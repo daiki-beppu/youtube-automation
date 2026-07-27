@@ -1,0 +1,1827 @@
+{
+  "issue": 2309,
+  "status": "integrated",
+  "source": "B1-B6 owner and provenance integration",
+  "counts": {
+    "old_owners": 224,
+    "provenance_groups": 27,
+    "delete": 20,
+    "merge": 5,
+    "retain": 2
+  },
+  "glossary_handoff": {
+    "received_by": "docs/architecture.md",
+    "terms": {
+      "dashboard": {
+        "source_contract": "local Web UI for first-party analytics snapshots",
+        "collector": "Python HTTP server",
+        "frontend": "React + Vite + shadcn/ui reads the same-origin API",
+        "snapshot_ssot": "data/analytics_data_*.json; future local store",
+        "failure_isolation": "per-channel partial errors"
+      }
+    }
+  },
+  "mappings": [
+    {
+      "old_owner": "legacy.analytics_base",
+      "exact_new_owner": "src/youtube_automation/domains/analytics/ports.py",
+      "symbols": ["AnalyticsBase"],
+      "consumers": ["src/youtube_automation/domains/analytics"],
+      "handoff": "retained"
+    },
+    {
+      "old_owner": "legacy.analytics_collector",
+      "exact_new_owner": "src/youtube_automation/domains/analytics/service.py",
+      "symbols": ["YouTubeAnalyticsCollector"],
+      "consumers": ["src/youtube_automation/commands/analytics/analytics_system.py"],
+      "handoff": "B4"
+    },
+    {
+      "old_owner": "legacy.channel_analytics",
+      "exact_new_owner": "src/youtube_automation/domains/analytics/mixins/channel_analytics.py",
+      "symbols": ["ChannelAnalyticsMixin"],
+      "consumers": ["tests/test_channel_analytics.py"],
+      "handoff": "retained"
+    },
+    {
+      "old_owner": "legacy.video_analytics",
+      "exact_new_owner": "src/youtube_automation/domains/analytics/mixins/video_analytics.py",
+      "symbols": ["VideoAnalyticsMixin"],
+      "consumers": ["tests/test_video_analytics.py"],
+      "handoff": "retained"
+    },
+    {
+      "old_owner": "legacy.playlist_analytics",
+      "exact_new_owner": "src/youtube_automation/domains/analytics/mixins/playlist_analytics.py",
+      "symbols": ["PlaylistAnalyticsMixin"],
+      "consumers": ["tests/test_playlist_analytics.py"],
+      "handoff": "retained"
+    },
+    {
+      "old_owner": "legacy.descriptions_md",
+      "exact_new_owner": "src/youtube_automation/domains/metadata/descriptions.py",
+      "symbols": ["extract_descriptions_md_section", "build_descriptions_md_parse_diagnostics"],
+      "consumers": ["src/youtube_automation/domains/media/captions.py"],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy.placeholders",
+      "exact_new_owner": "src/youtube_automation/domains/metadata/placeholders.py",
+      "symbols": ["is_placeholder_value"],
+      "consumers": ["src/youtube_automation/domains/thumbnail/references.py"],
+      "handoff": "retained"
+    },
+    {
+      "old_owner": "legacy.audio_formats",
+      "exact_new_owner": "src/youtube_automation/domains/media/audio_formats.py",
+      "symbols": ["AUDIO_EXTS"],
+      "consumers": ["src/youtube_automation/domains/media/audio.py", "src/youtube_automation/domains/media/video_validator.py", "src/youtube_automation/domains/metadata/service.py", "src/youtube_automation/commands/suno/suno_audio_cleanup.py"],
+      "handoff": "B4"
+    },
+    {
+      "old_owner": "legacy.image_provider_base",
+      "exact_new_owner": "src/youtube_automation/domains/media/image.py",
+      "symbols": ["ImageProvider"],
+      "consumers": ["src/youtube_automation/commands/media/generate_image.py"],
+      "handoff": "B4"
+    },
+    {
+      "old_owner": "legacy.video_type",
+      "exact_new_owner": "src/youtube_automation/domains/media/video_type.py",
+      "symbols": ["VideoType"],
+      "consumers": ["tests/test_video_type.py"],
+      "handoff": "B4"
+    },
+    {
+      "old_owner": "legacy.distrokid_metadata",
+      "exact_new_owner": "src/youtube_automation/domains/distrokid/metadata.py",
+      "symbols": ["DistroKidMetadata"],
+      "consumers": ["src/youtube_automation/domains/distrokid/preparation.py"],
+      "handoff": "retained"
+    },
+    {
+      "old_owner": "legacy.weekly_vote_log",
+      "exact_new_owner": "src/youtube_automation/domains/collections/weekly_vote_log.py",
+      "symbols": ["WeeklyVoteLog"],
+      "consumers": ["src/youtube_automation/commands/collections/vote_log.py"],
+      "handoff": "retained"
+    },
+    {
+      "old_owner": "legacy.audience_analytics",
+      "exact_new_owner": "src/youtube_automation/domains/analytics/mixins/audience_analytics.py",
+      "symbols": ["AudienceAnalyticsMixin"],
+      "consumers": ["tests/test_audience_analytics.py"],
+      "handoff": "retained"
+    },
+    {
+      "old_owner": "legacy.ctr_analytics",
+      "exact_new_owner": "src/youtube_automation/domains/analytics/mixins/ctr_analytics.py",
+      "symbols": ["CTRAnalyticsMixin"],
+      "consumers": ["tests/test_ctr_analytics.py"],
+      "handoff": "retained"
+    },
+    {
+      "old_owner": "legacy.retention_analytics",
+      "exact_new_owner": "src/youtube_automation/domains/analytics/mixins/retention_analytics.py",
+      "symbols": ["RetentionAnalyticsMixin"],
+      "consumers": ["tests/test_retention.py"],
+      "handoff": "retained"
+    },
+    {
+      "old_owner": "legacy.revenue_analytics",
+      "exact_new_owner": "src/youtube_automation/domains/analytics/mixins/revenue_analytics.py",
+      "symbols": ["RevenueAnalyticsMixin"],
+      "consumers": ["tests/test_revenue_analytics.py"],
+      "handoff": "retained"
+    },
+    {
+      "old_owner": "legacy.traffic_source_analytics",
+      "exact_new_owner": "src/youtube_automation/domains/analytics/mixins/traffic_source_analytics.py",
+      "symbols": ["TrafficSourceMixin"],
+      "consumers": ["tests/test_traffic_source.py"],
+      "handoff": "retained"
+    },
+    {
+      "old_owner": "legacy.video_daily_analytics",
+      "exact_new_owner": "src/youtube_automation/domains/analytics/mixins/video_daily_analytics.py",
+      "symbols": ["VideoDailyAnalyticsMixin"],
+      "consumers": ["tests/test_video_daily_analytics.py"],
+      "handoff": "retained"
+    },
+    {
+      "old_owner": "legacy.strategic_analytics",
+      "exact_new_owner": "src/youtube_automation/domains/analytics/collection/strategic_analytics.py",
+      "symbols": ["StrategicAnalyticsMixin"],
+      "consumers": ["tests/test_strategic_analytics_parallel.py"],
+      "handoff": "retained"
+    },
+    {
+      "old_owner": "legacy.reporting_analytics",
+      "exact_new_owner": "src/youtube_automation/domains/analytics/reporting/reporting_analytics.py",
+      "symbols": ["ReportingAPIMixin"],
+      "consumers": ["src/youtube_automation/domains/analytics/reporting/reporting_analytics.py"],
+      "handoff": "B4"
+    },
+    {
+      "old_owner": "legacy.channel_trend",
+      "exact_new_owner": "src/youtube_automation/domains/analytics/series/channel_trend.py",
+      "symbols": ["build_trend_frame", "detect_anomalies", "analyze_channel_trend"],
+      "consumers": ["src/youtube_automation/commands/analytics/channel_trend.py", "tests/test_channel_trend.py"],
+      "handoff": "retained"
+    },
+    {
+      "old_owner": "legacy.launch_curve_analyzer",
+      "exact_new_owner": "src/youtube_automation/domains/analytics/analysis/launch_curve_analyzer.py",
+      "symbols": ["compute_benchmark", "judge_video_vs_benchmark"],
+      "consumers": ["src/youtube_automation/commands/analytics/launch_curve.py", "tests/test_launch_curve_analyzer.py"],
+      "handoff": "retained"
+    },
+    {
+      "old_owner": "legacy.launch_curve_plotter",
+      "exact_new_owner": "src/youtube_automation/domains/analytics/analysis/launch_curve_plotter.py",
+      "symbols": ["plot_launch_curve"],
+      "consumers": ["src/youtube_automation/commands/analytics/launch_curve.py", "tests/test_launch_curve_plotter.py"],
+      "handoff": "retained"
+    },
+    {
+      "old_owner": "legacy.audio_units",
+      "exact_new_owner": "src/youtube_automation/domains/media/audio_units.py",
+      "symbols": ["unit_for_audio"],
+      "consumers": ["src/youtube_automation/commands/media/finalize_master.py"],
+      "handoff": "B4"
+    },
+    {
+      "old_owner": "legacy.captions",
+      "exact_new_owner": "src/youtube_automation/infrastructure/captions_adapter.py",
+      "symbols": ["upload_caption"],
+      "consumers": ["src/youtube_automation/commands/youtube/captions_upload.py"],
+      "handoff": "B4"
+    },
+    {
+      "old_owner": "legacy.thumbnail_archive",
+      "exact_new_owner": "src/youtube_automation/domains/thumbnail/archive.py",
+      "symbols": ["archive_approved_thumbnail", "archive_approved_thumbnail_transaction"],
+      "consumers": ["src/youtube_automation/commands/thumbnail/auto_select_thumbnail.py"],
+      "handoff": "retained"
+    },
+    {
+      "old_owner": "legacy.thumbnail_correlation",
+      "exact_new_owner": "src/youtube_automation/domains/thumbnail/correlation.py",
+      "symbols": ["compute_correlations"],
+      "consumers": ["src/youtube_automation/commands/thumbnail/thumbnail_correlate.py"],
+      "handoff": "retained"
+    },
+    {
+      "old_owner": "legacy.thumbnail_features",
+      "exact_new_owner": "src/youtube_automation/domains/thumbnail/features.py",
+      "symbols": ["extract_features", "feature_centroid", "feature_distance"],
+      "consumers": ["src/youtube_automation/domains/thumbnail/selection.py"],
+      "handoff": "retained"
+    },
+    {
+      "old_owner": "legacy.thumbnail_references",
+      "exact_new_owner": "src/youtube_automation/domains/thumbnail/references.py",
+      "symbols": ["resolve_configured_benchmark_references", "plan_ttp_reference_assignments"],
+      "consumers": ["src/youtube_automation/commands/thumbnail/auto_select_thumbnail.py"],
+      "handoff": "retained"
+    },
+    {
+      "old_owner": "legacy.video_validator",
+      "exact_new_owner": "src/youtube_automation/domains/media/video_validator.py",
+      "symbols": ["VideoValidator"],
+      "consumers": ["src/youtube_automation/commands/analytics/video_validator.py"],
+      "handoff": "B4"
+    },
+    {
+      "old_owner": "legacy..claude.CLAUDE.template.md",
+      "exact_new_owner": ".claude/CLAUDE.template.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.alignment-check.SKILL.md",
+      "exact_new_owner": ".claude/skills/alignment-check/SKILL.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.analytics-analyze.SKILL.md",
+      "exact_new_owner": ".claude/skills/analytics-analyze/SKILL.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.analytics-analyze.references.analysis-json-validator.md",
+      "exact_new_owner": ".claude/skills/analytics-analyze/references/analysis-json-validator.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.analytics-analyze.references.validate_insights",
+      "exact_new_owner": ".claude/skills/analytics-analyze/references/validate_insights.py",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.analytics-collect.SKILL.md",
+      "exact_new_owner": ".claude/skills/analytics-collect/SKILL.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.analytics-report.SKILL.md",
+      "exact_new_owner": ".claude/skills/analytics-report/SKILL.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.analytics-run.SKILL.md",
+      "exact_new_owner": ".claude/skills/analytics-run/SKILL.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.analytics-run.references.analytics-chain-state",
+      "exact_new_owner": ".claude/skills/analytics-run/references/analytics-chain-state.py",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.audience-persona-design.SKILL.md",
+      "exact_new_owner": ".claude/skills/audience-persona-design/SKILL.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.automation-release.SKILL.md",
+      "exact_new_owner": ".claude/skills/automation-release/SKILL.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.automation-release.references.changelog-promotion.md",
+      "exact_new_owner": ".claude/skills/automation-release/references/changelog-promotion.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.automation-release.references.extension-release-checklist.md",
+      "exact_new_owner": ".claude/skills/automation-release/references/extension-release-checklist.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.automation-release.references.prepare-checklist.md",
+      "exact_new_owner": ".claude/skills/automation-release/references/prepare-checklist.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.automation-release.references.publish-checklist.md",
+      "exact_new_owner": ".claude/skills/automation-release/references/publish-checklist.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.automation-release.references.version-rules.md",
+      "exact_new_owner": ".claude/skills/automation-release/references/version-rules.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.automation-schedule.SKILL.md",
+      "exact_new_owner": ".claude/skills/automation-schedule/SKILL.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.automation-schedule.references.schedule_backend",
+      "exact_new_owner": ".claude/skills/automation-schedule/references/schedule_backend.py",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.automation-schedule.references.schedule_config",
+      "exact_new_owner": ".claude/skills/automation-schedule/references/schedule_config.py",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.automation-update.SKILL.md",
+      "exact_new_owner": ".claude/skills/automation-update/SKILL.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.automation-update.references.gotchas.md",
+      "exact_new_owner": ".claude/skills/automation-update/references/gotchas.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.automation-update.references.local-fix-conflicts.md",
+      "exact_new_owner": ".claude/skills/automation-update/references/local-fix-conflicts.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.automation-update.references.post-apply-checks.md",
+      "exact_new_owner": ".claude/skills/automation-update/references/post-apply-checks.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.benchmark.SKILL.md",
+      "exact_new_owner": ".claude/skills/benchmark/SKILL.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.channel-new.SKILL.md",
+      "exact_new_owner": ".claude/skills/channel-new/SKILL.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.channel-new.references.analysis-mode.md",
+      "exact_new_owner": ".claude/skills/channel-new/references/analysis-mode.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.channel-new.references.claude-md-template.md",
+      "exact_new_owner": ".claude/skills/channel-new/references/claude-md-template.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.channel-new.references.config-generation-rules.md",
+      "exact_new_owner": ".claude/skills/channel-new/references/config-generation-rules.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.channel-new.references.derive_ttp_duration",
+      "exact_new_owner": ".claude/skills/channel-new/references/derive_ttp_duration.py",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.channel-new.references.desire-vocabulary.md",
+      "exact_new_owner": ".claude/skills/channel-new/references/desire-vocabulary.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.channel-new.references.direction-mode.md",
+      "exact_new_owner": ".claude/skills/channel-new/references/direction-mode.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.channel-new.references.directory-structure.md",
+      "exact_new_owner": ".claude/skills/channel-new/references/directory-structure.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.channel-new.references.fetch_branding_snapshot",
+      "exact_new_owner": ".claude/skills/channel-new/references/fetch_branding_snapshot.py",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.channel-new.references.gcp-bootstrap.md",
+      "exact_new_owner": ".claude/skills/channel-new/references/gcp-bootstrap.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.channel-new.references.import-mode.md",
+      "exact_new_owner": ".claude/skills/channel-new/references/import-mode.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.channel-new.references.regeneration-mode.md",
+      "exact_new_owner": ".claude/skills/channel-new/references/regeneration-mode.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.channel-new.references.terraform-gcp.README.md",
+      "exact_new_owner": ".claude/skills/channel-new/references/terraform-gcp/README.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.channel-new.references.verification.md",
+      "exact_new_owner": ".claude/skills/channel-new/references/verification.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.channel-status.SKILL.md",
+      "exact_new_owner": ".claude/skills/channel-status/SKILL.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.collection-ideate.SKILL.md",
+      "exact_new_owner": ".claude/skills/collection-ideate/SKILL.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.collection-ideate.references.collection-lifecycle.md",
+      "exact_new_owner": ".claude/skills/collection-ideate/references/collection-lifecycle.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.collection-ideate.references.freshness-rules.md",
+      "exact_new_owner": ".claude/skills/collection-ideate/references/freshness-rules.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.collection-ideate.references.freshness_action",
+      "exact_new_owner": ".claude/skills/collection-ideate/references/freshness_action.py",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.collection-ideate.references.object-design-examples.md",
+      "exact_new_owner": ".claude/skills/collection-ideate/references/object-design-examples.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.collection-ideate.references.record-ttp-reference-assignments",
+      "exact_new_owner": ".claude/skills/collection-ideate/references/record-ttp-reference-assignments.py",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.collection-ideate.references.select-ttp-references",
+      "exact_new_owner": ".claude/skills/collection-ideate/references/select-ttp-references.py",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.comments-reply.SKILL.md",
+      "exact_new_owner": ".claude/skills/comments-reply/SKILL.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.comments-reply.references.review-rubric.md",
+      "exact_new_owner": ".claude/skills/comments-reply/references/review-rubric.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.community-draft.SKILL.md",
+      "exact_new_owner": ".claude/skills/community-draft/SKILL.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.community-draft.references.generate_batch",
+      "exact_new_owner": ".claude/skills/community-draft/references/generate_batch.py",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.community-post.SKILL.md",
+      "exact_new_owner": ".claude/skills/community-post/SKILL.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.creative-constraints.SKILL.md",
+      "exact_new_owner": ".claude/skills/creative-constraints/SKILL.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.discover-competitors.SKILL.md",
+      "exact_new_owner": ".claude/skills/discover-competitors/SKILL.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.distrokid-helper.SKILL.md",
+      "exact_new_owner": ".claude/skills/distrokid-helper/SKILL.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.distrokid-helper.references.pii-gitignore.md",
+      "exact_new_owner": ".claude/skills/distrokid-helper/references/pii-gitignore.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.ext-install.SKILL.md",
+      "exact_new_owner": ".claude/skills/ext-install/SKILL.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.feedback.SKILL.md",
+      "exact_new_owner": ".claude/skills/feedback/SKILL.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.feedback.references.upstream-issue-template.md",
+      "exact_new_owner": ".claude/skills/feedback/references/upstream-issue-template.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.flop-analysis.SKILL.md",
+      "exact_new_owner": ".claude/skills/flop-analysis/SKILL.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.flop-analysis.references.verification",
+      "exact_new_owner": ".claude/skills/flop-analysis/references/verification.py",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.live-chat-reply.SKILL.md",
+      "exact_new_owner": ".claude/skills/live-chat-reply/SKILL.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.live-clean.SKILL.md",
+      "exact_new_owner": ".claude/skills/live-clean/SKILL.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.loop-video.SKILL.md",
+      "exact_new_owner": ".claude/skills/loop-video/SKILL.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.lyria.SKILL.md",
+      "exact_new_owner": ".claude/skills/lyria/SKILL.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.lyria.references.lyria-tuning-guide.md",
+      "exact_new_owner": ".claude/skills/lyria/references/lyria-tuning-guide.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.market-research.SKILL.md",
+      "exact_new_owner": ".claude/skills/market-research/SKILL.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.market-research.references.report-contract.md",
+      "exact_new_owner": ".claude/skills/market-research/references/report-contract.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.masterup.SKILL.md",
+      "exact_new_owner": ".claude/skills/masterup/SKILL.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.masterup.references.check_loudness_deviation",
+      "exact_new_owner": ".claude/skills/masterup/references/check_loudness_deviation.py",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.masterup.references.suno-fallback.md",
+      "exact_new_owner": ".claude/skills/masterup/references/suno-fallback.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.metadata-audit.SKILL.md",
+      "exact_new_owner": ".claude/skills/metadata-audit/SKILL.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.pinned-comment.SKILL.md",
+      "exact_new_owner": ".claude/skills/pinned-comment/SKILL.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.playlist.SKILL.md",
+      "exact_new_owner": ".claude/skills/playlist/SKILL.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.post-publish.SKILL.md",
+      "exact_new_owner": ".claude/skills/post-publish/SKILL.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.post-publish.references.post-publish-chain-state",
+      "exact_new_owner": ".claude/skills/post-publish/references/post-publish-chain-state.py",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.setup.SKILL.md",
+      "exact_new_owner": ".claude/skills/setup/SKILL.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.setup.references.check-runbook.md",
+      "exact_new_owner": ".claude/skills/setup/references/check-runbook.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.shadcn.SKILL.md",
+      "exact_new_owner": ".claude/skills/shadcn/SKILL.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.shadcn.cli.md",
+      "exact_new_owner": ".claude/skills/shadcn/cli.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.shadcn.customization.md",
+      "exact_new_owner": ".claude/skills/shadcn/customization.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.shadcn.mcp.md",
+      "exact_new_owner": ".claude/skills/shadcn/mcp.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.shadcn.registry.md",
+      "exact_new_owner": ".claude/skills/shadcn/registry.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.shadcn.rules.base-vs-radix.md",
+      "exact_new_owner": ".claude/skills/shadcn/rules/base-vs-radix.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.shadcn.rules.chat.md",
+      "exact_new_owner": ".claude/skills/shadcn/rules/chat.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.shadcn.rules.composition.md",
+      "exact_new_owner": ".claude/skills/shadcn/rules/composition.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.shadcn.rules.forms.md",
+      "exact_new_owner": ".claude/skills/shadcn/rules/forms.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.shadcn.rules.icons.md",
+      "exact_new_owner": ".claude/skills/shadcn/rules/icons.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.shadcn.rules.styling.md",
+      "exact_new_owner": ".claude/skills/shadcn/rules/styling.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.short-release.SKILL.md",
+      "exact_new_owner": ".claude/skills/short-release/SKILL.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.short-thumbnail.SKILL.md",
+      "exact_new_owner": ".claude/skills/short-thumbnail/SKILL.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.short-thumbnail.references.prompt-template.md",
+      "exact_new_owner": ".claude/skills/short-thumbnail/references/prompt-template.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.short.SKILL.md",
+      "exact_new_owner": ".claude/skills/short/SKILL.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.streaming.SKILL.md",
+      "exact_new_owner": ".claude/skills/streaming/SKILL.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.suno-helper.SKILL.md",
+      "exact_new_owner": ".claude/skills/suno-helper/SKILL.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.suno-helper.references.download-flow.md",
+      "exact_new_owner": ".claude/skills/suno-helper/references/download-flow.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.suno-lyric.SKILL.md",
+      "exact_new_owner": ".claude/skills/suno-lyric/SKILL.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.suno-lyric.references.check_lyric_duplication",
+      "exact_new_owner": ".claude/skills/suno-lyric/references/check_lyric_duplication.py",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.suno-lyric.references.lyric-templates.md",
+      "exact_new_owner": ".claude/skills/suno-lyric/references/lyric-templates.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.suno-lyric.references.persona-quote-affinity.md",
+      "exact_new_owner": ".claude/skills/suno-lyric/references/persona-quote-affinity.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.suno-lyric.references.review-rubric.md",
+      "exact_new_owner": ".claude/skills/suno-lyric/references/review-rubric.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.suno.SKILL.md",
+      "exact_new_owner": ".claude/skills/suno/SKILL.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.suno.references.suno-examples.md",
+      "exact_new_owner": ".claude/skills/suno/references/suno-examples.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.thumbnail-compare.SKILL.md",
+      "exact_new_owner": ".claude/skills/thumbnail-compare/SKILL.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.thumbnail-iterate.SKILL.md",
+      "exact_new_owner": ".claude/skills/thumbnail-iterate/SKILL.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.thumbnail-iterate.references.state-contract.md",
+      "exact_new_owner": ".claude/skills/thumbnail-iterate/references/state-contract.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.thumbnail-iterate.references.thumbnail-iterate-state",
+      "exact_new_owner": ".claude/skills/thumbnail-iterate/references/thumbnail-iterate-state.py",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.thumbnail-research.SKILL.md",
+      "exact_new_owner": ".claude/skills/thumbnail-research/SKILL.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.thumbnail-test.SKILL.md",
+      "exact_new_owner": ".claude/skills/thumbnail-test/SKILL.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.thumbnail-test.references.history-schema.md",
+      "exact_new_owner": ".claude/skills/thumbnail-test/references/history-schema.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.thumbnail-test.references.operator-guide.md",
+      "exact_new_owner": ".claude/skills/thumbnail-test/references/operator-guide.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.thumbnail.SKILL.md",
+      "exact_new_owner": ".claude/skills/thumbnail/SKILL.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.thumbnail.references.archive-approved-thumbnail",
+      "exact_new_owner": ".claude/skills/thumbnail/references/archive-approved-thumbnail.py",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.thumbnail.references.codex-prompt",
+      "exact_new_owner": ".claude/skills/thumbnail/references/codex-prompt.py",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.thumbnail.references.prompt-schema.md",
+      "exact_new_owner": ".claude/skills/thumbnail/references/prompt-schema.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.thumbnail.references.prompting.md",
+      "exact_new_owner": ".claude/skills/thumbnail/references/prompting.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.thumbnail.references.sample-prompts.md",
+      "exact_new_owner": ".claude/skills/thumbnail/references/sample-prompts.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.thumbnail.references.share_thumbnail_as_main",
+      "exact_new_owner": ".claude/skills/thumbnail/references/share_thumbnail_as_main.py",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.value-loop-audit.SKILL.md",
+      "exact_new_owner": ".claude/skills/value-loop-audit/SKILL.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.video-analyze.SKILL.md",
+      "exact_new_owner": ".claude/skills/video-analyze/SKILL.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.video-description.SKILL.md",
+      "exact_new_owner": ".claude/skills/video-description/SKILL.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.video-description.references.description-templates.md",
+      "exact_new_owner": ".claude/skills/video-description/references/description-templates.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.video-upload.SKILL.md",
+      "exact_new_owner": ".claude/skills/video-upload/SKILL.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.video-upload.references.posting-checklist.md",
+      "exact_new_owner": ".claude/skills/video-upload/references/posting-checklist.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.video-upload.references.scheduled-publish.md",
+      "exact_new_owner": ".claude/skills/video-upload/references/scheduled-publish.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.videoup.SKILL.md",
+      "exact_new_owner": ".claude/skills/videoup/SKILL.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.videoup.references.ring-migration.md",
+      "exact_new_owner": ".claude/skills/videoup/references/ring-migration.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.videoup.references.video-type-extension.md",
+      "exact_new_owner": ".claude/skills/videoup/references/video-type-extension.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.viewer-voice.SKILL.md",
+      "exact_new_owner": ".claude/skills/viewer-voice/SKILL.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.viewing-scene.SKILL.md",
+      "exact_new_owner": ".claude/skills/viewing-scene/SKILL.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.wf-auto.SKILL.md",
+      "exact_new_owner": ".claude/skills/wf-auto/SKILL.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.wf-auto.references.wf-auto-state",
+      "exact_new_owner": ".claude/skills/wf-auto/references/wf-auto-state.py",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.wf-new.SKILL.md",
+      "exact_new_owner": ".claude/skills/wf-new/SKILL.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.wf-new.references.scene_phrases.md",
+      "exact_new_owner": ".claude/skills/wf-new/references/scene_phrases.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.wf-new.references.schema.md",
+      "exact_new_owner": ".claude/skills/wf-new/references/schema.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.wf-next.SKILL.md",
+      "exact_new_owner": ".claude/skills/wf-next/SKILL.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.wf-next.references.master_audio_transition",
+      "exact_new_owner": ".claude/skills/wf-next/references/master_audio_transition.py",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy..claude.skills.wf-status.SKILL.md",
+      "exact_new_owner": ".claude/skills/wf-status/SKILL.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy.docs.adr.0001-ai-first-ts-rewrite.md",
+      "exact_new_owner": "docs/adr/0001-ai-first-ts-rewrite.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy.docs.adr.0002-service-first-architecture.md",
+      "exact_new_owner": "docs/adr/0002-service-first-architecture.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy.docs.adr.0003-service-boundary-contracts.md",
+      "exact_new_owner": "docs/adr/0003-service-boundary-contracts.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy.docs.adr.0004-core-feature-registry.md",
+      "exact_new_owner": "docs/adr/0004-core-feature-registry.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy.docs.adr.0005-metadata-pure-layer.md",
+      "exact_new_owner": "docs/adr/0005-metadata-pure-layer.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy.docs.adr.0006-npm-distribution.md",
+      "exact_new_owner": "docs/adr/0006-npm-distribution.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy.docs.adr.0007-rebrand-to-tayk.md",
+      "exact_new_owner": "docs/adr/0007-rebrand-to-tayk.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy.docs.adr.0008-cutover-merge-strategy.md",
+      "exact_new_owner": "docs/adr/0008-cutover-merge-strategy.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy.docs.adr.0009-json-only-config.md",
+      "exact_new_owner": "docs/adr/0009-json-only-config.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy.docs.adr.0010-unified-gcp-project.md",
+      "exact_new_owner": "docs/adr/0010-unified-gcp-project.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy.docs.adr.0011-extension-distribution.md",
+      "exact_new_owner": "docs/adr/0011-extension-distribution.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy.docs.adr.0012-suno-helper-bulk-download.md",
+      "exact_new_owner": "docs/adr/0012-suno-helper-bulk-download.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy.docs.adr.0013-multi-channel-dashboard.md",
+      "exact_new_owner": "docs/adr/0013-multi-channel-dashboard.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy.docs.adr.0014-streaming-continuous-default.md",
+      "exact_new_owner": "docs/adr/0014-streaming-continuous-default.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy.docs.adr.0015-development-roadmap.md",
+      "exact_new_owner": "docs/adr/0015-development-roadmap.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy.docs.adr.0016-distrokid-helper-shell-parity.md",
+      "exact_new_owner": "docs/adr/0016-distrokid-helper-shell-parity.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy.docs.adr.0017-turso-libsql-as-local-data-store.md",
+      "exact_new_owner": "docs/adr/0017-turso-libsql-as-local-data-store.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy.docs.adr.0018-remotion-video-rendering.md",
+      "exact_new_owner": "docs/adr/0018-remotion-video-rendering.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy.docs.adr.0019-community-helper-extension.md",
+      "exact_new_owner": "docs/adr/0019-community-helper-extension.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy.docs.adr.0020-suno-helper-yield-guard.md",
+      "exact_new_owner": "docs/adr/0020-suno-helper-yield-guard.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy.docs.adr.0021-separate-repo-restart.md",
+      "exact_new_owner": "docs/adr/0021-separate-repo-restart.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy.docs.adr.0022-multi-channel-workspace.md",
+      "exact_new_owner": "docs/adr/0022-multi-channel-workspace.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy.docs.architecture.md",
+      "exact_new_owner": "docs/architecture.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy.docs.audits.2026-05-18-skills-generalization-consistency.md",
+      "exact_new_owner": "docs/audits/2026-05-18-skills-generalization-consistency.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy.docs.audits.2026-05-18-skills-generalization-consistency.raw.00-supervise-report.md",
+      "exact_new_owner": "docs/audits/2026-05-18-skills-generalization-consistency/raw/00-supervise-report.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy.docs.audits.2026-05-18-skills-generalization-consistency.raw.01-plan.md",
+      "exact_new_owner": "docs/audits/2026-05-18-skills-generalization-consistency/raw/01-plan.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy.docs.audits.2026-05-18-skills-generalization-consistency.raw.02-dig-part-A-v1.md",
+      "exact_new_owner": "docs/audits/2026-05-18-skills-generalization-consistency/raw/02-dig-part-A-v1.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy.docs.audits.2026-05-18-skills-generalization-consistency.raw.03-dig-part-A-v2.md",
+      "exact_new_owner": "docs/audits/2026-05-18-skills-generalization-consistency/raw/03-dig-part-A-v2.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy.docs.audits.2026-05-18-skills-generalization-consistency.raw.04-dig-part-B.md",
+      "exact_new_owner": "docs/audits/2026-05-18-skills-generalization-consistency/raw/04-dig-part-B.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy.docs.audits.2026-05-18-skills-generalization-consistency.raw.05-dig-part-C-v1.md",
+      "exact_new_owner": "docs/audits/2026-05-18-skills-generalization-consistency/raw/05-dig-part-C-v1.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy.docs.audits.2026-05-18-skills-generalization-consistency.raw.06-dig-part-C-v2.md",
+      "exact_new_owner": "docs/audits/2026-05-18-skills-generalization-consistency/raw/06-dig-part-C-v2.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy.docs.audits.2026-05-18-skills-operational-risk-audit.md",
+      "exact_new_owner": "docs/audits/2026-05-18-skills-operational-risk-audit.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy.docs.audits.2026-05-18-skills-operational-risk-audit.raw.00-supervise-report.md",
+      "exact_new_owner": "docs/audits/2026-05-18-skills-operational-risk-audit.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy.docs.audits.2026-05-18-skills-operational-risk-audit.raw.02-data-failure-recovery.md",
+      "exact_new_owner": "docs/audits/2026-05-18-skills-operational-risk-audit.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy.docs.audits.2026-05-18-skills-operational-risk-audit.raw.03-data-billing-cost-control.md",
+      "exact_new_owner": "docs/audits/2026-05-18-skills-operational-risk-audit.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy.docs.audits.2026-05-18-skills-operational-risk-audit.raw.04-data-billing-cost.md",
+      "exact_new_owner": "docs/audits/2026-05-18-skills-operational-risk-audit.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy.docs.audits.2026-05-18-skills-operational-risk-audit.raw.05-data-security-secrets.md",
+      "exact_new_owner": "docs/audits/2026-05-18-skills-operational-risk-audit.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy.docs.audits.2026-05-18-skills-operational-risk-audit.raw.06-data-dependencies.md",
+      "exact_new_owner": "docs/audits/2026-05-18-skills-operational-risk-audit.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy.docs.audits.2026-05-18-skills-operational-risk-audit.raw.07-data-dependencies-compat.md",
+      "exact_new_owner": "docs/audits/2026-05-18-skills-operational-risk-audit.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy.docs.audits.2026-05-18-skills-operational-risk-audit.raw.08-data-deps-deprecated.md",
+      "exact_new_owner": "docs/audits/2026-05-18-skills-operational-risk-audit.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy.docs.audits.2026-05-18-skills-operational-risk-audit.raw.09-data-deps-deprecation.md",
+      "exact_new_owner": "docs/audits/2026-05-18-skills-operational-risk-audit.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy.docs.audits.2026-05-18-skills-operational-risk-audit.raw.10-data-external-api-deprecation.md",
+      "exact_new_owner": "docs/audits/2026-05-18-skills-operational-risk-audit.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy.docs.audits.2026-05-18-skills-operational-risk-audit.raw.11-data-backward-compat-shims.md",
+      "exact_new_owner": "docs/audits/2026-05-18-skills-operational-risk-audit.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy.docs.audits.2026-05-skill-md-audit.md",
+      "exact_new_owner": "docs/audits/2026-05-skill-md-audit.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy.docs.audits.2026-07-02-adr-audit.md",
+      "exact_new_owner": "docs/audits/2026-07-02-adr-audit.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy.docs.audits.2026-07-10-skill-orchestration-survey.md",
+      "exact_new_owner": "docs/audits/2026-07-10-skill-orchestration-survey.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy.docs.audits.thumbnail-ttp-2026-06-30.md",
+      "exact_new_owner": "docs/audits/thumbnail-ttp-2026-06-30.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy.docs.benchmarks.videoup-overlay-encoder-2026-07-21.md",
+      "exact_new_owner": "docs/benchmarks/videoup-overlay-encoder-2026-07-21.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy.docs.changelog-contract.md",
+      "exact_new_owner": "docs/changelog-contract.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy.docs.channel-workspace-migration.md",
+      "exact_new_owner": "docs/channel-workspace-migration.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy.docs.chrome-extension-install-guide.md",
+      "exact_new_owner": "docs/chrome-extension-install-guide.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy.docs.dashboard.md",
+      "exact_new_owner": "docs/dashboard.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy.docs.development.md",
+      "exact_new_owner": "docs/development.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy.docs.extensions-overlay-brand-colors.md",
+      "exact_new_owner": "docs/extensions-overlay-brand-colors.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy.docs.features.md",
+      "exact_new_owner": "docs/features.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy.docs.investigations.2026-05-15-313-video-daily-analytics.md",
+      "exact_new_owner": "docs/investigations/2026-05-15-313-video-daily-analytics.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
+      "old_owner": "legacy.docs.investigations.2026-05-30-606-bulk-update-synthetic-media.md",
+      "exact_new_owner": "docs/investigations/2026-05-30-606-bulk-update-synthetic-media.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    }
+  ],
+  "provenance_groups": [
+    {
+      "id": "C-01",
+      "path": "src/youtube_automation/utils/logging_setup.py",
+      "disposition": "delete",
+      "evidence": "unreferenced after consumer search",
+      "received_by": "docs/architecture/b6-integration-receipt.json",
+      "verification": "assert physical path is absent after cleanup"
+    },
+    {
+      "id": "C-02",
+      "path": "src/youtube_automation/templates/individual_track.md",
+      "disposition": "delete",
+      "evidence": "unreferenced after consumer search",
+      "received_by": "docs/architecture/b6-integration-receipt.json",
+      "verification": "assert physical path is absent after cleanup"
+    },
+    {
+      "id": "C-03",
+      "path": "src/youtube_automation/templates/complete_collection.md",
+      "disposition": "delete",
+      "evidence": "unreferenced after consumer search",
+      "received_by": "docs/architecture/b6-integration-receipt.json",
+      "verification": "assert physical path is absent after cleanup"
+    },
+    {
+      "id": "C-04",
+      "path": ".claude/settings.local.json",
+      "disposition": "delete",
+      "evidence": "repository-local generated settings",
+      "received_by": "docs/architecture/b6-integration-receipt.json",
+      "verification": "assert physical path is absent after cleanup"
+    },
+    {
+      "id": "C-05",
+      "path": "extensions/suno-helper/.prettierrc.json",
+      "disposition": "delete",
+      "evidence": "helper uses shared formatter contract",
+      "received_by": "docs/architecture/b6-integration-receipt.json",
+      "verification": "assert physical path is absent after cleanup"
+    },
+    {
+      "id": "C-06",
+      "path": "extensions/distrokid-helper/.prettierrc.json",
+      "disposition": "delete",
+      "evidence": "helper uses shared formatter contract",
+      "received_by": "docs/architecture/b6-integration-receipt.json",
+      "verification": "assert physical path is absent after cleanup"
+    },
+    {
+      "id": "C-07",
+      "path": "extensions/community-helper/.prettierrc.json",
+      "disposition": "delete",
+      "evidence": "helper uses shared formatter contract",
+      "received_by": "docs/architecture/b6-integration-receipt.json",
+      "verification": "assert physical path is absent after cleanup"
+    },
+    {
+      "id": "legacy-08",
+      "path": "auth/SETUP.md",
+      "disposition": "delete",
+      "evidence": "route 0 received by ONBOARDING.md 2.3, manual routes and reference sections received by docs/oauth-setup.md",
+      "received_by": "docs/oauth-setup.md",
+      "verification": "assert physical path is absent and receiving document exists"
+    },
+    {
+      "id": "legacy-09",
+      "path": "plans/001-* + plans/002-*",
+      "paths": ["plans/001-*", "plans/002-*"] ,
+      "disposition": "delete",
+      "evidence": "completed plans received by plans/README.md",
+      "received_by": "plans/README.md",
+      "verification": "assert every glob is absent and receiving document exists"
+    },
+    {
+      "id": "legacy-10",
+      "path": "plans/003-*",
+      "paths": ["plans/003-*"] ,
+      "disposition": "delete",
+      "evidence": "completed plans received by plans/README.md",
+      "received_by": "plans/README.md",
+      "verification": "assert every glob is absent and receiving document exists"
+    },
+    {
+      "id": "legacy-11",
+      "path": "plans/004-*",
+      "paths": ["plans/004-*"] ,
+      "disposition": "delete",
+      "evidence": "completed plans received by plans/README.md",
+      "received_by": "plans/README.md",
+      "verification": "assert every glob is absent and receiving document exists"
+    },
+    {
+      "id": "legacy-12",
+      "path": "plans/005-*",
+      "paths": ["plans/005-*"] ,
+      "disposition": "delete",
+      "evidence": "completed plans received by plans/README.md",
+      "received_by": "plans/README.md",
+      "verification": "assert every glob is absent and receiving document exists"
+    },
+    {
+      "id": "legacy-13",
+      "path": "plans/006-*",
+      "paths": ["plans/006-*"] ,
+      "disposition": "delete",
+      "evidence": "completed plans received by plans/README.md",
+      "received_by": "plans/README.md",
+      "verification": "assert every glob is absent and receiving document exists"
+    },
+    {
+      "id": "legacy-14",
+      "path": "docs/superpowers/plans",
+      "disposition": "delete",
+      "evidence": "completed plan history received by plans/README.md",
+      "received_by": "plans/README.md",
+      "verification": "assert source directory is absent and receiving document exists"
+    },
+    {
+      "id": "legacy-15",
+      "path": "docs/superpowers/specs",
+      "disposition": "merge",
+      "evidence": "completed spec history received by current docs",
+      "received_by": "docs/architecture/b6-integration-receipt.json",
+      "verification": "assert source directory is absent and receipt exists"
+    },
+    {
+      "id": "legacy-16",
+      "path": "docs/audits/2026-05-18-skills-operational-risk-audit/raw",
+      "disposition": "merge",
+      "evidence": "audit findings received by audit summary",
+      "received_by": "docs/audits/2026-05-18-skills-operational-risk-audit.md",
+      "verification": "assert source directory is absent and audit summary exists"
+    },
+    {
+      "id": "legacy-17",
+      "path": "CONTEXT.md",
+      "disposition": "merge",
+      "evidence": "current vocabulary and architectural decisions received by the project glossary in architecture.md",
+      "received_by": "docs/architecture.md",
+      "verification": "assert source file is absent and architecture.md contains the migrated glossary contract"
+    },
+    {
+      "id": "legacy-18",
+      "path": "src/youtube_automation/domains/analytics/collection/strategic_analytics.py",
+      "disposition": "retain",
+      "evidence": "public comprehensive mode is active",
+      "received_by": "src/youtube_automation/domains/analytics/collection/strategic_analytics.py",
+      "verification": "assert source exists and comprehensive mode branch remains present"
+    },
+    {
+      "id": "legacy-19",
+      "path": "docs/adr",
+      "disposition": "retain",
+      "evidence": "superseded ADR 0001/0002/0003/0004/0005/0008/0015 records are retained",
+      "received_by": "docs/adr",
+      "verification": "assert each named superseded ADR exists"
+    },
+    {
+      "id": "legacy-20",
+      "path": "plans/007-*",
+      "paths": ["plans/007-*"] ,
+      "disposition": "delete",
+      "evidence": "completed plan received by plans/README.md",
+      "received_by": "plans/README.md",
+      "verification": "assert every glob is absent and receiving document exists"
+    },
+    {
+      "id": "legacy-21",
+      "path": "plans/008-*",
+      "paths": ["plans/008-*"] ,
+      "disposition": "delete",
+      "evidence": "completed plan received by plans/README.md",
+      "received_by": "plans/README.md",
+      "verification": "assert every glob is absent and receiving document exists"
+    },
+    {
+      "id": "legacy-22",
+      "path": "plans/009-*",
+      "paths": ["plans/009-*"] ,
+      "disposition": "delete",
+      "evidence": "completed plan received by plans/README.md",
+      "received_by": "plans/README.md",
+      "verification": "assert every glob is absent and receiving document exists"
+    },
+    {
+      "id": "legacy-23",
+      "path": "plans/010-*",
+      "paths": ["plans/010-*"] ,
+      "disposition": "delete",
+      "evidence": "completed plan received by plans/README.md",
+      "received_by": "plans/README.md",
+      "verification": "assert every glob is absent and receiving document exists"
+    },
+    {
+      "id": "legacy-24",
+      "path": "plans/011-*",
+      "paths": ["plans/011-*"] ,
+      "disposition": "delete",
+      "evidence": "completed plan received by plans/README.md",
+      "received_by": "plans/README.md",
+      "verification": "assert every glob is absent and receiving document exists"
+    },
+    {
+      "id": "legacy-25",
+      "path": "plans/012-* through plans/024-*",
+      "paths": [
+        "plans/012-*", "plans/013-*", "plans/014-*", "plans/015-*", "plans/016-*",
+        "plans/017-*", "plans/018-*", "plans/019-*", "plans/020-*", "plans/021-*",
+        "plans/022-*", "plans/023-*", "plans/024-*"
+      ],
+      "disposition": "delete",
+      "evidence": "completed plan received by plans/README.md",
+      "received_by": "plans/README.md",
+      "verification": "assert every glob is absent and receiving document exists"
+    },
+    {
+      "id": "legacy-26",
+      "path": "src/youtube_automation/infrastructure/resources/auth/client_secrets.template.json",
+      "disposition": "merge",
+      "evidence": "canonical auth package resource",
+      "received_by": "src/youtube_automation/infrastructure/resources/auth/client_secrets.template.json",
+      "verification": "assert canonical package resource exists"
+    },
+    {
+      "id": "legacy-27",
+      "path": ".codex/takt-open-issues-execution-notes.md",
+      "disposition": "merge",
+      "evidence": "completed workflow execution ledger is received by the B6 receipt",
+      "received_by": "docs/architecture/b6-integration-receipt.json",
+      "verification": "assert execution ledger exists and active workflow run is not a provenance path"
+    }
+  ]
+}

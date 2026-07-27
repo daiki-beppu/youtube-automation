@@ -72,10 +72,12 @@ Google Auth Platform の Branding / Audience / Clients 設定を Console で作�
   4. 「Clients」→「Create client」で Application type「Desktop app」を選び、
      名前を <channel-name> Desktop Client にする
   5. 作成した client を開き、「Client secrets」→「Add secret」で新しい secret を発行
-  6. auth/client_secrets.template.json をコピーし、client_id / project_id / client_secret を転記して、
-     チャンネルリポジトリの auth/client_secrets.json として配置
+  6. 「Client secrets」→「Download JSON」を押して Downloads に保存し、「done」と返す
+  7. uv run yt-doctor --fix-client-secrets を実行して、ダウンロードした JSON を
+     チャンネルリポジトリの auth/client_secrets.json へ配置
+  8. uv run yt-doctor --json を実行し、client_secrets が ok になることを確認
 
-詳細は auth/SETUP.md を参照。
+詳細は配布済みの gcp-bootstrap.md「残る手動ステップ: OAuth クライアント ID」を参照してください。
 -----------------------------------
 
 EOF

@@ -4,6 +4,84 @@ CLAUDE.md の「アーキテクチャ」節の詳細版。要点は CLAUDE.md �
 
 このリポジトリは **このリポジトリ自体** と **下流のチャンネルリポジトリ** の 2 層構造で動く。
 
+## プロジェクト用語集
+
+`CONTEXT.md` から移管した、本プロジェクト固有の用語と決定の正本。実装詳細ではなく、設計・運用・移行時に使う語彙を定義する。
+
+### 配布・移行
+
+**tayk**: cutover 後に公開する予定のブランド、npm package 名、bin 名。現行 Python 版の canonical CLI は `yt-*` であり、cutover 後の起動方式として `bunx tayk <cmd>` を計画している。
+
+**cutover**: first-party 下流の日常運用が tayk のみで回るようになり、Python 版のメンテナンスを終了するイベント。tayk のリリース単位とは独立した判断であり、同一リポジトリ内の big-bang merge ではない。
+
+**dogfood**: cutover 前に first-party 2 リポジトリで各コレクション 1 本のフルライフサイクルを実走させる受け入れ検証。期間ではなく完走で判定する。
+
+**critical regression**: cutover をブロックする欠陥。誤公開・誤メタデータ、analytics 履歴または collection 成果物のデータ破壊、auth 破壊の 3 種に限る。
+
+**first-party**: 運営者自身が保有するチャンネルリポジトリ。dogfood の対象であり、第三者 consumer が存在しないことを意味しない。
+
+**external user**: `uv add git+https://` で Python 版を導入し skills 経由で運用する第三者コミュニティ。first-party ではないため dogfood 対象外だが、cutover の告知義務と移行コスト判断に影響する。
+
+### 計画・設定
+
+**Phase**: 実行順の見出しで、「いつ書くか」を表す。Tier とは直交する。
+
+**Tier**: マイルストーンゲート所属のバッジ。[T1] は dogfood ブロッカー、[T2] は cutover ブロッカー、[T3] は port せず削除を表す。優先度ではない。
+
+**config format**: tayk core が読み書きするファイル形式。すべて JSON とし、core は YAML パーサー依存を持たない。takt や CI など外部ツール所有ファイルは各ツールの規約に従う。
+
+**skill config**: チャンネル固有のスキル挙動パラメータ。`config/skills/<skill>.json` のフルファイル 1 本で管理し、default と override の deep merge は行わず、zod schema の `.default()` が省略キーを補完する。
+
+### アーキテクチャ
+
+**MCP tool**: tayk が expose する型付き操作で、agent が直接呼ぶ第一級インターフェース。workflow tool と primitive tool の 2 層で構成する。
+
+**workflow tool**: 人間の GO/NO-GO 判断ゲートで区切られた粗粒度の MCP tool。`collection.plan`、`collection.produce`、`collection.publish` があり、tool 内部で状態管理し resume できる。
+
+**primitive tool**: 単一操作を行う細粒度の MCP tool。workflow tool が内部で呼ぶほか、agent が直接呼んで細かく制御できる。
+
+**knowledge codec**: MCP tool の WHAT に対して WHEN/HOW を提供するドメイン知識パッケージ。60+ skill を `collection-lifecycle`、`channel-management`、`analytics`、`content-quality`、`distribution` の 5 本に集約し、cutover 時点で下流へ配布する操作面はこの 5 本だけとする。
+
+**adapter**: core の MCP tool を各プロトコルへ橋渡しする薄いラッパ。MCP adapter と CLI adapter（`tayk <cmd>`）がある。
+
+**tracer**: アーキテクチャ規約を確定させるため最初に end-to-end で通す垂直スライス。0 ベース再設計では `collection.plan` が該当し、PoC とは区別する。
+
+### 動画生成・コンテンツ制作
+
+**renderer**: collection の映像を生成するバックエンド。`remotion` は React コンポーネントから Chromium フレームキャプチャと ffmpeg エンコードまでを行い、`ffmpeg` は ffmpeg CLI を直接実行する。
+
+**collection**: 1 本の YouTube 動画としてまとめられる楽曲群と成果物一式。`collections/planning/<slug>/` で制作し、公開後 `collections/live/` へ移動する。アルバムや YouTube playlist とは別概念である。
+
+**collection lifecycle**: collection 固有の制作フロー。分析 → 企画 → GO/NO-GO → サムネ生成 → GO/NO-GO → 音源生成 → MIX/マスタリング → 動画生成 → upload → 公開後運用の順で進み、3 本の workflow tool に対応する。
+
+**master**: collection 内の個別トラックをクロスフェード結合した最終音声ファイル（`master.mp3` / `master.wav`）。結合後に正規化し、videoup の音声トラックにする。
+
+### Chrome 拡張
+
+**yield guard**: suno-helper が生成曲の `metadata.duration` を検査し、尺が閾値外なら同一プロンプトで自動再生成する品質最低ライン。良い曲を選ぶ masterup-pairs のキュレーションとは別責務である。
+
+**community-helper**: YouTube のチャンネル投稿ページへ DOM 注入し、`yt-collection-serve` から取得した投稿データを投稿 UI へ自動入力する Chrome 拡張。`suno-helper`、`distrokid-helper` と同列に配置する。
+
+**helper extension shell**: first-party Chrome helper 拡張が共有する、開発ゲート、manifest 管理、server 連携、popup/background/content の責務境界、エラー表示の考え方を揃える構造的な外枠。対象サイト固有の機能を同一にすることではない。
+
+### マルチチャンネル運用・データ
+
+**workspace**: 複数チャンネルを `channels/<slug>/` として同居させる単一リポジトリ。共有物はルートに 1 セット、per-channel 状態は各チャンネル配下に置く。単一チャンネルリポ構成は恒久サポートで、workspace への移行は opt-in とする。
+
+**channel slug**: workspace 内でチャンネルを識別する `channels/` 直下のディレクトリ名。`--channel <slug>` または `CHANNEL=<slug>` で実行対象を指定する。
+
+**competitor**: `analytics.benchmark.channels` に登録するベンチマーク分析対象の他者チャンネル。CLI フラグは `--competitor` であり、`--channel` は自チャンネル指定に予約する。
+
+**channel registry**: first-party チャンネルの絶対パス一覧を `~/.config/tayk/channels.json` に JSON 配列で保持するもの。表示名などは各チャンネルの `config/channel/meta.json` から解決し、dashboard が消費する。
+
+**dashboard**: 全 first-party チャンネルの analytics スナップショットを起動時に最新化して一覧表示するローカル Web UI。Python HTTP server が registry、全チャンネルの直列収集、read model/API/build asset 配信を担い、`dashboard/` の React + Vite + shadcn/ui 表示層は同一 origin の API だけを読む。SSOT は各チャンネルの `data/analytics_data_*.json`（将来は local store）。channel registry で対象チャンネルを解決し、失敗はチャンネル単位の部分エラーとして隔離する。
+
+**データ 4 分類**: SSOT を、① git 管理 JSON の宣言的インテント、② local store のランタイム状態・履歴、③ SSOT を持たない再生成可能な生成成果物、④ YouTube のリモート実状態、に分類するもの。④のローカルデータは reconcile 対象のミラーである。
+
+**local store**: チャンネルごとの `<CHANNEL_DIR>/data/local.db` に置く libSQL (Turso) embedded DB。時系列データと collection 状態を保持し、チャンネル設定の SSOT ではない。
+
+**read model**: local store が提供する読み取り専用のクエリ面。① と ④ のミラーを読むが、SSOT はそれぞれ git と YouTube のままである。
+
 ## 自リポジトリ
 
 - `src/youtube_automation/configuration/` — 設定 loader / dataclass owner
@@ -15,7 +93,6 @@ CLAUDE.md の「アーキテクチャ」節の詳細版。要点は CLAUDE.md �
 - `.claude/CLAUDE.template.md` — BGM チャンネル運営方針テンプレ（共通骨格）。wheel に `_claude_md/CLAUDE.template.md` として `force-include` され、`yt-skills sync --asset claude-md` で各チャンネルの `.claude/CLAUDE.md` として展開される
 - `.agents/skills` — `.claude/skills` への symlink。Codex CLI 用の探索パス（Codex 規約 `$REPO_ROOT/.agents/skills`）
 - `AGENTS.md` — Codex CLI 向けエージェント指示。CLAUDE.md と並立し、Codex 視点のドキュメント補足を含む
-- `auth/` — submodule 利用者向け **後方互換 shim**（OAuth 認証情報のみ維持。`utils/`・`agents/`・`scripts/` のルート shim は廃止済み）
 
 ## 下流チャンネルリポジトリ（`CHANNEL_DIR` が指す先）
 
@@ -69,6 +146,10 @@ assets/stock/           # ボツ画像ストック (#364)。<theme-slug>/ 配下
 | `scripts.collection_serve_discovery` | 固定 loopback endpoint の稼働 server registry、heartbeat、TTL、owner takeover |
 | `extensions/shared/server-discovery.ts` | registry schema v1 の検証と `/server-info` probe を両 helper 拡張へ提供 |
 | `extensions/shared/server-source-migration.ts` | 廃止した配信元候補履歴 storage key の共通 migration |
+
+### dashboard architecture
+
+`yt-dashboard` は channel registry、起動時の収集、read model、JSON API、loopback 限定配信を担当する。通常起動では `yt-dashboard` が全チャンネルを更新し、1 チャンネルの更新失敗は部分エラーとして隔離する。`dashboard/` の React + Vite frontend は shadcn/ui を使った JSON API の表示だけを担当し、dashboard 限定の TypeScript 例外として `extensions/shared-ui` を直接 import しない。
 
 ### B2 domain ownership receipt / B3 handoff
 

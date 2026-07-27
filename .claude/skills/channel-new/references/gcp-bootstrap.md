@@ -3,7 +3,7 @@
 新チャンネル用の GCP プロジェクト + API + 認証情報を用意するためのリファレンス。
 `/channel-new`（新規開設モード / 再生成モード）から参照する。
 
-上流リポジトリ (`daiki-beppu/youtube-automation`、PyPI 配布名は `youtube-channels-automation`) の `auth/SETUP.md` と `infra/terraform/gcp/README.md` が詳細版。このリファレンスは **スキルが実行するときの判断材料** に絞ってある。
+通常の OAuth 手順は `ONBOARDING.md` の「OAuth セットアップ」が正本。このリファレンスは **スキルが実行するときの判断材料** に絞ってある。
 
 ## 意思決定: どのルートで立ち上げるか
 
@@ -60,7 +60,7 @@ automation リポジトリ側では `infra/terraform/gcp/` を canonical ディ�
 
 ## 残る手動ステップ: OAuth クライアント ID
 
-いずれのルートでも **Google Auth Platform での Branding / Audience / Clients 設定と `client_secrets.json` 配置は Console での手動作業として残る**（gcloud / Terraform 双方未サポート）。
+いずれのルートでも **Google Auth Platform での Branding / Audience / Clients 設定は Console での手動作業として残る**（gcloud / Terraform 双方未サポート）。
 
 スクリプト実行後に出力される URL を開き:
 1. 左メニューで **Google Auth Platform** を開く
@@ -70,10 +70,11 @@ automation リポジトリ側では `infra/terraform/gcp/` を canonical ディ�
 4. **Clients** → **Create client** を開き、Application type **Desktop app** を選ぶ
 5. 名前を入力（推奨: `<channel-name> Desktop Client`）→ 作成
 6. 作成した client を開き、**Client secrets** → **Add secret** で secret を発行
-7. `auth/client_secrets.template.json` をコピーし、`client_id` / `project_id` / `client_secret` を転記して `client_secrets.json` として保存
-8. **チャンネルリポジトリの `auth/client_secrets.json`** に配置
+7. **Client secrets > Download JSON** を押して Downloads に保存し、`done` と返す
+8. `uv run yt-doctor --fix-client-secrets` を実行して、ダウンロードした JSON をチャンネルリポジトリの `auth/client_secrets.json` へ配置
+9. `uv run yt-doctor --json` を実行し、`client_secrets` が `ok` になることを確認
 
-client secret を見失った場合は、**Clients** → 対象 client → **Client secrets** → **Add secret** で新しい secret を発行し直す。`auth/client_secrets.template.json` をコピーし、`client_id` / `project_id` / `client_secret` を手入力して `client_secrets.json` として保存する。
+client secret を見失った場合は、**Clients** → 対象 client → **Client secrets** → **Add secret** で新しい secret を発行し、**Download JSON** から再取得して同じ手順を実行する。
 
 ## 前提チェック
 
@@ -99,4 +100,4 @@ terraform ルートの場合は追加で:
 | ADC の quota project がズレている | `gcloud auth application-default set-quota-project <id>` |
 | tfstate が壊れた | `terraform.tfstate*` を削除して `terraform import` からやり直すか、bootstrap.sh ルートに切替 |
 
-その他詳細は上流の `auth/SETUP.md` の「トラブルシューティング」節。
+OAuth の詳細は `ONBOARDING.md` の「OAuth セットアップ」を参照。

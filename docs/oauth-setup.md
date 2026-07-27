@@ -1,12 +1,16 @@
-# 🔐 GCP / YouTube API セットアップガイド
+# GCP / YouTube API セットアップ（手動ルートと参照情報）
 
-新しい YouTube チャンネル用に GCP プロジェクト + API + 認証情報を用意する手順。
+新しい YouTube チャンネル用に GCP プロジェクト + API + 認証情報を用意する手順のうち、**手動ルート A / B** と、ルート共通の参照情報（`client_secrets.json` の検索順、Vertex AI の project / location 解決、トラブルシューティング）をまとめる。
 
-本リポジトリは Gemini / Veo / Lyria を **Vertex AI 経由で 1 本化** している（AI Studio モードは廃止）。スクリプト / Terraform で半自動化しているため、Google Auth Platform の Branding / Audience / Clients は手動設定する。推奨の `/setup` では Download JSON までを利用者が行い、配置は AI が自動化する。手動ルート A / B の配置手順は現状どおり維持する。
+推奨経路である **ルート 0（`/setup` skill）の手順は [`ONBOARDING.md`](../ONBOARDING.md) の「2.3 OAuth セットアップ」を正本とする**。本書はそこから参照される補助文書であり、ルート 0 の手順を再掲しない。
+
+skill / CLI ごとの実効 scope と read-only token の設計は [`oauth-scopes.md`](oauth-scopes.md) を参照。
+
+本リポジトリは Gemini / Veo / Lyria を **Vertex AI 経由で 1 本化** している（AI Studio モードは廃止）。スクリプト / Terraform で半自動化しているが、Google Auth Platform の Branding / Audience / Clients は手動設定が必要。
 
 ---
 
-## 📋 前提条件
+## 前提条件
 
 - Google アカウント（YouTube チャンネル所有者）
 - `gcloud` CLI インストール済み（[導入手順](https://cloud.google.com/sdk/docs/install)）
@@ -18,7 +22,7 @@
 
 ---
 
-## 🚀 セットアップ: 3 つのルート
+## セットアップ: 3 つのルート
 
 > **実行ディレクトリ**: 本ガイドのスクリプトコマンドはこのリポジトリのルートを基準とした相対パスです。submodule (`automation/`) 経由で導入している場合は `cd automation` してから実行してください。
 
@@ -30,17 +34,9 @@
 
 「初回 1 チャンネルだけ立ち上げ」ならルート 0 or A、「2 つ目以降」「IaC 管理したい」ならルート B が向く。詳細な選択基準は [`infra/terraform/gcp/README.md`](../infra/terraform/gcp/README.md) の「いつ terraform を選ぶか」を参照。
 
-### ルート 0: `/setup` skill (AI 主導 wizard、推奨)
+ルート 0 は [`ONBOARDING.md`](../ONBOARDING.md) の「2.3 OAuth セットアップ」を参照する。内部では本書のルート A (`gcp-bootstrap.sh`) を呼ぶ。
 
-Claude Code 上で `/setup` を実行する。AI が `yt-doctor` でツール導入と API 設定の状態を診断し、GCP プロジェクト作成・billing 紐付け・API 有効化・IAM・ADC quota project・Google Auth Platform 手動設定まで wizard で誘導する。
-
-```
-/setup
-```
-
-`gcloud auth login` / `gcloud auth application-default login` / Google Auth Platform の Branding・Audience Test users・Clients 設定と Download JSON は PKCE / GUI 制約で AI 実行不可なため利用者が手動で行う。Download JSON 後に `done` と返すと、AI が `uv run yt-doctor --fix-client-secrets`、続けて `uv run yt-doctor --json` を実行し、`client_secrets: ok` を確認する。それ以外は AI が gcloud を直接 Bash で実行する。内部では本書のルート A (bootstrap.sh) を呼ぶ。
-
-### ルート A: `.claude/skills/channel-new/references/gcp-bootstrap.sh`（gcloud 半自動化・最速）
+### ルート A: `gcp-bootstrap.sh`（gcloud 半自動化・最速）
 
 チャンネル単位で気軽に立ち上げたいケース。1 コマンドでプロジェクト作成〜API 有効化〜IAM・ADC quota project 設定まで完結する。冪等なので再実行しても安全。
 
@@ -65,7 +61,7 @@ Claude Code 上で `/setup` を実行する。AI が `yt-doctor` でツール導
 | `--skip-adc` | `gcloud auth application-default login` を省略 |
 | `--dry-run` | 変更せずプレビュー |
 
-完了時に Google Auth Platform 手動設定用の Console URL が表示されるので、Branding / Audience / Clients を設定し、`client_secrets.json` を配置する（[Step OAuth](#step-oauth) 参照）。
+完了時に Google Auth Platform 手動設定用の Console URL が表示されるので、Branding / Audience / Clients を設定し、`client_secrets.json` を配置する（[Google Auth Platform 手動設定](#google-auth-platform-手動設定) 参照）。
 
 ### ルート B: `infra/terraform/gcp`（宣言的 IaC・本命）
 
@@ -85,11 +81,11 @@ cd ../../..
 
 詳細は [`infra/terraform/gcp/README.md`](../infra/terraform/gcp/README.md) を参照。
 
-ルート A / B では `client_secrets.json` の手動配置を現状どおり行う。次の Step OAuth はその手動経路向けであり、推奨のルート 0 は `/setup` の Download JSON → `done` → fix → JSON 再診断を使う。
+ルート A / B では `client_secrets.json` の手動配置を行う。次節はその手動経路向けであり、推奨のルート 0 は `/setup` の Download JSON → `done` → `yt-doctor --fix-client-secrets` → JSON 再診断を使う。
 
 ---
 
-## <a id="step-oauth"></a>🔑 Google Auth Platform 手動設定
+## Google Auth Platform 手動設定
 
 `gcloud` / Terraform いずれも Google Auth Platform の Branding / Audience / Clients 設定には対応していないため、ここは Console での手動作業が必要:
 
@@ -103,7 +99,8 @@ cd ../../..
 5. **Clients** → **Create client** を開き、Application type **Desktop app** を選ぶ
 6. 名前を入力（推奨: `<channel-name> Desktop Client`）→ 作成
 7. 作成した client を開き、**Client secrets** → **Add secret** で新しい secret を発行
-8. `auth/client_secrets.template.json` をコピーし、`client_id` / `project_id` / `client_secret` を転記して `client_secrets.json` として保存
+8. チャンネルリポジトリの `auth/client_secrets.template.json` をコピーし、`client_id` / `project_id` / `client_secret` を転記して `client_secrets.json` として保存
+   - テンプレートは `yt-skills sync --asset auth-template` で配布される（canonical source は `src/youtube_automation/infrastructure/resources/auth/client_secrets.template.json`）
 9. `client_secrets.json` を **チャンネルリポジトリの `auth/` 配下**に配置
    - 推奨パス: `<channel_dir>/auth/client_secrets.json`
 
@@ -111,17 +108,30 @@ cd ../../..
 
 `yt-channel-status` などの初回認証で `403 access_denied` が出る場合は、**Audience > Test users** にログイン中の Google アカウントが登録されているか確認し、`<channel_dir>/auth/token.json` を削除してから再実行する。
 
-検索順:
-1. `CLIENT_SECRETS_DIR` 環境変数で指定されたディレクトリ（明示 override。設定時はその中の `client_secrets.json` のみ検査し、未配置でも fallback しない）
-2. `CLIENT_SECRETS_DIR` 未設定時: `<channel_dir>/auth/client_secrets.json`（推奨）
-3. `CLIENT_SECRETS_DIR` 未設定時: `<channel_dir>/automation/auth/client_secrets.json`（submodule 互換フォールバック）
-4. `CLIENT_SECRETS_DIR` 未設定かつ 2 / 3 が無い場合: 1Password / `CLIENT_SECRETS_JSON` fallback
+---
 
-実行時 OAuth は 4 を一時ファイル化して Google OAuth ライブラリへ渡す。`yt-doctor` は read-only 診断のため、4 はメモリ上で JSON 構造だけ検査し、secret ファイルを書き出さない。
+## <a id="client-secrets-resolution"></a>`client_secrets.json` の解決順
+
+実装は `infrastructure/auth/youtube.py::client_secrets_file_candidates()` および `resolve_client_secrets_location()`。
+
+`CLIENT_SECRETS_DIR` が設定されている場合は **明示 override** として扱い、そのディレクトリの `client_secrets.json` **のみ**を検査する。未配置でも他の候補や 1Password へ fallback しない。
+
+`CLIENT_SECRETS_DIR` 未設定時は、次の順にファイルを探索する:
+
+1. `<channel_dir>/auth/client_secrets.json`（推奨）
+2. `<channel_dir>/automation/auth/client_secrets.json`（submodule 互換フォールバック）
+3. `<workspace_root>/auth/client_secrets.json`
+   - `channel_dir` が workspace 配下のチャンネルとして解決できる場合のみ候補に加わる
+4. `<main_worktree_root>/auth/client_secrets.json`
+   - git worktree では gitignore された `auth/` が複製されないため、main 作業ツリー側の実体を最後のフォールバックとして参照する（#1721）
+
+いずれのファイルも存在しない場合は、1Password / `CLIENT_SECRETS_JSON` による secret fallback を試みる。
+
+実行時 OAuth は secret fallback の内容を一時ファイル化して Google OAuth ライブラリへ渡す。`yt-doctor` は read-only 診断のため、fallback をメモリ上で JSON 構造だけ検査し、secret ファイルを書き出さない。
 
 ---
 
-## ✅ 動作確認
+## 動作確認
 
 ```bash
 # YouTube OAuth 初回認証（ブラウザ起動）
@@ -133,7 +143,7 @@ uv run yt-generate-image --prompt "a gentle watercolor forest" --output /tmp/tes
 
 両方成功すれば完了。
 
-## 📁 ファイル構成
+## ファイル構成
 
 ```
 <channel_dir>/
@@ -145,11 +155,11 @@ uv run yt-generate-image --prompt "a gentle watercolor forest" --output /tmp/tes
 
 read-only 系 skill（analytics / benchmark / channel-status 等）は `token.readonly.json`
 （write scope を含まない）を優先使用し、未発行時は warning 付きで `token.json` に
-フォールバックする。詳細と skill × scope 対応表は `docs/oauth-scopes.md`。
+フォールバックする。詳細と skill × scope 対応表は [`oauth-scopes.md`](oauth-scopes.md)。
 
 ---
 
-## 🌐 Vertex AI の project / location 解決
+## Vertex AI の project / location 解決
 
 project ID は ADC quota project (`gcloud auth application-default set-quota-project <PROJECT_ID>`) を標準とする。明示 override が必要な実行だけ `GOOGLE_CLOUD_PROJECT=<id>` を process env で渡す。
 
@@ -168,7 +178,7 @@ Vertex AI で以下を利用する。`aiplatform.googleapis.com` が有効化さ
 
 ---
 
-## ⚠️ セキュリティ注意事項
+## セキュリティ注意事項
 
 - `auth/client_secrets.json`: **絶対に公開しない**（gitignore 済み）
 - `auth/token.json` / `auth/token.readonly.json`: **絶対に公開しない**（gitignore 済み）
@@ -176,7 +186,7 @@ Vertex AI で以下を利用する。`aiplatform.googleapis.com` が有効化さ
 
 ---
 
-## 🔧 トラブルシューティング
+## トラブルシューティング
 
 ### bootstrap/terraform 共通
 
@@ -211,7 +221,7 @@ Billing account が紐付いていない。`--billing-account` を渡して再�
 ### YouTube OAuth 固有
 
 #### `client_secrets.json が見つかりません`
-[Step OAuth](#step-oauth) を確認。ファイル配置先を見直し。
+[Google Auth Platform 手動設定](#google-auth-platform-手動設定) と [`client_secrets.json` の解決順](#client-secrets-resolution) を確認。ファイル配置先を見直す。
 
 #### `Access blocked: This app's request is invalid`
 Google Auth Platform の設定が不足している。**Branding** の連絡先、**Audience > Test users**、**Clients** の Desktop app client を確認する。

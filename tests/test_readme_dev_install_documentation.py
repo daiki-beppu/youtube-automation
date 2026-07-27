@@ -5,9 +5,9 @@ Issue #329: pytest 全実行で optional dependency 未インストール時の 
 完了条件 3 が「どの optional dep が必要かを README/CONTRIBUTING に明文化」のため、
 本リポジトリでは README.md の Development 節に以下を含めることで満たす:
 
-1. Developer bootstrap のコマンド例から空 extra (`--extra veo`) を取り除き、
+1. Developer bootstrap のコマンド例から削除済み extra (`--extra veo`) を取り除き、
    正規 setup wrapper で依存が揃うことを示す。
-   - 理由: `pyproject.toml:33-35` で `veo = []` (空 extra) になっており、
+   - 理由: `pyproject.toml` に `veo` extra が存在せず、
      `--extra veo` を案内し続けるのは「optional dep を明文化」の主旨と矛盾する。
    - Plan 024 (dev 依存一本化) で `pytest` / `ruff` は `[dependency-groups].dev`
      経由の default group となり、`--extra dev` 指定は不要になった。
@@ -25,6 +25,7 @@ Issue #329: pytest 全実行で optional dependency 未インストール時の 
 from __future__ import annotations
 
 import re
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -97,25 +98,12 @@ def test_readme_has_development_section() -> None:
     assert "## Development" in text, "README.md に `## Development` 節がない"
 
 
-# ---------- Developer bootstrap: `--extra veo` の撤去 ----------
-
-
-def test_developer_bootstrap_drops_empty_veo_extra() -> None:
-    """Given README.md Developer bootstrap block
-    When `uv sync` コマンドを読む
-    Then 空 extra `--extra veo` が削除されている (pyproject.toml で `veo = []`)。
-    """
+def test_developer_bootstrap_drops_removed_veo_extra() -> None:
     block = _developer_bootstrap_block(_development_section(_read(README)))
-    assert "--extra veo" not in block, (
-        f"Developer bootstrap に空 extra `--extra veo` が残存 (pyproject.toml で `veo = []` なので no-op):\n{block}"
-    )
+    assert "--extra veo" not in block, f"Developer bootstrap に削除済み extra `--extra veo` が残存:\n{block}"
 
 
 def test_developer_bootstrap_uses_canonical_devshell_entry() -> None:
-    """Given README.md Developer bootstrap block
-    When 推奨コマンドを読む
-    Then canonical devShell 入口（nix develop）だけが環境準備入口として案内されている。
-    """
     block = _developer_bootstrap_block(_development_section(_read(README)))
     assert "nix develop" in block
     assert "uv sync" not in block
@@ -201,14 +189,14 @@ def test_test_run_section_is_expanded_beyond_single_codeblock() -> None:
 
 
 def test_readme_does_not_advertise_empty_extras() -> None:
-    """Given README.md 全体
-    When `--extra veo` の登場箇所を探す
-    Then 一切登場しない (pyproject.toml で `veo = []` の空 extra のため)。
-
-    Developer bootstrap block 以外の場所にも残っていないかの横断確認。
-    """
     text = _read(README)
-    assert "--extra veo" not in text, "README.md のどこかに `--extra veo` (空 extra) の案内が残存"
+    assert "--extra veo" not in text, "README.md のどこかに削除済み `--extra veo` の案内が残存"
+
+
+def test_pyproject_does_not_define_veo_extra() -> None:
+    project = tomllib.loads((_REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    optional_dependencies = project.get("project", {}).get("optional-dependencies", {})
+    assert "veo" not in optional_dependencies
 
 
 @pytest.mark.parametrize(
@@ -217,13 +205,6 @@ def test_readme_does_not_advertise_empty_extras() -> None:
     ids=["Pillow", "pandas", "pyyaml"],
 )
 def test_main_dependency_listed_in_pyproject(package_name: str) -> None:
-    """Given pyproject.toml `[project] dependencies`
-    When テストが import する main dep を列挙する
-    Then 列挙された dep (`Pillow` / `pandas` / `pyyaml`) が含まれている。
-
-    README に「main deps に入っている」と書いた根拠を pyproject.toml 側でも担保する。
-    将来誰かが pyproject.toml から削除した場合、この test と README の説明が同時に乖離する。
-    """
     pyproject = _REPO_ROOT / "pyproject.toml"
     text = pyproject.read_text(encoding="utf-8")
     # `[project] dependencies = [ ... ]` ブロックを抽出

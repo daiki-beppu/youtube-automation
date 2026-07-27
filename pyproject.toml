@@ -32,9 +32,6 @@ dependencies = [
 [project.urls]
 Repository = "https://github.com/daiki-beppu/youtube-automation"
 
-[project.optional-dependencies]
-veo = []  # google-genai, Pillow moved to main dependencies
-
 [project.scripts]
 yt-audio-visualizer-fill = "youtube_automation.entrypoints:yt_audio_visualizer_fill"
 # CLI script entry points (yt-* prefix)
@@ -141,22 +138,23 @@ packages = ["src/youtube_automation"]
 
 [tool.hatch.build.targets.sdist]
 skip-excluded-dirs = true
-include = [
+ignore-vcs = true
+only-include = [
     "src/",
     "tests/",
     ".claude/CLAUDE.template.md",
     ".claude/settings.template.json",
     "docs/workflow-cheatsheet.md",
     "docs/features.md",
-    "auth/SETUP.md",
-    "src/youtube_automation/infrastructure/resources/auth/client_secrets.template.json",
+    # README の OAuth 導線（ONBOARDING → oauth-setup → oauth-scopes / ルート B 詳細）が
+    # sdist 内で解決するよう同梱する。infra/ はこの README 以外は配布しない
+    "ONBOARDING.md",
+    "docs/oauth-setup.md",
+    "docs/oauth-scopes.md",
+    "infra/terraform/gcp/README.md",
     "README.md",
     "LICENSE",
     "pyproject.toml",
-]
-exclude = [
-    ".agents/",
-    "/.direnv",
 ]
 
 [tool.hatch.build.targets.sdist.force-include]

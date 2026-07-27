@@ -49,4 +49,4 @@ accepted (2026-07-13)。workspace 解決と `yt-channel list` は #1947、コピ
 - 単一チャンネルリポの external user には**破壊的変更なし**（解決チェーンの既存 2 段は不変）。ただし benchmark 系 `--channel` → `--competitor` リネームのみ breaking で、同梱 skills の参照更新と CHANGELOG 告知で吸収する
 - 移行期間中は旧リポと workspace が併存し、`yt-skills sync` / automation-update は両方に打つ必要がある（段階移行のコスト）
 - stock 楽曲のローカル喪失時は Suno からの手動再ダウンロードが必要になる（git バックアップの放棄）
-- CONTEXT.md に workspace / channel slug / competitor を登録済み。channel registry（ADR-0013）は workspace 内パスも指せる定義に更新済み
+- 現行 architecture 文書に workspace / channel slug / competitor の定義を統合済み。channel registry（ADR-0013）は workspace 内パスも指せる定義に更新済み
