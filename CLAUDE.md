@@ -1,101 +1,31 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+YouTube チャンネル運営を自動化するツールキット。`youtube-channels-automation` パッケージとして配布し、下流のチャンネルリポジトリ（`CHANNEL_DIR`）へ `yt-skills sync` で導入される 2 層構造。
 
-詳細ドキュメント: アーキテクチャ全容・主要モジュール表は `docs/architecture.md`、パッケージング / extensions / 品質ゲート詳細は `docs/development.md`、issue / worktree 運用は `docs/takt-operations.md`。
+詳細は必要になった時点で参照する: アーキテクチャ・主要モジュール表は `docs/architecture.md`、bootstrap / パッケージング / 品質ゲート / dashboard 開発は `docs/development.md`、issue / worktree 運用は `docs/takt-operations.md`、スキル設計は `docs/skill-design/skill-authoring-guidelines.md`。
 
-本リポジトリの開発者 bootstrap は `docs/development.md#開発者-bootstrap正規入口` を単一ソースとする。各 checkout（親 checkout / linked worktree）で devShell に入る（direnv または `nix develop`。shellHook が `uv sync` を自動実行）。非対話 shell は `nix develop --command <command>` を使う。
+## 非自明な規約・落とし穴
 
-## プロジェクト概要
-
-YouTube チャンネル運営を自動化するツールキット。`youtube-channels-automation` パッケージとして配布し、各チャンネルリポジトリへ導入される（Analytics 収集、AI コンテンツ生成、動画アップロード、メタデータ生成、ベンチマーク分析）。
-
-## プロジェクト固有コマンド
-
-```bash
-uv run yt-skills sync             # チャンネルリポジトリへ .claude/skills を配布（--asset claude-md で CLAUDE.md テンプレ）
-uv run yt-skills list             # 同梱スキル一覧
-uv run yt-skills diff             # 同梱版と target の差分確認
-uv run yt-skills lint [<skill>..] # SKILL.md frontmatter の軽量検証（strict YAML / double-quote。pytest 不要で秒単位）
-```
-
-`yt-*` 系 CLI 全 30 件超は `pyproject.toml` の `[project.scripts]` に登録されている。新規 CLI を追加するときは **必ず `yt-*` プレフィックス**を踏襲し、entry point を登録すること。
-
-CLI は SKILL.md から呼ばれるインターフェースでもある。値域が決まっている引数は `choices=` で閉じ（`--engine veo|omni`、`--existing ask|update|skip`）、フラグの意味は `argparse` の `help=` に書く。手順書側へ呼び出し例を並べて補うのではなく、引数自体が読んで分かる形にする（`docs/skill-design/skill-authoring-guidelines.md`「実行系のインターフェース」）。
-
-## アーキテクチャ要点
-
-このリポジトリは **このリポジトリ自体** と **下流のチャンネルリポジトリ** の 2 層構造で動く（全容・主要モジュール表は `docs/architecture.md`）。
-
-- `.claude/skills/` — 自動化スキル群（Claude Code / Codex 共用）。wheel に同梱され `yt-skills sync` で各チャンネルへ展開。`.agents/skills` は Codex CLI 探索パス用の symlink（実体は常に `.claude/skills/` 側を編集）
-- 下流チャンネルリポジトリ（`CHANNEL_DIR`）: `config/channel/*.json`（責務別分割。meta / content / youtube / analytics / playlists / workflow / audio + optional の shorts.json / comments.json / pinned-comment.json / distrokid.json / community-draft.json）、`config/localizations.json`、`auth/`、`.claude/skills/`、`collections/`、`assets/stock/`
-
-## 開発規約
-
-### 設定アクセス
-
-- チャンネル固有値は **必ず** `from youtube_automation.configuration import load_config` 経由で取得
-- 責務別ネームスペースでアクセス: `config.meta.channel_name` / `config.content.tags.base` / `config.youtube.api.category_id`
-- ハードコーディング禁止 — `config/channel/*.json` に集約
-- 新しい設定キーを追加する場合:
-  1. 該当責務の dataclass（`configuration/<section>.py`）にフィールド追加
-  2. `configuration/loader.py::_build_*` で JSON からの組み立てを追加
-  3. 必須キーであれば `_REQUIRED_KEYS_BY_SECTION` にも登録
-- Path のみ必要な場合（loader を起動したくない）は `channel_dir()` を使う
-- サンプルは `examples/channel_config.example/`（必須 + optional ファイル、`community.example.json` は skill-local raw JSON 例外）と `examples/localizations.example.json`
-
-### エラーハンドリング
-
-- `infrastructure/errors.py` のドメイン例外を使用すること
-- 生の `Exception` / `KeyError` を catch しない — `ConfigError`, `YouTubeAPIError` 等を使う
-
-### Import 規約
-
-- パッケージ内コードは必ず `from youtube_automation.xxx import ...` の fully-qualified import を使う
-
-### 依存ポリシー: deprecated 表明済み依存の取り扱い
-
-- `google-auth-httplib2` の **直 import を新規追加しない**（回帰テスト `tests/test_no_google_auth_httplib2_direct_import.py` で機械担保）
-- transitive 依存の残置理由・移行手順は `docs/migration/google-auth-httplib2.md` と `docs/development.md` を参照
-
-### スクリプト配置
-
-- skill 固有・共通スクリプトはいずれも該当 skill の `.claude/skills/<skill>/references/` に配置する。ルート直下に `scripts/` ディレクトリは設けない
-
-### skill frontmatter
-
-- SKILL.md の frontmatter `description:` は **必ず double-quoted string** で書く（値内の `: ` が strict YAML でマッピング区切りと誤解釈されるため）
-- スキルの新規作成・改訂時は `docs/skill-design/skill-authoring-guidelines.md` に従う。必須は 3 点（不可逆・外部反映操作の承認ゲート / 前提の存在ガード / 配布先で解決できる参照）で、それ以外は実行者の判断に委ねて記述量を抑える。既存スキルの一括改修は不要
-- SKILL.md は入口。生成・検証ロジック、長い対照表、プロンプトテンプレート、トラブルシュート事例は `references/` へ置き、必要になった時点で読ませる
-
-### パッケージング
-
-- `.claude/skills/` と `.claude/CLAUDE.template.md` は wheel に force-include され `yt-skills sync` で配布される。バージョン bump は `pyproject.toml::version` のみ（`__version__` は動的読込）。詳細は `docs/development.md`、リリースは `/automation-release` スキル
-
-### TS レイヤー（dashboard 限定例外）
-
-TS 版（tayk）の開発は専用の別リポジトリで行う（`docs/adr/0021-separate-repo-restart.md`）。本リポジトリは Python 版のメンテナンスモードであり、**`dashboard/` の React + Vite + shadcn/ui 表示層だけを dashboard 限定の TypeScript 例外**とする。dashboard frontend は Python の起動時 Analytics 収集・読み取り専用 JSON API・build asset 配信に従属し、詳細は ADR-0013 と `docs/development.md::dashboard 開発` を正とする。
-
-他の TypeScript 実装・fix、tayk core、削除済み `packages/` の復活は禁止する。Chrome 拡張は既存 `extensions/` 規約に従う独立例外であり、dashboard から `extensions/shared-ui` を直接 import しない。
+- devShell 必須（direnv または `nix develop`。shellHook が `uv sync` を自動実行）。非対話 shell は `nix develop --command <cmd>`
+- チャンネル固有値は `load_config` 経由でのみ取得（`config.meta.channel_name` 形式）。ハードコード禁止。新キー追加は dataclass（`configuration/<section>.py`）+ `loader.py::_build_*` + 必須なら `_REQUIRED_KEYS_BY_SECTION` の 3 点セット — 最後の登録を忘れやすい
+- 例外は `infrastructure/errors.py` のドメイン例外（`ConfigError`, `YouTubeAPIError` 等）を使う。生の `Exception` / `KeyError` を catch しない
+- パッケージ内 import は `from youtube_automation.xxx import ...` の fully-qualified 固定
+- 新規 CLI は必ず `yt-*` プレフィックスで `pyproject.toml::[project.scripts]` に登録。CLI は SKILL.md から呼ばれるインターフェースなので、引数は `choices=` / `help=` で自己記述にする
+- `google-auth-httplib2` の直 import を新規追加しない（回帰テストで機械担保。経緯は `docs/migration/google-auth-httplib2.md`）
+- スクリプトは該当 skill の `.claude/skills/<skill>/references/` 配下に置く。ルート直下に `scripts/` を設けない
+- skill の実体は常に `.claude/skills/` 側（`.agents/skills` は Codex 用 symlink — 編集しない）。SKILL.md frontmatter の `description:` は double-quoted 必須（値内の `: ` が strict YAML で誤解釈される）。検証は `uv run yt-skills lint`
+- `.claude/skills/` と `.claude/CLAUDE.template.md` は wheel に force-include される。バージョン bump は `pyproject.toml::version` のみ（`__version__` は動的読込）
+- 品質ゲート（ruff / CHANGELOG / any 型）はローカル git hook ではなく CI で担保
+- TypeScript は `dashboard/` の表示層（ADR-0013）と `extensions/` のみの限定例外。tayk core の実装・削除済み `packages/` の復活は禁止（`docs/adr/0021-separate-repo-restart.md`）。dashboard から `extensions/shared-ui` を import しない
 
 ## セキュリティ
 
-- `auth/client_secrets.json` / `auth/token.json` / `.env` は **絶対にコミットしない**
-- シークレット解決順序: `os.environ` → `op read`（1Password CLI）→ `ConfigError`。`YOUTUBE_AUTOMATION_DISABLE_OP_READ=1` の場合は `op read` をスキップし、通常テストではこの opt-out を既定有効化する
-- 参照定義は `utils/secrets.py` の `_SECRET_REFS`（デフォルト: `op://Personal/YouTube_OAuth_Client_Secrets/credential`）
+- `auth/client_secrets.json` / `auth/token.json` / `.env` は絶対にコミットしない
+- シークレット解決順: `os.environ` → `op read`（1Password CLI）→ `ConfigError`。参照定義は `utils/secrets.py::_SECRET_REFS`。テストでは `YOUTUBE_AUTOMATION_DISABLE_OP_READ=1`（既定有効）で `op read` をスキップ
 - AI 系（Vertex AI）は ADC 認証のため `op` 取得は不要
-
-### 品質ゲート
-
-- 品質ゲート（ruff / CHANGELOG / any 型）はローカル git hook ではなく CI で担保する。詳細は `docs/development.md` の「品質ゲート（CI）」
-- bootstrap / 対話・非対話 shell / 依存同期の正規手順は `docs/development.md#開発者-bootstrap正規入口` を参照
 
 ## 開発ワークフロー
 
-このリポジトリの開発は **必ず issue 専用 linked worktree 上で行う**（メインの作業ツリーで直接ブランチを切らない）。標準ルートは **GitHub issue + `/issue-direct`**。worktree の作成・検証・PR 運用は `docs/takt-operations.md`。
-
-- **issue 起票**: `gh issue create` または `/issue` スキル
-- **issue 着手**: `/issue-direct <N>`、または main から同等の issue 専用 linked worktree を作成する（base branch は **main** 固定、PR は通常 PR）
-- **takt**: 使用しない。既存の `takt:*` ラベルは履歴メタデータとしてのみ扱い、新規 issue へ付与しない
-- **commit 規約**: 日本語 Conventional Commits + タイトル末尾に `(#<N>)`
-- **リリース**: `/automation-release` スキル（post-release は `/release-notes`）
+- 開発は必ず issue 専用 linked worktree 上で行う。標準ルートは `/issue-direct <N>`（base branch は main 固定、通常 PR）。takt は使わない（既存 `takt:*` ラベルは履歴メタデータのみ）
+- commit は日本語 Conventional Commits + タイトル末尾に `(#<N>)`
+- リリースは `/automation-release`（post-release は `/release-notes`）
