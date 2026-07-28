@@ -2,12 +2,14 @@
 
 YouTube チャンネル運営を自動化するツールキット。`youtube-channels-automation` パッケージとして配布し、下流のチャンネルリポジトリ（`CHANNEL_DIR`）へ `yt-skills sync` で導入される 2 層構造。
 
-詳細は必要になった時点で参照する: アーキテクチャ・主要モジュール表は `docs/architecture.md`、bootstrap / パッケージング / 品質ゲート / dashboard 開発は `docs/development.md`、issue / worktree 運用は `docs/takt-operations.md`、スキル設計は `docs/skill-design/skill-authoring-guidelines.md`。
+詳細は必要になった時点で参照する: アーキテクチャ・主要モジュール表は `docs/architecture.md`、bootstrap は `docs/development.md#開発者-bootstrap正規入口`（パッケージング / 品質ゲート / dashboard 開発も `docs/development.md`）、issue / worktree 運用は `docs/takt-operations.md`、スキル設計は `docs/skill-design/skill-authoring-guidelines.md`。
 
 ## 非自明な規約・落とし穴
 
 - devShell 必須（direnv または `nix develop`。shellHook が `uv sync` を自動実行）。非対話 shell は `nix develop --command <cmd>`
 - チャンネル固有値は `load_config` 経由でのみ取得（`config.meta.channel_name` 形式）。ハードコード禁止。新キー追加は dataclass（`configuration/<section>.py`）+ `loader.py::_build_*` + 必須なら `_REQUIRED_KEYS_BY_SECTION` の 3 点セット — 最後の登録を忘れやすい
+- 下流の `config/channel/*.json` は責務別分割。optional は shorts.json / comments.json / pinned-comment.json / distrokid.json / community-draft.json（全容は `docs/architecture.md`）
+- 本ファイルや README / ONBOARDING / AGENTS の記述は契約テストで機械担保されている — 文言を変更・削除するときは `tests/test_*_contract.py` / `test_skill_docs_consistency.py` / `test_developer_bootstrap_documentation.py` を確認
 - 例外は `infrastructure/errors.py` のドメイン例外（`ConfigError`, `YouTubeAPIError` 等）を使う。生の `Exception` / `KeyError` を catch しない
 - パッケージ内 import は `from youtube_automation.xxx import ...` の fully-qualified 固定
 - 新規 CLI は必ず `yt-*` プレフィックスで `pyproject.toml::[project.scripts]` に登録。CLI は SKILL.md から呼ばれるインターフェースなので、引数は `choices=` / `help=` で自己記述にする
@@ -16,7 +18,7 @@ YouTube チャンネル運営を自動化するツールキット。`youtube-cha
 - skill の実体は常に `.claude/skills/` 側（`.agents/skills` は Codex 用 symlink — 編集しない）。SKILL.md frontmatter の `description:` は double-quoted 必須（値内の `: ` が strict YAML で誤解釈される）。検証は `uv run yt-skills lint`
 - `.claude/skills/` と `.claude/CLAUDE.template.md` は wheel に force-include される。バージョン bump は `pyproject.toml::version` のみ（`__version__` は動的読込）
 - 品質ゲート（ruff / CHANGELOG / any 型）はローカル git hook ではなく CI で担保
-- TypeScript は `dashboard/` の表示層（ADR-0013）と `extensions/` のみの限定例外。tayk core の実装・削除済み `packages/` の復活は禁止（`docs/adr/0021-separate-repo-restart.md`）。dashboard から `extensions/shared-ui` を import しない
+- TypeScript は dashboard 限定例外（`dashboard/` の React + Vite + shadcn/ui 表示層、ADR-0013）と `extensions/` のみ。他の TypeScript 実装・tayk core・削除済み `packages/` の復活は禁止（`docs/adr/0021-separate-repo-restart.md`）。dashboard から `extensions/shared-ui` を import しない
 
 ## セキュリティ
 
