@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `fix(generate-videos-batch)`: 複数 collection の workflow-state 永続化が途中で失敗した場合を終了コード 1 に変換し、更新済み collection を再実行対象から除外したまま未更新分だけ再開できる契約を固定（#2662）。
+
 - `chore(takt)`: ユニットテスト監査で稼働中の `audit-unit-split` workflow 資産（workflow 1 本 + facets 4 本、v3 の上書きセマンティクス対策済み）を無改変で git 管理下に置いた。#2686 で `.takt/workflows/` / `.takt/facets/` の git 管理が前提となったため、worktree・他 checkout でも定義を解決できるようにする（#2690）。
 
 - `feat(takt)`: リポジトリ専用 workflow 群を整備し、takt を開発の標準実装経路へ戻した（#2453 の廃止根拠だった「workflow 実体の不在」を、`.takt/workflows/` の git 管理 + `takt workflow doctor` 検証で解消）。レーンは yt-auto-feature（設計ゲート + テスト先行）/ yt-auto-fix（診断ゲート + 再現テスト red 検証）/ yt-auto-docs（文書・スキル限定の軽量レーン）/ yt-auto-maintenance（維持契約の列挙 + safety net 付きリファクタリング）/ yt-auto-audit（台帳ベース汎用監査）の 5 本と、共通 callable の yt-auto-intake / yt-auto-impl-review。全実装レーンに CI 同等ゲート（`ci_verify`: ruff / any-gate / pytest / CHANGELOG のローカル実行。ローカル git hook 廃止後の push 前関門）を置き、facets（personas / knowledge / policies / instructions / output-contracts）約 50 本と persona routing を追加した。CLAUDE.md / AGENTS.md / `docs/development.md` / `docs/takt-operations.md` の「takt は使用しない」を反転し、`/issue-direct` は対話用の代替経路として残した（#2686）。

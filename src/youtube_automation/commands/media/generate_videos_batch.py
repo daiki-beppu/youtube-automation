@@ -231,7 +231,7 @@ def main() -> int:
         print(f"対象: {len(targets)} collection / 最大並列数: {min(max_workers, len(targets))}")
         results = run_batch_parallel(targets, max_workers=max_workers, script_path=_script_path(root))
         updated = update_workflow_states(results)
-    except (ConfigError, ValidationError) as exc:
+    except (ConfigError, ValidationError, OSError) as exc:
         print(f"ERROR: {exc}")
         return 1
 

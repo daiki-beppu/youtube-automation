@@ -119,6 +119,42 @@ def test_update_workflow_states_accepts_successful_collection_paths(tmp_path: Pa
     assert batch.update_workflow_states([collection]) == {collection: "Success-Master.mp4"}
 
 
+def test_main_state_write_partial_failure_leaves_only_failed_target_for_retry(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    first = _collection(tmp_path, "planning", "first", audio="master.mp3", video=None)
+    second = _collection(tmp_path, "planning", "second", audio="master.mp3", video=None)
+    (first / "01-master" / "First-Master.mp4").touch()
+    (second / "01-master" / "Second-Master.mp4").touch()
+    script = tmp_path / ".claude" / "skills" / "videoup" / "references" / "generate_videos.sh"
+    script.parent.mkdir(parents=True)
+    script.touch()
+    results = [batch.BatchResult(first, 0), batch.BatchResult(second, 0)]
+    monkeypatch.setattr("sys.argv", ["yt-generate-videos-batch"])
+    monkeypatch.setattr(batch, "channel_dir", lambda: tmp_path)
+    monkeypatch.setattr(batch, "run_batch_parallel", lambda *_args, **_kwargs: results)
+    original_write = batch._write_state_atomic
+    writes = 0
+
+    def fail_second(path, state):
+        nonlocal writes
+        writes += 1
+        if writes == 2:
+            raise OSError("disk full")
+        original_write(path, state)
+
+    monkeypatch.setattr(batch, "_write_state_atomic", fail_second)
+
+    assert batch.main() == 1
+
+    first_state = json.loads((first / "workflow-state.json").read_text(encoding="utf-8"))
+    second_state = json.loads((second / "workflow-state.json").read_text(encoding="utf-8"))
+    assert first_state["assets"]["master_video"] == "First-Master.mp4"
+    assert second_state["assets"]["master_video"] is None
+    assert batch.find_batch_targets(tmp_path) == [second.resolve()]
+
+
 @pytest.mark.parametrize(
     ("cli", "env", "config", "cpu", "expected"),
     [
