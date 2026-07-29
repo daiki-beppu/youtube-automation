@@ -66,6 +66,42 @@ def test_select_report_type_raises_when_no_match():
         client.select_report_type()
 
 
+def test_dry_run_inspection_observes_existing_state_without_creating_or_downloading(monkeypatch):
+    service = _make_service(
+        report_types=[
+            {"id": "channel_reach_combined_a1", "name": "combined"},
+            {"id": "channel_reach_basic_a1", "name": "basic"},
+        ],
+        jobs=[
+            {"id": "job-basic", "reportTypeId": "channel_reach_basic_a1", "name": "yt-automation"},
+            {"id": "job-other", "reportTypeId": "channel_reach_combined_a1", "name": "other"},
+        ],
+    )
+    client = ReportingAPIClient(service, credentials=MagicMock())
+    list_reports = MagicMock(return_value=[{"id": "r1"}, {"id": "r2"}])
+    monkeypatch.setattr(client, "list_recent_reports", list_reports)
+    download = MagicMock()
+    monkeypatch.setattr(client, "download_report_csv", download)
+
+    result = client.dry_run_inspection()
+
+    assert result == {
+        "report_types_count": 2,
+        "available_priority_matches": ["channel_reach_basic_a1", "channel_reach_combined_a1"],
+        "selected_report_type": "channel_reach_basic_a1",
+        "jobs_count": 2,
+        "existing_job": {
+            "id": "job-basic",
+            "reportTypeId": "channel_reach_basic_a1",
+            "name": "yt-automation",
+        },
+        "recent_reports_count": 2,
+    }
+    list_reports.assert_called_once_with("job-basic", since_days=60)
+    service.jobs.return_value.create.assert_not_called()
+    download.assert_not_called()
+
+
 # ---------------------------------------------------------------------------
 # ensure_job
 # ---------------------------------------------------------------------------
@@ -95,6 +131,25 @@ def test_ensure_job_creates_when_missing():
     service.jobs.return_value.create.assert_called_once_with(
         body={"reportTypeId": "channel_reach_basic_a1", "name": "yt-automation"}
     )
+
+
+def test_list_recent_reports_follows_all_page_tokens():
+    service = _make_service()
+    execute = service.jobs.return_value.reports.return_value.list.return_value.execute
+    execute.side_effect = [
+        {"reports": [{"id": "r1"}], "nextPageToken": "page-2"},
+        {"reports": [{"id": "r2"}], "nextPageToken": "page-3"},
+        {"reports": [{"id": "r3"}]},
+    ]
+    client = ReportingAPIClient(service)
+
+    reports = client.list_recent_reports("job-1", since_days=7)
+
+    assert [report["id"] for report in reports] == ["r1", "r2", "r3"]
+    calls = service.jobs.return_value.reports.return_value.list.call_args_list
+    assert [call.kwargs.get("pageToken") for call in calls] == [None, "page-2", "page-3"]
+    assert all(call.kwargs["jobId"] == "job-1" for call in calls)
+    assert len({call.kwargs["createdAfter"] for call in calls}) == 1
 
 
 # ---------------------------------------------------------------------------
@@ -295,6 +350,41 @@ def test_collect_impressions_summary_returns_empty_when_no_reports():
     assert summary["aggregated_ctr_percentage"] is None
     assert summary["per_video"] == []
     assert summary["per_day"] == []
+
+
+def test_collect_impressions_summary_keeps_successes_after_download_and_parse_failures(monkeypatch, caplog):
+    client = ReportingAPIClient(MagicMock(), credentials=MagicMock())
+    monkeypatch.setattr(client, "select_report_type", MagicMock(return_value="channel_reach_basic_a1"))
+    monkeypatch.setattr(client, "ensure_job", MagicMock(return_value="job-1"))
+    monkeypatch.setattr(
+        client,
+        "list_recent_reports",
+        MagicMock(
+            return_value=[
+                {"id": "r1", "downloadUrl": "https://example.com/good.csv"},
+                {"id": "r2", "downloadUrl": "https://example.com/download-fails.csv"},
+                {"id": "r3", "downloadUrl": "https://example.com/parse-fails.csv"},
+            ]
+        ),
+    )
+    download = MagicMock(
+        side_effect=[
+            "date,video_id,video_thumbnail_impressions,video_thumbnail_impressions_ctr\n2026-04-20,vid001,1000,0.05\n",
+            YouTubeAPIError("download failed"),
+            "date,video_id,views\n2026-04-20,vid002,50\n",
+        ]
+    )
+    monkeypatch.setattr(client, "download_report_csv", download)
+
+    with caplog.at_level("WARNING"):
+        summary = client.collect_impressions_summary(days=7)
+
+    assert summary["report_count"] == 3
+    assert summary["aggregated_impressions"] == 1000
+    assert summary["aggregated_ctr_percentage"] == pytest.approx(5.0)
+    assert summary["per_video"] == [{"video_id": "vid001", "impressions": 1000, "ctr_percentage": pytest.approx(5.0)}]
+    assert download.call_count == 3
+    assert sum("パースに失敗（続行）" in record.message for record in caplog.records) == 2
 
 
 # ---------------------------------------------------------------------------
