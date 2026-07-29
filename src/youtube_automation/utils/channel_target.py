@@ -23,4 +23,7 @@ def resolve_existing_target_dir(target: str | None) -> Path:
             raise ConfigError(f"CHANNEL_DIR で指定されたディレクトリが存在しません: {path}")
         return path
 
-    return Path.cwd().resolve()
+    path = Path.cwd().resolve()
+    if not path.is_dir():
+        raise ConfigError(f"現在の作業ディレクトリが存在しません: {path}")
+    return path
