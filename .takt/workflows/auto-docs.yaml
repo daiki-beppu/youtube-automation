@@ -1,0 +1,296 @@
+# docs / skill 限定変更の軽量レーン。src/youtube_automation/ のプロダクションコードを
+# 変更しないことがレーンの前提であり、implement の quality_gates と docs_review が
+# これを検査する。実コード変更が必要と判明したら ABORT して適切なレーン
+# (auto-feature / auto-fix)へ回す。
+#
+# フル設計ゲート・テスト先行・4 並列実装レビューを持たない代わりに、
+# 文書には契約テスト(tests/test_*_contract.py 等)という機械ゲートがあるため、
+# ci_verify(CI 同等ゲート)は省かない。
+name: auto-docs
+description: >
+  docs / SKILL.md / CLAUDE.md など文書・スキル限定変更の軽量ワークフロー。
+  intake → 計画 → 実装 → 文書レビュー(記述整合 / 規約・品質の 2 並列)→ CI 同等ゲート →
+  スコープ外発見の起票。プロダクションコードの変更が必要なタスクは受けない
+  (auto-feature / auto-fix へ)。commit / push / PR 作成は workflow 完了後に
+  takt の auto_pr が行う。
+workflow_config:
+  provider_options:
+    codex:
+      network_access: true
+    opencode:
+      network_access: true
+# レビュー ⇄ 修正のループの歯止めは loop monitor が持ち、max_steps は最後の保険
+max_steps: 30
+initial_step: intake
+loop_monitors:
+  - cycle:
+      - docs_review
+      - docs_fix
+    threshold: 3
+    judge:
+      persona: supervisor
+      instruction: loop-monitor-reviewers-fix
+      rules:
+        - condition: 健全(指摘数が減少、修正が反映されている)
+          next: docs_review
+        - condition: 再計画で打開できる(指摘が計画の誤りを観測で実証している)
+          next: plan
+        - condition: 修正・再計画のいずれでも打開できない
+          next: ABORT
+steps:
+  # ── Phase 0: intake ───────────────────────────────────────────────
+  - name: intake
+    kind: workflow_call
+    call: auto-intake
+    rules:
+      - condition: COMPLETE
+        next: plan
+      - condition: blocked
+        next: ABORT
+      - condition: ABORT
+        next: ABORT
+
+  # ── Phase 1: 計画 ─────────────────────────────────────────────────
+  - name: plan
+    description: 変更対象文書の特定と方針の決定(要件 ID 採番)
+    tags:
+      - plan
+    edit: false
+    persona: planner
+    policy:
+      - auto-traceability
+    knowledge:
+      - auto-conventions
+      - auto-domain
+    provider_options:
+      extends: review-readonly
+    instruction: auto-docs-plan
+    quality_gates:
+      - 全要件に REQ-<issue番号>-<2桁連番> 形式の ID が振られていること
+      - 変更対象がすべて文書・スキル(docs/ / .claude/skills/ / CLAUDE.md / README 等)であり、プロダクションコードを含まないこと
+      - 変更対象の文言を担保する契約テスト(tests/test_*_contract.py 等)の有無を確認していること
+    rules:
+      - condition: これが 4 回目以降の計画である(3 回作り直しても方針が定まらなかった)
+        next: ABORT
+        appendix: |
+          各ラウンドで立てた方針と、差し戻された理由:
+          - {何を計画し、なぜ差し戻されたか}
+      - condition: 要件 ID を採番し変更方針を決めた
+        next: implement
+      - condition: ユーザーが質問をしている(実装タスクではない)
+        next: COMPLETE
+      - condition: プロダクションコードの変更が必要である(このレーンの対象外)
+        next: ABORT
+        appendix: |
+          必要なコード変更と、回すべきレーン:
+          - {何のコード変更が必要か。auto-feature / auto-fix のどちらへ回すべきか}
+      - condition: 情報不足で方針が一意に決まらない
+        next: ABORT
+        appendix: |
+          方針を決めるために必要な情報:
+          - {何が決まれば進めるか}
+    output_contracts:
+      report:
+        - name: docs-plan.md
+          format: auto-docs-plan
+
+  # ── Phase 2: 実装 ─────────────────────────────────────────────────
+  - name: implement
+    description: 文書・スキルの変更(契約テストの追随を含む)
+    tags:
+      - coding
+    edit: true
+    persona: coder
+    policy:
+      - auto-toolchain
+      - auto-traceability
+      - auto-scope-spillover
+    knowledge:
+      - auto-conventions
+      - auto-domain
+    required_permission_mode: edit
+    provider_options:
+      extends: edit
+    instruction: auto-docs-implement
+    quality_gates:
+      - src/youtube_automation/ のプロダクションコードを変更していないこと(契約テストの追随は tests/ のみ可)
+      - skill を変更したなら `uv run yt-skills lint` が通ること
+      - SKILL.md frontmatter の description が double-quoted であること
+      - 文言を担保する契約テストがある場合、テストを追随させていること(緩和・削除ではなく)
+      - 実コード扱いのパス(.claude/skills/ / .claude/CLAUDE.template.md)を変更したなら CHANGELOG.md の [Unreleased] を更新していること
+    rules:
+      - condition: 計画の全要件を実装した
+        next: docs_review
+      - condition: プロダクションコードの変更が必要と判明した(このレーンの対象外)
+        next: ABORT
+        appendix: |
+          必要なコード変更と、回すべきレーン:
+          - {何のコード変更が必要か。auto-feature / auto-fix のどちらへ回すべきか}
+      - condition: 計画の前提が誤っている
+        next: plan
+
+  # ── Phase 3: 文書レビュー ─────────────────────────────────────────
+  - name: docs_review
+    description: 記述整合 / 規約・品質の 2 並列レビュー
+    tags:
+      - review
+    parallel:
+      - name: docs-consistency-review
+        tags:
+          - review
+        edit: false
+        # requirements-reviewer は builtin persona に存在しない(config.yaml の routing は
+        # global 複製の名残)。記述整合の検査は品質全般の qa-reviewer が担う
+        persona: qa-reviewer
+        policy:
+          - review
+          - auto-review-convergence
+        knowledge:
+          - auto-domain
+        provider_options:
+          extends: review-readonly
+        pass_previous_response: false
+        instruction: auto-review-docs-consistency
+        rules:
+          - condition: APPROVE
+          - condition: REJECT
+        output_contracts:
+          report:
+            - name: docs-consistency-review.md
+              format: auto-docs-review
+      - name: docs-quality-review
+        tags:
+          - review
+          - conventions
+        edit: false
+        persona: auto-conventions-reviewer
+        policy:
+          - review
+          - auto-review-convergence
+        knowledge:
+          - auto-conventions
+        provider_options:
+          extends: review-readonly
+        pass_previous_response: false
+        instruction: auto-review-docs-quality
+        rules:
+          - condition: APPROVE
+          - condition: REJECT
+        output_contracts:
+          report:
+            - name: docs-quality-review.md
+              format: auto-docs-review
+    rules:
+      - condition: all("APPROVE")
+        next: ci_verify
+      - condition: any("REJECT")
+        next: docs_fix
+
+  - name: docs_fix
+    description: 文書レビュー指摘の修正
+    tags:
+      - coding
+    edit: true
+    persona: coder
+    policy:
+      - auto-toolchain
+      - auto-traceability
+      - auto-scope-spillover
+    knowledge:
+      - auto-conventions
+    required_permission_mode: edit
+    session: refresh
+    provider_options:
+      extends: edit
+    promotion:
+      - at: 2
+        provider_options:
+          codex:
+            reasoning_effort: high
+          claude:
+            effort: high
+    instruction: fix
+    pass_previous_response: false
+    quality_gates:
+      - 全 finding に対応(修正 or 根拠を示した反論)していること
+      - 契約テストの緩和・削除で指摘を消していないこと
+      - 要件 ID にない変更を追加していないこと
+    rules:
+      # docs_fix は docs_review からのみ再入されるため cycle は安定するが、
+      # 保険としてラウンド上限をこの step 自身にも持たせる
+      - condition: これが 4 回目以降の修正である(3 ラウンドで指摘が解消しなかった)
+        next: plan
+        appendix: |
+          各ラウンドで直した内容と、残った指摘:
+          - {何を直し、何が残ったか}
+      - condition: 修正完了
+        next: docs_review
+      - condition: 指摘が計画の前提そのものを否定している
+        next: plan
+
+  # ── Phase 4: CI 同等ゲート ────────────────────────────────────────
+  # 文書変更でも契約テスト(pytest)と changelog ゲートは落ち得る。
+  # 本リポジトリはローカル git hook を持たないため、ここが auto_pr 前の最後の関門。
+  - name: ci_verify
+    description: CI 同等ゲートのローカル実行と機械的修正(format / lint 自明修正 / CHANGELOG)
+    tags:
+      - coding
+      - delivery-gate
+    edit: true
+    persona: coder
+    policy:
+      - auto-toolchain
+      - auto-traceability
+    required_permission_mode: edit
+    provider_options:
+      extends: edit
+    instruction: auto-ci-verify
+    pass_previous_response: false
+    quality_gates:
+      - 全ゲート(ruff check / ruff format --check / any-usage-gate / pytest / CHANGELOG)を実際に実行し、個々の結果を報告していること
+      - テストの削除・skip・アサーション緩和でゲートを通していないこと
+      - 機械的修正(format 適用 / lint 自明修正 / CHANGELOG 追記)以外の実装変更をしていないこと
+    rules:
+      - condition: 全ゲートが green である(機械的修正のみで到達した場合を含む)
+        next: spillover
+      - condition: 文書・テストの欠陥が原因でゲートを green にできない
+        next: docs_review
+      - condition: 環境障害でゲートを実行できない
+        next: ABORT
+        appendix: |
+          実行できなかったゲートと失敗の内容:
+          - {何を実行し、どう失敗したか}
+
+  # ── Phase 5: スコープ外発見の起票 ─────────────────────────────────
+  # 文書監査で気づいた問題(リンク切れ・実装と乖離した記述など)の受け皿。
+  # 定義は auto-feature / auto-fix と重複するが、callable の子は親のレポートを
+  # 読めないため複製を選ぶ(職務が「親の全レポートの走査」そのものであるため)。
+  - name: spillover
+    description: 各レポートのスコープ外の発見を集め、起票する / 捨てるに仕分ける
+    tags:
+      - delivery
+    edit: false
+    persona: auto-delivery-operator
+    policy:
+      - auto-scope-spillover
+    knowledge:
+      - auto-domain
+    provider_options:
+      extends: review-readonly
+    session: refresh
+    instruction: auto-spillover
+    quality_gates:
+      - Report Directory の全レポートを読み、発見がなかったものも収集元に記録していること
+      - 起票したものが 3 条件(因果なし / 実害あり / 根拠あり)をすべて満たしていること
+      - 起票前に gh issue list で重複を照合していること
+      - 破棄した発見について、満たさなかった条件と理由を記録していること
+      - gh issue の操作に失敗したなら、起票できなかった発見と手動起票用のコマンドを
+        レポートに残していること
+      - コードを変更していないこと
+    rules:
+      - condition: 因果ありと判定した発見があり、今回の差分に含めるべきものが残っている
+        next: plan
+      - condition: gh issue の操作に失敗し、起票できなかった発見が残っている
+        next: COMPLETE
+      - condition: 仕分けが終わり、起票・追記・破棄をすべて記録した(発見ゼロの場合を含む)
+        next: COMPLETE

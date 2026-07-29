@@ -28,6 +28,9 @@ YouTube チャンネル運営を自動化するツールキット。`youtube-cha
 
 ## 開発ワークフロー
 
-- 開発は必ず issue 専用 linked worktree 上で行う。標準ルートは `/issue-direct <N>`（base branch は main 固定、通常 PR）。takt は使わない（既存 `takt:*` ラベルは履歴メタデータのみ）
+- 標準ルートは takt: `takt add '#<N>'` で `.takt/workflows/` の専用 workflow（auto-feature / auto-fix / auto-docs / auto-maintenance / auto-audit）を選び、`auto_pr` 有効で `takt run`。使い分けと運用は `docs/takt-operations.md`（既存 `takt:*` ラベルは履歴メタデータのみ — 新規に付与しない）
+- 人間と対話しながら進めたいタスク・要件が固まっていない探索は `/issue-direct <N>`（issue 専用 linked worktree、base branch は main 固定、通常 PR）
+- takt 経路以外の開発は必ず issue 専用 linked worktree 上で行う（メイン作業ツリーで直接ブランチを切らない）
+- `.takt/workflows/` / `.takt/facets/` を変更したら `takt workflow doctor` で検証する
 - commit は日本語 Conventional Commits + タイトル末尾に `(#<N>)`
 - リリースは `/automation-release`（post-release は `/release-notes`）

@@ -1,0 +1,421 @@
+# 定期リファクタリング workflow。外部から観測できる挙動を変えないことがレーンの前提。
+# feature との差分は「維持すべき契約の列挙」が計画の中心にあること、実装前に safety net
+# (契約を担保するテストの存在と green)を確認すること。fix との差分は診断がないこと
+# (壊れていないものを直すレーンであり、壊れていると分かったら auto-fix へ回す)。
+name: auto-maintenance
+description: >
+  定期リファクタリングワークフロー。intake → 計画(維持すべき契約の列挙 + リファクタ方針)→
+  計画レビュー(設計 / 規約整合の 2 並列)→ safety net(契約を担保するテストの確認・補強と
+  green 確認)→ リファクタ実装 → 実装レビュー(4 並列)→ CI 同等ゲート → 最終ゲート →
+  スコープ外発見の起票。外部挙動を変えないこと、変えたくなったら止まることが規律。
+  commit / push / PR 作成は workflow 完了後に takt の auto_pr が行う。
+workflow_config:
+  provider_options:
+    codex:
+      network_access: true
+    opencode:
+      network_access: true
+# 計画ループ・実装ループを含む。ループの歯止めは loop monitor と各 step の上限が持ち、
+# max_steps はそれらをすり抜けた場合の最後の保険
+max_steps: 80
+initial_step: intake
+loop_monitors:
+  # ── 計画レビュー ⇄ 計画修正。実装前なので、打ち切りより再計画を優先する ──
+  - cycle:
+      - plan_review
+      - plan_fix
+    threshold: 3
+    judge:
+      persona: supervisor
+      instruction: auto-loop-monitor-design
+      rules:
+        - condition: 健全(指摘が減っている・修正が実質的)
+          next: plan_review
+        - condition: 非生産的(同じ指摘が繰り返される・維持すべき契約が固まっていない)
+          next: plan
+  # ── 実装ゲート ⇄ CI 同等ゲートの往復 ──
+  - cycle:
+      - impl_gate
+      - ci_verify
+    threshold: 3
+    judge:
+      persona: supervisor
+      instruction: loop-monitor-reviewers-fix
+      rules:
+        - condition: 健全(落ちるゲートが減っている)
+          next: impl_gate
+        - condition: 再計画で打開できる(ゲート失敗が計画の誤りを観測で実証している)
+          next: plan
+        - condition: 修正・再計画のいずれでも打開できない
+          next: ABORT
+  # ── 実装ゲート ⇄ 最終ゲートの往復 ──
+  - cycle:
+      - impl_gate
+      - ci_verify
+      - final_gate
+    threshold: 3
+    judge:
+      persona: supervisor
+      instruction: loop-monitor-reviewers-fix
+      rules:
+        - condition: 健全(指摘数が減少、修正が反映されている)
+          next: impl_gate
+        - condition: 再計画または異議申告で打開できる(指摘が計画の誤りを観測で実証している)
+          next: plan
+        - condition: 修正・再計画・異議申告のいずれでも打開できない
+          next: ABORT
+steps:
+  # ── Phase 0: intake ───────────────────────────────────────────────
+  - name: intake
+    kind: workflow_call
+    call: auto-intake
+    rules:
+      - condition: COMPLETE
+        next: plan
+      - condition: blocked
+        next: ABORT
+      - condition: ABORT
+        next: ABORT
+
+  # ── Phase 1: 計画 ─────────────────────────────────────────────────
+  # リファクタリングの計画は「何を変えるか」より先に「何を変えないか」を確定する。
+  # 維持すべき契約が列挙されていない計画は、挙動変更の混入を検出できない。
+  - name: plan
+    description: 維持すべき契約の列挙とリファクタ方針の決定(要件 ID 採番)
+    tags:
+      - plan
+    edit: false
+    persona: planner
+    policy:
+      - auto-traceability
+      - auto-toolchain
+      - existing-system-respect
+    knowledge:
+      - architecture
+      - auto-conventions
+      - auto-domain
+    provider_options:
+      extends: review-readonly
+    instruction: auto-maintenance-plan
+    quality_gates:
+      - 維持すべき外部契約(公開 CLI / config スキーマ / skill 配布物 / 例外型 / テストが担保する挙動)が列挙されていること
+      - 全要件に REQ-<issue番号>-<2桁連番> 形式の ID が振られていること
+      - 各契約について、それを担保する既存テストの有無が確認されていること
+      - リファクタ方針が「何を変えないか」を前提に書かれていること
+      - 外部挙動の変更を含む方針になっていないこと
+    rules:
+      - condition: これが 4 回目以降の計画である(3 回作り直しても方針が定まらなかった)
+        next: ABORT
+        appendix: |
+          各ラウンドで立てた方針と、差し戻された理由:
+          - {何を計画し、なぜ差し戻されたか}
+      - condition: 維持契約を列挙し、要件 ID を採番し、リファクタ方針を決めた
+        next: plan_review
+      - condition: ユーザーが質問をしている(実装タスクではない)
+        next: COMPLETE
+      - condition: 対象が既に壊れている(リファクタリングではなくバグ修正が必要)
+        next: ABORT
+        appendix: |
+          観測した症状と、auto-fix へ回すべき理由:
+          - {何が壊れているか}
+      - condition: 情報不足で方針が一意に決まらない
+        next: ABORT
+        appendix: |
+          方針を決めるために必要な情報:
+          - {何が決まれば進めるか}
+    output_contracts:
+      report:
+        - name: plan.md
+          format: auto-maintenance-plan
+
+  # 実装前の関門。維持契約の見落としは、実装後に見つける場合より桁違いに安い。
+  - name: plan_review
+    description: リファクタ計画 / 規約整合の 2 並列レビュー
+    tags:
+      - review
+      - design-gate
+    parallel:
+      - name: maintenance-plan-review
+        tags:
+          - review
+          - design-gate
+        edit: false
+        persona: architecture-reviewer
+        policy:
+          - review
+          - existing-system-respect
+          - auto-review-rescan
+          - auto-review-convergence
+        knowledge:
+          - architecture
+          - auto-domain
+        provider_options:
+          extends: review-readonly
+        pass_previous_response: false
+        instruction: auto-review-maintenance-plan
+        rules:
+          - condition: APPROVE
+          - condition: REJECT
+          - condition: NEED_REPLAN
+        output_contracts:
+          report:
+            - name: plan-review.md
+              format: auto-design-arch-review
+      - name: conventions-plan
+        tags:
+          - review
+          - design-gate
+          - conventions
+        edit: false
+        persona: auto-conventions-reviewer
+        policy:
+          - review
+          - auto-review-rescan
+          - auto-review-convergence
+        knowledge:
+          - auto-conventions
+          - auto-domain
+        provider_options:
+          extends: review-readonly
+        pass_previous_response: false
+        instruction: auto-review-conventions-gate
+        rules:
+          - condition: APPROVE
+          - condition: REJECT
+          - condition: NEEDS_CONVENTION_REVISION
+        output_contracts:
+          report:
+            - name: conventions-plan.md
+              format: auto-conventions-review
+    rules:
+      - condition: all("APPROVE")
+        next: safety_net
+      - condition: any("NEED_REPLAN")
+        next: plan
+      - condition: any("REJECT", "NEEDS_CONVENTION_REVISION")
+        next: plan_fix
+
+  - name: plan_fix
+    description: 計画レビュー指摘の解消(レポートのみを直す。コードは書かない)
+    tags:
+      - plan
+      - design-gate
+    edit: true
+    persona: planner
+    policy:
+      - auto-traceability
+      - existing-system-respect
+    knowledge:
+      - architecture
+      - auto-conventions
+    required_permission_mode: edit
+    session: refresh
+    provider_options:
+      extends: edit
+    promotion:
+      - at: 2
+        provider_options:
+          codex:
+            reasoning_effort: high
+          claude:
+            effort: high
+    instruction: auto-gate-fix
+    pass_previous_response: false
+    quality_gates:
+      - 全 finding に対応(修正 or 根拠を示した反論)していること
+      - 要件 ID を振り直していないこと(分割時は枝番を使うこと)
+      - プロダクションコード・テストコードを書いていないこと
+    rules:
+      # plan_fix は plan_review からだけでなく safety_net(契約リストの誤り)からも
+      # 再入し得る。挟み込みで cycle が途切れてカウントが 1 に戻ることがあるため、
+      # ラウンド上限をこの step 自身にも持たせる
+      - condition: これが 4 回目以降の計画修正である(3 ラウンドで計画が固まらなかった)
+        next: plan
+        appendix: |
+          各ラウンドで直した内容と、残った指摘:
+          - {何を直し、何が残ったか}
+      - condition: 全 finding に対応した
+        next: plan_review
+      - condition: 指摘が計画の前提そのものを否定している
+        next: plan
+
+  # ── Phase 2: safety net ───────────────────────────────────────────
+  # リファクタ前に「契約が守られていることを検証できる状態」を作る。
+  # テストのないコードを動かすのは、命綱なしで構造を組み替えるのと同じ。
+  - name: safety_net
+    description: 維持契約を担保するテストの確認・補強(characterization テスト)と green 確認
+    tags:
+      - coding
+      - test-planning
+    edit: true
+    persona: coder
+    policy:
+      - coding
+      - testing
+      - auto-traceability
+      - existing-system-respect
+      - auto-toolchain
+    knowledge:
+      - unit-testing
+      - auto-conventions
+    required_permission_mode: edit
+    provider_options:
+      extends: edit
+    instruction: auto-safety-net
+    quality_gates:
+      - 計画の全維持契約について、担保するテストの存在(既存 or 今回追加)を確認していること
+      - 追加した characterization テストは現在の挙動をそのまま固定しており、望ましい挙動への先回りをしていないこと
+      - リファクタ前の時点で対象テストが全て green であることを確認していること
+      - プロダクションコードを変更していないこと
+      - 外部サービスへ実アクセスしていないこと
+    rules:
+      - condition: 全維持契約にテストが対応し、リファクタ前の green を確認した
+        next: refactor
+      - condition: 既存挙動のテストが修正前から red である(対象が既に壊れている)
+        next: ABORT
+        appendix: |
+          red のテストと症状(auto-fix へ回す):
+          - {どのテストがどう失敗したか}
+      - condition: 計画の維持契約リストに誤り・不足がある
+        next: plan_fix
+    output_contracts:
+      report:
+        - name: test-report.md
+          format: test-report
+
+  # ── Phase 3: リファクタ実装 ───────────────────────────────────────
+  - name: refactor
+    description: 挙動を変えない構造の変更(safety net の green を維持する)
+    tags:
+      - coding
+    edit: true
+    persona: coder
+    policy:
+      - coding
+      - testing
+      - auto-traceability
+      - existing-system-respect
+      - auto-scope-spillover
+      - auto-toolchain
+    knowledge:
+      - architecture
+      - auto-conventions
+      - auto-domain
+    required_permission_mode: edit
+    session: refresh
+    provider_options:
+      extends: edit
+    instruction: auto-refactor
+    quality_gates:
+      - safety net のテストが全て green のままであること
+      - テストの変更がリネーム・移動への機械的追随のみであること(アサーションの変更・削除をしていない)
+      - 全差分を「必須変更 / 関連変更 / 不要変更」に分類し、不要変更が残っていないこと
+      - 計画の要件 ID にない変更を混ぜていないこと
+    rules:
+      - condition: リファクタが完了し、safety net が green のまま
+        next: impl_gate
+      - condition: 挙動を変えずには目的を達成できないと判明した
+        next: plan
+      - condition: リファクタの過程でバグを発見した(既存挙動が誤っている)
+        next: plan
+        appendix: |
+          発見したバグ(スコープ外発見として起票するか、計画の見直しが必要):
+          - {何が誤っているか}
+    output_contracts:
+      report:
+        - name: maintenance-scope.md
+          format: maintenance-scope
+
+  # ── Phase 4: 実装レビュー ─────────────────────────────────────────
+  - name: impl_gate
+    kind: workflow_call
+    call: auto-impl-review
+    rules:
+      - condition: COMPLETE
+        next: ci_verify
+      - condition: needs_replan
+        next: plan
+      - condition: ABORT
+        next: ABORT
+
+  # ── Phase 5: CI 同等ゲート ────────────────────────────────────────
+  - name: ci_verify
+    description: CI 同等ゲートのローカル実行と機械的修正(format / lint 自明修正 / CHANGELOG)
+    tags:
+      - coding
+      - delivery-gate
+    edit: true
+    persona: coder
+    policy:
+      - auto-toolchain
+      - auto-traceability
+    required_permission_mode: edit
+    provider_options:
+      extends: edit
+    instruction: auto-ci-verify
+    pass_previous_response: false
+    quality_gates:
+      - 全ゲート(ruff check / ruff format --check / any-usage-gate / pytest / CHANGELOG)を実際に実行し、個々の結果を報告していること
+      - テストの削除・skip・アサーション緩和でゲートを通していないこと
+      - 機械的修正(format 適用 / lint 自明修正 / CHANGELOG 追記)以外の実装変更をしていないこと
+    rules:
+      - condition: 全ゲートが green である(機械的修正のみで到達した場合を含む)
+        next: final_gate
+      - condition: 実装の欠陥が原因でゲートを green にできない
+        next: impl_gate
+      - condition: 環境障害でゲートを実行できない
+        next: ABORT
+        appendix: |
+          実行できなかったゲートと失敗の内容:
+          - {何を実行し、どう失敗したか}
+
+  # ── Phase 6: 最終ゲート ───────────────────────────────────────────
+  - name: final_gate
+    kind: workflow_call
+    call: merge-readiness-final-gate
+    args:
+      supervise_knowledge:
+        - architecture
+        - auto-conventions
+    rules:
+      - condition: COMPLETE
+        next: spillover
+      - condition: needs_fix
+        next: impl_gate
+      - condition: need_replan
+        next: plan
+      - condition: ABORT
+        next: ABORT
+
+  # ── Phase 7: スコープ外発見の起票 ─────────────────────────────────
+  # リファクタリングは「ついで直し」の誘惑が最も強いレーンであり、spillover の
+  # 受け皿がないと existing-system-respect の禁止が守れない。
+  - name: spillover
+    description: 各レポートのスコープ外の発見を集め、起票する / 捨てるに仕分ける
+    tags:
+      - delivery
+    edit: false
+    persona: auto-delivery-operator
+    policy:
+      - auto-scope-spillover
+    knowledge:
+      - auto-domain
+    provider_options:
+      extends: review-readonly
+    session: refresh
+    instruction: auto-spillover
+    quality_gates:
+      - Report Directory の全レポートを読み、発見がなかったものも収集元に記録していること
+      - 起票したものが 3 条件(因果なし / 実害あり / 根拠あり)をすべて満たしていること
+      - 起票前に gh issue list で重複を照合していること
+      - 破棄した発見について、満たさなかった条件と理由を記録していること
+      - gh issue の操作に失敗したなら、起票できなかった発見と手動起票用のコマンドを
+        レポートに残していること
+      - コードを変更していないこと
+    rules:
+      - condition: 因果ありと判定した発見があり、今回の差分に含めるべきものが残っている
+        next: plan
+      - condition: gh issue の操作に失敗し、起票できなかった発見が残っている
+        next: COMPLETE
+      - condition: 仕分けが終わり、起票・追記・破棄をすべて記録した(発見ゼロの場合を含む)
+        next: COMPLETE

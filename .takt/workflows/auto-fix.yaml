@@ -1,0 +1,513 @@
+name: auto-fix
+description: >
+  バグ修正ワークフロー。intake → 診断(原因特定・検証可能な予測・修正方針・回帰テスト設計)→
+  診断レビュー(診断妥当性 / 規約整合 / 回帰テスト設計の 3 並列)→ 再現テスト(red 確認)→
+  修正 → 実装レビュー(4 並列)→ CI 同等ゲート → 最終ゲート → スコープ外発見の起票。
+  commit / push / PR 作成は workflow 完了後に takt の auto_pr が行う。
+  原因を特定してから直すこと、再現テストの red を診断の検証に使うことが feature との差分。
+workflow_config:
+  provider_options:
+    codex:
+      network_access: true
+    opencode:
+      network_access: true
+# 診断ループ・実装ループを含むため default (30) では足りない。
+# ループの歯止めは loop monitor と各 step の上限が持つ。max_steps はそれらを
+# すり抜けた場合の最後の保険であり、正常系が枯渇しない広さを取る
+max_steps: 100
+initial_step: intake
+loop_monitors:
+  # 各 monitor の末尾 step を分けてあるため、monitor は互いに干渉しない
+  # (照合は履歴末尾との一致で行われる)。
+  #
+  # 重要: 照合は「履歴末尾でパターンが *連続して* threshold 回反復する」厳密一致である。
+  # したがって cycle の外から再入される step は、cycle が途切れてカウントが 1 に戻る。
+  # diagnose は 3 方向から再訪される(診断レビューの NEED_REDIAGNOSE / reproduce の
+  # 再現失敗 / repair の対症療法判定)ため、cycle パターンが安定しない。診断のやり直し
+  # 回数の上限は diagnose step 自身が {step_iteration} で持つ。
+  #
+  # ── 診断レビュー ⇄ 診断修正。実装前なので、打ち切りより再診断を優先する ──
+  - cycle:
+      - diagnose_review
+      - diagnose_fix
+    threshold: 3
+    judge:
+      persona: supervisor
+      instruction: auto-loop-monitor-diagnosis
+      rules:
+        - condition: 健全(指摘が減っている・記述の不足が埋まっている)
+          next: diagnose_review
+        - condition: 原因の特定そのものが誤っている(レポート修正では解消しない)
+          next: diagnose
+        - condition: 調査材料が尽きている、または issue 側の情報不足に帰着する
+          next: ABORT
+  # ── 診断のやり直しが繰り返される。ここまで来たら原因の探索が行き詰まっている可能性が高い ──
+  - cycle:
+      - diagnose
+      - diagnose_review
+    threshold: 3
+    judge:
+      persona: supervisor
+      instruction: auto-loop-monitor-rediagnose
+      rules:
+        - condition: 健全(仮説が実質的に更新され、棄却根拠が積み上がっている)
+          next: diagnose
+        - condition: 同じ仮説の言い換えを繰り返している、または外部要因に帰着する
+          next: ABORT
+  # ── 実装ゲート ⇄ CI 同等ゲートの往復 ──
+  - cycle:
+      - impl_gate
+      - ci_verify
+    threshold: 3
+    judge:
+      persona: supervisor
+      instruction: loop-monitor-reviewers-fix
+      rules:
+        - condition: 健全(落ちるゲートが減っている)
+          next: impl_gate
+        - condition: 再診断で打開できる(ゲート失敗が原因の特定・修正方針の誤りを観測で実証している)
+          next: diagnose
+        - condition: 修正・再診断のいずれでも打開できない
+          next: ABORT
+  # ── 実装ゲート ⇄ 最終ゲートの往復。実装レビュー ⇄ 修正のループ自体は
+  #    auto-impl-review の内側にあり、その上限は sub-workflow 側の loop monitor が持つ。
+  #    ここで見るのは最終ゲートの差し戻しによる外側の往復である ──
+  - cycle:
+      - impl_gate
+      - ci_verify
+      - final_gate
+    threshold: 3
+    judge:
+      persona: supervisor
+      instruction: loop-monitor-reviewers-fix
+      rules:
+        - condition: 健全(指摘数が減少、修正が反映されている)
+          next: impl_gate
+        - condition: 再診断または異議申告で打開できる(指摘が原因の特定・修正方針の誤りを観測で実証している)
+          next: diagnose
+        - condition: 修正・再診断・異議申告のいずれでも打開できない
+          next: ABORT
+steps:
+  # ── Phase 0: intake ───────────────────────────────────────────────
+  # feature と共通。着手可能性の判定(未決事項・矛盾・依存・情報不足)は fix でも変わらない。
+  # fix 固有の入口検査(再現条件を確定できるか)は diagnose が持つ
+  - name: intake
+    kind: workflow_call
+    call: auto-intake
+    rules:
+      - condition: COMPLETE
+        next: diagnose
+      - condition: blocked
+        next: ABORT
+      - condition: ABORT
+        next: ABORT
+
+  # ── Phase 1: 診断 ─────────────────────────────────────────────────
+  # 直し方から考え始めない。原因が確定していない状態で書いた修正は対症療法になる
+  - name: diagnose
+    description: 原因の特定・検証可能な予測・修正方針・回帰テスト設計
+    tags:
+      - plan
+      - diagnosis
+    edit: false
+    persona: planner
+    policy:
+      - auto-traceability
+      - existing-system-respect
+      - auto-scope-spillover
+    knowledge:
+      - architecture
+      - auto-conventions
+      - auto-domain
+    provider_options:
+      extends: review-readonly
+    # 1 回目の診断で外した原因は浅くない。やり直しからは推論を厚くする
+    promotion:
+      - at: 2
+        provider_options:
+          codex:
+            reasoning_effort: high
+          claude:
+            effort: high
+    instruction: auto-diagnose
+    quality_gates:
+      - 因果の連鎖が file:line で示され、段が飛んでいないこと
+      - 対立仮説が最低 1 つ挙げられ、観測に基づく根拠で棄却されていること
+      - 報告された全症状に対し、原因仮説が説明できるか否かが判定されていること
+      - 予測が「入力 X → 症状 Y」の形で、再現テストとして書ける粒度であること
+      - 全要件に REQ-<issue番号>-<2桁連番> 形式の ID が振られていること
+      - 修正方針が因果の連鎖のどこを断つかを示しており、症状の出口を塞ぐだけでないこと
+      - プロダクションコード・テストコードを書いていないこと
+    rules:
+      # loop monitor は diagnose_fix / reproduce の挟み込みでカウントが崩れるため、
+      # やり直し回数の上限をこの step 自身にも持たせる
+      - condition: これが 4 回目以降の診断である(3 回やり直しても原因を確定できなかった)
+        next: ABORT
+        appendix: |
+          棄却された仮説と、決着に必要な情報:
+          - {何を試し、何が否定されたか}
+      - condition: 原因を特定し、予測・修正方針・回帰テスト設計を作った
+        next: diagnose_review
+      - condition: 調査しても再現条件を確定できない
+        next: ABORT
+        appendix: |
+          試した再現手順と結果:
+          - {何を実行し、どうなったか}
+      - condition: 原因が複数あり 1 つの issue として扱うべきでない
+        next: ABORT
+        appendix: |
+          分割の提案:
+          - {どう分けるか}
+    output_contracts:
+      report:
+        - name: diagnosis.md
+          format: auto-diagnosis
+
+  # 修正前の関門。誤った原因のまま進めば、テストも修正もすべて無駄になる
+  - name: diagnose_review
+    description: 診断妥当性 / 規約整合 / 回帰テスト設計の 3 並列レビュー
+    tags:
+      - review
+      - diagnosis-gate
+    parallel:
+      - name: diagnosis-review
+        tags:
+          - review
+          - diagnosis-gate
+        edit: false
+        persona: auto-diagnosis-reviewer
+        policy:
+          - review
+          - auto-review-rescan
+          - auto-review-convergence
+        knowledge:
+          - auto-domain
+        provider_options:
+          extends: review-readonly
+        pass_previous_response: false
+        instruction: auto-review-diagnosis
+        rules:
+          - condition: APPROVE
+          - condition: REJECT
+          - condition: NEED_REDIAGNOSE
+        output_contracts:
+          report:
+            - name: diagnosis-review.md
+              format: auto-diagnosis-review
+      - name: conventions-diagnosis
+        tags:
+          - review
+          - diagnosis-gate
+          - conventions
+        edit: false
+        persona: auto-conventions-reviewer
+        policy:
+          - review
+          - auto-review-rescan
+          - auto-review-convergence
+        knowledge:
+          - auto-conventions
+          - auto-domain
+        provider_options:
+          extends: review-readonly
+        pass_previous_response: false
+        instruction: auto-review-conventions-gate
+        rules:
+          - condition: APPROVE
+          - condition: REJECT
+          - condition: NEEDS_CONVENTION_REVISION
+        output_contracts:
+          report:
+            - name: conventions-diagnosis.md
+              format: auto-conventions-review
+      - name: regression-test-review
+        tags:
+          - review
+          - diagnosis-gate
+        edit: false
+        persona: testing-reviewer
+        policy:
+          - review
+          - testing
+          - auto-traceability
+          - auto-review-rescan
+          - auto-review-convergence
+        knowledge:
+          - unit-testing
+        provider_options:
+          extends: review-readonly
+        pass_previous_response: false
+        instruction: auto-review-test-design
+        rules:
+          - condition: APPROVE
+          - condition: REJECT
+        output_contracts:
+          report:
+            - name: regression-test-review.md
+              format: auto-test-design-review
+    rules:
+      - condition: all("APPROVE")
+        next: reproduce
+      - condition: any("NEED_REDIAGNOSE")
+        next: diagnose
+      - condition: any("REJECT", "NEEDS_CONVENTION_REVISION")
+        next: diagnose_fix
+
+  - name: diagnose_fix
+    description: 診断レビュー指摘の解消(レポートのみを直す。コードは書かない)
+    tags:
+      - plan
+      - diagnosis-gate
+    edit: true
+    persona: planner
+    policy:
+      - auto-traceability
+      - existing-system-respect
+    knowledge:
+      - architecture
+      - auto-conventions
+    required_permission_mode: edit
+    session: refresh
+    provider_options:
+      extends: edit
+    # 同じ診断指摘で 2 周目に入ったら、推論を厚くして食い違いの根に届かせる
+    promotion:
+      - at: 2
+        provider_options:
+          codex:
+            reasoning_effort: high
+          claude:
+            effort: high
+    instruction: auto-gate-fix
+    pass_previous_response: false
+    quality_gates:
+      - 全 finding に対応(修正 or 根拠を示した反論)していること
+      - 要件 ID を振り直していないこと(分割時は枝番を使うこと)
+      - プロダクションコード・テストコードを書いていないこと
+    rules:
+      # diagnose_fix は diagnose_review からだけでなく reproduce(再現に環境依存があり
+      # 決定的なテストにできない)からも再入する。挟み込みで loop monitor の cycle
+      # [diagnose_review, diagnose_fix] が途切れ、カウントが 1 に戻ることがあるため、
+      # ラウンド上限をこの step 自身にも持たせる
+      - condition: これが 4 回目以降の診断修正である(3 ラウンドで診断が固まらなかった)
+        next: diagnose
+        appendix: |
+          各ラウンドで直した内容と、残った指摘:
+          - {何を直し、何が残ったか}
+      - condition: 全 finding に対応した
+        next: diagnose_review
+      - condition: 指摘が原因の特定そのものを否定している
+        next: diagnose
+
+  # ── Phase 2: 再現と修正 ───────────────────────────────────────────
+  # 再現テストが red になることが、診断した原因が正しいことの証拠になる
+  - name: reproduce
+    description: 回帰テスト設計に基づく再現テストの実装(red を確認する)
+    tags:
+      - coding
+      - test-planning
+    edit: true
+    persona: coder
+    policy:
+      - coding
+      - testing
+      - auto-traceability
+      - existing-system-respect
+      - auto-toolchain
+    knowledge:
+      - unit-testing
+      - auto-conventions
+    required_permission_mode: edit
+    provider_options:
+      extends: edit
+    instruction: auto-reproduce
+    quality_gates:
+      - 回帰テスト設計の全ケースを実装していること
+      - 各テストに要件 ID・ケース ID・予測 ID が埋め込まれていること
+      - 再現テストが修正前に red であり、失敗の内容が診断の予測と一致していることを確認していること
+      - 既存挙動の回帰テストが修正前から green であることを確認していること
+      - プロダクションコードを変更していないこと
+      - 外部サービスへ実アクセスしていないこと
+    rules:
+      # 再現できないバグは診断も検証もできない。cycle パターンが安定しないため
+      # ラウンド上限をこの step 自身に持たせる
+      - condition: これが 4 回目以降の再現テスト実装である(3 回書き直しても症状を再現できなかった)
+        next: ABORT
+        appendix: |
+          各ラウンドで書いたテストと失敗の内容:
+          - {何を書き、どうなったか}
+      # 差し戻し条件を先に置く。「red かつ回帰 green」は予測が外れている場合も満たすため、
+      # 成功条件を先頭に置くと予測不一致がそこへ吸われ、診断の検証機構が働かなくなる
+      # (spillover の rule 順と同じ理由)
+      - condition: 再現テストが green である(症状を再現できない)
+        next: diagnose
+      - condition: 再現テストは red だが、失敗の内容が診断の予測と違う
+        next: diagnose
+      - condition: 既存挙動の回帰テストが修正前から red である
+        next: diagnose
+      - condition: 再現に環境依存があり決定的なテストにできない
+        next: diagnose_fix
+      # 症状を再現しないテストを抱えたまま修正へ進む出口は置かない。
+      # red にならない再現テストは、修正が効いたかどうかを判定できない。
+      # 予測一致を条件に明記する(quality_gates だけに置くと遷移は素通りする)
+      - condition: 再現テストが red で失敗の内容が診断の予測と一致し、既存挙動の回帰テストが green である
+        next: repair
+    output_contracts:
+      report:
+        - name: test-report.md
+          format: test-report
+
+  - name: repair
+    description: 因果の連鎖を断つ修正(症状を止めるのではなく原因を除く)
+    tags:
+      - coding
+    edit: true
+    persona: coder
+    policy:
+      - coding
+      - testing
+      - auto-traceability
+      - existing-system-respect
+      - auto-scope-spillover
+      - auto-toolchain
+    knowledge:
+      - architecture
+      - auto-conventions
+      - auto-domain
+    required_permission_mode: edit
+    session: refresh
+    provider_options:
+      extends: edit
+    instruction: auto-repair
+    quality_gates:
+      - 再現テストが green になり、既存挙動の回帰テストが green のままであること
+      - 対症療法の自己検査を実施し、その結果を報告していること
+      - 診断で断つと決めた箇所以外に、因果関係のない変更を混ぜていないこと
+      - 全差分を「必須変更 / 関連変更 / 不要変更」に分類し、不要変更が残っていないこと
+      - 診断で申告した規約逸脱がある場合、該当規約文書の改訂を差分に含めていること
+    rules:
+      - condition: 原因を除き、再現テストと既存挙動の回帰が green になった
+        next: impl_gate
+      - condition: 修正が対症療法にしかならない(原因を除くには診断の範囲を超える)
+        next: diagnose
+      - condition: 修正方針が規約と衝突する
+        next: diagnose
+      - condition: 修正しても再現テストが red のまま
+        next: diagnose
+    output_contracts:
+      report:
+        - name: maintenance-scope.md
+          format: maintenance-scope
+
+  # ── Phase 3: 実装レビュー ─────────────────────────────────────────
+  # feature と共通の callable sub-workflow。4 並列レビュー ⇄ 修正のループごと内側に
+  # 閉じてある。呼び出し元が fix へ直接飛び込まないため、内側では [impl_review, fix] が
+  # 必ず連続し、loop monitor の上限 3 が実効化する
+  - name: impl_gate
+    kind: workflow_call
+    call: auto-impl-review
+    rules:
+      - condition: COMPLETE
+        next: ci_verify
+      - condition: needs_replan
+        next: diagnose
+      - condition: ABORT
+        next: ABORT
+
+  # ── Phase 4: CI 同等ゲート ────────────────────────────────────────
+  # 本リポジトリはローカル git hook を持たないため、auto_pr の push 前に
+  # CI 同等ゲートをここでローカル実行する(auto-feature と同じ設計)。
+  - name: ci_verify
+    description: CI 同等ゲートのローカル実行と機械的修正(format / lint 自明修正 / CHANGELOG)
+    tags:
+      - coding
+      - delivery-gate
+    edit: true
+    persona: coder
+    policy:
+      - auto-toolchain
+      - auto-traceability
+    required_permission_mode: edit
+    provider_options:
+      extends: edit
+    instruction: auto-ci-verify
+    pass_previous_response: false
+    quality_gates:
+      - 全ゲート(ruff check / ruff format --check / any-usage-gate / pytest / CHANGELOG)を実際に実行し、個々の結果を報告していること
+      - テストの削除・skip・アサーション緩和でゲートを通していないこと
+      - 機械的修正(format 適用 / lint 自明修正 / CHANGELOG 追記)以外の実装変更をしていないこと
+    rules:
+      - condition: 全ゲートが green である(機械的修正のみで到達した場合を含む)
+        next: final_gate
+      - condition: 実装の欠陥が原因でゲートを green にできない
+        next: impl_gate
+      - condition: 環境障害でゲートを実行できない
+        next: ABORT
+        appendix: |
+          実行できなかったゲートと失敗の内容:
+          - {何を実行し、どう失敗したか}
+
+  # ── Phase 5: 最終ゲート ───────────────────────────────────────────
+  - name: final_gate
+    kind: workflow_call
+    call: merge-readiness-final-gate
+    args:
+      supervise_knowledge:
+        - architecture
+        - auto-conventions
+    rules:
+      - condition: COMPLETE
+        next: spillover
+      # fix へ直接戻さず実装ゲートを回り直す。そうしないと sub-workflow の内側にある
+      # [impl_review, fix] の cycle が外から破られ、上限 3 が失われる
+      - condition: needs_fix
+        next: impl_gate
+      - condition: need_replan
+        next: diagnose
+      - condition: ABORT
+        next: ABORT
+
+  # ── Phase 6: スコープ外発見の起票 ─────────────────────────────────
+  # 「ついで直しをしない」という禁止の受け皿。ここを通さないと発見は実行ログとともに埋もれる。
+  #
+  # commit / push / PR 作成はこの workflow では行わない。workflow 完了後に takt の
+  # auto_pr がサンドボックス外で実行する。品質の関門は ci_verify と PR の CI が担う。
+  #
+  # callable sub-workflow にしない。この step の職務は「Report Directory の全レポートを
+  # 走査する」ことだが、callable の子は自分専用の report namespace を持ち、親のレポートが
+  # 見えない。各レーンで定義が重複するが、複製を避けて職務が成立しなくなるより重複を選ぶ。
+  - name: spillover
+    description: 各レポートのスコープ外の発見を集め、起票する / 捨てるに仕分ける
+    tags:
+      - delivery
+    edit: false
+    persona: auto-delivery-operator
+    policy:
+      - auto-scope-spillover
+    knowledge:
+      - auto-domain
+    # gh issue create / comment を使うため Bash が要る。ソースは触らないので edit: false
+    provider_options:
+      extends: review-readonly
+    session: refresh
+    instruction: auto-spillover
+    quality_gates:
+      - Report Directory の全レポートを読み、発見がなかったものも収集元に記録していること
+      - 起票したものが 3 条件(因果なし / 実害あり / 根拠あり)をすべて満たしていること
+      - 起票前に gh issue list で重複を照合していること
+      - 破棄した発見について、満たさなかった条件と理由を記録していること
+      - gh issue の操作に失敗したなら、起票できなかった発見と手動起票用のコマンドを
+        レポートに残していること
+      - コードを変更していないこと
+    rules:
+      # 仕分け自体は完了しているため、この rule を先に置かないと下の「仕分けが終わった」に
+      # 吸われて素通りする。因果のある発見は要件 ID の採番からやり直すため診断へ戻す
+      - condition: 因果ありと判定した発見があり、今回の差分に含めるべきものが残っている
+        next: diagnose
+      # gh 失敗を「仕分けが終わった」と同じ rule に畳まない。畳むと実行ログ上で成功と
+      # 区別できなくなる。起票できなかった発見と手動起票コマンドはレポートに残るため、
+      # 実装が完了している以上ここでは止めない
+      - condition: gh issue の操作に失敗し、起票できなかった発見が残っている
+        next: COMPLETE
+      - condition: 仕分けが終わり、起票・追記・破棄をすべて記録した(発見ゼロの場合を含む)
+        next: COMPLETE
