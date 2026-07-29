@@ -1,8 +1,8 @@
-name: auto-impl-review
+name: yt-auto-impl-review
 description: >
   共通の実装レビューフェーズ。アーキテクチャ / AI アンチパターン / コーディング /
-  規約整合の 4 並列レビュー ⇄ 修正のループを内側に閉じて持つ。auto-feature /
-  auto-fix / auto-maintenance の各 workflow から呼ばれる。
+  規約整合の 4 並列レビュー ⇄ 修正のループを内側に閉じて持つ。yt-auto-feature /
+  yt-auto-fix / yt-auto-maintenance の各 workflow から呼ばれる。
 subworkflow:
   callable: true
   visibility: internal
@@ -60,10 +60,10 @@ steps:
         policy:
           - review
           - existing-system-respect
-          - auto-review-convergence
+          - yt-auto-review-convergence
         knowledge:
           - architecture
-          - auto-domain
+          - yt-auto-domain
         provider_options:
           extends: review-readonly
         instruction: review-arch
@@ -83,7 +83,7 @@ steps:
           - review
           - ai-antipattern
           - existing-system-respect
-          - auto-review-convergence
+          - yt-auto-review-convergence
         provider_options:
           extends: review-readonly
         instruction: ai-antipattern-review
@@ -102,9 +102,9 @@ steps:
         policy:
           - review
           - coding
-          - auto-traceability
+          - yt-auto-traceability
           - existing-system-respect
-          - auto-review-convergence
+          - yt-auto-review-convergence
         pass_previous_response: false
         provider_options:
           extends: review-readonly
@@ -121,18 +121,18 @@ steps:
           - review
           - conventions
         edit: false
-        persona: auto-conventions-reviewer
+        persona: yt-auto-conventions-reviewer
         policy:
           - review
-          - auto-review-rescan
-          - auto-review-convergence
+          - yt-auto-review-rescan
+          - yt-auto-review-convergence
         knowledge:
-          - auto-conventions
-          - auto-domain
+          - yt-auto-conventions
+          - yt-auto-domain
         pass_previous_response: false
         provider_options:
           extends: review-readonly
-        instruction: auto-review-conventions-impl
+        instruction: yt-auto-review-conventions-impl
         rules:
           - condition: APPROVE
           - condition: REJECT
@@ -140,7 +140,7 @@ steps:
         output_contracts:
           report:
             - name: conventions-impl.md
-              format: auto-conventions-review
+              format: yt-auto-conventions-review
     rules:
       # all() の複数引数は並列 sub-step と位置対応で照合され、個数が一致しないと
       # ルールごとスキップされる(= COMPLETE 不能)。sub-step の宣言順に 4 個並べる
@@ -158,12 +158,12 @@ steps:
     policy:
       - coding
       - testing
-      - auto-traceability
+      - yt-auto-traceability
       - existing-system-respect
-      - auto-scope-spillover
+      - yt-auto-scope-spillover
     knowledge:
       - architecture
-      - auto-conventions
+      - yt-auto-conventions
     required_permission_mode: edit
     session: refresh
     provider_options:

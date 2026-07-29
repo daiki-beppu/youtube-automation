@@ -12,7 +12,7 @@
 3. 台帳の全文をそのファイルへコピーし、**冒頭に出典ブロックだけを追記する**（本文は一字一句そのまま）:
 
    ```markdown
-   > 出典: takt workflow `auto-audit`
+   > 出典: takt workflow `yt-auto-audit`
    > タスク: <order.md のタイトル>
    > 実施日: <YYYY-MM-DD>
    > 起票記録: <下記「3. 起票記録」の要約。起票指示がなければ「起票指示なし」>

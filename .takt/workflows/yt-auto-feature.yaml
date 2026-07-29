@@ -1,4 +1,4 @@
-name: auto-feature
+name: yt-auto-feature
 description: >
   新機能開発ワークフロー。intake → 計画 → テスト設計 → 設計レビュー(設計 / 規約整合 /
   テスト設計の 3 並列)→ テスト先行実装 → 実装 → 実装レビュー(4 並列)→ CI 同等ゲート →
@@ -25,7 +25,7 @@ loop_monitors:
     threshold: 3
     judge:
       persona: supervisor
-      instruction: auto-loop-monitor-design
+      instruction: yt-auto-loop-monitor-design
       rules:
         - condition: 健全(指摘が減っている・修正が実質的)
           next: design_review
@@ -39,7 +39,7 @@ loop_monitors:
     threshold: 3
     judge:
       persona: supervisor
-      instruction: auto-loop-monitor-replan
+      instruction: yt-auto-loop-monitor-replan
       rules:
         - condition: 健全(曖昧さが減り計画が具体化している)
           next: plan
@@ -63,7 +63,7 @@ loop_monitors:
         - condition: 修正・再計画のいずれでも打開できない
           next: ABORT
   # ── 実装ゲート ⇄ 最終ゲートの往復 ──
-  # 実装レビュー ⇄ 修正のループ自体は auto-impl-review の内側にあり、その上限は
+  # 実装レビュー ⇄ 修正のループ自体は yt-auto-impl-review の内側にあり、その上限は
   # sub-workflow 側の loop monitor が持つ。ここで見るのは「最終ゲートが差し戻し、
   # 実装ゲートを回り直す」外側の往復である。非生産的と判定されたときに前進させない
   # (未解消の指摘を抱えたまま完了 → auto_pr の PR 化まで到達させない)
@@ -87,7 +87,7 @@ steps:
   # feature / fix / docs / maintenance 共通。着手できない issue を検出して止める。
   - name: intake
     kind: workflow_call
-    call: auto-intake
+    call: yt-auto-intake
     rules:
       - condition: COMPLETE
         next: plan
@@ -104,15 +104,15 @@ steps:
     edit: false
     persona: planner
     policy:
-      - auto-traceability
-      - auto-toolchain
+      - yt-auto-traceability
+      - yt-auto-toolchain
     knowledge:
       - architecture
-      - auto-conventions
-      - auto-domain
+      - yt-auto-conventions
+      - yt-auto-domain
     provider_options:
       extends: review-readonly
-    instruction: auto-plan
+    instruction: yt-auto-plan
     quality_gates:
       - 全要件に REQ-<issue番号>-<2桁連番> 形式の ID が振られていること
       - 要件 ID ごとに対象ファイルと方針が対応づいていること
@@ -140,7 +140,7 @@ steps:
     output_contracts:
       report:
         - name: plan.md
-          format: auto-plan
+          format: yt-auto-plan
 
   - name: test_design
     description: 要件 ID ごとの検証設計(テストコードは書かない)
@@ -151,14 +151,14 @@ steps:
     persona: test-planner
     policy:
       - testing
-      - auto-traceability
-      - auto-toolchain
+      - yt-auto-traceability
+      - yt-auto-toolchain
     knowledge:
       - unit-testing
-      - auto-domain
+      - yt-auto-domain
     provider_options:
       extends: review-readonly
-    instruction: auto-test-design
+    instruction: yt-auto-test-design
     quality_gates:
       - 全要件 ID にテストケースが対応しているか、検証不能の理由が書かれていること
       - 境界と失敗経路のケースが設計されていること
@@ -172,7 +172,7 @@ steps:
     output_contracts:
       report:
         - name: test-design.md
-          format: auto-test-design
+          format: yt-auto-test-design
 
   # 実装前の関門。ここで止めた誤りは、実装後に見つける場合より桁違いに安い。
   - name: design_review
@@ -189,15 +189,15 @@ steps:
         persona: architecture-reviewer
         policy:
           - review
-          - auto-review-rescan
-          - auto-review-convergence
+          - yt-auto-review-rescan
+          - yt-auto-review-convergence
         knowledge:
           - architecture
-          - auto-domain
+          - yt-auto-domain
         provider_options:
           extends: review-readonly
         pass_previous_response: false
-        instruction: auto-review-design-arch
+        instruction: yt-auto-review-design-arch
         rules:
           - condition: APPROVE
           - condition: REJECT
@@ -205,25 +205,25 @@ steps:
         output_contracts:
           report:
             - name: design-review.md
-              format: auto-design-arch-review
+              format: yt-auto-design-arch-review
       - name: conventions-design
         tags:
           - review
           - design-gate
           - conventions
         edit: false
-        persona: auto-conventions-reviewer
+        persona: yt-auto-conventions-reviewer
         policy:
           - review
-          - auto-review-rescan
-          - auto-review-convergence
+          - yt-auto-review-rescan
+          - yt-auto-review-convergence
         knowledge:
-          - auto-conventions
-          - auto-domain
+          - yt-auto-conventions
+          - yt-auto-domain
         provider_options:
           extends: review-readonly
         pass_previous_response: false
-        instruction: auto-review-conventions-gate
+        instruction: yt-auto-review-conventions-gate
         rules:
           - condition: APPROVE
           - condition: REJECT
@@ -231,7 +231,7 @@ steps:
         output_contracts:
           report:
             - name: conventions-design.md
-              format: auto-conventions-review
+              format: yt-auto-conventions-review
       - name: test-design-review
         tags:
           - review
@@ -241,22 +241,22 @@ steps:
         policy:
           - review
           - testing
-          - auto-traceability
-          - auto-review-rescan
-          - auto-review-convergence
+          - yt-auto-traceability
+          - yt-auto-review-rescan
+          - yt-auto-review-convergence
         knowledge:
           - unit-testing
         provider_options:
           extends: review-readonly
         pass_previous_response: false
-        instruction: auto-review-test-design
+        instruction: yt-auto-review-test-design
         rules:
           - condition: APPROVE
           - condition: REJECT
         output_contracts:
           report:
             - name: test-design-review.md
-              format: auto-test-design-review
+              format: yt-auto-test-design-review
     rules:
       - condition: all("APPROVE")
         next: write_tests
@@ -273,10 +273,10 @@ steps:
     edit: true
     persona: planner
     policy:
-      - auto-traceability
+      - yt-auto-traceability
     knowledge:
       - architecture
-      - auto-conventions
+      - yt-auto-conventions
     required_permission_mode: edit
     session: refresh
     provider_options:
@@ -289,7 +289,7 @@ steps:
             reasoning_effort: high
           claude:
             effort: high
-    instruction: auto-gate-fix
+    instruction: yt-auto-gate-fix
     pass_previous_response: false
     quality_gates:
       - 全 finding に対応(修正 or 根拠を示した反論)していること
@@ -321,15 +321,15 @@ steps:
     policy:
       - coding
       - testing
-      - auto-traceability
-      - auto-toolchain
+      - yt-auto-traceability
+      - yt-auto-toolchain
     knowledge:
       - unit-testing
-      - auto-conventions
+      - yt-auto-conventions
     required_permission_mode: edit
     provider_options:
       extends: edit
-    instruction: auto-write-tests
+    instruction: yt-auto-write-tests
     quality_gates:
       - テスト設計の全ケースを実装していること
       - 各テストに要件 ID とケース ID が埋め込まれていること
@@ -357,14 +357,14 @@ steps:
   # implement の instruction だけ本リポジトリの規約を効かせたものへ差し替える。
   #
   # builtin の子へは policy を渡せない(差し替えられるのは args の instruction だけ)。
-  # そのため他 step が policy: auto-toolchain に集約した uv / nix 規約も、この step にだけは
-  # 届かない。auto-implement の「禁止」節が uv 以外の依存操作を止めているのは、
-  # 重複ではなくこの制約の埋め合わせである。auto-toolchain を変えたら同時に見直す
+  # そのため他 step が policy: yt-auto-toolchain に集約した uv / nix 規約も、この step にだけは
+  # 届かない。yt-auto-implement の「禁止」節が uv 以外の依存操作を止めているのは、
+  # 重複ではなくこの制約の埋め合わせである。yt-auto-toolchain を変えたら同時に見直す
   - name: draft
     kind: workflow_call
     call: default-draft
     args:
-      impl_instruction: auto-implement
+      impl_instruction: yt-auto-implement
     rules:
       - condition: COMPLETE
         next: impl_gate
@@ -379,7 +379,7 @@ steps:
   # [impl_review, fix] が必ず連続し、loop monitor の上限 3 が実効化する
   - name: impl_gate
     kind: workflow_call
-    call: auto-impl-review
+    call: yt-auto-impl-review
     rules:
       - condition: COMPLETE
         next: ci_verify
@@ -400,12 +400,12 @@ steps:
     edit: true
     persona: coder
     policy:
-      - auto-toolchain
-      - auto-traceability
+      - yt-auto-toolchain
+      - yt-auto-traceability
     required_permission_mode: edit
     provider_options:
       extends: edit
-    instruction: auto-ci-verify
+    instruction: yt-auto-ci-verify
     pass_previous_response: false
     quality_gates:
       - 全ゲート(ruff check / ruff format --check / any-usage-gate / pytest / CHANGELOG)を実際に実行し、個々の結果を報告していること
@@ -431,7 +431,7 @@ steps:
     args:
       supervise_knowledge:
         - architecture
-        - auto-conventions
+        - yt-auto-conventions
     rules:
       - condition: COMPLETE
         next: spillover
@@ -458,16 +458,16 @@ steps:
     tags:
       - delivery
     edit: false
-    persona: auto-delivery-operator
+    persona: yt-auto-delivery-operator
     policy:
-      - auto-scope-spillover
+      - yt-auto-scope-spillover
     knowledge:
-      - auto-domain
+      - yt-auto-domain
     # gh issue create / comment を使うため Bash が要る。ソースは触らないので edit: false
     provider_options:
       extends: review-readonly
     session: refresh
-    instruction: auto-spillover
+    instruction: yt-auto-spillover
     quality_gates:
       - Report Directory の全レポートを読み、発見がなかったものも収集元に記録していること
       - 起票したものが 3 条件(因果なし / 実害あり / 根拠あり)をすべて満たしていること

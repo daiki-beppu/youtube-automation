@@ -6,8 +6,8 @@
 
 | workflow       | 要件一覧の出どころ            | テスト設計の出どころ                  |
 | -------------- | ----------------------------- | ------------------------------------- |
-| `auto-feature` | `plan.md` の「要件一覧」      | `test-design.md`                      |
-| `auto-fix`     | `diagnosis.md` の「要件一覧」 | `diagnosis.md` の「回帰テスト設計」節 |
+| `yt-auto-feature` | `plan.md` の「要件一覧」      | `test-design.md`                      |
+| `yt-auto-fix`     | `diagnosis.md` の「要件一覧」 | `diagnosis.md` の「回帰テスト設計」節 |
 
 ## 手順
 

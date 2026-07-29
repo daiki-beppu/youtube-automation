@@ -1,17 +1,17 @@
 # docs / skill 限定変更の軽量レーン。src/youtube_automation/ のプロダクションコードを
 # 変更しないことがレーンの前提であり、implement の quality_gates と docs_review が
 # これを検査する。実コード変更が必要と判明したら ABORT して適切なレーン
-# (auto-feature / auto-fix)へ回す。
+# (yt-auto-feature / yt-auto-fix)へ回す。
 #
 # フル設計ゲート・テスト先行・4 並列実装レビューを持たない代わりに、
 # 文書には契約テスト(tests/test_*_contract.py 等)という機械ゲートがあるため、
 # ci_verify(CI 同等ゲート)は省かない。
-name: auto-docs
+name: yt-auto-docs
 description: >
   docs / SKILL.md / CLAUDE.md など文書・スキル限定変更の軽量ワークフロー。
   intake → 計画 → 実装 → 文書レビュー(記述整合 / 規約・品質の 2 並列)→ CI 同等ゲート →
   スコープ外発見の起票。プロダクションコードの変更が必要なタスクは受けない
-  (auto-feature / auto-fix へ)。commit / push / PR 作成は workflow 完了後に
+  (yt-auto-feature / yt-auto-fix へ)。commit / push / PR 作成は workflow 完了後に
   takt の auto_pr が行う。
 workflow_config:
   provider_options:
@@ -41,7 +41,7 @@ steps:
   # ── Phase 0: intake ───────────────────────────────────────────────
   - name: intake
     kind: workflow_call
-    call: auto-intake
+    call: yt-auto-intake
     rules:
       - condition: COMPLETE
         next: plan
@@ -58,13 +58,13 @@ steps:
     edit: false
     persona: planner
     policy:
-      - auto-traceability
+      - yt-auto-traceability
     knowledge:
-      - auto-conventions
-      - auto-domain
+      - yt-auto-conventions
+      - yt-auto-domain
     provider_options:
       extends: review-readonly
-    instruction: auto-docs-plan
+    instruction: yt-auto-docs-plan
     quality_gates:
       - 全要件に REQ-<issue番号>-<2桁連番> 形式の ID が振られていること
       - 変更対象がすべて文書・スキル(docs/ / .claude/skills/ / CLAUDE.md / README 等)であり、プロダクションコードを含まないこと
@@ -83,7 +83,7 @@ steps:
         next: ABORT
         appendix: |
           必要なコード変更と、回すべきレーン:
-          - {何のコード変更が必要か。auto-feature / auto-fix のどちらへ回すべきか}
+          - {何のコード変更が必要か。yt-auto-feature / yt-auto-fix のどちらへ回すべきか}
       - condition: 情報不足で方針が一意に決まらない
         next: ABORT
         appendix: |
@@ -92,7 +92,7 @@ steps:
     output_contracts:
       report:
         - name: docs-plan.md
-          format: auto-docs-plan
+          format: yt-auto-docs-plan
 
   # ── Phase 2: 実装 ─────────────────────────────────────────────────
   - name: implement
@@ -102,16 +102,16 @@ steps:
     edit: true
     persona: coder
     policy:
-      - auto-toolchain
-      - auto-traceability
-      - auto-scope-spillover
+      - yt-auto-toolchain
+      - yt-auto-traceability
+      - yt-auto-scope-spillover
     knowledge:
-      - auto-conventions
-      - auto-domain
+      - yt-auto-conventions
+      - yt-auto-domain
     required_permission_mode: edit
     provider_options:
       extends: edit
-    instruction: auto-docs-implement
+    instruction: yt-auto-docs-implement
     quality_gates:
       - src/youtube_automation/ のプロダクションコードを変更していないこと(契約テストの追随は tests/ のみ可)
       - skill を変更したなら `uv run yt-skills lint` が通ること
@@ -125,7 +125,7 @@ steps:
         next: ABORT
         appendix: |
           必要なコード変更と、回すべきレーン:
-          - {何のコード変更が必要か。auto-feature / auto-fix のどちらへ回すべきか}
+          - {何のコード変更が必要か。yt-auto-feature / yt-auto-fix のどちらへ回すべきか}
       - condition: 計画の前提が誤っている
         next: plan
 
@@ -144,42 +144,42 @@ steps:
         persona: qa-reviewer
         policy:
           - review
-          - auto-review-convergence
+          - yt-auto-review-convergence
         knowledge:
-          - auto-domain
+          - yt-auto-domain
         provider_options:
           extends: review-readonly
         pass_previous_response: false
-        instruction: auto-review-docs-consistency
+        instruction: yt-auto-review-docs-consistency
         rules:
           - condition: APPROVE
           - condition: REJECT
         output_contracts:
           report:
             - name: docs-consistency-review.md
-              format: auto-docs-review
+              format: yt-auto-docs-review
       - name: docs-quality-review
         tags:
           - review
           - conventions
         edit: false
-        persona: auto-conventions-reviewer
+        persona: yt-auto-conventions-reviewer
         policy:
           - review
-          - auto-review-convergence
+          - yt-auto-review-convergence
         knowledge:
-          - auto-conventions
+          - yt-auto-conventions
         provider_options:
           extends: review-readonly
         pass_previous_response: false
-        instruction: auto-review-docs-quality
+        instruction: yt-auto-review-docs-quality
         rules:
           - condition: APPROVE
           - condition: REJECT
         output_contracts:
           report:
             - name: docs-quality-review.md
-              format: auto-docs-review
+              format: yt-auto-docs-review
     rules:
       - condition: all("APPROVE")
         next: ci_verify
@@ -193,11 +193,11 @@ steps:
     edit: true
     persona: coder
     policy:
-      - auto-toolchain
-      - auto-traceability
-      - auto-scope-spillover
+      - yt-auto-toolchain
+      - yt-auto-traceability
+      - yt-auto-scope-spillover
     knowledge:
-      - auto-conventions
+      - yt-auto-conventions
     required_permission_mode: edit
     session: refresh
     provider_options:
@@ -239,12 +239,12 @@ steps:
     edit: true
     persona: coder
     policy:
-      - auto-toolchain
-      - auto-traceability
+      - yt-auto-toolchain
+      - yt-auto-traceability
     required_permission_mode: edit
     provider_options:
       extends: edit
-    instruction: auto-ci-verify
+    instruction: yt-auto-ci-verify
     pass_previous_response: false
     quality_gates:
       - 全ゲート(ruff check / ruff format --check / any-usage-gate / pytest / CHANGELOG)を実際に実行し、個々の結果を報告していること
@@ -263,22 +263,22 @@ steps:
 
   # ── Phase 5: スコープ外発見の起票 ─────────────────────────────────
   # 文書監査で気づいた問題(リンク切れ・実装と乖離した記述など)の受け皿。
-  # 定義は auto-feature / auto-fix と重複するが、callable の子は親のレポートを
+  # 定義は yt-auto-feature / yt-auto-fix と重複するが、callable の子は親のレポートを
   # 読めないため複製を選ぶ(職務が「親の全レポートの走査」そのものであるため)。
   - name: spillover
     description: 各レポートのスコープ外の発見を集め、起票する / 捨てるに仕分ける
     tags:
       - delivery
     edit: false
-    persona: auto-delivery-operator
+    persona: yt-auto-delivery-operator
     policy:
-      - auto-scope-spillover
+      - yt-auto-scope-spillover
     knowledge:
-      - auto-domain
+      - yt-auto-domain
     provider_options:
       extends: review-readonly
     session: refresh
-    instruction: auto-spillover
+    instruction: yt-auto-spillover
     quality_gates:
       - Report Directory の全レポートを読み、発見がなかったものも収集元に記録していること
       - 起票したものが 3 条件(因果なし / 実害あり / 根拠あり)をすべて満たしていること

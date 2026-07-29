@@ -14,7 +14,7 @@
 # audit → supervise、supervise → audit、review → audit、loop judge → audit / review のみ。
 # audit の self-loop はパターン不一致で loop monitor に検知されない(audit-unit-split の
 # 既知の限界と同じ)。self-loop の暴走は max_steps が唯一のガード。
-name: auto-audit
+name: yt-auto-audit
 description: >
   汎用監査ワークフロー。issue / order でスコープと観点(テスト監査・タスク完了検収・
   アーキテクチャ監査・skill 監査など)を与え、計画 → 台帳ベースの監査 → 監督 ⇄ 再監査で
@@ -36,7 +36,7 @@ loop_monitors:
     threshold: 3
     judge:
       persona: supervisor
-      instruction: auto-loop-monitor-audit
+      instruction: yt-auto-loop-monitor-audit
       rules:
         - condition: 監査が完了している(全対象が監査済みで Issue 直貼り品質)
           next: review
@@ -53,19 +53,19 @@ steps:
     edit: false
     persona: planner
     policy:
-      - auto-toolchain
+      - yt-auto-toolchain
     knowledge:
       - architecture
-      - auto-domain
+      - yt-auto-domain
     provider_options:
       extends: review-readonly
-    instruction: auto-audit-plan
+    instruction: yt-auto-audit-plan
     output_contracts:
       report:
         - name: 01-audit-plan.md
-          format: auto-audit-plan
+          format: yt-auto-audit-plan
         - name: 02-audit-ledger.md
-          format: auto-audit-ledger
+          format: yt-auto-audit-ledger
     rules:
       - condition: 対象の棚卸しと監査対象表・初期台帳の作成が完了
         next: audit
@@ -87,14 +87,14 @@ steps:
       - review
     knowledge:
       - architecture
-      - auto-domain
+      - yt-auto-domain
     provider_options:
       extends: review-readonly
-    instruction: auto-audit-run
+    instruction: yt-auto-audit-run
     output_contracts:
       report:
         - name: 02-audit-ledger.md
-          format: auto-audit-ledger
+          format: yt-auto-audit-ledger
     rules:
       - condition: スコープ全件の監査・判定が完了した
         next: supervise
@@ -114,10 +114,10 @@ steps:
       - review
     provider_options:
       extends: review-readonly
-    instruction: auto-audit-supervise
+    instruction: yt-auto-audit-supervise
     pass_previous_response: false
     structured_output:
-      schema_ref: auto-audit-supervise
+      schema_ref: yt-auto-audit-supervise
     # 合否は supervisor の申告値による決定的ルーティング。
     # 素の文字列 condition に落とすと LLM 判定に化けるので必ず when() で包む
     rules:
@@ -140,7 +140,7 @@ steps:
       - review
     provider_options:
       extends: review-readonly
-    instruction: auto-audit-review
+    instruction: yt-auto-audit-review
     rules:
       - condition: 監査が完全で問題がない
         next: publish
@@ -152,13 +152,13 @@ steps:
     tags:
       - delivery
     edit: true
-    persona: auto-delivery-operator
+    persona: yt-auto-delivery-operator
     policy:
-      - auto-scope-spillover
+      - yt-auto-scope-spillover
     required_permission_mode: edit
     provider_options:
       extends: edit
-    instruction: auto-audit-publish
+    instruction: yt-auto-audit-publish
     pass_previous_response: false
     quality_gates:
       - レポート本文を書き換えていないこと(冒頭への出典追記のみ)

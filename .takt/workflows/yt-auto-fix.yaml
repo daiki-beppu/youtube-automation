@@ -1,4 +1,4 @@
-name: auto-fix
+name: yt-auto-fix
 description: >
   バグ修正ワークフロー。intake → 診断(原因特定・検証可能な予測・修正方針・回帰テスト設計)→
   診断レビュー(診断妥当性 / 規約整合 / 回帰テスト設計の 3 並列)→ 再現テスト(red 確認)→
@@ -33,7 +33,7 @@ loop_monitors:
     threshold: 3
     judge:
       persona: supervisor
-      instruction: auto-loop-monitor-diagnosis
+      instruction: yt-auto-loop-monitor-diagnosis
       rules:
         - condition: 健全(指摘が減っている・記述の不足が埋まっている)
           next: diagnose_review
@@ -48,7 +48,7 @@ loop_monitors:
     threshold: 3
     judge:
       persona: supervisor
-      instruction: auto-loop-monitor-rediagnose
+      instruction: yt-auto-loop-monitor-rediagnose
       rules:
         - condition: 健全(仮説が実質的に更新され、棄却根拠が積み上がっている)
           next: diagnose
@@ -70,7 +70,7 @@ loop_monitors:
         - condition: 修正・再診断のいずれでも打開できない
           next: ABORT
   # ── 実装ゲート ⇄ 最終ゲートの往復。実装レビュー ⇄ 修正のループ自体は
-  #    auto-impl-review の内側にあり、その上限は sub-workflow 側の loop monitor が持つ。
+  #    yt-auto-impl-review の内側にあり、その上限は sub-workflow 側の loop monitor が持つ。
   #    ここで見るのは最終ゲートの差し戻しによる外側の往復である ──
   - cycle:
       - impl_gate
@@ -93,7 +93,7 @@ steps:
   # fix 固有の入口検査(再現条件を確定できるか)は diagnose が持つ
   - name: intake
     kind: workflow_call
-    call: auto-intake
+    call: yt-auto-intake
     rules:
       - condition: COMPLETE
         next: diagnose
@@ -112,13 +112,13 @@ steps:
     edit: false
     persona: planner
     policy:
-      - auto-traceability
+      - yt-auto-traceability
       - existing-system-respect
-      - auto-scope-spillover
+      - yt-auto-scope-spillover
     knowledge:
       - architecture
-      - auto-conventions
-      - auto-domain
+      - yt-auto-conventions
+      - yt-auto-domain
     provider_options:
       extends: review-readonly
     # 1 回目の診断で外した原因は浅くない。やり直しからは推論を厚くする
@@ -129,7 +129,7 @@ steps:
             reasoning_effort: high
           claude:
             effort: high
-    instruction: auto-diagnose
+    instruction: yt-auto-diagnose
     quality_gates:
       - 因果の連鎖が file:line で示され、段が飛んでいないこと
       - 対立仮説が最低 1 つ挙げられ、観測に基づく根拠で棄却されていること
@@ -161,7 +161,7 @@ steps:
     output_contracts:
       report:
         - name: diagnosis.md
-          format: auto-diagnosis
+          format: yt-auto-diagnosis
 
   # 修正前の関門。誤った原因のまま進めば、テストも修正もすべて無駄になる
   - name: diagnose_review
@@ -175,17 +175,17 @@ steps:
           - review
           - diagnosis-gate
         edit: false
-        persona: auto-diagnosis-reviewer
+        persona: yt-auto-diagnosis-reviewer
         policy:
           - review
-          - auto-review-rescan
-          - auto-review-convergence
+          - yt-auto-review-rescan
+          - yt-auto-review-convergence
         knowledge:
-          - auto-domain
+          - yt-auto-domain
         provider_options:
           extends: review-readonly
         pass_previous_response: false
-        instruction: auto-review-diagnosis
+        instruction: yt-auto-review-diagnosis
         rules:
           - condition: APPROVE
           - condition: REJECT
@@ -193,25 +193,25 @@ steps:
         output_contracts:
           report:
             - name: diagnosis-review.md
-              format: auto-diagnosis-review
+              format: yt-auto-diagnosis-review
       - name: conventions-diagnosis
         tags:
           - review
           - diagnosis-gate
           - conventions
         edit: false
-        persona: auto-conventions-reviewer
+        persona: yt-auto-conventions-reviewer
         policy:
           - review
-          - auto-review-rescan
-          - auto-review-convergence
+          - yt-auto-review-rescan
+          - yt-auto-review-convergence
         knowledge:
-          - auto-conventions
-          - auto-domain
+          - yt-auto-conventions
+          - yt-auto-domain
         provider_options:
           extends: review-readonly
         pass_previous_response: false
-        instruction: auto-review-conventions-gate
+        instruction: yt-auto-review-conventions-gate
         rules:
           - condition: APPROVE
           - condition: REJECT
@@ -219,7 +219,7 @@ steps:
         output_contracts:
           report:
             - name: conventions-diagnosis.md
-              format: auto-conventions-review
+              format: yt-auto-conventions-review
       - name: regression-test-review
         tags:
           - review
@@ -229,22 +229,22 @@ steps:
         policy:
           - review
           - testing
-          - auto-traceability
-          - auto-review-rescan
-          - auto-review-convergence
+          - yt-auto-traceability
+          - yt-auto-review-rescan
+          - yt-auto-review-convergence
         knowledge:
           - unit-testing
         provider_options:
           extends: review-readonly
         pass_previous_response: false
-        instruction: auto-review-test-design
+        instruction: yt-auto-review-test-design
         rules:
           - condition: APPROVE
           - condition: REJECT
         output_contracts:
           report:
             - name: regression-test-review.md
-              format: auto-test-design-review
+              format: yt-auto-test-design-review
     rules:
       - condition: all("APPROVE")
         next: reproduce
@@ -261,11 +261,11 @@ steps:
     edit: true
     persona: planner
     policy:
-      - auto-traceability
+      - yt-auto-traceability
       - existing-system-respect
     knowledge:
       - architecture
-      - auto-conventions
+      - yt-auto-conventions
     required_permission_mode: edit
     session: refresh
     provider_options:
@@ -278,7 +278,7 @@ steps:
             reasoning_effort: high
           claude:
             effort: high
-    instruction: auto-gate-fix
+    instruction: yt-auto-gate-fix
     pass_previous_response: false
     quality_gates:
       - 全 finding に対応(修正 or 根拠を示した反論)していること
@@ -311,16 +311,16 @@ steps:
     policy:
       - coding
       - testing
-      - auto-traceability
+      - yt-auto-traceability
       - existing-system-respect
-      - auto-toolchain
+      - yt-auto-toolchain
     knowledge:
       - unit-testing
-      - auto-conventions
+      - yt-auto-conventions
     required_permission_mode: edit
     provider_options:
       extends: edit
-    instruction: auto-reproduce
+    instruction: yt-auto-reproduce
     quality_gates:
       - 回帰テスト設計の全ケースを実装していること
       - 各テストに要件 ID・ケース ID・予測 ID が埋め込まれていること
@@ -366,19 +366,19 @@ steps:
     policy:
       - coding
       - testing
-      - auto-traceability
+      - yt-auto-traceability
       - existing-system-respect
-      - auto-scope-spillover
-      - auto-toolchain
+      - yt-auto-scope-spillover
+      - yt-auto-toolchain
     knowledge:
       - architecture
-      - auto-conventions
-      - auto-domain
+      - yt-auto-conventions
+      - yt-auto-domain
     required_permission_mode: edit
     session: refresh
     provider_options:
       extends: edit
-    instruction: auto-repair
+    instruction: yt-auto-repair
     quality_gates:
       - 再現テストが green になり、既存挙動の回帰テストが green のままであること
       - 対症療法の自己検査を実施し、その結果を報告していること
@@ -405,7 +405,7 @@ steps:
   # 必ず連続し、loop monitor の上限 3 が実効化する
   - name: impl_gate
     kind: workflow_call
-    call: auto-impl-review
+    call: yt-auto-impl-review
     rules:
       - condition: COMPLETE
         next: ci_verify
@@ -416,7 +416,7 @@ steps:
 
   # ── Phase 4: CI 同等ゲート ────────────────────────────────────────
   # 本リポジトリはローカル git hook を持たないため、auto_pr の push 前に
-  # CI 同等ゲートをここでローカル実行する(auto-feature と同じ設計)。
+  # CI 同等ゲートをここでローカル実行する(yt-auto-feature と同じ設計)。
   - name: ci_verify
     description: CI 同等ゲートのローカル実行と機械的修正(format / lint 自明修正 / CHANGELOG)
     tags:
@@ -425,12 +425,12 @@ steps:
     edit: true
     persona: coder
     policy:
-      - auto-toolchain
-      - auto-traceability
+      - yt-auto-toolchain
+      - yt-auto-traceability
     required_permission_mode: edit
     provider_options:
       extends: edit
-    instruction: auto-ci-verify
+    instruction: yt-auto-ci-verify
     pass_previous_response: false
     quality_gates:
       - 全ゲート(ruff check / ruff format --check / any-usage-gate / pytest / CHANGELOG)を実際に実行し、個々の結果を報告していること
@@ -454,7 +454,7 @@ steps:
     args:
       supervise_knowledge:
         - architecture
-        - auto-conventions
+        - yt-auto-conventions
     rules:
       - condition: COMPLETE
         next: spillover
@@ -481,16 +481,16 @@ steps:
     tags:
       - delivery
     edit: false
-    persona: auto-delivery-operator
+    persona: yt-auto-delivery-operator
     policy:
-      - auto-scope-spillover
+      - yt-auto-scope-spillover
     knowledge:
-      - auto-domain
+      - yt-auto-domain
     # gh issue create / comment を使うため Bash が要る。ソースは触らないので edit: false
     provider_options:
       extends: review-readonly
     session: refresh
-    instruction: auto-spillover
+    instruction: yt-auto-spillover
     quality_gates:
       - Report Directory の全レポートを読み、発見がなかったものも収集元に記録していること
       - 起票したものが 3 条件(因果なし / 実害あり / 根拠あり)をすべて満たしていること

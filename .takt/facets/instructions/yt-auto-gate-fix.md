@@ -4,9 +4,9 @@
 
 | workflow           | 直すレポート                 | レビューレポート                      |
 | ------------------ | ---------------------------- | ------------------------------------- |
-| `auto-feature`     | `plan.md` + `test-design.md` | 設計 / 規約整合性 / テスト設計の 3 種 |
-| `auto-fix`         | `diagnosis.md`               | 診断妥当性 / 規約整合性 / テスト設計の 3 種 |
-| `auto-maintenance` | `plan.md`                    | リファクタ計画 / 規約整合性の 2 種    |
+| `yt-auto-feature`     | `plan.md` + `test-design.md` | 設計 / 規約整合性 / テスト設計の 3 種 |
+| `yt-auto-fix`         | `diagnosis.md`               | 診断妥当性 / 規約整合性 / テスト設計の 3 種 |
+| `yt-auto-maintenance` | `plan.md`                    | リファクタ計画 / 規約整合性の 2 種    |
 
 ## 手順
 

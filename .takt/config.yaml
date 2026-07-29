@@ -3,14 +3,14 @@
 # (~/.takt/config.yaml) を継承する。
 #
 # workflow はリポジトリ専用の .takt/workflows/ を使う (issue #2686。運用は docs/takt-operations.md):
-#   auto-feature     — 新機能・機能拡張(intake → 計画 → テスト設計 → 設計レビュー →
+#   yt-auto-feature     — 新機能・機能拡張(intake → 計画 → テスト設計 → 設計レビュー →
 #                      テスト先行実装 → 実装 → 実装レビュー → CI 同等ゲート → 最終ゲート → spillover)
-#   auto-fix         — バグ修正・回帰修正(intake → 診断 → 診断レビュー → 再現テスト →
+#   yt-auto-fix         — バグ修正・回帰修正(intake → 診断 → 診断レビュー → 再現テスト →
 #                      修正 → 実装レビュー → CI 同等ゲート → 最終ゲート → spillover)
-#   auto-docs        — docs / skill 限定変更の軽量レーン(プロダクションコード変更は不可)
-#   auto-maintenance — 定期リファクタリング(維持契約の列挙 → safety net → リファクタ)
-#   auto-audit       — 汎用監査(台帳ベース。テスト監査・タスク完了検収など)
-#   auto-intake / auto-impl-review — 共通 callable sub-workflow
+#   yt-auto-docs        — docs / skill 限定変更の軽量レーン(プロダクションコード変更は不可)
+#   yt-auto-maintenance — 定期リファクタリング(維持契約の列挙 → safety net → リファクタ)
+#   yt-auto-audit       — 汎用監査(台帳ベース。テスト監査・タスク完了検収など)
+#   yt-auto-intake / yt-auto-impl-review — 共通 callable sub-workflow
 #   audit-unit-split — ユニットテスト監査 16 分割の特化 workflow(稼働中・現状維持)
 # commit / push / PR 作成は workflow 完了後に takt の auto_pr が行う。
 # タスク投入時は auto_pr: true を設定すること。
@@ -94,10 +94,10 @@ provider_routing:
     testing-reviewer:
       provider: codex
       model: gpt-5.6-terra
-    # ── 以下は auto-* workflow 専用の persona(issue #2686)。グローバルに登録がなく、
+    # ── 以下は yt-auto-* workflow 専用の persona(issue #2686)。グローバルに登録がなく、
     #    既定モデルへフォールバックしてしまうものをここで固定する ──
     # intake の判定が全工程の入口。誤って着手を通すと後段すべてが無駄になるため最上位モデル
-    auto-intake-analyst:
+    yt-auto-intake-analyst:
       provider: codex
       model: gpt-5.6-sol
     # 設計ゲートの一角。テスト設計の誤りは write_tests で red を確認しても表面化せず、
@@ -108,15 +108,15 @@ provider_routing:
     # 診断ゲートの一角。誤った原因のまま進むと、テストも修正もすべて無駄になる。
     # 再現テストの red は「症状を再現できたか」しか見ないため、「症状は再現するが
     # 因果の理解が違う」誤診はここでしか捕まらない。intake と同格に置く
-    auto-diagnosis-reviewer:
+    yt-auto-diagnosis-reviewer:
       provider: codex
       model: gpt-5.6-sol
     # 規約文書(CLAUDE.md / docs/development.md / ADR)と差分の照合。他 reviewer と同格
-    auto-conventions-reviewer:
+    yt-auto-conventions-reviewer:
       provider: codex
       model: gpt-5.6-terra
     # spillover / audit publish の gh 操作(起票・重複照合・レポート配置)が主。
     # 手続き的な作業なので軽量モデル
-    auto-delivery-operator:
+    yt-auto-delivery-operator:
       provider: codex
       model: gpt-5.6-luna

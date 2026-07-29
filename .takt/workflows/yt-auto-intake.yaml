@@ -1,7 +1,7 @@
-name: auto-intake
+name: yt-auto-intake
 description: >
   共通の intake フェーズ。issue を読み、着手可能性を判定して実装ブリーフを作る。
-  auto-feature / auto-fix / auto-docs / auto-maintenance の各 workflow から呼ばれる。
+  yt-auto-feature / yt-auto-fix / yt-auto-docs / yt-auto-maintenance の各 workflow から呼ばれる。
 subworkflow:
   callable: true
   visibility: internal
@@ -44,14 +44,14 @@ steps:
       - plan
       - intake
     edit: false
-    persona: auto-intake-analyst
+    persona: yt-auto-intake-analyst
     knowledge:
-      - auto-domain
+      - yt-auto-domain
     # review-readonly = Read / Glob / Grep / Bash / WebSearch / WebFetch。
     # gh CLI を使うため Bash が要る。編集は edit: false で禁じる。
     provider_options:
       extends: review-readonly
-    instruction: auto-intake
+    instruction: yt-auto-intake
     quality_gates:
       - 判定の根拠として issue の該当箇所を引用していること
       - 依存する issue / PR があるとき、その状態(open / merged)を実際に照会していること
@@ -64,4 +64,4 @@ steps:
     output_contracts:
       report:
         - name: intake-brief.md
-          format: auto-intake-brief
+          format: yt-auto-intake-brief

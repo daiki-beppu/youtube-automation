@@ -1,8 +1,8 @@
 # 定期リファクタリング workflow。外部から観測できる挙動を変えないことがレーンの前提。
 # feature との差分は「維持すべき契約の列挙」が計画の中心にあること、実装前に safety net
 # (契約を担保するテストの存在と green)を確認すること。fix との差分は診断がないこと
-# (壊れていないものを直すレーンであり、壊れていると分かったら auto-fix へ回す)。
-name: auto-maintenance
+# (壊れていないものを直すレーンであり、壊れていると分かったら yt-auto-fix へ回す)。
+name: yt-auto-maintenance
 description: >
   定期リファクタリングワークフロー。intake → 計画(維持すべき契約の列挙 + リファクタ方針)→
   計画レビュー(設計 / 規約整合の 2 並列)→ safety net(契約を担保するテストの確認・補強と
@@ -27,7 +27,7 @@ loop_monitors:
     threshold: 3
     judge:
       persona: supervisor
-      instruction: auto-loop-monitor-design
+      instruction: yt-auto-loop-monitor-design
       rules:
         - condition: 健全(指摘が減っている・修正が実質的)
           next: plan_review
@@ -68,7 +68,7 @@ steps:
   # ── Phase 0: intake ───────────────────────────────────────────────
   - name: intake
     kind: workflow_call
-    call: auto-intake
+    call: yt-auto-intake
     rules:
       - condition: COMPLETE
         next: plan
@@ -87,16 +87,16 @@ steps:
     edit: false
     persona: planner
     policy:
-      - auto-traceability
-      - auto-toolchain
+      - yt-auto-traceability
+      - yt-auto-toolchain
       - existing-system-respect
     knowledge:
       - architecture
-      - auto-conventions
-      - auto-domain
+      - yt-auto-conventions
+      - yt-auto-domain
     provider_options:
       extends: review-readonly
-    instruction: auto-maintenance-plan
+    instruction: yt-auto-maintenance-plan
     quality_gates:
       - 維持すべき外部契約(公開 CLI / config スキーマ / skill 配布物 / 例外型 / テストが担保する挙動)が列挙されていること
       - 全要件に REQ-<issue番号>-<2桁連番> 形式の ID が振られていること
@@ -116,7 +116,7 @@ steps:
       - condition: 対象が既に壊れている(リファクタリングではなくバグ修正が必要)
         next: ABORT
         appendix: |
-          観測した症状と、auto-fix へ回すべき理由:
+          観測した症状と、yt-auto-fix へ回すべき理由:
           - {何が壊れているか}
       - condition: 情報不足で方針が一意に決まらない
         next: ABORT
@@ -126,7 +126,7 @@ steps:
     output_contracts:
       report:
         - name: plan.md
-          format: auto-maintenance-plan
+          format: yt-auto-maintenance-plan
 
   # 実装前の関門。維持契約の見落としは、実装後に見つける場合より桁違いに安い。
   - name: plan_review
@@ -144,15 +144,15 @@ steps:
         policy:
           - review
           - existing-system-respect
-          - auto-review-rescan
-          - auto-review-convergence
+          - yt-auto-review-rescan
+          - yt-auto-review-convergence
         knowledge:
           - architecture
-          - auto-domain
+          - yt-auto-domain
         provider_options:
           extends: review-readonly
         pass_previous_response: false
-        instruction: auto-review-maintenance-plan
+        instruction: yt-auto-review-maintenance-plan
         rules:
           - condition: APPROVE
           - condition: REJECT
@@ -160,25 +160,25 @@ steps:
         output_contracts:
           report:
             - name: plan-review.md
-              format: auto-design-arch-review
+              format: yt-auto-design-arch-review
       - name: conventions-plan
         tags:
           - review
           - design-gate
           - conventions
         edit: false
-        persona: auto-conventions-reviewer
+        persona: yt-auto-conventions-reviewer
         policy:
           - review
-          - auto-review-rescan
-          - auto-review-convergence
+          - yt-auto-review-rescan
+          - yt-auto-review-convergence
         knowledge:
-          - auto-conventions
-          - auto-domain
+          - yt-auto-conventions
+          - yt-auto-domain
         provider_options:
           extends: review-readonly
         pass_previous_response: false
-        instruction: auto-review-conventions-gate
+        instruction: yt-auto-review-conventions-gate
         rules:
           - condition: APPROVE
           - condition: REJECT
@@ -186,7 +186,7 @@ steps:
         output_contracts:
           report:
             - name: conventions-plan.md
-              format: auto-conventions-review
+              format: yt-auto-conventions-review
     rules:
       - condition: all("APPROVE")
         next: safety_net
@@ -203,11 +203,11 @@ steps:
     edit: true
     persona: planner
     policy:
-      - auto-traceability
+      - yt-auto-traceability
       - existing-system-respect
     knowledge:
       - architecture
-      - auto-conventions
+      - yt-auto-conventions
     required_permission_mode: edit
     session: refresh
     provider_options:
@@ -219,7 +219,7 @@ steps:
             reasoning_effort: high
           claude:
             effort: high
-    instruction: auto-gate-fix
+    instruction: yt-auto-gate-fix
     pass_previous_response: false
     quality_gates:
       - 全 finding に対応(修正 or 根拠を示した反論)していること
@@ -252,16 +252,16 @@ steps:
     policy:
       - coding
       - testing
-      - auto-traceability
+      - yt-auto-traceability
       - existing-system-respect
-      - auto-toolchain
+      - yt-auto-toolchain
     knowledge:
       - unit-testing
-      - auto-conventions
+      - yt-auto-conventions
     required_permission_mode: edit
     provider_options:
       extends: edit
-    instruction: auto-safety-net
+    instruction: yt-auto-safety-net
     quality_gates:
       - 計画の全維持契約について、担保するテストの存在(既存 or 今回追加)を確認していること
       - 追加した characterization テストは現在の挙動をそのまま固定しており、望ましい挙動への先回りをしていないこと
@@ -274,7 +274,7 @@ steps:
       - condition: 既存挙動のテストが修正前から red である(対象が既に壊れている)
         next: ABORT
         appendix: |
-          red のテストと症状(auto-fix へ回す):
+          red のテストと症状(yt-auto-fix へ回す):
           - {どのテストがどう失敗したか}
       - condition: 計画の維持契約リストに誤り・不足がある
         next: plan_fix
@@ -293,19 +293,19 @@ steps:
     policy:
       - coding
       - testing
-      - auto-traceability
+      - yt-auto-traceability
       - existing-system-respect
-      - auto-scope-spillover
-      - auto-toolchain
+      - yt-auto-scope-spillover
+      - yt-auto-toolchain
     knowledge:
       - architecture
-      - auto-conventions
-      - auto-domain
+      - yt-auto-conventions
+      - yt-auto-domain
     required_permission_mode: edit
     session: refresh
     provider_options:
       extends: edit
-    instruction: auto-refactor
+    instruction: yt-auto-refactor
     quality_gates:
       - safety net のテストが全て green のままであること
       - テストの変更がリネーム・移動への機械的追随のみであること(アサーションの変更・削除をしていない)
@@ -329,7 +329,7 @@ steps:
   # ── Phase 4: 実装レビュー ─────────────────────────────────────────
   - name: impl_gate
     kind: workflow_call
-    call: auto-impl-review
+    call: yt-auto-impl-review
     rules:
       - condition: COMPLETE
         next: ci_verify
@@ -347,12 +347,12 @@ steps:
     edit: true
     persona: coder
     policy:
-      - auto-toolchain
-      - auto-traceability
+      - yt-auto-toolchain
+      - yt-auto-traceability
     required_permission_mode: edit
     provider_options:
       extends: edit
-    instruction: auto-ci-verify
+    instruction: yt-auto-ci-verify
     pass_previous_response: false
     quality_gates:
       - 全ゲート(ruff check / ruff format --check / any-usage-gate / pytest / CHANGELOG)を実際に実行し、個々の結果を報告していること
@@ -376,7 +376,7 @@ steps:
     args:
       supervise_knowledge:
         - architecture
-        - auto-conventions
+        - yt-auto-conventions
     rules:
       - condition: COMPLETE
         next: spillover
@@ -395,15 +395,15 @@ steps:
     tags:
       - delivery
     edit: false
-    persona: auto-delivery-operator
+    persona: yt-auto-delivery-operator
     policy:
-      - auto-scope-spillover
+      - yt-auto-scope-spillover
     knowledge:
-      - auto-domain
+      - yt-auto-domain
     provider_options:
       extends: review-readonly
     session: refresh
-    instruction: auto-spillover
+    instruction: yt-auto-spillover
     quality_gates:
       - Report Directory の全レポートを読み、発見がなかったものも収集元に記録していること
       - 起票したものが 3 条件(因果なし / 実害あり / 根拠あり)をすべて満たしていること

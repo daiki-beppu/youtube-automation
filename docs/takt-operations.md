@@ -25,16 +25,16 @@
 
 | workflow | 対象 | 骨子 |
 | --- | --- | --- |
-| `auto-feature` | 新機能・機能拡張(CLI 追加、skill 新設など) | intake → 計画 → テスト設計 → 設計レビュー 3 並列 → テスト先行実装 → 実装 → 実装レビュー 4 並列 → CI 同等ゲート → 最終ゲート → spillover |
-| `auto-fix` | バグ修正・回帰修正 | intake → 診断 → 診断レビュー 3 並列 → 再現テスト(red 確認)→ 修正 → 実装レビュー 4 並列 → CI 同等ゲート → 最終ゲート → spillover |
-| `auto-docs` | docs / skill / CLAUDE.md 限定の変更(実コード変更なし) | intake → 計画 → 実装 → 文書レビュー 2 並列 → CI 同等ゲート → spillover |
-| `auto-maintenance` | 挙動を変えないリファクタリング | intake → 計画(維持契約の列挙)→ 計画レビュー 2 並列 → safety net → リファクタ → 実装レビュー 4 並列 → CI 同等ゲート → 最終ゲート → spillover |
-| `auto-audit` | 汎用監査(テスト監査・タスク完了検収・アーキテクチャ監査など) | 計画(台帳スケルトン)→ 監査(追記型)→ 監督 ⇄ 再監査 → 検収 → docs/audits/ へ配置(+指示があれば起票) |
-| `audit-unit-split` | ユニットテスト監査 16 分割(稼働中の特化 workflow) | 現状維持。汎用の監査は `auto-audit` を使う |
+| `yt-auto-feature` | 新機能・機能拡張(CLI 追加、skill 新設など) | intake → 計画 → テスト設計 → 設計レビュー 3 並列 → テスト先行実装 → 実装 → 実装レビュー 4 並列 → CI 同等ゲート → 最終ゲート → spillover |
+| `yt-auto-fix` | バグ修正・回帰修正 | intake → 診断 → 診断レビュー 3 並列 → 再現テスト(red 確認)→ 修正 → 実装レビュー 4 並列 → CI 同等ゲート → 最終ゲート → spillover |
+| `yt-auto-docs` | docs / skill / CLAUDE.md 限定の変更(実コード変更なし) | intake → 計画 → 実装 → 文書レビュー 2 並列 → CI 同等ゲート → spillover |
+| `yt-auto-maintenance` | 挙動を変えないリファクタリング | intake → 計画(維持契約の列挙)→ 計画レビュー 2 並列 → safety net → リファクタ → 実装レビュー 4 並列 → CI 同等ゲート → 最終ゲート → spillover |
+| `yt-auto-audit` | 汎用監査(テスト監査・タスク完了検収・アーキテクチャ監査など) | 計画(台帳スケルトン)→ 監査(追記型)→ 監督 ⇄ 再監査 → 検収 → docs/audits/ へ配置(+指示があれば起票) |
+| `audit-unit-split` | ユニットテスト監査 16 分割(稼働中の特化 workflow) | 現状維持。汎用の監査は `yt-auto-audit` を使う |
 
-迷ったときの判定順: 壊れている → `auto-fix`。コードを変えず文書だけ → `auto-docs`。挙動を変えずに構造を変える → `auto-maintenance`。調査して報告するだけ → `auto-audit`。それ以外 → `auto-feature`。
+迷ったときの判定順: 壊れている → `yt-auto-fix`。コードを変えず文書だけ → `yt-auto-docs`。挙動を変えずに構造を変える → `yt-auto-maintenance`。調査して報告するだけ → `yt-auto-audit`。それ以外 → `yt-auto-feature`。
 
-`auto-intake` / `auto-impl-review` は共通の callable sub-workflow であり、直接投入しない。
+`yt-auto-intake` / `yt-auto-impl-review` は共通の callable sub-workflow であり、直接投入しない。
 
 ## workflow 設計の要点(保守者向け)
 
