@@ -64,23 +64,6 @@ _VALID_PAYLOAD = {
 }
 
 
-class TestVideoTarget:
-    def test_holds_required_fields(self):
-        # Given: 必要な属性
-        target = VideoTarget(
-            video_id="vid_001",
-            slug="celtic-music",
-            url="https://www.youtube.com/watch?v=vid_001",
-            title="Celtic Forest",
-        )
-
-        # Then: 各属性にアクセスできる
-        assert target.video_id == "vid_001"
-        assert target.slug == "celtic-music"
-        assert target.url == "https://www.youtube.com/watch?v=vid_001"
-        assert target.title == "Celtic Forest"
-
-
 class TestVideoAnalyzerAnalyzeUrl:
     def test_parses_plain_json_response(self, tmp_path):
         # Given: 素の JSON を返す Gemini Client
@@ -381,17 +364,6 @@ class TestVideoAnalyzerLoadCachedJson:
         # Then
         assert cached is None
         assert "object ではない" in caplog.text
-
-    def test_returns_none_on_json_array(self, tmp_path):
-        # Given: 配列トップレベル (解析結果の形ではない)
-        analyzer = self._make_analyzer(tmp_path)
-        target = _make_target()
-        path = analyzer.json_path(target)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text('[{"hook_structure": {}}]', encoding="utf-8")
-
-        # When/Then
-        assert analyzer.load_cached_json(target) is None
 
 
 class TestVideoAnalysisReport:

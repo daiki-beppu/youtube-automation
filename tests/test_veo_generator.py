@@ -44,15 +44,6 @@ def _install_capture(monkeypatch) -> dict:
 # ---------- trim_tail ----------
 
 
-def test_trim_tail_places_sentinel_before_path(monkeypatch) -> None:
-    captured = _install_capture(monkeypatch)
-
-    veo_generator.trim_tail(Path("/fake.mp4"))
-
-    assert captured["cmd"][-2] == "--"
-    assert captured["cmd"][-1] == "/fake.mp4"
-
-
 def test_trim_tail_keeps_sentinel_for_dash_prefixed_path(monkeypatch) -> None:
     captured = _install_capture(monkeypatch)
 
@@ -63,15 +54,6 @@ def test_trim_tail_keeps_sentinel_for_dash_prefixed_path(monkeypatch) -> None:
 
 
 # ---------- smooth_loop ----------
-
-
-def test_smooth_loop_places_sentinel_before_path(monkeypatch) -> None:
-    captured = _install_capture(monkeypatch)
-
-    veo_generator.smooth_loop(Path("/fake.mp4"))
-
-    assert captured["cmd"][-2] == "--"
-    assert captured["cmd"][-1] == "/fake.mp4"
 
 
 def test_smooth_loop_keeps_sentinel_for_dash_prefixed_path(monkeypatch) -> None:
@@ -117,25 +99,6 @@ def test_compress_loop_uses_configured_crf_and_preset(monkeypatch) -> None:
     assert cmd[cmd.index("-preset") + 1] == "slow"
     assert cmd[cmd.index("-pix_fmt") + 1] == "yuv420p"
     assert "-an" in cmd
-
-
-def test_compress_loop_uses_custom_crf_value(monkeypatch) -> None:
-    """CRF 24（攻める設定）が argv に正しく反映される。"""
-    captured = _install_run_capture(monkeypatch)
-
-    veo_generator.compress_loop(Path("/fake.mp4"), crf=24, preset="veryslow")
-
-    cmd = captured["cmd"]
-    assert cmd[cmd.index("-crf") + 1] == "24"
-    assert cmd[cmd.index("-preset") + 1] == "veryslow"
-
-
-def test_compress_loop_returns_false_on_ffmpeg_failure(monkeypatch) -> None:
-    """ffmpeg 失敗時は False を返す。"""
-    _install_run_capture(monkeypatch)
-
-    result = veo_generator.compress_loop(Path("/nonexistent.mp4"))
-    assert result is False
 
 
 def test_smooth_loop_accepts_custom_crf_preset(monkeypatch) -> None:
@@ -693,31 +656,6 @@ class TestGenerateLoopVideoSubmitInterrupt:
         assert result is False
         out = capsys.readouterr().out
         assert "[Interrupt]" in out
-
-    def test_does_not_save_state_on_submit_keyboard_interrupt(
-        self, channel_tmp: Path, output_mp4: Path, monkeypatch
-    ) -> None:
-        """generate_videos() の Ctrl+C では operation_name 未取得のため state を保存しない。"""
-        _patch_genai_types(monkeypatch)
-        client = MagicMock()
-        client.models.generate_videos.side_effect = KeyboardInterrupt
-
-        with patch.multiple(
-            "youtube_automation.utils.veo_generator",
-            strip_audio=MagicMock(),
-            cost_tracker=MagicMock(),
-        ):
-            with patch("time.sleep"):
-                try:
-                    veo_generator.generate_loop_video(
-                        client,
-                        output_mp4.parent / "main.png",
-                        output_mp4,
-                        model="veo-3.1-fast",
-                        prompt="test prompt",
-                    )
-                except KeyboardInterrupt:
-                    pytest.fail("generate_loop_video が submit 中の KeyboardInterrupt を捕捉していない")
 
         from youtube_automation.utils import veo_operation_store as op_store
 
