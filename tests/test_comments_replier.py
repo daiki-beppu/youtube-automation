@@ -18,7 +18,11 @@ from youtube_automation.configuration.comments import (
 )
 from youtube_automation.infrastructure.errors import AutomationError, ConfigError, YouTubeAPIError
 from youtube_automation.utils.comments.history import ReplyHistory
-from youtube_automation.utils.comments.replier import _SAVE_MAX_RETRIES, CommentReplier
+from youtube_automation.utils.comments.replier import (
+    _SAVE_MAX_RETRIES,
+    CommentReplier,
+    fetch_video_status,
+)
 
 _PATCH_GENAI_CLIENT = "youtube_automation.utils.genai_client.create_global_genai_client"
 
@@ -1535,6 +1539,23 @@ def test_resolve_owner_channel_id_raises_on_empty_items(tmp_path):
 
     with pytest.raises(YouTubeAPIError, match="チャンネルが見つかりません"):
         replier._resolve_owner_channel_id()
+
+
+def test_fetch_video_status_rejects_invalid_api_shape():
+    yt = MagicMock()
+    yt.videos.return_value.list.return_value.execute.return_value = []
+
+    with pytest.raises(AttributeError):
+        fetch_video_status(yt, ["v1"])
+
+
+def test_get_title_rejects_invalid_api_shape(tmp_path):
+    yt = MagicMock()
+    yt.videos.return_value.list.return_value.execute.return_value = []
+    replier = CommentReplier(yt, config=_make_config(), channel_dir=tmp_path, default_language="ja")
+
+    with pytest.raises(AttributeError):
+        replier._get_title("v1")
 
 
 def test_resolve_owner_channel_id_raises_on_http_error(tmp_path):
