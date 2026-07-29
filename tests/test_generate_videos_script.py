@@ -267,12 +267,13 @@ def _run_generate_videos(
     collection: Path | None = None,
     master_filename: str = "master-mix.wav",
     with_loop: bool = True,
+    stub_bin: Path | None = None,
 ) -> tuple[subprocess.CompletedProcess[str], Path]:
     if collection is None:
         collection = _create_collection(tmp_path, master_filename=master_filename)
     if not with_loop:
         (collection / "10-assets" / "loop.mp4").unlink(missing_ok=True)
-    bin_dir = _shared_stub_bin_dir()
+    bin_dir = stub_bin or _shared_stub_bin_dir()
     ffmpeg_log = tmp_path / "ffmpeg.log"
     env = os.environ.copy()
     env["PATH"] = f"{bin_dir}:{env['PATH']}"
@@ -947,10 +948,80 @@ def test_overlays_env_has_priority_over_cli(tmp_path: Path) -> None:
     assert "Overlays : enabled" in result.stdout
 
 
-def test_runtime_mask_uses_project_environment() -> None:
-    script = _SCRIPT_PATH.read_text(encoding="utf-8")
-    assert "uv run python -m youtube_automation.utils.audio_visualizer_mask" in script
-    assert "python3 -m youtube_automation.utils.audio_visualizer_mask" not in script
+def _runtime_mask_env(tmp_path: Path, uv_log: Path) -> tuple[dict[str, str], Path]:
+    config = tmp_path / "youtube.json"
+    config.write_text('{"overlays": {"enabled": true}}', encoding="utf-8")
+    return (
+        {
+            "OVERLAYS_CONFIG": str(config),
+            "JQ_AV_ENABLED": "true",
+            "OVERLAY_AV_STYLE": "ring",
+            "OVERLAY_AV_BARS": "64",
+            "OVERLAY_AV_SIZE": "1280x180",
+            "UV_LOG": str(uv_log),
+        },
+        config,
+    )
+
+
+def test_runtime_mask_launches_helper_through_project_environment(tmp_path: Path) -> None:
+    bin_dir = _create_stub_bin(tmp_path)
+    uv_log = tmp_path / "uv.log"
+    _write_executable(
+        bin_dir / "uv",
+        """#!/bin/bash
+set -eu
+printf '%s\n' "$*" >> "$UV_LOG"
+[[ "$1" == "run" && "$2" == "python" && "$3" == "-m" ]]
+output=""
+prev=""
+for arg in "$@"; do
+    if [[ "$prev" == "--output" ]]; then output="$arg"; fi
+    prev="$arg"
+done
+printf 'mask' > "$output"
+""",
+    )
+    env, _config = _runtime_mask_env(tmp_path, uv_log)
+
+    result, _ = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        stream_bitrate_output="5000000",
+        extra_env=env,
+        stub_bin=bin_dir,
+    )
+
+    assert result.returncode == 0, result.stderr
+    invocation = uv_log.read_text(encoding="utf-8")
+    assert invocation.startswith("run python -m youtube_automation.utils.audio_visualizer_mask ")
+
+
+def test_runtime_mask_helper_failure_stops_script(tmp_path: Path) -> None:
+    bin_dir = _create_stub_bin(tmp_path)
+    uv_log = tmp_path / "uv.log"
+    _write_executable(
+        bin_dir / "uv",
+        """#!/bin/bash
+printf '%s\n' "$*" >> "$UV_LOG"
+exit 7
+""",
+    )
+    env, _config = _runtime_mask_env(tmp_path, uv_log)
+
+    result, _ = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        stream_bitrate_output="5000000",
+        extra_env=env,
+        stub_bin=bin_dir,
+    )
+
+    assert result.returncode == 1
+    assert "failed to generate runtime audio visualizer mask" in result.stdout + result.stderr
+    assert uv_log.read_text(encoding="utf-8").startswith(
+        "run python -m youtube_automation.utils.audio_visualizer_mask "
+    )
 
 
 def test_audio_visualizer_legacy_config_keeps_original_filtergraph(tmp_path: Path) -> None:
