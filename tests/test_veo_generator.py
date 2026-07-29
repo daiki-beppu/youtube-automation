@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 
@@ -286,6 +286,193 @@ def test_smooth_loop_relocates_stale_raw_for_short_loop_stem(tmp_path: Path, mon
     assert video.read_bytes() == b"smoothed"
     assert (tmp_path / "short-loop_raw.mp4").read_bytes() == b"current"
     assert (tmp_path / "short-loop_raw-v1.mp4").read_bytes() == b"stale"
+
+
+def test_strip_audio_replaces_output_and_consumes_tmp(tmp_path: Path, monkeypatch) -> None:
+    video = tmp_path / "loop.mp4"
+    video.write_bytes(b"with-audio")
+    tmp = tmp_path / "loop_tmp.mp4"
+
+    def fake_run(*args, **kwargs):
+        tmp.write_bytes(b"video-only")
+
+    monkeypatch.setattr(veo_generator.subprocess, "run", fake_run)
+
+    veo_generator.strip_audio(video)
+
+    assert video.read_bytes() == b"video-only"
+    assert not tmp.exists()
+
+
+def test_strip_audio_removes_partial_tmp_on_failure(tmp_path: Path, monkeypatch) -> None:
+    import subprocess as _sp
+
+    video = tmp_path / "loop.mp4"
+    video.write_bytes(b"original")
+    tmp = tmp_path / "loop_tmp.mp4"
+
+    def fail_run(cmd, **kwargs):
+        tmp.write_bytes(b"partial")
+        raise _sp.CalledProcessError(1, cmd)
+
+    monkeypatch.setattr(veo_generator.subprocess, "run", fail_run)
+
+    veo_generator.strip_audio(video)
+
+    assert video.read_bytes() == b"original"
+    assert not tmp.exists()
+
+
+def test_trim_tail_replaces_output_and_consumes_tmp(tmp_path: Path, monkeypatch) -> None:
+    video = tmp_path / "loop.mp4"
+    video.write_bytes(b"original")
+    tmp = tmp_path / "loop_trimmed.mp4"
+    monkeypatch.setattr(veo_generator.subprocess, "check_output", lambda *args, **kwargs: "8.0")
+
+    def fake_run(*args, **kwargs):
+        tmp.write_bytes(b"trimmed")
+
+    monkeypatch.setattr(veo_generator.subprocess, "run", fake_run)
+
+    assert veo_generator.trim_tail(video, trim_sec=1.5) is True
+    assert video.read_bytes() == b"trimmed"
+    assert not tmp.exists()
+
+
+def test_trim_tail_short_video_keeps_original_without_ffmpeg(tmp_path: Path, monkeypatch) -> None:
+    video = tmp_path / "loop.mp4"
+    video.write_bytes(b"original")
+    run = MagicMock()
+    monkeypatch.setattr(veo_generator.subprocess, "check_output", lambda *args, **kwargs: "0.5")
+    monkeypatch.setattr(veo_generator.subprocess, "run", run)
+
+    assert veo_generator.trim_tail(video, trim_sec=1.0) is False
+    assert video.read_bytes() == b"original"
+    assert not (tmp_path / "loop_trimmed.mp4").exists()
+    run.assert_not_called()
+
+
+def test_trim_tail_removes_partial_tmp_on_failure(tmp_path: Path, monkeypatch) -> None:
+    import subprocess as _sp
+
+    video = tmp_path / "loop.mp4"
+    video.write_bytes(b"original")
+    tmp = tmp_path / "loop_trimmed.mp4"
+    monkeypatch.setattr(veo_generator.subprocess, "check_output", lambda *args, **kwargs: "8.0")
+
+    def fail_run(cmd, **kwargs):
+        tmp.write_bytes(b"partial")
+        raise _sp.CalledProcessError(1, cmd, stderr="trim failed")
+
+    monkeypatch.setattr(veo_generator.subprocess, "run", fail_run)
+
+    assert veo_generator.trim_tail(video) is False
+    assert video.read_bytes() == b"original"
+    assert not tmp.exists()
+
+
+def test_compress_loop_replaces_output_and_consumes_tmp(tmp_path: Path, monkeypatch) -> None:
+    video = tmp_path / "loop.mp4"
+    video.write_bytes(b"original")
+    tmp = tmp_path / "loop_compressed.mp4"
+
+    def fake_run(*args, **kwargs):
+        tmp.write_bytes(b"compressed")
+
+    monkeypatch.setattr(veo_generator.subprocess, "run", fake_run)
+
+    assert veo_generator.compress_loop(video) is True
+    assert video.read_bytes() == b"compressed"
+    assert not tmp.exists()
+
+
+@pytest.mark.parametrize("duration", [RuntimeError("ffprobe failed"), "1.0"])
+def test_smooth_loop_duration_failure_or_short_video_has_no_side_effects(
+    tmp_path: Path, monkeypatch, duration: object
+) -> None:
+    video = tmp_path / "loop.mp4"
+    video.write_bytes(b"original")
+    run = MagicMock()
+    if isinstance(duration, Exception):
+        check_output = MagicMock(side_effect=duration)
+    else:
+        check_output = MagicMock(return_value=duration)
+    monkeypatch.setattr(veo_generator.subprocess, "check_output", check_output)
+    monkeypatch.setattr(veo_generator.subprocess, "run", run)
+
+    assert veo_generator.smooth_loop(video, crossfade_sec=0.5, trim_tail_sec=1.0) is False
+    assert video.read_bytes() == b"original"
+    assert not (tmp_path / "loop_smooth.mp4").exists()
+    assert not (tmp_path / "loop_raw.mp4").exists()
+    run.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("compression", "fallback_name", "expected_crf", "expected_preset"),
+    [
+        ({"enabled": True, "crf": 25, "preset": "fast"}, "compress", 25, "fast"),
+        ({"enabled": False, "crf": 25, "preset": "fast"}, "strip", 18, "slow"),
+    ],
+)
+def test_finalize_fallback_records_cost_then_clears_state(
+    tmp_path: Path,
+    compression: dict[str, object],
+    fallback_name: str,
+    expected_crf: int,
+    expected_preset: str,
+) -> None:
+    output = tmp_path / "loop.mp4"
+    output.write_bytes(b"generated")
+    calls = MagicMock()
+    calls.cost.log_generation.return_value = "entry"
+    calls.cost.relative_to_channel_dir.return_value = "10-assets/loop.mp4"
+
+    with patch.multiple(
+        veo_generator,
+        smooth_loop=calls.smooth,
+        compress_loop=calls.compress,
+        strip_audio=calls.strip,
+        cost_tracker=calls.cost,
+        op_store=calls.store,
+    ):
+        calls.smooth.return_value = False
+        veo_generator._finalize_generated_video(
+            output,
+            "veo-test-model",
+            8,
+            "16:9",
+            compression=compression,
+        )
+
+    calls.smooth.assert_called_once_with(
+        output,
+        crossfade_sec=0.5,
+        trim_tail_sec=1.0,
+        crf=expected_crf,
+        preset=expected_preset,
+    )
+    if fallback_name == "compress":
+        calls.compress.assert_called_once_with(output, crf=25, preset="fast")
+        calls.strip.assert_not_called()
+    else:
+        calls.strip.assert_called_once_with(output)
+        calls.compress.assert_not_called()
+    calls.cost.log_generation.assert_called_once_with(
+        "video",
+        model="veo-test-model",
+        quantity=8,
+        unit="second",
+        metadata={
+            "duration_sec": 8,
+            "aspect_ratio": "16:9",
+            "resolution": "1080p",
+            "output_file": "10-assets/loop.mp4",
+        },
+    )
+    assert calls.method_calls[-2:] == [
+        call.cost.print_last_report("entry"),
+        call.store.clear(output),
+    ]
 
 
 # =============================================================================

@@ -40,3 +40,8 @@ def test_generate_video_dispatches_to_registered_hook() -> None:
         # static は生成不要な背景タイプなので registry の標準状態へ戻す。
         veo_generator._VIDEO_TYPE_GENERATORS.clear()
         veo_generator._VIDEO_TYPE_GENERATORS.update(original_registry)
+
+
+def test_generate_video_rejects_valid_but_unregistered_type() -> None:
+    with pytest.raises(ValueError, match="static.*no registered generator"):
+        generate_video(VideoType.STATIC)
