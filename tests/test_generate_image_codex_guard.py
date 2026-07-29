@@ -1,40 +1,54 @@
-"""yt-generate-image の codex provider ガードに関する静的契約テスト。"""
+"""yt-generate-image の codex provider 拒否契約テスト。"""
 
 from __future__ import annotations
 
-from pathlib import Path
+import sys
+from types import SimpleNamespace
+from unittest.mock import MagicMock
 
-_REPO_ROOT = Path(__file__).resolve().parent.parent
-_GENERATE_IMAGE = _REPO_ROOT / "src" / "youtube_automation" / "commands" / "media" / "generate_image.py"
+import pytest
 
-
-def _read_generate_image() -> str:
-    return _GENERATE_IMAGE.read_text(encoding="utf-8")
-
-
-def test_generate_image_rejects_codex_before_model_override() -> None:
-    """Given yt-generate-image の API 経路
-    When provider=codex が config から来る
-    Then replace_model 前に明示エラーで codex-image.sh 経路へ誘導する。
-    """
-    text = _read_generate_image()
-    codex_guard = text.find('cfg.provider == "codex"')
-    if codex_guard == -1:
-        codex_guard = text.find("cfg.provider == 'codex'")
-    replace_model_call = text.find("replace_model(cfg, args.model)")
-
-    assert codex_guard != -1, "provider=codex の早期ガードが見つかりません"
-    assert replace_model_call != -1, "既存の --model override 経路が見つかりません"
-    assert codex_guard < replace_model_call, "codex ガードは replace_model より前に置く必要があります"
+from youtube_automation.commands.media import generate_image
 
 
-def test_generate_image_codex_error_mentions_script_route() -> None:
-    """Given provider=codex の誤配線
-    When yt-generate-image が拒否する
-    Then エラー文に codex-image.sh と yt-generate-image の API 経路差が含まれる。
-    """
-    text = _read_generate_image()
+def _run_with_codex_provider(monkeypatch, capsys):
+    replace_model = MagicMock()
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "yt-generate-image",
+            "--prompt",
+            "test prompt",
+            "--output",
+            "out.png",
+            "--model",
+            "override-model",
+        ],
+    )
+    monkeypatch.setattr(
+        generate_image,
+        "load_image_generation_config",
+        lambda: SimpleNamespace(provider="codex"),
+    )
+    monkeypatch.setattr(generate_image, "replace_model", replace_model)
 
-    assert "codex-image.sh" in text
-    assert "yt-generate-image" in text
-    assert "sys.exit(1)" in text
+    with pytest.raises(SystemExit) as exc_info:
+        generate_image.main()
+
+    return exc_info.value.code, capsys.readouterr(), replace_model
+
+
+def test_generate_image_rejects_codex_before_model_override(monkeypatch, capsys) -> None:
+    code, _captured, replace_model = _run_with_codex_provider(monkeypatch, capsys)
+
+    assert code == 1
+    replace_model.assert_not_called()
+
+
+def test_generate_image_codex_error_mentions_script_route(monkeypatch, capsys) -> None:
+    code, captured, _replace_model = _run_with_codex_provider(monkeypatch, capsys)
+
+    assert code == 1
+    assert "codex-image.sh" in captured.out
+    assert "yt-generate-image" in captured.out
