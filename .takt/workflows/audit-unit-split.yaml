@@ -1,0 +1,139 @@
+name: audit-unit-split
+description: スコープ分割版ユニットテスト監査。plan が台帳スケルトンを作り、audit が {report} 注入された既存台帳をインクリメンタルに拡張する。コード修正なしで Issue 直貼り可能なレポートを作成する
+workflow_config:
+  provider_options:
+    codex:
+      network_access: true
+    opencode:
+      network_access: true
+# builtin audit-unit を eject して作成した別名ワークフロー（builtin は無改変のまま）。
+# v2（2026-07-28）: v1 は builtin の facet（unit-audit-team-leader instruction / unit-audit
+# output contract）を流用していたため以下の欠陥で停滞 ABORT していた:
+# - output contract `unit-audit` の「認知負荷軽減ルール: REJECT → 高優先度の不足のみ記載」が
+#   order.md の台帳追記指示を上書きし、audit が毎回 7 行程度の要約を再生成するだけだった。
+# - レポート生成フェーズはツールなしでセッション再開されるため、agent は前回の台帳ファイルを
+#   読めない。前回内容は instruction への {report:...} 注入でしか渡せない。
+# - team_leader の統合フェーズもツールなしで、part 応答の圧縮しかできなかった。
+# v2 の設計:
+# - plan が台帳スケルトン（全スコープファイルを未台帳/未判定行で列挙）も出力し、
+#   audit の {report:02-unit-audit.md} 参照が初回から解決できるようにする。
+# - audit は team_leader をやめ単一 persona。custom instruction で既存台帳を注入し、
+#   1 パス最低 10 本番ファイル（残りが少なければ全件）を追記する。
+# - custom output contract `unit-audit-ledger` は追記専用・全行再掲・進捗行必須。
+# - review は検収のみ（output contract なし）。台帳は audit の出力が最終成果物。
+# v3（2026-07-29）: v2 の T01 実測（run 20260728-140715）で台帳は 5 パスで 49/49 に到達したが、
+# supervise 差し戻し後の修正パスで agent が「既存行を保持する」とだけ書く差分応答を出力し、
+# report phase の上書きで台帳が物理消滅 → 0/49 から再構築 ×2 で max_steps 24 を消費した。
+# 対策:
+# - 契約・instruction に上書きセマンティクス（応答に無い行は消滅する）を明記。
+# - audit instruction に修正パス分岐（指摘行のみ修正 + 全行再掲、済→未台帳への巻き戻し禁止）と
+#   破損台帳の回復規則（本文の実行数を正とする）を追加。
+# - supervise が要求する詳細度（node ID 単位の個別行・Partial 行の未カバー内容欄）を
+#   初回パスから契約必須にして差し戻し自体を減らす。
+# - max_steps 24→32（本構築 6 + supervise + 修正 + review の余裕分）。
+# 既知の限界: audit self-loop は cycle: [audit, supervise] のパターンに一致しないため
+# loop monitor では検知できない（v2 実測で一度も発火せず）。cycle: [audit] 単独監視は
+# スキーマ制約（>=2 items）で定義不可。self-loop の暴走は max_steps が唯一のガード。
+max_steps: 32
+initial_step: plan
+
+loop_monitors:
+  - cycle: [audit, supervise]
+    threshold: 3
+    judge:
+      persona: supervisor
+      instruction: |
+        unit audit の audit → supervise サイクルが {cycle_count} 回繰り返されました。
+        監査台帳（02-unit-audit.md）の進捗行と表の行数を履歴と比較し、以下を判断してください:
+        - 進捗行「台帳済み: 本番 n/N、テスト判定済み m/M」の n・m が前回サイクルから実際に増えているか
+        - 残りの未台帳・未判定件数は合理的なサイクル数で完了可能か
+      rules:
+        - condition: 監査品質・スコープが十分
+          next: review
+        - condition: 台帳が拡大しており改善が続いている
+          next: audit
+        - condition: 台帳が停滞し改善の見込みがない
+          next: ABORT
+
+steps:
+  - name: plan
+    tags:
+      - plan
+    edit: false
+    persona: test-planner
+    policy: testing
+    knowledge:
+      - architecture
+      - unit-testing
+    instruction: unit-audit-split-plan
+    output_contracts:
+      report:
+        - name: 01-unit-audit-plan.md
+          format: unit-audit-plan
+        - name: 02-unit-audit.md
+          format: unit-audit-ledger
+    rules:
+      - condition: 監査計画と初期台帳が完了
+        next: audit
+      - condition: ユーザーが質問をしている（監査タスクではない）
+        next: COMPLETE
+      - condition: 要件が不明確、情報不足
+        next: ABORT
+
+  - name: audit
+    tags:
+      - review
+    edit: false
+    persona: testing-reviewer
+    policy:
+      - review
+      - testing
+    knowledge:
+      - architecture
+      - unit-testing
+    instruction: unit-audit-split-audit
+    output_contracts:
+      report:
+        - name: 02-unit-audit.md
+          format: unit-audit-ledger
+    rules:
+      - condition: スコープ全件の台帳・判定が完了した
+        next: supervise
+      - condition: 台帳を拡張したが未台帳の残件がある
+        next: audit
+      - condition: 監査を継続できない障害がある
+        next: ABORT
+
+  - name: supervise
+    tags:
+      - review
+      - supervise
+    edit: false
+    persona: supervisor
+    policy: review
+    knowledge:
+      - unit-testing
+    instruction: unit-audit-supervise
+    pass_previous_response: false
+    rules:
+      - condition: 監査が完全で Issue 化できる品質に達している
+        next: review
+      - condition: カバレッジ監査が不完全、または根拠が不足している
+        next: audit
+
+  - name: review
+    tags:
+      - review
+    edit: false
+    persona: testing-reviewer
+    policy:
+      - review
+      - testing
+    knowledge:
+      - unit-testing
+    instruction: unit-audit-split-review
+    rules:
+      - condition: 監査が完全で問題がない
+        next: COMPLETE
+      - condition: 監査に不足・誤り・根拠不明な判定がある
+        next: audit
