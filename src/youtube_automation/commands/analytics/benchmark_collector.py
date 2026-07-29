@@ -724,7 +724,6 @@ class BenchmarkThumbnailAnalyzer:
                         )
                     except json.JSONDecodeError as e:
                         logger.warning("サムネイル分析JSONパース失敗 [%s]: %s", video["title"][:30], e)
-                        video["thumbnail_analysis"] = {"raw": response.text[:500] if "response" in dir() else str(e)}
                     except Exception as e:
                         logger.warning("サムネイル分析失敗 [%s]: %s", video["title"][:30], e)
 
