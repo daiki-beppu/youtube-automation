@@ -178,3 +178,52 @@ def test_build_launch_curve_frame_without_reporting_snapshot_keeps_columns():
     df = build_launch_curve_frame(daily_data=daily, video_meta=meta)
     assert df["reporting_ctr_snapshot"].isna().all()
     assert df["reporting_impressions_snapshot"].isna().all()
+
+
+def test_build_launch_curve_frame_empty_rows_returns_stable_schema():
+    df = build_launch_curve_frame(daily_data={"rows": []}, video_meta={})
+
+    assert df.empty
+    assert list(df.columns) == [
+        "video_id",
+        "date",
+        "published_at",
+        "days_since_publish",
+        "daily_views",
+        "cumulative_views",
+        "daily_impressions",
+        "ctr",
+        "reporting_ctr_snapshot",
+        "reporting_impressions_snapshot",
+    ]
+
+
+def test_build_launch_curve_frame_excludes_video_without_metadata():
+    daily = {
+        "rows": [
+            {"video_id": "known", "date": "2026-04-01", "views": 10},
+            {"video_id": "unknown", "date": "2026-04-01", "views": 999},
+        ]
+    }
+    meta = {"known": {"title": "Known", "published_at": "2026-04-01T00:00:00Z"}}
+
+    df = build_launch_curve_frame(daily_data=daily, video_meta=meta)
+
+    assert list(df["video_id"]) == ["known"]
+    assert list(df["daily_views"]) == [10]
+
+
+def test_build_launch_curve_frame_excludes_rows_before_publish_date():
+    daily = {
+        "rows": [
+            {"video_id": "v1", "date": "2026-03-31", "views": 999},
+            {"video_id": "v1", "date": "2026-04-01", "views": 10},
+            {"video_id": "v1", "date": "2026-04-02", "views": 20},
+        ]
+    }
+    meta = {"v1": {"title": "Video", "published_at": "2026-04-01T12:00:00Z"}}
+
+    df = build_launch_curve_frame(daily_data=daily, video_meta=meta)
+
+    assert list(df["days_since_publish"]) == [0, 1]
+    assert list(df["cumulative_views"]) == [10, 30]
