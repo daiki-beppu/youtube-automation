@@ -9,6 +9,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from youtube_automation.domains.analytics.mixins.traffic_source_analytics import TrafficSourceMixin
+from youtube_automation.infrastructure.errors import YouTubeAPIError
 
 
 class StubCollector(TrafficSourceMixin):
@@ -53,6 +54,17 @@ class TestGetTrafficSourceAnalytics:
         assert result["sources"] == {}
         assert result["total_views"] == 0
 
+    def test_zero_views_and_api_failure_return_stable_shapes(self, collector):
+        collector.analytics_service.query.return_value = {"rows": [["YT_SEARCH", 0, 0, 0]]}
+        zero = collector.get_traffic_source_analytics("2026-01-01", "2026-04-01")
+        assert zero["sources"]["YT_SEARCH"]["view_share_percent"] == 0
+
+        collector.analytics_service.query.side_effect = YouTubeAPIError("traffic unavailable")
+        failed = collector.get_traffic_source_analytics("2026-01-01", "2026-04-01")
+        assert failed["sources"] == {}
+        assert failed["total_views"] == 0
+        assert "traffic unavailable" in failed["error"]
+
 
 class TestGetTrafficSourceDetail:
     def test_returns_detail_list(self, collector):
@@ -70,3 +82,8 @@ class TestGetTrafficSourceDetail:
         assert len(result) == 2
         assert result[0]["detail"] == "lofi music"
         assert result[0]["views"] == 100
+
+    def test_api_failure_returns_empty_detail_list(self, collector):
+        collector.analytics_service.query.side_effect = YouTubeAPIError("detail unavailable")
+
+        assert collector.get_traffic_source_detail("2026-01-01", "2026-04-01", "YT_SEARCH") == []
