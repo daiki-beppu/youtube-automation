@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import subprocess
+from math import isfinite
 from pathlib import Path
 
 DEFAULT_FFPROBE_TIMEOUT_SECONDS = 30
@@ -28,7 +29,8 @@ def probe_duration(path: Path) -> float | None:
             check=True,
             timeout=DEFAULT_FFPROBE_TIMEOUT_SECONDS,
         )
-        return float(result.stdout.strip())
+        value = float(result.stdout.strip())
+        return value if isfinite(value) else None
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ValueError, FileNotFoundError):
         return None
 
@@ -57,6 +59,7 @@ def probe_bitrate(path: Path) -> float | None:
             check=True,
             timeout=DEFAULT_FFPROBE_TIMEOUT_SECONDS,
         )
-        return float(result.stdout.strip())
+        value = float(result.stdout.strip())
+        return value if isfinite(value) else None
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ValueError, FileNotFoundError):
         return None
