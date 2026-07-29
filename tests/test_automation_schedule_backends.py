@@ -76,6 +76,8 @@ def test_plan_is_dry_run_and_preserves_external_publish_gate(tmp_path, monkeypat
     assert plan["prevent_concurrent_runs"] is True
     assert plan["target_workflow"] == "wf-auto"
     assert plan["prompt"].startswith("/wf-auto")
+    assert plan["dependency_mode"] == "local"
+    assert "local dependencies require desktop local project" in plan["management"]
 
 
 def test_plan_rejects_removed_automation_run_override(tmp_path, monkeypatch):
@@ -140,16 +142,20 @@ def test_os_scheduler_install_refuses_implicit_fallback():
     assert "--confirm-os-fallback" in result.stderr
 
 
-def test_skill_covers_native_status_disable_and_local_dependency_gate():
-    skill = (REFERENCE_DIR.parent / "SKILL.md").read_text(encoding="utf-8")
-    for backend_name in backend.BACKENDS:
-        assert backend_name in skill
-    for command in ("setup / update", "status", "disable"):
-        assert command in skill
-    for local_dependency in ("Chrome", "Suno Helper", "ffmpeg", "OAuth"):
-        assert local_dependency in skill
-    assert "/loop" in skill and "最長 3 日" in skill
-    assert "--confirm-os-fallback" in skill
+def test_scheduler_entrypoint_reports_status_and_disables_recorded_backend(tmp_path, capsys):
+    state_path = tmp_path / "state.json"
+    common = ["--channel-dir", str(tmp_path), "--state-path", str(state_path)]
+
+    assert backend.main([*common, "show"]) == 0
+    assert json.loads(capsys.readouterr().out) == {"status": "unconfigured"}
+
+    backend.record_state(state_path, backend="codex-automation", external_id="task-1")
+    assert backend.main([*common, "disable", "--backend", "codex-automation"]) == 0
+    output = json.loads(capsys.readouterr().out)
+    assert output["backend"] == "codex-automation"
+    assert output["external_id"] == "task-1"
+    assert output["status"] == "disabled"
+    assert backend.read_state(state_path)["status"] == "disabled"
 
 
 def test_runtime_detection_never_promotes_os_scheduler_to_required_native_backend():

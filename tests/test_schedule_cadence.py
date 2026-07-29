@@ -1,26 +1,14 @@
-"""_calculate_publish_at の cadence 曜日制約テスト
+"""PublishedDatesMixin._calculate_publish_at の cadence 曜日制約テスト。"""
 
-collection_uploader のインポート依存（schedule パッケージ等）を回避するため、
-テスト対象メソッドを直接抽出してテストする。
-"""
-
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from typing import ClassVar
+from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
-TZ = ZoneInfo("Asia/Tokyo")
+from youtube_automation.domains.uploads import _published_dates
+from youtube_automation.domains.uploads._published_dates import PublishedDatesMixin
 
-# collection_uploader.py から _calculate_publish_at のロジックを再現
-# 本体と同期を保つため、テスト失敗時は本体の変更を確認すること
-WEEKDAY_MAP = {
-    "mon": 1,
-    "tue": 2,
-    "wed": 3,
-    "thu": 4,
-    "fri": 5,
-    "sat": 6,
-    "sun": 7,
-}
+TZ = ZoneInfo("Asia/Tokyo")
 
 
 def calculate_publish_at(
@@ -30,29 +18,29 @@ def calculate_publish_at(
     publish_time: str = "11:00",
     auto_schedule_enabled: bool = True,
 ) -> str | None:
-    """_calculate_publish_at のスタンドアロン版（テスト用）
+    """本番 mixin を固定時刻・既存公開日で実行するテストadapter。"""
 
-    本体: application/uploads/collection_uploader.py CollectionUploader._calculate_publish_at
-    """
-    if not auto_schedule_enabled:
-        return None
+    class Scheduler(PublishedDatesMixin):
+        def __init__(self) -> None:
+            self.config = {
+                "schedule": {
+                    "auto_schedule_enabled": auto_schedule_enabled,
+                    "cadence": cadence or [],
+                    "publish_time": publish_time,
+                    "timezone": "Asia/Tokyo",
+                }
+            }
 
-    hour, minute = map(int, publish_time.split(":"))
+        def _get_published_dates(self) -> set[date]:
+            return existing_dates
 
-    allowed_weekdays = {WEEKDAY_MAP[d.lower()] for d in cadence} if cadence else set(range(1, 8))
+    class FixedDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return now
 
-    publish_dt = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
-
-    if publish_dt <= now:
-        publish_dt += timedelta(days=1)
-
-    max_slide = 30
-    for _ in range(max_slide):
-        if publish_dt.isoweekday() in allowed_weekdays and publish_dt.date() not in existing_dates:
-            break
-        publish_dt += timedelta(days=1)
-
-    return publish_dt.isoformat()
+    with patch.object(_published_dates, "datetime", FixedDateTime):
+        return Scheduler()._calculate_publish_at()
 
 
 class TestCadenceScheduling:
