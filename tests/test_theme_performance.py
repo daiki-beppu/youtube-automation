@@ -1,9 +1,19 @@
-import pandas as pd
+import json
+import logging
+import sys
+from pathlib import Path
+from types import SimpleNamespace
 
+import pandas as pd
+import pytest
+
+from youtube_automation.commands.analytics import theme_compare
 from youtube_automation.utils.theme_performance import (
     analyze_theme_performance,
     classify_videos_by_theme,
 )
+
+_DAILY_PRESENT = object()
 
 
 def _make_launch_frame():
@@ -96,3 +106,99 @@ def test_analyze_theme_performance_excludes_empty_themes():
     result = analyze_theme_performance(df, theme_map)
     themes = {t["theme"] for t in result["themes"]}
     assert "empty_theme" not in themes
+
+
+def _install_cli_inputs(monkeypatch, *, frame=None, themes=None, daily=_DAILY_PRESENT):
+    meta = {
+        "vid_a1": {"title": "Adventure theme song", "published_at": "2026-04-01"},
+        "vid_b1": {"title": "Battle Royale", "published_at": "2026-04-01"},
+    }
+    monkeypatch.setattr(theme_compare, "_channel_dir", lambda: Path("/channel"))
+    monkeypatch.setattr(
+        theme_compare,
+        "load_config",
+        lambda: SimpleNamespace(
+            content=SimpleNamespace(
+                tags=SimpleNamespace(
+                    themes={"adventure": ["adventure"], "battle": ["battle"]} if themes is None else themes
+                )
+            )
+        ),
+    )
+    monkeypatch.setattr(theme_compare, "load_latest_daily_snapshot", lambda _data_dir: daily)
+    monkeypatch.setattr(theme_compare, "_load_video_meta", lambda _channel_dir: meta)
+    monkeypatch.setattr(
+        theme_compare,
+        "build_launch_curve_frame",
+        lambda **_kwargs: _make_launch_frame() if frame is None else frame,
+    )
+
+
+@pytest.mark.parametrize("text_mode", [False, True])
+def test_theme_compare_main_emits_json_and_text(monkeypatch, capsys, text_mode):
+    _install_cli_inputs(monkeypatch)
+    argv = ["yt-theme-compare", "--peak-days", "3,6"]
+    if text_mode:
+        argv.append("--text")
+    monkeypatch.setattr(sys, "argv", argv)
+
+    assert theme_compare.main() == 0
+
+    output = capsys.readouterr().out
+    if text_mode:
+        assert "テーマ別パフォーマンス比較" in output
+        assert "最高初速: adventure" in output
+    else:
+        payload = json.loads(output)
+        assert payload["peak_days"] == [3, 6]
+        assert payload["best_theme_by_initial_velocity"] == "adventure"
+
+
+@pytest.mark.parametrize(
+    ("overrides", "message"),
+    [
+        ({"daily": None}, "日次データが見つかりません"),
+        ({"themes": {}}, "tags.themes が未設定"),
+        ({"frame": pd.DataFrame()}, "launch curve 用データが空"),
+    ],
+)
+def test_theme_compare_main_returns_config_error(monkeypatch, caplog, overrides, message):
+    _install_cli_inputs(monkeypatch, **overrides)
+    monkeypatch.setattr(sys, "argv", ["yt-theme-compare"])
+
+    with caplog.at_level(logging.ERROR):
+        assert theme_compare.main() == 2
+
+    assert message in caplog.text
+
+
+def test_theme_compare_main_returns_one_for_unexpected_error(monkeypatch, caplog):
+    monkeypatch.setattr(sys, "argv", ["yt-theme-compare"])
+    monkeypatch.setattr(theme_compare, "_channel_dir", lambda: (_ for _ in ()).throw(RuntimeError("boom")))
+
+    with caplog.at_level(logging.ERROR):
+        assert theme_compare.main() == 1
+
+    assert "boom" in caplog.text
+
+
+def test_load_video_meta_uses_latest_snapshot_and_skips_incomplete_entries(tmp_path):
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    (data_dir / "analytics_data_20260701.json").write_text(
+        json.dumps({"video_analytics": {"old": {"title": "Old", "published_at": "2026-01-01"}}}),
+        encoding="utf-8",
+    )
+    (data_dir / "analytics_data_20260702.json").write_text(
+        json.dumps(
+            {
+                "video_analytics": {
+                    "new": {"title": "New", "published_at": "2026-02-01"},
+                    "missing-date": {"title": "Ignored"},
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert theme_compare._load_video_meta(tmp_path) == {"new": {"title": "New", "published_at": "2026-02-01"}}
