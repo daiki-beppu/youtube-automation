@@ -61,6 +61,91 @@ def _write_benchmark_json(data_dir, channels: list[dict]) -> None:
 
 
 class TestLoadBenchmarkVideos:
+    def test_uses_latest_json_and_applies_slug_view_thumbnail_and_dedup_filters(self, tmp_path):
+        (tmp_path / "benchmark_20260728.json").write_text(
+            json.dumps(
+                {
+                    "channels": [
+                        {
+                            "name": "old",
+                            "slug": "target",
+                            "videos": [{"video_id": "old-video", "views": 999999, "thumbnail_url": "old"}],
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        (tmp_path / "benchmark_20260729.json").write_text(
+            json.dumps(
+                {
+                    "channels": [
+                        {
+                            "name": "Target",
+                            "slug": "target",
+                            "videos": [
+                                {
+                                    "video_id": "highest",
+                                    "title": "Highest",
+                                    "views": "50000",
+                                    "thumbnail_url": "https://example.com/highest.jpg",
+                                },
+                                {
+                                    "video_id": "duplicate",
+                                    "title": "First occurrence",
+                                    "views": 30000,
+                                    "thumbnail_url": "https://example.com/duplicate.jpg",
+                                },
+                                {
+                                    "video_id": "duplicate",
+                                    "title": "Duplicate occurrence",
+                                    "views": 70000,
+                                    "thumbnail_url": "https://example.com/duplicate-again.jpg",
+                                },
+                                {
+                                    "video_id": "below-threshold",
+                                    "views": 9999,
+                                    "thumbnail_url": "https://example.com/low.jpg",
+                                },
+                                {"video_id": "missing-thumbnail", "views": 40000},
+                            ],
+                        },
+                        {
+                            "name": "Other",
+                            "slug": "other",
+                            "videos": [
+                                {
+                                    "video_id": "duplicate",
+                                    "title": "Second occurrence",
+                                    "views": 90000,
+                                    "thumbnail_url": "https://example.com/other.jpg",
+                                },
+                                {
+                                    "video_id": "other-only",
+                                    "views": 80000,
+                                    "thumbnail_url": "https://example.com/other-only.jpg",
+                                },
+                            ],
+                        },
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        result = load_benchmark_videos(
+            tmp_path,
+            min_views=10000,
+            require_thumbnail=True,
+            competitor_slug="target",
+        )
+
+        assert [(video["video_id"], video["views"]) for video in result] == [
+            ("highest", 50000),
+            ("duplicate", 30000),
+        ]
+        assert result[1]["title"] == "First occurrence"
+
     def test_raises_when_json_missing(self, tmp_path):
         # Given: data_dir に benchmark JSON が存在しない
         # When / Then: 空リストを返さず ConfigError で停止（次アクションを案内）
@@ -344,6 +429,32 @@ class TestEnsureBenchmarkFresh:
                 analyzer_factory=MagicMock(),
                 reporter_factory=MagicMock(),
             )
+
+    def test_raises_and_stops_when_refresh_skips_any_channel(self, tmp_path):
+        collector = MagicMock()
+        collector.config.analytics.benchmark.channels = [{"slug": "a"}, {"slug": "b"}]
+        collector.benchmark_config = {"gemini_thumbnail_analysis": True}
+        collector.benchmarks_dir = tmp_path
+        collector.today = object()
+        collector.collect_all.return_value = {
+            "channels": [{"slug": "a"}],
+            "skipped": [{"slug": "b"}],
+        }
+        analyzer_factory = MagicMock()
+        reporter_factory = MagicMock()
+
+        with pytest.raises(YouTubeAPIError, match="最新化に失敗"):
+            benchmark_refresh.ensure_benchmark_fresh(
+                tmp_path,
+                collector_factory=lambda: collector,
+                analyzer_factory=analyzer_factory,
+                reporter_factory=reporter_factory,
+            )
+
+        collector.download_thumbnails.assert_not_called()
+        collector.save_json.assert_not_called()
+        analyzer_factory.assert_not_called()
+        reporter_factory.assert_not_called()
 
     def test_stops_before_persisting_when_thumbnail_download_fails(self, tmp_path):
         events: list[str] = []
