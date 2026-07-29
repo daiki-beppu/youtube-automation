@@ -162,6 +162,25 @@ def test_upload_caption_ask_can_choose_skip(tmp_path, monkeypatch):
     youtube.captions.return_value.update.assert_not_called()
 
 
+def test_upload_caption_ask_can_choose_update(tmp_path, monkeypatch):
+    existing = {"id": "existing-caption", "snippet": {"language": "en", "name": "Old"}}
+    youtube = _youtube_with_captions([existing])
+    monkeypatch.setattr("youtube_automation.infrastructure.captions_adapter.log_quota", MagicMock())
+
+    result = upload_caption(
+        youtube,
+        video_id="video-1",
+        language="en",
+        name="English lyrics",
+        srt_path=_srt(tmp_path),
+        existing_policy="ask",
+        confirm_update=lambda item: item is existing,
+    )
+
+    assert result.action == "updated"
+    youtube.captions.return_value.update.assert_called_once()
+
+
 def test_upload_caption_rejects_ambiguous_existing_tracks(tmp_path, monkeypatch):
     youtube = _youtube_with_captions(
         [
