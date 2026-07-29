@@ -7,6 +7,8 @@
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from youtube_automation.commands.analytics import video_validator as vv_module
 from youtube_automation.domains.media.video_validator import VideoValidator
 
@@ -43,10 +45,62 @@ def test_unexpected_metadata_reader_error_is_not_converted_to_validation_result(
     video.touch()
     validator = VideoValidator(lambda _path: (_ for _ in ()).throw(RuntimeError("bug")))
 
-    import pytest
-
     with pytest.raises(RuntimeError, match="bug"):
         validator._validate_single_video(video, "individual")
+
+
+def test_none_metadata_is_classified_as_invalid_error(tmp_path):
+    video = tmp_path / "video.mp4"
+    video.write_bytes(b"video")
+
+    result = VideoValidator(lambda _path: None)._validate_single_video(video, "individual")
+
+    assert result["valid"] is False
+    assert result["errors"] == ["動画メタデータの取得に失敗しました"]
+    assert result["warnings"] == []
+
+
+def test_partial_metadata_is_invalid_without_exception(tmp_path):
+    video = tmp_path / "video.mp4"
+    video.write_bytes(b"video")
+
+    result = VideoValidator(lambda _path: {"duration": 120})._validate_single_video(video, "individual")
+
+    assert result["valid"] is False
+    assert "解像度が取得できません" in result["errors"]
+    assert any("サポートされていないコーデックです" in error for error in result["errors"])
+    assert result["warnings"] == []
+
+
+def test_valid_metadata_keeps_quality_problem_as_warning(tmp_path):
+    video = tmp_path / "video.mp4"
+    video.write_bytes(b"video")
+    metadata = {
+        "duration": 120,
+        "resolution": "1920x1080",
+        "codec": "h264",
+        "bitrate": 1_000_000,
+        "fps": 30,
+    }
+
+    result = VideoValidator(lambda _path: metadata)._validate_single_video(video, "individual")
+
+    assert result["valid"] is True
+    assert result["errors"] == []
+    assert result["warnings"] == ["1080p動画のビットレートが推奨範囲外です（8-12 Mbps）"]
+
+
+@pytest.mark.parametrize("error", [OSError("io"), ValueError("bad"), TypeError("shape")])
+def test_expected_metadata_reader_errors_are_classified_without_propagation(tmp_path, error):
+    video = tmp_path / "video.mp4"
+    video.write_bytes(b"video")
+    validator = VideoValidator(lambda _path: (_ for _ in ()).throw(error))
+
+    result = validator._validate_single_video(video, "individual")
+
+    assert result["valid"] is False
+    assert result["errors"] == [f"検証エラー: {error}"]
+    assert result["warnings"] == []
 
 
 def test_mixed_extensions_are_counted(tmp_path):

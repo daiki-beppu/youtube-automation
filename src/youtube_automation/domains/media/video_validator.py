@@ -205,7 +205,7 @@ class VideoValidator:
 
         # 解像度チェック
         resolution = video_info.get("resolution", "0x0")
-        if resolution == "0x0":
+        if not resolution or resolution == "0x0":
             errors.append("解像度が取得できません")
         else:
             try:
@@ -216,8 +216,8 @@ class VideoValidator:
                 errors.append("解像度の形式が不正です")
 
         # コーデックチェック
-        codec = video_info.get("codec", "")
-        if codec.lower() not in SUPPORTED_CODECS:
+        codec = video_info.get("codec") or ""
+        if not isinstance(codec, str) or codec.lower() not in SUPPORTED_CODECS:
             errors.append(f"サポートされていないコーデックです: {codec}")
 
         return errors
