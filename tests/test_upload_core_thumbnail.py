@@ -7,6 +7,9 @@ plan 020 Step 5: 全品質失敗時の temp ファイルリークと、ffmpeg �
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+from googleapiclient.errors import HttpError
+from httplib2 import Response
+
 from youtube_automation.infrastructure.google.youtube import YouTubeClients
 
 
@@ -105,3 +108,37 @@ class TestCompressThumbnailFailureCleanup:
         result = core._compress_thumbnail(thumb)
 
         assert result == thumb
+
+    def test_returns_first_successful_compressed_path_and_stops_quality_fallback(self, tmp_path):
+        core = _make_core()
+        thumb = tmp_path / "thumb.jpg"
+        thumb.write_bytes(b"x" * (3 * 1024 * 1024))
+        compressed = tmp_path / "compressed.jpg"
+
+        with patch(
+            "youtube_automation.domains.uploads.youtube.compress_image",
+            return_value=compressed,
+        ) as compress:
+            result = core._compress_thumbnail(thumb)
+
+        assert result == compressed
+        compress.assert_called_once_with(thumb, [2], 2_097_152)
+
+
+def test_resumable_upload_expired_session_clears_persisted_uri():
+    core = _make_core()
+    request = MagicMock(resumable_uri="https://upload/session")
+    request.next_chunk.side_effect = HttpError(
+        Response({"status": "410"}),
+        b'{"error": {"message": "gone"}}',
+    )
+    callback = MagicMock()
+
+    result = core._resumable_upload(
+        request,
+        "video.mp4",
+        on_session_uri_changed=callback,
+    )
+
+    assert result is None
+    callback.assert_called_once_with(None)
