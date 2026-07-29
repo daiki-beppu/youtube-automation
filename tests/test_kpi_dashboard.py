@@ -136,6 +136,40 @@ class TestBuildWeeklyKpi:
         assert weekly[0]["days_covered"] == 3
         assert weekly[0]["views"] == 300
 
+    def test_zero_previous_week_denominators_have_no_percent_delta(self):
+        daily = _daily_metrics(WEEK1, [0] * 7) + _daily_metrics(WEEK2, [10] * 7)
+        imps = _impressions_daily(WEEK1, 0, 4.0) + _impressions_daily(WEEK2, 100, 5.0)
+
+        first, second = build_weekly_kpi(daily, imps)
+
+        assert first["views"] == 0
+        assert first["impressions"] == 0
+        assert second["views_delta_pct"] is None
+        assert second["impressions_delta_pct"] is None
+
+    def test_zero_view_week_uses_plain_average_view_percentage(self):
+        daily = [
+            {
+                "date": WEEK1[0],
+                "views": 0,
+                "subscribers_gained": 0,
+                "subscribers_lost": 0,
+                "avg_view_percentage": 20.0,
+            },
+            {
+                "date": WEEK1[1],
+                "views": 0,
+                "subscribers_gained": 0,
+                "subscribers_lost": 0,
+                "avg_view_percentage": 40.0,
+            },
+        ]
+
+        weekly = build_weekly_kpi(daily, [])
+
+        assert weekly[0]["views"] == 0
+        assert weekly[0]["avg_view_percentage"] == pytest.approx(30.0)
+
 
 class TestAnalyzeKpiDashboard:
     def test_multiple_snapshots_no_note(self):
