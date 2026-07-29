@@ -1,0 +1,199 @@
+name: yt-auto-impl-review
+description: >
+  共通の実装レビューフェーズ。アーキテクチャ / AI アンチパターン / コーディング /
+  規約整合の 4 並列レビュー ⇄ 修正のループを内側に閉じて持つ。yt-auto-feature /
+  yt-auto-fix / yt-auto-maintenance の各 workflow から呼ばれる。
+subworkflow:
+  callable: true
+  visibility: internal
+  returns:
+    # 指摘が計画・要件(fix では原因の特定・修正方針)の側に帰着し、
+    # このループの中では解けないことを呼び出し元へ返す
+    - needs_replan
+workflow_config:
+  provider_options:
+    codex:
+      network_access: true
+    opencode:
+      network_access: true
+# レビュー 4 並列 ⇄ 修正を最大 3 周する。ループの歯止めは loop monitor が持ち、
+# max_steps はそれをすり抜けた場合の最後の保険
+max_steps: 30
+initial_step: impl_review
+loop_monitors:
+  # ── 実装レビュー ⇄ 修正。builtin の判断基準(findings ledger ベース)をそのまま使う ──
+  #
+  # このループを sub-workflow の内側に閉じてあるのが要点である。takt の cycle 判定は
+  # 「履歴末尾でパターンが *連続して* threshold 回反復する」厳密一致であり、cycle の外から
+  # 再入されると途中に別 step が挟まってカウントが 1 に戻る。fix を親 workflow に置くと
+  # final_gate の needs_fix が fix へ直接飛び込み、この経路で上限 3 が失われる。
+  # 呼び出し元は fix ではなくこの sub-workflow を再呼び出しするため、内側では
+  # [impl_review, fix] が必ず連続し、monitor だけで上限が保証される
+  # (docs/takt-operations.md の「ループ上限の設計」)
+  - cycle:
+      - impl_review
+      - fix
+    threshold: 3
+    judge:
+      persona: supervisor
+      instruction: loop-monitor-reviewers-fix
+      rules:
+        - condition: 健全(指摘数が減少、修正が反映されている)
+          next: impl_review
+        # loop monitor の rule は next しか取れない(takt の LoopMonitorRuleSchema)。
+        # 呼び出し元へ差し戻すために、返すためだけの system step を経由する
+        - condition: 再計画または異議申告で打開できる(指摘が要件・計画 — fix では診断 — の誤りを観測で実証している。論点が計画側にあるというだけでは戻さない)
+          next: bail_replan
+        - condition: 修正・再計画・異議申告のいずれでも打開できない
+          next: ABORT
+steps:
+  - name: impl_review
+    description: アーキテクチャ / AI アンチパターン / コーディング / 規約整合の 4 並列レビュー
+    tags:
+      - review
+    parallel:
+      - name: arch-review
+        tags:
+          - review
+        edit: false
+        persona: architecture-reviewer
+        policy:
+          - review
+          - existing-system-respect
+          - yt-auto-review-convergence
+        knowledge:
+          - architecture
+          - yt-auto-domain
+        provider_options:
+          extends: review-readonly
+        instruction: review-arch
+        rules:
+          - condition: approved
+          - condition: needs_fix
+        output_contracts:
+          report:
+            - name: architect-review.md
+              format: architecture-review
+      - name: ai-antipattern-review-2nd
+        tags:
+          - review
+        edit: false
+        persona: ai-antipattern-reviewer
+        policy:
+          - review
+          - ai-antipattern
+          - existing-system-respect
+          - yt-auto-review-convergence
+        provider_options:
+          extends: review-readonly
+        instruction: ai-antipattern-review
+        rules:
+          - condition: AI特有の問題なし
+          - condition: AI特有の問題あり
+        output_contracts:
+          report:
+            - name: ai-antipattern-review.md
+              format: ai-antipattern-review
+      - name: coding-review
+        tags:
+          - review
+        edit: false
+        persona: coding-reviewer
+        policy:
+          - review
+          - coding
+          - yt-auto-traceability
+          - existing-system-respect
+          - yt-auto-review-convergence
+        pass_previous_response: false
+        provider_options:
+          extends: review-readonly
+        instruction: review-coding
+        rules:
+          - condition: approved
+          - condition: needs_fix
+        output_contracts:
+          report:
+            - name: coding-review.md
+              format: coding-review
+      - name: conventions-impl
+        tags:
+          - review
+          - conventions
+        edit: false
+        persona: yt-auto-conventions-reviewer
+        policy:
+          - review
+          - yt-auto-review-rescan
+          - yt-auto-review-convergence
+        knowledge:
+          - yt-auto-conventions
+          - yt-auto-domain
+        pass_previous_response: false
+        provider_options:
+          extends: review-readonly
+        instruction: yt-auto-review-conventions-impl
+        rules:
+          - condition: APPROVE
+          - condition: REJECT
+          - condition: NEEDS_CONVENTION_REVISION
+        output_contracts:
+          report:
+            - name: conventions-impl.md
+              format: yt-auto-conventions-review
+    rules:
+      # all() の複数引数は並列 sub-step と位置対応で照合され、個数が一致しないと
+      # ルールごとスキップされる(= COMPLETE 不能)。sub-step の宣言順に 4 個並べる
+      - condition: all("approved", "AI特有の問題なし", "approved", "APPROVE")
+        next: COMPLETE
+      - condition: any("needs_fix", "AI特有の問題あり", "REJECT", "NEEDS_CONVENTION_REVISION")
+        next: fix
+
+  - name: fix
+    description: 実装レビュー指摘の修正
+    tags:
+      - coding
+    edit: true
+    persona: coder
+    policy:
+      - coding
+      - testing
+      - yt-auto-traceability
+      - existing-system-respect
+      - yt-auto-scope-spillover
+    knowledge:
+      - architecture
+      - yt-auto-conventions
+    required_permission_mode: edit
+    session: refresh
+    provider_options:
+      extends: edit
+    promotion:
+      - at: 2
+        provider_options:
+          codex:
+            reasoning_effort: high
+          claude:
+            effort: high
+    instruction: fix
+    pass_previous_response: false
+    quality_gates:
+      - テストの削除・skip・アサーション緩和で指摘を消していないこと
+      - 先行して書いたテスト(feature ではテスト先行、fix では再現テスト)が green のままであること
+      - 規約逸脱の指摘に対し、該当規約文書の改訂を差分に含めたか、逸脱を解消したかのいずれかであること
+      - 計画(fix では診断)の要件 ID にない機能を追加していないこと
+    rules:
+      # 上限は loop monitor が持つ。この step は「このループでは解けない」と分かった
+      # ときだけ呼び出し元へ返す
+      - condition: 修正完了
+        next: impl_review
+      - condition: 判断できない、情報不足
+        return: needs_replan
+
+  # loop monitor の judge が「再計画で打開できる」と判定したときの返却口。
+  # agent を起動しない system step なのでコストはゼロ
+  - name: bail_replan
+    mode: system
+    rules:
+      - condition: when(true)
+        return: needs_replan
