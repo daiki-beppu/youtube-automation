@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `fix(analytics)`: retention timeline が不正な retention 数値（変換不能・NaN・Infinity）や非有限の動画尺を `ValidationError` として利用者向けに拒否し、壊れたJSON・曖昧なanalysis参照・duration fallback・未照合・Markdown escaping の境界を直接検証した（#2612, #2636）。
 - `fix(live-chat)`: Codex の構造化出力が JSON object でない場合も `GeneratorError` として安全に拒否し、facade・filter・history保存失敗・投稿失敗・chat終了後再探索・CLI enabled/割込み/例外終了の実行時契約を直接検証した（#2648, #2651）。
 - `fix(playlist)`: playlist manager/status CLI が成功・中断・外部失敗を明示的な終了コードで返し、status/help/引数不備では不要な書き込み認証を開始せず、init/status/clean/assign の引数伝播と表示を command-level test で担保した（#2653）。
+- `fix(video-analyze)`: Gemini が JSON object 以外を返した場合を明示的な `ValidationError` として扱い、解析失敗時に sleep や結果保存へ進まない境界を固定（#2678）。
 
 - `chore(takt)`: ユニットテスト監査で稼働中の `audit-unit-split` workflow 資産（workflow 1 本 + facets 4 本、v3 の上書きセマンティクス対策済み）を無改変で git 管理下に置いた。#2686 で `.takt/workflows/` / `.takt/facets/` の git 管理が前提となったため、worktree・他 checkout でも定義を解決できるようにする（#2690）。
 

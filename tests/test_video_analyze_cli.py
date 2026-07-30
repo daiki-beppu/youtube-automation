@@ -22,6 +22,7 @@ from typing import ClassVar
 from unittest.mock import MagicMock, patch
 
 import pytest
+from google.genai.errors import APIError
 
 from youtube_automation.commands.analytics.video_analyze import (
     _analysis_window_sec_from_config,
@@ -669,6 +670,26 @@ class TestRunAnalysisCache:
         assert analyzer.client.models.generate_content.call_count == 1
         assert failures == []
         assert analyzer.json_path(target).exists()
+
+    def test_sdk_failure_records_failure_without_saving(self):
+        target = VideoTarget(
+            video_id="FAILED",
+            slug="test",
+            url="https://www.youtube.com/watch?v=FAILED",
+            title="Failed video",
+        )
+        analyzer = MagicMock(spec=VideoAnalyzer)
+        analyzer.load_cached_json.return_value = None
+        analyzer.analyze_url.side_effect = APIError(503, {"message": "unavailable"})
+
+        results, failures = _run_analysis(analyzer=analyzer, targets=[target])
+
+        assert results == []
+        assert len(failures) == 1
+        assert failures[0]["video_id"] == "FAILED"
+        assert failures[0]["url"] == target.url
+        assert "unavailable" in failures[0]["error"]
+        analyzer.save_json.assert_not_called()
 
 
 class TestBuildParser:

@@ -19,9 +19,11 @@ from __future__ import annotations
 
 import json
 import logging
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+from google.genai.errors import APIError
 
 from youtube_automation.infrastructure.errors import ValidationError
 from youtube_automation.utils.video_analyzer import (
@@ -174,6 +176,72 @@ class TestVideoAnalyzerAnalyzeUrl:
         # When/Then: 握りつぶさず ValidationError を投げる
         with pytest.raises(ValidationError):
             analyzer.analyze_url(_make_target())
+
+    @pytest.mark.parametrize("response_text", ["[]", "null"])
+    def test_raises_validation_error_on_non_object_json(self, tmp_path, response_text):
+        analyzer = VideoAnalyzer(
+            client=_make_client(response_text),
+            model="gemini-3.5-flash",
+            prompt="analyze",
+            delay_sec=7,
+            data_dir=tmp_path,
+            analysis_window_sec=900,
+        )
+
+        with patch("youtube_automation.utils.video_analyzer.time.sleep") as sleep:
+            with pytest.raises(ValidationError, match="JSON object"):
+                analyzer.analyze_url(_make_target())
+
+        sleep.assert_not_called()
+
+    def test_sdk_error_does_not_sleep(self, tmp_path):
+        client = MagicMock()
+        client.models.generate_content.side_effect = APIError(503, {"message": "unavailable"})
+        analyzer = VideoAnalyzer(
+            client=client,
+            model="gemini-3.5-flash",
+            prompt="analyze",
+            delay_sec=7,
+            data_dir=tmp_path,
+            analysis_window_sec=900,
+        )
+
+        with patch("youtube_automation.utils.video_analyzer.time.sleep") as sleep:
+            with pytest.raises(APIError):
+                analyzer.analyze_url(_make_target())
+
+        sleep.assert_not_called()
+
+    def test_target_metadata_overwrites_conflicting_response_values(self, tmp_path):
+        target = _make_target()
+        payload = {
+            **_VALID_PAYLOAD,
+            "video_id": "wrong",
+            "slug": "wrong",
+            "url": "https://wrong.invalid",
+            "title": "wrong",
+            "model": "wrong",
+            "analysis_window_sec": -1,
+        }
+        analyzer = VideoAnalyzer(
+            client=_make_client(json.dumps(payload)),
+            model="gemini-3.5-flash",
+            prompt="analyze",
+            delay_sec=0,
+            data_dir=tmp_path,
+            analysis_window_sec=900,
+        )
+
+        result = analyzer.analyze_url(target)
+
+        assert {key: result[key] for key in ("video_id", "slug", "url", "title", "model", "analysis_window_sec")} == {
+            "video_id": target.video_id,
+            "slug": target.slug,
+            "url": target.url,
+            "title": target.title,
+            "model": "gemini-3.5-flash",
+            "analysis_window_sec": 900,
+        }
 
     def test_uses_target_url_in_request(self, tmp_path):
         # Given: 解析対象 URL
@@ -366,6 +434,22 @@ class TestVideoAnalyzerLoadCachedJson:
         assert cached is None
         assert "破損" in caplog.text
 
+    def test_returns_none_on_cache_read_os_error(self, tmp_path, caplog):
+        analyzer = self._make_analyzer(tmp_path)
+        target = _make_target()
+        path = analyzer.json_path(target)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("{}", encoding="utf-8")
+
+        with (
+            patch.object(Path, "read_text", side_effect=PermissionError("denied")),
+            caplog.at_level(logging.WARNING),
+        ):
+            cached = analyzer.load_cached_json(target)
+
+        assert cached is None
+        assert "denied" in caplog.text
+
     def test_returns_none_on_json_null(self, tmp_path, caplog):
         # Given: JSON としては valid だが object ではない null
         analyzer = self._make_analyzer(tmp_path)
@@ -484,6 +568,22 @@ class TestVideoAnalysisReport:
         assert "BAD1" in md
         # 失敗件数を示す手がかりがある
         assert ("失敗" in md) or ("failed" in md.lower())
+
+    def test_failure_rows_preserve_order_and_escape_pipes(self):
+        md = VideoAnalysisReport.render(
+            slug="test",
+            results=[],
+            failures=[
+                {"video_id": "FIRST", "url": "https://first", "error": "rate | limited"},
+                {"video_id": "SECOND", "url": "https://second", "error": "private"},
+            ],
+        )
+
+        first_row = "| FIRST | https://first | rate \\| limited |"
+        second_row = "| SECOND | https://second | private |"
+        assert first_row in md
+        assert second_row in md
+        assert md.index(first_row) < md.index(second_row)
 
     def test_render_handles_empty_results(self):
         # Given: 結果なし、失敗のみ
