@@ -92,6 +92,7 @@ const harness = vi.hoisted(() => {
     waitForQueueSlot: vi.fn<
       (maxGeneratingClips: number, options?: unknown) => Promise<void>
     >(async () => undefined),
+    useActualAbortableSleep: false,
     // 既定は実装呼び出し（下の shared/dom mock factory で束縛）。空 queue で WAITING_SLOT が
     // 失敗しない回帰テストを実装ごと通すため、テスト個別の stall 注入だけ mockImplementation で上書きする。
     actualWaitForQueueSlot: null as
@@ -133,7 +134,11 @@ vi.mock("../../shared/dom", async () => {
   ) => Promise<void>;
   return {
     ...actual,
-    abortableSleep: vi.fn(async () => undefined),
+    abortableSleep: vi.fn(async (ms: number, isAborted: () => boolean) => {
+      if (harness.useActualAbortableSleep) {
+        await actual.abortableSleep(ms, isAborted);
+      }
+    }),
     injectAdvancedFields: vi.fn(async () => undefined),
     waitForCaptchaClear: vi.fn(async () => undefined),
     waitForGeneration: harness.waitForGeneration,
@@ -565,6 +570,7 @@ beforeEach(() => {
   harness.pendingClipIds = [];
   harness.requestFeedPollError = undefined;
   harness.abortOnRequestFeedPoll = false;
+  harness.useActualAbortableSleep = false;
   harness.requestFeedPoll.mockReset();
   harness.requestFeedPoll.mockImplementation(async (ids: string[]) => {
     if (harness.abortOnRequestFeedPoll) {
@@ -815,6 +821,67 @@ describe("content unattended launch", () => {
 });
 
 describe('content onMessage("run"): Run 開始前の Suno view preflight', () => {
+  it("Given actual run handler が実行中 When run が再着信する Then busy ACK で二重起動しない (#2909)", async () => {
+    makeRunnableSunoDom("Grid");
+    await loadContentScript();
+    const runHandler = getRunHandler();
+    let releaseSlot!: () => void;
+    harness.waitForQueueSlot.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseSlot = resolve;
+        })
+    );
+
+    const first = runHandler({ data: makeRunPayload(makePromptEntries(1)) });
+    const second = runHandler({ data: makeRunPayload(makePromptEntries(1)) });
+
+    expect(first).toEqual({ ok: true });
+    expect(second).toEqual({ ok: false, busy: true });
+    expect(harness.feedPollerStart).toHaveBeenCalledOnce();
+
+    await vi.waitFor(() =>
+      expect(harness.waitForQueueSlot).toHaveBeenCalledOnce()
+    );
+    releaseSlot();
+    await vi.waitFor(() =>
+      expect(harness.feedPollerStop).toHaveBeenCalledOnce()
+    );
+  });
+
+  it("Given actual content handler が pacing 待機中 When stop を受ける Then production abortableSleep が中断し STOPPED state を保存する (#2911)", async () => {
+    makeRunnableSunoDom("Grid");
+    await loadContentScript();
+    const { abortableSleep } = await import("../../shared/dom");
+    harness.useActualAbortableSleep = true;
+
+    expect(
+      getRunHandler()({ data: makeRunPayload(makePromptEntries(1)) })
+    ).toEqual({ ok: true });
+    await vi.waitFor(() => expect(abortableSleep).toHaveBeenCalledOnce());
+
+    harness.handlers.get("stop")?.({ data: undefined });
+
+    await vi.waitFor(
+      () =>
+        expect(writeResumeState).toHaveBeenCalledWith(
+          expect.objectContaining({
+            failedIndex: 0,
+            total: 1,
+          })
+        ),
+      { timeout: 1000 }
+    );
+    expect(progressPayloads()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ phase: PHASE.STOPPED, total: 1 }),
+      ])
+    );
+    await vi.waitFor(() =>
+      expect(harness.feedPollerStop).toHaveBeenCalledOnce()
+    );
+  });
+
   it("duration guard の pending 減少後は新しい stall deadline まで待機し、停滞時だけ timeout する", async () => {
     await loadContentScript();
     const { waitForAttemptClipsComplete } =
@@ -1699,6 +1766,44 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
         expect.objectContaining({ phase: PHASE.ERROR }),
       ])
     );
+  });
+
+  it("Given inclusive range 指定 When actual run handler を実行する Then failedIndex から末尾だけを絶対 index で処理する (#2910)", async () => {
+    makeRunnableSunoDom("Grid");
+    await loadContentScript();
+    const runHandler = getRunHandler();
+    const entries = makePromptEntries(3);
+    harness.submittedClipIds = [
+      "generated-clip-1",
+      "generated-clip-2",
+      "generated-clip-3",
+      "generated-clip-4",
+    ];
+
+    const result = runHandler({
+      data: { ...makeRunPayload(entries), range: { start: 1, end: 2 } },
+    });
+
+    expect(result).toEqual({ ok: true });
+    await vi.waitFor(() =>
+      expect(harness.feedPollerStop).toHaveBeenCalledOnce()
+    );
+    expect(
+      progressPayloads()
+        .filter(
+          (
+            payload
+          ): payload is { phase: string; index: number; total: number } =>
+            typeof payload === "object" &&
+            payload !== null &&
+            "phase" in payload &&
+            payload.phase === PHASE.WAITING_SLOT
+        )
+        .map(({ index, total }) => ({ index, total }))
+    ).toEqual([
+      { index: 1, total: 3 },
+      { index: 2, total: 3 },
+    ]);
   });
 
   it("Given indices 部分実行の途中で停止 When resume state を保存する Then 未選択 index を含まない残り indices を保持する", async () => {

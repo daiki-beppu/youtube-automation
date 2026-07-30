@@ -1314,7 +1314,7 @@ export function useSunoRunner(): RunnerState {
   const run = useCallback(
     async (overrides?: RunOverrides) => {
       // 二重実行ガード (#892 要件7)。実行中の再入（「再開」連打等）を no-op で弾く。
-      if (isRunning) {
+      if (isRunningRef.current) {
         return;
       }
       if (entries.length === 0) {
@@ -1362,7 +1362,6 @@ export function useSunoRunner(): RunnerState {
       }
     },
     [
-      isRunning,
       entries,
       durationFilter,
       playlistName,

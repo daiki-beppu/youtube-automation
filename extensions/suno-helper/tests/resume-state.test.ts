@@ -6,15 +6,31 @@
 // node でテスト可能な純関数のみを tester surface とする（既存 lib/storage.ts が untested なのと同方針）。
 //   - shouldShowResumeBanner: 起動時バナー表示条件（collection 一致 + stale 判定）。要件4
 //   - resumeRunRange: バナー承認時に run() へ直接渡す 0-based inclusive range。要件6
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const resumeStorage = vi.hoisted(() => ({
+  getValue: vi.fn(),
+  setValue: vi.fn(),
+  removeValue: vi.fn(),
+  defineItem: vi.fn(),
+}));
+
+vi.mock("wxt/utils/storage", () => ({
+  storage: {
+    defineItem: resumeStorage.defineItem.mockReturnValue(resumeStorage),
+  },
+}));
 
 import {
   RESUME_STALE_MS,
+  clearResumeStateForCollection,
+  readResumeState,
   resolvePlaylistClipIds,
   resolvePlaylistExpectedClipCountForResume,
   resolveInterruptIndex,
   resumeRunRange,
   shouldShowResumeBanner,
+  writeResumeState,
 } from "../lib/resume-state";
 import type { ResumeState } from "../lib/resume-state";
 
@@ -32,6 +48,47 @@ function makeResumeState(overrides: Partial<ResumeState> = {}): ResumeState {
     ...overrides,
   };
 }
+
+describe("resume state storage I/O and collection isolation (#2898)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resumeStorage.getValue.mockResolvedValue(null);
+    resumeStorage.setValue.mockResolvedValue(undefined);
+  });
+
+  it("遅延 item を正しい key/fallback で生成して read/write する", async () => {
+    const state = makeResumeState();
+    resumeStorage.getValue.mockResolvedValueOnce(state);
+
+    await expect(readResumeState()).resolves.toBe(state);
+    await writeResumeState(state);
+
+    expect(resumeStorage.defineItem).toHaveBeenCalledWith(
+      "local:sunoResumeState",
+      { fallback: null }
+    );
+    expect(resumeStorage.setValue).toHaveBeenCalledWith(state);
+  });
+
+  it("一致 collection の state だけ null 保存で消去する", async () => {
+    const state = makeResumeState();
+    resumeStorage.getValue.mockResolvedValueOnce(state);
+
+    await clearResumeStateForCollection(state.collectionId);
+
+    expect(resumeStorage.setValue).toHaveBeenCalledOnce();
+    expect(resumeStorage.setValue).toHaveBeenCalledWith(null);
+  });
+
+  it("別 collection の state は読み取っても変更しない", async () => {
+    const state = makeResumeState();
+    resumeStorage.getValue.mockResolvedValueOnce(state);
+
+    await clearResumeStateForCollection("other-collection");
+
+    expect(resumeStorage.setValue).not.toHaveBeenCalled();
+  });
+});
 
 describe("RESUME_STALE_MS: stale 判定の既定閾値", () => {
   it("Given 定数 When 読む Then 24 時間 (ms) である（要件4 の stale 既定値）", () => {

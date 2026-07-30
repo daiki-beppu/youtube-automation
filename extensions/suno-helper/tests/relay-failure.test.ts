@@ -13,6 +13,7 @@ import {
   EXTENSION_RELOAD_REQUIRED_MESSAGE,
   describeRelayFailure,
   formatRunError,
+  formatStopError,
   isExtensionContextInvalidatedError,
 } from "../components/runner-errors";
 
@@ -65,5 +66,31 @@ describe("拡張更新後の context invalidated を再読み込み案内へ集�
     expect(formatRunError(message)).toContain(
       EXTENSION_RELOAD_REQUIRED_MESSAGE
     );
+  });
+});
+
+describe("run/stop error formatter の完全な利用者向け文言 (#2902)", () => {
+  it.each([
+    [
+      "通常エラー",
+      "Advanced tab is closed",
+      "開始失敗: Advanced tab is closed\nSuno の Advanced タブを開き、Lyrics mode を確認してから実行してください。",
+      "停止リクエスト失敗: Advanced tab is closed",
+    ],
+    [
+      "content missing",
+      "Could not establish connection. Receiving end does not exist.",
+      "開始失敗: Could not establish connection. Receiving end does not exist.\n拡張が更新されました。Suno タブをハードリロードしてから操作してください。（⌘+Shift+R / Ctrl+Shift+R）",
+      "停止リクエスト失敗: Could not establish connection. Receiving end does not exist.\n拡張が更新されました。Suno タブをハードリロードしてから操作してください。（⌘+Shift+R / Ctrl+Shift+R）",
+    ],
+    [
+      "context invalidated",
+      "Extension context invalidated.",
+      "開始失敗: Extension context invalidated.\n拡張が更新されました。Suno タブをハードリロードしてから操作してください。（⌘+Shift+R / Ctrl+Shift+R）",
+      "停止リクエスト失敗: Extension context invalidated.\n拡張が更新されました。Suno タブをハードリロードしてから操作してください。（⌘+Shift+R / Ctrl+Shift+R）",
+    ],
+  ])("%s", (_label, message, runText, stopText) => {
+    expect(formatRunError(message)).toBe(runText);
+    expect(formatStopError(message)).toBe(stopText);
   });
 });

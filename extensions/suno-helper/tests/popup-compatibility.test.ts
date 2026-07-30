@@ -66,6 +66,10 @@ const collectionQueueMocks = vi.hoisted(() => ({
   settleStoredCollectionQueueRun: vi.fn(async () => null),
 }));
 
+const pageReloadMocks = vi.hoisted(() => ({
+  scheduleRunCompleteReload: vi.fn(),
+}));
+
 const presetStateMocks = vi.hoisted(() => ({
   readRunModeId: vi.fn(async () => "serial"),
   writeRunModeId: vi.fn(async () => undefined),
@@ -208,6 +212,17 @@ vi.mock("../lib/collection-queue-state", async () => {
     writeCollectionQueue: collectionQueueMocks.writeCollectionQueue,
     settleStoredCollectionQueueRun:
       collectionQueueMocks.settleStoredCollectionQueueRun,
+  };
+});
+
+vi.mock("../lib/page-reload", async () => {
+  const actual =
+    await vi.importActual<typeof import("../lib/page-reload")>(
+      "../lib/page-reload"
+    );
+  return {
+    ...actual,
+    scheduleRunCompleteReload: pageReloadMocks.scheduleRunCompleteReload,
   };
 });
 
@@ -1192,9 +1207,16 @@ describe("Suno popup compatibility check", () => {
         return defaultSendMessage(message, payload);
       }
     );
+    const runButton = buttonByText(container, "全パターンを連続実行");
     await act(async () => {
-      buttonByText(container, "全パターンを連続実行").click();
+      runButton.click();
+      runButton.click();
     });
+    expect(
+      messagingMocks.sendMessage.mock.calls.filter(
+        ([message]) => message === "run"
+      )
+    ).toHaveLength(1);
 
     await waitFor(() => {
       const panel = container.querySelector<HTMLElement>(
@@ -1526,6 +1548,79 @@ describe("Suno popup compatibility check", () => {
     expect(container.textContent).toContain("queue を一時停止しました");
   });
 
+  it("queue run の negative ACK は current item を failed settlement して reload を予約する (#2896)", async () => {
+    const collectionId = "20260601-clm-theme-a-collection";
+    const queue = {
+      version: 1 as const,
+      queueId: "queue-negative-ack",
+      baseUrl: BASE_URL,
+      items: [{ collectionId, status: "pending" as const }],
+      currentIndex: 0,
+      status: "running" as const,
+      runMode: "serial" as const,
+      regenerateDurationOutliers: true,
+      createdAt: 100,
+      updatedAt: 100,
+    };
+    const completed = {
+      ...queue,
+      items: [{ collectionId, status: "failed" as const }],
+      currentIndex: 1,
+      status: "completed" as const,
+      updatedAt: 200,
+    };
+    collectionQueueMocks.readCollectionQueue.mockResolvedValue(queue as never);
+    collectionQueueMocks.settleStoredCollectionQueueRun.mockResolvedValue({
+      state: completed,
+      requiresPageReload: true,
+    } as never);
+    messagingMocks.sendMessage.mockImplementation(
+      (message: string, payload?: Record<string, string>) => {
+        if (message === "fetchCompatibilityWarning") return Promise.resolve("");
+        if (message === "fetchCollections") {
+          return Promise.resolve([
+            {
+              id: collectionId,
+              name: "theme-a",
+              channel: "clm",
+              theme: "theme-a",
+              status: "ready",
+              pattern_count: 1,
+              downloaded_count: 0,
+            },
+          ]);
+        }
+        if (message === "fetchCollectionPromptResponse") {
+          return Promise.resolve({
+            entries: [{ name: "p1", style: "lofi", lyrics: "" }],
+          });
+        }
+        if (message === "run") {
+          return Promise.resolve({ ok: false, busy: true });
+        }
+        return defaultSendMessage(message, payload);
+      }
+    );
+
+    await rerenderApp();
+
+    await waitFor(() =>
+      expect(
+        collectionQueueMocks.settleStoredCollectionQueueRun
+      ).toHaveBeenCalledWith("queue-negative-ack", {
+        collectionId,
+        phase: "error",
+        failedEntryCount: 0,
+        message: "Suno runner が別の実行で使用中です。",
+        now: expect.any(Number),
+      })
+    );
+    expect(pageReloadMocks.scheduleRunCompleteReload).toHaveBeenCalledOnce();
+    expect(container.textContent).toContain(
+      "theme-a: Suno runner が別の実行で使用中です。"
+    );
+  });
+
   it("ACK 済み clip ID 未観測の resume state から再開しても同じ entry を再投入しない", async () => {
     const entries = [
       { name: "p1", style: "lofi", lyrics: "" },
@@ -1541,6 +1636,7 @@ describe("Suno popup compatibility check", () => {
       total: 2,
       timestamp: Date.now(),
       submittedClipIds: [],
+      runMode: "queue",
       regenerateDurationOutliers: false,
       durationOutlierWarnings: {
         0: "duration guard NG (60-300s): clip-short; 再生成 OFF のため全 clip を採用候補として保持します",
@@ -1594,7 +1690,7 @@ describe("Suno popup compatibility check", () => {
       playlistName: "clm | theme-a",
       range: { start: 1, end: 1 },
       collectionId: "20260601-clm-theme-a-collection",
-      runMode: "serial",
+      runMode: "queue",
       regenerateDurationOutliers: false,
       indices: undefined,
       submittedClipIds: [],
@@ -1748,6 +1844,50 @@ describe("Suno popup compatibility check", () => {
     expect(container.textContent).toContain("clip-short");
   });
 
+  it("snapshot 再開で playlistName を解決できない場合は run を送らず利用者へエラー表示する (#2896)", async () => {
+    const orphanCollectionId = "orphan-collection";
+    messagingMocks.sendMessage.mockImplementation(
+      (message: string, payload?: Record<string, string>) => {
+        if (message === "queryProgress") {
+          return Promise.resolve({
+            collectionId: orphanCollectionId,
+            entries: [{ name: "p1", style: "lofi", lyrics: "" }],
+            itemStates: ["failed"],
+            isRunning: false,
+            failedIndex: 0,
+            progress: {
+              phase: PHASE.ERROR,
+              index: 0,
+              total: 1,
+              message: "interrupted",
+            },
+          });
+        }
+        if (message === "discoverServerSources") {
+          return Promise.resolve([]);
+        }
+        return defaultSendMessage(message, payload);
+      }
+    );
+
+    await rerenderApp();
+    await waitFor(() => expect(buttonByText(container, "再開")).toBeTruthy());
+    messagingMocks.sendMessage.mockClear();
+
+    await act(async () => {
+      buttonByText(container, "再開").click();
+    });
+
+    expect(container.textContent).toContain(
+      "playlist 名を解決できません。コレクションを選択し直してください。"
+    );
+    expect(
+      messagingMocks.sendMessage.mock.calls.some(
+        ([message]) => message === "run"
+      )
+    ).toBe(false);
+  });
+
   it("dir mode でチェックを外した entry を除外して 0-based indices を run payload に渡す", async () => {
     const entries = [
       { name: "p1", style: "lofi", lyrics: "" },
@@ -1818,6 +1958,102 @@ describe("Suno popup compatibility check", () => {
       submittedClipIdsAreDurationFiltered: undefined,
       playlistExpectedClipCount: undefined,
     });
+  });
+
+  it("新規 collection queue は stale resume を消去してから queue storage に保存する (#2896)", async () => {
+    const firstId = "20260601-clm-theme-a-collection";
+    const secondId = "20260602-clm-theme-b-collection";
+    const collections = [
+      {
+        id: firstId,
+        name: "theme-a",
+        channel: "clm",
+        theme: "theme-a",
+        status: "ready",
+        pattern_count: 1,
+        downloaded_count: 0,
+      },
+      {
+        id: secondId,
+        name: "theme-b",
+        channel: "clm",
+        theme: "theme-b",
+        status: "ready",
+        pattern_count: 1,
+        downloaded_count: 0,
+      },
+    ];
+    act(() => {
+      root.unmount();
+    });
+    root = createRoot(container);
+    resumeStateMocks.readResumeState.mockResolvedValue({
+      collectionId: firstId,
+      failedIndex: 0,
+      total: 1,
+      timestamp: Date.now(),
+    } as never);
+    fetchMock.mockReset();
+    for (let index = 0; index < 2; index += 1) {
+      fetchMock
+        .mockResolvedValueOnce(
+          jsonResponse(200, {
+            version: "5.5.7",
+            min_extension_version: MANIFEST_VERSION,
+          })
+        )
+        .mockResolvedValueOnce(jsonResponse(200, collections))
+        .mockResolvedValueOnce(
+          jsonResponse(200, [{ name: "p1", style: "lofi", lyrics: "" }])
+        );
+    }
+
+    await act(async () => {
+      root.render(createElement(App));
+    });
+    await setSelectValue(expectControl(container, "server-url"), BASE_URL);
+    await waitFor(() => {
+      expect(container.textContent).toContain("1 パターンを取得しました。");
+    });
+    await act(async () => {
+      container
+        .querySelector<HTMLElement>(`[data-collection-id="${secondId}"]`)!
+        .click();
+    });
+    await waitFor(() =>
+      expect(
+        buttonByText(container, "選択した2コレクションを連続実行")
+      ).toBeTruthy()
+    );
+
+    resumeStateMocks.clearResumeStateForCollection.mockClear();
+    collectionQueueMocks.writeCollectionQueue.mockClear();
+    await act(async () => {
+      buttonByText(container, "選択した2コレクションを連続実行").click();
+    });
+
+    await waitFor(() =>
+      expect(collectionQueueMocks.writeCollectionQueue).toHaveBeenCalledOnce()
+    );
+    expect(resumeStateMocks.clearResumeStateForCollection).toHaveBeenCalledWith(
+      firstId
+    );
+    expect(
+      resumeStateMocks.clearResumeStateForCollection.mock.invocationCallOrder[0]
+    ).toBeLessThan(
+      collectionQueueMocks.writeCollectionQueue.mock.invocationCallOrder[0]
+    );
+    expect(collectionQueueMocks.writeCollectionQueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        baseUrl: BASE_URL,
+        items: [
+          { collectionId: firstId, status: "pending" },
+          { collectionId: secondId, status: "pending" },
+        ],
+        currentIndex: 0,
+        status: "running",
+      })
+    );
   });
 
   it("content snapshot の ERROR だけから再開して FINISHED を受けても option と異常値警告を維持する", async () => {
