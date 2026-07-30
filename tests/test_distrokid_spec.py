@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from youtube_automation.domains.distrokid import specification as specification_mod
 from youtube_automation.domains.distrokid.specification import (
     SPEC_FILENAME,
     find_disc_entry,
@@ -362,6 +363,24 @@ def test_write_collection_spec_leaves_no_temp_file(tmp_path):
 
     files = sorted(p.name for p in distrokid_dir.iterdir())
     assert files == [SPEC_FILENAME]
+
+
+def test_write_collection_spec_replace_failure_preserves_existing_and_removes_temp(tmp_path, monkeypatch):
+    """REQ-2729-01: replace 失敗時は既存 spec を保持し、中間 temp を削除して例外を伝播する."""
+    distrokid_dir = tmp_path / "30-distrokid"
+    original = {"version": 1, "artist": "Original", "discs": []}
+    spec_path = _write_spec(distrokid_dir, original)
+
+    def fail_replace(_src, _dst):
+        raise OSError("replace failed")
+
+    monkeypatch.setattr(specification_mod.os, "replace", fail_replace)
+
+    with pytest.raises(OSError, match="replace failed"):
+        write_collection_spec(distrokid_dir, _minimal_spec())
+
+    assert json.loads(spec_path.read_text(encoding="utf-8")) == original
+    assert list(distrokid_dir.glob(".spec-*.json")) == []
 
 
 def test_write_and_read_roundtrip(tmp_path):

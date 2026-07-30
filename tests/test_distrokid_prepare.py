@@ -21,6 +21,7 @@ from pathlib import Path
 
 import pytest
 
+from youtube_automation.domains.distrokid import preparation as preparation_mod
 from youtube_automation.domains.distrokid.preparation import (
     COVER_ART_FILENAME,
     DISTROKID_DIRNAME,
@@ -617,6 +618,23 @@ class TestWriteReleaseDate:
 
         with pytest.raises(ConfigError, match="object ではありません"):
             write_release_date(ws_path, "2026-12-31")
+
+    def test_replace_failure_preserves_existing_state_and_removes_temp(self, tmp_path, monkeypatch):
+        """REQ-2729-02: replace 失敗時は既存 state を保持し、temp を削除して例外を伝播する."""
+        ws_path = tmp_path / "workflow-state.json"
+        original = {"planning": {"theme": "night-drive", "publish_target_at": "2026-01-01"}}
+        ws_path.write_text(json.dumps(original), encoding="utf-8")
+
+        def fail_replace(_src, _dst):
+            raise OSError("replace failed")
+
+        monkeypatch.setattr(preparation_mod.os, "replace", fail_replace)
+
+        with pytest.raises(OSError, match="replace failed"):
+            write_release_date(ws_path, "2026-12-31")
+
+        assert json.loads(ws_path.read_text(encoding="utf-8")) == original
+        assert list(tmp_path.glob(".workflow-state-*.json")) == []
 
 
 # ---------------------------------------------------------------------------

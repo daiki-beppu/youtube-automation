@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import base64
+import io
 import json
+from urllib.error import URLError
 
 import pytest
 
@@ -10,6 +12,7 @@ from youtube_automation.commands.suno.suno_unattended_request import (
     build_unattended_launch_url,
     build_unattended_request,
     main,
+    register_unattended_request,
 )
 from youtube_automation.infrastructure.errors import ConfigError
 
@@ -80,6 +83,59 @@ def test_rejects_unsafe_or_unbounded_requests(override: dict[str, object], messa
     arguments.update(override)
     with pytest.raises(ConfigError, match=message):
         build_unattended_request(**arguments)  # type: ignore[arg-type]
+
+
+def test_register_unattended_request_posts_json_and_returns_nonce(monkeypatch: pytest.MonkeyPatch) -> None:
+    """REQ-2729-05: localhost 登録の HTTP method/body/timeout と成功 response を固定する."""
+    captured: dict[str, object] = {}
+    expected_nonce = "abcdefghijklmnopqrstuvwxyzABCDEFGH_1234567890"
+
+    def fake_urlopen(request, timeout):
+        captured["request"] = request
+        captured["timeout"] = timeout
+        return io.BytesIO(json.dumps({"nonce": expected_nonce}).encode())
+
+    monkeypatch.setattr(suno_unattended_request, "urlopen", fake_urlopen)
+    request_payload = {"version": 1, "collectionId": "collection"}
+
+    nonce = register_unattended_request("http://localhost:7873/path/", request_payload)
+
+    request = captured["request"]
+    assert request.full_url == "http://localhost:7873/path/unattended/requests"
+    assert request.get_method() == "POST"
+    assert request.get_header("Content-type") == "application/json"
+    assert json.loads(request.data) == request_payload
+    assert captured["timeout"] == 10
+    assert nonce == expected_nonce
+
+
+def test_register_unattended_request_wraps_transport_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    """REQ-2729-06: localhost 通信失敗は ConfigError として原因付きで公開する."""
+
+    def fail_urlopen(_request, timeout):
+        assert timeout == 10
+        raise URLError("connection refused")
+
+    monkeypatch.setattr(suno_unattended_request, "urlopen", fail_urlopen)
+
+    with pytest.raises(ConfigError, match="登録できません.*connection refused"):
+        register_unattended_request("http://localhost:7873", {"version": 1})
+
+
+@pytest.mark.parametrize("payload", [[], {}, {"nonce": ""}, {"nonce": 123}])
+def test_register_unattended_request_rejects_invalid_nonce_response(
+    monkeypatch: pytest.MonkeyPatch,
+    payload: object,
+) -> None:
+    """REQ-2729-07: response shape/nonce が不正なら成功扱いしない."""
+    monkeypatch.setattr(
+        suno_unattended_request,
+        "urlopen",
+        lambda _request, timeout: io.BytesIO(json.dumps(payload).encode()) if timeout == 10 else None,
+    )
+
+    with pytest.raises(ConfigError, match="有効な unattended nonce"):
+        register_unattended_request("http://localhost:7873", {"version": 1})
 
 
 def test_cli_uses_skill_config_defaults(capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch) -> None:
