@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -60,7 +61,12 @@ def resolve_auto_selection_settings(cfg: dict[str, object]) -> AutoSelectionSett
         return value
 
     tolerance = raw.get("aspect_tolerance", _DEFAULT_ASPECT_TOLERANCE)
-    if isinstance(tolerance, bool) or not isinstance(tolerance, (int, float)) or tolerance < 0:
+    if (
+        isinstance(tolerance, bool)
+        or not isinstance(tolerance, (int, float))
+        or not math.isfinite(tolerance)
+        or tolerance < 0
+    ):
         raise ConfigError(f"auto_selection.aspect_tolerance は 0 以上の数値である必要があります: {tolerance!r}")
     enabled = raw.get("enabled", False)
     if not isinstance(enabled, bool):

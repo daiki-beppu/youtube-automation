@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+from dataclasses import fields
 from pathlib import Path
 
 import yaml
@@ -25,8 +26,8 @@ def _load_default_config() -> dict:
 
 
 def test_prompt_schema_has_imagegen_14_fields() -> None:
-    schema = PromptSchema()
-    expected = (
+    """REQ-2729-10: 実 dataclass の field 集合と順序を imagegen 契約に完全一致させる."""
+    expected_fields = (
         "use_case",
         "asset_type",
         "primary_request",
@@ -42,9 +43,7 @@ def test_prompt_schema_has_imagegen_14_fields() -> None:
         "constraints",
         "avoid",
     )
-    for name in expected:
-        assert hasattr(schema, name), f"PromptSchema lacks imagegen field: {name}"
-    assert len(expected) == 14
+    assert tuple(field.name for field in fields(PromptSchema)) == expected_fields
 
 
 def test_render_skips_unset_fields_and_uses_imagegen_labels() -> None:

@@ -1,6 +1,12 @@
+import pytest
 from PIL import Image
 
-from youtube_automation.domains.thumbnail.features import extract_features
+from youtube_automation.domains.thumbnail.features import (
+    extract_features,
+    extract_features_from_path,
+    feature_centroid,
+    feature_distance,
+)
 
 
 def _solid_image(color, size=(100, 100)):
@@ -47,3 +53,31 @@ def test_extract_features_contains_all_keys():
     f = extract_features(img)
     expected = {"brightness", "contrast", "saturation", "dominant_hue", "colorfulness"}
     assert expected.issubset(f.keys())
+
+
+def test_feature_centroid_rejects_empty_input():
+    with pytest.raises(ValueError, match="特徴量リストが空"):
+        feature_centroid([])
+
+
+def test_feature_distance_rejects_missing_feature_key():
+    complete = {
+        "brightness": 1.0,
+        "contrast": 1.0,
+        "saturation": 1.0,
+        "dominant_hue": 1.0,
+        "colorfulness": 1.0,
+    }
+    incomplete = dict(complete)
+    incomplete.pop("contrast")
+
+    with pytest.raises(KeyError, match="contrast"):
+        feature_distance(incomplete, complete)
+
+
+def test_extract_features_from_path_rejects_corrupt_image(tmp_path):
+    corrupt = tmp_path / "corrupt.jpg"
+    corrupt.write_bytes(b"not an image")
+
+    with pytest.raises(OSError):
+        extract_features_from_path(corrupt)

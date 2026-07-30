@@ -25,6 +25,25 @@ def reset_skill_cache():
     skill_config.reset()
 
 
+def test_resolve_check_config_rejects_non_mapping_self_check(monkeypatch):
+    monkeypatch.setattr(thumbnail_check, "load_skill_config", lambda _name: {"self_check": ["invalid"]})
+
+    with pytest.raises(ValidationError, match="self_check は mapping"):
+        thumbnail_check._resolve_check_config(None)
+
+
+def test_resolve_check_config_normalizes_non_mapping_no_logo_guard(monkeypatch):
+    monkeypatch.setattr(
+        thumbnail_check,
+        "load_skill_config",
+        lambda _name: {"self_check": {"no_logo_guard": ["invalid"]}},
+    )
+
+    resolved = thumbnail_check._resolve_check_config(None)
+
+    assert resolved["no_logo_guard"] == {}
+
+
 # ---------------------------------------------------------------------------
 # _parse_json_response
 # ---------------------------------------------------------------------------

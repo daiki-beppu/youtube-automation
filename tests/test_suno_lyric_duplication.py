@@ -7,6 +7,9 @@ from pathlib import Path
 
 import pytest
 
+from youtube_automation.domains.suno.lyrics import load_suno_lyrics_entries
+from youtube_automation.infrastructure.errors import ConfigError
+
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / ".claude/skills/suno-lyric/references/check_lyric_duplication.py"
 
@@ -205,6 +208,29 @@ def test_check_lyric_duplication_invalid_json_is_format_error(tmp_path: Path) ->
 
     assert result.returncode == 2
     assert "invalid JSON" in result.stderr
+
+
+def test_load_suno_lyrics_entries_invalid_json_raises_config_error(tmp_path: Path) -> None:
+    """REQ-2729-21: public lyrics reader は破損 JSON を ConfigError に変換する."""
+    path = tmp_path / "suno-lyrics.json"
+    path.write_text("{", encoding="utf-8")
+
+    with pytest.raises(ConfigError, match=f"suno-lyrics.json is invalid JSON: {path}"):
+        load_suno_lyrics_entries(path)
+
+
+def test_load_suno_lyrics_entries_propagates_read_oserror(tmp_path: Path, monkeypatch) -> None:
+    """REQ-2729-22: public lyrics reader は OSError を呼び出し側へ伝播する."""
+    path = tmp_path / "suno-lyrics.json"
+    path.write_text("[]", encoding="utf-8")
+
+    def fail_read(_path: Path, *args, **kwargs):
+        raise OSError("permission denied")
+
+    monkeypatch.setattr(Path, "read_text", fail_read)
+
+    with pytest.raises(OSError, match="permission denied"):
+        load_suno_lyrics_entries(path)
 
 
 def test_check_lyric_duplication_root_must_be_list(tmp_path: Path) -> None:
