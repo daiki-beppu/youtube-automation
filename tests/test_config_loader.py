@@ -130,6 +130,7 @@ def test_load_minimal_sections(tmp_path, monkeypatch):
     assert config.localizations.exists is False
     assert config.localizations.supported_languages == ["ja"]
     assert config.audio.target_duration_min is None
+    assert config.audio.target_duration_max is None
     assert config.playlists.items == {}
     # comments は optional セクション、欠如時は enabled=False のデフォルト
     assert config.comments.enabled is False
@@ -217,6 +218,46 @@ def test_community_draft_rejects_unsafe_image_paths(tmp_path, monkeypatch, image
     monkeypatch.setenv("CHANNEL_DIR", str(ch))
 
     with pytest.raises(ConfigError, match="image"):
+        load_config()
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("label", {"text": "teaser"}),
+        ("template", ["{title}"]),
+        ("schedule_offset_days", None),
+        ("schedule_offset_days", True),
+        ("schedule_time", {"hour": 18}),
+        ("image", ["main.png"]),
+    ],
+)
+def test_community_draft_rejects_contract_external_post_shapes(tmp_path, monkeypatch, field, value):
+    post = {
+        "label": "teaser",
+        "template": "{title}",
+        "schedule_offset_days": 0,
+        "schedule_time": "18:00",
+        "image": "main.png",
+    }
+    post[field] = value
+    sections = _minimal_sections()
+    sections["community-draft.json"] = {"community_draft": {"posts": [post]}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match=field):
+        load_config()
+
+
+@pytest.mark.parametrize("posts", [None, {}, [], [None]])
+def test_community_draft_rejects_missing_or_invalid_posts(tmp_path, monkeypatch, posts):
+    sections = _minimal_sections()
+    sections["community-draft.json"] = {"community_draft": {"posts": posts}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match="community_draft.posts"):
         load_config()
 
 
@@ -415,6 +456,80 @@ def test_load_distrokid_section_enabled(tmp_path, monkeypatch):
         artist_persona=True,
         apply_to_all=True,
     )
+
+
+def test_distrokid_profile_loads_credits_with_songwriter(tmp_path, monkeypatch):
+    from youtube_automation.configuration.distrokid import DistrokidProfileCredits, SongwriterName
+
+    sections = _minimal_sections()
+    profile = _full_distrokid_profile()
+    profile["credits"] = {"performer_role": "Piano", "producer_role": "Executive Producer"}
+    sections["distrokid.json"] = {"distrokid": {"enabled": True, "profile": profile}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    loaded = load_config().distrokid.profile
+
+    assert loaded.songwriter == SongwriterName(first="Jane", middle="Q", last="Doe")
+    assert loaded.credits == DistrokidProfileCredits(
+        performer_role="Piano",
+        producer_role="Executive Producer",
+    )
+
+
+@pytest.mark.parametrize("credits", [["Synthesizer"], "Synthesizer", 1, True])
+def test_distrokid_credits_rejects_non_object_shapes(tmp_path, monkeypatch, credits):
+    sections = _minimal_sections()
+    profile = _full_distrokid_profile()
+    profile["credits"] = credits
+    sections["distrokid.json"] = {"distrokid": {"enabled": True, "profile": profile}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match="credits"):
+        load_config()
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("performer_role", None),
+        ("performer_role", []),
+        ("producer_role", ""),
+        ("producer_role", {"role": "Producer"}),
+    ],
+)
+def test_distrokid_credits_rejects_invalid_role_values(tmp_path, monkeypatch, field, value):
+    sections = _minimal_sections()
+    profile = _full_distrokid_profile()
+    profile["credits"] = {field: value}
+    sections["distrokid.json"] = {"distrokid": {"enabled": True, "profile": profile}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match=field):
+        load_config()
+
+
+@pytest.mark.parametrize(
+    ("songwriter", "field"),
+    [
+        ({"last": "Doe"}, "first"),
+        ({"first": "Jane"}, "last"),
+        ({"first": "", "last": "Doe"}, "first"),
+        ({"first": "Jane", "last": "Doe", "middle": []}, "middle"),
+    ],
+)
+def test_distrokid_songwriter_rejects_missing_or_invalid_names(tmp_path, monkeypatch, songwriter, field):
+    sections = _minimal_sections()
+    profile = _full_distrokid_profile()
+    profile["songwriter"] = songwriter
+    sections["distrokid.json"] = {"distrokid": {"enabled": True, "profile": profile}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match=field):
+        load_config()
 
 
 def test_distrokid_songwriter_without_middle(tmp_path, monkeypatch):
@@ -646,7 +761,7 @@ def test_load_all_sections(tmp_path, monkeypatch):
             "release": {"languages": ["jp"], "start_sec": 20, "duration_sec": 30},
         }
     }
-    sections["audio.json"] = {"audio": {"target_duration_min": 120.0}}
+    sections["audio.json"] = {"audio": {"target_duration_min": 120.0, "target_duration_max": 180.0}}
     sections["comments.json"] = {
         "comments": {
             "enabled": True,
@@ -683,6 +798,7 @@ def test_load_all_sections(tmp_path, monkeypatch):
     assert config.analytics.benchmark.channels == [{"name": "Rival", "id": "UC123"}]
     assert config.playlists.items == {"main": {"playlist_id": "PLtest123", "auto_add": True, "title": None}}
     assert config.audio.target_duration_min == 120.0
+    assert config.audio.target_duration_max == 180.0
     assert config.meta.branding.description == "ch desc"
     assert config.youtube.content_model.type == "collection"
     assert config.youtube.content_model.languages == ["ja"]
@@ -1368,6 +1484,27 @@ def test_localizations_missing(tmp_path, monkeypatch):
     assert config.localizations.default_language == ""
 
 
+def test_localizations_invalid_json_raises_config_error(tmp_path, monkeypatch):
+    ch = _setup_channel(tmp_path, _minimal_sections())
+    path = ch / "config" / "localizations.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("{invalid", encoding="utf-8")
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match="JSON パース失敗"):
+        load_config()
+
+
+@pytest.mark.parametrize("payload", [None, [], "ja", 1, True])
+def test_localizations_non_object_shapes_raise_config_error(tmp_path, monkeypatch, payload):
+    ch = _setup_channel(tmp_path, _minimal_sections())
+    _write_json(ch / "config" / "localizations.json", payload)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match="トップレベルは object"):
+        load_config()
+
+
 def test_tags_default_includes_channel_name(tmp_path, monkeypatch):
     ch = _setup_channel(tmp_path, _minimal_sections())
     monkeypatch.setenv("CHANNEL_DIR", str(ch))
@@ -1491,6 +1628,9 @@ def test_branding_as_api_dict(tmp_path, monkeypatch):
     sections["meta.json"]["youtube_channel"] = {
         "description": "desc",
         "keywords": ["a", "b"],
+        "country": "JP",
+        "default_language": "ja",
+        "unsubscribed_trailer": "trailer-id",
         "made_for_kids": False,
     }
     ch2 = _setup_channel(tmp_path / "v2", sections)
@@ -1500,6 +1640,9 @@ def test_branding_as_api_dict(tmp_path, monkeypatch):
     assert api_dict == {
         "description": "desc",
         "keywords": ["a", "b"],
+        "country": "JP",
+        "default_language": "ja",
+        "unsubscribed_trailer": "trailer-id",
         "made_for_kids": False,
     }
 

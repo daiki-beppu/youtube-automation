@@ -86,6 +86,32 @@ def test_server_serves_assets_and_spa_fallback(dashboard_server: str):
         assert response.read() == b"<main>dashboard shell</main>"
 
 
+def test_server_rejects_asset_path_traversal(dashboard_server: str):
+    with pytest.raises(HTTPError) as exc_info:
+        urlopen(f"{dashboard_server}/%2e%2e/app.js", timeout=5)
+
+    assert exc_info.value.code == 404
+    assert json.loads(exc_info.value.read())["error"]["message"] == "asset が見つかりません"
+
+
+def test_server_returns_404_when_spa_index_is_missing(tmp_path: Path):
+    assets = tmp_path / "assets"
+    assets.mkdir()
+    server = create_server(port=0, asset_root=assets, channel_paths=[])
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        with pytest.raises(HTTPError) as exc_info:
+            urlopen(f"http://127.0.0.1:{server.server_port}/missing", timeout=5)
+
+        assert exc_info.value.code == 404
+        assert json.loads(exc_info.value.read())["error"]["message"] == "dashboard build asset が見つかりません"
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+        server.server_close()
+
+
 def test_cli_opens_loopback_url_after_server_starts(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     opened: list[str] = []
     events: list[str] = []
@@ -150,3 +176,34 @@ def test_cli_skip_refresh_starts_from_existing_snapshots(monkeypatch: pytest.Mon
     )
 
     assert main(["--skip-refresh", "--registry", str(tmp_path / "channels.json")]) == 0
+
+
+@pytest.mark.parametrize("port", [0, 65535])
+def test_cli_accepts_port_boundaries(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, port: int):
+    received = []
+
+    class FakeServer:
+        server_port = 4321
+
+        def serve_forever(self) -> None:
+            raise KeyboardInterrupt
+
+        def server_close(self) -> None:
+            return None
+
+    monkeypatch.setattr("youtube_automation.commands.analytics.dashboard.load_channel_registry", lambda _path: [])
+    monkeypatch.setattr(
+        "youtube_automation.commands.analytics.dashboard.create_server",
+        lambda **kwargs: received.append(kwargs["port"]) or FakeServer(),
+    )
+
+    assert main(["--skip-refresh", "--port", str(port), "--registry", str(tmp_path / "channels.json")]) == 0
+    assert received == [port]
+
+
+@pytest.mark.parametrize("port", [-1, 65536])
+def test_cli_rejects_ports_outside_valid_range(tmp_path: Path, port: int):
+    with pytest.raises(SystemExit) as exc_info:
+        main(["--skip-refresh", "--port", str(port), "--registry", str(tmp_path / "channels.json")])
+
+    assert exc_info.value.code == 2

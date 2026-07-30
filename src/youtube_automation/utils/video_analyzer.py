@@ -162,10 +162,15 @@ def _parse_json_response(text: str) -> dict[str, Any]:
     stripped = _CODE_FENCE_HEAD.sub("", stripped)
     stripped = _CODE_FENCE_TAIL.sub("", stripped)
     try:
-        return json.loads(stripped)
+        payload = json.loads(stripped)
     except json.JSONDecodeError as err:
         # 握りつぶさず ValidationError へ昇格 (Fail Fast)
         raise ValidationError(f"Gemini レスポンスの JSON パースに失敗: {err}") from err
+    if not isinstance(payload, dict):
+        raise ValidationError(
+            f"Gemini レスポンスは JSON object である必要があります (received: {type(payload).__name__})"
+        )
+    return payload
 
 
 def _attach_metadata(

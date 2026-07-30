@@ -1,6 +1,9 @@
+import json
+
 import pandas as pd
 import pytest
 
+from youtube_automation.commands.analytics import channel_trend as channel_trend_cli
 from youtube_automation.domains.analytics.series.channel_trend import (
     analyze_channel_trend,
     build_trend_frame,
@@ -33,6 +36,16 @@ def test_build_trend_frame_computes_rolling_means():
     assert day7["views_7d_ma"] == pytest.approx(sum(views[:7]) / 7)
 
 
+def test_build_trend_frame_defaults_missing_metric_columns_to_zero():
+    df = build_trend_frame([{"date": "2026-04-01", "views": "10"}])
+
+    row = df.iloc[0]
+    assert row["watch_time"] == 0
+    assert row["subscribers_gained"] == 0
+    assert row["subscribers_lost"] == 0
+    assert row["subs_net"] == 0
+
+
 def test_detect_anomalies_flags_spike():
     dates = [f"2026-04-{i:02d}" for i in range(1, 21)]
     views = [10] * 15 + [100] + [10] * 4  # day 16 スパイク
@@ -56,6 +69,29 @@ def test_detect_anomalies_flags_dip():
     df = build_trend_frame(_daily_metrics(dates, views))
     anomalies = detect_anomalies(df, z_threshold=2.0)
     assert any(a["date"] == "2026-04-16" and a["type"] == "dip" for a in anomalies)
+
+
+def test_detect_anomalies_includes_z_score_equal_to_threshold():
+    df = pd.DataFrame(
+        [
+            {
+                "date": pd.Timestamp("2026-04-01"),
+                "views": 100,
+                "views_z_score": 2.0,
+                "views_7d_ma": 50.0,
+            }
+        ]
+    )
+
+    assert detect_anomalies(df, z_threshold=2.0) == [
+        {
+            "date": "2026-04-01",
+            "type": "spike",
+            "views": 100,
+            "z_score": 2.0,
+            "baseline_7d_ma": 50.0,
+        }
+    ]
 
 
 def test_analyze_channel_trend_marks_z_score_as_undetermined_before_min_periods():
@@ -84,6 +120,27 @@ def test_analyze_channel_trend_detects_upward_trend():
     views = [100] * 28 + [100] * 7 + [140] * 14 + [80] * 7
     result = analyze_channel_trend(_daily_metrics(dates, views))
     assert result["summary"]["trend_direction"] == "up"
+
+
+def test_analyze_channel_trend_detects_downward_trend():
+    dates = pd.date_range("2026-04-01", periods=56).strftime("%Y-%m-%d").tolist()
+    result = analyze_channel_trend(_daily_metrics(dates, [100] * 28 + [80] * 28))
+
+    assert result["summary"]["trend_direction"] == "down"
+
+
+@pytest.mark.parametrize(
+    ("recent_views", "expected"),
+    [
+        ([1] * 28, "up"),
+        ([0] * 28, "flat"),
+    ],
+)
+def test_analyze_channel_trend_handles_zero_prior_period(recent_views, expected):
+    dates = pd.date_range("2026-04-01", periods=56).strftime("%Y-%m-%d").tolist()
+    result = analyze_channel_trend(_daily_metrics(dates, [0] * 28 + recent_views))
+
+    assert result["summary"]["trend_direction"] == expected
 
 
 def test_analyze_channel_trend_handles_empty():
@@ -121,3 +178,48 @@ def test_week_over_week_excludes_leading_and_trailing_partial_weeks():
         {"week_starting": "2026-03-16", "views": 140, "delta_pct": 100.0},
     ]
     assert result["summary"]["wow_growth_rate"] == 100.0
+
+
+def _write_snapshot(path, views):
+    path.write_text(
+        json.dumps({"channel_analytics": {"daily_metrics": _daily_metrics(["2026-04-01"], [views])}}),
+        encoding="utf-8",
+    )
+
+
+def test_cli_uses_latest_snapshot_and_prints_json(tmp_path, monkeypatch, capsys):
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    _write_snapshot(data_dir / "analytics_data_20260401.json", 10)
+    _write_snapshot(data_dir / "analytics_data_20260402.json", 25)
+    monkeypatch.setattr(channel_trend_cli, "_channel_dir", lambda: tmp_path)
+    monkeypatch.setattr("sys.argv", ["yt-channel-trend"])
+
+    assert channel_trend_cli.main() == 0
+
+    output = json.loads(capsys.readouterr().out)
+    assert output["summary"]["total_views"] == 25
+    assert output["daily_series"][0]["date"] == "2026-04-01"
+
+
+def test_cli_prints_human_readable_text(tmp_path, monkeypatch, capsys):
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    _write_snapshot(data_dir / "analytics_data_20260401.json", 25)
+    monkeypatch.setattr(channel_trend_cli, "_channel_dir", lambda: tmp_path)
+    monkeypatch.setattr("sys.argv", ["yt-channel-trend", "--text"])
+
+    assert channel_trend_cli.main() == 0
+
+    output = capsys.readouterr().out
+    assert "チャンネルトレンド分析" in output
+    assert "合計 views: 25" in output
+    assert "トレンド:" in output
+
+
+def test_cli_returns_two_when_snapshot_is_missing(tmp_path, monkeypatch, caplog):
+    monkeypatch.setattr(channel_trend_cli, "_channel_dir", lambda: tmp_path)
+    monkeypatch.setattr("sys.argv", ["yt-channel-trend"])
+
+    assert channel_trend_cli.main() == 2
+    assert "analytics_data_*.json が見つかりません" in caplog.text

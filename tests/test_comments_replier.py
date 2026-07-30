@@ -18,7 +18,11 @@ from youtube_automation.configuration.comments import (
 )
 from youtube_automation.infrastructure.errors import AutomationError, ConfigError, YouTubeAPIError
 from youtube_automation.utils.comments.history import ReplyHistory
-from youtube_automation.utils.comments.replier import _SAVE_MAX_RETRIES, CommentReplier
+from youtube_automation.utils.comments.replier import (
+    _SAVE_MAX_RETRIES,
+    CommentReplier,
+    fetch_video_status,
+)
 
 _PATCH_GENAI_CLIENT = "youtube_automation.utils.genai_client.create_global_genai_client"
 
@@ -921,6 +925,91 @@ def test_cli_export_candidates_requires_json(monkeypatch, tmp_path, capsys):
     clients.assert_not_called()
 
 
+def test_cli_rejects_mutually_exclusive_modes_before_loading_config(monkeypatch):
+    load = MagicMock()
+    monkeypatch.setattr(comment_reply, "load_config", load)
+
+    with pytest.raises(SystemExit) as exc_info:
+        comment_reply.main(["--dry-run", "--apply"])
+
+    assert exc_info.value.code == 2
+    load.assert_not_called()
+
+
+def test_cli_rejects_invalid_since_before_authentication(monkeypatch):
+    config = SimpleNamespace(
+        comments=_make_config(),
+        youtube=SimpleNamespace(api=SimpleNamespace(language="ja")),
+    )
+    clients = MagicMock()
+    monkeypatch.setattr(comment_reply, "load_config", lambda: config)
+    monkeypatch.setattr(comment_reply, "YouTubeClients", clients)
+
+    with pytest.raises(SystemExit) as exc_info:
+        comment_reply.main(["--dry-run", "--since", "not-a-date"])
+
+    assert "--since は ISO8601" in str(exc_info.value)
+    clients.assert_not_called()
+
+
+def test_cli_disabled_config_returns_one_without_authentication(monkeypatch, capsys):
+    config = SimpleNamespace(
+        comments=SimpleNamespace(enabled=False),
+        youtube=SimpleNamespace(api=SimpleNamespace(language="ja")),
+    )
+    clients = MagicMock()
+    monkeypatch.setattr(comment_reply, "load_config", lambda: config)
+    monkeypatch.setattr(comment_reply, "YouTubeClients", clients)
+
+    assert comment_reply.main(["--dry-run"]) == 1
+
+    assert "comments.enabled=false" in capsys.readouterr().err
+    clients.assert_not_called()
+
+
+def test_cli_api_error_returns_one(monkeypatch, tmp_path, capsys):
+    config = SimpleNamespace(
+        comments=_make_config(),
+        youtube=SimpleNamespace(api=SimpleNamespace(language="ja")),
+    )
+
+    class FailingReplier:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def run(self, **_kwargs):
+            raise YouTubeAPIError("quota exceeded")
+
+    monkeypatch.setattr(comment_reply, "load_config", lambda: config)
+    monkeypatch.setattr(comment_reply, "YouTubeClients", lambda **_: SimpleNamespace(youtube=object()))
+    monkeypatch.setattr(comment_reply, "CommentReplier", FailingReplier)
+    monkeypatch.setattr(comment_reply, "_channel_dir", lambda: tmp_path)
+
+    assert comment_reply.main(["--dry-run"]) == 1
+    assert "quota exceeded" in capsys.readouterr().err
+
+
+def test_cli_plan_errors_return_two(monkeypatch, tmp_path):
+    config = SimpleNamespace(
+        comments=_make_config(),
+        youtube=SimpleNamespace(api=SimpleNamespace(language="ja")),
+    )
+    plan = SimpleNamespace(
+        planned=[],
+        replied=[],
+        skipped=[],
+        errors=[{"video_id": "v1", "comment_id": "c1", "error": "insert failed"}],
+    )
+    replier = MagicMock()
+    replier.run.return_value = plan
+    monkeypatch.setattr(comment_reply, "load_config", lambda: config)
+    monkeypatch.setattr(comment_reply, "YouTubeClients", lambda **_: SimpleNamespace(youtube=object()))
+    monkeypatch.setattr(comment_reply, "CommentReplier", MagicMock(return_value=replier))
+    monkeypatch.setattr(comment_reply, "_channel_dir", lambda: tmp_path)
+
+    assert comment_reply.main(["--dry-run", "--json"]) == 2
+
+
 def test_cli_export_candidates_json_excludes_comment_with_later_owner_reply(
     monkeypatch,
     tmp_path,
@@ -1535,6 +1624,23 @@ def test_resolve_owner_channel_id_raises_on_empty_items(tmp_path):
 
     with pytest.raises(YouTubeAPIError, match="チャンネルが見つかりません"):
         replier._resolve_owner_channel_id()
+
+
+def test_fetch_video_status_rejects_invalid_api_shape():
+    yt = MagicMock()
+    yt.videos.return_value.list.return_value.execute.return_value = []
+
+    with pytest.raises(AttributeError):
+        fetch_video_status(yt, ["v1"])
+
+
+def test_get_title_rejects_invalid_api_shape(tmp_path):
+    yt = MagicMock()
+    yt.videos.return_value.list.return_value.execute.return_value = []
+    replier = CommentReplier(yt, config=_make_config(), channel_dir=tmp_path, default_language="ja")
+
+    with pytest.raises(AttributeError):
+        replier._get_title("v1")
 
 
 def test_resolve_owner_channel_id_raises_on_http_error(tmp_path):

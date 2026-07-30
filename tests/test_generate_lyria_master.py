@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -304,6 +305,53 @@ class TestGenerateSegments:
         out = capsys.readouterr().out
         # max_retries=2 → 初回 + 2 リトライ = 3 回失敗
         assert "3 回失敗" in out
+
+    def test_partial_segment_failure_preserves_success_and_skips_master(self, tmp_path, monkeypatch):
+        collection = _make_collection(tmp_path / "coll")
+        _patch_ffmpeg(monkeypatch)
+        _patch_skill_configs(
+            monkeypatch,
+            lyria={"model": "lyria-3-pro-preview", "duration_padding_min": 0},
+        )
+        _patch_load_config(monkeypatch, target_duration_min=None)
+        generate_master = MagicMock()
+        monkeypatch.setattr(
+            generate_lyria_master.generate_master,
+            "generate_master",
+            generate_master,
+        )
+        responses = iter([b"FIRST_SEGMENT", None])
+        monkeypatch.setattr(
+            generate_lyria_master.lyria_client,
+            "generate_music",
+            lambda *_args, **_kwargs: next(responses),
+        )
+        monkeypatch.setattr(
+            "sys.argv",
+            [
+                "yt-generate-lyria-master",
+                "--prompt",
+                "p",
+                "--name",
+                "partial",
+                "--target-duration",
+                "4",
+                "--padding-min",
+                "0",
+                "--max-retries",
+                "0",
+                "--collection",
+                str(collection),
+            ],
+        )
+
+        assert generate_lyria_master.main() == 1
+
+        music_dir = collection / "02-Individual-music"
+        assert (music_dir / "01_partial.wav").exists()
+        assert not (music_dir / "02_partial.wav").exists()
+        assert not (collection / "01-master" / "master.mp3").exists()
+        generate_master.assert_not_called()
 
 
 class TestMasterCombineDelegation:

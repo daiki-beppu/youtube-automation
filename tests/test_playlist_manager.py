@@ -5,6 +5,7 @@ PlaylistManager のユニットテスト
 YouTube API 呼び出しと load_config を unittest.mock でモック化して検証する。
 """
 
+import copy
 import json
 import sys
 from pathlib import Path
@@ -54,7 +55,7 @@ def mock_config():
     config = MagicMock()
     config.meta.channel_name = "Test Channel"
     config.meta.channel_short = "TC"
-    config.playlists.items = SAMPLE_PLAYLISTS_CONFIG
+    config.playlists.items = copy.deepcopy(SAMPLE_PLAYLISTS_CONFIG)
     config.content.title.activity_for_theme = MagicMock(return_value="Study")
     return config
 
@@ -216,6 +217,7 @@ class TestAssignVideo:
         """playlist_id 未設定のプレイリストはスキップする"""
         # new_playlist を auto_add にしてマッチさせる
         manager.config.playlists.items["new_playlist"]["auto_add"] = True
+        assert "auto_add" not in SAMPLE_PLAYLISTS_CONFIG["new_playlist"]
         with (
             patch.object(manager, "_list_playlist_video_ids", return_value=set()),
             patch.object(manager, "_add_video_to_playlist", return_value=True),
@@ -728,6 +730,44 @@ def test_list_playlist_video_ids_returns_partial_result_for_invalid_item(manager
     request.execute.return_value = {"items": [{"contentDetails": {"videoId": "v1"}}, {"contentDetails": {}}]}
 
     assert manager._list_playlist_video_ids("PL_ALL") == {"v1"}
+
+
+def test_list_playlist_video_ids_keeps_first_page_when_next_page_fails(manager):
+    items = manager._youtube.playlistItems.return_value
+    first_request = items.list.return_value
+    first_response = {"items": [{"contentDetails": {"videoId": "v1"}}]}
+    first_request.execute.return_value = first_response
+    second_request = MagicMock()
+    second_request.execute.side_effect = OSError("page unavailable")
+    items.list_next.side_effect = [second_request]
+
+    assert manager._list_playlist_video_ids("PL_ALL") == {"v1"}
+
+
+def test_write_back_playlist_ids_preserves_unrelated_config(manager, monkeypatch):
+    raw = {
+        "playlists": {
+            "main": {"title": "Main", "playlist_id": None},
+            "existing": {"title": "Existing", "playlist_id": "PL_OLD"},
+        },
+        "unrelated": {"keep": True},
+    }
+    write = MagicMock()
+    monkeypatch.setattr("youtube_automation.domains.uploads.playlists.read_json", lambda _path: raw)
+    monkeypatch.setattr("youtube_automation.domains.uploads.playlists.write_json", write)
+
+    manager._write_back_playlist_ids({"main": "PL_NEW", "missing": "PL_IGNORED"})
+
+    write.assert_called_once_with(
+        manager._config_path,
+        {
+            "playlists": {
+                "main": {"title": "Main", "playlist_id": "PL_NEW"},
+                "existing": {"title": "Existing", "playlist_id": "PL_OLD"},
+            },
+            "unrelated": {"keep": True},
+        },
+    )
 
 
 @pytest.mark.parametrize("response", [None, {"items": {"videoId": "v1"}}])

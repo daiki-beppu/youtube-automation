@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from contextlib import nullcontext
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -85,3 +86,19 @@ def test_flag_truthy_variants(monkeypatch):
 
 def test_noop_is_nullcontext():
     assert isinstance(profile._NOOP, type(nullcontext()))
+
+
+def test_summary_registration_and_initialization_are_idempotent(monkeypatch):
+    register = MagicMock()
+    monkeypatch.setattr(profile.atexit, "register", register)
+    monkeypatch.setenv("YT_PROFILE", "1")
+    monkeypatch.setenv("YT_PROFILE_SUMMARY", "1")
+
+    with profile.section("first"):
+        pass
+    with profile.section("second"):
+        pass
+
+    register.assert_called_once_with(profile._dump_summary)
+    assert profile._initialized is True
+    assert set(profile._records) == {"first", "second"}

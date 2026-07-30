@@ -31,3 +31,24 @@ def test_plot_launch_curve_writes_png(tmp_path):
     )
     assert out.exists()
     assert out.stat().st_size > 1000
+
+
+def test_plot_launch_curve_without_target_uses_two_video_sample(tmp_path):
+    df = _make_frame()
+    df = df[df["video_id"].isin(["vid_0", "vid_1"])]
+    out = tmp_path / "two-videos.png"
+
+    plot_launch_curve(df=df, target_video_id=None, output_path=out, window=30)
+
+    assert out.exists()
+    assert out.stat().st_size > 1000
+
+
+def test_plot_launch_curve_ignores_rows_outside_window(tmp_path):
+    df = _make_frame()
+    out = tmp_path / "window.png"
+
+    plot_launch_curve(df=df, target_video_id="vid_4", output_path=out, window=2)
+
+    assert out.exists()
+    assert out.stat().st_size > 1000

@@ -91,6 +91,42 @@ class TestComputePostingIntervals:
         result = compute_posting_intervals(videos)
         assert result["trend"] == "accelerating"
 
+    def test_decelerating(self):
+        videos = [
+            {"published_at": "2026-03-15"},
+            {"published_at": "2026-03-10"},  # 5d
+            {"published_at": "2026-03-05"},  # 5d
+            {"published_at": "2026-03-03"},  # 2d
+            {"published_at": "2026-03-01"},  # 2d
+        ]
+
+        result = compute_posting_intervals(videos)
+
+        assert result["intervals_days"] == [5, 5, 2, 2]
+        assert result["trend"] == "decelerating"
+
+    def test_zero_older_interval_does_not_divide_by_zero(self):
+        videos = [
+            {"published_at": "2026-03-05"},
+            {"published_at": "2026-03-03"},
+            {"published_at": "2026-03-01"},
+            {"published_at": "2026-03-01"},
+            {"published_at": "2026-03-01"},
+        ]
+
+        result = compute_posting_intervals(videos)
+
+        assert result["intervals_days"] == [2, 2, 0, 0]
+        assert result["average_interval"] == 1.0
+        assert result["trend"] == "stable"
+
+    def test_empty_list(self):
+        assert compute_posting_intervals([]) == {
+            "intervals_days": [],
+            "average_interval": 0,
+            "trend": "stable",
+        }
+
     def test_single_video(self):
         result = compute_posting_intervals([{"published_at": "2026-03-07"}])
         assert result["intervals_days"] == []

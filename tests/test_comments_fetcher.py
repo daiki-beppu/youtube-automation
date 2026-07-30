@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+import pytest
 from googleapiclient.errors import HttpError
 from httplib2 import Response
 
@@ -206,6 +207,50 @@ def test_paginated_replies_handles_multiple_pages():
     # Then: top + 6 replies
     assert len(comments) == 7
     assert yt.comments.return_value.list.call_count == 2
+
+
+def test_paginated_replies_apply_since_and_continue_after_empty_page():
+    from datetime import datetime
+
+    thread = _make_thread_item(thread_id="t1", text="top", total_reply_count=6)
+    yt = _mock_youtube_threads([thread])
+    old = _make_reply_item(
+        reply_id="old",
+        text="old",
+        parent_id="t1",
+        published_at="2026-05-01T00:00:00Z",
+    )
+    new = _make_reply_item(
+        reply_id="new",
+        text="new",
+        parent_id="t1",
+        published_at="2026-05-11T00:00:00Z",
+    )
+    yt.comments.return_value.list.return_value.execute.side_effect = [
+        {"items": [old], "nextPageToken": "empty"},
+        {"items": [], "nextPageToken": "last"},
+        {"items": [new]},
+    ]
+
+    comments = list(
+        fetch_comments(
+            yt,
+            video_id="v1",
+            since=datetime.fromisoformat("2026-05-10T00:00:00+00:00"),
+        )
+    )
+
+    assert {comment.comment_id for comment in comments} == {"new"}
+    assert yt.comments.return_value.list.call_count == 3
+
+
+@pytest.mark.parametrize("response", [[], {"items": [None]}])
+def test_invalid_thread_response_shape_fails_visibly(response):
+    yt = _mock_youtube_threads([])
+    yt.commentThreads.return_value.list.return_value.execute.return_value = response
+
+    with pytest.raises((AttributeError, TypeError)):
+        list(fetch_comments(yt, video_id="v1"))
 
 
 def test_since_filter_excludes_old_top_level_comments():

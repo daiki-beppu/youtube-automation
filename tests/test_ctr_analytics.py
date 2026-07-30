@@ -7,7 +7,10 @@ YouTube Analytics API の仕様 (`videoThumbnailImpressions*` は
 
 from unittest.mock import MagicMock
 
+import pytest
+
 from youtube_automation.domains.analytics.mixins.ctr_analytics import CTRAnalyticsMixin
+from youtube_automation.infrastructure.errors import YouTubeAPIError
 
 
 class DummyCollector(CTRAnalyticsMixin):
@@ -89,3 +92,63 @@ def test_get_ctr_analysis_returns_without_impressions_summary():
     assert "error" not in result
     assert "impressions_summary" not in result
     assert result["video_performance"][0]["video_id"] == "vid_A"
+
+
+@pytest.mark.parametrize(
+    ("ctr", "expected"),
+    [
+        (2.0, "Excellent (目標達成)"),
+        (1.5, "Good (改善中)"),
+        (1.0, "Average (要改善)"),
+        (0.99, "Poor (緊急改善必要)"),
+    ],
+)
+def test_ctr_threshold_boundaries(ctr, expected):
+    assert DummyCollector(MagicMock())._evaluate_ctr_performance(ctr) == expected
+
+
+def test_collection_performance_classifies_and_aggregates_public_result():
+    collector = DummyCollector(MagicMock())
+    collector.get_video_analytics = MagicMock(
+        return_value=[
+            {
+                "title": "Boss Battle Complete Collection",
+                "views": 100,
+                "likes": 10,
+                "comments": 2,
+                "shares": 1,
+                "watch_time_minutes": 300,
+                "engagement_rate": 13.0,
+                "subscribers_gained": 2,
+                "collection_type": "Boss Battle",
+                "url": "https://example.com/a",
+            },
+            {
+                "title": "Quiet Village",
+                "views": 50,
+                "likes": 2,
+                "comments": 1,
+                "shares": 0,
+                "watch_time_minutes": 100,
+                "engagement_rate": 6.0,
+                "subscribers_gained": 1,
+                "collection_type": "Village/Town",
+                "url": "https://example.com/b",
+            },
+        ]
+    )
+
+    result = collector.get_collection_performance("2026-07-01", "2026-07-02")
+
+    assert result["collection_performance"]["Boss Battle"]["total_views"] == 100
+    assert result["collection_performance"]["Village/Town"]["video_count"] == 1
+    assert result["top_performers"]["top_by_views"][0]["title"] == "Boss Battle Complete Collection"
+
+
+def test_ctr_public_methods_return_empty_or_fail_soft_results():
+    collector = DummyCollector(MagicMock())
+    collector.get_video_analytics = MagicMock(return_value=[])
+    assert collector.get_collection_performance("2026-07-01", "2026-07-02") == {"error": "データが取得できませんでした"}
+
+    collector.analytics_service.query.side_effect = YouTubeAPIError("ctr unavailable")
+    assert collector.get_ctr_analysis("2026-07-01", "2026-07-02") == {"error": "ctr unavailable"}

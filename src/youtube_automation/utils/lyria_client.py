@@ -204,7 +204,11 @@ def _recover_audio_on_interrupt(response: requests.Response) -> None:
     if audio is None:
         print("\n[Interrupt] Ctrl+C 検出。退避可能なオーディオデータがありませんでした。")
         return
-    path = persist_recovered_audio(audio)
+    try:
+        path = persist_recovered_audio(audio)
+    except OSError as e:
+        print(f"\n[Interrupt] 支払い済みオーディオの退避に失敗しました: {e}")
+        return
     print(
         f"\n[Recovered] 支払い済みオーディオを退避しました → {path}\n"
         "            手動で WAV 化して 02-Individual-music/ に置けば再課金なしで再利用できます。"

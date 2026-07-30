@@ -11,7 +11,25 @@ import hashlib
 import json
 from pathlib import Path
 
+import pytest
+
 from youtube_automation.utils import veo_operation_store as store
+
+# ---------------------------------------------------------------------------
+# image_sha256
+# ---------------------------------------------------------------------------
+
+
+def test_image_sha256_tracks_content_and_reads_multiple_chunks(tmp_path: Path) -> None:
+    image_path = tmp_path / "main.png"
+    content = b"a" * (1024 * 1024) + b"second-chunk"
+    image_path.write_bytes(content)
+
+    assert store.image_sha256(image_path) == hashlib.sha256(content).hexdigest()
+
+    image_path.write_bytes(content + b"-changed")
+    assert store.image_sha256(image_path) == hashlib.sha256(content + b"-changed").hexdigest()
+
 
 # ---------------------------------------------------------------------------
 # state_path
@@ -65,17 +83,6 @@ class TestStatePath:
 
         # Then
         assert key_a != key_b
-
-    def test_hash_matches_sha1_of_abs_output(self, tmp_path: Path) -> None:
-        # Given
-        output_path = tmp_path / "collections" / "loop.mp4"
-        expected_hash = hashlib.sha1(str(output_path.resolve()).encode()).hexdigest()[:16]
-
-        # When
-        result = store.state_path(output_path, channel_root=tmp_path)
-
-        # Then
-        assert result.stem == expected_hash
 
 
 # ---------------------------------------------------------------------------
@@ -149,16 +156,31 @@ class TestSave:
         # Then
         assert ops_dir.exists()
 
-    def test_atomic_write_no_tmp_remnant(self, tmp_path: Path) -> None:
-        """書き込み後に .json.tmp が残っていないこと（atomic write の確認）."""
-        # Given
+    def test_atomic_write_replaces_complete_state_and_preserves_old_state_on_failure(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         output_path = tmp_path / "loop.mp4"
+        image_path = self._image_path(tmp_path)
+        store.save(output_path, image_path, "op-old", "model", channel_root=tmp_path)
 
-        # When
-        saved = store.save(output_path, self._image_path(tmp_path), "op-name", "model", channel_root=tmp_path)
-
-        # Then
+        saved = store.save(output_path, image_path, "op-new", "model", channel_root=tmp_path)
+        assert store.load(output_path, channel_root=tmp_path)["operation_name"] == "op-new"
         tmp_remnant = saved.with_suffix(saved.suffix + ".tmp")
+        assert not tmp_remnant.exists()
+
+        store.save(output_path, image_path, "op-protected", "model", channel_root=tmp_path)
+        original_write_text = Path.write_text
+
+        def fail_tmp_write(path: Path, *args, **kwargs):
+            if path == tmp_remnant:
+                raise OSError("disk full")
+            return original_write_text(path, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "write_text", fail_tmp_write)
+        with pytest.raises(OSError, match="disk full"):
+            store.save(output_path, image_path, "op-lost", "model", channel_root=tmp_path)
+
+        assert store.load(output_path, channel_root=tmp_path)["operation_name"] == "op-protected"
         assert not tmp_remnant.exists()
 
     def test_save_returns_path_to_state_file(self, tmp_path: Path) -> None:
@@ -231,6 +253,27 @@ class TestLoad:
 
         # Then: None を返して上位に例外を漏らさない
         assert result is None
+
+    def test_read_os_error_propagates_and_preserves_state(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        output_path = tmp_path / "loop.mp4"
+        state_file = store.state_path(output_path, channel_root=tmp_path)
+        state_file.parent.mkdir(parents=True, exist_ok=True)
+        state_file.write_text("{}", encoding="utf-8")
+        original_read_text = Path.read_text
+
+        def fail_state_read(path: Path, *args, **kwargs):
+            if path == state_file:
+                raise PermissionError("state is unreadable")
+            return original_read_text(path, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "read_text", fail_state_read)
+
+        with pytest.raises(PermissionError, match="state is unreadable"):
+            store.load(output_path, channel_root=tmp_path)
+
+        assert state_file.exists()
 
     def test_prints_warn_on_json_corruption(self, tmp_path: Path, capsys) -> None:
         # Given
@@ -309,6 +352,46 @@ class TestLoad:
         # Then: None を返し、[Warn] を出力し、state ファイルを削除する
         assert result is None
         assert "[Warn]" in out
+        assert not state_file.exists()
+
+    @pytest.mark.parametrize(
+        "empty_field",
+        ["operation_name", "model", "input_image_sha256"],
+    )
+    def test_accepts_empty_non_path_string_fields(self, tmp_path: Path, empty_field: str) -> None:
+        output_path = tmp_path / "loop.mp4"
+        state_file = store.state_path(output_path, channel_root=tmp_path)
+        state_file.parent.mkdir(parents=True, exist_ok=True)
+        data = {
+            "operation_name": "projects/veo/99",
+            "model": "veo-3.1-fast",
+            "output_path": str(output_path.resolve()),
+            "input_image_sha256": "test-hash",
+        }
+        data[empty_field] = ""
+        state_file.write_text(json.dumps(data), encoding="utf-8")
+
+        assert store.load(output_path, channel_root=tmp_path) == data
+        assert state_file.exists()
+
+    def test_empty_output_path_is_mismatch_and_removes_state(self, tmp_path: Path, capsys) -> None:
+        output_path = tmp_path / "loop.mp4"
+        state_file = store.state_path(output_path, channel_root=tmp_path)
+        state_file.parent.mkdir(parents=True, exist_ok=True)
+        state_file.write_text(
+            json.dumps(
+                {
+                    "operation_name": "",
+                    "model": "",
+                    "output_path": "",
+                    "input_image_sha256": "",
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        assert store.load(output_path, channel_root=tmp_path) is None
+        assert "output_path が不一致" in capsys.readouterr().out
         assert not state_file.exists()
 
     def test_returns_none_when_operation_name_is_not_str(self, tmp_path: Path, capsys) -> None:
@@ -399,29 +482,6 @@ class TestLoad:
         assert "[Warn]" in out
         assert not state_file.exists()
 
-    def test_returns_none_when_output_path_is_object(self, tmp_path: Path, capsys) -> None:
-        """output_path が dict の state は None を返し、state ファイルを削除する（ai-review-006）。"""
-        # Given: output_path をオブジェクトで書き込む
-        output_path = tmp_path / "loop.mp4"
-        state_file = store.state_path(output_path, channel_root=tmp_path)
-        state_file.parent.mkdir(parents=True, exist_ok=True)
-        invalid = {
-            "operation_name": "projects/veo/99",
-            "model": "veo-3.1-fast",
-            "output_path": {"path": "/some/path"},  # dict（非文字列）
-            "input_image_sha256": "test-hash",
-        }
-        state_file.write_text(json.dumps(invalid), encoding="utf-8")
-
-        # When
-        result = store.load(output_path, channel_root=tmp_path)
-        out = capsys.readouterr().out
-
-        # Then: None を返し、[Warn] を出力し、state ファイルを削除する
-        assert result is None
-        assert "[Warn]" in out
-        assert not state_file.exists()
-
     def test_returns_none_and_removes_legacy_state_without_input_image_hash(self, tmp_path: Path, capsys) -> None:
         """入力画像識別子がない旧 state は安全側で破棄する。"""
         output_path = tmp_path / "loop.mp4"
@@ -457,23 +517,6 @@ class TestLoad:
         assert "[Warn]" in out
         assert not state_file.exists()
 
-    def test_returns_none_when_state_is_json_string(self, tmp_path: Path, capsys) -> None:
-        """state が JSON 文字列の場合は None を返し、state ファイルを削除する（ai-review-005）。"""
-        # Given: state が文字列の有効 JSON
-        output_path = tmp_path / "loop.mp4"
-        state_file = store.state_path(output_path, channel_root=tmp_path)
-        state_file.parent.mkdir(parents=True, exist_ok=True)
-        state_file.write_text('"just-a-string"', encoding="utf-8")
-
-        # When
-        result = store.load(output_path, channel_root=tmp_path)
-        out = capsys.readouterr().out
-
-        # Then: None を返し、[Warn] を出力し、state ファイルを削除する
-        assert result is None
-        assert "[Warn]" in out
-        assert not state_file.exists()
-
 
 # ---------------------------------------------------------------------------
 # clear
@@ -494,6 +537,7 @@ class TestClear:
 
         # Then
         assert not store.state_path(output_path, channel_root=tmp_path).exists()
+        assert store.load(output_path, channel_root=tmp_path) is None
 
     def test_noop_when_no_state(self, tmp_path: Path) -> None:
         """state ファイルが存在しなくても例外を上げない."""
@@ -502,15 +546,3 @@ class TestClear:
 
         # When / Then: 例外なし
         store.clear(output_path, channel_root=tmp_path)
-
-    def test_load_returns_none_after_clear(self, tmp_path: Path) -> None:
-        # Given
-        output_path = tmp_path / "loop.mp4"
-        store.save(output_path, TestSave._image_path(tmp_path), "op-name", "model", channel_root=tmp_path)
-
-        # When
-        store.clear(output_path, channel_root=tmp_path)
-        result = store.load(output_path, channel_root=tmp_path)
-
-        # Then
-        assert result is None

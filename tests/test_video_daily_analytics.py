@@ -48,6 +48,35 @@ def test_get_video_daily_analytics_query_uses_views_metric_only():
     assert "videoThumbnailImpressions" not in last_call_kwargs["metrics"]
 
 
+@pytest.mark.parametrize(
+    ("video_ids", "expected_filter"),
+    [
+        (["vid_A", "vid_B"], "video==vid_A,vid_B"),
+        (None, None),
+        ([], None),
+    ],
+)
+def test_get_video_daily_analytics_filter_boundary(video_ids, expected_filter):
+    mock_service = MagicMock()
+    mock_service.query.return_value = {}
+    collector = DummyCollector(mock_service)
+
+    result = collector.get_video_daily_analytics("2026-04-01", "2026-04-02", video_ids=video_ids)
+
+    assert result == []
+    kwargs = mock_service.query.call_args.kwargs
+    if expected_filter is None:
+        assert "filters" not in kwargs
+    else:
+        assert kwargs["filters"] == expected_filter
+
+
+def test_parse_video_daily_rows_ignores_short_rows():
+    assert VideoDailyAnalyticsMixin._parse_video_daily_rows(
+        {"rows": [[], ["vid_A"], ["vid_A", "2026-04-01"], ["vid_B", "2026-04-02", 10]]}
+    ) == [{"video_id": "vid_B", "date": "2026-04-02", "views": 10}]
+
+
 def test_get_video_daily_analytics_converts_permanent_http_error():
     mock_service = MagicMock()
     mock_service.query.side_effect = YouTubeAPIError("metric not found", status_code=400)

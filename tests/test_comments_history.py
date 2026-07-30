@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 
 import pytest
 
@@ -59,3 +60,44 @@ def test_save_creates_parent_directory(tmp_path):
     history.mark_replied("x", {"video_id": "v"})
     history.save()
     assert path.exists()
+
+
+def test_replied_must_be_object(tmp_path):
+    path = tmp_path / "reply.json"
+    path.write_text('{"replied": []}', encoding="utf-8")
+
+    with pytest.raises(ConfigError, match="replied は object"):
+        ReplyHistory(path)
+
+
+def test_replied_video_ids_ignores_legacy_and_invalid_records(tmp_path):
+    path = tmp_path / "reply.json"
+    path.write_text(
+        json.dumps(
+            {
+                "replied": {
+                    "current": {"video_id": "v1"},
+                    "legacy": {"reply_text": "thanks"},
+                    "invalid": "old-record",
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert ReplyHistory(path).replied_video_ids() == {"v1"}
+
+
+def test_replace_failure_keeps_existing_history_unchanged(tmp_path, monkeypatch):
+    path = tmp_path / "reply.json"
+    original = '{"schema_version": 1, "replied": {}}\n'
+    path.write_text(original, encoding="utf-8")
+    history = ReplyHistory(path)
+    history.mark_replied("new", {"video_id": "v1"})
+    monkeypatch.setattr(os, "replace", lambda *_args: (_ for _ in ()).throw(OSError("disk full")))
+
+    with pytest.raises(OSError, match="disk full"):
+        history.save()
+
+    assert path.read_text(encoding="utf-8") == original
+    assert path.with_suffix(".json.tmp").exists()

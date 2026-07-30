@@ -102,7 +102,9 @@ def _plot_metric_panel(ax, df, target_video_id, metric, title, ylabel):
 
     ax.set_title(title)
     ax.set_ylabel(ylabel)
-    ax.legend(loc="upper left", fontsize=9)
+    handles, labels = ax.get_legend_handles_labels()
+    if handles:
+        ax.legend(handles, labels, loc="upper left", fontsize=9)
     ax.grid(True, alpha=0.3)
 
 

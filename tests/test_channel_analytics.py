@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest.mock import MagicMock
+
 import pytest
 
 from youtube_automation.domains.analytics.mixins.channel_analytics import ChannelAnalyticsMixin
@@ -65,6 +67,12 @@ class StubCollector(ChannelAnalyticsMixin):
         return {"source": "retention"}
 
 
+class DirectCollector(ChannelAnalyticsMixin):
+    def __init__(self) -> None:
+        self.analytics_service = MagicMock()
+        self.channel_id = "UC_TEST"
+
+
 @pytest.mark.parametrize("depth", ["standard", "full"])
 def test_standard_and_full_depth_save_subscribed_status_audience(depth: str) -> None:
     """標準収集の公開経路が subscribedStatus 集計を JSON データへ配線する。"""
@@ -97,3 +105,40 @@ def test_subscribed_status_error_fails_collection() -> None:
 
     with pytest.raises(YouTubeAPIError, match="登録ステータス分析取得失敗: quota exceeded"):
         collector.collect_basic_analytics("2026-01-01", "2026-04-01", depth="standard")
+
+
+def test_channel_analytics_maps_daily_rows_and_summary_with_optional_columns() -> None:
+    collector = DirectCollector()
+    collector.analytics_service.query.return_value = {
+        "rows": [
+            ["2026-07-01", 100, 50, 30, 4, 1, 10, 2, 3, 5],
+            ["2026-07-02", 200, 80, 40, 2, 3, 20, 1, 4, 6, 75.0, 1000, 25, 2.5],
+        ]
+    }
+
+    result = collector.get_channel_analytics("2026-07-01", "2026-07-02")
+
+    assert result["daily_metrics"][0]["avg_view_percentage"] == 0
+    assert result["daily_metrics"][1]["card_click_rate"] == 2.5
+    assert result["summary"] == {
+        "total_views": 300,
+        "total_watch_time": 130,
+        "net_subscribers": 2,
+        "total_engagement": 48,
+        "avg_view_percentage": 75.0,
+        "total_card_impressions": 1000,
+        "total_card_clicks": 25,
+    }
+
+
+def test_channel_analytics_empty_and_api_failure_shapes() -> None:
+    collector = DirectCollector()
+    collector.analytics_service.query.return_value = {}
+
+    empty = collector.get_channel_analytics("2026-07-01", "2026-07-02")
+
+    assert empty["daily_metrics"] == []
+    assert empty["summary"]["total_views"] == 0
+
+    collector.analytics_service.query.side_effect = YouTubeAPIError("daily unavailable")
+    assert collector.get_channel_analytics("2026-07-01", "2026-07-02") == {"error": "daily unavailable"}

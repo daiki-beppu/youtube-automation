@@ -10,6 +10,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from youtube_automation.domains.analytics.mixins.video_analytics import VideoAnalyticsMixin
+from youtube_automation.infrastructure.errors import YouTubeAPIError
 
 
 class StubCollector(VideoAnalyticsMixin):
@@ -101,6 +102,24 @@ class TestGetVideoAnalytics:
         # (50 + 10 + 5) / 1000 * 100 = 6.5
         assert result[0]["engagement_rate"] == pytest.approx(6.5)
 
+    def test_api_failure_returns_empty_list(self, collector):
+        collector.analytics_service.query.side_effect = YouTubeAPIError("video analytics unavailable")
+
+        assert collector.get_video_analytics("2026-01-01", "2026-04-01") == []
+
+    def test_empty_video_detail_uses_defaults_and_classifies_titles(self, collector):
+        collector.analytics_service.query.return_value = {"rows": [["VID_001", 0, 0, 0, 0, 0, 0, 0, 0]]}
+        collector.youtube_service.list_videos.return_value = {"items": []}
+
+        result = collector.get_video_analytics("2026-01-01", "2026-04-01")
+
+        assert result[0]["title"] == "Unknown"
+        assert result[0]["published_at"] is None
+        assert result[0]["collection_type"] == "Individual Track"
+        assert result[0]["engagement_rate"] == 0.0
+        assert collector._classify_video_type("Complete Collection") == "Complete Collection"
+        assert collector._classify_video_type("Quiet single") == "Individual Track"
+
 
 class TestGetVideoAnalyticsById:
     def test_returns_all_metrics(self, collector):
@@ -125,6 +144,25 @@ class TestGetVideoAnalyticsById:
         assert result["views"] == 0
         assert result["likes"] == 0
         assert result["subscribers_gained"] == 0
+
+    def test_short_row_defaults_missing_metrics_and_api_failure_adds_error(self, collector):
+        collector.analytics_service.query.return_value = {"rows": [[10, 5]]}
+
+        short = collector.get_video_analytics_by_id("VID_SHORT", "2026-01-01", "2026-04-01")
+
+        assert short["views"] == 10
+        assert short["estimated_minutes_watched"] == 5
+        assert short["average_view_duration"] == 0
+        assert short["subscribers_gained"] == 0
+
+        collector.analytics_service.query.side_effect = YouTubeAPIError("video unavailable")
+        failed = collector.get_video_analytics_by_id("VID_FAIL", "2026-01-01", "2026-04-01")
+        assert failed["views"] == 0
+        assert "video unavailable" in failed["error"]
+
+    @pytest.mark.parametrize("row", [[], ["VID"], ["VID", "bad", 0, 0, "bad", 0, 0, 0]])
+    def test_invalid_engagement_rows_return_zero(self, collector, row):
+        assert collector._calculate_engagement_rate(row) == 0.0
 
 
 class TestGetVideoDetails:

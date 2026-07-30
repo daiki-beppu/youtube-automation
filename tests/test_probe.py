@@ -6,6 +6,10 @@ import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
+from youtube_automation.commands.media import generate_master
+from youtube_automation.infrastructure.errors import ValidationError
 from youtube_automation.utils import probe
 
 
@@ -50,6 +54,13 @@ def test_returns_none_on_unparseable_stdout(monkeypatch) -> None:
         return SimpleNamespace(stdout="not a number\n")
 
     monkeypatch.setattr(probe.subprocess, "run", fake_run)
+    assert probe.probe_duration(Path("/fake.mp3")) is None
+
+
+@pytest.mark.parametrize("stdout", ["nan\n", "inf\n", "-inf\n"])
+def test_probe_duration_returns_none_on_non_finite_stdout(monkeypatch, stdout) -> None:
+    monkeypatch.setattr(probe.subprocess, "run", lambda *_args, **_kwargs: SimpleNamespace(stdout=stdout))
+
     assert probe.probe_duration(Path("/fake.mp3")) is None
 
 
@@ -121,6 +132,21 @@ def test_probe_bitrate_returns_none_on_unparseable(monkeypatch) -> None:
 
     monkeypatch.setattr(probe.subprocess, "run", fake_run)
     assert probe.probe_bitrate(Path("/fake.mp4")) is None
+
+
+@pytest.mark.parametrize("stdout", ["nan\n", "inf\n", "-inf\n"])
+def test_probe_bitrate_returns_none_on_non_finite_stdout(monkeypatch, stdout) -> None:
+    monkeypatch.setattr(probe.subprocess, "run", lambda *_args, **_kwargs: SimpleNamespace(stdout=stdout))
+
+    assert probe.probe_bitrate(Path("/fake.mp4")) is None
+
+
+def test_generate_master_rejects_non_finite_track_duration(monkeypatch) -> None:
+    monkeypatch.setattr(probe.subprocess, "run", lambda *_args, **_kwargs: SimpleNamespace(stdout="nan\n"))
+    monkeypatch.setattr(generate_master, "probe_duration", probe.probe_duration)
+
+    with pytest.raises(ValidationError, match="probe に失敗"):
+        generate_master._sum_track_duration([Path("/fake.mp3")])
 
 
 # ---------- argv-injection defense (Issue #167): "--" sentinel ----------

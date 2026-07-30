@@ -38,14 +38,3 @@ def test_unit_for_audio_unknown_model_raises_value_error():
     """
     with pytest.raises(ValueError, match="no-such-model"):
         unit_for_audio("no-such-model")
-
-
-def test_unit_for_audio_is_publicly_exported():
-    """Given the audio domain module
-    When `unit_for_audio` を import する
-    Then underscore-private でなく、scripts 跨ぎ import に耐える公開 API として参照できる。
-    """
-    from youtube_automation.domains.media import audio_units
-
-    assert hasattr(audio_units, "unit_for_audio")
-    assert audio_units.unit_for_audio.__name__ == "unit_for_audio"

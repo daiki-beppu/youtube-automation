@@ -59,7 +59,6 @@ REPO_CONTRACT_MODULES = frozenset(
         "test_features_catalog_documentation.py",
         "test_flop_analysis_skill_contract.py",
         "test_lifecycle_skills_no_tayk.py",
-        "test_loop_video_preview_skill_contract.py",
         "test_market_research_skill_contract.py",
         "test_no_google_auth_httplib2_direct_import.py",
         "test_pytest_lane_contract.py",

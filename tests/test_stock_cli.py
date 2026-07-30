@@ -150,6 +150,59 @@ class TestStockArchiveCLI:
         assert keep.exists()  # excluded → 退避されず元の場所に残る
         assert not drop.exists()
 
+    def test_partial_failure_keeps_prior_archive_and_stops_before_later_input(
+        self,
+        isolated_channel: Path,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        from youtube_automation.infrastructure.errors import ValidationError
+
+        first = _make_image(tmp_path / "first.jpg")
+        second = _make_image(tmp_path / "second.jpg")
+        third = _make_image(tmp_path / "third.jpg")
+        _patch_skill_config(monkeypatch, {"image_generation": {"stock": {"enabled": True}}})
+        real_archive = stock_archive.archive_to_stock
+        calls: list[Path] = []
+
+        def archive(path: Path, meta: dict, **kwargs):
+            calls.append(path)
+            if path == second:
+                raise ValidationError("archive failed")
+            return real_archive(path, meta, **kwargs)
+
+        monkeypatch.setattr(stock_archive, "archive_to_stock", archive)
+
+        exit_code = stock_archive.main([str(first), str(second), str(third), "--theme", "tavern"])
+
+        assert exit_code == 2
+        assert calls == [first, second]
+        assert not first.exists()
+        assert second.exists()
+        assert third.exists()
+        assert len(list((isolated_channel / "assets" / "stock" / "tavern").glob("*.jpg"))) == 1
+        assert "archive failed" in capsys.readouterr().err
+
+    def test_duplicate_input_is_archived_once_and_then_skipped(
+        self,
+        isolated_channel: Path,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        image = _make_image(tmp_path / "duplicate.jpg")
+        _patch_skill_config(monkeypatch, {"image_generation": {"stock": {"enabled": True}}})
+
+        exit_code = stock_archive.main([str(image), str(image), "--theme", "tavern"])
+
+        assert exit_code == 0
+        assert not image.exists()
+        assert len(list((isolated_channel / "assets" / "stock" / "tavern").glob("*.jpg"))) == 1
+        captured = capsys.readouterr()
+        assert "Summary: archived=1 unlinked=0 skipped=1" in captured.out
+        assert f"not found: {image}" in captured.err
+
 
 # ---- yt-stock-list ---------------------------------------------------------
 

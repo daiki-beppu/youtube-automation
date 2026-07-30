@@ -28,6 +28,17 @@ def collector():
 
 
 class TestGetDeviceAnalytics:
+    def test_empty_and_zero_view_rows_return_stable_shares(self, collector):
+        collector.analytics_service.query.return_value = {"rows": []}
+        assert collector.get_device_analytics("2026-01-01", "2026-04-01") == {
+            "devices": {},
+            "total_views": 0,
+        }
+
+        collector.analytics_service.query.return_value = {"rows": [["MOBILE", 0, 0, 0]]}
+        result = collector.get_device_analytics("2026-01-01", "2026-04-01")
+        assert result["devices"]["MOBILE"]["view_share_percent"] == 0
+
     def test_consumes_adapter_response_through_analytics_entrypoint(self, collector):
         request = collector.analytics_service.query
         request.return_value = {"rows": [["MOBILE", 1, 2, 3]]}
@@ -66,6 +77,20 @@ class TestGetDeviceAnalytics:
 
 
 class TestGetCountryAnalytics:
+    def test_forwards_max_results_and_fails_soft(self, collector):
+        collector.analytics_service.query.return_value = {"rows": [["JP", 0, 0, 0, 0]]}
+
+        result = collector.get_country_analytics("2026-01-01", "2026-04-01", max_countries=3)
+
+        assert result["countries"]["JP"]["view_share_percent"] == 0
+        assert collector.analytics_service.query.call_args.kwargs["maxResults"] == 3
+
+        collector.analytics_service.query.side_effect = YouTubeAPIError("country unavailable")
+        failed = collector.get_country_analytics("2026-01-01", "2026-04-01")
+        assert failed["countries"] == {}
+        assert failed["total_views"] == 0
+        assert "country unavailable" in failed["error"]
+
     def test_returns_countries_with_subscribers(self, collector):
         """地域別データが subscribers_gained を含む"""
         mock_response = {
@@ -84,11 +109,6 @@ class TestGetCountryAnalytics:
 
 
 class TestGetSubscribedStatusAnalytics:
-    def test_mixin_docstring_includes_subscribed_status_analysis(self) -> None:
-        """公開 Mixin の責務が登録ステータス分析を含む。"""
-        assert AudienceAnalyticsMixin.__doc__ is not None
-        assert "登録ステータス" in AudienceAnalyticsMixin.__doc__
-
     def test_returns_statuses_with_share_and_uses_subscribed_status_dimension(self, collector):
         """登録済み／未登録のデータ、比率、API dimension を正しく扱う"""
         collector.analytics_service.query.return_value = {

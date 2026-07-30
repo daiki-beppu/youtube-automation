@@ -7,9 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `fix(analytics)`: 競合候補の channel ID を YouTube API 上限の 50 件単位で取得し、uploads playlist 欠損または有効な公開日を持つ動画がない候補を結果から除外する境界を公開 API テストで担保した（#2631）。
+- `fix(analytics)`: retention timeline が不正な retention 数値（変換不能・NaN・Infinity）や非有限の動画尺を `ValidationError` として利用者向けに拒否し、壊れたJSON・曖昧なanalysis参照・duration fallback・未照合・Markdown escaping の境界を直接検証した（#2612, #2636）。
+- `fix(live-chat)`: Codex の構造化出力が JSON object でない場合も `GeneratorError` として安全に拒否し、facade・filter・history保存失敗・投稿失敗・chat終了後再探索・CLI enabled/割込み/例外終了の実行時契約を直接検証した（#2648, #2651）。
+- `fix(playlist)`: playlist manager/status CLI が成功・中断・外部失敗を明示的な終了コードで返し、status/help/引数不備では不要な書き込み認証を開始せず、init/status/clean/assign の引数伝播と表示を command-level test で担保した（#2653）。
+- `fix(video-analyze)`: Gemini が JSON object 以外を返した場合を明示的な `ValidationError` として扱い、解析失敗時に sleep や結果保存へ進まない境界を固定（#2678）。
+- `fix(benchmark)`: Gemini サムネイル分析が依存欠落・client初期化・画像取得・生成・JSON解析で失敗した場合は収集済み動画データを変更せず、解析成功時だけ `thumbnail_analysis` とgeneration記録を追加する fail-soft 契約を明確化（#2611）。
+- `fix(benchmark)`: Short判定のISO 8601 durationを完全一致で検証し、空の `PT` や末尾に不正文字を含む値をShortとして扱わないよう修正（#2618）。
+- `fix(analytics)`: launch-curve plotでtargetなし・benchmarkサンプル不足によりラベル対象がない場合、空legendを描画せず警告なくPNGを生成する（#2617）。
+- `fix(config)`: channel targetの明示指定・`CHANNEL_DIR`・cwd fallbackの優先順位を検証し、fallback cwdがdirectoryでない場合も `ConfigError` で拒否する（#2630）。
+- `fix(video-validator)`: ffprobe の `0/0` frame rate を検証失敗として扱い、CLI をクラッシュさせず既存の metadata 読取失敗契約へ統一（#2644）。
+- `fix(pinned-comment)`: CLI で破損した履歴 JSON と atomic 履歴保存の I/O 失敗を終了コード 1 のエラー契約へ変換し、未処理例外で終了しないようにした（#2652）。
+- `fix(apply-rain-layers)`: ffmpeg 出力後の workflow-state 保存失敗を終了コード 1 として報告し、生成済み出力と更新前 state を保ったまま安全に再実行できるようにした（#2660）。
+- `fix(generate-videos-batch)`: 複数 collection の workflow-state 永続化が途中で失敗した場合を終了コード 1 に変換し、更新済み collection を再実行対象から除外したまま未更新分だけ再開できる契約を固定（#2662）。
+- ffprobe の `nan` / `inf` / `-inf` を duration・bitrate の取得失敗として正規化（#2668）
+- 動画 metadata の codec 欠落・非文字列を例外にせず validation error として分類（#2671）
+- Lyria の中断時回収ファイル保存に失敗しても元の `KeyboardInterrupt` を保ち、誤った回収成功表示を出さないよう修正（#2667）
+
 - `chore(takt)`: ユニットテスト監査で稼働中の `audit-unit-split` workflow 資産（workflow 1 本 + facets 4 本、v3 の上書きセマンティクス対策済み）を無改変で git 管理下に置いた。#2686 で `.takt/workflows/` / `.takt/facets/` の git 管理が前提となったため、worktree・他 checkout でも定義を解決できるようにする（#2690）。
 
 - `feat(takt)`: リポジトリ専用 workflow 群を整備し、takt を開発の標準実装経路へ戻した（#2453 の廃止根拠だった「workflow 実体の不在」を、`.takt/workflows/` の git 管理 + `takt workflow doctor` 検証で解消）。レーンは yt-auto-feature（設計ゲート + テスト先行）/ yt-auto-fix（診断ゲート + 再現テスト red 検証）/ yt-auto-docs（文書・スキル限定の軽量レーン）/ yt-auto-maintenance（維持契約の列挙 + safety net 付きリファクタリング）/ yt-auto-audit（台帳ベース汎用監査）の 5 本と、共通 callable の yt-auto-intake / yt-auto-impl-review。全実装レーンに CI 同等ゲート（`ci_verify`: ruff / any-gate / pytest / CHANGELOG のローカル実行。ローカル git hook 廃止後の push 前関門）を置き、facets（personas / knowledge / policies / instructions / output-contracts）約 50 本と persona routing を追加した。CLAUDE.md / AGENTS.md / `docs/development.md` / `docs/takt-operations.md` の「takt は使用しない」を反転し、`/issue-direct` は対話用の代替経路として残した（#2686）。
+- `fix(config)`: DistroKid credits の role と songwriter 名を空でない文字列に限定し、契約外 shape を `ConfigError` で早期拒否する。audio 上限、community draft、localizations、branding の実行時設定契約テストを補強し、community draft ADR 本文の文字列固定テストを削除（#2593, #2594, #2595, #2596, #2597, #2658）。
+- `fix(analytics)`: 不正な video analytics row と短い video-daily row を fail-soft に扱い、audience / channel / CTR / retention / revenue / traffic / video mixin の空応答・ゼロ値・API失敗・query境界を実行時テストで固定。audience mixin の docstring 文字列固定テストを削除（#2620, #2621, #2622, #2623, #2624, #2625, #2626, #2627, #2637）。
 
 - `refactor(integration)`: B6 の統合 receipt と sdist allowlist を追加し、root `auth/`、未使用 logging/template、helper の旧 Prettier 設定を整理した。Community Helper の install/update 導線を `/ext-install` と機能カタログへ追加した。OAuth セットアップは推奨経路（`/setup`）を `ONBOARDING.md` 2.3、手動ルート A / B・`client_secrets.json` の解決順・Vertex AI の project / location 解決・トラブルシューティングを新設の `docs/oauth-setup.md` へ移し、root `auth/SETUP.md` を廃止した。解決順の記述は `client_secrets_file_candidates()` の実装に合わせ、workspace root と main 作業ツリーへのフォールバック（#1721）を追記している。README 側の環境変数表も同じ 4 候補を明記し、workspace channel かつ linked worktree の fixture で全候補を観測して README / `docs/oauth-setup.md` の記載順が実装の候補列と一致することを `tests/test_oauth_onboarding_contract.py` で機械担保した。sdist allowlist には `ONBOARDING.md` / `docs/oauth-setup.md` / `docs/oauth-scopes.md` と、ルート B 詳細の `infra/terraform/gcp/README.md` を含め、README から辿る OAuth 導線が配布物内で解決することを実ビルド検査で機械担保した（`infra/` はこの README 以外を配布しない）。移設に伴って存在確認へ弱まっていた契約テスト（dashboard の起動時 API・`--skip-refresh`・部分エラー・配布境界・Spell UI 禁止、onboarding の dotenv 禁止と ADC / 1Password 記述、手動ルート A / B）は、移設先の `docs/architecture.md` / `ONBOARDING.md` / `docs/oauth-setup.md` に対して削除前と同等の内容 assertion を復元した（#2309）。
 

@@ -78,6 +78,8 @@ class CodexLiveChatGenerator:
                 raise GeneratorError(f"codex exec が失敗しました: {completed.stderr.strip()}")
             try:
                 result = json.loads(output_path.read_text(encoding="utf-8"))
+                if not isinstance(result, dict):
+                    raise TypeError("result must be an object")
                 if not isinstance(result.get("should_reply"), bool):
                     raise TypeError("should_reply must be boolean")
                 if not isinstance(result.get("reply_text"), str) or not isinstance(result.get("reason"), str):

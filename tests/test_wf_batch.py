@@ -270,6 +270,69 @@ def _summary(channel_root: Path) -> tuple[dict, Path]:
     return json.loads(summary_path.read_text(encoding="utf-8")), report_dirs[0]
 
 
+def test_collection_outcome_json_shapes_are_status_specific():
+    success = wf_batch.CollectionOutcome(
+        slug="ok",
+        status=wf_batch.STATUS_SUCCESS,
+        video_id="v1",
+        video_url="https://youtu.be/v1",
+        live_path="/live/ok",
+    )
+    failed = wf_batch.CollectionOutcome(
+        slug="ng",
+        status=wf_batch.STATUS_FAILED,
+        error="step failed",
+    )
+
+    assert success.to_json() == {
+        "slug": "ok",
+        "status": "success",
+        "video_id": "v1",
+        "video_url": "https://youtu.be/v1",
+        "live_path": "/live/ok",
+    }
+    assert failed.to_json() == {
+        "slug": "ng",
+        "status": "failed",
+        "error": "step failed",
+    }
+
+
+@pytest.mark.parametrize(
+    "output",
+    [
+        "",
+        "plain text",
+        "{invalid json}",
+        '{"action": 123}',
+        '{"status": "ok"}',
+    ],
+)
+def test_parse_transition_action_returns_unknown_for_invalid_output(output):
+    assert wf_batch._parse_transition_action(output) == "unknown"
+
+
+def test_verify_live_migration_rejects_missing_live_state(tmp_path):
+    with pytest.raises(ValidationError, match="live 移行が未完了"):
+        wf_batch._verify_live_migration(tmp_path, "missing")
+
+
+@pytest.mark.parametrize(
+    ("state", "message"),
+    [
+        ({}, "upload が記録されていません"),
+        ({"upload": {}}, "upload.video_id が記録されていません"),
+    ],
+)
+def test_verify_live_migration_rejects_missing_upload_fields(tmp_path, state, message):
+    live = tmp_path / "collections" / "live" / "slug"
+    live.mkdir(parents=True)
+    (live / "workflow-state.json").write_text(json.dumps(state), encoding="utf-8")
+
+    with pytest.raises(ValidationError, match=message):
+        wf_batch._verify_live_migration(tmp_path, "slug")
+
+
 class TestMainDryRun:
     def test_dry_run_lists_targets_and_warnings_without_processing(self, channel, monkeypatch, capsys):
         planning = channel / "collections" / "planning"
@@ -339,6 +402,27 @@ class TestMainBatchRun:
         # 失敗した collection の後続 step は打ち切られ、次の collection は処理されている
         assert ("001-a-collection", "yt-raw-master-check") not in calls
         assert ("002-b-collection", "yt-upload-collection") in calls
+
+    @pytest.mark.parametrize(
+        "step",
+        ["yt-collection-preflight", "yt-suno-select-tracks", "yt-raw-master-check"],
+    )
+    def test_each_pre_transition_cli_failure_is_reported(self, channel, monkeypatch, step):
+        planning = channel / "collections" / "planning"
+        _make_collection(planning, "001-a-collection", _state())
+        runner, calls = _make_runner(
+            channel,
+            failures={("001-a-collection", step): 9},
+        )
+        monkeypatch.setattr(wf_batch, "_run_command", runner)
+
+        assert wf_batch.main([]) == 2
+
+        summary, _ = _summary(channel)
+        assert summary["results"][0]["status"] == "failed"
+        assert "exit 9" in summary["results"][0]["error"]
+        assert ("001-a-collection", step) in calls
+        assert ("001-a-collection", "master-audio-transition") not in calls
 
     def test_transition_not_adopted_fails_collection(self, channel, monkeypatch):
         planning = channel / "collections" / "planning"

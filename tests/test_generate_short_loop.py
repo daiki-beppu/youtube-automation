@@ -248,3 +248,54 @@ class TestMain:
             with pytest.raises(SystemExit) as excinfo:
                 mod.main()
             assert excinfo.value.code == 1
+
+    def test_main_exits_one_when_client_configuration_fails(self, tmp_path, monkeypatch, capsys):
+        from youtube_automation.commands.media import generate_short_loop as mod
+        from youtube_automation.infrastructure.errors import ConfigError
+
+        col = tmp_path / "collection"
+        assets = col / "10-assets"
+        assets.mkdir(parents=True)
+        (assets / "short.png").write_bytes(b"\x00")
+        monkeypatch.setattr(sys, "argv", ["yt-generate-shorts-loop", str(col), "-y"])
+
+        with patch.multiple(
+            mod,
+            load_skill_config=DEFAULT,
+            create_veo_genai_client=DEFAULT,
+            generate_loop_video=DEFAULT,
+        ) as mocks:
+            mocks["load_skill_config"].return_value = {"veo": {}}
+            mocks["create_veo_genai_client"].side_effect = ConfigError("project is missing")
+
+            with pytest.raises(SystemExit) as excinfo:
+                mod.main()
+
+        assert excinfo.value.code == 1
+        assert "[ERROR] project is missing" in capsys.readouterr().out
+        mocks["generate_loop_video"].assert_not_called()
+
+    def test_main_exits_one_when_generation_fails(self, tmp_path, monkeypatch, capsys):
+        from youtube_automation.commands.media import generate_short_loop as mod
+
+        col = tmp_path / "collection"
+        assets = col / "10-assets"
+        assets.mkdir(parents=True)
+        (assets / "short.png").write_bytes(b"\x00")
+        monkeypatch.setattr(sys, "argv", ["yt-generate-shorts-loop", str(col), "-y"])
+
+        with patch.multiple(
+            mod,
+            load_skill_config=DEFAULT,
+            create_veo_genai_client=DEFAULT,
+            generate_loop_video=DEFAULT,
+        ) as mocks:
+            mocks["load_skill_config"].return_value = {"veo": {}}
+            mocks["generate_loop_video"].return_value = False
+
+            with pytest.raises(SystemExit) as excinfo:
+                mod.main()
+
+        assert excinfo.value.code == 1
+        assert "Shorts ループ動画生成: 失敗" in capsys.readouterr().out
+        mocks["generate_loop_video"].assert_called_once()

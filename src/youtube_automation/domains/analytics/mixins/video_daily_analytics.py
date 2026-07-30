@@ -69,4 +69,5 @@ class VideoDailyAnalyticsMixin:
                 "views": row[2],
             }
             for row in rows
+            if len(row) >= 3
         ]
