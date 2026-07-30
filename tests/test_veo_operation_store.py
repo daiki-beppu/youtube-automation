@@ -11,7 +11,25 @@ import hashlib
 import json
 from pathlib import Path
 
+import pytest
+
 from youtube_automation.utils import veo_operation_store as store
+
+# ---------------------------------------------------------------------------
+# image_sha256
+# ---------------------------------------------------------------------------
+
+
+def test_image_sha256_tracks_content_and_reads_multiple_chunks(tmp_path: Path) -> None:
+    image_path = tmp_path / "main.png"
+    content = b"a" * (1024 * 1024) + b"second-chunk"
+    image_path.write_bytes(content)
+
+    assert store.image_sha256(image_path) == hashlib.sha256(content).hexdigest()
+
+    image_path.write_bytes(content + b"-changed")
+    assert store.image_sha256(image_path) == hashlib.sha256(content + b"-changed").hexdigest()
+
 
 # ---------------------------------------------------------------------------
 # state_path
@@ -232,6 +250,27 @@ class TestLoad:
         # Then: None を返して上位に例外を漏らさない
         assert result is None
 
+    def test_read_os_error_propagates_and_preserves_state(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        output_path = tmp_path / "loop.mp4"
+        state_file = store.state_path(output_path, channel_root=tmp_path)
+        state_file.parent.mkdir(parents=True, exist_ok=True)
+        state_file.write_text("{}", encoding="utf-8")
+        original_read_text = Path.read_text
+
+        def fail_state_read(path: Path, *args, **kwargs):
+            if path == state_file:
+                raise PermissionError("state is unreadable")
+            return original_read_text(path, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "read_text", fail_state_read)
+
+        with pytest.raises(PermissionError, match="state is unreadable"):
+            store.load(output_path, channel_root=tmp_path)
+
+        assert state_file.exists()
+
     def test_prints_warn_on_json_corruption(self, tmp_path: Path, capsys) -> None:
         # Given
         output_path = tmp_path / "loop.mp4"
@@ -309,6 +348,46 @@ class TestLoad:
         # Then: None を返し、[Warn] を出力し、state ファイルを削除する
         assert result is None
         assert "[Warn]" in out
+        assert not state_file.exists()
+
+    @pytest.mark.parametrize(
+        "empty_field",
+        ["operation_name", "model", "input_image_sha256"],
+    )
+    def test_accepts_empty_non_path_string_fields(self, tmp_path: Path, empty_field: str) -> None:
+        output_path = tmp_path / "loop.mp4"
+        state_file = store.state_path(output_path, channel_root=tmp_path)
+        state_file.parent.mkdir(parents=True, exist_ok=True)
+        data = {
+            "operation_name": "projects/veo/99",
+            "model": "veo-3.1-fast",
+            "output_path": str(output_path.resolve()),
+            "input_image_sha256": "test-hash",
+        }
+        data[empty_field] = ""
+        state_file.write_text(json.dumps(data), encoding="utf-8")
+
+        assert store.load(output_path, channel_root=tmp_path) == data
+        assert state_file.exists()
+
+    def test_empty_output_path_is_mismatch_and_removes_state(self, tmp_path: Path, capsys) -> None:
+        output_path = tmp_path / "loop.mp4"
+        state_file = store.state_path(output_path, channel_root=tmp_path)
+        state_file.parent.mkdir(parents=True, exist_ok=True)
+        state_file.write_text(
+            json.dumps(
+                {
+                    "operation_name": "",
+                    "model": "",
+                    "output_path": "",
+                    "input_image_sha256": "",
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        assert store.load(output_path, channel_root=tmp_path) is None
+        assert "output_path が不一致" in capsys.readouterr().out
         assert not state_file.exists()
 
     def test_returns_none_when_operation_name_is_not_str(self, tmp_path: Path, capsys) -> None:
