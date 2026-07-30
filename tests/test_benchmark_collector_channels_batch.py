@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+import builtins
 from datetime import date
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -20,12 +21,14 @@ import pytest
 from googleapiclient.errors import HttpError
 from httplib2 import Response
 
+from youtube_automation.commands.analytics import benchmark_collector
 from youtube_automation.commands.analytics.benchmark_collector import (
     _CHANNELS_BATCH_SIZE,
     BenchmarkCollector,
     BenchmarkReportGenerator,
+    BenchmarkThumbnailAnalyzer,
 )
-from youtube_automation.infrastructure.errors import YouTubeAPIError
+from youtube_automation.infrastructure.errors import ConfigError, YouTubeAPIError
 
 
 def _make_collector(youtube_mock: MagicMock, *, benchmark_channels: list[dict] | None = None) -> BenchmarkCollector:
@@ -84,6 +87,124 @@ def _video_item(
         },
         "contentDetails": {"duration": duration},
     }
+
+
+def _thumbnail_analyzer(monkeypatch, tmp_path) -> BenchmarkThumbnailAnalyzer:
+    monkeypatch.setattr(
+        benchmark_collector,
+        "load_skill_config",
+        lambda _skill: {"thumbnail_analysis": {"model": "gemini-test", "delay_sec": 0, "prompt": "analyze"}},
+    )
+    return BenchmarkThumbnailAnalyzer(tmp_path)
+
+
+def _thumbnail_data() -> dict:
+    return {
+        "channels": [
+            {
+                "slug": "reference",
+                "videos": [
+                    {
+                        "video_id": "VID_REF",
+                        "title": "Reference Mix",
+                        "thumbnail_url": "https://example.com/thumbnail.jpg",
+                    }
+                ],
+            }
+        ]
+    }
+
+
+class TestBenchmarkThumbnailAnalyzer:
+    def test_missing_genai_dependency_preserves_collected_data(self, monkeypatch, tmp_path):
+        analyzer = _thumbnail_analyzer(monkeypatch, tmp_path)
+        data = _thumbnail_data()
+        real_import = builtins.__import__
+
+        def reject_genai(name, *args, **kwargs):
+            if name == "google.genai":
+                raise ImportError("google-genai unavailable")
+            return real_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, "__import__", reject_genai)
+
+        assert analyzer.analyze_thumbnails(data) is data
+        assert "thumbnail_analysis" not in data["channels"][0]["videos"][0]
+
+    def test_client_initialization_failure_preserves_collected_data(self, monkeypatch, tmp_path):
+        analyzer = _thumbnail_analyzer(monkeypatch, tmp_path)
+        data = _thumbnail_data()
+
+        def fail_client():
+            raise ConfigError("credentials unavailable")
+
+        monkeypatch.setattr("youtube_automation.utils.genai_client.create_global_genai_client", fail_client)
+
+        assert analyzer.analyze_thumbnails(data) is data
+        assert "thumbnail_analysis" not in data["channels"][0]["videos"][0]
+
+    @pytest.mark.parametrize(
+        ("download_error", "response"),
+        [
+            (OSError("download failed"), None),
+            (None, RuntimeError("generation failed")),
+            (None, SimpleNamespace(text="not json")),
+        ],
+    )
+    def test_processing_failures_do_not_add_analysis_or_generation(
+        self,
+        monkeypatch,
+        tmp_path,
+        download_error,
+        response,
+    ):
+        analyzer = _thumbnail_analyzer(monkeypatch, tmp_path)
+        data = _thumbnail_data()
+        client = MagicMock()
+        if isinstance(response, Exception):
+            client.models.generate_content.side_effect = response
+        else:
+            client.models.generate_content.return_value = response
+        monkeypatch.setattr("youtube_automation.utils.genai_client.create_global_genai_client", lambda: client)
+
+        def download(_url, path):
+            if download_error:
+                raise download_error
+            path.write_bytes(b"jpeg")
+
+        generation = MagicMock()
+        monkeypatch.setattr(benchmark_collector.urllib.request, "urlretrieve", download)
+        monkeypatch.setattr("youtube_automation.infrastructure.cost_tracker.log_generation", generation)
+        monkeypatch.setattr(benchmark_collector.time, "sleep", lambda _seconds: None)
+
+        assert analyzer.analyze_thumbnails(data) is data
+        assert "thumbnail_analysis" not in data["channels"][0]["videos"][0]
+        generation.assert_not_called()
+
+    def test_success_adds_parsed_analysis_and_generation_record(self, monkeypatch, tmp_path):
+        analyzer = _thumbnail_analyzer(monkeypatch, tmp_path)
+        data = _thumbnail_data()
+        client = MagicMock()
+        client.models.generate_content.return_value = SimpleNamespace(text='```json\n{"composition": "centered"}\n```')
+        monkeypatch.setattr("youtube_automation.utils.genai_client.create_global_genai_client", lambda: client)
+        monkeypatch.setattr(
+            benchmark_collector.urllib.request,
+            "urlretrieve",
+            lambda _url, path: path.write_bytes(b"jpeg"),
+        )
+        generation = MagicMock()
+        monkeypatch.setattr("youtube_automation.infrastructure.cost_tracker.log_generation", generation)
+        monkeypatch.setattr(benchmark_collector.time, "sleep", lambda _seconds: None)
+
+        assert analyzer.analyze_thumbnails(data) is data
+        assert data["channels"][0]["videos"][0]["thumbnail_analysis"] == {"composition": "centered"}
+        generation.assert_called_once_with(
+            "analysis",
+            "gemini-test",
+            quantity=1,
+            unit="call",
+            metadata={"video_id": "VID_REF", "channel_slug": "reference"},
+        )
 
 
 class TestFetchChannelsMetadata:
