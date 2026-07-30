@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
@@ -18,7 +19,14 @@ def _object(value: object) -> dict[str, object]:
 
 
 def _number(value: object, default: int | float = 0) -> int | float:
-    return value if isinstance(value, (int, float)) and not isinstance(value, bool) else default
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return default
+    return value if math.isfinite(value) else default
+
+
+def _non_negative_number(value: object, default: int | float = 0) -> int | float:
+    number = _number(value, default)
+    return number if number >= 0 else default
 
 
 def _text(value: object, default: str = "") -> str:
@@ -56,21 +64,21 @@ def _videos(snapshot: dict[str, object]) -> list[dict[str, object]]:
         source = _object(raw)
         video_id = _text(source.get("video_id"), key)
         reach = reporting.get(video_id, {})
-        likes = _number(source.get("likes"))
-        comments = _number(source.get("comments"))
-        shares = _number(source.get("shares"))
+        likes = _non_negative_number(source.get("likes"))
+        comments = _non_negative_number(source.get("comments"))
+        shares = _non_negative_number(source.get("shares"))
         videos.append(
             {
                 "video_id": video_id,
                 "title": _text(source.get("title"), "Unknown"),
-                "views": _number(source.get("views")),
-                "impressions": _number(reach.get("impressions")),
-                "ctr_percentage": _number(reach.get("ctr_percentage")),
+                "views": _non_negative_number(source.get("views")),
+                "impressions": _non_negative_number(reach.get("impressions")),
+                "ctr_percentage": _non_negative_number(reach.get("ctr_percentage")),
                 "likes": likes,
                 "comments": comments,
                 "shares": shares,
-                "subscribers_gained": _number(source.get("subscribers_gained")),
-                "average_view_duration_seconds": _number(source.get("average_view_duration")),
+                "subscribers_gained": _non_negative_number(source.get("subscribers_gained")),
+                "average_view_duration_seconds": _non_negative_number(source.get("average_view_duration")),
                 "engagements": likes + comments + shares,
             }
         )
@@ -139,11 +147,11 @@ def _ready_channel(
         },
         "scheduled_count": _integer_or_none(scheduled.get("count")),
         "summary": {
-            "views": _number(summary.get("total_views")),
-            "watch_time_minutes": _number(summary.get("total_watch_time")),
+            "views": _non_negative_number(summary.get("total_views")),
+            "watch_time_minutes": _non_negative_number(summary.get("total_watch_time")),
             "subscribers_net": _number(summary.get("net_subscribers")),
-            "engagements": _number(summary.get("total_engagement")),
-            "average_view_percentage": _number(summary.get("avg_view_percentage")),
+            "engagements": _non_negative_number(summary.get("total_engagement")),
+            "average_view_percentage": _non_negative_number(summary.get("avg_view_percentage")),
         },
         "videos": _videos(snapshot),
         "error": None,
@@ -240,5 +248,8 @@ class DashboardAPI:
         """選択チャンネルの動画を含む詳細を返す。"""
         for item in self._channels():
             if item.get("id") == channel_id:
-                return item
+                detail = dict(item)
+                if not isinstance(detail.get("videos"), list):
+                    detail["videos"] = []
+                return detail
         raise DashboardChannelNotFoundError(f"dashboard channel が見つかりません: {channel_id}")

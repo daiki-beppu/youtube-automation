@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import {
   CalendarRangeIcon,
   AlertCircleIcon,
@@ -467,6 +467,7 @@ export function App() {
   const [detail, setDetail] = useState<ChannelDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
+  const detailRequestId = useRef(0)
 
   useEffect(() => {
     requestJson<OverviewResponse>("/api/channels")
@@ -477,20 +478,27 @@ export function App() {
   }, [])
 
   async function selectChannel(channelId: string) {
+    const requestId = detailRequestId.current + 1
+    detailRequestId.current = requestId
     setSelectedId(channelId)
     setDetail(null)
     setError(null)
     setDetailLoading(true)
     try {
-      setDetail(
-        await requestJson<ChannelDetail>(
-          `/api/channels/${encodeURIComponent(channelId)}`
-        )
+      const response = await requestJson<ChannelDetail>(
+        `/api/channels/${encodeURIComponent(channelId)}`
       )
+      if (detailRequestId.current === requestId) {
+        setDetail(response)
+      }
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason))
+      if (detailRequestId.current === requestId) {
+        setError(reason instanceof Error ? reason.message : String(reason))
+      }
     } finally {
-      setDetailLoading(false)
+      if (detailRequestId.current === requestId) {
+        setDetailLoading(false)
+      }
     }
   }
 

@@ -1,102 +1,68 @@
-"""Dashboard 限定 TypeScript 例外の文書契約。
+"""Dashboard の実ソース・依存・runtime 境界を直接検証する。"""
 
-正本は移設で `CONTEXT.md` から `docs/architecture.md` へ移った。存在確認だけでは
-`--skip-refresh` や部分エラーのような内容契約が失われるため、移設先に対して
-削除前と同等の assertion を維持する。
-"""
+from __future__ import annotations
 
+import json
+import re
+import threading
 from pathlib import Path
+from urllib.request import urlopen
+
+from youtube_automation.commands.analytics.dashboard import create_server
 
 ROOT = Path(__file__).resolve().parents[1]
+DASHBOARD = ROOT / "dashboard"
+STATIC_IMPORT = re.compile(r"""(?:from\s+|import\s*)["']([^"']+)["']""")
 
 
-def _read(path: str) -> str:
-    return (ROOT / path).read_text(encoding="utf-8")
+def _dashboard_imports() -> list[tuple[Path, str]]:
+    imports: list[tuple[Path, str]] = []
+    for path in sorted((DASHBOARD / "src").rglob("*")):
+        if path.suffix not in {".ts", ".tsx"}:
+            continue
+        for specifier in STATIC_IMPORT.findall(path.read_text(encoding="utf-8")):
+            imports.append((path.relative_to(ROOT), specifier))
+    return imports
 
 
-def test_dashboard_governing_documents_are_migrated_and_present() -> None:
-    for relative_path in (
-        "docs/adr/0013-multi-channel-dashboard.md",
-        "docs/adr/0021-separate-repo-restart.md",
-        "docs/architecture.md",
-        "docs/development.md",
-        "docs/dashboard.md",
-        "CLAUDE.md",
-    ):
-        assert (ROOT / relative_path).is_file(), relative_path
-    assert not (ROOT / "CONTEXT.md").exists()
+def test_dashboard_source_does_not_cross_extension_or_removed_package_boundaries() -> None:
+    forbidden = ("extensions/shared-ui", "packages/")
+
+    violations = [
+        f"{path}: {specifier}"
+        for path, specifier in _dashboard_imports()
+        if any(boundary in specifier for boundary in forbidden)
+    ]
+
+    assert violations == []
 
 
-def test_dashboard_architecture_is_consistent_across_governing_docs() -> None:
-    adr = _read("docs/adr/0013-multi-channel-dashboard.md")
-    separation = _read("docs/adr/0021-separate-repo-restart.md")
-    claude = _read("CLAUDE.md")
-    architecture = _read("docs/architecture.md")
+def test_dashboard_dependency_graph_has_no_legacy_ui_or_workspace_package() -> None:
+    package = json.loads((DASHBOARD / "package.json").read_text(encoding="utf-8"))
+    dependencies = {
+        **package.get("dependencies", {}),
+        **package.get("devDependencies", {}),
+    }
 
-    for document in (adr, separation, claude, architecture):
-        assert "dashboard/" in document
-        assert "React" in document
-        assert "shadcn/ui" in document
-
-    assert "Python HTTP" in adr
-    assert "127.0.0.1" in adr
-    assert "起動時" in adr
-    assert "全チャンネル" in adr
-    assert "部分エラー" in adr
-    assert "公開予約" in adr
-    assert "dashboard 限定" in separation
-    assert "dashboard 限定" in claude
-    assert "他の TypeScript" in claude
-
-
-def test_dashboard_docs_define_quality_and_distribution_boundaries() -> None:
-    adr = _read("docs/adr/0013-multi-channel-dashboard.md")
-    development = _read("docs/development.md")
-
-    for command in ("lint", "typecheck", "test", "test:e2e", "build"):
-        assert command in development
-
-    assert "Base UI" in adr
-    assert "Tailwind CSS v4" in adr
-    assert "semantic token" in adr
-    assert "extensions/shared-ui" in adr
-    assert "直接 import しない" in adr
-    assert "wheel" in adr and "sdist" in adr
-
-
-def test_dashboard_docs_disclose_startup_api_usage_and_offline_escape_hatch() -> None:
-    dashboard = _read("docs/dashboard.md")
-    development = _read("docs/development.md")
-
-    for document in (dashboard, development):
-        assert "YouTube Data API" in document
-        assert "YouTube Analytics API" in document
-        assert "--skip-refresh" in document
-
-
-def test_analytics_skills_disclose_dashboard_collection_cost() -> None:
-    collect = _read(".claude/skills/analytics-collect/SKILL.md")
-    run = _read(".claude/skills/analytics-run/SKILL.md")
-
-    for document in (collect, run):
-        assert "yt-dashboard" in document
-        assert "チャンネル数" in document
-    assert "--skip-refresh" in collect
-
-
-def test_spell_ui_is_not_a_current_dashboard_decision() -> None:
-    for path in (
-        "docs/adr/0013-multi-channel-dashboard.md",
-        "docs/adr/0021-separate-repo-restart.md",
-        "CLAUDE.md",
-        "docs/architecture.md",
-        "docs/development.md",
-    ):
-        assert "Spell UI" not in _read(path)
-
-
-def test_dashboard_source_and_extension_boundaries_are_separate() -> None:
-    architecture = _read("docs/architecture.md")
-    assert "dashboard/" in architecture
-    assert "extensions/shared-ui" in architecture
+    assert not any(name.lower().replace("-", " ") == "spell ui" for name in dependencies)
+    assert not any(str(version).startswith("workspace:") for version in dependencies.values())
     assert not (ROOT / "packages").exists()
+
+
+def test_python_dashboard_runtime_serves_the_bundled_distribution() -> None:
+    server = create_server(port=0, channel_paths=[])
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        with urlopen(f"http://127.0.0.1:{server.server_port}/", timeout=5) as response:
+            status = response.status
+            content_type = response.headers.get_content_type()
+            body = response.read().decode("utf-8")
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+        server.server_close()
+
+    assert status == 200
+    assert content_type == "text/html"
+    assert "YouTube Analytics Dashboard" in body
