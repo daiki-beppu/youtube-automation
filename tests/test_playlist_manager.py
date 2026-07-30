@@ -732,6 +732,44 @@ def test_list_playlist_video_ids_returns_partial_result_for_invalid_item(manager
     assert manager._list_playlist_video_ids("PL_ALL") == {"v1"}
 
 
+def test_list_playlist_video_ids_keeps_first_page_when_next_page_fails(manager):
+    items = manager._youtube.playlistItems.return_value
+    first_request = items.list.return_value
+    first_response = {"items": [{"contentDetails": {"videoId": "v1"}}]}
+    first_request.execute.return_value = first_response
+    second_request = MagicMock()
+    second_request.execute.side_effect = OSError("page unavailable")
+    items.list_next.side_effect = [second_request]
+
+    assert manager._list_playlist_video_ids("PL_ALL") == {"v1"}
+
+
+def test_write_back_playlist_ids_preserves_unrelated_config(manager, monkeypatch):
+    raw = {
+        "playlists": {
+            "main": {"title": "Main", "playlist_id": None},
+            "existing": {"title": "Existing", "playlist_id": "PL_OLD"},
+        },
+        "unrelated": {"keep": True},
+    }
+    write = MagicMock()
+    monkeypatch.setattr("youtube_automation.domains.uploads.playlists.read_json", lambda _path: raw)
+    monkeypatch.setattr("youtube_automation.domains.uploads.playlists.write_json", write)
+
+    manager._write_back_playlist_ids({"main": "PL_NEW", "missing": "PL_IGNORED"})
+
+    write.assert_called_once_with(
+        manager._config_path,
+        {
+            "playlists": {
+                "main": {"title": "Main", "playlist_id": "PL_NEW"},
+                "existing": {"title": "Existing", "playlist_id": "PL_OLD"},
+            },
+            "unrelated": {"keep": True},
+        },
+    )
+
+
 @pytest.mark.parametrize("response", [None, {"items": {"videoId": "v1"}}])
 def test_list_playlist_video_ids_returns_empty_for_invalid_response_shape(manager, response):
     manager._youtube.playlistItems.return_value.list.return_value.execute.return_value = response
