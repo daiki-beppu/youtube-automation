@@ -8,7 +8,7 @@ import { afterEach, describe, expect, test } from "vitest";
 
 // ".bin" を含む specifier 風文字列は fallow が依存 import と誤認するため join で組み立てる。
 const oxlint = join(
-  fileURLToPath(new URL("../node_modules", import.meta.url)),
+  fileURLToPath(new URL("../../node_modules", import.meta.url)),
   ".bin",
   "oxlint"
 );
@@ -43,11 +43,13 @@ afterEach(() => {
   }
 });
 
+// REQ-2922-01: the shared config resolves from its own workspace and preserves severities.
 describe("React Hooks lint contract", () => {
   test("conditional Hook calls fail with rules-of-hooks", () => {
     const result = lintFixture("conditional-hook");
 
     expect(result.status).not.toBe(0);
+    expect(result.output).not.toContain("Cannot find package");
     expect(result.output).toContain("react-hooks(rules-of-hooks)");
     expect(result.output).toMatch(/\berror\b/);
   });
@@ -56,6 +58,7 @@ describe("React Hooks lint contract", () => {
     const result = lintFixture("missing-effect-dependency");
 
     expect(result.status).toBe(0);
+    expect(result.output).not.toContain("Cannot find package");
     expect(result.output).toContain("react-hooks(exhaustive-deps)");
     expect(result.output).toMatch(/\bwarning\b/);
   });
@@ -64,6 +67,7 @@ describe("React Hooks lint contract", () => {
     const result = lintFixture("ref-read-during-render");
 
     expect(result.status).toBe(0);
+    expect(result.output).not.toContain("Cannot find package");
     expect(result.output).not.toContain("react(react-compiler)");
   });
 });

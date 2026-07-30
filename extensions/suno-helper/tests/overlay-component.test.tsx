@@ -91,6 +91,27 @@ describe("Overlay shell", () => {
   let container: HTMLDivElement;
   let root: Root;
 
+  async function rerenderOverlay(): Promise<void> {
+    await act(async () => root.unmount());
+    container.innerHTML = "";
+    root = createRoot(container);
+    await act(async () => {
+      root.render(createElement(Overlay));
+    });
+  }
+
+  async function expectReloadRequired(): Promise<void> {
+    await waitFor(() => {
+      expect(container.querySelector('[data-slot="card"]')).toBeNull();
+      expect(
+        container.querySelector('[data-suno-control="reload-required"]')
+      ).not.toBeNull();
+      expect(
+        container.querySelector('[data-suno-control="reload-tab"]')?.textContent
+      ).toContain("タブを再読み込み");
+    });
+  }
+
   beforeEach(async () => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     vi.stubGlobal("browser", {
@@ -489,5 +510,51 @@ describe("Overlay shell", () => {
         'button[data-suno-control="stop"]'
       )?.disabled
     ).toBe(false);
+  });
+
+  // REQ-2918-01: initialization/persistence failures replace the shell with reload UI.
+  it("version handshake mismatch では shell を隠して再読み込みを案内する", async () => {
+    messagingMocks.sendMessage.mockResolvedValueOnce({
+      version: "0.2.4",
+      matches: false,
+    });
+
+    await rerenderOverlay();
+
+    await expectReloadRequired();
+  });
+
+  it("version handshake reject では shell を隠して再読み込みを案内する", async () => {
+    messagingMocks.sendMessage.mockRejectedValueOnce(
+      new Error("Extension context invalidated.")
+    );
+
+    await rerenderOverlay();
+
+    await expectReloadRequired();
+  });
+
+  it("overlay state read reject では shell を隠して再読み込みを案内する", async () => {
+    overlayStateMocks.readOverlayState.mockRejectedValueOnce(
+      new Error("storage unavailable")
+    );
+
+    await rerenderOverlay();
+
+    await expectReloadRequired();
+  });
+
+  it("overlay state write reject では shell を隠して再読み込みを案内する", async () => {
+    overlayStateMocks.writeOverlayState.mockRejectedValueOnce(
+      new Error("storage unavailable")
+    );
+
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>('button[aria-label="最小化"]')!
+        .click()
+    );
+
+    await expectReloadRequired();
   });
 });

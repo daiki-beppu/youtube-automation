@@ -305,7 +305,8 @@ describe("shadcn/ui foundation", () => {
     }
   );
 
-  it("Alert は role を暗黙追加せず、指定された semantic role と props を透過する", () => {
+  // REQ-2923-01: the test name states the explicit-role override contract.
+  it("Alert は明示 role で既定 alert role を上書きし、aria-live 等の props を透過する", () => {
     const html = renderToStaticMarkup(
       createElement(
         Alert,

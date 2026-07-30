@@ -29,6 +29,11 @@ export default defineContentScript({
         root?.unmount();
       },
     });
-    ui.mount();
+    try {
+      ui.mount();
+    } catch (error) {
+      ui.remove();
+      throw error;
+    }
   },
 });
