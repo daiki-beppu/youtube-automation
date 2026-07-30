@@ -306,6 +306,41 @@ class TestInterruptRecovery:
         assert len(recovered) == 1
         assert recovered[0].read_bytes() == audio
 
+    def test_recovery_write_failure_preserves_existing_files_and_reraises_interrupt(
+        self, mock_token, tmp_path, monkeypatch, capsys
+    ):
+        os.environ["GOOGLE_CLOUD_PROJECT"] = "my-project"
+        audio = b"\xff\xfb\x90\x00new-paid-audio"
+        from youtube_automation.utils import lyria_client
+
+        recovery_dir = tmp_path / "tmp" / "lyria-recovered"
+        recovery_dir.mkdir(parents=True)
+        existing = recovery_dir / "existing.mp3"
+        existing.write_bytes(b"existing-paid-audio")
+        monkeypatch.setattr(lyria_client, "channel_dir", lambda: tmp_path)
+        monkeypatch.setattr(
+            lyria_client,
+            "persist_recovered_audio",
+            MagicMock(side_effect=OSError("disk full")),
+        )
+
+        resp = MagicMock()
+        resp.ok = True
+        good_body = {
+            "outputs": [{"type": "audio", "mime_type": "audio/mpeg", "data": base64.b64encode(audio).decode()}]
+        }
+        resp.json.side_effect = [KeyboardInterrupt(), good_body]
+
+        with patch.object(lyria_client.requests, "post", return_value=resp):
+            with pytest.raises(KeyboardInterrupt):
+                lyria_client.generate_music("p", "lyria-3-pro-preview")
+
+        assert existing.read_bytes() == b"existing-paid-audio"
+        assert list(recovery_dir.iterdir()) == [existing]
+        output = capsys.readouterr().out
+        assert "退避に失敗しました: disk full" in output
+        assert "[Recovered]" not in output
+
     def test_persist_recovered_audio_writes_sha1_path_idempotently(self, tmp_path, monkeypatch):
         import hashlib
 

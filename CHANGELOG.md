@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `fix(generate-videos-batch)`: 複数 collection の workflow-state 永続化が途中で失敗した場合を終了コード 1 に変換し、更新済み collection を再実行対象から除外したまま未更新分だけ再開できる契約を固定（#2662）。
 - ffprobe の `nan` / `inf` / `-inf` を duration・bitrate の取得失敗として正規化（#2668）
 - 動画 metadata の codec 欠落・非文字列を例外にせず validation error として分類（#2671）
+- Lyria の中断時回収ファイル保存に失敗しても元の `KeyboardInterrupt` を保ち、誤った回収成功表示を出さないよう修正（#2667）
 
 - `chore(takt)`: ユニットテスト監査で稼働中の `audit-unit-split` workflow 資産（workflow 1 本 + facets 4 本、v3 の上書きセマンティクス対策済み）を無改変で git 管理下に置いた。#2686 で `.takt/workflows/` / `.takt/facets/` の git 管理が前提となったため、worktree・他 checkout でも定義を解決できるようにする（#2690）。
 
