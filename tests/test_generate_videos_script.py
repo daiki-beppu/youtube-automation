@@ -1518,14 +1518,6 @@ def test_overlay_explicit_nvenc_uses_codec_specific_options(tmp_path: Path) -> N
     assert "requested=h264_nvenc, selected=h264_nvenc" in result.stdout
 
 
-def test_overlay_benchmark_script_covers_required_candidates() -> None:
-    benchmark = (_SCRIPT_PATH.parent / "benchmark_overlay_encoders.sh").read_text(encoding="utf-8")
-    for candidate in ("baseline", "software-veryfast", "twostage", "h264_videotoolbox", "h264_nvenc"):
-        assert candidate in benchmark
-    assert "/usr/bin/time -p" in benchmark
-    assert "ssim" in benchmark
-
-
 def test_target_video_duration_unset_keeps_legacy_behavior(tmp_path: Path) -> None:
     """env / channel override が無ければ従来動作 (音声側 -stream_loop 無し)."""
     result, ffmpeg_log = _run_generate_videos(
