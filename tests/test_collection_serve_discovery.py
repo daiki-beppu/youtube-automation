@@ -387,6 +387,18 @@ class InitiallyUnavailableTransport(RecordingTransport):
         super().register(payload)
 
 
+class HeartbeatTemporarilyUnavailableTransport(RecordingTransport):
+    def __init__(self, state: RegistryState) -> None:
+        super().__init__(state)
+        self.attempts = 0
+
+    def register(self, payload: dict[str, object]) -> None:
+        self.attempts += 1
+        if self.attempts == 2:
+            raise urllib.error.URLError("temporary heartbeat failure")
+        super().register(payload)
+
+
 class HeartbeatRejectedTransport(RecordingTransport):
     def register(self, payload: dict[str, object]) -> None:
         if self.registered:
@@ -468,6 +480,39 @@ def test_lifecycle_recovers_when_initial_follower_registration_races_registry_st
         assert len(state.snapshot()["servers"]) == 1
     finally:
         lifecycle.stop()
+
+
+def test_lifecycle_reregisters_after_temporary_heartbeat_failure():
+    """REQ-2793-01: 初回成功後の一時 heartbeat 障害から再登録する."""
+    clock = FakeClock(100.0)
+    state = RegistryState(ttl_seconds=30, clock=clock)
+    wait = ControlledWait(clock)
+    transport = HeartbeatTemporarilyUnavailableTransport(state)
+    lifecycle = DiscoveryLifecycle(
+        server_info=server_info("http://alpha.localhost:9001", "Alpha"),
+        instance_id="instance-a",
+        heartbeat_seconds=10,
+        wait=wait,
+        transport=transport,
+    )
+
+    try:
+        lifecycle.start()
+        assert len(transport.registered) == 1
+
+        wait.release()
+        wait_until(lambda: assert_transport_attempts(transport, 2))
+        wait.release()
+        wait_until(lambda: assert_registration_count(transport, 2))
+
+        assert transport.attempts == 3
+        assert len(state.snapshot()["servers"]) == 1
+    finally:
+        lifecycle.stop()
+
+
+def assert_transport_attempts(transport: HeartbeatTemporarilyUnavailableTransport, expected: int) -> None:
+    assert transport.attempts >= expected
 
 
 def test_lifecycle_heartbeat_reports_permanent_http_rejection(monkeypatch):

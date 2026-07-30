@@ -17,12 +17,16 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
+from PIL import Image
 
 from youtube_automation.utils.image_provider.composition import (
+    apply_composition_rules,
     confirm_cost,
     log_image_cost,
+    persist_image,
     resolve_cost_per_image,
 )
 
@@ -251,3 +255,70 @@ class TestLogImageCost:
                 cost_usd=0.101,  # type: ignore[call-arg]
                 reference_count=0,
             )
+
+
+class TestApplyCompositionRules:
+    @pytest.mark.parametrize(
+        ("config", "prompt"),
+        [
+            ({}, "quiet library"),
+            ({"composition_prefix": "Wide shot"}, "quiet library"),
+            ({"composition_keywords": ["close-up"]}, "quiet library"),
+            (
+                {"composition_prefix": "Wide shot", "composition_keywords": ["close-up"]},
+                "A close-up portrait",
+            ),
+            (
+                {"composition_prefix": "Wide shot", "composition_keywords": ["close-up"]},
+                "Edit this image without changing the subject",
+            ),
+        ],
+    )
+    def test_returns_prompt_unchanged_when_prefix_is_not_applicable(self, config, prompt):
+        assert apply_composition_rules(prompt, config) == prompt
+
+    def test_prefixes_prompt_when_no_keyword_matches(self):
+        result = apply_composition_rules(
+            "quiet library",
+            {"composition_prefix": "Wide shot", "composition_keywords": ["close-up"]},
+        )
+        assert result == "Wide shot quiet library"
+
+
+class TestPersistImage:
+    def test_png_writes_lossless_and_jpeg_companion(self, tmp_path: Path):
+        output = tmp_path / "thumbnail.png"
+
+        saved = persist_image(Image.new("RGBA", (8, 8), (1, 2, 3, 128)), output, save_as_png=True)
+
+        assert saved == output
+        assert output.exists()
+        assert output.with_suffix(".jpg").exists()
+        with Image.open(output) as png:
+            assert png.format == "PNG"
+        with Image.open(output.with_suffix(".jpg")) as jpg:
+            assert jpg.format == "JPEG"
+
+    def test_jpeg_mode_removes_stale_non_jpeg_output_only_after_save(self, tmp_path: Path):
+        output = tmp_path / "thumbnail.png"
+        output.write_bytes(b"stale")
+
+        saved = persist_image(Image.new("RGB", (8, 8), "red"), output, save_as_png=False)
+
+        assert saved == output.with_suffix(".jpg")
+        assert saved.exists()
+        assert not output.exists()
+
+    def test_jpeg_conversion_failure_preserves_existing_source(self, tmp_path: Path):
+        output = tmp_path / "thumbnail.png"
+        output.write_bytes(b"stale")
+        image = MagicMock()
+        converted = MagicMock()
+        converted.save.side_effect = OSError("disk full")
+        image.convert.return_value = converted
+
+        with pytest.raises(OSError, match="disk full"):
+            persist_image(image, output, save_as_png=False)
+
+        assert output.read_bytes() == b"stale"
+        assert not output.with_suffix(".jpg").exists()

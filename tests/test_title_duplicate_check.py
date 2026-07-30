@@ -102,6 +102,7 @@ def test_main_rejects_title_over_100_codepoints(tmp_path: Path, capsys: pytest.C
     captured = capsys.readouterr()
     assert rc == 1
     assert "YouTube 制限 100 を超過" in captured.out
+    assert "title duplicate warning" not in captured.out
 
 
 def test_main_rejects_descriptions_title_over_100_codepoints(
@@ -140,6 +141,60 @@ def test_main_rejects_long_title_before_duplicate_warning(tmp_path: Path, capsys
     captured = capsys.readouterr()
     assert rc == 1
     assert "YouTube 制限 100 を超過" in captured.out
+    assert "title duplicate warning" not in captured.out
+
+
+@pytest.mark.parametrize(("strict_args", "expected_rc"), [([], 0), (["--strict"], 1)])
+def test_main_duplicate_warning_respects_strict_mode(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    strict_args: list[str],
+    expected_rc: int,
+) -> None:
+    """REQ-2792-01: duplicate warning の strict/non-strict 終了コードを固定する."""
+    from youtube_automation.commands.metadata.title_duplicate_check import main
+
+    title = "Rainy Night Focus Mix"
+    existing = tmp_path / "collections" / "live" / "published"
+    _write_descriptions_md(existing, _valid_descriptions_md(title))
+
+    rc = main(
+        [
+            "--title",
+            title,
+            "--collections-root",
+            str(tmp_path / "collections"),
+            *strict_args,
+        ]
+    )
+
+    assert rc == expected_rc
+    assert "title duplicate warning" in capsys.readouterr().out
+
+
+def test_main_excludes_the_current_live_collection_from_duplicate_check(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """REQ-2792-02: 現在の live collection は自己重複から除外する."""
+    from youtube_automation.commands.metadata.title_duplicate_check import main
+
+    current = tmp_path / "collections" / "live" / "current"
+    title = "Rainy Night Focus Mix"
+    _write_descriptions_md(current, _valid_descriptions_md(title))
+
+    rc = main(
+        [
+            str(current),
+            "--collections-root",
+            str(tmp_path / "collections"),
+            "--strict",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert rc == 0
+    assert "title duplicate check OK" in captured.out
     assert "title duplicate warning" not in captured.out
 
 

@@ -70,13 +70,6 @@ class TestSystemdUnitTemplate:
         )
         return text
 
-    def test_file_exists(self):
-        """Given infra/terraform/streaming/templates/
-        When youtube-stream.service.tftpl を探す
-        Then 存在する。
-        """
-        assert _SYSTEMD_TFTPL.exists(), "templates/youtube-stream.service.tftpl が存在しない"
-
     def test_unit_section_has_description(self):
         """Given .tftpl
         When [Unit] セクションを読む

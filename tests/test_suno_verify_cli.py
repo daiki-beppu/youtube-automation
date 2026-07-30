@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from tests.helpers.suno_verify import load_suno_verify_module
+from youtube_automation.infrastructure.errors import ConfigError, ValidationError
 
 
 def test_pyproject_registers_yt_suno_verify_script():
@@ -58,3 +59,34 @@ def test_help_flag_shows_usage_and_exits_zero(monkeypatch, capsys):
 
     assert exc_info.value.code == 0
     assert "usage" in capsys.readouterr().out.lower()
+
+
+def test_collection_resolution_failure_returns_one_and_prints_error(monkeypatch, capsys):
+    """REQ-2729-08: collection 入口解決失敗は traceback ではなく exit 1 と ERROR を返す."""
+    module = load_suno_verify_module()
+    monkeypatch.setattr(sys, "argv", ["yt-suno-verify", "missing"])
+    monkeypatch.setattr(
+        module,
+        "resolve_collection_dir",
+        lambda _collection: (_ for _ in ()).throw(ValidationError("collection missing")),
+    )
+
+    assert module.main() == 1
+    assert capsys.readouterr().out == "ERROR: collection missing\n"
+
+
+def test_config_loading_failure_returns_one_and_prints_error(monkeypatch, capsys, tmp_path):
+    """REQ-2729-09: 設定読込失敗も exit 1 と ERROR に正規化する."""
+    module = load_suno_verify_module()
+    collection = tmp_path / "collection"
+    collection.mkdir()
+    monkeypatch.setattr(sys, "argv", ["yt-suno-verify", str(collection)])
+    monkeypatch.setattr(module, "resolve_collection_dir", lambda _collection: collection)
+    monkeypatch.setattr(
+        module,
+        "load_skill_config",
+        lambda _skill: (_ for _ in ()).throw(ConfigError("suno config invalid")),
+    )
+
+    assert module.main() == 1
+    assert capsys.readouterr().out == "ERROR: suno config invalid\n"

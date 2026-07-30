@@ -905,26 +905,36 @@ class TestExecuteCompleteCollectionResume:
         assert cc.get("concurrent_marker") == "x"
 
     def test_should_not_reuse_stale_uri_after_successful_previous_upload(self, tmp_path):
-        """plan 要件 #6 回帰: 前回成功で URI クリア済みの tracking で再実行しても URI は None."""
-        # Given: 前回成功で URI クリア済みの tracking（=URI 無し、status pending に戻したとする）
-        col, _ = _make_tracking_collection(tmp_path, resume_uri=None)
+        """REQ-2802-01: 成功時の URI 消去を disk で観測し、次回へ stale URI を渡さない."""
+        col, tracking_path = _make_tracking_collection(tmp_path, resume_uri=_SESS_PREV)
         uploader, mock_inner = _make_uploader_with_collection_mock(tmp_path)
         mock_inner.upload_collection.return_value = {
             "complete_video": {
-                "video_id": "V_FRESH",
+                "video_id": "V_FIRST",
                 "video_url": "u",
                 "title": "t",
                 "file_path": "p",
             }
         }
 
-        # When
-        tracking = uploader._load_tracking(col)
-        uploader._execute_complete_collection(col, tracking, publish_at=None)
+        first_tracking = uploader._load_tracking(col)
+        uploader._execute_complete_collection(col, first_tracking, publish_at=None)
 
-        # Then
-        call_kwargs = mock_inner.upload_collection.call_args.kwargs
-        assert call_kwargs.get("resume_session_uri") is None
+        assert mock_inner.upload_collection.call_args_list[0].kwargs["resume_session_uri"] == _SESS_PREV
+        assert _read_resume_uri(tracking_path) is None
+
+        mock_inner.upload_collection.return_value = {
+            "complete_video": {
+                "video_id": "V_SECOND",
+                "video_url": "u2",
+                "title": "t2",
+                "file_path": "p2",
+            }
+        }
+        second_tracking = uploader._load_tracking(col)
+        uploader._execute_complete_collection(col, second_tracking, publish_at=None)
+
+        assert mock_inner.upload_collection.call_args_list[1].kwargs["resume_session_uri"] is None
 
     def test_should_resume_same_session_uri_on_retry_after_mid_upload_failure(self, tmp_path):
         """**issue #381 中核回帰**: 1 回目失敗 → 2 回目で同一 URI で resume."""

@@ -298,3 +298,63 @@ class TestRemoteChapterMaxSkillConfig:
         ):
             result = audit_remote({video_id: "test-collection"})
         assert any("chapters (>12)" in issue for issue in result[video_id])
+
+    def test_audit_remote_continues_when_quota_recording_fails(self) -> None:
+        """REQ-2791-01: quota 台帳失敗は remote audit を停止させない."""
+        video_id = "VID"
+        response = _yt_response(video_id, {})
+        with (
+            patch(
+                "youtube_automation.infrastructure.google.youtube.YouTubeClients",
+                return_value=SimpleNamespace(youtube_readonly=_patched_yt(response)),
+            ),
+            patch(
+                "youtube_automation.commands.metadata.metadata_audit.cost_tracker.log_quota",
+                side_effect=OSError("quota ledger unavailable"),
+            ),
+        ):
+            result = audit_remote({video_id: "test-collection"})
+
+        assert result == {video_id: []}
+
+    @pytest.mark.parametrize("snippet", [None, [], "invalid"])
+    def test_audit_remote_reports_non_object_snippet_without_stopping(self, snippet: object) -> None:
+        """REQ-2791-02: snippet 非 object を診断して次動画へ継続する."""
+        response = {
+            "items": [
+                {"id": "BROKEN", "snippet": snippet, "localizations": {}},
+                {
+                    "id": "VALID",
+                    "snippet": {"title": "valid", "description": ""},
+                    "localizations": {},
+                },
+            ]
+        }
+        with patch(
+            "youtube_automation.infrastructure.google.youtube.YouTubeClients",
+            return_value=SimpleNamespace(youtube_readonly=_patched_yt(response)),
+        ):
+            result = audit_remote({"BROKEN": "broken", "VALID": "valid"})
+
+        assert result["BROKEN"] == ["YT snippet missing or not an object"]
+        assert result["VALID"] == []
+
+    def test_audit_remote_reports_missing_snippet_without_stopping(self) -> None:
+        response = {
+            "items": [
+                {"id": "BROKEN", "localizations": {}},
+                {
+                    "id": "VALID",
+                    "snippet": {"title": "valid", "description": ""},
+                    "localizations": {},
+                },
+            ]
+        }
+        with patch(
+            "youtube_automation.infrastructure.google.youtube.YouTubeClients",
+            return_value=SimpleNamespace(youtube_readonly=_patched_yt(response)),
+        ):
+            result = audit_remote({"BROKEN": "broken", "VALID": "valid"})
+
+        assert result["BROKEN"] == ["YT snippet missing or not an object"]
+        assert result["VALID"] == []

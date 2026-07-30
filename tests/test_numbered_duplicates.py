@@ -106,6 +106,33 @@ class TestScanNumberedDuplicates:
         assert result.errors[0].path == tmp_path
         assert "permission denied" in result.errors[0].reason
 
+    def test_recursive_scan_keeps_found_duplicates_when_a_child_scan_fails(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+    ):
+        """REQ-2796-01: 部分走査失敗でも既発見 duplicate と error を両方返す."""
+        (tmp_path / "mix.mp3").write_bytes(b"base")
+        duplicate = tmp_path / "mix 2.mp3"
+        duplicate.write_bytes(b"duplicate")
+        failing_child = tmp_path / "unreadable"
+        failing_child.mkdir()
+        original_iterdir = Path.iterdir
+
+        def selective_iterdir(path: Path):
+            if path == failing_child:
+                raise PermissionError("permission denied")
+            return original_iterdir(path)
+
+        monkeypatch.setattr(Path, "iterdir", selective_iterdir)
+
+        result = scan_numbered_duplicates(tmp_path, recursive=True)
+
+        assert result.duplicates == (duplicate,)
+        assert len(result.errors) == 1
+        assert result.errors[0].path == failing_child
+        assert "permission denied" in result.errors[0].reason
+
     def test_scan_rejects_symlink_root(self, tmp_path: Path):
         outside = tmp_path / "outside"
         outside.mkdir()

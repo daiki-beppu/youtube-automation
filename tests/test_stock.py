@@ -110,6 +110,36 @@ class TestArchiveToStock:
         assert "generated_at" in meta
         assert "rejected_at" in meta
 
+    def test_metadata_write_failure_leaves_moved_image_for_recovery(
+        self, channel: Path, tmp_path: Path, monkeypatch
+    ) -> None:
+        image = _make_image(tmp_path / "main-v1.jpg")
+        original_write_text = Path.write_text
+
+        def fail_meta(path: Path, *args, **kwargs):
+            if path.name.endswith(META_SUFFIX):
+                raise OSError("disk full")
+            return original_write_text(path, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "write_text", fail_meta)
+
+        with pytest.raises(OSError, match="disk full"):
+            archive_to_stock(image, {"theme": "Tavern"}, channel_dir=channel)
+
+        moved = list((channel / "assets" / "stock" / "tavern").glob("*.jpg"))
+        assert not image.exists()
+        assert len(moved) == 1
+        assert not moved[0].with_suffix(moved[0].suffix + META_SUFFIX).exists()
+
+    def test_non_object_metadata_is_treated_as_missing(self, channel: Path) -> None:
+        image = _make_image(channel / "assets" / "stock" / "tavern" / "entry.jpg", b"x" * 2048)
+        image.with_suffix(image.suffix + META_SUFFIX).write_text('["not", "an", "object"]')
+
+        entries = list_stock(channel)
+
+        assert len(entries) == 1
+        assert entries[0].meta == {}
+
     def test_filename_includes_date_and_hash(self, channel: Path, tmp_path: Path) -> None:
         image = _make_image(tmp_path / "main-v1.jpg")
         dest = archive_to_stock(
@@ -600,3 +630,61 @@ class TestResolveStockRefs:
         )
         assert tiny_image not in result
         assert len(result) == 1
+
+
+@pytest.mark.parametrize("max_count", [True, -1, 1.5, "2"])
+def test_resolve_stock_refs_rejects_invalid_max_count(channel: Path, tmp_path: Path, max_count) -> None:
+    _seed_stock(channel, tmp_path, [("tavern", "thumbnail_candidate")])
+
+    with pytest.raises(ValidationError, match="max_count"):
+        resolve_stock_refs(
+            channel,
+            stock_refs_config={
+                "enabled": True,
+                "max_count": max_count,
+                "theme_match": "exact",
+            },
+            theme="tavern",
+        )
+
+
+def test_resolve_stock_refs_zero_max_count_returns_empty(channel: Path, tmp_path: Path) -> None:
+    _seed_stock(channel, tmp_path, [("tavern", "thumbnail_candidate")])
+
+    assert (
+        resolve_stock_refs(
+            channel,
+            stock_refs_config={"enabled": True, "max_count": 0, "theme_match": "exact"},
+            theme="tavern",
+        )
+        == []
+    )
+
+
+def test_resolve_stock_refs_rejects_unknown_theme_match(channel: Path) -> None:
+    with pytest.raises(ValidationError, match="theme_match"):
+        resolve_stock_refs(
+            channel,
+            stock_refs_config={"enabled": True, "theme_match": "prefix"},
+            theme="tavern",
+        )
+
+
+def test_resolve_stock_refs_surfaces_stat_failure(channel: Path, tmp_path: Path, monkeypatch) -> None:
+    archived = _seed_stock(channel, tmp_path, [("tavern", "thumbnail_candidate")])
+    target = archived[0]
+    original_stat = Path.stat
+
+    def fail_target(path: Path, *args, **kwargs):
+        if path == target:
+            raise OSError("stat denied")
+        return original_stat(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "stat", fail_target)
+
+    with pytest.raises(OSError, match="stat denied"):
+        resolve_stock_refs(
+            channel,
+            stock_refs_config={"enabled": True, "max_count": 1, "theme_match": "exact"},
+            theme="tavern",
+        )

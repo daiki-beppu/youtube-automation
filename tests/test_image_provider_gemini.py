@@ -338,6 +338,56 @@ class TestTransientErrorRetries:
         assert result.success is False
         assert mock_client.models.generate_content.call_count == RETRY_MAX
 
+    def test_persist_failure_then_success_retries_entire_generation(self, gemini_config, request_factory):
+        provider = GeminiImageProvider(gemini_config)
+        req = request_factory()
+        response = _fake_response([_fake_image_part(_png_bytes())])
+        mock_client = MagicMock()
+        mock_client.models.generate_content.return_value = response
+
+        with (
+            patch(
+                "youtube_automation.utils.image_provider.gemini.create_global_genai_client",
+                return_value=mock_client,
+            ),
+            patch(
+                "youtube_automation.utils.image_provider.gemini.persist_image",
+                side_effect=[OSError("disk busy"), req.output_path],
+            ) as persist,
+        ):
+            result = provider.generate(req)
+
+        assert result.success is True
+        assert result.saved_path == req.output_path
+        assert mock_client.models.generate_content.call_count == 2
+        assert persist.call_count == 2
+
+    def test_persist_failure_on_every_attempt_returns_failure(self, gemini_config, request_factory):
+        from youtube_automation.utils.image_provider import RETRY_MAX
+
+        provider = GeminiImageProvider(gemini_config)
+        req = request_factory()
+        response = _fake_response([_fake_image_part(_png_bytes())])
+        mock_client = MagicMock()
+        mock_client.models.generate_content.return_value = response
+
+        with (
+            patch(
+                "youtube_automation.utils.image_provider.gemini.create_global_genai_client",
+                return_value=mock_client,
+            ),
+            patch(
+                "youtube_automation.utils.image_provider.gemini.persist_image",
+                side_effect=OSError("disk full"),
+            ) as persist,
+        ):
+            result = provider.generate(req)
+
+        assert result.success is False
+        assert result.saved_path is None
+        assert mock_client.models.generate_content.call_count == RETRY_MAX
+        assert persist.call_count == RETRY_MAX
+
 
 class TestImageWithoutInlineDataRetries:
     def test_text_only_response_triggers_retry(self, gemini_config, request_factory):

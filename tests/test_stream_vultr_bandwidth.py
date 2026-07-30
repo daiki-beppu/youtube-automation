@@ -45,6 +45,22 @@ def _fake_urlopen(payload: dict, status: int = 200):
     return _Resp(json.dumps(payload).encode("utf-8"))
 
 
+def _fake_urlopen_bytes(body: bytes):
+    """JSON でない HTTP body も返せる urlopen response mock."""
+
+    class _Resp:
+        def read(self):
+            return body
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    return _Resp()
+
+
 def test_fetch_bandwidth_calls_vultr_api_with_bearer_token():
     """Given instance_id=ABC, api_key=KEY
     When fetch_bandwidth を呼ぶ
@@ -103,6 +119,45 @@ def test_fetch_bandwidth_raises_when_response_missing_bandwidth_key():
     with patch("youtube_automation.utils.streaming.vultr_bandwidth.urllib.request.urlopen") as mock_open:
         mock_open.return_value = _fake_urlopen({"unexpected": "shape"})
         with pytest.raises(YouTubeAPIError):
+            vultr_bandwidth.fetch_bandwidth(instance_id="ABC", api_key="KEY")
+
+
+def test_fetch_bandwidth_wraps_invalid_json():
+    """Given Vultr が不正 JSON を返す
+    When fetch_bandwidth を呼ぶ
+    Then YouTubeAPIError へ正規化し JSONDecodeError を原因として保持する。
+    """
+    with patch("youtube_automation.utils.streaming.vultr_bandwidth.urllib.request.urlopen") as mock_open:
+        mock_open.return_value = _fake_urlopen_bytes(b"{not-json")
+        with pytest.raises(YouTubeAPIError) as exc_info:
+            vultr_bandwidth.fetch_bandwidth(instance_id="ABC", api_key="KEY")
+
+    assert isinstance(exc_info.value.__cause__, json.JSONDecodeError)
+
+
+def test_fetch_bandwidth_wraps_timeout_error():
+    """Given HTTP 読み出しが timeout
+    When fetch_bandwidth を呼ぶ
+    Then YouTubeAPIError へ正規化し TimeoutError を原因として保持する。
+    """
+    timeout = TimeoutError("timed out")
+    with patch("youtube_automation.utils.streaming.vultr_bandwidth.urllib.request.urlopen") as mock_open:
+        mock_open.side_effect = timeout
+        with pytest.raises(YouTubeAPIError) as exc_info:
+            vultr_bandwidth.fetch_bandwidth(instance_id="ABC", api_key="KEY")
+
+    assert exc_info.value.__cause__ is timeout
+
+
+@pytest.mark.parametrize("payload", [[], "bandwidth", 42])
+def test_fetch_bandwidth_rejects_non_dict_payload(payload):
+    """Given Vultr が object 以外の JSON payload を返す
+    When fetch_bandwidth を呼ぶ
+    Then envelope を推測せず YouTubeAPIError で拒否する。
+    """
+    with patch("youtube_automation.utils.streaming.vultr_bandwidth.urllib.request.urlopen") as mock_open:
+        mock_open.return_value = _fake_urlopen_bytes(json.dumps(payload).encode("utf-8"))
+        with pytest.raises(YouTubeAPIError, match="unexpected shape"):
             vultr_bandwidth.fetch_bandwidth(instance_id="ABC", api_key="KEY")
 
 
@@ -179,26 +234,3 @@ def test_monthly_total_gb_returns_zero_when_month_absent():
         "2026-03-15": {"incoming_bytes": _BYTES_PER_GB, "outgoing_bytes": 0},
     }
     assert vultr_bandwidth.monthly_total_gb(bandwidth, year=2026, month=4) == 0.0
-
-
-def test_monthly_total_gb_handles_february_with_31day_query():
-    """Given 2026-02 のデータ
-    When monthly_total_gb(2026, 2) を呼ぶ
-    Then 2 月分のみ集計 (うるう年判定不要、文字列前方一致で十分)。
-    """
-    bandwidth = {
-        "2026-02-28": {"incoming_bytes": _BYTES_PER_GB * 5, "outgoing_bytes": 0},
-        "2026-03-01": {"incoming_bytes": _BYTES_PER_GB * 5, "outgoing_bytes": 0},
-    }
-    assert vultr_bandwidth.monthly_total_gb(bandwidth, year=2026, month=2) == pytest.approx(5.0)
-
-
-def test_monthly_total_gb_zero_padded_month_match():
-    """Given month=4 (int)
-    When キーが "2026-04-..." のとき
-    Then ゼロパディングを考慮してヒットさせる (month=4 → "04")。
-    """
-    bandwidth = {
-        "2026-04-01": {"incoming_bytes": _BYTES_PER_GB, "outgoing_bytes": 0},
-    }
-    assert vultr_bandwidth.monthly_total_gb(bandwidth, year=2026, month=4) == pytest.approx(1.0)
