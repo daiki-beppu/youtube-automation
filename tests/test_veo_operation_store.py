@@ -253,6 +253,7 @@ class TestLoad:
 
         # Then: None を返して上位に例外を漏らさない
         assert result is None
+
     def test_read_os_error_propagates_and_preserves_state(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
