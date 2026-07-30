@@ -13,7 +13,7 @@
 
 set -euo pipefail
 
-readonly ENV_FILE="/etc/youtube-stream-healthcheck.env"
+readonly ENV_FILE="${YOUTUBE_STREAM_HEALTHCHECK_ENV_FILE:-/etc/youtube-stream-healthcheck.env}"
 
 if [[ ! -r "$ENV_FILE" ]]; then
   echo "notify.sh: $ENV_FILE が読めない（webhook 未設定）" >&2

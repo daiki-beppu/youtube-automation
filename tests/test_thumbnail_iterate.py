@@ -3,13 +3,25 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
 
 ROOT = Path(__file__).parents[1]
 SCRIPT = ROOT / ".claude/skills/thumbnail-iterate/references/thumbnail-iterate-state.py"
+
+
+def _load_module():
+    spec = importlib.util.spec_from_file_location("thumbnail_iterate_state_failure", SCRIPT)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def _run(*args: str, cwd: Path) -> subprocess.CompletedProcess[str]:
@@ -240,6 +252,59 @@ def test_coherent_synthesis_requires_current_champion_as_control(tmp_path: Path)
 
     assert result.returncode == 1
     assert "current champion" in result.stderr
+
+
+def test_corrupt_json_and_invalid_numeric_inputs_leave_existing_state_unchanged(tmp_path: Path) -> None:
+    run_path = tmp_path / "data" / "thumbnail-iterate" / "runs" / "video-1.json"
+    run_path.parent.mkdir(parents=True)
+    run_path.write_bytes(b'{"existing":"state"}\n')
+    corrupt = tmp_path / "corrupt.json"
+    corrupt.write_text("[broken", encoding="utf-8")
+
+    result = _run("plan", "--repo", str(tmp_path), "--input", str(corrupt), cwd=tmp_path)
+    assert result.returncode == 1
+    assert "cannot read JSON" in result.stderr
+    assert run_path.read_bytes() == b'{"existing":"state"}\n'
+
+    source = _plan(tmp_path)
+    payload = json.loads(source.read_text(encoding="utf-8"))
+    payload["target_ctr"] = True
+    source.write_text(json.dumps(payload), encoding="utf-8")
+    invalid = _run("plan", "--repo", str(tmp_path), "--input", str(source), cwd=tmp_path)
+    assert invalid.returncode == 1
+    assert "target_ctr must be a number" in invalid.stderr
+    assert run_path.read_bytes() == b'{"existing":"state"}\n'
+
+
+def test_promote_copy_failure_preserves_run_and_removes_temporary_artifact(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = _plan(tmp_path)
+    assert _run("plan", "--repo", str(tmp_path), "--input", str(source), cwd=tmp_path).returncode == 0
+    run_path = tmp_path / "data/thumbnail-iterate/runs/video-1.json"
+    before = run_path.read_bytes()
+    run = json.loads(before)
+    history = _history(tmp_path, run, "B")
+    module = _load_module()
+
+    def fail_copy(_source, _destination):
+        raise OSError("injected copy failure")
+
+    monkeypatch.setattr(module.shutil, "copyfile", fail_copy)
+    with pytest.raises(OSError, match="injected copy failure"):
+        module._promote(
+            SimpleNamespace(
+                repo=str(tmp_path),
+                video_id="video-1",
+                history=str(history),
+            )
+        )
+
+    assert run_path.read_bytes() == before
+    assert not (tmp_path / "data/thumbnail-iterate/champion.json").exists()
+    champions = tmp_path / "data/thumbnail-iterate/champions"
+    assert not champions.exists() or list(champions.iterdir()) == []
 
 
 def test_skill_docs_define_routing_thresholds_and_champion_contract() -> None:

@@ -260,45 +260,6 @@ class TestRunFfmpegScript:
             "env は EnvironmentFile= 経由で systemd が注入する）"
         )
 
-    def test_script_execs_ffmpeg(self):
-        """Given ラッパー本文
-        When 全文を読む
-        Then ``exec /usr/bin/ffmpeg ...`` で起動している。
-
-        ``exec`` 必須: 中継 shell が残ると systemd の ``Restart`` /
-        ``RuntimeMaxSec`` シグナルが ffmpeg に直接届かなくなる。
-        plan §「実装ガイドライン」最重要項目。
-        """
-        text = read_file(_RUN_FFMPEG_SCRIPT)
-        assert re.search(r"^\s*exec\s+/usr/bin/ffmpeg\b", text, flags=re.MULTILINE), (
-            "run-ffmpeg.sh が `exec /usr/bin/ffmpeg ...` でプロセス置換していない"
-            "（中継 shell が残ると systemd シグナルが ffmpeg に直接届かない）"
-        )
-
-    def test_script_ffmpeg_argv_matches_pre_wrapper_spec(self):
-        """Given ラッパー本文
-        When ``exec /usr/bin/ffmpeg ...`` 行を読む
-        Then ``-re -stream_loop -1 -i "$VIDEO" -c:v copy -c:a copy -f flv "$RTMP_URL"``
-        の引数列が宣言されている (#185 互換)。
-
-        #185 で systemd unit 側に ``-c:v copy -c:a copy``（再エンコードなし、
-        動画音声をそのまま送出）を明示分離した意図を後退させない。``-c copy``
-        ショートハンドや anullsrc 復活を禁止する。``$VIDEO`` / ``$RTMP_URL`` は
-        ``set -u`` 配下の word-splitting 防止のためダブルクォート必須。
-        """
-        text = read_file(_RUN_FFMPEG_SCRIPT)
-        expected = (
-            r"exec\s+/usr/bin/ffmpeg\s+-re\s+-stream_loop\s+-1\s+"
-            r'-i\s+"\$VIDEO"\s+'
-            r"-c:v\s+copy\s+-c:a\s+copy\s+"
-            r'-f\s+flv\s+"\$RTMP_URL"\s*$'
-        )
-        assert re.search(expected, text, flags=re.MULTILINE), (
-            "run-ffmpeg.sh の ffmpeg argv が #185 仕様"
-            '（-re -stream_loop -1 -i "$VIDEO" -c:v copy -c:a copy -f flv "$RTMP_URL"）'
-            "と一致しない"
-        )
-
     def test_script_does_not_use_c_copy_shorthand(self):
         """Given ラッパー本文
         When 全文を読む

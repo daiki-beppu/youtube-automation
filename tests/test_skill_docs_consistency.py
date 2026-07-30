@@ -1571,6 +1571,21 @@ def test_insights_validator_enforces_schema_and_id_uniqueness(tmp_path: Path) ->
     assert duplicate.returncode == 1
     assert "重複" in duplicate.stderr
 
+    malformed_path = tmp_path / "malformed.jsonl"
+    malformed_path.write_text('{"id":\n', encoding="utf-8")
+    malformed = _run_insights_validator(malformed_path)
+    assert malformed.returncode == 1
+    assert "JSON として不正" in malformed.stderr
+
+    usage = subprocess.run(
+        [sys.executable, str(_INSIGHTS_VALIDATOR)],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert usage.returncode == 2
+    assert "usage:" in usage.stderr
+
 
 def test_theme_compare_missing_themes_error_uses_current_config_path(monkeypatch, caplog) -> None:
     from youtube_automation.commands.analytics import theme_compare

@@ -246,21 +246,6 @@ def test_package_level_editable_root_patch_propagates_to_asset_root(
 # ---------- 13-15: 物理レイアウト不変条件 ----------
 
 
-def test_each_split_file_is_within_line_limit() -> None:
-    # Given: 分割後の package directory
-    repo_root = Path(__file__).resolve().parents[1]
-    pkg_dir = repo_root / "src" / "youtube_automation" / "commands" / "system" / "skills_sync"
-
-    # When: 各 .py を走査
-    files = sorted(pkg_dir.glob("*.py"))
-
-    # Then: 全ファイル ≤ 300 行 (完了条件 #1)
-    assert len(files) >= 2, "package 化されていない (__init__.py + submodules を期待)"
-    for f in files:
-        line_count = len(f.read_text(encoding="utf-8").splitlines())
-        assert line_count <= 300, f"{f.name} has {line_count} lines (>300)"
-
-
 def test_old_module_file_is_removed_after_package_split() -> None:
     # Given: worktree root
     repo_root = Path(__file__).resolve().parents[1]

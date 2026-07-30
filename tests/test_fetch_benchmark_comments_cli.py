@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
+from unittest.mock import MagicMock
 
 import pytest
 
 from youtube_automation.commands.analytics import fetch_benchmark_comments as mod
-from youtube_automation.infrastructure.errors import ConfigError
+from youtube_automation.infrastructure.errors import ConfigError, YouTubeAPIError
 
 
 def _run_main_with_fake_collector(monkeypatch, argv: list[str], input_func=None) -> list[dict]:
@@ -85,8 +87,7 @@ def test_main_validates_channel_dir_before_prompt(monkeypatch):
 
     monkeypatch.setattr("builtins.input", fail_on_prompt)
 
-    with pytest.raises(ConfigError, match="missing CHANNEL_DIR"):
-        mod.main()
+    assert mod.main() == 1
 
 
 def test_main_cancels_when_prompt_is_rejected(monkeypatch, capsys):
@@ -105,10 +106,7 @@ def test_main_cancels_when_prompt_is_rejected(monkeypatch, capsys):
     monkeypatch.setattr(mod, "BenchmarkCommentCollector", FakeCollector)
     monkeypatch.setattr("builtins.input", lambda *_args: "n")
 
-    with pytest.raises(SystemExit) as exc_info:
-        mod.main()
-
-    assert exc_info.value.code == 0
+    assert mod.main() == 0
     assert calls == [
         {"min_views": mod.DEFAULT_MIN_VIEWS, "max_comments": mod.DEFAULT_MAX_COMMENTS, "competitor_slug": None}
     ]
@@ -135,10 +133,7 @@ def test_main_cancels_on_prompt_interrupt(monkeypatch, capsys, error):
     monkeypatch.setattr(mod, "BenchmarkCommentCollector", FakeCollector)
     monkeypatch.setattr("builtins.input", raise_error)
 
-    with pytest.raises(SystemExit) as exc_info:
-        mod.main()
-
-    assert exc_info.value.code == 0
+    assert mod.main() == 0
     assert calls == [
         {"min_views": mod.DEFAULT_MIN_VIEWS, "max_comments": mod.DEFAULT_MAX_COMMENTS, "competitor_slug": None}
     ]
@@ -321,3 +316,106 @@ def test_collect_empty_targets_returns_without_authentication_or_save(monkeypatc
     assert calls == ["fresh"]
     assert collector.youtube is None
     assert not (tmp_path / "comments_20260630.json").exists()
+
+
+def _comment_item(comment_id: str) -> dict:
+    return {
+        "snippet": {
+            "topLevelComment": {
+                "id": comment_id,
+                "snippet": {
+                    "authorDisplayName": f"author-{comment_id}",
+                    "textOriginal": f"text-{comment_id}",
+                    "likeCount": 1,
+                    "publishedAt": "2026-07-31T00:00:00Z",
+                },
+            }
+        }
+    }
+
+
+def test_fetch_comments_paginates_to_requested_limit_and_passes_page_token(tmp_path):
+    collector = _collector_for_date(tmp_path)
+    collector.max_comments = 3
+    youtube = MagicMock()
+    first = MagicMock()
+    first.execute.return_value = {
+        "items": [_comment_item("c1"), _comment_item("c2")],
+        "nextPageToken": "next-token",
+    }
+    second = MagicMock()
+    second.execute.return_value = {"items": [_comment_item("c3"), _comment_item("c4")]}
+    youtube.commentThreads.return_value.list.side_effect = [first, second]
+    collector.youtube = youtube
+
+    comments = collector._fetch_comments("video")
+
+    assert [comment["comment_id"] for comment in comments] == ["c1", "c2", "c3"]
+    assert youtube.commentThreads.return_value.list.call_args_list[0].kwargs == {
+        "videoId": "video",
+        "part": "snippet",
+        "order": "relevance",
+        "maxResults": 3,
+    }
+    assert youtube.commentThreads.return_value.list.call_args_list[1].kwargs == {
+        "videoId": "video",
+        "part": "snippet",
+        "order": "relevance",
+        "maxResults": 1,
+        "pageToken": "next-token",
+    }
+
+
+def test_fetch_comments_partial_api_failure_is_not_reported_as_empty_success(tmp_path):
+    collector = _collector_for_date(tmp_path)
+    collector.max_comments = 3
+    youtube = MagicMock()
+    first = MagicMock()
+    first.execute.return_value = {
+        "items": [_comment_item("c1")],
+        "nextPageToken": "next-token",
+    }
+    second = MagicMock()
+    second.execute.side_effect = RuntimeError("quota exhausted")
+    youtube.commentThreads.return_value.list.side_effect = [first, second]
+    collector.youtube = youtube
+
+    with pytest.raises(YouTubeAPIError, match="1件取得後"):
+        collector._fetch_comments("video")
+
+
+def test_atomic_save_failure_preserves_existing_artifact_and_cleans_temp(monkeypatch, tmp_path):
+    output = tmp_path / "comments.json"
+    output.write_text('{"existing": true}\n', encoding="utf-8")
+    before = output.read_bytes()
+
+    def fail_replace(_source, _destination):
+        raise OSError("injected replace failure")
+
+    monkeypatch.setattr(os, "replace", fail_replace)
+    with pytest.raises(OSError, match="injected replace failure"):
+        mod._write_json_atomic(output, {"replacement": True})
+
+    assert output.read_bytes() == before
+    assert not list(tmp_path.glob(".comments.json.*.tmp"))
+
+
+@pytest.mark.parametrize(
+    "error",
+    [YouTubeAPIError("api unavailable"), OSError("disk full")],
+)
+def test_main_reports_collection_failure_on_stderr_and_returns_nonzero(monkeypatch, capsys, error):
+    class FailingCollector:
+        def __init__(self, **_kwargs):
+            pass
+
+        def collect(self, *, force: bool = False):
+            raise error
+
+    monkeypatch.setattr(sys, "argv", ["yt-benchmark-comments", "--yes"])
+    monkeypatch.setattr(mod, "BenchmarkCommentCollector", FailingCollector)
+
+    assert mod.main() == 1
+    captured = capsys.readouterr()
+    assert "ERROR:" in captured.err
+    assert str(error) in captured.err

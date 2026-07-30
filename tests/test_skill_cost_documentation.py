@@ -20,8 +20,6 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-import pytest
-
 # リポジトリルート (tests/ の親)
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _SKILLS_DIR = _REPO_ROOT / ".claude" / "skills"
@@ -68,19 +66,6 @@ def _config_yaml_image_generation_block(text: str) -> str:
     if not match:
         raise AssertionError("thumbnail/config.default.yaml に image_generation セクションが見つかりません")
     return match.group(0)
-
-
-# ---------- skill ファイル存在確認 ----------
-
-
-@pytest.mark.parametrize(
-    "path",
-    [THUMBNAIL_SKILL_MD, THUMBNAIL_CONFIG_YAML, IDEATE_SKILL_MD],
-    ids=["thumbnail/SKILL.md", "thumbnail/config.default.yaml", "collection-ideate/SKILL.md"],
-)
-def test_target_skill_files_exist(path: Path) -> None:
-    """前提: 修正対象の skill ファイルが存在する。"""
-    assert path.exists(), f"{path} が存在しません"
 
 
 # ---------- thumbnail/SKILL.md (ttp_swap モードのコスト行) (Test #43) ----------

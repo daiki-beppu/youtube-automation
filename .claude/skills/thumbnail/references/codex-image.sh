@@ -12,6 +12,12 @@ fi
 prompt=${1:?usage: codex-image.sh [--require-reference] <prompt> <output.png> [reference.png ...]}
 out=${2:?output path required}
 shift 2
+out_dir=$(dirname "$out")
+
+if [ ! -d "$out_dir" ]; then
+  echo "ERROR: output parent directory does not exist: $out_dir" >&2
+  exit 1
+fi
 
 if [ "$require_reference" = true ] && [ "$#" -lt 1 ]; then
   echo "ERROR: codex-image.sh requires at least one reference image for thumbnail TTP generation" >&2
@@ -72,6 +78,10 @@ fi
 
 if ! command -v jq >/dev/null 2>&1; then
   echo "ERROR: jq CLI が PATH にありません (codex --json の JSONL 解析に必要)" >&2
+  exit 1
+fi
+if [ "$#" -gt 0 ] && ! command -v md5sum >/dev/null 2>&1 && ! command -v md5 >/dev/null 2>&1; then
+  echo "ERROR: reference 検証に必要な md5sum または md5 が PATH にありません" >&2
   exit 1
 fi
 
@@ -151,7 +161,6 @@ for ref in "$@"; do
   fi
 done
 
-out_dir=$(dirname "$out")
 # prompt 末尾の自動付与文は agent が image_generation tool を skip して
 # reference 画像を cp するだけで終わる failure mode を抑止するため、
 # 「新画像を生成」「reference を copy するな」を明示する。

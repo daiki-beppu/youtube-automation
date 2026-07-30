@@ -22,4 +22,5 @@
 
 set -eu
 
-exec /usr/bin/ffmpeg -re -stream_loop -1 -i "$VIDEO" -c:v copy -c:a copy -f flv "$RTMP_URL"
+FFMPEG_BIN="${FFMPEG_BIN:-/usr/bin/ffmpeg}"
+exec "$FFMPEG_BIN" -re -stream_loop -1 -i "$VIDEO" -c:v copy -c:a copy -f flv "$RTMP_URL"

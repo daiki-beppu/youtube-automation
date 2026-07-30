@@ -1,5 +1,6 @@
 """thumbnail skill の配布アセット内容を固定化するテスト。"""
 
+import hashlib
 import importlib.util
 import os
 import re
@@ -409,6 +410,36 @@ def test_share_thumbnail_as_main_true_is_noop(tmp_path: Path) -> None:
     assert result["status"] == "SKIP"
     assert (assets / "main.png").read_bytes() == b"textless"
     assert not (assets / "main.jpg").exists()
+
+
+@pytest.mark.parametrize("failure_point", ["copy", "replace"])
+def test_share_thumbnail_as_main_failure_preserves_existing_main(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    failure_point: str,
+) -> None:
+    module = _load_shared_main_module(f"share_thumbnail_as_main_{failure_point}")
+    collection = tmp_path / "collection"
+    assets = collection / "10-assets"
+    assets.mkdir(parents=True)
+    (assets / "thumbnail.jpg").write_bytes(b"approved-thumbnail")
+    main = assets / "main.jpg"
+    main.write_bytes(b"existing-main")
+    before = hashlib.sha256(main.read_bytes()).hexdigest()
+
+    def fail(*_args, **_kwargs):
+        raise OSError(f"injected {failure_point} failure")
+
+    if failure_point == "copy":
+        monkeypatch.setattr(module.shutil, "copyfile", fail)
+    else:
+        monkeypatch.setattr(module.os, "replace", fail)
+
+    with pytest.raises(OSError, match=f"injected {failure_point} failure"):
+        module.share_thumbnail_as_main(collection, enabled=False)
+
+    assert hashlib.sha256(main.read_bytes()).hexdigest() == before
+    assert not list(assets.glob(".main-shared-*"))
 
 
 def test_thumbnail_skill_applies_thumbnail_text_profile_with_default_fallback() -> None:

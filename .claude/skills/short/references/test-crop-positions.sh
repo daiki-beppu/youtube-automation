@@ -8,6 +8,11 @@ set -euo pipefail
 MASTER="${1:?usage: $(basename "$0") <master_video> [timestamp_sec]}"
 TS="${2:-30}"
 
+if [[ ! -f "$MASTER" ]]; then
+  echo "master video not found: $MASTER" >&2
+  exit 1
+fi
+
 ffmpeg -y -ss "$TS" -i "$MASTER" -frames:v 1 \
   -vf "crop=ih*9/16:ih,scale=1080:1920" /tmp/short-test-center.jpg
 ffmpeg -y -ss "$TS" -i "$MASTER" -frames:v 1 \
