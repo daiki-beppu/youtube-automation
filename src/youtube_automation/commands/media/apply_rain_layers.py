@@ -267,7 +267,11 @@ def apply_rain_layers(
         )
         return 1
 
-    _update_workflow_state_raw_master(paths.workflow_state_path, rain_cfg["output_name"])
+    try:
+        _update_workflow_state_raw_master(paths.workflow_state_path, rain_cfg["output_name"])
+    except OSError as e:
+        print(f"ERROR: workflow-state.json の更新に失敗: {e}", file=sys.stderr)
+        return 1
 
     if not quiet:
         print(f"  Rain layer applied: {output.name} (assets.raw_master を更新)")

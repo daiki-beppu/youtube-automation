@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `fix(config)`: channel targetの明示指定・`CHANNEL_DIR`・cwd fallbackの優先順位を検証し、fallback cwdがdirectoryでない場合も `ConfigError` で拒否する（#2630）。
 - `fix(video-validator)`: ffprobe の `0/0` frame rate を検証失敗として扱い、CLI をクラッシュさせず既存の metadata 読取失敗契約へ統一（#2644）。
 - `fix(pinned-comment)`: CLI で破損した履歴 JSON と atomic 履歴保存の I/O 失敗を終了コード 1 のエラー契約へ変換し、未処理例外で終了しないようにした（#2652）。
+- `fix(apply-rain-layers)`: ffmpeg 出力後の workflow-state 保存失敗を終了コード 1 として報告し、生成済み出力と更新前 state を保ったまま安全に再実行できるようにした（#2660）。
 
 - `chore(takt)`: ユニットテスト監査で稼働中の `audit-unit-split` workflow 資産（workflow 1 本 + facets 4 本、v3 の上書きセマンティクス対策済み）を無改変で git 管理下に置いた。#2686 で `.takt/workflows/` / `.takt/facets/` の git 管理が前提となったため、worktree・他 checkout でも定義を解決できるようにする（#2690）。
 

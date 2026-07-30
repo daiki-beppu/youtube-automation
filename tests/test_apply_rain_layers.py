@@ -506,6 +506,38 @@ class TestApplyRainLayersRun:
 
 
 class TestApplyRainLayersFailure:
+    def test_state_write_failure_preserves_output_and_allows_retry(self, tmp_path, monkeypatch):
+        collection = _setup_collection(tmp_path, n_rain=1)
+        workflow_state = collection / "workflow-state.json"
+        original_state = {"assets": {"raw_master": "master.mp3", "master_audio": None}}
+        workflow_state.write_text(json.dumps(original_state), encoding="utf-8")
+        monkeypatch.setattr(mod.shutil, "which", lambda _: "/usr/bin/ffmpeg")
+        _patch_skill_config(monkeypatch, {"post_processing": {"rain_layers": {"enabled": True}}})
+        captured: dict = {}
+        original_update = mod._update_workflow_state_raw_master
+        attempts = 0
+
+        def fail_once(path, new_name):
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                raise OSError("disk full")
+            return original_update(path, new_name)
+
+        monkeypatch.setattr(mod, "_update_workflow_state_raw_master", fail_once)
+        with patch.object(mod.subprocess, "run", side_effect=_fake_run_writes_output(captured)):
+            first_rc = apply_rain_layers(collection, collection, quiet=True)
+
+            assert first_rc == 1
+            assert json.loads(workflow_state.read_text(encoding="utf-8")) == original_state
+            assert (collection / "01-master" / "master-rain.wav").read_bytes() == _NEW_OUTPUT_BYTES
+
+            second_rc = apply_rain_layers(collection, collection, quiet=True)
+
+        assert second_rc == 0
+        assert json.loads(workflow_state.read_text(encoding="utf-8"))["assets"]["raw_master"] == "master-rain.wav"
+        assert len(captured["cmds"]) == 2
+
     def test_returns_rc1_when_ffmpeg_not_on_path(self, tmp_path, monkeypatch):
         # Given: enabled + rain wav 在り、ffmpeg 未インストール
         collection = _setup_collection(tmp_path, n_rain=1)
