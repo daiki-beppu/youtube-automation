@@ -5,6 +5,7 @@ from youtube_automation.domains.thumbnail.correlation import (
     MIN_SAMPLES_DEFAULT,
     _benjamini_hochberg,
     _pearson_p_value,
+    _regularized_incomplete_beta,
     compute_correlations,
 )
 
@@ -85,6 +86,15 @@ def test_pearson_p_value_matches_scipy_reference():
     assert _pearson_p_value(0.5, 12) == pytest.approx(0.09765, abs=0.001)
     assert _pearson_p_value(1.0, 10) == 0.0
     assert _pearson_p_value(0.0, 10) == pytest.approx(1.0, abs=0.001)
+
+
+def test_pearson_p_value_returns_one_for_fewer_than_three_samples():
+    assert _pearson_p_value(0.9, 2) == 1.0
+
+
+@pytest.mark.parametrize(("x", "expected"), [(-0.1, 0.0), (0.0, 0.0), (1.0, 1.0), (1.1, 1.0)])
+def test_regularized_incomplete_beta_clamps_x_endpoints(x, expected):
+    assert _regularized_incomplete_beta(2.0, 3.0, x) == expected
 
 
 def test_benjamini_hochberg_adjustment():

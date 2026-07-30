@@ -14,9 +14,12 @@ from pathlib import Path
 import pytest
 
 from youtube_automation.domains.thumbnail.references import (
+    canonicalize_benchmark_reference,
     format_reference_assignment,
     infer_benchmark_channel,
     normalize_reference_default,
+    plan_ttp_reference_assignments,
+    resolve_configured_benchmark_references,
 )
 from youtube_automation.infrastructure.errors import ConfigError
 from youtube_automation.utils.image_provider.composition import select_reference, validate_single_step_references
@@ -189,3 +192,125 @@ class TestNormalizeReferenceDefault:
 
     def test_empty_list_returns_empty(self) -> None:
         assert normalize_reference_default([]) == []
+
+
+class TestStrictBenchmarkReferenceBoundaries:
+    def test_configured_relative_reference_resolves_canonically(self, tmp_path: Path) -> None:
+        reference = tmp_path / "data" / "thumbnail_compare" / "benchmark" / "channel" / "a.jpg"
+        reference.parent.mkdir(parents=True)
+        reference.write_bytes(b"image")
+
+        result = resolve_configured_benchmark_references(
+            tmp_path,
+            "data/thumbnail_compare/benchmark/channel/a.jpg",
+        )
+
+        assert result.references == [reference.resolve()]
+        assert result.placeholders == []
+        assert result.invalid_reasons == []
+
+    def test_configured_placeholder_and_escaped_paths_are_not_accepted(self, tmp_path: Path) -> None:
+        result = resolve_configured_benchmark_references(
+            tmp_path,
+            ["{{REFERENCE}}", "../outside.jpg", str(tmp_path / "absolute.jpg")],
+        )
+
+        assert result.references == []
+        assert result.placeholders == ["{{REFERENCE}}"]
+        assert any("channel_dir 外" in reason for reason in result.invalid_reasons)
+        assert any("絶対パス" in reason for reason in result.invalid_reasons)
+
+    def test_canonicalization_rejects_missing_and_outside_paths(self, tmp_path: Path) -> None:
+        benchmark = tmp_path / "benchmark"
+        benchmark.mkdir()
+        outside = tmp_path / "outside.jpg"
+        outside.write_bytes(b"outside")
+
+        with pytest.raises(ConfigError, match="見つかりません"):
+            canonicalize_benchmark_reference(benchmark / "missing.jpg", benchmark)
+        with pytest.raises(ConfigError, match="benchmark サムネイルに限定"):
+            canonicalize_benchmark_reference(outside, benchmark)
+
+    def test_recent_history_is_avoided_before_older_and_unused_references(self, tmp_path: Path) -> None:
+        benchmark = tmp_path / "data" / "thumbnail_compare" / "benchmark" / "channel"
+        benchmark.mkdir(parents=True)
+        recent, old, unused = [benchmark / name for name in ("recent.jpg", "old.jpg", "unused.jpg")]
+        for path in (recent, old, unused):
+            path.write_bytes(path.name.encode())
+        older_log = tmp_path / "collections" / "live" / "20260101-old" / "20-documentation" / "thumbnail-prompts.md"
+        recent_log = tmp_path / "collections" / "live" / "20260102-new" / "20-documentation" / "thumbnail-prompts.md"
+        for log, ref in ((older_log, old), (recent_log, recent)):
+            log.parent.mkdir(parents=True)
+            log.write_text(
+                "## Reference Assignments\n"
+                "| attempt | output | reference_image | benchmark_channel |\n"
+                "|---:|---|---|---|\n"
+                f"| 1 | x | `{ref.relative_to(tmp_path)}` | channel |\n",
+                encoding="utf-8",
+            )
+
+        selected = plan_ttp_reference_assignments(
+            [recent, old, unused],
+            2,
+            True,
+            benchmark_root=benchmark.parent,
+            channel_dir=tmp_path,
+            dedup_recent_collections=1,
+        )
+
+        assert selected == [unused.resolve(), old.resolve()]
+
+    def test_all_used_references_fall_back_deterministically(self, tmp_path: Path) -> None:
+        benchmark = tmp_path / "data" / "thumbnail_compare" / "benchmark" / "channel"
+        benchmark.mkdir(parents=True)
+        refs = [benchmark / "a.jpg", benchmark / "b.jpg"]
+        for ref in refs:
+            ref.write_bytes(b"image")
+        log = tmp_path / "collections" / "live" / "20260101-one" / "20-documentation" / "thumbnail-prompts.md"
+        log.parent.mkdir(parents=True)
+        log.write_text(
+            "## Reference Assignments\n"
+            "| attempt | output | reference_image | benchmark_channel |\n"
+            "|---:|---|---|---|\n"
+            + "".join(
+                f"| {index} | x | `{ref.relative_to(tmp_path)}` | channel |\n" for index, ref in enumerate(refs, 1)
+            ),
+            encoding="utf-8",
+        )
+
+        selected = plan_ttp_reference_assignments(
+            refs,
+            2,
+            True,
+            benchmark_root=benchmark.parent,
+            channel_dir=tmp_path,
+            dedup_recent_collections=1,
+        )
+
+        assert selected == [ref.resolve() for ref in refs]
+
+    def test_unreadable_history_is_reported_as_config_error(self, tmp_path: Path, monkeypatch) -> None:
+        benchmark = tmp_path / "data" / "thumbnail_compare" / "benchmark" / "channel"
+        benchmark.mkdir(parents=True)
+        ref = benchmark / "a.jpg"
+        ref.write_bytes(b"image")
+        log = tmp_path / "collections" / "live" / "20260101-one" / "20-documentation" / "thumbnail-prompts.md"
+        log.parent.mkdir(parents=True)
+        log.write_text("## Reference Assignments\n", encoding="utf-8")
+        original = Path.read_text
+
+        def fail_history(path: Path, *args, **kwargs):
+            if path == log:
+                raise OSError("denied")
+            return original(path, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "read_text", fail_history)
+        with pytest.raises(ConfigError, match="履歴を読み取れません"):
+            plan_ttp_reference_assignments(
+                [ref],
+                1,
+                True,
+                benchmark_root=benchmark.parent,
+                channel_dir=tmp_path,
+                dedup_recent_collections=1,
+            )

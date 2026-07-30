@@ -13,9 +13,13 @@ CLI が同じ helper を使っていることを保証するため、import 経�
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import pytest
 
+from youtube_automation.commands.media import generate_image
+from youtube_automation.domains.media.image import ImageGenerationResult
 from youtube_automation.infrastructure.errors import ConfigError
 from youtube_automation.utils.image_provider.composition import (
     prompt_overwrite_or_rename,
@@ -143,37 +147,84 @@ class TestResolveReferencePaths:
         assert str(missing) in str(ei.value)
 
 
-class TestCliHelperShared:
-    """``generate_image.py`` が helper 経路を import していることの構造的回帰防止。
-
-    verbatim 重複（旧 inline ブロック）の再導入を構造的に防ぐため、
-    script ソースに ``prompt_overwrite_or_rename`` / ``resolve_reference_paths``
-    が import されていることを直接検査する。
-    """
-
-    SCRIPT_NAME = "generate_image.py"
-
-    def _read_script(self) -> str:
-        commands_dir = Path(__file__).resolve().parent.parent / "src" / "youtube_automation" / "commands"
-        path = commands_dir / "media" / self.SCRIPT_NAME
-        return path.read_text(encoding="utf-8")
-
-    def test_script_imports_shared_helpers(self):
-        src = self._read_script()
-        assert "prompt_overwrite_or_rename" in src, (
-            f"{self.SCRIPT_NAME} が prompt_overwrite_or_rename を経由していない（DRY 違反の再発）"
+class TestGenerateImageCliHelperContracts:
+    @pytest.fixture
+    def cli(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+        provider = MagicMock()
+        provider.supported_aspect_ratios = ()
+        provider.generate.side_effect = lambda req: ImageGenerationResult(success=True, saved_path=req.output_path)
+        cfg = SimpleNamespace(
+            provider="gemini",
+            gemini=SimpleNamespace(model="test-model"),
+            openai=None,
+            gemini_cli=None,
         )
-        assert "resolve_reference_paths" in src, (
-            f"{self.SCRIPT_NAME} が resolve_reference_paths を経由していない（DRY 違反の再発）"
+        monkeypatch.setattr(generate_image, "load_image_generation_config", lambda: cfg)
+        monkeypatch.setattr(generate_image, "get_provider", lambda _cfg: provider)
+        monkeypatch.setattr(generate_image, "_channel_root", lambda: tmp_path)
+        monkeypatch.setattr(
+            "youtube_automation.utils.skill_config.load_skill_config",
+            lambda _name: {"image_generation": {"gemini": {}}},
+        )
+        monkeypatch.setattr(generate_image, "resolve_cost_per_image", lambda *_args: 0.0)
+        monkeypatch.setattr(generate_image, "log_image_cost", lambda *_args, **_kwargs: None, raising=False)
+        return provider
+
+    def test_existing_output_with_yes_uses_versioned_path(self, cli, tmp_path: Path, monkeypatch):
+        output = tmp_path / "out.png"
+        output.write_bytes(b"existing")
+        monkeypatch.setattr(
+            "sys.argv",
+            ["yt-generate-image", "--prompt", "scene", "--output", str(output), "--yes"],
         )
 
-    def test_script_does_not_inline_overwrite_prompt(self):
-        """インラインの 16 行ブロック特徴語が残っていないこと（再発検知）。"""
-        src = self._read_script()
-        # 元の重複ブロック特有の連続フレーズ
-        assert "上書きしますか? (y/N):" not in src, f"{self.SCRIPT_NAME} に旧 inline overwrite prompt が再発している"
+        with pytest.raises(SystemExit, match="0"):
+            generate_image.main()
 
-    def test_script_does_not_inline_reference_loop(self):
-        """インラインの参照画像存在チェック特徴語が残っていないこと（再発検知）。"""
-        src = self._read_script()
-        assert "参照画像が見つかりません" not in src, f"{self.SCRIPT_NAME} に旧 inline 参照画像チェックが再発している"
+        assert cli.generate.call_args.args[0].output_path == tmp_path / "out-v2.png"
+        assert output.read_bytes() == b"existing"
+
+    def test_reference_is_resolved_and_forwarded_to_request(self, cli, tmp_path: Path, monkeypatch):
+        reference = tmp_path / "reference.png"
+        reference.write_bytes(b"reference")
+        output = tmp_path / "out.png"
+        monkeypatch.setattr(
+            "sys.argv",
+            [
+                "yt-generate-image",
+                "--prompt",
+                "scene",
+                "--output",
+                str(output),
+                "--reference",
+                str(reference),
+                "--yes",
+            ],
+        )
+
+        with pytest.raises(SystemExit, match="0"):
+            generate_image.main()
+
+        assert cli.generate.call_args.args[0].references == [reference]
+
+    def test_missing_reference_exits_before_provider_creation(self, cli, tmp_path: Path, monkeypatch, capsys):
+        monkeypatch.setattr(
+            "sys.argv",
+            [
+                "yt-generate-image",
+                "--prompt",
+                "scene",
+                "--output",
+                str(tmp_path / "out.png"),
+                "--reference",
+                str(tmp_path / "missing.png"),
+                "--yes",
+            ],
+        )
+
+        with pytest.raises(SystemExit, match="1"):
+            generate_image.main()
+
+        captured = capsys.readouterr()
+        assert "参照画像が見つかりません" in captured.err
+        cli.generate.assert_not_called()
