@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `fix(suno-distrokid)`: DistroKid の atomic write・metadata・workflow-state 読込境界と、Suno の ffmpeg cleanup・unattended HTTP・verify CLI・artifact reader の成功／失敗契約を直接回帰テストで固定し、不正な workflow-state shape と I/O 失敗を `ConfigError` に統一した（#2719, #2720, #2721, #2722, #2723, #2724, #2725, #2726, #2727, #2728, #2729）。
 - `fix(thumbnail)`: 画像保存・provider retry・参照履歴・自動選択・比較CLI・stock設定の失敗／境界契約を実回帰テストで固定し、参照画像欠落を stderr へ報告、非有限の自動選択 tolerance、非object stock metadata、不正な stock theme/max-count 設定を安全に拒否する。Codex wrapper と thumbnail skill の内部文字列だけを固定していた重複テストは、同等以上のCLI・成果物・失敗診断テストへ統合した（#2768〜#2786）。
 - `fix(analytics)`: 競合候補の channel ID を YouTube API 上限の 50 件単位で取得し、uploads playlist 欠損または有効な公開日を持つ動画がない候補を結果から除外する境界を公開 API テストで担保した（#2631）。
 - `fix(analytics)`: retention timeline が不正な retention 数値（変換不能・NaN・Infinity）や非有限の動画尺を `ValidationError` として利用者向けに拒否し、壊れたJSON・曖昧なanalysis参照・duration fallback・未照合・Markdown escaping の境界を直接検証した（#2612, #2636）。
