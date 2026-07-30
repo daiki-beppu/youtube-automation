@@ -5,6 +5,7 @@ BAHMetadataGenerator のユニットテスト
 副作用のない純粋ロジック（タイムスタンプ計算、ファイル名サニタイズ、メタデータ生成）を検証する。
 """
 
+import json
 import shutil
 import sys
 from pathlib import Path
@@ -14,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import pytest
 import yaml
 
+import youtube_automation.domains.metadata as metadata_api
 from youtube_automation.configuration import load_config
 from youtube_automation.domains.metadata import (
     LOCALIZED_TITLE_PLACEHOLDERS,
@@ -25,7 +27,12 @@ from youtube_automation.domains.metadata import (
     validate_scene_phrases,
 )
 from youtube_automation.domains.metadata import service as metadata_generator_module
-from youtube_automation.domains.metadata.localizations import _localized_title_values
+from youtube_automation.domains.metadata.descriptions import build_short_description
+from youtube_automation.domains.metadata.localizations import (
+    _localized_title_values,
+    build_short_localizations,
+)
+from youtube_automation.domains.metadata.placeholders import is_placeholder_value
 from youtube_automation.domains.metadata.titles import _extract_pattern_key
 from youtube_automation.infrastructure.errors import ValidationError
 from youtube_automation.utils.time_utils import format_duration_display
@@ -52,6 +59,96 @@ def _make_generator(dir_name: str = "20250907-live-8bit-adventure-music") -> BAH
     gen.bit_depth = gen.config.content.genre.style
     gen.tracks = []
     return gen
+
+
+# REQ-2787-01: placeholder policy の全入力分岐を直接観測する。
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        (None, True),
+        (123, False),
+        (" \t", True),
+        ("TBD", True),
+        ("{{ scene_phrase }}", True),
+        ("finished", False),
+        ("prefix {{ scene_phrase }}", False),
+    ],
+)
+def test_placeholder_value_policy_covers_every_input_branch(value: object, expected: bool) -> None:
+    assert is_placeholder_value(value) is expected
+
+
+# REQ-2788-01: localization template の非正規 shape を専用入力で観測する。
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"languages": []},
+        {"languages": {"ja": {"title_template": ["not", "a", "string"]}}},
+    ],
+)
+def test_localization_template_validator_ignores_noncanonical_shapes(payload: dict) -> None:
+    assert validate_localizations_title_templates(payload) == []
+
+
+# REQ-2790-01: metadata package の遅延 export 表と解決挙動を固定する。
+def test_metadata_public_api_resolves_exact_lazy_export_contract() -> None:
+    expected = {
+        "BAHMetadataGenerator",
+        "LOCALIZED_TITLE_PLACEHOLDERS",
+        "SceneTitleViolation",
+        "build_short_description",
+        "build_short_localizations",
+        "format_scene_title_violations",
+        "format_title_template",
+        "validate_localizations_title_templates",
+        "validate_scene_phrases",
+    }
+
+    assert set(metadata_api.__all__) == expected
+    resolved = {name: getattr(metadata_api, name) for name in metadata_api.__all__}
+    assert resolved == {
+        "BAHMetadataGenerator": BAHMetadataGenerator,
+        "LOCALIZED_TITLE_PLACEHOLDERS": LOCALIZED_TITLE_PLACEHOLDERS,
+        "SceneTitleViolation": SceneTitleViolation,
+        "build_short_description": build_short_description,
+        "build_short_localizations": build_short_localizations,
+        "format_scene_title_violations": format_scene_title_violations,
+        "format_title_template": format_title_template,
+        "validate_localizations_title_templates": validate_localizations_title_templates,
+        "validate_scene_phrases": validate_scene_phrases,
+    }
+
+
+def test_metadata_public_api_rejects_unknown_lazy_export() -> None:
+    with pytest.raises(AttributeError, match="definitely_not_public"):
+        metadata_api.__getattr__("definitely_not_public")
+
+
+# REQ-2789-01: syntactically valid な workflow-state 不正 shape を拒否する。
+@pytest.mark.parametrize(
+    ("payload", "loader", "message"),
+    [
+        ([], "_load_workflow_state", "root は object"),
+        ({"planning": []}, "_load_scene_emoji", "planning は object"),
+        ({"planning": {"scene_emoji": 123}}, "_load_scene_emoji", "scene_emoji は string"),
+        ({"scene_phrases": []}, "_load_scene_phrases", "scene_phrases は object"),
+    ],
+)
+def test_workflow_state_rejects_syntactically_valid_invalid_shapes(
+    tmp_path: Path,
+    payload: object,
+    loader: str,
+    message: str,
+) -> None:
+    (tmp_path / "workflow-state.json").write_text(
+        json.dumps(payload),
+        encoding="utf-8",
+    )
+    gen = _make_generator()
+    gen.collection_path = tmp_path
+
+    with pytest.raises(ValidationError, match=message):
+        getattr(gen, loader)()
 
 
 # ===========================================================================
@@ -665,6 +762,49 @@ class TestCrossfade:
         try:
             gen = BAHMetadataGenerator(str(channel / "collections" / "demo"))
             assert gen._crossfade_sec == 2.5
+        finally:
+            reset_config()
+            reset_skill_config()
+
+    def test_sequential_channels_do_not_inherit_config_or_skill_overrides(self, tmp_path, monkeypatch):
+        """REQ-2799-01: A→B 連続生成でも B の channel/skill 設定だけを使う."""
+        from youtube_automation.configuration import reset as reset_config
+        from youtube_automation.utils.skill_config import reset as reset_skill_config
+
+        fixture = Path(__file__).resolve().parent / "fixtures" / "sample_channel"
+        channels: list[Path] = []
+        for name, channel_name, crossfade in [
+            ("channel-a", "Channel A", 2.0),
+            ("channel-b", "Channel B", 7.0),
+        ]:
+            channel = tmp_path / name
+            shutil.copytree(fixture, channel)
+            meta_path = channel / "config" / "channel" / "meta.json"
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            meta["channel"]["name"] = channel_name
+            meta_path.write_text(json.dumps(meta), encoding="utf-8")
+            skills_dir = channel / "config" / "skills"
+            skills_dir.mkdir(parents=True)
+            (skills_dir / "masterup.yaml").write_text(
+                yaml.safe_dump({"audio": {"crossfade_duration": crossfade}}),
+                encoding="utf-8",
+            )
+            channels.append(channel)
+
+        reset_config()
+        reset_skill_config()
+        try:
+            monkeypatch.setenv("CHANNEL_DIR", str(channels[0]))
+            first = BAHMetadataGenerator(str(channels[0] / "collections" / "demo"))
+            assert first.config.meta.channel_name == "Channel A"
+            assert first._crossfade_sec == 2.0
+
+            monkeypatch.setenv("CHANNEL_DIR", str(channels[1]))
+            reset_config()
+            second = BAHMetadataGenerator(str(channels[1] / "collections" / "demo"))
+
+            assert second.config.meta.channel_name == "Channel B"
+            assert second._crossfade_sec == 7.0
         finally:
             reset_config()
             reset_skill_config()

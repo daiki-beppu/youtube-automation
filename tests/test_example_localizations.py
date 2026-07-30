@@ -39,14 +39,7 @@ def _assert_non_empty_string(value: object, *, field_name: str) -> None:
     assert value.strip(), f"{field_name} must not be empty"
 
 
-def test_example_localizations_file_exists() -> None:
-    assert _EXAMPLE_LOCALIZATIONS.is_file()
-
-
-def test_channel_new_localizations_template_exists() -> None:
-    assert _CHANNEL_SETUP_TEMPLATE.is_file()
-
-
+# REQ-2798-01: JSON 読込を伴う構造検証が file existence も一意に担保する。
 def test_example_localizations_supported_languages_are_high_cpm_tier_only() -> None:
     data = _read_json(_EXAMPLE_LOCALIZATIONS)
 

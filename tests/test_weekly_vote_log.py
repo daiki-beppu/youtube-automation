@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -17,6 +17,8 @@ from youtube_automation.domains.collections.weekly_vote_log import (
     compute_vote_log_weights,
     load_weekly_vote_log,
     load_weekly_vote_log_schema,
+    parse_iso_date,
+    parse_isoformat_datetime,
     poll_deprecation_message,
     save_weekly_vote_log,
     validate_weekly_vote_log,
@@ -75,6 +77,58 @@ def test_validate_minimal_payload():
 def test_validate_rejects_unknown_schema_version():
     with pytest.raises(ValidationError, match="schema_version"):
         validate_weekly_vote_log({"schema_version": 999, "entries": []})
+
+
+# REQ-2803-01: weekly vote log の root/entry/axis 非 object を個別拒否する。
+@pytest.mark.parametrize(
+    ("payload", "message"),
+    [
+        ([], "トップは dict"),
+        ({"schema_version": 1, "entries": ["invalid"]}, r"entries\[0\]: dict"),
+        (
+            {
+                "schema_version": 1,
+                "entries": [
+                    {
+                        "week_start": "2026-05-04",
+                        "axes": ["invalid"],
+                        "top_axis": "rain",
+                    }
+                ],
+            },
+            r"axes\[0\]: dict",
+        ),
+    ],
+)
+def test_validate_rejects_non_object_root_entry_and_axis_shapes(payload: object, message: str):
+    with pytest.raises(ValidationError, match=message):
+        validate_weekly_vote_log(payload)
+
+
+def test_public_date_helpers_parse_valid_values():
+    """REQ-2803-02: 公開日付 helper の正常変換を固定する."""
+    assert parse_iso_date("2026-05-04") == date(2026, 5, 4)
+    assert parse_isoformat_datetime("2026-05-04T12:34:56+00:00") == datetime(
+        2026,
+        5,
+        4,
+        12,
+        34,
+        56,
+        tzinfo=timezone.utc,
+    )
+
+
+@pytest.mark.parametrize(
+    ("parser", "value", "error"),
+    [
+        (parse_iso_date, "2026/05/04", ValidationError),
+        (parse_isoformat_datetime, "not-a-datetime", ValueError),
+    ],
+)
+def test_public_date_helpers_reject_invalid_values(parser, value: str, error: type[Exception]):
+    with pytest.raises(error):
+        parser(value)
 
 
 def test_validate_rejects_total_votes_mismatch():
