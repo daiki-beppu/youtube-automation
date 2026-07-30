@@ -13,8 +13,15 @@ import pytest
 
 from youtube_automation.configuration.comments import LiveChatConfig
 from youtube_automation.configuration.loader import _build_comments
-from youtube_automation.infrastructure.errors import ConfigError, GeneratorError
+from youtube_automation.infrastructure.errors import (
+    AutomationError,
+    ConfigError,
+    GeneratorError,
+    YouTubeAPIError,
+)
+from youtube_automation.utils import live_chat
 from youtube_automation.utils.live_chat.codex import CodexLiveChatGenerator
+from youtube_automation.utils.live_chat.filters import audit_text
 from youtube_automation.utils.live_chat.history import LiveChatHistory
 from youtube_automation.utils.live_chat.models import LiveChatMessage, ReplyDecision
 from youtube_automation.utils.live_chat.runner import LiveChatReplier
@@ -291,6 +298,50 @@ def test_history_rejects_unknown_schema(tmp_path):
         LiveChatHistory(path)
 
 
+def test_live_chat_facade_exports_replier():
+    assert live_chat.__all__ == ["LiveChatReplier"]
+    assert live_chat.LiveChatReplier is LiveChatReplier
+
+
+@pytest.mark.parametrize(
+    ("text", "expected_language", "ng_words", "max_length", "expected"),
+    [
+        ("", "ja", [], 10, "empty_or_too_long"),
+        ("12345", "ja", [], 5, None),
+        ("123456", "ja", [], 5, "empty_or_too_long"),
+        ("SPAM message", None, ["spam"], 100, "ng_word"),
+        ("hello", "ja-JP", [], 100, "language_mismatch"),
+        ("質問", "en-US", [], 100, "language_mismatch"),
+        ("123", "ja", [], 100, None),
+    ],
+)
+def test_audit_text_filter_boundaries(text, expected_language, ng_words, max_length, expected):
+    assert (
+        audit_text(
+            text,
+            expected_language=expected_language,
+            ng_words=ng_words,
+            max_length=max_length,
+        )
+        == expected
+    )
+
+
+def test_history_save_failure_propagates_without_replacing_file(tmp_path, monkeypatch):
+    history = LiveChatHistory(tmp_path / "history.json")
+
+    def fail_replace(source, destination):
+        raise PermissionError("history is read-only")
+
+    monkeypatch.setattr("youtube_automation.utils.live_chat.history.os.replace", fail_replace)
+
+    with pytest.raises(PermissionError, match="history is read-only"):
+        history.mark("m1", outcome="skipped")
+
+    assert not history.path.exists()
+    assert history.path.with_suffix(".json.tmp").is_file()
+
+
 def test_codex_uses_output_schema_and_parses_single_decision(monkeypatch):
     captured = {}
 
@@ -313,6 +364,31 @@ def test_codex_uses_output_schema_and_parses_single_decision(monkeypatch):
     assert captured["args"].count("codex") == 1
     assert captured["kwargs"]["timeout"] == 3
     assert "<\\/viewer_input>" in captured["kwargs"]["input"]
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        [],
+        {"should_reply": "yes", "reply_text": "返信", "reason": "question"},
+        {"should_reply": True, "reply_text": "返信"},
+    ],
+)
+def test_codex_rejects_invalid_structured_output(monkeypatch, payload):
+    def fake_run(args, **kwargs):
+        output = Path(args[args.index("--output-last-message") + 1])
+        output.write_text(json.dumps(payload), encoding="utf-8")
+        return SimpleNamespace(returncode=0, stderr="")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    with pytest.raises(GeneratorError, match="構造化出力が不正"):
+        CodexLiveChatGenerator(model=None, timeout_sec=1).decide(
+            LiveChatMessage("m", "u", "viewer", "質問", ""),
+            persona="",
+            language="ja",
+            max_length=200,
+        )
 
 
 def test_codex_timeout_is_domain_error(monkeypatch):
@@ -341,3 +417,97 @@ def test_cli_disabled_does_not_authenticate(monkeypatch):
     monkeypatch.setattr(live_chat_reply, "YouTubeClients", clients)
     assert live_chat_reply.main([]) == 1
     clients.assert_not_called()
+
+
+def test_insert_failure_is_recorded_without_reply(tmp_path, monkeypatch):
+    from youtube_automation.utils.live_chat import runner
+
+    response = {"nextPageToken": "n", "pollingIntervalMillis": 1, "items": [message_item()]}
+    replier, _, messages, _, _ = build_replier(
+        tmp_path,
+        message_responses=[response],
+        decisions=[ReplyDecision(True, "返信です", "question")],
+    )
+
+    def execute(request, context):
+        if "insert" in context:
+            raise YouTubeAPIError("insert failed", reason="backendError")
+        return request.execute()
+
+    monkeypatch.setattr(runner, "execute_with_retry", execute)
+
+    replier.run_forever(max_polls=1)
+
+    record = json.loads((tmp_path / "live_chat_reply_history.json").read_text())["processed"]["m1"]
+    assert record["outcome"] == "skipped"
+    assert record["reason"] == "insert_error"
+    assert len(messages.insert_calls) == 1
+
+
+def test_ended_chat_resolves_new_chat_and_continues_polling(tmp_path):
+    replier, broadcasts, _, _, sleeps = build_replier(
+        tmp_path,
+        message_responses=[],
+        settings=config(no_broadcast_retry_sec=7),
+    )
+    broadcasts.list_responses.append({"items": [{"snippet": {"liveChatId": "chat-2"}}]})
+    replier.fetch_messages = MagicMock(
+        side_effect=[
+            YouTubeAPIError("ended", reason="liveChatEnded"),
+            {"nextPageToken": "n", "pollingIntervalMillis": 1, "items": []},
+        ]
+    )
+
+    replier.run_forever(max_polls=1)
+
+    assert replier.fetch_messages.call_args_list[0].args == ("chat-1", None)
+    assert replier.fetch_messages.call_args_list[1].args == ("chat-2", None)
+    assert sleeps == [7]
+
+
+def _enabled_cli(monkeypatch, tmp_path):
+    from youtube_automation.commands.youtube import live_chat_reply
+
+    settings = config()
+    monkeypatch.setattr(
+        live_chat_reply,
+        "load_config",
+        lambda: SimpleNamespace(comments=SimpleNamespace(live_chat=settings)),
+    )
+    monkeypatch.setattr(live_chat_reply, "channel_dir", lambda: tmp_path)
+    youtube = object()
+    clients = MagicMock(return_value=SimpleNamespace(youtube=youtube))
+    auth_handler = MagicMock(return_value=object())
+    replier = MagicMock()
+    monkeypatch.setattr(live_chat_reply, "YouTubeClients", clients)
+    monkeypatch.setattr(live_chat_reply, "YouTubeOAuthHandler", auth_handler)
+    monkeypatch.setattr(live_chat_reply, "LiveChatReplier", replier)
+    return live_chat_reply, settings, youtube, clients, auth_handler, replier
+
+
+def test_cli_enabled_authenticates_and_runs_replier(tmp_path, monkeypatch):
+    live_chat_reply, settings, youtube, clients, auth_handler, replier = _enabled_cli(monkeypatch, tmp_path)
+
+    assert live_chat_reply.main([]) == 0
+
+    auth_handler.assert_called_once_with()
+    clients.assert_called_once_with(full_handler=auth_handler.return_value)
+    replier.assert_called_once_with(youtube, config=settings, channel_dir=tmp_path)
+    replier.return_value.run_forever.assert_called_once_with()
+
+
+def test_cli_keyboard_interrupt_exits_zero(tmp_path, monkeypatch, caplog):
+    live_chat_reply, _, _, _, _, replier = _enabled_cli(monkeypatch, tmp_path)
+    replier.return_value.run_forever.side_effect = KeyboardInterrupt
+
+    with caplog.at_level("INFO"):
+        assert live_chat_reply.main([]) == 0
+    assert "ライブチャット監視を終了します" in caplog.text
+
+
+def test_cli_automation_error_exits_one(tmp_path, monkeypatch, capsys):
+    live_chat_reply, _, _, clients, _, _ = _enabled_cli(monkeypatch, tmp_path)
+    clients.side_effect = AutomationError("authentication failed")
+
+    assert live_chat_reply.main([]) == 1
+    assert "[error] authentication failed" in capsys.readouterr().err
