@@ -16,13 +16,13 @@ export interface UseDraggableResult {
 }
 
 function isInteractive(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) {
+  if (!(target instanceof Element)) {
     return false;
   }
   return (
-    target.tagName === "INPUT" ||
-    target.tagName === "TEXTAREA" ||
-    target.isContentEditable
+    target.closest(
+      'a[href],button,input,select,textarea,[contenteditable]:not([contenteditable="false"]),[role="button"],[role="link"]'
+    ) !== null
   );
 }
 

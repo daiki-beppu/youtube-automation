@@ -194,4 +194,64 @@ describe("InjectSession", () => {
       /injectStart/
     );
   });
+
+  it("static injection rejection keeps INJECTING, clears payload, and permits a clean restart", async () => {
+    const made = makeInjector();
+    let failStatic = true;
+    made.injector.injectStaticFields = async () => {
+      made.calls.push({ kind: "static" });
+      if (failStatic) throw new Error("static injection failed");
+    };
+    const localReports: { phase: Phase; message: string }[] = [];
+    const localSession = new InjectSession(made.injector, (phase, message) =>
+      localReports.push({ phase, message })
+    );
+
+    await expect(localSession.start(makePayload(1))).rejects.toThrow(
+      "static injection failed"
+    );
+    expect(localReports.at(-1)?.phase).toBe(PHASES.INJECTING);
+    expect(() => localSession.track(0, makeAsset("track-01.mp3"))).toThrow(
+      /injectStart/u
+    );
+
+    failStatic = false;
+    await expect(localSession.start(makePayload(1))).resolves.toBeUndefined();
+    expect(() =>
+      localSession.track(0, makeAsset("track-01.mp3"))
+    ).not.toThrow();
+  });
+
+  it("AI finish rejection keeps payload for retry, emits no DONE, and clears only after success", async () => {
+    const made = makeInjector();
+    let failAi = true;
+    made.injector.injectAiDisclosure = async () => {
+      made.calls.push({ kind: "ai" });
+      if (failAi) throw new Error("AI injection failed");
+    };
+    const localReports: { phase: Phase; message: string }[] = [];
+    const localSession = new InjectSession(made.injector, (phase, message) =>
+      localReports.push({ phase, message })
+    );
+    await localSession.start(makePayload(1));
+
+    await expect(localSession.finish()).rejects.toThrow("AI injection failed");
+    expect(localReports.at(-1)).toEqual({
+      phase: PHASES.INJECTING,
+      message: "AI 開示を注入中",
+    });
+    expect(localReports).not.toContainEqual(
+      expect.objectContaining({ phase: PHASES.DONE })
+    );
+    expect(() =>
+      localSession.track(0, makeAsset("track-01.mp3"))
+    ).not.toThrow();
+
+    failAi = false;
+    await expect(localSession.finish()).resolves.toBeUndefined();
+    expect(localReports.at(-1)?.phase).toBe(PHASES.DONE);
+    expect(() => localSession.track(0, makeAsset("track-01.mp3"))).toThrow(
+      /injectStart/u
+    );
+  });
 });

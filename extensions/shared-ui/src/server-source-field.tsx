@@ -50,6 +50,7 @@ export function ServerSourceField({
   const fieldRef = React.useRef<HTMLDivElement | null>(null);
   const [open, setOpen] = React.useState(false);
   const [refreshing, setRefreshing] = React.useState(false);
+  const refreshingRef = React.useRef(false);
   const disabledRef = React.useRef(disabled);
   React.useEffect(() => {
     disabledRef.current = disabled;
@@ -63,17 +64,21 @@ export function ServerSourceField({
       setOpen(false);
       return;
     }
-    if (disabledRef.current || refreshing) {
+    if (disabledRef.current || refreshingRef.current) {
       return;
     }
     setOpen(false);
+    refreshingRef.current = true;
     setRefreshing(true);
-    void onRefresh().finally(() => {
-      setRefreshing(false);
-      if (!disabledRef.current) {
-        setOpen(true);
-      }
-    });
+    void onRefresh()
+      .catch(() => undefined)
+      .finally(() => {
+        refreshingRef.current = false;
+        setRefreshing(false);
+        if (!disabledRef.current) {
+          setOpen(true);
+        }
+      });
   };
 
   const items = sources.map((source) => ({
@@ -94,13 +99,13 @@ export function ServerSourceField({
         nextValue &&
         nextValue !== committedValueRef.current &&
         !disabledRef.current &&
-        !refreshing
+        !refreshingRef.current
       ) {
         committedValueRef.current = nextValue;
         onValueChange(nextValue);
       }
     },
-    [onValueChange, refreshing]
+    [onValueChange]
   );
   React.useEffect(() => {
     const field = fieldRef.current;

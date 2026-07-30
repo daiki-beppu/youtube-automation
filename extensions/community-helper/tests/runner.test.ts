@@ -208,4 +208,29 @@ describe("community runner", () => {
     });
     expect(dependencies.cancelPostForm).not.toHaveBeenCalled();
   });
+
+  it("requires reconciliation and suppresses every later side effect when composer cleanup rejects", async () => {
+    const dependencies = createDependencies([]);
+    vi.mocked(dependencies.setScheduleDateTime).mockRejectedValue(
+      new Error("picker drift")
+    );
+    vi.mocked(dependencies.cancelPostForm).mockRejectedValue(
+      new Error("cleanup relay failed")
+    );
+
+    const result = runCommunityPosts("http://localhost:7873", dependencies);
+
+    await expect(result).rejects.toMatchObject({
+      completedCount: 0,
+      requiresReconciliation: true,
+      cause: expect.objectContaining({ message: "cleanup relay failed" }),
+    });
+    await expect(result).rejects.toThrow(
+      /picker drift.*cleanup relay failed.*予約投稿を照合/u
+    );
+    expect(dependencies.cancelPostForm).toHaveBeenCalledOnce();
+    expect(dependencies.clickPost).not.toHaveBeenCalled();
+    expect(dependencies.openPostForm).toHaveBeenCalledOnce();
+    expect(dependencies.setCommunityText).toHaveBeenCalledOnce();
+  });
 });

@@ -246,4 +246,31 @@ describe("createDocumentInjector", () => {
         .value
     ).toBe("Soulful Grooves");
   });
+
+  it("track UUID count mismatch rejects before profile, release, track, store, or credit mutation", async () => {
+    mountStaticForm(2, "Soulful Grooves");
+    wireGenreSecondaryPopulate([{ value: "Ambient", text: "Ambient" }]);
+    const bandName = document.querySelector<HTMLInputElement>(
+      'input[name="bandname"]'
+    )!;
+    const albumTitle =
+      document.querySelector<HTMLInputElement>("#albumTitleInput")!;
+    const firstTitle = document.querySelector<HTMLInputElement>(
+      'input[name="title_a"]'
+    )!;
+    const appleStore = document.querySelector<HTMLInputElement>("#chkapple")!;
+
+    await expect(
+      createDocumentInjector(document).injectStaticFields(payload(BASE_PROFILE))
+    ).rejects.toThrow(/track 数が DOM と一致しません/u);
+
+    expect(bandName.value).toBe("");
+    expect(albumTitle.value).toBe("");
+    expect(firstTitle.value).toBe("");
+    expect(appleStore.checked).toBe(false);
+    expect(
+      document.querySelector<HTMLInputElement>("#track-1-performer-1-name")!
+        .value
+    ).toBe("");
+  });
 });

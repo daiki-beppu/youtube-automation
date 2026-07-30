@@ -33,6 +33,15 @@ export function createDocumentInjector(doc: Document): Injector {
       // 以降の注入（assert / プロファイル / タイトル / credit）は行生成後に開始する（順序保証）。
       await setTrackCount(doc, release.tracks.length);
 
+      // DOM 行数の不一致は、利用者の既存入力を一切変更する前に fail-loud にする。
+      // 再読み込みが必要な不完全 DOM に profile/release/store を部分注入しない。
+      const uuids = resolveTrackUuids(doc);
+      if (uuids.length !== release.tracks.length) {
+        throw new Error(
+          `track 数が DOM と一致しません: DOM=${uuids.length}, payload=${release.tracks.length}。${RELOAD_GUIDANCE}`
+        );
+      }
+
       // 新規リリース前提を assert（過去公開対応はスコープ外）。
       assertNewRelease(doc);
       await injectProfile(doc, profile);
@@ -40,12 +49,6 @@ export function createDocumentInjector(doc: Document): Injector {
       injectReleaseDate(doc, release.release_date);
 
       // track UUID を DOM order で解決し、全 track のタイトル / songwriter を注入する。
-      const uuids = resolveTrackUuids(doc);
-      if (uuids.length !== release.tracks.length) {
-        throw new Error(
-          `track 数が DOM と一致しません: DOM=${uuids.length}, payload=${release.tracks.length}。${RELOAD_GUIDANCE}`
-        );
-      }
       release.tracks.forEach((track, i) => {
         injectTrackTitle(doc, uuids[i], track.title);
         if (profile.songwriter !== null) {

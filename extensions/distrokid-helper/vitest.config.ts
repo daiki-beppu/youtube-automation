@@ -2,6 +2,10 @@ import { fileURLToPath } from "node:url";
 
 import { defineConfig } from "vitest/config";
 
+const rootUrl = new URL(".", import.meta.url);
+const rootPath =
+  rootUrl.protocol === "file:" ? fileURLToPath(rootUrl) : rootUrl.pathname;
+
 // unit テスト（tests/**/*.test.{ts,tsx}）専用。E2E（tests/e2e）は Playwright が担う。
 //
 // setupFiles で fakeBrowser を chrome/browser グローバルへ注入し、
@@ -12,7 +16,7 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   resolve: {
     alias: {
-      "@": fileURLToPath(new URL(".", import.meta.url)),
+      "@": rootPath,
     },
     dedupe: ["react", "react-dom", "@base-ui/react"],
   },

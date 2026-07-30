@@ -4,7 +4,9 @@ export async function backgroundFetch(
   input: string | URL | Request,
   init?: RequestInit
 ): Promise<Response> {
-  if (init?.method !== undefined && init.method !== "GET") {
+  const method =
+    init?.method ?? (input instanceof Request ? input.method : "GET");
+  if (method.toUpperCase() !== "GET") {
     throw new Error("background local fetch only supports GET");
   }
   const url =
