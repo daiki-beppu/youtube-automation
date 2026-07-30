@@ -112,18 +112,20 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
 
-def main(argv: list[str] | None = None):
+def main(argv: list[str] | None = None) -> int:
     # 引数解析を先に済ませることで、CHANNEL_DIR 未設定でも --help は exit 0 で返る（#2308）
     build_parser().parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     try:
         viewer = PlaylistStatusViewer()
         viewer.show_status()
+        return 0
     except KeyboardInterrupt:
         print("\n中断されました")
+        return 0
     except Exception as e:
         print(f"エラー: {e}")
-        sys.exit(1)
+        return 1
 
 
 if __name__ == "__main__":
