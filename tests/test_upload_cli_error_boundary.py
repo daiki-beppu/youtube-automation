@@ -188,3 +188,140 @@ def test_shorts_cli_normalizes_collection_to_absolute_path_for_upload(monkeypatc
 
     uploader.upload_short.assert_called_once_with(expected, short_num=None)
     assert capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    ("option", "expected_action", "preflight"),
+    [
+        ("--status", "show_status", False),
+        ("--plan", "show_plan", True),
+        (None, "execute_next_step", True),
+    ],
+)
+def test_collection_cli_dispatches_normal_operation(monkeypatch, option, expected_action, preflight):
+    from youtube_automation.commands.uploads import collection_uploader
+
+    target = Path("/collection")
+    uploader = SimpleNamespace(
+        find_collection=MagicMock(return_value=target),
+        ensure_upload_preflight=MagicMock(),
+        show_status=MagicMock(),
+        show_plan=MagicMock(),
+        execute_next_step=MagicMock(),
+    )
+    argv = ["yt-upload-collection", "--collection", "slug", "--config", "/config.json"]
+    if option:
+        argv.append(option)
+    factory = MagicMock(return_value=uploader)
+    clients = object()
+    monkeypatch.setattr("sys.argv", argv)
+    monkeypatch.setattr(collection_uploader, "CollectionUploader", factory)
+    monkeypatch.setattr(
+        collection_uploader,
+        "create_authenticated_youtube_clients",
+        MagicMock(return_value=clients),
+    )
+
+    assert collection_uploader.main() is None
+
+    factory.assert_called_once_with(config_path="/config.json", youtube_clients=clients)
+    uploader.find_collection.assert_called_once_with("slug")
+    assert uploader.ensure_upload_preflight.called is preflight
+    getattr(uploader, expected_action).assert_called_once_with(target)
+
+
+def test_collection_cli_daemon_skips_collection_lookup(monkeypatch):
+    from youtube_automation.commands.uploads import collection_uploader
+
+    uploader = SimpleNamespace(
+        run_automated_schedule=MagicMock(),
+        find_collection=MagicMock(),
+    )
+    monkeypatch.setattr("sys.argv", ["yt-upload-collection", "--daemon"])
+    monkeypatch.setattr(collection_uploader, "CollectionUploader", MagicMock(return_value=uploader))
+    monkeypatch.setattr(
+        collection_uploader,
+        "create_authenticated_youtube_clients",
+        MagicMock(return_value=object()),
+    )
+
+    assert collection_uploader.main() is None
+
+    uploader.run_automated_schedule.assert_called_once_with()
+    uploader.find_collection.assert_not_called()
+
+
+def test_shorts_cli_failed_result_exits_one(monkeypatch):
+    from youtube_automation.commands.uploads import short_uploader
+
+    uploader = SimpleNamespace(upload_short=MagicMock(return_value={"action": short_uploader.ACTION_FAILED}))
+    monkeypatch.setattr("sys.argv", ["yt-upload-shorts", "/collection", "--short-num", "2"])
+    monkeypatch.setattr(short_uploader, "ShortUploader", MagicMock(return_value=uploader))
+    monkeypatch.setattr(
+        short_uploader,
+        "create_authenticated_youtube_clients",
+        MagicMock(return_value=object()),
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        short_uploader.main()
+
+    assert exc_info.value.code == 1
+    uploader.upload_short.assert_called_once_with(Path("/collection"), short_num=2)
+
+
+@pytest.mark.parametrize(
+    ("argv", "method", "expected_args"),
+    [
+        (["yt-upload-auto", "--collection", "slug"], "upload_collection", ("slug",)),
+        (
+            ["yt-upload-auto", "--batch", "--status", "ready", "planned"],
+            "process_collections_directory",
+            (["ready", "planned"],),
+        ),
+    ],
+)
+def test_auto_cli_initializes_then_dispatches(monkeypatch, argv, method, expected_args):
+    from youtube_automation.commands.uploads import youtube_auto_uploader
+
+    uploader = SimpleNamespace(
+        initialize=MagicMock(),
+        upload_collection=MagicMock(),
+        process_collections_directory=MagicMock(),
+    )
+    monkeypatch.setattr("sys.argv", argv)
+    monkeypatch.setattr(youtube_auto_uploader, "YouTubeAutoUploader", MagicMock(return_value=uploader))
+    monkeypatch.setattr(
+        youtube_auto_uploader,
+        "create_authenticated_youtube_clients",
+        MagicMock(return_value=object()),
+    )
+
+    assert youtube_auto_uploader.main() is None
+
+    uploader.initialize.assert_called_once_with()
+    getattr(uploader, method).assert_called_once_with(*expected_args)
+
+
+def test_auto_cli_without_operation_prints_usage(monkeypatch, capsys):
+    from youtube_automation.commands.uploads import youtube_auto_uploader
+
+    uploader = SimpleNamespace(
+        initialize=MagicMock(),
+        upload_collection=MagicMock(),
+        process_collections_directory=MagicMock(),
+    )
+    monkeypatch.setattr("sys.argv", ["yt-upload-auto"])
+    monkeypatch.setattr(youtube_auto_uploader, "YouTubeAutoUploader", MagicMock(return_value=uploader))
+    monkeypatch.setattr(
+        youtube_auto_uploader,
+        "create_authenticated_youtube_clients",
+        MagicMock(return_value=object()),
+    )
+
+    assert youtube_auto_uploader.main() is None
+
+    uploader.initialize.assert_called_once_with()
+    uploader.upload_collection.assert_not_called()
+    uploader.process_collections_directory.assert_not_called()
+    assert "使用法:" in capsys.readouterr().out
