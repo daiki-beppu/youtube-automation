@@ -191,6 +191,20 @@ def test_cli_returns_unavailable_when_benchmark_json_is_missing(tmp_path, monkey
     assert report["reason"] == "no_benchmark_json"
 
 
+def test_cli_returns_unavailable_when_benchmark_channels_are_not_configured(tmp_path, monkeypatch) -> None:
+    config = SimpleNamespace(analytics=SimpleNamespace(benchmark=SimpleNamespace(channels=[])))
+    monkeypatch.setattr(ttp_health_cli, "load_config", lambda: config)
+
+    report = ttp_health_cli.build_report(data_dir=tmp_path)
+
+    assert report == {
+        "status": "unavailable",
+        "reason": "no_benchmark_channels",
+        "detail": "config/channel/analytics.json の benchmark.channels に対象がありません。",
+        "channels": [],
+    }
+
+
 def test_cli_loads_latest_json_and_preserves_source_name(tmp_path, monkeypatch) -> None:
     config = SimpleNamespace(analytics=SimpleNamespace(benchmark=SimpleNamespace(channels=[CONFIG_CHANNEL])))
     monkeypatch.setattr(ttp_health_cli, "load_config", lambda: config)
@@ -205,3 +219,40 @@ def test_cli_loads_latest_json_and_preserves_source_name(tmp_path, monkeypatch) 
     assert report["status"] == "ok"
     assert report["source"] == benchmark_path.name
     assert report["channels"][0]["status"] == "healthy"
+
+
+def test_main_emits_compact_json_and_forwards_thresholds(tmp_path, monkeypatch, capsys) -> None:
+    calls = []
+    monkeypatch.setattr(ttp_health_cli, "channel_dir", lambda: tmp_path)
+    monkeypatch.setattr(
+        ttp_health_cli,
+        "build_report",
+        lambda **kwargs: calls.append(kwargs) or {"status": "ok", "channels": []},
+    )
+
+    assert ttp_health_cli.main(["--stale-days", "14", "--decline-ratio", "0.75", "--window-days", "30"]) == 0
+
+    assert capsys.readouterr().out == '{"status":"ok","channels":[]}\n'
+    assert calls == [
+        {
+            "data_dir": tmp_path / "data",
+            "stale_days": 14,
+            "decline_ratio": 0.75,
+            "window_days": 30,
+        }
+    ]
+
+
+def test_main_emits_pretty_json(tmp_path, monkeypatch, capsys) -> None:
+    monkeypatch.setattr(ttp_health_cli, "channel_dir", lambda: tmp_path)
+    monkeypatch.setattr(
+        ttp_health_cli,
+        "build_report",
+        lambda **_kwargs: {"status": "unavailable", "reason": "no_benchmark_json"},
+    )
+
+    assert ttp_health_cli.main(["--pretty"]) == 0
+
+    output = capsys.readouterr().out
+    assert json.loads(output) == {"status": "unavailable", "reason": "no_benchmark_json"}
+    assert output.startswith('{\n  "status"')
