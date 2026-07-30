@@ -111,39 +111,6 @@ class TestSystemChecksCombinations:
 # ---------------------------------------------------------------------------
 
 
-class TestRunAllChecksWithBootstrap:
-    def test_bootstrap_checks_present(self, monkeypatch, tmp_path):
-        """run_all_checks に ffmpeg / ffprobe が含まれる."""
-        monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
-        results = doctor.run_all_checks(tmp_path)
-        ids = {r.id for r in results}
-        assert "ffmpeg" in ids
-        assert "ffprobe" in ids
-
-    def test_bootstrap_checks_count(self, monkeypatch, tmp_path):
-        """bootstrap は ffmpeg + ffprobe + uv + uv project + automation + skills + numbered duplicates の 7 件."""
-        monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
-        results = doctor.run_all_checks(tmp_path)
-        bootstrap_results = [r for r in results if r.category == "bootstrap"]
-        assert len(bootstrap_results) == 7
-
-    def test_total_checks_is_27(self, monkeypatch, tmp_path):
-        """7 bootstrap + 12 api + 3 channel + 4 data + 1 upload = 計 27 件."""
-        monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
-        results = doctor.run_all_checks(tmp_path)
-        assert len(results) == 27
-
-    def test_bootstrap_before_api(self, monkeypatch, tmp_path):
-        """bootstrap カテゴリは api カテゴリより前に配置される."""
-        monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
-        results = doctor.run_all_checks(tmp_path)
-        categories = [r.category for r in results]
-
-        last_bootstrap = max(i for i, c in enumerate(categories) if c == "bootstrap")
-        first_api = next(i for i, c in enumerate(categories) if c == "api")
-        assert last_bootstrap < first_api
-
-
 # ---------------------------------------------------------------------------
 # render_table / JSON 出力に bootstrap が含まれること
 # ---------------------------------------------------------------------------

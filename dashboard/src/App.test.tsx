@@ -7,6 +7,14 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest"
 import App from "./App"
 import { ThemeProvider } from "./components/theme-provider"
 
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((promiseResolve) => {
+    resolve = promiseResolve
+  })
+  return { promise, resolve }
+}
+
 const overview = {
   schema_version: 1,
   channels: [
@@ -337,5 +345,122 @@ describe("dashboard", () => {
         "読み込めませんでした"
       )
     )
+  })
+
+  it("leaves detail loading after a selected channel request fails", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      if (String(input) === "/api/channels") {
+        return new Response(JSON.stringify(overview), { status: 200 })
+      }
+      return new Response("detail failed", { status: 500 })
+    })
+    const user = userEvent.setup()
+    const { container } = renderDashboard()
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Night Drive の動画詳細を見る",
+      })
+    )
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("HTTP 500")
+    await waitFor(() =>
+      expect(container.querySelector("[data-slot='skeleton']")).toBeNull()
+    )
+  })
+
+  it("keeps the current selection when an older detail response arrives last", async () => {
+    const secondChannel = {
+      ...overview.channels[0],
+      id: "channel-b",
+      name: "Morning Focus",
+    }
+    const twoChannels = {
+      ...overview,
+      channels: [overview.channels[0], secondChannel],
+    }
+    const firstResponse = deferred<Response>()
+    const secondResponse = deferred<Response>()
+    vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
+      const url = String(input)
+      if (url === "/api/channels") {
+        return Promise.resolve(
+          new Response(JSON.stringify(twoChannels), { status: 200 })
+        )
+      }
+      return url.endsWith("channel-a")
+        ? firstResponse.promise
+        : secondResponse.promise
+    })
+    const user = userEvent.setup()
+    renderDashboard()
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Night Drive の動画詳細を見る",
+      })
+    )
+    await user.click(
+      screen.getByRole("button", {
+        name: "Morning Focus の動画詳細を見る",
+      })
+    )
+    secondResponse.resolve(
+      new Response(
+        JSON.stringify({
+          ...detail,
+          id: "channel-b",
+          name: "Morning Focus",
+        }),
+        { status: 200 }
+      )
+    )
+    expect(
+      await screen.findByRole("heading", {
+        name: "Morning Focus の動画詳細",
+      })
+    ).toBeInTheDocument()
+
+    firstResponse.resolve(
+      new Response(JSON.stringify(detail), {
+        status: 200,
+      })
+    )
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("heading", {
+          name: "Night Drive の動画詳細",
+        })
+      ).not.toBeInTheDocument()
+    )
+  })
+
+  it("does not refetch the overview when channel details are selected", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input) => {
+        const payload = String(input) === "/api/channels" ? overview : detail
+        return new Response(JSON.stringify(payload), { status: 200 })
+      })
+    const user = userEvent.setup()
+    renderDashboard()
+
+    const detailButton = await screen.findByRole("button", {
+      name: "Night Drive の動画詳細を見る",
+    })
+    await user.click(detailButton)
+    await screen.findByRole("heading", {
+      name: "Night Drive の動画詳細",
+    })
+    await user.click(detailButton)
+    await screen.findByRole("heading", {
+      name: "Night Drive の動画詳細",
+    })
+
+    expect(
+      fetchMock.mock.calls.filter(
+        ([input]) => String(input) === "/api/channels"
+      )
+    ).toHaveLength(1)
   })
 })

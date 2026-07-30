@@ -195,9 +195,10 @@ def load_stock_meta(image_path: Path) -> dict[str, Any] | None:
 
     meta_path = image_path.with_suffix(image_path.suffix + META_SUFFIX)
     try:
-        return json.loads(meta_path.read_text(encoding="utf-8"))
+        payload = json.loads(meta_path.read_text(encoding="utf-8"))
     except (FileNotFoundError, json.JSONDecodeError):
         return None
+    return payload if isinstance(payload, dict) else None
 
 
 def list_stock(
@@ -284,6 +285,8 @@ def resolve_stock_refs(
         return []
 
     theme_match = stock_refs_config.get("theme_match", "exact")
+    if theme_match not in {"exact", "any"}:
+        raise ValidationError("reference_images.stock.theme_match は 'exact' または 'any' で指定してください")
     if theme_match == "exact" and not theme:
         raise ValidationError("reference_images.stock.theme_match='exact' のとき theme は必須です")
 
@@ -317,7 +320,9 @@ def resolve_stock_refs(
         shuffler = rng if rng is not None else random.Random(stock_refs_config.get("seed"))
         shuffler.shuffle(surviving)
 
-    max_count = int(stock_refs_config.get("max_count", 3))
+    max_count = stock_refs_config.get("max_count", 3)
+    if isinstance(max_count, bool) or not isinstance(max_count, int) or max_count < 0:
+        raise ValidationError("reference_images.stock.max_count は 0 以上の整数で指定してください")
     selected = surviving[:max_count] if max_count > 0 else []
 
     role_label = source_role or "any"

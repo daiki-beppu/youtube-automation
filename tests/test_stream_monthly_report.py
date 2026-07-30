@@ -44,8 +44,7 @@ def test_format_monthly_report_includes_usage_gb_with_unit():
         archives=60,
         days_in_month=30,
     )
-    assert "1188" in text
-    assert "GB" in text
+    assert "帯域消費量: 1188.0 GB / 2048 GB (58.0%)" in text
 
 
 def test_format_monthly_report_includes_previous_month_diff_with_sign():
@@ -61,9 +60,7 @@ def test_format_monthly_report_includes_previous_month_diff_with_sign():
         archives=60,
         days_in_month=30,
     )
-    assert "+" in text
-    # 前月比文言（"前月比" もしくは "前月" / "diff"）
-    assert ("前月" in text) or ("diff" in text.lower())
+    assert "  - 前月比: +200.0 GB (+20.0%)" in text
 
 
 def test_format_monthly_report_includes_negative_previous_month_diff():
@@ -79,7 +76,25 @@ def test_format_monthly_report_includes_negative_previous_month_diff():
         archives=60,
         days_in_month=30,
     )
-    assert "-" in text
+    assert "  - 前月比: -100.0 GB (-10.0%)" in text
+
+
+def test_format_monthly_report_omits_percentage_when_previous_usage_is_zero():
+    """Given previous_usage_gb=0
+    When format_monthly_report を呼ぶ
+    Then ゼロ除算せず、GB 差分だけを前月比行へ表示する。
+    """
+    text = monthly_report.format_monthly_report(
+        year=2026,
+        month=4,
+        usage_gb=1200.0,
+        previous_usage_gb=0.0,
+        archives=60,
+        days_in_month=30,
+    )
+    diff_line = next(line for line in text.splitlines() if "前月比:" in line)
+    assert diff_line == "  - 前月比: +1200.0 GB"
+    assert "%" not in diff_line
 
 
 def test_format_monthly_report_handles_no_previous_month():
@@ -145,25 +160,7 @@ def test_format_monthly_report_includes_quota_percentage():
         archives=60,
         days_in_month=30,
     )
-    assert "80" in text
-    assert "%" in text
-
-
-def test_format_monthly_report_returns_str():
-    """Given 通常入力
-    When format_monthly_report を呼ぶ
-    Then str を返す (Discord webhook の content に流せる)。
-    """
-    text = monthly_report.format_monthly_report(
-        year=2026,
-        month=4,
-        usage_gb=1188.0,
-        previous_usage_gb=1100.0,
-        archives=60,
-        days_in_month=30,
-    )
-    assert isinstance(text, str)
-    assert len(text) > 0
+    assert "帯域消費量: 1638.4 GB / 2048 GB (80.0%)" in text
 
 
 def test_format_monthly_report_archives_expected_true_includes_uptime_and_count(
@@ -187,11 +184,7 @@ def test_format_monthly_report_archives_expected_true_includes_uptime_and_count(
         archives=45,
         days_in_month=30,
     )
-    # 実測稼働率が N/A ではなく数値 (%) で表示される
-    assert "実測 N/A" not in text
-    assert "実測" in text
-    assert "理論 100.0%" in text
-    # アーカイブ件数行が含まれる
+    assert "稼働率 (24/7 連続配信): 実測 75.0% / 理論 100.0%" in text
     assert "アーカイブ件数: 実測 45 本 / 理論 60 本" in text
 
 

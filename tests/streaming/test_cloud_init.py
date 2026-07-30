@@ -440,13 +440,6 @@ class TestEnvTftpl:
     が ``${video}`` / ``${rtmp_url}`` を実値に展開し、systemd は env file をロードするだけ。
     """
 
-    def test_file_exists(self):
-        """Given infra/terraform/streaming/templates/
-        When youtube-stream.env.tftpl を探す
-        Then 存在する。
-        """
-        assert _ENV_TFTPL.exists(), "templates/youtube-stream.env.tftpl が存在しない"
-
     def test_contains_video_variable_assignment(self):
         """Given env tftpl
         When 全文を読む

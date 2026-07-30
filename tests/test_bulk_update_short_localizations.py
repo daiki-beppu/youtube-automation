@@ -14,6 +14,7 @@ plan 要件 #10 / 14-d / アンチパターン #8 を検証する:
 
 from __future__ import annotations
 
+import builtins
 import json
 import shutil
 import sys
@@ -169,6 +170,48 @@ class TestCollectShortVideos:
         assert "V_OK" in ids
         assert None not in ids
         assert len(videos) == 1
+
+    def test_corrupt_workflow_state_is_logged_and_skipped(self, tmp_path, monkeypatch, caplog):
+        """REQ-2797-01: Shorts の破損 JSON を診断して skip する."""
+        from youtube_automation.commands.metadata import bulk_update_short_localizations as mod
+
+        ch = _setup_channel(tmp_path)
+        col = _make_collection_with_shorts(
+            ch,
+            "20250101-live-broken",
+            shorts=[{"short_num": 1, "video_id": "V_BROKEN"}],
+        )
+        (col / "workflow-state.json").write_text("{broken", encoding="utf-8")
+        monkeypatch.setenv("CHANNEL_DIR", str(ch))
+        reset()
+
+        assert mod.collect_short_videos() == []
+        assert "20250101-live-broken 読み込み失敗" in caplog.text
+
+    def test_tracking_read_oserror_is_logged_and_skipped(self, tmp_path, monkeypatch, caplog):
+        """REQ-2797-02: Shorts tracking の I/O 失敗を診断して skip する."""
+        from youtube_automation.commands.metadata import bulk_update_short_localizations as mod
+
+        ch = _setup_channel(tmp_path)
+        col = _make_collection_with_shorts(
+            ch,
+            "20250101-live-unreadable",
+            shorts=[{"short_num": 1, "video_id": "V_UNREADABLE"}],
+        )
+        target = col / "20-documentation" / "upload_tracking.json"
+        original_open = builtins.open
+
+        def selective_open(file, *args, **kwargs):
+            if Path(file) == target:
+                raise OSError("permission denied")
+            return original_open(file, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, "open", selective_open)
+        monkeypatch.setenv("CHANNEL_DIR", str(ch))
+        reset()
+
+        assert mod.collect_short_videos() == []
+        assert "permission denied" in caplog.text
 
 
 # ---------------------------------------------------------------------------

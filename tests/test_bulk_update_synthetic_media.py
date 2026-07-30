@@ -12,6 +12,45 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from youtube_automation.commands.metadata import bulk_update_synthetic_media as mod
+from youtube_automation.infrastructure.errors import YouTubeAPIError
+
+
+def _http_error(status: int = 503):
+    from googleapiclient.errors import HttpError
+
+    response = MagicMock()
+    response.status = status
+    return HttpError(response, b'{"error": {"message": "backend unavailable"}}')
+
+
+class TestReadFailures:
+    def test_empty_authenticated_channel_is_a_domain_error(self):
+        """REQ-2797-03: channel items 空を domain error とする."""
+        youtube = MagicMock()
+        youtube.channels.return_value.list.return_value.execute.return_value = {"items": []}
+
+        with pytest.raises(YouTubeAPIError, match="items 空"):
+            mod.list_uploads_video_ids(youtube)
+
+    def test_uploads_playlist_read_http_error_is_a_domain_error(self):
+        """REQ-2797-04: uploads 読み取り HttpError を domain error に変換する."""
+        youtube = MagicMock()
+        youtube.channels.return_value.list.return_value.execute.return_value = {
+            "items": [{"contentDetails": {"relatedPlaylists": {"uploads": "UPLOADS"}}}]
+        }
+        youtube.playlistItems.return_value.list.return_value.execute.side_effect = _http_error()
+
+        with pytest.raises(YouTubeAPIError, match="uploads playlist"):
+            mod.list_uploads_video_ids(youtube)
+
+    def test_status_read_http_error_is_a_domain_error(self):
+        """REQ-2797-05: status 読み取り HttpError を domain error に変換する."""
+        youtube = MagicMock()
+        youtube.videos.return_value.list.return_value.execute.side_effect = _http_error()
+
+        with pytest.raises(YouTubeAPIError, match="動画 status"):
+            mod.fetch_status_batch(youtube, ["VID"])
+
 
 # ---------------------------------------------------------------------------
 # select_targets

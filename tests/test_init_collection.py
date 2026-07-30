@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import pytest
 
 from youtube_automation.commands.collections.init_collection import main
-from youtube_automation.configuration import channel_dir
+from youtube_automation.configuration import channel_dir, load_config
 from youtube_automation.utils.collection_paths import REQUIRED_SUBDIRS
 
 
@@ -75,6 +75,49 @@ class TestScaffold:
             assert "uv run yt-collection-preflight" in err
             assert "bunx tayk collection-preflight" not in err
             assert "quote scaffold-collection'" in err
+        finally:
+            import shutil
+
+            shutil.rmtree(collection)
+
+    def test_cli_options_are_persisted_in_workflow_state(self, monkeypatch):
+        """REQ-2795-01: CLI option を workflow-state の実値として保存する."""
+        _run(
+            monkeypatch,
+            [
+                "Configured Scaffold",
+                "init-scaffold",
+                "--track-count",
+                "7",
+                "--selected-plan",
+                "D",
+                "--music-engine",
+                "lyria",
+            ],
+        )
+        collection = _created_collection()
+        try:
+            state = json.loads((collection / "workflow-state.json").read_text(encoding="utf-8"))
+            assert state["collection_name"] == "Configured Scaffold"
+            assert state["theme"] == "init-scaffold"
+            assert state["track_count"] == 7
+            assert state["selected_plan"] == "D"
+            assert state["music_engine"] == "lyria"
+        finally:
+            import shutil
+
+            shutil.rmtree(collection)
+
+    def test_music_engine_falls_back_to_channel_config(self, monkeypatch):
+        """REQ-2795-02: 未指定値は channel config/default から補完する."""
+        expected_engine = load_config().youtube.music_engine
+        _run(monkeypatch, ["Fallback Scaffold", "init-scaffold"])
+        collection = _created_collection()
+        try:
+            state = json.loads((collection / "workflow-state.json").read_text(encoding="utf-8"))
+            assert state["music_engine"] == expected_engine
+            assert state["track_count"] == 12
+            assert state["selected_plan"] == "A"
         finally:
             import shutil
 

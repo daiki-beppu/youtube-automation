@@ -44,6 +44,22 @@ def test_parse_axis_arg_rejects_negative_votes():
         cli._parse_axis_arg("a:A:-1")
 
 
+@pytest.mark.parametrize(
+    ("value", "message"),
+    [
+        (":Rain Window:1", "key が空"),
+        ("rain_window::1", "label が空"),
+        ("rain_window:Rain Window:not-an-int", "votes が整数ではありません"),
+    ],
+)
+def test_parse_axis_arg_rejects_empty_fields_and_non_integer_votes(value: str, message: str):
+    """REQ-2804-01: axis の空 key/label と非整数 votes を個別拒否する."""
+    import argparse
+
+    with pytest.raises(argparse.ArgumentTypeError, match=message):
+        cli._parse_axis_arg(value)
+
+
 def test_cli_append_then_show(channel_dir_env: Path, capsys: pytest.CaptureFixture[str]):
     rc = cli.main(
         [
