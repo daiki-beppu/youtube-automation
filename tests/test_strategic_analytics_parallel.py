@@ -21,6 +21,7 @@ from youtube_automation.domains.analytics.collection.strategic_analytics import 
     _MAX_WORKERS,
     StrategicAnalyticsMixin,
 )
+from youtube_automation.infrastructure.errors import YouTubeAPIError
 
 # get_video_analytics_by_id が返す Analytics 結果（views を視聴回数として差別化）
 _ANALYTICS_BY_ID: Dict[str, Dict] = {
@@ -198,6 +199,80 @@ class TestSubscriberConversionRanking:
         result = collector.get_top_video_analytics("2026-01-01", "2026-04-01")
 
         assert result[0]["subscriber_conversion_rate"] == 3.0
+
+
+class TestCombinedAndBatchBoundaries:
+    @staticmethod
+    def _row(video_id: str, views: int) -> list:
+        return [video_id, views, 1000, 120, 10, 0, 1, 2, 1]
+
+    def test_combined_excludes_recent_video_already_in_top_and_reports_statistics(
+        self, collector: _StubCollector
+    ) -> None:
+        collector._all_videos = [
+            _video_meta("VID_A", "recent top") | {"published_at": "2099-01-01T00:00:00Z"},
+            _video_meta("VID_B", "recent outside top") | {"published_at": "2099-01-01T00:00:00Z"},
+            _video_meta("VID_C", "old top") | {"published_at": "2000-01-01T00:00:00Z"},
+        ]
+        collector.analytics_service.query.return_value = {"rows": [self._row("VID_A", 300), self._row("VID_C", 200)]}
+
+        result = collector.get_combined_analytics("2026-01-01", "2026-04-01", top_count=2, recent_days=30)
+
+        assert [video["video_id"] for video in result["top_videos"]] == ["VID_A", "VID_C"]
+        assert [video["video_id"] for video in result["recent_videos"]] == ["VID_B"]
+        assert result["statistics"] == {
+            "top_videos_count": 2,
+            "recent_videos_count": 1,
+            "recent_in_top": 1,
+            "unique_recent_videos": 1,
+            "total_analyzed": 3,
+        }
+        assert collector._call_log == ["VID_B"]
+
+    @pytest.mark.parametrize("response", [{}, {"rows": []}], ids=["missing-rows", "empty-rows"])
+    def test_combined_stops_cleanly_when_batch_has_no_rows(self, collector: _StubCollector, response) -> None:
+        collector._all_videos = [_video_meta("VID_A", "old") | {"published_at": "2000-01-01T00:00:00Z"}]
+        collector.analytics_service.query.return_value = response
+
+        result = collector.get_combined_analytics("2026-01-01", "2026-04-01")
+
+        assert result["top_videos"] == []
+        assert result["recent_videos"] == []
+        assert result["statistics"]["total_analyzed"] == 0
+        collector.analytics_service.query.assert_called_once()
+
+    def test_top_batches_use_next_start_index_and_stop_on_short_final_page(self, collector: _StubCollector) -> None:
+        first = [self._row(f"VID_{index}", 100 - index) for index in range(10)]
+        second = [self._row("VID_10", 10), self._row("VID_11", 9)]
+        collector.analytics_service.query.side_effect = [{"rows": first}, {"rows": second}]
+
+        result = collector.get_top_video_analytics("2026-01-01", "2026-04-01", top_count=20)
+
+        assert len(result) == 12
+        calls = collector.analytics_service.query.call_args_list
+        assert [call.kwargs["startIndex"] for call in calls] == [1, 11]
+        assert [call.kwargs["maxResults"] for call in calls] == [10, 10]
+
+    def test_top_returns_partial_result_after_api_failure(self, collector: _StubCollector) -> None:
+        first = [self._row(f"VID_{index}", 100 - index) for index in range(10)]
+        collector.analytics_service.query.side_effect = [{"rows": first}, YouTubeAPIError("boom")]
+
+        result = collector.get_top_video_analytics("2026-01-01", "2026-04-01", top_count=20)
+
+        assert len(result) == 10
+        assert collector.analytics_service.query.call_count == 2
+
+    def test_unknown_mode_returns_empty_mode_envelope(self, collector: _StubCollector) -> None:
+        result = collector.get_strategic_video_analytics("2026-01-01", "2026-04-01", mode="unknown")
+
+        assert result == {
+            "mode": "unknown",
+            "period": "2026-01-01 to 2026-04-01",
+            "top_videos": [],
+            "recent_videos": [],
+            "all_videos": [],
+        }
+        collector.analytics_service.query.assert_not_called()
 
     @pytest.mark.parametrize(
         ("mode", "method_name", "result_key"),
