@@ -4275,9 +4275,9 @@ describe("Suno popup compatibility check", () => {
     );
   });
 
-  it("should ignore an older discovery completion", async () => {
-    const older = deferred<Array<{ id: string; label: string; url: string }>>();
-    const newer = deferred<Array<{ id: string; label: string; url: string }>>();
+  it("should suppress a second discovery while the first refresh is pending", async () => {
+    const pending =
+      deferred<Array<{ id: string; label: string; url: string }>>();
     let refreshCount = 0;
     messagingMocks.sendMessage.mockImplementation(
       (message: string, payload?: Record<string, string>) => {
@@ -4286,7 +4286,7 @@ describe("Suno popup compatibility check", () => {
           if (refreshCount === 1) {
             return Promise.resolve([]);
           }
-          return refreshCount === 2 ? older.promise : newer.promise;
+          return pending.promise;
         }
         return defaultSendMessage(message, payload);
       }
@@ -4300,8 +4300,10 @@ describe("Suno popup compatibility check", () => {
       ) as HTMLButtonElement;
       trigger.click();
       trigger.click();
+      await Promise.resolve();
     });
-    newer.resolve([
+    expect(refreshCount).toBe(2);
+    pending.resolve([
       { id: "new", label: "New", url: "http://new.localhost:49152" },
     ]);
     await waitFor(() =>
@@ -4309,14 +4311,7 @@ describe("Suno popup compatibility check", () => {
         "http://new.localhost:49152"
       )
     );
-    older.resolve([
-      { id: "old", label: "Old", url: "http://old.localhost:9001" },
-    ]);
-    await act(async () => Promise.resolve());
-    expect(select.dataset.sourceValues).toContain("http://new.localhost:49152");
-    expect(select.dataset.sourceValues).not.toContain(
-      "http://old.localhost:9001"
-    );
+    expect(refreshCount).toBe(2);
   });
 
   it("should discard a deferred discovery result when a run starts", async () => {
