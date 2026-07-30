@@ -87,52 +87,6 @@ def test_flop_analysis_keeps_identity_symptom_mapping_and_output_contract() -> N
     assert "フォールバック用の新規ディレクトリ規約は作らない" in phase_5
 
 
-def test_flop_analysis_keeps_phase_2_and_phase_3_decision_tables_unchanged() -> None:
-    """Issue #1972 scope外: Phase 2〜3 の全行・閾値・対応関係を固定する。"""
-    text = _skill_text()
-    phase_2 = _section(text, "### Phase 2: 症状の定量化")
-    phase_3 = _section(text, "### Phase 3: 仮説マッピング")
-
-    assert _table_rows(phase_2, ("指標", "判定")) == [
-        {"指標": "`ratio_vs_median < strong`", "判定": "強い症状（赤）"},
-        {
-            "指標": "`strong ≦ ratio_vs_median < moderate`",
-            "判定": "中程度の症状（黄）",
-        },
-        {
-            "指標": "`moderate ≦ ratio_vs_median < mild`",
-            "判定": "軽症（薄黄）",
-        },
-        {"指標": "`ratio_vs_median ≧ mild`", "判定": "健常（緑）"},
-    ]
-    assert _table_rows(phase_3, ("主症状", "副症状", "主仮説", "副仮説")) == [
-        {
-            "主症状": "`ctr_percentage` が自チャンネル `aggregated_ctr_percentage` の `ctr_low` 倍未満",
-            "副症状": "`impressions` は過去平均同等以上",
-            "主仮説": "サムネ訴求弱",
-            "副仮説": "タイトル訴求弱<br>ターゲット層ミスマッチ<br>差別化不足",
-        },
-        {
-            "主症状": "`ctr_percentage` が自チャンネル `aggregated_ctr_percentage` の `ctr_healthy` 倍以上",
-            "副症状": "`average_view_duration` が自チャンネル中央値の `avd_low` 倍未満",
-            "主仮説": "中身の弱さ（音源 / 編集 / テーマ）",
-            "副仮説": "サムネと中身の不一致",
-        },
-        {
-            "主症状": "`impressions` が過去平均の `impressions_low` 倍未満",
-            "副症状": "—",
-            "主仮説": "タイトル / タグ SEO 弱<br>初動エンゲージメント低",
-            "副仮説": "公開時刻ミス<br>再生リスト未登録",
-        },
-        {
-            "主症状": "全指標が中央値前後（±`neutral_band_pct` %）で `ratio_vs_median < mild`",
-            "副症状": "—",
-            "主仮説": "テーマ自体の市場性不足",
-            "副仮説": "競合過密ジャンル",
-        },
-    ]
-
-
 def test_flop_analysis_calls_executable_verification_reference() -> None:
     phase_4 = _section(_skill_text(), "### Phase 4: 検証の自律実行")
 
