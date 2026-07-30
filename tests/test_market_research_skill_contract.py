@@ -1,80 +1,122 @@
-"""`/market-research` の読み取り専用・任意保存契約を検証する。"""
+"""Executable /market-research classification and persistence contracts."""
 
 from __future__ import annotations
 
+import importlib.util
+from datetime import date
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parent.parent
-SKILL = ROOT / ".claude" / "skills" / "market-research" / "SKILL.md"
-REPORT_CONTRACT = SKILL.parent / "references" / "report-contract.md"
+SCRIPT = ROOT / ".claude" / "skills" / "market-research" / "references" / "market_research_contract.py"
 
 
-def _read(path: Path) -> str:
-    return path.read_text(encoding="utf-8")
+def _load_contract():
+    spec = importlib.util.spec_from_file_location("market_research_contract", SCRIPT)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+contract = _load_contract()
+
+
+def _report() -> str:
+    return contract.render_report({section: f"{section} body" for section in contract.SECTIONS})
 
 
 def test_market_research_hard_gates_are_near_the_top() -> None:
-    first_60_lines = "\n".join(_read(SKILL).splitlines()[:60])
-
-    assert "## Hard Gates" in first_60_lines
-    assert "## 完了条件" in first_60_lines
-    assert "状態を持たない読み取り専用" in first_60_lines
-    assert "TTP の自動入替は行わない" in first_60_lines
+    assert (
+        contract.classify_candidate(
+            "ttp",
+            {
+                "direct_observations": 2,
+                "primary_sources": 1,
+                "comparable_observations": 1,
+                "limitations": 1,
+            },
+        )
+        == "候補"
+    )
+    assert (
+        contract.classify_candidate(
+            "ttp",
+            {
+                "direct_observations": 2,
+                "primary_sources": 1,
+                "comparable_observations": 1,
+                "limitations": 1,
+                "reproducible": False,
+            },
+        )
+        == "非推奨"
+    )
 
 
 def test_market_research_reference_exists_and_defines_all_report_sections() -> None:
-    skill = _read(SKILL)
-    contract = _read(REPORT_CONTRACT)
-
-    assert "references/report-contract.md" in skill
-    for heading in (
-        "## 調査問い",
-        "## 比較対象と評価軸",
-        "## 根拠",
-        "## TTP 入替候補",
-        "## ニッチ仮説",
-        "## 不確実性",
-        "## 次の検証",
-    ):
-        assert f"`{heading}`" in contract
+    report = _report()
+    headings = [line for line in report.splitlines() if line.startswith("## ")]
+    assert headings == [f"## {section}" for section in contract.SECTIONS]
+    with pytest.raises(ValueError, match="missing report sections"):
+        contract.render_report({"調査問い": "only one"})
 
 
-def test_dry_run_without_save_request_creates_no_artifact() -> None:
-    skill = _read(SKILL)
-    contract = _read(REPORT_CONTRACT)
-
-    assert "保存依頼がない場合は「会話内のみ・ファイル未生成」" in skill
-    assert "依頼がなければディレクトリもファイルも作らない" in skill
-    assert "既定: 会話内だけに返し、ファイルを生成しない" in contract
+def test_dry_run_without_save_request_creates_no_artifact(tmp_path: Path) -> None:
+    assert contract.deliver_report(_report(), channel_dir=tmp_path) is None
+    assert list(tmp_path.rglob("*")) == []
 
 
-def test_dry_run_with_save_request_uses_dated_path_only() -> None:
-    skill = _read(SKILL)
-    contract = _read(REPORT_CONTRACT)
-    expected_path = "docs/research/market-<YYYY-MM-DD>.md"
-
-    assert expected_path in skill
-    assert expected_path in contract
-    assert "明示的に「保存して」と依頼した場合だけ" in skill
-    assert "同日ファイルがすでに存在する場合" in skill
+def test_dry_run_with_save_request_uses_dated_path_only(tmp_path: Path) -> None:
+    target = contract.deliver_report(
+        _report(),
+        channel_dir=tmp_path,
+        save=True,
+        today=date(2026, 7, 31),
+    )
+    assert target == tmp_path / "docs" / "research" / "market-2026-07-31.md"
+    assert target.read_text(encoding="utf-8") == _report()
+    with pytest.raises(FileExistsError, match="overwrite approval"):
+        contract.deliver_report(
+            "replacement",
+            channel_dir=tmp_path,
+            save=True,
+            today=date(2026, 7, 31),
+        )
+    assert target.read_text(encoding="utf-8") == _report()
 
 
 def test_dry_run_with_insufficient_evidence_is_fail_closed() -> None:
-    skill = _read(SKILL)
-    contract = _read(REPORT_CONTRACT)
-
-    assert "根拠不足" in skill
-    assert "候補自身を直接観測した根拠が 2 件以上" in contract
-    assert "需要を支える根拠が 1 件以上" in contract
-    assert "需要根拠とは別の根拠が 1 件以上" in contract
-    assert "推奨表現へ格上げしない" in contract
+    assert (
+        contract.classify_candidate(
+            "ttp",
+            {
+                "direct_observations": 1,
+                "primary_sources": 1,
+                "comparable_observations": 1,
+                "limitations": 1,
+            },
+        )
+        == "保留（根拠不足）"
+    )
+    assert (
+        contract.classify_candidate(
+            "niche",
+            {"demand_sources": 1, "differentiation_sources": 0, "persona_elements": 5},
+        )
+        == "保留（根拠不足）"
+    )
+    assert (
+        contract.classify_candidate(
+            "niche",
+            {"demand_sources": 1, "differentiation_sources": 1, "persona_elements": 5},
+        )
+        == "候補"
+    )
 
 
 def test_channel_new_and_discovery_keep_distinct_routes() -> None:
-    channel_new = _read(ROOT / ".claude" / "skills" / "channel-new" / "SKILL.md")
-    discover = _read(ROOT / ".claude" / "skills" / "discover-competitors" / "SKILL.md")
-
-    assert "追加の競合候補を広げたい → `/discover-competitors`" in channel_new
-    assert "現行 TTP の入替候補やニッチ仮説" in channel_new
-    assert "→ `/market-research`" in channel_new
-    assert "横断比較する調査は /market-research を使う" in discover
+    assert contract.route_for("market-comparison") == "market-research"
+    assert contract.route_for("discover") == "discover-competitors"
+    assert contract.route_for("analyze-collected") == "channel-new"

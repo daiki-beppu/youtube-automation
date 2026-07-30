@@ -107,3 +107,57 @@ def test_main_error_prints_message_and_exits_one(monkeypatch, capsys):
 
     assert error.value.code == 1
     assert capsys.readouterr().out == "❌ 取得エラー: unavailable\n"
+
+
+def test_get_status_falls_back_to_uploads_when_collection_playlists_are_empty(monkeypatch):
+    config = SimpleNamespace(
+        meta=SimpleNamespace(channel_short="ref"),
+        analytics=SimpleNamespace(collection_filter_keywords=("Complete", "Collection")),
+    )
+    monkeypatch.setattr(channel_status, "load_config", lambda: config)
+    monkeypatch.setattr(channel_status, "channel_dir", lambda: MagicMock())
+    monkeypatch.setattr(
+        channel_status,
+        "create_readonly_youtube_clients",
+        lambda: SimpleNamespace(
+            youtube_readonly=MagicMock(),
+            analytics=MagicMock(),
+            reporting=MagicMock(),
+            credentials_readonly=MagicMock(),
+        ),
+    )
+    collector = MagicMock()
+    collector.channel_id = "UC_REF"
+    collector.youtube_service.resolve_channel.return_value = {
+        "snippet": {"title": "Reference Channel"},
+        "statistics": {"subscriberCount": "10", "viewCount": "20", "videoCount": "1"},
+    }
+    collector.youtube_service.list_uploads.return_value = {
+        "items": [{"contentDetails": {"relatedPlaylists": {"uploads": "UU_REF"}}}]
+    }
+    collector.youtube_service.list_playlists.return_value = {"items": []}
+    collector.youtube_service.list_playlist_items_for_display.return_value = {
+        "items": [
+            {
+                "snippet": {
+                    "title": "Fallback upload",
+                    "publishedAt": "2026-07-30T00:00:00Z",
+                    "resourceId": {"videoId": "video-fallback"},
+                }
+            }
+        ]
+    }
+    collector.analytics_service.query.return_value = {"rows": []}
+    monkeypatch.setattr(channel_status, "YouTubeAnalyticsCollector", MagicMock(return_value=collector))
+
+    result = channel_status.get_channel_latest_status()
+
+    assert result["recent_collections"] == [
+        {
+            "collection_name": "Fallback upload",
+            "published_at": "2026-07-30",
+            "video_id": "video-fallback",
+            "url": "https://youtu.be/video-fallback",
+        }
+    ]
+    collector.youtube_service.list_playlist_items_for_display.assert_called_once_with("UU_REF", max_results=10)

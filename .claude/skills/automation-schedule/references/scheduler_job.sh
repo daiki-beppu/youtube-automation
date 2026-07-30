@@ -115,7 +115,7 @@ install_job() {
   else
     CRON_DAYS="$(for day in $CADENCE; do weekday_num "$day"; done | paste -sd, -)"
     CRON_LINE="$((10#$MINUTE)) $((10#$HOUR)) * * $CRON_DAYS /bin/bash $RUN_SCRIPT --channel-dir $CHANNEL_DIR --runtime $RUNTIME # $LABEL"
-    (crontab -l 2>/dev/null | grep -vF "# $LABEL"; echo "$CRON_LINE") | crontab -
+    (crontab -l 2>/dev/null | grep -vF "# $LABEL" || true; echo "$CRON_LINE") | crontab -
     uv run python "$BACKEND_SCRIPT" --channel-dir "$CHANNEL_DIR" record --backend os-fallback --external-id "$LABEL" >/dev/null
     echo "crontab entry を作成・更新しました: $LABEL"
   fi

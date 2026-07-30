@@ -74,6 +74,7 @@ echo "Mode:  $MODE"
 echo "Audio: $MASTER_AUDIO"
 echo "Out:   $OUTDIR"
 
+pids=()
 for i in "${!STARTS[@]}"; do
   START="${STARTS[$i]}"
   LABEL="${LABELS[$i]}"
@@ -118,10 +119,25 @@ for i in "${!STARTS[@]}"; do
         "$OUTPUT" 2>/dev/null &
       ;;
   esac
+  pids+=("$!")
   echo "Started #${NUM}: ${LABEL} (start=${START}s)"
 done
 
 echo "Waiting for all jobs..."
-wait
+job_status=0
+for pid in "${pids[@]}"; do
+  if wait "$pid"; then
+    :
+  else
+    rc=$?
+    echo "ffmpeg job failed (pid=$pid, exit=$rc)" >&2
+    if [[ "$job_status" -eq 0 ]]; then
+      job_status="$rc"
+    fi
+  fi
+done
+if [[ "$job_status" -ne 0 ]]; then
+  exit "$job_status"
+fi
 echo "Done."
 ls -lh "$OUTDIR"/*.mp4

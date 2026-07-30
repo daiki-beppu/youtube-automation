@@ -19,8 +19,11 @@ Usage:
 import argparse
 import json
 import logging
+import os
 import sys
+import tempfile
 from datetime import date, datetime
+from pathlib import Path
 
 from youtube_automation.application.analytics.benchmark_query import load_benchmark_videos
 from youtube_automation.application.analytics.benchmark_refresh import ensure_benchmark_fresh
@@ -32,6 +35,7 @@ from youtube_automation.commands.analytics.benchmark_collector import (
 from youtube_automation.configuration import channel_dir as _channel_dir
 from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
 from youtube_automation.infrastructure.cost_tracker import log_quota
+from youtube_automation.infrastructure.errors import AutomationError, YouTubeAPIError
 from youtube_automation.infrastructure.google.youtube import YouTubeClients
 from youtube_automation.utils.cli_arguments import CompetitorArgumentParser
 
@@ -63,38 +67,51 @@ class BenchmarkCommentCollector:
 
     def _fetch_comments(self, video_id: str) -> list[dict]:
         """1動画のコメントを取得"""
-        request = self.youtube.commentThreads().list(
-            videoId=video_id,
-            part="snippet",
-            order="relevance",
-            maxResults=self.max_comments,
-        )
-        try:
-            response = request.execute()
-        except Exception as e:
-            logger.warning("コメント取得失敗 %s: %s", video_id, e)
-            return []
-        finally:
-            # quota は失敗した request でも消費されるため成否に関わらず記録する
-            log_quota(
-                _QUOTA_SERVICE,
-                "commentThreads.list",
-                _READ_QUOTA_UNITS,
-                metadata={"context": "benchmark_comments.comment_threads", "video_id": video_id},
-            )
+        comments: list[dict] = []
+        page_token: str | None = None
+        while len(comments) < self.max_comments:
+            request_args = {
+                "videoId": video_id,
+                "part": "snippet",
+                "order": "relevance",
+                "maxResults": min(100, self.max_comments - len(comments)),
+            }
+            if page_token is not None:
+                request_args["pageToken"] = page_token
+            request = self.youtube.commentThreads().list(**request_args)
+            try:
+                response = request.execute()
+            except Exception as error:
+                raise YouTubeAPIError.from_http_error(
+                    error,
+                    f"コメント取得失敗 {video_id}（{len(comments)}件取得後）",
+                ) from error
+            finally:
+                # quota は失敗した request でも消費されるため成否に関わらず記録する
+                log_quota(
+                    _QUOTA_SERVICE,
+                    "commentThreads.list",
+                    _READ_QUOTA_UNITS,
+                    metadata={"context": "benchmark_comments.comment_threads", "video_id": video_id},
+                )
 
-        comments = []
-        for item in response.get("items", []):
-            snippet = item["snippet"]["topLevelComment"]["snippet"]
-            comments.append(
-                {
-                    "author": snippet["authorDisplayName"],
-                    "text": snippet["textOriginal"],
-                    "likes": snippet["likeCount"],
-                    "published_at": snippet["publishedAt"],
-                    "comment_id": item["snippet"]["topLevelComment"]["id"],
-                }
-            )
+            for item in response.get("items", []):
+                snippet = item["snippet"]["topLevelComment"]["snippet"]
+                comments.append(
+                    {
+                        "author": snippet["authorDisplayName"],
+                        "text": snippet["textOriginal"],
+                        "likes": snippet["likeCount"],
+                        "published_at": snippet["publishedAt"],
+                        "comment_id": item["snippet"]["topLevelComment"]["id"],
+                    }
+                )
+                if len(comments) >= self.max_comments:
+                    break
+
+            page_token = response.get("nextPageToken")
+            if not page_token:
+                break
 
         return comments
 
@@ -172,8 +189,7 @@ class BenchmarkCommentCollector:
         result["summary"]["total_videos"] = len(result["videos"])
 
         self.data_dir.mkdir(parents=True, exist_ok=True)
-        with open(output_path, "w") as f:
-            json.dump(result, f, ensure_ascii=False, indent=2)
+        _write_json_atomic(output_path, result)
 
         logger.info(
             "保存完了: %s（%d動画, %d件コメント）",
@@ -182,6 +198,18 @@ class BenchmarkCommentCollector:
             result["summary"]["total_comments"],
         )
         return result
+
+
+def _write_json_atomic(path: Path, data: dict) -> None:
+    fd, temp_name = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as file:
+            json.dump(data, file, ensure_ascii=False, indent=2)
+            file.write("\n")
+        os.replace(temp_name, path)
+    except BaseException:
+        Path(temp_name).unlink(missing_ok=True)
+        raise
 
 
 def print_summary(data: dict):
@@ -218,30 +246,35 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main():
+def main() -> int:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     args = _build_parser().parse_args()
 
-    collector = BenchmarkCommentCollector(
-        min_views=args.min_views,
-        max_comments=args.max_comments,
-        competitor_slug=args.competitor,
-    )
+    try:
+        collector = BenchmarkCommentCollector(
+            min_views=args.min_views,
+            max_comments=args.max_comments,
+            competitor_slug=args.competitor,
+        )
 
-    if not args.yes and not args.force:
-        try:
-            answer = input("続行しますか？ [Y/n] ").strip().lower()
-            if answer and answer != "y":
-                print("キャンセルしました")
-                sys.exit(0)
-        except (EOFError, KeyboardInterrupt):
-            print("\nキャンセルしました")
-            sys.exit(0)
+        if not args.yes and not args.force:
+            try:
+                answer = input("続行しますか？ [Y/n] ").strip().lower()
+                if answer and answer != "y":
+                    print("キャンセルしました")
+                    return 0
+            except (EOFError, KeyboardInterrupt):
+                print("\nキャンセルしました")
+                return 0
 
-    result = collector.collect(force=args.force)
-    if result:
-        print_summary(result)
+        result = collector.collect(force=args.force)
+        if result:
+            print_summary(result)
+    except (AutomationError, OSError, json.JSONDecodeError) as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 1
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

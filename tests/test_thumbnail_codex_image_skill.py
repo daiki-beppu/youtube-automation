@@ -319,6 +319,66 @@ def test_codex_image_script_is_executable() -> None:
     )
 
 
+def test_codex_image_script_rejects_missing_jq_without_creating_output(tmp_path: Path) -> None:
+    env, log_file = _prepare_fake_codex_env(tmp_path)
+    bin_dir = tmp_path / "bin"
+    (bin_dir / "bash").symlink_to("/bin/bash")
+    (bin_dir / "dirname").symlink_to("/usr/bin/dirname")
+    (bin_dir / "grep").symlink_to("/usr/bin/grep")
+    env["PATH"] = str(bin_dir)
+    env["CODEX_IMAGE_FORBID_KEYWORDS"] = "forbidden"
+    output = tmp_path / "output.png"
+
+    result = _run_script(_CODEX_IMAGE_SH, "safe prompt", str(output), env=env)
+
+    assert result.returncode == 1
+    assert "jq CLI" in result.stderr
+    assert not output.exists()
+    assert not log_file.exists()
+
+
+def test_codex_image_script_rejects_missing_md5_tool_when_references_are_used(tmp_path: Path) -> None:
+    env, log_file = _prepare_fake_codex_env(tmp_path)
+    bin_dir = tmp_path / "bin"
+    (bin_dir / "bash").symlink_to("/bin/bash")
+    (bin_dir / "dirname").symlink_to("/usr/bin/dirname")
+    (bin_dir / "grep").symlink_to("/usr/bin/grep")
+    _write_fake_tool = bin_dir / "jq"
+    _write_fake_tool.write_text("#!/bin/bash\nexit 0\n", encoding="utf-8")
+    _write_fake_tool.chmod(0o755)
+    env["PATH"] = str(bin_dir)
+    env["CODEX_IMAGE_FORBID_KEYWORDS"] = "forbidden"
+    output = tmp_path / "output.png"
+    reference = _write_reference_file(tmp_path)
+
+    result = _run_script(
+        _CODEX_IMAGE_SH,
+        "--reference",
+        str(reference),
+        "safe prompt",
+        str(output),
+        env=env,
+    )
+
+    assert result.returncode == 1
+    assert "md5" in result.stderr
+    assert not output.exists()
+    assert not log_file.exists()
+
+
+def test_codex_image_script_rejects_missing_output_parent_before_codex(tmp_path: Path) -> None:
+    env, log_file = _prepare_fake_codex_env(tmp_path)
+    env["CODEX_IMAGE_FORBID_KEYWORDS"] = "forbidden"
+    output = tmp_path / "missing-parent" / "output.png"
+
+    result = _run_script(_CODEX_IMAGE_SH, "safe prompt", str(output), env=env)
+
+    assert result.returncode == 1
+    assert "output parent directory does not exist" in result.stderr
+    assert not output.exists()
+    assert not log_file.exists()
+
+
 def test_codex_image_script_appends_cp_instructions_to_prompt(tmp_path: Path) -> None:
     """Given codex-image.sh
     When 偽 codex で `codex exec` の `--` 後 prompt を観測する

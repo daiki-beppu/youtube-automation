@@ -60,7 +60,7 @@ if [ "$PREVENT_CONCURRENT" = "True" ]; then
   else
     old_pid="$(cat "$LOCK_DIR/pid" 2>/dev/null || true)"
     if [ -n "$old_pid" ] && kill -0 "$old_pid" 2>/dev/null; then
-      log "前回実行（pid=$old_pid）が生存中のためスキップ（prevent_concurrent_runs）"
+      log "前回実行（pid=${old_pid}）が生存中のためスキップ（prevent_concurrent_runs）"
       exit 0
     fi
     log "stale lock（pid=${old_pid:-unknown}）を回収して続行"

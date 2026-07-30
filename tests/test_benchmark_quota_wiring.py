@@ -255,18 +255,16 @@ class TestFetchBenchmarkCommentsQuotaWiring:
         assert quota_calls[0]["units"] == _READ_QUOTA_UNITS
         assert quota_calls[0]["metadata"]["video_id"] == "VID_C"
 
-    def test_fetch_comments_failure_records_quota_and_keeps_original_handling(self, quota_calls, caplog):
+    def test_fetch_comments_failure_records_quota_and_fails_closed(self, quota_calls):
         # Given: commentThreads.list が失敗する（コメント無効化等）
         youtube = MagicMock()
         youtube.commentThreads.return_value.list.return_value.execute.side_effect = RuntimeError("commentsDisabled")
         collector = self._make_comment_collector(youtube)
 
-        # When: 既存挙動（warn + 空リスト）は維持され、quota は記録される
-        with caplog.at_level("WARNING"):
-            comments = collector._fetch_comments("VID_FAIL")
+        # When: 不完全な結果を空成功として保存せず、quota は記録される
+        with pytest.raises(YouTubeAPIError, match="コメント取得失敗 VID_FAIL"):
+            collector._fetch_comments("VID_FAIL")
 
-        # Then: 元例外がそのまま警告ログに現れ、記録件数は request 数と一致する
-        assert comments == []
+        # Then: 記録件数は request 数と一致する
         assert _buckets(quota_calls) == ["commentThreads.list"]
         assert quota_calls[0]["metadata"]["video_id"] == "VID_FAIL"
-        assert "commentsDisabled" in caplog.text

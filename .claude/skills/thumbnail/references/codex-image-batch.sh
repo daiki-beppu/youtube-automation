@@ -189,6 +189,10 @@ run_job() {
   prompt=$(jq -r '.prompt' <<< "$job")
   output=$(jq -r '.output' <<< "$job")
   reference=$(jq -r '.reference // empty' <<< "$job")
+  # The single-image runner intentionally rejects a missing output parent.
+  # Batch mode owns its manifest outputs, so establish each validated parent
+  # before delegating the job.
+  mkdir -p "$(dirname "$output")"
   if [ -n "$reference" ]; then
     CODEX_IMAGE_REAL_CODEX="$real_codex" PATH="$shim_dir:$PATH" \
       "$runner" --require-reference "$prompt" "$output" "$reference"

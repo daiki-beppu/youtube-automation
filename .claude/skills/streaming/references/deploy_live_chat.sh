@@ -57,9 +57,24 @@ CHANNEL_DIR_ABS="$(realpath "$CHANNEL_DIR")"
     exit 1
 }
 
-export TF_VAR_live_chat_youtube_token_json="$(op read "$OP_LIVE_CHAT_TOKEN_REF")"
-export TF_VAR_live_chat_client_secrets_json="$(op read "$OP_LIVE_CHAT_CLIENT_SECRETS_REF")"
-export TF_VAR_live_chat_codex_auth_json="$(op read "$OP_CODEX_AUTH_REF")"
+TF_VAR_live_chat_youtube_token_json="$(op read "$OP_LIVE_CHAT_TOKEN_REF")" || {
+    rc=$?
+    error "1Password token の取得に失敗しました"
+    exit "$rc"
+}
+TF_VAR_live_chat_client_secrets_json="$(op read "$OP_LIVE_CHAT_CLIENT_SECRETS_REF")" || {
+    rc=$?
+    error "1Password client secrets の取得に失敗しました"
+    exit "$rc"
+}
+TF_VAR_live_chat_codex_auth_json="$(op read "$OP_CODEX_AUTH_REF")" || {
+    rc=$?
+    error "1Password Codex auth の取得に失敗しました"
+    exit "$rc"
+}
+export TF_VAR_live_chat_youtube_token_json
+export TF_VAR_live_chat_client_secrets_json
+export TF_VAR_live_chat_codex_auth_json
 cleanup() {
     unset TF_VAR_live_chat_youtube_token_json
     unset TF_VAR_live_chat_client_secrets_json
