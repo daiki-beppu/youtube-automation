@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import pytest
 from googleapiclient.errors import HttpError
@@ -480,3 +482,89 @@ def test_build_plan_insert_failure_records_quota_and_keeps_error(quota_calls):
     assert plan["posted"] == []
     assert len(plan["errors"]) == 1
     assert "status=403" in plan["errors"][0]["error"]
+
+
+def _cli_config():
+    return SimpleNamespace(
+        pinned_comment=SimpleNamespace(
+            enabled=True,
+            default_language="en",
+            templates={"en": "{video_title}"},
+            history_file="pinned-history.json",
+            delay_between_posts_sec=0,
+        )
+    )
+
+
+def _patch_cli(monkeypatch, tmp_path, youtube):
+    monkeypatch.setattr(pinned_comment, "load_config", _cli_config)
+    monkeypatch.setattr(pinned_comment, "_channel_dir", lambda: tmp_path)
+    monkeypatch.setattr(pinned_comment, "YouTubeOAuthHandler", lambda: object())
+    monkeypatch.setattr(
+        pinned_comment,
+        "YouTubeClients",
+        lambda **_kwargs: SimpleNamespace(youtube=youtube),
+    )
+
+
+def test_main_rejects_mutually_exclusive_targets_before_config(monkeypatch):
+    load = MagicMock()
+    monkeypatch.setattr(pinned_comment, "load_config", load)
+
+    with pytest.raises(SystemExit) as exc_info:
+        pinned_comment.main(["--video-id", "v1", "--collection", "/collection", "--dry-run"])
+
+    assert exc_info.value.code == 2
+    load.assert_not_called()
+
+
+def test_main_corrupt_history_returns_one_without_authentication(tmp_path, monkeypatch):
+    (tmp_path / "pinned-history.json").write_text("{", encoding="utf-8")
+    clients = MagicMock()
+    monkeypatch.setattr(pinned_comment, "load_config", _cli_config)
+    monkeypatch.setattr(pinned_comment, "_channel_dir", lambda: tmp_path)
+    monkeypatch.setattr(pinned_comment, "YouTubeClients", clients)
+
+    assert pinned_comment.main(["--video-id", "v1", "--dry-run"]) == 1
+    clients.assert_not_called()
+
+
+def test_main_save_failure_returns_one_after_post_without_replacing_history(tmp_path, monkeypatch):
+    youtube = FakeYouTube(status_items={"v1": {"privacyStatus": "public"}}, snippet_titles={"v1": "Title"})
+    _patch_cli(monkeypatch, tmp_path, youtube)
+    monkeypatch.setattr(
+        pinned_comment,
+        "save_history",
+        MagicMock(side_effect=OSError("disk full")),
+    )
+
+    assert pinned_comment.main(["--video-id", "v1", "--apply"]) == 1
+    assert youtube.inserted == [("v1", "Title")]
+    assert not (tmp_path / "pinned-history.json").exists()
+
+
+def test_main_multiple_targets_prints_complete_json_summary(tmp_path, monkeypatch, capsys):
+    youtube = FakeYouTube(
+        status_items={
+            "public": {"privacyStatus": "public"},
+            "private": {"privacyStatus": "private"},
+        },
+        snippet_titles={"public": "Public"},
+    )
+    _patch_cli(monkeypatch, tmp_path, youtube)
+
+    code = pinned_comment.main(
+        [
+            "--video-id",
+            "public",
+            "--video-id",
+            "private",
+            "--dry-run",
+            "--json",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert code == 0
+    assert [row["video_id"] for row in payload["planned"]] == ["public"]
+    assert payload["skipped"] == [{"video_id": "private", "reason": "video_private"}]

@@ -368,9 +368,9 @@ def main(argv: Iterable[str] | None = None) -> int:
         return 1
 
     history_path = _channel_dir() / cfg.history_file
-    history = load_history(history_path)
 
     try:
+        history = load_history(history_path)
         if args.collection:
             targets = resolve_targets_from_collection(Path(args.collection))
         else:
@@ -393,7 +393,7 @@ def main(argv: Iterable[str] | None = None) -> int:
             delay=cfg.delay_between_posts_sec,
             history_path=history_path,
         )
-    except AutomationError as e:
+    except (AutomationError, OSError, json.JSONDecodeError) as e:
         print(f"[error] {e}", file=sys.stderr)
         return 1
 
