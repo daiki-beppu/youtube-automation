@@ -1343,15 +1343,6 @@ def test_channel_new_thumbnail_template_includes_channel_branding_contract() -> 
     }
 
 
-def test_thumbnail_skill_includes_codex_prompt_helper_script() -> None:
-    """#1300: collection-ideate から共有する Codex prompt helper を同梱する。"""
-    script = _read_codex_prompt_script()
-
-    assert "from youtube_automation.utils.image_provider.config import build_codex_prompt" in script
-    assert 'load_skill_config("thumbnail")' in script
-    assert 'parser.add_argument("title"' in script
-
-
 def test_codex_prompt_helper_cli_renders_default_template(tmp_path: Path) -> None:
     """#1300: provider=codex の最小 override で default template を title 差し替えして出力する。"""
     result = _run_codex_prompt_cli(

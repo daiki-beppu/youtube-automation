@@ -17,6 +17,7 @@ from __future__ import annotations
 import base64
 import io
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -320,6 +321,46 @@ class TestRetryBehavior:
 
         # Then
         assert result.success is False
+        assert mock_client.images.generate.call_count == RETRY_MAX
+
+    @pytest.mark.parametrize(
+        "response",
+        [
+            SimpleNamespace(data=[]),
+            SimpleNamespace(data=[SimpleNamespace(b64_json=None)]),
+        ],
+    )
+    def test_missing_image_payload_retries_then_returns_failure(self, response, openai_config, request_factory):
+        from youtube_automation.utils.image_provider import RETRY_MAX
+
+        provider = OpenAIImageProvider(openai_config)
+        req = request_factory()
+        with patch("youtube_automation.utils.image_provider.openai.OpenAI") as mock_class:
+            mock_client = MagicMock()
+            mock_client.images.generate.return_value = response
+            mock_class.return_value = mock_client
+
+            result = provider.generate(req)
+
+        assert result.success is False
+        assert result.saved_path is None
+        assert mock_client.images.generate.call_count == RETRY_MAX
+
+    def test_invalid_base64_retries_then_returns_failure(self, openai_config, request_factory):
+        from youtube_automation.utils.image_provider import RETRY_MAX
+
+        provider = OpenAIImageProvider(openai_config)
+        req = request_factory()
+        response = SimpleNamespace(data=[SimpleNamespace(b64_json="%%%not-base64%%%")])
+        with patch("youtube_automation.utils.image_provider.openai.OpenAI") as mock_class:
+            mock_client = MagicMock()
+            mock_client.images.generate.return_value = response
+            mock_class.return_value = mock_client
+
+            result = provider.generate(req)
+
+        assert result.success is False
+        assert result.saved_path is None
         assert mock_client.images.generate.call_count == RETRY_MAX
 
 
