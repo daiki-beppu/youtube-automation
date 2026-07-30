@@ -1,21 +1,26 @@
 """チャンネルルート dotenv を production runtime へ再導入させない contract test."""
 
+import os
 from pathlib import Path
+
+import pytest
+
+from youtube_automation.infrastructure.errors import ConfigError
+from youtube_automation.infrastructure.secrets import get_secret, reset_cache
 
 _ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_production_python_does_not_import_or_load_dotenv() -> None:
-    forbidden = ("from dotenv import", "import dotenv", "load_dotenv(", "find_dotenv(")
-    violations: list[str] = []
+def test_runtime_secret_resolution_ignores_channel_dotenv(tmp_path, monkeypatch) -> None:
+    (tmp_path / ".env").write_text("OPENAI_API_KEY=dotenv-only-secret\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setenv("YOUTUBE_AUTOMATION_DISABLE_OP_READ", "1")
+    reset_cache()
 
-    for path in sorted((_ROOT / "src").rglob("*.py")):
-        source = path.read_text(encoding="utf-8")
-        for token in forbidden:
-            if token in source:
-                violations.append(f"{path.relative_to(_ROOT)}: {token}")
-
-    assert violations == []
+    with pytest.raises(ConfigError, match="OPENAI_API_KEY"):
+        get_secret("OPENAI_API_KEY")
+    assert "OPENAI_API_KEY" not in os.environ
 
 
 def test_python_dotenv_is_not_a_package_dependency() -> None:

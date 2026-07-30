@@ -1,10 +1,11 @@
+import { requireSenderTabId } from "@youtube-automation/extensions-shared/tab-relay";
+
 import {
   checkServerCompatibility,
   fetchCommunityImage,
   fetchCommunityPosts,
 } from "../../shared/api";
 import { encodeAsset } from "../../shared/asset-transfer";
-import { requireSenderTabId } from "../../shared/tab-relay";
 import { onMessage, sendMessage } from "../lib/messaging";
 
 export default defineBackground(() => {

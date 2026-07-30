@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import ast
+import subprocess
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).parents[1]
@@ -39,21 +41,28 @@ def test_registered_lane_modules_exist() -> None:
 
 
 def test_slow_node_ids_reference_existing_modules_and_tests() -> None:
-    for node_id in SLOW_NODE_IDS:
-        module_path, separator, test_name = node_id.partition("::")
-        assert separator and test_name, f"slow node id must select a test: {node_id}"
-        source = ROOT / module_path
-        assert source.is_file(), f"slow node module does not exist: {module_path}"
-        assert test_name.split("::")[-1] in source.read_text(encoding="utf-8"), (
-            f"slow node test name is absent from {module_path}: {test_name}"
-        )
+    result = subprocess.run(
+        [sys.executable, "-m", "pytest", "--collect-only", "-q", *SLOW_NODE_IDS],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    collected = {line for line in result.stdout.splitlines() if line.startswith("tests/")}
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert collected == set(SLOW_NODE_IDS)
 
 
-def test_lane_commands_keep_ci_full_suite_unfiltered() -> None:
+def test_ci_runs_the_full_pytest_suite_without_lane_filters() -> None:
     workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
-    development = (ROOT / "docs/development.md").read_text(encoding="utf-8")
 
     assert "nix develop --command uv run pytest -n auto" in workflow
     assert '-m "not repo_contract and not slow"' not in workflow
+
+
+def test_development_documents_each_pytest_lane_command() -> None:
+    development = (ROOT / "docs/development.md").read_text(encoding="utf-8")
+
     for expression in ('-m "not repo_contract and not slow"', "-m repo_contract", "-m slow"):
         assert expression in development

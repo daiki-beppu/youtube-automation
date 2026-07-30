@@ -41,6 +41,17 @@ async function loadBackground() {
     }),
     sendMessage,
   }));
+  const requireSenderTabId = vi.fn(
+    (sender: { tab?: { id?: number } }, messageType: string) => {
+      if (typeof sender.tab?.id !== "number") {
+        throw new Error(`${messageType}: 送信元タブが特定できません`);
+      }
+      return sender.tab.id;
+    }
+  );
+  vi.doMock("@youtube-automation/extensions-shared/tab-relay", () => ({
+    requireSenderTabId,
+  }));
   vi.doMock("../../shared/api", () => ({
     checkServerCompatibility,
     fetchCommunityImage,
@@ -54,6 +65,7 @@ async function loadBackground() {
     fetchCommunityImage,
     fetchCommunityPosts,
     handlers,
+    requireSenderTabId,
     sendMessage,
   };
 }
@@ -61,6 +73,7 @@ async function loadBackground() {
 afterEach(() => {
   vi.doUnmock("../lib/messaging");
   vi.doUnmock("../../shared/api");
+  vi.doUnmock("@youtube-automation/extensions-shared/tab-relay");
   vi.unstubAllGlobals();
 });
 
@@ -105,7 +118,8 @@ describe("community-helper background relay", () => {
   });
 
   it("relays run and stop to the sender tab", async () => {
-    const { handlers, sendMessage } = await loadBackground();
+    const { handlers, requireSenderTabId, sendMessage } =
+      await loadBackground();
     const request = { baseUrl: "http://localhost:7873" };
 
     const sender = { tab: { id: 42 } };
@@ -114,6 +128,8 @@ describe("community-helper background relay", () => {
 
     expect(sendMessage).toHaveBeenNthCalledWith(1, "run", request, 42);
     expect(sendMessage).toHaveBeenNthCalledWith(2, "stop", undefined, 42);
+    expect(requireSenderTabId).toHaveBeenNthCalledWith(1, sender, "run");
+    expect(requireSenderTabId).toHaveBeenNthCalledWith(2, sender, "stop");
   });
 
   it("relays content progress and errors to the sender tab overlay", async () => {

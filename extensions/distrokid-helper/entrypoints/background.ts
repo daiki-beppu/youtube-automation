@@ -2,8 +2,9 @@
 // server state を更新する POST（配信済み記録）だけは、content/overlay からの直接 fetch を避けて
 // background の extension origin + serve token で実行する（#1360、suno-helper の postDownloaded と対称）。
 
+import { requireSenderTabId } from "@youtube-automation/extensions-shared/tab-relay";
+
 import { recordDistrokidRelease } from "../../shared/api";
-import { requireSenderTabId } from "../../shared/tab-relay";
 import { fetchLocalAsset, fetchLocalText } from "../lib/local-fetch";
 import { onMessage, sendMessage } from "../lib/messaging";
 import { migrateServerSourcesStorage } from "../lib/storage";
