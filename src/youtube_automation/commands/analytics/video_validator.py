@@ -37,7 +37,7 @@ def read_video_metadata(video_path: Path) -> Optional[dict]:
             "bitrate": int(format_info["bit_rate"]) if format_info.get("bit_rate") else None,
             "fps": _parse_fps(video_stream.get("r_frame_rate", "0/1")),
         }
-    except (subprocess.CalledProcessError, json.JSONDecodeError, OSError, ValueError) as exc:
+    except (subprocess.CalledProcessError, json.JSONDecodeError, OSError, ValueError, ZeroDivisionError) as exc:
         print(f"ffprobe エラー {video_path.name}: {exc}", file=sys.stderr)
         return None
 
