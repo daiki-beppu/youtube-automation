@@ -10,8 +10,8 @@ TTP_VIDEO_ANALYZE_TOP_N = 5
 
 def is_short_benchmark_duration(duration_iso: str) -> bool:
     """Return whether an ISO duration is shorter than five minutes."""
-    match = re.match(r"PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?", duration_iso)
-    if not match:
+    match = re.fullmatch(r"PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?", duration_iso)
+    if not match or all(group is None for group in match.groups()):
         return False
     hours = int(match.group(1) or 0)
     minutes = int(match.group(2) or 0)

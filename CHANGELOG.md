@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `fix(playlist)`: playlist manager/status CLI が成功・中断・外部失敗を明示的な終了コードで返し、status/help/引数不備では不要な書き込み認証を開始せず、init/status/clean/assign の引数伝播と表示を command-level test で担保した（#2653）。
 - `fix(video-analyze)`: Gemini が JSON object 以外を返した場合を明示的な `ValidationError` として扱い、解析失敗時に sleep や結果保存へ進まない境界を固定（#2678）。
 - `fix(benchmark)`: Gemini サムネイル分析が依存欠落・client初期化・画像取得・生成・JSON解析で失敗した場合は収集済み動画データを変更せず、解析成功時だけ `thumbnail_analysis` とgeneration記録を追加する fail-soft 契約を明確化（#2611）。
+- `fix(benchmark)`: Short判定のISO 8601 durationを完全一致で検証し、空の `PT` や末尾に不正文字を含む値をShortとして扱わないよう修正（#2618）。
 
 - `chore(takt)`: ユニットテスト監査で稼働中の `audit-unit-split` workflow 資産（workflow 1 本 + facets 4 本、v3 の上書きセマンティクス対策済み）を無改変で git 管理下に置いた。#2686 で `.takt/workflows/` / `.takt/facets/` の git 管理が前提となったため、worktree・他 checkout でも定義を解決できるようにする（#2690）。
 
