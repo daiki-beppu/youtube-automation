@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 from dataclasses import asdict, dataclass
 from itertools import pairwise
@@ -91,16 +92,23 @@ def detect_retention_drops(
         try:
             elapsed = float(raw["elapsed_ratio"])
             watch = float(raw["watch_ratio"])
+            relative_raw = raw.get("relative_performance")
+            relative = float(relative_raw) if relative_raw is not None else None
         except (KeyError, TypeError, ValueError) as error:
-            raise ValidationError("retention_curve の elapsed_ratio / watch_ratio が不正です") from error
+            raise ValidationError("retention_curve の数値が不正です") from error
+        if (
+            not math.isfinite(elapsed)
+            or not math.isfinite(watch)
+            or (relative is not None and not math.isfinite(relative))
+        ):
+            raise ValidationError("retention_curve の数値が不正です")
         if not 0 <= elapsed <= 1 or watch < 0:
             raise ValidationError("retention_curve の値が範囲外です")
-        relative = raw.get("relative_performance")
         points.append(
             {
                 "elapsed_ratio": elapsed,
                 "watch_ratio": watch,
-                "relative_performance": float(relative) if relative is not None else None,
+                "relative_performance": relative,
             }
         )
 
@@ -129,7 +137,7 @@ def correlate_retention_timeline(
     threshold: float = DEFAULT_DROP_THRESHOLD,
 ) -> dict[str, object]:
     """drop 地点を scene / BGM タイムラインへ割り当てる。"""
-    if duration_seconds <= 0:
+    if not math.isfinite(duration_seconds) or duration_seconds <= 0:
         raise ValidationError("duration_seconds は正の値である必要があります")
     if not isinstance(video_analysis, dict):
         raise ValidationError("video_analysis JSON は object である必要があります")
