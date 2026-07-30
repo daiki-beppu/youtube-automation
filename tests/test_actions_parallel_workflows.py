@@ -464,9 +464,12 @@ def test_fallow_audit_fails_for_a_new_error_finding_in_a_git_diff(tmp_path: Path
         "run",
         "audit",
     ]
+    cache_home = tmp_path / "xdg-cache"
+    cache_home.mkdir()
     audit_env = {
         **os.environ,
         "FALLOW_AUDIT_BASE": base_sha,
+        "XDG_CACHE_HOME": str(cache_home),
     }
     clean_audit = subprocess.run(
         audit_command,

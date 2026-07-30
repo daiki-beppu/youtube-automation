@@ -168,38 +168,6 @@ def _resolve_imported_modules(module_name: str, tree: ast.AST) -> set[str]:
     return imported
 
 
-def test_dependency_import_collection_covers_absolute_and_relative_imports() -> None:
-    tree = ast.parse(
-        """
-import youtube_automation.domains.metadata.service
-from youtube_automation.domains.metadata import titles
-from youtube_automation.domains.metadata import BAHMetadataGenerator
-from .descriptions import build_short_description
-from . import titles
-"""
-    )
-
-    assert _resolve_imported_modules("youtube_automation.domains.metadata.localizations", tree) == {
-        "youtube_automation.domains.metadata.service",
-        "youtube_automation.domains.metadata.titles",
-        "youtube_automation.domains.metadata",
-        "youtube_automation.domains.metadata.descriptions",
-    }
-
-
-def test_dependency_import_collection_rejects_unallowed_absolute_child_module() -> None:
-    tree = ast.parse("from youtube_automation.domains.metadata import localizations\n")
-
-    imported = _resolve_imported_modules(f"{_METADATA_ROOT}.service", tree)
-
-    assert imported == {f"{_METADATA_ROOT}.localizations"}
-    assert not imported <= {
-        f"{_METADATA_ROOT}.titles",
-        f"{_METADATA_ROOT}.descriptions",
-        f"{_METADATA_ROOT}.tags",
-    }
-
-
 def test_domain_dependency_edges_are_one_way() -> None:
     allowed = {
         f"{_DOWNLOADED_ROOT}.workflow": {f"{_DOWNLOADED_ROOT}.models"},

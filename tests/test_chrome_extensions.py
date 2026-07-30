@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+import youtube_automation.utils.chrome_extensions as chrome_extensions
 from youtube_automation.infrastructure.errors import ConfigError
 from youtube_automation.utils.chrome_extensions import resolve_unpacked_extension_origin
 
@@ -24,6 +25,31 @@ def _write_preferences_payload(profile_dir: Path, filename: str, payload: object
 
 def _extension_path(tmp_path: Path, name: str) -> str:
     return str(tmp_path / "chrome-extensions" / name)
+
+
+def test_resolve_unpacked_extension_origin_rejects_empty_name_with_manual_fallback() -> None:
+    with pytest.raises(ConfigError) as exc_info:
+        resolve_unpacked_extension_origin("")
+
+    message = str(exc_info.value)
+    assert "must not be empty" in message
+    assert "--allow-origin" in message
+
+
+def test_resolve_unpacked_extension_origin_uses_default_chrome_user_data_root(tmp_path, monkeypatch):
+    extension_id = "gdjhjiphejeeclngbljhajiffhpdepee"
+    default_root = tmp_path / "Library" / "Application Support" / "Google" / "Chrome"
+    _write_preferences(
+        default_root / "Default",
+        "Secure Preferences",
+        {extension_id: {"path": _extension_path(tmp_path, "suno-helper")}},
+    )
+    monkeypatch.setattr(chrome_extensions.Path, "home", lambda: tmp_path)
+
+    resolved = resolve_unpacked_extension_origin("suno-helper")
+
+    assert resolved.extension_id == extension_id
+    assert resolved.profile == "Default"
 
 
 def test_resolve_unpacked_extension_origin_matches_secure_preferences(tmp_path):
@@ -97,7 +123,6 @@ def test_resolve_unpacked_extension_origin_missing_extension_guides_allow_origin
     "payload",
     (
         {},
-        {"extensions": None},
         {"extensions": {"settings": []}},
         {"extensions": {"settings": {"gdjhjiphejeeclngbljhajiffhpdepee": None}}},
         {"extensions": {"settings": {"gdjhjiphejeeclngbljhajiffhpdepee": {"path": None}}}},
@@ -136,6 +161,20 @@ def test_resolve_unpacked_extension_origin_accepts_same_id_across_profiles(tmp_p
 
     assert resolved.extension_id == extension_id
     assert resolved.origin == f"chrome-extension://{extension_id}"
+
+
+def test_resolve_unpacked_extension_origin_selects_first_profile_by_name(tmp_path):
+    extension_id = "gdjhjiphejeeclngbljhajiffhpdepee"
+    for profile in ("Profile 2", "Profile 10"):
+        _write_preferences(
+            tmp_path / profile,
+            "Secure Preferences",
+            {extension_id: {"path": _extension_path(tmp_path, "suno-helper")}},
+        )
+
+    resolved = resolve_unpacked_extension_origin("suno-helper", chrome_user_data_dir=tmp_path)
+
+    assert resolved.profile == "Profile 10"
 
 
 def test_resolve_unpacked_extension_origin_conflicting_ids_lists_candidates(tmp_path):

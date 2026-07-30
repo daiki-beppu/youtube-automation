@@ -60,6 +60,17 @@ async function loadBackground(opts?: {
     }),
     sendMessage: sendMessageMock,
   }));
+  const requireSenderTabIdMock = vi.fn(
+    (sender: { tab?: { id?: number } }, messageType: string) => {
+      if (typeof sender.tab?.id !== "number") {
+        throw new Error(`${messageType}: 送信元タブが特定できません`);
+      }
+      return sender.tab.id;
+    }
+  );
+  vi.doMock("@youtube-automation/extensions-shared/tab-relay", () => ({
+    requireSenderTabId: requireSenderTabIdMock,
+  }));
 
   const recordDistrokidReleaseMock = opts?.recordError
     ? vi.fn(() => Promise.reject(opts.recordError))
@@ -83,6 +94,7 @@ async function loadBackground(opts?: {
     installedListeners,
     migrateServerSourcesStorageMock,
     recordDistrokidReleaseMock,
+    requireSenderTabIdMock,
     sendMessageMock,
   };
 }
@@ -90,6 +102,7 @@ async function loadBackground(opts?: {
 afterEach(() => {
   vi.doUnmock("../lib/messaging");
   vi.doUnmock("../../shared/api");
+  vi.doUnmock("@youtube-automation/extensions-shared/tab-relay");
   vi.unstubAllGlobals();
 });
 
@@ -108,7 +121,8 @@ describe("background overlay relay", () => {
   });
 
   it("overlay command と runner progress を送信元と同一タブへ中継する", async () => {
-    const { handlers, sendMessageMock } = await loadBackground();
+    const { handlers, requireSenderTabIdMock, sendMessageMock } =
+      await loadBackground();
     const sender = { tab: { id: 42 } };
 
     await handlers.get("injectStart")!({
@@ -129,6 +143,16 @@ describe("background overlay relay", () => {
       "progress",
       { phase: "injecting", message: "working" },
       42
+    );
+    expect(requireSenderTabIdMock).toHaveBeenNthCalledWith(
+      1,
+      sender,
+      "injectStart"
+    );
+    expect(requireSenderTabIdMock).toHaveBeenNthCalledWith(
+      2,
+      sender,
+      "progress"
     );
   });
 

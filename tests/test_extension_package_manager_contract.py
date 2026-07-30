@@ -222,14 +222,14 @@ def test_release_skill_delegates_extension_verification_to_single_source() -> No
     assert "lockfile 無差分" in issue_entry
 
 
-def test_release_skill_places_hard_gates_and_completion_criteria_in_first_60_lines() -> None:
-    first_60_lines = "\n".join(_read(".claude/skills/automation-release/SKILL.md").splitlines()[:60])
+def test_release_skill_declares_executable_hard_gates_and_completion_criteria() -> None:
+    release_skill = _read(".claude/skills/automation-release/SKILL.md")
 
-    assert "## Hard Gates / 完了条件" in first_60_lines
-    assert "non-zeroならreleaseを停止" in first_60_lines
-    assert "承認前にpushしない" in first_60_lines
-    assert "extension prepare完了" in first_60_lines
-    assert "extension publish完了" in first_60_lines
+    assert "## Hard Gates / 完了条件" in release_skill
+    assert "non-zeroならreleaseを停止" in release_skill
+    assert "承認前にpushしない" in release_skill
+    assert "extension prepare完了" in release_skill
+    assert "extension publish完了" in release_skill
 
 
 def test_release_skill_requires_exactly_three_named_zip_assets() -> None:

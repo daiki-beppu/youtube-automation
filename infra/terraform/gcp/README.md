@@ -76,7 +76,6 @@ adc_email      = "you@example.com"
 | 名前 | 内容 |
 |------|------|
 | `project_id` | 確定した project ID |
-| `location` | Vertex AI リージョン |
 | `oauth_console_url` | Google Auth Platform 手動設定用 Console URL |
 | `enabled_apis` | 有効化した API 一覧 |
 

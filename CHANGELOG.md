@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `test(repository)`: リポジトリ契約監査の文字列・行数・自己テストを実行時境界へ置換し、Chrome extension/worktree解決、Git ignore、dotenv非使用、pytest lane、shared-ui relay、隔離fallow cacheの回帰契約を強化した（#2888）。
 - `fix(analytics)`: 競合候補の channel ID を YouTube API 上限の 50 件単位で取得し、uploads playlist 欠損または有効な公開日を持つ動画がない候補を結果から除外する境界を公開 API テストで担保した（#2631）。
 - `fix(analytics)`: retention timeline が不正な retention 数値（変換不能・NaN・Infinity）や非有限の動画尺を `ValidationError` として利用者向けに拒否し、壊れたJSON・曖昧なanalysis参照・duration fallback・未照合・Markdown escaping の境界を直接検証した（#2612, #2636）。
 - `fix(live-chat)`: Codex の構造化出力が JSON object でない場合も `GeneratorError` として安全に拒否し、facade・filter・history保存失敗・投稿失敗・chat終了後再探索・CLI enabled/割込み/例外終了の実行時契約を直接検証した（#2648, #2651）。

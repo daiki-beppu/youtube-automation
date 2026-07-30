@@ -120,9 +120,8 @@ uv run yt-skills lint [<skill>...]
 これは strict YAML / `description:` double-quote の軽量検証であり、skill 本文・docs・features catalog・配布経路の契約は対象外。広い契約は目的を分けて pytest で確認する:
 
 ```bash
-# 全 skill 横断の契約（frontmatter strict YAML / docs 整合 / features カタログ整合）
-uv run pytest tests/test_skill_frontmatter_yaml.py tests/test_skill_docs_consistency.py \
-  tests/test_features_catalog_documentation.py -n auto
+# 全 skill 横断の実行契約（frontmatter strict YAML / docs・配布参照整合）
+uv run pytest tests/test_skill_frontmatter_yaml.py tests/test_skill_docs_consistency.py -n auto
 
 # 編集した skill に個別契約テストがあれば併走する。探し方:
 rg -l '<skill-name>' tests/
@@ -162,7 +161,7 @@ uv run pytest tests/test_skills_sync_installed_wheel.py -q
 - [ ] `.claude/skills/<name>/SKILL.md` を作成（`docs/skill-design/skill-authoring-guidelines.md` 準拠。frontmatter 記法は `CLAUDE.md`「### skill frontmatter」）
 - [ ] 付属スクリプト・参照資料は `.claude/skills/<name>/references/` に配置
 - [ ] 契約テスト `tests/test_<name>_skill_contract.py` を追加（雛形は既存の `tests/test_video_description_skill_contract.py` / `tests/test_flop_analysis_skill_contract.py` を参照。SKILL.md の必須節・参照ファイルの存在・frontmatter 記述を機械担保する）
-- [ ] `docs/features.md` のカタログに 1 行追加し、冒頭の「全 **N** 個」を更新（`tests/test_features_catalog_documentation.py` が全 skill ディレクトリとの 1:1 対応と総数一致を機械担保しており、忘れると CI で落ちる）
+- [ ] `docs/features.md` のカタログに 1 行追加し、冒頭の「全 **N** 個」を更新
 - [ ] `CHANGELOG.md` の `[Unreleased]` に追記（`.claude/skills/` は実コード扱いでゲート対象）
 
 ### fork 運用者向け: upstream owner 参照の一覧

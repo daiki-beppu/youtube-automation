@@ -90,6 +90,60 @@ class TestMainWorktreeRoot:
         (broken / ".git").write_text("not a gitdir pointer\n", encoding="utf-8")
         assert main_worktree_root(broken) is None
 
+    def test_relative_gitdir_pointer_resolves_main_root(self, tmp_path):
+        main_root = tmp_path / "main"
+        gitdir = main_root / ".git" / "worktrees" / "wt"
+        gitdir.mkdir(parents=True)
+        (gitdir / "commondir").write_text("../..\n", encoding="utf-8")
+        worktree = tmp_path / "wt"
+        worktree.mkdir()
+        (worktree / ".git").write_text("gitdir: ../main/.git/worktrees/wt\n", encoding="utf-8")
+
+        assert main_worktree_root(worktree) == main_root.resolve()
+
+    def test_git_pointer_read_failure_returns_none(self, tmp_path, monkeypatch):
+        worktree = tmp_path / "wt"
+        worktree.mkdir()
+        pointer = worktree / ".git"
+        pointer.write_text("gitdir: ignored\n", encoding="utf-8")
+        original_read_text = Path.read_text
+
+        def fail_pointer_read(path: Path, *args, **kwargs):
+            if path == pointer:
+                raise OSError("permission denied")
+            return original_read_text(path, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "read_text", fail_pointer_read)
+
+        assert main_worktree_root(worktree) is None
+
+    def test_commondir_read_failure_returns_none(self, tmp_path, monkeypatch):
+        _, worktree = _make_worktree_pair(tmp_path)
+        pointer = worktree / ".git"
+        gitdir = Path(pointer.read_text(encoding="utf-8").removeprefix("gitdir:").strip())
+        commondir = gitdir / "commondir"
+        original_read_text = Path.read_text
+
+        def fail_commondir_read(path: Path, *args, **kwargs):
+            if path == commondir:
+                raise OSError("permission denied")
+            return original_read_text(path, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "read_text", fail_commondir_read)
+
+        assert main_worktree_root(worktree) is None
+
+    def test_pointer_resolving_to_current_root_is_rejected(self, tmp_path):
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        external_gitdir = tmp_path / "gitdirs" / "repo"
+        external_gitdir.mkdir(parents=True)
+        common = repo / "common"
+        (external_gitdir / "commondir").write_text(str(common), encoding="utf-8")
+        (repo / ".git").write_text(f"gitdir: {external_gitdir}\n", encoding="utf-8")
+
+        assert main_worktree_root(repo) is None
+
 
 class TestClientSecretsCandidates:
     def test_workspace_root_auth_is_fallback_after_channel_candidates(self, tmp_path, monkeypatch):

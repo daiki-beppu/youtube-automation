@@ -1,36 +1,72 @@
-"""セットアップ入口がチャンネルルート dotenv を管理しないことの contract test."""
+"""公開 setup 操作と配布 Terraform が channel dotenv を管理しない契約。"""
 
+from __future__ import annotations
+
+import re
+import subprocess
 from pathlib import Path
 
-from youtube_automation.commands.channel import channel_init_templates
-from youtube_automation.commands.system import doctor
+import pytest
+
+from youtube_automation.commands.channel.channel_init import main as channel_init_main
 
 ROOT = Path(__file__).resolve().parents[1]
 CHANNEL_NEW_REFERENCES = ROOT / ".claude" / "skills" / "channel-new" / "references"
 
 
-def test_doctor_has_no_env_file_check_or_writer() -> None:
-    assert not hasattr(doctor, "check_env_file")
-    assert not hasattr(doctor, "write_env_defaults")
+def test_channel_init_public_operation_does_not_generate_env(tmp_path) -> None:
+    result = channel_init_main(
+        [
+            "--target",
+            str(tmp_path),
+            "--short",
+            "TEST",
+            "--name",
+            "Test Channel",
+        ]
+    )
+
+    assert result == 0
+    assert not (tmp_path / ".env").exists()
 
 
-def test_channel_init_does_not_generate_env() -> None:
-    assert Path(".env") not in channel_init_templates.ROOT_TEXT_TEMPLATES
+@pytest.mark.parametrize("script_name", ("gcp-bootstrap.sh", "gcp-terraform-apply.sh"))
+def test_gcp_setup_scripts_reject_env_file_without_generating_it(tmp_path, script_name: str) -> None:
+    env_file = tmp_path / ".env"
+    result = subprocess.run(
+        ["bash", str(CHANNEL_NEW_REFERENCES / script_name), "--env-file", str(env_file)],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "未知のオプション: --env-file" in result.stderr
+    assert not env_file.exists()
 
 
-def test_gcp_setup_scripts_do_not_accept_or_write_env_file() -> None:
-    for name in ("gcp-bootstrap.sh", "gcp-terraform-apply.sh"):
-        source = (CHANNEL_NEW_REFERENCES / name).read_text(encoding="utf-8")
-        assert "--env-file" not in source
-        assert "ENV_FILE" not in source
-        assert "write_env_var" not in source
-
-
-def test_canonical_and_bundled_terraform_contracts_match_without_env_outputs() -> None:
+def test_bundled_terraform_inputs_and_outputs_match_the_canonical_copy() -> None:
     canonical = ROOT / "infra" / "terraform" / "gcp"
     bundled = CHANNEL_NEW_REFERENCES / "terraform-gcp"
+
     for name in ("outputs.tf", "variables.tf"):
-        canonical_text = (canonical / name).read_text(encoding="utf-8")
-        assert canonical_text == (bundled / name).read_text(encoding="utf-8")
-        assert 'output "env_vars"' not in canonical_text
-        assert 'variable "location"' not in canonical_text
+        assert (bundled / name).read_bytes() == (canonical / name).read_bytes()
+
+
+def test_terraform_public_schema_has_no_dotenv_output_or_location_input() -> None:
+    canonical = ROOT / "infra" / "terraform" / "gcp"
+    outputs = set(re.findall(r'(?m)^output\s+"([^"]+)"', (canonical / "outputs.tf").read_text(encoding="utf-8")))
+    variables = set(re.findall(r'(?m)^variable\s+"([^"]+)"', (canonical / "variables.tf").read_text(encoding="utf-8")))
+
+    assert outputs == {"project_id", "oauth_console_url", "enabled_apis"}
+    assert variables == {
+        "project_id",
+        "project_name",
+        "create_project",
+        "billing_account",
+        "org_id",
+        "folder_id",
+        "adc_email",
+        "apis",
+    }

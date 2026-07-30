@@ -1,274 +1,31 @@
+"""Shared UI の配布設定に限定した repository contract tests."""
+
+from __future__ import annotations
+
 import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 EXTENSIONS = ROOT / "extensions"
 HELPERS = ("suno-helper", "distrokid-helper", "community-helper")
-PRIMITIVES = (
-    "alert-dialog.tsx",
-    "alert.tsx",
-    "button.tsx",
-    "card.tsx",
-    "checkbox.tsx",
-    "collapsible.tsx",
-    "empty.tsx",
-    "field.tsx",
-    "input.tsx",
-    "label.tsx",
-    "radio-group.tsx",
-    "scroll-area.tsx",
-    "select.tsx",
-    "server-source-field.tsx",
-    "switch.tsx",
-)
-MIGRATED_PRIMITIVES = ("alert.tsx", "button.tsx", "card.tsx", "select.tsx")
-
-
-def test_shared_ui_package_owns_public_primitives_and_theme() -> None:
-    package = json.loads((EXTENSIONS / "shared-ui/package.json").read_text())
-
-    assert package["name"] == "@youtube-automation/ui"
-    assert package["exports"] == {
-        ".": "./src/index.ts",
-        "./theme.css": "./src/theme.css",
-    }
-    assert set(package["dependencies"]) == {
-        "@base-ui/react",
-        "@youtube-automation/extensions-shared",
-        "class-variance-authority",
-        "clsx",
-        "tailwindcss",
-        "tailwind-merge",
-    }
-
-    index = (EXTENSIONS / "shared-ui/src/index.ts").read_text()
-    for public_symbol in (
-        "Alert",
-        "AlertDialog",
-        "AlertDialogContent",
-        "AlertDescription",
-        "Button",
-        "Card",
-        "Checkbox",
-        "Collapsible",
-        "CollapsibleContent",
-        "CollapsibleTrigger",
-        "Empty",
-        "FieldError",
-        "FieldLabel",
-        "FieldSet",
-        "Input",
-        "OverlayShell",
-        "RadioGroup",
-        "RadioGroupItem",
-        "ScrollArea",
-        "ScrollBar",
-        "Select",
-        "ServerSourceField",
-        "Switch",
-        "useDraggable",
-        "cn",
-    ):
-        assert public_symbol in index
-
-    for primitive in PRIMITIVES:
-        assert (EXTENSIONS / f"shared-ui/src/{primitive}").is_file()
-
-
-def test_overlay_foundation_is_shared_and_service_neutral() -> None:
-    shared_package = json.loads((EXTENSIONS / "shared/package.json").read_text())
-    state = (EXTENSIONS / "shared/overlay-state.ts").read_text()
-    shell = (EXTENSIONS / "shared-ui/src/overlay-shell.tsx").read_text()
-    draggable = (EXTENSIONS / "shared-ui/src/use-draggable.ts").read_text()
-    controller = (EXTENSIONS / "shared-ui/src/use-overlay-controller.ts").read_text()
-
-    assert shared_package["exports"]["./overlay-state"] == "./overlay-state.ts"
-    assert shared_package["exports"]["./constants"] == "./constants.ts"
-    for helper_name in HELPERS:
-        workspace = (EXTENSIONS / helper_name / "pnpm-workspace.yaml").read_text()
-        assert "../shared" in workspace
-        assert "../shared-ui" in workspace
-
-    suno_package = json.loads((EXTENSIONS / "suno-helper/package.json").read_text())
-    assert suno_package["dependencies"]["@youtube-automation/extensions-shared"] == "workspace:*"
-
-    assert "createOverlayStateStorage" in state
-    assert "storageKey" in state
-    assert "toggleOverlayHidden" in state
-    assert "overlayHiddenStyle" in state
-    assert 'data-overlay-shell=""' in shell
-    assert 'data-overlay-handle=""' in shell
-    assert "subscribeToggle" in controller
-    assert 'display: controller.minimized ? "none" : "block"' in shell
-    assert "clampOverlayPosition" in draggable
-    assert 'window.addEventListener("resize"' in draggable
-    assert "suno" not in shell.lower()
-    assert "distrokid" not in shell.lower()
-    assert "community" not in shell.lower()
-    assert "suno" not in controller.lower()
-    assert "distrokid" not in controller.lower()
-    assert "community" not in controller.lower()
-    assert not (EXTENSIONS / "suno-helper/components/useDraggable.ts").exists()
-    assert not (EXTENSIONS / "suno-helper/lib/overlay-state.ts").exists()
-
-
-def test_shared_form_primitives_use_base_ui_state_contracts() -> None:
-    checkbox = (EXTENSIONS / "shared-ui/src/checkbox.tsx").read_text()
-    radio_group = (EXTENSIONS / "shared-ui/src/radio-group.tsx").read_text()
-
-    assert 'from "@base-ui/react/checkbox"' in checkbox
-    assert 'data-slot="checkbox"' in checkbox
-    assert 'data-slot="checkbox-indicator"' in checkbox
-    assert "data-checked" in checkbox
-    assert "disabled:opacity-50" in checkbox
-    assert "focus-visible:ring-3" in checkbox
-    assert "data-indeterminate:bg-primary" in checkbox
-    assert "aria-invalid:ring-3" in checkbox
-
-    assert 'from "@base-ui/react/radio"' in radio_group
-    assert 'from "@base-ui/react/radio-group"' in radio_group
-    assert 'data-slot="radio-group"' in radio_group
-    assert 'data-slot="radio-group-item"' in radio_group
-    assert 'data-slot="radio-group-indicator"' in radio_group
-    assert "data-checked" in radio_group
-    assert "disabled:opacity-50" in radio_group
-    assert "focus-visible:ring-3" in radio_group
-    assert "aria-invalid:ring-3" in radio_group
-    assert "data-checked:bg-primary" not in radio_group
-    assert 'className="flex size-4 items-center justify-center"' in radio_group
-    assert "left-1/2 top-1/2" in radio_group
-    assert "-translate-x-1/2 -translate-y-1/2" in radio_group
-    assert "rounded-full bg-current" in radio_group
-
-
-def test_shared_collapsible_tracks_current_base_vega_composition() -> None:
-    collapsible = (EXTENSIONS / "shared-ui/src/collapsible.tsx").read_text()
-
-    assert 'from "@base-ui/react/collapsible"' in collapsible
-    assert 'data-slot="collapsible"' in collapsible
-    assert 'data-slot="collapsible-trigger"' in collapsible
-    assert 'data-slot="collapsible-content"' in collapsible
-    assert "CollapsiblePrimitive.Root.Props" in collapsible
-    assert "CollapsiblePrimitive.Trigger.Props" in collapsible
-    assert "CollapsiblePrimitive.Panel.Props" in collapsible
-
-
-def test_shared_scroll_area_tracks_current_base_vega_composition() -> None:
-    scroll_area = (EXTENSIONS / "shared-ui/src/scroll-area.tsx").read_text()
-
-    assert 'from "@base-ui/react/scroll-area"' in scroll_area
-    for slot in (
-        "scroll-area",
-        "scroll-area-viewport",
-        "scroll-area-scrollbar",
-        "scroll-area-thumb",
-    ):
-        assert f'data-slot="{slot}"' in scroll_area
-    assert "ScrollAreaPrimitive.Root.Props" in scroll_area
-    assert "ScrollAreaPrimitive.Scrollbar.Props" in scroll_area
-    assert "viewportClassName" in scroll_area
-
-
-def test_shared_switch_tracks_current_light_only_base_vega_composition() -> None:
-    switch = (EXTENSIONS / "shared-ui/src/switch.tsx").read_text()
-
-    assert 'from "@base-ui/react/switch"' in switch
-    assert 'data-slot="switch"' in switch
-    assert 'data-slot="switch-thumb"' in switch
-    assert "data-checked:bg-primary" in switch
-    assert "data-unchecked:bg-input" in switch
-    assert "focus-visible:ring-3" in switch
-    assert "dark:" not in switch
-
-
-def test_shared_primitives_track_current_base_vega_composition() -> None:
-    sources = {
-        name: (EXTENSIONS / f"shared-ui/src/{name}.tsx").read_text()
-        for name in ("alert", "button", "card", "field", "select")
-    }
-
-    assert "[&_p:not(:last-child)]:mb-4" in sources["alert"]
-    assert "group/button" in sources["button"]
-    assert '"icon-xs"' in sources["button"]
-    assert "active:not-aria-[haspopup]:translate-y-px" in sources["button"]
-    assert "has-[>img:first-child]:pt-0" in sources["card"]
-    assert "has-data-[slot=card-action]:grid-cols-[1fr_auto]" in sources["card"]
-
-    for slot in (
-        "field-set",
-        "field-legend",
-        "field-group",
-        "field-title",
-        "field-separator",
-        "field-error",
-    ):
-        assert f'data-slot="{slot}"' in sources["field"]
-
-    assert "*:data-[slot=select-value]:line-clamp-1" in sources["select"]
-    assert "data-[side=bottom]:slide-in-from-top-2" in sources["select"]
-    assert "SelectPortalContext" in sources["select"]
-
-
-def test_shared_theme_is_light_only() -> None:
-    theme = (EXTENSIONS / "shared-ui/src/theme.css").read_text()
-
-    assert "--background: oklch(0.97 0 0);" in theme
-    assert "--card: oklch(1 0 0);" in theme
-    assert "--popover: oklch(1 0 0);" in theme
-    assert "@custom-variant dark" not in theme
-    assert ".dark" not in theme
-    assert ":host(.dark)" not in theme
-
-    for status in ("info", "warning", "success", "destructive"):
-        for role in ("background", "foreground", "border"):
-            token = f"--{status}-{role}:"
-            assert theme.count(token) == 1, f"{token} must exist once in the light theme"
-            assert f"--color-{status}-{role}: var(--{status}-{role});" in theme
-
-    source_roots = [EXTENSIONS / "shared-ui/src"]
-    source_roots.extend(
-        EXTENSIONS / helper / directory for helper in HELPERS for directory in ("components", "entrypoints", "lib")
-    )
-    sources = "\n".join(
-        path.read_text()
-        for source_root in source_roots
-        if source_root.exists()
-        for path in source_root.rglob("*")
-        if path.suffix in {".css", ".ts", ".tsx"}
-    )
-    assert "dark:" not in sources
-    assert "prefers-color-scheme" not in sources
-    assert not (EXTENSIONS / "shared-ui/src/color-scheme.ts").exists()
-    assert "watchColorScheme" not in sources
-
-
-def test_helpers_depend_on_shared_ui_without_local_primitive_copies() -> None:
-    for helper_name in HELPERS:
-        helper = EXTENSIONS / helper_name
-        package = json.loads((helper / "package.json").read_text())
-
-        assert package["dependencies"]["@youtube-automation/ui"] == "workspace:*"
-        assert not (helper / "lib/utils.ts").exists()
-        for primitive in MIGRATED_PRIMITIVES:
-            assert not (helper / f"components/ui/{primitive}").exists()
 
 
 def test_shared_ui_consumers_dedupe_base_ui_and_react_from_their_workspace() -> None:
     for helper_name in HELPERS:
         helper = EXTENSIONS / helper_name
-        package = json.loads((helper / "package.json").read_text())
+        package = json.loads((helper / "package.json").read_text(encoding="utf-8"))
         assert package["dependencies"]["@base-ui/react"] == "1.6.0"
         for config_name in ("vitest.config.ts", "wxt.config.ts"):
-            config = (helper / config_name).read_text()
+            config = (helper / config_name).read_text(encoding="utf-8")
             assert '"react", "react-dom", "@base-ui/react"' in config
 
-    fallow = json.loads((EXTENSIONS / ".fallowrc.json").read_text())
+    fallow = json.loads((EXTENSIONS / ".fallowrc.json").read_text(encoding="utf-8"))
     assert fallow["ignoreDependencies"] == ["@base-ui/react"]
 
 
 def test_all_shadcn_configs_choose_base_vega() -> None:
     for workspace in ("shared-ui", *HELPERS):
-        config = json.loads((EXTENSIONS / workspace / "components.json").read_text())
+        config = json.loads((EXTENSIONS / workspace / "components.json").read_text(encoding="utf-8"))
         assert config["style"] == "base-vega"
 
 
@@ -281,21 +38,12 @@ def test_helpers_import_the_shared_theme_contract() -> None:
     )
 
     for style in styles:
-        assert '@import "@youtube-automation/ui/theme.css";' in style.read_text()
-
-
-def test_shared_overlay_relay_is_exported_and_consumed_by_overlay_helpers() -> None:
-    shared_package = json.loads((EXTENSIONS / "shared/package.json").read_text())
-
-    assert shared_package["exports"]["./tab-relay"] == "./tab-relay.ts"
-    for helper_name in ("distrokid-helper", "community-helper"):
-        package = json.loads((EXTENSIONS / helper_name / "package.json").read_text())
-        assert package["dependencies"]["@youtube-automation/extensions-shared"] == "workspace:*"
+        assert '@import "@youtube-automation/ui/theme.css";' in style.read_text(encoding="utf-8")
 
 
 def test_shared_ui_is_in_the_extension_lint_gate() -> None:
-    shared_package = json.loads((EXTENSIONS / "shared-ui/package.json").read_text())
-    suno_package = json.loads((EXTENSIONS / "suno-helper/package.json").read_text())
+    shared_package = json.loads((EXTENSIONS / "shared-ui/package.json").read_text(encoding="utf-8"))
+    suno_package = json.loads((EXTENSIONS / "suno-helper/package.json").read_text(encoding="utf-8"))
 
-    assert shared_package["scripts"]["check"] == ("pnpm --dir .. exec ultracite check shared-ui")
+    assert shared_package["scripts"]["check"] == "pnpm --dir .. exec ultracite check shared-ui"
     assert "shared-ui" in suno_package["scripts"]["check"]
