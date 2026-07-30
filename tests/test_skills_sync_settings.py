@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from youtube_automation.commands.system import skills_sync
 
 
@@ -74,6 +76,18 @@ def test_settings_invalid_target_is_not_overwritten(tmp_path, monkeypatch) -> No
     target.write_text("{broken", encoding="utf-8")
     before = target.read_bytes()
     assert _run(tmp_path, target, monkeypatch, "--accept-hooks") == 1
+    assert target.read_bytes() == before
+
+
+@pytest.mark.parametrize("invalid_root", ["[]", "null", '"scalar"'])
+def test_settings_non_object_root_is_rejected_without_overwrite(tmp_path, monkeypatch, invalid_root: str) -> None:
+    _template(tmp_path)
+    target = tmp_path / "settings.json"
+    target.write_text(invalid_root, encoding="utf-8")
+    before = target.read_bytes()
+
+    assert _run(tmp_path, target, monkeypatch, "--accept-hooks") == 1
+
     assert target.read_bytes() == before
 
 
