@@ -5,12 +5,14 @@ import { ScrollArea as ScrollAreaPrimitive } from "@base-ui/react/scroll-area";
 import { cn } from "./utils";
 
 type ScrollAreaProps = ScrollAreaPrimitive.Root.Props & {
+  scrollbars?: "vertical" | "horizontal" | "both";
   viewportClassName?: string;
 };
 
 function ScrollArea({
   className,
   children,
+  scrollbars = "vertical",
   viewportClassName,
   ...props
 }: ScrollAreaProps) {
@@ -29,14 +31,20 @@ function ScrollArea({
       >
         {children}
       </ScrollAreaPrimitive.Viewport>
-      <ScrollBar />
-      <ScrollAreaPrimitive.Corner />
+      {scrollbars === "vertical" || scrollbars === "both" ? (
+        <ScrollBar />
+      ) : null}
+      {scrollbars === "horizontal" || scrollbars === "both" ? (
+        <ScrollBar orientation="horizontal" />
+      ) : null}
+      <ScrollAreaPrimitive.Corner data-slot="scroll-area-corner" />
     </ScrollAreaPrimitive.Root>
   );
 }
 
 function ScrollBar({
   className,
+  keepMounted = true,
   orientation = "vertical",
   ...props
 }: ScrollAreaPrimitive.Scrollbar.Props) {
@@ -44,6 +52,7 @@ function ScrollBar({
     <ScrollAreaPrimitive.Scrollbar
       data-slot="scroll-area-scrollbar"
       data-orientation={orientation}
+      keepMounted={keepMounted}
       orientation={orientation}
       className={cn(
         "flex touch-none p-px transition-colors select-none data-horizontal:h-2.5 data-horizontal:flex-col data-horizontal:border-t data-horizontal:border-t-transparent data-vertical:h-full data-vertical:w-2.5 data-vertical:border-l data-vertical:border-l-transparent",

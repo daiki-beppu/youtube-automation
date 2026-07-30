@@ -177,4 +177,77 @@ describe("runInjection", () => {
     expect(made.calls).toEqual([{ kind: "start", trackIndex: 3 }]);
     expect(made.fetched).toEqual([]);
   });
+
+  it.each([
+    ["start", ["start"]],
+    ["trackFetch", ["start", "message:track-01.mp3", "fetch:track-01.mp3"]],
+    ["track", ["start", "message:track-01.mp3", "fetch:track-01.mp3", "track"]],
+    [
+      "coverFetch",
+      [
+        "start",
+        "message:track-01.mp3",
+        "fetch:track-01.mp3",
+        "track",
+        "message:main.png",
+        "fetch:main.png",
+      ],
+    ],
+    [
+      "cover",
+      [
+        "start",
+        "message:track-01.mp3",
+        "fetch:track-01.mp3",
+        "track",
+        "message:main.png",
+        "fetch:main.png",
+        "cover",
+      ],
+    ],
+    [
+      "finish",
+      [
+        "start",
+        "message:track-01.mp3",
+        "fetch:track-01.mp3",
+        "track",
+        "message:main.png",
+        "fetch:main.png",
+        "cover",
+        "finish",
+      ],
+    ],
+  ] as const)(
+    "propagates a %s rejection and performs no later message or side effect",
+    async (failure, expectedEvents) => {
+      const events: string[] = [];
+      const rejectAt = async (name: string): Promise<void> => {
+        events.push(name);
+        if (failure === name) {
+          throw new Error(`${failure} failed`);
+        }
+      };
+      const channel: InjectChannel = {
+        start: async () => rejectAt("start"),
+        setMessage: (message) =>
+          events.push(`message:${message.split(": ").at(-1)}`),
+        fetchAsset: async (_path, filename) => {
+          const step = filename === "main.png" ? "coverFetch" : "trackFetch";
+          events.push(`fetch:${filename}`);
+          if (failure === step) throw new Error(`${failure} failed`);
+          return { filename, mimeType: "audio/mpeg", base64: "AQID" };
+        },
+        track: async () => rejectAt("track"),
+        cover: async () => rejectAt("cover"),
+        finish: async () => rejectAt("finish"),
+        isStopped: () => false,
+      };
+
+      await expect(runInjection(makePayload(1, true), channel)).rejects.toThrow(
+        `${failure} failed`
+      );
+      expect(events).toEqual(expectedEvents);
+    }
+  );
 });

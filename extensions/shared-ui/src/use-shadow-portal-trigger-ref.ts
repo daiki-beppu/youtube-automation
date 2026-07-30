@@ -13,9 +13,7 @@ export function useShadowPortalTriggerRef<T extends HTMLElement>(
       } else if (forwardedRef) {
         forwardedRef.current = node;
       }
-      if (node) {
-        setContainer?.(node.parentElement);
-      }
+      setContainer?.(node?.parentElement ?? null);
     },
     [forwardedRef, setContainer]
   );

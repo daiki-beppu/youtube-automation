@@ -14,6 +14,7 @@ const initialState = {
 
 const messagingMocks = vi.hoisted(() => ({
   toggle: undefined as (() => void) | undefined,
+  unsubscribe: vi.fn(),
 }));
 const storageMocks = vi.hoisted(() => ({
   read: vi.fn(async () => initialState),
@@ -26,7 +27,7 @@ vi.mock("../components/App", () => ({
 vi.mock("../lib/messaging", () => ({
   onMessage: vi.fn((_type: string, listener: () => void) => {
     messagingMocks.toggle = listener;
-    return vi.fn();
+    return messagingMocks.unsubscribe;
   }),
 }));
 vi.mock("../lib/overlay-storage", () => ({
@@ -39,21 +40,29 @@ describe("Community Overlay", () => {
   let root: Root;
 
   beforeEach(async () => {
-    storageMocks.read.mockClear();
-    storageMocks.write.mockClear();
+    storageMocks.read.mockReset().mockResolvedValue(initialState);
+    storageMocks.write.mockReset().mockResolvedValue(undefined);
     messagingMocks.toggle = undefined;
+    messagingMocks.unsubscribe.mockClear();
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
-    await act(async () => root.render(createElement(Overlay)));
   });
+
+  async function renderOverlay(): Promise<void> {
+    await act(async () => root.render(createElement(Overlay)));
+  }
 
   afterEach(() => {
     act(() => root.unmount());
+    if (messagingMocks.toggle) {
+      expect(messagingMocks.unsubscribe).toHaveBeenCalledOnce();
+    }
     container.remove();
   });
 
   it("renders the app in the shared shell and persists minimize state", async () => {
+    await renderOverlay();
     const shell = container.querySelector<HTMLElement>("[data-overlay-shell]")!;
     expect(shell.style.left).toBe("40px");
     expect(shell.style.top).toBe("50px");
@@ -81,10 +90,40 @@ describe("Community Overlay", () => {
   });
 
   it("keeps the action toggle listener alive while hidden", async () => {
+    await renderOverlay();
     const shell = container.querySelector<HTMLElement>("[data-overlay-shell]")!;
     await act(async () => messagingMocks.toggle?.());
     expect(shell.style.display).toBe("none");
     await act(async () => messagingMocks.toggle?.());
     expect(shell.style.display).toBe("block");
+  });
+
+  it("shows reload guidance when initial storage read rejects", async () => {
+    storageMocks.read.mockRejectedValueOnce(new Error("storage context lost"));
+
+    await renderOverlay();
+
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      "再読み込みが必要です"
+    );
+    expect(container.querySelector("[data-overlay-shell]")).toBeNull();
+    expect(messagingMocks.toggle).toBeUndefined();
+  });
+
+  it("shows reload guidance when state persistence rejects", async () => {
+    storageMocks.write.mockRejectedValueOnce(new Error("write failed"));
+    await renderOverlay();
+
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>('button[aria-label="最小化"]')!
+        .click();
+      await Promise.resolve();
+    });
+
+    expect(storageMocks.write).toHaveBeenCalledOnce();
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      "再読み込みが必要です"
+    );
   });
 });

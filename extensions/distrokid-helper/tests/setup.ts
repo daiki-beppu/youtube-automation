@@ -10,13 +10,26 @@ import { fakeBrowser } from "wxt/testing/fake-browser";
 
 vi.stubGlobal("chrome", fakeBrowser);
 vi.stubGlobal("browser", fakeBrowser);
+Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+
+interface PointerEventWindow {
+  MouseEvent: typeof MouseEvent;
+  PointerEvent?: typeof PointerEvent;
+}
+
+export function installPointerEventFallback(target: PointerEventWindow): void {
+  if (target.PointerEvent) {
+    return;
+  }
+  Object.defineProperty(target, "PointerEvent", {
+    configurable: true,
+    value: target.MouseEvent,
+    writable: true,
+  });
+}
 
 // jsdom does not implement PointerEvent, while Base UI dispatches one through
 // hidden native form controls to preserve browser form semantics.
-if (typeof window !== "undefined" && !window.PointerEvent) {
-  Object.defineProperty(window, "PointerEvent", {
-    configurable: true,
-    value: window.MouseEvent,
-    writable: true,
-  });
+if (typeof window !== "undefined") {
+  installPointerEventFallback(window);
 }

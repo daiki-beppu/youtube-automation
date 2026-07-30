@@ -46,11 +46,9 @@ function getOverlayBrandStyle(
   return {
     "--overlay-header-background": brandColors.headerBackground,
     "--overlay-header-foreground": brandColors.headerForeground,
-    ...(brandColors.primary && brandColors.primaryForeground
-      ? {
-          "--primary": brandColors.primary,
-          "--primary-foreground": brandColors.primaryForeground,
-        }
+    ...(brandColors.primary ? { "--primary": brandColors.primary } : {}),
+    ...(brandColors.primaryForeground
+      ? { "--primary-foreground": brandColors.primaryForeground }
       : {}),
   };
 }

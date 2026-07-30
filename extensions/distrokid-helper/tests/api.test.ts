@@ -151,6 +151,19 @@ describe("fetchRelease", () => {
     }
   );
 
+  it.each([[null], [undefined], [["profile"]]])(
+    "profile=%j は不正 envelope として reject する",
+    async (profile) => {
+      fetchMock.mockResolvedValue(
+        jsonResponse(200, { ...SAMPLE_PAYLOAD, profile })
+      );
+
+      await expect(fetchRelease("http://localhost:7873")).rejects.toThrow(
+        /profile must be an object/u
+      );
+    }
+  );
+
   it.each([[null], [undefined], [["track-01"]]])(
     "release=%j は不正 payload として reject する",
     async (release) => {

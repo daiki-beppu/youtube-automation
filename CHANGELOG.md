@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `fix(extensions)`: Community / DistroKid helper の cleanup・stop・storage・asset relay・content injection 失敗を後続副作用なしで扱い、shared-ui の portal・primitive・refresh・drag・viewport 境界と entrypoint lifecycle を実 mount 回帰テストで固定した（#2926〜#2946）。
 - `fix(skills)`: スキル配布・パッケージング監査の25件を実行可能な成功／失敗契約へ置換し、market/persona の状態判定、schedule/GCP/shell reference の外部コマンド境界、thumbnail のatomic更新、動画ベンチマーク、コメント収集のpagination・途中失敗・atomic保存・CLI終了コードを回帰テストで固定した（#2831〜#2855）。
 - `test(repository)`: リポジトリ契約監査の文字列・行数・自己テストを実行時境界へ置換し、Chrome extension/worktree解決、Git ignore、dotenv非使用、pytest lane、shared-ui relay、隔離fallow cacheの回帰契約を強化した（#2888）。
 - `fix(dashboard)`: detail 選択の競合 response が現在の表示・loading/error 状態を上書きしないようにし、Analytics snapshot の bool・負値・不正 nested shape を公開 read model/API で安全な値へ正規化。dashboard・refresh・architecture・fixture/helper の失敗/境界経路を実行時回帰テストで補強し、session-expiry の定数形式テストを 404/410 の公開 upload 動作へ統合した（#2857, #2858, #2859, #2860, #2861, #2862, #2863, #2864, #2865, #2866, #2867）。

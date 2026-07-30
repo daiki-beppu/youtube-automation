@@ -388,6 +388,23 @@ describe("useDistrokidRunner", () => {
     expect(sendMessage).toHaveBeenCalledWith("stop");
   });
 
+  it("stop relay reject: error phase/message を表示して busy を解除する", async () => {
+    stubDirModeServer();
+    await fetchDirModeRelease();
+    vi.mocked(sendMessage).mockRejectedValueOnce(
+      new Error("stop relay unavailable")
+    );
+
+    await act(async () => {
+      await current.stop();
+    });
+
+    expect(sendMessage).toHaveBeenCalledWith("stop");
+    expect(current.phase).toBe("error");
+    expect(current.message).toBe("stop relay unavailable");
+    expect(current.busy).toBe(false);
+  });
+
   it("inject: 完了後に配信済み記録を POST し、一覧を再取得して配信済み disc を除外する", async () => {
     stubDirModeServer();
     await fetchDirModeRelease();
