@@ -28,13 +28,6 @@ class TestStreamingSkillFirewall:
     本テストは raw text のキーワード包含のみ検証する（章立て自由度を残す）。
     """
 
-    def test_skill_file_exists(self):
-        """Given .claude/skills/streaming/
-        When SKILL.md を探す
-        Then 存在する。
-        """
-        assert _STREAMING_SKILL.exists(), ".claude/skills/streaming/SKILL.md が存在しない"
-
     def test_mentions_allowed_ssh_cidr(self):
         """Given SKILL.md
         When 全文を読む
@@ -131,13 +124,6 @@ class TestStreamingReadme:
     包含のみ検証する（執筆の自由度を残す）。
     """
 
-    def test_file_exists(self):
-        """Given infra/terraform/streaming/
-        When README.md を探す
-        Then 存在する（gcp モジュールと並列の慣例）。
-        """
-        assert _STREAMING_README.exists(), "infra/terraform/streaming/README.md が存在しない"
-
     def test_mentions_tf_var_stream_key(self):
         """Given README
         When 全文を読む
@@ -224,14 +210,31 @@ class TestStreamingReadme:
         assert "低エントロピー値" in text, "README に低エントロピー値の hash 化が secret 保護でない説明が無い"
 
     def test_mentions_systemctl_status_for_verification(self):
-        """Given README
-        When 全文を読む
-        Then ``systemctl status`` 等の動作確認コマンドが書かれている。
-
-        order.md「動作確認」セクションの最低限の引用。
+        """Given README の動作確認節
+        When サービス・サイクル・ログの確認手順を読む
+        Then 各確認目的と実行コマンドが同じ節で対応付く。
         """
         text = read_file(_STREAMING_README)
-        assert "systemctl" in text, "README に systemctl 系の動作確認コマンドが書かれていない"
+        match = re.search(
+            r"^## 動作確認\s*$\n(.*?)(?=^##\s|\Z)",
+            text,
+            flags=re.MULTILINE | re.DOTALL,
+        )
+        assert match is not None, "README に動作確認節が無い"
+        section = match.group(1)
+        assert (
+            "# サービス状態（active / inactive / failed）\n"
+            "ssh -i ~/.ssh/yt_stream_key root@<instance_ip> systemctl status youtube-stream"
+        ) in section
+        assert (
+            "# 配信サイクル設定が効いているか確認\n"
+            "ssh -i ~/.ssh/yt_stream_key root@<instance_ip> systemctl show youtube-stream "
+            "| grep -E 'RuntimeMaxUSec|RestartUSec'"
+        ) in section
+        assert (
+            "# リアルタイムログ（ffmpeg の出力）\n"
+            "ssh -i ~/.ssh/yt_stream_key root@<instance_ip> journalctl -u youtube-stream -f"
+        ) in section
 
     def test_mentions_default_24_7_and_optional_11h_1h_streaming_cycle(self):
         """Given README
