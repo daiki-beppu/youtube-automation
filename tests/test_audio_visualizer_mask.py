@@ -52,3 +52,43 @@ def test_heart_mask_places_discrete_bars_on_cardioid(tmp_path: Path) -> None:
 def test_parse_size_rejects_invalid_values(value: str) -> None:
     with pytest.raises(ValueError, match="WIDTHxHEIGHT"):
         parse_size(value)
+
+
+@pytest.mark.parametrize(
+    "override",
+    [
+        {"bars": 0},
+        {"inner_r": -1},
+        {"length": 0},
+        {"arc_deg": (0, 0)},
+        {"arc_deg": (-1, 360)},
+        {"arc_deg": (0, 361)},
+        {"arc_deg": (300, 200)},
+    ],
+)
+def test_generate_mask_rejects_invalid_geometry_without_creating_output(tmp_path: Path, override: dict) -> None:
+    output = tmp_path / "invalid.png"
+    kwargs = {
+        "style": "ring",
+        "size": "300x110",
+        "bars": 12,
+        "inner_r": 30,
+        "length": 20,
+        "arc_deg": (0, 360),
+        **override,
+    }
+
+    with pytest.raises(ValueError):
+        generate_mask(output, **kwargs)
+
+    assert not output.exists()
+
+
+@pytest.mark.parametrize("size", ["301x110", "300x111"])
+def test_generate_mirror_mask_rejects_odd_dimensions_without_output(tmp_path: Path, size: str) -> None:
+    output = tmp_path / "invalid-mirror.png"
+
+    with pytest.raises(ValueError, match="both be even"):
+        generate_mask(output, style="mirror-mountain", size=size, bars=16)
+
+    assert not output.exists()
