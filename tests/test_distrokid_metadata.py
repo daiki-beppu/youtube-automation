@@ -218,6 +218,31 @@ def test_parse_track_table_extracts_filled_isrc(tmp_path):
     assert parse_track_table(md)[0]["isrc"] == "USABC1234567"
 
 
+def test_parse_track_table_skips_numeric_row_with_too_few_columns(tmp_path):
+    """REQ-2729-03: 数値列でも title/filename の3列に満たない行は track として返さない."""
+    md = tmp_path / "metadata.md"
+    md.write_text(
+        "\n".join(
+            [
+                "| # | タイトル | ファイル |",
+                "|---|---|---|",
+                "| 1 | title |",
+                "| 2 | Complete | `02-complete.mp3` |",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    assert parse_track_table(md) == [
+        {
+            "number": 2,
+            "title": "Complete",
+            "filename": "02-complete.mp3",
+            "isrc": None,
+        }
+    ]
+
+
 def test_parse_track_table_missing_file_raises_config_error(tmp_path):
     """Given 不在の metadata.md
     When parse_track_table

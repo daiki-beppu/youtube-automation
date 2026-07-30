@@ -610,6 +610,39 @@ class TestMainExecution:
                 "Keeping old title; updating description only.",
             ) in [(record.levelname, record.message) for record in caplog.records]
 
+    def test_should_accept_new_title_at_exactly_100_utf16_units(self, tmp_path, monkeypatch):
+        """REQ-2805-01: UTF-16 ちょうど 100 units は新 title を保持する."""
+        from youtube_automation.commands.metadata import bulk_update_descriptions as mod
+
+        boundary_title = "x" * 98 + "🎵"
+        assert mod.utf16_units(boundary_title) == 100
+        ch = _setup_channel(tmp_path)
+        _make_collection_with_descriptions(
+            ch,
+            "alpha",
+            video_id="V_ALPHA",
+            title=boundary_title,
+            description="new desc",
+        )
+        monkeypatch.setenv("CHANNEL_DIR", str(ch))
+        reset()
+        monkeypatch.setattr(sys, "argv", ["yt-bulk-update-desc"])
+        yt_mock = _build_youtube_mock([_snippet("V_ALPHA", title="old title", description="old desc")])
+
+        with (
+            patch.object(
+                mod,
+                "create_authenticated_youtube_clients",
+                return_value=SimpleNamespace(youtube=yt_mock),
+            ),
+            patch.object(mod.time, "sleep"),
+        ):
+            mod.main()
+
+        body = yt_mock.videos.return_value.update.call_args_list[0].kwargs["body"]
+        assert body["snippet"]["title"] == boundary_title
+        assert body["snippet"]["description"] == "new desc"
+
     def test_should_log_collection_load_failure(self, tmp_path, monkeypatch, caplog):
         """collection 読み込み失敗は collection 名と例外詳細を ERROR に残す."""
         from youtube_automation.commands.metadata import bulk_update_descriptions as mod

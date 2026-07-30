@@ -287,6 +287,142 @@ class TestCheckGcloudAccount:
         assert r.status == "unknown"
 
 
+class TestCheckGcpProject:
+    def test_success(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(doctor, "_project_id_for", lambda channel_dir: "test-project")
+        monkeypatch.setattr(doctor, "_run", lambda cmd, **kwargs: (0, "test-project\n", ""))
+
+        result = doctor.check_gcp_project(tmp_path)
+
+        assert result.id == "gcp_project"
+        assert result.status == "ok"
+        assert result.next_action is None
+
+    def test_missing_project_is_fail(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(doctor, "_project_id_for", lambda channel_dir: None)
+
+        result = doctor.check_gcp_project(tmp_path)
+
+        assert result.id == "gcp_project"
+        assert result.status == "fail"
+        assert result.next_action is None
+
+
+class TestCheckBilling:
+    def test_success(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(doctor, "_project_id_for", lambda channel_dir: "test-project")
+        monkeypatch.setattr(doctor, "_run", lambda cmd, **kwargs: (0, "true\n", ""))
+
+        result = doctor.check_billing(tmp_path)
+
+        assert result.id == "billing_linked"
+        assert result.status == "ok"
+        assert result.next_action is None
+
+    def test_unlinked_billing_is_fail_with_action(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(doctor, "_project_id_for", lambda channel_dir: "test-project")
+        monkeypatch.setattr(doctor, "_run", lambda cmd, **kwargs: (0, "false\n", ""))
+
+        result = doctor.check_billing(tmp_path)
+
+        assert result.id == "billing_linked"
+        assert result.status == "fail"
+        assert result.next_action is not None
+        assert result.next_action["kind"] == "ai-exec"
+
+
+class TestCheckApisEnabled:
+    def test_success(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(doctor, "_project_id_for", lambda channel_dir: "test-project")
+        monkeypatch.setattr(
+            doctor,
+            "_run",
+            lambda cmd, **kwargs: (0, "\n".join(doctor.REQUIRED_APIS), ""),
+        )
+
+        result = doctor.check_apis_enabled(tmp_path)
+
+        assert result.id == "apis_enabled"
+        assert result.status == "ok"
+        assert result.next_action is None
+
+    def test_missing_api_is_fail_with_action(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(doctor, "_project_id_for", lambda channel_dir: "test-project")
+        monkeypatch.setattr(doctor, "_run", lambda cmd, **kwargs: (0, "", ""))
+
+        result = doctor.check_apis_enabled(tmp_path)
+
+        assert result.id == "apis_enabled"
+        assert result.status == "fail"
+        assert result.next_action is not None
+        assert result.next_action["kind"] == "ai-exec"
+
+
+class TestCheckAdcQuotaProject:
+    def _write_adc(self, home, quota_project_id):
+        adc = home / ".config" / "gcloud" / "application_default_credentials.json"
+        adc.parent.mkdir(parents=True)
+        adc.write_text(json.dumps({"quota_project_id": quota_project_id}), encoding="utf-8")
+
+    def test_success(self, tmp_path, monkeypatch):
+        self._write_adc(tmp_path, "test-project")
+        monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.setattr(doctor, "_project_id_for", lambda channel_dir: "test-project")
+
+        result = doctor.check_adc_quota_project(tmp_path)
+
+        assert result.id == "adc_quota_project"
+        assert result.status == "ok"
+        assert result.next_action is None
+
+    def test_mismatch_is_warn_with_action(self, tmp_path, monkeypatch):
+        self._write_adc(tmp_path, "other-project")
+        monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.setattr(doctor, "_project_id_for", lambda channel_dir: "test-project")
+
+        result = doctor.check_adc_quota_project(tmp_path)
+
+        assert result.id == "adc_quota_project"
+        assert result.status == "warn"
+        assert result.next_action is not None
+        assert result.next_action["kind"] == "ai-exec"
+
+
+class TestCheckIamAiPlatformUser:
+    def test_success(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(doctor, "_project_id_for", lambda channel_dir: "test-project")
+        responses = iter(
+            [
+                (0, "user@example.com\n", ""),
+                (0, "roles/aiplatform.user\n", ""),
+            ]
+        )
+        monkeypatch.setattr(doctor, "_run", lambda cmd, **kwargs: next(responses))
+
+        result = doctor.check_iam_aiplatform_user(tmp_path)
+
+        assert result.id == "iam_aiplatform_user"
+        assert result.status == "ok"
+        assert result.next_action is None
+
+    def test_missing_role_is_fail_with_action(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(doctor, "_project_id_for", lambda channel_dir: "test-project")
+        responses = iter(
+            [
+                (0, "user@example.com\n", ""),
+                (0, "", ""),
+            ]
+        )
+        monkeypatch.setattr(doctor, "_run", lambda cmd, **kwargs: next(responses))
+
+        result = doctor.check_iam_aiplatform_user(tmp_path)
+
+        assert result.id == "iam_aiplatform_user"
+        assert result.status == "fail"
+        assert result.next_action is not None
+        assert result.next_action["kind"] == "ai-exec"
+
+
 class TestCheckADC:
     def test_missing_delegates_command_to_setup_and_browser_auth_to_human(self, stub_run):
         stub_run((1, "", "missing"))
@@ -1541,7 +1677,6 @@ class TestCheckInitialSetupReadiness:
         assert r.status == "warn"
         assert r.category == "data"
         assert "reference_images.default" in r.message
-        assert "composition_rules" in r.message
 
     def test_channel_dir_env_restored_after_success(self, tmp_path, monkeypatch):
         original = str(tmp_path / "original")
@@ -1592,12 +1727,7 @@ class TestCheckInitialSetupReadiness:
                     "      default: []",
                     "      path_base: channel_dir",
                     "    composition_rules:",
-                    '      environment: "TBD"',
-                    '      character_size: "TBD"',
-                    '      character_pose: "TBD"',
-                    '      allowed_actions: "TBD"',
-                    '      ng_actions: "TBD"',
-                    '      background: "TBD"',
+                    '      text_lines: "TBD"',
                 ]
             ),
             encoding="utf-8",
@@ -1654,12 +1784,7 @@ class TestCheckInitialSetupReadiness:
                     "        - data/thumbnail_compare/benchmark/alpha/alpha.jpg",
                     "      path_base: channel_dir",
                     "    composition_rules:",
-                    '      environment: "desk"',
-                    '      character_size: "medium"',
-                    '      character_pose: "sitting"',
-                    '      allowed_actions: "reading"',
-                    '      ng_actions: "no text"',
-                    '      background: "warm room"',
+                    '      text_lines: "2 lines"',
                 ]
             ),
             encoding="utf-8",

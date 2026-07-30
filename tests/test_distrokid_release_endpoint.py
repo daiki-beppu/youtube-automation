@@ -33,6 +33,7 @@ from youtube_automation.configuration.distrokid import (
     DistrokidProfile,
     SongwriterName,
 )
+from youtube_automation.domains.distrokid import release as release_mod
 from youtube_automation.domains.distrokid.release import (
     DISTROKID_ASSETS_PREFIX,
     DISTROKID_RELEASE_ROUTE,
@@ -584,3 +585,51 @@ def test_release_date_absent_yields_none(tmp_path):
     distrokid = Distrokid(enabled=True, profile=_profile())
 
     assert build_release_payload(collection, distrokid)["release"]["release_date"] is None
+
+
+def test_release_date_corrupt_json_raises_config_error(tmp_path):
+    """REQ-2729-11: 破損 workflow-state.json は ConfigError で fail-loud にする."""
+    collection = _make_collection(tmp_path)
+    (collection / "workflow-state.json").write_text("{", encoding="utf-8")
+    distrokid = Distrokid(enabled=True, profile=_profile())
+
+    with pytest.raises(ConfigError, match="workflow-state.json が不正な JSON"):
+        build_release_payload(collection, distrokid)
+
+
+def test_release_date_non_object_root_raises_config_error(tmp_path):
+    """REQ-2729-12: workflow-state.json の root は object 以外を拒否する."""
+    collection = _make_collection(tmp_path)
+    (collection / "workflow-state.json").write_text(json.dumps(["invalid"]), encoding="utf-8")
+    distrokid = Distrokid(enabled=True, profile=_profile())
+
+    with pytest.raises(ConfigError, match="トップレベルが object ではありません"):
+        build_release_payload(collection, distrokid)
+
+
+def test_release_date_non_object_planning_raises_config_error(tmp_path):
+    """REQ-2729-13: planning は object 以外を空値扱いせず拒否する."""
+    collection = _make_collection(tmp_path)
+    (collection / "workflow-state.json").write_text(json.dumps({"planning": ["invalid"]}), encoding="utf-8")
+    distrokid = Distrokid(enabled=True, profile=_profile())
+
+    with pytest.raises(ConfigError, match="planning が object ではありません"):
+        build_release_payload(collection, distrokid)
+
+
+def test_release_date_read_failure_raises_config_error(tmp_path, monkeypatch):
+    """REQ-2729-14: workflow-state.json の OSError はパス付き ConfigError に変換する."""
+    collection = _make_collection(tmp_path, publish_target_at="2026-07-01")
+    state_path = collection / "workflow-state.json"
+    distrokid = Distrokid(enabled=True, profile=_profile())
+    real_read_text = release_mod.Path.read_text
+
+    def fail_state_read(path, *args, **kwargs):
+        if path == state_path:
+            raise OSError("permission denied")
+        return real_read_text(path, *args, **kwargs)
+
+    monkeypatch.setattr(release_mod.Path, "read_text", fail_state_read)
+
+    with pytest.raises(ConfigError, match="workflow-state.json を読み取れませんでした.*permission denied"):
+        build_release_payload(collection, distrokid)

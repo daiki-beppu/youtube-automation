@@ -85,8 +85,21 @@ def _read_release_date(paths: CollectionPaths) -> str | None:
     state_path = paths.workflow_state_path
     if not state_path.is_file():
         return None
-    data = json.loads(state_path.read_text(encoding="utf-8"))
-    planning = data.get(_PLANNING_KEY) or {}
+    try:
+        raw_state = state_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise ConfigError(f"workflow-state.json を読み取れませんでした: {state_path}: {exc}") from exc
+    try:
+        data = json.loads(raw_state)
+    except json.JSONDecodeError as exc:
+        raise ConfigError(f"workflow-state.json が不正な JSON です: {state_path}") from exc
+    if not isinstance(data, dict):
+        raise ConfigError(f"workflow-state.json のトップレベルが object ではありません: {state_path}")
+    planning = data.get(_PLANNING_KEY)
+    if planning is None:
+        planning = {}
+    elif not isinstance(planning, dict):
+        raise ConfigError(f"workflow-state.json の planning が object ではありません: {state_path}")
     raw = planning.get(_PUBLISH_TARGET_KEY)
     return _normalize_release_date(raw)
 

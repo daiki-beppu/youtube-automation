@@ -667,3 +667,37 @@ class TestRequiredSkeleton:
 
         assert collision.is_file()
         assert collision.read_text(encoding="utf-8") == "keep me"
+
+    def test_ensure_required_dirs_rejects_broken_symlink_without_replacing_it(self, tmp_path):
+        """REQ-2800-01: 壊れた symlink を破壊せず domain error にする."""
+        collision = tmp_path / "01-master"
+        collision.symlink_to(tmp_path / "missing-target", target_is_directory=True)
+        paths = CollectionPaths(tmp_path)
+
+        with pytest.raises(ValidationError, match="壊れた symlink"):
+            paths.ensure_required_dirs()
+
+        assert collision.is_symlink()
+        assert not collision.exists()
+
+    def test_ensure_required_dirs_wraps_directory_creation_oserror(
+        self,
+        tmp_path,
+        monkeypatch,
+    ):
+        """REQ-2800-02: directory 作成 I/O 失敗を文脈付き domain error にする."""
+        target = tmp_path / "01-master"
+        original_mkdir = Path.mkdir
+
+        def selective_mkdir(path: Path, *args, **kwargs):
+            if path == target:
+                raise PermissionError("permission denied")
+            return original_mkdir(path, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "mkdir", selective_mkdir)
+        paths = CollectionPaths(tmp_path)
+
+        with pytest.raises(ValidationError, match="01-master.*permission denied"):
+            paths.ensure_required_dirs()
+
+        assert not target.exists()

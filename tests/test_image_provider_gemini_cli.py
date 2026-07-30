@@ -215,6 +215,37 @@ class TestRetryAndFailure:
         assert result.success is False
         assert runner.call_count == RETRY_MAX
 
+    def test_oserror_then_success_retries(self, cli_config, request_factory):
+        req = request_factory()
+        attempts = 0
+
+        def _runner(cmd, **kwargs):
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                raise OSError("exec format error")
+            req.output_path.write_bytes(_png_bytes())
+            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+        runner = MagicMock(side_effect=_runner)
+        provider = GeminiCliImageProvider(cli_config, runner=runner)
+
+        result = provider.generate(req)
+
+        assert result.success is True
+        assert runner.call_count == 2
+
+    def test_oserror_on_every_attempt_returns_failure(self, cli_config, request_factory):
+        req = request_factory()
+        runner = MagicMock(side_effect=OSError("permission denied"))
+        provider = GeminiCliImageProvider(cli_config, runner=runner)
+
+        result = provider.generate(req)
+
+        assert result.success is False
+        assert result.saved_path is None
+        assert runner.call_count == RETRY_MAX
+
     def test_missing_output_file_retries_then_fails(self, cli_config, request_factory):
         req = request_factory()
         # returncode=0 だが出力ファイルを書かない

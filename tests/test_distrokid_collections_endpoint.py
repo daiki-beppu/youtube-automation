@@ -22,6 +22,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -218,6 +219,41 @@ def test_write_and_read_distrokid_release_round_trip(tmp_path):
     released = read_released_discs(root)
 
     assert "20260526-abc-collection/disc1-alpha" in released
+
+
+def test_write_distrokid_release_recovers_from_corrupt_existing_json(tmp_path):
+    """REQ-2794-01: 破損 release 記録を fail-soft で上書き回復する."""
+    root = tmp_path / "channel"
+    target = distrokid_releases_output_path(root)
+    target.parent.mkdir(parents=True)
+    target.write_text("{broken", encoding="utf-8")
+
+    write_distrokid_release(root, "20260526-abc-collection", "disc1-alpha", "Recovered")
+
+    assert read_released_discs(root) == {"20260526-abc-collection/disc1-alpha"}
+    assert (
+        json.loads(target.read_text(encoding="utf-8"))["20260526-abc-collection/disc1-alpha"]["album_title"]
+        == "Recovered"
+    )
+
+
+def test_write_distrokid_release_recovers_after_existing_json_read_oserror(tmp_path):
+    """REQ-2794-02: 読み取り I/O 失敗後も新規 release 記録を書ける."""
+    root = tmp_path / "channel"
+    target = distrokid_releases_output_path(root)
+    target.parent.mkdir(parents=True)
+    target.write_text('{"old/disc": {"album_title": "old"}}', encoding="utf-8")
+    original_read_text = Path.read_text
+
+    def fail_target_read(path: Path, *args, **kwargs):
+        if path == target:
+            raise OSError("temporary read failure")
+        return original_read_text(path, *args, **kwargs)
+
+    with patch.object(Path, "read_text", fail_target_read):
+        write_distrokid_release(root, "20260526-abc-collection", "disc1-alpha", "Recovered")
+
+    assert read_released_discs(root) == {"20260526-abc-collection/disc1-alpha"}
 
 
 def test_write_distrokid_release_stores_album_title_and_recorded_at(tmp_path):

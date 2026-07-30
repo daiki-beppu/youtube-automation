@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 - `fix(dashboard)`: detail 選択の競合 response が現在の表示・loading/error 状態を上書きしないようにし、Analytics snapshot の bool・負値・不正 nested shape を公開 read model/API で安全な値へ正規化。dashboard・refresh・architecture・fixture/helper の失敗/境界経路を実行時回帰テストで補強し、session-expiry の定数形式テストを 404/410 の公開 upload 動作へ統合した（#2857, #2858, #2859, #2860, #2861, #2862, #2863, #2864, #2865, #2866, #2867）。
+- `fix(system)`: notification・競合 CLI・automation update・settings merge・doctor・preflight の失敗／境界契約を実行テストで固定し、thumbnail routing の 21 件の文書固定テストを provider・reference routing・thumbnail/main 成果物・loop-video on/off・cost 拒否の実行シナリオへ置換。doctor readiness は現行の `composition_rules.text_lines` 契約へ更新した（#2807, #2808, #2809, #2810, #2811, #2812, #2813, #2814, #2815, #2816）。
+- `fix(metadata)`: metadata remote audit の不正 `snippet` 応答を動画単位の診断へ変換し、連続 channel 実行時の skill-config 混入を防止。collection 必須 directory の壊れた symlink と作成 I/O 失敗も文脈付き `ValidationError` へ統一し、metadata・collection・localization の監査 findings 19件を実回帰テストで固定した（#2787〜#2806）。
+- `fix(suno-distrokid)`: DistroKid の atomic write・metadata・workflow-state 読込境界と、Suno の ffmpeg cleanup・unattended HTTP・verify CLI・artifact reader の成功／失敗契約を直接回帰テストで固定し、不正な workflow-state shape と I/O 失敗を `ConfigError` に統一した（#2719, #2720, #2721, #2722, #2723, #2724, #2725, #2726, #2727, #2728, #2729）。
+- `fix(thumbnail)`: 画像保存・provider retry・参照履歴・自動選択・比較CLI・stock設定の失敗／境界契約を実回帰テストで固定し、参照画像欠落を stderr へ報告、非有限の自動選択 tolerance、非object stock metadata、不正な stock theme/max-count 設定を安全に拒否する。Codex wrapper と thumbnail skill の内部文字列だけを固定していた重複テストは、同等以上のCLI・成果物・失敗診断テストへ統合した（#2768〜#2786）。
 - `fix(analytics)`: 競合候補の channel ID を YouTube API 上限の 50 件単位で取得し、uploads playlist 欠損または有効な公開日を持つ動画がない候補を結果から除外する境界を公開 API テストで担保した（#2631）。
 - `fix(analytics)`: retention timeline が不正な retention 数値（変換不能・NaN・Infinity）や非有限の動画尺を `ValidationError` として利用者向けに拒否し、壊れたJSON・曖昧なanalysis参照・duration fallback・未照合・Markdown escaping の境界を直接検証した（#2612, #2636）。
 - `fix(live-chat)`: Codex の構造化出力が JSON object でない場合も `GeneratorError` として安全に拒否し、facade・filter・history保存失敗・投稿失敗・chat終了後再探索・CLI enabled/割込み/例外終了の実行時契約を直接検証した（#2648, #2651）。

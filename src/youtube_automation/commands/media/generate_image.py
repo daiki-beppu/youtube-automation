@@ -483,7 +483,7 @@ def main():
     try:
         reference_images = resolve_reference_paths(args.reference)
     except ConfigError as e:
-        print(f"[ERROR] {e}")
+        print(f"[ERROR] {e}", file=sys.stderr)
         sys.exit(1)
 
     try:

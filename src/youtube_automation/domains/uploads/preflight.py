@@ -58,14 +58,7 @@ DEFAULT_TITLE_VOLUME_PATTERNS = (
     r"\b(?:I{2,3}|IV|VI{0,3}|IX|X)\b\s*$",  # 末尾ローマ数字 (II〜X)
 )
 SUNO_DEFAULT_STYLE_CHAR_LIMIT = 120
-THUMBNAIL_COMPOSITION_REQUIRED_KEYS = (
-    "environment",
-    "character_size",
-    "character_pose",
-    "allowed_actions",
-    "ng_actions",
-    "background",
-)
+THUMBNAIL_COMPOSITION_REQUIRED_KEYS = ("text_lines",)
 
 
 def requires_scene_phrases(supported_languages: Sequence[str]) -> bool:

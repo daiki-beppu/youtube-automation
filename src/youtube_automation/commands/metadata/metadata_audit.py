@@ -201,7 +201,10 @@ def audit_remote(video_ids: dict[str, str]) -> dict[str, list[str]]:
         if not item:
             issues[vid].append("not found on YouTube")
             continue
-        snippet = item["snippet"]
+        snippet = item.get("snippet")
+        if not isinstance(snippet, dict):
+            issues[vid].append("YT snippet missing or not an object")
+            continue
         title = snippet.get("title", "")
         desc = snippet.get("description", "")
         locs = item.get("localizations", {}) or {}

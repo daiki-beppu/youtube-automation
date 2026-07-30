@@ -358,6 +358,32 @@ def test_runtime_path_fails_when_directory_is_missing(tmp_path: Path) -> None:
     assert "XDG_CACHE_HOME" in result.detail
 
 
+@pytest.mark.parametrize("var", RUNTIME_PATH_ENV_VARS)
+@pytest.mark.parametrize("path_kind", ["file", "broken-symlink"])
+def test_runtime_path_rejects_non_directory_without_leaking_path(
+    tmp_path: Path,
+    var: str,
+    path_kind: str,
+) -> None:
+    env = _isolated_env(tmp_path)
+    repo = _init_repo(tmp_path, env)
+    runtime_root = tmp_path / "current" / ".takt" / ".runtime"
+    env.update(_runtime_env(runtime_root))
+    invalid_path = runtime_root / f"secret-{var.lower()}-{path_kind}"
+    if path_kind == "file":
+        invalid_path.write_text("not a directory\n", encoding="utf-8")
+    else:
+        invalid_path.symlink_to(runtime_root / "missing-target", target_is_directory=True)
+    env[var] = str(invalid_path)
+
+    result = check_runtime_path(repo, env)
+
+    assert not result.ok
+    assert var in result.detail
+    assert "ディレクトリ" in result.detail
+    assert invalid_path.name not in format_report([result])
+
+
 def test_runtime_path_fails_when_directory_is_not_writable(tmp_path: Path) -> None:
     env = _isolated_env(tmp_path)
     repo = _init_repo(tmp_path, env)

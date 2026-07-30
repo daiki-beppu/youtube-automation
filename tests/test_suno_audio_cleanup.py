@@ -137,6 +137,30 @@ def test_process_file_apply_uses_container_matching_codec(
     assert captured_cmd[captured_cmd.index("-c:a") + 1] == expected_codec
 
 
+def test_process_file_ffmpeg_failure_preserves_original_and_removes_partial_output(tmp_path: Path, monkeypatch) -> None:
+    """REQ-2729-04: ffmpeg 非0終了では元音源を変えず、temp/backup を残さない."""
+    collection = _make_collection(tmp_path, ["01-a.mp3"])
+    source = collection / "02-Individual-music" / "01-a.mp3"
+    tmp_output = source.parent / ".01-a.cleanup-tmp.mp3"
+    backup = source.parent / "originals-pre-cleanup" / source.name
+
+    monkeypatch.setattr(mod, "probe_duration", lambda _path: 60)
+    monkeypatch.setattr(mod.shutil, "which", lambda _name: "/usr/bin/ffmpeg")
+
+    def fail_run(cmd, capture_output, text):
+        Path(cmd[-1]).write_bytes(b"partial-output")
+        return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="decode failed")
+
+    monkeypatch.setattr(mod.subprocess, "run", fail_run)
+
+    with pytest.raises(RuntimeError, match=r"(?s)ffmpeg cleanup failed .*rc=1.*decode failed"):
+        process_file(source, CleanupConfig(enabled=True), apply=True, force=False, quiet=True)
+
+    assert source.read_bytes() == b"audio"
+    assert not tmp_output.exists()
+    assert not backup.exists()
+
+
 def test_process_file_apply_without_backup_preserves_original_when_replace_fails(tmp_path: Path, monkeypatch) -> None:
     collection = _make_collection(tmp_path, ["01-a.mp3"])
     source = collection / "02-Individual-music" / "01-a.mp3"

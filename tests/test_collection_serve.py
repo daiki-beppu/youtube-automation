@@ -3757,16 +3757,19 @@ def test_post_downloaded_default_rejects_extension_origin_without_exact_lock(ser
     assert exc_info.value.code == 403
 
 
-def test_post_downloaded_default_rejects_missing_origin_without_exact_lock(serve_dir, tmp_path):
-    """Given allow_origin 未指定の通常起動
-    When Origin なしで /auth/token を取得しようとする
-    Then 403 を返す。
-    """
+def test_post_downloaded_rejects_missing_runtime_origin_even_with_valid_token(serve_dir, tmp_path):
+    """REQ-2801-01: downloaded POST は token が正しくても runtime origin 未申告なら拒否する."""
     planning = tmp_path / "planning"
     _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
-    base = serve_dir(planning)
+    base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
+    token = _fetch_token(base)
+
     with pytest.raises(urllib.error.HTTPError) as exc_info:
-        urllib.request.urlopen(f"{base}/auth/token")
+        _post(
+            f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
+            {"file_count": 0, "format": "mp3"},
+            headers={"X-Serve-Token": token},
+        )
 
     assert exc_info.value.code == 403
 

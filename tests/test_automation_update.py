@@ -638,6 +638,31 @@ dependencies = [
     assert "youtube-automation@v5.5.0" not in text
 
 
+def test_apply_url_tag_pin_rejects_ambiguous_active_dependency_without_changes(
+    tmp_path: Path,
+    no_network,
+    recorded_commands: list[list[str]],
+    capsys: pytest.CaptureFixture,
+) -> None:
+    dependency = "youtube-channels-automation @ git+https://github.com/daiki-beppu/youtube-automation@v5.5.0"
+    repo = _write_repo(
+        tmp_path,
+        f'[project]\nname = "deepfocus365"\ndependencies = [\n    "{dependency}",\n    "{dependency}",\n]\n',
+    )
+    pyproject = repo / "pyproject.toml"
+    before = pyproject.read_bytes()
+    pin = _detect_pin(automation_update._load_pyproject(pyproject))
+
+    with pytest.raises(automation_update.ConfigError, match="一意に特定できない"):
+        automation_update._rewrite_pin(before.decode("utf-8"), pin, "v5.6.0")
+
+    assert main(["apply", "--target", str(repo), "--tag", "v5.6.0"]) == 1
+
+    assert "一意に特定できない" in capsys.readouterr().err
+    assert pyproject.read_bytes() == before
+    assert recorded_commands == []
+
+
 def test_apply_ssh_url_tag_pin_rewrites_only_ref(
     tmp_path: Path, no_network, recorded_commands: list[list[str]]
 ) -> None:

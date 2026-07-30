@@ -319,55 +319,6 @@ def test_codex_image_script_is_executable() -> None:
     )
 
 
-def test_codex_image_script_has_bash_shebang_and_strict_mode() -> None:
-    """Given codex-image.sh
-    When 先頭付近を読む
-    Then bash shebang と `set -euo pipefail` を含む。
-    """
-    text = _read(_CODEX_IMAGE_SH)
-    first_line = text.splitlines()[0]
-    assert first_line == "#!/usr/bin/env bash"
-    assert re.search(r"^set\s+-euo\s+pipefail\s*$", text, flags=re.MULTILINE), (
-        "codex-image.sh に `set -euo pipefail` が無い"
-    )
-
-
-def test_codex_image_script_usage_comment_points_to_canonical_path() -> None:
-    """Given codex-image.sh
-    When Usage コメントを読む
-    Then 実行パスとして `.claude/skills/thumbnail/references/codex-image.sh` を案内する。
-    """
-    head = "\n".join(_read(_CODEX_IMAGE_SH).splitlines()[:12])
-    assert ".claude/skills/thumbnail/references/codex-image.sh" in head, (
-        "Usage コメントが canonical path を案内していない"
-    )
-
-
-def test_codex_image_script_invokes_codex_exec_json_and_parses_agent_message() -> None:
-    """Given codex-image.sh
-    When 本文を読む
-    Then `codex exec --json` 系の新フラグセットと `jq` 経由の `agent_message` 解析がある。
-
-    旧プロトコル (`--enable image_generation` / `awk '/^generated image /` /
-    `base64 -d`) の残骸が無いこともここで確定する。
-    """
-    text = _read(_CODEX_IMAGE_SH)
-
-    # 新プロトコルのフラグ・パイプライン
-    assert "--json" in text, "`codex exec --json` が無い"
-    assert "--sandbox workspace-write" in text, "`--sandbox workspace-write` が無い"
-    assert "--add-dir" in text, "`--add-dir <out_dir>` が無い"
-    assert "--skip-git-repo-check" in text, "`--skip-git-repo-check` が無い"
-    assert re.search(r"\bjq\b", text), "`jq` パイプラインが無い"
-    assert "agent_message" in text, "`agent_message` イベントを対象にした jq フィルタが無い"
-
-    # 旧プロトコル残骸が無いこと
-    assert "--enable image_generation" not in text, "旧 `--enable image_generation` フラグが残っている（要件 #4 違反）"
-    assert "generated image" not in text, "旧プロトコル文字列 `generated image` が残っている（要件 #4 違反）"
-    assert not re.search(r"awk\s+'/\^generated image /", text), "旧 awk 抽出パターンが残っている（要件 #4 違反）"
-    assert not re.search(r"\bbase64\s+-d\b", text), "旧 `base64 -d` 復号が残っている（要件 #4 違反）"
-
-
 def test_codex_image_script_appends_cp_instructions_to_prompt(tmp_path: Path) -> None:
     """Given codex-image.sh
     When 偽 codex で `codex exec` の `--` 後 prompt を観測する
@@ -552,32 +503,6 @@ def test_codex_image_script_require_reference_rejects_multiple_reference_images(
     assert not output_path.exists()
 
 
-def test_codex_image_script_checks_login_output_and_png_validity() -> None:
-    """Given codex-image.sh
-    When 本文を読む
-    Then `codex login status` 前提確認、`$out` の非ゼロサイズ検証、PNG ヘッダ検証が含まれる。
-    """
-    text = _read(_CODEX_IMAGE_SH)
-    assert "codex login status" in text, "未ログイン時の事前確認が無い"
-    assert "Logged in" in text, "`codex login status` の期待出力が本文に無い"
-    assert re.search(r'-s\s+"\$out"', text), '`-s "$out"` による非ゼロサイズ検証が無い'
-    assert "89504e470d0a1a0a" in text, "PNG ヘッダ検証のマジック値が無い"
-
-
-def test_codex_image_script_contains_model_compatibility_preflight_and_diagnostics() -> None:
-    """Given codex-image.sh
-    When 本文を読む
-    Then codex CLI version / default model 診断と互換性プリフライトが含まれる。
-    """
-    text = _read(_CODEX_IMAGE_SH)
-    assert "codex --version" in text, "codex CLI version 取得が無い"
-    assert "Reply with exactly codex-model-compat-ok." in text, "互換性プリフライト prompt が無い"
-    assert "codex default model:" in text, "default model 診断行が無い"
-    assert "npm install -g @openai/codex@latest" in text, "npm のアップグレード手順が無い"
-    assert "brew upgrade codex" in text, "Homebrew のアップグレード手順が無い"
-    assert "bun add -g @openai/codex@latest" in text, "Bun のアップグレード手順が無い"
-
-
 def test_codex_image_script_stops_when_codex_is_not_logged_in(tmp_path: Path) -> None:
     """Given 未ログイン状態の codex CLI
     When codex-image.sh を実行する
@@ -627,21 +552,6 @@ def test_codex_image_script_rejects_not_logged_in_substring_false_positive(tmp_p
         f"`Not Logged in` 時に `codex exec` を呼んではいけない: {invocations!r}"
     )
     assert not output_path.exists(), "`Not Logged in` 時は出力ファイルを作らない"
-
-
-def test_codex_image_script_requires_chatgpt_login_phrase() -> None:
-    """Given codex-image.sh
-    When ログイン判定の条件式を読む
-    Then `Logged in using ChatGPT` の厳密一致を要求している。
-
-    回帰防止 (AI-547-002): `*"Logged in"*` の部分一致だと `Not Logged in` が
-    通過する。実装側でも文字列を `Logged in using ChatGPT` に固定する契約を担保。
-    """
-    text = _read(_CODEX_IMAGE_SH)
-    assert '!= *"Logged in using ChatGPT"*' in text, (
-        "ログイン判定が `Logged in using ChatGPT` の厳密一致になっていない（"
-        '`*"Logged in"*` だと `Not Logged in` を通してしまう）'
-    )
 
 
 def test_codex_image_script_surfaces_codex_login_status_nonzero_exit(tmp_path: Path) -> None:
@@ -899,60 +809,6 @@ def test_codex_image_script_rejects_output_matching_reference(tmp_path: Path) ->
     assert "reference" in result.stderr, f"reference 一致を示す診断文が stderr に出ていない: {result.stderr!r}"
 
 
-def test_codex_image_script_removes_stale_out_before_invoking_codex() -> None:
-    """Given codex-image.sh
-    When 本文を読む
-    Then codex exec 呼び出し前に `rm -f "$out"` で stale artifact を消すコードがある。
-
-    回帰防止 (ARCH-547-002): 既存 PNG が残っていると agent が cp スキップしても
-    `-s "$out"` / PNG ヘッダ検証が通って偽陽性 success になる。実行前削除を契約化する。
-    """
-    text = _read(_CODEX_IMAGE_SH)
-    # rm -f "$out" が codex exec 行より前に出現することを確認する
-    rm_match = re.search(r'^\s*rm\s+-f\s+"\$out"\s*$', text, flags=re.MULTILINE)
-    assert rm_match is not None, '`rm -f "$out"` で stale artifact を消す処理が無い'
-
-    codex_exec_match = re.search(r"codex\s+exec\b", text)
-    assert codex_exec_match is not None, "codex exec の呼び出しが見つからない"
-    assert rm_match.start() < codex_exec_match.start(), (
-        '`rm -f "$out"` が codex exec の前に出現していない（stale artifact 削除が後置だと意味がない）'
-    )
-
-
-def test_codex_image_script_validates_final_msg_matches_out() -> None:
-    """Given codex-image.sh
-    When 本文を読む
-    Then `final_msg` と `$out` の一致を検証する条件分岐がある。
-
-    回帰防止 (ARCH-547-002): agent_message の path を取り出しているのに成功判定に
-    使わない配線漏れを禁止する。`final_msg != $out` を非 0 終了で扱う経路を担保する。
-    """
-    text = _read(_CODEX_IMAGE_SH)
-    assert re.search(r'\[\s*"\$final_msg"\s+!=\s+"\$out"\s*\]', text), (
-        '`final_msg == "$out"` の契約検証が無い（agent_message の path と出力先の境界が緩く ARCH-547-002 が再発する）'
-    )
-
-
-def test_codex_image_script_reports_saved_message() -> None:
-    """Given codex-image.sh
-    When 成功時メッセージの形式を確認する
-    Then `saved: <path> (<size> bytes)` を出力する。
-    """
-    text = _read(_CODEX_IMAGE_SH)
-    assert re.search(r"saved:\s+\$out\s+\(\$\([^)]*\)\s*bytes\)", text, flags=re.DOTALL), (
-        "成功時の `saved: <path> (<size> bytes)` 出力が見つからない"
-    )
-
-
-def test_codex_image_script_uses_cross_platform_stat_fallback() -> None:
-    """Given codex-image.sh
-    When ファイルサイズ取得処理を確認する
-    Then `stat -f%z ... || stat -c%s ...` のフォールバックを持つ。
-    """
-    text = _read(_CODEX_IMAGE_SH)
-    assert re.search(r"stat\s+-f%z[^|]*\|\|\s*stat\s+-c%s", text), "macOS/Linux 両対応の stat フォールバックが無い"
-
-
 def test_codex_image_script_passes_bash_syntax_check() -> None:
     """Given codex-image.sh
     When `bash -n` で構文チェックする
@@ -969,85 +825,6 @@ def test_codex_image_script_passes_bash_syntax_check() -> None:
     assert result.returncode == 0, (
         f"{_CODEX_IMAGE_SH.relative_to(_REPO_ROOT)} の bash 構文チェックに失敗:\n{result.stderr}"
     )
-
-
-def test_codex_image_script_centralizes_stderr_tail_dump_in_helper() -> None:
-    """Given codex-image.sh
-    When 本文を読む
-    Then `dump_codex_stderr` ヘルパが 1 度だけ定義され、5 つの error 分岐から呼ばれている。
-
-    回帰防止 (AI-547-006-N2 / family_tag: dry-violation-error-diagnostics):
-    `--- codex stderr (tail) ---` を echo して `tail -n 30 "$err_log"` する 4 行ブロックが
-    error 分岐に直接コピペで散在していた DRY 違反を、共通ヘルパに集約した状態を維持する。
-    """
-    text = _read(_CODEX_IMAGE_SH)
-
-    # ヘルパ定義は 1 つだけ
-    assert len(re.findall(r"^dump_codex_stderr\(\)\s*\{", text, flags=re.MULTILINE)) == 1, (
-        "`dump_codex_stderr` ヘルパが 1 度だけ定義されている必要がある"
-    )
-    # 呼び出しは error 5 分岐ぶん（行頭でない位置にあるかも知れないので空白許可）
-    call_sites = re.findall(r"^\s*dump_codex_stderr\s*$", text, flags=re.MULTILINE)
-    assert len(call_sites) == 5, (
-        f"`dump_codex_stderr` 呼び出しが 5 箇所揃っていない (現在 {len(call_sites)} 件): "
-        "互換性プリフライト非互換 / 互換性プリフライト汎用失敗 / codex exec 失敗 / "
-        "final_msg 不一致 / 画像未生成 の 5 つの error 分岐から呼ばれること"
-    )
-    # コピペブロックが再び発生していないことを確認
-    duplicated_pattern = re.findall(r'echo "--- codex stderr \(tail\) ---" >&2', text)
-    assert len(duplicated_pattern) == 1, (
-        f'`echo "--- codex stderr (tail) ---"` がヘルパ以外で再びコピペされている (現在 {len(duplicated_pattern)} 件)'
-    )
-
-
-def test_codex_image_script_drops_unreachable_defense_around_final_msg_after_contract() -> None:
-    """Given codex-image.sh の `[ ! -s "$out" ]` 分岐
-    When 本文を読む
-    Then `if [ -n "$final_msg" ]; then echo "agent_message (最終)` の論理到達不能な防御 if が無く、
-        `final_msg` を直接 echo している。
-
-    回帰防止 (AI-547-006-N1 / family_tag: logically-unreachable-defense):
-    `[ ! -s "$out" ]` 分岐に到達した時点で直前の `[ "$final_msg" != "$out" ]` 契約検証を通過済みであり、
-    `out` は `out=${2:?...}` で空文字でない契約。したがって `final_msg == "$out"` も非空が保証され、
-    `[ -n "$final_msg" ]` チェックは常に真。「念のため」の防御 if を AI 由来で再追加させない。
-    """
-    text = _read(_CODEX_IMAGE_SH)
-
-    # `[ ! -s "$out" ]` 分岐の本文を抽出
-    match = re.search(
-        r'if \[ ! -s "\$out" \]; then(?P<body>.*?)\n  exit 1\nfi',
-        text,
-        flags=re.DOTALL,
-    )
-    assert match is not None, '`[ ! -s "$out" ]` 分岐が見つからない'
-    body = match.group("body")
-    assert re.search(r'if \[ -n "\$final_msg" \]; then', body) is None, (
-        '`[ ! -s "$out" ]` 分岐内の `if [ -n "$final_msg" ]` 防御 if は論理到達不能なので削除されている必要がある '
-        "(AI 由来の防御コピペ再発: AI-547-006-N1)"
-    )
-    assert 'echo "agent_message (最終): $final_msg" >&2' in body, (
-        "`final_msg` の echo（防御 if 削除後）は維持されている必要がある"
-    )
-
-
-def test_thumbnail_skill_lists_codex_in_provider_switch_table() -> None:
-    """Given thumbnail/SKILL.md の provider 表
-    When `## プロバイダー切り替え` セクションだけを読む
-    Then `codex` は正規 provider 行として追加されている。
-    """
-    section = _provider_section(_read(_THUMBNAIL_SKILL_MD))
-    assert "| `codex` |" in section, "`codex` が provider 表に正規 provider として載っていない"
-    assert "ChatGPT" in section
-    assert "GCP" in section
-
-
-def test_thumbnail_skill_has_codex_generation_section() -> None:
-    """Given thumbnail/SKILL.md
-    When 該当セクションを抽出する
-    Then codex 経路のセクションが存在する。
-    """
-    section = _codex_section(_read(_THUMBNAIL_SKILL_MD))
-    assert "codex 経由" in section
 
 
 def test_thumbnail_skill_codex_section_documents_login_and_direct_command() -> None:
@@ -1068,60 +845,6 @@ def test_thumbnail_skill_provider_fallback_codex_example_starts_with_thumbnail()
     assert "<thumbnail prompt>" in section
     assert "<collection-path>/10-assets/thumbnail-codex-v1.png" in section
     assert "<textless background prompt>" not in section
-
-
-def test_thumbnail_skill_codex_section_follows_thumbnail_then_textless_main_contract() -> None:
-    """#1611: codex 経路も文字入り thumbnail 先行で textless main を別成果物にする。"""
-    section = _codex_section(_read(_THUMBNAIL_SKILL_MD))
-
-    for required in (
-        "codex 経路でも標準ファイル契約は同じ",
-        "10-assets/thumbnail-codex-v1.png",
-        "10-assets/thumbnail.jpg",
-        "確定した `thumbnail.jpg`",
-        "10-assets/main-v1.png",
-        "10-assets/main.png",
-        "動画背景には使わない",
-    ):
-        assert required in section
-
-
-def test_thumbnail_skill_codex_section_documents_api_route_boundary() -> None:
-    """Given codex 経路セクション
-    When 本文を読む
-    Then 正規 provider だが uv run yt-generate-image / ImageProvider の API 経路ではないことを説明する。
-    """
-    section = _codex_section(_read(_THUMBNAIL_SKILL_MD))
-    assert "正規" in section
-    assert "uv run yt-generate-image" in section
-    assert "ImageProvider" in section
-    assert "codex-image.sh" in section
-
-
-def test_thumbnail_skill_codex_section_documents_cost_and_retry_policy() -> None:
-    """Given codex 経路セクション
-    When 本文を読む
-    Then GCP 課金・cost_tracker・fair-use と自動リトライなしの扱いが明文化されている。
-    """
-    section = _codex_section(_read(_THUMBNAIL_SKILL_MD))
-    assert "GCP" in section
-    assert "cost_tracker" in section
-    assert "fair-use" in section
-    assert "リトライ" in section
-    assert "自動" in section
-
-
-def test_thumbnail_skill_codex_section_documents_prompt_length_caveat() -> None:
-    """Given codex 経路セクション
-    When 本文を読む
-    Then 「prompt は短く保つ（長いと agent が image_generation tool を skip する
-        failure mode あり）」「画像は agent が cp してくるので wrapper 側 path
-        指定がそのまま使える」が明文化されている。
-    """
-    section = _codex_section(_read(_THUMBNAIL_SKILL_MD))
-    assert "短く" in section, "prompt を短く保つ運用ルールが明文化されていない（要件 #5）"
-    assert "skip" in section, "長い prompt で agent が tool を skip する failure mode の言及が無い（要件 #5）"
-    assert "cp" in section, "agent が cp する設計の言及が無い（要件 #5）"
 
 
 def test_codex_image_script_blocks_forbidden_keyword_before_codex_exec(tmp_path: Path) -> None:

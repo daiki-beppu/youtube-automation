@@ -25,12 +25,15 @@ def test_parsers_accept_competitor(build_parser):
     "build_parser",
     [benchmark_collector._build_parser, compare_thumbnails._build_parser],
 )
-def test_removed_channel_flag_names_competitor_replacement(build_parser, capsys):
+@pytest.mark.parametrize("legacy_args", [["--channel", "celtic-music"], ["--channel=celtic-music"]])
+def test_removed_channel_flag_names_competitor_replacement(build_parser, legacy_args, capsys):
     with pytest.raises(SystemExit) as exc_info:
-        build_parser().parse_args(["--channel", "celtic-music"])
+        build_parser().parse_args(legacy_args)
 
     assert exc_info.value.code == 2
-    assert "--channel は --competitor に変わりました" in capsys.readouterr().err
+    stderr = capsys.readouterr().err
+    assert "usage:" in stderr
+    assert "--channel は --competitor に変わりました" in stderr
 
 
 def test_thumbnail_compare_refreshes_benchmark_before_loading_videos(monkeypatch, tmp_path):

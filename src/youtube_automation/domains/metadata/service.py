@@ -19,7 +19,7 @@ from typing import Dict, List
 
 import yaml
 
-from youtube_automation.configuration import load_config
+from youtube_automation.configuration import channel_dir, load_config
 from youtube_automation.domains.media.audio_formats import AUDIO_EXTS
 from youtube_automation.domains.metadata.descriptions import (
     build_complete_collection_description,
@@ -63,9 +63,13 @@ class BAHMetadataGenerator:
             collection_path (str): コレクションディレクトリのパス
         """
         self.config = load_config()
-        self._masterup_config = load_skill_config("masterup")
+        current_channel_dir = channel_dir()
+        self._masterup_config = load_skill_config("masterup", channel_dir=current_channel_dir)
         self._crossfade_sec = float(self._masterup_config.get("audio", {}).get("crossfade_duration", 1.0))
-        self._video_description_config = load_skill_config("video-description")
+        self._video_description_config = load_skill_config(
+            "video-description",
+            channel_dir=current_channel_dir,
+        )
         self.collection_path = Path(collection_path)
         self.collection_name = self._extract_collection_name()
         self.bit_depth = self.config.content.genre.style

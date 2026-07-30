@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import inspect
 import json
+from pathlib import Path
 
 import pytest
 import yaml
@@ -19,6 +19,13 @@ from tests.helpers.suno_verify import (
     write_video_analysis_suno_preset,
 )
 from youtube_automation.commands.suno.generate_suno_prompts import build_prompt_entries
+from youtube_automation.domains.suno.config import ResolvedSunoConfig
+from youtube_automation.domains.suno.downloaded.validation import (
+    ArtifactEntries,
+    load_lyric_entries,
+    load_pattern_contract,
+    load_prompt_entries,
+)
 from youtube_automation.utils import skill_config
 
 
@@ -740,24 +747,102 @@ def test_invalid_prompts_json_shape_is_reported(channel_dir, tmp_path, monkeypat
     assert "entries" in output
 
 
-def test_verify_artifact_helpers_do_not_accept_mutable_issue_accumulators():
-    """検証 helper は呼び出し元 list を引数で受け取らず、issue を戻り値で返す。"""
-    from youtube_automation.domains.suno.downloaded import validation as suno_verify_artifacts
-
-    for helper_name in ("_validate_prompts", "_verify_vocal_artifacts"):
-        signature = inspect.signature(getattr(suno_verify_artifacts, helper_name))
-        assert "issues" not in signature.parameters
+def _resolved_suno_config() -> ResolvedSunoConfig:
+    return ResolvedSunoConfig(raw={}, genre_line="lo-fi jazz", exclude_styles="")
 
 
-def test_verify_reader_helpers_do_not_accept_mutable_accumulators():
-    """reader helper は呼び出し元 list/dict を引数で受け取らず、parse 結果を戻り値で返す。"""
-    from youtube_automation.domains.suno.downloaded import validation as suno_verify_readers
+def test_load_pattern_contract_reports_missing_file_directly(tmp_path):
+    """REQ-2729-15: pattern reader の欠落契約を公開 API の戻り値で固定する."""
+    path = tmp_path / "suno-patterns.yaml"
 
-    for old_helper_name in ("_append_prompt_entry", "_append_lyric_entry"):
-        assert not hasattr(suno_verify_readers, old_helper_name)
+    contract, issues = load_pattern_contract(path, _resolved_suno_config(), lambda _genre: "instrumental")
 
-    for helper_name in ("_entry_names_from_pattern", "_prompt_entry_from_mapping", "_lyric_entry_from_mapping"):
-        signature = inspect.signature(getattr(suno_verify_readers, helper_name))
-        assert "issues" not in signature.parameters
-        assert "names" not in signature.parameters
-        assert "lyrics_by_name" not in signature.parameters
+    assert contract is None
+    assert issues == [f"suno-patterns.yaml not found: {path}"]
+
+
+def test_load_pattern_contract_reports_invalid_yaml_directly(tmp_path):
+    """REQ-2729-16: pattern reader の破損 YAML 契約を公開 API で固定する."""
+    path = tmp_path / "suno-patterns.yaml"
+    path.write_text("patterns: [", encoding="utf-8")
+
+    contract, issues = load_pattern_contract(path, _resolved_suno_config(), lambda _genre: "instrumental")
+
+    assert contract is None
+    assert len(issues) == 1
+    assert issues[0].startswith(f"suno-patterns.yaml is invalid YAML: {path}:")
+
+
+def test_load_pattern_contract_reports_read_failure_directly(tmp_path, monkeypatch):
+    """REQ-2729-17: pattern reader の OSError 契約を公開 API で固定する."""
+    path = tmp_path / "suno-patterns.yaml"
+    path.write_text("patterns: []", encoding="utf-8")
+
+    def fail_read(_path: Path, *args, **kwargs):
+        raise OSError("permission denied")
+
+    monkeypatch.setattr(Path, "read_text", fail_read)
+
+    contract, issues = load_pattern_contract(path, _resolved_suno_config(), lambda _genre: "instrumental")
+
+    assert contract is None
+    assert issues == [f"suno-patterns.yaml could not be read: {path}: permission denied"]
+
+
+@pytest.mark.parametrize(
+    ("loader", "filename"),
+    [
+        (load_prompt_entries, "suno-prompts.json"),
+        (load_lyric_entries, "suno-lyrics.json"),
+    ],
+)
+def test_artifact_json_readers_report_missing_file_directly(tmp_path, loader, filename):
+    """REQ-2729-18: prompt/lyric reader の欠落は空 artifact と issue を返す."""
+    path = tmp_path / filename
+
+    entries, issues = loader(path)
+
+    assert entries == ArtifactEntries(names=[], lyrics_by_name={}, lyrics_entries=[])
+    assert issues == [f"{filename} not found: {path}"]
+
+
+@pytest.mark.parametrize(
+    ("loader", "filename"),
+    [
+        (load_prompt_entries, "suno-prompts.json"),
+        (load_lyric_entries, "suno-lyrics.json"),
+    ],
+)
+def test_artifact_json_readers_report_invalid_json_directly(tmp_path, loader, filename):
+    """REQ-2729-19: prompt/lyric reader の破損 JSON は空 artifact と issue を返す."""
+    path = tmp_path / filename
+    path.write_text("{", encoding="utf-8")
+
+    entries, issues = loader(path)
+
+    assert entries == ArtifactEntries(names=[], lyrics_by_name={}, lyrics_entries=[])
+    assert len(issues) == 1
+    assert issues[0].startswith(f"{filename} is invalid JSON: {path}:")
+
+
+@pytest.mark.parametrize(
+    ("loader", "filename"),
+    [
+        (load_prompt_entries, "suno-prompts.json"),
+        (load_lyric_entries, "suno-lyrics.json"),
+    ],
+)
+def test_artifact_json_readers_report_read_failure_directly(tmp_path, monkeypatch, loader, filename):
+    """REQ-2729-20: prompt/lyric reader の OSError は空 artifact と issue を返す."""
+    path = tmp_path / filename
+    path.write_text("[]", encoding="utf-8")
+
+    def fail_read(_path: Path, *args, **kwargs):
+        raise OSError("permission denied")
+
+    monkeypatch.setattr(Path, "read_text", fail_read)
+
+    entries, issues = loader(path)
+
+    assert entries == ArtifactEntries(names=[], lyrics_by_name={}, lyrics_entries=[])
+    assert issues == [f"{filename} could not be read: {path}: permission denied"]

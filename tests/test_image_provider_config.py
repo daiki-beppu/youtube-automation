@@ -359,6 +359,54 @@ class TestParseImageGenerationConfig:
         # Then
         assert replaced.gemini_cli.model == "gemini-3.0-flash-image-preview"
 
+    def test_replace_model_overrides_only_gemini_model(self):
+        cfg = ImageGenerationConfig(
+            provider="gemini",
+            gemini=GeminiConfig(model="old"),
+        )
+
+        replaced = replace_model(cfg, "new")
+
+        assert replaced.gemini.model == "new"
+        assert cfg.gemini.model == "old"
+        assert replaced.openai is None
+
+    def test_replace_model_overrides_only_openai_model(self):
+        cfg = ImageGenerationConfig(
+            provider="openai",
+            openai=OpenAIConfig(
+                model="old",
+                quality="medium",
+                aspect_ratio="16:9",
+                thinking="off",
+                batch=1,
+            ),
+        )
+
+        replaced = replace_model(cfg, "new")
+
+        assert replaced.openai.model == "new"
+        assert cfg.openai.model == "old"
+        assert replaced.gemini is None
+
+    @pytest.mark.parametrize(
+        "cfg",
+        [
+            ImageGenerationConfig(provider="gemini", gemini=None),
+            ImageGenerationConfig(provider="openai", openai=None),
+            ImageGenerationConfig(provider="gemini_cli", gemini_cli=None),
+        ],
+    )
+    def test_replace_model_rejects_missing_active_subconfig(self, cfg):
+        with pytest.raises(ConfigError, match="設定が見つかりません"):
+            replace_model(cfg, "new")
+
+    def test_replace_model_rejects_codex_api_route(self):
+        cfg = ImageGenerationConfig(provider="codex", codex=CodexConfig())
+
+        with pytest.raises(ConfigError, match="未対応.*codex"):
+            replace_model(cfg, "new")
+
     def test_unknown_provider_raises_config_error(self):
         # Given: 未対応 provider 名
         skill_cfg = {
