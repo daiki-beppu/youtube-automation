@@ -5,6 +5,7 @@ PlaylistManager のユニットテスト
 YouTube API 呼び出しと load_config を unittest.mock でモック化して検証する。
 """
 
+import copy
 import json
 import sys
 from pathlib import Path
@@ -54,7 +55,7 @@ def mock_config():
     config = MagicMock()
     config.meta.channel_name = "Test Channel"
     config.meta.channel_short = "TC"
-    config.playlists.items = SAMPLE_PLAYLISTS_CONFIG
+    config.playlists.items = copy.deepcopy(SAMPLE_PLAYLISTS_CONFIG)
     config.content.title.activity_for_theme = MagicMock(return_value="Study")
     return config
 
@@ -216,6 +217,7 @@ class TestAssignVideo:
         """playlist_id 未設定のプレイリストはスキップする"""
         # new_playlist を auto_add にしてマッチさせる
         manager.config.playlists.items["new_playlist"]["auto_add"] = True
+        assert "auto_add" not in SAMPLE_PLAYLISTS_CONFIG["new_playlist"]
         with (
             patch.object(manager, "_list_playlist_video_ids", return_value=set()),
             patch.object(manager, "_add_video_to_playlist", return_value=True),
