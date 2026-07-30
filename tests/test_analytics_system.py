@@ -219,6 +219,37 @@ class TestInit:
         assert system.authenticated is False
 
 
+class TestCollectorInitialize:
+    def _collector(self, response):
+        youtube = MagicMock()
+        youtube.resolve_channel.return_value = response
+        collector = YouTubeAnalyticsCollector(
+            youtube_client=youtube,
+            analytics_client=MagicMock(),
+            reporting_client=MagicMock(),
+            channel_root=Path("/tmp/channel"),
+        )
+        return collector, youtube
+
+    def test_success_sets_resolved_channel_id(self):
+        collector, youtube = self._collector({"id": "UC_RESOLVED", "snippet": {"title": "Channel"}})
+
+        collector.initialize()
+
+        assert collector.channel_id == "UC_RESOLVED"
+        youtube.resolve_channel.assert_called_once_with()
+
+    @pytest.mark.parametrize("response", [None, {}])
+    def test_empty_response_raises_without_setting_channel_id(self, response):
+        collector, youtube = self._collector(response)
+
+        with pytest.raises(YouTubeAPIError, match="channel was not found"):
+            collector.initialize()
+
+        assert collector.channel_id is None
+        youtube.resolve_channel.assert_called_once_with()
+
+
 # ---------------------------------------------------------------------------
 # authenticate
 # ---------------------------------------------------------------------------
