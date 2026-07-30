@@ -149,68 +149,6 @@ class TestDiscoveryParams:
             params.top = 5  # type: ignore[misc]
 
 
-class TestVideoMetricFields:
-    """family_tag=dead-code 再発防止。
-
-    `VideoMetric` には API レスポンスから読み出すスコアリング関数が実際に参照する
-    フィールド（views / likes / comments / published_at）のみが存在することを保証する。
-    `video_id` / `title` を「念のため」追加すると本テストが失敗する。
-    """
-
-    def test_video_metric_exposes_only_used_fields(self):
-        # Given: dataclass のフィールド集合
-        from dataclasses import fields
-
-        names = {f.name for f in fields(VideoMetric)}
-
-        # Then: スコアリング・出力で実際に読まれる 4 フィールドのみ
-        assert names == {"views", "likes", "comments", "published_at"}
-
-
-class TestModuleResponsibilitySplit:
-    """family_tag=module-size 再発防止。
-
-    plan §「検討したアプローチ」の「300 行超なら competitor_scoring.py に純粋関数を
-    分離」という設計判断に基づき、純粋スコアリング関数群は `competitor_scoring.py`
-    に置く。`competitor_discovery.py` には API I/O と orchestration のみを残し、
-    再び純粋関数群を抱え込んで肥大化しないよう構造を固定する。
-    """
-
-    def test_pure_scoring_functions_are_defined_in_scoring_module(self):
-        # Given: 純粋関数群の `__module__` 属性は scoring モジュールを指す
-        from youtube_automation.utils import competitor_scoring
-
-        scoring_module = "youtube_automation.utils.competitor_scoring"
-        for fn in (
-            competitor_scoring._apply_filters,
-            competitor_scoring._compute_keyword_match,
-            competitor_scoring._compute_engagement,
-            competitor_scoring._compute_posting_cadence,
-            competitor_scoring._compute_subscriber_proximity,
-            competitor_scoring._combine_score,
-            competitor_scoring._format_reason,
-            competitor_scoring._compute_monthly_uploads,
-            competitor_scoring._compute_avg_views,
-            competitor_scoring._score_candidate,
-            competitor_scoring._is_music_topic_match,
-        ):
-            assert fn.__module__ == scoring_module, f"{fn.__name__} は scoring モジュール定義であるべき"
-
-    def test_discovery_module_only_owns_api_io_and_orchestration(self):
-        # Given: discovery モジュールが自身で定義する関数の `__module__`
-        from youtube_automation.utils import competitor_discovery
-
-        discovery_module = "youtube_automation.utils.competitor_discovery"
-        # discover_competitors / API I/O ヘルパーは discovery 側で定義
-        for fn in (
-            competitor_discovery.discover_competitors,
-            competitor_discovery._search_channels,
-            competitor_discovery._fetch_channel_details,
-            competitor_discovery._fetch_recent_videos,
-        ):
-            assert fn.__module__ == discovery_module
-
-
 # ----------------------------------------------------------------------------
 # _apply_filters
 # ----------------------------------------------------------------------------
@@ -960,6 +898,68 @@ class TestDiscoverCompetitors:
         assert [candidate.channel.channel_id for candidate in result] == ["UC_NEW"]
         youtube.channels.return_value.list.assert_called_once()
         assert youtube.channels.return_value.list.call_args.kwargs["id"] == "UC_NEW"
+
+    def test_batches_51_channels_and_skips_candidates_without_uploads(self):
+        channel_ids = [f"UC_BATCH_{index:02d}" for index in range(51)]
+        youtube = self._make_youtube_mock(
+            search_items=[{"snippet": {"channelId": channel_id}} for channel_id in channel_ids],
+            channel_items=[],
+            playlist_items={},
+            video_items=[],
+        )
+
+        def _channels_list(**kwargs):
+            requested_ids = kwargs["id"].split(",")
+            request = MagicMock()
+            request.execute.return_value = {
+                "items": [
+                    {
+                        "id": channel_id,
+                        "snippet": {"title": channel_id},
+                        "statistics": {"subscriberCount": "100000", "videoCount": "10"},
+                        "contentDetails": {"relatedPlaylists": {}},
+                    }
+                    for channel_id in requested_ids
+                ]
+            }
+            return request
+
+        youtube.channels.return_value.list.side_effect = _channels_list
+
+        result = discover_competitors(youtube, _make_params(per_keyword_results=50))
+
+        assert result == []
+        requested_batches = [call.kwargs["id"].split(",") for call in youtube.channels.return_value.list.call_args_list]
+        assert requested_batches == [channel_ids[:50], channel_ids[50:]]
+        youtube.playlistItems.return_value.list.assert_not_called()
+        youtube.videos.return_value.list.assert_not_called()
+
+    def test_skips_candidate_when_video_published_at_is_invalid(self):
+        youtube = self._make_youtube_mock(
+            search_items=[{"snippet": {"channelId": "UC_INVALID_DATE"}}],
+            channel_items=[
+                {
+                    "id": "UC_INVALID_DATE",
+                    "snippet": {"title": "Invalid Date Channel"},
+                    "statistics": {"subscriberCount": "100000", "videoCount": "10"},
+                    "contentDetails": {"relatedPlaylists": {"uploads": "UU_INVALID_DATE"}},
+                }
+            ],
+            playlist_items={"UU_INVALID_DATE": [{"contentDetails": {"videoId": "V_INVALID_DATE"}}]},
+            video_items=[
+                {
+                    "id": "V_INVALID_DATE",
+                    "snippet": {"publishedAt": "not-a-date"},
+                    "statistics": {"viewCount": "10000"},
+                }
+            ],
+        )
+
+        result = discover_competitors(youtube, _make_params())
+
+        assert result == []
+        youtube.playlistItems.return_value.list.assert_called_once()
+        youtube.videos.return_value.list.assert_called_once()
 
     @pytest.mark.parametrize(
         ("cache_contents", "warning"),

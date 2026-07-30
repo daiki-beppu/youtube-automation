@@ -278,6 +278,8 @@ def discover_competitors(
         if not uploads:
             continue
         recent = _fetch_recent_videos(youtube, uploads)
+        if not recent:
+            continue
         last_posted = max((v.published_at for v in recent), default=None)
         enriched.append(replace(ch, recent_videos=recent, last_posted_at=last_posted))
 
