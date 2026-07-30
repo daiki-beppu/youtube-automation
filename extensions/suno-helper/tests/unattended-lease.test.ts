@@ -59,4 +59,30 @@ describe("unattended collection lease", () => {
       releaseUnattendedLease(acquired.leases, "collection", "owner")
     ).toEqual({});
   });
+
+  it("correct token cannot renew a different collection lease", () => {
+    const acquired = acquireUnattendedLease(
+      {},
+      { collectionId: "collection", requestId: "one", tabId: 1 },
+      1000,
+      "owner"
+    );
+
+    expect(
+      renewUnattendedLease(acquired.leases, "other-collection", "owner", 2000)
+    ).toBe(acquired.leases);
+  });
+
+  it("correct token cannot release a different collection lease", () => {
+    const acquired = acquireUnattendedLease(
+      {},
+      { collectionId: "collection", requestId: "one", tabId: 1 },
+      1000,
+      "owner"
+    );
+
+    expect(
+      releaseUnattendedLease(acquired.leases, "other-collection", "owner")
+    ).toBe(acquired.leases);
+  });
 });

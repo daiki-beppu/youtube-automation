@@ -79,6 +79,20 @@ async function loadBackground(opts?: {
   const sentMessages: SentMessage[] = [];
   const installedListeners: Array<(details: { reason: string }) => void> = [];
   const notificationCreate = vi.fn(() => Promise.resolve("notification-id"));
+  const sessionStore: Record<string, unknown> = opts?.sessionState
+    ? { "suno-helper:downloadWatcher": opts.sessionState }
+    : {};
+  const browserSessionGet = vi.fn(async (key: string) => {
+    if (typeof opts?.sessionGetDelayMs === "number") {
+      await new Promise((resolve) =>
+        setTimeout(resolve, opts.sessionGetDelayMs)
+      );
+    }
+    return { [key]: sessionStore[key] };
+  });
+  const browserSessionSet = vi.fn(async (items: Record<string, unknown>) => {
+    Object.assign(sessionStore, items);
+  });
 
   // --- globals ---
   // defineBackground は WXT の auto-import。stub して即座にコールバックを実行する。
@@ -100,6 +114,12 @@ async function loadBackground(opts?: {
     notifications: { create: notificationCreate },
     action: { onClicked: { addListener: vi.fn() } },
     tabs: { onUpdated: { addListener: vi.fn() } },
+    storage: {
+      session: {
+        get: browserSessionGet,
+        set: browserSessionSet,
+      },
+    },
     scripting: {
       executeScript: vi.fn(() => Promise.resolve([{ result: true }])),
     },
@@ -110,10 +130,6 @@ async function loadBackground(opts?: {
   const removedCreatedListeners: Array<(item: DownloadItem) => void> = [];
   const downloadListeners: Array<(delta: DownloadDelta) => void> = [];
   const removedDownloadListeners: Array<(delta: DownloadDelta) => void> = [];
-  const sessionStore: Record<string, unknown> = opts?.sessionState
-    ? { "suno-helper:downloadWatcher": opts.sessionState }
-    : {};
-
   const chromeDownloads = {
     onCreated: {
       addListener: vi.fn((fn: (item: DownloadItem) => void) => {
@@ -302,6 +318,8 @@ async function loadBackground(opts?: {
     installedListeners,
     notificationCreate,
     sessionStore,
+    browserSessionGet,
+    browserSessionSet,
   };
 }
 
@@ -397,6 +415,114 @@ describe("background onInstalled: legacy server source migration", () => {
       error
     );
     consoleError.mockRestore();
+  });
+});
+
+describe("background unattended lease handlers (#2903)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("acquire → heartbeat → release を session storage と所有権込みで実行する", async () => {
+    const { handlers, sessionStore, browserSessionSet } =
+      await loadBackground();
+    const sender = { tab: { id: 42 } };
+
+    const acquired = (await handlers.get("acquireUnattendedLease")!({
+      data: { collectionId: "collection-a", requestId: "request-a" },
+      sender,
+    })) as { acquired: boolean; token?: string };
+
+    expect(acquired.acquired).toBe(true);
+    expect(acquired.token).toEqual(expect.any(String));
+    expect(sessionStore.sunoUnattendedLeases).toEqual({
+      __unattended_global__: expect.objectContaining({
+        collectionId: "collection-a",
+        requestId: "request-a",
+        tabId: 42,
+        token: acquired.token,
+        expiresAt: expect.any(Number),
+      }),
+    });
+
+    const beforeHeartbeat = structuredClone(sessionStore.sunoUnattendedLeases);
+    browserSessionSet.mockClear();
+    await handlers.get("heartbeatUnattendedLease")!({
+      data: { collectionId: "other-collection", token: acquired.token },
+      sender,
+    });
+    expect(browserSessionSet).not.toHaveBeenCalled();
+    expect(sessionStore.sunoUnattendedLeases).toEqual(beforeHeartbeat);
+
+    await handlers.get("heartbeatUnattendedLease")!({
+      data: { collectionId: "collection-a", token: acquired.token },
+      sender,
+    });
+    expect(browserSessionSet).toHaveBeenCalledOnce();
+
+    browserSessionSet.mockClear();
+    await handlers.get("releaseUnattendedLease")!({
+      data: { collectionId: "other-collection", token: acquired.token },
+      sender,
+    });
+    expect(browserSessionSet).not.toHaveBeenCalled();
+
+    await handlers.get("releaseUnattendedLease")!({
+      data: { collectionId: "collection-a", token: acquired.token },
+      sender,
+    });
+    expect(browserSessionSet).toHaveBeenCalledOnce();
+    expect(sessionStore.sunoUnattendedLeases).toEqual({});
+  });
+
+  it("競合する並行 acquire を直列化し session の最初の owner だけを保持する", async () => {
+    const { handlers, sessionStore, browserSessionGet, browserSessionSet } =
+      await loadBackground({ sessionGetDelayMs: 5 });
+
+    const [first, second] = (await Promise.all([
+      handlers.get("acquireUnattendedLease")!({
+        data: { collectionId: "collection-a", requestId: "request-a" },
+        sender: { tab: { id: 1 } },
+      }),
+      handlers.get("acquireUnattendedLease")!({
+        data: { collectionId: "collection-b", requestId: "request-b" },
+        sender: { tab: { id: 2 } },
+      }),
+    ])) as Array<{ acquired: boolean; token?: string }>;
+
+    expect([first.acquired, second.acquired]).toEqual([true, false]);
+    expect(browserSessionGet).toHaveBeenCalledTimes(2);
+    expect(browserSessionSet).toHaveBeenCalledOnce();
+    expect(sessionStore.sunoUnattendedLeases).toEqual({
+      __unattended_global__: expect.objectContaining({
+        collectionId: "collection-a",
+        requestId: "request-a",
+        tabId: 1,
+        token: first.token,
+      }),
+    });
+  });
+
+  it.each([
+    "acquireUnattendedLease",
+    "heartbeatUnattendedLease",
+    "releaseUnattendedLease",
+  ])("%s は sender tab 不在を storage mutation 前に拒否する", async (name) => {
+    const { handlers, browserSessionGet, browserSessionSet } =
+      await loadBackground();
+
+    expect(() =>
+      handlers.get(name)!({
+        data: {
+          collectionId: "collection-a",
+          requestId: "request-a",
+          token: "owner",
+        },
+        sender: {},
+      })
+    ).toThrow(`${name} test error`);
+    expect(browserSessionGet).not.toHaveBeenCalled();
+    expect(browserSessionSet).not.toHaveBeenCalled();
   });
 });
 

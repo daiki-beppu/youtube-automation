@@ -17,6 +17,86 @@ const collections = [
 ];
 
 describe("collection queue state (#2029)", () => {
+  const createOptions = {
+    queueId: "queue-validation",
+    baseUrl: "http://localhost:8765",
+    collectionIds: ["first", "second"],
+    runMode: "queue" as const,
+    regenerateDurationOutliers: true,
+    now: 100,
+  };
+
+  it.each([
+    ["空の collectionIds", { collectionIds: [] }, "at least one collection"],
+    ["空白 queueId", { queueId: " \t" }, "queueId must be non-empty"],
+    ["空白 baseUrl", { baseUrl: "\n" }, "baseUrl must be non-empty"],
+    [
+      "空白 collectionId",
+      { collectionIds: ["first", " "] },
+      "collectionIds[1] must be non-empty",
+    ],
+    [
+      "重複 collectionId",
+      { collectionIds: ["first", "first"] },
+      "collectionIds must be unique",
+    ],
+  ])("%s を拒否して入力を変更しない", (_label, overrides, message) => {
+    const options = { ...createOptions, ...overrides };
+    const before = structuredClone(options);
+
+    expect(() => createCollectionQueue(options)).toThrow(message);
+    expect(options).toEqual(before);
+  });
+
+  it.each(["paused", "completed"] as const)(
+    "%s queue への result 記録を拒否して state を変更しない",
+    (status) => {
+      const state = { ...createCollectionQueue(createOptions), status };
+      const before = structuredClone(state);
+
+      expect(() =>
+        recordCollectionResult(state, {
+          collectionId: "first",
+          outcome: "succeeded",
+          now: 200,
+        })
+      ).toThrow("collection queue must be running");
+      expect(state).toEqual(before);
+    }
+  );
+
+  it("current item と異なる result を拒否して state を変更しない", () => {
+    const state = createCollectionQueue(createOptions);
+    const before = structuredClone(state);
+
+    expect(() =>
+      recordCollectionResult(state, {
+        collectionId: "second",
+        outcome: "failed",
+        now: 200,
+      })
+    ).toThrow("collection queue expected first, got second");
+    expect(state).toEqual(before);
+  });
+
+  it.each(["finished", "error", "stopped"] as const)(
+    "current item と異なる %s settlement を拒否して state を変更しない",
+    (phase) => {
+      const state = createCollectionQueue(createOptions);
+      const before = structuredClone(state);
+
+      expect(() =>
+        settleCollectionQueueRun(state, {
+          collectionId: "second",
+          phase,
+          failedEntryCount: 0,
+          now: 200,
+        })
+      ).toThrow("collection queue settlement does not match current item");
+      expect(state).toEqual(before);
+    }
+  );
+
   it("server の一覧順で選択 collection を直列進行し、境界 reload を要求する", () => {
     const ordered = orderSelectedCollectionIds(
       collections,

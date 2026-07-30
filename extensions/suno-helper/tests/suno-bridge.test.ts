@@ -21,8 +21,18 @@ function jsonResponse(json: unknown): Response {
   });
 }
 
-async function loadBridge(): Promise<void> {
+async function loadBridge(options?: {
+  findSliderElement?: ReturnType<typeof vi.fn>;
+  setSliderValueViaReact?: ReturnType<typeof vi.fn>;
+}) {
   vi.resetModules();
+  const findSliderElement = options?.findSliderElement ?? vi.fn(() => null);
+  const setSliderValueViaReact =
+    options?.setSliderValueViaReact ?? vi.fn(async () => false);
+  vi.doMock("../lib/slider-bridge", () => ({
+    findSliderElement,
+    setSliderValueViaReact,
+  }));
   vi.stubGlobal(
     "defineContentScript",
     (definition: { main: () => void }) => definition
@@ -31,6 +41,7 @@ async function loadBridge(): Promise<void> {
   bridge.default.main(
     {} as NonNullable<Parameters<typeof bridge.default.main>[0]>
   );
+  return { findSliderElement, setSliderValueViaReact };
 }
 
 async function flushObservedFetch(): Promise<void> {
@@ -40,6 +51,121 @@ async function flushObservedFetch(): Promise<void> {
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+});
+
+describe("suno-bridge MAIN-world slider RPC (#2904)", () => {
+  it("request を slider 実装へ渡し requestId/ok/actual を response する", async () => {
+    vi.stubGlobal("fetch", vi.fn());
+    const slider = document.createElement("div");
+    slider.setAttribute("aria-valuenow", "50");
+    const findSliderElement = vi.fn(() => slider);
+    const setSliderValueViaReact = vi.fn(async () => {
+      slider.setAttribute("aria-valuenow", "75");
+      return true;
+    });
+    const postMessage = vi
+      .spyOn(window, "postMessage")
+      .mockImplementation(() => undefined);
+    await loadBridge({ findSliderElement, setSliderValueViaReact });
+
+    window.dispatchEvent(
+      new MessageEvent("message", {
+        source: window,
+        data: {
+          source: BRIDGE_SOURCE,
+          type: BRIDGE_MSG.SLIDER_SET_REQUEST,
+          requestId: 501,
+          ariaLabel: "Style Influence",
+          target: 75,
+        },
+      })
+    );
+    await flushObservedFetch();
+
+    expect(findSliderElement).toHaveBeenCalledWith("Style Influence");
+    expect(setSliderValueViaReact).toHaveBeenCalledWith(slider, 75);
+    expect(postMessage).toHaveBeenCalledWith(
+      {
+        source: BRIDGE_SOURCE,
+        type: BRIDGE_MSG.SLIDER_SET_RESPONSE,
+        requestId: 501,
+        ok: true,
+        actual: 75,
+      },
+      window.location.origin
+    );
+  });
+
+  it("slider 不在を ok=false/actual=null で response する", async () => {
+    vi.stubGlobal("fetch", vi.fn());
+    const postMessage = vi
+      .spyOn(window, "postMessage")
+      .mockImplementation(() => undefined);
+    await loadBridge();
+
+    window.dispatchEvent(
+      new MessageEvent("message", {
+        source: window,
+        data: {
+          source: BRIDGE_SOURCE,
+          type: BRIDGE_MSG.SLIDER_SET_REQUEST,
+          requestId: 502,
+          ariaLabel: "Weirdness",
+          target: 40,
+        },
+      })
+    );
+    await flushObservedFetch();
+
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: BRIDGE_MSG.SLIDER_SET_RESPONSE,
+        requestId: 502,
+        ok: false,
+        actual: null,
+      }),
+      window.location.origin
+    );
+  });
+
+  it("slider 実装の例外を漏らさず失敗 response へ変換する", async () => {
+    vi.stubGlobal("fetch", vi.fn());
+    const slider = document.createElement("div");
+    slider.setAttribute("aria-valuenow", "10");
+    const postMessage = vi
+      .spyOn(window, "postMessage")
+      .mockImplementation(() => undefined);
+    await loadBridge({
+      findSliderElement: vi.fn(() => slider),
+      setSliderValueViaReact: vi.fn(async () => {
+        throw new Error("React props unavailable");
+      }),
+    });
+
+    window.dispatchEvent(
+      new MessageEvent("message", {
+        source: window,
+        data: {
+          source: BRIDGE_SOURCE,
+          type: BRIDGE_MSG.SLIDER_SET_REQUEST,
+          requestId: 503,
+          ariaLabel: "Audio Influence",
+          target: 90,
+        },
+      })
+    );
+    await flushObservedFetch();
+
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: BRIDGE_MSG.SLIDER_SET_RESPONSE,
+        requestId: 503,
+        ok: false,
+        actual: null,
+      }),
+      window.location.origin
+    );
+  });
 });
 
 describe("suno-bridge fetch interceptor", () => {

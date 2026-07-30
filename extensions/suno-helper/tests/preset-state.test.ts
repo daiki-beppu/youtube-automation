@@ -1,13 +1,55 @@
 // lib/preset-state.ts の jitter 純関数回帰テスト。
 // speed preset 永続化は #1573 で廃止済み。run mode の既定値だけ #1586 で保持する。
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const runModeStorage = vi.hoisted(() => ({
+  getValue: vi.fn(),
+  setValue: vi.fn(),
+  defineItem: vi.fn(),
+}));
+
+vi.mock("wxt/utils/storage", () => ({
+  storage: {
+    defineItem: runModeStorage.defineItem.mockReturnValue(runModeStorage),
+  },
+}));
 
 import { BALANCED_RUN_PACING } from "../../shared/constants";
-import { applyJitter, DEFAULT_RUN_MODE_ID } from "../lib/preset-state";
+import {
+  applyJitter,
+  DEFAULT_RUN_MODE_ID,
+  readRunModeId,
+  writeRunModeId,
+} from "../lib/preset-state";
 
 describe("DEFAULT_RUN_MODE_ID: 既定の投入方式 (#1586)", () => {
   it("Given 定数 When 読む Then serial である（既存の直列実行を既定として維持する）", () => {
     expect(DEFAULT_RUN_MODE_ID).toBe("serial");
+  });
+});
+
+describe("run mode storage I/O (#2906)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    runModeStorage.getValue.mockResolvedValue(DEFAULT_RUN_MODE_ID);
+    runModeStorage.setValue.mockResolvedValue(undefined);
+  });
+
+  it("初回 read は正しい key/fallback の遅延 item から既定値を返す", async () => {
+    await expect(readRunModeId()).resolves.toBe("serial");
+    expect(runModeStorage.defineItem).toHaveBeenCalledWith(
+      "local:sunoRunMode",
+      { fallback: DEFAULT_RUN_MODE_ID }
+    );
+  });
+
+  it("write 後の read は保存値を直接返す", async () => {
+    runModeStorage.getValue.mockResolvedValueOnce("queue");
+
+    await writeRunModeId("queue");
+    await expect(readRunModeId()).resolves.toBe("queue");
+
+    expect(runModeStorage.setValue).toHaveBeenCalledWith("queue");
   });
 });
 
