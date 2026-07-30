@@ -6,14 +6,16 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
+from googleapiclient.errors import HttpError
 
 from youtube_automation.domains.media.captions import (
     generate_srt,
     parse_total_duration,
     parse_track_timestamps,
 )
+from youtube_automation.infrastructure import captions_adapter
 from youtube_automation.infrastructure.captions_adapter import upload_caption
-from youtube_automation.infrastructure.errors import ValidationError
+from youtube_automation.infrastructure.errors import ValidationError, YouTubeAPIError
 
 _DESCRIPTIONS = """## Complete Collection 概要欄
 
@@ -180,3 +182,149 @@ def test_upload_caption_rejects_ambiguous_existing_tracks(tmp_path, monkeypatch)
             srt_path=_srt(tmp_path),
             existing_policy="update",
         )
+
+
+def _http_error(status: int = 503) -> HttpError:
+    response = MagicMock()
+    response.status = status
+    response.reason = "Service Unavailable"
+    return HttpError(
+        resp=response,
+        content=b'{"error": {"errors": [{"reason": "backendError"}]}}',
+    )
+
+
+@pytest.mark.parametrize(
+    ("overrides", "error_match"),
+    [
+        ({"existing_policy": "invalid"}, "existing_policy"),
+        ({"language": "   "}, "字幕言語"),
+        ({"name": ""}, "字幕トラック名"),
+        ({"name": "x" * 151}, "字幕トラック名"),
+    ],
+)
+def test_upload_caption_rejects_invalid_inputs_before_api_call(tmp_path, overrides, error_match):
+    youtube = MagicMock()
+    arguments = {
+        "video_id": "video-1",
+        "language": "en",
+        "name": "English lyrics",
+        "srt_path": _srt(tmp_path),
+        "existing_policy": "skip",
+        **overrides,
+    }
+
+    with pytest.raises(ValidationError, match=error_match):
+        upload_caption(youtube, **arguments)
+
+    youtube.captions.assert_not_called()
+
+
+def test_upload_caption_rejects_missing_srt_before_api_call(tmp_path):
+    youtube = MagicMock()
+
+    with pytest.raises(ValidationError, match="SRT ファイルが見つかりません"):
+        upload_caption(
+            youtube,
+            video_id="video-1",
+            language="en",
+            name="English lyrics",
+            srt_path=tmp_path / "missing.srt",
+            existing_policy="skip",
+        )
+
+    youtube.captions.assert_not_called()
+
+
+def test_upload_caption_ask_requires_callback_before_mutation(tmp_path, monkeypatch):
+    existing = {"id": "existing-caption", "snippet": {"language": "en"}}
+    youtube = _youtube_with_captions([existing])
+    monkeypatch.setattr(captions_adapter, "log_quota", MagicMock())
+
+    with pytest.raises(ValidationError, match="confirm_update"):
+        upload_caption(
+            youtube,
+            video_id="video-1",
+            language="en",
+            name="English lyrics",
+            srt_path=_srt(tmp_path),
+            existing_policy="ask",
+        )
+
+    youtube.captions.return_value.insert.assert_not_called()
+    youtube.captions.return_value.update.assert_not_called()
+
+
+def test_caption_list_http_error_is_converted_and_records_failed_quota(tmp_path, monkeypatch):
+    youtube = _youtube_with_captions([])
+    youtube.captions.return_value.list.return_value.execute.side_effect = _http_error(429)
+    quota = MagicMock()
+    monkeypatch.setattr(captions_adapter, "log_quota", quota)
+
+    with pytest.raises(YouTubeAPIError) as error_info:
+        upload_caption(
+            youtube,
+            video_id="video-1",
+            language="en",
+            name="English lyrics",
+            srt_path=_srt(tmp_path),
+            existing_policy="skip",
+        )
+
+    assert error_info.value.status_code == 429
+    assert error_info.value.reason == "backendError"
+    assert isinstance(error_info.value.__cause__, HttpError)
+    quota.assert_called_once_with(
+        "youtube-data-api",
+        "captions.list",
+        50,
+        metadata={"video_id": "video-1", "language": "en", "error": True},
+    )
+
+
+@pytest.mark.parametrize(
+    ("existing", "policy", "operation", "units"),
+    [
+        ([], "skip", "captions.insert", 400),
+        ([{"id": "caption-1", "snippet": {"language": "en"}}], "update", "captions.update", 450),
+    ],
+)
+def test_caption_mutation_http_error_is_converted_and_records_failed_quota(
+    tmp_path,
+    monkeypatch,
+    existing,
+    policy,
+    operation,
+    units,
+):
+    youtube = _youtube_with_captions(existing)
+    request = (
+        youtube.captions.return_value.insert.return_value
+        if operation == "captions.insert"
+        else youtube.captions.return_value.update.return_value
+    )
+    request.execute.side_effect = _http_error()
+    quota = MagicMock()
+    monkeypatch.setattr(captions_adapter, "log_quota", quota)
+    monkeypatch.setattr(captions_adapter, "MediaFileUpload", MagicMock())
+
+    with pytest.raises(YouTubeAPIError, match=operation) as error_info:
+        upload_caption(
+            youtube,
+            video_id="video-1",
+            language="en",
+            name="English lyrics",
+            srt_path=_srt(tmp_path),
+            existing_policy=policy,
+        )
+
+    assert error_info.value.status_code == 503
+    assert isinstance(error_info.value.__cause__, HttpError)
+    assert quota.call_args_list[-1].args == ("youtube-data-api", operation, units)
+    assert quota.call_args_list[-1].kwargs == {
+        "metadata": {
+            "video_id": "video-1",
+            "language": "en",
+            "error": True,
+        }
+    }
