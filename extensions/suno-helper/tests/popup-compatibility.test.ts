@@ -2904,6 +2904,7 @@ describe("Suno popup compatibility check", () => {
     );
   });
 
+  // REQ-2921-01: the reload-required action reloads the tab exactly once.
   it("DL 形式の読込が失敗すると未捕捉にせず再読み込み案内を表示する", async () => {
     downloadFormatMocks.getValue.mockRejectedValueOnce(
       new Error("'wxt/storage' must be loaded in a web extension environment")
@@ -2927,6 +2928,20 @@ describe("Suno popup compatibility check", () => {
       expect(alert.dataset.variant).toBe("warning");
       expectShadcnControl(expectControl(container, "reload-tab"), "outline");
     });
+
+    const reload = vi.fn();
+    const reloadWindow = Object.create(window) as Window & typeof globalThis;
+    Object.defineProperty(reloadWindow, "location", {
+      configurable: true,
+      value: { reload },
+    });
+    vi.stubGlobal("window", reloadWindow);
+
+    await act(async () => {
+      expectControl(container, "reload-tab").click();
+    });
+
+    expect(reload).toHaveBeenCalledOnce();
   });
 
   it.each([
