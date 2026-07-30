@@ -67,3 +67,31 @@ def test_monetary_api_failure_warns_and_returns_unavailable(caplog):
     assert result["daily_metrics"] == []
     assert result["by_video"] == {}
     assert "基本メトリクスの収集は継続" in caplog.text
+
+
+def test_zero_views_and_empty_responses_have_stable_available_summary():
+    zero_service = MagicMock()
+    zero_service.query.side_effect = [
+        {"currency": "JPY", "rows": [["2026-07-01", 0, 0.0, 0, 0.0, 0.0]]},
+        {"rows": [["video-1", 0, 0.0, 0, 0.0, 0.0]]},
+    ]
+
+    zero = DummyCollector(zero_service).get_revenue_analytics("2026-07-01", "2026-07-01")
+
+    assert zero["daily_metrics"][0]["rpm"] == 0.0
+    assert zero["by_video"]["video-1"]["rpm"] == 0.0
+    assert zero["summary"]["rpm"] == 0.0
+
+    empty_service = MagicMock()
+    empty_service.query.side_effect = [{"currency": "USD"}, {}]
+    empty = DummyCollector(empty_service).get_revenue_analytics("2026-07-01", "2026-07-01")
+
+    assert empty["status"] == "available"
+    assert empty["daily_metrics"] == []
+    assert empty["by_video"] == {}
+    assert empty["summary"] == {
+        "estimated_revenue": 0,
+        "monetized_playbacks": 0,
+        "views": 0,
+        "rpm": 0.0,
+    }

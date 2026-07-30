@@ -57,8 +57,26 @@ class TestGetAudienceRetention:
         assert result["data_points"] == 0
         assert result["average_retention"] == 0
 
+    def test_individual_api_failure_returns_error_with_empty_curve(self, collector):
+        collector.analytics_service.query.side_effect = YouTubeAPIError("retention unavailable")
+
+        result = collector.get_audience_retention("VID_FAIL", "2026-01-01", "2026-04-01")
+
+        assert result["video_id"] == "VID_FAIL"
+        assert result["retention_curve"] == []
+        assert result["data_points"] == 0
+        assert "retention unavailable" in result["error"]
+
 
 class TestGetRetentionSummary:
+    def test_missing_rows_returns_empty_summary_without_detail_lookup(self, collector):
+        collector.analytics_service.query.return_value = {}
+
+        result = collector.get_retention_summary("2026-01-01", "2026-04-01", top_n=2)
+
+        assert result == []
+        collector.youtube_service.list_videos.assert_not_called()
+
     def test_top_video_api_failure_is_propagated(self, collector):
         """上位動画一覧の API 失敗を「対象動画なし」に変換しない。"""
 

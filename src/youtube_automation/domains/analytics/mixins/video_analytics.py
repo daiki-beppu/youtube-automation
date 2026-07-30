@@ -207,5 +207,5 @@ class VideoAnalyticsMixin:
                 return ((likes + comments + shares) / views) * 100
             else:
                 return 0.0
-        except (TypeError, ZeroDivisionError):
+        except (IndexError, TypeError, ValueError, ZeroDivisionError):
             return 0.0
