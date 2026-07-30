@@ -122,6 +122,15 @@ class CollectionPaths:
 
         既存のディレクトリ・ファイルには一切触れない（非破壊）。
         """
+        broken_symlinks = [
+            sub for sub in REQUIRED_SUBDIRS if (self.root / sub).is_symlink() and not (self.root / sub).exists()
+        ]
+        if broken_symlinks:
+            raise ValidationError(
+                "必須サブディレクトリ名と同名の壊れた symlink があります: "
+                + ", ".join(broken_symlinks)
+                + "。symlink を修復または退避してから再実行してください。"
+            )
         invalid = self.invalid_required_dirs()
         if invalid:
             raise ValidationError(
@@ -131,7 +140,10 @@ class CollectionPaths:
             )
         missing = self.missing_required_dirs()
         for sub in missing:
-            (self.root / sub).mkdir(parents=True, exist_ok=True)
+            try:
+                (self.root / sub).mkdir(parents=True, exist_ok=True)
+            except OSError as exc:
+                raise ValidationError(f"必須サブディレクトリ {sub} を作成できません: {exc}") from exc
         return missing
 
     def find_master_video(self) -> Path | None:
