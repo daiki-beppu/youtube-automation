@@ -96,6 +96,28 @@ def test_resolve_raises_config_error_when_terraform_fails(tmp_path: Path):
             instance_resolver.resolve_instance_id(override=None, terraform_dir=tmp_path)
 
 
+def test_resolve_wraps_terraform_timeout_and_preserves_cause(tmp_path: Path):
+    """Given terraform output が timeout
+    When resolve_instance_id を呼ぶ
+    Then ConfigError へ正規化し TimeoutExpired を原因として保持する。
+    """
+    timeout = subprocess.TimeoutExpired(
+        cmd=["terraform", "output", "-raw", "instance_id"],
+        timeout=30,
+    )
+    with patch(
+        "youtube_automation.utils.streaming.instance_resolver.subprocess.run",
+        side_effect=timeout,
+    ):
+        with pytest.raises(ConfigError, match="timed out") as exc_info:
+            instance_resolver.resolve_instance_id(
+                override=None,
+                terraform_dir=tmp_path,
+            )
+
+    assert exc_info.value.__cause__ is timeout
+
+
 def test_resolve_raises_config_error_when_output_empty(tmp_path: Path):
     """Given terraform output が空文字
     When resolve_instance_id を呼ぶ

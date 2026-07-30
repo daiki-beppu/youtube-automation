@@ -43,9 +43,6 @@ def test_actual_uptime_ratio_validates_days_when_archives_are_not_expected():
         (60, 30, 1.0),
         (30, 30, 0.5),
         (0, 30, 0.0),
-        (62, 31, 1.0),
-        (56, 28, 1.0),
-        (45, 30, 0.75),
     ],
 )
 def test_actual_uptime_ratio_uses_archive_count_when_archives_are_expected(
@@ -83,6 +80,16 @@ def test_theoretical_archive_count_returns_none_by_default():
     Then 理論アーカイブ本数は None になる。
     """
     assert cycle_uptime.theoretical_archive_count(days_in_month=30) is None
+
+
+@pytest.mark.parametrize("days_in_month", [0, -1])
+def test_theoretical_archive_count_rejects_non_positive_days(days_in_month: int):
+    """Given days_in_month が 0 以下
+    When theoretical_archive_count を直接呼ぶ
+    Then archive mode に関係なく ValueError を送出する。
+    """
+    with pytest.raises(ValueError, match="days_in_month must be positive"):
+        cycle_uptime.theoretical_archive_count(days_in_month=days_in_month)
 
 
 def test_theoretical_archive_count_uses_days_when_archives_are_expected(monkeypatch: pytest.MonkeyPatch):

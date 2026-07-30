@@ -78,6 +78,28 @@ _PYPROJECT = _REPO_ROOT / "pyproject.toml"
 _HEALTHCHECK_DOC = _REPO_ROOT / "docs" / "streaming-healthcheck.md"
 
 
+def _markdown_section(path: Path, heading: str) -> str:
+    """指定 Markdown 見出しから次の同階層以上の見出し直前までを返す。"""
+    lines = read_file(path).splitlines()
+    level = len(heading) - len(heading.lstrip("#"))
+    try:
+        start = lines.index(heading)
+    except ValueError:
+        pytest.fail(f"Markdown 見出しが見つからない: {heading}")
+
+    section: list[str] = []
+    in_fence = False
+    for line in lines[start + 1 :]:
+        if line.startswith("```"):
+            in_fence = not in_fence
+        if not in_fence:
+            next_heading = re.match(r"^(#{1,6})\s", line)
+            if next_heading and len(next_heading.group(1)) <= level:
+                break
+        section.append(line)
+    return "\n".join(section)
+
+
 # ---------- bash ヘルパー ----------
 
 
@@ -121,13 +143,6 @@ def _classify(active: str, sub: str, result: str) -> tuple[int, str, str]:
 class TestHealthcheckShStructure:
     """``.claude/skills/streaming/references/healthcheck.sh`` の静的構造
     （shebang / set -euo / PATH）。"""
-
-    def test_file_exists(self):
-        """Given .claude/skills/streaming/references/
-        When healthcheck.sh を探す
-        Then 存在する。
-        """
-        assert _HEALTHCHECK_SH.exists(), ".claude/skills/streaming/references/healthcheck.sh が存在しない"
 
     def test_has_bash_shebang(self):
         """Given healthcheck.sh
@@ -545,13 +560,6 @@ class TestHealthcheckShStateChange:
 class TestNotifyShStructure:
     """``.claude/skills/streaming/references/notify.sh`` の静的構造。"""
 
-    def test_file_exists(self):
-        """Given .claude/skills/streaming/references/
-        When notify.sh を探す
-        Then 存在する。
-        """
-        assert _NOTIFY_SH.exists(), ".claude/skills/streaming/references/notify.sh が存在しない"
-
     def test_has_bash_shebang(self):
         """Given notify.sh
         When 1 行目を読む
@@ -802,13 +810,6 @@ class TestHealthcheckEnvTftpl:
     systemd ``EnvironmentFile`` 慣例: ``KEY=VALUE``、引用符なし。terraform
     ``templatefile()`` で ``${webhook}`` を実値に展開する。
     """
-
-    def test_file_exists(self):
-        """Given infra/terraform/streaming/templates/
-        When youtube-stream-healthcheck.env.tftpl を探す
-        Then 存在する。
-        """
-        assert _HEALTHCHECK_ENV_TFTPL.exists(), "templates/youtube-stream-healthcheck.env.tftpl が存在しない"
 
     def test_contains_webhook_variable_assignment(self):
         """Given env tftpl
@@ -1127,14 +1128,6 @@ class TestTfvarsExampleDiscordWebhook:
 class TestStreamingReadmeHealthcheck:
     """README.md の死活監視セクション（plan §3）。"""
 
-    def test_mentions_discord(self):
-        """Given README
-        When 全文を読む
-        Then Discord 言及がある（通知手段の説明）。
-        """
-        text = read_file(_STREAMING_README)
-        assert "Discord" in text, "README に Discord 言及が無い（死活監視の通知手段が説明されない）"
-
     def test_mentions_tf_var_discord_webhook_url(self):
         """Given README
         When 全文を読む
@@ -1154,31 +1147,36 @@ class TestStreamingReadmeHealthcheck:
         assert "healthcheck.sh" in text, "README に healthcheck.sh の言及が無い"
 
     @pytest.mark.parametrize(
-        "scenario_keyword",
+        ("operation", "expected"),
         [
-            "kill",  # kill -9 シナリオ
-            "systemctl stop",  # 手動停止シナリオ
-            "RuntimeMaxSec",  # 計画停止シナリオ
-            "再開",  # 自動再開シナリオ（漢字でも英語の "restart" でも可）
+            (
+                r"`pkill -KILL -f 'ffmpeg .*current\.mp4'`",
+                "5 分以内に Discord に anomaly 通知が届く",
+            ),
+            (
+                "`systemctl stop youtube-stream`",
+                "通知は飛ばない（`manual` 分類）",
+            ),
+            (
+                "`RuntimeMaxSec` 到達による正常停止",
+                "通知は飛ばない（`activating+auto-restart+success` = `idle`）",
+            ),
+            (
+                "`RestartSec` 経過後の自動再開（`auto-restart`）",
+                "通知は飛ばない（休止中は `idle`、再開後は `ok`）",
+            ),
         ],
     )
-    def test_mentions_each_test_scenario(self, scenario_keyword: str):
-        """Given README
-        When 全文を読む
-        Then order.md の 4 テストシナリオが運用手順に含まれている。
-
-        ``再開`` は systemd の自動再起動文脈。"restart" 単独は他箇所と被るため、
-        日本語キーワードまたは "RestartSec" / "auto-restart" を緩く受け入れる。
+    def test_documents_each_healthcheck_scenario_outcome(self, operation: str, expected: str):
+        """Given README のテストシナリオ表
+        When 操作と期待結果を読む
+        Then 各操作が固有の分類・通知結果と同じ行で対応付く。
         """
-        text = read_file(_STREAMING_README)
-        if scenario_keyword == "再開":
-            assert "再開" in text or "auto-restart" in text or "RestartSec" in text, (
-                "README に自動再開シナリオの言及が無い"
-            )
-        else:
-            assert scenario_keyword in text, (
-                f"README に '{scenario_keyword}' シナリオの言及が無い（4 シナリオ運用手順未網羅）"
-            )
+        section = _markdown_section(
+            _STREAMING_README,
+            "### テストシナリオ（VPS 上で確認）",
+        )
+        assert f"| {operation} | {expected} |" in section
 
 
 # ============================================================================
@@ -1214,6 +1212,26 @@ class TestStreamingArchiveCount:
         count = count_archives_for_date(service, date(2026, 5, 1))
         assert count == 0, f"動画ゼロのとき 0 を返すべき: {count}"
 
+    def test_searches_fixed_utc_window_and_completed_video_contract(self):
+        """Given target_date=2026-05-01
+        When count_archives_for_date を呼ぶ
+        Then UTC 前日から翌々日までを固定引数で検索する。
+        """
+        from youtube_automation.utils.streaming.daily_archive import count_archives_for_date
+
+        service = self._make_service(search_items=[], video_items=[])
+        count_archives_for_date(service, date(2026, 5, 1))
+
+        service.search.return_value.list.assert_called_once_with(
+            forMine=True,
+            type="video",
+            eventType="completed",
+            publishedAfter="2026-04-30T00:00:00Z",
+            publishedBefore="2026-05-03T00:00:00Z",
+            part="id",
+            maxResults=50,
+        )
+
     def test_counts_videos_with_actual_end_time_in_target_date(self):
         """Given target_date に actualEndTime を持つ動画 2 本
         When count_archives_for_date を呼ぶ
@@ -1243,6 +1261,28 @@ class TestStreamingArchiveCount:
         service = self._make_service(search_items, video_items)
         count = count_archives_for_date(service, target)
         assert count == 2, f"target_date のアーカイブ 2 本を数えていない: {count}"
+
+    def test_counts_offset_end_time_by_utc_date(self):
+        """Given 2026-05-02 00:30 +09:00 に終了した配信
+        When UTC の target_date=2026-05-01 を数える
+        Then ローカル日付でなく UTC 日付へ変換して 1 本に数える。
+        """
+        from youtube_automation.utils.streaming.daily_archive import count_archives_for_date
+
+        service = self._make_service(
+            search_items=[{"id": {"videoId": "offset"}}],
+            video_items=[
+                {
+                    "id": "offset",
+                    "snippet": {"liveBroadcastContent": "none"},
+                    "liveStreamingDetails": {
+                        "actualEndTime": "2026-05-02T00:30:00+09:00",
+                    },
+                }
+            ],
+        )
+
+        assert count_archives_for_date(service, date(2026, 5, 1)) == 1
 
     def test_excludes_videos_outside_target_date(self):
         """Given actualEndTime が target_date より前または後の動画
@@ -1640,40 +1680,63 @@ class TestPyprojectEntryPoint:
 class TestHealthcheckDoc:
     """``docs/streaming-healthcheck.md`` の運用手順書（4 シナリオ網羅）。"""
 
-    def test_file_exists(self):
-        """Given docs/
-        When streaming-healthcheck.md を探す
-        Then 存在する。
-        """
-        assert _HEALTHCHECK_DOC.exists(), "docs/streaming-healthcheck.md が存在しない"
-
     @pytest.mark.parametrize(
-        "scenario_keyword",
+        ("heading", "required_contracts"),
         [
-            "kill",
-            "systemctl stop",
-            "RuntimeMaxSec",
+            (
+                "### シナリオ 1: `pkill` による異常停止",
+                (
+                    "pkill -KILL -f 'ffmpeg .*current\\.mp4'",
+                    "`anomaly`",
+                    "Discord に POST",
+                    'journalctl -t youtube-stream-healthcheck --since "5 minutes ago"',
+                ),
+            ),
+            (
+                "### シナリオ 2: 運用者による `systemctl stop`",
+                (
+                    "systemctl stop youtube-stream",
+                    "`ActiveState=inactive`, `SubState=dead`, `Result=success`",
+                    "`manual`",
+                    "通知は飛ばない",
+                    "systemctl start youtube-stream",
+                    'journalctl -t youtube-stream-healthcheck --since "10 minutes ago"',
+                ),
+            ),
+            (
+                "### シナリオ 3: `RuntimeMaxSec=11h` 到達による正常停止",
+                (
+                    "`Restart=always` + `RestartSec=1h`",
+                    "`activating (auto-restart)`",
+                    "`idle`",
+                    "通知は飛ばない",
+                    "systemctl show youtube-stream -p ActiveState,SubState,Result",
+                ),
+            ),
+            (
+                "### シナリオ 4: 1 時間後の自動再開",
+                (
+                    "`RestartSec=1h`",
+                    "`ActiveState=active`, `SubState=running`",
+                    "`ok`",
+                    "通知は飛ばない",
+                    "journalctl -u youtube-stream -f",
+                ),
+            ),
         ],
     )
-    def test_documents_each_test_scenario(self, scenario_keyword: str):
-        """Given streaming-healthcheck.md
-        When 全文を読む
-        Then order.md の 3 シナリオ（4 つ目「自動再開」は文脈で吸収）が手順書に含まれている。
-
-        order.md「各シナリオが運用手順書に記載済み」要件。
+    def test_documents_scenario_operation_outcome_and_verification(
+        self,
+        heading: str,
+        required_contracts: tuple[str, ...],
+    ):
+        """Given 各シナリオ節
+        When 操作・期待状態・通知・確認方法を読む
+        Then 4 要素が同じ節に揃っている。
         """
-        text = read_file(_HEALTHCHECK_DOC)
-        assert scenario_keyword in text, f"運用手順書に '{scenario_keyword}' シナリオの記載が無い"
-
-    def test_documents_auto_restart_scenario(self):
-        """Given streaming-healthcheck.md
-        When 全文を読む
-        Then 1 時間後の自動再開（RestartSec / auto-restart / 再開 のいずれか）の言及がある。
-        """
-        text = read_file(_HEALTHCHECK_DOC)
-        assert "再開" in text or "RestartSec" in text or "auto-restart" in text, (
-            "運用手順書に自動再開シナリオの記載が無い"
-        )
+        section = _markdown_section(_HEALTHCHECK_DOC, heading)
+        for contract in required_contracts:
+            assert contract in section
 
     def test_documents_archive_check_as_archive_mode_only(self):
         """Given streaming-healthcheck.md

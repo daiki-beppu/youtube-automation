@@ -254,13 +254,6 @@ class TestOutputsTf:
 class TestTfvarsExample:
     """``terraform.tfvars.example`` の secret 漏洩防止。"""
 
-    def test_example_file_exists(self):
-        """Given infra/terraform/streaming/
-        When terraform.tfvars.example を探す
-        Then 存在する（cp して使うサンプル）。
-        """
-        assert _TFVARS_EXAMPLE.exists(), "terraform.tfvars.example が存在しない"
-
     def test_does_not_contain_vultr_api_key_assignment(self):
         """Given terraform.tfvars.example
         When ファイル内容を読む
