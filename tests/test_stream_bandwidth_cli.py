@@ -363,24 +363,6 @@ def test_probe_bitrate_returns_nonzero_when_probe_fails(tmp_path: Path):
     assert rc != 0
 
 
-# ---------- argparse 妥当性 ----------
-
-
-def test_main_returns_int_for_systemd_exit():
-    """Given 引数なし
-    When main を呼ぶ
-    Then int を返す (sys.exit(main()) で使われる)。
-    """
-    bw = {"2026-04-01": {"incoming_bytes": 0, "outgoing_bytes": 0}}
-    mocks = _patch_all(bandwidth=bw)
-    _enter(mocks)
-    try:
-        rc = stream_bandwidth.main(["--instance-id", "VULTR_X"])
-    finally:
-        _exit(mocks)
-    assert isinstance(rc, int)
-
-
 # ---------- R13: --help が落ちない (% リテラルのエスケープ回帰防止) ----------
 
 

@@ -6,7 +6,10 @@
 
 from __future__ import annotations
 
+import os
 import re
+import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -34,18 +37,6 @@ class TestSwapVideoScript:
     と同様）に従い、ファイルテキスト・実行ビット・主要キーワードを正規表現で検証する。
     実行時挙動（subprocess での実 terraform 呼び出し / shellcheck 適用）はスコープ外。
     """
-
-    def test_script_exists(self):
-        """Given リポジトリ
-        When ``.claude/skills/streaming/references/swap_video.sh`` を探す
-        Then 当該ファイルが存在する。
-
-        order.md「スクリプト化（任意）: ``swap_video.sh``」要件の最低条件。
-        ラッパーは README から発見可能であっても、ファイルが無ければ叩けない。
-        """
-        assert _SWAP_VIDEO_SCRIPT.exists(), (
-            f"{_SWAP_VIDEO_SCRIPT.relative_to(_REPO_ROOT)} が存在しない（1 コマンドラッパーが未実装）"
-        )
 
     def test_script_is_executable(self):
         """Given スクリプトファイル
@@ -127,54 +118,77 @@ class TestSwapVideoScript:
             "swap_video.sh に `terraform apply` 起動行が無い（差し替えを実行する本体コマンドが欠落）"
         )
 
-    def test_script_default_apply_is_interactive(self):
-        """Given スクリプト本文
-        When 全文を読む
-        Then ``-auto-approve`` の付与が条件分岐配下にある（無条件付与ではない）。
-
-        plan.md「``--auto-approve`` は off（対話確認）」要件。デフォルトで
-        ``-auto-approve`` を付けると誤 apply 事故のリスクが上がる。``--auto-approve``
-        フラグを明示した時のみ ``-auto-approve`` を Terraform に渡す分岐構造であること。
+    @pytest.mark.parametrize(
+        ("cli_args", "expected_apply"),
+        [
+            ([], "apply"),
+            (["--auto-approve"], "apply -auto-approve"),
+        ],
+    )
+    def test_script_passes_auto_approve_only_when_requested(
+        self,
+        tmp_path: Path,
+        cli_args: list[str],
+        expected_apply: str,
+    ):
+        """Given terraform・SSH 前提を隔離 stub した環境
+        When default または --auto-approve でスクリプトを実行
+        Then plan 後の apply argv に利用者指定だけが反映される。
         """
-        text = read_file(_SWAP_VIDEO_SCRIPT)
-        # `--auto-approve` のフラグハンドリング（引数パース）が存在する
-        assert re.search(r"--auto-approve\b", text), (
-            "swap_video.sh に `--auto-approve` 引数の取り扱いが無い"
-            "（plan.md 仕様: フラグ off がデフォルト / 明示時のみ非対話 apply）"
-        )
-        # `terraform ... apply -auto-approve` が無条件に書かれていない
-        # （= 直接 1 行で `terraform apply -auto-approve` を書くのは禁止。条件分岐配下が必須）
-        unconditional = re.search(
-            r"^[ \t]*terraform\s+[^\n]*\bapply\b[^\n]*-auto-approve",
-            text,
-            flags=re.MULTILINE,
-        )
-        # `if` / `case` / `$AUTO_APPROVE` などのガード語が同一スクリプト内にある場合は
-        # 上記マッチが分岐配下にある可能性がある。安全側で「``apply -auto-approve`` の
-        # 行が出現する場合は、その上方に AUTO_APPROVE 系変数のガードがあること」を要求する。
-        if unconditional is not None:
-            head = text[: unconditional.start()]
-            assert re.search(r"AUTO_APPROVE", head), (
-                "swap_video.sh が `terraform apply -auto-approve` を無条件で実行している"
-                "（AUTO_APPROVE 変数等のガードが上方に無い。誤 apply リスク）"
-            )
+        stub_dir = tmp_path / "bin"
+        stub_dir.mkdir()
+        calls_path = tmp_path / "terraform-calls.txt"
 
-    def test_script_supports_auto_approve_flag(self):
-        """Given スクリプト本文
-        When 全文を読む
-        Then ``-auto-approve`` を terraform に渡す経路と ``--auto-approve`` 受け取りが対になっている。
+        stubs = {
+            "terraform": '#!/usr/bin/env bash\nprintf "%s\\n" "$*" >> "$TERRAFORM_CALLS"\n',
+            "realpath": '#!/usr/bin/env bash\nprintf "%s\\n" "$1"\n',
+            "ssh-keygen": '#!/usr/bin/env bash\nprintf "256 SHA256:test operator@test (ED25519)\\n"\n',
+            "ssh-add": '#!/usr/bin/env bash\nprintf "256 SHA256:test operator@test (ED25519)\\n"\n',
+        }
+        for name, body in stubs.items():
+            path = stub_dir / name
+            path.write_text(body, encoding="utf-8")
+            path.chmod(0o755)
 
-        ユーザーが ``--auto-approve`` を渡した時に Terraform 側へ ``-auto-approve``
-        が伝播する経路があること。フラグだけ受け取って何もしない実装になっていないか担保する。
-        """
-        text = read_file(_SWAP_VIDEO_SCRIPT)
-        # ユーザー向けフラグ `--auto-approve` の取り回し
-        assert re.search(r"--auto-approve\b", text), "swap_video.sh が `--auto-approve` 引数を受け取っていない"
-        # terraform へ渡す `-auto-approve`（シングルダッシュ）
-        assert re.search(r"-auto-approve\b", text), (
-            "swap_video.sh が terraform へ `-auto-approve` を渡していない"
-            "（ユーザーフラグだけ受け取って Terraform 側に伝播していない）"
+        home_dir = tmp_path / "home"
+        ssh_dir = home_dir / ".ssh"
+        ssh_dir.mkdir(parents=True)
+        (ssh_dir / "yt_stream_key.pub").write_text("stub public key\n", encoding="utf-8")
+
+        terraform_dir = tmp_path / "terraform"
+        terraform_dir.mkdir()
+        (terraform_dir / "main.tf").write_text("# stub\n", encoding="utf-8")
+        video_path = tmp_path / "video.mp4"
+        video_path.write_bytes(b"video")
+
+        env = os.environ.copy()
+        env.update(
+            {
+                "HOME": str(home_dir),
+                "PATH": f"{stub_dir}:/usr/bin:/bin",
+                "TERRAFORM_CALLS": str(calls_path),
+            }
         )
+        proc = subprocess.run(
+            [
+                "bash",
+                str(_SWAP_VIDEO_SCRIPT),
+                *cli_args,
+                "--tf-dir",
+                str(terraform_dir),
+                str(video_path),
+            ],
+            capture_output=True,
+            text=True,
+            env=env,
+            check=False,
+        )
+
+        assert proc.returncode == 0, proc.stderr
+        assert calls_path.read_text(encoding="utf-8").splitlines() == [
+            f"-chdir={terraform_dir} plan",
+            f"-chdir={terraform_dir} {expected_apply}",
+        ]
 
 
 # ============================================================================
@@ -194,18 +208,6 @@ class TestRunFfmpegScript:
     本テストは terraform バイナリ非依存方針に従い、ファイルテキスト・主要キーワードの
     包含のみ正規表現で検証する（既存 ``TestSwapVideoScript`` と同じスタイル）。
     """
-
-    def test_script_exists(self):
-        """Given リポジトリ
-        When ``scripts/streaming/run-ffmpeg.sh`` を探す
-        Then 当該ファイルが存在する。
-
-        ExecStart の差し替え先が物理的に欠落すると ``systemctl start`` が
-        ``status=203/EXEC`` で fail する。最低限の存在保証。
-        """
-        assert _RUN_FFMPEG_SCRIPT.exists(), (
-            f"{_RUN_FFMPEG_SCRIPT.relative_to(_REPO_ROOT)} が存在しない（#160 ラッパーが未実装）"
-        )
 
     def test_script_has_bash_shebang(self):
         """Given ラッパー本文

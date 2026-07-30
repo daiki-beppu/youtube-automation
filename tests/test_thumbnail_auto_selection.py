@@ -16,7 +16,14 @@ from PIL import Image
 import youtube_automation.commands.thumbnail.auto_select_thumbnail as auto_select_thumbnail
 from youtube_automation.commands.thumbnail.auto_select_thumbnail import main, validate_audit_record
 from youtube_automation.domains.thumbnail.features import feature_centroid, feature_distance
-from youtube_automation.infrastructure.errors import ValidationError
+from youtube_automation.domains.thumbnail.selection import (
+    AutoSelectionSettings,
+    CandidateScore,
+    resolve_auto_selection_settings,
+    score_candidates,
+    select_best,
+)
+from youtube_automation.infrastructure.errors import ConfigError, ValidationError
 from youtube_automation.utils import skill_config
 
 # テスト用の最小解像度 (フル HD だと純 Python の特徴量抽出が遅いため縮小)
@@ -31,6 +38,60 @@ _REF_COLORS = ((20, 30, 80), (25, 35, 85))
 _NEAR_COLOR = (22, 32, 82)
 _FAR_COLOR = (200, 40, 40)
 _ARCHIVE_ENABLED = {"enabled": True}
+
+
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [
+        ("min_width", True),
+        ("min_width", 0),
+        ("min_width", -1),
+        ("min_height", False),
+        ("min_height", 0),
+        ("aspect_tolerance", True),
+        ("aspect_tolerance", -0.1),
+        ("aspect_tolerance", float("nan")),
+        ("aspect_tolerance", float("inf")),
+    ],
+)
+def test_auto_selection_rejects_invalid_numeric_boundaries(key, value):
+    with pytest.raises(ConfigError, match=key):
+        resolve_auto_selection_settings({"image_generation": {"auto_selection": {"enabled": True, key: value}}})
+
+
+def test_auto_selection_accepts_zero_aspect_tolerance():
+    settings = resolve_auto_selection_settings({"image_generation": {"auto_selection": {"aspect_tolerance": 0}}})
+    assert settings.aspect_tolerance == 0.0
+
+
+def test_score_candidates_breaks_equal_distance_tie_by_path(tmp_path: Path):
+    settings = AutoSelectionSettings(True, "selection_only", 160, 90, 0.01)
+    a = tmp_path / "a.jpg"
+    b = tmp_path / "b.jpg"
+    Image.new("RGB", _SIZE_16_9, _NEAR_COLOR).save(a)
+    Image.new("RGB", _SIZE_16_9, _NEAR_COLOR).save(b)
+    centroid = feature_centroid([auto_select_thumbnail.extract_features_from_path(a)])
+
+    scores = score_candidates([b, a], centroid, settings)
+    selected = select_best(scores, mode=settings.mode)
+
+    assert selected.path == a
+    assert scores[0].distance == scores[1].distance
+
+
+def test_full_mode_reports_every_ineligible_candidate():
+    scores = [
+        CandidateScore(Path("small.jpg"), 100, 90, 1.0, False, ["解像度不足"]),
+        CandidateScore(Path("square.jpg"), 160, 160, 2.0, False, ["16:9 逸脱"]),
+    ]
+
+    with pytest.raises(ValidationError) as exc_info:
+        select_best(scores, mode="full")
+
+    message = str(exc_info.value)
+    assert "small.jpg" in message
+    assert "square.jpg" in message
+    assert "mode: full" in message
 
 
 def _archive(collection: Path, channel_dir: Path):
