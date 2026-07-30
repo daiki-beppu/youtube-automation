@@ -1099,8 +1099,18 @@ def _build_credits(raw: object) -> DistrokidProfileCredits:
     if not isinstance(raw, dict):
         raise ConfigError(f"distrokid.profile.credits は object でなければなりません（got {type(raw).__name__}）")
     return DistrokidProfileCredits(
-        performer_role=str(raw.get("performer_role", "Synthesizer")),
-        producer_role=str(raw.get("producer_role", "Producer")),
+        performer_role=_required_string_with_default(
+            raw,
+            "performer_role",
+            "Synthesizer",
+            "distrokid.profile.credits.performer_role",
+        ),
+        producer_role=_required_string_with_default(
+            raw,
+            "producer_role",
+            "Producer",
+            "distrokid.profile.credits.producer_role",
+        ),
     )
 
 
@@ -1110,11 +1120,29 @@ def _build_songwriter(raw: object) -> SongwriterName | None:
     if not isinstance(raw, dict):
         raise ConfigError(f"distrokid.profile.songwriter は object でなければなりません（got {type(raw).__name__}）")
     middle = raw.get("middle")
+    if middle is not None and not isinstance(middle, str):
+        raise ConfigError(
+            "distrokid.profile.songwriter.middle は string または null でなければなりません"
+            f"（got {type(middle).__name__}）"
+        )
     return SongwriterName(
-        first=str(raw.get("first", "")),
-        last=str(raw.get("last", "")),
-        middle=str(middle) if middle is not None else None,
+        first=_required_string(raw, "first", "distrokid.profile.songwriter.first"),
+        last=_required_string(raw, "last", "distrokid.profile.songwriter.last"),
+        middle=middle,
     )
+
+
+def _required_string(raw: dict, key: str, label: str) -> str:
+    value = raw.get(key)
+    if not isinstance(value, str) or not value.strip():
+        raise ConfigError(f"{label} は空でない string でなければなりません（got {value!r}）")
+    return value
+
+
+def _required_string_with_default(raw: dict, key: str, default: str, label: str) -> str:
+    if key not in raw:
+        return default
+    return _required_string(raw, key, label)
 
 
 _VALID_RECORDING_SCOPES = ("full", "partial")
