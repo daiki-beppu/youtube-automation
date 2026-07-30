@@ -237,6 +237,62 @@ describe("ChannelStockTable", () => {
     expect(within(row).queryByText("正常")).not.toBeInTheDocument()
   })
 
+  it.each([
+    ["invalid_snapshot", "データエラー"],
+    ["invalid_channel", "設定エラー"],
+    ["future_status", "future_status"],
+  ])("renders %s as a destructive user-visible status", (status, label) => {
+    render(
+      <ChannelStockTable channels={[{ ...channel("Broken", null), status }]} />
+    )
+
+    const badge = within(screen.getByRole("row", { name: /Broken/ })).getByText(
+      label
+    )
+    expect(badge).toHaveClass("bg-destructive/10")
+  })
+
+  it("keeps equal stock counts in registry order", () => {
+    render(
+      <ChannelStockTable
+        channels={[
+          channel("First registered", 2),
+          channel("Second registered", 2),
+          channel("Third registered", 2),
+        ]}
+      />
+    )
+
+    const names = screen
+      .getAllByRole("row")
+      .slice(1)
+      .map(
+        (row) =>
+          within(row).getAllByRole("cell")[0].querySelector("span")?.textContent
+      )
+    expect(names).toEqual([
+      "First registered",
+      "Second registered",
+      "Third registered",
+    ])
+  })
+
+  it("reports zero total when every channel stock value is unavailable", () => {
+    render(
+      <ChannelStockTable
+        channels={[
+          channel("First unavailable", null),
+          channel("Second unavailable", null),
+        ]}
+      />
+    )
+
+    expect(
+      screen.getByText("全チャンネル合計 公開予約 0本")
+    ).toBeInTheDocument()
+    expect(screen.getByText("未取得 2件を除く")).toBeInTheDocument()
+  })
+
   it("renders all channels without truncating a larger channel set", () => {
     const channels = Array.from({ length: 10 }, (_, index) =>
       channel(`Channel ${index + 1}`, index % 4)

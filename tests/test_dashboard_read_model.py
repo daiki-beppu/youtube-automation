@@ -235,3 +235,91 @@ def test_read_model_does_not_modify_channel_files(tmp_path: Path) -> None:
         if path.is_file()
     }
     assert after == before
+
+
+def test_read_model_normalizes_invalid_nested_shapes_and_numeric_boundaries(tmp_path: Path) -> None:
+    channel = tmp_path / "invalid-shapes"
+    snapshot = _snapshot(
+        collected_at="2026-07-20T00:00:00+00:00",
+        views=900,
+        video_views=700,
+    )
+    snapshot["reporting_api"]["impressions_summary"]["per_video"] = {"video-b": {"impressions": 1000}}
+    snapshot["channel_analytics"]["summary"].update(
+        {
+            "total_views": True,
+            "total_watch_time": -1,
+            "net_subscribers": -4,
+            "total_engagement": float("nan"),
+            "avg_view_percentage": float("inf"),
+        }
+    )
+    snapshot["scheduled_videos"]["count"] = False
+    snapshot["video_analytics"]["video-b"].update(
+        {
+            "views": -10,
+            "likes": True,
+            "comments": -2,
+            "shares": float("inf"),
+            "subscribers_gained": -1,
+            "average_view_duration": float("nan"),
+        }
+    )
+    _write_channel(
+        channel,
+        name="Normalized",
+        snapshots={"analytics_data_20260720.json": snapshot},
+    )
+
+    item = build_dashboard_read_model([channel])["channels"][0]
+
+    assert item["scheduled_count"] is None
+    assert item["summary"] == {
+        "views": 0,
+        "watch_time_minutes": 0,
+        "subscribers_net": -4,
+        "engagements": 0,
+        "average_view_percentage": 0,
+    }
+    assert item["videos"][0] == {
+        "video_id": "video-b",
+        "title": "Later video",
+        "views": 0,
+        "impressions": 0,
+        "ctr_percentage": 0,
+        "likes": 0,
+        "comments": 0,
+        "shares": 0,
+        "subscribers_gained": 0,
+        "average_view_duration_seconds": 0,
+        "engagements": 0,
+    }
+
+
+@pytest.mark.parametrize("channels", [None, {}, "invalid"])
+def test_dashboard_api_returns_empty_channels_for_invalid_model_shape(channels: object) -> None:
+    api = DashboardAPI({"schema_version": 1, "channels": channels})
+
+    assert api.overview() == {"schema_version": 1, "channels": []}
+    with pytest.raises(DashboardChannelNotFoundError):
+        api.channel("unknown")
+
+
+def test_dashboard_api_filters_non_object_channels_and_non_list_videos() -> None:
+    api = DashboardAPI(
+        {
+            "schema_version": 1,
+            "channels": [
+                None,
+                "invalid",
+                {
+                    "id": "valid",
+                    "name": "Valid",
+                    "videos": {"video": "not-a-list"},
+                },
+            ],
+        }
+    )
+
+    assert api.overview()["channels"] == [{"id": "valid", "name": "Valid", "video_count": 0}]
+    assert api.channel("valid")["videos"] == []
