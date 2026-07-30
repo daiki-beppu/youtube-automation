@@ -1464,7 +1464,7 @@ class TestStreamingArchiveCheckCli:
                 rc = streaming_archive_check.main()
             except SystemExit as e:
                 rc = e.code
-        assert rc not in (0, None), f"件数不足で exit 非 0 にならない: {rc}"
+        assert rc == 1, f"件数不足の終了コードが通知失敗の 2 と区別されない: {rc}"
 
     def test_expected_is_required(self):
         """Given --expected なし
