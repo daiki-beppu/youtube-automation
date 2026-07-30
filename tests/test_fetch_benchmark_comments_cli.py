@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sys
 
 import pytest
@@ -271,3 +272,52 @@ def test_collect_checks_benchmark_freshness(monkeypatch, tmp_path):
     }
     assert result["videos"] == [{**target, "comments": [comment], "comment_count": 1}]
     assert (tmp_path / "comments_20260630.json").exists()
+
+
+def _collector_for_date(tmp_path):
+    collector = mod.BenchmarkCommentCollector.__new__(mod.BenchmarkCommentCollector)
+    collector.data_dir = tmp_path
+    collector.today = mod.date(2026, 6, 30)
+    collector.min_views = 10000
+    collector.max_comments = 100
+    collector.competitor_slug = None
+    collector.youtube = None
+    return collector
+
+
+def test_collect_reuses_same_day_cache_without_refresh_or_api(monkeypatch, tmp_path):
+    collector = _collector_for_date(tmp_path)
+    cached = {"collected_at": "cached", "videos": [], "summary": {"total_videos": 0}}
+    output = tmp_path / "comments_20260630.json"
+    output.write_text(json.dumps(cached), encoding="utf-8")
+    monkeypatch.setattr(
+        mod,
+        "ensure_benchmark_fresh",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("refreshed")),
+    )
+    monkeypatch.setattr(
+        mod,
+        "load_benchmark_videos",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("loaded targets")),
+    )
+
+    assert collector.collect() == cached
+
+
+def test_collect_empty_targets_returns_without_authentication_or_save(monkeypatch, tmp_path):
+    collector = _collector_for_date(tmp_path)
+    calls = []
+    monkeypatch.setattr(mod, "ensure_benchmark_fresh", lambda *_args, **_kwargs: calls.append("fresh"))
+    monkeypatch.setattr(mod, "load_benchmark_videos", lambda *_args, **_kwargs: [])
+
+    class Clients:
+        @property
+        def youtube(self):
+            raise AssertionError("authenticated")
+
+    collector.youtube_clients = Clients()
+
+    assert collector.collect() == {}
+    assert calls == ["fresh"]
+    assert collector.youtube is None
+    assert not (tmp_path / "comments_20260630.json").exists()
