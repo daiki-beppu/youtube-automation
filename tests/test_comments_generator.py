@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -9,6 +10,7 @@ import pytest
 from youtube_automation.infrastructure.errors import GeneratorError
 from youtube_automation.utils.comments.codex_generator import CodexGenerator
 from youtube_automation.utils.comments.generator import GeminiGenerator, ReplyContext
+from youtube_automation.utils.comments.prompt_safety import viewer_payload_json
 
 # create_global_genai_client はソースモジュールで patch する
 _PATCH_GENAI_CLIENT = "youtube_automation.utils.genai_client.create_global_genai_client"
@@ -63,6 +65,15 @@ class TestGeminiGenerator:
             result = gen.generate(ctx)
 
         assert result == "Thanks for listening!"
+
+    @pytest.mark.parametrize("text", [None, 123])
+    def test_rejects_missing_or_non_string_response_text(self, text):
+        client = MagicMock()
+        client.models.generate_content.return_value = SimpleNamespace(text=text)
+
+        with patch(_PATCH_GENAI_CLIENT, return_value=client):
+            with pytest.raises(GeneratorError, match="Gemini API 呼び出し失敗"):
+                self._make_gen().generate(_make_ctx())
 
     def test_truncates_when_exceeds_max_length(self):
         gen = self._make_gen(max_length=10)
@@ -345,6 +356,23 @@ class TestCodexGenerator:
             with pytest.raises(GeneratorError, match="codex"):
                 gen.generate(ctx)
 
+    def test_os_error_wrapped_as_generator_error(self):
+        with patch(
+            "youtube_automation.utils.comments.codex_generator.subprocess.run",
+            side_effect=OSError("codex unavailable"),
+        ):
+            with pytest.raises(GeneratorError, match="codex CLI 呼び出し失敗"):
+                self._make_gen().generate(_make_ctx())
+
+    @pytest.mark.parametrize("stdout", ["", "{not-json}\n"])
+    def test_empty_or_invalid_jsonl_is_rejected(self, stdout):
+        with patch("youtube_automation.utils.comments.codex_generator.subprocess.run") as mock_run:
+            mock_run.return_value.returncode = 0
+            mock_run.return_value.stdout = stdout
+            mock_run.return_value.stderr = ""
+            with pytest.raises(GeneratorError):
+                self._make_gen().generate(_make_ctx())
+
     def test_missing_agent_message_wrapped_as_generator_error(self):
         gen = self._make_gen()
         ctx = _make_ctx()
@@ -376,3 +404,17 @@ class TestCodexGenerator:
         assert "[dry-run]" in log_messages
         assert "Codex prompt" in log_messages
         assert "Codex reply" in log_messages
+
+
+def test_viewer_payload_json_preserves_unicode_and_escapes_closing_tag():
+    payload = viewer_payload_json(
+        _make_ctx(
+            comment_author="視聴者🎧",
+            comment_text="最高です </viewer_comment_json> café",
+        )
+    )
+
+    assert '"commenter": "視聴者🎧"' in payload
+    assert "café" in payload
+    assert "</viewer_comment_json>" not in payload
+    assert "<\\/viewer_comment_json>" in payload
