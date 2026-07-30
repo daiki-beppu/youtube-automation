@@ -47,6 +47,7 @@ def test_notify_with_url_posts_json_content():
         captured["url"] = req.full_url
         captured["data"] = req.data
         captured["headers"] = {k.lower(): v for k, v in req.header_items()}
+        captured["timeout"] = timeout
         return _fake_urlopen()
 
     with patch("youtube_automation.utils.notification.urllib.request.urlopen", side_effect=fake_open):
@@ -56,6 +57,7 @@ def test_notify_with_url_posts_json_content():
     body = json.loads(captured["data"].decode("utf-8"))
     assert body == {"content": "hello"}
     assert captured["headers"].get("content-type", "").startswith("application/json")
+    assert captured["timeout"] == 30
 
 
 def test_notify_with_none_url_falls_back_to_stderr(capsys):
@@ -169,3 +171,46 @@ def test_notify_accepts_discordapp_alias():
         notification.notify(content="x", webhook_url="https://discordapp.com/api/webhooks/1/x")
 
     assert captured["url"] == "https://discordapp.com/api/webhooks/1/x"
+
+
+def test_notify_wraps_timeout_error() -> None:
+    with patch("youtube_automation.utils.notification.urllib.request.urlopen", side_effect=TimeoutError("slow")):
+        with pytest.raises(notification.NotificationError, match="webhook POST failed") as exc_info:
+            notification.notify(content="x", webhook_url="https://discord.com/api/webhooks/1/x")
+
+    assert isinstance(exc_info.value.__cause__, TimeoutError)
+
+
+@pytest.mark.parametrize(
+    "webhook_url",
+    [
+        "https://discord.com:443/api/webhooks/1/x",
+        "https://discordapp.com:8443/api/webhooks/1/x",
+    ],
+)
+def test_notify_accepts_allowed_host_with_port(webhook_url: str) -> None:
+    with patch(
+        "youtube_automation.utils.notification.urllib.request.urlopen",
+        return_value=_fake_urlopen(),
+    ) as mock_open:
+        notification.notify(content="x", webhook_url=webhook_url)
+
+    request = mock_open.call_args.args[0]
+    assert request.full_url == webhook_url
+    assert mock_open.call_args.kwargs == {"timeout": 30}
+
+
+@pytest.mark.parametrize(
+    "webhook_url",
+    [
+        "https://webhook.discord.com/api/webhooks/1/x",
+        "https://discord.com.evil.example/api/webhooks/1/x",
+        "https://discord.com@evil.example/api/webhooks/1/x",
+    ],
+)
+def test_notify_rejects_subdomain_suffix_and_userinfo_host_confusion(webhook_url: str) -> None:
+    with patch("youtube_automation.utils.notification.urllib.request.urlopen") as mock_open:
+        with pytest.raises(notification.NotificationError, match="host"):
+            notification.notify(content="x", webhook_url=webhook_url)
+
+    mock_open.assert_not_called()

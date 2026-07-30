@@ -240,14 +240,7 @@ class TestInitialSetupChecks:
                 "gemini": {
                     "generation_mode": "single_step",
                     "reference_images": {"default": [], "path_base": "channel_dir"},
-                    "composition_rules": {
-                        "environment": "TBD",
-                        "character_size": "TBD",
-                        "character_pose": "TBD",
-                        "allowed_actions": "TBD",
-                        "ng_actions": "TBD",
-                        "background": "TBD",
-                    },
+                    "composition_rules": {"text_lines": "TBD"},
                 }
             }
         }
@@ -255,7 +248,7 @@ class TestInitialSetupChecks:
         issues = check_thumbnail_skill_config(tmp_path, cfg)
 
         assert any("reference_images.default" in issue for issue in issues)
-        assert any("composition_rules" in issue and "environment" in issue for issue in issues)
+        assert any("composition_rules" in issue and "text_lines" in issue for issue in issues)
 
     def test_thumbnail_config_detects_tbd_reference(self, tmp_path: Path) -> None:
         cfg = {
@@ -263,14 +256,7 @@ class TestInitialSetupChecks:
                 "gemini": {
                     "generation_mode": "single_step",
                     "reference_images": {"default": "TBD"},
-                    "composition_rules": {
-                        "environment": "desk",
-                        "character_size": "medium",
-                        "character_pose": "sitting",
-                        "allowed_actions": "reading",
-                        "ng_actions": "no text",
-                        "background": "warm room",
-                    },
+                    "composition_rules": {"text_lines": "2 lines"},
                 }
             }
         }
@@ -303,14 +289,7 @@ class TestInitialSetupChecks:
                     "generation_mode": "single_step",
                     "single_step": {"max_attempts": 2, "rotate": True},
                     "reference_images": {"default": refs, "dedup_recent_collections": 1},
-                    "composition_rules": {
-                        "environment": "desk",
-                        "character_size": "medium",
-                        "character_pose": "sitting",
-                        "allowed_actions": "reading",
-                        "ng_actions": "no text",
-                        "background": "warm room",
-                    },
+                    "composition_rules": {"text_lines": "2 lines"},
                 }
             }
         }
@@ -328,35 +307,21 @@ class TestInitialSetupChecks:
                 "gemini": {
                     "generation_mode": "single_step",
                     "reference_images": {"default": ["data/thumbnail_compare/benchmark/alpha/alpha.jpg"]},
-                    "composition_rules": {
-                        "environment": "{{ENVIRONMENT}}",
-                        "character_size": "medium",
-                        "character_pose": "sitting",
-                        "allowed_actions": "reading",
-                        "ng_actions": "no text",
-                        "background": "warm room",
-                    },
+                    "composition_rules": {"text_lines": "{{TEXT_LINES}}"},
                 }
             }
         }
 
         issues = check_thumbnail_skill_config(tmp_path, cfg)
 
-        assert any("composition_rules" in issue and "environment" in issue for issue in issues)
+        assert any("composition_rules" in issue and "text_lines" in issue for issue in issues)
 
     def test_thumbnail_config_detects_composition_rules_outside_single_step(self, tmp_path: Path) -> None:
         cfg = {
             "image_generation": {
                 "gemini": {
                     "generation_mode": "two_phase",
-                    "composition_rules": {
-                        "environment": "TBD",
-                        "character_size": "medium",
-                        "character_pose": "sitting",
-                        "allowed_actions": "reading",
-                        "ng_actions": "no text",
-                        "background": "warm room",
-                    },
+                    "composition_rules": {"text_lines": "TBD"},
                 }
             }
         }
@@ -365,7 +330,7 @@ class TestInitialSetupChecks:
 
         assert issues == [
             "config/skills/thumbnail.yaml::image_generation.gemini.composition_rules "
-            "に未設定/TBD の主要項目があります: environment"
+            "に未設定/TBD の主要項目があります: text_lines"
         ]
 
     def test_thumbnail_config_detects_missing_reference_path(self, tmp_path: Path) -> None:
@@ -374,14 +339,7 @@ class TestInitialSetupChecks:
                 "gemini": {
                     "generation_mode": "single_step",
                     "reference_images": {"default": ["data/thumbnail_compare/benchmark/missing.jpg"]},
-                    "composition_rules": {
-                        "environment": "desk",
-                        "character_size": "medium",
-                        "character_pose": "sitting",
-                        "allowed_actions": "reading",
-                        "ng_actions": "no text",
-                        "background": "warm room",
-                    },
+                    "composition_rules": {"text_lines": "2 lines"},
                 }
             }
         }
@@ -401,14 +359,7 @@ class TestInitialSetupChecks:
                     "generation_mode": "single_step",
                     "single_step": {"max_attempts": 2},
                     "reference_images": {"default": ["data/thumbnail_compare/benchmark/alpha/alpha.jpg"]},
-                    "composition_rules": {
-                        "environment": "desk",
-                        "character_size": "medium",
-                        "character_pose": "sitting",
-                        "allowed_actions": "reading",
-                        "ng_actions": "no text",
-                        "background": "warm room",
-                    },
+                    "composition_rules": {"text_lines": "2 lines"},
                 }
             }
         }
@@ -427,14 +378,7 @@ class TestInitialSetupChecks:
                 "gemini": {
                     "generation_mode": "single_step",
                     "reference_images": {"default": []},
-                    "composition_rules": {
-                        "environment": "TBD",
-                        "character_size": "TBD",
-                        "character_pose": "TBD",
-                        "allowed_actions": "TBD",
-                        "ng_actions": "TBD",
-                        "background": "TBD",
-                    },
+                    "composition_rules": {"text_lines": "TBD"},
                 },
             }
         }
@@ -631,14 +575,7 @@ def _valid_thumbnail_cfg(overrides: dict[str, object] | None = None) -> dict[str
         "generation_mode": "single_step",
         "single_step": {"max_attempts": 1, "rotate": True},
         "reference_images": {"default": ["data/thumbnail_compare/benchmark/alpha/alpha.jpg"]},
-        "composition_rules": {
-            "environment": "desk",
-            "character_size": "medium",
-            "character_pose": "sitting",
-            "allowed_actions": "reading",
-            "ng_actions": "no text",
-            "background": "warm room",
-        },
+        "composition_rules": {"text_lines": "2 lines"},
     }
     if overrides:
         gemini.update(overrides)
