@@ -457,10 +457,21 @@ EFFECT_FILTER_LOOP="$(build_effect_filter "0:v" "vout")"
 EFFECT_FILTER_STATIC="scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2[scaled];$(build_effect_filter "scaled" "vout")"
 
 # ─── Audio encoder 自動選択 (macOS は AudioToolbox 優先) ─
+# 一覧に載っていても初期化できるとは限らない。aac_at は AudioToolbox 経由で
+# coreaudiod への Mach lookup を必要とするため、サンドボックス下では
+# `AudioToolbox init error: 1718449215` (kAudioFormatUnsupportedDataFormatError) で
+# 失敗する。overlay encoder と同じく、実際に短いエンコードを試して通ったときだけ採用する。
+AUDIO_ENCODER="aac"
 if ffmpeg -hide_banner -encoders 2>&1 | grep -q '^ A..... aac_at '; then
-    AUDIO_ENCODER="aac_at"
-else
-    AUDIO_ENCODER="aac"
+    audio_encoder_probe="$(mktemp "${TMPDIR:-/tmp}/yt-audio-encoder-probe.XXXXXX")"
+    if ffmpeg -y -f lavfi -i anullsrc -t 0.1 -c:a aac_at -f mp4 \
+        -loglevel error "$audio_encoder_probe" &>/dev/null; then
+        AUDIO_ENCODER="aac_at"
+    else
+        echo "  WARN: audio encoder aac_at failed to start; falling back to aac"
+    fi
+    rm -f "$audio_encoder_probe"
+    unset audio_encoder_probe
 fi
 
 # ─── 音声出力オプション (m4a/aac はストリームコピー、それ以外は再エンコード) ─
