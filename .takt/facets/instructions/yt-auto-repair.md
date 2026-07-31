@@ -1,3 +1,5 @@
+{{include:instructions/use-relevant-skills}}
+
 承認された診断（`diagnosis.md`）の修正方針に従って、**原因を除いて**ください。症状を止めるのではなく、因果の連鎖を断ちます。
 
 ## 手順

@@ -17,6 +17,11 @@ workflow_config:
   provider_options:
     codex:
       network_access: true
+      # takt 0.53 で workflow の Codex Skill 継承が既定 off になった(#1081)。本リポジトリは
+      # .agents/skills(→ .claude/skills)を Codex 向けに維持しているため repo スコープのみ
+      # 復元する(0.54 simple family と同じ設計。user スコープは個人環境由来のため継承しない)
+      skills:
+        repo: true
     opencode:
       network_access: true
 # レビュー ⇄ 修正のループの歯止めは loop monitor が持ち、max_steps は最後の保険
@@ -227,6 +232,13 @@ steps:
         next: docs_review
       - condition: 指摘が計画の前提そのものを否定している
         next: plan
+    # takt 0.53 の builtin 準拠(#1116): 対応済み / 未対応の指摘・検証結果を非判定の
+    # 構造化レポートに残し、次イテレーションと resume が修正の続きから入れるようにする
+    output_contracts:
+      report:
+        - name: fix-report.md
+          format: fix-report
+          use_judge: false
 
   # ── Phase 4: CI 同等ゲート ────────────────────────────────────────
   # 文書変更でも契約テスト(pytest)と changelog ゲートは落ち得る。

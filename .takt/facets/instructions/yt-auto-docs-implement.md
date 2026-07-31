@@ -1,3 +1,5 @@
+{{include:instructions/use-relevant-skills}}
+
 承認された文書変更計画（`{report:docs-plan.md}`）に従って、文書・スキルを変更してください。
 
 ## 変更スコープ宣言

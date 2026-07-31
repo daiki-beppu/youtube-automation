@@ -1,3 +1,5 @@
+{{include:instructions/use-relevant-skills}}
+
 計画（`{report:plan.md}`）のリファクタ方針に従って、**挙動を変えない構造変更**を行ってください。safety net（`{report:test-report.md}`）が張ったテストの green を維持し続けることが、挙動を変えていないことの証明です。
 
 ## 手順

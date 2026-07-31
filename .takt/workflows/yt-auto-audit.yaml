@@ -24,6 +24,11 @@ workflow_config:
   provider_options:
     codex:
       network_access: true
+      # takt 0.53 で workflow の Codex Skill 継承が既定 off になった(#1081)。本リポジトリは
+      # .agents/skills(→ .claude/skills)を Codex 向けに維持しているため repo スコープのみ
+      # 復元する(0.54 simple family と同じ設計。user スコープは個人環境由来のため継承しない)
+      skills:
+        repo: true
     opencode:
       network_access: true
 max_steps: 32
@@ -83,6 +88,11 @@ steps:
       - review
     edit: false
     persona: qa-reviewer
+    # 台帳が全件に達するまで self-loop する長寿命セッション。台帳の正本は
+    # {report:02-audit-ledger.md} 注入で毎パス渡るため、セッション記憶は正確性に
+    # 不要 — takt 0.51 の compact(#994)で Phase 1 前に圧縮し、コンテキスト枯渇を防ぐ
+    # (圧縮非対応 provider では従来どおり動く)
+    session: compact
     policy:
       - review
     knowledge:
@@ -134,6 +144,10 @@ steps:
     description: 検収。監査の完全性・根拠の実在を最終確認する(レポートは書かない)
     tags:
       - review
+      # takt 0.50 の builtin 最終ゲートと同じタグ(#954)。config の
+      # provider_routing.tags.final-gate が persona ルーティングより優先されるため、
+      # 最終検収だけ強いモデルへ振れる
+      - final-gate
     edit: false
     persona: qa-reviewer
     policy:

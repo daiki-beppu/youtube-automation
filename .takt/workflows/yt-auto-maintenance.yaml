@@ -13,6 +13,11 @@ workflow_config:
   provider_options:
     codex:
       network_access: true
+      # takt 0.53 で workflow の Codex Skill 継承が既定 off になった(#1081)。本リポジトリは
+      # .agents/skills(→ .claude/skills)を Codex 向けに維持しているため repo スコープのみ
+      # 復元する(0.54 simple family と同じ設計。user スコープは個人環境由来のため継承しない)
+      skills:
+        repo: true
     opencode:
       network_access: true
 # 計画ループ・実装ループを含む。ループの歯止めは loop monitor と各 step の上限が持ち、

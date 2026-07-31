@@ -48,6 +48,15 @@ observability:
 # そのため全ペルソナを global と同値でここに複製する。
 # global 側のルーティングを変更した場合は、このファイルへの反映も必要。
 provider_routing:
+  # takt 0.50 の final-gate タグルーティング(#954)。builtin の merge-readiness-final-gate
+  # (yt-auto-feature / fix / maintenance の final_gate)と yt-auto-audit の review step が
+  # このタグを持つ。tags は personas より優先されるため(provider-resolution の
+  # PROVIDER_MODEL_SOURCE_PRIORITY: tags=5 < personas=6)、auto_pr 前の最終関門だけ
+  # レビュー既定の Terra より強い Sol へ振る。最終ゲートは 1 run に 1〜2 回しか走らない
+  tags:
+    final-gate:
+      provider: codex
+      model: gpt-5.6-sol
   personas:
     coder:
       provider: codex
