@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `fix(videoup)`: `generate_videos.sh` の音声エンコーダ選択を、`ffmpeg -encoders` の列挙だけでなく実行時プローブの成功を条件にした。`aac_at` は AudioToolbox 経由で coreaudiod への Mach lookup を必要とするため、サンドボックス下では列挙されていても初期化に失敗し ffmpeg が exit 171 で落ちていた。プローブに失敗した場合は警告を出して `aac` へフォールバックする（#3034）。
+
 - `refactor(packaging)`: リポジトリを責務別 layer へ再配置し、canonical owner への production import・receipt・active documentation を同期した。`youtube_automation.utils` と `infrastructure.legacy_utils` は下流向け compatibility façade として installed wheel でも維持し、削除・統合候補は `docs/architecture/reorganization-followups.md` に記録した。
 
 - `chore(takt)`: takt 0.54.1 追随 — 0.53 で既定 off になった Codex Skill 継承（`.agents/skills` の repo スコープ）を yt-auto-* 全 workflow で復元し、builtin 準拠の fix-report 契約（`instruction: fix` の 2 step）・`session: compact`（yt-auto-audit の台帳拡張 step）・final-gate タグルーティング（最終関門のみ Sol へ）・`use-relevant-skills` partial（実装系 4 instruction）を導入した（#2686）。
