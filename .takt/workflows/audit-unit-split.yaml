@@ -97,43 +97,55 @@ steps:
         - name: 02-unit-audit.md
           format: unit-audit-ledger
     rules:
-      - condition: スコープ全件の台帳・判定が完了した
+      - condition: 応答の末尾に宣言文「スコープ全件の台帳・判定が完了した」がそのまま含まれている
         next: supervise
-      - condition: 台帳を拡張したが未台帳の残件がある
+      - condition: 応答の末尾に宣言文「台帳を拡張したが未台帳の残件がある」がそのまま含まれている
         next: audit
-      - condition: 監査を継続できない障害がある
+      - condition: 監査を継続できない障害がある（どちらの宣言文もない）
         next: ABORT
 
+  # v4（2026-07-30）: T07/T08/T10/T11 が audit↔supervise の往復で max_steps を消費（32 中 25〜28 ステップ）。
+  # 原因は (a) supervise が builtin instruction のままで「十分」の基準・差し戻し上限を持たない、
+  # (b) policy: review の「APPROVE は issue 0 件」基準が台帳検収に適用され、毎回何かを見つけて REJECT し続ける。
+  # 対策: project facet unit-audit-supervise.md で builtin を shadow（承認基準 5 点・差し戻しは物理的欠落のみ・
+  # 宣言文一字一句固定）し、policy: review の注入を外す。あわせて T11 で再発した Findings の 1 行圧縮を
+  # 契約・audit instruction の禁止事項に追加。
   - name: supervise
     tags:
       - review
       - supervise
     edit: false
     persona: supervisor
-    policy: review
     knowledge:
       - unit-testing
     instruction: unit-audit-supervise
     pass_previous_response: false
     rules:
-      - condition: 監査が完全で Issue 化できる品質に達している
+      - condition: 応答の末尾に宣言文「監査が完全で Issue 化できる品質に達している」がそのまま含まれている
         next: review
-      - condition: カバレッジ監査が不完全、または根拠が不足している
+      - condition: 応答の末尾に宣言文「カバレッジ監査が不完全、または根拠が不足している」がそのまま含まれている
         next: audit
 
+  # v5（2026-07-31）: v4 適用後の T15/T16 でも review の遷移判定（structured_output）が
+  # 承認宣言「監査が完全で問題がない」で終わる応答を rule 2（差し戻し）へ誤分類する事象が
+  # 計 3 回発生（T15 Iter12/15・T16 Iter15。応答本文は承認なのに Matched Rule Index: 1）。
+  # 宣言文の一字一句固定（v3）だけでは判定 LLM の「内容の再審」を防げないため、
+  # 全 rule condition を「応答の末尾に宣言文『…』がそのまま含まれている」という
+  # 機械照合の記述へ変更し、判定タスクを文字列照合として定義し直した。
+  # あわせて review からも policy: review を除去（v4 で supervise から外したのと同じ理由 —
+  # 「APPROVE は issue 0 件」基準が最終検収に注入され差し戻し圧力になる）。
   - name: review
     tags:
       - review
     edit: false
     persona: testing-reviewer
     policy:
-      - review
       - testing
     knowledge:
       - unit-testing
     instruction: unit-audit-split-review
     rules:
-      - condition: 監査が完全で問題がない
+      - condition: 応答の末尾に宣言文「監査が完全で問題がない」がそのまま含まれている
         next: COMPLETE
-      - condition: 監査に不足・誤り・根拠不明な判定がある
+      - condition: 応答の末尾に宣言文「監査に不足・誤り・根拠不明な判定がある」がそのまま含まれている
         next: audit

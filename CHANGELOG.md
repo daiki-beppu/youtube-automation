@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `chore(takt)`: audit-unit-split の検収ゲートを v4/v5 へ更新。v4 は supervise を project facet で shadow（承認基準 5 点・差し戻しは物理的欠落のみ）し `policy: review` の「APPROVE は issue 0 件」注入を除去（T07/T08/T10/T11 の max_steps 枯渇対策）。v5 は判定 LLM が承認宣言の応答を差し戻しへ誤分類する事象（T15/T16 で計 3 回・約 9 step 空転）への対策として全 rule condition を宣言文の機械照合形式へ変更し、review からも `policy: review` を除去。F 番号の連番規約（F-001 起点・欠番禁止・取り下げ見出し）と優先度集計の実数カウントを契約・instruction に明文化した（#2680）。
 - `fix(extensions)`: Community / DistroKid helper の cleanup・stop・storage・asset relay・content injection 失敗を後続副作用なしで扱い、shared-ui の portal・primitive・refresh・drag・viewport 境界と entrypoint lifecycle を実 mount 回帰テストで固定した（#2926〜#2946）。
 - `fix(skills)`: スキル配布・パッケージング監査の25件を実行可能な成功／失敗契約へ置換し、market/persona の状態判定、schedule/GCP/shell reference の外部コマンド境界、thumbnail のatomic更新、動画ベンチマーク、コメント収集のpagination・途中失敗・atomic保存・CLI終了コードを回帰テストで固定した（#2831〜#2855）。
 - `test(repository)`: リポジトリ契約監査の文字列・行数・自己テストを実行時境界へ置換し、Chrome extension/worktree解決、Git ignore、dotenv非使用、pytest lane、shared-ui relay、隔離fallow cacheの回帰契約を強化した（#2888）。
