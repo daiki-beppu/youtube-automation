@@ -2,6 +2,26 @@
 
 > 2026-07-30(#2686)以降、このリポジトリの標準実装経路は takt + リポジトリ専用 workflow である。2026-07-23(#2453)の takt 廃止は「ドキュメントが前提とする workflow の実体が環境に存在しない」ことが原因だった。現在は workflow を `.takt/workflows/` で git 管理し、`takt workflow doctor` で機械検証するため、廃止の根拠は解消されている。
 
+## issue の粒度
+
+**1 issue = 1 PR = 1 振る舞い変更**を単位とする。PR は stacked PR 前提であり、レビューは 1 段ずつ独立に行う。次のいずれかに当たる issue は着手前に分割する。
+
+- 要件が 3 件以上ある
+- 影響ファイルが 4 件以上ある
+- 独立した関心事が 2 つ以上混ざっている
+- 実装が複数 PR に分かれる見込みがある
+
+分割して得た各 issue は、加えて次を満たす。
+
+- **単体で検証可能**: その issue だけを完了させた時点で挙動を実演または検証できる
+- **全レイヤを貫く**: config / ロジック / CLI / skill を縦に貫通する狭い経路にする。1 レイヤだけを横に切らない
+- **1 context に収まる**: 新規セッション 1 本で実装しきれる分量に収める
+- **prefactor を先に置く**: 実装を楽にする下準備が必要なら、それを先行 issue として独立させる
+
+分割は sub-issue(GraphQL `addSubIssue`)で親へ接続し、実装順の依存は `addBlockedBy` で表す。親子は階層であって依存関係ではないため両方を持たせる。着手は blocker がすべて close した子(frontier)から選ぶ。
+
+リネームのように 1 つの機械的変更が全域へ波及する wide refactor は縦に切れない。expand(新しい形を旧い形の隣に追加)→ migrate(呼び出し側をディレクトリ単位のバッチで移す。各バッチを 1 issue とする)→ contract(旧い形を削除)の順に並べ、各段を stack の 1 段に対応させる。
+
 ## 正規ルート
 
 1. `gh issue create` または `/issue` で issue を起票する。
@@ -14,6 +34,7 @@
 
 3. workflow が完走すると takt の `auto_pr` がサンドボックス外で commit → push → PR 作成を行う。
 4. PR の CI・レビュー指摘への対応は人間が判断する。必要なら fix issue を起票して再キューする。**マージは人間が行う。**
+5. 関連する PR が複数できたら `gh stack link <下段PR> <上段PR> ...` で stack にまとめ、`gh stack merge <stack番号> --yes --squash` で atomic merge する(「commit / push / PR(gh stack 前提)」節)。
 
 `takt:*` ラベルは使わない(workflow の選択はタスク投入時に行う。既存 issue に残る `takt:*` ラベルは履歴メタデータとしてのみ扱う)。
 
@@ -62,14 +83,79 @@ cd .worktrees/issue-<N>-<slug>
 nix develop
 ```
 
-base branch は `main` 固定とする。別 issue の未マージ branch を base にしない。依存 issue がある場合は依存 PR の merge 後に main を更新し、rebase してから検証する。takt が生成する worktree(`<repo-parent>/takt-worktrees/`)は takt CLI が管理し、この規約の対象外。
+stack を組まない単独 PR の base branch は `main` 固定とする。stack の上段 branch は直下の branch を base に取るが、その chain は `gh stack` が管理するものであり、手で別 issue の未マージ branch を base に指定しない。stack に載せない依存 issue は、依存 PR の merge 後に main を更新し、rebase してから検証する。takt が生成する worktree(`<repo-parent>/takt-worktrees/`)は takt CLI が管理し、この規約の対象外。
 
-## commit / push / PR
+1 worktree = 1 stack とする。`.worktrees/` には `codex/*` の worktree が多数あり、同じ branch が 2 箇所にチェックアウトされていると stack の branch 移動が exit 6 で失敗するため、stack 用の branch 名はそれらと衝突させない。
+
+## commit / push / PR(gh stack 前提)
+
+PR は **stacked PR** を前提とする。1 PR = 1 振る舞い変更(テストと実装をセットにし、レビュアーが 1 つの意思決定で可否を判断できる単位。目安 200 行以内)に絞り、関連する変更は `gh stack` で積んでレビューと atomic merge を行う。
 
 - commit: 日本語 Conventional Commits を使い、タイトル末尾に `(#<N>)` を付ける(takt 経路では auto_pr が生成する)
-- push: issue branch だけを push する
+- push: stack に属する branch だけを push する
 - PR: `Closes #<N>`、変更概要、検証コマンド、参照した公式資料を本文へ記載する
-- merge: required CI 成功後に行う。チェックの削除・弱体化で green にしない
+- merge: required CI 成功後に `gh stack merge` で行う。チェックの削除・弱体化で green にしない
+
+### セットアップ(clone 直後に 1 回)
+
+```bash
+gh extension install github/gh-stack
+git config remote.pushDefault origin   # origin / contributor の 2 リモートがあるため必須
+git config rerere.enabled true
+```
+
+`remote.pushDefault` は必須。`gh stack checkout` / `trunk` は `--remote` フラグを持たず、複数リモート下で default が無いと非対話実行がエラーになる。
+
+### takt 経路: 生成された PR を後から link する
+
+takt は 1 run = 1 branch = 1 PR、`base_branch: main` 固定で、ローカルに stack を作らない。関連する issue をそれぞれ takt へ投入し、できた PR を後から stack にまとめる。
+
+```bash
+gh stack link <下段PR> <上段PR> [...]     # 引数は bottom → top の順
+gh stack link <stack番号> <追加PR>        # 既存 stack の上へ追加する
+```
+
+`link` はローカル追跡状態を作らず、base branch の chain を自動補正する(既存 PR の base が chain と食い違っていれば直す)。
+
+**前提**: 各 issue が main ベースで独立に実装できる粒度であること。takt worker は他 issue の未マージ変更を見られないため、実装順に依存がある issue は `addBlockedBy` で順序を表し、下段 PR の merge 後に上段を投入する。
+
+### `/issue-direct` 経路: worktree 内で stack を積む
+
+```bash
+gh stack init <下段branch>     # trunk は既定ブランチ(main)
+gh stack add <上段branch>      # 上に積む。staging と commit は通常の git を使う
+gh stack submit --auto         # push + PR 作成(draft)
+gh stack view --json           # 状態確認
+gh stack sync --prune          # 下段 merge 後の追随。merge 済みローカル branch も掃除する
+```
+
+下段を直したくなったら `gh stack down` で降りて直し、`gh stack rebase --upstack` で上段へ波及させる。上段の branch で下段の修正をしない(PR の差分が混ざる)。
+
+### merge
+
+`gh pr merge` は stacked PR に効かない。
+
+```bash
+gh stack merge <stack番号|PR番号> --yes --squash
+```
+
+指定 PR までを bottom から all-or-nothing で atomic merge する。**stack merge では ruleset の bypass が使えない**ため、admin 権限があっても全段で `lint` / `test` が green でなければ 1 件も入らない。
+
+### 非対話実行の必須フラグ
+
+| コマンド | 必須 | 無指定時 |
+| --- | --- | --- |
+| `gh stack view` | `--json` | TUI が起動してハングする |
+| `gh stack submit` | `--auto` | PR タイトルを 1 件ずつ対話で聞く |
+| `gh stack init` / `add` / `checkout` | branch 名・番号を positional で渡す | 対話メニューが出る |
+| `gh stack merge` | `--yes` | 対話ウィザードが出る |
+
+### 落とし穴
+
+- **PR タイトル / 本文は自動生成で、`submit` に指定フラグが無い。** branch が単一 commit ならその commit subject がタイトルになるので、日本語 Conventional Commits + `(#<N>)` を満たすには 1 branch 1 commit に寄せる。複数 commit の branch はタイトルが branch 名から機械生成されるため、作成後に `gh pr edit` で直す
+- **stack は厳密に線形。** 1 つの親に複数の子は持てない。並行させたい作業は別 stack にする
+- `gh stack sync` はローカルとリモートの stack が diverge していると、非対話環境では何も変更せず `ℹ Sync aborted` を出して **exit 0 で終わる**。成功と読み違えない。解消は `gh stack unstack` してから作り直す
+- `gh stack rebase` の conflict は exit 3。`git add` で解決を stage して `gh stack rebase --continue`、戻せなくなったら `--abort` で全 branch が rebase 前へ復元される
 
 ## 環境
 
