@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.6.0] - 2026-07-31
+
 - `chore(takt)`: takt 0.54.1 追随 — 0.53 で既定 off になった Codex Skill 継承（`.agents/skills` の repo スコープ）を yt-auto-* 全 workflow で復元し、builtin 準拠の fix-report 契約（`instruction: fix` の 2 step）・`session: compact`（yt-auto-audit の台帳拡張 step）・final-gate タグルーティング（最終関門のみ Sol へ）・`use-relevant-skills` partial（実装系 4 instruction）を導入した（#2686）。
 - `chore(takt)`: audit-unit-split の検収ゲートを v4/v5 へ更新。v4 は supervise を project facet で shadow（承認基準 5 点・差し戻しは物理的欠落のみ）し `policy: review` の「APPROVE は issue 0 件」注入を除去（T07/T08/T10/T11 の max_steps 枯渇対策）。v5 は判定 LLM が承認宣言の応答を差し戻しへ誤分類する事象（T15/T16 で計 3 回・約 9 step 空転）への対策として全 rule condition を宣言文の機械照合形式へ変更し、review からも `policy: review` を除去。F 番号の連番規約（F-001 起点・欠番禁止・取り下げ見出し）と優先度集計の実数カウントを契約・instruction に明文化した（#2680）。
 - `fix(extensions)`: Community / DistroKid helper の cleanup・stop・storage・asset relay・content injection 失敗を後続副作用なしで扱い、shared-ui の portal・primitive・refresh・drag・viewport 境界と entrypoint lifecycle を実 mount 回帰テストで固定した（#2926〜#2946）。
@@ -433,6 +435,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `feat(analytics)`: 動画別の `subscribersGained ÷ views × 100` による登録転換率ランキングと、登録済み／未登録視聴者別の `subscribedStatus` 集計を analytics スナップショットへ追加した。`/analytics-analyze` は両データを組み合わせて「登録を生む動画の型」を分析し、チャンネル全体の subscribedStatus を動画個別の因果として断定しない（#1813）。
 - `feat(analytics)`: standard / full depth の Analytics 収集に、視聴数上位 200 件の playlist dimension における views・平均視聴時間・上位 200 件内の視聴シェアを追加し、`/analytics-analyze` が Complete Collection を含むプレイリスト内視聴をレポートできるようにした（#1815）。
+
+### Migration
+
+所要時間の目安: 20〜30 分
+
+local fix 衝突注意:
+- flop-analysis: `/postmortem` からの改称（#2023）。下流の `config/skills/postmortem.yaml` は `config/skills/flop-analysis.yaml` へリネームが必要。旧ファイル名は警告付きの互換読み込みのみで、旧 command alias と旧 skill directory は残らない
+- wf-auto: `/automation-run` 互換 skill を削除し一気通貫入口を `/wf-auto` へ一本化（#2400）。`/automation-run` を参照する local fix は要更新
+- channel-new: `/channel-research` を第 6 モード「分析モード」へ挙動不変で統合（#2027）。`/channel-research` を参照する local fix は要更新
+- thumbnail: 標準生成順序を textless 背景先行 → 実フォント合成（`yt-thumbnail-text`）へ変更し、`thumbnail_text` の個別フィールド 6 種を deprecated 化（#1702, #1907, #2166）。改修規模が大きく local fix は上書きされる可能性が高い
+- setup, masterup, automation-update, collection-ideate, channel-new: 段階的開示で SKILL.md 本文を `references/` へ分割し行数が大きく変わった（#2565）。local fix は要再適用
+- benchmark, video-analyze, thumbnail-compare, viewer-voice: 競合 slug の指定を `--channel` から `--competitor` へ即時リネーム（#1948）。旧 `--channel` は alias として受理されない
+- suno-helper, distrokid-helper, community-helper, ext-install: overlay UI を shared shadcn/ui へ全面移行（#2318〜#2360）。拡張本体の配布は `ext-v*` 系列で独立
+
+必須の手作業（下流チャンネルリポジトリ）:
+- `config/skills/postmortem.yaml` を `config/skills/flop-analysis.yaml` へリネームする（#2023）。未実施でも警告付きで読めるが、警告は解消されない
+- `workflow.json` の `wf_next.approval_gates` / `comments.rules` は廃止キーとして `ConfigError` で拒否される。`skip_audio_approval` / `skip_upload_approval` へ移行する（#2304）
+- チャンネルルート `.env` の自動読込と `python-dotenv` 依存を削除した（#2477, #2478）。`.env` に置いていた値は process env / OAuth ファイル / 1Password のいずれかへ移す。GCP は ADC の quota project へ統一し、Vertex AI の location は用途別の内部固定値になる
+- 定期実行を設定済みの場合は `workflow.scheduled_automation.target_workflow` を `automation-run` から `wf-auto` へ変更する（#2400）。旧値は移行案内付きで拒否される
+- Python から `utils.suno_*` / `utils.metadata_generator` を直接 import している local script があれば `domains.suno` / `domains.suno.downloaded` / `domains.metadata` へ移行する（#2305）。旧 import path の facade は提供しない
+
+サマリ:
+
+- BREAKING 6 件: benchmark 系 4 CLI の `--competitor` リネーム（#1948）、`utils.suno_*` / `utils.metadata_generator` の削除（#2305）、`wf_next.approval_gates` / `comments.rules` の廃止（#2304）、`/automation-run` の削除（#2400）と `/postmortem` の改称（#2023）、チャンネルルート `.env` の廃止（#2477, #2478）
+- 読み取り専用 Analytics dashboard（React + Vite + shadcn/ui、`yt-dashboard`）を新設し、全チャンネル横断の指標比較・公開予約ストック・デジタル庁ガイド準拠の配色を追加（#2385, #2387, #2397, #2399, #2546）
+- 新規 skill 13 件: `/wf-auto`, `/analytics-run`, `/post-publish`, `/flop-analysis`, `/market-research`, `/creative-constraints`, `/value-loop-audit`, `/thumbnail-iterate`, `/thumbnail-test`, `/thumbnail-research`, `/feedback`, `/live-chat-reply`, `/automation-schedule`
+- YouTube Data API quota の記録 schema と `yt-cost-report --quota` 集計を追加し、read / write の全経路へ instrumentation を配線（#2006, #2055〜#2061）
+- takt を開発の標準実装経路へ復帰させ、`.takt/workflows/` の yt-auto-* 5 レーンと共通 callable を git 管理下で整備（#2686, #2690）
+- 監査由来の回帰テスト強化を大規模に実施（skills / repository / dashboard / metadata / suno / distrokid / thumbnail / analytics / extensions の findings を実行時契約へ置換）
+
 ## [5.5.17] - 2026-07-10
 
 ### Added
@@ -1987,6 +2019,7 @@ uv run yt-config-migrate verify                  # 新 loader で読めるか検
 未マップキー（例: `suno` 等のチャンネル独自拡張）は `yt-config-migrate` が warning を出力し、
 `--strict` 指定時は `ConfigError` で中止する。
 
+[5.6.0]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.6.0
 [5.5.17]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.17
 [5.5.16]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.16
 [5.5.15]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.15
