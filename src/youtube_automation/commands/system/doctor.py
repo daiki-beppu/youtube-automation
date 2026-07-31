@@ -2622,11 +2622,27 @@ def _suno_music_readiness(channel_dir: Path, channels: list[dict[str, object]]) 
 def check_initial_setup_readiness(channel_dir: Path) -> CheckResult:
     issues: list[str] = []
 
+    seed_confirmation = channel_dir / "docs" / "channel" / "ttp-seed-confirmation.md"
+    approved_exceptions: set[str] = set()
+    if seed_confirmation.is_file():
+        try:
+            seed_text = seed_confirmation.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            pass
+        else:
+            approved_exceptions, _ = _approved_ttp_exceptions(seed_text)
+
     thumbnail_cfg, thumbnail_error = _load_skill_config_for_channel("thumbnail", channel_dir)
     if thumbnail_error:
         issues.append(thumbnail_error)
     else:
-        issues.extend(check_thumbnail_skill_config(channel_dir, thumbnail_cfg))
+        issues.extend(
+            check_thumbnail_skill_config(
+                channel_dir,
+                thumbnail_cfg,
+                skip_reference_images="thumbnail" in approved_exceptions,
+            )
+        )
 
     suno_cfg, suno_error = _load_skill_config_for_channel("suno", channel_dir)
     if suno_error:

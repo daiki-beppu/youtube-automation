@@ -132,14 +132,19 @@ def check_suno_genre_line_char_limit(suno_cfg: Mapping[str, object]) -> str | No
     )
 
 
-def check_thumbnail_skill_config(channel_dir: Path, thumbnail_cfg: Mapping[str, object]) -> list[str]:
+def check_thumbnail_skill_config(
+    channel_dir: Path,
+    thumbnail_cfg: Mapping[str, object],
+    *,
+    skip_reference_images: bool = False,
+) -> list[str]:
     """thumbnail skill-config の初期セットアップ漏れを検出する."""
     image_generation = _as_mapping(thumbnail_cfg.get("image_generation"))
     gemini = _as_mapping(image_generation.get("gemini"))
     generation_mode = str(gemini.get("generation_mode") or "single_step").strip()
 
     issues: list[str] = []
-    if generation_mode == "single_step":
+    if generation_mode == "single_step" and not skip_reference_images:
         single_step = _as_mapping(gemini.get("single_step"))
         max_attempts = _positive_int(single_step.get("max_attempts"), default=1)
         rotate = _bool(single_step.get("rotate"), default=True)
