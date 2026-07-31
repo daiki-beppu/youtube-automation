@@ -10,6 +10,7 @@
 #   yt-auto-docs        — docs / skill 限定変更の軽量レーン(プロダクションコード変更は不可)
 #   yt-auto-maintenance — 定期リファクタリング(維持契約の列挙 → safety net → リファクタ)
 #   yt-auto-audit       — 汎用監査(台帳ベース。テスト監査・タスク完了検収など)
+#   yt-auto-audit-runs  — takt 資産の監査(workflow 定義の整合 + .takt/runs の実行トレース)
 #   yt-auto-intake / yt-auto-impl-review — 共通 callable sub-workflow
 #   audit-unit-split — ユニットテスト監査 16 分割の特化 workflow(稼働中・現状維持)
 # commit / push / PR 作成は workflow 完了後に takt の auto_pr が行う。
