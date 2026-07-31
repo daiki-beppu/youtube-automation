@@ -30,9 +30,12 @@
 | `yt-auto-docs` | docs / skill / CLAUDE.md 限定の変更(実コード変更なし) | intake → 計画 → 実装 → 文書レビュー 2 並列 → CI 同等ゲート → spillover |
 | `yt-auto-maintenance` | 挙動を変えないリファクタリング | intake → 計画(維持契約の列挙)→ 計画レビュー 2 並列 → safety net → リファクタ → 実装レビュー 4 並列 → CI 同等ゲート → 最終ゲート → spillover |
 | `yt-auto-audit` | 汎用監査(テスト監査・タスク完了検収・アーキテクチャ監査など) | 計画(台帳スケルトン)→ 監査(追記型)→ 監督 ⇄ 再監査 → 検収 → docs/audits/ へ配置(+指示があれば起票) |
+| `yt-auto-audit-runs` | takt 資産そのものの監査(workflow 定義の整合 + 実行トレースの再発パターン) | 計画(証拠パス確認 + 固定 5 対象の採番)→ 監査(追記型)→ 監督 ⇄ 再監査 → 検収 → docs/audits/ へ配置(+指示があれば起票) |
 | `audit-unit-split` | ユニットテスト監査 16 分割(稼働中の特化 workflow) | 現状維持。汎用の監査は `yt-auto-audit` を使う |
 
-迷ったときの判定順: 壊れている → `yt-auto-fix`。コードを変えず文書だけ → `yt-auto-docs`。挙動を変えずに構造を変える → `yt-auto-maintenance`。調査して報告するだけ → `yt-auto-audit`。それ以外 → `yt-auto-feature`。
+迷ったときの判定順: 壊れている → `yt-auto-fix`。コードを変えず文書だけ → `yt-auto-docs`。挙動を変えずに構造を変える → `yt-auto-maintenance`。takt の workflow / facet / 実行トレース自体を点検する → `yt-auto-audit-runs`。それ以外を調査して報告するだけ → `yt-auto-audit`。それ以外 → `yt-auto-feature`。
+
+`yt-auto-audit-runs` は issue 起点でなくてもよい定期点検レーン。run トレースの所在が 2 系統(メインチェックアウトの `.takt/runs` と、`.takt/clone-meta/*.json` の `clonePath` 配下)に分かれる点が他レーンと違う — takt はタスクを隔離クローンで実行するため、`yt-auto-*` の実行実績はクローン側にしか無い。クローンはスイープで消えるので、読める run 数は実行回数と一致しない。
 
 `yt-auto-intake` / `yt-auto-impl-review` は共通の callable sub-workflow であり、直接投入しない。
 
