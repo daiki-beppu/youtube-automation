@@ -33,6 +33,10 @@ bash .claude/skills/automation-release/references/verify-extensions.sh <name>
 
 検証ロジックとPASS/FAIL条件は `verify-extensions.sh` が単一ソース。`pnpm install --frozen-lockfile` → `pnpm build` → `pnpm zip`、対象拡張の期待名 zip が唯一の1件であること、対象 lockfile に差分がないことを検証する。non-zeroなら出力された原因を解消するまでabort。
 
+「唯一の1件」判定は今回の run が生成した zip だけを対象にする必要があるため、スクリプトは `pnpm zip` の直前に `.output/*.zip` を削除する（`.output/` は gitignore 済みのビルド成果物で `pnpm zip` が再生成する）。過去 run の zip を残したまま判定すると `expected exactly one zip ... found N` で誤 abort する。
+
+なお exit code をパイプ越しに読まないこと。`bash verify-extensions.sh | tail -60` の `$?` は `tail` の値になり、スクリプトの `exit 1` が 0 に見える。
+
 ### 4. 開いている release/ext-v* ブランチが無い
 
 ```bash

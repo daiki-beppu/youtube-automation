@@ -13,6 +13,8 @@
   ├─ ### Removed セクション あり
   │    → major bump
   ├─ 本文中に "BREAKING" / "破壊的変更" / "後方互換性無し" / "API 削除" 記述
+  │    （大小文字を問わない。本リポジトリでは "**Breaking:**" と
+  │      "breaking(scope):" の 2 表記が実際に使われている）
   │    → major bump
   ├─ ### Added セクション あり
   │    → minor bump
@@ -108,8 +110,8 @@ prepare Phase 1-1 で Unreleased 内容を判定するときの実装ヒント:
 # Unreleased セクション本文を抽出
 unreleased=$(awk '/^## \[Unreleased\]/{flag=1; next} /^## \[/{flag=0} flag' CHANGELOG.md)
 
-# major 判定
-if echo "$unreleased" | grep -qE "^### Removed|BREAKING|破壊的変更|後方互換性無し"; then
+# major 判定（-i 必須: "**Breaking:**" / "breaking(scope):" 表記を取りこぼさない）
+if echo "$unreleased" | grep -qiE "^### Removed|BREAKING|破壊的変更|後方互換性無し"; then
   bump="major"
 # minor 判定
 elif echo "$unreleased" | grep -qE "^### Added|^### Deprecated"; then
