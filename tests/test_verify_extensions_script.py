@@ -53,6 +53,9 @@ if [[ ${4:-} == pnpm ]]; then
   if [[ ${command} == zip && ${FAKE_SKIP_ZIP:-} != "${name}" ]]; then
     mkdir -p "${extension_dir}/.output"
     : > "${extension_dir}/.output/${name}-1.2.3-chrome.zip"
+    if [[ ${FAKE_EXTRA_ZIP:-} == "${name}" ]]; then
+      : > "${extension_dir}/.output/${name}-sources.zip"
+    fi
   fi
   exit 0
 fi
@@ -174,15 +177,33 @@ def test_verification_rejects_missing_zip(
 def test_verification_rejects_extra_zip(
     verify_environment: tuple[Path, dict[str, str], Path],
 ) -> None:
+    # release-extensions.yml は .output/*.zip を glob で Release asset へ上げるため、
+    # zip コマンドが期待名以外の成果物を生んだ場合は公開前に停止する必要がある。
+    result = _run_verify(
+        verify_environment,
+        "suno-helper",
+        environment_overrides={"FAKE_EXTRA_ZIP": "suno-helper"},
+    )
+
+    assert result.returncode != 0
+    assert "found 2" in result.stderr
+
+
+def test_verification_cleans_stale_zip_before_zipping(
+    verify_environment: tuple[Path, dict[str, str], Path],
+) -> None:
+    # 過去 run のビルド残骸（gitignore 済みで pnpm zip が再生成する）は
+    # 唯一性判定の対象外。掃除した上で今回の生成物だけを検証する。
     repository = verify_environment[0]
     output_dir = repository / "extensions/suno-helper/.output"
     output_dir.mkdir(parents=True)
     (output_dir / "stale.zip").touch()
+    (output_dir / "suno-helper-0.0.1-chrome.zip").touch()
 
     result = _run_verify(verify_environment, "suno-helper")
 
-    assert result.returncode != 0
-    assert "found 2" in result.stderr
+    assert result.returncode == 0, result.stderr
+    assert sorted(path.name for path in output_dir.glob("*.zip")) == ["suno-helper-1.2.3-chrome.zip"]
 
 
 def test_verification_rejects_lockfile_diff(
