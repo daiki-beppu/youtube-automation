@@ -2,8 +2,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from youtube_automation.core.errors import YouTubeAPIError
 from youtube_automation.domains.analytics.mixins.video_daily_analytics import VideoDailyAnalyticsMixin
-from youtube_automation.infrastructure.errors import YouTubeAPIError
 
 
 class DummyCollector(VideoDailyAnalyticsMixin):

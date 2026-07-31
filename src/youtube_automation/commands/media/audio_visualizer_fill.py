@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from youtube_automation.utils.audio_visualizer_fill import create_fill_asset
+from youtube_automation.infrastructure.media.audio_visualizer_fill import create_fill_asset
 
 
 def main() -> None:

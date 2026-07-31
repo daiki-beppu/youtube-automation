@@ -20,12 +20,12 @@ from pathlib import Path
 from PIL import Image
 
 from youtube_automation.configuration import channel_dir as _channel_dir
+from youtube_automation.core.errors import ConfigError
 from youtube_automation.domains.thumbnail.correlation import (
     MIN_SAMPLES_DEFAULT,
     compute_correlations,
 )
 from youtube_automation.domains.thumbnail.features import extract_features
-from youtube_automation.infrastructure.errors import ConfigError
 
 logger = logging.getLogger(__name__)
 

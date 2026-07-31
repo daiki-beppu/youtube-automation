@@ -8,7 +8,7 @@ from pathlib import Path
 
 from youtube_automation.application.analytics.benchmark_query import find_latest_benchmark_json
 from youtube_automation.configuration import channel_dir, load_config
-from youtube_automation.utils.ttp_health import evaluate_ttp_health
+from youtube_automation.infrastructure.analytics.ttp_health import evaluate_ttp_health
 
 
 def _unavailable(reason: str, detail: str) -> dict:

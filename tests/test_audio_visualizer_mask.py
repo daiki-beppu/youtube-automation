@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
-from youtube_automation.utils.audio_visualizer_mask import generate_mask, parse_size
+from youtube_automation.infrastructure.media.audio_visualizer_mask import generate_mask, parse_size
 
 
 def test_mirror_mask_uses_configured_size_and_bar_count(tmp_path: Path) -> None:

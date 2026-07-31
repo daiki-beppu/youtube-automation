@@ -4,9 +4,9 @@ import argparse
 import logging
 import sys
 
+from youtube_automation.core.errors import AutomationError
 from youtube_automation.domains.uploads.playlists import PlaylistManager
 from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
-from youtube_automation.infrastructure.errors import AutomationError
 from youtube_automation.infrastructure.google.youtube import YouTubeClients
 
 

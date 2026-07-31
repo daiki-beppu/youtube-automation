@@ -9,15 +9,15 @@ import logging
 import re
 from pathlib import Path
 
+from youtube_automation.core.adapters.errors import ValidationError
+from youtube_automation.core.adapters.filesystem import glob_files, path_exists, read_file_text
+from youtube_automation.core.adapters.media import CollectionPaths
+from youtube_automation.core.adapters.youtube import parse_youtube_tags
 from youtube_automation.domains.metadata.descriptions import (
     DESCRIPTIONS_MD_RECREATE_GUIDE,
     build_descriptions_md_parse_diagnostics,
     extract_descriptions_md_section,
 )
-from youtube_automation.infrastructure.errors import ValidationError
-from youtube_automation.infrastructure.filesystem import glob_files, path_exists, read_file_text
-from youtube_automation.utils.collection_paths import CollectionPaths
-from youtube_automation.utils.youtube_tag import parse_youtube_tags
 
 logger = logging.getLogger(__name__)
 

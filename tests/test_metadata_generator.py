@@ -17,6 +17,7 @@ import yaml
 
 import youtube_automation.domains.metadata as metadata_api
 from youtube_automation.configuration import load_config
+from youtube_automation.core.errors import ValidationError
 from youtube_automation.domains.metadata import (
     LOCALIZED_TITLE_PLACEHOLDERS,
     BAHMetadataGenerator,
@@ -34,8 +35,7 @@ from youtube_automation.domains.metadata.localizations import (
 )
 from youtube_automation.domains.metadata.placeholders import is_placeholder_value
 from youtube_automation.domains.metadata.titles import _extract_pattern_key
-from youtube_automation.infrastructure.errors import ValidationError
-from youtube_automation.utils.time_utils import format_duration_display
+from youtube_automation.infrastructure.runtime.time_utils import format_duration_display
 
 # ---------------------------------------------------------------------------
 # ヘルパー: 最小限の初期化でインスタンスを取得する
@@ -47,7 +47,7 @@ def _make_generator(dir_name: str = "20250907-live-8bit-adventure-music") -> BAH
 
     実際のファイルシステムにはアクセスしない純粋ロジックのテストに使用する。
     """
-    from youtube_automation.utils.skill_config import load_skill_config
+    from youtube_automation.configuration.skills import load_skill_config
 
     gen = object.__new__(BAHMetadataGenerator)
     gen.config = load_config()
@@ -526,7 +526,7 @@ class TestGenerateCompleteCollectionMetadata:
     def test_localizations_usage_attribution_respects_override(self, tmp_path, monkeypatch):
         """skill-config の usage_attribution_lines 上書きが全言語のローカライズ概要欄に反映される（#1650）"""
         from youtube_automation.configuration import reset as reset_config
-        from youtube_automation.utils.skill_config import reset as reset_skill_config
+        from youtube_automation.configuration.skills import reset as reset_skill_config
 
         fixture = Path(__file__).resolve().parent / "fixtures" / "sample_channel"
         channel = tmp_path / "sample_channel"
@@ -561,7 +561,7 @@ class TestGenerateCompleteCollectionMetadata:
 
     def test_localizations_usage_attribution_matches_complete_collection_default(self, gen_with_tracks):
         """デフォルト設定時、localizations と Complete Collection の Usage & Attribution 本文が同一（#1650）"""
-        from youtube_automation.utils.skill_config import load_skill_config
+        from youtube_automation.configuration.skills import load_skill_config
 
         meta = gen_with_tracks.generate_complete_collection_metadata()
         main_body = self._extract_usage_body(meta["description"])
@@ -732,7 +732,7 @@ class TestCrossfade:
 
     def test_crossfade_config_default(self):
         """skill-config (masterup.yaml) の audio.crossfade_duration がロードされること"""
-        from youtube_automation.utils.skill_config import load_skill_config
+        from youtube_automation.configuration.skills import load_skill_config
 
         cfg = load_skill_config("masterup")
         assert cfg.get("audio", {}).get("crossfade_duration") == 1.0
@@ -740,7 +740,7 @@ class TestCrossfade:
     def test_metadata_generator_uses_masterup_json_before_yaml(self, tmp_path, monkeypatch):
         """metadata_generator も TS generate-master と同じ JSON 優先 override を使うこと。"""
         from youtube_automation.configuration import reset as reset_config
-        from youtube_automation.utils.skill_config import reset as reset_skill_config
+        from youtube_automation.configuration.skills import reset as reset_skill_config
 
         fixture = Path(__file__).resolve().parent / "fixtures" / "sample_channel"
         channel = tmp_path / "sample_channel"
@@ -769,7 +769,7 @@ class TestCrossfade:
     def test_sequential_channels_do_not_inherit_config_or_skill_overrides(self, tmp_path, monkeypatch):
         """REQ-2799-01: A→B 連続生成でも B の channel/skill 設定だけを使う."""
         from youtube_automation.configuration import reset as reset_config
-        from youtube_automation.utils.skill_config import reset as reset_skill_config
+        from youtube_automation.configuration.skills import reset as reset_skill_config
 
         fixture = Path(__file__).resolve().parent / "fixtures" / "sample_channel"
         channels: list[Path] = []

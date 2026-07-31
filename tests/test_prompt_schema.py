@@ -13,7 +13,7 @@ from pathlib import Path
 
 import yaml
 
-from youtube_automation.utils.image_provider import PromptSchema, prompt_schema
+from youtube_automation.infrastructure.media.image_provider import PromptSchema, prompt_schema
 
 
 def _repo_root() -> Path:

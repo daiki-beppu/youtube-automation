@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
+from youtube_automation.core.errors import ConfigError
 from youtube_automation.domains.suno.lyrics import load_suno_lyrics_entries
-from youtube_automation.infrastructure.errors import ConfigError
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / ".claude/skills/suno-lyric/references/check_lyric_duplication.py"

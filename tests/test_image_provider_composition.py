@@ -22,7 +22,7 @@ from unittest.mock import MagicMock
 import pytest
 from PIL import Image
 
-from youtube_automation.utils.image_provider.composition import (
+from youtube_automation.infrastructure.media.image_provider.composition import (
     apply_composition_rules,
     confirm_cost,
     log_image_cost,

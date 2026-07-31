@@ -11,7 +11,7 @@ import pytest
 from googleapiclient.errors import HttpError
 from httplib2 import Response
 
-from youtube_automation.infrastructure.errors import QuotaExhaustedError, UploadError, YouTubeAPIError
+from youtube_automation.core.errors import QuotaExhaustedError, UploadError, YouTubeAPIError
 from youtube_automation.infrastructure.google.youtube import YouTubeClients
 
 # ---------------------------------------------------------------------------

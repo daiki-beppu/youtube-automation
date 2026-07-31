@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Iterable
 
-from youtube_automation.utils.youtube_tag import normalize_youtube_tags
+from youtube_automation.core.adapters.youtube import normalize_youtube_tags
 
 
 def build_collection_tags(tags: Iterable[str]) -> list[str]:

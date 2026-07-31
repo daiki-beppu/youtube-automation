@@ -9,9 +9,9 @@ from pathlib import Path
 import pytest
 
 from youtube_automation.configuration import load_config
+from youtube_automation.core.errors import ValidationError
 from youtube_automation.domains.uploads._preflight import PreflightMixin
 from youtube_automation.domains.uploads.youtube import YouTubeAutoUploader
-from youtube_automation.infrastructure.errors import ValidationError
 
 
 class _PreflightHarness(PreflightMixin):

@@ -34,13 +34,13 @@ from youtube_automation.commands.media.generate_image import (
 from youtube_automation.commands.media.generate_image import (
     main as generate_image_main,
 )
+from youtube_automation.core.errors import ConfigError
 from youtube_automation.domains.thumbnail.references import (
     plan_ttp_reference_assignments,
     record_ttp_reference_assignments,
     resolve_dedup_recent_collections,
 )
-from youtube_automation.infrastructure.errors import ConfigError
-from youtube_automation.utils.image_provider.composition import resolve_unique_path
+from youtube_automation.infrastructure.media.image_provider.composition import resolve_unique_path
 
 # ---- フェイク provider ------------------------------------------------------
 
@@ -749,7 +749,7 @@ def _patch_generate_image_cli(
     if channel_root is not None:
         monkeypatch.setattr(generate_image_module, "_channel_root", lambda: channel_root)
 
-    import youtube_automation.utils.skill_config as skill_config_module
+    import youtube_automation.configuration.skills as skill_config_module
 
     monkeypatch.setattr(skill_config_module, "load_skill_config", lambda _name: skill_cfg_override or skill_cfg)
 

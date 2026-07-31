@@ -27,7 +27,7 @@ import pytest
 from googleapiclient.errors import HttpError
 from httplib2 import Response
 
-from youtube_automation.infrastructure.errors import ValidationError
+from youtube_automation.core.errors import ValidationError
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -60,8 +60,8 @@ def _make_http_error(status: int, message: bytes = b"error") -> HttpError:
 
 def test_batch_upload_failure_does_not_expose_exception_text(tmp_path, caplog):
     """batch 結果・ログへ AutomationError の本文を転送しない."""
+    from youtube_automation.core.errors import AutomationError
     from youtube_automation.domains.uploads.youtube import YouTubeAutoUploader
-    from youtube_automation.infrastructure.errors import AutomationError
 
     ready = tmp_path / "ready"
     ready.mkdir()
@@ -1117,7 +1117,7 @@ class TestUploadCompleteCollectionDedup:
 
     def test_should_fail_loud_when_upload_thumbnail_missing(self, tmp_path):
         """#1310: main.* は動画背景なので upload thumbnail 欠落を隠さない。"""
-        from youtube_automation.infrastructure.errors import ValidationError
+        from youtube_automation.core.errors import ValidationError
 
         uploader, col_dir, mock_gen = self._setup(tmp_path)
         (col_dir / "10-assets" / "thumbnail.jpg").unlink()
@@ -1135,7 +1135,7 @@ class TestUploadCompleteCollectionDedup:
 
     def test_should_fail_loud_when_upload_thumbnail_missing_even_if_dedup_hits(self, tmp_path):
         """#1310: dedup existing-video 経路でも upload thumbnail 欠落を隠さない。"""
-        from youtube_automation.infrastructure.errors import ValidationError
+        from youtube_automation.core.errors import ValidationError
 
         uploader, col_dir, mock_gen = self._setup(tmp_path)
         (col_dir / "10-assets" / "thumbnail.jpg").unlink()

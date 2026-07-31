@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import pytest
 
-from youtube_automation.infrastructure.errors import ConfigError
-from youtube_automation.utils.image_provider.config import (
+from youtube_automation.core.errors import ConfigError
+from youtube_automation.infrastructure.media.image_provider.config import (
     SUPPORTED_PROVIDERS,
     CodexConfig,
     GeminiConfig,

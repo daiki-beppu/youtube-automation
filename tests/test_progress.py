@@ -1,4 +1,4 @@
-"""utils.progress の単体テスト（Issue #641）。
+"""infrastructure.runtime.progress の単体テスト（Issue #641）。
 
 進捗フォーマット純粋関数（spinner / elapsed / ETA / 推定進捗率 /
 1 行レンダラー / TTY 判定）の動作と境界値を担保する。
@@ -10,7 +10,7 @@ import io
 
 import pytest
 
-from youtube_automation.utils import progress
+from youtube_automation.infrastructure.runtime import progress
 
 # ---------- spinner_frame ----------
 

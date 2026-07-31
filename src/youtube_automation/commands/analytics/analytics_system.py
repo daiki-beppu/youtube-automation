@@ -16,12 +16,12 @@ from typing import Any
 from googleapiclient.errors import HttpError
 
 from youtube_automation.configuration import channel_dir, load_config
+from youtube_automation.core.errors import AuthError, ConfigError, YouTubeAPIError
 from youtube_automation.domains.analytics.service import YouTubeAnalyticsCollector
 from youtube_automation.infrastructure.analytics_adapter import AnalyticsAdapter, YouTubeDataAdapter
 from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
-from youtube_automation.infrastructure.errors import AuthError, ConfigError, YouTubeAPIError
 from youtube_automation.infrastructure.google.youtube import YouTubeClients
-from youtube_automation.utils.reporting_api import ReportingAPIClient
+from youtube_automation.infrastructure.youtube.reporting_api import ReportingAPIClient
 
 logger = logging.getLogger(__name__)
 
@@ -254,7 +254,7 @@ def _run_reporting_dry_run() -> int:
     print("=" * 60)
 
     try:
-        from youtube_automation.infrastructure.errors import AutomationError
+        from youtube_automation.core.errors import AutomationError
 
         client = _make_reporting_client()
         report = client.dry_run_inspection()
@@ -285,7 +285,7 @@ def _run_reporting_create_job() -> int:
     print("=" * 60)
 
     try:
-        from youtube_automation.infrastructure.errors import AutomationError
+        from youtube_automation.core.errors import AutomationError
 
         client = _make_reporting_client()
         report_type_id = client.select_report_type()

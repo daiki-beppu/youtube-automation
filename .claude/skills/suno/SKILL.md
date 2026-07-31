@@ -46,7 +46,7 @@ subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実�
 1. `.claude/skills/suno/config.default.yaml`
 2. `config/skills/suno.yaml`（存在する場合）
 
-合成規則は `youtube_automation.utils.skill_config.load_skill_config("suno")` と同じで、チャンネル上書きが優先される。存在しない override は未設定として扱い、勝手に作成しない。このスキルが別 skill の skill-config を直接参照する段階では、その skill の `config.default.yaml` と `config/skills/<skill>.yaml` も同じ手順で読む。
+合成規則は `youtube_automation.configuration.skills.load_skill_config("suno")` と同じで、チャンネル上書きが優先される。存在しない override は未設定として扱い、勝手に作成しない。このスキルが別 skill の skill-config を直接参照する段階では、その skill の `config.default.yaml` と `config/skills/<skill>.yaml` も同じ手順で読む。
 
 ### モード判定
 

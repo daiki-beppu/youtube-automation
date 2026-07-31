@@ -14,8 +14,8 @@ from types import SimpleNamespace
 import pytest
 
 from youtube_automation.commands.thumbnail import thumbnail_check
-from youtube_automation.infrastructure.errors import ValidationError
-from youtube_automation.utils import skill_config
+from youtube_automation.configuration import skills as skill_config
+from youtube_automation.core.errors import ValidationError
 
 
 @pytest.fixture(autouse=True)
@@ -203,7 +203,7 @@ def test_main_print_prompt_skips_gemini(tmp_path, monkeypatch, capsys):
     def _boom(*args, **kwargs):
         raise AssertionError("Gemini Client must not be created in --print-prompt path")
 
-    monkeypatch.setattr("youtube_automation.utils.genai_client.create_global_genai_client", _boom)
+    monkeypatch.setattr("youtube_automation.infrastructure.media.genai_client.create_global_genai_client", _boom)
 
     rc = thumbnail_check.main(["dummy.png", "--print-prompt"])
     assert rc == 0
@@ -227,7 +227,7 @@ def test_main_skips_when_self_check_disabled(tmp_path, monkeypatch, capsys):
     def _boom(*args, **kwargs):
         raise AssertionError("Gemini Client must not be created when self_check disabled")
 
-    monkeypatch.setattr("youtube_automation.utils.genai_client.create_global_genai_client", _boom)
+    monkeypatch.setattr("youtube_automation.infrastructure.media.genai_client.create_global_genai_client", _boom)
 
     rc = thumbnail_check.main(["nonexistent.png"])
     assert rc == 0

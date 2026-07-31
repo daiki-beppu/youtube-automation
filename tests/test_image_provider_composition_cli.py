@@ -19,9 +19,9 @@ from unittest.mock import MagicMock
 import pytest
 
 from youtube_automation.commands.media import generate_image
+from youtube_automation.core.errors import ConfigError
 from youtube_automation.domains.media.image import ImageGenerationResult
-from youtube_automation.infrastructure.errors import ConfigError
-from youtube_automation.utils.image_provider.composition import (
+from youtube_automation.infrastructure.media.image_provider.composition import (
     prompt_overwrite_or_rename,
     resolve_reference_paths,
 )
@@ -163,7 +163,7 @@ class TestGenerateImageCliHelperContracts:
         monkeypatch.setattr(generate_image, "get_provider", lambda _cfg: provider)
         monkeypatch.setattr(generate_image, "_channel_root", lambda: tmp_path)
         monkeypatch.setattr(
-            "youtube_automation.utils.skill_config.load_skill_config",
+            "youtube_automation.configuration.skills.load_skill_config",
             lambda _name: {"image_generation": {"gemini": {}}},
         )
         monkeypatch.setattr(generate_image, "resolve_cost_per_image", lambda *_args: 0.0)

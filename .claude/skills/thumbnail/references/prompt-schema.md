@@ -15,7 +15,7 @@ Use case / Asset type / Primary request / Input images / Scene / Subject /
 Style / Composition / Lighting / Color / Materials / Text / Constraints / Avoid
 ```
 
-bridge `youtube_automation.utils.image_provider.prompt_schema.from_skill_config()`
+bridge `youtube_automation.infrastructure.media.image_provider.prompt_schema.from_skill_config()`
 は thumbnail の `config.default.yaml` キーを次のように 14 項目へ流し込む。
 
 | # | imagegen 項目 | 取得元キー | 備考 |
@@ -39,7 +39,7 @@ bridge `youtube_automation.utils.image_provider.prompt_schema.from_skill_config(
 
 ## ブリッジ層 API 仕様
 
-`src/youtube_automation/utils/image_provider/prompt_schema.py` に試験導入。
+`src/youtube_automation/infrastructure/media/image_provider/prompt_schema.py` に試験導入。
 
 ### `PromptSchema` dataclass（frozen）
 
@@ -47,7 +47,7 @@ bridge `youtube_automation.utils.image_provider.prompt_schema.from_skill_config(
 全フィールドはデフォルト `None`（`input_images` のみ `()`）。
 
 ```python
-from youtube_automation.utils.image_provider import PromptSchema
+from youtube_automation.infrastructure.media.image_provider import PromptSchema
 
 schema = PromptSchema(
     primary_request="A jazz bar at night",
@@ -63,8 +63,8 @@ schema = PromptSchema(
 未設定キーは `None` / 空 tuple として残る。
 
 ```python
-from youtube_automation.utils.image_provider import prompt_schema
-from youtube_automation.utils.skill_config import load_skill_config
+from youtube_automation.infrastructure.media.image_provider import prompt_schema
+from youtube_automation.configuration.skills import load_skill_config
 
 schema = prompt_schema.from_skill_config(load_skill_config("thumbnail"))
 ```

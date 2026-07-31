@@ -19,18 +19,18 @@ import sys
 import time
 from pathlib import Path
 
+from youtube_automation.core.errors import ConfigError
 from youtube_automation.domains.thumbnail.references import (
     format_reference_assignment,
     plan_ttp_reference_assignments,
     resolve_dedup_recent_collections,
 )
-from youtube_automation.infrastructure.errors import ConfigError
-from youtube_automation.utils.image_provider import (
+from youtube_automation.infrastructure.media.image_provider import (
     ImageGenerationRequest,
     get_provider,
     load_image_generation_config,
 )
-from youtube_automation.utils.image_provider.composition import (
+from youtube_automation.infrastructure.media.image_provider.composition import (
     apply_composition_rules,
     confirm_cost,
     print_cost_summary,
@@ -43,8 +43,8 @@ from youtube_automation.utils.image_provider.composition import (
     validate_single_step_references,
     validate_single_step_request_references,
 )
-from youtube_automation.utils.image_provider.config import replace_model
-from youtube_automation.utils.profile import section
+from youtube_automation.infrastructure.media.image_provider.config import replace_model
+from youtube_automation.infrastructure.observability.profile import section
 
 # Gemini 用の解像度オプション（OpenAI provider 時は無視される）
 _GEMINI_VALID_IMAGE_SIZES = ("1K", "2K", "4K")
@@ -406,7 +406,7 @@ def main():
         cfg = replace_model(cfg, args.model)
 
     # composition_prefix は channel-side の image_generation.<provider> から解決する。
-    from youtube_automation.utils.skill_config import load_skill_config
+    from youtube_automation.configuration.skills import load_skill_config
 
     try:
         skill_cfg = load_skill_config("thumbnail")

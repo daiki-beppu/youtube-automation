@@ -15,7 +15,7 @@ import subprocess
 import sys
 
 from youtube_automation.configuration import channel_dir
-from youtube_automation.utils.stock import SOURCE_ROLES, list_stock
+from youtube_automation.infrastructure.media.stock import SOURCE_ROLES, list_stock
 
 
 def _build_parser() -> argparse.ArgumentParser:

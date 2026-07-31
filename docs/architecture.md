@@ -84,11 +84,50 @@ CLAUDE.md の「アーキテクチャ」節の詳細版。要点は CLAUDE.md �
 
 ## 自リポジトリ
 
+### 再配置後の責務境界と配置規則
+
+この節は、再配置後のファイル配置と依存方向を判断するための正本である。`CLAUDE.md` はこの文書への入口と開発規約を示し、`AGENTS.md` は Codex CLI 固有の補足を示す。構成・owner・配置判断を変更するときは、まずこの節と「主要モジュール」を確認する。
+
+#### 層と許可される依存方向
+
+依存は外側から内側へ一方向に流す。`commands/` は `application/`、`domains/`、`infrastructure/`、`configuration/`、`core/` を利用できるが、domain や infrastructure は commands を import しない。`domains/` は `core/` と設定の契約に依存し、外部 SDK・認証・network・subprocess は `infrastructure/` の adapter に閉じ込める。`application/` は workflow 単位の orchestration を持ち、commands から呼び出される。`configuration/` は設定の読み込み・検証と dataclass を所有する。設定境界で必要な正規化処理に限り `configuration/` から `infrastructure/` の provider-neutral な utility を利用するが、`infrastructure/` から設定機能層へは依存しない。
+
+`infrastructure/legacy_utils/` と `utils/` は下流公開 import のための compatibility facade であり、canonical implementation の owner ではない。canonical source、tests、skills、bench から facade へ依存してはならない。`dashboard/` と `extensions/` はそれぞれ独立した表示層・拡張層で、Python domain 実装の owner にはしない。
+
+#### 新規ファイルの配置判断
+
+新しいファイルは、次の順で最も狭い責務の owner に置く。
+
+1. 設定の schema、loader、dataclass は `src/youtube_automation/configuration/`。
+2. 外部 API、SDK、認証、filesystem、network、subprocess の adapter は `src/youtube_automation/infrastructure/`。
+3. 業務ルールと provider-neutral な model / policy は `src/youtube_automation/domains/`。
+4. 複数 domain を束ねる状態付き workflow は `src/youtube_automation/application/`。
+5. CLI の argparse、stdio、exit、composition は対応する `src/youtube_automation/commands/<domain>/`。
+6. 共通のドメイン例外・横断 primitive は `src/youtube_automation/core/`。
+7. 既存機能の回帰テストは対象層に対応する `tests/` の領域、skill の実行補助はその skill の `.claude/skills/<skill>/references/`。
+
+既存 owner がある場合は同じ責務の新 directory を作らず、canonical owner に追加する。下流公開 import を維持する必要がある場合だけ、`infrastructure/legacy_utils/` に明示的な薄い facade を置き、実装を複製しない。新規 CLI は `commands/` に置き、`pyproject.toml` の `yt-*` entrypoint と対応する契約テストを同時に更新する。
+
+#### 変更時に辿る対応表
+
+機能を変更するときは、実装だけで完了とせず、次の対応する成果物を順に確認する。
+
+| 変更内容 | 最初に確認する実装 | 次に確認する設定・テスト | 参照する文書・配布物 |
+|---|---|---|---|
+| 設定項目・schema | `configuration/<section>.py` と `configuration/loader.py` | `config/channel/*.json`、configuration 契約テスト | `docs/architecture.md`、`docs/development.md` |
+| CLI・実行入口 | `commands/<domain>/` と `entrypoints.py` | `pyproject.toml`、CLI 契約テスト | 対応 skill の `SKILL.md`、`docs/development.md` |
+| domain workflow・業務ルール | `domains/` または `application/` | domain/application テスト、fixture | `docs/architecture.md` の主要モジュール表 |
+| 外部サービス・adapter | `infrastructure/<area>/` | adapter 契約テスト、認証・secret 設定 | `docs/development.md`、該当 migration 文書 |
+| skill・配布リソース | `.claude/skills/`、`.claude/CLAUDE.template.md` | skill lint、sync / installed-wheel テスト | `CLAUDE.md`、`AGENTS.md`、配布設定 |
+| dashboard・extension | `dashboard/` または `extensions/` | frontend / extension テスト・build | `docs/development.md`、各領域の案内文書 |
+
+移動や owner 変更を伴う場合は、`docs/architecture/repository-reorganization-receipt.json`、参照元全体、下流公開 import、CLI、設定パス、package resource を追加で確認する。履歴監査文書の旧 path は履歴証跡として保持するが、active source・tests・skills・案内文書には canonical path だけを記載する。
+
 - `src/youtube_automation/configuration/` — 設定 loader / dataclass owner
-- `src/youtube_automation/utils/` — コアライブラリ（API クライアント、analytics、upload）
+- `src/youtube_automation/infrastructure/legacy_utils/` — 再配置後も下流公開 import を維持する compatibility adapter 群
 - `src/youtube_automation/commands/` — `yt-*` CLI の thin adapter。`analytics` / `channel` / `collections` / `distrokid` / `media` / `metadata` / `suno` / `system` / `thumbnail` / `uploads` / `youtube` の 11 domain に分割し、argparse・stdio・exit・composition を所有する。アップロード CLI（Auto / Collection / Shorts）は `commands/uploads/` が入口で、実装は `domains/uploads/` が持つ
 - `src/youtube_automation/entrypoints.py` — console script wrapper。`pyproject.toml [project.scripts]` の全 `yt-*` がここを経由し、**例外なく** `commands/` 配下の module を `import_module` して `main` を呼ぶ
-- `src/youtube_automation/templates/` — 説明文テンプレート
+- `src/youtube_automation/commands/channel/channel_init_templates.py` — channel-init が生成する設定テンプレート
 - `.claude/skills/` — 自動化スキル群（Claude Code / Codex 共用）。wheel に `_skills/` として `force-include` され、`yt-skills sync` で各チャンネルへ展開される
 - `.claude/CLAUDE.template.md` — BGM チャンネル運営方針テンプレ（共通骨格）。wheel に `_claude_md/CLAUDE.template.md` として `force-include` され、`yt-skills sync --asset claude-md` で各チャンネルの `.claude/CLAUDE.md` として展開される
 - `.agents/skills` — `.claude/skills` への symlink。Codex CLI 用の探索パス（Codex 規約 `$REPO_ROOT/.agents/skills`）
@@ -126,8 +165,8 @@ assets/stock/           # ボツ画像ストック (#364)。<theme-slug>/ 配下
 | `configuration.{meta,content,youtube,analytics,playlists,workflow,shorts,audio,localizations,comments,pinned_comment,distrokid,community_draft}` | 責務別 dataclass |
 | `infrastructure.google.youtube` | YouTube API clients（instance-scoped） |
 | `domains.uploads.youtube` | 再開可能アップロード・サムネイル圧縮の共通コア |
-| `infrastructure.errors` | ドメイン例外（`AutomationError` 基底、`ConfigError` / `YouTubeAPIError` / `ValidationError` / `UploadError`） |
-| `utils.collection_paths` | コレクションディレクトリ構造の解決 |
+| `core.errors` | ドメイン例外（`AutomationError` 基底、`ConfigError` / `YouTubeAPIError` / `ValidationError` / `UploadError`） |
+| `infrastructure.media.collection_paths` | コレクションディレクトリ構造の解決 |
 | `domains.suno` | Suno 設定、歌詞、プロンプト、プレイリスト、選曲の生成・検証 |
 | `domains.suno.downloaded` | downloaded payload、workflow、検証、archive、apply transaction |
 | `domains.metadata` | `service` の状態付き orchestration と titles / descriptions / tags / localizations leaf |
@@ -136,14 +175,14 @@ assets/stock/           # ボツ画像ストック (#364)。<theme-slug>/ 配下
 | `domains.media` | 音声、字幕、画像、動画の provider-neutral model / policy |
 | `domains.distrokid` | DistroKid naming、metadata、specification、preparation、release policy |
 | `domains.collections.weekly_vote_log` | 週次投票ログ reader、initializer、schema、保存・検証 |
-| `utils.image_provider` | 画像生成プロバイダー抽象化（Gemini / OpenAI 切り替え） |
-| `utils.stock` | ボツ画像ストック化（`assets/stock/<theme>/` への退避・列挙・整理、隣接 `.meta.json` 管理） |
+| `infrastructure.media.image_provider` | 画像生成プロバイダー抽象化（Gemini / OpenAI 切り替え） |
+| `infrastructure.media.stock` | ボツ画像ストック化（`assets/stock/<theme>/` への退避・列挙・整理、隣接 `.meta.json` 管理） |
 | `infrastructure.auth.youtube` | OAuth 2.0 トークン管理 |
 | `infrastructure.secrets` | シークレット解決（`_SECRET_REFS` で参照定義） |
-| `utils.live_chat.{codex,filters,history,models,runner}` | active broadcast のチャット取得、Codex 構造化判定、入出力フィルタ、PT 日次・時間・連続 user 上限、重複防止履歴、返信投稿 loop |
-| `scripts.live_chat_reply` | `yt-live-chat-reply` 常駐 CLI。`comments.live_chat.enabled` を opt-in とし、VPS では独立した `live-chat-reply.service` から起動 |
-| `cli.skills_sync` | `yt-skills` 本体 |
-| `scripts.collection_serve_discovery` | 固定 loopback endpoint の稼働 server registry、heartbeat、TTL、owner takeover |
+| `application.live_chat.{codex,filters,history,models,runner}` | active broadcast のチャット取得、Codex 構造化判定、入出力フィルタ、PT 日次・時間・連続 user 上限、重複防止履歴、返信投稿 loop |
+| `commands.youtube.live_chat_reply` | `yt-live-chat-reply` 常駐 CLI。`comments.live_chat.enabled` を opt-in とし、VPS では独立した `live-chat-reply.service` から起動 |
+| `commands.system.skills_sync` | `yt-skills` 本体 |
+| `commands.collections.collection_serve_discovery` | 固定 loopback endpoint の稼働 server registry、heartbeat、TTL、owner takeover |
 | `extensions/shared/server-discovery.ts` | registry schema v1 の検証と `/server-info` probe を両 helper 拡張へ提供 |
 | `extensions/shared/server-source-migration.ts` | 廃止した配信元候補履歴 storage key の共通 migration |
 

@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from tests.helpers.suno_verify import load_suno_verify_module
-from youtube_automation.infrastructure.errors import ConfigError, ValidationError
+from youtube_automation.core.errors import ConfigError, ValidationError
 
 
 def test_pyproject_registers_yt_suno_verify_script():

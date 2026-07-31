@@ -13,8 +13,8 @@ import tempfile
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
-from youtube_automation.infrastructure.errors import ConfigError, ValidationError
-from youtube_automation.utils.skill_config import load_skill_config
+from youtube_automation.configuration.skills import load_skill_config
+from youtube_automation.core.errors import ConfigError, ValidationError
 
 
 def _textless_enabled(config: Mapping[str, object]) -> bool:

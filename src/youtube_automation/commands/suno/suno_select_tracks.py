@@ -8,10 +8,10 @@ import json
 import sys
 from collections.abc import Mapping
 
+from youtube_automation.configuration.skills import load_skill_config
+from youtube_automation.core.errors import ValidationError
 from youtube_automation.domains.suno.selection import select_suno_tracks
-from youtube_automation.infrastructure.errors import ValidationError
-from youtube_automation.utils.collection_paths import resolve_collection_dir
-from youtube_automation.utils.skill_config import load_skill_config
+from youtube_automation.infrastructure.media.collection_paths import resolve_collection_dir
 
 
 def _configured_min_song_sec(cfg: Mapping[str, object]) -> float | None:

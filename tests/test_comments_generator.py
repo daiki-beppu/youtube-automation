@@ -7,13 +7,13 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from youtube_automation.infrastructure.errors import GeneratorError
-from youtube_automation.utils.comments.codex_generator import CodexGenerator
-from youtube_automation.utils.comments.generator import GeminiGenerator, ReplyContext
-from youtube_automation.utils.comments.prompt_safety import viewer_payload_json
+from youtube_automation.application.comments.codex_generator import CodexGenerator
+from youtube_automation.application.comments.generator import GeminiGenerator, ReplyContext
+from youtube_automation.application.comments.prompt_safety import viewer_payload_json
+from youtube_automation.core.errors import GeneratorError
 
 # create_global_genai_client はソースモジュールで patch する
-_PATCH_GENAI_CLIENT = "youtube_automation.utils.genai_client.create_global_genai_client"
+_PATCH_GENAI_CLIENT = "youtube_automation.infrastructure.media.genai_client.create_global_genai_client"
 
 
 def _make_ctx(**overrides) -> ReplyContext:
@@ -159,7 +159,7 @@ class TestGeminiGenerator:
         ctx = _make_ctx(dry_run=True)
 
         with patch(_PATCH_GENAI_CLIENT, return_value=_make_mock_client("Test reply")):
-            with caplog.at_level(logging.INFO, logger="youtube_automation.utils.comments.generator"):
+            with caplog.at_level(logging.INFO, logger="youtube_automation.application.comments.generator"):
                 result = gen.generate(ctx)
 
         assert result == "Test reply"
@@ -180,7 +180,7 @@ class TestGeminiGenerator:
 
         with (
             patch(_PATCH_GENAI_CLIENT, return_value=_make_mock_client()),
-            patch("youtube_automation.utils.comments.generator.time.monotonic") as mock_monotonic,
+            patch("youtube_automation.application.comments.generator.time.monotonic") as mock_monotonic,
         ):
             # 1回目: last_call_at が None なので sleep しない
             mock_monotonic.return_value = 0.0
@@ -264,7 +264,7 @@ class TestCodexGenerator:
         ctx = _make_ctx()
         completed = '{"type":"item.completed","item":{"type":"agent_message","text":"  Thanks for listening!  "}}\n'
 
-        with patch("youtube_automation.utils.comments.codex_generator.subprocess.run") as mock_run:
+        with patch("youtube_automation.application.comments.codex_generator.subprocess.run") as mock_run:
             mock_run.return_value.returncode = 0
             mock_run.return_value.stdout = completed
             mock_run.return_value.stderr = ""
@@ -280,7 +280,7 @@ class TestCodexGenerator:
             '{"type":"item.completed","item":{"type":"agent_message","text":"final reply"}}\n'
         )
 
-        with patch("youtube_automation.utils.comments.codex_generator.subprocess.run") as mock_run:
+        with patch("youtube_automation.application.comments.codex_generator.subprocess.run") as mock_run:
             mock_run.return_value.returncode = 0
             mock_run.return_value.stdout = completed
             mock_run.return_value.stderr = ""
@@ -292,7 +292,7 @@ class TestCodexGenerator:
         gen = self._make_gen(model="gpt-5.4-mini")
         ctx = _make_ctx(comment_text="so relaxing", comment_author="Bob")
 
-        with patch("youtube_automation.utils.comments.codex_generator.subprocess.run") as mock_run:
+        with patch("youtube_automation.application.comments.codex_generator.subprocess.run") as mock_run:
             mock_run.return_value.returncode = 0
             mock_run.return_value.stdout = '{"type":"item.completed","item":{"type":"agent_message","text":"Nice!"}}\n'
             mock_run.return_value.stderr = ""
@@ -315,7 +315,7 @@ class TestCodexGenerator:
             comment_author="Bob",
         )
 
-        with patch("youtube_automation.utils.comments.codex_generator.subprocess.run") as mock_run:
+        with patch("youtube_automation.application.comments.codex_generator.subprocess.run") as mock_run:
             mock_run.return_value.returncode = 0
             mock_run.return_value.stdout = '{"type":"item.completed","item":{"type":"agent_message","text":"Nice!"}}\n'
             mock_run.return_value.stderr = ""
@@ -337,7 +337,7 @@ class TestCodexGenerator:
             '"text":"This is a very long reply that exceeds max_length"}}\n'
         )
 
-        with patch("youtube_automation.utils.comments.codex_generator.subprocess.run") as mock_run:
+        with patch("youtube_automation.application.comments.codex_generator.subprocess.run") as mock_run:
             mock_run.return_value.returncode = 0
             mock_run.return_value.stdout = completed
             mock_run.return_value.stderr = ""
@@ -349,7 +349,7 @@ class TestCodexGenerator:
         gen = self._make_gen()
         ctx = _make_ctx()
 
-        with patch("youtube_automation.utils.comments.codex_generator.subprocess.run") as mock_run:
+        with patch("youtube_automation.application.comments.codex_generator.subprocess.run") as mock_run:
             mock_run.return_value.returncode = 1
             mock_run.return_value.stdout = ""
             mock_run.return_value.stderr = "auth failed"
@@ -358,7 +358,7 @@ class TestCodexGenerator:
 
     def test_os_error_wrapped_as_generator_error(self):
         with patch(
-            "youtube_automation.utils.comments.codex_generator.subprocess.run",
+            "youtube_automation.application.comments.codex_generator.subprocess.run",
             side_effect=OSError("codex unavailable"),
         ):
             with pytest.raises(GeneratorError, match="codex CLI 呼び出し失敗"):
@@ -366,7 +366,7 @@ class TestCodexGenerator:
 
     @pytest.mark.parametrize("stdout", ["", "{not-json}\n"])
     def test_empty_or_invalid_jsonl_is_rejected(self, stdout):
-        with patch("youtube_automation.utils.comments.codex_generator.subprocess.run") as mock_run:
+        with patch("youtube_automation.application.comments.codex_generator.subprocess.run") as mock_run:
             mock_run.return_value.returncode = 0
             mock_run.return_value.stdout = stdout
             mock_run.return_value.stderr = ""
@@ -377,7 +377,7 @@ class TestCodexGenerator:
         gen = self._make_gen()
         ctx = _make_ctx()
 
-        with patch("youtube_automation.utils.comments.codex_generator.subprocess.run") as mock_run:
+        with patch("youtube_automation.application.comments.codex_generator.subprocess.run") as mock_run:
             mock_run.return_value.returncode = 0
             mock_run.return_value.stdout = '{"type":"session.started"}\n'
             mock_run.return_value.stderr = ""
@@ -390,13 +390,13 @@ class TestCodexGenerator:
         gen = self._make_gen()
         ctx = _make_ctx(dry_run=True)
 
-        with patch("youtube_automation.utils.comments.codex_generator.subprocess.run") as mock_run:
+        with patch("youtube_automation.application.comments.codex_generator.subprocess.run") as mock_run:
             mock_run.return_value.returncode = 0
             mock_run.return_value.stdout = (
                 '{"type":"item.completed","item":{"type":"agent_message","text":"Test reply"}}\n'
             )
             mock_run.return_value.stderr = ""
-            with caplog.at_level(logging.INFO, logger="youtube_automation.utils.comments.codex_generator"):
+            with caplog.at_level(logging.INFO, logger="youtube_automation.application.comments.codex_generator"):
                 result = gen.generate(ctx)
 
         assert result == "Test reply"

@@ -9,8 +9,8 @@ from types import SimpleNamespace
 import pytest
 
 from youtube_automation.commands.media import generate_master
-from youtube_automation.infrastructure.errors import ValidationError
-from youtube_automation.utils import probe
+from youtube_automation.core.errors import ValidationError
+from youtube_automation.infrastructure.media import probe
 
 
 def test_returns_float_on_success(monkeypatch) -> None:

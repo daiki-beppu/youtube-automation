@@ -23,7 +23,7 @@ from youtube_automation.domains.metadata import build_short_localizations
 from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
 from youtube_automation.infrastructure.cost_tracker import log_quota
 from youtube_automation.infrastructure.google.youtube import YouTubeClients
-from youtube_automation.utils.collection_paths import CollectionPaths
+from youtube_automation.infrastructure.media.collection_paths import CollectionPaths
 
 logger = logging.getLogger(__name__)
 

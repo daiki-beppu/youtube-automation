@@ -11,20 +11,20 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from youtube_automation.application import live_chat
+from youtube_automation.application.live_chat.codex import CodexLiveChatGenerator
+from youtube_automation.application.live_chat.filters import audit_text
+from youtube_automation.application.live_chat.history import LiveChatHistory
+from youtube_automation.application.live_chat.models import LiveChatMessage, ReplyDecision
+from youtube_automation.application.live_chat.runner import LiveChatReplier
 from youtube_automation.configuration.comments import LiveChatConfig
 from youtube_automation.configuration.loader import _build_comments
-from youtube_automation.infrastructure.errors import (
+from youtube_automation.core.errors import (
     AutomationError,
     ConfigError,
     GeneratorError,
     YouTubeAPIError,
 )
-from youtube_automation.utils import live_chat
-from youtube_automation.utils.live_chat.codex import CodexLiveChatGenerator
-from youtube_automation.utils.live_chat.filters import audit_text
-from youtube_automation.utils.live_chat.history import LiveChatHistory
-from youtube_automation.utils.live_chat.models import LiveChatMessage, ReplyDecision
-from youtube_automation.utils.live_chat.runner import LiveChatReplier
 
 
 class Request:
@@ -333,7 +333,7 @@ def test_history_save_failure_propagates_without_replacing_file(tmp_path, monkey
     def fail_replace(source, destination):
         raise PermissionError("history is read-only")
 
-    monkeypatch.setattr("youtube_automation.utils.live_chat.history.os.replace", fail_replace)
+    monkeypatch.setattr("youtube_automation.application.live_chat.history.os.replace", fail_replace)
 
     with pytest.raises(PermissionError, match="history is read-only"):
         history.mark("m1", outcome="skipped")
@@ -420,7 +420,7 @@ def test_cli_disabled_does_not_authenticate(monkeypatch):
 
 
 def test_insert_failure_is_recorded_without_reply(tmp_path, monkeypatch):
-    from youtube_automation.utils.live_chat import runner
+    from youtube_automation.application.live_chat import runner
 
     response = {"nextPageToken": "n", "pollingIntervalMillis": 1, "items": [message_item()]}
     replier, _, messages, _, _ = build_replier(

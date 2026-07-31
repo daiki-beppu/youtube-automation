@@ -8,8 +8,8 @@ from pathlib import Path
 import pytest
 
 from youtube_automation.commands.analytics import retention_timeline as cli
-from youtube_automation.infrastructure.errors import ValidationError
-from youtube_automation.utils.retention_timeline import (
+from youtube_automation.core.errors import ValidationError
+from youtube_automation.infrastructure.analytics.retention_timeline import (
     correlate_retention_timeline,
     detect_retention_drops,
     parse_iso8601_duration,

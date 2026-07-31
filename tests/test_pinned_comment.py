@@ -24,7 +24,7 @@ from youtube_automation.commands.youtube.pinned_comment import (
     resolve_targets_from_collection,
     save_history,
 )
-from youtube_automation.infrastructure.errors import ValidationError, YouTubeAPIError
+from youtube_automation.core.errors import ValidationError, YouTubeAPIError
 
 # ----- fake YouTube service ------------------------------------------------
 

@@ -27,7 +27,7 @@ def _consume_channel_option(argv: list[str]) -> str | None:
             break
         if argument == "--channel":
             if index + 1 >= len(argv) or argv[index + 1].startswith("-"):
-                from youtube_automation.infrastructure.errors import ConfigError
+                from youtube_automation.core.errors import ConfigError
 
                 raise ConfigError("--channel には channel slug が必要です")
             value = argv[index + 1]
@@ -39,11 +39,11 @@ def _consume_channel_option(argv: list[str]) -> str | None:
             index += 1
             continue
         if not value:
-            from youtube_automation.infrastructure.errors import ConfigError
+            from youtube_automation.core.errors import ConfigError
 
             raise ConfigError("--channel には空でない channel slug を指定してください")
         if slug is not None:
-            from youtube_automation.infrastructure.errors import ConfigError
+            from youtube_automation.core.errors import ConfigError
 
             raise ConfigError("--channel は複数回指定できません")
         slug = value

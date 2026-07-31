@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
-from youtube_automation.utils.youtube_tag import normalize_youtube_tags, parse_youtube_tags, youtube_tag_chars
+from youtube_automation.infrastructure.youtube.youtube_tag import (
+    normalize_youtube_tags,
+    parse_youtube_tags,
+    youtube_tag_chars,
+)
 
 # ---------------------------------------------------------------------------
 # normalize_youtube_tags

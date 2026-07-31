@@ -28,7 +28,7 @@ from youtube_automation.commands.analytics.benchmark_collector import (
     BenchmarkReportGenerator,
     BenchmarkThumbnailAnalyzer,
 )
-from youtube_automation.infrastructure.errors import ConfigError, YouTubeAPIError
+from youtube_automation.core.errors import ConfigError, YouTubeAPIError
 
 
 def _make_collector(youtube_mock: MagicMock, *, benchmark_channels: list[dict] | None = None) -> BenchmarkCollector:
@@ -138,7 +138,9 @@ class TestBenchmarkThumbnailAnalyzer:
         def fail_client():
             raise ConfigError("credentials unavailable")
 
-        monkeypatch.setattr("youtube_automation.utils.genai_client.create_global_genai_client", fail_client)
+        monkeypatch.setattr(
+            "youtube_automation.infrastructure.media.genai_client.create_global_genai_client", fail_client
+        )
 
         assert analyzer.analyze_thumbnails(data) is data
         assert "thumbnail_analysis" not in data["channels"][0]["videos"][0]
@@ -165,7 +167,9 @@ class TestBenchmarkThumbnailAnalyzer:
             client.models.generate_content.side_effect = response
         else:
             client.models.generate_content.return_value = response
-        monkeypatch.setattr("youtube_automation.utils.genai_client.create_global_genai_client", lambda: client)
+        monkeypatch.setattr(
+            "youtube_automation.infrastructure.media.genai_client.create_global_genai_client", lambda: client
+        )
 
         def download(_url, path):
             if download_error:
@@ -186,7 +190,9 @@ class TestBenchmarkThumbnailAnalyzer:
         data = _thumbnail_data()
         client = MagicMock()
         client.models.generate_content.return_value = SimpleNamespace(text='```json\n{"composition": "centered"}\n```')
-        monkeypatch.setattr("youtube_automation.utils.genai_client.create_global_genai_client", lambda: client)
+        monkeypatch.setattr(
+            "youtube_automation.infrastructure.media.genai_client.create_global_genai_client", lambda: client
+        )
         monkeypatch.setattr(
             benchmark_collector.urllib.request,
             "urlretrieve",

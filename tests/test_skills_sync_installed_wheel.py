@@ -86,6 +86,45 @@ def test_candidate_wheel_syncs_all_assets_into_clean_downstream(tmp_path: Path) 
     assert package_location.returncode == 0, package_location.stderr
     assert Path(package_location.stdout.strip()).is_relative_to(venv.resolve())
 
+    compatibility_imports = _run(
+        python,
+        "-c",
+        """
+import importlib
+
+legacy_modules = (
+    "youtube_automation.infrastructure.errors",
+    "youtube_automation.utils.skill_config",
+    "youtube_automation.utils.collection_paths",
+    "youtube_automation.utils.image_provider",
+    "youtube_automation.utils.audio_visualizer_mask",
+)
+for module_name in legacy_modules:
+    module = importlib.import_module(module_name)
+    assert module.__name__ == module_name
+
+canonical = importlib.import_module("youtube_automation.configuration.channel_target")
+legacy_channel_target = importlib.import_module("youtube_automation.infrastructure.legacy_utils.channel_target")
+compat_channel_target = importlib.import_module("youtube_automation.utils.channel_target")
+assert canonical.resolve_existing_target_dir is legacy_channel_target.resolve_existing_target_dir
+assert canonical.resolve_existing_target_dir is compat_channel_target.resolve_existing_target_dir
+importlib.import_module("youtube_automation.infrastructure.legacy_utils.schemas")
+importlib.import_module("youtube_automation.utils.schemas")
+
+legacy = importlib.import_module("youtube_automation.infrastructure.legacy_utils.skill_config")
+canonical_skills = importlib.import_module("youtube_automation.configuration.skills")
+assert legacy.reset is canonical_skills.reset
+assert legacy._cache is canonical_skills._cache
+legacy.reset()
+legacy._cache["wheel-identity-check"] = {}
+canonical_skills.reset("wheel-identity-check")
+assert "wheel-identity-check" not in legacy._cache
+""",
+        cwd=downstream,
+        env=clean_env,
+    )
+    assert compatibility_imports.returncode == 0, compatibility_imports.stderr
+
     yt_skills = venv / "bin" / "yt-skills"
     synced = _run(yt_skills, "sync", cwd=downstream, env=clean_env)
     assert synced.returncode == 0, synced.stderr

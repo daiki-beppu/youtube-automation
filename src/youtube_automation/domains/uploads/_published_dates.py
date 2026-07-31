@@ -12,11 +12,10 @@ from datetime import datetime, timedelta
 from typing import ClassVar
 
 from youtube_automation.configuration import load_config
-from youtube_automation.infrastructure.errors import ValidationError, YouTubeAPIError
-from youtube_automation.infrastructure.google.youtube import execute_youtube_request, validate_youtube_response_items
-from youtube_automation.infrastructure.quota import youtube_quota_recorder
-from youtube_automation.utils.publish_schedule import resolve_default_publish_at
-from youtube_automation.utils.schedule import get_schedule_timezone
+from youtube_automation.core.adapters.errors import ValidationError, YouTubeAPIError
+from youtube_automation.core.adapters.google.youtube import execute_youtube_request, validate_youtube_response_items
+from youtube_automation.core.adapters.quota import youtube_quota_recorder
+from youtube_automation.core.adapters.runtime import get_schedule_timezone, resolve_default_publish_at
 
 logger = logging.getLogger(__name__)
 

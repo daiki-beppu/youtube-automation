@@ -20,8 +20,8 @@ from unittest.mock import MagicMock, call, patch
 
 import pytest
 
-from youtube_automation.utils import veo_generator
-from youtube_automation.utils.veo_generator import build_structured_prompt
+from youtube_automation.infrastructure.media import veo_generator
+from youtube_automation.infrastructure.media.veo_generator import build_structured_prompt
 
 
 def _install_capture(monkeypatch) -> dict:
@@ -512,7 +512,7 @@ class TestGenerateLoopVideoNewSubmit:
         client.models.generate_videos.return_value = operation
 
         with patch.multiple(
-            "youtube_automation.utils.veo_generator",
+            "youtube_automation.infrastructure.media.veo_generator",
             strip_audio=MagicMock(),
             cost_tracker=MagicMock(),
         ):
@@ -527,7 +527,7 @@ class TestGenerateLoopVideoNewSubmit:
 
         # Then: 成功したので state は削除済み
         assert result is True
-        from youtube_automation.utils import veo_operation_store as op_store
+        from youtube_automation.infrastructure.media import veo_operation_store as op_store
 
         assert op_store.load(output_mp4, channel_root=channel_tmp) is None
 
@@ -542,7 +542,7 @@ class TestGenerateLoopVideoNewSubmit:
         client.models.generate_videos.return_value = op
 
         with patch.multiple(
-            "youtube_automation.utils.veo_generator",
+            "youtube_automation.infrastructure.media.veo_generator",
             strip_audio=MagicMock(),
             cost_tracker=MagicMock(),
         ):
@@ -558,7 +558,7 @@ class TestGenerateLoopVideoNewSubmit:
         out = capsys.readouterr().out
         assert "[Warn]" in out
 
-        from youtube_automation.utils import veo_operation_store as op_store
+        from youtube_automation.infrastructure.media import veo_operation_store as op_store
 
         assert op_store.load(output_mp4, channel_root=channel_tmp) is None
 
@@ -567,7 +567,7 @@ class TestGenerateLoopVideoResume:
     """resume 経路（state あり）のテスト."""
 
     def _write_state(self, channel_tmp: Path, output_mp4: Path, operation_name: str, model: str) -> None:
-        from youtube_automation.utils import veo_operation_store as op_store
+        from youtube_automation.infrastructure.media import veo_operation_store as op_store
 
         op_store.save(
             output_mp4,
@@ -588,7 +588,7 @@ class TestGenerateLoopVideoResume:
         self._write_state(channel_tmp, output_mp4, "projects/veo/resumed-op", "veo-3.1-fast")
 
         with patch.multiple(
-            "youtube_automation.utils.veo_generator",
+            "youtube_automation.infrastructure.media.veo_generator",
             strip_audio=MagicMock(),
             cost_tracker=MagicMock(),
         ):
@@ -616,7 +616,7 @@ class TestGenerateLoopVideoResume:
         self._write_state(channel_tmp, output_mp4, "projects/veo/op-x", "veo-3.1-fast")
 
         with patch.multiple(
-            "youtube_automation.utils.veo_generator",
+            "youtube_automation.infrastructure.media.veo_generator",
             strip_audio=MagicMock(),
             cost_tracker=MagicMock(),
         ):
@@ -644,7 +644,7 @@ class TestGenerateLoopVideoResume:
         self._write_state(channel_tmp, output_mp4, "projects/veo/old-model", "veo-3.1-fast")
 
         with patch.multiple(
-            "youtube_automation.utils.veo_generator",
+            "youtube_automation.infrastructure.media.veo_generator",
             strip_audio=MagicMock(),
             cost_tracker=MagicMock(),
         ):
@@ -659,7 +659,7 @@ class TestGenerateLoopVideoResume:
         assert result is False
         client.operations.get.assert_not_called()
         client.models.generate_videos.assert_called_once()
-        from youtube_automation.utils import veo_operation_store as op_store
+        from youtube_automation.infrastructure.media import veo_operation_store as op_store
 
         assert op_store.load(output_mp4, channel_root=channel_tmp) is None
 
@@ -674,7 +674,7 @@ class TestGenerateLoopVideoResume:
         (output_mp4.parent / "main.png").write_bytes(b"replacement-image")
 
         with patch.multiple(
-            "youtube_automation.utils.veo_generator",
+            "youtube_automation.infrastructure.media.veo_generator",
             strip_audio=MagicMock(),
             cost_tracker=MagicMock(),
         ):
@@ -703,7 +703,7 @@ class TestGenerateLoopVideoResume:
         self._write_state(channel_tmp, output_mp4, "projects/veo/op-ok", "veo-3.1-fast")
 
         with patch.multiple(
-            "youtube_automation.utils.veo_generator",
+            "youtube_automation.infrastructure.media.veo_generator",
             strip_audio=MagicMock(),
             cost_tracker=MagicMock(),
         ):
@@ -717,7 +717,7 @@ class TestGenerateLoopVideoResume:
                 )
 
         assert result is True
-        from youtube_automation.utils import veo_operation_store as op_store
+        from youtube_automation.infrastructure.media import veo_operation_store as op_store
 
         assert op_store.load(output_mp4, channel_root=channel_tmp) is None
         # Then: 保存済み operation_name で GenerateVideosOperation を再構築した
@@ -734,7 +734,7 @@ class TestGenerateLoopVideoResume:
         self._write_state(channel_tmp, output_mp4, "projects/veo/resume-transient", "veo-3.1-fast")
 
         with patch.multiple(
-            "youtube_automation.utils.veo_generator",
+            "youtube_automation.infrastructure.media.veo_generator",
             strip_audio=MagicMock(),
             cost_tracker=MagicMock(),
         ):
@@ -749,7 +749,7 @@ class TestGenerateLoopVideoResume:
 
         # Then: False を返し、state は保持されている（一時障害なので再試行可能）
         assert result is False
-        from youtube_automation.utils import veo_operation_store as op_store
+        from youtube_automation.infrastructure.media import veo_operation_store as op_store
 
         state = op_store.load(output_mp4, channel_root=channel_tmp)
         assert state is not None
@@ -763,7 +763,7 @@ class TestGenerateLoopVideoResume:
         self._write_state(channel_tmp, output_mp4, "projects/veo/resume-not-found", "veo-3.1-fast")
 
         with patch.multiple(
-            "youtube_automation.utils.veo_generator",
+            "youtube_automation.infrastructure.media.veo_generator",
             strip_audio=MagicMock(),
             cost_tracker=MagicMock(),
         ):
@@ -777,7 +777,7 @@ class TestGenerateLoopVideoResume:
                 )
 
         assert result is False
-        from youtube_automation.utils import veo_operation_store as op_store
+        from youtube_automation.infrastructure.media import veo_operation_store as op_store
 
         assert op_store.load(output_mp4, channel_root=channel_tmp) is None
 
@@ -794,7 +794,7 @@ class TestGenerateLoopVideoResume:
 
         mock_cost = MagicMock()
         with patch.multiple(
-            "youtube_automation.utils.veo_generator",
+            "youtube_automation.infrastructure.media.veo_generator",
             strip_audio=MagicMock(),
             cost_tracker=mock_cost,
         ):
@@ -824,7 +824,7 @@ class TestGenerateLoopVideoSubmitInterrupt:
         client.models.generate_videos.side_effect = KeyboardInterrupt
 
         with patch.multiple(
-            "youtube_automation.utils.veo_generator",
+            "youtube_automation.infrastructure.media.veo_generator",
             strip_audio=MagicMock(),
             cost_tracker=MagicMock(),
         ):
@@ -844,7 +844,7 @@ class TestGenerateLoopVideoSubmitInterrupt:
         out = capsys.readouterr().out
         assert "[Interrupt]" in out
 
-        from youtube_automation.utils import veo_operation_store as op_store
+        from youtube_automation.infrastructure.media import veo_operation_store as op_store
 
         assert op_store.load(output_mp4, channel_root=channel_tmp) is None
 
@@ -864,7 +864,7 @@ class TestGenerateLoopVideoKeyboardInterrupt:
         client.operations.get.side_effect = KeyboardInterrupt
 
         with patch.multiple(
-            "youtube_automation.utils.veo_generator",
+            "youtube_automation.infrastructure.media.veo_generator",
             strip_audio=MagicMock(),
             cost_tracker=MagicMock(),
         ):
@@ -886,7 +886,7 @@ class TestGenerateLoopVideoKeyboardInterrupt:
         assert result is False
 
         # Then: state は保持されている（再開可能）
-        from youtube_automation.utils import veo_operation_store as op_store
+        from youtube_automation.infrastructure.media import veo_operation_store as op_store
 
         state = op_store.load(output_mp4, channel_root=channel_tmp)
         assert state is not None
@@ -914,7 +914,7 @@ class TestGenerateLoopVideoKeyboardInterrupt:
         mock_types.GenerateVideosOperation.return_value = MagicMock(name="projects/veo/progress-op", done=False)
 
         with patch.multiple(
-            "youtube_automation.utils.veo_generator",
+            "youtube_automation.infrastructure.media.veo_generator",
             strip_audio=MagicMock(),
             cost_tracker=MagicMock(),
         ):
@@ -948,7 +948,7 @@ class TestGenerateLoopVideoKeyboardInterrupt:
         client.operations.get.side_effect = KeyboardInterrupt
 
         with patch.multiple(
-            "youtube_automation.utils.veo_generator",
+            "youtube_automation.infrastructure.media.veo_generator",
             strip_audio=MagicMock(),
             cost_tracker=MagicMock(),
         ):
@@ -965,7 +965,7 @@ class TestGenerateLoopVideoKeyboardInterrupt:
                     pytest.fail("generate_loop_video が KeyboardInterrupt を捕捉していない")
 
         # Then: [Interrupt] / [Resume] / [State] <state_path> が stdout に含まれる
-        from youtube_automation.utils import veo_operation_store as op_store
+        from youtube_automation.infrastructure.media import veo_operation_store as op_store
 
         expected_path = op_store.state_path(output_mp4, channel_root=channel_tmp)
         out = capsys.readouterr().out
@@ -988,7 +988,7 @@ class TestGenerateLoopVideoStateLifecycle:
         client.models.generate_videos.return_value = op
 
         with patch.multiple(
-            "youtube_automation.utils.veo_generator",
+            "youtube_automation.infrastructure.media.veo_generator",
             strip_audio=MagicMock(),
             cost_tracker=MagicMock(),
         ):
@@ -1002,7 +1002,7 @@ class TestGenerateLoopVideoStateLifecycle:
                 )
 
         assert result is False
-        from youtube_automation.utils import veo_operation_store as op_store
+        from youtube_automation.infrastructure.media import veo_operation_store as op_store
 
         assert op_store.load(output_mp4, channel_root=channel_tmp) is None
 
@@ -1017,7 +1017,7 @@ class TestGenerateLoopVideoStateLifecycle:
         client.models.generate_videos.return_value = op
 
         with patch.multiple(
-            "youtube_automation.utils.veo_generator",
+            "youtube_automation.infrastructure.media.veo_generator",
             strip_audio=MagicMock(),
             cost_tracker=MagicMock(),
         ):
@@ -1031,7 +1031,7 @@ class TestGenerateLoopVideoStateLifecycle:
                 )
 
         assert result is False
-        from youtube_automation.utils import veo_operation_store as op_store
+        from youtube_automation.infrastructure.media import veo_operation_store as op_store
 
         assert op_store.load(output_mp4, channel_root=channel_tmp) is None
 
@@ -1046,7 +1046,7 @@ class TestGenerateLoopVideoStateLifecycle:
         client.operations.get.side_effect = Exception("operation not found")
 
         with patch.multiple(
-            "youtube_automation.utils.veo_generator",
+            "youtube_automation.infrastructure.media.veo_generator",
             strip_audio=MagicMock(),
             cost_tracker=MagicMock(),
         ):
@@ -1060,7 +1060,7 @@ class TestGenerateLoopVideoStateLifecycle:
                 )
 
         assert result is False
-        from youtube_automation.utils import veo_operation_store as op_store
+        from youtube_automation.infrastructure.media import veo_operation_store as op_store
 
         assert op_store.load(output_mp4, channel_root=channel_tmp) is None
 
@@ -1078,7 +1078,7 @@ class TestGenerateLoopVideoStateLifecycle:
         client.operations.get.side_effect = ConnectionError("connection reset by peer")
 
         with patch.multiple(
-            "youtube_automation.utils.veo_generator",
+            "youtube_automation.infrastructure.media.veo_generator",
             strip_audio=MagicMock(),
             cost_tracker=MagicMock(),
         ):
@@ -1093,7 +1093,7 @@ class TestGenerateLoopVideoStateLifecycle:
 
         # Then: False を返し、state は保持されている（再試行可能）
         assert result is False
-        from youtube_automation.utils import veo_operation_store as op_store
+        from youtube_automation.infrastructure.media import veo_operation_store as op_store
 
         state = op_store.load(output_mp4, channel_root=channel_tmp)
         assert state is not None
@@ -1110,7 +1110,7 @@ class TestGenerateLoopVideoStateLifecycle:
         client.operations.get.side_effect = Exception("404 NOT_FOUND: resource not found")
 
         with patch.multiple(
-            "youtube_automation.utils.veo_generator",
+            "youtube_automation.infrastructure.media.veo_generator",
             strip_audio=MagicMock(),
             cost_tracker=MagicMock(),
         ):
@@ -1124,7 +1124,7 @@ class TestGenerateLoopVideoStateLifecycle:
                 )
 
         assert result is False
-        from youtube_automation.utils import veo_operation_store as op_store
+        from youtube_automation.infrastructure.media import veo_operation_store as op_store
 
         assert op_store.load(output_mp4, channel_root=channel_tmp) is None
 
@@ -1143,12 +1143,12 @@ class TestGenerateLoopVideoStateLifecycle:
         client.operations.get.return_value = polling_op
 
         # monotonic を操作して即タイムアウトさせる
-        import youtube_automation.utils.veo_generator as vg
+        import youtube_automation.infrastructure.media.veo_generator as vg
 
         monkeypatch.setattr(vg, "MAX_POLL_SEC", -1)  # 即タイムアウト
 
         with patch.multiple(
-            "youtube_automation.utils.veo_generator",
+            "youtube_automation.infrastructure.media.veo_generator",
             strip_audio=MagicMock(),
             cost_tracker=MagicMock(),
         ):
@@ -1162,7 +1162,7 @@ class TestGenerateLoopVideoStateLifecycle:
                 )
 
         assert result is False
-        from youtube_automation.utils import veo_operation_store as op_store
+        from youtube_automation.infrastructure.media import veo_operation_store as op_store
 
         # state は保持されている
         state = op_store.load(output_mp4, channel_root=channel_tmp)
@@ -1181,7 +1181,7 @@ class TestGenerateLoopVideoStateLifecycle:
         client.models.generate_videos.return_value = op
 
         with patch.multiple(
-            "youtube_automation.utils.veo_generator",
+            "youtube_automation.infrastructure.media.veo_generator",
             strip_audio=MagicMock(),
             cost_tracker=MagicMock(),
         ):
@@ -1195,7 +1195,7 @@ class TestGenerateLoopVideoStateLifecycle:
                 )
 
         assert result is False
-        from youtube_automation.utils import veo_operation_store as op_store
+        from youtube_automation.infrastructure.media import veo_operation_store as op_store
 
         assert op_store.load(output_mp4, channel_root=channel_tmp) is None
 
@@ -1211,7 +1211,7 @@ class TestGenerateLoopVideoStateLifecycle:
         client.models.generate_videos.return_value = op
 
         with patch.multiple(
-            "youtube_automation.utils.veo_generator",
+            "youtube_automation.infrastructure.media.veo_generator",
             strip_audio=MagicMock(),
             cost_tracker=MagicMock(),
         ):
@@ -1225,7 +1225,7 @@ class TestGenerateLoopVideoStateLifecycle:
                 )
 
         assert result is False
-        from youtube_automation.utils import veo_operation_store as op_store
+        from youtube_automation.infrastructure.media import veo_operation_store as op_store
 
         assert op_store.load(output_mp4, channel_root=channel_tmp) is None
 

@@ -9,6 +9,7 @@ from pathlib import Path
 
 from youtube_automation.configuration.analytics import Analytics, Benchmark
 from youtube_automation.configuration.audio import Audio
+from youtube_automation.configuration.channel_target import resolve_existing_target_dir
 from youtube_automation.configuration.comments import (
     FALLBACK_SKIP,
     MAX_LENGTH_DEFAULT,
@@ -62,14 +63,17 @@ from youtube_automation.configuration.youtube import (
     YoutubeApi,
     YoutubeSection,
 )
-from youtube_automation.infrastructure.errors import ConfigError
-from youtube_automation.utils.audio_visualizer_fill import normalize_ffmpeg_color, parse_color
+from youtube_automation.core.errors import ConfigError
+from youtube_automation.infrastructure.media.audio_visualizer_fill import normalize_ffmpeg_color, parse_color
 
 logger = logging.getLogger(__name__)
 
 _instance: ChannelConfig | None = None
 _channel_dir: Path | None = None
 _explicit_channel: str | None = None
+
+__all__ = ["resolve_existing_target_dir"]
+
 
 # 必須キー（ドット区切り）。分割前の channel_config.py::_REQUIRED_KEYS を新構造へ分配。
 _REQUIRED_KEYS_BY_SECTION: dict[str, list[str]] = {

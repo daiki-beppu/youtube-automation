@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from youtube_automation.utils.publish_schedule import (
+from youtube_automation.infrastructure.runtime.publish_schedule import (
     parse_default_publish_time,
     resolve_default_publish_at,
 )

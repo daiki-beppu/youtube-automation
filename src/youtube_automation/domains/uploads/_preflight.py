@@ -11,6 +11,15 @@ import re
 from pathlib import Path
 
 from youtube_automation.configuration import load_config
+from youtube_automation.core.adapters.errors import ValidationError
+from youtube_automation.core.adapters.filesystem import (
+    list_directory,
+    path_exists,
+    path_is_directory,
+    read_file_text,
+    read_json,
+)
+from youtube_automation.core.adapters.media import CollectionPaths, probe_duration
 from youtube_automation.domains.metadata import BAHMetadataGenerator
 from youtube_automation.domains.metadata.descriptions import (
     build_descriptions_md_parse_diagnostics,
@@ -29,16 +38,6 @@ from youtube_automation.domains.uploads.preflight import (
     extract_descriptions_md_tags,
     requires_scene_phrases,
 )
-from youtube_automation.infrastructure.errors import ValidationError
-from youtube_automation.infrastructure.filesystem import (
-    list_directory,
-    path_exists,
-    path_is_directory,
-    read_file_text,
-    read_json,
-)
-from youtube_automation.utils.collection_paths import CollectionPaths
-from youtube_automation.utils.probe import probe_duration
 
 logger = logging.getLogger(__name__)
 

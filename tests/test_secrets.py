@@ -20,7 +20,7 @@ from unittest.mock import patch
 import pytest
 
 import youtube_automation.infrastructure.secrets as secrets_module
-from youtube_automation.infrastructure.errors import ConfigError
+from youtube_automation.core.errors import ConfigError
 from youtube_automation.infrastructure.secrets import (
     _SECRET_REFS,
     get_client_secrets_config,

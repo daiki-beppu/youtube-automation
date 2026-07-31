@@ -15,6 +15,8 @@ from PIL import Image
 
 import youtube_automation.commands.thumbnail.auto_select_thumbnail as auto_select_thumbnail
 from youtube_automation.commands.thumbnail.auto_select_thumbnail import main, validate_audit_record
+from youtube_automation.configuration import skills as skill_config
+from youtube_automation.core.errors import ConfigError, ValidationError
 from youtube_automation.domains.thumbnail.features import feature_centroid, feature_distance
 from youtube_automation.domains.thumbnail.selection import (
     AutoSelectionSettings,
@@ -23,8 +25,6 @@ from youtube_automation.domains.thumbnail.selection import (
     score_candidates,
     select_best,
 )
-from youtube_automation.infrastructure.errors import ConfigError, ValidationError
-from youtube_automation.utils import skill_config
 
 # テスト用の最小解像度 (フル HD だと純 Python の特徴量抽出が遅いため縮小)
 _SIZE_16_9 = (160, 90)

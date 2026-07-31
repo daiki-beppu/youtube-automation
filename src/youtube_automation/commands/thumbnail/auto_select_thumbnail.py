@@ -39,6 +39,8 @@ from typing import Any
 
 from PIL import Image, UnidentifiedImageError
 
+from youtube_automation.configuration.skills import load_skill_config
+from youtube_automation.core.errors import ConfigError, ValidationError
 from youtube_automation.domains.thumbnail.archive import archive_approved_thumbnail_transaction
 from youtube_automation.domains.thumbnail.features import (
     extract_features_from_path,
@@ -52,9 +54,7 @@ from youtube_automation.domains.thumbnail.selection import (
     score_candidates,
     select_best,
 )
-from youtube_automation.infrastructure.errors import ConfigError, ValidationError
-from youtube_automation.utils.collection_paths import CollectionPaths
-from youtube_automation.utils.skill_config import load_skill_config
+from youtube_automation.infrastructure.media.collection_paths import CollectionPaths
 
 SKILL_NAME = "thumbnail"
 

@@ -21,7 +21,7 @@ description: "Use when live コレクションの大容量メディアを削除�
 1. `.claude/skills/live-clean/config.default.yaml`
 2. `config/skills/live-clean.yaml`（存在する場合）
 
-合成規則は `youtube_automation.utils.skill_config.load_skill_config("live-clean")` と同じで、チャンネル上書きが優先される（リストは丸ごと置換）。存在しない override は未設定として扱い、勝手に作成しない。
+合成規則は `youtube_automation.configuration.skills.load_skill_config("live-clean")` と同じで、チャンネル上書きが優先される（リストは丸ごと置換）。存在しない override は未設定として扱い、勝手に作成しない。
 
 ## 前提
 

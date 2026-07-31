@@ -33,7 +33,7 @@ subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実�
 1. `.claude/skills/lyria/config.default.yaml`
 2. `config/skills/lyria.yaml`（存在する場合）
 
-合成規則は `youtube_automation.utils.skill_config.load_skill_config("lyria")` と同じで、チャンネル上書きが優先される。存在しない override は未設定として扱い、勝手に作成しない。
+合成規則は `youtube_automation.configuration.skills.load_skill_config("lyria")` と同じで、チャンネル上書きが優先される。存在しない override は未設定として扱い、勝手に作成しない。
 
 ## 前提
 
@@ -97,7 +97,7 @@ $ARGUMENTS → コレクションのテーマ指定
 読み込み確認:
 
 ```bash
-uv run python -c "from youtube_automation.utils.skill_config import load_skill_config; import json; print(json.dumps(load_skill_config('lyria'), indent=2, ensure_ascii=False))"
+uv run python -c "from youtube_automation.configuration.skills import load_skill_config; import json; print(json.dumps(load_skill_config('lyria'), indent=2, ensure_ascii=False))"
 ```
 
 `config/channel/audio.json` からは `audio.target_duration_min`（コレクション全体の基準長）のみ参照する。1 リクエストあたり ~184 秒の制約があるため、`yt-generate-lyria-master` がこの値と `duration_padding_min` から必要セグメント数 N を自動算出する。

@@ -15,10 +15,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from youtube_automation.configuration import channel_dir
+from youtube_automation.configuration.skills import load_channel_override
+from youtube_automation.core.errors import ConfigError, ValidationError
 from youtube_automation.infrastructure.cost_tracker import _file_lock
-from youtube_automation.infrastructure.errors import ConfigError, ValidationError
-from youtube_automation.utils.collection_paths import CollectionPaths
-from youtube_automation.utils.skill_config import load_channel_override
+from youtube_automation.infrastructure.media.collection_paths import CollectionPaths
 
 DEFAULT_MAX_WORKERS = 3
 MAX_WORKERS_ENV = "YT_VIDEOUP_MAX_WORKERS"

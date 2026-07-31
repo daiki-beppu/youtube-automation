@@ -21,10 +21,9 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+from youtube_automation.core.adapters.errors import ValidationError
+from youtube_automation.core.adapters.media import CollectionPaths, probe_duration
 from youtube_automation.domains.suno.prompts import read_suno_prompt_entries
-from youtube_automation.infrastructure.errors import ValidationError
-from youtube_automation.utils.collection_paths import CollectionPaths
-from youtube_automation.utils.probe import probe_duration
 
 DOCUMENTATION_DIRNAME = "20-documentation"
 SUNO_PROMPTS_JSON_FILENAME = "suno-prompts.json"

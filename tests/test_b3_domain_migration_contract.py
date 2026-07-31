@@ -32,8 +32,8 @@ from googleapiclient.errors import HttpError
 from httplib2 import Response
 from PIL import Image
 
+from youtube_automation.core.errors import AuthError, ConfigError, YouTubeAPIError
 from youtube_automation.domains.uploads.preflight import check_thumbnail_skill_config
-from youtube_automation.infrastructure.errors import AuthError, ConfigError, YouTubeAPIError
 
 _ROOT = Path(__file__).resolve().parents[1]
 
@@ -73,11 +73,12 @@ def test_b3_domain_modules_are_importable() -> None:
 
 def test_b3_removes_legacy_owner_imports_from_executable_code() -> None:
     """実行コードの import が削除済み owner を参照しないことを固定する。"""
+    legacy_root = ".".join(("youtube_automation", "utils"))
     legacy_prefixes = (
-        "youtube_automation.utils." + "analytics_",
-        "youtube_automation.utils." + "thumbnail_",
-        "youtube_automation.utils." + "distrokid_",
-        "youtube_automation.utils." + "weekly_vote_log",
+        f"{legacy_root}.analytics_",
+        f"{legacy_root}.thumbnail_",
+        f"{legacy_root}.distrokid_",
+        f"{legacy_root}.weekly_vote_log",
     )
     offenders: list[str] = []
     for root in (_ROOT / "src", _ROOT / "tests"):
@@ -207,7 +208,7 @@ def test_analytics_domain_has_no_sdk_execution_or_retry_boundary() -> None:
         "googleapiclient",
         "google.auth",
         "youtube_automation.infrastructure.retry",
-        "youtube_automation.utils.youtube_service",
+        ".".join(("youtube_automation", "utils", "youtube_service")),
     }
     offenders: list[str] = []
     for path in analytics_root.rglob("*.py"):

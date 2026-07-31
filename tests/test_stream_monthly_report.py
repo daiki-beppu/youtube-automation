@@ -1,4 +1,4 @@
-"""utils/streaming/monthly_report.py のユニットテスト。
+"""infrastructure/youtube/streaming/monthly_report.py のユニットテスト。
 
 要件 R8/R9/R10/R11: 月次レポート文字列を整形する純粋関数。
 
@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import pytest
 
-from youtube_automation.utils.streaming import monthly_report
+from youtube_automation.infrastructure.youtube.streaming import monthly_report
 
 
 def test_format_monthly_report_includes_year_month_header():
@@ -170,8 +170,8 @@ def test_format_monthly_report_archives_expected_true_includes_uptime_and_count(
     When format_monthly_report を呼ぶ
     Then 実測稼働率と理論稼働率が数値で表示され、アーカイブ件数行を含む。
     """
-    import youtube_automation.utils.streaming as streaming_pkg
-    import youtube_automation.utils.streaming.cycle_uptime as cycle_mod
+    import youtube_automation.infrastructure.youtube.streaming as streaming_pkg
+    import youtube_automation.infrastructure.youtube.streaming.cycle_uptime as cycle_mod
 
     monkeypatch.setattr(streaming_pkg, "ARCHIVES_EXPECTED", True)
     monkeypatch.setattr(cycle_mod, "ARCHIVES_EXPECTED", True)
@@ -195,8 +195,8 @@ def test_format_monthly_report_archives_expected_true_archives_none_raises(
     When format_monthly_report を呼ぶ
     Then ValueError が送出される。
     """
-    import youtube_automation.utils.streaming as streaming_pkg
-    import youtube_automation.utils.streaming.cycle_uptime as cycle_mod
+    import youtube_automation.infrastructure.youtube.streaming as streaming_pkg
+    import youtube_automation.infrastructure.youtube.streaming.cycle_uptime as cycle_mod
 
     monkeypatch.setattr(streaming_pkg, "ARCHIVES_EXPECTED", True)
     monkeypatch.setattr(cycle_mod, "ARCHIVES_EXPECTED", True)

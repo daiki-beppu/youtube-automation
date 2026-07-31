@@ -13,8 +13,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import pytest
 
-from youtube_automation.infrastructure.errors import ValidationError
-from youtube_automation.utils.collection_paths import (
+from youtube_automation.core.errors import ValidationError
+from youtube_automation.infrastructure.media.collection_paths import (
     REQUIRED_SUBDIRS,
     CollectionPaths,
     resolve_collection_dir,

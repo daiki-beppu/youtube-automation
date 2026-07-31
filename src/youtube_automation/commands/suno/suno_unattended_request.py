@@ -12,8 +12,8 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit, urlunsplit
 from urllib.request import Request, urlopen
 
-from youtube_automation.infrastructure.errors import ConfigError
-from youtube_automation.utils.skill_config import load_skill_config
+from youtube_automation.configuration.skills import load_skill_config
+from youtube_automation.core.errors import ConfigError
 
 _DOWNLOAD_FORMATS = ("mp3", "m4a", "wav")
 

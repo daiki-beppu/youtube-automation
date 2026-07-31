@@ -6,7 +6,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from youtube_automation.infrastructure.errors import ConfigError
+from youtube_automation.core.adapters.errors import ConfigError
 
 SUNO_LYRICS_JSON_FILENAME = "suno-lyrics.json"
 

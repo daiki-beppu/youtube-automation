@@ -22,10 +22,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from youtube_automation.core.errors import ConfigError
 from youtube_automation.domains.media.image import ImageGenerationRequest
-from youtube_automation.infrastructure.errors import ConfigError
-from youtube_automation.utils.image_provider.config import GeminiCliConfig
-from youtube_automation.utils.image_provider.gemini_cli import (
+from youtube_automation.infrastructure.media.image_provider.config import GeminiCliConfig
+from youtube_automation.infrastructure.media.image_provider.gemini_cli import (
     RETRY_MAX,
     GeminiCliImageProvider,
 )
@@ -71,7 +71,7 @@ def request_factory(tmp_path: Path):
 def _cli_available():
     """shutil.which が gemini を見つける状態を既定にする。"""
     with patch(
-        "youtube_automation.utils.image_provider.gemini_cli.shutil.which",
+        "youtube_automation.infrastructure.media.image_provider.gemini_cli.shutil.which",
         return_value="/usr/local/bin/gemini",
     ):
         yield
@@ -80,7 +80,7 @@ def _cli_available():
 @pytest.fixture(autouse=True)
 def _no_sleep(monkeypatch):
     monkeypatch.setattr(
-        "youtube_automation.utils.image_provider.gemini_cli.time.sleep",
+        "youtube_automation.infrastructure.media.image_provider.gemini_cli.time.sleep",
         lambda s: None,
     )
 
@@ -104,7 +104,7 @@ class TestCliAvailability:
         provider = GeminiCliImageProvider(cli_config, runner=_runner_writing(Path("/nonexistent")))
         req = request_factory()
         with patch(
-            "youtube_automation.utils.image_provider.gemini_cli.shutil.which",
+            "youtube_automation.infrastructure.media.image_provider.gemini_cli.shutil.which",
             return_value=None,
         ):
             with pytest.raises(ConfigError, match="gemini CLI"):

@@ -8,9 +8,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from youtube_automation.core.errors import YouTubeAPIError
 from youtube_automation.domains.analytics.mixins.retention_analytics import RetentionAnalyticsMixin
 from youtube_automation.domains.analytics.mixins.video_analytics import VideoAnalyticsMixin
-from youtube_automation.infrastructure.errors import YouTubeAPIError
 
 
 class StubCollector(RetentionAnalyticsMixin, VideoAnalyticsMixin):

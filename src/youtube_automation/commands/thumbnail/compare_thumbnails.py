@@ -24,6 +24,7 @@ from pathlib import Path
 
 from youtube_automation.application.analytics.benchmark_query import load_benchmark_videos
 from youtube_automation.application.analytics.benchmark_refresh import ensure_benchmark_fresh
+from youtube_automation.commands._shared.arguments import CompetitorArgumentParser
 from youtube_automation.commands.analytics.benchmark_collector import (
     BenchmarkCollector,
     BenchmarkReportGenerator,
@@ -31,7 +32,6 @@ from youtube_automation.commands.analytics.benchmark_collector import (
 )
 from youtube_automation.configuration import channel_dir as _channel_dir
 from youtube_automation.configuration import load_config
-from youtube_automation.utils.cli_arguments import CompetitorArgumentParser
 
 logger = logging.getLogger(__name__)
 

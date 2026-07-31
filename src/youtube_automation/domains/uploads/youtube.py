@@ -7,6 +7,18 @@ from pathlib import Path
 from typing import Callable, Dict, List, Optional
 
 from youtube_automation.configuration import channel_dir, load_config
+from youtube_automation.core.adapters.errors import (
+    AutomationError,
+    QuotaExhaustedError,
+    UploadError,
+    ValidationError,
+    YouTubeAPIError,
+)
+from youtube_automation.core.adapters.filesystem import file_size, path_exists, remove_file
+from youtube_automation.core.adapters.google.upload import HttpError, create_media_upload
+from youtube_automation.core.adapters.google.youtube import YouTubeClients, execute_youtube_request
+from youtube_automation.core.adapters.process import compress_image
+from youtube_automation.core.adapters.runtime import resolve_default_publish_at as _resolve_default_publish_at
 from youtube_automation.domains.metadata import BAHMetadataGenerator
 from youtube_automation.domains.uploads._complete_collection_strategy import CompleteCollectionMixin
 from youtube_automation.domains.uploads._dedup_search import DedupSearchMixin
@@ -20,18 +32,6 @@ from youtube_automation.domains.uploads._uploader_constants import (
 from youtube_automation.domains.uploads.policy import SESSION_EXPIRED_HTTP_STATUSES, RetryDecision, ThumbnailCompression
 from youtube_automation.domains.uploads.preflight import check_title_codepoint_limit
 from youtube_automation.domains.youtube.channel_settings import build_upload_status_flags
-from youtube_automation.infrastructure.errors import (
-    AutomationError,
-    QuotaExhaustedError,
-    UploadError,
-    ValidationError,
-    YouTubeAPIError,
-)
-from youtube_automation.infrastructure.filesystem import file_size, path_exists, remove_file
-from youtube_automation.infrastructure.google.upload import HttpError, create_media_upload
-from youtube_automation.infrastructure.google.youtube import YouTubeClients, execute_youtube_request
-from youtube_automation.infrastructure.process import compress_image
-from youtube_automation.utils.publish_schedule import resolve_default_publish_at as _resolve_default_publish_at
 
 logger = logging.getLogger(__name__)
 
@@ -334,7 +334,7 @@ class YouTubeAutoUploader(
             Dict: アップロード結果
         """
         collection_dir = Path(collection_path)
-        from youtube_automation.infrastructure.filesystem import path_exists
+        from youtube_automation.core.adapters.filesystem import path_exists
 
         if not path_exists(collection_dir):
             raise FileNotFoundError(f"コレクションディレクトリが見つかりません: {collection_path}")
@@ -440,7 +440,7 @@ class YouTubeAutoUploader(
 
         for status in status_filter:
             status_dir = self.collections_root / status
-            from youtube_automation.infrastructure.filesystem import list_directory, path_exists, path_is_directory
+            from youtube_automation.core.adapters.filesystem import list_directory, path_exists, path_is_directory
 
             if path_exists(status_dir):
                 collections = [

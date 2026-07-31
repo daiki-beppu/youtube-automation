@@ -10,8 +10,8 @@ from pathlib import Path
 
 import pytest
 
-from youtube_automation.infrastructure.errors import ConfigError
-from youtube_automation.utils.image_provider.config import parse_image_generation_config
+from youtube_automation.core.errors import ConfigError
+from youtube_automation.infrastructure.media.image_provider.config import parse_image_generation_config
 
 ROOT = Path(__file__).parents[1]
 BATCH = ROOT / ".claude/skills/thumbnail/references/codex-image-batch.sh"

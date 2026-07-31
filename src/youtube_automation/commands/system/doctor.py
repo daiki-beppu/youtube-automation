@@ -42,6 +42,8 @@ from youtube_automation.configuration import (
     workspace_channels,
 )
 from youtube_automation.configuration.loader import _explicit_channel_selection
+from youtube_automation.configuration.skills import load_skill_config
+from youtube_automation.core.errors import AutomationError, ConfigError, YouTubeAPIError
 from youtube_automation.domains.analytics.benchmark import (
     TTP_VIDEO_ANALYZE_TOP_N,
     select_top_vod_benchmark_videos,
@@ -53,16 +55,14 @@ from youtube_automation.domains.uploads.preflight import (
     check_thumbnail_skill_config,
 )
 from youtube_automation.infrastructure.auth.youtube import resolve_client_secrets_location
-from youtube_automation.infrastructure.errors import AutomationError, ConfigError, YouTubeAPIError
-from youtube_automation.infrastructure.retry import QUOTA_REASONS
-from youtube_automation.utils.numbered_duplicates import (
+from youtube_automation.infrastructure.collections.numbered_duplicates import (
     CLEANUP_GUIDE_URL,
     format_duplicate_name,
     format_scan_error_reason,
     scan_numbered_duplicates,
 )
-from youtube_automation.utils.reporting_api import ReportingAPIClient
-from youtube_automation.utils.skill_config import load_skill_config
+from youtube_automation.infrastructure.retry import QUOTA_REASONS
+from youtube_automation.infrastructure.youtube.reporting_api import ReportingAPIClient
 
 PYPROJECT_FILENAME = "pyproject.toml"
 CLAUDE_SKILLS_DIR = Path(".claude") / "skills"
@@ -874,7 +874,7 @@ def _load_client_secrets_data(channel_dir: Path) -> tuple[Path | str, object | N
 
     if kind == "secret-fallback":
         try:
-            from youtube_automation.infrastructure.errors import ConfigError
+            from youtube_automation.core.errors import ConfigError
             from youtube_automation.infrastructure.secrets import get_secret
 
             return "CLIENT_SECRETS_JSON", json.loads(get_secret("CLIENT_SECRETS_JSON")), None, None
@@ -1161,8 +1161,8 @@ def check_channel_config(channel_dir: Path) -> CheckResult:
         )
 
     from youtube_automation.configuration import load_config
+    from youtube_automation.core.errors import ConfigError
     from youtube_automation.domains.metadata import validate_localizations_title_templates
-    from youtube_automation.infrastructure.errors import ConfigError
 
     with _temporary_channel_dir(channel_dir):
         try:
@@ -1333,8 +1333,8 @@ def check_playlist_config(channel_dir: Path) -> CheckResult:
 
 
 def check_playlist_create_dry_run(channel_dir: Path) -> CheckResult:
+    from youtube_automation.core.errors import ConfigError
     from youtube_automation.domains.uploads.playlists import PlaylistManager
-    from youtube_automation.infrastructure.errors import ConfigError
 
     with _temporary_channel_dir(channel_dir):
         try:
@@ -2665,8 +2665,8 @@ def check_initial_setup_readiness(channel_dir: Path) -> CheckResult:
 
 
 def _load_skill_config_for_channel(skill: str, target_channel_dir: Path) -> tuple[dict, str | None]:
-    from youtube_automation.infrastructure.errors import ConfigError
-    from youtube_automation.utils.skill_config import load_skill_config
+    from youtube_automation.configuration.skills import load_skill_config
+    from youtube_automation.core.errors import ConfigError
 
     try:
         with _temporary_channel_dir(target_channel_dir):

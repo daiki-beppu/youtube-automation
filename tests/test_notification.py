@@ -1,4 +1,4 @@
-"""utils/notification.py のユニットテスト。
+"""infrastructure/youtube/notification.py のユニットテスト。
 
 要件 R13/R14: Discord/Slack 等の webhook に投稿する通知層 (#109 と共有)。
 
@@ -15,8 +15,8 @@ from unittest.mock import patch
 
 import pytest
 
-from youtube_automation.infrastructure.errors import AutomationError
-from youtube_automation.utils import notification
+from youtube_automation.core.errors import AutomationError
+from youtube_automation.infrastructure.youtube import notification
 
 
 def _fake_urlopen(status: int = 204):
@@ -50,7 +50,7 @@ def test_notify_with_url_posts_json_content():
         captured["timeout"] = timeout
         return _fake_urlopen()
 
-    with patch("youtube_automation.utils.notification.urllib.request.urlopen", side_effect=fake_open):
+    with patch("youtube_automation.infrastructure.youtube.notification.urllib.request.urlopen", side_effect=fake_open):
         notification.notify(content="hello", webhook_url="https://discord.com/api/webhooks/abc/xyz")
 
     assert captured["url"] == "https://discord.com/api/webhooks/abc/xyz"
@@ -65,7 +65,7 @@ def test_notify_with_none_url_falls_back_to_stderr(capsys):
     When notify を呼ぶ
     Then HTTP は呼ばれず、content が stderr に print される (fail-soft)。
     """
-    with patch("youtube_automation.utils.notification.urllib.request.urlopen") as mock_open:
+    with patch("youtube_automation.infrastructure.youtube.notification.urllib.request.urlopen") as mock_open:
         notification.notify(content="fallback message", webhook_url=None)
     mock_open.assert_not_called()
     err = capsys.readouterr().err
@@ -77,7 +77,7 @@ def test_notify_with_empty_url_falls_back_to_stderr(capsys):
     When notify を呼ぶ
     Then HTTP は呼ばれず、stderr に出力される (None と同等扱い)。
     """
-    with patch("youtube_automation.utils.notification.urllib.request.urlopen") as mock_open:
+    with patch("youtube_automation.infrastructure.youtube.notification.urllib.request.urlopen") as mock_open:
         notification.notify(content="x", webhook_url="")
     mock_open.assert_not_called()
     err = capsys.readouterr().err
@@ -91,7 +91,7 @@ def test_notify_propagates_http_error():
     """
     import urllib.error
 
-    with patch("youtube_automation.utils.notification.urllib.request.urlopen") as mock_open:
+    with patch("youtube_automation.infrastructure.youtube.notification.urllib.request.urlopen") as mock_open:
         mock_open.side_effect = urllib.error.URLError("dns failure")
         with pytest.raises(AutomationError):
             notification.notify(content="x", webhook_url="https://discord.com/api/webhooks/123/abc")
@@ -108,7 +108,7 @@ def test_notify_passes_content_root_shape_not_envelope():
         captured["data"] = req.data
         return _fake_urlopen()
 
-    with patch("youtube_automation.utils.notification.urllib.request.urlopen", side_effect=fake_open):
+    with patch("youtube_automation.infrastructure.youtube.notification.urllib.request.urlopen", side_effect=fake_open):
         notification.notify(content="root-shape", webhook_url="https://discord.com/api/webhooks/1/x")
 
     body = json.loads(captured["data"].decode("utf-8"))
@@ -128,7 +128,7 @@ def test_notify_rejects_http_scheme():
     When notify を呼ぶ
     Then NotificationError が raise され HTTP は呼ばれない（SSRF 防御）。
     """
-    with patch("youtube_automation.utils.notification.urllib.request.urlopen") as mock_open:
+    with patch("youtube_automation.infrastructure.youtube.notification.urllib.request.urlopen") as mock_open:
         with pytest.raises(notification.NotificationError, match="https"):
             notification.notify(content="x", webhook_url="http://discord.com/api/webhooks/1/x")
     mock_open.assert_not_called()
@@ -139,7 +139,7 @@ def test_notify_rejects_file_scheme():
     When notify を呼ぶ
     Then NotificationError が raise される（secret store 侵害シナリオを塞ぐ）。
     """
-    with patch("youtube_automation.utils.notification.urllib.request.urlopen") as mock_open:
+    with patch("youtube_automation.infrastructure.youtube.notification.urllib.request.urlopen") as mock_open:
         with pytest.raises(notification.NotificationError, match="https"):
             notification.notify(content="x", webhook_url="file:///etc/passwd")
     mock_open.assert_not_called()
@@ -150,7 +150,7 @@ def test_notify_rejects_non_discord_host():
     When notify を呼ぶ
     Then NotificationError が raise される（ホスト whitelist）。
     """
-    with patch("youtube_automation.utils.notification.urllib.request.urlopen") as mock_open:
+    with patch("youtube_automation.infrastructure.youtube.notification.urllib.request.urlopen") as mock_open:
         with pytest.raises(notification.NotificationError, match="host"):
             notification.notify(content="x", webhook_url="https://evil.com/api/webhooks/1/x")
     mock_open.assert_not_called()
@@ -167,14 +167,17 @@ def test_notify_accepts_discordapp_alias():
         captured["url"] = req.full_url
         return _fake_urlopen()
 
-    with patch("youtube_automation.utils.notification.urllib.request.urlopen", side_effect=fake_open):
+    with patch("youtube_automation.infrastructure.youtube.notification.urllib.request.urlopen", side_effect=fake_open):
         notification.notify(content="x", webhook_url="https://discordapp.com/api/webhooks/1/x")
 
     assert captured["url"] == "https://discordapp.com/api/webhooks/1/x"
 
 
 def test_notify_wraps_timeout_error() -> None:
-    with patch("youtube_automation.utils.notification.urllib.request.urlopen", side_effect=TimeoutError("slow")):
+    with patch(
+        "youtube_automation.infrastructure.youtube.notification.urllib.request.urlopen",
+        side_effect=TimeoutError("slow"),
+    ):
         with pytest.raises(notification.NotificationError, match="webhook POST failed") as exc_info:
             notification.notify(content="x", webhook_url="https://discord.com/api/webhooks/1/x")
 
@@ -190,7 +193,7 @@ def test_notify_wraps_timeout_error() -> None:
 )
 def test_notify_accepts_allowed_host_with_port(webhook_url: str) -> None:
     with patch(
-        "youtube_automation.utils.notification.urllib.request.urlopen",
+        "youtube_automation.infrastructure.youtube.notification.urllib.request.urlopen",
         return_value=_fake_urlopen(),
     ) as mock_open:
         notification.notify(content="x", webhook_url=webhook_url)
@@ -209,7 +212,7 @@ def test_notify_accepts_allowed_host_with_port(webhook_url: str) -> None:
     ],
 )
 def test_notify_rejects_subdomain_suffix_and_userinfo_host_confusion(webhook_url: str) -> None:
-    with patch("youtube_automation.utils.notification.urllib.request.urlopen") as mock_open:
+    with patch("youtube_automation.infrastructure.youtube.notification.urllib.request.urlopen") as mock_open:
         with pytest.raises(notification.NotificationError, match="host"):
             notification.notify(content="x", webhook_url=webhook_url)
 

@@ -11,8 +11,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TypedDict
 
-from youtube_automation.infrastructure.errors import ConfigError
-from youtube_automation.utils.skill_config import load_skill_config
+from youtube_automation.configuration.skills import load_skill_config
+from youtube_automation.core.errors import ConfigError
 
 EXIT_SKIP = 0
 EXIT_RUN = 10

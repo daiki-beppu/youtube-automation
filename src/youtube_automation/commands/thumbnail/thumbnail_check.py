@@ -34,9 +34,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from youtube_automation.infrastructure.errors import ValidationError
-from youtube_automation.utils.composition_lock import build_self_check_prompt
-from youtube_automation.utils.skill_config import load_skill_config
+from youtube_automation.configuration.skills import load_skill_config
+from youtube_automation.core.errors import ValidationError
+from youtube_automation.infrastructure.media.composition_lock import build_self_check_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -313,7 +313,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # Gemini Client を境界で 1 回だけ解決
     try:
-        from youtube_automation.utils.genai_client import create_global_genai_client
+        from youtube_automation.infrastructure.media.genai_client import create_global_genai_client
 
         client = create_global_genai_client()
     except Exception as exc:

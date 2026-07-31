@@ -251,7 +251,7 @@ class TestMain:
 
     def test_main_exits_one_when_client_configuration_fails(self, tmp_path, monkeypatch, capsys):
         from youtube_automation.commands.media import generate_short_loop as mod
-        from youtube_automation.infrastructure.errors import ConfigError
+        from youtube_automation.core.errors import ConfigError
 
         col = tmp_path / "collection"
         assets = col / "10-assets"

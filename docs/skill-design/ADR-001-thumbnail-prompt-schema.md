@@ -34,7 +34,7 @@ issue #654 は将来検討用に立てられたが（`takt:none`）、本 issue 
 
 | 採否 | 項目 | 配置 |
 |---|---|---|
-| ✅ 採用 | 14 項目 `PromptSchema` dataclass | `src/youtube_automation/utils/image_provider/prompt_schema.py` |
+| ✅ 採用 | 14 項目 `PromptSchema` dataclass | `src/youtube_automation/infrastructure/media/image_provider/prompt_schema.py` |
 | ✅ 採用 | `from_skill_config()` bridge（既存 `image_generation.gemini.*` キーから 14 項目へ機械マッピング） | 同上 |
 | ✅ 採用 | `render()` で imagegen 互換の `Label: value` テキスト出力 | 同上 |
 | ✅ 採用 | 対応マッピング表（14 項目 × config キー） | `.claude/skills/thumbnail/references/prompt-schema.md` |
@@ -86,7 +86,7 @@ issue #654 は将来検討用に立てられたが（`takt:none`）、本 issue 
 - SKILL.md には 1 行の参照リンク追記のみ（`references/prompt-schema.md` への
   pointer）。既存セクション順序・固定化テストの対象テキストには触れない。
 - `image_provider.__init__` の `__all__` に `PromptSchema` / `prompt_schema`
-  を追加するため、`from youtube_automation.utils.image_provider import ...`
+  を追加するため、`from youtube_automation.infrastructure.media.image_provider import ...`
   経由のインターフェースが拡張される（破壊的変更なし）。
 
 ## Trigger（再評価条件）

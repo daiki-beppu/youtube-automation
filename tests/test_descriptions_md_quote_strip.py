@@ -10,8 +10,8 @@ from pathlib import Path
 
 import pytest
 
+from youtube_automation.core.errors import ValidationError
 from youtube_automation.domains.uploads._descriptions_md import DescriptionsMdMixin
-from youtube_automation.infrastructure.errors import ValidationError
 
 
 def _write_descriptions_md(collection_dir: Path, tags_line: str) -> None:

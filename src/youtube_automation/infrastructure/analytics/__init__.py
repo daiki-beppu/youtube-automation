@@ -1,0 +1,1 @@
+"""Analytics integration adapters."""

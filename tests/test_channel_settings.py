@@ -12,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from youtube_automation.commands.channel import channel_settings as channel_settings_cli
 from youtube_automation.configuration.youtube import YoutubeApi
+from youtube_automation.core.errors import ConfigError, YouTubeAPIError
 from youtube_automation.domains.youtube.channel_settings import (
     KEYWORDS_MAX_LENGTH,
     build_update_body,
@@ -23,7 +24,6 @@ from youtube_automation.domains.youtube.channel_settings import (
     parse_api_response,
     verify_channel_id,
 )
-from youtube_automation.infrastructure.errors import ConfigError, YouTubeAPIError
 
 # ---------------------------------------------------------------------------
 # build_upload_status_flags (#605)

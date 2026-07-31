@@ -8,8 +8,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 
 from youtube_automation.configuration import channel_dir
-from youtube_automation.infrastructure.errors import ConfigError
-from youtube_automation.utils.video_analyzer import VIDEO_ANALYSIS_DIRNAME
+from youtube_automation.core.adapters.errors import ConfigError
+from youtube_automation.core.adapters.media import VIDEO_ANALYSIS_DIRNAME
 
 _TOP_GENRE_PHRASES = 8
 _VOCAL_KEYWORDS = ("vocals", "vocal", "singing", "rap", "sings", "sung")

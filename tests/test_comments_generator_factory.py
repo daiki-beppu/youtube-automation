@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import pytest
 
+from youtube_automation.application import comments as comments_api
+from youtube_automation.application.comments.generator import GeminiGenerator
+from youtube_automation.application.comments.generator_factory import create_reply_generator
 from youtube_automation.configuration.comments import GeneratorConfig
-from youtube_automation.infrastructure.errors import ConfigError
-from youtube_automation.utils import comments as comments_api
-from youtube_automation.utils.comments.generator import GeminiGenerator
-from youtube_automation.utils.comments.generator_factory import create_reply_generator
+from youtube_automation.core.errors import ConfigError
 
 
 def _config(provider: str, *, model: str | None = None) -> GeneratorConfig:

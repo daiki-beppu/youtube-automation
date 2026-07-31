@@ -6,6 +6,8 @@ import sys
 from pathlib import Path
 
 from youtube_automation.configuration import channel_dir
+from youtube_automation.configuration.skills import load_skill_config
+from youtube_automation.core.errors import ConfigError, ValidationError
 from youtube_automation.domains.thumbnail.text.config import (
     overlay_config_from_skill_config,
     overlay_spec_from_overlay_config,
@@ -14,8 +16,6 @@ from youtube_automation.domains.thumbnail.text.renderer import (
     compose_thumbnail_text,
     validate_thumbnail_output_path,
 )
-from youtube_automation.infrastructure.errors import ConfigError, ValidationError
-from youtube_automation.utils.skill_config import load_skill_config
 
 SKILL_NAME = "thumbnail"
 _OVERLAY_CONFIG_PATH = "image_generation.gemini.thumbnail_text.overlay"

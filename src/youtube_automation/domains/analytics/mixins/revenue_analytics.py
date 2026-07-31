@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from youtube_automation.infrastructure.errors import YouTubeAPIError
+from youtube_automation.core.adapters.errors import YouTubeAPIError
 
 if TYPE_CHECKING:
     from youtube_automation.domains.analytics.ports import AnalyticsBase  # noqa: F401

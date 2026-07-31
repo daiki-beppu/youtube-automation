@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from youtube_automation.infrastructure.errors import ChannelRegistryError
-from youtube_automation.utils.channel_registry import load_channel_registry
+from youtube_automation.core.errors import ChannelRegistryError
+from youtube_automation.infrastructure.analytics.channel_registry import load_channel_registry
 
 
 def test_registry_returns_absolute_paths_in_declared_order(tmp_path: Path) -> None:

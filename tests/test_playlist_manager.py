@@ -17,7 +17,7 @@ import pytest
 from googleapiclient.errors import HttpError
 from httplib2 import Response
 
-from youtube_automation.infrastructure.errors import ValidationError
+from youtube_automation.core.errors import ValidationError
 from youtube_automation.infrastructure.google.youtube import YouTubeClients
 
 # ---------------------------------------------------------------------------

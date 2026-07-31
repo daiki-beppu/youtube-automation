@@ -216,7 +216,8 @@ def test_active_files_have_no_legacy_owner_references() -> None:
         _ROOT / "docs",
         _ROOT / "examples",
     )
-    legacy_names = tuple(f"youtube_automation.utils.{name[:-3]}" for name in _LEGACY_MODULES)
+    legacy_root = ".".join(("youtube_automation", "utils"))
+    legacy_names = tuple(f"{legacy_root}.{name[:-3]}" for name in _LEGACY_MODULES)
 
     offenders: list[str] = []
     for root in roots:

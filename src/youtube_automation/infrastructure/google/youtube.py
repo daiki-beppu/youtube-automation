@@ -6,7 +6,7 @@ from collections.abc import Callable
 
 from googleapiclient.discovery import build
 
-from youtube_automation.infrastructure.errors import ValidationError
+from youtube_automation.core.errors import ValidationError
 from youtube_automation.infrastructure.retry import execute_with_retry
 
 

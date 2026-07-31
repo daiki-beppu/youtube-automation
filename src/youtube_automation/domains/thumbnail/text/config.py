@@ -6,8 +6,8 @@ from pathlib import Path
 
 from PIL import ImageColor, ImageFont
 
+from youtube_automation.core.adapters.errors import ConfigError
 from youtube_automation.domains.thumbnail.text.models import OverlaySpec, TextStyle
-from youtube_automation.infrastructure.errors import ConfigError
 
 _DEFAULT_TITLE_SIZE = 96
 _DEFAULT_CHANNEL_NAME_SIZE = 36

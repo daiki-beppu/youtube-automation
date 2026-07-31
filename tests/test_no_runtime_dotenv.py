@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from youtube_automation.infrastructure.errors import ConfigError
+from youtube_automation.core.errors import ConfigError
 from youtube_automation.infrastructure.secrets import get_secret, reset_cache
 
 _ROOT = Path(__file__).resolve().parents[1]

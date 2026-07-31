@@ -25,7 +25,7 @@ description: "Use when YouTube 概要欄を Complete Collection 形式で自動�
 1. `.claude/skills/video-description/config.default.yaml`
 2. `config/skills/video-description.yaml`（存在する場合）
 
-合成規則は `youtube_automation.utils.skill_config.load_skill_config("video-description")` と同じで、チャンネル上書きが優先される。存在しない override は未設定として扱い、勝手に作成しない。
+合成規則は `youtube_automation.configuration.skills.load_skill_config("video-description")` と同じで、チャンネル上書きが優先される。存在しない override は未設定として扱い、勝手に作成しない。
 
 ## 前提
 

@@ -1,4 +1,4 @@
-"""utils.veo_operation_store の単体テスト。
+"""infrastructure.media.veo_operation_store の単体テスト。
 
 Issue #453: Ctrl+C 中断時に operation_id を永続化して再開可能にする。
 store モジュールは pure I/O（google.genai 非依存）。
@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from youtube_automation.utils import veo_operation_store as store
+from youtube_automation.infrastructure.media import veo_operation_store as store
 
 # ---------------------------------------------------------------------------
 # image_sha256

@@ -8,17 +8,17 @@ from __future__ import annotations
 
 import pytest
 
-from youtube_automation.infrastructure.errors import ConfigError
-from youtube_automation.utils.image_provider import get_provider
-from youtube_automation.utils.image_provider.config import (
+from youtube_automation.core.errors import ConfigError
+from youtube_automation.infrastructure.media.image_provider import get_provider
+from youtube_automation.infrastructure.media.image_provider.config import (
     GeminiCliConfig,
     GeminiConfig,
     ImageGenerationConfig,
     OpenAIConfig,
 )
-from youtube_automation.utils.image_provider.gemini import GeminiImageProvider
-from youtube_automation.utils.image_provider.gemini_cli import GeminiCliImageProvider
-from youtube_automation.utils.image_provider.openai import OpenAIImageProvider
+from youtube_automation.infrastructure.media.image_provider.gemini import GeminiImageProvider
+from youtube_automation.infrastructure.media.image_provider.gemini_cli import GeminiCliImageProvider
+from youtube_automation.infrastructure.media.image_provider.openai import OpenAIImageProvider
 
 
 def _gemini_config() -> ImageGenerationConfig:

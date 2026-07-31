@@ -220,7 +220,7 @@ def test_setup_directory_generation_contract_is_separate_from_channel_config() -
     channel_new = _read(".claude/skills/channel-new/SKILL.md")
     setup_dirs = _read("src/youtube_automation/commands/system/setup_dirs.py")
     channel_init = _read("src/youtube_automation/commands/channel/channel_init.py")
-    setup_directory_contract = _read("src/youtube_automation/utils/setup_directory_contract.py")
+    setup_directory_contract = _read("src/youtube_automation/infrastructure/legacy_utils/setup_directory_contract.py")
     pyproject = _read("pyproject.toml")
 
     assert "uv run yt-setup-dirs" in setup

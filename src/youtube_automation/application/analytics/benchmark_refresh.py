@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Protocol
 
 from youtube_automation.application.analytics.benchmark_query import find_latest_benchmark_json
-from youtube_automation.infrastructure.errors import ConfigError, YouTubeAPIError
+from youtube_automation.core.errors import ConfigError, YouTubeAPIError
 
 logger = logging.getLogger(__name__)
 

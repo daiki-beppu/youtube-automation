@@ -1,4 +1,4 @@
-"""utils/streaming/threshold.py の純粋計算ロジックをテストする。
+"""infrastructure/youtube/streaming/threshold.py の純粋計算ロジックをテストする。
 
 要件 R6: 80% 到達 (1.6 TB) アラート判定。
 """
@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import pytest
 
-from youtube_automation.utils.streaming import threshold
+from youtube_automation.infrastructure.youtube.streaming import threshold
 
 
 def test_threshold_gb_is_quota_times_ratio():

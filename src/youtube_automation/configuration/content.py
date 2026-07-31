@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from youtube_automation.utils.youtube_tag import normalize_youtube_tags
+from youtube_automation.infrastructure.youtube.youtube_tag import normalize_youtube_tags
 
 
 @dataclass(frozen=True)

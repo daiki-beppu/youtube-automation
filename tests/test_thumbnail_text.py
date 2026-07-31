@@ -9,14 +9,14 @@ from matplotlib import font_manager
 from PIL import Image
 
 from youtube_automation.configuration import reset as reset_configuration
+from youtube_automation.configuration import skills as skill_config
+from youtube_automation.core.errors import ConfigError, ValidationError
 from youtube_automation.domains.thumbnail.text import OverlaySpec, TextStyle, compose_thumbnail_text
 from youtube_automation.domains.thumbnail.text.config import (
     overlay_config_from_skill_config,
     overlay_spec_from_overlay_config,
     resolve_font_path,
 )
-from youtube_automation.infrastructure.errors import ConfigError, ValidationError
-from youtube_automation.utils import skill_config
 
 
 @pytest.fixture(autouse=True)

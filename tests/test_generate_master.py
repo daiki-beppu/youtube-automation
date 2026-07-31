@@ -22,7 +22,7 @@ from youtube_automation.commands.media.generate_master import (
 from youtube_automation.commands.media.generate_master import (
     generate_master as run_generate_master,
 )
-from youtube_automation.infrastructure.errors import ValidationError
+from youtube_automation.core.errors import ValidationError
 
 
 class TestResolveLoopCount:

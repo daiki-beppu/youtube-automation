@@ -163,8 +163,8 @@ class TestInit:
         import shutil
 
         from youtube_automation.configuration import reset
+        from youtube_automation.core.errors import UploadError
         from youtube_automation.domains.uploads.shorts import ShortUploader
-        from youtube_automation.infrastructure.errors import UploadError
 
         # Given: sample_channel をコピーして shorts.enabled=false に書き換える
         src = Path(__file__).resolve().parent / "fixtures" / "sample_channel"
@@ -763,7 +763,7 @@ class TestUploadShort:
 
     def test_upload_video_raises_quota_exhausted_error_marks_result_retryable(self, tmp_path):
         """plan 020 Step 4: QuotaExhaustedError は details.retryable=True で区別する."""
-        from youtube_automation.infrastructure.errors import QuotaExhaustedError
+        from youtube_automation.core.errors import QuotaExhaustedError
 
         # Given
         col = _setup_collection(tmp_path)

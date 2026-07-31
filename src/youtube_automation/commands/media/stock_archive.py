@@ -27,9 +27,9 @@ from pathlib import Path
 from typing import Any
 
 from youtube_automation.configuration import channel_dir
-from youtube_automation.infrastructure.errors import ValidationError
-from youtube_automation.utils.skill_config import load_skill_config
-from youtube_automation.utils.stock import SOURCE_ROLES, archive_to_stock, load_stock_config
+from youtube_automation.configuration.skills import load_skill_config
+from youtube_automation.core.errors import ValidationError
+from youtube_automation.infrastructure.media.stock import SOURCE_ROLES, archive_to_stock, load_stock_config
 
 
 def _load_meta_from_arg(meta_arg: str | None) -> dict[str, Any]:

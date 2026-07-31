@@ -11,12 +11,12 @@ import sys
 from datetime import datetime, timedelta
 
 from youtube_automation.configuration import channel_dir, load_config
+from youtube_automation.core.errors import AutomationError, YouTubeAPIError
 from youtube_automation.domains.analytics.service import YouTubeAnalyticsCollector
 from youtube_automation.infrastructure import cost_tracker
 from youtube_automation.infrastructure.analytics_adapter import AnalyticsAdapter, YouTubeDataAdapter
-from youtube_automation.infrastructure.errors import AutomationError, YouTubeAPIError
 from youtube_automation.infrastructure.google.youtube import create_readonly_youtube_clients
-from youtube_automation.utils.reporting_api import ReportingAPIClient
+from youtube_automation.infrastructure.youtube.reporting_api import ReportingAPIClient
 
 logger = logging.getLogger(__name__)
 

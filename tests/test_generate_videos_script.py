@@ -994,7 +994,7 @@ printf 'mask' > "$output"
 
     assert result.returncode == 0, result.stderr
     invocation = uv_log.read_text(encoding="utf-8")
-    assert invocation.startswith("run python -m youtube_automation.utils.audio_visualizer_mask ")
+    assert invocation.startswith("run python -m youtube_automation.infrastructure.media.audio_visualizer_mask ")
 
 
 def test_runtime_mask_helper_failure_stops_script(tmp_path: Path) -> None:
@@ -1020,7 +1020,7 @@ exit 7
     assert result.returncode == 1
     assert "failed to generate runtime audio visualizer mask" in result.stdout + result.stderr
     assert uv_log.read_text(encoding="utf-8").startswith(
-        "run python -m youtube_automation.utils.audio_visualizer_mask "
+        "run python -m youtube_automation.infrastructure.media.audio_visualizer_mask "
     )
 
 

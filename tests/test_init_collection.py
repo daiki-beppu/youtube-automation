@@ -15,7 +15,7 @@ import pytest
 
 from youtube_automation.commands.collections.init_collection import main
 from youtube_automation.configuration import channel_dir, load_config
-from youtube_automation.utils.collection_paths import REQUIRED_SUBDIRS
+from youtube_automation.infrastructure.media.collection_paths import REQUIRED_SUBDIRS
 
 
 def _run(monkeypatch, argv: list[str]):

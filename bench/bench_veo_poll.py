@@ -33,7 +33,7 @@ def run() -> Sequence[Stats]:
     try:
         from google import genai
 
-        from youtube_automation.utils import veo_generator
+        from youtube_automation.infrastructure.media import veo_generator
     except ImportError as e:
         print(f"  [SKIP] {e}")
         return []

@@ -1,7 +1,7 @@
 from collections.abc import Callable
 
+from youtube_automation.core.errors import AutomationError
 from youtube_automation.infrastructure.auth.redaction import redact_sensitive_data
-from youtube_automation.infrastructure.errors import AutomationError
 
 
 def run_upload_cli(

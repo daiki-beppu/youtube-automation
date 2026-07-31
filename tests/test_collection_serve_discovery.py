@@ -22,7 +22,7 @@ from youtube_automation.commands.collections.collection_serve_discovery import (
     RegistryState,
     create_registry_server,
 )
-from youtube_automation.infrastructure.errors import DiscoveryRegistryError
+from youtube_automation.core.errors import DiscoveryRegistryError
 
 
 class FakeClock:

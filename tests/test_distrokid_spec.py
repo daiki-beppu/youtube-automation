@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from youtube_automation.core.errors import ConfigError
 from youtube_automation.domains.distrokid import specification as specification_mod
 from youtube_automation.domains.distrokid.specification import (
     SPEC_FILENAME,
@@ -19,7 +20,6 @@ from youtube_automation.domains.distrokid.specification import (
     title_map_from_entry,
     write_collection_spec,
 )
-from youtube_automation.infrastructure.errors import ConfigError
 
 # ---------------------------------------------------------------------------
 # テスト用ヘルパー

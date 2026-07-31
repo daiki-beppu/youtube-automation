@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from youtube_automation.utils.youtube_quota import (
+from youtube_automation.infrastructure.youtube.youtube_quota import (
     DAILY_BUCKET_LIMITS,
     UNIT_COSTS,
     UNIT_POOL_LIMIT,

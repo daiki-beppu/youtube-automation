@@ -9,8 +9,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
-from youtube_automation.infrastructure.errors import ConfigError, ValidationError
-from youtube_automation.utils.collection_paths import CollectionPaths
+from youtube_automation.core.adapters.errors import ConfigError, ValidationError
+from youtube_automation.core.adapters.media import CollectionPaths
 
 _GALLERY_RELATIVE_PATH = Path("assets/thumbnail-gallery")
 _THUMBNAIL_SUFFIXES = (".jpg", ".png")

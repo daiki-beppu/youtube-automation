@@ -19,6 +19,7 @@ from tests.helpers.suno_verify import (
     write_video_analysis_suno_preset,
 )
 from youtube_automation.commands.suno.generate_suno_prompts import build_prompt_entries
+from youtube_automation.configuration import skills as skill_config
 from youtube_automation.domains.suno.config import ResolvedSunoConfig
 from youtube_automation.domains.suno.downloaded.validation import (
     ArtifactEntries,
@@ -26,7 +27,6 @@ from youtube_automation.domains.suno.downloaded.validation import (
     load_pattern_contract,
     load_prompt_entries,
 )
-from youtube_automation.utils import skill_config
 
 
 @pytest.fixture

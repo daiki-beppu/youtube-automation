@@ -32,9 +32,9 @@ from youtube_automation.commands.analytics.discover_competitors import (
     _write_markdown,
     main,
 )
-from youtube_automation.infrastructure.errors import ValidationError
-from youtube_automation.utils.competitor_discovery import SearchCacheMode
-from youtube_automation.utils.competitor_scoring import (
+from youtube_automation.core.errors import ValidationError
+from youtube_automation.infrastructure.analytics.competitor_discovery import SearchCacheMode
+from youtube_automation.infrastructure.analytics.competitor_scoring import (
     CandidateChannel,
     DiscoveryParams,
     ScoreBreakdown,
@@ -673,7 +673,7 @@ class TestFormatCountCompact:
         公開されてはならない。leading underscore の関数を別モジュールから cross-module
         import するアンチパターンの再発を防ぐ。
         """
-        from youtube_automation.utils import competitor_discovery, competitor_scoring
+        from youtube_automation.infrastructure.analytics import competitor_discovery, competitor_scoring
 
         assert not hasattr(competitor_discovery, "_format_count_compact")
         assert not hasattr(competitor_discovery, "format_count_compact")
@@ -708,7 +708,7 @@ class TestSkillConfigDefaults:
 
     @pytest.fixture(autouse=True)
     def _reset_skill_config_cache(self):
-        from youtube_automation.utils import skill_config
+        from youtube_automation.configuration import skills as skill_config
 
         skill_config.reset("discover-competitors")
         yield

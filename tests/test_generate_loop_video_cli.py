@@ -34,7 +34,7 @@ from youtube_automation.commands.media.generate_loop_video import (
     resolve_collection_paths,
     resolve_prompt,
 )
-from youtube_automation.utils.veo_generator import DEFAULT_PROMPT
+from youtube_automation.infrastructure.media.veo_generator import DEFAULT_PROMPT
 
 # NOTE: `_backup_existing_loop` は本 issue で新規追加される関数。
 # write_tests phase では未実装のため、module top では import せず、
@@ -1112,7 +1112,7 @@ class TestMainEnabledGate:
 class TestMainOmniEngine:
     def test_omni_uses_default_model_when_config_is_absent(self, tmp_path, monkeypatch):
         from youtube_automation.commands.media import generate_loop_video as mod
-        from youtube_automation.utils.omni_generator import DEFAULT_MODEL as DEFAULT_OMNI_MODEL
+        from youtube_automation.infrastructure.media.omni_generator import DEFAULT_MODEL as DEFAULT_OMNI_MODEL
 
         col = _make_collection(tmp_path)
         _write_image(col, MAIN_PNG)
@@ -1163,7 +1163,7 @@ class TestMainOmniEngine:
 
     def test_omni_missing_api_key_fails_loud(self, tmp_path, monkeypatch):
         from youtube_automation.commands.media import generate_loop_video as mod
-        from youtube_automation.infrastructure.errors import ConfigError
+        from youtube_automation.core.errors import ConfigError
 
         col = _make_collection(tmp_path)
         _write_image(col, MAIN_PNG)

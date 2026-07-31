@@ -29,6 +29,7 @@ from typing import Any
 
 from youtube_automation.configuration import ChannelConfig, load_config
 from youtube_automation.configuration import channel_dir as _channel_dir
+from youtube_automation.core.errors import ConfigError, YouTubeAPIError
 from youtube_automation.domains.youtube.channel_settings import (
     build_update_body,
     diff_settings,
@@ -38,7 +39,6 @@ from youtube_automation.domains.youtube.channel_settings import (
 )
 from youtube_automation.infrastructure import cost_tracker
 from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
-from youtube_automation.infrastructure.errors import ConfigError, YouTubeAPIError
 from youtube_automation.infrastructure.google.youtube import YouTubeClients
 
 logger = logging.getLogger(__name__)

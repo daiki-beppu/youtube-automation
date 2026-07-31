@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping
 
+from youtube_automation.core.errors import ValidationError
 from youtube_automation.domains.suno.downloaded.archive import (
     _AUDIO_EXTENSIONS,
     _CANONICAL_MUSIC_FILENAME_RE,
@@ -25,8 +26,7 @@ from youtube_automation.domains.suno.playlist import (
     verify_playlist_titles,
 )
 from youtube_automation.domains.suno.prompts import read_suno_prompt_entries
-from youtube_automation.infrastructure.errors import ValidationError
-from youtube_automation.utils.collection_paths import resolve_collection_dir
+from youtube_automation.infrastructure.media.collection_paths import resolve_collection_dir
 
 _APOSTROPHE_RE = re.compile(r"['’]")
 _TITLE_SOURCE_ERROR = (

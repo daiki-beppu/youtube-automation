@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Dict, List, Optional
 
-from youtube_automation.utils.profile import section
+from youtube_automation.core.adapters.observability import section
 
 logger = logging.getLogger(__name__)
 

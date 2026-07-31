@@ -793,7 +793,7 @@ if [[ "$OVERLAYS_ENABLED" -eq 1 ]]; then
         if [[ "$av_style" != "bar" ]]; then
             AV_MASK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/yt-audio-visualizer-mask.XXXXXX")"
             AV_MASK_PATH="${AV_MASK_DIR}/mask.png"
-            if ! uv run python -m youtube_automation.utils.audio_visualizer_mask \
+            if ! uv run python -m youtube_automation.infrastructure.media.audio_visualizer_mask \
                 --output "$AV_MASK_PATH" \
                 --style "$av_style" \
                 --size "$av_size" \

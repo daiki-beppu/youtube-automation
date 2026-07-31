@@ -5,10 +5,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from youtube_automation.core.errors import YouTubeAPIError
 from youtube_automation.domains.analytics.mixins.channel_analytics import ChannelAnalyticsMixin
 from youtube_automation.domains.analytics.mixins.playlist_analytics import PlaylistAnalyticsMixin
 from youtube_automation.domains.analytics.service import YouTubeAnalyticsCollector
-from youtube_automation.infrastructure.errors import YouTubeAPIError
 
 
 class StubCollector(PlaylistAnalyticsMixin):

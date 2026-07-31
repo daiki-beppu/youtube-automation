@@ -47,7 +47,7 @@ def _make_generator(
     """
     from dataclasses import replace
 
-    from youtube_automation.utils.skill_config import load_skill_config
+    from youtube_automation.configuration.skills import load_skill_config
 
     gen = object.__new__(BAHMetadataGenerator)
     gen.config = load_config()

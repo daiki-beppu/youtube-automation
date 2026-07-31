@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from youtube_automation.utils.numbered_duplicates import (
+from youtube_automation.infrastructure.collections.numbered_duplicates import (
     format_duplicate_name,
     format_scan_error_reason,
     numbered_duplicate_base_name,

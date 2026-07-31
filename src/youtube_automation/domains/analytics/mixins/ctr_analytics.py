@@ -9,7 +9,7 @@ YouTube Analytics API (channel_reports) の仕様上 `dimensions=video` と組�
 取得可能とされているが、実 API では 400 が返るチャンネルが多く、Google 公式の Looker Studio
 Connector でも同症状が報告されている未解決問題のため、本 Mixin では収集しない)
 
-代替経路 (#84): YouTube Reporting API v1 (`youtube_automation.utils.reporting_api`) で
+代替経路 (#84): YouTube Reporting API v1 (`youtube_automation.infrastructure.youtube.reporting_api`) で
 非同期 CSV bulk download 経由の thumbnail impressions / CTR を取得できる。
 ジョブ作成後 最大 48h で初回レポート取得可能（過去 30 日分が backfill）、
 以降は日次 D+2、API データ保持上限 60 日。
@@ -20,7 +20,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Dict, List
 
-from youtube_automation.infrastructure.errors import YouTubeAPIError
+from youtube_automation.core.adapters.errors import YouTubeAPIError
 
 if TYPE_CHECKING:
     from youtube_automation.domains.analytics.ports import AnalyticsBase  # noqa: F401

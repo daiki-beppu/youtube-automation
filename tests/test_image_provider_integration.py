@@ -4,10 +4,10 @@
 末端まで `provider` 値を正しく伝搬することを検証する。
 
 このテストは以下のモジュール境界を結合して動作確認する:
-- youtube_automation.utils.skill_config (YAML loader)
-- youtube_automation.utils.image_provider.config (parse)
-- youtube_automation.utils.image_provider (factory)
-- youtube_automation.utils.image_provider.gemini / openai (provider impl)
+- youtube_automation.configuration.skills (YAML loader)
+- youtube_automation.infrastructure.media.image_provider.config (parse)
+- youtube_automation.infrastructure.media.image_provider (factory)
+- youtube_automation.infrastructure.media.image_provider.gemini / openai (provider impl)
 """
 
 from __future__ import annotations
@@ -18,15 +18,15 @@ import pytest
 import yaml
 
 from youtube_automation.configuration import reset as reset_config
-from youtube_automation.infrastructure.errors import ConfigError
-from youtube_automation.utils import skill_config
-from youtube_automation.utils.image_provider import (
+from youtube_automation.configuration import skills as skill_config
+from youtube_automation.core.errors import ConfigError
+from youtube_automation.infrastructure.media.image_provider import (
     get_provider,
     load_image_generation_config,
 )
-from youtube_automation.utils.image_provider.composition import resolve_composition_source
-from youtube_automation.utils.image_provider.gemini import GeminiImageProvider
-from youtube_automation.utils.image_provider.openai import OpenAIImageProvider
+from youtube_automation.infrastructure.media.image_provider.composition import resolve_composition_source
+from youtube_automation.infrastructure.media.image_provider.gemini import GeminiImageProvider
+from youtube_automation.infrastructure.media.image_provider.openai import OpenAIImageProvider
 
 
 @pytest.fixture(autouse=True)

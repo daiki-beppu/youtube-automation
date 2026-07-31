@@ -22,10 +22,10 @@ from youtube_automation.commands.channel.channel_init_templates import (
     ChannelInitContext,
     serialize_json,
 )
+from youtube_automation.configuration.channel_target import resolve_existing_target_dir
+from youtube_automation.core.errors import ConfigError
 from youtube_automation.domains.youtube.channel_settings import normalize_locale_to_short
-from youtube_automation.infrastructure.errors import ConfigError
-from youtube_automation.utils.channel_target import resolve_existing_target_dir
-from youtube_automation.utils.setup_directory_contract import validate_existing_setup_directories
+from youtube_automation.infrastructure.collections.setup_directory_contract import validate_existing_setup_directories
 
 
 class ActionKind(Enum):

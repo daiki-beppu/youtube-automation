@@ -6,7 +6,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from youtube_automation.utils.benchmark_analyzer import (
+from youtube_automation.infrastructure.analytics.benchmark_analyzer import (
     compute_daily_views,
     compute_engagement_rate,
     compute_posting_intervals,

@@ -38,16 +38,16 @@ from typing import cast
 
 from youtube_automation.commands.media import generate_master
 from youtube_automation.configuration import load_config
+from youtube_automation.configuration.skills import load_skill_config
+from youtube_automation.core.errors import ConfigError, ValidationError
 from youtube_automation.domains.media.audio_units import unit_for_audio
 from youtube_automation.infrastructure import cost_tracker
-from youtube_automation.infrastructure.errors import ConfigError, ValidationError
-from youtube_automation.utils import lyria_client
-from youtube_automation.utils.collection_paths import (
+from youtube_automation.infrastructure.media import lyria_client
+from youtube_automation.infrastructure.media.collection_paths import (
     CollectionPaths,
     resolve_collection_dir,
 )
-from youtube_automation.utils.lyria_client import Intensity, Mode
-from youtube_automation.utils.skill_config import load_skill_config
+from youtube_automation.infrastructure.media.lyria_client import Intensity, Mode
 
 # Lyria 3 Pro は 1 リクエスト最大約 184 秒の音源を返すため、コレクション尺から
 # 必要呼び出し回数を割り出す基準として使う。short 化や引き伸ばしのトリミングは行わない。

@@ -8,7 +8,7 @@ from unittest.mock import patch
 import pytest
 
 from youtube_automation.commands.system import automation_update_remote
-from youtube_automation.infrastructure.errors import ConfigError
+from youtube_automation.core.errors import ConfigError
 
 
 class _Response:

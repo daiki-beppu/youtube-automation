@@ -257,7 +257,7 @@ class TestRemoteChapterMaxSkillConfig:
 
     @pytest.fixture(autouse=True)
     def _reset_skill_config_cache(self):
-        from youtube_automation.utils import skill_config
+        from youtube_automation.configuration import skills as skill_config
 
         skill_config.reset("metadata-audit")
         yield

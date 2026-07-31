@@ -32,7 +32,7 @@ import pytest
 from googleapiclient.errors import HttpError
 
 from youtube_automation.configuration import reset
-from youtube_automation.infrastructure.errors import YouTubeAPIError
+from youtube_automation.core.errors import YouTubeAPIError
 
 # ---------------------------------------------------------------------------
 # ヘルパー

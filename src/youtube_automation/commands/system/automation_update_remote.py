@@ -10,7 +10,7 @@ import urllib.request
 from pathlib import Path
 
 from youtube_automation.commands.system.automation_update_refs import PACKAGE_NAME, _canonicalize_name
-from youtube_automation.infrastructure.errors import ConfigError
+from youtube_automation.core.errors import ConfigError
 
 
 def _github_api_get(path: str) -> object:

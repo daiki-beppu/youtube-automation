@@ -31,12 +31,13 @@ YouTube チャンネル運営を自動化するツールキット。Analytics �
 youtube-channels-automation/      # ← このリポジトリ
 ├── src/
 │   └── youtube_automation/       # インストール対象パッケージ
-│       ├── utils/                # コアユーティリティ
-│       ├── agents/               # 自動化エージェント
-│       ├── auth/                 # OAuth 2.0 認証
-│       ├── scripts/              # CLI スクリプト (yt-* entry points)
-│       ├── cli/                  # ユーザー向け CLI (yt-skills)
-│       └── templates/            # 説明文テンプレート
+│       ├── application/         # ユースケースと実行フロー
+│       ├── commands/             # yt-* CLI の入口（機能別、channel-init テンプレート含む）
+│       ├── configuration/        # 設定モデル・loader・canonical 境界
+│       ├── core/                 # 共通エラーと基盤契約
+│       ├── domains/              # ドメインロジック
+│       ├── infrastructure/      # 外部連携・互換 facade
+│       └── auth/                 # OAuth 2.0 認証
 ├── .claude/skills/               # Claude Code スキル群 (yt-skills sync で配布)
 ├── tests/                        # テストスイート
 ```

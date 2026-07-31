@@ -7,6 +7,7 @@ import shutil
 import tempfile
 from pathlib import Path
 
+from youtube_automation.core.adapters.media import CollectionPaths
 from youtube_automation.domains.suno.downloaded.archive import extract_downloaded_archive
 from youtube_automation.domains.suno.downloaded.models import (
     DownloadedArtifactError,
@@ -19,7 +20,6 @@ from youtube_automation.domains.suno.downloaded.workflow import (
     read_pattern_count,
     update_workflow_state_downloaded,
 )
-from youtube_automation.utils.collection_paths import CollectionPaths
 
 logger = logging.getLogger(__name__)
 

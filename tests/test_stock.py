@@ -10,8 +10,8 @@ from pathlib import Path
 
 import pytest
 
-from youtube_automation.infrastructure.errors import ValidationError
-from youtube_automation.utils.stock import (
+from youtube_automation.core.errors import ValidationError
+from youtube_automation.infrastructure.media.stock import (
     META_SUFFIX,
     STOCK_SCHEMA_VERSION,
     StockEntry,

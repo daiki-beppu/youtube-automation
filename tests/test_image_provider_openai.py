@@ -23,8 +23,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from youtube_automation.domains.media.image import ImageGenerationRequest
-from youtube_automation.utils.image_provider.config import OpenAIConfig
-from youtube_automation.utils.image_provider.openai import OpenAIImageProvider
+from youtube_automation.infrastructure.media.image_provider.config import OpenAIConfig
+from youtube_automation.infrastructure.media.image_provider.openai import OpenAIImageProvider
 
 # ---------- フィクスチャ ----------
 
@@ -89,7 +89,7 @@ def _stub_openai_api_key(monkeypatch):
         raise KeyError(name)
 
     monkeypatch.setattr(
-        "youtube_automation.utils.image_provider.openai.get_secret",
+        "youtube_automation.infrastructure.media.image_provider.openai.get_secret",
         _fake_get_secret,
     )
 
@@ -98,7 +98,7 @@ def _stub_openai_api_key(monkeypatch):
 def _no_sleep(monkeypatch):
     """リトライバックオフを高速化。"""
     monkeypatch.setattr(
-        "youtube_automation.utils.image_provider.openai.time.sleep",
+        "youtube_automation.infrastructure.media.image_provider.openai.time.sleep",
         lambda s: None,
     )
 
@@ -126,7 +126,7 @@ class TestAspectRatioToSizeMapping:
         provider = OpenAIImageProvider(cfg)
         req = request_factory(aspect_ratio=ratio, image_size=expected_size)
 
-        with patch("youtube_automation.utils.image_provider.openai.OpenAI") as mock_class:
+        with patch("youtube_automation.infrastructure.media.image_provider.openai.OpenAI") as mock_class:
             mock_client = MagicMock()
             mock_client.images.generate.return_value = _fake_image_response(_png_bytes())
             mock_class.return_value = mock_client
@@ -149,7 +149,7 @@ class TestParameterForwarding:
         provider = OpenAIImageProvider(openai_config)
         req = request_factory()
 
-        with patch("youtube_automation.utils.image_provider.openai.OpenAI") as mock_class:
+        with patch("youtube_automation.infrastructure.media.image_provider.openai.OpenAI") as mock_class:
             mock_client = MagicMock()
             mock_client.images.generate.return_value = _fake_image_response(_png_bytes())
             mock_class.return_value = mock_client
@@ -176,7 +176,7 @@ class TestParameterForwarding:
         # batch=4 でも 1 件分のレスポンスでテスト（複数取得は別 issue）
         req = request_factory()
 
-        with patch("youtube_automation.utils.image_provider.openai.OpenAI") as mock_class:
+        with patch("youtube_automation.infrastructure.media.image_provider.openai.OpenAI") as mock_class:
             mock_client = MagicMock()
             mock_client.images.generate.return_value = _fake_image_response(_png_bytes())
             mock_class.return_value = mock_client
@@ -193,7 +193,7 @@ class TestParameterForwarding:
         provider = OpenAIImageProvider(openai_config)
         req = request_factory(prompt="a vivid sunset over the ocean")
 
-        with patch("youtube_automation.utils.image_provider.openai.OpenAI") as mock_class:
+        with patch("youtube_automation.infrastructure.media.image_provider.openai.OpenAI") as mock_class:
             mock_client = MagicMock()
             mock_client.images.generate.return_value = _fake_image_response(_png_bytes())
             mock_class.return_value = mock_client
@@ -219,13 +219,13 @@ class TestApiKeyAcquisition:
             return "sk-tracked-7890"
 
         monkeypatch.setattr(
-            "youtube_automation.utils.image_provider.openai.get_secret",
+            "youtube_automation.infrastructure.media.image_provider.openai.get_secret",
             _tracking,
         )
         provider = OpenAIImageProvider(openai_config)
         req = request_factory()
 
-        with patch("youtube_automation.utils.image_provider.openai.OpenAI") as mock_class:
+        with patch("youtube_automation.infrastructure.media.image_provider.openai.OpenAI") as mock_class:
             mock_client = MagicMock()
             mock_client.images.generate.return_value = _fake_image_response(_png_bytes())
             mock_class.return_value = mock_client
@@ -248,7 +248,7 @@ class TestReferenceImageRouting:
         provider = OpenAIImageProvider(openai_config)
         req = request_factory(references=[])
 
-        with patch("youtube_automation.utils.image_provider.openai.OpenAI") as mock_class:
+        with patch("youtube_automation.infrastructure.media.image_provider.openai.OpenAI") as mock_class:
             mock_client = MagicMock()
             mock_client.images.generate.return_value = _fake_image_response(_png_bytes())
             mock_class.return_value = mock_client
@@ -267,7 +267,7 @@ class TestReferenceImageRouting:
         provider = OpenAIImageProvider(openai_config)
         req = request_factory(references=[ref_path])
 
-        with patch("youtube_automation.utils.image_provider.openai.OpenAI") as mock_class:
+        with patch("youtube_automation.infrastructure.media.image_provider.openai.OpenAI") as mock_class:
             mock_client = MagicMock()
             mock_client.images.edit.return_value = _fake_image_response(_png_bytes())
             mock_class.return_value = mock_client
@@ -289,7 +289,7 @@ class TestRetryBehavior:
         provider = OpenAIImageProvider(openai_config)
         req = request_factory()
 
-        with patch("youtube_automation.utils.image_provider.openai.OpenAI") as mock_class:
+        with patch("youtube_automation.infrastructure.media.image_provider.openai.OpenAI") as mock_class:
             mock_client = MagicMock()
             mock_client.images.generate.side_effect = [
                 RuntimeError("transient 500"),
@@ -309,12 +309,12 @@ class TestRetryBehavior:
         provider = OpenAIImageProvider(openai_config)
         req = request_factory()
 
-        with patch("youtube_automation.utils.image_provider.openai.OpenAI") as mock_class:
+        with patch("youtube_automation.infrastructure.media.image_provider.openai.OpenAI") as mock_class:
             mock_client = MagicMock()
             mock_client.images.generate.side_effect = RuntimeError("permanent error")
             mock_class.return_value = mock_client
 
-            from youtube_automation.utils.image_provider import RETRY_MAX
+            from youtube_automation.infrastructure.media.image_provider import RETRY_MAX
 
             # When
             result = provider.generate(req)
@@ -331,11 +331,11 @@ class TestRetryBehavior:
         ],
     )
     def test_missing_image_payload_retries_then_returns_failure(self, response, openai_config, request_factory):
-        from youtube_automation.utils.image_provider import RETRY_MAX
+        from youtube_automation.infrastructure.media.image_provider import RETRY_MAX
 
         provider = OpenAIImageProvider(openai_config)
         req = request_factory()
-        with patch("youtube_automation.utils.image_provider.openai.OpenAI") as mock_class:
+        with patch("youtube_automation.infrastructure.media.image_provider.openai.OpenAI") as mock_class:
             mock_client = MagicMock()
             mock_client.images.generate.return_value = response
             mock_class.return_value = mock_client
@@ -347,12 +347,12 @@ class TestRetryBehavior:
         assert mock_client.images.generate.call_count == RETRY_MAX
 
     def test_invalid_base64_retries_then_returns_failure(self, openai_config, request_factory):
-        from youtube_automation.utils.image_provider import RETRY_MAX
+        from youtube_automation.infrastructure.media.image_provider import RETRY_MAX
 
         provider = OpenAIImageProvider(openai_config)
         req = request_factory()
         response = SimpleNamespace(data=[SimpleNamespace(b64_json="%%%not-base64%%%")])
-        with patch("youtube_automation.utils.image_provider.openai.OpenAI") as mock_class:
+        with patch("youtube_automation.infrastructure.media.image_provider.openai.OpenAI") as mock_class:
             mock_client = MagicMock()
             mock_client.images.generate.return_value = response
             mock_class.return_value = mock_client
@@ -373,7 +373,7 @@ class TestImageOutputPersistence:
         provider = OpenAIImageProvider(openai_config)
         req = request_factory(output_name="generated.jpg")
 
-        with patch("youtube_automation.utils.image_provider.openai.OpenAI") as mock_class:
+        with patch("youtube_automation.infrastructure.media.image_provider.openai.OpenAI") as mock_class:
             mock_client = MagicMock()
             mock_client.images.generate.return_value = _fake_image_response(_png_bytes())
             mock_class.return_value = mock_client
@@ -400,7 +400,7 @@ class TestProviderRejectsUnsupportedAspectRatio:
 
     def test_unsupported_request_aspect_ratio_raises_config_error(self, openai_config, request_factory):
         # Given: Request の aspect_ratio が "1:1"
-        from youtube_automation.infrastructure.errors import ConfigError
+        from youtube_automation.core.errors import ConfigError
 
         provider = OpenAIImageProvider(openai_config)
         req = request_factory(aspect_ratio="1:1", image_size="1024x1024")

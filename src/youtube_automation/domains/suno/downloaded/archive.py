@@ -8,13 +8,13 @@ import tempfile
 import zipfile
 from pathlib import Path, PurePosixPath
 
+from youtube_automation.core.adapters.media import CollectionPaths
 from youtube_automation.domains.suno.downloaded.models import (
     DOCUMENTATION_DIRNAME,
     SUNO_PROMPTS_JSON_FILENAME,
     DownloadedArtifactError,
     PromptEntriesReader,
 )
-from youtube_automation.utils.collection_paths import CollectionPaths
 
 _AUDIO_EXTENSIONS = frozenset({".mp3", ".m4a", ".wav"})
 _ZIP_MAX_TOTAL_SIZE = 2 * 1024 * 1024 * 1024

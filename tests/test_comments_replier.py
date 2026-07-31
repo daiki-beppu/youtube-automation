@@ -10,21 +10,21 @@ from unittest.mock import MagicMock, patch
 import pytest
 from googleapiclient.errors import HttpError
 
+from youtube_automation.application.comments.history import ReplyHistory
+from youtube_automation.application.comments.replier import (
+    _SAVE_MAX_RETRIES,
+    CommentReplier,
+    fetch_video_status,
+)
 from youtube_automation.commands.youtube import comment_reply
 from youtube_automation.commands.youtube.comment_reply import _load_agent_replies
 from youtube_automation.configuration.comments import (
     Comments,
     GeneratorConfig,
 )
-from youtube_automation.infrastructure.errors import AutomationError, ConfigError, YouTubeAPIError
-from youtube_automation.utils.comments.history import ReplyHistory
-from youtube_automation.utils.comments.replier import (
-    _SAVE_MAX_RETRIES,
-    CommentReplier,
-    fetch_video_status,
-)
+from youtube_automation.core.errors import AutomationError, ConfigError, YouTubeAPIError
 
-_PATCH_GENAI_CLIENT = "youtube_automation.utils.genai_client.create_global_genai_client"
+_PATCH_GENAI_CLIENT = "youtube_automation.infrastructure.media.genai_client.create_global_genai_client"
 
 
 def test_load_agent_replies_accepts_replies_object(tmp_path):
@@ -1616,7 +1616,7 @@ def test_resolve_owner_channel_id_returns_and_caches(tmp_path):
 
 def test_resolve_owner_channel_id_raises_on_empty_items(tmp_path):
     """空 items 系: YouTubeAPIError が送出される."""
-    from youtube_automation.infrastructure.errors import YouTubeAPIError
+    from youtube_automation.core.errors import YouTubeAPIError
 
     yt = MagicMock()
     yt.channels.return_value.list.return_value.execute.return_value = {"items": []}
@@ -1647,7 +1647,7 @@ def test_resolve_owner_channel_id_raises_on_http_error(tmp_path):
     """HttpError 系: YouTubeAPIError に変換される."""
     from googleapiclient.errors import HttpError
 
-    from youtube_automation.infrastructure.errors import YouTubeAPIError
+    from youtube_automation.core.errors import YouTubeAPIError
 
     class _FakeResp:
         status = 403
@@ -2122,7 +2122,7 @@ def test_preflight_chunks_video_ids_in_50s(tmp_path):
 
 def test_fetch_video_status_returns_none_for_missing_video(tmp_path):
     """fetch_video_status は API 応答に無い video を None で返す."""
-    from youtube_automation.utils.comments.replier import fetch_video_status
+    from youtube_automation.application.comments.replier import fetch_video_status
 
     yt = MagicMock()
     yt.videos.return_value.list.return_value.execute.return_value = {
@@ -2136,7 +2136,7 @@ def test_fetch_video_status_returns_none_for_missing_video(tmp_path):
 
 def test_fetch_video_status_wraps_http_error(tmp_path, no_retry_backoff):
     """status 取得失敗は YouTubeAPIError に変換され、握りつぶされない."""
-    from youtube_automation.utils.comments.replier import fetch_video_status
+    from youtube_automation.application.comments.replier import fetch_video_status
 
     err = _make_http_error(403, "Forbidden", "quotaExceeded")
     yt = MagicMock()
@@ -2177,7 +2177,7 @@ def test_save_succeeds_first_try_no_warning(tmp_path, caplog):
         default_language="ja",
     )
 
-    with caplog.at_level(logging.WARNING, logger="youtube_automation.utils.comments.replier"):
+    with caplog.at_level(logging.WARNING, logger="youtube_automation.application.comments.replier"):
         plan = replier.run(dry_run=False)
 
     assert len(plan.replied) == 1
@@ -2210,7 +2210,7 @@ def test_save_fails_once_then_succeeds_logs_warning(tmp_path, caplog):
         return original_save()
 
     with patch.object(replier._history, "save", side_effect=_flaky_save):
-        with caplog.at_level(logging.WARNING, logger="youtube_automation.utils.comments.replier"):
+        with caplog.at_level(logging.WARNING, logger="youtube_automation.application.comments.replier"):
             plan = replier.run(dry_run=False)
 
     assert len(plan.replied) == 1
@@ -2234,7 +2234,7 @@ def test_save_fails_all_3_times_logs_error_and_flags_record(tmp_path, caplog):
     )
 
     with patch.object(replier._history, "save", side_effect=OSError("disk full")):
-        with caplog.at_level(logging.WARNING, logger="youtube_automation.utils.comments.replier"):
+        with caplog.at_level(logging.WARNING, logger="youtube_automation.application.comments.replier"):
             plan = replier.run(dry_run=False)
 
     assert len(plan.replied) == 1
@@ -2248,7 +2248,7 @@ def test_save_fails_all_3_times_logs_error_and_flags_record(tmp_path, caplog):
     assert caplog.text.count("履歴保存リトライ") == 3
     assert "履歴保存が 3 回失敗" in caplog.text
     # ログレベル検証: WARNING 3 件 + ERROR 1 件
-    replier_records = [r for r in caplog.records if r.name == "youtube_automation.utils.comments.replier"]
+    replier_records = [r for r in caplog.records if r.name == "youtube_automation.application.comments.replier"]
     warning_records = [r for r in replier_records if r.levelno == logging.WARNING]
     error_records = [r for r in replier_records if r.levelno == logging.ERROR]
     assert len(warning_records) == 3
@@ -2279,12 +2279,12 @@ def test_save_fails_once_then_succeeds_log_levels(tmp_path, caplog):
         return original_save()
 
     with patch.object(replier._history, "save", side_effect=_flaky_save):
-        with caplog.at_level(logging.WARNING, logger="youtube_automation.utils.comments.replier"):
+        with caplog.at_level(logging.WARNING, logger="youtube_automation.application.comments.replier"):
             plan = replier.run(dry_run=False)
 
     assert len(plan.replied) == 1
     assert plan.errors == []
-    replier_records = [r for r in caplog.records if r.name == "youtube_automation.utils.comments.replier"]
+    replier_records = [r for r in caplog.records if r.name == "youtube_automation.application.comments.replier"]
     warning_records = [r for r in replier_records if r.levelno == logging.WARNING]
     error_records = [r for r in replier_records if r.levelno == logging.ERROR]
     assert len(warning_records) == 1

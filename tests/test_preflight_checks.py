@@ -7,6 +7,7 @@ from typing import ClassVar
 
 import pytest
 
+from youtube_automation.core.errors import ConfigError
 from youtube_automation.domains.uploads.preflight import (
     check_chapter_count,
     check_chapter_variation_suffix,
@@ -23,8 +24,7 @@ from youtube_automation.domains.uploads.preflight import (
     extract_descriptions_md_tags,
     requires_scene_phrases,
 )
-from youtube_automation.infrastructure.errors import ConfigError
-from youtube_automation.utils.image_provider.composition import (
+from youtube_automation.infrastructure.media.image_provider.composition import (
     find_forbidden_keywords,
     resolve_forbid_keywords,
     validate_forbid_keywords,

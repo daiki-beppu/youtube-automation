@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 from youtube_automation.commands.media import stock_archive, stock_list, stock_preview, stock_prune
-from youtube_automation.utils import skill_config as skill_config_mod
+from youtube_automation.configuration import skills as skill_config_mod
 
 
 @pytest.fixture
@@ -157,7 +157,7 @@ class TestStockArchiveCLI:
         monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
-        from youtube_automation.infrastructure.errors import ValidationError
+        from youtube_automation.core.errors import ValidationError
 
         first = _make_image(tmp_path / "first.jpg")
         second = _make_image(tmp_path / "second.jpg")

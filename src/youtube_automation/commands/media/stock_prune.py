@@ -16,8 +16,8 @@ import argparse
 import sys
 
 from youtube_automation.configuration import channel_dir
-from youtube_automation.utils.skill_config import load_skill_config
-from youtube_automation.utils.stock import load_stock_config, prune_stock
+from youtube_automation.configuration.skills import load_skill_config
+from youtube_automation.infrastructure.media.stock import load_stock_config, prune_stock
 
 
 def _resolve_defaults(args: argparse.Namespace) -> tuple[int | None, int | None]:

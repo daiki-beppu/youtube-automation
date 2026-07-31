@@ -22,7 +22,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-from youtube_automation.utils.collection_paths import CollectionPaths
+from youtube_automation.infrastructure.media.collection_paths import CollectionPaths
 
 # --- パス解決 ---
 SCRIPT_DIR = Path(__file__).resolve().parent
