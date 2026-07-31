@@ -95,7 +95,7 @@ open_release_branch=$(git ls-remote --heads origin "release/v*" | head -1)
 
 `CHANGELOG.md::[Unreleased]` の内容を読み、semver bump 種別を提案する:
 
-- `### Removed` 有り、または本文中に `BREAKING` / `破壊的変更` 記述 → **major**
+- `### Removed` 有り、または本文中に `BREAKING` / `破壊的変更` 記述 → **major**（検索は **大小文字を問わない**。`**Breaking:**` / `breaking(scope):` 表記を取りこぼさないこと）
 - `### Added` 有り → **minor**
 - `### Fixed` のみ（または `### Changed` のみで挙動変更が patch レベル）→ **patch**
 
@@ -449,6 +449,8 @@ Asset: <name>-<VER>-chrome.zip
 - **`pnpm install --frozen-lockfile` の失敗**: version bump 自体では lockfile は乖離しない。失敗＝依存差分の混入なので、リリースとは切り離して lockfile 同期の修正 PR を先に main へ入れる
 - **ext-v tag 系列と package.json 版数の乖離**: `ext-v*` は3拡張共通の単一系列のため、bump 対象の拡張によっては tag 版数と package.json 版数がずれる（前例: `ext-v0.2.3` で distrokid-helper 0.2.1）。Release asset 名は package.json 版数に従う（E0 の「tag 版数の決定」参照）
 - **Chrome 拡張の pnpm 版数乖離**: ambient pnpm の版は各環境で異なり得る。prepare Phase 1-6 の Nix extensions shell（Node 24 / pnpm 11.15.1）で3拡張を検証し、期待 zip と lockfile 無差分を確認する
+- **`.output/` のビルド残骸で verify が誤 FAIL**: `verify-extensions.sh` は zip が「期待名の唯一 1 件」であることを検証するため、過去 run の zip（`<name>-<旧版数>-chrome.zip`）が `.output/` に残っていると `expected exactly one zip ... found N` で停止する。原因はリポジトリ側ではなくローカルのビルド成果物（gitignore 済み）。スクリプトが zip 生成前に `.output/*.zip` を掃除するので通常は起きないが、手動で `pnpm zip` を先に走らせた場合は掃除してから再実行する
+- **verify を `| tail` 等へパイプすると exit code を見失う**: `bash verify-extensions.sh | tail -60` の `$?` はパイプ末尾（`tail`）の値になり、スクリプトが `exit 1` していても 0 に見える。Hard Gate の「exit 0 を必須」を満たすには、パイプせずに実行するか `${PIPESTATUS[0]}` を評価する
 
 ## Rules
 

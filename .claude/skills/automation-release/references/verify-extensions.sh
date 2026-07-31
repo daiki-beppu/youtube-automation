@@ -40,6 +40,10 @@ for name in "${extension_names[@]}"; do
   extension_dir="extensions/${name}"
   nix develop .#extensions --command pnpm -C "${extension_dir}" install --frozen-lockfile
   nix develop .#extensions --command pnpm -C "${extension_dir}" build
+  # 過去 run の zip が残っていると下の「唯一の1件」判定が誤 FAIL する。
+  # .output/ は gitignore 済みのビルド成果物で pnpm zip が再生成するため、
+  # 判定対象を今回の run が生成した zip だけに揃えてから zip する。
+  rm -f "${extension_dir}/.output"/*.zip
   nix develop .#extensions --command pnpm -C "${extension_dir}" zip
 
   version=$(nix develop .#extensions --command node -p "require('./${extension_dir}/package.json').version")
