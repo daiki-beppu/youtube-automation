@@ -213,8 +213,9 @@ def test_release_skill_delegates_extension_verification_to_single_source() -> No
         assert "期待名 zip が唯一の1件" in document
         assert "lockfile に差分がない" in document
     assert "`pnpm -v` が 9 系" not in release_skill
-    unreleased = changelog.split("## [Unreleased]", maxsplit=1)[1].split("\n## [", maxsplit=1)[0]
-    issue_entry = next(line for line in unreleased.splitlines() if "#1956" in line)
+    # エントリはリリース昇格で [Unreleased] から該当バージョンのセクションへ移るため、
+    # 探索範囲を [Unreleased] に限定すると昇格のたびに StopIteration で落ちる。
+    issue_entry = next(line for line in changelog.splitlines() if "#1956" in line)
     # #1956 は当時の再現環境を記録する履歴なので、現行 pin 更新では書き換えない。
     assert "Nix extensions shell 契約（Node 24 / pnpm 11.12.0" in issue_entry
     assert "frozen install → build → zip" in issue_entry
