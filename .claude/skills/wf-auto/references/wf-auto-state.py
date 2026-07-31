@@ -507,7 +507,8 @@ def _lease_mutex(root: Path):
 def acquire_lease(root: Path, *, now: float, ttl_seconds: int) -> str:
     if isinstance(ttl_seconds, bool) or ttl_seconds <= 0:
         raise ValueError("ttl_seconds は正の整数でなければなりません")
-    token = secrets.token_urlsafe(24)
+    # argparse が `-` 始まりの値を option と誤認しない文字集合に限定する。
+    token = secrets.token_hex(24)
     payload = {"token": token, "acquired_at": now, "expires_at": now + ttl_seconds}
     with _lease_mutex(root) as state_dir:
         lock_dir = state_dir / LEASE_DIR_NAME
