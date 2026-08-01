@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `fix(ci)`: any-usage-gate が diff の基準点を解決できず素通りしていた事象を解消した。基準点の解決順を `PRE_PUSH_DIFF_BASE` → `origin/main` → `main` とし、remote を 1 つも持たない隔離クローン（takt がタスクを実行する形態）でもローカル `main` を基準に判定する。従来の self-skip は client-side lefthook 時代の設計で CI がバックストップだったが、`ci_verify` は CI の前に立つため同じ skip がそのままゲートの消失になり、CI の 4 ジョブのうち any-gate だけが takt run で一度も実行されていなかった。どの ref も解決できない場合は試した ref を列挙して skip する。解決順は新設した `tests/test_any_usage_gate.py` が機械担保する（#3048）。
 - `fix(automation-release)`: リリース前検証の誤検出 2 件を解消した。`verify-extensions.sh` は `pnpm zip` の直前に `.output/*.zip` を掃除し、過去 run のビルド残骸によって「期待名 zip が唯一の1件」判定が `expected exactly one zip ... found N` で誤 FAIL しないようにする（判定の意図である「今回の run が期待名の zip だけを生成した」ことの検証力は維持する。`release-extensions.yml` が `.output/*.zip` を glob で Release asset へ上げるため、期待名以外の成果物を公開前に止める必要があるという本来の目的に合わせ、回帰テストも「事前残骸は掃除されて成功する」「zip コマンドが余分な成果物を生んだら停止する」の 2 本へ分けた）。あわせて semver 判定の BREAKING 検出を大小文字非依存（`grep -qiE`）にし、本リポジトリで実際に使われる `**Breaking:**` / `breaking(scope):` 表記の取りこぼしを解消した。v5.6.0 の prepare で破壊的変更 6 件を検出できず minor と提案した事象への対策。`.output/` 残骸・パイプ越しの exit code 誤読という 2 つの落とし穴も SKILL.md の Gotchas と extension checklist へ明文化した。
 
 ## [5.6.0] - 2026-07-31

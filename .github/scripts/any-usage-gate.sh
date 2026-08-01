@@ -2,7 +2,7 @@
 #
 # 新規追加行の広すぎる Any / any 型注釈を検出する。
 #
-# 判定基準: origin/main からの分岐点（merge-base）と現在の HEAD の差分。
+# 判定基準: main からの分岐点（merge-base）と現在の HEAD の差分。
 # diff の基準点は CI（ci.yml の any-gate ジョブ）が PRE_PUSH_DIFF_BASE で
 # 渡した値を再利用し、単体実行時のみ自前で解決する。
 
@@ -10,16 +10,29 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# 基準点となる ref の候補を優先順に並べる。CI と通常のチェックアウトは
+# origin/main を持つが、takt はタスクを remote を 1 つも持たない隔離クローンで
+# 実行するため origin/main が解決できない。クローンのローカル main はクローン
+# 時点の main そのものなので、フォールバックしても基準点は変わらない（#3048）。
+BASE_REF_CANDIDATES=(origin/main main)
+
 if [ -n "${PRE_PUSH_DIFF_BASE:-}" ]; then
   diff_base="${PRE_PUSH_DIFF_BASE}"
 else
-  BASE_REF="origin/main"
-  if ! git rev-parse --verify --quiet "${BASE_REF}^{commit}" >/dev/null; then
-    echo "any-usage-gate: ${BASE_REF} が無いためスキップします（CI / review で確認してください）。" >&2
+  base_ref=""
+  for candidate in "${BASE_REF_CANDIDATES[@]}"; do
+    if git rev-parse --verify --quiet "${candidate}^{commit}" >/dev/null; then
+      base_ref="${candidate}"
+      break
+    fi
+  done
+  # exit 0 はゲートを素通りさせるため、どの ref を試したのかを必ず示す。
+  if [ -z "${base_ref}" ]; then
+    echo "any-usage-gate: 基準点の ref が無いためスキップします（試した ref: ${BASE_REF_CANDIDATES[*]}）。CI / review で確認してください。" >&2
     exit 0
   fi
-  if ! diff_base=$(git merge-base "${BASE_REF}" HEAD 2>/dev/null); then
-    diff_base="${BASE_REF}"
+  if ! diff_base=$(git merge-base "${base_ref}" HEAD 2>/dev/null); then
+    diff_base="${base_ref}"
   fi
 fi
 
