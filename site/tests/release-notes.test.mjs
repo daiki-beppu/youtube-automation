@@ -27,14 +27,16 @@ test("本体とChrome拡張を区別し、詳細ページへリンクする", as
   assert.match(html, /href="\/ext-v0\.3\.0\/?"/);
 });
 
-test("詳細ページはタイトルを一度だけ表示し、サイドバーを新しい順に並べる", async () => {
+test("詳細ページはタイトルを一度だけ表示し、サイドバーを種類別・新しい順に並べる", async () => {
   const html = await readRelease("v5.6.0");
   const titleMatches = html.match(/<h1(?:\s[^>]*)?>youtube-automation v5\.6\.0<\/h1>/g) ?? [];
   const sidebar = html.match(/<nav data-blume-nav-tree>([\s\S]*?)<\/nav>/)?.[1] ?? "";
   const hrefs = [...sidebar.matchAll(/href="(\/[^"#]+)"/g)].map((match) => match[1]);
 
   assert.equal(titleMatches.length, 1);
-  assert.deepEqual(hrefs, ["/v5.6.0", "/ext-v0.3.0", "/v5.5.17", "/ext-v0.2.5"]);
+  assert.match(html, /youtube-automation ドキュメント/);
+  assert.ok(sidebar.indexOf("本体") < sidebar.indexOf("Chrome 拡張"));
+  assert.deepEqual(hrefs, ["/v5.6.0", "/v5.5.17", "/ext-v0.3.0", "/ext-v0.2.5"]);
 });
 
 test("アップデートコマンドをコピー可能なコードブロックで表示する", async () => {
