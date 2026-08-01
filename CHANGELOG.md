@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `refactor(tests)`: pytest lane registry の slow node 登録を module basename と test 識別子で表現し、`tests/` 以下の module 配置に依存しない lane 判定と再帰的な module 検索を可能にした（#3042）。
 - `refactor(tests)`: `tests.helpers.paths` に repository root、`tests/`、fixtures の共通 path helper を追加し、テストからの `Path(__file__)` 直接遡上を禁止する契約テストと tests 配置規約を導入した（#3041）。
 - `refactor(repository)`: 再配置後に役目を終えた旧 `youtube_automation.auth` package marker と、受領済みの plans 025〜027 を削除した。互換 façade、配布物、契約テスト、履歴受領先は維持した。
 - `refactor(packaging)`: リポジトリを責務別 layer へ再配置し、canonical owner への production import・receipt・active documentation を同期した。`youtube_automation.utils` と `infrastructure.legacy_utils` は下流向け compatibility façade として installed wheel でも維持し、削除・統合候補は `docs/architecture/reorganization-followups.md` に記録した。

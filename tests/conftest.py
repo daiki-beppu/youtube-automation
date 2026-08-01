@@ -99,14 +99,38 @@ SLOW_MODULES = frozenset(
 )
 
 SLOW_NODE_IDS = (
-    "tests/test_analytics_cli_integration.py::test_yt_analytics_returns_failure_when_subscribed_status_collection_fails",
-    "tests/test_audience_analytics.py::TestGetDeviceAnalytics::test_permanent_api_failure_keeps_api_specific_fail_soft_result",
-    "tests/test_audience_analytics.py::TestGetSubscribedStatusAnalytics::test_returns_empty_statuses_when_api_returns_no_rows",
-    "tests/test_audience_analytics.py::TestGetSubscribedStatusAnalytics::test_returns_error_shape_for_http_error",
-    "tests/test_benchmark_collector_channels_batch.py::TestFetchChannelsMetadata::test_retries_transient_api_failure_through_benchmark_collector",
-    "tests/test_comments_fetcher.py::test_retries_transient_api_failure_through_comments_entrypoint",
-    "tests/test_competitor_discovery.py::TestDiscoverCompetitors::test_retries_transient_api_failure_through_discovery_entrypoint",
-    "tests/test_playlist_manager.py::TestCreatePlaylist::test_retries_transient_api_failure_through_playlist_manager",
+    (
+        "test_analytics_cli_integration.py",
+        "test_yt_analytics_returns_failure_when_subscribed_status_collection_fails",
+    ),
+    (
+        "test_audience_analytics.py",
+        "TestGetDeviceAnalytics::test_permanent_api_failure_keeps_api_specific_fail_soft_result",
+    ),
+    (
+        "test_audience_analytics.py",
+        "TestGetSubscribedStatusAnalytics::test_returns_empty_statuses_when_api_returns_no_rows",
+    ),
+    (
+        "test_audience_analytics.py",
+        "TestGetSubscribedStatusAnalytics::test_returns_error_shape_for_http_error",
+    ),
+    (
+        "test_benchmark_collector_channels_batch.py",
+        "TestFetchChannelsMetadata::test_retries_transient_api_failure_through_benchmark_collector",
+    ),
+    (
+        "test_comments_fetcher.py",
+        "test_retries_transient_api_failure_through_comments_entrypoint",
+    ),
+    (
+        "test_competitor_discovery.py",
+        "TestDiscoverCompetitors::test_retries_transient_api_failure_through_discovery_entrypoint",
+    ),
+    (
+        "test_playlist_manager.py",
+        "TestCreatePlaylist::test_retries_transient_api_failure_through_playlist_manager",
+    ),
 )
 
 
@@ -172,9 +196,10 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     """Apply registered lane markers before pytest evaluates ``-m`` selection."""
     for item in items:
         module_name = Path(str(item.path)).name
+        node_identifier = item.nodeid.split("::", 1)[1]
         if module_name in REPO_CONTRACT_MODULES:
             item.add_marker(pytest.mark.repo_contract)
-        if module_name in SLOW_MODULES or any(item.nodeid.startswith(prefix) for prefix in SLOW_NODE_IDS):
+        if module_name in SLOW_MODULES or (module_name, node_identifier) in SLOW_NODE_IDS:
             item.add_marker(pytest.mark.slow)
 
 

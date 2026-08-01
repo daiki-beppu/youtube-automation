@@ -46,7 +46,7 @@ uv run pytest tests/ --ignore=tests/integration -n auto -m slow           # 実 
 ```
 
 - **既定は直列**（`addopts` には入れない）。単一ファイル・単一テストのデバッグ実行で worker 起動オーバーヘッドを毎回払わないため、また `-x` / `--pdb` など直列前提のオプションと干渉しないため。フルスイートを回すときに明示的に `-n auto` を付ける
-- **marker の境界**: `repo_contract` は production behavior を起動せず repository 内の docs / CI / workflow / packaging を読むテスト、`slow` は実 Nix・ffmpeg・socket TTL・外部 tool/process・意図的待機を含むテストに付ける。分類の単一 registry は `tests/conftest.py`、存在・CI無選別の回帰契約は `tests/test_pytest_lane_contract.py` が担う。両方に該当するテストは両 marker を持つ
+- **marker の境界**: `repo_contract` は production behavior を起動せず repository 内の docs / CI / workflow / packaging を読むテスト、`slow` は実 Nix・ffmpeg・socket TTL・外部 tool/process・意図的待機を含むテストに付ける。分類の単一 registry は `tests/conftest.py` にあり、module は basename、個別 node は basename と test 識別子で登録するため、`tests/` 以下の配置に依存しない。同じ basename の source module は登録できない。存在・CI無選別の回帰契約は `tests/test_pytest_lane_contract.py` が担う。両方に該当するテストは両 marker を持つ
 - **fast lane の位置づけ**: behavioral fast lane は Python product code の短い red/green loop 用で、repository-only / slow test と `tests/integration/` を除く。変更した対象の直接テストは marker にかかわらず別途実行し、PR 前または CI では無選別の全スイートを必ず通す
 
 変更種別ごとの最小入口:
