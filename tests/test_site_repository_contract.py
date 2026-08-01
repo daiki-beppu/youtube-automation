@@ -1,0 +1,118 @@
+"""公開リリースノートサイトの CI・配布・文書境界を検証する。"""
+
+from __future__ import annotations
+
+import subprocess
+import tarfile
+import tomllib
+import zipfile
+from pathlib import Path
+
+import yaml
+
+ROOT = Path(__file__).resolve().parents[1]
+WORKFLOW_PATH = ROOT / ".github/workflows/site.yml"
+
+
+def _workflow() -> dict[str, object]:
+    return yaml.safe_load(WORKFLOW_PATH.read_text(encoding="utf-8"))
+
+
+def _triggers(workflow: dict[str, object]) -> dict[str, object]:
+    triggers = workflow.get("on", workflow.get(True))
+    assert isinstance(triggers, dict)
+    return triggers
+
+
+def test_site_workflow_checks_every_stacked_pull_request_and_main_push() -> None:
+    workflow = _workflow()
+    triggers = _triggers(workflow)
+    expected_paths = [
+        "site/**",
+        "docs/release-notes/**",
+        ".github/workflows/site.yml",
+        "flake.nix",
+        "flake.lock",
+    ]
+
+    pull_request = triggers["pull_request"]
+    assert isinstance(pull_request, dict)
+    assert "branches" not in pull_request
+    assert pull_request["paths"] == expected_paths
+    assert triggers["push"] == {"branches": ["main"], "paths": expected_paths}
+
+
+def test_site_workflow_uses_frozen_dependencies_and_all_quality_gates() -> None:
+    workflow = _workflow()
+    jobs = workflow["jobs"]
+    assert isinstance(jobs, dict)
+    site = jobs["site"]
+    assert isinstance(site, dict)
+    steps = site["steps"]
+    assert isinstance(steps, list)
+
+    assert steps[0]["uses"] == "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
+    assert steps[1]["uses"] == "cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342"
+    commands = [step.get("run") for step in steps]
+    assert commands == [
+        None,
+        None,
+        "nix develop .#extensions --command pnpm -C site install --frozen-lockfile",
+        "nix develop .#extensions --command pnpm -C site check",
+        "nix develop .#extensions --command pnpm -C site build",
+        "nix develop .#extensions --command pnpm -C site test",
+    ]
+    assert not any("deploy" in str(step).lower() for step in steps)
+
+
+def test_site_generated_files_are_explicitly_ignored() -> None:
+    ignored = (ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
+    assert {"site/node_modules/", "site/.blume/", "site/dist/"} <= set(ignored)
+
+
+def test_python_build_configuration_excludes_site_workspace() -> None:
+    project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    wheel = project["tool"]["hatch"]["build"]["targets"]["wheel"]
+    sdist = project["tool"]["hatch"]["build"]["targets"]["sdist"]
+
+    assert wheel["packages"] == ["src/youtube_automation"]
+    assert all(not str(source).startswith("site") for source in wheel.get("force-include", {}))
+    assert all(not str(source).startswith("site") for source in sdist["only-include"])
+    assert all(not str(source).startswith("site") for source in sdist.get("force-include", {}))
+
+
+def test_built_python_archives_do_not_contain_site_workspace(tmp_path: Path) -> None:
+    dist = tmp_path / "dist"
+    result = subprocess.run(
+        ["uv", "build", "--out-dir", str(dist)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+
+    wheel = next(dist.glob("*.whl"))
+    sdist = next(dist.glob("*.tar.gz"))
+    with zipfile.ZipFile(wheel) as archive:
+        wheel_members = archive.namelist()
+    with tarfile.open(sdist) as archive:
+        sdist_members = [Path(member.name).parts[1:] for member in archive.getmembers()]
+
+    assert not [member for member in wheel_members if member == "site" or member.startswith("site/")]
+    assert not [parts for parts in sdist_members if parts and parts[0] == "site"]
+
+
+def test_repository_docs_define_the_site_as_a_typescript_exception_and_separate_distribution() -> None:
+    claude = (ROOT / "CLAUDE.md").read_text(encoding="utf-8")
+    development = (ROOT / "docs/development.md").read_text(encoding="utf-8")
+    architecture = (ROOT / "docs/architecture.md").read_text(encoding="utf-8")
+    adr = (ROOT / "docs/adr/0023-release-notes-site.md").read_text(encoding="utf-8")
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+
+    assert "`site/`" in claude and "TypeScript" in claude
+    assert "## リリースノートサイト開発" in development
+    assert "Python wheel / sdist には同梱しない" in development
+    assert "**release notes site**" in architecture
+    assert "Blume" in adr and "Cloudflare Pages" in adr
+    assert "公開リリースノート" in readme

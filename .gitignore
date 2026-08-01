@@ -49,6 +49,11 @@ extensions/*/.output/
 extensions/*/test-results/
 extensions/*/playwright-report/
 
+# Release notes site (Blume)
+site/node_modules/
+site/.blume/
+site/dist/
+
 # Terraform
 terraform.tfvars
 *.tfstate

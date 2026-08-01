@@ -54,3 +54,7 @@ ADR-0001 以降、TS リライトは同一リポの `feat/ts-rewrite` → main �
 - frontend の lint / typecheck / unit / e2e / build と、wheel / sdist asset 同梱 smoke を品質ゲートにする。
 
 構成・配布境界の正は ADR-0013 と `docs/development.md::dashboard 開発` とする。他の TypeScript 実装は従来どおり tayk 専用リポジトリで行う。
+
+## Amendment: 公開リリースノートサイト限定 TypeScript 例外（2026-08-01, #3056）
+
+`docs/release-notes/*.md` を公開する静的サイトに限り、`site/` 内の Blume 設定・Astro page・schema・test と Node toolchain を許可する。この例外は Python 製品や tayk core の実装ではなく、生成物は Python wheel / sdist に含めない。Cloudflare Pages への独立配信、許可する責務、品質ゲートの正は ADR-0023 と `docs/development.md::リリースノートサイト開発` とする。
