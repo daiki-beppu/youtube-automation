@@ -10,7 +10,9 @@ from pathlib import Path
 
 import yaml
 
-ROOT = Path(__file__).resolve().parents[1]
+from tests.helpers.paths import REPO_ROOT
+
+ROOT = REPO_ROOT
 WORKFLOW_PATH = ROOT / ".github/workflows/site.yml"
 
 

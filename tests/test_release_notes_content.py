@@ -7,7 +7,9 @@ from pathlib import Path
 import pytest
 import yaml
 
-ROOT = Path(__file__).resolve().parents[1]
+from tests.helpers.paths import REPO_ROOT
+
+ROOT = REPO_ROOT
 NOTES_DIR = ROOT / "docs" / "release-notes"
 EXPECTED_NOTES = {
     "v5.5.17.md": (
