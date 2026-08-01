@@ -58,6 +58,7 @@ uv run pytest tests/ --ignore=tests/integration -n auto -m slow           # 実 
 | docs / CI / packaging / hook | repository contract lane + 対応 file の直接 test | slow lane（tool 契約を含む場合）+ unit-only full suite |
 | extensions | 対象 workspace の既存 pnpm lint / type / Vitest / Playwright | Extensions CI（pytest marker 対象外） |
 | dashboard | `dashboard/` の lint / typecheck / test | test:e2e / build + Python server・wheel smoke |
+| release notes site | `site/` の check / test | build + Python 配布境界 test |
 - **CI では `-n auto` を有効化済み**（`.github/workflows/ci.yml` の test ジョブ）
 - **外部 GitHub Actions は full commit SHA で固定**し、追跡する stable version を同じ `uses:` 行のコメントに残す。複数 workflow で同じ action を使う場合も SHA/version を統一し、`tests/test_github_actions_pinning.py` で mutable ref・drift・未棚卸し action を拒否する
 - **CI の changed-path 分岐**: `.github/scripts/classify-ci-paths.sh` が PR と `main` push の差分を Python / packaging / Windows / ADR / 3 helper に分類する。branch protection の required check である `lint` / `test` job は path filter や job-level `if` で消さず、extension-only 変更では成功する軽量 step を返して Nix・uv・pytest を起動しない。空 diff は全 gate を有効化する fail-safe とし、分類変更時は `tests/test_actions_parallel_workflows.py` の対応表も更新する
@@ -98,6 +99,21 @@ component 追加前は対象 workspace で `shadcn info` と registry/公式 doc
 - `dashboard build` は Vite output を `src/youtube_automation/dashboard_dist/` へ生成する。Vite の production build は明示的に実行し、Python build backend から Node.js を暗黙起動しない。
 - `dashboard_dist/` は package data として wheel / sdist に同梱し、runtime は `importlib.resources` で解決する。candidate wheel の非 editable install smoke で `index.html` と hashed asset、API 配信を確認する。
 - frontend source を変えた PR は build output の同期差分、frontend 5 gate、Python server test、wheel smoke を通す。
+
+## リリースノートサイト開発
+
+`site/` は ADR-0023 / ADR-0021 で許可された Blume ベースの公開静的サイトで、`docs/release-notes/*.md` を唯一のコンテンツソースとして読む。Node.js / pnpm は dashboard・extensions と同じ Nix toolchain を使い、ambient `pnpm` や `npx` は使わない。
+
+```bash
+nix develop .#extensions --command pnpm -C site install --frozen-lockfile
+nix develop .#extensions --command pnpm -C site check
+nix develop .#extensions --command pnpm -C site test
+nix develop .#extensions --command pnpm -C site build
+```
+
+- `site/.blume/` と `site/dist/` は再生成可能な build output であり commit しない。CI は content/schema check、一覧・詳細の契約 test、production build を実行する。
+- 静的サイトは Cloudflare Pages へ独立して配信する。preview / production の公開処理はホスティング workflow が所有し、この品質ゲートは deploy しない。
+- `site/` の source、lockfile、生成物は Python wheel / sdist には同梱しない。Hatch は `src/youtube_automation/` と明示した force-include だけを扱い、配布境界 test が実 archive に `site/` が無いことを確認する。
 
 ## skill 開発ループ（編集 → 検証 → 配布）
 

@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `ci(site)`: Blume リリースノートサイトの frozen install / schema check / test / build を stacked PR と `main` push で検証する専用 workflow を追加した。`site/` の生成物・依存を明示的に gitignore し、実際に build した Python wheel / sdist へサイト workspace が混入しない配布境界を契約テストで固定。公開サイトを ADR-0021 の限定 TypeScript 例外として ADR-0023、CLAUDE.md、architecture、development guide、README に反映した（#3056）。
 - `docs(release-notes)`: 運営者向け公開リリースノートの frontmatter・本文・表記契約を定義し、v5.5.17 / v5.6.0 / ext-v0.2.5 / ext-v0.3.0 の初期 4 件を `docs/release-notes/` へ追加した。非公開チャット向け digest を Web 用 Markdown へ移植し、更新判断に必要な新機能・改善・修正・移行手順を保ちながら、コミュニティ固有記号、issue・PR 番号、内部実装名、本文全体のコードブロックを除去した。必須 frontmatter、所定見出し、タグと Release リンクの一致、公開表記は契約テストで機械担保する（#3054）。
 
 ### Fixed
