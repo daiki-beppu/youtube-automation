@@ -31,7 +31,7 @@ jobs:
         run: nix develop .#extensions --command pnpm -C site install --frozen-lockfile
       - name: Check content and types
         run: nix develop .#extensions --command pnpm -C site check
-      - name: Test
-        run: nix develop .#extensions --command pnpm -C site test
       - name: Build
         run: nix develop .#extensions --command pnpm -C site build
+      - name: Test
+        run: nix develop .#extensions --command pnpm -C site test

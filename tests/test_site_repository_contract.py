@@ -59,8 +59,8 @@ def test_site_workflow_uses_frozen_dependencies_and_all_quality_gates() -> None:
         None,
         "nix develop .#extensions --command pnpm -C site install --frozen-lockfile",
         "nix develop .#extensions --command pnpm -C site check",
-        "nix develop .#extensions --command pnpm -C site test",
         "nix develop .#extensions --command pnpm -C site build",
+        "nix develop .#extensions --command pnpm -C site test",
     ]
     assert not any("deploy" in str(step).lower() for step in steps)
 
