@@ -112,7 +112,8 @@ nix develop .#extensions --command pnpm -C site build
 ```
 
 - `site/.blume/` と `site/dist/` は再生成可能な build output であり commit しない。CI は content/schema check、一覧・詳細の契約 test、production build を実行する。
-- 静的サイトは Cloudflare Pages へ独立して配信する。preview / production の公開処理はホスティング workflow が所有し、この品質ゲートは deploy しない。
+- 静的サイトは Cloudflare Pages へ独立して配信する。preview / production の公開処理は Cloudflare Pages Git integration が所有し、この品質ゲートは deploy しない。
+- Cloudflare Pages の production / preview 設定、公開 URL、障害復旧用 Direct Upload は [`docs/release-notes-deployment.md`](release-notes-deployment.md) を参照する。
 - `site/` の source、lockfile、生成物は Python wheel / sdist には同梱しない。Hatch は `src/youtube_automation/` と明示した force-include だけを扱い、配布境界 test が実 archive に `site/` が無いことを確認する。
 
 ## skill 開発ループ（編集 → 検証 → 配布）
