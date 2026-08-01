@@ -1,0 +1,95 @@
+---
+import { getCollection } from "astro:content";
+import data from "blume:data";
+import PageLayout from "blume/components/layout/PageLayout.astro";
+import "../styles/release-notes.css";
+
+type ReleaseKind = "main" | "extension";
+
+interface ReleaseData {
+  kind: ReleaseKind;
+  released_at: Date;
+  summary: string;
+  version: string;
+}
+
+const routeByEntryId = new Map(data.routes.map((route) => [route.entryId, route.path]));
+const releases = (await getCollection("docs"))
+  .map((entry) => {
+    const release = entry.data as typeof entry.data & ReleaseData;
+    return {
+      ...release,
+      href: routeByEntryId.get(entry.id) ?? `/${entry.id.replace(/\.mdx?$/, "")}`,
+    };
+  })
+  .sort((left, right) => {
+    const dateOrder = right.released_at.getTime() - left.released_at.getTime();
+    if (dateOrder !== 0) return dateOrder;
+    return left.kind === right.kind ? 0 : left.kind === "main" ? -1 : 1;
+  });
+
+const kindLabel: Record<ReleaseKind, string> = {
+  main: "本体",
+  extension: "Chrome 拡張",
+};
+const releaseKinds: ReleaseKind[] = ["main", "extension"];
+
+const formatDate = (date: Date) =>
+  new Intl.DateTimeFormat("ja-JP", {
+    dateStyle: "long",
+    timeZone: "UTC",
+  }).format(date);
+---
+
+<PageLayout
+  site={{ title: data.config.title, description: data.config.description }}
+  logo={data.config.logo}
+  banner={data.config.banner}
+  analytics={data.config.analytics}
+  navigation={data.navigation}
+  favicon={data.config.favicon}
+  fontCssVars={data.fontCssVars}
+  themeMode={data.config.theme.mode}
+  searchEnabled={data.config.search.enabled}
+  siteUrl={data.config.site}
+  ogEnabled={data.config.og.enabled}
+  page={{
+    title: "リリースノート | youtube-automation",
+    description: data.config.description,
+  }}
+>
+  <main class="release-shell">
+    <header class="release-hero">
+      <p class="release-eyebrow">RELEASE NOTES</p>
+      <h1>最新のアップデート</h1>
+      <p>日々の YouTube 運営を、もっと速く、安全に。新機能と改善内容をお知らせします。</p>
+    </header>
+
+    <div class="release-sections">
+      {releaseKinds.map((kind) => (
+        <section class="release-section" data-release-kind={kind}>
+          <h2>{kindLabel[kind]}</h2>
+          <ol class="release-list" aria-label={`${kindLabel[kind]}のリリース一覧`}>
+            {releases.filter((release) => release.kind === kind).map((release) => (
+              <li>
+                <a class="release-card" href={release.href}>
+                  <div class="release-meta">
+                    <span class:list={["release-kind", `release-kind--${release.kind}`]}>
+                      {kindLabel[release.kind]}
+                    </span>
+                    <time datetime={release.released_at.toISOString()}>
+                      {formatDate(release.released_at)}
+                    </time>
+                  </div>
+                  <h3>{release.version}</h3>
+                  <p>{release.summary}</p>
+                  <span class="release-link" aria-hidden="true">詳しく見る <span>→</span></span>
+                </a>
+              </li>
+            ))}
+          </ol>
+        </section>
+      ))}
+    </div>
+  </main>
+</PageLayout>
