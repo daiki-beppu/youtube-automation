@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from tests.helpers.hcl import extract_block, read_file, strip_hcl_comments
+from tests.helpers.paths import REPO_ROOT
 
 
 class TestStripHclComments:
@@ -40,7 +41,7 @@ class TestReadFile:
     def test_missing_file_calls_pytest_fail(self):
         # `_REPO_ROOT` 配下のリポジトリには確実に存在しない相対パスを与え、
         # `relative_to` を成立させた上で ``pytest.fail`` の発火だけを観測する。
-        repo_root = Path(__file__).resolve().parent.parent.parent
+        repo_root = REPO_ROOT
         missing = repo_root / "__definitely_missing_file__.txt"
         assert not missing.exists()
         with pytest.raises(pytest.fail.Exception):

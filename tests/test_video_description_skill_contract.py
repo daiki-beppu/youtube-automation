@@ -1,6 +1,6 @@
-from pathlib import Path
+from tests.helpers.paths import REPO_ROOT
 
-_REPO_ROOT = Path(__file__).resolve().parents[1]
+_REPO_ROOT = REPO_ROOT
 _VIDEO_DESCRIPTION_SKILL_MD = _REPO_ROOT / ".claude" / "skills" / "video-description" / "SKILL.md"
 
 

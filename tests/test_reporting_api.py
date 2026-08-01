@@ -6,15 +6,15 @@ monkeypatch で吸収する。`tests/test_ctr_analytics.py` の流儀に準拠�
 
 from __future__ import annotations
 
-from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
 
+from tests.helpers.paths import FIXTURES_DIR
 from youtube_automation.core.errors import ConfigError, ValidationError, YouTubeAPIError
 from youtube_automation.infrastructure.youtube.reporting_api import ReportingAPIClient
 
-_FIXTURE_DIR = Path(__file__).resolve().parent / "fixtures" / "reporting_api"
+_FIXTURE_DIR = FIXTURES_DIR / "reporting_api"
 _FIXTURE = _FIXTURE_DIR / "channel_reach_basic_a1_sample.csv"
 _FIXTURE_COMBINED = _FIXTURE_DIR / "channel_reach_combined_a1_sample.csv"
 

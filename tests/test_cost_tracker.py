@@ -21,6 +21,7 @@ from pathlib import Path
 
 import pytest
 
+from tests.helpers.paths import REPO_ROOT
 from youtube_automation.infrastructure import cost_tracker
 
 
@@ -266,7 +267,7 @@ def test_generate_image_entrypoint_starts_when_fcntl_is_unavailable():
     When yt-generate-image のエントリーポイントを --help で起動する
     Then ImportError にならず argparse の正常終了まで到達する。
     """
-    repo_root = Path(__file__).resolve().parents[1]
+    repo_root = REPO_ROOT
     env = os.environ.copy()
     env["PYTHONPATH"] = str(repo_root / "src")
     env["PYTHONIOENCODING"] = "utf-8"

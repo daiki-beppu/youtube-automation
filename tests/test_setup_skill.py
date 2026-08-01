@@ -8,9 +8,10 @@ from pathlib import Path
 
 import yaml
 
+from tests.helpers.paths import REPO_ROOT
 from youtube_automation.commands.system import doctor
 
-_REPO_ROOT = Path(__file__).resolve().parent.parent
+_REPO_ROOT = REPO_ROOT
 _SKILLS_DIR = _REPO_ROOT / ".claude" / "skills"
 _SETUP_SKILL = _SKILLS_DIR / "setup" / "SKILL.md"
 _SETUP_RUNBOOK = _SKILLS_DIR / "setup" / "references" / "check-runbook.md"

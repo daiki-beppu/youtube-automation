@@ -13,7 +13,9 @@ import json
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from tests.helpers.paths import FIXTURES_DIR, REPO_ROOT
+
+sys.path.insert(0, str(REPO_ROOT))
 
 import pytest
 
@@ -139,7 +141,7 @@ def _setup_channel_with_localizations(tmp_path: Path, loc_data: dict) -> Path:
     """sample_channel をベースに localizations.json を上書きしたチャンネルディレクトリを作る."""
     import shutil
 
-    src = Path(__file__).resolve().parent / "fixtures" / "sample_channel"
+    src = FIXTURES_DIR / "sample_channel"
     dst = tmp_path / "channel"
     shutil.copytree(src, dst)
     # localizations を上書き

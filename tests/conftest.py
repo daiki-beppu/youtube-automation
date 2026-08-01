@@ -25,14 +25,16 @@ from pathlib import Path
 
 import pytest
 
+from tests.helpers.paths import FIXTURES_DIR, REPO_ROOT
+
 # editable install されていない場合に備えて src/ を sys.path に追加
-_AUTOMATION_DIR = Path(__file__).resolve().parent.parent
+_AUTOMATION_DIR = REPO_ROOT
 _SRC_DIR = _AUTOMATION_DIR / "src"
 if str(_SRC_DIR) not in sys.path:
     sys.path.insert(0, str(_SRC_DIR))
 
 # テスト用フィクスチャディレクトリ（git 管理下のオリジナル）
-_FIXTURE_CHANNEL_DIR = Path(__file__).resolve().parent / "fixtures" / "sample_channel"
+_FIXTURE_CHANNEL_DIR = FIXTURES_DIR / "sample_channel"
 _OP_READ_DISABLED_ENV = "YOUTUBE_AUTOMATION_DISABLE_OP_READ"
 _TEST_TMP_PREFIX = "yt-automation-tests-"
 # conftest が CHANNEL_DIR を自動設定したことを示すマーカー。
@@ -66,6 +68,7 @@ REPO_CONTRACT_MODULES = frozenset(
         "test_skill_frontmatter_yaml.py",
         "test_suno_skill_doc.py",
         "test_takt_runtime_prepare.py",
+        "test_tests_layout_contract.py",
         "test_upgrade_guide_command_guard.py",
         "test_video_description_skill_contract.py",
         "test_wf_new_analytics_fallback_skill_contract.py",

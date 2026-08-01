@@ -9,24 +9,16 @@ from pathlib import Path
 import pytest
 import yaml
 
+from tests.helpers.paths import REPO_ROOT
 from youtube_automation.commands.suno.generate_suno_prompts import build_prompt_entries, generate, main
 from youtube_automation.configuration import skills as skill_config
 from youtube_automation.core.errors import ConfigError
 
 # `_skills/<skill>/config.default.yaml` の解決元になる editable install のソースツリー
-_DEFAULT_YAML = Path(__file__).resolve().parents[1] / ".claude" / "skills" / "suno" / "config.default.yaml"
-_SUNO_LYRIC_DEFAULT_YAML = (
-    Path(__file__).resolve().parents[1] / ".claude" / "skills" / "suno-lyric" / "config.default.yaml"
-)
-_SKILL_MD = Path(__file__).resolve().parents[1] / ".claude" / "skills" / "suno" / "SKILL.md"
-_CONFIG_RULES_MD = (
-    Path(__file__).resolve().parents[1]
-    / ".claude"
-    / "skills"
-    / "channel-new"
-    / "references"
-    / "config-generation-rules.md"
-)
+_DEFAULT_YAML = REPO_ROOT / ".claude" / "skills" / "suno" / "config.default.yaml"
+_SUNO_LYRIC_DEFAULT_YAML = REPO_ROOT / ".claude" / "skills" / "suno-lyric" / "config.default.yaml"
+_SKILL_MD = REPO_ROOT / ".claude" / "skills" / "suno" / "SKILL.md"
+_CONFIG_RULES_MD = REPO_ROOT / ".claude" / "skills" / "channel-new" / "references" / "config-generation-rules.md"
 
 
 @pytest.fixture

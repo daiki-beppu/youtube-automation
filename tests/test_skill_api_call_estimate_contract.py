@@ -29,7 +29,9 @@ from pathlib import Path
 
 import pytest
 
-ROOT = Path(__file__).resolve().parents[1]
+from tests.helpers.paths import REPO_ROOT
+
+ROOT = REPO_ROOT
 SKILLS_DIR = ROOT / ".claude" / "skills"
 
 # --- 1 段目: CLI → 課金 API 分類（実装の execute() / クライアント呼び出しを根拠に判定） ---

@@ -2,9 +2,10 @@
 
 import sys
 from datetime import date
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from tests.helpers.paths import REPO_ROOT
+
+sys.path.insert(0, str(REPO_ROOT))
 
 from youtube_automation.infrastructure.analytics.benchmark_analyzer import (
     compute_daily_views,

@@ -12,7 +12,9 @@ from types import SimpleNamespace
 
 import pytest
 
-ROOT = Path(__file__).parents[1]
+from tests.helpers.paths import REPO_ROOT
+
+ROOT = REPO_ROOT
 SCRIPT = ROOT / ".claude/skills/thumbnail-iterate/references/thumbnail-iterate-state.py"
 
 

@@ -4,9 +4,10 @@ from pathlib import Path
 
 import yaml
 
+from tests.helpers.paths import REPO_ROOT
 from youtube_automation.commands.system.skills_sync import bundled_skill_names
 
-ROOT = Path(__file__).parents[1]
+ROOT = REPO_ROOT
 CHANNEL_NEW = ROOT / ".claude/skills/channel-new/SKILL.md"
 ANALYSIS_MODE = ROOT / ".claude/skills/channel-new/references/analysis-mode.md"
 

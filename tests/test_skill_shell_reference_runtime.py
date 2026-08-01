@@ -7,7 +7,9 @@ import os
 import subprocess
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+from tests.helpers.paths import REPO_ROOT
+
+ROOT = REPO_ROOT
 SKILLS = ROOT / ".claude" / "skills"
 
 

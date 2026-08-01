@@ -8,7 +8,9 @@ from pathlib import Path
 
 import pytest
 
-ROOT = Path(__file__).resolve().parents[1]
+from tests.helpers.paths import REPO_ROOT
+
+ROOT = REPO_ROOT
 RECEIPT_PATH = ROOT / "docs/architecture/b6-integration-receipt.json"
 B3_RECEIPT_PATH = ROOT / "docs/architecture/b3-owner-receipt.json"
 

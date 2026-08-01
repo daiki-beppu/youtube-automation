@@ -7,9 +7,10 @@ from pathlib import Path
 
 import pytest
 
+from tests.helpers.paths import REPO_ROOT
 from youtube_automation.commands.system import doctor
 
-_REPO_ROOT = Path(__file__).resolve().parents[1]
+_REPO_ROOT = REPO_ROOT
 _FRESHNESS_RULES = _REPO_ROOT / ".claude" / "skills" / "collection-ideate" / "references" / "freshness-rules.md"
 
 

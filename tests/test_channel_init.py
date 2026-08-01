@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+from tests.helpers.paths import REPO_ROOT
 from youtube_automation.commands.channel.channel_init import (
     _resolve_target_dir,
     main,
@@ -640,14 +641,7 @@ def test_channel_init_does_not_generate_legacy_upload_settings_file(tmp_path):
 
 def test_channel_new_legacy_upload_settings_template_is_removed() -> None:
     """#1310: sync で配布する旧 upload settings template を復活させない。"""
-    template_path = (
-        Path(__file__).resolve().parents[1]
-        / ".claude"
-        / "skills"
-        / "channel-new"
-        / "references"
-        / "upload-settings-template.json"
-    )
+    template_path = REPO_ROOT / ".claude" / "skills" / "channel-new" / "references" / "upload-settings-template.json"
 
     assert not template_path.exists()
 
@@ -819,7 +813,7 @@ def test_target_resolves_from_cwd_when_target_and_env_omitted(tmp_path, monkeypa
 
 def test_pyproject_registers_yt_channel_init_entry_point():
     # Given: リポジトリルートの pyproject.toml
-    root = Path(__file__).resolve().parent.parent
+    root = REPO_ROOT
     pyproject = root / "pyproject.toml"
 
     # When: [project.scripts] を読む

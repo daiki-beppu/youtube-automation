@@ -27,7 +27,9 @@ from types import SimpleNamespace
 
 import pytest
 
-_ROOT = Path(__file__).resolve().parents[1]
+from tests.helpers.paths import REPO_ROOT
+
+_ROOT = REPO_ROOT
 _SUNO_ROOT = "youtube_automation.domains.suno"
 _DOWNLOADED_ROOT = f"{_SUNO_ROOT}.downloaded"
 _METADATA_ROOT = "youtube_automation.domains.metadata"

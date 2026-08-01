@@ -6,7 +6,9 @@ import os
 import subprocess
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+from tests.helpers.paths import REPO_ROOT
+
+REPO_ROOT = REPO_ROOT
 SETUP_SKILL = REPO_ROOT / ".claude" / "skills" / "setup" / "SKILL.md"
 CHANNEL_NEW_SKILL = REPO_ROOT / ".claude" / "skills" / "channel-new" / "SKILL.md"
 GCP_BOOTSTRAP_MD = REPO_ROOT / ".claude" / "skills" / "channel-new" / "references" / "gcp-bootstrap.md"

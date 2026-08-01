@@ -5,9 +5,10 @@ from __future__ import annotations
 import ast
 import subprocess
 import sys
-from pathlib import Path
 
-ROOT = Path(__file__).parents[1]
+from tests.helpers.paths import REPO_ROOT
+
+ROOT = REPO_ROOT
 TESTS = ROOT / "tests"
 CONFTEST = TESTS / "conftest.py"
 

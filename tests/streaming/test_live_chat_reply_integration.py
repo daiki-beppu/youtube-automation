@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import re
-from pathlib import Path
 
 from tests.helpers.hcl import extract_block, read_file, strip_hcl_comments
+from tests.helpers.paths import REPO_ROOT
 from tests.streaming._helpers import _MAIN_TF, _STREAMING_DIR, _VARIABLES_TF, _VERSIONS_TF
 
-_REPO_ROOT = Path(__file__).resolve().parents[2]
+_REPO_ROOT = REPO_ROOT
 _UNIT = _STREAMING_DIR / "templates" / "live-chat-reply.service.tftpl"
 _DEPLOY_SCRIPT = _REPO_ROOT / ".claude/skills/streaming/references/deploy_live_chat.sh"
 

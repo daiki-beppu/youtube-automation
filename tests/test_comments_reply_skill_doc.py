@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-_REPO_ROOT = Path(__file__).resolve().parent.parent
+from tests.helpers.paths import REPO_ROOT
+
+_REPO_ROOT = REPO_ROOT
 SKILL_MD = _REPO_ROOT / ".claude" / "skills" / "comments-reply" / "SKILL.md"
 REVIEW_RUBRIC_MD = SKILL_MD.parent / "references" / "review-rubric.md"
 

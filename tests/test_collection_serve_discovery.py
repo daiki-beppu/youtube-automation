@@ -7,10 +7,10 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from pathlib import Path
 
 import pytest
 
+from tests.helpers.paths import FIXTURES_DIR
 from youtube_automation.commands.collections.collection_serve_discovery import (
     DISCOVERY_HEARTBEAT_SECONDS,
     DISCOVERY_PATH,
@@ -113,7 +113,7 @@ def test_registry_returns_all_servers_in_deterministic_base_url_order(registry_h
 
 
 def test_registry_matches_the_cross_language_golden_fixture(registry_http):
-    fixture_path = Path(__file__).parent / "fixtures" / "collection_serve_discovery_v1.json"
+    fixture_path = FIXTURES_DIR / "collection_serve_discovery_v1.json"
     expected = json.loads(fixture_path.read_text(encoding="utf-8"))
     state = RegistryState(ttl_seconds=30, clock=FakeClock(100.0))
     state.register(

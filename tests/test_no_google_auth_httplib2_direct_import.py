@@ -18,7 +18,9 @@ from pathlib import Path
 
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+from tests.helpers.paths import REPO_ROOT
+
+REPO_ROOT = REPO_ROOT
 SRC_DIR = REPO_ROOT / "src" / "youtube_automation"
 
 _FORBIDDEN_MODULE = "google_auth_httplib2"

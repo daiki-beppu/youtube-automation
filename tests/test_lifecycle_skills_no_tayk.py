@@ -17,7 +17,9 @@ from typing import Final
 
 import pytest
 
-_REPO_ROOT: Final[Path] = Path(__file__).resolve().parent.parent
+from tests.helpers.paths import REPO_ROOT
+
+_REPO_ROOT: Final[Path] = REPO_ROOT
 _SKILLS_DIR: Final[Path] = _REPO_ROOT / ".claude" / "skills"
 
 _LIFECYCLE_SKILL_NAMES: Final[tuple[str, ...]] = (

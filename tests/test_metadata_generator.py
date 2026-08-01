@@ -10,7 +10,9 @@ import shutil
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from tests.helpers.paths import FIXTURES_DIR, REPO_ROOT
+
+sys.path.insert(0, str(REPO_ROOT))
 
 import pytest
 import yaml
@@ -528,7 +530,7 @@ class TestGenerateCompleteCollectionMetadata:
         from youtube_automation.configuration import reset as reset_config
         from youtube_automation.configuration.skills import reset as reset_skill_config
 
-        fixture = Path(__file__).resolve().parent / "fixtures" / "sample_channel"
+        fixture = FIXTURES_DIR / "sample_channel"
         channel = tmp_path / "sample_channel"
         shutil.copytree(fixture, channel)
         skills_dir = channel / "config" / "skills"
@@ -742,7 +744,7 @@ class TestCrossfade:
         from youtube_automation.configuration import reset as reset_config
         from youtube_automation.configuration.skills import reset as reset_skill_config
 
-        fixture = Path(__file__).resolve().parent / "fixtures" / "sample_channel"
+        fixture = FIXTURES_DIR / "sample_channel"
         channel = tmp_path / "sample_channel"
         shutil.copytree(fixture, channel)
         skills_dir = channel / "config" / "skills"
@@ -771,7 +773,7 @@ class TestCrossfade:
         from youtube_automation.configuration import reset as reset_config
         from youtube_automation.configuration.skills import reset as reset_skill_config
 
-        fixture = Path(__file__).resolve().parent / "fixtures" / "sample_channel"
+        fixture = FIXTURES_DIR / "sample_channel"
         channels: list[Path] = []
         for name, channel_name, crossfade in [
             ("channel-a", "Channel A", 2.0),

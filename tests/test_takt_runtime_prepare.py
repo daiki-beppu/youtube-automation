@@ -13,9 +13,10 @@ from pathlib import Path
 
 import pytest
 
+from tests.helpers.paths import REPO_ROOT
 from youtube_automation.commands.system.preflight import RUNTIME_PATH_ENV_VARS
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = REPO_ROOT
 PREPARE_SCRIPT = ROOT / ".takt" / "runtime-prepare.sh"
 
 

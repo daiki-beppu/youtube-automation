@@ -29,6 +29,7 @@ from unittest.mock import DEFAULT, patch
 
 import pytest
 
+from tests.helpers.paths import REPO_ROOT
 from youtube_automation.commands.media.generate_loop_video import (
     _build_parser,
     resolve_collection_paths,
@@ -410,9 +411,7 @@ class TestResolvePrompt:
 # ---------- 強度制御は motion_targets の文言のみで行う (Issue #1747) ----------
 
 # 同梱 default config を実物のまま検証する（外部 IO ではなくリポジトリ内資産の読み取り）。
-_LOOP_VIDEO_DEFAULT_CONFIG = (
-    Path(__file__).resolve().parents[1] / ".claude" / "skills" / "loop-video" / "config.default.yaml"
-)
+_LOOP_VIDEO_DEFAULT_CONFIG = REPO_ROOT / ".claude" / "skills" / "loop-video" / "config.default.yaml"
 
 # 既定 template が付加してはいけない強度断定語（issue #1747 の regression 対象）
 _INTENSITY_SOFTENERS = ("subtle", "gentle", "barely perceptible")

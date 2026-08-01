@@ -8,12 +8,13 @@ from pathlib import Path
 import pytest
 import yaml
 
+from tests.helpers.paths import REPO_ROOT
 from youtube_automation.core.errors import ValidationError
 from youtube_automation.domains.thumbnail import archive as thumbnail_archive
 
 
 def _repo_root() -> Path:
-    return Path(__file__).resolve().parents[1]
+    return REPO_ROOT
 
 
 def _script_path() -> Path:

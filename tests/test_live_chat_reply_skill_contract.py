@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import yaml
 
-_ROOT = Path(__file__).resolve().parents[1]
+from tests.helpers.paths import REPO_ROOT
+
+_ROOT = REPO_ROOT
 _SKILLS = _ROOT / ".claude" / "skills"
 _LIVE_CHAT_SKILL = _SKILLS / "live-chat-reply" / "SKILL.md"
 

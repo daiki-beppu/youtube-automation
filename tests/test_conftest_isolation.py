@@ -7,12 +7,13 @@ from unittest.mock import Mock
 
 import pytest
 
+from tests.helpers.paths import TESTS_DIR
 from youtube_automation import configuration
 
 
 @pytest.fixture
 def suite_config(request: pytest.FixtureRequest) -> ModuleType:
-    expected = Path(__file__).with_name("conftest.py").resolve()
+    expected = (TESTS_DIR / "conftest.py").resolve()
     for _name, plugin in request.config.pluginmanager.list_name_plugin():
         module_path = getattr(plugin, "__file__", None)
         if module_path and Path(module_path).resolve() == expected:

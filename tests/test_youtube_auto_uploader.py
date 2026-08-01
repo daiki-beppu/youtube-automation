@@ -27,9 +27,10 @@ import pytest
 from googleapiclient.errors import HttpError
 from httplib2 import Response
 
+from tests.helpers.paths import REPO_ROOT
 from youtube_automation.core.errors import ValidationError
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(REPO_ROOT))
 
 
 def test_main_without_action_prints_usage(monkeypatch, capsys):

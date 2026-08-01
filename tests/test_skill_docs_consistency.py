@@ -12,7 +12,9 @@ import pandas as pd
 import pytest
 import yaml
 
-ROOT = Path(__file__).resolve().parents[1]
+from tests.helpers.paths import REPO_ROOT
+
+ROOT = REPO_ROOT
 
 
 def test_all_skills_use_machine_readable_chain_block() -> None:

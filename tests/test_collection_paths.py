@@ -9,7 +9,9 @@ import sys
 from pathlib import Path
 from typing import ClassVar
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from tests.helpers.paths import REPO_ROOT
+
+sys.path.insert(0, str(REPO_ROOT))
 
 import pytest
 
@@ -559,7 +561,7 @@ class TestLiteralCollectionSubpathRegression:
     ]
 
     def _repo_root(self) -> Path:
-        return Path(__file__).resolve().parents[1]
+        return REPO_ROOT
 
     def _violates(self, line: str) -> bool:
         """コメント行を除く行で、リテラル Path 演算を検出する。

@@ -32,10 +32,11 @@ from googleapiclient.errors import HttpError
 from httplib2 import Response
 from PIL import Image
 
+from tests.helpers.paths import REPO_ROOT
 from youtube_automation.core.errors import AuthError, ConfigError, YouTubeAPIError
 from youtube_automation.domains.uploads.preflight import check_thumbnail_skill_config
 
-_ROOT = Path(__file__).resolve().parents[1]
+_ROOT = REPO_ROOT
 
 _DOMAIN_MODULES = (
     "youtube_automation.domains.analytics.ports",

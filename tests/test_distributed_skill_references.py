@@ -15,7 +15,9 @@ import re
 import tomllib
 from pathlib import Path
 
-_REPO_ROOT = Path(__file__).resolve().parents[1]
+from tests.helpers.paths import REPO_ROOT
+
+_REPO_ROOT = REPO_ROOT
 _SKILLS_DIR = _REPO_ROOT / ".claude" / "skills"
 _CLAUDE_TEMPLATE = _REPO_ROOT / ".claude" / "CLAUDE.template.md"
 

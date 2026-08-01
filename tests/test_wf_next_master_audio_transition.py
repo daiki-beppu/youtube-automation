@@ -6,7 +6,9 @@ from pathlib import Path
 
 import pytest
 
-_REPO_ROOT = Path(__file__).resolve().parent.parent
+from tests.helpers.paths import REPO_ROOT
+
+_REPO_ROOT = REPO_ROOT
 _SCRIPT = _REPO_ROOT / ".claude" / "skills" / "wf-next" / "references" / "master_audio_transition.py"
 
 

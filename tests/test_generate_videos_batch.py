@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from tests.helpers.paths import REPO_ROOT
 from youtube_automation.commands.media import generate_videos_batch as batch
 from youtube_automation.core.errors import ConfigError
 
@@ -52,7 +53,7 @@ def test_find_batch_targets_does_not_use_legacy_state_shape(tmp_path: Path) -> N
 
 
 def test_videoup_skill_auto_detection_matches_implementation_contract() -> None:
-    skill = (Path(__file__).parents[1] / ".claude/skills/videoup/SKILL.md").read_text(encoding="utf-8")
+    skill = (REPO_ROOT / ".claude/skills/videoup/SKILL.md").read_text(encoding="utf-8")
     expected = "`assets.master_audio` が設定済み（`null` 以外）かつ `assets.master_video` が `null` のコレクション"
     assert expected in skill
 

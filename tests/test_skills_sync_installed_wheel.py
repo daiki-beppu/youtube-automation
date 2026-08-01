@@ -8,6 +8,8 @@ import re
 import subprocess
 from pathlib import Path
 
+from tests.helpers.paths import REPO_ROOT
+
 _FILE_ASSETS = {
     Path(".claude/CLAUDE.md"): Path(".claude/CLAUDE.template.md"),
     Path("docs/workflow-cheatsheet.md"): Path("docs/workflow-cheatsheet.md"),
@@ -59,7 +61,7 @@ def _tracked_skill_files(repo_root: Path) -> set[Path]:
 
 
 def test_candidate_wheel_syncs_all_assets_into_clean_downstream(tmp_path: Path) -> None:
-    repo_root = Path(__file__).resolve().parents[1]
+    repo_root = REPO_ROOT
     wheel = _candidate_wheel(repo_root, tmp_path)
     venv = tmp_path / "venv"
 

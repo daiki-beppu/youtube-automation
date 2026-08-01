@@ -26,7 +26,9 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, call, patch
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from tests.helpers.paths import FIXTURES_DIR, REPO_ROOT
+
+sys.path.insert(0, str(REPO_ROOT))
 
 import pytest
 from googleapiclient.errors import HttpError
@@ -41,7 +43,7 @@ from youtube_automation.core.errors import YouTubeAPIError
 
 def _setup_channel(tmp_path: Path) -> Path:
     """sample_channel をコピーした独立 channel dir を返す."""
-    src = Path(__file__).resolve().parent / "fixtures" / "sample_channel"
+    src = FIXTURES_DIR / "sample_channel"
     dst = tmp_path / "channel"
     shutil.copytree(src, dst)
     return dst
@@ -443,7 +445,7 @@ class TestMainTargetSelection:
         """実 console script は logger 設定の手注入なしで INFO を stderr に出す."""
         ch = _setup_channel(tmp_path)
         entrypoint = Path(sys.executable).with_name("yt-bulk-update-desc")
-        project_src = Path(__file__).resolve().parents[1] / "src"
+        project_src = REPO_ROOT / "src"
         assert entrypoint.is_file()
 
         result = subprocess.run(

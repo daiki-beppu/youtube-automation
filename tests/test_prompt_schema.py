@@ -13,11 +13,12 @@ from pathlib import Path
 
 import yaml
 
+from tests.helpers.paths import REPO_ROOT
 from youtube_automation.infrastructure.media.image_provider import PromptSchema, prompt_schema
 
 
 def _repo_root() -> Path:
-    return Path(__file__).resolve().parents[1]
+    return REPO_ROOT
 
 
 def _load_default_config() -> dict:

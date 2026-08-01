@@ -11,7 +11,9 @@ from types import ModuleType
 
 import pytest
 
-ROOT = Path(__file__).resolve().parent.parent
+from tests.helpers.paths import REPO_ROOT
+
+ROOT = REPO_ROOT
 SKILL_DIR = ROOT / ".claude" / "skills" / "post-publish"
 SCRIPT = SKILL_DIR / "references" / "post-publish-chain-state.py"
 MANIFEST = SKILL_DIR / "references" / "post-publish-chain-manifest.json"

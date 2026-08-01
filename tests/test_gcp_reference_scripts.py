@@ -8,7 +8,9 @@ from pathlib import Path
 
 import pytest
 
-ROOT = Path(__file__).resolve().parent.parent
+from tests.helpers.paths import REPO_ROOT
+
+ROOT = REPO_ROOT
 REFERENCES = ROOT / ".claude" / "skills" / "channel-new" / "references"
 
 

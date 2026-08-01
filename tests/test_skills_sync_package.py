@@ -25,6 +25,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.helpers.paths import REPO_ROOT
+
 # ---------- 1-4: package facade — 公開 import surface ----------
 
 
@@ -58,7 +60,7 @@ def test_default_all_assets_include_auth_template_target() -> None:
 
 
 def test_auth_template_is_included_in_wheel_and_sdist_manifests() -> None:
-    pyproject = tomllib.loads((Path(__file__).resolve().parents[1] / "pyproject.toml").read_text(encoding="utf-8"))
+    pyproject = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
 
     hatch = pyproject["tool"]["hatch"]["build"]["targets"]
     force_include = hatch["wheel"]["force-include"]
@@ -248,7 +250,7 @@ def test_package_level_editable_root_patch_propagates_to_asset_root(
 
 def test_old_module_file_is_removed_after_package_split() -> None:
     # Given: worktree root
-    repo_root = Path(__file__).resolve().parents[1]
+    repo_root = REPO_ROOT
     commands_dir = repo_root / "src" / "youtube_automation" / "commands" / "system"
 
     # Then: package directory が存在し、旧 .py は存在しない (同名衝突防止)

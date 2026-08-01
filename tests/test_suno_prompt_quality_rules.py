@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+from tests.helpers.paths import REPO_ROOT
 from youtube_automation.commands.suno.generate_suno_prompts import (
     QualityReport,
     apply_auto_lyrics_structure,
@@ -20,7 +21,7 @@ from youtube_automation.commands.suno.generate_suno_prompts import (
 )
 from youtube_automation.configuration import skills as skill_config
 
-_DEFAULT_YAML = Path(__file__).resolve().parents[1] / ".claude" / "skills" / "suno" / "config.default.yaml"
+_DEFAULT_YAML = REPO_ROOT / ".claude" / "skills" / "suno" / "config.default.yaml"
 
 
 @pytest.fixture
@@ -331,8 +332,8 @@ def test_default_yaml_has_quality_rule_keys():
 # SKILL.md: 品質ルールセクションの存在検証
 # ---------------------------------------------------------------------------
 
-_SKILL_MD = Path(__file__).resolve().parents[1] / ".claude" / "skills" / "suno" / "SKILL.md"
-_SUNO_LYRIC_SKILL_MD = Path(__file__).resolve().parents[1] / ".claude" / "skills" / "suno-lyric" / "SKILL.md"
+_SKILL_MD = REPO_ROOT / ".claude" / "skills" / "suno" / "SKILL.md"
+_SUNO_LYRIC_SKILL_MD = REPO_ROOT / ".claude" / "skills" / "suno-lyric" / "SKILL.md"
 
 
 def test_skill_md_has_quality_rules_section():

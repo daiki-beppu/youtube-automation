@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from tests.helpers.paths import REPO_ROOT
 from youtube_automation import entrypoints
 from youtube_automation.commands.channel import channel_import
 
@@ -327,7 +328,7 @@ def test_running_from_inside_source_is_rejected_to_keep_source_untouched(tmp_pat
 
 
 def test_entrypoint_is_registered_and_does_not_consume_channel_selection():
-    root = Path(__file__).resolve().parents[1]
+    root = REPO_ROOT
     with (root / "pyproject.toml").open("rb") as file:
         config = tomllib.load(file)
 

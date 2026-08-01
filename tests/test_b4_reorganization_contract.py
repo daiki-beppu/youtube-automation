@@ -22,7 +22,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
-ROOT = Path(__file__).resolve().parents[1]
+from tests.helpers.paths import REPO_ROOT
+
+ROOT = REPO_ROOT
 SRC = ROOT / "src" / "youtube_automation"
 
 DOMAIN_MODULES = (

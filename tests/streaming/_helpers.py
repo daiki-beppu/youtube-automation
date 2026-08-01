@@ -7,11 +7,12 @@ issue #426: ``tests/test_terraform_streaming.py`` (3580 行 / 26 クラス) を�
 from __future__ import annotations
 
 import re
-from pathlib import Path
+
+from tests.helpers.paths import REPO_ROOT
 
 # ---------- パス定数 ----------
 
-_REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+_REPO_ROOT = REPO_ROOT
 _STREAMING_DIR = _REPO_ROOT / "infra" / "terraform" / "streaming"
 
 _VERSIONS_TF = _STREAMING_DIR / "versions.tf"

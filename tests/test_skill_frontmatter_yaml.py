@@ -15,10 +15,11 @@ from pathlib import Path
 
 import pytest
 
+from tests.helpers.paths import REPO_ROOT
 from youtube_automation.commands.system.skills_sync._lint import lint_skill
 
 # リポジトリルート (tests/ の親)
-_REPO_ROOT = Path(__file__).resolve().parent.parent
+_REPO_ROOT = REPO_ROOT
 _SKILLS_DIR = _REPO_ROOT / ".claude" / "skills"
 
 _SKILL_DIRS = sorted(p.parent for p in _SKILLS_DIR.glob("*/SKILL.md"))

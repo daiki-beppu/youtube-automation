@@ -7,11 +7,11 @@ import sys
 import threading
 import urllib.error
 import urllib.request
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
+from tests.helpers.paths import REPO_ROOT
 from youtube_automation.commands.collections import collection_serve as collection_serve_module
 from youtube_automation.commands.collections.collection_serve import create_server, main
 
@@ -189,7 +189,7 @@ def test_studio_origin_is_not_allowed_to_read_other_non_community_routes(serve_c
 
 
 def test_shared_route_constants_match_server_contract():
-    constants = (Path(__file__).parents[1] / "extensions/shared/constants.ts").read_text(encoding="utf-8")
+    constants = (REPO_ROOT / "extensions/shared/constants.ts").read_text(encoding="utf-8")
 
     assert 'export const COMMUNITY_POSTS_ROUTE = "/community/posts.json"' in constants
     assert 'export const COMMUNITY_IMAGE_ROUTE = "/community/posts"' in constants

@@ -28,7 +28,9 @@ from pathlib import Path
 
 import pytest
 
-_REPO_ROOT = Path(__file__).resolve().parent.parent
+from tests.helpers.paths import REPO_ROOT
+
+_REPO_ROOT = REPO_ROOT
 _THUMBNAIL_SKILL_MD = _REPO_ROOT / ".claude" / "skills" / "thumbnail" / "SKILL.md"
 _CODEX_IMAGE_SH = _REPO_ROOT / ".claude" / "skills" / "thumbnail" / "references" / "codex-image.sh"
 

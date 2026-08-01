@@ -22,6 +22,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from tests.helpers.paths import REPO_ROOT
 from youtube_automation.core.errors import ConfigError
 from youtube_automation.domains.media.image import ImageGenerationRequest
 from youtube_automation.infrastructure.media.image_provider.config import GeminiCliConfig
@@ -298,7 +299,7 @@ class TestRetryAndFailure:
 def _shipped_thumbnail_default_config() -> dict:
     import yaml
 
-    path = Path(__file__).resolve().parents[1] / ".claude" / "skills" / "thumbnail" / "config.default.yaml"
+    path = REPO_ROOT / ".claude" / "skills" / "thumbnail" / "config.default.yaml"
     return yaml.safe_load(path.read_text(encoding="utf-8"))
 
 

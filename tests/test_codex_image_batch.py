@@ -10,10 +10,11 @@ from pathlib import Path
 
 import pytest
 
+from tests.helpers.paths import REPO_ROOT
 from youtube_automation.core.errors import ConfigError
 from youtube_automation.infrastructure.media.image_provider.config import parse_image_generation_config
 
-ROOT = Path(__file__).parents[1]
+ROOT = REPO_ROOT
 BATCH = ROOT / ".claude/skills/thumbnail/references/codex-image-batch.sh"
 
 

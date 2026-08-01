@@ -8,7 +8,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from tests.helpers.paths import FIXTURES_DIR, REPO_ROOT
+
+sys.path.insert(0, str(REPO_ROOT))
 
 from youtube_automation.commands.channel import channel_settings as channel_settings_cli
 from youtube_automation.configuration.youtube import YoutubeApi
@@ -958,7 +960,7 @@ class TestCLIPull:
 
 def _prepare_channel_dir(tmp_path: Path, monkeypatch) -> None:
     """テスト用 channel/*.json を tmp_path にコピーし CHANNEL_DIR を向ける。"""
-    fixture_root = Path(__file__).parent / "fixtures" / "sample_channel"
+    fixture_root = FIXTURES_DIR / "sample_channel"
     src_channel = fixture_root / "config" / "channel"
     dst_channel = tmp_path / "config" / "channel"
     dst_channel.mkdir(parents=True, exist_ok=True)

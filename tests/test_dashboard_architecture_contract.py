@@ -8,9 +8,10 @@ import threading
 from pathlib import Path
 from urllib.request import urlopen
 
+from tests.helpers.paths import REPO_ROOT
 from youtube_automation.commands.analytics.dashboard import create_server
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = REPO_ROOT
 DASHBOARD = ROOT / "dashboard"
 STATIC_IMPORT = re.compile(r"""(?:from\s+|import\s*)["']([^"']+)["']""")
 

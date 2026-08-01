@@ -15,9 +15,11 @@ from pathlib import Path
 
 import pytest
 
+from tests.helpers.paths import REPO_ROOT
+
 pytestmark = pytest.mark.repo_contract
 
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = REPO_ROOT
 SRC = ROOT / "src" / "youtube_automation"
 RECEIPT = ROOT / "docs" / "architecture" / "repository-reorganization-receipt.json"
 

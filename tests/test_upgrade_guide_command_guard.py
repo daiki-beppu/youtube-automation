@@ -27,8 +27,10 @@ import re
 from pathlib import Path
 from typing import Final
 
+from tests.helpers.paths import REPO_ROOT
+
 # リポジトリルート (tests/ の親)
-_REPO_ROOT = Path(__file__).resolve().parent.parent
+_REPO_ROOT = REPO_ROOT
 
 UPGRADE_GUIDE: Final[Path] = _REPO_ROOT / "docs" / "upgrades" / "v5.5.0.md"
 

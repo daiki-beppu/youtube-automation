@@ -1,9 +1,9 @@
 import json
-from pathlib import Path
 
+from tests.helpers.paths import REPO_ROOT
 from youtube_automation.configuration.community_draft import CommunityDraftPost
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = REPO_ROOT
 EXAMPLE_PATH = REPO_ROOT / "examples/channel_config.example/community-draft.example.json"
 
 

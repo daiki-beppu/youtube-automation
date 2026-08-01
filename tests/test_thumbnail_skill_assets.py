@@ -11,9 +11,11 @@ from pathlib import Path
 import pytest
 import yaml
 
+from tests.helpers.paths import REPO_ROOT
+
 
 def _repo_root() -> Path:
-    return Path(__file__).resolve().parents[1]
+    return REPO_ROOT
 
 
 def _read_thumbnail_skill() -> str:

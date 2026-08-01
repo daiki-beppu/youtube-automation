@@ -22,7 +22,9 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, call, patch
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from tests.helpers.paths import FIXTURES_DIR, REPO_ROOT
+
+sys.path.insert(0, str(REPO_ROOT))
 
 import pytest
 
@@ -36,7 +38,7 @@ from youtube_automation.domains.metadata import build_short_localizations
 
 def _setup_channel(tmp_path: Path, *, with_short_template: bool = True) -> Path:
     """sample_channel をコピーし localizations を差し替えたチャンネル dir を返す."""
-    src = Path(__file__).resolve().parent / "fixtures" / "sample_channel"
+    src = FIXTURES_DIR / "sample_channel"
     dst = tmp_path / "channel"
     shutil.copytree(src, dst)
     loc_data = {

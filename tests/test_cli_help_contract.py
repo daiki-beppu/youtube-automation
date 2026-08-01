@@ -33,7 +33,9 @@ from pathlib import Path
 
 import pytest
 
-ROOT = Path(__file__).resolve().parents[1]
+from tests.helpers.paths import REPO_ROOT
+
+ROOT = REPO_ROOT
 
 # CLI 1 件あたりの上限。実測は最遅 0.8 秒程度で、CI の遅い runner でも十分な余裕がある。
 _HELP_TIMEOUT_SECONDS = 15.0

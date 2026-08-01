@@ -20,7 +20,9 @@ import pytest
 from googleapiclient.errors import HttpError
 from httplib2 import Response
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from tests.helpers.paths import FIXTURES_DIR, REPO_ROOT
+
+sys.path.insert(0, str(REPO_ROOT))
 
 
 # ---------------------------------------------------------------------------
@@ -148,7 +150,7 @@ def test_main_title_preflight_honors_collection_opt_in_for_each_cli_entry(
     from youtube_automation.configuration import reset as reset_config
     from youtube_automation.domains.uploads.collection import CollectionUploader
 
-    fixture_channel = Path(__file__).parent / "fixtures" / "sample_channel"
+    fixture_channel = FIXTURES_DIR / "sample_channel"
     test_channel = tmp_path / "channel"
     shutil.copytree(fixture_channel, test_channel)
     collection = _write_cli_title_collection(test_channel, title_template_check=title_template_check)

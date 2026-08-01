@@ -30,8 +30,10 @@ from pathlib import Path
 
 import pytest
 
+from tests.helpers.paths import REPO_ROOT
+
 # リポジトリルート (tests/ の親)
-_REPO_ROOT = Path(__file__).resolve().parent.parent
+_REPO_ROOT = REPO_ROOT
 README = _REPO_ROOT / "README.md"
 
 
