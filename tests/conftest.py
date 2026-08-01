@@ -64,6 +64,7 @@ REPO_CONTRACT_MODULES = frozenset(
         "test_skill_cost_documentation.py",
         "test_skill_frontmatter_yaml.py",
         "test_suno_skill_doc.py",
+        "test_takt_runtime_prepare.py",
         "test_upgrade_guide_command_guard.py",
         "test_video_description_skill_contract.py",
         "test_wf_new_analytics_fallback_skill_contract.py",
