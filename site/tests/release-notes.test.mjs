@@ -9,13 +9,20 @@ const readRelease = (version) =>
   readFile(new URL(`../dist/${version}/index.html`, import.meta.url), "utf8");
 const execFileAsync = promisify(execFile);
 
-test("一覧は公開日の新しい順で4件を表示する", async () => {
+test("一覧は本体とChrome拡張に分かれ、それぞれ公開日の新しい順で表示する", async () => {
   const html = await readIndex();
-  const hrefs = [...html.matchAll(/class="release-card" href="([^"]+)"/g)].map(
-    (match) => match[1]
-  );
+  const section = (kind) =>
+    html.match(new RegExp(`<section[^>]*data-release-kind="${kind}"[^>]*>([\\s\\S]*?)<\\/section>`))
+      ?.[1] ?? "";
+  const main = section("main");
+  const extension = section("extension");
+  const hrefs = (markup) =>
+    [...markup.matchAll(/class="release-card" href="([^"]+)"/g)].map((match) => match[1]);
 
-  assert.deepEqual(hrefs, ["/v5.6.0", "/ext-v0.3.0", "/v5.5.17", "/ext-v0.2.5"]);
+  assert.match(main, /<h2>本体<\/h2>/);
+  assert.match(extension, /<h2>Chrome 拡張<\/h2>/);
+  assert.deepEqual(hrefs(main), ["/v5.6.0", "/v5.5.17"]);
+  assert.deepEqual(hrefs(extension), ["/ext-v0.3.0", "/ext-v0.2.5"]);
 });
 
 test("本体とChrome拡張を区別し、詳細ページへリンクする", async () => {

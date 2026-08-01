@@ -37,11 +37,23 @@
   margin: 1.5rem 0 0;
 }
 
+.release-sections {
+  display: grid;
+  gap: clamp(3rem, 7vw, 5rem);
+  margin-top: clamp(3rem, 7vw, 5rem);
+}
+
+.release-section > h2 {
+  font-size: clamp(1.6rem, 3vw, 2.25rem);
+  letter-spacing: -0.035em;
+  margin: 0 0 1.5rem;
+}
+
 .release-list {
   display: grid;
   gap: 1rem;
   list-style: none;
-  margin: clamp(3rem, 7vw, 5rem) 0 0;
+  margin: 0;
   padding: 0;
 }
 
@@ -90,7 +102,7 @@
   color: var(--release-extension);
 }
 
-.release-card h2 {
+.release-card h3 {
   font-size: clamp(1.45rem, 3vw, 2rem);
   letter-spacing: -0.025em;
   margin: 1.1rem 0 0.55rem;
