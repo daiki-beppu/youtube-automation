@@ -1,0 +1,118 @@
+/*
+ * Release notes palette.
+ *
+ * DADS principles: readable neutral text, a conventional blue link/accent,
+ * visible focus states, and at least 4.5:1 contrast for text roles.
+ * Surface density and the navy code treatment follow html2pptx.app's docs.
+ */
+:root {
+  --blume-background: #f8f8fb;
+  --blume-foreground: #202634;
+  --blume-muted: #eef1f5;
+  --blume-muted-foreground: #556070;
+  --blume-border: #c4ccd8;
+  --blume-accent: #0017c1;
+  --blume-accent-foreground: #ffffff;
+  --blume-action: #0017c1;
+  --blume-action-foreground: #ffffff;
+  --blume-code-background: #0f172a;
+  --blume-font-body: -apple-system, BlinkMacSystemFont, "Noto Sans JP", "Yu Gothic UI",
+    "Hiragino Sans", "Segoe UI", sans-serif;
+  --blume-font-display: var(--blume-font-body);
+  --blume-content-width: 46rem;
+  --blume-radius: 0.75rem;
+  --release-surface: #ffffff;
+  --release-surface-hover: #f1f5fb;
+  --release-main: #0017c1;
+  --release-main-bg: #e8f1fe;
+  --release-extension: #006b53;
+  --release-extension-bg: #e8f5f0;
+  --release-shadow: 0 1px 2px rgb(15 23 42 / 5%), 0 12px 32px rgb(15 23 42 / 7%);
+}
+
+:root[data-theme="dark"] {
+  --blume-background: #0b1220;
+  --blume-foreground: #f8fafc;
+  --blume-muted: #182235;
+  --blume-muted-foreground: #b8c2d1;
+  --blume-border: #526071;
+  --blume-accent: #a9c6ff;
+  --blume-accent-foreground: #07111f;
+  --blume-action: #a9c6ff;
+  --blume-action-foreground: #07111f;
+  --blume-code-background: #050a13;
+  --release-surface: #111b2c;
+  --release-surface-hover: #18253a;
+  --release-main: #a9c6ff;
+  --release-main-bg: #152846;
+  --release-extension: #7fdac3;
+  --release-extension-bg: #12342e;
+  --release-shadow: 0 1px 2px rgb(0 0 0 / 25%), 0 16px 36px rgb(0 0 0 / 22%);
+}
+
+[data-blume-header] {
+  border-bottom: 1px solid var(--blume-border);
+  background-color: color-mix(in srgb, var(--blume-background) 92%, transparent);
+}
+
+[data-blume-nav-tree] a[aria-current="page"] {
+  box-shadow: inset 3px 0 var(--blume-accent);
+  color: var(--blume-foreground);
+}
+
+:focus-visible {
+  outline: 3px solid var(--blume-accent);
+  outline-offset: 3px;
+}
+
+.prose {
+  color: var(--blume-muted-foreground);
+  font-size: 1rem;
+  line-height: 1.8;
+}
+
+.prose :where(h1, h2, h3, h4) {
+  color: var(--blume-foreground);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.prose :where(a) {
+  color: var(--blume-accent);
+  font-weight: 500;
+  text-decoration: underline;
+  text-decoration-thickness: 0.08em;
+  text-underline-offset: 0.18em;
+}
+
+.prose :where(a:visited) {
+  color: #6f32a8;
+}
+
+:root[data-theme="dark"] .prose :where(a:visited) {
+  color: #d6a8ff;
+}
+
+.prose :where(:not(pre) > code) {
+  border: 1px solid color-mix(in srgb, var(--blume-accent) 22%, var(--blume-border));
+  background: var(--release-main-bg);
+  color: var(--blume-foreground);
+  padding: 0.08em 0.34em;
+}
+
+.prose pre.astro-code {
+  border: 1px solid color-mix(in srgb, var(--blume-border) 72%, transparent);
+  background: var(--blume-code-background) !important;
+  box-shadow: 0 12px 28px rgb(15 23 42 / 14%);
+}
+
+.prose pre.astro-code code {
+  font-size: 0.9375rem;
+  line-height: 1.7;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    scroll-behavior: auto !important;
+  }
+}
