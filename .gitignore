@@ -40,6 +40,7 @@ build/
 
 # Node / extensions (WXT)
 node_modules/
+.blume/
 .pnpm-store/
 coverage/
 extensions/*/dist/
