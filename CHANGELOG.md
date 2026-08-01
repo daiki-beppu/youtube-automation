@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `refactor(repository)`: 再配置後に役目を終えた旧 `youtube_automation.auth` package marker と、受領済みの plans 025〜027 を削除した。互換 façade、配布物、契約テスト、履歴受領先は維持した。
 - `refactor(packaging)`: リポジトリを責務別 layer へ再配置し、canonical owner への production import・receipt・active documentation を同期した。`youtube_automation.utils` と `infrastructure.legacy_utils` は下流向け compatibility façade として installed wheel でも維持し、削除・統合候補は `docs/architecture/reorganization-followups.md` に記録した。
 
 ### Fixed

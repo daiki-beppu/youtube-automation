@@ -3,6 +3,12 @@
 今回の再配置では、canonical owner への移動と production import の更新を完了した。
 下流互換性のための façade は削除せず、内容分割候補も変更せずに別タスクとして残す。
 
+今回の残骸棚卸しでは、`src/youtube_automation/utils/__init__.py` を削除しなかった。
+この package は `infrastructure/legacy_utils/` への旧 import namespace を接続する
+compatibility package であり、下流 import・repository contract・installed wheel の
+配布契約が実在を要求するためである。`src/youtube_automation/infrastructure/legacy_utils/`
+と同様、deprecation 方針を決める別タスクまで維持する。
+
 | 対象 | 根拠 | 影響範囲 | 推奨対応 | 必要な検証 |
 |------|------|----------|----------|------------|
 | `src/youtube_automation/infrastructure/legacy_utils/` compatibility façade | 下流 import と installed wheel が旧公開面を参照する | 下流 package、skill、利用者 | 利用状況を棚卸しし、deprecation 方針と削除時期を決定する | source / installed wheel の旧 import、sdist、全体テスト |
