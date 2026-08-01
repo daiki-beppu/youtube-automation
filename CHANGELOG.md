@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `docs(release-notes)`: 運営者向け公開リリースノートの frontmatter・本文・表記契約を定義し、v5.5.17 / v5.6.0 / ext-v0.2.5 / ext-v0.3.0 の初期 4 件を `docs/release-notes/` へ追加した。非公開チャット向け digest を Web 用 Markdown へ移植し、更新判断に必要な新機能・改善・修正・移行手順を保ちながら、コミュニティ固有記号、issue・PR 番号、内部実装名、本文全体のコードブロックを除去した。必須 frontmatter、所定見出し、タグと Release リンクの一致、公開表記は契約テストで機械担保する（#3054）。
+
 ### Fixed
 
 - `fix(ci)`: any-usage-gate が diff の基準点を解決できず素通りしていた事象を解消した。基準点の解決順を `PRE_PUSH_DIFF_BASE` → `origin/main` → `main` とし、remote を 1 つも持たない隔離クローン（takt がタスクを実行する形態）でもローカル `main` を基準に判定する。従来の self-skip は client-side lefthook 時代の設計で CI がバックストップだったが、`ci_verify` は CI の前に立つため同じ skip がそのままゲートの消失になり、CI の 4 ジョブのうち any-gate だけが takt run で一度も実行されていなかった。どの ref も解決できない場合は試した ref を列挙して skip する。解決順は新設した `tests/test_any_usage_gate.py` が機械担保する（#3048）。
