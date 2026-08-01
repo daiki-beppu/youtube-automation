@@ -13,6 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `refactor(tests)`: `tests.helpers.paths` に repository root、`tests/`、fixtures の共通 path helper を追加し、テストからの `Path(__file__)` 直接遡上を禁止する契約テストと tests 配置規約を導入した（#3041）。
 - `refactor(repository)`: 再配置後に役目を終えた旧 `youtube_automation.auth` package marker と、受領済みの plans 025〜027 を削除した。互換 façade、配布物、契約テスト、履歴受領先は維持した。
 - `refactor(packaging)`: リポジトリを責務別 layer へ再配置し、canonical owner への production import・receipt・active documentation を同期した。`youtube_automation.utils` と `infrastructure.legacy_utils` は下流向け compatibility façade として installed wheel でも維持し、削除・統合候補は `docs/architecture/reorganization-followups.md` に記録した。
+### Added
+
+- `deploy(site)`: 公開リリースノートを Cloudflare Pages の `youtube-automation-release-notes` project から配信する。GitHub integration は `site` を monorepo root とし、Node.js 24 / pnpm 11.15.1 で build、`main` を production、repository 内のその他 branch / pull request を preview として自動公開する。公開 URL、build/output 条件、Direct Upload による復旧手順をリポジトリへ記録した（#3057）。
+- `ci(site)`: Blume リリースノートサイトの frozen install / schema check / test / build を stacked PR と `main` push で検証する専用 workflow を追加した。`site/` の生成物・依存を明示的に gitignore し、実際に build した Python wheel / sdist へサイト workspace が混入しない配布境界を契約テストで固定。公開サイトを ADR-0021 の限定 TypeScript 例外として ADR-0023、CLAUDE.md、architecture、development guide、README に反映した（#3056）。
+- `docs(release-notes)`: 運営者向け公開リリースノートの frontmatter・本文・表記契約を定義し、v5.5.17 / v5.6.0 / ext-v0.2.5 / ext-v0.3.0 の初期 4 件を `docs/release-notes/` へ追加した。非公開チャット向け digest を Web 用 Markdown へ移植し、更新判断に必要な新機能・改善・修正・移行手順を保ちながら、コミュニティ固有記号、issue・PR 番号、内部実装名、本文全体のコードブロックを除去した。必須 frontmatter、所定見出し、タグと Release リンクの一致、公開表記は契約テストで機械担保する（#3054）。
 
 ### Fixed
 
