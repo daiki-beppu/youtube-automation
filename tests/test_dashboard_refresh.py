@@ -7,8 +7,11 @@ from unittest.mock import Mock
 import pytest
 
 from youtube_automation import configuration
-from youtube_automation.infrastructure.errors import AutomationError, ConfigError
-from youtube_automation.utils.dashboard_refresh import collect_channel_analytics, refresh_dashboard_channels
+from youtube_automation.core.errors import AutomationError, ConfigError
+from youtube_automation.infrastructure.analytics.dashboard_refresh import (
+    collect_channel_analytics,
+    refresh_dashboard_channels,
+)
 
 
 def test_refresh_attempts_every_channel_and_isolates_expected_failure(tmp_path: Path) -> None:

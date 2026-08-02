@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from youtube_automation.infrastructure.errors import ConfigError
-from youtube_automation.utils.channel_target import resolve_existing_target_dir
+from youtube_automation.configuration.channel_target import resolve_existing_target_dir
+from youtube_automation.core.errors import ConfigError
 
 
 def test_explicit_target_precedes_channel_dir_and_cwd(tmp_path, monkeypatch):

@@ -19,7 +19,7 @@ from bench.common import Stats, save_result, stats_from_samples
 
 
 def _provider(batch: int):
-    from youtube_automation.utils.image_provider import get_provider
+    from youtube_automation.infrastructure.media.image_provider import get_provider
 
     cfg = {
         "provider": "openai",
@@ -34,7 +34,7 @@ def _provider(batch: int):
 
 
 def _bench_one(batch: int, n_iter: int = 2) -> Stats:
-    from youtube_automation.utils.image_provider import ImageGenerationRequest
+    from youtube_automation.infrastructure.media.image_provider import ImageGenerationRequest
 
     samples: list[float] = []
     with tempfile.TemporaryDirectory() as tmpdir:

@@ -8,7 +8,9 @@ import sys
 from pathlib import Path
 from types import ModuleType
 
-ROOT = Path(__file__).resolve().parent.parent
+from tests.helpers.paths import REPO_ROOT
+
+ROOT = REPO_ROOT
 SCRIPT = ROOT / ".claude" / "skills" / "wf-auto" / "references" / "wf-auto-state.py"
 
 

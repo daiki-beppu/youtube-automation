@@ -11,7 +11,9 @@ from types import ModuleType
 
 import pytest
 
-ROOT = Path(__file__).resolve().parent.parent
+from tests.helpers.paths import REPO_ROOT
+
+ROOT = REPO_ROOT
 SKILL_DIR = ROOT / ".claude" / "skills" / "wf-auto"
 SCRIPT = SKILL_DIR / "references" / "wf-auto-state.py"
 

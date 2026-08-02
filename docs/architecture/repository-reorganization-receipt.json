@@ -1,0 +1,1375 @@
+{
+  "schema_version": 1,
+  "purpose": "Canonical owner and reference-update receipt for the repository reorganization.",
+  "mappings": [
+    {
+      "old_owner": "src/youtube_automation/utils/audio_visualizer_fill.py",
+      "exact_new_owner": "src/youtube_automation/infrastructure/media/audio_visualizer_fill.py",
+      "responsibility": "Canonical owner for audio_visualizer_fill.py in media",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/infrastructure/media/audio_visualizer_fill.py",
+        "Moved-source audit: src/youtube_automation/utils/audio_visualizer_fill.py",
+        "Updated consumer: src/youtube_automation/configuration/loader.py",
+        "Updated consumer: src/youtube_automation/commands/media/audio_visualizer_fill.py",
+        "Updated consumer: tests/test_audio_visualizer_fill.py",
+        "Updated consumer: tests/test_comments_generator.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/audio_visualizer_mask.py",
+      "exact_new_owner": "src/youtube_automation/infrastructure/media/audio_visualizer_mask.py",
+      "responsibility": "Canonical owner for audio_visualizer_mask.py in media",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/infrastructure/media/audio_visualizer_mask.py",
+        "Moved-source audit: src/youtube_automation/utils/audio_visualizer_mask.py",
+        "Updated consumer: src/youtube_automation/infrastructure/legacy_utils/audio_visualizer_mask.py",
+        "Updated consumer: tests/test_audio_visualizer_mask.py",
+        "Updated consumer: tests/test_generate_videos_script.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py",
+        "Updated consumer: .claude/skills/videoup/SKILL.md",
+        "Updated consumer: .claude/skills/videoup/references/generate_videos.sh"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/benchmark_analyzer.py",
+      "exact_new_owner": "src/youtube_automation/infrastructure/analytics/benchmark_analyzer.py",
+      "responsibility": "Canonical owner for benchmark_analyzer.py in analytics",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/infrastructure/analytics/benchmark_analyzer.py",
+        "Moved-source audit: src/youtube_automation/utils/benchmark_analyzer.py",
+        "Updated consumer: src/youtube_automation/commands/analytics/benchmark_collector.py",
+        "Updated consumer: tests/test_benchmark_analyzer.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py",
+        "Updated consumer: .claude/skills/collection-ideate/references/benchmark_collector.py",
+        "Updated consumer: .claude/skills/channel-new/references/benchmark_collector.py",
+        "Updated consumer: .claude/skills/benchmark/references/benchmark_collector.py"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/channel_registry.py",
+      "exact_new_owner": "src/youtube_automation/infrastructure/analytics/channel_registry.py",
+      "responsibility": "Canonical owner for channel_registry.py in analytics",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/infrastructure/analytics/channel_registry.py",
+        "Moved-source audit: src/youtube_automation/utils/channel_registry.py",
+        "Updated consumer: src/youtube_automation/commands/analytics/dashboard.py",
+        "Updated consumer: tests/test_channel_registry.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py",
+        "Updated consumer: .github/workflows/dashboard.yml"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/channel_target.py",
+      "exact_new_owner": "src/youtube_automation/configuration/channel_target.py",
+      "responsibility": "Canonical owner for channel_target.py in configuration",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/configuration/channel_target.py",
+        "Moved-source audit: src/youtube_automation/utils/channel_target.py",
+        "Updated consumer: src/youtube_automation/configuration/loader.py",
+        "Updated consumer: src/youtube_automation/commands/channel/channel_init.py",
+        "Updated consumer: src/youtube_automation/commands/system/setup_dirs.py",
+        "Updated consumer: tests/test_channel_target.py",
+        "Updated consumer: tests/test_skills_sync_installed_wheel.py",
+        "Updated consumer: tests/test_image_provider_factory.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/chrome_extensions.py",
+      "exact_new_owner": "src/youtube_automation/infrastructure/collections/chrome_extensions.py",
+      "responsibility": "Canonical owner for chrome_extensions.py in collections",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/infrastructure/collections/chrome_extensions.py",
+        "Moved-source audit: src/youtube_automation/utils/chrome_extensions.py",
+        "Updated consumer: src/youtube_automation/commands/collections/collection_serve.py",
+        "Updated consumer: tests/test_collection_serve.py",
+        "Updated consumer: tests/test_chrome_extensions.py",
+        "Updated consumer: tests/test_live_chat_reply.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/cli_arguments.py",
+      "exact_new_owner": "src/youtube_automation/commands/_shared/arguments.py",
+      "responsibility": "Canonical owner for arguments.py in _shared",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/commands/_shared/arguments.py",
+        "Moved-source audit: src/youtube_automation/utils/cli_arguments.py",
+        "Updated consumer: src/youtube_automation/commands/thumbnail/compare_thumbnails.py",
+        "Updated consumer: src/youtube_automation/commands/analytics/video_analyze.py",
+        "Updated consumer: src/youtube_automation/commands/analytics/benchmark_collector.py",
+        "Updated consumer: src/youtube_automation/commands/analytics/fetch_benchmark_comments.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py",
+        "Updated consumer: .claude/skills/collection-ideate/references/benchmark_collector.py",
+        "Updated consumer: .claude/skills/thumbnail-compare/references/compare_thumbnails.py",
+        "Updated consumer: .claude/skills/channel-new/references/benchmark_collector.py",
+        "Updated consumer: .claude/skills/channel-new/references/fetch_benchmark_comments.py",
+        "Updated consumer: .claude/skills/viewer-voice/references/fetch_benchmark_comments.py",
+        "Updated consumer: .claude/skills/benchmark/references/benchmark_collector.py"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/collection_paths.py",
+      "exact_new_owner": "src/youtube_automation/infrastructure/media/collection_paths.py",
+      "responsibility": "Canonical owner for collection_paths.py in media",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/infrastructure/media/collection_paths.py",
+        "Moved-source audit: src/youtube_automation/utils/collection_paths.py",
+        "Updated consumer: src/youtube_automation/infrastructure/legacy_utils/collection_paths.py",
+        "Updated consumer: src/youtube_automation/commands/thumbnail/auto_select_thumbnail.py",
+        "Updated consumer: src/youtube_automation/commands/distrokid/distrokid_prepare.py",
+        "Updated consumer: src/youtube_automation/commands/uploads/wf_batch.py",
+        "Updated consumer: src/youtube_automation/commands/youtube/pinned_comment.py",
+        "Updated consumer: src/youtube_automation/commands/suno/generate_suno_prompts.py",
+        "Updated consumer: src/youtube_automation/commands/suno/suno_audio_cleanup.py",
+        "Updated consumer: src/youtube_automation/commands/suno/suno_verify.py",
+        "Updated consumer: src/youtube_automation/commands/suno/suno_select_tracks.py",
+        "Updated consumer: src/youtube_automation/commands/suno/suno_verify_playlist.py",
+        "Updated consumer: src/youtube_automation/commands/collections/init_collection.py",
+        "Updated consumer: src/youtube_automation/commands/collections/collection_serve.py",
+        "Updated consumer: src/youtube_automation/commands/metadata/metadata_audit.py",
+        "Updated consumer: src/youtube_automation/commands/metadata/bulk_update_short_localizations.py",
+        "Updated consumer: src/youtube_automation/commands/metadata/title_duplicate_check.py",
+        "Updated consumer: src/youtube_automation/commands/media/apply_rain_layers.py",
+        "Updated consumer: src/youtube_automation/commands/media/check_raw_master.py",
+        "Updated consumer: src/youtube_automation/commands/media/finalize_master.py",
+        "Updated consumer: src/youtube_automation/commands/media/generate_lyria_master.py",
+        "Updated consumer: src/youtube_automation/commands/media/generate_videos_batch.py",
+        "Updated consumer: src/youtube_automation/commands/media/generate_master.py",
+        "Updated consumer: src/youtube_automation/commands/media/generate_short_loop.py",
+        "Updated consumer: src/youtube_automation/core/adapters/media.py",
+        "Updated consumer: tests/test_init_collection.py",
+        "Updated consumer: tests/test_collection_paths.py",
+        "Updated consumer: tests/test_collection_preflight.py",
+        "Updated consumer: tests/test_codex_thumbnail_routing.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py",
+        "Updated consumer: .claude/skills/masterup/SKILL.md",
+        "Updated consumer: .claude/skills/short-thumbnail/references/generate_short_loop.py",
+        "Updated consumer: .claude/skills/suno/references/generate_suno_prompts.py",
+        "Updated consumer: .claude/skills/distrokid-helper/references/distrokid_prepare.py",
+        "Updated consumer: .claude/skills/wf-new/references/init_collection.py",
+        "Updated consumer: .claude/skills/short/references/generate_short_loop.py",
+        "Updated consumer: .claude/skills/masterup/references/finalize_master.py",
+        "Updated consumer: .claude/skills/thumbnail/references/archive-approved-thumbnail.py"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/comments/__init__.py",
+      "exact_new_owner": "src/youtube_automation/application/comments/__init__.py",
+      "responsibility": "Canonical owner for __init__.py in comments",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/application/comments/__init__.py",
+        "Moved-source audit: src/youtube_automation/utils/comments/__init__.py",
+        "Updated consumer: tests/test_comments_generator.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/comments/codex_generator.py",
+      "exact_new_owner": "src/youtube_automation/application/comments/codex_generator.py",
+      "responsibility": "Canonical owner for codex_generator.py in comments",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/application/comments/codex_generator.py",
+        "Moved-source audit: src/youtube_automation/utils/comments/codex_generator.py",
+        "Updated consumer: tests/test_comments_generator.py",
+        "Updated consumer: tests/test_prompt_schema.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/comments/fetcher.py",
+      "exact_new_owner": "src/youtube_automation/application/comments/fetcher.py",
+      "responsibility": "Canonical owner for fetcher.py in comments",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/application/comments/fetcher.py",
+        "Moved-source audit: src/youtube_automation/utils/comments/fetcher.py",
+        "Updated consumer: src/youtube_automation/application/comments/replier.py",
+        "Updated consumer: src/youtube_automation/application/comments/generator.py",
+        "Updated consumer: tests/test_comments_fetcher.py",
+        "Updated consumer: tests/test_stream_cycle_uptime.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/comments/generator.py",
+      "exact_new_owner": "src/youtube_automation/application/comments/generator.py",
+      "responsibility": "Canonical owner for generator.py in comments",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/application/comments/generator.py",
+        "Moved-source audit: src/youtube_automation/utils/comments/generator.py",
+        "Updated consumer: src/youtube_automation/application/comments/generator_factory.py",
+        "Updated consumer: src/youtube_automation/application/comments/codex_generator.py",
+        "Updated consumer: src/youtube_automation/application/comments/replier.py",
+        "Updated consumer: src/youtube_automation/application/comments/prompt_safety.py",
+        "Updated consumer: tests/test_comments_generator_factory.py",
+        "Updated consumer: tests/test_comments_generator.py",
+        "Updated consumer: tests/test_veo_operation_store.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/comments/generator_factory.py",
+      "exact_new_owner": "src/youtube_automation/application/comments/generator_factory.py",
+      "responsibility": "Canonical owner for generator_factory.py in comments",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/application/comments/generator_factory.py",
+        "Moved-source audit: src/youtube_automation/utils/comments/generator_factory.py",
+        "Updated consumer: src/youtube_automation/application/comments/replier.py",
+        "Updated consumer: tests/test_comments_generator_factory.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/comments/history.py",
+      "exact_new_owner": "src/youtube_automation/application/comments/history.py",
+      "responsibility": "Canonical owner for history.py in comments",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/application/comments/history.py",
+        "Moved-source audit: src/youtube_automation/utils/comments/history.py",
+        "Updated consumer: src/youtube_automation/application/comments/replier.py",
+        "Updated consumer: tests/test_comments_history.py",
+        "Updated consumer: tests/test_comments_replier.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/comments/prompt_safety.py",
+      "exact_new_owner": "src/youtube_automation/application/comments/prompt_safety.py",
+      "responsibility": "Canonical owner for prompt_safety.py in comments",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/application/comments/prompt_safety.py",
+        "Moved-source audit: src/youtube_automation/utils/comments/prompt_safety.py",
+        "Updated consumer: src/youtube_automation/application/comments/codex_generator.py",
+        "Updated consumer: src/youtube_automation/application/comments/generator.py",
+        "Updated consumer: src/youtube_automation/application/live_chat/codex.py",
+        "Updated consumer: tests/test_comments_generator.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/comments/replier.py",
+      "exact_new_owner": "src/youtube_automation/application/comments/replier.py",
+      "responsibility": "Canonical owner for replier.py in comments",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/application/comments/replier.py",
+        "Moved-source audit: src/youtube_automation/utils/comments/replier.py",
+        "Updated consumer: src/youtube_automation/application/comments/__init__.py",
+        "Updated consumer: tests/test_comments_replier.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/competitor_discovery.py",
+      "exact_new_owner": "src/youtube_automation/infrastructure/analytics/competitor_discovery.py",
+      "responsibility": "Canonical owner for competitor_discovery.py in analytics",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/infrastructure/analytics/competitor_discovery.py",
+        "Moved-source audit: src/youtube_automation/utils/competitor_discovery.py",
+        "Updated consumer: src/youtube_automation/commands/analytics/discover_competitors.py",
+        "Updated consumer: tests/test_discover_competitors_cli.py",
+        "Updated consumer: tests/test_competitor_discovery.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/competitor_scoring.py",
+      "exact_new_owner": "src/youtube_automation/infrastructure/analytics/competitor_scoring.py",
+      "responsibility": "Canonical owner for competitor_scoring.py in analytics",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/infrastructure/analytics/competitor_scoring.py",
+        "Moved-source audit: src/youtube_automation/utils/competitor_scoring.py",
+        "Updated consumer: src/youtube_automation/infrastructure/analytics/competitor_discovery.py",
+        "Updated consumer: src/youtube_automation/commands/analytics/discover_competitors.py",
+        "Updated consumer: tests/test_discover_competitors_cli.py",
+        "Updated consumer: tests/test_competitor_discovery.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/composition_lock.py",
+      "exact_new_owner": "src/youtube_automation/infrastructure/media/composition_lock.py",
+      "responsibility": "Canonical owner for composition_lock.py in media",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/infrastructure/media/composition_lock.py",
+        "Moved-source audit: src/youtube_automation/utils/composition_lock.py",
+        "Updated consumer: src/youtube_automation/commands/thumbnail/thumbnail_check.py",
+        "Updated consumer: tests/test_composition_lock.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py",
+        "Updated consumer: .claude/skills/collection-ideate/SKILL.md",
+        "Updated consumer: .claude/skills/collection-ideate/references/object-design-examples.md"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/ctr_resolver.py",
+      "exact_new_owner": "src/youtube_automation/infrastructure/analytics/ctr_resolver.py",
+      "responsibility": "Canonical owner for ctr_resolver.py in analytics",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/infrastructure/analytics/ctr_resolver.py",
+        "Moved-source audit: src/youtube_automation/utils/ctr_resolver.py",
+        "Updated consumer: src/youtube_automation/infrastructure/analytics/launch_curve_data.py",
+        "Updated consumer: tests/test_ctr_resolver.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/dashboard_read_model.py",
+      "exact_new_owner": "src/youtube_automation/infrastructure/analytics/dashboard_read_model.py",
+      "responsibility": "Canonical owner for dashboard_read_model.py in analytics",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/infrastructure/analytics/dashboard_read_model.py",
+        "Moved-source audit: src/youtube_automation/utils/dashboard_read_model.py",
+        "Updated consumer: src/youtube_automation/commands/analytics/dashboard.py",
+        "Updated consumer: tests/test_dashboard_read_model.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py",
+        "Updated consumer: .github/workflows/dashboard.yml"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/dashboard_refresh.py",
+      "exact_new_owner": "src/youtube_automation/infrastructure/analytics/dashboard_refresh.py",
+      "responsibility": "Canonical owner for dashboard_refresh.py in analytics",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/infrastructure/analytics/dashboard_refresh.py",
+        "Moved-source audit: src/youtube_automation/utils/dashboard_refresh.py",
+        "Updated consumer: src/youtube_automation/commands/analytics/dashboard.py",
+        "Updated consumer: tests/test_dashboard_refresh.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/genai_client.py",
+      "exact_new_owner": "src/youtube_automation/infrastructure/media/genai_client.py",
+      "responsibility": "Canonical owner for genai_client.py in media",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/infrastructure/media/genai_client.py",
+        "Moved-source audit: src/youtube_automation/utils/genai_client.py",
+        "Updated consumer: src/youtube_automation/infrastructure/legacy_utils/genai_client.py",
+        "Updated consumer: src/youtube_automation/infrastructure/media/image_provider/gemini.py",
+        "Updated consumer: src/youtube_automation/application/comments/generator.py",
+        "Updated consumer: src/youtube_automation/commands/thumbnail/thumbnail_check.py",
+        "Updated consumer: src/youtube_automation/commands/analytics/video_analyze.py",
+        "Updated consumer: src/youtube_automation/commands/analytics/benchmark_collector.py",
+        "Updated consumer: src/youtube_automation/commands/media/generate_loop_video.py",
+        "Updated consumer: src/youtube_automation/commands/media/generate_short_loop.py",
+        "Updated consumer: tests/test_benchmark_collector_channels_batch.py",
+        "Updated consumer: tests/test_thumbnail_check_cli.py",
+        "Updated consumer: tests/test_comments_replier.py",
+        "Updated consumer: tests/test_comments_generator.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py",
+        "Updated consumer: .claude/skills/short-thumbnail/references/generate_short_loop.py",
+        "Updated consumer: .claude/skills/collection-ideate/references/benchmark_collector.py",
+        "Updated consumer: .claude/skills/channel-new/references/benchmark_collector.py",
+        "Updated consumer: .claude/skills/short/references/generate_short_loop.py",
+        "Updated consumer: .claude/skills/loop-video/references/generate_loop_video.py",
+        "Updated consumer: .claude/skills/benchmark/references/benchmark_collector.py"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/google_cloud_project.py",
+      "exact_new_owner": "src/youtube_automation/infrastructure/runtime/google_cloud_project.py",
+      "responsibility": "Canonical owner for google_cloud_project.py in runtime",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/infrastructure/runtime/google_cloud_project.py",
+        "Moved-source audit: src/youtube_automation/utils/google_cloud_project.py",
+        "Updated consumer: src/youtube_automation/infrastructure/media/genai_client.py",
+        "Updated consumer: src/youtube_automation/infrastructure/media/lyria_client.py",
+        "Updated consumer: tests/test_lyria_client.py",
+        "Updated consumer: tests/test_genai_client.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/image_provider/__init__.py",
+      "exact_new_owner": "src/youtube_automation/infrastructure/media/image_provider/__init__.py",
+      "responsibility": "Canonical owner for __init__.py in image_provider",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/infrastructure/media/image_provider/__init__.py",
+        "Moved-source audit: src/youtube_automation/utils/image_provider/__init__.py",
+        "Updated consumer: tests/test_image_provider_factory.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/image_provider/composition.py",
+      "exact_new_owner": "src/youtube_automation/infrastructure/media/image_provider/composition.py",
+      "responsibility": "Canonical owner for composition.py in image_provider",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/infrastructure/media/image_provider/composition.py",
+        "Moved-source audit: src/youtube_automation/utils/image_provider/composition.py",
+        "Updated consumer: src/youtube_automation/infrastructure/media/stock.py",
+        "Updated consumer: src/youtube_automation/infrastructure/media/image_provider/gemini.py",
+        "Updated consumer: src/youtube_automation/infrastructure/media/image_provider/openai.py",
+        "Updated consumer: src/youtube_automation/infrastructure/media/image_provider/gemini_cli.py",
+        "Updated consumer: src/youtube_automation/commands/media/generate_image.py",
+        "Updated consumer: tests/test_image_provider_single_step_rotation.py",
+        "Updated consumer: tests/test_image_provider_composition_cli.py",
+        "Updated consumer: tests/test_image_provider_integration.py",
+        "Updated consumer: tests/test_generate_image_parallel.py",
+        "Updated consumer: tests/test_image_provider_composition.py",
+        "Updated consumer: tests/test_preflight_checks.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py",
+        "Updated consumer: .claude/skills/collection-ideate/references/generate_image.py",
+        "Updated consumer: .claude/skills/channel-new/references/generate_image.py",
+        "Updated consumer: .claude/skills/thumbnail/references/generate_image.py",
+        "Updated consumer: .claude/skills/thumbnail/references/codex-image.sh"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/image_provider/config.py",
+      "exact_new_owner": "src/youtube_automation/infrastructure/media/image_provider/config.py",
+      "responsibility": "Canonical owner for config.py in image_provider",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/infrastructure/media/image_provider/config.py",
+        "Moved-source audit: src/youtube_automation/utils/image_provider/config.py",
+        "Updated consumer: src/youtube_automation/infrastructure/media/image_provider/__init__.py",
+        "Updated consumer: src/youtube_automation/infrastructure/media/image_provider/gemini.py",
+        "Updated consumer: src/youtube_automation/infrastructure/media/image_provider/openai.py",
+        "Updated consumer: src/youtube_automation/infrastructure/media/image_provider/gemini_cli.py",
+        "Updated consumer: src/youtube_automation/commands/media/generate_image.py",
+        "Updated consumer: tests/test_codex_image_batch.py",
+        "Updated consumer: tests/test_image_provider_gemini.py",
+        "Updated consumer: tests/test_image_provider_factory.py",
+        "Updated consumer: tests/test_image_provider_config.py",
+        "Updated consumer: tests/test_image_provider_integration.py",
+        "Updated consumer: tests/test_image_provider_gemini_cli.py",
+        "Updated consumer: tests/test_image_provider_openai.py",
+        "Updated consumer: tests/test_codex_thumbnail_routing.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py",
+        "Updated consumer: .claude/skills/collection-ideate/references/generate_image.py",
+        "Updated consumer: .claude/skills/channel-new/references/generate_image.py",
+        "Updated consumer: .claude/skills/thumbnail/references/codex-image-batch.sh",
+        "Updated consumer: .claude/skills/thumbnail/references/generate_image.py",
+        "Updated consumer: .claude/skills/thumbnail/references/codex-prompt.py"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/image_provider/gemini.py",
+      "exact_new_owner": "src/youtube_automation/infrastructure/media/image_provider/gemini.py",
+      "responsibility": "Canonical owner for gemini.py in image_provider",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/infrastructure/media/image_provider/gemini.py",
+        "Moved-source audit: src/youtube_automation/utils/image_provider/gemini.py",
+        "Updated consumer: src/youtube_automation/infrastructure/media/image_provider/__init__.py",
+        "Updated consumer: tests/test_image_provider_gemini.py",
+        "Updated consumer: tests/test_image_provider_factory.py",
+        "Updated consumer: tests/test_image_provider_integration.py",
+        "Updated consumer: tests/test_image_provider_gemini_cli.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/image_provider/gemini_cli.py",
+      "exact_new_owner": "src/youtube_automation/infrastructure/media/image_provider/gemini_cli.py",
+      "responsibility": "Canonical owner for gemini_cli.py in image_provider",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/infrastructure/media/image_provider/gemini_cli.py",
+        "Moved-source audit: src/youtube_automation/utils/image_provider/gemini_cli.py",
+        "Updated consumer: src/youtube_automation/infrastructure/media/image_provider/__init__.py",
+        "Updated consumer: tests/test_image_provider_factory.py",
+        "Updated consumer: tests/test_image_provider_gemini_cli.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/image_provider/openai.py",
+      "exact_new_owner": "src/youtube_automation/infrastructure/media/image_provider/openai.py",
+      "responsibility": "Canonical owner for openai.py in image_provider",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/infrastructure/media/image_provider/openai.py",
+        "Moved-source audit: src/youtube_automation/utils/image_provider/openai.py",
+        "Updated consumer: src/youtube_automation/infrastructure/media/image_provider/__init__.py",
+        "Updated consumer: tests/test_image_provider_factory.py",
+        "Updated consumer: tests/test_image_provider_integration.py",
+        "Updated consumer: tests/test_image_provider_openai.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/image_provider/prompt_schema.py",
+      "exact_new_owner": "src/youtube_automation/infrastructure/media/image_provider/prompt_schema.py",
+      "responsibility": "Canonical owner for prompt_schema.py in image_provider",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/infrastructure/media/image_provider/prompt_schema.py",
+        "Moved-source audit: src/youtube_automation/utils/image_provider/prompt_schema.py",
+        "Updated consumer: src/youtube_automation/infrastructure/media/image_provider/__init__.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py",
+        "Updated consumer: .claude/skills/thumbnail/SKILL.md",
+        "Updated consumer: .claude/skills/thumbnail/references/prompt-schema.md",
+        "Updated consumer: docs/skill-design/ADR-001-thumbnail-prompt-schema.md"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/kpi_dashboard.py",
+      "exact_new_owner": "src/youtube_automation/infrastructure/analytics/kpi_dashboard.py",
+      "responsibility": "Canonical owner for kpi_dashboard.py in analytics",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/infrastructure/analytics/kpi_dashboard.py",
+        "Moved-source audit: src/youtube_automation/utils/kpi_dashboard.py",
+        "Updated consumer: src/youtube_automation/commands/analytics/kpi_dashboard.py",
+        "Updated consumer: tests/test_kpi_dashboard.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/launch_curve_data.py",
+      "exact_new_owner": "src/youtube_automation/infrastructure/analytics/launch_curve_data.py",
+      "responsibility": "Canonical owner for launch_curve_data.py in analytics",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/infrastructure/analytics/launch_curve_data.py",
+        "Moved-source audit: src/youtube_automation/utils/launch_curve_data.py",
+        "Updated consumer: src/youtube_automation/commands/analytics/launch_curve.py",
+        "Updated consumer: src/youtube_automation/commands/analytics/theme_compare.py",
+        "Updated consumer: tests/test_launch_curve_data.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/live_chat/__init__.py",
+      "exact_new_owner": "src/youtube_automation/application/live_chat/__init__.py",
+      "responsibility": "Canonical owner for __init__.py in live_chat",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/application/live_chat/__init__.py",
+        "Moved-source audit: src/youtube_automation/utils/live_chat/__init__.py",
+        "Updated consumer: tests/test_live_chat_reply.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/live_chat/codex.py",
+      "exact_new_owner": "src/youtube_automation/application/live_chat/codex.py",
+      "responsibility": "Canonical owner for codex.py in live_chat",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/application/live_chat/codex.py",
+        "Moved-source audit: src/youtube_automation/utils/live_chat/codex.py",
+        "Updated consumer: src/youtube_automation/application/live_chat/runner.py",
+        "Updated consumer: tests/test_live_chat_reply.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/live_chat/filters.py",
+      "exact_new_owner": "src/youtube_automation/application/live_chat/filters.py",
+      "responsibility": "Canonical owner for filters.py in live_chat",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/application/live_chat/filters.py",
+        "Moved-source audit: src/youtube_automation/utils/live_chat/filters.py",
+        "Updated consumer: src/youtube_automation/application/live_chat/runner.py",
+        "Updated consumer: tests/test_live_chat_reply.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/live_chat/history.py",
+      "exact_new_owner": "src/youtube_automation/application/live_chat/history.py",
+      "responsibility": "Canonical owner for history.py in live_chat",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/application/live_chat/history.py",
+        "Moved-source audit: src/youtube_automation/utils/live_chat/history.py",
+        "Updated consumer: src/youtube_automation/application/live_chat/runner.py",
+        "Updated consumer: tests/test_live_chat_reply.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/live_chat/models.py",
+      "exact_new_owner": "src/youtube_automation/application/live_chat/models.py",
+      "responsibility": "Canonical owner for models.py in live_chat",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/application/live_chat/models.py",
+        "Moved-source audit: src/youtube_automation/utils/live_chat/models.py",
+        "Updated consumer: src/youtube_automation/application/live_chat/runner.py",
+        "Updated consumer: src/youtube_automation/application/live_chat/codex.py",
+        "Updated consumer: tests/test_live_chat_reply.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/live_chat/runner.py",
+      "exact_new_owner": "src/youtube_automation/application/live_chat/runner.py",
+      "responsibility": "Canonical owner for runner.py in live_chat",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/application/live_chat/runner.py",
+        "Moved-source audit: src/youtube_automation/utils/live_chat/runner.py",
+        "Updated consumer: src/youtube_automation/application/live_chat/__init__.py",
+        "Updated consumer: tests/test_live_chat_reply.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/lyria_client.py",
+      "exact_new_owner": "src/youtube_automation/infrastructure/media/lyria_client.py",
+      "responsibility": "Canonical owner for lyria_client.py in media",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/infrastructure/media/lyria_client.py",
+        "Moved-source audit: src/youtube_automation/utils/lyria_client.py",
+        "Updated consumer: src/youtube_automation/commands/media/generate_lyria_master.py",
+        "Updated consumer: tests/test_lyria_client.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/notification.py",
+      "exact_new_owner": "src/youtube_automation/infrastructure/youtube/notification.py",
+      "responsibility": "Canonical owner for notification.py in youtube",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/infrastructure/youtube/notification.py",
+        "Moved-source audit: src/youtube_automation/utils/notification.py",
+        "Updated consumer: src/youtube_automation/commands/youtube/streaming_archive_check.py",
+        "Updated consumer: src/youtube_automation/commands/youtube/stream_bandwidth.py",
+        "Updated consumer: tests/test_streaming_healthcheck.py",
+        "Updated consumer: tests/test_notification.py",
+        "Updated consumer: tests/integration/test_stream_bandwidth_flow.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/numbered_duplicates.py",
+      "exact_new_owner": "src/youtube_automation/infrastructure/collections/numbered_duplicates.py",
+      "responsibility": "Canonical owner for numbered_duplicates.py in collections",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/infrastructure/collections/numbered_duplicates.py",
+        "Moved-source audit: src/youtube_automation/utils/numbered_duplicates.py",
+        "Updated consumer: src/youtube_automation/commands/system/doctor.py",
+        "Updated consumer: src/youtube_automation/commands/system/skills_sync/_sync.py",
+        "Updated consumer: tests/test_numbered_duplicates.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/omni_generator.py",
+      "exact_new_owner": "src/youtube_automation/infrastructure/media/omni_generator.py",
+      "responsibility": "Canonical owner for omni_generator.py in media",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/infrastructure/media/omni_generator.py",
+        "Moved-source audit: src/youtube_automation/utils/omni_generator.py",
+        "Updated consumer: src/youtube_automation/commands/media/generate_loop_video.py",
+        "Updated consumer: tests/test_generate_loop_video_cli.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py",
+        "Updated consumer: .claude/skills/loop-video/references/generate_loop_video.py"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/probe.py",
+      "exact_new_owner": "src/youtube_automation/infrastructure/media/probe.py",
+      "responsibility": "Canonical owner for probe.py in media",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/infrastructure/media/probe.py",
+        "Moved-source audit: src/youtube_automation/utils/probe.py",
+        "Updated consumer: src/youtube_automation/commands/distrokid/distrokid_prepare.py",
+        "Updated consumer: src/youtube_automation/commands/youtube/stream_bandwidth.py",
+        "Updated consumer: src/youtube_automation/commands/suno/suno_audio_cleanup.py",
+        "Updated consumer: src/youtube_automation/commands/metadata/metadata_audit.py",
+        "Updated consumer: src/youtube_automation/commands/media/generate_master.py",
+        "Updated consumer: src/youtube_automation/core/adapters/media.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py",
+        "Updated consumer: .claude/skills/distrokid-helper/references/distrokid_prepare.py"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/profile.py",
+      "exact_new_owner": "src/youtube_automation/infrastructure/observability/profile.py",
+      "responsibility": "Canonical owner for profile.py in observability",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/infrastructure/observability/profile.py",
+        "Moved-source audit: src/youtube_automation/utils/profile.py",
+        "Updated consumer: src/youtube_automation/infrastructure/cost_tracker.py",
+        "Updated consumer: src/youtube_automation/infrastructure/legacy_utils/profile.py",
+        "Updated consumer: src/youtube_automation/infrastructure/media/veo_generator.py",
+        "Updated consumer: src/youtube_automation/commands/analytics/benchmark_collector.py",
+        "Updated consumer: src/youtube_automation/commands/media/generate_image.py",
+        "Updated consumer: src/youtube_automation/core/adapters/observability.py",
+        "Updated consumer: tests/test_profile.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py",
+        "Updated consumer: .claude/skills/collection-ideate/references/generate_image.py",
+        "Updated consumer: .claude/skills/collection-ideate/references/benchmark_collector.py",
+        "Updated consumer: .claude/skills/channel-new/references/generate_image.py",
+        "Updated consumer: .claude/skills/channel-new/references/benchmark_collector.py",
+        "Updated consumer: .claude/skills/thumbnail/references/generate_image.py",
+        "Updated consumer: .claude/skills/benchmark/references/benchmark_collector.py"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/progress.py",
+      "exact_new_owner": "src/youtube_automation/infrastructure/runtime/progress.py",
+      "responsibility": "Canonical owner for progress.py in runtime",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/infrastructure/runtime/progress.py",
+        "Moved-source audit: src/youtube_automation/utils/progress.py",
+        "Updated consumer: tests/test_progress.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/publish_schedule.py",
+      "exact_new_owner": "src/youtube_automation/infrastructure/runtime/publish_schedule.py",
+      "responsibility": "Canonical owner for publish_schedule.py in runtime",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/infrastructure/runtime/publish_schedule.py",
+        "Moved-source audit: src/youtube_automation/utils/publish_schedule.py",
+        "Updated consumer: src/youtube_automation/core/adapters/runtime.py",
+        "Updated consumer: tests/test_publish_schedule.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/reporting_api.py",
+      "exact_new_owner": "src/youtube_automation/infrastructure/youtube/reporting_api.py",
+      "responsibility": "Canonical owner for reporting_api.py in youtube",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/infrastructure/youtube/reporting_api.py",
+        "Moved-source audit: src/youtube_automation/utils/reporting_api.py",
+        "Updated consumer: src/youtube_automation/commands/channel/channel_status.py",
+        "Updated consumer: src/youtube_automation/commands/system/doctor.py",
+        "Updated consumer: src/youtube_automation/commands/analytics/analytics_system.py",
+        "Updated consumer: src/youtube_automation/domains/analytics/mixins/ctr_analytics.py",
+        "Updated consumer: tests/test_reporting_api.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py",
+        "Updated consumer: .claude/skills/flop-analysis/SKILL.md",
+        "Updated consumer: .claude/skills/channel-status/references/get_channel_status.py",
+        "Updated consumer: .claude/skills/analytics-collect/references/analytics_system.py",
+        "Updated consumer: bench/bench_video_daily.py"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/retention_timeline.py",
+      "exact_new_owner": "src/youtube_automation/infrastructure/analytics/retention_timeline.py",
+      "responsibility": "Canonical owner for retention_timeline.py in analytics",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/infrastructure/analytics/retention_timeline.py",
+        "Moved-source audit: src/youtube_automation/utils/retention_timeline.py",
+        "Updated consumer: src/youtube_automation/commands/analytics/retention_timeline.py",
+        "Updated consumer: tests/test_retention_timeline.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/schedule.py",
+      "exact_new_owner": "src/youtube_automation/infrastructure/runtime/schedule.py",
+      "responsibility": "Canonical owner for schedule.py in runtime",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/infrastructure/runtime/schedule.py",
+        "Moved-source audit: src/youtube_automation/utils/schedule.py",
+        "Updated consumer: src/youtube_automation/core/adapters/runtime.py",
+        "Updated consumer: tests/test_schedule.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/schemas/__init__.py",
+      "exact_new_owner": "src/youtube_automation/infrastructure/legacy_utils/schemas/__init__.py",
+      "responsibility": "Canonical owner for __init__.py in schemas",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/infrastructure/legacy_utils/schemas/__init__.py",
+        "Moved-source audit: src/youtube_automation/utils/schemas/__init__.py",
+        "Updated consumer: tests/test_prompt_schema.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/setup_directory_contract.py",
+      "exact_new_owner": "src/youtube_automation/infrastructure/collections/setup_directory_contract.py",
+      "responsibility": "Canonical owner for setup_directory_contract.py in collections",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/infrastructure/collections/setup_directory_contract.py",
+        "Moved-source audit: src/youtube_automation/utils/setup_directory_contract.py",
+        "Updated consumer: src/youtube_automation/infrastructure/legacy_utils/setup_directory_contract.py",
+        "Updated consumer: src/youtube_automation/commands/channel/channel_init.py",
+        "Updated consumer: src/youtube_automation/commands/system/setup_dirs.py",
+        "Updated consumer: tests/test_setup_dirs.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/skill_config.py",
+      "exact_new_owner": "src/youtube_automation/configuration/skills.py",
+      "responsibility": "Canonical owner for skills.py in configuration",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/configuration/skills.py",
+        "Moved-source audit: src/youtube_automation/utils/skill_config.py",
+        "Updated consumer: src/youtube_automation/infrastructure/media/image_provider/__init__.py",
+        "Updated consumer: src/youtube_automation/commands/thumbnail/thumbnail_check.py",
+        "Updated consumer: src/youtube_automation/commands/thumbnail/auto_select_thumbnail.py",
+        "Updated consumer: src/youtube_automation/commands/thumbnail/thumbnail_text.py",
+        "Updated consumer: src/youtube_automation/commands/system/doctor.py",
+        "Updated consumer: src/youtube_automation/commands/suno/generate_suno_prompts.py",
+        "Updated consumer: src/youtube_automation/commands/suno/suno_audio_cleanup.py",
+        "Updated consumer: src/youtube_automation/commands/suno/suno_unattended_request.py",
+        "Updated consumer: src/youtube_automation/commands/suno/suno_verify.py",
+        "Updated consumer: src/youtube_automation/commands/suno/suno_select_tracks.py",
+        "Updated consumer: src/youtube_automation/commands/metadata/metadata_audit.py",
+        "Updated consumer: src/youtube_automation/commands/analytics/discover_competitors.py",
+        "Updated consumer: src/youtube_automation/commands/analytics/video_analyze.py",
+        "Updated consumer: src/youtube_automation/commands/analytics/benchmark_collector.py",
+        "Updated consumer: src/youtube_automation/commands/media/generate_loop_video.py",
+        "Updated consumer: src/youtube_automation/commands/media/stock_prune.py",
+        "Updated consumer: src/youtube_automation/commands/media/apply_rain_layers.py",
+        "Updated consumer: src/youtube_automation/commands/media/finalize_master.py",
+        "Updated consumer: src/youtube_automation/commands/media/generate_lyria_master.py",
+        "Updated consumer: src/youtube_automation/commands/media/generate_image.py",
+        "Updated consumer: src/youtube_automation/commands/media/generate_videos_batch.py",
+        "Updated consumer: src/youtube_automation/commands/media/stock_archive.py",
+        "Updated consumer: src/youtube_automation/commands/media/generate_master.py",
+        "Updated consumer: src/youtube_automation/commands/media/generate_short_loop.py",
+        "Updated consumer: src/youtube_automation/domains/metadata/service.py",
+        "Updated consumer: tests/test_image_provider_composition_cli.py",
+        "Updated consumer: tests/test_metadata_generator_shorts.py",
+        "Updated consumer: tests/test_image_provider_integration.py",
+        "Updated consumer: tests/test_skills_sync_installed_wheel.py",
+        "Updated consumer: tests/test_metadata_generator.py",
+        "Updated consumer: tests/test_generate_image_parallel.py",
+        "Updated consumer: tests/test_video_analyze_cli.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py",
+        "Updated consumer: .claude/skills/benchmark/SKILL.md",
+        "Updated consumer: .claude/skills/suno-helper/SKILL.md",
+        "Updated consumer: .claude/skills/thumbnail/SKILL.md",
+        "Updated consumer: .claude/skills/masterup/SKILL.md",
+        "Updated consumer: .claude/skills/videoup/SKILL.md",
+        "Updated consumer: .claude/skills/loop-video/SKILL.md",
+        "Updated consumer: .claude/skills/community-post/SKILL.md",
+        "Updated consumer: .claude/skills/flop-analysis/SKILL.md",
+        "Updated consumer: .claude/skills/discover-competitors/SKILL.md",
+        "Updated consumer: .claude/skills/analytics-collect/SKILL.md",
+        "Updated consumer: .claude/skills/suno-lyric/SKILL.md",
+        "Updated consumer: .claude/skills/setup/SKILL.md",
+        "Updated consumer: .claude/skills/short/SKILL.md",
+        "Updated consumer: .claude/skills/live-clean/SKILL.md",
+        "Updated consumer: .claude/skills/analytics-report/SKILL.md",
+        "Updated consumer: .claude/skills/video-analyze/SKILL.md",
+        "Updated consumer: .claude/skills/collection-ideate/SKILL.md",
+        "Updated consumer: .claude/skills/metadata-audit/SKILL.md",
+        "Updated consumer: .claude/skills/short-release/SKILL.md",
+        "Updated consumer: .claude/skills/lyria/SKILL.md",
+        "Updated consumer: .claude/skills/suno/SKILL.md",
+        "Updated consumer: .claude/skills/video-upload/SKILL.md",
+        "Updated consumer: .claude/skills/video-description/SKILL.md",
+        "Updated consumer: .claude/skills/short-thumbnail/references/generate_short_loop.py",
+        "Updated consumer: .claude/skills/analytics-run/references/analytics-chain-state.py",
+        "Updated consumer: .claude/skills/suno/references/generate_suno_prompts.py",
+        "Updated consumer: .claude/skills/collection-ideate/references/select-ttp-references.py",
+        "Updated consumer: .claude/skills/collection-ideate/references/generate_image.py",
+        "Updated consumer: .claude/skills/collection-ideate/references/benchmark_collector.py",
+        "Updated consumer: .claude/skills/channel-new/references/generate_image.py",
+        "Updated consumer: .claude/skills/channel-new/references/benchmark_collector.py",
+        "Updated consumer: .claude/skills/short/references/generate_short_loop.py",
+        "Updated consumer: .claude/skills/loop-video/references/generate_loop_video.py",
+        "Updated consumer: .claude/skills/masterup/references/finalize_master.py",
+        "Updated consumer: .claude/skills/masterup/references/check_loudness_deviation.py",
+        "Updated consumer: .claude/skills/thumbnail/references/codex-image-batch.sh",
+        "Updated consumer: .claude/skills/thumbnail/references/prompt-schema.md",
+        "Updated consumer: .claude/skills/thumbnail/references/share_thumbnail_as_main.py",
+        "Updated consumer: .claude/skills/thumbnail/references/generate_image.py",
+        "Updated consumer: .claude/skills/thumbnail/references/codex-prompt.py",
+        "Updated consumer: .claude/skills/thumbnail/references/codex-image.sh",
+        "Updated consumer: .claude/skills/thumbnail/references/archive-approved-thumbnail.py",
+        "Updated consumer: .claude/skills/benchmark/references/benchmark_collector.py"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/stock.py",
+      "exact_new_owner": "src/youtube_automation/infrastructure/media/stock.py",
+      "responsibility": "Canonical owner for stock.py in media",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/infrastructure/media/stock.py",
+        "Moved-source audit: src/youtube_automation/utils/stock.py",
+        "Updated consumer: src/youtube_automation/commands/media/stock_list.py",
+        "Updated consumer: src/youtube_automation/commands/media/stock_prune.py",
+        "Updated consumer: src/youtube_automation/commands/media/stock_preview.py",
+        "Updated consumer: src/youtube_automation/commands/media/stock_archive.py",
+        "Updated consumer: tests/test_stock.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/streaming/__init__.py",
+      "exact_new_owner": "src/youtube_automation/infrastructure/youtube/streaming/__init__.py",
+      "responsibility": "Canonical owner for __init__.py in streaming",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/infrastructure/youtube/streaming/__init__.py",
+        "Moved-source audit: src/youtube_automation/utils/streaming/__init__.py",
+        "Updated consumer: tests/test_stream_cycle_uptime.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/streaming/cycle_uptime.py",
+      "exact_new_owner": "src/youtube_automation/infrastructure/youtube/streaming/cycle_uptime.py",
+      "responsibility": "Canonical owner for cycle_uptime.py in streaming",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/infrastructure/youtube/streaming/cycle_uptime.py",
+        "Moved-source audit: src/youtube_automation/utils/streaming/cycle_uptime.py",
+        "Updated consumer: src/youtube_automation/infrastructure/youtube/streaming/monthly_report.py",
+        "Updated consumer: tests/test_stream_monthly_report.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/streaming/daily_archive.py",
+      "exact_new_owner": "src/youtube_automation/infrastructure/youtube/streaming/daily_archive.py",
+      "responsibility": "Canonical owner for daily_archive.py in streaming",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/infrastructure/youtube/streaming/daily_archive.py",
+        "Moved-source audit: src/youtube_automation/utils/streaming/daily_archive.py",
+        "Updated consumer: src/youtube_automation/commands/youtube/streaming_archive_check.py",
+        "Updated consumer: tests/test_streaming_healthcheck.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/streaming/instance_resolver.py",
+      "exact_new_owner": "src/youtube_automation/infrastructure/youtube/streaming/instance_resolver.py",
+      "responsibility": "Canonical owner for instance_resolver.py in streaming",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/infrastructure/youtube/streaming/instance_resolver.py",
+        "Moved-source audit: src/youtube_automation/utils/streaming/instance_resolver.py",
+        "Updated consumer: src/youtube_automation/commands/youtube/stream_bandwidth.py",
+        "Updated consumer: tests/test_stream_instance_resolver.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/streaming/monthly_archive.py",
+      "exact_new_owner": "src/youtube_automation/infrastructure/youtube/streaming/monthly_archive.py",
+      "responsibility": "Canonical owner for monthly_archive.py in streaming",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/infrastructure/youtube/streaming/monthly_archive.py",
+        "Moved-source audit: src/youtube_automation/utils/streaming/monthly_archive.py",
+        "Updated consumer: src/youtube_automation/commands/youtube/stream_bandwidth.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/streaming/monthly_report.py",
+      "exact_new_owner": "src/youtube_automation/infrastructure/youtube/streaming/monthly_report.py",
+      "responsibility": "Canonical owner for monthly_report.py in streaming",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/infrastructure/youtube/streaming/monthly_report.py",
+        "Moved-source audit: src/youtube_automation/utils/streaming/monthly_report.py",
+        "Updated consumer: src/youtube_automation/commands/youtube/stream_bandwidth.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/streaming/threshold.py",
+      "exact_new_owner": "src/youtube_automation/infrastructure/youtube/streaming/threshold.py",
+      "responsibility": "Canonical owner for threshold.py in streaming",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/infrastructure/youtube/streaming/threshold.py",
+        "Moved-source audit: src/youtube_automation/utils/streaming/threshold.py",
+        "Updated consumer: src/youtube_automation/commands/youtube/stream_bandwidth.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/streaming/vultr_bandwidth.py",
+      "exact_new_owner": "src/youtube_automation/infrastructure/youtube/streaming/vultr_bandwidth.py",
+      "responsibility": "Canonical owner for vultr_bandwidth.py in streaming",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/infrastructure/youtube/streaming/vultr_bandwidth.py",
+        "Moved-source audit: src/youtube_automation/utils/streaming/vultr_bandwidth.py",
+        "Updated consumer: src/youtube_automation/commands/youtube/stream_bandwidth.py",
+        "Updated consumer: tests/test_stream_vultr_bandwidth.py",
+        "Updated consumer: tests/integration/test_stream_bandwidth_flow.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/theme_performance.py",
+      "exact_new_owner": "src/youtube_automation/infrastructure/analytics/theme_performance.py",
+      "responsibility": "Canonical owner for theme_performance.py in analytics",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/infrastructure/analytics/theme_performance.py",
+        "Moved-source audit: src/youtube_automation/utils/theme_performance.py",
+        "Updated consumer: src/youtube_automation/commands/analytics/theme_compare.py",
+        "Updated consumer: tests/test_theme_performance.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/time_utils.py",
+      "exact_new_owner": "src/youtube_automation/infrastructure/runtime/time_utils.py",
+      "responsibility": "Canonical owner for time_utils.py in runtime",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/infrastructure/runtime/time_utils.py",
+        "Moved-source audit: src/youtube_automation/utils/time_utils.py",
+        "Updated consumer: src/youtube_automation/core/adapters/runtime.py",
+        "Updated consumer: tests/test_metadata_generator.py",
+        "Updated consumer: tests/unit/test_time_utils.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/traffic_trend.py",
+      "exact_new_owner": "src/youtube_automation/infrastructure/analytics/traffic_trend.py",
+      "responsibility": "Canonical owner for traffic_trend.py in analytics",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/infrastructure/analytics/traffic_trend.py",
+        "Moved-source audit: src/youtube_automation/utils/traffic_trend.py",
+        "Updated consumer: src/youtube_automation/commands/analytics/traffic_trend.py",
+        "Updated consumer: tests/test_traffic_trend.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/ttp_health.py",
+      "exact_new_owner": "src/youtube_automation/infrastructure/analytics/ttp_health.py",
+      "responsibility": "Canonical owner for ttp_health.py in analytics",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/infrastructure/analytics/ttp_health.py",
+        "Moved-source audit: src/youtube_automation/utils/ttp_health.py",
+        "Updated consumer: src/youtube_automation/commands/analytics/ttp_health.py",
+        "Updated consumer: tests/test_ttp_health.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/veo_generator.py",
+      "exact_new_owner": "src/youtube_automation/infrastructure/media/veo_generator.py",
+      "responsibility": "Canonical owner for veo_generator.py in media",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/infrastructure/media/veo_generator.py",
+        "Moved-source audit: src/youtube_automation/utils/veo_generator.py",
+        "Updated consumer: src/youtube_automation/infrastructure/media/omni_generator.py",
+        "Updated consumer: src/youtube_automation/commands/media/generate_loop_video.py",
+        "Updated consumer: src/youtube_automation/commands/media/generate_short_loop.py",
+        "Updated consumer: tests/test_veo_generator.py",
+        "Updated consumer: tests/test_video_type.py",
+        "Updated consumer: tests/test_generate_loop_video_cli.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py",
+        "Updated consumer: .claude/skills/short-thumbnail/references/generate_short_loop.py",
+        "Updated consumer: .claude/skills/short/references/generate_short_loop.py",
+        "Updated consumer: .claude/skills/loop-video/references/generate_loop_video.py",
+        "Updated consumer: .claude/skills/videoup/references/video-type-extension.md"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/veo_operation_store.py",
+      "exact_new_owner": "src/youtube_automation/infrastructure/media/veo_operation_store.py",
+      "responsibility": "Canonical owner for veo_operation_store.py in media",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/infrastructure/media/veo_operation_store.py",
+        "Moved-source audit: src/youtube_automation/utils/veo_operation_store.py",
+        "Updated consumer: tests/test_veo_operation_store.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/video_analyzer.py",
+      "exact_new_owner": "src/youtube_automation/infrastructure/media/video_analyzer.py",
+      "responsibility": "Canonical owner for video_analyzer.py in media",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/infrastructure/media/video_analyzer.py",
+        "Moved-source audit: src/youtube_automation/utils/video_analyzer.py",
+        "Updated consumer: src/youtube_automation/commands/analytics/video_analyze.py",
+        "Updated consumer: src/youtube_automation/core/adapters/media.py",
+        "Updated consumer: tests/test_video_analyzer.py",
+        "Updated consumer: tests/test_video_analyze_cli.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/worktree.py",
+      "exact_new_owner": "src/youtube_automation/infrastructure/vcs/worktree.py",
+      "responsibility": "Canonical owner for worktree.py in vcs",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/infrastructure/vcs/worktree.py",
+        "Moved-source audit: src/youtube_automation/utils/worktree.py",
+        "Updated consumer: src/youtube_automation/infrastructure/auth/youtube.py",
+        "Updated consumer: tests/test_oauth_worktree_fallback.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/youtube_quota.py",
+      "exact_new_owner": "src/youtube_automation/infrastructure/youtube/youtube_quota.py",
+      "responsibility": "Canonical owner for youtube_quota.py in youtube",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/infrastructure/youtube/youtube_quota.py",
+        "Moved-source audit: src/youtube_automation/utils/youtube_quota.py",
+        "Updated consumer: src/youtube_automation/core/adapters/youtube.py",
+        "Updated consumer: tests/test_youtube_quota.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/utils/youtube_tag.py",
+      "exact_new_owner": "src/youtube_automation/infrastructure/youtube/youtube_tag.py",
+      "responsibility": "Canonical owner for youtube_tag.py in youtube",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/infrastructure/youtube/youtube_tag.py",
+        "Moved-source audit: src/youtube_automation/utils/youtube_tag.py",
+        "Updated consumer: src/youtube_automation/configuration/content.py",
+        "Updated consumer: src/youtube_automation/commands/metadata/bulk_update_descriptions.py",
+        "Updated consumer: src/youtube_automation/core/adapters/youtube.py",
+        "Updated consumer: tests/test_youtube_tag.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py"
+      ]
+    },
+    {
+      "old_owner": "src/youtube_automation/infrastructure/errors.py",
+      "exact_new_owner": "src/youtube_automation/core/errors.py",
+      "responsibility": "Canonical owner for errors.py in core",
+      "reference_updates": [
+        "Canonical owner: src/youtube_automation/core/errors.py",
+        "Moved-source audit: src/youtube_automation/infrastructure/errors.py",
+        "Updated consumer: src/youtube_automation/entrypoints.py",
+        "Updated consumer: src/youtube_automation/configuration/skills.py",
+        "Updated consumer: src/youtube_automation/configuration/loader.py",
+        "Updated consumer: src/youtube_automation/configuration/channel_target.py",
+        "Updated consumer: src/youtube_automation/configuration/comments.py",
+        "Updated consumer: src/youtube_automation/configuration/community_draft.py",
+        "Updated consumer: src/youtube_automation/infrastructure/captions_adapter.py",
+        "Updated consumer: src/youtube_automation/infrastructure/retry.py",
+        "Updated consumer: src/youtube_automation/infrastructure/secrets.py",
+        "Updated consumer: src/youtube_automation/infrastructure/analytics_adapter.py",
+        "Updated consumer: src/youtube_automation/infrastructure/auth/client_secrets.py",
+        "Updated consumer: src/youtube_automation/infrastructure/auth/youtube.py",
+        "Updated consumer: src/youtube_automation/infrastructure/google/youtube.py",
+        "Updated consumer: src/youtube_automation/infrastructure/runtime/google_cloud_project.py",
+        "Updated consumer: src/youtube_automation/infrastructure/runtime/schedule.py",
+        "Updated consumer: src/youtube_automation/infrastructure/youtube/reporting_api.py",
+        "Updated consumer: src/youtube_automation/infrastructure/youtube/notification.py",
+        "Updated consumer: src/youtube_automation/infrastructure/collections/chrome_extensions.py",
+        "Updated consumer: src/youtube_automation/infrastructure/collections/setup_directory_contract.py",
+        "Updated consumer: src/youtube_automation/infrastructure/analytics/competitor_discovery.py",
+        "Updated consumer: src/youtube_automation/infrastructure/analytics/channel_registry.py",
+        "Updated consumer: src/youtube_automation/infrastructure/analytics/dashboard_refresh.py",
+        "Updated consumer: src/youtube_automation/infrastructure/analytics/retention_timeline.py",
+        "Updated consumer: src/youtube_automation/infrastructure/analytics/dashboard_read_model.py",
+        "Updated consumer: src/youtube_automation/infrastructure/media/stock.py",
+        "Updated consumer: src/youtube_automation/infrastructure/media/collection_paths.py",
+        "Updated consumer: src/youtube_automation/infrastructure/media/lyria_client.py",
+        "Updated consumer: src/youtube_automation/infrastructure/media/video_analyzer.py",
+        "Updated consumer: src/youtube_automation/infrastructure/media/image_provider/config.py",
+        "Updated consumer: src/youtube_automation/infrastructure/media/image_provider/__init__.py",
+        "Updated consumer: src/youtube_automation/infrastructure/media/image_provider/openai.py",
+        "Updated consumer: src/youtube_automation/infrastructure/media/image_provider/composition.py",
+        "Updated consumer: src/youtube_automation/infrastructure/media/image_provider/gemini_cli.py",
+        "Updated consumer: src/youtube_automation/infrastructure/youtube/streaming/vultr_bandwidth.py",
+        "Updated consumer: src/youtube_automation/infrastructure/youtube/streaming/instance_resolver.py",
+        "Updated consumer: src/youtube_automation/infrastructure/youtube/streaming/monthly_archive.py",
+        "Updated consumer: src/youtube_automation/application/comments/generator_factory.py",
+        "Updated consumer: src/youtube_automation/application/comments/codex_generator.py",
+        "Updated consumer: src/youtube_automation/application/comments/replier.py",
+        "Updated consumer: src/youtube_automation/application/comments/generator.py",
+        "Updated consumer: src/youtube_automation/application/comments/fetcher.py",
+        "Updated consumer: src/youtube_automation/application/comments/history.py",
+        "Updated consumer: src/youtube_automation/application/live_chat/runner.py",
+        "Updated consumer: src/youtube_automation/application/live_chat/codex.py",
+        "Updated consumer: src/youtube_automation/application/live_chat/history.py",
+        "Updated consumer: src/youtube_automation/application/analytics/benchmark_refresh.py",
+        "Updated consumer: src/youtube_automation/application/analytics/benchmark_query.py",
+        "Updated consumer: src/youtube_automation/commands/thumbnail/thumbnail_check.py",
+        "Updated consumer: src/youtube_automation/commands/thumbnail/auto_select_thumbnail.py",
+        "Updated consumer: src/youtube_automation/commands/thumbnail/thumbnail_correlate.py",
+        "Updated consumer: src/youtube_automation/commands/thumbnail/thumbnail_text.py",
+        "Updated consumer: src/youtube_automation/commands/distrokid/distrokid_prepare.py",
+        "Updated consumer: src/youtube_automation/commands/uploads/_upload_cli_error_boundary.py",
+        "Updated consumer: src/youtube_automation/commands/uploads/wf_batch.py",
+        "Updated consumer: src/youtube_automation/commands/youtube/captions_upload.py",
+        "Updated consumer: src/youtube_automation/commands/youtube/fetch_stream_key.py",
+        "Updated consumer: src/youtube_automation/commands/youtube/comment_reply.py",
+        "Updated consumer: src/youtube_automation/commands/youtube/live_chat_reply.py",
+        "Updated consumer: src/youtube_automation/commands/youtube/playlist_manager.py",
+        "Updated consumer: src/youtube_automation/commands/youtube/pinned_comment.py",
+        "Updated consumer: src/youtube_automation/commands/channel/channel_settings.py",
+        "Updated consumer: src/youtube_automation/commands/channel/channel_import.py",
+        "Updated consumer: src/youtube_automation/commands/channel/channel_status.py",
+        "Updated consumer: src/youtube_automation/commands/channel/channel_init.py",
+        "Updated consumer: src/youtube_automation/commands/channel/channel_seed.py",
+        "Updated consumer: src/youtube_automation/commands/system/automation_update_refs.py",
+        "Updated consumer: src/youtube_automation/commands/system/automation_update_remote.py",
+        "Updated consumer: src/youtube_automation/commands/system/setup_dirs.py",
+        "Updated consumer: src/youtube_automation/commands/system/automation_update.py",
+        "Updated consumer: src/youtube_automation/commands/system/doctor.py",
+        "Updated consumer: src/youtube_automation/commands/system/oauth.py",
+        "Updated consumer: src/youtube_automation/commands/suno/generate_suno_prompts.py",
+        "Updated consumer: src/youtube_automation/commands/suno/suno_audio_cleanup.py",
+        "Updated consumer: src/youtube_automation/commands/suno/suno_unattended_request.py",
+        "Updated consumer: src/youtube_automation/commands/suno/suno_verify.py",
+        "Updated consumer: src/youtube_automation/commands/suno/suno_select_tracks.py",
+        "Updated consumer: src/youtube_automation/commands/suno/suno_verify_playlist.py",
+        "Updated consumer: src/youtube_automation/commands/collections/vote_log.py",
+        "Updated consumer: src/youtube_automation/commands/collections/collection_serve_discovery.py",
+        "Updated consumer: src/youtube_automation/commands/collections/collection_serve.py",
+        "Updated consumer: src/youtube_automation/commands/metadata/bulk_update_descriptions.py",
+        "Updated consumer: src/youtube_automation/commands/metadata/bulk_update_synthetic_media.py",
+        "Updated consumer: src/youtube_automation/commands/metadata/title_duplicate_check.py",
+        "Updated consumer: src/youtube_automation/commands/analytics/discover_competitors.py",
+        "Updated consumer: src/youtube_automation/commands/analytics/traffic_trend.py",
+        "Updated consumer: src/youtube_automation/commands/analytics/channel_trend.py",
+        "Updated consumer: src/youtube_automation/commands/analytics/analytics_system.py",
+        "Updated consumer: src/youtube_automation/commands/analytics/dashboard.py",
+        "Updated consumer: src/youtube_automation/commands/analytics/video_analyze.py",
+        "Updated consumer: src/youtube_automation/commands/analytics/launch_curve.py",
+        "Updated consumer: src/youtube_automation/commands/analytics/retention_timeline.py",
+        "Updated consumer: src/youtube_automation/commands/analytics/theme_compare.py",
+        "Updated consumer: src/youtube_automation/commands/analytics/kpi_dashboard.py",
+        "Updated consumer: src/youtube_automation/commands/analytics/benchmark_collector.py",
+        "Updated consumer: src/youtube_automation/commands/analytics/fetch_benchmark_comments.py",
+        "Updated consumer: src/youtube_automation/commands/media/generate_loop_video.py",
+        "Updated consumer: src/youtube_automation/commands/media/apply_rain_layers.py",
+        "Updated consumer: src/youtube_automation/commands/media/check_raw_master.py",
+        "Updated consumer: src/youtube_automation/commands/media/populate_scene_phrases.py",
+        "Updated consumer: src/youtube_automation/commands/media/finalize_master.py",
+        "Updated consumer: src/youtube_automation/commands/media/generate_lyria_master.py",
+        "Updated consumer: src/youtube_automation/commands/media/generate_image.py",
+        "Updated consumer: src/youtube_automation/commands/media/generate_videos_batch.py",
+        "Updated consumer: src/youtube_automation/commands/media/stock_archive.py",
+        "Updated consumer: src/youtube_automation/commands/media/generate_master.py",
+        "Updated consumer: src/youtube_automation/commands/media/generate_short_loop.py",
+        "Updated consumer: src/youtube_automation/core/adapters/errors.py",
+        "Updated consumer: tests/test_playlist_analytics.py",
+        "Updated consumer: tests/test_channel_target.py",
+        "Updated consumer: tests/test_reporting_api.py",
+        "Updated consumer: tests/test_stream_bandwidth_cli.py",
+        "Updated consumer: tests/test_codex_image_batch.py",
+        "Updated consumer: tests/test_collection_serve.py",
+        "Updated consumer: tests/test_retention_timeline.py",
+        "Updated consumer: tests/test_video_analyzer.py",
+        "Updated consumer: tests/test_retry.py",
+        "Updated consumer: tests/test_youtube_service.py",
+        "Updated consumer: tests/test_oauth_handler_main.py",
+        "Updated consumer: tests/test_retention.py",
+        "Updated consumer: tests/test_audience_analytics.py",
+        "Updated consumer: tests/test_video_listing.py",
+        "Updated consumer: tests/test_benchmark_collector_channels_batch.py",
+        "Updated consumer: tests/test_image_provider_single_step_rotation.py",
+        "Updated consumer: tests/test_pinned_comment.py",
+        "Updated consumer: tests/test_thumbnail_text.py",
+        "Updated consumer: tests/test_oauth_handler_exceptions.py",
+        "Updated consumer: tests/test_image_provider_factory.py",
+        "Updated consumer: tests/test_collection_uploader.py",
+        "Updated consumer: tests/test_probe.py",
+        "Updated consumer: tests/test_finalize_master_config_matrix.py",
+        "Updated consumer: tests/test_config_loader.py",
+        "Updated consumer: tests/test_thumbnail_archive.py",
+        "Updated consumer: tests/test_channel_seed.py",
+        "Updated consumer: tests/test_stream_instance_resolver.py",
+        "Updated consumer: tests/test_revenue_analytics.py",
+        "Updated consumer: tests/test_image_provider_composition_cli.py",
+        "Updated consumer: tests/test_thumbnail_auto_selection.py",
+        "Updated consumer: tests/test_comments_history.py",
+        "Updated consumer: tests/test_video_daily_analytics.py",
+        "Updated consumer: tests/test_video_analytics.py",
+        "Updated consumer: tests/test_fetch_benchmark_comments_cli.py",
+        "Updated consumer: tests/test_dashboard_read_model.py",
+        "Updated consumer: tests/test_bulk_update_descriptions_from_md.py",
+        "Updated consumer: tests/test_suno_lyric_duplication.py",
+        "Updated consumer: tests/test_generate_videos_batch.py",
+        "Updated consumer: tests/test_dashboard_refresh.py",
+        "Updated consumer: tests/test_strategic_analytics_parallel.py",
+        "Updated consumer: tests/test_image_provider_config.py",
+        "Updated consumer: tests/test_generate_master.py",
+        "Updated consumer: tests/test_preflight.py",
+        "Updated consumer: tests/test_traffic_source.py",
+        "Updated consumer: tests/test_suno_unattended_request.py",
+        "Updated consumer: tests/test_automation_update_remote.py",
+        "Updated consumer: tests/test_collection_paths.py",
+        "Updated consumer: tests/test_distrokid_spec.py",
+        "Updated consumer: tests/test_channel_registry.py",
+        "Updated consumer: tests/test_oauth_save_credentials.py",
+        "Updated consumer: tests/test_distrokid_release_endpoint.py",
+        "Updated consumer: tests/test_doctor.py",
+        "Updated consumer: tests/test_lyria_client.py",
+        "Updated consumer: tests/test_short_uploader.py",
+        "Updated consumer: tests/test_playlist_cli.py",
+        "Updated consumer: tests/test_suno_prompt_quality_rules.py",
+        "Updated consumer: tests/test_channel_init.py",
+        "Updated consumer: tests/test_descriptions_md_quote_strip.py",
+        "Updated consumer: tests/test_stream_vultr_bandwidth.py",
+        "Updated consumer: tests/test_collection_serve_discovery.py",
+        "Updated consumer: tests/test_ctr_analytics.py",
+        "Updated consumer: tests/test_comments_generator_factory.py",
+        "Updated consumer: tests/test_setup_dirs.py",
+        "Updated consumer: tests/test_b3_domain_migration_contract.py",
+        "Updated consumer: tests/test_thumbnail_check_cli.py",
+        "Updated consumer: tests/test_distrokid_disc_source.py",
+        "Updated consumer: tests/test_suno_select_tracks.py",
+        "Updated consumer: tests/test_schedule.py",
+        "Updated consumer: tests/test_bulk_update_synthetic_media.py",
+        "Updated consumer: tests/test_genai_client.py",
+        "Updated consumer: tests/test_channel_analytics.py",
+        "Updated consumer: tests/test_notification.py",
+        "Updated consumer: tests/test_youtube_auto_uploader.py",
+        "Updated consumer: tests/test_stock_cli.py",
+        "Updated consumer: tests/test_generate_lyria_master.py",
+        "Updated consumer: tests/test_generate_short_loop.py",
+        "Updated consumer: tests/test_wf_batch.py",
+        "Updated consumer: tests/test_discover_competitors_cli.py",
+        "Updated consumer: tests/test_image_provider_integration.py",
+        "Updated consumer: tests/test_suno_playlist_verification.py",
+        "Updated consumer: tests/test_weekly_vote_log.py",
+        "Updated consumer: tests/test_apply_rain_layers.py",
+        "Updated consumer: tests/test_chrome_extensions.py",
+        "Updated consumer: tests/test_channel_settings.py",
+        "Updated consumer: tests/test_benchmark_collector_no_fallback.py",
+        "Updated consumer: tests/test_metadata_generator.py",
+        "Updated consumer: tests/test_quota_read_wiring.py",
+        "Updated consumer: tests/test_skill_config.py",
+        "Updated consumer: tests/test_captions_upload_cli.py",
+        "Updated consumer: tests/test_secrets.py",
+        "Updated consumer: tests/test_playlist_manager.py",
+        "Updated consumer: tests/test_analytics_system.py",
+        "Updated consumer: tests/test_live_chat_reply.py",
+        "Updated consumer: tests/test_stream_monthly_archive.py",
+        "Updated consumer: tests/test_distrokid_prepare.py",
+        "Updated consumer: tests/test_suno_verify_cli.py",
+        "Updated consumer: tests/test_video_type.py",
+        "Updated consumer: tests/test_distrokid_metadata.py",
+        "Updated consumer: tests/test_channel_new_fetch_branding_snapshot.py",
+        "Updated consumer: tests/test_benchmark_quota_wiring.py",
+        "Updated consumer: tests/test_generate_image_parallel.py",
+        "Updated consumer: tests/test_generate_suno_prompts.py",
+        "Updated consumer: tests/test_finalize_master.py",
+        "Updated consumer: tests/test_image_provider_gemini_cli.py",
+        "Updated consumer: tests/test_competitor_discovery.py",
+        "Updated consumer: tests/test_video_analyze_cli.py",
+        "Updated consumer: tests/test_no_runtime_dotenv.py",
+        "Updated consumer: tests/test_populate_scene_phrases.py",
+        "Updated consumer: tests/test_entrypoints.py",
+        "Updated consumer: tests/test_check_raw_master.py",
+        "Updated consumer: tests/test_fetch_stream_key.py",
+        "Updated consumer: tests/test_captions.py",
+        "Updated consumer: tests/test_comments_replier.py",
+        "Updated consumer: tests/test_stock.py",
+        "Updated consumer: tests/test_upload_cli_error_boundary.py",
+        "Updated consumer: tests/test_image_provider_openai.py",
+        "Updated consumer: tests/test_generate_loop_video_cli.py",
+        "Updated consumer: tests/test_codex_thumbnail_routing.py",
+        "Updated consumer: tests/test_suno_audio_cleanup.py",
+        "Updated consumer: tests/test_preflight_checks.py",
+        "Updated consumer: tests/test_comments_generator.py",
+        "Updated consumer: tests/integration/test_upload_core.py",
+        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py",
+        "Updated consumer: .claude/skills/short-thumbnail/references/generate_short_loop.py",
+        "Updated consumer: .claude/skills/analytics-run/references/analytics-chain-state.py",
+        "Updated consumer: .claude/skills/community-draft/references/generate_batch.py",
+        "Updated consumer: .claude/skills/video-upload/references/playlist_manager.py",
+        "Updated consumer: .claude/skills/suno/references/generate_suno_prompts.py",
+        "Updated consumer: .claude/skills/distrokid-helper/references/distrokid_prepare.py",
+        "Updated consumer: .claude/skills/automation-schedule/references/schedule_config.py",
+        "Updated consumer: .claude/skills/collection-ideate/references/generate_image.py",
+        "Updated consumer: .claude/skills/collection-ideate/references/benchmark_collector.py",
+        "Updated consumer: .claude/skills/channel-new/references/generate_image.py",
+        "Updated consumer: .claude/skills/channel-new/references/benchmark_collector.py",
+        "Updated consumer: .claude/skills/channel-new/references/fetch_branding_snapshot.py",
+        "Updated consumer: .claude/skills/channel-new/references/fetch_benchmark_comments.py",
+        "Updated consumer: .claude/skills/viewer-voice/references/fetch_benchmark_comments.py",
+        "Updated consumer: .claude/skills/channel-status/references/get_channel_status.py",
+        "Updated consumer: .claude/skills/short/references/generate_short_loop.py",
+        "Updated consumer: .claude/skills/suno-lyric/references/check_lyric_duplication.py",
+        "Updated consumer: .claude/skills/analytics-collect/references/analytics_system.py",
+        "Updated consumer: .claude/skills/loop-video/references/generate_loop_video.py",
+        "Updated consumer: .claude/skills/masterup/references/finalize_master.py",
+        "Updated consumer: .claude/skills/masterup/references/check_loudness_deviation.py",
+        "Updated consumer: .claude/skills/thumbnail/references/share_thumbnail_as_main.py",
+        "Updated consumer: .claude/skills/thumbnail/references/generate_image.py",
+        "Updated consumer: .claude/skills/thumbnail/references/codex-prompt.py",
+        "Updated consumer: .claude/skills/thumbnail/references/archive-approved-thumbnail.py",
+        "Updated consumer: .claude/skills/benchmark/references/benchmark_collector.py",
+        "Updated consumer: bench/bench_video_daily.py"
+      ]
+    }
+  ]
+}

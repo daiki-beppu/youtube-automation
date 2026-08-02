@@ -14,6 +14,8 @@ from typing import cast
 
 import yaml
 
+from youtube_automation.configuration.skills import load_channel_override, load_skill_config
+from youtube_automation.core.errors import ConfigError
 from youtube_automation.domains.suno.config import infer_suno_mode, resolve_suno_config
 from youtube_automation.domains.suno.downloaded.models import (
     DOCUMENTATION_DIRNAME,
@@ -32,9 +34,7 @@ from youtube_automation.domains.suno.downloaded.validation import (
     surrounding_whitespace_issue,
 )
 from youtube_automation.domains.suno.lyrics import load_suno_lyrics_by_name
-from youtube_automation.infrastructure.errors import ConfigError
-from youtube_automation.utils.collection_paths import CollectionPaths
-from youtube_automation.utils.skill_config import load_channel_override, load_skill_config
+from youtube_automation.infrastructure.media.collection_paths import CollectionPaths
 
 _STYLE_VARIATION_BANNED_ADJECTIVES = frozenset(
     {

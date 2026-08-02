@@ -34,12 +34,12 @@ from pathlib import Path
 from typing import Any
 
 from youtube_automation.configuration import channel_dir
-from youtube_automation.infrastructure.errors import ConfigError, ValidationError
-from youtube_automation.utils.collection_paths import (
+from youtube_automation.configuration.skills import load_skill_config
+from youtube_automation.core.errors import ConfigError, ValidationError
+from youtube_automation.infrastructure.media.collection_paths import (
     CollectionPaths,
     resolve_collection_dir,
 )
-from youtube_automation.utils.skill_config import load_skill_config
 
 # 雨レイヤー設定 (skill-config post_processing.rain_layers namespace で上書き可)。
 _DEFAULT_VOLUME_DB = -19.0

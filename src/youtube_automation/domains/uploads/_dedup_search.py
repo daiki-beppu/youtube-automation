@@ -10,13 +10,13 @@ from __future__ import annotations
 import logging
 from typing import Dict, Optional
 
+from youtube_automation.core.adapters.errors import ValidationError, YouTubeAPIError
+from youtube_automation.core.adapters.google.youtube import execute_youtube_request, validate_youtube_response_items
+from youtube_automation.core.adapters.quota import youtube_quota_recorder
 from youtube_automation.domains.uploads._uploader_constants import (
     _REUSABLE_UPLOAD_STATUSES,
     YOUTUBE_VIDEO_URL_PREFIX,
 )
-from youtube_automation.infrastructure.errors import ValidationError, YouTubeAPIError
-from youtube_automation.infrastructure.google.youtube import execute_youtube_request, validate_youtube_response_items
-from youtube_automation.infrastructure.quota import youtube_quota_recorder
 
 logger = logging.getLogger(__name__)
 

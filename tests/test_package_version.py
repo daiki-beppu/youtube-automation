@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import importlib.metadata
 import runpy
-from pathlib import Path
 from unittest.mock import patch
 
-PACKAGE_INIT = Path(__file__).parents[1] / "src" / "youtube_automation" / "__init__.py"
+from tests.helpers.paths import REPO_ROOT
+
+PACKAGE_INIT = REPO_ROOT / "src" / "youtube_automation" / "__init__.py"
 
 
 def test_version_uses_installed_package_metadata() -> None:

@@ -8,8 +8,8 @@ from typing import Protocol
 from googleapiclient.errors import HttpError
 from httplib2 import HttpLib2Error
 
+from youtube_automation.core.errors import YouTubeAPIError
 from youtube_automation.domains.analytics.ports import AnalyticsResponse
-from youtube_automation.infrastructure.errors import YouTubeAPIError
 from youtube_automation.infrastructure.retry import execute_with_retry
 
 

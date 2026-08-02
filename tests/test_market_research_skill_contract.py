@@ -8,7 +8,9 @@ from pathlib import Path
 
 import pytest
 
-ROOT = Path(__file__).resolve().parent.parent
+from tests.helpers.paths import REPO_ROOT
+
+ROOT = REPO_ROOT
 SCRIPT = ROOT / ".claude" / "skills" / "market-research" / "references" / "market_research_contract.py"
 
 

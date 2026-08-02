@@ -27,17 +27,17 @@ from pathlib import Path
 
 from youtube_automation.application.analytics.benchmark_query import load_benchmark_videos
 from youtube_automation.application.analytics.benchmark_refresh import ensure_benchmark_fresh
+from youtube_automation.commands._shared.arguments import CompetitorArgumentParser
 from youtube_automation.commands.analytics.benchmark_collector import (
     BenchmarkCollector,
     BenchmarkReportGenerator,
     BenchmarkThumbnailAnalyzer,
 )
 from youtube_automation.configuration import channel_dir as _channel_dir
+from youtube_automation.core.errors import AutomationError, YouTubeAPIError
 from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
 from youtube_automation.infrastructure.cost_tracker import log_quota
-from youtube_automation.infrastructure.errors import AutomationError, YouTubeAPIError
 from youtube_automation.infrastructure.google.youtube import YouTubeClients
-from youtube_automation.utils.cli_arguments import CompetitorArgumentParser
 
 logger = logging.getLogger(__name__)
 

@@ -10,7 +10,7 @@ import pytest
 
 from youtube_automation.commands.youtube import captions_upload
 from youtube_automation.commands.youtube.captions_upload import main
-from youtube_automation.infrastructure.errors import YouTubeAPIError
+from youtube_automation.core.errors import YouTubeAPIError
 
 
 def test_dry_run_generates_srt_without_youtube_api(tmp_path, monkeypatch):

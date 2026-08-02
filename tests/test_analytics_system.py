@@ -10,7 +10,9 @@ import sys
 from pathlib import Path
 from unittest.mock import ANY, MagicMock, patch
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from tests.helpers.paths import REPO_ROOT
+
+sys.path.insert(0, str(REPO_ROOT))
 
 import pytest
 from googleapiclient.errors import HttpError
@@ -18,8 +20,8 @@ from googleapiclient.errors import HttpError
 # `patch("youtube_automation.commands.analytics.analytics_system.X")` がモジュール属性として
 # 解決できるよう、トップレベルで submodule を import しておく。
 import youtube_automation.commands.analytics.analytics_system  # noqa: F401
+from youtube_automation.core.errors import AuthError, ConfigError, YouTubeAPIError
 from youtube_automation.domains.analytics.service import YouTubeAnalyticsCollector
-from youtube_automation.infrastructure.errors import AuthError, ConfigError, YouTubeAPIError
 
 # ---------------------------------------------------------------------------
 # フィクスチャ

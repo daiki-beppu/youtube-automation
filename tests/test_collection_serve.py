@@ -54,13 +54,16 @@ from youtube_automation.commands.collections.collection_serve import (
     resolve_prompts_path,
 )
 from youtube_automation.commands.collections.collection_serve_discovery import DISCOVERY_PATH, RegistryState
+from youtube_automation.core.errors import ConfigError
 from youtube_automation.domains.suno.downloaded.apply import apply_downloaded_artifacts
 from youtube_automation.domains.suno.downloaded.archive import commit_staged_music_files
 from youtube_automation.domains.suno.downloaded.archive import extract_and_rename_music as _extract_and_rename_music
 from youtube_automation.domains.suno.downloaded.models import DownloadedArtifactError, DownloadedPayload
 from youtube_automation.domains.suno.prompts import read_suno_prompt_entries
-from youtube_automation.infrastructure.errors import ConfigError
-from youtube_automation.utils.chrome_extensions import ChromeExtensionOrigin, resolve_unpacked_extension_origin
+from youtube_automation.infrastructure.collections.chrome_extensions import (
+    ChromeExtensionOrigin,
+    resolve_unpacked_extension_origin,
+)
 
 extract_and_rename_music = partial(
     _extract_and_rename_music,

@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from googleapiclient.errors import HttpError
 
+from youtube_automation.core.errors import ValidationError, YouTubeAPIError
 from youtube_automation.domains.youtube.channel_seed import (
     SeedChannel,
     fetch_channel_seed,
@@ -14,7 +15,6 @@ from youtube_automation.domains.youtube.channel_seed import (
     to_benchmark_entry,
 )
 from youtube_automation.infrastructure.browser import RedirectRejectedError
-from youtube_automation.infrastructure.errors import ValidationError, YouTubeAPIError
 
 
 def test_scrape_rejects_non_youtube_urls(monkeypatch):

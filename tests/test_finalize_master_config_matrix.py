@@ -28,7 +28,7 @@ from youtube_automation.commands.media.finalize_master import (
 from youtube_automation.commands.media.finalize_master import (
     finalize_master as run_finalize_master,
 )
-from youtube_automation.infrastructure.errors import ConfigError
+from youtube_automation.core.errors import ConfigError
 
 _ORIGINAL_MASTER_BYTES = b"ORIGINAL_MASTER_BYTES_FOR_TEST"
 _NEW_MASTER_BYTES = b"NEW_MASTER_BYTES_AFTER_PASS2"
@@ -267,7 +267,7 @@ class TestBuildFilterNewParameters:
         assert "afade=t=in:st=0:d=0.5" in result
 
     def test_layer_overrides_length_mismatch_fails_loud(self):
-        from youtube_automation.infrastructure.errors import ValidationError
+        from youtube_automation.core.errors import ValidationError
 
         with pytest.raises(ValidationError, match="layer_overrides"):
             build_filter(

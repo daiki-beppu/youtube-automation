@@ -9,13 +9,13 @@ from pathlib import Path
 from typing import Optional
 
 from youtube_automation.configuration import channel_dir, load_config
+from youtube_automation.core.adapters.errors import AutomationError, QuotaExhaustedError, UploadError, ValidationError
+from youtube_automation.core.adapters.filesystem import list_directory, path_exists, read_json, write_json
+from youtube_automation.core.adapters.google.youtube import YouTubeClients
+from youtube_automation.core.adapters.media import CollectionPaths
+from youtube_automation.core.adapters.runtime import get_schedule_timezone, now_in_schedule_tz
 from youtube_automation.domains.metadata import BAHMetadataGenerator
 from youtube_automation.domains.uploads.youtube import YouTubeAutoUploader
-from youtube_automation.infrastructure.errors import AutomationError, QuotaExhaustedError, UploadError, ValidationError
-from youtube_automation.infrastructure.filesystem import list_directory, path_exists, read_json, write_json
-from youtube_automation.infrastructure.google.youtube import YouTubeClients
-from youtube_automation.utils.collection_paths import CollectionPaths
-from youtube_automation.utils.schedule import get_schedule_timezone, now_in_schedule_tz
 
 logger = logging.getLogger(__name__)
 

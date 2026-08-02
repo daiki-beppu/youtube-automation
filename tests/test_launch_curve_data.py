@@ -5,10 +5,11 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+from tests.helpers.paths import FIXTURES_DIR
 from youtube_automation.commands.analytics import launch_curve
-from youtube_automation.utils.launch_curve_data import build_launch_curve_frame
+from youtube_automation.infrastructure.analytics.launch_curve_data import build_launch_curve_frame
 
-FIXTURES = Path(__file__).parent / "fixtures" / "sample_launch_curve"
+FIXTURES = FIXTURES_DIR / "sample_launch_curve"
 
 
 def _load():

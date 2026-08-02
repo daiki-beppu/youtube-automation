@@ -28,27 +28,27 @@ from collections import Counter
 from datetime import date, datetime
 from pathlib import Path
 
+from youtube_automation.commands._shared.arguments import CompetitorArgumentParser
 from youtube_automation.configuration import channel_dir as _channel_dir
 from youtube_automation.configuration import load_config
+from youtube_automation.configuration.skills import load_skill_config
+from youtube_automation.core.errors import ConfigError, YouTubeAPIError
 from youtube_automation.domains.analytics.benchmark import (
     is_short_benchmark_duration,
     is_short_benchmark_video,
 )
-from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
-from youtube_automation.infrastructure.cost_tracker import log_quota
-from youtube_automation.infrastructure.errors import ConfigError, YouTubeAPIError
-from youtube_automation.infrastructure.google.youtube import YouTubeClients
-from youtube_automation.infrastructure.retry import execute_with_retry
-from youtube_automation.utils.benchmark_analyzer import (
+from youtube_automation.infrastructure.analytics.benchmark_analyzer import (
     compute_daily_views,
     compute_engagement_rate,
     compute_posting_intervals,
     extract_description_keywords,
     parse_iso_duration,
 )
-from youtube_automation.utils.cli_arguments import CompetitorArgumentParser
-from youtube_automation.utils.profile import section
-from youtube_automation.utils.skill_config import load_skill_config
+from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
+from youtube_automation.infrastructure.cost_tracker import log_quota
+from youtube_automation.infrastructure.google.youtube import YouTubeClients
+from youtube_automation.infrastructure.observability.profile import section
+from youtube_automation.infrastructure.retry import execute_with_retry
 
 logger = logging.getLogger(__name__)
 
@@ -659,7 +659,7 @@ class BenchmarkThumbnailAnalyzer:
         try:
             from google.genai import types
 
-            from youtube_automation.utils.genai_client import create_global_genai_client
+            from youtube_automation.infrastructure.media.genai_client import create_global_genai_client
         except ImportError:
             logger.warning("google-genai 未インストール — サムネイル分析をスキップ")
             return data

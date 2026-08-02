@@ -8,7 +8,9 @@ import json
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from tests.helpers.paths import REPO_ROOT
+
+sys.path.insert(0, str(REPO_ROOT))
 
 import pytest
 
@@ -17,7 +19,7 @@ from youtube_automation.commands.collections.collection_preflight import (
     check_collection,
     main,
 )
-from youtube_automation.utils.collection_paths import REQUIRED_SUBDIRS
+from youtube_automation.infrastructure.media.collection_paths import REQUIRED_SUBDIRS
 
 
 def _make_collection(root: Path, name: str, *, subdirs=REQUIRED_SUBDIRS, with_state=True) -> Path:

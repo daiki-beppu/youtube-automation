@@ -11,7 +11,7 @@ from typing import ParamSpec, Protocol, TypeVar
 from googleapiclient.errors import HttpError
 from httplib2 import HttpLib2Error
 
-from youtube_automation.infrastructure.errors import YouTubeAPIError
+from youtube_automation.core.errors import YouTubeAPIError
 
 P = ParamSpec("P")
 T = TypeVar("T")

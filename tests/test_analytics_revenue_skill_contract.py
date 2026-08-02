@@ -1,8 +1,8 @@
 """収益収集・RPM 分析の skill 契約。"""
 
-from pathlib import Path
+from tests.helpers.paths import REPO_ROOT
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = REPO_ROOT
 
 
 def test_analytics_collect_documents_graceful_monetary_skip():

@@ -24,9 +24,9 @@ import pytest
 from googleapiclient.errors import HttpError
 from httplib2 import Response
 
-from youtube_automation.infrastructure.errors import YouTubeAPIError
-from youtube_automation.utils.competitor_discovery import SearchCacheMode, discover_competitors
-from youtube_automation.utils.competitor_scoring import (
+from youtube_automation.core.errors import YouTubeAPIError
+from youtube_automation.infrastructure.analytics.competitor_discovery import SearchCacheMode, discover_competitors
+from youtube_automation.infrastructure.analytics.competitor_scoring import (
     _MUSIC_TOPIC_URLS,
     CandidateChannel,
     DiscoveryParams,
@@ -48,7 +48,7 @@ from youtube_automation.utils.competitor_scoring import (
 def _isolated_discovery_cache(tmp_path: Path, monkeypatch):
     cache_path = tmp_path / "discover-competitors-search.json"
     monkeypatch.setattr(
-        "youtube_automation.utils.competitor_discovery._search_cache_path",
+        "youtube_automation.infrastructure.analytics.competitor_discovery._search_cache_path",
         lambda: cache_path,
     )
 

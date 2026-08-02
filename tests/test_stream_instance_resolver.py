@@ -1,4 +1,4 @@
-"""utils/streaming/instance_resolver.py のユニットテスト。
+"""infrastructure/youtube/streaming/instance_resolver.py のユニットテスト。
 
 要件 R4/R5: `instance_id` を Terraform output から取得。`--instance-id` 直接指定もサポート。
 
@@ -18,8 +18,8 @@ from unittest.mock import patch
 
 import pytest
 
-from youtube_automation.infrastructure.errors import ConfigError
-from youtube_automation.utils.streaming import instance_resolver
+from youtube_automation.core.errors import ConfigError
+from youtube_automation.infrastructure.youtube.streaming import instance_resolver
 
 
 def test_override_takes_precedence_over_terraform():
@@ -27,7 +27,7 @@ def test_override_takes_precedence_over_terraform():
     When resolve_instance_id を呼ぶ
     Then terraform を呼ばず override をそのまま返す。
     """
-    with patch("youtube_automation.utils.streaming.instance_resolver.subprocess.run") as mock_run:
+    with patch("youtube_automation.infrastructure.youtube.streaming.instance_resolver.subprocess.run") as mock_run:
         got = instance_resolver.resolve_instance_id(override="VULTR_123", terraform_dir=Path("/nowhere"))
     assert got == "VULTR_123"
     mock_run.assert_not_called()
@@ -45,7 +45,9 @@ def test_resolve_runs_terraform_output_in_terraform_dir(tmp_path: Path):
         captured["cwd"] = kwargs.get("cwd")
         return SimpleNamespace(stdout="VULTR_FROM_TF\n", returncode=0)
 
-    with patch("youtube_automation.utils.streaming.instance_resolver.subprocess.run", side_effect=fake_run):
+    with patch(
+        "youtube_automation.infrastructure.youtube.streaming.instance_resolver.subprocess.run", side_effect=fake_run
+    ):
         got = instance_resolver.resolve_instance_id(override=None, terraform_dir=tmp_path)
 
     assert got == "VULTR_FROM_TF"
@@ -63,7 +65,9 @@ def test_resolve_strips_whitespace_from_terraform_output(tmp_path: Path):
     def fake_run(cmd, **kwargs):
         return SimpleNamespace(stdout="  VULTR_TRIM  \n", returncode=0)
 
-    with patch("youtube_automation.utils.streaming.instance_resolver.subprocess.run", side_effect=fake_run):
+    with patch(
+        "youtube_automation.infrastructure.youtube.streaming.instance_resolver.subprocess.run", side_effect=fake_run
+    ):
         got = instance_resolver.resolve_instance_id(override=None, terraform_dir=tmp_path)
     assert got == "VULTR_TRIM"
 
@@ -77,7 +81,9 @@ def test_resolve_raises_config_error_when_terraform_missing(tmp_path: Path):
     def fake_run(cmd, **kwargs):
         raise FileNotFoundError("terraform: command not found")
 
-    with patch("youtube_automation.utils.streaming.instance_resolver.subprocess.run", side_effect=fake_run):
+    with patch(
+        "youtube_automation.infrastructure.youtube.streaming.instance_resolver.subprocess.run", side_effect=fake_run
+    ):
         with pytest.raises(ConfigError):
             instance_resolver.resolve_instance_id(override=None, terraform_dir=tmp_path)
 
@@ -91,7 +97,9 @@ def test_resolve_raises_config_error_when_terraform_fails(tmp_path: Path):
     def fake_run(cmd, **kwargs):
         raise subprocess.CalledProcessError(1, cmd, stderr="No outputs found")
 
-    with patch("youtube_automation.utils.streaming.instance_resolver.subprocess.run", side_effect=fake_run):
+    with patch(
+        "youtube_automation.infrastructure.youtube.streaming.instance_resolver.subprocess.run", side_effect=fake_run
+    ):
         with pytest.raises(ConfigError):
             instance_resolver.resolve_instance_id(override=None, terraform_dir=tmp_path)
 
@@ -106,7 +114,7 @@ def test_resolve_wraps_terraform_timeout_and_preserves_cause(tmp_path: Path):
         timeout=30,
     )
     with patch(
-        "youtube_automation.utils.streaming.instance_resolver.subprocess.run",
+        "youtube_automation.infrastructure.youtube.streaming.instance_resolver.subprocess.run",
         side_effect=timeout,
     ):
         with pytest.raises(ConfigError, match="timed out") as exc_info:
@@ -127,7 +135,9 @@ def test_resolve_raises_config_error_when_output_empty(tmp_path: Path):
     def fake_run(cmd, **kwargs):
         return SimpleNamespace(stdout="\n", returncode=0)
 
-    with patch("youtube_automation.utils.streaming.instance_resolver.subprocess.run", side_effect=fake_run):
+    with patch(
+        "youtube_automation.infrastructure.youtube.streaming.instance_resolver.subprocess.run", side_effect=fake_run
+    ):
         with pytest.raises(ConfigError):
             instance_resolver.resolve_instance_id(override=None, terraform_dir=tmp_path)
 

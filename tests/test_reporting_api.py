@@ -6,15 +6,15 @@ monkeypatch で吸収する。`tests/test_ctr_analytics.py` の流儀に準拠�
 
 from __future__ import annotations
 
-from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
 
-from youtube_automation.infrastructure.errors import ConfigError, ValidationError, YouTubeAPIError
-from youtube_automation.utils.reporting_api import ReportingAPIClient
+from tests.helpers.paths import FIXTURES_DIR
+from youtube_automation.core.errors import ConfigError, ValidationError, YouTubeAPIError
+from youtube_automation.infrastructure.youtube.reporting_api import ReportingAPIClient
 
-_FIXTURE_DIR = Path(__file__).resolve().parent / "fixtures" / "reporting_api"
+_FIXTURE_DIR = FIXTURES_DIR / "reporting_api"
 _FIXTURE = _FIXTURE_DIR / "channel_reach_basic_a1_sample.csv"
 _FIXTURE_COMBINED = _FIXTURE_DIR / "channel_reach_combined_a1_sample.csv"
 
@@ -201,7 +201,7 @@ def test_download_report_csv_returns_text(monkeypatch):
         return fake_session
 
     monkeypatch.setattr(
-        "youtube_automation.utils.reporting_api.AuthorizedSession",
+        "youtube_automation.infrastructure.youtube.reporting_api.AuthorizedSession",
         _fake_authed_session,
     )
 
@@ -218,7 +218,7 @@ def test_download_report_csv_raises_on_http_error(monkeypatch):
     fake_session.get.return_value = fake_response
 
     monkeypatch.setattr(
-        "youtube_automation.utils.reporting_api.AuthorizedSession",
+        "youtube_automation.infrastructure.youtube.reporting_api.AuthorizedSession",
         lambda *_a, **_k: fake_session,
     )
 
@@ -279,7 +279,7 @@ def test_collect_impressions_summary_aggregates(
     fake_session = MagicMock()
     fake_session.get.return_value = fake_response
     monkeypatch.setattr(
-        "youtube_automation.utils.reporting_api.AuthorizedSession",
+        "youtube_automation.infrastructure.youtube.reporting_api.AuthorizedSession",
         lambda *_a, **_k: fake_session,
     )
 
@@ -314,7 +314,7 @@ def test_collect_impressions_summary_combined_uses_weighted_ctr(monkeypatch):
     fake_session = MagicMock()
     fake_session.get.return_value = fake_response
     monkeypatch.setattr(
-        "youtube_automation.utils.reporting_api.AuthorizedSession",
+        "youtube_automation.infrastructure.youtube.reporting_api.AuthorizedSession",
         lambda *_a, **_k: fake_session,
     )
 
@@ -391,8 +391,8 @@ def test_collect_impressions_summary_keeps_successes_after_download_and_parse_fa
 # ReportingAPIMixin (fail-open)
 # ---------------------------------------------------------------------------
 def test_mixin_fail_open_returns_none_on_exception():
+    from youtube_automation.core.errors import YouTubeAPIError
     from youtube_automation.domains.analytics.reporting import reporting_analytics
-    from youtube_automation.infrastructure.errors import YouTubeAPIError
 
     class _BoomClient:
         def __init__(self, *_a, **_k):

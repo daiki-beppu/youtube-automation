@@ -1,14 +1,14 @@
 """チャンネルルート dotenv を production runtime へ再導入させない contract test."""
 
 import os
-from pathlib import Path
 
 import pytest
 
-from youtube_automation.infrastructure.errors import ConfigError
+from tests.helpers.paths import REPO_ROOT
+from youtube_automation.core.errors import ConfigError
 from youtube_automation.infrastructure.secrets import get_secret, reset_cache
 
-_ROOT = Path(__file__).resolve().parents[1]
+_ROOT = REPO_ROOT
 
 
 def test_runtime_secret_resolution_ignores_channel_dotenv(tmp_path, monkeypatch) -> None:

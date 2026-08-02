@@ -15,12 +15,12 @@ from pathlib import Path
 
 from youtube_automation.configuration import channel_dir as _channel_dir
 from youtube_automation.configuration import load_config
-from youtube_automation.infrastructure.errors import ConfigError
-from youtube_automation.utils.launch_curve_data import (
+from youtube_automation.core.errors import ConfigError
+from youtube_automation.infrastructure.analytics.launch_curve_data import (
     build_launch_curve_frame,
     load_latest_daily_snapshot,
 )
-from youtube_automation.utils.theme_performance import (
+from youtube_automation.infrastructure.analytics.theme_performance import (
     analyze_theme_performance,
     classify_videos_by_theme,
 )

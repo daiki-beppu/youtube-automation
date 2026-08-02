@@ -28,6 +28,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from tests.helpers.paths import REPO_ROOT
 from youtube_automation.configuration import (
     ChannelConfig,
     CommunityDraft,
@@ -121,7 +122,7 @@ def test_channel_config_is_owned_by_configuration_model():
 
 
 def test_configuration_package_has_no_domains_or_commands_dependency():
-    configuration_root = Path(__file__).parents[1] / "src" / "youtube_automation" / "configuration"
+    configuration_root = REPO_ROOT / "src" / "youtube_automation" / "configuration"
     dependencies: list[tuple[str, str]] = []
     for path in configuration_root.glob("*.py"):
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
@@ -268,7 +269,7 @@ def test_master_audio_transition_uses_skip_audio_approval_cli(tmp_path):
         encoding="utf-8",
     )
 
-    script = Path(__file__).parents[1] / ".claude" / "skills" / "wf-next" / "references" / "master_audio_transition.py"
+    script = REPO_ROOT / ".claude" / "skills" / "wf-next" / "references" / "master_audio_transition.py"
 
     result = subprocess.run(
         [

@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from youtube_automation.commands.media import check_raw_master, generate_master
-from youtube_automation.infrastructure.errors import ValidationError
+from youtube_automation.core.errors import ValidationError
 
 
 def _make_collection(

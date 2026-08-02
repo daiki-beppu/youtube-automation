@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
-_REPO_ROOT = Path(__file__).resolve().parent.parent
+from tests.helpers.paths import REPO_ROOT
+
+_REPO_ROOT = REPO_ROOT
 _EXTENSION_NAMES = ("suno-helper", "distrokid-helper")
 _PINNED_TYPESCRIPT = "7.0.2"
 

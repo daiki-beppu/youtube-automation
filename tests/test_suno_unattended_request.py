@@ -14,7 +14,7 @@ from youtube_automation.commands.suno.suno_unattended_request import (
     main,
     register_unattended_request,
 )
-from youtube_automation.infrastructure.errors import ConfigError
+from youtube_automation.core.errors import ConfigError
 
 
 def decode_launch_url(url: str) -> dict[str, object]:

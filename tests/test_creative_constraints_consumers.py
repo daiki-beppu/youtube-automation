@@ -1,8 +1,8 @@
 """Creative constraints consumer contract for generation and audit skills."""
 
-from pathlib import Path
+from tests.helpers.paths import REPO_ROOT
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = REPO_ROOT
 SKILLS = {
     "suno": ("## 音", "BPM", "Style"),
     "thumbnail": ("## サムネ", "色温度", "被写体"),

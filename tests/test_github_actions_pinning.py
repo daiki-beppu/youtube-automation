@@ -7,7 +7,9 @@ from pathlib import Path
 
 import pytest
 
-_REPO_ROOT = Path(__file__).resolve().parent.parent
+from tests.helpers.paths import REPO_ROOT
+
+_REPO_ROOT = REPO_ROOT
 _WORKFLOWS_DIR = _REPO_ROOT / ".github" / "workflows"
 _USES_LINE = re.compile(
     r"^\s*-?\s*uses:\s+([^\s@]+/[^\s@]+)@([0-9a-f]{40})\s+#\s+(\S+)\s*$",

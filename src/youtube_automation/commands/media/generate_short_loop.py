@@ -17,11 +17,11 @@ import sys
 import time
 from pathlib import Path
 
-from youtube_automation.infrastructure.errors import ConfigError
-from youtube_automation.utils.collection_paths import CollectionPaths
-from youtube_automation.utils.genai_client import create_veo_genai_client
-from youtube_automation.utils.skill_config import load_skill_config
-from youtube_automation.utils.veo_generator import (
+from youtube_automation.configuration.skills import load_skill_config
+from youtube_automation.core.errors import ConfigError
+from youtube_automation.infrastructure.media.collection_paths import CollectionPaths
+from youtube_automation.infrastructure.media.genai_client import create_veo_genai_client
+from youtube_automation.infrastructure.media.veo_generator import (
     DEFAULT_MODEL,
     DEFAULT_PROMPT,
     generate_loop_video,

@@ -1,4 +1,4 @@
-"""utils/streaming/monthly_archive.py のユニットテスト。
+"""infrastructure/youtube/streaming/monthly_archive.py のユニットテスト。
 
 要件 R11: 月間アーカイブ件数 (理論値 60 本/月) を YouTube Data API から取得する。
 
@@ -15,8 +15,8 @@ from unittest.mock import MagicMock
 import pytest
 from googleapiclient.errors import HttpError
 
-from youtube_automation.infrastructure.errors import YouTubeAPIError
-from youtube_automation.utils.streaming import monthly_archive
+from youtube_automation.core.errors import YouTubeAPIError
+from youtube_automation.infrastructure.youtube.streaming import monthly_archive
 
 
 def _make_service(pages: list[dict]):

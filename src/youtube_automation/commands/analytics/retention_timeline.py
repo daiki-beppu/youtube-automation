@@ -10,8 +10,8 @@ import re
 from pathlib import Path
 
 from youtube_automation.configuration import channel_dir
-from youtube_automation.infrastructure.errors import ConfigError, ValidationError
-from youtube_automation.utils.retention_timeline import (
+from youtube_automation.core.errors import ConfigError, ValidationError
+from youtube_automation.infrastructure.analytics.retention_timeline import (
     DEFAULT_DROP_THRESHOLD,
     correlate_retention_timeline,
     parse_iso8601_duration,

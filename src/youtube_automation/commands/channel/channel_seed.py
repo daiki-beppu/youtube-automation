@@ -8,6 +8,7 @@ import sys
 from collections.abc import Iterable
 from pathlib import Path
 
+from youtube_automation.core.errors import AutomationError, ConfigError
 from youtube_automation.domains.youtube.channel_seed import (
     SeedChannel,
     fetch_channel_seed,
@@ -15,7 +16,6 @@ from youtube_automation.domains.youtube.channel_seed import (
     to_benchmark_entry,
 )
 from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
-from youtube_automation.infrastructure.errors import AutomationError, ConfigError
 from youtube_automation.infrastructure.google.youtube import YouTubeClients
 
 ANALYTICS_PATH = Path("config") / "channel" / "analytics.json"

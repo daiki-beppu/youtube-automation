@@ -20,7 +20,9 @@ import pytest
 from googleapiclient.errors import HttpError
 from httplib2 import Response
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from tests.helpers.paths import FIXTURES_DIR, REPO_ROOT
+
+sys.path.insert(0, str(REPO_ROOT))
 
 
 # ---------------------------------------------------------------------------
@@ -148,7 +150,7 @@ def test_main_title_preflight_honors_collection_opt_in_for_each_cli_entry(
     from youtube_automation.configuration import reset as reset_config
     from youtube_automation.domains.uploads.collection import CollectionUploader
 
-    fixture_channel = Path(__file__).parent / "fixtures" / "sample_channel"
+    fixture_channel = FIXTURES_DIR / "sample_channel"
     test_channel = tmp_path / "channel"
     shutil.copytree(fixture_channel, test_channel)
     collection = _write_cli_title_collection(test_channel, title_template_check=title_template_check)
@@ -359,7 +361,7 @@ class TestAutoDetectCollection:
         assert uploader.find_collection() == target
 
     def test_auto_detect_fails_when_no_unpublished_mastered_planning_collection(self, tmp_path):
-        from youtube_automation.infrastructure.errors import ValidationError
+        from youtube_automation.core.errors import ValidationError
 
         uploader, _ = _make_uploader_with_collection_mock(tmp_path)
         _write_workflow_state(
@@ -377,7 +379,7 @@ class TestAutoDetectCollection:
             uploader.find_collection()
 
     def test_auto_detect_fails_when_video_id_is_missing(self, tmp_path):
-        from youtube_automation.infrastructure.errors import ValidationError
+        from youtube_automation.core.errors import ValidationError
 
         uploader, _ = _make_uploader_with_collection_mock(tmp_path)
         collection = tmp_path / "collections" / "planning" / "20260201-incomplete-collection"
@@ -390,7 +392,7 @@ class TestAutoDetectCollection:
             uploader.find_collection()
 
     def test_auto_detect_fails_when_multiple_unpublished_mastered_planning_collections(self, tmp_path):
-        from youtube_automation.infrastructure.errors import ValidationError
+        from youtube_automation.core.errors import ValidationError
 
         uploader, _ = _make_uploader_with_collection_mock(tmp_path)
         _write_workflow_state(
@@ -997,10 +999,10 @@ class TestExecuteCompleteCollectionResume:
         tracking の complete_collection.status を "failed" にせず、resume URI
         （callback が既に永続化済み）を温存したまま次回実行に委ねる。
         """
+        from youtube_automation.core.errors import QuotaExhaustedError
         from youtube_automation.domains.uploads._collection_uploader_constants import (
             ACTION_COMPLETE_COLLECTION_QUOTA_EXHAUSTED,
         )
-        from youtube_automation.infrastructure.errors import QuotaExhaustedError
 
         col, tracking_path = _make_tracking_collection(tmp_path, resume_uri=None)
         uploader, mock_inner = _make_uploader_with_collection_mock(tmp_path)
@@ -1024,7 +1026,7 @@ class TestExecuteCompleteCollectionResume:
 
     def test_complete_collection_failure_does_not_expose_exception_text(self, tmp_path, caplog):
         """Complete Collection の失敗本文を tracking・結果・ログへ転送しない."""
-        from youtube_automation.infrastructure.errors import AutomationError
+        from youtube_automation.core.errors import AutomationError
 
         col, tracking_path = _make_tracking_collection(tmp_path, resume_uri=None)
         uploader, mock_inner = _make_uploader_with_collection_mock(tmp_path)

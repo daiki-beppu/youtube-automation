@@ -5,7 +5,7 @@ import pytest
 from googleapiclient.errors import HttpError
 from httplib2 import Response, ServerNotFoundError
 
-from youtube_automation.infrastructure.errors import YouTubeAPIError
+from youtube_automation.core.errors import YouTubeAPIError
 from youtube_automation.infrastructure.retry import retry_youtube_api
 
 

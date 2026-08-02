@@ -44,8 +44,8 @@ if [ -z "$forbid_keywords" ]; then
     exit 1
   fi
   if ! forbid_keywords=$(uv run python - <<'PY'
-from youtube_automation.utils.image_provider.composition import resolve_forbid_keywords
-from youtube_automation.utils.skill_config import load_skill_config
+from youtube_automation.infrastructure.media.image_provider.composition import resolve_forbid_keywords
+from youtube_automation.configuration.skills import load_skill_config
 
 for keyword in resolve_forbid_keywords(load_skill_config("thumbnail")):
     print(keyword)

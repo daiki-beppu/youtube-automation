@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from youtube_automation.commands.youtube import playlist_manager, playlist_status
-from youtube_automation.infrastructure.errors import YouTubeAPIError
+from youtube_automation.core.errors import YouTubeAPIError
 
 
 def _manager_cli(monkeypatch):

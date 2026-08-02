@@ -11,7 +11,9 @@ from pathlib import Path
 
 import pytest
 
-_REPO_ROOT = Path(__file__).resolve().parent.parent
+from tests.helpers.paths import REPO_ROOT
+
+_REPO_ROOT = REPO_ROOT
 _SCRIPT_PATH = _REPO_ROOT / ".claude" / "skills" / "videoup" / "references" / "generate_videos.sh"
 _VIDEOUP_SKILL_PATH = _REPO_ROOT / ".claude" / "skills" / "videoup" / "SKILL.md"
 
@@ -994,7 +996,7 @@ printf 'mask' > "$output"
 
     assert result.returncode == 0, result.stderr
     invocation = uv_log.read_text(encoding="utf-8")
-    assert invocation.startswith("run python -m youtube_automation.utils.audio_visualizer_mask ")
+    assert invocation.startswith("run python -m youtube_automation.infrastructure.media.audio_visualizer_mask ")
 
 
 def test_runtime_mask_helper_failure_stops_script(tmp_path: Path) -> None:
@@ -1020,7 +1022,7 @@ exit 7
     assert result.returncode == 1
     assert "failed to generate runtime audio visualizer mask" in result.stdout + result.stderr
     assert uv_log.read_text(encoding="utf-8").startswith(
-        "run python -m youtube_automation.utils.audio_visualizer_mask "
+        "run python -m youtube_automation.infrastructure.media.audio_visualizer_mask "
     )
 
 
@@ -1510,6 +1512,47 @@ def _output_ffmpeg_command(ffmpeg_log: Path, output_name: str) -> str:
         if output_name in cmd:
             return cmd
     raise AssertionError(f"ffmpeg command for {output_name} not found: {commands}")
+
+
+# ─── Audio encoder 実行時プローブ (#3034) ─────────────────
+
+_AAC_AT_ENCODER_LINE = " A..... aac_at aac (AudioToolbox) (codec aac)\\n"
+
+
+def test_audio_encoder_uses_aac_at_when_probe_succeeds(tmp_path: Path) -> None:
+    """#3034: aac_at が列挙され、実際に初期化できるなら aac_at を使う."""
+    result, ffmpeg_log = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        extra_env={"FFMPEG_ENCODERS": _AAC_AT_ENCODER_LINE},
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "-c:a aac_at" in _master_ffmpeg_command(ffmpeg_log)
+    assert "falling back to aac" not in result.stdout
+
+
+def test_audio_encoder_falls_back_to_aac_when_probe_fails(tmp_path: Path) -> None:
+    """#3034: 列挙されていても初期化できないなら aac へフォールバックする.
+
+    aac_at は AudioToolbox 経由で coreaudiod への Mach lookup を必要とするため、
+    サンドボックス下では `-encoders` に載っていても初期化に失敗する。列挙の有無だけで
+    採用すると ffmpeg が exit 171 で落ちるので、実行時プローブの結果で決める。
+    """
+    result, ffmpeg_log = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        extra_env={
+            "FFMPEG_ENCODERS": _AAC_AT_ENCODER_LINE,
+            "FFMPEG_FAIL_MATCH": "yt-audio-encoder-probe",
+        },
+    )
+
+    assert result.returncode == 0, result.stderr
+    master_cmd = _master_ffmpeg_command(ffmpeg_log)
+    assert "-c:a aac " in f"{master_cmd} "
+    assert "-c:a aac_at" not in master_cmd
+    assert "audio encoder aac_at failed to start; falling back to aac" in result.stdout
 
 
 def _overlay_encoder_env(codec: str, encoders: str = "") -> dict[str, str]:

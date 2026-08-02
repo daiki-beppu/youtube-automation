@@ -8,6 +8,7 @@ from unittest.mock import MagicMock
 import pytest
 from googleapiclient.errors import HttpError
 
+from youtube_automation.core.errors import ValidationError, YouTubeAPIError
 from youtube_automation.domains.media.captions import (
     generate_srt,
     parse_total_duration,
@@ -15,7 +16,6 @@ from youtube_automation.domains.media.captions import (
 )
 from youtube_automation.infrastructure import captions_adapter
 from youtube_automation.infrastructure.captions_adapter import upload_caption
-from youtube_automation.infrastructure.errors import ValidationError, YouTubeAPIError
 
 _DESCRIPTIONS = """## Complete Collection 概要欄
 

@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import subprocess
-from pathlib import Path
 
 import pytest
 
-_REPO_ROOT = Path(__file__).resolve().parent.parent
+from tests.helpers.paths import REPO_ROOT
+
+_REPO_ROOT = REPO_ROOT
 
 
 @pytest.mark.parametrize("relative_path", ("auth/token.json", "auth/token_streaming.json"))

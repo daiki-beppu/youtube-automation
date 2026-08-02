@@ -75,11 +75,11 @@ def test_report_flow_posts_combined_report_without_youtube_archive_count():
         patch("youtube_automation.commands.youtube.stream_bandwidth.get_secret", side_effect=fake_get_secret),
         patch("youtube_automation.commands.youtube.stream_bandwidth.count_archives") as count_archives_mock,
         patch(
-            "youtube_automation.utils.streaming.vultr_bandwidth.urllib.request.urlopen",
+            "youtube_automation.infrastructure.youtube.streaming.vultr_bandwidth.urllib.request.urlopen",
             side_effect=fake_urlopen,
         ),
         patch(
-            "youtube_automation.utils.notification.urllib.request.urlopen",
+            "youtube_automation.infrastructure.youtube.notification.urllib.request.urlopen",
             side_effect=fake_urlopen,
         ),
     ):
@@ -128,11 +128,11 @@ def test_check_threshold_flow_silent_under_limit():
         patch("youtube_automation.commands.youtube.stream_bandwidth.get_secret", side_effect=fake_get_secret),
         patch("youtube_automation.commands.youtube.stream_bandwidth.count_archives", return_value=10),
         patch(
-            "youtube_automation.utils.streaming.vultr_bandwidth.urllib.request.urlopen",
+            "youtube_automation.infrastructure.youtube.streaming.vultr_bandwidth.urllib.request.urlopen",
             side_effect=fake_urlopen,
         ),
         patch(
-            "youtube_automation.utils.notification.urllib.request.urlopen",
+            "youtube_automation.infrastructure.youtube.notification.urllib.request.urlopen",
             side_effect=fake_urlopen,
         ),
         patch(

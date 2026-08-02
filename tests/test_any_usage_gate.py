@@ -12,7 +12,9 @@ import os
 import subprocess
 from pathlib import Path
 
-_REPO_ROOT = Path(__file__).resolve().parent.parent
+from tests.helpers.paths import REPO_ROOT
+
+_REPO_ROOT = REPO_ROOT
 _GATE_SCRIPT = _REPO_ROOT / ".github/scripts/any-usage-gate.sh"
 
 # 実行環境の git 設定（既定ブランチ名・署名・hooksPath）に結果が左右されないよう、

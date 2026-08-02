@@ -13,14 +13,14 @@ import logging
 from pathlib import Path
 from typing import Callable, Dict, Optional
 
+from youtube_automation.core.adapters.errors import ValidationError
+from youtube_automation.core.adapters.filesystem import glob_files, path_exists, path_is_file, read_json
+from youtube_automation.core.adapters.media import CollectionPaths
 from youtube_automation.domains.metadata import BAHMetadataGenerator
 from youtube_automation.domains.uploads._uploader_constants import (
     UPLOAD_SOURCE_EXISTING,
     UPLOAD_SOURCE_NEW,
 )
-from youtube_automation.infrastructure.errors import ValidationError
-from youtube_automation.infrastructure.filesystem import glob_files, path_exists, path_is_file, read_json
-from youtube_automation.utils.collection_paths import CollectionPaths
 
 logger = logging.getLogger(__name__)
 

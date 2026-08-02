@@ -17,10 +17,16 @@ from typing import cast
 from urllib.parse import unquote, urlsplit
 
 from youtube_automation.commands.analytics.analytics_system import AnalyticsSystem
-from youtube_automation.infrastructure.errors import DashboardChannelNotFoundError
-from youtube_automation.utils.channel_registry import DEFAULT_CHANNEL_REGISTRY, load_channel_registry
-from youtube_automation.utils.dashboard_read_model import DashboardAPI, build_dashboard_read_model
-from youtube_automation.utils.dashboard_refresh import collect_channel_analytics, refresh_dashboard_channels
+from youtube_automation.core.errors import DashboardChannelNotFoundError
+from youtube_automation.infrastructure.analytics.channel_registry import (
+    DEFAULT_CHANNEL_REGISTRY,
+    load_channel_registry,
+)
+from youtube_automation.infrastructure.analytics.dashboard_read_model import DashboardAPI, build_dashboard_read_model
+from youtube_automation.infrastructure.analytics.dashboard_refresh import (
+    collect_channel_analytics,
+    refresh_dashboard_channels,
+)
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8765

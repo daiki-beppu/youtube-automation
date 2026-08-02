@@ -24,15 +24,15 @@ import google.auth.exceptions
 import pytest
 from googleapiclient.errors import HttpError
 
-from youtube_automation.infrastructure.auth.redaction import redact_sensitive_data
-from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler, resolve_client_secrets_location
-from youtube_automation.infrastructure.errors import (
+from youtube_automation.core.errors import (
     AuthError,
     AutomationError,
     ConfigError,
     ValidationError,
     YouTubeAPIError,
 )
+from youtube_automation.infrastructure.auth.redaction import redact_sensitive_data
+from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler, resolve_client_secrets_location
 
 # ---------------------------------------------------------------------------
 # モジュール定数（leak sentinel 入力）

@@ -5,9 +5,9 @@ from __future__ import annotations
 
 import argparse
 
-from youtube_automation.infrastructure.errors import ConfigError
-from youtube_automation.utils.image_provider.config import build_codex_prompt
-from youtube_automation.utils.skill_config import load_skill_config
+from youtube_automation.configuration.skills import load_skill_config
+from youtube_automation.core.errors import ConfigError
+from youtube_automation.infrastructure.media.image_provider.config import build_codex_prompt
 
 
 def main() -> int:

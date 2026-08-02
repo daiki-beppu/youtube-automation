@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from youtube_automation.utils.composition_lock import (
+from youtube_automation.infrastructure.media.composition_lock import (
     axes_in_thumbnail_prompt,
     build_self_check_prompt,
     expand_fixed_objects,

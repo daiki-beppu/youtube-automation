@@ -8,7 +8,7 @@ import pytest
 from googleapiclient.errors import HttpError
 from httplib2 import Response
 
-from youtube_automation.utils.comments.fetcher import fetch_comments
+from youtube_automation.application.comments.fetcher import fetch_comments
 
 
 def _make_thread_item(
@@ -375,13 +375,13 @@ def test_reply_has_correct_fields():
 
 def test_fetch_top_level_comments_name_does_not_exist():
     """旧名 fetch_top_level_comments がエイリアスとして残存しないことを確認."""
-    import youtube_automation.utils.comments.fetcher as fetcher
+    import youtube_automation.application.comments.fetcher as fetcher
 
     assert not hasattr(fetcher, "fetch_top_level_comments")
 
 
 def test_fetcher_module_has_no_unused_logger():
     """未使用の logger が fetcher モジュールに残存しないことを確認."""
-    import youtube_automation.utils.comments.fetcher as fetcher
+    import youtube_automation.application.comments.fetcher as fetcher
 
     assert not hasattr(fetcher, "logger")

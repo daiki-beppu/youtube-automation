@@ -1,4 +1,4 @@
-"""utils/streaming/vultr_bandwidth.py のユニットテスト。
+"""infrastructure/youtube/streaming/vultr_bandwidth.py のユニットテスト。
 
 要件 R1/R2: Vultr `/v2/instances/{id}/bandwidth` から月次帯域を取得し GB 換算する。
 
@@ -16,8 +16,8 @@ from unittest.mock import patch
 
 import pytest
 
-from youtube_automation.infrastructure.errors import YouTubeAPIError
-from youtube_automation.utils.streaming import vultr_bandwidth
+from youtube_automation.core.errors import YouTubeAPIError
+from youtube_automation.infrastructure.youtube.streaming import vultr_bandwidth
 
 _BYTES_PER_GB = 1024**3
 
@@ -66,7 +66,9 @@ def test_fetch_bandwidth_calls_vultr_api_with_bearer_token():
     When fetch_bandwidth を呼ぶ
     Then https://api.vultr.com/v2/instances/ABC/bandwidth に Bearer KEY 付きで GET。
     """
-    with patch("youtube_automation.utils.streaming.vultr_bandwidth.urllib.request.urlopen") as mock_open:
+    with patch(
+        "youtube_automation.infrastructure.youtube.streaming.vultr_bandwidth.urllib.request.urlopen"
+    ) as mock_open:
         mock_open.return_value = _fake_urlopen({"bandwidth": {}})
         vultr_bandwidth.fetch_bandwidth(instance_id="ABC", api_key="KEY")
 
@@ -91,7 +93,9 @@ def test_fetch_bandwidth_returns_bandwidth_dict():
             "2026-04-02": {"incoming_bytes": 300, "outgoing_bytes": 400},
         }
     }
-    with patch("youtube_automation.utils.streaming.vultr_bandwidth.urllib.request.urlopen") as mock_open:
+    with patch(
+        "youtube_automation.infrastructure.youtube.streaming.vultr_bandwidth.urllib.request.urlopen"
+    ) as mock_open:
         mock_open.return_value = _fake_urlopen(payload)
         got = vultr_bandwidth.fetch_bandwidth(instance_id="ABC", api_key="KEY")
 
@@ -105,7 +109,9 @@ def test_fetch_bandwidth_raises_on_http_error():
     """
     import urllib.error
 
-    with patch("youtube_automation.utils.streaming.vultr_bandwidth.urllib.request.urlopen") as mock_open:
+    with patch(
+        "youtube_automation.infrastructure.youtube.streaming.vultr_bandwidth.urllib.request.urlopen"
+    ) as mock_open:
         mock_open.side_effect = urllib.error.URLError("connection refused")
         with pytest.raises(YouTubeAPIError):
             vultr_bandwidth.fetch_bandwidth(instance_id="ABC", api_key="KEY")
@@ -116,7 +122,9 @@ def test_fetch_bandwidth_raises_when_response_missing_bandwidth_key():
     When fetch_bandwidth を呼ぶ
     Then YouTubeAPIError (フォールバックで {} を返さないこと)。
     """
-    with patch("youtube_automation.utils.streaming.vultr_bandwidth.urllib.request.urlopen") as mock_open:
+    with patch(
+        "youtube_automation.infrastructure.youtube.streaming.vultr_bandwidth.urllib.request.urlopen"
+    ) as mock_open:
         mock_open.return_value = _fake_urlopen({"unexpected": "shape"})
         with pytest.raises(YouTubeAPIError):
             vultr_bandwidth.fetch_bandwidth(instance_id="ABC", api_key="KEY")
@@ -127,7 +135,9 @@ def test_fetch_bandwidth_wraps_invalid_json():
     When fetch_bandwidth を呼ぶ
     Then YouTubeAPIError へ正規化し JSONDecodeError を原因として保持する。
     """
-    with patch("youtube_automation.utils.streaming.vultr_bandwidth.urllib.request.urlopen") as mock_open:
+    with patch(
+        "youtube_automation.infrastructure.youtube.streaming.vultr_bandwidth.urllib.request.urlopen"
+    ) as mock_open:
         mock_open.return_value = _fake_urlopen_bytes(b"{not-json")
         with pytest.raises(YouTubeAPIError) as exc_info:
             vultr_bandwidth.fetch_bandwidth(instance_id="ABC", api_key="KEY")
@@ -141,7 +151,9 @@ def test_fetch_bandwidth_wraps_timeout_error():
     Then YouTubeAPIError へ正規化し TimeoutError を原因として保持する。
     """
     timeout = TimeoutError("timed out")
-    with patch("youtube_automation.utils.streaming.vultr_bandwidth.urllib.request.urlopen") as mock_open:
+    with patch(
+        "youtube_automation.infrastructure.youtube.streaming.vultr_bandwidth.urllib.request.urlopen"
+    ) as mock_open:
         mock_open.side_effect = timeout
         with pytest.raises(YouTubeAPIError) as exc_info:
             vultr_bandwidth.fetch_bandwidth(instance_id="ABC", api_key="KEY")
@@ -155,7 +167,9 @@ def test_fetch_bandwidth_rejects_non_dict_payload(payload):
     When fetch_bandwidth を呼ぶ
     Then envelope を推測せず YouTubeAPIError で拒否する。
     """
-    with patch("youtube_automation.utils.streaming.vultr_bandwidth.urllib.request.urlopen") as mock_open:
+    with patch(
+        "youtube_automation.infrastructure.youtube.streaming.vultr_bandwidth.urllib.request.urlopen"
+    ) as mock_open:
         mock_open.return_value = _fake_urlopen_bytes(json.dumps(payload).encode("utf-8"))
         with pytest.raises(YouTubeAPIError, match="unexpected shape"):
             vultr_bandwidth.fetch_bandwidth(instance_id="ABC", api_key="KEY")
@@ -170,7 +184,9 @@ def test_fetch_bandwidth_percent_encodes_slash_in_instance_id():
     Then `/` が `%2F` にエンコードされ、URL path segment を勝手に拡張できない
     (`safe=''` 必須の根拠: デフォルト `safe='/'` だと `/` が透過する)。
     """
-    with patch("youtube_automation.utils.streaming.vultr_bandwidth.urllib.request.urlopen") as mock_open:
+    with patch(
+        "youtube_automation.infrastructure.youtube.streaming.vultr_bandwidth.urllib.request.urlopen"
+    ) as mock_open:
         mock_open.return_value = _fake_urlopen({"bandwidth": {}})
         vultr_bandwidth.fetch_bandwidth(instance_id="A/B", api_key="KEY")
 
@@ -186,7 +202,9 @@ def test_fetch_bandwidth_percent_encodes_traversal_payload_in_instance_id():
     """
     from urllib.parse import quote
 
-    with patch("youtube_automation.utils.streaming.vultr_bandwidth.urllib.request.urlopen") as mock_open:
+    with patch(
+        "youtube_automation.infrastructure.youtube.streaming.vultr_bandwidth.urllib.request.urlopen"
+    ) as mock_open:
         mock_open.return_value = _fake_urlopen({"bandwidth": {}})
         vultr_bandwidth.fetch_bandwidth(instance_id="../etc/passwd", api_key="KEY")
 

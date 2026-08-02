@@ -6,9 +6,9 @@ from pathlib import Path
 
 import pytest
 
-_SCRIPT_PATH = (
-    Path(__file__).parents[1] / ".claude" / "skills" / "channel-new" / "references" / "derive_ttp_duration.py"
-)
+from tests.helpers.paths import REPO_ROOT
+
+_SCRIPT_PATH = REPO_ROOT / ".claude" / "skills" / "channel-new" / "references" / "derive_ttp_duration.py"
 _SPEC = importlib.util.spec_from_file_location("derive_ttp_duration", _SCRIPT_PATH)
 assert _SPEC is not None and _SPEC.loader is not None
 duration = importlib.util.module_from_spec(_SPEC)

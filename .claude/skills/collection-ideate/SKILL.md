@@ -34,7 +34,7 @@ description: "Use when 新コレクションの企画・テーマ選定をデー
 1. `.claude/skills/collection-ideate/config.default.yaml`
 2. `config/skills/collection-ideate.yaml`（存在する場合）
 
-合成規則は `youtube_automation.utils.skill_config.load_skill_config("collection-ideate")` と同じで、チャンネル上書きが優先される。存在しない override は未設定として扱い、勝手に作成しない。このスキルが別 skill の skill-config を直接参照する段階では、その skill の `config.default.yaml` と `config/skills/<skill>.yaml` も同じ手順で読む。
+合成規則は `youtube_automation.configuration.skills.load_skill_config("collection-ideate")` と同じで、チャンネル上書きが優先される。存在しない override は未設定として扱い、勝手に作成しない。このスキルが別 skill の skill-config を直接参照する段階では、その skill の `config.default.yaml` と `config/skills/<skill>.yaml` も同じ手順で読む。
 
 読み込んだ `ttp_mode`（デフォルト `false`）を Phase 1 より前に確定し、以降の企画生成を次のどちらか一方で進める。
 
@@ -213,8 +213,8 @@ Console > Billing で確認する。`thumbnail_mode` によって生成枚数が
 
 ```bash
 uv run python3 -c "
-from youtube_automation.utils.image_provider import load_image_generation_config
-from youtube_automation.utils.skill_config import (
+from youtube_automation.infrastructure.media.image_provider import load_image_generation_config
+from youtube_automation.configuration.skills import (
     load_skill_config,
     get_collection_ideate_thumbnail_mode,
     THUMBNAIL_MODE_SEQUENTIAL,
@@ -287,14 +287,14 @@ mkdir -p collections/planning/_plan-previews/${PREVIEW_DIR}
 THEME="<slug>"
 
 CANDIDATE_COUNT=$(uv run python3 -c "
-from youtube_automation.utils.skill_config import load_skill_config
+from youtube_automation.configuration.skills import load_skill_config
 preview = load_skill_config('collection-ideate').get('preview', {})
 print(int(preview.get('candidate_count', 3) or 3))
 ")
 
 REFS=$(uv run python3 -c "
 from youtube_automation.configuration import channel_dir
-from youtube_automation.utils.skill_config import load_skill_config
+from youtube_automation.configuration.skills import load_skill_config
 from youtube_automation.domains.thumbnail.references import normalize_reference_default
 
 thumb = load_skill_config('thumbnail').get('image_generation', {}).get('gemini', {})
@@ -317,7 +317,7 @@ mapfile -t REF_PATHS <<< "$VALIDATED_REFS"
 
 # 順次実行。candidate_count の数だけ plan-{a,b,c,...} を生成する。
 LABELS=(a b c d e f g h)
-PROVIDER=$(uv run python3 -c "from youtube_automation.utils.image_provider import load_image_generation_config; cfg = load_image_generation_config(); print(cfg.provider)")
+PROVIDER=$(uv run python3 -c "from youtube_automation.infrastructure.media.image_provider import load_image_generation_config; cfg = load_image_generation_config(); print(cfg.provider)")
 if [ "$PROVIDER" = "codex" ]; then
   # codex は image_generation.codex.default_prompt_template を必ず使う。
   # image_generation.gemini.composition_rules（legend_motif / allowed_actions を含む）は
@@ -423,7 +423,7 @@ if [ "${#REF_PATHS[@]}" -le "$REF_INDEX" ]; then
   echo "ERROR: selected preview reference is missing: index=${REF_INDEX}" >&2
   exit 1
 fi
-PROVIDER=$(uv run python3 -c "from youtube_automation.utils.image_provider import load_image_generation_config; cfg = load_image_generation_config(); print(cfg.provider)")
+PROVIDER=$(uv run python3 -c "from youtube_automation.infrastructure.media.image_provider import load_image_generation_config; cfg = load_image_generation_config(); print(cfg.provider)")
 if [ "$PROVIDER" = "codex" ]; then
   # codex は image_generation.codex.default_prompt_template を必ず使う。
   # image_generation.gemini.composition_rules は codex-prompt.py が自動注入する。
@@ -578,7 +578,7 @@ Mode) の wet airport runway + blue-hour テンプレから外れて参照画像
   slot に取り込まれている範囲（候補ごとに変える色・小物・キャラ表情など）でのみ
   サムネに反映される。
 - 差別化軸の値そのもの（`mountain airstrip` 等）をサムネプロンプト本文に書き出すと、
-  TTP 参照画像のスタイルアンカーが効かなくなる。`youtube_automation.utils.composition_lock.axes_in_thumbnail_prompt()`
+  TTP 参照画像のスタイルアンカーが効かなくなる。`youtube_automation.infrastructure.media.composition_lock.axes_in_thumbnail_prompt()`
   を使えば検証可能（ヒットしたら警告して書き直す）。
 - 音楽プロンプト・概要欄・タイトルでは引き続き差別化軸を字義通り使ってよい
   （視聴シーン訴求の幅を出すための内部メタデータ）。

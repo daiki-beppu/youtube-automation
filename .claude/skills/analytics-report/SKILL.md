@@ -24,7 +24,7 @@ description: "Use when 既存の Analytics レポートの表示・比較だけ�
 1. `.claude/skills/analytics-report/config.default.yaml`
 2. `config/skills/analytics-report.yaml`（存在する場合）
 
-合成規則は `youtube_automation.utils.skill_config.load_skill_config("analytics-report")` と同じで、チャンネル上書きが優先される。存在しない override は未設定として扱い、勝手に作成しない。HTML レポートの KPI カードは `html.kpi_cards`、Shorts 除外キーワードは `html.exclude_title_keywords`、テーマ色は `theme.colors` を参照する。
+合成規則は `youtube_automation.configuration.skills.load_skill_config("analytics-report")` と同じで、チャンネル上書きが優先される。存在しない override は未設定として扱い、勝手に作成しない。HTML レポートの KPI カードは `html.kpi_cards`、Shorts 除外キーワードは `html.exclude_title_keywords`、テーマ色は `theme.colors` を参照する。
 
 ## 前提
 

@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import sys
 import tomllib
-from pathlib import Path
 
 import pytest
 
+from tests.helpers.paths import REPO_ROOT
 from tests.helpers.suno_verify import load_suno_verify_module
-from youtube_automation.infrastructure.errors import ConfigError, ValidationError
+from youtube_automation.core.errors import ConfigError, ValidationError
 
 
 def test_pyproject_registers_yt_suno_verify_script():
@@ -17,7 +17,7 @@ def test_pyproject_registers_yt_suno_verify_script():
     When project.scripts を読む
     Then yt-suno-verify が集約 entrypoint に登録されている。
     """
-    root = Path(__file__).resolve().parents[1]
+    root = REPO_ROOT
     data = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
 
     assert data["project"]["scripts"].get("yt-suno-verify") == ("youtube_automation.entrypoints:yt_suno_verify")

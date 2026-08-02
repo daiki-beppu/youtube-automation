@@ -17,11 +17,11 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from youtube_automation.core.errors import YouTubeAPIError
 from youtube_automation.domains.analytics.collection.strategic_analytics import (
     _MAX_WORKERS,
     StrategicAnalyticsMixin,
 )
-from youtube_automation.infrastructure.errors import YouTubeAPIError
 
 # get_video_analytics_by_id が返す Analytics 結果（views を視聴回数として差別化）
 _ANALYTICS_BY_ID: Dict[str, Dict] = {

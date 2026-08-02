@@ -27,6 +27,7 @@ from PIL import Image, UnidentifiedImageError
 
 from youtube_automation.application.distrokid.disc_query import find_distrokid_discs
 from youtube_automation.configuration import load_config
+from youtube_automation.core.errors import ConfigError, ValidationError
 from youtube_automation.domains.distrokid.preparation import (
     _MAX_TRACKS_PER_DISC,
     COVER_ART_FILENAME,
@@ -46,9 +47,8 @@ from youtube_automation.domains.distrokid.release import (
     build_release_payload,
 )
 from youtube_automation.domains.distrokid.specification import SPEC_FILENAME, write_collection_spec
-from youtube_automation.infrastructure.errors import ConfigError, ValidationError
-from youtube_automation.utils.collection_paths import CollectionPaths, resolve_collection_dir
-from youtube_automation.utils.probe import probe_duration
+from youtube_automation.infrastructure.media.collection_paths import CollectionPaths, resolve_collection_dir
+from youtube_automation.infrastructure.media.probe import probe_duration
 
 # ファイル名先頭の連番プレフィックス（metadata.md の # 列 = グローバル番号として使う）
 _GLOBAL_NUM_RE = re.compile(r"^(\d+)-")

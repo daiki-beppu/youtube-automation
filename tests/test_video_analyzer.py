@@ -25,8 +25,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 from google.genai.errors import APIError
 
-from youtube_automation.infrastructure.errors import ValidationError
-from youtube_automation.utils.video_analyzer import (
+from youtube_automation.core.errors import ValidationError
+from youtube_automation.infrastructure.media.video_analyzer import (
     VideoAnalysisReport,
     VideoAnalyzer,
     VideoTarget,
@@ -171,7 +171,7 @@ class TestVideoAnalyzerAnalyzeUrl:
             analysis_window_sec=900,
         )
 
-        with patch("youtube_automation.utils.video_analyzer.time.sleep") as sleep:
+        with patch("youtube_automation.infrastructure.media.video_analyzer.time.sleep") as sleep:
             with pytest.raises(ValidationError, match="JSON object"):
                 analyzer.analyze_url(_make_target())
 
@@ -189,7 +189,7 @@ class TestVideoAnalyzerAnalyzeUrl:
             analysis_window_sec=900,
         )
 
-        with patch("youtube_automation.utils.video_analyzer.time.sleep") as sleep:
+        with patch("youtube_automation.infrastructure.media.video_analyzer.time.sleep") as sleep:
             with pytest.raises(APIError):
                 analyzer.analyze_url(_make_target())
 
@@ -303,7 +303,7 @@ class TestVideoAnalyzerAnalyzeUrl:
         )
 
         # When: analyze_url を呼ぶ
-        with patch("youtube_automation.utils.video_analyzer.time.sleep") as mock_sleep:
+        with patch("youtube_automation.infrastructure.media.video_analyzer.time.sleep") as mock_sleep:
             analyzer.analyze_url(_make_target())
 
         # Then: sleep が delay_sec で呼ばれる (API レート対策)

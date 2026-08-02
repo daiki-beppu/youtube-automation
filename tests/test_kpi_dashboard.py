@@ -5,7 +5,7 @@ import json
 import pandas as pd
 import pytest
 
-from youtube_automation.utils.kpi_dashboard import (
+from youtube_automation.infrastructure.analytics.kpi_dashboard import (
     MULTI_SNAPSHOT_NOTE,
     analyze_kpi_dashboard,
     build_weekly_kpi,

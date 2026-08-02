@@ -35,7 +35,7 @@ subagent へ渡す入力は、解決済みの実行モード、実行コマン�
 1. `.claude/skills/analytics-collect/config.default.yaml`
 2. `config/skills/analytics-collect.yaml`（存在する場合）
 
-合成規則は `youtube_automation.utils.skill_config.load_skill_config("analytics-collect")` と同じで、チャンネル上書きが優先される。存在しない override は未設定として扱い、勝手に作成しない。
+合成規則は `youtube_automation.configuration.skills.load_skill_config("analytics-collect")` と同じで、チャンネル上書きが優先される。存在しない override は未設定として扱い、勝手に作成しない。
 
 ## 前提
 

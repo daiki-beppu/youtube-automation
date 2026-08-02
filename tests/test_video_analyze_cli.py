@@ -34,10 +34,10 @@ from youtube_automation.commands.analytics.video_analyze import (
     _run_analysis,
     main,
 )
-from youtube_automation.infrastructure.errors import ConfigError, ValidationError
-from youtube_automation.utils.skill_config import load_skill_config
-from youtube_automation.utils.skill_config import reset as reset_skill_config
-from youtube_automation.utils.video_analyzer import VideoAnalyzer, VideoTarget
+from youtube_automation.configuration.skills import load_skill_config
+from youtube_automation.configuration.skills import reset as reset_skill_config
+from youtube_automation.core.errors import ConfigError, ValidationError
+from youtube_automation.infrastructure.media.video_analyzer import VideoAnalyzer, VideoTarget
 
 # ----------------------------------------------------------------------------
 # _extract_video_id_from_url

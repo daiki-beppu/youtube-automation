@@ -12,6 +12,16 @@ from collections.abc import Collection, Mapping, Sequence
 from pathlib import Path
 
 from youtube_automation.configuration import load_config
+from youtube_automation.core.adapters.errors import ConfigError, ValidationError
+from youtube_automation.core.adapters.filesystem import (
+    path_exists,
+    path_is_file,
+    path_is_symlink,
+    read_file_text,
+    read_json,
+)
+from youtube_automation.core.adapters.media import CollectionPaths
+from youtube_automation.core.adapters.youtube import parse_youtube_tags, youtube_tag_chars
 from youtube_automation.domains.metadata.descriptions import (
     build_descriptions_md_parse_diagnostics,
     extract_descriptions_md_section,
@@ -23,16 +33,6 @@ from youtube_automation.domains.thumbnail.references import (
     resolve_configured_benchmark_references,
     resolve_dedup_recent_collections,
 )
-from youtube_automation.infrastructure.errors import ConfigError, ValidationError
-from youtube_automation.infrastructure.filesystem import (
-    path_exists,
-    path_is_file,
-    path_is_symlink,
-    read_file_text,
-    read_json,
-)
-from youtube_automation.utils.collection_paths import CollectionPaths
-from youtube_automation.utils.youtube_tag import parse_youtube_tags, youtube_tag_chars
 
 YT_TAG_CHAR_LIMIT = 500
 YOUTUBE_TITLE_MAX_CODEPOINTS = 100

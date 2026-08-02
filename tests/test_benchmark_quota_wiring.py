@@ -26,7 +26,7 @@ from youtube_automation.commands.analytics.benchmark_collector import (
     BenchmarkCollector,
 )
 from youtube_automation.commands.analytics.fetch_benchmark_comments import BenchmarkCommentCollector
-from youtube_automation.infrastructure.errors import YouTubeAPIError
+from youtube_automation.core.errors import YouTubeAPIError
 
 
 @pytest.fixture

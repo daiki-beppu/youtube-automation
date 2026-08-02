@@ -18,7 +18,7 @@ from PIL import Image as PILImage
 
 import youtube_automation.infrastructure.secrets as secrets_module
 from youtube_automation.commands.system import doctor
-from youtube_automation.infrastructure.errors import ConfigError
+from youtube_automation.core.errors import ConfigError
 
 
 def _clear_secret_cache() -> None:

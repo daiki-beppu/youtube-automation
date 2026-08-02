@@ -1,10 +1,10 @@
 """#2416 / #2419-#2422 の無人実行 skip 契約を文書と設定の両側で固定する."""
 
-from pathlib import Path
-
 import yaml
 
-ROOT = Path(__file__).resolve().parents[1]
+from tests.helpers.paths import REPO_ROOT
+
+ROOT = REPO_ROOT
 SKILLS = ROOT / ".claude" / "skills"
 
 

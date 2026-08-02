@@ -6,9 +6,9 @@ import argparse
 import logging
 import sys
 
+from youtube_automation.core.errors import AuthError, ConfigError, ValidationError, YouTubeAPIError
 from youtube_automation.infrastructure.auth.redaction import redact_sensitive_data
 from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
-from youtube_automation.infrastructure.errors import AuthError, ConfigError, ValidationError, YouTubeAPIError
 
 logger = logging.getLogger(__name__)
 

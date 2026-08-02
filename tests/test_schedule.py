@@ -5,8 +5,8 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from youtube_automation.infrastructure.errors import ConfigError, ValidationError
-from youtube_automation.utils.schedule import (
+from youtube_automation.core.errors import ConfigError, ValidationError
+from youtube_automation.infrastructure.runtime.schedule import (
     ensure_tz_aware,
     get_schedule_timezone,
     now_in_schedule_tz,

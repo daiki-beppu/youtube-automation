@@ -5,6 +5,7 @@ from __future__ import annotations
 import tomllib
 from pathlib import Path
 
+from tests.helpers.paths import REPO_ROOT
 from youtube_automation import entrypoints
 from youtube_automation.commands.channel import channel
 from youtube_automation.configuration import loader
@@ -110,7 +111,7 @@ def test_help_documents_discovery_and_output_format(capsys):
 
 
 def test_pyproject_registers_yt_channel_entrypoint():
-    project_root = Path(__file__).resolve().parents[1]
+    project_root = REPO_ROOT
     with (project_root / "pyproject.toml").open("rb") as file:
         config = tomllib.load(file)
 

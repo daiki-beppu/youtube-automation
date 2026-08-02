@@ -6,7 +6,7 @@ import pytest
 from PIL import Image
 
 from youtube_automation.commands.media import audio_visualizer_fill as cli
-from youtube_automation.utils.audio_visualizer_fill import (
+from youtube_automation.infrastructure.media.audio_visualizer_fill import (
     create_fill_asset,
     normalize_ffmpeg_color,
     parse_color,

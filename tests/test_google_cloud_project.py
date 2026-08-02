@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from youtube_automation.utils import google_cloud_project
+from youtube_automation.infrastructure.runtime import google_cloud_project
 
 
 def test_explicit_project_override_precedes_environment_and_adc(

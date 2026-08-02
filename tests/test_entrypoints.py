@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 from youtube_automation import entrypoints
-from youtube_automation.infrastructure.errors import ConfigError
+from youtube_automation.core.errors import ConfigError
 
 
 def test_consume_channel_rejects_missing_value_without_mutating_argv() -> None:

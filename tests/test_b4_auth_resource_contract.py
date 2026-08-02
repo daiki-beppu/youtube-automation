@@ -11,7 +11,9 @@ from pathlib import Path
 
 import pytest
 
-ROOT = Path(__file__).resolve().parents[1]
+from tests.helpers.paths import REPO_ROOT
+
+ROOT = REPO_ROOT
 CANONICAL_RELATIVE = Path("src/youtube_automation/infrastructure/resources/auth/client_secrets.template.json")
 TEMPLATE_NAME = "client_secrets.template.json"
 LIVE_CREDENTIAL_NAMES = {

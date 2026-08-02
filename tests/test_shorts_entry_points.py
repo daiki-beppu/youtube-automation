@@ -8,13 +8,14 @@ editable install されていない環境でも `pyproject.toml` を直接パー
 from __future__ import annotations
 
 import sys
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from tests.helpers.paths import REPO_ROOT
+
+sys.path.insert(0, str(REPO_ROOT))
 
 import pytest
 
-_REPO_ROOT = Path(__file__).resolve().parent.parent
+_REPO_ROOT = REPO_ROOT
 _PYPROJECT = _REPO_ROOT / "pyproject.toml"
 
 

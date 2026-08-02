@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pytest
 
-import youtube_automation.utils.chrome_extensions as chrome_extensions
-from youtube_automation.infrastructure.errors import ConfigError
-from youtube_automation.utils.chrome_extensions import resolve_unpacked_extension_origin
+import youtube_automation.infrastructure.collections.chrome_extensions as chrome_extensions
+from youtube_automation.core.errors import ConfigError
+from youtube_automation.infrastructure.collections.chrome_extensions import resolve_unpacked_extension_origin
 
 
 def _write_preferences(profile_dir: Path, filename: str, settings: dict[str, object]) -> None:

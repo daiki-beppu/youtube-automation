@@ -12,6 +12,7 @@ from typing import cast
 
 import yaml
 
+from youtube_automation.core.adapters.errors import ConfigError
 from youtube_automation.domains.suno.downloaded.models import (
     DOCUMENTATION_DIRNAME,
     SUNO_LYRICS_JSON_FILENAME,
@@ -21,7 +22,6 @@ from youtube_automation.domains.suno.downloaded.models import (
     SunoModeInferer,
 )
 from youtube_automation.domains.uploads.preflight import check_suno_genre_line_char_limit
-from youtube_automation.infrastructure.errors import ConfigError
 
 SECTION_TAG_RE = re.compile(r"\[[A-Za-z][A-Za-z0-9 -]*\]")
 INSTRUMENTAL_TAG_RE = re.compile(r"\[Instrumental\]", re.IGNORECASE)

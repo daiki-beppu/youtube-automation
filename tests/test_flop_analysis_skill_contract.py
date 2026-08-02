@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import re
-from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+from tests.helpers.paths import REPO_ROOT
+
+ROOT = REPO_ROOT
 SKILL_MD = ROOT / ".claude" / "skills" / "flop-analysis" / "SKILL.md"
 VIDEO_ANALYZE_CONFIG = ROOT / ".claude" / "skills" / "video-analyze" / "config.default.yaml"
 

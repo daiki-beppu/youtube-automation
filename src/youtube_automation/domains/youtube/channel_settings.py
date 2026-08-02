@@ -33,8 +33,8 @@ import logging
 import shlex
 from typing import Any
 
-from youtube_automation.infrastructure.errors import ConfigError, ValidationError, YouTubeAPIError
-from youtube_automation.infrastructure.google.youtube import execute_youtube_request, validate_youtube_response_items
+from youtube_automation.core.adapters.errors import ConfigError, ValidationError, YouTubeAPIError
+from youtube_automation.core.adapters.google.youtube import execute_youtube_request, validate_youtube_response_items
 
 logger = logging.getLogger(__name__)
 

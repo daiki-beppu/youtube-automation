@@ -7,11 +7,11 @@ import logging
 import sys
 from collections.abc import Iterable
 
+from youtube_automation.application.live_chat import LiveChatReplier
 from youtube_automation.configuration import channel_dir, load_config
+from youtube_automation.core.errors import AutomationError
 from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
-from youtube_automation.infrastructure.errors import AutomationError
 from youtube_automation.infrastructure.google.youtube import YouTubeClients
-from youtube_automation.utils.live_chat import LiveChatReplier
 
 
 def build_parser() -> argparse.ArgumentParser:

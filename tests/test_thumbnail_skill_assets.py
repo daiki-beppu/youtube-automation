@@ -11,9 +11,11 @@ from pathlib import Path
 import pytest
 import yaml
 
+from tests.helpers.paths import REPO_ROOT
+
 
 def _repo_root() -> Path:
-    return Path(__file__).resolve().parents[1]
+    return REPO_ROOT
 
 
 def _read_thumbnail_skill() -> str:
@@ -1301,7 +1303,7 @@ def test_thumbnail_default_config_gemini_diff_template_syncs_codex_ttp_policy() 
 
 def test_thumbnail_gemini_diff_template_channel_override_takes_priority(tmp_path, monkeypatch) -> None:
     """#2070: channel 側 diff_prompt_template は deep-merge のスカラ置換で既定値より常に優先される。"""
-    from youtube_automation.utils import skill_config
+    from youtube_automation.configuration import skills as skill_config
 
     override_dir = tmp_path / "config" / "skills"
     override_dir.mkdir(parents=True)

@@ -50,8 +50,10 @@ from typing import Iterable
 
 import pytest
 
+from tests.helpers.paths import REPO_ROOT
+
 # リポジトリルート (tests/ の親)
-_REPO_ROOT = Path(__file__).resolve().parent.parent
+_REPO_ROOT = REPO_ROOT
 _SKILLS_DIR = _REPO_ROOT / ".claude" / "skills"
 _SRC_DIR = _REPO_ROOT / "src" / "youtube_automation"
 _AUDIT_DOC = _REPO_ROOT / "docs" / "audits" / "2026-05-skill-md-audit.md"

@@ -4,7 +4,9 @@ import json
 import subprocess
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+from tests.helpers.paths import REPO_ROOT
+
+ROOT = REPO_ROOT
 VALIDATOR = ROOT / ".claude/skills/analytics-collect/references/validate-depth.sh"
 
 

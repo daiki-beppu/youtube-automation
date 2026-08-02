@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, call, patch
 import httpx
 import pytest
 
-from youtube_automation.utils import omni_generator
+from youtube_automation.infrastructure.media import omni_generator
 
 
 def _paths(tmp_path: Path) -> tuple[Path, Path]:

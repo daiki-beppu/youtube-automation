@@ -274,6 +274,7 @@ def _runtime_env(runtime_root: Path) -> dict[str, str]:
         "XDG_DATA_HOME": runtime_root / "data",
         "XDG_STATE_HOME": runtime_root / "state",
         "UV_CACHE_DIR": runtime_root / "cache" / "uv",
+        "NIX_CACHE_HOME": runtime_root / "tmp" / "nix-cache",
     }
     for path in paths.values():
         path.mkdir(parents=True, exist_ok=True)
@@ -319,6 +320,27 @@ def test_runtime_path_fails_on_sibling_worktree_value_without_leaking_it(tmp_pat
     # path の実値（sibling worktree の場所）を detail / report へ漏らさない
     report = format_report([result])
     assert "sibling-secret-worktree" not in report
+
+
+def test_runtime_path_fails_on_sibling_worktree_nix_cache_home(tmp_path: Path) -> None:
+    """#3040: XDG_CACHE_HOME が正しくても NIX_CACHE_HOME の継承は独立に検知する.
+
+    Nix は XDG_CACHE_HOME より NIX_CACHE_HOME を優先するため、後者だけが sibling
+    worktree を指す状態が成立する。そのまま `nix develop` へ入ると別 worktree の
+    fetcher-cache SQLite を readonly で開いて停止する。
+    """
+    env = _isolated_env(tmp_path)
+    repo = _init_repo(tmp_path, env)
+    env.update(_runtime_env(tmp_path / "current" / ".takt" / ".runtime"))
+    sibling_nix_cache = tmp_path / "sibling-secret-worktree" / ".takt" / ".runtime" / "tmp" / "nix-cache"
+    sibling_nix_cache.mkdir(parents=True)
+    env["NIX_CACHE_HOME"] = str(sibling_nix_cache)
+
+    result = check_runtime_path(repo, env)
+
+    assert not result.ok
+    assert "NIX_CACHE_HOME" in result.detail
+    assert "sibling-secret-worktree" not in format_report([result])
 
 
 def test_runtime_path_fails_when_var_is_missing(tmp_path: Path) -> None:
@@ -401,6 +423,7 @@ def test_runtime_path_fails_when_directory_is_not_writable(tmp_path: Path) -> No
 
 
 def test_runtime_path_covers_all_prepared_vars() -> None:
+    """検査対象の意図を固定する（実スクリプトとの突合は test_takt_runtime_prepare.py）."""
     assert RUNTIME_PATH_ENV_VARS == (
         "TMPDIR",
         "XDG_CACHE_HOME",
@@ -408,6 +431,7 @@ def test_runtime_path_covers_all_prepared_vars() -> None:
         "XDG_DATA_HOME",
         "XDG_STATE_HOME",
         "UV_CACHE_DIR",
+        "NIX_CACHE_HOME",
     )
 
 

@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from youtube_automation.core.errors import ConfigError, ValidationError
 from youtube_automation.domains.collections.weekly_vote_log import (
     WEEKLY_VOTE_LOG_SCHEMA_VERSION,
     AxisVote,
@@ -24,7 +25,6 @@ from youtube_automation.domains.collections.weekly_vote_log import (
     validate_weekly_vote_log,
     warn_poll_deprecated,
 )
-from youtube_automation.infrastructure.errors import ConfigError, ValidationError
 
 # ---------------------------------------------------------------------------
 # Helpers

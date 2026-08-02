@@ -1,11 +1,12 @@
 """配布する content.json テンプレートのタグ件数下限を検証する。"""
 
 import json
-from pathlib import Path
 
 import pytest
 
-ROOT = Path(__file__).resolve().parents[1]
+from tests.helpers.paths import REPO_ROOT
+
+ROOT = REPO_ROOT
 
 
 @pytest.mark.parametrize(

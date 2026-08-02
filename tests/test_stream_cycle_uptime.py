@@ -1,4 +1,4 @@
-"""utils/streaming/cycle_uptime.py の純粋計算ロジックをテストする。
+"""infrastructure/youtube/streaming/cycle_uptime.py の純粋計算ロジックをテストする。
 
 要件 R10 / ADR-0014: 24/7 連続配信の稼働率。
 - 理論値: 24h / 24h = 1.0
@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from youtube_automation.utils.streaming import cycle_uptime
+from youtube_automation.infrastructure.youtube.streaming import cycle_uptime
 
 
 def test_theoretical_uptime_ratio_is_24_over_24():

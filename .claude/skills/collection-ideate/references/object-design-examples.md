@@ -114,7 +114,7 @@ objects:
 - `objects.swappable` の `car_model` / `aircraft_silhouette` を企画ごとに変えて
   視覚的差別化を取る（sedan / coupe / 戦闘機 / ビジネスジェット ...）。
 
-`objects.fixed` のキーは `youtube_automation.utils.composition_lock.expand_fixed_objects()`
+`objects.fixed` のキーは `youtube_automation.infrastructure.media.composition_lock.expand_fixed_objects()`
 で TTP プロンプト定型節へ自動展開される。既知キー（`wet_runway`,
 `matte_black_car`, `aircraft_mid_distance`, `blue_hour`, `low_three_quarter_angle`,
 `rain_window`, `turntable`, `campfire`, `character` ...）はビルトイン辞書を持ち、

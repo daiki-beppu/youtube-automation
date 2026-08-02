@@ -22,8 +22,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from youtube_automation.core.errors import ConfigError
 from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
-from youtube_automation.infrastructure.errors import ConfigError
 
 # ---------------------------------------------------------------------------
 # テストヘルパー

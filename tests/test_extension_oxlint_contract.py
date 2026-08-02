@@ -9,7 +9,9 @@ from typing import Final
 import pytest
 import yaml
 
-_REPO_ROOT: Final[Path] = Path(__file__).resolve().parent.parent
+from tests.helpers.paths import REPO_ROOT
+
+_REPO_ROOT: Final[Path] = REPO_ROOT
 _EXTENSIONS_ROOT: Final[Path] = _REPO_ROOT / "extensions"
 _HELPERS: Final[tuple[str, ...]] = ("suno-helper", "distrokid-helper")
 _ESLINT_DIRECT_DEPENDENCIES: Final[set[str]] = {

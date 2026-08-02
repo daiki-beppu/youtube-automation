@@ -1,4 +1,4 @@
-"""Tests for `youtube_automation.utils.profile`."""
+"""Tests for `youtube_automation.infrastructure.observability.profile`."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from youtube_automation.utils import profile
+from youtube_automation.infrastructure.observability import profile
 
 
 @pytest.fixture(autouse=True)

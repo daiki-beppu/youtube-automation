@@ -1,0 +1,1 @@
+"""YouTube integration adapters."""

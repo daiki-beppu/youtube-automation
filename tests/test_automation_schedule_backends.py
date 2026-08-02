@@ -5,12 +5,13 @@ from __future__ import annotations
 import importlib.util
 import json
 import subprocess
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
-ROOT = Path(__file__).resolve().parents[1]
+from tests.helpers.paths import REPO_ROOT
+
+ROOT = REPO_ROOT
 REFERENCE_DIR = ROOT / ".claude" / "skills" / "automation-schedule" / "references"
 
 

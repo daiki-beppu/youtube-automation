@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import json
 import re
-from pathlib import Path
 
 import yaml
 
-_REPO_ROOT = Path(__file__).resolve().parent.parent
+from tests.helpers.paths import REPO_ROOT
+
+_REPO_ROOT = REPO_ROOT
 _EXTENSION_NAMES = ("suno-helper", "distrokid-helper", "community-helper")
 _EXTENSION_README_NAMES = ("suno-helper", "distrokid-helper")
 _NIX_PNPM = "11.15.1"

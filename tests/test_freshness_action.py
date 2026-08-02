@@ -5,7 +5,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-_RUNNER = Path(__file__).resolve().parents[1] / ".claude/skills/collection-ideate/references/freshness_action.py"
+from tests.helpers.paths import REPO_ROOT
+
+_RUNNER = REPO_ROOT / ".claude/skills/collection-ideate/references/freshness_action.py"
 
 
 def _run(tmp_path: Path, *args: str) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:

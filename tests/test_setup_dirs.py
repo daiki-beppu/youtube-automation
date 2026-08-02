@@ -7,9 +7,10 @@ from pathlib import Path
 
 import pytest
 
+from tests.helpers.paths import REPO_ROOT
 from youtube_automation.commands.system import setup_dirs
-from youtube_automation.infrastructure.errors import ConfigError
-from youtube_automation.utils.setup_directory_contract import SETUP_DIRECTORIES
+from youtube_automation.core.errors import ConfigError
+from youtube_automation.infrastructure.collections.setup_directory_contract import SETUP_DIRECTORIES
 
 EXPECTED_SETUP_DIRECTORIES: tuple[str, ...] = (
     "auth",
@@ -220,7 +221,7 @@ def test_resolve_target_dir_raises_when_channel_dir_env_missing(tmp_path, monkey
 
 
 def test_pyproject_registers_yt_setup_dirs_entry_point():
-    root = Path(__file__).resolve().parent.parent
+    root = REPO_ROOT
     pyproject = root / "pyproject.toml"
 
     with open(pyproject, "rb") as f:

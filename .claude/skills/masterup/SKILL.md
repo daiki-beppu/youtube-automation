@@ -38,7 +38,7 @@ subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実�
 2. `config/skills/masterup.json`（存在する場合）
 3. `config/skills/masterup.yaml`（JSON が存在しない場合の fallback）
 
-合成規則は `youtube_automation.utils.skill_config.load_skill_config("masterup")` と同じで、チャンネル上書きが優先される。TS CLI `uv run yt-generate-master` は `config/skills/masterup.json` を優先し、存在しない場合のみ `config/skills/masterup.yaml` を fallback として読む。存在しない override は未設定として扱い、勝手に作成しない。
+合成規則は `youtube_automation.configuration.skills.load_skill_config("masterup")` と同じで、チャンネル上書きが優先される。TS CLI `uv run yt-generate-master` は `config/skills/masterup.json` を優先し、存在しない場合のみ `config/skills/masterup.yaml` を fallback として読む。存在しない override は未設定として扱い、勝手に作成しない。
 
 ## 前提
 
@@ -173,7 +173,7 @@ from pathlib import Path
 from youtube_automation.domains.suno.downloaded.workflow import read_pattern_count, expected_download_count
 from youtube_automation.domains.suno.downloaded.archive import count_audio_files
 from youtube_automation.domains.suno.prompts import read_suno_prompt_entries
-from youtube_automation.utils.collection_paths import CollectionPaths
+from youtube_automation.infrastructure.media.collection_paths import CollectionPaths
 
 coll_dir = Path('.')  # アクティブなコレクションディレクトリで実行
 pattern_count = read_pattern_count(coll_dir, prompt_entries_reader=read_suno_prompt_entries)

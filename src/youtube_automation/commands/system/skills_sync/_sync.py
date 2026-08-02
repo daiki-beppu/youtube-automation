@@ -22,7 +22,7 @@ from youtube_automation.commands.system.skills_sync._ops import (
     _symlink_entry,
 )
 from youtube_automation.commands.system.skills_sync._settings import sync_settings_asset
-from youtube_automation.utils.numbered_duplicates import (
+from youtube_automation.infrastructure.collections.numbered_duplicates import (
     CLEANUP_GUIDE_URL,
     format_duplicate_name,
     format_scan_error_reason,

@@ -27,7 +27,7 @@ description: "Use when 公開済み動画が伸びなかった原因を video_id
 1. `.claude/skills/flop-analysis/config.default.yaml`
 2. `config/skills/flop-analysis.yaml`（存在する場合）
 
-新 override を正規経路として優先する。新 override がなく `config/skills/postmortem.yaml` だけが存在する場合は、移行 fallback として旧 override を読み込み、`config/skills/flop-analysis.yaml` へのリネームを案内する。合成規則は `youtube_automation.utils.skill_config.load_skill_config("postmortem")` と同じで、チャンネル上書きが優先される。存在しない override は未設定として扱い、勝手に作成しない。Phase 2 の症状判定は `thresholds.*`、Phase 3 の仮説マッピングは `hypothesis_ratios.*` を参照する。
+新 override を正規経路として優先する。新 override がなく `config/skills/postmortem.yaml` だけが存在する場合は、移行 fallback として旧 override を読み込み、`config/skills/flop-analysis.yaml` へのリネームを案内する。合成規則は `youtube_automation.configuration.skills.load_skill_config("postmortem")` と同じで、チャンネル上書きが優先される。存在しない override は未設定として扱い、勝手に作成しない。Phase 2 の症状判定は `thresholds.*`、Phase 3 の仮説マッピングは `hypothesis_ratios.*` を参照する。
 
 ## 前提
 
@@ -39,7 +39,7 @@ description: "Use when 公開済み動画が伸びなかった原因を video_id
 
 加えて、対象動画について以下が揃っていること:
 - `data/analytics_data_*.json` の `video_analytics[<video_id>]` に当該動画が含まれている（含まれていない場合は `/analytics-collect` を先に案内）
-- CTR / インプレッションを参照する場合は同 JSON に `reporting_api.impressions_summary.per_video[]` が含まれていること（取得元は `utils/reporting_api.py`。未取得の場合は CTR / インプレッション欄を「データなし」と明示し、`/analytics-collect` の再実行を案内する）
+- CTR / インプレッションを参照する場合は同 JSON に `reporting_api.impressions_summary.per_video[]` が含まれていること（取得元は `infrastructure/youtube/reporting_api.py`。未取得の場合は CTR / インプレッション欄を「データなし」と明示し、`/analytics-collect` の再実行を案内する）
 - コレクション指定の場合は `collections/live/<collection>/20-documentation/upload_tracking.json` が存在する
 
 ## Quick Reference
@@ -86,7 +86,7 @@ description: "Use when 公開済み動画が伸びなかった原因を video_id
 | `cumulative_views` ベンチマーク比 | `yt-launch-curve --video <id>` | `target.ratio_vs_median` / `target.quartile_label` を引用 |
 | 日別 `daily_views` / `daily_impressions` / `ctr` | `yt-launch-curve --video <id>` | `target.trace[]` を引用（`daily_views` / `daily_impressions` / `ctr` の各キーが含まれる） |
 | 平均視聴時間（全期間） | `data/analytics_data_*.json` の `video_analytics[<id>].average_view_duration` | snake_case フィールド（秒）。`strategic_analytics.py::get_combined_analytics` 由来 |
-| CTR（全期間集計） | `data/analytics_data_*.json` の `reporting_api.impressions_summary.per_video[]` | `video_id` 一致行の `ctr_percentage`（パーセント）。`utils/reporting_api.py::collect_impressions_summary` 由来。Reporting API v1 が未取得の場合は欠損として扱う |
+| CTR（全期間集計） | `data/analytics_data_*.json` の `reporting_api.impressions_summary.per_video[]` | `video_id` 一致行の `ctr_percentage`（パーセント）。`infrastructure/youtube/reporting_api.py::collect_impressions_summary` 由来。Reporting API v1 が未取得の場合は欠損として扱う |
 | インプレッション（全期間集計） | 同上 | `video_id` 一致行の `impressions`。日次合計は `target.trace[].daily_impressions` を合算 |
 | 競合中央値（補助指標） | `data/benchmark_<YYYYMMDD>.json`（最新） | `benchmark_collector.py::collect_channel` が保存する `views` / `likes` / `comments` / `duration_display` のみ参照。**CTR / 平均視聴時間は Data API では取れず競合分は欠落する** |
 | サムネ A/B テスト | `20-documentation/thumbnail-test-history.json` | 対象 `video_id` の `result.status` / `candidates[].watch_time_share` / Winner 候補の構図・配色・文字量を引用 |
@@ -340,7 +340,7 @@ Phase 4 は子スキル / CLI / API へ委譲する orchestration。個別検証
 - `collections/live/<collection>/20-documentation/thumbnail-test-history.json` — `/thumbnail-test` が記録する Studio A/B テスト結果。存在時は `.claude/skills/thumbnail-test/references/history-schema.md` で検証してから使用
 - `src/youtube_automation/commands/analytics/launch_curve.py` — `yt-launch-curve --video <id>` の出力定義（`target.ratio_vs_median` / `target.quartile_label` / `target.trace[]` / `target.benchmark_median`）
 - `src/youtube_automation/domains/analytics/analysis/launch_curve_analyzer.py` — `compute_benchmark` / `judge_video_vs_benchmark`（p25/p50/p75 四分位）
-- `src/youtube_automation/utils/reporting_api.py` — `collect_impressions_summary` / `_aggregate_rows`（`per_video[].ctr_percentage` / `per_video[].impressions` を生成）
+- `src/youtube_automation/infrastructure/youtube/reporting_api.py` — `collect_impressions_summary` / `_aggregate_rows`（`per_video[].ctr_percentage` / `per_video[].impressions` を生成）
 - `src/youtube_automation/domains/analytics/mixins/traffic_source_analytics.py` — `get_traffic_source_analytics`（チャンネル全体集計のみ。per-video filter 非対応）/ `get_traffic_source_detail`（`insightTrafficSourceType` を絞り込みつつチャンネル全体集計で詳細を返す）
 
 ## Next Step

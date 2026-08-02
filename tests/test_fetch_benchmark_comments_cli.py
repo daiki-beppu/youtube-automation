@@ -10,7 +10,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from youtube_automation.commands.analytics import fetch_benchmark_comments as mod
-from youtube_automation.infrastructure.errors import ConfigError, YouTubeAPIError
+from youtube_automation.core.errors import ConfigError, YouTubeAPIError
 
 
 def _run_main_with_fake_collector(monkeypatch, argv: list[str], input_func=None) -> list[dict]:

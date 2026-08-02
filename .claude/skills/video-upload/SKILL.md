@@ -33,7 +33,7 @@ subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実�
 1. `.claude/skills/video-upload/config.default.yaml`
 2. `config/skills/video-upload.yaml`（存在する場合）
 
-合成規則は `youtube_automation.utils.skill_config.load_skill_config("video-upload")` と同じで、チャンネル上書きが優先される。存在しない override は未設定として扱い、勝手に作成しない。前提条件チェックの探索パターンは `preflight.*`、メタデータ基準の誇張語は `metadata.banned_exaggeration_words` を参照する。
+合成規則は `youtube_automation.configuration.skills.load_skill_config("video-upload")` と同じで、チャンネル上書きが優先される。存在しない override は未設定として扱い、勝手に作成しない。前提条件チェックの探索パターンは `preflight.*`、メタデータ基準の誇張語は `metadata.banned_exaggeration_words` を参照する。
 
 ## 前提
 

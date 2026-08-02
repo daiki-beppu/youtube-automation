@@ -12,7 +12,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from youtube_automation.commands.metadata import bulk_update_synthetic_media as mod
-from youtube_automation.infrastructure.errors import YouTubeAPIError
+from youtube_automation.core.errors import YouTubeAPIError
 
 
 def _http_error(status: int = 503):

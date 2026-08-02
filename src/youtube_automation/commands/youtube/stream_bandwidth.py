@@ -24,20 +24,20 @@ from pathlib import Path
 
 from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
 from youtube_automation.infrastructure.google.youtube import YouTubeClients
+from youtube_automation.infrastructure.media.probe import probe_bitrate
 from youtube_automation.infrastructure.secrets import get_secret
-from youtube_automation.utils.notification import notify
-from youtube_automation.utils.probe import probe_bitrate
-from youtube_automation.utils.streaming import (
+from youtube_automation.infrastructure.youtube.notification import notify
+from youtube_automation.infrastructure.youtube.streaming import (
     ARCHIVES_EXPECTED,
     MONTHLY_QUOTA_GB,
     THEORETICAL_BITRATE_MBPS,
     THRESHOLD_RATIO,
 )
-from youtube_automation.utils.streaming.instance_resolver import resolve_instance_id
-from youtube_automation.utils.streaming.monthly_archive import count_archives
-from youtube_automation.utils.streaming.monthly_report import format_monthly_report
-from youtube_automation.utils.streaming.threshold import is_over_threshold
-from youtube_automation.utils.streaming.vultr_bandwidth import (
+from youtube_automation.infrastructure.youtube.streaming.instance_resolver import resolve_instance_id
+from youtube_automation.infrastructure.youtube.streaming.monthly_archive import count_archives
+from youtube_automation.infrastructure.youtube.streaming.monthly_report import format_monthly_report
+from youtube_automation.infrastructure.youtube.streaming.threshold import is_over_threshold
+from youtube_automation.infrastructure.youtube.streaming.vultr_bandwidth import (
     fetch_bandwidth,
     monthly_total_gb,
 )

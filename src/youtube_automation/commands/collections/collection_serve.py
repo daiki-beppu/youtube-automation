@@ -54,6 +54,7 @@ from youtube_automation.commands.collections.collection_serve_discovery import (
     handle_registry_request,
 )
 from youtube_automation.configuration import Distrokid, channel_dir, load_config
+from youtube_automation.core.errors import ConfigError
 from youtube_automation.domains.distrokid.metadata import parse_album_metadata
 from youtube_automation.domains.distrokid.release import (
     DISTROKID_ASSETS_PREFIX,
@@ -82,9 +83,11 @@ from youtube_automation.domains.suno.downloaded.models import (
     collection_downloaded_route,
 )
 from youtube_automation.domains.suno.prompts import read_suno_prompt_entries
-from youtube_automation.infrastructure.errors import ConfigError
-from youtube_automation.utils.chrome_extensions import ChromeExtensionOrigin, resolve_unpacked_extension_origin
-from youtube_automation.utils.collection_paths import CollectionPaths
+from youtube_automation.infrastructure.collections.chrome_extensions import (
+    ChromeExtensionOrigin,
+    resolve_unpacked_extension_origin,
+)
+from youtube_automation.infrastructure.media.collection_paths import CollectionPaths
 
 DEFAULT_PORT = 7873
 DEFAULT_IDLE_TIMEOUT_SECONDS = 60 * 60

@@ -95,8 +95,8 @@ if [ -z "$max_parallel" ]; then
   # 通常の `uv run` で worktree-local .venv を lockfile へ同期する。環境を
   # 準備できない失敗と、準備後の thumbnail config 不備を別の診断にする。
   if ! uv run python - <<'PY'
-from youtube_automation.utils.image_provider.config import parse_image_generation_config  # noqa: F401
-from youtube_automation.utils.skill_config import load_skill_config  # noqa: F401
+from youtube_automation.infrastructure.media.image_provider.config import parse_image_generation_config  # noqa: F401
+from youtube_automation.configuration.skills import load_skill_config  # noqa: F401
 PY
   then
     echo "ERROR: thumbnail config を読む project 環境を準備できません" >&2
@@ -107,8 +107,8 @@ PY
 import os
 from pathlib import Path
 
-from youtube_automation.utils.image_provider.config import parse_image_generation_config
-from youtube_automation.utils.skill_config import load_skill_config
+from youtube_automation.infrastructure.media.image_provider.config import parse_image_generation_config
+from youtube_automation.configuration.skills import load_skill_config
 
 channel_root = Path(os.environ.get("CHANNEL_DIR", "."))
 config = parse_image_generation_config(

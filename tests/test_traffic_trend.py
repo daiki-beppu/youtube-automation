@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from youtube_automation.utils.traffic_trend import analyze_traffic_trend
+from youtube_automation.infrastructure.analytics.traffic_trend import analyze_traffic_trend
 
 
 def _snapshot(end_date, sources, devices=None, search_terms=None, collected_at=None):

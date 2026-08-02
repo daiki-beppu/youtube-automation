@@ -24,19 +24,19 @@ import sys
 import time
 from pathlib import Path
 
+from youtube_automation.core.errors import ConfigError
 from youtube_automation.domains.media.video_type import VideoType, VideoTypeConfig
-from youtube_automation.infrastructure.errors import ConfigError
-from youtube_automation.utils.genai_client import create_veo_genai_client
-from youtube_automation.utils.omni_generator import (
+from youtube_automation.infrastructure.media.genai_client import create_veo_genai_client
+from youtube_automation.infrastructure.media.omni_generator import (
     DEFAULT_MODEL as DEFAULT_OMNI_MODEL,
 )
-from youtube_automation.utils.omni_generator import (
+from youtube_automation.infrastructure.media.omni_generator import (
     create_omni_client,
 )
-from youtube_automation.utils.omni_generator import (
+from youtube_automation.infrastructure.media.omni_generator import (
     generate_loop_video as generate_omni_loop_video,
 )
-from youtube_automation.utils.veo_generator import (
+from youtube_automation.infrastructure.media.veo_generator import (
     DEFAULT_MODEL,
     DEFAULT_PROMPT,
     build_structured_prompt,
@@ -64,7 +64,7 @@ DEFAULT_MAX_BACKUPS = 3
 def load_config() -> dict:
     """loop-video skill-config 全体を読み込む（max_backups / veo / compression を含む）。"""
     try:
-        from youtube_automation.utils.skill_config import load_skill_config
+        from youtube_automation.configuration.skills import load_skill_config
 
         return load_skill_config("loop-video")
     except Exception:

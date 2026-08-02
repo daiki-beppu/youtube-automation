@@ -16,7 +16,7 @@ from youtube_automation.commands.suno.suno_audio_cleanup import (
     process_file,
     resolve_cleanup_config,
 )
-from youtube_automation.infrastructure.errors import ConfigError
+from youtube_automation.core.errors import ConfigError
 
 
 def _make_collection(tmp_path: Path, names: list[str]) -> Path:

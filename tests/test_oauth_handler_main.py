@@ -25,7 +25,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from youtube_automation.commands.system import oauth as oauth_cli
-from youtube_automation.infrastructure.errors import AuthError, ConfigError, ValidationError, YouTubeAPIError
+from youtube_automation.core.errors import AuthError, ConfigError, ValidationError, YouTubeAPIError
 
 # leak sentinel は `test_oauth_handler_exceptions.py` と同値を使う
 # （モジュール跨ぎでヘルパ共有を増やすとテスト間の依存が広がるため、定数だけ重複させる）。

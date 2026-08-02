@@ -29,9 +29,9 @@ import time
 
 from googleapiclient.errors import HttpError
 
+from youtube_automation.core.errors import YouTubeAPIError
 from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
 from youtube_automation.infrastructure.cost_tracker import log_quota
-from youtube_automation.infrastructure.errors import YouTubeAPIError
 from youtube_automation.infrastructure.google.youtube import YouTubeClients
 
 logger = logging.getLogger(__name__)

@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import subprocess
-from pathlib import Path
 
-_REPO_ROOT = Path(__file__).resolve().parent.parent
+from tests.helpers.paths import REPO_ROOT
+
+_REPO_ROOT = REPO_ROOT
 
 
 def test_git_ignores_pytest_temporary_artifacts() -> None:

@@ -29,8 +29,10 @@ from pathlib import Path
 
 import pytest
 
+from tests.helpers.paths import REPO_ROOT
+
 # リポジトリルート (tests/ の親)
-_REPO_ROOT = Path(__file__).resolve().parent.parent
+_REPO_ROOT = REPO_ROOT
 _SCRIPTS_DIR = _REPO_ROOT / "scripts"
 _SKILLS_DIR = _REPO_ROOT / ".claude" / "skills"
 

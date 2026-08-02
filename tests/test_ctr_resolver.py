@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from youtube_automation.utils.ctr_resolver import index_reporting_per_video, resolve_ctr_summary
+from youtube_automation.infrastructure.analytics.ctr_resolver import index_reporting_per_video, resolve_ctr_summary
 
 
 def test_resolve_prefers_reporting_api():

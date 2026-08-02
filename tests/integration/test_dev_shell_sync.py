@@ -10,7 +10,9 @@ from pathlib import Path
 
 import pytest
 
-_REPO_ROOT = Path(__file__).resolve().parents[2]
+from tests.helpers.paths import REPO_ROOT
+
+_REPO_ROOT = REPO_ROOT
 _PROJECT_COPY_ENTRIES = (
     ".claude",
     "LICENSE",

@@ -27,7 +27,7 @@ Step 6 のユーザー案内（クリップボードコピー済み + Studio で
 1. `.claude/skills/community-post/config.default.yaml`
 2. `config/skills/community-post.yaml`（存在する場合）
 
-読み込み後は `youtube_automation.utils.skill_config.load_skill_config("community-post")` と同じ順序で default と任意 override を確認する。ただし、この skill の `config.default.yaml` は既存の skill-local raw JSON 例外を明示するためのプレースホルダであり、投稿本文・Studio URL の実データには使わない。実データは必ず `config/channel/community.json` を読む。存在しない override は未設定として扱い、勝手に作成しない。
+読み込み後は `youtube_automation.configuration.skills.load_skill_config("community-post")` と同じ順序で default と任意 override を確認する。ただし、この skill の `config.default.yaml` は既存の skill-local raw JSON 例外を明示するためのプレースホルダであり、投稿本文・Studio URL の実データには使わない。実データは必ず `config/channel/community.json` を読む。存在しない override は未設定として扱い、勝手に作成しない。
 
 ## 前提
 

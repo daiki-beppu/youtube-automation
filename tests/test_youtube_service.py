@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from youtube_automation.infrastructure.errors import ValidationError
+from youtube_automation.core.errors import ValidationError
 from youtube_automation.infrastructure.google.youtube import YouTubeClients, validate_youtube_response_items
 
 

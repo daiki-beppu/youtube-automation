@@ -24,8 +24,8 @@ from youtube_automation.application.analytics.benchmark_query import load_benchm
 from youtube_automation.commands.analytics.benchmark_collector import (
     BenchmarkCollector,
 )
+from youtube_automation.core.errors import ConfigError, YouTubeAPIError
 from youtube_automation.domains.analytics.benchmark import is_live_benchmark_video
-from youtube_automation.infrastructure.errors import ConfigError, YouTubeAPIError
 
 
 def _http_error(status: int = 403, reason: str = "quotaExceeded") -> HttpError:

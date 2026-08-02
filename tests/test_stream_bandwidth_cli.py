@@ -1,4 +1,4 @@
-"""cli/stream_bandwidth.py のユニットテスト。
+"""commands/youtube/stream_bandwidth.py のユニットテスト。
 
 要件 R3/R12: `yt-stream-bandwidth` CLI のコマンド分岐をテストする。
 
@@ -40,7 +40,7 @@ def _patch_all(
 
     def fake_get_secret(name: str):
         if name not in secrets_map:
-            from youtube_automation.infrastructure.errors import ConfigError
+            from youtube_automation.core.errors import ConfigError
 
             raise ConfigError(f"missing secret: {name}")
         return secrets_map[name]
@@ -168,8 +168,8 @@ def test_report_mode_emits_na_when_previous_month_has_no_data():
     When --report --month 2026-04
     Then notify content に "N/A" / "前月データなし" が含まれる。
 
-    `cli/stream_bandwidth.py:136-139` の `previous_usage_gb == 0 → None` 変換と、
-    `monthly_report._format_diff_gb` (`utils/streaming/monthly_report.py:20-23`) の
+    `commands/youtube/stream_bandwidth.py:136-139` の `previous_usage_gb == 0 → None` 変換と、
+    `monthly_report._format_diff_gb` (`infrastructure/youtube/streaming/monthly_report.py:20-23`) の
     `"前月比: N/A (前月データなし)"` 出力経路を結合検証する。前月キー (2026-03-*) を
     fixture に含めないことで `monthly_total_gb` が 0.0 を返す経路を素直に通す。
     """

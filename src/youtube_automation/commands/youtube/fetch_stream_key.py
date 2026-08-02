@@ -28,9 +28,9 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
 from youtube_automation.configuration import channel_dir
+from youtube_automation.core.errors import ValidationError, YouTubeAPIError
 from youtube_automation.infrastructure import cost_tracker
 from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
-from youtube_automation.infrastructure.errors import ValidationError, YouTubeAPIError
 from youtube_automation.infrastructure.secrets import write_op_secret
 
 # 契約文字列・マジック値は 1 箇所で定義する

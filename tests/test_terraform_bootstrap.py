@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import re
-from pathlib import Path
 
 from tests.helpers.hcl import extract_block, read_file, strip_hcl_comments
+from tests.helpers.paths import REPO_ROOT
 
-_REPO_ROOT = Path(__file__).resolve().parent.parent
+_REPO_ROOT = REPO_ROOT
 _BOOTSTRAP_DIR = _REPO_ROOT / "infra" / "terraform" / "bootstrap"
 _GCP_DIR = _REPO_ROOT / "infra" / "terraform" / "gcp"
 _STREAMING_DIR = _REPO_ROOT / "infra" / "terraform" / "streaming"

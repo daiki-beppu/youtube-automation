@@ -20,8 +20,10 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from tests.helpers.paths import REPO_ROOT
+
 # リポジトリルート (tests/ の親)
-_REPO_ROOT = Path(__file__).resolve().parent.parent
+_REPO_ROOT = REPO_ROOT
 _SKILLS_DIR = _REPO_ROOT / ".claude" / "skills"
 
 THUMBNAIL_SKILL_MD = _SKILLS_DIR / "thumbnail" / "SKILL.md"

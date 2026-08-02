@@ -9,9 +9,9 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
-from youtube_automation.infrastructure.errors import ConfigError
-from youtube_automation.utils.channel_target import resolve_existing_target_dir
-from youtube_automation.utils.setup_directory_contract import (
+from youtube_automation.configuration.channel_target import resolve_existing_target_dir
+from youtube_automation.core.errors import ConfigError
+from youtube_automation.infrastructure.collections.setup_directory_contract import (
     GITKEEP_NAME,
     SETUP_DIRECTORIES,
     validate_setup_directory_target,

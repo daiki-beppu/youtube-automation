@@ -25,13 +25,13 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
 from youtube_automation.configuration import find_workspace_root, workspace_channels
+from youtube_automation.core.errors import AuthError, ConfigError, ValidationError, YouTubeAPIError
 from youtube_automation.infrastructure import secrets as secret_store
 from youtube_automation.infrastructure.auth.client_secrets import validate_desktop_client_config
 from youtube_automation.infrastructure.auth.redaction import redact_sensitive_data
 from youtube_automation.infrastructure.auth.tokens import save_credentials
 from youtube_automation.infrastructure.auth.tokens import token_path as resolve_token_path
-from youtube_automation.infrastructure.errors import AuthError, ConfigError, ValidationError, YouTubeAPIError
-from youtube_automation.utils.worktree import main_worktree_root
+from youtube_automation.infrastructure.vcs.worktree import main_worktree_root
 
 logger = logging.getLogger(__name__)
 

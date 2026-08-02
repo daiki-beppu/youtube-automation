@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import re
 import subprocess
-from pathlib import Path
 
 import pytest
 
+from tests.helpers.paths import REPO_ROOT
 from youtube_automation.commands.channel.channel_init import main as channel_init_main
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = REPO_ROOT
 CHANNEL_NEW_REFERENCES = ROOT / ".claude" / "skills" / "channel-new" / "references"
 
 

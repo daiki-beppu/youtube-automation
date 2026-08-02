@@ -25,14 +25,16 @@ from pathlib import Path
 
 import pytest
 
+from tests.helpers.paths import FIXTURES_DIR, REPO_ROOT
+
 # editable install されていない場合に備えて src/ を sys.path に追加
-_AUTOMATION_DIR = Path(__file__).resolve().parent.parent
+_AUTOMATION_DIR = REPO_ROOT
 _SRC_DIR = _AUTOMATION_DIR / "src"
 if str(_SRC_DIR) not in sys.path:
     sys.path.insert(0, str(_SRC_DIR))
 
 # テスト用フィクスチャディレクトリ（git 管理下のオリジナル）
-_FIXTURE_CHANNEL_DIR = Path(__file__).resolve().parent / "fixtures" / "sample_channel"
+_FIXTURE_CHANNEL_DIR = FIXTURES_DIR / "sample_channel"
 _OP_READ_DISABLED_ENV = "YOUTUBE_AUTOMATION_DISABLE_OP_READ"
 _TEST_TMP_PREFIX = "yt-automation-tests-"
 # conftest が CHANNEL_DIR を自動設定したことを示すマーカー。
@@ -66,6 +68,8 @@ REPO_CONTRACT_MODULES = frozenset(
         "test_skill_frontmatter_yaml.py",
         "test_site_repository_contract.py",
         "test_suno_skill_doc.py",
+        "test_takt_runtime_prepare.py",
+        "test_tests_layout_contract.py",
         "test_upgrade_guide_command_guard.py",
         "test_video_description_skill_contract.py",
         "test_wf_new_analytics_fallback_skill_contract.py",
@@ -97,14 +101,38 @@ SLOW_MODULES = frozenset(
 )
 
 SLOW_NODE_IDS = (
-    "tests/test_analytics_cli_integration.py::test_yt_analytics_returns_failure_when_subscribed_status_collection_fails",
-    "tests/test_audience_analytics.py::TestGetDeviceAnalytics::test_permanent_api_failure_keeps_api_specific_fail_soft_result",
-    "tests/test_audience_analytics.py::TestGetSubscribedStatusAnalytics::test_returns_empty_statuses_when_api_returns_no_rows",
-    "tests/test_audience_analytics.py::TestGetSubscribedStatusAnalytics::test_returns_error_shape_for_http_error",
-    "tests/test_benchmark_collector_channels_batch.py::TestFetchChannelsMetadata::test_retries_transient_api_failure_through_benchmark_collector",
-    "tests/test_comments_fetcher.py::test_retries_transient_api_failure_through_comments_entrypoint",
-    "tests/test_competitor_discovery.py::TestDiscoverCompetitors::test_retries_transient_api_failure_through_discovery_entrypoint",
-    "tests/test_playlist_manager.py::TestCreatePlaylist::test_retries_transient_api_failure_through_playlist_manager",
+    (
+        "test_analytics_cli_integration.py",
+        "test_yt_analytics_returns_failure_when_subscribed_status_collection_fails",
+    ),
+    (
+        "test_audience_analytics.py",
+        "TestGetDeviceAnalytics::test_permanent_api_failure_keeps_api_specific_fail_soft_result",
+    ),
+    (
+        "test_audience_analytics.py",
+        "TestGetSubscribedStatusAnalytics::test_returns_empty_statuses_when_api_returns_no_rows",
+    ),
+    (
+        "test_audience_analytics.py",
+        "TestGetSubscribedStatusAnalytics::test_returns_error_shape_for_http_error",
+    ),
+    (
+        "test_benchmark_collector_channels_batch.py",
+        "TestFetchChannelsMetadata::test_retries_transient_api_failure_through_benchmark_collector",
+    ),
+    (
+        "test_comments_fetcher.py",
+        "test_retries_transient_api_failure_through_comments_entrypoint",
+    ),
+    (
+        "test_competitor_discovery.py",
+        "TestDiscoverCompetitors::test_retries_transient_api_failure_through_discovery_entrypoint",
+    ),
+    (
+        "test_playlist_manager.py",
+        "TestCreatePlaylist::test_retries_transient_api_failure_through_playlist_manager",
+    ),
 )
 
 
@@ -170,9 +198,10 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     """Apply registered lane markers before pytest evaluates ``-m`` selection."""
     for item in items:
         module_name = Path(str(item.path)).name
+        node_identifier = item.nodeid.split("::", 1)[1]
         if module_name in REPO_CONTRACT_MODULES:
             item.add_marker(pytest.mark.repo_contract)
-        if module_name in SLOW_MODULES or any(item.nodeid.startswith(prefix) for prefix in SLOW_NODE_IDS):
+        if module_name in SLOW_MODULES or (module_name, node_identifier) in SLOW_NODE_IDS:
             item.add_marker(pytest.mark.slow)
 
 

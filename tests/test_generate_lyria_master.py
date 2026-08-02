@@ -19,7 +19,7 @@ from youtube_automation.commands.media.generate_lyria_master import (
     _generate_one_segment,
     _resolve_segment_count,
 )
-from youtube_automation.infrastructure.errors import ValidationError
+from youtube_automation.core.errors import ValidationError
 
 
 @pytest.fixture(autouse=True)

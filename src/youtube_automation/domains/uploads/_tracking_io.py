@@ -11,21 +11,21 @@ import json
 import logging
 from pathlib import Path
 
-from youtube_automation.domains.uploads._collection_uploader_constants import (
-    TRACKING_STATUS_COMPLETED,
-    WORKFLOW_PHASE_COMPLETE,
-    WORKFLOW_STAGE_LIVE,
-)
-from youtube_automation.infrastructure.errors import ValidationError
-from youtube_automation.infrastructure.filesystem import (
+from youtube_automation.core.adapters.errors import ValidationError
+from youtube_automation.core.adapters.filesystem import (
     make_directory,
     path_exists,
     read_file_text,
     replace_file,
     write_file_text,
 )
-from youtube_automation.utils.collection_paths import CollectionPaths
-from youtube_automation.utils.schedule import now_in_schedule_tz
+from youtube_automation.core.adapters.media import CollectionPaths
+from youtube_automation.core.adapters.runtime import now_in_schedule_tz
+from youtube_automation.domains.uploads._collection_uploader_constants import (
+    TRACKING_STATUS_COMPLETED,
+    WORKFLOW_PHASE_COMPLETE,
+    WORKFLOW_STAGE_LIVE,
+)
 
 logger = logging.getLogger(__name__)
 

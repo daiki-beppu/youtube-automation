@@ -31,7 +31,7 @@ Step 1 のスクリプトが exit 0 で終了して `docs/benchmarks/*.md` と `
 1. `.claude/skills/benchmark/config.default.yaml`
 2. `config/skills/benchmark.yaml`（存在する場合）
 
-合成規則は `youtube_automation.utils.skill_config.load_skill_config("benchmark")` と同じで、チャンネル上書きが優先される。存在しない override は未設定として扱い、勝手に作成しない。
+合成規則は `youtube_automation.configuration.skills.load_skill_config("benchmark")` と同じで、チャンネル上書きが優先される。存在しない override は未設定として扱い、勝手に作成しない。
 
 ## 前提成果物ガード
 

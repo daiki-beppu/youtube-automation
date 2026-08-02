@@ -6,12 +6,12 @@ import json
 from pathlib import Path
 from typing import Protocol
 
+from youtube_automation.core.adapters.media import CollectionPaths
 from youtube_automation.domains.suno.downloaded.models import (
     DOCUMENTATION_DIRNAME,
     SUNO_PROMPTS_JSON_FILENAME,
     PromptEntriesReader,
 )
-from youtube_automation.utils.collection_paths import CollectionPaths
 
 _SUNO_CLIPS_PER_PROMPT = 2
 

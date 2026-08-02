@@ -25,7 +25,9 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 from zoneinfo import ZoneInfo
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from tests.helpers.paths import FIXTURES_DIR, REPO_ROOT
+
+sys.path.insert(0, str(REPO_ROOT))
 
 import pytest
 
@@ -163,11 +165,11 @@ class TestInit:
         import shutil
 
         from youtube_automation.configuration import reset
+        from youtube_automation.core.errors import UploadError
         from youtube_automation.domains.uploads.shorts import ShortUploader
-        from youtube_automation.infrastructure.errors import UploadError
 
         # Given: sample_channel をコピーして shorts.enabled=false に書き換える
-        src = Path(__file__).resolve().parent / "fixtures" / "sample_channel"
+        src = FIXTURES_DIR / "sample_channel"
         dst = tmp_path / "channel"
         shutil.copytree(src, dst)
         (dst / "config" / "channel" / "shorts.json").write_text('{"shorts": {"enabled": false}}', encoding="utf-8")
@@ -763,7 +765,7 @@ class TestUploadShort:
 
     def test_upload_video_raises_quota_exhausted_error_marks_result_retryable(self, tmp_path):
         """plan 020 Step 4: QuotaExhaustedError は details.retryable=True で区別する."""
-        from youtube_automation.infrastructure.errors import QuotaExhaustedError
+        from youtube_automation.core.errors import QuotaExhaustedError
 
         # Given
         col = _setup_collection(tmp_path)

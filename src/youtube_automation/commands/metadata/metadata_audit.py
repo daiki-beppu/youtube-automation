@@ -26,6 +26,7 @@ from pathlib import Path
 
 from youtube_automation.configuration import channel_dir, load_config
 from youtube_automation.configuration.model import ChannelConfig
+from youtube_automation.configuration.skills import load_skill_config
 from youtube_automation.domains.metadata.descriptions import (
     build_descriptions_md_parse_diagnostics,
     extract_descriptions_md_section,
@@ -41,9 +42,8 @@ from youtube_automation.domains.uploads.preflight import (
     requires_scene_phrases,
 )
 from youtube_automation.infrastructure import cost_tracker
-from youtube_automation.utils.collection_paths import CollectionPaths
-from youtube_automation.utils.probe import probe_duration
-from youtube_automation.utils.skill_config import load_skill_config
+from youtube_automation.infrastructure.media.collection_paths import CollectionPaths
+from youtube_automation.infrastructure.media.probe import probe_duration
 
 
 def _collections_dir() -> Path:

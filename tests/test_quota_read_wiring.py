@@ -17,8 +17,8 @@ import youtube_automation.commands.channel.channel_status as get_channel_status_
 import youtube_automation.commands.metadata.metadata_audit as metadata_audit_module
 import youtube_automation.commands.youtube.fetch_stream_key as fetch_stream_key_module
 import youtube_automation.commands.youtube.playlist_status as playlist_status_module
+from youtube_automation.core.errors import YouTubeAPIError
 from youtube_automation.infrastructure import cost_tracker
-from youtube_automation.infrastructure.errors import YouTubeAPIError
 
 
 @pytest.fixture

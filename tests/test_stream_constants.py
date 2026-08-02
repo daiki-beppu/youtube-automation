@@ -1,4 +1,4 @@
-"""utils/streaming/__init__.py の定数集中をテストする。
+"""infrastructure/youtube/streaming/__init__.py の定数集中をテストする。
 
 計画 §「定数集中」: MONTHLY_QUOTA_GB / THRESHOLD_RATIO / THEORETICAL_BITRATE_MBPS /
 THEORETICAL_HOURS_PER_DAY / ARCHIVES_EXPECTED を package __init__ に集約し、CLI / レポート /
@@ -7,7 +7,7 @@ THEORETICAL_HOURS_PER_DAY / ARCHIVES_EXPECTED を package __init__ に集約し�
 
 from __future__ import annotations
 
-from youtube_automation.utils import streaming
+from youtube_automation.infrastructure.youtube import streaming
 
 
 def test_monthly_quota_gb_is_2048():

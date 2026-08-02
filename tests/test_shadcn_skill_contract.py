@@ -7,7 +7,9 @@ from pathlib import Path
 
 import yaml
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+from tests.helpers.paths import REPO_ROOT
+
+REPO_ROOT = REPO_ROOT
 SKILL_DIR = REPO_ROOT / ".claude" / "skills" / "shadcn"
 SKILL_FILE = SKILL_DIR / "SKILL.md"
 AGENTS_SKILLS = REPO_ROOT / ".agents" / "skills"

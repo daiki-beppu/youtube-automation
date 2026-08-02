@@ -8,7 +8,7 @@ import pandas as pd
 import pytest
 
 from youtube_automation.commands.analytics import theme_compare
-from youtube_automation.utils.theme_performance import (
+from youtube_automation.infrastructure.analytics.theme_performance import (
     analyze_theme_performance,
     classify_videos_by_theme,
 )

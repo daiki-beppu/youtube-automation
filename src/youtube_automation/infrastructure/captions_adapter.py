@@ -10,8 +10,8 @@ from typing import Literal
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaFileUpload
 
+from youtube_automation.core.errors import ValidationError, YouTubeAPIError
 from youtube_automation.infrastructure.cost_tracker import log_quota
-from youtube_automation.infrastructure.errors import ValidationError, YouTubeAPIError
 
 ExistingPolicy = Literal["ask", "update", "skip"]
 

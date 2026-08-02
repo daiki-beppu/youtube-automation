@@ -31,7 +31,7 @@ description: "Use when ローカル descriptions.md と YouTube メタデータ�
 1. `.claude/skills/metadata-audit/config.default.yaml`
 2. `config/skills/metadata-audit.yaml`（存在する場合）
 
-合成規則は `youtube_automation.utils.skill_config.load_skill_config("metadata-audit")` と同じで、チャンネル上書きが優先される。存在しない override は未設定として扱い、勝手に作成しない。REMOTE チェックのチャプター上限は `chapters.remote_max` を参照する（実装 `metadata_audit.py` も同じ経路で読む）。
+合成規則は `youtube_automation.configuration.skills.load_skill_config("metadata-audit")` と同じで、チャンネル上書きが優先される。存在しない override は未設定として扱い、勝手に作成しない。REMOTE チェックのチャプター上限は `chapters.remote_max` を参照する（実装 `metadata_audit.py` も同じ経路で読む）。
 
 ## 前提
 

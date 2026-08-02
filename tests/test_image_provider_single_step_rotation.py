@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 
+from youtube_automation.core.errors import ConfigError
 from youtube_automation.domains.thumbnail.references import (
     canonicalize_benchmark_reference,
     format_reference_assignment,
@@ -21,8 +22,10 @@ from youtube_automation.domains.thumbnail.references import (
     plan_ttp_reference_assignments,
     resolve_configured_benchmark_references,
 )
-from youtube_automation.infrastructure.errors import ConfigError
-from youtube_automation.utils.image_provider.composition import select_reference, validate_single_step_references
+from youtube_automation.infrastructure.media.image_provider.composition import (
+    select_reference,
+    validate_single_step_references,
+)
 
 # ---- select_reference ------------------------------------------------------
 

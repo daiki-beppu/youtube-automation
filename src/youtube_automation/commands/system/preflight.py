@@ -35,7 +35,10 @@ TAKT_RUNTIME_ROOT_ENV = "TAKT_RUNTIME_ROOT"
 
 # takt runtime.prepare（.takt/runtime-prepare.sh）が current runtime root 配下へ
 # 再構成する runtime path 変数（issue #2163）。sibling worktree の値が残ると
-# 別 worktree の cleanup・権限変更に巻き込まれて test 開始前に停止する
+# 別 worktree の cleanup・権限変更に巻き込まれて test 開始前に停止する。
+# NIX_CACHE_HOME は Nix が XDG_CACHE_HOME より優先するため独立に検査する。
+# 継承値が残ると別 worktree の fetcher-cache SQLite を readonly で開き
+# `nix develop` が test 開始前に停止する（issue #3040）
 RUNTIME_PATH_ENV_VARS = (
     "TMPDIR",
     "XDG_CACHE_HOME",
@@ -43,6 +46,7 @@ RUNTIME_PATH_ENV_VARS = (
     "XDG_DATA_HOME",
     "XDG_STATE_HOME",
     "UV_CACHE_DIR",
+    "NIX_CACHE_HOME",
 )
 
 # default 実行 60 秒未満の要件を守るための per-check タイムアウト
@@ -225,6 +229,8 @@ def check_runtime_path(cwd: Path, env: Mapping[str, str]) -> CheckResult:
 
     sibling worktree の TMPDIR / XDG_* / UV_CACHE_DIR が残ると、別 worktree の
     cleanup・権限変更に巻き込まれて test 開始前に停止する（issue #2163）。
+    NIX_CACHE_HOME が残ると別 worktree の fetcher-cache SQLite を readonly で
+    開き `nix develop` が停止する（issue #3040）。
     detail には変数名と違反種別のみを含め、path の実値は出力しない。
     """
     runtime_root_value = env.get(TAKT_RUNTIME_ROOT_ENV, "")

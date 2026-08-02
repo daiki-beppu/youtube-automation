@@ -13,7 +13,7 @@ def template_bytes() -> bytes:
 
 def validate_desktop_client_config(data: dict[str, object]) -> None:
     """Validate the Google Desktop OAuth client configuration shape."""
-    from youtube_automation.infrastructure.errors import ValidationError
+    from youtube_automation.core.errors import ValidationError
 
     installed = data.get("installed")
     if not isinstance(installed, dict):

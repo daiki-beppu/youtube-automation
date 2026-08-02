@@ -47,7 +47,7 @@ try:
 except ImportError:
     _msvcrt = None
 
-from youtube_automation.utils.profile import section
+from youtube_automation.infrastructure.observability.profile import section
 
 Category = Literal["image", "video", "audio", "analysis"]
 

@@ -15,7 +15,7 @@ from youtube_automation.infrastructure.auth.youtube import (
     client_secrets_file_candidates,
     resolve_client_secrets_path,
 )
-from youtube_automation.utils.worktree import main_worktree_root
+from youtube_automation.infrastructure.vcs.worktree import main_worktree_root
 
 _CLIENT_SECRETS = {
     "installed": {

@@ -6,7 +6,7 @@ import json
 from types import SimpleNamespace
 
 from youtube_automation.commands.analytics import ttp_health as ttp_health_cli
-from youtube_automation.utils.ttp_health import evaluate_ttp_health
+from youtube_automation.infrastructure.analytics.ttp_health import evaluate_ttp_health
 
 REFERENCE_DATE = "2026-07-15"
 CONFIG_CHANNEL = {"slug": "rival", "name": "Rival", "id": "UC_RIVAL"}

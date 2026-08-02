@@ -9,14 +9,9 @@ from pathlib import Path
 
 import pytest
 
-SCRIPT = (
-    Path(__file__).resolve().parents[1]
-    / ".claude"
-    / "skills"
-    / "masterup"
-    / "references"
-    / "check_loudness_deviation.py"
-)
+from tests.helpers.paths import REPO_ROOT
+
+SCRIPT = REPO_ROOT / ".claude" / "skills" / "masterup" / "references" / "check_loudness_deviation.py"
 
 
 def _load_module():

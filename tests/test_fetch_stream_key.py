@@ -30,7 +30,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from youtube_automation.infrastructure.errors import ConfigError, ValidationError, YouTubeAPIError
+from youtube_automation.core.errors import ConfigError, ValidationError, YouTubeAPIError
 from youtube_automation.infrastructure.secrets import _SECRET_REFS
 
 _VALID_CLIENT_SECRETS_JSON = '{"installed":{"client_id":"x","client_secret":"y","redirect_uris":["http://localhost"]}}'

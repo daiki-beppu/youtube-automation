@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from youtube_automation.commands.uploads._upload_cli_error_boundary import run_upload_cli
-from youtube_automation.infrastructure.errors import AutomationError
+from youtube_automation.core.errors import AutomationError
 
 
 @pytest.mark.parametrize(

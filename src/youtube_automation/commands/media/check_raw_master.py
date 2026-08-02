@@ -31,8 +31,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from youtube_automation.infrastructure.errors import ValidationError
-from youtube_automation.utils.collection_paths import (
+from youtube_automation.core.errors import ValidationError
+from youtube_automation.infrastructure.media.collection_paths import (
     CollectionPaths,
     resolve_collection_dir,
 )

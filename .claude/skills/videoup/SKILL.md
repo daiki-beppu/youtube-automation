@@ -37,7 +37,7 @@ subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実�
 1. `.claude/skills/videoup/config.default.yaml`
 2. `config/skills/videoup.yaml`（存在する場合）
 
-合成規則は `youtube_automation.utils.skill_config.load_skill_config("videoup")` と同じで、チャンネル上書きが優先される。存在しない override は未設定として扱い、勝手に作成しない。このスキルが `masterup` や `loop-video` の skill-config を直接参照する段階では、それぞれの `config.default.yaml` と `config/skills/<skill>.yaml` も同じ手順で読む。
+合成規則は `youtube_automation.configuration.skills.load_skill_config("videoup")` と同じで、チャンネル上書きが優先される。存在しない override は未設定として扱い、勝手に作成しない。このスキルが `masterup` や `loop-video` の skill-config を直接参照する段階では、それぞれの `config.default.yaml` と `config/skills/<skill>.yaml` も同じ手順で読む。
 
 ## 前提
 
@@ -204,7 +204,7 @@ effect:
 
 一回だけ切り替える場合は `VIDEOUP_OVERLAYS=0|1` または `--no-overlays|--overlays` を使う。解決順は env > CLI > `config/channel/youtube.json` > default。例: `VIDEOUP_OVERLAYS=0 uv run bash .../generate_videos.sh <path>`。設定ファイルを一時編集しない。
 
-runtime mask helper は script 内から `uv run python -m youtube_automation.utils.audio_visualizer_mask` で起動する。script 自体も `uv run bash` で実行し、system Python に package が無い環境でも venv の依存を使う。
+runtime mask helper は script 内から `uv run python -m youtube_automation.infrastructure.media.audio_visualizer_mask` で起動する。script 自体も `uv run bash` で実行し、system Python に package が無い環境でも venv の依存を使う。
 
 ### 設定例（youtube.json）
 

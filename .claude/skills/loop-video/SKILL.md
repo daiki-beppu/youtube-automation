@@ -50,7 +50,7 @@ subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実�
 1. `.claude/skills/loop-video/config.default.yaml`
 2. `config/skills/loop-video.yaml`（存在する場合）
 
-合成規則は `youtube_automation.utils.skill_config.load_skill_config("loop-video")` と同じで、チャンネル上書きが優先される。存在しない override は未設定として扱い、勝手に作成しない。
+合成規則は `youtube_automation.configuration.skills.load_skill_config("loop-video")` と同じで、チャンネル上書きが優先される。存在しない override は未設定として扱い、勝手に作成しない。
 
 ## 前提
 
@@ -356,7 +356,7 @@ veo:
 
 ポイント:
 
-- **Veo API には `operations.cancel` 相当が現状未実装** (`client.operations.cancel` は未提供)。本スキルの実装 (`utils/veo_generator.py`) も `KeyboardInterrupt` を捕捉してメッセージ表示と state 保存だけを行い、cancel API を呼んでいない。**Ctrl+C はあくまでローカルプロセスを止めるだけで、API 側のジョブとクレジット消費は止められない**。
+- **Veo API には `operations.cancel` 相当が現状未実装** (`client.operations.cancel` は未提供)。本スキルの実装 (`infrastructure/media/veo_generator.py`) も `KeyboardInterrupt` を捕捉してメッセージ表示と state 保存だけを行い、cancel API を呼んでいない。**Ctrl+C はあくまでローカルプロセスを止めるだけで、API 側のジョブとクレジット消費は止められない**。
 - submit が成功した時点で課金は確定する想定で運用する。中断は「節約」にはならず、せいぜい「次回の二重課金を resume で防ぐ」効果しかない。
 - 中断 → 同じ model・同じ入力画像で即再実行すれば、保存済み operation_name から resume して既課金分を回収できる（loop.mp4 を取り出せる）。**再課金は発生しない**。
 - model または入力画像を変えて完全に作り直す場合は、state を手動削除する必要はない。次回 `yt-generate-loop-video` 実行時に自動で state を破棄して新規 submit する。

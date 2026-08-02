@@ -26,7 +26,7 @@ overlay の phase が `finished` に到達し、Step 6 の 6 点（playlist 紐�
 1. `.claude/skills/suno-helper/config.default.yaml`
 2. `config/skills/suno-helper.yaml`（存在する場合）
 
-読み込み後は `youtube_automation.utils.skill_config.load_skill_config("suno-helper")` と同じ deep-merge 前提でチャンネル上書きを優先する。存在しない override は未設定として扱い、勝手に作成しない。`unattended` の値は定期実行 URL の既定にだけ使い、手動 overlay の Balanced preset は変更しない。
+読み込み後は `youtube_automation.configuration.skills.load_skill_config("suno-helper")` と同じ deep-merge 前提でチャンネル上書きを優先する。存在しない override は未設定として扱い、勝手に作成しない。`unattended` の値は定期実行 URL の既定にだけ使い、手動 overlay の Balanced preset は変更しない。
 
 ## When to Use
 

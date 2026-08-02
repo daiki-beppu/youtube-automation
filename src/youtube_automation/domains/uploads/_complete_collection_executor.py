@@ -13,6 +13,9 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
+from youtube_automation.core.adapters import cost_tracker
+from youtube_automation.core.adapters.errors import AutomationError, QuotaExhaustedError
+from youtube_automation.core.adapters.youtube import complete_collection_quota_plan, quota_shortages
 from youtube_automation.domains.uploads._collection_uploader_constants import (
     ACTION_COMPLETE_COLLECTION_DEDUP_SKIPPED,
     ACTION_COMPLETE_COLLECTION_QUOTA_EXHAUSTED,
@@ -20,9 +23,6 @@ from youtube_automation.domains.uploads._collection_uploader_constants import (
     TRACKING_STATUS_COMPLETED,
 )
 from youtube_automation.domains.uploads.youtube import UPLOAD_SOURCE_EXISTING
-from youtube_automation.infrastructure import cost_tracker
-from youtube_automation.infrastructure.errors import AutomationError, QuotaExhaustedError
-from youtube_automation.utils.youtube_quota import complete_collection_quota_plan, quota_shortages
 
 logger = logging.getLogger(__name__)
 

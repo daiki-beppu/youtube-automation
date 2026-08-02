@@ -6,17 +6,17 @@ from pathlib import Path
 from typing import Protocol
 
 from youtube_automation.configuration import channel_dir, load_config, reset
-from youtube_automation.infrastructure.errors import ValidationError, YouTubeAPIError
-from youtube_automation.infrastructure.filesystem import (
+from youtube_automation.core.adapters.errors import ValidationError, YouTubeAPIError
+from youtube_automation.core.adapters.filesystem import (
     list_directory,
     path_exists,
     path_is_directory,
     read_json,
     write_json,
 )
-from youtube_automation.infrastructure.google.youtube import execute_youtube_request, validate_youtube_response_items
-from youtube_automation.infrastructure.quota import youtube_quota_recorder
-from youtube_automation.utils.collection_paths import CollectionPaths
+from youtube_automation.core.adapters.google.youtube import execute_youtube_request, validate_youtube_response_items
+from youtube_automation.core.adapters.media import CollectionPaths
+from youtube_automation.core.adapters.quota import youtube_quota_recorder
 
 logger = logging.getLogger(__name__)
 
