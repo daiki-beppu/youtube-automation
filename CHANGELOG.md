@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `fix(wf-auto)`: lease token を `-` を含まない hexadecimal 形式で生成し、`argparse` が `--token` の値をオプションと誤認する確率的な CLI 失敗を解消した（#2575）。
 - `fix(takt)`: `.takt/runtime-prepare.sh` が `NIX_CACHE_HOME` を current runtime root 配下へ再構成するようにした。Nix は `XDG_CACHE_HOME` より `NIX_CACHE_HOME` を優先するため、`XDG_CACHE_HOME` だけを差し替えても sibling worktree 由来の継承値が残り、別 worktree の fetcher-cache SQLite を readonly で開いて `nix develop` が `attempt to write a readonly database` で test 開始前に停止していた。注入値は devShell 入場時に `flake.nix` shellHook / `.envrc` が導出する `$TMPDIR/nix-cache` と一致させ、入場前後で cache path が動かないようにする。あわせて `yt-preflight` の `check_runtime_path` の検査対象へ `NIX_CACHE_HOME` を追加し、スクリプトの注入対象と preflight の検査対象が一致することを回帰テストで機械担保した（#3040）。
 - `fix(videoup)`: `generate_videos.sh` の音声エンコーダ選択を、`ffmpeg -encoders` の列挙だけでなく実行時プローブの成功を条件にした。`aac_at` は AudioToolbox 経由で coreaudiod への Mach lookup を必要とするため、サンドボックス下では列挙されていても初期化に失敗し ffmpeg が exit 171 で落ちていた。プローブに失敗した場合は警告を出して `aac` へフォールバックする（#3034）。
 - `fix(ci)`: any-usage-gate が diff の基準点を解決できず素通りしていた事象を解消した。基準点の解決順を `PRE_PUSH_DIFF_BASE` → `origin/main` → `main` とし、remote を 1 つも持たない隔離クローン（takt がタスクを実行する形態）でもローカル `main` を基準に判定する。従来の self-skip は client-side lefthook 時代の設計で CI がバックストップだったが、`ci_verify` は CI の前に立つため同じ skip がそのままゲートの消失になり、CI の 4 ジョブのうち any-gate だけが takt run で一度も実行されていなかった。どの ref も解決できない場合は試した ref を列挙して skip する。解決順は新設した `tests/test_any_usage_gate.py` が機械担保する（#3048）。
