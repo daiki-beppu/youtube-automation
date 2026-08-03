@@ -1,426 +1,255 @@
-# 定期リファクタリング workflow。外部から観測できる挙動を変えないことがレーンの前提。
-# feature との差分は「維持すべき契約の列挙」が計画の中心にあること、実装前に safety net
-# (契約を担保するテストの存在と green)を確認すること。fix との差分は診断がないこと
-# (壊れていないものを直すレーンであり、壊れていると分かったら yt-auto-fix へ回す)。
 name: yt-auto-maintenance
 description: >
-  定期リファクタリングワークフロー。intake → 計画(維持すべき契約の列挙 + リファクタ方針)→
-  計画レビュー(設計 / 規約整合の 2 並列)→ safety net(契約を担保するテストの確認・補強と
-  green 確認)→ リファクタ実装 → 実装レビュー(4 並列)→ CI 同等ゲート → 最終ゲート →
-  スコープ外発見の起票。外部挙動を変えないこと、変えたくなったら止まることが規律。
-  commit / push / PR 作成は workflow 完了後に takt の auto_pr が行う。
+  挙動維持の保守・リファクタ用。intake、維持契約の計画と設計ゲート、変更前
+  safety net、リファクタ、6 観点の専門レビュー、CI 同等ゲート、
+  fail-closed final gate、spillover を行う。
 workflow_config:
   provider_options:
     codex:
       network_access: true
-      # takt 0.53 で workflow の Codex Skill 継承が既定 off になった(#1081)。本リポジトリは
-      # .agents/skills(→ .claude/skills)を Codex 向けに維持しているため repo スコープのみ
-      # 復元する(0.54 simple family と同じ設計。user スコープは個人環境由来のため継承しない)
       skills:
         repo: true
-    opencode:
-      network_access: true
-# 計画ループ・実装ループを含む。ループの歯止めは loop monitor と各 step の上限が持ち、
-# max_steps はそれらをすり抜けた場合の最後の保険
-max_steps: 80
+max_steps: 44
 initial_step: intake
+
 loop_monitors:
-  # ── 計画レビュー ⇄ 計画修正。実装前なので、打ち切りより再計画を優先する ──
-  - cycle:
-      - plan_review
-      - plan_fix
+  - cycle: [plan_fix, plan_review]
+    ignore_steps: [plan_gate]
     threshold: 3
     judge:
       persona: supervisor
-      instruction: yt-auto-loop-monitor-design
+      instruction: loop-monitor-fix-replan
       rules:
-        - condition: 健全(指摘が減っている・修正が実質的)
+        - condition: 維持契約の指摘が収束しており再審査できる
           next: plan_review
-        - condition: 非生産的(同じ指摘が繰り返される・維持すべき契約が固まっていない)
+        - condition: 挙動維持の前提を再計画する必要がある
           next: plan
-  # ── 実装ゲート ⇄ CI 同等ゲートの往復 ──
-  - cycle:
-      - impl_gate
-      - ci_verify
+        - condition: 同じ指摘が反復し収束見込みがない
+          next: ABORT
+  - cycle: [plan, refactor]
+    ignore_steps: [plan_review, plan_gate, plan_fix, safety_net, reviewers, review_gate, ci_verify, final_gate, fix]
+    threshold: 2
+    judge:
+      persona: supervisor
+      instruction: loop-monitor-fix-replan
+      rules:
+        - condition: 挙動を変えない未試行方針を具体化できる
+          next: plan
+        - condition: 挙動変更なしでは目的を達成できない
+          next: ABORT
+  - cycle: [fix, reviewers]
+    ignore_steps: [review_gate, ci_verify, final_gate]
     threshold: 3
     judge:
       persona: supervisor
-      instruction: loop-monitor-reviewers-fix
+      instruction: loop-monitor-reviewers-fix-fc
       rules:
-        - condition: 健全(落ちるゲートが減っている)
-          next: impl_gate
-        - condition: 再計画で打開できる(ゲート失敗が計画の誤りを観測で実証している)
+        - condition: 修正進捗があり次の修正が実行可能である
+          next: fix
+        - condition: 維持契約または方針の再計画が必要である
           next: plan
-        - condition: 修正・再計画のいずれでも打開できない
+        - condition: 修正が停滞し収束見込みがない
           next: ABORT
-  # ── 実装ゲート ⇄ 最終ゲートの往復 ──
-  - cycle:
-      - impl_gate
-      - ci_verify
-      - final_gate
-    threshold: 3
-    judge:
-      persona: supervisor
-      instruction: loop-monitor-reviewers-fix
-      rules:
-        - condition: 健全(指摘数が減少、修正が反映されている)
-          next: impl_gate
-        - condition: 再計画または異議申告で打開できる(指摘が計画の誤りを観測で実証している)
-          next: plan
-        - condition: 修正・再計画・異議申告のいずれでも打開できない
-          next: ABORT
+
 steps:
-  # ── Phase 0: intake ───────────────────────────────────────────────
   - name: intake
-    kind: workflow_call
-    call: yt-auto-intake
+    uses: intake
+    structured_output:
+      schema_ref: yt-auto-decision
     rules:
-      - condition: COMPLETE
+      - condition: when(structured.intake.verdict == "ready")
         next: plan
-      - condition: blocked
-        next: ABORT
-      - condition: ABORT
+      - condition: when(true)
         next: ABORT
 
-  # ── Phase 1: 計画 ─────────────────────────────────────────────────
-  # リファクタリングの計画は「何を変えるか」より先に「何を変えないか」を確定する。
-  # 維持すべき契約が列挙されていない計画は、挙動変更の混入を検出できない。
   - name: plan
-    description: 維持すべき契約の列挙とリファクタ方針の決定(要件 ID 採番)
-    tags:
-      - plan
+    uses: implementation-high-plan-to-write-tests
+    instruction: yt-auto-maintenance-plan
+    structured_output:
+      schema_ref: yt-auto-decision
+    rules:
+      - condition: when(structured.plan.verdict == "planned")
+        next: plan_review
+      - condition: when(true)
+        next: ABORT
+
+  - name: plan_review
+    uses: design-review
+    rules:
+      self:
+        - condition: all("review_complete")
+          next: plan_gate
+      parallel:
+        requirements_review:
+          - condition: review_complete
+        architecture_review:
+          - condition: review_complete
+        test_design_review:
+          - condition: review_complete
+
+  - name: plan_gate
+    tags: [review, design-gate]
     edit: false
-    persona: planner
-    policy:
-      - yt-auto-traceability
-      - yt-auto-toolchain
-      - existing-system-respect
-    knowledge:
-      - architecture
-      - yt-auto-conventions
-      - yt-auto-domain
+    persona: merge-readiness-reviewer
     provider_options:
       extends: review-readonly
-    instruction: yt-auto-maintenance-plan
-    quality_gates:
-      - 維持すべき外部契約(公開 CLI / config スキーマ / skill 配布物 / 例外型 / テストが担保する挙動)が列挙されていること
-      - 全要件に REQ-<issue番号>-<2桁連番> 形式の ID が振られていること
-      - 各契約について、それを担保する既存テストの有無が確認されていること
-      - リファクタ方針が「何を変えないか」を前提に書かれていること
-      - 外部挙動の変更を含む方針になっていないこと
+    instruction: yt-auto-review-design-gate
+    structured_output:
+      schema_ref: yt-auto-decision
+    pass_previous_response: false
     rules:
-      - condition: これが 4 回目以降の計画である(3 回作り直しても方針が定まらなかった)
-        next: ABORT
-        appendix: |
-          各ラウンドで立てた方針と、差し戻された理由:
-          - {何を計画し、なぜ差し戻されたか}
-      - condition: 維持契約を列挙し、要件 ID を採番し、リファクタ方針を決めた
-        next: plan_review
-      - condition: ユーザーが質問をしている(実装タスクではない)
-        next: COMPLETE
-      - condition: 対象が既に壊れている(リファクタリングではなくバグ修正が必要)
-        next: ABORT
-        appendix: |
-          観測した症状と、yt-auto-fix へ回すべき理由:
-          - {何が壊れているか}
-      - condition: 情報不足で方針が一意に決まらない
-        next: ABORT
-        appendix: |
-          方針を決めるために必要な情報:
-          - {何が決まれば進めるか}
-    output_contracts:
-      report:
-        - name: plan.md
-          format: yt-auto-maintenance-plan
-
-  # 実装前の関門。維持契約の見落としは、実装後に見つける場合より桁違いに安い。
-  - name: plan_review
-    description: リファクタ計画 / 規約整合の 2 並列レビュー
-    tags:
-      - review
-      - design-gate
-    parallel:
-      - name: maintenance-plan-review
-        tags:
-          - review
-          - design-gate
-        edit: false
-        persona: architecture-reviewer
-        policy:
-          - review
-          - existing-system-respect
-          - yt-auto-review-rescan
-          - yt-auto-review-convergence
-        knowledge:
-          - architecture
-          - yt-auto-domain
-        provider_options:
-          extends: review-readonly
-        pass_previous_response: false
-        instruction: yt-auto-review-maintenance-plan
-        rules:
-          - condition: APPROVE
-          - condition: REJECT
-          - condition: NEED_REPLAN
-        output_contracts:
-          report:
-            - name: plan-review.md
-              format: yt-auto-design-arch-review
-      - name: conventions-plan
-        tags:
-          - review
-          - design-gate
-          - conventions
-        edit: false
-        persona: yt-auto-conventions-reviewer
-        policy:
-          - review
-          - yt-auto-review-rescan
-          - yt-auto-review-convergence
-        knowledge:
-          - yt-auto-conventions
-          - yt-auto-domain
-        provider_options:
-          extends: review-readonly
-        pass_previous_response: false
-        instruction: yt-auto-review-conventions-gate
-        rules:
-          - condition: APPROVE
-          - condition: REJECT
-          - condition: NEEDS_CONVENTION_REVISION
-        output_contracts:
-          report:
-            - name: conventions-plan.md
-              format: yt-auto-conventions-review
-    rules:
-      - condition: all("APPROVE")
+      - condition: when(structured.plan_gate.verdict == "approve")
         next: safety_net
-      - condition: any("NEED_REPLAN")
-        next: plan
-      - condition: any("REJECT", "NEEDS_CONVENTION_REVISION")
+      - condition: when(structured.plan_gate.verdict == "reject")
         next: plan_fix
+      - condition: when(structured.plan_gate.verdict == "replan")
+        next: plan
+      - condition: when(true)
+        next: ABORT
 
   - name: plan_fix
-    description: 計画レビュー指摘の解消(レポートのみを直す。コードは書かない)
-    tags:
-      - plan
-      - design-gate
-    edit: true
+    tags: [plan]
+    edit: false
+    session: compact
     persona: planner
-    policy:
-      - yt-auto-traceability
-      - existing-system-respect
-    knowledge:
-      - architecture
-      - yt-auto-conventions
-    required_permission_mode: edit
-    session: refresh
     provider_options:
-      extends: edit
-    promotion:
-      - at: 2
-        provider_options:
-          codex:
-            reasoning_effort: high
-          claude:
-            effort: high
-    instruction: yt-auto-gate-fix
-    pass_previous_response: false
-    quality_gates:
-      - 全 finding に対応(修正 or 根拠を示した反論)していること
-      - 要件 ID を振り直していないこと(分割時は枝番を使うこと)
-      - プロダクションコード・テストコードを書いていないこと
+      extends: review-readonly
+    instruction: yt-auto-design-fix
+    structured_output:
+      schema_ref: yt-auto-decision
     rules:
-      # plan_fix は plan_review からだけでなく safety_net(契約リストの誤り)からも
-      # 再入し得る。挟み込みで cycle が途切れてカウントが 1 に戻ることがあるため、
-      # ラウンド上限をこの step 自身にも持たせる
-      - condition: これが 4 回目以降の計画修正である(3 ラウンドで計画が固まらなかった)
-        next: plan
-        appendix: |
-          各ラウンドで直した内容と、残った指摘:
-          - {何を直し、何が残ったか}
-      - condition: 全 finding に対応した
+      - condition: when(structured.plan_fix.verdict == "fixed")
         next: plan_review
-      - condition: 指摘が計画の前提そのものを否定している
+      - condition: when(structured.plan_fix.verdict == "replan")
         next: plan
+      - condition: when(true)
+        next: ABORT
 
-  # ── Phase 2: safety net ───────────────────────────────────────────
-  # リファクタ前に「契約が守られていることを検証できる状態」を作る。
-  # テストのないコードを動かすのは、命綱なしで構造を組み替えるのと同じ。
   - name: safety_net
-    description: 維持契約を担保するテストの確認・補強(characterization テスト)と green 確認
-    tags:
-      - coding
-      - test-planning
+    tags: [coding, test-planning]
     edit: true
+    session: compact
     persona: coder
-    policy:
-      - coding
-      - testing
-      - yt-auto-traceability
-      - existing-system-respect
-      - yt-auto-toolchain
-    knowledge:
-      - unit-testing
-      - yt-auto-conventions
+    policy: testing
     required_permission_mode: edit
-    provider_options:
-      extends: edit
     instruction: yt-auto-safety-net
-    quality_gates:
-      - 計画の全維持契約について、担保するテストの存在(既存 or 今回追加)を確認していること
-      - 追加した characterization テストは現在の挙動をそのまま固定しており、望ましい挙動への先回りをしていないこと
-      - リファクタ前の時点で対象テストが全て green であることを確認していること
-      - プロダクションコードを変更していないこと
-      - 外部サービスへ実アクセスしていないこと
+    structured_output:
+      schema_ref: yt-auto-decision
     rules:
-      - condition: 全維持契約にテストが対応し、リファクタ前の green を確認した
+      - condition: when(structured.safety_net.verdict == "baseline_ready")
         next: refactor
-      - condition: 既存挙動のテストが修正前から red である(対象が既に壊れている)
+      - condition: when(structured.safety_net.verdict == "replan")
+        next: plan
+      - condition: when(true)
         next: ABORT
-        appendix: |
-          red のテストと症状(yt-auto-fix へ回す):
-          - {どのテストがどう失敗したか}
-      - condition: 計画の維持契約リストに誤り・不足がある
-        next: plan_fix
-    output_contracts:
-      report:
-        - name: test-report.md
-          format: test-report
 
-  # ── Phase 3: リファクタ実装 ───────────────────────────────────────
   - name: refactor
-    description: 挙動を変えない構造の変更(safety net の green を維持する)
-    tags:
-      - coding
+    tags: [coding]
     edit: true
+    session: compact
     persona: coder
-    policy:
-      - coding
-      - testing
-      - yt-auto-traceability
-      - existing-system-respect
-      - yt-auto-scope-spillover
-      - yt-auto-toolchain
-    knowledge:
-      - architecture
-      - yt-auto-conventions
-      - yt-auto-domain
+    policy: [coding, testing]
+    knowledge: [architecture, implementation-semantics]
     required_permission_mode: edit
-    session: refresh
-    provider_options:
-      extends: edit
     instruction: yt-auto-refactor
-    quality_gates:
-      - safety net のテストが全て green のままであること
-      - テストの変更がリネーム・移動への機械的追随のみであること(アサーションの変更・削除をしていない)
-      - 全差分を「必須変更 / 関連変更 / 不要変更」に分類し、不要変更が残っていないこと
-      - 計画の要件 ID にない変更を混ぜていないこと
+    structured_output:
+      schema_ref: yt-auto-decision
     rules:
-      - condition: リファクタが完了し、safety net が green のまま
-        next: impl_gate
-      - condition: 挙動を変えずには目的を達成できないと判明した
+      - condition: when(structured.refactor.verdict == "refactored")
+        next: reviewers
+      - condition: when(structured.refactor.verdict == "replan")
         next: plan
-      - condition: リファクタの過程でバグを発見した(既存挙動が誤っている)
-        next: plan
-        appendix: |
-          発見したバグ(スコープ外発見として起票するか、計画の見直しが必要):
-          - {何が誤っているか}
-    output_contracts:
-      report:
-        - name: maintenance-scope.md
-          format: maintenance-scope
-
-  # ── Phase 4: 実装レビュー ─────────────────────────────────────────
-  - name: impl_gate
-    kind: workflow_call
-    call: yt-auto-impl-review
-    rules:
-      - condition: COMPLETE
-        next: ci_verify
-      - condition: needs_replan
-        next: plan
-      - condition: ABORT
+      - condition: when(true)
         next: ABORT
 
-  # ── Phase 5: CI 同等ゲート ────────────────────────────────────────
-  - name: ci_verify
-    description: CI 同等ゲートのローカル実行と機械的修正(format / lint 自明修正 / CHANGELOG)
-    tags:
-      - coding
-      - delivery-gate
-    edit: true
-    persona: coder
-    policy:
-      - yt-auto-toolchain
-      - yt-auto-traceability
-    required_permission_mode: edit
+  - name: reviewers
+    uses: reviewers
+    rules:
+      self:
+        - condition: all("review_complete")
+          next: review_gate
+      parallel:
+        arch_review:
+          - condition: review_complete
+        ai_antipattern_review:
+          - condition: review_complete
+        coding_review:
+          - condition: review_complete
+        implementation_semantics_review:
+          - condition: review_complete
+        contract_lifecycle_review:
+          - condition: review_complete
+        robustness_review:
+          - condition: review_complete
+
+  - name: review_gate
+    tags: [review]
+    edit: false
+    persona: merge-readiness-reviewer
     provider_options:
-      extends: edit
-    instruction: yt-auto-ci-verify
+      extends: review-readonly
+    instruction: yt-auto-review-gate
+    structured_output:
+      schema_ref: yt-auto-decision
     pass_previous_response: false
-    quality_gates:
-      - 全ゲート(ruff check / ruff format --check / any-usage-gate / pytest / CHANGELOG)を実際に実行し、個々の結果を報告していること
-      - テストの削除・skip・アサーション緩和でゲートを通していないこと
-      - 機械的修正(format 適用 / lint 自明修正 / CHANGELOG 追記)以外の実装変更をしていないこと
     rules:
-      - condition: 全ゲートが green である(機械的修正のみで到達した場合を含む)
-        next: final_gate
-      - condition: 実装の欠陥が原因でゲートを green にできない
-        next: impl_gate
-      - condition: 環境障害でゲートを実行できない
+      - condition: when(structured.review_gate.verdict == "approve")
+        next: ci_verify
+      - condition: when(structured.review_gate.verdict == "reject")
+        next: fix
+      - condition: when(structured.review_gate.verdict == "replan")
+        next: plan
+      - condition: when(true)
         next: ABORT
-        appendix: |
-          実行できなかったゲートと失敗の内容:
-          - {何を実行し、どう失敗したか}
 
-  # ── Phase 6: 最終ゲート ───────────────────────────────────────────
+  - name: ci_verify
+    uses: ci-verify
+    structured_output:
+      schema_ref: yt-auto-decision
+    rules:
+      - condition: when(structured.ci_verify.verdict == "pass")
+        next: final_gate
+      - condition: when(structured.ci_verify.verdict == "fail")
+        next: fix
+      - condition: when(true)
+        next: ABORT
+
   - name: final_gate
     kind: workflow_call
     call: merge-readiness-final-gate
     args:
-      supervise_knowledge:
-        - architecture
-        - yt-auto-conventions
+      supervise_knowledge: [architecture, takt]
     rules:
       - condition: COMPLETE
         next: spillover
       - condition: needs_fix
-        next: impl_gate
+        next: fix
       - condition: need_replan
         next: plan
       - condition: ABORT
         next: ABORT
 
-  # ── Phase 7: スコープ外発見の起票 ─────────────────────────────────
-  # リファクタリングは「ついで直し」の誘惑が最も強いレーンであり、spillover の
-  # 受け皿がないと existing-system-respect の禁止が守れない。
-  - name: spillover
-    description: 各レポートのスコープ外の発見を集め、起票する / 捨てるに仕分ける
-    tags:
-      - delivery
-    edit: false
-    persona: yt-auto-delivery-operator
-    policy:
-      - yt-auto-scope-spillover
-    knowledge:
-      - yt-auto-domain
-    provider_options:
-      extends: review-readonly
-    session: refresh
-    instruction: yt-auto-spillover
-    quality_gates:
-      - Report Directory の全レポートを読み、発見がなかったものも収集元に記録していること
-      - 起票したものが 3 条件(因果なし / 実害あり / 根拠あり)をすべて満たしていること
-      - 起票前に gh issue list で重複を照合していること
-      - 破棄した発見について、満たさなかった条件と理由を記録していること
-      - gh issue の操作に失敗したなら、起票できなかった発見と手動起票用のコマンドを
-        レポートに残していること
-      - コードを変更していないこと
+  - name: fix
+    uses: fix
+    instruction: yt-auto-fix-findings
+    structured_output:
+      schema_ref: yt-auto-decision
     rules:
-      - condition: 因果ありと判定した発見があり、今回の差分に含めるべきものが残っている
+      - condition: when(structured.fix.verdict == "fixed")
+        next: reviewers
+      - condition: when(structured.fix.verdict == "replan")
         next: plan
-      - condition: gh issue の操作に失敗し、起票できなかった発見が残っている
+      - condition: when(true)
+        next: ABORT
+
+  - name: spillover
+    uses: spillover
+    structured_output:
+      schema_ref: yt-auto-decision
+    rules:
+      - condition: when(structured.spillover.verdict == "return")
+        next: plan
+      - condition: when(structured.spillover.verdict == "complete")
         next: COMPLETE
-      - condition: 仕分けが終わり、起票・追記・破棄をすべて記録した(発見ゼロの場合を含む)
-        next: COMPLETE
+      - condition: when(true)
+        next: ABORT

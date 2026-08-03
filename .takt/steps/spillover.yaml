@@ -1,0 +1,8 @@
+name: spillover
+tags: [delivery]
+edit: false
+session: refresh
+persona: planner
+provider_options:
+  extends: review-readonly
+instruction: yt-auto-spillover

@@ -1,495 +1,283 @@
 name: yt-auto-feature
 description: >
-  新機能開発ワークフロー。intake → 計画 → テスト設計 → 設計レビュー(設計 / 規約整合 /
-  テスト設計の 3 並列)→ テスト先行実装 → 実装 → 実装レビュー(4 並列)→ CI 同等ゲート →
-  最終ゲート → スコープ外発見の起票。commit / push / PR 作成は workflow 完了後に takt の
-  auto_pr が行う。実装に入る前に設計を止められること、規約からの逸脱を黙って通さないことが
-  default との差分。本リポジトリはローカル git hook を持たないため、CI 同等ゲート
-  (ci_verify)を workflow 内の関門として持つ。
+  新機能・機能拡張用。intake、実装前設計ゲート、test-first、6 観点の専門レビュー、
+  CI 同等ゲート、fail-closed final gate、spillover を行う。
 workflow_config:
   provider_options:
     codex:
       network_access: true
-      # takt 0.53 で workflow の Codex Skill 継承が既定 off になった(#1081)。本リポジトリは
-      # .agents/skills(→ .claude/skills)を Codex 向けに維持しているため repo スコープのみ
-      # 復元する(0.54 simple family と同じ設計。user スコープは個人環境由来のため継承しない)
       skills:
         repo: true
-    opencode:
-      network_access: true
-# 設計ループ・実装ループを含むため default (30) では足りない。
-# ループの歯止めは loop monitor と各修正 step の上限が持つ。max_steps はそれらを
-# すり抜けた場合の最後の保険であり、正常系が枯渇しない広さを取る
-max_steps: 100
+max_steps: 50
 initial_step: intake
+
 loop_monitors:
-  # ── 設計レビュー ⇄ 設計修正。実装前なので、打ち切りより再計画を優先する ──
-  - cycle:
-      - design_review
-      - design_fix
+  - cycle: [design_fix, design_review]
+    ignore_steps: [design_gate]
     threshold: 3
     judge:
       persona: supervisor
-      instruction: yt-auto-loop-monitor-design
+      instruction: loop-monitor-fix-replan
       rules:
-        - condition: 健全(指摘が減っている・修正が実質的)
+        - condition: 指摘が収束しており同じ契約のまま設計を再審査できる
           next: design_review
-        - condition: 非生産的(同じ指摘が繰り返される・要件が固まっていない)
+        - condition: 設計の前提または受入条件を再検討する必要がある
           next: plan
-  # ── 再計画ループ。ここまで来たら計画の作り直しでは解けない可能性が高い ──
-  - cycle:
-      - plan
-      - test_design
-      - design_review
+        - condition: 同じ指摘が反復し安全に収束できない
+          next: ABORT
+  - cycle: [replan, implement]
+    ignore_steps: [reviewers, review_gate, ci_verify, final_gate, fix]
+    threshold: 2
+    judge:
+      persona: supervisor
+      instruction: loop-monitor-fix-replan
+      rules:
+        - condition: 未試行の実装方針と検証手順を具体化できる
+          next: replan
+        - condition: 受入条件を満たす実現可能な方針がない
+          next: ABORT
+  - cycle: [fix, reviewers]
+    ignore_steps: [review_gate, ci_verify, final_gate]
     threshold: 3
     judge:
       persona: supervisor
-      instruction: yt-auto-loop-monitor-replan
+      instruction: loop-monitor-reviewers-fix-fc
       rules:
-        - condition: 健全(曖昧さが減り計画が具体化している)
-          next: plan
-        - condition: 非生産的(issue の未決事項 / 規約との衝突に帰着する)
+        - condition: 修正進捗があり次の修正が実行可能である
+          next: fix
+        - condition: 実装方針の再定義が必要である
+          next: replan
+        - condition: 修正が停滞し収束見込みがない
           next: ABORT
-  # ── 実装ゲート ⇄ CI 同等ゲートの往復 ──
-  # ci_verify が「実装の欠陥が原因で green にできない」と差し戻す往復。
-  # final_gate を経ないため 3 要素 cycle とは別に監視する
-  - cycle:
-      - impl_gate
-      - ci_verify
-    threshold: 3
-    judge:
-      persona: supervisor
-      instruction: loop-monitor-reviewers-fix
-      rules:
-        - condition: 健全(落ちるゲートが減っている)
-          next: impl_gate
-        - condition: 再計画で打開できる(ゲート失敗が計画・要件の誤りを観測で実証している)
-          next: plan
-        - condition: 修正・再計画のいずれでも打開できない
-          next: ABORT
-  # ── 実装ゲート ⇄ 最終ゲートの往復 ──
-  # 実装レビュー ⇄ 修正のループ自体は yt-auto-impl-review の内側にあり、その上限は
-  # sub-workflow 側の loop monitor が持つ。ここで見るのは「最終ゲートが差し戻し、
-  # 実装ゲートを回り直す」外側の往復である。非生産的と判定されたときに前進させない
-  # (未解消の指摘を抱えたまま完了 → auto_pr の PR 化まで到達させない)
-  - cycle:
-      - impl_gate
-      - ci_verify
-      - final_gate
-    threshold: 3
-    judge:
-      persona: supervisor
-      instruction: loop-monitor-reviewers-fix
-      rules:
-        - condition: 健全(指摘数が減少、修正が反映されている)
-          next: impl_gate
-        - condition: 再計画または異議申告で打開できる(指摘が計画・要件の誤りを観測で実証している)
-          next: plan
-        - condition: 修正・再計画・異議申告のいずれでも打開できない
-          next: ABORT
+
 steps:
-  # ── Phase 0: intake ───────────────────────────────────────────────
-  # feature / fix / docs / maintenance 共通。着手できない issue を検出して止める。
   - name: intake
-    kind: workflow_call
-    call: yt-auto-intake
+    uses: intake
+    structured_output:
+      schema_ref: yt-auto-decision
     rules:
-      - condition: COMPLETE
+      - condition: when(structured.intake.verdict == "ready")
         next: plan
-      - condition: blocked
+      - condition: when(structured.intake.verdict == "blocked" || structured.intake.verdict == "abort")
         next: ABORT
-      - condition: ABORT
+      - condition: when(true)
         next: ABORT
 
-  # ── Phase 1: 設計 ─────────────────────────────────────────────────
   - name: plan
-    description: 要件 ID の採番と実装方針の決定
-    tags:
-      - plan
-    edit: false
-    persona: planner
-    policy:
-      - yt-auto-traceability
-      - yt-auto-toolchain
-    knowledge:
-      - architecture
-      - yt-auto-conventions
-      - yt-auto-domain
-    provider_options:
-      extends: review-readonly
-    instruction: yt-auto-plan
-    quality_gates:
-      - 全要件に REQ-<issue番号>-<2桁連番> 形式の ID が振られていること
-      - 要件 ID ごとに対象ファイルと方針が対応づいていること
-      - 規約整合の事前申告が主要規約文書(CLAUDE.md / docs/development.md)に対して行われていること
-      - メンテナンスモードの境界(TS は dashboard / extensions 限定)を越える拡張を方針に含めていないこと
+    uses: implementation-high-plan-to-write-tests
+    instruction: yt-auto-feature-plan
+    structured_output:
+      schema_ref: yt-auto-decision
     rules:
-      # plan は多方向から再訪される(intake / test_design / design_review の NEED_REPLAN /
-      # design_fix / draft の need_replan / impl_gate の needs_replan / ci_verify /
-      # final_gate / spillover、加えて loop monitor)。cycle パターンが安定しないため、
-      # やり直し回数の上限をこの step 自身が持つ
-      - condition: これが 4 回目以降の計画である(3 回作り直しても方針が定まらなかった)
-        next: ABORT
-        appendix: |
-          各ラウンドで立てた方針と、差し戻された理由:
-          - {何を計画し、なぜ差し戻されたか}
-      - condition: 要件 ID を採番し実装方針を決めた
+      - condition: when(structured.plan.verdict == "planned")
         next: test_design
-      - condition: ユーザーが質問をしている(実装タスクではない)
-        next: COMPLETE
-      - condition: ブリーフの決定だけでは方針が一意に決まらない
+      - condition: when(true)
         next: ABORT
-        appendix: |
-          方針を決めるために必要な情報:
-          - {何が決まれば進めるか}
-    output_contracts:
-      report:
-        - name: plan.md
-          format: yt-auto-plan
 
   - name: test_design
-    description: 要件 ID ごとの検証設計(テストコードは書かない)
-    tags:
-      - plan
-      - test-planning
+    tags: [plan, test-planning]
     edit: false
     persona: test-planner
-    policy:
-      - testing
-      - yt-auto-traceability
-      - yt-auto-toolchain
-    knowledge:
-      - unit-testing
-      - yt-auto-domain
     provider_options:
       extends: review-readonly
     instruction: yt-auto-test-design
-    quality_gates:
-      - 全要件 ID にテストケースが対応しているか、検証不能の理由が書かれていること
-      - 境界と失敗経路のケースが設計されていること
-      - 既存の契約テスト(tests/test_*_contract.py 等)に触れる変更なら、その追随ケースがあること
-      - tests/test_<対象>.py の配置規約に沿っていること
+    structured_output:
+      schema_ref: yt-auto-decision
     rules:
-      - condition: 全要件にテスト設計が対応づいた
+      - condition: when(structured.test_design.verdict == "designed")
         next: design_review
-      - condition: 実装計画の要件が曖昧でテスト設計できない
+      - condition: when(structured.test_design.verdict == "replan")
         next: plan
-    output_contracts:
-      report:
-        - name: test-design.md
-          format: yt-auto-test-design
+      - condition: when(true)
+        next: ABORT
 
-  # 実装前の関門。ここで止めた誤りは、実装後に見つける場合より桁違いに安い。
   - name: design_review
-    description: 設計 / 規約整合 / テスト設計の 3 並列レビュー
-    tags:
-      - review
-      - design-gate
-    parallel:
-      - name: design-arch-review
-        tags:
-          - review
-          - design-gate
-        edit: false
-        persona: architecture-reviewer
-        policy:
-          - review
-          - yt-auto-review-rescan
-          - yt-auto-review-convergence
-        knowledge:
-          - architecture
-          - yt-auto-domain
-        provider_options:
-          extends: review-readonly
-        pass_previous_response: false
-        instruction: yt-auto-review-design-arch
-        rules:
-          - condition: APPROVE
-          - condition: REJECT
-          - condition: NEED_REPLAN
-        output_contracts:
-          report:
-            - name: design-review.md
-              format: yt-auto-design-arch-review
-      - name: conventions-design
-        tags:
-          - review
-          - design-gate
-          - conventions
-        edit: false
-        persona: yt-auto-conventions-reviewer
-        policy:
-          - review
-          - yt-auto-review-rescan
-          - yt-auto-review-convergence
-        knowledge:
-          - yt-auto-conventions
-          - yt-auto-domain
-        provider_options:
-          extends: review-readonly
-        pass_previous_response: false
-        instruction: yt-auto-review-conventions-gate
-        rules:
-          - condition: APPROVE
-          - condition: REJECT
-          - condition: NEEDS_CONVENTION_REVISION
-        output_contracts:
-          report:
-            - name: conventions-design.md
-              format: yt-auto-conventions-review
-      - name: test-design-review
-        tags:
-          - review
-          - design-gate
-        edit: false
-        persona: testing-reviewer
-        policy:
-          - review
-          - testing
-          - yt-auto-traceability
-          - yt-auto-review-rescan
-          - yt-auto-review-convergence
-        knowledge:
-          - unit-testing
-        provider_options:
-          extends: review-readonly
-        pass_previous_response: false
-        instruction: yt-auto-review-test-design
-        rules:
-          - condition: APPROVE
-          - condition: REJECT
-        output_contracts:
-          report:
-            - name: test-design-review.md
-              format: yt-auto-test-design-review
+    uses: design-review
     rules:
-      - condition: all("APPROVE")
+      self:
+        - condition: all("review_complete")
+          next: design_gate
+      parallel:
+        requirements_review:
+          - condition: review_complete
+        architecture_review:
+          - condition: review_complete
+        test_design_review:
+          - condition: review_complete
+
+  - name: design_gate
+    tags: [review, design-gate]
+    edit: false
+    persona: merge-readiness-reviewer
+    provider_options:
+      extends: review-readonly
+    instruction: yt-auto-review-design-gate
+    structured_output:
+      schema_ref: yt-auto-decision
+    pass_previous_response: false
+    rules:
+      - condition: when(structured.design_gate.verdict == "approve")
         next: write_tests
-      - condition: any("NEED_REPLAN")
-        next: plan
-      - condition: any("REJECT", "NEEDS_CONVENTION_REVISION")
+      - condition: when(structured.design_gate.verdict == "reject")
         next: design_fix
+      - condition: when(structured.design_gate.verdict == "replan")
+        next: plan
+      - condition: when(true)
+        next: ABORT
 
   - name: design_fix
-    description: 設計レビュー指摘の解消(レポートのみを直す。コードは書かない)
-    tags:
-      - plan
-      - design-gate
-    edit: true
+    tags: [plan, design-gate]
+    edit: false
+    session: compact
     persona: planner
-    policy:
-      - yt-auto-traceability
-    knowledge:
-      - architecture
-      - yt-auto-conventions
-    required_permission_mode: edit
-    session: refresh
     provider_options:
-      extends: edit
-    # 同じ設計指摘で 2 周目に入ったら、推論を厚くして食い違いの根に届かせる
-    promotion:
-      - at: 2
-        provider_options:
-          codex:
-            reasoning_effort: high
-          claude:
-            effort: high
-    instruction: yt-auto-gate-fix
-    pass_previous_response: false
-    quality_gates:
-      - 全 finding に対応(修正 or 根拠を示した反論)していること
-      - 要件 ID を振り直していないこと(分割時は枝番を使うこと)
-      - プロダクションコード・テストコードを書いていないこと
+      extends: review-readonly
+    instruction: yt-auto-design-fix
+    structured_output:
+      schema_ref: yt-auto-decision
     rules:
-      # design_fix は design_review からだけでなく write_tests(テストを書けない要件が
-      # 残る)からも再入する。挟み込みで loop monitor の cycle
-      # [design_review, design_fix] が途切れ、カウントが 1 に戻ることがあるため、
-      # ラウンド上限をこの step 自身にも持たせる
-      - condition: これが 4 回目以降の設計修正である(3 ラウンドで設計が固まらなかった)
-        next: plan
-        appendix: |
-          各ラウンドで直した内容と、残った指摘:
-          - {何を直し、何が残ったか}
-      - condition: 全 finding に対応した
+      - condition: when(structured.design_fix.verdict == "fixed")
         next: design_review
-      - condition: 指摘が計画の前提そのものを否定している
+      - condition: when(structured.design_fix.verdict == "replan")
         next: plan
+      - condition: when(true)
+        next: ABORT
 
-  # ── Phase 2: 実装 ─────────────────────────────────────────────────
   - name: write_tests
-    description: 承認されたテスト設計に基づくテスト先行実装(red を確認する)
-    tags:
-      - coding
-      - test-planning
-    edit: true
-    persona: coder
-    policy:
-      - coding
-      - testing
-      - yt-auto-traceability
-      - yt-auto-toolchain
-    knowledge:
-      - unit-testing
-      - yt-auto-conventions
-    required_permission_mode: edit
-    provider_options:
-      extends: edit
+    uses: implementation-high-write-tests-to-implement
     instruction: yt-auto-write-tests
-    quality_gates:
-      - テスト設計の全ケースを実装していること
-      - 各テストに要件 ID とケース ID が埋め込まれていること
-      - 実装前の時点でテストが失敗する(red である)ことを確認していること
-      - 外部サービスへ実アクセスしていないこと
-      - テストを持たない要件 ID を残したまま実装へ進んでいないこと(検証不能と設計された要件を除く)
+    structured_output:
+      schema_ref: yt-auto-decision
     rules:
-      - condition: 設計の全ケースを実装し red を確認した
-        next: draft
-      # テスト未作成のまま draft へ進む出口は置かない。テストのない要件は
-      # 「検証不能」としてテスト設計に明記し、設計レビューを通してから実装へ入る
-      # (1 要件に最低 1 テストケース)
-      - condition: テストを書けない要件が残る(テスト設計の誤り、または依存する基盤が未実装)
+      - condition: when(structured.write_tests.verdict == "red_confirmed")
+        next: implement
+      - condition: when(structured.write_tests.verdict == "replan")
         next: design_fix
-      - condition: ユーザーへの確認事項があるためユーザー入力が必要
+      - condition: when(structured.write_tests.verdict == "blocked")
         next: write_tests
         requires_user_input: true
         interactive_only: true
-    output_contracts:
-      report:
-        - name: test-report.md
-          format: test-report
-
-  # builtin の実装 + AI アンチパターン自己レビューループ。
-  # implement の instruction だけ本リポジトリの規約を効かせたものへ差し替える。
-  #
-  # builtin の子へは policy を渡せない(差し替えられるのは args の instruction だけ)。
-  # そのため他 step が policy: yt-auto-toolchain に集約した uv / nix 規約も、この step にだけは
-  # 届かない。yt-auto-implement の「禁止」節が uv 以外の依存操作を止めているのは、
-  # 重複ではなくこの制約の埋め合わせである。yt-auto-toolchain を変えたら同時に見直す
-  - name: draft
-    kind: workflow_call
-    call: default-draft
-    args:
-      impl_instruction: yt-auto-implement
-    rules:
-      - condition: COMPLETE
-        next: impl_gate
-      - condition: need_replan
-        next: plan
-      - condition: ABORT
+      - condition: when(true)
         next: ABORT
 
-  # ── Phase 3: 実装レビュー ─────────────────────────────────────────
-  # feature / fix / maintenance 共通の callable sub-workflow。4 並列レビュー ⇄ 修正の
-  # ループごと内側に閉じてある。呼び出し元が fix へ直接飛び込まないため、内側では
-  # [impl_review, fix] が必ず連続し、loop monitor の上限 3 が実効化する
-  - name: impl_gate
-    kind: workflow_call
-    call: yt-auto-impl-review
-    rules:
-      - condition: COMPLETE
-        next: ci_verify
-      - condition: needs_replan
-        next: plan
-      - condition: ABORT
-        next: ABORT
-
-  # ── Phase 4: CI 同等ゲート ────────────────────────────────────────
-  # 本リポジトリはローカル git hook を持たず、品質ゲートは CI が正
-  # (docs/development.md「品質ゲート(CI)」)。auto_pr の push を止める関門が無いため、
-  # PR の CI で落ちる前にここで全ゲートをローカル実行する。
-  - name: ci_verify
-    description: CI 同等ゲートのローカル実行と機械的修正(format / lint 自明修正 / CHANGELOG)
-    tags:
-      - coding
-      - delivery-gate
+  - name: implement
+    tags: [coding]
     edit: true
+    session: compact
     persona: coder
-    policy:
-      - yt-auto-toolchain
-      - yt-auto-traceability
+    policy: [coding, testing]
+    knowledge: [takt, architecture, implementation-semantics]
     required_permission_mode: edit
-    provider_options:
-      extends: edit
-    instruction: yt-auto-ci-verify
-    pass_previous_response: false
-    quality_gates:
-      - 全ゲート(ruff check / ruff format --check / any-usage-gate / pytest / CHANGELOG)を実際に実行し、個々の結果を報告していること
-      - テストの削除・skip・アサーション緩和でゲートを通していないこと
-      - 機械的修正(format 適用 / lint 自明修正 / CHANGELOG 追記)以外の実装変更をしていないこと
+    instruction: yt-auto-implement
+    structured_output:
+      schema_ref: yt-auto-decision
     rules:
-      - condition: 全ゲートが green である(機械的修正のみで到達した場合を含む)
-        next: final_gate
-      - condition: 実装の欠陥が原因でゲートを green にできない
-        next: impl_gate
-      - condition: 環境障害でゲートを実行できない
+      - condition: when(structured.implement.verdict == "implemented")
+        next: reviewers
+      - condition: when(structured.implement.verdict == "replan")
+        next: replan
+      - condition: when(true)
         next: ABORT
-        appendix: |
-          実行できなかったゲートと失敗の内容:
-          - {何を実行し、どう失敗したか}
 
-  # ── Phase 5: 最終ゲート ───────────────────────────────────────────
-  # builtin の merge-readiness + supervise 並列ゲート。
-  # supervise 側の knowledge に本リポジトリの規約を足して、規約観点の最終確認を効かせる。
+  - name: replan
+    uses: implementation-high-replan-to-implement
+    instruction: yt-auto-replan
+    structured_output:
+      schema_ref: yt-auto-decision
+    rules:
+      - condition: when(structured.replan.verdict == "planned")
+        next: implement
+      - condition: when(true)
+        next: ABORT
+
+  - name: reviewers
+    uses: reviewers
+    rules:
+      self:
+        - condition: all("review_complete")
+          next: review_gate
+      parallel:
+        arch_review:
+          - condition: review_complete
+        ai_antipattern_review:
+          - condition: review_complete
+        coding_review:
+          - condition: review_complete
+        implementation_semantics_review:
+          - condition: review_complete
+        contract_lifecycle_review:
+          - condition: review_complete
+        robustness_review:
+          - condition: review_complete
+
+  - name: review_gate
+    tags: [review]
+    edit: false
+    persona: merge-readiness-reviewer
+    provider_options:
+      extends: review-readonly
+    instruction: yt-auto-review-gate
+    structured_output:
+      schema_ref: yt-auto-decision
+    pass_previous_response: false
+    rules:
+      - condition: when(structured.review_gate.verdict == "approve")
+        next: ci_verify
+      - condition: when(structured.review_gate.verdict == "reject")
+        next: fix
+      - condition: when(structured.review_gate.verdict == "replan")
+        next: replan
+      - condition: when(true)
+        next: ABORT
+
+  - name: ci_verify
+    uses: ci-verify
+    structured_output:
+      schema_ref: yt-auto-decision
+    rules:
+      - condition: when(structured.ci_verify.verdict == "pass")
+        next: final_gate
+      - condition: when(structured.ci_verify.verdict == "fail")
+        next: fix
+      - condition: when(true)
+        next: ABORT
+
   - name: final_gate
     kind: workflow_call
     call: merge-readiness-final-gate
     args:
-      supervise_knowledge:
-        - architecture
-        - yt-auto-conventions
+      supervise_knowledge: [architecture, takt]
     rules:
       - condition: COMPLETE
         next: spillover
-      # fix へ直接戻さず実装ゲートを回り直す。そうしないと sub-workflow の内側にある
-      # [impl_review, fix] の cycle が外から破られ、上限 3 が失われる
       - condition: needs_fix
-        next: impl_gate
+        next: fix
       - condition: need_replan
-        next: plan
+        next: replan
       - condition: ABORT
         next: ABORT
 
-  # ── Phase 6: スコープ外発見の起票 ─────────────────────────────────
-  # 「ついで直しをしない」という禁止の受け皿。ここを通さないと発見は実行ログとともに埋もれる。
-  #
-  # commit / push / PR 作成はこの workflow では行わない。workflow 完了後に takt の
-  # auto_pr がサンドボックス外で実行する。品質の関門は ci_verify と PR の CI が担う。
-  #
-  # callable sub-workflow にしない。この step の職務は「Report Directory の全レポートを
-  # 走査する」ことだが、callable の子は自分専用の report namespace を持ち、親のレポートが
-  # 見えない。各レーンで定義が重複するが、複製を避けて職務が成立しなくなるより重複を選ぶ。
-  - name: spillover
-    description: 各レポートのスコープ外の発見を集め、起票する / 捨てるに仕分ける
-    tags:
-      - delivery
-    edit: false
-    persona: yt-auto-delivery-operator
-    policy:
-      - yt-auto-scope-spillover
-    knowledge:
-      - yt-auto-domain
-    # gh issue create / comment を使うため Bash が要る。ソースは触らないので edit: false
-    provider_options:
-      extends: review-readonly
-    session: refresh
-    instruction: yt-auto-spillover
-    quality_gates:
-      - Report Directory の全レポートを読み、発見がなかったものも収集元に記録していること
-      - 起票したものが 3 条件(因果なし / 実害あり / 根拠あり)をすべて満たしていること
-      - 起票前に gh issue list で重複を照合していること
-      - 破棄した発見について、満たさなかった条件と理由を記録していること
-      - gh issue の操作に失敗したなら、起票できなかった発見と手動起票用のコマンドを
-        レポートに残していること
-      - コードを変更していないこと
+  - name: fix
+    uses: fix
+    instruction: yt-auto-fix-findings
+    structured_output:
+      schema_ref: yt-auto-decision
     rules:
-      # 仕分け自体は完了しているため、この rule を先に置かないと下の「仕分けが終わった」に
-      # 吸われて素通りする。因果のある発見は要件 ID の採番からやり直すため計画へ戻す
-      - condition: 因果ありと判定した発見があり、今回の差分に含めるべきものが残っている
+      - condition: when(structured.fix.verdict == "fixed")
+        next: reviewers
+      - condition: when(structured.fix.verdict == "replan")
+        next: replan
+      - condition: when(true)
+        next: ABORT
+
+  - name: spillover
+    uses: spillover
+    structured_output:
+      schema_ref: yt-auto-decision
+    rules:
+      - condition: when(structured.spillover.verdict == "return")
         next: plan
-      # gh 失敗を「仕分けが終わった」と同じ rule に畳まない。畳むと実行ログ上で成功と
-      # 区別できなくなる。起票できなかった発見と手動起票コマンドはレポートに残るため、
-      # 実装が完了している以上ここでは止めない
-      - condition: gh issue の操作に失敗し、起票できなかった発見が残っている
+      - condition: when(structured.spillover.verdict == "complete")
         next: COMPLETE
-      - condition: 仕分けが終わり、起票・追記・破棄をすべて記録した(発見ゼロの場合を含む)
-        next: COMPLETE
+      - condition: when(true)
+        next: ABORT

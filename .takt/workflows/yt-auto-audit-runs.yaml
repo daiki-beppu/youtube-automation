@@ -1,209 +1,121 @@
-# takt 資産そのものを監査する workflow。tayk の tayk-audit-runs を本リポジトリへ移植した。
-#
-# 監査対象は 2 系統:
-#   (a) 定義監査 — .takt/workflows/*.yaml と facets の整合。固定 5 対象(#1〜#5)として毎回検査する
-#   (b) run 監査 — .takt/runs の実行トレース(trace.md / meta.json / monitor.json)を run 横断で分析
-#
-# tayk との差分(本リポジトリ固有の事情):
-#
-# 1. 証拠パスが 2 系統ある — takt はタスクを隔離クローン(<repo-parent>/takt-worktrees/)で実行する
-#    ため、run トレースはメインチェックアウトではなくクローン側の .takt/runs に作られる。tayk は
-#    メインリポの絶対パス 1 本で足りたが、本リポは「メインの .takt/runs」と「.takt/clone-meta/*.json
-#    の clonePath 配下の .takt/runs」の両方を走査しないと yt-auto-* の実行実績を拾えない。
-#    クローンはスイープで消えるため、読める run 数は実行回数と一致しない(欠落は障害ではない)
-# 2. 定義監査の固定対象が 5 つ — tayk は 3 つ(検査 E / F / drift)。本リポは spillover の複製先が
-#    4 workflow(feature / fix / docs / maintenance。tayk は 2)ある分だけ検査 E の価値が高く、
-#    さらに ci_verify ゲート(#4)と workflow 共通設定の一貫性(#5)が本リポ固有の観点として加わる
-# 3. 骨格は既存 yt-auto-audit(台帳ベースの self-loop)に合わせた — tayk は team_leader 3 分割 +
-#    supervise ⇄ review だが、本リポの監査レーンは audit-unit-split(v3)由来の台帳追記型で統一
-#    されている。起票も tayk のように file step へ分離せず、yt-auto-audit と同じく publish に統合する
-#
-# ループ上限の実効性: cycle [audit, supervise] への遷移は audit の self-loop、audit → supervise、
-# supervise → audit、review → audit、loop judge → audit / review のみ。audit の self-loop は
-# パターン不一致で loop monitor に検知されない(yt-auto-audit / audit-unit-split と同じ既知の限界)。
-# self-loop の暴走は max_steps が唯一のガード。
-#
-# 容量: plan(1) + [audit + supervise]×6(12) + review(1) + publish(1) = 15。
-# 対象数上限 24(固定 5 + run 19)と audit 1 パス最低 4 対象の前進義務が 6 パスに対応し、
-# 差し戻し分の余裕を見て max_steps 32(yt-auto-audit と同値)に置く。
 name: yt-auto-audit-runs
 description: >
-  takt 資産の監査ワークフロー。.takt/workflows と facets の定義整合(spillover 複製の一致 /
-  callable のレポート境界 / 工程説明 drift / ci_verify ゲート / workflow 共通設定の一貫性)を
-  固定 5 対象として毎回検査し、併せて .takt/runs の実行トレースを run 横断で分析して
-  ABORT 原因・差し戻し経路・loop monitor 不発の再発パターンを抽出する。トークン消費を
-  workflow 別・step 別に集計してレポートへ載せ、レポートを docs/audits/ へ配置し、order に
-  指示があれば根拠を示せる finding のみ起票する。publish 以外はファイルを変更しない。
+  takt 資産と読み取り可能な run trace の read-only 監査 lane。定義・参照・有限停止・
+  composition・反復失敗を追記型台帳で監査し、独立検収後だけ docs/audits/ へ配置する。
 workflow_config:
   provider_options:
     codex:
       network_access: true
-      # takt 0.53 で workflow の Codex Skill 継承が既定 off になった(#1081)。本リポジトリは
-      # .agents/skills(→ .claude/skills)を Codex 向けに維持しているため repo スコープのみ
-      # 復元する(0.54 simple family と同じ設計。user スコープは個人環境由来のため継承しない)
       skills:
         repo: true
-    opencode:
-      network_access: true
-max_steps: 32
+max_steps: 24
 initial_step: plan
 
 loop_monitors:
-  - cycle:
-      - audit
-      - supervise
+  - cycle: [audit, supervise]
+    ignore_steps: [review]
     threshold: 3
     judge:
       persona: supervisor
-      instruction: yt-auto-loop-monitor-runs
+      instruction: yt-auto-audit-supervise
       rules:
-        - condition: 監査が完了している(全対象が監査済みで Issue 直貼り品質)
+        - condition: APPROVE
           next: review
-        - condition: 健全(監査済み対象が増え続けており、残りを回収できる見込み)
+        - condition: REWORK
           next: audit
-        - condition: 非生産的(監査済みが増えていない、または残り iteration で回収不能)
+        - condition: ABORT
           next: ABORT
 
 steps:
   - name: plan
-    description: 証拠パスの読み取りを確認し、定義監査の固定 5 対象と対象 run の棚卸しから監査対象表と台帳スケルトンを作る
-    tags:
-      - plan
+    tags: [plan, audit]
     edit: false
     persona: planner
-    policy:
-      - yt-auto-toolchain
-    knowledge:
-      - yt-auto-domain
     provider_options:
       extends: review-readonly
     instruction: yt-auto-audit-runs-plan
     output_contracts:
       report:
-        - name: 01-runs-audit-plan.md
-          format: yt-auto-runs-audit-plan
-        - name: 02-runs-audit-ledger.md
-          format: yt-auto-runs-audit-ledger
+        - name: audit-plan.md
+          format: yt-auto-audit-plan
+        - name: audit-ledger.md
+          format: yt-auto-audit-ledger
+    structured_output:
+      schema_ref: yt-auto-decision
     rules:
-      - condition: 対象の棚卸しと監査対象表・初期台帳の作成が完了
+      - condition: when(structured.plan.verdict == "planned")
         next: audit
-      - condition: ユーザーが質問をしている(監査タスクではない)
-        next: COMPLETE
-      # 定義ファイルは隔離クローン内に git 追跡で存在するため必ず読める。両系統の証拠パスから
-      # run を 1 件も読めない状態でだけ止める(空レポートや推測で埋めた計画を出さないため)
-      - condition: run 証拠を両系統とも読めず、定義監査だけでは監査が成立しない
+      - condition: when(true)
         next: ABORT
-        appendix: |
-          実行したコマンドと、その出力(エラーをそのまま貼る):
-          - {何を実行し、何が返ったか}
-      - condition: スコープが不明確で監査対象を確定できない
-        next: ABORT
-        appendix: |
-          スコープを確定するために必要な情報:
-          - {何が決まれば監査できるか}
 
   - name: audit
-    description: 既存台帳をインクリメンタルに拡張する(1 パス最低 4 対象、残りが少なければ全件)
-    tags:
-      - review
+    tags: [review, audit]
     edit: false
-    persona: architecture-reviewer
-    # 台帳が全件に達するまで self-loop する長寿命セッション。台帳の正本は毎パス注入で渡るため
-    # セッション記憶は正確性に不要 — takt 0.51 の compact(#994)で Phase 1 前に圧縮し、
-    # 巨大な trace.md を読み続けることによるコンテキスト枯渇を防ぐ
-    session: compact
-    policy:
-      - review
-    knowledge:
-      - yt-auto-domain
+    session: refresh
+    persona: testing-reviewer
     provider_options:
       extends: review-readonly
     instruction: yt-auto-audit-runs-run
     output_contracts:
       report:
-        - name: 02-runs-audit-ledger.md
-          format: yt-auto-runs-audit-ledger
+        - name: audit-ledger.md
+          format: yt-auto-audit-ledger
+    structured_output:
+      schema_ref: yt-auto-decision
     rules:
-      - condition: スコープ全件の監査・判定が完了した
+      - condition: when(structured.audit.verdict == "scope_complete")
         next: supervise
-      - condition: 台帳を拡張したが未監査の残件がある
-        next: audit
-      - condition: 監査を継続できない障害がある
+      - condition: when(structured.audit.verdict == "progressed")
+        next: supervise
+      - condition: when(true)
         next: ABORT
 
   - name: supervise
-    description: 対象表と台帳の一対一照合と品質判定。判定のみでレポートは書かない
-    tags:
-      - review
-      - supervise
+    tags: [review, supervise]
     edit: false
     persona: supervisor
-    policy:
-      - review
     provider_options:
       extends: review-readonly
-    instruction: yt-auto-audit-runs-supervise
+    instruction: yt-auto-audit-supervise
     pass_previous_response: false
     structured_output:
-      schema_ref: yt-auto-audit-supervise
-    # 合否は supervisor の申告値による決定的ルーティング。
-    # 素の文字列 condition に落とすと LLM 判定に化けるので必ず when() で包む
+      schema_ref: yt-auto-decision
     rules:
       - condition: when(structured.supervise.verdict == "approve")
         next: review
       - condition: when(structured.supervise.verdict == "rework")
         next: audit
-      - condition: when(structured.supervise.verdict == "table_broken")
-        next: audit
       - condition: when(true)
         next: ABORT
 
   - name: review
-    description: 検収。監査の完全性・根拠の実在・固定 5 対象の検査実施を最終確認する(レポートは書かない)
-    tags:
-      - review
-      # takt 0.50 の builtin 最終ゲートと同じタグ(#954)。config の
-      # provider_routing.tags.final-gate が persona ルーティングより優先されるため、
-      # 最終検収だけ強いモデルへ振れる
-      - final-gate
+    tags: [review, final-gate]
     edit: false
-    persona: qa-reviewer
-    policy:
-      - review
+    persona: merge-readiness-reviewer
     provider_options:
       extends: review-readonly
-    instruction: yt-auto-audit-runs-review
+    instruction: yt-auto-audit-review
+    pass_previous_response: false
+    structured_output:
+      schema_ref: yt-auto-decision
     rules:
-      - condition: 監査が完全で問題がない
+      - condition: when(structured.review.verdict == "approve")
         next: publish
-      - condition: 監査に不足・誤り・根拠不明な判定がある
+      - condition: when(structured.review.verdict == "rework")
         next: audit
+      - condition: when(true)
+        next: ABORT
 
   - name: publish
-    description: 完成した監査レポートを docs/audits/ へ配置し、order の指示があれば finding を起票する(この workflow 唯一の書き込み step)
-    tags:
-      - delivery
+    tags: [delivery, docs]
     edit: true
-    persona: yt-auto-delivery-operator
-    policy:
-      - yt-auto-scope-spillover
+    persona: coder
     required_permission_mode: edit
-    provider_options:
-      extends: edit
-    instruction: yt-auto-audit-runs-publish
-    pass_previous_response: false
-    quality_gates:
-      - レポート本文を書き換えていないこと(冒頭への出典追記のみ)
-      - docs/audits/ 以外のファイルを変更していないこと
-      - 起票する場合、起票前に gh issue list で重複を照合していること
-      - 起票したものが実害と根拠(定義監査はファイルパス + 該当行の引用、run 監査は run 名 + トレース引用)の両方を満たしていること
-      - 記録のみとした finding について、満たさなかった条件を記録していること
-      - gh issue の操作に失敗したなら、起票できなかった finding と手動起票用のコマンドをレポートに残していること
+    instruction: yt-auto-audit-publish
+    structured_output:
+      schema_ref: yt-auto-decision
     rules:
-      # gh 失敗を「配置が終わった」と同じ rule に畳まない。畳むと実行ログ上で成功と区別できなくなる
-      - condition: gh issue の操作に失敗し、起票できなかった finding が残っている(配置は完了)
+      - condition: when(structured.publish.verdict == "published")
         next: COMPLETE
-      - condition: 配置(および指示があれば起票)が完了
-        next: COMPLETE
-      - condition: レポートが見つからない、または配置できない
+      - condition: when(true)
         next: ABORT

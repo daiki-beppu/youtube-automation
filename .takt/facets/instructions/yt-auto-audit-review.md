@@ -1,31 +1,9 @@
-完成した監査台帳を最終検収してください。検収のみ行い、台帳の書き直しはしません。**コードも変更しません。**
+Perform final acceptance of the plan and ledger:
 
-**重要:** 監査計画を参照してください:
+{report:audit-plan.md}
 
-{report:01-audit-plan.md}
+{report:audit-ledger.md}
 
-**重要:** 監査台帳を参照してください:
+Independently sample the cited evidence, reconcile completed/total counts, verify every target has a verdict, and ensure findings are actionable without rewriting or deleting the ledger.
 
-{report:02-audit-ledger.md}
-
-## 検証手順
-
-1. 進捗行が N/N（スコープ全件）に達しており、⏳ 行が残っていないこと、Status が SCOPE_COMPLETE であることを確認する
-2. 台帳の監査台帳表が計画の Audit Targets と一対一（同じ # ・同じ行数・同じ対象名）であることを確認する
-3. 台帳の判定根拠（`file:line`）から複数行を抜き取り、**実際にそのファイルを Read で開いて**根拠の箇所が実在し、判定を支えていることを確認する。実在しない根拠・判定と対応しない根拠は不足として扱う
-4. Finding 判定の行すべてに Findings 節の詳細があり、Findings がそのまま Issue へ貼り付けられる粒度（何が・どこで・なぜ問題か・影響・推奨対応・完了条件・確認方法）に達しているかを確認する
-5. 判定基準の適用に無理がないか、High Priority の対象をいくつか自分でも読んで抜き取り検査する
-
-## 判定 — 応答の最後に必ずどちらかを一字一句そのまま宣言する
-
-- すべて満たしている場合のみ: 「監査が完全で問題がない」
-- 不足がある場合は、どの # ・どの行・どの Finding が不足かを具体的に列挙した上で: 「監査に不足・誤り・根拠不明な判定がある」
-
-言い換え・語尾の変更は禁止（この宣言文はワークフローの遷移判定に一字一句照合される）。
-
-## 禁止事項
-
-- スコープ外の未監査を理由に差し戻すこと（スコープは order.md を正とする計画の Audit Targets が確定している）
-- テスト・ビルドの再実行、またはその実行証跡の不足を差し戻し理由にすること（実行証跡は台帳の実行証跡節を正とする。この step は readonly でありテスト実行の再要求は成立しない）
-- 台帳の要約版・書き直し版を自分で出力すること（このステップに output contract はなく、台帳は audit の出力が最終成果物）
-- レポート自体の体裁・文言への好みを差し戻し理由にすること（検収の対象は完全性・根拠の実在・Issue 直貼り品質のみ）
+Set structured verdict to `approve` only when acceptance is complete, `rework` with concrete gaps, or `abort` when evidence is irrecoverably unavailable. Missing evidence fails closed.
