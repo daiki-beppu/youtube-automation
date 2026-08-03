@@ -1,31 +1,3 @@
-{{include:instructions/use-relevant-skills}}
+Perform the approved structural change while preserving the documented behavior contract. Keep the change local, run the safety net, and stop if the objective requires behavior changes.
 
-計画（`{report:plan.md}`）のリファクタ方針に従って、**挙動を変えない構造変更**を行ってください。safety net（`{report:test-report.md}`）が張ったテストの green を維持し続けることが、挙動を変えていないことの証明です。
-
-## 手順
-
-1. 計画の「リファクタ方針」「変えないもの」と、safety net の契約 ↔ テスト対応を読む。実装する要件 ID を宣言し、宣言にない変更は行わない
-2. 小さく刻んで進める。1 まとまりの変更ごとに safety net のテストを回し、green を確認してから次へ進む（反復の途中は対象テストファイルに絞ってよい）:
-   ```
-   nix develop --command uv run pytest tests/<対象テストファイル> -q
-   ```
-3. テストの変更は**リネーム・移動への機械的追随のみ**（import パスの変更、移動したモジュール名・ファイル名への追随）。アサーション・期待値・フィクスチャの実質は変えない。追随が「機械的」を超えそうになったら、それは挙動が変わっているサイン — 手を止めて判定へ
-4. `src/youtube_automation/` を変更したら `CHANGELOG.md` の `[Unreleased]` を更新する（refactor でも src を触れば追記が要る。docs/development.md「品質ゲート（CI）」）
-5. 完了前に、全差分を **必須変更 / 関連変更 / 不要変更** に分類する。不要変更（方針と無関係な整形・改名・並べ替え）が 1 つでも残っていれば完了しない。分類はレポートに記録する
-6. 完了前に、テスト全体で safety net の green を確認する:
-   ```
-   nix develop --command uv run pytest
-   ```
-
-## 制約
-
-- **外部挙動を変えない。** 公開 CLI の引数・出力、例外型、config の解釈、skill 配布物の構成 — 計画の維持契約表が正である
-- 計画の要件 ID にない変更を混ぜない。作業中に見つけた無関係な問題（バグ・重複・古い記述）は**直さず**「スコープ外の発見」節に記録する（Policy のスコープ外発見ポリシー。リファクタリングは「ついで直し」の誘惑が最も強いレーンである）
-- テストの期待値の緩和・skip・削除でテストを通さない
-- 挙動変更が必要だと分かったら、**実装を続けずに止まる**（下記判定）
-
-## 判定
-
-- リファクタが完了し、safety net が green のまま、差分 3 分類に不要変更なし → 実装ゲートへ
-- 挙動を変えずには目的を達成できないと判明した → 再計画へ差し戻す。何の挙動変更がなぜ必要かを報告に残す
-- リファクタの過程でバグを発見した（既存挙動が誤っている）→ 再計画へ差し戻す。何が誤っているかを報告に残す（スコープ外発見として起票するか、計画を見直すかは再計画が判断する）
+Set structured verdict to `refactored` only when the safety net remains green, `replan` when the structure needs a different approach, or `out_of_lane` when behavior preservation is impossible.

@@ -1,0 +1,36 @@
+name: design_review
+tags: [review, design-gate]
+parallel:
+  - name: requirements_review
+    edit: false
+    session: compact
+    persona: merge-readiness-reviewer
+    provider_options:
+      extends: review-readonly
+    instruction: yt-auto-review-design
+    output_contracts:
+      report:
+        - name: requirements-design-review.md
+          format: yt-auto-review-report
+  - name: architecture_review
+    edit: false
+    session: compact
+    persona: architecture-reviewer
+    provider_options:
+      extends: review-readonly
+    instruction: yt-auto-review-design
+    output_contracts:
+      report:
+        - name: architecture-design-review.md
+          format: yt-auto-review-report
+  - name: test_design_review
+    edit: false
+    session: compact
+    persona: testing-reviewer
+    provider_options:
+      extends: review-readonly
+    instruction: yt-auto-review-design
+    output_contracts:
+      report:
+        - name: test-design-review.md
+          format: yt-auto-review-report

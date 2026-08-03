@@ -1,0 +1,8 @@
+name: intake
+tags: [plan, intake]
+edit: false
+session: compact
+persona: planner
+provider_options:
+  extends: review-readonly
+instruction: yt-auto-intake

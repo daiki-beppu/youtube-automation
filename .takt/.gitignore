@@ -1,25 +1,14 @@
-# Ignore everything by default
+# Ignore runtime state by default.
 *
 
-# This file itself
 !.gitignore
-
-# Project configuration
 !config.yaml
-
-# Runtime prepare script (tracked): sandbox 化された worker への
-# 環境変数注入（issue #1999）。worktree でも解決できるよう必ずコミットする
 !runtime-prepare.sh
-
-# Custom workflows (tracked)
 !workflows/
-!workflows/*.yaml
-
-# Structured output schemas (tracked)
+!workflows/**
+!steps/
+!steps/**
 !schemas/
-!schemas/*.json
-
-# Custom facets (tracked): takt 自動生成 worktree でも
-# instruction/policy 参照を解決できるよう必ずコミットする
+!schemas/**
 !facets/
 !facets/**

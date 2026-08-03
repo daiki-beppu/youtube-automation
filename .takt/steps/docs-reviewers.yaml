@@ -1,0 +1,25 @@
+name: docs_review
+tags: [review, docs-gate]
+parallel:
+  - name: correctness_review
+    edit: false
+    session: compact
+    persona: merge-readiness-reviewer
+    provider_options:
+      extends: review-readonly
+    instruction: yt-auto-review-docs
+    output_contracts:
+      report:
+        - name: docs-correctness-review.md
+          format: yt-auto-review-report
+  - name: consistency_review
+    edit: false
+    session: compact
+    persona: architecture-reviewer
+    provider_options:
+      extends: review-readonly
+    instruction: yt-auto-review-docs
+    output_contracts:
+      report:
+        - name: docs-consistency-review.md
+          format: yt-auto-review-report
