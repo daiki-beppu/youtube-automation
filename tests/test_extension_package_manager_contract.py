@@ -62,10 +62,12 @@ def _pnpm_setup_versions(path: str) -> list[object]:
 
 
 def test_extensions_shell_contains_only_the_node_toolchain() -> None:
+    """REQ-3078-01 / TC-01B: worker default is wired only into extensions shell."""
     flake = _read("flake.nix")
     extensions_shell = re.search(
         r"(?ms)^(?P<indent>[ \t]*)devShells\.extensions\s*="
         r"\s*pkgs\.mkShell\s*\{"
+        r".*?"
         r"\s*packages\s*=\s*with pkgs;\s*\[(?P<packages>.*?)\];"
         r"\s*\};",
         flake,
@@ -80,8 +82,29 @@ def test_extensions_shell_contains_only_the_node_toolchain() -> None:
     assert extensions_shell.group("indent") == default_shell.group("indent")
 
     block = extensions_shell.group(0)
-    for excluded in ("python311", "uv", "ffmpeg", "shellHook"):
+    for excluded in ("python314", "uv", "ffmpeg"):
         assert excluded not in block
+    assert "shellHook" in block
+    assert "if [ -z \"''${PNPM_MAX_WORKERS:-}\" ]; then" in block
+    assert "export PNPM_MAX_WORKERS=1" in block
+
+    default_shell_start = default_shell.start()
+    assert "PNPM_MAX_WORKERS" not in flake[default_shell_start:]
+
+
+def test_pnpm_wrapper_sets_a_default_worker_limit() -> None:
+    """REQ-3078-01 / TC-01A: pnpm wrapper preserves overrides and Node entrypoint."""
+    flake = _read("flake.nix")
+    wrapper = re.search(
+        r'(?ms)makeWrapper .*?"\$out/bin/pnpm" \\\n+(?P<args>.*?)\n\s*runHook postInstall',
+        flake,
+    )
+
+    assert wrapper is not None
+    args = wrapper.group("args")
+    assert "--set-default PNPM_MAX_WORKERS 1" in args
+    assert "--set PNPM_MAX_WORKERS" not in args
+    assert '--add-flags "$out/lib/pnpm/bin/pnpm.cjs"' in args
 
 
 def test_all_extensions_pin_the_nix_pnpm() -> None:
