@@ -127,7 +127,7 @@ jobs:
           candidate_wheel=$(find dist -maxdepth 1 -name '*.whl' -print -quit)
           test -n "$candidate_wheel"
           YTA_CANDIDATE_WHEEL="$candidate_wheel" \
-            nix develop --command uv run pytest tests/test_dashboard_packaging.py -q
+            nix develop --command uv run pytest tests/repo/test_dashboard_packaging.py -q
 
   windows-cost-tracker:
     needs: changes

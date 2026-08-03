@@ -11,6 +11,12 @@ import pytest
 from matplotlib import font_manager
 from PIL import Image
 
+from tests.repo.test_thumbnail_codex_image_skill import (
+    _CODEX_IMAGE_SH,
+    _parse_invocations,
+    _prepare_fake_codex_env,
+    _run_script,
+)
 from tests.test_generate_videos_script import (
     _create_collection as _create_video_collection,
 )
@@ -23,12 +29,6 @@ from tests.test_thumbnail_auto_selection import (
     _setup_channel,
     _setup_collection,
     _solid_image,
-)
-from tests.test_thumbnail_codex_image_skill import (
-    _CODEX_IMAGE_SH,
-    _parse_invocations,
-    _prepare_fake_codex_env,
-    _run_script,
 )
 from youtube_automation.commands.media import generate_image, generate_lyria_master
 from youtube_automation.commands.thumbnail import auto_select_thumbnail
