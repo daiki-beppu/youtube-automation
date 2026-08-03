@@ -118,7 +118,7 @@
 | スクリプト | 合否を機械判定できる | [suno-lyric/references/check_lyric_duplication.py](../../.claude/skills/suno-lyric/references/check_lyric_duplication.py) — 連続一致で歌詞重複を判定 |
 | rubric | 質的判断だが評価観点は固定したい | [comments-reply/references/review-rubric.md](../../.claude/skills/comments-reply/references/review-rubric.md) — reviewer の入力境界と必須フィールドを規定 |
 | checklist | 人間が完了を確認する不可逆手順 | [automation-release/references/publish-checklist.md](../../.claude/skills/automation-release/references/publish-checklist.md) |
-| テスト | 契約が壊れたら CI で落としたい | `tests/test_*_skill_contract.py` |
+| テスト | 契約が壊れたら CI で落としたい | production-importing test は鏡像規則、repository-only 契約は `tests/repo/` |
 
 - 同じ制約を散文と spec の両方に書かない。spec があるなら SKILL.md には**いつ回すか**だけを書く。
 - 質的な判断を縛りたくなったら、閾値を発明する前に rubric を置けないかを検討する（前節「判断を委ねる / 委ねない」と対になる）。
