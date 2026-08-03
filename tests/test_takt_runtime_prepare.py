@@ -20,7 +20,9 @@ ROOT = REPO_ROOT
 PREPARE_SCRIPT = ROOT / ".takt" / "runtime-prepare.sh"
 
 
-def _run_prepare(tmp_path: Path, *, inherited: dict[str, str] | None = None) -> dict[str, str]:
+def _run_prepare_process(
+    tmp_path: Path, *, inherited: dict[str, str] | None = None
+) -> subprocess.CompletedProcess[str]:
     """runtime root を tmp へ向けてスクリプトを実行し、注入される環境を返す。
 
     cwd は `pyproject.toml` を持たない tmp にする。スクリプトは pyproject.toml が
@@ -42,6 +44,11 @@ def _run_prepare(tmp_path: Path, *, inherited: dict[str, str] | None = None) -> 
         check=False,
     )
 
+    return result
+
+
+def _run_prepare(tmp_path: Path, *, inherited: dict[str, str] | None = None) -> dict[str, str]:
+    result = _run_prepare_process(tmp_path, inherited=inherited)
     assert result.returncode == 0, result.stderr
     injected = {}
     for line in result.stdout.splitlines():
@@ -49,6 +56,22 @@ def _run_prepare(tmp_path: Path, *, inherited: dict[str, str] | None = None) -> 
         assert separator, f"KEY=VALUE 契約に反する出力: {line!r}"
         injected[key] = value
     return injected
+
+
+def test_runtime_prepare_emits_the_ordered_seven_line_contract(tmp_path: Path) -> None:
+    """REQ-3078-04 / TC-04: raw stdout has exactly the seven ordered path lines."""
+    result = _run_prepare_process(tmp_path)
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.splitlines() == [
+        "TMPDIR=" + str(tmp_path / "current" / ".takt" / ".runtime" / "tmp"),
+        "XDG_CACHE_HOME=" + str(tmp_path / "current" / ".takt" / ".runtime" / "cache"),
+        "XDG_CONFIG_HOME=" + str(tmp_path / "current" / ".takt" / ".runtime" / "config"),
+        "XDG_DATA_HOME=" + str(tmp_path / "current" / ".takt" / ".runtime" / "data"),
+        "XDG_STATE_HOME=" + str(tmp_path / "current" / ".takt" / ".runtime" / "state"),
+        "UV_CACHE_DIR=" + str(tmp_path / "current" / ".takt" / ".runtime" / "cache" / "uv"),
+        "NIX_CACHE_HOME=" + str(tmp_path / "current" / ".takt" / ".runtime" / "tmp" / "nix-cache"),
+    ]
 
 
 def test_injected_variables_match_the_preflight_contract(tmp_path: Path) -> None:

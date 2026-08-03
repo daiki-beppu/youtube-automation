@@ -29,6 +29,7 @@
             mkdir -p "$out/lib/pnpm" "$out/bin"
             cp -R . "$out/lib/pnpm/"
             makeWrapper "${pkgs.nodejs_24}/bin/node" "$out/bin/pnpm" \
+              --set-default PNPM_MAX_WORKERS 1 \
               --add-flags "$out/lib/pnpm/bin/pnpm.cjs"
             runHook postInstall
           '';
@@ -36,6 +37,12 @@
       in
       {
         devShells.extensions = pkgs.mkShell {
+          shellHook = ''
+            if [ -z "''${PNPM_MAX_WORKERS:-}" ]; then
+              export PNPM_MAX_WORKERS=1
+            fi
+          '';
+
           packages = with pkgs; [
             nodejs_24
             pnpmLatest

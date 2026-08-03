@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `fix(extensions)`: pnpm の tarball Worker 既定値を 1 に抑制し、macOS・Node 24 で発生する libuv abort による Fallow audit の偽 red を回避した（#3078）。
 - `fix(wf-auto)`: lease token を `-` を含まない hexadecimal 形式で生成し、`argparse` が `--token` の値をオプションと誤認する確率的な CLI 失敗を解消した（#2575）。
 - `fix(takt)`: `.takt/runtime-prepare.sh` が `NIX_CACHE_HOME` を current runtime root 配下へ再構成するようにした。Nix は `XDG_CACHE_HOME` より `NIX_CACHE_HOME` を優先するため、`XDG_CACHE_HOME` だけを差し替えても sibling worktree 由来の継承値が残り、別 worktree の fetcher-cache SQLite を readonly で開いて `nix develop` が `attempt to write a readonly database` で test 開始前に停止していた。注入値は devShell 入場時に `flake.nix` shellHook / `.envrc` が導出する `$TMPDIR/nix-cache` と一致させ、入場前後で cache path が動かないようにする。あわせて `yt-preflight` の `check_runtime_path` の検査対象へ `NIX_CACHE_HOME` を追加し、スクリプトの注入対象と preflight の検査対象が一致することを回帰テストで機械担保した（#3040）。
 - `fix(videoup)`: `generate_videos.sh` の音声エンコーダ選択を、`ffmpeg -encoders` の列挙だけでなく実行時プローブの成功を条件にした。`aac_at` は AudioToolbox 経由で coreaudiod への Mach lookup を必要とするため、サンドボックス下では列挙されていても初期化に失敗し ffmpeg が exit 171 で落ちていた。プローブに失敗した場合は警告を出して `aac` へフォールバックする（#3034）。
