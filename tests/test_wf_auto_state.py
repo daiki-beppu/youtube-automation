@@ -203,10 +203,18 @@ def test_cli_plan_prints_bootstrap_decision(
 
 
 def test_cli_records_bootstrap_block_before_collection_exists(
-    tmp_path: Path, runner: ModuleType, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path,
+    runner: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
+    safe_token = "a1" * 24
+    monkeypatch.setattr(runner.secrets, "token_urlsafe", lambda _: "-unsafe-token")
+    monkeypatch.setattr(runner.secrets, "token_hex", lambda _: safe_token)
+
     token = runner.acquire_lease(tmp_path, now=time.time(), ttl_seconds=60)
 
+    assert token == safe_token
     assert (
         runner.main(
             [
