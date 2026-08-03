@@ -20,6 +20,15 @@
 draft_pr: false
 base_branch: main
 
+# 失敗タスクの自動再実行を無効化する（グローバルの auto_requeue_max_attempts: 2 を上書き）。
+# yt-auto-* の workflow は intake / plan で「着手すべきでない」と判断したとき設計どおり ABORT
+# する。auto_requeue はこれを失敗として同じ入力のまま回し直すため、判断が覆ることはなく
+# 試行回数とトークンだけを消費する（#3043 で plan の ABORT に対し 2 回消費し、requeue された
+# run はいずれも "Task was interrupted" で終わった）。
+# 0 にすると runAllTasks 起動時の requeueExistingFailedTasks も止まり、過去の failed タスクが
+# takt run のたびに掘り起こされることもなくなる。再実行は失敗原因を解消してから明示的に積む。
+auto_requeue_max_attempts: 0
+
 provider: codex
 
 # sandbox 化された worker の direnv / lefthook セットアップ停滞対策（issue #1999）と、
