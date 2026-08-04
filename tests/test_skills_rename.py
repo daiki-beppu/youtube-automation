@@ -37,7 +37,7 @@ rename マッピング:
   例: `/description-templates`、`/persona-definition`
 
 リネーム後の `yt-skills sync` パイプラインの動作は既存
-`tests/test_skills_sync.py` で担保される（`_list_entries` がディレクトリ名を
+`tests/commands/system/test_skills_sync.py` で担保される（`_list_entries` がディレクトリ名を
 ハードコードしないため、rename はパッケージング側に影響しない）。
 """
 

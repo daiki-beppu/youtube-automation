@@ -166,7 +166,7 @@
       "old_owner": "legacy.channel_trend",
       "exact_new_owner": "src/youtube_automation/domains/analytics/series/channel_trend.py",
       "symbols": ["build_trend_frame", "detect_anomalies", "analyze_channel_trend"],
-      "consumers": ["src/youtube_automation/commands/analytics/channel_trend.py", "tests/test_channel_trend.py"],
+      "consumers": ["src/youtube_automation/commands/analytics/channel_trend.py", "tests/commands/analytics/test_channel_trend.py"],
       "handoff": "retained"
     },
     {

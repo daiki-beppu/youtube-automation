@@ -2,7 +2,7 @@
 
 frontmatter 検証ロジック (_lint.py) の単体検証と、CLI 経由の exit code /
 出力の検証。editable fallback を tmp_path で偽装する方式は
-tests/test_skills_sync.py と同じ。
+tests/commands/system/test_skills_sync.py と同じ。
 """
 
 from __future__ import annotations

@@ -10,7 +10,7 @@
 5. ファイル分割の物理レイアウト (各 .py ≤ 300 行、旧 .py 削除、submodule 直接 import)
 6. console_scripts entry point `yt-skills` の解決
 
-既存の `tests/test_skills_sync.py` / `tests/test_skills_sync_claude_md.py` は
+既存の `tests/commands/system/test_skills_sync.py` / `tests/commands/system/test_skills_sync_claude_md.py` は
 全 60 ケースが `_editable_root` を monkeypatch 経由でバイパスしているため、
 unpatched 時の `parents[N]` 計算と package facade の構造的健全性は本ファイルで補強する。
 """

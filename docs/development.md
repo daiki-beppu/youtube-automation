@@ -17,7 +17,7 @@ nix develop
 変更は必ず issue 用の linked worktree 上で行う。worktree を作成・移動した後も、その checkout で devShell（direnv または `nix develop`）に入る。親 checkout の `.venv` / `node_modules` は共有しない。
 
 - **対話 shell**: direnv があれば `direnv allow` 一回で `.envrc`（nix-direnv 経由の `use flake`）が devShell へ自動入室させる。なければ `nix develop` を使う。どちらも shellHook が `uv sync` を自動実行する（失敗は warning で入場継続）
-- **非対話 shell / agent**: `nix develop --command <command> [args...]` を正規入口とする。例: `nix develop --command uv run pytest tests/test_doctor.py -q`
+- **非対話 shell / agent**: `nix develop --command <command> [args...]` を正規入口とする。例: `nix develop --command uv run pytest tests/commands/system/test_doctor.py -q`
 - **依存同期を fail-closed にしたい場合**: `nix develop --command uv sync` を明示実行する。exit 非 0 なら依存は同期されていないので、後続コマンドを実行しない
 
 worktree の生成・命名・issue / PR 運用は [`docs/takt-operations.md`](takt-operations.md) を参照する。標準実装経路は takt + `.takt/workflows/` の専用 workflow（#2686）。
@@ -138,13 +138,13 @@ uv run yt-skills lint [<skill>...]
 
 ```bash
 # 全 skill 横断の実行契約（frontmatter strict YAML / docs・配布参照整合）
-uv run pytest tests/test_skill_frontmatter_yaml.py tests/test_skill_docs_consistency.py -n auto
+uv run pytest tests/commands/system/test_skill_frontmatter_yaml.py tests/test_skill_docs_consistency.py -n auto
 
 # 編集した skill に個別契約テストがあれば併走する。探し方:
 rg -l '<skill-name>' tests/
 
 # 配布経路（sync / packaging）を触った場合のみ:
-uv run pytest tests/test_skills_sync.py tests/test_skills_sync_package.py tests/test_skills_sync_claude_md.py -n auto
+uv run pytest tests/commands/system/test_skills_sync.py tests/commands/system/test_skills_sync_package.py tests/commands/system/test_skills_sync_claude_md.py -n auto
 
 # candidate wheel を隔離 venv へ installし、擬似下流への全 asset sync / diff を貫通確認:
 uv run pytest tests/test_skills_sync_installed_wheel.py -q

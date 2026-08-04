@@ -2,7 +2,7 @@
 
 skill 編集後の検証を pytest 全体実行 (約 4 分) に律速されず秒単位で回すための
 サブコマンド。検証ロジックはこのモジュールを単一ソースとし、既存の回帰テスト
-(tests/test_skill_frontmatter_yaml.py) もここを import して同じ判定基準を使う。
+(tests/commands/system/test_skill_frontmatter_yaml.py) もここを import して同じ判定基準を使う。
 
 検証内容 (Issue #652 の strict YAML 契約 + CLAUDE.md「skill frontmatter」規約):
     1. SKILL.md が frontmatter デリミタ `---` で始まり、閉じ `---` を持つ

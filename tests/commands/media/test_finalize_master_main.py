@@ -85,7 +85,7 @@ def _make_pass1_stderr(
 def _patch_skill_config(monkeypatch, cfg: dict) -> MagicMock:
     """`load_skill_config` を関数自体置換し、呼び出し履歴を spy する。
 
-    `tests/test_generate_master.py` 流儀でプロセス内キャッシュ汚染を回避する。
+    `tests/commands/media/test_generate_master.py` 流儀でプロセス内キャッシュ汚染を回避する。
     Returns:
         MagicMock 化されたスタブ (assert_called_*/呼び出し回数検証に使う)
     """
