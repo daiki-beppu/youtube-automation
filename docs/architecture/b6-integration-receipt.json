@@ -40,21 +40,21 @@
       "old_owner": "legacy.channel_analytics",
       "exact_new_owner": "src/youtube_automation/domains/analytics/mixins/channel_analytics.py",
       "symbols": ["ChannelAnalyticsMixin"],
-      "consumers": ["tests/test_channel_analytics.py"],
+      "consumers": ["tests/domains/analytics/mixins/test_channel_analytics.py"],
       "handoff": "retained"
     },
     {
       "old_owner": "legacy.video_analytics",
       "exact_new_owner": "src/youtube_automation/domains/analytics/mixins/video_analytics.py",
       "symbols": ["VideoAnalyticsMixin"],
-      "consumers": ["tests/test_video_analytics.py"],
+      "consumers": ["tests/domains/analytics/mixins/test_video_analytics.py"],
       "handoff": "retained"
     },
     {
       "old_owner": "legacy.playlist_analytics",
       "exact_new_owner": "src/youtube_automation/domains/analytics/mixins/playlist_analytics.py",
       "symbols": ["PlaylistAnalyticsMixin"],
-      "consumers": ["tests/test_playlist_analytics.py"],
+      "consumers": ["tests/domains/analytics/mixins/test_playlist_analytics.py"],
       "handoff": "retained"
     },
     {
@@ -89,7 +89,7 @@
       "old_owner": "legacy.video_type",
       "exact_new_owner": "src/youtube_automation/domains/media/video_type.py",
       "symbols": ["VideoType"],
-      "consumers": ["tests/test_video_type.py"],
+      "consumers": ["tests/infrastructure/media/test_video_type.py"],
       "handoff": "B4"
     },
     {
@@ -110,49 +110,49 @@
       "old_owner": "legacy.audience_analytics",
       "exact_new_owner": "src/youtube_automation/domains/analytics/mixins/audience_analytics.py",
       "symbols": ["AudienceAnalyticsMixin"],
-      "consumers": ["tests/test_audience_analytics.py"],
+      "consumers": ["tests/domains/analytics/mixins/test_audience_analytics.py"],
       "handoff": "retained"
     },
     {
       "old_owner": "legacy.ctr_analytics",
       "exact_new_owner": "src/youtube_automation/domains/analytics/mixins/ctr_analytics.py",
       "symbols": ["CTRAnalyticsMixin"],
-      "consumers": ["tests/test_ctr_analytics.py"],
+      "consumers": ["tests/domains/analytics/mixins/test_ctr_analytics.py"],
       "handoff": "retained"
     },
     {
       "old_owner": "legacy.retention_analytics",
       "exact_new_owner": "src/youtube_automation/domains/analytics/mixins/retention_analytics.py",
       "symbols": ["RetentionAnalyticsMixin"],
-      "consumers": ["tests/test_retention.py"],
+      "consumers": ["tests/domains/analytics/mixins/test_retention.py"],
       "handoff": "retained"
     },
     {
       "old_owner": "legacy.revenue_analytics",
       "exact_new_owner": "src/youtube_automation/domains/analytics/mixins/revenue_analytics.py",
       "symbols": ["RevenueAnalyticsMixin"],
-      "consumers": ["tests/test_revenue_analytics.py"],
+      "consumers": ["tests/domains/analytics/mixins/test_revenue_analytics.py"],
       "handoff": "retained"
     },
     {
       "old_owner": "legacy.traffic_source_analytics",
       "exact_new_owner": "src/youtube_automation/domains/analytics/mixins/traffic_source_analytics.py",
       "symbols": ["TrafficSourceMixin"],
-      "consumers": ["tests/test_traffic_source.py"],
+      "consumers": ["tests/domains/analytics/mixins/test_traffic_source.py"],
       "handoff": "retained"
     },
     {
       "old_owner": "legacy.video_daily_analytics",
       "exact_new_owner": "src/youtube_automation/domains/analytics/mixins/video_daily_analytics.py",
       "symbols": ["VideoDailyAnalyticsMixin"],
-      "consumers": ["tests/test_video_daily_analytics.py"],
+      "consumers": ["tests/domains/analytics/mixins/test_video_daily_analytics.py"],
       "handoff": "retained"
     },
     {
       "old_owner": "legacy.strategic_analytics",
       "exact_new_owner": "src/youtube_automation/domains/analytics/collection/strategic_analytics.py",
       "symbols": ["StrategicAnalyticsMixin"],
-      "consumers": ["tests/test_strategic_analytics_parallel.py"],
+      "consumers": ["tests/domains/analytics/collection/test_strategic_analytics_parallel.py"],
       "handoff": "retained"
     },
     {
@@ -173,14 +173,14 @@
       "old_owner": "legacy.launch_curve_analyzer",
       "exact_new_owner": "src/youtube_automation/domains/analytics/analysis/launch_curve_analyzer.py",
       "symbols": ["compute_benchmark", "judge_video_vs_benchmark"],
-      "consumers": ["src/youtube_automation/commands/analytics/launch_curve.py", "tests/test_launch_curve_analyzer.py"],
+      "consumers": ["src/youtube_automation/commands/analytics/launch_curve.py", "tests/domains/analytics/analysis/test_launch_curve_analyzer.py"],
       "handoff": "retained"
     },
     {
       "old_owner": "legacy.launch_curve_plotter",
       "exact_new_owner": "src/youtube_automation/domains/analytics/analysis/launch_curve_plotter.py",
       "symbols": ["plot_launch_curve"],
-      "consumers": ["src/youtube_automation/commands/analytics/launch_curve.py", "tests/test_launch_curve_plotter.py"],
+      "consumers": ["src/youtube_automation/commands/analytics/launch_curve.py", "tests/domains/analytics/analysis/test_launch_curve_plotter.py"],
       "handoff": "retained"
     },
     {

@@ -1,7 +1,7 @@
 """ReportingAPIClient のユニットテスト。
 
 MagicMock で discovery service を差し替え、AuthorizedSession の HTTP は
-monkeypatch で吸収する。`tests/test_ctr_analytics.py` の流儀に準拠。
+monkeypatch で吸収する。`tests/domains/analytics/mixins/test_ctr_analytics.py` の流儀に準拠。
 """
 
 from __future__ import annotations

@@ -61,7 +61,7 @@ uv run pytest tests/ --ignore=tests/integration -n auto -m slow           # 実 
 | release notes site | `site/` の check / test | build + Python 配布境界 test |
 - **CI では `-n auto` を有効化済み**（`.github/workflows/ci.yml` の test ジョブ）
 - **外部 GitHub Actions は full commit SHA で固定**し、追跡する stable version を同じ `uses:` 行のコメントに残す。複数 workflow で同じ action を使う場合も SHA/version を統一し、`tests/repo/test_github_actions_pinning.py` で mutable ref・drift・未棚卸し action を拒否する
-- **CI の changed-path 分岐**: `.github/scripts/classify-ci-paths.sh` が PR と `main` push の差分を Python / packaging / Windows / ADR / 3 helper に分類する。branch protection の required check である `lint` / `test` job は path filter や job-level `if` で消さず、extension-only 変更では成功する軽量 step を返して Nix・uv・pytest を起動しない。空 diff は全 gate を有効化する fail-safe とし、分類変更時は `tests/test_actions_parallel_workflows.py` の対応表も更新する
+- **CI の changed-path 分岐**: `.github/scripts/classify-ci-paths.sh` が PR と `main` push の差分を Python / packaging / Windows / ADR / 3 helper に分類する。branch protection の required check である `lint` / `test` job は path filter や job-level `if` で消さず、extension-only 変更では成功する軽量 step を返して Nix・uv・pytest を起動しない。空 diff は全 gate を有効化する fail-safe とし、分類変更時は `tests/repo/test_actions_parallel_workflows.py` の対応表も更新する
 - worker ごとの分離: `tests/conftest.py` が `CHANNEL_DIR` の tmp コピーを **worker プロセスごとに独立して** 作り直す（controller が自動設定した値を環境変数継承でそのまま共有しない）。ユーザーが明示的に `CHANNEL_DIR` を指定した場合は全 worker がその指定を尊重する
 - 注意: nix devShell / CLI を実 subprocess で叩く契約テストはホスト負荷に敏感で、混雑したマシンでは並列時に所要時間が大きく伸びることがある
 
@@ -138,7 +138,7 @@ uv run yt-skills lint [<skill>...]
 
 ```bash
 # 全 skill 横断の実行契約（frontmatter strict YAML / docs・配布参照整合）
-uv run pytest tests/commands/system/test_skill_frontmatter_yaml.py tests/test_skill_docs_consistency.py -n auto
+uv run pytest tests/commands/system/test_skill_frontmatter_yaml.py tests/repo/test_skill_docs_consistency.py -n auto
 
 # 編集した skill に個別契約テストがあれば併走する。探し方:
 rg -l '<skill-name>' tests/
@@ -147,7 +147,7 @@ rg -l '<skill-name>' tests/
 uv run pytest tests/commands/system/test_skills_sync.py tests/commands/system/test_skills_sync_package.py tests/commands/system/test_skills_sync_claude_md.py -n auto
 
 # candidate wheel を隔離 venv へ installし、擬似下流への全 asset sync / diff を貫通確認:
-uv run pytest tests/test_skills_sync_installed_wheel.py -q
+uv run pytest tests/repo/test_skills_sync_installed_wheel.py -q
 ```
 
 最終的な担保は CI の全体 pytest。上記はローカルの高速フィードバック用で、全体スイートの代替ではない。
@@ -156,7 +156,7 @@ uv run pytest tests/test_skills_sync_installed_wheel.py -q
 
 - **upstream（本リポジトリ内）**: `uv run yt-skills list/diff/sync` は editable fallback によりリポジトリ直下の `.claude/skills/` を直接読む（wheel ビルド不要。編集が即反映される）
 - **下流（チャンネルリポジトリ）**: pin されたリリース版 wheel に焼き込まれた `_skills/` を読む。**upstream で編集しただけでは下流の `yt-skills diff/sync` には一切反映されない**
-- release前の packaged-resource 経路は `uv run pytest tests/test_skills_sync_installed_wheel.py -q` で再現できる。testはcandidate wheelをrepository外の一時directoryへbuildし、隔離venvへ非editable installしてから、空の擬似下流へ全assetをsyncする。同期後のtreeをsourceとbyte単位で比較し、`.agents/skills` symlinkとinstalled `yt-skills diff` の差分なしも確認する
+- release前の packaged-resource 経路は `uv run pytest tests/repo/test_skills_sync_installed_wheel.py -q` で再現できる。testはcandidate wheelをrepository外の一時directoryへbuildし、隔離venvへ非editable installしてから、空の擬似下流へ全assetをsyncする。同期後のtreeをsourceとbyte単位で比較し、`.agents/skills` symlinkとinstalled `yt-skills diff` の差分なしも確認する
 - CI `build-smoke` も同じpytest targetへbuild済みwheelを `YTA_CANDIDATE_WHEEL` で渡すため、ローカルとCIで判定ロジックを二重管理しない。環境変数未指定のローカル実行ではtest自身が一時領域へwheelをbuildする
 - このsmokeが保証するのは、candidate wheelから資格情報を持たない標準layoutの擬似下流への配布内容と冪等性まで。実チャンネル固有差分、release作成、pin更新、認証を含む `/automation-update` の運用確認は引き続きリリース後に行う
 
@@ -204,7 +204,7 @@ uv run pytest tests/test_skills_sync_installed_wheel.py -q
 ## 依存ポリシー: deprecated 表明済み依存の取り扱い（詳細）
 
 - **`google-auth-httplib2`（PyPI 0.4.0 で deprecated 表明）**:
-  - `src/youtube_automation/` / `tests/` 配下に `google_auth_httplib2` の **直 import を新規追加しない**（現状 0 件、回帰テスト `tests/test_no_google_auth_httplib2_direct_import.py` で機械担保）
+  - `src/youtube_automation/` / `tests/` 配下に `google_auth_httplib2` の **直 import を新規追加しない**（現状 0 件、回帰テスト `tests/repo/test_no_google_auth_httplib2_direct_import.py` で機械担保）
   - 既存の transitive 依存は `googleapiclient.discovery.build(..., credentials=credentials)` 経由で残置する（上流 `google-api-python-client` が内部で `google_auth_httplib2.AuthorizedHttp` を要求しているため、即時撤去不可）
   - 上流が non-httplib2 transport（`google.auth.transport.requests` など）を正式サポートした際の移行手順・撤去判断は `docs/migration/google-auth-httplib2.md` を参照
   - `pyproject.toml::dependencies` の `"google-auth-httplib2"` 直接宣言の撤去は transport 切替完了後に別 issue で再検証する
