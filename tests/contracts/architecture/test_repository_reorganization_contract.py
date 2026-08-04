@@ -410,35 +410,35 @@ def test_reorganization_references_use_canonical_owner_paths() -> None:
 def test_active_streaming_tests_describe_canonical_owners() -> None:
     # Given: 再配置後の owner を説明する active test 群
     expected_descriptions = {
-        "tests/test_stream_constants.py": (
+        "tests/infrastructure/youtube/test_stream_constants.py": (
             "infrastructure/youtube/streaming/__init__.py",
             "utils/streaming/__init__.py",
         ),
-        "tests/test_stream_cycle_uptime.py": (
+        "tests/infrastructure/youtube/test_stream_cycle_uptime.py": (
             "infrastructure/youtube/streaming/cycle_uptime.py",
             "utils/streaming/cycle_uptime.py",
         ),
-        "tests/test_stream_instance_resolver.py": (
+        "tests/infrastructure/youtube/test_stream_instance_resolver.py": (
             "infrastructure/youtube/streaming/instance_resolver.py",
             "utils/streaming/instance_resolver.py",
         ),
-        "tests/test_stream_monthly_archive.py": (
+        "tests/infrastructure/youtube/test_stream_monthly_archive.py": (
             "infrastructure/youtube/streaming/monthly_archive.py",
             "utils/streaming/monthly_archive.py",
         ),
-        "tests/test_stream_monthly_report.py": (
+        "tests/infrastructure/youtube/test_stream_monthly_report.py": (
             "infrastructure/youtube/streaming/monthly_report.py",
             "utils/streaming/monthly_report.py",
         ),
-        "tests/test_stream_threshold.py": (
+        "tests/infrastructure/youtube/test_stream_threshold.py": (
             "infrastructure/youtube/streaming/threshold.py",
             "utils/streaming/threshold.py",
         ),
-        "tests/test_stream_vultr_bandwidth.py": (
+        "tests/infrastructure/youtube/test_stream_vultr_bandwidth.py": (
             "infrastructure/youtube/streaming/vultr_bandwidth.py",
             "utils/streaming/vultr_bandwidth.py",
         ),
-        "tests/test_notification.py": (
+        "tests/infrastructure/youtube/test_notification.py": (
             "infrastructure/youtube/notification.py",
             "utils/notification.py",
         ),
