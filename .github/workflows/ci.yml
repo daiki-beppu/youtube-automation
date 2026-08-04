@@ -142,7 +142,7 @@ jobs:
       - name: Install dependencies
         run: uv sync
       - name: Test cost tracker on Windows
-        run: uv run pytest tests/test_cost_tracker.py -q
+        run: uv run pytest tests/infrastructure/test_cost_tracker.py -q
 
   changelog:
     runs-on: ubuntu-latest

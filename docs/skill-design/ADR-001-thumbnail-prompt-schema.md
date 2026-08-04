@@ -38,7 +38,7 @@ issue #654 は将来検討用に立てられたが（`takt:none`）、本 issue 
 | ✅ 採用 | `from_skill_config()` bridge（既存 `image_generation.gemini.*` キーから 14 項目へ機械マッピング） | 同上 |
 | ✅ 採用 | `render()` で imagegen 互換の `Label: value` テキスト出力 | 同上 |
 | ✅ 採用 | 対応マッピング表（14 項目 × config キー） | `.claude/skills/thumbnail/references/prompt-schema.md` |
-| ✅ 採用 | bridge の単体テスト | `tests/test_prompt_schema.py` |
+| ✅ 採用 | bridge の単体テスト | `tests/infrastructure/media/test_prompt_schema.py` |
 | ❌ 不採用 | 実本番フロー（`composition.py` / `scripts/generate_image.py`）の schema 化 | gating: skill-config 管理見直し epic 待ち |
 | ❌ 不採用 | `config.default.yaml` のキー再編・schema 寄せ | gating: 同上 |
 | ❌ 不採用 | `image_generation.gemini.diff_prompt_template` の撤去・置換 | gating: 同上 |

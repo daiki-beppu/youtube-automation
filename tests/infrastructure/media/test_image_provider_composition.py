@@ -33,7 +33,7 @@ from youtube_automation.infrastructure.media.image_provider.composition import (
 
 @pytest.fixture
 def tmp_channel(tmp_path: Path, monkeypatch):
-    """tests/test_cost_tracker.py と同等の最小チャンネル fixture。"""
+    """tests/infrastructure/test_cost_tracker.py と同等の最小チャンネル fixture。"""
     monkeypatch.setenv("CHANNEL_DIR", str(tmp_path))
     (tmp_path / "config" / "channel").mkdir(parents=True, exist_ok=True)
     (tmp_path / "config" / "channel" / "meta.json").write_text(

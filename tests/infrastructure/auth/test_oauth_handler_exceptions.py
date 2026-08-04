@@ -64,7 +64,7 @@ def _make_handler(
 ) -> YouTubeOAuthHandler:
     """OAuth フロー / client_secrets 検証をバイパスした handler を作る。
 
-    既存 ``tests/test_oauth_save_credentials.py::_build_handler`` の踏襲だが、
+    既存 ``tests/infrastructure/auth/test_oauth_save_credentials.py::_build_handler`` の踏襲だが、
     本テストでは ``_validate_client_secrets`` を no-op に差し替え、物理ファイルを
     用意せずに認証経路だけを単離して検証する。
     """
