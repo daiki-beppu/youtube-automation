@@ -63,7 +63,7 @@
 公開定義は `.takt/workflows/`、takt 0.55.1 builtin から eject した共有 step とリポジトリ固有 step は `.takt/steps/`、固有 instruction / report contract だけを `.takt/facets/` に置く。一般的な plan / test-first / implementation review / fix / final gate は builtin 由来 fragment を正とし、旧内部構造への互換 adapter は持たない。
 
 - **検証は実行時 takt を正とする。** 変更前に `takt --version` と `takt catalog` / `takt eject` の内容を確認し、全公開 workflow へ `takt workflow doctor`、各 workflow へ `takt prompt <workflow>` を実行する
-- **CI 同等ゲート(`ci_verify`)を final gate より前に置く。** 最低でも ruff check / format、全 pytest、any-usage gate、`git diff --check` を実行し、変更 path に応じた CI job も追加する。失敗時は修正または再計画へ戻し、環境障害は ABORT する
+- **CI 同等ゲート(`ci_verify`)を final gate より前に置く。** 最低でも ruff check / format、全 pytest、any-usage gate、`git diff --check` を実行し、変更 path に応じた CI job も追加する。ローカルで実行できるゲートの失敗は `fail` として修正へ戻す。実測した環境でコマンドまたは前提リソースを利用できない項目は、項目名と理由を findings に列挙して CI-only とし、ローカル判定から除外して正本の CI へ委ねる。`ci_verify` の verdict は `pass` / `fail` の 2 値とし、環境差を理由に ABORT しない
 - **レビューと final gate は fail-closed。** 専門レビューは未解決 finding / conflict / 判定不能を修正・再計画・ABORT へ送り、既知 verdict に一致しない出力も ABORT する。final gate も COMPLETE 以外をレビュー・修正・再計画・ABORT へ戻す
 - **分岐は 1 個の strict structured schema と `when(structured.*)` で決定する。** 並列 reviewer は各 report を生成するだけにし、直後の gate が全 report を読み structured verdict を返す。これにより判定不能を fallback ABORT へ送り、`takt prompt` でも全 step を reportContent なしで合成できる
 - **有限停止は root `max_steps` と loop monitor で担保する。** monitor は `ignore_steps` でゲートを挟む実際の cycle を追跡し、継続・再計画・ABORT を明示する。公開 lane から無制限 self-loop を作らない
