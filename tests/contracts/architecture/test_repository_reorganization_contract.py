@@ -442,7 +442,7 @@ def test_active_streaming_tests_describe_canonical_owners() -> None:
             "infrastructure/youtube/notification.py",
             "utils/notification.py",
         ),
-        "tests/test_stream_bandwidth_cli.py": (
+        "tests/commands/youtube/test_stream_bandwidth_cli.py": (
             "commands/youtube/stream_bandwidth.py",
             "cli/stream_bandwidth.py",
         ),

@@ -206,7 +206,7 @@ def test_upload_settings_contract_is_nested_in_schedule_config() -> None:
     channel_new = _read(".claude/skills/channel-new/SKILL.md")
     regeneration_mode = _read(".claude/skills/channel-new/references/regeneration-mode.md")
     channel_init = _read("src/youtube_automation/commands/channel/channel_init_templates.py")
-    channel_init_test = _read("tests/test_channel_init.py")
+    channel_init_test = _read("tests/commands/channel/test_channel_init.py")
     schedule_template = _read(".claude/skills/channel-new/references/schedule-template.json")
 
     for text in (channel_new, regeneration_mode, channel_init, channel_init_test):

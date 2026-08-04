@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `refactor(tests)`: commands 層のテストを production module の鏡像配置へ移し、active consumer の参照を canonical path に追従させた（#3045）。
 - `feat(takt)`: `ci_verify` の verdict を `pass` / `fail` の 2 値に限定し、ローカル環境で実測上実行できないゲートは項目名と理由を findings に残す CI-only 項目として正本の CI へ委ねるようにした。環境差による ABORT で完成済み実装が破棄されることを防ぎつつ、ローカルで実行できるゲートの失敗は従来どおり fix へ送る（#3087）。
 - `refactor(tests)`: infrastructure / core 層のテストを production module の鏡像配置へ移し、active consumer の参照を更新した（#3044）。
 - `refactor(takt)`: takt 0.55.1 の builtin workflow / step fragment を基準に `.takt/` の feature・fix・docs・maintenance・audit 系 workflow を再設計した。公開 lane の目的を維持しつつ、structured fail-closed gate、有限 loop monitor、CI 同等ゲート、外部副作用を起こさない spillover へ統一し、旧 callable・facet・schema と内部構造固定テストを利用者向け契約テストへ置換した。
