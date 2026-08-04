@@ -209,7 +209,7 @@ def test_extensions_pull_request_trigger_keeps_path_filter() -> None:
         "extensions/**",
         ".github/workflows/extensions.yml",
         ".github/scripts/classify-ci-paths.sh",
-        "tests/test_actions_parallel_workflows.py",
+        "tests/repo/test_actions_parallel_workflows.py",
         "flake.nix",
         "flake.lock",
     ]

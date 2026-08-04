@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `refactor(tests)`: domains / application / configuration 層と同名衝突分のテストを production module の鏡像配置へ移し、repository contract は `tests/repo/`、infrastructure の裁定分は各鏡像へ配置した。active consumer の参照を canonical path に追従させ、複数テストが同一 production module に対応する場合の共存規則と root 残置理由を配置規約へ記録した（#3046）。
 - `refactor(tests)`: commands 層のテストを production module の鏡像配置へ移し、active consumer の参照を canonical path に追従させた（#3045）。
 - `feat(takt)`: `ci_verify` の verdict を `pass` / `fail` の 2 値に限定し、ローカル環境で実測上実行できないゲートは項目名と理由を findings に残す CI-only 項目として正本の CI へ委ねるようにした。環境差による ABORT で完成済み実装が破棄されることを防ぎつつ、ローカルで実行できるゲートの失敗は従来どおり fix へ送る（#3087）。
 - `refactor(tests)`: infrastructure / core 層のテストを production module の鏡像配置へ移し、active consumer の参照を更新した（#3044）。

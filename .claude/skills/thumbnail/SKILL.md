@@ -219,7 +219,7 @@ Make it cleaner, more readable on mobile, stronger face impact, no logos, no wat
 Use the title {title}.
 ```
 
-このテンプレートは `config.default.yaml` の `image_generation.codex.default_prompt_template` と完全一致させる（`tests/test_thumbnail_skill_assets.py` で機械担保）。
+このテンプレートは `config.default.yaml` の `image_generation.codex.default_prompt_template` と完全一致させる（`tests/configuration/test_thumbnail_skill_assets.py` で機械担保）。
 
 **`{title}` の意味論**: `{title}`（`codex-prompt.py` の `title` 引数）に渡すのは**サムネに焼くテキスト（見出し + 短いサブタイトル）だけ**。動画タイトル全文を渡さない — 旧テンプレート運用時に動画タイトル全文がそのまま画像に焼き込まれた事故があり、その再発防止のための契約。
 

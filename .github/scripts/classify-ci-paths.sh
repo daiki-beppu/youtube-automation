@@ -32,7 +32,7 @@ while IFS= read -r path || [ -n "$path" ]; do
       distrokid=true
       community=true
       ;;
-    tests/test_actions_parallel_workflows.py | flake.nix | flake.lock)
+    tests/repo/test_actions_parallel_workflows.py | flake.nix | flake.lock)
       python=true
       suno=true
       distrokid=true
@@ -49,7 +49,7 @@ while IFS= read -r path || [ -n "$path" ]; do
   esac
 
   case "$path" in
-    dashboard/* | src/* | .claude/* | pyproject.toml | uv.lock | flake.nix | flake.lock | .github/workflows/ci.yml | tests/test_skills_sync_installed_wheel.py | tests/test_packaging*)
+    dashboard/* | src/* | .claude/* | pyproject.toml | uv.lock | flake.nix | flake.lock | .github/workflows/ci.yml | tests/repo/test_skills_sync_installed_wheel.py | tests/test_packaging*)
       packaging=true
       ;;
   esac
@@ -61,7 +61,7 @@ while IFS= read -r path || [ -n "$path" ]; do
   esac
 
   case "$path" in
-    docs/adr/* | .github/workflows/ci.yml | tests/test_actions_parallel_workflows.py)
+    docs/adr/* | .github/workflows/ci.yml | tests/repo/test_actions_parallel_workflows.py)
       adr=true
       ;;
   esac
