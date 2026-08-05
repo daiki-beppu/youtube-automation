@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `fix(config)`: channel skill-config の未知のトップレベルキーを警告し、`thumbnail.yaml` の誤った `auto_select` 階層などが silent に無視される状態を防止（#2520）。
+
 ### Changed
 
 - `refactor(tests)`: 旧 `unit` / `streaming` テストを canonical owner と `tests/repo/streaming/` へ整理し、root allowlist・source layer・source owner の配置規約を repository contract として機械担保した（#3047）。
