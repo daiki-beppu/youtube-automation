@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 from tests.helpers.hcl import read_file
-from tests.streaming._helpers import (
+from tests.repo.streaming._helpers import (
     _REPO_ROOT,
     _RUN_FFMPEG_SCRIPT,
     _SWAP_VIDEO_SCRIPT,

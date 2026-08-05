@@ -1,4 +1,4 @@
-"""tests/streaming/ パッケージ内で共有するパス定数とヘルパー。
+"""tests/repo/streaming/ パッケージ内で共有するパス定数とヘルパー。
 
 issue #426: ``tests/test_terraform_streaming.py`` (3580 行 / 26 クラス) を責務別
 ファイルに分割した際の共有モジュール。

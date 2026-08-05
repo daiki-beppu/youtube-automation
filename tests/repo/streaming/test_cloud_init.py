@@ -11,7 +11,7 @@ import re
 import yaml
 
 from tests.helpers.hcl import read_file
-from tests.streaming._helpers import (
+from tests.repo.streaming._helpers import (
     _CLOUD_INIT_YAML,
     _DEFAULT_INSTALL_ROOT,
     _ENV_TFTPL,

@@ -8,17 +8,29 @@
 
 同じ production module に複数のテスト module が対応する場合は、テストの basename を変更せず、それぞれを独立した module として同じ鏡像ディレクトリに置く。鏡像規則は 1 module = 1 test の単射を要求しない。
 
+移行前の `tests/unit/` は廃止した。`test_time_utils.py` は `tests/infrastructure/runtime/`、`test_upload_policy.py` は `tests/domains/uploads/` に置く。
+
 ## `tests/repo/`
 
 `youtube_automation` を実行時に import せず、docs、CI、packaging、skill などリポジトリ自体の構造・配布物・静的契約を検査するテストは `tests/repo/` に置く。既存の repository contract は後続の配置変更でこの規則に従って移動する。
+
+Terraform、cloud-init、systemd unit、streaming 用 skill などの repository 資産を検査するテストは `tests/repo/streaming/` に置く。`tests/streaming/` は廃止した。
 
 ## `tests/integration/`
 
 複数 layer をまたいで実際の tool、process、filesystem、network 境界を検証する end-to-end テストは `tests/integration/` に置く。これは鏡像規則の例外として扱う。
 
+## `tests/contracts/`
+
+リポジトリの architecture・package・移行契約を検証するテストは `tests/contracts/` に置く。これは特定の production module の鏡像ではなく、リポジトリ全体の契約を所有する領域であるため、鏡像規則と source-owner 検証の対象外とする。
+
 ## `tests/helpers/`
 
 `tests/helpers/` はテスト module ではなく、複数テストが利用する helper package である。鏡像規則の対象外とし、helper はこの領域に置く。テスト専用の repository path は `tests.helpers.paths` が公開する `REPO_ROOT`、`TESTS_DIR`、`FIXTURES_DIR` から解決する。
+
+## `tests/fixtures/`
+
+複数テストが共有する入力データ、サンプルファイル、固定値などの test asset は `tests/fixtures/` に置く。これは production module のテストではない共有資産であるため、鏡像規則と source-owner 検証の対象外とする。
 
 ## 同名衝突の裁定
 

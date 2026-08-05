@@ -10,7 +10,7 @@ from __future__ import annotations
 import re
 
 from tests.helpers.hcl import extract_block, read_file, strip_hcl_comments
-from tests.streaming._helpers import (
+from tests.repo.streaming._helpers import (
     _DEFAULT_INSTALL_ROOT,
     _VARIABLES_TF,
 )

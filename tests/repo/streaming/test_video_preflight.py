@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 from types import ModuleType
 
-from tests.streaming._helpers import _VIDEO_PREFLIGHT_PY
+from tests.repo.streaming._helpers import _VIDEO_PREFLIGHT_PY
 
 
 def _load_module() -> ModuleType:

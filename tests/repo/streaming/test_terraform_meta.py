@@ -14,7 +14,7 @@ import re
 import pytest
 
 from tests.helpers.hcl import extract_block, read_file, strip_hcl_comments
-from tests.streaming._helpers import (
+from tests.repo.streaming._helpers import (
     _CRON_D_TFTPL,
     _INSTALL_ROOT_TFTPL,
     _LOGROTATE_TFTPL,
