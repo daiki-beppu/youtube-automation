@@ -968,8 +968,8 @@ if [[ "$OVERLAYS_ENABLED" -eq 1 ]]; then
             sp_path="${COLLECTION_DIR}/${sp_image}"
         fi
         if [[ -z "$sp_path" || ! -f "$sp_path" ]]; then
-            echo "  WARN: subscribe popup image not found: ${sp_image} (overlay 経路だが popup はスキップ)"
-            sp_enabled="false"
+            echo "ERROR: subscribe popup image not found: ${sp_image}"
+            exit 1
         else
             INPUTS+=(-loop 1 -i "$sp_path")
             sp_input_idx="$next_input_idx"
