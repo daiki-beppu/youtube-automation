@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `fix(doctor)`: duration TTP 証跡の同義ラベル・空白・区切り記号と、見出し配下の複数行箇条書きを解釈しつつ、根拠・対象 channel・上位5本・min/max・承認の必須条件を維持（#2545）。
+
 - `fix(suno-helper)`: 適応型ペーシング後の Create 直前に Turnstile を再確認し、表示中の新規投入を止めて解消後に同じ entry から重複なく再開する（#2536）。
 
 - `fix(config)`: channel skill-config の未知のトップレベルキーを警告し、`thumbnail.yaml` の誤った `auto_select` 階層などが silent に無視される状態を防止（#2520）。
