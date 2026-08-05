@@ -603,6 +603,25 @@ def test_build_prompt_entries_instrumental_has_empty_lyrics(channel_dir, tmp_pat
     assert entries[0]["lyrics"] == ""
 
 
+def test_build_prompt_entries_instrumental_preserves_pattern_lyrics(channel_dir, tmp_path):
+    """Instrument Notes を含む pattern lyrics を構造補強後も保持する."""
+    _write_suno_override(
+        channel_dir,
+        genre_line="lo-fi jazz, soft piano",
+        auto_lyrics_structure=True,
+    )
+    patterns_path = _write_minimal_patterns(tmp_path)
+    payload = yaml.safe_load(patterns_path.read_text(encoding="utf-8"))
+    payload["patterns"][0]["lyrics"] = "Instrument Notes: start directly with the main saxophone line"
+    patterns_path.write_text(yaml.safe_dump(payload, allow_unicode=True), encoding="utf-8")
+
+    entries = build_prompt_entries(patterns_path)
+
+    assert entries[0]["lyrics"] == (
+        "[Instrumental]\n\nInstrument Notes: start directly with the main saxophone line\n\n[Extended Outro]"
+    )
+
+
 def test_build_prompt_entries_style_contains_tempo_genre_and_scene(channel_dir, tmp_path):
     """Given tempo + genre_line + scene
     When style を読む
