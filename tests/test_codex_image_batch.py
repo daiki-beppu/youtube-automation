@@ -309,3 +309,15 @@ def test_skill_documents_batch_usage_and_fair_use_limit() -> None:
         "`3` 以上はユーザーが今回の実行について明示した場合だけ",
     ):
         assert phrase in skill
+
+
+def test_skill_uses_per_run_manifest_with_caller_owned_cleanup() -> None:
+    """#2948: 並列 collection は固定 manifest を共有せず、自身の一時ファイルだけを消す。"""
+    skill = (ROOT / ".claude/skills/thumbnail/SKILL.md").read_text()
+    batch_contract = skill.split("2 件以上の候補を同時生成する場合", maxsplit=1)[1].split("同時起動数は", maxsplit=1)[0]
+
+    assert "/tmp/codex-thumbnail-jobs.json" not in batch_contract
+    assert 'manifest=$(mktemp "${TMPDIR:-/tmp}/codex-thumbnail-jobs.XXXXXX")' in batch_contract
+    assert "trap 'rm -f \"$manifest\"' EXIT" in batch_contract
+    assert '--manifest "$manifest"' in batch_contract
+    assert 'rm -f "${TMPDIR:-/tmp}/codex-thumbnail-jobs.' not in batch_contract
