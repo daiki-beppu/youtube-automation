@@ -10,6 +10,9 @@
 //
 // 純関数化に伴い、中断フラグと各タイミングは引数 (options) で注入する。
 // 旧実装のモジュール変数 `aborted` / 定数 (GENERATE_TIMEOUT_MS 等) を直接参照しない。
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -27,6 +30,11 @@ const FAST_OPTIONS = {
   pollIntervalMs: 10,
   settleMs: 10,
 } as const;
+
+const CONTENT_SOURCE = readFileSync(
+  resolve(process.cwd(), "entrypoints/content.ts"),
+  "utf8"
+);
 
 function disabledButton(): HTMLButtonElement {
   const btn = document.createElement("button");
@@ -293,5 +301,16 @@ describe("shared/dom: タイミング定数", () => {
     expect(POLL_INTERVAL_MS).toBe(500);
     expect(SETTLE_MS).toBe(1500);
     expect(CAPTCHA_WAIT_TIMEOUT_MS).toBe(600000);
+  });
+});
+
+describe("content runner: captcha 待機上限", () => {
+  it("Given manual / unattended run When 生成完了を待つ Then 両方で共有の10分上限を使う", () => {
+    expect(CONTENT_SOURCE).toContain(
+      "captchaWaitTimeoutMs: CAPTCHA_WAIT_TIMEOUT_MS"
+    );
+    expect(CONTENT_SOURCE).not.toMatch(
+      /captchaWaitTimeoutMs:\s*activeUnattended/
+    );
   });
 });

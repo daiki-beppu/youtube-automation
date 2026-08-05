@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `fix(suno-helper)`: 無人実行中の可視 Turnstile も手動実行と同じ10分間 `waiting-captcha` で待機し、即時エラー終了しないように統一（#2978）。
+
 - `fix(doctor)`: read-only OAuth token の発行状況を独立診断し、未発行時は対象チャンネルの context 付きで `uv run yt-oauth --readonly` を案内する warning を追加（#2957）。
 
 - `fix(suno)`: `genre_line` のモード推定で否定表現をボーカル語より優先し、完全な語境界だけを照合して部分文字列による誤判定を防止（#2954）。
