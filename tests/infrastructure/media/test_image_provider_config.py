@@ -242,6 +242,93 @@ class TestParseImageGenerationConfig:
 
         assert prompt == "Use the title Rain Study."
 
+    def test_build_codex_prompt_appends_single_step_opt_in_clause(self):
+        """Given Codex provider と単一の opt-in clause
+        When prompt を build する
+        Then clause 本文が title prompt の末尾へ渡る。
+        """
+        prompt = build_codex_prompt(
+            {
+                "image_generation": {
+                    "provider": "codex",
+                    "gemini": {
+                        "single_step": {
+                            "style_lock_clause": "Keep the strong caricature treatment.",
+                        }
+                    },
+                    "codex": {"default_prompt_template": "Use the title {title}."},
+                }
+            },
+            "Night Groove",
+        )
+
+        assert prompt == (
+            "Use the title Night Groove.\n\nAdditional thumbnail guidance:\nKeep the strong caricature treatment."
+        )
+
+    def test_build_codex_prompt_rejects_multiple_single_step_opt_in_clauses(self):
+        """Given Codex provider と複数の opt-in clause
+        When prompt を build する
+        Then clause の積み上げを ConfigError で拒否する。
+        """
+        skill_cfg = {
+            "image_generation": {
+                "provider": "codex",
+                "gemini": {
+                    "single_step": {
+                        "variation_clause": "Create a variation.",
+                        "style_lock_clause": "Keep the lighting.",
+                    }
+                },
+                "codex": {"default_prompt_template": "Use the title {title}."},
+            }
+        }
+
+        with pytest.raises(ConfigError, match="opt-in clause.*1 つ"):
+            build_codex_prompt(skill_cfg, "Night Groove")
+
+    def test_build_codex_prompt_expands_typography_font_description(self):
+        """Given font placeholder を持つ typography clause
+        When Codex prompt を build する
+        Then thumbnail_text.font.copy の実値へ展開する。
+        """
+        prompt = build_codex_prompt(
+            {
+                "image_generation": {
+                    "provider": "codex",
+                    "gemini": {
+                        "single_step": {
+                            "typography_clause": "Use a consistent {font_description} typeface.",
+                        },
+                        "thumbnail_text": {"font": {"copy": "classic serif"}},
+                    },
+                    "codex": {"default_prompt_template": "Use the title {title}."},
+                }
+            },
+            "Night Groove",
+        )
+
+        assert "Use a consistent classic serif typeface." in prompt
+        assert "{font_description}" not in prompt
+
+    def test_build_codex_prompt_does_not_mix_text_strip_into_thumbnail_prompt(self):
+        """Given textless main 専用 clause
+        When text-included Codex prompt を build する
+        Then text strip 指示は初回 prompt へ混入しない。
+        """
+        prompt = build_codex_prompt(
+            {
+                "image_generation": {
+                    "provider": "codex",
+                    "gemini": {"single_step": {"text_strip_clause": "Remove all text."}},
+                    "codex": {"default_prompt_template": "Use the title {title}."},
+                }
+            },
+            "Night Groove",
+        )
+
+        assert prompt == "Use the title Night Groove."
+
     def test_build_codex_prompt_injects_gemini_composition_rules_for_codex(self):
         prompt = build_codex_prompt(
             {

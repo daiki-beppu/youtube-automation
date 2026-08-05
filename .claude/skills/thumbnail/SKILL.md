@@ -203,6 +203,11 @@ Codex 経路でも `image_generation.gemini.composition_rules` は自動的に�
 レジェンド名や楽器・ポーズを手書きで重複指定しない。設定されたルールが Codex に渡らないまま
 参照被写体を踏襲することは許容しない。
 
+`image_generation.gemini.single_step` の opt-in clause は、`variation_clause` / `style_lock_clause` /
+`anatomy_clause` / `typography_clause` のうち非空の 1 つだけを Codex prompt の末尾へ追加する。
+複数を同時指定した場合はプロンプトを積み上げず `ConfigError` で停止する。`text_strip_clause` は
+承認済み thumbnail から textless main を作る後段専用で、テキスト付き候補の prompt には追加しない。
+
 codex 経路でも標準ファイル契約は同じ:
 
 1. ベンチマーク参照画像から、テキスト付き候補を `10-assets/thumbnail-codex-v1.png` に生成する。
