@@ -823,6 +823,80 @@ class TestOAuthToken:
         assert result.next_action is None
 
 
+class TestOAuthTokenReadonly:
+    def test_missing_is_warning_with_channel_scoped_oauth_action(self, tmp_path):
+        result = doctor.check_oauth_token_readonly(tmp_path)
+
+        assert result.id == "oauth_token_readonly"
+        assert result.category == doctor.API_CATEGORY
+        assert result.status == "warn"
+        assert result.next_action["kind"] == "human"
+        assert result.next_action["reason"] == "authentication"
+        assert result.next_action["cmd"] == "uv run yt-oauth --readonly"
+        assert result.next_action["cwd"] == str(tmp_path)
+        assert result.next_action["execution_owner"] == "ai-or-setup"
+
+    def test_present_at_resolved_location_is_ok_without_reading_contents(self, tmp_path):
+        auth = tmp_path / "auth"
+        auth.mkdir()
+        token_path = auth / "token.readonly.json"
+        token_path.write_text("not-json-and-must-not-be-read", encoding="utf-8")
+
+        result = doctor.check_oauth_token_readonly(tmp_path)
+
+        assert result.status == "ok"
+        assert result.next_action is None
+        assert "発行済み" in result.message
+
+    def test_directory_at_resolved_location_is_warning_with_canonical_action(self, tmp_path):
+        token_path = tmp_path / "auth" / "token.readonly.json"
+        token_path.mkdir(parents=True)
+
+        result = doctor.check_oauth_token_readonly(tmp_path)
+
+        assert result.status == "warn"
+        assert result.next_action["cmd"] == "uv run yt-oauth --readonly"
+        assert result.next_action["cwd"] == str(tmp_path)
+
+    def test_json_exposes_readonly_warning_and_canonical_next_action(self, monkeypatch, tmp_path, capsys):
+        monkeypatch.setattr(
+            doctor,
+            "run_all_checks",
+            lambda channel_dir: [doctor.check_oauth_token_readonly(channel_dir)],
+        )
+
+        code = doctor.main(["--json", "--target", str(tmp_path)])
+
+        assert code == 0
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["summary"]["warn"] == 1
+        assert payload["summary"]["next_check_id"] == "oauth_token_readonly"
+        check = payload["checks"][0]
+        assert check["status"] == "warn"
+        assert check["next_action"]["cmd"] == "uv run yt-oauth --readonly"
+        assert check["next_action"]["cwd"] == str(tmp_path)
+
+    def test_apply_treats_readonly_warning_as_human_authentication_step(self, monkeypatch, tmp_path, capsys):
+        monkeypatch.setattr(
+            doctor,
+            "run_all_checks",
+            lambda channel_dir: [doctor.check_oauth_token_readonly(channel_dir)],
+        )
+        monkeypatch.setattr(
+            doctor,
+            "_run_apply_command",
+            lambda _argv, _cwd: (_ for _ in ()).throw(AssertionError("OAuth browser flow must not run")),
+        )
+
+        code = doctor.main(["--apply", "--json", "--target", str(tmp_path)])
+
+        assert code == 0
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["apply"]["stop_reason"] == "human_required"
+        assert payload["apply"]["check_id"] == "oauth_token_readonly"
+        assert payload["apply"]["next_action"]["cmd"] == "uv run yt-oauth --readonly"
+
+
 class TestReportingJob:
     @staticmethod
     def _write_token(channel_dir: Path, *, expiry: datetime | None = None) -> None:
@@ -1200,8 +1274,8 @@ class TestMain:
         payload = json.loads(out)
         assert payload["channel_dir"] == str(tmp_path)
         assert "summary" in payload
-        # 7 bootstrap + 12 api + 3 channel + 4 data + 1 upload = 27
-        assert len(payload["checks"]) == 27
+        # 7 bootstrap + 13 api + 3 channel + 4 data + 1 upload = 28
+        assert len(payload["checks"]) == 28
         for c in payload["checks"]:
             assert c["status"] in ("ok", "info", "warn", "fail", "unknown")
             # category フィールドが JSON に含まれていること
@@ -4880,20 +4954,21 @@ class TestCheckNumberedDuplicates:
 
 
 class TestRunAllChecksExtended:
-    def test_returns_27_checks(self, monkeypatch, tmp_path):
-        """7 bootstrap + 12 api + 3 channel + 4 data + 1 upload = 計 27 件."""
+    def test_returns_28_checks(self, monkeypatch, tmp_path):
+        """7 bootstrap + 13 api + 3 channel + 4 data + 1 upload = 計 28 件."""
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
         results = doctor.run_all_checks(tmp_path)
-        assert len(results) == 27
+        assert len(results) == 28
 
-    def test_12_api_checks_present(self, monkeypatch, tmp_path):
-        """dotenv を含まず oauth_client_sharing を含む 12 check が api カテゴリにある."""
+    def test_13_api_checks_present(self, monkeypatch, tmp_path):
+        """readonly token と oauth_client_sharing を含む 13 check が api カテゴリにある."""
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
         results = doctor.run_all_checks(tmp_path)
         api_results = [r for r in results if r.category == "api"]
-        assert len(api_results) == 12
+        assert len(api_results) == 13
         assert api_results[-1].id == "reporting_job"
         assert any(r.id == "oauth_client_sharing" for r in api_results)
+        assert any(r.id == "oauth_token_readonly" for r in api_results)
 
     def test_new_check_ids_present(self, monkeypatch, tmp_path):
         """bootstrap / channel / data / upload の check が含まれる."""
