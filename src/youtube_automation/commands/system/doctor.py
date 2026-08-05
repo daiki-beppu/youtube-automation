@@ -2066,35 +2066,139 @@ def _missing_duration_ttp_items(
         return []
 
     missing: list[str] = []
-    lower_text = seed_text.lower()
-    if "duration ttp 根拠" not in lower_text and "動画尺 ttp 根拠" not in lower_text:
+    evidence_lines = _duration_ttp_evidence_lines(seed_text)
+    duration_lines = [line for line in evidence_lines if _has_duration_context(line[0])]
+    if not any(_has_duration_evidence_label(text) for text, _, _ in duration_lines):
         missing.append("duration TTP 根拠が未記録")
-    if "target_duration_min" not in lower_text or "target_duration_max" not in lower_text:
+    has_min = any(_has_duration_range_context(text) and _has_min_label(text) for text, _, _ in duration_lines)
+    has_max = any(_has_duration_range_context(text) and _has_max_label(text) for text, _, _ in duration_lines)
+    if not has_min or not has_max:
         missing.append("duration 推奨 min/max が未記録")
-    approval_lines = [
-        line
-        for line in seed_text.splitlines()
-        if ("duration 推奨承認" in line.lower() or "動画尺推奨承認" in line)
-        and ("ユーザー承認済み" in line or "approved" in line.lower())
-    ]
-    if not approval_lines:
+    if not any(_has_duration_approval(text) for text, _, _ in duration_lines):
         missing.append("duration 推奨のユーザー承認結果が未記録")
 
-    duration_channel_lines = [line for line in seed_text.splitlines() if "duration 対象 channel" in line.lower()]
+    duration_channel_lines = [text for text, _, _ in duration_lines if _has_target_channel_label(text)]
     for index, channel in enumerate(channels):
         identifiers = _channel_seed_identifiers(channel)
         if identifiers and not any(
-            any(identifier.lower() in line.lower() for identifier in identifiers) for line in duration_channel_lines
+            any(identifier.lower() in line for identifier in identifiers) for line in duration_channel_lines
         ):
             missing.append(
                 f"duration TTP 根拠に承認済み channel が未記録 ({_channel_diagnostic_label(index, channel)})"
             )
 
-    selected_count = sum(1 for line in seed_text.splitlines() if "duration selected video" in line.lower())
+    selected_count = sum(
+        1
+        for text, is_list_item, item_text in duration_lines
+        if is_list_item and _has_selected_video_label(text) and _has_selected_video_evidence(item_text)
+    )
     required_count = TTP_VIDEO_ANALYZE_TOP_N * len(channels)
     if selected_count < required_count:
         missing.append(f"duration selected video の根拠が不足 ({selected_count}/{required_count})")
     return missing
+
+
+def _duration_ttp_evidence_lines(seed_text: str) -> list[tuple[str, bool, str]]:
+    headings: dict[int, str] = {}
+    evidence_lines: list[tuple[str, bool, str]] = []
+    for raw_line in seed_text.splitlines():
+        stripped = raw_line.strip()
+        heading_match = re.match(r"^(#{1,6})\s*(.*?)\s*#*$", stripped)
+        if heading_match:
+            level = len(heading_match.group(1))
+            headings = {current_level: text for current_level, text in headings.items() if current_level < level}
+            headings[level] = heading_match.group(2)
+            continue
+        if not stripped:
+            continue
+        list_match = re.match(r"^(?:[-*+]|\d+[.)])\s+(.+)$", stripped)
+        content = list_match.group(1) if list_match else stripped
+        context = " ".join([*(headings[level] for level in sorted(headings)), content])
+        evidence_lines.append(
+            (
+                _normalize_duration_evidence_text(context),
+                list_match is not None,
+                _normalize_duration_evidence_text(content),
+            )
+        )
+    return evidence_lines
+
+
+def _normalize_duration_evidence_text(text: str) -> str:
+    normalized = unicodedata.normalize("NFKC", text).casefold()
+    normalized = re.sub(r"[`*_]", " ", normalized)
+    normalized = re.sub(r"[:=|/・,;()\[\]{}]+", " ", normalized)
+    return re.sub(r"\s+", " ", normalized).strip()
+
+
+def _has_duration_context(text: str) -> bool:
+    return bool(re.search(r"\bduration\b", text)) or "動画尺" in text.replace(" ", "")
+
+
+def _has_duration_evidence_label(text: str) -> bool:
+    return "根拠" in text or bool(re.search(r"\b(?:evidence|source|basis)\b", text))
+
+
+def _has_target_channel_label(text: str) -> bool:
+    return ("対象" in text and ("channel" in text or "チャンネル" in text)) or bool(
+        re.search(r"\btarget\s+channels?\b", text)
+    )
+
+
+def _has_selected_video_label(text: str) -> bool:
+    compact = text.replace(" ", "")
+    return (
+        ("選定" in text and "動画" in text)
+        or ("上位5本" in compact and "動画" in text)
+        or bool(re.search(r"\bselected\s+videos?\b", text))
+        or bool(re.search(r"\btop\s*5\b", text) and re.search(r"\bvideos?\b", text))
+    )
+
+
+def _has_selected_video_evidence(item_text: str) -> bool:
+    identifier_source = re.sub(r"^(?:duration\s+)?selected\s+video\s*", "", item_text).strip(" :=-")
+    identifier_source = re.sub(r"^(?:動画尺\s*)?(?:選定動画|動画)\s*", "", identifier_source).strip(" :=-")
+    identifier = re.split(
+        r"\s*(?:[|/,;]|\bviews?\s*[:=]?|\b(?:duration|length)\s*[:=]?|再生(?:数|回数)?\s*[:=]?)",
+        identifier_source,
+        maxsplit=1,
+    )[0].strip(" :=-")
+    if identifier in {"tbd", "todo", "n/a", "na", "未定", "保留"}:
+        return False
+    has_identifier = bool(re.search(r"[a-z0-9ぁ-んァ-ヶ一-龠]", identifier))
+    has_views = bool(
+        re.search(r"\bviews?\s*[:=]?\s*[\d,]+\b", item_text)
+        or re.search(r"\b[\d,]+\s+views?\b", item_text)
+        or re.search(r"再生(?:数|回数)?\s*[:=]?\s*[\d,]+", item_text)
+    )
+    has_duration = bool(
+        re.search(r"\bpt(?=\d)(?:\d+h)?(?:\d+m)?(?:\d+s)?\b", item_text)
+        or re.search(r"\d+(?:\.\d+)?\s*(?:hours?|hrs?|h|minutes?|mins?|m|seconds?|secs?|s|時間|分|秒)\b", item_text)
+    )
+    return has_identifier and has_views and has_duration
+
+
+def _has_duration_range_context(text: str) -> bool:
+    return "推奨" in text or "範囲" in text or bool(re.search(r"\b(?:recommend(?:ed|ation)?|range|target)\b", text))
+
+
+def _has_min_label(text: str) -> bool:
+    return "最小" in text or "下限" in text or bool(re.search(r"\b(?:min|minimum)\b", text))
+
+
+def _has_max_label(text: str) -> bool:
+    return "最大" in text or "上限" in text or bool(re.search(r"\b(?:max|maximum)\b", text))
+
+
+def _has_duration_approval(text: str) -> bool:
+    compact = text.replace(" ", "")
+    user_approved = "ユーザー承認済み" in compact or bool(
+        re.search(r"\b(?:approved\s+by\s+(?:the\s+)?user|user\s+approved)\b", text)
+    )
+    approval_context = (
+        "推奨" in text or "承認" in text or bool(re.search(r"\b(?:recommend(?:ed|ation)?|approval)\b", text))
+    )
+    return user_approved and approval_context
 
 
 def _approved_exception_has_reason(line: str) -> bool:
