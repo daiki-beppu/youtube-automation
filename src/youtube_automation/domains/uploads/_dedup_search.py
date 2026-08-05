@@ -75,17 +75,17 @@ class DedupSearchMixin:
             return None
 
     @staticmethod
-    def _exact_title_video_ids(items: list[dict], title: str) -> list[str]:
+    def _exact_title_video_ids(items: list[object], title: str) -> list[str]:
         video_ids = []
         for item in items:
             if not isinstance(item, dict):
-                raise ValidationError("search.list response item must be an object")
+                continue
             snippet = item.get("snippet")
             identity = item.get("id")
             if not isinstance(snippet, dict) or not isinstance(snippet.get("title"), str):
-                raise ValidationError("search.list response item is missing snippet.title")
+                continue
             if not isinstance(identity, dict) or not isinstance(identity.get("videoId"), str):
-                raise ValidationError("search.list response item is missing id.videoId")
+                continue
             if snippet["title"] == title:
                 video_ids.append(identity["videoId"])
         return video_ids

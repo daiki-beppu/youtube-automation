@@ -779,6 +779,45 @@ class TestFindExistingVideoByTitle:
         # Then
         assert result is None
 
+    def test_should_skip_ghost_search_items_and_keep_valid_exact_match(self, tmp_path):
+        uploader, mock_youtube = self._make_uploader_with_mock_youtube(tmp_path)
+        mock_youtube.search.return_value.list.return_value.execute.return_value = {
+            "items": [
+                {"id": {"videoId": "ghost-no-snippet"}},
+                None,
+                {"id": {"videoId": "ghost-bad-snippet"}, "snippet": []},
+                {"id": {"videoId": "ghost-no-title"}, "snippet": {}},
+                {"id": {"videoId": "v9"}, "snippet": {"title": "Rainy Jazz"}},
+            ]
+        }
+        mock_youtube.videos.return_value.list.return_value.execute.return_value = {
+            "items": [
+                {"id": "v9", "snippet": {"title": "Rainy Jazz"}, "status": {"uploadStatus": "processed"}},
+            ]
+        }
+
+        result = uploader._find_existing_video_by_title("Rainy Jazz")
+
+        assert result == {
+            "video_id": "v9",
+            "video_url": "https://www.youtube.com/watch?v=v9",
+        }
+        mock_youtube.videos.return_value.list.assert_called_once_with(id="v9", part="status,snippet")
+
+    def test_should_return_none_when_all_search_items_are_ghosts(self, tmp_path):
+        uploader, mock_youtube = self._make_uploader_with_mock_youtube(tmp_path)
+        mock_youtube.search.return_value.list.return_value.execute.return_value = {
+            "items": [
+                {"id": {"videoId": "ghost-no-snippet"}},
+                {"id": {"videoId": "ghost-no-title"}, "snippet": {}},
+            ]
+        }
+
+        result = uploader._find_existing_video_by_title("Rainy Jazz")
+
+        assert result is None
+        mock_youtube.videos.return_value.list.assert_not_called()
+
     def test_should_return_none_when_search_returns_empty_items(self, tmp_path):
         """検索結果が空なら None を返す."""
         # Given
