@@ -81,6 +81,8 @@ _LATIN_TITLE_TAIL_RE = re.compile(r"([A-Za-z][A-Za-z0-9 &'(),.!?:/-]*)$")
 # Suno はダウンロード ZIP 内のファイル名からアポストロフィを除去する（例: Greed's Rhythm → Greeds Rhythm.m4a）。
 # typographic apostrophe（U+2019）も同一視する。それ以外の記号は Suno 仕様が未確認のため除去しない
 _APOSTROPHE_RE = re.compile(r"['’]")
+_LOOKUP_EM_DASH_RE = re.compile(r"\s*—\s*")
+_LOOKUP_SPACE_RE = re.compile(r"\s+")
 _OUTPUT_STEM_SEPARATOR_RE = re.compile(r"[\\/]+")
 _OUTPUT_STEM_SPACE_RE = re.compile(r"\s+")
 
@@ -108,22 +110,29 @@ def _suno_name_lookup_candidates(name: str) -> list[str]:
     return deduped
 
 
+def _normalize_suno_name_for_lookup(name: str) -> str:
+    with_canonical_dash = _LOOKUP_EM_DASH_RE.sub(" — ", name)
+    return _LOOKUP_SPACE_RE.sub(" ", with_canonical_dash).strip()
+
+
 def _zip_member_lookup_candidates(filename: str) -> list[tuple[str, str]]:
     member_path = PurePosixPath(filename)
     relative_stem = member_path.with_suffix("").as_posix()
     raw_stems = [relative_stem, member_path.stem]
     deduped: list[tuple[str, str]] = []
     for raw_stem in raw_stems:
-        if raw_stem.endswith("_1"):
-            stem = raw_stem[:-2]
+        dup_match = _DUP_SUFFIX_RE.fullmatch(raw_stem.strip())
+        if dup_match is not None and int(dup_match.group("paren") or dup_match.group("underscore")) == 1:
+            stem = dup_match.group("base")
             variant = "b"
         else:
             stem = raw_stem
             variant = "a"
         for candidate in _suno_name_lookup_candidates(stem):
-            item = (candidate, variant)
-            if item not in deduped:
-                deduped.append(item)
+            for lookup in (candidate, _normalize_suno_name_for_lookup(candidate)):
+                item = (lookup, variant)
+                if lookup and item not in deduped:
+                    deduped.append(item)
     return deduped
 
 
@@ -169,6 +178,9 @@ def _build_name_to_index(coll_dir: Path, prompt_entries_reader: PromptEntriesRea
         stripped = _APOSTROPHE_RE.sub("", key)
         if stripped and stripped != key:
             name_to_index.setdefault(stripped, track_index)
+        normalized = _normalize_suno_name_for_lookup(key)
+        if normalized and normalized != key:
+            name_to_index.setdefault(normalized, track_index)
     return name_to_index
 
 
