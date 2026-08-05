@@ -705,7 +705,7 @@ def build_prompt_entries(patterns_path: Path) -> list[dict]:
             report.errors.extend(validate_banned_artists(full_style, banned_artists))
 
             # auto_lyrics_structure: 歌詞構造の自動補強 (#904)
-            lyrics = lyrics_source if resolved.is_vocal else ""
+            lyrics = lyrics_source
             if auto_lyrics:
                 lyrics = apply_auto_lyrics_structure(lyrics, is_vocal=resolved.is_vocal)
 
