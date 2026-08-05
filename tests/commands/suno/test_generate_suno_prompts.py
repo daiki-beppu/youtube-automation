@@ -13,6 +13,7 @@ from tests.helpers.paths import REPO_ROOT
 from youtube_automation.commands.suno.generate_suno_prompts import build_prompt_entries, generate, main
 from youtube_automation.configuration import skills as skill_config
 from youtube_automation.core.errors import ConfigError
+from youtube_automation.domains.suno.config import infer_suno_mode
 
 # `_skills/<skill>/config.default.yaml` の解決元になる editable install のソースツリー
 _DEFAULT_YAML = REPO_ROOT / ".claude" / "skills" / "suno" / "config.default.yaml"
@@ -107,6 +108,73 @@ def test_help_flag_shows_usage_and_exits_zero(monkeypatch, capsys):
     assert exc_info.value.code == 0
     captured = capsys.readouterr()
     assert "usage" in captured.out.lower()
+
+
+@pytest.mark.parametrize(
+    "genre_line",
+    [
+        "instrumental",
+        "no vocals",
+        "without vocals",
+        "vocal-free",
+        "non-vocal",
+    ],
+)
+def test_infer_suno_mode_treats_negative_vocal_expressions_as_instrumental(genre_line):
+    assert infer_suno_mode(genre_line) == "instrumental"
+
+
+@pytest.mark.parametrize(
+    "genre_line",
+    [
+        "vocals",
+        "vocal",
+        "singing",
+        "singer",
+        "rap",
+        "choir",
+        "humming",
+        "male vocals",
+        "female vocals",
+    ],
+)
+def test_infer_suno_mode_recognizes_complete_vocal_terms(genre_line):
+    assert infer_suno_mode(genre_line) == "vocal"
+
+
+@pytest.mark.parametrize(
+    "genre_line",
+    [
+        "female vocals, instrumental arrangement",
+        "rap without vocals",
+        "choir, vocal-free mix",
+    ],
+)
+def test_infer_suno_mode_prioritizes_negative_expressions(genre_line):
+    assert infer_suno_mode(genre_line) == "instrumental"
+
+
+@pytest.mark.parametrize(
+    ("genre_line", "expected"),
+    [
+        ("vocalist", "instrumental"),
+        ("vocality", "instrumental"),
+        ("crap", "instrumental"),
+        ("instrumentalist with choir", "vocal"),
+        ("non-vocalist with rap", "vocal"),
+    ],
+)
+def test_infer_suno_mode_matches_terms_at_token_boundaries(genre_line, expected):
+    assert infer_suno_mode(genre_line) == expected
+
+
+def test_explicit_instrumental_mode_overrides_vocal_genre_line(channel_dir, tmp_path):
+    _write_suno_override(channel_dir, genre_line="dream pop vocals")
+    patterns_path = _write_minimal_patterns(tmp_path)
+
+    output = generate(patterns_path)
+
+    assert "dream pop vocals" in output
 
 
 # ---------------------------------------------------------------------------
