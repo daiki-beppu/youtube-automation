@@ -78,14 +78,16 @@
 ```bash
 git switch main
 git pull --ff-only
-git worktree add .worktrees/issue-<N>-<slug> -b issue-<N>-<slug> main
-cd .worktrees/issue-<N>-<slug>
+git worktree add .claude/worktrees/issue-<N>-<slug> -b issue-<N>-<slug> main
+cd .claude/worktrees/issue-<N>-<slug>
 nix develop
 ```
 
 stack を組まない単独 PR の base branch は `main` 固定とする。stack の上段 branch は直下の branch を base に取るが、その chain は `gh stack` が管理するものであり、手で別 issue の未マージ branch を base に指定しない。stack に載せない依存 issue は、依存 PR の merge 後に main を更新し、rebase してから検証する。takt が生成する worktree(`<repo-parent>/takt-worktrees/`)は takt CLI が管理し、この規約の対象外。
 
-1 worktree = 1 stack とする。`.worktrees/` には `codex/*` の worktree が多数あり、同じ branch が 2 箇所にチェックアウトされていると stack の branch 移動が exit 6 で失敗するため、stack 用の branch 名はそれらと衝突させない。
+worktree の置き場は `$REPO_ROOT/.claude/worktrees/<slug>/` に統一する(グローバル規約と同じ)。takt が生成する `<repo-parent>/takt-worktrees/` だけが例外で、takt CLI が管理する。
+
+1 worktree = 1 stack とする。旧い置き場 `.worktrees/` にはローカル環境によって `codex/*` の worktree が残っていることがあり、同じ branch が 2 箇所にチェックアウトされていると stack の branch 移動が exit 6 で失敗するため、stack 用の branch 名はそれらと衝突させない。`.gitignore` は移行期間中どちらの置き場も無視する。
 
 ## commit / push / PR(gh stack 前提)
 

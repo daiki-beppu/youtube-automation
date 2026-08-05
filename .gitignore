@@ -36,6 +36,7 @@ dist/
 build/
 *.egg-info/
 .coverage
+.claude/worktrees/
 .worktrees/
 
 # Node / extensions (WXT)
