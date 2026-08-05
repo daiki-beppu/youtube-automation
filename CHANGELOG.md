@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `fix(suno-helper)`: 適応型ペーシング後の Create 直前に Turnstile を再確認し、表示中の新規投入を止めて解消後に同じ entry から重複なく再開する（#2536）。
+
 - `fix(config)`: channel skill-config の未知のトップレベルキーを警告し、`thumbnail.yaml` の誤った `auto_select` 階層などが silent に無視される状態を防止（#2520）。
 
 ### Changed

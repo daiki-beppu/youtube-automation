@@ -908,6 +908,24 @@ export default defineContentScript({
     });
     downloadFlow.installMessageHandlers();
 
+    async function guardCreateAgainstCaptcha(
+      index: number,
+      total: number
+    ): Promise<void> {
+      assertUnattendedUiIsSafe();
+      // captcha が出ていても即停止しない。多くは passive 検証で数秒以内に自動 verify されて閉じるため、
+      // waiting-captcha phase で解消を待って自動続行する。解消されない場合のみ throw（fail-loud は維持）。
+      await waitForCaptchaClear({
+        isAborted: () => aborted,
+        pollIntervalMs: POLL_INTERVAL_MS,
+        timeoutMs: CAPTCHA_WAIT_TIMEOUT_MS,
+        onWaitStart: () => {
+          adaptivePacingState = recordChallenge(adaptivePacingState);
+          emitProgress({ phase: PHASE.WAITING_CAPTCHA, index, total });
+        },
+      });
+    }
+
     // fallow-ignore-next-line complexity
     async function injectEntryAndClickGenerate(
       entry: PromptEntry,
@@ -995,19 +1013,7 @@ export default defineContentScript({
         return null; // 停止押下後は Generate を押さない（未投入のまま STOPPED 経路へ）
       }
 
-      assertUnattendedUiIsSafe();
-
-      // captcha が出ていても即停止しない。多くは passive 検証で数秒以内に自動 verify されて閉じるため、
-      // waiting-captcha phase で解消を待って自動続行する。解消されない場合のみ throw（fail-loud は維持）。
-      await waitForCaptchaClear({
-        isAborted: () => aborted,
-        pollIntervalMs: POLL_INTERVAL_MS,
-        timeoutMs: CAPTCHA_WAIT_TIMEOUT_MS,
-        onWaitStart: () => {
-          adaptivePacingState = recordChallenge(adaptivePacingState);
-          emitProgress({ phase: PHASE.WAITING_CAPTCHA, index, total });
-        },
-      });
+      await guardCreateAgainstCaptcha(index, total);
       if (aborted) {
         return null; // captcha 解消待ち中の停止。Generate を押さない（未投入のまま STOPPED 経路へ）
       }
@@ -1030,6 +1036,12 @@ export default defineContentScript({
           () => aborted
         );
       }
+      if (aborted) {
+        return null;
+      }
+
+      // 上の確認後、適応型ペーシング中に challenge が出現する競合窓を閉じる最終ガード。
+      await guardCreateAgainstCaptcha(index, total);
       if (aborted) {
         return null;
       }
