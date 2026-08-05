@@ -43,7 +43,10 @@ from youtube_automation.infrastructure.media.image_provider.composition import (
     validate_single_step_references,
     validate_single_step_request_references,
 )
-from youtube_automation.infrastructure.media.image_provider.config import replace_model
+from youtube_automation.infrastructure.media.image_provider.config import (
+    expand_thumbnail_prompt_clauses,
+    replace_model,
+)
 from youtube_automation.infrastructure.observability.profile import section
 
 # Gemini 用の解像度オプション（OpenAI provider 時は無視される）
@@ -129,34 +132,6 @@ def apply_ab_test_pattern(prompt: str, patterns: list[dict[str, str]], pattern_n
         available = ", ".join(item["name"] for item in patterns)
         raise ConfigError(f"--ab-pattern={pattern_name!r} は未定義です（有効値: {available}）")
     return f"{prompt.rstrip()}\n{pattern['variation']}"
-
-
-def expand_thumbnail_prompt_clauses(prompt: str, skill_cfg: dict) -> str:
-    """thumbnail skill-config の prompt clause placeholder を展開する。"""
-    if "${typography_clause}" not in prompt:
-        return prompt
-
-    image_generation = _required_mapping(skill_cfg.get("image_generation"), "image_generation")
-    gemini = _required_mapping(image_generation.get("gemini"), "image_generation.gemini")
-    single_step = _required_mapping(gemini.get("single_step"), "image_generation.gemini.single_step")
-    thumbnail_text = _required_mapping(gemini.get("thumbnail_text"), "image_generation.gemini.thumbnail_text")
-    font = _required_mapping(thumbnail_text.get("font"), "image_generation.gemini.thumbnail_text.font")
-
-    typography_clause = _required_non_empty_string(
-        single_step.get("typography_clause"),
-        "image_generation.gemini.single_step.typography_clause",
-    )
-    font_description = _required_non_empty_string(
-        font.get("copy"),
-        "image_generation.gemini.thumbnail_text.font.copy",
-    )
-    if "{font_description}" not in typography_clause:
-        raise ConfigError(
-            "image_generation.gemini.single_step.typography_clause は {font_description} を含めてください"
-        )
-
-    rendered_clause = typography_clause.replace("{font_description}", font_description)
-    return prompt.replace("${typography_clause}", rendered_clause.strip())
 
 
 def _next_planned_path(output_path: Path, taken: set[Path]) -> Path:

@@ -35,6 +35,12 @@ _DEFAULT_GEMINI_CLI_TIMEOUT = 300
 # （provider 切替時の無自覚な高単価課金を防ぐ。high は明示 opt-in のみ、#1697）
 _DEFAULT_OPENAI_QUALITY = "medium"
 _DEFAULT_CODEX_MAX_PARALLEL = 2
+_CODEX_THUMBNAIL_OPT_IN_CLAUSE_KEYS = (
+    "variation_clause",
+    "style_lock_clause",
+    "anatomy_clause",
+    "typography_clause",
+)
 
 
 @dataclass(frozen=True)
@@ -105,6 +111,7 @@ class CodexConfig:
 
     default_prompt_template: str = ""
     composition_rules: dict[str, object] | None = None
+    thumbnail_guidance: str | None = None
     max_parallel: int = _DEFAULT_CODEX_MAX_PARALLEL
 
 
@@ -166,10 +173,15 @@ def _build_from_new_namespace(section: dict[str, Any]) -> ImageGenerationConfig:
 
     gemini_section = section.get("gemini")
     composition_rules = _composition_rules_from_gemini(gemini_section)
+    thumbnail_guidance = _codex_thumbnail_guidance_from_gemini(gemini_section)
     codex_cfg = (
-        _build_codex(section.get("codex"), composition_rules=composition_rules)
+        _build_codex(
+            section.get("codex"),
+            composition_rules=composition_rules,
+            thumbnail_guidance=thumbnail_guidance,
+        )
         if "codex" in section
-        else CodexConfig(composition_rules=composition_rules)
+        else CodexConfig(composition_rules=composition_rules, thumbnail_guidance=thumbnail_guidance)
     )
     return ImageGenerationConfig(provider="codex", gemini=None, openai=None, codex=codex_cfg)
 
@@ -201,7 +213,12 @@ def _build_openai(d: dict[str, Any]) -> OpenAIConfig:
     )
 
 
-def _build_codex(d: object, *, composition_rules: dict[str, object] | None) -> CodexConfig:
+def _build_codex(
+    d: object,
+    *,
+    composition_rules: dict[str, object] | None,
+    thumbnail_guidance: str | None,
+) -> CodexConfig:
     if not isinstance(d, dict):
         raise ConfigError("image_generation.codex は mapping で指定してください")
     template = d.get("default_prompt_template", "")
@@ -215,6 +232,7 @@ def _build_codex(d: object, *, composition_rules: dict[str, object] | None) -> C
     return CodexConfig(
         default_prompt_template=template,
         composition_rules=composition_rules,
+        thumbnail_guidance=thumbnail_guidance,
         max_parallel=max_parallel,
     )
 
@@ -226,6 +244,72 @@ def _composition_rules_from_gemini(section: object) -> dict[str, object] | None:
     if not isinstance(rules, dict):
         raise ConfigError("image_generation.gemini.composition_rules は mapping で指定してください")
     return rules
+
+
+def _codex_thumbnail_guidance_from_gemini(section: object) -> str | None:
+    if not isinstance(section, dict) or "single_step" not in section:
+        return None
+    single_step = section["single_step"]
+    if not isinstance(single_step, dict):
+        raise ConfigError("image_generation.gemini.single_step は mapping で指定してください")
+
+    configured: list[tuple[str, str]] = []
+    for key in _CODEX_THUMBNAIL_OPT_IN_CLAUSE_KEYS:
+        value = single_step.get(key, "")
+        if not isinstance(value, str):
+            raise ConfigError(f"image_generation.gemini.single_step.{key} は文字列で指定してください")
+        if normalized := value.strip():
+            configured.append((key, normalized))
+
+    if len(configured) > 1:
+        keys = ", ".join(key for key, _ in configured)
+        raise ConfigError(f"Codex thumbnail の opt-in clause は 1 つだけ指定してください: {keys}")
+    if not configured:
+        return None
+    key, guidance = configured[0]
+    return _render_thumbnail_typography_clause(section) if key == "typography_clause" else guidance
+
+
+def _required_mapping(value: object, key: str) -> dict:
+    if not isinstance(value, dict):
+        raise ConfigError(f"{key} は object で指定してください")
+    return value
+
+
+def _required_non_empty_string(value: object, key: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ConfigError(f"{key} は空でない文字列で指定してください")
+    return value
+
+
+def _render_thumbnail_typography_clause(gemini: object) -> str:
+    gemini = _required_mapping(gemini, "image_generation.gemini")
+    single_step = _required_mapping(gemini.get("single_step"), "image_generation.gemini.single_step")
+    thumbnail_text = _required_mapping(gemini.get("thumbnail_text"), "image_generation.gemini.thumbnail_text")
+    font = _required_mapping(thumbnail_text.get("font"), "image_generation.gemini.thumbnail_text.font")
+    typography_clause = _required_non_empty_string(
+        single_step.get("typography_clause"),
+        "image_generation.gemini.single_step.typography_clause",
+    )
+    font_description = _required_non_empty_string(
+        font.get("copy"),
+        "image_generation.gemini.thumbnail_text.font.copy",
+    )
+    if "{font_description}" not in typography_clause:
+        raise ConfigError(
+            "image_generation.gemini.single_step.typography_clause は {font_description} を含めてください"
+        )
+    return typography_clause.replace("{font_description}", font_description).strip()
+
+
+def expand_thumbnail_prompt_clauses(prompt: str, skill_cfg: dict) -> str:
+    """thumbnail skill-config の prompt clause placeholder を展開する。"""
+    if "${typography_clause}" not in prompt:
+        return prompt
+    image_generation = _required_mapping(skill_cfg.get("image_generation"), "image_generation")
+    gemini = _required_mapping(image_generation.get("gemini"), "image_generation.gemini")
+    rendered_clause = _render_thumbnail_typography_clause(gemini)
+    return prompt.replace("${typography_clause}", rendered_clause)
 
 
 def _validate_codex_prompt_template(template: Any) -> str:
@@ -250,6 +334,12 @@ def _render_codex_composition_rules(rules: dict[str, object] | None) -> str:
     return f"\n\nComposition rules (must follow; these override the reference subject):\n{rendered}"
 
 
+def _render_codex_thumbnail_guidance(guidance: str | None) -> str:
+    if guidance is None:
+        return ""
+    return f"\n\nAdditional thumbnail guidance:\n{guidance}"
+
+
 def _validate_required_legend_motif(rules: dict[str, object] | None) -> None:
     if not rules:
         return
@@ -271,7 +361,11 @@ def build_codex_prompt(skill_cfg: dict[str, Any], title: str) -> str:
         raise ConfigError("image_generation.provider=codex の設定で実行してください")
     _validate_required_legend_motif(cfg.codex.composition_rules)
     prompt = render_codex_prompt(cfg.codex.default_prompt_template, title)
-    return prompt + _render_codex_composition_rules(cfg.codex.composition_rules)
+    return (
+        prompt
+        + _render_codex_thumbnail_guidance(cfg.codex.thumbnail_guidance)
+        + _render_codex_composition_rules(cfg.codex.composition_rules)
+    )
 
 
 def replace_model(cfg: ImageGenerationConfig, model: str) -> ImageGenerationConfig:
