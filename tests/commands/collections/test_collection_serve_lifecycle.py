@@ -14,12 +14,15 @@ import subprocess
 import sys
 import threading
 import time
+from collections.abc import Callable
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import pytest
 
 from youtube_automation.commands.collections import collection_serve
+
+_WAIT_TIMEOUT_SECONDS = 15.0
 
 
 class _NoopDiscoveryLifecycle:
@@ -44,6 +47,52 @@ def _read_record(path: Path) -> collection_serve._LifecycleRecord:
     record = collection_serve._read_pid_file(path)
     assert record is not None
     return record
+
+
+def _wait_until(predicate: Callable[[], bool], *, timeout: float, description: str) -> None:
+    expires_at = time.monotonic() + timeout
+    while not predicate():
+        if time.monotonic() >= expires_at:
+            pytest.fail(f"Timed out after {timeout:g} seconds waiting for {description}")
+        time.sleep(0.05)
+
+
+def _wait_for_server_identity(
+    pid_path: Path,
+    port: int,
+    *,
+    timeout: float = _WAIT_TIMEOUT_SECONDS,
+) -> collection_serve._LifecycleRecord:
+    ready_record: collection_serve._LifecycleRecord | None = None
+
+    def identity_is_ready() -> bool:
+        nonlocal ready_record
+        candidate = collection_serve._read_pid_file(pid_path)
+        if candidate is None or collection_serve._server_process_id(port, candidate) != candidate.pid:
+            return False
+        ready_record = candidate
+        return True
+
+    _wait_until(
+        identity_is_ready,
+        timeout=timeout,
+        description=f"HTTP identity for collection server on port {port}",
+    )
+    assert ready_record is not None
+    return ready_record
+
+
+def test_wait_until_reports_what_did_not_become_ready(monkeypatch):
+    clock = iter([0.0, 1.0])
+    monkeypatch.setattr(time, "monotonic", clock.__next__)
+    monkeypatch.setattr(time, "sleep", lambda _seconds: None)
+
+    with pytest.raises(pytest.fail.Exception, match="HTTP identity for collection server"):
+        _wait_until(
+            lambda: False,
+            timeout=1.0,
+            description="HTTP identity for collection server",
+        )
 
 
 def test_main_writes_pid_file_while_serving_and_removes_it_on_shutdown(monkeypatch, tmp_path):
@@ -261,17 +310,17 @@ def test_parallel_console_starts_publish_one_owner_and_reuse_it(tmp_path):
         for _ in range(2)
     ]
     try:
-        deadline = time.monotonic() + 10
-        while time.monotonic() < deadline:
-            if pid_path.exists() and sum(process.poll() is None for process in processes) == 1:
-                break
-            time.sleep(0.05)
+        record = _wait_for_server_identity(pid_path, port)
+        _wait_until(
+            lambda: sum(process.poll() is None for process in processes) == 1,
+            timeout=_WAIT_TIMEOUT_SECONDS,
+            description="one collection server owner and one completed reuse process",
+        )
 
         running = [process for process in processes if process.poll() is None]
         reused = [process for process in processes if process.poll() is not None]
         assert len(running) == 1
         assert len(reused) == 1
-        record = _read_record(pid_path)
         assert record.pid == running[0].pid
         reused_stdout, reused_stderr = reused[0].communicate(timeout=5)
         assert reused[0].returncode == 0
@@ -448,11 +497,8 @@ def test_distrokid_fallback_console_commands_stop_server_cleanly_without_traceba
         env=environment,
     )
     try:
-        deadline = time.monotonic() + 5
-        while not pid_path.exists() and time.monotonic() < deadline:
-            time.sleep(0.05)
-        record = _read_record(pid_path)
-        assert collection_serve._server_process_id(port, record) == server.pid
+        record = _wait_for_server_identity(pid_path, port)
+        assert record.pid == server.pid
 
         stopped = subprocess.run(
             [str(console_script), "--stop", "--port", str(port)],
@@ -518,10 +564,7 @@ collection_serve.main()
     )
     stopper: subprocess.Popen[str] | None = None
     try:
-        deadline = time.monotonic() + 5
-        while not pid_path.exists() and time.monotonic() < deadline:
-            time.sleep(0.05)
-        assert _read_record(pid_path).pid == server.pid
+        assert _wait_for_server_identity(pid_path, port).pid == server.pid
 
         stopper = subprocess.Popen(
             [str(console_script), "--stop", "--port", str(port)],
@@ -530,9 +573,11 @@ collection_serve.main()
             text=True,
             env=environment,
         )
-        deadline = time.monotonic() + 5
-        while not cleanup_started.exists() and time.monotonic() < deadline:
-            time.sleep(0.05)
+        _wait_until(
+            cleanup_started.exists,
+            timeout=_WAIT_TIMEOUT_SECONDS,
+            description="collection server cleanup to start",
+        )
 
         assert cleanup_started.exists()
         assert server.poll() is None
@@ -540,9 +585,11 @@ collection_serve.main()
             stopper.wait(timeout=0.5)
 
         allow_cleanup.touch()
-        deadline = time.monotonic() + 5
-        while server.poll() is None and time.monotonic() < deadline:
-            time.sleep(0.05)
+        _wait_until(
+            lambda: server.poll() is not None,
+            timeout=_WAIT_TIMEOUT_SECONDS,
+            description="collection server process to exit after cleanup",
+        )
         assert server.returncode == 0
         stopped_stdout, stopped_stderr = stopper.communicate(timeout=5)
         assert stopper.returncode == 0, stopped_stderr
@@ -576,11 +623,8 @@ def test_console_script_unexpected_sigterm_remains_traceable_failure(tmp_path):
         env=environment,
     )
     try:
-        deadline = time.monotonic() + 5
-        while not pid_path.exists() and time.monotonic() < deadline:
-            time.sleep(0.05)
-        record = _read_record(pid_path)
-        assert collection_serve._server_process_id(port, record) == server.pid
+        record = _wait_for_server_identity(pid_path, port)
+        assert record.pid == server.pid
 
         os.kill(server.pid, signal.SIGTERM)
         _stdout, stderr = server.communicate(timeout=10)
@@ -639,10 +683,7 @@ def test_console_stop_fails_and_preserves_pid_file_while_server_is_temporarily_u
     )
     resumed = False
     try:
-        deadline = time.monotonic() + 5
-        while not pid_path.exists() and time.monotonic() < deadline:
-            time.sleep(0.05)
-        record = _read_record(pid_path)
+        record = _wait_for_server_identity(pid_path, port)
         assert record.pid == server.pid
 
         os.kill(server.pid, signal.SIGSTOP)
