@@ -208,6 +208,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `fix(suno-helper)`: 外部 prompt の `style_influence` / `weirdness` が `null` の場合は未指定として slider 注入を skip し、Suno UI の現在値を維持する。数値 `0` は引き続き有効値として注入する（#3032）。
 - `fix(suno-verify)`: コレクションの明示パス指定を維持しつつ、bare directory name をチャンネルの `collections/planning/`、`collections/live/` の順に解決するようにした（#3243）。
 - `docs(suno)`: `yt-generate-suno` が `workflow-state.json` を自動更新するという誤記を削除し、成果物と検証結果を確認した `/suno` 呼び出し元のメインエージェント（`/wf-new` / `/wf-next` 経由と直接実行を含む）だけが `assets.music_prompts` を更新する責務を明記（#2559）。
+- `fix(videoup)`: 最終動画の尺検証で ffprobe / afinfo の小数精度から最大丸め誤差を算出し、1 フレーム境界の微小な丸め差を誤検知せず、境界超過と不正 probe 値は引き続き fail-loud にするよう修正（#3098）。
 
 - `fix(tests)`: pnpm Worker 契約テストの実行対象を `extensions/suno-helper` から依存ゼロの一時 project へ変更し、`node_modules` が無い環境で 494 パッケージ / 318MB の実インストールが検証前に走る構造を解消した。takt worker ではこの install が `SIGKILL` されて全体 pytest のベースラインが red になり、後続 issue が着手できなくなっていた。検証している契約は `PNPM_MAX_WORKERS` が pnpm のプロセス境界を越えることだけで、対象 project の依存構成は含まれない。あわせて stdout 末尾行に依存した assertion を、検証値へラベルを付けて行集合を検査する方式へ置き換えた。pnpm は依存ゼロでも `Already up to date` を出力し、その位置が 2 つの検証値の間に入るため位置依存の判定が成立しない（#3082）。
 - `fix(extensions)`: pnpm の tarball Worker 既定値を 1 に抑制し、macOS・Node 24 で発生する libuv abort による Fallow audit の偽 red を回避した（#3078）。
