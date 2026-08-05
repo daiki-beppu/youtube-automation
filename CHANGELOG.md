@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `fix(videoup)`: 有効化した登録ポップアップ画像を解決できない場合、ポップアップを黙って省略せず動画生成前にエラー終了する（#2579）。
+
 - `fix(doctor)`: duration TTP 証跡の同義ラベル・空白・区切り記号と、見出し配下の複数行箇条書きを解釈しつつ、根拠・対象 channel・上位5本・min/max・承認の必須条件を維持（#2545）。
 
 - `fix(suno-helper)`: 適応型ペーシング後の Create 直前に Turnstile を再確認し、表示中の新規投入を止めて解消後に同じ entry から重複なく再開する（#2536）。
