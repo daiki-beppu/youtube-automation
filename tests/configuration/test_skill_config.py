@@ -72,6 +72,23 @@ def test_channel_override_merged(tmp_path, monkeypatch):
     assert "model" in gemini_block
 
 
+def test_unknown_top_level_override_key_warns_but_still_merges(tmp_path, monkeypatch):
+    """#2520: 未知のトップレベルキーを silent に無視させない。"""
+    channel_dir = tmp_path / "ch"
+    (channel_dir / "config" / "skills").mkdir(parents=True)
+    override_path = channel_dir / "config" / "skills" / "thumbnail.yaml"
+    override_path.write_text(
+        yaml.safe_dump({"auto_select": {"enabled": True}}),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
+
+    with pytest.warns(UserWarning, match=r"thumbnail\.yaml.*auto_select"):
+        cfg = skill_config.load_skill_config("thumbnail", use_cache=False)
+
+    assert cfg["auto_select"] == {"enabled": True}
+
+
 def test_thumbnail_deprecated_override_keys_warn_but_still_merge(tmp_path, monkeypatch):
     """#1702: 縮小済みキーの override は壊さず deep-merge しつつ DeprecationWarning を出す。"""
     channel_dir = tmp_path / "ch"
@@ -340,14 +357,14 @@ def test_load_skill_config_falls_back_to_yaml_when_json_absent(tmp_path, monkeyp
     channel_dir = tmp_path / "ch"
     (channel_dir / "config" / "skills").mkdir(parents=True)
     (channel_dir / "config" / "skills" / "thumbnail.yaml").write_text(
-        yaml.safe_dump({"marker": "yaml"}),
+        yaml.safe_dump({"archive": {"marker": "yaml"}}),
         encoding="utf-8",
     )
     monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
 
     cfg = skill_config.load_skill_config("thumbnail", use_cache=False)
 
-    assert cfg.get("marker") == "yaml"
+    assert cfg.get("archive", {}).get("marker") == "yaml"
 
 
 def test_load_skill_config_masterup_json_root_must_be_mapping(tmp_path, monkeypatch):
@@ -685,11 +702,11 @@ def test_explicit_channel_dir_override_does_not_use_env(tmp_path, monkeypatch):
     (env_channel / "config" / "skills").mkdir(parents=True)
     (explicit_channel / "config" / "skills").mkdir(parents=True)
     (env_channel / "config" / "skills" / "thumbnail.yaml").write_text(
-        yaml.safe_dump({"marker": "env"}),
+        yaml.safe_dump({"archive": {"marker": "env"}}),
         encoding="utf-8",
     )
     (explicit_channel / "config" / "skills" / "thumbnail.yaml").write_text(
-        yaml.safe_dump({"marker": "explicit"}),
+        yaml.safe_dump({"archive": {"marker": "explicit"}}),
         encoding="utf-8",
     )
     monkeypatch.setenv("CHANNEL_DIR", str(env_channel))
@@ -697,9 +714,9 @@ def test_explicit_channel_dir_override_does_not_use_env(tmp_path, monkeypatch):
     env_cfg = skill_config.load_skill_config("thumbnail")
     cfg = skill_config.load_skill_config("thumbnail", channel_dir=explicit_channel)
 
-    assert env_cfg.get("marker") == "env"
-    assert cfg.get("marker") == "explicit"
-    assert skill_config.load_skill_config("thumbnail").get("marker") == "env"
+    assert env_cfg.get("archive", {}).get("marker") == "env"
+    assert cfg.get("archive", {}).get("marker") == "explicit"
+    assert skill_config.load_skill_config("thumbnail").get("archive", {}).get("marker") == "env"
 
 
 def test_channel_override_root_must_be_mapping(tmp_path, monkeypatch):
@@ -718,22 +735,22 @@ def test_cache_reset(tmp_path, monkeypatch):
     channel_dir = tmp_path / "ch"
     (channel_dir / "config" / "skills").mkdir(parents=True)
     override = channel_dir / "config" / "skills" / "thumbnail.yaml"
-    override.write_text(yaml.safe_dump({"marker": "a"}), encoding="utf-8")
+    override.write_text(yaml.safe_dump({"archive": {"marker": "a"}}), encoding="utf-8")
     monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
 
     cfg1 = skill_config.load_skill_config("thumbnail")
-    assert cfg1.get("marker") == "a"
+    assert cfg1.get("archive", {}).get("marker") == "a"
 
-    override.write_text(yaml.safe_dump({"marker": "b"}), encoding="utf-8")
+    override.write_text(yaml.safe_dump({"archive": {"marker": "b"}}), encoding="utf-8")
     # キャッシュされているので同じ値が返る
     cfg2 = skill_config.load_skill_config("thumbnail")
-    assert cfg2.get("marker") == "a"
+    assert cfg2.get("archive", {}).get("marker") == "a"
 
     # reset 後は再読み込み
     skill_config.reset("thumbnail")
     reset_config()
     cfg3 = skill_config.load_skill_config("thumbnail")
-    assert cfg3.get("marker") == "b"
+    assert cfg3.get("archive", {}).get("marker") == "b"
 
 
 def test_get_collection_ideate_thumbnail_mode_default(tmp_path, monkeypatch):
