@@ -110,6 +110,8 @@ def _run_batch(
     channel_dir: Path | None = None,
     project_environment: Path | None = None,
     runner_override: bool = True,
+    cwd: Path = ROOT,
+    channel_slug: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
     tools, codex_log, state = _mock_tools(tmp_path)
     batch = BATCH
@@ -127,12 +129,29 @@ def _run_batch(
         "PATH": f"{tools}:{os.environ['PATH']}",
         "MOCK_CODEX_LOG": str(codex_log),
         "MOCK_RUNNER_STATE": str(state),
+        "UV_PROJECT": str(ROOT),
     }
+    env.pop("CHANNEL", None)
+    env.pop("CHANNEL_DIR", None)
     if channel_dir is not None:
         env["CHANNEL_DIR"] = str(channel_dir)
+    if channel_slug is not None:
+        env["CHANNEL"] = channel_slug
     if project_environment is not None:
         env["UV_PROJECT_ENVIRONMENT"] = str(project_environment)
-    return subprocess.run(command, cwd=ROOT, env=env, text=True, capture_output=True, check=False)
+    return subprocess.run(command, cwd=cwd, env=env, text=True, capture_output=True, check=False)
+
+
+def _workspace_channel(workspace: Path, slug: str) -> Path:
+    channel = workspace / "channels" / slug
+    (channel / "config" / "channel").mkdir(parents=True)
+    skills = channel / "config" / "skills"
+    skills.mkdir()
+    (skills / "thumbnail.yaml").write_text(
+        "image_generation:\n  provider: codex\n  codex:\n    max_parallel: 1\n",
+        encoding="utf-8",
+    )
+    return channel
 
 
 def test_codex_config_defaults_overrides_and_rejects_invalid_parallelism() -> None:
@@ -228,6 +247,43 @@ def test_batch_reports_config_failure_after_environment_is_ready(tmp_path: Path)
     assert not (tmp_path / "codex.log").exists()
 
 
+@pytest.mark.parametrize(
+    ("channel_slug", "diagnostic"),
+    [
+        (None, "workspace ルートでは --channel <slug> または CHANNEL=<slug> を指定してください"),
+        ("missing", "CHANNEL='missing' に対応するチャンネルが見つかりません"),
+    ],
+)
+def test_batch_rejects_missing_or_wrong_workspace_channel_before_jobs(
+    tmp_path: Path,
+    channel_slug: str | None,
+    diagnostic: str,
+) -> None:
+    workspace = tmp_path / "workspace"
+    _workspace_channel(workspace, "alpha")
+    manifest = _manifest(tmp_path, ["one", "two"])
+
+    result = _run_batch(tmp_path, manifest, cwd=workspace, channel_slug=channel_slug)
+
+    assert result.returncode != 0
+    assert diagnostic in result.stderr
+    assert "候補: alpha" in result.stderr
+    assert not (tmp_path / "codex.log").exists()
+    assert not (tmp_path / "runner-state.json").exists()
+
+
+def test_batch_resolves_channel_slug_from_workspace_root(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    _workspace_channel(workspace, "alpha")
+    manifest = _manifest(tmp_path, ["one", "two"])
+
+    result = _run_batch(tmp_path, manifest, cwd=workspace, channel_slug="alpha")
+
+    assert result.returncode == 0, result.stderr
+    state = json.loads((tmp_path / "runner-state.json").read_text())
+    assert sorted(state["calls"]) == ["one", "two"]
+
+
 def test_batch_finishes_remaining_jobs_and_reports_failures(tmp_path: Path) -> None:
     manifest = _manifest(tmp_path, ["one", "FAIL two", "three"])
 
@@ -254,8 +310,9 @@ def test_batch_reports_multiline_failure_prompt_without_corrupting_entries(tmp_p
 
 def test_default_single_image_runner_skips_child_preflight_via_batch_shim(tmp_path: Path) -> None:
     manifest = _manifest(tmp_path, ["one", "two"])
+    channel = _workspace_channel(tmp_path / "workspace", "alpha")
 
-    result = _run_batch(tmp_path, manifest, max_parallel=2, runner_override=False)
+    result = _run_batch(tmp_path, manifest, max_parallel=2, runner_override=False, channel_dir=channel)
 
     assert result.returncode == 0, result.stderr
     assert (tmp_path / "codex.log").read_text().splitlines() == [
