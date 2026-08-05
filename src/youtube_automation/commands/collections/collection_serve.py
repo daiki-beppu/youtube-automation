@@ -190,7 +190,7 @@ def channel_hostname(channel_name: str) -> str:
     return f"{_hostname_slug(channel_name)}.localhost"
 
 
-def build_server_info(channel_name: str, channel_short: str, port: int) -> dict[str, str | int]:
+def build_server_info(channel_name: str, channel_short: str, port: int) -> dict[str, object]:
     """helper 拡張の接続先 selector に出す配信元情報（#1352）。"""
     hostname_source = (
         channel_short if channel_short and not re.search(r"[a-z0-9]", channel_name.lower()) else channel_name
@@ -1029,7 +1029,7 @@ def create_server(
     port: int,
     allow_origin: str | None,
     *,
-    server_info: dict[str, str | int] | None = None,
+    server_info: dict[str, object] | None = None,
     prompts_path: Path | None,
     collection_dir: Path | None,
     distrokid: Distrokid | None,
@@ -1061,6 +1061,8 @@ def create_server(
     resolved_server_info = (
         server_info if server_info is not None else build_server_info("YouTube Automation", "YA", port)
     )
+    distrokid_mode = "disabled" if not distrokid_enabled else ("dir" if dir_mode else "single")
+    resolved_server_info["capabilities"] = {"distrokid": {"mode": distrokid_mode}}
     resolved_community_asset_root = community_asset_root if community_asset_root is not None else collection_dir
 
     class _Handler(BaseHTTPRequestHandler):
