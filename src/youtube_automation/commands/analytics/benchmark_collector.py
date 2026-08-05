@@ -531,8 +531,11 @@ class BenchmarkCollector:
             "playlists": playlists_data,
         }
 
-    def save_json(self, data: dict) -> Path:
+    def save_json(self, data: dict, *, competitor_slug: str | None = None) -> Path:
         """中間 JSON を data/ に保存する。
+
+        ``competitor_slug`` 指定時は同日ファイルの同一 slug だけを更新し、
+        他チャンネルと playlist 収集済みフィールドを保持する。
 
         Returns:
             保存先パス
@@ -540,6 +543,22 @@ class BenchmarkCollector:
         self.data_dir.mkdir(parents=True, exist_ok=True)
         filename = f"benchmark_{self.today.strftime('%Y%m%d')}.json"
         path = self.data_dir / filename
+        if competitor_slug is not None and path.exists():
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    existing_data = json.load(f)
+            except json.JSONDecodeError:
+                existing_data = None
+            if existing_data is not None:
+                incoming_by_slug = {channel.get("slug"): channel for channel in data.get("channels", [])}
+                merged_channels = []
+                for existing_channel in existing_data.get("channels", []):
+                    incoming = incoming_by_slug.pop(existing_channel.get("slug"), None)
+                    merged_channels.append(
+                        {**existing_channel, **incoming} if incoming is not None else existing_channel
+                    )
+                merged_channels.extend(incoming_by_slug.values())
+                data = {**existing_data, **data, "channels": merged_channels}
         with open(path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
             f.write("\n")
@@ -1328,7 +1347,10 @@ def main():
         data = analyzer.analyze_thumbnails(data, keep=True)
 
     # JSON 保存
-    json_path = collector.save_json(data)
+    if args.competitor:
+        json_path = collector.save_json(data, competitor_slug=args.competitor)
+    else:
+        json_path = collector.save_json(data)
     print(f"JSON 保存: {json_path}")
 
     # Markdown 生成
