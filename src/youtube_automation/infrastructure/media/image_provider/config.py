@@ -110,6 +110,7 @@ class CodexConfig:
     """Codex shell 経路で使う prompt 設定。"""
 
     default_prompt_template: str = ""
+    ip_safety_clause: str = ""
     composition_rules: dict[str, object] | None = None
     thumbnail_guidance: str | None = None
     max_parallel: int = _DEFAULT_CODEX_MAX_PARALLEL
@@ -174,14 +175,20 @@ def _build_from_new_namespace(section: dict[str, Any]) -> ImageGenerationConfig:
     gemini_section = section.get("gemini")
     composition_rules = _composition_rules_from_gemini(gemini_section)
     thumbnail_guidance = _codex_thumbnail_guidance_from_gemini(gemini_section)
+    ip_safety_clause = _ip_safety_clause_from_gemini(gemini_section)
     codex_cfg = (
         _build_codex(
             section.get("codex"),
             composition_rules=composition_rules,
             thumbnail_guidance=thumbnail_guidance,
+            ip_safety_clause=ip_safety_clause,
         )
         if "codex" in section
-        else CodexConfig(composition_rules=composition_rules, thumbnail_guidance=thumbnail_guidance)
+        else CodexConfig(
+            composition_rules=composition_rules,
+            thumbnail_guidance=thumbnail_guidance,
+            ip_safety_clause=ip_safety_clause,
+        )
     )
     return ImageGenerationConfig(provider="codex", gemini=None, openai=None, codex=codex_cfg)
 
@@ -218,6 +225,7 @@ def _build_codex(
     *,
     composition_rules: dict[str, object] | None,
     thumbnail_guidance: str | None,
+    ip_safety_clause: str,
 ) -> CodexConfig:
     if not isinstance(d, dict):
         raise ConfigError("image_generation.codex は mapping で指定してください")
@@ -231,10 +239,23 @@ def _build_codex(
         raise ConfigError("image_generation.codex.max_parallel は 1 以上の整数で指定してください")
     return CodexConfig(
         default_prompt_template=template,
+        ip_safety_clause=ip_safety_clause,
         composition_rules=composition_rules,
         thumbnail_guidance=thumbnail_guidance,
         max_parallel=max_parallel,
     )
+
+
+def _ip_safety_clause_from_gemini(section: object) -> str:
+    if not isinstance(section, dict):
+        return ""
+    single_step = section.get("single_step")
+    if not isinstance(single_step, dict) or "ip_safety_clause" not in single_step:
+        return ""
+    clause = single_step["ip_safety_clause"]
+    if not isinstance(clause, str):
+        raise ConfigError("image_generation.gemini.single_step.ip_safety_clause は文字列で指定してください")
+    return clause.strip()
 
 
 def _composition_rules_from_gemini(section: object) -> dict[str, object] | None:
@@ -340,6 +361,12 @@ def _render_codex_thumbnail_guidance(guidance: str | None) -> str:
     return f"\n\nAdditional thumbnail guidance:\n{guidance}"
 
 
+def _append_codex_ip_safety_clause(prompt: str, clause: str) -> str:
+    if not clause or clause in prompt:
+        return prompt
+    return f"{prompt.rstrip()}\n\n{clause}"
+
+
 def _validate_required_legend_motif(rules: dict[str, object] | None) -> None:
     if not rules:
         return
@@ -361,6 +388,7 @@ def build_codex_prompt(skill_cfg: dict[str, Any], title: str) -> str:
         raise ConfigError("image_generation.provider=codex の設定で実行してください")
     _validate_required_legend_motif(cfg.codex.composition_rules)
     prompt = render_codex_prompt(cfg.codex.default_prompt_template, title)
+    prompt = _append_codex_ip_safety_clause(prompt, cfg.codex.ip_safety_clause)
     return (
         prompt
         + _render_codex_thumbnail_guidance(cfg.codex.thumbnail_guidance)
