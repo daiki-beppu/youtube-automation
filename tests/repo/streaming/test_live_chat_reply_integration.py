@@ -6,7 +6,7 @@ import re
 
 from tests.helpers.hcl import extract_block, read_file, strip_hcl_comments
 from tests.helpers.paths import REPO_ROOT
-from tests.streaming._helpers import _MAIN_TF, _STREAMING_DIR, _VARIABLES_TF, _VERSIONS_TF
+from tests.repo.streaming._helpers import _MAIN_TF, _STREAMING_DIR, _VARIABLES_TF, _VERSIONS_TF
 
 _REPO_ROOT = REPO_ROOT
 _UNIT = _STREAMING_DIR / "templates" / "live-chat-reply.service.tftpl"

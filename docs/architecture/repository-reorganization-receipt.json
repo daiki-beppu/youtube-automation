@@ -994,7 +994,7 @@
         "Moved-source audit: src/youtube_automation/utils/time_utils.py",
         "Updated consumer: src/youtube_automation/core/adapters/runtime.py",
         "Updated consumer: tests/domains/metadata/test_metadata_generator.py",
-        "Updated consumer: tests/unit/test_time_utils.py",
+        "Updated consumer: tests/infrastructure/runtime/test_time_utils.py",
         "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py"
       ]
     },

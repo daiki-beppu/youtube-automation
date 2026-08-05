@@ -35,6 +35,12 @@ uv run yt-skills diff --asset claude-md              # CLAUDE.md テンプレの
 
 ## テスト実行（pytest-xdist による並列化）
 
+### テストの配置
+
+`youtube_automation` の production module を実行して挙動を検証するテストは、`src/youtube_automation/` と同じ layer・subdirectory の `tests/<layer>/<sub>/test_<module>.py` に置く。repository の docs、CI、packaging、skill、Terraform などを静的に検査し、production module を実行しないテストは `tests/repo/` に置く。複数 layer をまたぐ実 tool の end-to-end テストは `tests/integration/`、共有 helper と fixture はそれぞれ `tests/helpers/` と `tests/fixtures/` に置く。
+
+新しいテストの配置先は、まず検証対象の canonical owner を確認して決める。同じ module に複数テストが対応する場合は basename を変えず同じ鏡像 directory に共存させる。単一 owner に帰属できない repository 横断テストは root の許可リストへ追加せず、適切な repository または integration 境界へ置く。配置規約は `tests/repo/test_tests_layout_contract.py` が検査する。
+
 ユニットテストスイートは待ち時間支配（実 sleep / subprocess 待ち。#2087 の計測で wall 213.5s に対し CPU 合計 ~43s）のため、[pytest-xdist](https://pytest-xdist.readthedocs.io/) による並列実行が有効。dev dependency に含まれている。
 
 ```bash

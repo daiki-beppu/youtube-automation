@@ -8,7 +8,7 @@ from __future__ import annotations
 import re
 
 from tests.helpers.hcl import read_file
-from tests.streaming._helpers import (
+from tests.repo.streaming._helpers import (
     _INSTALL_ROOT_TFTPL,
     _SYSTEMD_TFTPL,
 )

@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 
 from tests.helpers.hcl import read_file
-from tests.streaming._helpers import (
+from tests.repo.streaming._helpers import (
     _STREAMING_README,
     _STREAMING_SKILL,
     _TFSTATE_GCS_OBJECT,
