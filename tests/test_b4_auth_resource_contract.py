@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.helpers.paths import REPO_ROOT
+from tests.helpers.paths import REPO_ROOT, is_inside_worktree_store
 
 ROOT = REPO_ROOT
 CANONICAL_RELATIVE = Path("src/youtube_automation/infrastructure/resources/auth/client_secrets.template.json")
@@ -74,7 +74,10 @@ def test_canonical_template_is_the_only_source_and_has_no_root_copy() -> None:
     templates = sorted(
         path.relative_to(ROOT)
         for path in ROOT.rglob(TEMPLATE_NAME)
-        if ".git" not in path.parts and ".takt" not in path.parts and ".venv" not in path.parts
+        if ".git" not in path.parts
+        and ".takt" not in path.parts
+        and ".venv" not in path.parts
+        and not is_inside_worktree_store(path, ROOT)
     )
 
     assert canonical.is_file()

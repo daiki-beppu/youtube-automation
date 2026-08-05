@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.helpers.paths import REPO_ROOT
+from tests.helpers.paths import REPO_ROOT, is_inside_worktree_store
 
 _REPO_ROOT = REPO_ROOT
 _PROJECT_COPY_ENTRIES = (
@@ -25,8 +25,20 @@ _PROJECT_COPY_ENTRIES = (
     "uv.lock",
     "src",
 )
-_PROJECT_COPY_IGNORE = shutil.ignore_patterns(".pytest_cache", "__pycache__", "*.pyc")
+_BUILD_ARTIFACT_IGNORE = shutil.ignore_patterns(".pytest_cache", "__pycache__", "*.pyc")
 _MAX_PROJECT_COPY_BYTES = 10 * 1024 * 1024
+
+
+def _project_copy_ignore(directory: str, names: list[str]) -> set[str]:
+    """ビルド生成物と worktree 置き場をコピー対象から外す。
+
+    `.claude` を丸ごとコピーするため、規約どおり `.claude/worktrees/` に切られた
+    worktree をそのまま含めるとコピーが GB 級に膨らむ。サイズ上限は `.claude` 自体の
+    肥大を検出するためのものなので、上限を緩めずに worktree だけを除外する。
+    """
+    ignored = set(_BUILD_ARTIFACT_IGNORE(directory, names))
+    ignored.update(name for name in names if is_inside_worktree_store(Path(directory) / name, _REPO_ROOT))
+    return ignored
 
 
 def _nix_is_available() -> bool:
@@ -78,7 +90,7 @@ def project_copy(tmp_path: Path, request: pytest.FixtureRequest) -> Path:
         source = _REPO_ROOT / entry_name
         destination = project / entry_name
         if source.is_dir():
-            shutil.copytree(source, destination, ignore=_PROJECT_COPY_IGNORE)
+            shutil.copytree(source, destination, ignore=_project_copy_ignore)
         else:
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, destination)
