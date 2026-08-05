@@ -479,7 +479,7 @@ patterns:
 uv run yt-generate-suno <collection-path>
 ```
 
-`config/skills/suno.yaml` の `genre_line` + `exclude_styles` + `style_influence` をパターンに自動付加して `suno-prompts.md` と `suno-prompts.json` を生成する。ボーカルモードでは entry `name` を使い、同階層の `suno-lyrics.json` から同名 lyrics を Style とマージする。保存後、`workflow-state.json` の `assets.music_prompts = true` に更新する。
+`config/skills/suno.yaml` の `genre_line` + `exclude_styles` + `style_influence` をパターンに自動付加して `suno-prompts.md` と `suno-prompts.json` を生成する。ボーカルモードでは entry `name` を使い、同階層の `suno-lyrics.json` から同名 lyrics を Style とマージする。
 
 Suno helper の Custom Duration を collection 共通で指定する場合は、チャンネル側 `config/skills/suno.yaml` に秒単位の正の整数 `duration_sec` を設定する。明示した場合だけ同じ数値を `suno-prompts.json` の全 entry へ出力し、未設定時はキー自体を省略する。`duration_sec` は生成前の目標尺であり、生成後 clip の採用範囲を表す `duration_filter` から推定・同期しない。
 
@@ -499,6 +499,8 @@ uv run yt-suno-verify <collection-path>
 ```
 
 `suno-prompts.json` / `suno-lyrics.json` の展開後 entry 数、entry name、歌詞構造、`genre_line` 文字数を検証し、exit 0 を確認する。その後、別コンテキスト reviewer が `suno-prompts.json` のみを読み、`.claude/skills/suno-lyric/references/review-rubric.md` に従って LLM semantic review を実行し、entry ごとに `PASS` / `FAIL` + 理由を出す。reviewer は `name`, `style`, `lyrics` と、存在する場合のみ More Options 補助 field だけを判定材料にし、`review_context` 欠落を `/suno` entry の failure reason にしない。`FAIL` entry のみ最大 2 周まで generator subagent（Codex では別コンテキスト実行）に再生成させる。全 entry が `PASS` した後にだけ Suno UI へ投入する。上限到達時に `FAIL` が残る場合は Step 3 へ進まず、残課題をユーザーに提示する。
+
+`yt-generate-suno` 自体は `workflow-state.json` を更新しない。`/suno` を呼び出したメインエージェント（`/wf-new` / `/wf-next` からの呼び出しと、`/suno` の直接実行を含む）が、生成された成果物、`yt-suno-verify` の成功、semantic review の全 entry `PASS` を確認した後にだけ、`assets.music_prompts = true`、`planning.music`、`updated_at` を更新する。subagent は state を書き込まない。
 
 ### Step 3: `/suno-helper` で自動投入（推奨）
 

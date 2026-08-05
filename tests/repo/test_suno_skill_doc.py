@@ -471,14 +471,38 @@ def test_suno_blocks_step_3_until_semantic_review_passes() -> None:
     assert step_2_match, "SKILL.md に `/suno` Step 2 節が見つからない"
     step_2 = step_2_match.group(0)
 
-    for token in (
-        "`workflow-state.json` の `assets.music_prompts = true` に更新する",
-        "全 entry が `PASS` した後にだけ Suno UI へ投入する",
-        "Step 3 へ進まず",
-    ):
+    for token in ("全 entry が `PASS` した後にだけ Suno UI へ投入する", "Step 3 へ進まず"):
         assert token in step_2, f"/suno Step 2 に semantic review gate 契約がない（`{token}` 不在）"
 
     _assert_before(step_2, "LLM semantic review", "Suno UI へ投入する")
+
+
+def test_suno_documents_workflow_state_writer_boundary() -> None:
+    """Issue #2559: CLI/subagent ではなく呼び出し元のメインが検証後に state を更新する."""
+    text = _read()
+    step_2_match = re.search(
+        r"### Step 2: スクリプトで suno-prompts\.md を生成\b.*?(?=^### Step 3:)",
+        text,
+        flags=re.DOTALL | re.MULTILINE,
+    )
+    assert step_2_match, "SKILL.md に `/suno` Step 2 節が見つからない"
+    step_2 = step_2_match.group(0)
+
+    for token in (
+        "`yt-generate-suno` 自体は `workflow-state.json` を更新しない",
+        "`/suno` を呼び出したメインエージェント",
+        "`/wf-new` / `/wf-next` からの呼び出し",
+        "`/suno` の直接実行",
+        "`yt-suno-verify` の成功",
+        "semantic review の全 entry `PASS`",
+        "`assets.music_prompts = true`",
+        "subagent は state を書き込まない",
+    ):
+        assert token in step_2, f"/suno Step 2 に state writer 境界がない（`{token}` 不在）"
+
+    assert "保存後、`workflow-state.json` の `assets.music_prompts = true` に更新する" not in step_2
+    assert "`/wf-new` または `/wf-next` のメインエージェント" not in step_2
+    _assert_before(step_2, "全 entry が `PASS`", "`assets.music_prompts = true`")
 
 
 def test_review_rubric_documents_required_semantic_viewpoints() -> None:
