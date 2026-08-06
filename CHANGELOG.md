@@ -74,6 +74,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `fix(suno-helper)`: 適応型ペーシング後の Create 直前に Turnstile を再確認し、表示中の新規投入を止めて解消後に同じ entry から重複なく再開する（#2536）。
 
 - `fix(config)`: channel skill-config の未知のトップレベルキーを警告し、`thumbnail.yaml` の誤った `auto_select` 階層などが silent に無視される状態を防止（#2520）。
+- `feat(suno)`: collection の `suno-patterns.yaml` に `genre_line` がある場合は channel 設定より優先し、Style と mode 推定を collection ごとに分離（#3134）。
 
 ### Changed
 
