@@ -1473,10 +1473,20 @@ export default defineContentScript({
         isAborted,
         now: Date.now,
       });
-      return evaluateClips(
-        clipIds.map((id) => ({ id, duration: tracker.getDuration(id) })),
-        durationFilter
-      );
+      const failedSubmittedIds = new Set(tracker.getFailedSubmittedIds());
+      const failedClipIds = clipIds.filter((id) => failedSubmittedIds.has(id));
+      return failedClipIds.length > 0
+        ? { kind: "generation-failed" as const, failedClipIds }
+        : {
+            kind: "evaluated" as const,
+            evaluation: evaluateClips(
+              clipIds.map((id) => ({
+                id,
+                duration: tracker.getDuration(id),
+              })),
+              durationFilter
+            ),
+          };
     }
 
     interface RunOptions {
@@ -1932,7 +1942,7 @@ export default defineContentScript({
               options.durationFilter ?? DEFAULT_DURATION_FILTER;
             let attemptResult;
             try {
-              const evaluation = await evaluateAttemptYield(
+              const yieldResult = await evaluateAttemptYield(
                 attemptClipIds,
                 durationFilter,
                 () => aborted
@@ -1951,7 +1961,25 @@ export default defineContentScript({
                 });
                 return;
               }
-              attemptResult = { kind: "evaluated" as const, evaluation };
+              if (yieldResult.kind === "generation-failed") {
+                const message = `生成に失敗した clip を検出しました (status=error): ${yieldResult.failedClipIds.join(", ")}`;
+                tracker.dropSubmittedIds(attemptClipIds);
+                failedIndices.push(i);
+                console.warn(`[suno-helper] entry ${i}: ${message}`);
+                emitProgress({
+                  phase: PHASE.ENTRY_FAILED,
+                  index: i,
+                  total,
+                  message,
+                  yieldRetryCount,
+                  log: {
+                    kind: "skip",
+                    entryName: entryDisplayName(entries[i]),
+                  },
+                });
+                break;
+              }
+              attemptResult = yieldResult;
             } catch (err) {
               attemptResult = {
                 kind: "evaluation-failed" as const,
