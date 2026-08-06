@@ -2,11 +2,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  ADAPTIVE_BURST_COOLDOWN_MS,
   BALANCED_RUN_PACING,
   CLIPS_PER_REQUEST,
   INFLIGHT_STALL_TIMEOUT_MS,
   PHASE,
 } from "../../shared/constants";
+import type { WaitForCaptchaClearOptions } from "../../shared/dom";
 import {
   findPlaylistUrlsByName,
   fillPlaylistNameAndCreate,
@@ -89,10 +91,14 @@ const harness = vi.hoisted(() => {
       return [];
     }),
     waitForGeneration: vi.fn<() => Promise<void>>(async () => undefined),
+    waitForCaptchaClear: vi.fn<
+      (options: WaitForCaptchaClearOptions) => Promise<void>
+    >(async () => undefined),
     waitForQueueSlot: vi.fn<
       (maxGeneratingClips: number, options?: unknown) => Promise<void>
     >(async () => undefined),
     useActualAbortableSleep: false,
+    onAbortableSleep: undefined as ((ms: number) => Promise<void>) | undefined,
     // 既定は実装呼び出し（下の shared/dom mock factory で束縛）。空 queue で WAITING_SLOT が
     // 失敗しない回帰テストを実装ごと通すため、テスト個別の stall 注入だけ mockImplementation で上書きする。
     actualWaitForQueueSlot: null as
@@ -135,12 +141,13 @@ vi.mock("../../shared/dom", async () => {
   return {
     ...actual,
     abortableSleep: vi.fn(async (ms: number, isAborted: () => boolean) => {
+      await harness.onAbortableSleep?.(ms);
       if (harness.useActualAbortableSleep) {
         await actual.abortableSleep(ms, isAborted);
       }
     }),
     injectAdvancedFields: vi.fn(async () => undefined),
-    waitForCaptchaClear: vi.fn(async () => undefined),
+    waitForCaptchaClear: harness.waitForCaptchaClear,
     waitForGeneration: harness.waitForGeneration,
     waitForQueueSlot: harness.waitForQueueSlot,
   };
@@ -571,6 +578,7 @@ beforeEach(() => {
   harness.requestFeedPollError = undefined;
   harness.abortOnRequestFeedPoll = false;
   harness.useActualAbortableSleep = false;
+  harness.onAbortableSleep = undefined;
   harness.requestFeedPoll.mockReset();
   harness.requestFeedPoll.mockImplementation(async (ids: string[]) => {
     if (harness.abortOnRequestFeedPoll) {
@@ -587,6 +595,8 @@ beforeEach(() => {
   });
   harness.waitForGeneration.mockReset();
   harness.waitForGeneration.mockResolvedValue(undefined);
+  harness.waitForCaptchaClear.mockReset();
+  harness.waitForCaptchaClear.mockResolvedValue(undefined);
   harness.waitForQueueSlot.mockReset();
   // 既定は実装呼び出し（vi.fn(actual.waitForQueueSlot) 相当）。no-op 既定にすると
   // 「Remix 0 かつ空 queue で初回 WAITING_SLOT で失敗しない」回帰テストが空虚に通る。
@@ -603,6 +613,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
@@ -881,6 +892,66 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
       expect(harness.feedPollerStop).toHaveBeenCalledOnce()
     );
   });
+
+  it.each(["serial", "queue"] as const)(
+    "Given %s mode の適応型ペーシング中に challenge が出現 When 解消する Then waiting-captcha 中は Create せず同じ entry を1回だけ投入する",
+    async (runMode) => {
+      vi.useFakeTimers();
+      makeViewButton("Newest ▼");
+      makeViewButton("Grid");
+      makeTextarea(null);
+      makeTextarea("lyrics-textarea");
+      const clickGenerate = vi.fn();
+      makeGenerateButtonWithClickObserver(clickGenerate);
+      addCompletedRemixCard();
+      await loadContentScript();
+      let challengeVisible = false;
+
+      harness.onAbortableSleep = async (ms) => {
+        if (ms === ADAPTIVE_BURST_COOLDOWN_MS) {
+          challengeVisible = true;
+        }
+      };
+      harness.waitForCaptchaClear.mockImplementation(async (options) => {
+        if (!challengeVisible) {
+          return;
+        }
+        options.onWaitStart?.();
+        await new Promise<void>((resolve) => {
+          setTimeout(() => {
+            challengeVisible = false;
+            resolve();
+          }, 1000);
+        });
+      });
+
+      const entries = makePromptEntries(5);
+      expect(
+        getRunHandler()({
+          data: { ...makeRunPayload(entries), runMode },
+        })
+      ).toEqual({ ok: true });
+
+      await vi.advanceTimersByTimeAsync(0);
+      expect(clickGenerate).toHaveBeenCalledTimes(4);
+      expect(progressPayloads()).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            phase: PHASE.WAITING_CAPTCHA,
+            index: 4,
+            total: 5,
+          }),
+        ])
+      );
+
+      await vi.advanceTimersByTimeAsync(999);
+      expect(clickGenerate).toHaveBeenCalledTimes(4);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(clickGenerate).toHaveBeenCalledTimes(5);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(clickGenerate).toHaveBeenCalledTimes(5);
+    }
+  );
 
   it("duration guard の pending 減少後は新しい stall deadline まで待機し、停滞時だけ timeout する", async () => {
     await loadContentScript();
@@ -2098,6 +2169,7 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
       { timeout: 3000 }
     );
     expect(clickGenerate).toHaveBeenCalledTimes(3);
+    expect(harness.waitForCaptchaClear).toHaveBeenCalledTimes(6);
     expect(harness.droppedClipIds).toEqual([
       "serial-on-1-a",
       "serial-on-1-b",

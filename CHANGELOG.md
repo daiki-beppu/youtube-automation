@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `fix(videoup)`: 有効化した登録ポップアップ画像を解決できない場合、ポップアップを黙って省略せず動画生成前にエラー終了する（#2579）。
+
+- `fix(doctor)`: duration TTP 証跡の同義ラベル・空白・区切り記号と、見出し配下の複数行箇条書きを解釈しつつ、根拠・対象 channel・上位5本・min/max・承認の必須条件を維持（#2545）。
+
+- `fix(suno-helper)`: 適応型ペーシング後の Create 直前に Turnstile を再確認し、表示中の新規投入を止めて解消後に同じ entry から重複なく再開する（#2536）。
+
+- `fix(config)`: channel skill-config の未知のトップレベルキーを警告し、`thumbnail.yaml` の誤った `auto_select` 階層などが silent に無視される状態を防止（#2520）。
+
 ### Changed
 
 - `refactor(tests)`: 旧 `unit` / `streaming` テストを canonical owner と `tests/repo/streaming/` へ整理し、root allowlist・source layer・source owner の配置規約を repository contract として機械担保した（#3047）。
@@ -29,6 +37,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `docs(release-notes)`: 運営者向け公開リリースノートの frontmatter・本文・表記契約を定義し、v5.5.17 / v5.6.0 / ext-v0.2.5 / ext-v0.3.0 の初期 4 件を `docs/release-notes/` へ追加した。非公開チャット向け digest を Web 用 Markdown へ移植し、更新判断に必要な新機能・改善・修正・移行手順を保ちながら、コミュニティ固有記号、issue・PR 番号、内部実装名、本文全体のコードブロックを除去した。必須 frontmatter、所定見出し、タグと Release リンクの一致、公開表記は契約テストで機械担保する（#3054）。
 
 ### Fixed
+
+- `fix(distrokid-helper)`: dir mode のコレクション選択表示を `アルバム名（曲数）` へ簡略化し、選択中ラベルの省略表示と候補一覧の横 overflow 防止を追加。表示と独立した `collection_id / disc` の選択 identity は維持した（#2515）。
+- `fix(suno-helper)`: Suno ZIP の clip 名に含まれる em-dash 周りの空白差・全角空白・`(1)` / `_1` 重複 suffix を prompts の同一 entry として照合し、配置 skip を防ぐようにした（#3002）。
+- `fix(suno-helper)`: localhost mutation の失敗時に、後続の serve token 再取得エラーで上書きせず、元の request の method・path・status を構造化エラーとして保持するようにした（#3000）。
+- `fix(videoup)`: マルチチャンネル workspace で `overlays.subscribe_popup.image` の相対パスを、canonical `config/channel/youtube.json` が属するチャンネルルートから解決できるようにした（#3208）。
 
 - `fix(tests)`: pnpm Worker 契約テストの実行対象を `extensions/suno-helper` から依存ゼロの一時 project へ変更し、`node_modules` が無い環境で 494 パッケージ / 318MB の実インストールが検証前に走る構造を解消した。takt worker ではこの install が `SIGKILL` されて全体 pytest のベースラインが red になり、後続 issue が着手できなくなっていた。検証している契約は `PNPM_MAX_WORKERS` が pnpm のプロセス境界を越えることだけで、対象 project の依存構成は含まれない。あわせて stdout 末尾行に依存した assertion を、検証値へラベルを付けて行集合を検査する方式へ置き換えた。pnpm は依存ゼロでも `Already up to date` を出力し、その位置が 2 つの検証値の間に入るため位置依存の判定が成立しない（#3082）。
 - `fix(extensions)`: pnpm の tarball Worker 既定値を 1 に抑制し、macOS・Node 24 で発生する libuv abort による Fallow audit の偽 red を回避した（#3078）。

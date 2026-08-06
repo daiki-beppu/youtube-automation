@@ -203,6 +203,16 @@ with open(sys.argv[1], encoding="utf-8") as f:
 print(str(data.get("overlays", {}).get("subscribe_popup", {}).get("enabled", False)).lower())
 PY
         ;;
+    *".overlays.subscribe_popup.image"*)
+        python3 - "$file" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as f:
+    data = json.load(f)
+print(data.get("overlays", {}).get("subscribe_popup", {}).get("image", ""))
+PY
+        ;;
     *".overlays.encoder.codec"*) printf '%s\\n' "${OVERLAY_ENCODER_CODEC:-}" ;;
     *".overlays.encoder.preset"*) printf '%s\\n' "${OVERLAY_ENCODER_PRESET:-}" ;;
     *".overlays.encoder.crf"*) printf '%s\\n' "${OVERLAY_ENCODER_CRF:-}" ;;
@@ -2113,6 +2123,75 @@ def test_preview_overlay_filter_includes_effect_visualizer_and_popup(tmp_path: P
     assert preview_cmd.index("showfreqs=mode=bar") < preview_cmd.index("fade=t=in")
     assert " -t 25 " in f" {preview_cmd} "
     assert "Route   : overlays + particles effect/full encode" in result.stdout
+
+
+def test_enabled_subscribe_popup_with_missing_image_fails_before_ffmpeg(tmp_path: Path) -> None:
+    """#2579: 有効な popup 画像を解決できなければ動画生成を成功扱いにしない。"""
+    collection = _create_collection(tmp_path)
+    overlays_config = tmp_path / "youtube.json"
+    overlays_config.write_text(
+        json.dumps(
+            {
+                "overlays": {
+                    "enabled": True,
+                    "audio_visualizer": {"enabled": False},
+                    "subscribe_popup": {
+                        "enabled": True,
+                        "image": "missing-popup.png",
+                    },
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result, ffmpeg_log = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        extra_env={"OVERLAYS_CONFIG": str(overlays_config)},
+        collection=collection,
+    )
+
+    assert result.returncode != 0
+    assert "ERROR: subscribe popup image not found: missing-popup.png" in result.stdout + result.stderr
+    assert not ffmpeg_log.exists()
+    assert not (collection / "01-master" / "Ambient-Master.mp4").exists()
+
+
+def test_subscribe_popup_resolves_relative_to_canonical_channel_root(tmp_path: Path) -> None:
+    """#3208: nested workspace の popup は選択チャンネルの branding から解決する。"""
+    channel_root = tmp_path / "workspace with spaces" / "channels" / "focus"
+    collection = _create_collection(channel_root / "collections" / "planning")
+    popup = channel_root / "branding" / "subscribe-popup.png"
+    popup.parent.mkdir(parents=True)
+    popup.write_bytes(b"fake-popup")
+    config = channel_root / "config" / "channel" / "youtube.json"
+    config.parent.mkdir(parents=True)
+    config.write_text(
+        json.dumps(
+            {
+                "overlays": {
+                    "enabled": True,
+                    "audio_visualizer": {"enabled": False},
+                    "subscribe_popup": {
+                        "enabled": True,
+                        "image": "branding/subscribe-popup.png",
+                    },
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result, ffmpeg_log = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        extra_env={"CHANNEL_DIR": ""},
+        collection=collection,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert str(popup) in _filter_complex_command(ffmpeg_log)
 
 
 def test_no_preview_keeps_master_output_contract(tmp_path: Path) -> None:

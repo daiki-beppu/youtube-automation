@@ -108,6 +108,28 @@ export type Fetcher = (
   init?: RequestInit
 ) => Promise<Response>;
 
+export class ApiRequestError extends Error {
+  readonly method: string;
+  readonly path: string;
+  readonly status: number;
+  readonly statusText: string;
+
+  constructor(
+    method: string,
+    path: string,
+    status: number,
+    statusText: string,
+    message = `${method} ${path} failed: ${status}${statusText ? ` ${statusText}` : ""}`
+  ) {
+    super(message);
+    this.name = "ApiRequestError";
+    this.method = method;
+    this.path = path;
+    this.status = status;
+    this.statusText = statusText;
+  }
+}
+
 export type CompatibilityResult =
   | {
       status: "compatible" | "incompatible";
@@ -778,7 +800,13 @@ export async function recordDistrokidRelease(
     requestContext
   );
   if (!resp.ok) {
-    throw new Error(`HTTP ${resp.status}`);
+    throw new ApiRequestError(
+      "POST",
+      DISTROKID_RELEASES_ROUTE,
+      resp.status,
+      resp.statusText,
+      `HTTP ${resp.status}`
+    );
   }
 }
 
@@ -820,7 +848,15 @@ async function fetchServeToken(
     Object.keys(headers).length > 0
       ? await fetch(url, { headers })
       : await fetch(url);
-  if (!res.ok) throw new Error(`GET /auth/token failed: ${res.status}`);
+  if (!res.ok) {
+    throw new ApiRequestError(
+      "GET",
+      "/auth/token",
+      res.status,
+      res.statusText,
+      `GET /auth/token failed: ${res.status}`
+    );
+  }
   const data: unknown = await res.json();
   if (
     !data ||
@@ -863,7 +899,19 @@ async function postJsonWithServeToken(
     await fetchServeToken(normalizedBaseUrl, requestContext)
   );
   if (res.status === 403) {
-    res = await post(await fetchServeToken(normalizedBaseUrl, requestContext));
+    const originatingError = new ApiRequestError(
+      "POST",
+      route,
+      res.status,
+      res.statusText
+    );
+    try {
+      res = await post(
+        await fetchServeToken(normalizedBaseUrl, requestContext)
+      );
+    } catch {
+      throw originatingError;
+    }
   }
   return res;
 }
@@ -889,7 +937,13 @@ export async function postDownloaded(
     requestContext
   );
   if (!res.ok) {
-    throw new Error(`POST downloaded failed: ${res.status} ${res.statusText}`);
+    throw new ApiRequestError(
+      "POST",
+      collectionDownloadedRoute(collectionId),
+      res.status,
+      res.statusText,
+      `POST downloaded failed: ${res.status} ${res.statusText}`
+    );
   }
   // サーバーは部分完了（期待数未満の配置）を warning 付き 200 で返す (#1913)。
   // body が JSON でない・warning が無い場合は完全成功として扱う
@@ -919,7 +973,13 @@ export async function consumeUnattendedRequest(
   const route = `/unattended/requests/${encodeURIComponent(nonce)}/consume`;
   const res = await postJsonWithServeToken(baseUrl, route, {}, requestContext);
   if (!res.ok) {
-    throw new Error(`unattended request consume failed: HTTP ${res.status}`);
+    throw new ApiRequestError(
+      "POST",
+      route,
+      res.status,
+      res.statusText,
+      `unattended request consume failed: HTTP ${res.status}`
+    );
   }
   return res.json();
 }

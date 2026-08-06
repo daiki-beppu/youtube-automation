@@ -7,11 +7,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   DEFAULT_DURATION_FILTER,
+  ApiRequestError,
   type CollectionSummary,
   type DurationFilter,
   type PromptEntry,
   checkServerCompatibility,
   collectionHasPrompts,
+  consumeUnattendedRequest,
   fetchCollectionPromptResponse,
   fetchCollections,
   fetchCollectionPrompts,
@@ -19,6 +21,7 @@ import {
   formatCompatibilityWarning,
   pickInitialCollectionId,
   postDownloaded,
+  recordDistrokidRelease,
   resolvePromptCollectionId,
   resolveCompatibilityWarning,
   visiblePromptCollections,
@@ -1303,6 +1306,87 @@ describe("shared/api postDownloaded: 正常系", () => {
 });
 
 describe("shared/api postDownloaded: 異常系 (fail-loud)", () => {
+  it("Given unattended mutation が 500 When consume Then originating request context を保持して throw する", async () => {
+    const fetchFn = mockFetchForDownloaded(() => ({
+      ok: false,
+      status: 500,
+      statusText: "Internal Server Error",
+      json: async () => ({ error: "consume failed" }),
+    }));
+    const route = "/unattended/requests/nonce%2Fwith%20space/consume";
+    const request = consumeUnattendedRequest(BASE_URL, "nonce/with space");
+
+    await expect(request).rejects.toBeInstanceOf(ApiRequestError);
+    await expect(request).rejects.toMatchObject({
+      method: "POST",
+      path: route,
+      status: 500,
+      statusText: "Internal Server Error",
+      message: "unattended request consume failed: HTTP 500",
+    });
+    expect(fetchFn).toHaveBeenCalledWith(
+      `${BASE_URL}${route}`,
+      expect.objectContaining({ method: "POST", body: "{}" })
+    );
+  });
+
+  it("Given POST 403 後の token 再取得も失敗 When postDownloaded Then originating request を保持して throw する", async () => {
+    let tokenCallCount = 0;
+    const fetchFn = vi.fn(async (url: string) => {
+      if (url.includes("/auth/token")) {
+        tokenCallCount += 1;
+        return {
+          ok: tokenCallCount === 1,
+          status: tokenCallCount === 1 ? 200 : 403,
+          statusText: tokenCallCount === 1 ? "OK" : "Forbidden",
+          json: async () => ({ token: "stale-token" }),
+        } as Response;
+      }
+      return {
+        ok: false,
+        status: 403,
+        statusText: "Forbidden",
+        json: async () => ({}),
+      } as Response;
+    });
+    vi.stubGlobal("fetch", fetchFn);
+
+    const request = postDownloaded(BASE_URL, "20260601-clm-aaa-collection", {
+      file_count: 0,
+      format: "mp3",
+      suno_playlist_url: "https://suno.com/playlist/test",
+    });
+
+    await expect(request).rejects.toMatchObject({
+      method: "POST",
+      path: "/collections/20260601-clm-aaa-collection/downloaded",
+      status: 403,
+    });
+    await expect(request).rejects.toBeInstanceOf(ApiRequestError);
+    await expect(request).rejects.not.toThrow(/GET \/auth\/token/);
+  });
+
+  it("Given DistroKid mutation が 500 When recordDistrokidRelease Then originating request を保持して throw する", async () => {
+    mockFetchForDownloaded(() => ({
+      ok: false,
+      status: 500,
+      statusText: "Internal Server Error",
+      json: async () => ({}),
+    }));
+
+    await expect(
+      recordDistrokidRelease(BASE_URL, {
+        collection_id: "20260601-clm-aaa-collection",
+        disc: "disc-1",
+        album_title: "Album",
+      })
+    ).rejects.toMatchObject({
+      method: "POST",
+      path: "/distrokid/releases",
+      status: 500,
+    });
+  });
+
   it("Given /auth/token が非 2xx When postDownloaded Then downloaded POST に進まず throw する", async () => {
     const fetchFn = vi.fn(async (url: string) => {
       if (typeof url === "string" && url.includes("/auth/token")) {

@@ -357,6 +357,54 @@ describe("DistroKid popup compatibility check", () => {
     expect(stopButton?.dataset.variant).toBe("outline");
   });
 
+  it("コレクション selector は選択中と候補をアルバム名（曲数）で表示し、横 overflow を防ぐ", async () => {
+    vi.mocked(serverUrlItem.getValue).mockResolvedValue(BASE_URL);
+    stubDirModeServer();
+
+    await renderApp();
+
+    const trigger = container.querySelector<HTMLButtonElement>(
+      '[data-distrokid-control="collection-select"]'
+    )!;
+    await waitFor(() => {
+      expect(trigger.textContent).toBe(
+        `${DISC1.album_title}（${DISC1.track_count} 曲）`
+      );
+    });
+    expect(Array.from(trigger.classList)).toEqual(
+      expect.arrayContaining(["w-full", "min-w-0", "overflow-hidden"])
+    );
+    expect(
+      Array.from(
+        trigger.querySelector<HTMLElement>('[data-slot="select-value"]')!
+          .classList
+      )
+    ).toEqual(expect.arrayContaining(["min-w-0", "truncate"]));
+
+    await act(async () => trigger.click());
+    const collectionOptions = (): HTMLElement[] =>
+      Array.from(
+        document.querySelectorAll<HTMLElement>('[role="option"]')
+      ).filter(
+        (option) => option.dataset.value === "0" || option.dataset.value === "1"
+      );
+    await waitFor(() => expect(collectionOptions()).toHaveLength(2));
+    expect(
+      collectionOptions().map((option) => ({
+        text: option.textContent,
+        value: option.dataset.value,
+      }))
+    ).toEqual([
+      { text: `${DISC1.album_title}（${DISC1.track_count} 曲）`, value: "0" },
+      { text: `${DISC2.album_title}（${DISC2.track_count} 曲）`, value: "1" },
+    ]);
+    expect(
+      collectionOptions()[0].closest<HTMLElement>(
+        '[data-slot="select-content"]'
+      )?.classList
+    ).toContain("overflow-x-hidden");
+  });
+
   it("全 disc が配信済みなら選択肢を表示せず all-released 状態を案内する", async () => {
     vi.mocked(serverUrlItem.getValue).mockResolvedValue(BASE_URL);
     fetchMock.mockImplementation(async (url: string) => {
@@ -467,7 +515,26 @@ describe("DistroKid popup compatibility check", () => {
 
   it("collection 選択時に一覧を最新化し、選択 disc の release へ自動更新する", async () => {
     vi.mocked(serverUrlItem.getValue).mockResolvedValue(BASE_URL);
-    stubDirModeServer();
+    const sameLabelDisc2 = {
+      ...DISC2,
+      album_title: DISC1.album_title,
+      track_count: DISC1.track_count,
+    };
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === `${BASE_URL}/server-info` || url === `${BASE_URL}/version`) {
+        return jsonResponse(404, {});
+      }
+      if (url === `${BASE_URL}/distrokid/collections`) {
+        return jsonResponse(200, [DISC1, sameLabelDisc2]);
+      }
+      if (url.includes(`/${DISC1.disc}/release.json`)) {
+        return jsonResponse(200, RELEASE_PAYLOAD);
+      }
+      if (url.includes(`/${DISC2.disc}/release.json`)) {
+        return jsonResponse(200, SECOND_RELEASE_PAYLOAD);
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
     await renderApp();
 
     await waitFor(() => {

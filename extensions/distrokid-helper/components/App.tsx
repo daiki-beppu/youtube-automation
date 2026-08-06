@@ -64,18 +64,18 @@ export function App() {
             value={String(selectedIndex)}
             items={collections.map((item, index) => ({
               value: String(index),
-              label: `${item.name} / ${item.disc}（${item.album_title}・${item.track_count} 曲）`,
+              label: `${item.album_title}（${item.track_count} 曲）`,
             }))}
             disabled={isInjecting}
             onValueChange={(value) => selectCollection(Number(value))}
           >
             <SelectTrigger
               data-selected-value={String(selectedIndex)}
-              className="w-full"
+              className="w-full min-w-0 overflow-hidden"
               aria-labelledby="collection-select-label"
               data-distrokid-control="collection-select"
             >
-              <SelectValue />
+              <SelectValue className="min-w-0 truncate" />
             </SelectTrigger>
             <SelectContent>
               <SelectGroup>
@@ -84,7 +84,7 @@ export function App() {
                     key={`${item.collection_id}/${item.disc}`}
                     value={String(idx)}
                   >
-                    {`${item.name} / ${item.disc}（${item.album_title}・${item.track_count} 曲）`}
+                    {`${item.album_title}（${item.track_count} 曲）`}
                   </SelectItem>
                 ))}
               </SelectGroup>
