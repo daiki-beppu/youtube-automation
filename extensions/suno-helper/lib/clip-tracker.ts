@@ -14,6 +14,7 @@ import {
 } from "../../shared/constants";
 
 const TERMINAL = new Set<string>(TERMINAL_CLIP_STATUSES);
+const FAILED_CLIP_STATUS = "error";
 
 export interface ClipTracker {
   /** generate レスポンス観測（= この run の投入受理）。submission count を進め、clip を登録する。 */
@@ -37,6 +38,10 @@ export interface ClipTracker {
   getPendingSubmittedIds(): string[];
   /** この run の generate レスポンスで観測した clip id 一覧。playlist 対象の SSOT。 */
   getSubmittedIds(): string[];
+  /** この run で投入し、最新の観測 status が error の clip id 一覧。 */
+  getFailedSubmittedIds(): string[];
+  /** 指定した id のうち、最新の観測 status が error の id 一覧。 */
+  getFailedIdsByIds(ids: string[]): string[];
   /** duration yield guard を通過した submitted clip id を記録する。 */
   markAccepted(ids: string[]): void;
   /** duration yield guard を通過した submitted clip id 一覧。 */
@@ -162,6 +167,14 @@ export function createClipTracker(now: () => number = Date.now): ClipTracker {
     },
     getSubmittedIds() {
       return Array.from(submittedById.keys());
+    },
+    getFailedSubmittedIds() {
+      return Array.from(submittedById.keys()).filter(
+        (id) => statusById.get(id) === FAILED_CLIP_STATUS
+      );
+    },
+    getFailedIdsByIds(ids) {
+      return ids.filter((id) => statusById.get(id) === FAILED_CLIP_STATUS);
     },
     markAccepted(ids) {
       for (const id of ids) {
