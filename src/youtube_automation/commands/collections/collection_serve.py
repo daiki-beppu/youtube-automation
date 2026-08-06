@@ -1179,16 +1179,22 @@ def create_server(
                 self._send_json_error(500, str(exc))
                 return
             resp: dict = {"ok": True, "collection_id": cid, "placed_count": apply_result.placed_count}
-            # 部分完了（Suno が期待数未満しか生成しないケース）は 500 にせず warning で返す（#1913）
-            if downloaded.download_path and 0 < apply_result.placed_count < apply_result.expected_count:
-                missing = apply_result.expected_count - apply_result.placed_count
-                missing_reasons = apply_result.missing_reasons
-                resp["missing_reasons"] = missing_reasons
-                resp["warning"] = (
-                    f"placed {apply_result.placed_count} files, expected {apply_result.expected_count} "
-                    f"({missing} missing; Suno 未生成 {missing_reasons['suno_unfulfilled']} / "
-                    f"配置 skip {missing_reasons['apply_skipped']})"
+            # playlist URL だけを記録する先行 POST は legacy 応答を維持し、実 ZIP 適用後だけ summary を返す。
+            if downloaded.download_path:
+                missing_file_count = max(apply_result.expected_count - apply_result.placed_count, 0)
+                resp.update(
+                    expected_file_count=apply_result.expected_count,
+                    missing_file_count=missing_file_count,
                 )
+                # 部分完了（Suno が期待数未満しか生成しないケース）は 500 にせず warning で返す（#1913）
+                if 0 < apply_result.placed_count < apply_result.expected_count:
+                    missing_reasons = apply_result.missing_reasons
+                    resp["missing_reasons"] = missing_reasons
+                    resp["warning"] = (
+                        f"placed {apply_result.placed_count} files, expected {apply_result.expected_count} "
+                        f"({missing_file_count} missing; Suno 未生成 {missing_reasons['suno_unfulfilled']} / "
+                        f"配置 skip {missing_reasons['apply_skipped']})"
+                    )
             resp_body = json.dumps(resp).encode("utf-8")
             self._send_bytes(resp_body, "application/json; charset=utf-8")
 
