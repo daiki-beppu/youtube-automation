@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `refactor(packaging)`: リポジトリを責務別 layer へ再配置し、canonical owner への production import・receipt・active documentation を同期した。`youtube_automation.utils` と `infrastructure.legacy_utils` は下流向け compatibility façade として installed wheel でも維持し、削除・統合候補は `docs/architecture/reorganization-followups.md` に記録した。
 ### Added
 
+- `feat(wf-auto)`: workflow attempt に AI / human の型付き timing segment と種別別秒数を append-only で記録する schema v2 を追加した（#3248）。
 - `feat(wf-auto)`: schema v1 の `.automation-run/history.json` を時間未取得として読み出し、根拠のない実行時間を推測しない後方互換契約を追加した（#3247）。
 - `deploy(site)`: 公開リリースノートを Cloudflare Pages の `youtube-automation-release-notes` project から配信する。GitHub integration は `site` を monorepo root とし、Node.js 24 / pnpm 11.15.1 で build、`main` を production、repository 内のその他 branch / pull request を preview として自動公開する。公開 URL、build/output 条件、Direct Upload による復旧手順をリポジトリへ記録した（#3057）。
 - `ci(site)`: Blume リリースノートサイトの frozen install / schema check / test / build を stacked PR と `main` push で検証する専用 workflow を追加した。`site/` の生成物・依存を明示的に gitignore し、実際に build した Python wheel / sdist へサイト workspace が混入しない配布境界を契約テストで固定。公開サイトを ADR-0021 の限定 TypeScript 例外として ADR-0023、CLAUDE.md、architecture、development guide、README に反映した（#3056）。

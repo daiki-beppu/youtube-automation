@@ -177,6 +177,59 @@ def test_schema_v1_history_reads_timing_as_unavailable_without_mutation(tmp_path
     assert json.loads(history_path.read_text(encoding="utf-8")) == original
 
 
+def test_schema_v2_appends_typed_segments_and_preserves_every_attempt(tmp_path: Path, runner: ModuleType) -> None:
+    token = runner.acquire_lease(tmp_path, now=time.time(), ttl_seconds=60)
+    history_path = tmp_path / ".automation-run" / "history.json"
+    history_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "attempts": [{"action": "wf-new", "status": "failed", "recorded_at": "2026-07-20T23:59:00+00:00"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    segments = [
+        {
+            "kind": "ai",
+            "started_at": "2026-07-21T00:00:00+00:00",
+            "ended_at": "2026-07-21T00:00:12+00:00",
+            "duration_seconds": 12.0,
+        },
+        {
+            "kind": "human",
+            "started_at": "2026-07-21T00:00:12+00:00",
+            "ended_at": "2026-07-21T00:00:17+00:00",
+            "duration_seconds": 5.0,
+        },
+    ]
+
+    for index, status in enumerate(("blocked", "failed", "success")):
+        runner.record_attempt(
+            tmp_path,
+            token=token,
+            collection=None,
+            action="wf-new",
+            status=status,
+            reason=f"attempt_{status}",
+            resume_action=None,
+            now=f"2026-07-21T00:0{index}:17+00:00",
+            segments=segments,
+        )
+
+    history = runner.read_history(tmp_path)
+    assert history["schema_version"] == 2
+    assert [attempt["status"] for attempt in history["attempts"]] == ["failed", "blocked", "failed", "success"]
+    assert history["attempts"][0]["timing"] is None
+    assert history["attempts"][-1]["timing"] == {
+        "started_at": "2026-07-21T00:00:00+00:00",
+        "ended_at": "2026-07-21T00:00:17+00:00",
+        "ai_seconds": 12.0,
+        "human_seconds": 5.0,
+        "segments": segments,
+    }
+
+
 def test_completed_live_collection_finishes_after_post_publish_history(tmp_path: Path, runner: ModuleType) -> None:
     collection = _collection(
         tmp_path,
