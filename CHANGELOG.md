@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `feat(collection-serve)`: Suno downloaded の実 ZIP 適用成功応答へ期待数・配置数・欠損数の placement summary を追加し、部分成功時の欠損理由と workflow state を同じ count に統一。playlist URL 記録だけの先行 POST は legacy 応答を維持（#3164）。
 - `feat(suno-helper)`: download flow の通常・best-effort・再試行成功結果と再試行時の全 FINISHED event で server の型付き配置 summary を保持し、既存エラー契約を維持（#3169）。
+- `docs(suno-helper)`: 配置数が 1 件以上の部分 download は欠損内訳付き FINISHED、配置ゼロは ERROR とする operator 契約を公開し、server 応答・workflow state・実ファイルの照合後だけ strict 完了として後工程へ進む手順を明記（#3172）。
+
 - `feat(suno-helper)`: retry download の部分成功 summary を FINISHED progress と完了 snapshot に保持し、既存の resume 消去・リロード順序と reject 時の ERROR 契約を維持（#3171）。
 
 - `feat(suno-helper)`: normal collection run の部分 download 成功 summary を FINISHED progress と完了 snapshot に保持し、既存の resume 消去・リロード順序と失敗時の再開契約を維持（#3170）。

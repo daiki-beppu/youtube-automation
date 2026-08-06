@@ -282,6 +282,34 @@ def test_suno_helper_phase_table_matches_shared_phase_constants() -> None:
     assert _suno_helper_phase_table_values() == _shared_phase_values()
 
 
+def test_suno_helper_documents_partial_finished_operator_contract() -> None:
+    """Issue #3172: 部分配置の終端 phase と strict 完了判定を operator 向けに固定する。"""
+    text = _read_suno_helper()
+    phase_section = text.split("### Step 5. 進捗 phase を読む", 1)[1].split("### Step 6. 完了確認", 1)[0]
+    completion_section = text.split("### Step 6. 完了確認", 1)[1].split("\n### ", 1)[0]
+
+    for token in (
+        "`placed > 0`",
+        "`finished`",
+        "配置数 / 期待数 / 欠損数",
+        "`missing_reasons`",
+        "`placed = 0`",
+        "`error`",
+    ):
+        assert token in phase_section, f"Step 5 に部分 FINISHED 契約がない（`{token}` 不在）"
+
+    for token in (
+        "server 応答",
+        "`planning.music.actual_file_count`",
+        "`planning.music.missing_file_count`",
+        "`planning.music.missing_reasons`",
+        "`suno_unfulfilled + apply_skipped = missing_file_count`",
+        "strict 完了ではない",
+        "`/masterup` へ進めない",
+    ):
+        assert token in completion_section, f"Step 6 に部分配置の照合契約がない（`{token}` 不在）"
+
+
 def test_wf_new_hands_off_to_suno_helper_browser_use_flow() -> None:
     """Given wf-new SKILL.md
     When Suno 後続案内を読む
