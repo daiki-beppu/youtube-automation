@@ -43,6 +43,16 @@ function formatSeconds(value: number): string {
   return `${Math.round(value)}s`;
 }
 
+function formatDownloadSummary(
+  summary: NonNullable<SnapshotPayload["progress"]["downloadSummary"]>
+): string {
+  const text = `完了 (${summary.placed}/${summary.expected} clip 配置, ${summary.missing} clip 欠損`;
+  if (!summary.reasons) {
+    return `${text})`;
+  }
+  return `${text} — 内訳: Suno 未生成 ${summary.reasons.sunoUnfulfilled} / 配置 skip ${summary.reasons.applySkipped})`;
+}
+
 function formatDurationLimit(
   log: Extract<ProgressLog, { kind: "duration-check" }>
 ): string {
@@ -129,7 +139,7 @@ export function phaseToStatus(
     return logStatus;
   }
 
-  const { phase, index, total, message } = progress;
+  const { phase, index, total, message, downloadSummary } = progress;
   const n = (index ?? 0) + 1;
   switch (phase) {
     case PHASE.INJECTING:
@@ -164,9 +174,12 @@ export function phaseToStatus(
       // playlist 名は ProgressPayload.message で運ぶ（専用フィールドを足さず既存経路で表示する）。
       return { text: `Playlist '${message ?? ""}' へ追加中…` };
     case PHASE.FINISHED:
-      // 失敗スキップ付き完走 (#948) は message に失敗一覧が載る。無ければ従来文言。
-      return message
-        ? { text: `完了（一部失敗）: ${message}`, error: true }
+      // 失敗スキップ付き完走 (#948) を成功した配置 summary で覆わない。
+      if (message) {
+        return { text: `完了（一部失敗）: ${message}`, error: true };
+      }
+      return downloadSummary
+        ? { text: formatDownloadSummary(downloadSummary) }
         : { text: `完了: ${total} パターンを実行しました。` };
     case PHASE.STOPPED:
       return { text: "停止しました。再実行できます。" };
