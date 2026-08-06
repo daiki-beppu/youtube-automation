@@ -227,6 +227,27 @@ describe("applyProgress: progress 受信でスナップショットを更新す�
     expect(finished.entries).toEqual(entries);
     expect(finished.itemStates).toEqual(["done", "idle"]);
     expect(finished.isRunning).toBe(false);
+    expect(finished.progress).toEqual({ phase: PHASE.FINISHED, total: 2 });
+  });
+
+  it("Given downloadSummary 付き FINISHED When applyProgress Then summary を無加工で snapshot に保持する", () => {
+    const snap = initSnapshot(makePromptEntries(2), snapshotOptions());
+    const downloadSummary = {
+      expected: 56,
+      placed: 47,
+      missing: 9,
+      reasons: { sunoUnfulfilled: 3, applySkipped: 6 },
+    };
+    const progress = {
+      phase: PHASE.FINISHED,
+      total: 2,
+      downloadSummary,
+    } as const;
+
+    const next = applyProgress(snap, progress);
+
+    expect(next.progress).toBe(progress);
+    expect(next.progress.downloadSummary).toBe(downloadSummary);
   });
 
   it("Given snap When ERROR を message 付きで適用 Then progress.message を保持する", () => {
