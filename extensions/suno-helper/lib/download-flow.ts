@@ -1,4 +1,4 @@
-import type { DownloadedPayload } from "../../shared/api";
+import type { DownloadedPayload, DownloadSummary } from "../../shared/api";
 import type { ProgressPayload } from "../../shared/constants";
 import { PHASE } from "../../shared/constants";
 import { triggerDownloadAll } from "./download";
@@ -15,7 +15,13 @@ export interface DownloadFlow {
     collectionId: string,
     progressTotal: number,
     expectedFileCount: number
-  ) => Promise<void>;
+  ) => Promise<DownloadSummary | undefined>;
+  downloadBestEffortResult: (
+    context: DownloadContext,
+    collectionId: string,
+    progressTotal: number,
+    expectedFileCount: number
+  ) => Promise<DownloadBestEffortResult>;
   downloadBestEffort: (
     context: DownloadContext,
     collectionId: string,
@@ -31,6 +37,12 @@ export interface RetryDownloadResult {
   /** FINISHED まで到達し resume state 消去も成功したか。呼び出し側の完了時リロード発火判定に使う (#1411)。
    * false は中断（STOPPED）または resume state 消去失敗（リロードすると再開バナーが誤判定するため見送る）。 */
   completedAndCleared: boolean;
+  summary?: DownloadSummary;
+}
+
+export interface DownloadBestEffortResult {
+  error: string | null;
+  summary?: DownloadSummary;
 }
 
 export interface DownloadFlowDeps {
@@ -161,7 +173,7 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
     progressTotal: number,
     expectedFileCount: number,
     filename: string
-  ): Promise<void> {
+  ): Promise<DownloadSummary | undefined> {
     await deps.onDownloadComplete?.(filename);
     const postResult = await sendMessage("postDownloaded", {
       baseUrl: context.baseUrl,
@@ -183,6 +195,7 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
         message: `部分ダウンロード（不足あり）: ${postResult.warning}`,
       });
     }
+    return postResult?.summary;
   }
 
   async function performDownloadAttempt(
@@ -190,7 +203,7 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
     collectionId: string,
     progressTotal: number,
     expectedFileCount: number
-  ): Promise<void> {
+  ): Promise<DownloadSummary | undefined> {
     if (deps.isAborted()) return;
 
     deps.emitProgress({
@@ -201,7 +214,7 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
     await startDownloadWatcher(context.format);
     const filename = await waitForDownloadedFilename(context.format);
     if (filename === null) return;
-    await postDownloadedArchive(
+    return await postDownloadedArchive(
       context,
       collectionId,
       progressTotal,
@@ -215,9 +228,9 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
     collectionId: string,
     progressTotal: number,
     expectedFileCount: number
-  ): Promise<void> {
+  ): Promise<DownloadSummary | undefined> {
     try {
-      await performDownloadAttempt(
+      return await performDownloadAttempt(
         context,
         collectionId,
         progressTotal,
@@ -228,20 +241,20 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
     }
   }
 
-  async function downloadBestEffort(
+  async function downloadBestEffortResult(
     context: DownloadContext,
     collectionId: string,
     progressTotal: number,
     expectedFileCount: number
-  ): Promise<string | null> {
+  ): Promise<DownloadBestEffortResult> {
     try {
-      await performDownload(
+      const summary = await performDownload(
         context,
         collectionId,
         progressTotal,
         expectedFileCount
       );
-      return null;
+      return summary === undefined ? { error: null } : { error: null, summary };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.warn(`[suno-helper] Download all failed: ${message}`);
@@ -250,8 +263,24 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
         total: progressTotal,
         message: `ダウンロード失敗（手動でダウンロードしてください）: ${message}`,
       });
-      return message;
+      return { error: message };
     }
+  }
+
+  async function downloadBestEffort(
+    context: DownloadContext,
+    collectionId: string,
+    progressTotal: number,
+    expectedFileCount: number
+  ): Promise<string | null> {
+    return (
+      await downloadBestEffortResult(
+        context,
+        collectionId,
+        progressTotal,
+        expectedFileCount
+      )
+    ).error;
   }
 
   async function retryDownload(
@@ -271,7 +300,7 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
       deps.emitProgress({ phase: PHASE.STOPPED, total: 0 });
       return { completedAndCleared: false };
     }
-    await performDownload(
+    const summary = await performDownload(
       options.context,
       options.collectionId,
       total,
@@ -279,7 +308,9 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
     );
     if (deps.isAborted()) {
       deps.emitProgress({ phase: PHASE.STOPPED, total: 0 });
-      return { completedAndCleared: false };
+      return summary === undefined
+        ? { completedAndCleared: false }
+        : { completedAndCleared: false, summary };
     }
     // 消去失敗でも FINISHED は維持する（download 自体は成功しているため）。
     // その場合はリロードを見送る合図として completedAndCleared=false を返す (#1411)。
@@ -293,13 +324,20 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
         err
       );
     }
-    deps.emitProgress({ phase: PHASE.FINISHED, total: 0 });
-    return { completedAndCleared: resumeStateCleared };
+    deps.emitProgress({
+      phase: PHASE.FINISHED,
+      total: 0,
+      ...(summary === undefined ? {} : { downloadSummary: summary }),
+    });
+    return summary === undefined
+      ? { completedAndCleared: resumeStateCleared }
+      : { completedAndCleared: resumeStateCleared, summary };
   }
 
   return {
     installMessageHandlers,
     performDownload,
+    downloadBestEffortResult,
     downloadBestEffort,
     retryDownload,
   };
