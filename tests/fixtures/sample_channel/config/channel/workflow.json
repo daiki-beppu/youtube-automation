@@ -1,3 +1,8 @@
 {
-  "workflow": {}
+  "workflow": {
+    "manual_baseline_minutes": {
+      "wf-new": 30,
+      "wf-next": 15
+    }
+  }
 }
