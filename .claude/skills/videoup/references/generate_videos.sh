@@ -492,6 +492,7 @@ fi
 # どれか 1 つでも欠ければ既存 stream copy 経路へフォールバックする。
 OVERLAYS_ENABLED=0
 OVERLAYS_CONFIG_PATH=""
+OVERLAYS_CHANNEL_ROOT=""
 
 resolve_overlays_config() {
     if [[ -n "${OVERLAYS_CONFIG:-}" && -f "$OVERLAYS_CONFIG" ]]; then
@@ -516,6 +517,23 @@ resolve_overlays_config() {
     done
 }
 
+resolve_overlays_channel_root() {
+    local config_path="$1"
+    case "$config_path" in
+        */config/channel/youtube.json)
+            local channel_root="${config_path%/config/channel/youtube.json}"
+            [[ -n "$channel_root" ]] || channel_root="/"
+            if [[ -d "$channel_root" ]]; then
+                (cd "$channel_root" && pwd)
+                return
+            fi
+            ;;
+    esac
+    if [[ -n "${CHANNEL_DIR:-}" && -d "$CHANNEL_DIR" ]]; then
+        (cd "$CHANNEL_DIR" && pwd)
+    fi
+}
+
 if [[ -n "${VIDEOUP_OVERLAYS:-}" && "${VIDEOUP_OVERLAYS}" != "0" && "${VIDEOUP_OVERLAYS}" != "1" ]]; then
     echo "ERROR: VIDEOUP_OVERLAYS must be 0 or 1 (got: ${VIDEOUP_OVERLAYS})"
     exit 1
@@ -528,6 +546,7 @@ elif [[ -n "$OVERLAYS_CLI_OVERRIDE" ]]; then
 elif command -v jq &>/dev/null; then
     OVERLAYS_CONFIG_PATH="$(resolve_overlays_config)"
     if [[ -n "$OVERLAYS_CONFIG_PATH" ]]; then
+        OVERLAYS_CHANNEL_ROOT="$(resolve_overlays_channel_root "$OVERLAYS_CONFIG_PATH")"
         ov_enabled="$(jq -r '(.overlays.enabled // false) | tostring' "$OVERLAYS_CONFIG_PATH" 2>/dev/null)"
         if [[ "$ov_enabled" == "true" ]]; then
             OVERLAYS_ENABLED=1
@@ -966,6 +985,8 @@ if [[ "$OVERLAYS_ENABLED" -eq 1 ]]; then
             sp_path="${ASSETS_DIR}/${sp_image}"
         elif [[ -f "${COLLECTION_DIR}/${sp_image}" ]]; then
             sp_path="${COLLECTION_DIR}/${sp_image}"
+        elif [[ -n "$OVERLAYS_CHANNEL_ROOT" && -f "${OVERLAYS_CHANNEL_ROOT}/${sp_image}" ]]; then
+            sp_path="${OVERLAYS_CHANNEL_ROOT}/${sp_image}"
         fi
         if [[ -z "$sp_path" || ! -f "$sp_path" ]]; then
             echo "ERROR: subscribe popup image not found: ${sp_image}"
