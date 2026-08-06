@@ -6,6 +6,7 @@ import importlib.util
 import json
 import sys
 import time
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import ModuleType
 
@@ -156,6 +157,7 @@ def test_unattended_manual_intervention_is_recorded_with_resume_action(tmp_path:
     assert history["attempts"][-1]["collection"] is None
     assert history["attempts"][-1]["action"] == "wf-new"
     assert history["attempts"][-1]["resume_action"] == "wf-new"
+    assert history["attempts"][-1]["timing"] is None
 
 
 def test_schema_v1_history_reads_timing_as_unavailable_without_mutation(tmp_path: Path, runner: ModuleType) -> None:
@@ -545,6 +547,117 @@ def test_invalid_timing_fails_loud_on_read_and_append_without_mutating_history(
     assert history_path.read_text(encoding="utf-8") == original
 
 
+@pytest.mark.parametrize("status", ["success", "failed", "blocked"])
+def test_cli_record_closes_ai_segment_for_every_outcome(
+    tmp_path: Path,
+    runner: ModuleType,
+    status: str,
+) -> None:
+    collection = _collection(tmp_path, "20260721-timed")
+    token = runner.acquire_lease(tmp_path, now=time.time(), ttl_seconds=60)
+    started_at = (datetime.now(UTC) - timedelta(seconds=1)).isoformat()
+
+    assert (
+        runner.main(
+            [
+                "record",
+                "--channel-dir",
+                str(tmp_path),
+                "--token",
+                token,
+                "--collection",
+                collection.name,
+                "--action",
+                "lyria",
+                "--status",
+                status,
+                "--reason",
+                f"timed_{status}",
+                "--ai-started-at",
+                started_at,
+            ]
+        )
+        == 0
+    )
+
+    attempt = runner.read_history(tmp_path)["attempts"][-1]
+    assert attempt["status"] == status
+    assert attempt["timing"]["human_seconds"] == 0
+    assert attempt["timing"]["ai_seconds"] >= 1
+    assert attempt["timing"]["segments"] == [
+        {
+            "kind": "ai",
+            "started_at": started_at,
+            "ended_at": attempt["timing"]["ended_at"],
+            "duration_seconds": attempt["timing"]["ai_seconds"],
+        }
+    ]
+
+
+def test_cli_record_retry_appends_new_timed_attempt_without_overwriting_failure(
+    tmp_path: Path, runner: ModuleType
+) -> None:
+    collection = _collection(tmp_path, "20260721-retry")
+    token = runner.acquire_lease(tmp_path, now=time.time(), ttl_seconds=60)
+
+    for index, status in enumerate(("failed", "success"), start=1):
+        started_at = (datetime.now(UTC) - timedelta(seconds=index)).isoformat()
+        assert (
+            runner.main(
+                [
+                    "record",
+                    "--channel-dir",
+                    str(tmp_path),
+                    "--token",
+                    token,
+                    "--collection",
+                    collection.name,
+                    "--action",
+                    "lyria",
+                    "--status",
+                    status,
+                    "--reason",
+                    f"attempt_{status}",
+                    "--ai-started-at",
+                    started_at,
+                ]
+            )
+            == 0
+        )
+
+    attempts = runner.read_history(tmp_path)["attempts"]
+    assert [attempt["status"] for attempt in attempts] == ["failed", "success"]
+    assert all(attempt["timing"]["segments"][0]["kind"] == "ai" for attempt in attempts)
+
+
+def test_cli_record_without_ai_start_keeps_timing_unavailable(tmp_path: Path, runner: ModuleType) -> None:
+    collection = _collection(tmp_path, "20260721-legacy-record")
+    token = runner.acquire_lease(tmp_path, now=time.time(), ttl_seconds=60)
+
+    assert (
+        runner.main(
+            [
+                "record",
+                "--channel-dir",
+                str(tmp_path),
+                "--token",
+                token,
+                "--collection",
+                collection.name,
+                "--action",
+                "lyria",
+                "--status",
+                "success",
+                "--reason",
+                "legacy_caller",
+            ]
+        )
+        == 0
+    )
+
+    assert runner.read_history(tmp_path)["attempts"][-1]["timing"] is None
+
+
 def test_completed_live_collection_finishes_after_post_publish_history(tmp_path: Path, runner: ModuleType) -> None:
     collection = _collection(
         tmp_path,
@@ -589,17 +702,20 @@ def test_cli_plan_prints_bootstrap_decision(
     assert json.loads(capsys.readouterr().out)["reason"] == "no_active_collection"
 
 
-def test_cli_records_bootstrap_block_before_collection_exists(
+@pytest.mark.parametrize("status", ["blocked", "failed"])
+def test_cli_records_timed_bootstrap_stop_before_collection_exists(
     tmp_path: Path,
     runner: ModuleType,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
+    status: str,
 ) -> None:
     safe_token = "a1" * 24
     monkeypatch.setattr(runner.secrets, "token_urlsafe", lambda _: "-unsafe-token")
     monkeypatch.setattr(runner.secrets, "token_hex", lambda _: safe_token)
 
     token = runner.acquire_lease(tmp_path, now=time.time(), ttl_seconds=60)
+    started_at = (datetime.now(UTC) - timedelta(seconds=1)).isoformat()
 
     assert token == safe_token
     assert (
@@ -611,11 +727,25 @@ def test_cli_records_bootstrap_block_before_collection_exists(
                 "--token",
                 token,
                 "--status",
-                "blocked",
+                status,
                 "--reason",
                 "user_input_required",
+                "--ai-started-at",
+                started_at,
             ]
         )
         == 0
     )
     assert json.loads(capsys.readouterr().out) == {"status": "recorded"}
+    attempt = runner.read_history(tmp_path)["attempts"][-1]
+    assert attempt["collection"] is None
+    assert attempt["action"] == "wf-new"
+    assert attempt["status"] == status
+    assert attempt["timing"]["segments"] == [
+        {
+            "kind": "ai",
+            "started_at": started_at,
+            "ended_at": attempt["timing"]["ended_at"],
+            "duration_seconds": attempt["timing"]["ai_seconds"],
+        }
+    ]
