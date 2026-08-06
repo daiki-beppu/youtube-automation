@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(suno)`: collection の `suno-patterns.yaml` にある `vocal_gender` を全 JSON entry で channel 設定より優先し、空文字による省略と型契約検証に対応（#3137）。
+
 - `feat(suno)`: collection の `suno-patterns.yaml` にある `exclude_styles` を Markdown と全 JSON entry で channel 設定より優先し、空文字を明示値として扱う（#3136）。
 
 - `feat(suno)`: collection の `suno-patterns.yaml` にある `style_variants` を channel 設定より優先し、不正な collection variant を生成前に拒否（#3135）。

@@ -318,6 +318,7 @@ class _ResolvedPattern:
 # (拡張型契約: "male" | "female" | "neutral" | "auto")。空文字は「未指定」として JSON 出力から省く
 # (_build_advanced_json_fields の skip ロジック参照)。
 _ADVANCED_JSON_KEYS = ("style_influence", "weirdness", "exclude_styles", "vocal_gender")
+_VOCAL_GENDERS = frozenset({"male", "female", "neutral", "auto"})
 
 
 def _duration_filter_from_config(suno: dict) -> dict:
@@ -470,6 +471,20 @@ def _resolve_exclude_styles(
     return exclude_styles, {**channel_json_fields, "exclude_styles": exclude_styles}
 
 
+def _resolve_vocal_gender(data: Mapping[str, object], channel_json_fields: dict, patterns_path: Path) -> dict:
+    if "vocal_gender" not in data:
+        return channel_json_fields
+    vocal_gender = data["vocal_gender"]
+    if not isinstance(vocal_gender, str) or (vocal_gender and vocal_gender not in _VOCAL_GENDERS):
+        raise ConfigError(f"{patterns_path}: vocal_gender must be empty or one of: male, female, neutral, auto")
+    resolved_fields = channel_json_fields.copy()
+    if vocal_gender:
+        resolved_fields["vocal_gender"] = vocal_gender
+    else:
+        resolved_fields.pop("vocal_gender", None)
+    return resolved_fields
+
+
 def _resolve_style_variants(
     data: Mapping[str, object], channel_fallback: object, patterns_path: Path
 ) -> Mapping[str, Mapping[str, str]]:
@@ -509,6 +524,7 @@ def _resolve_prompts(patterns_path: Path) -> _ResolvedPrompts:
         advanced_json_fields,
         patterns_path,
     )
+    advanced_json_fields = _resolve_vocal_gender(data, advanced_json_fields, patterns_path)
     style_variants = _resolve_style_variants(data, suno.get("style_variants", {}), patterns_path)
     style_influence = suno.get("style_influence", 50)
     weirdness = suno.get("weirdness", 50)
