@@ -17,7 +17,7 @@ suno-helper は生成 → playlist 追加 → 一括ダウンロードまでを 
 
 ## 完了条件
 
-overlay の phase が `finished` に到達し、Step 6 の 6 点（playlist 紐付け / clip 数 = entry 数 × 2 / `02-Individual-music/` への音声配置 / `status = downloaded` / `suno_playlist_url` 記録 / `assets.music_downloaded = true`）を確認後、collection server を停止してプロセスが残っていないとき完了とする（詳細は Step 6 が正）。異常値再生成を OFF にした run は、さらに duration guard NG の clip を試聴し、NG clip が ZIP に含まれることを確認してから完了とする。`entry-failed`、clip 数不足、server プロセス残留のいずれかがある場合は完了扱いにしない。
+overlay の phase が `finished` に到達し、Step 6 の 6 点（playlist 紐付け / clip 数 = entry 数 × 2 / `02-Individual-music/` への音声配置 / `status = downloaded` / `suno_playlist_url` 記録 / `assets.music_downloaded = true`）を確認後、collection server を停止してプロセスが残っていないとき strict 完了とする（詳細は Step 6 が正）。`finished` は download 通知の終端成功を示し、1 件以上配置できた部分成功も含むため、それだけで strict 完了とは判定しない。異常値再生成を OFF にした run は、さらに duration guard NG の clip を試聴し、NG clip が ZIP に含まれることを確認してから完了とする。`entry-failed`、clip 数不足、server プロセス残留のいずれかがある場合は完了扱いにしない。
 
 ## 設定読み込みゲート
 
@@ -188,11 +188,11 @@ overlay / popup 上部の live region と root の `data-suno-phase` に進捗�
 | `entry-failed` | 当該 entry は失敗としてスキップし、run 全体は次 entry へ継続 |
 | `adding-to-playlist` | 全 entry 完了、clip を一括 playlist 化中 |
 | `downloading` | playlist 追加完了後、全 clip を ZIP 一括ダウンロード中 |
-| `finished` | 完了（DL 含む） |
+| `finished` | DL 通知成功。`placed > 0` なら部分配置も終端成功とし、status に配置数 / 期待数 / 欠損数と `missing_reasons` の内訳を表示 |
 | `stopped` | user が停止ボタンで中断 |
-| `error` | 失敗（赤色で停止）|
+| `error` | server reject を含む失敗（赤色で停止）。`placed = 0` は成功へ縮退せずこの phase |
 
-**phase 遷移の詳細**: `done`（最終 entry）→ `adding-to-playlist` → `downloading` → `finished`。playlist 追加完了直後に `postDownloaded(file_count: 0)` を呼んで playlist URL のみをサーバーに記録し、ZIP ダウンロード完了後に `postDownloaded(file_count: N)` で実ファイル数を報告する。
+**phase 遷移の詳細**: `done`（最終 entry）→ `adding-to-playlist` → `downloading` → `finished`。playlist 追加完了直後に `postDownloaded(file_count: 0)` を呼んで playlist URL のみをサーバーに記録し、ZIP ダウンロード完了後に `postDownloaded(file_count: N)` で実ファイル数を報告する。後者の server 応答で `placed > 0` なら期待数未満でも `finished` へ進み、status は `完了 (placed/expected clip 配置, missing clip 欠損 — 内訳: Suno 未生成 N / 配置 skip N)` を表示する。ZIP からの `placed = 0` は server が reject し、拡張は `error` のまま resume state を保持する。
 
 無限待機を避ける監視ルール:
 
@@ -219,12 +219,16 @@ handoff 条件（agent は自動突破しない）:
 
 `finished` 表示後、以下を確認:
 
+最初に、overlay の `role="status"` に保持された server 応答 summary、`workflow-state.json`、`02-Individual-music/` の実ファイルを照合する。server 応答の `placed_count` / `expected_file_count` / `missing_file_count` は、それぞれ実ファイル数 / `planning.music.actual_file_count`、`planning.music.expected_file_count`、`planning.music.missing_file_count` と一致すること。部分配置では `planning.music.missing_reasons` の `suno_unfulfilled` / `apply_skipped` が status の「Suno 未生成」/「配置 skip」と一致し、`suno_unfulfilled + apply_skipped = missing_file_count` であること。不一致なら成功表示のまま進めず、server log と配置 skip を調査する。
+
 1. Suno 側で対象 playlist に collection の全 clip が紐付いている
 2. clip 数 = collection の entry 数 × 2（数が合わなければ resume で残りを回す）
 3. `02-Individual-music/` に mp3/m4a/wav が配置されている
 4. `GET /collections` で対象 collection の `status` が `downloaded`、`downloaded_count` が期待 clip 数以上になっている
 5. `workflow-state.json` の `planning.music.suno_playlist_url` に playlist URL が記録されている
 6. `workflow-state.json` の `assets.music_downloaded` が `true` になっている（DL 完了時）
+
+`placed_count > 0` かつ `missing_file_count > 0` の partial FINISHED は download 通知としては成功だが、strict 完了ではない。`status = downloaded` や `assets.music_downloaded = true` だけを根拠に `/masterup` へ進めない。不足分の再実行または手動解決を行い、上記 6 点と `missing_file_count = 0` が揃ってから後工程へ進む。
 
 **異常値の曲を再生成する** を OFF にした場合は、上記に加えて status / console warning で記録された duration guard NG の clip を playlist 上で試聴し、手動採否を確認する。NG clip も意図どおり ZIP に含まれていることを確認してから完了とする。
 
