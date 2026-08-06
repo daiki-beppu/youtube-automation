@@ -1089,6 +1089,9 @@ def test_main_resolves_allow_extension_to_allow_origin(monkeypatch, capsys, tmp_
     stdout = capsys.readouterr().out
     assert "detected extension: suno-helper -> gdjhjiphejeeclngbljhajiffhpdepee" in stdout
     assert "chrome-extension://gdjhjiphejeeclngbljhajiffhpdepee" in stdout
+    assert f"path={detected.path}" in stdout
+    assert "profile=Default" in stdout
+    assert "enabled=true" in stdout
     assert "serve token: GET http://test-channel.localhost:7873/auth/token" in stdout
 
 
