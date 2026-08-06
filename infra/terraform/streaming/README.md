@@ -93,6 +93,47 @@ terraform apply
 
 `terraform workspace show` が意図した `<workspace>` と完全一致することを最初に確認する。既存 workspace では `terraform state list` がそのチャンネルの既存リソースを示すこと、新規 workspace では意図どおり空であることを確認する。最後に `terraform plan` の対象動画、作成・変更・削除されるリソースが選択中のチャンネルに限られることを確認する。workspace が違う、既存 state が空、または plan に別チャンネルの削除・置換や想定外の変更が含まれる場合は **apply しない**。正しい workspace を再選択し、3 つの `TF_VAR_*` を再注入して `workspace show` から確認し直す。
 
+## 既存 Vultr リソースの import
+
+Terraform 管理外で作成済みの配信 VPS を取り込む場合は、最初に対象チャンネルの workspace を選択し、表示名が意図した値と完全一致することを確認する。別 workspace の state へ import するとチャンネル間のリソースが混在するため、一致しない場合はここで停止する。
+
+```bash
+terraform workspace select <workspace>
+terraform workspace show
+terraform state list
+```
+
+Vultr API または control panel で対象リソースの ID を調べ、`terraform.tfvars` と `TF_VAR_*` を既存 VPS の設定に合わせる。firewall group、SSH key、instance はそれぞれ Vultr の resource ID を使う。firewall rule の import ID だけは、firewall group ID と数値の rule ID をカンマで連結した `<firewall-group-id>,<firewall-rule-id>` 形式にする。
+
+依存先から順に、次の 4 種類だけを import する。`vultr_firewall_rule.ssh` は `for_each` resource なので、Terraform address 全体を single quote で囲み、`<allowed-ssh-cidr>` を既存 rule の CIDR（例: `203.0.113.5/32`）へ置き換える。CIDR が複数ある場合は対応する rule ID ごとに 2 番目のコマンドを繰り返す。
+
+```bash
+# 1. firewall group
+terraform import vultr_firewall_group.stream <firewall-group-id>
+
+# 2. firewall rule（address の引用符を外さない）
+terraform import 'vultr_firewall_rule.ssh["<allowed-ssh-cidr>"]' '<firewall-group-id>,<firewall-rule-id>'
+
+# 3. SSH key
+terraform import vultr_ssh_key.this <ssh-key-id>
+
+# 4. instance
+terraform import vultr_instance.this <instance-id>
+```
+
+`tls_private_key.ssh_host` は既存の Vultr resource ではなく Terraform が生成するローカル鍵であり、`null_resource.deploy` は provisioner の実行状態を表すだけなので、どちらにも import 用の Vultr ID はない。この手順では両方を **state 未管理のまま**にし、target 指定の apply や state の手作業で追加しない。
+
+4 種類を import したら、変更は適用せず evidence を保存しながら state と差分だけを確認する。
+
+```bash
+terraform state list
+terraform plan
+```
+
+import しなかった 2 resource は state に存在しないため、plan では `# tls_private_key.ssh_host will be created` と `# null_resource.deploy will be created` がそれぞれ `+ create` 予定になる。この 2 件の `+ create` だけなら import 漏れや instance replacement ではなく、未管理 resource を Terraform 管理へ加える想定差分である。
+
+既存 VPS の SSH host key と新規の `tls_private_key.ssh_host` は一致しない。さらに、その生成鍵を埋め込む `vultr_instance.this.user_data` と provisioner の `host_key` は既存 VPS の値を Terraform から復元できない。同じ plan に `vultr_instance.this must be replaced` が併記された場合に限り、破壊的な instance replacement として **apply しない**。既存 host key と `user_data` を保全した移行方針が別途承認されるまで停止し、`terraform apply` や `-target` で差分を部分適用しない。
+
 ## ライブチャット自動返信（opt-in）
 
 既定の `enable_live_chat_reply=false` では関連 resource を一切作らず、既存の `youtube-stream` 配備だけが従来どおり動く。有効化時も返信 daemon は独立した `live-chat-reply.service` として動き、失敗時は `Restart=on-failure` で自動復帰する。unit は `youtube-stream.service` を `Requires=` しないため、返信 daemon の停止や再起動が配信本体を止めることはない。
