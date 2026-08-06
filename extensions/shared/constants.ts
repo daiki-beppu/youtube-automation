@@ -297,6 +297,7 @@ export const DISCOVERY_REQUEST_TIMEOUT_MS = 2_000;
 
 export interface LocalServerSource {
   id: string;
+  channelName?: string;
   label: string;
   url: string;
 }
@@ -314,6 +315,7 @@ export function formatServerSourceLabel(
 export const DEFAULT_SERVER_SOURCES: LocalServerSource[] = [
   {
     id: "youtube-automation-localhost-7873",
+    channelName: "YouTube Automation",
     label: "YouTube Automation (default)",
     url: DEFAULT_URL,
   },

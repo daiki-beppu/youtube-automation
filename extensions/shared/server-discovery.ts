@@ -159,6 +159,7 @@ async function validatedSource(
     if (normalizeServerUrl(info.base_url) !== registeredUrl) return undefined;
     return {
       id: serverSourceIdFromUrl(registeredUrl),
+      channelName: info.channel_name,
       label: info.label,
       url: registeredUrl,
     };
