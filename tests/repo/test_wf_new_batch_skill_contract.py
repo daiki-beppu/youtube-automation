@@ -84,6 +84,40 @@ def _valid_manifest() -> dict:
     }
 
 
+def _valid_ledger() -> dict:
+    return {
+        "schema_version": 1,
+        "batch_id": "batch-20260806",
+        "manifest_path": "reports/wf-new-batches/batch-20260806/plan-manifest.json",
+        "manifest_sha256": "a" * 64,
+        "requested_count": 2,
+        "status": "running",
+        "current_plan_id": None,
+        "created_at": "2026-08-06T00:00:00+00:00",
+        "updated_at": "2026-08-06T00:00:00+00:00",
+        "plans": [
+            {
+                "plan_id": "plan-a",
+                "theme_slug": "plan-a-theme",
+                "status": "pending",
+                "collection_dir": None,
+                "reason": None,
+                "resume_action": None,
+                "updated_at": "2026-08-06T00:00:00+00:00",
+            },
+            {
+                "plan_id": "plan-b",
+                "theme_slug": "plan-b-theme",
+                "status": "pending",
+                "collection_dir": None,
+                "reason": None,
+                "resume_action": None,
+                "updated_at": "2026-08-06T00:00:00+00:00",
+            },
+        ],
+    }
+
+
 def test_collection_ideate_batch_plan_is_explicit_and_fail_closed() -> None:
     text = _read_skill("collection-ideate")
 
@@ -150,6 +184,218 @@ def test_batch_manifest_validator_rejects_structural_mismatches(case: str, mutat
 
     with pytest.raises(ValueError):
         validator.validate_manifest(manifest)
+
+
+def test_batch_ledger_allows_only_declared_transitions() -> None:
+    state = _load_reference(
+        "batch_ledger_transitions",
+        REPO_ROOT / ".claude" / "skills" / "wf-new-batch" / "references" / "batch-ledger.py",
+    )
+    ledger = state.transition_plan(
+        _valid_ledger(),
+        plan_id="plan-a",
+        target_status="in_progress",
+        updated_at="2026-08-06T00:01:00+00:00",
+    )
+    ledger = state.transition_plan(
+        ledger,
+        plan_id="plan-a",
+        target_status="completed",
+        collection_dir="collections/planning/plan-a",
+        updated_at="2026-08-06T00:02:00+00:00",
+    )
+
+    assert ledger["plans"][0]["status"] == "completed"
+    assert ledger["status"] == "running"
+    with pytest.raises(ValueError, match="不正な plan 遷移"):
+        state.transition_plan(
+            ledger,
+            plan_id="plan-a",
+            target_status="in_progress",
+            updated_at="2026-08-06T00:03:00+00:00",
+        )
+
+
+def test_batch_ledger_guardedly_blocks_completed_plan_after_revalidation_drift() -> None:
+    state = _load_reference(
+        "batch_ledger_guarded_downgrade",
+        REPO_ROOT / ".claude" / "skills" / "wf-new-batch" / "references" / "batch-ledger.py",
+    )
+    ledger = _valid_ledger()
+    for index, plan_id in enumerate(("plan-a", "plan-b"), start=1):
+        ledger = state.transition_plan(
+            ledger,
+            plan_id=plan_id,
+            target_status="in_progress",
+            updated_at=f"2026-08-06T00:0{index}:00+00:00",
+        )
+        ledger = state.transition_plan(
+            ledger,
+            plan_id=plan_id,
+            target_status="completed",
+            collection_dir=f"collections/planning/{plan_id}",
+            updated_at=f"2026-08-06T00:1{index}:00+00:00",
+        )
+
+    assert ledger["status"] == "completed"
+    blocked = state.transition_plan(
+        ledger,
+        plan_id="plan-a",
+        target_status="blocked",
+        reason="hard artifact provenance drift",
+        resume_action="re-run /wf-new for plan-a after correcting provenance",
+        updated_at="2026-08-06T00:20:00+00:00",
+    )
+    assert blocked["status"] == "blocked"
+    assert blocked["current_plan_id"] == "plan-a"
+    assert blocked["plans"][0]["status"] == "blocked"
+
+    for missing in ("reason", "resume_action"):
+        arguments = {
+            "plan_id": "plan-a",
+            "target_status": "blocked",
+            "reason": "artifact drift",
+            "resume_action": "repair artifacts",
+            "updated_at": "2026-08-06T00:20:00+00:00",
+        }
+        arguments[missing] = ""
+        with pytest.raises(ValueError, match=missing):
+            state.transition_plan(ledger, **arguments)
+
+
+def test_batch_ledger_rejects_second_active_plan() -> None:
+    state = _load_reference(
+        "batch_ledger_single_active",
+        REPO_ROOT / ".claude" / "skills" / "wf-new-batch" / "references" / "batch-ledger.py",
+    )
+    ledger = state.transition_plan(
+        _valid_ledger(),
+        plan_id="plan-a",
+        target_status="in_progress",
+        updated_at="2026-08-06T00:01:00+00:00",
+    )
+
+    with pytest.raises(ValueError, match="別の active plan"):
+        state.transition_plan(
+            ledger,
+            plan_id="plan-b",
+            target_status="in_progress",
+            updated_at="2026-08-06T00:02:00+00:00",
+        )
+
+
+def test_batch_ledger_rejects_current_plan_status_mismatch() -> None:
+    state = _load_reference(
+        "batch_ledger_current_coherence",
+        REPO_ROOT / ".claude" / "skills" / "wf-new-batch" / "references" / "batch-ledger.py",
+    )
+    ledger = _valid_ledger()
+    ledger["current_plan_id"] = "plan-a"
+
+    with pytest.raises(ValueError, match="current_plan_id"):
+        state.validate_ledger(ledger)
+
+    ledger = _valid_ledger()
+    ledger["current_plan_id"] = "plan-a"
+    ledger["plans"][0]["status"] = "in_progress"
+    ledger["plans"][1]["status"] = "in_progress"
+    with pytest.raises(ValueError, match="active plan を 1 件"):
+        state.validate_ledger(ledger)
+
+
+def test_batch_ledger_atomic_failure_preserves_previous_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    state = _load_reference(
+        "batch_ledger_atomic",
+        REPO_ROOT / ".claude" / "skills" / "wf-new-batch" / "references" / "batch-ledger.py",
+    )
+    path = tmp_path / "batch-ledger.json"
+    original = _valid_ledger()
+    path.write_text(json.dumps(original), encoding="utf-8")
+    monkeypatch.setattr(state.os, "replace", lambda *_: (_ for _ in ()).throw(OSError("replace failed")))
+
+    with pytest.raises(OSError, match="replace failed"):
+        state.save_ledger(
+            path,
+            state.transition_plan(
+                original,
+                plan_id="plan-a",
+                target_status="in_progress",
+                updated_at="2026-08-06T00:01:00+00:00",
+            ),
+        )
+
+    assert json.loads(path.read_text(encoding="utf-8")) == original
+    assert list(tmp_path.glob(".batch-ledger.json.*")) == []
+
+
+def test_batch_ledger_reconciles_child_complete_crash_without_changing_actual_state() -> None:
+    state = _load_reference(
+        "batch_ledger_reconcile",
+        REPO_ROOT / ".claude" / "skills" / "wf-new-batch" / "references" / "batch-ledger.py",
+    )
+    ledger = state.transition_plan(
+        _valid_ledger(),
+        plan_id="plan-a",
+        target_status="in_progress",
+        updated_at="2026-08-06T00:01:00+00:00",
+    )
+    actual = {
+        "provenance": {"batch_id": "batch-20260806", "plan_id": "plan-a"},
+        "phase": "prepared",
+        "hard_artifacts_valid": True,
+        "collection_dir": "collections/planning/plan-a",
+    }
+    original_actual = copy.deepcopy(actual)
+
+    reconciled, changed = state.reconcile_prepared_plan(
+        ledger,
+        plan_id="plan-a",
+        actual=actual,
+        updated_at="2026-08-06T00:02:00+00:00",
+    )
+
+    assert changed is True
+    assert reconciled["plans"][0]["status"] == "completed"
+    assert reconciled["plans"][0]["reason"] == "reconciled_after_child_completion"
+    assert actual == original_actual
+
+
+def test_batch_ledger_does_not_reconcile_incomplete_or_mismatched_actual_state() -> None:
+    state = _load_reference(
+        "batch_ledger_reconcile_negative",
+        REPO_ROOT / ".claude" / "skills" / "wf-new-batch" / "references" / "batch-ledger.py",
+    )
+    ledger = state.transition_plan(
+        _valid_ledger(),
+        plan_id="plan-a",
+        target_status="in_progress",
+        updated_at="2026-08-06T00:01:00+00:00",
+    )
+    incomplete = {
+        "provenance": {"batch_id": "batch-20260806", "plan_id": "plan-a"},
+        "phase": "prepared",
+        "hard_artifacts_valid": False,
+        "collection_dir": "collections/planning/plan-a",
+    }
+
+    unchanged, changed = state.reconcile_prepared_plan(
+        ledger,
+        plan_id="plan-a",
+        actual=incomplete,
+        updated_at="2026-08-06T00:02:00+00:00",
+    )
+    assert changed is False
+    assert unchanged == ledger
+
+    mismatched = copy.deepcopy(incomplete)
+    mismatched["provenance"]["batch_id"] = "different-batch"
+    with pytest.raises(ValueError, match="provenance"):
+        state.reconcile_prepared_plan(
+            ledger,
+            plan_id="plan-a",
+            actual=mismatched,
+            updated_at="2026-08-06T00:02:00+00:00",
+        )
 
 
 def test_wf_new_preselected_batch_entry_validates_before_state_mutation() -> None:
