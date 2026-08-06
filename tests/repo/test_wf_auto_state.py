@@ -230,6 +230,114 @@ def test_schema_v2_appends_typed_segments_and_preserves_every_attempt(tmp_path: 
     }
 
 
+def test_attempt_duration_summary_includes_every_status_and_work_item(runner: ModuleType) -> None:
+    def attempt(collection: str, action: str, status: str, ai_seconds: float, human_seconds: float) -> dict:
+        return {
+            "collection": collection,
+            "action": action,
+            "status": status,
+            "timing": {
+                "segments": [
+                    {
+                        "kind": "ai",
+                        "started_at": "2026-07-21T00:00:00+00:00",
+                        "ended_at": "2026-07-21T00:00:01+00:00",
+                        "duration_seconds": ai_seconds,
+                    },
+                    {
+                        "kind": "human",
+                        "started_at": "2026-07-21T00:00:01+00:00",
+                        "ended_at": "2026-07-21T00:00:02+00:00",
+                        "duration_seconds": human_seconds,
+                    },
+                ]
+            },
+        }
+
+    history = {
+        "schema_version": 2,
+        "attempts": [
+            attempt("collections/planning/a", "wf-next", "failed", 10.0, 2.0),
+            attempt("collections/planning/a", "wf-next", "blocked", 5.0, 3.0),
+            attempt("collections/planning/a", "wf-next", "success", 20.0, 1.0),
+            attempt("collections/planning/b", "wf-next", "success", 30.0, 4.0),
+            attempt("collections/planning/a", "masterup", "success", 7.0, 6.0),
+        ],
+    }
+
+    summary = runner.summarize_attempt_durations(history)
+
+    assert summary == {
+        "available": True,
+        "reason": None,
+        "actions": {
+            "masterup": {
+                "ai_seconds": 7.0,
+                "human_seconds": 6.0,
+                "attempt_count": 1,
+                "work_item_count": 1,
+            },
+            "wf-next": {
+                "ai_seconds": 65.0,
+                "human_seconds": 10.0,
+                "attempt_count": 4,
+                "work_item_count": 2,
+            },
+        },
+        "totals": {
+            "ai_seconds": 72.0,
+            "human_seconds": 16.0,
+            "attempt_count": 5,
+            "work_item_count": 3,
+        },
+    }
+
+
+@pytest.mark.parametrize(
+    ("history", "reason"),
+    [
+        ({"schema_version": 1, "attempts": []}, "history_schema_v1"),
+        (
+            {"schema_version": 2, "attempts": [{"collection": None, "action": "wf-new", "timing": None}]},
+            "attempt_timing_unavailable",
+        ),
+    ],
+)
+def test_attempt_duration_summary_distinguishes_unavailable_from_zero(
+    runner: ModuleType, history: dict, reason: str
+) -> None:
+    assert runner.summarize_attempt_durations(history) == {
+        "available": False,
+        "reason": reason,
+        "actions": None,
+        "totals": None,
+    }
+
+    zero_summary = runner.summarize_attempt_durations(
+        {
+            "schema_version": 2,
+            "attempts": [
+                {
+                    "collection": None,
+                    "action": "wf-new",
+                    "timing": {
+                        "segments": [
+                            {
+                                "kind": "ai",
+                                "started_at": "2026-07-21T00:00:00+00:00",
+                                "ended_at": "2026-07-21T00:00:00+00:00",
+                                "duration_seconds": 0.0,
+                            }
+                        ]
+                    },
+                }
+            ],
+        }
+    )
+    assert zero_summary["available"] is True
+    assert zero_summary["totals"]["ai_seconds"] == 0.0
+
+
 @pytest.mark.parametrize(
     ("segment", "message"),
     [
