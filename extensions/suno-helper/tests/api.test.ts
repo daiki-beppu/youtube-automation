@@ -174,6 +174,35 @@ describe("shared/api PromptEntry.duration_sec: optional wire 契約 (#3153)", ()
   });
 });
 
+describe("shared/api PromptEntry.duration_sec: runtime 検証 (#3154)", () => {
+  it.each([
+    ["true", true],
+    ["false", false],
+    ["文字列", "180"],
+    ["小数", 180.5],
+    ["NaN", Number.NaN],
+    ["Infinity", Number.POSITIVE_INFINITY],
+    ["-Infinity", Number.NEGATIVE_INFINITY],
+    ["zero", 0],
+    ["negative", -1],
+  ])(
+    "Given duration_sec が不正値 %s When fetch する Then fail-loud で拒否する",
+    async (_label, durationSec) => {
+      mockFetch(() => ({
+        ok: true,
+        status: 200,
+        json: async () => [
+          { name: "p1", style: "lofi", lyrics: "", duration_sec: durationSec },
+        ],
+      }));
+
+      await expect(
+        fetchCollectionPrompts(BASE_URL, COLLECTION_ID)
+      ).rejects.toThrow(/duration_sec/);
+    }
+  );
+});
+
 describe("shared/api PromptEntry: More Options 3 フィールドの optional 契約 (#900)", () => {
   // 契約 (draft が実装する shared/api.ts PromptEntry):
   //   style_influence?: number;  // 0-100 整数 (Suno Style Influence slider)
