@@ -7,6 +7,7 @@ import argparse
 import fcntl
 import hashlib
 import json
+import math
 import os
 import secrets
 import shutil
@@ -102,21 +103,67 @@ def read_history(root: Path) -> dict:
     for attempt in attempts:
         if not isinstance(attempt, dict):
             raise ValueError(f"history attempt は object でなければなりません: {history_path}")
-        normalized_attempts.append({**attempt, "timing": None} if schema_version == 1 else {**attempt})
+        normalized = {**attempt, "timing": None} if schema_version == 1 else {**attempt}
+        if schema_version == 2:
+            _validate_timing(normalized.get("timing"), source=str(history_path))
+        normalized_attempts.append(normalized)
     return {**history, "attempts": normalized_attempts}
+
+
+def _timestamp(value: object, *, field: str, source: str) -> datetime:
+    if not isinstance(value, str):
+        raise ValueError(f"{source}: {field} は ISO 8601 文字列でなければなりません")
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError as exc:
+        raise ValueError(f"{source}: {field} は ISO 8601 でなければなりません: {value}") from exc
+
+
+def _validate_timing(timing: object, *, source: str) -> None:
+    if timing is None:
+        return
+    if not isinstance(timing, dict) or not isinstance(timing.get("segments"), list):
+        raise ValueError(f"{source}: timing.segments は array でなければなりません")
+    for index, segment in enumerate(timing["segments"]):
+        prefix = f"timing.segments[{index}]"
+        if not isinstance(segment, dict):
+            raise ValueError(f"{source}: {prefix} は object でなければなりません")
+        if segment.get("kind") not in {"ai", "human"}:
+            raise ValueError(f"{source}: {prefix}.kind は ai または human でなければなりません")
+        started_at = _timestamp(segment.get("started_at"), field=f"{prefix}.started_at", source=source)
+        if "ended_at" not in segment:
+            raise ValueError(f"{source}: {prefix} は open segment のまま保存できません")
+        ended_at = _timestamp(segment["ended_at"], field=f"{prefix}.ended_at", source=source)
+        try:
+            reversed_time = ended_at < started_at
+        except TypeError as exc:
+            raise ValueError(f"{source}: {prefix} の timezone 指定が一致しません") from exc
+        if reversed_time:
+            raise ValueError(f"{source}: {prefix} の ended_at は started_at より前にできません")
+        duration = segment.get("duration_seconds")
+        if isinstance(duration, bool) or not isinstance(duration, (int, float)):
+            raise ValueError(f"{source}: {prefix}.duration_seconds は 0 以上の有限数値でなければなりません")
+        try:
+            invalid_duration = duration < 0 or not math.isfinite(duration)
+        except OverflowError:
+            invalid_duration = True
+        if invalid_duration:
+            raise ValueError(f"{source}: {prefix}.duration_seconds は 0 以上の有限数値でなければなりません")
 
 
 def _attempt_timing(segments: list[TimingSegment] | None) -> dict | None:
     if not segments:
         return None
     copied_segments = [{**segment} for segment in segments]
-    return {
+    _validate_timing({"segments": copied_segments}, source="record_attempt")
+    timing = {
         "started_at": copied_segments[0]["started_at"],
         "ended_at": copied_segments[-1]["ended_at"],
         "ai_seconds": sum(segment["duration_seconds"] for segment in copied_segments if segment["kind"] == "ai"),
         "human_seconds": sum(segment["duration_seconds"] for segment in copied_segments if segment["kind"] == "human"),
         "segments": copied_segments,
     }
+    return timing
 
 
 def _inside(root: Path, path: Path, field: str) -> Path:
