@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `docs(skill-feedback)`: 配布テンプレートと skill catalog の公開 operator route を `/skill-feedback` へ移行した（#3188）。
 - `refactor(skill-feedback)`: `/feedback` との命名衝突を避ける canonical `/skill-feedback` entrypoint を旧名と並行配置し、B6 integration receipt の owner を新 skill と issue template へ移した（#3187）。
 - `refactor(tests)`: 旧 `unit` / `streaming` テストを canonical owner と `tests/repo/streaming/` へ整理し、root allowlist・source layer・source owner の配置規約を repository contract として機械担保した（#3047）。
 - `fix(tests)`: collection serve の subprocess lifecycle テストで待機処理を共通化し、デッドライン到達時に待機対象を明示して失敗させるようにした。server 起動完了は PID ファイルの存在ではなく HTTP identity endpoint の応答まで確認し、高負荷時の起動途中を準備完了と誤認しないようにした（#3091）。
