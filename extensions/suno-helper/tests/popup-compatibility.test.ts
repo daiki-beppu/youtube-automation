@@ -146,17 +146,25 @@ function defaultSendMessage(
     return Promise.resolve([
       {
         id: "youtube-automation-localhost-7873",
+        channelName: "YouTube Automation",
         label: "YouTube Automation (default)",
         url: "http://youtube-automation.localhost:7873",
       },
-      { id: "abyss-mi", label: "ABYSS MI", url: BASE_URL },
+      {
+        id: "abyss-mi",
+        channelName: "ABYSS (MI)",
+        label: "ABYSS (MI) (localhost:7873)",
+        url: BASE_URL,
+      },
       {
         id: "localhost-7877",
+        channelName: "Fallback Channel",
         label: "localhost fallback 7877",
         url: FALLBACK_URL,
       },
       {
         id: "localhost-7873-changed",
+        channelName: "Changed Channel",
         label: "localhost changed",
         url: `${BASE_URL}/changed`,
       },
@@ -491,9 +499,12 @@ describe("Suno popup compatibility check", () => {
     completionSoundMocks.play.mockResolvedValue(undefined);
   });
 
-  it("ローカル配信元 option は URL を表示せず、URL value はデータ取得先として維持する", async () => {
+  it("ローカル配信元の option と選択済み trigger は channelName だけを表示する", async () => {
     const select = expectControl(container, "server-url");
-    select.querySelector<HTMLButtonElement>('[role="combobox"]')!.click();
+    const trigger =
+      select.querySelector<HTMLButtonElement>('[role="combobox"]')!;
+    expect(trigger.textContent).toBe("YouTube Automation | suno-helper");
+    trigger.click();
 
     await waitFor(() => {
       expect(document.querySelectorAll('[role="option"]')).toHaveLength(4);
@@ -509,16 +520,14 @@ describe("Suno popup compatibility check", () => {
       )
     ).toEqual([
       {
-        text: "YouTube Automation (default) | suno-helper",
+        text: "YouTube Automation | suno-helper",
         value: "http://youtube-automation.localhost:7873",
       },
-      { text: "ABYSS MI | suno-helper", value: BASE_URL },
-      { text: "localhost fallback 7877 | suno-helper", value: FALLBACK_URL },
-      { text: "localhost changed | suno-helper", value: `${BASE_URL}/changed` },
+      { text: "ABYSS (MI) | suno-helper", value: BASE_URL },
+      { text: "Fallback Channel | suno-helper", value: FALLBACK_URL },
+      { text: "Changed Channel | suno-helper", value: `${BASE_URL}/changed` },
     ]);
-    expect(
-      select.querySelector('[role="combobox"]')?.textContent
-    ).not.toContain("http://");
+    expect(trigger.textContent).not.toContain("http://");
   });
 
   it("popup に投入方式 selector を表示し、Fast / Balanced / Safe の速度プリセットは表示しない", () => {
@@ -4224,7 +4233,8 @@ describe("Suno popup compatibility check", () => {
   it("should persist only the selected URL when choosing a discovered non-default source", async () => {
     const liveSource = {
       id: "channel-a-49152",
-      label: "Channel A",
+      channelName: "Channel (A)",
+      label: "Channel (A) (channel-a.localhost:49152)",
       url: "http://channel-a.localhost:49152",
     };
     fetchMock.mockResolvedValue(jsonResponse(404, {}));
@@ -4234,6 +4244,7 @@ describe("Suno popup compatibility check", () => {
           return Promise.resolve([
             {
               id: "youtube-automation-localhost-7873",
+              channelName: "YouTube Automation",
               label: "YouTube Automation (default)",
               url: "http://youtube-automation.localhost:7873",
             },
@@ -4252,6 +4263,9 @@ describe("Suno popup compatibility check", () => {
 
     await waitFor(() =>
       expect(storageMocks.setValue).toHaveBeenCalledWith(liveSource.url)
+    );
+    expect(expectControl(container, "server-source-trigger").textContent).toBe(
+      "Channel (A) | suno-helper"
     );
     expect(
       expectControl(container, "server-source-trigger").getAttribute(
