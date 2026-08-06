@@ -140,6 +140,8 @@ def _candidates_from_preferences(
         extension_path = Path(raw_path)
         if not extension_path.is_absolute() or extension_path.name != extension_name:
             continue
+        if _is_disabled_extension_entry(raw_entry):
+            continue
         candidates.append(
             _ExtensionCandidate(
                 extension_id=extension_id,
@@ -149,6 +151,10 @@ def _candidates_from_preferences(
             )
         )
     return candidates
+
+
+def _is_disabled_extension_entry(raw_entry: dict[object, object]) -> bool:
+    return bool(raw_entry.get("disable_reasons")) or raw_entry.get("state") == 0
 
 
 def _format_candidates(candidates: list[_ExtensionCandidate]) -> str:

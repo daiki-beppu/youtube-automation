@@ -72,6 +72,32 @@ def test_resolve_unpacked_extension_origin_matches_secure_preferences(tmp_path):
     assert resolved.path == Path(_extension_path(tmp_path, "suno-helper"))
 
 
+@pytest.mark.parametrize(
+    "disabled_fields",
+    (
+        {"disable_reasons": [1]},
+        {"state": 0},
+    ),
+)
+def test_resolve_unpacked_extension_origin_selects_enabled_duplicate(tmp_path, disabled_fields):
+    disabled_id = "gdjhjiphejeeclngbljhajiffhpdepee"
+    enabled_id = "abcdefghijklmnopabcdefghijklmnop"
+    extension_path = _extension_path(tmp_path, "suno-helper")
+    _write_preferences(
+        tmp_path / "Default",
+        "Secure Preferences",
+        {
+            disabled_id: {"path": extension_path, **disabled_fields},
+            enabled_id: {"path": extension_path},
+        },
+    )
+
+    resolved = resolve_unpacked_extension_origin("suno-helper", chrome_user_data_dir=tmp_path)
+
+    assert resolved.extension_id == enabled_id
+    assert resolved.origin == f"chrome-extension://{enabled_id}"
+
+
 def test_resolve_unpacked_extension_origin_uses_preferences_fallback(tmp_path):
     _write_preferences(
         tmp_path / "Profile 1",
