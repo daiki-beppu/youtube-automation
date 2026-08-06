@@ -20,6 +20,7 @@ _SUNO_LYRIC_DEFAULT_YAML = REPO_ROOT / ".claude" / "skills" / "suno-lyric" / "co
 _SKILL_MD = REPO_ROOT / ".claude" / "skills" / "suno" / "SKILL.md"
 _CONFIG_RULES_MD = REPO_ROOT / ".claude" / "skills" / "channel-new" / "references" / "config-generation-rules.md"
 _STYLE_VARIANTS_UNSET = object()
+_EXCLUDE_STYLES_UNSET = object()
 
 
 @pytest.fixture
@@ -1427,6 +1428,7 @@ def _write_patterns_with_explicit_entries(
     tracks_top: int,
     *,
     style_variants: object = _STYLE_VARIANTS_UNSET,
+    exclude_styles: object = _EXCLUDE_STYLES_UNSET,
 ) -> Path:
     """name_jp / name_en を明示した複数 entry の yaml を書き出す.
 
@@ -1440,6 +1442,8 @@ def _write_patterns_with_explicit_entries(
     }
     if style_variants is not _STYLE_VARIANTS_UNSET:
         payload["style_variants"] = style_variants
+    if exclude_styles is not _EXCLUDE_STYLES_UNSET:
+        payload["exclude_styles"] = exclude_styles
     path = dir_ / "patterns.yaml"
     path.write_text(yaml.safe_dump(payload, allow_unicode=True), encoding="utf-8")
     return path
@@ -1561,6 +1565,62 @@ def test_unique_titles_allow_same_pattern_name_when_variation_suffix_disambiguat
 # 【要レビュー】product owner が B 案 (同梱既定の暗黙 auto-flow) を意図する場合、本セクションの
 # テストは設計やり直しが必要 (特に backward-compat の exact-3-keys テスト)。
 # ---------------------------------------------------------------------------
+
+
+def test_collection_exclude_styles_overrides_channel_in_md_and_every_json_entry(channel_dir, tmp_path):
+    """collection の exclude_styles は表示と全 JSON entry で channel より優先する."""
+    _write_suno_override(channel_dir, genre_line="lo-fi jazz", exclude_styles="channel metal")
+    patterns_path = _write_patterns_with_explicit_entries(
+        tmp_path,
+        entries=[
+            {"name_jp": "屋上", "name_en": "Rooftop", "tempo": "slow", "scenes": ["quiet rooftop"]},
+            {"name_jp": "書斎", "name_en": "Study", "tempo": "gentle", "scenes": ["warm study"]},
+        ],
+        tracks_top=4,
+        exclude_styles="collection edm",
+    )
+
+    md = generate(patterns_path)
+    entries = build_prompt_entries(patterns_path)
+
+    assert "collection edm" in md
+    assert "channel metal" not in md
+    assert all(entry["exclude_styles"] == "collection edm" for entry in entries)
+
+
+def test_collection_empty_exclude_styles_is_explicit_for_md_and_json(channel_dir, tmp_path):
+    """collection の空文字は channel 値へ fallback せず、JSON にも明示値として載せる."""
+    _write_suno_override(channel_dir, genre_line="lo-fi jazz", exclude_styles="channel metal")
+    patterns_path = _write_patterns_with_explicit_entries(
+        tmp_path,
+        entries=[
+            {"name_jp": "屋上", "name_en": "Rooftop", "tempo": "slow", "scenes": ["quiet rooftop"]},
+            {"name_jp": "書斎", "name_en": "Study", "tempo": "gentle", "scenes": ["warm study"]},
+        ],
+        tracks_top=4,
+        exclude_styles="",
+    )
+
+    md = generate(patterns_path)
+    entries = build_prompt_entries(patterns_path)
+
+    assert "**Exclude Styles:**" not in md
+    assert all("exclude_styles" in entry and entry["exclude_styles"] == "" for entry in entries)
+
+
+@pytest.mark.parametrize("exclude_styles", [None, [], {}])
+def test_collection_exclude_styles_rejects_non_string(channel_dir, tmp_path, exclude_styles):
+    """collection の exclude_styles が文字列でなければ生成前に拒否する."""
+    _write_suno_override(channel_dir, genre_line="lo-fi jazz")
+    patterns_path = _write_patterns_with_explicit_entries(
+        tmp_path,
+        entries=[{"name_jp": "屋上", "name_en": "Rooftop", "tempo": "slow", "scenes": ["quiet rooftop"]}],
+        tracks_top=2,
+        exclude_styles=exclude_styles,
+    )
+
+    with pytest.raises(ConfigError, match=r"patterns\.yaml.*exclude_styles.*string"):
+        build_prompt_entries(patterns_path)
 
 
 def test_build_prompt_entries_includes_style_influence_from_channel_override(channel_dir, tmp_path):
