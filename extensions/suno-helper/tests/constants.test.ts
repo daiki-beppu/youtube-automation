@@ -91,20 +91,34 @@ describe("shared/constants: サーバー互換の契約値", () => {
     expect(DEFAULT_SERVER_SOURCES).toHaveLength(1);
   });
 
-  it("Given server selector When helper ごとの option 表示名を組み立てる Then URL を含めずプロセスを識別できる", () => {
+  it("Given structured channelName When helper ごとの表示名を組み立てる Then legacy label と URL を表示しない", () => {
     expect(
       formatServerSourceLabel(
         {
           id: "abyss-mi",
-          label: "ABYSS MI",
+          channelName: "Ambient (Night)",
+          label: "Ambient (Night) (abyss-mi.localhost:7873)",
           url: "http://abyss-mi.localhost:7873",
         },
         "distrokid-helper"
       )
-    ).toBe("ABYSS MI | distrokid-helper");
+    ).toBe("Ambient (Night) | distrokid-helper");
     expect(
       formatServerSourceLabel(DEFAULT_SERVER_SOURCES[0], "suno-helper")
-    ).toBe("YouTube Automation (default) | suno-helper");
+    ).toBe("YouTube Automation | suno-helper");
+  });
+
+  it("Given expand 前の source When 表示名を組み立てる Then legacy label を互換表示する", () => {
+    expect(
+      formatServerSourceLabel(
+        {
+          id: "legacy",
+          label: "Legacy Channel",
+          url: "http://legacy.localhost:7873",
+        },
+        "suno-helper"
+      )
+    ).toBe("Legacy Channel | suno-helper");
   });
 
   it("Given server selector When host permissions を読む Then *.localhost を許可する", () => {
