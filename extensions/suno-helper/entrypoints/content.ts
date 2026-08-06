@@ -2650,7 +2650,13 @@ export default defineContentScript({
           // リロード前に FINISHED snapshot を退避する（runAll の完了経路と同じ）。
           if (result.completedAndCleared) {
             await verifyUnattendedCompletion(unattended);
-            emitProgress({ phase: PHASE.FINISHED, total: 0 });
+            emitProgress({
+              phase: PHASE.FINISHED,
+              total: 0,
+              ...(result.summary === undefined
+                ? {}
+                : { downloadSummary: result.summary }),
+            });
             if (await persistFinishedSnapshotForReload()) {
               scheduleRunCompleteReload();
             }
