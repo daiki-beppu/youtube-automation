@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `refactor(downloaded)`: Suno ZIP の archive 内音声総数と実配置数を単一走査の詳細結果として返し、現行の配置数 API 契約を維持（#3127）。
+
 - `fix(suno-helper)`: 通常・再試行の download 失敗理由へ `(phase=downloading)` を一度だけ付与し、overlay と unattended stop reason で失敗工程を特定可能にした（#3126）。
 
 - `fix(suno-helper)`: downloaded 通知 API の失敗表示に URL encode 後の実 POST endpoint を含め、token 再取得失敗でも起点 request の文脈を維持（#3125）。
