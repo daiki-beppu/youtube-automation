@@ -19,7 +19,7 @@ def create_authenticated_youtube_clients() -> "YouTubeClients":
 def create_readonly_youtube_clients() -> "YouTubeClients":
     from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
 
-    return YouTubeClients(readonly_handler=YouTubeOAuthHandler.create_readonly())
+    return YouTubeClients(readonly_handler=YouTubeOAuthHandler.create_readonly(interactive=False))
 
 
 def execute_youtube_request(request, context: str, *, on_attempt: Callable[[], None] | None = None):
