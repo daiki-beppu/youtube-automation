@@ -388,6 +388,49 @@ class TestStreamingReadmeWorkspaces:
         assert show_index < state_index < plan_index < apply_index
 
 
+class TestStreamingReadmeUnmanagedImport:
+    """既存 Vultr リソースを破壊せず workspace へ import する運用契約。"""
+
+    def test_documents_dependency_order_ids_and_stop_conditions(self):
+        """import 順序・ID 形式・未管理 resource・replace 時の停止を固定する。"""
+        text = read_file(_STREAMING_README)
+        match = re.search(
+            r"^## 既存 Vultr リソースの import\s*$\n(.*?)(?=^##\s|\Z)",
+            text,
+            flags=re.MULTILINE | re.DOTALL,
+        )
+        assert match is not None, "README に既存 Vultr リソースの import 節が無い"
+        section = match.group(1)
+
+        commands = (
+            "terraform import vultr_firewall_group.stream <firewall-group-id>",
+            "terraform import 'vultr_firewall_rule.ssh[\"<allowed-ssh-cidr>\"]' "
+            "'<firewall-group-id>,<firewall-rule-id>'",
+            "terraform import vultr_ssh_key.this <ssh-key-id>",
+            "terraform import vultr_instance.this <instance-id>",
+        )
+        for required in (
+            "terraform workspace show",
+            *commands,
+            "tls_private_key.ssh_host",
+            "null_resource.deploy",
+            "tls_private_key.ssh_host will be created",
+            "null_resource.deploy will be created",
+            "この 2 件の `+ create` だけ",
+            "同じ plan に `vultr_instance.this must be replaced` が併記",
+            "user_data",
+            "host_key",
+            "terraform plan",
+            "apply しない",
+        ):
+            assert required in section, f"既存 resource の import 節に {required!r} が無い"
+
+        positions = [section.index(command) for command in commands]
+        assert section.index("terraform workspace show") < positions[0]
+        assert positions == sorted(positions)
+        assert positions[-1] < section.index("terraform plan")
+
+
 # ============================================================================
 # infra/terraform/streaming/README.md — #111 動画差し替え手順
 # ============================================================================
