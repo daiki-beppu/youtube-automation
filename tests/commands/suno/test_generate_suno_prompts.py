@@ -1499,14 +1499,44 @@ def test_build_prompt_entries_rejects_invalid_duration_sec_override(channel_dir,
         build_prompt_entries(patterns_path)
 
 
-def test_build_prompt_entries_accepts_positive_integer_duration_sec_override(channel_dir, tmp_path):
-    """正の整数の duration_sec は既存の prompt 生成を妨げない。"""
+def test_build_prompt_entries_includes_positive_integer_duration_sec_override(channel_dir, tmp_path):
+    """正の整数の duration_sec を数値のまま prompt entry へ出力する。"""
     _write_suno_override(channel_dir, genre_line="lo-fi jazz", duration_sec=180)
     patterns_path = _write_minimal_patterns(tmp_path)
 
     entries = build_prompt_entries(patterns_path)
 
-    assert len(entries) == 1
+    assert entries[0]["duration_sec"] == 180
+    assert isinstance(entries[0]["duration_sec"], int)
+
+
+def test_build_prompt_entries_applies_duration_sec_to_every_scene(channel_dir, tmp_path):
+    """collection 共通の duration_sec を multi-scene の全 entry へ伝搬する。"""
+    _write_suno_override(channel_dir, genre_line="dream pop vocals", duration_sec=180)
+    patterns_path = _write_vocal_patterns(tmp_path, ["scene one", "scene two"])
+    _write_suno_lyrics_json(
+        tmp_path,
+        ["歌もの — Vocal (Variation 1)", "歌もの — Vocal (Variation 2)"],
+    )
+
+    entries = build_prompt_entries(patterns_path)
+
+    assert len(entries) == 2
+    assert [entry["duration_sec"] for entry in entries] == [180, 180]
+
+
+def test_build_prompt_entries_does_not_derive_duration_sec_from_duration_filter(channel_dir, tmp_path):
+    """duration_filter だけの設定から duration_sec を推定・同期しない。"""
+    _write_suno_override(
+        channel_dir,
+        genre_line="lo-fi jazz",
+        duration_filter={"min_sec": 120, "max_sec": 240},
+    )
+    patterns_path = _write_minimal_patterns(tmp_path)
+
+    entries = build_prompt_entries(patterns_path)
+
+    assert "duration_sec" not in entries[0]
 
 
 # ---------------------------------------------------------------------------
@@ -1654,6 +1684,7 @@ def test_build_prompt_entries_omits_advanced_fields_without_channel_override(cha
     assert "style_influence" not in entries[0]
     assert "weirdness" not in entries[0]
     assert "exclude_styles" not in entries[0]
+    assert "duration_sec" not in entries[0]
 
 
 def test_build_prompt_entries_omits_advanced_fields_when_no_override_file(channel_dir, tmp_path):
