@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(suno)`: collection の `suno-patterns.yaml` に `genre_line` がある場合は channel 設定より優先し、Style と mode 推定を collection ごとに分離（#3134）。
+
 ### Changed
 
 - `refactor(tests)`: 旧 `unit` / `streaming` テストを canonical owner と `tests/repo/streaming/` へ整理し、root allowlist・source layer・source owner の配置規約を repository contract として機械担保した（#3047）。
