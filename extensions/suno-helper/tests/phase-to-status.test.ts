@@ -73,6 +73,24 @@ describe("phaseToStatus: 終了 phase の文言と error フラグ", () => {
     expect(result.error).toBeFalsy();
   });
 
+  it("Given downloadSummary 付き FINISHED When phaseToStatus Then server count の部分完了文言・error は falsy", () => {
+    const result = statusOf({
+      phase: PHASE.FINISHED,
+      total: 28,
+      downloadSummary: {
+        expected: 56,
+        placed: 47,
+        missing: 9,
+        reasons: { sunoUnfulfilled: 3, applySkipped: 6 },
+      },
+    });
+
+    expect(result.text).toBe(
+      "完了 (47/56 clip 配置, 9 clip 欠損 — 内訳: Suno 未生成 3 / 配置 skip 6)"
+    );
+    expect(result.error).toBeFalsy();
+  });
+
   it("Given STOPPED When phaseToStatus Then 再実行可能な停止文言・error は falsy", () => {
     const result = statusOf({ phase: PHASE.STOPPED, index: 0, total: 3 });
 
@@ -144,6 +162,12 @@ describe("phaseToStatus: ENTRY_FAILED / 失敗付き FINISHED (#948)", () => {
         phase: PHASE.FINISHED,
         total: 55,
         message: "2 件の entry が失敗しました (entry 3, 7)",
+        downloadSummary: {
+          expected: 56,
+          placed: 47,
+          missing: 9,
+          reasons: { sunoUnfulfilled: 3, applySkipped: 6 },
+        },
       },
       []
     );
