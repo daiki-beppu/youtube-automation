@@ -32,6 +32,7 @@ async function loadContentScriptWithStalledCompletion(options: {
   initialSubmittedIds: string[];
   clipIdsByEntry: Map<number, string[]>;
   completionResult: SubmittedClipCompletionResult;
+  failedSubmittedIds?: string[];
 }) {
   vi.resetModules();
   vi.stubGlobal(
@@ -126,6 +127,14 @@ async function loadContentScriptWithStalledCompletion(options: {
         submittedIds = [...options.initialSubmittedIds];
       }),
       getSubmittedIds: vi.fn(() => [...submittedIds]),
+      getFailedSubmittedIds: vi.fn(() =>
+        (options.failedSubmittedIds ?? []).filter((id) =>
+          submittedIds.includes(id)
+        )
+      ),
+      getFailedIdsByIds: vi.fn((ids: string[]) =>
+        ids.filter((id) => (options.failedSubmittedIds ?? []).includes(id))
+      ),
       getPendingSubmittedIds: vi.fn(() => []),
       getPendingIdsByIds: vi.fn(() => []),
       getDuration: vi.fn(() => 120),
@@ -253,12 +262,17 @@ async function loadContentScriptWithStalledCompletion(options: {
   if (!runHandler) {
     throw new Error("run message handler was not registered");
   }
+  const retryPlaylistHandler = handlers.get("retryPlaylist");
+  if (!retryPlaylistHandler) {
+    throw new Error("retryPlaylist message handler was not registered");
+  }
   return {
     progressMessages,
     sentMessages,
     scrollAndMultiSelectByIdsMock,
     scheduleRunCompleteReloadMock,
     runHandler,
+    retryPlaylistHandler,
   };
 }
 
@@ -377,6 +391,207 @@ describe("content.ts queue mode stall graceful degradation (#1994)", () => {
     );
     expect(writeResumeStateMock).toHaveBeenCalledWith(
       expect.objectContaining({ failedIndices: [0, 1, 2] })
+    );
+  });
+
+  it("Given 一部 entry に error clip がある When queue run Then 当該 entry を除外して完了分をダウンロードする", async () => {
+    const {
+      progressMessages,
+      sentMessages,
+      scrollAndMultiSelectByIdsMock,
+      scheduleRunCompleteReloadMock,
+      runHandler,
+    } = await loadContentScriptWithStalledCompletion({
+      initialSubmittedIds: allClipIds,
+      clipIdsByEntry: new Map(clipIdsByEntry),
+      failedSubmittedIds: ["clip-1b"],
+      completionResult: {
+        timedOut: false,
+        submittedIds: allClipIds,
+        stalledClipIds: [],
+      },
+    });
+
+    runQueue(runHandler);
+    await vi.waitFor(() =>
+      expect(progressMessages).toContainEqual(
+        expect.objectContaining({ phase: PHASE.FINISHED })
+      )
+    );
+
+    expect(progressMessages).toContainEqual(
+      expect.objectContaining({
+        phase: PHASE.ENTRY_FAILED,
+        index: 1,
+        message: expect.stringContaining("status=error"),
+        log: { kind: "skip", entryName: "track-2" },
+      })
+    );
+    expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledWith(
+      ["clip-0a", "clip-0b", "clip-2a", "clip-2b"],
+      expect.anything()
+    );
+    expect(sentMessages).toContainEqual(
+      expect.objectContaining({ type: "startDownload" })
+    );
+    const finished = progressMessages.find(
+      (message) => message.phase === PHASE.FINISHED
+    );
+    expect(finished?.message).toContain("status=error");
+    expect(finished?.message).toContain("失敗分のみ再実行");
+    expect(writeResumeStateMock).toHaveBeenCalledWith(
+      expect.objectContaining({ failedIndices: [1] })
+    );
+    expect(clearResumeStateForCollectionMock).not.toHaveBeenCalled();
+    expect(scheduleRunCompleteReloadMock).not.toHaveBeenCalled();
+  });
+
+  it("Given 全 entry に error clip がある When queue run Then playlist を作らず失敗保留にする", async () => {
+    const { progressMessages, scrollAndMultiSelectByIdsMock, runHandler } =
+      await loadContentScriptWithStalledCompletion({
+        initialSubmittedIds: allClipIds,
+        clipIdsByEntry: new Map(clipIdsByEntry),
+        failedSubmittedIds: ["clip-0a", "clip-1a", "clip-2a"],
+        completionResult: {
+          timedOut: false,
+          submittedIds: allClipIds,
+          stalledClipIds: [],
+        },
+      });
+
+    runQueue(runHandler);
+    await vi.waitFor(() =>
+      expect(progressMessages).toContainEqual(
+        expect.objectContaining({ phase: PHASE.FINISHED })
+      )
+    );
+
+    expect(scrollAndMultiSelectByIdsMock).not.toHaveBeenCalled();
+    expect(writeResumeStateMock).toHaveBeenCalledWith(
+      expect.objectContaining({ failedIndices: [0, 1, 2] })
+    );
+    expect(progressMessages).toContainEqual(
+      expect.objectContaining({
+        phase: PHASE.FINISHED,
+        message: expect.stringContaining("失敗分のみ再実行"),
+      })
+    );
+  });
+
+  it("Given error clip が entry mapping にない When queue run Then playlist を作らず ERROR にする", async () => {
+    const { progressMessages, scrollAndMultiSelectByIdsMock, runHandler } =
+      await loadContentScriptWithStalledCompletion({
+        initialSubmittedIds: [...allClipIds, "unmapped-error"],
+        clipIdsByEntry: new Map(clipIdsByEntry),
+        failedSubmittedIds: ["unmapped-error"],
+        completionResult: {
+          timedOut: false,
+          submittedIds: allClipIds,
+          stalledClipIds: [],
+        },
+      });
+
+    runQueue(runHandler);
+    await vi.waitFor(() =>
+      expect(progressMessages).toContainEqual(
+        expect.objectContaining({ phase: PHASE.ERROR })
+      )
+    );
+
+    expect(scrollAndMultiSelectByIdsMock).not.toHaveBeenCalled();
+    expect(progressMessages).toContainEqual(
+      expect.objectContaining({
+        phase: PHASE.ERROR,
+        message: expect.stringContaining("unmapped-error"),
+      })
+    );
+  });
+
+  it("Given 保存済み clip が status=error When retryPlaylist Then playlist を作らず fail-loud にする", async () => {
+    const {
+      progressMessages,
+      scrollAndMultiSelectByIdsMock,
+      retryPlaylistHandler,
+    } = await loadContentScriptWithStalledCompletion({
+      // reload 後の retryPlaylist は fresh tracker で、保存済み ID は registerSubmitted されない。
+      initialSubmittedIds: [],
+      clipIdsByEntry: new Map(),
+      failedSubmittedIds: ["saved-error"],
+      completionResult: {
+        timedOut: false,
+        submittedIds: ["saved-ok", "saved-error"],
+        stalledClipIds: [],
+      },
+    });
+
+    retryPlaylistHandler({
+      data: {
+        playlistName: "vj | retry error regression",
+        submittedClipIds: ["saved-ok", "saved-error"],
+        expectedClipCount: 2,
+        collectionId: "collection-stall",
+      },
+    });
+    await vi.waitFor(() =>
+      expect(progressMessages).toContainEqual(
+        expect.objectContaining({ phase: PHASE.ERROR })
+      )
+    );
+
+    expect(scrollAndMultiSelectByIdsMock).not.toHaveBeenCalled();
+    expect(progressMessages).toContainEqual(
+      expect.objectContaining({
+        phase: PHASE.ERROR,
+        message: expect.stringMatching(/saved-error.*status=error/),
+      })
+    );
+  });
+
+  it("Given error entry と別の stall entry が混在 When queue run Then 両 entry を除外して完了分を処理する", async () => {
+    const {
+      progressMessages,
+      sentMessages,
+      scrollAndMultiSelectByIdsMock,
+      runHandler,
+    } = await loadContentScriptWithStalledCompletion({
+      initialSubmittedIds: allClipIds,
+      clipIdsByEntry: new Map(clipIdsByEntry),
+      failedSubmittedIds: ["clip-2a"],
+      completionResult: {
+        timedOut: true,
+        submittedIds: allClipIds,
+        stalledClipIds: ["clip-1b"],
+        message:
+          "生成完了待ちがタイムアウトしました: submitted=6/6, pending=1, 最後の進捗からの経過時間=600000ms",
+      },
+    });
+
+    runQueue(runHandler);
+    await vi.waitFor(() =>
+      expect(progressMessages).toContainEqual(
+        expect.objectContaining({ phase: PHASE.FINISHED })
+      )
+    );
+
+    expect(progressMessages).toContainEqual(
+      expect.objectContaining({ phase: PHASE.ENTRY_FAILED, index: 1 })
+    );
+    expect(progressMessages).toContainEqual(
+      expect.objectContaining({
+        phase: PHASE.ENTRY_FAILED,
+        index: 2,
+        message: expect.stringContaining("status=error"),
+      })
+    );
+    expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledWith(
+      ["clip-0a", "clip-0b"],
+      expect.anything()
+    );
+    expect(sentMessages).toContainEqual(
+      expect.objectContaining({ type: "startDownload" })
+    );
+    expect(writeResumeStateMock).toHaveBeenCalledWith(
+      expect.objectContaining({ failedIndices: [1, 2] })
     );
   });
 
