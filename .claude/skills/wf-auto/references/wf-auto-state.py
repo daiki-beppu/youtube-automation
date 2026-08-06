@@ -166,6 +166,73 @@ def _attempt_timing(segments: list[TimingSegment] | None) -> dict | None:
     return timing
 
 
+def summarize_attempt_durations(history: dict) -> dict:
+    """Aggregate every measured attempt without treating unavailable timing as zero."""
+    if not isinstance(history, dict) or not isinstance(history.get("attempts"), list):
+        raise ValueError("history は attempts array を持つ object でなければなりません")
+    schema_version = history.get("schema_version")
+    if schema_version == 1:
+        return {
+            "available": False,
+            "reason": "history_schema_v1",
+            "actions": None,
+            "totals": None,
+        }
+    if schema_version != 2:
+        raise ValueError(f"未対応 history schema です: {schema_version!r}")
+
+    accumulators: dict[str, dict] = {}
+    for index, attempt in enumerate(history["attempts"]):
+        if not isinstance(attempt, dict):
+            raise ValueError(f"history.attempts[{index}] は object でなければなりません")
+        action = attempt.get("action")
+        if not isinstance(action, str) or not action:
+            raise ValueError(f"history.attempts[{index}].action は空でない string でなければなりません")
+        collection = attempt.get("collection")
+        if collection is not None and (not isinstance(collection, str) or not collection):
+            raise ValueError(f"history.attempts[{index}].collection は null または空でない string です")
+        timing = attempt.get("timing")
+        if timing is None:
+            return {
+                "available": False,
+                "reason": "attempt_timing_unavailable",
+                "actions": None,
+                "totals": None,
+            }
+        _validate_timing(timing, source=f"history.attempts[{index}]")
+
+        accumulator = accumulators.setdefault(
+            action,
+            {
+                "ai_durations": [],
+                "human_durations": [],
+                "attempt_count": 0,
+                "work_items": set(),
+            },
+        )
+        for segment in timing["segments"]:
+            accumulator[f"{segment['kind']}_durations"].append(float(segment["duration_seconds"]))
+        accumulator["attempt_count"] += 1
+        accumulator["work_items"].add(collection)
+
+    actions = {}
+    for action in sorted(accumulators):
+        accumulator = accumulators[action]
+        actions[action] = {
+            "ai_seconds": math.fsum(accumulator["ai_durations"]),
+            "human_seconds": math.fsum(accumulator["human_durations"]),
+            "attempt_count": accumulator["attempt_count"],
+            "work_item_count": len(accumulator["work_items"]),
+        }
+    totals = {
+        "ai_seconds": math.fsum(item["ai_seconds"] for item in actions.values()),
+        "human_seconds": math.fsum(item["human_seconds"] for item in actions.values()),
+        "attempt_count": sum(item["attempt_count"] for item in actions.values()),
+        "work_item_count": sum(item["work_item_count"] for item in actions.values()),
+    }
+    return {"available": True, "reason": None, "actions": actions, "totals": totals}
+
+
 def _inside(root: Path, path: Path, field: str) -> Path:
     root = root.resolve()
     path = path.resolve()
