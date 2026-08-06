@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `refactor(packaging)`: リポジトリを責務別 layer へ再配置し、canonical owner への production import・receipt・active documentation を同期した。`youtube_automation.utils` と `infrastructure.legacy_utils` は下流向け compatibility façade として installed wheel でも維持し、削除・統合候補は `docs/architecture/reorganization-followups.md` に記録した。
 ### Added
 
+- `feat(wf-new-batch)`: batch manifest の schema/provenance/approval、exact-N、plan ID・slug 一意性、既存衝突、全 unordered pair と既存比較直積を実行時に fail-closed 検証する validator を追加した（#3278）。
 - `feat(collection-ideate)`: 明示的な batch plan mode で N 件の企画を既存 collection と batch 内の全組合せに対して相互差別化し、全件承認・件数・slug 一意性・provenance を検証した manifest だけを atomic に保存する契約を追加した。通常の single collection 企画契約は維持する（#3262）。
 - `deploy(site)`: 公開リリースノートを Cloudflare Pages の `youtube-automation-release-notes` project から配信する。GitHub integration は `site` を monorepo root とし、Node.js 24 / pnpm 11.15.1 で build、`main` を production、repository 内のその他 branch / pull request を preview として自動公開する。公開 URL、build/output 条件、Direct Upload による復旧手順をリポジトリへ記録した（#3057）。
 - `ci(site)`: Blume リリースノートサイトの frozen install / schema check / test / build を stacked PR と `main` push で検証する専用 workflow を追加した。`site/` の生成物・依存を明示的に gitignore し、実際に build した Python wheel / sdist へサイト workspace が混入しない配布境界を契約テストで固定。公開サイトを ADR-0021 の限定 TypeScript 例外として ADR-0023、CLAUDE.md、architecture、development guide、README に反映した（#3056）。
