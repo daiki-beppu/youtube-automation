@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `refactor(suno-helper)`: clip tracker から、この run で投入し最新 status が `error` の clip ID を投入順で取得できるようにした。あわせて、reload 後の保存済み clip のように投入登録がない ID も、明示した ID 集合に対する最新 status から失敗を取得できるようにした。失敗集合は正規 status から都度導出し、既存の pending・in-flight・playlist 候補契約を変えない（#3204）。
 - `fix(suno-helper)`: active feed poll で要求 clip が欠落した場合、認証済みの単体 clip API を順次照会して `status=error` を含む終端状態を観測できるようにした。feed で確認済みの ID は重複照会せず、個別失敗は残りの照会を妨げず、401 後は token の再捕捉まで自前通信を停止する（#3203）。
 - `refactor(tests)`: 旧 `unit` / `streaming` テストを canonical owner と `tests/repo/streaming/` へ整理し、root allowlist・source layer・source owner の配置規約を repository contract として機械担保した（#3047）。
 - `fix(tests)`: collection serve の subprocess lifecycle テストで待機処理を共通化し、デッドライン到達時に待機対象を明示して失敗させるようにした。server 起動完了は PID ファイルの存在ではなく HTTP identity endpoint の応答まで確認し、高負荷時の起動途中を準備完了と誤認しないようにした（#3091）。
