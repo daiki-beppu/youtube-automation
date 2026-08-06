@@ -57,7 +57,7 @@ function expectOnlyStartAndCancelMessages(): void {
   ).toBe(false);
 }
 
-describe("download flow cleanup", () => {
+describe("download flow", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     messagingMocks.handlers.clear();
@@ -122,5 +122,57 @@ describe("download flow cleanup", () => {
     dispatchDownloadComplete();
     await Promise.resolve();
     expectOnlyStartAndCancelMessages();
+  });
+
+  it("通常 download の API 失敗理由へ downloading phase を付与して返す", async () => {
+    const apiError =
+      "POST /collections/collection/downloaded failed: 403 Forbidden";
+    messagingMocks.sendMessage.mockImplementation(async (message: string) => {
+      if (message === "startDownload") {
+        return { ok: true };
+      }
+      if (message === "postDownloaded") {
+        throw new Error(apiError);
+      }
+      return { ok: true };
+    });
+    downloadMocks.triggerDownloadAll.mockImplementationOnce(async () => {
+      dispatchDownloadComplete();
+    });
+    const flow = createSubject(() => false);
+
+    await expect(
+      flow.downloadBestEffort(CONTEXT, "collection", 2, 2)
+    ).resolves.toBe(`${apiError} (phase=downloading)`);
+  });
+
+  it("retry download の失敗理由へ downloading phase を付与して throw する", async () => {
+    messagingMocks.sendMessage.mockResolvedValueOnce({
+      ok: false,
+      message: "watcher unavailable",
+    });
+    const flow = createSubject(() => false);
+
+    await expect(
+      flow.retryDownload({
+        context: CONTEXT,
+        collectionId: "collection",
+        submittedClipIds: ["clip-id"],
+        selectClipIds: vi.fn(async () => undefined),
+        clearResumeState: vi.fn(async () => undefined),
+      })
+    ).rejects.toThrow("watcher unavailable (phase=downloading)");
+  });
+
+  it("既に downloading phase がある失敗理由を重複して付与しない", async () => {
+    messagingMocks.sendMessage.mockResolvedValueOnce({
+      ok: false,
+      message: "watcher unavailable (phase=downloading)",
+    });
+    const flow = createSubject(() => false);
+
+    await expect(
+      flow.performDownload(CONTEXT, "collection", 2, 2)
+    ).rejects.toThrow(/^watcher unavailable \(phase=downloading\)$/);
   });
 });
