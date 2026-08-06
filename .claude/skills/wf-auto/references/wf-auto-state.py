@@ -166,6 +166,23 @@ def _attempt_timing(segments: list[TimingSegment] | None) -> dict | None:
     return timing
 
 
+def _ai_timing_segment(started_at: str, ended_at: str) -> TimingSegment:
+    started = _timestamp(started_at, field="ai_started_at", source="record")
+    ended = _timestamp(ended_at, field="recorded_at", source="record")
+    try:
+        duration_seconds = (ended - started).total_seconds()
+    except TypeError as exc:
+        raise ValueError("record: ai_started_at と recorded_at の timezone 指定が一致しません") from exc
+    segment: TimingSegment = {
+        "kind": "ai",
+        "started_at": started_at,
+        "ended_at": ended_at,
+        "duration_seconds": duration_seconds,
+    }
+    _validate_timing({"segments": [segment]}, source="record")
+    return segment
+
+
 def _inside(root: Path, path: Path, field: str) -> Path:
     root = root.resolve()
     path = path.resolve()
@@ -821,6 +838,7 @@ def record_bootstrap_attempt(
     status: Literal["blocked", "failed"],
     reason: str,
     now: str,
+    ai_started_at: str | None = None,
 ) -> None:
     """Record an unattended `/wf-new` stop before a collection exists."""
     record_attempt(
@@ -832,6 +850,7 @@ def record_bootstrap_attempt(
         reason=reason,
         resume_action="wf-new",
         now=now,
+        segments=[_ai_timing_segment(ai_started_at, now)] if ai_started_at is not None else None,
     )
 
 
@@ -859,11 +878,13 @@ def _parser() -> argparse.ArgumentParser:
     record.add_argument("--status", choices=("success", "blocked", "failed"), required=True)
     record.add_argument("--reason", required=True)
     record.add_argument("--resume-action", choices=sorted(ACTIONS))
+    record.add_argument("--ai-started-at")
     bootstrap = sub.add_parser("record-bootstrap")
     bootstrap.add_argument("--channel-dir", type=Path, default=Path.cwd())
     bootstrap.add_argument("--token", required=True)
     bootstrap.add_argument("--status", choices=("blocked", "failed"), required=True)
     bootstrap.add_argument("--reason", required=True)
+    bootstrap.add_argument("--ai-started-at")
     return parser
 
 
@@ -887,16 +908,20 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "plan":
             result = resolve_action(root, args.collection)
         elif args.command == "record-bootstrap":
+            recorded_at = datetime.now(UTC).isoformat()
             record_bootstrap_attempt(
                 root,
                 token=args.token,
                 status=args.status,
                 reason=args.reason,
-                now=datetime.now(UTC).isoformat(),
+                now=recorded_at,
+                ai_started_at=args.ai_started_at,
             )
             result = {"status": "recorded"}
         else:
             collection = select_collection(root, args.collection)
+            recorded_at = datetime.now(UTC).isoformat()
+            segments = [_ai_timing_segment(args.ai_started_at, recorded_at)] if args.ai_started_at is not None else None
             record_attempt(
                 root,
                 token=args.token,
@@ -905,7 +930,8 @@ def main(argv: list[str] | None = None) -> int:
                 status=args.status,
                 reason=args.reason,
                 resume_action=args.resume_action,
-                now=datetime.now(UTC).isoformat(),
+                now=recorded_at,
+                segments=segments,
             )
             result = {"status": "recorded"}
     except LeaseBusyError as exc:
