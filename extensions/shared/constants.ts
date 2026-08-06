@@ -314,10 +314,7 @@ export function formatServerSourceLabel(
   source: LocalServerSource,
   helper: HelperProcessName
 ): string {
-  const channelName =
-    helper === "distrokid-helper"
-      ? (source.channelName ?? source.label)
-      : source.label;
+  const channelName = source.channelName ?? source.label;
   return `${channelName} | ${helper}`;
 }
 

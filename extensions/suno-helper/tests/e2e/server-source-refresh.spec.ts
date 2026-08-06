@@ -34,7 +34,7 @@ test("最初の開操作では停止済み候補を提示せず、検出完了�
   let registry: Server | undefined;
   try {
     const makeLiveServer = async (
-      label: string
+      channelName: string
     ): Promise<{ info: Record<string, unknown> }> => {
       const server = createServer((request, response) => {
         response.setHeader("Content-Type", "application/json");
@@ -47,9 +47,10 @@ test("最初の開操作では停止済み候補を提示せず、検出完了�
       });
       const port = await listen(server);
       liveServers.push(server);
+      const label = `${channelName} (127.0.0.1:${port})`;
       const info = {
-        channel_name: label,
-        channel_short: label.toLowerCase(),
+        channel_name: channelName,
+        channel_short: channelName.toLowerCase(),
         hostname: "127.0.0.1",
         port,
         base_url: `http://127.0.0.1:${port}`,
@@ -57,8 +58,8 @@ test("最初の開操作では停止済み候補を提示せず、検出完了�
       };
       return { info };
     };
-    const oldServer = await makeLiveServer("Old");
-    const newServer = await makeLiveServer("New");
+    const oldServer = await makeLiveServer("Old (Archive)");
+    const newServer = await makeLiveServer("New (Channel)");
     let active = oldServer;
     let delayNextResponse = false;
     registry = createServer((request, response) => {
@@ -115,7 +116,7 @@ test("最初の開操作では停止済み候補を提示せず、検出完了�
     await page.goto("https://suno.com/create");
     const trigger = page.locator('[data-suno-control="server-source-trigger"]');
     const sourceField = page.locator('[data-suno-control="server-url"]');
-    await expect(trigger).toContainText("YouTube Automation (default)");
+    await expect(trigger).toHaveText("YouTube Automation | suno-helper");
     await expect(sourceField).toHaveAttribute(
       "data-source-values",
       new RegExp(String(oldServer.info.base_url))
@@ -132,9 +133,9 @@ test("最初の開操作では停止済み候補を提示せず、検出完了�
 
     await expect(trigger).toBeEnabled();
     const options = page.getByRole("option");
-    await expect(options).toContainText([
-      "YouTube Automation (default)",
-      "New",
+    await expect(options).toHaveText([
+      "YouTube Automation | suno-helper",
+      "New (Channel) | suno-helper",
     ]);
     await expect(options.filter({ hasText: "Old" })).toHaveCount(0);
     expect(
@@ -142,6 +143,17 @@ test("最初の開操作では停止済み候補を提示せず、検出完了�
         .first()
         .evaluate((option) => option.getRootNode() instanceof ShadowRoot)
     ).toBe(true);
+    await page
+      .getByRole("option", {
+        name: "New (Channel) | suno-helper",
+        exact: true,
+      })
+      .click();
+    await expect(trigger).toHaveText("New (Channel) | suno-helper");
+    await expect(sourceField).toHaveAttribute(
+      "data-selected-value",
+      String(newServer.info.base_url)
+    );
   } finally {
     await context?.close();
     if (registry?.listening) await close(registry);
