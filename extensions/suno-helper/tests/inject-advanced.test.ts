@@ -10,9 +10,9 @@
 //
 // 契約 (shared/dom.ts):
 //   injectAdvancedFields(entry, fields): Promise<void>
-//     entry:  AdvancedFieldValues { style_influence?, weirdness?, exclude_styles?, vocal_gender? }
-//     fields: ResolvedAdvancedFields { excludeStyles, weirdness, styleInfluence, vocalGender: { male, female } }
-//   注入順序: Exclude styles (text, 高速) → vocal_gender (click 1 回) → Weirdness → Style Influence
+//     entry:  AdvancedFieldValues { style_influence?, weirdness?, exclude_styles?, vocal_gender?, duration_sec? }
+//     fields: ResolvedAdvancedFields { excludeStyles, weirdness, styleInfluence, vocalGender, duration }
+//   注入順序: Exclude styles → vocal_gender → Duration Custom/slider → Weirdness → Style Influence
 //   各フィールドの非対称契約:
 //     - entry に値有 (=== undefined でない) + 対応 selector が null:
 //         - exclude_styles / vocal_gender → throw (fail-loud、UI 改装検知)
@@ -94,6 +94,7 @@ const ALL_NULL: ResolvedAdvancedFields = {
   weirdness: null,
   styleInfluence: null,
   vocalGender: { male: null, female: null },
+  duration: null,
 };
 
 beforeEach(() => {
@@ -326,6 +327,79 @@ describe("injectAdvancedFields: 非対称契約 (fail-loud / fail-soft, #900)", 
         expect.any(Error)
       );
       warnSpy.mockRestore();
+    });
+  });
+
+  describe("duration_sec 注入 (#3160)", () => {
+    it("Given duration_sec=180 + 解決済み controls When 注入 Then Custom click 後に bridge で slider を180へ動かす", async () => {
+      const order: string[] = [];
+      const customButton = document.createElement("button");
+      customButton.addEventListener("click", () => order.push("custom"));
+      const slider = makeSlider(120, { respond: false });
+      const resolvedAriaLabel = "resolved-duration-slider";
+      slider.setAttribute("aria-label", resolvedAriaLabel);
+      const bridgeSetSlider = vi.fn(
+        async (_ariaLabel: string, target: number) => {
+          order.push("slider");
+          slider.setAttribute("aria-valuenow", String(target));
+          return true;
+        }
+      );
+      const customClick = vi.spyOn(customButton, "click");
+
+      await injectAdvancedFields(
+        { duration_sec: 180 },
+        { ...ALL_NULL, duration: { customButton, slider } },
+        { bridgeSetSlider }
+      );
+
+      expect(order).toEqual(["custom", "slider"]);
+      expect(customClick).toHaveBeenCalledTimes(1);
+      expect(bridgeSetSlider).toHaveBeenCalledWith(resolvedAriaLabel, 180);
+      expect(slider.getAttribute("aria-valuenow")).toBe("180");
+    });
+
+    it("Given duration_sec=180 + bridge false When 注入 Then Custom click 後に keydown fallback で180へ動かす", async () => {
+      const order: string[] = [];
+      const customButton = document.createElement("button");
+      customButton.addEventListener("click", () => order.push("custom"));
+      const slider = makeSlider(179);
+      slider.setAttribute("aria-label", "resolved-duration-slider");
+      slider.addEventListener("keydown", () => order.push("keydown"));
+      const bridgeSetSlider = vi.fn(async () => {
+        order.push("bridge");
+        return false;
+      });
+
+      await injectAdvancedFields(
+        { duration_sec: 180 },
+        { ...ALL_NULL, duration: { customButton, slider } },
+        { bridgeSetSlider }
+      );
+
+      expect(order).toEqual(["custom", "bridge", "keydown"]);
+      expect(slider.getAttribute("aria-valuenow")).toBe("180");
+    });
+
+    it("Given duration_sec 未指定 + 解決済み controls When 注入 Then controls に触れず slider 値を維持する", async () => {
+      const customButton = document.createElement("button");
+      const customClick = vi.spyOn(customButton, "click");
+      const slider = makeSlider(120);
+      slider.setAttribute("aria-label", "resolved-duration-slider");
+      const keydown = vi.fn();
+      slider.addEventListener("keydown", keydown);
+      const bridgeSetSlider = vi.fn().mockResolvedValue(true);
+
+      await injectAdvancedFields(
+        {},
+        { ...ALL_NULL, duration: { customButton, slider } },
+        { bridgeSetSlider }
+      );
+
+      expect(customClick).not.toHaveBeenCalled();
+      expect(bridgeSetSlider).not.toHaveBeenCalled();
+      expect(keydown).not.toHaveBeenCalled();
+      expect(slider.getAttribute("aria-valuenow")).toBe("120");
     });
   });
 
