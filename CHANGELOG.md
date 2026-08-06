@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(suno)`: collection の `suno-patterns.yaml` にある `style_variants` を channel 設定より優先し、不正な collection variant を生成前に拒否（#3135）。
+
 - `feat(suno)`: collection の `suno-patterns.yaml` に `genre_line` がある場合は channel 設定より優先し、Style と mode 推定を collection ごとに分離（#3134）。
 
 ### Changed
