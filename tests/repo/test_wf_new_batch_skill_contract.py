@@ -421,3 +421,30 @@ def test_wf_new_normal_entry_does_not_infer_preselected_mode() -> None:
     assert "両引数がない場合は従来の通常入口" in text
     assert "片方だけなら停止" in text
     assert "通常入口から manifest を自動探索しない" in text
+
+
+def test_wf_new_batch_is_sequential_resumable_and_delegates_to_wf_new() -> None:
+    text = _read_skill("wf-new-batch")
+
+    assert "reports/wf-new-batches/<batch-id>/batch-ledger.json" in text
+    assert "`/collection-ideate` を 1 回だけ" in text
+    assert "`/wf-new --batch-id <batch-id> --plan-id <plan-id>`" in text
+    assert "並列に起動しない" in text
+    assert "`completed` は再実行しない" in text
+    assert "最初の未完了 plan" in text
+    assert "atomic rename" in text
+    assert "後続 plan を開始しない" in text
+    assert "batch-ledger.py reconcile" in text
+    assert "child 完了後・ledger completed 更新前に crash" in text
+    assert "`workflow-state.json` と hard artifacts も変更せず" in text
+    assert "次回 resume で同じ実成果物を再照合" in text
+
+
+def test_wf_new_batch_done_requires_every_canonical_wf_new_completion() -> None:
+    text = _read_skill("wf-new-batch")
+
+    assert "全 plan が `completed`" in text
+    assert '`phase == "prepared"`' in text
+    assert "hard artifacts" in text
+    assert "approval gate" in text
+    assert "batch ledger だけを根拠に Done としない" in text
