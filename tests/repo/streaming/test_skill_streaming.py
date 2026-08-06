@@ -109,6 +109,36 @@ class TestStreamingSkillSshAgent:
         assert "preflight 合否は `terraform plan` / `apply` の stream-level 検証" in text
 
 
+class TestStreamingSkillWorkspaces:
+    """Quick Reference から README 正本の workspace 手順へ到達できる契約。"""
+
+    def test_quick_reference_indexes_workspace_operations_and_variable_warning(self):
+        """workspace 操作、変数再注入警告、詳細正本への link を固定する。"""
+        text = read_file(_STREAMING_SKILL)
+        match = re.search(
+            r"^## Quick Reference\s*$\n(.*?)(?=^##\s|\Z)",
+            text,
+            flags=re.MULTILINE | re.DOTALL,
+        )
+        assert match is not None, "streaming SKILL.md に Quick Reference 節が無い"
+        section = match.group(1)
+
+        for required in (
+            "workspace list",
+            "workspace show",
+            "workspace new <workspace>",
+            "workspace select <workspace>",
+            "jq -r '.backend.config.bucket'",
+            'gcloud storage ls "gs://${bucket}/streaming/${workspace}.tfstate"',
+            "TF_VAR_video_path",
+            "TF_VAR_stream_key",
+            "TF_VAR_discord_webhook_url",
+            "再注入",
+            "../../../infra/terraform/streaming/README.md#チャンネル別-terraform-workspace-運用",
+        ):
+            assert required in section, f"Quick Reference に {required!r} が無い"
+
+
 # ============================================================================
 # infra/terraform/streaming/README.md — #125 新規ドキュメント
 # ============================================================================
