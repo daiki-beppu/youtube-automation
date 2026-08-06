@@ -10,6 +10,10 @@ read-only skill が write scope を共用しないための 3 点を検証する
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import google.auth.exceptions
+import pytest
+
+from youtube_automation.core.errors import AuthError
 from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
 from youtube_automation.infrastructure.google.youtube import YouTubeClients
 
@@ -31,6 +35,16 @@ def _make_worktree_pair(tmp_path: Path) -> tuple[Path, Path]:
     worktree.mkdir()
     (worktree / ".git").write_text(f"gitdir: {gitdir}\n", encoding="utf-8")
     return main_root, worktree
+
+
+def _create_readonly_handler(tmp_path: Path, monkeypatch, *, interactive: bool):
+    channel = tmp_path / "channel"
+    (channel / "auth").mkdir(parents=True)
+    monkeypatch.delenv("CLIENT_SECRETS_DIR", raising=False)
+    monkeypatch.setenv("CHANNEL_DIR", str(channel))
+    handler = YouTubeOAuthHandler.create_readonly(interactive=interactive)
+    handler._validate_client_secrets = MagicMock()
+    return handler
 
 
 class TestReadonlyScopes:
@@ -111,6 +125,127 @@ class TestCreateReadonly:
 
         handler = YouTubeOAuthHandler.create_readonly()
         assert handler.token_file == main_root.resolve() / "auth" / "token.readonly.json"
+
+
+class TestReadonlyInteractivePolicy:
+    def test_noninteractive_missing_token_fails_with_issue_command_before_browser(self, tmp_path, monkeypatch):
+        handler = _create_readonly_handler(tmp_path, monkeypatch, interactive=False)
+        browser_flow = MagicMock()
+        monkeypatch.setattr(
+            "youtube_automation.infrastructure.auth.youtube.InstalledAppFlow.from_client_secrets_file",
+            browser_flow,
+        )
+
+        with pytest.raises(AuthError, match=r"uv run yt-oauth --readonly"):
+            handler.authenticate()
+
+        browser_flow.assert_not_called()
+
+    def test_noninteractive_invalid_token_fails_before_browser(self, tmp_path, monkeypatch):
+        handler = _create_readonly_handler(tmp_path, monkeypatch, interactive=False)
+        handler.token_file.write_text("{}", encoding="utf-8")
+        browser_flow = MagicMock()
+        monkeypatch.setattr(
+            "youtube_automation.infrastructure.auth.youtube.Credentials.from_authorized_user_file",
+            MagicMock(side_effect=ValueError("invalid token")),
+        )
+        monkeypatch.setattr(
+            "youtube_automation.infrastructure.auth.youtube.InstalledAppFlow.from_client_secrets_file",
+            browser_flow,
+        )
+
+        with pytest.raises(AuthError, match=r"uv run yt-oauth --readonly"):
+            handler.authenticate()
+
+        browser_flow.assert_not_called()
+
+    def test_noninteractive_refresh_failure_fails_before_browser(self, tmp_path, monkeypatch):
+        handler = _create_readonly_handler(tmp_path, monkeypatch, interactive=False)
+        handler.token_file.write_text("{}", encoding="utf-8")
+        credentials = MagicMock(expired=True, valid=False, refresh_token="refresh-token")
+        credentials.refresh.side_effect = google.auth.exceptions.RefreshError("revoked")
+        browser_flow = MagicMock()
+        monkeypatch.setattr(
+            "youtube_automation.infrastructure.auth.youtube.Credentials.from_authorized_user_file",
+            MagicMock(return_value=credentials),
+        )
+        monkeypatch.setattr(
+            "youtube_automation.infrastructure.auth.youtube.InstalledAppFlow.from_client_secrets_file",
+            browser_flow,
+        )
+
+        with pytest.raises(AuthError, match=r"uv run yt-oauth --readonly"):
+            handler.authenticate()
+
+        browser_flow.assert_not_called()
+
+    def test_noninteractive_refresh_transport_failure_fails_before_browser(self, tmp_path, monkeypatch):
+        handler = _create_readonly_handler(tmp_path, monkeypatch, interactive=False)
+        handler.token_file.write_text("{}", encoding="utf-8")
+        credentials = MagicMock(expired=True, valid=False, refresh_token="refresh-token")
+        credentials.refresh.side_effect = google.auth.exceptions.TransportError("network unavailable")
+        browser_flow = MagicMock()
+        monkeypatch.setattr(
+            "youtube_automation.infrastructure.auth.youtube.Credentials.from_authorized_user_file",
+            MagicMock(return_value=credentials),
+        )
+        monkeypatch.setattr(
+            "youtube_automation.infrastructure.auth.youtube.InstalledAppFlow.from_client_secrets_file",
+            browser_flow,
+        )
+
+        with pytest.raises(AuthError, match=r"uv run yt-oauth --readonly"):
+            handler.authenticate()
+
+        browser_flow.assert_not_called()
+
+    def test_noninteractive_valid_token_is_reused(self, tmp_path, monkeypatch):
+        handler = _create_readonly_handler(tmp_path, monkeypatch, interactive=False)
+        handler.token_file.write_text("{}", encoding="utf-8")
+        credentials = MagicMock(expired=False, valid=True)
+        monkeypatch.setattr(
+            "youtube_automation.infrastructure.auth.youtube.Credentials.from_authorized_user_file",
+            MagicMock(return_value=credentials),
+        )
+
+        assert handler.authenticate() is credentials
+        handler._validate_client_secrets.assert_not_called()
+
+    def test_noninteractive_refreshable_token_is_refreshed(self, tmp_path, monkeypatch):
+        handler = _create_readonly_handler(tmp_path, monkeypatch, interactive=False)
+        handler.token_file.write_text("{}", encoding="utf-8")
+        credentials = MagicMock(expired=True, valid=False, refresh_token="refresh-token")
+
+        def mark_valid(_request):
+            credentials.expired = False
+            credentials.valid = True
+
+        credentials.refresh.side_effect = mark_valid
+        monkeypatch.setattr(
+            "youtube_automation.infrastructure.auth.youtube.Credentials.from_authorized_user_file",
+            MagicMock(return_value=credentials),
+        )
+        handler._save_credentials = MagicMock()
+
+        assert handler.authenticate() is credentials
+        credentials.refresh.assert_called_once()
+        handler._save_credentials.assert_called_once_with()
+
+    def test_default_policy_keeps_interactive_browser_flow(self, tmp_path, monkeypatch):
+        handler = _create_readonly_handler(tmp_path, monkeypatch, interactive=True)
+        credentials = MagicMock(expired=False, valid=True)
+        flow = MagicMock()
+        flow.run_local_server.return_value = credentials
+        browser_flow = MagicMock(return_value=flow)
+        monkeypatch.setattr(
+            "youtube_automation.infrastructure.auth.youtube.InstalledAppFlow.from_client_secrets_file",
+            browser_flow,
+        )
+        handler._save_credentials = MagicMock()
+
+        assert handler.authenticate() is credentials
+        browser_flow.assert_called_once()
+        flow.run_local_server.assert_called_once()
 
 
 class TestYouTubeClientsReadonly:
