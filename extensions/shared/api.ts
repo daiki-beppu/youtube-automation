@@ -916,9 +916,81 @@ async function postJsonWithServeToken(
   return res;
 }
 
-/** POST /collections/:id/downloaded の応答 (#1913)。部分完了時のみ warning が入る。 */
+export interface DownloadMissingReasons {
+  sunoUnfulfilled: number;
+  applySkipped: number;
+}
+
+export interface DownloadSummary {
+  expected: number;
+  placed: number;
+  missing: number;
+  reasons: DownloadMissingReasons | null;
+}
+
+/** POST /collections/:id/downloaded の応答 (#1913/#3165)。 */
 export interface PostDownloadedResult {
+  summary?: DownloadSummary;
   warning: string | null;
+}
+
+function assertNonnegativeSafeInteger(value: unknown, field: string): number {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
+    throw new Error(`${field} must be nonnegative safe integer`);
+  }
+  return value;
+}
+
+function parseDownloadedResult(data: unknown): PostDownloadedResult {
+  const record = assertObject(data, "downloaded response");
+  const warning = typeof record.warning === "string" ? record.warning : null;
+  const hasStructuredSummary =
+    "expected_file_count" in record ||
+    "missing_file_count" in record ||
+    "missing_reasons" in record;
+  if (!hasStructuredSummary) {
+    return { warning };
+  }
+
+  const expected = assertNonnegativeSafeInteger(
+    record.expected_file_count,
+    "downloaded response expected_file_count"
+  );
+  const placed = assertNonnegativeSafeInteger(
+    record.placed_count,
+    "downloaded response placed_count"
+  );
+  const missing = assertNonnegativeSafeInteger(
+    record.missing_file_count,
+    "downloaded response missing_file_count"
+  );
+  if (expected !== placed + missing) {
+    throw new Error("downloaded response counts are inconsistent");
+  }
+
+  let reasons: DownloadMissingReasons | null = null;
+  if (record.missing_reasons !== undefined) {
+    const reasonRecord = assertObject(
+      record.missing_reasons,
+      "downloaded response missing_reasons"
+    );
+    const sunoUnfulfilled = assertNonnegativeSafeInteger(
+      reasonRecord.suno_unfulfilled,
+      "downloaded response missing_reasons.suno_unfulfilled"
+    );
+    const applySkipped = assertNonnegativeSafeInteger(
+      reasonRecord.apply_skipped,
+      "downloaded response missing_reasons.apply_skipped"
+    );
+    if (sunoUnfulfilled + applySkipped !== missing) {
+      throw new Error("downloaded response reason total is inconsistent");
+    }
+    reasons = { sunoUnfulfilled, applySkipped };
+  } else if (missing > 0) {
+    throw new Error("downloaded response missing_reasons is required");
+  }
+
+  return { summary: { expected, placed, missing, reasons }, warning };
 }
 
 export async function postDownloaded(
@@ -944,23 +1016,14 @@ export async function postDownloaded(
       res.statusText
     );
   }
-  // サーバーは部分完了（期待数未満の配置）を warning 付き 200 で返す (#1913)。
-  // body が JSON でない・warning が無い場合は完全成功として扱う
-  let warning: string | null = null;
+  // 旧サーバーの body なし応答は warning/summary なしの成功として扱う (#1913)。
+  let data: unknown;
   try {
-    const data: unknown = await res.json();
-    if (
-      data &&
-      typeof data === "object" &&
-      "warning" in data &&
-      typeof (data as Record<string, unknown>).warning === "string"
-    ) {
-      warning = (data as Record<string, string>).warning;
-    }
+    data = await res.json();
   } catch {
-    warning = null;
+    return { warning: null };
   }
-  return { warning };
+  return parseDownloadedResult(data);
 }
 
 /** Atomically consume a server-issued unattended request nonce. */
