@@ -2560,6 +2560,41 @@ def test_post_downloaded_zero_file_count_does_not_set_music_downloaded(serve_dir
     assert "assets" not in ws or "music_downloaded" not in ws.get("assets", {})
 
 
+def test_post_downloaded_metadata_only_omits_structured_placement_summary(serve_dir, tmp_path):
+    """Given playlist 記録用の metadata-only POST
+    When file_count=0、expected_file_count>0、download_path なしで通知する
+    Then 後続の実 download 前に部分配置 summary を返さない。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(
+        planning,
+        "20260601-clm-aaa-collection",
+        entries=[{"name": "A", "style": "s", "lyrics": ""}],
+    )
+    base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
+    token = _fetch_token(base)
+    payload = {
+        "file_count": 0,
+        "expected_file_count": 2,
+        "format": "mp3",
+        "suno_playlist_url": "https://suno.com/playlist/abc",
+    }
+
+    with _post(
+        f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
+        payload,
+        headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
+    ) as resp:
+        assert resp.status == 200
+        result = json.loads(resp.read().decode("utf-8"))
+
+    assert result == {
+        "ok": True,
+        "collection_id": "20260601-clm-aaa-collection",
+        "placed_count": 0,
+    }
+
+
 def test_post_downloaded_zero_file_count_preserves_existing_music_downloaded(serve_dir, tmp_path):
     """Given 既に downloaded の workflow-state
     When playlist URL 記録用に file_count=0 で POST する
@@ -3993,7 +4028,9 @@ def test_post_downloaded_partial_zip_succeeds_with_warning(serve_dir, tmp_path):
         result = json.loads(resp.read().decode("utf-8"))
 
     assert result["ok"] is True
+    assert result["expected_file_count"] == 4
     assert result["placed_count"] == 2
+    assert result["missing_file_count"] == 2
     assert result["missing_reasons"] == {"suno_unfulfilled": 1, "apply_skipped": 1}
     assert result["warning"] == "placed 2 files, expected 4 (2 missing; Suno 未生成 1 / 配置 skip 1)"
     music_dir = planning / "20260601-clm-aaa-collection" / "02-Individual-music"
@@ -4001,9 +4038,9 @@ def test_post_downloaded_partial_zip_succeeds_with_warning(serve_dir, tmp_path):
     ws_path = planning / "20260601-clm-aaa-collection" / "workflow-state.json"
     workflow_state = json.loads(ws_path.read_text(encoding="utf-8"))
     music = workflow_state["planning"]["music"]
-    assert music["expected_file_count"] == 4
-    assert music["actual_file_count"] == 2
-    assert music["missing_file_count"] == 2
+    assert music["expected_file_count"] == result["expected_file_count"]
+    assert music["actual_file_count"] == result["placed_count"]
+    assert music["missing_file_count"] == result["missing_file_count"]
     assert music["missing_reasons"] == result["missing_reasons"]
     assert workflow_state["assets"]["music_downloaded"] is True
 
@@ -4095,7 +4132,9 @@ def test_post_downloaded_full_redownload_resets_missing_file_count(serve_dir, tm
     ) as resp:
         result = json.loads(resp.read().decode("utf-8"))
 
+    assert result["expected_file_count"] == 4
     assert result["placed_count"] == 4
+    assert result["missing_file_count"] == 0
     assert "warning" not in result
     assert "missing_reasons" not in result
     ws_path = planning / "20260601-clm-aaa-collection" / "workflow-state.json"
