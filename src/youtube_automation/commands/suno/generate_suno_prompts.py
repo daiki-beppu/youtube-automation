@@ -456,6 +456,20 @@ def _resolve_genre_line(data: Mapping[str, object], channel_fallback: str, patte
     return genre_line
 
 
+def _resolve_exclude_styles(
+    data: Mapping[str, object],
+    channel_fallback: str,
+    channel_json_fields: dict,
+    patterns_path: Path,
+) -> tuple[str, dict]:
+    if "exclude_styles" not in data:
+        return channel_fallback, channel_json_fields
+    exclude_styles = data["exclude_styles"]
+    if not isinstance(exclude_styles, str):
+        raise ConfigError(f"{patterns_path}: exclude_styles must be a string")
+    return exclude_styles, {**channel_json_fields, "exclude_styles": exclude_styles}
+
+
 def _resolve_style_variants(
     data: Mapping[str, object], channel_fallback: object, patterns_path: Path
 ) -> Mapping[str, Mapping[str, str]]:
@@ -489,7 +503,12 @@ def _resolve_prompts(patterns_path: Path) -> _ResolvedPrompts:
 
     genre_line = _resolve_genre_line(data, resolved_suno.genre_line, patterns_path)
     mood_descriptors = suno.get("mood_descriptors", "")
-    exclude_styles = resolved_suno.exclude_styles
+    exclude_styles, advanced_json_fields = _resolve_exclude_styles(
+        data,
+        resolved_suno.exclude_styles,
+        advanced_json_fields,
+        patterns_path,
+    )
     style_variants = _resolve_style_variants(data, suno.get("style_variants", {}), patterns_path)
     style_influence = suno.get("style_influence", 50)
     weirdness = suno.get("weirdness", 50)
