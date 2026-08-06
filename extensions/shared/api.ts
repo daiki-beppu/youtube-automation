@@ -941,8 +941,7 @@ export async function postDownloaded(
       "POST",
       collectionDownloadedRoute(collectionId),
       res.status,
-      res.statusText,
-      `POST downloaded failed: ${res.status} ${res.statusText}`
+      res.statusText
     );
   }
   // サーバーは部分完了（期待数未満の配置）を warning 付き 200 で返す (#1913)。
