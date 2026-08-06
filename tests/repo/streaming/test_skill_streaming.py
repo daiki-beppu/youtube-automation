@@ -321,6 +321,43 @@ class TestStreamingReadme:
         )
 
 
+class TestStreamingReadmeWorkspaces:
+    """README を正本とする、チャンネル別 Terraform workspace の安全契約。"""
+
+    def test_documents_workspace_switch_and_fail_safe_apply_sequence(self):
+        """workspace とチャンネル変数を照合した後だけ apply する手順を固定する。"""
+        text = read_file(_STREAMING_README)
+        match = re.search(
+            r"^## チャンネル別 Terraform workspace 運用\s*$\n(.*?)(?=^##\s|\Z)",
+            text,
+            flags=re.MULTILINE | re.DOTALL,
+        )
+        assert match is not None, "README にチャンネル別 Terraform workspace 運用節が無い"
+        section = match.group(1)
+
+        for required in (
+            "terraform workspace list",
+            "terraform workspace new <workspace>",
+            "terraform workspace select <workspace>",
+            "streaming/<workspace>.tfstate",
+            "TF_VAR_video_path",
+            "TF_VAR_stream_key",
+            "TF_VAR_discord_webhook_url",
+            "terraform workspace show",
+            "terraform state list",
+            "terraform plan",
+            "terraform apply",
+            "apply しない",
+        ):
+            assert required in section, f"workspace 運用節に {required!r} が無い"
+
+        show_index = section.index("terraform workspace show")
+        state_index = section.index("terraform state list")
+        plan_index = section.index("terraform plan")
+        apply_index = section.index("terraform apply")
+        assert show_index < state_index < plan_index < apply_index
+
+
 # ============================================================================
 # infra/terraform/streaming/README.md — #111 動画差し替え手順
 # ============================================================================
