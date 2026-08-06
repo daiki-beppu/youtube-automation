@@ -14,6 +14,7 @@ from youtube_automation.domains.suno.downloaded.models import (
 )
 
 _SUNO_CLIPS_PER_PROMPT = 2
+_MISSING_REASON_KEYS = frozenset({"suno_unfulfilled", "apply_skipped"})
 
 
 class AtomicJsonWriter(Protocol):
@@ -56,15 +57,30 @@ def _read_existing_workflow_state(ws_path: Path) -> dict:
     return data
 
 
+def _validate_missing_reasons(missing_reasons: dict[str, object] | None) -> dict[str, int] | None:
+    if missing_reasons is None:
+        return None
+    if set(missing_reasons) != _MISSING_REASON_KEYS:
+        raise ValueError("missing_reasons must contain suno_unfulfilled and apply_skipped")
+    if any(isinstance(value, bool) or not isinstance(value, int) or value < 0 for value in missing_reasons.values()):
+        raise ValueError("missing_reasons values must be non-negative integers")
+    return {
+        "suno_unfulfilled": missing_reasons["suno_unfulfilled"],
+        "apply_skipped": missing_reasons["apply_skipped"],
+    }
+
+
 def update_workflow_state_downloaded(
     coll_dir: Path,
     *,
     file_count: int,
     suno_playlist_url: str | None = None,
     expected_file_count: int | None = None,
+    missing_reasons: dict[str, object] | None = None,
     prompt_entries_reader: PromptEntriesReader,
     atomic_json_write: AtomicJsonWriter,
 ) -> None:
+    validated_missing_reasons = _validate_missing_reasons(missing_reasons)
     ws_path = CollectionPaths(coll_dir).workflow_state_path
     data = _read_existing_workflow_state(ws_path)
 
@@ -92,7 +108,13 @@ def update_workflow_state_downloaded(
         # 不足は actual/missing_file_count で機械可読に残し、後続工程が観測する
         music["actual_file_count"] = file_count
         if effective_expected_count is not None:
-            music["missing_file_count"] = max(0, effective_expected_count - file_count)
+            missing_file_count = max(0, effective_expected_count - file_count)
+            music["missing_file_count"] = missing_file_count
+        download_complete = effective_expected_count is not None and file_count >= effective_expected_count
+        if download_complete:
+            music.pop("missing_reasons", None)
+        elif validated_missing_reasons is not None:
+            music["missing_reasons"] = validated_missing_reasons
         assets["music_downloaded"] = True
 
     ws_path.parent.mkdir(parents=True, exist_ok=True)
