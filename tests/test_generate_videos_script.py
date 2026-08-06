@@ -2158,6 +2158,42 @@ def test_enabled_subscribe_popup_with_missing_image_fails_before_ffmpeg(tmp_path
     assert not (collection / "01-master" / "Ambient-Master.mp4").exists()
 
 
+def test_subscribe_popup_resolves_relative_to_canonical_channel_root(tmp_path: Path) -> None:
+    """#3208: nested workspace の popup は選択チャンネルの branding から解決する。"""
+    channel_root = tmp_path / "workspace with spaces" / "channels" / "focus"
+    collection = _create_collection(channel_root / "collections" / "planning")
+    popup = channel_root / "branding" / "subscribe-popup.png"
+    popup.parent.mkdir(parents=True)
+    popup.write_bytes(b"fake-popup")
+    config = channel_root / "config" / "channel" / "youtube.json"
+    config.parent.mkdir(parents=True)
+    config.write_text(
+        json.dumps(
+            {
+                "overlays": {
+                    "enabled": True,
+                    "audio_visualizer": {"enabled": False},
+                    "subscribe_popup": {
+                        "enabled": True,
+                        "image": "branding/subscribe-popup.png",
+                    },
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result, ffmpeg_log = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        extra_env={"CHANNEL_DIR": ""},
+        collection=collection,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert str(popup) in _filter_complex_command(ffmpeg_log)
+
+
 def test_no_preview_keeps_master_output_contract(tmp_path: Path) -> None:
     """#1749: --preview 無しの既存 CLI は Master 出力を維持する。"""
     collection = _create_collection(tmp_path)
