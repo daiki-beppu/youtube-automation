@@ -1,5 +1,7 @@
+from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
+from urllib.error import URLError
 
 import pytest
 
@@ -26,15 +28,15 @@ def test_download_thumbnail_writes_requested_destination(tmp_path: Path, monkeyp
     destination = tmp_path / "download.jpg"
     calls = []
 
-    def retrieve(url, output):
-        calls.append((url, output))
-        Path(output).write_bytes(b"image")
+    def open_url(url, *, timeout):
+        calls.append((url, timeout))
+        return BytesIO(b"image")
 
-    monkeypatch.setattr(mod.urllib.request, "urlretrieve", retrieve)
+    monkeypatch.setattr(mod.urllib.request, "urlopen", open_url)
 
     assert comparer._download_thumbnail("https://example.test/thumb.jpg", destination) is True
     assert destination.read_bytes() == b"image"
-    assert calls == [("https://example.test/thumb.jpg", str(destination))]
+    assert calls == [("https://example.test/thumb.jpg", mod.DOWNLOAD_TIMEOUT_SECONDS)]
 
 
 def test_download_failure_returns_false_and_leaves_no_artifact(tmp_path: Path, monkeypatch):
@@ -42,12 +44,91 @@ def test_download_failure_returns_false_and_leaves_no_artifact(tmp_path: Path, m
     destination = tmp_path / "download.jpg"
     monkeypatch.setattr(
         mod.urllib.request,
-        "urlretrieve",
-        lambda *_args: (_ for _ in ()).throw(OSError("offline")),
+        "urlopen",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("offline")),
     )
 
     assert comparer._download_thumbnail("https://example.test/thumb.jpg", destination) is False
     assert not destination.exists()
+
+
+def test_download_timeout_is_bounded_and_reports_target(tmp_path: Path, monkeypatch, caplog):
+    comparer = _comparer(tmp_path)
+    destination = tmp_path / "download.jpg"
+    calls = []
+
+    class SlowResponse:
+        def __init__(self):
+            self.read_count = 0
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def read(self, _size):
+            self.read_count += 1
+            if self.read_count == 1:
+                return b"partial"
+            raise TimeoutError("timed out")
+
+    def timeout(url, *, timeout):
+        calls.append((url, timeout))
+        return SlowResponse()
+
+    monkeypatch.setattr(mod.urllib.request, "urlopen", timeout)
+
+    assert comparer._download_thumbnail("https://example.test/slow.jpg", destination) is False
+    assert calls == [("https://example.test/slow.jpg", mod.DOWNLOAD_TIMEOUT_SECONDS)]
+    assert not destination.exists()
+    assert not (tmp_path / ".download.jpg.part").exists()
+    assert "https://example.test/slow.jpg" in caplog.text
+    assert "タイムアウト" in caplog.text
+
+
+def test_download_slow_drip_stops_at_wall_clock_deadline(tmp_path: Path, monkeypatch, caplog):
+    comparer = _comparer(tmp_path)
+    destination = tmp_path / "download.jpg"
+    ticks = iter((0.0, 5.0, 10.0, 16.0))
+
+    class SlowDripResponse:
+        read_count = 0
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def read1(self, _size):
+            self.read_count += 1
+            return b"still downloading"
+
+    response = SlowDripResponse()
+    monkeypatch.setattr(mod.time, "monotonic", lambda: next(ticks))
+    monkeypatch.setattr(mod.urllib.request, "urlopen", lambda *_args, **_kwargs: response)
+
+    assert comparer._download_thumbnail("https://example.test/drip.jpg", destination) is False
+    assert response.read_count == 1
+    assert not destination.exists()
+    assert not (tmp_path / ".download.jpg.part").exists()
+    assert "https://example.test/drip.jpg" in caplog.text
+    assert "タイムアウト" in caplog.text
+
+
+def test_download_url_error_wrapped_timeout_uses_timeout_diagnostic(tmp_path: Path, monkeypatch, caplog):
+    comparer = _comparer(tmp_path)
+    destination = tmp_path / "download.jpg"
+    monkeypatch.setattr(
+        mod.urllib.request,
+        "urlopen",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(URLError(TimeoutError("socket timed out"))),
+    )
+
+    assert comparer._download_thumbnail("https://example.test/wrapped.jpg", destination) is False
+    assert "ダウンロードタイムアウト" in caplog.text
+    assert "ダウンロード失敗" not in caplog.text
 
 
 def test_resize_invokes_ffmpeg_with_fixed_mobile_dimensions(tmp_path: Path, monkeypatch):
@@ -71,6 +152,40 @@ def test_resize_failures_return_false(tmp_path: Path, monkeypatch, error):
     monkeypatch.setattr(mod.subprocess, "run", lambda *_args, **_kwargs: (_ for _ in ()).throw(error))
 
     assert comparer._resize_thumbnail(tmp_path / "source.jpg", tmp_path / "small.jpg") is False
+
+
+def test_resize_timeout_is_bounded_and_removes_partial_output(tmp_path: Path, monkeypatch, caplog):
+    comparer = _comparer(tmp_path)
+    source = tmp_path / "source.jpg"
+    output = tmp_path / "small.jpg"
+    source.write_bytes(b"source")
+    calls = []
+
+    def timeout(command, **kwargs):
+        calls.append((command, kwargs))
+        output.write_bytes(b"partial")
+        raise mod.subprocess.TimeoutExpired(command, kwargs["timeout"])
+
+    monkeypatch.setattr(mod.subprocess, "run", timeout)
+
+    assert comparer._resize_thumbnail(source, output) is False
+    assert calls[0][1]["timeout"] == mod.FFMPEG_TIMEOUT_SECONDS
+    assert not output.exists()
+    assert source.name in caplog.text
+    assert "タイムアウト" in caplog.text
+
+
+def test_collect_reports_refresh_progress_before_refresh_starts(tmp_path: Path, monkeypatch, capsys):
+    comparer = _comparer(tmp_path)
+
+    def refresh(*_args, **_kwargs):
+        assert "ベンチマーク鮮度確認" in capsys.readouterr().out
+
+    monkeypatch.setattr(mod, "ensure_benchmark_fresh", refresh)
+    monkeypatch.setattr(mod, "load_benchmark_videos", lambda *_args, **_kwargs: [])
+    comparer._collect_channel_thumbnails = lambda: []
+
+    comparer.collect_and_compare(no_open=True)
 
 
 def test_collect_continues_after_download_and_resize_failures_and_opens_small_dir(tmp_path: Path, monkeypatch, capsys):

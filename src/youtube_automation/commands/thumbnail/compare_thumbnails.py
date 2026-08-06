@@ -18,7 +18,10 @@ Usage:
 import argparse
 import logging
 import os
+import shutil
 import subprocess
+import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -38,6 +41,15 @@ logger = logging.getLogger(__name__)
 DEFAULT_MIN_VIEWS = 10000
 SMALL_WIDTH = 320
 SMALL_HEIGHT = 180
+DOWNLOAD_TIMEOUT_SECONDS = 15
+DOWNLOAD_CHUNK_SIZE = 64 * 1024
+FFMPEG_TIMEOUT_SECONDS = 30
+
+
+def _is_timeout_error(error: OSError) -> bool:
+    if isinstance(error, TimeoutError):
+        return True
+    return isinstance(error, urllib.error.URLError) and isinstance(error.reason, TimeoutError)
 
 
 class ThumbnailComparer:
@@ -64,11 +76,31 @@ class ThumbnailComparer:
     def _download_thumbnail(self, url: str, output_path: Path) -> bool:
         if output_path.exists():
             return True
+        partial_path = output_path.with_name(f".{output_path.name}.part")
+        deadline = time.monotonic() + DOWNLOAD_TIMEOUT_SECONDS
         try:
-            urllib.request.urlretrieve(url, str(output_path))
+            with urllib.request.urlopen(url, timeout=DOWNLOAD_TIMEOUT_SECONDS) as response:
+                with partial_path.open("wb") as output:
+                    read_chunk = getattr(response, "read1", None)
+                    if read_chunk is None:
+                        read_chunk = response.read
+                    while True:
+                        if time.monotonic() >= deadline:
+                            raise TimeoutError
+                        chunk = read_chunk(DOWNLOAD_CHUNK_SIZE)
+                        if not chunk:
+                            break
+                        if time.monotonic() >= deadline:
+                            raise TimeoutError
+                        output.write(chunk)
+            partial_path.replace(output_path)
             return True
-        except Exception as e:
-            logger.warning("ダウンロード失敗 %s: %s", url, e)
+        except OSError as error:
+            partial_path.unlink(missing_ok=True)
+            if _is_timeout_error(error):
+                logger.warning("ダウンロードタイムアウト %s（%d秒）", url, DOWNLOAD_TIMEOUT_SECONDS)
+            else:
+                logger.warning("ダウンロード失敗 %s: %s", url, error)
             return False
 
     def _resize_thumbnail(self, input_path: Path, output_path: Path) -> bool:
@@ -87,17 +119,24 @@ class ThumbnailComparer:
                 ],
                 capture_output=True,
                 check=True,
+                timeout=FFMPEG_TIMEOUT_SECONDS,
             )
             return True
         except FileNotFoundError:
             logger.error("FFmpeg がインストールされていません")
             return False
+        except subprocess.TimeoutExpired:
+            output_path.unlink(missing_ok=True)
+            logger.warning("リサイズタイムアウト %s（%d秒）", input_path.name, FFMPEG_TIMEOUT_SECONDS)
+            return False
         except subprocess.CalledProcessError as e:
+            output_path.unlink(missing_ok=True)
             logger.warning("リサイズ失敗 %s: %s", input_path.name, e)
             return False
 
     def collect_and_compare(self, no_open: bool = False, small_only: bool = False):
         """サムネイルを収集・縮小・表示"""
+        print("[1/3] ベンチマーク鮮度確認を開始します...", flush=True)
         ensure_benchmark_fresh(
             self.data_dir,
             collector_factory=BenchmarkCollector,
@@ -117,6 +156,7 @@ class ThumbnailComparer:
         )
         logger.info("ベンチマーク対象: %d本（%s再生以上）", len(bench_videos), f"{self.min_views:,}")
 
+        print("[2/3] サムネイル取得を開始します...", flush=True)
         downloaded_bench = []
         for v in bench_videos:
             views_k = v["views"] // 1000
@@ -141,13 +181,12 @@ class ThumbnailComparer:
                 try:
                     os.symlink(thumb.resolve(), dest)
                 except OSError:
-                    import shutil
-
                     shutil.copy2(thumb, dest)
             channel_copies.append(dest)
 
         # 全サムネイルを 320x180 に縮小
         all_originals = downloaded_bench + channel_copies
+        print(f"[3/3] サムネイル縮小を開始します（{len(all_originals)}枚）...", flush=True)
         small_paths = []
         for orig in all_originals:
             small_path = self.small_dir / f"small_{orig.name}"
