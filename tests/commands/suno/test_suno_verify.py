@@ -643,6 +643,90 @@ def test_video_analysis_genre_line_uses_configured_char_limit(channel_dir, tmp_p
     assert "OK" in output
 
 
+def _update_patterns_style_config(docs: Path, **updates: object) -> None:
+    patterns_path = docs / "suno-patterns.yaml"
+    payload = yaml.safe_load(patterns_path.read_text(encoding="utf-8"))
+    payload.update(updates)
+    patterns_path.write_text(yaml.safe_dump(payload, allow_unicode=True), encoding="utf-8")
+
+
+def test_patterns_genre_line_char_limit_is_reported(channel_dir, tmp_path, monkeypatch, capsys):
+    """patterns root genre_line が上限超過なら effective Style 違反として報告する."""
+    write_suno_override(channel_dir, genre_line="lo-fi jazz")
+    collection = tmp_path / "collection"
+    docs = docs_dir(collection)
+    write_patterns(docs, mode="instrumental", scenes=["scene one"], tracks=2)
+    _update_patterns_style_config(docs, genre_line="x" * 121)
+    write_prompts(docs, prompt_names(mode="instrumental", scenes_count=1))
+
+    code = run_verify(monkeypatch, collection)
+    output = capsys.readouterr().out
+
+    assert code == 1
+    assert "suno-patterns.yaml::genre_line" in output
+    assert "121 / 120" in output
+
+
+def test_patterns_genre_line_uses_configured_char_limit(channel_dir, tmp_path, monkeypatch, capsys):
+    """patterns root genre_line にも channel の configured limit を維持する."""
+    write_suno_override(channel_dir, genre_line="lo-fi jazz", style_char_limit=373)
+    collection = tmp_path / "collection"
+    docs = docs_dir(collection)
+    write_patterns(docs, mode="instrumental", scenes=["scene one"], tracks=2)
+    _update_patterns_style_config(docs, genre_line="x" * 373)
+    write_prompts(docs, prompt_names(mode="instrumental", scenes_count=1))
+
+    code = run_verify(monkeypatch, collection)
+    output = capsys.readouterr().out
+
+    assert code == 0
+    assert "OK" in output
+
+
+def test_used_patterns_style_variant_char_limit_is_reported(channel_dir, tmp_path, monkeypatch, capsys):
+    """使用中の patterns style variant は channel variant より優先して検査する."""
+    write_suno_override(
+        channel_dir,
+        genre_line="lo-fi jazz",
+        style_variants={"long": {"name": "Channel", "genre_line": "short"}},
+    )
+    collection = tmp_path / "collection"
+    docs = docs_dir(collection)
+    write_patterns(docs, mode="instrumental", scenes=["scene one"], tracks=2, style="long")
+    _update_patterns_style_config(
+        docs,
+        style_variants={"long": {"name": "Patterns", "genre_line": "x" * 121}},
+    )
+    write_prompts(docs, prompt_names(mode="instrumental", scenes_count=1))
+
+    code = run_verify(monkeypatch, collection)
+    output = capsys.readouterr().out
+
+    assert code == 1
+    assert "suno-patterns.yaml::style_variants.long.genre_line" in output
+    assert "121 / 120" in output
+
+
+def test_unused_patterns_style_variant_char_limit_is_not_reported(channel_dir, tmp_path, monkeypatch, capsys):
+    """未使用の patterns style variant は文字数上限の対象にしない."""
+    write_suno_override(channel_dir, genre_line="lo-fi jazz")
+    collection = tmp_path / "collection"
+    docs = docs_dir(collection)
+    write_patterns(docs, mode="instrumental", scenes=["scene one"], tracks=2)
+    _update_patterns_style_config(
+        docs,
+        style_variants={"unused": {"name": "Unused", "genre_line": "x" * 121}},
+    )
+    write_prompts(docs, prompt_names(mode="instrumental", scenes_count=1))
+
+    code = run_verify(monkeypatch, collection)
+    output = capsys.readouterr().out
+
+    assert code == 0
+    assert "OK" in output
+    assert "style_variants.unused.genre_line" not in output
+
+
 def test_used_style_variant_genre_line_char_limit_is_reported(channel_dir, tmp_path, monkeypatch, capsys):
     """Given pattern が 121 文字 genre_line の style variant を使用する
     When yt-suno-verify を実行する

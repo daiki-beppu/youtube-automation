@@ -270,6 +270,7 @@ def load_pattern_contract(
     issues.extend(mode_issues)
     issues.extend(pattern_issues)
     issues.extend(tracks_issues)
+    issues.extend(_effective_style_char_limit_issues(raw, suno_cfg, style_keys))
     if mode is None:
         return None, issues
     contract = PatternContract(
@@ -549,12 +550,10 @@ def verify_suno_collection(
     prompts_path = docs_dir / SUNO_PROMPTS_JSON_FILENAME
     lyrics_path = docs_dir / SUNO_LYRICS_JSON_FILENAME
 
-    issues = _preflight_issues(suno_cfg)
     contract, pattern_issues = load_pattern_contract(patterns_path, suno_cfg, infer_mode)
-    issues = [*issues, *pattern_issues]
+    issues = pattern_issues
     if contract is None:
         return issues, "mode=unknown prompt_entries=0"
-    issues = [*issues, *_style_variant_genre_line_issues(suno_cfg, contract)]
 
     expected_name_issue = unique_entry_names_issue(
         source_name=SUNO_PATTERNS_FILENAME,
@@ -572,33 +571,49 @@ def verify_suno_collection(
     return issues, _instrumental_summary(contract, prompts)
 
 
-def _preflight_issues(suno_cfg: SunoConfig) -> list[str]:
-    genre_line_issue = check_suno_genre_line_char_limit({**suno_cfg.raw, "genre_line": suno_cfg.genre_line})
-    return [] if genre_line_issue is None else [genre_line_issue]
+def _effective_style_char_limit_issues(
+    raw: Mapping[str, object], suno_cfg: SunoConfig, style_keys: frozenset[str]
+) -> list[str]:
+    if isinstance(raw.get("genre_line"), str):
+        genre_line = cast(str, raw["genre_line"])
+        genre_line_source = f"{SUNO_PATTERNS_FILENAME}::genre_line"
+    else:
+        genre_line = suno_cfg.genre_line
+        genre_line_source = "config/skills/suno.yaml::genre_line"
 
+    issues = _style_char_limit_issues(suno_cfg, genre_line, genre_line_source)
 
-def _style_variant_genre_line_issues(suno_cfg: SunoConfig, contract: PatternContract) -> list[str]:
-    variants = suno_cfg.raw.get("style_variants")
+    if "style_variants" in raw:
+        variants = raw.get("style_variants")
+        variants_source = f"{SUNO_PATTERNS_FILENAME}::style_variants"
+    else:
+        variants = suno_cfg.raw.get("style_variants")
+        variants_source = "config/skills/suno.yaml::style_variants"
     if not isinstance(variants, Mapping):
-        return []
+        return issues
 
-    issues: list[str] = []
-    for style_key in sorted(contract.style_keys):
+    for style_key in sorted(style_keys):
         variant = variants.get(style_key)
         if not isinstance(variant, Mapping):
             continue
         genre_line = variant.get("genre_line")
         if not isinstance(genre_line, str):
             continue
-        issue = check_suno_genre_line_char_limit({**suno_cfg.raw, "genre_line": genre_line})
-        if issue is not None:
-            issues.append(
-                issue.replace(
-                    "config/skills/suno.yaml::genre_line",
-                    f"config/skills/suno.yaml::style_variants.{style_key}.genre_line",
-                )
+        issues.extend(
+            _style_char_limit_issues(
+                suno_cfg,
+                genre_line,
+                f"{variants_source}.{style_key}.genre_line",
             )
+        )
     return issues
+
+
+def _style_char_limit_issues(suno_cfg: SunoConfig, genre_line: str, source: str) -> list[str]:
+    issue = check_suno_genre_line_char_limit({**suno_cfg.raw, "genre_line": genre_line})
+    if issue is None:
+        return []
+    return [issue.replace("config/skills/suno.yaml::genre_line", source)]
 
 
 def _validate_prompts(prompts_path: Path, contract: PatternContract) -> tuple[ArtifactEntries, list[str]]:
