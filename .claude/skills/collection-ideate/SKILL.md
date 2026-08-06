@@ -60,8 +60,30 @@ description: "Use when 新コレクションの企画・テーマ選定をデー
 ## When to Use
 
 - 新コレクションの企画が必要なとき
+- 複数コレクションを一括制作する前に、batch 全体を相互差別化した企画台帳が必要なとき
 - 戦略の見直し・次期コンテンツ計画を立てたいとき
 - データに基づいた意思決定をしたいとき
+
+### Batch plan mode（opt-in）
+
+ユーザーが複数コレクションの一括企画と件数 `N`（2 以上の整数）を明示した場合だけ batch plan mode を使う。明示がない実行は**通常モード**であり、従来どおり `preview.candidate_count` 件の候補から 1 件を選び、1 collection の `plan_proposals.md` と `workflow-state.json` を更新する。batch mode を通常モードから推測してはならない。
+
+batch mode でも、設定読み込み、入力モード、鮮度、persona、TTP、untrusted data、open insights の各 gate はこの文書の Phase 1〜3 と同じ順序で通す。ただし collection はまだ初期化せず、Phase 4 の画像生成と通常モードの collection 成果物保存は行わない。画像 API call は 0 件なので画像生成の cost confirmation は発生しない。画像生成を追加で求められた場合は通常モードと同じ見積もり・承認を適用し、承認前に call しない。
+
+Phase 3 では単なる候補 `N` 件ではなく、制作へ渡せる確定 plan をちょうど `N` 件作る。各 plan は既存の全 collection と比較し、さらに batch 内の**全 unordered pair**について theme、scene、mood、visual hook、music direction の重なりと差分を表にする。`ttp_mode: false` では近接を解消してから提示し、`true` では転写元と満たす欲求を plan ごとに分け、表面要素だけの差を相互差別化と数えない。
+
+全 `N` 件を同じ承認画面でユーザーへ提示し、一括承認または修正対象を受け取る。部分承認を complete とせず、修正後も全件を再提示する。承認済み plan だけを次の schema version 1 manifest として `reports/wf-new-batches/<batch-id>/plan-manifest.json` へ保存する。
+
+- root 必須 field: `schema_version`（整数 `1`）、`batch_id`、`requested_count`、`approved_at`、`provenance`、`existing_collection_slugs`、`plans`、`differentiation_matrix`
+- `provenance` 必須 field: `producer`（`collection-ideate`）、`mode`（`batch-plan`）、確定済み `input_mode`、`ttp_mode`
+- plan 必須 field: `plan_id`、`collection_name`、`theme_slug`、`track_count`、`music_engine`、`final_title`、`target_persona`、`viewing_scene`、`proposal_markdown`
+- `existing_collection_slugs` は比較時点の既存 collection slug を重複なしで全件保持する
+- `differentiation_matrix` の batch 内比較 row は `kind: batch_pair`、`left_plan_id`、`right_plan_id`、非空の `differences` を持つ。各 unordered pair は plan 順に小さい側を left として一度だけ含める
+- 既存比較 row は `kind: existing_collection`、`plan_id`、`existing_collection_slug`、非空の `differences` を持ち、plan と `existing_collection_slugs` の直積を一度ずつ含める
+
+保存前 Hard Gate として、`requested_count == N`、`plans` がちょうど `N` 件、`approved_at` と全必須 field が非空、`track_count >= 1`、`music_engine` が `suno` または `lyria`、`plan_id` と `theme_slug` と既存 slug が各集合内で一意であることを検証する。特に `theme_slug` が batch 内で一意かつ既存 collection と衝突しないこと、全比較行が重複・欠落なく揃うことを必須とする。1 件でも失敗したら manifest を更新せず停止する。保存は同一 directory の一時ファイルを完全に書いて検証した後の **atomic rename** とし、失敗時に既存 manifest を保つ。
+
+batch mode では collection directory と `workflow-state.json` を作成・更新しない。open insights を使った場合の status 更新は全件承認後に通常契約どおり行い、更新失敗時は manifest を complete として保存しない。manifest の保存と再読込検証が成功した時点だけ batch plan mode の完了とし、次工程 `/wf-new-batch` へ `batch_id` を渡す。
 
 ## 前提スキル状態確認
 
