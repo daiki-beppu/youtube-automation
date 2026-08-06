@@ -61,6 +61,38 @@ terraform apply
 
 `terraform.tfvars` には secret 値を書かない（`stream_key` / `vultr_api_key` は `TF_VAR_*` のみ）。
 
+## チャンネル別 Terraform workspace 運用
+
+1 つの `infra/terraform/streaming` module を複数チャンネルで使う場合は、チャンネルごとに Terraform workspace を 1 つ作り、workspace 名をチャンネル slug と一致させる。GCS backend の `prefix = "streaming"` により、`<workspace>` の state は bucket 内の `streaming/<workspace>.tfstate` に保存される（`default` は `streaming/default.tfstate`）。workspace は state だけを分離し、shell の `TF_VAR_*` や共有の `terraform.tfvars` は切り替えない。
+
+```bash
+cd infra/terraform/streaming
+
+# 既存 workspace を確認する
+terraform workspace list
+
+# 初回だけ新規作成する（作成後はその workspace が選択される）
+terraform workspace new <workspace>
+
+# 既存 workspace へ切り替える場合
+terraform workspace select <workspace>
+
+# 切替後に対象チャンネルの値を必ず再注入する
+export TF_VAR_video_path="$(realpath /path/to/<workspace>/video.mp4)"
+export TF_VAR_stream_key="$(op read 'op://Personal/<workspace>-YouTube/stream_key')"
+export TF_VAR_discord_webhook_url="$(op read 'op://Personal/<workspace>-Discord-Webhook/url')"
+
+# workspace → state → plan の順で照合する
+terraform workspace show
+terraform state list
+terraform plan
+
+# 3 つの照合に成功した場合だけ実行する
+terraform apply
+```
+
+`terraform workspace show` が意図した `<workspace>` と完全一致することを最初に確認する。既存 workspace では `terraform state list` がそのチャンネルの既存リソースを示すこと、新規 workspace では意図どおり空であることを確認する。最後に `terraform plan` の対象動画、作成・変更・削除されるリソースが選択中のチャンネルに限られることを確認する。workspace が違う、既存 state が空、または plan に別チャンネルの削除・置換や想定外の変更が含まれる場合は **apply しない**。正しい workspace を再選択し、3 つの `TF_VAR_*` を再注入して `workspace show` から確認し直す。
+
 ## ライブチャット自動返信（opt-in）
 
 既定の `enable_live_chat_reply=false` では関連 resource を一切作らず、既存の `youtube-stream` 配備だけが従来どおり動く。有効化時も返信 daemon は独立した `live-chat-reply.service` として動き、失敗時は `Restart=on-failure` で自動復帰する。unit は `youtube-stream.service` を `Requires=` しないため、返信 daemon の停止や再起動が配信本体を止めることはない。
