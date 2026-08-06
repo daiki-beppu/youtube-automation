@@ -65,6 +65,8 @@ _VIEWING_SCENE = _SKILLS_DIR / "viewing-scene" / "SKILL.md"
 _COLLECTION_IDEATE = _SKILLS_DIR / "collection-ideate" / "SKILL.md"
 _FLOP_ANALYSIS = _SKILLS_DIR / "flop-analysis" / "SKILL.md"
 _SUNO_LYRIC = _SKILLS_DIR / "suno-lyric" / "SKILL.md"
+_LEGACY_FEEDBACK_DIR = _SKILLS_DIR / "feedback"
+_SKILL_FEEDBACK = _SKILLS_DIR / "skill-feedback" / "SKILL.md"
 _SUNO_LYRIC_PERSONA_DOCS = (
     _SUNO_LYRIC,
     _SKILLS_DIR / "suno-lyric" / "config.default.yaml",
@@ -189,6 +191,20 @@ def test_old_skill_directory_is_removed(old_name: str) -> None:
         f" `git mv {path.relative_to(_REPO_ROOT)} .claude/skills/{RENAME_MAP[old_name]}` で rename すること"
         f" (後方互換 alias の symlink は order.md で禁止)"
     )
+
+
+def test_skill_feedback_replaces_legacy_feedback_entrypoint() -> None:
+    """canonical entrypoint だけを公開し、旧 references は cleanup 段まで許容する。"""
+    assert not (_LEGACY_FEEDBACK_DIR / "SKILL.md").exists()
+    if _LEGACY_FEEDBACK_DIR.exists():
+        assert {path.name for path in _LEGACY_FEEDBACK_DIR.iterdir()} <= {"references"}
+
+    canonical = _read(_SKILL_FEEDBACK)
+    assert _front_matter_name(_SKILL_FEEDBACK) == "skill-feedback"
+    description = next(line for line in canonical.splitlines() if line.startswith("description:"))
+    assert "「/skill-feedback」" in description
+    assert "「/feedback」" not in description
+    assert "`data/feedback/feedback-log.jsonl`" in canonical
 
 
 # ---------- 新ディレクトリが SKILL.md を持つか ----------

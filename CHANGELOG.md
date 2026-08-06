@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `refactor(skill-feedback)`: legacy `/feedback` entrypoint を廃止し、canonical `/skill-feedback` のみを公開するようにした（#3190）。
 - `fix(skills-sync)`: legacy `feedback` skill を既知の削除対象へ追加し、`yt-skills sync --prune --yes` でのみ削除するようにした（#3189）。
 - `docs(skill-feedback)`: 配布テンプレートと skill catalog の公開 operator route を `/skill-feedback` へ移行した（#3188）。
 - `refactor(skill-feedback)`: `/feedback` との命名衝突を避ける canonical `/skill-feedback` entrypoint を旧名と並行配置し、B6 integration receipt の owner を新 skill と issue template へ移した（#3187）。
