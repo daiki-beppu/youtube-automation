@@ -98,12 +98,19 @@ const discoveryMocks = vi.hoisted(() => ({
   discoverServerSources: vi.fn(async () => [
     {
       id: "youtube-automation-localhost-7873",
+      channelName: "YouTube Automation",
       label: "YouTube Automation (default)",
       url: "http://youtube-automation.localhost:7873",
     },
-    { id: "abyss-mi", label: "ABYSS MI", url: "http://localhost:7873" },
+    {
+      id: "abyss-mi",
+      channelName: "ABYSS (MI)",
+      label: "ABYSS (MI) (localhost:7873)",
+      url: "http://localhost:7873",
+    },
     {
       id: "localhost-7877",
+      channelName: "Fallback Channel",
       label: "localhost fallback 7877",
       url: "http://localhost:7877",
     },
@@ -205,12 +212,19 @@ describe("DistroKid popup compatibility check", () => {
     discoveryMocks.discoverServerSources.mockReset().mockResolvedValue([
       {
         id: "youtube-automation-localhost-7873",
+        channelName: "YouTube Automation",
         label: "YouTube Automation (default)",
         url: "http://youtube-automation.localhost:7873",
       },
-      { id: "abyss-mi", label: "ABYSS MI", url: BASE_URL },
+      {
+        id: "abyss-mi",
+        channelName: "ABYSS (MI)",
+        label: "ABYSS (MI) (localhost:7873)",
+        url: BASE_URL,
+      },
       {
         id: "localhost-7877",
+        channelName: "Fallback Channel",
         label: "localhost fallback 7877",
         url: FALLBACK_URL,
       },
@@ -257,9 +271,10 @@ describe("DistroKid popup compatibility check", () => {
     vi.clearAllMocks();
   });
 
-  it("ローカル配信元 option は URL を表示せず、URL value はデータ取得先として維持する", async () => {
+  it("ローカル配信元の option と選択済み trigger は channelName だけを表示する", async () => {
     await renderApp();
     const trigger = container.querySelector<HTMLButtonElement>("#server-url")!;
+    expect(trigger.textContent).toBe("YouTube Automation | distrokid-helper");
     await act(async () => trigger.click());
     await waitFor(() =>
       expect(document.querySelectorAll('[role="option"]')).toHaveLength(3)
@@ -275,12 +290,12 @@ describe("DistroKid popup compatibility check", () => {
       )
     ).toEqual([
       {
-        text: "YouTube Automation (default) | distrokid-helper",
+        text: "YouTube Automation | distrokid-helper",
         value: "http://youtube-automation.localhost:7873",
       },
-      { text: "ABYSS MI | distrokid-helper", value: BASE_URL },
+      { text: "ABYSS (MI) | distrokid-helper", value: BASE_URL },
       {
-        text: "localhost fallback 7877 | distrokid-helper",
+        text: "Fallback Channel | distrokid-helper",
         value: FALLBACK_URL,
       },
     ]);
@@ -846,21 +861,37 @@ describe("DistroKid popup compatibility check", () => {
   it("should rerun shared discovery before the selector opens and replace a stopped port", async () => {
     const defaultSource = {
       id: "youtube-automation-localhost-7873",
+      channelName: "YouTube Automation",
       label: "YouTube Automation (default)",
       url: "http://youtube-automation.localhost:7873",
     };
     discoveryMocks.discoverServerSources
       .mockResolvedValueOnce([
         defaultSource,
-        { id: "old", label: "Old", url: "http://old.localhost:9001" },
+        {
+          id: "old",
+          channelName: "Old",
+          label: "Old",
+          url: "http://old.localhost:9001",
+        },
       ])
       .mockResolvedValueOnce([
         defaultSource,
-        { id: "new", label: "New", url: "http://new.localhost:49152" },
+        {
+          id: "new",
+          channelName: "New",
+          label: "New",
+          url: "http://new.localhost:49152",
+        },
       ])
       .mockResolvedValueOnce([
         defaultSource,
-        { id: "new", label: "New", url: "http://new.localhost:49152" },
+        {
+          id: "new",
+          channelName: "New",
+          label: "New",
+          url: "http://new.localhost:49152",
+        },
       ]);
 
     await renderApp();
@@ -907,15 +938,23 @@ describe("DistroKid popup compatibility check", () => {
   });
 
   it("should replace a restored URL removed by discovery during an early selector refresh", async () => {
-    const initialDiscovery =
-      deferred<Array<{ id: string; label: string; url: string }>>();
+    const initialDiscovery = deferred<
+      Array<{
+        id: string;
+        channelName: string;
+        label: string;
+        url: string;
+      }>
+    >();
     const defaultSource = {
       id: "youtube-automation-localhost-7873",
+      channelName: "YouTube Automation",
       label: "YouTube Automation (default)",
       url: "http://youtube-automation.localhost:7873",
     };
     const restoredSource = {
       id: "restored",
+      channelName: "Restored",
       label: "Restored",
       url: "http://restored.localhost:49152",
     };
@@ -961,11 +1000,13 @@ describe("DistroKid popup compatibility check", () => {
     async (_label, savedUrl, expectedUrl) => {
       const defaultSource = {
         id: "youtube-automation-localhost-7873",
+        channelName: "YouTube Automation",
         label: "YouTube Automation (default)",
         url: "http://youtube-automation.localhost:7873",
       };
       const liveSource = {
         id: "live",
+        channelName: "Live",
         label: "Live",
         url: "http://live.localhost:49152",
       };
@@ -1000,12 +1041,14 @@ describe("DistroKid popup compatibility check", () => {
   it("should select a discovered non-default URL without recreating candidate history", async () => {
     const live = {
       id: "channel-b",
-      label: "Channel B",
+      channelName: "Channel (B)",
+      label: "Channel (B) (channel-b.localhost:49152)",
       url: "http://channel-b.localhost:49152",
     };
     const liveSources = [
       {
         id: "youtube-automation-localhost-7873",
+        channelName: "YouTube Automation",
         label: "YouTube Automation (default)",
         url: "http://youtube-automation.localhost:7873",
       },
@@ -1019,6 +1062,7 @@ describe("DistroKid popup compatibility check", () => {
     await waitFor(() =>
       expect(serverUrlItem.setValue).toHaveBeenCalledWith(live.url)
     );
+    expect(select.textContent).toBe("Channel (B) | distrokid-helper");
     expect(select.getAttribute("aria-expanded")).toBe("false");
     expect(migrateServerSourcesStorage).toHaveBeenCalled();
     expect(legacySourceState.present).toBe(false);

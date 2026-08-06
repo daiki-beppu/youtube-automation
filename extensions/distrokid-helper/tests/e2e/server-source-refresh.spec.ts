@@ -66,7 +66,7 @@ test("最初の開操作では停止済み menu を開かず、検出完了後�
   let releaseFails = false;
   try {
     const makeLiveServer = async (
-      label: string
+      channelName: string
     ): Promise<{ url: string; info: Record<string, unknown> }> => {
       const server = createServer((request, response) => {
         response.setHeader("Content-Type", "application/json");
@@ -101,9 +101,10 @@ test("最初の開操作では停止済み menu を開かず、検出完了後�
       const port = await listen(server);
       liveServers.push(server);
       const url = `http://127.0.0.1:${port}`;
+      const label = `${channelName} (127.0.0.1:${port})`;
       const info = {
-        channel_name: label,
-        channel_short: label.toLowerCase(),
+        channel_name: channelName,
+        channel_short: channelName.toLowerCase(),
         hostname: "127.0.0.1",
         port,
         base_url: url,
@@ -111,8 +112,8 @@ test("最初の開操作では停止済み menu を開かず、検出完了後�
       };
       return { url, info };
     };
-    const oldServer = await makeLiveServer("Old");
-    const newServer = await makeLiveServer("New");
+    const oldServer = await makeLiveServer("Old (Archive)");
+    const newServer = await makeLiveServer("New (Channel)");
     let active = oldServer;
     let delayNextResponse = false;
     registry = createServer((request, response) => {
@@ -178,7 +179,13 @@ test("最初の開操作では停止済み menu を開かず、検出完了後�
       new RegExp(oldServer.url)
     );
     await trigger.click();
-    await page.getByRole("option", { name: /Old/ }).click();
+    await page
+      .getByRole("option", {
+        name: "Old (Archive) | distrokid-helper",
+        exact: true,
+      })
+      .click();
+    await expect(trigger).toHaveText("Old (Archive) | distrokid-helper");
     await expect(page.locator('[data-slot="card-title"]')).toHaveText(
       releasePayload.release.album_title
     );
@@ -205,9 +212,9 @@ test("最初の開操作では停止済み menu を開かず、検出完了後�
 
     await expect(trigger).toBeEnabled();
     const options = page.getByRole("option");
-    await expect(options).toContainText([
-      "YouTube Automation (default)",
-      "New",
+    await expect(options).toHaveText([
+      "YouTube Automation | distrokid-helper",
+      "New (Channel) | distrokid-helper",
     ]);
     await expect(options.filter({ hasText: "Old" })).toHaveCount(0);
     expect(
@@ -217,7 +224,13 @@ test("最初の開操作では停止済み menu を開かず、検出完了後�
     ).toBe(true);
 
     releaseFails = true;
-    await page.getByRole("option", { name: /New/ }).click();
+    await page
+      .getByRole("option", {
+        name: "New (Channel) | distrokid-helper",
+        exact: true,
+      })
+      .click();
+    await expect(trigger).toHaveText("New (Channel) | distrokid-helper");
     await expect(page.getByRole("alert")).toHaveText(/HTTP 500/);
   } finally {
     await context?.close();
