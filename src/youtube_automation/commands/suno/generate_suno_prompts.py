@@ -319,6 +319,16 @@ class _ResolvedPattern:
 # (_build_advanced_json_fields の skip ロジック参照)。
 _ADVANCED_JSON_KEYS = ("style_influence", "weirdness", "exclude_styles", "vocal_gender")
 _VOCAL_GENDERS = frozenset({"male", "female", "neutral", "auto"})
+_DURATION_SEC_KEY = "duration_sec"
+
+
+def _validate_duration_sec_override(override: Mapping[str, object]) -> None:
+    """明示された duration_sec が正の整数であることを検証する。"""
+    if _DURATION_SEC_KEY not in override:
+        return
+    value = override[_DURATION_SEC_KEY]
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        raise ConfigError("config/skills/suno.yaml::duration_sec must be a positive integer")
 
 
 def _duration_filter_from_config(suno: dict) -> dict:
@@ -510,6 +520,7 @@ def _resolve_prompts(patterns_path: Path) -> _ResolvedPrompts:
     # JSON 反映は channel override に明示されたキーのみ gating する (#900、A 案)。merged config では
     # default.yaml の既定値と区別できないため、override 単体を別途読む。
     override = load_channel_override("suno")
+    _validate_duration_sec_override(override)
     advanced_json_fields = _build_advanced_json_fields(override)
     resolved_suno = resolve_suno_config(suno)
 
