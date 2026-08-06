@@ -124,6 +124,54 @@ def test_resolve_unpacked_extension_origin_lists_all_disabled_candidates(tmp_pat
     assert "--allow-origin chrome-extension://<EXTENSION_ID>" in message
 
 
+def test_resolve_unpacked_extension_origin_matches_embedded_manifest_name(tmp_path):
+    extension_id = "gdjhjiphejeeclngbljhajiffhpdepee"
+    extension_path = tmp_path / "extensions" / "suno-helper" / ".output" / "chrome-mv3"
+    _write_preferences(
+        tmp_path / "Default",
+        "Secure Preferences",
+        {
+            extension_id: {
+                "path": str(extension_path),
+                "manifest": {"name": "Suno Helper (youtube-channels-automation)"},
+            }
+        },
+    )
+
+    resolved = resolve_unpacked_extension_origin("suno-helper", chrome_user_data_dir=tmp_path)
+
+    assert resolved.extension_id == extension_id
+    assert resolved.path == extension_path
+
+
+@pytest.mark.parametrize(
+    "manifest",
+    (
+        None,
+        [],
+        {"name": None},
+        {"name": "DistroKid Helper (youtube-channels-automation)"},
+        {"name": "Suno Helper ("},
+        {"name": "Suno Helper (DistroKid Helper"},
+        {"name": "Suno Helper () trailing"},
+        {"name": "Suno Helper (youtube-channels-automation) trailing"},
+    ),
+)
+def test_resolve_unpacked_extension_origin_rejects_nonmatching_embedded_manifest(tmp_path, manifest):
+    extension_path = tmp_path / "extensions" / "suno-helper" / ".output" / "chrome-mv3"
+    entry: dict[str, object] = {"path": str(extension_path)}
+    if manifest is not None:
+        entry["manifest"] = manifest
+    _write_preferences(
+        tmp_path / "Default",
+        "Secure Preferences",
+        {"gdjhjiphejeeclngbljhajiffhpdepee": entry},
+    )
+
+    with pytest.raises(ConfigError, match="was not found"):
+        resolve_unpacked_extension_origin("suno-helper", chrome_user_data_dir=tmp_path)
+
+
 def test_resolve_unpacked_extension_origin_uses_preferences_fallback(tmp_path):
     _write_preferences(
         tmp_path / "Profile 1",
