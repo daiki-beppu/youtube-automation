@@ -626,14 +626,14 @@
     },
     {
       "old_owner": "legacy..claude.skills.feedback.SKILL.md",
-      "exact_new_owner": ".claude/skills/feedback/SKILL.md",
+      "exact_new_owner": ".claude/skills/skill-feedback/SKILL.md",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"
     },
     {
       "old_owner": "legacy..claude.skills.feedback.references.upstream-issue-template.md",
-      "exact_new_owner": ".claude/skills/feedback/references/upstream-issue-template.md",
+      "exact_new_owner": ".claude/skills/skill-feedback/references/upstream-issue-template.md",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"
