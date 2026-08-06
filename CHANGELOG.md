@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `refactor(packaging)`: リポジトリを責務別 layer へ再配置し、canonical owner への production import・receipt・active documentation を同期した。`youtube_automation.utils` と `infrastructure.legacy_utils` は下流向け compatibility façade として installed wheel でも維持し、削除・統合候補は `docs/architecture/reorganization-followups.md` に記録した。
 ### Added
 
+- `feat(wf-new-batch)`: batch ledger の許可遷移・単一 active plan・current plan 整合性と atomic 保存を実行時に検証し、child が prepared + hard artifacts 完了後に ledger 更新前 crash した場合は same-provenance actual state から workflow-state を変更せず completed へ reconcile できる state helper を追加した。Done 再検証で artifact / provenance drift を検知した completed plan は、reason と resume_action を伴う guarded transition だけ blocked へ戻せる（#3279）。
 - `feat(wf-new-batch)`: batch manifest の schema/provenance/approval、exact-N、plan ID・slug 一意性、既存衝突、全 unordered pair と既存比較直積を実行時に fail-closed 検証する validator を追加した（#3278）。
 - `feat(wf-new)`: canonical validator で schema・approval・exact-N・pair completeness を実行時検証済みの batch manifest から 1 plan を指定する opt-in 入口を追加し、企画生成だけを省略して初期化以降の承認・state・failure gate を通常入口と共有する契約を固定した。不正・曖昧な入力は state mutation 前に拒否する（#3263）。
 - `feat(collection-ideate)`: 明示的な batch plan mode で N 件の企画を既存 collection と batch 内の全組合せに対して相互差別化し、全件承認・件数・slug 一意性・provenance を検証した manifest だけを atomic に保存する契約を追加した。通常の single collection 企画契約は維持する（#3262）。
