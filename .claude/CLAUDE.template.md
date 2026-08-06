@@ -58,7 +58,7 @@ Claude はこのリポジトリ上で **「BGM チャンネルを運営して収
 スキル選択は各 `.claude/skills/<name>/SKILL.md` の `description` を正とする。全カタログは [`docs/features.md`](../docs/features.md)。
 
 - workflow 起点の質問（`/wf-new` `/wf-next` `/wf-status` `/collection-ideate`、「次なに作る？」「制作どこまで進んだ？」「`workflow-state.json` 触っていい？」）をセッション内で初めて受けたら、skill 実行に進む前に [`docs/workflow-cheatsheet.md`](../docs/workflow-cheatsheet.md) の判定フローと `workflow-state.json` の扱いを **1 回だけ**提示する（同一セッション内で繰り返さない）
-- スキル実行中に不具合・摩擦・改善案に遭遇したら `/feedback` を案内する
+- スキル実行中に不具合・摩擦・改善案に遭遇したら `/skill-feedback` を案内する
 
 ---
 
