@@ -147,7 +147,7 @@ def _candidates_from_preferences(
         if not isinstance(raw_path, str):
             continue
         extension_path = Path(raw_path)
-        if not extension_path.is_absolute() or extension_path.name != extension_name:
+        if not extension_path.is_absolute() or not _matches_extension_name(extension_name, extension_path, raw_entry):
             continue
         candidates.append(
             _ExtensionCandidate(
@@ -163,6 +163,20 @@ def _candidates_from_preferences(
 
 def _is_disabled_extension_entry(raw_entry: dict[object, object]) -> bool:
     return bool(raw_entry.get("disable_reasons")) or raw_entry.get("state") == 0
+
+
+def _matches_extension_name(extension_name: str, extension_path: Path, raw_entry: dict[object, object]) -> bool:
+    if extension_path.name == extension_name:
+        return True
+    manifest = raw_entry.get("manifest")
+    if not isinstance(manifest, dict):
+        return False
+    manifest_name = manifest.get("name")
+    if not isinstance(manifest_name, str):
+        return False
+    requested_name = " ".join(extension_name.replace("-", " ").split()).casefold()
+    display_name = " ".join(manifest_name.split()).casefold()
+    return display_name in {requested_name, f"{requested_name} (youtube-channels-automation)"}
 
 
 def _format_candidates(candidates: list[_ExtensionCandidate]) -> str:
