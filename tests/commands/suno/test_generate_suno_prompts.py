@@ -32,31 +32,35 @@ def channel_dir(tmp_path, monkeypatch):
     skill_config.reset()
 
 
-def _write_minimal_patterns(dir_: Path) -> Path:
+def _write_minimal_patterns(
+    dir_: Path,
+    *,
+    genre_line: object | None = None,
+    mode: str | None = "instrumental",
+) -> Path:
     """1 パターン × 1 シーンの最小 suno-patterns.yaml を作る.
 
     yaml top-level に `tracks: 2` を併設して `tracks_per_collection` の
     fail-loud 検証 (ceil(2/2) = 1 entry) と整合させる。
     """
     path = dir_ / "patterns.yaml"
-    path.write_text(
-        yaml.safe_dump(
+    payload: dict[str, object] = {
+        "title": "Test Collection",
+        "tracks": 2,
+        "patterns": [
             {
-                "title": "Test Collection",
-                "mode": "instrumental",
-                "tracks": 2,
-                "patterns": [
-                    {
-                        "name_jp": "テスト",
-                        "name_en": "Test",
-                        "tempo": "slow",
-                        "scenes": ["a quiet scene description"],
-                    }
-                ],
+                "name_jp": "テスト",
+                "name_en": "Test",
+                "tempo": "slow",
+                "scenes": ["a quiet scene description"],
             }
-        ),
-        encoding="utf-8",
-    )
+        ],
+    }
+    if genre_line is not None:
+        payload["genre_line"] = genre_line
+    if mode is not None:
+        payload["mode"] = mode
+    path.write_text(yaml.safe_dump(payload), encoding="utf-8")
     return path
 
 
@@ -332,6 +336,56 @@ def test_channel_new_rules_list_suno_lyrics_override_keys():
 # ---------------------------------------------------------------------------
 # issue #360: video_analysis の suno_preset を fallback として参照する動作
 # ---------------------------------------------------------------------------
+
+
+def test_patterns_genre_line_overrides_channel_style_and_mode(channel_dir, tmp_path):
+    """patterns の genre_line は Style と mode 推定の共通 SSOT になる。"""
+    _write_suno_override(channel_dir, genre_line="channel dream pop vocals")
+    patterns_path = _write_minimal_patterns(
+        tmp_path,
+        genre_line="collection lo-fi instrumental",
+        mode=None,
+    )
+
+    markdown = generate(patterns_path)
+    entries = build_prompt_entries(patterns_path)
+
+    assert "collection lo-fi instrumental" in markdown
+    assert "collection lo-fi instrumental" in entries[0]["style"]
+    assert "channel dream pop vocals" not in entries[0]["style"]
+    assert "| Instrumental | ON（インストモード） |" in markdown
+
+
+@pytest.mark.parametrize("order", [("first", "second"), ("second", "first")])
+def test_patterns_genre_line_is_isolated_between_collections(channel_dir, tmp_path, order):
+    """同一 process で生成順を変えても collection の Style は混線しない。"""
+    _write_suno_override(channel_dir, genre_line="shared channel style")
+    paths: dict[str, Path] = {}
+    styles = {
+        "first": "first collection soul",
+        "second": "second collection jazz",
+    }
+    for name, genre_line in styles.items():
+        collection_dir = tmp_path / name
+        collection_dir.mkdir()
+        paths[name] = _write_minimal_patterns(collection_dir, genre_line=genre_line)
+
+    generated = {name: build_prompt_entries(paths[name])[0]["style"] for name in order}
+
+    for name, style in generated.items():
+        other_name = "second" if name == "first" else "first"
+        assert styles[name] in style
+        assert styles[other_name] not in style
+        assert "shared channel style" not in style
+
+
+def test_patterns_genre_line_rejects_non_string_value(channel_dir, tmp_path):
+    """patterns の genre_line は不正 shape を mode 推定前に拒否する。"""
+    _write_suno_override(channel_dir, genre_line="channel fallback")
+    patterns_path = _write_minimal_patterns(tmp_path, genre_line=["not", "a", "string"], mode=None)
+
+    with pytest.raises(ConfigError, match=r"patterns\.yaml.*genre_line.*string"):
+        build_prompt_entries(patterns_path)
 
 
 def test_fallback_uses_video_analysis_genre_line_when_config_empty(channel_dir, tmp_path):
