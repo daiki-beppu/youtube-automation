@@ -85,15 +85,37 @@ def _warn_deprecated_override_keys(skill: str, override: dict[str, object], over
     )
 
 
+def _find_nested_key_paths(defaults: dict[str, object], target_key: str) -> list[str]:
+    paths: list[str] = []
+
+    def visit(node: dict[str, object], prefix: tuple[str, ...]) -> None:
+        for key, value in node.items():
+            path = (*prefix, key)
+            if prefix and key == target_key:
+                paths.append(".".join(path))
+            if isinstance(value, dict):
+                visit(value, path)
+
+    visit(defaults, ())
+    return paths
+
+
 def _warn_unknown_top_level_override_keys(
     override: dict[str, object], defaults: dict[str, object], override_path: Path
 ) -> None:
     unknown_keys = sorted(override.keys() - defaults.keys())
     if not unknown_keys:
         return
+    suggestions = [
+        f"'{unknown_key}' → {', '.join(repr(path) for path in nested_paths)}"
+        for unknown_key in unknown_keys
+        if (nested_paths := _find_nested_key_paths(defaults, unknown_key))
+    ]
+    suggestion_message = f" 配置先候補: {'; '.join(suggestions)}。" if suggestions else ""
     warnings.warn(
         f"skill-config {override_path} の未知のトップレベルキーを検出しました: "
         f"{', '.join(unknown_keys)}。キー名または階層を確認してください。"
+        f"{suggestion_message}"
         "値は互換性のためマージされますが、利用側に参照されない可能性があります。",
         UserWarning,
         stacklevel=3,
