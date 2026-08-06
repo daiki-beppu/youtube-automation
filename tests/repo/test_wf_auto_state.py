@@ -338,6 +338,125 @@ def test_attempt_duration_summary_distinguishes_unavailable_from_zero(
     assert zero_summary["totals"]["ai_seconds"] == 0.0
 
 
+def test_time_savings_uses_every_attempt_and_baseline_per_work_item(runner: ModuleType) -> None:
+    def attempt(collection: str, action: str, kind: str, duration: float) -> dict:
+        return {
+            "collection": collection,
+            "action": action,
+            "timing": {
+                "segments": [
+                    {
+                        "kind": kind,
+                        "started_at": "2026-07-21T00:00:00+00:00",
+                        "ended_at": "2026-07-21T00:00:01+00:00",
+                        "duration_seconds": duration,
+                    }
+                ]
+            },
+        }
+
+    history = {
+        "schema_version": 2,
+        "attempts": [
+            attempt("collections/planning/a", "wf-next", "ai", 50.0),
+            attempt("collections/planning/a", "wf-next", "human", 30.0),
+            attempt("collections/planning/b", "wf-next", "ai", 30.0),
+            attempt("collections/planning/b", "wf-next", "human", 20.0),
+            attempt("collections/planning/a", "masterup", "ai", 10.0),
+            attempt("collections/planning/a", "masterup", "human", 20.0),
+        ],
+    }
+
+    summary = runner.summarize_time_savings(history, {"wf-next": 1.0, "masterup": 1.0})
+
+    assert summary["available"] is True
+    assert summary["actions"]["wf-next"] == {
+        "ai_seconds": 80.0,
+        "human_seconds": 50.0,
+        "attempt_count": 4,
+        "work_item_count": 2,
+        "manual_baseline_seconds": 120.0,
+        "ai_inclusive_saved_seconds": 0.0,
+        "human_freed_seconds": 70.0,
+    }
+    assert summary["actions"]["masterup"]["ai_inclusive_saved_seconds"] == 30.0
+    assert summary["totals"] == {
+        "ai_seconds": 90.0,
+        "human_seconds": 70.0,
+        "attempt_count": 6,
+        "work_item_count": 3,
+        "manual_baseline_seconds": 180.0,
+        "ai_inclusive_saved_seconds": 20.0,
+        "human_freed_seconds": 110.0,
+    }
+
+
+@pytest.mark.parametrize(
+    ("history", "baselines", "reason"),
+    [
+        ({"schema_version": 2, "attempts": []}, None, "manual_baseline_unconfigured"),
+        (
+            {
+                "schema_version": 2,
+                "attempts": [
+                    {
+                        "collection": None,
+                        "action": "wf-new",
+                        "timing": {"segments": []},
+                    }
+                ],
+            },
+            {},
+            "manual_baseline_missing:wf-new",
+        ),
+        ({"schema_version": 1, "attempts": []}, {"wf-new": 30.0}, "history_schema_v1"),
+    ],
+)
+def test_time_savings_keeps_unavailable_distinct_from_zero(
+    runner: ModuleType, history: dict, baselines: dict | None, reason: str
+) -> None:
+    assert runner.summarize_time_savings(history, baselines) == {
+        "available": False,
+        "reason": reason,
+        "actions": None,
+        "totals": None,
+    }
+
+
+def test_time_savings_clamps_negative_values_to_available_zero(runner: ModuleType) -> None:
+    history = {
+        "schema_version": 2,
+        "attempts": [
+            {
+                "collection": "collections/planning/a",
+                "action": "wf-next",
+                "timing": {
+                    "segments": [
+                        {
+                            "kind": "ai",
+                            "started_at": "2026-07-21T00:00:00+00:00",
+                            "ended_at": "2026-07-21T00:00:01+00:00",
+                            "duration_seconds": 120.0,
+                        },
+                        {
+                            "kind": "human",
+                            "started_at": "2026-07-21T00:00:01+00:00",
+                            "ended_at": "2026-07-21T00:00:02+00:00",
+                            "duration_seconds": 60.0,
+                        },
+                    ]
+                },
+            }
+        ],
+    }
+
+    summary = runner.summarize_time_savings(history, {"wf-next": 1.0})
+
+    assert summary["available"] is True
+    assert summary["totals"]["ai_inclusive_saved_seconds"] == 0.0
+    assert summary["totals"]["human_freed_seconds"] == 0.0
+
+
 @pytest.mark.parametrize(
     ("segment", "message"),
     [
