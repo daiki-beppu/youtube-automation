@@ -158,6 +158,25 @@ def test_unattended_manual_intervention_is_recorded_with_resume_action(tmp_path:
     assert history["attempts"][-1]["resume_action"] == "wf-new"
 
 
+def test_schema_v1_history_reads_timing_as_unavailable_without_mutation(tmp_path: Path, runner: ModuleType) -> None:
+    history_path = tmp_path / ".automation-run" / "history.json"
+    history_path.parent.mkdir()
+    original = {
+        "schema_version": 1,
+        "attempts": [
+            {"action": "wf-new", "status": "failed", "recorded_at": "2026-07-21T00:00:00+00:00"},
+            {"action": "wf-new", "status": "blocked", "recorded_at": "2026-07-21T00:01:00+00:00"},
+        ],
+    }
+    history_path.write_text(json.dumps(original), encoding="utf-8")
+
+    history = runner.read_history(tmp_path)
+
+    assert [attempt["status"] for attempt in history["attempts"]] == ["failed", "blocked"]
+    assert [attempt["timing"] for attempt in history["attempts"]] == [None, None]
+    assert json.loads(history_path.read_text(encoding="utf-8")) == original
+
+
 def test_completed_live_collection_finishes_after_post_publish_history(tmp_path: Path, runner: ModuleType) -> None:
     collection = _collection(
         tmp_path,

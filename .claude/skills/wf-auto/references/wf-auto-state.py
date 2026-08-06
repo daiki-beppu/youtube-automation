@@ -77,6 +77,27 @@ def _read_object(path: Path) -> dict:
     return value
 
 
+def read_history(root: Path) -> dict:
+    """Read workflow attempts without inventing timing for schema v1 data."""
+    history_path = root.resolve() / STATE_DIR_NAME / HISTORY_FILE_NAME
+    if history_path.is_symlink():
+        raise ValueError(f"history に symlink は使えません: {history_path}")
+    if not history_path.exists():
+        return {"schema_version": 1, "attempts": []}
+
+    history = _read_object(history_path)
+    attempts = history.get("attempts")
+    if history.get("schema_version") != 1 or not isinstance(attempts, list):
+        raise ValueError(f"未対応 .automation-run history です: {history_path}")
+
+    normalized_attempts = []
+    for attempt in attempts:
+        if not isinstance(attempt, dict):
+            raise ValueError(f"history attempt は object でなければなりません: {history_path}")
+        normalized_attempts.append({**attempt, "timing": None})
+    return {**history, "attempts": normalized_attempts}
+
+
 def _inside(root: Path, path: Path, field: str) -> Path:
     root = root.resolve()
     path = path.resolve()
