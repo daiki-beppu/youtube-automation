@@ -357,4 +357,153 @@ describe("suno-bridge fetch interceptor", () => {
     expect(FEED_V3_PAGE_DELAY_MS).toBe(1000);
     vi.useRealTimers();
   });
+
+  it("Given feed に error clip が現れない When active poll request を受ける Then 欠落 ID だけを単体照会して返す", async () => {
+    const originalFetch = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ clips: [] }))
+      .mockResolvedValueOnce(
+        jsonResponse({ clips: [{ id: "complete", status: "complete" }] })
+      )
+      .mockResolvedValueOnce(jsonResponse({ id: "failed", status: "error" }));
+    vi.stubGlobal("fetch", originalFetch);
+    const postMessage = vi
+      .spyOn(window, "postMessage")
+      .mockImplementation(() => undefined);
+
+    await loadBridge();
+    await window.fetch(`${SUNO_API_ORIGIN}${FEED_V3_PATH}`, {
+      method: FEED_V3_METHOD,
+      headers: { authorization: "Bearer token" },
+    });
+    window.dispatchEvent(
+      new MessageEvent("message", {
+        source: window,
+        data: {
+          source: BRIDGE_SOURCE,
+          type: BRIDGE_MSG.FEED_V3_POLL_REQUEST,
+          requestId: 125,
+          ids: ["complete", "failed"],
+        },
+      })
+    );
+
+    await vi.waitFor(() =>
+      expect(postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: BRIDGE_MSG.FEED_V3_POLL_RESPONSE,
+          requestId: 125,
+          clips: [
+            { id: "complete", status: "complete" },
+            { id: "failed", status: "error" },
+          ],
+        }),
+        window.location.origin
+      )
+    );
+    expect(originalFetch).toHaveBeenNthCalledWith(
+      3,
+      `${SUNO_API_ORIGIN}/api/clip/failed`,
+      { headers: { authorization: "Bearer token" } }
+    );
+    expect(
+      originalFetch.mock.calls.filter(([url]) =>
+        String(url).includes("/api/clip/complete")
+      )
+    ).toHaveLength(0);
+  });
+
+  it("Given 一部の単体照会が失敗する When 複数 ID を補完する Then 残りの ID は順次観測する", async () => {
+    const originalFetch = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ clips: [] }))
+      .mockResolvedValueOnce(jsonResponse({ clips: [] }))
+      .mockResolvedValueOnce(new Response(null, { status: 500 }))
+      .mockResolvedValueOnce(jsonResponse({ id: "failed-b", status: "error" }));
+    vi.stubGlobal("fetch", originalFetch);
+    const postMessage = vi
+      .spyOn(window, "postMessage")
+      .mockImplementation(() => undefined);
+
+    await loadBridge();
+    await window.fetch(`${SUNO_API_ORIGIN}${FEED_V3_PATH}`, {
+      method: FEED_V3_METHOD,
+      headers: { authorization: "Bearer token" },
+    });
+    window.dispatchEvent(
+      new MessageEvent("message", {
+        source: window,
+        data: {
+          source: BRIDGE_SOURCE,
+          type: BRIDGE_MSG.FEED_V3_POLL_REQUEST,
+          requestId: 126,
+          ids: ["failed-a", "failed-b"],
+        },
+      })
+    );
+
+    await vi.waitFor(() =>
+      expect(postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: BRIDGE_MSG.FEED_V3_POLL_RESPONSE,
+          requestId: 126,
+          clips: [{ id: "failed-b", status: "error" }],
+        }),
+        window.location.origin
+      )
+    );
+    expect(originalFetch).toHaveBeenNthCalledWith(
+      3,
+      `${SUNO_API_ORIGIN}/api/clip/failed-a`,
+      { headers: { authorization: "Bearer token" } }
+    );
+    expect(originalFetch).toHaveBeenNthCalledWith(
+      4,
+      `${SUNO_API_ORIGIN}/api/clip/failed-b`,
+      { headers: { authorization: "Bearer token" } }
+    );
+  });
+
+  it("Given 単体照会が 401 When 次の active poll を受ける Then token 再捕捉まで fetch しない", async () => {
+    const originalFetch = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ clips: [] }))
+      .mockResolvedValueOnce(jsonResponse({ clips: [] }))
+      .mockResolvedValueOnce(new Response(null, { status: 401 }));
+    vi.stubGlobal("fetch", originalFetch);
+    const postMessage = vi
+      .spyOn(window, "postMessage")
+      .mockImplementation(() => undefined);
+
+    await loadBridge();
+    await window.fetch(`${SUNO_API_ORIGIN}${FEED_V3_PATH}`, {
+      method: FEED_V3_METHOD,
+      headers: { authorization: "Bearer token" },
+    });
+    for (const requestId of [127, 128]) {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          source: window,
+          data: {
+            source: BRIDGE_SOURCE,
+            type: BRIDGE_MSG.FEED_V3_POLL_REQUEST,
+            requestId,
+            ids: ["failed"],
+          },
+        })
+      );
+      await vi.waitFor(() =>
+        expect(postMessage).toHaveBeenCalledWith(
+          expect.objectContaining({
+            type: BRIDGE_MSG.FEED_V3_POLL_RESPONSE,
+            requestId,
+            clips: null,
+          }),
+          window.location.origin
+        )
+      );
+    }
+
+    expect(originalFetch).toHaveBeenCalledTimes(3);
+  });
 });
