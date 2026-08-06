@@ -456,6 +456,25 @@ def _resolve_genre_line(data: Mapping[str, object], channel_fallback: str, patte
     return genre_line
 
 
+def _resolve_style_variants(
+    data: Mapping[str, object], channel_fallback: object, patterns_path: Path
+) -> Mapping[str, Mapping[str, str]]:
+    if "style_variants" not in data:
+        return cast(Mapping[str, Mapping[str, str]], channel_fallback)
+    style_variants = data["style_variants"]
+    if not isinstance(style_variants, Mapping):
+        raise ConfigError(f"{patterns_path}: style_variants must be a mapping")
+    for key, variant in style_variants.items():
+        if not isinstance(key, str) or not key:
+            raise ConfigError(f"{patterns_path}: style_variants keys must be non-empty strings")
+        if not isinstance(variant, Mapping):
+            raise ConfigError(f"{patterns_path}: style_variants.{key} must be a mapping")
+        for field_name in ("name", "genre_line"):
+            if not isinstance(variant.get(field_name), str):
+                raise ConfigError(f"{patterns_path}: style_variants.{key}.{field_name} must be a string")
+    return cast(Mapping[str, Mapping[str, str]], style_variants)
+
+
 def _resolve_prompts(patterns_path: Path) -> _ResolvedPrompts:
     """config + patterns.yaml を解決し、md / JSON 双方の共通中間表現を返す."""
     suno = load_skill_config("suno")
@@ -471,7 +490,7 @@ def _resolve_prompts(patterns_path: Path) -> _ResolvedPrompts:
     genre_line = _resolve_genre_line(data, resolved_suno.genre_line, patterns_path)
     mood_descriptors = suno.get("mood_descriptors", "")
     exclude_styles = resolved_suno.exclude_styles
-    style_variants = suno.get("style_variants", {})
+    style_variants = _resolve_style_variants(data, suno.get("style_variants", {}), patterns_path)
     style_influence = suno.get("style_influence", 50)
     weirdness = suno.get("weirdness", 50)
 
