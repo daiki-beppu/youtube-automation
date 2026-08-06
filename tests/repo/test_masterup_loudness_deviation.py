@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
+import shlex
+import subprocess
 import sys
 from pathlib import Path
 
@@ -12,6 +15,7 @@ import pytest
 from tests.helpers.paths import REPO_ROOT
 
 SCRIPT = REPO_ROOT / ".claude" / "skills" / "masterup" / "references" / "check_loudness_deviation.py"
+SKILL = REPO_ROOT / ".claude" / "skills" / "masterup" / "SKILL.md"
 
 
 def _load_module():
@@ -35,6 +39,58 @@ def _collection(tmp_path: Path) -> Path:
     for name in ("01-a.mp3", "02-b.mp3", "03-c.wav"):
         (music / name).write_bytes(b"fixture")
     return collection
+
+
+@pytest.mark.parametrize("nested_channel", (False, True), ids=("single-channel", "nested-channel"))
+def test_documented_invocation_resolves_script_from_channel_cwd(tmp_path: Path, nested_channel: bool) -> None:
+    """#3210: 配布コマンドは channel CWD を保って workspace 側 script を起動する。"""
+    workspace = tmp_path / "workspace with spaces"
+    subprocess.run(["git", "init", "-q", str(workspace)], check=True)
+    channel = workspace / "channels" / "focus" if nested_channel else workspace
+    collection = channel / "collections" / "planning" / "demo"
+    collection.mkdir(parents=True)
+    distributed_script = workspace / ".claude" / "skills" / "masterup" / "references" / SCRIPT.name
+    distributed_script.parent.mkdir(parents=True)
+    distributed_script.write_text(
+        """from pathlib import Path
+import json
+import sys
+
+print(json.dumps({"cwd": str(Path.cwd()), "script": str(Path(__file__).resolve()), "collection": sys.argv[1]}))
+""",
+        encoding="utf-8",
+    )
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    uv = bin_dir / "uv"
+    uv.write_text('#!/bin/sh\nset -eu\ntest "$1" = run\nshift\nexec "$@"\n', encoding="utf-8")
+    uv.chmod(0o755)
+    documented = next(
+        line
+        for line in SKILL.read_text(encoding="utf-8").splitlines()
+        if line.startswith("uv run python3 ") and SCRIPT.name in line
+    )
+    command = documented.replace("<collection-path>", shlex.quote(str(collection)))
+    env = os.environ.copy()
+    env["PATH"] = f"{bin_dir}:{env['PATH']}"
+
+    completed = subprocess.run(
+        command,
+        shell=True,
+        executable="/bin/bash",
+        cwd=channel,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    payload = json.loads(completed.stdout)
+    assert payload == {
+        "cwd": str(channel),
+        "script": str(distributed_script),
+        "collection": str(collection),
+    }
 
 
 def test_parse_loudnorm_input_i_uses_ffmpeg_json(module):
