@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { DownloadSummary } from "../../shared/api";
 import {
   ADAPTIVE_BURST_COOLDOWN_MS,
   BALANCED_RUN_PACING,
@@ -14,6 +15,7 @@ import {
   fillPlaylistNameAndCreate,
   scrollAndMultiSelectByIds,
 } from "../../shared/playlist-dom";
+import type { DownloadBestEffortResult } from "../lib/download-flow";
 import type {
   EntryRunResult,
   RunEntryWithRetryOptions,
@@ -40,6 +42,12 @@ const harness = vi.hoisted(() => {
     injectAckTimeoutMs: 12345,
     maxEntryRetry: 9,
   }));
+  const clearResumeStateForCollection = vi.fn(() => Promise.resolve());
+  const downloadBestEffortResult = vi.fn<
+    () => Promise<DownloadBestEffortResult>
+  >(() => Promise.resolve({ error: null }));
+  const writeFinishedSnapshot = vi.fn(() => Promise.resolve());
+  const scheduleRunCompleteReload = vi.fn();
 
   return {
     handlers,
@@ -60,6 +68,10 @@ const harness = vi.hoisted(() => {
     runEntryWithRetry,
     legacyReadSpeedPresetId,
     legacyResolveSpeedPreset,
+    clearResumeStateForCollection,
+    downloadBestEffortResult,
+    writeFinishedSnapshot,
+    scheduleRunCompleteReload,
     serverUrlSet: vi.fn(() => Promise.resolve()),
     downloadFormatSet: vi.fn(() => Promise.resolve()),
     readResumeState: vi.fn<() => Promise<ResumeState | null>>(() =>
@@ -230,7 +242,7 @@ vi.mock("../lib/resume-state", async () => {
   );
   return {
     ...actual,
-    clearResumeStateForCollection: vi.fn(() => Promise.resolve()),
+    clearResumeStateForCollection: harness.clearResumeStateForCollection,
     readResumeState: harness.readResumeState,
     writeResumeState: vi.fn(() => Promise.resolve()),
   };
@@ -248,7 +260,7 @@ vi.mock("../lib/download", () => ({
 vi.mock("../lib/download-flow", () => ({
   createDownloadFlow: vi.fn(() => ({
     installMessageHandlers: vi.fn(),
-    downloadBestEffort: vi.fn(() => Promise.resolve(null)),
+    downloadBestEffortResult: harness.downloadBestEffortResult,
     performDownload: vi.fn(() => Promise.resolve()),
     retryDownload: vi.fn(() => Promise.resolve({ completedAndCleared: true })),
   })),
@@ -257,7 +269,7 @@ vi.mock("../lib/download-flow", () => ({
 // 完了時リロード前の snapshot 退避。実物は chrome.storage へアクセスするため node/jsdom 環境では mock 必須。
 // 退避契約そのものの検証は content-finished-snapshot.test.ts が担う。
 vi.mock("../lib/finished-snapshot", () => ({
-  writeFinishedSnapshot: vi.fn(() => Promise.resolve()),
+  writeFinishedSnapshot: harness.writeFinishedSnapshot,
   readFreshFinishedSnapshot: vi.fn(() => Promise.resolve(null)),
   clearFinishedSnapshot: vi.fn(() => Promise.resolve()),
 }));
@@ -266,7 +278,7 @@ vi.mock("../lib/finished-snapshot", () => ({
 // mock 必須（teardown 後に timer が発火すると location 参照が undefined で unhandled error になる）。
 // リロード契約そのものの検証は content-finished-snapshot.test.ts が担う。
 vi.mock("../lib/page-reload", () => ({
-  scheduleRunCompleteReload: vi.fn(),
+  scheduleRunCompleteReload: harness.scheduleRunCompleteReload,
   cancelScheduledRunCompleteReload: vi.fn(),
 }));
 
@@ -569,6 +581,8 @@ beforeEach(() => {
       return { outcome: "ok" };
     }
   );
+  harness.downloadBestEffortResult.mockReset();
+  harness.downloadBestEffortResult.mockResolvedValue({ error: null });
   harness.submittedClipIds = [];
   harness.acceptedClipIds = [];
   harness.droppedClipIds = [];
@@ -1105,6 +1119,109 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
       ])
     );
   });
+
+  it("Given download が部分成功 When normal run completes Then summary 付き FINISHED を保存して順序どおりリロードする", async () => {
+    const summary = {
+      expected: 2,
+      placed: 1,
+      missing: 1,
+      reasons: { sunoUnfulfilled: 0, applySkipped: 1 },
+    } satisfies DownloadSummary;
+    harness.downloadBestEffortResult.mockResolvedValueOnce({
+      error: null,
+      summary,
+    });
+    makeRunnableSunoDom("Grid");
+    await loadContentScript();
+
+    expect(
+      getRunHandler()({ data: makeRunPayload(makePromptEntries(1)) })
+    ).toEqual({ ok: true });
+
+    await vi.waitFor(() =>
+      expect(harness.scheduleRunCompleteReload).toHaveBeenCalledOnce()
+    );
+    const progress = progressPayloads() as Array<{
+      phase: string;
+      downloadSummary?: DownloadSummary;
+    }>;
+    const finished = progress.find(
+      (payload) => payload.phase === PHASE.FINISHED
+    );
+    expect(finished?.downloadSummary).toBe(summary);
+    expect(progress.some((payload) => payload.phase === PHASE.ERROR)).toBe(
+      false
+    );
+    expect(harness.writeFinishedSnapshot).toHaveBeenCalledWith({
+      snapshot: expect.objectContaining({
+        progress: expect.objectContaining({
+          phase: PHASE.FINISHED,
+          downloadSummary: summary,
+        }),
+      }),
+      timestamp: expect.any(Number),
+    });
+
+    const finishedCallIndex = harness.sendMessage.mock.calls.findIndex(
+      ([type, payload]) =>
+        type === "progress" &&
+        (payload as { phase?: string }).phase === PHASE.FINISHED
+    );
+    expect(finishedCallIndex).toBeGreaterThanOrEqual(0);
+    const finishedCallOrder =
+      harness.sendMessage.mock.invocationCallOrder[finishedCallIndex];
+    expect(
+      harness.clearResumeStateForCollection.mock.invocationCallOrder[0]
+    ).toBeLessThan(finishedCallOrder);
+    expect(finishedCallOrder).toBeLessThan(
+      harness.writeFinishedSnapshot.mock.invocationCallOrder[0]
+    );
+    expect(
+      harness.writeFinishedSnapshot.mock.invocationCallOrder[0]
+    ).toBeLessThan(
+      harness.scheduleRunCompleteReload.mock.invocationCallOrder[0]
+    );
+  });
+
+  it.each([
+    "POST downloaded failed: 500 Internal Server Error (phase=downloading)",
+    "placed_count must be positive (phase=downloading)",
+  ])(
+    "Given download result が %s When normal run completes Then ERROR で resume state を保持する",
+    async (downloadError) => {
+      harness.downloadBestEffortResult.mockResolvedValueOnce({
+        error: downloadError,
+      });
+      makeRunnableSunoDom("Grid");
+      await loadContentScript();
+
+      expect(
+        getRunHandler()({ data: makeRunPayload(makePromptEntries(1)) })
+      ).toEqual({ ok: true });
+
+      await vi.waitFor(() =>
+        expect(progressPayloads()).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              phase: PHASE.ERROR,
+              message: downloadError,
+            }),
+          ])
+        )
+      );
+      expect(writeResumeState).toHaveBeenCalledWith(
+        expect.objectContaining({
+          collectionId: "20260601-clm-preflight-collection",
+        })
+      );
+      expect(harness.clearResumeStateForCollection).not.toHaveBeenCalled();
+      expect(progressPayloads()).not.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ phase: PHASE.FINISHED }),
+        ])
+      );
+    }
+  );
 
   it("Given durationFilter が小数秒 When run を受ける Then payload を受理して実行を開始する", async () => {
     makeViewButton("Grid");
