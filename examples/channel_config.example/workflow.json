@@ -8,6 +8,13 @@
       "skip_upload_approval": true,
       "skip_manual_mastering": false
     },
+    "manual_baseline_minutes": {
+      "wf-new": 30,
+      "suno-helper": 45,
+      "masterup": 20,
+      "wf-next": 15,
+      "post-publish": 10
+    },
     "post-publish": {
       "skip_approvals": {
         "community-post": true,
