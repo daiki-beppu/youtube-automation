@@ -42,9 +42,11 @@ uv run python "$STATE_SCRIPT" heartbeat --channel-dir . --token <token>
 uv run python "$STATE_SCRIPT" plan --channel-dir . [--collection <fixed-name>]
 uv run python "$STATE_SCRIPT" record --channel-dir . --token <token> \
   --collection <fixed-name> --action <action> --status success|blocked|failed \
-  --reason <reason> [--resume-action <action>]
+  --reason <reason> [--resume-action <action>] \
+  --ai-started-at <current-attempt-ai-started-at>
 uv run python "$STATE_SCRIPT" record-bootstrap --channel-dir . --token <token> \
-  --status blocked|failed --reason <reason>
+  --status blocked|failed --reason <reason> \
+  --ai-started-at <current-attempt-ai-started-at>
 uv run python "$STATE_SCRIPT" release --channel-dir . --token <token>
 ```
 
@@ -69,6 +71,18 @@ uv run python "$STATE_SCRIPT" release --channel-dir . --token <token>
 | `blocked` | reason / resume_action を記録して停止 |
 | `complete` | 完了を記録して停止 |
 
+### canonical action の AI timing 契約
+
+各 canonical action は、`heartbeat` が `owner` を確認した直後かつ子 skill への委譲または terminal action の処理を始める直前に、次のコマンドを実行する。stdout の値をその attempt 専用の `<current-attempt-ai-started-at>` として保持する。
+
+```bash
+uv run python -c 'from datetime import UTC, datetime; print(datetime.now(UTC).isoformat())'
+```
+
+子 skill の終了報告だけで成功とせず、期待成果物と state を検証してから終了 status を決める。検証に成功した場合だけ `success`、手動介入が必要なら `blocked`、検証失敗を含むその他の失敗は `failed` とする。すべての `record --status success|blocked|failed` と collection 作成前の `record-bootstrap --status blocked|failed` に、同じ attempt で保持した `--ai-started-at <current-attempt-ai-started-at>` を渡して AI 区間を必ず閉じる。`blocked` / `complete` の terminal action も、同じ順序で開始時刻を取得して記録する。
+
+retry・再開時は action を実行するたびに新しい開始時刻を取得し、新しい attempt として追記する。前回の開始時刻を再利用せず、前回の `failed` / `blocked` attempt と実行時間を履歴に残す。
+
 ### `suno-helper` action の自律実行契約
 
 resolver が `action: suno-helper` を返したら、agent 自身が `/suno-helper` の **Agent primary flow: browser use** を実行する。Codex は browser use、Claude Code は browser use または Claude in Chrome を使い、固定 collection について次を完走する。
@@ -79,7 +93,7 @@ resolver が `action: suno-helper` を返したら、agent 自身が `/suno-help
 4. 生成曲を対象 playlist へ追加し、複数曲の ZIP download を実行する
 5. `/suno-helper` の strict 成果物数・manifest・音源ファイル検証を実行する
 
-ユーザーへ `/suno-helper` の実行、overlay 選択、曲生成、playlist 追加、ZIP download、成果物検証を一括して依頼してはならない。Suno が login または CAPTCHA を表示し本人操作が不可欠な場合だけ、現在の画面と必要な1操作を限定して依頼し、`record --action suno-helper --status blocked --reason suno_login_required|suno_captcha_required --resume-action suno-helper` を残す。認証のコマンド実行や CAPTCHA 回避は行わない。
+ユーザーへ `/suno-helper` の実行、overlay 選択、曲生成、playlist 追加、ZIP download、成果物検証を一括して依頼してはならない。Suno が login または CAPTCHA を表示し本人操作が不可欠な場合だけ、現在の画面と必要な1操作を限定して依頼し、`record --action suno-helper --status blocked --reason suno_login_required|suno_captcha_required --resume-action suno-helper --ai-started-at <current-attempt-ai-started-at>` を残す。認証のコマンド実行や CAPTCHA 回避は行わない。
 
 本人操作の完了後は agent が同じ固定 collection の `suno-helper` action から再開する。UI 非互換、拡張未ロード、server 接続、生成、playlist、download の失敗を login / CAPTCHA と束ねず、`/suno-helper` の診断・再試行契約に従う。strict 完了条件が揃ったら成功を記録して同一 collection を再度 `plan` し、返された `masterup` 以降へ同じ run 内で継続する。
 
@@ -88,17 +102,18 @@ resolver が `action: suno-helper` を返したら、agent 自身が `/suno-help
 1. `config/channel/` が無ければ `/channel-new` を案内して停止し、`load_config()` が失敗した場合も既存チャンネル取り込みモードの `/channel-new` を案内して停止する。state resolver または上記子 skill が無ければ `/automation-update`（本リポジトリ内では `yt-skills sync`）を案内して停止する。すべて満たすまで lease と子 skill を開始しない。
 2. `acquire` で token を保持する。exit 20 / `busy` なら子 skill を開始せず終了する。
 3. 初回 `plan` を実行する。
-   - `reason: no_active_collection`: `/wf-new` の `SKILL.md` を読み、既存 gate と明示 opt-in の skip 分岐を保って新規開始する。`skip_plan_selection: true` の analytics / benchmark fallback mode は推奨順 1 位で続行し、minimal mode など設定で省略されていない入力が必要なら `record-bootstrap --status blocked --reason user_input_required` で停止する。
+   - `reason: no_active_collection`: `/wf-new` を canonical action として選び、step 4 の heartbeat と AI 開始時刻取得後に `SKILL.md` を読んで、既存 gate と明示 opt-in の skip 分岐を保って新規開始する。`skip_plan_selection: true` の analytics / benchmark fallback mode は推奨順 1 位で続行し、minimal mode など設定で省略されていない入力が必要なら `record-bootstrap --status blocked --reason user_input_required --ai-started-at <current-attempt-ai-started-at>` で停止する。
    - collection が返る: その名前を固定する。
-4. `/wf-new` が collection を初期化したら、出力 path と `workflow-state.json` の実在を検証して名前を固定する。`record --action wf-new --status success` 後、同じ run 内で `plan --collection <fixed-name>` を実行する。企画選択等で対話が一時停止しても lease を保持した実行文脈へ回答を戻し、完了後に同じ固定処理を行う。
-5. 各 action の直前に `heartbeat` を実行する。owner なら対応する子 skill の `SKILL.md` を読み、固定 collection、期待成果物、外部公開許可を明示して委譲する。`not-owner` なら開始しない。
-6. 子 skill の期待成果物と state を検証する。成功は `record --status success`、手動介入は `blocked`、その他は `failed` として reason / resume_action を残す。成功時だけ固定 collection を再度 `plan` する。
-7. `post-publish` 後も再評価し、`phase: complete`、`stage: live`、`upload.video_id` と必要な post-publish history が揃って `action: complete` になったら完了記録を残す。
+4. 選ばれた各 action の直前に `heartbeat` を実行する。owner なら直後に「canonical action の AI timing 契約」の開始時刻を取得して保持する。子 skill action は対応する `SKILL.md` を読み、固定 collection、期待成果物、外部公開許可を明示して委譲する。`blocked` / `complete` は同じ開始時刻取得後に terminal action として処理する。`not-owner` なら開始時刻を取得せず、action を開始しない。
+5. `/wf-new` が collection を初期化したら、出力 path と `workflow-state.json` の実在を検証して名前を固定する。step 4 で保持した開始時刻を渡して `record --action wf-new --status success --ai-started-at <current-attempt-ai-started-at>` を実行した後、同じ run 内で `plan --collection <fixed-name>` を実行する。企画選択等で対話が一時停止しても lease を保持した実行文脈へ回答を戻し、完了後に同じ固定処理を行う。
+6. 子 skill の期待成果物と state を検証する。検証成功だけを `record --status success`、手動介入は `blocked`、検証失敗を含むその他は `failed` として reason / resume_action を残し、すべてに同じ attempt の `--ai-started-at` を渡す。成功時だけ固定 collection を再度 `plan` する。
+7. `post-publish` 後も再評価し、`phase: complete`、`stage: live`、`upload.video_id` と必要な post-publish history が揃って `action: complete` になったら、同じ timing 契約で完了記録を残す。
 8. `finally` 相当で必ず自分の token を指定して `release` する。`not-owner` でも他 token の lease は削除しない。
 
 ## 再開と停止報告
 
 - 再実行時は新しい lease を取り、state と成果物から action を再計算する。`.automation-run/history.json` は監査用であり工程判定の source of truth にしない。
+- retry・再開で同じ action を再実行するときも、新しい AI 開始時刻と新しい attempt を使い、前回の失敗時間を上書きしない。
 - `blocked` / `failed` の報告には collection（未作成なら `null`）、action、reason、resume_action、history path を含める。
 - 無人実行の blocker を成功完了として報告しない。人間が行う認証は login / 同意等のブラウザ操作だけとし、コマンド起動と再検証は AI または setup script が担う。
 
