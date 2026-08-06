@@ -2304,6 +2304,66 @@ def test_audio_visualizer_accepts_conical_fill(tmp_path, monkeypatch):
     assert config.youtube.overlays.audio_visualizer.fill.type == "conical"
 
 
+# ----- workflow.manual_baseline_minutes (#3259) -----------------------------
+
+
+def test_manual_baseline_minutes_absent_is_distinguishable_from_configured_empty(tmp_path, monkeypatch):
+    absent_channel = _setup_channel(tmp_path / "absent", _minimal_sections())
+    monkeypatch.setenv("CHANNEL_DIR", str(absent_channel))
+
+    assert load_config().workflow.manual_baseline_minutes is None
+
+    reset()
+    sections = _minimal_sections()
+    sections["workflow.json"] = {"workflow": {"manual_baseline_minutes": {}}}
+    configured_channel = _setup_channel(tmp_path / "configured", sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(configured_channel))
+
+    assert load_config().workflow.manual_baseline_minutes == {}
+
+
+def test_manual_baseline_minutes_loads_action_values_as_minutes(tmp_path, monkeypatch):
+    sections = _minimal_sections()
+    sections["workflow.json"] = {
+        "workflow": {
+            "manual_baseline_minutes": {
+                "thumbnail": 45,
+                "video-upload": 12.5,
+            }
+        }
+    }
+    channel = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(channel))
+
+    baselines = load_config().workflow.manual_baseline_minutes
+
+    assert baselines == {"thumbnail": 45.0, "video-upload": 12.5}
+
+
+@pytest.mark.parametrize(
+    ("value", "message"),
+    [
+        ([], "manual_baseline_minutes は object"),
+        ({"": 10}, "action ID は空でない string"),
+        ({"   ": 10}, "action ID は空でない string"),
+        ({"thumbnail": True}, "0 以上の有限 number"),
+        ({"thumbnail": -1}, "0 以上の有限 number"),
+        ({"thumbnail": "30"}, "0 以上の有限 number"),
+        ({"thumbnail": float("nan")}, "0 以上の有限 number"),
+        ({"thumbnail": float("inf")}, "0 以上の有限 number"),
+        ({"thumbnail": 10**1000}, "0 以上の有限 number"),
+    ],
+)
+def test_manual_baseline_minutes_rejects_invalid_values(tmp_path, monkeypatch, value, message):
+    sections = _minimal_sections()
+    sections["workflow.json"] = {"workflow": {"manual_baseline_minutes": value}}
+    channel = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(channel))
+
+    with pytest.raises(ConfigError, match=message):
+        load_config()
+
+
 # ----- workflow.scheduled_automation (#1892) --------------------------------
 
 
