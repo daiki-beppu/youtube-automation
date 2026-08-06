@@ -5,10 +5,12 @@ from __future__ import annotations
 import logging
 import shutil
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 
 from youtube_automation.core.adapters.media import CollectionPaths
-from youtube_automation.domains.suno.downloaded.archive import extract_downloaded_archive
+from youtube_automation.domains.suno.downloaded.archive import extract_downloaded_archive_detailed
 from youtube_automation.domains.suno.downloaded.models import (
     DownloadedArtifactError,
     DownloadedPayload,
@@ -22,6 +24,32 @@ from youtube_automation.domains.suno.downloaded.workflow import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True, slots=True)
+class DownloadedApplyResult:
+    expected_count: int
+    audio_count: int
+    placed_count: int
+    suno_unfulfilled: int
+    apply_skipped: int
+
+    @classmethod
+    def from_counts(cls, *, expected_count: int, audio_count: int, placed_count: int) -> DownloadedApplyResult:
+        return cls(
+            expected_count=expected_count,
+            audio_count=audio_count,
+            placed_count=placed_count,
+            suno_unfulfilled=max(expected_count - audio_count, 0),
+            apply_skipped=max(audio_count - placed_count, 0),
+        )
+
+    @property
+    def missing_reasons(self) -> dict[str, int]:
+        return {
+            "suno_unfulfilled": self.suno_unfulfilled,
+            "apply_skipped": self.apply_skipped,
+        }
 
 
 def _restore_downloaded_transaction(
@@ -46,17 +74,17 @@ def _restore_downloaded_transaction(
         workflow_state_path.unlink(missing_ok=True)
 
 
-def apply_downloaded_artifacts(
+def apply_downloaded_artifacts_detailed(
     coll_dir: Path,
     payload: DownloadedPayload,
     *,
     prompt_entries_reader: PromptEntriesReader,
     atomic_json_write: AtomicJsonWriter,
-) -> int:
+) -> DownloadedApplyResult:
     pattern_count = read_pattern_count(coll_dir, prompt_entries_reader=prompt_entries_reader, default=0)
-    expected_count = expected_download_count(pattern_count, payload.expected_file_count)
-    placed_count_for_response = payload.file_count
-    file_count = payload.file_count
+    expected_count = cast(int, expected_download_count(pattern_count, payload.expected_file_count))
+    audio_count = payload.file_count
+    placed_count = payload.file_count
     paths = CollectionPaths(coll_dir)
     music_dir = paths.music_dir
     workflow_state_path = paths.workflow_state_path
@@ -71,17 +99,24 @@ def apply_downloaded_artifacts(
                 music_backup_dir = Path(tempfile.mkdtemp(dir=str(coll_dir), prefix=".suno-music-apply-backup-"))
                 shutil.copytree(music_dir, music_backup_dir / "02-Individual-music")
             restore_music_on_error = True
-            placed_count = extract_downloaded_archive(
+            archive_result = extract_downloaded_archive_detailed(
                 coll_dir, payload.download_path, prompt_entries_reader=prompt_entries_reader
             )
-            placed_count_for_response = placed_count
-            file_count = placed_count
+            audio_count = archive_result.audio_count
+            placed_count = archive_result.placed_count
+
+        result = DownloadedApplyResult.from_counts(
+            expected_count=expected_count,
+            audio_count=audio_count,
+            placed_count=placed_count,
+        )
 
         update_workflow_state_downloaded(
             coll_dir,
-            file_count=file_count,
+            file_count=result.placed_count,
             suno_playlist_url=payload.suno_playlist_url,
-            expected_file_count=expected_count,
+            expected_file_count=result.expected_count,
+            missing_reasons=result.missing_reasons,
             prompt_entries_reader=prompt_entries_reader,
             atomic_json_write=atomic_json_write,
         )
@@ -113,4 +148,19 @@ def apply_downloaded_artifacts(
             Path(payload.download_path).unlink()
         except OSError as exc:
             logger.warning("Suno download ZIP cleanup failed for %s: %s", payload.download_path, exc)
-    return placed_count_for_response
+    return result
+
+
+def apply_downloaded_artifacts(
+    coll_dir: Path,
+    payload: DownloadedPayload,
+    *,
+    prompt_entries_reader: PromptEntriesReader,
+    atomic_json_write: AtomicJsonWriter,
+) -> int:
+    return apply_downloaded_artifacts_detailed(
+        coll_dir,
+        payload,
+        prompt_entries_reader=prompt_entries_reader,
+        atomic_json_write=atomic_json_write,
+    ).placed_count
