@@ -844,6 +844,35 @@ def test_cmd_sync_prune_removes_orphan_dir_when_yes(fake_repo: Path, tmp_path: P
 
 
 @pytest.mark.parametrize(
+    ("prune_flags", "feedback_exists"),
+    [
+        pytest.param([], True, id="normal-sync-keeps"),
+        pytest.param(["--prune"], True, id="unapproved-prune-keeps"),
+        pytest.param(["--prune", "--yes"], False, id="approved-prune-removes"),
+    ],
+)
+def test_cmd_sync_legacy_feedback_prune_requires_explicit_yes(
+    fake_repo: Path,
+    tmp_path: Path,
+    prune_flags: list[str],
+    feedback_exists: bool,
+) -> None:
+    """legacy feedback は明示承認した prune でだけ削除する。"""
+    target = tmp_path / "out" / ".claude" / "skills"
+    _seed_bundled_target(target)
+    legacy_feedback = target / "feedback"
+    legacy_feedback.mkdir()
+    (legacy_feedback / "SKILL.md").write_text("# legacy feedback\n", encoding="utf-8")
+
+    parser = build_parser()
+    args = parser.parse_args(["sync", "--asset", "skills", "--target", str(target), "--force", *prune_flags])
+    rc = args.func(args)
+
+    assert rc == 0
+    assert legacy_feedback.exists() is feedback_exists
+
+
+@pytest.mark.parametrize(
     "skill_name",
     ["onboard", "distrokid-prep", "channel-import", "channel-setup", "channel-direction"],
 )
