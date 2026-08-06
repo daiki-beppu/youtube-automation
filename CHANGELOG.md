@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(downloaded)`: Suno apply の詳細結果で期待数・archive 内音声数・配置数と生成不足・配置 skip を返し、同じ欠損内訳を workflow state に保存（#3129）。
+
 - `feat(downloaded)`: Suno の欠損数を生成不足と配置 skip の内訳として workflow state に保存し、完全完了時は過去の内訳を消去（#3128）。
 
 - `refactor(downloaded)`: Suno ZIP の archive 内音声総数と実配置数を単一走査の詳細結果として返し、現行の配置数 API 契約を維持（#3127）。
