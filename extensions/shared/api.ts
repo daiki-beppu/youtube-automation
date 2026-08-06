@@ -28,6 +28,8 @@ export interface PromptEntry {
   weirdness?: number;
   /** Exclude styles free text。Suno の Exclude styles 欄へ注入。 */
   exclude_styles?: string;
+  /** Custom Duration の秒数。channel override に明示された entry だけが持つ。 */
+  duration_sec?: number;
   /**
    * Voice section の Male / Female ボタン (Suno UI)。"male" / "female" のみ対応ボタンを click する。
    * "neutral" / "auto" / undefined は何もしない（既選択を解除しない、"Auto = Suno に任せる"解釈）。
