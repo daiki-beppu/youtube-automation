@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `fix(collection-serve)`: `--allow-extension` が同名候補を検出しても有効 ID が 0 件、または複数 ID の場合は起動前に拒否し、検出した全候補の profile / ID / path / enabled 状態と `--allow-origin` fallback を `ConfigError` に列挙する（#3216）。
 - `fix(collection-serve)`: Chrome Preferences の同名 unpacked 拡張候補に無効化済み ID が混在しても、非空の `disable_reasons` または `state=0` を持つ entry を除外し、唯一の有効候補へ `--allow-extension` の exact origin lock を設定する（#3215）。
 - `fix(tests)`: pnpm Worker 契約テストの実行対象を `extensions/suno-helper` から依存ゼロの一時 project へ変更し、`node_modules` が無い環境で 494 パッケージ / 318MB の実インストールが検証前に走る構造を解消した。takt worker ではこの install が `SIGKILL` されて全体 pytest のベースラインが red になり、後続 issue が着手できなくなっていた。検証している契約は `PNPM_MAX_WORKERS` が pnpm のプロセス境界を越えることだけで、対象 project の依存構成は含まれない。あわせて stdout 末尾行に依存した assertion を、検証値へラベルを付けて行集合を検査する方式へ置き換えた。pnpm は依存ゼロでも `Already up to date` を出力し、その位置が 2 つの検証値の間に入るため位置依存の判定が成立しない（#3082）。
 - `fix(extensions)`: pnpm の tarball Worker 既定値を 1 に抑制し、macOS・Node 24 で発生する libuv abort による Fallow audit の偽 red を回避した（#3078）。

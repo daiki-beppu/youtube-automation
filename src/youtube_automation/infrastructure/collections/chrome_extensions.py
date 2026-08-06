@@ -28,6 +28,7 @@ class _ExtensionCandidate:
     extension_id: str
     profile: str
     path: Path
+    enabled: bool
     preferences_path: Path
 
 
@@ -49,7 +50,15 @@ def resolve_unpacked_extension_origin(
             "Load the unpacked extension in Chrome, or pass --allow-origin chrome-extension://<EXTENSION_ID> manually."
         )
 
-    ids = {candidate.extension_id for candidate in candidates}
+    enabled_candidates = [candidate for candidate in candidates if candidate.enabled]
+    if not enabled_candidates:
+        raise ConfigError(
+            f"Chrome unpacked extension named {extension_name!r} matched no enabled extension IDs. "
+            f"Candidates: {_format_candidates(candidates)}. "
+            "Pass --allow-origin chrome-extension://<EXTENSION_ID> manually."
+        )
+
+    ids = {candidate.extension_id for candidate in enabled_candidates}
     if len(ids) > 1:
         raise ConfigError(
             f"Chrome unpacked extension named {extension_name!r} matched multiple extension IDs. "
@@ -57,7 +66,7 @@ def resolve_unpacked_extension_origin(
             "Pass --allow-origin chrome-extension://<EXTENSION_ID> manually."
         )
 
-    selected = candidates[0]
+    selected = enabled_candidates[0]
     return ChromeExtensionOrigin(
         name=extension_name,
         extension_id=selected.extension_id,
@@ -140,13 +149,12 @@ def _candidates_from_preferences(
         extension_path = Path(raw_path)
         if not extension_path.is_absolute() or extension_path.name != extension_name:
             continue
-        if _is_disabled_extension_entry(raw_entry):
-            continue
         candidates.append(
             _ExtensionCandidate(
                 extension_id=extension_id,
                 profile=profile_dir.name,
                 path=extension_path,
+                enabled=not _is_disabled_extension_entry(raw_entry),
                 preferences_path=preferences_path,
             )
         )
@@ -159,6 +167,7 @@ def _is_disabled_extension_entry(raw_entry: dict[object, object]) -> bool:
 
 def _format_candidates(candidates: list[_ExtensionCandidate]) -> str:
     return "; ".join(
-        f"{candidate.profile}: {candidate.extension_id} ({candidate.path}) via {candidate.preferences_path}"
+        f"profile={candidate.profile}, id={candidate.extension_id}, path={candidate.path}, "
+        f"enabled={str(candidate.enabled).lower()}, preferences={candidate.preferences_path}"
         for candidate in candidates
     )

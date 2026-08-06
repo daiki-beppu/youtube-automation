@@ -98,6 +98,32 @@ def test_resolve_unpacked_extension_origin_selects_enabled_duplicate(tmp_path, d
     assert resolved.origin == f"chrome-extension://{enabled_id}"
 
 
+def test_resolve_unpacked_extension_origin_lists_all_disabled_candidates(tmp_path):
+    first_id = "gdjhjiphejeeclngbljhajiffhpdepee"
+    second_id = "abcdefghijklmnopabcdefghijklmnop"
+    first_path = tmp_path / "first" / "suno-helper"
+    second_path = tmp_path / "second" / "suno-helper"
+    _write_preferences(
+        tmp_path / "Default",
+        "Secure Preferences",
+        {first_id: {"path": str(first_path), "disable_reasons": [1]}},
+    )
+    _write_preferences(
+        tmp_path / "Profile 1",
+        "Secure Preferences",
+        {second_id: {"path": str(second_path), "state": 0}},
+    )
+
+    with pytest.raises(ConfigError) as exc_info:
+        resolve_unpacked_extension_origin("suno-helper", chrome_user_data_dir=tmp_path)
+
+    message = str(exc_info.value)
+    assert "matched no enabled extension IDs" in message
+    assert f"profile=Default, id={first_id}, path={first_path}, enabled=false" in message
+    assert f"profile=Profile 1, id={second_id}, path={second_path}, enabled=false" in message
+    assert "--allow-origin chrome-extension://<EXTENSION_ID>" in message
+
+
 def test_resolve_unpacked_extension_origin_uses_preferences_fallback(tmp_path):
     _write_preferences(
         tmp_path / "Profile 1",
@@ -220,8 +246,9 @@ def test_resolve_unpacked_extension_origin_conflicting_ids_lists_candidates(tmp_
 
     message = str(exc_info.value)
     assert "matched multiple extension IDs" in message
-    assert "Default: gdjhjiphejeeclngbljhajiffhpdepee" in message
-    assert "Profile 1: abcdefghijklmnopabcdefghijklmnop" in message
+    assert "profile=Default, id=gdjhjiphejeeclngbljhajiffhpdepee" in message
+    assert "profile=Profile 1, id=abcdefghijklmnopabcdefghijklmnop" in message
+    assert message.count("enabled=true") == 2
     assert "--allow-origin chrome-extension://<EXTENSION_ID>" in message
 
 
