@@ -38,6 +38,7 @@ _KNOWN_REMOVED_SKILL_NAMES = frozenset(
         "channel-direction",
         "automation-release",
         "shadcn",
+        "feedback",
     }
 )
 
