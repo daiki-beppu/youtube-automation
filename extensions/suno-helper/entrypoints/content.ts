@@ -506,6 +506,27 @@ function assertRetryPlaylistPayload(value: unknown): RetryPlaylistPayload {
   };
 }
 
+function assertNoFailedSavedClips(
+  failedClipIds: string[],
+  submittedClipIds: string[]
+): void {
+  if (failedClipIds.length === 0) {
+    return;
+  }
+  const submittedSet = new Set(submittedClipIds);
+  const unmappedFailedClipIds = failedClipIds.filter(
+    (clipId) => !submittedSet.has(clipId)
+  );
+  if (unmappedFailedClipIds.length > 0) {
+    throw new Error(
+      `生成失敗 clip を保存済み playlist 候補へ対応付けられません: ${unmappedFailedClipIds.join(", ")}`
+    );
+  }
+  throw new Error(
+    `保存済み clip ${failedClipIds.join(", ")} は status=error のため playlist へ追加できません。失敗分のみ再実行してください。`
+  );
+}
+
 function assertRetryDownloadPayload(value: unknown): RetryDownloadPayload {
   const record = assertRecord(value, "retryDownload payload");
   const collectionId = assertNonEmptyString(
@@ -1521,6 +1542,7 @@ export default defineContentScript({
       // 追加して resume/retry 導線へ渡すが、stall のみの失敗では完了済み clip で playlist 追加・
       // download を続行するため、finishWithFailedEntriesIfNeeded の保留判定からは除外する。
       const stalledEntryIndices: number[] = [];
+      const generationFailedEntryIndices: number[] = [];
       let queueClipIdsByEntry: Map<number, string[]> | null = null;
       let keepResumeStateForDownloadRetry = false;
       let playlistPersistInfo: PlaylistClipPersistInfo | null = null;
@@ -1634,8 +1656,11 @@ export default defineContentScript({
         }
         // stall 由来の失敗だけなら playlist 追加を保留しない (#1994)。完了済み clip での
         // graceful degradation（playlist 追加 / download の続行）を優先する。
-        const stalledSet = new Set(stalledEntryIndices);
-        if (failedIndices.every((i) => stalledSet.has(i))) {
+        const degradedSet = new Set([
+          ...stalledEntryIndices,
+          ...generationFailedEntryIndices,
+        ]);
+        if (failedIndices.every((i) => degradedSet.has(i))) {
           return false;
         }
         finishDeferringPlaylistForFailedEntries();
@@ -2124,6 +2149,56 @@ export default defineContentScript({
             return;
           }
         }
+        // stall と status=error は独立した終端状態。timeout した entry を除外した後にも
+        // 残った error entry を評価し、両者が混在する run を同じ partial complete へ収束させる。
+        // 一部の埋め込み先・テスト fixture は旧 tracker shape のままでも動作できるよう、
+        // API が無い場合は従来どおり「失敗 clip なし」として扱う。
+        const failedClipIds = tracker.getFailedSubmittedIds?.() ?? [];
+        if (failedClipIds.length > 0) {
+          if (options.runMode !== "queue" || queueClipIdsByEntry === null) {
+            throw new Error(
+              `生成失敗 clip を queue entry に対応付けられません: ${failedClipIds.join(", ")}`
+            );
+          }
+          const degraded = resolveStalledQueueEntries(
+            failedClipIds,
+            queueClipIdsByEntry
+          );
+          if (degraded.unmappedStalledClipIds.length > 0) {
+            throw new Error(
+              `生成失敗 clip を queue entry に対応付けられません: ${degraded.unmappedStalledClipIds.join(", ")}`
+            );
+          }
+          for (const index of degraded.stalledEntryIndices) {
+            const entryClipIds = queueClipIdsByEntry.get(index) ?? [];
+            tracker.dropSubmittedIds(entryClipIds);
+            queueClipIdsByEntry.delete(index);
+            generationFailedEntryIndices.push(index);
+            failedIndices.push(index);
+            const message = "生成に失敗したためスキップしました (status=error)";
+            console.warn(`[suno-helper] entry ${index}: ${message}`);
+            emitProgress({
+              phase: PHASE.ENTRY_FAILED,
+              index,
+              total,
+              message,
+              yieldRetryCount: 0,
+              log: {
+                kind: "skip",
+                entryName: entryDisplayName(entries[index]),
+              },
+            });
+          }
+          playlistTargetClipCount = countQueuePlaylistClipIds(
+            previousSubmittedClipIds,
+            queueClipIdsByEntry
+          );
+          verifiedPlaylistClipCount = playlistTargetClipCount;
+          if (playlistTargetClipCount === 0) {
+            finishDeferringPlaylistForFailedEntries();
+            return;
+          }
+        }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         persistInterruptState(total);
@@ -2132,10 +2207,13 @@ export default defineContentScript({
       }
       // stall でスキップした entry は生成物が無いため、yield finalize と playlist の title fallback
       // （order と clip ID の位置対応）から除外する (#1994)。
-      const stalledEntrySet = new Set(stalledEntryIndices);
+      const unavailableEntrySet = new Set([
+        ...stalledEntryIndices,
+        ...generationFailedEntryIndices,
+      ]);
       const completedOrder =
-        stalledEntryIndices.length > 0
-          ? order.filter((i) => !stalledEntrySet.has(i))
+        unavailableEntrySet.size > 0
+          ? order.filter((i) => !unavailableEntrySet.has(i))
           : order;
       if (aborted) {
         persistInterruptState(total);
@@ -2317,16 +2395,29 @@ export default defineContentScript({
         emitProgress({ phase: PHASE.STOPPED, total });
         return;
       }
-      // stall でスキップした entry が残る partial complete (#1994)。完了分の playlist 追加・
-      // download は実行済み。stalled entry を「失敗分のみ再実行」導線へ渡すため resume state を
-      // 保持し、消去も完了時リロードも行わない。
-      if (stalledEntryIndices.length > 0) {
+      // 生成物を得られなかった entry が残る partial complete。完了分の playlist 追加・download は
+      // 実行済み。失敗 entry を再実行導線へ渡すため resume state を保持する。
+      if (
+        stalledEntryIndices.length > 0 ||
+        generationFailedEntryIndices.length > 0
+      ) {
         persistInterruptState(total);
-        const list = stalledEntryIndices.map((i) => i + 1).join(", ");
+        const details = [
+          ...(stalledEntryIndices.length > 0
+            ? [
+                `生成停滞: entry ${stalledEntryIndices.map((i) => i + 1).join(", ")}`,
+              ]
+            : []),
+          ...(generationFailedEntryIndices.length > 0
+            ? [
+                `生成失敗 (status=error): entry ${generationFailedEntryIndices.map((i) => i + 1).join(", ")}`,
+              ]
+            : []),
+        ];
         emitProgress({
           phase: PHASE.FINISHED,
           total,
-          message: `${stalledEntryIndices.length} 件の entry が生成停滞のため失敗しました (entry ${list})。完了分の playlist 追加とダウンロードは実行済みです。「失敗分のみ再実行」で残りを生成できます。`,
+          message: `${details.join(" / ")}。完了分の playlist 追加とダウンロードは実行済みです。「失敗分のみ再実行」で残りを生成できます。`,
         });
         return;
       }
@@ -2545,6 +2636,10 @@ export default defineContentScript({
               completion.message ?? "生成完了待ちがタイムアウトしました"
             );
           }
+          assertNoFailedSavedClips(
+            tracker.getFailedIdsByIds?.(submittedClipIds) ?? [],
+            submittedClipIds
+          );
           if (aborted) {
             emitProgress({ phase: PHASE.STOPPED, total: 0 });
             return;
