@@ -67,6 +67,7 @@ const harness = vi.hoisted(() => {
     readUnattendedRunState: vi.fn(() => Promise.resolve(null)),
     requestSliderSet: vi.fn(),
     submittedClipIds: [] as string[],
+    failedClipIds: [] as string[],
     acceptedClipIds: [] as string[],
     droppedClipIds: [] as string[],
     durationsById: {} as Record<string, number | undefined>,
@@ -166,6 +167,7 @@ vi.mock("../lib/clip-tracker", () => ({
   createClipTracker: vi.fn(() => ({
     clearSubmittedIds: vi.fn(),
     getSubmittedIds: vi.fn(() => harness.submittedClipIds),
+    getFailedSubmittedIds: vi.fn(() => harness.failedClipIds),
     getPendingSubmittedIds: vi.fn(() => []),
     getPendingIdsByIds: vi.fn((ids: string[]) =>
       ids.filter((id) => harness.pendingClipIds.includes(id))
@@ -563,6 +565,7 @@ beforeEach(() => {
     }
   );
   harness.submittedClipIds = [];
+  harness.failedClipIds = [];
   harness.acceptedClipIds = [];
   harness.droppedClipIds = [];
   harness.durationsById = {};
@@ -2122,6 +2125,68 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
           acceptedClipIds: ["serial-on-3-a", "serial-on-3-b"],
           yieldRetryCount: 2,
         }),
+      ])
+    );
+  });
+
+  it("Given serial mode で error clip を観測 When 実行する Then 再生成せず失敗 entry として後続へ進む", async () => {
+    makeViewButton("Grid");
+    makeTextarea(null);
+    makeTextarea("lyrics-textarea");
+    let generationCount = 0;
+    makeGenerateButtonWithClickObserver(() => {
+      generationCount += 1;
+      appendSubmittedClipIdsForRequest(
+        generationCount === 1 ? "serial-error" : "serial-complete"
+      );
+    });
+    addCompletedRemixCard();
+    await loadContentScript();
+    const entries = makePromptEntries(2);
+    const payload = makeRunPayload(entries);
+    harness.submittedClipIds = [];
+    harness.failedClipIds = ["serial-error-1"];
+    harness.durationErrorsById = {
+      "serial-error-1": new Error("error clip の duration は評価しない"),
+    };
+
+    expect(getRunHandler()({ data: payload })).toEqual({ ok: true });
+
+    await vi.waitFor(
+      () => expect(harness.feedPollerStop).toHaveBeenCalledOnce(),
+      { timeout: 3000 }
+    );
+    expect(generationCount).toBe(2);
+    expect(harness.droppedClipIds).toEqual([
+      "serial-error-1",
+      "serial-error-2",
+    ]);
+    expect(harness.acceptedClipIds).toEqual([
+      "serial-complete-1",
+      "serial-complete-2",
+    ]);
+    expect(progressPayloads()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          phase: PHASE.ENTRY_FAILED,
+          index: 0,
+          message: expect.stringContaining("status=error"),
+          log: { kind: "skip", entryName: "pattern-1" },
+        }),
+        expect.objectContaining({
+          phase: PHASE.DONE,
+          index: 1,
+          acceptedClipIds: ["serial-complete-1", "serial-complete-2"],
+        }),
+        expect.objectContaining({
+          phase: PHASE.FINISHED,
+          message: expect.stringContaining("失敗分のみ再実行"),
+        }),
+      ])
+    );
+    expect(progressPayloads()).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ phase: PHASE.ADDING_TO_PLAYLIST }),
       ])
     );
   });
