@@ -11,6 +11,18 @@ export type ServerUrlFieldProps = Pick<
   onOpen: () => Promise<void>;
 };
 
+function withDistrokidSourceLabel(
+  source: ServerSourceFieldProps["sources"][number]
+): ServerSourceFieldProps["sources"][number] {
+  const mode = source.capabilities?.distrokid.mode;
+  if (mode === undefined) return source;
+  const detail =
+    mode === "dir" && source.collectionsRoot
+      ? `${mode}/${source.collectionsRoot}`
+      : mode;
+  return { ...source, label: `${source.label} [${detail}]` };
+}
+
 export function ServerUrlField({
   value,
   sources,
@@ -18,11 +30,12 @@ export function ServerUrlField({
   onChange,
   onOpen,
 }: ServerUrlFieldProps) {
+  const labeledSources = sources.map(withDistrokidSourceLabel);
   return (
     <ServerSourceField
       id="server-url"
       value={value}
-      sources={sources}
+      sources={labeledSources}
       disabled={disabled}
       helper="distrokid-helper"
       onValueChange={onChange}
