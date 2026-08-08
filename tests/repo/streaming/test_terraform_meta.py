@@ -22,6 +22,7 @@ from tests.repo.streaming._helpers import (
     _ROOT_GITIGNORE,
     _TFSTATE_BACKEND_PREFIX,
     _TFVARS_EXAMPLE,
+    _VARIABLES_TF,
     _VERSIONS_TF,
 )
 
@@ -217,7 +218,13 @@ class TestVersionsTfExternalProvider:
 
 
 class TestOutputsTf:
-    """``outputs.tf`` の instance_ip / instance_id expose。"""
+    """``outputs.tf`` の apply 完了時 output。"""
+
+    _WEBHOOK_WARNING = "WARNING: healthcheck の Discord webhook が未設定です。"
+    _WEBHOOK_EXPORT = (
+        "export TF_VAR_discord_webhook_url=\\\"$(op read 'op://Personal/YouTube_Stream_Discord_Webhook/url')\\\""
+    )
+    _WEBHOOK_REAPPLY = "設定後に terraform apply を再実行してください。"
 
     def test_instance_ip_outputs_main_ip_with_description(self):
         """Given outputs.tf
@@ -244,6 +251,60 @@ class TestOutputsTf:
             "instance_id.value が vultr_instance.this.id でない"
         )
         assert re.search(r"description\s*=", block), "instance_id.description が無い"
+
+    def test_webhook_warning_outputs_actionable_recovery_steps(self):
+        """Given webhook warning output
+        When apply 完了時の案内を読む
+        Then 未設定警告・1Password export・再 apply 手順を正確に表示する。
+        """
+        text = read_file(_OUTPUTS_TF)
+        block = extract_block(text, r'output\s+"discord_webhook_setup_warning"')
+
+        assert block is not None, 'output "discord_webhook_setup_warning" が存在しない'
+        assert self._WEBHOOK_WARNING in block
+        assert self._WEBHOOK_EXPORT in block
+        assert self._WEBHOOK_REAPPLY in block
+
+    def test_webhook_warning_treats_empty_and_whitespace_as_unconfigured(self):
+        """Given sensitive webhook input
+        When warning 条件を読む
+        Then trim 後の空判定だけを非機密化し、設定済みなら null を返す。
+        """
+        text = read_file(_OUTPUTS_TF)
+        block = extract_block(text, r'output\s+"discord_webhook_setup_warning"')
+
+        assert block is not None
+        assert re.search(
+            r"nonsensitive\(\s*trimspace\(var\.discord_webhook_url\)\s*==\s*\"\"\s*\)",
+            block,
+        )
+        assert re.search(r":\s*null\s*$", block, flags=re.MULTILINE)
+
+    def test_webhook_warning_does_not_expose_or_fingerprint_secret(self):
+        """Given webhook warning output
+        When secret の参照方法を検査する
+        Then URL 値・hash・sensitive output を公開しない。
+        """
+        text = read_file(_OUTPUTS_TF)
+        block = extract_block(text, r'output\s+"discord_webhook_setup_warning"')
+
+        assert block is not None
+        assert block.count("var.discord_webhook_url") == 1
+        assert not re.search(r"\b(?:sha\d*|md5)\s*\(", block, flags=re.IGNORECASE)
+        assert not re.search(r"https?://", block, flags=re.IGNORECASE)
+        assert re.search(r"sensitive\s*=\s*false", block)
+
+    def test_webhook_remains_required_but_accepts_explicit_empty_value(self):
+        """Given discord_webhook_url variable
+        When 入力制約を読む
+        Then 欠落は fail-fast のまま、明示的な空値は validation で拒否しない。
+        """
+        text = strip_hcl_comments(read_file(_VARIABLES_TF))
+        block = extract_block(text, r'variable\s+"discord_webhook_url"')
+
+        assert block is not None
+        assert not re.search(r"\bdefault\s*=", block)
+        assert extract_block(block, r"validation") is None
 
 
 # ============================================================================
