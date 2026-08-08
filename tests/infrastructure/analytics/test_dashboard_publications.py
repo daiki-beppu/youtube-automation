@@ -8,8 +8,18 @@ import pytest
 from youtube_automation.infrastructure.analytics import dashboard_publications
 from youtube_automation.infrastructure.analytics.dashboard_publications import (
     build_dashboard_publications,
+    load_fresh_dashboard_publications,
     save_dashboard_publications,
 )
+
+
+def _publication_payload(fetched_at: str) -> dict[str, object]:
+    return {
+        "schema_version": 1,
+        "fetched_at": fetched_at,
+        "timezone": "UTC",
+        "days": {"2026-08-08": 2},
+    }
 
 
 def test_build_dashboard_publications_groups_by_local_calendar_day() -> None:
@@ -109,3 +119,69 @@ def test_save_dashboard_publications_preserves_destination_and_cleans_temp_on_re
     assert destination.read_bytes() == original
     assert observed_temporary is not None
     assert not observed_temporary.exists()
+
+
+def test_load_fresh_dashboard_publications_should_return_payload_when_cache_is_24_hours_old(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "dashboard_publications.json"
+    payload = _publication_payload("2026-08-07T12:00:00+00:00")
+    source.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = load_fresh_dashboard_publications(
+        source,
+        now=datetime(2026, 8, 8, 12, tzinfo=UTC),
+    )
+
+    assert result == payload
+
+
+def test_load_fresh_dashboard_publications_should_return_none_when_cache_is_older_than_24_hours(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "dashboard_publications.json"
+    source.write_text(
+        json.dumps(_publication_payload("2026-08-07T11:59:59+00:00")),
+        encoding="utf-8",
+    )
+
+    result = load_fresh_dashboard_publications(
+        source,
+        now=datetime(2026, 8, 8, 12, tzinfo=UTC),
+    )
+
+    assert result is None
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        "{not-json",
+        json.dumps({"schema_version": 2, "fetched_at": "2026-08-08T11:00:00+00:00"}),
+        json.dumps(_publication_payload("not-a-timestamp")),
+    ],
+)
+def test_load_fresh_dashboard_publications_should_return_none_when_cache_is_corrupt(
+    tmp_path: Path,
+    content: str,
+) -> None:
+    source = tmp_path / "dashboard_publications.json"
+    source.write_text(content, encoding="utf-8")
+
+    result = load_fresh_dashboard_publications(
+        source,
+        now=datetime(2026, 8, 8, 12, tzinfo=UTC),
+    )
+
+    assert result is None
+
+
+def test_load_fresh_dashboard_publications_should_return_none_when_cache_is_missing(
+    tmp_path: Path,
+) -> None:
+    result = load_fresh_dashboard_publications(
+        tmp_path / "dashboard_publications.json",
+        now=datetime(2026, 8, 8, 12, tzinfo=UTC),
+    )
+
+    assert result is None
