@@ -213,29 +213,19 @@ benchmark fallback mode または `ttp_mode: false` の minimal mode でペル�
 
 ### Phase 4: プレビューサムネイル生成
 
-既定では `preview.thumbnail_mode: parallel` ── テキストで `preview.candidate_count` 案（デフォルト 3）を先に提示して合意を取り、その後 `candidate_count` 枚を一括生成して比較選択する。コストを抑えたい場合は `sequential` に切り替えると「テキスト `candidate_count` 案 → 選択 → 選択 1 案だけ生成」フローになる（コスト 1/`candidate_count`、節末「Phase 4 補足: sequential モード (opt-in)」参照）。
+設定、候補 schema、コスト計算、セルフチェックは [preview contract](references/preview-contract.md) を先に読み、その解決結果を Phase 4 全体で共有する。
 
-以下、本文中の Bash 例・テーブル・採番（A/B/C / plan-a/b/c）はすべて `candidate_count = 3` のときのサンプル。`candidate_count` を変更した場合は連打回数・採番をその値に合わせて調整すること。
+`preview.thumbnail_mode` が `parallel` ならテキスト候補への合意後に全候補を一括生成して比較し、`sequential` ならテキスト候補から選んだ1案だけを生成する。
 
 両モード共通の前半（4-1〜4-2）でテキスト案提示とコスト条件を確定してから、後半（4-3〜4-5）で生成・比較・選択に進む。
 
 **4-1: 企画 `candidate_count` 案（プロンプト本文込み）をテキストで提示**
 
-`preview.candidate_count`（デフォルト 3）個の企画について、`/thumbnail` スキルの Phase 1 と同等の本番品質プロンプトを **テキストで** 生成・提示する。この段階では画像は生成しない。
-
-- `config/skills/thumbnail.yaml` の `image_generation.gemini.prompt_prefix` + `composition_rules` を完全適用
-- 英語 1 段落、誇張表現禁止、16:9 構図、テキスト除外
-- **キャラ + 手が写る構図では `image_generation.gemini.single_step.anatomy_clause` の内容（hands anatomically correct, five fingers each, no fused/extra/melted fingers）をプロンプトに含める**（#570、Gemini の指破綻を抑止）
-- **IP / 版権セーフティ (#569)**: 参照画像が TTP のベンチマーク（競合サムネ）である以上、原作者のサイン・署名・透かし・ロゴが転写される事故を抑止するため、各企画プロンプトの末尾に標準除外 clause を必ず含める: `no signature, no autograph, no watermark, no logo, no brand mark, clean corners`（`image_generation.gemini.single_step.ip_safety_clause` を参照）。プロンプト本文の比較材料に含まれるため、テキスト案提示の段階で抜けに気付けるようにしておく
-- **本番品質で生成する**（選択された企画のプロンプトをそのまま `yt-generate-image` に渡すため、再生成によるばらつきを避ける）
-
-各企画について、テーマ・タイトル・オブジェクト定義・サムネプロンプト全文をユーザーに提示する。プロンプト本文も比較材料に含めることで、視覚出力を見る前にユーザーが意図を把握できる。
+解決済み `candidate_count` 件を preview contract の候補 schema でテキスト提示する。この段階では画像を生成しない。
 
 **4-2: コスト一括確認**
 
-事前見積もりは `config/skills/thumbnail.yaml` の `image_generation.<provider>.cost_per_image_usd` を
-指定したときのみ提示する（Issue #132 以降、ハードコード単価表は撤廃済み）。実コストは GCP Cloud
-Console > Billing で確認する。`thumbnail_mode` によって生成枚数が異なるため、ワンライナーで自動分岐させる:
+preview contract の計算契約に従い、mode 別の生成枚数、provider、model / quality、画像サイズ、単価、API call 数を次のコマンドで確定する:
 
 ```bash
 uv run python3 -c "
@@ -267,14 +257,7 @@ else:
 "
 ```
 
-例（`cost_per_image_usd` が設定済み・parallel・`candidate_count=3` の場合）: `3 枚 × $0.101 = $0.303 (parallel / gemini-3.1-flash-image-preview / 2K)`
-
-deep-merge 後の `preview.skip_cost_confirm` で分岐する:
-
-- `false`（既定）: 上記見積もりを提示し、confirm_cost の y/N で明示承認を待つ。承認までは画像生成を実行しない
-- `true`: y/N を省略し、上記ワンライナーが確定した生成枚数、provider、model / quality、画像サイズ、単価または単価未設定、想定 call 数を terminal / agent run の実行ログへ表示して画像生成へ進む。同じ内容を `20-documentation/plan_proposals.md` の `Preview generation` 節へ追記する。記録に失敗した場合は画像生成せず停止する
-
-**`skip_cost_confirm: false` でユーザーが拒否した場合** → プレビュー画像生成を完全スキップしテキストのみで提示（企画参照画像生成はブロッキングにしない）。`planning-preview.png` は未生成のまま Next Step に進み、後段の `/thumbnail <theme>` がベンチマーク参照からテキスト付き `thumbnail.jpg` を先に生成・承認し、承認済み `thumbnail.jpg` から textless `main.png/jpg` を再生成する（Next Step の「コスト拒否 / 生成失敗で企画参照画像が無い場合」参照）。
+見積もりを提示し、preview contract が確認を要求する場合は `confirm_cost` の y/N で明示承認を待つ。承認または承認省略時の必須記録が完了するまで、4-3 以降の副作用へ進まない。記録に失敗した場合は画像生成せず停止する。ユーザーが拒否した場合は画像生成をスキップし、テキストのみで Next Step へ進む。
 
 **4-3: セッションディレクトリ作成**
 
@@ -293,18 +276,7 @@ mkdir -p collections/planning/_plan-previews/${PREVIEW_DIR}
 
 **4-4: プロンプト構築 + 一括生成（parallel デフォルト）**
 
-`config/skills/thumbnail.yaml` の `image_generation.gemini.generation_mode` を確認:
-
-- **`single_step` の場合**: `image_generation.gemini.diff_prompt_template` をベースに、オブジェクトデザインルール（`objects` が定義されている場合）に従って企画ごとのオリジナルオブジェクトを指定。
-  - **背景色**: `image_generation.gemini.brand_background` を使用（定義がある場合）。全コレクション統一
-  - **オブジェクトの扱い**: `ttp_mode: false` では `objects.swappable` で定義されたスロットを企画ごとに変えて差別化する。`ttp_mode: true` では差別化軸からスロット値を作らず、転写元の高再生コレクションまたは勝ちパターンに基づく値だけを使う
-  - **キャラ + 手が写る構図では `${anatomy_clause}` を全企画プロンプトに展開する**（#570）。`single_step` プレビューは企画参照素材として保存され、最終 `thumbnail.jpg` には流用しない。ただし参照素材の手・指破綻（指の融合・本数異常・溶融）が後段 `/thumbnail` の方向性に影響するため、ここで anatomy 強調 clause を当てておく
-  - **IP / 版権セーフティ clause を常時付与 (#569)**: ベンチマーク TTP 由来の署名・サイン・透かし・ロゴが焼き込まれないよう、`single_step.ip_safety_clause`（`no signature, no autograph, no watermark, no logo, no brand mark, clean corners`）を全企画プロンプトに含める。`diff_prompt_template` 自体に組み込んでおけば 4-1 で生成するテキスト案にも自動で含まれる
-  - 具体的な差分プロンプトの書き方は `references/object-design-examples.md` を参照
-
-- **それ以外の場合**: 4-1 で生成済みの本番品質プロンプトをそのまま流用
-
-`REF_PATHS` を構築してから provider に応じた経路で `preview.candidate_count` 枚を順次生成する:
+preview contract の候補 schema で確定した prompt を使う。`REF_PATHS` を構築してから provider に応じた経路で `candidate_count` 枚を順次生成する:
 
 ```bash
 # <dir> は 4-3 で作成したセッション固有ディレクトリ名（例: 20260306-a3f1）
@@ -387,11 +359,7 @@ fi
 
 **4-4-check: 生成後セルフチェック (#489, 任意)**
 
-`config/skills/collection-ideate.yaml` の `self_check.enabled: true`（デフォルト）の場合、
-4-5 のユーザー提示の **前** に `yt-thumbnail-check` を実行する。これは Gemini Vision で
-`objects.fixed`（wet_runway / matte_black_car / aircraft_mid_distance 等）と
-`no_logo_guard`（テキスト・ロゴ・透かし混入）を JSON 形式の YES/NO チェックリストで
-検査するセルフチェック CLI。
+preview contract がセルフチェックを要求する場合、4-5 のユーザー提示前に実行する:
 
 ```bash
 uv run yt-thumbnail-check \
@@ -399,14 +367,7 @@ uv run yt-thumbnail-check \
   --json
 ```
 
-- 終了コード 0 で全画像合格、1 で 1 件以上が不合格。
-- 不合格時は `self_check.max_regeneration_attempts` が 1 以上なら 4-4 の生成を該当
-  企画だけ再実行、0 なら警告表示のみで 4-5 に進む（ユーザー承認時に保存）。
-- `--print-prompt` で実際に Gemini に渡すチェック prompt を確認できる（呼び出しなし）。
-- 検査対象を絞りたい場合は `--check 'Does the aircraft sit off-center?'` のように追加可能。
-
-`self_check.enabled: false` または `objects.fixed` 未定義のチャンネルでは
-チェックリストが no_logo_guard のみになる（または完全 skip）。
+判定と再生成条件は preview contract のセルフチェック契約を適用する。
 
 **4-5: 全枚を比較提示 → ユーザー選択**
 
@@ -432,9 +393,9 @@ parallel モードでは Next Step で `yt-stock-archive` による不採用 (`c
 
 ### Phase 4 補足: sequential モード (opt-in)
 
-`config/skills/collection-ideate.yaml` で `preview.thumbnail_mode: sequential` に切り替えた場合のみ実行する。コストは parallel の 1/`candidate_count`（`candidate_count=3` で例えば `1 枚 × $0.101 = $0.101`）。テキスト案のプロンプト本文だけで企画を絞り込めるときに有効。
+mode 判定が `sequential` の場合のみ実行する。
 
-**sequential 用 4-1 / 4-2**: 共通。4-2 のコストワンライナーは `mode == sequential` のとき `count = 1` を返すため自動的に `1 枚 × $X` 表示になる。コスト拒否時の挙動も共通。
+**sequential 用 4-1 / 4-2**: 共通。4-2 のコストコマンドは生成1枚として見積もり、承認境界も共通。
 
 **sequential 用 4-3 (セッションディレクトリ作成)**: 共通。
 
