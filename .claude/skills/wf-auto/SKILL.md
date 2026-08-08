@@ -43,7 +43,8 @@ uv run python "$STATE_SCRIPT" plan --channel-dir . [--collection <fixed-name>]
 uv run python "$STATE_SCRIPT" record --channel-dir . --token <token> \
   --collection <fixed-name> --action <action> --status success|blocked|failed \
   --reason <reason> [--resume-action <action>] \
-  --ai-started-at <current-attempt-ai-started-at>
+  --ai-started-at <current-attempt-ai-started-at> \
+  [--human-interval <human-start> <human-end>]...
 uv run python "$STATE_SCRIPT" record-bootstrap --channel-dir . --token <token> \
   --status blocked|failed --reason <reason> \
   --ai-started-at <current-attempt-ai-started-at>
@@ -82,6 +83,26 @@ uv run python -c 'from datetime import UTC, datetime; print(datetime.now(UTC).is
 子 skill の終了報告だけで成功とせず、期待成果物と state を検証してから終了 status を決める。検証に成功した場合だけ `success`、手動介入が必要なら `blocked`、検証失敗を含むその他の失敗は `failed` とする。すべての `record --status success|blocked|failed` と collection 作成前の `record-bootstrap --status blocked|failed` に、同じ attempt で保持した `--ai-started-at <current-attempt-ai-started-at>` を渡して AI 区間を必ず閉じる。`blocked` / `complete` の terminal action も、同じ順序で開始時刻を取得して記録する。
 
 retry・再開時は action を実行するたびに新しい開始時刻を取得し、新しい attempt として追記する。前回の開始時刻を再利用せず、前回の `failed` / `blocked` attempt と実行時間を履歴に残す。
+
+### 同一 run の人間介入 gate timing 契約
+
+canonical action の開始時に、空の `<current-attempt-human-intervals>` を同じ attempt の一時情報として用意する。対話実行で AskUserQuestion または本人操作の依頼を提示する直前に、メインエージェントが human 開始時刻を取得する。承認取得と本人操作の依頼は subagent へ委譲しない。回答または本人操作の完了を受け取った直後、成果物検証や次のコマンドへ進む前に、メインエージェントが human 終了時刻を取得し、閉じた組を `<current-attempt-human-intervals>` へ追加する。
+
+時刻の取得には AI 開始時刻と同じ UTC コマンドを使う。同一 action に複数の gate がある場合も、前の組を上書き・統合せず、各 gate の閉区間を発生順に保持する。action の status と成果物検証が確定して `record` を実行するとき、同じ attempt の AI 開始時刻に加え、保持した区間を発生順を保ったまま全件 `--human-interval START END` として渡す。gate が 0 件ならこの option は渡さない。
+
+```bash
+HUMAN_START_1="$(uv run python -c 'from datetime import UTC, datetime; print(datetime.now(UTC).isoformat())')"
+# メインエージェントが gate を提示し、回答または必要な本人操作の完了を受け取る
+HUMAN_END_1="$(uv run python -c 'from datetime import UTC, datetime; print(datetime.now(UTC).isoformat())')"
+
+uv run python "$STATE_SCRIPT" record --channel-dir . --token <token> \
+  --collection <fixed-name> --action <action> --status <status> --reason <reason> \
+  --ai-started-at <current-attempt-ai-started-at> \
+  --human-interval <human-start-1> <human-end-1> \
+  --human-interval <human-start-2> <human-end-2>
+```
+
+この契約は同じ run の実行文脈へ回答または操作完了が戻る gate にだけ適用する。login / CAPTCHA は既存 Hard Gate の範囲を広げず、本人に必要な1操作だけを依頼し、認証コマンドの実行や CAPTCHA 回避を行わない。
 
 ### `suno-helper` action の自律実行契約
 
