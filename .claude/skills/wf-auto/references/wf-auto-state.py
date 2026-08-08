@@ -183,6 +183,76 @@ def _ai_timing_segment(started_at: str, ended_at: str) -> TimingSegment:
     return segment
 
 
+def _timing_segment(kind: Literal["ai", "human"], started_at: str, ended_at: str) -> TimingSegment:
+    started = _timestamp(started_at, field=f"{kind}_started_at", source="record")
+    ended = _timestamp(ended_at, field=f"{kind}_ended_at", source="record")
+    try:
+        duration_seconds = (ended - started).total_seconds()
+    except TypeError as exc:
+        raise ValueError("record: timing boundary の timezone 指定が一致しません") from exc
+    segment: TimingSegment = {
+        "kind": kind,
+        "started_at": started_at,
+        "ended_at": ended_at,
+        "duration_seconds": duration_seconds,
+    }
+    _validate_timing({"segments": [segment]}, source="record")
+    return segment
+
+
+def _human_interval(interval: list[str], index: int) -> tuple[str, str, datetime, datetime]:
+    human_started_text, human_ended_text = interval
+    human_started = _timestamp(
+        human_started_text,
+        field=f"human_intervals[{index}].started_at",
+        source="record",
+    )
+    human_ended = _timestamp(
+        human_ended_text,
+        field=f"human_intervals[{index}].ended_at",
+        source="record",
+    )
+    try:
+        if human_ended < human_started:
+            raise ValueError(f"record: human_intervals[{index}].ended_at は started_at より前にできません")
+    except TypeError as exc:
+        raise ValueError("record: timing boundary の timezone 指定が一致しません") from exc
+    return human_started_text, human_ended_text, human_started, human_ended
+
+
+def _timing_segments(
+    ai_started_at: str,
+    human_intervals: list[list[str]],
+    recorded_at: str,
+) -> list[TimingSegment]:
+    ai_started = _timestamp(ai_started_at, field="ai_started_at", source="record")
+    recorded = _timestamp(recorded_at, field="recorded_at", source="record")
+    cursor_at = ai_started
+    cursor_text = ai_started_at
+    segments: list[TimingSegment] = []
+    try:
+        if recorded < ai_started:
+            raise ValueError("record: recorded_at は ai_started_at より前にできません")
+        for index, interval in enumerate(human_intervals):
+            human_started_text, human_ended_text, human_started, human_ended = _human_interval(interval, index)
+            if human_started < ai_started:
+                raise ValueError(f"record: human_intervals[{index}] は ai_started_at より前にできません")
+            if human_started < cursor_at:
+                raise ValueError(f"record: human_intervals[{index}] は直前の区間と overlap しています")
+            if human_ended > recorded:
+                raise ValueError(f"record: human_intervals[{index}] は recorded_at より後にできません")
+            if cursor_at < human_started:
+                segments.append(_timing_segment("ai", cursor_text, human_started_text))
+            segments.append(_timing_segment("human", human_started_text, human_ended_text))
+            cursor_at = human_ended
+            cursor_text = human_ended_text
+    except TypeError as exc:
+        raise ValueError("record: timing boundary の timezone 指定が一致しません") from exc
+    if cursor_at < recorded:
+        segments.append(_timing_segment("ai", cursor_text, recorded_at))
+    return segments
+
+
 def _inside(root: Path, path: Path, field: str) -> Path:
     root = root.resolve()
     path = path.resolve()
@@ -879,6 +949,7 @@ def _parser() -> argparse.ArgumentParser:
     record.add_argument("--reason", required=True)
     record.add_argument("--resume-action", choices=sorted(ACTIONS))
     record.add_argument("--ai-started-at")
+    record.add_argument("--human-interval", action="append", nargs=2, metavar=("START", "END"))
     bootstrap = sub.add_parser("record-bootstrap")
     bootstrap.add_argument("--channel-dir", type=Path, default=Path.cwd())
     bootstrap.add_argument("--token", required=True)
@@ -921,7 +992,13 @@ def main(argv: list[str] | None = None) -> int:
         else:
             collection = select_collection(root, args.collection)
             recorded_at = datetime.now(UTC).isoformat()
-            segments = [_ai_timing_segment(args.ai_started_at, recorded_at)] if args.ai_started_at is not None else None
+            if args.human_interval and args.ai_started_at is None:
+                raise ValueError("record: human_interval には ai_started_at が必要です")
+            segments = (
+                _timing_segments(args.ai_started_at, args.human_interval or [], recorded_at)
+                if args.ai_started_at is not None
+                else None
+            )
             record_attempt(
                 root,
                 token=args.token,
