@@ -8,6 +8,7 @@ import { expect, test, chromium, type BrowserContext } from "@playwright/test";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const extensionPath = join(here, "..", "..", ".output", "chrome-mv3");
+test.describe.configure({ mode: "serial" });
 const releasePayload = {
   profile: {
     artist: "Midnight Echoes",
@@ -213,6 +214,11 @@ test("最初の開操作では停止済み menu を開かず、検出完了後�
         .first()
         .evaluate((option) => option.getRootNode() instanceof ShadowRoot)
     ).toBe(true);
+    await expect(sourceField).toHaveAttribute(
+      "data-source-values",
+      new RegExp(newServer.url)
+    );
+    await expect(trigger).toHaveAttribute("data-selected-value", newServer.url);
     await expect(page.getByRole("alert")).toHaveText(/HTTP 500/);
   } finally {
     await context?.close();
@@ -220,5 +226,74 @@ test("最初の開操作では停止済み menu を開かず、検出完了後�
     await Promise.all(
       liveServers.filter((server) => server.listening).map(close)
     );
+  }
+});
+
+test("配信元候補が空なら操作不能な専用表示を保つ", async () => {
+  let registryRequestCount = 0;
+  let context: BrowserContext | undefined;
+  let registry: Server | undefined;
+  try {
+    registry = createServer((request, response) => {
+      if (request.url !== "/.well-known/yt-collection-serve") {
+        response.statusCode = 404;
+        response.end("{}");
+        return;
+      }
+      registryRequestCount += 1;
+      response.setHeader("Content-Type", "application/json");
+      response.setHeader(
+        "Access-Control-Allow-Origin",
+        request.headers.origin ?? "*"
+      );
+      response.end(
+        JSON.stringify({ schema_version: 1, ttl_seconds: 30, servers: [] })
+      );
+    });
+    await listen(registry, 7872);
+
+    const profile = await mkdtemp(
+      join(tmpdir(), "distrokid-helper-e2e-empty-")
+    );
+    context = await chromium.launchPersistentContext(profile, {
+      channel: "chromium",
+      headless: false,
+      args: [
+        `--disable-extensions-except=${extensionPath}`,
+        `--load-extension=${extensionPath}`,
+      ],
+    });
+    let worker = context.serviceWorkers()[0];
+    worker ??= await context.waitForEvent("serviceworker");
+    expect(worker.url()).toContain("chrome-extension://");
+    await context.route("https://distrokid.com/new", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "text/html",
+        body: "<!doctype html><title>DistroKid fixture</title>",
+      })
+    );
+    const page = await context.newPage();
+    await page.goto("https://distrokid.com/new");
+
+    const trigger = page.locator("#server-url");
+    const sourceField = page.locator("[data-source-values]");
+    await expect(trigger).toHaveText("サーバーが起動されていません");
+    await expect(trigger).toBeDisabled();
+    await expect(sourceField).toHaveAttribute("data-source-values", "");
+    await expect(sourceField).toHaveAttribute("data-selected-value", "");
+
+    const settledRequestCount = registryRequestCount;
+    await trigger.click({ force: true });
+    await sourceField.dispatchEvent("youtube-automation:server-source-select", {
+      bubbles: true,
+      detail: "http://127.0.0.1:65534",
+    });
+    await expect(page.getByRole("listbox")).toHaveCount(0);
+    await expect(sourceField).toHaveAttribute("data-selected-value", "");
+    await expect.poll(() => registryRequestCount).toBe(settledRequestCount);
+  } finally {
+    await context?.close();
+    if (registry?.listening) await close(registry);
   }
 });

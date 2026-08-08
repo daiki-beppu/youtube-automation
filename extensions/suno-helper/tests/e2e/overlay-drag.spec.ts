@@ -117,7 +117,14 @@ test("実ビルドした overlay は drag・最小化・automation selector 契�
     const panel = content.locator(
       ':scope > [data-suno-helper="control-panel"]'
     );
-    // 配信元 0 件の専用表示は #2993 が担う。この段では未確認候補を選ばず idle を保つ。
+    const sourceTrigger = panel.locator(
+      '[data-suno-control="server-source-trigger"]'
+    );
+    const sourceField = panel.locator('[data-suno-control="server-url"]');
+    await expect(sourceTrigger).toHaveText("サーバーが起動されていません");
+    await expect(sourceTrigger).toBeDisabled();
+    await expect(sourceField).toHaveAttribute("data-source-values", "");
+    await expect(sourceField).toHaveAttribute("data-selected-value", "");
     await expect(panel).toHaveAttribute("data-suno-phase", "idle");
     await expect(panel).toHaveAttribute("data-suno-running", "false");
     await expect(panel).toHaveAttribute("data-suno-error", "false");
