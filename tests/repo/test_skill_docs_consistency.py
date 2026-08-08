@@ -1146,10 +1146,20 @@ def test_community_draft_documents_typed_batch_generator_contract() -> None:
     text = _read(".claude/skills/community-draft/SKILL.md")
 
     assert "load_config().community_draft.posts" in text
-    assert "references/generate_batch.py" in text
+    assert re.search(r"単一ソースは\s+`references/generate_batch\.py`\s+とし", text)
+    assert "planning.final_title" in text
     assert "planning.publish_target_at" in text
-    assert "docs/adr/0019-community-helper-extension.md" in text
+    assert "`CHANNEL_DIR` 配下" in text
     assert "community-posts.json" in text
+    assert "timezone 付き `scheduled_at`" in text
+    assert "channel root 相対 `image_path`" in text
+    assert "`visibility: public`" in text
+
+
+def test_community_draft_does_not_require_upstream_adr() -> None:
+    text = _read(".claude/skills/community-draft/SKILL.md")
+
+    assert "docs/adr/0019-community-helper-extension.md" not in text
 
 
 def test_skill_config_defaults_have_read_gate_in_skill_docs() -> None:
