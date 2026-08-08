@@ -10,7 +10,7 @@ from unittest.mock import Mock
 import pytest
 
 from youtube_automation import configuration
-from youtube_automation.core.errors import AutomationError, ConfigError
+from youtube_automation.core.errors import AutomationError, ConfigError, YouTubeAPIError
 from youtube_automation.infrastructure.analytics import dashboard_refresh
 from youtube_automation.infrastructure.analytics.dashboard_refresh import (
     collect_channel_analytics,
@@ -220,6 +220,96 @@ def test_collect_channel_should_reuse_publication_cache_when_cache_is_fresh(
     system.run_data_collection.assert_called_once_with(days=30, depth="standard")
     collector.get_all_channel_videos.assert_called_once_with()
     assert json.loads(publication_path.read_text(encoding="utf-8")) == cached_payload
+
+
+def test_refresh_channels_should_keep_stale_cache_and_continue_when_publication_refresh_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    broken = tmp_path / "broken"
+    last = tmp_path / "last"
+    fixed_now = datetime(2026, 8, 8, 12, tzinfo=UTC)
+    publication_path = broken / "data" / "dashboard_publications.json"
+    cached_payload = {
+        "schema_version": 1,
+        "fetched_at": "2026-08-07T11:59:59+00:00",
+        "timezone": "Asia/Tokyo",
+        "days": {"2026-08-07": 2},
+    }
+    publication_path.parent.mkdir(parents=True)
+    publication_path.write_text(json.dumps(cached_payload), encoding="utf-8")
+
+    class FixedDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return fixed_now if tz is None else fixed_now.astimezone(tz)
+
+    monkeypatch.setattr(dashboard_refresh, "datetime", FixedDateTime)
+    monkeypatch.setattr(
+        configuration,
+        "load_config",
+        Mock(
+            return_value=SimpleNamespace(youtube=SimpleNamespace(api=SimpleNamespace(default_publish_timezone="UTC")))
+        ),
+    )
+    collector = Mock()
+    collector.get_all_channel_videos.side_effect = [[], YouTubeAPIError("uploads playlist request failed")]
+    system = Mock(collector=collector)
+
+    def run_data_collection(*, days: int, depth: str) -> dict[str, bool]:
+        assert (days, depth) == (30, "standard")
+        collector.get_all_channel_videos()
+        return {"success": True}
+
+    system.run_data_collection.side_effect = run_data_collection
+    attempted: list[Path] = []
+
+    def collect(channel: Path) -> None:
+        attempted.append(channel)
+        if channel == broken:
+            collect_channel_analytics(channel, Mock(return_value=system))
+
+    errors = refresh_dashboard_channels([broken, last], collect_channel=collect)
+
+    assert attempted == [broken, last]
+    assert errors == {}
+    assert json.loads(publication_path.read_text(encoding="utf-8")) == {
+        **cached_payload,
+        "error": {
+            "code": "publication_refresh_failed",
+            "message": "uploads playlist request failed",
+            "attempted_at": "2026-08-08T12:00:00+00:00",
+        },
+    }
+
+
+def test_collect_channel_should_raise_publication_error_when_valid_cache_is_missing(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    channel = tmp_path / "selected"
+    monkeypatch.setattr(
+        configuration,
+        "load_config",
+        Mock(
+            return_value=SimpleNamespace(youtube=SimpleNamespace(api=SimpleNamespace(default_publish_timezone="UTC")))
+        ),
+    )
+    collector = Mock()
+    collector.get_all_channel_videos.side_effect = [[], YouTubeAPIError("uploads playlist request failed")]
+    system = Mock(collector=collector)
+
+    def run_data_collection(*, days: int, depth: str) -> dict[str, bool]:
+        assert (days, depth) == (30, "standard")
+        collector.get_all_channel_videos()
+        return {"success": True}
+
+    system.run_data_collection.side_effect = run_data_collection
+
+    with pytest.raises(YouTubeAPIError, match="uploads playlist request failed"):
+        collect_channel_analytics(channel, Mock(return_value=system))
+
+    assert not (channel / "data" / "dashboard_publications.json").exists()
 
 
 def test_collect_channel_restores_environment_and_raises_automation_error(
