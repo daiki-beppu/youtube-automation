@@ -244,6 +244,8 @@ Use the title {title}.
 | `diff_from_reference` | 既存キャラ画像を参照に差分指示 |
 | `two_phase` | 従来方式フォールバック。既存参照を選択 → テキスト付き `thumbnail.jpg` 確定 → 承認済み `thumbnail.jpg` から textless `main.png/jpg` 再生成 |
 
+モードを選んだ後の参照ローテーション、プロンプト展開、Single-Step / TTP と Two-Phase の詳細は [generation workflow 詳細](references/generation-workflows.md) を読む。実行順序・コマンド・承認ゲートは後続の本文を正とする。
+
 ### 参照画像モード（必須）
 
 参照画像を渡して TTP の勝ちパターンを踏襲する方式。`single_step` では参照画像なしの生成は行わない。
@@ -260,41 +262,15 @@ uv run yt-generate-image \
 - `reference_images.default` には同じベンチマークチャンネル内の別サムネイル画像を並べる
 - `--max-attempts N` のときは N 枚以上のユニーク参照画像が必要。不足・重複・同一参照の再利用はエラー
 - `--reference-index N` を指定した場合のみ単一参照固定になり、attempt 数は 1 に固定される
-- `path_base: "channel_dir"` の場合、パスはプロジェクトルートからの相対パス
 - `--reference` 使用時は `composition_prefix` が自動スキップされる（generate_image.py 修正済み）
+
+パス解決と collection 間ローテーションの詳細は [generation workflow 詳細](references/generation-workflows.md) に従う。
 
 ## プロンプト構築
 
-プロンプト指示の解説はこのセクションを単一ソースとし、各モードの節（Single-Step / Two-Phase）には差分だけを書く。補足の原則は `references/prompting.md`、短い差分プロンプト例は `references/sample-prompts.md` を参照する。
+生成時は `image_generation.gemini.diff_prompt_template` のプレースホルダを置換し、TTP では `${ip_safety_clause}` を必ず展開する。textless 再生成では承認済み `thumbnail.jpg` を参照し、テキスト除去指示だけを足す。Two-Phase のテキスト付き候補は `thumbnail_text.text_overlay_prompt` を入口とする。
 
-**原則: 参照画像主導 + 最小限のキーワード。** TTP では勝ちパターンは参照画像が運ぶ。プロンプトに指示を積むほど参照画像の支配力が薄れるため、プロンプトにはテーマ・主題・スタイルなど最小限のキーワードと、サムネに焼くタイトルだけを書く。
-
-**既定の組み立て（provider 共通）:**
-
-1. `image_generation.gemini.diff_prompt_template`（TTP 方針行 + `{title_line1}` / `{title_line2}`）のプレースホルダを置換する
-2. 既定で展開する clause は `${ip_safety_clause}` の 1 つだけ（#569、TTP で常時挿入必須）
-
-opt-in clause（`variation_clause` / `style_lock_clause` / `text_strip_clause` / `anatomy_clause` / `typography_clause`）は既定空文字。必要なチャンネルだけ `config/skills/thumbnail.yaml` に本文を設定し、自前の `diff_prompt_template` で展開する（推奨文面は `config.default.yaml` のコメント参照）。複数の clause を同時に積み上げない — バリエーション vs スタイル固定 vs テキスト除去の指示は相互に打ち消し合い、参照画像の支配力を薄める。
-
-**最終プロンプト例（TTP / 既定 config でプロバイダーへ渡る全文）:**
-
-```text
-TTP this reference thumbnail, then improve it into a stronger original thumbnail.
-Keep the winning layout, typography feel, character scale, color mood, texture, and energy.
-Make it cleaner, more readable on mobile, stronger face impact, no logos, no watermarks, no broken hands.
-Use the title Midnight Jazz Rainy Tokyo Mood.
-Do not reproduce any signature, autograph, handwritten name, watermark,
-logo, brand mark, channel badge, copyright notice, or identifying mark
-from the reference image. Keep all corners clean and free of such marks.
-```
-
-参照画像 + この最小プロンプトだけで TTP は機能する。テーマ固有の差分（色・オブジェクト）を足す場合も 1〜2 文にとどめる。
-
-**モード別差分:**
-
-- **single_step（テキスト付き thumbnail 候補）**: 既定の組み立てをそのまま使う。手順の詳細は「Single-Step / TTP モード > プロンプト構築」
-- **textless main 再生成**: 承認済み `thumbnail.jpg` を参照し、除去指示（`text_strip_clause` を設定していれば展開、未設定なら `Remove all text` 相当を明記）だけを足す
-- **two_phase（テキストオーバーレイ）**: `thumbnail_text.text_overlay_prompt` が単一の入口。旧個別フィールド（`channel_name_style` / `title_format` / `title_prefix` / `copy_position` / `color` / `decoration`）は deprecated で、位置・色・装飾の意図は `text_overlay_prompt` の本文に直接書く（段階的廃止 #1702。override は当面 deep-merge され続けるが、config ロード時に DeprecationWarning が出る）
+参照画像主導の原則、opt-in clause の選び方、完成プロンプト例、モード別差分は [generation workflow 詳細](references/generation-workflows.md) を読む。
 
 > 将来検討（issue #654）: imagegen の 14 項目 Shared prompt schema 形式と既存 skill-config の bridge ヘルパが `references/prompt-schema.md` および `youtube_automation.infrastructure.media.image_provider.prompt_schema` に試験導入されている。実本番フローからは未接続。設計判断は `references/prompt-schema.md`。
 
@@ -443,7 +419,7 @@ config 側のデフォルトは `image_generation.gemini.single_step.{max_attemp
 
 #### プロンプト構築
 
-TTP 生成方針は provider によらず共通: 参照サムネを winning template として扱い、winning layout を維持したまま品質改善（mobile readability / face impact / no logos / no watermarks / no broken hands）だけを指示する（codex 節の「既定テンプレート」と同じ方針。#2070）。`config.default.yaml` の `image_generation.gemini.diff_prompt_template` 既定値はこの方針行を codex 既定テンプレートと同期しており、チャンネル側 `config/skills/thumbnail.yaml` の `diff_prompt_template` があればそちらが常に優先される。`provider: gemini_cli`（サブスク認証の gemini CLI 経由）も同じ `diff_prompt_template` とこの構築手順を共有し、CLI ラッパーはプロンプトを方針を変えずそのまま透過する（model / CLI protocol のみ異なる。#2071、`tests/infrastructure/media/test_image_provider_gemini_cli.py` の contract test で機械担保）。
+テンプレート展開と provider 間の共通方針は [generation workflow 詳細](references/generation-workflows.md) を読む。実行時は以下の入力と安全ゲートを必ず適用する。
 
 1. `image_generation.gemini.color_themes` からテーマのカラー設定を取得
 2. `image_generation.gemini.diff_prompt_template` のプレースホルダーを置換してプロンプト構築:
@@ -551,7 +527,7 @@ Two-Phase は旧チャンネル向けのフォールバック。使う場合も�
 **`thumbnail_text.text_overlay_prompt` が定義されている場合（推奨）:**
 テンプレート内の `{title_line1}`, `{title_line2}`, `{channel_name}` をコレクションのタイトルとチャンネル名で置換して使用。
 
-**未定義の場合（フォールバック）:** `references/sample-prompts.md` の「Two-Phase モードのテキストオーバーレイ・フォールバックプロンプト」を使用する。
+**未定義の場合（フォールバック）:** [generation workflow 詳細](references/generation-workflows.md) から正規の sample prompt へルーティングする。
 
 `text_overlay_prompt` が実質単一の入口。旧個別フィールド（`channel_name_style` / `title_format` / `title_prefix` / `copy_position` / `color` / `decoration`）は deprecated で、位置・色・装飾の意図は `text_overlay_prompt` の本文に直接書く（段階的廃止 #1702）。
 
