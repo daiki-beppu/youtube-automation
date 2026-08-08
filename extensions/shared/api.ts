@@ -101,6 +101,12 @@ export interface ServerInfo {
   port: number;
   base_url: string;
   label: string;
+  capabilities?: {
+    distrokid: {
+      mode: "disabled" | "single" | "dir";
+    };
+  };
+  collections_root?: string;
 }
 
 export type Fetcher = (
@@ -238,6 +244,35 @@ function assertOptionalNullableString(
     return value;
   }
   return assertString(value, field);
+}
+
+function assertOptionalServerCapabilities(
+  record: Record<string, unknown>
+): ServerInfo["capabilities"] {
+  if (!Object.hasOwn(record, "capabilities")) return undefined;
+  const capabilities = assertObject(record.capabilities, "capabilities");
+  const distrokid = assertObject(
+    capabilities.distrokid,
+    "capabilities.distrokid"
+  );
+  const mode = distrokid.mode;
+  if (mode !== "disabled" && mode !== "single" && mode !== "dir") {
+    throw new Error(
+      "capabilities.distrokid.mode must be disabled, single, or dir"
+    );
+  }
+  return { distrokid: { mode } };
+}
+
+function assertOptionalCollectionsRoot(
+  record: Record<string, unknown>
+): string | undefined {
+  if (!Object.hasOwn(record, "collections_root")) return undefined;
+  const value = assertString(record.collections_root, "collections_root");
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/u.test(value)) {
+    throw new Error("collections_root must be a safe basename");
+  }
+  return value;
 }
 
 function calendarMonthLengths(year: number): number[] {
@@ -494,6 +529,8 @@ export function parseServerInfo(data: unknown): ServerInfo {
   if (port === 0) {
     throw new Error("port must be positive integer");
   }
+  const capabilities = assertOptionalServerCapabilities(record);
+  const collectionsRoot = assertOptionalCollectionsRoot(record);
   return {
     channel_name: assertString(record.channel_name, "channel_name"),
     channel_short: assertString(record.channel_short, "channel_short"),
@@ -501,6 +538,10 @@ export function parseServerInfo(data: unknown): ServerInfo {
     port,
     base_url: assertString(record.base_url, "base_url"),
     label: assertString(record.label, "label"),
+    ...(capabilities === undefined ? {} : { capabilities }),
+    ...(collectionsRoot === undefined
+      ? {}
+      : { collections_root: collectionsRoot }),
   };
 }
 
