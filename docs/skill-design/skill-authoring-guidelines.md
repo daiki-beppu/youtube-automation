@@ -89,6 +89,7 @@ skill に新しい mode・variant を設ける場合は、呼び出しを `--<mo
 
 実行者はまず `description` だけを見てスキルを選ぶ。ここが唯一の選択インターフェースなので、**発動条件と否定条件の両方**を書く。
 
+- skill が mode・variant を持つ場合は、対応する引数（`--batch`、`--since <N>` など）を `description` に列挙する。本文だけに記載してもスキル選択時には見えないため、本文を `description` の代わりにしない。
 - 標準型: 用途 + 発動キーワード + `〜の場合は /<sibling> を使う`。棲み分けは双方向に書く（A→B と B→A の両方）。
 - frontmatter の記法規約（`description:` の double-quote 等）は `CLAUDE.md`「### skill frontmatter」を正とし、ここでは再掲しない。検証は `uv run yt-skills lint`。
 - **良い実例**: [.claude/skills/short/SKILL.md](../../.claude/skills/short/SKILL.md) と [.claude/skills/short-release/SKILL.md](../../.claude/skills/short-release/SKILL.md) — collection 型 / release 型を互いに否定トリガーで排他している。
