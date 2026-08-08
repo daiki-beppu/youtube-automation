@@ -1855,7 +1855,8 @@ def main() -> None:
     if detected_extension is not None:
         print(
             f"  detected extension: {detected_extension.name} -> "
-            f"{detected_extension.extension_id} ({detected_extension.origin})"
+            f"{detected_extension.extension_id} ({detected_extension.origin}, "
+            f"path={detected_extension.path}, profile={detected_extension.profile}, enabled=true)"
         )
     if allow_origin is not None and allow_origin.startswith(_EXTENSION_ORIGIN_SCHEME):
         print(f"  serve token: GET {canonical_url}/auth/token")
