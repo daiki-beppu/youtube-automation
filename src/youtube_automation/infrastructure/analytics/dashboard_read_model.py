@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import cast
 
 from youtube_automation.core.errors import DashboardChannelNotFoundError
+from youtube_automation.infrastructure.analytics.dashboard_publications import load_dashboard_publications
 
 SCHEMA_VERSION = 1
 
@@ -198,6 +199,50 @@ def _build_channel(channel: Path, *, allow_snapshot_fallback: bool = False) -> d
     )
 
 
+def _publication_channel(channel: Path, item: dict[str, object]) -> dict[str, object]:
+    publication_path = channel / "data" / "dashboard_publications.json"
+    payload = load_dashboard_publications(publication_path)
+    if payload is None:
+        return {
+            "id": item["id"],
+            "name": item["name"],
+            "status": "invalid" if publication_path.exists() else "missing",
+            "fetched_at": None,
+            "timezone": None,
+            "days": {},
+            "error": None,
+        }
+
+    error = payload.get("error")
+    return {
+        "id": item["id"],
+        "name": item["name"],
+        "status": "refresh_failed" if error is not None else "ready",
+        "fetched_at": payload["fetched_at"],
+        "timezone": payload["timezone"],
+        "days": payload["days"],
+        "error": error,
+    }
+
+
+def _publication_read_model(
+    channel_paths: list[Path],
+    channels: list[dict[str, object]],
+) -> dict[str, object]:
+    totals: dict[str, int] = {}
+    publication_channels: list[dict[str, object]] = []
+    for channel, item in zip(channel_paths, channels, strict=True):
+        publication = _publication_channel(channel, item)
+        publication_channels.append(publication)
+        days = cast(dict[str, int], publication["days"])
+        for local_day, count in days.items():
+            totals[local_day] = totals.get(local_day, 0) + count
+    return {
+        "days": dict(sorted(totals.items())),
+        "channels": publication_channels,
+    }
+
+
 def build_dashboard_read_model(
     channel_paths: list[Path],
     *,
@@ -216,6 +261,7 @@ def build_dashboard_read_model(
     return {
         "schema_version": SCHEMA_VERSION,
         "channels": channels,
+        "publications": _publication_read_model(channel_paths, channels),
     }
 
 
