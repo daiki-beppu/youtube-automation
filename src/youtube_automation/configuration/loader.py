@@ -232,6 +232,11 @@ def load_config() -> ChannelConfig:
     return _instance
 
 
+def load_config_from_path(channel_dir_path: Path) -> ChannelConfig:
+    """明示した channel root の設定を singleton state へ影響させず読み込む。"""
+    return _build(channel_dir_path.resolve())
+
+
 def _build(channel_dir_path: Path) -> ChannelConfig:
     channel_subdir = channel_dir_path / "config" / "channel"
     legacy_path = channel_dir_path / "config" / "channel_config.json"

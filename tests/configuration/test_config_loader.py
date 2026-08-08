@@ -21,6 +21,7 @@ from youtube_automation.configuration import (
     select_channel,
     workspace_channels,
 )
+from youtube_automation.configuration.loader import load_config_from_path
 from youtube_automation.core.errors import ConfigError
 
 # ----- helpers -------------------------------------------------------------
@@ -143,6 +144,24 @@ def test_load_minimal_sections(tmp_path, monkeypatch):
     assert config.pinned_comment.templates == {}
     assert config.pinned_comment.history_file == "pinned_comment_history.json"
     assert config.pinned_comment.default_language == "en"
+
+
+def test_load_config_from_path_does_not_change_singleton_selection(tmp_path, monkeypatch):
+    selected_sections = _minimal_sections()
+    selected_sections["meta.json"]["channel"]["name"] = "Selected Channel"
+    selected = _setup_channel(tmp_path / "selected", selected_sections)
+    requested_sections = _minimal_sections()
+    requested_sections["meta.json"]["channel"]["name"] = "Requested Channel"
+    requested = _setup_channel(tmp_path / "requested", requested_sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(selected))
+
+    selected_config = load_config()
+    requested_config = load_config_from_path(requested)
+
+    assert selected_config.meta.channel_name == "Selected Channel"
+    assert requested_config.meta.channel_name == "Requested Channel"
+    assert load_config() is selected_config
+    assert channel_dir() == selected
 
 
 def test_community_draft_section_loads_typed_posts(tmp_path, monkeypatch):
