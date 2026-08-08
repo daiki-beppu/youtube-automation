@@ -613,6 +613,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 所要時間の目安: 20〜30 分
 
+Python module 移動: あり
+互換 facade: なし
+
+| 旧 import path | 新 import path |
+|---|---|
+| `youtube_automation.auth.oauth_handler` | `youtube_automation.infrastructure.auth.youtube` |
+| `youtube_automation.utils.config` | `youtube_automation.configuration` |
+| `youtube_automation.utils.descriptions_md` | `youtube_automation.domains.metadata.descriptions` |
+| `youtube_automation.utils.preflight_checks` | `youtube_automation.domains.uploads.preflight` |
+
 local fix 衝突注意:
 - flop-analysis: `/postmortem` からの改称（#2023）。下流の `config/skills/postmortem.yaml` は `config/skills/flop-analysis.yaml` へリネームが必要。旧ファイル名は警告付きの互換読み込みのみで、旧 command alias と旧 skill directory は残らない
 - wf-auto: `/automation-run` 互換 skill を削除し一気通貫入口を `/wf-auto` へ一本化（#2400）。`/automation-run` を参照する local fix は要更新
