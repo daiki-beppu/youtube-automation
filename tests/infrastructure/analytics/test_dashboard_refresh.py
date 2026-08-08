@@ -1,13 +1,17 @@
 from __future__ import annotations
 
+import json
 import os
+from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
 
 from youtube_automation import configuration
 from youtube_automation.core.errors import AutomationError, ConfigError
+from youtube_automation.infrastructure.analytics import dashboard_refresh
 from youtube_automation.infrastructure.analytics.dashboard_refresh import (
     collect_channel_analytics,
     refresh_dashboard_channels,
@@ -68,13 +72,22 @@ def test_collect_channel_restores_environment_and_configuration_after_success(
         monkeypatch.setenv("CHANNEL", initial_slug)
     reset = Mock(wraps=configuration.reset)
     monkeypatch.setattr(configuration, "reset", reset)
+    monkeypatch.setattr(
+        configuration,
+        "load_config",
+        Mock(
+            return_value=SimpleNamespace(youtube=SimpleNamespace(api=SimpleNamespace(default_publish_timezone="UTC")))
+        ),
+    )
     system = Mock()
+    system.collector.get_all_channel_videos.return_value = []
 
     def run_data_collection(*, days: int, depth: str) -> dict[str, bool]:
         assert days == 30
         assert depth == "standard"
         assert os.environ["CHANNEL_DIR"] == str(channel)
         assert "CHANNEL" not in os.environ
+        (channel / "data").mkdir(parents=True)
         return {"success": True}
 
     system.run_data_collection.side_effect = run_data_collection
@@ -85,8 +98,61 @@ def test_collect_channel_restores_environment_and_configuration_after_success(
     assert reset.call_count == 2
     assert factory.call_count == 1
     system.run_data_collection.assert_called_once_with(days=30, depth="standard")
+    system.collector.get_all_channel_videos.assert_called_once_with()
+    assert (channel / "data" / "dashboard_publications.json").is_file()
     assert os.environ.get("CHANNEL_DIR") == initial_dir
     assert os.environ.get("CHANNEL") == initial_slug
+
+
+def test_collect_channel_reuses_system_collector_and_saves_publications_with_config_timezone(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    channel = tmp_path / "selected"
+    fixed_now = datetime(2026, 8, 8, 12, tzinfo=UTC)
+
+    class FixedDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return fixed_now if tz is None else fixed_now.astimezone(tz)
+
+    monkeypatch.setattr(dashboard_refresh, "datetime", FixedDateTime)
+    monkeypatch.setattr(
+        configuration,
+        "load_config",
+        Mock(
+            return_value=SimpleNamespace(
+                youtube=SimpleNamespace(api=SimpleNamespace(default_publish_timezone="America/Los_Angeles"))
+            )
+        ),
+    )
+    collector = Mock()
+    collector.get_all_channel_videos.return_value = [
+        {"published_at": "2026-08-08T01:00:00Z"},
+        {"published_at": "2026-08-08T10:00:00Z"},
+    ]
+    system = Mock(collector=collector)
+
+    def run_data_collection(*, days: int, depth: str) -> dict[str, bool]:
+        assert (days, depth) == (30, "standard")
+        collector.get_all_channel_videos()
+        (channel / "data").mkdir(parents=True)
+        return {"success": True}
+
+    system.run_data_collection.side_effect = run_data_collection
+    factory = Mock(return_value=system)
+
+    collect_channel_analytics(channel, factory)
+
+    factory.assert_called_once_with()
+    assert collector.get_all_channel_videos.call_count == 2
+    payload = json.loads((channel / "data" / "dashboard_publications.json").read_text(encoding="utf-8"))
+    assert payload == {
+        "schema_version": 1,
+        "fetched_at": "2026-08-08T12:00:00+00:00",
+        "timezone": "America/Los_Angeles",
+        "days": {"2026-08-07": 1, "2026-08-08": 1},
+    }
 
 
 def test_collect_channel_restores_environment_and_raises_automation_error(
@@ -115,5 +181,7 @@ def test_collect_channel_restores_environment_and_raises_automation_error(
         collect_channel_analytics(tmp_path / "selected", Mock(return_value=system))
 
     assert reset.call_count == 2
+    system.collector.get_all_channel_videos.assert_not_called()
+    assert not (tmp_path / "selected" / "data" / "dashboard_publications.json").exists()
     assert os.environ["CHANNEL_DIR"] == "/previous/channel"
     assert os.environ["CHANNEL"] == "previous-slug"
