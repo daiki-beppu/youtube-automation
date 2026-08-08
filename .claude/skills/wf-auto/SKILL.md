@@ -104,6 +104,14 @@ uv run python "$STATE_SCRIPT" record --channel-dir . --token <token> \
 
 この契約は同じ run の実行文脈へ回答または操作完了が戻る gate にだけ適用する。login / CAPTCHA は既存 Hard Gate の範囲を広げず、本人に必要な1操作だけを依頼し、認証コマンドの実行や CAPTCHA 回避を行わない。
 
+### blocked 停止と agent wait の timing 分類
+
+人間の回答や操作完了を同じ run で待たず `blocked` として停止すると決めた場合は、その停止決定時点で、すでに閉じている同一 run の human interval だけを渡して `record --status blocked` を実行する。未完了の human interval を開始・保存せず、その場で現在の attempt を閉じて lease を release し、run を停止する。停止後から次回起動までの放置時間を timing segment に含めない。
+
+次回の再開では新しい lease を取得し、resolver で action を再評価する。owner 確認後に新しい attempt と新しい AI 開始時刻を作り、前回の AI 開始時刻を再利用しない。前回の `blocked` attempt は閉じた履歴として保持し、再開後の timing を追記する。login / CAPTCHA も本人に必要な1操作だけを依頼してこの blocked 停止契約に従い、自動突破しない。
+
+通常の API polling、実行中 tool call の待機、agent が保持する background session の30 秒以下の間隔での poll は、agent が処理の完了・失敗を観測する canonical action 内の作業である。これらは AI 実行時間として扱い、human interval を開始しない。human interval に切り替えるのは、前節どおり同じ run へ回答が戻る明示的な AskUserQuestion または本人操作 gate だけとする。
+
 ### `suno-helper` action の自律実行契約
 
 resolver が `action: suno-helper` を返したら、agent 自身が `/suno-helper` の **Agent primary flow: browser use** を実行する。Codex は browser use、Claude Code は browser use または Claude in Chrome を使い、固定 collection について次を完走する。
