@@ -4117,7 +4117,7 @@ describe("Suno popup compatibility check", () => {
     );
   });
 
-  it("should replace a restored URL removed by discovery during an early selector refresh", async () => {
+  it("should keep a restored live URL when the empty selector rejects an early refresh", async () => {
     await act(async () => root.unmount());
     container.innerHTML = "";
     root = createRoot(container);
@@ -4142,7 +4142,7 @@ describe("Suno popup compatibility check", () => {
           discoveryCount += 1;
           return discoveryCount === 1
             ? initialDiscovery.promise
-            : Promise.resolve([defaultSource]);
+            : Promise.resolve([defaultSource, restoredSource]);
         }
         return defaultSendMessage(message, payload);
       }
@@ -4150,10 +4150,14 @@ describe("Suno popup compatibility check", () => {
 
     await act(async () => root.render(createElement(App)));
     const select = expectControl(container, "server-url");
+    const trigger = expectControl(
+      container,
+      "server-source-trigger"
+    ) as HTMLButtonElement;
+    expect(trigger.disabled).toBe(true);
+    expect(trigger.textContent).toBe("サーバーが起動されていません");
     await act(async () => {
-      (
-        expectControl(container, "server-source-trigger") as HTMLButtonElement
-      ).click();
+      trigger.click();
       initialDiscovery.resolve([defaultSource, restoredSource]);
       await initialDiscovery.promise;
     });
@@ -4161,11 +4165,13 @@ describe("Suno popup compatibility check", () => {
     await waitFor(() =>
       expect(messagingMocks.sendMessage).toHaveBeenCalledWith(
         "fetchCollections",
-        { baseUrl: defaultSource.url }
+        { baseUrl: restoredSource.url }
       )
     );
-    expect(select.dataset.selectedValue).toBe(defaultSource.url);
-    expect(discoveryCount).toBe(2);
+    expect(select.dataset.selectedValue).toBe(restoredSource.url);
+    expect(select.dataset.sourceValues).toContain(restoredSource.url);
+    expect(trigger.disabled).toBe(false);
+    expect(discoveryCount).toBe(1);
   });
 
   it.each([
@@ -4278,40 +4284,67 @@ describe("Suno popup compatibility check", () => {
   it("should suppress a second discovery while the first refresh is pending", async () => {
     const pending =
       deferred<Array<{ id: string; label: string; url: string }>>();
+    const liveSource = {
+      id: "live",
+      label: "Live",
+      url: "http://live.localhost:49152",
+    };
     let refreshCount = 0;
     messagingMocks.sendMessage.mockImplementation(
       (message: string, payload?: Record<string, string>) => {
         if (message === "discoverServerSources") {
           refreshCount += 1;
           if (refreshCount === 1) {
-            return Promise.resolve([]);
+            return Promise.resolve([liveSource]);
           }
-          return pending.promise;
+          if (refreshCount === 2) return pending.promise;
+          return Promise.resolve([liveSource]);
         }
         return defaultSendMessage(message, payload);
       }
     );
     await rerenderApp();
     const select = expectControl(container, "server-url");
+    const trigger = expectControl(
+      container,
+      "server-source-trigger"
+    ) as HTMLButtonElement;
+    await waitFor(() =>
+      expect(select.dataset.sourceValues).toBe(liveSource.url)
+    );
+    expect(trigger.disabled).toBe(false);
     await act(async () => {
-      const trigger = expectControl(
-        container,
-        "server-source-trigger"
-      ) as HTMLButtonElement;
       trigger.click();
       trigger.click();
       await Promise.resolve();
     });
     expect(refreshCount).toBe(2);
-    pending.resolve([
-      { id: "new", label: "New", url: "http://new.localhost:49152" },
-    ]);
+    expect(trigger.disabled).toBe(true);
+    pending.resolve([]);
     await waitFor(() =>
-      expect(select.dataset.sourceValues).toContain(
-        "http://new.localhost:49152"
+      expect(trigger.textContent).toBe("サーバーが起動されていません")
+    );
+    expect(trigger.disabled).toBe(true);
+    expect(select.dataset.sourceValues).toBe("");
+
+    await act(async () => {
+      trigger.click();
+      await Promise.resolve();
+    });
+    expect(refreshCount).toBe(2);
+
+    await rerenderApp();
+    const reenabledTrigger = expectControl(
+      container,
+      "server-source-trigger"
+    ) as HTMLButtonElement;
+    await waitFor(() =>
+      expect(expectControl(container, "server-url").dataset.sourceValues).toBe(
+        liveSource.url
       )
     );
-    expect(refreshCount).toBe(2);
+    expect(reenabledTrigger.disabled).toBe(false);
+    expect(refreshCount).toBe(3);
   });
 
   it("should discard a deferred discovery result when a run starts", async () => {

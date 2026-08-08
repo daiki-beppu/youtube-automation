@@ -1,5 +1,9 @@
 // @vitest-environment jsdom
 
+import {
+  SERVER_SOURCE_SELECT_EVENT,
+  ServerSourceField,
+} from "@youtube-automation/ui";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -255,6 +259,108 @@ describe("DistroKid popup compatibility check", () => {
     container.remove();
     vi.unstubAllGlobals();
     vi.clearAllMocks();
+  });
+
+  it("should show a disabled empty source state and reject every selection entry point", async () => {
+    const onRefresh = vi.fn(async () => undefined);
+    const onValueChange = vi.fn();
+    await act(async () => {
+      root.render(
+        createElement(ServerSourceField, {
+          id: "server-url",
+          value: "",
+          sources: [],
+          disabled: false,
+          helper: "distrokid-helper",
+          onRefresh,
+          onValueChange,
+        })
+      );
+    });
+    const trigger = container.querySelector<HTMLButtonElement>("#server-url")!;
+    const field = container.querySelector<HTMLElement>('[data-slot="field"]')!;
+
+    await act(async () => {
+      trigger.click();
+      field.dispatchEvent(
+        new CustomEvent(SERVER_SOURCE_SELECT_EVENT, {
+          bubbles: true,
+          detail: BASE_URL,
+        })
+      );
+    });
+
+    expect(trigger.textContent).toBe("サーバーが起動されていません");
+    expect(trigger.disabled).toBe(true);
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    expect(container.querySelector('[role="listbox"]')).toBeNull();
+    expect(onRefresh).not.toHaveBeenCalled();
+    expect(onValueChange).not.toHaveBeenCalled();
+  });
+
+  it("should close on an empty transition, prioritize refreshing, and re-enable when a source returns", async () => {
+    const source = { id: "live", label: "Live", url: BASE_URL };
+    const pendingRefresh = deferred<void>();
+    const onRefresh = vi
+      .fn<() => Promise<void>>()
+      .mockResolvedValueOnce(undefined)
+      .mockReturnValueOnce(pendingRefresh.promise);
+    const onValueChange = vi.fn();
+    const renderField = async (
+      sources: Array<{ id: string; label: string; url: string }>
+    ): Promise<void> => {
+      await act(async () => {
+        root.render(
+          createElement(ServerSourceField, {
+            id: "server-url",
+            value: source.url,
+            sources,
+            disabled: false,
+            helper: "distrokid-helper",
+            onRefresh,
+            onValueChange,
+          })
+        );
+      });
+    };
+
+    await renderField([source]);
+    let trigger = container.querySelector<HTMLButtonElement>("#server-url")!;
+    await act(async () => trigger.click());
+    await waitFor(() =>
+      expect(container.querySelector('[role="listbox"]')).not.toBeNull()
+    );
+
+    await renderField([]);
+    trigger = container.querySelector<HTMLButtonElement>("#server-url")!;
+    expect(trigger.disabled).toBe(true);
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    await waitFor(() =>
+      expect(container.querySelector('[role="listbox"]')).toBeNull()
+    );
+
+    await renderField([source]);
+    trigger = container.querySelector<HTMLButtonElement>("#server-url")!;
+    expect(trigger.disabled).toBe(false);
+    await act(async () => trigger.click());
+    expect(trigger.textContent).toBe("稼働中の配信元を更新中…");
+
+    await renderField([]);
+    trigger = container.querySelector<HTMLButtonElement>("#server-url")!;
+    expect(trigger.textContent).toBe("稼働中の配信元を更新中…");
+    await act(async () => {
+      pendingRefresh.resolve(undefined);
+      await pendingRefresh.promise;
+    });
+    await waitFor(() =>
+      expect(trigger.textContent).toBe("サーバーが起動されていません")
+    );
+
+    await renderField([source]);
+    trigger = container.querySelector<HTMLButtonElement>("#server-url")!;
+    expect(trigger.disabled).toBe(false);
+    expect(trigger.textContent).toBe("Live | distrokid-helper");
+    expect(trigger.dataset.selectedValue).toBe(source.url);
   });
 
   it("ローカル配信元 option は URL を表示せず、URL value はデータ取得先として維持する", async () => {
@@ -906,7 +1012,7 @@ describe("DistroKid popup compatibility check", () => {
     );
   });
 
-  it("should replace a restored URL removed by discovery during an early selector refresh", async () => {
+  it("should replace a restored URL removed by discovery during selector refresh", async () => {
     const initialDiscovery =
       deferred<Array<{ id: string; label: string; url: string }>>();
     const defaultSource = {
@@ -927,11 +1033,14 @@ describe("DistroKid popup compatibility check", () => {
     await renderApp();
     const select = container.querySelector<HTMLButtonElement>("#server-url")!;
     await act(async () => {
-      container
-        .querySelector<HTMLButtonElement>('button[aria-haspopup="listbox"]')!
-        .click();
       initialDiscovery.resolve([defaultSource, restoredSource]);
       await initialDiscovery.promise;
+    });
+    await waitFor(() =>
+      expect(select.dataset.selectedValue).toBe(restoredSource.url)
+    );
+    await act(async () => {
+      select.click();
     });
 
     await waitFor(() =>

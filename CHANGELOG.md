@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `feat(extensions)`: ローカル配信元が 0 件の selector に「サーバーが起動されていません」と表示して操作を無効化し、候補の再出現時は通常の選択へ戻るようにした（#3453）。
 - `fix(extensions)`: ローカル配信元 discovery は registry entry のうち稼働確認できたサーバーだけを URL 順で返し、registry が空・到達不能・不正、または全 probe 失敗の場合は未確認の既定候補を混ぜず空配列を返すようにした（#2992）。
 - `refactor(tests)`: 旧 `unit` / `streaming` テストを canonical owner と `tests/repo/streaming/` へ整理し、root allowlist・source layer・source owner の配置規約を repository contract として機械担保した（#3047）。
 - `fix(tests)`: collection serve の subprocess lifecycle テストで待機処理を共通化し、デッドライン到達時に待機対象を明示して失敗させるようにした。server 起動完了は PID ファイルの存在ではなく HTTP identity endpoint の応答まで確認し、高負荷時の起動途中を準備完了と誤認しないようにした（#3091）。
