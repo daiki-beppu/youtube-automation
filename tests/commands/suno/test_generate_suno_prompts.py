@@ -1486,6 +1486,29 @@ def test_unique_titles_allow_same_pattern_name_when_variation_suffix_disambiguat
     assert entries[1]["name"].endswith("(Variation 2)")
 
 
+@pytest.mark.parametrize(
+    "duration_sec",
+    [True, False, "180", 180.0, float("nan"), float("inf"), float("-inf"), 0, -1],
+)
+def test_build_prompt_entries_rejects_invalid_duration_sec_override(channel_dir, tmp_path, duration_sec):
+    """明示された duration_sec が正の整数でなければ fail-loud に拒否する。"""
+    _write_suno_override(channel_dir, genre_line="lo-fi jazz", duration_sec=duration_sec)
+    patterns_path = _write_minimal_patterns(tmp_path)
+
+    with pytest.raises(ConfigError, match=r"duration_sec.*positive integer"):
+        build_prompt_entries(patterns_path)
+
+
+def test_build_prompt_entries_accepts_positive_integer_duration_sec_override(channel_dir, tmp_path):
+    """正の整数の duration_sec は既存の prompt 生成を妨げない。"""
+    _write_suno_override(channel_dir, genre_line="lo-fi jazz", duration_sec=180)
+    patterns_path = _write_minimal_patterns(tmp_path)
+
+    entries = build_prompt_entries(patterns_path)
+
+    assert len(entries) == 1
+
+
 # ---------------------------------------------------------------------------
 # issue #900: More Options 3 フィールド (style_influence / weirdness / exclude_styles)
 # の suno-prompts.json への wire
