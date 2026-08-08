@@ -4,6 +4,8 @@
 // background 版の defineBackground + chrome API stub を構築する。
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { PostDownloadedResult } from "../../shared/api";
+
 type Handler = (msg: {
   data: Record<string, unknown>;
   sender: Record<string, unknown>;
@@ -67,6 +69,7 @@ async function loadBackground(opts?: {
   debuggerAttachError?: Error;
   debuggerSendCommandError?: Error;
   postDownloadedError?: Error;
+  postDownloadedResult?: PostDownloadedResult;
   sessionState?: StoredDownloadWatcher;
   sessionGetDelayMs?: number;
   useRealPostDownloaded?: boolean;
@@ -248,7 +251,7 @@ async function loadBackground(opts?: {
 
   const postDownloadedMock = opts?.postDownloadedError
     ? vi.fn(() => Promise.reject(opts.postDownloadedError))
-    : vi.fn(() => Promise.resolve());
+    : vi.fn(() => Promise.resolve(opts?.postDownloadedResult));
   if (opts?.useRealPostDownloaded) {
     vi.doUnmock("../../shared/api");
     vi.stubGlobal("fetch", opts.fetchImpl ?? vi.fn());
@@ -1796,6 +1799,35 @@ describe('background onMessage("postDownloaded"): privileged POST boundary', () 
       body,
       { extensionOrigin: "chrome-extension://suno-helper-id" }
     );
+  });
+
+  it("Given shared api が summary を返す When handler runs Then summary を無加工で返す", async () => {
+    const postDownloadedResult = {
+      summary: {
+        expected: 56,
+        placed: 47,
+        missing: 9,
+        reasons: { sunoUnfulfilled: 3, applySkipped: 6 },
+      },
+      warning: "localized warning text",
+    };
+    const { handlers } = await loadBackground({ postDownloadedResult });
+
+    const result = await handlers.get("postDownloaded")!({
+      data: {
+        baseUrl: "http://localhost:8787",
+        collectionId: "coll-1",
+        body: {
+          file_count: 56,
+          expected_file_count: 56,
+          format: "mp3",
+          download_path: "/Users/test/Downloads/test.zip",
+        },
+      },
+      sender: { tab: { id: 42 } },
+    });
+
+    expect(result).toBe(postDownloadedResult);
   });
 
   it("Given shared api rejects When handler runs Then rejection を呼び出し側へ伝播する", async () => {

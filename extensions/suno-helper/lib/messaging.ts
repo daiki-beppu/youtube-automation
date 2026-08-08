@@ -7,6 +7,7 @@ import type {
   CollectionSummary,
   DownloadedPayload,
   DurationFilter,
+  PostDownloadedResult,
   PromptEntry,
   PromptResponse,
   ServerInfo,
@@ -198,9 +199,7 @@ interface ProtocolMap {
     baseUrl: string;
     collectionId: string;
     body: DownloadedPayload;
-  }): {
-    warning: string | null;
-  };
+  }): PostDownloadedResult;
   /** overlay → background → runner: ダウンロードのみ再実行する (#1251)。 */
   retryDownload(
     payload: RetryDownloadPayload
