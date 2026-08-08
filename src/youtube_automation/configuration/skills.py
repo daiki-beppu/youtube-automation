@@ -85,6 +85,21 @@ def _warn_deprecated_override_keys(skill: str, override: dict[str, object], over
     )
 
 
+def _warn_unknown_top_level_override_keys(
+    override: dict[str, object], defaults: dict[str, object], override_path: Path
+) -> None:
+    unknown_keys = sorted(override.keys() - defaults.keys())
+    if not unknown_keys:
+        return
+    warnings.warn(
+        f"skill-config {override_path} の未知のトップレベルキーを検出しました: "
+        f"{', '.join(unknown_keys)}。キー名または階層を確認してください。"
+        "値は互換性のためマージされますが、利用側に参照されない可能性があります。",
+        UserWarning,
+        stacklevel=3,
+    )
+
+
 def _default_path(skill: str) -> Path:
     """パッケージ同梱の default.yaml を解決する。
 
@@ -239,6 +254,7 @@ def load_skill_config(
     if override_path is not None:
         override = _load_override(override_path)
         _warn_deprecated_override_keys(skill, override, override_path)
+        _warn_unknown_top_level_override_keys(override, defaults, override_path)
         merged = _deep_merge(defaults, override)
     else:
         merged = defaults
