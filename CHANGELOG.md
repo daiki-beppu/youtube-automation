@@ -31,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `fix(distrokid-helper)`: dir mode のコレクション選択表示を `アルバム名（曲数）` へ簡略化し、選択中ラベルの省略表示と候補一覧の横 overflow 防止を追加。表示と独立した `collection_id / disc` の選択 identity は維持した（#2515）。
 - `fix(suno-helper)`: Suno ZIP の clip 名に含まれる em-dash 周りの空白差・全角空白・`(1)` / `_1` 重複 suffix を prompts の同一 entry として照合し、配置 skip を防ぐようにした（#3002）。
 - `fix(suno-helper)`: localhost mutation の失敗時に、後続の serve token 再取得エラーで上書きせず、元の request の method・path・status を構造化エラーとして保持するようにした（#3000）。
 - `fix(tests)`: pnpm Worker 契約テストの実行対象を `extensions/suno-helper` から依存ゼロの一時 project へ変更し、`node_modules` が無い環境で 494 パッケージ / 318MB の実インストールが検証前に走る構造を解消した。takt worker ではこの install が `SIGKILL` されて全体 pytest のベースラインが red になり、後続 issue が着手できなくなっていた。検証している契約は `PNPM_MAX_WORKERS` が pnpm のプロセス境界を越えることだけで、対象 project の依存構成は含まれない。あわせて stdout 末尾行に依存した assertion を、検証値へラベルを付けて行集合を検査する方式へ置き換えた。pnpm は依存ゼロでも `Already up to date` を出力し、その位置が 2 つの検証値の間に入るため位置依存の判定が成立しない（#3082）。
