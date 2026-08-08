@@ -31,7 +31,7 @@ export type WorkflowTimingMetrics = {
 
 export type WorkflowTimingStep = WorkflowTimingMetrics & {
   action: string
-  status: "success" | "blocked" | "failed"
+  status: "in_progress" | "success" | "failed" | "blocked" | "not_run"
 }
 
 export type WorkflowTimingCollection = {
