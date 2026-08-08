@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -30,6 +31,7 @@ class _ExtensionCandidate:
     path: Path
     enabled: bool
     preferences_path: Path
+    match_priority: int | None
 
 
 def resolve_unpacked_extension_origin(
@@ -43,11 +45,15 @@ def resolve_unpacked_extension_origin(
         raise ConfigError("Chrome extension name must not be empty. Use --allow-origin for manual fallback.")
 
     root = chrome_user_data_dir if chrome_user_data_dir is not None else Path.home() / _CHROME_USER_DATA_RELPATH
-    candidates = _find_unpacked_extension_candidates(extension_name, root)
+    candidates, near_candidates = _find_unpacked_extension_candidates(extension_name, root)
     if not candidates:
+        near_candidate_guidance = (
+            f" Nearby unpacked extensions: {_format_near_candidates(near_candidates)}." if near_candidates else ""
+        )
         raise ConfigError(
             f"Chrome unpacked extension named {extension_name!r} was not found in {root}. "
-            "Load the unpacked extension in Chrome, or pass --allow-origin chrome-extension://<EXTENSION_ID> manually."
+            f"Load the unpacked extension in Chrome.{near_candidate_guidance} "
+            "Otherwise pass --allow-origin chrome-extension://<EXTENSION_ID> manually."
         )
 
     enabled_candidates = [candidate for candidate in candidates if candidate.enabled]
@@ -76,15 +82,26 @@ def resolve_unpacked_extension_origin(
     )
 
 
-def _find_unpacked_extension_candidates(extension_name: str, root: Path) -> list[_ExtensionCandidate]:
-    candidates: list[_ExtensionCandidate] = []
+def _find_unpacked_extension_candidates(
+    extension_name: str,
+    root: Path,
+) -> tuple[list[_ExtensionCandidate], list[_ExtensionCandidate]]:
+    discovered: list[_ExtensionCandidate] = []
     for profile_dir in _iter_profile_dirs(root):
         preferences_path = _preferences_path(profile_dir)
         if preferences_path is None:
             continue
         payload = _read_preferences(preferences_path)
-        candidates.extend(_candidates_from_preferences(extension_name, profile_dir, preferences_path, payload))
-    return candidates
+        discovered.extend(_candidates_from_preferences(extension_name, profile_dir, preferences_path, payload))
+
+    priorities = [candidate.match_priority for candidate in discovered if candidate.match_priority is not None]
+    if priorities:
+        selected_priority = min(priorities)
+        return (
+            [candidate for candidate in discovered if candidate.match_priority == selected_priority],
+            [],
+        )
+    return [], [candidate for candidate in discovered if extension_name in candidate.path.name]
 
 
 def _iter_profile_dirs(root: Path) -> list[Path]:
@@ -147,7 +164,10 @@ def _candidates_from_preferences(
         if not isinstance(raw_path, str):
             continue
         extension_path = Path(raw_path)
-        if not extension_path.is_absolute() or not _matches_extension_name(extension_name, extension_path, raw_entry):
+        if not extension_path.is_absolute():
+            continue
+        match_priority = _extension_name_match_priority(extension_name, extension_path, raw_entry)
+        if match_priority is None and extension_name not in extension_path.name:
             continue
         candidates.append(
             _ExtensionCandidate(
@@ -156,6 +176,7 @@ def _candidates_from_preferences(
                 path=extension_path,
                 enabled=not _is_disabled_extension_entry(raw_entry),
                 preferences_path=preferences_path,
+                match_priority=match_priority,
             )
         )
     return candidates
@@ -165,23 +186,41 @@ def _is_disabled_extension_entry(raw_entry: dict[object, object]) -> bool:
     return bool(raw_entry.get("disable_reasons")) or raw_entry.get("state") == 0
 
 
-def _matches_extension_name(extension_name: str, extension_path: Path, raw_entry: dict[object, object]) -> bool:
+def _extension_name_match_priority(
+    extension_name: str,
+    extension_path: Path,
+    raw_entry: dict[object, object],
+) -> int | None:
     if extension_path.name == extension_name:
-        return True
+        return 0
+    release_folder_pattern = rf"{re.escape(extension_name)}(?:-\d+(?:\.\d+)*)?(?:-chrome)?"
+    if re.fullmatch(release_folder_pattern, extension_path.name):
+        return 1
     manifest = raw_entry.get("manifest")
     if not isinstance(manifest, dict):
-        return False
+        return None
     manifest_name = manifest.get("name")
     if not isinstance(manifest_name, str):
-        return False
+        return None
     requested_name = " ".join(extension_name.replace("-", " ").split()).casefold()
     display_name = " ".join(manifest_name.split()).casefold()
-    return display_name in {requested_name, f"{requested_name} (youtube-channels-automation)"}
+    if display_name in {requested_name, f"{requested_name} (youtube-channels-automation)"}:
+        return 2
+    return None
 
 
 def _format_candidates(candidates: list[_ExtensionCandidate]) -> str:
     return "; ".join(
         f"profile={candidate.profile}, id={candidate.extension_id}, path={candidate.path}, "
         f"enabled={str(candidate.enabled).lower()}, preferences={candidate.preferences_path}"
+        for candidate in candidates
+    )
+
+
+def _format_near_candidates(candidates: list[_ExtensionCandidate]) -> str:
+    return "; ".join(
+        f"profile={candidate.profile}, id={candidate.extension_id}, path={candidate.path}, "
+        f"enabled={str(candidate.enabled).lower()}, "
+        f"command=yt-collection-serve --allow-origin {_EXTENSION_ORIGIN_PREFIX}{candidate.extension_id}"
         for candidate in candidates
     )
