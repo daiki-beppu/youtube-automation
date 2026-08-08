@@ -6,6 +6,7 @@ import {
   type PromptResponse,
 } from "../../shared/api";
 import {
+  ADAPTIVE_BURST_WINDOW_MS,
   BALANCED_RUN_PACING,
   CLIPS_PER_REQUEST,
   DEFAULT_REGENERATE_DURATION_OUTLIERS,
@@ -71,6 +72,10 @@ import {
   requestFeedPoll,
   requestSliderSet,
 } from "../lib/bridge-listener";
+import {
+  appendChallengeRecord,
+  type ChallengeLogSource,
+} from "../lib/challenge-log";
 import { createClipTracker } from "../lib/clip-tracker";
 import { settleStoredCollectionQueueRun } from "../lib/collection-queue-state";
 import { acquireDomRunLock, releaseDomRunLock } from "../lib/dom-run-lock";
@@ -740,6 +745,8 @@ export default defineContentScript({
     // 以降は emitProgress が sendMessage より前に同期更新する（queryProgress と race しないため）。
     let currentSnapshot: SnapshotPayload | null = null;
     let activeUnattended: RunPayload["unattended"];
+    let activeRunMode: RunModeId | null = null;
+    let runCreateCount = 0;
     // progress は高頻度で到着するため、storage 書き込みを直列化して古い phase が
     // FINISHED / manual-intervention を後から上書きする race を防ぐ。
     let unattendedStateWrite: Promise<void> = Promise.resolve();
@@ -755,6 +762,13 @@ export default defineContentScript({
     const feedPoller = createFeedPoller(tracker);
     let warnedDomFallback = false;
 
+    function observedInFlightClipCount(): number {
+      if (tracker.hasObservedAnyTraffic()) {
+        return tracker.getInFlightCount();
+      }
+      return getInFlightClipCount();
+    }
+
     /** in-flight 数の合成カウント (#948)。bridge 観測があれば status ベース、無ければ DOM プロキシへ縮退。 */
     function currentInFlightCount(): number {
       if (tracker.hasObservedAnyTraffic()) {
@@ -767,6 +781,41 @@ export default defineContentScript({
         );
       }
       return getInFlightClipCount();
+    }
+
+    function recordDetectedChallenge(input: {
+      source: ChallengeLogSource;
+      runMode: RunModeId | null;
+      unattended: boolean;
+      entryIndex: number | null;
+      total: number | null;
+    }): void {
+      const timestamp = Date.now();
+      const createTimestamps = adaptivePacingState.recentCreateTimestamps;
+      const previousCreateAt = createTimestamps.at(-2);
+      const lastCreateAt = createTimestamps.at(-1);
+      const appliedDelayMs = decideAdaptivePacing(
+        adaptivePacingState,
+        timestamp
+      ).delayMs;
+      void appendChallengeRecord({
+        timestamp,
+        ...input,
+        challengeLevel: adaptivePacingState.challengeLevel,
+        recentCreateCount: createTimestamps.filter(
+          (createdAt) => createdAt >= timestamp - ADAPTIVE_BURST_WINDOW_MS
+        ).length,
+        runCreateCount,
+        lastCreateIntervalMs:
+          previousCreateAt === undefined || lastCreateAt === undefined
+            ? null
+            : lastCreateAt - previousCreateAt,
+        appliedDelayMs,
+        inflightRequestCount: Math.ceil(
+          observedInFlightClipCount() / CLIPS_PER_REQUEST
+        ),
+      });
+      adaptivePacingState = recordChallenge(adaptivePacingState);
     }
 
     /** inject ACK のハイブリッド判定 (#948)。bridge の generate レスポンス観測 OR DOM 増分。 */
@@ -1004,7 +1053,13 @@ export default defineContentScript({
         pollIntervalMs: POLL_INTERVAL_MS,
         timeoutMs: CAPTCHA_WAIT_TIMEOUT_MS,
         onWaitStart: () => {
-          adaptivePacingState = recordChallenge(adaptivePacingState);
+          recordDetectedChallenge({
+            source: "before-create",
+            runMode: activeRunMode,
+            unattended: activeUnattended !== undefined,
+            entryIndex: index,
+            total,
+          });
           emitProgress({ phase: PHASE.WAITING_CAPTCHA, index, total });
         },
       });
@@ -1036,6 +1091,7 @@ export default defineContentScript({
 
       const button = resolveGenerateButton();
       button.click();
+      runCreateCount += 1;
       adaptivePacingState = recordSuccessfulCreate(
         adaptivePacingState,
         Date.now()
@@ -1084,7 +1140,13 @@ export default defineContentScript({
         // 生成完了待ち中に captcha が出たら waiting-captcha 表示へ切り替え、解消後 generating へ戻す。
         onCaptchaWait: (waiting) => {
           if (waiting) {
-            adaptivePacingState = recordChallenge(adaptivePacingState);
+            recordDetectedChallenge({
+              source: "generation-wait",
+              runMode: activeRunMode,
+              unattended: activeUnattended !== undefined,
+              entryIndex: index,
+              total,
+            });
           }
           emitProgress({
             phase: waiting ? PHASE.WAITING_CAPTCHA : PHASE.GENERATING,
@@ -2407,6 +2469,8 @@ export default defineContentScript({
       }
       running = true;
       aborted = false;
+      activeRunMode = runMode;
+      runCreateCount = 0;
       lastSubmittedEntryIndex = -1;
       tracker.clearSubmittedIds();
       // run 中のみ active feed poll で clip status を追う (#948)。passive 観測が生きていれば
@@ -2444,6 +2508,7 @@ export default defineContentScript({
         }
         await releaseExecutionLease(unattended);
         activeUnattended = undefined;
+        activeRunMode = null;
         feedPoller.stop();
         releaseRunLock();
       });
@@ -2764,6 +2829,15 @@ export default defineContentScript({
       try {
         const blocker = detectUnattendedPreflightBlocker();
         if (blocker) {
+          if (blocker.reason === "captcha-required") {
+            recordDetectedChallenge({
+              source: "preflight",
+              runMode: null,
+              unattended: true,
+              entryIndex: null,
+              total: null,
+            });
+          }
           await writeUnattendedRunState(
             createUnattendedManualState({
               request,

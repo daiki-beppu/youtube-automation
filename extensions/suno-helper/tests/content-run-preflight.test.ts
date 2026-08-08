@@ -19,6 +19,14 @@ import type {
 import { type ResumeState, writeResumeState } from "../lib/resume-state";
 import { makePromptEntries, markBbox } from "./_helpers";
 
+interface CaptchaWaitOptionsProbe {
+  onWaitStart?: () => void;
+}
+
+interface GenerationWaitOptionsProbe {
+  onCaptchaWait?: (waiting: boolean) => void;
+}
+
 const harness = vi.hoisted(() => {
   const handlers = new Map<string, (message: { data: unknown }) => unknown>();
   const feedPollerStart = vi.fn();
@@ -72,6 +80,7 @@ const harness = vi.hoisted(() => {
     durationsById: {} as Record<string, number | undefined>,
     durationErrorsById: {} as Record<string, Error | undefined>,
     pendingClipIds: [] as string[],
+    trackerInFlightCount: 0,
     requestFeedPollError: undefined as Error | undefined,
     unattendedRequest: null as Record<string, unknown> | null,
     abortOnRequestFeedPoll: false,
@@ -88,7 +97,16 @@ const harness = vi.hoisted(() => {
       );
       return [];
     }),
-    waitForGeneration: vi.fn<() => Promise<void>>(async () => undefined),
+    appendChallengeRecord: vi.fn(() => Promise.resolve()),
+    waitForCaptchaClear: vi.fn(
+      async (_options?: CaptchaWaitOptionsProbe): Promise<void> => undefined
+    ),
+    waitForGeneration: vi.fn(
+      async (
+        _button?: HTMLButtonElement,
+        _options?: GenerationWaitOptionsProbe
+      ): Promise<void> => undefined
+    ),
     waitForQueueSlot: vi.fn<
       (maxGeneratingClips: number, options?: unknown) => Promise<void>
     >(async () => undefined),
@@ -140,7 +158,7 @@ vi.mock("../../shared/dom", async () => {
       }
     }),
     injectAdvancedFields: vi.fn(async () => undefined),
-    waitForCaptchaClear: vi.fn(async () => undefined),
+    waitForCaptchaClear: harness.waitForCaptchaClear,
     waitForGeneration: harness.waitForGeneration,
     waitForQueueSlot: harness.waitForQueueSlot,
   };
@@ -160,6 +178,10 @@ vi.mock("../lib/bridge-listener", () => ({
 
 vi.mock("../lib/entry-retry", () => ({
   runEntryWithRetry: harness.runEntryWithRetry,
+}));
+
+vi.mock("../lib/challenge-log", () => ({
+  appendChallengeRecord: harness.appendChallengeRecord,
 }));
 
 vi.mock("../lib/clip-tracker", () => ({
@@ -198,7 +220,7 @@ vi.mock("../lib/clip-tracker", () => ({
         (id) => !dropped.has(id)
       );
     }),
-    getInFlightCount: vi.fn(() => 0),
+    getInFlightCount: vi.fn(() => harness.trackerInFlightCount),
     hasObservedAnyTraffic: vi.fn(() => true),
     lastChangeAt: vi.fn(() => Date.now()),
     submissionCount: vi.fn(() => harness.submittedClipIds.length),
@@ -568,6 +590,7 @@ beforeEach(() => {
   harness.durationsById = {};
   harness.durationErrorsById = {};
   harness.pendingClipIds = [];
+  harness.trackerInFlightCount = 0;
   harness.requestFeedPollError = undefined;
   harness.abortOnRequestFeedPoll = false;
   harness.useActualAbortableSleep = false;
@@ -587,6 +610,10 @@ beforeEach(() => {
   });
   harness.waitForGeneration.mockReset();
   harness.waitForGeneration.mockResolvedValue(undefined);
+  harness.waitForCaptchaClear.mockReset();
+  harness.waitForCaptchaClear.mockResolvedValue(undefined);
+  harness.appendChallengeRecord.mockReset();
+  harness.appendChallengeRecord.mockResolvedValue(undefined);
   harness.waitForQueueSlot.mockReset();
   // 既定は実装呼び出し（vi.fn(actual.waitForQueueSlot) 相当）。no-op 既定にすると
   // 「Remix 0 かつ空 queue で初回 WAITING_SLOT で失敗しない」回帰テストが空虚に通る。
@@ -821,6 +848,115 @@ describe("content unattended launch", () => {
 });
 
 describe('content onMessage("run"): Run 開始前の Suno view preflight', () => {
+  it("Given unattended preflight challenge When launch を検査する Then preflight context を1回記録する", async () => {
+    harness.trackerInFlightCount = 3;
+    setUnattendedLaunchHash();
+    const iframe = document.createElement("iframe");
+    iframe.src =
+      "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/if/ov2/av0/rcv";
+    markBbox(iframe, 300, 200);
+    document.body.appendChild(iframe);
+
+    await loadContentScript();
+
+    await vi.waitFor(() =>
+      expect(harness.appendChallengeRecord).toHaveBeenCalledWith(
+        expect.objectContaining({
+          source: "preflight",
+          runMode: null,
+          unattended: true,
+          entryIndex: null,
+          total: null,
+          runCreateCount: 0,
+          lastCreateIntervalMs: null,
+          recentCreateCount: 0,
+          challengeLevel: 0,
+          appliedDelayMs: 0,
+          inflightRequestCount: 2,
+        })
+      )
+    );
+    expect(harness.appendChallengeRecord).toHaveBeenCalledOnce();
+  });
+
+  it.each(["serial", "queue"] as const)(
+    "Given %s run の Create直前 challenge When wait が始まる Then 共通 before-create context を1回記録する",
+    async (runMode) => {
+      harness.trackerInFlightCount = 3;
+      makeRunnableSunoDom("Grid");
+      harness.waitForCaptchaClear.mockImplementationOnce(async (options) => {
+        options?.onWaitStart?.();
+      });
+      await loadContentScript();
+
+      expect(
+        getRunHandler()({
+          data: { ...makeRunPayload(makePromptEntries(1)), runMode },
+        })
+      ).toEqual({ ok: true });
+
+      await vi.waitFor(() =>
+        expect(harness.appendChallengeRecord).toHaveBeenCalledWith(
+          expect.objectContaining({
+            source: "before-create",
+            runMode,
+            unattended: false,
+            entryIndex: 0,
+            total: 1,
+            runCreateCount: 0,
+            lastCreateIntervalMs: null,
+            recentCreateCount: 0,
+            challengeLevel: 0,
+            appliedDelayMs: 0,
+            inflightRequestCount: 2,
+          })
+        )
+      );
+      expect(harness.appendChallengeRecord).toHaveBeenCalledOnce();
+      await vi.waitFor(() =>
+        expect(harness.feedPollerStop).toHaveBeenCalledOnce()
+      );
+    }
+  );
+
+  it("Given generation wait challenge When true の後 false callback が来る Then true episode だけを記録する", async () => {
+    harness.trackerInFlightCount = 3;
+    makeRunnableSunoDom("Grid");
+    harness.waitForGeneration.mockImplementationOnce(
+      async (_button, options) => {
+        options?.onCaptchaWait?.(true);
+        options?.onCaptchaWait?.(false);
+      }
+    );
+    await loadContentScript();
+
+    expect(
+      getRunHandler()({ data: makeRunPayload(makePromptEntries(1)) })
+    ).toEqual({ ok: true });
+
+    await vi.waitFor(() =>
+      expect(harness.appendChallengeRecord).toHaveBeenCalledWith(
+        expect.objectContaining({
+          source: "generation-wait",
+          runMode: "serial",
+          unattended: false,
+          entryIndex: 0,
+          total: 1,
+          runCreateCount: 1,
+          lastCreateIntervalMs: null,
+          recentCreateCount: 1,
+          challengeLevel: 0,
+          appliedDelayMs: 0,
+          inflightRequestCount: 2,
+        })
+      )
+    );
+    expect(harness.appendChallengeRecord).toHaveBeenCalledOnce();
+    await vi.waitFor(() =>
+      expect(harness.feedPollerStop).toHaveBeenCalledOnce()
+    );
+  });
+
   it("Given actual run handler が実行中 When run が再着信する Then busy ACK で二重起動しない (#2909)", async () => {
     makeRunnableSunoDom("Grid");
     await loadContentScript();
