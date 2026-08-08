@@ -18,7 +18,7 @@ from urllib.parse import unquote, urlsplit
 
 from youtube_automation.commands.analytics.analytics_system import AnalyticsSystem
 from youtube_automation.configuration.loader import load_config_from_path
-from youtube_automation.core.errors import DashboardChannelNotFoundError
+from youtube_automation.core.errors import ConfigError, DashboardChannelNotFoundError
 from youtube_automation.infrastructure.analytics.channel_registry import (
     DEFAULT_CHANNEL_REGISTRY,
     load_channel_registry,
@@ -34,16 +34,22 @@ DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8765
 
 
-def _build_channel_workflow_timing(channel: Path) -> dict[str, object]:
-    collection_states = (
-        state_path
-        for stage in ("planning", "live")
-        for state_path in (channel / "collections" / stage).glob("*/workflow-state.json")
-    )
-    if next(collection_states, None) is None:
-        return {"collections": []}
-    config = load_config_from_path(channel)
-    return build_workflow_timing(channel, config.workflow.manual_baseline_minutes)
+def _build_channel_workflow_timing(channel: Path) -> dict[str, object] | None:
+    try:
+        collection_states = (
+            state_path
+            for stage in ("planning", "live")
+            for state_path in (channel / "collections" / stage).glob("*/workflow-state.json")
+        )
+        if next(collection_states, None) is None:
+            timing = build_workflow_timing(channel, None)
+            if timing.get("status") == "in_progress":
+                return timing
+            return {"status": "unavailable", "reason": "collection_missing", "collections": []}
+        config = load_config_from_path(channel)
+        return build_workflow_timing(channel, config.workflow.manual_baseline_minutes)
+    except (ConfigError, OSError, ValueError):
+        return None
 
 
 class DashboardServer(ThreadingHTTPServer):
