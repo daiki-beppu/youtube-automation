@@ -202,9 +202,11 @@ def build_dashboard_read_model(
     channel_paths: list[Path],
     *,
     refresh_errors: dict[Path, str] | None = None,
+    workflow_timing_by_channel: dict[Path, dict[str, object]] | None = None,
 ) -> dict[str, object]:
     """登録順のチャンネルから JSON serializable な read model を作る。"""
     errors = refresh_errors or {}
+    workflow_timings = workflow_timing_by_channel or {}
     channels: list[dict[str, object]] = []
     for channel in channel_paths:
         refresh_message = errors.get(channel)
@@ -212,6 +214,8 @@ def build_dashboard_read_model(
         item["refresh_error"] = (
             {"code": "refresh_failed", "message": refresh_message} if refresh_message is not None else None
         )
+        if channel in workflow_timings:
+            item["workflow_timing"] = workflow_timings[channel]
         channels.append(item)
     return {
         "schema_version": SCHEMA_VERSION,
@@ -236,7 +240,7 @@ class DashboardAPI:
         overview_channels: list[dict[str, object]] = []
         for item in self._channels():
             videos = item.get("videos")
-            overview = {key: value for key, value in item.items() if key != "videos"}
+            overview = {key: value for key, value in item.items() if key not in {"videos", "workflow_timing"}}
             overview["video_count"] = len(videos) if isinstance(videos, list) else 0
             overview_channels.append(overview)
         return {
