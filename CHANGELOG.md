@@ -50,6 +50,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `fix(suno-helper)`: 無人実行の起動前確認で可視 CAPTCHA challenge を検出した場合、即時に手動介入状態へ停止せず既存の CAPTCHA 解消待機経路へ入るようにした（#2979）。
 - `feat(server-discovery)`: dir mode の `/server-info` に `planning` / `live` 相当の安全な collections root basename を追加し、absolute filesystem path を公開せず discovery registry で保持できるようにした（#2986）。
 - `fix(server-discovery)`: shared `ServerInfo` parser が optional な DistroKid 実行 mode と安全な collections root basename を strict に検証・保持し、存在する malformed metadata を fail-loud に拒否するようにした（#3441）。
+- `fix(distrokid-helper)`: discovery source が DistroKid mode `disabled` を明示した場合だけ候補から除外し、legacy / `single` / `dir` source は引き続き選択できるようにした（#2988）。
 
 - `fix(suno-helper)`: 無人実行中の可視 Turnstile も手動実行と同じ10分間 `waiting-captcha` で待機し、即時エラー終了しないように統一（#2978）。
 
