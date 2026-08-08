@@ -17,6 +17,7 @@ from typing import cast
 from urllib.parse import unquote, urlsplit
 
 from youtube_automation.commands.analytics.analytics_system import AnalyticsSystem
+from youtube_automation.configuration.loader import load_config_from_path
 from youtube_automation.core.errors import DashboardChannelNotFoundError
 from youtube_automation.infrastructure.analytics.channel_registry import (
     DEFAULT_CHANNEL_REGISTRY,
@@ -27,9 +28,22 @@ from youtube_automation.infrastructure.analytics.dashboard_refresh import (
     collect_channel_analytics,
     refresh_dashboard_channels,
 )
+from youtube_automation.infrastructure.analytics.workflow_timing import build_workflow_timing
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8765
+
+
+def _build_channel_workflow_timing(channel: Path) -> dict[str, object]:
+    collection_states = (
+        state_path
+        for stage in ("planning", "live")
+        for state_path in (channel / "collections" / stage).glob("*/workflow-state.json")
+    )
+    if next(collection_states, None) is None:
+        return {"collections": []}
+    config = load_config_from_path(channel)
+    return build_workflow_timing(channel, config.workflow.manual_baseline_minutes)
 
 
 class DashboardServer(ThreadingHTTPServer):
@@ -125,7 +139,14 @@ def create_server(
 ) -> DashboardServer:
     """registry を一度読み、loopback にだけ bind する server を作る。"""
     channels = channel_paths if channel_paths is not None else load_channel_registry(registry_path)
-    api = DashboardAPI(build_dashboard_read_model(channels, refresh_errors=refresh_errors))
+    workflow_timings = {channel: _build_channel_workflow_timing(channel) for channel in channels}
+    api = DashboardAPI(
+        build_dashboard_read_model(
+            channels,
+            refresh_errors=refresh_errors,
+            workflow_timing_by_channel=workflow_timings,
+        )
+    )
     resolved_assets = asset_root or files("youtube_automation").joinpath("dashboard_dist")
     return DashboardServer((DEFAULT_HOST, port), api, resolved_assets)
 
