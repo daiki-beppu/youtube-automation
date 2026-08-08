@@ -42,6 +42,36 @@ const overview = {
 
 const detail = {
   ...overview.channels[0],
+  workflow_timing: {
+    collections: [
+      {
+        collection_id: "active",
+        stage: "planning",
+        steps: [],
+        totals: {
+          manual_baseline_seconds: 7200,
+          ai_seconds: 600,
+          human_seconds: 1200,
+          work_seconds: 2222,
+          ai_inclusive_saved_seconds: 5400,
+          human_freed_seconds: 6000,
+        },
+      },
+      {
+        collection_id: "latest",
+        stage: "live",
+        steps: [],
+        totals: {
+          manual_baseline_seconds: 3600,
+          ai_seconds: 300,
+          human_seconds: 900,
+          work_seconds: 1333,
+          ai_inclusive_saved_seconds: 2400,
+          human_freed_seconds: 2700,
+        },
+      },
+    ],
+  },
   videos: [
     {
       video_id: "video-1",
@@ -200,6 +230,48 @@ describe("dashboard", () => {
     const comparisonRow = screen.getByRole("row", { name: /Night Drive/ })
     expect(within(comparisonRow).getByText("3本")).toBeInTheDocument()
     expect(screen.queryByText("準備完了")).not.toBeInTheDocument()
+  })
+
+  it("shows the six server-provided timing totals for active and latest collections", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const payload = String(input).endsWith("channel-a") ? detail : overview
+      return new Response(JSON.stringify(payload), { status: 200 })
+    })
+    const user = userEvent.setup()
+
+    renderDashboard()
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Night Drive の動画詳細を見る",
+      })
+    )
+
+    const active = await screen.findByRole("region", {
+      name: "進行中コレクション active",
+    })
+    expect(within(active).getByText("手作業基準")).toBeInTheDocument()
+    expect(within(active).getByText("+02:00:00")).toBeInTheDocument()
+    expect(within(active).getByText("AI 実行時間")).toBeInTheDocument()
+    expect(within(active).getByText("+00:10:00")).toBeInTheDocument()
+    expect(within(active).getByText("人間使用時間")).toBeInTheDocument()
+    expect(within(active).getByText("+00:20:00")).toBeInTheDocument()
+    expect(within(active).getByText("総作業時間")).toBeInTheDocument()
+    expect(within(active).getByText("+00:37:02")).toBeInTheDocument()
+    expect(within(active).getByText("AI 込み削減時間")).toBeInTheDocument()
+    expect(within(active).getByText("+01:30:00")).toBeInTheDocument()
+    expect(within(active).getByText("人間が浮いた時間")).toBeInTheDocument()
+    expect(within(active).getByText("+01:40:00")).toBeInTheDocument()
+
+    const latest = screen.getByRole("region", {
+      name: "最新公開コレクション latest",
+    })
+    expect(within(latest).getByText("+01:00:00")).toBeInTheDocument()
+    expect(within(latest).getByText("+00:05:00")).toBeInTheDocument()
+    expect(within(latest).getByText("+00:15:00")).toBeInTheDocument()
+    expect(within(latest).getByText("+00:22:13")).toBeInTheDocument()
+    expect(within(latest).getByText("+00:40:00")).toBeInTheDocument()
+    expect(within(latest).getByText("+00:45:00")).toBeInTheDocument()
   })
 
   it("shows an empty state when no channels are registered", async () => {
