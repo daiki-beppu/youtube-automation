@@ -195,8 +195,7 @@ def test_server_keeps_analytics_payload_when_workflow_timing_is_unavailable_or_e
         history_path = channel / ".automation-run" / "history.json"
         history_path.write_text(json.dumps({"schema_version": 1, "attempts": []}), encoding="utf-8")
     else:
-        for state_path in channel.glob("collections/*/*/workflow-state.json"):
-            state_path.unlink()
+        (channel / ".automation-run" / "history.json").write_text("not-json", encoding="utf-8")
     server = create_server(port=0, channel_paths=[channel])
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -215,6 +214,63 @@ def test_server_keeps_analytics_payload_when_workflow_timing_is_unavailable_or_e
         assert detail["workflow_timing"]["status"] == expected_status
         if expected_code is not None:
             assert detail["workflow_timing"]["error"]["code"] == expected_code
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+        server.server_close()
+
+
+def test_server_isolates_corrupt_history_from_healthy_channel(tmp_path: Path) -> None:
+    corrupt = _write_channel(tmp_path / "corrupt-root")
+    healthy = _write_channel(tmp_path / "healthy-root")
+    (corrupt / ".automation-run" / "history.json").write_text("not-json", encoding="utf-8")
+
+    server = create_server(port=0, channel_paths=[corrupt, healthy])
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base_url = f"http://127.0.0.1:{server.server_port}"
+    try:
+        overview_status, overview = _json(f"{base_url}/api/channels")
+        corrupt_overview, healthy_overview = overview["channels"]
+        corrupt_status, corrupt_detail = _json(f"{base_url}/api/channels/{corrupt_overview['id']}")
+        healthy_status, healthy_detail = _json(f"{base_url}/api/channels/{healthy_overview['id']}")
+
+        assert overview_status == corrupt_status == healthy_status == 200
+        assert corrupt_overview["summary"]["views"] == 123
+        assert corrupt_detail["videos"][0]["title"] == "Midnight"
+        assert corrupt_detail["workflow_timing"]["status"] == "error"
+        assert healthy_overview["summary"]["views"] == 123
+        assert healthy_detail["videos"][0]["title"] == "Midnight"
+        assert healthy_detail["workflow_timing"]["status"] == "ready"
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+        server.server_close()
+
+
+def test_server_exposes_active_lease_without_collection_as_in_progress(tmp_path: Path) -> None:
+    channel = _write_channel(tmp_path)
+    for state_path in channel.glob("collections/*/*/workflow-state.json"):
+        state_path.unlink()
+    lease = channel / ".automation-run" / "lease"
+    lease.mkdir()
+    (lease / "lease.json").write_text(
+        json.dumps({"token": "active", "acquired_at": 0, "expires_at": 4_102_444_800}),
+        encoding="utf-8",
+    )
+
+    server = create_server(port=0, channel_paths=[channel])
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base_url = f"http://127.0.0.1:{server.server_port}"
+    try:
+        _, overview = _json(f"{base_url}/api/channels")
+        status, detail = _json(f"{base_url}/api/channels/{overview['channels'][0]['id']}")
+
+        assert status == 200
+        assert detail["summary"]["views"] == 123
+        assert detail["videos"][0]["title"] == "Midnight"
+        assert detail["workflow_timing"] == {"status": "in_progress", "collections": []}
     finally:
         server.shutdown()
         thread.join(timeout=5)
