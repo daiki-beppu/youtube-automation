@@ -43,6 +43,7 @@ const overview = {
 const detail = {
   ...overview.channels[0],
   workflow_timing: {
+    status: "ready",
     collections: [
       {
         collection_id: "active",
@@ -338,6 +339,177 @@ describe("dashboard", () => {
     expect(within(latestTotals).getByText("+00:22:13")).toBeInTheDocument()
     expect(within(latestTotals).getByText("+00:40:00")).toBeInTheDocument()
     expect(within(latestTotals).getByText("+00:45:00")).toBeInTheDocument()
+  })
+
+  it.each([
+    ["manual_baseline_unconfigured", "未設定"],
+    ["attempt_timing_unavailable", "—"],
+  ] as const)(
+    "shows unavailable reason %s as %s in the workflow timing section",
+    async (reason, label) => {
+      const unavailableDetail = {
+        ...detail,
+        workflow_timing: {
+          status: "unavailable",
+          reason,
+          collections: [],
+        },
+      }
+      vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+        const payload = String(input).endsWith("channel-a")
+          ? unavailableDetail
+          : overview
+        return new Response(JSON.stringify(payload), { status: 200 })
+      })
+      const user = userEvent.setup()
+
+      renderDashboard()
+      await user.click(
+        await screen.findByRole("button", {
+          name: "Night Drive の動画詳細を見る",
+        })
+      )
+
+      const timingSection = screen
+        .getByRole("heading", { name: "コレクション時間サマリー" })
+        .closest("section") as HTMLElement
+      expect(within(timingSection).getByText(label)).toBeInTheDocument()
+      expect(
+        within(timingSection).queryByRole("region", {
+          name: /コレクション/,
+        })
+      ).not.toBeInTheDocument()
+    }
+  )
+
+  it("shows measured zero seconds as a duration instead of an unavailable state", async () => {
+    const zeroMetrics = {
+      manual_baseline_seconds: 0,
+      ai_seconds: 0,
+      human_seconds: 0,
+      work_seconds: 0,
+      ai_inclusive_saved_seconds: 0,
+      human_freed_seconds: 0,
+    }
+    const zeroDetail = {
+      ...detail,
+      workflow_timing: {
+        status: "ready",
+        collections: [
+          {
+            collection_id: "zero",
+            stage: "live",
+            steps: [],
+            totals: zeroMetrics,
+          },
+        ],
+      },
+    }
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const payload = String(input).endsWith("channel-a")
+        ? zeroDetail
+        : overview
+      return new Response(JSON.stringify(payload), { status: 200 })
+    })
+    const user = userEvent.setup()
+
+    renderDashboard()
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Night Drive の動画詳細を見る",
+      })
+    )
+
+    const totals = within(
+      screen.getByRole("region", { name: "最新公開コレクション zero" })
+    ).getByRole("group", { name: "collection totals" })
+    expect(within(totals).getAllByText("00:00:00")).toHaveLength(6)
+    expect(screen.queryByText("未設定")).not.toBeInTheDocument()
+  })
+
+  it("shows an in-progress timing state without hiding measured collections", async () => {
+    const inProgressDetail = {
+      ...detail,
+      workflow_timing: {
+        status: "in_progress",
+        collections: detail.workflow_timing.collections,
+      },
+    }
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const payload = String(input).endsWith("channel-a")
+        ? inProgressDetail
+        : overview
+      return new Response(JSON.stringify(payload), { status: 200 })
+    })
+    const user = userEvent.setup()
+
+    renderDashboard()
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Night Drive の動画詳細を見る",
+      })
+    )
+
+    const timingSection = screen
+      .getByRole("heading", { name: "コレクション時間サマリー" })
+      .closest("section") as HTMLElement
+    expect(
+      within(timingSection).getByRole("status", {
+        name: "workflow timing 進行中",
+      })
+    ).toHaveTextContent("進行中")
+    expect(
+      within(timingSection).getByRole("region", {
+        name: "進行中コレクション active",
+      })
+    ).toBeInTheDocument()
+  })
+
+  it("shows a local timing error while preserving Analytics summary and videos", async () => {
+    const errorDetail = {
+      ...detail,
+      workflow_timing: {
+        status: "error",
+        collections: [],
+        error: {
+          code: "workflow_timing_invalid",
+          message: "workflow timing を読み込めません",
+        },
+      },
+    }
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const payload = String(input).endsWith("channel-a")
+        ? errorDetail
+        : overview
+      return new Response(JSON.stringify(payload), { status: 200 })
+    })
+    const user = userEvent.setup()
+
+    renderDashboard()
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Night Drive の動画詳細を見る",
+      })
+    )
+
+    const timingSection = screen
+      .getByRole("heading", { name: "コレクション時間サマリー" })
+      .closest("section") as HTMLElement
+    expect(within(timingSection).getByRole("alert")).toHaveTextContent(
+      "workflow timing を読み込めません"
+    )
+    const detailRegion = screen.getByRole("heading", {
+      name: "Night Drive の動画詳細",
+    }).parentElement?.parentElement
+    if (detailRegion === undefined || detailRegion === null) {
+      throw new Error("channel detail region is missing")
+    }
+    expect(
+      within(detailRegion).getByText("再生数", { selector: "dt" })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole("cell", { name: "Midnight City" })
+    ).toBeInTheDocument()
   })
 
   it("shows each workflow step action, status, and six timing metrics", async () => {

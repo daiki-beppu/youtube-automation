@@ -235,7 +235,15 @@ test.beforeAll(async () => {
         },
       },
       scheduled_videos: { count: 0 },
-      video_analytics: {},
+      video_analytics: {
+        "video-error": {
+          title: "Timing Error Video",
+          views: 100,
+          likes: 4,
+          comments: 1,
+          shares: 0,
+        },
+      },
     })
   )
   await writeFile(
@@ -246,6 +254,17 @@ test.beforeAll(async () => {
       timezone: "Asia/Tokyo",
       days: { [publicationDate]: 1 },
     })
+  )
+  const invalidTimingCollection = join(
+    secondChannel,
+    "collections",
+    "planning",
+    "active"
+  )
+  await mkdir(invalidTimingCollection, { recursive: true })
+  await writeFile(
+    join(invalidTimingCollection, "workflow-state.json"),
+    JSON.stringify({ phase: "planning", created_at: "2026-07-21" })
   )
   const registry = join(fixtureRoot, "channels.json")
   await writeFile(registry, JSON.stringify([channel, secondChannel]))
@@ -399,6 +418,36 @@ test("概要から動画詳細まで keyboard で確認できる", async ({ page
     videoTable.getByRole("cell", { name: "Midnight City" })
   ).toBeVisible()
   await expect(videoTable.getByRole("cell", { name: "3,200" })).toBeVisible()
+})
+
+test("timing error でも実 HTTP の Analytics 詳細を維持する", async ({
+  page,
+}) => {
+  await page.goto(baseURL)
+  await page
+    .getByRole("button", { name: "Zero Stock の動画詳細を見る" })
+    .click()
+
+  const detailHeading = page.getByRole("heading", {
+    name: "Zero Stock の動画詳細",
+  })
+  await expect(detailHeading).toBeVisible()
+  const timingSection = page
+    .getByRole("heading", { name: "コレクション時間サマリー" })
+    .locator("xpath=..")
+    .locator("xpath=..")
+  await expect(timingSection.getByRole("alert")).toContainText("エラー")
+  await expect(
+    page
+      .locator("dt")
+      .filter({ hasText: /^再生数$/ })
+      .locator("..")
+  ).toContainText("100")
+  await expect(
+    page
+      .getByRole("table", { name: "動画パフォーマンス" })
+      .getByRole("cell", { name: "Timing Error Video" })
+  ).toBeVisible()
 })
 
 test("768px 幅でも比較行と詳細操作が見切れない", async ({ page }) => {
