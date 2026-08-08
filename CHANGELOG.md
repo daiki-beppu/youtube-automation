@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `feat(dashboard)`: workflow timing を含む dashboard API schema を v2 とし、overview は timing を除いた channel 集約、detail は `ready` / `unavailable` / `in_progress` / `error` の timing を返す境界を HTTP 200 契約として固定した（#3338）。
 - `feat(dashboard)`: channel ごとの workflow timing 欠損・不正 shape を専用の `status=error` へ隔離し、同じ channel の Analytics summary / videos と他 channel の timing を維持する fail-soft 境界を追加した（#3339）。
 - `feat(dashboard)`: workflow timing の公開 status を `ready` / `unavailable` / `in_progress` に正規化し、基準未設定・旧 schema・未計測・実行中を 0 と区別できるようにした（#3334）。
+- `feat(dashboard)`: チャンネル詳細に active planning / latest live collection の手作業基準、AI 実行、人間使用、総作業、AI 込み削減、人間が浮いた時間の 6 指標を API 集計値のまま比較可能な時間表記で表示し、配布 asset を同期した（#3353）。
 - `feat(dashboard)`: API の符号付き秒数を、正負を保った比較しやすい `HH:MM:SS` 表記へ整形する formatter を追加した（#3352）。
 - `feat(dashboard)`: registry の各 channel から検証済み手作業基準と workflow history を読み、collection timing summary を channel detail API へ配線した（#3325）。
 - `feat(dashboard)`: workflow timing summary を channel detail read model に追加し、overview からは除外して一覧 API の軽量契約を維持した（#3324）。

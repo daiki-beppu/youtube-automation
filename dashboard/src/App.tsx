@@ -48,11 +48,18 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet"
 import { ChannelStockTable } from "@/features/channel-stock/channel-stock-table"
-import type { ChannelOverview, Summary } from "@/lib/dashboard-types"
+import type {
+  ChannelOverview,
+  Summary,
+  WorkflowTiming,
+  WorkflowTimingCollection,
+  WorkflowTimingMetrics,
+} from "@/lib/dashboard-types"
 import {
   formatCollectedAt,
   formatDateRange,
   formatInteger,
+  formatSignedDuration,
   formatSignedInteger,
 } from "@/lib/dashboard-formatters"
 import { dashboardStatusPresentation } from "@/lib/dashboard-status"
@@ -79,8 +86,23 @@ type Video = {
   engagements: number
 }
 
-type ChannelDetail = Omit<ChannelOverview, "video_count"> & { videos: Video[] }
+type ChannelDetail = Omit<ChannelOverview, "video_count"> & {
+  videos: Video[]
+  workflow_timing: WorkflowTiming
+}
 type OverviewResponse = { schema_version: number; channels: ChannelOverview[] }
+
+const timingMetrics = [
+  { key: "manual_baseline_seconds", label: "手作業基準" },
+  { key: "ai_seconds", label: "AI 実行時間" },
+  { key: "human_seconds", label: "人間使用時間" },
+  { key: "work_seconds", label: "総作業時間" },
+  { key: "ai_inclusive_saved_seconds", label: "AI 込み削減時間" },
+  { key: "human_freed_seconds", label: "人間が浮いた時間" },
+] as const satisfies ReadonlyArray<{
+  key: keyof WorkflowTimingMetrics
+  label: string
+}>
 
 const chartConfig = {
   views: { label: "再生数", color: "var(--chart-3)" },
@@ -316,6 +338,84 @@ function SummaryMetrics({ summary }: { summary: Summary }) {
   )
 }
 
+function collectionStageLabel(
+  stage: WorkflowTimingCollection["stage"]
+): string {
+  switch (stage) {
+    case "planning":
+      return "進行中コレクション"
+    case "live":
+      return "最新公開コレクション"
+  }
+}
+
+function TimingMetrics({ totals }: { totals: WorkflowTimingMetrics }) {
+  return (
+    <dl className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      {timingMetrics.map((metric) => (
+        <div
+          key={metric.key}
+          className="dashboard-metric-surface rounded-lg p-3"
+        >
+          <dt className="text-xs text-foreground">{metric.label}</dt>
+          <dd className="mt-1 font-semibold tabular-nums">
+            {formatSignedDuration(totals[metric.key])}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  )
+}
+
+function WorkflowTimingCard({
+  collection,
+}: {
+  collection: WorkflowTimingCollection
+}) {
+  const stageLabel = collectionStageLabel(collection.stage)
+  return (
+    <Card
+      role="region"
+      aria-label={`${stageLabel} ${collection.collection_id}`}
+    >
+      <CardHeader>
+        <CardTitle>{stageLabel}</CardTitle>
+        <CardDescription>{collection.collection_id}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <TimingMetrics totals={collection.totals} />
+      </CardContent>
+    </Card>
+  )
+}
+
+function WorkflowTimingSummary({
+  workflowTiming,
+}: {
+  workflowTiming: WorkflowTiming
+}) {
+  return (
+    <section aria-labelledby="workflow-timing-title" className="grid gap-4">
+      <div>
+        <h3 id="workflow-timing-title" className="text-xl font-semibold">
+          コレクション時間サマリー
+        </h3>
+        <p className="text-sm text-muted-foreground">
+          API が集計した作業時間と削減時間をコレクション単位で比較します。
+        </p>
+      </div>
+      <div className="grid gap-4 lg:grid-cols-2">
+        {workflowTiming.collections.map((collection) => (
+          <WorkflowTimingCard
+            key={`${collection.stage}-${collection.collection_id}`}
+            collection={collection}
+          />
+        ))}
+      </div>
+    </section>
+  )
+}
+
 function Detail({ detail }: { detail: ChannelDetail }) {
   const chartData = useMemo(
     () =>
@@ -345,6 +445,7 @@ function Detail({ detail }: { detail: ChannelDetail }) {
         </Alert>
       ) : null}
       {detail.summary ? <SummaryMetrics summary={detail.summary} /> : null}
+      <WorkflowTimingSummary workflowTiming={detail.workflow_timing} />
       {detail.videos.length === 0 ? (
         <Empty className="border">
           <EmptyHeader>
