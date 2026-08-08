@@ -66,6 +66,73 @@ describe("discovery schema v1", () => {
     expect(input).toEqual(before);
   });
 
+  it("should preserve strict optional server capabilities and a safe collections root", () => {
+    const legacy = serverInfo(LIVE_URL, "live");
+    const input = registry([
+      {
+        ...registryEntry(LIVE_URL, "live"),
+        server_info: {
+          ...legacy,
+          capabilities: { distrokid: { mode: "dir" } },
+          collections_root: "planning",
+          unrelated_future_field: "ignored",
+        },
+      },
+    ]);
+
+    const parsed = parseDiscoveryResponse(input);
+
+    expect(parsed.servers[0].server_info).toEqual({
+      ...legacy,
+      capabilities: { distrokid: { mode: "dir" } },
+      collections_root: "planning",
+    });
+  });
+
+  it("should preserve exact legacy omission of optional server capabilities", () => {
+    const parsed = parseDiscoveryResponse(
+      registry([registryEntry(LIVE_URL, "legacy")])
+    );
+
+    expect(parsed.servers[0].server_info).toEqual(
+      serverInfo(LIVE_URL, "legacy")
+    );
+    expect(parsed.servers[0].server_info).not.toHaveProperty("capabilities");
+    expect(parsed.servers[0].server_info).not.toHaveProperty(
+      "collections_root"
+    );
+  });
+
+  it.each([
+    { capabilities: undefined },
+    { capabilities: null },
+    { capabilities: {} },
+    { capabilities: { distrokid: null } },
+    { capabilities: { distrokid: {} } },
+    { capabilities: { distrokid: { mode: "parallel" } } },
+    { collections_root: undefined },
+    { collections_root: null },
+    { collections_root: "" },
+    { collections_root: "." },
+    { collections_root: ".." },
+    { collections_root: "/planning" },
+    { collections_root: "collections/planning" },
+    { collections_root: "collections\\planning" },
+    { collections_root: "C:planning" },
+  ])("should reject malformed present optional server metadata", (optional) => {
+    const input = registry([
+      {
+        ...registryEntry(LIVE_URL, "invalid-optional"),
+        server_info: {
+          ...serverInfo(LIVE_URL, "invalid-optional"),
+          ...optional,
+        },
+      },
+    ]);
+
+    expect(() => parseDiscoveryResponse(input)).toThrow();
+  });
+
   it.each([
     { schema_version: 2, ttl_seconds: 30, servers: [] },
     { schema_version: 1, ttl_seconds: "30", servers: [] },
