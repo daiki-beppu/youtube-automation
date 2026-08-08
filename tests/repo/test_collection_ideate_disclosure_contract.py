@@ -11,6 +11,7 @@ SKILL_MD = SKILL_DIR / "SKILL.md"
 PLANNING_RULES_MD = SKILL_DIR / "references" / "planning-rules.md"
 PREVIEW_CONTRACT_MD = SKILL_DIR / "references" / "preview-contract.md"
 PREVIEW_GENERATION_MD = SKILL_DIR / "references" / "preview-generation.md"
+SELECTION_HANDOFF_MD = SKILL_DIR / "references" / "selection-handoff.md"
 
 PLANNING_RULE_HEADINGS = {
     "ペルソナベース企画フレームワーク",
@@ -32,6 +33,13 @@ PREVIEW_GENERATION_HEADINGS = {
     "Sequential 生成詳細",
     "出力検証と再生成",
     "Failure handling",
+}
+SELECTION_HANDOFF_HEADINGS = {
+    "採用候補の保存",
+    "Reference assignment",
+    "Stock archive",
+    "Cleanup と失敗時処理",
+    "Handoff semantics",
 }
 
 
@@ -167,3 +175,85 @@ def test_skill_keeps_generation_routing_commands_and_hard_gates() -> None:
         "生成失敗",
     ):
         assert hard_gate in skill
+
+
+def test_skill_dispatches_selection_handoff_after_user_selection() -> None:
+    skill = SKILL_MD.read_text(encoding="utf-8")
+    relative_reference = SELECTION_HANDOFF_MD.relative_to(SKILL_DIR).as_posix()
+
+    user_selection = skill.index("**4-5: 全枚を比較提示 → ユーザー選択**")
+    dispatch = skill.index(f"]({relative_reference})")
+    report_save = skill.index("## 企画レポート保存", dispatch)
+
+    assert SELECTION_HANDOFF_MD.is_file()
+    assert user_selection < dispatch < report_save
+
+
+def test_selection_handoff_sections_have_one_reference_owner() -> None:
+    skill_headings = _headings(SKILL_MD.read_text(encoding="utf-8"))
+    reference_headings = _headings(SELECTION_HANDOFF_MD.read_text(encoding="utf-8"))
+
+    assert SELECTION_HANDOFF_HEADINGS <= reference_headings
+    assert SELECTION_HANDOFF_HEADINGS.isdisjoint(skill_headings)
+
+    skill = SKILL_MD.read_text(encoding="utf-8")
+    reference = SELECTION_HANDOFF_MD.read_text(encoding="utf-8")
+    for detail in (
+        "空ファイルや代替画像を作らない",
+        "生成途中の候補、不採用候補、未生成候補",
+        "7日以上経過したもの",
+        "同じ段階から再開する",
+    ):
+        assert detail not in skill
+        assert reference.count(detail) == 1
+
+
+def test_skill_keeps_selection_commands_hard_gates_and_handoff_order() -> None:
+    skill = SKILL_MD.read_text(encoding="utf-8")
+    next_step = skill.index("## Next Step")
+
+    report_save = skill.index("plan_proposals.md")
+    planning_generated = skill.index("planning.generated = true", report_save)
+    final_title = skill.index("planning.final_title", next_step)
+    assignment = skill.index("record-ttp-reference-assignments.py", next_step)
+    parallel = skill.index("### parallel モード（デフォルト）", assignment)
+    adopted_copy = skill.index("cp collections/planning/_plan-previews", parallel)
+    stock_archive = skill.index("uv run yt-stock-archive", adopted_copy)
+    parallel_cleanup = skill.index("rm -rf collections/planning/_plan-previews", stock_archive)
+    downstream_thumbnail = skill.index("`/thumbnail <theme>`", parallel_cleanup)
+    downstream_suno = skill.index("`/suno <theme>`", downstream_thumbnail)
+
+    assert report_save < planning_generated < final_title < assignment
+    assert assignment < adopted_copy < stock_archive < parallel_cleanup
+    assert parallel_cleanup < downstream_thumbnail < downstream_suno
+    for command in (
+        "record-ttp-reference-assignments.py",
+        "uv run yt-stock-archive",
+        "cp collections/planning/_plan-previews",
+        "rm -rf collections/planning/_plan-previews",
+    ):
+        assert command in skill
+    for hard_gate in (
+        "保存に失敗した場合は処理を継続せず",
+        "`main.png` にはコピーしない",
+        "`planning-preview.png` が未生成",
+    ):
+        assert hard_gate in skill
+
+
+def test_skill_keeps_mode_specific_cleanup_order() -> None:
+    skill = SKILL_MD.read_text(encoding="utf-8")
+    sequential = skill.index("### sequential モード時の Next Step")
+    no_image = skill.index("### コスト拒否 / 生成失敗で企画参照画像が無い場合", sequential)
+    handoff = skill.index("企画選択後:", no_image)
+
+    sequential_block = skill[sequential:no_image]
+    assert sequential_block.index("cp collections/planning/_plan-previews") < sequential_block.index(
+        "rm -rf collections/planning/_plan-previews"
+    )
+    assert "yt-stock-archive" not in sequential_block
+
+    no_image_block = skill[no_image:handoff]
+    assert "planning-preview.png コピーはスキップ" in no_image_block
+    assert "rm -rf collections/planning/_plan-previews" in no_image_block
+    assert "record-ttp-reference-assignments.py" not in no_image_block

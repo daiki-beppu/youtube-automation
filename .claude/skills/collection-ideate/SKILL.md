@@ -429,6 +429,8 @@ sequential モードでは Next Step で stock 退避は走らない（不採用
 
 コレクション作成の詳細ライフサイクル（ディレクトリ構造、段階別手順、チェックリスト）は `references/collection-lifecycle.md` を参照。入力モード・鮮度判定の正本は `references/freshness-rules.md` とする。
 
+ユーザーが企画を選択したら、保存・参照割当・stock・cleanup・後工程の判断詳細を [selection / handoff](references/selection-handoff.md) から読み、以下の分岐とコマンドへ適用する。
+
 ## 企画レポート保存
 
 企画候補は必ずコレクションの `20-documentation/plan_proposals.md` に保存すること。`preview.skip_cost_confirm: true` で画像生成した場合は、Phase 4-2 の生成条件と想定 call 数も同じ文書へ保存する。
@@ -439,7 +441,7 @@ sequential モードでは Next Step で stock 退避は走らない（不採用
 
 企画選択時にタイトルも確定する（`workflow-state.json` の `planning.final_title` に記録）。
 
-企画確定後、選択した企画のプレビュー画像は企画参照として保存し、**`main.png` にはコピーしない**。`main.png/jpg` は `/thumbnail` で承認済みのテキスト付き `thumbnail.jpg` から再生成して確定する textless 動画背景であり、文字入りサムネと同一画像にしない。`thumbnail_mode` と「画像が生成されたか」によって手順が分岐するため、ケース別に示す。
+企画確定後は `thumbnail_mode` と画像の有無で分岐する。採用画像は企画参照へ保存し、**`main.png` にはコピーしない**。不可逆操作は、参照割当の保存 → 採用画像のコピー → 不採用画像の stock 退避 → セッション cleanup の順で実行する。
 
 画像生成を実施した場合、企画確定後かつプレビューディレクトリ削除前に、今回使用した参照割当を collection の履歴へ必ず保存する。保存に失敗した場合は処理を継続せず、エラーを解消して同じコマンドを再実行する。
 
@@ -481,8 +483,6 @@ JSON
 rm -rf collections/planning/_plan-previews/<session-dir>/
 ```
 
-parallel モードでは `config/skills/collection-ideate.yaml` の `preview.stock_archive: false` か `config/skills/thumbnail.yaml` の `image_generation.stock.enabled: false` のいずれかで stock 退避を無効化できる（無効化時は CLI 経由で単純削除に戻る）。
-
 ### sequential モード時の Next Step
 
 不採用 (`candidate_count` - 1) 案は画像が未生成なので stock 退避は不要。`cp` 1 回 + `rm -rf` だけで済む:
@@ -505,12 +505,7 @@ rm -rf collections/planning/_plan-previews/<session-dir>/
 [ -d collections/planning/_plan-previews/<session-dir> ] && rm -rf collections/planning/_plan-previews/<session-dir>/
 ```
 
-このケースでも下流の `/thumbnail <theme>` がベンチマーク参照からテキスト付き `thumbnail.jpg` を先に生成・承認し、承認済み `thumbnail.jpg` から textless `main.png/jpg` を再生成する流れに合流する（下記「企画選択後」参照）。
-
-> **定期クリーンアップ**: 放棄されたセッションのディレクトリが残る場合、7 日以上前のものは手動削除可:
-> `find collections/planning/_plan-previews/ -maxdepth 1 -type d -mtime +7 -exec rm -rf {} +`
->
-> stock 側の保守は `uv run yt-stock-prune --dry-run` で候補確認 →（必要なら）本実行。
+このケースも下記「企画選択後」へ合流する。
 
 企画選択後:
 - `/thumbnail <theme>` で、テキスト付き `thumbnail.jpg` を先に確定し、承認済み `thumbnail.jpg` から textless `main.png/jpg` を別成果物として再生成・確定する。企画プレビューは参照素材であり、`main.png` として動画背景に流用しない
