@@ -263,9 +263,40 @@ def test_dashboard_api_exposes_overview_and_selected_channel(tmp_path: Path) -> 
 
     assert "videos" not in overview["channels"][0]
     assert overview["channels"][0]["video_count"] == 1
+    assert "workflow_timing" not in api.channel(channel_id)
     assert api.channel(channel_id)["videos"][0]["video_id"] == "video-b"
     with pytest.raises(DashboardChannelNotFoundError, match="unknown"):
         api.channel("unknown")
+
+
+def test_dashboard_api_exposes_workflow_timing_only_in_channel_detail(tmp_path: Path) -> None:
+    channel = tmp_path / "channel"
+    _write_channel(
+        channel,
+        name="Selected",
+        snapshots={
+            "analytics_data_20260720.json": _snapshot(
+                collected_at="2026-07-20T00:00:00+00:00", views=900, video_views=700
+            )
+        },
+    )
+    timing = {
+        "collections": [
+            {
+                "collection_id": "active",
+                "stage": "planning",
+                "steps": [],
+                "totals": {"work_seconds": 0},
+            }
+        ]
+    }
+
+    api = DashboardAPI(build_dashboard_read_model([channel], workflow_timing_by_channel={channel: timing}))
+    overview = api.overview()
+    channel_id = overview["channels"][0]["id"]
+
+    assert "workflow_timing" not in overview["channels"][0]
+    assert api.channel(channel_id)["workflow_timing"] == timing
 
 
 def test_read_model_keeps_previous_snapshot_with_structured_refresh_error(tmp_path: Path) -> None:
