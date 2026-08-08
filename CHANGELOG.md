@@ -29,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `refactor(packaging)`: リポジトリを責務別 layer へ再配置し、canonical owner への production import・receipt・active documentation を同期した。`youtube_automation.utils` と `infrastructure.legacy_utils` は下流向け compatibility façade として installed wheel でも維持し、削除・統合候補は `docs/architecture/reorganization-followups.md` に記録した。
 ### Added
 
+- `feat(dashboard)`: 日別公開本数を当日終端の過去365日について週×曜日へ配置し、月・曜日ラベルと0本+4強度の semantic-token 凡例を表示する独立 heatmap component を追加した（#3408）。
 - `feat(dashboard)`: 各登録チャンネルの保存済み公開履歴 cache を canonical loader で読み、全チャンネルの日別合計、チャンネル別内訳、最終更新日時、構造化更新エラー、missing / invalid 状態を読み取り専用 dashboard read model に集約した（#3404）。
 - `feat(dashboard)`: standard Analytics 収集に使った同一 `AnalyticsSystem` / collector の動画一覧 cache を再利用し、チャンネル設定の公開 timezone で集計した `data/dashboard_publications.json` を収集成功時だけ保存するようにした（#3357）。
 - `feat(dashboard)`: 公開履歴 payload を保存先と同じディレクトリの一時ファイルへ完全に書き終えてから原子的に置換し、置換失敗時も既存 JSON を保持して一時ファイルを片付ける保存関数を追加した（#3356）。
