@@ -125,19 +125,13 @@ OpenAI provider 使用時は `image_generation.openai.aspect_ratio` を `"16:9"`
 
 `config/skills/thumbnail.yaml` の `image_generation.provider` が未設定の場合、デフォルトは `gemini`。channel-config 側で `image_generation.provider` が明示されている場合はそちらが優先される（既存の切り替え挙動は変更しない）。
 
+provider 障害からの切り替え例、Codex wrapper の protocol・失敗診断は [provider/Codex 詳細](references/provider-guidance.md) を、provider 決定後かつ必要な場合だけ読む。
+
 ## 障害時の provider fallback
 
-Gemini API 障害、GCP 課金切れ、ADC 認証不備、quota 超過が疑われる場合は、自動切替せずに provider を明示変更して再実行する。
+Gemini API 障害、GCP 課金切れ、ADC 認証不備、quota 超過が疑われる場合は、自動切替せずに provider を明示変更して再実行する。生成物の品質差が出るため、自動で provider を切り替えて上書きしない。
 
-GCP 課金なしで進める場合:
-
-```yaml
-# config/skills/thumbnail.yaml
-image_generation:
-  provider: codex
-```
-
-その後、`uv run yt-generate-image` ではなく codex wrapper を使う:
+GCP 課金なしで `codex` に切り替えた場合は、`uv run yt-generate-image` ではなく次の codex wrapper を使う:
 
 ```bash
 bash .claude/skills/thumbnail/references/codex-image.sh --require-reference \
@@ -146,43 +140,20 @@ bash .claude/skills/thumbnail/references/codex-image.sh --require-reference \
   <reference-image-1>
 ```
 
-OpenAI API に切り替える場合:
-
-```yaml
-image_generation:
-  provider: openai
-  openai:
-    aspect_ratio: "16:9"
-    # quality 未指定時の既定は medium。high は単価が数倍高いので明示 opt-in のみ
-    # quality: high
-```
-
-Gemini / OpenAI の CLI 経路で全 attempt が失敗した場合、`uv run yt-generate-image` はこの fallback 章を案内する。生成物の品質差が出るため、自動で provider を切り替えて上書きすることはしない。
+OpenAI API に切り替える場合は `provider: openai` と `image_generation.openai.aspect_ratio` を明示する。設定例と症状別の診断は provider/Codex 詳細に従う。
 
 ## codex 経由の生成
 
-`image_generation.provider: codex` のチャンネルでは、`uv run yt-generate-image` ではなく `codex-image.sh` を正規の生成経路として使う。`ImageProvider` API 実装は持たないため、`uv run yt-generate-image` に誤配線した場合は明示エラーでこの shell 経路へ誘導される。
+`image_generation.provider: codex` のチャンネルでは、`uv run yt-generate-image` ではなく `.claude/skills/thumbnail/references/codex-image.sh` を正規の生成経路として使う。`ImageProvider` API 実装は持たないため、`uv run yt-generate-image` に誤配線した場合は明示エラーでこの shell 経路へ誘導される。
 
 前提:
-- codex CLI 0.131 系以降（旧 stdout プロトコル `generated image <id> <base64>` は 0.131 で削除済み）
 - `codex login status` が `Logged in using ChatGPT` を返す
-- `jq` が PATH 上にある（`--json` の JSONL 解析に使う）
-- wrapper は生成前に最小 `codex exec --json` プローブで codex CLI とサーバー側デフォルトモデルの互換性を確認する。非互換時は生成を試みず、CLI version・検出モデル・アップグレード手順を stderr に出して停止する
 - TTP 生成のため、3 引数目以降に参照画像を 1 件以上渡す
 - ChatGPT サブスクの fair-use 上限は明文化されていないため、大量生成には使わない
 
-直接実行例:
-
-```bash
-bash .claude/skills/thumbnail/references/codex-image.sh --require-reference \
-  "TTP this reference thumbnail, then improve it into a stronger original thumbnail for cozy cafe morning coffee. Keep the winning layout and make the title readable on mobile." \
-  collections/planning/sample/10-assets/thumbnail-codex-v1.png \
-  data/thumbnail_compare/benchmark/<channel>/<reference>.jpg
-```
-
 複数候補を作る場合でも、1 回の `codex-image.sh --require-reference` 呼び出しには候補に対応する参照画像 1 枚だけを渡す。TTP 生成では参照画像 0 件で停止する。DistroKid cover などの汎用 codex 生成は `--require-reference` を付けない。
 
-2 件以上の候補を同時生成する場合は、`id` / `prompt` / `output` / 任意の `reference` を持つ JSON 配列を manifest に保存し、batch launcher を使う。manifest は共有 scratchpad の固定名に置かず、実行ごとに `mktemp` で作成する。cleanup はその実行が取得した path だけを `trap` で削除し、glob や固定名で他の並列実行の manifest を削除しない。互換 preflight は batch 全体で 1 回だけ実行され、各 job は独立した出力先で単発 `codex-image.sh` の stale-artifact / PNG / MD5 gate を通る。一部失敗時も残りを完走し、最後に失敗一覧と非 0 exit を返す。
+2 件以上の候補を同時生成する場合は、provider/Codex 詳細に定義した `id` / `prompt` / `output` / 任意の `reference` を持つ JSON 配列 schema で manifest を保存し、batch launcher を使う。manifest は共有 scratchpad の固定名に置かず、実行ごとに `mktemp` で作成する。cleanup はその実行が取得した path だけを `trap` で削除し、glob や固定名で他の並列実行の manifest を削除しない。互換 preflight は batch 全体で 1 回だけ実行され、各 job は独立した出力先で単発 `codex-image.sh` の stale-artifact / PNG / MD5 gate を通る。一部失敗時も残りを完走し、最後に失敗一覧と非 0 exit を返す:
 
 ```bash
 manifest=$(mktemp "${TMPDIR:-/tmp}/codex-thumbnail-jobs.XXXXXX")
@@ -230,24 +201,6 @@ Use the title {title}.
 このテンプレートは `config.default.yaml` の `image_generation.codex.default_prompt_template` と完全一致させる（`tests/configuration/test_thumbnail_skill_assets.py` で機械担保）。
 
 **`{title}` の意味論**: `{title}`（`codex-prompt.py` の `title` 引数）に渡すのは**サムネに焼くテキスト（見出し + 短いサブタイトル）だけ**。動画タイトル全文を渡さない — 旧テンプレート運用時に動画タイトル全文がそのまま画像に焼き込まれた事故があり、その再発防止のための契約。
-
-内部実装の要約:
-
-- wrapper は `codex --version` で CLI version を控え、ログイン確認後に `codex exec --json --skip-git-repo-check -- "Reply with exactly codex-model-compat-ok."` の最小プローブを実行する。互換性エラーなら本番生成を呼ばず、`npm install -g @openai/codex@latest` / `brew upgrade codex` / `bun add -g @openai/codex@latest` を案内して非0終了する
-- wrapper は `codex exec --json --sandbox workspace-write --add-dir <out_dir> --skip-git-repo-check` で起動する
-- 受け取った prompt 末尾に `Generate a new image with the image_generation tool. Do not copy any provided reference image; produce a freshly generated PNG. After generation, copy the produced PNG to <out>. Then reply with exactly <out>.` を自動付与する（後述の reference cp failure mode を抑止するため、tool 呼び出しと「reference を copy するな」を明示）
-- agent 自身が `~/.codex/generated_images/<thread_id>/ig_*.png` から `<out>` へ `cp` し、最終 `agent_message.text` で `<out>` を返す
-- wrapper は事前に `rm -f <out>` で stale artifact を確実に削除してから `codex exec` を起動する
-- wrapper は JSONL を `jq` でフィルタし、`tail -n 1` で最後の `agent_message.text` を取得。これを JSON プロトコル契約として `<out>` と完全一致することを検証し（不一致なら非0終了）、その後 `<out>` の存在・サイズと PNG ヘッダ（`89504e470d0a1a0a`）を検証する
-- reference 画像を渡したときは、wrapper が事前に各 reference の MD5 を控えておき、最終的に `<out>` の MD5 と一致したら「agent が `image_generation` tool を skip して reference をそのまま cp した」failure mode として非0終了する
-- wrapper 側で指定した `<out>` がそのまま最終 path として使えるので、生成後に呼び出し側で path 解決し直す必要はない
-
-運用上の注意:
-
-- **prompt は短く保つ**: 長すぎる prompt は agent が `image_generation` tool 呼び出しを skip して path だけ echo する failure mode に陥る。TTP 参照画像つきでは `image_generation.codex.default_prompt_template` を使い、`{title}` だけを差し替える。失敗したら短縮を最優先で試す
-- **reference 画像つきは prompt で「変更点」を明示する**: 「reference を参考に」程度の弱い指示だと agent が `image_generation` tool を skip して reference を `<out>` に cp するだけで終わる failure mode がある。wrapper の自動付与文 + MD5 一致検証で抑止しているが、prompt 側でも reference からの差分（色味の参考 / 構図だけ流用 / 主役を差し替え 等）を明示しておくと安定する
-- 失敗時 wrapper は codex CLI version・デフォルトモデル推定値・`agent_message (最終)`・codex stderr の末尾 30 行を診断 dump するので、これを見て CLI upgrade / prompt 短縮 / 参照画像見直しに切り替える
-- **NG ワード事前検査 (#1664)**: wrapper は `codex exec` 起動前に prompt を `image_generation.gemini.forbid_keywords` と照合し、ヒットしたら即エラー終了する。キーワードは環境変数 `CODEX_IMAGE_FORBID_KEYWORDS`（改行区切り）が非空ならそれを優先し、未設定なら `uv run python` で merged skill-config から自動解決する。チャンネルリポジトリ外での単体実行など config 文脈が無い場合は従来どおり no-op
 
 この経路のスコープ:
 - `uv run yt-generate-image` の API 呼び出しは使わない
