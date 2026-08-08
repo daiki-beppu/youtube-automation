@@ -136,6 +136,10 @@ export interface ResolvedFields {
 
 const LYRICS_MODE_NAMES = ["Write", "Prompt", "Instrumental"] as const;
 const CREATE_FORM_MODE_NAMES = ["Simple", "Advanced", "Sounds"] as const;
+const LYRICS_WRITE_LOCATION =
+  "Advanced → More options → Lyrics mode → Write の順に切り替えてください。";
+const LYRICS_WRITE_REASON =
+  "suno-helper は非空の lyrics（[Instrumental] を含む）を Lyrics 欄へ注入するため、Write が必要です。";
 
 function controlName(el: Element): string {
   return (el.getAttribute("aria-label") ?? el.textContent ?? "").trim();
@@ -187,7 +191,11 @@ export function diagnoseLyricsInputState(): string {
     LYRICS_MODE_NAMES
   );
   if (lyricsMode === "Prompt" || lyricsMode === "Instrumental") {
-    return `Lyrics mode が ${lyricsMode} になっています。Write に切り替えてください。`;
+    return [
+      `Lyrics mode が ${lyricsMode} になっています。Write に切り替えてください。`,
+      LYRICS_WRITE_LOCATION,
+      LYRICS_WRITE_REASON,
+    ].join("\n");
   }
 
   const createFormMode = selectedModeName(
@@ -197,13 +205,18 @@ export function diagnoseLyricsInputState(): string {
     CREATE_FORM_MODE_NAMES
   );
   if (createFormMode === "Simple" || createFormMode === "Sounds") {
-    return `Create form mode が ${createFormMode} になっています。Advanced タブを選択してください。`;
+    return [
+      `Create form mode が ${createFormMode} になっています。Advanced タブを選択してください。`,
+      LYRICS_WRITE_LOCATION,
+      LYRICS_WRITE_REASON,
+    ].join("\n");
   }
 
   return [
     "Lyrics 欄を表示できる状態か確認してください:",
     "- Advanced タブが選択されているか",
-    "- Lyrics mode が Write になっているか",
+    "- More options を開き、Lyrics mode が Write になっているか",
+    `- ${LYRICS_WRITE_REASON}`,
     "- Suno の UI 言語が日本語になっていないか（英語推奨）",
   ].join("\n");
 }
