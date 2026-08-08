@@ -48,6 +48,10 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet"
 import { ChannelStockTable } from "@/features/channel-stock/channel-stock-table"
+import {
+  PublicationHeatmap,
+  type PublicationActivityResponse,
+} from "@/features/publication-activity/publication-heatmap"
 import type { ChannelOverview, Summary } from "@/lib/dashboard-types"
 import {
   formatCollectedAt,
@@ -93,7 +97,19 @@ async function requestJson<T>(path: string): Promise<T> {
   if (!response.ok) {
     throw new Error(`HTTP ${response.status}`)
   }
-  return response.json() as Promise<T>
+  return response.clone().json() as Promise<T>
+}
+
+function isPublicationActivityResponse(
+  value: unknown
+): value is PublicationActivityResponse {
+  if (typeof value !== "object" || value === null) return false
+  const response = value as Record<string, unknown>
+  return (
+    typeof response.days === "object" &&
+    response.days !== null &&
+    Array.isArray(response.channels)
+  )
 }
 
 function LoadingState() {
@@ -463,6 +479,8 @@ function Detail({ detail }: { detail: ChannelDetail }) {
 export function App() {
   const { theme, setTheme } = useTheme()
   const [channels, setChannels] = useState<ChannelOverview[] | null>(null)
+  const [publicationActivity, setPublicationActivity] =
+    useState<PublicationActivityResponse | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [detail, setDetail] = useState<ChannelDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -470,11 +488,22 @@ export function App() {
   const detailRequestId = useRef(0)
 
   useEffect(() => {
-    requestJson<OverviewResponse>("/api/channels")
+    void requestJson<OverviewResponse>("/api/channels")
       .then((response) => setChannels(response.channels))
-      .catch((reason: unknown) =>
+      .catch((reason: unknown) => {
         setError(reason instanceof Error ? reason.message : String(reason))
-      )
+      })
+
+    void Promise.allSettled([requestJson<unknown>("/api/publications")]).then(
+      ([publicationResult]) => {
+        if (
+          publicationResult.status === "fulfilled" &&
+          isPublicationActivityResponse(publicationResult.value)
+        ) {
+          setPublicationActivity(publicationResult.value)
+        }
+      }
+    )
   }, [])
 
   async function selectChannel(channelId: string) {
@@ -568,6 +597,10 @@ export function App() {
             </Sheet>
           </div>
         </header>
+
+        {publicationActivity ? (
+          <PublicationHeatmap days={publicationActivity.days} />
+        ) : null}
 
         {error ? (
           <Alert variant="destructive">
