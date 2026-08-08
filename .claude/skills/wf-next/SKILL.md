@@ -88,6 +88,41 @@ description: "Use when 既存コレクション（collections/planning/）を一
 
 ## Instructions
 
+### 直接実行の canonical timing 契約
+
+`/wf-next` を直接呼んだ場合も、state 判定・lease・history/timing の正は `/wf-auto` と同じ state script とする。下記「1. アクティブなコレクションの特定」の既存手順で対象名を `<fixed-name>` として固定した後、フェーズ処理や子 skill を開始する前に、チャンネルルートで次の順序を守る。
+
+```bash
+STATE_SCRIPT=.claude/skills/wf-auto/references/wf-auto-state.py
+uv run python "$STATE_SCRIPT" acquire --channel-dir .
+uv run python "$STATE_SCRIPT" plan --channel-dir . --collection <fixed-name>
+uv run python "$STATE_SCRIPT" heartbeat --channel-dir . --token <token>
+uv run python -c 'from datetime import UTC, datetime; print(datetime.now(UTC).isoformat())'
+```
+
+`acquire` の `busy` / exit 20 では作業を開始しない。`plan` 後は `heartbeat` の JSON 応答が `status: refreshed` の場合だけ lease owner の確認成功として AI 開始時刻を取得し、stdout を同じ attempt 専用の `<current-attempt-ai-started-at>` として保持する。`status: not-owner` も exit 0 で返るため、exit 0 だけでは owner と判定しない。`status: not-owner` では開始時刻を取得せず停止する。resolver が返した固定 collection と action を `<resolver-action>` としてそのまま使い、公開許可や実成果物から action を独自再判定せず、別 action へ読み替えない。別 collection ID や timing 保存処理も作らない。
+
+resolver action と直接入口の既存責務は次の対応を正とする。
+
+| resolver action | 直接 `/wf-next` の処理 |
+|---|---|
+| `wf-new` | planning が未完了であることを報告し、`/wf-new` を再開 action として blocked で閉じる |
+| `lyria` / `suno-helper` / `masterup` | prepared の既存のフェーズ別処理をそのまま実行し、同じ action ID で記録する |
+| `wf-next-local` / `wf-next` | mastered / publishing の既存のフェーズ別処理を実行する。`wf-next-local` は resolver が許可したローカル成果物までに限定し、YouTube write を行わない |
+| `post-publish` | production 完了を検証して `/post-publish` を再開 action として blocked で閉じ、公開後処理を本 skill へ複製しない |
+| `blocked` | resolver の reason / resume action を変更せず blocked で閉じる |
+| `complete` | 下記 complete の既存検証を通過した場合だけ success で閉じる |
+
+既存の成果物検証、承認 gate、state 更新責務を変更せず、子 skill の終了報告だけで成功にしない。期待成果物と state を検証した後、成功だけを success、手動介入または責務外 action への handoff を blocked、検証失敗を含むその他を failed とし、すべて同じ固定 collection、resolver action、同じ attempt の AI 開始時刻で閉じる。対話 gate の時間分類と `--human-interval` は `/wf-auto` の canonical timing 契約をそのまま使う。
+
+```bash
+uv run python "$STATE_SCRIPT" record --channel-dir . --token <token> --collection <fixed-name> --action <resolver-action> --status success|blocked|failed --reason <reason> [--resume-action <resolver-resume-action>] --ai-started-at <current-attempt-ai-started-at> [--human-interval <human-start> <human-end>]...
+```
+
+status を記録した後は、成功時だけでなく blocked / failed の停止報告前にも同じ固定 collection を `plan --channel-dir . --collection <fixed-name>` で再評価し、次回の再開 action を推測しない。全終了経路の `finally` 相当で `release --channel-dir . --token <token>` を実行し、他 token の lease は変更しない。
+
+`/wf-auto` が token、resolver の action / collection、attempt の開始時刻を固定して本 skill へ委譲した場合は、その実行文脈を再利用する。nested `acquire` や独自 attempt の作成・記録・release は行わず、成果物と state の検証結果を呼び出し元へ返し、canonical history の記録と lease 解放は `/wf-auto` に一度だけ行わせる。
+
 ### 1. アクティブなコレクションの特定
 
 - `collections/planning/` の `workflow-state.json` を探索
