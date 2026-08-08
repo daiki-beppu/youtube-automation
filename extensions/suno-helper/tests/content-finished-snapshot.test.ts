@@ -28,6 +28,7 @@ async function loadContentScript(
   overrides?: {
     writeFinishedSnapshotError?: Error;
     persistedFinishedSnapshot?: SnapshotPayload | null;
+    downloadFilename?: string;
   }
 ) {
   vi.resetModules();
@@ -57,6 +58,9 @@ async function loadContentScript(
     sendMessage: vi.fn((type: string, payload?: unknown) => {
       if (type === "progress") {
         progressMessages.push(payload as ProgressMessage);
+      }
+      if (type === "startDownload" && overrides?.downloadFilename) {
+        return Promise.resolve({ ok: true });
       }
       return Promise.resolve();
     }),
@@ -173,7 +177,13 @@ async function loadContentScript(
   }));
 
   vi.doMock("../lib/download", () => ({
-    triggerDownloadAll: vi.fn(() => Promise.resolve()),
+    triggerDownloadAll: vi.fn(async () => {
+      if (overrides?.downloadFilename) {
+        handlers.get("downloadComplete")?.({
+          data: { filename: overrides.downloadFilename },
+        });
+      }
+    }),
   }));
 
   vi.doMock("../../shared/api", async () => ({
@@ -254,6 +264,35 @@ describe("content.ts 完了時リロード前の FINISHED snapshot 退避", () =
     expect(writeFinishedSnapshotMock.mock.invocationCallOrder[0]).toBeLessThan(
       scheduleRunCompleteReloadMock.mock.invocationCallOrder[0]
     );
+  });
+
+  it("Given 完全自動生成が完走 When FINISHED snapshot を永続化 Then Download 再開用 clip 契約を保持する", async () => {
+    const autoRunClipIds = ["clip-1", "clip-2", "clip-3", "clip-4"];
+    const { runHandler, progressMessages, writeFinishedSnapshotMock } =
+      await loadContentScript(autoRunClipIds, {
+        downloadFilename: "/downloads/collection.zip",
+      });
+
+    runHandler({
+      data: {
+        ...partialRunPayload(),
+        range: undefined,
+      },
+    });
+
+    await vi.waitFor(() =>
+      expect(progressMessages).toContainEqual(
+        expect.objectContaining({ phase: PHASE.FINISHED })
+      )
+    );
+    expect(writeFinishedSnapshotMock).toHaveBeenCalledWith({
+      snapshot: expect.objectContaining({
+        submittedClipIds: autoRunClipIds,
+        submittedClipIdsAreDurationFiltered: true,
+        playlistExpectedClipCount: autoRunClipIds.length,
+      }),
+      timestamp: expect.any(Number),
+    });
   });
 
   it("Given snapshot 退避が失敗 When FINISHED Then リロードを見送る（in-memory snapshot を生かして復元性を守る）", async () => {
