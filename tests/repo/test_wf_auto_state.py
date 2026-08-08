@@ -660,7 +660,11 @@ def test_cli_records_timed_bootstrap_stop_before_collection_exists(
     monkeypatch.setattr(runner.secrets, "token_hex", lambda _: safe_token)
 
     token = runner.acquire_lease(tmp_path, now=time.time(), ttl_seconds=60)
-    started_at = (datetime.now(UTC) - timedelta(seconds=1)).isoformat()
+    started_at = datetime.now(UTC) - timedelta(seconds=30)
+    first_human_start = started_at + timedelta(seconds=5)
+    first_human_end = started_at + timedelta(seconds=10)
+    second_human_start = started_at + timedelta(seconds=15)
+    second_human_end = started_at + timedelta(seconds=20)
 
     assert token == safe_token
     assert (
@@ -676,7 +680,13 @@ def test_cli_records_timed_bootstrap_stop_before_collection_exists(
                 "--reason",
                 "user_input_required",
                 "--ai-started-at",
-                started_at,
+                started_at.isoformat(),
+                "--human-interval",
+                first_human_start.isoformat(),
+                first_human_end.isoformat(),
+                "--human-interval",
+                second_human_start.isoformat(),
+                second_human_end.isoformat(),
             ]
         )
         == 0
@@ -686,11 +696,71 @@ def test_cli_records_timed_bootstrap_stop_before_collection_exists(
     assert attempt["collection"] is None
     assert attempt["action"] == "wf-new"
     assert attempt["status"] == status
-    assert attempt["timing"]["segments"] == [
-        {
-            "kind": "ai",
-            "started_at": started_at,
-            "ended_at": attempt["timing"]["ended_at"],
-            "duration_seconds": attempt["timing"]["ai_seconds"],
-        }
+    assert [segment["kind"] for segment in attempt["timing"]["segments"]] == [
+        "ai",
+        "human",
+        "ai",
+        "human",
+        "ai",
     ]
+    assert attempt["timing"]["segments"][1] == {
+        "kind": "human",
+        "started_at": first_human_start.isoformat(),
+        "ended_at": first_human_end.isoformat(),
+        "duration_seconds": 5.0,
+    }
+    assert attempt["timing"]["segments"][3] == {
+        "kind": "human",
+        "started_at": second_human_start.isoformat(),
+        "ended_at": second_human_end.isoformat(),
+        "duration_seconds": 5.0,
+    }
+    assert attempt["timing"]["human_seconds"] == 10.0
+
+
+@pytest.mark.parametrize(
+    ("ai_started_at", "human_intervals", "message"),
+    [
+        (None, [["2026-08-08T00:00:01+00:00", "2026-08-08T00:00:02+00:00"]], "ai_started_at"),
+        (
+            "2026-08-08T00:00:00+00:00",
+            [
+                ["2026-08-08T00:00:01+00:00", "2026-08-08T00:00:03+00:00"],
+                ["2026-08-08T00:00:02+00:00", "2026-08-08T00:00:04+00:00"],
+            ],
+            "overlap",
+        ),
+    ],
+)
+def test_cli_rejects_invalid_bootstrap_human_intervals_without_mutating_history(
+    tmp_path: Path,
+    runner: ModuleType,
+    capsys: pytest.CaptureFixture[str],
+    ai_started_at: str | None,
+    human_intervals: list[list[str]],
+    message: str,
+) -> None:
+    token = runner.acquire_lease(tmp_path, now=time.time(), ttl_seconds=60)
+    history_path = tmp_path / ".automation-run" / "history.json"
+    original = json.dumps({"schema_version": 2, "attempts": []})
+    history_path.write_text(original, encoding="utf-8")
+
+    argv = [
+        "record-bootstrap",
+        "--channel-dir",
+        str(tmp_path),
+        "--token",
+        token,
+        "--status",
+        "blocked",
+        "--reason",
+        "user_input_required",
+    ]
+    if ai_started_at is not None:
+        argv.extend(["--ai-started-at", ai_started_at])
+    for interval in human_intervals:
+        argv.extend(["--human-interval", *interval])
+
+    assert runner.main(argv) == 2
+    assert message in json.loads(capsys.readouterr().out)["reason"]
+    assert history_path.read_text(encoding="utf-8") == original

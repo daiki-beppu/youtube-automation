@@ -166,23 +166,6 @@ def _attempt_timing(segments: list[TimingSegment] | None) -> dict | None:
     return timing
 
 
-def _ai_timing_segment(started_at: str, ended_at: str) -> TimingSegment:
-    started = _timestamp(started_at, field="ai_started_at", source="record")
-    ended = _timestamp(ended_at, field="recorded_at", source="record")
-    try:
-        duration_seconds = (ended - started).total_seconds()
-    except TypeError as exc:
-        raise ValueError("record: ai_started_at と recorded_at の timezone 指定が一致しません") from exc
-    segment: TimingSegment = {
-        "kind": "ai",
-        "started_at": started_at,
-        "ended_at": ended_at,
-        "duration_seconds": duration_seconds,
-    }
-    _validate_timing({"segments": [segment]}, source="record")
-    return segment
-
-
 def _timing_segment(kind: Literal["ai", "human"], started_at: str, ended_at: str) -> TimingSegment:
     started = _timestamp(started_at, field=f"{kind}_started_at", source="record")
     ended = _timestamp(ended_at, field=f"{kind}_ended_at", source="record")
@@ -909,8 +892,12 @@ def record_bootstrap_attempt(
     reason: str,
     now: str,
     ai_started_at: str | None = None,
+    human_intervals: list[list[str]] | None = None,
 ) -> None:
     """Record an unattended `/wf-new` stop before a collection exists."""
+    if human_intervals and ai_started_at is None:
+        raise ValueError("record-bootstrap: human_interval には ai_started_at が必要です")
+    segments = _timing_segments(ai_started_at, human_intervals or [], now) if ai_started_at is not None else None
     record_attempt(
         root,
         token=token,
@@ -920,7 +907,7 @@ def record_bootstrap_attempt(
         reason=reason,
         resume_action="wf-new",
         now=now,
-        segments=[_ai_timing_segment(ai_started_at, now)] if ai_started_at is not None else None,
+        segments=segments,
     )
 
 
@@ -956,6 +943,7 @@ def _parser() -> argparse.ArgumentParser:
     bootstrap.add_argument("--status", choices=("blocked", "failed"), required=True)
     bootstrap.add_argument("--reason", required=True)
     bootstrap.add_argument("--ai-started-at")
+    bootstrap.add_argument("--human-interval", action="append", nargs=2, metavar=("START", "END"))
     return parser
 
 
@@ -987,6 +975,7 @@ def main(argv: list[str] | None = None) -> int:
                 reason=args.reason,
                 now=recorded_at,
                 ai_started_at=args.ai_started_at,
+                human_intervals=args.human_interval,
             )
             result = {"status": "recorded"}
         else:
