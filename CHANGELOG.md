@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 - `feat(collection-serve)`: Suno downloaded の実 ZIP 適用成功応答へ期待数・配置数・欠損数の placement summary を追加し、部分成功時の欠損理由と workflow state を同じ count に統一。playlist URL 記録だけの先行 POST は legacy 応答を維持（#3164）。
+- `feat(suno-helper)`: FINISHED progress に downloaded API の型付き配置 summary を載せ、content snapshot へ無加工で保持できるようにした（#3167）。
+
 - `feat(suno-helper)`: downloaded API の型付き配置 summary を privileged messaging relay でも無加工のまま返すよう統一（#3166）。
 
 - `feat(suno-helper)`: downloaded 成功応答の期待数・配置数・欠損数・欠損理由を型検証して保持し、不正な count や不整合な内訳を fail-loud で拒否（#3165）。
