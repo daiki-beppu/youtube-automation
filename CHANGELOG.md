@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `fix(extensions)`: ローカル配信元 discovery は registry entry のうち稼働確認できたサーバーだけを URL 順で返し、registry が空・到達不能・不正、または全 probe 失敗の場合は未確認の既定候補を混ぜず空配列を返すようにした（#2992）。
 - `refactor(tests)`: 旧 `unit` / `streaming` テストを canonical owner と `tests/repo/streaming/` へ整理し、root allowlist・source layer・source owner の配置規約を repository contract として機械担保した（#3047）。
 - `fix(tests)`: collection serve の subprocess lifecycle テストで待機処理を共通化し、デッドライン到達時に待機対象を明示して失敗させるようにした。server 起動完了は PID ファイルの存在ではなく HTTP identity endpoint の応答まで確認し、高負荷時の起動途中を準備完了と誤認しないようにした（#3091）。
 - `refactor(tests)`: domains / application / configuration 層と同名衝突分のテストを production module の鏡像配置へ移し、repository contract は `tests/repo/`、infrastructure の裁定分は各鏡像へ配置した。active consumer の参照を canonical path に追従させ、複数テストが同一 production module に対応する場合の共存規則と root 残置理由を配置規約へ記録した（#3046）。

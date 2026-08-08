@@ -1,6 +1,5 @@
 import { parseServerInfo, type ServerInfo } from "./api";
 import {
-  DEFAULT_SERVER_SOURCES,
   DISCOVERY_REGISTRY_URL,
   DISCOVERY_REQUEST_TIMEOUT_MS,
   DISCOVERY_SCHEMA_VERSION,
@@ -176,28 +175,21 @@ export async function discoverServerSources(
       fetcher,
       DISCOVERY_REGISTRY_URL
     );
-    if (!response.ok) return [...DEFAULT_SERVER_SOURCES];
+    if (!response.ok) return [];
     const registry = parseDiscoveryResponse(body);
     const probed = await Promise.all(
       registry.servers.map((entry) => validatedSource(fetcher, entry))
     );
-    const byUrl = new Map(
-      DEFAULT_SERVER_SOURCES.map((source) => [
-        normalizeServerUrl(source.url),
-        source,
-      ])
-    );
+    const byUrl = new Map<string, LocalServerSource>();
     for (const source of probed.filter(
       (source): source is LocalServerSource => source !== undefined
     )) {
       byUrl.set(source.url, source);
     }
-    const [defaultSource, ...dynamic] = [...byUrl.values()];
-    return [
-      defaultSource,
-      ...dynamic.sort((left, right) => left.url.localeCompare(right.url)),
-    ];
+    return [...byUrl.values()].sort((left, right) =>
+      left.url.localeCompare(right.url)
+    );
   } catch {
-    return [...DEFAULT_SERVER_SOURCES];
+    return [];
   }
 }

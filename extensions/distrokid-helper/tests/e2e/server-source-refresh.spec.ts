@@ -195,6 +195,7 @@ test("最初の開操作では停止済み menu を開かず、検出完了後�
 
     active = newServer;
     delayNextResponse = true;
+    releaseFails = true;
     await trigger.click();
     await expect(trigger).toBeDisabled();
     await expect(sourceField).toHaveAttribute(
@@ -205,19 +206,13 @@ test("最初の開操作では停止済み menu を開かず、検出完了後�
 
     await expect(trigger).toBeEnabled();
     const options = page.getByRole("option");
-    await expect(options).toContainText([
-      "YouTube Automation (default)",
-      "New",
-    ]);
+    await expect(options).toContainText(["New | distrokid-helper"]);
     await expect(options.filter({ hasText: "Old" })).toHaveCount(0);
     expect(
       await options
         .first()
         .evaluate((option) => option.getRootNode() instanceof ShadowRoot)
     ).toBe(true);
-
-    releaseFails = true;
-    await page.getByRole("option", { name: /New/ }).click();
     await expect(page.getByRole("alert")).toHaveText(/HTTP 500/);
   } finally {
     await context?.close();
