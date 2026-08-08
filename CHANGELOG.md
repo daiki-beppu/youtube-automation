@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `refactor(packaging)`: リポジトリを責務別 layer へ再配置し、canonical owner への production import・receipt・active documentation を同期した。`youtube_automation.utils` と `infrastructure.legacy_utils` は下流向け compatibility façade として installed wheel でも維持し、削除・統合候補は `docs/architecture/reorganization-followups.md` に記録した。
 ### Added
 
+- `feat(wf-auto)`: collection 作成前の bootstrap attempt でも複数の人間介入区間を AI 区間と分離し、同じ canonical timing history に保存できるようにした（#3342）。
 - `docs(wf-auto)`: blocked の停止決定時点で attempt を閉じて再開までの放置時間を計上せず、再開は新しい attempt と AI 開始時刻に分離する契約を追加した。通常の API polling と agent が保持する background wait は human interval ではなく AI 実行時間として分類する（#3321）。
 - `docs(wf-auto)`: 同一 run で回答を待つ人間介入 gate の直前・直後をメインエージェントが採時し、同じ canonical action attempt の全閉区間を発生順に `record --human-interval` へ渡す実行契約を追加した（#3320）。
 - `feat(wf-auto)`: state CLI の `record` に repeatable な `--human-interval START END` を追加し、AI 開始から記録時刻までを連続した AI / human timing segment として保存できるようにした。不正な逆転・重複・範囲外・timezone 不一致は既存 history を変更せず拒否する（#3319）。
