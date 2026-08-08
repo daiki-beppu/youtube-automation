@@ -116,6 +116,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `docs(thumbnail)`: `/thumbnail` の長大な provider、generation、quality / operations 詳細を配布対象の references へ段階的に分離し、SKILL.md 本文には実行コマンド・承認ゲート・完了条件と明示的な導線を維持した。あわせて prompt schema 参照を wheel 内の正規パスへ統一した。実行時の振る舞いと成果物契約は変更しない（#3005）。
 - `refactor(automation-update)`: `yt-automation-update apply --help` だけで各 flag の用途と制約を確認できるようにし、追従スキルは代表フローと破壊的・直感に反する操作の承認案内へ整理した。既存の pin 更新・同期・smoke check の実行挙動は変更しない（#3513）。
 - `feat(site)`: 公開リリースノートサイトへ公式 DADS design token package を導入し、accent を blue key token の system 配色へ移行、リリース分類色を key / neutral role に分離した。あわせて muted text variable を現行 token へ修正した（#3550, #3551）。
+- `docs(wf-auto)`: 下流へ配布される skill から wheel 非同梱のオーケストレーション文書への参照を除去し、長時間処理の待機主体・30 秒以下の poll・終了観測という実行契約を inline のまま維持した（#3525）。
 - `refactor(tests)`: 旧 `unit` / `streaming` テストを canonical owner と `tests/repo/streaming/` へ整理し、root allowlist・source layer・source owner の配置規約を repository contract として機械担保した（#3047）。
 - `fix(tests)`: collection serve の subprocess lifecycle テストで待機処理を共通化し、デッドライン到達時に待機対象を明示して失敗させるようにした。server 起動完了は PID ファイルの存在ではなく HTTP identity endpoint の応答まで確認し、高負荷時の起動途中を準備完了と誤認しないようにした（#3091）。
 - `refactor(tests)`: domains / application / configuration 層と同名衝突分のテストを production module の鏡像配置へ移し、repository contract は `tests/repo/`、infrastructure の裁定分は各鏡像へ配置した。active consumer の参照を canonical path に追従させ、複数テストが同一 production module に対応する場合の共存規則と root 残置理由を配置規約へ記録した（#3046）。
