@@ -346,16 +346,13 @@ uv run yt-doctor --json
 
 ### Step 10: 初回保存と automation-update 前の整理
 
-`/channel-new` 完了直後は、`/setup` と本スキルで生成したファイルが未コミットのまま残りやすい。後続の `/automation-update` は dirty worktree で停止するため、最後に必ず git 状態を確認する。
+初回保存・cleanup・設定 push・障害対応の詳細は **[save-push-troubleshooting.md](references/save-push-troubleshooting.md)** を Read してから実行する。後続の `/automation-update` は dirty worktree で停止するため、最後に必ず git 状態を確認する。
 
 ```bash
 git status --porcelain
 ```
 
-出力が空なら、作業ツリーが整理済みで `/automation-update` に進める状態だと案内する。
-
-出力が非空の場合は、差分をユーザーに見せたうえで初回 commit を作成する。シークレットを混入させないため、staged files 全体を commit 前 guard で確認してから commit する。
-ignore 済み `.env` は exclude pathspec 付き `git add` でも Git が exit 1 になり得るため、`git add -A` 後の guard を唯一の安全境界にする。guard が失敗した場合は staged secret を自動で外して停止し、`git commit` へ進まない。
+出力が空なら、作業ツリーが整理済みで `/automation-update` に進める状態だと案内する。非空なら差分をユーザーに見せ、`git add -A` 後の guard を唯一の安全境界にする。次を順に実行し、guard が失敗した場合は staged secret を自動で外して停止して `git commit` へ進まない。
 
 ```bash
 git status --short
@@ -366,16 +363,7 @@ git commit -m "chore: 初回チャンネル設定を保存"
 git status --porcelain
 ```
 
-guard が `secret-like file staged; unstaged before commit` を出した場合は commit しない。該当ファイルは staged から外れているため、`.gitignore` を確認してからやり直す。
-
-`gh repo create` や remote 作成を保留している、git user identity 未設定で commit できない、またはユーザーが今 commit しない判断をした場合は、保存未完了として次の手順を明確に案内して終了する:
-
-```text
-未コミット変更が残っています。/automation-update の前に以下を完了してください:
-  1. git status --short で差分を確認
-  2. .env / auth/client_secrets.json / auth/token*.json が staged されていないことを確認
-  3. git commit -m "chore: 初回チャンネル設定を保存"
-```
+guard が `secret-like file staged; unstaged before commit` を出した場合は commit しない。remote 作成保留、git user identity 未設定、またはユーザーが今 commit しない場合は、reference の「未コミット変更が残っています。/automation-update の前に以下を完了してください」案内を提示して保存未完了として終了する。
 
 保存未完了として終了した場合は、以下の成功案内は出さない。作業ツリーが最初から clean、または初回 commit が成功した場合だけ最後に案内する:
 
@@ -416,15 +404,22 @@ guard が `secret-like file staged; unstaged before commit` を出した場合�
 
 ## 設定 push モード（運用中チャンネルの設定同期）
 
-ローカル `config/channel/meta.json` の `youtube_channel` セクション（description / keywords / country / default_language / unsubscribed_trailer / made_for_kids）と `config/localizations.json` を YouTube チャンネルに反映、もしくは YouTube 側から取り込む。新規セットアップ後はもちろん、運用中に設定を変更したときの **設定反映フェーズ** としても本セクションが入口。
+実行前に **[save-push-troubleshooting.md](references/save-push-troubleshooting.md)** を Read する。ローカル `config/channel/meta.json` の `youtube_channel` と `config/localizations.json` を YouTube チャンネルに反映、もしくは YouTube 側から取り込む。
 
 **前提**: OAuth 認証完了済み (`auth/token.json` が存在) かつ `config/channel/meta.json` の `channel.channel_id` が設定済みであること。
 
-**運用フロー（push 方向: local → YouTube）**:
+push 方向は次の読み取り専用確認を順に実行する。
 
-1. `uv run yt-channel-settings diff` で意図しないずれがないか確認（読み取り専用）
-2. `uv run yt-channel-settings push` の dry-run 出力をレビュー（`channels().update()` 呼び出しなし）
-3. 問題なければ `uv run yt-channel-settings push --apply` で実反映
+```bash
+uv run yt-channel-settings diff
+uv run yt-channel-settings push
+```
+
+dry-run の差分、対象 part、`meta.json::channel.channel_id` を提示し、ユーザー承認後だけ実反映する。
+
+```bash
+uv run yt-channel-settings push --apply
+```
 
 **逆方向（pull: YouTube → local）が必要な場合**:
 
@@ -433,24 +428,11 @@ uv run yt-channel-settings pull               # dry-run: 取り込み内容の�
 uv run yt-channel-settings pull --apply       # 実反映: meta.json と localizations.json を書き換え
 ```
 
-YouTube 側で手動編集した設定をローカルに取り込みたいときに使う。`--apply` 後は git diff で変更内容を必ず確認すること。
-
-**API 制約と運用上の注意**:
-
-- `--apply` 実行時は `brandingSettings` / `localizations` / `status` を **別々の `channels().update()` 呼び出し** として個別に発火する。YouTube Data API は `brandingSettings` を他の part と同時送信すると `branding_settings cannot be used with other parts` で 400 エラーを返すため (#230)。この分割は CLI 側で自動対応済みで、運用者が意識する必要はない。
-- `localizations` セクションを **完全に空** にして送信すると `Required` 400 エラーになる。`config/localizations.json` の `supported_languages` を全削除して全ローカライゼーションを消したい場合は、少なくとも `default_language` の 1 件はエントリを残して push すること（送信しなかったロケールは YouTube 側で自動削除される）。
-- `--no-localizations` を付けると localizations 関連の比較・送信をスキップする（branding と status だけを反映したいときに使う）。
-- 認可スコープは `youtube.force-ssl` が必要。`auth/token.json` が古い OAuth scope のままだと 403 になるので、その場合は `auth/token.json` を削除して再認証する。
+pull は YouTube 側の手動編集を取り込む場合だけ使い、`--apply` 後は `git diff` で確認する。API 契約として、`brandingSettings` / `localizations` / `status` は別々の `channels().update()` で送り、`branding_settings cannot be used with other parts` を避ける。空の `localizations` は `Required` 400 になる。`--no-localizations` は localization を対象外にする。認可には `youtube.force-ssl` が必要で、古い `auth/token.json` の scope 不足時は再認証する。
 
 ## 障害時ガイダンス
 
-| 状況 | 兆候 | 対処 |
-|---|---|---|
-| `/setup` 未完了 | `auth/token.json` 不在、ADC 未設定、API 403 | `/setup` を先に完了する |
-| `gh` CLI 不在/未認証 | `command not found: gh` / `gh auth` エラー | `gh` を install し `gh auth login` を実行。remote 作成だけ保留して config 生成は継続可 |
-| YouTube quota / rate | HTTP 429 / 403 `quotaExceeded` | 日次 quota リセットを待つか、対象チャンネル数を絞る |
-| seed が誤チャンネル | `yt-channel-seed --no-write-benchmark --json` の表示が想定と違う | ユーザー確認で不採用にし、承認後の書き込みコマンドを実行しない |
-| branding push 失敗 | `yt-channel-settings push --apply` が 400/403 | dry-run 差分、OAuth scope、`meta.json::channel.channel_id` を確認する |
+詳細な兆候・対処は **[save-push-troubleshooting.md](references/save-push-troubleshooting.md)** を Read する。`/setup` 未完了は setup 完了まで停止し、`gh` 未認証は remote 作成だけ保留できる。quota / rate はリセット待ちまたは対象削減、誤チャンネルは不採用、branding push 失敗は dry-run 差分・OAuth scope・`meta.json::channel.channel_id` を確認し、原因解消まで書き込みを再実行しない。
 
 ## Cross References
 
