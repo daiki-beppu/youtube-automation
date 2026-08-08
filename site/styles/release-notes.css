@@ -66,6 +66,17 @@
   margin: 0 0 1.5rem;
 }
 
+.release-scale + .release-scale {
+  margin-top: 2rem;
+}
+
+.release-scale > h3 {
+  color: var(--color-muted-foreground);
+  font-size: clamp(1.1rem, 2vw, 1.35rem);
+  letter-spacing: -0.02em;
+  margin: 0 0 1rem;
+}
+
 .release-list {
   display: grid;
   gap: 1rem;
@@ -119,7 +130,7 @@
   color: var(--release-extension);
 }
 
-.release-card h3 {
+.release-card h4 {
   font-size: clamp(1.45rem, 3vw, 2rem);
   letter-spacing: -0.025em;
   margin: 1.1rem 0 0.55rem;
