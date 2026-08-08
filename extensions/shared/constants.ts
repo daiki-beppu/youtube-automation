@@ -299,6 +299,12 @@ export interface LocalServerSource {
   id: string;
   label: string;
   url: string;
+  capabilities?: {
+    distrokid: {
+      mode: "disabled" | "single" | "dir";
+    };
+  };
+  collectionsRoot?: string;
 }
 
 export type HelperProcessName = "distrokid-helper" | "suno-helper";
