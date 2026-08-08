@@ -14,16 +14,16 @@
 //     fields: ResolvedAdvancedFields { excludeStyles, weirdness, styleInfluence, vocalGender: { male, female } }
 //   注入順序: Exclude styles (text, 高速) → vocal_gender (click 1 回) → Weirdness → Style Influence
 //   各フィールドの非対称契約:
-//     - entry に値有 (=== undefined でない) + 対応 selector が null:
-//         - exclude_styles / vocal_gender → throw (fail-loud、UI 改装検知)
-//         - slider 2 つ → console.warn + onSliderSkip + skip (fail-soft、#1720。値は UI で手動設定でき
+//     - exclude_styles / vocal_gender に値有 + 対応 selector が null → throw (fail-loud、UI 改装検知)
+//     - slider に値有 (!= null) + 対応 selector が null
+//         → console.warn + onSliderSkip + skip (fail-soft、#1720。値は UI で手動設定でき
 //           Create を跨いで永続するため、Suno のリネームによる未検出で run を中断しない)
-//     - entry に値無 (=== undefined)                              → skip (fail-soft、後方互換)
+//     - slider に値無 (null / undefined)                          → skip (fail-soft)
 //     - entry に値有 + selector 有                                 → 注入する
 //       (exclude_styles は setNativeValue / slider 2 つは setSliderValue / vocal_gender は click)
 //     - vocal_gender = "neutral" / "auto"                          → click しない (既選択を解除しない)
 //     - vocal_gender = "male" / "female" + 対応ボタンが既選択 → click しない (冪等)
-//   値の有無判定は `!== undefined`。0 や "" の falsy 値を truthy 判定で脱落させない。
+//   slider 値の有無判定は `!= null`。null / undefined は skip し、0 は有効値として注入する。
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -197,6 +197,34 @@ describe("injectAdvancedFields: 非対称契約 (fail-loud / fail-soft, #900)", 
       expect(slider.getAttribute("aria-valuenow")).toBe("50");
       expect(exclude.value).toBe("");
     });
+
+    it("Given entry.style_influence=null + UI は非 0 When 注入 Then UI を維持して bridge を呼ばない", async () => {
+      const styleInfluence = makeSlider(73);
+      const bridgeSetSlider = vi.fn().mockResolvedValue(true);
+
+      await injectAdvancedFields(
+        { style_influence: null },
+        { ...ALL_NULL, styleInfluence },
+        { bridgeSetSlider }
+      );
+
+      expect(styleInfluence.getAttribute("aria-valuenow")).toBe("73");
+      expect(bridgeSetSlider).not.toHaveBeenCalled();
+    });
+
+    it("Given entry.weirdness=null + UI は非 0 When 注入 Then UI を維持して bridge を呼ばない", async () => {
+      const weirdness = makeSlider(41);
+      const bridgeSetSlider = vi.fn().mockResolvedValue(true);
+
+      await injectAdvancedFields(
+        { weirdness: null },
+        { ...ALL_NULL, weirdness },
+        { bridgeSetSlider }
+      );
+
+      expect(weirdness.getAttribute("aria-valuenow")).toBe("41");
+      expect(bridgeSetSlider).not.toHaveBeenCalled();
+    });
   });
 
   describe("値有 + selector 有 → 注入する", () => {
@@ -239,7 +267,7 @@ describe("injectAdvancedFields: 非対称契約 (fail-loud / fail-soft, #900)", 
       expect(styleInfluence.getAttribute("aria-valuenow")).toBe("85");
     });
 
-    it("Given entry.weirdness=0 + slider 有 When 注入 Then 0 を注入する（falsy でも !== undefined で通す）", async () => {
+    it("Given entry.weirdness=0 + slider 有 When 注入 Then 0 を注入する（falsy でも != null で通す）", async () => {
       // current 50 → target 0 (ArrowLeft×50)。truthy 判定だと 0 が skip され値ずれが残る。
       const weirdness = makeSlider(50);
 
@@ -251,6 +279,19 @@ describe("injectAdvancedFields: 非対称契約 (fail-loud / fail-soft, #900)", 
       await pending;
 
       expect(weirdness.getAttribute("aria-valuenow")).toBe("0");
+    });
+
+    it("Given entry.style_influence=0 + slider 有 When 注入 Then 0 を注入する", async () => {
+      const styleInfluence = makeSlider(50);
+
+      const pending = injectAdvancedFields(
+        { style_influence: 0 },
+        { ...ALL_NULL, styleInfluence }
+      );
+      await vi.advanceTimersByTimeAsync(2000);
+      await pending;
+
+      expect(styleInfluence.getAttribute("aria-valuenow")).toBe("0");
     });
   });
 
