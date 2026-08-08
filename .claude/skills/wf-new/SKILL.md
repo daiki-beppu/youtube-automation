@@ -96,6 +96,36 @@ uv run yt-init-collection "Pilot Direction Check" "pilot-direction-check" --trac
 
 定期的なデータ収集は `/analytics-collect`（`uv run yt-analytics` のラッパー）が担当し、通常時は workflow から呼び出さない。stale report の自動更新時だけは `/collection-ideate` の freshness SSOT が指定するシーケンスに従って subagent が呼び出す。必要に応じた cron / launchd 登録はユーザー側の運用とする。テーマは企画の結果で決定されるため、最初に手入力しない。
 
+### 直接実行の canonical timing 契約
+
+`/wf-new` を直接呼んだ場合も、state 判定・lease・history/timing の正は `/wf-auto` と同じ state script とする。独自の action ID、collection ID、timing 保存処理を作らない。channel config gate を通過したら、子 skill や collection 初期化を始める前に、チャンネルルートで次の順序を守る。
+
+```bash
+STATE_SCRIPT=.claude/skills/wf-auto/references/wf-auto-state.py
+uv run python "$STATE_SCRIPT" acquire --channel-dir .
+uv run python "$STATE_SCRIPT" plan --channel-dir .
+uv run python "$STATE_SCRIPT" heartbeat --channel-dir . --token <token>
+uv run python -c 'from datetime import UTC, datetime; print(datetime.now(UTC).isoformat())'
+```
+
+`acquire` の `busy` / exit 20 では作業を開始しない。`plan` 後は `heartbeat` の JSON 応答が `status: refreshed` の場合だけ lease owner の確認成功として AI 開始時刻を取得し、stdout を同じ attempt 専用の `<current-attempt-ai-started-at>` として保持する。`status: not-owner` も exit 0 で返るため、exit 0 だけでは owner と判定しない。`status: not-owner` では開始時刻を取得せず停止する。resolver が返した `action: wf-new` と resolver が返した collection（未作成なら `null`）だけを使い、別 action や別 collection に置き換えない。`wf-new` 以外が返った場合は本 skill で工程を推測せず、返された action を報告して `/wf-auto` からの再開を案内する。
+
+collection がまだ無い段階で blocked / failed になった場合は、canonical action `wf-new` の bootstrap attempt を次の形で閉じる。同じ run ですでに閉じた human interval があれば、省略・統合せず発生順にすべて渡す。
+
+```bash
+uv run python "$STATE_SCRIPT" record-bootstrap --channel-dir . --token <token> --status blocked|failed --reason <reason> --ai-started-at <current-attempt-ai-started-at> [--human-interval <human-start> <human-end>]...
+```
+
+resolver が collection を返した場合、または `yt-init-collection` の出力 path と `workflow-state.json` の実在を検証して作成済み collection の名前を固定した後は、success / blocked / failed のすべてを同じ fixed collection、canonical action `wf-new`、同じ attempt の AI 開始時刻で閉じる。成功は既存の成果物・state 検証をすべて通過した場合だけとし、手動介入は blocked、検証失敗を含むその他は failed とする。対話 gate の時間分類と `--human-interval` は `/wf-auto` の canonical timing 契約をそのまま使う。
+
+```bash
+uv run python "$STATE_SCRIPT" record --channel-dir . --token <token> --collection <fixed-name> --action wf-new --status success|blocked|failed --reason <reason> --ai-started-at <current-attempt-ai-started-at> [--human-interval <human-start> <human-end>]...
+```
+
+success を記録した後は同じ fixed collection を `plan --collection <fixed-name>` で再評価する。全終了経路の `finally` 相当で `release --channel-dir . --token <token>` を実行し、他 token の lease は変更しない。
+
+`/wf-auto` が token、resolver の action / collection、attempt の開始時刻を固定して本 skill へ委譲した場合は、その実行文脈を再利用する。nested `acquire` や独自 attempt の作成・記録・release は行わず、成果物と state の検証結果を呼び出し元へ返し、canonical history の記録と lease 解放は `/wf-auto` に一度だけ行わせる。
+
 ### 呼び出しルール
 
 - **順次実行**: 子スキルは必ず上から順に呼ぶ。Agent ツールで起動する subagent も一作業ずつ呼び、並列 Agent は使わない
