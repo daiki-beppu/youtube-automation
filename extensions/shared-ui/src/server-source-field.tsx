@@ -34,6 +34,18 @@ export interface ServerSourceFieldProps {
 export const SERVER_SOURCE_SELECT_EVENT =
   "youtube-automation:server-source-select";
 
+function ServerSourceValue({
+  refreshing,
+  hasSources,
+}: {
+  refreshing: boolean;
+  hasSources: boolean;
+}) {
+  if (refreshing) return <span>稼働中の配信元を更新中…</span>;
+  if (!hasSources) return <span>サーバーが起動されていません</span>;
+  return <SelectValue />;
+}
+
 export function ServerSourceField({
   value,
   sources,
@@ -51,20 +63,22 @@ export function ServerSourceField({
   const [open, setOpen] = React.useState(false);
   const [refreshing, setRefreshing] = React.useState(false);
   const refreshingRef = React.useRef(false);
-  const disabledRef = React.useRef(disabled);
+  const hasSources = sources.length > 0;
+  const interactionDisabled = disabled || !hasSources;
+  const interactionDisabledRef = React.useRef(interactionDisabled);
+  interactionDisabledRef.current = interactionDisabled;
   React.useEffect(() => {
-    disabledRef.current = disabled;
-    if (disabled) {
+    if (interactionDisabled) {
       setOpen(false);
     }
-  }, [disabled]);
+  }, [interactionDisabled]);
 
   const handleOpenChange = (nextOpen: boolean): void => {
     if (!nextOpen) {
       setOpen(false);
       return;
     }
-    if (disabledRef.current || refreshingRef.current) {
+    if (interactionDisabledRef.current || refreshingRef.current) {
       return;
     }
     setOpen(false);
@@ -75,7 +89,7 @@ export function ServerSourceField({
       .finally(() => {
         refreshingRef.current = false;
         setRefreshing(false);
-        if (!disabledRef.current) {
+        if (!interactionDisabledRef.current) {
           setOpen(true);
         }
       });
@@ -98,7 +112,7 @@ export function ServerSourceField({
       if (
         nextValue &&
         nextValue !== committedValueRef.current &&
-        !disabledRef.current &&
+        !interactionDisabledRef.current &&
         !refreshingRef.current
       ) {
         committedValueRef.current = nextValue;
@@ -128,7 +142,7 @@ export function ServerSourceField({
   return (
     <Field
       ref={fieldRef}
-      data-disabled={disabled || refreshing}
+      data-disabled={interactionDisabled || refreshing}
       data-selected-value={selectedValue}
       data-source-values={sources.map((source) => source.url).join(" ")}
       className={cn("gap-1", fieldClassName)}
@@ -140,7 +154,7 @@ export function ServerSourceField({
         items={items}
         value={selectedValue}
         open={open}
-        disabled={disabled || refreshing}
+        disabled={interactionDisabled || refreshing}
         onOpenChange={handleOpenChange}
         onValueChange={(nextValue) => nextValue && commitValue(nextValue)}
       >
@@ -151,7 +165,7 @@ export function ServerSourceField({
           {...restTriggerProps}
           {...triggerDataAttributes}
         >
-          {refreshing ? <span>稼働中の配信元を更新中…</span> : <SelectValue />}
+          <ServerSourceValue refreshing={refreshing} hasSources={hasSources} />
         </SelectTrigger>
         <SelectContent alignItemWithTrigger={false}>
           <SelectGroup>
