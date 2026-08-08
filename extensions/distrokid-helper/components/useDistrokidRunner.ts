@@ -62,6 +62,10 @@ interface CollectionLoadResult {
   isDirMode: boolean;
 }
 
+function supportsDistrokid(source: LocalServerSource): boolean {
+  return source.capabilities?.distrokid.mode !== "disabled";
+}
+
 export function useDistrokidRunner(): DistrokidRunnerState {
   const [serverUrl, setServerUrl] = useState("");
   const serverUrlRef = useRef(serverUrl);
@@ -322,12 +326,15 @@ export function useDistrokidRunner(): DistrokidRunnerState {
     if (injectionActiveRef.current) return;
     const revision = ++serverSourcesRevisionRef.current;
     try {
-      const sources = await discoverServerSources({ fetch: backgroundFetch });
+      const discovered = await discoverServerSources({
+        fetch: backgroundFetch,
+      });
       if (
         injectionActiveRef.current ||
         revision !== serverSourcesRevisionRef.current
       )
         return;
+      const sources = discovered.filter(supportsDistrokid);
       setServerSources(sources);
       const currentServerUrl = serverUrlRef.current;
       if (
@@ -357,13 +364,14 @@ export function useDistrokidRunner(): DistrokidRunnerState {
           discoverServerSources({ fetch: backgroundFetch }),
         ])
       )
-      .then(([stored, sources]) => {
+      .then(([stored, discovered]) => {
         if (
           initialFetchStartedRef.current ||
           revision !== serverSourcesRevisionRef.current
         )
           return;
         initialFetchStartedRef.current = true;
+        const sources = discovered.filter(supportsDistrokid);
         setServerSources(sources);
         if (!stored.trim()) return;
         const nextUrl = sources.some((source) => source.url === stored)

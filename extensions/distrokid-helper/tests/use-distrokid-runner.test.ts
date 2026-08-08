@@ -13,6 +13,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { LocalServerSource } from "../../shared/constants";
 import {
   useDistrokidRunner,
   type DistrokidRunnerState,
@@ -556,6 +557,86 @@ describe("useDistrokidRunner", () => {
 
     expect(current.serverSources.map(({ url }) => url)).toContain(live.url);
     expect(serverUrlItem.setValue).toHaveBeenCalledWith(live.url);
+  });
+
+  it("should filter only explicitly disabled sources during initialization and fall back from the stored URL", async () => {
+    const disabledUrl = "http://disabled.localhost:49152";
+    const legacyUrl = "http://legacy.localhost:49153";
+    await act(async () => root.unmount());
+    vi.mocked(serverUrlItem.getValue).mockResolvedValueOnce(disabledUrl);
+    discoveryMocks.discoverServerSources.mockResolvedValueOnce([
+      {
+        id: "disabled",
+        label: "Disabled",
+        url: disabledUrl,
+        capabilities: { distrokid: { mode: "disabled" } },
+      },
+      { id: "legacy", label: "Legacy", url: legacyUrl },
+    ] as LocalServerSource[]);
+    fetchMock.mockRejectedValue(new TypeError("offline"));
+    root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        createElement(Probe, {
+          onState: (state) => {
+            current = state;
+          },
+        })
+      );
+    });
+    await waitFor(() => expect(current.serverUrl).toBe(legacyUrl));
+
+    expect(current.serverSources).toEqual([
+      { id: "legacy", label: "Legacy", url: legacyUrl },
+    ]);
+    expect(serverUrlItem.setValue).toHaveBeenCalledWith(legacyUrl);
+  });
+
+  it("should filter disabled sources on refresh while retaining legacy, single, and dir modes", async () => {
+    const disabledUrl = "http://disabled.localhost:49152";
+    const legacy = {
+      id: "legacy",
+      label: "Legacy",
+      url: "http://legacy.localhost:49153",
+    };
+    const single = {
+      id: "single",
+      label: "Single",
+      url: "http://single.localhost:49154",
+      capabilities: { distrokid: { mode: "single" as const } },
+    };
+    const dir = {
+      id: "dir",
+      label: "Dir",
+      url: "http://dir.localhost:49155",
+      capabilities: { distrokid: { mode: "dir" as const } },
+    };
+    fetchMock.mockRejectedValue(new TypeError("offline"));
+    await act(async () => {
+      current.setServerUrl(disabledUrl);
+    });
+    await waitFor(() => expect(current.busy).toBe(false));
+    vi.mocked(serverUrlItem.setValue).mockClear();
+    discoveryMocks.discoverServerSources.mockResolvedValueOnce([
+      {
+        id: "disabled",
+        label: "Disabled",
+        url: disabledUrl,
+        capabilities: { distrokid: { mode: "disabled" } },
+      },
+      legacy,
+      single,
+      dir,
+    ] as LocalServerSource[]);
+
+    await act(async () => {
+      await current.refreshServerSources();
+    });
+    await waitFor(() => expect(current.serverUrl).toBe(legacy.url));
+
+    expect(current.serverSources).toEqual([legacy, single, dir]);
+    expect(serverUrlItem.setValue).toHaveBeenCalledWith(legacy.url);
   });
 
   it("should ignore stale discovery completions", async () => {
