@@ -78,6 +78,13 @@
 
 ## インターフェース設計
 
+### mode・variant の表記
+
+skill に新しい mode・variant を設ける場合は、呼び出しを `--<mode>` 形式の引数で表す。`mode=<name>` 形式や自然言語の mode 名を新規に導入しない。値を伴う variant も、名前付き引数として表現する。
+
+- mode の実例: [community-draft の `--batch`](../../.claude/skills/community-draft/SKILL.md)
+- 値を伴う variant の実例: [flop-analysis の `--since <N>`](../../.claude/skills/flop-analysis/SKILL.md)
+
 ### description（スキル選択の API）
 
 実行者はまず `description` だけを見てスキルを選ぶ。ここが唯一の選択インターフェースなので、**発動条件と否定条件の両方**を書く。
