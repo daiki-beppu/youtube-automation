@@ -3,6 +3,8 @@ import "@testing-library/jest-dom/vitest"
 import { fireEvent, render, screen, within } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
+import { formatCollectedAt } from "@/lib/dashboard-formatters"
+
 import { PublicationHeatmap } from "./publication-heatmap"
 
 describe("PublicationHeatmap", () => {
@@ -202,5 +204,120 @@ describe("PublicationHeatmap", () => {
 
     expect(screen.getByRole("tooltip")).toHaveTextContent("2026-08-08")
     expect(screen.getByRole("tooltip")).toHaveTextContent("合計 2本")
+  })
+
+  it("keeps stale publication days while announcing refresh failures and the latest fetched time", () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-08-08T12:00:00Z"))
+    const channels = [
+      {
+        id: "channel-a",
+        name: "Night Drive",
+        status: "refresh_failed",
+        fetched_at: "2026-08-08T10:00:00Z",
+        timezone: "Asia/Tokyo",
+        days: { "2026-08-08": 2 },
+        error: {
+          code: "publication_refresh_failed",
+          message: "quota exceeded",
+          attempted_at: "2026-08-08T12:00:00Z",
+        },
+      },
+      {
+        id: "channel-b",
+        name: "Morning Focus",
+        status: "ready",
+        fetched_at: "2026-08-08T11:00:00Z",
+        timezone: "Asia/Tokyo",
+        days: { "2026-08-08": 1 },
+        error: null,
+      },
+    ]
+
+    render(
+      <PublicationHeatmap
+        channels={channels}
+        days={{ "2026-08-08": 3 }}
+      />
+    )
+
+    const alert = screen.getByRole("alert", {
+      name: "Night Drive の公開活動更新失敗",
+    })
+    expect(alert).toHaveTextContent("quota exceeded")
+    expect(alert).toHaveTextContent("前回データを表示しています")
+    expect(screen.getByText(/^最終更新/)).toHaveTextContent(
+      /2026\/08\/08.*\d{1,2}:\d{2}/
+    )
+
+    const cell = screen.getByRole("gridcell", {
+      name: "2026-08-08: 3本",
+    })
+    cell.focus()
+    fireEvent.focus(cell)
+    expect(screen.getByRole("tooltip")).toHaveTextContent("Night Drive 2本")
+    expect(screen.getByRole("tooltip")).toHaveTextContent("Morning Focus 1本")
+  })
+
+  it("does not synthesize a fetched time when channels have none", () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-08-08T12:00:00Z"))
+
+    render(
+      <PublicationHeatmap
+        channels={[
+          {
+            id: "channel-a",
+            name: "Night Drive",
+            status: "missing",
+            fetched_at: null,
+            timezone: null,
+            days: {},
+            error: null,
+          },
+        ]}
+        days={{}}
+      />
+    )
+
+    expect(screen.queryByText(/^最終更新/)).not.toBeInTheDocument()
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument()
+    expect(
+      screen.getByRole("grid", { name: "日別公開本数" })
+    ).toBeInTheDocument()
+  })
+
+  it("selects the latest fetched time by instant across offsets", () => {
+    const laterTimestamp = "2026-08-08T23:30:00-07:00"
+
+    render(
+      <PublicationHeatmap
+        channels={[
+          {
+            id: "channel-a",
+            name: "Night Drive",
+            status: "ready",
+            fetched_at: laterTimestamp,
+            timezone: "America/Los_Angeles",
+            days: {},
+            error: null,
+          },
+          {
+            id: "channel-b",
+            name: "Morning Focus",
+            status: "ready",
+            fetched_at: "2026-08-09T01:00:00+09:00",
+            timezone: "Asia/Tokyo",
+            days: {},
+            error: null,
+          },
+        ]}
+        days={{}}
+      />
+    )
+
+    expect(screen.getByText(/^最終更新/)).toHaveTextContent(
+      `最終更新 ${formatCollectedAt(laterTimestamp)}`
+    )
   })
 })
