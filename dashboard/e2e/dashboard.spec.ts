@@ -102,7 +102,39 @@ test.beforeAll(async () => {
   await mkdir(join(channel, "data"), { recursive: true })
   await writeFile(
     join(channel, "config", "channel", "meta.json"),
-    JSON.stringify({ channel: { name: "Night Drive" } })
+    JSON.stringify({
+      channel: {
+        name: "Night Drive",
+        short: "ND",
+        youtube_handle: "@nightdrive",
+        url: "https://youtube.com/@nightdrive",
+      },
+    })
+  )
+  await writeFile(
+    join(channel, "config", "channel", "content.json"),
+    JSON.stringify({
+      genre: { primary: "synthwave", style: "retro", context: "driving" },
+      tags: { base: ["synthwave"], themes: {} },
+      descriptions: {
+        opening: "Night music",
+        perfect_for: ["Driving"],
+        hashtags: ["#Night"],
+      },
+      title: { template: "{theme}" },
+    })
+  )
+  await writeFile(
+    join(channel, "config", "channel", "youtube.json"),
+    JSON.stringify({
+      youtube: { category_id: "10", privacy_status: "public", language: "ja" },
+    })
+  )
+  await writeFile(
+    join(channel, "config", "channel", "workflow.json"),
+    JSON.stringify({
+      workflow: { manual_baseline_minutes: { "wf-next": 60 } },
+    })
   )
   await writeFile(
     join(channel, "data", "analytics_data_2026-07-20.json"),
@@ -126,6 +158,43 @@ test.beforeAll(async () => {
           shares: 5,
         },
       },
+    })
+  )
+  const activeCollection = join(channel, "collections", "planning", "active")
+  await mkdir(activeCollection, { recursive: true })
+  await writeFile(
+    join(activeCollection, "workflow-state.json"),
+    JSON.stringify({ phase: "planning", created_at: "2026-07-21" })
+  )
+  const historyDirectory = join(channel, ".automation-run")
+  await mkdir(historyDirectory)
+  await writeFile(
+    join(historyDirectory, "history.json"),
+    JSON.stringify({
+      schema_version: 2,
+      attempts: [
+        {
+          collection: "collections/planning/active",
+          action: "wf-next",
+          status: "success",
+          timing: {
+            segments: [
+              {
+                kind: "ai",
+                started_at: "2026-07-21T00:00:00+00:00",
+                ended_at: "2026-07-21T00:10:00+00:00",
+                duration_seconds: 600,
+              },
+              {
+                kind: "human",
+                started_at: "2026-07-21T00:10:00+00:00",
+                ended_at: "2026-07-21T00:15:00+00:00",
+                duration_seconds: 300,
+              },
+            ],
+          },
+        },
+      ],
     })
   )
   const secondChannel = join(fixtureRoot, "zero-stock")
@@ -265,6 +334,36 @@ test("概要から動画詳細まで keyboard で確認できる", async ({ page
   expect(layout.right).toBeLessThanOrEqual(layout.viewportWidth)
   await channel.focus()
   await page.keyboard.press("Enter")
+  await expect(channel).toBeFocused()
+  const stepTable = page.getByRole("table", {
+    name: "active の workflow step",
+  })
+  await expect(stepTable).toBeVisible()
+  const stepRow = stepTable.getByRole("row", { name: /wf-next/ })
+  await expect(stepRow).toContainText("成功")
+  await expect(stepRow).toContainText("+01:00:00")
+  await expect(stepRow).toContainText("+00:10:00")
+  await expect(stepRow).toContainText("+00:05:00")
+  await expect(stepRow).toContainText("+00:15:00")
+  await expect(stepRow).toContainText("+00:45:00")
+  await expect(stepRow).toContainText("+00:55:00")
+  const stepLayout = await stepRow.evaluate((element) => {
+    const bounds = element.getBoundingClientRect()
+    return {
+      clientWidth: element.clientWidth,
+      scrollWidth: element.scrollWidth,
+      left: bounds.left,
+      right: bounds.right,
+      documentWidth: document.documentElement.scrollWidth,
+      viewportWidth: document.documentElement.clientWidth,
+    }
+  })
+  expect(stepLayout.scrollWidth).toBeLessThanOrEqual(stepLayout.clientWidth)
+  expect(stepLayout.left).toBeGreaterThanOrEqual(0)
+  expect(stepLayout.right).toBeLessThanOrEqual(stepLayout.viewportWidth)
+  expect(stepLayout.documentWidth).toBeLessThanOrEqual(stepLayout.viewportWidth)
+  await page.keyboard.press("Tab")
+  await expect(stepTable).toBeFocused()
   await expect(
     page.getByRole("heading", { name: "動画パフォーマンス" })
   ).toBeVisible()
@@ -310,6 +409,61 @@ test("768px 幅でも比較行と詳細操作が見切れない", async ({ page 
   expect(layout.rowRight).toBeLessThanOrEqual(layout.viewportWidth)
   expect(layout.buttonLeft).toBeGreaterThanOrEqual(layout.rowLeft)
   expect(layout.buttonRight).toBeLessThanOrEqual(layout.rowRight)
+})
+
+test("xl viewport で step table の列が見切れず重ならない", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 })
+  await page.goto(baseURL)
+  await page
+    .getByRole("button", { name: "Night Drive の動画詳細を見る" })
+    .click()
+
+  const stepTable = page.getByRole("table", {
+    name: "active の workflow step",
+  })
+  await expect(stepTable).toBeVisible()
+  const layout = await stepTable.evaluate((table) => {
+    const container = table.parentElement
+    if (!container) throw new Error("step table container がありません")
+    const containerBounds = container.getBoundingClientRect()
+    const contentBounds = (selector: string) =>
+      [...table.querySelectorAll(selector)].map((element) => {
+        const range = document.createRange()
+        range.selectNodeContents(element)
+        const rectangle = range.getBoundingClientRect()
+        return { left: rectangle.left, right: rectangle.right }
+      })
+    return {
+      clientWidth: table.clientWidth,
+      scrollWidth: table.scrollWidth,
+      container: {
+        left: containerBounds.left,
+        right: containerBounds.right,
+      },
+      headers: contentBounds("thead th"),
+      values: contentBounds("tbody tr:first-child td"),
+    }
+  })
+  const expectColumnsToFit = (
+    columns: Array<{ left: number; right: number }>
+  ) => {
+    for (const column of columns) {
+      expect(column.left).toBeGreaterThanOrEqual(layout.container.left)
+      expect(column.right).toBeLessThanOrEqual(layout.container.right)
+    }
+    for (const [index, column] of columns.entries()) {
+      const next = columns[index + 1]
+      if (next) expect(column.right).toBeLessThanOrEqual(next.left)
+    }
+  }
+
+  expect(layout.scrollWidth).toBeLessThanOrEqual(layout.clientWidth)
+  expect(layout.headers).toHaveLength(8)
+  expect(layout.values).toHaveLength(8)
+  expectColumnsToFit(layout.headers)
+  expectColumnsToFit(layout.values)
 })
 
 test("ダークテーマでも背景とカードの階調を識別できる", async ({ page }) => {
