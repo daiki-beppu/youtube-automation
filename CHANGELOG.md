@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `fix(suno-helper)`: downloaded 通知 API の失敗表示に URL encode 後の実 POST endpoint を含め、token 再取得失敗でも起点 request の文脈を維持（#3125）。
+
 - `fix(config)`: skill-config の未知のトップレベルキーと同名のキーが既定設定内にある場合、正しい nested path の候補を警告へ表示（#2558）。
 
 - `feat(distrokid-helper)`: `/server-info` に DistroKid の `disabled` / `single` / `dir` 実行モードを判別できる optional capability を追加し、既存必須フィールドと discovery schema v1 の互換性を維持（#2985）。
