@@ -2806,6 +2806,39 @@ def _duration_ttp_seed_lines() -> list[str]:
     ]
 
 
+def _replace_duration_ttp_seed(base: Path, duration_evidence: str) -> None:
+    seed_path = base / "docs" / "channel" / "ttp-seed-confirmation.md"
+    lines = [line for line in seed_path.read_text(encoding="utf-8").splitlines() if "duration" not in line]
+    lines.extend(duration_evidence.strip().splitlines())
+    seed_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _semantic_duration_ttp_evidence() -> str:
+    return """
+## 動画尺 TTP
+
+### 根拠 | Evidence
+- `.claude/skills/channel-new/references/derive_ttp_duration.py` の算出結果
+
+### 対象チャンネル
+- rival (UC123)
+
+### 上位 5 本の選定動画
+- VID1 | views: 50000 | length: 60 min
+- VID2 | views: 49999 | length: 61 min
+- VID3 | views: 49998 | length: 62 min
+- VID4 | views: 49997 | length: 63 min
+- VID5 | views: 49996 | length: 64 min
+
+### 推奨範囲
+- 最小 = 60 分
+- 最大 = 64 分
+
+### 推奨の承認
+- ユーザー承認済み
+"""
+
+
 def _write_ttp_readiness_files(base: Path) -> None:
     docs_channel = base / "docs" / "channel"
     docs_channel.mkdir(parents=True, exist_ok=True)
@@ -4284,6 +4317,126 @@ class TestCheckTtpWfNewReadinessChannelNew:
 
         assert r.status == "ok"
         assert r.next_action is None
+
+    @pytest.mark.parametrize(
+        "duration_evidence",
+        [
+            _semantic_duration_ttp_evidence(),
+            """
+## Duration TTP
+### Evidence
+- derived with derive_ttp_duration.py
+### Target channels
+- rival (UC123)
+### Top 5 selected videos
+- VID1 / views 50000 / length 60 min
+- VID2 / views 49999 / length 61 min
+- VID3 / views 49998 / length 62 min
+- VID4 / views 49997 / length 63 min
+- VID5 / views 49996 / length 64 min
+### Recommended range
+- minimum: 60 min
+- maximum: 64 min
+### Approval
+- approved by user
+""",
+        ],
+    )
+    def test_semantic_duration_evidence_is_ok(self, tmp_path, duration_evidence):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        _replace_duration_ttp_seed(tmp_path, duration_evidence)
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "ok", r.message
+
+    @pytest.mark.parametrize(
+        ("removed_section", "expected"),
+        [
+            ("根拠 | Evidence", "duration TTP 根拠が未記録"),
+            ("対象チャンネル", "duration TTP 根拠に承認済み channel が未記録"),
+            ("上位 5 本の選定動画", "duration selected video の根拠が不足 (0/5)"),
+            ("推奨範囲", "duration 推奨 min/max が未記録"),
+            ("推奨の承認", "duration 推奨のユーザー承認結果が未記録"),
+        ],
+    )
+    def test_semantic_duration_evidence_reports_each_missing_item(self, tmp_path, removed_section, expected):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        evidence = _semantic_duration_ttp_evidence()
+        evidence = re.sub(
+            rf"(?ms)^### {re.escape(removed_section)}\n.*?(?=^### |\Z)",
+            "",
+            evidence,
+        )
+        _replace_duration_ttp_seed(tmp_path, evidence)
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert expected in r.message
+
+    def test_duration_mention_without_evidence_warns(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        _replace_duration_ttp_seed(tmp_path, "動画尺 duration は今後検討する。")
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "duration TTP 根拠が未記録" in r.message
+        assert "duration selected video の根拠が不足 (0/5)" in r.message
+
+    def test_semantic_duration_evidence_still_requires_five_selected_videos(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        evidence = _semantic_duration_ttp_evidence().replace("- VID5 | views: 49996 | length: 64 min\n", "")
+        _replace_duration_ttp_seed(tmp_path, evidence)
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "duration selected video の根拠が不足 (4/5)" in r.message
+
+    @pytest.mark.parametrize(
+        "item",
+        [
+            "TBD",
+            "views: 50000 | length: 60 min",
+            "VID1 | length: 60 min",
+            "VID1 | views: 50000",
+        ],
+    )
+    def test_semantic_duration_evidence_rejects_incomplete_selected_videos(self, tmp_path, item):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        evidence = re.sub(
+            r"- VID\d \| views: \d+ \| length: \d+ min",
+            f"- {item}",
+            _semantic_duration_ttp_evidence(),
+        )
+        _replace_duration_ttp_seed(tmp_path, evidence)
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "duration selected video の根拠が不足 (0/5)" in r.message
+
+    @pytest.mark.parametrize("duration", ["4h40m", "4 hours 40 minutes"])
+    def test_semantic_duration_evidence_accepts_duration_value_variants(self, tmp_path, duration):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        evidence = re.sub(
+            r"length: \d+ min",
+            f"length: {duration}",
+            _semantic_duration_ttp_evidence(),
+        )
+        _replace_duration_ttp_seed(tmp_path, evidence)
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "ok", r.message
 
     def test_missing_duration_evidence_warns(self, tmp_path):
         _write_ttp_analytics(tmp_path, [_ttp_channel()])
