@@ -274,9 +274,11 @@ mkdir -p collections/planning/_plan-previews/${PREVIEW_DIR}
 
 `_` プレフィックスで通常コレクションと区別。セッション ID 付きディレクトリで並列実行時の競合を回避する。
 
+4-4以降へ進む前に [preview generation](references/preview-generation.md) を読み、確定済みmodeへprovider / prompt / 生成物 / retry / failure handlingの詳細を適用する。SKILL本体のcommandと順序を変更せず実行する。
+
 **4-4: プロンプト構築 + 一括生成（parallel デフォルト）**
 
-preview contract の候補 schema で確定した prompt を使う。`REF_PATHS` を構築してから provider に応じた経路で `candidate_count` 枚を順次生成する:
+`parallel` の場合だけ実行する。`REF_PATHS` を構築してからproviderに応じた経路で `candidate_count` 枚を順次生成する。候補数ぶんの参照が無い場合は参照不足なら生成せず停止する。
 
 ```bash
 # <dir> は 4-3 で作成したセッション固有ディレクトリ名（例: 20260306-a3f1）
@@ -317,11 +319,6 @@ mapfile -t REF_PATHS <<< "$VALIDATED_REFS"
 LABELS=(a b c d e f g h)
 PROVIDER=$(uv run python3 -c "from youtube_automation.infrastructure.media.image_provider import load_image_generation_config; cfg = load_image_generation_config(); print(cfg.provider)")
 if [ "$PROVIDER" = "codex" ]; then
-  # codex は image_generation.codex.default_prompt_template を必ず使う。
-  # image_generation.gemini.composition_rules（legend_motif / allowed_actions を含む）は
-  # codex-prompt.py が自動注入するため、title にレジェンドや楽器を重複して書かない。
-  # 参照画像を winning template として扱い、テキスト付き候補を先に確定する短い TTP thumbnail 先行プロンプトにする（#1611）。
-  # 候補ごとに別参照画像 1 枚だけを渡す。参照不足なら生成せず設定を直す。
   if [ "${#REF_PATHS[@]}" -lt "$CANDIDATE_COUNT" ]; then
     echo "ERROR: codex single_step preview requires at least ${CANDIDATE_COUNT} unique reference images" >&2
     exit 1
@@ -331,8 +328,6 @@ if [ "$PROVIDER" = "codex" ]; then
   }
   for idx in $(seq 0 $((CANDIDATE_COUNT - 1))); do
     label="${LABELS[$idx]}"
-    # title にはサムネに焼くテキスト（見出し + 短いサブタイトル）だけを渡す。
-    # 動画タイトル全文を渡さない（全文が画像に焼き込まれる事故の再発防止）。
     title="<企画${label}タイトル>"
     bash .claude/skills/thumbnail/references/codex-image.sh --require-reference \
       "$(build_codex_prompt "$title")" \
@@ -352,10 +347,7 @@ else
 fi
 ```
 
-- 全企画とも `REF_PATHS[$idx]` の別々の benchmark 参照を 1 枚ずつ使う。TTP strict preview では stock を混ぜない
-- 出力先: `collections/planning/_plan-previews/<dir>/plan-<x>-<slug>.png`（`<x>` は a/b/c/... のラベル、`candidate_count` 枚ぶん）
-- `-y` 指定時、同名ファイルが既存なら自動で `-v2`, `-v3` ... と採番（追加の安全策）
-- stock は TTP strict preview には混ぜない。stock 参照を使う場合は `/thumbnail` の汎用参照生成で別途扱う
+個別生成が失敗しても後続候補のcommandは実行する。生成成功が 0 枚なら画像比較へ進まず、失敗を明記したテキスト候補だけで4-5へ進む。
 
 **4-4-check: 生成後セルフチェック (#489, 任意)**
 
@@ -367,7 +359,7 @@ uv run yt-thumbnail-check \
   --json
 ```
 
-判定と再生成条件は preview contract のセルフチェック契約を適用する。
+exit 0だけを合格とする。exit 1ではpreview contractの上限内で不合格候補だけを再生成し、checkを再実行する。check実行不能は停止し、上限到達時は結果を提示して明示承認を待つ。
 
 **4-5: 全枚を比較提示 → ユーザー選択**
 
@@ -377,15 +369,12 @@ uv run yt-thumbnail-check \
    open collections/planning/_plan-previews/<dir>/plan-{a,b,c}-*.png
    ```
 
-2. Read（Codex では同等の画像閲覧機能）でも各プレビュー画像を表示しながら企画を提示する
-3. 各企画にはサムネイル情報に加え、`objects` で定義されたオブジェクトの名前・ストーリーを併記する（`objects` 未定義時は省略）
-4. 生成に失敗した分はテキストのみで提示（「プレビュー生成失敗」と明記）
+2. Read（Codex では同等の画像閲覧機能）でも各成功画像を表示し、生成失敗候補は「プレビュー生成失敗」と明記する
 
 ユーザーから採用企画を番号（A, B, C, ... のラベル）または企画タイトルで受け取る。NG だった場合の戻り経路:
 
-- 同じペルソナで再生成したい → Phase 3 から再実行
-- 別の利用文脈を試したい → `ttp_mode: false` では第一ペルソナの別シーン・別感情・別活動軸、`true` では別の高再生パターンを使って Phase 3 から再実行
-- 個別画像だけ気に入らない → 該当企画を 4-4 のコマンドで単発再生成
+- 企画を変える → Phase 3から再実行
+- 個別画像だけ再生成する → 該当候補の4-4 commandを再実行
 
 parallel モードでは Next Step で `yt-stock-archive` による不採用 (`candidate_count` - 1) 枚の stock 退避が走る（「Next Step」参照）。
 
@@ -401,7 +390,7 @@ mode 判定が `sequential` の場合のみ実行する。
 
 **sequential 用 4-4 (選択 → 1 枚生成)**:
 
-先にユーザーから採用企画を番号（A, B, C, ... のラベル）または企画タイトルで受け取り（不採用 (`candidate_count` - 1) 案は破棄、画像は未生成なので副作用なし）、選択 1 案のみ provider に応じた生成経路を 1 回呼ぶ:
+先にユーザーから採用企画を番号（A, B, C, ... のラベル）または企画タイトルで受け取り、選択1案だけproviderに応じた生成経路を1回呼ぶ。参照indexが無ければ停止する。
 
 ```bash
 # <x> は選択された企画の番号（a/b/c）
@@ -412,12 +401,6 @@ if [ "${#REF_PATHS[@]}" -le "$REF_INDEX" ]; then
 fi
 PROVIDER=$(uv run python3 -c "from youtube_automation.infrastructure.media.image_provider import load_image_generation_config; cfg = load_image_generation_config(); print(cfg.provider)")
 if [ "$PROVIDER" = "codex" ]; then
-  # codex は image_generation.codex.default_prompt_template を必ず使う。
-  # image_generation.gemini.composition_rules は codex-prompt.py が自動注入する。
-  # 参照画像を winning template として扱い、テキスト付き候補を先に確定する短い TTP thumbnail 先行プロンプトにする（#1611）。
-  # 選択した企画と同じ index の参照画像 1 枚だけを使う（a=0, b=1, c=2）。
-  # title 引数にはサムネに焼くテキスト（見出し + 短いサブタイトル）だけを渡す。
-  # 動画タイトル全文を渡さない（全文が画像に焼き込まれる事故の再発防止）。
   CODEX_PROMPT=$(uv run python3 .claude/skills/thumbnail/references/codex-prompt.py "<選択された企画タイトル>")
   bash .claude/skills/thumbnail/references/codex-image.sh --require-reference \
     "$CODEX_PROMPT" \
@@ -430,12 +413,13 @@ else
 fi
 ```
 
+生成commandがnon-zeroなら4-5へ進まず停止し、同じ4-4から再開する。
+
 **sequential 用 4-5 (1 枚承認)**:
 
 1. `open` で生成 1 枚をプレビューアプリで開く
-2. Read（Codex では同等の画像閲覧機能）でもプレビュー画像を表示する
-3. オブジェクトの名前・ストーリーを併記する
-4. 承認 NG / 生成失敗の場合は次のいずれかの経路で復帰:
+2. Read（Codex では同等の画像閲覧機能）でもプレビュー画像を表示して明示承認を待つ
+3. 承認 NG の場合は次のいずれかの経路で復帰:
    - 同じ企画で再生成 → 4-4 を再実行
    - 別の企画に切り替え → 4-4 の選択からやり直し
 

@@ -10,6 +10,7 @@ SKILL_DIR = REPO_ROOT / ".claude" / "skills" / "collection-ideate"
 SKILL_MD = SKILL_DIR / "SKILL.md"
 PLANNING_RULES_MD = SKILL_DIR / "references" / "planning-rules.md"
 PREVIEW_CONTRACT_MD = SKILL_DIR / "references" / "preview-contract.md"
+PREVIEW_GENERATION_MD = SKILL_DIR / "references" / "preview-generation.md"
 
 PLANNING_RULE_HEADINGS = {
     "ペルソナベース企画フレームワーク",
@@ -25,6 +26,12 @@ PREVIEW_CONTRACT_HEADINGS = {
     "候補 schema",
     "コスト計算契約",
     "セルフチェック契約",
+}
+PREVIEW_GENERATION_HEADINGS = {
+    "Parallel 生成詳細",
+    "Sequential 生成詳細",
+    "出力検証と再生成",
+    "Failure handling",
 }
 
 
@@ -112,3 +119,51 @@ def test_cost_approval_precedes_preview_side_effects() -> None:
     image_generation = skill.index("yt-generate-image", phase_4)
 
     assert approval < session_creation < image_generation
+
+
+def test_skill_dispatches_preview_generation_before_generation_steps() -> None:
+    skill = SKILL_MD.read_text(encoding="utf-8")
+    relative_reference = PREVIEW_GENERATION_MD.relative_to(SKILL_DIR).as_posix()
+
+    dispatch = skill.index(f"]({relative_reference})")
+    parallel_generation = skill.index("**4-4: プロンプト構築 + 一括生成（parallel デフォルト）**")
+
+    assert PREVIEW_GENERATION_MD.is_file()
+    assert dispatch < parallel_generation
+
+
+def test_preview_generation_sections_have_one_reference_owner() -> None:
+    skill_headings = _headings(SKILL_MD.read_text(encoding="utf-8"))
+    reference_headings = _headings(PREVIEW_GENERATION_MD.read_text(encoding="utf-8"))
+
+    assert PREVIEW_GENERATION_HEADINGS <= reference_headings
+    assert PREVIEW_GENERATION_HEADINGS.isdisjoint(skill_headings)
+
+
+def test_skill_keeps_generation_routing_commands_and_hard_gates() -> None:
+    skill = SKILL_MD.read_text(encoding="utf-8")
+    phase_4 = skill.index("### Phase 4:")
+
+    mode_decision = skill.index("`preview.thumbnail_mode`", phase_4)
+    approval = skill.index("confirm_cost", phase_4)
+    session_creation = skill.index("mkdir -p", phase_4)
+    dispatch = skill.index("](references/preview-generation.md)", phase_4)
+    parallel_generation = skill.index("**4-4: プロンプト構築 + 一括生成（parallel デフォルト）**")
+    validation = skill.index("yt-thumbnail-check", parallel_generation)
+    user_selection = skill.index("**4-5: 全枚を比較提示 → ユーザー選択**", validation)
+
+    assert mode_decision < approval < session_creation < dispatch < parallel_generation < validation < user_selection
+    for command in (
+        "select-ttp-references.py",
+        "codex-image.sh --require-reference",
+        "yt-generate-image --ttp-strict-references",
+        "yt-thumbnail-check",
+    ):
+        assert command in skill
+    for hard_gate in (
+        "参照不足なら生成せず停止",
+        "生成成功が 0 枚",
+        "不合格候補だけを再生成",
+        "生成失敗",
+    ):
+        assert hard_gate in skill
