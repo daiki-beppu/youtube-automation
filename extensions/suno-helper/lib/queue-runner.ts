@@ -507,13 +507,13 @@ export async function submitQueueEntries(
         options.isEntrySubmitted(index),
         result.error instanceof InjectNotAcknowledgedError
       );
+      options.persistInterruptState(interruptIndex, orderPosition);
       options.emitProgress({
         phase: PHASE.ERROR,
         index: interruptIndex,
         total: options.total,
         message,
       });
-      options.persistInterruptState(interruptIndex, orderPosition);
       return { completed: false, failedIndices, clipIdsByEntry };
     }
     if (result.outcome === "aborted" || options.isAborted()) {
