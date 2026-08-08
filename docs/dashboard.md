@@ -21,11 +21,19 @@ uv run yt-dashboard --open
 
 registry の全チャンネルを登録順に更新してから server を開始します。1 チャンネルが失敗しても残りを続行し、失敗したカードには前回 snapshot と更新エラーを表示します。API quota は概ねチャンネルごとの `yt-analytics` standard 収集に相当し、公開予約数の取得に動画 50 本ごとに `videos.list` 1 call が加わります。
 
+fresh な公開履歴 cache も再取得する場合は、強制更新を指定します。通常の Analytics 更新はそのまま行い、全登録チャンネルの公開履歴を再取得します。
+
+```bash
+uv run yt-dashboard --refresh-publications
+```
+
 OAuth を使わない配布確認やセルフ E2E で保存済み snapshot だけを表示する場合は、明示的に更新を止めます。
 
 ```bash
 uv run yt-dashboard --skip-refresh
 ```
+
+`--skip-refresh` と `--refresh-publications` を同時に指定した場合は `--skip-refresh` が優先され、公開履歴を含む API 更新は行いません。
 
 既定 URL は `http://127.0.0.1:8765/` です。別 port は `--port 9000`、別 registry は `--registry /absolute/path/channels.json` で指定できます。server は外部 interface へ bind せず、loopback だけで UI と JSON API を同一 origin 配信します。
 
