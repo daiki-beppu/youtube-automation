@@ -172,11 +172,14 @@ def test_server_exposes_overview_and_channel_detail(dashboard_server: str):
     channel = overview["channels"][0]
 
     assert status == 200
+    assert overview["schema_version"] == 2
     assert channel["name"] == "Night Drive"
     assert channel["video_count"] == 1
+    assert "workflow_timing" not in channel
     detail_status, detail = _json(f"{dashboard_server}/api/channels/{channel['id']}")
     assert detail_status == 200
     assert detail["videos"][0]["title"] == "Midnight"
+    assert detail["workflow_timing"]["status"] == "ready"
     active, latest = detail["workflow_timing"]["collections"]
     assert (active["collection_id"], active["stage"], active["totals"]["work_seconds"]) == (
         "active",
@@ -206,6 +209,50 @@ def test_server_exposes_saved_publication_read_model(dashboard_server: str) -> N
         "message": "quota exceeded",
         "attempted_at": "2026-07-20T14:00:00+00:00",
     }
+
+
+@pytest.mark.parametrize(
+    ("timing_state", "expected_status", "expected_code"),
+    [
+        ("unavailable", "unavailable", None),
+        ("error", "error", "workflow_timing_invalid"),
+    ],
+)
+def test_server_keeps_analytics_payload_when_workflow_timing_is_unavailable_or_error(
+    tmp_path: Path,
+    timing_state: str,
+    expected_status: str,
+    expected_code: str | None,
+) -> None:
+    channel = _write_channel(tmp_path)
+    if timing_state == "unavailable":
+        history_path = channel / ".automation-run" / "history.json"
+        history_path.write_text(json.dumps({"schema_version": 1, "attempts": []}), encoding="utf-8")
+    else:
+        for state_path in channel.glob("collections/*/*/workflow-state.json"):
+            state_path.unlink()
+    server = create_server(port=0, channel_paths=[channel])
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base_url = f"http://127.0.0.1:{server.server_port}"
+    try:
+        overview_status, overview = _json(f"{base_url}/api/channels")
+        overview_channel = overview["channels"][0]
+        detail_status, detail = _json(f"{base_url}/api/channels/{overview_channel['id']}")
+
+        assert overview_status == detail_status == 200
+        assert overview["schema_version"] == 2
+        assert overview_channel["summary"]["views"] == 123
+        assert "workflow_timing" not in overview_channel
+        assert detail["summary"]["views"] == 123
+        assert detail["videos"][0]["title"] == "Midnight"
+        assert detail["workflow_timing"]["status"] == expected_status
+        if expected_code is not None:
+            assert detail["workflow_timing"]["error"]["code"] == expected_code
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+        server.server_close()
 
 
 @pytest.mark.parametrize("path", ["/api/unknown", "/api/channels/not-registered"])
