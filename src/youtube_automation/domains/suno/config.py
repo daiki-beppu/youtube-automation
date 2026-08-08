@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections import Counter
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -12,7 +13,33 @@ from youtube_automation.core.adapters.errors import ConfigError
 from youtube_automation.core.adapters.media import VIDEO_ANALYSIS_DIRNAME
 
 _TOP_GENRE_PHRASES = 8
-_VOCAL_KEYWORDS = ("vocals", "vocal", "singing", "rap", "sings", "sung")
+_VOCAL_TERMS = (
+    "male vocals",
+    "female vocals",
+    "vocals",
+    "vocal",
+    "singing",
+    "singer",
+    "rap",
+    "choir",
+    "humming",
+)
+_TERM_LEFT_BOUNDARY = r"(?<![\w-])"
+_TERM_RIGHT_BOUNDARY = r"(?![\w-])"
+_INSTRUMENTAL_PATTERNS = tuple(
+    re.compile(f"{_TERM_LEFT_BOUNDARY}{expression}{_TERM_RIGHT_BOUNDARY}", re.IGNORECASE)
+    for expression in (
+        r"instrumental",
+        r"no(?:\s+(?:male|female))?\s+vocals?",
+        r"without(?:\s+(?:male|female))?\s+vocals?",
+        r"vocals?(?:-|\s+)free",
+        r"non(?:-|\s+)vocals?",
+    )
+)
+_VOCAL_PATTERN = re.compile(
+    f"{_TERM_LEFT_BOUNDARY}(?:{'|'.join(re.escape(term) for term in _VOCAL_TERMS)}){_TERM_RIGHT_BOUNDARY}",
+    re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True)
@@ -32,7 +59,9 @@ def resolve_suno_config(suno_cfg: Mapping[str, object]) -> ResolvedSunoConfig:
 
 
 def infer_suno_mode(genre_line: str) -> str:
-    return "vocal" if any(keyword in genre_line.lower() for keyword in _VOCAL_KEYWORDS) else "instrumental"
+    if any(pattern.search(genre_line) for pattern in _INSTRUMENTAL_PATTERNS):
+        return "instrumental"
+    return "vocal" if _VOCAL_PATTERN.search(genre_line) else "instrumental"
 
 
 def collect_video_analysis_suno_presets() -> tuple[str, str]:
