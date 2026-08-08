@@ -94,6 +94,30 @@ local fix 衝突注意:
 
 `/automation-update` が Top 3 を AI 抽出する際の参考情報として使う。
 
+## Migration の import path 対応表
+
+リリースで import 可能な Python module を移動し、旧 import path に互換 facade を設けない場合、`### Migration` に以下の対応表を置く。該当する移動を全件記載し、下流コードの置換元と置換先を一意にする。
+
+```markdown
+Python module 移動: あり
+互換 facade: なし
+
+| 旧 import path | 新 import path |
+|---|---|
+| `youtube_automation.cli.doctor` | `youtube_automation.commands.system.doctor` |
+```
+
+- 旧 / 新 path は、いずれも `youtube_automation.*` から始まる fully-qualified module path とする
+- class・関数・変数名は表へ含めず、import 文で module として指定する path だけを書く
+- 1 module の移動を 1 行とし、旧 path と新 path に同じ値を書かない
+- 旧 path に互換 facade を残す移動はこの表の対象外とし、通常の Migration サマリで互換範囲を説明する
+
+facade 無しの Python module 移動がないリリースでは、対応表を空のまま置かず、次の 1 行だけを記載する。この状態は「module を移動したが facade が無い」状態と区別される。
+
+```markdown
+Python module 移動: なし
+```
+
 ## 推奨される追加要素（任意）
 
 - バグ修正への issue / PR 参照（`(#NNN)` 形式）
