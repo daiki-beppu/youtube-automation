@@ -47,7 +47,58 @@ const detail = {
       {
         collection_id: "active",
         stage: "planning",
-        steps: [],
+        steps: [
+          {
+            action: "wf-next",
+            status: "in_progress",
+            manual_baseline_seconds: 7200,
+            ai_seconds: 600,
+            human_seconds: 1200,
+            work_seconds: 1800,
+            ai_inclusive_saved_seconds: 5400,
+            human_freed_seconds: 6000,
+          },
+          {
+            action: "video-upload",
+            status: "success",
+            manual_baseline_seconds: 3600,
+            ai_seconds: 300,
+            human_seconds: 600,
+            work_seconds: 900,
+            ai_inclusive_saved_seconds: 2700,
+            human_freed_seconds: 3000,
+          },
+          {
+            action: "post-publish",
+            status: "failed",
+            manual_baseline_seconds: 1800,
+            ai_seconds: 120,
+            human_seconds: 300,
+            work_seconds: 420,
+            ai_inclusive_saved_seconds: 1380,
+            human_freed_seconds: 1500,
+          },
+          {
+            action: "metadata-audit",
+            status: "blocked",
+            manual_baseline_seconds: 900,
+            ai_seconds: 60,
+            human_seconds: 180,
+            work_seconds: 240,
+            ai_inclusive_saved_seconds: 660,
+            human_freed_seconds: 720,
+          },
+          {
+            action: "community-post",
+            status: "not_run",
+            manual_baseline_seconds: 600,
+            ai_seconds: 0,
+            human_seconds: 0,
+            work_seconds: 0,
+            ai_inclusive_saved_seconds: 600,
+            human_freed_seconds: 600,
+          },
+        ],
         totals: {
           manual_baseline_seconds: 7200,
           ai_seconds: 600,
@@ -255,28 +306,86 @@ describe("dashboard", () => {
     const active = await screen.findByRole("region", {
       name: "進行中コレクション active",
     })
-    expect(within(active).getByText("手作業基準")).toBeInTheDocument()
-    expect(within(active).getByText("+02:00:00")).toBeInTheDocument()
-    expect(within(active).getByText("AI 実行時間")).toBeInTheDocument()
-    expect(within(active).getByText("+00:10:00")).toBeInTheDocument()
-    expect(within(active).getByText("人間使用時間")).toBeInTheDocument()
-    expect(within(active).getByText("+00:20:00")).toBeInTheDocument()
-    expect(within(active).getByText("総作業時間")).toBeInTheDocument()
-    expect(within(active).getByText("+00:37:02")).toBeInTheDocument()
-    expect(within(active).getByText("AI 込み削減時間")).toBeInTheDocument()
-    expect(within(active).getByText("+01:30:00")).toBeInTheDocument()
-    expect(within(active).getByText("人間が浮いた時間")).toBeInTheDocument()
-    expect(within(active).getByText("+01:40:00")).toBeInTheDocument()
+    const activeTotals = within(active).getByRole("group", {
+      name: "collection totals",
+    })
+    expect(within(activeTotals).getByText("手作業基準")).toBeInTheDocument()
+    expect(within(activeTotals).getByText("+02:00:00")).toBeInTheDocument()
+    expect(within(activeTotals).getByText("AI 実行時間")).toBeInTheDocument()
+    expect(within(activeTotals).getByText("+00:10:00")).toBeInTheDocument()
+    expect(within(activeTotals).getByText("人間使用時間")).toBeInTheDocument()
+    expect(within(activeTotals).getByText("+00:20:00")).toBeInTheDocument()
+    expect(within(activeTotals).getByText("総作業時間")).toBeInTheDocument()
+    expect(within(activeTotals).getByText("+00:37:02")).toBeInTheDocument()
+    expect(
+      within(activeTotals).getByText("AI 込み削減時間")
+    ).toBeInTheDocument()
+    expect(within(activeTotals).getByText("+01:30:00")).toBeInTheDocument()
+    expect(
+      within(activeTotals).getByText("人間が浮いた時間")
+    ).toBeInTheDocument()
+    expect(within(activeTotals).getByText("+01:40:00")).toBeInTheDocument()
 
     const latest = screen.getByRole("region", {
       name: "最新公開コレクション latest",
     })
-    expect(within(latest).getByText("+01:00:00")).toBeInTheDocument()
-    expect(within(latest).getByText("+00:05:00")).toBeInTheDocument()
-    expect(within(latest).getByText("+00:15:00")).toBeInTheDocument()
-    expect(within(latest).getByText("+00:22:13")).toBeInTheDocument()
-    expect(within(latest).getByText("+00:40:00")).toBeInTheDocument()
-    expect(within(latest).getByText("+00:45:00")).toBeInTheDocument()
+    const latestTotals = within(latest).getByRole("group", {
+      name: "collection totals",
+    })
+    expect(within(latestTotals).getByText("+01:00:00")).toBeInTheDocument()
+    expect(within(latestTotals).getByText("+00:05:00")).toBeInTheDocument()
+    expect(within(latestTotals).getByText("+00:15:00")).toBeInTheDocument()
+    expect(within(latestTotals).getByText("+00:22:13")).toBeInTheDocument()
+    expect(within(latestTotals).getByText("+00:40:00")).toBeInTheDocument()
+    expect(within(latestTotals).getByText("+00:45:00")).toBeInTheDocument()
+  })
+
+  it("shows each workflow step action, status, and six timing metrics", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const payload = String(input).endsWith("channel-a") ? detail : overview
+      return new Response(JSON.stringify(payload), { status: 200 })
+    })
+    const user = userEvent.setup()
+
+    renderDashboard()
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Night Drive の動画詳細を見る",
+      })
+    )
+
+    const stepTable = await screen.findByRole("table", {
+      name: "active の workflow step",
+    })
+    const inProgress = within(stepTable).getByRole("row", { name: /wf-next/ })
+    expect(within(inProgress).getByText("進行中")).toBeInTheDocument()
+    expect(within(inProgress).getByText("+02:00:00")).toBeInTheDocument()
+    expect(within(inProgress).getByText("+00:10:00")).toBeInTheDocument()
+    expect(within(inProgress).getByText("+00:20:00")).toBeInTheDocument()
+    expect(within(inProgress).getByText("+00:30:00")).toBeInTheDocument()
+    expect(within(inProgress).getByText("+01:30:00")).toBeInTheDocument()
+    expect(within(inProgress).getByText("+01:40:00")).toBeInTheDocument()
+    expect(
+      within(
+        within(stepTable).getByRole("row", { name: /video-upload/ })
+      ).getByText("成功")
+    ).toBeInTheDocument()
+    expect(
+      within(
+        within(stepTable).getByRole("row", { name: /post-publish/ })
+      ).getByText("失敗")
+    ).toBeInTheDocument()
+    expect(
+      within(
+        within(stepTable).getByRole("row", { name: /metadata-audit/ })
+      ).getByText("ブロック中")
+    ).toBeInTheDocument()
+    expect(
+      within(
+        within(stepTable).getByRole("row", { name: /community-post/ })
+      ).getByText("未実行")
+    ).toBeInTheDocument()
   })
 
   it("shows an empty state when no channels are registered", async () => {
