@@ -528,8 +528,8 @@ export interface ResolvedAdvancedFields {
 
 /** injectAdvancedFields が読む entry の advanced 値（PromptEntry の部分集合）。 */
 export interface AdvancedFieldValues {
-  style_influence?: number;
-  weirdness?: number;
+  style_influence?: number | null;
+  weirdness?: number | null;
   exclude_styles?: string;
   vocal_gender?: "male" | "female" | "neutral" | "auto";
 }
@@ -598,10 +598,10 @@ function resolveVocalGenderButtons(): {
  * 注入順序は Exclude styles (text, 高速) → Weirdness → Style Influence。
  *
  * 非対称契約:
- *   - entry に値有 (`!== undefined`) + 対応 selector が null → input / vocal_gender は throw（fail-loud、UI 改装検知）。
- *     slider 2 つは warn + skip（#1720。slider 値は UI で手動設定でき Create を跨いで永続するため、
+ *   - input / vocal_gender に値有 + 対応 selector が null → throw（fail-loud、UI 改装検知）。
+ *   - slider に値有 (`!= null`) + 対応 selector が null → warn + skip（#1720。slider 値は UI で手動設定でき Create を跨いで永続するため、
  *     Suno のリネームによる未検出は run 中断に値しない。skip は onSliderSkip で観測可能にする）
- *   - entry に値無 (`=== undefined`)                        → skip（fail-soft、後方互換）
+ *   - slider に値無 (`== null`)                             → skip（fail-soft、外部入力の null / undefined を未指定として扱う）
  *   - entry に値有 + selector 有 + input                    → setNativeValue で注入（collapsed でも React 反映を実機確認済み）
  *   - entry に値有 + selector 有 + slider                   → 注入試行し失敗時は warn + skip
  *   - vocal_gender = "male" / "female"                     → 対応ボタンが既に data-selected=true なら skip、false なら click（冪等）
@@ -614,7 +614,7 @@ function resolveVocalGenderButtons(): {
  *   体験が大きく劣化するため、本 PR では注入失敗を warn + skip で吸収する。trusted event 経由の真の
  *   解決は別 issue で chrome.debugger API ベースの設計を予定（manifest permission 拡張が必要）。
  *
- * 値の有無は `!== undefined` で判定する。0 や "" の falsy 値を truthy 判定で脱落させない。
+ * slider 値の有無は `!= null` で判定する。null / undefined は未指定として扱い、0 は有効値として注入する。
  *
  * slider 注入経路（#973）: options.bridgeSetSlider があれば MAIN world bridge 経由
  * （React onKeyDown 直接呼び出し = isTrusted チェック通過）を先に試し、失敗時に従来の
@@ -676,7 +676,7 @@ export async function injectAdvancedFields(
       target.click();
     }
   }
-  if (entry.weirdness !== undefined) {
+  if (entry.weirdness != null) {
     // slider 未検出は throw せず warn + skip（#1720）。値は UI で手動設定でき Create を跨いで
     // 永続するため、Suno のリネーム / UI 改装で run 全体を中断しない。
     if (!fields.weirdness) {
@@ -697,7 +697,7 @@ export async function injectAdvancedFields(
       }
     }
   }
-  if (entry.style_influence !== undefined) {
+  if (entry.style_influence != null) {
     if (!fields.styleInfluence) {
       console.warn(
         "[suno-helper] Style Influence slider が見つかりません（Suno の UI 変更の可能性）。注入を skip して続行します。"
