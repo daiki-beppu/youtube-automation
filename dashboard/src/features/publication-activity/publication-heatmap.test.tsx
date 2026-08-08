@@ -1,6 +1,6 @@
 import "@testing-library/jest-dom/vitest"
 
-import { render, screen, within } from "@testing-library/react"
+import { fireEvent, render, screen, within } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { PublicationHeatmap } from "./publication-heatmap"
@@ -14,7 +14,7 @@ describe("PublicationHeatmap", () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date("2026-08-08T12:00:00Z"))
 
-    render(<PublicationHeatmap days={{}} />)
+    render(<PublicationHeatmap channels={[]} days={{}} />)
 
     const grid = screen.getByRole("grid", { name: "日別公開本数" })
     const rows = within(grid).getAllByRole("row")
@@ -49,6 +49,7 @@ describe("PublicationHeatmap", () => {
 
     render(
       <PublicationHeatmap
+        channels={[]}
         days={{
           "2026-08-04": 1,
           "2026-08-05": 2,
@@ -80,7 +81,7 @@ describe("PublicationHeatmap", () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date("2026-08-08T12:00:00Z"))
 
-    render(<PublicationHeatmap days={{}} />)
+    render(<PublicationHeatmap channels={[]} days={{}} />)
 
     const months = screen.getByRole("list", { name: "月" })
     const labels = within(months).getAllByRole("listitem")
@@ -115,12 +116,91 @@ describe("PublicationHeatmap", () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date("2026-08-08T12:00:00Z"))
 
-    render(<PublicationHeatmap days={{}} />)
+    render(<PublicationHeatmap channels={[]} days={{}} />)
 
     const boundary = screen.getByTestId("publication-heatmap-scroll")
     expect(boundary).toHaveStyle({ maxWidth: "100%", overflowX: "auto" })
     expect(screen.getByRole("grid", { name: "日別公開本数" })).toHaveStyle({
       gridTemplateColumns: "repeat(53, 11px)",
     })
+  })
+
+  it("shows the same date, total, and channel breakdown on pointer hover and keyboard focus", () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-08-08T12:00:00Z"))
+    const channels = [
+      {
+        id: "channel-a",
+        name: "Night Drive",
+        status: "ready",
+        fetched_at: "2026-08-08T10:00:00Z",
+        timezone: "Asia/Tokyo",
+        days: { "2026-08-08": 2 },
+        error: null,
+      },
+      {
+        id: "channel-b",
+        name: "Morning Focus",
+        status: "ready",
+        fetched_at: "2026-08-08T10:00:00Z",
+        timezone: "Asia/Tokyo",
+        days: { "2026-08-08": 1 },
+        error: null,
+      },
+    ]
+
+    render(
+      <PublicationHeatmap
+        channels={channels}
+        days={{ "2026-08-08": 3 }}
+      />
+    )
+
+    const cell = screen.getByRole("gridcell", {
+      name: "2026-08-08: 3本",
+    })
+    fireEvent.mouseEnter(cell)
+    const pointerDetails = screen.getByRole("tooltip")
+    expect(pointerDetails).toHaveTextContent("2026-08-08")
+    expect(pointerDetails).toHaveTextContent("合計 3本")
+    expect(pointerDetails).toHaveTextContent("Night Drive 2本")
+    expect(pointerDetails).toHaveTextContent("Morning Focus 1本")
+    const pointerContent = pointerDetails.textContent
+
+    fireEvent.mouseLeave(cell)
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument()
+
+    cell.focus()
+    fireEvent.focus(cell)
+    const focusDetails = screen.getByRole("tooltip")
+    expect(focusDetails.textContent).toBe(pointerContent)
+    expect(cell).toHaveFocus()
+    expect(cell).toHaveAttribute("aria-describedby", focusDetails.id)
+  })
+
+  it("shows the hovered cell after another cell received keyboard focus", () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-08-08T12:00:00Z"))
+
+    render(
+      <PublicationHeatmap
+        channels={[]}
+        days={{ "2026-08-07": 1, "2026-08-08": 2 }}
+      />
+    )
+
+    const focusedCell = screen.getByRole("gridcell", {
+      name: "2026-08-07: 1本",
+    })
+    const hoveredCell = screen.getByRole("gridcell", {
+      name: "2026-08-08: 2本",
+    })
+    focusedCell.focus()
+    fireEvent.focus(focusedCell)
+
+    fireEvent.mouseEnter(hoveredCell)
+
+    expect(screen.getByRole("tooltip")).toHaveTextContent("2026-08-08")
+    expect(screen.getByRole("tooltip")).toHaveTextContent("合計 2本")
   })
 })
