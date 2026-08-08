@@ -281,18 +281,46 @@ def main():
     parser = argparse.ArgumentParser(
         description="画像生成プロバイダー（Gemini / OpenAI）で画像を生成（ダイレクトモード）"
     )
-    parser.add_argument("--prompt", type=str, default=None, help="プロンプトテキスト")
-    parser.add_argument("--output", type=str, default=None, help="出力パス")
-    parser.add_argument("-y", "--yes", action="store_true", help="コスト確認をスキップ")
-    parser.add_argument("--model", type=str, default=None, help="使用するモデル（skill-config の値を上書き）")
+    parser.add_argument(
+        "--prompt",
+        type=str,
+        default=None,
+        help="プロンプトテキスト。通常生成では必須（--costs 単独実行時は不要）",
+    )
+    parser.add_argument(
+        "--output",
+        type=str,
+        default=None,
+        help="出力パス。通常生成では必須（--costs 単独実行時は不要）",
+    )
+    parser.add_argument(
+        "-y",
+        "--yes",
+        action="store_true",
+        help="コスト承認のみを省略。既存出力は上書きせず -vN で自動採番",
+    )
+    parser.add_argument(
+        "--model",
+        type=str,
+        default=None,
+        help="使用するモデル。未指定時は skill-config の provider 別 model を使い、指定時はその値を上書き",
+    )
     parser.add_argument(
         "--reference",
         type=str,
         action="append",
         default=None,
-        help="参照画像パス（複数指定可。複数指定時はスタイルブレンド/合成）",
+        help=("参照画像パス。画像ごとに繰り返し指定可能。複数指定時はスタイルブレンドまたは合成に使う"),
     )
-    parser.add_argument("--aspect-ratio", type=str, default="16:9", help="アスペクト比（例: 16:9, 9:16, 1:1）")
+    parser.add_argument(
+        "--aspect-ratio",
+        type=str,
+        default="16:9",
+        help=(
+            "アスペクト比 (デフォルト: %(default)s)。OpenAI は 16:9 または 9:16 のみ。"
+            "Gemini / gemini_cli は provider/config の対応範囲に従う"
+        ),
+    )
     parser.add_argument(
         "--size",
         type=str,
@@ -300,7 +328,7 @@ def main():
         default=_GEMINI_DEFAULT_IMAGE_SIZE,
         help=(
             f"画像解像度 {_GEMINI_VALID_IMAGE_SIZES}（Gemini provider 用、デフォルト: "
-            f"{_GEMINI_DEFAULT_IMAGE_SIZE}）。OpenAI provider では aspect_ratio から自動決定"
+            "%(default)s）。OpenAI provider では aspect_ratio から自動決定"
         ),
     )
     parser.add_argument("--no-composition", action="store_true", help="composition_prefix の自動付加をスキップ")
@@ -337,7 +365,7 @@ def main():
         "--reference-index",
         type=int,
         default=None,
-        help="複数参照画像のうち特定のインデックスのみ使用（attempt ループ無効）",
+        help=("複数参照画像から 0-based index で1枚を選ぶ（--reference 必須）。指定時は attempt ループを無効化"),
     )
     parser.add_argument(
         "--max-workers",
