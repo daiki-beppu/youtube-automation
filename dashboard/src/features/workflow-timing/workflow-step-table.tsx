@@ -14,16 +14,41 @@ import type {
 } from "@/lib/dashboard-types"
 import { workflowStepStatusPresentation } from "@/lib/workflow-step-status"
 
+const AI_INCLUSIVE_SAVED_FORMULA_ID =
+  "workflow-timing-ai-inclusive-saved-formula"
+const HUMAN_FREED_FORMULA_ID = "workflow-timing-human-freed-formula"
+
 const WORKFLOW_TIMING_METRICS = [
-  { key: "manual_baseline_seconds", label: "手作業基準" },
-  { key: "ai_seconds", label: "AI 実行時間" },
-  { key: "human_seconds", label: "人間使用時間" },
-  { key: "work_seconds", label: "総作業時間" },
-  { key: "ai_inclusive_saved_seconds", label: "AI 込み削減時間" },
-  { key: "human_freed_seconds", label: "人間が浮いた時間" },
+  {
+    key: "manual_baseline_seconds",
+    label: "手作業基準",
+    descriptionId: undefined,
+  },
+  { key: "ai_seconds", label: "AI 実行時間", descriptionId: undefined },
+  {
+    key: "human_seconds",
+    label: "人間使用時間",
+    descriptionId: undefined,
+  },
+  {
+    key: "work_seconds",
+    label: "総作業時間",
+    descriptionId: undefined,
+  },
+  {
+    key: "ai_inclusive_saved_seconds",
+    label: "AI 込み削減時間",
+    descriptionId: AI_INCLUSIVE_SAVED_FORMULA_ID,
+  },
+  {
+    key: "human_freed_seconds",
+    label: "人間が浮いた時間",
+    descriptionId: HUMAN_FREED_FORMULA_ID,
+  },
 ] as const satisfies ReadonlyArray<{
   key: keyof WorkflowTimingMetrics
   label: string
+  descriptionId?: string
 }>
 
 function StepMetricCell({
@@ -34,7 +59,10 @@ function StepMetricCell({
   metric: (typeof WORKFLOW_TIMING_METRICS)[number]
 }) {
   return (
-    <TableCell className="flex flex-col gap-1 p-0 whitespace-normal tabular-nums xl:table-cell xl:p-2 xl:text-right">
+    <TableCell
+      aria-describedby={metric.descriptionId}
+      className="flex flex-col gap-1 p-0 whitespace-normal tabular-nums xl:table-cell xl:p-2 xl:text-right"
+    >
       <span className="text-xs text-muted-foreground xl:hidden">
         {metric.label}
       </span>
@@ -59,8 +87,16 @@ export function WorkflowTimingMetricsList({
           key={metric.key}
           className="dashboard-metric-surface rounded-lg p-3"
         >
-          <dt className="text-xs text-foreground">{metric.label}</dt>
-          <dd className="mt-1 font-semibold tabular-nums">
+          <dt
+            aria-describedby={metric.descriptionId}
+            className="text-xs text-foreground"
+          >
+            {metric.label}
+          </dt>
+          <dd
+            aria-describedby={metric.descriptionId}
+            className="mt-1 font-semibold tabular-nums"
+          >
             {formatSignedDuration(totals[metric.key])}
           </dd>
         </div>
@@ -88,7 +124,11 @@ export function WorkflowStepTable({
             <TableHead>step</TableHead>
             <TableHead>状態</TableHead>
             {WORKFLOW_TIMING_METRICS.map((metric) => (
-              <TableHead key={metric.key} className="text-right">
+              <TableHead
+                key={metric.key}
+                aria-describedby={metric.descriptionId}
+                className="text-right"
+              >
                 {metric.label}
               </TableHead>
             ))}
@@ -124,5 +164,30 @@ export function WorkflowStepTable({
         </TableBody>
       </Table>
     </div>
+  )
+}
+
+export function WorkflowTimingFormulaGuide() {
+  return (
+    <aside
+      role="note"
+      aria-labelledby="workflow-timing-formula-guide-title"
+      className="dashboard-metric-surface rounded-lg p-4"
+    >
+      <h4
+        id="workflow-timing-formula-guide-title"
+        className="text-sm font-semibold"
+      >
+        削減時間の算出式
+      </h4>
+      <ul className="mt-2 grid gap-1 text-sm text-muted-foreground">
+        <li id={AI_INCLUSIVE_SAVED_FORMULA_ID}>
+          AI込み削減時間 = 手作業基準 - 総作業時間
+        </li>
+        <li id={HUMAN_FREED_FORMULA_ID}>
+          人間が浮いた時間 = 手作業基準 - 人間使用時間
+        </li>
+      </ul>
+    </aside>
   )
 }
