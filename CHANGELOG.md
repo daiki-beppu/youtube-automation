@@ -151,6 +151,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `feat(wf-new-batch)`: 相互差別化済み manifest を canonical `/wf-new` へ 1 件ずつ渡し、atomic ledger と実成果物照合により completed を飛ばして最初の未完了 plan から再開する batch orchestrator を追加した。child 完了後・ledger 更新前 crash は same-provenance の prepared state と hard artifacts を再検証し、workflow state を変更せず ledger だけを completed へ reconcile する。失敗・承認待ちでは後続を開始しない（#3264）。
 - `feat(wf-new)`: 検証済み batch manifest の 1 plan を指定して開始する opt-in 入口を追加し、企画生成だけを省略して初期化以降の承認・state・failure gate を通常入口と共有する契約を固定した。不正・曖昧な入力は state mutation 前に拒否する（#3263）。
 - `feat(collection-ideate)`: 明示的な batch plan mode で N 件の企画を既存 collection と batch 内の全組合せに対して相互差別化し、全件承認・件数・slug 一意性・provenance を検証した manifest だけを atomic に保存する契約を追加した。通常の single collection 企画契約は維持する（#3262）。
+- `feat(dashboard)`: production dashboard の workflow timing 構築を channel 単位で fail-soft 化し、history / lease / state / config の破損を他 channel や Analytics payload へ波及させず、collection 作成前の active lease も `in_progress` として返すようにした（#3348）。
 - `feat(dashboard)`: workflow timing を含む dashboard API schema を v2 とし、overview は timing を除いた channel 集約、detail は `ready` / `unavailable` / `in_progress` / `error` の timing を返す境界を HTTP 200 契約として固定した（#3338）。
 - `feat(dashboard)`: channel ごとの workflow timing 欠損・不正 shape を専用の `status=error` へ隔離し、同じ channel の Analytics summary / videos と他 channel の timing を維持する fail-soft 境界を追加した（#3339）。
 - `feat(dashboard)`: workflow timing の公開 status を `ready` / `unavailable` / `in_progress` に正規化し、基準未設定・旧 schema・未計測・実行中を 0 と区別できるようにした（#3334）。
