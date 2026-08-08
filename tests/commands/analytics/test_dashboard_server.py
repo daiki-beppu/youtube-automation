@@ -149,8 +149,11 @@ def test_cli_opens_loopback_url_after_server_starts(monkeypatch: pytest.MonkeyPa
     assert opened == ["http://127.0.0.1:4321/"]
 
 
-def test_cli_skip_refresh_starts_from_existing_snapshots(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+def test_cli_skip_refresh_starts_from_existing_snapshots_without_api_calls(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
     channels = [tmp_path / "one"]
+    api_calls: list[str] = []
 
     class FakeServer:
         server_port = 4321
@@ -162,9 +165,19 @@ def test_cli_skip_refresh_starts_from_existing_snapshots(monkeypatch: pytest.Mon
             return None
 
     monkeypatch.setattr("youtube_automation.commands.analytics.dashboard.load_channel_registry", lambda _path: channels)
+
+    def refresh_channels(paths: list[Path], *, collect_channel) -> dict[Path, str]:
+        api_calls.append("channel refresh")
+        collect_channel(paths[0])
+        return {}
+
     monkeypatch.setattr(
         "youtube_automation.commands.analytics.dashboard.refresh_dashboard_channels",
-        lambda _paths: pytest.fail("refresh must be skipped"),
+        refresh_channels,
+    )
+    monkeypatch.setattr(
+        "youtube_automation.commands.analytics.dashboard.collect_channel_analytics",
+        lambda _channel, _factory: api_calls.append("publication collector"),
     )
     monkeypatch.setattr(
         "youtube_automation.commands.analytics.dashboard.create_server",
@@ -176,6 +189,7 @@ def test_cli_skip_refresh_starts_from_existing_snapshots(monkeypatch: pytest.Mon
     )
 
     assert main(["--skip-refresh", "--registry", str(tmp_path / "channels.json")]) == 0
+    assert api_calls == []
 
 
 @pytest.mark.parametrize("port", [0, 65535])
