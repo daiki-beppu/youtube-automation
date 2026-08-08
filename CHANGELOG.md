@@ -109,6 +109,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `feat(dashboard)`: stale な有効公開履歴 cache の再取得が想定内エラーで失敗した場合、前回データを維持した構造化 error payload を保存して channel 更新を継続するようにした。有効 cache が無い場合は従来の refresh error 経路へ伝播する（#3384）。
 - `feat(dashboard)`: stale を含む schema-valid な公開履歴 cache を鮮度判定と独立して読み出し、前回の `days` / `fetched_at` / `timezone` を維持したまま `code` / `message` / `attempted_at` の構造化更新エラーを付与できるようにした（#3383）。
 - `feat(dashboard)`: 公開履歴 cache が fresh な場合は通常の Analytics snapshot 更新だけを行い、公開履歴用の追加 YouTube Data API 呼び出しと cache 保存を省略するようにした。cache が missing / stale / corrupt の場合は従来どおり再取得・保存する（#3375）。
+- `feat(extensions)`: ローカル配信元が 0 件の selector に「サーバーが起動されていません」と表示して操作を無効化し、候補の再出現時は通常の選択へ戻るようにした（#3453）。
 - `fix(extensions)`: ローカル配信元 discovery は registry entry のうち稼働確認できたサーバーだけを URL 順で返し、registry が空・到達不能・不正、または全 probe 失敗の場合は未確認の既定候補を混ぜず空配列を返すようにした（#2992）。
 - `refactor(tests)`: 旧 `unit` / `streaming` テストを canonical owner と `tests/repo/streaming/` へ整理し、root allowlist・source layer・source owner の配置規約を repository contract として機械担保した（#3047）。
 - `fix(tests)`: collection serve の subprocess lifecycle テストで待機処理を共通化し、デッドライン到達時に待機対象を明示して失敗させるようにした。server 起動完了は PID ファイルの存在ではなく HTTP identity endpoint の応答まで確認し、高負荷時の起動途中を準備完了と誤認しないようにした（#3091）。
