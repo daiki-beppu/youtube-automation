@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `fix(collection-serve)`: `--allow-extension` が exact basename を優先しつつ、`<name>-X.Y.Z`・`<name>-X.Y.Z-chrome`・`<name>-chrome` の release folder を狭い完全一致で検出するようにした。正規候補が 0 件の場合は、requested name を literal に含む近似候補を profile / ID / path / enabled 状態と候補ごとの `yt-collection-serve --allow-origin chrome-extension://<ID>` コマンド付きで列挙する（#3033）。
 - `fix(collection-serve)`: `--allow-extension` の起動ログへ、exact origin lock に実際に選択した unpacked 拡張の path / Chrome profile / `enabled=true` を追加し、無効な重複 ID や実行中 origin との食い違いをリクエスト前に診断可能にする（#3217）。
 - `fix(collection-serve)`: `--allow-extension` が同名候補を検出しても有効 ID が 0 件、または複数 ID の場合は起動前に拒否し、検出した全候補の profile / ID / path / enabled 状態と `--allow-origin` fallback を `ConfigError` に列挙する（#3216）。
 - `fix(collection-serve)`: Chrome Preferences の同名 unpacked 拡張候補に無効化済み ID が混在しても、非空の `disable_reasons` または `state=0` を持つ entry を除外し、唯一の有効候補へ `--allow-extension` の exact origin lock を設定する（#3215）。

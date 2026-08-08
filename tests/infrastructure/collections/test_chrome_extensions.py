@@ -73,6 +73,66 @@ def test_resolve_unpacked_extension_origin_matches_secure_preferences(tmp_path):
 
 
 @pytest.mark.parametrize(
+    "folder_name",
+    (
+        "suno-helper-0.2.5",
+        "suno-helper-0.2.5-chrome",
+        "suno-helper-chrome",
+    ),
+)
+def test_resolve_unpacked_extension_origin_matches_versioned_release_folder(tmp_path, folder_name):
+    extension_id = "gdjhjiphejeeclngbljhajiffhpdepee"
+    extension_path = tmp_path / "Downloads" / folder_name
+    _write_preferences(
+        tmp_path / "Default",
+        "Secure Preferences",
+        {extension_id: {"path": str(extension_path)}},
+    )
+
+    resolved = resolve_unpacked_extension_origin("suno-helper", chrome_user_data_dir=tmp_path)
+
+    assert resolved.extension_id == extension_id
+    assert resolved.path == extension_path
+
+
+@pytest.mark.parametrize(
+    "folder_name",
+    (
+        "other-suno-helper-0.2.5",
+        "suno-helper-0.2.5-preview",
+        "suno-helper-0..2-chrome",
+        "suno-helper-v0.2.5-chrome",
+    ),
+)
+def test_resolve_unpacked_extension_origin_rejects_broad_release_folder_matches(tmp_path, folder_name):
+    _write_preferences(
+        tmp_path / "Default",
+        "Secure Preferences",
+        {"gdjhjiphejeeclngbljhajiffhpdepee": {"path": _extension_path(tmp_path, folder_name)}},
+    )
+
+    with pytest.raises(ConfigError, match="was not found"):
+        resolve_unpacked_extension_origin("suno-helper", chrome_user_data_dir=tmp_path)
+
+
+def test_resolve_unpacked_extension_origin_prefers_exact_folder_over_release_folder(tmp_path):
+    exact_id = "gdjhjiphejeeclngbljhajiffhpdepee"
+    release_id = "abcdefghijklmnopabcdefghijklmnop"
+    _write_preferences(
+        tmp_path / "Default",
+        "Secure Preferences",
+        {
+            exact_id: {"path": _extension_path(tmp_path, "suno-helper")},
+            release_id: {"path": _extension_path(tmp_path, "suno-helper-0.2.5-chrome")},
+        },
+    )
+
+    resolved = resolve_unpacked_extension_origin("suno-helper", chrome_user_data_dir=tmp_path)
+
+    assert resolved.extension_id == exact_id
+
+
+@pytest.mark.parametrize(
     "disabled_fields",
     (
         {"disable_reasons": [1]},
@@ -217,6 +277,30 @@ def test_resolve_unpacked_extension_origin_missing_extension_guides_allow_origin
     message = str(exc_info.value)
     assert "suno-helper" in message
     assert "--allow-origin chrome-extension://<EXTENSION_ID>" in message
+
+
+def test_resolve_unpacked_extension_origin_lists_literal_near_candidates_with_commands(tmp_path):
+    enabled_id = "gdjhjiphejeeclngbljhajiffhpdepee"
+    disabled_id = "abcdefghijklmnopabcdefghijklmnop"
+    enabled_path = tmp_path / "Downloads" / "suno-helper-preview"
+    disabled_path = tmp_path / "Downloads" / "my-suno-helper-build"
+    _write_preferences(
+        tmp_path / "Default",
+        "Secure Preferences",
+        {
+            enabled_id: {"path": str(enabled_path)},
+            disabled_id: {"path": str(disabled_path), "state": 0},
+        },
+    )
+
+    with pytest.raises(ConfigError) as exc_info:
+        resolve_unpacked_extension_origin("suno-helper", chrome_user_data_dir=tmp_path)
+
+    message = str(exc_info.value)
+    assert f"profile=Default, id={enabled_id}, path={enabled_path}, enabled=true" in message
+    assert f"--allow-origin chrome-extension://{enabled_id}" in message
+    assert f"profile=Default, id={disabled_id}, path={disabled_path}, enabled=false" in message
+    assert f"--allow-origin chrome-extension://{disabled_id}" in message
 
 
 @pytest.mark.parametrize(
