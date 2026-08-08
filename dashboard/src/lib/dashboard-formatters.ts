@@ -12,6 +12,22 @@ export function formatSignedInteger(value: number): string {
   return value > 0 ? `+${formatInteger(value)}` : formatInteger(value)
 }
 
+export function formatSignedDuration(value: number): string {
+  if (!Number.isFinite(value)) {
+    throw new RangeError("duration must be finite")
+  }
+
+  const totalSeconds = Math.round(Math.abs(value))
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+  const sign = totalSeconds === 0 ? "" : value > 0 ? "+" : "-"
+
+  return `${sign}${hours.toString().padStart(2, "0")}:${minutes
+    .toString()
+    .padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`
+}
+
 export function formatCollectedAt(value: string | null): string {
   if (!value) return "未収集"
   const date = new Date(value)

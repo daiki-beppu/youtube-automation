@@ -4,6 +4,7 @@ import {
   formatCollectedAt,
   formatDateRange,
   formatInteger,
+  formatSignedDuration,
   formatSignedInteger,
 } from "./dashboard-formatters"
 
@@ -14,6 +15,24 @@ describe("dashboard formatters", () => {
     expect(formatSignedInteger(12)).toBe("+12")
     expect(formatSignedInteger(-4)).toBe("-4")
   })
+
+  it("formats signed seconds as a comparable hours timestamp", () => {
+    expect(formatSignedDuration(3661)).toBe("+01:01:01")
+    expect(formatSignedDuration(0)).toBe("00:00:00")
+    expect(formatSignedDuration(-61)).toBe("-00:01:01")
+  })
+
+  it("rounds fractional durations to the nearest second", () => {
+    expect(formatSignedDuration(59.5)).toBe("+00:01:00")
+    expect(formatSignedDuration(-0.4)).toBe("00:00:00")
+  })
+
+  it.each([Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])(
+    "rejects a non-finite duration: %s",
+    (value) => {
+      expect(() => formatSignedDuration(value)).toThrow(RangeError)
+    }
+  )
 
   it("shows collection fallbacks without hiding an invalid timestamp", () => {
     expect(formatCollectedAt(null)).toBe("未収集")
