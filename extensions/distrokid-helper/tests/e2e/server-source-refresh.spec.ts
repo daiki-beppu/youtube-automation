@@ -59,6 +59,8 @@ function close(server: Server): Promise<void> {
   );
 }
 
+test.describe.configure({ mode: "serial" });
+
 test("最初の開操作では停止済み menu を開かず、検出完了後に更新済み候補を提示する", async () => {
   const liveServers: Server[] = [];
   let context: BrowserContext | undefined;
@@ -225,5 +227,109 @@ test("最初の開操作では停止済み menu を開かず、検出完了後�
     await Promise.all(
       liveServers.filter((server) => server.listening).map(close)
     );
+  }
+});
+
+test("保存済み legacy source の collections/release 404 を復旧案内付き alert にする", async () => {
+  let context: BrowserContext | undefined;
+  let registry: Server | undefined;
+  let legacyServer: Server | undefined;
+  const requestedPaths: string[] = [];
+  let legacyInfo: Record<string, unknown> = {};
+  try {
+    legacyServer = createServer((request, response) => {
+      requestedPaths.push(request.url ?? "");
+      response.setHeader("Content-Type", "application/json");
+      response.setHeader(
+        "Access-Control-Allow-Origin",
+        request.headers.origin ?? "*"
+      );
+      if (request.url === "/server-info") {
+        response.end(JSON.stringify(legacyInfo));
+        return;
+      }
+      response.statusCode = 404;
+      response.end("{}");
+    });
+    const legacyPort = await listen(legacyServer);
+    const legacyUrl = `http://127.0.0.1:${legacyPort}`;
+    legacyInfo = {
+      channel_name: "Legacy",
+      channel_short: "legacy",
+      hostname: "127.0.0.1",
+      port: legacyPort,
+      base_url: legacyUrl,
+      label: `Legacy (127.0.0.1:${legacyPort})`,
+    };
+    registry = createServer((request, response) => {
+      if (request.url !== "/.well-known/yt-collection-serve") {
+        response.statusCode = 404;
+        response.end("{}");
+        return;
+      }
+      response.setHeader("Content-Type", "application/json");
+      response.setHeader(
+        "Access-Control-Allow-Origin",
+        request.headers.origin ?? "*"
+      );
+      response.end(
+        JSON.stringify({
+          schema_version: 1,
+          ttl_seconds: 30,
+          servers: [
+            {
+              instance_id: "legacy",
+              expires_at: Date.now() / 1000 + 30,
+              server_info: legacyInfo,
+            },
+          ],
+        })
+      );
+    });
+    await listen(registry, 7872);
+
+    const profile = await mkdtemp(join(tmpdir(), "distrokid-helper-e2e-"));
+    context = await chromium.launchPersistentContext(profile, {
+      channel: "chromium",
+      headless: false,
+      args: [
+        `--disable-extensions-except=${extensionPath}`,
+        `--load-extension=${extensionPath}`,
+      ],
+    });
+    let worker = context.serviceWorkers()[0];
+    worker ??= await context.waitForEvent("serviceworker");
+    expect(worker.url()).toContain("chrome-extension://");
+    await worker.evaluate(async (url) => {
+      const extensionGlobal = globalThis as typeof globalThis & {
+        chrome: {
+          storage: {
+            local: {
+              set(values: Record<string, string>): Promise<void>;
+            };
+          };
+        };
+      };
+      await extensionGlobal.chrome.storage.local.set({ serverUrl: url });
+    }, legacyUrl);
+    await context.route("https://distrokid.com/new", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "text/html",
+        body: "<!doctype html><title>DistroKid fixture</title>",
+      })
+    );
+    const page = await context.newPage();
+    await page.goto("https://distrokid.com/new");
+
+    const alert = page.getByRole("alert");
+    await expect(alert).toContainText("どちらも HTTP 404");
+    await expect(alert).toContainText(/\[single\]|\[dir\//u);
+    expect(requestedPaths).toContain("/distrokid/collections");
+    expect(requestedPaths).toContain("/distrokid/release.json");
+  } finally {
+    await context?.close();
+    if (registry?.listening) await close(registry);
+    if (legacyServer?.listening) await close(legacyServer);
   }
 });
