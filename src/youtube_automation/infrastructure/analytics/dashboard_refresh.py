@@ -56,7 +56,12 @@ def _channel_context(channel: Path) -> Iterator[None]:
         reset_config()
 
 
-def collect_channel_analytics(channel: Path, analytics_system_factory: Callable[[], _AnalyticsSystem]) -> None:
+def collect_channel_analytics(
+    channel: Path,
+    analytics_system_factory: Callable[[], _AnalyticsSystem],
+    *,
+    force_publication_refresh: bool = False,
+) -> None:
     """同じ AnalyticsSystem で standard snapshot と公開履歴を保存する。"""
     from youtube_automation.configuration import load_config
 
@@ -68,7 +73,10 @@ def collect_channel_analytics(channel: Path, analytics_system_factory: Callable[
 
         publication_path = channel / "data" / "dashboard_publications.json"
         fetched_at = datetime.now(UTC)
-        if load_fresh_dashboard_publications(publication_path, now=fetched_at) is not None:
+        if (
+            not force_publication_refresh
+            and load_fresh_dashboard_publications(publication_path, now=fetched_at) is not None
+        ):
             return
 
         timezone = load_config().youtube.api.default_publish_timezone
