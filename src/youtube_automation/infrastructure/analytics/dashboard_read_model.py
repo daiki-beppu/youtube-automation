@@ -12,7 +12,8 @@ from typing import cast
 
 from youtube_automation.core.errors import DashboardChannelNotFoundError
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+LEGACY_SCHEMA_VERSION = 1
 
 
 def _object(value: object) -> dict[str, object]:
@@ -249,7 +250,7 @@ def build_dashboard_read_model(
                 )
         channels.append(item)
     return {
-        "schema_version": SCHEMA_VERSION,
+        "schema_version": SCHEMA_VERSION if timing_requested else LEGACY_SCHEMA_VERSION,
         "channels": channels,
     }
 
