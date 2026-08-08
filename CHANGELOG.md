@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `refactor(packaging)`: リポジトリを責務別 layer へ再配置し、canonical owner への production import・receipt・active documentation を同期した。`youtube_automation.utils` と `infrastructure.legacy_utils` は下流向け compatibility façade として installed wheel でも維持し、削除・統合候補は `docs/architecture/reorganization-followups.md` に記録した。
 ### Added
 
+- `feat(dashboard)`: active planning と latest live collection を最大 2 件選び、`wf-auto-state.py` の正規集計から step 状態と 6 種の時間指標を構築する read adapter を追加した（#3323）。
 - `feat(config)`: channel registry の任意 path から検証済み設定を読み込み、既存 singleton の channel 選択へ影響させない API を追加した（#3322）。
 - `feat(wf-auto)`: action 別手作業基準を同じ collection / action の work item 数へ適用し、全 retry の AI・人間時間を差し引いた「AI 込み削減時間」と「人間が浮いた時間」を action 別・全体で返す集計を追加した。負値は available な 0 に丸め、基準欠落と legacy timing は unavailable を維持する（#3273）。
 - `feat(wf-auto)`: schema v2 history の全 attempt を status に関係なく同じ collection / action の work item と action 別に集約し、AI 秒・人間秒・attempt 数・work item 数を決定的に返す純粋関数を追加した。schema v1 または timing 欠落は 0 とせず unavailable を返す（#3272）。
