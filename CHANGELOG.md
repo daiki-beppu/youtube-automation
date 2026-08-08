@@ -171,6 +171,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `fix(auth)`: readonly OAuth handler に明示的な非対話 policy を追加し、`token.readonly.json` が未発行・不正・refresh 不能な場合は browser OAuth を開始せず、`uv run yt-oauth --readonly` による発行を案内して fail-fast するようにした（#2956）。
 - `fix(streaming)`: `RuntimeMaxUSec` が無制限の 24/7 配信では `activating/auto-restart` を異常として通知し、有限サイクルの計画休止だけを無音にした。`NRestarts` の増加も cron 観測ごとに一度だけ通知し、初回・破損 baseline・counter reset は無音で再同期する（#3458）。
 - `fix(suno-helper)`: Lyrics 欄が見つからない場合の診断に、Advanced → More options → Lyrics mode → Write の具体的な所在と、`[Instrumental]` を含む非空 lyrics は Lyrics 欄へ注入するため Write が必要になる理由を表示する（#3468）。
+- `fix(suno-helper)`: 完全自動生成後の FINISHED snapshot から clip ID と期待件数を復元して Download 再開へ引き継ぐ回帰テストを追加し、clip ID が無い場合は効果のないページ再読み込みではなく、Suno 上で対象曲を選択して「選択中の曲を採用」後に再試行する手順を案内するよう修正した（#3071）。
 - `fix(tests)`: pnpm Worker 契約テストの実行対象を `extensions/suno-helper` から依存ゼロの一時 project へ変更し、`node_modules` が無い環境で 494 パッケージ / 318MB の実インストールが検証前に走る構造を解消した。takt worker ではこの install が `SIGKILL` されて全体 pytest のベースラインが red になり、後続 issue が着手できなくなっていた。検証している契約は `PNPM_MAX_WORKERS` が pnpm のプロセス境界を越えることだけで、対象 project の依存構成は含まれない。あわせて stdout 末尾行に依存した assertion を、検証値へラベルを付けて行集合を検査する方式へ置き換えた。pnpm は依存ゼロでも `Already up to date` を出力し、その位置が 2 つの検証値の間に入るため位置依存の判定が成立しない（#3082）。
 - `fix(extensions)`: pnpm の tarball Worker 既定値を 1 に抑制し、macOS・Node 24 で発生する libuv abort による Fallow audit の偽 red を回避した（#3078）。
 - `fix(wf-auto)`: lease token を `-` を含まない hexadecimal 形式で生成し、`argparse` が `--token` の値をオプションと誤認する確率的な CLI 失敗を解消した（#2575）。
