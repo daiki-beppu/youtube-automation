@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 - `feat(distrokid-helper)`: `/server-info` に DistroKid の `disabled` / `single` / `dir` 実行モードを判別できる optional capability を追加し、既存必須フィールドと discovery schema v1 の互換性を維持（#2985）。
+- `feat(server-discovery)`: dir mode の `/server-info` に `planning` / `live` 相当の安全な collections root basename を追加し、absolute filesystem path を公開せず discovery registry で保持できるようにした（#2986）。
 
 - `fix(suno-helper)`: 無人実行中の可視 Turnstile も手動実行と同じ10分間 `waiting-captcha` で待機し、即時エラー終了しないように統一（#2978）。
 
