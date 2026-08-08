@@ -117,13 +117,11 @@ test("実ビルドした overlay は drag・最小化・automation selector 契�
     const panel = content.locator(
       ':scope > [data-suno-helper="control-panel"]'
     );
-    // 実拡張はローカル配信元が無い fixture では fail-loud に error 状態へ遷移する。
-    await expect(panel).toHaveAttribute("data-suno-phase", "error");
+    // 配信元 0 件の専用表示は #2993 が担う。この段では未確認候補を選ばず idle を保つ。
+    await expect(panel).toHaveAttribute("data-suno-phase", "idle");
     await expect(panel).toHaveAttribute("data-suno-running", "false");
-    await expect(panel).toHaveAttribute("data-suno-error", "true");
-    const status = panel.getByRole("status");
-    await expect(status).toHaveAttribute("aria-live", "polite");
-    await expect(status).toHaveAttribute("data-suno-status", "error");
+    await expect(panel).toHaveAttribute("data-suno-error", "false");
+    await expect(panel.getByRole("status")).toHaveCount(0);
 
     const collectionsTrigger = panel.locator(
       '[data-suno-control="collections-collapsible-trigger"]'

@@ -116,7 +116,7 @@ test("最初の開操作では停止済み候補を提示せず、検出完了�
     await page.goto("https://suno.com/create");
     const trigger = page.locator('[data-suno-control="server-source-trigger"]');
     const sourceField = page.locator('[data-suno-control="server-url"]');
-    await expect(trigger).toHaveText("YouTube Automation | suno-helper");
+    await expect(trigger).toHaveText("Old (Archive) | suno-helper");
     await expect(sourceField).toHaveAttribute(
       "data-source-values",
       new RegExp(String(oldServer.info.base_url))
@@ -133,10 +133,7 @@ test("最初の開操作では停止済み候補を提示せず、検出完了�
 
     await expect(trigger).toBeEnabled();
     const options = page.getByRole("option");
-    await expect(options).toHaveText([
-      "YouTube Automation | suno-helper",
-      "New (Channel) | suno-helper",
-    ]);
+    await expect(options).toHaveText(["New (Channel) | suno-helper"]);
     await expect(options.filter({ hasText: "Old" })).toHaveCount(0);
     expect(
       await options
