@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `feat(suno-helper)`: Turnstile challenge 検知時の安全な実行コンテキストだけを、run を跨ぐ固定長 ring buffer として `chrome.storage.local` へ best-effort で蓄積する基盤を追加した（#2982）。
+- `feat(suno-helper)`: unattended preflight・Create 直前・生成完了待ち中の challenge 検知を共通記録経路へ接続し、検知箇所と run・pacing・inflight の実行コンテキストを区別して蓄積するようにした（#3435）。
 
 - `docs(adr)`: ADR-0024「クラウド移譲アーキテクチャの原則」を追加した。cloud/local 境界を能力ベースの規則 1 本（ブラウザ工程のみ local）で定義し、状態正本の Git 管理移行・工程所有権による分散ロック排除・二重チェック + fail-closed の冪等性・R2 の境界越え受け渡し専用化・マニフェスト = 完了マーカーの受け渡し規約・pull → run → push のサンドイッチ実行モデルを確定した。あわせて architecture の用語集へ「クラウド移譲」節（制御面 / データ面・工程所有権・サンドイッチ実行モデル・受け渡しマニフェスト・MediaStore）を追加した（#3299）。
 - `deploy(site)`: 公開リリースノートを Cloudflare Pages の `youtube-automation-release-notes` project から配信する。GitHub integration は `site` を monorepo root とし、Node.js 24 / pnpm 11.15.1 で build、`main` を production、repository 内のその他 branch / pull request を preview として自動公開する。公開 URL、build/output 条件、Direct Upload による復旧手順をリポジトリへ記録した（#3057）。
