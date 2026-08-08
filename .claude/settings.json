@@ -36,7 +36,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "root=$(git rev-parse --show-toplevel 2>/dev/null || true); branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true); if [ \"$root\" = \"/Users/mba/02-yt/automation\" ] && [ \"$branch\" = \"main\" ]; then echo '⚠️  main tree の main branch にいます。コード編集を始める前に worktree（takt or .worktrees/<slug>/）へ移動してください'; fi"
+            "command": "git_dir=$(git rev-parse --path-format=absolute --git-dir 2>/dev/null || true); common_dir=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true); branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true); if [ \"$git_dir\" = \"$common_dir\" ] && [ \"$branch\" = \"main\" ]; then echo '⚠️  main tree の main branch にいます。コード編集を始める前に linked worktree へ移動してください'; fi"
           }
         ]
       }
