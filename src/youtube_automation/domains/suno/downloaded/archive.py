@@ -6,6 +6,7 @@ import re
 import shutil
 import tempfile
 import zipfile
+from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
 from youtube_automation.core.adapters.media import CollectionPaths
@@ -20,6 +21,12 @@ _AUDIO_EXTENSIONS = frozenset({".mp3", ".m4a", ".wav"})
 _ZIP_MAX_TOTAL_SIZE = 2 * 1024 * 1024 * 1024
 _ZIP_MAX_SINGLE_FILE = 500 * 1024 * 1024
 _ZIP_MAX_ENTRIES = 1000
+
+
+@dataclass(frozen=True, slots=True)
+class DownloadedArchiveResult:
+    audio_count: int
+    placed_count: int
 
 
 def count_audio_files(music_dir: Path) -> int:
@@ -54,23 +61,36 @@ def commit_staged_music_files(coll_dir: Path, staging_dir: Path) -> None:
             shutil.rmtree(backup_dir, ignore_errors=True)
 
 
-def extract_downloaded_archive(
+def extract_downloaded_archive_detailed(
     coll_dir: Path, download_path: str, *, prompt_entries_reader: PromptEntriesReader
-) -> int:
+) -> DownloadedArchiveResult:
     # 期待数未満の部分 ZIP も受け入れて配置する（#1913）。不足の記録と警告は
     # workflow-state（actual/missing_file_count）と downloaded API response が担う
     resolved_dp = Path(download_path).resolve()
     staging_dir = Path(tempfile.mkdtemp(dir=str(coll_dir), prefix=".suno-music-"))
     try:
-        placed_count = extract_and_rename_music(
-            coll_dir, str(resolved_dp), prompt_entries_reader=prompt_entries_reader, target_dir=staging_dir
+        result = _extract_and_rename_music_to_dir(
+            coll_dir,
+            str(resolved_dp),
+            staging_dir,
+            prompt_entries_reader,
         )
-        if placed_count == 0:
+        if result.placed_count == 0:
             raise DownloadedArtifactError("ZIP extraction failed: 0 audio files placed")
         commit_staged_music_files(coll_dir, staging_dir)
     finally:
         shutil.rmtree(staging_dir, ignore_errors=True)
-    return placed_count
+    return result
+
+
+def extract_downloaded_archive(
+    coll_dir: Path, download_path: str, *, prompt_entries_reader: PromptEntriesReader
+) -> int:
+    return extract_downloaded_archive_detailed(
+        coll_dir,
+        download_path,
+        prompt_entries_reader=prompt_entries_reader,
+    ).placed_count
 
 
 _CANONICAL_MUSIC_FILENAME_RE = re.compile(r"^(?P<index>\d{2,})(?P<variant>[ab])-(?P<title>.+)$")
@@ -265,11 +285,11 @@ def _extract_and_rename_music_to_dir(
     download_path: str,
     target_dir: Path,
     prompt_entries_reader: PromptEntriesReader,
-) -> int:
+) -> DownloadedArchiveResult:
     zip_path = Path(download_path)
     if not zip_path.is_file() or not zipfile.is_zipfile(zip_path):
         print(f"[yt-collection-serve] ZIP が無効です（skip）: {download_path}")
-        return 0
+        return DownloadedArchiveResult(audio_count=0, placed_count=0)
 
     name_to_index = _build_name_to_index(coll_dir, prompt_entries_reader)
     target_dir.mkdir(parents=True, exist_ok=True)
@@ -279,7 +299,7 @@ def _extract_and_rename_music_to_dir(
             infos = zf.infolist()
             if len(infos) > _ZIP_MAX_ENTRIES:
                 print(f"[yt-collection-serve] ZIP entry 数が上限超過 ({len(infos)} > {_ZIP_MAX_ENTRIES}): skip")
-                return 0
+                return DownloadedArchiveResult(audio_count=0, placed_count=0)
             total_size = 0
             for info in infos:
                 if info.file_size > _ZIP_MAX_SINGLE_FILE:
@@ -287,11 +307,11 @@ def _extract_and_rename_music_to_dir(
                         f"[yt-collection-serve] ZIP 内ファイルがサイズ上限超過"
                         f" ({info.filename}: {info.file_size} bytes): skip"
                     )
-                    return 0
+                    return DownloadedArchiveResult(audio_count=0, placed_count=0)
                 total_size += info.file_size
             if total_size > _ZIP_MAX_TOTAL_SIZE:
                 print(f"[yt-collection-serve] ZIP 総展開サイズが上限超過 ({total_size} bytes): skip")
-                return 0
+                return DownloadedArchiveResult(audio_count=0, placed_count=0)
             audio_infos = [
                 info for info in infos if not info.is_dir() and Path(info.filename).suffix.lower() in _AUDIO_EXTENSIONS
             ]
@@ -331,10 +351,10 @@ def _extract_and_rename_music_to_dir(
             moved_count += 1
 
         print(f"[yt-collection-serve] 展開完了: {moved_count} files → {target_dir}")
-        return moved_count
+        return DownloadedArchiveResult(audio_count=len(audio_infos), placed_count=moved_count)
     except zipfile.BadZipFile as exc:
         print(f"[yt-collection-serve] ZIP 展開エラー（skip）: {exc}")
-        return 0
+        return DownloadedArchiveResult(audio_count=0, placed_count=0)
     except (OSError, ValueError, shutil.Error) as exc:
         print(f"[yt-collection-serve] ZIP 展開エラー: {exc}")
         raise DownloadedArtifactError(f"ZIP extraction failed: {exc}") from exc
@@ -350,11 +370,13 @@ def extract_and_rename_music(
     target_dir: Path | None = None,
 ) -> int:
     if target_dir is not None:
-        return _extract_and_rename_music_to_dir(coll_dir, download_path, target_dir, prompt_entries_reader)
+        return _extract_and_rename_music_to_dir(coll_dir, download_path, target_dir, prompt_entries_reader).placed_count
 
     staging_dir = Path(tempfile.mkdtemp(dir=str(coll_dir), prefix=".suno-music-"))
     try:
-        placed_count = _extract_and_rename_music_to_dir(coll_dir, download_path, staging_dir, prompt_entries_reader)
+        placed_count = _extract_and_rename_music_to_dir(
+            coll_dir, download_path, staging_dir, prompt_entries_reader
+        ).placed_count
         if placed_count > 0:
             try:
                 commit_staged_music_files(coll_dir, staging_dir)
