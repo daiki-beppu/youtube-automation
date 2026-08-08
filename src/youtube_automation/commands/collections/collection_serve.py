@@ -68,12 +68,12 @@ from youtube_automation.domains.distrokid.specification import find_disc_entry, 
 from youtube_automation.domains.suno.downloaded import (
     DownloadedArtifactError,
     DownloadedPayloadError,
-    apply_downloaded_artifacts,
     count_audio_files,
     expected_download_count,
     parse_downloaded_payload,
     read_pattern_count,
 )
+from youtube_automation.domains.suno.downloaded.apply import apply_downloaded_artifacts_detailed
 from youtube_automation.domains.suno.downloaded.models import (
     COLLECTIONS_ROUTE,
     DOCUMENTATION_DIRNAME,
@@ -1166,7 +1166,7 @@ def create_server(
 
             coll_dir = collections_root / cid
             try:
-                placed_count_for_response = apply_downloaded_artifacts(
+                apply_result = apply_downloaded_artifacts_detailed(
                     coll_dir,
                     downloaded,
                     prompt_entries_reader=read_suno_prompt_entries,
@@ -1178,24 +1178,16 @@ def create_server(
             except DownloadedArtifactError as exc:
                 self._send_json_error(500, str(exc))
                 return
-            resp: dict = {"ok": True, "collection_id": cid, "placed_count": placed_count_for_response}
+            resp: dict = {"ok": True, "collection_id": cid, "placed_count": apply_result.placed_count}
             # 部分完了（Suno が期待数未満しか生成しないケース）は 500 にせず warning で返す（#1913）
-            expected_count = expected_download_count(
-                read_pattern_count(
-                    coll_dir,
-                    prompt_entries_reader=read_suno_prompt_entries,
-                    default=0,
-                ),
-                downloaded.expected_file_count,
-            )
-            if (
-                downloaded.download_path
-                and expected_count is not None
-                and 0 < placed_count_for_response < expected_count
-            ):
-                missing = expected_count - placed_count_for_response
+            if downloaded.download_path and 0 < apply_result.placed_count < apply_result.expected_count:
+                missing = apply_result.expected_count - apply_result.placed_count
+                missing_reasons = apply_result.missing_reasons
+                resp["missing_reasons"] = missing_reasons
                 resp["warning"] = (
-                    f"placed {placed_count_for_response} files, expected {expected_count} ({missing} missing)"
+                    f"placed {apply_result.placed_count} files, expected {apply_result.expected_count} "
+                    f"({missing} missing; Suno 未生成 {missing_reasons['suno_unfulfilled']} / "
+                    f"配置 skip {missing_reasons['apply_skipped']})"
                 )
             resp_body = json.dumps(resp).encode("utf-8")
             self._send_bytes(resp_body, "application/json; charset=utf-8")
