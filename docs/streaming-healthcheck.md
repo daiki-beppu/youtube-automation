@@ -4,12 +4,13 @@
 
 ## 状態分類（4-way）
 
-`/opt/youtube-stream/bin/healthcheck.sh` は `systemctl show youtube-stream -p ActiveState,SubState,Result` の 3 値を以下のように分類する:
+`/opt/youtube-stream/bin/healthcheck.sh` は `systemctl show` から `ActiveState` / `SubState` / `Result` / `RuntimeMaxUSec` / `NRestarts` を取得する。状態分類は以下のとおり:
 
 | systemd 状態 | 分類 | 通知 |
 |---|---|---|
 | `active+running` | `ok` | しない |
-| `activating+auto-restart+success` | `idle` | しない |
+| `activating+auto-restart+success` + 有限 `RuntimeMaxUSec` | `idle` | しない（11h+1h の計画休止） |
+| `activating+auto-restart+success` + `RuntimeMaxUSec=infinity` / `0` | `anomaly` | **送る**（24/7 に計画休止はない） |
 | `inactive+dead+success` | `manual` | しない |
 | その他（`Result≠success` 等） | `anomaly` | **送る** |
 
@@ -28,12 +29,23 @@
 
 `unknown` は `last_status` ファイル不在時のフォールバック値（VPS 再構築直後など）。初回 `ok` は無音、初回 `anomaly` は 1 通だけ通知が来る。
 
+## 再起動カウンタ（観測間の再起動検知）
+
+cron の間に service が停止して `active+running` まで復帰すると、状態 snapshot だけでは障害を見逃す。このため `NRestarts` を `/var/lib/youtube-stream/last_n_restarts` と比較し、増加時は `[youtube-stream] restart detected: NRestarts=<current> previous=<previous> increment=<delta>` を **その cron 観測で 1 通だけ**送る。同時に anomaly / recovered 遷移を観測しても二重通知しない。同じ `NRestarts` の次回観測も無音になる。
+
+baseline ファイルが存在しない、内容が非数値に破損している、または現在値が baseline より小さい場合は、service 再作成や counter reset として現在値へ無音で再基準化する。したがって実機検証前に healthcheck を一度実行し、有効な baseline を作っておく。
+
 ## テストシナリオ
 
 ### シナリオ 1: `pkill` による異常停止
 
+> **承認ゲート:** この操作は配信中の ffmpeg を SIGKILL し、視聴中の配信を切断する破壊的な実機操作である。対象 VPS と影響を提示して利用者の明示的承認を得た場合だけ実行する。本 issue では VPS 接続・SIGKILL・実通知確認を実行していない。
+
 ```bash
 ssh -i ~/.ssh/yt_stream_key root@<instance_ip>
+# baseline を作成し、現在値を控える（初回 baseline は無通知）
+/opt/youtube-stream/bin/healthcheck.sh
+systemctl show youtube-stream -p NRestarts
 # streaming 用 ffmpeg だけを狙い撃ち（コマンドラインに current.mp4 を含むプロセスに限定）
 pkill -KILL -f 'ffmpeg .*current\.mp4'
 ```
@@ -42,10 +54,11 @@ pkill -KILL -f 'ffmpeg .*current\.mp4'
 
 期待挙動:
 
-- `systemctl show youtube-stream -p Result` が `core-dump` または `signal` を返す
+- `systemctl show youtube-stream -p NRestarts` の値が baseline より増える
 - 5 分以内に `/etc/cron.d/youtube-stream-healthcheck` が `healthcheck.sh` を呼ぶ
-- `classify_status` が `anomaly` を返し `notify.sh` が Discord に POST
-- `journalctl -t youtube-stream-healthcheck` に `[youtube-stream] anomaly detected: ...` のログが残る
+- service が cron 前に復帰していても `notify.sh` が Discord に POST する
+- `[youtube-stream] restart detected: NRestarts=... previous=... increment=...` が 1 通だけ届く
+- 24/7 の `activating+auto-restart+success` を直接観測した場合も `RuntimeMaxUSec=infinity` / `0` のため `anomaly` であり、同一観測では restart 通知と重複しない
 
 確認:
 
@@ -81,7 +94,7 @@ journalctl -t youtube-stream-healthcheck --since "10 minutes ago"
 
 - 停止直後: `ActiveState=deactivating` または `inactive`, `Result=success`
 - すぐに `Restart=always` + `RestartSec=1h` で `activating (auto-restart)` 状態へ遷移
-- `classify_status` が `idle` を返し **通知は飛ばない**
+- 有限 `RuntimeMaxUSec` を根拠に `classify_status` が `idle` を返し **通知は飛ばない**
 - 5 分間隔の cron が 12 回走るが全て idle 判定で抑止される
 
 確認:
@@ -90,6 +103,8 @@ journalctl -t youtube-stream-healthcheck --since "10 minutes ago"
 # 11h 経過の境界で:
 systemctl show youtube-stream -p ActiveState,SubState,Result
 # → ActiveState=activating SubState=auto-restart Result=success が期待値
+systemctl show youtube-stream -p RuntimeMaxUSec,NRestarts
+# → RuntimeMaxUSec は有限値。休止中の cron をまたいでも Discord 通知が 0 通であることを確認
 ```
 
 ### シナリオ 4: 1 時間後の自動再開
@@ -136,6 +151,8 @@ grep CRON /var/log/syslog | tail
 # 強制リセット（次回 cron で classify 結果が ok ならそのまま無音、anomaly なら 1 通通知）
 rm -f /var/lib/youtube-stream/last_status
 ```
+
+`last_n_restarts` は手動削除不要。ファイル不在・非数値・現在の `NRestarts` より大きい値は、次回 cron が現在値へ無音で再基準化する。
 
 ### ログが肥大化している
 
