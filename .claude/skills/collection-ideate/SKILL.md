@@ -194,6 +194,10 @@ benchmark fallback mode では自チャンネル分析の示唆を使わず、�
 minimal mode では `ttp_mode: false` の場合だけ、ユーザー直接入力（テーマ / ジャンル / 雰囲気）と
 `config/channel/meta.json` / `config/channel/content.json` の世界観だけで候補を作る。`true` は Phase 1-3 で停止する。
 
+## 企画規則の段階開示
+
+Phase 2〜3 の候補設計へ進むときは、[planning rules](references/planning-rules.md) を読み、確定済みの入力モードと `ttp_mode` 分岐へ適用する。企画規則の正本は同 reference とし、SKILL 本体では Phase 順、停止条件、承認点、実行コマンド、成果物契約だけを扱う。
+
 ### Phase 2: 戦略的企画立案
 **youtube-video-planner** サブエージェント（Task ツール。Codex では同等のエージェント機能に読み替え）で入力モードごとの材料からテーマ戦略を構築。
 analytics mode では CTR 改善に最適なテーマ戦略を優先し、benchmark fallback mode と
@@ -476,206 +480,11 @@ fi
 
 sequential モードでは Next Step で stock 退避は走らない（不採用画像が生成されていない）。
 
-## ペルソナベース企画フレームワーク
-
-前提スキル状態確認で確定した **第一ペルソナ 1 人** に対し、`preview.candidate_count` 個の企画候補を生成する。
-`ttp_mode: false` では第一ペルソナの別シーン・別感情・別利用文脈から情景を導出し、差別化軸と掛け合わせてテーマを決定する。`ttp_mode: true` ではペルソナは維持するが差別化軸を掛け合わせず、高再生パターンの転写をテーマ決定の直接根拠にする。
-
-persona / viewing-scene の存在確認、停止 / fallback 条件、fallback 入力は `references/freshness-rules.md` の判定結果をそのまま適用する。fallback で作った第一ペルソナには、使用した入力と根拠を明記する。
-
-`ttp_mode: false` では、今回のターゲットペルソナ（第一ペルソナ 1 人）に対し、差別化軸（`config/skills/collection-ideate.yaml` の `differentiation_axes`、デフォルト: location / time_of_day / activity / mood）の掛け合わせで `preview.candidate_count` 個の候補を生成する。以下は `candidate_count=3` のときのテンプレ:
-
-| 企画 | 差別化の切り口 |
-|------|---------------|
-| **企画 1** | 軸 A × 軸 B のバリエーション |
-| **企画 2** | 軸 C × 軸 D のバリエーション |
-| **企画 3** | analytics / benchmark fallback mode では競合の高再生パターンをペルソナ視点で再解釈。minimal mode では直接入力のテーマを別の差別化軸で再解釈 |
-
-`candidate_count` を変えた場合は枠を増減し、各企画ごとに異なる差別化軸の組み合わせを割り当てる。analytics / benchmark fallback mode では競合パターン再解釈を含め、minimal mode では直接入力と config だけを根拠にする。
-
-`ttp_mode: true` では、差別化軸の表と掛け合わせを使わず、`candidate_count` 件を競合の高再生パターン順に割り当てる。各企画は次の形式で転写根拠を持つ:
-
-| 項目 | 内容 |
-|---|---|
-| 転写元 | 競合チャンネル名 + 高再生コレクションまたは勝ちパターン |
-| 転写する型 | タイトル構造、テーマ構造、利用シーンなど企画に使う構造・パターン・型 |
-| 参照元が満たす欲求 | 欲求語彙 + ソース + 競合コメント / タイトル上の根拠 |
-| 欲求整合 | 企画のタイトル・サムネイル・楽曲 / 音楽性が同じ欲求を満たす根拠 |
-| 採用根拠 | ベンチマーク上の高再生実績 |
-
-### カラールール
-
-- **背景色**: `config/skills/thumbnail.yaml` の `image_generation.gemini.brand_background` を使用（定義があれば全コレクション統一）
-- **オブジェクトの扱い**: `ttp_mode: false` では `objects.swappable` を企画ごとに変えて差別化する。`ttp_mode: true` では差別化軸から値を作らず、転写元の高再生コレクションまたは勝ちパターンに基づく値だけを使う
-
-各企画には以下を必ず含める:
-- **ターゲットペルソナ**: 名前・視聴シーン・ユースケース
-- **差別化ポイント**: `ttp_mode: false` の場合、既存コレクションとどう異なるか。`true` の場合は不要
-- **情景没入スコア**: サムネイル + タイトルで情景が浮かぶ度合い（高/中/低）
-- **オブジェクト定義**: `objects.swappable` 各スロットの具体値（名前・ストーリー・ビジュアル）
-- **転写元**: `ttp_mode: true` の場合、どの競合のどの高再生コレクションまたは勝ちパターンを転写したか
-- **欲求整合の根拠**: `ttp_mode: true` の場合、参照元が満たす欲求、欲求語彙のソース、企画のタイトル・サムネイル・楽曲 / 音楽性が同じ欲求を満たす理由
-
-入力モード別の根拠項目:
-- **analytics mode / benchmark fallback mode**: 競合パターン参照（どの競合の成功パターンを参考にしたか）を必ず含める
-- **minimal mode**: 競合パターン参照は要求しない。この規則は `ttp_mode: false` の場合だけ適用し、ユーザー直接入力（テーマ / ジャンル / 雰囲気）と config からの根拠、仮説ペルソナ / 視聴シーンの根拠を必ず含める。`ttp_mode: true` では企画を生成しない
-
-## 企画ルール
-
-`config/channel/meta.json` の `channel.core_message` と `config/channel/content.json` の `genre.*` からチャンネルの世界観を読み取り、一貫した企画を立案する。
-
-`config/channel/content.json` の `title.template` に基づくタイトル構造を使用。
-
-### タイトルテンプレート
-
-`config/channel/content.json` の `title.template` を参照。テーマに合わせて動的要素を調整。
-
-### 差別化軸
-
-`ttp_mode: false` の場合だけ `config/skills/collection-ideate.yaml` の `differentiation_axes` を使用する。`ttp_mode: true` ではこのセクションの掛け合わせをすべてスキップする。デフォルト軸:
-
-| 軸 | 説明 |
-|---|---|
-| **location** | シーンの空間設定 |
-| **time_of_day** | 時間的コンテキスト |
-| **activity** | リスナーのユースケース |
-| **mood** | 感情的トーン |
-
-### vote-log hook（#509 — `data/community/weekly-vote-log.json` 連携）
-
-YouTube Studio の **Sunday Vote** 結果を `yt-vote-log append` で記録したログから
-theme weight 計算に取り込み、第一ペルソナ内の別シーン・別感情・別利用文脈の候補より
-優先順位高めに反映する hook（オプション、ログ未存在なら静かに無視）。
-
-```python
-from youtube_automation.configuration import channel_dir
-from youtube_automation.domains.collections.weekly_vote_log import (
-    compute_vote_log_weights,
-    load_weekly_vote_log,
-)
-
-log = load_weekly_vote_log(channel_dir=channel_dir(), missing_ok=True)
-result = compute_vote_log_weights(log, recent_weeks=4, decay=0.7)
-# result.forced_axis: 連続 2 週以上で 1 位だった軸 key (なければ None)
-# result.weights: 軸 key → float weight (decay^i の合算)
-```
-
-**theme weight への反映ルール**:
-
-`ttp_mode: true` では差別化軸自体を候補生成に使わないため、この hook による軸の強制採用と重み付けをスキップする。`ttp_mode: false` の場合だけ以下を適用する。
-
-1. **`result.forced_axis is not None` のとき** → その軸を **強制採用** (theme weight を最大化)。
-   差別化軸の選択肢でも `forced_axis` を含む組み合わせを必ず 1 案残す。連続 2 週 1 位は
-   「視聴者の関心が明確にロックオン済み」のシグナルなので、別軸の探索より追従を優先する
-2. **`result.weights` のキー** → 各軸の **重みづけ平均** (新しい週ほど高く) として候補の優先順位を上げる。
-   重みは `decay=0.7` (最新 1.0 / 1 週前 0.7 / 2 週前 0.49 / 3 週前 0.343) で減衰
-3. **ログ未存在 / 空** → 通常の `differentiation_axes` ロジックを変更なしで継続（後方互換）
-
-CLI からも同一ロジックを叩ける:
-
-```bash
-uv run yt-vote-log weights --recent 4 --decay 0.7
-# → {"weights": {...}, "forced_axis": "...", "forced_streak": N, "considered_weeks": M}
-```
-
-> **連動先**: ログ append は Studio 投票結果の確認後に `yt-vote-log append` で行う。`/collection-ideate` 側は **read-only**。
-
-#### composition_lock (#489)
-
-`ttp_mode: false` かつ `composition_lock`（デフォルト `true`、トップレベル）が有効なとき、`differentiation_axes` は
-**企画コンセプトの内部メタデータ**（音楽プロンプト・概要欄訴求・タイトルバリエーション）
-として扱い、**サムネ構図には反映しない**。サムネは TTP 参照画像 +
-`objects.fixed` で固定され、差別化は `objects.swappable` の slot 値のみで取る。
-
-`ttp_mode: true` では `composition_lock` の値にかかわらず `differentiation_axes` 自体を企画候補へ使わない。
-
-これは過去事例（DF365 / 2026-05-20）で「`location` を企画ごとに `mountain airstrip`
-/ `urban tunnel exit` / `desert airstrip` と変えたところ、参照画像 (Mental Stamina
-Mode) の wet airport runway + blue-hour テンプレから外れて参照画像のスタイル
-アンカーが効かなくなった」問題への対処。
-
-`ttp_mode: false` での具体的な扱い:
-
-- Phase 4-4 のサムネプロンプト構築では、差別化軸の **値** は `objects.swappable` の
-  slot に取り込まれている範囲（候補ごとに変える色・小物・キャラ表情など）でのみ
-  サムネに反映される。
-- 差別化軸の値そのもの（`mountain airstrip` 等）をサムネプロンプト本文に書き出すと、
-  TTP 参照画像のスタイルアンカーが効かなくなる。`youtube_automation.infrastructure.media.composition_lock.axes_in_thumbnail_prompt()`
-  を使えば検証可能（ヒットしたら警告して書き直す）。
-- 音楽プロンプト・概要欄・タイトルでは引き続き差別化軸を字義通り使ってよい
-  （視聴シーン訴求の幅を出すための内部メタデータ）。
-
-`ttp_mode: true` では上記の差別化軸による企画候補生成を適用せず、転写元の
-高再生コレクションまたは勝ちパターンだけを企画の根拠にする。後続の
-`/thumbnail`、`/suno` など他スキルの生成方針はこの設定では変更しない。
-
-`ttp_mode: false` で `composition_lock: false` に切り替えると従来挙動
-（差別化軸をサムネ構図にも反映）に戻る。TTP を捨てて毎回ゼロから構図設計する
-派生チャンネルでのみ false 推奨。
-
-### 競合パターン分析ルール
-
-analytics mode / benchmark fallback mode ではベンチマークデータを分析し、以下を企画判断に使う。`ttp_mode: false` の minimal mode ではこの分析をスキップし、ユーザー直接入力（テーマ / ジャンル / 雰囲気）と config から企画根拠を作る。`ttp_mode: true` の minimal mode は `/benchmark` を案内して停止する。
-- **高再生タイトルの共通要素**: 情景描写の具体性と再生数の相関
-- **低再生タイトルの回避要素**: 抽象的・汎用的なテーマは CTR が低い
-- 具体的な場所 + ムードの組み合わせが視聴者の情景想起を助ける
-
-`ttp_mode: true` では高再生タイトルだけでなく、高再生コレクションの実績テーマを優先する。転写対象は競合固有のタイトルや表現そのものではなく、そこから抽出した構造・パターン・型と欲求訴求の構造とする。画像・フレーズなど表面要素の直接模写は 1 回きりで再現性がないため、転写基準を満たさない。
-
-### OK / NG 例
-
-- ✓ 具体的場所 + 天候/時間帯 + ムード（情景が浮かぶ）
-- ✗ 汎用的すぎる、情景なし（`Relaxing Music` 等）
-- ✗ 形容詞が抽象的、場所なし（`Beautiful Night Music` 等）
-- ✗ カタログ的、世界観なし（`BGM Collection` 等）
-
-## オブジェクトデザインルール
-
-`config/skills/collection-ideate.yaml` に `objects` セクションがある場合、サムネイルの差し替え可能オブジェクトと固定オブジェクトを定義する。
-
-`objects` がない場合、このセクションはスキップする。`ttp_mode: false` では
-サムネイル差別化はカラー・構図のみになり、`ttp_mode: true` では転写元の
-高再生コレクションまたは勝ちパターンに従う。
-
-### オブジェクトデザインの原則
-
-- `ttp_mode: false` では各コレクションでオブジェクトを差し替え、視覚的差別化を実現する
-- `ttp_mode: true` では差別化軸からオブジェクト値を作らず、転写元の高再生コレクションまたは勝ちパターンに基づいて定義する
-- 名前は短く詩的に
-- ストーリーは「誰が、どんな場面で、なぜ」を描写
-- ビジュアルは具体的に指定（形状・色・質感）
-
-具体例は `references/object-design-examples.md` を参照。
-
-## オリジナリティ保証ルール
-
-`config/skills/collection-ideate.yaml` の `originality` を参照:
-
-- 競合の既存タイトル・テーマとの類似度が `originality.max_similarity` を超えたら警告
-- `ttp_mode: false` ではベンチマークから学ぶのは「パターン（構造）」であり「テーマそのもの」ではない。`true` では実績テーマも優先するが、競合固有のタイトル・シリーズ名・表現は複製せず、構造・パターン・型として転写する
-- 既存コレクションと類似度が高い場合は警告表示
-- `ttp_mode: true` では `originality.require_pattern_reference` の値にかかわらず各企画に「転写元（どの競合のどの高再生コレクションまたは勝ちパターンか）」を明記する
-- `ttp_mode: false` かつ `originality.require_pattern_reference: true` の場合、analytics mode / benchmark fallback mode では各企画に「競合パターン参照元」と「差別化ポイント」を明記。minimal mode では競合パターン参照元を要求せず、ユーザー直接入力 + config からの根拠と差別化ポイントを明記
-
 ## リファレンス
 
 コレクション作成の詳細ライフサイクル（ディレクトリ構造、段階別手順、チェックリスト）は `references/collection-lifecycle.md` を参照。入力モード・鮮度判定の正本は `references/freshness-rules.md` とする。
 
-## 意思決定支援
-
-### 第一ペルソナの企画バリエーション
-
-`/collection-ideate` は前提スキル状態確認で確定した **第一ペルソナ 1 人** に絞って、`preview.candidate_count` 個の企画候補を生成する。複数ペルソナをローテーションせず、`ttp_mode: false` では同じ人物の別シーン・別感情・別利用文脈、`true` では別々の高再生パターンから企画の幅を出す。
-
-**今回のターゲットペルソナ判定**:
-1. persona / viewing-scene の判定は `references/freshness-rules.md` を適用し、続行結果で確定した第一ペルソナを対象にする
-2. `collections/` 配下の全 `workflow-state.json` から `planning.target_persona` を収集する場合も、別人物への切り替えには使わない。`ttp_mode: false` では第一ペルソナ内で未使用のシーン・感情・活動軸を選ぶ材料とし、`true` では persona の一貫性確認だけに使う
-
-**`candidate_count` 候補の生成基準**:
-- `ttp_mode: false`: 同一ペルソナ向けに、`differentiation_axes` の掛け合わせを変えてバリエーションを生成する
-- `ttp_mode: true`: 同一ペルソナ向けに、競合の高再生パターンを変えてバリエーションを生成する。差別化軸は使わず、各候補に転写元を記録する
-
-### 企画レポート保存
+## 企画レポート保存
 
 企画候補は必ずコレクションの `20-documentation/plan_proposals.md` に保存すること。`preview.skip_cost_confirm: true` で画像生成した場合は、Phase 4-2 の生成条件と想定 call 数も同じ文書へ保存する。
 
