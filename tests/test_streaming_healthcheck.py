@@ -124,14 +124,19 @@ def _run_bash(
     )
 
 
-def _classify(active: str, sub: str, result: str) -> tuple[int, str, str]:
+def _classify(
+    active: str,
+    sub: str,
+    result: str,
+    runtime_max_usec: str = "infinity",
+) -> tuple[int, str, str]:
     """healthcheck.sh を source して ``classify_status`` を呼び、(returncode, stdout, stderr) を返す。
 
     bash 関数の単体テスト用 fixture。stdout のトリム済み文字列を分類結果として比較する。
     """
     if not _HEALTHCHECK_SH.exists():
         pytest.fail(f"healthcheck.sh が存在しない: {_HEALTHCHECK_SH}")
-    snippet = f'source "{_HEALTHCHECK_SH}" && classify_status "{active}" "{sub}" "{result}"'
+    snippet = f'source "{_HEALTHCHECK_SH}" && classify_status "{active}" "{sub}" "{result}" "{runtime_max_usec}"'
     proc = _run_bash(snippet)
     return proc.returncode, proc.stdout.strip(), proc.stderr
 
@@ -214,9 +219,19 @@ class TestHealthcheckShClassifyStatus:
 
         order.md「5 分間隔 × 1 時間の休止 = 12 回ぶん抑止」要件。
         """
-        rc, out, _ = _classify("activating", "auto-restart", "success")
+        rc, out, _ = _classify("activating", "auto-restart", "success", "39600000000")
         assert rc == 0
         assert out == "idle", f"activating+auto-restart+success の分類が idle でない: {out!r}"
+
+    @pytest.mark.parametrize("runtime_max_usec", ["infinity", "0"])
+    def test_24_7_auto_restart_classifies_as_anomaly(self, runtime_max_usec: str):
+        """Given RuntimeMaxUSec が無制限の 24/7 配信
+        When activating+auto-restart+success を観測する
+        Then 計画休止ではないため anomaly を出力する。
+        """
+        rc, out, _ = _classify("activating", "auto-restart", "success", runtime_max_usec)
+        assert rc == 0
+        assert out == "anomaly"
 
     def test_activating_auto_restart_with_signal_classifies_as_anomaly(self):
         """Given kill -9 直後の自動再起動待ち (activating+auto-restart+signal)
@@ -304,10 +319,12 @@ class TestHealthcheckShBehavior:
         fake_systemctl = bin_dir / "systemctl"
         fake_systemctl.write_text(
             "#!/usr/bin/env bash\n"
-            "# 偽 systemctl: -p ActiveState -p SubState -p Result のとき KEY=VALUE で 3 行出力\n"
+            "# 偽 systemctl: 監視対象 property を KEY=VALUE で出力\n"
             'echo "ActiveState=${FAKE_ACTIVE:-active}"\n'
             'echo "SubState=${FAKE_SUB:-running}"\n'
             'echo "Result=${FAKE_RESULT:-success}"\n'
+            'echo "RuntimeMaxUSec=${FAKE_RUNTIME_MAX_USEC:-infinity}"\n'
+            'echo "NRestarts=${FAKE_N_RESTARTS:-0}"\n'
         )
         fake_systemctl.chmod(0o755)
 
@@ -335,6 +352,8 @@ class TestHealthcheckShBehavior:
         active: str,
         sub: str,
         result: str,
+        runtime_max_usec: str = "infinity",
+        n_restarts: str = "0",
     ) -> subprocess.CompletedProcess:
         """偽 systemd 状態を環境変数で渡して healthcheck.sh を実行する。"""
         env = os.environ.copy()
@@ -343,6 +362,8 @@ class TestHealthcheckShBehavior:
         env["FAKE_ACTIVE"] = active
         env["FAKE_SUB"] = sub
         env["FAKE_RESULT"] = result
+        env["FAKE_RUNTIME_MAX_USEC"] = runtime_max_usec
+        env["FAKE_N_RESTARTS"] = n_restarts
         # last_status を tmp に閉じ込める（本番では /var/lib/youtube-stream/last_status）
         env["YT_STREAM_STATE_DIR"] = str(fake_env["state_dir"])
         return subprocess.run(
@@ -369,11 +390,94 @@ class TestHealthcheckShBehavior:
 
         order.md「5 分 × 12 回抑止」要件の core test。
         """
-        proc = self._run_with_state(fake_env, active="activating", sub="auto-restart", result="success")
+        proc = self._run_with_state(
+            fake_env,
+            active="activating",
+            sub="auto-restart",
+            result="success",
+            runtime_max_usec="39600000000",
+        )
         assert proc.returncode == 0, f"healthcheck.sh が non-zero: {proc.stderr}"
         assert not fake_env["called_marker"].exists(), (
             "1h 休止中（idle）で notify.sh が呼ばれた（5 分間隔で誤検知が 12 回飛ぶ）"
         )
+
+    @pytest.mark.parametrize("runtime_max_usec", ["infinity", "0"])
+    def test_24_7_auto_restart_calls_notify(self, fake_env, runtime_max_usec: str):
+        """24/7 配信の auto-restart 待ちは計画休止ではなく異常として通知する。"""
+        proc = self._run_with_state(
+            fake_env,
+            active="activating",
+            sub="auto-restart",
+            result="success",
+            runtime_max_usec=runtime_max_usec,
+        )
+        assert proc.returncode == 0, proc.stderr
+        assert fake_env["called_marker"].exists()
+
+    def test_restart_counter_increment_notifies_only_once(self, fake_env):
+        """NRestarts の増加は初回観測時だけ通知し、同じ値の再観測では連打しない。"""
+        first = self._run_with_state(fake_env, active="active", sub="running", result="success", n_restarts="4")
+        assert first.returncode == 0, first.stderr
+        assert not fake_env["called_marker"].exists()
+
+        second = self._run_with_state(fake_env, active="active", sub="running", result="success", n_restarts="5")
+        assert second.returncode == 0, second.stderr
+        calls_after_increment = fake_env["called_marker"].read_text().splitlines()
+        assert len(calls_after_increment) == 1
+        assert "NRestarts=5" in calls_after_increment[0]
+
+        third = self._run_with_state(fake_env, active="active", sub="running", result="success", n_restarts="5")
+        assert third.returncode == 0, third.stderr
+        assert fake_env["called_marker"].read_text().splitlines() == calls_after_increment
+
+    def test_restart_increment_and_anomaly_share_one_notification(self, fake_env):
+        """再起動増加と anomaly 遷移を同時観測しても notify は一度だけ呼ぶ。"""
+        self._run_with_state(fake_env, active="active", sub="running", result="success", n_restarts="0")
+        proc = self._run_with_state(
+            fake_env,
+            active="activating",
+            sub="auto-restart",
+            result="success",
+            runtime_max_usec="infinity",
+            n_restarts="1",
+        )
+        assert proc.returncode == 0, proc.stderr
+        calls = fake_env["called_marker"].read_text().splitlines()
+        assert len(calls) == 1
+        assert "NRestarts=1" in calls[0]
+
+    def test_planned_finite_idle_restart_rebaselines_without_notification(self, fake_env):
+        """11h+1h の計画 restart は counter を進めるが通知しない。"""
+        self._run_with_state(fake_env, active="active", sub="running", result="success", n_restarts="0")
+
+        planned_idle = {
+            "active": "activating",
+            "sub": "auto-restart",
+            "result": "success",
+            "runtime_max_usec": "39600000000",
+            "n_restarts": "1",
+        }
+        first = self._run_with_state(fake_env, **planned_idle)
+        second = self._run_with_state(fake_env, **planned_idle)
+
+        assert first.returncode == 0, first.stderr
+        assert second.returncode == 0, second.stderr
+        assert not fake_env["called_marker"].exists()
+        assert (fake_env["state_dir"] / "last_n_restarts").read_text() == "1\n"
+
+    @pytest.mark.parametrize("baseline", [None, "broken\n", "8\n"])
+    def test_restart_counter_invalid_baseline_or_decrease_rebaselines_silently(self, fake_env, baseline):
+        """baseline 不在・破損・counter 減少は通知せず現在値へ rebaseline する。"""
+        baseline_file = fake_env["state_dir"] / "last_n_restarts"
+        if baseline is not None:
+            fake_env["state_dir"].mkdir(parents=True)
+            baseline_file.write_text(baseline)
+
+        proc = self._run_with_state(fake_env, active="active", sub="running", result="success", n_restarts="3")
+        assert proc.returncode == 0, proc.stderr
+        assert not fake_env["called_marker"].exists()
+        assert baseline_file.read_text() == "3\n"
 
     def test_manual_state_does_not_call_notify(self, fake_env):
         """Given inactive+dead+success（systemctl stop）
@@ -500,6 +604,19 @@ class TestHealthcheckShOrderIndependentParse:
         assert "active=active" in out, f"active が正しく束ねられていない: {out!r}"
         assert "sub=running" in out, f"sub が正しく束ねられていない: {out!r}"
         assert "result=success" in out, f"result が正しく束ねられていない: {out!r}"
+
+    def test_parses_runtime_and_restart_properties(self):
+        """RuntimeMaxUSec と NRestarts も行順に依存せず取得する。"""
+        snippet = (
+            f'source "{_HEALTHCHECK_SH}"\n'
+            "parse_systemctl_kv <<EOF\n"
+            "NRestarts=7\nResult=success\nRuntimeMaxUSec=39600000000\n"
+            "SubState=running\nActiveState=active\nEOF\n"
+            'echo "$runtime_max_usec:$n_restarts"\n'
+        )
+        proc = _run_bash(snippet)
+        assert proc.returncode == 0, proc.stderr
+        assert proc.stdout.strip() == "39600000000:7"
 
 
 class TestHealthcheckShStateChange:
