@@ -49,6 +49,7 @@ import {
 } from "@/components/ui/sheet"
 import { ChannelStockTable } from "@/features/channel-stock/channel-stock-table"
 import {
+  WorkflowTimingFormulaGuide,
   WorkflowTimingMetricsList,
   WorkflowStepTable,
 } from "@/features/workflow-timing/workflow-step-table"
@@ -392,6 +393,7 @@ function WorkflowTimingSummary({
           API が集計した作業時間と削減時間をコレクション単位で比較します。
         </p>
       </div>
+      <WorkflowTimingFormulaGuide />
       <WorkflowTimingState presentation={presentation} />
       <div className="grid gap-4">
         {collections.map((collection) => (

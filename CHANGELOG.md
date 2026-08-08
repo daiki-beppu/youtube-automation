@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `refactor(packaging)`: リポジトリを責務別 layer へ再配置し、canonical owner への production import・receipt・active documentation を同期した。`youtube_automation.utils` と `infrastructure.legacy_utils` は下流向け compatibility façade として installed wheel でも維持し、削除・統合候補は `docs/architecture/reorganization-followups.md` に記録した。
 ### Added
 
+- `feat(dashboard)`: workflow timing の「AI込み削減時間」と「人間が浮いた時間」の算出式を画面内に明示し、カードと step table の各指標から支援技術でも対応する式を確認できるようにした（#3391）。
 - `feat(dashboard)`: workflow timing の基準未設定・未計測・0 秒・進行中・エラーを区別して表示し、timing エラーは Analytics summary / videos を維持する局所 Alert として扱うようにした（#3390）。
 - `feat(dashboard)`: production dashboard の workflow timing 構築を channel 単位で fail-soft 化し、history / lease / state / config の破損を他 channel や Analytics payload へ波及させず、collection 作成前の active lease も `in_progress` として返すようにした（#3348）。
 - `feat(dashboard)`: workflow timing を含む dashboard API schema を v2 とし、overview は timing を除いた channel 集約、detail は `ready` / `unavailable` / `in_progress` / `error` の timing を返す境界を HTTP 200 契約として固定した（#3338）。
