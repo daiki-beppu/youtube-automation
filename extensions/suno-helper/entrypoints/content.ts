@@ -586,6 +586,43 @@ interface PlaylistClipPersistInfo {
   playlistUrlsBeforeCreate?: string[];
 }
 
+type ActiveUnattendedRun = NonNullable<RunPayload["unattended"]>;
+
+function remainingRunIndices(
+  order: number[],
+  interruptedIndex: number,
+  orderPosition: number
+): number[] {
+  const remainingStart =
+    interruptedIndex === order[orderPosition]
+      ? orderPosition
+      : orderPosition + 1;
+  return order.slice(remainingStart);
+}
+
+function resolveInterruptRemainingIndices(
+  explicitRemainingIndices: number[] | undefined,
+  hasExplicitIndices: boolean,
+  remainingIndicesInRun: number[] | undefined
+): number[] | undefined {
+  if (explicitRemainingIndices !== undefined) {
+    return explicitRemainingIndices;
+  }
+  return hasExplicitIndices ? remainingIndicesInRun : undefined;
+}
+
+function appendDeferredIndices(
+  unattended: ActiveUnattendedRun,
+  remainingIndicesInRun: number[]
+): ActiveUnattendedRun {
+  return {
+    ...unattended,
+    deferredIndices: [
+      ...new Set([...remainingIndicesInRun, ...unattended.deferredIndices]),
+    ],
+  };
+}
+
 async function resolveDownloadContext(
   formatOverride?: DownloadContext["format"]
 ): Promise<DownloadContext> {
@@ -923,15 +960,24 @@ export default defineContentScript({
       assertUnattendedUiIsSafe({ allowCaptcha: true });
       // captcha が出ていても即停止しない。多くは passive 検証で数秒以内に自動 verify されて閉じるため、
       // waiting-captcha phase で解消を待って自動続行する。解消されない場合のみ throw（fail-loud は維持）。
-      await waitForCaptchaClear({
-        isAborted: () => aborted,
-        pollIntervalMs: POLL_INTERVAL_MS,
-        timeoutMs: CAPTCHA_WAIT_TIMEOUT_MS,
-        onWaitStart: () => {
-          adaptivePacingState = recordChallenge(adaptivePacingState);
-          emitProgress({ phase: PHASE.WAITING_CAPTCHA, index, total });
-        },
-      });
+      try {
+        await waitForCaptchaClear({
+          isAborted: () => aborted,
+          pollIntervalMs: POLL_INTERVAL_MS,
+          timeoutMs: CAPTCHA_WAIT_TIMEOUT_MS,
+          onWaitStart: () => {
+            adaptivePacingState = recordChallenge(adaptivePacingState);
+            emitProgress({ phase: PHASE.WAITING_CAPTCHA, index, total });
+          },
+        });
+      } catch (error) {
+        if (activeUnattended) {
+          throw new FatalRunError(
+            error instanceof Error ? error.message : String(error)
+          );
+        }
+        throw error;
+      }
     }
 
     // fallow-ignore-next-line complexity
@@ -1545,15 +1591,21 @@ export default defineContentScript({
         explicitRemainingIndices?: number[],
         propagateWriteError = false
       ): void {
-        const remainingIndices =
-          explicitRemainingIndices ??
-          (hasExplicitIndices && orderPosition !== undefined
-            ? order.slice(
-                interruptedIndex === order[orderPosition]
-                  ? orderPosition
-                  : orderPosition + 1
-              )
-            : undefined);
+        const remainingIndicesInRun =
+          orderPosition === undefined
+            ? undefined
+            : remainingRunIndices(order, interruptedIndex, orderPosition);
+        const remainingIndices = resolveInterruptRemainingIndices(
+          explicitRemainingIndices,
+          hasExplicitIndices,
+          remainingIndicesInRun
+        );
+        if (activeUnattended && remainingIndicesInRun) {
+          activeUnattended = appendDeferredIndices(
+            activeUnattended,
+            remainingIndicesInRun
+          );
+        }
         const currentSubmittedIds = tracker.getSubmittedIds();
         const regenerateDurationOutliers =
           options.durationOutlierPolicy.kind === "regenerate";

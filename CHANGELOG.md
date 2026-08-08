@@ -42,6 +42,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `fix(config)`: skill-config の未知のトップレベルキーと同名のキーが既定設定内にある場合、正しい nested path の候補を警告へ表示（#2558）。
 
 - `feat(distrokid-helper)`: `/server-info` に DistroKid の `disabled` / `single` / `dir` 実行モードを判別できる optional capability を追加し、既存必須フィールドと discovery schema v1 の互換性を維持（#2985）。
+- `fix(suno-helper)`: 無人実行の CAPTCHA 解消待機が timeout した場合、未投入 entry をすべて checkpoint に保持して `manual-intervention / captcha-required` で停止するようにした。待機中の Stop はエラー化せず、同じ checkpoint から再開できる（#3426）。
+
 - `fix(suno-helper)`: 無人実行中の CAPTCHA challenge を致命的な UI blocker とせず、serial / queue 共通の解消待機後に未投入 entry を重複なく再開するようにした（#2980）。
 
 - `fix(suno-helper)`: 無人実行の起動前確認で可視 CAPTCHA challenge を検出した場合、即時に手動介入状態へ停止せず既存の CAPTCHA 解消待機経路へ入るようにした（#2979）。
