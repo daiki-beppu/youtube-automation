@@ -1092,7 +1092,7 @@ export default defineContentScript({
         timeoutMs: GENERATE_TIMEOUT_MS,
         pollIntervalMs: POLL_INTERVAL_MS,
         settleMs: SETTLE_MS,
-        captchaWaitTimeoutMs: activeUnattended ? 0 : CAPTCHA_WAIT_TIMEOUT_MS,
+        captchaWaitTimeoutMs: CAPTCHA_WAIT_TIMEOUT_MS,
         // 生成完了待ち中に captcha が出たら waiting-captcha 表示へ切り替え、解消後 generating へ戻す。
         onCaptchaWait: (waiting) => {
           if (waiting) {
