@@ -3,6 +3,7 @@
 // retry 系ハンドラの running ガード・正常完了・throw→ERROR を網羅する。
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { DownloadSummary, PostDownloadedResult } from "../../shared/api";
 import { PHASE } from "../../shared/constants";
 import type { RetryPlaylistPayload } from "../lib/messaging";
 
@@ -11,6 +12,7 @@ interface ProgressMessage {
   total: number;
   index?: number;
   message?: string;
+  downloadSummary?: DownloadSummary;
 }
 
 type Handler = (message: { data: unknown }) => unknown;
@@ -18,6 +20,7 @@ type Handler = (message: { data: unknown }) => unknown;
 const clearResumeStateMock = vi.fn(() => Promise.resolve());
 const scheduleRunCompleteReloadMock = vi.fn();
 const cancelScheduledRunCompleteReloadMock = vi.fn();
+const writeFinishedSnapshotMock = vi.fn(() => Promise.resolve());
 
 function expectPostDownloadedBody(
   payload: unknown,
@@ -52,6 +55,7 @@ async function loadContentScript(overrides?: {
   startDownloadResult?: { ok: true } | { ok: false; message: string };
   postDownloadedError?: Error;
   postDownloadedRejectOnCall?: number;
+  postDownloadedResult?: PostDownloadedResult;
   downloadFormatValue?: unknown;
 }) {
   vi.resetModules();
@@ -61,9 +65,11 @@ async function loadContentScript(overrides?: {
   );
   scheduleRunCompleteReloadMock.mockReset();
   cancelScheduledRunCompleteReloadMock.mockReset();
+  writeFinishedSnapshotMock.mockReset();
 
   const handlers = new Map<string, Handler>();
   const progressMessages: ProgressMessage[] = [];
+  const progressMock = vi.fn();
   const sentMessages: Array<{ type: string; payload: unknown }> = [];
   let postDownloadedCallCount = 0;
 
@@ -76,18 +82,21 @@ async function loadContentScript(overrides?: {
       sentMessages.push({ type, payload });
       if (type === "progress") {
         progressMessages.push(payload as ProgressMessage);
+        progressMock(payload);
       }
       if (type === "startDownload") {
         return Promise.resolve(overrides?.startDownloadResult ?? { ok: true });
       }
-      if (type === "postDownloaded" && overrides?.postDownloadedError) {
+      if (type === "postDownloaded") {
         postDownloadedCallCount += 1;
         if (
+          overrides?.postDownloadedError &&
           (overrides.postDownloadedRejectOnCall ?? 1) ===
-          postDownloadedCallCount
+            postDownloadedCallCount
         ) {
           return Promise.reject(overrides.postDownloadedError);
         }
+        return Promise.resolve(overrides?.postDownloadedResult);
       }
       return Promise.resolve();
     }),
@@ -210,7 +219,7 @@ async function loadContentScript(overrides?: {
   // 完了時リロード前の snapshot 退避。実物は chrome.storage へアクセスするため node 環境では mock 必須。
   // 退避契約そのものの検証は content-finished-snapshot.test.ts が担う。
   vi.doMock("../lib/finished-snapshot", () => ({
-    writeFinishedSnapshot: vi.fn(() => Promise.resolve()),
+    writeFinishedSnapshot: writeFinishedSnapshotMock,
     readFreshFinishedSnapshot: vi.fn(() => Promise.resolve(null)),
     clearFinishedSnapshot: vi.fn(() => Promise.resolve()),
   }));
@@ -268,10 +277,12 @@ async function loadContentScript(overrides?: {
   return {
     handlers,
     progressMessages,
+    progressMock,
     sentMessages,
     triggerDownloadAllMock,
     scrollAndMultiSelectByIdsMock,
     scheduleRunCompleteReloadMock,
+    writeFinishedSnapshotMock,
   };
 }
 
@@ -686,6 +697,75 @@ describe('content onMessage("retryDownload"): 正常完了', () => {
     });
   });
 
+  it("Given retry download が部分成功 When retry completes Then summary 付き FINISHED を保存して順序どおりリロードする", async () => {
+    const summary = {
+      expected: 4,
+      placed: 3,
+      missing: 1,
+      reasons: { sunoUnfulfilled: 1, applySkipped: 0 },
+    } satisfies DownloadSummary;
+    const {
+      handlers,
+      progressMock,
+      progressMessages,
+      scheduleRunCompleteReloadMock,
+      writeFinishedSnapshotMock,
+    } = await loadContentScript({
+      postDownloadedResult: {
+        summary,
+        warning: "placed 3 files, expected 4 (1 missing)",
+      },
+    });
+
+    handlers.get("retryDownload")!({
+      data: {
+        collectionId: "coll-1",
+        submittedClipIds: ["clip-1", "clip-2"],
+        expectedClipCount: 4,
+      },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    handlers.get("downloadComplete")!({
+      data: { filename: "/Users/test/Downloads/partial-retry.zip" },
+    });
+
+    await vi.waitFor(() =>
+      expect(scheduleRunCompleteReloadMock).toHaveBeenCalledOnce()
+    );
+    const finished = progressMessages.findLast(
+      (message) => message.phase === PHASE.FINISHED
+    );
+    expect(finished?.downloadSummary).toBe(summary);
+    expect(
+      progressMessages.some((message) => message.phase === PHASE.ERROR)
+    ).toBe(false);
+    expect(writeFinishedSnapshotMock).toHaveBeenCalledWith({
+      snapshot: expect.objectContaining({
+        progress: expect.objectContaining({
+          phase: PHASE.FINISHED,
+          downloadSummary: summary,
+        }),
+      }),
+      timestamp: expect.any(Number),
+    });
+
+    const finishedCallIndex = progressMock.mock.calls.findIndex(
+      ([payload]) => (payload as ProgressMessage).phase === PHASE.FINISHED
+    );
+    expect(finishedCallIndex).toBeGreaterThanOrEqual(0);
+    const finishedCallOrder =
+      progressMock.mock.invocationCallOrder[finishedCallIndex];
+    expect(clearResumeStateMock.mock.invocationCallOrder[0]).toBeLessThan(
+      finishedCallOrder
+    );
+    expect(finishedCallOrder).toBeLessThan(
+      writeFinishedSnapshotMock.mock.invocationCallOrder[0]
+    );
+    expect(writeFinishedSnapshotMock.mock.invocationCallOrder[0]).toBeLessThan(
+      scheduleRunCompleteReloadMock.mock.invocationCallOrder[0]
+    );
+  });
+
   it("Given 不正な保存済み download format When retryDownload Then mp3 に正規化して実行する", async () => {
     const { handlers, sentMessages, triggerDownloadAllMock } =
       await loadContentScript({
@@ -924,10 +1004,11 @@ describe('content onMessage("retryDownload"): postDownloaded 失敗→ERROR (#12
   });
 
   it("Given postDownloaded が reject When retryDownload Then ERROR phase を emit する", async () => {
-    const { handlers, progressMessages } = await loadContentScript({
-      postDownloadedError: new Error("POST downloaded failed: 403 Forbidden"),
-      postDownloadedRejectOnCall: 1,
-    });
+    const { handlers, progressMessages, scheduleRunCompleteReloadMock } =
+      await loadContentScript({
+        postDownloadedError: new Error("POST downloaded failed: 403 Forbidden"),
+        postDownloadedRejectOnCall: 1,
+      });
 
     const clipIds = ["clip-1", "clip-2"];
     handlers.get("retryDownload")!({
@@ -952,5 +1033,9 @@ describe('content onMessage("retryDownload"): postDownloaded 失敗→ERROR (#12
       )
     );
     expect(clearResumeStateMock).not.toHaveBeenCalled();
+    expect(
+      progressMessages.some((message) => message.phase === PHASE.FINISHED)
+    ).toBe(false);
+    expect(scheduleRunCompleteReloadMock).not.toHaveBeenCalled();
   });
 });
