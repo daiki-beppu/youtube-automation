@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import json
+import os
+import tempfile
 from collections import Counter
 from collections.abc import Iterable
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 SCHEMA_VERSION = 1
@@ -45,3 +49,21 @@ def build_dashboard_publications(
         "timezone": timezone,
         "days": dict(sorted(counts.items())),
     }
+
+
+def save_dashboard_publications(destination: Path, payload: dict[str, object]) -> None:
+    """同一ディレクトリの一時ファイルを置換して payload を原子的に保存する。"""
+    descriptor, temporary_name = tempfile.mkstemp(
+        dir=destination.parent,
+        prefix=f".{destination.name}.",
+        suffix=".tmp",
+    )
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as file:
+            json.dump(payload, file, ensure_ascii=False, indent=2)
+            file.write("\n")
+            file.flush()
+        os.replace(temporary, destination)
+    finally:
+        temporary.unlink(missing_ok=True)
