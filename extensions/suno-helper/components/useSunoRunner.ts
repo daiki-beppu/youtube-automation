@@ -1511,7 +1511,7 @@ export function useSunoRunner(): RunnerState {
     }
     if (submittedClipIdsForResume.length === 0) {
       report(
-        "ダウンロード再開に必要な clip ID がありません。ページを再読み込みしてから再試行してください。",
+        "ダウンロード再開に必要な clip ID がありません。Suno 上で対象曲を選択し、「選択中の曲を採用」を押してから「Download から再開」を再試行してください。",
         true
       );
       return;
