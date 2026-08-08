@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import test from "node:test";
 import { promisify } from "node:util";
 
@@ -8,6 +8,18 @@ const readIndex = () => readFile(new URL("../dist/index.html", import.meta.url),
 const readRelease = (version) =>
   readFile(new URL(`../dist/${version}/index.html`, import.meta.url), "utf8");
 const execFileAsync = promisify(execFile);
+
+const readStylesheetClosure = async (html) => {
+  const inlineStyles = [...html.matchAll(/<style(?:\s[^>]*)?>([\s\S]*?)<\/style>/g)].map(
+    (match) => match[1]
+  );
+  const linkedStyles = await Promise.all(
+    [...html.matchAll(/<link[^>]+href=["']([^"']+\.css)["'][^>]*>/g)].map((match) =>
+      readFile(new URL(`../dist${match[1]}`, import.meta.url), "utf8")
+    )
+  );
+  return [...inlineStyles, ...linkedStyles].join("\n");
+};
 
 test("公式 DADS design tokens の exact dependency と CSS token surface を提供する", async () => {
   const sitePackage = JSON.parse(
@@ -35,6 +47,90 @@ test("公式 DADS design tokens の exact dependency と CSS token surface を�
   assert.match(tokens, /--color-key-/);
   assert.match(tokens, /--color-neutral-/);
   assert.match(tokens, /--color-semantic-/);
+});
+
+test("DADS key と neutral token を system mode の site 配色へ割り当てる", async () => {
+  const config = await readFile(new URL("../blume.config.ts", import.meta.url), "utf8");
+  const sourceCss = await readFile(
+    new URL("../styles/release-notes.css", import.meta.url),
+    "utf8"
+  );
+  const assetDirectory = new URL("../dist/_astro/", import.meta.url);
+  const generatedCss = (
+    await Promise.all(
+      (await readdir(assetDirectory))
+        .filter((name) => name.endsWith(".css"))
+        .map((name) => readFile(new URL(name, assetDirectory), "utf8"))
+    )
+  ).join("\n");
+
+  assert.match(
+    sourceCss,
+    /@import ["']@digital-go-jp\/design-tokens\/dist\/tokens-simple\.css["'];/
+  );
+  assert.match(
+    config,
+    /import dadsTokens from ["']@digital-go-jp\/design-tokens["']/
+  );
+  assert.match(
+    config,
+    /const lightAccent = dadsTokens\.Color\.Key\["800"\]\.\$value/
+  );
+  assert.match(
+    config,
+    /const darkAccent = dadsTokens\.Color\.Key\["400"\]\.\$value/
+  );
+  assert.match(
+    config,
+    /accent:\s*\{\s*light:\s*lightAccent,\s*dark:\s*darkAccent,?\s*\}/
+  );
+  assert.doesNotMatch(config, /#[0-9a-f]{3,8}\b/i);
+  assert.match(config, /mode:\s*["']system["']/);
+  assert.match(sourceCss, /--release-main:\s*var\(--color-key-800\)/);
+  assert.match(
+    sourceCss,
+    /--release-extension:\s*var\(--color-neutral-solid-gray-700\)/
+  );
+  assert.match(
+    sourceCss,
+    /:root\[data-theme=["']dark["']\][\s\S]*--release-main:\s*var\(--color-key-400\)[\s\S]*--release-extension:\s*var\(--color-neutral-solid-gray-300\)/
+  );
+  assert.match(sourceCss, /color:\s*var\(--color-muted-foreground\)/);
+  assert.match(sourceCss, /border:\s*1px solid var\(--color-border\)/);
+  assert.doesNotMatch(sourceCss, /#[0-9a-f]{3,8}\b/i);
+  assert.doesNotMatch(sourceCss, /#7c3aed|#0f766e|--color-text-muted/i);
+  assert.doesNotMatch(
+    sourceCss,
+    /--release-(?:main|extension):[^;]*--color-semantic-(?:success|error|warning)/
+  );
+  assert.match(generatedCss, /--color-key-800/);
+  assert.match(generatedCss, /--color-key-400/);
+  assert.match(generatedCss, /--color-neutral-solid-gray-700/);
+  assert.match(generatedCss, /--color-neutral-solid-gray-300/);
+  assert.doesNotMatch(generatedCss, /#7c3aed|#0f766e/i);
+});
+
+test("全 Blume page の stylesheet closure で DADS accent を解決する", async () => {
+  const designTokens = (await import("@digital-go-jp/design-tokens")).default;
+  const lightAccent = designTokens.Color.Key["800"].$value;
+  const darkAccent = designTokens.Color.Key["400"].$value;
+  const distDirectory = new URL("../dist/", import.meta.url);
+  const htmlPaths = (await readdir(distDirectory, { recursive: true })).filter((path) =>
+    path.endsWith(".html")
+  );
+
+  assert.ok(htmlPaths.length > 1);
+  for (const htmlPath of htmlPaths) {
+    const html = await readFile(new URL(htmlPath, distDirectory), "utf8");
+    const styles = await readStylesheetClosure(html);
+    const accentReferences = [...styles.matchAll(/--blume-accent:\s*var\((--[^)]+)\)/g)];
+
+    for (const [, variable] of accentReferences) {
+      assert.match(styles, new RegExp(`${variable.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}:`));
+    }
+    assert.match(styles, new RegExp(`--blume-accent:\\s*${lightAccent}`));
+    assert.match(styles, new RegExp(`--blume-accent:\\s*${darkAccent}`));
+  }
 });
 
 test("一覧は本体とChrome拡張に分かれ、それぞれ公開日の新しい順で表示する", async () => {
