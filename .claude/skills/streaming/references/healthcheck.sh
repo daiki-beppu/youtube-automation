@@ -3,7 +3,7 @@
 #
 # 4-way 分類:
 #   ok      : active+running           （配信中、Result は問わない）
-#   idle    : activating+auto-restart+success （stream_hours > 0 の RuntimeMaxSec 到達後の計画休止）
+#   idle    : activating+auto-restart+success かつ有限 RuntimeMaxUSec（計画休止）
 #   manual  : inactive+dead+success    （systemctl stop）
 #   anomaly : 上記以外                 （kill -9 / failed / Result≠success など）
 #
@@ -20,12 +20,13 @@ set -euo pipefail
 # にあるため、cron セーフなパスを末尾に append しておく（既存 PATH が空でも動く）。
 export PATH="${PATH:+${PATH}:}/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
-# systemctl show の 3 値を ok / idle / manual / anomaly のいずれかに分類する純関数。
+# systemctl show の状態と RuntimeMaxUSec を ok / idle / manual / anomaly に分類する純関数。
 # stdout に分類名を 1 行 echo するだけ。
 classify_status() {
   local active="$1"
   local sub="$2"
   local result="$3"
+  local runtime_max_usec="${4:-}"
 
   if [[ "$active" == "active" && "$sub" == "running" ]]; then
     echo "ok"
@@ -33,7 +34,12 @@ classify_status() {
   fi
 
   if [[ "$active" == "activating" && "$sub" == "auto-restart" && "$result" == "success" ]]; then
-    echo "idle"
+    if [[ -n "$runtime_max_usec" && "$runtime_max_usec" != "infinity" && "$runtime_max_usec" != "0" ]]; then
+      echo "idle"
+    else
+      # 24/7 配信には計画休止がないため、auto-restart 待ちは異常。
+      echo "anomaly"
+    fi
     return
   fi
 
@@ -47,19 +53,23 @@ classify_status() {
 }
 
 # stdin の `KEY=VALUE` 行（systemctl show -p ... 出力）を読み、
-# ActiveState/SubState/Result を呼び出し元 scope の active/sub/result 変数にセットする。
+# 監視対象 property を呼び出し元 scope の変数にセットする。
 # `systemctl show ... --value` は property 引数順序を保証しないため `KEY=VALUE` 形式で
 # パースする（順序非依存）。process substitution `< <(...)` で呼ぶ前提。
 parse_systemctl_kv() {
   active=""
   sub=""
   result=""
+  runtime_max_usec=""
+  n_restarts=""
   local line
   while IFS= read -r line; do
     case "$line" in
       ActiveState=*) active="${line#*=}" ;;
       SubState=*)    sub="${line#*=}" ;;
       Result=*)      result="${line#*=}" ;;
+      RuntimeMaxUSec=*) runtime_max_usec="${line#*=}" ;;
+      NRestarts=*)      n_restarts="${line#*=}" ;;
     esac
   done
 }
@@ -107,17 +117,45 @@ readonly UNIT="youtube-stream"
 # STATE_DIR は本番では /var/lib/youtube-stream 固定。テスト時のみ YT_STREAM_STATE_DIR で override。
 readonly STATE_DIR="${YT_STREAM_STATE_DIR:-/var/lib/youtube-stream}"
 readonly LAST_STATUS_FILE="${STATE_DIR}/last_status"
+readonly LAST_N_RESTARTS_FILE="${STATE_DIR}/last_n_restarts"
 
 mkdir -p "$STATE_DIR"
 
 # 順序非依存パース（KEY=VALUE 形式）。process substitution で親 scope に変数を反映させる。
-parse_systemctl_kv < <(systemctl show "$UNIT" -p ActiveState -p SubState -p Result)
+parse_systemctl_kv < <(
+  systemctl show "$UNIT" \
+    -p ActiveState \
+    -p SubState \
+    -p Result \
+    -p RuntimeMaxUSec \
+    -p NRestarts
+)
 
-status="$(classify_status "$active" "$sub" "$result")"
+status="$(classify_status "$active" "$sub" "$result" "$runtime_max_usec")"
+
+# NRestarts は配信が次の観測までに active へ復帰しても再起動を検知できる。
+# 初回・破損 baseline・counter reset は通知せず、現在値へ rebaseline する。
+prev_n_restarts="$(cat "$LAST_N_RESTARTS_FILE" 2>/dev/null || true)"
+restart_notified=false
+if [[ "$n_restarts" =~ ^[0-9]+$ ]]; then
+  if [[ "$status" != "idle" && "$prev_n_restarts" =~ ^[0-9]+$ ]] && ((n_restarts > prev_n_restarts)); then
+    restart_delta=$((n_restarts - prev_n_restarts))
+    restart_msg="[youtube-stream] restart detected: NRestarts=${n_restarts} previous=${prev_n_restarts} increment=${restart_delta}"
+    logger -t youtube-stream-healthcheck -- "$restart_msg" || true
+    "$(dirname "$0")/notify.sh" "$restart_msg"
+    restart_notified=true
+  fi
+  printf '%s\n' "$n_restarts" > "$LAST_N_RESTARTS_FILE"
+fi
 
 # 初回・破損時は unknown フォールバック（decide_notification の遷移表に従う）
 prev="$(cat "$LAST_STATUS_FILE" 2>/dev/null || echo unknown)"
 action="$(decide_notification "$prev" "$status")"
+
+# 同じ cron 観測で再起動増加も検知した場合、状態遷移との二重通知を避ける。
+if [[ "$restart_notified" == true ]]; then
+  action=""
+fi
 
 case "$action" in
   anomaly)
