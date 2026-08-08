@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `feat(dashboard)`: stale な有効公開履歴 cache の再取得が想定内エラーで失敗した場合、前回データを維持した構造化 error payload を保存して channel 更新を継続するようにした。有効 cache が無い場合は従来の refresh error 経路へ伝播する（#3384）。
 - `feat(dashboard)`: stale を含む schema-valid な公開履歴 cache を鮮度判定と独立して読み出し、前回の `days` / `fetched_at` / `timezone` を維持したまま `code` / `message` / `attempted_at` の構造化更新エラーを付与できるようにした（#3383）。
 - `feat(dashboard)`: 公開履歴 cache が fresh な場合は通常の Analytics snapshot 更新だけを行い、公開履歴用の追加 YouTube Data API 呼び出しと cache 保存を省略するようにした。cache が missing / stale / corrupt の場合は従来どおり再取得・保存する（#3375）。
 - `refactor(tests)`: 旧 `unit` / `streaming` テストを canonical owner と `tests/repo/streaming/` へ整理し、root allowlist・source layer・source owner の配置規約を repository contract として機械担保した（#3047）。
