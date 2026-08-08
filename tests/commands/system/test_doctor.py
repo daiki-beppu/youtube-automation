@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import importlib.metadata
 import json
 import os
 import re
 import shutil
+import site
+import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -19,6 +22,22 @@ from PIL import Image as PILImage
 import youtube_automation.infrastructure.secrets as secrets_module
 from youtube_automation.commands.system import doctor
 from youtube_automation.core.errors import ConfigError
+
+
+def _mock_running_distribution(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    location: Path,
+    installer: str | None,
+    prefix: Path,
+    base_prefix: Path,
+) -> None:
+    distribution = MagicMock()
+    distribution.locate_file.return_value = location
+    distribution.read_text.return_value = installer
+    monkeypatch.setattr(importlib.metadata, "distribution", lambda _name: distribution)
+    monkeypatch.setattr(sys, "prefix", str(prefix))
+    monkeypatch.setattr(sys, "base_prefix", str(base_prefix))
 
 
 def _clear_secret_cache() -> None:
@@ -1248,9 +1267,19 @@ class TestResolveChannelDir:
 
 class TestMain:
     def test_json_output_reports_uv_tool_install_through_public_cli(self, monkeypatch, tmp_path, capsys):
+        tool_root = tmp_path / "uv-tools"
+        tool_environment = tool_root / "youtube-channels-automation"
+        _mock_running_distribution(
+            monkeypatch,
+            location=tool_environment / "lib/python3.13/site-packages",
+            installer="uv\n",
+            prefix=tool_environment,
+            base_prefix=tmp_path / "python",
+        )
+
         def fake_run(cmd, **kwargs):
-            if cmd == ["uv", "tool", "list"]:
-                return 0, "youtube-channels-automation v5.5.15\n- yt-doctor\n", ""
+            if cmd == ["uv", "tool", "dir"]:
+                return 0, f"{tool_root}\n", ""
             return 127, "", "missing"
 
         monkeypatch.setattr(doctor, "_run", fake_run)
@@ -1264,6 +1293,30 @@ class TestMain:
         assert "uv tool" in checks["uv_project"]["message"]
         assert checks["automation_package"]["status"] == "ok"
         assert "uv tool" in checks["automation_package"]["message"]
+        assert payload["summary"]["next_check_id"] not in {"uv_project", "automation_package"}
+
+    def test_json_output_reports_pip_user_install_through_public_cli(self, monkeypatch, tmp_path, capsys):
+        user_site = tmp_path / "user-site"
+        _mock_running_distribution(
+            monkeypatch,
+            location=user_site,
+            installer="pip\n",
+            prefix=tmp_path / "python",
+            base_prefix=tmp_path / "python",
+        )
+        monkeypatch.setattr(site, "getusersitepackages", lambda: str(user_site))
+        monkeypatch.setattr(doctor, "_run", lambda *_args, **_kwargs: (127, "", "missing"))
+
+        code = doctor.main(["--json", "--target", str(tmp_path)])
+
+        assert code == 0
+        payload = json.loads(capsys.readouterr().out)
+        checks = {check["id"]: check for check in payload["checks"]}
+        assert checks["uv_project"]["status"] == "ok"
+        assert "pip user" in checks["uv_project"]["message"]
+        assert checks["automation_package"]["status"] == "ok"
+        assert "pip user" in checks["automation_package"]["message"]
+        assert payload["summary"]["next_check_id"] not in {"uv_project", "automation_package"}
 
     def test_json_output(self, monkeypatch, tmp_path, capsys):
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
@@ -1930,10 +1983,19 @@ class TestBootstrapChecks:
         assert r.next_action["kind"] == "human"
 
     def test_uv_tool_install_without_pyproject_is_ok(self, monkeypatch, tmp_path):
+        tool_root = tmp_path / "uv-tools"
+        tool_environment = tool_root / "youtube-channels-automation"
+        _mock_running_distribution(
+            monkeypatch,
+            location=tool_environment / "lib/python3.13/site-packages",
+            installer="uv\n",
+            prefix=tool_environment,
+            base_prefix=tmp_path / "python",
+        )
         monkeypatch.setattr(
             doctor,
             "_run",
-            lambda *args, **kwargs: (0, "youtube-channels-automation v5.5.15\n- yt-doctor\n", ""),
+            lambda cmd, **_kwargs: (0, f"{tool_root}\n", "") if cmd == ["uv", "tool", "dir"] else (127, "", "missing"),
         )
 
         uv_project = doctor.check_uv_project(tmp_path)
@@ -1945,6 +2007,108 @@ class TestBootstrapChecks:
         assert automation_package.status == "ok"
         assert "uv tool" in automation_package.message
         assert automation_package.next_action is None
+
+    @pytest.mark.parametrize(
+        ("location_kind", "expected_mode"),
+        [("user", "pip user"), ("system", "pip system")],
+    )
+    def test_pip_global_install_without_pyproject_is_ok(self, monkeypatch, tmp_path, location_kind, expected_mode):
+        user_site = tmp_path / "user-site"
+        system_site = tmp_path / "system-site"
+        location = user_site if location_kind == "user" else system_site
+        _mock_running_distribution(
+            monkeypatch,
+            location=location,
+            installer="pip\n",
+            prefix=tmp_path / "python",
+            base_prefix=tmp_path / "python",
+        )
+        monkeypatch.setattr(site, "getusersitepackages", lambda: str(user_site))
+        monkeypatch.setattr(doctor, "_run", lambda *_args, **_kwargs: (0, "", ""))
+
+        uv_project = doctor.check_uv_project(tmp_path)
+        automation_package = doctor.check_automation_package(tmp_path)
+
+        assert uv_project.status == "ok"
+        assert expected_mode in uv_project.message
+        assert uv_project.next_action is None
+        assert automation_package.status == "ok"
+        assert expected_mode in automation_package.message
+        assert automation_package.next_action is None
+
+    def test_pip_user_running_distribution_is_not_mislabeled_by_separate_uv_tool(self, monkeypatch, tmp_path):
+        user_site = tmp_path / "user-site"
+        _mock_running_distribution(
+            monkeypatch,
+            location=user_site,
+            installer="pip\n",
+            prefix=tmp_path / "python",
+            base_prefix=tmp_path / "python",
+        )
+        monkeypatch.setattr(site, "getusersitepackages", lambda: str(user_site))
+        monkeypatch.setattr(
+            doctor,
+            "_run",
+            lambda cmd, **_kwargs: (
+                (0, "youtube-channels-automation v5.6.0\n- yt-doctor\n", "")
+                if cmd == ["uv", "tool", "list"]
+                else (0, "", "")
+            ),
+        )
+
+        result = doctor.check_automation_package(tmp_path)
+
+        assert result.status == "ok"
+        assert "pip user" in result.message
+        assert "uv tool" not in result.message
+
+    def test_unknown_global_installer_is_reported_without_guessing(self, monkeypatch, tmp_path):
+        _mock_running_distribution(
+            monkeypatch,
+            location=tmp_path / "system-site",
+            installer="custom-installer\n",
+            prefix=tmp_path / "python",
+            base_prefix=tmp_path / "python",
+        )
+        monkeypatch.setattr(site, "getusersitepackages", lambda: str(tmp_path / "user-site"))
+        monkeypatch.setattr(doctor, "_run", lambda *_args, **_kwargs: (0, "", ""))
+
+        result = doctor.check_automation_package(tmp_path)
+
+        assert result.status == "ok"
+        assert "global" in result.message
+        assert "pip" not in result.message
+        assert "uv tool" not in result.message
+
+    def test_unknown_virtual_environment_without_pyproject_remains_failed(self, monkeypatch, tmp_path):
+        virtual_environment = tmp_path / "venv"
+        _mock_running_distribution(
+            monkeypatch,
+            location=virtual_environment / "lib/python3.13/site-packages",
+            installer=None,
+            prefix=virtual_environment,
+            base_prefix=tmp_path / "python",
+        )
+        monkeypatch.setattr(doctor, "_run", lambda *_args, **_kwargs: (1, "", "uv tool unavailable"))
+
+        uv_project = doctor.check_uv_project(tmp_path)
+        automation_package = doctor.check_automation_package(tmp_path)
+
+        assert uv_project.status == "fail"
+        assert uv_project.next_action["cmd"] == "uv init"
+        assert automation_package.status == "fail"
+        assert automation_package.next_action["cmd"] == "uv init"
+
+    def test_missing_distribution_metadata_without_pyproject_remains_failed(self, monkeypatch, tmp_path):
+        def missing_distribution(_name):
+            raise importlib.metadata.PackageNotFoundError
+
+        monkeypatch.setattr(importlib.metadata, "distribution", missing_distribution)
+
+        result = doctor.check_automation_package(tmp_path)
+
+        assert result.status == "fail"
+        assert result.next_action["cmd"] == "uv init"
 
     def test_uv_project_missing_is_fail_with_uv_init(self, monkeypatch, tmp_path):
         monkeypatch.setattr(doctor, "_run", lambda *args, **kwargs: (0, "", ""))
@@ -1966,6 +2130,7 @@ class TestBootstrapChecks:
         r = doctor.check_uv_project(tmp_path)
         assert r.status == "ok"
         assert r.category == "bootstrap"
+        assert "uv project" in r.message
 
     def test_workspace_channel_uses_root_uv_project(self, monkeypatch, tmp_path):
         workspace, channel = self._workspace_channel(tmp_path)
@@ -1996,10 +2161,19 @@ class TestBootstrapChecks:
         assert "uv add" in r.next_action["cmd"]
 
     def test_automation_package_uv_tool_install_with_pyproject_is_ok(self, monkeypatch, tmp_path):
+        tool_root = tmp_path / "uv-tools"
+        tool_environment = tool_root / "youtube-channels-automation"
+        _mock_running_distribution(
+            monkeypatch,
+            location=tool_environment / "lib/python3.13/site-packages",
+            installer="uv\n",
+            prefix=tool_environment,
+            base_prefix=tmp_path / "python",
+        )
         monkeypatch.setattr(
             doctor,
             "_run",
-            lambda *args, **kwargs: (0, "youtube-channels-automation v5.5.15\n- yt-doctor\n", ""),
+            lambda cmd, **_kwargs: (0, f"{tool_root}\n", "") if cmd == ["uv", "tool", "dir"] else (127, "", "missing"),
         )
         (tmp_path / "pyproject.toml").write_text(
             '[project]\nname = "x"\ndependencies = ["requests>=2"]\n',
@@ -2021,6 +2195,7 @@ class TestBootstrapChecks:
         r = doctor.check_automation_package(tmp_path)
         assert r.status == "ok"
         assert r.category == "bootstrap"
+        assert "uv project" in r.message
 
     def test_workspace_channel_uses_root_automation_dependency(self, monkeypatch, tmp_path):
         workspace, channel = self._workspace_channel(tmp_path)
@@ -2033,7 +2208,7 @@ class TestBootstrapChecks:
         r = doctor.check_automation_package(channel)
 
         assert r.status == "ok"
-        assert r.message == "automation パッケージ導入済み"
+        assert r.message == "uv project で automation パッケージ導入済み"
 
     def test_automation_package_similar_name_is_fail(self, monkeypatch, tmp_path):
         monkeypatch.setattr(
