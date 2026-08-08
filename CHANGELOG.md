@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `refactor(packaging)`: リポジトリを責務別 layer へ再配置し、canonical owner への production import・receipt・active documentation を同期した。`youtube_automation.utils` と `infrastructure.legacy_utils` は下流向け compatibility façade として installed wheel でも維持し、削除・統合候補は `docs/architecture/reorganization-followups.md` に記録した。
 ### Added
 
+- `feat(dashboard)`: channel ごとの workflow timing 欠損・不正 shape を専用の `status=error` へ隔離し、同じ channel の Analytics summary / videos と他 channel の timing を維持する fail-soft 境界を追加した（#3339）。
 - `feat(dashboard)`: workflow timing の公開 status を `ready` / `unavailable` / `in_progress` に正規化し、基準未設定・旧 schema・未計測・実行中を 0 と区別できるようにした（#3334）。
 - `feat(dashboard)`: registry の各 channel から検証済み手作業基準と workflow history を読み、collection timing summary を channel detail API へ配線した（#3325）。
 - `feat(dashboard)`: workflow timing summary を channel detail read model に追加し、overview からは除外して一覧 API の軽量契約を維持した（#3324）。

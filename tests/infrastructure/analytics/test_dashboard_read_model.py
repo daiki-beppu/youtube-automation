@@ -181,6 +181,7 @@ def test_dashboard_api_exposes_workflow_timing_only_in_channel_detail(tmp_path: 
         },
     )
     timing = {
+        "status": "ready",
         "collections": [
             {
                 "collection_id": "active",
@@ -188,7 +189,7 @@ def test_dashboard_api_exposes_workflow_timing_only_in_channel_detail(tmp_path: 
                 "steps": [],
                 "totals": {"work_seconds": 0},
             }
-        ]
+        ],
     }
 
     api = DashboardAPI(build_dashboard_read_model([channel], workflow_timing_by_channel={channel: timing}))
@@ -197,6 +198,52 @@ def test_dashboard_api_exposes_workflow_timing_only_in_channel_detail(tmp_path: 
 
     assert "workflow_timing" not in overview["channels"][0]
     assert api.channel(channel_id)["workflow_timing"] == timing
+
+
+@pytest.mark.parametrize(
+    ("broken_timing", "error_code"),
+    [
+        (None, "workflow_timing_missing"),
+        ({"status": "ready", "collections": "not-an-array"}, "workflow_timing_invalid"),
+    ],
+)
+def test_read_model_isolates_missing_or_malformed_workflow_timing_by_channel(
+    tmp_path: Path,
+    broken_timing: object,
+    error_code: str,
+) -> None:
+    healthy = tmp_path / "healthy"
+    broken = tmp_path / "broken"
+    for channel, name, views in ((healthy, "Healthy", 900), (broken, "Broken timing", 700)):
+        _write_channel(
+            channel,
+            name=name,
+            snapshots={
+                "analytics_data_20260720.json": _snapshot(
+                    collected_at="2026-07-20T00:00:00+00:00",
+                    views=views,
+                    video_views=views - 100,
+                )
+            },
+        )
+    healthy_timing = {"status": "ready", "collections": []}
+    timings: dict[Path, object] = {healthy: healthy_timing}
+    if broken_timing is not None:
+        timings[broken] = broken_timing
+
+    channels = build_dashboard_read_model(
+        [broken, healthy],
+        workflow_timing_by_channel=timings,
+    )["channels"]
+
+    broken_item, healthy_item = channels
+    assert broken_item["status"] == "ready"
+    assert broken_item["summary"]["views"] == 700
+    assert broken_item["videos"][0]["video_id"] == "video-b"
+    assert broken_item["workflow_timing"]["status"] == "error"
+    assert broken_item["workflow_timing"]["error"]["code"] == error_code
+    assert healthy_item["summary"]["views"] == 900
+    assert healthy_item["workflow_timing"] == healthy_timing
 
 
 def test_read_model_keeps_previous_snapshot_with_structured_refresh_error(tmp_path: Path) -> None:

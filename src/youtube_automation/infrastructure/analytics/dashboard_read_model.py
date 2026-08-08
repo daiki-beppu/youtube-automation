@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
@@ -35,6 +36,29 @@ def _text(value: object, default: str = "") -> str:
 
 def _integer_or_none(value: object) -> int | None:
     return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else None
+
+
+def _workflow_timing_error(code: str, message: str) -> dict[str, object]:
+    return {
+        "status": "error",
+        "collections": [],
+        "error": {"code": code, "message": message},
+    }
+
+
+def _workflow_timing(value: object) -> dict[str, object]:
+    if not isinstance(value, dict):
+        return _workflow_timing_error("workflow_timing_invalid", "workflow timing は object ではありません")
+    timing = cast(dict[str, object], value)
+    status = timing.get("status")
+    collections = timing.get("collections")
+    if status not in {"ready", "unavailable", "in_progress"} or not isinstance(collections, list):
+        return _workflow_timing_error("workflow_timing_invalid", "workflow timing の status/collections が不正です")
+    if any(not isinstance(collection, dict) for collection in collections):
+        return _workflow_timing_error("workflow_timing_invalid", "workflow timing collection は object ではありません")
+    if status == "unavailable" and not _text(timing.get("reason")):
+        return _workflow_timing_error("workflow_timing_invalid", "unavailable workflow timing に reason がありません")
+    return timing
 
 
 def _channel_id(channel: Path) -> str:
@@ -202,11 +226,12 @@ def build_dashboard_read_model(
     channel_paths: list[Path],
     *,
     refresh_errors: dict[Path, str] | None = None,
-    workflow_timing_by_channel: dict[Path, dict[str, object]] | None = None,
+    workflow_timing_by_channel: Mapping[Path, object] | None = None,
 ) -> dict[str, object]:
     """登録順のチャンネルから JSON serializable な read model を作る。"""
     errors = refresh_errors or {}
     workflow_timings = workflow_timing_by_channel or {}
+    timing_requested = workflow_timing_by_channel is not None
     channels: list[dict[str, object]] = []
     for channel in channel_paths:
         refresh_message = errors.get(channel)
@@ -214,8 +239,14 @@ def build_dashboard_read_model(
         item["refresh_error"] = (
             {"code": "refresh_failed", "message": refresh_message} if refresh_message is not None else None
         )
-        if channel in workflow_timings:
-            item["workflow_timing"] = workflow_timings[channel]
+        if timing_requested:
+            if channel in workflow_timings:
+                item["workflow_timing"] = _workflow_timing(workflow_timings[channel])
+            else:
+                item["workflow_timing"] = _workflow_timing_error(
+                    "workflow_timing_missing",
+                    "channel の workflow timing がありません",
+                )
         channels.append(item)
     return {
         "schema_version": SCHEMA_VERSION,
