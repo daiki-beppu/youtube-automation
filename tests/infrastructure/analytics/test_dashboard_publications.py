@@ -1,7 +1,14 @@
+import json
+import os
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
+import pytest
+
+from youtube_automation.infrastructure.analytics import dashboard_publications
 from youtube_automation.infrastructure.analytics.dashboard_publications import (
     build_dashboard_publications,
+    save_dashboard_publications,
 )
 
 
@@ -55,3 +62,50 @@ def test_build_dashboard_publications_normalizes_fetched_at_to_utc() -> None:
     payload = build_dashboard_publications([], timezone="UTC", fetched_at=fetched_at)
 
     assert payload["fetched_at"] == "2026-08-08T12:00:00+00:00"
+
+
+def test_save_dashboard_publications_replaces_with_complete_json(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    destination = tmp_path / "dashboard_publications.json"
+    payload = {"schema_version": 1, "days": {"2026-08-08": 2}}
+    real_replace = os.replace
+    observed_temporary: Path | None = None
+
+    def inspect_then_replace(source: str | os.PathLike[str], target: str | os.PathLike[str]) -> None:
+        nonlocal observed_temporary
+        observed_temporary = Path(source)
+        assert observed_temporary.parent == destination.parent
+        assert json.loads(observed_temporary.read_text(encoding="utf-8")) == payload
+        real_replace(source, target)
+
+    monkeypatch.setattr(dashboard_publications.os, "replace", inspect_then_replace)
+
+    save_dashboard_publications(destination, payload)
+
+    assert json.loads(destination.read_text(encoding="utf-8")) == payload
+    assert observed_temporary is not None
+    assert not observed_temporary.exists()
+
+
+def test_save_dashboard_publications_preserves_destination_and_cleans_temp_on_replace_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    destination = tmp_path / "dashboard_publications.json"
+    original = b'{"existing": true}\n'
+    destination.write_bytes(original)
+    observed_temporary: Path | None = None
+
+    def fail_replace(source: str | os.PathLike[str], _target: str | os.PathLike[str]) -> None:
+        nonlocal observed_temporary
+        observed_temporary = Path(source)
+        raise OSError("injected replace failure")
+
+    monkeypatch.setattr(dashboard_publications.os, "replace", fail_replace)
+
+    with pytest.raises(OSError, match="injected replace failure"):
+        save_dashboard_publications(destination, {"replacement": True})
+
+    assert destination.read_bytes() == original
+    assert observed_temporary is not None
+    assert not observed_temporary.exists()
