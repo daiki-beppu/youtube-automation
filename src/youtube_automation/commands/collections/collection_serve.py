@@ -1063,6 +1063,8 @@ def create_server(
     )
     distrokid_mode = "disabled" if not distrokid_enabled else ("dir" if dir_mode else "single")
     resolved_server_info["capabilities"] = {"distrokid": {"mode": distrokid_mode}}
+    if collections_root is not None:
+        resolved_server_info["collections_root"] = collections_root.name
     resolved_community_asset_root = community_asset_root if community_asset_root is not None else collection_dir
 
     class _Handler(BaseHTTPRequestHandler):
