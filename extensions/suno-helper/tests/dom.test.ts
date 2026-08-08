@@ -178,8 +178,14 @@ describe("diagnoseLyricsInputState: 現行 Suno UI の ARIA 状態診断 (#1899)
       addLyricsMode(selectedName);
       addCreateFormMode("Advanced");
 
-      expect(diagnoseLyricsInputState()).toBe(
-        `Lyrics mode が ${selectedName} になっています。Write に切り替えてください。`
+      expect(diagnoseLyricsInputState()).toContain(
+        `Lyrics mode が ${selectedName} になっています。`
+      );
+      expect(diagnoseLyricsInputState()).toContain(
+        "Advanced → More options → Lyrics mode → Write"
+      );
+      expect(diagnoseLyricsInputState()).toContain(
+        "非空の lyrics（[Instrumental] を含む）を Lyrics 欄へ注入"
       );
     }
   );
@@ -190,8 +196,14 @@ describe("diagnoseLyricsInputState: 現行 Suno UI の ARIA 状態診断 (#1899)
       addLyricsMode("Write");
       addCreateFormMode(selectedName);
 
-      expect(diagnoseLyricsInputState()).toBe(
-        `Create form mode が ${selectedName} になっています。Advanced タブを選択してください。`
+      expect(diagnoseLyricsInputState()).toContain(
+        `Create form mode が ${selectedName} になっています。`
+      );
+      expect(diagnoseLyricsInputState()).toContain(
+        "Advanced → More options → Lyrics mode → Write"
+      );
+      expect(diagnoseLyricsInputState()).toContain(
+        "非空の lyrics（[Instrumental] を含む）を Lyrics 欄へ注入"
       );
     }
   );
@@ -238,7 +250,11 @@ describe("diagnoseLyricsInputState: 現行 Suno UI の ARIA 状態診断 (#1899)
 
       const message = diagnoseLyricsInputState();
       expect(message).toContain("Advanced タブが選択されているか");
+      expect(message).toContain("More options");
       expect(message).toContain("Lyrics mode が Write になっているか");
+      expect(message).toContain(
+        "非空の lyrics（[Instrumental] を含む）を Lyrics 欄へ注入"
+      );
       expect(message).toContain("UI 言語が日本語になっていないか（英語推奨）");
     }
   );
