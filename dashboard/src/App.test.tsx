@@ -59,6 +59,11 @@ const detail = {
   ],
 }
 
+const publicationActivity = {
+  days: { "2026-08-08": 3 },
+  channels: [],
+}
+
 beforeAll(() => {
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
@@ -216,6 +221,127 @@ describe("dashboard", () => {
     ).toBeInTheDocument()
   })
 
+  it("shows publication loading without delaying the overview", async () => {
+    const publicationResponse = deferred<Response>()
+    vi.spyOn(globalThis, "fetch").mockImplementation((input) =>
+      String(input) === "/api/publications"
+        ? publicationResponse.promise
+        : Promise.resolve(
+            new Response(JSON.stringify(overview), { status: 200 })
+          )
+    )
+
+    renderDashboard()
+
+    expect(
+      await screen.findByRole("region", { name: "概況" })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole("status", { name: "公開活動を読み込み中" })
+    ).toBeInTheDocument()
+
+    publicationResponse.resolve(
+      new Response(JSON.stringify(publicationActivity), { status: 200 })
+    )
+  })
+
+  it("shows a publication empty state instead of an empty heatmap", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const payload =
+        String(input) === "/api/publications"
+          ? { days: {}, channels: [] }
+          : overview
+      return new Response(JSON.stringify(payload), { status: 200 })
+    })
+
+    renderDashboard()
+
+    expect(
+      await screen.findByText("公開活動データがありません")
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole("grid", { name: "日別公開本数" })
+    ).not.toBeInTheDocument()
+  })
+
+  it("treats zero-valued publication days as empty", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const payload =
+        String(input) === "/api/publications"
+          ? { days: { "2026-08-08": 0 }, channels: [] }
+          : overview
+      return new Response(JSON.stringify(payload), { status: 200 })
+    })
+
+    renderDashboard()
+
+    expect(
+      await screen.findByText("公開活動データがありません")
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole("grid", { name: "日別公開本数" })
+    ).not.toBeInTheDocument()
+  })
+
+  it.each([
+    [
+      "request failure",
+      () => new Response("failed", { status: 503 }),
+      "HTTP 503",
+    ],
+    [
+      "schema failure",
+      () => new Response(JSON.stringify({ days: null, channels: [] })),
+      "応答形式が不正です",
+    ],
+    [
+      "null channel",
+      () =>
+        new Response(
+          JSON.stringify({ days: { "2026-08-08": 1 }, channels: [null] })
+        ),
+      "応答形式が不正です",
+    ],
+    [
+      "negative day count",
+      () =>
+        new Response(
+          JSON.stringify({ days: { "2026-08-08": -1 }, channels: [] })
+        ),
+      "応答形式が不正です",
+    ],
+    [
+      "non-finite day count",
+      () =>
+        new Response(
+          '{"days":{"2026-08-08":1e999},"channels":[]}'
+        ),
+      "応答形式が不正です",
+    ],
+  ])(
+    "shows a publication fatal alert for %s without hiding the overview",
+    async (_caseName, publicationResponse, expectedMessage) => {
+      vi.spyOn(globalThis, "fetch").mockImplementation(async (input) =>
+        String(input) === "/api/publications"
+          ? publicationResponse()
+          : new Response(JSON.stringify(overview), { status: 200 })
+      )
+
+      renderDashboard()
+
+      expect(
+        await screen.findByRole("region", { name: "概況" })
+      ).toBeInTheDocument()
+      const alert = await screen.findByRole("alert", {
+        name: "公開活動を読み込めませんでした",
+      })
+      expect(alert).toHaveTextContent(expectedMessage)
+      expect(
+        screen.queryByRole("region", { name: "過去365日の公開活動" })
+      ).not.toBeInTheDocument()
+    }
+  )
+
   it("counts channels with unavailable data as needing attention", async () => {
     const unavailableOverview = {
       ...overview,
@@ -334,8 +460,12 @@ describe("dashboard", () => {
   })
 
   it("shows an alert when the overview request fails", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response("failed", { status: 500 })
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) =>
+      String(input) === "/api/publications"
+        ? new Response(JSON.stringify({ days: {}, channels: [] }), {
+            status: 200,
+          })
+        : new Response("failed", { status: 500 })
     )
 
     renderDashboard()
@@ -349,7 +479,13 @@ describe("dashboard", () => {
 
   it("leaves detail loading after a selected channel request fails", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
-      if (String(input) === "/api/channels") {
+      const path = String(input)
+      if (path === "/api/publications") {
+        return new Response(JSON.stringify({ days: {}, channels: [] }), {
+          status: 200,
+        })
+      }
+      if (path === "/api/channels") {
         return new Response(JSON.stringify(overview), { status: 200 })
       }
       return new Response("detail failed", { status: 500 })
