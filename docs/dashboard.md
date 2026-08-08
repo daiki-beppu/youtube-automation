@@ -37,6 +37,10 @@ uv run yt-dashboard --skip-refresh
 
 既定 URL は `http://127.0.0.1:8765/` です。別 port は `--port 9000`、別 registry は `--registry /absolute/path/channels.json` で指定できます。server は外部 interface へ bind せず、loopback だけで UI と JSON API を同一 origin 配信します。
 
+## JSON API
+
+`GET /api/publications` は、起動時に保存済み cache から構築した公開履歴 read model を読み取り専用で返します。同じ response の `days` に全チャンネルの日別合計、`channels` に登録順のチャンネル別内訳を含みます。各内訳は `status`、`fetched_at`、`timezone`、`days`、構造化された `error` を持ち、endpoint で公開日を再推測したり外部 API を呼んだりはしません。
+
 ## 表示内容
 
 - チャンネルごとの最新 snapshot、収集日時、動画数、主要指標
