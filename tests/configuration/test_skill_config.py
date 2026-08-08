@@ -89,6 +89,26 @@ def test_unknown_top_level_override_key_warns_but_still_merges(tmp_path, monkeyp
     assert cfg["auto_select"] == {"enabled": True}
 
 
+def test_misplaced_top_level_override_key_warns_with_nested_path(tmp_path, monkeypatch):
+    """#2558: nested schema と同名の誤配置には正しい dotted path を示す。"""
+    channel_dir = tmp_path / "ch"
+    (channel_dir / "config" / "skills").mkdir(parents=True)
+    override_path = channel_dir / "config" / "skills" / "thumbnail.yaml"
+    override_path.write_text(
+        yaml.safe_dump({"auto_selection": {"enabled": True}}),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
+
+    with pytest.warns(
+        UserWarning,
+        match=r"thumbnail\.yaml.*auto_selection.*image_generation\.auto_selection",
+    ):
+        cfg = skill_config.load_skill_config("thumbnail", use_cache=False)
+
+    assert cfg["auto_selection"] == {"enabled": True}
+
+
 def test_thumbnail_deprecated_override_keys_warn_but_still_merge(tmp_path, monkeypatch):
     """#1702: 縮小済みキーの override は壊さず deep-merge しつつ DeprecationWarning を出す。"""
     channel_dir = tmp_path / "ch"
