@@ -40,7 +40,7 @@ overlay の phase が `finished` に到達し、Step 6 の 6 点（playlist 紐�
 
 - Chrome に unpacked の suno-helper 拡張がロード済み（拡張アイコンが popup を出す。ID 検出に失敗した場合のみ `--allow-origin` fallback で拡張 ID を手動指定する）
 - Suno (suno.com/create) にログイン済み・**Advanced タブ**が選択されている
-- Style 入力欄が出ていること。prompt entry の `lyrics` が非空なら（インストゥルメンタルを含め）Lyrics mode = Write と Style / Lyrics 入力欄を使い、空のインストゥルメンタル entry なら Lyrics mode = Instrumental と Style 入力欄を使う
+- Style 入力欄が出ていること。**Advanced → More options を開く → Lyrics mode → Write** の順に選ぶ。prompt entry の `lyrics` が非空なら、`[Instrumental]` だけのインストゥルメンタル entry でも Write が必須。suno-helper は Lyrics 欄へその値を注入して歌詞なしを指定するため、Lyrics 欄を隠す Instrumental mode では実行できない。`lyrics` が真に空の entry だけは Lyrics mode = Instrumental と Style 入力欄を使える
 - automation リポジトリで `uv` が使える・`CHANNEL_DIR` 環境変数を当該チャンネルへ向けてある
 - collection ディレクトリ名が **`*-collection` suffix** を持つ（dir mode 必須）。例: `20260201-soulful-grooves-rainy-night-soul-collection/`
 - 7873 / 7874 など特定 port を既に他の collection で使っていないか確認（並走させる場合は明示的に分ける）
@@ -95,7 +95,7 @@ collection 単体パスを直接渡す single file mode は playlist phase が�
 ### Agent primary flow: browser use で操作する
 
 1. browser use で `https://suno.com/create` を開く。
-2. ログイン済みで Advanced タブが選択されていることを確認する。prompt entry の `lyrics` が非空なら（インストゥルメンタルを含め）Lyrics mode = Write を選び、Style / Lyrics 入力欄が見えることを確認する。空のインストゥルメンタル entry なら Lyrics mode = Instrumental を選び、Style 入力欄が見えることを確認する。ログイン画面、CAPTCHA、Advanced タブ不在なら下記 handoff 条件に従い停止する。
+2. ログイン済みで **Advanced → More options を開く → Lyrics mode → Write** の順に選び、Style / Lyrics 入力欄が見えることを確認する。prompt entry の `lyrics` が非空なら、`[Instrumental]` だけでも suno-helper が Lyrics 欄へ注入するため Write が必須。`lyrics` が真に空の entry だけは Lyrics mode = Instrumental と Style 入力欄を使える。ログイン画面、CAPTCHA、Advanced タブ不在なら下記 handoff 条件に従い停止する。
 3. 拡張アイコンをクリックして suno-helper overlay を Suno タブ内に表示する。overlay が最小化されている場合はヘッダーの展開ボタンを押す。
 4. overlay ルート `[data-suno-helper="control-panel"]` を観測する。`data-suno-phase`、`data-suno-running`、`data-suno-error`、`data-suno-collection-id`、`data-suno-entry-count`、`data-suno-selected-entry-count` が browser use から読める。
 5. `[data-suno-control="server-source-trigger"]` を押し、更新後に表示される `role="option"` から Step 1 で確認した URL の配信元候補を選ぶ。
@@ -244,7 +244,7 @@ ps aux | grep '[y]t-collection-serve'
 - **entry phase の任意停止 / ERROR**（`stopped` / `error`）: 24h 以内なら次回 popup 起動時に resume バナーが出る。"再開" で保存した entry から再実行し、元 run の異常値再生成 option も引き継ぐ
 - **playlist / download phase の任意停止 / ERROR**: resume バナーは出ない。**Playlist から再開** / **Download から再開** を使い、元 run の異常値再生成 option と警告を引き継ぐ
 - ERROR 文言の代表例（いずれも fail-loud で停止する）:
-  - `Lyrics mode が Instrumental になっています。Write に切り替えてください。`
+  - `Lyrics mode が Instrumental になっています。Write に切り替えてください。` が出たら、前提条件の **Advanced → More options → Lyrics mode → Write** をやり直す。`[Instrumental]` も Lyrics 欄へ注入する値なので Write が必要
   - `Create form mode が Simple になっています。Advanced タブを選択してください。`
   - 状態を特定できない場合は Advanced タブ / Lyrics mode = Write / UI 言語（英語推奨）のチェックリストを表示する
   - `reCAPTCHA を検知しました。手動で解決してから再開してください。`
@@ -264,7 +264,7 @@ DL が止まる・形式が違う・`workflow-state.json` へ反映されない�
 
 - **`--allow-extension` / `--allow-origin` 無しで起動すると token 取得と DL 完了 POST が 403 になる**。通常は `--allow-extension suno-helper` で検出し、検出失敗時のみ `--allow-origin "chrome-extension://<EXTENSION_ID>"` を exact 指定して Step 1 の `/auth/token` 確認を通すこと。
 - **誤って single file mode で起動すると playlist phase がスキップされる**。`/collections` 404 が返り、popup 側で derivedPlaylistName が undefined になり playlist phase に分岐しない。Step 1 の `curl /collections` 確認を必ず通すこと。
-- **Advanced タブ + Lyrics mode を毎回確認**。prompt entry の `lyrics` が非空なら（インストゥルメンタルを含め）Write と Style / Lyrics 欄、空のインストゥルメンタル entry なら Instrumental と Style 欄を選ぶ。Suno が UI 状態を覚えていないことがあり、`lyrics` が非空の entry で Lyrics 欄が消えていると Step 5 開始直後に ERROR で止まる。
+- **Advanced → More options → Lyrics mode を毎回確認**。prompt entry の `lyrics` が非空なら、`[Instrumental]` を含め Write と Style / Lyrics 欄を使う。`lyrics` が真に空の entry だけは Instrumental と Style 欄を使える。Suno が UI 状態を覚えていないことがあり、`lyrics` が非空の entry で Lyrics 欄が消えていると Step 5 開始直後に ERROR で止まる。
 - **Cmd+P を手動で押す必要はない**。拡張は background script から `chrome.debugger` の `Input.dispatchKeyEvent` で trusted key event を送る。dispatchEvent では Suno listener に届かない（isTrusted=false）ため、user 側で打鍵してはいけない（衝突する）。失敗時は拡張 manifest の `debugger` 権限、対象 Suno tab への attach 失敗、DevTools/別 debugger の競合を確認する。
 - **dir 名規約は `<YYYYMMDD>-<channel>-<theme>-collection`**。拡張が dir 名の `<channel>` と collection name の `<theme>` から playlist 名（`<channel> | <theme>`）を導出する。独自規約で切ると playlist 名が壊れる。
 - **7873 / 7874 を並走させる場合は明示的に port を分ける**。両方を 7873 で立てると後者が起動失敗するので、必ず `--port` を指定して popup のローカル配信元を選び直す。
