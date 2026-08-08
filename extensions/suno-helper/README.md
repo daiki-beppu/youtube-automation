@@ -91,7 +91,7 @@ build 後は `.output/chrome-mv3/manifest.json`、zip 後は `.output/suno-helpe
      --allow-extension suno-helper
    # → http://<channel>.localhost:7873/collections と /auth/token を配信
    ```
-2. Chrome で Suno の **Advanced** タブを選択する。
+2. Chrome で Suno の **Advanced → More options を開く → Lyrics mode → Write** の順に選ぶ。prompt entry の `lyrics` が非空なら、`[Instrumental]` だけのインスト曲でも suno-helper が Lyrics 欄へ値を注入するため Write が必須。Lyrics 欄を隠す Instrumental mode のままでは実行できない。`lyrics` が真に空の entry だけは Instrumental mode を使える。
 3. 拡張アイコンからポップアップを開き、**ローカル配信元** で動的検出されたチャンネル名つき候補を選ぶ。初回表示・配信元選択・collection 選択の各タイミングで一覧と prompts が自動取得される。
 4. `ready` な collection を checkbox で 1 件以上選び、prompts の自動取得後に **異常値の曲を再生成する** を選んでから実行する。1 件なら従来どおり現在の entry 選択を使い、2 件以上なら server 一覧順で各 collection の全 pattern を直列実行する。既定の ON は duration guard NG の entry を最大 2 回再生成する。OFF は追加生成せず、NG を警告表示したうえで生成済み全 clip を playlist / download 候補に残す。
 5. 各パターンで Style/Lyrics を注入 → Generate 押下 → 生成完了検知 → 次へ、を自動で繰り返す。

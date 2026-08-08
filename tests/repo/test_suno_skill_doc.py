@@ -23,6 +23,7 @@ from tests.helpers.paths import REPO_ROOT
 _REPO_ROOT = REPO_ROOT
 SKILL_MD = _REPO_ROOT / ".claude" / "skills" / "suno" / "SKILL.md"
 SUNO_HELPER_SKILL_MD = _REPO_ROOT / ".claude" / "skills" / "suno-helper" / "SKILL.md"
+SUNO_HELPER_README_MD = _REPO_ROOT / "extensions" / "suno-helper" / "README.md"
 WF_NEW_SKILL_MD = _REPO_ROOT / ".claude" / "skills" / "wf-new" / "SKILL.md"
 WF_AUTO_SKILL_MD = _REPO_ROOT / ".claude" / "skills" / "wf-auto" / "SKILL.md"
 SUNO_HELPER_PHASE_CONSTANTS_TS = _REPO_ROOT / "extensions" / "shared" / "constants.ts"
@@ -44,6 +45,10 @@ def _assert_before(text: str, earlier: str, later: str) -> None:
 
 def _read_suno_helper() -> str:
     return SUNO_HELPER_SKILL_MD.read_text(encoding="utf-8")
+
+
+def _read_suno_helper_readme() -> str:
+    return SUNO_HELPER_README_MD.read_text(encoding="utf-8")
 
 
 def _read_wf_new() -> str:
@@ -240,6 +245,19 @@ def test_suno_helper_documents_browser_use_primary_flow() -> None:
     assert '[data-suno-control="server-url"]' not in text, "非表示の互換 select が現行操作手順に残っている"
     assert '[data-suno-control="fetch-data"]' not in text, "廃止した手動取得 selector が現行手順に残っている"
     assert "サーバー URL 入力" not in text, "登録済み配信元 select を free-input と説明する旧契約が残っている"
+
+
+def test_suno_helper_documents_lyrics_mode_setup_contract() -> None:
+    """Given suno-helper の operator 向け手順
+    When 非空 lyrics を自動投入する前提を読む
+    Then Write の所在、Instrumental tag の注入理由、空 entry の例外が分かる。
+    """
+    for document in (_read_suno_helper(), _read_suno_helper_readme()):
+        assert "Advanced → More options" in document
+        assert "Lyrics mode → Write" in document
+        assert "`[Instrumental]`" in document
+        assert "Lyrics 欄へ" in document
+        assert "`lyrics` が真に空" in document
 
 
 def test_suno_helper_devtools_mcp_is_not_required_flow() -> None:
