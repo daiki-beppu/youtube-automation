@@ -54,7 +54,7 @@ from youtube_automation.domains.uploads.preflight import (
     check_suno_genre_line_char_limit,
     check_thumbnail_skill_config,
 )
-from youtube_automation.infrastructure.auth.youtube import resolve_client_secrets_location
+from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler, resolve_client_secrets_location
 from youtube_automation.infrastructure.collections.numbered_duplicates import (
     CLEANUP_GUIDE_URL,
     format_duplicate_name,
@@ -158,6 +158,26 @@ def _youtube_oauth_action(instructions: str) -> dict:
     )
     action.update(
         {
+            "execution_mode": "background",
+            "url_source": "stdout",
+            "completion_signal": "process-exit",
+            "post_check_cmd": "uv run yt-doctor --json",
+        }
+    )
+    return action
+
+
+def _youtube_readonly_oauth_action(channel_dir: Path) -> dict:
+    """Return the agent-driven read-only OAuth hand-off in the target channel context."""
+    action = _human_auth_action(
+        ["uv", "run", "yt-oauth", "--readonly"],
+        "AI または setup が対象チャンネルのディレクトリで `uv run yt-oauth --readonly` を background session "
+        "として起動し、stdout の同意 URL を利用者へ中継します。利用者はブラウザで OAuth 同意だけを"
+        "完了してください。AI は同じ process の exit 0 を待ち、`uv run yt-doctor --json` で再検証します。",
+    )
+    action.update(
+        {
+            "cwd": str(channel_dir),
             "execution_mode": "background",
             "url_source": "stdout",
             "completion_signal": "process-exit",
@@ -1085,6 +1105,24 @@ def check_oauth_token(channel_dir: Path) -> CheckResult:
         id="oauth_token",
         status="ok",
         message=f"token.json 利用可能 (scopes: {len(scopes)} 件{refresh_status})",
+    )
+
+
+def check_oauth_token_readonly(channel_dir: Path) -> CheckResult:
+    """Check whether the independently issued read-only token is available."""
+    with _temporary_channel_dir(channel_dir):
+        path = YouTubeOAuthHandler.readonly_token_path()
+    if path is None or not path.is_file():
+        return CheckResult(
+            id="oauth_token_readonly",
+            status="warn",
+            message="token.readonly.json が未発行",
+            next_action=_youtube_readonly_oauth_action(channel_dir),
+        )
+    return CheckResult(
+        id="oauth_token_readonly",
+        status="ok",
+        message="token.readonly.json 発行済み",
     )
 
 
@@ -3006,6 +3044,7 @@ def run_all_checks(channel_dir: Path) -> list[CheckResult]:
         check_client_secrets(channel_dir),
         check_oauth_client_sharing(channel_dir),
         check_oauth_token(channel_dir),
+        check_oauth_token_readonly(channel_dir),
         check_reporting_job(channel_dir),
         check_channel_config(channel_dir),
         check_playlist_config(channel_dir),
