@@ -111,6 +111,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `feat(dashboard)`: 公開履歴 cache が fresh な場合は通常の Analytics snapshot 更新だけを行い、公開履歴用の追加 YouTube Data API 呼び出しと cache 保存を省略するようにした。cache が missing / stale / corrupt の場合は従来どおり再取得・保存する（#3375）。
 - `feat(extensions)`: ローカル配信元が 0 件の selector に「サーバーが起動されていません」と表示して操作を無効化し、候補の再出現時は通常の選択へ戻るようにした（#3453）。
 - `fix(extensions)`: ローカル配信元 discovery は registry entry のうち稼働確認できたサーバーだけを URL 順で返し、registry が空・到達不能・不正、または全 probe 失敗の場合は未確認の既定候補を混ぜず空配列を返すようにした（#2992）。
+- `docs(thumbnail)`: `/thumbnail` の長大な provider、generation、quality / operations 詳細を配布対象の references へ段階的に分離し、SKILL.md 本文には実行コマンド・承認ゲート・完了条件と明示的な導線を維持した。あわせて prompt schema 参照を wheel 内の正規パスへ統一した。実行時の振る舞いと成果物契約は変更しない（#3005）。
 - `refactor(tests)`: 旧 `unit` / `streaming` テストを canonical owner と `tests/repo/streaming/` へ整理し、root allowlist・source layer・source owner の配置規約を repository contract として機械担保した（#3047）。
 - `fix(tests)`: collection serve の subprocess lifecycle テストで待機処理を共通化し、デッドライン到達時に待機対象を明示して失敗させるようにした。server 起動完了は PID ファイルの存在ではなく HTTP identity endpoint の応答まで確認し、高負荷時の起動途中を準備完了と誤認しないようにした（#3091）。
 - `refactor(tests)`: domains / application / configuration 層と同名衝突分のテストを production module の鏡像配置へ移し、repository contract は `tests/repo/`、infrastructure の裁定分は各鏡像へ配置した。active consumer の参照を canonical path に追従させ、複数テストが同一 production module に対応する場合の共存規則と root 残置理由を配置規約へ記録した（#3046）。
