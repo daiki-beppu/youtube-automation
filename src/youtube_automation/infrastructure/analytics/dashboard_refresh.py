@@ -13,6 +13,7 @@ from typing import Protocol
 from youtube_automation.core.errors import AutomationError
 from youtube_automation.infrastructure.analytics.dashboard_publications import (
     build_dashboard_publications,
+    load_fresh_dashboard_publications,
     save_dashboard_publications,
 )
 
@@ -62,6 +63,11 @@ def collect_channel_analytics(channel: Path, analytics_system_factory: Callable[
         if not result.get("success"):
             raise AutomationError(str(result.get("error", "Analytics refresh failed")))
 
+        publication_path = channel / "data" / "dashboard_publications.json"
+        fetched_at = datetime.now(UTC)
+        if load_fresh_dashboard_publications(publication_path, now=fetched_at) is not None:
+            return
+
         published_at_values: list[str] = []
         for video in system.collector.get_all_channel_videos():
             published_at = video.get("published_at")
@@ -73,9 +79,9 @@ def collect_channel_analytics(channel: Path, analytics_system_factory: Callable[
         payload = build_dashboard_publications(
             published_at_values,
             timezone=timezone,
-            fetched_at=datetime.now(UTC),
+            fetched_at=fetched_at,
         )
-        save_dashboard_publications(channel / "data" / "dashboard_publications.json", payload)
+        save_dashboard_publications(publication_path, payload)
 
 
 def refresh_dashboard_channels(
