@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `feat(dashboard)`: 公開活動の更新に失敗したチャンネルでは前回取得済みの日別データを維持し、最終更新日時と更新失敗理由を視覚表示および支援技術へ通知するようにした（#3418）。
 - `feat(dashboard)`: 公開活動 API の loading・公開データ0件・request/schema 失敗を overview と独立した相互排他の表示状態として扱い、データ0件を空の365日グリッドとして表示しないようにした（#3417）。
 - `feat(dashboard)`: 公開活動の日セルを pointer と keyboard focus のどちらでも確認できるようにし、API のチャンネル別日次データから同じ日付・合計公開本数・チャンネル内訳を支援技術に関連付けて表示する（#3412）。
 - `feat(dashboard)`: `yt-dashboard --refresh-publications` を追加し、通常の Analytics 更新とともに全登録チャンネルの公開履歴 cache を強制更新できるようにした。`--skip-refresh` との同時指定では offline 契約を優先し、公開履歴を含む API 更新を行わない（#3398）。
