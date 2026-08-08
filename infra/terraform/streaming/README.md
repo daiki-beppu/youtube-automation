@@ -254,14 +254,17 @@ ssh -i ~/.ssh/yt_stream_key root@<instance_ip> journalctl -u youtube-stream -f
 
 ## 死活監視（issue #109）
 
-`stream_hours > 0` のとき、`youtube-stream.service` は **指定時間の配信 → 指定休止時間後に自動再開** のサイクルで自律的に回る。素朴な「サービス active か」チェックでは休止中（`activating (auto-restart)`）に誤検知が出るため、本モジュールは以下の 4-way 分類で計画停止と本物の異常を切り分ける:
+`stream_hours > 0` のとき、`youtube-stream.service` は **指定時間の配信 → 指定休止時間後に自動再開** のサイクルで自律的に回る。素朴な「サービス active か」チェックでは休止中（`activating (auto-restart)`）に誤検知が出るため、本モジュールは `RuntimeMaxUSec` も含めて計画停止と本物の異常を切り分ける。24/7 と有限サイクルで同じ systemd 状態の意味が異なる点に注意する:
 
 | systemd 状態 | 分類 | 通知 | 想定シナリオ |
 |---|---|---|---|
 | `active+running` | `ok` | しない | 配信中 |
-| `activating+auto-restart+success` | `idle` | しない | `RuntimeMaxSec` 到達による正常停止後の `RestartSec` 休止（自動再開待ち） |
+| `activating+auto-restart+success` + 有限 `RuntimeMaxUSec` | `idle` | しない | 11h+1h の `RuntimeMaxSec` 到達後の計画休止 |
+| `activating+auto-restart+success` + `RuntimeMaxUSec=infinity` / `0` | `anomaly` | **送る** | 計画休止がない 24/7 の再起動待ち |
 | `inactive+dead+success` | `manual` | しない | 運用者の `systemctl stop` |
 | その他（`failed` / `Result≠success` 等） | `anomaly` | **送る** | `kill -9` / `core-dump` / 設定不備 |
+
+状態 snapshot の間で再起動と復帰が完了しても見逃さないよう、`NRestarts` を `/var/lib/youtube-stream/last_n_restarts` と比較する。増加時は `[youtube-stream] restart detected: NRestarts=<current> previous=<previous> increment=<delta>` をその cron 観測で **1 通だけ**送り、同時に検知した anomaly / recovered 通知とは重複させない。同じ値の再観測は無音。baseline 不在、非数値への破損、または counter 減少時は現在値へ無音で再基準化する。
 
 ### 通知手段
 
@@ -279,12 +282,16 @@ Discord Webhook URL を `/etc/youtube-stream-healthcheck.env` から読み、`cu
 
 ### テストシナリオ（VPS 上で確認）
 
+`pkill -KILL` は稼働中の配信を切断する破壊的な実機操作である。対象 VPS と視聴者影響を提示し、利用者の明示的承認を得た場合だけ実施する。本 issue の文書更新では VPS 接続、SIGKILL、実 Discord 通知の確認は実行していない。
+
 | 操作 | 期待結果 |
 |---|---|
 | `pkill -KILL -f 'ffmpeg .*current\.mp4'` | 5 分以内に Discord に anomaly 通知が届く |
 | `systemctl stop youtube-stream` | 通知は飛ばない（`manual` 分類） |
 | `RuntimeMaxSec` 到達による正常停止 | 通知は飛ばない（`activating+auto-restart+success` = `idle`） |
 | `RestartSec` 経過後の自動再開（`auto-restart`） | 通知は飛ばない（休止中は `idle`、再開後は `ok`） |
+
+承認後に 24/7 の SIGKILL を確認する場合は、先に `/opt/youtube-stream/bin/healthcheck.sh` を 1 回実行して `NRestarts` baseline を作り、`systemctl show youtube-stream -p NRestarts` の値を控える。その後に対象を限定した `pkill` を実行し、次の cron までに counter が増え、`restart detected` が 1 通だけ届くことを確認する。cron 時点で service が既に `active+running` へ復帰していても検知できる。11h+1h の回帰確認では `systemctl show youtube-stream -p ActiveState,SubState,Result,RuntimeMaxUSec,NRestarts` を使い、有限 `RuntimeMaxUSec` の `activating+auto-restart+success` が `idle` となり、1 時間の計画休止を通して通知が 0 通であることを確認する。
 
 ## トラブルシューティング
 

@@ -124,9 +124,14 @@ healthcheck は systemd 状態を 4 通りに分類し、**真の異常のみ通
 | 状態 | 分類 | 通知 |
 |---|---|---|
 | `active+running` | ok | しない |
-| `activating+auto-restart+success` | idle（`stream_hours > 0` の計画休止） | しない |
+| `activating+auto-restart+success` + 有限 `RuntimeMaxUSec` | idle（11h+1h の計画休止） | しない |
+| `activating+auto-restart+success` + `RuntimeMaxUSec=infinity` / `0` | anomaly（24/7 に計画休止はない） | **送る** |
 | `inactive+dead+success` | manual（運用者の `systemctl stop`）| しない |
 | `failed` / `Result≠success` | anomaly | **送る** |
+
+さらに `NRestarts` を `/var/lib/youtube-stream/last_n_restarts` と比較する。増加を観測した cron では restart 通知を 1 通だけ送り、同じ観測の状態遷移通知とは重複させない。baseline 不在・非数値への破損・counter 減少（service 再作成など）は異常扱いせず、現在値へ無音で再基準化する。
+
+24/7 の実機 SIGKILL 確認は配信を切断する破壊的操作であり、VPS への接続と実行には利用者の明示的承認が必要。本 issue の文書更新では実行していない。承認後は healthcheck を一度実行して `NRestarts` baseline を作り、対象を限定した SIGKILL 後の次回 cron で `restart detected` が 1 通だけ届くことを確認する。11h+1h は有限 `RuntimeMaxUSec` の計画休止をまたいで通知が 0 通であることを確認する。
 
 帯域モニタリング cron 例（ローカル or CI）:
 
@@ -153,7 +158,7 @@ healthcheck は systemd 状態を 4 通りに分類し、**真の異常のみ通
 
 ```bash
 INSTANCE_IP=$(terraform -chdir=infra/terraform/streaming output -raw instance_ip)
-ssh -i ~/.ssh/yt_stream_key root@$INSTANCE_IP "systemctl show youtube-stream | grep -E 'ActiveState|SubState|Result|RuntimeMaxUSec|RestartUSec'"
+ssh -i ~/.ssh/yt_stream_key root@$INSTANCE_IP "systemctl show youtube-stream | grep -E 'ActiveState|SubState|Result|RuntimeMaxUSec|RestartUSec|NRestarts'"
 ```
 
 ## 障害時ガイダンス
@@ -179,7 +184,7 @@ VPS が消えるまで課金が続くため、**長期休止する場合は必�
 
 - **`terraform.tfvars` に secret を書く** → 必ず `TF_VAR_*` 環境変数経由。`*.tfvars` / `*.tfstate*` は gitignore 済みだが、コミット時に二重チェック
 - **配信中に動画差し替え** → 数秒の中断あり。`stream_hours > 0` の計画休止がある運用で視聴者ダウンタイム 0 を狙うなら休止時間まで待つ
-- **`activating (auto-restart)` を異常と誤認** → これは `stream_hours > 0` の正常な計画休止状態。healthcheck は idle 分類で通知しない
+- **`activating (auto-restart)` を常に計画休止とみなす** → 有限 `RuntimeMaxUSec` の 11h+1h 運用だけが idle。`infinity` / `0` の 24/7 運用では anomaly
 - **同じ動画で再 apply して心配する** → `filemd5` 不変なら no-op で安全。空打ち可能
 - **24/7 運用で `yt-stream-archive-check` を使う** → 日次アーカイブ不足判定の対象外。`stream_hours=11` / `break_hours=1` 運用で `--expected 2` を付けて使う
 - **`yt-stream-archive-check --expected 2` で 0 件** → YouTube Data API のキャッシュ遅延。`publishedAt` が UTC 基準であることに注意
