@@ -48,6 +48,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `fix(suno-helper)`: 無人実行中の CAPTCHA challenge を致命的な UI blocker とせず、serial / queue 共通の解消待機後に未投入 entry を重複なく再開するようにした（#2980）。
 
 - `fix(suno-helper)`: 無人実行の起動前確認で可視 CAPTCHA challenge を検出した場合、即時に手動介入状態へ停止せず既存の CAPTCHA 解消待機経路へ入るようにした（#2979）。
+- `feat(server-discovery)`: dir mode の `/server-info` に `planning` / `live` 相当の安全な collections root basename を追加し、absolute filesystem path を公開せず discovery registry で保持できるようにした（#2986）。
 
 - `fix(suno-helper)`: 無人実行中の可視 Turnstile も手動実行と同じ10分間 `waiting-captcha` で待機し、即時エラー終了しないように統一（#2978）。
 
