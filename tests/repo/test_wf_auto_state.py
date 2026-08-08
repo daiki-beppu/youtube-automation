@@ -431,6 +431,178 @@ def test_cli_record_without_ai_start_keeps_timing_unavailable(tmp_path: Path, ru
     assert runner.read_history(tmp_path)["attempts"][-1]["timing"] is None
 
 
+def test_cli_record_splits_ai_timing_around_one_human_interval(tmp_path: Path, runner: ModuleType) -> None:
+    collection = _collection(tmp_path, "20260721-one-human-gate")
+    token = runner.acquire_lease(tmp_path, now=time.time(), ttl_seconds=60)
+    started = datetime.now(UTC) - timedelta(seconds=30)
+    human_started = started + timedelta(seconds=10)
+    human_ended = started + timedelta(seconds=15)
+
+    assert (
+        runner.main(
+            [
+                "record",
+                "--channel-dir",
+                str(tmp_path),
+                "--token",
+                token,
+                "--collection",
+                collection.name,
+                "--action",
+                "lyria",
+                "--status",
+                "success",
+                "--reason",
+                "approved",
+                "--ai-started-at",
+                started.isoformat(),
+                "--human-interval",
+                human_started.isoformat(),
+                human_ended.isoformat(),
+            ]
+        )
+        == 0
+    )
+
+    timing = runner.read_history(tmp_path)["attempts"][-1]["timing"]
+    assert [segment["kind"] for segment in timing["segments"]] == ["ai", "human", "ai"]
+    assert timing["segments"][0] == {
+        "kind": "ai",
+        "started_at": started.isoformat(),
+        "ended_at": human_started.isoformat(),
+        "duration_seconds": 10.0,
+    }
+    assert timing["segments"][1] == {
+        "kind": "human",
+        "started_at": human_started.isoformat(),
+        "ended_at": human_ended.isoformat(),
+        "duration_seconds": 5.0,
+    }
+    assert timing["segments"][2]["started_at"] == human_ended.isoformat()
+    assert timing["segments"][2]["ended_at"] == timing["ended_at"]
+    assert timing["human_seconds"] == 5.0
+    assert timing["ai_seconds"] == pytest.approx(
+        (datetime.fromisoformat(timing["ended_at"]) - started).total_seconds() - 5.0
+    )
+
+
+def test_human_intervals_build_continuous_typed_segments(runner: ModuleType) -> None:
+    segments = runner._timing_segments(
+        "2026-07-21T00:00:00+00:00",
+        [
+            ["2026-07-21T00:00:10+00:00", "2026-07-21T00:00:15+00:00"],
+            ["2026-07-21T00:00:20+00:00", "2026-07-21T00:00:24+00:00"],
+        ],
+        "2026-07-21T00:00:30+00:00",
+    )
+
+    assert segments == [
+        {
+            "kind": "ai",
+            "started_at": "2026-07-21T00:00:00+00:00",
+            "ended_at": "2026-07-21T00:00:10+00:00",
+            "duration_seconds": 10.0,
+        },
+        {
+            "kind": "human",
+            "started_at": "2026-07-21T00:00:10+00:00",
+            "ended_at": "2026-07-21T00:00:15+00:00",
+            "duration_seconds": 5.0,
+        },
+        {
+            "kind": "ai",
+            "started_at": "2026-07-21T00:00:15+00:00",
+            "ended_at": "2026-07-21T00:00:20+00:00",
+            "duration_seconds": 5.0,
+        },
+        {
+            "kind": "human",
+            "started_at": "2026-07-21T00:00:20+00:00",
+            "ended_at": "2026-07-21T00:00:24+00:00",
+            "duration_seconds": 4.0,
+        },
+        {
+            "kind": "ai",
+            "started_at": "2026-07-21T00:00:24+00:00",
+            "ended_at": "2026-07-21T00:00:30+00:00",
+            "duration_seconds": 6.0,
+        },
+    ]
+
+
+@pytest.mark.parametrize(
+    ("ai_started_at", "human_intervals", "message"),
+    [
+        (None, [["2026-07-21T00:00:01+00:00", "2026-07-21T00:00:02+00:00"]], "ai_started_at"),
+        (
+            "2026-07-21T00:00:00+00:00",
+            [["2026-07-21T00:00:02+00:00", "2026-07-21T00:00:01+00:00"]],
+            "ended_at",
+        ),
+        (
+            "2026-07-21T00:00:00+00:00",
+            [
+                ["2026-07-21T00:00:01+00:00", "2026-07-21T00:00:03+00:00"],
+                ["2026-07-21T00:00:02+00:00", "2026-07-21T00:00:04+00:00"],
+            ],
+            "overlap",
+        ),
+        (
+            "2026-07-21T00:00:00+00:00",
+            [["2026-07-20T23:59:59+00:00", "2026-07-21T00:00:01+00:00"]],
+            "ai_started_at",
+        ),
+        (
+            "2026-07-21T00:00:00+00:00",
+            [["2099-07-21T00:00:01+00:00", "2099-07-21T00:00:02+00:00"]],
+            "recorded_at",
+        ),
+        (
+            "2026-07-21T00:00:00+00:00",
+            [["2026-07-21T00:00:01", "2026-07-21T00:00:02"]],
+            "timezone",
+        ),
+    ],
+)
+def test_cli_record_rejects_invalid_human_intervals_without_mutating_history(
+    tmp_path: Path,
+    runner: ModuleType,
+    capsys: pytest.CaptureFixture[str],
+    ai_started_at: str | None,
+    human_intervals: list[list[str]],
+    message: str,
+) -> None:
+    collection = _collection(tmp_path, "20260721-invalid-human-gate")
+    token = runner.acquire_lease(tmp_path, now=time.time(), ttl_seconds=60)
+    history_path = tmp_path / ".automation-run" / "history.json"
+    original = json.dumps({"schema_version": 2, "attempts": []})
+    history_path.write_text(original, encoding="utf-8")
+    argv = [
+        "record",
+        "--channel-dir",
+        str(tmp_path),
+        "--token",
+        token,
+        "--collection",
+        collection.name,
+        "--action",
+        "lyria",
+        "--status",
+        "failed",
+        "--reason",
+        "invalid_gate",
+    ]
+    if ai_started_at is not None:
+        argv.extend(["--ai-started-at", ai_started_at])
+    for interval in human_intervals:
+        argv.extend(["--human-interval", *interval])
+
+    assert runner.main(argv) == 2
+
+    assert message in json.loads(capsys.readouterr().out)["reason"]
+    assert history_path.read_text(encoding="utf-8") == original
+
+
 def test_completed_live_collection_finishes_after_post_publish_history(tmp_path: Path, runner: ModuleType) -> None:
     collection = _collection(
         tmp_path,

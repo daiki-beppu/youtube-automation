@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `refactor(packaging)`: リポジトリを責務別 layer へ再配置し、canonical owner への production import・receipt・active documentation を同期した。`youtube_automation.utils` と `infrastructure.legacy_utils` は下流向け compatibility façade として installed wheel でも維持し、削除・統合候補は `docs/architecture/reorganization-followups.md` に記録した。
 ### Added
 
+- `feat(wf-auto)`: state CLI の `record` に repeatable な `--human-interval START END` を追加し、AI 開始から記録時刻までを連続した AI / human timing segment として保存できるようにした。不正な逆転・重複・範囲外・timezone 不一致は既存 history を変更せず拒否する（#3319）。
 - `feat(wf-auto)`: canonical action の開始時刻を state CLI の `record` へ渡し、success / failed / blocked の全 attempt に閉じた AI 実行区間を append-only で保存できる契約を追加した（#2962）。
 - `feat(wf-auto)`: workflow attempt に AI / human の型付き timing segment と種別別秒数を append-only で記録する schema v2 を追加した（#3248）。
 - `feat(wf-auto)`: schema v1 の `.automation-run/history.json` を時間未取得として読み出し、根拠のない実行時間を推測しない後方互換契約を追加した（#3247）。
