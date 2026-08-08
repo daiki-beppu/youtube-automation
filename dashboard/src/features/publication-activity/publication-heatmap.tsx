@@ -1,3 +1,5 @@
+import { useState } from "react"
+
 export type PublicationActivityError = {
   code: string
   message: string
@@ -65,14 +67,36 @@ function activityDays(days: Record<string, number>) {
   })
 }
 
-export function PublicationHeatmap({
-  days,
-}: {
+export type PublicationHeatmapProps = {
+  channels: PublicationActivityResponse["channels"]
   days: PublicationActivityResponse["days"]
-}) {
+}
+
+export function PublicationHeatmap({
+  channels,
+  days,
+}: PublicationHeatmapProps) {
+  const [focusedDate, setFocusedDate] = useState<string | null>(null)
+  const [hoveredDate, setHoveredDate] = useState<string | null>(null)
   const activity = activityDays(days)
   const weekCount = activity.at(-1)!.week + 1
   const weekColumns = `repeat(${weekCount}, 11px)`
+  const activeDate = hoveredDate ?? focusedDate
+  const activeDay = activeDate
+    ? activity.find((day) => day.key === activeDate)
+    : undefined
+  const activeChannels = activeDate
+    ? channels
+        .map((channel) => ({
+          count: channel.days[activeDate] ?? 0,
+          id: channel.id,
+          name: channel.name,
+        }))
+        .filter((channel) => channel.count > 0)
+    : []
+  const detailsId = activeDate
+    ? `publication-activity-details-${activeDate}`
+    : undefined
 
   return (
     <section aria-label="過去365日の公開活動">
@@ -158,6 +182,9 @@ export function PublicationHeatmap({
                     const level = intensity(day.count)
                     return (
                       <span
+                        aria-describedby={
+                          activeDate === day.key ? detailsId : undefined
+                        }
                         aria-label={`${day.key}: ${day.count}本`}
                         data-count={day.count}
                         data-date={day.key}
@@ -165,6 +192,10 @@ export function PublicationHeatmap({
                         data-week={day.week}
                         data-weekday={day.weekday}
                         key={day.key}
+                        onBlur={() => setFocusedDate(null)}
+                        onFocus={() => setFocusedDate(day.key)}
+                        onMouseEnter={() => setHoveredDate(day.key)}
+                        onMouseLeave={() => setHoveredDate(null)}
                         role="gridcell"
                         style={{
                           backgroundColor: INTENSITY_COLORS[level],
@@ -173,6 +204,7 @@ export function PublicationHeatmap({
                           height: 11,
                           width: 11,
                         }}
+                        tabIndex={0}
                       />
                     )
                   })}
@@ -181,6 +213,27 @@ export function PublicationHeatmap({
           </div>
         </div>
       </div>
+      {activeDate && activeDay && detailsId ? (
+        <div
+          className="mt-3 max-w-sm rounded-md border bg-popover p-3 text-sm text-popover-foreground shadow-md"
+          id={detailsId}
+          role="tooltip"
+        >
+          <p className="font-medium">{activeDate}</p>
+          <p>合計 {activeDay.count}本</p>
+          {activeChannels.length > 0 ? (
+            <ul aria-label="チャンネル別内訳" className="mt-2 grid gap-1">
+              {activeChannels.map((channel) => (
+                <li key={channel.id}>
+                  {channel.name} {channel.count}本
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-2 text-muted-foreground">公開チャンネルなし</p>
+          )}
+        </div>
+      ) : null}
       <ol
         aria-label="公開本数の凡例"
         style={{
