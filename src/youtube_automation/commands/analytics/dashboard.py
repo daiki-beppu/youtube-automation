@@ -140,6 +140,11 @@ def _parser() -> argparse.ArgumentParser:
         help="API更新を行わず既存snapshotを表示します（offline test用）",
     )
     parser.add_argument(
+        "--refresh-publications",
+        action="store_true",
+        help="fresh cache があっても公開履歴を再取得します",
+    )
+    parser.add_argument(
         "--registry",
         type=Path,
         default=DEFAULT_CHANNEL_REGISTRY,
@@ -160,7 +165,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.skip_refresh
         else refresh_dashboard_channels(
             channels,
-            collect_channel=lambda channel: collect_channel_analytics(channel, AnalyticsSystem),
+            collect_channel=lambda channel: collect_channel_analytics(
+                channel,
+                AnalyticsSystem,
+                force_publication_refresh=args.refresh_publications,
+            ),
         )
     )
     server = create_server(

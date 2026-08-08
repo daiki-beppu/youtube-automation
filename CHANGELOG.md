@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `feat(dashboard)`: `yt-dashboard --refresh-publications` を追加し、通常の Analytics 更新とともに全登録チャンネルの公開履歴 cache を強制更新できるようにした。`--skip-refresh` との同時指定では offline 契約を優先し、公開履歴を含む API 更新を行わない（#3398）。
 - `feat(dashboard)`: 公開履歴 refresh に明示的な強制更新 option を追加し、指定時は fresh cache があっても同じ `AnalyticsSystem` の collector から再取得して保存できるようにした。既定の fresh cache 再利用と更新失敗時の前回 cache 維持は変更しない（#3397）。
 - `feat(dashboard)`: stale な有効公開履歴 cache の再取得が想定内エラーで失敗した場合、前回データを維持した構造化 error payload を保存して channel 更新を継続するようにした。有効 cache が無い場合は従来の refresh error 経路へ伝播する（#3384）。
 - `feat(dashboard)`: stale を含む schema-valid な公開履歴 cache を鮮度判定と独立して読み出し、前回の `days` / `fetched_at` / `timezone` を維持したまま `code` / `message` / `attempted_at` の構造化更新エラーを付与できるようにした（#3383）。
