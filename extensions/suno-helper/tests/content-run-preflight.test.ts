@@ -8,7 +8,11 @@ import {
   INFLIGHT_STALL_TIMEOUT_MS,
   PHASE,
 } from "../../shared/constants";
-import type { WaitForCaptchaClearOptions } from "../../shared/dom";
+import {
+  CAPTCHA_WAIT_TIMEOUT_MS,
+  POLL_INTERVAL_MS,
+  type WaitForCaptchaClearOptions,
+} from "../../shared/dom";
 import {
   findPlaylistUrlsByName,
   fillPlaylistNameAndCreate,
@@ -826,6 +830,32 @@ describe("content unattended launch", () => {
     );
     expect(harness.sendMessage).not.toHaveBeenCalledWith(
       "run",
+      expect.anything()
+    );
+  });
+
+  it("waits for a visible Turnstile before unattended preflight continues", async () => {
+    setUnattendedLaunchHash();
+    const turnstile = document.createElement("iframe");
+    turnstile.src = "https://challenges.cloudflare.com/turnstile/v0/widget";
+    markBbox(turnstile, 300, 65);
+    document.body.appendChild(turnstile);
+    harness.waitForCaptchaClear.mockImplementation(
+      () => new Promise<void>(() => undefined)
+    );
+
+    await loadContentScript();
+
+    await vi.waitFor(() =>
+      expect(harness.waitForCaptchaClear).toHaveBeenCalledWith({
+        isAborted: expect.any(Function),
+        pollIntervalMs: POLL_INTERVAL_MS,
+        timeoutMs: CAPTCHA_WAIT_TIMEOUT_MS,
+      })
+    );
+    expect(harness.writeUnattendedRunState).not.toHaveBeenCalled();
+    expect(harness.sendMessage).not.toHaveBeenCalledWith(
+      "fetchCollections",
       expect.anything()
     );
   });

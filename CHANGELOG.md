@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `fix(suno-helper)`: 無人実行の起動前確認で可視 CAPTCHA challenge を検出した場合、即時に手動介入状態へ停止せず既存の CAPTCHA 解消待機経路へ入るようにした（#2979）。
+
 - `fix(suno-helper)`: 無人実行中の可視 Turnstile も手動実行と同じ10分間 `waiting-captcha` で待機し、即時エラー終了しないように統一（#2978）。
 
 - `fix(doctor)`: read-only OAuth token の発行状況を独立診断し、未発行時は対象チャンネルの context 付きで `uv run yt-oauth --readonly` を案内する warning を追加（#2957）。
