@@ -56,6 +56,106 @@ def _snapshot(*, collected_at: str, views: int, video_views: int) -> dict:
     }
 
 
+def _write_publications(
+    channel: Path,
+    *,
+    fetched_at: str,
+    timezone: str,
+    days: dict[str, int],
+    error: dict[str, str] | None = None,
+) -> None:
+    payload: dict[str, object] = {
+        "schema_version": 1,
+        "fetched_at": fetched_at,
+        "timezone": timezone,
+        "days": days,
+    }
+    if error is not None:
+        payload["error"] = error
+    (channel / "data" / "dashboard_publications.json").write_text(json.dumps(payload), encoding="utf-8")
+
+
+def test_read_model_aggregates_publication_days_and_channel_cache_state(tmp_path: Path) -> None:
+    first = tmp_path / "first"
+    second = tmp_path / "second"
+    for channel, name in ((first, "First"), (second, "Second")):
+        _write_channel(
+            channel,
+            name=name,
+            snapshots={
+                "analytics_data_20260720.json": _snapshot(
+                    collected_at="2026-07-20T00:00:00+00:00", views=900, video_views=700
+                )
+            },
+        )
+    _write_publications(
+        first,
+        fetched_at="2026-08-08T12:00:00+00:00",
+        timezone="Asia/Tokyo",
+        days={"2026-08-07": 2, "2026-08-08": 3},
+    )
+    publication_error = {
+        "code": "publication_refresh_failed",
+        "message": "quota exceeded",
+        "attempted_at": "2026-08-08T13:00:00+00:00",
+    }
+    _write_publications(
+        second,
+        fetched_at="2026-08-07T12:00:00+00:00",
+        timezone="UTC",
+        days={"2026-08-08": 4},
+        error=publication_error,
+    )
+
+    model = build_dashboard_read_model([first, second])
+
+    assert model["publications"] == {
+        "days": {"2026-08-07": 2, "2026-08-08": 7},
+        "channels": [
+            {
+                "id": model["channels"][0]["id"],
+                "name": "First",
+                "status": "ready",
+                "fetched_at": "2026-08-08T12:00:00+00:00",
+                "timezone": "Asia/Tokyo",
+                "days": {"2026-08-07": 2, "2026-08-08": 3},
+                "error": None,
+            },
+            {
+                "id": model["channels"][1]["id"],
+                "name": "Second",
+                "status": "refresh_failed",
+                "fetched_at": "2026-08-07T12:00:00+00:00",
+                "timezone": "UTC",
+                "days": {"2026-08-08": 4},
+                "error": publication_error,
+            },
+        ],
+    }
+
+
+def test_read_model_isolates_missing_and_invalid_publication_caches(tmp_path: Path) -> None:
+    missing = tmp_path / "missing"
+    invalid = tmp_path / "invalid"
+    ready = tmp_path / "ready"
+    for channel, name in ((missing, "Missing"), (invalid, "Invalid"), (ready, "Ready")):
+        _write_channel(channel, name=name, snapshots={})
+    (invalid / "data" / "dashboard_publications.json").write_text("not-json", encoding="utf-8")
+    _write_publications(
+        ready,
+        fetched_at="2026-08-08T12:00:00+00:00",
+        timezone="UTC",
+        days={"2026-08-08": 5},
+    )
+
+    publications = build_dashboard_read_model([missing, invalid, ready])["publications"]
+
+    assert publications["days"] == {"2026-08-08": 5}
+    assert [channel["status"] for channel in publications["channels"]] == ["missing", "invalid", "ready"]
+    assert publications["channels"][0]["fetched_at"] is None
+    assert publications["channels"][1]["days"] == {}
+
+
 def test_read_model_uses_latest_snapshot_and_normalizes_metrics(tmp_path: Path) -> None:
     channel = tmp_path / "channel-one"
     _write_channel(
