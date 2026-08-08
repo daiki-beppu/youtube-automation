@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `fix(thumbnail)`: Codex のテキスト付きサムネイルプロンプトへ、deep-merge 後の `single_step.ip_safety_clause` を自動で一度だけ付与する（#2586）。
+
 - `fix(videoup)`: 有効化した登録ポップアップ画像を解決できない場合、ポップアップを黙って省略せず動画生成前にエラー終了する（#2579）。
 
 - `fix(doctor)`: duration TTP 証跡の同義ラベル・空白・区切り記号と、見出し配下の複数行箇条書きを解釈しつつ、根拠・対象 channel・上位5本・min/max・承認の必須条件を維持（#2545）。

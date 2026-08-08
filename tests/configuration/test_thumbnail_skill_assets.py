@@ -1377,17 +1377,46 @@ def test_channel_new_thumbnail_template_includes_channel_branding_contract() -> 
 
 
 def test_codex_prompt_helper_cli_renders_default_template(tmp_path: Path) -> None:
-    """#1300: provider=codex の最小 override で default template を title 差し替えして出力する。"""
+    """#1300 / #2586: default template と IP safety clause を title 付きで出力する。"""
     result = _run_codex_prompt_cli(
         tmp_path,
         "image_generation:\n  provider: codex\n",
         "Rain Study",
     )
 
+    default_clause = _load_thumbnail_default_config()["image_generation"]["gemini"]["single_step"][
+        "ip_safety_clause"
+    ].strip()
     assert result.returncode == 0, result.stderr
     assert "TTP this reference thumbnail, then improve it into a stronger original thumbnail." in result.stdout
     assert "Use the title Rain Study." in result.stdout
+    assert result.stdout.count(default_clause) == 1
+    assert "Remove all text" not in result.stdout
     assert "{title}" not in result.stdout
+
+
+def test_codex_prompt_helper_cli_uses_channel_ip_safety_override_without_text_strip(tmp_path: Path) -> None:
+    """#2586: channel の IP clause だけを初回の文字入り prompt へ一度展開する。"""
+    result = _run_codex_prompt_cli(
+        tmp_path,
+        """image_generation:
+  provider: codex
+  gemini:
+    single_step:
+      ip_safety_clause: Channel-specific IP safety clause.
+      text_strip_clause: Remove all text from the image.
+""",
+        "Rain Study",
+    )
+
+    default_clause = _load_thumbnail_default_config()["image_generation"]["gemini"]["single_step"][
+        "ip_safety_clause"
+    ].strip()
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.count("Use the title Rain Study.") == 1
+    assert result.stdout.count("Channel-specific IP safety clause.") == 1
+    assert default_clause not in result.stdout
+    assert "Remove all text from the image." not in result.stdout
 
 
 def test_codex_prompt_helper_cli_rejects_non_codex_provider(tmp_path: Path) -> None:
