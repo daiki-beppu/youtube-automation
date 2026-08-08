@@ -820,10 +820,17 @@ export default defineContentScript({
       });
     }
 
-    function assertUnattendedUiIsSafe(): void {
+    function assertUnattendedUiIsSafe(options?: {
+      allowCaptcha: boolean;
+    }): void {
       if (!activeUnattended) return;
       const blocker = detectUnattendedPreflightBlocker();
-      if (blocker) throw new FatalRunError(blocker.message);
+      if (
+        blocker &&
+        !(blocker.reason === "captcha-required" && options?.allowCaptcha)
+      ) {
+        throw new FatalRunError(blocker.message);
+      }
     }
 
     async function verifyUnattendedCompletion(
@@ -913,7 +920,7 @@ export default defineContentScript({
       index: number,
       total: number
     ): Promise<void> {
-      assertUnattendedUiIsSafe();
+      assertUnattendedUiIsSafe({ allowCaptcha: true });
       // captcha が出ていても即停止しない。多くは passive 検証で数秒以内に自動 verify されて閉じるため、
       // waiting-captcha phase で解消を待って自動続行する。解消されない場合のみ throw（fail-loud は維持）。
       await waitForCaptchaClear({
