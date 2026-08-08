@@ -16,7 +16,37 @@ def _write_channel(root: Path) -> Path:
     (channel / "config" / "channel").mkdir(parents=True)
     (channel / "data").mkdir()
     (channel / "config" / "channel" / "meta.json").write_text(
-        json.dumps({"channel": {"name": "Night Drive"}}), encoding="utf-8"
+        json.dumps(
+            {
+                "channel": {
+                    "name": "Night Drive",
+                    "short": "ND",
+                    "youtube_handle": "@nightdrive",
+                    "url": "https://youtube.com/@nightdrive",
+                    "tagline": "Drive at night",
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    (channel / "config" / "channel" / "content.json").write_text(
+        json.dumps(
+            {
+                "genre": {"primary": "synthwave", "style": "retro", "context": "driving"},
+                "tags": {"base": ["synthwave"], "themes": {}},
+                "descriptions": {"opening": "Night music", "perfect_for": ["Driving"], "hashtags": ["#Night"]},
+                "title": {"template": "{theme}"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (channel / "config" / "channel" / "youtube.json").write_text(
+        json.dumps({"youtube": {"category_id": "10", "privacy_status": "public", "language": "ja"}}),
+        encoding="utf-8",
+    )
+    (channel / "config" / "channel" / "workflow.json").write_text(
+        json.dumps({"workflow": {"manual_baseline_minutes": {"wf-next": 1, "post-publish": 2}}}),
+        encoding="utf-8",
     )
     (channel / "data" / "analytics_data_2026-07-20.json").write_text(
         json.dumps(
@@ -24,6 +54,70 @@ def _write_channel(root: Path) -> Path:
                 "collection_period": {"collected_at": "2026-07-20T12:00:00Z"},
                 "channel_analytics": {"summary": {"total_views": 123}},
                 "video_analytics": {"video-1": {"title": "Midnight", "views": 123}},
+            }
+        ),
+        encoding="utf-8",
+    )
+    active = channel / "collections" / "planning" / "active"
+    active.mkdir(parents=True)
+    (active / "workflow-state.json").write_text(
+        json.dumps({"phase": "planning", "created_at": "2026-07-21"}), encoding="utf-8"
+    )
+    latest = channel / "collections" / "live" / "latest"
+    latest.mkdir(parents=True)
+    (latest / "workflow-state.json").write_text(
+        json.dumps({"phase": "complete", "created_at": "2026-07-20"}), encoding="utf-8"
+    )
+    history_dir = channel / ".automation-run"
+    history_dir.mkdir()
+    (history_dir / "history.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 2,
+                "attempts": [
+                    {
+                        "collection": "collections/planning/active",
+                        "action": "wf-next",
+                        "status": "success",
+                        "timing": {
+                            "segments": [
+                                {
+                                    "kind": "ai",
+                                    "started_at": "2026-07-21T00:00:00+00:00",
+                                    "ended_at": "2026-07-21T00:00:10+00:00",
+                                    "duration_seconds": 10,
+                                },
+                                {
+                                    "kind": "human",
+                                    "started_at": "2026-07-21T00:00:10+00:00",
+                                    "ended_at": "2026-07-21T00:00:20+00:00",
+                                    "duration_seconds": 5,
+                                },
+                            ]
+                        },
+                    },
+                    {
+                        "collection": "collections/live/latest",
+                        "action": "post-publish",
+                        "status": "success",
+                        "timing": {
+                            "segments": [
+                                {
+                                    "kind": "ai",
+                                    "started_at": "2026-07-20T00:00:00+00:00",
+                                    "ended_at": "2026-07-20T00:00:10+00:00",
+                                    "duration_seconds": 20,
+                                },
+                                {
+                                    "kind": "human",
+                                    "started_at": "2026-07-20T00:00:10+00:00",
+                                    "ended_at": "2026-07-20T00:00:20+00:00",
+                                    "duration_seconds": 10,
+                                },
+                            ]
+                        },
+                    },
+                ],
             }
         ),
         encoding="utf-8",
@@ -67,6 +161,17 @@ def test_server_exposes_overview_and_channel_detail(dashboard_server: str):
     detail_status, detail = _json(f"{dashboard_server}/api/channels/{channel['id']}")
     assert detail_status == 200
     assert detail["videos"][0]["title"] == "Midnight"
+    active, latest = detail["workflow_timing"]["collections"]
+    assert (active["collection_id"], active["stage"], active["totals"]["work_seconds"]) == (
+        "active",
+        "planning",
+        15,
+    )
+    assert (latest["collection_id"], latest["stage"], latest["totals"]["work_seconds"]) == (
+        "latest",
+        "live",
+        30,
+    )
 
 
 @pytest.mark.parametrize("path", ["/api/unknown", "/api/channels/not-registered"])

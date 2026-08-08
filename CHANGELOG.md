@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `refactor(packaging)`: リポジトリを責務別 layer へ再配置し、canonical owner への production import・receipt・active documentation を同期した。`youtube_automation.utils` と `infrastructure.legacy_utils` は下流向け compatibility façade として installed wheel でも維持し、削除・統合候補は `docs/architecture/reorganization-followups.md` に記録した。
 ### Added
 
+- `feat(dashboard)`: registry の各 channel から検証済み手作業基準と workflow history を読み、collection timing summary を channel detail API へ配線した（#3325）。
 - `feat(dashboard)`: workflow timing summary を channel detail read model に追加し、overview からは除外して一覧 API の軽量契約を維持した（#3324）。
 - `feat(dashboard)`: active planning と latest live collection を最大 2 件選び、`wf-auto-state.py` の正規集計から step 状態と 6 種の時間指標を構築する read adapter を追加した（#3323）。
 - `feat(config)`: channel registry の任意 path から検証済み設定を読み込み、既存 singleton の channel 選択へ影響させない API を追加した（#3322）。
