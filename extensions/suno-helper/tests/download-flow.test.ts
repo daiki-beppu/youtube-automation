@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { PHASE } from "../../shared/constants";
 import { createDownloadFlow } from "../lib/download-flow";
 
 // REQ-2915-01: every watcher-side failure cancels once and clears its resolver.
@@ -29,15 +30,22 @@ const CONTEXT = {
   format: "mp3" as const,
 };
 
+const PARTIAL_SUMMARY = {
+  expected: 56,
+  placed: 47,
+  missing: 9,
+  reasons: { sunoUnfulfilled: 3, applySkipped: 6 },
+};
+
 function dispatchDownloadComplete(filename = "collection.zip"): void {
   messagingMocks.handlers.get("downloadComplete")?.({
     data: { filename },
   });
 }
 
-function createSubject(isAborted: () => boolean) {
+function createSubject(isAborted: () => boolean, emitProgress = vi.fn()) {
   const flow = createDownloadFlow({
-    emitProgress: vi.fn(),
+    emitProgress,
     isAborted,
   });
   flow.installMessageHandlers();
@@ -55,6 +63,24 @@ function expectOnlyStartAndCancelMessages(): void {
       ([message]) => message === "postDownloaded"
     )
   ).toBe(false);
+}
+
+function arrangePartialDownloadSuccess(): void {
+  messagingMocks.sendMessage.mockImplementation(async (message: string) => {
+    if (message === "startDownload") {
+      return { ok: true };
+    }
+    if (message === "postDownloaded") {
+      return {
+        summary: PARTIAL_SUMMARY,
+        warning: "placed 47 files, expected 56 (9 missing)",
+      };
+    }
+    return { ok: true };
+  });
+  downloadMocks.triggerDownloadAll.mockImplementationOnce(async () => {
+    dispatchDownloadComplete();
+  });
 }
 
 describe("download flow", () => {
@@ -124,6 +150,61 @@ describe("download flow", () => {
     expectOnlyStartAndCancelMessages();
   });
 
+  it("通常 download の部分成功は server summary を同一objectで返す", async () => {
+    arrangePartialDownloadSuccess();
+    const flow = createSubject(() => false);
+
+    const summary = await flow.performDownload(CONTEXT, "collection", 28, 56);
+
+    expect(summary).toBe(PARTIAL_SUMMARY);
+  });
+
+  it("best-effort download の部分成功は error なしで同じ server summary を返す", async () => {
+    arrangePartialDownloadSuccess();
+    const flow = createSubject(() => false);
+
+    const result = await flow.downloadBestEffortResult(
+      CONTEXT,
+      "collection",
+      28,
+      56
+    );
+
+    expect(result).toEqual({ error: null, summary: PARTIAL_SUMMARY });
+    expect(result.summary).toBe(PARTIAL_SUMMARY);
+  });
+
+  it("retry download の部分成功は同じ server summary を返す", async () => {
+    arrangePartialDownloadSuccess();
+    const emitProgress = vi.fn();
+    const flow = createSubject(() => false, emitProgress);
+
+    const result = await flow.retryDownload({
+      context: CONTEXT,
+      collectionId: "collection",
+      submittedClipIds: ["clip-id"],
+      expectedClipCount: 56,
+      selectClipIds: vi.fn(async () => undefined),
+      clearResumeState: vi.fn(async () => undefined),
+    });
+
+    expect(result).toEqual({
+      completedAndCleared: true,
+      summary: PARTIAL_SUMMARY,
+    });
+    expect(result.summary).toBe(PARTIAL_SUMMARY);
+    const finishedProgress = emitProgress.mock.calls
+      .map(([payload]) => payload)
+      .filter((payload) => payload.phase === PHASE.FINISHED);
+    expect(finishedProgress).toEqual([
+      {
+        phase: PHASE.FINISHED,
+        total: 0,
+        downloadSummary: PARTIAL_SUMMARY,
+      },
+    ]);
+  });
+
   it("通常 download の API 失敗理由へ downloading phase を付与して返す", async () => {
     const apiError =
       "POST /collections/collection/downloaded failed: 403 Forbidden";
@@ -162,6 +243,27 @@ describe("download flow", () => {
         clearResumeState: vi.fn(async () => undefined),
       })
     ).rejects.toThrow("watcher unavailable (phase=downloading)");
+  });
+
+  it("配置数 0 の server error を通常 download で握りつぶさない", async () => {
+    const serverError = "placed_count must be positive";
+    messagingMocks.sendMessage.mockImplementation(async (message: string) => {
+      if (message === "startDownload") {
+        return { ok: true };
+      }
+      if (message === "postDownloaded") {
+        throw new Error(serverError);
+      }
+      return { ok: true };
+    });
+    downloadMocks.triggerDownloadAll.mockImplementationOnce(async () => {
+      dispatchDownloadComplete();
+    });
+    const flow = createSubject(() => false);
+
+    await expect(
+      flow.performDownload(CONTEXT, "collection", 2, 2)
+    ).rejects.toThrow(`${serverError} (phase=downloading)`);
   });
 
   it("既に downloading phase がある失敗理由を重複して付与しない", async () => {
