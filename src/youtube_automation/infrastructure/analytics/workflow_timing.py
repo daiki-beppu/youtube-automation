@@ -3,12 +3,21 @@
 from __future__ import annotations
 
 import importlib.util
+import json
+import math
 import sys
+import time
 from functools import cache
 from importlib.resources import as_file, files
 from pathlib import Path
 from types import ModuleType
 from typing import Protocol, cast
+
+
+class _TimingUnavailableError(ValueError):
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
 
 
 class _TimingRunner(Protocol):
@@ -125,7 +134,12 @@ def _collection_summary(
     scoped_history = _collection_history(history, channel, collection)
     summary = runner.summarize_time_savings(scoped_history, manual_baseline_minutes)
     if summary.get("available") is not True:
-        raise ValueError(f"workflow timing を集計できません: {summary.get('reason')}")
+        reason = summary.get("reason")
+        if not isinstance(reason, str) or not reason:
+            raise ValueError("unavailable workflow timing に reason がありません")
+        raise _TimingUnavailableError(reason)
+    if not scoped_history["attempts"]:
+        raise _TimingUnavailableError("attempt_timing_unavailable")
     actions = summary.get("actions")
     totals = summary.get("totals")
     if not isinstance(actions, dict) or not isinstance(totals, dict):
@@ -144,6 +158,26 @@ def _collection_summary(
     }
 
 
+def _has_active_lease(channel: Path) -> bool:
+    lease_path = channel / ".automation-run" / "lease" / "lease.json"
+    if lease_path.is_symlink():
+        raise ValueError(f"workflow lease に symlink は使えません: {lease_path}")
+    if not lease_path.exists():
+        return False
+    if not lease_path.is_file():
+        raise ValueError(f"workflow lease が通常ファイルではありません: {lease_path}")
+    try:
+        lease = json.loads(lease_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"workflow lease を読めません: {lease_path}: {exc}") from exc
+    if not isinstance(lease, dict):
+        raise ValueError(f"workflow lease は object でなければなりません: {lease_path}")
+    expires_at = lease.get("expires_at")
+    if isinstance(expires_at, bool) or not isinstance(expires_at, (int, float)) or not math.isfinite(expires_at):
+        raise ValueError(f"workflow lease の expires_at が不正です: {lease_path}")
+    return expires_at > time.time()
+
+
 def build_workflow_timing(
     channel: Path,
     manual_baseline_minutes: dict[str, float] | None,
@@ -152,8 +186,14 @@ def build_workflow_timing(
     channel = channel.resolve()
     runner = _runner()
     history = runner.read_history(channel)
-    collections = [
-        _collection_summary(channel, collection, stage, history, manual_baseline_minutes, runner)
-        for stage, collection in _selected_collections(channel, runner)
-    ]
-    return {"collections": collections}
+    in_progress = _has_active_lease(channel)
+    try:
+        collections = [
+            _collection_summary(channel, collection, stage, history, manual_baseline_minutes, runner)
+            for stage, collection in _selected_collections(channel, runner)
+        ]
+    except _TimingUnavailableError as exc:
+        if in_progress:
+            return {"status": "in_progress", "collections": []}
+        return {"status": "unavailable", "reason": exc.reason, "collections": []}
+    return {"status": "in_progress" if in_progress else "ready", "collections": collections}
