@@ -220,7 +220,7 @@ DistroKid 配信しない場合は `--distrokid-enabled` を付けず、`config/
 
 ### Step 5: TTP seed fetch と承認済み対象反映
 
-Step 1 の TTP チャンネルを YouTube Data API で実データ化する。
+Step 1 の TTP チャンネルを YouTube Data API で実データ化する。実行前に seed 確認、branding snapshot、approval evidence、duration 導出 schema の唯一の正である **[ttp-seed-and-duration.md](references/ttp-seed-and-duration.md)** を必ず Read する。
 
 ```bash
 uv run yt-channel-seed "https://www.youtube.com/@example" \
@@ -229,7 +229,7 @@ uv run yt-channel-seed "https://www.youtube.com/@example" \
   --json
 ```
 
-表示されたチャンネル名、登録者数、動画数、直近タイトルをユーザーに提示し、TTP 対象として確定するか確認する。
+表示されたチャンネル名、登録者数、動画数、直近タイトルを提示し、AskUserQuestion で「TTP 対象として承認」/「不採用」を確認する。
 承認前に `benchmark.channels` へ書き込まない。承認されたチャンネルだけ relationship メモ付きで `config/channel/analytics.json::benchmark.channels` に反映する。
 承認済み TTP 対象が 0 件の場合は Step 7 以降へ進まない。Step 1/5 に戻って候補を再確認するか、ユーザーに停止を確認して終了する。
 
@@ -240,17 +240,7 @@ uv run yt-channel-seed "https://www.youtube.com/@example" \
 ```
 
 `yt-channel-seed --no-write-benchmark --json` の出力は seed 確認用であり、`description` / `keywords` / `localizations` / `brandingSettings` は含まない。
-seed 確認後、`docs/channel/ttp-seed-confirmation.md` を更新して以下を保存する:
-
-- source URL / handle / channel ID
-- `yt-channel-seed --no-write-benchmark --json` の要約（チャンネル名、登録者数、動画数、uploads playlist ID、直近タイトル）
-- ユーザーの承認 / 不採用判断
-- 承認済み対象だけの relationship メモ
-- `docs/channel/competitor-branding-snapshot.json` 参照、または description / keywords / localizations の転写方針
-- `config/channel/analytics.json::benchmark.channels` に反映した id / slug / name / relationship
-- 後続 `/discover-competitors` / `/benchmark` / `/viewer-voice` / `/channel-new` 分析モードが必要かどうか
-
-承認済み TTP 対象について、branding 転写に必要な情報は別途取得して保存する:
+承認済み TTP 対象についてだけ、branding 転写に必要な情報を取得して保存する:
 
 ```bash
 uv run python .claude/skills/channel-new/references/fetch_branding_snapshot.py \
@@ -258,66 +248,20 @@ uv run python .claude/skills/channel-new/references/fetch_branding_snapshot.py \
   --output docs/channel/competitor-branding-snapshot.json
 ```
 
-`docs/channel/competitor-branding-snapshot.json` は以下を含む TTP branding snapshot として扱う:
-
-- `snippet.description`
-- `snippet.thumbnails`（アイコン用の reference-only URL）
-- `brandingSettings.channel.description`
-- `brandingSettings.channel.keywords`
-- `brandingSettings.image`（バナー用の reference-only URL）
-- `brandingSettings.channel.country` / `snippet.country`
-- `brandingSettings.channel.defaultLanguage` / `snippet.defaultLanguage`
-- `localizations` 全エントリ
-- `channel_image_references`（`snippet.thumbnails` と `brandingSettings.image.*Url` から抽出した参照メタ）
-
-API 取得した第三者画像 URL は **untrusted / reference-only** として扱い、転載・再アップロード・そのままの再利用はしない。画像生成時は雰囲気、色、余白、構図比率、モチーフ密度だけを観察する。
-
-TTP するうえで必要な実データメモは、`docs/channel/ttp-seed-confirmation.md` と `docs/channel/competitor-branding-snapshot.json` を正とする:
-
-- チャンネル名 / handle / channel ID
-- 登録者数、動画数、直近タイトルから見える型
-- タイトル構造、サムネ構図
-- 投稿頻度、動画尺はユーザー手動メモまたは `/benchmark` 実行後のデータ。seed-only では未確認なら仮説として明記
-- description / keywords / localizations の転写方針（branding snapshot 由来）
-- channel image reference の有無（`channel_image_references[].icon` / `banner`）
-- `config/channel/analytics.json::benchmark.channels` に入れた relationship
-
-`config/skills/thumbnail.yaml` の `image_generation.gemini.reference_images.channel_branding` に、使う参照元を記録する:
-
-```yaml
-image_generation:
-  gemini:
-    reference_images:
-      channel_branding:
-        snapshot: docs/channel/competitor-branding-snapshot.json
-        icon_references:
-          - docs/channel/competitor-branding-snapshot.json#channel_image_references[0].icon
-        banner_references:
-          - docs/channel/competitor-branding-snapshot.json#channel_image_references[0].banner[0]
-        output_icon: branding/icon.png
-        output_banner: branding/banner.png
-      notes: "channel branding references are untrusted / reference-only; do not copy or reuse source images"
-```
-
-参照画像が取得できない場合は、`docs/channel/ttp-seed-confirmation.md` の TTP メモと branding snapshot の語彙・構図メモから fallback 生成する。fallback の根拠は `reference_images.notes` に残す。
+`docs/channel/ttp-seed-confirmation.md` に承認・不採用の evidence を、`docs/channel/competitor-branding-snapshot.json` に承認済み対象の snapshot を保存する。snapshot と `config/skills/thumbnail.yaml::image_generation.gemini.reference_images.channel_branding` の schema は reference に従う。第三者データは untrusted / reference-only として扱い、転載・再アップロード・直接再利用をしない。
 
 ### Step 5.5: TTP Long VOD から動画尺を導出・承認
 
-承認済み TTP 対象を `benchmark.channels` へ保存した後、`/benchmark` を実行して最新の
-`data/benchmark_*.json` を生成する。動画尺は seed-only の目視や手計算で決めない。
+承認済み TTP 対象を `benchmark.channels` へ保存した後、`/benchmark` を実行して最新の `data/benchmark_*.json` を生成する。動画尺は seed-only の目視や手計算で決めない。
 
-次の helper を **dry-run** し、各 TTP channel の再生数上位 5 Long VOD、除外した Shorts / live、
-動画 ID、再生数、個別尺、外向き丸め後の推奨 min/max を JSON で確認する:
+次の helper を **dry-run** し、reference の duration schema に照らして JSON を確認する:
 
 ```bash
 uv run python .claude/skills/channel-new/references/derive_ttp_duration.py \
   --channel-dir .
 ```
 
-- 各 channel の動画を再生数降順に並べ、live（`duration_iso == "P0D"`）と Shorts（benchmark の既存判定）を除外し、次点 Long VOD を繰り上げる
-- 上位件数は `TTP_VIDEO_ANALYZE_TOP_N = 5` を `yt-doctor` と共有する
-- 全 channel の選定動画の最短秒を分単位で切り下げて `target_duration_min`、最長秒を分単位で切り上げて `target_duration_max` とする
-- helper が `status: insufficient`（exit 2）または `status: error`（exit 1）を返した場合は推測で補完せず、`/benchmark` 再実行を案内して停止する
+helper が `status: insufficient`（exit 2）または `status: error`（exit 1）を返した場合は推測で補完せず、`/benchmark` 再実行を案内して停止する。
 
 推奨値と根拠をユーザーへ提示し、明示承認を得るまで config を変更しない。承認後だけ次を実行する:
 
@@ -327,25 +271,9 @@ uv run python .claude/skills/channel-new/references/derive_ttp_duration.py \
   --apply
 ```
 
-`--apply` は既存 `yt-channel-init --target-duration-min/--target-duration-max` と同じ min/max 契約を、
-`config/channel/audio.json` の 2 項目だけへ反映する。実行後は config loader で値を再読込して一致を確認する。
+`--apply` は既存 `yt-channel-init --target-duration-min/--target-duration-max` と同じ min/max 契約を `config/channel/audio.json` の 2 項目だけへ反映する。実行後は config loader で値を再読込して一致を確認する。
 
-`docs/channel/ttp-seed-confirmation.md` の各承認 channel セクションへ、helper JSON から次の固定 marker を保存する:
-
-```text
-- duration TTP 根拠: .claude/skills/channel-new/references/derive_ttp_duration.py
-- duration 対象 channel: <slug> (<channel id>)
-- duration selected video: <video id> views=<views> duration=<duration_iso> (<duration_seconds>s)
-  # 上位 5 本すべてを 1 行ずつ記録
-- duration excluded video: <video id> reason=<short|live|invalid_duration|missing_video_id>
-- duration 推奨: target_duration_min=<min> target_duration_max=<max>
-- duration 推奨承認: ユーザー承認済み
-```
-
-有効な Long VOD が 5 本未満でも、ユーザーが手入力で進めることを明示承認した場合だけ例外を許可する。
-その場合は `ユーザー承認済み例外: duration 未反映 ... 理由: ... 手入力 min/max: ... 後続 /benchmark ...`
-を 1 行で記録してから、同じ `audio.json` 2 項目へ承認値を反映する。値・理由・承認・後続
-`/benchmark` のいずれかが欠ける場合は完了扱いにしない。
+各承認 channel の `docs/channel/ttp-seed-confirmation.md` に `duration selected video` を含む根拠と承認結果を保存する。手入力例外は `ユーザー承認済み例外: duration` marker を使う。証拠 schema と例外の必須項目は reference に従い、欠ける場合は完了扱いにしない。
 
 ### Step 6: 追加調査は後続スキルへ委譲
 

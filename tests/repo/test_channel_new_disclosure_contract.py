@@ -9,12 +9,20 @@ from tests.helpers.paths import REPO_ROOT
 SKILL_DIR = REPO_ROOT / ".claude" / "skills" / "channel-new"
 SKILL_MD = SKILL_DIR / "SKILL.md"
 BOOTSTRAP_REFERENCE_MD = SKILL_DIR / "references" / "new-channel-bootstrap.md"
+TTP_SEED_DURATION_REFERENCE_MD = SKILL_DIR / "references" / "ttp-seed-and-duration.md"
 
 BOOTSTRAP_DETAIL_HEADINGS = {
     "Repository initialization details",
     "Setup gate details",
     "Configuration input schema",
     "Initial file generation details",
+}
+TTP_SEED_DURATION_DETAIL_HEADINGS = {
+    "Seed preview and approval evidence",
+    "Branding snapshot schema",
+    "Thumbnail reference schema",
+    "Duration derivation schema",
+    "Duration evidence and exceptions",
 }
 
 
@@ -119,3 +127,72 @@ def test_skill_keeps_bootstrap_commands_defaults_artifacts_and_stop_conditions()
         "remote 作成を保留",
     ):
         assert contract in skill
+
+
+def test_skill_dispatches_ttp_reference_before_step_5_actions() -> None:
+    skill = SKILL_MD.read_text(encoding="utf-8")
+    relative_reference = TTP_SEED_DURATION_REFERENCE_MD.relative_to(SKILL_DIR).as_posix()
+
+    dispatch = skill.index(f"]({relative_reference})")
+    step_5 = skill.index("### Step 5:")
+    seed_preview = skill.index("uv run yt-channel-seed", step_5)
+
+    assert TTP_SEED_DURATION_REFERENCE_MD.is_file()
+    assert step_5 < dispatch < seed_preview
+
+
+def test_ttp_seed_duration_detail_sections_have_one_reference_owner() -> None:
+    skill_headings = _headings(SKILL_MD.read_text(encoding="utf-8"))
+    reference_headings = _headings(TTP_SEED_DURATION_REFERENCE_MD.read_text(encoding="utf-8"))
+
+    assert TTP_SEED_DURATION_DETAIL_HEADINGS <= reference_headings
+    assert TTP_SEED_DURATION_DETAIL_HEADINGS.isdisjoint(skill_headings)
+
+
+def test_seed_approval_precedes_benchmark_and_branding_side_effects() -> None:
+    skill = SKILL_MD.read_text(encoding="utf-8")
+    step_5 = skill.index("### Step 5:")
+
+    seed_preview = skill.index("--no-write-benchmark", step_5)
+    approval = skill.index("AskUserQuestion", seed_preview)
+    benchmark_write = skill.index("--relationship", approval)
+    branding_snapshot = skill.index("fetch_branding_snapshot.py", benchmark_write)
+
+    assert seed_preview < approval < benchmark_write < branding_snapshot
+
+
+def test_skill_keeps_duration_input_approval_output_and_stop_contract() -> None:
+    skill = SKILL_MD.read_text(encoding="utf-8")
+    step_5_5 = skill.index("### Step 5.5:")
+
+    benchmark_input = skill.index("data/benchmark_*.json", step_5_5)
+    dry_run = skill.index("derive_ttp_duration.py", benchmark_input)
+    approval = skill.index("明示承認", dry_run)
+    apply = skill.index("--apply", approval)
+    audio_output = skill.index("config/channel/audio.json", apply)
+
+    assert benchmark_input < dry_run < approval < apply < audio_output
+    for contract in (
+        "status: insufficient",
+        "status: error",
+        "推測で補完せず",
+        "duration selected video",
+        "ユーザー承認済み例外: duration",
+    ):
+        assert contract in skill
+
+
+def test_reference_owns_ttp_seed_branding_and_duration_schema_details() -> None:
+    reference = TTP_SEED_DURATION_REFERENCE_MD.read_text(encoding="utf-8")
+    skill = SKILL_MD.read_text(encoding="utf-8")
+    step_5_details = skill.split("### Step 5:", 1)[1].split("### Step 6:", 1)[0]
+
+    for detail in (
+        "uploads playlist ID",
+        "brandingSettings.channel.defaultLanguage",
+        "channel_image_references[0].banner[0]",
+        "TTP_VIDEO_ANALYZE_TOP_N = 5",
+        "duration excluded video: <video id>",
+    ):
+        assert reference.count(detail) == 1
+        assert detail not in step_5_details
