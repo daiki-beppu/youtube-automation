@@ -5,6 +5,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Overlay } from "../components/Overlay";
+import type { ChallengeLogRecord } from "../lib/challenge-log";
 
 const INITIAL_STATE = {
   position: { x: 40, y: 50 },
@@ -13,13 +14,38 @@ const INITIAL_STATE = {
 };
 
 const messagingMocks = vi.hoisted(() => ({
-  onMessage: vi.fn(() => () => undefined),
+  onMessage: vi.fn((_name: string, _handler: () => void) => () => undefined),
   sendMessage: vi.fn(async () => ({ version: "0.2.5", matches: true })),
 }));
 
 const overlayStateMocks = vi.hoisted(() => ({
   readOverlayState: vi.fn(async () => INITIAL_STATE),
   writeOverlayState: vi.fn(async () => undefined),
+}));
+
+const challengeLogMocks = vi.hoisted(() => ({
+  readChallengeLog: vi.fn<() => Promise<ChallengeLogRecord[]>>(),
+  writeClipboard: vi.fn<(text: string) => Promise<void>>(),
+}));
+
+const CHALLENGE_RECORDS: ChallengeLogRecord[] = [
+  "preflight",
+  "before-create",
+  "generation-wait",
+  "before-create",
+].map((source, index) => ({
+  timestamp: 1_800_000_000_000 + index,
+  source: source as ChallengeLogRecord["source"],
+  runMode: index === 0 ? null : "serial",
+  unattended: index === 0,
+  entryIndex: index === 0 ? null : index,
+  total: index === 0 ? null : 4,
+  challengeLevel: index,
+  recentCreateCount: index,
+  runCreateCount: index,
+  lastCreateIntervalMs: index === 0 ? null : 6000,
+  appliedDelayMs: index * 15_000,
+  inflightRequestCount: index,
 }));
 
 const runner = vi.hoisted(() => ({
@@ -66,6 +92,9 @@ vi.mock("../lib/messaging", () => messagingMocks);
 vi.mock("../lib/overlay-storage", () => ({
   readOverlayState: overlayStateMocks.readOverlayState,
   writeOverlayState: overlayStateMocks.writeOverlayState,
+}));
+vi.mock("../lib/challenge-log", () => ({
+  readChallengeLog: challengeLogMocks.readChallengeLog,
 }));
 vi.mock("../lib/storage", () => ({
   downloadFormatItem: { setValue: vi.fn(async () => undefined) },
@@ -121,6 +150,14 @@ describe("Overlay shell", () => {
     messagingMocks.onMessage.mockClear();
     overlayStateMocks.readOverlayState.mockClear();
     overlayStateMocks.writeOverlayState.mockClear();
+    challengeLogMocks.readChallengeLog.mockReset();
+    challengeLogMocks.readChallengeLog.mockResolvedValue(CHALLENGE_RECORDS);
+    challengeLogMocks.writeClipboard.mockReset();
+    challengeLogMocks.writeClipboard.mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: challengeLogMocks.writeClipboard },
+    });
     Object.assign(runner, {
       collections: [],
       selectedCollectionId: "",
@@ -220,6 +257,175 @@ describe("Overlay shell", () => {
       minimized: false,
       hidden: false,
     });
+  });
+
+  it("challenge履歴を総件数と直近5件で表示する", async () => {
+    const sixRecords = [
+      ...CHALLENGE_RECORDS,
+      { ...CHALLENGE_RECORDS[0], timestamp: 1_800_000_000_004 },
+      { ...CHALLENGE_RECORDS[1], timestamp: 1_800_000_000_005 },
+    ];
+    challengeLogMocks.readChallengeLog.mockResolvedValueOnce(sixRecords);
+    await rerenderOverlay();
+
+    await waitFor(() => {
+      expect(
+        container.querySelector('[data-suno-control="challenge-log-count"]')
+          ?.textContent
+      ).toContain("6件");
+    });
+    const records = container.querySelectorAll(
+      '[data-suno-control="challenge-log-record"]'
+    );
+
+    expect(records).toHaveLength(5);
+    expect(records[0].textContent).toContain("before-create");
+    expect(records[4].textContent).toContain("before-create");
+    expect(records[4].textContent).not.toContain("preflight");
+  });
+
+  it("toggleで開くたびにchallenge履歴を再読込し、表示とexportを更新する", async () => {
+    await waitFor(() =>
+      expect(
+        container.querySelector('[data-suno-control="challenge-log-count"]')
+          ?.textContent
+      ).toContain("4件")
+    );
+    const toggle = messagingMocks.onMessage.mock.calls.find(
+      ([name]) => name === "toggleOverlay"
+    )?.[1];
+    expect(toggle).toBeTypeOf("function");
+
+    await act(async () => toggle?.());
+
+    const tamperedRecord = {
+      ...CHALLENGE_RECORDS[0],
+      timestamp: 1_800_000_000_004,
+      source: "generation-wait" as const,
+      secret: "must-not-leak",
+    } as ChallengeLogRecord;
+    challengeLogMocks.readChallengeLog.mockResolvedValue([
+      ...CHALLENGE_RECORDS,
+      tamperedRecord,
+    ]);
+    await act(async () => toggle?.());
+
+    await waitFor(() =>
+      expect(
+        container.querySelector('[data-suno-control="challenge-log-count"]')
+          ?.textContent
+      ).toContain("5件")
+    );
+    expect(
+      container.querySelector('[data-suno-control="challenge-log-record"]')
+        ?.textContent
+    ).toContain("generation-wait");
+    expect(container.textContent).not.toContain("must-not-leak");
+
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>(
+          '[data-suno-control="copy-challenge-log"]'
+        )!
+        .click()
+    );
+    const exported = JSON.parse(
+      challengeLogMocks.writeClipboard.mock.calls[0][0]
+    ) as Array<Record<string, unknown>>;
+    expect(exported).toHaveLength(5);
+    expect(Object.keys(exported[4]).sort()).toEqual(
+      [
+        "appliedDelayMs",
+        "challengeLevel",
+        "entryIndex",
+        "inflightRequestCount",
+        "lastCreateIntervalMs",
+        "recentCreateCount",
+        "runCreateCount",
+        "runMode",
+        "source",
+        "timestamp",
+        "total",
+        "unattended",
+      ].sort()
+    );
+    expect(exported[4]).not.toHaveProperty("secret");
+  });
+
+  it("challenge履歴の全件を安全なJSONとしてclipboardへコピーする", async () => {
+    await waitFor(() =>
+      expect(
+        container.querySelector<HTMLButtonElement>(
+          '[data-suno-control="copy-challenge-log"]'
+        )?.disabled
+      ).toBe(false)
+    );
+
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>(
+          '[data-suno-control="copy-challenge-log"]'
+        )!
+        .click()
+    );
+
+    expect(challengeLogMocks.writeClipboard).toHaveBeenCalledOnce();
+    expect(
+      JSON.parse(challengeLogMocks.writeClipboard.mock.calls[0][0])
+    ).toEqual(CHALLENGE_RECORDS);
+    expect(
+      container.querySelector('[data-suno-control="challenge-log-status"]')
+        ?.textContent
+    ).toContain("コピーしました");
+  });
+
+  it("challenge履歴が空なら空状態を表示してcopyを無効化する", async () => {
+    challengeLogMocks.readChallengeLog.mockResolvedValueOnce([]);
+
+    await rerenderOverlay();
+
+    await waitFor(() =>
+      expect(
+        container.querySelector('[data-suno-control="challenge-log-status"]')
+          ?.textContent
+      ).toContain("記録はありません")
+    );
+    expect(
+      container.querySelector<HTMLButtonElement>(
+        '[data-suno-control="copy-challenge-log"]'
+      )?.disabled
+    ).toBe(true);
+    expect(container.querySelector('[data-slot="card"]')).not.toBeNull();
+    expect(
+      container.querySelector('[data-suno-helper="control-panel"]')
+    ).not.toBeNull();
+  });
+
+  it("challenge履歴のcopy失敗を通知して既存overlayを維持する", async () => {
+    challengeLogMocks.writeClipboard.mockRejectedValueOnce(
+      new Error("clipboard unavailable")
+    );
+    await waitFor(() =>
+      expect(
+        container.querySelector<HTMLButtonElement>(
+          '[data-suno-control="copy-challenge-log"]'
+        )?.disabled
+      ).toBe(false)
+    );
+
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>(
+          '[data-suno-control="copy-challenge-log"]'
+        )!
+        .click()
+    );
+
+    expect(
+      container.querySelector('[data-suno-control="challenge-log-error"]')
+        ?.textContent
+    ).toContain("コピーできませんでした");
+    expect(container.querySelector('[data-slot="card"]')).not.toBeNull();
   });
 
   it("drag handle の pointer 操作で位置を更新し pointerup 時に永続化する", async () => {
