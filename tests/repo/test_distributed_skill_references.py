@@ -59,7 +59,6 @@ _KNOWN_UNRESOLVED: frozenset[tuple[str, str]] = frozenset(
             "docs/skill-design/thumbnail-codex-imagegen-diff-report.md",
         ),
         (".claude/skills/videoup/SKILL.md", "docs/benchmarks/videoup-overlay-encoder-2026-07-21.md"),
-        (".claude/skills/wf-auto/SKILL.md", "docs/skill-design/subagent-orchestration.md"),
     }
 )
 
