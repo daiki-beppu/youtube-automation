@@ -327,6 +327,33 @@ describe("useDistrokidRunner", () => {
     expect(current.busy).toBe(false);
   });
 
+  it("dir mode: scoped release 404 を top-level release との二重 404 と誤案内しない", async () => {
+    const scopedReleaseUrl = `${BASE_URL}/collections/${DISC1.collection_id}/distrokid/${DISC1.disc}/release.json`;
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === `${BASE_URL}/version`) {
+        return jsonResponse(404, {});
+      }
+      if (url === `${BASE_URL}/distrokid/collections`) {
+        return jsonResponse(200, [DISC1]);
+      }
+      if (url === scopedReleaseUrl) {
+        return jsonResponse(404, {});
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+
+    await fetchDirModeRelease();
+
+    expect(current.payload).toBeNull();
+    expect(current.phase).toBe("error");
+    expect(current.message).toBe("distrokid release is unavailable (404)");
+    expect(current.message).not.toContain("どちらも HTTP 404");
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      `${BASE_URL}/distrokid/release.json`,
+      expect.anything()
+    );
+  });
+
   it("単一 mode: release が利用不可なら既存ガイダンスを表示して payload を返さない", async () => {
     fetchMock.mockImplementation(async (url: string) => {
       if (
@@ -591,6 +618,50 @@ describe("useDistrokidRunner", () => {
       { id: "legacy", label: "Legacy", url: legacyUrl },
     ]);
     expect(serverUrlItem.setValue).toHaveBeenCalledWith(legacyUrl);
+  });
+
+  it("should probe a stored URL with no eligible discovery candidates and explain a double 404", async () => {
+    const storedUrl = "http://legacy.localhost:49152";
+    await act(async () => root.unmount());
+    vi.mocked(serverUrlItem.getValue).mockResolvedValueOnce(storedUrl);
+    discoveryMocks.discoverServerSources.mockResolvedValueOnce([]);
+    fetchMock.mockImplementation(async (url: string) => {
+      if (
+        url === `${storedUrl}/server-info` ||
+        url === `${storedUrl}/version` ||
+        url === `${storedUrl}/distrokid/collections` ||
+        url === `${storedUrl}/distrokid/release.json`
+      ) {
+        return jsonResponse(404, {});
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        createElement(Probe, {
+          onState: (state) => {
+            current = state;
+          },
+        })
+      );
+    });
+    await waitFor(() => expect(current.busy).toBe(false));
+
+    expect(current.serverSources).toEqual([]);
+    expect(current.serverUrl).toBe(storedUrl);
+    expect(fetchMock).toHaveBeenCalledWith(
+      `${storedUrl}/distrokid/collections`
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      `${storedUrl}/distrokid/release.json`,
+      { method: "GET" }
+    );
+    expect(current.phase).toBe("error");
+    expect(current.message).toContain("どちらも HTTP 404");
+    expect(current.message).toContain("[single]");
+    expect(current.message).toContain("[dir/");
   });
 
   it("should filter disabled sources on refresh while retaining legacy, single, and dir modes", async () => {

@@ -30,7 +30,7 @@ import { discoverServerSources } from "../../shared/server-discovery";
 
 // 無効チャンネル（distrokid.enabled=false / 未配置）時のガイダンス（要件 #16）。
 const UNAVAILABLE_GUIDANCE =
-  "このチャンネルでは distrokid 連携が無効です。config/channel/distrokid.json を enabled:true にして yt-collection-serve を再起動してください。";
+  "選択したローカル配信元では /distrokid/collections と /distrokid/release.json がどちらも HTTP 404 です。このチャンネルでは distrokid 連携が無効です、または非対応のサーバーです。ローカル配信元 selector から [single] または [dir/<collectionsRoot>] の候補を選ぶか、config/channel/distrokid.json を enabled:true にして yt-collection-serve を再起動してください。";
 
 // overlay 表示 component へ渡す runner state と実行制御。
 export interface DistrokidRunnerState {
@@ -176,6 +176,7 @@ export function useDistrokidRunner(): DistrokidRunnerState {
       setMessage("");
       setPayload(null);
       payloadSourceRef.current = null;
+      let attemptedTopLevelRelease = false;
 
       try {
         const info = await fetchServerInfo(baseUrl, backgroundFetch);
@@ -261,6 +262,7 @@ export function useDistrokidRunner(): DistrokidRunnerState {
         } else {
           // 単一 mode（後方互換）: 従来の /distrokid/release.json を取得する。
           payloadSourceRef.current = null;
+          attemptedTopLevelRelease = true;
           result = await fetchRelease(baseUrl, backgroundFetch);
         }
         if (!isLatestRequest()) {
@@ -274,7 +276,7 @@ export function useDistrokidRunner(): DistrokidRunnerState {
         setPayload(null);
         setPhase(PHASES.ERROR);
         setMessage(
-          error instanceof ReleaseUnavailableError
+          error instanceof ReleaseUnavailableError && attemptedTopLevelRelease
             ? UNAVAILABLE_GUIDANCE
             : error instanceof Error
               ? error.message
@@ -376,7 +378,7 @@ export function useDistrokidRunner(): DistrokidRunnerState {
         if (!stored.trim()) return;
         const nextUrl = sources.some((source) => source.url === stored)
           ? stored
-          : sources[0]?.url;
+          : (sources[0]?.url ?? stored);
         if (!nextUrl) return;
         serverUrlRef.current = nextUrl;
         setServerUrl(nextUrl);

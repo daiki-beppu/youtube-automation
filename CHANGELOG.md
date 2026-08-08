@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `fix(server-discovery)`: shared `ServerInfo` parser が optional な DistroKid 実行 mode と安全な collections root basename を strict に検証・保持し、存在する malformed metadata を fail-loud に拒否するようにした（#3441）。
 - `fix(distrokid-helper)`: discovery source が DistroKid mode `disabled` を明示した場合だけ候補から除外し、legacy / `single` / `dir` source は引き続き選択できるようにした（#2988）。
 - `fix(distrokid-helper)`: ローカル配信元の構造化 metadata から `single` / `dir` と collections root を候補 label に表示し、同一 channel の配信元を port 以外でも識別できるようにした（#2989）。
+- `fix(distrokid-helper)`: discovery 候補が空でも保存済み URL を検証し、collections / release がともに 404 の場合は原因と対応する配信元の選択・server 再起動方法を明示するようにした（#2990）。
 
 - `fix(suno-helper)`: 無人実行中の可視 Turnstile も手動実行と同じ10分間 `waiting-captcha` で待機し、即時エラー終了しないように統一（#2978）。
 
