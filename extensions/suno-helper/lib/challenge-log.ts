@@ -16,6 +16,10 @@ export interface ChallengeLogRecord {
   total: number | null;
   challengeLevel: number;
   recentCreateCount: number;
+  runCreateCount: number;
+  lastCreateIntervalMs: number | null;
+  appliedDelayMs: number;
+  inflightRequestCount: number;
 }
 
 const CHALLENGE_LOG_STORAGE_KEY = "sunoChallengeLog";
@@ -45,6 +49,10 @@ function allowlistedRecord(input: ChallengeLogRecord): ChallengeLogRecord {
     total: input.total,
     challengeLevel: input.challengeLevel,
     recentCreateCount: input.recentCreateCount,
+    runCreateCount: input.runCreateCount,
+    lastCreateIntervalMs: input.lastCreateIntervalMs,
+    appliedDelayMs: input.appliedDelayMs,
+    inflightRequestCount: input.inflightRequestCount,
   };
 }
 
