@@ -113,11 +113,14 @@ component 追加前は対象 workspace で `shadcn info` と registry/公式 doc
 ```bash
 nix develop .#extensions --command pnpm -C site install --frozen-lockfile
 nix develop .#extensions --command pnpm -C site check
-nix develop .#extensions --command pnpm -C site test
 nix develop .#extensions --command pnpm -C site build
+nix develop .#extensions --command pnpm -C site test
 ```
 
 - `site/.blume/` と `site/dist/` は再生成可能な build output であり commit しない。CI は content/schema check、一覧・詳細の契約 test、production build を実行する。
+- `site/tests/color-contrast.test.mjs` は production build の `index.html` が参照する stylesheet closure から実際の色値を解決するため、`test` は必ず `build` の後に実行する。light / dark それぞれの body text、muted text、accent / link、main / extension の kind badge 前景と合成後の背景、card の default / hover border を検証する。
+- contrast threshold は text が `4.5:1`、border などの non-text が `3:1`。基準未達時は failure に pair 名、実測比 `x.xx:1`、必要比 `4.50:1` または `3.00:1` が出るため、該当 theme と用途の DADS token / mix を見直す。
+- contrast gate は既存の site CI job と `pnpm -C site test` に含まれる Node test で完結する。新しい CI job、headless browser、外部サービスによるブラウザ監査は不要。
 - 静的サイトは Cloudflare Pages へ独立して配信する。preview / production の公開処理は Cloudflare Pages Git integration が所有し、この品質ゲートは deploy しない。
 - Cloudflare Pages の production / preview 設定、公開 URL、障害復旧用 Direct Upload は [`docs/release-notes-deployment.md`](release-notes-deployment.md) を参照する。
 - `site/` の source、lockfile、生成物は Python wheel / sdist には同梱しない。Hatch は `src/youtube_automation/` と明示した force-include だけを扱い、配布境界 test が実 archive に `site/` が無いことを確認する。
