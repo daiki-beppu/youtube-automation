@@ -1,10 +1,8 @@
 # imagegen Shared prompt schema bridge（試験導入）
 
 > 試験導入レイヤ。実本番のプロンプト構築フロー（`composition.py` / `scripts/generate_image.py`）
-> からは **未接続**。issue #654 で導入。本ファイルは差分レポート
-> （`docs/skill-design/thumbnail-codex-imagegen-diff-report.md`）の「提案 5: Shared
-> prompt schema の導入（差分 E）」に対応する。設計判断は
-> `docs/skill-design/ADR-001-thumbnail-prompt-schema.md` を参照。
+> からは **未接続**。issue #654 で導入した Shared prompt schema の bridge と、
+> 実本番接続を再評価する gate を本書だけで確認できるようにする。
 
 ## 14 項目スキーマと skill-config キーの対応マッピング
 
@@ -100,8 +98,8 @@ text = prompt_schema.render(schema)
 4. **legacy 撤去**: skill-config 全体の管理方法見直し epic と同期して
    `diff_prompt_template` を撤去。
 
-ステップ 2 以降は **skill-config 全体の責務分割・配布経路の見直し**
-（issue #654 §制約「トリガ条件」）が発火するまで着手しない。
+ステップ 2 以降は issue #654 の再評価 gate である
+**skill-config 全体の責務分割・配布経路の見直し**が発火するまで着手しない。
 
 ## 既存独自機能との関係
 

@@ -38,6 +38,11 @@ def _read_thumbnail_quality_and_operations() -> str:
     return path.read_text(encoding="utf-8")
 
 
+def _read_thumbnail_prompt_schema() -> str:
+    path = _repo_root() / ".claude" / "skills" / "thumbnail" / "references" / "prompt-schema.md"
+    return path.read_text(encoding="utf-8")
+
+
 def _read_loop_video_skill() -> str:
     path = _repo_root() / ".claude" / "skills" / "loop-video" / "SKILL.md"
     return path.read_text(encoding="utf-8")
@@ -912,6 +917,30 @@ def test_thumbnail_design_report_uses_current_two_phase_contract() -> None:
     assert "承認済み `thumbnail.jpg` から textless `main.png/jpg` を再生成" in two_phase_section
     assert "背景 → テキストオーバーレイ" not in two_phase_section
     assert "Phase 1 で背景（`main.png`）を生成" not in two_phase_section
+
+
+def test_thumbnail_prompt_schema_is_self_contained_experimental_contract() -> None:
+    prompt_schema = _read_thumbnail_prompt_schema()
+
+    for required in (
+        "試験導入",
+        "実本番のプロンプト構築フロー",
+        "**未接続**",
+        "issue #654",
+        "再評価",
+        "14 項目スキーマと skill-config キーの対応マッピング",
+        "`PromptSchema` dataclass（frozen）",
+        "`from_skill_config(skill_config: dict) -> PromptSchema`",
+        "`render(schema: PromptSchema) -> str`",
+        "段階移行パスと並存設計",
+        "opt-in フェーズ",
+        "default 切替",
+        "legacy 撤去",
+    ):
+        assert required in prompt_schema
+
+    assert "docs/skill-design/ADR-001-thumbnail-prompt-schema.md" not in prompt_schema
+    assert "docs/skill-design/thumbnail-codex-imagegen-diff-report.md" not in prompt_schema
 
 
 def test_thumbnail_default_config_keeps_font_stabilization_contract() -> None:

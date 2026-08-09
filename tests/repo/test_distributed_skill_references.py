@@ -49,14 +49,6 @@ _KNOWN_UNRESOLVED: frozenset[tuple[str, str]] = frozenset(
             ".claude/skills/automation-update/references/post-apply-checks.md",
             "docs/migration/numbered-duplicate-files-cleanup.md",
         ),
-        (
-            ".claude/skills/thumbnail/references/prompt-schema.md",
-            "docs/skill-design/ADR-001-thumbnail-prompt-schema.md",
-        ),
-        (
-            ".claude/skills/thumbnail/references/prompt-schema.md",
-            "docs/skill-design/thumbnail-codex-imagegen-diff-report.md",
-        ),
     }
 )
 
