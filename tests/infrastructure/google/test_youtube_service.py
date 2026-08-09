@@ -1,12 +1,16 @@
 """Instance-scoped YouTube client cache tests."""
 
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from youtube_automation.core.errors import ValidationError
-from youtube_automation.infrastructure.google.youtube import YouTubeClients, validate_youtube_response_items
+from youtube_automation.infrastructure.google.youtube import (
+    YouTubeClients,
+    create_readonly_youtube_clients,
+    validate_youtube_response_items,
+)
 
 
 def _handler(*, youtube=None):
@@ -36,6 +40,17 @@ def test_full_and_readonly_services_are_cached_independently():
     assert clients.youtube_readonly == "readonly"
     full_handler.get_youtube_service.assert_called_once_with()
     readonly_handler.get_youtube_service.assert_called_once_with()
+
+
+def test_readonly_factory_disables_interactive_browser_auth():
+    readonly_handler = MagicMock()
+    with patch("youtube_automation.infrastructure.auth.youtube.YouTubeOAuthHandler") as handler_class:
+        handler_class.create_readonly.return_value = readonly_handler
+
+        clients = create_readonly_youtube_clients()
+
+    assert clients._read_handler is readonly_handler
+    handler_class.create_readonly.assert_called_once_with(interactive=False)
 
 
 def test_reset_clears_only_this_instance_cache():
