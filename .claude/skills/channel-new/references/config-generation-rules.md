@@ -66,6 +66,9 @@
 | `theme_scenes` | テーマ → アクティビティ + 英語シーンフレーズのマッピング（TTP 形式・推奨）。`{theme: {activities: "...", scene: "..."}}` 形式。`yt-populate-scene-phrases` の `--en` 自動補完に使われる |
 | `theme_activities` | テーマ → アクティビティのマッピング（レガシー形式）。`theme_scenes` 未設定のときのみ参照される |
 
+`activities` に複数の値を書く場合はカンマ区切り（例: `"Focus, Study, Writing"`）を使う。
+プレイリスト自動割り当ては既存 config の中黒区切り（`"Focus · Study · Writing"`）も受理する。
+
 `theme_scenes` / `theme_activities` をどちらも空のまま `/channel-new`（再生成モード）を抜けると
 下流 `yt-populate-scene-phrases` が手動 `--en` 指定を要求する。channel-direction.md で
 テーマ群が確定しているなら空のまま終了しないこと（issue #567）。

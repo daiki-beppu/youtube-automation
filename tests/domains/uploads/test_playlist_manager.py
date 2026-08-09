@@ -108,6 +108,15 @@ class TestResolvePlaylists:
         result = manager.resolve_playlists("battle arena")
         assert "battle" in result
 
+    @pytest.mark.parametrize("separator", ["·", ","])
+    def test_activity_matching_accepts_supported_separators(self, manager, separator):
+        """複数 activity は中黒とカンマのどちらでもマッチする."""
+        activity = separator.join(["Focus", "Gaming", "Writing"])
+
+        result = manager.resolve_playlists("battle arena", activity=activity)
+
+        assert "battle" in result
+
     def test_theme_keyword_matching(self, manager):
         """theme キーワードベースのマッチング"""
         result = manager.resolve_playlists("Deep Ocean Waves")

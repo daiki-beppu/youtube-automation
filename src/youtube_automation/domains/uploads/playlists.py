@@ -145,8 +145,8 @@ class PlaylistManager:
                 matched.append(key)
                 continue
 
-            # activity ベースのマッチング（"Study · Focus · Late Night" → ["Study", "Focus", "Late Night"]）
-            activities = [a.strip() for a in activity.split("·")]
+            # 中黒は従来形式、カンマは channel-new の生成形式として下流 config に存在する。
+            activities = [a.strip() for a in activity.replace("·", ",").split(",")]
             if any(a in pl.get("auto_add_activities", []) for a in activities):
                 matched.append(key)
                 continue
