@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `fix(doctor)`: `initial_setup_readiness` でも有効な thumbnail ユーザー承認済み例外を尊重し、承認済みの規約外参照パスだけで恒久的に warn にならないようにした（#2509）。
+
 - `feat(workspace)`: SessionStart で cwd 由来の対象チャンネル、または未確定時の候補と書き込み基準をコンテキストへ注入する hook を追加（#3372）。
 
 - `feat(workspace)`: 下流の Edit/Write hook でチャンネル関連 path だけを事前抽出し、workspace 境界判定 CLI の拒否理由と exit code をエージェントへ返すようにした（#3371）。
