@@ -278,7 +278,7 @@ mkdir -p collections/planning/_plan-previews/${PREVIEW_DIR}
 
 **4-4: プロンプト構築 + 一括生成（parallel デフォルト）**
 
-`parallel` の場合だけ実行する。`REF_PATHS` を構築してからproviderに応じた経路で `candidate_count` 枚を順次生成する。候補数ぶんの参照が無い場合は参照不足なら生成せず停止する。
+`parallel` の場合だけ実行する。`REF_PATHS` を構築してからproviderに応じた経路で `candidate_count` 枚を順次生成する。候補数ぶんの参照が無い場合は参照不足なら生成せず停止する。通常 flag の意味・既定値は `uv run yt-generate-image --help` を正とする。
 
 ```bash
 # <dir> は 4-3 で作成したセッション固有ディレクトリ名（例: 20260306-a3f1）
