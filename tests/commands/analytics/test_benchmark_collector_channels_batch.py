@@ -118,6 +118,13 @@ def _thumbnail_data() -> dict:
 
 
 class TestBenchmarkThumbnailAnalyzer:
+    def test_uses_vertex_ga_default_when_model_is_unspecified(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(benchmark_collector, "load_skill_config", lambda _skill: {})
+
+        analyzer = BenchmarkThumbnailAnalyzer(tmp_path)
+
+        assert analyzer.model == "gemini-3.5-flash"
+
     def test_missing_genai_dependency_preserves_collected_data(self, monkeypatch, tmp_path):
         analyzer = _thumbnail_analyzer(monkeypatch, tmp_path)
         data = _thumbnail_data()

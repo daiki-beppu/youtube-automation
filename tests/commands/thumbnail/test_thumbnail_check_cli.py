@@ -44,6 +44,14 @@ def test_resolve_check_config_normalizes_non_mapping_no_logo_guard(monkeypatch):
     assert resolved["no_logo_guard"] == {}
 
 
+def test_resolve_check_config_uses_vertex_ga_default_when_model_is_unspecified(monkeypatch):
+    monkeypatch.setattr(thumbnail_check, "load_skill_config", lambda _name: {})
+
+    resolved = thumbnail_check._resolve_check_config(None)
+
+    assert resolved["model"] == "gemini-3.5-flash"
+
+
 # ---------------------------------------------------------------------------
 # _parse_json_response
 # ---------------------------------------------------------------------------
@@ -105,7 +113,7 @@ def test_check_image_passes_when_all_yes(tmp_path):
             }
         )
     )
-    result = thumbnail_check._check_image(image_path=image, prompt="prompt", client=client, model="gemini-2.5-flash")
+    result = thumbnail_check._check_image(image_path=image, prompt="prompt", client=client, model="gemini-test")
     assert result.passed is True
     assert len(result.checks) == 2
     assert result.error is None

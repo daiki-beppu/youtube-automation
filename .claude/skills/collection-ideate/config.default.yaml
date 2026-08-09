@@ -107,4 +107,4 @@ self_check:
   # 不合格時の再生成最大回数。0 にすると warn 表示のみで再生成しない。
   max_regeneration_attempts: 0
   # Gemini モデル (vision/text)。未指定なら video-analyze と同じデフォルトを使う。
-  model: "gemini-2.5-flash"
+  model: "gemini-3.5-flash"

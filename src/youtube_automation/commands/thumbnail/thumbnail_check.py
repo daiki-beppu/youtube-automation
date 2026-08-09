@@ -41,7 +41,7 @@ from youtube_automation.infrastructure.media.composition_lock import build_self_
 logger = logging.getLogger(__name__)
 
 SKILL_NAME = "collection-ideate"
-_DEFAULT_MODEL = "gemini-2.5-flash"
+_DEFAULT_MODEL = "gemini-3.5-flash"
 
 # benchmark_collector.py:561-563 / video_analyzer と同方式のコードフェンス除去
 _CODE_FENCE_HEAD = re.compile(r"^```(?:json)?\s*")

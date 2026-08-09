@@ -22,7 +22,7 @@ gemini_thumbnail_analysis: false
 
 # Gemini サムネイル分析の詳細設定（gemini_thumbnail_analysis: true 時のみ使用）
 thumbnail_analysis:
-  model: gemini-2.5-flash
+  model: gemini-3.5-flash
   delay_sec: 5  # API レート制限対策の待機秒数
   # Gemini に渡すプロンプト。チャンネルのジャンル/世界観に合わせて
   # config/skills/benchmark.yaml で上書きを推奨。
