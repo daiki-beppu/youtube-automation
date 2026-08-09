@@ -135,3 +135,4 @@ class Workflow:
     wf_next: WfNext = field(default_factory=WfNext)
     post_publish: PostPublish = field(default_factory=PostPublish)
     scheduled_automation: ScheduledAutomation = field(default_factory=ScheduledAutomation)
+    manual_baseline_minutes: dict[str, float] | None = None
