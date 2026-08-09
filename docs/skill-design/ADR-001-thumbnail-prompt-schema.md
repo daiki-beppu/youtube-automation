@@ -75,7 +75,7 @@ issue #654 は将来検討用に立てられたが（`takt:none`）、本 issue 
 - 実本番フロー未接続のため、本 ADR 時点では **実 prompt 改善効果はゼロ**。
   bridge 経由の生成試験は別 issue（`takt:default` で再起票）で行う。
 - bridge の対応マッピングは現在の `gemini` ブロックのみを参照する。
-  `openai` / `gemini_cli` / `codex` provider 個別のキーは未マッピング。
+  `openai` / `codex` provider 個別のキーは未マッピング。
   provider 横断の schema 化は将来課題。
 - 14 項目のうち `Lighting` は `config.default.yaml` に対応キーが無く、
   常に `None`。チャンネル側で必要なら `dataclasses.replace()` で明示マージ

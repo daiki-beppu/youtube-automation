@@ -312,7 +312,7 @@ def resolve_forbid_keywords(skill_cfg: dict[str, object]) -> list[str]:
 
     未設定・空リストは ``[]``（no-op）。list 以外や非文字列要素は ``ConfigError``。
     空白のみの要素は除外する。キーは gemini namespace に置くが、検査自体は
-    provider 非依存（Gemini / OpenAI / gemini_cli / codex の全入口で共通）。
+    provider 非依存（Gemini / OpenAI / codex の全入口で共通）。
     """
     image_gen = skill_cfg.get("image_generation")
     if not isinstance(image_gen, dict):

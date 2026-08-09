@@ -341,7 +341,7 @@ def main():
         default="16:9",
         help=(
             "アスペクト比 (デフォルト: %(default)s)。OpenAI は 16:9 または 9:16 のみ。"
-            "Gemini / gemini_cli は provider/config の対応範囲に従う"
+            "Gemini は provider/config の対応範囲に従う"
         ),
     )
     parser.add_argument(
@@ -478,10 +478,6 @@ def main():
         assert cfg.openai is not None
         model = cfg.openai.model
         image_size = cfg.openai.quality
-    elif cfg.provider == "gemini_cli":
-        assert cfg.gemini_cli is not None
-        model = cfg.gemini_cli.model
-        image_size = args.size
     else:
         print(f"[ERROR] provider={cfg.provider!r} は yt-generate-image では未対応です")
         sys.exit(1)

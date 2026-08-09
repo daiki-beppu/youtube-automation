@@ -41,7 +41,7 @@ from the reference image. Keep all corners clean and free of such marks.
 
 TTP 生成方針は provider によらず共通。参照サムネを winning template とし、winning layout を維持したまま mobile readability / face impact / no logos / no watermarks / no broken hands の品質改善だけを指示する。`config.default.yaml` の既定 template と codex 既定 template はこの方針行を共有し、チャンネル側 override があればそちらを優先する。
 
-`provider: gemini_cli` も同じ `diff_prompt_template` とこの構築手順を共有し、ラッパーは prompt の方針を変えない。カラーテーマ、オブジェクト、タイトルの placeholder を入力から展開し、IP safety を必須にする。手や指が壊れる構図だけ `anatomy_clause` を opt-in clause として追加する。
+各 provider は同じ `diff_prompt_template` とこの構築手順を共有し、ラッパーは prompt の方針を変えない。カラーテーマ、オブジェクト、タイトルの placeholder を入力から展開し、IP safety を必須にする。手や指が壊れる構図だけ `anatomy_clause` を opt-in clause として追加する。
 
 collection 間のローテーションでは最近の `Reference Assignments` を見て参照の偏りを抑える。同じ attempt 内の重複と、候補数より少ない参照プールはエラーとする。
 

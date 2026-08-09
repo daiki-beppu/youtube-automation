@@ -16,8 +16,9 @@ from typing import Any, Literal
 from youtube_automation.core.errors import ConfigError
 
 # プロバイダー識別子。`get_provider` の dispatch キーと一致させる。
-ProviderName = Literal["gemini", "openai", "codex", "gemini_cli"]
-SUPPORTED_PROVIDERS: tuple[str, ...] = ("gemini", "openai", "codex", "gemini_cli")
+ProviderName = Literal["gemini", "openai", "codex"]
+SUPPORTED_PROVIDERS: tuple[str, ...] = ("gemini", "openai", "codex")
+_RETIRED_SUBPROCESS_PROVIDER = "gemini" + "_cli"
 
 # OpenAI が受理するアスペクト比（order.md "期待する動作 1": 16:9 と 9:16 のみ）
 OPENAI_SUPPORTED_ASPECT_RATIOS: tuple[str, ...] = ("16:9", "9:16")
@@ -25,11 +26,6 @@ OPENAI_SUPPORTED_ASPECT_RATIOS: tuple[str, ...] = ("16:9", "9:16")
 # 既定値（skill-config 不在時のフォールバック）
 _DEFAULT_GEMINI_MODEL = "gemini-3.1-flash-image"
 _DEFAULT_GEMINI_IMAGE_SIZE = "2K"
-
-# gemini_cli provider 既定値（サブスク認証の gemini CLI 経由 / nano-banana）
-_DEFAULT_GEMINI_CLI_MODEL = "gemini-2.5-flash-image-preview"
-_DEFAULT_GEMINI_CLI_IMAGE_SIZE = "2K"
-_DEFAULT_GEMINI_CLI_TIMEOUT = 300
 
 # OpenAI provider の既定 quality。high は単価が数倍高いため既定にしない
 # （provider 切替時の無自覚な高単価課金を防ぐ。high は明示 opt-in のみ、#1697）
@@ -56,31 +52,6 @@ class GeminiConfig:
     model: str
     image_size: str = _DEFAULT_GEMINI_IMAGE_SIZE
     variation_guard_enabled: bool = True
-
-
-@dataclass(frozen=True)
-class GeminiCliConfig:
-    """gemini CLI 経由（サブスク認証）画像生成プロバイダーの設定。
-
-    ADC 課金の ``GeminiConfig`` と異なり、Google AI Pro/Ultra サブスクで認証された
-    ``gemini`` CLI（``@google/gemini-cli``）を subprocess で叩く。GCP 従量課金を
-    発生させずに枚数の多いサムネ生成のコストを抑える用途 (#474)。
-
-    Note:
-        ``GeminiConfig`` 同様に ``aspect_ratio`` フィールドは持たない。比率は
-        ``ImageGenerationRequest`` 経由で都度渡し、branding/icon.png 用途の 1:1 等も許容する。
-
-    Attributes:
-        model: gemini CLI に ``-m`` で渡すモデル ID
-        image_size: 解像度ヒント（プロンプトに埋め込む）
-        timeout_seconds: subprocess 1 回あたりのタイムアウト秒
-        generation_mode: thumbnail の生成モード。``single_step`` の場合は参照画像を必須化する
-    """
-
-    model: str = _DEFAULT_GEMINI_CLI_MODEL
-    image_size: str = _DEFAULT_GEMINI_CLI_IMAGE_SIZE
-    timeout_seconds: int = _DEFAULT_GEMINI_CLI_TIMEOUT
-    generation_mode: str | None = None
 
 
 @dataclass(frozen=True)
@@ -129,7 +100,6 @@ class ImageGenerationConfig:
     gemini: GeminiConfig | None = None
     openai: OpenAIConfig | None = None
     codex: CodexConfig | None = None
-    gemini_cli: GeminiCliConfig | None = None
 
     @classmethod
     def default(cls) -> "ImageGenerationConfig":
@@ -155,6 +125,8 @@ def parse_image_generation_config(skill_cfg: dict[str, Any]) -> ImageGenerationC
 
 def _build_from_new_namespace(section: dict[str, Any]) -> ImageGenerationConfig:
     provider = section.get("provider", "gemini")
+    if _is_retired_subprocess_provider(provider):
+        raise _retired_subprocess_provider_error(provider)
     if provider not in SUPPORTED_PROVIDERS:
         raise ConfigError(f"image_generation.provider={provider!r} は未対応。許容値: {SUPPORTED_PROVIDERS}")
 
@@ -165,12 +137,6 @@ def _build_from_new_namespace(section: dict[str, Any]) -> ImageGenerationConfig:
     if provider == "openai":
         openai_cfg = _build_openai(section.get("openai") or {})
         return ImageGenerationConfig(provider="openai", gemini=None, openai=openai_cfg)
-
-    if provider == "gemini_cli":
-        gemini_section = section.get("gemini")
-        generation_mode = gemini_section.get("generation_mode") if isinstance(gemini_section, dict) else None
-        gemini_cli_cfg = _build_gemini_cli(section.get("gemini_cli") or {}, generation_mode=generation_mode)
-        return ImageGenerationConfig(provider="gemini_cli", gemini_cli=gemini_cli_cfg)
 
     gemini_section = section.get("gemini")
     composition_rules = _composition_rules_from_gemini(gemini_section)
@@ -198,15 +164,6 @@ def _build_gemini(d: dict[str, Any]) -> GeminiConfig:
         model=d.get("model", _DEFAULT_GEMINI_MODEL),
         image_size=d.get("image_size", _DEFAULT_GEMINI_IMAGE_SIZE),
         variation_guard_enabled=d.get("variation_guard_enabled", True),
-    )
-
-
-def _build_gemini_cli(d: dict[str, object], *, generation_mode: str | None = None) -> GeminiCliConfig:
-    return GeminiCliConfig(
-        model=d.get("model", _DEFAULT_GEMINI_CLI_MODEL),
-        image_size=d.get("image_size", _DEFAULT_GEMINI_CLI_IMAGE_SIZE),
-        timeout_seconds=int(d.get("timeout_seconds", _DEFAULT_GEMINI_CLI_TIMEOUT)),
-        generation_mode=generation_mode,
     )
 
 
@@ -410,8 +367,14 @@ def replace_model(cfg: ImageGenerationConfig, model: str) -> ImageGenerationConf
         if cfg.openai is None:
             raise ConfigError("provider=openai だが openai 設定が見つかりません")
         return replace(cfg, openai=replace(cfg.openai, model=model))
-    if cfg.provider == "gemini_cli":
-        if cfg.gemini_cli is None:
-            raise ConfigError("provider=gemini_cli だが gemini_cli 設定が見つかりません")
-        return replace(cfg, gemini_cli=replace(cfg.gemini_cli, model=model))
     raise ConfigError(f"未対応の provider={cfg.provider!r}")
+
+
+def _is_retired_subprocess_provider(provider: object) -> bool:
+    return provider == _RETIRED_SUBPROCESS_PROVIDER
+
+
+def _retired_subprocess_provider_error(provider: object) -> ConfigError:
+    return ConfigError(
+        f"image_generation.provider: {provider} は廃止されました。provider: gemini（Vertex AI）を使用してください"
+    )

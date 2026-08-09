@@ -60,7 +60,7 @@ def test_help_exposes_static_and_dynamic_defaults_without_false_choices(
 
     assert "アスペクト比 (デフォルト: 16:9)" in help_text
     assert "OpenAI は 16:9 または 9:16 のみ" in help_text
-    assert "Gemini / gemini_cli は provider/config の対応範囲に従う" in help_text
+    assert "Gemini は provider/config の対応範囲に従う" in help_text
     assert "未指定時は skill-config の provider 別 model" in help_text
     assert "未指定時は skill-config の image_generation.gemini.single_step.max_attempts" in help_text
     assert re.search(r"--aspect-ratio ASPECT_RATIO\b", help_text)
