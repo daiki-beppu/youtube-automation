@@ -15,7 +15,7 @@ description: "Use when 本リポジトリの新規リリースを作成すると
 - extension verify は repository root で `bash .claude/skills/automation-release/references/verify-extensions.sh [<name>]` を実行し、exit 0を必須とする。non-zeroならreleaseを停止する。
 - tag push前に tag名・対象commit SHA・対象版数を表示し、取消不能な外部反映操作であることを警告して `AskUserQuestion` の「実行 / 中止」2択で承認を得る。承認前にpushしない。
 - Python prepare完了 = version / CHANGELOG / uv.lockが同期したPRを作成済み。Python publish完了 = tagとGitHub Releaseを作成済み。post-release note の PR は別の完了状態として扱い、skip や PR pending を release publish の失敗へ巻き戻さない。
-- extension prepare完了 = package.jsonのversion差分だけを含むPRを作成し、verifyと差分ガードがPASS。extension publish完了 = merge commitへのtag、workflow成功、Releaseのzip asset 3件を確認済み。
+- extension prepare完了 = package.jsonのversion差分だけを含むPRを作成し、verifyと差分ガードがPASS。extension publish完了 = merge commitへのtag、workflow成功、Releaseのzip asset 3件を確認済み。post-release note の PR は別の完了状態として扱い、skip や PR pending を extension publish の失敗へ巻き戻さない。
 
 ## Overview
 
@@ -501,7 +501,60 @@ test "$(printf '%s\n' "${assets}" | grep -Ec '^community-helper-[0-9]+\.[0-9]+\.
 
 PASSはzip assetが合計3件で、`suno-helper-<version>-chrome.zip`、`distrokid-helper-<version>-chrome.zip`、`community-helper-<version>-chrome.zip` が各1件の場合のみ。件数過不足・重複・別名zipがあれば停止する。
 
-#### E2-5. クリーンアップと案内
+#### E2-5. extension 公開リリースノート案の生成と内容確認
+
+E2-4 が PASS した後だけ、同一 tag の GitHub Release body を取得する。Python 本体の CHANGELOG section を入力に使わない。
+
+```bash
+EXT_TAG="ext-v${VER}"
+release_body=$(gh release view "ext-v${VER}" --json body --jq .body)
+test -n "$(printf '%s' "${release_body}" | tr -d '[:space:]')" \
+  || { echo "ERROR: ${EXT_TAG} の Release body が空です"; exit 1; }
+EXT_NOTE_PATH="docs/release-notes/ext-v${VER}.md"
+EXT_POST_RELEASE_BRANCH="docs/release-notes-ext-v${VER}"
+```
+
+Release body が空なら公開ノート生成へ進まず、`references/extension-release-checklist.md` の retry 手順を報告する。body が取得できたら canonical contract の `references/release-notes-authoring.md` に従い、運営者影響を全件保持して `docs/release-notes/ext-v${VER}.md` へ変換する。既存ファイルがあれば上書きせず停止する。
+
+生成後、ファイル全文と `git diff -- "${EXT_NOTE_PATH}"` を確認し、生成内容・対象 tag・post-release branch・変更 path をユーザーへ提示する。期待する変更 path は `${EXT_NOTE_PATH}` だけとし、別 path の差分があれば承認へ進まない。
+
+#### E2-6. extension post-release PR の承認
+
+`AskUserQuestion` で「PR 作成 / 非承認 / skip」の選択を得る。承認前に commit / push / pull request 作成を行わない。main へ直接 push しない。
+
+- 修正依頼では内容を修正して再提示し、同じ承認 gate に戻る。
+- 非承認 / skip ではノートを commit せず、extension publish は完了扱いとする。同一 tag の Release body、canonical authoring reference、`${EXT_NOTE_PATH}` を使う手動作成手順を報告し、E2-8 の cleanup へ進む。
+- 承認された場合だけ E2-7 へ進む。
+
+#### E2-7. extension post-release 専用 branch と pull request
+
+```bash
+if git show-ref --verify --quiet "refs/heads/${EXT_POST_RELEASE_BRANCH}" \
+  || git ls-remote --exit-code --heads origin "${EXT_POST_RELEASE_BRANCH}" >/dev/null 2>&1; then
+  echo "ERROR: 既存 extension post-release branch: ${EXT_POST_RELEASE_BRANCH}"
+  gh pr list --state all --head "${EXT_POST_RELEASE_BRANCH}" --json number,state,url
+  echo "既存 branch / pull request を削除・上書きせず、内容を照合して retry してください"
+else
+  git checkout -b "${EXT_POST_RELEASE_BRANCH}" origin/main
+fi
+```
+
+既存 extension post-release branch を検出した場合は自動処理を停止する。既存 pull request があれば URL と state を報告して重複作成せず、無ければ tag・生成 path・diff を照合する retry 手順を案内する。extension publish は完了したまま、E2-8 の extension release branch cleanup は必ず続行する。
+
+新規 branch では `references/publish-checklist.md` の「post-release note の local gates」を記載順に実行する。non-zero なら commit / push せず、失敗した gate と retry 手順を報告する。全 gate が green の場合だけ次へ進む。
+
+```bash
+git add "${EXT_NOTE_PATH}"
+git commit -m "docs(release-notes): ${EXT_TAG} の公開ノートを追加する"
+git push -u origin "${EXT_POST_RELEASE_BRANCH}"
+EXT_PR_URL=$(gh pr create --base main --head "${EXT_POST_RELEASE_BRANCH}" \
+  --title "docs(release-notes): ${EXT_TAG}" \
+  --body "${EXT_TAG} の公開リリースノート。Cloudflare Pages preview と required checks を確認後に merge する。")
+```
+
+pull request では Cloudflare Pages preview と branch protection の required checks の `lint` / `test` を通す。production site は PR merge 後に更新されるため、この時点では site は PR pending として報告する。
+
+#### E2-8. クリーンアップと完了報告
 
 ```bash
 git push origin --delete "release/ext-v${VER}" 2>/dev/null || true
@@ -513,12 +566,20 @@ git branch -D "release/ext-v${VER}" 2>/dev/null || true
 
 Tag: ext-v${VER}（merge commit に push 済み）
 GitHub Release: https://github.com/daiki-beppu/youtube-automation/releases/tag/ext-v${VER}
-Asset: <name>-<VER>-chrome.zip
+Assets: ${assets}（3拡張の asset）
+統一 `ext-v*` 系列: ext-v${VER}
+merge commit tag: ${merge_sha}
+生成 path: docs/release-notes/ext-v${VER}.md
+post-release PR: ${EXT_PR_URL または skip / retry 状態}
+site は PR pending: Cloudflare Pages preview と required checks の確認待ち
+merge 後の公開 URL: https://youtube-automation-release-notes.pages.dev/ext-v${VER}/
 
 次のステップ:
 - 利用者への告知はチャットで Release URL を共有（ADR 0011。自動アップデート通知は無し）
 - 手元 Chrome の拡張更新は `/ext-install`
 ```
+
+非承認 / skip、Release body 欠落、local gate 失敗、既存 branch 検出でも tag・workflow・3 zip assets が確認済みなら extension publish 自体は完了として報告する。PR が無い場合は理由と手動作成手順を、途中失敗では重複作成しない retry 手順を併記する。
 
 ## Gotchas
 

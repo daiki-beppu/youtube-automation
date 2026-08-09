@@ -107,7 +107,25 @@ worktree 環境では remote merge 成功後の local checkout 後処理（`git 
 
 workflow は tag push 時点の main で **3拡張** を zip して添付する。bump していない拡張はそれぞれの現行版数の zip が付く。
 
-**対応**: SKILL.md E2-4の検証を実行する。zip assetが合計3件かつ3拡張が各1件でなければ失敗。tagが正しいmerge commitを指すか（`git rev-parse "ext-v${VER}^{commit}"` と `mergeCommit.oid` の一致）を確認する。
+**対応**: partial assets の状態では公開ノート生成へ進まない。SKILL.md E2-4の検証を実行し、zip assetが合計3件かつ3拡張が各1件でなければ失敗させる。tagが正しいmerge commitを指すか（`git rev-parse "ext-v${VER}^{commit}"` と `mergeCommit.oid` の一致）を確認し、workflow の修復・再実行後に E2-4 から再実行する。
+
+### ケース F: Release body が空または取得に失敗
+
+3 zip assets が揃っていても Release body が空なら公開ノート生成へ進まない。`gh release view "ext-v${VER}" --json body --jq .body` の tag・認証・応答を確認し、workflow が生成した Release body を復旧してから E2-5 を retry する。Python 本体の CHANGELOG section で代用しない。
+
+### ケース G: 公開ノート案が非承認 / skip
+
+修正依頼では生成内容を修正して再提示し、承認されるまで commit / push / PR 作成を行わない。非承認 / skip では extension publish は完了扱いとし、同一 tag の Release body、canonical authoring reference、生成 pathを使う手動作成手順を報告する。extension release branch cleanup は必ず続行する。
+
+### ケース H: 既存 extension post-release branch / PR がある
+
+local または remote の既存 extension post-release branch は削除・上書きしない。`gh pr list --state all --head "${EXT_POST_RELEASE_BRANCH}"` で既存 pull request を確認し、存在すれば URL と state を報告して重複作成しない。
+
+PR が無ければ branch の tag、生成 path、commit、diff を照合する。一致時だけ local gates から retry し、不一致なら自動処理を停止する。どちらの場合も extension release branch cleanup は必ず続行する。
+
+### ケース I: local gates / push / PR 作成が失敗
+
+local gates が non-zero なら push せず、失敗した gate と retry 手順を報告する。push / PR 作成失敗時は remote branch と既存 pull request を再確認し、作成済みなら URL を再利用して重複作成しない。未作成なら同じ branch の gates と diff を再確認してから失敗した操作だけ retry する。
 
 ---
 
@@ -122,6 +140,10 @@ Tag: ext-v${VER}（merge commit に push 済み）
 GitHub Release: https://github.com/daiki-beppu/youtube-automation/releases/tag/ext-v${VER}
 Asset: <name>-<VER>-chrome.zip（+ 他2拡張の現行版数 zip）
 リリースブランチ: release/ext-v${VER}（削除済み）
+生成 path: docs/release-notes/ext-v${VER}.md
+post-release PR: <URL または skip / retry 状態>
+site は PR pending: Cloudflare Pages preview と required checks の確認待ち
+merge 後の公開 URL: https://youtube-automation-release-notes.pages.dev/ext-v${VER}/
 
 次のステップ:
 - 利用者への告知はチャットで Release URL を共有（ADR 0011。自動アップデート通知は無し）
