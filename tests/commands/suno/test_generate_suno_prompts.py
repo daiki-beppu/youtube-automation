@@ -15,6 +15,7 @@ from youtube_automation.commands.suno.generate_suno_prompts import build_prompt_
 from youtube_automation.configuration import skills as skill_config
 from youtube_automation.core.errors import ConfigError
 from youtube_automation.domains.suno.config import infer_suno_mode
+from youtube_automation.infrastructure import filesystem
 
 # `_skills/<skill>/config.default.yaml` の解決元になる editable install のソースツリー
 _DEFAULT_YAML = REPO_ROOT / ".claude" / "skills" / "suno" / "config.default.yaml"
@@ -1141,6 +1142,60 @@ def test_main_writes_suno_prompts_json_alongside_md(channel_dir, tmp_path, monke
     json_path = patterns_path.parent / "suno-prompts.json"
     assert md_path.exists(), "既存の md 出力は維持されること"
     assert json_path.exists(), "suno-prompts.json が併出されること"
+    assert not [path for path in tmp_path.iterdir() if path.name.startswith(".suno-prompts")]
+
+
+@pytest.mark.parametrize(
+    ("original_md", "original_json"),
+    [
+        (None, None),
+        (b"old markdown\n", None),
+        (None, b'{"old": true}\n'),
+        (b"old markdown\n", b'{"old": true}\n'),
+    ],
+)
+def test_main_rolls_back_both_outputs_when_second_commit_fails(
+    channel_dir,
+    tmp_path,
+    monkeypatch,
+    original_md,
+    original_json,
+):
+    """2個目の成果物 commit 失敗時は、元の有無を含めて一組で復元する。"""
+    _write_suno_override(channel_dir, genre_line="lo-fi jazz, soft piano")
+    patterns_path = _write_minimal_patterns(tmp_path)
+    md_path = patterns_path.parent / "suno-prompts.md"
+    json_path = patterns_path.parent / "suno-prompts.json"
+    if original_md is not None:
+        md_path.write_bytes(original_md)
+    if original_json is not None:
+        json_path.write_bytes(original_json)
+    monkeypatch.setattr(sys, "argv", ["yt-generate-suno", str(patterns_path)])
+
+    real_replace = filesystem.replace_file
+    failed = False
+
+    def fail_json_commit_once(source: Path, destination: Path) -> None:
+        nonlocal failed
+        if destination == json_path and not failed:
+            failed = True
+            raise OSError("simulated second commit failure")
+        real_replace(source, destination)
+
+    monkeypatch.setattr(filesystem, "replace_file", fail_json_commit_once)
+
+    with pytest.raises(OSError, match="simulated second commit failure"):
+        main()
+
+    if original_md is None:
+        assert not md_path.exists()
+    else:
+        assert md_path.read_bytes() == original_md
+    if original_json is None:
+        assert not json_path.exists()
+    else:
+        assert json_path.read_bytes() == original_json
+    assert not [path for path in tmp_path.iterdir() if path.name.startswith(".suno-prompts")]
 
 
 @pytest.mark.parametrize("style_source", ["channel", "patterns"])
@@ -2195,6 +2250,7 @@ def test_main_legacy_style_variant_drift_preserves_stale_outputs(channel_dir, tm
     assert f"uv run yt-suno-verify {patterns_path.parent}" in message
     assert md_path.read_bytes() == original_md
     assert json_path.read_bytes() == original_json
+    assert not [path for path in tmp_path.iterdir() if path.name.startswith(".suno-prompts")]
     assert not [warning for warning in caught if "未知のトップレベルキー" in str(warning.message)]
 
 

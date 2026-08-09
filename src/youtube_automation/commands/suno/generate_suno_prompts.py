@@ -34,6 +34,7 @@ from youtube_automation.domains.suno.downloaded.validation import (
     surrounding_whitespace_issue,
 )
 from youtube_automation.domains.suno.lyrics import load_suno_lyrics_by_name
+from youtube_automation.infrastructure.filesystem import write_text_files_transactionally
 from youtube_automation.infrastructure.media.collection_paths import CollectionPaths
 
 _STYLE_VARIATION_BANNED_ADJECTIVES = frozenset(
@@ -895,11 +896,14 @@ def main():
     }
 
     md_path = patterns_path.parent / SUNO_PROMPTS_MD_FILENAME
-    md_path.write_text(markdown)
-    print(f"Generated: {md_path}")
-
     json_path = patterns_path.parent / SUNO_PROMPTS_JSON_FILENAME
-    json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    write_text_files_transactionally(
+        {
+            md_path: markdown,
+            json_path: json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+        }
+    )
+    print(f"Generated: {md_path}")
     print(f"Generated: {json_path}")
 
 
