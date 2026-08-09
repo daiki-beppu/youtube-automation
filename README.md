@@ -18,7 +18,7 @@ YouTube チャンネル運営を自動化するツールキット。Analytics �
 - **ベンチマーク分析** - 競合チャンネルのパフォーマンス比較
 - **プレイリスト管理** - プレイリストの自動作成・動画追加
 - **Analytics dashboard** - `yt-dashboard` で収集済みチャンネル指標をローカル横断表示（[利用手順](docs/dashboard.md)）
-- **公開リリースノート** - 本体と Chrome 拡張の更新内容を共通形式で掲載（[公開サイト](https://youtube-automation-release-notes.pages.dev/) / [公開ノートのソース](docs/release-notes/)）
+- **運用者向け公開ドキュメント（公開リリースノート）** - 「はじめる」「使う」「リリースノート」の区分で、セットアップ、OAuth、skill / workflow、dashboard、workspace 移行、本体と Chrome 拡張の更新内容を掲載（[公開サイト](https://youtube-automation-release-notes.pages.dev/) / [掲載原本](ONBOARDING.md)）
 
 > **個別 skill のカタログ**: `yt-skills sync` で配布される全 46 skill の「なにができるか」一覧は [`docs/features.md`](docs/features.md) を参照。
 >

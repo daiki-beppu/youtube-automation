@@ -1,6 +1,6 @@
-# リリースノートサイトの公開
+# 運用者向けドキュメントサイトの公開
 
-公開リリースノートは Cloudflare Pages の
+セットアップ・利用手順とリリースノートをまとめた運用者向け公開ドキュメントは、Cloudflare Pages の
 [`youtube-automation-release-notes`](https://youtube-automation-release-notes.pages.dev/)
 プロジェクトから配信する。
 
@@ -18,7 +18,7 @@
 | pnpm | `11.15.1`（`site/package.json::packageManager` と `PNPM_VERSION`） |
 | Production deploy | `main` への push で自動実行 |
 | Preview deploy | repository 内の production 以外の全 branch / pull request |
-| Build watch paths | `site/**`, `docs/release-notes/**` |
+| Build watch paths | `site/**`, `docs/release-notes/**`, `ONBOARDING.md`, `docs/oauth-setup.md`, `docs/features.md`, `docs/workflow-cheatsheet.md`, `docs/chrome-extension-install-guide.md`, `docs/dashboard.md`, `docs/channel-workspace-migration.md` |
 
 Cloudflare Pages の GitHub integration が commit を取得し、production branch では
 `https://youtube-automation-release-notes.pages.dev/`、それ以外では commit 固有 URL と
@@ -26,7 +26,44 @@ branch alias を生成する。fork から作成された pull request には pr
 
 `site/wrangler.jsonc` は Direct Upload で同じ出力境界を使うための設定である。Git integration
 の build 設定は Cloudflare 側に保持されるため、変更時はこの表と Cloudflare Pages project
-の両方を同じ値へ更新する。
+の両方を同じ値へ更新する。既存 project の名前、production URL、custom domain は変更しない。
+
+### repository workflow と Build watch paths
+
+`.github/workflows/site.yml` の `on.push.paths` / `on.pull_request.paths` は GitHub Actions の実行条件、
+Cloudflare Pages Git integration の **Build watch paths** は Pages build の実行条件であり、別々の設定である。
+片方を編集しても、もう片方へ自動同期されない。公開原本を追加・削除するときは両方を同じ変更で更新し、
+次の一覧と一致することを確認する。
+
+```text
+site/**
+docs/release-notes/**
+ONBOARDING.md
+docs/oauth-setup.md
+docs/features.md
+docs/workflow-cheatsheet.md
+docs/chrome-extension-install-guide.md
+docs/dashboard.md
+docs/channel-workspace-migration.md
+```
+
+Cloudflare Dashboard で既存の `youtube-automation-release-notes` project を開き、Git integration の
+Build watch paths を上記9項目へ更新して保存する。保存後は設定画面を再表示し、各項目が完全一致すること、
+`docs/**` のように公開対象外まで含む広い pattern がないことを確認する。
+
+## Preview 受け入れ確認
+
+site を変更した pull request では、Cloudflare Pages の commit 固有 preview build が成功してから次を確認する。
+fork からの pull request には preview URL が作られないため、同一 repository の branch で確認する。
+
+- トップページと sidebar / tabs に「はじめる」「使う」「リリースノート」の3区分が表示される。
+- 次の7ページが preview URL 配下で表示される: `/onboarding/`、`/oauth-setup/`、`/chrome-extension-install-guide/`、`/features/`、`/workflow-cheatsheet/`、`/dashboard/`、`/channel-workspace-migration/`。
+- `/features/` から `/workflow-cheatsheet/`、`/onboarding/` と `/oauth-setup/` の相互リンクが preview 内の route を指す。
+- `/onboarding/` の Python 版から `tayk` への移行リンクは、GitHub の `docs/migration/python-to-tayk.md` 原本へ fallback する。
+- `/audits/` route が生成されず、navigation と検索結果にも内部 audit が現れない。
+
+この checklist は local build の代替ではない。pull request の commit と preview URL を記録し、上記を確認した後に
+merge する。merge 後は production build と `https://youtube-automation-release-notes.pages.dev/` の表示を確認する。
 
 ## ローカル検証と手動公開
 
