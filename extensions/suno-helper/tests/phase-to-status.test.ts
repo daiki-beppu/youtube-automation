@@ -110,6 +110,22 @@ describe("phaseToStatus: 終了 phase の文言と error フラグ", () => {
     expect(result.error).toBe(true);
   });
 
+  it("Given downloaded POST の 403 When phaseToStatus Then endpoint と downloading phase だけを中断理由に表示する", () => {
+    const result = statusOf({
+      phase: PHASE.ERROR,
+      index: 1,
+      total: 3,
+      message:
+        "POST /collections/collection/downloaded failed: 403 Forbidden (phase=downloading)",
+    });
+
+    expect(result.text).toBe(
+      "中断: POST /collections/collection/downloaded failed: 403 Forbidden (phase=downloading)"
+    );
+    expect(result.text).not.toContain("GET /auth/token");
+    expect(result.error).toBe(true);
+  });
+
   it("Given ERROR (message 無し) When phaseToStatus Then message 部は空文字で握りつぶさず表示する", () => {
     const result = statusOf({ phase: PHASE.ERROR, index: 1, total: 3 });
 

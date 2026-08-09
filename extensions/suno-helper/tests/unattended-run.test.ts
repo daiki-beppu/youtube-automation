@@ -372,6 +372,32 @@ describe("nextUnattendedRunState", () => {
     });
   });
 
+  it("downloaded POST の失敗理由を無人実行の required action へ保持する", () => {
+    const message =
+      "POST /collections/collection/downloaded failed: 403 Forbidden (phase=downloading)";
+
+    const state = nextUnattendedRunState({
+      request: REQUEST,
+      progress: {
+        phase: "error",
+        index: 5,
+        total: 5,
+        message,
+      },
+      deferredIndices: [],
+      now: 2000,
+    });
+
+    expect(state).toMatchObject({
+      status: "manual-intervention",
+      checkpoint: "entries",
+      stopReason: "run-error",
+      message,
+    });
+    expect(state.requiredAction).toContain(message);
+    expect(state.requiredAction).not.toContain("GET /auth/token");
+  });
+
   it("marks the run complete only after the terminal phase", () => {
     expect(
       nextUnattendedRunState({
