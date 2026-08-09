@@ -1390,6 +1390,25 @@ def test_codex_prompt_helper_cli_renders_default_template(tmp_path: Path) -> Non
     assert "{title}" not in result.stdout
 
 
+def test_codex_prompt_helper_cli_appends_style_lock_clause(tmp_path: Path) -> None:
+    """#2557: channel override の opt-in clause を Codex CLI 出力へ伝搬する。"""
+    result = _run_codex_prompt_cli(
+        tmp_path,
+        """image_generation:
+  provider: codex
+  gemini:
+    single_step:
+      style_lock_clause: Keep the strong caricature treatment.
+""",
+        "Night Groove",
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "Use the title Night Groove." in result.stdout
+    assert "Additional thumbnail guidance:" in result.stdout
+    assert "Keep the strong caricature treatment." in result.stdout
+
+
 def test_codex_prompt_helper_cli_rejects_non_codex_provider(tmp_path: Path) -> None:
     """#1300: codex 以外の provider では prompt helper を失敗させる。"""
     result = _run_codex_prompt_cli(
