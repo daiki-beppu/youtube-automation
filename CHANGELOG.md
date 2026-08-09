@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `feat(workspace)`: Write/Edit 対象 path が multi-channel workspace のチャンネル境界を越えないか検査する `yt-workspace-guard` CLI を追加（#3370）。
 - `fix(image)`: Gemini 画像生成の runtime fallback `_DEFAULT_GEMINI_MODEL`、設定契約 test、genai client のモデル例示を GA ID `gemini-3.1-flash-image` へ更新（#3303、#3638）。
+- `fix(thumbnail)`: thumbnail skill の配布既定値と Gemini provider fixture を GA モデル `gemini-3.1-flash-image` へ更新（#3303、#3639）。
 
 - `feat(collection-serve)`: Suno downloaded の実 ZIP 適用成功応答へ期待数・配置数・欠損数の placement summary を追加し、部分成功時の欠損理由と workflow state を同じ count に統一。playlist URL 記録だけの先行 POST は legacy 応答を維持（#3164）。
 - `feat(suno-helper)`: download flow の通常・best-effort・再試行成功結果と再試行時の全 FINISHED event で server の型付き配置 summary を保持し、既存エラー契約を維持（#3169）。
