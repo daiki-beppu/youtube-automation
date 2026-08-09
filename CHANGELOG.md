@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(collection-serve)`: Suno downloaded の実 ZIP 適用成功応答へ期待数・配置数・欠損数の placement summary を追加し、部分成功時の欠損理由と workflow state を同じ count に統一。playlist URL 記録だけの先行 POST は legacy 応答を維持（#3164）。
+
 - `feat(collection-serve)`: Suno downloaded の部分成功応答へ生成不足・配置 skip の内訳を追加し、warning と workflow state の欠損理由を一致（#3130）。
 
 - `feat(downloaded)`: Suno apply の詳細結果で期待数・archive 内音声数・配置数と生成不足・配置 skip を返し、同じ欠損内訳を workflow state に保存（#3129）。
