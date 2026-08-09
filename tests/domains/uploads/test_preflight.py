@@ -523,6 +523,7 @@ def test_upload_collection_reports_unreachable_tags_min_count_from_channel_confi
 
     assert load_config().content.tags.min_count == 30
     uploader = YouTubeAutoUploader(str(channel_dir / "collections"))
+    monkeypatch.setattr(uploader, "_verify_authenticated_upload_channel", lambda: None)
 
     with pytest.raises(ValidationError) as excinfo:
         uploader.upload_collection(str(collection_dir), apply_default_publish_at=False)

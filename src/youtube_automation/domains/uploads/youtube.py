@@ -9,6 +9,7 @@ from typing import Callable, Dict, List, Optional
 from youtube_automation.configuration import channel_dir, load_config
 from youtube_automation.core.adapters.errors import (
     AutomationError,
+    ConfigError,
     QuotaExhaustedError,
     UploadError,
     ValidationError,
@@ -16,7 +17,11 @@ from youtube_automation.core.adapters.errors import (
 )
 from youtube_automation.core.adapters.filesystem import file_size, path_exists, remove_file
 from youtube_automation.core.adapters.google.upload import HttpError, create_media_upload
-from youtube_automation.core.adapters.google.youtube import YouTubeClients, execute_youtube_request
+from youtube_automation.core.adapters.google.youtube import (
+    YouTubeClients,
+    execute_youtube_request,
+    validate_youtube_response_items,
+)
 from youtube_automation.core.adapters.process import compress_image
 from youtube_automation.core.adapters.runtime import resolve_default_publish_at as _resolve_default_publish_at
 from youtube_automation.domains.metadata import BAHMetadataGenerator
@@ -49,6 +54,35 @@ def _parse_retry_after(resp) -> float | None:
         return float(raw)
     except (TypeError, ValueError):
         return None
+
+
+def _authenticated_channel_id(youtube) -> str:
+    response = execute_youtube_request(
+        youtube.channels().list(part="id", mine=True),
+        "channels.list(mine=True) failed",
+    )
+    try:
+        items = validate_youtube_response_items(response, "channels.list(mine=True)")
+    except ValidationError as error:
+        raise YouTubeAPIError(str(error)) from error
+    if not items:
+        raise YouTubeAPIError("authenticated user has no YouTube channel")
+    item = items[0]
+    if not isinstance(item, dict) or not isinstance(item.get("id"), str) or not item["id"]:
+        raise YouTubeAPIError("channels.list(mine=True) returned an invalid channel item")
+    return item["id"]
+
+
+def _verify_upload_channel_id(expected_channel_id: str, authenticated_channel_id: str) -> None:
+    if expected_channel_id and expected_channel_id != authenticated_channel_id:
+        raise ConfigError(
+            "channel_id mismatch: ローカル config と認証済みチャンネルが一致しません。\n"
+            f"  config/channel/meta.json (channel.channel_id): {expected_channel_id}\n"
+            f"  authenticated channel (channels().list mine=True): {authenticated_channel_id}\n"
+            "→ 別チャンネルへの誤投稿を防ぐためアップロードを中止しました。\n"
+            "  auth/token.json を削除して対象チャンネルで再認証するか、"
+            "meta.json の channel.channel_id を確認してください"
+        )
 
 
 class ResumableUploader:
@@ -228,6 +262,21 @@ class YouTubeAutoUploader(
             collections_root = channel_dir() / "collections"
 
         self.collections_root = Path(collections_root)
+        self._verified_authenticated_channel_id: str | None = None
+
+    def _verify_authenticated_upload_channel(self) -> None:
+        """OAuth の実チャンネルを config と照合し、同一実行内で結果を保持する。"""
+        if self._verified_authenticated_channel_id is not None:
+            return
+        self._ensure_service()
+        authenticated_channel_id = _authenticated_channel_id(self.youtube)
+        _verify_upload_channel_id(load_config().meta.channel_id, authenticated_channel_id)
+        self._verified_authenticated_channel_id = authenticated_channel_id
+
+    def preflight_check(self, collection_dir: Path) -> None:
+        """チャンネル本人性を確認してからメタデータ品質を検証する。"""
+        self._verify_authenticated_upload_channel()
+        super().preflight_check(collection_dir)
 
     def upload_video(
         self,
@@ -350,7 +399,7 @@ class YouTubeAutoUploader(
                 logger.info(f"チャンネル既定の予約投稿時刻を適用: publish_at={publish_at}")
 
         # アップロード前メタデータ検証
-        self._preflight_check(collection_dir)
+        self.preflight_check(collection_dir)
 
         # メタデータ生成器初期化
         metadata_gen = BAHMetadataGenerator(str(collection_dir))

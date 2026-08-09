@@ -110,6 +110,85 @@ def _make_metadata(title: str = "Rainy Jazz") -> dict:
     }
 
 
+def _youtube_service_with_authenticated_channel(channel_id: str | None) -> MagicMock:
+    youtube = MagicMock()
+    items = [] if channel_id is None else [{"id": channel_id}]
+    youtube.channels.return_value.list.return_value.execute.return_value = {"items": items}
+    return youtube
+
+
+class TestUploadChannelIdentityPreflight:
+    def test_rejects_mismatched_authenticated_channel_before_metadata_preflight(self, tmp_path):
+        from youtube_automation.core.errors import ConfigError
+        from youtube_automation.domains.uploads.youtube import YouTubeAutoUploader
+        from youtube_automation.infrastructure.google.youtube import YouTubeClients
+
+        youtube = _youtube_service_with_authenticated_channel("UC_TOKEN_OWNER")
+        uploader = YouTubeAutoUploader(
+            collections_root=str(tmp_path),
+            youtube_clients=YouTubeClients(full_handler=SimpleNamespace(get_youtube_service=lambda: youtube)),
+        )
+
+        with (
+            patch(
+                "youtube_automation.domains.uploads.youtube.load_config",
+                return_value=SimpleNamespace(meta=SimpleNamespace(channel_id="UC_CONFIGURED")),
+            ),
+            patch.object(uploader, "_preflight_check") as metadata_preflight,
+            pytest.raises(ConfigError, match="channel_id mismatch"),
+        ):
+            uploader.preflight_check(tmp_path / "collection")
+
+        youtube.channels.return_value.list.assert_called_once_with(part="id", mine=True)
+        metadata_preflight.assert_not_called()
+        youtube.videos.return_value.insert.assert_not_called()
+
+    def test_matching_authenticated_channel_continues_metadata_preflight(self, tmp_path):
+        from youtube_automation.domains.uploads.youtube import YouTubeAutoUploader
+        from youtube_automation.infrastructure.google.youtube import YouTubeClients
+
+        youtube = _youtube_service_with_authenticated_channel("UC_CONFIGURED")
+        uploader = YouTubeAutoUploader(
+            collections_root=str(tmp_path),
+            youtube_clients=YouTubeClients(full_handler=SimpleNamespace(get_youtube_service=lambda: youtube)),
+        )
+        collection = tmp_path / "collection"
+
+        with (
+            patch(
+                "youtube_automation.domains.uploads.youtube.load_config",
+                return_value=SimpleNamespace(meta=SimpleNamespace(channel_id="UC_CONFIGURED")),
+            ),
+            patch.object(uploader, "_preflight_check") as metadata_preflight,
+        ):
+            uploader.preflight_check(collection)
+
+        metadata_preflight.assert_called_once_with(collection)
+
+    def test_rejects_empty_authenticated_channel_response(self, tmp_path):
+        from youtube_automation.core.errors import YouTubeAPIError
+        from youtube_automation.domains.uploads.youtube import YouTubeAutoUploader
+        from youtube_automation.infrastructure.google.youtube import YouTubeClients
+
+        youtube = _youtube_service_with_authenticated_channel(None)
+        uploader = YouTubeAutoUploader(
+            collections_root=str(tmp_path),
+            youtube_clients=YouTubeClients(full_handler=SimpleNamespace(get_youtube_service=lambda: youtube)),
+        )
+
+        with (
+            patch(
+                "youtube_automation.domains.uploads.youtube.load_config",
+                return_value=SimpleNamespace(meta=SimpleNamespace(channel_id="UC_CONFIGURED")),
+            ),
+            patch.object(uploader, "_preflight_check") as metadata_preflight,
+            pytest.raises(YouTubeAPIError, match="authenticated user has no YouTube channel"),
+        ):
+            uploader.preflight_check(tmp_path / "collection")
+
+        metadata_preflight.assert_not_called()
+
+
 def _make_preflight_config(supported_languages: list[str]) -> SimpleNamespace:
     return SimpleNamespace(
         audio=SimpleNamespace(
@@ -379,6 +458,7 @@ class TestPreflightTitleTemplateCompliance:
         uploader = YouTubeAutoUploader(collections_root=str(tmp_path))
 
         with (
+            patch.object(uploader, "_verify_authenticated_upload_channel"),
             patch(
                 "youtube_automation.domains.uploads._preflight.load_config",
                 return_value=_make_title_template_config(["ja", "en", "de"]),
@@ -401,6 +481,7 @@ class TestPreflightTitleTemplateCompliance:
         uploader = YouTubeAutoUploader(collections_root=str(tmp_path))
 
         with (
+            patch.object(uploader, "_verify_authenticated_upload_channel"),
             patch(
                 "youtube_automation.domains.uploads._preflight.load_config",
                 return_value=_make_title_template_config(["ja", "en", "de"]),
@@ -575,6 +656,7 @@ class TestUploadCollectionForwarding:
         on_complete = MagicMock()
 
         with (
+            patch.object(uploader, "_verify_authenticated_upload_channel"),
             patch.object(uploader, "_preflight_check"),
             patch.object(
                 uploader,
@@ -1517,6 +1599,7 @@ class TestDefaultPublishAt:
         uploader = YouTubeAutoUploader(collections_root=str(tmp_path))
 
         with (
+            patch.object(uploader, "_verify_authenticated_upload_channel"),
             patch.object(uploader, "_preflight_check"),
             patch.object(
                 uploader,
@@ -1547,6 +1630,7 @@ class TestDefaultPublishAt:
         uploader = YouTubeAutoUploader(collections_root=str(tmp_path))
 
         with (
+            patch.object(uploader, "_verify_authenticated_upload_channel"),
             patch.object(uploader, "_preflight_check"),
             patch.object(
                 uploader,
@@ -1570,6 +1654,7 @@ class TestDefaultPublishAt:
         uploader = YouTubeAutoUploader(collections_root=str(tmp_path))
 
         with (
+            patch.object(uploader, "_verify_authenticated_upload_channel"),
             patch.object(uploader, "_preflight_check"),
             patch.object(
                 uploader,

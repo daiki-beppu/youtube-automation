@@ -66,6 +66,29 @@ def test_main_runs_shared_preflight_before_plan_or_execute(monkeypatch, tmp_path
     getattr(mock_uploader, method_name).assert_called_once_with(target)
 
 
+def test_main_exits_before_state_changes_when_channel_identity_preflight_fails(monkeypatch, tmp_path):
+    """認証チャンネル不一致時は orchestration を開始せず非ゼロ終了する。"""
+    from youtube_automation.commands.uploads import collection_uploader
+    from youtube_automation.core.errors import ConfigError
+
+    target = tmp_path / "collections" / "planning" / "20990101-test-collection"
+    target.mkdir(parents=True)
+    mock_uploader = MagicMock()
+    mock_uploader.find_collection.return_value = target
+    mock_uploader.ensure_upload_preflight.side_effect = ConfigError("channel_id mismatch")
+
+    monkeypatch.setattr(sys, "argv", ["yt-upload-collection", "-c", target.name])
+    with (
+        patch("youtube_automation.commands.uploads.collection_uploader.CollectionUploader", return_value=mock_uploader),
+        pytest.raises(SystemExit, match="1"),
+    ):
+        collection_uploader.main()
+
+    mock_uploader.execute_next_step.assert_not_called()
+    mock_uploader.show_plan.assert_not_called()
+    mock_uploader.show_status.assert_not_called()
+
+
 def test_collection_preflight_uses_public_inner_uploader_operation(monkeypatch, tmp_path):
     """Collection domain は内部 uploader の private preflight を直接呼ばない。"""
     from youtube_automation.domains.uploads import collection as collection_domain
@@ -165,6 +188,7 @@ def test_main_title_preflight_honors_collection_opt_in_for_each_cli_entry(
     with (
         patch("youtube_automation.domains.uploads._preflight.load_config", return_value=_title_preflight_config()),
         patch("youtube_automation.domains.uploads._preflight.probe_duration", return_value=3600),
+        patch("youtube_automation.domains.uploads.youtube.YouTubeAutoUploader._verify_authenticated_upload_channel"),
         patch.object(CollectionUploader, method_name) as mock_action,
     ):
         if expected_outcome == "pass":
