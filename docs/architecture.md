@@ -76,7 +76,7 @@ CLAUDE.md の「アーキテクチャ」節の詳細版。要点は CLAUDE.md �
 
 **dashboard**: 全 first-party チャンネルの analytics スナップショットを起動時に最新化して一覧表示するローカル Web UI。Python HTTP server が registry、全チャンネルの直列収集、read model/API/build asset 配信を担い、`dashboard/` の React + Vite + shadcn/ui 表示層は同一 origin の API だけを読む。SSOT は各チャンネルの `data/analytics_data_*.json`（将来は local store）。channel registry で対象チャンネルを解決し、失敗はチャンネル単位の部分エラーとして隔離する。
 
-**release notes site**: `docs/release-notes/*.md` を公開用の SSOT とし、`site/` の Blume workspace が一覧・詳細ページへ変換する静的 Web サイト。Cloudflare Pages から配信し、Python package や下流チャンネルへの asset 配布には含めない。
+**operator documentation site**: `docs/release-notes/*.md` と明示的な運用者向け Markdown allowlist を公開用の SSOT とし、`site/` の Blume workspace が目的別入口・詳細ページへ変換する静的 Web サイト。Cloudflare Pages から配信し、site workspace 自体は Python package や下流チャンネルへの asset 配布には含めない。
 
 **データ 4 分類**: SSOT を、① git 管理 JSON の宣言的インテント、② local store のランタイム状態・履歴、③ SSOT を持たない再生成可能な生成成果物、④ YouTube のリモート実状態、に分類するもの。④のローカルデータは reconcile 対象のミラーである。
 
@@ -146,7 +146,7 @@ CLAUDE.md の「アーキテクチャ」節の詳細版。要点は CLAUDE.md �
 - `.claude/CLAUDE.template.md` — BGM チャンネル運営方針テンプレ（共通骨格）。wheel に `_claude_md/CLAUDE.template.md` として `force-include` され、`yt-skills sync --asset claude-md` で各チャンネルの `.claude/CLAUDE.md` として展開される
 - `.agents/skills` — `.claude/skills` への symlink。Codex CLI 用の探索パス（Codex 規約 `$REPO_ROOT/.agents/skills`）
 - `AGENTS.md` — Codex CLI 向けエージェント指示。CLAUDE.md と並立し、Codex 視点のドキュメント補足を含む
-- `site/` — Blume ベースの公開リリースノート静的サイト。`docs/release-notes/` を読み、Python 配布物とは独立して build・deploy する
+- `site/` — Blume ベースの運用者向け公開ドキュメントサイト。release notes と明示 allowlist の原本を読み、Python 配布物とは独立して build・deploy する
 
 ## 下流チャンネルリポジトリ（`CHANNEL_DIR` が指す先）
 
@@ -205,9 +205,23 @@ assets/stock/           # ボツ画像ストック (#364)。<theme-slug>/ 配下
 
 `yt-dashboard` は channel registry、起動時の収集、read model、JSON API、loopback 限定配信を担当する。通常起動では `yt-dashboard` が全チャンネルを更新し、1 チャンネルの更新失敗は部分エラーとして隔離する。`dashboard/` の React + Vite frontend は shadcn/ui を使った JSON API の表示だけを担当し、dashboard 限定の TypeScript 例外として `extensions/shared-ui` を直接 import しない。
 
-### release notes site architecture
+### operator documentation site architecture
 
-`docs/release-notes/*.md` の公開 frontmatter と本文がコンテンツの SSOT であり、`site/` は schema 検証・一覧・詳細表示だけを所有する。生成される `site/.blume/` と `site/dist/` は再生成可能な成果物として git および Python wheel / sdist から除外し、Cloudflare Pages の preview / production 配信境界へ渡す。
+`docs/release-notes/*.md` の公開 frontmatter と本文に加え、`site/operator-doc-source.ts` の allowlist が次の運用者向け原本だけを read-in-place で公開する。
+
+- `ONBOARDING.md`
+- `docs/oauth-setup.md`
+- `docs/features.md`
+- `docs/workflow-cheatsheet.md`
+- `docs/chrome-extension-install-guide.md`
+- `docs/dashboard.md`
+- `docs/channel-workspace-migration.md`
+
+source は build ごとに原本を読み、掲載対象間の相対 Markdown link を site route、対象外の repository 内 Markdown link を GitHub の原本へ解決する。原本を移動・永続コピーせず、Blume が所有する `site/.blume/` の一時 staging と `site/dist/` の生成だけを行う。GitHub Actions の site workflow も同じ7原本を個別 path として監視し、broad な `docs/**` は使わない。
+
+公開境界は allowlist で閉じる。`docs/adr/`、`docs/audits/`、`docs/investigations/`、`docs/research/`、`docs/strategy/`、`docs/benchmarks/`、および `docs/development.md` や `docs/takt-operations.md` などの development workflow 文書は暗黙収集せず、navigation・search・生成 route に含めない。
+
+公開対象であることと Python 配布対象であることは別契約である。既存用途により一部原本が wheel / sdist に含まれていても、site 公開を理由に Python package allowlist は拡張しない。`site/`、`site/.blume/`、`site/dist/` は Python wheel / sdist から除外し、Cloudflare Pages の preview / production 配信境界へだけ渡す。
 
 ### B2 domain ownership receipt / B3 handoff
 
