@@ -106,7 +106,7 @@ ffmpeg -i input.mp4 \
 
 `yt-stream-bandwidth --probe-bitrate` は container 全体の平均 bitrate を見る月間帯域見積もり用。配信元 MP4 の preflight 合否は `terraform plan` / `apply` の stream-level 検証を正とする。
 
-配信サイクルを変える場合は `terraform.tfvars` で `stream_hours` / `break_hours` を指定する。0 は無制限を意味し、`stream_hours=0` では `RuntimeMaxSec` を出力しない。`break_hours=0` では `RestartSec=10s` を出力する。
+配信サイクルを変える場合は `terraform.tfvars` で `stream_hours` / `break_hours` を指定する。0 は無制限を意味し、`stream_hours=0` では `RuntimeMaxSec` を出力しない。`break_hours=0` では `RestartSec=2s`（`crash_restart_seconds` で 1〜300 秒に上書き可）を出力する。永続的な起動失敗は 60 秒間に 10 回で停止し、healthcheck の anomaly 通知後に手動で原因を直して再起動する。
 
 ## §2 動画差し替え
 

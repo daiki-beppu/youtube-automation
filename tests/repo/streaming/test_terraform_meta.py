@@ -473,6 +473,7 @@ class TestTfvarsExampleStreamCycle:
         raw = read_file(_TFVARS_EXAMPLE)
         assert "# stream_hours = 0" in raw, "stream_hours の任意サンプルが無い"
         assert "# break_hours  = 0" in raw, "break_hours の任意サンプルが無い"
+        assert "# crash_restart_seconds = 2" in raw, "crash_restart_seconds の任意サンプルが無い"
         assert "24/7" in raw, "0 / 0 が 24/7 連続配信である説明が無い"
 
 

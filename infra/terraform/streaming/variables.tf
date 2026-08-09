@@ -58,12 +58,27 @@ variable "stream_hours" {
 
 variable "break_hours" {
   type        = number
-  description = "配信終了後の休止時間（時間）。0 は休止なしを表し、クラッシュ時の再起動間隔 RestartSec=10s を使用する"
+  description = "配信終了後の休止時間（時間）。0 は休止なしを表し、クラッシュ時は crash_restart_seconds 後に再起動する"
   default     = 0
 
   validation {
     condition     = var.break_hours >= 0
     error_message = "break_hours は 0 以上を指定してください（0 = 休止なし、正数 = 休止時間（時間））。"
+  }
+}
+
+variable "crash_restart_seconds" {
+  type        = number
+  description = "計画休止を使わないときのクラッシュ再起動間隔（秒）。24/7 配信の短い断絶から素早く復帰する"
+  default     = 2
+
+  validation {
+    condition = (
+      var.crash_restart_seconds >= 1 &&
+      var.crash_restart_seconds <= 300 &&
+      floor(var.crash_restart_seconds) == var.crash_restart_seconds
+    )
+    error_message = "crash_restart_seconds は 1〜300 の整数で指定してください。"
   }
 }
 

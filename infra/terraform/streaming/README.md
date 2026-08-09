@@ -2,7 +2,7 @@
 
 Vultr VPS をプロビジョニングし、ローカル MP4 を YouTube Live に常時配信する Terraform モジュール。`terraform apply` 一発で「VPS 作成 → cloud-init で OS 準備 → 動画 + systemd unit + 設定ファイル配置 → 配信開始」までを完結する。
 
-配信はデフォルトで `RuntimeMaxSec` を省略し、`Restart=always` + `RestartSec=10s` により **24/7 連続配信** として自律的に回る。YouTube アーカイブ生成を優先する場合は `stream_hours=11` / `break_hours=1` を指定し、従来の **11 時間配信 → 1 時間休止 → 自動再開** に切り替える。
+配信はデフォルトで `RuntimeMaxSec` を省略し、`Restart=always` + `RestartSec=2s` により **24/7 連続配信** として自律的に回る。再起動間隔は `crash_restart_seconds`（1〜300 秒）で上書きできる。YouTube アーカイブ生成を優先する場合は `stream_hours=11` / `break_hours=1` を指定し、従来の **11 時間配信 → 1 時間休止 → 自動再開** に切り替える。
 
 ## 管理するリソース
 
@@ -224,8 +224,9 @@ ffmpeg -i input.mp4 \
 systemd unit が以下の挙動を持つ:
 
 - `stream_hours=0`: `RuntimeMaxSec` 行を省略し、配信時間を systemd 側では制限しない
-- `break_hours=0`: `RestartSec=10s` を出力し、クラッシュ時は 10 秒後に再起動する
+- `break_hours=0`: `RestartSec=2s` を出力し、クラッシュ時は 2 秒後に再起動する（`crash_restart_seconds` で 1〜300 秒に上書き可）
 - `stream_hours=11` / `break_hours=1`: `RuntimeMaxSec=11h` + `RestartSec=1h` を出力し、11 時間配信 → 1 時間休止 → 自動再開のサイクルにする
+- 起動失敗が 60 秒間に 10 回へ達した場合は systemd の start limit で停止する。healthcheck の anomaly 通知を確認し、原因を解消してから `systemctl reset-failed youtube-stream && systemctl restart youtube-stream` で復旧する
 - `ExecStart` は `${var.install_root}/bin/run-ffmpeg.sh` へ展開されたラッパーのみを呼ぶ。`VIDEO` / `RTMP_URL` は systemd の `EnvironmentFile=/etc/youtube-stream.env`（PID 1 が root で読み込み env を子プロセスへ注入）経由で渡るため、unit 行にも、`DynamicUser=yes` 配下のラッパー側の `source` にも露出しない（`systemctl show` / `/proc/<pid>/cmdline` の unit レベル経路を遮断）
 - 音声は動画ファイルの音声トラックを送出（`-c:a copy`、再エンコードなし）
 
