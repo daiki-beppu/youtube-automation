@@ -129,6 +129,16 @@ nix develop .#extensions --command pnpm -C site test
 
 `.claude/skills/` 配下の skill を編集してから下流チャンネルリポジトリへ届くまでの一連手順（issue #2098）。
 
+### 実 skill 挙動のローカル E2E
+
+`evals/` は、静的な skill lint / repository contract では検証できない LLM の実挙動を `promptfoo` + `claude -p` で確認する独立レーンです。モデル利用料金と Claude Code の認証を伴うため、`pytest` や CI からは起動しません。
+
+```bash
+nix develop --command pnpm dlx promptfoo@0.122.0 eval -c evals/promptfooconfig.yaml
+```
+
+現在の対象、権限制限、fixture 不変確認、禁止事項 assertion の検出力確認は [`evals/README.md`](../evals/README.md) を参照してください。
+
 ### 1. 編集
 
 - 実体は常に `.claude/skills/<name>/` を編集する（`.agents/skills` は Codex CLI 探索パス用の symlink）。付属スクリプトは `.claude/skills/<name>/references/` に置く（ルート直下 `scripts/` は設けない）

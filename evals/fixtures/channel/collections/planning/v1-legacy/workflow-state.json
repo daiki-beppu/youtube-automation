@@ -1,0 +1,10 @@
+{
+  "collection_name": "Legacy Rain Study",
+  "theme": "legacy-rain-study",
+  "steps": {
+    "planning": {"approved": true},
+    "music": {"approved": true},
+    "video": {"approved": false},
+    "upload": {"approved": false}
+  }
+}

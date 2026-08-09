@@ -1,0 +1,9 @@
+{
+  "workflow": {
+    "wf_next": {
+      "skip_audio_approval": false,
+      "skip_upload_approval": false,
+      "skip_manual_mastering": false
+    }
+  }
+}

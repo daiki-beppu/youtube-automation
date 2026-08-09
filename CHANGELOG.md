@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 - `fix(video-upload)`: localizations title の 100 codepoint 超過診断に、実際の duration・activities 等を含む固定部分と scene phrase の codepoint 内訳を locale ごとに表示する（#3685）。
+- `feat(evals)`: promptfoo 0.122.0 から権限を読み取り専用へ制限した `claude -p` provider を起動し、v1 / v2 fixture 上の `/wf-status` が実行系 tool を試行せず `workflow-state.json` と fixture 全体を変更しないことをローカル E2E で検出できるようにした（#3093）。
 
 - `feat(streaming)`: 24/7 配信時だけ YouTube 配信枠復旧 CLI を既定 2 分の systemd timer で実行し、ephemeral OAuth 配備、ffmpeg 停止時 no-op、recovered 通知と journald 記録、安全な disable cleanup を行う Terraform opt-in を追加（#3675）。
 

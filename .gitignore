@@ -39,6 +39,11 @@ build/
 .claude/worktrees/
 .worktrees/
 
+# promptfoo local eval output
+.promptfoo/
+evals/.promptfoo/
+evals/results/
+
 # Node / extensions (WXT)
 node_modules/
 .blume/

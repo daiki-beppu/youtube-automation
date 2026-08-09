@@ -1,0 +1,3 @@
+[
+  "{\"response\":\"violation fixture\",\"tool_calls\":[{\"name\":\"Bash\",\"input\":{\"command\":\"uv run yt-wf-next\"},\"denied\":true}],\"workflow_state_unchanged\":false,\"fixture_unchanged\":false,\"changed_workflow_state_files\":[\"collections/planning/v2-prepared/workflow-state.json\"],\"changed_fixture_files\":[\"collections/planning/v2-prepared/workflow-state.json\"]}"
+]
