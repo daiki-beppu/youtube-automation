@@ -58,7 +58,6 @@ _KNOWN_UNRESOLVED: frozenset[tuple[str, str]] = frozenset(
             ".claude/skills/thumbnail/references/prompt-schema.md",
             "docs/skill-design/thumbnail-codex-imagegen-diff-report.md",
         ),
-        (".claude/skills/videoup/SKILL.md", "docs/benchmarks/videoup-overlay-encoder-2026-07-21.md"),
     }
 )
 
@@ -113,6 +112,22 @@ def test_no_claude_md_section_number_references() -> None:
     assert offenders == [], (
         "配布ファイルに CLAUDE.md の節番号参照が残っている（テンプレ再構成で腐る）:\n  " + "\n  ".join(offenders)
     )
+
+
+def test_videoup_encoder_benchmark_contract_is_self_contained() -> None:
+    """videoup の配布物だけで encoder 採用基準と安全な fallback を判断できる。"""
+    skill = (_SKILLS_DIR / "videoup" / "SKILL.md").read_text(encoding="utf-8")
+
+    assert "median wall-clock が `libx264 medium` baseline より 20% 以上短い候補だけ" in skill
+    assert "H.264 / yuv420p / profile / maxrate / bufsize / fps / AAC / duration" in skill
+    assert (
+        "VIDEOUP_BENCH_DURATION=60 VIDEOUP_BENCH_RUNS=3 "
+        "bash .claude/skills/videoup/references/benchmark_overlay_encoders.sh"
+    ) in skill
+    assert "hardware encode は明示 opt-in" in skill
+    assert "既定は引き続き `libx264`" in skill
+    assert "1-frame 起動 probe 失敗時は `libx264` へ戻り" in skill
+    assert "docs/benchmarks/videoup-overlay-encoder-2026-07-21.md" not in skill
 
 
 def test_no_new_unresolvable_docs_references() -> None:
