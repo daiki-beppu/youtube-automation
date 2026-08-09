@@ -115,6 +115,8 @@ nix develop .#extensions --command pnpm -C extensions/distrokid-helper compile
 
 `yt-collection-serve collections/planning --port 49152` のように任意 port で起動したサーバーは、固定 registry `http://localhost:7872/.well-known/yt-collection-serve` に登録される。overlay は初回表示と selector を開く操作時に registry を読み、`GET /server-info` で検証できた稼働中サーバーだけを動的検出する。選択肢は更新完了後に開くため、停止済み候補を先に表示しない。既定の `http://youtube-automation.localhost:7873` は常に表示される。候補履歴は保存せず、選択中 URL だけを保存する。
 
+DistroKid の候補 label は、`/server-info` が構造化 capability を返す場合、元の server label の後ろに実行 mode を付ける。単一 mode は `<server label> [single] | distrokid-helper`、dir mode は `<server label> [dir/<collectionsRoot>] | distrokid-helper` と表示する（例: `[dir/planning]`、`[dir/live]`）。`collectionsRoot` は `planning` / `live` のような安全で非機密の basename だけであり、絶対 path や channel root の filesystem path は表示しない。capability を返さない legacy server は `<server label> | distrokid-helper` の従来表記をそのまま使う。候補の URL と server label 内の host/port は選択値および troubleshooting 情報として引き続き保持する。
+
 ### discovery / storage schema v1
 
 server は `Content-Type: application/json`、`Origin` なしで `{"instance_id":"fixture-instance","server_info":{"channel_name":"Fixture Channel","channel_short":"fixture","hostname":"fixture.localhost","port":49152,"base_url":"http://fixture.localhost:49152","label":"Fixture Channel"}}` を registry へ POST する。GET の完全な schema v1 応答は次の形になる。
