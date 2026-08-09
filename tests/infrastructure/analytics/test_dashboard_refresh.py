@@ -222,6 +222,64 @@ def test_collect_channel_should_reuse_publication_cache_when_cache_is_fresh(
     assert json.loads(publication_path.read_text(encoding="utf-8")) == cached_payload
 
 
+def test_collect_channel_should_refresh_fresh_publication_cache_when_forced(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    channel = tmp_path / "selected"
+    fixed_now = datetime(2026, 8, 8, 12, tzinfo=UTC)
+    publication_path = channel / "data" / "dashboard_publications.json"
+    publication_path.parent.mkdir(parents=True)
+    publication_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "fetched_at": "2026-08-08T11:00:00+00:00",
+                "timezone": "UTC",
+                "days": {"2026-08-07": 1},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    class FixedDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return fixed_now if tz is None else fixed_now.astimezone(tz)
+
+    monkeypatch.setattr(dashboard_refresh, "datetime", FixedDateTime)
+    monkeypatch.setattr(
+        configuration,
+        "load_config",
+        Mock(
+            return_value=SimpleNamespace(youtube=SimpleNamespace(api=SimpleNamespace(default_publish_timezone="UTC")))
+        ),
+    )
+    collector = Mock()
+    collector.get_all_channel_videos.side_effect = [
+        [],
+        [{"published_at": "2026-08-08T01:00:00Z"}],
+    ]
+    system = Mock(collector=collector)
+
+    def run_data_collection(*, days: int, depth: str) -> dict[str, bool]:
+        assert (days, depth) == (30, "standard")
+        collector.get_all_channel_videos()
+        return {"success": True}
+
+    system.run_data_collection.side_effect = run_data_collection
+
+    collect_channel_analytics(channel, Mock(return_value=system), force_publication_refresh=True)
+
+    assert collector.get_all_channel_videos.call_count == 2
+    assert json.loads(publication_path.read_text(encoding="utf-8")) == {
+        "schema_version": 1,
+        "fetched_at": "2026-08-08T12:00:00+00:00",
+        "timezone": "UTC",
+        "days": {"2026-08-08": 1},
+    }
+
+
 def test_refresh_channels_should_keep_stale_cache_and_continue_when_publication_refresh_fails(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
