@@ -67,6 +67,13 @@ class Decision(TypedDict):
     allow_external_publish: bool
 
 
+class TimingSegment(TypedDict):
+    kind: Literal["ai", "human"]
+    started_at: str
+    ended_at: str
+    duration_seconds: float
+
+
 def _read_object(path: Path) -> dict:
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
@@ -87,15 +94,29 @@ def read_history(root: Path) -> dict:
 
     history = _read_object(history_path)
     attempts = history.get("attempts")
-    if history.get("schema_version") != 1 or not isinstance(attempts, list):
+    schema_version = history.get("schema_version")
+    if schema_version not in {1, 2} or not isinstance(attempts, list):
         raise ValueError(f"未対応 .automation-run history です: {history_path}")
 
     normalized_attempts = []
     for attempt in attempts:
         if not isinstance(attempt, dict):
             raise ValueError(f"history attempt は object でなければなりません: {history_path}")
-        normalized_attempts.append({**attempt, "timing": None})
+        normalized_attempts.append({**attempt, "timing": None} if schema_version == 1 else {**attempt})
     return {**history, "attempts": normalized_attempts}
+
+
+def _attempt_timing(segments: list[TimingSegment] | None) -> dict | None:
+    if not segments:
+        return None
+    copied_segments = [{**segment} for segment in segments]
+    return {
+        "started_at": copied_segments[0]["started_at"],
+        "ended_at": copied_segments[-1]["ended_at"],
+        "ai_seconds": sum(segment["duration_seconds"] for segment in copied_segments if segment["kind"] == "ai"),
+        "human_seconds": sum(segment["duration_seconds"] for segment in copied_segments if segment["kind"] == "human"),
+        "segments": copied_segments,
+    }
 
 
 def _inside(root: Path, path: Path, field: str) -> Path:
@@ -633,6 +654,7 @@ def record_attempt(
     reason: str,
     resume_action: str | None,
     now: str,
+    segments: list[TimingSegment] | None = None,
 ) -> None:
     root = root.resolve()
     if collection is None:
@@ -668,9 +690,8 @@ def record_attempt(
         history_path = state_dir / HISTORY_FILE_NAME
         if history_path.is_symlink():
             raise ValueError(f"history に symlink は使えません: {history_path}")
-        history = _read_object(history_path) if history_path.exists() else {"schema_version": 1, "attempts": []}
-        if history.get("schema_version") != 1 or not isinstance(history.get("attempts"), list):
-            raise ValueError(f"未対応 .automation-run history です: {history_path}")
+        history = read_history(root)
+        history["schema_version"] = 2
         history["attempts"].append(
             {
                 "run_id": hashlib.sha256(token.encode("utf-8")).hexdigest()[:16],
@@ -680,6 +701,7 @@ def record_attempt(
                 "reason": reason,
                 "resume_action": resume_action,
                 "recorded_at": now,
+                "timing": _attempt_timing(segments),
             }
         )
         descriptor, temporary_name = tempfile.mkstemp(prefix=".history.", dir=state_dir)
