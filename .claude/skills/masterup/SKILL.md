@@ -109,12 +109,12 @@ Lyria で音源を生成するチャンネルでは `/lyria` が `01-master/mast
 | `uv run yt-suno-verify-playlist` | ローカル音声ファイル名または playlist 曲名の突合（混入 / 生成漏れ / clip 不足を fail-loud 検出） | `uv run yt-suno-verify-playlist <collection> --music-dir 02-Individual-music` |
 | (skill-config) `pair_selection.mode` | 歌詞-aware 採用整理。歌詞ありならペア片方、歌詞なしなら両方採用 | `mode: auto` |
 | (skill-config) `pair_selection.min_song_sec` / `.max_song_sec` | 短すぎる / 長すぎる Suno 失敗生成を master から除外 | `min_song_sec: 45`, `max_song_sec: 300` |
-| (skill-config) `audio.target_duration_min` | CLI フラグ未指定時のデフォルト目標尺（分）。`config/skills/masterup.json` 優先、既存 `masterup.yaml` fallback で設定 | `target_duration_min: 120` |
+| (skill-config) `audio.target_duration_min` | 旧 channel override。`config/channel/audio.json` が未設定のときだけ、CLI フラグ未指定時の互換 fallback として使用 | `target_duration_min: 120` |
 | (skill-config) `audio.shuffle` | CLI フラグ未指定時のデフォルトシャッフル設定 | `shuffle: true` |
 | (skill-config) `audio.shuffle_seed` | `audio.shuffle: true` 時のデフォルト seed（整数） | `shuffle_seed: 42` |
 | (skill-config) `audio.pin_first_count` | CLI フラグ未指定時のデフォルト先頭固定数（`0` = 固定なし） | `pin_first_count: 1` |
 
-`uv run yt-generate-master` の値は CLI フラグ > `config/skills/masterup.json` > `config/skills/masterup.yaml` > 組み込み default の順で解決される。組み込み default の `audio.bitrate` / `audio.crossfade_duration` は同梱 `config.default.yaml` と同期テストで固定する。`--crossfade-duration` / `audio.crossfade_duration` は 0 より大きい数値でなければならない。
+`uv run yt-generate-master` の値は通常 CLI フラグ > `config/skills/masterup.json` > `config/skills/masterup.yaml` > 組み込み default の順で解決される。ただし目標尺は CLI フラグ > `config/channel/audio.json` > skill-config の順で、skill-config の `audio.target_duration_min` は channel 側未設定時だけの互換 fallback。組み込み default の `audio.bitrate` / `audio.crossfade_duration` は同梱 `config.default.yaml` と同期テストで固定する。`--crossfade-duration` / `audio.crossfade_duration` は 0 より大きい数値でなければならない。
 
 ## Suno fallback 経路
 

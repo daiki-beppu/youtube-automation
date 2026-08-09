@@ -487,11 +487,13 @@ def main() -> int:
         if args.loop is None and args.target_duration is None and not args.no_loop:
             channel_target = channel_audio.target_duration_min
             skill_target = audio.get(_TARGET_DURATION_MIN_KEY)
-            if channel_target is not None and skill_target is not None and float(channel_target) != float(skill_target):
+            if channel_target is not None and skill_target is not None:
                 print(
-                    "  Duration target: "
-                    f"channel={channel_target:g}分 / skill={float(skill_target):g}分 "
-                    "→ config/channel/audio.json を SSOT として採用"
+                    "WARNING: masterup.audio.target_duration_min の "
+                    f"skill-config={float(skill_target):g}分は無視し、"
+                    f"channel={channel_target:g}分 "
+                    "(config/channel/audio.json の SSOT) を採用します",
+                    file=sys.stderr,
                 )
             effective_target = channel_target if channel_target is not None else skill_target
             if effective_target is not None:
