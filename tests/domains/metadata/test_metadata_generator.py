@@ -37,7 +37,10 @@ from youtube_automation.domains.metadata.localizations import (
 )
 from youtube_automation.domains.metadata.placeholders import is_placeholder_value
 from youtube_automation.domains.metadata.titles import _extract_pattern_key
-from youtube_automation.infrastructure.runtime.time_utils import format_duration_display
+from youtube_automation.infrastructure.runtime.time_utils import (
+    format_duration_display,
+    format_localized_duration_display,
+)
 
 # ---------------------------------------------------------------------------
 # ヘルパー: 最小限の初期化でインスタンスを取得する
@@ -462,6 +465,7 @@ class TestGenerateCompleteCollectionMetadata:
             english_title="Test English Title",
             timestamp_body="00:00 01. Track 1",
             scene_phrases=self._all_phrases(),
+            duration_seconds=3600,
         )
         assert "ja" in locs
         assert "雨の街の夜テスト" in locs["ja"]["title"]
@@ -475,6 +479,7 @@ class TestGenerateCompleteCollectionMetadata:
                 english_title="English Fallback Title",
                 timestamp_body="00:00 Track 1",
                 scene_phrases={"ja": "雨"},
+                duration_seconds=3600,
             )
 
     def test_localizations_description_hybrid_structure(self):
@@ -485,6 +490,7 @@ class TestGenerateCompleteCollectionMetadata:
             english_title="Test",
             timestamp_body="00:00 01. Track 1",
             scene_phrases=self._all_phrases(),
+            duration_seconds=3600,
         )
         ja_desc = locs["ja"]["description"]
         assert "- Genre :" in ja_desc
@@ -502,6 +508,7 @@ class TestGenerateCompleteCollectionMetadata:
             english_title="Test",
             timestamp_body="00:00 Track 1",
             scene_phrases=self._all_phrases(),
+            duration_seconds=3600,
         )
         for lang, loc in locs.items():
             assert len(loc["description"]) <= 5000, f"{lang} description exceeds 5000 chars"
@@ -515,6 +522,7 @@ class TestGenerateCompleteCollectionMetadata:
                 english_title="Fallback",
                 timestamp_body="",
                 scene_phrases={},
+                duration_seconds=3600,
             )
 
     @staticmethod
@@ -553,6 +561,7 @@ class TestGenerateCompleteCollectionMetadata:
                 english_title="Test",
                 timestamp_body="00:00 01. Track 1",
                 scene_phrases=self._all_phrases(),
+                duration_seconds=3600,
             )
             assert len(locs) >= 2  # 多言語チャンネルで全言語に反映されることを確認
             for lang, loc in locs.items():
@@ -626,6 +635,24 @@ class TestFormatDurationDisplay:
 
     def test_two_hours(self):
         assert format_duration_display(7200) == "2 Hours"
+
+    @pytest.mark.parametrize(
+        "seconds,locale,expected",
+        [
+            (8 * 3600 + 10 * 60, "en", "8 Hours"),
+            (8 * 3600 + 10 * 60, "de", "8 Std"),
+            (8 * 3600 + 10 * 60, "ja", "8時間"),
+            (10 * 3600 + 32 * 60, "en", "10.5 Hours"),
+            (10 * 3600 + 32 * 60, "de", "10.5 Std"),
+            (10 * 3600 + 32 * 60, "ja", "10.5時間"),
+        ],
+    )
+    def test_localized_duration_uses_common_rounded_number(self, seconds, locale, expected):
+        assert format_localized_duration_display(seconds, locale) == expected
+
+    def test_localized_duration_rejects_unsupported_locale(self):
+        with pytest.raises(ValueError, match="対応していない locale"):
+            format_localized_duration_display(3600, "fr")
 
     def test_very_short(self):
         """60秒 = 1分 → 最小 5 min"""
@@ -889,7 +916,7 @@ class TestValidateScenePhrases:
     def test_all_within_limit_returns_empty(self):
         """全言語で 100 codepoint 以内なら空リスト"""
         config = load_config()
-        violations = validate_scene_phrases(_all_langs_phrases("short phrase"), config)
+        violations = validate_scene_phrases(_all_langs_phrases("short phrase"), config, 3600)
         assert violations == []
 
     def test_single_language_over_limit(self):
@@ -897,7 +924,7 @@ class TestValidateScenePhrases:
         config = load_config()
         phrases = _all_langs_phrases("short phrase")
         phrases["ja"] = "あ" * 90  # template + activities 込みで 100 超過
-        violations = validate_scene_phrases(phrases, config)
+        violations = validate_scene_phrases(phrases, config, 3600)
         assert len(violations) == 1
         assert violations[0].lang == "ja"
         assert violations[0].length > 100
@@ -906,7 +933,7 @@ class TestValidateScenePhrases:
         """複数言語が超過していれば 1 言語ずつ fail せず全件まとめて返る（#78 の主目的）"""
         config = load_config()
         phrases = _all_langs_phrases("あ" * 90)
-        violations = validate_scene_phrases(phrases, config)
+        violations = validate_scene_phrases(phrases, config, 3600)
         # sample_channel の supported_languages 5 つ全てが超過するはず
         assert len(violations) == len(config.localizations.supported_languages)
         langs = {v.lang for v in violations}
@@ -917,7 +944,7 @@ class TestValidateScenePhrases:
         config = load_config()
         phrases = _all_langs_phrases("short phrase")
         phrases["ja"] = "あ" * 90
-        violations = validate_scene_phrases(phrases, config)
+        violations = validate_scene_phrases(phrases, config, 3600)
         v = violations[0]
         assert isinstance(v, SceneTitleViolation)
         assert v.length == len(v.title)
@@ -927,26 +954,26 @@ class TestValidateScenePhrases:
         """scene_phrases に不足言語があれば ValueError（existing 挙動を踏襲）"""
         config = load_config()
         with pytest.raises(ValueError, match="scene_phrases"):
-            validate_scene_phrases({"ja": "あ"}, config)
+            validate_scene_phrases({"ja": "あ"}, config, 3600)
 
     def test_empty_scene_phrases_raises(self):
         """空辞書はそのまま全言語欠落扱いで raise"""
         config = load_config()
         with pytest.raises(ValueError, match="scene_phrases"):
-            validate_scene_phrases({}, config)
+            validate_scene_phrases({}, config, 3600)
 
     def test_single_language_channel_empty_scene_phrases_ok(self):
         """単一言語チャンネルは scene_phrases 不要（populate no-op と対称 #1470）"""
         from types import SimpleNamespace
 
         config = SimpleNamespace(localizations=SimpleNamespace(data={"supported_languages": ["en"], "languages": {}}))
-        assert validate_scene_phrases({}, config) == []
+        assert validate_scene_phrases({}, config, 3600) == []
 
     def test_format_scene_title_violations_joins_all(self):
         """format_scene_title_violations は全件を複数行にまとめる（CLI で 1 回で報告するため）"""
         config = load_config()
         phrases = _all_langs_phrases("あ" * 90)
-        violations = validate_scene_phrases(phrases, config)
+        violations = validate_scene_phrases(phrases, config, 3600)
         text = format_scene_title_violations(violations)
         for v in violations:
             assert f"[{v.lang}]" in text
@@ -963,7 +990,7 @@ class TestGenerateLocalizationsSingleLanguage:
         gen.config = SimpleNamespace(
             localizations=SimpleNamespace(data={"supported_languages": ["en"], "languages": {}})
         )
-        assert gen.generate_localizations("Continuous Focus Mix", "00:00 Intro", {}) == {}
+        assert gen.generate_localizations("Continuous Focus Mix", "00:00 Intro", {}, duration_seconds=3600) == {}
 
     def test_malformed_workflow_state_fails_before_scene_phrases_fallback(self, tmp_path):
         from types import SimpleNamespace
@@ -993,6 +1020,7 @@ class TestGenerateLocalizationsBulkReport:
                 english_title="Test",
                 timestamp_body="",
                 scene_phrases=phrases,
+                duration_seconds=3600,
             )
         msg = str(excinfo.value)
         for lang in config.localizations.supported_languages:
@@ -1472,7 +1500,12 @@ class TestTitleTemplateUnknownPlaceholder:
 
     def test_localized_title_values_keys_match_allowed_placeholders(self):
         """uploader が渡す values のキー集合と許可リスト定数の drift を防ぐ。"""
-        values = _localized_title_values(scene_phrase="Rainy", activities="Study", scene_emoji="🌧")
+        values = _localized_title_values(
+            scene_phrase="Rainy",
+            activities="Study",
+            scene_emoji="🌧",
+            duration_display="10.5 Hours",
+        )
         assert set(values) == set(LOCALIZED_TITLE_PLACEHOLDERS)
 
     def test_validate_localizations_title_templates_detects_unknown_placeholder(self):
@@ -1492,10 +1525,20 @@ class TestTitleTemplateUnknownPlaceholder:
     def test_validate_localizations_title_templates_accepts_allowed_placeholders(self):
         loc = {
             "languages": {
-                "en": {"title_template": "{scene_phrase} | Jazz BGM ({activities}) {scene_emoji}"},
+                "en": {"title_template": "{scene_phrase} | Jazz BGM ({activities}) {scene_emoji} [{duration_display}]"},
             }
         }
         assert validate_localizations_title_templates(loc) == []
+
+    @pytest.mark.parametrize("literal", ["[3 Hours]", "[3 Std]", "3時間"])
+    def test_validate_localizations_title_templates_rejects_static_duration(self, literal):
+        loc = {"languages": {"en": {"title_template": f"{{scene_phrase}} | {literal}"}}}
+
+        errors = validate_localizations_title_templates(loc)
+
+        assert len(errors) == 1
+        assert "固定尺" in errors[0]
+        assert "{duration_display}" in errors[0]
 
     def test_validate_localizations_title_templates_tolerates_missing_sections(self):
         # languages 無し / title_template 無し / 非 dict 言語エントリは検証対象外として黙って通す
@@ -1525,6 +1568,19 @@ class TestTitleTemplateUnknownPlaceholder:
         meta = gen_with_tracks.generate_complete_collection_metadata()
         assert len(meta["title"]) > 0
 
+    def test_primary_and_localized_titles_share_master_duration_number(self, gen_with_tracks):
+        object.__setattr__(
+            gen_with_tracks.config.content.title,
+            "template",
+            "{scene_phrase} [{duration_display}]",
+        )
+        metadata = gen_with_tracks.generate_complete_collection_metadata(duration_seconds=10 * 3600 + 32 * 60)
+
+        assert "10.5 Hours" in metadata["title"]
+        assert "10.5時間" in metadata["localizations"]["ja"]["title"]
+        assert "10.5 Hours" in metadata["localizations"]["en"]["title"]
+        assert "10.5 Std" in metadata["localizations"]["de"]["title"]
+
     # --- localizations.json::title_template 経路 ---------------------------
 
     def test_localizations_unknown_placeholder_raises_actionable(self):
@@ -1534,7 +1590,7 @@ class TestTitleTemplateUnknownPlaceholder:
         config.localizations.data["languages"][lang]["title_template"] = "{adjective} {scene_phrase}"
         scene_phrases = {lng: "phrase" for lng in supported}
         with pytest.raises(ValidationError) as exc:
-            validate_scene_phrases(scene_phrases, config)
+            validate_scene_phrases(scene_phrases, config, 3600)
         msg = str(exc.value)
         assert "adjective" in msg
         assert lang in msg

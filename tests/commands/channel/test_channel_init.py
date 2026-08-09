@@ -688,7 +688,7 @@ def test_generated_localization_title_templates_match_metadata_contract(tmp_path
     monkeypatch.setenv("CHANNEL_DIR", str(tmp_path))
     config = load_config()
     scene_phrases = {lang: f"{lang} quiet study room" for lang in config.localizations.supported_languages}
-    violations = validate_scene_phrases(scene_phrases, config)
+    violations = validate_scene_phrases(scene_phrases, config, 3600)
 
     # Then: localizations の title_template は scene_phrase 契約で format できる
     assert violations == []

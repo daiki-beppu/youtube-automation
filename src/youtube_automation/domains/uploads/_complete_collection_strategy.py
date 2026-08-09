@@ -15,7 +15,7 @@ from typing import Callable, Dict, Optional
 
 from youtube_automation.core.adapters.errors import ValidationError
 from youtube_automation.core.adapters.filesystem import glob_files, path_exists, path_is_file, read_json
-from youtube_automation.core.adapters.media import CollectionPaths
+from youtube_automation.core.adapters.media import CollectionPaths, probe_duration
 from youtube_automation.domains.metadata import BAHMetadataGenerator
 from youtube_automation.domains.uploads._uploader_constants import (
     UPLOAD_SOURCE_EXISTING,
@@ -88,6 +88,12 @@ class CompleteCollectionMixin:
         paths = CollectionPaths(collection_dir)
 
         master_video = resolve_master_video(collection_dir)
+        duration_seconds = probe_duration(master_video)
+        if duration_seconds is None:
+            raise ValidationError(
+                f"実マスター尺を取得できません: {master_video.name}。"
+                "ffprobe で読み取れる完成済みマスター動画を指定してください"
+            )
 
         # descriptions.md が最終タイトル/概要/タグを供給するなら先に読み込み、
         # 中間タイトル生成（_generate_title）を title_override でスキップする。
@@ -97,7 +103,9 @@ class CompleteCollectionMixin:
 
         # メタデータ生成（BAHMetadataGenerator — localizations 等）
         metadata = metadata_gen.generate_complete_collection_metadata(
-            loops=1, title_override=prebuilt["title"] if prebuilt else None
+            loops=1,
+            title_override=prebuilt["title"] if prebuilt else None,
+            duration_seconds=duration_seconds,
         )
 
         # descriptions.md が存在すれば title/description/tags を上書き
@@ -113,7 +121,11 @@ class CompleteCollectionMixin:
             scene_emoji = metadata_gen._load_scene_emoji()
             if curated_timestamps:
                 metadata["localizations"] = metadata_gen.generate_localizations(
-                    metadata["title"], curated_timestamps, scene_phrases, scene_emoji=scene_emoji
+                    metadata["title"],
+                    curated_timestamps,
+                    scene_phrases,
+                    scene_emoji=scene_emoji,
+                    duration_seconds=duration_seconds,
                 )
 
         if publish_at:
