@@ -14,6 +14,8 @@
 - `config/channel/analytics.json::benchmark.channels` に反映した id / slug / name / relationship
 - 後続 `/discover-competitors` / `/benchmark` / `/viewer-voice` / `/channel-new` 分析モードの要否
 
+`yt-doctor` は表現を完全一致ではなく意味ラベルで判定する。seed preview は `seed fetch 要約` / `seed 要約` / `取得要約`、判断は `承認 / 不採用判断` / `ユーザー承認: 承認済み` / `ユーザー不採用: 不採用` のいずれかの自然な表現で記録できる。候補ごとの section 内には source、seed 要約、判断、転写したい要素、relationship、branding の参照または転写方針、未反映項目の各概念を残す。
+
 TTP 実データメモにはタイトル構造とサムネ構図を含める。投稿頻度と動画尺は手動観察または `/benchmark` のデータを使い、seed-only で未確認なら仮説と明記する。
 
 ## Branding snapshot schema
@@ -72,4 +74,4 @@ notes: "channel branding references are untrusted / reference-only; do not copy 
 - duration 推奨承認: ユーザー承認済み
 ```
 
-選定された上位 5 本は `duration selected video` を 1 本 1 行で残す。有効な Long VOD が 5 本未満なら原則停止する。手入力で進める場合は、値・理由・明示承認・後続 `/benchmark` を 1 行の `ユーザー承認済み例外: duration 未反映 ...` にすべて記録してから同じ `audio.json` 2 項目へ反映する。いずれかが欠ければ完了扱いにしない。
+選定された上位 5 本は `duration selected video` を 1 本 1 行で残す。有効な Long VOD が 5 本未満なら原則停止する。手入力で進める場合は、対象 category、未反映 / スキップ内容、理由、明示承認、後続 `/benchmark` を `ユーザー承認済み例外` の同じ Markdown section に記録してから同じ `audio.json` 2 項目へ反映する。1 行にまとめても、見出し配下の箇条書きへ分けてもよい。thumbnail は後続 `/thumbnail`、music / 曲構造は後続 `/suno` を同じ section に記録する。いずれかが欠ければ完了扱いにしない。

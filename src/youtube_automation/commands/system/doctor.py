@@ -1950,8 +1950,18 @@ def _verified_video_analysis_ids(slug: str, slug_dir: Path, expected_ids: set[st
 
 _SEED_CONFIRMATION_MARKERS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("source", ("source", "ソース", "url", "handle", "channel id", "チャンネルid")),
-    ("seed fetch 要約", ("seed fetch", "fetch", "取得要約", "収集要約")),
-    ("承認 / 不採用判断", ("承認 / 不採用判断", "承認判断", "不採用判断", "判断:", "approved:", "rejected:")),
+    ("seed fetch 要約", ("seed fetch", "seed 要約", "seed preview", "fetch", "取得要約", "収集要約")),
+    (
+        "承認 / 不採用判断",
+        (
+            "承認 / 不採用判断",
+            "承認判断",
+            "不採用判断",
+            "判断:",
+            "approved:",
+            "rejected:",
+        ),
+    ),
     ("転写したい要素", ("転写したい要素", "転写", "要素:")),
     ("relationship", ("relationship", "関係性")),
     ("未反映項目", ("未反映", "未適用", "none", "なし")),
@@ -1979,7 +1989,7 @@ def _validate_ttp_seed_confirmation(seed_text: str, channels: list[dict[str, obj
 
         candidate_text = "\n".join(candidate_sections)
         for marker_label, markers in _SEED_CONFIRMATION_MARKERS:
-            if not _contains_any_marker(candidate_text, markers):
+            if not _has_seed_confirmation_marker(candidate_text, marker_label, markers):
                 missing.append(f"ttp-seed-confirmation.md に {marker_label} が未記録 ({label})")
         if not _has_branding_transfer_policy(candidate_text):
             missing.append(f"ttp-seed-confirmation.md に branding snapshot 参照または転写方針が未記録 ({label})")
@@ -1992,15 +2002,19 @@ def _validate_ttp_seed_confirmation(seed_text: str, channels: list[dict[str, obj
         ):
             missing.append(f"ttp-seed-confirmation.md に承認済み TTP 対象の relationship が未記録 ({label})")
 
+    exception_blocks = _approved_ttp_exception_blocks(seed_text)
+    approved_exception_line_numbers = {
+        line_number for _, line_numbers in exception_blocks for line_number in line_numbers
+    }
     unapproved_skip_lines = [
         line.strip()
-        for line in seed_text.splitlines()
-        if _line_mentions_ttp_skip(line) and not _line_mentions_approved_exception(line)
+        for line_number, line in enumerate(seed_text.splitlines())
+        if _line_mentions_ttp_skip(line) and line_number not in approved_exception_line_numbers
     ]
     if unapproved_skip_lines:
         missing.append("ttp-seed-confirmation.md に未承認の TTP 未反映 / スキップ項目あり")
 
-    approved_exceptions, exception_missing = _approved_ttp_exceptions(seed_text)
+    approved_exceptions, exception_missing = _validate_approved_ttp_exception_blocks(exception_blocks)
     missing.extend(exception_missing)
     return missing, approved_exceptions
 
@@ -2056,6 +2070,20 @@ def _contains_any_marker(text: str, markers: tuple[str, ...]) -> bool:
     return any(marker.lower() in lower_text for marker in markers)
 
 
+def _has_seed_confirmation_marker(text: str, marker_label: str, markers: tuple[str, ...]) -> bool:
+    if _contains_any_marker(text, markers):
+        return True
+    if marker_label != "承認 / 不採用判断":
+        return False
+
+    decision_text = "\n".join(line for line in text.splitlines() if not _line_mentions_approved_exception(line))
+    normalized = unicodedata.normalize("NFKC", decision_text).casefold()
+    return bool(
+        re.search(r"ユーザー承認\s*:\s*承認済み", normalized)
+        or re.search(r"ユーザー不採用\s*:\s*(?:不採用|却下)", normalized)
+    )
+
+
 def _has_branding_transfer_policy(text: str) -> bool:
     lower_text = text.lower()
     if "competitor-branding-snapshot.json" in lower_text or "branding snapshot" in lower_text:
@@ -2089,36 +2117,65 @@ def _line_mentions_approved_exception(line: str) -> bool:
 
 
 def _approved_ttp_exceptions(seed_text: str) -> tuple[set[str], list[str]]:
-    exceptions: set[str] = set()
-    missing: list[str] = []
-    for line in seed_text.splitlines():
+    return _validate_approved_ttp_exception_blocks(_approved_ttp_exception_blocks(seed_text))
+
+
+def _approved_ttp_exception_blocks(seed_text: str) -> list[tuple[str, set[int]]]:
+    lines = seed_text.splitlines()
+    blocks: list[tuple[str, set[int]]] = []
+    for line_number, line in enumerate(lines):
         if not _line_mentions_approved_exception(line):
             continue
-        lower_line = line.lower()
+        heading_match = re.match(r"^\s*(#{1,6})\s+", line)
+        if not heading_match:
+            blocks.append((line, {line_number}))
+            continue
+
+        heading_level = len(heading_match.group(1))
+        block_lines = [line]
+        block_line_numbers = {line_number}
+        for following_number in range(line_number + 1, len(lines)):
+            following_line = lines[following_number]
+            following_heading = re.match(r"^\s*(#{1,6})\s+", following_line)
+            if following_heading and len(following_heading.group(1)) <= heading_level:
+                break
+            block_lines.append(following_line)
+            block_line_numbers.add(following_number)
+        blocks.append(("\n".join(block_lines), block_line_numbers))
+    return blocks
+
+
+def _validate_approved_ttp_exception_blocks(
+    blocks: list[tuple[str, set[int]]],
+) -> tuple[set[str], list[str]]:
+    exceptions: set[str] = set()
+    missing: list[str] = []
+    for block, _ in blocks:
+        lower_block = block.lower()
         categories: set[str] = set()
-        if "thumbnail" in lower_line or "サムネ" in line:
+        if "thumbnail" in lower_block or "サムネ" in block:
             categories.add("thumbnail")
-        if "music" in lower_line or "suno" in lower_line or "曲構造" in line or "音楽" in line:
+        if "music" in lower_block or "suno" in lower_block or "曲構造" in block or "音楽" in block:
             categories.add("music")
-        if "duration" in lower_line or "動画尺" in line:
+        if "duration" in lower_block or "動画尺" in block:
             categories.add("duration")
 
         if not categories:
             missing.append("ユーザー承認済み例外に対象 category が未記録")
             continue
-        if not _line_mentions_ttp_skip(line):
+        if not any(_line_mentions_ttp_skip(line) for line in block.splitlines()):
             missing.append("ユーザー承認済み例外に具体的な未反映 / スキップ内容が未記録")
             continue
-        if not _approved_exception_has_reason(line):
+        if not _approved_exception_has_reason(block):
             missing.append("ユーザー承認済み例外に進める理由が未記録")
             continue
-        if "thumbnail" in categories and "/thumbnail" not in lower_line:
+        if "thumbnail" in categories and "/thumbnail" not in lower_block:
             missing.append("thumbnail のユーザー承認済み例外に後続 /thumbnail が未記録")
             continue
-        if "music" in categories and "/suno" not in lower_line:
+        if "music" in categories and "/suno" not in lower_block:
             missing.append("music のユーザー承認済み例外に後続 /suno が未記録")
             continue
-        if "duration" in categories and "/benchmark" not in lower_line:
+        if "duration" in categories and "/benchmark" not in lower_block:
             missing.append("duration のユーザー承認済み例外に後続 /benchmark が未記録")
             continue
 
