@@ -447,6 +447,15 @@ def _read_vocal_patterns_track_count(data: Mapping[str, object], patterns_path: 
     return cast(int, track_count)
 
 
+def _resolve_genre_line(data: Mapping[str, object], channel_fallback: str, patterns_path: Path) -> str:
+    if "genre_line" not in data:
+        return channel_fallback
+    genre_line = data["genre_line"]
+    if not isinstance(genre_line, str):
+        raise ConfigError(f"{patterns_path}: genre_line must be a string")
+    return genre_line
+
+
 def _resolve_prompts(patterns_path: Path) -> _ResolvedPrompts:
     """config + patterns.yaml を解決し、md / JSON 双方の共通中間表現を返す."""
     suno = load_skill_config("suno")
@@ -456,7 +465,10 @@ def _resolve_prompts(patterns_path: Path) -> _ResolvedPrompts:
     advanced_json_fields = _build_advanced_json_fields(override)
     resolved_suno = resolve_suno_config(suno)
 
-    genre_line = resolved_suno.genre_line
+    with open(patterns_path) as f:
+        data = yaml.safe_load(f)
+
+    genre_line = _resolve_genre_line(data, resolved_suno.genre_line, patterns_path)
     mood_descriptors = suno.get("mood_descriptors", "")
     exclude_styles = resolved_suno.exclude_styles
     style_variants = suno.get("style_variants", {})
@@ -472,9 +484,6 @@ def _resolve_prompts(patterns_path: Path) -> _ResolvedPrompts:
     if mood_descriptors:
         base_parts.append(mood_descriptors)
     base_style = ", ".join(base_parts)
-
-    with open(patterns_path) as f:
-        data = yaml.safe_load(f)
 
     title = data.get("title", "Suno Prompts")
     patterns = data.get("patterns", [])
