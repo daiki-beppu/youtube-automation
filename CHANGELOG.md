@@ -129,6 +129,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `feat(dashboard)`: standard Analytics 収集に使った同一 `AnalyticsSystem` / collector の動画一覧 cache を再利用し、チャンネル設定の公開 timezone で集計した `data/dashboard_publications.json` を収集成功時だけ保存するようにした（#3357）。
 - `feat(dashboard)`: 公開履歴 payload を保存先と同じディレクトリの一時ファイルへ完全に書き終えてから原子的に置換し、置換失敗時も既存 JSON を保持して一時ファイルを片付ける保存関数を追加した（#3356）。
 - `feat(dashboard)`: uploads playlist 由来の公開日時を UTC の取得時刻から rolling 365 日で絞り、チャンネル設定の timezone に変換したローカル暦日別件数 payload を構築する純粋関数を追加した（#3355）。
+- `feat(suno-helper)`: Turnstile challenge 検知時の安全な実行コンテキストだけを、run を跨ぐ固定長 ring buffer として `chrome.storage.local` へ best-effort で蓄積する基盤を追加した（#2982）。
+
 - `docs(adr)`: ADR-0024「クラウド移譲アーキテクチャの原則」を追加した。cloud/local 境界を能力ベースの規則 1 本（ブラウザ工程のみ local）で定義し、状態正本の Git 管理移行・工程所有権による分散ロック排除・二重チェック + fail-closed の冪等性・R2 の境界越え受け渡し専用化・マニフェスト = 完了マーカーの受け渡し規約・pull → run → push のサンドイッチ実行モデルを確定した。あわせて architecture の用語集へ「クラウド移譲」節（制御面 / データ面・工程所有権・サンドイッチ実行モデル・受け渡しマニフェスト・MediaStore）を追加した（#3299）。
 - `feat(thumbnail-compare)`: 公開済み live に加えて planning 中コレクションの確定済み `10-assets/thumbnail.jpg` を比較へ収集する。同一実体を重複させず、planning 出力名を stage・collection 単位で分離して既存 live 成果物との衝突を防ぐ（#3230）。
 - `feat(wf-new-batch)`: batch ledger の許可遷移・単一 active plan・current plan 整合性と atomic 保存を実行時に検証し、child が prepared + hard artifacts 完了後に ledger 更新前 crash した場合は same-provenance actual state から workflow-state を変更せず completed へ reconcile できる state helper を追加した。Done 再検証で artifact / provenance drift を検知した completed plan は、reason と resume_action を伴う guarded transition だけ blocked へ戻せる（#3279）。
