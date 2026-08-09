@@ -23,6 +23,11 @@ def _read_thumbnail_skill() -> str:
     return path.read_text(encoding="utf-8")
 
 
+def _read_thumbnail_provider_guidance() -> str:
+    path = _repo_root() / ".claude" / "skills" / "thumbnail" / "references" / "provider-guidance.md"
+    return path.read_text(encoding="utf-8")
+
+
 def _read_loop_video_skill() -> str:
     path = _repo_root() / ".claude" / "skills" / "loop-video" / "SKILL.md"
     return path.read_text(encoding="utf-8")
@@ -268,6 +273,47 @@ def test_thumbnail_skill_documents_thumbnail_compare_and_alignment_check_roles()
     assert "整合性監査" in role_block
     assert "320px" in role_block
     assert "公開**後**" in role_block
+
+
+def test_thumbnail_skill_routes_provider_details_without_moving_runtime_gates() -> None:
+    skill = _read_thumbnail_skill()
+    provider_block = _slice_between(skill, "## プロバイダー切り替え", "## Channel Adaptation")
+
+    assert "[provider/Codex 詳細](references/provider-guidance.md)" in provider_block
+    assert provider_block.count("bash .claude/skills/thumbnail/references/codex-image.sh --require-reference") == 1
+    assert provider_block.count("bash .claude/skills/thumbnail/references/codex-image-batch.sh") == 1
+    for required in (
+        "`image_generation.provider`",
+        "`gemini`",
+        "`openai`",
+        "`codex`",
+        "デフォルトは `gemini`",
+        "codex 経路でも標準ファイル契約は同じ",
+        "10-assets/thumbnail.jpg",
+        "10-assets/main.png",
+    ):
+        assert required in provider_block
+
+    assert "confirm_cost()" in skill
+    assert "## 完了条件" in skill
+
+
+def test_thumbnail_provider_guidance_owns_protocol_and_failure_details_once() -> None:
+    skill = _read_thumbnail_skill()
+    guidance = _read_thumbnail_provider_guidance()
+    combined = skill + "\n" + guidance
+    moved_details = (
+        "旧 stdout プロトコル `generated image <id> <base64>`",
+        "wrapper は JSONL を `jq` でフィルタ",
+        "最終的に `<out>` の MD5 と一致したら",
+        "`image_generation` tool 呼び出しを skip して path だけ echo",
+        "reference を `<out>` に cp するだけで終わる",
+    )
+
+    for detail in moved_details:
+        assert detail not in skill
+        assert guidance.count(detail) == 1
+        assert combined.count(detail) == 1
 
 
 def test_thumbnail_skill_documents_textless_first_deterministic_flow() -> None:
