@@ -460,6 +460,43 @@ def test_suno_documents_pass_fail_loop_contract() -> None:
         assert token in text, f"/suno SKILL.md に PASS/FAIL ループ契約がない（`{token}` 不在）"
 
 
+def test_suno_documents_collection_local_effective_style_contract() -> None:
+    """Issue #2999: collection 固有 Style を共有 config へ混ぜずに解決・検証する."""
+    text = _read()
+    section = text.split("### Style 入力の解決（collection 優先、preset 推奨）", 1)[1].split("\n### ", 1)[0]
+
+    for token in (
+        "`20-documentation/suno-patterns.yaml`",
+        "`genre_line`",
+        "`exclude_styles`",
+        "`vocal_gender`",
+        "`config/skills/suno.yaml`",
+        "fallback",
+        "`suno_preset` は推奨入力",
+        "共有 config を書き換えない",
+        "collection 間",
+        "`uv run yt-suno-verify <collection-path>`",
+        "effective Style",
+    ):
+        assert token in section
+
+
+def test_suno_documents_collection_vocal_gender_handoff_to_lyric() -> None:
+    """Issue #2999: collection の歌声性別を歌詞の語り手へ引き渡す."""
+    text = _read()
+    section = text.split("### Collection vocal gender の整合", 1)[1].split("\n### ", 1)[0]
+
+    for token in (
+        "`suno-patterns.yaml::vocal_gender`",
+        "`config/skills/suno-lyric.yaml::vocal_gender`",
+        "`/suno-lyric`",
+        "語り手",
+        "人称代名詞",
+        "共有 config は書き換えない",
+    ):
+        assert token in section
+
+
 def test_suno_blocks_step_3_until_semantic_review_passes() -> None:
     """Issue #1485: /suno は semantic review 全 PASS 後だけ Suno UI 投入へ進む。"""
     text = _read()

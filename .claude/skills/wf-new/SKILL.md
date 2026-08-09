@@ -26,7 +26,7 @@ minimal mode では企画候補生成前にテーマ / ジャンル / 雰囲気�
 
 - `config/channel/` が存在し `load_config()` でロード可能であること。存在しない場合は `/channel-new`、ロード失敗の場合は `/channel-new`（既存チャンネル取り込みモード）を案内して停止する
 - `/setup` が完了していること（ffmpeg / uv / automation パッケージ / OAuth）。未完なら `/setup` を案内して停止する
-- Suno チャンネルで `/suno` を呼ぶ場合は、`config/skills/suno.yaml::genre_line` または `data/video_analysis/<slug>/*.json` が必要（詳細は Hard Gates 3）
+- Suno チャンネルで `/suno` を呼ぶ場合は、collection の確定企画と書き込み先 `20-documentation/suno-patterns.yaml` を明示する。channel config と `suno_preset` は fallback / 推奨入力として扱う（詳細は Hard Gates 3）
 
 ## Hard Gates
 
@@ -34,7 +34,7 @@ minimal mode では企画候補生成前にテーマ / ジャンル / 雰囲気�
 
 1. **channel config gate**: `config/channel/` が存在し、`load_config()` でロードできること。存在しない場合は `/channel-new`、ロード失敗の場合は `/channel-new`（既存チャンネル取り込みモード）を案内して停止する。この状態では `/collection-ideate`、`/thumbnail`、`/suno`、`/lyria` を呼ばない。
 2. **前提未達時の state 変更禁止**: channel config gate で停止した場合、`uv run yt-init-collection` を実行しない。`collections/planning/`、`workflow-state.json`、`assets.*` を新規作成・更新しない。
-3. **Suno readiness gate**: Suno チャンネルで `/suno` を呼ぶ直前に、`config/skills/suno.yaml::genre_line` または `data/video_analysis/<slug>/*.json` が存在することを確認する。不足している場合は `/suno` を呼ばず、`uv run yt-video-analyze --source benchmark --competitor <slug> --top 5` を案内して停止する。AI が `genre_line` を手書き補完して続行すること、`assets.music_prompts = true` に更新することは禁止。
+3. **Suno collection Style boundary**: Suno チャンネルで `/suno` を呼ぶときは、対象 collection の絶対 path、確定企画、theme、書き込み先 `20-documentation/suno-patterns.yaml` を subagent へ渡す。collection 固有の `genre_line` / `exclude_styles` / `style_variants` / `vocal_gender` は同ファイルの root に書き、共有 `config/skills/suno.yaml` を書き換えない。root に無い値だけが channel config へ fallback する。`suno_preset` は推奨入力であり、不在だけを理由に停止しない。利用可能なら TTP 根拠として渡し、無ければ `/suno` が確定企画と制約から collection-local Style を設計する。`assets.music_prompts = true` は subagent 報告だけで更新せず、成果物、`yt-suno-verify`、semantic review をメインが検証した後に限る。
 4. **analytics input gate**: 入力モード判定、同日付 JSON、validator、stale 判定、自動更新、再検証は `/collection-ideate` の `references/freshness-rules.md::stale report の自動更新` に一元化する。`/wf-new` は判定ロジックを再定義せず、stale 判定や AskUserQuestion を先行実行しない。subagent が stale を検出した場合は、同 SSOT が返す自動更新シーケンスを同じ subagent 作業内で順次実行し、全呼び出し成功後に入力モード判定を先頭からやり直す。`yt-doctor` の `analytics_report` は予備確認にだけ使い、analytics mode の最終判定には使わない。
 5. **subagent state boundary**: 各フェーズの生成処理は Agent ツールで subagent へ一作業ずつ委譲する。subagent は `workflow-state.json` を書き込まず AskUserQuestion を実行しない。メインエージェントだけが承認、成果物検証、`assets` / `phase` / `updated_at` 更新を行う。
 6. **failure boundary**: subagent の失敗、期待成果物欠落、現在の phase との不整合時は state を更新しない。同じ未完了ステップから再実行できる状態で停止する。
@@ -285,7 +285,7 @@ uv run yt-populate-scene-phrases <collection-dir-name> \
 
 #### 2c. サムネイル確定 + 音楽素材生成
 
-サムネイル候補生成、承認・確定、音楽素材生成を以下の 2 substep で順に進める。Suno チャンネルでは、音楽素材生成へ進む前に `config/skills/suno.yaml::genre_line` または `data/video_analysis/<slug>/*.json` が存在することをメインが再確認する。不足時は `/suno` を起動せず、`uv run yt-video-analyze --source benchmark --competitor <slug> --top 5` を案内して停止する。AI が `genre_line` を手書き補完して続行すること、`assets.music_prompts = true` に更新することは禁止。
+サムネイル候補生成、承認・確定、音楽素材生成を以下の 2 substep で順に進める。Suno チャンネルでは、メインが対象 collection と確定企画を固定し、`config/skills/suno.yaml` と利用可能な `data/video_analysis/<slug>/*.json` を fallback / 推奨入力として `/suno` へ渡す。subagent は共有 config を変更せず、その collection の `20-documentation/suno-patterns.yaml` に effective Style 系の root 値を保存する。`suno_preset` が無くても確定企画と制約から collection-local Style を設計して続行し、検証前に `assets.music_prompts = true` へ更新しない。
 
 ##### 2c-1. サムネイル候補生成
 
@@ -362,7 +362,7 @@ uv run yt-populate-scene-phrases <collection-dir-name> \
 4. `thumbnail.jpg` と `main.png/jpg` の確定を検証した後だけ、メインが `assets.thumbnail = true`、`thumbnail.approved = true`、`updated_at` を更新する。このゲートで承認済みの `thumbnail.jpg` を再度 AskUserQuestion にかけない。
 
 5. **音楽 skill を順番に処理**:
-   - Suno: readiness gate 通過後、対象 collection と theme を指定して Agent ツールで `/suno <theme>` のプロンプト生成を委譲する
+   - Suno: 対象 collection、theme、確定企画、書き込み先 `20-documentation/suno-patterns.yaml` を指定して Agent ツールで `/suno <theme>` のプロンプト生成を委譲する。共有 `config/skills/suno.yaml` の書き換えを禁止し、collection root の Style 値と channel fallback を解決した後に `uv run yt-suno-verify <collection-path>` を通す。ボーカルでは root `vocal_gender` を `/suno-lyric` の語り手性別入力にも引き渡す
    - Lyria: 対象 collection と theme を指定して Agent ツールで `/lyria <theme>` のプロンプト設計だけを委譲する（Lyria 3 API 呼び出しは `/wf-next`）
    - subagent には state 更新と AskUserQuestion を禁止する。メインが `20-documentation/suno-prompts.json` または Lyria 設計成果物の存在を検証し、成功時だけ `assets.music_prompts = true` と `updated_at` を更新する
 
