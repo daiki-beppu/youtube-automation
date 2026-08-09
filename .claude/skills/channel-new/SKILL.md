@@ -141,9 +141,11 @@ TTP に関する質問は、TTP 対象への転写要素（タイトル構造 / 
 このヒアリング結果は後続の seed fetch / TTP 対象反映に使う。
 ヒアリング後は `docs/channel/ttp-seed-confirmation.md` を作成し、TTP したいチャンネル URL / handle / channel ID、転写したい要素、関係性メモを保存する。
 
+新規開設モードで Step 2 へ進む前に、repository 初期化、setup gate の check 分類、config 入力 schema、初期ファイル生成詳細の唯一の正である **[new-channel-bootstrap.md](references/new-channel-bootstrap.md)** を必ず Read する。本体に残す Step 2〜4 の順序、承認点、実行コマンド、成功・停止条件と組み合わせて実行する。
+
 ### Step 2: 現在のディレクトリを repo 初期化
 
-`.git` がなければ現在のディレクトリで初期化する。テンプレートリポジトリは使わない。
+`.git` の有無と作成予定の private remote 名を提示し、AskUserQuestion で「repo 初期化と remote 作成を実行」/「中止」を確認する。承認された場合だけ次の副作用を実行し、中止なら `git init` より前に停止する。`.git` がすでにある場合は `git init` をスキップする。
 
 ```bash
 git init
@@ -155,61 +157,22 @@ gh repo create <repo-name> --private --source . --remote origin
 
 ### Step 3: setup 完了確認
 
-`/channel-new` は **`/setup` 完了済み** を前提に進める。`/setup` が automation パッケージ導入、`yt-skills sync`、`yt-setup-dirs` による setup 用ディレクトリ生成、GCP プロジェクト作成、API 有効化、ADC、OAuth クライアント ID 配置、OAuth token 生成までを担当する。
-
-AI は以下を実行して状態を確認する:
+`/channel-new` は **`/setup` 完了済み** を前提に、次を実行して状態を確認する。
 
 ```bash
 uv run yt-doctor --json
 ```
 
-以下の check が `ok` でない場合は、ここで `/setup` を案内して停止する。認証とツール導入が完了するまで Step 4 以降へ進まない。
+必須 check は `ffmpeg` / `ffprobe` / `uv` / `uv_project` / `automation_package` / `skills_synced` / `gcloud` / `gcloud_account` / `gcp_project` / `billing_linked` / `apis_enabled` / `adc` / `adc_quota_project` / `iam_aiplatform_user` / `env_file` / `client_secrets` / `oauth_token`。いずれかが `ok` でなければ `/setup` を案内して停止し、認証とツール導入が完了するまで Step 4 以降へ進まない。
 
-- `ffmpeg`
-- `ffprobe`
-- `uv`
-- `uv_project`
-- `automation_package`
-- `skills_synced`
-- `gcloud`
-- `gcloud_account`
-- `gcp_project`
-- `billing_linked`
-- `apis_enabled`
-- `adc`
-- `adc_quota_project`
-- `iam_aiplatform_user`
-- `env_file`
-- `client_secrets`
-- `oauth_token`
-
-Step 4 の config 生成で解消するため、以下の config 未生成由来の fail は許容する:
-
-- `channel_config`: `config/channel/ ディレクトリが存在しない (新規チャンネル、setup 用ディレクトリのみでは未生成)`
-- `playlist_config`: `config/channel/playlists.json が存在しない`
-- `playlist_create_dry_run`: config 未生成による設定ロード失敗
-- `ttp_wf_new_readiness`: `config/channel/analytics.json 未生成`
-- `initial_setup_readiness`: `config/skills/thumbnail.yaml` / `config/skills/suno.yaml` 未転記由来の warn（Step R3.5 で解消する）
-- `upload_ready`: `config/channel/meta.json が存在しない`
-- `upload_ready`: `channel.channel_id が未設定`
-
-`upload_ready` が `auth/token.json が存在しない`、`upload 必須 scope 不足`、`token.json 読み込み失敗` で fail している場合は `/setup` を案内して停止する。その他の fail / warn / unknown が残る場合は、表示された `next_action` に従って解消してから進む。
-
-seed fetch は YouTube Data API 認証に依存するため、既存チャンネルの token コピーで代替しない。
+Step 4 で解消するため、`channel_config`: `config/channel/ ディレクトリが存在しない (新規チャンネル、setup 用ディレクトリのみでは未生成)`、`upload_ready`: `config/channel/meta.json が存在しない`、`upload_ready`: `channel.channel_id が未設定` は許容する。その他の許容分類は reference に従う。`upload_ready` が `auth/token.json が存在しない`、`upload 必須 scope 不足`、`token.json 読み込み失敗` のいずれかなら許容せず `/setup` に戻る。その他の fail / warn / unknown は表示された `next_action` に従って解消してから進む。
 
 ### Step 4: フルパッケージ config / 初期運用ファイル生成
 
-`yt-channel-init` で `config/channel/*.json` と channel-new で必要な初期運用ファイルを一括生成する。`/setup` が作成済みのディレクトリはそのまま再利用する:
-Step 1 の TTP ヒアリングとは別に、config 生成に必要な初期値だけをここで確認する:
+Step 1 の TTP ヒアリングとは別に、config 生成に必要な初期値だけをここで確認する。確認項目は **仮チャンネル名と SHORT** / **初期ジャンル情報** / **音楽エンジン** / **DistroKid 配信有無** / **DistroKid 初期 profile**。値の schema と確認規則は reference に従う。
+**動画尺** はここで確認せず、Step 5 の TTP seed fetch 後に Step 5.5 で承認済み TTP の benchmark から導出する。
 
-- **仮チャンネル名と SHORT**: `meta.json::channel.name` / `channel.short` に入れる
-- **初期ジャンル情報**: `genre.primary` / `genre.style` / `genre.context`
-- **動画尺**: この Step では手入力せず、Step 5.5 で承認済み TTP の benchmark から導出する
-- **音楽エンジン**: `music_engine` に入れる `suno` / `lyria` のどちらか
-- **DistroKid 配信有無**: 配信する場合は `distrokid.enabled=true` で初期化する
-- **DistroKid 初期 profile**: 配信する場合のみ `artist` / `language` / `main_genre` / `sub_genre` / songwriter first / last
-
-ここで確認した入力は `yt-channel-init` の CLI 引数に使う。
+`yt-channel-init` で `config/channel/*.json` と channel-new に必要な初期運用ファイルを一括生成し、`/setup` が作成済みのディレクトリはそのまま再利用する。
 
 ```bash
 uv run yt-channel-init \
@@ -240,11 +203,6 @@ uv run yt-channel-init \
 ```
 
 DistroKid 配信しない場合は `--distrokid-enabled` を付けず、`config/channel/distrokid.json` は生成しない。
-未配置時は config loader が `distrokid.enabled=false` として扱う。
-配信する場合は `artist`、`language`、`main_genre` を必ずヒアリングし、推測 default では埋めない。
-
-TTP 対象がこの時点で channel ID まで分かっている場合も、Step 4 では `benchmark.channels` へ書き込まない。
-候補 URL / handle / channel ID と関係性メモだけを残し、Step 5 の実データ確認とユーザー承認後に反映する。
 
 生成対象:
 
@@ -258,7 +216,7 @@ TTP 対象がこの時点で channel ID まで分かっている場合も、Step
 
 定期制作の自動起動（`workflow.json` の `scheduled_automation`）は本スキルでは生成しない（既定は未設定 = 無効）。運用開始後に定期実行したくなったら `/automation-schedule` で有効化する。
 
-冪等性: 既存ファイルは `--force` がない限り上書きしない。差分がある場合は unified diff を確認してから `--force` を判断する。初期ディレクトリ生成は `/setup` の責務であり、`yt-channel-init` は setup が作成済みのディレクトリを削除・再生成しない。
+冪等性: 既存ファイルは `--force` がない限り上書きしない。差分がある場合は unified diff を確認してから `--force` を判断する。初期ディレクトリは `/setup` の生成物を再利用する。
 
 ### Step 5: TTP seed fetch と承認済み対象反映
 
