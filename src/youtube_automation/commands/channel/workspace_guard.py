@@ -23,11 +23,12 @@ _ROOT_CHANNEL_LAYOUTS = (
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="yt-workspace-guard",
-        description="書き込み対象 path が workspace のチャンネル境界内か検査します。",
+        description="workspace のチャンネル境界を検査し、セッションの対象チャンネルを表示します。",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
     check = subparsers.add_parser("check", help="1 件以上の path をチャンネル境界に照らして検査します。")
     check.add_argument("paths", nargs="+", metavar="path", help="Write/Edit の対象 path")
+    subparsers.add_parser("context", help="cwd からセッションの対象チャンネルと path 基準を表示します。")
     return parser
 
 
@@ -88,11 +89,40 @@ def check_paths(raw_paths: list[str], cwd: Path) -> list[tuple[str, str]]:
     return blocked
 
 
+def _find_channel_ancestor(start: Path) -> Path | None:
+    for candidate in [start, *start.parents]:
+        if (candidate / "config" / "channel").is_dir():
+            return candidate
+    return None
+
+
+def context_lines(cwd: Path) -> list[str]:
+    """cwd から SessionStart へ注入する最小コンテキストを組み立てる。"""
+    resolved_cwd = cwd.expanduser().resolve()
+    workspace_root = find_workspace_root(resolved_cwd)
+    if workspace_root is None:
+        channel = _find_channel_ancestor(resolved_cwd)
+        return [f"channel_dir={channel}"] if channel is not None else []
+
+    channels = workspace_channels(workspace_root)
+    current_slug = _channel_slug(resolved_cwd, channels)
+    if current_slug is None:
+        candidates = ", ".join(channels)
+        return [f"チャンネル未確定。候補: {candidates}。書き込み前に対象チャンネルの channels/<slug>/ を基準にすること"]
+
+    channel = channels[current_slug].resolve()
+    return [f"channel={current_slug}", f"channel_dir={channel}", "相対パスはこの dir 基準"]
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
+    if args.command == "context":
+        for line in context_lines(Path.cwd()):
+            print(line)
+        return EXIT_OK
+
     if args.command != "check":
         raise AssertionError(f"未対応の command です: {args.command}")
-
     blocked = check_paths(args.paths, Path.cwd())
     for path, reason in blocked:
         print(f"BLOCK: {path}: {reason}", file=sys.stderr)
