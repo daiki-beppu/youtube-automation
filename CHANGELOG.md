@@ -92,6 +92,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `feat(suno)`: channel override に明示した `duration_sec` を、既定値や `duration_filter` から補完せず全 prompt entry へ数値として出力するようにした（#3132）。
 - `feat(suno)`: channel override の `duration_sec` を正の整数に限定し、bool・文字列・float・非有限値・0 以下を prompt 生成前に `ConfigError` で拒否する検証境界を追加した（#3131）。
 - `docs(streaming)`: `/streaming` の Quick Reference にチャンネル別 Terraform workspace の確認・作成・切替入口を追加し、切替後のチャンネル固有 `TF_VAR_*` 再注入と README 正本への導線を明示した（#3184）。
+- `fix(skills-sync)`: legacy `feedback` skill を既知の削除対象へ追加し、`yt-skills sync --prune --yes` でのみ削除するようにした（#3189）。
 - `docs(skill-feedback)`: 配布テンプレートと skill catalog の公開 operator route を `/skill-feedback` へ移行した（#3188）。
 - `refactor(skill-feedback)`: `/feedback` との命名衝突を避ける canonical `/skill-feedback` entrypoint を旧名と並行配置し、B6 integration receipt の owner を新 skill と issue template へ移した（#3187）。
 - `refactor(tests)`: 旧 `unit` / `streaming` テストを canonical owner と `tests/repo/streaming/` へ整理し、root allowlist・source layer・source owner の配置規約を repository contract として機械担保した（#3047）。
