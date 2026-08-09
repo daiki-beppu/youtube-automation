@@ -109,7 +109,7 @@ class TestResolveCostPerImage:
         When resolve_cost_per_image を呼ぶ
         Then None を返す。
         """
-        cfg = {"image_generation": {"gemini": {"model": "gemini-3.1-flash-image-preview"}}}
+        cfg = {"image_generation": {"gemini": {"model": "gemini-3.1-flash-image"}}}
 
         result = resolve_cost_per_image(cfg, "gemini")
 
@@ -147,7 +147,7 @@ class TestConfirmCost:
         """
         monkeypatch.setattr("builtins.input", lambda _prompt="": "y")
 
-        assert confirm_cost("gemini-3.1-flash-image-preview", 0.101) is True
+        assert confirm_cost("gemini-3.1-flash-image", 0.101) is True
 
         out = capsys.readouterr().out
         assert "$0.101" in out
@@ -159,7 +159,7 @@ class TestConfirmCost:
         """
         monkeypatch.setattr("builtins.input", lambda _prompt="": "y")
 
-        assert confirm_cost("gemini-3.1-flash-image-preview", None) is True
+        assert confirm_cost("gemini-3.1-flash-image", None) is True
 
         out = capsys.readouterr().out
         assert "不明" in out
@@ -172,7 +172,7 @@ class TestConfirmCost:
         """
         monkeypatch.setattr("builtins.input", lambda _prompt="": "n")
 
-        assert confirm_cost("gemini-3.1-flash-image-preview", None) is False
+        assert confirm_cost("gemini-3.1-flash-image", None) is False
 
     def test_numeric_cost_with_user_no_returns_false(self, monkeypatch: pytest.MonkeyPatch):
         """Given cost_per_image=0.101 / ユーザー 'N'
@@ -181,7 +181,7 @@ class TestConfirmCost:
         """
         monkeypatch.setattr("builtins.input", lambda _prompt="": "n")
 
-        assert confirm_cost("gemini-3.1-flash-image-preview", 0.101) is False
+        assert confirm_cost("gemini-3.1-flash-image", 0.101) is False
 
     def test_none_cost_with_eof_returns_false(self, monkeypatch: pytest.MonkeyPatch):
         """Given cost_per_image=None / 入力で EOFError
@@ -194,7 +194,7 @@ class TestConfirmCost:
 
         monkeypatch.setattr("builtins.input", _raise_eof)
 
-        assert confirm_cost("gemini-3.1-flash-image-preview", None) is False
+        assert confirm_cost("gemini-3.1-flash-image", None) is False
 
 
 # ============================================================
@@ -218,7 +218,7 @@ class TestLogImageCost:
         output = tmp_channel / "collections" / "foo" / "main.png"
 
         entry = log_image_cost(
-            model="gemini-3.1-flash-image-preview",
+            model="gemini-3.1-flash-image",
             image_size="2K",
             aspect_ratio="16:9",
             output_file=output,
@@ -248,7 +248,7 @@ class TestLogImageCost:
 
         with pytest.raises(TypeError, match="cost_usd"):
             log_image_cost(
-                model="gemini-3.1-flash-image-preview",
+                model="gemini-3.1-flash-image",
                 image_size="2K",
                 aspect_ratio="16:9",
                 output_file=output,

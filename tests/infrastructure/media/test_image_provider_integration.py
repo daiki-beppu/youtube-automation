@@ -12,14 +12,18 @@
 
 from __future__ import annotations
 
+import io
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 import yaml
+from PIL import Image
 
 from youtube_automation.configuration import reset as reset_config
 from youtube_automation.configuration import skills as skill_config
 from youtube_automation.core.errors import ConfigError
+from youtube_automation.domains.media.image import ImageGenerationRequest
 from youtube_automation.infrastructure.media.image_provider import (
     get_provider,
     load_image_generation_config,
@@ -81,10 +85,10 @@ class TestProviderSwitchEndToEnd:
         assert cfg.openai.aspect_ratio == "16:9"
         assert cfg.openai.quality == "high"
 
-    def test_gemini_provider_selected_from_yaml(self, tmp_path: Path, monkeypatch):
-        """Given skill-config YAML が `image_generation.provider: gemini` を宣言
-        When ロード → ファクトリ
-        Then GeminiImageProvider が返り、model が末端まで届く。
+    def test_gemini_default_model_reaches_vertex_api(self, tmp_path: Path, monkeypatch):
+        """Given skill-config override が Gemini model を省略
+        When ロード → ファクトリ → generate を実行
+        Then GA model ID が Vertex API 呼び出しへ届く。
         """
         # Given
         channel_dir = tmp_path / "ch"
@@ -96,21 +100,43 @@ class TestProviderSwitchEndToEnd:
                 "image_generation": {
                     "provider": "gemini",
                     "gemini": {
-                        "model": "gemini-3.1-flash-image-preview",
                         "image_size": "2K",
                     },
                 }
             },
         )
+        image_bytes = io.BytesIO()
+        Image.new("RGB", (16, 16), color=(0, 0, 0)).save(image_bytes, format="PNG")
+        image_part = MagicMock()
+        image_part.inline_data.data = image_bytes.getvalue()
+        image_part.text = None
+        response = MagicMock(parts=[image_part])
+        mock_client = MagicMock()
+        mock_client.models.generate_content.return_value = response
+        monkeypatch.setattr(
+            "youtube_automation.infrastructure.media.image_provider.gemini.create_global_genai_client",
+            lambda: mock_client,
+        )
 
         # When
         cfg = load_image_generation_config()
         provider = get_provider(cfg)
+        result = provider.generate(
+            ImageGenerationRequest(
+                prompt="a serene mountain at dawn",
+                output_path=channel_dir / "out.png",
+                aspect_ratio="16:9",
+                image_size="2K",
+            )
+        )
 
         # Then
         assert cfg.provider == "gemini"
         assert isinstance(provider, GeminiImageProvider)
-        assert cfg.gemini.model == "gemini-3.1-flash-image-preview"
+        assert result.success is True
+        sent_model = mock_client.models.generate_content.call_args.kwargs["model"]
+        assert sent_model == "gemini-3.1-flash-image"
+        assert not sent_model.endswith("-preview")
 
     def test_codex_provider_selected_from_yaml_and_rejected_by_api_factory(self, tmp_path: Path, monkeypatch):
         """Given skill-config YAML が `image_generation.provider: codex` を宣言
