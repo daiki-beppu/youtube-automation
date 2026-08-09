@@ -16,6 +16,9 @@ NOTES_DIR = ROOT / "docs" / "release-notes"
 AUTHORING_REFERENCE = ROOT / ".claude" / "skills" / "automation-release" / "references" / "release-notes-authoring.md"
 RELEASE_SKILL = ROOT / ".claude" / "skills" / "automation-release" / "SKILL.md"
 PUBLISH_CHECKLIST = ROOT / ".claude" / "skills" / "automation-release" / "references" / "publish-checklist.md"
+EXTENSION_PUBLISH_CHECKLIST = (
+    ROOT / ".claude" / "skills" / "automation-release" / "references" / "extension-release-checklist.md"
+)
 REQUIRED_FRONTMATTER_KEYS = {"title", "version", "released_at", "kind", "summary", "sidebar"}
 REQUIRED_HEADINGS = (
     "## 30 秒サマリー",
@@ -175,5 +178,57 @@ def test_python_post_release_failures_are_retryable_without_weakening_release_cl
         "既存 pull request",
         "重複作成しない",
         "release branch cleanup は必ず続行",
+    ):
+        assert required in checklist
+
+
+def test_extension_publish_reads_release_body_only_after_all_assets_succeed() -> None:
+    skill = RELEASE_SKILL.read_text(encoding="utf-8")
+    phase_e2 = skill[skill.index("### Phase E2: extension publish") : skill.index("## Gotchas")]
+    ordered_contract = (
+        'test "${zip_count}" -eq 3',
+        'gh release view "ext-v${VER}" --json body --jq .body',
+        "references/release-notes-authoring.md",
+        "運営者影響を全件保持して `docs/release-notes/ext-v${VER}.md` へ変換する",
+        "生成内容・対象 tag・post-release branch・変更 path",
+        "`AskUserQuestion` で「PR 作成 / 非承認 / skip」",
+        'git push -u origin "${EXT_POST_RELEASE_BRANCH}"',
+        'gh pr create --base main --head "${EXT_POST_RELEASE_BRANCH}"',
+    )
+
+    positions = [phase_e2.index(fragment) for fragment in ordered_contract]
+    assert positions == sorted(positions)
+
+
+def test_extension_publish_keeps_release_complete_when_public_note_is_skipped() -> None:
+    skill = RELEASE_SKILL.read_text(encoding="utf-8")
+
+    for required in (
+        "承認前に commit / push / pull request 作成を行わない",
+        "main へ直接 push しない",
+        "extension publish は完了扱い",
+        "手動作成手順",
+        "3拡張の asset",
+        "統一 `ext-v*` 系列",
+        "merge commit tag",
+        "site は PR pending",
+        "merge 後の公開 URL",
+    ):
+        assert required in skill
+
+
+def test_extension_post_release_failures_stop_before_authoring_and_are_retryable() -> None:
+    checklist = EXTENSION_PUBLISH_CHECKLIST.read_text(encoding="utf-8")
+
+    for required in (
+        "Release body が空",
+        "公開ノート生成へ進まない",
+        "partial assets",
+        "E2-4 から再実行",
+        "既存 extension post-release branch",
+        "削除・上書きしない",
+        "既存 pull request",
+        "重複作成しない",
+        "extension release branch cleanup は必ず続行",
     ):
         assert required in checklist
