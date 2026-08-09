@@ -2,7 +2,7 @@
   "supported_languages": ["ja", "en", "de"],
   "languages": {
     "ja": {
-      "title_template": "{scene_phrase} | RPG BGM ({activities})",
+      "title_template": "{scene_phrase} | RPG BGM ({activities}) [{duration_display}]",
       "activities": "ゲーム · 勉強 · 集中",
       "description": {
         "opening_poem": "ピクセルの夜、冒険の調べ",
@@ -12,7 +12,7 @@
       }
     },
     "en": {
-      "title_template": "{scene_phrase} | RPG BGM ({activities})",
+      "title_template": "{scene_phrase} | RPG BGM ({activities}) [{duration_display}]",
       "activities": "Gaming · Study · Focus",
       "description": {
         "opening_poem": "Pixel nights, melodies of adventure",
@@ -22,7 +22,7 @@
       }
     },
     "de": {
-      "title_template": "{scene_phrase} | RPG BGM ({activities})",
+      "title_template": "{scene_phrase} | RPG BGM ({activities}) [{duration_display}]",
       "activities": "Gaming · Lernen · Fokus",
       "description": {
         "opening_poem": "Pixelnacht, Melodie des Abenteuers",

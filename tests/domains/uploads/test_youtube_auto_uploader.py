@@ -33,6 +33,18 @@ from youtube_automation.core.errors import ValidationError
 sys.path.insert(0, str(REPO_ROOT))
 
 
+@pytest.fixture(autouse=True)
+def _mock_complete_collection_master_duration(monkeypatch):
+    monkeypatch.setattr(
+        "youtube_automation.domains.uploads._complete_collection_strategy.probe_duration",
+        lambda _: 10 * 3600 + 32 * 60,
+    )
+    monkeypatch.setattr(
+        "youtube_automation.domains.uploads._preflight.probe_duration",
+        lambda _: 10 * 3600 + 32 * 60,
+    )
+
+
 def test_main_without_action_prints_usage(monkeypatch, capsys):
     from youtube_automation.commands.uploads import youtube_auto_uploader
 
@@ -152,6 +164,9 @@ def _write_preflight_collection(tmp_path: Path, scene_languages: list[str]) -> P
         json.dumps({"scene_phrases": scene_phrases}),
         encoding="utf-8",
     )
+    master_dir = col_dir / "01-master"
+    master_dir.mkdir()
+    (master_dir / "master.mp4").write_bytes(b"probe is mocked")
     return col_dir
 
 
@@ -259,6 +274,9 @@ def _write_title_collection(
         json.dumps(workflow_state),
         encoding="utf-8",
     )
+    master_dir = col_dir / "01-master"
+    master_dir.mkdir()
+    (master_dir / "master.mp4").write_bytes(b"probe is mocked")
     return col_dir
 
 
@@ -1025,6 +1043,9 @@ class TestUploadCompleteCollectionDedup:
         assert result["video_id"] == "v9"
         assert result["video_url"] == "https://www.youtube.com/watch?v=v9"
         assert result["upload_source"] == "existing_video"
+        assert mock_gen.generate_complete_collection_metadata.call_args.kwargs["duration_seconds"] == (
+            10 * 3600 + 32 * 60
+        )
 
     def test_should_proceed_with_upload_when_dedup_search_returns_none(self, tmp_path):
         """dedup miss 時は通常通り `upload_video` を呼ぶ."""

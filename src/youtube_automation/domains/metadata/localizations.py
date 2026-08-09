@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Dict, List
 
+from youtube_automation.core.adapters.runtime import format_localized_duration_display
 from youtube_automation.domains.metadata.descriptions import build_short_description
 from youtube_automation.domains.metadata.titles import (
     _referenced_placeholders,
@@ -12,7 +14,11 @@ from youtube_automation.domains.metadata.titles import (
 )
 from youtube_automation.domains.uploads.preflight import requires_scene_phrases
 
-LOCALIZED_TITLE_PLACEHOLDERS = frozenset({"scene_phrase", "activities", "scene_emoji"})
+LOCALIZED_TITLE_PLACEHOLDERS = frozenset({"scene_phrase", "activities", "scene_emoji", "duration_display"})
+_STATIC_DURATION_LITERAL = re.compile(
+    r"(?<!\w)\d+(?:[.,]\d+)?\s*(?:hours?|hrs?|std\.?|stunden?|時間|minutes?|mins?|min\.?|分)(?!\w)",
+    re.IGNORECASE,
+)
 
 
 def build_short_localizations(
@@ -73,9 +79,20 @@ def build_short_localizations(
     return localizations
 
 
-def _localized_title_values(*, scene_phrase: str, activities: str, scene_emoji: str) -> Dict[str, str]:
+def _localized_title_values(
+    *,
+    scene_phrase: str,
+    activities: str,
+    scene_emoji: str,
+    duration_display: str,
+) -> Dict[str, str]:
     """localizations の title_template に渡す values を組み立てる."""
-    return {"scene_phrase": scene_phrase, "activities": activities, "scene_emoji": scene_emoji}
+    return {
+        "scene_phrase": scene_phrase,
+        "activities": activities,
+        "scene_emoji": scene_emoji,
+        "duration_display": duration_display,
+    }
 
 
 def validate_localizations_title_templates(loc_data: Dict) -> List[str]:
@@ -102,6 +119,13 @@ def validate_localizations_title_templates(loc_data: Dict) -> List[str]:
         template = lang_data.get("title_template")
         if not isinstance(template, str):
             continue
+        static_duration = _STATIC_DURATION_LITERAL.search(template)
+        if static_duration:
+            errors.append(
+                f"languages.{lang}.title_template: 固定尺 {static_duration.group(0)!r} が含まれています。\n"
+                "  → 固定値を `{duration_display}` に置き換えて、実マスター尺を表示してください。\n"
+                f"  → テンプレート: {template}"
+            )
         unknown = _referenced_placeholders(template) - LOCALIZED_TITLE_PLACEHOLDERS
         if unknown:
             errors.append(
@@ -125,6 +149,7 @@ class SceneTitleViolation:
 def validate_scene_phrases(
     scene_phrases: Dict[str, str],
     config,
+    duration_seconds: int | float,
     scene_emoji: str = "",
 ) -> List[SceneTitleViolation]:
     """scene_phrases を localizations の全言語で試算し、100 codepoint 超過を一括検出する.
@@ -137,6 +162,7 @@ def validate_scene_phrases(
     Args:
         scene_phrases: {"en": ..., "ja": ..., ...} コレクション別の感情フレーズ翻訳
         config: `load_config()` の戻り値
+        duration_seconds: primary title と共有する実マスター秒数
 
     Returns:
         違反のリスト。空なら全言語 100 codepoint 以内.
@@ -173,9 +199,15 @@ def validate_scene_phrases(
             raise ValueError(f"localizations.json: language '{lang}' に title_template が無い")
         activities = lang_data.get("activities", best_for_line)
         scene = scene_phrases[lang]
+        duration_display = format_localized_duration_display(duration_seconds, lang)
         title = format_title_template(
             title_tpl,
-            _localized_title_values(scene_phrase=scene, activities=activities, scene_emoji=scene_emoji),
+            _localized_title_values(
+                scene_phrase=scene,
+                activities=activities,
+                scene_emoji=scene_emoji,
+                duration_display=duration_display,
+            ),
             context=f"localizations.json: language '{lang}' の title_template",
         )
         if len(title) > 100:

@@ -257,6 +257,10 @@ class TestMainCLI:
         state = json.loads((collection_dir / "workflow-state.json").read_text(encoding="utf-8"))
         assert "scene_phrases" not in state
 
+        master_dir = collection_dir / "01-master"
+        master_dir.mkdir()
+        (master_dir / "master.mp4").write_bytes(b"probe is mocked")
+        monkeypatch.setattr("youtube_automation.domains.uploads._preflight.probe_duration", lambda _: 3600)
         _PreflightHarness(ch / "collections")._preflight_check(collection_dir)
 
         gen = object.__new__(BAHMetadataGenerator)
@@ -266,6 +270,7 @@ class TestMainCLI:
                 "Late-night neon city, jazz between rain and streetlights | 3 Hours of Study",
                 "00:00 Intro",
                 {},
+                duration_seconds=3600,
             )
             == {}
         )

@@ -87,6 +87,7 @@ def _write_cli_title_collection(channel_dir: Path, *, title_template_check: dict
     collection = channel_dir / "collections" / "planning" / "20990101-volume-collection"
     for subdir in ("01-master", "02-Individual-music", "03-Individual-movie", "10-assets", "20-documentation"):
         (collection / subdir).mkdir(parents=True, exist_ok=True)
+    (collection / "01-master" / "master.mp4").write_bytes(b"probe is mocked")
     (collection / "20-documentation" / "descriptions.md").write_text(
         """## タイトル案
 ```
@@ -163,6 +164,7 @@ def test_main_title_preflight_honors_collection_opt_in_for_each_cli_entry(
 
     with (
         patch("youtube_automation.domains.uploads._preflight.load_config", return_value=_title_preflight_config()),
+        patch("youtube_automation.domains.uploads._preflight.probe_duration", return_value=3600),
         patch.object(CollectionUploader, method_name) as mock_action,
     ):
         if expected_outcome == "pass":

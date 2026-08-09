@@ -3,11 +3,11 @@
   "default_language": "en",
   "languages": {
     "ja": {
-      "title_template": "{scene_phrase} | ジャズBGM ({activities})",
+      "title_template": "{scene_phrase} | ジャズBGM ({activities}) [{duration_display}]",
       "description_opening": "落ち着いたジャズ音楽。"
     },
     "en": {
-      "title_template": "{scene_phrase} | Jazz BGM ({activities})",
+      "title_template": "{scene_phrase} | Jazz BGM ({activities}) [{duration_display}]",
       "description_opening": "Relaxing jazz music."
     }
   }

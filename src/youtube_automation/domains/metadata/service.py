@@ -26,6 +26,7 @@ from youtube_automation.core.adapters.media import CollectionPaths, probe_durati
 from youtube_automation.core.adapters.runtime import (
     format_duration_display,
     format_duration_short,
+    format_localized_duration_display,
     format_timestamp,
 )
 from youtube_automation.domains.media.audio_formats import AUDIO_EXTS
@@ -37,6 +38,7 @@ from youtube_automation.domains.metadata.localizations import (
     _localized_title_values,
     build_short_localizations,
     format_scene_title_violations,
+    validate_localizations_title_templates,
     validate_scene_phrases,
 )
 from youtube_automation.domains.metadata.tags import (
@@ -568,7 +570,7 @@ class BAHMetadataGenerator:
         theme = self._extract_theme_name()
         return self.config.content.title.activity_for_theme(theme)
 
-    def _generate_title(self, total_seconds: int) -> str:
+    def _generate_title(self, total_seconds: int | float) -> str:
         """channel_config のテンプレートでタイトルを生成（100文字制限）"""
         theme = self._extract_theme_name()
         activity = self._get_activity()
@@ -651,6 +653,8 @@ class BAHMetadataGenerator:
         timestamp_body: str,
         scene_phrases: Dict[str, str] | None = None,
         scene_emoji: str = "",
+        *,
+        duration_seconds: int | float,
     ) -> Dict:
         """各言語のローカライズされたタイトル・説明文を生成（jazzgak. TTP ハイブリッド方式）
 
@@ -661,6 +665,7 @@ class BAHMetadataGenerator:
             english_title: 英語デフォルトタイトル（フォールバック用）
             timestamp_body: タイムスタンプ部分（全言語共通、ヘッダーなし）
             scene_phrases: {"ja": "雨の街の夜...", ...} コレクション別の感情フレーズ翻訳
+            duration_seconds: primary title と共有する実マスター秒数
 
         Returns:
             YouTube API 用 localizations 辞書
@@ -675,6 +680,10 @@ class BAHMetadataGenerator:
         if not requires_scene_phrases(loc_config.get("supported_languages", [])):
             return {}
 
+        template_errors = validate_localizations_title_templates(loc_config)
+        if template_errors:
+            raise ValueError("localizations.json の title_template が不正です:\n" + "\n".join(template_errors))
+
         # 英語固定パーツ（config/channel/content.json の descriptions.metadata から取得）
         desc_metadata = self.config.content.descriptions.metadata
         genre_line = desc_metadata.get("genre", "Jazz")
@@ -684,7 +693,12 @@ class BAHMetadataGenerator:
 
         # 欠落チェック + 100 codepoint 超過を全言語まとめて検出する
         # （従来は 1 言語ずつ fail していたため多言語対応チャンネルで再アップロードを繰り返していた）
-        violations = validate_scene_phrases(scene_phrases, self.config, scene_emoji=scene_emoji)
+        violations = validate_scene_phrases(
+            scene_phrases,
+            self.config,
+            duration_seconds,
+            scene_emoji=scene_emoji,
+        )
         if violations:
             raise ValueError(
                 f"localizations の {len(violations)} 言語でタイトルが 100 codepoint を超過:\n"
@@ -700,9 +714,15 @@ class BAHMetadataGenerator:
             scene = scene_phrases[lang]
             title_tpl = lang_data["title_template"]
             activities = lang_data.get("activities", best_for_line)
+            duration_display = format_localized_duration_display(duration_seconds, lang)
             loc_title = format_title_template(
                 title_tpl,
-                _localized_title_values(scene_phrase=scene, activities=activities, scene_emoji=scene_emoji),
+                _localized_title_values(
+                    scene_phrase=scene,
+                    activities=activities,
+                    scene_emoji=scene_emoji,
+                    duration_display=duration_display,
+                ),
                 context=f"localizations.json: language '{lang}' の title_template",
             )
 
@@ -751,7 +771,13 @@ class BAHMetadataGenerator:
 
         return localizations
 
-    def generate_complete_collection_metadata(self, title_override: str | None = None, loops: int = 1) -> Dict:
+    def generate_complete_collection_metadata(
+        self,
+        title_override: str | None = None,
+        loops: int = 1,
+        *,
+        duration_seconds: int | float | None = None,
+    ) -> Dict:
         """
         Complete Collection 用メタデータ生成
 
@@ -763,6 +789,8 @@ class BAHMetadataGenerator:
                 `KeyError`/`ValidationError` で巻き込まれない（#574）。
             loops: master のループ回数。`format_timestamps_text(loops=loops)` に渡し、
                 全ループ分のチャプターを展開する。既定 1（従来挙動）。
+            duration_seconds: upload/preflight が probe した実マスター秒数。metadata 単体生成では
+                track のクロスフェード補正済み合計を使う。
 
         Returns:
             Dict: YouTube アップロード用メタデータ
@@ -772,11 +800,12 @@ class BAHMetadataGenerator:
 
         crossfade = self._crossfade_sec
         total_duration = sum(track["duration"] for track in self.tracks) - max(0, len(self.tracks) - 1) * crossfade
+        effective_duration = total_duration if duration_seconds is None else duration_seconds
 
         # タイトル生成（2026リブランド）。
         # title_override がある（descriptions.md で最終タイトルが確定する）場合は
         # 中間タイトル生成をスキップし、未知プレースホルダ由来のクラッシュを避ける。
-        title = title_override if title_override else self._generate_title(total_duration)
+        title = title_override if title_override else self._generate_title(effective_duration)
 
         timestamp_body = self.format_timestamps_text(loops=loops)
         perfect_for_lines = "\n".join(f"• {item}" for item in list(self.config.content.descriptions.perfect_for))
@@ -808,7 +837,13 @@ class BAHMetadataGenerator:
         scene_phrases = self._load_scene_phrases()
         scene_emoji = self._load_scene_emoji()
         self._last_scene_phrases = scene_phrases
-        localizations = self.generate_localizations(title, timestamp_body, scene_phrases, scene_emoji=scene_emoji)
+        localizations = self.generate_localizations(
+            title,
+            timestamp_body,
+            scene_phrases,
+            scene_emoji=scene_emoji,
+            duration_seconds=effective_duration,
+        )
 
         return {
             "title": title,

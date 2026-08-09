@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `fix(benchmark)`: 個別 benchmark Markdown の自動生成領域と手書きサムネイル分析領域を marker で分離し、旧形式の分析を移行・保持したまま全レポートを原子的に更新するようにした（#3050）。
 - `fix(benchmark)`: 高頻度競合でも TTP の前期比較を回収できるよう `scan_recent` 既定を 150 に引き上げ、不足時に観測投稿密度から 50 本単位の推奨値と設定先を返し、Data API quota 上限をページング式で表示するようにした（#3051）。
 - `feat(site)`: `.claude/skills/*/SKILL.md` の frontmatter・前提・前後工程だけから skill 一覧と58個の個別ページを動的生成し、前後の skill をサイト内リンクで辿れるようにした（#3064）。
+- `fix(video-upload)`: Complete Collection の実マスター尺を primary / localizations / preflight へ共通入力として渡し、`{duration_display}` を ja/en/de の単位で展開。固定の `3 Hours` / `3 Std` 等を含む localization title template は公開前に停止する（#3684）。
 
 - `fix(thumbnail)`: TTP 参照プールの centroid 距離外れ値を参照ごとに診断し、`selection_only` は警告継続、`full` は strict 画像生成の API 呼び出し前と自動選択前に停止するようにした（#2952）。
 

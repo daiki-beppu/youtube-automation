@@ -166,7 +166,7 @@ def _template_literal(value: str) -> str:
 
 def _render_language_template(lang: str, ctx: ChannelInitContext) -> dict[str, str]:
     genre_label = _template_literal(ctx.genre)
-    title_template = f"{{scene_phrase}} | {genre_label} BGM ({{activities}})"
+    title_template = f"{{scene_phrase}} | {genre_label} BGM ({{activities}}) [{{duration_display}}]"
     openings: dict[str, str] = {
         "ja": f"{ctx.style}の{ctx.genre}音楽。",
         "de": f"{ctx.style} {ctx.genre} Musik.",

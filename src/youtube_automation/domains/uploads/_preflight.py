@@ -166,6 +166,13 @@ class PreflightMixin:
 
         # 実 upload と同じ generator で全 locale の title を構築し、API 呼び出し前の
         # --plan preflight でも YouTube の 100 codepoint 制限を検証する。
+        master_video = resolve_master_video(collection_dir)
+        duration_sec = probe_duration(master_video)
+        if duration_sec is None:
+            raise ValidationError(
+                f"❌ 実マスター尺を取得できません: {master_video.name}。"
+                "ffprobe で読み取れる完成済みマスター動画を指定してください"
+            )
         generator = BAHMetadataGenerator(str(collection_dir))
         # 同じ invocation で読み込んだ config を使い、plan と upload の設定 snapshot を揃える。
         # 最小 stub を使う既存 unit test では localization data が無いため生成を省略する。
@@ -183,6 +190,7 @@ class PreflightMixin:
                     description,
                     scene_phrases,
                     scene_emoji=generator._load_scene_emoji(),
+                    duration_seconds=duration_sec,
                 )
                 if templates_complete
                 else {}
@@ -213,21 +221,16 @@ class PreflightMixin:
         target_min = getattr(config.audio, "target_duration_min", None)
         target_max = getattr(config.audio, "target_duration_max", None)
         if target_min is not None or target_max is not None:
-            master_video = resolve_master_video(collection_dir)
-            duration_sec = probe_duration(master_video)
-            if duration_sec is None:
-                issues.append(f"duration probe failed for {master_video.name}")
-            else:
-                duration_issue = check_duration(
-                    duration_sec,
-                    target_min * 60 if target_min is not None else None,
-                    target_max * 60 if target_max is not None else None,
+            duration_issue = check_duration(
+                duration_sec,
+                target_min * 60 if target_min is not None else None,
+                target_max * 60 if target_max is not None else None,
+            )
+            if duration_issue and not getattr(self, "allow_duration_outside_target", False):
+                issues.append(
+                    f"{duration_issue}; config/channel/audio.json の target を満たす動画を再生成するか、"
+                    "operator 判断で --allow-duration-outside-target を明示してください"
                 )
-                if duration_issue and not getattr(self, "allow_duration_outside_target", False):
-                    issues.append(
-                        f"{duration_issue}; config/channel/audio.json の target を満たす動画を再生成するか、"
-                        "operator 判断で --allow-duration-outside-target を明示してください"
-                    )
 
         if issues:
             raise ValidationError("❌ preflight failed:\n  - " + "\n  - ".join(issues))

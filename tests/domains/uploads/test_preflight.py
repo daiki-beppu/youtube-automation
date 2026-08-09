@@ -118,6 +118,9 @@ Continuous Focus Mix
         encoding="utf-8",
     )
     _write_json(collection_dir / "workflow-state.json", {"scene_phrases": scene_phrases})
+    master_dir = collection_dir / "01-master"
+    master_dir.mkdir(parents=True)
+    (master_dir / "master.mp4").write_bytes(b"probe is mocked")
     return collection_dir
 
 
@@ -127,8 +130,13 @@ def _run_preflight(
     monkeypatch: pytest.MonkeyPatch,
     *,
     allow_duration_outside_target: bool = False,
+    duration_seconds: float = 3600,
 ) -> None:
     monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
+    monkeypatch.setattr(
+        "youtube_automation.domains.uploads._preflight.probe_duration",
+        lambda _: duration_seconds,
+    )
     harness = _PreflightHarness(channel_dir / "collections")
     harness.allow_duration_outside_target = allow_duration_outside_target
     harness._preflight_check(collection_dir)
@@ -332,6 +340,72 @@ def test_plan_preflight_rejects_overlong_localized_title(
         _run_preflight(channel_dir, collection_dir, monkeypatch)
 
 
+def test_plan_preflight_rejects_static_localized_duration(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    channel_dir = _write_minimal_channel(tmp_path, youtube_language="en", supported_languages=["en", "de"])
+    _write_json(
+        channel_dir / "config" / "localizations.json",
+        {
+            "supported_languages": ["en", "de"],
+            "languages": {
+                "en": {"title_template": "{scene_phrase} [3 Hours]"},
+                "de": {"title_template": "{scene_phrase} [{duration_display}]"},
+            },
+        },
+    )
+    collection_dir = _write_collection(
+        channel_dir,
+        scene_phrases={"en": "focus", "de": "ruhiger Fokus"},
+        description="A continuous BGM mix without chapter markers.",
+    )
+
+    with pytest.raises(ValidationError, match=r"固定尺 '3 Hours'"):
+        _run_preflight(channel_dir, collection_dir, monkeypatch)
+
+
+def test_plan_preflight_passes_actual_master_duration_to_localizations(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, float] = {}
+
+    class _Generator:
+        def __init__(self, _collection_dir: str) -> None:
+            self.config = None
+
+        @staticmethod
+        def _load_scene_emoji() -> str:
+            return ""
+
+        def generate_localizations(self, *_args, duration_seconds: float, **_kwargs):
+            captured["duration_seconds"] = duration_seconds
+            return {"en": {"title": "Focus [10.5 Hours]"}}
+
+    channel_dir = _write_minimal_channel(tmp_path, youtube_language="en", supported_languages=["en", "de"])
+    _write_json(
+        channel_dir / "config" / "localizations.json",
+        {
+            "supported_languages": ["en", "de"],
+            "languages": {
+                "en": {"title_template": "{scene_phrase} [{duration_display}]"},
+                "de": {"title_template": "{scene_phrase} [{duration_display}]"},
+            },
+        },
+    )
+    collection_dir = _write_collection(
+        channel_dir,
+        scene_phrases={"en": "focus", "de": "ruhiger Fokus"},
+        description="A continuous BGM mix without chapter markers.",
+    )
+    monkeypatch.setattr("youtube_automation.domains.uploads._preflight.BAHMetadataGenerator", _Generator)
+
+    _run_preflight(channel_dir, collection_dir, monkeypatch, duration_seconds=10 * 3600 + 32 * 60)
+
+    assert captured == {"duration_seconds": 10 * 3600 + 32 * 60}
+
+
 def test_target_duration_config_allows_video_inside_target(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -347,11 +421,6 @@ def test_target_duration_config_allows_video_inside_target(
         scene_phrases={"en": "continuous focus mix"},
         description="A continuous BGM mix without chapter markers.",
     )
-    master_dir = collection_dir / "01-master"
-    master_dir.mkdir(parents=True)
-    (master_dir / "master.mp4").write_bytes(b"probe is mocked")
-    monkeypatch.setattr("youtube_automation.domains.uploads._preflight.probe_duration", lambda _: 60 * 60)
-
     _run_preflight(channel_dir, collection_dir, monkeypatch)
 
 
@@ -370,16 +439,11 @@ def test_target_duration_config_blocks_short_video_without_override(
         scene_phrases={"en": "continuous focus mix"},
         description="A continuous BGM mix without chapter markers.",
     )
-    master_dir = collection_dir / "01-master"
-    master_dir.mkdir(parents=True)
-    (master_dir / "master.mp4").write_bytes(b"probe is mocked")
-    monkeypatch.setattr("youtube_automation.domains.uploads._preflight.probe_duration", lambda _: 50 * 60 + 29)
-
     with pytest.raises(
         ValidationError,
         match=r"duration: 50m .*target 1h00m〜1h30m.*--allow-duration-outside-target",
     ):
-        _run_preflight(channel_dir, collection_dir, monkeypatch)
+        _run_preflight(channel_dir, collection_dir, monkeypatch, duration_seconds=50 * 60 + 29)
 
 
 def test_target_duration_override_allows_short_video(
@@ -397,16 +461,12 @@ def test_target_duration_override_allows_short_video(
         scene_phrases={"en": "continuous focus mix"},
         description="A continuous BGM mix without chapter markers.",
     )
-    master_dir = collection_dir / "01-master"
-    master_dir.mkdir(parents=True)
-    (master_dir / "master.mp4").write_bytes(b"probe is mocked")
-    monkeypatch.setattr("youtube_automation.domains.uploads._preflight.probe_duration", lambda _: 50 * 60 + 29)
-
     _run_preflight(
         channel_dir,
         collection_dir,
         monkeypatch,
         allow_duration_outside_target=True,
+        duration_seconds=50 * 60 + 29,
     )
 
 
@@ -452,6 +512,10 @@ def test_upload_collection_reports_unreachable_tags_min_count_from_channel_confi
         tags=["a" * 17] * 26 + ["b" * 27],
     )
     monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
+    monkeypatch.setattr(
+        "youtube_automation.domains.uploads._preflight.probe_duration",
+        lambda _: 3600,
+    )
 
     assert load_config().content.tags.min_count == 30
     uploader = YouTubeAutoUploader(str(channel_dir / "collections"))
