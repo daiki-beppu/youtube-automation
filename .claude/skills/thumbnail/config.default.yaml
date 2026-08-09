@@ -9,6 +9,14 @@
 textless:
   enabled: true
 
+# サムネイルへのテキスト描画経路。
+# ai_burn_in（既定）: 文字入り thumbnail 候補を AI 生成・承認し、承認済み
+# thumbnail から textless main を再生成する。書体は生成ごとに揺れる。
+# deterministic: textless main を先に確定し、yt-thumbnail-text で実フォントを
+# 合成する。同じ背景・テキスト・設定なら同一出力になる。
+text_render:
+  mode: ai_burn_in
+
 # 承認済みサムネイルのギャラリー保存 (#1942)。
 # true の場合、確定直後に assets/thumbnail-gallery/<collection-dir-name>.<ext>
 # へ元の拡張子・内容のままコピーする。false なら従来どおり何も作らない。
@@ -79,9 +87,8 @@ image_generation:
     #   single_step   : ベンチマーク模倣 (TTP) の推奨実装。テキスト付き参照画像から
     #                   差分のみ指示して text-included thumbnail 候補を生成する。
     #                   reference_images.default が必須。
-    #                   #1907 以降の標準フローは同じ TTP 機構を textless 背景候補の
-    #                   生成に流用し、テキストは yt-thumbnail-text で決定的に合成する
-    #                   (text-included 候補の直接生成は AI 焼き込み fallback)。
+    #                   text_render.mode=deterministic のときだけ同じ TTP 機構を
+    #                   textless 背景候補の生成に流用し、yt-thumbnail-text で合成する。
     #   two_phase     : 既存参照から text-included thumbnail を先に確定し、
     #                   承認済み thumbnail から textless main を後続再生成するフォールバック
     #   diff_from_reference : 既存キャラ画像を参照に差分のみ指示

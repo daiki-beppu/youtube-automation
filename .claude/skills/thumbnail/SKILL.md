@@ -75,7 +75,7 @@ subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実�
 
 履歴の `performed_same` / `inconclusive` は強い方針へ還元しない。履歴の作成・追記は `/thumbnail-test` の責務であり、このスキルから変更しない。
 
-**読み順**: 標準フローは「ワークフロー > 標準生成順序とファイル契約」から読む。「フォント安定化」章は標準経路（決定的合成）の設定詳細としてあわせて読む。「codex 経由の生成」章は `image_generation.provider: codex` のチャンネルのみ、「自動選択」章は該当機能を明示的に使うチャンネルのみ参照すればよい。
+**読み順**: 標準フローは「ワークフロー > 標準生成順序とファイル契約」から読み、実効 `text_render.mode` に対応する経路へ進む。「フォント安定化」章は 2 経路の再現性差を確認するときに読む。「codex 経由の生成」章は `image_generation.provider: codex` のチャンネルのみ、「自動選択」章は該当機能を明示的に使うチャンネルのみ参照すればよい。
 
 ## 蓄積 insights 参照（lever=thumbnail）
 
@@ -288,7 +288,11 @@ uv run python .claude/skills/thumbnail/references/finalize_planning_preview.py <
 
 `status: MISSING` の場合だけ、`/wf-new` は既存の `/thumbnail <theme>` 候補生成へフォールバックする。空ファイルや代替画像を作らない。変換エラーは `MISSING` とみなさず、既存成果物と state を変更せず停止する。
 
-`/thumbnail` の標準手順は、**textless 動画背景の生成 → `yt-thumbnail-text` による実フォント合成**の 2 段構成で進める（#1907）。タイトル文字は AI に焼き込ませず、承認済みの textless 背景へ実フォント（Pillow 描画）で決定的に合成する。同一の背景・テキスト・設定なら常に同一出力になり、AI っぽい書体の揺れが発生しない。
+最初に deep-merge 済み skill-config を読み、`text_render.mode` を解決する。未設定または `ai_burn_in` は既定の AI 焼き込み経路、`deterministic` は決定的合成経路を使う。それ以外の値は画像生成 API を呼ぶ前に `ConfigError` で停止し、許容値 `ai_burn_in` / `deterministic` を表示する。provider によってこの分岐を変えない。
+
+**AI 焼き込み経路（既定）**: 「Single-Step / TTP モード」または「Two-Phase モード」の手順で、最初にテキスト付き `10-assets/thumbnail-v*.jpg/png` を生成する。`/thumbnail-compare` とユーザー承認後に `thumbnail.jpg` を確定し、承認済み `thumbnail.jpg` を参照して textless `main-v*.png/jpg` を再生成・承認する。書体の厳密な再現は保証されない。
+
+**決定的合成経路（`text_render.mode: deterministic` の opt-in）**: **textless 動画背景の生成 → `yt-thumbnail-text` による実フォント合成**の 2 段構成で進める（#1907）。タイトル文字は AI に焼き込ませず、承認済みの textless 背景へ実フォント（Pillow 描画）で決定的に合成する。同一の背景・テキスト・設定なら常に同一出力になり、AI っぽい書体の揺れが発生しない。
 
 ただし deep-merge 後の `textless.enabled: false` は明示 opt-in の共用経路とする。この場合は textless 候補の AI 生成、セルフチェック、プレビュー、承認をすべて省略し、テキスト付き最終 `10-assets/thumbnail.jpg` の確定後に次を実行する。
 
@@ -319,7 +323,7 @@ uv run yt-thumbnail-text \
 
 `thumbnail.jpg` はアップロード用、`main.png/jpg` は動画背景・loop-video 入力用の成果物とする。`textless.enabled` が未設定または `true` では文字入りと文字なしを分離し、両者を同一画像で代用しない。`false` だけは上記の検証済みコピーを正規契約とする。symlink や拡張子偽装では代用しない。
 
-**AI 焼き込み経路（fallback・非既定）**: 手書き風タイポグラフィなど実フォントで再現できない表現を運用者が明示的に選んだときだけ、従来の「テキスト付き YouTube サムネ → 承認済みサムネから textless 動画背景」の順で Single-Step / Two-Phase / codex 章のテキスト付き候補生成手順を使う（経路は残すが #1907 では改修しない）。この場合、書体の厳密な再現は保証されないことをユーザーに伝える。
+決定的合成経路は `text_render.mode: deterministic` の場合だけ使う。未設定 / `ai_burn_in` では上記の textless 先行手順へ入らず、AI 焼き込み経路を実行する。
 
 ### Test & compare 用 A/B pattern（opt-in）
 
@@ -380,7 +384,7 @@ uv run python .claude/skills/thumbnail/references/archive-approved-thumbnail.py 
 
 ### Single-Step / TTP モード（`generation_mode: "single_step"`、デフォルト・推奨）
 
-> **#1907 以降の位置づけ**: 標準フローはこの章の TTP 機構（参照画像選定・差分プロンプト構築・CLI 引数）を **textless 背景候補 `main-v*.png/jpg` の生成**に流用し、テキストは `yt-thumbnail-text` で合成する。この章に書かれた「テキスト付き候補を先に生成 → 承認済み `thumbnail.jpg` から textless 再生成」の順序は **AI 焼き込み経路（fallback・非既定）**の手順であり、運用者が明示的に選んだときだけ使う。
+> **経路の位置づけ**: この章の「テキスト付き候補を先に生成 → 承認済み `thumbnail.jpg` から textless 再生成」が、未設定 / `text_render.mode: ai_burn_in` の標準手順である。`text_render.mode: deterministic` の場合だけ、同じ TTP 機構（参照画像選定・差分プロンプト構築・CLI 引数）を textless 背景候補 `main-v*.png/jpg` の生成に流用し、テキストを `yt-thumbnail-text` で合成する。
 
 ベンチマーク模倣（**TTP**: trace / imitate）の標準実装。テキスト付きベンチマーク参照画像（背景テクスチャ・オブジェクト配置・主役スケール・文字レイアウトを含む）を参照にして、**維持する勝ちパターンと差し替えるタイトルだけ**をプロンプトで指示する。1 回目の生成では、YouTube 用のテキスト付き `thumbnail-v*.jpg/png` 候補を作る。承認後、その `thumbnail.jpg` から textless `main-v*.png/jpg` を再生成する。
 
@@ -536,14 +540,14 @@ Two-Phase は旧チャンネル向けのフォールバック。使う場合も�
 
 ## フォント安定化（#1332 / #1907）
 
-「サムネの文字フォントが毎回バラバラになる」問題への対処。フォントの扱いは 2 経路あり、#1907 以降は決定的合成経路が標準フローの既定になった。
+「サムネの文字フォントが毎回バラバラになる」問題への対処。フォントの扱いは 2 経路あり、`text_render.mode` で選択する。
 
 | 経路 | 仕組み | フォント再現性 |
 |---|---|---|
-| **決定的合成経路**（`yt-thumbnail-text`・**既定**） | textless 背景に実フォントファイル（.ttf/.otf/.ttc）を Pillow で描画 | **完全に安定**。同一の背景・テキスト・設定なら常に同一出力 |
-| **AI プロンプト経路**（fallback・非既定） | テキスト付きサムネ生成プロンプトで書体の雰囲気を指示（`thumbnail_text.font` / `single_step.typography_clause`） | **保証されない**。AI 画像生成はフォント名を厳密に再現できず、同じ指示でも生成ごとに書体が揺れる |
+| **AI プロンプト経路**（`ai_burn_in`・**既定**） | テキスト付きサムネ生成プロンプトで書体の雰囲気を指示（`thumbnail_text.font` / `single_step.typography_clause`） | **保証されない**。AI 画像生成はフォント名を厳密に再現できず、同じ指示でも生成ごとに書体が揺れる |
+| **決定的合成経路**（`deterministic`・opt-in） | textless 背景に実フォントファイル（.ttf/.otf/.ttc）を Pillow で描画 | **完全に安定**。同一の背景・テキスト・設定なら常に同一出力 |
 
-標準は「標準生成順序とファイル契約」の `yt-thumbnail-text` 経路とし、textless 背景の承認後に合成する。文字入り画像を `--background` に流用しない。AI プロンプト経路は fallback であり、フォントの厳密な再現を保証しない。
+「標準生成順序とファイル契約」の標準は AI プロンプト経路で文字入りサムネを先に確定する。決定的合成を選んだ場合は textless 背景の承認後に合成し、文字入り画像を `--background` に流用しない。`yt-thumbnail-text` が失敗しても AI 経路へ無断で切り替えない。
 
 font config、`typography_clause`、ライセンス、失敗時の切り替えは [quality / operations 詳細](references/quality-and-operations.md) を読む。`yt-thumbnail-text` が失敗したら理由を表示して終了コード 1 で停止し、無断で fallback しない。
 

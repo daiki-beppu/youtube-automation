@@ -332,8 +332,8 @@ def test_thumbnail_provider_guidance_owns_protocol_and_failure_details_once() ->
         assert combined.count(detail) == 1
 
 
-def test_thumbnail_skill_documents_textless_first_deterministic_flow() -> None:
-    """#1907: 標準フローは textless 背景を先に確定し yt-thumbnail-text で実フォント合成する。"""
+def test_thumbnail_skill_documents_ai_burn_in_default_and_deterministic_opt_in() -> None:
+    """#3312: AI 焼き込みを既定に戻し、決定的合成は明示 opt-in とする。"""
     skill = _read_thumbnail_skill()
 
     standard_block = _slice_between(
@@ -364,17 +364,21 @@ def test_thumbnail_skill_documents_textless_first_deterministic_flow() -> None:
         "config/skills/loop-video.yaml::enabled: false",
         "静止画背景",
         "両者を同一画像で代用しない",
-        "AI 焼き込み経路（fallback・非既定）",
+        "AI 焼き込み経路（既定）",
+        "text_render.mode: deterministic",
     ):
         assert required in standard_block
 
-    # textless 背景の確定が実フォント合成より先
+    # deterministic 経路では textless 背景の確定が実フォント合成より先
     assert standard_block.find("cp main-v1.png main.png") < standard_block.find("uv run yt-thumbnail-text")
-    # AI 焼き込みは運用者の明示選択のみ
-    assert "運用者が明示的に選んだときだけ" in standard_block
+    # 既定は文字入り候補を先に生成し、決定的合成だけを明示 opt-in にする
+    assert standard_block.find("AI 焼き込み経路（既定）") < standard_block.find(
+        "決定的合成経路（`text_render.mode: deterministic`"
+    )
+    assert "未設定または `ai_burn_in` は既定" in standard_block
 
-    # AI 焼き込み経路（Single-Step 章）は fallback として従来契約のまま残す（#1901 の順序を維持）
-    assert "AI 焼き込み経路（fallback・非既定）**の手順" in single_step_block
+    # AI 焼き込み経路（Single-Step 章）が未設定 / ai_burn_in の標準手順
+    assert "未設定 / `text_render.mode: ai_burn_in` の標準手順" in single_step_block
     for required in (
         "/thumbnail-compare",
         "cp thumbnail-v1.jpg thumbnail.jpg",
@@ -901,8 +905,8 @@ def test_thumbnail_skill_two_phase_keeps_thumbnail_and_main_separate() -> None:
     assert "既に存在する場合は Phase 1 をスキップ" not in two_phase_block
 
 
-def test_thumbnail_skill_deterministic_text_path_is_standard_default() -> None:
-    """#1907: 決定的合成経路が標準の既定で、textless 背景を先に確定してから合成する。"""
+def test_thumbnail_skill_ai_text_path_is_default_and_deterministic_is_opt_in() -> None:
+    """#3312: フォント経路表も AI 既定 / deterministic opt-in とする。"""
     skill = _read_thumbnail_skill()
     font_block = _slice_between(skill, "## フォント安定化", "## 自動選択")
     font_details = _slice_between(
@@ -911,19 +915,15 @@ def test_thumbnail_skill_deterministic_text_path_is_standard_default() -> None:
         "## auto-selection",
     )
 
-    # 経路表の既定は決定的合成、AI プロンプト経路は fallback
-    assert "**決定的合成経路**（`yt-thumbnail-text`・**既定**）" in font_block
-    assert "**AI プロンプト経路**（fallback・非既定）" in font_block
-    assert "**AI プロンプト経路**（既定）" not in font_block
+    assert "**AI プロンプト経路**（`ai_burn_in`・**既定**）" in font_block
+    assert "**決定的合成経路**（`deterministic`・opt-in）" in font_block
 
     assert "標準生成順序とファイル契約" in font_block
+    assert "文字入りサムネを先に確定" in font_block
     assert "textless 背景の承認後に合成" in font_block
     assert "image_generation.gemini.thumbnail_text.overlay.font.title" in font_details
     assert "文字入り画像を `--background` に流用しない" in font_block
-    # 旧契約（テキスト付き先行）の手順は標準から撤去済み
-    combined = font_block + font_details
-    assert "最初にテキスト付き `thumbnail-v*.jpg` を生成・承認して" not in combined
-    assert "標準 `/thumbnail` フローから自動分岐しない" not in combined
+    assert "AI 経路へ無断で切り替えない" in font_block
 
 
 def test_loop_video_skill_uses_textless_main_image_and_respects_disabled_channels() -> None:
@@ -978,6 +978,45 @@ def test_thumbnail_default_config_disables_ab_test_by_default() -> None:
     config = _load_thumbnail_default_config()
 
     assert config["ab_test"] == {"enabled": False, "patterns": []}
+
+
+def test_thumbnail_default_config_uses_ai_burn_in_text_render_mode() -> None:
+    config = _load_thumbnail_default_config()
+
+    assert config["text_render"] == {"mode": "ai_burn_in"}
+
+
+@pytest.mark.parametrize("mode", ["ai_burn_in", "deterministic"])
+def test_thumbnail_text_render_mode_accepts_supported_values(tmp_path, mode) -> None:
+    from youtube_automation.configuration import skills as skill_config
+
+    override_dir = tmp_path / "config" / "skills"
+    override_dir.mkdir(parents=True)
+    (override_dir / "thumbnail.yaml").write_text(f"text_render:\n  mode: {mode}\n", encoding="utf-8")
+
+    merged = skill_config.load_skill_config("thumbnail", use_cache=False, channel_dir=tmp_path)
+
+    assert merged["text_render"]["mode"] == mode
+
+
+@pytest.mark.parametrize(
+    "text_render_yaml",
+    [
+        "text_render: unsupported\n",
+        "text_render:\n  mode: unsupported\n",
+        "text_render:\n  mode: null\n",
+    ],
+)
+def test_thumbnail_text_render_mode_rejects_invalid_values(tmp_path, text_render_yaml) -> None:
+    from youtube_automation.configuration import skills as skill_config
+    from youtube_automation.core.errors import ConfigError
+
+    override_dir = tmp_path / "config" / "skills"
+    override_dir.mkdir(parents=True)
+    (override_dir / "thumbnail.yaml").write_text(text_render_yaml, encoding="utf-8")
+
+    with pytest.raises(ConfigError, match=r"text_render\.mode.*ai_burn_in.*deterministic"):
+        skill_config.load_skill_config("thumbnail", use_cache=False, channel_dir=tmp_path)
 
 
 def test_thumbnail_skill_documents_ab_test_outputs_prompts_and_approval_contract() -> None:

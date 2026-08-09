@@ -13,7 +13,7 @@ postmortem は `flop-analysis.yaml` を優先し、旧 `postmortem.yaml` だけ�
     bg = cfg.get("image_generation", {}).get("gemini", {}).get("brand_background")
 
 設計方針:
-- スキーマ検証なし。YAML のコメントで説明、コード側は .get() でゆるく適応
+- 原則スキーマ検証なし。実行経路を切り替える一部の列挙値だけ Fail Fast で検証
 - プロセス内キャッシュ (skill 名ごと)。reset() でクリア可
 - editable install / wheel 両対応 (importlib.resources)
 """
@@ -33,6 +33,8 @@ from youtube_automation.configuration import channel_dir as configured_channel_d
 from youtube_automation.core.errors import ConfigError
 
 _cache: dict[str, dict[str, Any]] = {}
+
+_THUMBNAIL_TEXT_RENDER_MODES = frozenset({"ai_burn_in", "deterministic"})
 
 # #1702: 基底 config から縮小済みのキー。channel override は引き続き deep-merge で
 # 有効（挙動は壊さない）だが、後続リリースでの物理削除に先立ち DeprecationWarning で
@@ -246,6 +248,22 @@ def _load_override(path: Path) -> dict[str, Any]:
     return _load_yaml(path)
 
 
+def _validate_thumbnail_text_render(config: dict[str, Any]) -> None:
+    text_render = config.get("text_render")
+    if not isinstance(text_render, dict):
+        raise ConfigError("thumbnail.text_render.mode は ai_burn_in / deterministic のいずれかで指定してください")
+    mode = text_render.get("mode")
+    if mode not in _THUMBNAIL_TEXT_RENDER_MODES:
+        raise ConfigError(
+            f"thumbnail.text_render.mode は ai_burn_in / deterministic のいずれかで指定してください: {mode!r}"
+        )
+
+
+def _validate_skill_config(skill: str, config: dict[str, Any]) -> None:
+    if skill == "thumbnail":
+        _validate_thumbnail_text_render(config)
+
+
 def load_skill_config(
     skill: str,
     *,
@@ -280,6 +298,8 @@ def load_skill_config(
         merged = _deep_merge(defaults, override)
     else:
         merged = defaults
+
+    _validate_skill_config(skill, merged)
 
     if use_shared_cache:
         _cache[skill] = merged
