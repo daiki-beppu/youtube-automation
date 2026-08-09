@@ -61,10 +61,11 @@ Step 1 のスクリプトが exit 0 で終了して `docs/benchmarks/*.md` と `
 | API | call 数 / 実行 | 変動要因 |
 |---|---|---|
 | YouTube Data API v3（channels.list、1 unit/call） | ceil(チャンネル数/50) units | ベンチマークチャンネル数 |
-| YouTube Data API v3（playlistItems.list + videos.list、各 1 unit） | 鮮度切れチャンネルあたり各 1 call（1 チャンネルあたり計約 4 units） | 鮮度切れチャンネル数、`scan_recent`（既定 50） |
+| YouTube Data API v3（playlistItems.list + videos.list、各 1 unit） | 鮮度切れチャンネルごとに `2 × ceil(scan_recent / 50)` units | 鮮度切れチャンネル数、`scan_recent`（既定 150） |
 | Vertex AI Gemini（サムネイル分析） | 既定 OFF で 0。有効時はサムネイル枚数分 | `gemini_thumbnail_analysis: true` の場合のみ |
 
 - 上限 / 承認: `freshness_days` 以内のチャンネルは再収集せず、サムネイル DL は CDN 直取得で quota を消費しない。`-y` / `--force` なしの実行では収集前に `[Y/n]` 確認プロンプトで停止する。
+- 通常収集の上限式は `ceil(更新チャンネル数 / 50) + 更新チャンネル数 × 2 × ceil(scan_recent / 50)`。先頭項は共有の `channels.list`、後半は各チャンネルの `playlistItems.list` と `videos.list`。1 チャンネルなら `scan_recent: 50` で最大 3 units、既定 150 で最大 7 units（投稿総数が少ない場合は早期終了して減る）。
 
 ## 実行フロー
 
@@ -87,7 +88,7 @@ uv run yt-benchmark-collect -v               # 詳細ログ
 スクリプトが自動で以下を実行:
 1. `config/channel/analytics.json` の `benchmark.channels` から対象チャンネルを読み込み
 2. `docs/benchmarks/*.md` の更新日時で鮮度チェック（`freshness_days` 日以上前なら更新）
-3. YouTube Data API で**直近 `scan_recent` 本（既定 50）** を走査し、**`min_views` 以上（既定 10,000）** の動画だけを抽出
+3. YouTube Data API で**直近 `scan_recent` 本（既定 150）** を走査し、**`min_views` 以上（既定 10,000）** の動画だけを抽出
 4. 派生指標算出（日次再生数・ER%・投稿間隔トレンド）
 5. サムネイル画像を `docs/benchmarks/thumbnails/` にダウンロード
 6. `data/benchmark_YYYYMMDD.json` に中間データ保存
@@ -159,7 +160,7 @@ subagent へは次を具体値で渡す:
 
 | 項目 | 既定 | 説明 |
 |---|---|---|
-| `scan_recent` | 50 | チャンネルあたりの走査プール本数（直近 N 投稿） |
+| `scan_recent` | 150 | チャンネルあたりの走査プール本数（直近 N 投稿、50 本単位で API call が増加） |
 | `min_views` | 10000 | ベンチマーク対象の視聴数しきい値 |
 | `freshness_days` | 3 | レポート更新間隔（日） |
 | `gemini_thumbnail_analysis` | false | Gemini API によるサムネイル分析（Vertex AI 課金あり、通常は不要） |
@@ -169,7 +170,7 @@ subagent へは次を具体値で渡す:
 
 ## コストに関する注意
 
-- **YouTube Data API**: 無料枠内（10,000 units/day）。1チャンネルあたり約 4 ユニット
+- **YouTube Data API**: 無料枠内（10,000 units/day）。通常収集は上記ページング式で、1 チャンネルなら既定 150 本で最大 7 units
 - **サムネイル分析**: デフォルトではエージェントが実行（追加コストなし）
 - **Gemini サムネイル分析** (`gemini_thumbnail_analysis: true`): Vertex AI 課金が発生する。10チャンネル × 各 20 本 = 200 回の API 呼び出しで数千円になる可能性があるため、通常は OFF のままにすること
 

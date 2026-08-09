@@ -4,6 +4,56 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
+_SCAN_PAGE_SIZE = 50
+_DEFAULT_SCAN_RECENT = 150
+_BENCHMARK_CONFIG_PATH = "config/skills/benchmark.yaml"
+
+
+def _round_up_to_scan_page(value: int) -> int:
+    return max(_SCAN_PAGE_SIZE, ((value + _SCAN_PAGE_SIZE - 1) // _SCAN_PAGE_SIZE) * _SCAN_PAGE_SIZE)
+
+
+def _coverage_recommendation(upload_scan: dict, reference_date: date, prior_start: date) -> dict:
+    """観測した投稿密度から比較期間を覆う走査本数を保守的に見積もる。"""
+    try:
+        scanned_count = max(0, int(upload_scan.get("scanned_count", 0)))
+    except (TypeError, ValueError):
+        scanned_count = 0
+
+    oldest_upload_at = upload_scan.get("oldest_upload_at")
+    try:
+        oldest_date = date.fromisoformat(oldest_upload_at)
+    except (TypeError, ValueError):
+        oldest_date = None
+
+    latest_upload_at = upload_scan.get("latest_upload_at")
+    try:
+        latest_date = date.fromisoformat(latest_upload_at)
+    except (TypeError, ValueError):
+        latest_date = reference_date
+
+    observed_span_days = max(0, (latest_date - oldest_date).days) if oldest_date is not None else 0
+    required_span_days = max(1, (latest_date - prior_start).days)
+    if scanned_count > 0 and observed_span_days > 0:
+        estimated_count = (scanned_count * required_span_days + observed_span_days - 1) // observed_span_days
+    else:
+        estimated_count = scanned_count + 1
+
+    # 不完全と判定された現在値より必ず先の API page まで走査する。
+    recommended_scan_recent = _round_up_to_scan_page(max(_DEFAULT_SCAN_RECENT, estimated_count, scanned_count + 1))
+    return {
+        "recommended_scan_recent": recommended_scan_recent,
+        "config_path": _BENCHMARK_CONFIG_PATH,
+        "config_key": "scan_recent",
+        "coverage": {
+            "scanned_count": scanned_count,
+            "latest_upload_at": latest_upload_at,
+            "oldest_upload_at": oldest_upload_at,
+            "observed_span_days": observed_span_days,
+            "required_span_days": required_span_days,
+        },
+    }
+
 
 def _window(start: date, end: date, videos: list[tuple[date, int]]) -> dict:
     values = [views for published_at, views in videos if start <= published_at <= end]
@@ -144,13 +194,18 @@ def evaluate_ttp_health(
             coverage_complete = oldest_date is not None and oldest_date <= prior_start
 
         if not coverage_complete:
+            recommendation = _coverage_recommendation(upload_scan, reference_date, prior_start)
+            recommended_scan_recent = recommendation["recommended_scan_recent"]
             insufficiencies.append(
                 {
                     "kind": "incomplete_window_coverage",
                     "detail": (
                         f"走査範囲が前期開始日 {prior_start.isoformat()} まで到達していません"
                         f"（oldest_upload_at={upload_scan.get('oldest_upload_at')!r}）。"
+                        f" {_BENCHMARK_CONFIG_PATH} に scan_recent: {recommended_scan_recent} 以上を設定して"
+                        " /benchmark を再実行してください。"
                     ),
+                    **recommendation,
                 }
             )
         elif prior_window["video_count"] == 0:

@@ -106,7 +106,7 @@ def _render_analytics(ctx: ChannelInitContext) -> dict:
         "analytics": {"collection_filter_keywords": ["Complete Collection", ctx.short]},
         "benchmark": {
             "channels": list(ctx.benchmark_channels),
-            "scan_recent": 50,
+            "scan_recent": 150,
             "min_views": 10000,
             "freshness_days": 3,
             "gemini_thumbnail_analysis": False,

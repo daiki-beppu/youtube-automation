@@ -7,7 +7,7 @@
 # config/channel/analytics.json 側で管理する。この YAML では走査・分析の動作パラメータのみ扱う。
 
 # チャンネルあたりの走査プール本数（直近 N 投稿）
-scan_recent: 50
+scan_recent: 150
 
 # ベンチマーク対象とする視聴数しきい値（これ未満の動画は分析対象外）
 min_views: 10000
