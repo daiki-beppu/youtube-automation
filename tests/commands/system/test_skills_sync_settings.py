@@ -57,6 +57,13 @@ def _session_context_command(settings: dict[str, object]) -> str:
     return commands[0]
 
 
+def _progress_hook_command(settings: dict[str, object]) -> str:
+    groups = settings["hooks"]["PreToolUse"]
+    commands = [hook["command"] for group in groups if group["matcher"] == "Bash" for hook in group["hooks"]]
+    assert commands == ["uv run yt-progress-hook"]
+    return commands[0]
+
+
 def test_settings_merge_preserves_local_values_and_accepts_hooks(tmp_path, monkeypatch) -> None:
     _template(tmp_path)
     target = tmp_path / "downstream" / ".claude" / "settings.json"
@@ -112,6 +119,21 @@ def test_distributed_settings_include_session_start_context_hook(tmp_path, monke
 
     merged = json.loads(target.read_text(encoding="utf-8"))
     assert _session_context_command(merged) == "uv run yt-workspace-guard context"
+
+
+def test_distributed_settings_include_background_progress_hook(tmp_path, monkeypatch) -> None:
+    target = tmp_path / "downstream" / ".claude" / "settings.json"
+
+    assert _run(REPO_ROOT, target, monkeypatch, "--accept-hooks") == 0
+
+    merged = json.loads(target.read_text(encoding="utf-8"))
+    assert _progress_hook_command(merged) == "uv run yt-progress-hook"
+
+
+def test_repository_settings_include_background_progress_hook() -> None:
+    settings = json.loads((REPO_ROOT / ".claude" / "settings.json").read_text(encoding="utf-8"))
+
+    assert _progress_hook_command(settings) == "uv run yt-progress-hook"
 
 
 def test_workspace_guard_hook_prefilters_unrelated_paths(tmp_path) -> None:
