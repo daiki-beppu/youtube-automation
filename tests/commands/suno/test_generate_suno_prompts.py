@@ -505,17 +505,15 @@ def test_empty_config_does_not_inherit_video_analysis_exclude_styles(channel_dir
     assert all("exclude_styles" not in entry for entry in entries)
 
 
-def test_default_exclude_styles_prevent_sudden_transitions_without_using_style_budget(channel_dir, tmp_path):
-    """急変系語彙は独立 Exclude Styles 欄へ入り、Styles 本文へ混入しないこと."""
+def test_default_config_omits_exclude_styles_from_generated_prompts(channel_dir, tmp_path):
+    """明示設定がなければ Exclude Styles 欄を生成しない."""
     patterns_path = _write_minimal_patterns(tmp_path)
 
     output = generate(patterns_path)
     entries = build_prompt_entries(patterns_path)
 
-    assert "**Exclude Styles:**" in output
-    for term in ("sudden drops", "risers", "drum fills", "hard transitions", "dramatic buildups"):
-        assert term in output
-        assert term not in entries[0]["style"]
+    assert "**Exclude Styles:**" not in output
+    assert all("exclude_styles" not in entry for entry in entries)
 
 
 def test_user_override_wins_over_video_analysis_fallback(channel_dir, tmp_path):

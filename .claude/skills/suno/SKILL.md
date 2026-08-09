@@ -434,9 +434,9 @@ Suno V5.5 では Styles 経由で実楽曲長を制御できない。望む長�
 
 ### 雨音・環境音の制御
 
-**雨音や環境音は楽曲に含めない。** NG ワード: rain, dripping, drops, puddles, splashing, pouring 等。OK ワード: misty, melancholic, nocturnal, bittersweet, foggy 等。全プロンプトに `no rain sound effects, no white noise, no ambient noise` を追加。`exclude_styles` にも `rain sounds, vinyl crackle, white noise, ambient noise` を含める。
+**雨音や環境音は楽曲に含めない。** NG ワード: rain, dripping, drops, puddles, splashing, pouring 等。OK ワード: misty, melancholic, nocturnal, bittersweet, foggy 等。全プロンプトに `no rain sound effects, no white noise, no ambient noise` を追加する。
 
-視聴中の注意を急に奪う展開を避けるため、同梱 `exclude_styles` は `sudden drops, risers, drum fills, hard transitions, dramatic buildups` も既定で含む。これらは Suno の独立した **Exclude Styles** 欄へ入力する値であり、Styles 本文へ連結しないため `style_char_limit` / `full_style_char_limit` の文字数には算入しない。
+同梱 `exclude_styles` は空であり、既定では Suno の **Exclude Styles** 欄を使わない。チャンネルまたは collection で追加の抑止が必要な場合だけ、`config/skills/suno.yaml` または `suno-patterns.yaml` に `sudden drops, risers, drum fills, hard transitions, dramatic buildups` などの短い除外語を明示する。これらは Styles 本文へ連結しないため `style_char_limit` / `full_style_char_limit` の文字数には算入しない。
 
 #### genre_line と exclude_styles の整合性
 

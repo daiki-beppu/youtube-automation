@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `fix(suno)`: 同梱 `exclude_styles` の既定を空にし、チャンネルまたは collection が明示した場合だけ Suno の Exclude Styles 欄を使うように変更（#3313）。
 - `feat(analytics)`: 収集済み動画の ads-per-playback をチャンネル中央値と比較し、低カバレッジの疑いを抽出する `yt-ad-coverage` CLI を追加（#3310）。
 - `feat(analytics)`: 収益メトリクスへ広告インプレッションを追加し、日別・動画別の ads-per-playback を保存する（#3309）。
 - `fix(suno)`: `exclude_styles` が空のときに video_analysis の全 slug から除外語を集約する fallback を撤去し、空設定を空のまま出力へ反映する（#3311）。
