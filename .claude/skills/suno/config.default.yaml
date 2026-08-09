@@ -123,7 +123,7 @@ tracks_per_collection: 20
 # Suno helper の Custom Duration へ渡す collection 共通の目標尺（秒）。
 # channel override に正の整数を明示した場合だけ全 prompt entry へ出力し、未設定時はキーを省略する。
 # 生成後 clip の採用範囲を決める duration_filter とは独立し、自動推定・同期しない。
-# duration_sec: 180
+duration_sec: null
 
 # Suno helper の playlist 採用判定に使う collection 単位 duration guard（秒）。
 # 生成された clip がこの範囲外なら playlist 追加対象から除外される。
