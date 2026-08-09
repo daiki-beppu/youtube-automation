@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import re
+import sys
 import threading
 import time
 from pathlib import Path
@@ -10,6 +12,51 @@ import pytest
 from tests.helpers.paths import REPO_ROOT
 from youtube_automation.commands.media import generate_videos_batch as batch
 from youtube_automation.core.errors import ConfigError
+
+
+def _help_text(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> str:
+    monkeypatch.setattr(sys, "argv", ["yt-generate-videos-batch", "--help"])
+
+    with pytest.raises(SystemExit) as exc_info:
+        batch.main()
+
+    assert exc_info.value.code == 0
+    return " ".join(capsys.readouterr().out.split())
+
+
+def test_help_explains_default_stage_and_batch_target(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    help_text = _help_text(monkeypatch, capsys)
+
+    assert "既定では collections/planning/ のみ" in help_text
+    assert "--include-live で collections/live/ も含める" in help_text
+    assert "assets.master_audio が設定済み" in help_text
+    assert "assets.master_video: null" in help_text
+
+
+def test_help_explains_max_workers_resolution_without_false_choices(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    help_text = _help_text(monkeypatch, capsys)
+
+    assert "1 以上" in help_text
+    assert "CLI > YT_VIDEOUP_MAX_WORKERS > channel skill-config > CPU 検出 > 3" in help_text
+    assert "config/skills/videoup.yaml::batch.max_workers" in help_text
+    assert re.search(r"--max-workers MAX_WORKERS\b", help_text)
+    assert "--max-workers {" not in help_text
+
+
+def test_help_explains_success_state_update_and_partial_failure_exit(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    help_text = _help_text(monkeypatch, capsys)
+
+    assert "成功した collection のみ assets.master_video を更新" in help_text
+    assert "部分失敗は non-zero" in help_text
 
 
 def _collection(root: Path, stage: str, slug: str, *, audio: object, video: object) -> Path:
