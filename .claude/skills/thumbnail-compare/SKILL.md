@@ -25,7 +25,7 @@ description: "Use when 自チャンネルの生成済みサムネイルを競合
 - `config/channel/` が存在すること（`load_config()` でロード可能）。存在しない場合は `/channel-new`（既存チャンネルは取り込みモード）を案内して停止する
 - `config/channel/analytics.json::benchmark.channels` に承認済みベンチマークチャンネルが設定済みであること。未設定なら `/channel-new` / `/discover-competitors` を案内して停止する
 - `data/benchmark_*.json` が存在すること（鮮度が古い場合はスクリプトが自動更新する）。一度も収集していなければ先に `/benchmark` を案内する
-- 自チャンネルのサムネイル `collections/live/*/10-assets/thumbnail.jpg` が 1 件以上存在すること。無ければ比較対象なしとして `/thumbnail` → `/video-upload` の前工程を案内する
+- 自チャンネルの確定済みサムネイル `collections/live/*/10-assets/thumbnail.jpg` または `collections/planning/*/10-assets/thumbnail.jpg` が 1 件以上存在すること。どちらにも無ければ比較対象なしとして `/thumbnail` を案内する
 - ベンチマーク更新は YouTube Data API を使うため `auth/token.json` の OAuth 認証が必要。未認証なら `/setup` を案内する
 
 ## 想定 API call 数
@@ -48,7 +48,11 @@ uv run yt-thumbnail-compare --no-open
 スクリプトが自動で以下を実行:
 1. ベンチマークデータの鮮度チェック → 古ければ全チャンネル一括更新
 2. 1万再生以上の動画サムネイルをダウンロード → `data/thumbnail_compare/benchmark/`
-3. 自チャンネルの全サムネイルをコピー → `data/thumbnail_compare/自チャンネルスラッグ/`
+3. 自チャンネルの確定済みサムネイルを収集 → `data/thumbnail_compare/自チャンネルスラッグ/`
+   - 公開済み: `collections/live/*/10-assets/thumbnail.jpg` → `<channel_slug>_<theme>.jpg`
+   - 企画中: `collections/planning/*/10-assets/thumbnail.jpg` → `<channel_slug>_planning_<collection>.jpg`
+   - `thumbnail-v*.jpg`、`planning-preview.png`、textless の `main.png/jpg` は入力にしない
+   - 同一実体は 1 件にまとめ、同名の既存出力は上書きしない
 4. 全サムネイルを 320x180px に縮小 → `data/thumbnail_compare/small/`
 
 ### Phase 2: 比較分析（サブエージェント並列）
@@ -100,13 +104,15 @@ open data/thumbnail_compare/
 |---|---|---|
 | 入力データ不在 | `data/` のベンチマーク/Analytics スナップショットが無い | 先に `/benchmark`・`/analytics-collect` 等を実行して入力を用意 |
 | サムネ取得失敗 | `yt-thumbnail-compare` の画像 DL が HTTP エラー | YouTube / CDN のステータスを確認し時間を置いて再実行 |
+| 個別 timeout | 画像取得または縮小対象を示す timeout warning | 失敗対象だけを確認する。処理は残りを継続し、成功分の出力と最終件数を提示する |
 
 ## 関連ファイル
 
 - `yt-thumbnail-compare` (`youtube_automation.commands.thumbnail.compare_thumbnails`) — サムネイル収集・縮小スクリプト
 - `data/thumbnail_compare/` — 出力ディレクトリ
 - `data/benchmark_YYYYMMDD.json` — ベンチマーク動画データ（サムネURL）
-- `collections/live/*/10-assets/thumbnail.jpg` — 自チャンネルサムネイル
+- `collections/live/*/10-assets/thumbnail.jpg` — 公開済み自チャンネルサムネイル
+- `collections/planning/*/10-assets/thumbnail.jpg` — 企画中の確定済み自チャンネルサムネイル
 - `docs/benchmarks/common-patterns.md` — サムネイルチェックリスト v4
 - `data/video_analysis/<slug>/<video_id>.json` — `/video-analyze` の `signature_elements` / `hook_structure` 出力（競合のサムネ実装パターン抽出を補強）
   - 冒頭クリップ窓（既定 900 秒、JSON の `analysis_window_sec`）内の実装パターン。動画全尺で出る signature 要素を網羅したものとは扱わない。

@@ -1334,6 +1334,27 @@ def test_channel_new_regeneration_documents_ttp_wf_new_readiness_gate() -> None:
         assert "config/skills/thumbnail.yaml::image_generation.gemini.reference_images.channel_branding" in text
 
 
+def test_thumbnail_compare_documents_planning_thumbnail_runtime_contract() -> None:
+    skill = _read(".claude/skills/thumbnail-compare/SKILL.md")
+    prerequisites = skill.split("## 前提", 1)[1].split("## 想定 API call 数", 1)[0]
+    phase_one = skill.split("### Phase 1: サムネイル収集", 1)[1].split("### Phase 2:", 1)[0]
+    troubleshooting = skill.split("## 障害時ガイダンス", 1)[1].split("## 関連ファイル", 1)[0]
+    related_files = skill.split("## 関連ファイル", 1)[1]
+
+    for section in (prerequisites, phase_one, related_files):
+        assert "collections/live/*/10-assets/thumbnail.jpg" in section
+        assert "collections/planning/*/10-assets/thumbnail.jpg" in section
+
+    for excluded in ("thumbnail-v*.jpg", "planning-preview.png", "main.png/jpg"):
+        assert excluded in phase_one
+
+    assert "<channel_slug>_planning_<collection>.jpg" in phase_one
+    assert "既存出力" in phase_one
+    assert "上書きしない" in phase_one
+    assert "個別 timeout" in troubleshooting
+    assert "成功分" in troubleshooting
+
+
 def test_channel_new_setting_push_mode_contract_is_documented() -> None:
     channel_new = _read(".claude/skills/channel-new/SKILL.md")
     description = _frontmatter(".claude/skills/channel-new/SKILL.md")["description"]
