@@ -353,27 +353,12 @@ uv run yt-generate-image \
 
 これは前提ガードではない。ファイルが存在しない、またはスキーマの見出し・必須キーを満たさない場合は「thumbnail-text-profile なし」と表示し、`config.default.yaml` の現行デフォルト値（チャンネル上書きがあれば deep-merge 後の実効値)のまま標準フローを続行する。エラーで停止しない。
 
-profile が存在する場合、3 セクションを次のとおり適用する:
 
-| profile セクション | 適用先 | 変換 |
-|---|---|---|
-| `## font_tendency` | `image_generation.gemini.thumbnail_text.overlay.font.title`（必要なら `overlay.title.stroke_width` / `stroke_color` も） | 下流環境の既存ローカルフォント（日本語対応 .ttf/.otf/.ttc）から `typeface_classification` / `weight` に近い書体を選定する。`outline: present` なら縁取り（`stroke_width` > 0）を維持する |
-| `## text_content_pattern` | `--title` に渡すコピー生成の制約（config 変更なし） | タイトル行を `line_count_range` / `languages` / `character_count_range` / `copy_pattern` に従って生成する。競合のチャンネル名・コレクション名・シリーズ名・コピー原文（固有の文言）は使わない |
-| `## placement_tendency` | `overlay.layout.anchor` / `margin_x` / `margin_y` | `anchor_position` を 9 アンカー（`top|center|bottom` - `left|center|right`、中央は `center`）のいずれかへ、`margin` をピクセル値へ変換する |
-
-- 値が `unknown` のキーは適用せず、該当項目は実効デフォルト値のまま進む
-- フォント選定は**ローカルに既にあるファイルだけ**を対象にする（`fc-list :lang=ja file family style`、`/System/Library/Fonts/`・`~/Library/Fonts/`・`<channel_dir>/assets/fonts/` の列挙など）。フォントファイルの同梱・自動ダウンロードはしない。日本語対応の候補が見つからない場合は入手先（Google Fonts 等）と配置先 `<channel_dir>/assets/fonts/` を案内し、配置を待つか AI 焼き込み経路へ fallback するかをユーザーに確認する
-- profile 不在でも `overlay.font.title` が未設定の場合は、同じローカルフォント選定手順で日本語対応フォントを 1 つ選んで設定してから合成に進む（profile 由来の傾向は適用しない。これにより分析モード未実行チャンネルでもフォントの揺れだけは解消される）
-- 変換した値は `config/skills/thumbnail.yaml` の該当キーへ、設定内容と根拠（profile のどの傾向か）をユーザーへ提示し承認を得てから書き込む。「設定読み込みゲート」の「勝手に作成しない」は読み取り時の原則であり、この手順は承認を得た明示的な更新として扱う。書き込み後は deep-merge 後の実効値を再確認してから合成に進む
+変換表、ローカルフォント選定、`unknown` の扱いは [quality / operations 詳細](references/quality-and-operations.md) を読む。変換値は設定内容と根拠をユーザーに提示し、**承認を得てから** `config/skills/thumbnail.yaml` へ書き込む。書き込み後は deep-merge 後の実効値を再確認する。
 
 ### 承認済みサムネイルのアーカイブ
 
 `archive.enabled: false` が既定で、従来どおりギャラリーを作成しない。過去作サムネを TTP テンプレートとして蓄積するチャンネルだけ、`config/skills/thumbnail.yaml` で opt-in する:
-
-```yaml
-archive:
-  enabled: true
-```
 
 決定的合成（フォント固定・標準）、AI 焼き込みの手動承認、codex、Two-Phase の各経路では、それぞれの既存の検証・承認順序を変えず、最終 `10-assets/thumbnail.jpg` または `thumbnail.png` の確定直後に次の共通コマンドを 1 回実行する:
 
@@ -381,7 +366,7 @@ archive:
 uv run python .claude/skills/thumbnail/references/archive-approved-thumbnail.py <collection-path>
 ```
 
-自動選択では、既存どおりユーザー承認を省略し、`yt-thumbnail-auto-select --apply` が確定直後にこの処理を内部で実行してから workflow-state を更新する。有効時は `assets/thumbnail-gallery/<collection-dir-name>.<ext>` へ元の拡張子と内容のままコピーする。同じコレクションを再承認した場合は最新の確定サムネで置き換える。無効時は副作用なしで正常終了する。設定不正、確定サムネ欠落、シンボリックリンク、コピー失敗は明示エラーで停止し、アーカイブ成功として扱わない。アーカイブまたは workflow-state 更新の失敗時、自動選択は確定サムネイル、ギャラリー、workflow-state を元に戻す。自動確定後の `/thumbnail-compare` と後工程の順序は従来どおり変更しない。
+自動選択では、既存どおりユーザー承認を省略し、`yt-thumbnail-auto-select --apply` が確定直後にこの処理を内部で実行してから workflow-state を更新する。設定不正、確定サムネ欠落、コピーまたは state 更新失敗は明示エラーで停止し、成功として扱わない。保存先・置換・ロールバックの詳細は [quality / operations 詳細](references/quality-and-operations.md) を読む。自動確定後の `/thumbnail-compare` と後工程の順序は変更しない。
 
 ### Single-Step / TTP モード（`generation_mode: "single_step"`、デフォルト・推奨）
 
@@ -548,41 +533,9 @@ Two-Phase は旧チャンネル向けのフォールバック。使う場合も�
 | **決定的合成経路**（`yt-thumbnail-text`・**既定**） | textless 背景に実フォントファイル（.ttf/.otf/.ttc）を Pillow で描画 | **完全に安定**。同一の背景・テキスト・設定なら常に同一出力 |
 | **AI プロンプト経路**（fallback・非既定） | テキスト付きサムネ生成プロンプトで書体の雰囲気を指示（`thumbnail_text.font` / `single_step.typography_clause`） | **保証されない**。AI 画像生成はフォント名を厳密に再現できず、同じ指示でも生成ごとに書体が揺れる |
 
-### AI プロンプト経路でのフォント指示（fallback）
+標準は「標準生成順序とファイル契約」の `yt-thumbnail-text` 経路とし、textless 背景の承認後に合成する。文字入り画像を `--background` に流用しない。AI プロンプト経路は fallback であり、フォントの厳密な再現を保証しない。
 
-- **single_step（TTP）**: 初回 `diff_prompt_template` はテキスト付き `thumbnail-v*.jpg/png` 候補生成用。書体の一貫性を高めたい場合は、override に本文を設定（既定空文字の opt-in）した上で `single_step.typography_clause` を展開し、`{font_description}` を `thumbnail_text.font.copy` の値で置換する。承認済み `thumbnail.jpg` から作る textless 再生成プロンプトには、`${typography_clause}` やタイトル文字の描画指示を入れない
-- **two_phase**: Phase 2 のオーバーレイプロンプトで `thumbnail_text.font.copy` / `font.genre_tag` の記述が使われる
-
-いずれも改善であって保証ではない。「同一チャンネルで常に同じフォント」が必要なら決定的合成経路を使う。
-
-### 決定的合成経路（yt-thumbnail-text・標準）
-
-標準 `/thumbnail` フローの既定テキスト描画経路（#1907）。textless 背景 `main.png/jpg` の生成・承認から、`yt-thumbnail-text` 合成 → `/thumbnail-compare` → `thumbnail.jpg` 確定までの手順は「標準生成順序とファイル契約」に従う。フォント選定・コピー生成制約・配置へのプロファイル反映は「thumbnail-text-profile 適用」節に従う。
-
-`config/skills/thumbnail.yaml` にフォントファイルを設定する:
-
-```yaml
-image_generation:
-  gemini:
-    thumbnail_text:
-      overlay:
-        font:
-          title: "assets/fonts/NotoSansJP-Bold.ttf"   # channel_dir 相対 or 絶対パス
-```
-
-フォントファイルは Google Fonts 等から入手し `<channel_dir>/assets/fonts/` に置く運用を推奨（フォントのライセンス条項を確認すること）。サイズ・色・縁取り・配置は `overlay.title` / `overlay.channel_name` / `overlay.layout` で調整する（デフォルト値は `config.default.yaml` 参照）。
-
-決定的合成はテキスト描画だけを担う。`--background` に渡す textless 背景は AI 焼き込みテキストを含まない状態で先に確定しておく。AI 焼き込み経路で確定した過去コレクションのサムネを実フォントで作り直す場合も、承認済み `thumbnail.jpg` から textless `main-v*.png/jpg` を AI 再生成・承認してから合成する（文字入り画像を `--background` に流用しない）。
-
-### フォント指定に失敗した場合
-
-`yt-thumbnail-text` は失敗理由と代替手順を明示して終了コード 1 で停止する:
-
-- **`image_generation.gemini.thumbnail_text.overlay.font.title` 未設定** → `config/skills/thumbnail.yaml` に .ttf/.otf/.ttc のパスを設定する
-- **フォントファイルが存在しない** → パスを確認（相対パスは channel_dir 起点）。フォントを `<channel_dir>/assets/fonts/` に配置し直す
-- **ファイルが壊れている・フォントとして読めない** → 別のフォントファイルを用意する
-
-決定的合成を使わない判断をした場合は、AI プロンプト経路（上記 `typography_clause` / two_phase の `thumbnail_text.font`）へフォールバックする。その場合フォントの厳密な再現は保証されないことをユーザーに伝えること。
+font config、`typography_clause`、ライセンス、失敗時の切り替えは [quality / operations 詳細](references/quality-and-operations.md) を読む。`yt-thumbnail-text` が失敗したら理由を表示して終了コード 1 で停止し、無断で fallback しない。
 
 ## 自動選択（auto-selection・opt-in）
 
@@ -596,17 +549,7 @@ TTP 参照画像が固定されているチャンネルでは、候補生成後�
 
 `selection_only` の既存手順は変更しない。`auto_selection.enabled` が false / 未設定のチャンネルも従来の手動承認フローを使う。
 
-有効化（チャンネル側 `config/skills/thumbnail.yaml`）:
-
-```yaml
-image_generation:
-  auto_selection:
-    enabled: true          # opt-in。false / 未設定なら従来の手動承認フロー
-    mode: selection_only   # selection_only（既定）| full（4 ゲートを省略）
-    min_width: 1280        # 候補の最小解像度
-    min_height: 720
-    aspect_tolerance: 0.01 # 16:9 判定の許容誤差
-```
+有効化キーと採点パラメータは [quality / operations 詳細](references/quality-and-operations.md) を読む。
 
 ### `mode: full` のテーマ自動決定
 
@@ -634,11 +577,7 @@ uv run yt-thumbnail-auto-select <collection-path> --dry-run
 uv run yt-thumbnail-auto-select <collection-path> --apply
 ```
 
-選択ロジック（deterministic・学習なし）:
-
-- `image_generation.gemini.reference_images.default` の各参照画像から特徴量（brightness / contrast / saturation / dominant_hue / colorfulness）を抽出して centroid を作る
-- `10-assets/` の候補（`thumbnail-v*.jpg` / `thumbnail-v*.png` / `thumbnail-codex-v*.png`）を採点し、16:9・最小解像度を満たす候補のうち centroid に最も近いもの（distance 最小）を選ぶ
-- apply 時は選択候補を `thumbnail.jpg` にコピー（PNG 候補は JPEG 変換）し、`workflow-state.json` があれば `thumbnail_auto_selection` キーに選択候補・distance・ランキング・実行時刻を記録する
+採点は deterministic・学習なしで、16:9 と最小解像度を満たす候補から参照群に最も近い候補を選ぶ。特徴量、centroid、distance、監査ログの詳細は [quality / operations 詳細](references/quality-and-operations.md) を読む。
 
 失敗時は silent fallback しない（終了コード 1 / 2 の明示エラー）:
 
@@ -671,25 +610,9 @@ uv run yt-thumbnail-check <collection-path>/10-assets/main-v1.png --json
 JSON で返す（終了コード 0=合格 / 1=不合格）。手作業チェックの前段スクリーニングとして、
 TTP 構図逸脱（wet_runway 不在・矩形ロゴ混入・テキスト burned-in 等）を機械的に検出する。
 
-テキスト付き thumbnail 候補生成後（`thumbnail-v1.jpg` / `thumbnail-codex-v1.png`）:
-- [ ] ベンチマーク参照の構図・主役スケール・光・色温度・背景テクスチャが維持されているか
-- [ ] `/thumbnail-compare` で 320px 縮小時のタイトル可読性・コントラスト・主役認識を確認したか
-- [ ] タイトルテキストが `composition_rules.text_lines` の制約内か
-- [ ] `thumbnail_text.channel_name` が表示されているか
-- [ ] 参照元の署名・サイン・透かし・ロゴ・ブランドマークが焼き込まれていないか
-- [ ] `image_generation.gemini.style` に記載されたスタイルが維持されているか
-- [ ] `fixed_character` の外見が維持されているか（ある場合）
-- [ ] キャラの顔が見えているか（`fixed_character.face` の指示通り）
-- [ ] **解剖学チェック（手・指）**: キャラが写っている場合、手・指が解剖学的に正しいか（各手 5 本指・指の分離が明瞭・指の融合や本数異常・溶融が無い・プロポーションが破綻していない）。**特に楽器持ちキャラ・指を伸ばす/握るポーズでは Gemini が破綻しやすい**ため必ず Read ツールで等倍プレビューを開いて目視確認する。NG なら `anatomy_clause` を強調 / 再生成 / プロバイダー切り替え（codex は人体破綻に強い傾向）で対応する（#570）
+テキスト付き thumbnail 候補は、承認前に `/thumbnail-compare` で 320px 可読性・コントラスト・主役認識を確認し、署名・透かし・ロゴと手指の破綻がないことを目視確認する。textless main 候補は承認済み `thumbnail.jpg` の構図を維持し、タイトル文字・字幕・ロゴ・透かし・タイポグラフィ・チャンネル名が残っていないことを確認する。
 
-textless main 候補生成後（`main-v1.png` / `main-v1.jpg`）:
-- [ ] 承認済み `thumbnail.jpg` の構図・主役スケール・光・色温度・背景テクスチャが textless 背景として維持されているか
-- [ ] タイトル文字、字幕、ロゴ、透かし、タイポグラフィ、チャンネル名が残っていないか
-- [ ] 新しい文字や記号が追加されていないか
-- [ ] `uv run yt-thumbnail-check <collection-path>/10-assets/main-v1.png --json` を通したか（JPEG 候補なら `main-v1.jpg` を指定）
-- [ ] `/loop-video` 入力や `/videoup` 静止背景として使える textless 背景になっているか
-
-> **Note (#570)**: キャラ + 手が写る構図で指の破綻が出るチャンネルは、`image_generation.gemini.single_step.anatomy_clause` に本文を設定（既定空文字の opt-in、推奨文面は `config.default.yaml` のコメント）してプロンプト末尾に `${anatomy_clause}` として展開すると、Gemini の手・指破綻（指の融合・本数異常・溶融）の発生率を下げられる。`/collection-ideate` の single_step プレビューは企画参照素材であり最終 thumbnail には流用しないが、参照素材として採用する前にも最低限の QA（手・指 / 署名 / ロゴ）を通すこと。
+完整な thumbnail / textless main の QA チェックリストと `anatomy_clause` の対処は [quality / operations 詳細](references/quality-and-operations.md) を読む。JPEG 候補は `uv run yt-thumbnail-check <collection-path>/10-assets/main-v1.jpg --json` のように実ファイルを指定する。セルフチェック、上記の目視 QA、`/thumbnail-compare` が揃うまで承認・確定しない。
 
 ## 視認性検証と整合性監査の役割分担
 
@@ -706,54 +629,7 @@ textless main 候補生成後（`main-v1.png` / `main-v1.jpg`）:
 
 ## プロンプト保存
 
-プロンプトは `20-documentation/thumbnail-prompts.md` に保存:
-
-```markdown
-# Thumbnail Prompts - <コレクション名>
-
-*プロバイダー: {image_generation.provider}*
-*スタイル: {image_generation.gemini.style}*
-*モデル: {image_generation.gemini.model}*
-
-## Reference Assignments
-
-| attempt | output | reference_image | benchmark_channel |
-|---:|---|---|---|
-| 1 | `10-assets/thumbnail-v1.jpg` | `<参照画像 1>` | `<benchmark_channel>` |
-| 2 | `10-assets/thumbnail-v2.jpg` | `<参照画像 2>` | `<benchmark_channel>` |
-| 3 | `10-assets/thumbnail-v3.jpg` | `<参照画像 3>` | `<benchmark_channel>` |
-
-## Text-Included Thumbnail Prompt (thumbnail.jpg)
-
-\```
-<ベンチマーク参照画像からテキスト付きサムネを生成したプロンプト>
-\```
-
-## Textless Background Prompt (main.png/main.jpg)
-
-\```
-<承認済み thumbnail.jpg からテキストなし背景を生成したプロンプト>
-\```
-
-## A/B Test Pattern Prompts
-
-| pattern | final output | variation |
-|---|---|---|
-| `a` | `10-assets/thumbnail-a.jpg` | `<pattern a variation>` |
-| `b` | `10-assets/thumbnail-b.jpg` | `<pattern b variation>` |
-
-### Pattern a Final Prompt
-
-\```
-<diff_prompt_template 展開結果 + pattern a variation>
-\```
-
-### Pattern b Final Prompt
-
-\```
-<diff_prompt_template 展開結果 + pattern b variation>
-\```
-```
+プロンプトは `20-documentation/thumbnail-prompts.md` に保存する。provider / model / style、attempt ごとの output / reference / benchmark channel、テキスト付き生成プロンプト、textless 背景生成プロンプト、A/B pattern ごとの最終プロンプトを欠落なく記録する。正規テンプレートは [quality / operations 詳細](references/quality-and-operations.md) を使う。
 
 ## ファイル命名ルール（上書き禁止）
 
@@ -800,7 +676,7 @@ JSON
 
 ## stock 退避と再利用
 
-不採用画像は `<channel_dir>/assets/stock/<theme-slug>/` に画像本体 + 隣接 `<image>.meta.json` で退避される（schema_version=1）。メタには prompt / provider / model / generation_mode / source_collection / reference_images / generated_at / rejected_at を保存し、将来別コレクションの参照画像として再利用できる。
+不採用画像は `<channel_dir>/assets/stock/<theme-slug>/` に画像と隣接メタデータを退避する。メタデータの schema、retention、参照プールへの合成条件は [quality / operations 詳細](references/quality-and-operations.md) を読む。
 
 stock の操作 CLI:
 
@@ -810,38 +686,9 @@ stock の操作 CLI:
 | `uv run yt-stock-preview [--theme T] [--limit N]` | macOS `open` でプレビュー起動 |
 | `uv run yt-stock-prune [--retention-days N] [--max-per-theme N] [--dry-run]` | 古い画像 / 上限超過分を削除（config 既定値あり） |
 
-`config/skills/thumbnail.yaml` の `image_generation.stock`:
-
-```yaml
-image_generation:
-  stock:
-    enabled: true          # false で退避を無効化（unlink のみ）
-    retention_days: 90     # uv run yt-stock-prune の保持日数
-    max_per_theme: 50      # uv run yt-stock-prune の上限
-```
-
 ### stock 再利用（参照画像プールへの自動合成）
 
-PR-B (#364): stock 画像は `reference_images.default` とは別スコープの参照プールとして扱う。TTP single_step の標準フローでは同じベンチマークチャンネル内の別サムネだけを使い、`--ttp-strict-references` では stock 混在を拒否するため、stock 合成は default OFF。必要なチャンネルだけ `enabled: true` を明示し、TTP strict ではない汎用参照生成に限って `resolve_stock_refs()` の結果を `--reference` に追加する。
-
-- **デフォルト動作**: `enabled: false` で stock は混ぜない。
-- **有効化**: `config/skills/thumbnail.yaml` で `image_generation.gemini.reference_images.stock.enabled: true` を明示する。TTP strict 候補生成では使わない。
-- **採用ログ**: 1 枚採用ごとに stderr へ `[INFO] stock 採用: <path> (theme=<t>, role=thumbnail_candidate)` を出力。監査時は stderr を grep。
-- **チューニング**: `max_count` / `shuffle` / `theme_match: "any"` / `source_role: null` (role フィルタなし) などをチャンネル側で調整。
-
-```yaml
-image_generation:
-  gemini:
-    reference_images:
-      stock:
-        enabled: false
-        max_count: 3
-        theme_match: "exact"     # "any" で全テーマ横断
-        source_role: "thumbnail_candidate"
-        shuffle: true
-        seed: null
-        fallback_when_empty: true
-```
+stock 合成は default OFF。TTP strict 候補生成では stock を混ぜない。必要なチャンネルだけ `image_generation.gemini.reference_images.stock.enabled: true` を明示し、TTP strict ではない汎用参照生成に限る。設定例と採用ログの読み方は [quality / operations 詳細](references/quality-and-operations.md) を読む。
 
 ## 所要時間と完了報告
 
@@ -851,12 +698,7 @@ image_generation:
 
 ## 障害時ガイダンス
 
-| 状況 | 兆候 | 対処 |
-|---|---|---|
-| GCP ADC 未取得/失効 | `ConfigError` / ADC 認証エラー | `gcloud auth application-default login`（必要なら `set-quota-project`）を再実行 |
-| Vertex AI rate | HTTP 429 | 時間を置いて再実行。並列実行を避け順次処理する |
-| API 障害 / サービス停止 | HTTP 503 / タイムアウト | Google Cloud（Vertex AI）のステータスを確認し、時間を置いて再実行 |
-| 画像 provider 障害 | 片方の provider のエラー | `image_generation.provider` を `gemini` ↔ `openai` で切り替える |
+障害は silent fallback せず停止し、エラーと provider を報告する。ADC、rate limit、service outage、provider 切り替えの詳細は [quality / operations 詳細](references/quality-and-operations.md) を読む。
 
 ## Next Step
 

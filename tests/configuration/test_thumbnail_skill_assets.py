@@ -33,6 +33,11 @@ def _read_thumbnail_generation_workflows() -> str:
     return path.read_text(encoding="utf-8")
 
 
+def _read_thumbnail_quality_and_operations() -> str:
+    path = _repo_root() / ".claude" / "skills" / "thumbnail" / "references" / "quality-and-operations.md"
+    return path.read_text(encoding="utf-8")
+
+
 def _read_loop_video_skill() -> str:
     path = _repo_root() / ".claude" / "skills" / "loop-video" / "SKILL.md"
     return path.read_text(encoding="utf-8")
@@ -503,11 +508,20 @@ def test_thumbnail_skill_applies_thumbnail_text_profile_with_default_fallback() 
         "### thumbnail-text-profile 適用（#1907）",
         "### 承認済みサムネイルのアーカイブ",
     )
+    profile_details = _slice_between(
+        _read_thumbnail_quality_and_operations(),
+        "## thumbnail-text-profile 変換",
+        "## 承認済みサムネイルのアーカイブ",
+    )
 
     for required in (
         "docs/benchmarks/thumbnail-text-profile.md",
         "`schema_version: 1`",
         ".claude/skills/channel-new/references/analysis-mode.md",
+    ):
+        assert required in profile_block
+
+    for required in (
         "## font_tendency",
         "## text_content_pattern",
         "## placement_tendency",
@@ -522,18 +536,18 @@ def test_thumbnail_skill_applies_thumbnail_text_profile_with_default_fallback() 
         "日本語対応 .ttf/.otf/.ttc",
         "競合のチャンネル名・コレクション名・シリーズ名・コピー原文",
     ):
-        assert required in profile_block
+        assert required in profile_details
 
     # profile 不在は前提ガードにしない（現行デフォルト値で続行）
     assert "前提ガードではない" in profile_block
     assert "エラーで停止しない" in profile_block
-    assert "unknown" in profile_block
+    assert "unknown" in profile_details
     # フォントはローカル既存ファイルのみ（同梱・自動ダウンロードはスコープ外）
-    assert "同梱・自動ダウンロードはしない" in profile_block
+    assert "同梱・自動ダウンロードはしない" in profile_details
     # profile 不在かつフォント未設定でもローカル選定でフォント揺れを解消する
-    assert "profile 不在でも `overlay.font.title` が未設定の場合" in profile_block
+    assert "profile 不在でも `overlay.font.title` が未設定なら" in profile_details
     # config への書き込みはユーザー承認つきの明示更新
-    assert "承認を得てから書き込む" in profile_block
+    assert "承認を得てから" in profile_block
 
 
 def test_thumbnail_archive_is_opt_in_and_wired_after_every_approval_path() -> None:
@@ -635,20 +649,25 @@ def test_thumbnail_skill_applies_typography_to_thumbnail_prompt_only() -> None:
     """#1901: single_step の書体指定は thumbnail 生成だけに使う。"""
     skill = _read_thumbnail_skill()
     prompt_construction_block = _slice_between(skill, "#### プロンプト構築", "#### 生成コマンド")
-    font_block = _slice_between(skill, "## フォント安定化", "## 品質チェック")
+    font_block = _slice_between(skill, "## フォント安定化", "## 自動選択")
+    font_details = _slice_between(_read_thumbnail_quality_and_operations(), "## フォント運用", "## auto-selection")
 
     assert "typography_clause" in prompt_construction_block
     assert "text_strip_clause" in prompt_construction_block
-    assert "テキスト付き `thumbnail-v*.jpg/png` 候補生成用" in font_block
-    assert "`single_step.typography_clause` を展開" in font_block
-    assert "textless 再生成プロンプトには、`${typography_clause}`" in font_block
-    assert "初回 `diff_prompt_template` は textless" not in font_block
+    assert "テキスト付き `thumbnail-v*.jpg/png` 候補生成用" in font_details
+    assert "`single_step.typography_clause` を opt-in で展開" in font_details
+    assert "textless 再生成プロンプトには `${typography_clause}`" in font_details
+    assert "初回 `diff_prompt_template` は textless" not in font_block + font_details
 
 
 def test_thumbnail_skill_prompt_log_and_file_contract_cover_issue_1310_outputs() -> None:
     """#1310: prompt 保存とファイル命名が thumbnail/main/loop の役割を明示する。"""
     skill = _read_thumbnail_skill()
-    prompt_block = _slice_between(skill, "## プロンプト保存", "## ファイル命名ルール（上書き禁止）")
+    prompt_block = _slice_between(
+        _read_thumbnail_quality_and_operations(),
+        "## プロンプト保存テンプレート",
+        "## stock 退避と再利用",
+    )
     naming_block = _slice_between(skill, "## ファイル命名ルール（上書き禁止）", "### クリーンアップ")
 
     for required in (
@@ -658,6 +677,13 @@ def test_thumbnail_skill_prompt_log_and_file_contract_cover_issue_1310_outputs()
         "テキスト付きサムネを生成したプロンプト",
         "`10-assets/thumbnail-v1.jpg`",
         "`10-assets/thumbnail-v2.jpg`",
+        "`10-assets/thumbnail-v3.jpg`",
+        "`<参照画像 3>`",
+        "| pattern | final output | variation |",
+        "`10-assets/thumbnail-a.jpg`",
+        "`<pattern a variation>`",
+        "`10-assets/thumbnail-b.jpg`",
+        "`<pattern b variation>`",
     ):
         assert required in prompt_block
 
@@ -676,29 +702,38 @@ def test_thumbnail_skill_quality_check_separates_thumbnail_and_textless_main_qa(
     """#1310: 品質チェックは文字入り thumbnail と textless main を逆に扱わない。"""
     skill = _read_thumbnail_skill()
     qa_block = _slice_between(skill, "## 品質チェック", "## 視認性検証")
+    qa_details = _slice_between(
+        _read_thumbnail_quality_and_operations(),
+        "## QA チェックリスト",
+        "## プロンプト保存テンプレート",
+    )
 
     for required in (
         "テキスト付き thumbnail 候補生成後",
-        "`thumbnail-v1.jpg` / `thumbnail-codex-v1.png`",
         "ベンチマーク参照の構図",
         "/thumbnail-compare",
         "タイトル可読性",
-        "`thumbnail_text.channel_name` が表示されているか",
+        "`composition_rules.text_lines`",
+        "`thumbnail_text.channel_name` が表示され",
+        "`image_generation.gemini.style`",
+        "`fixed_character` の外見",
+        "`fixed_character.face`",
         "textless main 候補生成後",
-        "`main-v1.png` / `main-v1.jpg`",
         "承認済み `thumbnail.jpg` の構図",
-        "タイトル文字、字幕、ロゴ、透かし、タイポグラフィ、チャンネル名が残っていないか",
-        "uv run yt-thumbnail-check <collection-path>/10-assets/main-v1.png --json",
+        "タイトル文字、字幕、ロゴ、透かし、タイポグラフィ、チャンネル名が残っていない",
     ):
-        assert required in qa_block
+        assert required in qa_details
 
-    assert qa_block.find("テキスト付き thumbnail 候補生成後") < qa_block.find("textless main 候補生成後")
-    assert "承認済み `main.png/jpg` の構図" not in qa_block
+    assert "uv run yt-thumbnail-check <collection-path>/10-assets/main-v1.png --json" in qa_block
+    assert "承認・確定しない" in qa_block
+    assert qa_details.find("テキスト付き thumbnail 候補生成後") < qa_details.find("textless main 候補生成後")
+    assert "承認済み `main.png/jpg` の構図" not in qa_block + qa_details
 
-    assert "Phase 1 生成後" not in qa_block
-    assert "Phase 2 生成後" not in qa_block
-    assert "テキストが入っていないか" not in qa_block
-    assert "single_step プレビューを最終 thumbnail に流用" not in qa_block
+    combined = qa_block + qa_details
+    assert "Phase 1 生成後" not in combined
+    assert "Phase 2 生成後" not in combined
+    assert "テキストが入っていないか" not in combined
+    assert "single_step プレビューを最終 thumbnail に流用" not in combined
 
 
 def test_thumbnail_skill_cleanup_archives_png_candidates() -> None:
@@ -755,10 +790,10 @@ def test_thumbnail_skill_deterministic_text_path_is_standard_default() -> None:
     """#1907: 決定的合成経路が標準の既定で、textless 背景を先に確定してから合成する。"""
     skill = _read_thumbnail_skill()
     font_block = _slice_between(skill, "## フォント安定化", "## 自動選択")
-    deterministic_block = _slice_between(
-        skill,
-        "### 決定的合成経路（yt-thumbnail-text・標準）",
-        "### フォント指定に失敗した場合",
+    font_details = _slice_between(
+        _read_thumbnail_quality_and_operations(),
+        "## フォント運用",
+        "## auto-selection",
     )
 
     # 経路表の既定は決定的合成、AI プロンプト経路は fallback
@@ -766,19 +801,14 @@ def test_thumbnail_skill_deterministic_text_path_is_standard_default() -> None:
     assert "**AI プロンプト経路**（fallback・非既定）" in font_block
     assert "**AI プロンプト経路**（既定）" not in font_block
 
-    assert "既定テキスト描画経路（#1907）" in deterministic_block
-    assert "「標準生成順序とファイル契約」に従う" in deterministic_block
-    assert "「thumbnail-text-profile 適用」節に従う" in deterministic_block
-    assert "決定的合成はテキスト描画だけを担う" in deterministic_block
-    # 文字入り画像を背景に流用しない（過去コレクションの作り直しでも textless を先に用意する）
-    assert (
-        "承認済み `thumbnail.jpg` から textless `main-v*.png/jpg` を AI 再生成・承認してから合成する"
-        in deterministic_block
-    )
-    assert "文字入り画像を `--background` に流用しない" in deterministic_block
+    assert "標準生成順序とファイル契約" in font_block
+    assert "textless 背景の承認後に合成" in font_block
+    assert "image_generation.gemini.thumbnail_text.overlay.font.title" in font_details
+    assert "文字入り画像を `--background` に流用しない" in font_block
     # 旧契約（テキスト付き先行）の手順は標準から撤去済み
-    assert "最初にテキスト付き `thumbnail-v*.jpg` を生成・承認して" not in deterministic_block
-    assert "標準 `/thumbnail` フローから自動分岐しない" not in deterministic_block
+    combined = font_block + font_details
+    assert "最初にテキスト付き `thumbnail-v*.jpg` を生成・承認して" not in combined
+    assert "標準 `/thumbnail` フローから自動分岐しない" not in combined
 
 
 def test_loop_video_skill_uses_textless_main_image_and_respects_disabled_channels() -> None:
@@ -859,7 +889,11 @@ def test_thumbnail_skill_documents_ab_test_outputs_prompts_and_approval_contract
     ):
         assert required in block
 
-    prompt_block = _slice_between(skill, "## プロンプト保存", "## ファイル命名ルール（上書き禁止）")
+    prompt_block = _slice_between(
+        _read_thumbnail_quality_and_operations(),
+        "## プロンプト保存テンプレート",
+        "## stock 退避と再利用",
+    )
     assert "## A/B Test Pattern Prompts" in prompt_block
     assert "Pattern a Final Prompt" in prompt_block
     assert "Pattern b Final Prompt" in prompt_block
@@ -1618,12 +1652,50 @@ def test_thumbnail_generation_workflows_owns_generation_details_once() -> None:
         assert combined.count(detail) == 1
 
 
+def test_thumbnail_skill_routes_quality_details_without_moving_hard_gates() -> None:
+    skill = _read_thumbnail_skill()
+    route = "[quality / operations 詳細](references/quality-and-operations.md)"
+
+    assert skill.index("## ワークフロー") < skill.index(route) < skill.index("## フォント安定化")
+    assert skill.count("uv run yt-thumbnail-check") == 5
+    assert skill.count("uv run yt-thumbnail-auto-select") == 3
+    assert skill.count("archive-approved-thumbnail.py") == 5
+    assert skill.count("uv run yt-stock-archive") == 1
+    assert "## 完了条件" in skill
+    assert "**Hard Gate**" in "\n".join(skill.splitlines()[:60])
+    assert "/thumbnail-compare" in skill
+    assert "ユーザー承認" in skill
+    assert "thumbnail.approved = true" in skill
+
+
+def test_thumbnail_quality_and_operations_owns_details_once() -> None:
+    skill = _read_thumbnail_skill()
+    details = _read_thumbnail_quality_and_operations()
+    combined = skill + details
+    moved_details = (
+        "| `## font_tendency` |",
+        "シンボリックリンクやコピー失敗は成功として扱わない",
+        "brightness / contrast / saturation / dominant_hue / colorfulness",
+        "**解剖学チェック（手・指）**",
+        "# Thumbnail Prompts - <コレクション名>",
+        "schema_version=1",
+        "| Vertex AI rate | HTTP 429 |",
+    )
+    for detail in moved_details:
+        assert detail not in skill
+        assert details.count(detail) == 1
+        assert combined.count(detail) == 1
+
+
 def test_thumbnail_skill_quality_check_covers_hand_anatomy() -> None:
     """#570: 品質チェックに手・指の解剖学項目が含まれている。"""
-    skill = _read_thumbnail_skill()
-    quality_block = _slice_between(skill, "## 品質チェック", "## 視認性検証と整合性監査の役割分担")
+    quality_block = _slice_between(
+        _read_thumbnail_quality_and_operations(),
+        "## QA チェックリスト",
+        "## プロンプト保存テンプレート",
+    )
 
     # issue #570 の修正要件 1: 手・指の解剖学チェック項目
     assert "解剖学" in quality_block
     assert "5 本指" in quality_block or "五本指" in quality_block
-    assert "楽器" in quality_block
+    assert "指の分離" in quality_block
