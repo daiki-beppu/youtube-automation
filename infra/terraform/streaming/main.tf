@@ -71,6 +71,11 @@ resource "vultr_instance" "this" {
     ssh_host_private_key = tls_private_key.ssh_host.private_key_openssh
     ssh_host_public_key  = local.ssh_host_public_key
   })
+
+  lifecycle {
+    # Vultr API が import 時に復元できない ForceNew 属性だけで稼働中 VPS を replace しない。
+    ignore_changes = [user_data, ssh_key_ids]
+  }
 }
 
 resource "null_resource" "deploy" {
