@@ -314,7 +314,11 @@ export function formatServerSourceLabel(
   source: LocalServerSource,
   helper: HelperProcessName
 ): string {
-  return `${source.label} | ${helper}`;
+  const channelName =
+    helper === "distrokid-helper"
+      ? (source.channelName ?? source.label)
+      : source.label;
+  return `${channelName} | ${helper}`;
 }
 
 /** 拡張初回起動時のローカル配信元候補。 */
