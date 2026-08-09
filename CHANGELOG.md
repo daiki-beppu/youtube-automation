@@ -150,6 +150,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `feat(collection-ideate)`: 明示的な batch plan mode で N 件の企画を既存 collection と batch 内の全組合せに対して相互差別化し、全件承認・件数・slug 一意性・provenance を検証した manifest だけを atomic に保存する契約を追加した。通常の single collection 企画契約は維持する（#3262）。
 - `feat(wf-auto)`: action 別手作業基準を同じ collection / action の work item 数へ適用し、全 retry の AI・人間時間を差し引いた「AI 込み削減時間」と「人間が浮いた時間」を action 別・全体で返す集計を追加した。負値は available な 0 に丸め、基準欠落と legacy timing は unavailable を維持する（#3273）。
 - `feat(wf-auto)`: schema v2 history の全 attempt を status に関係なく同じ collection / action の work item と action 別に集約し、AI 秒・人間秒・attempt 数・work item 数を決定的に返す純粋関数を追加した。schema v1 または timing 欠落は 0 とせず unavailable を返す（#3272）。
+- `feat(wf-auto)`: canonical action の開始時刻を state CLI の `record` へ渡し、success / failed / blocked の全 attempt に閉じた AI 実行区間を append-only で保存できる契約を追加した（#2962）。
 - `feat(wf-auto)`: workflow attempt に AI / human の型付き timing segment と種別別秒数を append-only で記録する schema v2 を追加した（#3248）。
 - `feat(wf-auto)`: schema v1 の `.automation-run/history.json` を時間未取得として読み出し、根拠のない実行時間を推測しない後方互換契約を追加した（#3247）。
 - `feat(wf-auto)`: `.automation-run/history.json` を schema v2 へ拡張し、attempt ごとの AI / human 区間と種別別秒数を append-only で保持できるようにした。schema v1 は時間を推測せず unavailable として読み、open segment・時刻逆転・負 duration は非破壊で拒否する（#2959）。
