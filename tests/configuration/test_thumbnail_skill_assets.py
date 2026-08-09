@@ -1009,6 +1009,34 @@ def test_collection_ideate_persists_only_the_adopted_reference_after_selection()
     assert '"$COLLECTION_PATH" "${REF_PATHS[$REF_INDEX]}"' in next_step
 
 
+def test_collection_ideate_hands_adopted_preview_to_final_thumbnail_contract() -> None:
+    ideate_dir = _repo_root() / ".claude" / "skills" / "collection-ideate"
+    skill = (ideate_dir / "SKILL.md").read_text(encoding="utf-8")
+    config = (ideate_dir / "config.default.yaml").read_text(encoding="utf-8")
+
+    next_step = _slice_between(skill, "## Next Step", "### コスト拒否 / 生成失敗で企画参照画像が無い場合")
+
+    assert "最終 `thumbnail.jpg` の正規入力" in next_step
+    assert "最終 `thumbnail.jpg` の正規入力" in config
+    assert "企画参照素材" not in next_step
+    assert "企画参照素材" not in config
+    assert "別の文字入り候補" not in next_step
+    assert "`main.png` にはコピーしない" in next_step
+
+
+def test_collection_ideate_routes_missing_preview_to_thumbnail_fallback() -> None:
+    skill = (_repo_root() / ".claude" / "skills" / "collection-ideate" / "SKILL.md").read_text(encoding="utf-8")
+
+    no_image = _slice_between(
+        skill,
+        "### コスト拒否 / 生成失敗で企画参照画像が無い場合",
+        "企画選択後:",
+    )
+
+    assert "`/thumbnail <theme>` フォールバック" in no_image
+    assert "planning-preview.png コピーはスキップ" in no_image
+
+
 def test_collection_ideate_parallel_generation_failure_continues_to_later_candidates(tmp_path: Path) -> None:
     references = [tmp_path / "fail.jpg", tmp_path / "success.jpg"]
 
