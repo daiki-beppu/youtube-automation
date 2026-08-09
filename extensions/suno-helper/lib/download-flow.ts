@@ -55,6 +55,15 @@ export interface DownloadContext {
 }
 
 const DOWNLOAD_COMPLETE_TIMEOUT_MS = 660000;
+const DOWNLOADING_PHASE_SUFFIX = "(phase=downloading)";
+
+function withDownloadingPhase(error: unknown): Error {
+  const message = error instanceof Error ? error.message : String(error);
+  if (message.endsWith(DOWNLOADING_PHASE_SUFFIX)) {
+    return error instanceof Error ? error : new Error(message);
+  }
+  return new Error(`${message} ${DOWNLOADING_PHASE_SUFFIX}`);
+}
 
 export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
   let downloadCompleteResolver:
@@ -102,7 +111,81 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
     });
   }
 
-  async function performDownload(
+  async function startDownloadWatcher(
+    format: DownloadContext["format"]
+  ): Promise<void> {
+    const startResult = await sendMessage("startDownload", { format });
+    if (!startResult?.ok) {
+      throw new Error(
+        startResult?.message ?? "Download all 監視を開始できませんでした"
+      );
+    }
+  }
+
+  async function cancelDownloadWatcher(): Promise<void> {
+    downloadCompleteResolver = null;
+    await sendMessage("cancelDownload", undefined).catch(
+      (cancelErr: unknown) => {
+        console.warn("[suno-helper] cancelDownload 中継失敗:", cancelErr);
+      }
+    );
+  }
+
+  async function waitForDownloadedFilename(
+    format: DownloadContext["format"]
+  ): Promise<string | null> {
+    const downloadPromise = waitForDownloadComplete();
+    let watcherActive = true;
+    try {
+      await triggerDownloadAll(format);
+      const downloadResult = await downloadPromise;
+      if (deps.isAborted()) return null;
+      if (!downloadResult) {
+        throw new Error("Download all がタイムアウトしました");
+      }
+      watcherActive = false;
+      if (!downloadResult.ok) {
+        throw new Error(downloadResult.message);
+      }
+      return downloadResult.filename;
+    } finally {
+      if (watcherActive) {
+        await cancelDownloadWatcher();
+      }
+    }
+  }
+
+  async function postDownloadedArchive(
+    context: DownloadContext,
+    collectionId: string,
+    progressTotal: number,
+    expectedFileCount: number,
+    filename: string
+  ): Promise<void> {
+    await deps.onDownloadComplete?.(filename);
+    const postResult = await sendMessage("postDownloaded", {
+      baseUrl: context.baseUrl,
+      collectionId,
+      body: {
+        file_count: expectedFileCount,
+        expected_file_count: expectedFileCount,
+        format: context.format,
+        download_path: filename,
+      },
+    });
+    // 部分完了（Suno の生成数不足）はサーバーが warning 付き 200 で受理する (#1913)。
+    // フローは止めず、不足をユーザーへ通知するだけに留める
+    if (postResult?.warning) {
+      console.warn(`[suno-helper] 部分ダウンロード: ${postResult.warning}`);
+      deps.emitProgress({
+        phase: PHASE.DOWNLOADING,
+        total: progressTotal,
+        message: `部分ダウンロード（不足あり）: ${postResult.warning}`,
+      });
+    }
+  }
+
+  async function performDownloadAttempt(
     context: DownloadContext,
     collectionId: string,
     progressTotal: number,
@@ -115,62 +198,33 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
       total: progressTotal,
       message: `${context.format.toUpperCase()} 形式`,
     });
-    const startResult = await sendMessage("startDownload", {
-      format: context.format,
-    });
-    if (!startResult?.ok) {
-      throw new Error(
-        startResult?.message ?? "Download all 監視を開始できませんでした"
-      );
-    }
-    const downloadPromise = waitForDownloadComplete();
-    let watcherActive = true;
+    await startDownloadWatcher(context.format);
+    const filename = await waitForDownloadedFilename(context.format);
+    if (filename === null) return;
+    await postDownloadedArchive(
+      context,
+      collectionId,
+      progressTotal,
+      expectedFileCount,
+      filename
+    );
+  }
+
+  async function performDownload(
+    context: DownloadContext,
+    collectionId: string,
+    progressTotal: number,
+    expectedFileCount: number
+  ): Promise<void> {
     try {
-      await triggerDownloadAll(context.format);
-
-      const downloadResult = await downloadPromise;
-
-      if (deps.isAborted()) return;
-
-      if (!downloadResult) {
-        throw new Error("Download all がタイムアウトしました");
-      }
-      watcherActive = false;
-      if (!downloadResult.ok) {
-        throw new Error(downloadResult.message);
-      }
-
-      await deps.onDownloadComplete?.(downloadResult.filename);
-
-      const postResult = await sendMessage("postDownloaded", {
-        baseUrl: context.baseUrl,
+      await performDownloadAttempt(
+        context,
         collectionId,
-        body: {
-          file_count: expectedFileCount,
-          expected_file_count: expectedFileCount,
-          format: context.format,
-          download_path: downloadResult.filename,
-        },
-      });
-      // 部分完了（Suno の生成数不足）はサーバーが warning 付き 200 で受理する (#1913)。
-      // フローは止めず、不足をユーザーへ通知するだけに留める
-      if (postResult?.warning) {
-        console.warn(`[suno-helper] 部分ダウンロード: ${postResult.warning}`);
-        deps.emitProgress({
-          phase: PHASE.DOWNLOADING,
-          total: progressTotal,
-          message: `部分ダウンロード（不足あり）: ${postResult.warning}`,
-        });
-      }
-    } finally {
-      if (watcherActive) {
-        downloadCompleteResolver = null;
-        await sendMessage("cancelDownload", undefined).catch(
-          (cancelErr: unknown) => {
-            console.warn("[suno-helper] cancelDownload 中継失敗:", cancelErr);
-          }
-        );
-      }
+        progressTotal,
+        expectedFileCount
+      );
+    } catch (error) {
+      throw withDownloadingPhase(error);
     }
   }
 
