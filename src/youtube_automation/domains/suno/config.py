@@ -50,11 +50,11 @@ class ResolvedSunoConfig:
 
 
 def resolve_suno_config(suno_cfg: Mapping[str, object]) -> ResolvedSunoConfig:
-    fallback_genre, fallback_exclude = collect_video_analysis_suno_presets()
+    fallback_genre = collect_video_analysis_genre_line()
     return ResolvedSunoConfig(
         raw=suno_cfg,
         genre_line=str(suno_cfg.get("genre_line") or fallback_genre),
-        exclude_styles=str(suno_cfg.get("exclude_styles") or fallback_exclude),
+        exclude_styles=str(suno_cfg.get("exclude_styles") or ""),
     )
 
 
@@ -64,17 +64,15 @@ def infer_suno_mode(genre_line: str) -> str:
     return "vocal" if _VOCAL_PATTERN.search(genre_line) else "instrumental"
 
 
-def collect_video_analysis_suno_presets() -> tuple[str, str]:
+def collect_video_analysis_genre_line() -> str:
     try:
         base = channel_dir() / "data" / VIDEO_ANALYSIS_DIRNAME
     except ConfigError:
-        return "", ""
+        return ""
     if not base.exists():
-        return "", ""
+        return ""
 
     genre_counter: Counter[str] = Counter()
-    exclude_seen: dict[str, None] = {}
-
     for slug_dir in sorted(base.iterdir()):
         if not slug_dir.is_dir():
             continue
@@ -88,11 +86,8 @@ def collect_video_analysis_suno_presets() -> tuple[str, str]:
                 continue
             for phrase in _split_csv(preset.get("genre_line", "")):
                 genre_counter[phrase] += 1
-            for phrase in _split_csv(preset.get("exclude_styles", "")):
-                exclude_seen.setdefault(phrase, None)
 
-    top_genre = ", ".join(phrase for phrase, _ in genre_counter.most_common(_TOP_GENRE_PHRASES))
-    return top_genre, ", ".join(exclude_seen)
+    return ", ".join(phrase for phrase, _ in genre_counter.most_common(_TOP_GENRE_PHRASES))
 
 
 def _split_csv(value: object) -> list[str]:
