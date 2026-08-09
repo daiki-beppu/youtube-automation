@@ -1112,6 +1112,205 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
     }
   );
 
+  it.each(["serial", "queue"] as const)(
+    "Given unattended-active %s mode の CAPTCHA が timeout まで残る When Create 前に待つ Then fatal CAPTCHA state で未投入 entry を保持する",
+    async (runMode) => {
+      makeViewButton("Newest ▼");
+      makeViewButton("Grid");
+      makeTextarea(null);
+      makeTextarea("lyrics-textarea");
+      const clickGenerate = vi.fn();
+      makeGenerateButtonWithClickObserver(clickGenerate);
+      addCompletedRemixCard();
+      const captcha = document.createElement("iframe");
+      captcha.src = "https://challenges.cloudflare.com/turnstile/v0/widget";
+      markBbox(captcha, 300, 65);
+      document.body.appendChild(captcha);
+      await loadContentScript();
+      harness.waitForCaptchaClear.mockImplementation(async (options) => {
+        options.onWaitStart?.();
+        throw new Error("captcha challenge が timeout しました");
+      });
+      harness.runEntryWithRetry.mockImplementation(async (options) => {
+        try {
+          await options.attempt();
+        } catch (error) {
+          expect(options.isFatal(error)).toBe(true);
+          return { outcome: "fatal", error };
+        }
+        return { outcome: "ok" };
+      });
+      harness.sendMessage.mockImplementation((type: string) =>
+        type === "releaseUnattendedLease"
+          ? Promise.resolve({ released: true })
+          : undefined
+      );
+      const entries = makePromptEntries(2);
+
+      expect(
+        getRunHandler()({
+          data: {
+            ...makeRunPayload(entries),
+            runMode,
+            unattended: {
+              request: {
+                version: 1,
+                requestId: `scheduled-timeout-${runMode}`,
+                baseUrl: "http://localhost:8787",
+                collectionId: "20260601-clm-preflight-collection",
+                downloadFormat: "wav",
+                limits: {
+                  maxEntries: 2,
+                  maxConcurrentGenerations: 1,
+                  maxRetries: 1,
+                },
+              },
+              deferredIndices: [],
+              leaseToken: "lease-token",
+            },
+          },
+        })
+      ).toEqual({ ok: true });
+
+      await vi.waitFor(() =>
+        expect(harness.writeUnattendedRunState).toHaveBeenCalledWith(
+          expect.objectContaining({
+            checkpoint: "entries",
+            pendingEntryIndices: [0, 1],
+            status: "manual-intervention",
+            stopReason: "captcha-required",
+          })
+        )
+      );
+      expect(harness.runEntryWithRetry).toHaveBeenCalledOnce();
+      expect(clickGenerate).not.toHaveBeenCalled();
+      expect(progressPayloads()).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ phase: PHASE.ERROR }),
+        ])
+      );
+    }
+  );
+
+  it("Given manual mode の CAPTCHA 待機が失敗 When Create 前 guard が終了する Then generic error のまま retry 契約へ返す", async () => {
+    makeViewButton("Newest ▼");
+    makeViewButton("Grid");
+    makeTextarea(null);
+    makeTextarea("lyrics-textarea");
+    const clickGenerate = vi.fn();
+    makeGenerateButtonWithClickObserver(clickGenerate);
+    addCompletedRemixCard();
+    const captcha = document.createElement("iframe");
+    captcha.src = "https://challenges.cloudflare.com/turnstile/v0/widget";
+    markBbox(captcha, 300, 65);
+    document.body.appendChild(captcha);
+    await loadContentScript();
+    const waitError = new Error("manual captcha wait failed");
+    harness.waitForCaptchaClear.mockRejectedValue(waitError);
+    harness.runEntryWithRetry.mockImplementation(async (options) => {
+      try {
+        await options.attempt();
+      } catch (error) {
+        expect(error).toBe(waitError);
+        expect(options.isFatal(error)).toBe(false);
+        return { outcome: "failed", error };
+      }
+      return { outcome: "ok" };
+    });
+
+    expect(
+      getRunHandler()({ data: makeRunPayload(makePromptEntries(1)) })
+    ).toEqual({ ok: true });
+
+    await vi.waitFor(() =>
+      expect(harness.runEntryWithRetry).toHaveBeenCalledOnce()
+    );
+    expect(clickGenerate).not.toHaveBeenCalled();
+    expect(harness.writeUnattendedRunState).not.toHaveBeenCalledWith(
+      expect.objectContaining({ status: "manual-intervention" })
+    );
+  });
+
+  it.each(["serial", "queue"] as const)(
+    "Given unattended-active %s mode の CAPTCHA 待機中 When Stop する Then pending entry を保持して STOPPED にする",
+    async (runMode) => {
+      makeViewButton("Newest ▼");
+      makeViewButton("Grid");
+      makeTextarea(null);
+      makeTextarea("lyrics-textarea");
+      const clickGenerate = vi.fn();
+      makeGenerateButtonWithClickObserver(clickGenerate);
+      addCompletedRemixCard();
+      const captcha = document.createElement("iframe");
+      captcha.src = "https://challenges.cloudflare.com/turnstile/v0/widget";
+      markBbox(captcha, 300, 65);
+      document.body.appendChild(captcha);
+      await loadContentScript();
+      harness.waitForCaptchaClear.mockImplementation(async (options) => {
+        options.onWaitStart?.();
+        harness.handlers.get("stop")?.({ data: undefined });
+      });
+      harness.sendMessage.mockImplementation((type: string) =>
+        type === "releaseUnattendedLease"
+          ? Promise.resolve({ released: true })
+          : undefined
+      );
+      const entries = makePromptEntries(2);
+
+      expect(
+        getRunHandler()({
+          data: {
+            ...makeRunPayload(entries),
+            runMode,
+            unattended: {
+              request: {
+                version: 1,
+                requestId: `scheduled-stop-${runMode}`,
+                baseUrl: "http://localhost:8787",
+                collectionId: "20260601-clm-preflight-collection",
+                downloadFormat: "wav",
+                limits: {
+                  maxEntries: 2,
+                  maxConcurrentGenerations: 1,
+                  maxRetries: 1,
+                },
+              },
+              deferredIndices: [],
+              leaseToken: "lease-token",
+            },
+          },
+        })
+      ).toEqual({ ok: true });
+
+      await vi.waitFor(() =>
+        expect(progressPayloads()).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ phase: PHASE.STOPPED }),
+          ])
+        )
+      );
+      expect(writeResumeState).toHaveBeenCalledWith(
+        expect.objectContaining({ failedIndex: 0, total: 2 })
+      );
+      expect(harness.writeUnattendedRunState).toHaveBeenCalledWith(
+        expect.objectContaining({
+          checkpoint: "entries",
+          pendingEntryIndices: [0, 1],
+          status: "checkpoint",
+        })
+      );
+      expect(harness.writeUnattendedRunState).not.toHaveBeenCalledWith(
+        expect.objectContaining({ status: "manual-intervention" })
+      );
+      expect(clickGenerate).not.toHaveBeenCalled();
+      expect(progressPayloads()).not.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ phase: PHASE.ERROR }),
+        ])
+      );
+    }
+  );
+
   it("duration guard の pending 減少後は新しい stall deadline まで待機し、停滞時だけ timeout する", async () => {
     await loadContentScript();
     const { waitForAttemptClipsComplete } =
