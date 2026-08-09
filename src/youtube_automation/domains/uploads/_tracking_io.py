@@ -83,7 +83,7 @@ class TrackingIOMixin:
             return
 
         state = json.loads(read_file_text(ws_path))
-        upload = state.get("upload")
+        upload = state.get("upload", {})
         if not isinstance(upload, dict):
             raise ValidationError(f"workflow-state.json upload must be object: {ws_path}")
 

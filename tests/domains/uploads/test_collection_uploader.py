@@ -766,6 +766,66 @@ class TestExecuteCompleteCollectionResume:
             "publish_at": "2099-01-01T10:00:00+09:00",
         }
 
+    def test_should_initialize_missing_workflow_upload_when_complete_collection_succeeds(self, tmp_path):
+        """upload 未作成の workflow-state でも成功した video_id を記録する."""
+        col, _ = _make_tracking_collection(tmp_path, resume_uri=None)
+        state_path = col / "workflow-state.json"
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        state.pop("upload")
+        state_path.write_text(json.dumps(state), encoding="utf-8")
+        uploader, mock_inner = _make_uploader_with_collection_mock(tmp_path)
+        mock_inner.upload_collection.return_value = {
+            "complete_video": {
+                "video_id": "V_MISSING_UPLOAD",
+                "video_url": "https://www.youtube.com/watch?v=V_MISSING_UPLOAD",
+                "title": "t",
+                "file_path": "p",
+            }
+        }
+
+        result = uploader._execute_complete_collection(
+            col,
+            uploader._load_tracking(col),
+            publish_at="2099-01-01T10:00:00+09:00",
+        )
+
+        saved_state = json.loads(state_path.read_text(encoding="utf-8"))
+        assert result["action"] == "complete_collection_uploaded"
+        assert saved_state["upload"] == {
+            "video_id": "V_MISSING_UPLOAD",
+            "video_url": "https://www.youtube.com/watch?v=V_MISSING_UPLOAD",
+            "publish_at": "2099-01-01T10:00:00+09:00",
+        }
+
+    def test_should_preserve_uploaded_video_when_workflow_post_processing_fails(self, tmp_path, caplog):
+        """upload 成功後の workflow 更新失敗は partial とし、再 upload を誘発しない."""
+        from youtube_automation.core.errors import ValidationError
+
+        col, tracking_path = _make_tracking_collection(tmp_path, resume_uri=None)
+        uploader, mock_inner = _make_uploader_with_collection_mock(tmp_path)
+        mock_inner.upload_collection.return_value = {
+            "complete_video": {
+                "video_id": "V_PRESERVED",
+                "video_url": "https://www.youtube.com/watch?v=V_PRESERVED",
+                "title": "t",
+                "file_path": "p",
+            }
+        }
+        diagnostic = "workflow-state.json upload must be object"
+
+        with patch.object(uploader, "_update_workflow_upload", side_effect=ValidationError(diagnostic)):
+            result = uploader._execute_complete_collection(col, uploader._load_tracking(col), publish_at=None)
+
+        tracking = json.loads(tracking_path.read_text(encoding="utf-8"))
+        assert result["action"] == "complete_collection_uploaded"
+        assert result["details"]["video_id"] == "V_PRESERVED"
+        assert result["details"]["post_processing_status"] == "partial"
+        assert tracking["status"] == "completed"
+        assert tracking["complete_collection"]["status"] == "completed"
+        assert tracking["complete_collection"]["video_id"] == "V_PRESERVED"
+        assert tracking["complete_collection"]["post_processing_status"] == "partial"
+        assert any(diagnostic in record.getMessage() for record in caplog.records)
+
     def test_should_distinguish_dedup_skip_and_keep_tracking_workflow_consistent_after_live_move(self, tmp_path):
         """dedup skip 時も live 移動後の tracking/workflow-state に既存 video_id を記録する."""
         col, _ = _make_tracking_collection(tmp_path, resume_uri=None)
@@ -1026,14 +1086,14 @@ class TestExecuteCompleteCollectionResume:
         # callback が既に永続化した resume URI は温存されている
         assert saved["complete_collection"]["resume_session_uri"] == _SESS_NEW
 
-    def test_complete_collection_failure_does_not_expose_exception_text(self, tmp_path, caplog):
-        """Complete Collection の失敗本文を tracking・結果・ログへ転送しない."""
+    def test_complete_collection_failure_logs_redacted_exception_text(self, tmp_path, caplog):
+        """Complete Collection の失敗原因を log に残し、secret は redaction する."""
         from youtube_automation.core.errors import AutomationError
 
         col, tracking_path = _make_tracking_collection(tmp_path, resume_uri=None)
         uploader, mock_inner = _make_uploader_with_collection_mock(tmp_path)
-        canary = "access-token-domain-canary"
-        mock_inner.upload_collection.side_effect = AutomationError(canary)
+        secret = "secret-domain-canary"
+        mock_inner.upload_collection.side_effect = AutomationError(f"access_token={secret}")
 
         result = uploader._execute_complete_collection(col, uploader._load_tracking(col), publish_at=None)
 
@@ -1041,8 +1101,8 @@ class TestExecuteCompleteCollectionResume:
         tracking = json.loads(tracking_path.read_text(encoding="utf-8"))
         assert tracking["complete_collection"]["error"] == "complete collection upload failed"
         error_messages = [record.getMessage() for record in caplog.records if record.levelno >= logging.ERROR]
-        assert error_messages == ["❌ Complete Collection エラー"]
-        assert all(canary not in message for message in error_messages)
+        assert error_messages == ["❌ Complete Collection エラー: access_token=<redacted-token>"]
+        assert all(secret not in message for message in error_messages)
 
 
 class TestShowPlanPrivacyDisplay:
