@@ -489,12 +489,17 @@ export function nextUnattendedRunState(options: {
     };
   }
   if (progress.phase === PHASE.ERROR) {
-    const stopReason = classifyUnattendedStop(progress.message ?? "run error");
+    const message = progress.message ?? "run error";
+    const stopReason = classifyUnattendedStop(message);
+    const requiredAction = requiredActionFor(stopReason);
     return {
       ...common,
       status: "manual-intervention",
       stopReason,
-      requiredAction: requiredActionFor(stopReason),
+      requiredAction:
+        stopReason === "run-error"
+          ? `${message} / ${requiredAction}`
+          : requiredAction,
     };
   }
   return { ...common, status: "running" };

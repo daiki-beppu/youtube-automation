@@ -1831,8 +1831,11 @@ describe('background onMessage("postDownloaded"): privileged POST boundary', () 
   });
 
   it("Given shared api rejects When handler runs Then rejection を呼び出し側へ伝播する", async () => {
+    const apiError = new Error(
+      "POST /collections/coll-1/downloaded failed: 403 Forbidden"
+    );
     const { handlers } = await loadBackground({
-      postDownloadedError: new Error("POST downloaded failed: 403 Forbidden"),
+      postDownloadedError: apiError,
     });
 
     await expect(
@@ -1848,7 +1851,11 @@ describe('background onMessage("postDownloaded"): privileged POST boundary', () 
         },
         sender: { tab: { id: 42 } },
       })
-    ).rejects.toThrow("403");
+    ).rejects.toBe(apiError);
+    expect(apiError.message).toBe(
+      "POST /collections/coll-1/downloaded failed: 403 Forbidden"
+    );
+    expect(apiError.message).not.toContain("GET /auth/token");
   });
 
   it("Given sender tab が無い When handler runs Then shared api に委譲しない", async () => {
