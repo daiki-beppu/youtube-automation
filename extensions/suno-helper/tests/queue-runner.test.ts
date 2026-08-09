@@ -14,6 +14,7 @@ import {
   MAX_INFLIGHT_REQUESTS,
   PHASE,
 } from "../../shared/constants";
+import { FatalRunError } from "../../shared/dom";
 import {
   finalizeQueueEntriesYield,
   resolveStalledQueueEntries,
@@ -166,6 +167,60 @@ describe("queue-runner: production ロジック (#1586)", () => {
       [0, ["clip-z-a", "clip-z-b"]],
       [1, ["clip-a-a", "clip-a-b"]],
     ]);
+  });
+
+  it("Given queue entry が fatal When 投入を終了する Then checkpoint を ERROR より先に1回保存する", async () => {
+    const entries = makePromptEntries(1);
+    const options = makeQueueSubmissionOptions({
+      entries,
+      submittedIndexes: [],
+      submittedClipIds: [],
+    });
+    const events: string[] = [];
+    options.submitEntryToQueue = async () => {
+      throw new FatalRunError("fatal queue failure");
+    };
+    options.persistInterruptState = vi.fn((index, orderPosition) => {
+      events.push(`persist:${index}:${orderPosition}`);
+    });
+    options.emitProgress = vi.fn((payload) => {
+      if (payload.phase === PHASE.ERROR) {
+        events.push(`progress:${payload.phase}`);
+      }
+    });
+
+    const result = await submitQueueEntries(options);
+
+    expect(result.completed).toBe(false);
+    expect(options.persistInterruptState).toHaveBeenCalledOnce();
+    expect(options.persistInterruptState).toHaveBeenCalledWith(0, 0);
+    expect(events).toEqual(["persist:0:0", `progress:${PHASE.ERROR}`]);
+  });
+
+  it("Given queue 投入前に abort When 投入を終了する Then checkpoint を STOPPED より先に1回保存する", async () => {
+    const entries = makePromptEntries(1);
+    const options = makeQueueSubmissionOptions({
+      entries,
+      submittedIndexes: [],
+      submittedClipIds: [],
+    });
+    const events: string[] = [];
+    options.isAborted = () => true;
+    options.persistInterruptState = vi.fn((index, orderPosition) => {
+      events.push(`persist:${index}:${orderPosition}`);
+    });
+    options.emitProgress = vi.fn((payload) => {
+      if (payload.phase === PHASE.STOPPED) {
+        events.push(`progress:${payload.phase}`);
+      }
+    });
+
+    const result = await submitQueueEntries(options);
+
+    expect(result.completed).toBe(false);
+    expect(options.persistInterruptState).toHaveBeenCalledOnce();
+    expect(options.persistInterruptState).toHaveBeenCalledWith(0, 0);
+    expect(events).toEqual(["persist:0:0", `progress:${PHASE.STOPPED}`]);
   });
 
   it("Given 1回目の ACK 失敗後に clip ID が遅延観測される When entry retry が成功する Then retry attempt 分も同じ entry に帰属する", async () => {
