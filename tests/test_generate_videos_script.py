@@ -18,6 +18,38 @@ _SCRIPT_PATH = _REPO_ROOT / ".claude" / "skills" / "videoup" / "references" / "g
 _VIDEOUP_SKILL_PATH = _REPO_ROOT / ".claude" / "skills" / "videoup" / "SKILL.md"
 
 
+def _help_text() -> str:
+    result = subprocess.run(
+        ["/bin/bash", str(_SCRIPT_PATH), "--help"],
+        capture_output=True,
+        text=True,
+        cwd=_REPO_ROOT,
+    )
+
+    assert result.returncode == 0
+    return " ".join(result.stdout.split())
+
+
+def test_help_explains_collection_and_preview_contract() -> None:
+    help_text = _help_text()
+
+    assert "collection-path 省略時は現在の作業ディレクトリ (CWD)" in help_text
+    assert "--preview [15-30]" in help_text
+    assert "省略時 20 秒" in help_text
+    assert "full output を作成・置換しない" in help_text
+    assert "workflow-state.json を更新しない" in help_text
+
+
+def test_help_explains_overlay_overrides_are_invocation_scoped() -> None:
+    help_text = _help_text()
+
+    assert "--overlays" in help_text
+    assert "overlay を有効化" in help_text
+    assert "--no-overlays" in help_text
+    assert "overlay を無効化" in help_text
+    assert "config の値をこの実行だけ上書き" in help_text
+
+
 def _write_executable(path: Path, content: str) -> None:
     path.write_text(content, encoding="utf-8")
     path.chmod(0o755)
