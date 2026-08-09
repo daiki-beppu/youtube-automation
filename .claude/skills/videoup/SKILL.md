@@ -62,11 +62,10 @@ subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実�
 |---------|------|
 | `yt-generate-master` | CWD のコレクションでマスター音源生成 |
 | `yt-generate-master <path>` | 指定コレクションでマスター音源生成 |
-| `yt-generate-videos-batch` | `collections/planning/` の `assets.master_audio` 設定済みかつ `assets.master_video: null` のコレクションを並列動画化 |
-| `yt-generate-videos-batch --include-live` | 上記に `collections/live/` も含めて並列動画化 |
-| `uv run bash "$(git rev-parse --show-toplevel)/.claude/skills/videoup/references/generate_videos.sh"` | CWD のコレクションで全動画生成（コレクションディレクトリ内で実行） |
-| `uv run bash "$(git rev-parse --show-toplevel)/.claude/skills/videoup/references/generate_videos.sh" <path>` | 指定コレクションで全動画生成 |
-| `uv run bash "$(git rev-parse --show-toplevel)/.claude/skills/videoup/references/generate_videos.sh" --preview 20 <path>` | effect / overlay を反映した 15〜30 秒の確認用サンプルを生成（既定 20 秒） |
+| `yt-generate-videos-batch` | マスター音源確定済み・未動画化のコレクションを並列動画化 |
+| `uv run bash "$(git rev-parse --show-toplevel)/.claude/skills/videoup/references/generate_videos.sh" <collection-path>` | 1 コレクションの動画を生成 |
+
+対象 stage・並列度・通常 option は `yt-generate-videos-batch --help`、collection path・preview・overlay option は `generate_videos.sh --help` を正とする。
 
 ## Instructions
 
@@ -78,7 +77,7 @@ $ARGUMENTS
 
 引数が指定されている場合、そのコレクションを対象とします。
 未指定の場合、`collections/planning/` から `assets.master_audio` が設定済み（`null` 以外）かつ `assets.master_video` が `null` のコレクションを自動検出します。
-複数件を一括処理する場合は `yt-generate-videos-batch` を使います。並列度は `--max-workers` > `YT_VIDEOUP_MAX_WORKERS` > `config/skills/videoup.yaml::batch.max_workers` > CPU 自動検出 > 既定値 3 の順で解決されます。
+複数件を一括処理する場合は `yt-generate-videos-batch` を使います。通常 option と解決契約は同 CLI の `--help` に従います。
 
 ### ステップ
 
@@ -202,7 +201,7 @@ effect:
 
 `config/channel/youtube.json::overlays` で audio visualizer + subscribe popup の合成を有効化できる。`overlays.enabled: true` のときだけ `generate_videos.sh` は **x264 再エンコード経路** に分岐し、`filter_complex` で背景の上に visualizer / popup を重ねる。`overlays.enabled: false`（既定）または `overlays` キー欠落時は、ループ動画または静止画の短尺ベイクを使う **stream copy 経路**を維持する。
 
-一回だけ切り替える場合は `VIDEOUP_OVERLAYS=0|1` または `--no-overlays|--overlays` を使う。解決順は env > CLI > `config/channel/youtube.json` > default。例: `VIDEOUP_OVERLAYS=0 uv run bash .../generate_videos.sh <path>`。設定ファイルを一時編集しない。
+overlay 合成は動画生成工程だけが担当し、Suno / Lyria / masterup では適用しない。一回限りの切替入口と config に対する override 契約は `generate_videos.sh --help` を正とし、設定ファイルを一時編集しない。
 
 runtime mask helper は script 内から `uv run python -m youtube_automation.infrastructure.media.audio_visualizer_mask` で起動する。script 自体も `uv run bash` で実行し、system Python に package が無い環境でも venv の依存を使う。
 
