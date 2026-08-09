@@ -86,6 +86,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `feat(suno-helper)`: prompt entry の `duration_sec` が明示された場合、解決済みの Custom Duration button を押してから既存の bridge-first / keydown fallback 経路で Duration slider へ秒数を注入するようにした（#3160）。
 - `feat(suno-helper)`: prompt entry の optional な `duration_sec` を wire 型で受理し、明示された数値を失わず保持するようにした（#3153）。
 - `docs(suno)`: optional な `duration_sec` の単位・値域・明示時のみ全 entry へ出力する契約と、生成後の採用範囲を担う `duration_filter` との責務分離を配布設定と Suno 手順へ記載した（#3133）。
 - `feat(suno)`: channel override に明示した `duration_sec` を、既定値や `duration_filter` から補完せず全 prompt entry へ数値として出力するようにした（#3132）。

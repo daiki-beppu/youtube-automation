@@ -524,6 +524,10 @@ export interface ResolvedAdvancedFields {
     male: HTMLButtonElement | null;
     female: HTMLButtonElement | null;
   };
+  duration: {
+    customButton: HTMLButtonElement;
+    slider: HTMLElement;
+  } | null;
 }
 
 /** injectAdvancedFields が読む entry の advanced 値（PromptEntry の部分集合）。 */
@@ -532,6 +536,7 @@ export interface AdvancedFieldValues {
   weirdness?: number;
   exclude_styles?: string;
   vocal_gender?: "male" | "female" | "neutral" | "auto";
+  duration_sec?: number;
 }
 
 /**
@@ -570,6 +575,7 @@ export function resolveAdvancedFields(): ResolvedAdvancedFields {
     weirdness,
     styleInfluence,
     vocalGender: resolveVocalGenderButtons(),
+    duration: null,
   };
 }
 
@@ -675,6 +681,14 @@ export async function injectAdvancedFields(
     if (target.getAttribute("data-selected") !== "true") {
       target.click();
     }
+  }
+  if (entry.duration_sec !== undefined && fields.duration) {
+    fields.duration.customButton.click();
+    await injectSliderValue(
+      fields.duration.slider,
+      entry.duration_sec,
+      options.bridgeSetSlider
+    );
   }
   if (entry.weirdness !== undefined) {
     // slider 未検出は throw せず warn + skip（#1720）。値は UI で手動設定でき Create を跨いで
