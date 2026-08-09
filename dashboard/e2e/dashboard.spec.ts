@@ -10,6 +10,7 @@ let process: ChildProcess
 let fixtureRoot: string
 let baseURL: string
 let serverStderr = ""
+let publicationDate: string
 
 const paletteLightColors = {
   Blue: ["#d9e6ff", "#9db7f9", "#4979f5", "#264af4", "#0017c1"],
@@ -63,6 +64,13 @@ function contrastRatio(foreground: string, background: string): number {
   return (values[0] + 0.05) / (values[1] + 0.05)
 }
 
+function localDateKey(date: Date): string {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, "0")
+  const day = String(date.getDate()).padStart(2, "0")
+  return `${year}-${month}-${day}`
+}
+
 async function unusedPort(): Promise<number> {
   return new Promise((resolvePort, reject) => {
     const server = createServer()
@@ -96,6 +104,7 @@ async function waitUntilReady(url: string): Promise<void> {
 }
 
 test.beforeAll(async () => {
+  publicationDate = localDateKey(new Date())
   fixtureRoot = await mkdtemp(join(tmpdir(), "yt-dashboard-e2e-"))
   const channel = join(fixtureRoot, "night-drive")
   await mkdir(join(channel, "config", "channel"), { recursive: true })
@@ -128,6 +137,15 @@ test.beforeAll(async () => {
       },
     })
   )
+  await writeFile(
+    join(channel, "data", "dashboard_publications.json"),
+    JSON.stringify({
+      schema_version: 1,
+      fetched_at: new Date().toISOString(),
+      timezone: "Asia/Tokyo",
+      days: { [publicationDate]: 2 },
+    })
+  )
   const secondChannel = join(fixtureRoot, "zero-stock")
   await mkdir(join(secondChannel, "config", "channel"), { recursive: true })
   await mkdir(join(secondChannel, "data"), { recursive: true })
@@ -149,6 +167,15 @@ test.beforeAll(async () => {
       },
       scheduled_videos: { count: 0 },
       video_analytics: {},
+    })
+  )
+  await writeFile(
+    join(secondChannel, "data", "dashboard_publications.json"),
+    JSON.stringify({
+      schema_version: 1,
+      fetched_at: new Date().toISOString(),
+      timezone: "Asia/Tokyo",
+      days: { [publicationDate]: 1 },
     })
   )
   const registry = join(fixtureRoot, "channels.json")
@@ -310,6 +337,46 @@ test("768px 幅でも比較行と詳細操作が見切れない", async ({ page 
   expect(layout.rowRight).toBeLessThanOrEqual(layout.viewportWidth)
   expect(layout.buttonLeft).toBeGreaterThanOrEqual(layout.rowLeft)
   expect(layout.buttonRight).toBeLessThanOrEqual(layout.rowRight)
+})
+
+test("狭い画面で公開活動を領域内スクロールと keyboard で確認できる", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 640, height: 900 })
+  await page.goto(baseURL)
+
+  const heatmap = page.getByRole("region", { name: "過去365日の公開活動" })
+  const scrollBoundary = heatmap.getByTestId("publication-heatmap-scroll")
+  await expect(scrollBoundary).toBeVisible()
+
+  const layout = await scrollBoundary.evaluate((element) => ({
+    boundaryWidth: element.clientWidth,
+    contentWidth: element.scrollWidth,
+    documentWidth: document.documentElement.scrollWidth,
+    viewportWidth: document.documentElement.clientWidth,
+  }))
+  expect(layout.documentWidth).toBeLessThanOrEqual(layout.viewportWidth)
+  expect(layout.contentWidth).toBeGreaterThan(layout.boundaryWidth)
+
+  await scrollBoundary.evaluate((element) => {
+    element.scrollLeft = element.scrollWidth
+  })
+  expect(
+    await scrollBoundary.evaluate((element) => element.scrollLeft)
+  ).toBeGreaterThan(0)
+
+  const cell = heatmap.getByRole("gridcell", {
+    name: `${publicationDate}: 3本`,
+    exact: true,
+  })
+  await cell.focus()
+  await expect(cell).toBeFocused()
+  const details = heatmap.getByRole("tooltip")
+  await expect(details).toContainText(publicationDate)
+  await expect(details).toContainText("合計 3本")
+  await expect(details).toContainText("Night Drive 2本")
+  await expect(details).toContainText("Zero Stock 1本")
+  await expect(cell).toHaveAttribute("aria-describedby", await details.getAttribute("id"))
 })
 
 test("ダークテーマでも背景とカードの階調を識別できる", async ({ page }) => {
