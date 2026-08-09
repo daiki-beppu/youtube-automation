@@ -70,6 +70,7 @@ EXPECTED_ENTRYPOINT_MODULES = {
     "yt-suno-verify-playlist": "youtube_automation.commands.suno.suno_verify_playlist",
     "yt-stream-archive-check": "youtube_automation.commands.youtube.streaming_archive_check",
     "yt-stream-bandwidth": "youtube_automation.commands.youtube.stream_bandwidth",
+    "yt-stream-broadcast-recover": "youtube_automation.commands.youtube.stream_broadcast_recover",
     "yt-theme-compare": "youtube_automation.commands.analytics.theme_compare",
     "yt-ttp-health": "youtube_automation.commands.analytics.ttp_health",
     "yt-thumbnail-auto-select": "youtube_automation.commands.thumbnail.auto_select_thumbnail",

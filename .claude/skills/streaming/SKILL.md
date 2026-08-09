@@ -43,6 +43,7 @@ description: "Use when ライブ配信用 Vultr VPS・動画配信本体を Terr
 | 帯域チェック | `uv run yt-stream-bandwidth --check-threshold --terraform-dir infra/terraform/streaming` |
 | 月間帯域見積もり用の MP4 実測 | `uv run yt-stream-bandwidth --probe-bitrate ./stream.mp4` |
 | アーカイブ件数確認（11h+1h 運用時） | `uv run yt-stream-archive-check --expected 2` |
+| ingest 稼働中に消えた配信枠を復旧 | `uv run yt-stream-broadcast-recover --stream-id <stream-id> --title '<stable-title>' --dry-run` で確認後、`--dry-run` を外す |
 | サービス状態 | `ssh -i ~/.ssh/yt_stream_key root@$(terraform -chdir=infra/terraform/streaming output -raw instance_ip) systemctl status youtube-stream` |
 | ログ追跡 | 同上 + `journalctl -u youtube-stream -f` |
 | 破棄 | §5 |
@@ -54,6 +55,7 @@ workspace は state だけを切り替える。作成・切替後は対象チャ
 | `yt-fetch-stream-key` | YouTube Data API 経由でストリームキーを取得し 1Password に保存 |
 | `yt-stream-bandwidth` | Vultr 帯域 API 月次レポート + 80% 閾値アラート |
 | `yt-stream-archive-check --expected 2` | `stream_hours=11` / `break_hours=1` 運用で 1 日 2 本のアーカイブが上がっているか確認 |
+| `yt-stream-broadcast-recover` | active 枠があれば no-op。ingest inactive なら systemd 側の復旧を待つ。active ingest かつ active 枠なしの場合だけ upcoming 枠を再利用、または作成して bind → live 遷移 |
 | `$(git rev-parse --show-toplevel)/.claude/skills/streaming/references/swap_video.sh` | `terraform plan` → `apply` の 1 コマンドラッパー |
 
 ## 想定 API call 数
@@ -64,8 +66,10 @@ workspace は state だけを切り替える。作成・切替後は対象チャ
 | liveStreams.list（1 unit、yt-fetch-stream-key） | 1 | — |
 | search.list + videos.list（≈ 101 units、yt-stream-archive-check） | 各 1 | — |
 | search.list（100 units / ページ、yt-stream-bandwidth --report のみ） | ページ数分 | アーカイブ本数（default 実行は Vultr API / ローカルのみで無料） |
+| liveBroadcasts.list + liveStreams.list（yt-stream-broadcast-recover） | 1〜3 | active 枠ありは 1、ingest inactive は 2、復旧判定は 3 |
+| liveBroadcasts.insert + bind + transition（yt-stream-broadcast-recover） | 0〜3 | `--dry-run` / no-op は 0、upcoming の再利用状況により 1〜3 |
 
-- 上限 / 承認: `terraform plan` で apply 前に差分確認し、§5 の `terraform destroy` で課金を停止する。yt-stream-archive-check は read のみで書き込みなし。
+- 上限 / 承認: `terraform plan` で apply 前に差分確認し、§5 の `terraform destroy` で課金を停止する。yt-stream-archive-check は read のみで書き込みなし。yt-stream-broadcast-recover は必ず最初に `--dry-run` で予定 action を確認し、同じ `--title` を再試行時も使う。
 
 ## §1 初回構築
 

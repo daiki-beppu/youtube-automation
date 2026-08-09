@@ -65,6 +65,7 @@ BILLED_CLIS: dict[str, str] = {
     "yt-shorts-bulk-update-loc": "YouTube Data API (videos.update)",
     "yt-stream-archive-check": "YouTube Data API (search.list)",
     "yt-stream-bandwidth": "YouTube Data API (--report の search.list のみ)",
+    "yt-stream-broadcast-recover": "YouTube Live Streaming API (broadcast/stream list + insert/bind/transition)",
     "yt-thumbnail-check": "Vertex AI Gemini Vision",
     "yt-thumbnail-compare": "YouTube Data API (benchmark stale 時の再収集誘発)",
     "yt-upload-auto": "YouTube Data API (videos.insert)",
