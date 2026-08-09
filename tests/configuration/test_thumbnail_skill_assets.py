@@ -28,6 +28,11 @@ def _read_thumbnail_provider_guidance() -> str:
     return path.read_text(encoding="utf-8")
 
 
+def _read_thumbnail_generation_workflows() -> str:
+    path = _repo_root() / ".claude" / "skills" / "thumbnail" / "references" / "generation-workflows.md"
+    return path.read_text(encoding="utf-8")
+
+
 def _read_loop_video_skill() -> str:
     path = _repo_root() / ".claude" / "skills" / "loop-video" / "SKILL.md"
     return path.read_text(encoding="utf-8")
@@ -1367,17 +1372,18 @@ def test_thumbnail_gemini_diff_template_channel_override_takes_priority(tmp_path
 
 def test_thumbnail_docs_state_provider_agnostic_ttp_policy() -> None:
     """#2070: SKILL.md / prompting.md が provider 差なく同じ TTP 方針を明示する。"""
-    skill = _read_thumbnail_skill()
     prompting = (_repo_root() / ".claude" / "skills" / "thumbnail" / "references" / "prompting.md").read_text(
         encoding="utf-8"
     )
 
-    assert "TTP 生成方針は provider によらず共通" in skill
+    generation_workflows = _read_thumbnail_generation_workflows()
+
+    assert "TTP 生成方針は provider によらず共通" in generation_workflows
     assert "TTP 方針は provider 共通" in prompting
     assert "チャンネル側 override" in prompting
     # #2071: gemini_cli 経路も同じ diff_prompt_template と構築手順を共有することを明示
-    assert "`provider: gemini_cli`" in skill
-    assert "同じ `diff_prompt_template` とこの構築手順を共有" in skill
+    assert "`provider: gemini_cli`" in generation_workflows
+    assert "同じ `diff_prompt_template` とこの構築手順を共有" in generation_workflows
 
 
 def test_thumbnail_default_config_codex_template_matches_skill_md_block() -> None:
@@ -1562,8 +1568,7 @@ def test_thumbnail_default_config_slims_composition_rules_and_thumbnail_text() -
 
 def test_thumbnail_skill_prompt_section_is_single_source_with_final_prompt_example() -> None:
     """#1702: プロンプト指示解説は 1 セクション + モード別差分に集約し、最終プロンプト例を 1 例掲載する。"""
-    skill = _read_thumbnail_skill()
-    prompt_section = _slice_between(skill, "## プロンプト構築", "## ワークフロー")
+    prompt_section = _read_thumbnail_generation_workflows()
 
     assert "最小限のキーワード" in prompt_section
     assert "参照画像主導" in prompt_section
@@ -1574,9 +1579,43 @@ def test_thumbnail_skill_prompt_section_is_single_source_with_final_prompt_examp
     assert "Do not reproduce any signature" in prompt_section
     # 既定 clause は ip_safety のみ。多重 clause の同時展開指示は解消済み
     assert "${ip_safety_clause}` の 1 つだけ" in prompt_section
-    single_step_prompt_block = _slice_between(skill, "#### プロンプト構築", "#### 生成コマンド")
+    single_step_prompt_block = _slice_between(prompt_section, "## Single-Step / TTP 詳細", "## Two-Phase 詳細")
     assert "共通ガイダンス clause（`single_step.variation_clause` / `style_lock_clause`" not in single_step_prompt_block
     assert "opt-in clause" in single_step_prompt_block
+
+
+def test_thumbnail_skill_routes_generation_details_without_moving_runtime_contract() -> None:
+    skill = _read_thumbnail_skill()
+    route = "[generation workflow 詳細](references/generation-workflows.md)"
+
+    assert skill.index("## 生成モード判定") < skill.index(route) < skill.index("## ワークフロー")
+    for mode in ("`single_step`", "`diff_from_reference`", "`two_phase`"):
+        assert mode in _slice_between(skill, "## 生成モード判定", "## ワークフロー")
+    assert skill.count("uv run yt-generate-image") == 11
+    assert skill.count("uv run yt-thumbnail-text") == 1
+    assert skill.count("archive-approved-thumbnail.py") == 5
+    assert '### Single-Step / TTP モード（`generation_mode: "single_step"`、デフォルト・推奨）' in skill
+    assert "### Two-Phase モード（従来方式・フォールバック）" in skill
+    assert "/thumbnail-compare" in skill
+    assert "ユーザー承認" in skill
+    assert "## 完了条件" in skill
+
+
+def test_thumbnail_generation_workflows_owns_generation_details_once() -> None:
+    skill = _read_thumbnail_skill()
+    details = _read_thumbnail_generation_workflows()
+    combined = skill + details
+    moved_details = (
+        '`path_base: "channel_dir"',
+        "複数の clause を同時に積み上げない",
+        "**最終プロンプト例（TTP / 既定 config でプロバイダーへ渡る全文）:**",
+        "TTP 生成方針は provider によらず共通",
+        "Two-Phase モードのテキストオーバーレイ・フォールバックプロンプト",
+    )
+    for detail in moved_details:
+        assert detail not in skill
+        assert details.count(detail) == 1
+        assert combined.count(detail) == 1
 
 
 def test_thumbnail_skill_quality_check_covers_hand_anatomy() -> None:
