@@ -938,7 +938,7 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
   });
 
   it.each(["serial", "queue"] as const)(
-    "Given %s mode の適応型ペーシング中に challenge が出現 When 解消する Then waiting-captcha 中は Create せず同じ entry を1回だけ投入する",
+    "Given unattended-active %s mode の適応型ペーシング中に challenge が出現 When 解消する Then waiting-captcha 中は Create せず同じ entry を1回だけ投入する",
     async (runMode) => {
       vi.useFakeTimers();
       makeViewButton("Newest ▼");
@@ -946,33 +946,69 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
       makeTextarea(null);
       makeTextarea("lyrics-textarea");
       const clickGenerate = vi.fn();
+      clickGenerate.mockImplementation(() => {
+        if (clickGenerate.mock.calls.length === 5) {
+          harness.handlers.get("stop")?.({ data: undefined });
+        }
+      });
       makeGenerateButtonWithClickObserver(clickGenerate);
       addCompletedRemixCard();
       await loadContentScript();
-      let challengeVisible = false;
+      harness.sendMessage.mockImplementation((type: string) =>
+        type === "releaseUnattendedLease"
+          ? Promise.resolve({ released: true })
+          : undefined
+      );
+      let challenge: HTMLIFrameElement | null = null;
 
       harness.onAbortableSleep = async (ms) => {
         if (ms === ADAPTIVE_BURST_COOLDOWN_MS) {
-          challengeVisible = true;
+          challenge = document.createElement("iframe");
+          challenge.src =
+            "https://challenges.cloudflare.com/turnstile/v0/widget";
+          markBbox(challenge, 300, 65);
+          document.body.appendChild(challenge);
         }
       };
       harness.waitForCaptchaClear.mockImplementation(async (options) => {
-        if (!challengeVisible) {
+        if (!challenge) {
           return;
         }
         options.onWaitStart?.();
         await new Promise<void>((resolve) => {
           setTimeout(() => {
-            challengeVisible = false;
+            challenge?.remove();
+            challenge = null;
             resolve();
           }, 1000);
         });
       });
 
       const entries = makePromptEntries(5);
+      const payload = makeRunPayload(entries);
+      harness.submittedClipIds = [];
       expect(
         getRunHandler()({
-          data: { ...makeRunPayload(entries), runMode },
+          data: {
+            ...payload,
+            runMode,
+            unattended: {
+              request: {
+                version: 1,
+                requestId: `scheduled-captcha-${runMode}`,
+                baseUrl: "http://localhost:8787",
+                collectionId: "20260601-clm-preflight-collection",
+                downloadFormat: "wav",
+                limits: {
+                  maxEntries: entries.length,
+                  maxConcurrentGenerations: 2,
+                  maxRetries: 1,
+                },
+              },
+              deferredIndices: [],
+              leaseToken: "lease-token",
+            },
+          },
         })
       ).toEqual({ ok: true });
 
@@ -994,6 +1030,85 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
       expect(clickGenerate).toHaveBeenCalledTimes(5);
       await vi.advanceTimersByTimeAsync(0);
       expect(clickGenerate).toHaveBeenCalledTimes(5);
+      expect(harness.writeUnattendedRunState).not.toHaveBeenCalledWith(
+        expect.objectContaining({ status: "manual-intervention" })
+      );
+      expect(progressPayloads()).not.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ phase: PHASE.ERROR }),
+        ])
+      );
+    }
+  );
+
+  it.each(["serial", "queue"] as const)(
+    "Given unattended-active %s mode の最後の Create 後に challenge が出現 When playlist 境界へ進む Then CAPTCHA manual state で停止し UI を変更しない",
+    async (runMode) => {
+      makeViewButton("Newest ▼");
+      makeViewButton("Grid");
+      makeTextarea(null);
+      makeTextarea("lyrics-textarea");
+      const clickGenerate = vi.fn(() => {
+        appendSubmittedClipIdsForRequest("captcha-boundary-clip");
+        const challenge = document.createElement("iframe");
+        challenge.src = "https://challenges.cloudflare.com/turnstile/v0/widget";
+        markBbox(challenge, 300, 65);
+        document.body.appendChild(challenge);
+      });
+      makeGenerateButtonWithClickObserver(clickGenerate);
+      addCompletedRemixCard();
+      await loadContentScript();
+      harness.sendMessage.mockImplementation((type: string) =>
+        type === "releaseUnattendedLease"
+          ? Promise.resolve({ released: true })
+          : undefined
+      );
+
+      const entries = makePromptEntries(1);
+      const payload = makeRunPayload(entries);
+      harness.submittedClipIds = [];
+      expect(
+        getRunHandler()({
+          data: {
+            ...payload,
+            runMode,
+            unattended: {
+              request: {
+                version: 1,
+                requestId: `scheduled-playlist-captcha-${runMode}`,
+                baseUrl: "http://localhost:8787",
+                collectionId: "20260601-clm-preflight-collection",
+                downloadFormat: "wav",
+                limits: {
+                  maxEntries: 1,
+                  maxConcurrentGenerations: 2,
+                  maxRetries: 1,
+                },
+              },
+              deferredIndices: [],
+              leaseToken: "lease-token",
+            },
+          },
+        })
+      ).toEqual({ ok: true });
+
+      await vi.waitFor(() =>
+        expect(harness.writeUnattendedRunState).toHaveBeenCalledWith(
+          expect.objectContaining({
+            checkpoint: "entries",
+            status: "manual-intervention",
+            stopReason: "captcha-required",
+          })
+        )
+      );
+      expect(clickGenerate).toHaveBeenCalledOnce();
+      expect(harness.runEntryWithRetry).toHaveBeenCalledOnce();
+      expect(fillPlaylistNameAndCreate).not.toHaveBeenCalled();
+      expect(progressPayloads()).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ phase: PHASE.ERROR }),
+        ])
+      );
     }
   );
 
