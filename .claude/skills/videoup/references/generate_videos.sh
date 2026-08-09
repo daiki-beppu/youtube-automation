@@ -80,7 +80,21 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --help|-h)
-            echo "Usage: $0 [--preview [15-30]] [--overlays|--no-overlays] [collection-path]"
+            cat <<EOF
+Usage: $0 [--preview [15-30]] [--overlays|--no-overlays] [collection-path]
+
+collection-path:
+  対象 collection のパス。collection-path 省略時は現在の作業ディレクトリ (CWD) を使う。
+  CWD には 01-master/ と 10-assets/ が必要。
+
+Options:
+  --preview [15-30]  15〜30 秒の preview を生成。秒数省略時 20 秒。
+                     preview は full output を作成・置換しない。また workflow-state.json を更新しない。
+  --overlays         overlay を有効化。config の値をこの実行だけ上書きし、config 自体は変更しない。
+  --no-overlays      overlay を無効化。config の値をこの実行だけ上書きし、config 自体は変更しない。
+                     VIDEOUP_OVERLAYS が設定されている場合は環境変数を優先。
+  -h, --help         この help を表示して終了。
+EOF
             exit 0
             ;;
         --*)
