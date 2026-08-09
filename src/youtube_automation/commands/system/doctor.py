@@ -103,7 +103,7 @@ UPLOAD_REQUIRED_SCOPES = [
 ]
 
 UNSUPPORTED_VIDEO_ANALYZE_MODELS = {
-    "gemini-3.5-flash",
+    "gemini-3.1-flash-image-preview",
 }
 UNSUPPORTED_THUMBNAIL_MODELS = {
     "gemini-3.1-flash-image-preview",

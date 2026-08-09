@@ -4557,7 +4557,20 @@ class TestCheckTtpWfNewReadinessChannelNew:
         assert r.status == "warn"
         assert "data/video_analysis の channel_dir 外参照を拒否" in r.message
 
-    def test_old_video_analyze_model_warns(self, tmp_path):
+    def test_video_input_unsupported_model_warns(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        (tmp_path / "config" / "skills" / "video-analyze.yaml").write_text(
+            "model: gemini-3.1-flash-image-preview\n",
+            encoding="utf-8",
+        )
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "video-analyze model が旧/非対応: gemini-3.1-flash-image-preview" in r.message
+
+    def test_video_input_supported_ga_model_does_not_warn(self, tmp_path):
         _write_ttp_analytics(tmp_path, [_ttp_channel()])
         _write_ttp_readiness_files(tmp_path)
         (tmp_path / "config" / "skills" / "video-analyze.yaml").write_text(
@@ -4567,8 +4580,7 @@ class TestCheckTtpWfNewReadinessChannelNew:
 
         r = doctor.check_ttp_wf_new_readiness(tmp_path)
 
-        assert r.status == "warn"
-        assert "video-analyze model が旧/非対応: gemini-3.5-flash" in r.message
+        assert "video-analyze model が旧/非対応" not in r.message
 
     @pytest.mark.parametrize(
         "model",

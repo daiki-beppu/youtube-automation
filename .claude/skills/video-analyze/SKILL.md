@@ -112,7 +112,7 @@ skill-config (`.claude/skills/video-analyze/config.default.yaml`):
 
 | 項目 | 既定 | 説明 |
 |---|---|---|
-| `model` | `gemini-2.5-flash` | 動画入力対応 Gemini モデル |
+| `model` | `gemini-3.5-flash` | Vertex AI global endpoint の動画入力対応 GA Gemini モデル |
 | `delay_sec` | 10 | 動画間の API レート対策ウェイト (秒) |
 | `analysis_window_sec` | 900 | 解析するクリップ窓 (秒)。動画冒頭からこの秒数のみ Gemini に渡す。bool ではない正の整数のみ有効 |
 | `prompt` | 汎用プロンプト | ジャンル/世界観に合わせて `config/skills/video-analyze.yaml` で上書き推奨 |
