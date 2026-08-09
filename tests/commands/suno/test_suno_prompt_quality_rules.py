@@ -39,7 +39,7 @@ def _write_suno_override(channel: Path, **overrides) -> None:
     (channel / "config" / "skills" / "suno.yaml").write_text(yaml.safe_dump(overrides), encoding="utf-8")
 
 
-def _write_minimal_patterns(dir_: Path, **extra_top) -> Path:
+def _write_minimal_patterns(dir_: Path, *, scene: str = "a quiet scene description", **extra_top) -> Path:
     payload: dict = {
         "title": "Test Collection",
         "mode": "instrumental",
@@ -49,7 +49,7 @@ def _write_minimal_patterns(dir_: Path, **extra_top) -> Path:
                 "name_jp": "テスト",
                 "name_en": "Test",
                 "tempo": "slow",
-                "scenes": ["a quiet scene description"],
+                "scenes": [scene],
             }
         ],
     }
@@ -81,6 +81,12 @@ def test_style_char_limit_exact_boundary():
     """ちょうど上限は OK."""
     result = validate_style_char_limit("x" * 120, limit=120)
     assert result == []
+
+
+def test_style_char_limit_uses_full_style_soft_budget_by_default():
+    """既定の完成形 Style budget は 256 文字を境界に警告する."""
+    assert validate_style_char_limit("x" * 256) == []
+    assert "257 chars" in validate_style_char_limit("x" * 257)[0]
 
 
 # ---------------------------------------------------------------------------
@@ -258,6 +264,73 @@ def test_build_prompt_entries_style_char_limit_warns(channel_dir, tmp_path, caps
     assert "[WARN]" in captured.err
 
 
+def test_build_prompt_entries_default_full_style_budget_accepts_256_chars(channel_dir, tmp_path, capsys):
+    """override なしでは公式 v4.5 例を収める 256 文字まで完成形 Style を許容する."""
+    _write_suno_override(channel_dir, genre_line="lo-fi jazz")
+    patterns_path = _write_minimal_patterns(tmp_path, scene="x" * 238)
+
+    entries = build_prompt_entries(patterns_path)
+
+    assert len(entries[0]["style"]) == 256
+    assert "Style text exceeds" not in capsys.readouterr().err
+
+
+def test_build_prompt_entries_default_full_style_budget_warns_above_256_chars(channel_dir, tmp_path, capsys):
+    """override なしでは 256 文字を超えた完成形 Style を soft warning にする."""
+    _write_suno_override(channel_dir, genre_line="lo-fi jazz")
+    patterns_path = _write_minimal_patterns(tmp_path, scene="x" * 239)
+
+    entries = build_prompt_entries(patterns_path)
+
+    assert len(entries[0]["style"]) == 257
+    assert "Style text exceeds 256 char limit" in capsys.readouterr().err
+
+
+def test_build_prompt_entries_explicit_full_style_limit_overrides_legacy_limit(channel_dir, tmp_path, capsys):
+    """新旧両キー指定時は full_style_char_limit を完成形 Style に使う."""
+    _write_suno_override(
+        channel_dir,
+        genre_line="lo-fi jazz",
+        style_char_limit=10,
+        full_style_char_limit=256,
+    )
+    patterns_path = _write_minimal_patterns(tmp_path)
+
+    build_prompt_entries(patterns_path)
+
+    assert "Style text exceeds" not in capsys.readouterr().err
+
+
+def test_build_prompt_entries_explicit_full_style_limit_warns(channel_dir, tmp_path, capsys):
+    """full_style_char_limit の明示値を完成形 Style の soft budget に使う."""
+    _write_suno_override(
+        channel_dir,
+        genre_line="lo-fi jazz",
+        full_style_char_limit=40,
+    )
+    patterns_path = _write_minimal_patterns(tmp_path)
+
+    build_prompt_entries(patterns_path)
+
+    assert "Style text exceeds 40 char limit" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("invalid_limit", [0, -1, True, "256"])
+def test_build_prompt_entries_rejects_invalid_full_style_limit(channel_dir, tmp_path, invalid_limit):
+    """full_style_char_limit は正の整数以外を fail-loud で拒否する."""
+    from youtube_automation.core.errors import ConfigError
+
+    _write_suno_override(
+        channel_dir,
+        genre_line="lo-fi jazz",
+        full_style_char_limit=invalid_limit,
+    )
+    patterns_path = _write_minimal_patterns(tmp_path)
+
+    with pytest.raises(ConfigError, match="full_style_char_limit must be a positive integer"):
+        build_prompt_entries(patterns_path)
+
+
 def test_build_prompt_entries_auto_lyrics_instrumental(channel_dir, tmp_path):
     """Given auto_lyrics_structure: true + インストモード
     When build_prompt_entries を呼ぶ
@@ -324,6 +397,7 @@ def test_default_yaml_has_quality_rule_keys():
     assert data["model"] == "V5.5", "model の既定値は V5.5"
     assert data["auto_lyrics_structure"] is True, "auto_lyrics_structure: true が追加されるべき"
     assert data["style_char_limit"] == 120, "style_char_limit: 120 が追加されるべき"
+    assert data["full_style_char_limit"] == 256, "full_style_char_limit: 256 が追加されるべき"
     assert isinstance(data["banned_artists"], list), "banned_artists はリスト型であるべき"
     assert len(data["banned_artists"]) >= 25, "banned_artists は 25 件以上であるべき"
 

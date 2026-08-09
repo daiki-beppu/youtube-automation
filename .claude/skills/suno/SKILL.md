@@ -100,7 +100,7 @@ generator は pattern draft、設定、benchmark analysis、必要な References
 - **明示 override 優先**: pattern に `style: <variant-key>` がある entry は `style_variants` の genre_line をそのまま使い、自動バリエーションは付与しない（通し番号は消費する）
 - **プール定義**: `config.default.yaml::style_variation.pools` に axis 名（`texture` / `rhythm` 等）→ descriptor 配列で定義する。axis 名の辞書順で round-robin に interleave した列を循環割り当てる。チャンネル側 `config/skills/suno.yaml` では axis 単位で丸ごと置換（deep-merge のリスト置換）・axis 追加・空リスト上書きによる axis 無効化ができる
 - **設定契約**: `style_variation` は mapping、`enabled` は bool、`pools` は mapping、各 axis は `list[str]`。descriptor は非空文字列のみ有効で、契約外 shape は `uv run yt-generate-suno` が `ConfigError` で停止する
-- **語彙の制約**: descriptor に禁止形容詞（`references/suno-examples.md`）・雨音／環境音 NG ワード・楽器名の裸置き・アーティスト名を入れない。`style_char_limit`（既定 120）の上限は descriptor 込みの Style 文で検証される
+- **語彙の制約**: descriptor に禁止形容詞（`references/suno-examples.md`）・雨音／環境音 NG ワード・楽器名の裸置き・アーティスト名を入れない。descriptor と情景行を含む完成形 Style は `full_style_char_limit`（既定 256）の soft quality budget で検証される
 - **重複検証**: 生成時に全 entry の Style 文（第 1 行 + 情景行）が完全一致する組があれば `uv run yt-generate-suno` が警告する
 - **無効化**: チャンネル側で `style_variation.enabled: false` を設定すると従来動作（全 entry 同一の Style 第 1 行）に戻る
 
@@ -182,7 +182,9 @@ Style テキストは以下の順序で構成する。順序を守ることで S
 
 ### Configurable Character Limit
 
-Style フィールドの文字数上限は `config/skills/suno.yaml::style_char_limit` で設定する（既定 **120 文字**）。`uv run yt-generate-suno` はビルド時に超過を警告し、`uv run yt-suno-verify` は設定上限を超えた `genre_line` と使用中の `style_variants.*.genre_line` をエラーにする。5-Element Order に従って要素を絞り込むか、意図的な長文 Style 運用では実際の上限を設定する。
+`config/skills/suno.yaml::style_char_limit`（既定 **120 文字**）は effective `genre_line` の hard guard であり、`uv run yt-suno-verify` は root と使用中の `style_variants.*.genre_line` の超過をエラーにする。第 1 行、descriptor、情景行を結合した完成形 Style は別の `full_style_char_limit`（既定 **256 文字**）を soft quality budget として使い、`uv run yt-generate-suno` が超過を警告する。256 は [Suno v4.5 公式 Help の詳細 Style 例](https://help.suno.com/en/articles/5782849)を収容する保守的な推奨値であり、Suno platform の hard limit を表さない。
+
+チャンネル側で `full_style_char_limit` を明示した場合はその値を使う。未指定で既存の `style_char_limit` だけが明示されているチャンネルでは、従来どおり同じ値を完成形 Style の警告にも使う。両方とも未指定なら完成形 Style には既定 256 を使う。
 
 ### Artist Name Prohibition
 
@@ -413,7 +415,7 @@ Suno V5.5 では Styles 経由で実楽曲長を制御できない。望む長�
 
 **雨音や環境音は楽曲に含めない。** NG ワード: rain, dripping, drops, puddles, splashing, pouring 等。OK ワード: misty, melancholic, nocturnal, bittersweet, foggy 等。全プロンプトに `no rain sound effects, no white noise, no ambient noise` を追加。`exclude_styles` にも `rain sounds, vinyl crackle, white noise, ambient noise` を含める。
 
-視聴中の注意を急に奪う展開を避けるため、同梱 `exclude_styles` は `sudden drops, risers, drum fills, hard transitions, dramatic buildups` も既定で含む。これらは Suno の独立した **Exclude Styles** 欄へ入力する値であり、Styles 本文へ連結しないため `style_char_limit` の文字数には算入しない。
+視聴中の注意を急に奪う展開を避けるため、同梱 `exclude_styles` は `sudden drops, risers, drum fills, hard transitions, dramatic buildups` も既定で含む。これらは Suno の独立した **Exclude Styles** 欄へ入力する値であり、Styles 本文へ連結しないため `style_char_limit` / `full_style_char_limit` の文字数には算入しない。
 
 #### genre_line と exclude_styles の整合性
 
