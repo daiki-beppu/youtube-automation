@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(workspace)`: 下流の Edit/Write hook でチャンネル関連 path だけを事前抽出し、workspace 境界判定 CLI の拒否理由と exit code をエージェントへ返すようにした（#3371）。
+
 - `feat(workspace)`: Write/Edit 対象 path が multi-channel workspace のチャンネル境界を越えないか検査する `yt-workspace-guard` CLI を追加（#3370）。
 
 - `feat(collection-serve)`: Suno downloaded の実 ZIP 適用成功応答へ期待数・配置数・欠損数の placement summary を追加し、部分成功時の欠損理由と workflow state を同じ count に統一。playlist URL 記録だけの先行 POST は legacy 応答を維持（#3164）。
