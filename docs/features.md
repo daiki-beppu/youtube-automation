@@ -121,7 +121,7 @@ YouTube Analytics と動画本体の解析。
 | /automation-release | 本リポジトリの新規リリースを作成（prepare → publish の 2 フェーズ） |
 | /automation-update | 下流チャンネルを upstream 最新版に追従（pin bump + `yt-skills sync` + 動作確認） |
 | /ext-install | Chrome 拡張（suno-helper / distrokid-helper / community-helper）の初回インストールまたは更新ガイド |
-| /feedback | スキル実行中の不具合・摩擦・改善案を append-only JSONL に構造化記録 |
+| /skill-feedback | スキル実行中の不具合・摩擦・改善案を append-only JSONL に構造化記録 |
 | /shadcn | `components.json` を読み、公式docs・registry差分を基準にshadcn/ui componentを追加・更新・監査 |
 
 ---
