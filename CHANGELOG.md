@@ -122,6 +122,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `refactor(automation-update)`: `yt-automation-update apply --help` だけで各 flag の用途と制約を確認できるようにし、追従スキルは代表フローと破壊的・直感に反する操作の承認案内へ整理した。既存の pin 更新・同期・smoke check の実行挙動は変更しない（#3513）。
 - `feat(site)`: 公開リリースノートサイトへ公式 DADS design token package を導入し、accent を blue key token の system 配色へ移行、リリース分類色を key / neutral role に分離した。あわせて muted text variable を現行 token へ修正した（#3550, #3551）。
 - `feat(site)`: production CSS の light / dark 配色を site CI で機械検証し、text `4.5:1` / non-text `3:1` を必須化した。基準未達だった card の default / hover border と dark main badge は、役割を保った DADS token / mix の最小調整で補正した（#3568）。
+- `feat(site)`: 公開リリースノートの詳細ページでも、本体 / Chrome 拡張を大きい / 小さいアップデート別に辿れるようにした（#3570）。
 - `docs(community-draft)`: 下流へ配布される skill から wheel 非同梱の ADR への参照を除去し、同梱する `references/generate_batch.py` を変数解決・日時計算・path 検証・JSON schema の単一ソースとして維持した。community draft の runtime behavior は変更しない（#3532）。
 - `docs(videoup)`: 下流へ配布される skill から wheel 非同梱の encoder benchmark 文書への参照を除去し、同一入力・共通出力での比較、median wall-clock 20% 短縮の採用基準、既定 `libx264`・hardware 明示 opt-in・probe 失敗時 fallback の判断契約を inline で維持した。動画生成の実行挙動は変更しない（#3530）。
 - `refactor(videoup)`: `yt-generate-videos-batch --help` と `generate_videos.sh --help` だけで対象 collection・stage・並列度、および collection path・preview・overlay の入力・既定・安全契約を確認できるようにし、skill は orchestration / safety contract に整理した。既存の execution contract と runtime behavior は変更しない（#3523）。
