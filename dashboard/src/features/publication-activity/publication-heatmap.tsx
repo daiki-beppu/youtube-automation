@@ -1,4 +1,8 @@
 import { useState } from "react"
+import { AlertCircleIcon } from "lucide-react"
+
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { formatCollectedAt } from "@/lib/dashboard-formatters"
 
 export type PublicationActivityError = {
   code: string
@@ -97,9 +101,46 @@ export function PublicationHeatmap({
   const detailsId = activeDate
     ? `publication-activity-details-${activeDate}`
     : undefined
+  const refreshFailures = channels.filter(
+    (
+      channel
+    ): channel is PublicationActivityChannel & {
+      error: PublicationActivityError
+    } => channel.status === "refresh_failed" && channel.error !== null
+  )
+  const fetchedAt = channels.reduce<string | null>((latest, channel) => {
+    if (channel.fetched_at === null) return latest
+    if (
+      latest === null ||
+      Date.parse(channel.fetched_at) > Date.parse(latest)
+    ) {
+      return channel.fetched_at
+    }
+    return latest
+  }, null)
 
   return (
-    <section aria-label="過去365日の公開活動">
+    <section aria-label="過去365日の公開活動" className="grid gap-3">
+      {fetchedAt ? (
+        <p className="text-sm text-muted-foreground">
+          最終更新 {formatCollectedAt(fetchedAt)}
+        </p>
+      ) : null}
+      {refreshFailures.map((channel) => (
+        <Alert
+          aria-label={`${channel.name} の公開活動更新失敗`}
+          key={channel.id}
+          variant="destructive"
+        >
+          <AlertCircleIcon />
+          <AlertTitle>
+            {channel.name} の公開活動を更新できませんでした
+          </AlertTitle>
+          <AlertDescription>
+            前回データを表示しています。{channel.error.message}
+          </AlertDescription>
+        </Alert>
+      ))}
       <div
         data-testid="publication-heatmap-scroll"
         style={{

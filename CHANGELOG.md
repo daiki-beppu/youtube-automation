@@ -101,6 +101,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `fix(suno-helper)`: 安全モードの entry 完了待ちで `status=error` の clip を観測した場合、duration outlier として自動再生成せず attempt 全体を playlist 候補から除外し、生成失敗の `ENTRY_FAILED` と失敗分再実行導線へ渡すようにした（#3205）。
 - `fix(suno-helper)`: active feed poll で要求 clip が欠落した場合、認証済みの単体 clip API を順次照会して `status=error` を含む終端状態を観測できるようにした。feed で確認済みの ID は重複照会せず、個別失敗は残りの照会を妨げず、401 後は token の再捕捉まで自前通信を停止する（#3203）。
 - `feat(server-source)`: ローカル配信元 selector の候補名を構造化されたチャンネル名と helper 名から組み立て、接続先 URL や `(default)`、hostname、port を表示しないようにした（#3232〜#3235）。
+- `feat(dashboard)`: 公開活動の更新に失敗したチャンネルでは前回取得済みの日別データを維持し、最終更新日時と更新失敗理由を視覚表示および支援技術へ通知するようにした（#3418）。
 - `feat(dashboard)`: 公開活動 API の loading・公開データ0件・request/schema 失敗を overview と独立した相互排他の表示状態として扱い、データ0件を空の365日グリッドとして表示しないようにした（#3417）。
 - `feat(dashboard)`: 公開活動の日セルを pointer と keyboard focus のどちらでも確認できるようにし、API のチャンネル別日次データから同じ日付・合計公開本数・チャンネル内訳を支援技術に関連付けて表示する（#3412）。
 - `feat(dashboard)`: `yt-dashboard --refresh-publications` を追加し、通常の Analytics 更新とともに全登録チャンネルの公開履歴 cache を強制更新できるようにした。`--skip-refresh` との同時指定では offline 契約を優先し、公開履歴を含む API 更新を行わない（#3398）。
