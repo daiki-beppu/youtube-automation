@@ -61,6 +61,16 @@ awk '/^## \[Unreleased\]/{flag=1; next} /^## \[/{flag=0} flag' CHANGELOG.md \
 5. 対象となる facade 無し移動が 0 件なら、監査結果と `### Migration` に `Python module 移動: なし` を明示する。
 <!-- import-migration-audit-contract:end -->
 
+### 4b. CLI 撤去・改名時の利用側監査（必須）
+
+previous tag から HEAD までに `pyproject.toml::[project.scripts]` の entry point が撤去または改名されている場合、release 前に次を完了する。CLI 実装と entry point だけを消しても、skill や smoke check が旧コマンドを起動すると下流の更新処理が最後に失敗するため、利用側まで同じ変更で移行する。
+
+1. `git diff "${previous_tag}..HEAD" -- pyproject.toml` で撤去・改名された `yt-*` 名と代替 CLI を列挙する。
+2. 撤去名ごとに `git grep -n -F -- '<撤去したCLI名>'` を実行し、現行の production code、`.claude/skills/`、運用 docs、テストに残る実行参照を確認する。履歴説明として残す `CHANGELOG.md` と過去 release notes は現行利用側に数えない。
+3. 特に `yt-automation-update apply` の smoke check と、撤去 CLI を案内していた skill を確認する。設定検証 CLI の置換では、対象 repo を明示して実行できる現行 `yt-doctor --json --target <repo>` へ移行する。
+4. 代替 CLI を実際に呼ぶ正常系の回帰テストを追加し、公開入口から exit 0 になることを確認する。旧 CLI の文字列不在だけをテストの根拠にしない。
+5. 撤去名の現行利用側参照が 0 件、代替経路のテストが green になるまで release prepare を停止する。
+
 ### 5. 開いている release/* ブランチが無い
 
 ```bash
