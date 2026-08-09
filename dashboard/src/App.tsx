@@ -72,6 +72,10 @@ import {
 } from "@/lib/dashboard-formatters"
 import { dashboardStatusPresentation } from "@/lib/dashboard-status"
 import {
+  workflowTimingPresentation,
+  type WorkflowTimingPresentation,
+} from "@/lib/workflow-timing-presentation"
+import {
   Table,
   TableBody,
   TableCell,
@@ -482,6 +486,12 @@ function WorkflowTimingSummary({
 }: {
   workflowTiming: WorkflowTiming
 }) {
+  const presentation = workflowTimingPresentation(workflowTiming)
+  const collections =
+    presentation.kind === "ready" || presentation.kind === "in_progress"
+      ? presentation.collections
+      : []
+
   return (
     <section aria-labelledby="workflow-timing-title" className="grid gap-4">
       <div>
@@ -492,8 +502,9 @@ function WorkflowTimingSummary({
           API が集計した作業時間と削減時間をコレクション単位で比較します。
         </p>
       </div>
+      <WorkflowTimingState presentation={presentation} />
       <div className="grid gap-4">
-        {workflowTiming.collections.map((collection) => (
+        {collections.map((collection) => (
           <WorkflowTimingCard
             key={`${collection.stage}-${collection.collection_id}`}
             collection={collection}
@@ -502,6 +513,50 @@ function WorkflowTimingSummary({
       </div>
     </section>
   )
+}
+
+function WorkflowTimingState({
+  presentation,
+}: {
+  presentation: WorkflowTimingPresentation
+}) {
+  switch (presentation.kind) {
+    case "ready":
+      return null
+    case "in_progress":
+      return (
+        <div
+          role="status"
+          aria-label="workflow timing 進行中"
+          className="flex items-center gap-3 rounded-lg border p-4"
+        >
+          <Badge>進行中</Badge>
+          <p className="text-sm text-muted-foreground">
+            現在の計測結果を表示しています。
+          </p>
+        </div>
+      )
+    case "error":
+      return (
+        <Alert variant="destructive">
+          <AlertCircleIcon />
+          <AlertTitle>{presentation.label}</AlertTitle>
+          <AlertDescription>{presentation.error.message}</AlertDescription>
+        </Alert>
+      )
+    case "unconfigured":
+    case "unmeasured":
+    case "unavailable":
+      return (
+        <div
+          role="status"
+          aria-label={`workflow timing ${presentation.label}`}
+          className="dashboard-metric-surface rounded-lg p-4"
+        >
+          <p className="font-semibold tabular-nums">{presentation.label}</p>
+        </div>
+      )
+  }
 }
 
 function Detail({ detail }: { detail: ChannelDetail }) {
