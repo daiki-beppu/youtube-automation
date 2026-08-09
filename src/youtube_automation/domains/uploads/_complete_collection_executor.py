@@ -15,6 +15,7 @@ from pathlib import Path
 
 from youtube_automation.core.adapters import cost_tracker
 from youtube_automation.core.adapters.errors import AutomationError, QuotaExhaustedError
+from youtube_automation.core.adapters.security import redact_sensitive_data
 from youtube_automation.core.adapters.youtube import complete_collection_quota_plan, quota_shortages
 from youtube_automation.domains.uploads._collection_uploader_constants import (
     ACTION_COMPLETE_COLLECTION_DEDUP_SKIPPED,
@@ -31,6 +32,76 @@ _COMPLETE_COLLECTION_ERROR = "complete collection upload failed"
 
 class CompleteCollectionExecutorMixin:
     """Complete Collection アップロード実行ループを提供する mixin。"""
+
+    def _failed_complete_collection(self, collection_path: Path, tracking: dict, error: AutomationError) -> dict:
+        current = self._load_tracking(collection_path) or tracking
+        cc_current = current.setdefault("complete_collection", {})
+        cc_current["status"] = "failed"
+        cc_current["error"] = _COMPLETE_COLLECTION_ERROR
+        self._save_tracking(collection_path, current)
+        logger.error("❌ Complete Collection エラー: %s", redact_sensitive_data(str(error), collection_path))
+        return {"action": "complete_collection_failed", "details": {"error": _COMPLETE_COLLECTION_ERROR}}
+
+    def _finish_uploaded_collection(
+        self,
+        collection_path: Path,
+        tracking: dict,
+        complete_video: dict,
+        publish_at: str | None,
+    ) -> dict:
+        tracking = {
+            **tracking,
+            "complete_collection": self._completed_tracking_record(complete_video, publish_at),
+            "status": TRACKING_STATUS_COMPLETED,
+        }
+        # YouTube 側の成功直後に正規状態を保存し、後処理失敗で video_id を失わない。
+        self._save_tracking(collection_path, tracking)
+
+        post_processing_errors: list[str] = []
+        if self.config["collections_management"].get("auto_move_to_live", True):
+            try:
+                collection_path = self._move_collection_to_live(collection_path)
+            except AutomationError as error:
+                post_processing_errors.append("move_to_live")
+                logger.error(
+                    "⚠️  Complete Collection 後処理エラー (move_to_live): %s",
+                    redact_sensitive_data(str(error), collection_path),
+                )
+
+        try:
+            self._update_workflow_upload(collection_path, complete_video, publish_at)
+        except AutomationError as error:
+            post_processing_errors.append("workflow_upload")
+            logger.error(
+                "⚠️  Complete Collection 後処理エラー (workflow_upload): %s",
+                redact_sensitive_data(str(error), collection_path),
+            )
+
+        try:
+            self._assign_to_playlists(complete_video["video_id"], collection_path)
+        except AutomationError as error:
+            post_processing_errors.append("playlist_assignment")
+            logger.error(
+                "⚠️  Complete Collection 後処理エラー (playlist_assignment): %s",
+                redact_sensitive_data(str(error), collection_path),
+            )
+
+        if post_processing_errors:
+            tracking["complete_collection"] = {
+                **tracking["complete_collection"],
+                "post_processing_status": "partial",
+                "post_processing_errors": post_processing_errors,
+            }
+        self._save_tracking(collection_path, tracking)
+
+        if complete_video.get("upload_source") == UPLOAD_SOURCE_EXISTING:
+            logger.info("⏭️  Complete Collection は既存動画を流用")
+            action = ACTION_COMPLETE_COLLECTION_DEDUP_SKIPPED
+        else:
+            logger.info("✅ Complete Collection アップロード完了")
+            action = ACTION_COMPLETE_COLLECTION_UPLOADED
+        logger.info(f"📹 {complete_video['video_url']}")
+        return {"action": action, "details": {**tracking["complete_collection"]}}
 
     def _execute_complete_collection(
         self, collection_path: Path, tracking: dict, publish_at: str | None = None
@@ -84,49 +155,6 @@ class CompleteCollectionExecutorMixin:
                 on_session_uri_changed=_on_session_uri_changed,
                 on_upload_complete=_on_upload_complete,
             )
-            complete_video = result.get("complete_video")
-
-            if complete_video and "video_id" in complete_video:
-                tracking = {
-                    **tracking,
-                    "complete_collection": self._completed_tracking_record(complete_video, publish_at),
-                    "status": TRACKING_STATUS_COMPLETED,
-                }
-
-                # live 移動
-                if self.config["collections_management"].get("auto_move_to_live", True):
-                    collection_path = self._move_collection_to_live(collection_path)
-
-                self._update_workflow_upload(collection_path, complete_video, publish_at)
-                self._save_tracking(collection_path, tracking)
-
-                if complete_video.get("upload_source") == UPLOAD_SOURCE_EXISTING:
-                    logger.info("⏭️  Complete Collection は既存動画を流用")
-                else:
-                    logger.info("✅ Complete Collection アップロード完了")
-                logger.info(f"📹 {complete_video['video_url']}")
-
-                # プレイリスト自動追加
-                self._assign_to_playlists(complete_video["video_id"], collection_path)
-
-                action = (
-                    ACTION_COMPLETE_COLLECTION_DEDUP_SKIPPED
-                    if complete_video.get("upload_source") == UPLOAD_SOURCE_EXISTING
-                    else ACTION_COMPLETE_COLLECTION_UPLOADED
-                )
-                return {"action": action, "details": {**tracking["complete_collection"]}}
-            else:
-                error_msg = _COMPLETE_COLLECTION_ERROR
-                # callback が disk に書いた URI 状態（session 失効クリア等）を保ったまま
-                # status 更新を載せるため、disk から再ロードしてから書き戻す。
-                current = self._load_tracking(collection_path) or tracking
-                cc_current = current.setdefault("complete_collection", {})
-                cc_current["status"] = "failed"
-                cc_current["error"] = error_msg
-                self._save_tracking(collection_path, current)
-                logger.error(f"❌ Complete Collection 失敗: {error_msg}")
-                return {"action": "complete_collection_failed", "details": {"error": error_msg}}
-
         except QuotaExhaustedError as e:
             # リトライ可能: tracking を failed にせず、resume URI（callback が永続化済み）を
             # 温存して次回実行に委ねる
@@ -135,15 +163,23 @@ class CompleteCollectionExecutorMixin:
                 "action": ACTION_COMPLETE_COLLECTION_QUOTA_EXHAUSTED,
                 "details": {"error": "quota exhausted", "retry_after_seconds": e.retry_after_seconds},
             }
-        except AutomationError:
-            # 例外パスでも callback が書いた disk 状態を尊重するため再ロード
-            current = self._load_tracking(collection_path) or tracking
-            cc_current = current.setdefault("complete_collection", {})
-            cc_current["status"] = "failed"
-            cc_current["error"] = _COMPLETE_COLLECTION_ERROR
-            self._save_tracking(collection_path, current)
-            logger.error("❌ Complete Collection エラー")
-            return {"action": "complete_collection_failed", "details": {"error": _COMPLETE_COLLECTION_ERROR}}
+        except AutomationError as error:
+            return self._failed_complete_collection(collection_path, tracking, error)
+
+        complete_video = result.get("complete_video")
+        if complete_video and "video_id" in complete_video:
+            return self._finish_uploaded_collection(collection_path, tracking, complete_video, publish_at)
+
+        error_msg = _COMPLETE_COLLECTION_ERROR
+        # callback が disk に書いた URI 状態（session 失効クリア等）を保ったまま
+        # status 更新を載せるため、disk から再ロードしてから書き戻す。
+        current = self._load_tracking(collection_path) or tracking
+        cc_current = current.setdefault("complete_collection", {})
+        cc_current["status"] = "failed"
+        cc_current["error"] = error_msg
+        self._save_tracking(collection_path, current)
+        logger.error(f"❌ Complete Collection 失敗: {error_msg}")
+        return {"action": "complete_collection_failed", "details": {"error": error_msg}}
 
 
 __all__ = ["CompleteCollectionExecutorMixin"]
