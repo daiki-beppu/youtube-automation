@@ -67,7 +67,7 @@ def test_collection_resolution_failure_returns_one_and_prints_error(monkeypatch,
     monkeypatch.setattr(sys, "argv", ["yt-suno-verify", "missing"])
     monkeypatch.setattr(
         module,
-        "resolve_collection_dir",
+        "_resolve_collection_argument",
         lambda _collection: (_ for _ in ()).throw(ValidationError("collection missing")),
     )
 
@@ -90,3 +90,87 @@ def test_config_loading_failure_returns_one_and_prints_error(monkeypatch, capsys
 
     assert module.main() == 1
     assert capsys.readouterr().out == "ERROR: suno config invalid\n"
+
+
+def test_bare_collection_name_prefers_planning_over_live(monkeypatch, tmp_path):
+    """bare name が planning / live の両方にある場合は planning を検証する."""
+    module = load_suno_verify_module()
+    channel = tmp_path / "channel"
+    planning = channel / "collections" / "planning" / "same-name"
+    live = channel / "collections" / "live" / "same-name"
+    planning.mkdir(parents=True)
+    live.mkdir(parents=True)
+    seen: dict[str, object] = {}
+
+    monkeypatch.setattr(sys, "argv", ["yt-suno-verify", "same-name"])
+    monkeypatch.setattr(module, "channel_dir", lambda: channel)
+    monkeypatch.setattr(module, "load_skill_config", lambda _skill: {})
+    monkeypatch.setattr(module, "resolve_suno_config", lambda _config: object())
+
+    def fake_verify(collection, config, infer_mode):
+        seen.update(collection=collection, config=config, infer_mode=infer_mode)
+        return [], "verified"
+
+    monkeypatch.setattr(module, "verify_suno_collection", fake_verify)
+
+    assert module.main() == 0
+    assert seen["collection"] == planning.resolve()
+
+
+def test_bare_collection_name_falls_back_to_live(monkeypatch, tmp_path):
+    """bare name が planning に無く live にある場合は live を検証する."""
+    module = load_suno_verify_module()
+    channel = tmp_path / "channel"
+    live = channel / "collections" / "live" / "live-only"
+    live.mkdir(parents=True)
+    seen: dict[str, object] = {}
+
+    monkeypatch.setattr(sys, "argv", ["yt-suno-verify", "live-only"])
+    monkeypatch.setattr(module, "channel_dir", lambda: channel)
+    monkeypatch.setattr(module, "load_skill_config", lambda _skill: {})
+    monkeypatch.setattr(module, "resolve_suno_config", lambda _config: object())
+    monkeypatch.setattr(
+        module,
+        "verify_suno_collection",
+        lambda collection, _config, _infer_mode: (seen.update(collection=collection) or [], "verified"),
+    )
+
+    assert module.main() == 0
+    assert seen["collection"] == live.resolve()
+
+
+@pytest.mark.parametrize("path_kind", ["relative", "absolute"])
+def test_explicit_collection_path_is_preserved(monkeypatch, tmp_path, path_kind):
+    """既存の相対パス・絶対パス指定は collection-name 探索へ置換しない."""
+    module = load_suno_verify_module()
+    collection = tmp_path / "explicit"
+    collection.mkdir()
+    monkeypatch.chdir(tmp_path)
+    argument = "explicit" if path_kind == "relative" else str(collection)
+    seen: dict[str, object] = {}
+
+    monkeypatch.setattr(sys, "argv", ["yt-suno-verify", argument])
+    monkeypatch.setattr(module, "channel_dir", lambda: tmp_path / "channel")
+    monkeypatch.setattr(module, "load_skill_config", lambda _skill: {})
+    monkeypatch.setattr(module, "resolve_suno_config", lambda _config: object())
+    monkeypatch.setattr(
+        module,
+        "verify_suno_collection",
+        lambda resolved, _config, _infer_mode: (seen.update(collection=resolved) or [], "verified"),
+    )
+
+    assert module.main() == 0
+    assert seen["collection"] == collection.resolve()
+
+
+def test_missing_bare_collection_name_returns_one_and_prints_error(monkeypatch, capsys, tmp_path):
+    """planning / live に無い bare name は ERROR と exit 1 に正規化する."""
+    module = load_suno_verify_module()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["yt-suno-verify", "missing"])
+    monkeypatch.setattr(module, "channel_dir", lambda: tmp_path / "channel")
+
+    assert module.main() == 1
+    assert capsys.readouterr().out == (
+        "ERROR: コレクション 'missing' が collections/planning/ にも collections/live/ にも見つかりません\n"
+    )
