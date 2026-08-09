@@ -14,6 +14,56 @@ interface ReleaseData {
   version: string;
 }
 
+const operatorSections = [
+  {
+    id: "getting-started",
+    label: "はじめる",
+    pages: [
+      {
+        description: "導入から最初のコレクション制作までの標準手順",
+        href: "/onboarding",
+        label: "セットアップ",
+      },
+      {
+        description: "Google Cloud と YouTube API の設定・トラブルシューティング",
+        href: "/oauth-setup",
+        label: "OAuth",
+      },
+      {
+        description: "Suno・DistroKid・Community Helper の導入手順",
+        href: "/chrome-extension-install-guide",
+        label: "Chrome 拡張の導入",
+      },
+    ],
+  },
+  {
+    id: "use",
+    label: "使う",
+    pages: [
+      {
+        description: "チャンネル運営で利用できる skill の一覧",
+        href: "/features",
+        label: "skill カタログ",
+      },
+      {
+        description: "制作 workflow の選び方と再開方法",
+        href: "/workflow-cheatsheet",
+        label: "ワークフローの使い分け",
+      },
+      {
+        description: "複数チャンネルの数字を確認する dashboard の使い方",
+        href: "/dashboard",
+        label: "dashboard",
+      },
+      {
+        description: "単一チャンネル構成から workspace へ移行する手順",
+        href: "/channel-workspace-migration",
+        label: "workspace 移行",
+      },
+    ],
+  },
+] as const;
+
 const routeByEntryId = new Map(data.routes.map((route) => [route.entryId, route.path]));
 const releases = (await getCollection("docs"))
   .map((entry) => {
@@ -60,49 +110,72 @@ const formatDate = (date: Date) =>
   siteUrl={data.config.site}
   ogEnabled={data.config.og.enabled}
   page={{
-    title: "リリースノート | youtube-automation",
+    title: "運用ガイド | youtube-automation",
     description: data.config.description,
   }}
 >
   <main class="release-shell">
     <header class="release-hero">
-      <p class="release-eyebrow">RELEASE NOTES</p>
-      <h1>最新のアップデート</h1>
-      <p>日々の YouTube 運営を、もっと速く、安全に。新機能と改善内容をお知らせします。</p>
+      <p class="release-eyebrow">OPERATOR GUIDE</p>
+      <h1>YouTube 運用ガイド</h1>
+      <p>導入、日々の制作、アップデート確認に必要な公式ドキュメントを目的別に案内します。</p>
     </header>
 
-    <div class="release-sections">
-      {releaseGroupsByKind.map(({ groups, kind, label }) => (
-        <section class="release-section" data-release-kind={kind}>
-          <h2>{label}</h2>
-          {groups.map((group) => (
-            <section class="release-scale" data-release-scale={group.scale}>
-              <h3>{group.label}</h3>
-              <ol class="release-list" aria-label={`${label}の${group.label}一覧`}>
-                {group.releases.map((release) => (
-                  <li>
-                    <a class="release-card" href={release.href}>
-                      <div class="release-meta">
-                        <span class:list={["release-kind", `release-kind--${release.kind}`]}>
-                          {kindLabel[release.kind]}
-                        </span>
-                        <time datetime={release.released_at.toISOString()}>
-                          {formatDate(release.released_at)}
-                        </time>
-                      </div>
-                      <h4>{release.version}</h4>
-                      <p>{release.summary}</p>
-                      <span class="release-link" aria-hidden="true">
-                        詳しく見る <span>→</span>
-                      </span>
-                    </a>
-                  </li>
-                ))}
-              </ol>
-            </section>
-          ))}
+    <div class="doc-sections">
+      {operatorSections.map((section) => (
+        <section class="doc-section" data-doc-section={section.id} id={section.id}>
+          <h2>{section.label}</h2>
+          <ul class="doc-list">
+            {section.pages.map((page) => (
+              <li>
+                <a class="doc-card" href={page.href}>
+                  <h3>{page.label}</h3>
+                  <p>{page.description}</p>
+                  <span aria-hidden="true">読む →</span>
+                </a>
+              </li>
+            ))}
+          </ul>
         </section>
       ))}
+
+      <section class="doc-section" data-doc-section="release-notes" id="release-notes">
+        <h2>リリースノート</h2>
+        <p class="doc-section-lead">本体と Chrome 拡張の新機能・改善内容を確認できます。</p>
+        <div class="release-sections">
+          {releaseGroupsByKind.map(({ groups, kind, label }) => (
+            <section class="release-section" data-release-kind={kind}>
+              <h3>{label}</h3>
+              {groups.map((group) => (
+                <section class="release-scale" data-release-scale={group.scale}>
+                  <h4>{group.label}</h4>
+                  <ol class="release-list" aria-label={`${label}の${group.label}一覧`}>
+                    {group.releases.map((release) => (
+                      <li>
+                        <a class="release-card" href={release.href}>
+                          <div class="release-meta">
+                            <span class:list={["release-kind", `release-kind--${release.kind}`]}>
+                              {kindLabel[release.kind]}
+                            </span>
+                            <time datetime={release.released_at.toISOString()}>
+                              {formatDate(release.released_at)}
+                            </time>
+                          </div>
+                          <h5>{release.version}</h5>
+                          <p>{release.summary}</p>
+                          <span class="release-link" aria-hidden="true">
+                            詳しく見る <span>→</span>
+                          </span>
+                        </a>
+                      </li>
+                    ))}
+                  </ol>
+                </section>
+              ))}
+            </section>
+          ))}
+        </div>
+      </section>
     </div>
   </main>
 </PageLayout>

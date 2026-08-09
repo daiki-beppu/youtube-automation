@@ -12,7 +12,31 @@ import {
 const readIndex = () => readFile(new URL("../dist/index.html", import.meta.url), "utf8");
 const readRelease = (version) =>
   readFile(new URL(`../dist/${version}/index.html`, import.meta.url), "utf8");
+const readOperatorDoc = (route) =>
+  readFile(new URL(`../dist${route}/index.html`, import.meta.url), "utf8");
 const execFileAsync = promisify(execFile);
+const operatorSections = [
+  {
+    label: "はじめる",
+    routes: [
+      "/onboarding",
+      "/oauth-setup",
+      "/chrome-extension-install-guide",
+    ],
+    section: "getting-started",
+  },
+  {
+    label: "使う",
+    routes: [
+      "/features",
+      "/workflow-cheatsheet",
+      "/dashboard",
+      "/channel-workspace-migration",
+    ],
+    section: "use",
+  },
+];
+const operatorRoutes = operatorSections.flatMap(({ routes }) => routes);
 
 const readStylesheetClosure = async (html) => {
   const inlineStyles = [...html.matchAll(/<style(?:\s[^>]*)?>([\s\S]*?)<\/style>/g)].map(
@@ -167,6 +191,102 @@ const sectionByAttribute = (html, attribute, value) => {
   throw new Error(`${attribute}="${value}" の section が閉じられていません`);
 };
 
+const hrefsWithin = (markup) =>
+  [...markup.matchAll(/href="(\/[^"#?]*)"/g)].map((match) => match[1]);
+
+test("landing page は3区分を表示し、operator docs 7件へ1回ずつ到達できる", async () => {
+  const html = await readIndex();
+  const sectionLabels = [
+    ["getting-started", "はじめる"],
+    ["use", "使う"],
+    ["release-notes", "リリースノート"],
+  ];
+
+  for (const [section, label] of sectionLabels) {
+    const markup = sectionByAttribute(html, "data-doc-section", section);
+    assert.match(markup, new RegExp(`<h2>${label}</h2>`));
+  }
+
+  const operatorMarkup = operatorSections
+    .map(({ section }) => sectionByAttribute(html, "data-doc-section", section))
+    .join("\n");
+  const operatorHrefs = hrefsWithin(operatorMarkup).filter((href) =>
+    operatorRoutes.includes(href)
+  );
+  assert.deepEqual(operatorHrefs, operatorRoutes);
+});
+
+test("全ページ共通 sidebar と tabs は operator 区分・release規模・exact route ownership を保つ", async () => {
+  const pages = [await readRelease("v5.6.0"), await readOperatorDoc("/features")];
+
+  for (const html of pages) {
+    const sidebar = html.match(/<nav data-blume-nav-tree>([\s\S]*?)<\/nav>/)?.[1] ?? "";
+    const header = html.match(/<header\b[^>]*data-blume-header[^>]*>([\s\S]*?)<\/header>/)?.[1] ?? "";
+    const tabs = header.match(/<nav aria-label="Sections"[^>]*>([\s\S]*?)<\/nav>/)?.[1] ?? "";
+
+    for (const { label } of operatorSections) {
+      assert.match(sidebar, new RegExp(`>${label}<`));
+      assert.match(tabs, new RegExp(`>${label}<`));
+    }
+    for (const label of [
+      "本体｜大きいアップデート",
+      "本体｜小さいアップデート",
+      "Chrome 拡張｜大きいアップデート",
+      "Chrome 拡張｜小さいアップデート",
+    ]) {
+      assert.match(sidebar, new RegExp(`>${label}<`));
+    }
+    assert.match(tabs, />リリースノート</);
+    assert.deepEqual(
+      [...tabs.matchAll(/href="([^"]+)"/g)].map((match) => match[1]),
+      ["/#getting-started", "/#use", "/#release-notes"]
+    );
+
+    for (const route of operatorRoutes) {
+      assert.equal(hrefsWithin(sidebar).filter((href) => href === route).length, 1);
+    }
+  }
+});
+
+test("operator docs の7 routeを描画・検索し、内部linkとGitHub fallbackを保つ", async () => {
+  const search = JSON.parse(
+    await readFile(new URL("../dist/blume-search.json", import.meta.url), "utf8")
+  );
+  const searchRoutes = search.map(({ route }) => route);
+
+  for (const route of operatorRoutes) {
+    const html = await readOperatorDoc(route);
+    assert.match(html, /<article\b/);
+    assert.equal(searchRoutes.filter((candidate) => candidate === route).length, 1);
+  }
+
+  const features = await readOperatorDoc("/features");
+  const onboarding = await readOperatorDoc("/onboarding");
+  const oauth = await readOperatorDoc("/oauth-setup");
+  assert.match(features, /href="\/workflow-cheatsheet"/);
+  assert.match(onboarding, /href="\/oauth-setup"/);
+  assert.match(oauth, /href="\/onboarding"/);
+  assert.match(
+    onboarding,
+    /href="https:\/\/github\.com\/daiki-beppu\/youtube-automation\/blob\/main\/docs\/migration\/python-to-tayk\.md"/
+  );
+});
+
+test("非掲載領域は route、navigation、landing、search に現れない", async () => {
+  const distDirectory = new URL("../dist/", import.meta.url);
+  const generatedPaths = await readdir(distDirectory, { recursive: true });
+  const index = await readIndex();
+  const release = await readRelease("v5.6.0");
+  const search = JSON.parse(
+    await readFile(new URL("../dist/blume-search.json", import.meta.url), "utf8")
+  );
+
+  assert.equal(generatedPaths.some((path) => path.startsWith("audits/")), false);
+  assert.doesNotMatch(index, /href="\/audits(?:\/|"|#)/);
+  assert.doesNotMatch(release, /href="\/audits(?:\/|"|#)/);
+  assert.equal(search.some(({ route }) => route.startsWith("/audits")), false);
+});
+
 test("patch が 0 の version は major、それ以外は minor に分類する", () => {
   assert.equal(scaleFromVersion("v5.6.0"), "major");
   assert.equal(scaleFromVersion("ext-v0.3.0"), "major");
@@ -237,13 +357,13 @@ test("top page は kind の下に非空の更新規模 section を見出し階�
     const majorSection = sectionByAttribute(kindSection, "data-release-scale", "major");
     const minorSection = sectionByAttribute(kindSection, "data-release-scale", "minor");
 
-    assert.match(kindSection, new RegExp(`<h2>${kindLabel}</h2>`));
+    assert.match(kindSection, new RegExp(`<h3>${kindLabel}</h3>`));
     assert.equal([...kindSection.matchAll(/<section[^>]*data-release-scale=/g)].length, 2);
-    assert.match(majorSection, /<h3>大きいアップデート<\/h3>/);
-    assert.match(minorSection, /<h3>小さいアップデート<\/h3>/);
+    assert.match(majorSection, /<h4>大きいアップデート<\/h4>/);
+    assert.match(minorSection, /<h4>小さいアップデート<\/h4>/);
     assert.match(majorSection, /<ol[^>]*class="release-list"[^>]*>\s*<li>/);
     assert.match(minorSection, /<ol[^>]*class="release-list"[^>]*>\s*<li>/);
-    assert.doesNotMatch(kindSection, /<section[^>]*data-release-scale[^>]*>\s*<h3>[^<]+<\/h3>\s*<ol[^>]*>\s*<\/ol>/);
+    assert.doesNotMatch(kindSection, /<section[^>]*data-release-scale[^>]*>\s*<h4>[^<]+<\/h4>\s*<ol[^>]*>\s*<\/ol>/);
   }
 });
 
@@ -292,7 +412,7 @@ test("top page の kind × 更新規模 group は4 releaseの所属・日付・�
     );
 
     assert.deepEqual(hrefs, [expected.href]);
-    assert.match(scaleSection, new RegExp(`<h4>${expected.version}</h4>`));
+    assert.match(scaleSection, new RegExp(`<h5>${expected.version}</h5>`));
     assert.match(scaleSection, new RegExp(`<time datetime="${expected.date}">[^<]+</time>`));
     assert.match(
       scaleSection,
@@ -317,8 +437,8 @@ test("一覧は本体とChrome拡張に分かれ、それぞれ公開日の新�
   const hrefs = (markup) =>
     [...markup.matchAll(/class="release-card" href="([^"]+)"/g)].map((match) => match[1]);
 
-  assert.match(main, /<h2>本体<\/h2>/);
-  assert.match(extension, /<h2>Chrome 拡張<\/h2>/);
+  assert.match(main, /<h3>本体<\/h3>/);
+  assert.match(extension, /<h3>Chrome 拡張<\/h3>/);
   assert.deepEqual(hrefs(main), ["/v5.6.0", "/v5.5.17"]);
   assert.deepEqual(hrefs(extension), ["/ext-v0.3.0", "/ext-v0.2.5"]);
 });
@@ -335,10 +455,12 @@ test("本体とChrome拡張を区別し、詳細ページへリンクする", as
 const sidebarGroups = (html) => {
   const sidebar = html.match(/<nav data-blume-nav-tree>([\s\S]*?)<\/nav>/)?.[1] ?? "";
   const groupPattern = /<p\b[^>]*>\s*<span\b[^>]*>([^<]+)<\/span>\s*<\/p>\s*<div\b[^>]*>\s*<ul\b[^>]*>([\s\S]*?)<\/ul>/g;
-  return [...sidebar.matchAll(groupPattern)].map((match) => ({
-    label: match[1],
-    hrefs: [...match[2].matchAll(/href="(\/[^"#]+)"/g)].map((href) => href[1]),
-  }));
+  return [...sidebar.matchAll(groupPattern)]
+    .filter((match) => match[1].includes("｜"))
+    .map((match) => ({
+      label: match[1],
+      hrefs: [...match[2].matchAll(/href="(\/[^"#]+)"/g)].map((href) => href[1]),
+    }));
 };
 
 test("全詳細ページのサイドバーを kind × 更新規模の4 flat groupで表示する", async () => {

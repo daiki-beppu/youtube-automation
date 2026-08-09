@@ -42,6 +42,23 @@ export default defineConfig({
   navigation: {
     sidebar: [
       {
+        label: "はじめる",
+        items: [
+          "/onboarding",
+          "/oauth-setup",
+          "/chrome-extension-install-guide",
+        ],
+      },
+      {
+        label: "使う",
+        items: [
+          "/features",
+          "/workflow-cheatsheet",
+          "/dashboard",
+          "/channel-workspace-migration",
+        ],
+      },
+      {
         label: `本体｜${releaseScaleLabels.major}`,
         items: ["/v5.6.0"],
       },
@@ -58,7 +75,25 @@ export default defineConfig({
         items: ["/ext-v0.2.5"],
       },
     ],
-    tabs: [{ label: "リリースノート", path: "/", href: "/" }],
+    // Operator routes are intentionally flat; root-scoped tabs keep the same
+    // three-section sidebar visible instead of treating one route as a prefix.
+    tabs: [
+      {
+        href: "/#getting-started",
+        label: "はじめる",
+        path: "/",
+      },
+      {
+        href: "/#use",
+        label: "使う",
+        path: "/",
+      },
+      {
+        href: "/#release-notes",
+        label: "リリースノート",
+        path: "/",
+      },
+    ],
   },
   theme: {
     accent: {
