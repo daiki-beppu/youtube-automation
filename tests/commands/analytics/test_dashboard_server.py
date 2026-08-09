@@ -149,6 +149,54 @@ def test_cli_opens_loopback_url_after_server_starts(monkeypatch: pytest.MonkeyPa
     assert opened == ["http://127.0.0.1:4321/"]
 
 
+def test_cli_refresh_publications_forces_every_channel(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    channels = [tmp_path / "one", tmp_path / "two"]
+    collected: list[tuple[Path, bool]] = []
+
+    class FakeServer:
+        server_port = 4321
+
+        def serve_forever(self) -> None:
+            raise KeyboardInterrupt
+
+        def server_close(self) -> None:
+            return None
+
+    monkeypatch.setattr("youtube_automation.commands.analytics.dashboard.load_channel_registry", lambda _path: channels)
+
+    def refresh_channels(paths: list[Path], *, collect_channel) -> dict[Path, str]:
+        for path in paths:
+            collect_channel(path)
+        return {}
+
+    def collect_analytics(
+        channel: Path,
+        _factory,
+        *,
+        force_publication_refresh: bool,
+    ) -> None:
+        collected.append((channel, force_publication_refresh))
+
+    monkeypatch.setattr(
+        "youtube_automation.commands.analytics.dashboard.refresh_dashboard_channels",
+        refresh_channels,
+    )
+    monkeypatch.setattr(
+        "youtube_automation.commands.analytics.dashboard.collect_channel_analytics",
+        collect_analytics,
+    )
+    monkeypatch.setattr(
+        "youtube_automation.commands.analytics.dashboard.create_server",
+        lambda **_kwargs: FakeServer(),
+    )
+
+    assert main(["--refresh-publications", "--registry", str(tmp_path / "channels.json")]) == 0
+    assert collected == [(channels[0], True), (channels[1], True)]
+
+
 def test_cli_skip_refresh_starts_from_existing_snapshots_without_api_calls(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ):
@@ -177,7 +225,9 @@ def test_cli_skip_refresh_starts_from_existing_snapshots_without_api_calls(
     )
     monkeypatch.setattr(
         "youtube_automation.commands.analytics.dashboard.collect_channel_analytics",
-        lambda _channel, _factory: api_calls.append("publication collector"),
+        lambda _channel, _factory, *, force_publication_refresh: api_calls.append(
+            f"publication collector force={force_publication_refresh}"
+        ),
     )
     monkeypatch.setattr(
         "youtube_automation.commands.analytics.dashboard.create_server",
@@ -188,7 +238,17 @@ def test_cli_skip_refresh_starts_from_existing_snapshots_without_api_calls(
         ),
     )
 
-    assert main(["--skip-refresh", "--registry", str(tmp_path / "channels.json")]) == 0
+    assert (
+        main(
+            [
+                "--skip-refresh",
+                "--refresh-publications",
+                "--registry",
+                str(tmp_path / "channels.json"),
+            ]
+        )
+        == 0
+    )
     assert api_calls == []
 
 
