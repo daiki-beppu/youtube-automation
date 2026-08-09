@@ -55,6 +55,8 @@ logger = logging.getLogger(__name__)
 
 # channels.list バッチ単位（YouTube Data API 上限）
 _CHANNELS_BATCH_SIZE = 50
+_SCAN_PAGE_SIZE = 50
+_DEFAULT_SCAN_RECENT = 150
 # quota 記録（Issue #2056）: read 系 list operation は 1 request = 1 unit
 _QUOTA_SERVICE = "youtube-data-api"
 _READ_QUOTA_UNITS = 1
@@ -113,6 +115,15 @@ def _existing_user_content(path: Path) -> str:
             "手書き分析を1セクションへ統合して再実行してください。"
         )
     return "".join(lines[matches[0] :]).strip("\r\n") if matches else ""
+
+
+def estimate_collection_quota_units(*, channel_count: int, scan_recent: int) -> int:
+    """通常収集の Data API read quota 上限を 50 件ページ単位で返す。"""
+    if channel_count <= 0:
+        return 0
+    scan_pages = max(0, (scan_recent + _SCAN_PAGE_SIZE - 1) // _SCAN_PAGE_SIZE)
+    channel_batches = (channel_count + _CHANNELS_BATCH_SIZE - 1) // _CHANNELS_BATCH_SIZE
+    return channel_batches + channel_count * scan_pages * 2
 
 
 def _markdown_code_fence(content: str) -> str:
@@ -228,7 +239,7 @@ class BenchmarkCollector:
                 空辞書で握りつぶさず、欠落を呼び出し側へ伝播させる
         """
         channel_id = channel_info["id"]
-        scan_recent = self.benchmark_config.get("scan_recent", 50)
+        scan_recent = self.benchmark_config.get("scan_recent", _DEFAULT_SCAN_RECENT)
         min_views = self.benchmark_config.get("min_views", 10000)
 
         if not ch_item:
@@ -1351,12 +1362,17 @@ def main():
         logger.info("--keep-thumbnails: サムネイルは常に保持されるようになりました（このフラグは不要）")
 
     analyze_thumbnails = collector.benchmark_config.get("gemini_thumbnail_analysis", False)
-    scan_recent = collector.benchmark_config.get("scan_recent", 50)
+    scan_recent = collector.benchmark_config.get("scan_recent", _DEFAULT_SCAN_RECENT)
     num_channels = len(collector.config.analytics.benchmark.channels)
 
     print("\n=== Benchmark Collector ===")
     print(f"  対象チャンネル: {num_channels} 件")
     print(f"  走査プール: {scan_recent} 本/ch")
+    print(
+        "  Data API quota 上限目安: "
+        f"{estimate_collection_quota_units(channel_count=num_channels, scan_recent=scan_recent)} units"
+        "（全対象を更新する場合）"
+    )
     print(f"  鮮度基準: {collector.benchmark_config.get('freshness_days', 3)} 日")
     if args.no_thumbnails:
         print("  サムネイル分析: OFF（--no-thumbnails）")

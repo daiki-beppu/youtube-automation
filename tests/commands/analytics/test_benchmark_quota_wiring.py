@@ -24,6 +24,7 @@ from youtube_automation.commands.analytics.benchmark_collector import (
     _QUOTA_SERVICE,
     _READ_QUOTA_UNITS,
     BenchmarkCollector,
+    estimate_collection_quota_units,
 )
 from youtube_automation.commands.analytics.fetch_benchmark_comments import BenchmarkCommentCollector
 from youtube_automation.core.errors import YouTubeAPIError
@@ -75,6 +76,11 @@ def _video_item(video_id: str) -> dict:
 
 def _buckets(calls: list[dict]) -> list[str]:
     return [c["bucket"] for c in calls]
+
+
+@pytest.mark.parametrize(("scan_recent", "expected_units"), [(0, 1), (50, 3), (150, 7)])
+def test_collection_quota_estimate_matches_50_item_paging(scan_recent, expected_units) -> None:
+    assert estimate_collection_quota_units(channel_count=1, scan_recent=scan_recent) == expected_units
 
 
 class TestBenchmarkCollectorQuotaWiring:

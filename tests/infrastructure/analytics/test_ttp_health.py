@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import date, timedelta
 from types import SimpleNamespace
 
 from youtube_automation.commands.analytics import ttp_health as ttp_health_cli
@@ -98,6 +99,35 @@ def test_incomplete_coverage_is_insufficient_not_healthy() -> None:
     assert result["status"] == "insufficient_data"
     assert result["alerts"] == []
     assert {item["kind"] for item in result["insufficiencies"]} == {"incomplete_window_coverage"}
+    insufficiency = result["insufficiencies"][0]
+    assert insufficiency["recommended_scan_recent"] == 150
+    assert insufficiency["config_path"] == "config/skills/benchmark.yaml"
+    assert insufficiency["config_key"] == "scan_recent"
+    assert insufficiency["coverage"] == {
+        "scanned_count": 2,
+        "latest_upload_at": "2026-06-15",
+        "oldest_upload_at": "2026-03-17",
+        "observed_span_days": 90,
+        "required_span_days": 150,
+    }
+    assert "scan_recent: 150" in insufficiency["detail"]
+
+
+def test_high_frequency_scan_50_has_no_prior_window_but_scan_150_recovers_it() -> None:
+    reference = date.fromisoformat(REFERENCE_DATE)
+    offsets = [round(index * 60 / 49) for index in range(50)] + [round(61 + index * 119 / 99) for index in range(100)]
+    high_frequency_videos = [_video((reference - timedelta(days=offset)).isoformat(), 20_000) for offset in offsets]
+
+    result_at_50 = _channel_result(_benchmark(high_frequency_videos[:50], complete=False))
+    result_at_150 = _channel_result(_benchmark(high_frequency_videos, complete=False))
+
+    assert result_at_50["prior_window"]["video_count"] == 0
+    insufficiency = next(
+        item for item in result_at_50["insufficiencies"] if item["kind"] == "incomplete_window_coverage"
+    )
+    assert insufficiency["recommended_scan_recent"] == 150
+    assert result_at_150["prior_window"]["video_count"] > 0
+    assert result_at_150["status"] == "healthy"
 
 
 def test_missing_benchmark_entry_is_missing_data() -> None:

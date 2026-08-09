@@ -229,7 +229,11 @@ def test_analytics_json_has_default_benchmark_parameters(tmp_path):
     analytics = _read_json(_channel_dir(tmp_path) / "analytics.json")
     bm = analytics["benchmark"]
     assert bm["channels"] == []
-    assert "scan_recent" in bm
+    assert bm["scan_recent"] == 150
+    default_config = yaml.safe_load(
+        (REPO_ROOT / ".claude/skills/benchmark/config.default.yaml").read_text(encoding="utf-8")
+    )
+    assert default_config["scan_recent"] == bm["scan_recent"]
     assert "min_views" in bm
     assert "freshness_days" in bm
     assert "gemini_thumbnail_analysis" in bm
