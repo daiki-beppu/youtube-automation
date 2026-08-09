@@ -109,8 +109,8 @@ def _benchmark_refs(channel_root: Path, *names: str, channel: str = "winner") ->
     root = channel_root / "data" / "thumbnail_compare" / "benchmark" / channel
     root.mkdir(parents=True, exist_ok=True)
     paths = [root / name for name in names]
-    for path in paths:
-        path.write_bytes(b"reference")
+    for index, path in enumerate(paths):
+        Image.new("RGB", (160, 90), (20 + index, 30 + index, 80 + index)).save(path)
     return paths
 
 

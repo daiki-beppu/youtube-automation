@@ -19,11 +19,15 @@ import sys
 import time
 from pathlib import Path
 
-from youtube_automation.core.errors import ConfigError
+from youtube_automation.core.errors import ConfigError, ValidationError
 from youtube_automation.domains.thumbnail.references import (
     format_reference_assignment,
     plan_ttp_reference_assignments,
     resolve_dedup_recent_collections,
+)
+from youtube_automation.domains.thumbnail.selection import (
+    diagnose_reference_pool,
+    resolve_auto_selection_settings,
 )
 from youtube_automation.infrastructure.media.image_provider import (
     ImageGenerationRequest,
@@ -66,6 +70,25 @@ def _channel_root() -> Path:
     from youtube_automation.configuration import channel_dir
 
     return channel_dir()
+
+
+def _preflight_reference_pool(reference_assignments: list[Path | None], skill_cfg: dict) -> None:
+    references = [reference for reference in reference_assignments if reference is not None]
+    settings = resolve_auto_selection_settings(skill_cfg)
+    diagnostic = diagnose_reference_pool(
+        references,
+        max_reference_distance=settings.max_reference_distance,
+    )
+    if not diagnostic.outliers:
+        return
+    details = ", ".join(f"{item.path}: distance={item.distance:.4f}" for item in diagnostic.outliers)
+    message = (
+        "参照画像プールに centroid 距離の外れ値があります "
+        f"(max_reference_distance={diagnostic.max_reference_distance:.4f}): {details}"
+    )
+    if settings.enabled and settings.mode == "full":
+        raise ValidationError(message)
+    print(f"[WARN] {message}", file=sys.stderr)
 
 
 def _required_mapping(value: object, key: str) -> dict:
@@ -521,10 +544,11 @@ def main():
                 channel_dir=_channel_root(),
                 dedup_recent_collections=dedup_recent_collections,
             )
+            _preflight_reference_pool(reference_assignments, skill_cfg)
         else:
             benchmark_root = None
             reference_assignments = plan_reference_assignments(reference_images, cli_max_attempts, rotate)
-    except ConfigError as e:
+    except (ConfigError, ValidationError) as e:
         print(f"[ERROR] {e}")
         sys.exit(1)
 

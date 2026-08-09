@@ -382,6 +382,7 @@ def test_thumbnail_selection_keeps_config_validation_and_tie_breaking(tmp_path: 
         min_height=90,
         aspect_tolerance=0.02,
         mode="selection_only",
+        max_reference_distance=0.4,
     )
     image_paths = []
     for name in ("b.jpg", "a.jpg"):

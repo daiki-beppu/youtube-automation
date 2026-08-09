@@ -26,9 +26,9 @@ single_step の初回 `diff_prompt_template` はテキスト付き `thumbnail-v*
 
 ## auto-selection 設定と採点
 
-`image_generation.auto_selection` で `enabled`、`mode`、`min_width`、`min_height`、`aspect_tolerance` を設定する。`selection_only` は候補承認だけを省略し、`full` は `SKILL.md` の表に示す 4 ゲートを省略する。
+`image_generation.auto_selection` で `enabled`、`mode`、`min_width`、`min_height`、`aspect_tolerance`、`max_reference_distance`（既定 0.40）を設定する。`selection_only` は候補承認だけを省略し、`full` は `SKILL.md` の表に示す 4 ゲートを省略する。
 
-`image_generation.gemini.reference_images.default` の各参照画像から brightness / contrast / saturation / dominant_hue / colorfulness を抽出して centroid を作る。16:9 と最小解像度を満たす候補を採点し、centroid への distance が最小の候補を選ぶ。apply 時は PNG 候補を必要に応じて JPEG へ変換し、`thumbnail_auto_selection` に選択候補・distance・ランキング・実行時刻を記録する。
+`image_generation.gemini.reference_images.default` の各参照画像から brightness / contrast / saturation / dominant_hue / colorfulness を抽出して centroid を作る。各参照の centroid 距離が上限を超えた場合、`selection_only` は構造化診断を残して警告継続し、`full` は候補確定前に停止する。`yt-generate-image --ttp-strict-references` でも同じ診断を生成 API 呼び出し前に行う。16:9 と最小解像度を満たす候補を採点し、centroid への distance が最小の候補を選ぶ。apply 時は PNG 候補を必要に応じて JPEG へ変換し、`thumbnail_auto_selection` に選択候補・distance・ランキング・参照ごとの診断・実行時刻を記録する。prompt の色・背景指定だけを参照プールの構造的な外れ値対策として扱わない。
 
 候補なし、参照なし、解像度や 16:9 条件を満たす候補なし、確定済みファイル存在、無効設定は silent fallback せず停止する。
 
