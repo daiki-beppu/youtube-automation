@@ -27,6 +27,16 @@
           }
         ]
       }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run yt-workspace-guard context"
+          }
+        ]
+      }
     ]
   }
 }

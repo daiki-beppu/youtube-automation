@@ -50,6 +50,13 @@ def _workspace_guard_command(settings: dict[str, object]) -> str:
     return commands[0]
 
 
+def _session_context_command(settings: dict[str, object]) -> str:
+    groups = settings["hooks"]["SessionStart"]
+    commands = [hook["command"] for group in groups for hook in group["hooks"]]
+    assert commands == ["uv run yt-workspace-guard context"]
+    return commands[0]
+
+
 def test_settings_merge_preserves_local_values_and_accepts_hooks(tmp_path, monkeypatch) -> None:
     _template(tmp_path)
     target = tmp_path / "downstream" / ".claude" / "settings.json"
@@ -96,6 +103,15 @@ def test_distributed_settings_include_workspace_guard_alongside_auth_hook(tmp_pa
     assert "uv run yt-workspace-guard check $CLAUDE_FILE_PATHS" in command
     all_commands = [hook["command"] for group in merged["hooks"]["PreToolUse"] for hook in group["hooks"]]
     assert any("auth/client_secrets.json" in candidate for candidate in all_commands)
+
+
+def test_distributed_settings_include_session_start_context_hook(tmp_path, monkeypatch) -> None:
+    target = tmp_path / "downstream" / ".claude" / "settings.json"
+
+    assert _run(REPO_ROOT, target, monkeypatch, "--accept-hooks") == 0
+
+    merged = json.loads(target.read_text(encoding="utf-8"))
+    assert _session_context_command(merged) == "uv run yt-workspace-guard context"
 
 
 def test_workspace_guard_hook_prefilters_unrelated_paths(tmp_path) -> None:
