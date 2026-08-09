@@ -58,6 +58,7 @@ _SKILLS_DIR = _REPO_ROOT / ".claude" / "skills"
 _SRC_DIR = _REPO_ROOT / "src" / "youtube_automation"
 _AUDIT_DOC = _REPO_ROOT / "docs" / "audits" / "2026-05-skill-md-audit.md"
 _CLAUDE_TEMPLATE = _REPO_ROOT / ".claude" / "CLAUDE.template.md"
+_FEATURES = _REPO_ROOT / "docs" / "features.md"
 _ONBOARDING = _REPO_ROOT / "ONBOARDING.md"
 _AUDIENCE_PERSONA_DESIGN = _SKILLS_DIR / "audience-persona-design" / "SKILL.md"
 _VIEWER_VOICE = _SKILLS_DIR / "viewer-voice" / "SKILL.md"
@@ -194,10 +195,11 @@ def test_old_skill_directory_is_removed(old_name: str) -> None:
 
 
 def test_skill_feedback_replaces_legacy_feedback_entrypoint() -> None:
-    """canonical entrypoint だけを公開し、旧 references は cleanup 段まで許容する。"""
-    assert not (_LEGACY_FEEDBACK_DIR / "SKILL.md").exists()
-    if _LEGACY_FEEDBACK_DIR.exists():
-        assert {path.name for path in _LEGACY_FEEDBACK_DIR.iterdir()} <= {"references"}
+    """canonical entrypoint だけを公開し、旧 directory と command route を残さない。"""
+    assert not os.path.lexists(_LEGACY_FEEDBACK_DIR)
+
+    for path in (*_iter_skill_md_files(), _CLAUDE_TEMPLATE, _FEATURES):
+        assert _slash_pattern("feedback").search(_read(path)) is None, path.relative_to(_REPO_ROOT)
 
     canonical = _read(_SKILL_FEEDBACK)
     assert _front_matter_name(_SKILL_FEEDBACK) == "skill-feedback"
