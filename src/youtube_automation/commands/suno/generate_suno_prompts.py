@@ -830,16 +830,18 @@ def main():
     if not patterns_path.exists():
         parser.error(f"{patterns_path} not found")
 
-    md_path = patterns_path.parent / SUNO_PROMPTS_MD_FILENAME
-    md_path.write_text(generate(patterns_path))
-    print(f"Generated: {md_path}")
-
-    json_path = patterns_path.parent / SUNO_PROMPTS_JSON_FILENAME
     entries = build_prompt_entries(patterns_path)
+    markdown = generate(patterns_path)
     payload = {
         "entries": entries,
         "duration_filter": _duration_filter_from_config(load_skill_config("suno")),
     }
+
+    md_path = patterns_path.parent / SUNO_PROMPTS_MD_FILENAME
+    md_path.write_text(markdown)
+    print(f"Generated: {md_path}")
+
+    json_path = patterns_path.parent / SUNO_PROMPTS_JSON_FILENAME
     json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(f"Generated: {json_path}")
 

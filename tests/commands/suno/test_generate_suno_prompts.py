@@ -1143,6 +1143,28 @@ def test_main_writes_suno_prompts_json_alongside_md(channel_dir, tmp_path, monke
     assert json_path.exists(), "suno-prompts.json が併出されること"
 
 
+@pytest.mark.parametrize("style_source", ["channel", "patterns"])
+def test_main_rejects_banned_artist_before_writing_outputs(
+    channel_dir,
+    tmp_path,
+    monkeypatch,
+    style_source,
+):
+    """channel/patterns どちらの Style でも同じ ConfigError で生成を止める."""
+    banned_style = "lo-fi jazz inspired by Drake"
+    channel_style = banned_style if style_source == "channel" else "lo-fi jazz"
+    patterns_style = banned_style if style_source == "patterns" else None
+    _write_suno_override(channel_dir, genre_line=channel_style, banned_artists=["Drake"])
+    patterns_path = _write_minimal_patterns(tmp_path, genre_line=patterns_style)
+    monkeypatch.setattr(sys, "argv", ["yt-generate-suno", str(patterns_path)])
+
+    with pytest.raises(ConfigError, match="Banned artist.*Drake"):
+        main()
+
+    assert not (patterns_path.parent / "suno-prompts.md").exists()
+    assert not (patterns_path.parent / "suno-prompts.json").exists()
+
+
 def test_main_json_output_is_loadable_array_of_entries(channel_dir, tmp_path, monkeypatch):
     """Given main 実行後の suno-prompts.json
     When json.loads する
