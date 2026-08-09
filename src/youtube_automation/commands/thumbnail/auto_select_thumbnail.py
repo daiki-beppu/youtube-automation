@@ -347,7 +347,7 @@ def _ranking_payload(scores: list[CandidateScore]) -> list[dict[str, Any]]:
 def _reference_diagnostic_payload(
     diagnostic: ReferencePoolDiagnostic,
     channel_root: Path,
-) -> dict[str, Any]:
+) -> dict[str, object]:
     return {
         "max_reference_distance": diagnostic.max_reference_distance,
         "references": [
@@ -559,7 +559,7 @@ def main(argv: list[str] | None = None) -> int:
     except (ConfigError, ValidationError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         if args.json:
-            payload: dict[str, Any] = {"status": "error", "error": str(exc)}
+            payload: dict[str, object] = {"status": "error", "error": str(exc)}
             if reference_diagnostic is not None and channel_root is not None:
                 payload["reference_diagnostics"] = _reference_diagnostic_payload(reference_diagnostic, channel_root)
             print(json.dumps(payload, ensure_ascii=False))
