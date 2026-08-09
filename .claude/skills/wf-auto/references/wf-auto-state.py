@@ -233,6 +233,65 @@ def summarize_attempt_durations(history: dict) -> dict:
     return {"available": True, "reason": None, "actions": actions, "totals": totals}
 
 
+def summarize_time_savings(history: dict, manual_baseline_minutes: dict[str, float] | None) -> dict:
+    """Apply configured per-work-item baselines to measured attempt durations."""
+    duration_summary = summarize_attempt_durations(history)
+    if not duration_summary["available"]:
+        return duration_summary
+    if manual_baseline_minutes is None:
+        return {
+            "available": False,
+            "reason": "manual_baseline_unconfigured",
+            "actions": None,
+            "totals": None,
+        }
+    if not isinstance(manual_baseline_minutes, dict):
+        raise ValueError("manual_baseline_minutes は object または null でなければなりません")
+
+    actions = {}
+    for action, duration in duration_summary["actions"].items():
+        if action not in manual_baseline_minutes:
+            return {
+                "available": False,
+                "reason": f"manual_baseline_missing:{action}",
+                "actions": None,
+                "totals": None,
+            }
+        minutes = manual_baseline_minutes[action]
+        if isinstance(minutes, bool) or not isinstance(minutes, (int, float)):
+            raise ValueError(f"manual_baseline_minutes.{action} は 0 以上の有限 number でなければなりません")
+        try:
+            invalid_minutes = minutes < 0 or not math.isfinite(minutes)
+        except OverflowError:
+            invalid_minutes = True
+        if invalid_minutes:
+            raise ValueError(f"manual_baseline_minutes.{action} は 0 以上の有限 number でなければなりません")
+
+        baseline_seconds = float(minutes) * 60 * duration["work_item_count"]
+        actions[action] = {
+            **duration,
+            "manual_baseline_seconds": baseline_seconds,
+            "ai_inclusive_saved_seconds": max(
+                0.0,
+                baseline_seconds - duration["ai_seconds"] - duration["human_seconds"],
+            ),
+            "human_freed_seconds": max(0.0, baseline_seconds - duration["human_seconds"]),
+        }
+
+    duration_totals = duration_summary["totals"]
+    baseline_total = math.fsum(item["manual_baseline_seconds"] for item in actions.values())
+    totals = {
+        **duration_totals,
+        "manual_baseline_seconds": baseline_total,
+        "ai_inclusive_saved_seconds": max(
+            0.0,
+            baseline_total - duration_totals["ai_seconds"] - duration_totals["human_seconds"],
+        ),
+        "human_freed_seconds": max(0.0, baseline_total - duration_totals["human_seconds"]),
+    }
+    return {"available": True, "reason": None, "actions": actions, "totals": totals}
+
+
 def _inside(root: Path, path: Path, field: str) -> Path:
     root = root.resolve()
     path = path.resolve()
