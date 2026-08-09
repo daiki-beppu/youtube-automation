@@ -34,6 +34,8 @@ const MOCK_SUNO_HTML = `<!doctype html>
     <input id="exclude" placeholder="Exclude styles" maxlength="1000" />
     <div id="weirdness" role="slider" aria-label="Weirdness" aria-valuenow="0" tabindex="0"></div>
     <div id="style-influence" role="slider" aria-label="Style Influence" aria-valuenow="50" tabindex="0"></div>
+    <button id="duration-custom" type="button">Custom</button>
+    <div id="duration" role="slider" aria-label="Duration" aria-valuemin="60" aria-valuemax="480" aria-valuenow="120" tabindex="0"></div>
     <button id="generate">Create</button>
     <iframe id="hcaptcha-none" src="https://hcaptcha-assets-prod.suno.com/captcha/v1/0" style="display:none;width:0;height:0;border:0"></iframe>
     <iframe id="hcaptcha-hidden" src="https://hcaptcha-assets-prod.suno.com/captcha/v1/4" title="hCaptchaチャレンジ" style="visibility:hidden;width:300px;height:150px;border:0"></iframe>
@@ -69,6 +71,9 @@ const MOCK_SUNO_HTML = `<!doctype html>
           else if (e.key === 'ArrowLeft') slider.setAttribute('aria-valuenow', String(cur - 1));
         });
       }
+      document.getElementById('duration-custom').addEventListener('click', (e) => {
+        e.currentTarget.setAttribute('aria-pressed', 'true');
+      });
       document.getElementById('generate').addEventListener('click', () => {
         document.getElementById('clicked').textContent = 'yes';
       });
@@ -177,7 +182,7 @@ test("Suno mock へ Style/Lyrics を注入し Generate を押下できる", asyn
     setNativeValue(style, "lofi, jazzy, rainy night");
     setNativeValue(lyrics, "la la la");
     setNativeValue(title, "Midnight Cafe");
-    (document.querySelector("button") as HTMLButtonElement).click();
+    (document.querySelector("#generate") as HTMLButtonElement).click();
   });
 
   // React 互換注入: UI 側の onChange が値を取り込めている (= input イベントが届いた)
@@ -341,6 +346,8 @@ test("Suno mock へ More Options 3 フィールド (exclude/weirdness/style_infl
       'input[placeholder="Exclude styles"]'
     ) as HTMLInputElement;
     setNativeValue(exclude, "hyperpop, edm");
+    document.getElementById("duration-custom")!.click();
+    setSliderValue(document.getElementById("duration")!, 180);
     setSliderValue(
       document.querySelector(
         '[role="slider"][aria-label="Weirdness"]'
@@ -365,6 +372,14 @@ test("Suno mock へ More Options 3 フィールド (exclude/weirdness/style_infl
   await expect(page.locator("#style-influence")).toHaveAttribute(
     "aria-valuenow",
     "85"
+  );
+  await expect(page.locator("#duration")).toHaveAttribute(
+    "aria-valuenow",
+    "180"
+  );
+  await expect(page.locator("#duration-custom")).toHaveAttribute(
+    "aria-pressed",
+    "true"
   );
 });
 

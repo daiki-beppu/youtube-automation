@@ -34,6 +34,8 @@ const SELECTORS = {
   weirdness:
     '[role="slider"][aria-label*="weirdness" i], [role="slider"][aria-label*="bizarre" i]',
   styleInfluence: '[role="slider"][aria-label*="influence" i]',
+  duration: '[role="slider"][aria-label*="duration" i]',
+  durationButtons: 'button[type="button"]',
   // Voice section の Male / Female ボタン (chrome-devtools-mcp 実機検証で確認)。
   // aria-label / data-testid を持たないため、`data-selected` 属性 (Suno が排他トグル用に意図して
   // 付けた属性) で候補を全 query → textContent 完全一致で Male/Female を絞り込む方式を採用。
@@ -48,7 +50,7 @@ const SELECTORS = {
 const SLIDER_READBACK_POLL_MS = 100;
 /** step ごとの読み戻し検証の最大 poll 回数。これを超えても不変なら fail-loud で throw。 */
 const SLIDER_READBACK_MAX_POLLS = 5;
-/** slider が target に到達するまでの最大 step 数。Suno slider は 0-100 整数なので余裕を持たせた上限。 */
+/** slider が target に到達するまでの最小 step 上限。大きい値域では初期差分から拡張する。 */
 const SLIDER_MAX_STEPS = 150;
 
 /**
@@ -492,6 +494,10 @@ export async function setSliderValue(
 ): Promise<void> {
   slider.focus();
   const read = (): number => Number(slider.getAttribute("aria-valuenow"));
+  const maxSteps = Math.max(
+    SLIDER_MAX_STEPS,
+    Math.ceil(Math.abs(target - read())) * 2
+  );
   const fail = (): never => {
     throw new Error(
       `slider 値の注入に失敗しました（target=${target}, actual=${slider.getAttribute("aria-valuenow")}, ` +
@@ -499,7 +505,7 @@ export async function setSliderValue(
         "keydown 後も aria-valuenow が変化しませんでした。Suno の UI 変更の可能性があります。"
     );
   };
-  for (let step = 0; step < SLIDER_MAX_STEPS; step++) {
+  for (let step = 0; step < maxSteps; step++) {
     const current = read();
     if (current === target) {
       return;
@@ -527,7 +533,7 @@ export async function setSliderValue(
   }
 }
 
-/** More Options の advanced フィールド解決結果（#900, vocal gender 追加）。不在は null（fail-soft）。 */
+/** More Options の advanced フィールド解決結果（#900, vocal gender / Duration 追加）。 */
 export interface ResolvedAdvancedFields {
   excludeStyles: HTMLInputElement | HTMLTextAreaElement | null;
   weirdness: HTMLElement | null;
@@ -563,6 +569,37 @@ function pickPreferVisible<T extends HTMLElement>(els: T[]): T | null {
   return els.find(isVisible) ?? els[0] ?? null;
 }
 
+function domDistance(first: HTMLElement, second: HTMLElement): number {
+  const firstAncestors = new Map<HTMLElement, number>();
+  let distance = 0;
+  for (let node: HTMLElement | null = first; node; node = node.parentElement) {
+    firstAncestors.set(node, distance++);
+  }
+  distance = 0;
+  for (let node: HTMLElement | null = second; node; node = node.parentElement) {
+    const firstDistance = firstAncestors.get(node);
+    if (firstDistance !== undefined) {
+      return firstDistance + distance;
+    }
+    distance++;
+  }
+  return Number.POSITIVE_INFINITY;
+}
+
+function pickClosestPreferVisible<T extends HTMLElement>(
+  reference: HTMLElement,
+  candidates: T[]
+): T | null {
+  const visible = candidates.filter(isVisible);
+  const pool = visible.length > 0 ? visible : candidates;
+  return (
+    pool.toSorted(
+      (left, right) =>
+        domDistance(reference, left) - domDistance(reference, right)
+    )[0] ?? null
+  );
+}
+
 /**
  * Advanced タブ > More Options の 3 フィールドを解決する（#900）。
  * visible 優先、なければ DOM 上の最初の要素を返す（collapsed 時の null 化を回避）。
@@ -583,12 +620,24 @@ export function resolveAdvancedFields(): ResolvedAdvancedFields {
   const styleInfluence = pickPreferVisible(
     Array.from(document.querySelectorAll<HTMLElement>(SELECTORS.styleInfluence))
   );
+  const durationSlider = pickPreferVisible(
+    Array.from(document.querySelectorAll<HTMLElement>(SELECTORS.duration))
+  );
+  const durationCustomButtons = Array.from(
+    document.querySelectorAll<HTMLButtonElement>(SELECTORS.durationButtons)
+  ).filter((button) => button.textContent?.trim().toLowerCase() === "custom");
+  const durationCustomButton = durationSlider
+    ? pickClosestPreferVisible(durationSlider, durationCustomButtons)
+    : null;
   return {
     excludeStyles,
     weirdness,
     styleInfluence,
     vocalGender: resolveVocalGenderButtons(),
-    duration: null,
+    duration:
+      durationSlider && durationCustomButton
+        ? { customButton: durationCustomButton, slider: durationSlider }
+        : null,
   };
 }
 
@@ -668,81 +717,142 @@ async function injectSliderValue(
   await setSliderValue(slider, target);
 }
 
+function readDurationSliderAttribute(
+  slider: HTMLElement,
+  attribute: "aria-valuemin" | "aria-valuemax" | "aria-valuenow"
+): number {
+  const raw = slider.getAttribute(attribute);
+  const value = raw === null ? Number.NaN : Number(raw);
+  if (!Number.isFinite(value)) {
+    throw new FatalRunError(
+      `Duration slider の ${attribute} が有効な数値ではありません。Suno の UI 変更の可能性があります。`
+    );
+  }
+  return value;
+}
+
+function validateDurationTarget(slider: HTMLElement, target: number): void {
+  const min = readDurationSliderAttribute(slider, "aria-valuemin");
+  const max = readDurationSliderAttribute(slider, "aria-valuemax");
+  if (
+    !Number.isInteger(target) ||
+    target <= 0 ||
+    target < min ||
+    target > max
+  ) {
+    throw new FatalRunError(
+      `Duration ${target} 秒は UI の対応範囲 ${min}〜${max} 秒外です。値を範囲内の正の整数へ変更してください。`
+    );
+  }
+}
+
+function injectExcludeStyles(
+  value: string | undefined,
+  field: HTMLInputElement | HTMLTextAreaElement | null
+): void {
+  if (value === undefined) {
+    return;
+  }
+  if (!field) {
+    throw new FatalRunError(
+      "Exclude styles 欄が見つかりません。Suno の「書く」モードでその他のオプションを開いてから再実行してください。"
+    );
+  }
+  setNativeValue(field, value);
+}
+
+function injectVocalGender(
+  value: AdvancedFieldValues["vocal_gender"],
+  fields: ResolvedAdvancedFields["vocalGender"]
+): void {
+  if (value !== "male" && value !== "female") {
+    return;
+  }
+  const target = value === "male" ? fields.male : fields.female;
+  if (!target) {
+    throw new FatalRunError(
+      `Vocal gender button (${value}) が見つかりません。Suno の UI 変更の可能性があります。`
+    );
+  }
+  if (target.getAttribute("data-selected") !== "true") {
+    target.click();
+  }
+}
+
+async function injectDuration(
+  value: number | undefined,
+  fields: ResolvedAdvancedFields["duration"],
+  bridgeSetSlider: AdvancedInjectOptions["bridgeSetSlider"]
+): Promise<void> {
+  if (value === undefined) {
+    return;
+  }
+  if (!fields) {
+    throw new FatalRunError(
+      "Duration の Custom button または slider が見つかりません。Suno の「書く」モードでその他のオプションを開いてから再実行してください。"
+    );
+  }
+  validateDurationTarget(fields.slider, value);
+  fields.customButton.click();
+  await injectSliderValue(fields.slider, value, bridgeSetSlider);
+  const actual = readDurationSliderAttribute(fields.slider, "aria-valuenow");
+  if (actual !== value) {
+    throw new FatalRunError(
+      `Duration slider の読戻し値 ${actual} 秒が指定値 ${value} 秒と一致しません。生成を停止します。`
+    );
+  }
+}
+
+type OptionalSliderName = "Weirdness" | "Style Influence";
+
+async function injectOptionalSlider(
+  value: number | null | undefined,
+  slider: HTMLElement | null,
+  name: OptionalSliderName,
+  options: AdvancedInjectOptions
+): Promise<void> {
+  if (value == null) {
+    return;
+  }
+  if (!slider) {
+    console.warn(
+      `[suno-helper] ${name} slider が見つかりません（Suno の UI 変更の可能性）。注入を skip して続行します。`
+    );
+    options.onSliderSkip?.(name);
+    return;
+  }
+  try {
+    await injectSliderValue(slider, value, options.bridgeSetSlider);
+  } catch (error) {
+    console.warn(`[suno-helper] ${name} slider 注入を skip:`, error);
+    options.onSliderSkip?.(name);
+  }
+}
+
 export async function injectAdvancedFields(
   entry: AdvancedFieldValues,
   fields: ResolvedAdvancedFields,
   options: AdvancedInjectOptions = {}
 ): Promise<void> {
-  if (entry.exclude_styles !== undefined) {
-    if (!fields.excludeStyles) {
-      throw new FatalRunError(
-        "Exclude styles 欄が見つかりません。Suno の「書く」モードでその他のオプションを開いてから再実行してください。"
-      );
-    }
-    setNativeValue(fields.excludeStyles, entry.exclude_styles);
-  }
-  if (entry.vocal_gender === "male" || entry.vocal_gender === "female") {
-    const target =
-      entry.vocal_gender === "male"
-        ? fields.vocalGender.male
-        : fields.vocalGender.female;
-    if (!target) {
-      throw new FatalRunError(
-        `Vocal gender button (${entry.vocal_gender}) が見つかりません。Suno の UI 変更の可能性があります。`
-      );
-    }
-    if (target.getAttribute("data-selected") !== "true") {
-      target.click();
-    }
-  }
-  if (entry.duration_sec !== undefined && fields.duration) {
-    fields.duration.customButton.click();
-    await injectSliderValue(
-      fields.duration.slider,
-      entry.duration_sec,
-      options.bridgeSetSlider
-    );
-  }
-  if (entry.weirdness != null) {
-    // slider 未検出は throw せず warn + skip（#1720）。値は UI で手動設定でき Create を跨いで
-    // 永続するため、Suno のリネーム / UI 改装で run 全体を中断しない。
-    if (!fields.weirdness) {
-      console.warn(
-        "[suno-helper] Weirdness slider が見つかりません（Suno の UI 変更の可能性）。注入を skip して続行します。"
-      );
-      options.onSliderSkip?.("Weirdness");
-    } else {
-      try {
-        await injectSliderValue(
-          fields.weirdness,
-          entry.weirdness,
-          options.bridgeSetSlider
-        );
-      } catch (e) {
-        console.warn("[suno-helper] Weirdness slider 注入を skip:", e);
-        options.onSliderSkip?.("Weirdness");
-      }
-    }
-  }
-  if (entry.style_influence != null) {
-    if (!fields.styleInfluence) {
-      console.warn(
-        "[suno-helper] Style Influence slider が見つかりません（Suno の UI 変更の可能性）。注入を skip して続行します。"
-      );
-      options.onSliderSkip?.("Style Influence");
-    } else {
-      try {
-        await injectSliderValue(
-          fields.styleInfluence,
-          entry.style_influence,
-          options.bridgeSetSlider
-        );
-      } catch (e) {
-        console.warn("[suno-helper] Style Influence slider 注入を skip:", e);
-        options.onSliderSkip?.("Style Influence");
-      }
-    }
-  }
+  injectExcludeStyles(entry.exclude_styles, fields.excludeStyles);
+  injectVocalGender(entry.vocal_gender, fields.vocalGender);
+  await injectDuration(
+    entry.duration_sec,
+    fields.duration,
+    options.bridgeSetSlider
+  );
+  await injectOptionalSlider(
+    entry.weirdness,
+    fields.weirdness,
+    "Weirdness",
+    options
+  );
+  await injectOptionalSlider(
+    entry.style_influence,
+    fields.styleInfluence,
+    "Style Influence",
+    options
+  );
 }
 
 /**

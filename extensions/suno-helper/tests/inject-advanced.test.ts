@@ -379,6 +379,8 @@ describe("injectAdvancedFields: 非対称契約 (fail-loud / fail-soft, #900)", 
       const slider = makeSlider(120, { respond: false });
       const resolvedAriaLabel = "resolved-duration-slider";
       slider.setAttribute("aria-label", resolvedAriaLabel);
+      slider.setAttribute("aria-valuemin", "60");
+      slider.setAttribute("aria-valuemax", "480");
       const bridgeSetSlider = vi.fn(
         async (_ariaLabel: string, target: number) => {
           order.push("slider");
@@ -400,12 +402,14 @@ describe("injectAdvancedFields: 非対称契約 (fail-loud / fail-soft, #900)", 
       expect(slider.getAttribute("aria-valuenow")).toBe("180");
     });
 
-    it("Given duration_sec=180 + bridge false When 注入 Then Custom click 後に keydown fallback で180へ動かす", async () => {
+    it("Given duration_sec=300 + bridge false When 注入 Then 150 step を超えても keydown fallback で300へ動かす", async () => {
       const order: string[] = [];
       const customButton = document.createElement("button");
       customButton.addEventListener("click", () => order.push("custom"));
-      const slider = makeSlider(179);
+      const slider = makeSlider(120);
       slider.setAttribute("aria-label", "resolved-duration-slider");
+      slider.setAttribute("aria-valuemin", "60");
+      slider.setAttribute("aria-valuemax", "480");
       slider.addEventListener("keydown", () => order.push("keydown"));
       const bridgeSetSlider = vi.fn(async () => {
         order.push("bridge");
@@ -413,13 +417,14 @@ describe("injectAdvancedFields: 非対称契約 (fail-loud / fail-soft, #900)", 
       });
 
       await injectAdvancedFields(
-        { duration_sec: 180 },
+        { duration_sec: 300 },
         { ...ALL_NULL, duration: { customButton, slider } },
         { bridgeSetSlider }
       );
 
-      expect(order).toEqual(["custom", "bridge", "keydown"]);
-      expect(slider.getAttribute("aria-valuenow")).toBe("180");
+      expect(order.slice(0, 3)).toEqual(["custom", "bridge", "keydown"]);
+      expect(order.filter((event) => event === "keydown")).toHaveLength(180);
+      expect(slider.getAttribute("aria-valuenow")).toBe("300");
     });
 
     it("Given duration_sec 未指定 + 解決済み controls When 注入 Then controls に触れず slider 値を維持する", async () => {
@@ -441,6 +446,46 @@ describe("injectAdvancedFields: 非対称契約 (fail-loud / fail-soft, #900)", 
       expect(bridgeSetSlider).not.toHaveBeenCalled();
       expect(keydown).not.toHaveBeenCalled();
       expect(slider.getAttribute("aria-valuenow")).toBe("120");
+    });
+
+    it("Given duration_sec 指定 + controls 不在 When 注入 Then selector error で fail-loud に停止する", async () => {
+      await expect(
+        injectAdvancedFields({ duration_sec: 180 }, ALL_NULL)
+      ).rejects.toThrow(/Duration.*見つかりません/);
+    });
+
+    it("Given duration_sec が DOM 公開範囲外 When 注入 Then Custom を押さず fail-loud に停止する", async () => {
+      const customButton = document.createElement("button");
+      const customClick = vi.spyOn(customButton, "click");
+      const slider = makeSlider(120);
+      slider.setAttribute("aria-label", "Duration");
+      slider.setAttribute("aria-valuemin", "60");
+      slider.setAttribute("aria-valuemax", "240");
+
+      await expect(
+        injectAdvancedFields(
+          { duration_sec: 300 },
+          { ...ALL_NULL, duration: { customButton, slider } }
+        )
+      ).rejects.toThrow(/Duration.*60.*240/);
+      expect(customClick).not.toHaveBeenCalled();
+    });
+
+    it("Given bridge が成功を返しても slider 読戻し不一致 When 注入 Then fail-loud に停止する", async () => {
+      const customButton = document.createElement("button");
+      const slider = makeSlider(120, { respond: false });
+      slider.setAttribute("aria-label", "Duration");
+      slider.setAttribute("aria-valuemin", "60");
+      slider.setAttribute("aria-valuemax", "480");
+      const bridgeSetSlider = vi.fn().mockResolvedValue(true);
+
+      await expect(
+        injectAdvancedFields(
+          { duration_sec: 180 },
+          { ...ALL_NULL, duration: { customButton, slider } },
+          { bridgeSetSlider }
+        )
+      ).rejects.toThrow(/Duration.*読.*120.*180/);
     });
   });
 
