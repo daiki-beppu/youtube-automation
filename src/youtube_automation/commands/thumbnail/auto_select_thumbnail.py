@@ -42,14 +42,12 @@ from PIL import Image, UnidentifiedImageError
 from youtube_automation.configuration.skills import load_skill_config
 from youtube_automation.core.errors import ConfigError, ValidationError
 from youtube_automation.domains.thumbnail.archive import archive_approved_thumbnail_transaction
-from youtube_automation.domains.thumbnail.features import (
-    extract_features_from_path,
-    feature_centroid,
-)
 from youtube_automation.domains.thumbnail.references import resolve_configured_benchmark_references
 from youtube_automation.domains.thumbnail.selection import (
     CandidateScore,
+    ReferencePoolDiagnostic,
     _image_generation_section,
+    diagnose_reference_pool,
     resolve_auto_selection_settings,
     score_candidates,
     select_best,
@@ -205,6 +203,7 @@ def record_workflow_state(
     channel_root: Path,
     executed_at: str,
     mode: str,
+    reference_diagnostic: ReferencePoolDiagnostic,
 ) -> None:
     """検証済みの workflow-state に選択の監査ログを記録して書き戻す。"""
     record: dict[str, object] = {
@@ -214,6 +213,7 @@ def record_workflow_state(
         "distance": round(best.distance, 4),
         "ranking": _ranking_payload(scores),
         "reference_images": [_relative_to_channel(path, channel_root) for path in reference_images],
+        "reference_diagnostics": _reference_diagnostic_payload(reference_diagnostic, channel_root),
         "executed_at": executed_at,
     }
     validate_audit_record(record)
@@ -277,6 +277,35 @@ def validate_audit_record(record: dict[str, object]) -> None:
         if not isinstance(reasons, list) or any(not isinstance(reason, str) for reason in reasons):
             raise ValidationError(f"{key}.reasons は文字列の list である必要があります: {reasons!r}")
 
+    diagnostics = record.get("reference_diagnostics")
+    if not isinstance(diagnostics, dict):
+        raise ValidationError(
+            f"thumbnail_auto_selection.reference_diagnostics は object である必要があります: {diagnostics!r}"
+        )
+    threshold = diagnostics.get("max_reference_distance")
+    if not _finite_number(threshold) or threshold < 0:
+        raise ValidationError(
+            "thumbnail_auto_selection.reference_diagnostics.max_reference_distance は "
+            "0 以上の有限数値である必要があります: "
+            f"{threshold!r}"
+        )
+    references = diagnostics.get("references")
+    if not isinstance(references, list) or not references:
+        raise ValidationError(
+            "thumbnail_auto_selection.reference_diagnostics.references は非空 list である必要があります: "
+            f"{references!r}"
+        )
+    for index, entry in enumerate(references):
+        key = f"thumbnail_auto_selection.reference_diagnostics.references[{index}]"
+        if not isinstance(entry, dict):
+            raise ValidationError(f"{key} は object である必要があります: {entry!r}")
+        if not isinstance(entry.get("reference_image"), str) or not entry["reference_image"].strip():
+            raise ValidationError(f"{key}.reference_image は非空文字列である必要があります")
+        if not _finite_number(entry.get("distance")) or entry["distance"] < 0:
+            raise ValidationError(f"{key}.distance は 0 以上の有限数値である必要があります")
+        if not isinstance(entry.get("outlier"), bool):
+            raise ValidationError(f"{key}.outlier は boolean である必要があります")
+
     executed_at = record.get("executed_at")
     if not isinstance(executed_at, str):
         raise ValidationError(
@@ -313,6 +342,31 @@ def _ranking_payload(scores: list[CandidateScore]) -> list[dict[str, Any]]:
         }
         for score in scores
     ]
+
+
+def _reference_diagnostic_payload(
+    diagnostic: ReferencePoolDiagnostic,
+    channel_root: Path,
+) -> dict[str, Any]:
+    return {
+        "max_reference_distance": diagnostic.max_reference_distance,
+        "references": [
+            {
+                "reference_image": _relative_to_channel(reference.path, channel_root),
+                "distance": round(reference.distance, 4),
+                "outlier": reference.outlier,
+            }
+            for reference in diagnostic.references
+        ],
+    }
+
+
+def _reference_outlier_message(diagnostic: ReferencePoolDiagnostic) -> str:
+    details = ", ".join(f"{item.path}: distance={item.distance:.4f}" for item in diagnostic.outliers)
+    return (
+        "参照画像プールに centroid 距離の外れ値があります "
+        f"(max_reference_distance={diagnostic.max_reference_distance:.4f}): {details}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -354,6 +408,7 @@ def _render_json(
     channel_root: Path,
     workflow_state_updated: bool | None,
     auto_selection_mode: str,
+    reference_diagnostic: ReferencePoolDiagnostic,
 ) -> str:
     return json.dumps(
         {
@@ -369,6 +424,7 @@ def _render_json(
             "target": str(target),
             "ranking": _ranking_payload(scores),
             "reference_images": [_relative_to_channel(path, channel_root) for path in reference_images],
+            "reference_diagnostics": _reference_diagnostic_payload(reference_diagnostic, channel_root),
             "workflow_state_updated": workflow_state_updated,
         },
         ensure_ascii=False,
@@ -415,6 +471,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: コレクションディレクトリではありません (10-assets/ が必要): {collection}", file=sys.stderr)
         return 2
 
+    reference_diagnostic: ReferencePoolDiagnostic | None = None
+    channel_root: Path | None = None
     try:
         cfg = load_skill_config(SKILL_NAME)
         settings = resolve_auto_selection_settings(cfg)
@@ -430,17 +488,22 @@ def main(argv: list[str] | None = None) -> int:
 
         channel_root = channel_dir()
         reference_images = resolve_reference_images(cfg, channel_root)
-        try:
-            centroid = feature_centroid([extract_features_from_path(path) for path in reference_images])
-        except (OSError, UnidentifiedImageError) as exc:
-            raise ValidationError(f"参照画像を読み込めません: {exc}") from exc
+        reference_diagnostic = diagnose_reference_pool(
+            reference_images,
+            max_reference_distance=settings.max_reference_distance,
+        )
+        if reference_diagnostic.outliers:
+            message = _reference_outlier_message(reference_diagnostic)
+            if settings.mode == _MODE_FULL:
+                raise ValidationError(message)
+            print(f"[WARN] {message}", file=sys.stderr)
 
         candidates = discover_candidates(paths.assets_dir)
         if not candidates:
             patterns = ", ".join(_CANDIDATE_PATTERNS)
             raise ValidationError(f"thumbnail 候補が見つかりません: {paths.assets_dir} (対象: {patterns})")
 
-        scores = score_candidates(candidates, centroid, settings)
+        scores = score_candidates(candidates, reference_diagnostic.centroid, settings)
         best = select_best(scores, mode=settings.mode)
 
         target = paths.assets_dir / _TARGET_FILENAME
@@ -468,6 +531,7 @@ def main(argv: list[str] | None = None) -> int:
                         channel_root=channel_root,
                         executed_at=datetime.now(timezone.utc).isoformat(),
                         mode=settings.mode,
+                        reference_diagnostic=reference_diagnostic,
                     )
             except (ConfigError, ValidationError) as exc:
                 rollback_errors = []
@@ -495,7 +559,10 @@ def main(argv: list[str] | None = None) -> int:
     except (ConfigError, ValidationError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         if args.json:
-            print(json.dumps({"status": "error", "error": str(exc)}, ensure_ascii=False))
+            payload: dict[str, Any] = {"status": "error", "error": str(exc)}
+            if reference_diagnostic is not None and channel_root is not None:
+                payload["reference_diagnostics"] = _reference_diagnostic_payload(reference_diagnostic, channel_root)
+            print(json.dumps(payload, ensure_ascii=False))
         return 1
 
     mode = "apply" if args.apply else "dry-run"
@@ -511,6 +578,7 @@ def main(argv: list[str] | None = None) -> int:
                 channel_root=channel_root,
                 workflow_state_updated=workflow_state_updated,
                 auto_selection_mode=settings.mode,
+                reference_diagnostic=reference_diagnostic,
             )
         )
     else:

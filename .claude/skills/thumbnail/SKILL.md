@@ -557,7 +557,7 @@ TTP 参照画像が固定されているチャンネルでは、候補生成後�
 | `enabled: true`, `mode: selection_only` または mode 未設定 | 実行 | 実行 | 実行 | **省略**（#1370 の従来挙動） |
 | `enabled: true`, `mode: full` | **省略** | **省略**（生成 CLI に `-y`） | **省略** | **省略** |
 
-`selection_only` の既存手順は変更しない。`auto_selection.enabled` が false / 未設定のチャンネルも従来の手動承認フローを使う。
+`selection_only` の既存手順は変更しない。参照プールに `max_reference_distance`（既定 0.40）超過があれば参照ごとの構造化診断を出して警告継続し、`full` は strict 参照生成の API 呼び出し前と自動選択前に停止する。prompt の色・背景指定は参照プール外れ値の代替対策にしない。`auto_selection.enabled` が false / 未設定のチャンネルも従来の手動承認フローを使う。
 
 有効化キーと採点パラメータは [quality / operations 詳細](references/quality-and-operations.md) を読む。
 
@@ -682,7 +682,7 @@ JSON
 
 画像確認・承認後、`thumbnail.approved = true` を更新する。`textless.enabled: false` では `share_thumbnail_as_main.py` の成功と `thumbnail.jpg` / `main.jpg` の SHA-256 一致、`main.png` 不在を確認した後だけ更新する。`mode: full` では目視確認と AskUserQuestion を省略し、既存の自動確定成功を承認完了として扱う。`ab_test.enabled: true` の場合は、設定された全 pattern の `thumbnail-<name>.jpg` が存在し、各 pattern の承認（`full` では自動確定）が完了し、`thumbnail.jpg` が先頭 pattern と同一内容であることを確認してからだけ更新する。一部 pattern の承認・確定に失敗した状態では `false` のままにする。
 
-`yt-thumbnail-auto-select --apply` で確定した場合は、選択候補・distance・ランキング・実行時刻が `thumbnail_auto_selection` キーに監査ログとして自動記録される（#1370）。
+`yt-thumbnail-auto-select --apply` で確定した場合は、選択候補・distance・ランキング・参照画像ごとの centroid distance / outlier 判定・実行時刻が `thumbnail_auto_selection` キーに監査ログとして自動記録される（#1370、#2952）。
 
 ## stock 退避と再利用
 

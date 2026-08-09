@@ -17,10 +17,11 @@ import youtube_automation.commands.thumbnail.auto_select_thumbnail as auto_selec
 from youtube_automation.commands.thumbnail.auto_select_thumbnail import main, validate_audit_record
 from youtube_automation.configuration import skills as skill_config
 from youtube_automation.core.errors import ConfigError, ValidationError
-from youtube_automation.domains.thumbnail.features import feature_centroid, feature_distance
+from youtube_automation.domains.thumbnail.features import extract_features_from_path, feature_centroid, feature_distance
 from youtube_automation.domains.thumbnail.selection import (
     AutoSelectionSettings,
     CandidateScore,
+    diagnose_reference_pool,
     resolve_auto_selection_settings,
     score_candidates,
     select_best,
@@ -60,17 +61,44 @@ def test_auto_selection_rejects_invalid_numeric_boundaries(key, value):
 
 
 def test_auto_selection_accepts_zero_aspect_tolerance():
-    settings = resolve_auto_selection_settings({"image_generation": {"auto_selection": {"aspect_tolerance": 0}}})
+    settings = resolve_auto_selection_settings(
+        {"image_generation": {"auto_selection": {"aspect_tolerance": 0, "max_reference_distance": 0}}}
+    )
     assert settings.aspect_tolerance == 0.0
+    assert settings.max_reference_distance == 0.0
+
+
+def test_auto_selection_defaults_reference_distance_threshold_to_point_four():
+    settings = resolve_auto_selection_settings({})
+    assert settings.max_reference_distance == 0.40
+
+
+@pytest.mark.parametrize("value", [True, -0.1, float("nan"), float("inf"), "0.4"])
+def test_auto_selection_rejects_invalid_reference_distance_threshold(value):
+    with pytest.raises(ConfigError, match="max_reference_distance"):
+        resolve_auto_selection_settings({"image_generation": {"auto_selection": {"max_reference_distance": value}}})
+
+
+def test_reference_pool_diagnostic_reports_each_reference(tmp_path: Path):
+    refs = [tmp_path / "near-a.jpg", tmp_path / "near-b.jpg", tmp_path / "outlier.jpg"]
+    for path, color in zip(refs, (*_REF_COLORS, _FAR_COLOR), strict=True):
+        _solid_image(path, color)
+
+    diagnostic = diagnose_reference_pool(refs, max_reference_distance=0.1)
+
+    assert [item.path for item in diagnostic.references] == refs
+    assert diagnostic.max_reference_distance == 0.1
+    assert any(item.outlier for item in diagnostic.references)
+    assert all(math.isfinite(item.distance) and item.distance >= 0 for item in diagnostic.references)
 
 
 def test_score_candidates_breaks_equal_distance_tie_by_path(tmp_path: Path):
-    settings = AutoSelectionSettings(True, "selection_only", 160, 90, 0.01)
+    settings = AutoSelectionSettings(True, "selection_only", 160, 90, 0.01, 0.4)
     a = tmp_path / "a.jpg"
     b = tmp_path / "b.jpg"
     Image.new("RGB", _SIZE_16_9, _NEAR_COLOR).save(a)
     Image.new("RGB", _SIZE_16_9, _NEAR_COLOR).save(b)
-    centroid = feature_centroid([auto_select_thumbnail.extract_features_from_path(a)])
+    centroid = feature_centroid([extract_features_from_path(a)])
 
     scores = score_candidates([b, a], centroid, settings)
     selected = select_best(scores, mode=settings.mode)
@@ -114,7 +142,15 @@ def _solid_image(path, color, size=_SIZE_16_9):
     Image.new("RGB", size, color).save(path)
 
 
-def _write_channel_config(channel_dir, *, enabled=True, mode=None, refs=_REF_RELPATHS, archive_config=None):
+def _write_channel_config(
+    channel_dir,
+    *,
+    enabled=True,
+    mode=None,
+    refs=_REF_RELPATHS,
+    archive_config=None,
+    max_reference_distance=None,
+):
     skills_dir = channel_dir / "config" / "skills"
     skills_dir.mkdir(parents=True, exist_ok=True)
     cfg = {
@@ -131,6 +167,8 @@ def _write_channel_config(channel_dir, *, enabled=True, mode=None, refs=_REF_REL
     }
     if mode is not None:
         cfg["image_generation"]["auto_selection"]["mode"] = mode
+    if max_reference_distance is not None:
+        cfg["image_generation"]["auto_selection"]["max_reference_distance"] = max_reference_distance
     (skills_dir / "thumbnail.yaml").write_text(yaml.safe_dump(cfg), encoding="utf-8")
 
 
@@ -143,13 +181,21 @@ def _setup_channel(
     refs=_REF_RELPATHS,
     ref_colors=_REF_COLORS,
     archive_config=None,
+    max_reference_distance=None,
 ):
     channel_dir = tmp_path / "channel"
     # refs は空タプルで渡されるケース（test_no_reference_images_errors）があり、
     # ref_colors とは意図的に非同長になり得るため strict=False（zip 既定 = 挙動保存）
     for relpath, color in zip(refs, ref_colors, strict=False):
         _solid_image(channel_dir / relpath, color)
-    _write_channel_config(channel_dir, enabled=enabled, mode=mode, refs=refs, archive_config=archive_config)
+    _write_channel_config(
+        channel_dir,
+        enabled=enabled,
+        mode=mode,
+        refs=refs,
+        archive_config=archive_config,
+        max_reference_distance=max_reference_distance,
+    )
     monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
     return channel_dir
 
@@ -179,6 +225,10 @@ def _valid_audit_record():
                 "reasons": [],
             }
         ],
+        "reference_diagnostics": {
+            "max_reference_distance": 0.4,
+            "references": [{"reference_image": "benchmark/ref.jpg", "distance": 0.1, "outlier": False}],
+        },
         "executed_at": "2026-07-18T12:34:56+00:00",
     }
 
@@ -207,6 +257,52 @@ def test_mode_selection_only_explicit(tmp_path, monkeypatch, capsys):
     payload = json.loads(captured.out)
     assert payload["selected"]["candidate"] == "thumbnail-v1.jpg"
     assert payload["auto_selection_mode"] == "selection_only"
+
+
+def test_selection_only_warns_and_emits_structured_reference_diagnostics(tmp_path, monkeypatch, capsys):
+    refs = (*_REF_RELPATHS, "data/thumbnail_compare/benchmark/SIDEEP/SIDEEP_outlier.jpg")
+    _setup_channel(
+        tmp_path,
+        monkeypatch,
+        mode="selection_only",
+        refs=refs,
+        ref_colors=(*_REF_COLORS, _FAR_COLOR),
+        max_reference_distance=0.1,
+    )
+    collection = _setup_collection(tmp_path)
+    _solid_image(collection / "10-assets" / "thumbnail-v1.jpg", _NEAR_COLOR)
+
+    code, captured = _run_json([str(collection), "--dry-run", "--json"], capsys)
+
+    assert code == 0
+    assert "[WARN]" in captured.err
+    payload = json.loads(captured.out)
+    diagnostics = payload["reference_diagnostics"]
+    assert diagnostics["max_reference_distance"] == 0.1
+    assert len(diagnostics["references"]) == 3
+    assert any(item["outlier"] for item in diagnostics["references"])
+
+
+def test_full_mode_rejects_reference_outlier_before_selection(tmp_path, monkeypatch, capsys):
+    refs = (*_REF_RELPATHS, "data/thumbnail_compare/benchmark/SIDEEP/SIDEEP_outlier.jpg")
+    _setup_channel(
+        tmp_path,
+        monkeypatch,
+        mode="full",
+        refs=refs,
+        ref_colors=(*_REF_COLORS, _FAR_COLOR),
+        max_reference_distance=0.1,
+    )
+    collection = _setup_collection(tmp_path)
+    _solid_image(collection / "10-assets" / "thumbnail-v1.jpg", _NEAR_COLOR)
+
+    code, captured = _run_json([str(collection), "--apply", "--json"], capsys)
+
+    assert code == 1
+    assert "参照画像プール" in captured.err
+    assert not (collection / "10-assets" / "thumbnail.jpg").exists()
+    diagnostics = json.loads(captured.out)["reference_diagnostics"]
+    assert any(item["outlier"] for item in diagnostics["references"])
 
 
 def test_invalid_mode_errors_non_zero_exit(tmp_path, monkeypatch, capsys):

@@ -20,6 +20,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from PIL import Image
 
 import youtube_automation.commands.media.generate_image as generate_image_module
 from youtube_automation.commands.media.generate_image import (
@@ -758,8 +759,8 @@ def _benchmark_refs(tmp_path: Path, count: int) -> list[Path]:
     ref_dir = tmp_path / "data" / "thumbnail_compare" / "benchmark" / "jazzgak"
     ref_dir.mkdir(parents=True)
     refs = [ref_dir / f"ref-{idx}.jpg" for idx in range(count)]
-    for ref in refs:
-        ref.write_bytes(b"fake image")
+    for index, ref in enumerate(refs):
+        Image.new("RGB", (160, 90), (20 + index, 30 + index, 80 + index)).save(ref)
     return refs
 
 
@@ -865,6 +866,106 @@ def test_record_ttp_reference_assignments_wraps_persistence_failure(
 
 
 class TestGenerateImageCLIReferenceContract:
+    def test_strict_full_mode_rejects_outlier_before_provider_call(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        refs = _benchmark_refs(tmp_path, 3)
+        Image.new("RGB", (160, 90), (220, 20, 20)).save(refs[-1])
+        provider = _FakeProvider()
+        argv = [
+            "--prompt",
+            "prompt",
+            "--output",
+            str(tmp_path / "thumbnail-v1.jpg"),
+            "--max-attempts",
+            "3",
+            "--ttp-strict-references",
+            "-y",
+        ]
+        for ref in refs:
+            argv.extend(["--reference", str(ref)])
+        skill_cfg = {
+            "image_generation": {
+                "auto_selection": {
+                    "enabled": True,
+                    "mode": "full",
+                    "max_reference_distance": 0.1,
+                },
+                "gemini": {
+                    "generation_mode": "single_step",
+                    "single_step": {"max_attempts": 3, "rotate": True},
+                    "reference_images": {"default": [str(ref) for ref in refs]},
+                },
+            }
+        }
+        _patch_generate_image_cli(
+            monkeypatch,
+            argv,
+            provider=provider,
+            channel_root=tmp_path,
+            skill_cfg_override=skill_cfg,
+        )
+
+        with pytest.raises(SystemExit) as exc_info:
+            generate_image_main()
+
+        assert exc_info.value.code == 1
+        assert provider.requests == []
+        assert "distance=" in capsys.readouterr().out
+
+    def test_strict_selection_only_warns_and_continues(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        refs = _benchmark_refs(tmp_path, 3)
+        Image.new("RGB", (160, 90), (220, 20, 20)).save(refs[-1])
+        provider = _FakeProvider()
+        argv = [
+            "--prompt",
+            "prompt",
+            "--output",
+            str(tmp_path / "thumbnail-v1.jpg"),
+            "--max-attempts",
+            "3",
+            "--ttp-strict-references",
+            "-y",
+        ]
+        for ref in refs:
+            argv.extend(["--reference", str(ref)])
+        skill_cfg = {
+            "image_generation": {
+                "auto_selection": {
+                    "enabled": True,
+                    "mode": "selection_only",
+                    "max_reference_distance": 0.1,
+                },
+                "gemini": {
+                    "generation_mode": "single_step",
+                    "single_step": {"max_attempts": 3, "rotate": True},
+                    "reference_images": {"default": [str(ref) for ref in refs]},
+                },
+            }
+        }
+        _patch_generate_image_cli(
+            monkeypatch,
+            argv,
+            provider=provider,
+            channel_root=tmp_path,
+            skill_cfg_override=skill_cfg,
+        )
+
+        with pytest.raises(SystemExit) as exc_info:
+            generate_image_main()
+
+        assert exc_info.value.code == 0
+        assert len(provider.requests) == 3
+        assert "[WARN]" in capsys.readouterr().err
+
     def test_single_step_cli_assigns_one_unique_reference_per_attempt(
         self,
         tmp_path: Path,

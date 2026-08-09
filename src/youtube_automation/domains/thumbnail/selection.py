@@ -11,6 +11,7 @@ from PIL import Image, UnidentifiedImageError
 from youtube_automation.core.adapters.errors import ConfigError, ValidationError
 from youtube_automation.domains.thumbnail.features import (
     extract_features_from_path,
+    feature_centroid,
     feature_distance,
 )
 
@@ -18,6 +19,7 @@ _TARGET_ASPECT = 16 / 9
 _DEFAULT_MIN_WIDTH = 1280
 _DEFAULT_MIN_HEIGHT = 720
 _DEFAULT_ASPECT_TOLERANCE = 0.01
+_DEFAULT_MAX_REFERENCE_DISTANCE = 0.40
 _MODE_SELECTION_ONLY = "selection_only"
 _MODE_FULL = "full"
 _ALLOWED_MODES = (_MODE_SELECTION_ONLY, _MODE_FULL)
@@ -30,6 +32,25 @@ class AutoSelectionSettings:
     min_width: int
     min_height: int
     aspect_tolerance: float
+    max_reference_distance: float = _DEFAULT_MAX_REFERENCE_DISTANCE
+
+
+@dataclass(frozen=True)
+class ReferenceDiagnostic:
+    path: Path
+    distance: float
+    outlier: bool
+
+
+@dataclass(frozen=True)
+class ReferencePoolDiagnostic:
+    centroid: dict[str, float]
+    max_reference_distance: float
+    references: list[ReferenceDiagnostic]
+
+    @property
+    def outliers(self) -> list[ReferenceDiagnostic]:
+        return [reference for reference in self.references if reference.outlier]
 
 
 @dataclass(frozen=True)
@@ -68,6 +89,16 @@ def resolve_auto_selection_settings(cfg: dict[str, object]) -> AutoSelectionSett
         or tolerance < 0
     ):
         raise ConfigError(f"auto_selection.aspect_tolerance は 0 以上の数値である必要があります: {tolerance!r}")
+    max_reference_distance = raw.get("max_reference_distance", _DEFAULT_MAX_REFERENCE_DISTANCE)
+    if (
+        isinstance(max_reference_distance, bool)
+        or not isinstance(max_reference_distance, (int, float))
+        or not math.isfinite(max_reference_distance)
+        or max_reference_distance < 0
+    ):
+        raise ConfigError(
+            f"auto_selection.max_reference_distance は 0 以上の有限数値である必要があります: {max_reference_distance!r}"
+        )
     enabled = raw.get("enabled", False)
     if not isinstance(enabled, bool):
         raise ConfigError(f"auto_selection.enabled は boolean である必要があります: {enabled!r}")
@@ -82,6 +113,37 @@ def resolve_auto_selection_settings(cfg: dict[str, object]) -> AutoSelectionSett
         min_width=positive_int("min_width", _DEFAULT_MIN_WIDTH),
         min_height=positive_int("min_height", _DEFAULT_MIN_HEIGHT),
         aspect_tolerance=float(tolerance),
+        max_reference_distance=float(max_reference_distance),
+    )
+
+
+def diagnose_reference_pool(
+    reference_images: list[Path],
+    *,
+    max_reference_distance: float,
+) -> ReferencePoolDiagnostic:
+    """Measure every reference against the pool centroid and flag outliers."""
+    if not reference_images:
+        raise ValidationError("参照画像プールが空です")
+    try:
+        features = [extract_features_from_path(path) for path in reference_images]
+    except (OSError, UnidentifiedImageError) as exc:
+        raise ValidationError(f"参照画像を読み込めません: {exc}") from exc
+    centroid = feature_centroid(features)
+    references = []
+    for path, feature in zip(reference_images, features, strict=True):
+        distance = feature_distance(feature, centroid)
+        references.append(
+            ReferenceDiagnostic(
+                path=path,
+                distance=distance,
+                outlier=distance > max_reference_distance,
+            )
+        )
+    return ReferencePoolDiagnostic(
+        centroid=centroid,
+        max_reference_distance=max_reference_distance,
+        references=references,
     )
 
 
