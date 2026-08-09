@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(streaming)`: active broadcast / ingest 状態を確認し、active ingest だけが残った場合に upcoming 配信枠を冪等再利用、または新規作成して bind → live 遷移する `yt-stream-broadcast-recover` CLI を追加。dry-run、構造化結果、secret 非出力を備えた（#3674）。
+
 - `fix(thumbnail)`: TTP 参照プールの centroid 距離外れ値を参照ごとに診断し、`selection_only` は警告継続、`full` は strict 画像生成の API 呼び出し前と自動選択前に停止するようにした（#2952）。
 
 - `fix(suno)`: effective `genre_line` の hard guard `style_char_limit: 120` を維持しつつ、完成形 Style の soft quality budget を `full_style_char_limit: 256` へ分離。明示した新キー、明示した legacy キー、既定値の順で解決し、既存チャンネルの override を保ったまま構造的な警告を解消（#2589）。

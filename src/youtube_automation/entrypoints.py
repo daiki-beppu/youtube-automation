@@ -130,6 +130,7 @@ yt_suno_verify = _make_entrypoint("youtube_automation.commands.suno.suno_verify"
 yt_suno_verify_playlist = _make_entrypoint("youtube_automation.commands.suno.suno_verify_playlist")
 yt_stream_archive_check = _make_entrypoint("youtube_automation.commands.youtube.streaming_archive_check")
 yt_stream_bandwidth = _make_entrypoint("youtube_automation.commands.youtube.stream_bandwidth")
+yt_stream_broadcast_recover = _make_entrypoint("youtube_automation.commands.youtube.stream_broadcast_recover")
 yt_theme_compare = _make_entrypoint("youtube_automation.commands.analytics.theme_compare")
 yt_ttp_health = _make_entrypoint("youtube_automation.commands.analytics.ttp_health")
 yt_thumbnail_auto_select = _make_entrypoint("youtube_automation.commands.thumbnail.auto_select_thumbnail")
