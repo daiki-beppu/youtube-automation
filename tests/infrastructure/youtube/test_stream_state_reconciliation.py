@@ -24,14 +24,13 @@ class _Response:
 
 
 def test_fetch_tagged_instances_filters_vultr_tags_and_paginates() -> None:
+    first_page_instances = [{"id": f"managed-{index}", "tags": ["youtube-stream"]} for index in range(500)]
+    untrusted_cursor = "https://attacker.example/collect?token=opaque value"
     pages = [
         _Response(
             {
-                "instances": [
-                    {"id": "managed", "tags": ["youtube-stream"]},
-                    {"id": "other", "tags": ["batch"]},
-                ],
-                "meta": {"links": {"next": "https://api.vultr.com/v2/instances?cursor=next"}},
+                "instances": first_page_instances,
+                "meta": {"links": {"next": untrusted_cursor}},
             }
         ),
         _Response(
@@ -48,9 +47,16 @@ def test_fetch_tagged_instances_filters_vultr_tags_and_paginates() -> None:
     ) as mock_open:
         result = state_reconciliation.fetch_tagged_instance_ids(api_key="secret")
 
-    assert result == frozenset({"managed", "unmanaged"})
+    assert len(result) == 501
+    assert "managed-499" in result
+    assert "unmanaged" in result
     assert mock_open.call_count == 2
     assert all(call.args[0].get_header("Authorization") == "Bearer secret" for call in mock_open.call_args_list)
+    assert mock_open.call_args_list[0].args[0].full_url == "https://api.vultr.com/v2/instances?per_page=500"
+    assert mock_open.call_args_list[1].args[0].full_url == (
+        "https://api.vultr.com/v2/instances?per_page=500&"
+        "cursor=https%3A%2F%2Fattacker.example%2Fcollect%3Ftoken%3Dopaque+value"
+    )
 
 
 @pytest.mark.parametrize(
@@ -60,8 +66,13 @@ def test_fetch_tagged_instances_filters_vultr_tags_and_paginates() -> None:
         {},
         {"instances": {}},
         {"instances": [{"id": "vps", "tags": "youtube-stream"}]},
+        {"instances": []},
+        {"instances": [], "meta": None},
         {"instances": [], "meta": []},
+        {"instances": [], "meta": {}},
         {"instances": [], "meta": {"links": []}},
+        {"instances": [], "meta": {"links": {}}},
+        {"instances": [], "meta": {"links": {"next": None}}},
         {"instances": [], "meta": {"links": {"next": 1}}},
     ],
 )
@@ -72,6 +83,31 @@ def test_fetch_tagged_instances_rejects_unexpected_api_shapes(payload: object) -
     ):
         with pytest.raises(YouTubeAPIError, match="unexpected shape"):
             state_reconciliation.fetch_tagged_instance_ids(api_key="secret")
+
+
+@pytest.mark.parametrize(
+    ("payload", "field_path"),
+    [
+        ({"instances": {"default_password": "do-not-leak"}}, "instances"),
+        (
+            {
+                "instances": [{"id": "vps", "tags": 1, "default_password": "do-not-leak"}],
+                "meta": {"links": {"next": ""}},
+            },
+            "instances[0].tags",
+        ),
+    ],
+)
+def test_fetch_tagged_instances_does_not_expose_response_secrets(payload: object, field_path: str) -> None:
+    with patch(
+        "youtube_automation.infrastructure.youtube.streaming.state_reconciliation.urllib.request.urlopen",
+        return_value=_Response(payload),
+    ):
+        with pytest.raises(YouTubeAPIError) as exc_info:
+            state_reconciliation.fetch_tagged_instance_ids(api_key="secret")
+
+    assert field_path in str(exc_info.value)
+    assert "do-not-leak" not in str(exc_info.value)
 
 
 def test_load_managed_ids_reads_every_gcs_workspace_state(tmp_path) -> None:
@@ -112,6 +148,26 @@ def test_load_managed_ids_fails_when_backend_metadata_is_missing(tmp_path) -> No
             terraform_dir=tmp_path,
             run_command=lambda *_args, **_kwargs: (0, "", ""),
         )
+
+
+@pytest.mark.parametrize(
+    "stderr",
+    ["CommandException: matched no URLs", "One or more URLs matched no objects."],
+)
+def test_load_managed_ids_treats_gcloud_empty_listing_as_empty(tmp_path, stderr: str) -> None:
+    metadata = tmp_path / ".terraform" / "terraform.tfstate"
+    metadata.parent.mkdir()
+    metadata.write_text(
+        json.dumps({"backend": {"type": "gcs", "config": {"bucket": "bucket", "prefix": "streaming"}}}),
+        encoding="utf-8",
+    )
+
+    result = state_reconciliation.load_managed_instance_ids(
+        terraform_dir=tmp_path,
+        run_command=lambda *_args, **_kwargs: (1, "", stderr),
+    )
+
+    assert result == frozenset()
 
 
 def test_load_managed_ids_rejects_malformed_state_instead_of_ignoring_it(tmp_path) -> None:

@@ -9,14 +9,17 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
-from urllib.parse import urlparse
+from urllib.parse import urlencode
 
 from youtube_automation.core.errors import ConfigError, YouTubeAPIError
 
-_VULTR_INSTANCES_URL = "https://api.vultr.com/v2/instances?per_page=500"
+_VULTR_INSTANCES_ENDPOINT = "https://api.vultr.com/v2/instances"
+_VULTR_PAGE_SIZE = 500
+_VULTR_INSTANCES_URL = f"{_VULTR_INSTANCES_ENDPOINT}?{urlencode({'per_page': _VULTR_PAGE_SIZE})}"
 _STREAMING_TAG = "youtube-stream"
 _HTTP_TIMEOUT_SECONDS = 30
 _COMMAND_TIMEOUT_SECONDS = 30
+_GCLOUD_EMPTY_STATE_MESSAGES = ("matched no URLs", "One or more URLs matched no objects.")
 
 CommandRunner = Callable[..., tuple[int, str, str]]
 
@@ -39,9 +42,9 @@ def fetch_tagged_instance_ids(*, api_key: str) -> frozenset[str]:
         payload = _fetch_vultr_page(url=url, api_key=api_key)
         instances = payload.get("instances")
         if not isinstance(instances, list):
-            raise YouTubeAPIError(f"Vultr instances API returned unexpected shape: {payload!r}")
-        for instance in instances:
-            instance_id, tags = _parse_vultr_instance(instance)
+            raise _unexpected_vultr_shape("instances")
+        for index, instance in enumerate(instances):
+            instance_id, tags = _parse_vultr_instance(instance, index=index)
             if _STREAMING_TAG in tags:
                 instance_ids.add(instance_id)
         url = _next_page_url(payload)
@@ -56,40 +59,43 @@ def _fetch_vultr_page(*, url: str, api_key: str) -> dict[str, object]:
     except (urllib.error.URLError, TimeoutError, UnicodeDecodeError, json.JSONDecodeError) as error:
         raise YouTubeAPIError(f"Vultr instances API request failed: {error}") from error
     if not isinstance(payload, dict) or not all(isinstance(key, str) for key in payload):
-        raise YouTubeAPIError(f"Vultr instances API returned unexpected shape: {payload!r}")
+        raise _unexpected_vultr_shape("$")
     return cast(dict[str, object], payload)
 
 
-def _parse_vultr_instance(instance: object) -> tuple[str, frozenset[str]]:
+def _parse_vultr_instance(instance: object, *, index: int) -> tuple[str, frozenset[str]]:
+    field_path = f"instances[{index}]"
     if not isinstance(instance, dict):
-        raise YouTubeAPIError(f"Vultr instances API returned unexpected shape: {instance!r}")
+        raise _unexpected_vultr_shape(field_path)
     instance_id = instance.get("id")
     tags = instance.get("tags")
-    if not isinstance(instance_id, str) or not instance_id or not isinstance(tags, list):
-        raise YouTubeAPIError(f"Vultr instances API returned unexpected shape: {instance!r}")
+    if not isinstance(instance_id, str) or not instance_id:
+        raise _unexpected_vultr_shape(f"{field_path}.id")
+    if not isinstance(tags, list):
+        raise _unexpected_vultr_shape(f"{field_path}.tags")
     if not all(isinstance(tag, str) for tag in tags):
-        raise YouTubeAPIError(f"Vultr instances API returned unexpected shape: {instance!r}")
+        raise _unexpected_vultr_shape(f"{field_path}.tags")
     return instance_id, frozenset(tags)
 
 
 def _next_page_url(payload: dict[str, object]) -> str | None:
     meta = payload.get("meta")
-    if meta is None:
-        return None
     if not isinstance(meta, dict):
-        raise YouTubeAPIError(f"Vultr instances API returned unexpected shape: {payload!r}")
+        raise _unexpected_vultr_shape("meta")
     links = meta.get("links")
     if not isinstance(links, dict):
-        raise YouTubeAPIError(f"Vultr instances API returned unexpected shape: {payload!r}")
-    next_url = links.get("next")
-    if next_url in (None, ""):
+        raise _unexpected_vultr_shape("meta.links")
+    next_cursor = links.get("next")
+    if not isinstance(next_cursor, str):
+        raise _unexpected_vultr_shape("meta.links.next")
+    if next_cursor == "":
         return None
-    if not isinstance(next_url, str):
-        raise YouTubeAPIError(f"Vultr instances API returned unexpected shape: {payload!r}")
-    parsed = urlparse(next_url)
-    if parsed.scheme != "https" or parsed.netloc != "api.vultr.com" or parsed.path != "/v2/instances":
-        raise YouTubeAPIError(f"Vultr instances API returned invalid next URL: {next_url!r}")
-    return next_url
+    query = urlencode({"per_page": _VULTR_PAGE_SIZE, "cursor": next_cursor})
+    return f"{_VULTR_INSTANCES_ENDPOINT}?{query}"
+
+
+def _unexpected_vultr_shape(field_path: str) -> YouTubeAPIError:
+    return YouTubeAPIError(f"Vultr instances API field `{field_path}` has unexpected shape")
 
 
 def load_managed_instance_ids(*, terraform_dir: Path, run_command: CommandRunner) -> frozenset[str]:
@@ -102,7 +108,7 @@ def load_managed_instance_ids(*, terraform_dir: Path, run_command: CommandRunner
         cwd=terraform_dir,
     )
     if returncode != 0:
-        if "matched no URLs" in stderr:
+        if any(message in stderr for message in _GCLOUD_EMPTY_STATE_MESSAGES):
             return frozenset()
         raise ConfigError(f"streaming Terraform state 一覧の取得に失敗: {stderr.strip() or returncode}")
 
