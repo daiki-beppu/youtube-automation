@@ -37,6 +37,10 @@ function record(timestamp: number) {
     total: 10,
     challengeLevel: 1,
     recentCreateCount: 4,
+    runCreateCount: 7,
+    lastCreateIntervalMs: 3200,
+    appliedDelayMs: 5000,
+    inflightRequestCount: 3,
   };
 }
 
@@ -80,8 +84,15 @@ describe("challenge log storage boundary (#2982)", () => {
 
   it("allowlist field だけを再構築し、生成内容や認証情報を保存しない", async () => {
     const { appendChallengeRecord } = await import("../lib/challenge-log");
-    const input = {
+    const expected = {
       ...record(100),
+      runCreateCount: 0,
+      lastCreateIntervalMs: null,
+      appliedDelayMs: 0,
+      inflightRequestCount: 0,
+    };
+    const input = {
+      ...expected,
       style: "secret style",
       lyrics: "secret lyrics",
       token: "secret token",
@@ -90,7 +101,7 @@ describe("challenge log storage boundary (#2982)", () => {
 
     await appendChallengeRecord(input);
 
-    expect(challengeStorage.read()).toEqual([record(100)]);
+    expect(challengeStorage.read()).toEqual([expected]);
   });
 
   it("storage の read / write failure を呼び出し元へ伝播しない", async () => {
