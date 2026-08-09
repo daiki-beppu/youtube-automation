@@ -1182,6 +1182,63 @@ describe("shared/api postDownloaded: 正常系", () => {
     ).resolves.toEqual({ warning: "placed 10 files, expected 12 (2 missing)" });
   });
 
+  it("Given structured 部分完了応答 When postDownloaded Then warning を解析せず summary を保持する", async () => {
+    mockFetchForDownloaded(() => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        ok: true,
+        expected_file_count: 56,
+        placed_count: 47,
+        missing_file_count: 9,
+        missing_reasons: { suno_unfulfilled: 3, apply_skipped: 6 },
+        warning: "localized warning text",
+      }),
+    }));
+
+    await expect(
+      postDownloaded(BASE_URL, "20260601-clm-aaa-collection", {
+        file_count: 56,
+        expected_file_count: 56,
+        format: "mp3",
+        download_path: "/Users/test/Downloads/test.zip",
+      })
+    ).resolves.toEqual({
+      summary: {
+        expected: 56,
+        placed: 47,
+        missing: 9,
+        reasons: { sunoUnfulfilled: 3, applySkipped: 6 },
+      },
+      warning: "localized warning text",
+    });
+  });
+
+  it("Given structured 完全完了応答 When postDownloaded Then reasons=null と warning=null を返す", async () => {
+    mockFetchForDownloaded(() => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        ok: true,
+        expected_file_count: 4,
+        placed_count: 4,
+        missing_file_count: 0,
+      }),
+    }));
+
+    await expect(
+      postDownloaded(BASE_URL, "20260601-clm-aaa-collection", {
+        file_count: 4,
+        expected_file_count: 4,
+        format: "mp3",
+        download_path: "/Users/test/Downloads/test.zip",
+      })
+    ).resolves.toEqual({
+      summary: { expected: 4, placed: 4, missing: 0, reasons: null },
+      warning: null,
+    });
+  });
+
   it("Given JSON でない 200 応答 When postDownloaded Then warning なしとして resolve する (#1913)", async () => {
     mockFetchForDownloaded(() => ({
       ok: true,
@@ -1306,6 +1363,80 @@ describe("shared/api postDownloaded: 正常系", () => {
 });
 
 describe("shared/api postDownloaded: 異常系 (fail-loud)", () => {
+  it.each([
+    ["negative", -1],
+    ["fraction", 1.5],
+    ["unsafe", Number.MAX_SAFE_INTEGER + 1],
+  ])(
+    "Given structured count が %s When postDownloaded Then fail-loud に拒否する",
+    async (_label, invalidCount) => {
+      mockFetchForDownloaded(() => ({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          expected_file_count: 4,
+          placed_count: invalidCount,
+          missing_file_count: 2,
+          missing_reasons: { suno_unfulfilled: 1, apply_skipped: 1 },
+        }),
+      }));
+
+      await expect(
+        postDownloaded(BASE_URL, "20260601-clm-aaa-collection", {
+          file_count: 4,
+          format: "mp3",
+          download_path: "/Users/test/Downloads/test.zip",
+        })
+      ).rejects.toThrow(/placed_count.*nonnegative safe integer/);
+    }
+  );
+
+  it.each([
+    [
+      "count fields are incomplete",
+      { expected_file_count: 4, placed_count: 2 },
+    ],
+    [
+      "missing count disagrees",
+      {
+        expected_file_count: 4,
+        placed_count: 3,
+        missing_file_count: 2,
+        missing_reasons: { suno_unfulfilled: 1, apply_skipped: 1 },
+      },
+    ],
+    [
+      "partial reasons are absent",
+      { expected_file_count: 4, placed_count: 2, missing_file_count: 2 },
+    ],
+    [
+      "reason total disagrees",
+      {
+        expected_file_count: 4,
+        placed_count: 2,
+        missing_file_count: 2,
+        missing_reasons: { suno_unfulfilled: 1, apply_skipped: 0 },
+      },
+    ],
+  ])(
+    "Given structured response whose %s When postDownloaded Then fail-loud に拒否する",
+    async (_label, responseBody) => {
+      mockFetchForDownloaded(() => ({
+        ok: true,
+        status: 200,
+        json: async () => responseBody,
+      }));
+
+      await expect(
+        postDownloaded(BASE_URL, "20260601-clm-aaa-collection", {
+          file_count: 4,
+          format: "mp3",
+          download_path: "/Users/test/Downloads/test.zip",
+        })
+      ).rejects.toThrow(/downloaded response/);
+    }
+  );
+
   it("Given unattended mutation が 500 When consume Then originating request context を保持して throw する", async () => {
     const fetchFn = mockFetchForDownloaded(() => ({
       ok: false,
