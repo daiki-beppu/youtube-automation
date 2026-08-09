@@ -1,19 +1,43 @@
 import dadsTokens from "@digital-go-jp/design-tokens";
 import { defineConfig } from "blume";
 import { releaseScaleLabels } from "./release-scale";
+import { fileURLToPath } from "node:url";
+import { z } from "zod";
+import {
+  createOperatorDocSource,
+  operatorDocMap,
+  operatorDocReleaseField,
+} from "./operator-doc-source";
 import { releaseFrontmatter } from "./release-schema";
 
 const lightAccent = dadsTokens.Color.Key["800"].$value;
 const darkAccent = dadsTokens.Color.Key["400"].$value;
+const repositoryRoot = fileURLToPath(new URL("..", import.meta.url));
+const operatorDocReleaseFieldSchema = z
+  .custom((value) => value === operatorDocReleaseField)
+  .transform(() => undefined);
+const mixedContentFrontmatter = Object.fromEntries(
+  Object.entries(releaseFrontmatter).map(([key, schema]) => [
+    key,
+    schema.or(operatorDocReleaseFieldSchema),
+  ])
+);
 
 export default defineConfig({
   title: "youtube-automation ドキュメント",
   description: "youtube-automation の公式ドキュメント",
   content: {
     root: "../docs/release-notes",
+    sources: [
+      { root: "../docs/release-notes", type: "filesystem" },
+      {
+        source: createOperatorDocSource({ map: operatorDocMap, repositoryRoot }),
+        type: "custom",
+      },
+    ],
   },
   frontmatter: {
-    extend: releaseFrontmatter,
+    extend: mixedContentFrontmatter,
   },
   navigation: {
     sidebar: [
