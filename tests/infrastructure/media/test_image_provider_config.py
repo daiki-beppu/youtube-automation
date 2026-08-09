@@ -32,7 +32,7 @@ class TestParseImageGenerationConfig:
             "image_generation": {
                 "provider": "gemini",
                 "gemini": {
-                    "model": "gemini-3.1-flash-image-preview",
+                    "model": "gemini-3.1-flash-image",
                     "image_size": "2K",
                 },
             }
@@ -44,8 +44,19 @@ class TestParseImageGenerationConfig:
         # Then
         assert isinstance(cfg, ImageGenerationConfig)
         assert cfg.provider == "gemini"
-        assert cfg.gemini.model == "gemini-3.1-flash-image-preview"
+        assert cfg.gemini.model == "gemini-3.1-flash-image"
         assert cfg.gemini.image_size == "2K"
+
+    def test_should_use_ga_model_when_gemini_model_is_omitted(self):
+        # Given: Gemini provider で model 未指定
+        skill_cfg = {"image_generation": {"provider": "gemini", "gemini": {}}}
+
+        # When
+        cfg = parse_image_generation_config(skill_cfg)
+
+        # Then
+        assert cfg.gemini is not None
+        assert cfg.gemini.model == "gemini-3.1-flash-image"
 
     def test_parses_image_generation_namespace_for_openai(self):
         # Given
@@ -586,12 +597,12 @@ class TestGeminiConfigDoesNotRestrictAspectRatio:
         # Given: GeminiConfig の必須キーだけを渡す
         # When
         cfg = GeminiConfig(
-            model="gemini-3.1-flash-image-preview",
+            model="gemini-3.1-flash-image",
             image_size="2K",
         )
 
         # Then: aspect_ratio は config レベルでは保持しない（Request 側で渡す）
-        assert cfg.model == "gemini-3.1-flash-image-preview"
+        assert cfg.model == "gemini-3.1-flash-image"
         assert cfg.image_size == "2K"
         assert not hasattr(cfg, "aspect_ratio") or getattr(cfg, "aspect_ratio", None) is None
 

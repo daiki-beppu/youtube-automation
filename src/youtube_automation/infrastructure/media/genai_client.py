@@ -7,8 +7,8 @@ GCP プロジェクト / API 有効化 / ADC を整えたうえで使用する�
 環境変数:
 - `GOOGLE_CLOUD_PROJECT` (任意) — 未設定なら ADC quota project から自動解決
 
-Vertex AI はモデルごとにサポート region が異なる (2026-04 現在):
-- `gemini-3.1-flash-image-preview` などの画像系: `global` のみ
+Vertex AI はモデルごとにサポート region が異なる (2026-08 現在):
+- `gemini-3.1-flash-image` などの画像系: `global` のみ
 - `veo-3.1-fast-generate-001` などの Veo 系: `us-central1` など region 指定
 
 呼び出し側はモデル用途に合わせて `create_global_genai_client()` または
