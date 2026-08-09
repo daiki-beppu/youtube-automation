@@ -119,6 +119,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `feat(site)`: 公開リリースノートサイトへ公式 DADS design token package を導入し、accent を blue key token の system 配色へ移行、リリース分類色を key / neutral role に分離した。あわせて muted text variable を現行 token へ修正した（#3550, #3551）。
 - `docs(community-draft)`: 下流へ配布される skill から wheel 非同梱の ADR への参照を除去し、同梱する `references/generate_batch.py` を変数解決・日時計算・path 検証・JSON schema の単一ソースとして維持した。community draft の runtime behavior は変更しない（#3532）。
 - `docs(videoup)`: 下流へ配布される skill から wheel 非同梱の encoder benchmark 文書への参照を除去し、同一入力・共通出力での比較、median wall-clock 20% 短縮の採用基準、既定 `libx264`・hardware 明示 opt-in・probe 失敗時 fallback の判断契約を inline で維持した。動画生成の実行挙動は変更しない（#3530）。
+- `refactor(videoup)`: `yt-generate-videos-batch --help` と `generate_videos.sh --help` だけで対象 collection・stage・並列度、および collection path・preview・overlay の入力・既定・安全契約を確認できるようにし、skill は orchestration / safety contract に整理した。既存の execution contract と runtime behavior は変更しない（#3523）。
 - `docs(wf-auto)`: 下流へ配布される skill から wheel 非同梱のオーケストレーション文書への参照を除去し、長時間処理の待機主体・30 秒以下の poll・終了観測という実行契約を inline のまま維持した（#3525）。
 - `refactor(tests)`: 旧 `unit` / `streaming` テストを canonical owner と `tests/repo/streaming/` へ整理し、root allowlist・source layer・source owner の配置規約を repository contract として機械担保した（#3047）。
 - `fix(tests)`: collection serve の subprocess lifecycle テストで待機処理を共通化し、デッドライン到達時に待機対象を明示して失敗させるようにした。server 起動完了は PID ファイルの存在ではなく HTTP identity endpoint の応答まで確認し、高負荷時の起動途中を準備完了と誤認しないようにした（#3091）。
