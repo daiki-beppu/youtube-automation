@@ -86,6 +86,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `feat(suno-helper)`: prompt entry の optional な `duration_sec` を wire 型で受理し、明示された数値を失わず保持するようにした（#3153）。
 - `docs(suno)`: optional な `duration_sec` の単位・値域・明示時のみ全 entry へ出力する契約と、生成後の採用範囲を担う `duration_filter` との責務分離を配布設定と Suno 手順へ記載した（#3133）。
 - `feat(suno)`: channel override に明示した `duration_sec` を、既定値や `duration_filter` から補完せず全 prompt entry へ数値として出力するようにした（#3132）。
 - `feat(suno)`: channel override の `duration_sec` を正の整数に限定し、bool・文字列・float・非有限値・0 以下を prompt 生成前に `ConfigError` で拒否する検証境界を追加した（#3131）。
