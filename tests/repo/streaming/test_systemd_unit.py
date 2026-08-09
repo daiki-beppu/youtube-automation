@@ -43,7 +43,11 @@ class TestSystemdUnitTemplate:
         assert re.search(pattern, service, flags=re.MULTILINE), message
 
     @staticmethod
-    def _render_cycle_template(stream_hours: int, break_hours: int) -> str:
+    def _render_cycle_template(
+        stream_hours: int,
+        break_hours: int,
+        crash_restart_seconds: int = 2,
+    ) -> str:
         """Terraform templatefile の cycle 条件だけをテスト用に展開する。"""
         text = read_file(_SYSTEMD_TFTPL)
         text = text.replace("${install_root}", "/opt/youtube-stream")
@@ -61,7 +65,11 @@ class TestSystemdUnitTemplate:
                 text,
                 flags=re.DOTALL,
             )
-        restart_sec = f"RestartSec={break_hours}h" if stream_hours > 0 and break_hours > 0 else "RestartSec=10s"
+        restart_sec = (
+            f"RestartSec={break_hours}h"
+            if stream_hours > 0 and break_hours > 0
+            else f"RestartSec={crash_restart_seconds}s"
+        )
         text = re.sub(
             r"%\{\s*if stream_hours > 0 && break_hours > 0\s*\}\n.*?%\{\s*else\s*\}\n.*?%\{\s*endif\s*\}",
             restart_sec,
@@ -180,20 +188,20 @@ class TestSystemdUnitTemplate:
         """Given .tftpl
         When [Service] を読む
         Then break_hours > 0 のとき ``RestartSec=${break_hours}h``、
-             0 のとき ``RestartSec=10s`` が出力される。
+             0 のとき ``RestartSec=${crash_restart_seconds}s`` が出力される。
         """
         text = read_file(_SYSTEMD_TFTPL)
         assert "%{ if stream_hours > 0 && break_hours > 0 }" in text, (
             "stream_hours > 0 && break_hours > 0 の条件分岐が無い"
         )
         assert "RestartSec=${break_hours}h" in text, "RestartSec が break_hours 変数で出力されていない"
-        assert "RestartSec=10s" in text, "break_hours=0 用の RestartSec=10s が無い"
+        assert "RestartSec=${crash_restart_seconds}s" in text, "break_hours=0 用の configurable RestartSec が無い"
         default_service = self._section(self._render_cycle_template(0, 0), "Service")
         legacy_service = self._section(self._render_cycle_template(11, 1), "Service")
         assert default_service is not None
         assert legacy_service is not None
-        assert re.search(r"^RestartSec=10s\s*$", default_service, flags=re.MULTILINE), (
-            "break_hours=0 で RestartSec=10s が出力されない"
+        assert re.search(r"^RestartSec=2s\s*$", default_service, flags=re.MULTILINE), (
+            "break_hours=0 で既定 RestartSec=2s が出力されない"
         )
         assert re.search(r"^RestartSec=1h\s*$", legacy_service, flags=re.MULTILINE), (
             "break_hours=1 で RestartSec=1h が出力されない"
@@ -202,16 +210,16 @@ class TestSystemdUnitTemplate:
     def test_service_restart_sec_ignores_break_hours_when_stream_hours_zero(self):
         """Given stream_hours=0 (24/7 モード) かつ break_hours=1
         When テンプレートを展開する
-        Then ``RestartSec=10s`` が出力される（break_hours は無視される）。
+        Then ``RestartSec=2s`` が出力される（break_hours は無視される）。
 
         stream_hours=0 では RuntimeMaxSec が省略されるため、RestartSec が長時間になると
         クラッシュ時の再起動が遅延する。24/7 モードでは break_hours を無視して
-        常にクラッシュ再起動用の 10s を使う。
+        常にクラッシュ再起動用の既定 2s を使う。
         """
         service = self._section(self._render_cycle_template(0, 1), "Service")
         assert service is not None
-        assert re.search(r"^RestartSec=10s\s*$", service, flags=re.MULTILINE), (
-            "stream_hours=0, break_hours=1 で RestartSec=10s が出力されない（24/7 モードでは break_hours を無視すべき）"
+        assert re.search(r"^RestartSec=2s\s*$", service, flags=re.MULTILINE), (
+            "stream_hours=0, break_hours=1 で RestartSec=2s が出力されない（24/7 モードでは break_hours を無視すべき）"
         )
         assert not re.search(r"^RestartSec=1h\s*$", service, flags=re.MULTILINE), (
             "stream_hours=0 なのに RestartSec=1h が出力されている"
@@ -235,16 +243,25 @@ class TestSystemdUnitTemplate:
     def test_service_custom_cycle_no_break(self):
         """Given stream_hours=6, break_hours=0
         When テンプレートを展開する
-        Then RuntimeMaxSec=6h が出力され、RestartSec=10s（クラッシュ再起動）になる。
+        Then RuntimeMaxSec=6h が出力され、RestartSec=2s（クラッシュ再起動）になる。
         """
         service = self._section(self._render_cycle_template(6, 0), "Service")
         assert service is not None
         assert re.search(r"^RuntimeMaxSec=6h\s*$", service, flags=re.MULTILINE), (
             "stream_hours=6 で RuntimeMaxSec=6h が出力されない"
         )
-        assert re.search(r"^RestartSec=10s\s*$", service, flags=re.MULTILINE), (
-            "stream_hours=6, break_hours=0 で RestartSec=10s が出力されない"
+        assert re.search(r"^RestartSec=2s\s*$", service, flags=re.MULTILINE), (
+            "stream_hours=6, break_hours=0 で RestartSec=2s が出力されない"
         )
+
+    def test_crash_restart_seconds_override_does_not_change_planned_break(self):
+        """24/7 の override は反映し、11h+1h の計画休止は常に 1h を維持する。"""
+        continuous = self._render_cycle_template(0, 0, crash_restart_seconds=7)
+        planned = self._render_cycle_template(11, 1, crash_restart_seconds=7)
+
+        assert re.search(r"^RestartSec=7s\s*$", continuous, flags=re.MULTILINE)
+        assert re.search(r"^RestartSec=1h\s*$", planned, flags=re.MULTILINE)
+        assert not re.search(r"^RestartSec=7s\s*$", planned, flags=re.MULTILINE)
 
     def test_install_section_wanted_by_multi_user(self):
         """Given .tftpl
@@ -403,7 +420,12 @@ class TestSystemdUnitTemplate:
         text = read_file(_SYSTEMD_TFTPL)
         interpolations = re.findall(r"\$\{[^}]+\}", text)
         assert interpolations, "Terraform 補間が無い（install_root の配線検証になっていない）"
-        assert set(interpolations) <= {"${install_root}", "${stream_hours}", "${break_hours}"}, (
+        assert set(interpolations) <= {
+            "${install_root}",
+            "${stream_hours}",
+            "${break_hours}",
+            "${crash_restart_seconds}",
+        }, (
             "templatefile() に渡していない補間が残っている（systemd で参照したい場合は $NAME と書く / "
             "terraform で渡したい場合は templatefile() の variables map に追加する）"
         )
@@ -424,20 +446,18 @@ class TestSystemdUnitTemplate:
             flags=re.IGNORECASE,
         ), "ffmpeg -i に動画パスが直書きされている（$VIDEO を使うこと）"
 
-    def test_unit_section_start_limit_interval_sec_zero(self):
+    def test_unit_section_limits_persistent_crash_loop(self):
         """Given .tftpl
         When [Unit] セクションを読む
-        Then ``StartLimitIntervalSec=0`` が宣言されている (#214)。
+        Then 60 秒間 10 回の start limit が宣言されている。
 
-        起動失敗カウントの時間窓を無効化し、``Restart=always`` + ``RestartSec``
-        サイクルが ``StartLimitHit`` で永続停止する経路を遮断する。
+        2 秒再起動を無制限に続けず、healthcheck が通知できる failed 状態で停止する。
         """
         text = read_file(_SYSTEMD_TFTPL)
         unit = self._section(text, "Unit")
         assert unit is not None
-        assert re.search(r"^StartLimitIntervalSec=0\s*$", unit, flags=re.MULTILINE), (
-            "[Unit].StartLimitIntervalSec=0 が無い（起動失敗連発で StartLimitHit 永続停止する余地が残る）"
-        )
+        assert re.search(r"^StartLimitIntervalSec=60\s*$", unit, flags=re.MULTILINE)
+        assert re.search(r"^StartLimitBurst=10\s*$", unit, flags=re.MULTILINE)
 
     def test_service_success_exit_status_sigterm_143(self):
         """Given .tftpl

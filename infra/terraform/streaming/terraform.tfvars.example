@@ -30,10 +30,12 @@ allowed_ssh_cidr = ["203.0.113.5/32"]
 # channel_slug     = "005ch-abyss"
 
 # 配信サイクル:
-#   0 / 0 は 24/7 連続配信（RuntimeMaxSec なし、クラッシュ時は 10 秒後に再起動）。
+#   0 / 0 は 24/7 連続配信（RuntimeMaxSec なし、クラッシュ時は既定 2 秒後に再起動）。
 #   従来の 11 時間配信 + 1 時間休止に戻す場合は 11 / 1 を指定する。
+#   永続的な起動失敗は 60 秒間に 10 回で停止し、healthcheck が異常を通知する。
 # stream_hours = 0
 # break_hours  = 0
+# crash_restart_seconds = 2  # 1〜300 秒。環境に合わせて上書き可能
 
 # ライブチャット返信 daemon（既定 false / opt-in）:
 # secret 3 種は tfvars に書かず、1Password 参照を渡して専用ラッパーを実行する。

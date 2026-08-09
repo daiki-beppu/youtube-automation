@@ -466,7 +466,7 @@ class TestMainTfNullResource:
 
         - instance_id = vultr_instance.this.id（VPS 再作成時の再 deploy）
         - video_hash = filemd5(var.video_path)（動画差分での再 deploy）
-        - stream_hours / break_hours（配信サイクル差分での再 deploy）
+        - stream_hours / break_hours / crash_restart_seconds（配信サイクル差分での再 deploy）
         - stream_key（sha256 ハッシュ。stream key 差分での再 deploy）
         """
         text = strip_hcl_comments(read_file(_MAIN_TF))
@@ -486,6 +486,10 @@ class TestMainTfNullResource:
         assert re.search(r"break_hours\s*=\s*tostring\(\s*var\.break_hours\s*\)", triggers), (
             "triggers.break_hours が tostring(var.break_hours) でない"
         )
+        assert re.search(
+            r"crash_restart_seconds\s*=\s*tostring\(\s*var\.crash_restart_seconds\s*\)",
+            triggers,
+        ), "triggers.crash_restart_seconds が tostring(var.crash_restart_seconds) でない"
         assert re.search(r"\bstream_key\s*=", triggers), "triggers.stream_key が無い"
 
     def test_triggers_systemd_unit_hashes_service_tftpl(self):
@@ -517,7 +521,7 @@ class TestMainTfNullResource:
         """Given main.tf
         When ``null_resource.deploy`` 内の ``provisioner "file"`` を読む
         Then ``content = templatefile("${path.module}/templates/youtube-stream.service.tftpl",``
-             ``{ install_root = var.install_root, stream_hours = var.stream_hours, break_hours = var.break_hours })``
+             ``{ install_root, stream_hours, break_hours, crash_restart_seconds })``
              と ``destination = "/etc/systemd/system/youtube-stream.service"`` のペアが
              同一 provisioner 内に宣言されている (#212)。
 
@@ -532,7 +536,8 @@ class TestMainTfNullResource:
             r'"\$\{path\.module\}/templates/youtube-stream\.service\.tftpl"\s*,\s*\{'
             r"[^}]*install_root\s*=\s*var\.install_root"
             r"[^}]*stream_hours\s*=\s*var\.stream_hours"
-            r"[^}]*break_hours\s*=\s*var\.break_hours[^}]*\}\s*\)"
+            r"[^}]*break_hours\s*=\s*var\.break_hours"
+            r"[^}]*crash_restart_seconds\s*=\s*var\.crash_restart_seconds[^}]*\}\s*\)"
         )
         destination_pattern = r'destination\s*=\s*"/etc/systemd/system/youtube-stream\.service"'
         match = re.search(
@@ -547,7 +552,8 @@ class TestMainTfNullResource:
         )
         assert match or match_alt, (
             'provisioner "file" で content=templatefile("${path.module}/templates/'
-            'youtube-stream.service.tftpl", { install_root, stream_hours, break_hours }) → '
+            'youtube-stream.service.tftpl", { install_root, stream_hours, break_hours, '
+            "crash_restart_seconds }) → "
             "/etc/systemd/system/youtube-stream.service への配信が宣言されていない"
         )
 

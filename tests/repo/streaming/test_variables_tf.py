@@ -186,7 +186,7 @@ class TestVariablesTfNullResource:
         When break_hours 変数定義を読む
         Then type=number, default=0, description あり、非負 validation が宣言されている。
 
-        0 は休止なしを表し、systemd unit では RestartSec=10s を使う。
+        0 は休止なしを表し、systemd unit では crash_restart_seconds を使う。
         負数は > 0 分岐の else 側に入り休止なしモードに黙って吸収されるため、非負を検証する。
         """
         text = strip_hcl_comments(read_file(_VARIABLES_TF))
@@ -205,6 +205,20 @@ class TestVariablesTfNullResource:
             r"error_message\s*=\s*\"",
             validation,
         ), "break_hours.validation.error_message が宣言されていない"
+
+    def test_crash_restart_seconds_has_safe_configurable_default(self):
+        """クラッシュ再起動間隔は既定2秒で、1〜300の整数だけを受理する。"""
+        text = strip_hcl_comments(read_file(_VARIABLES_TF))
+        block = extract_block(text, r'variable\s+"crash_restart_seconds"')
+        assert block is not None
+        assert re.search(r"type\s*=\s*number", block)
+        assert re.search(r"default\s*=\s*2\b", block)
+        assert re.search(r"description\s*=", block)
+        validation = extract_block(block, r"validation")
+        assert validation is not None
+        assert "var.crash_restart_seconds >= 1" in validation
+        assert "var.crash_restart_seconds <= 300" in validation
+        assert "floor(var.crash_restart_seconds) == var.crash_restart_seconds" in validation
 
     def test_stream_key_is_sensitive_string_with_no_default(self):
         """Given variables.tf

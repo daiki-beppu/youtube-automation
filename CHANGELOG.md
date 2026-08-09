@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `fix(suno)`: effective `genre_line` の hard guard `style_char_limit: 120` を維持しつつ、完成形 Style の soft quality budget を `full_style_char_limit: 256` へ分離。明示した新キー、明示した legacy キー、既定値の順で解決し、既存チャンネルの override を保ったまま構造的な警告を解消（#2589）。
 - `fix(suno)`: `suno-prompts.md` / JSON を同一ディレクトリの一時ファイルへ書き切ってから一組で公開し、commit 途中失敗時は元の有無を含めて両成果物を rollback するようにした（#3669）。
 - `fix(suno)`: collection-local `style_variants` を持たない legacy collection の variant key drift を、patterns path・移行手順・既存成果物の stale 状態と再検証コマンド付きで診断し、失敗時の既存 MD/JSON を不変に保つようにした（#3668）。
+- `fix(streaming)`: 24/7 配信のクラッシュ再起動間隔を 10 秒から既定 2 秒へ短縮し、`crash_restart_seconds`（1〜300 秒）で上書き可能にした。11h+1h の計画休止は維持し、永続障害は 60 秒間 10 回の systemd start limit で過剰再試行を停止する（#3029）。
 - `docs(thumbnail)`: 承認済み画像生成を subagent / background session で実行する場合は stdin を `/dev/null` へ閉じ、process の exit と成果物を観測するまで完了報告しない契約を追加（#2950）。
 - `docs(suno)`: `suno_preset` を hard gate から推奨入力へ変更し、collection 固有の effective Style と vocal gender を `suno-patterns.yaml` に保存して共有 channel config を変更せず `/wf-new`・`/suno-lyric`・`yt-suno-verify` へ引き渡す正規手順を追加（#2999）。
 - `fix(suno)`: `suno-patterns.yaml` が上書きした effective Style にも channel の `banned_artists` を適用し、禁止アーティスト検出時は channel Style と同じ `ConfigError` で出力前に停止する契約を固定（#2998）。

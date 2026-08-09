@@ -15,7 +15,7 @@ accepted (2026-06-24)。
 1. **デフォルトを 24/7 連続配信（`RuntimeMaxSec` なし）にする。** アーカイブは生成されなくなるが、配信の中断がなくなる
 2. **Terraform 変数 `stream_hours`（default=0）と `break_hours`（default=0）を導入する。** 0 は「無制限」を意味し、24/7 モードを表す。休憩モードが必要な場合は `stream_hours=11, break_hours=1` のように設定する
 3. **設定の置き場所は Terraform 変数のみ。** VPS 上での手動変更は `terraform apply` で上書きされる前提（single source of truth）
-4. **systemd unit テンプレートの条件分岐**: `stream_hours > 0` のとき `RuntimeMaxSec` を出力、`break_hours > 0` のとき `RestartSec=Xh` else `RestartSec=10s`（クラッシュ時の再起動間隔）。`Restart=always` は常に出力
+4. **systemd unit テンプレートの条件分岐**: `stream_hours > 0` のとき `RuntimeMaxSec` を出力、`break_hours > 0` のとき `RestartSec=Xh`、それ以外は `RestartSec=2s`（`crash_restart_seconds` で上書き可能）。`Restart=always` は常に出力し、永続障害は 60 秒間 10 回の start limit で抑止する
 5. **Python 定数を更新**: `THEORETICAL_HOURS_PER_DAY=24`、`ARCHIVES_EXPECTED=False`（boolean）。稼働率計算は `ARCHIVES_EXPECTED=False` のとき従来のアーカイブ数ベース計算をスキップ
 6. **ヘルスチェックの `idle` 状態分類は残す。** 休憩モード時に正しく動作するために必要で、24/7 モードでは到達しないだけ
 

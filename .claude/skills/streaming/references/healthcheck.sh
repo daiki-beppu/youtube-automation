@@ -7,7 +7,7 @@
 #   manual  : inactive+dead+success    （systemctl stop）
 #   anomaly : 上記以外                 （kill -9 / failed / Result≠success など）
 #
-# break_hours=0 の RestartSec=10s はクラッシュ時の短い再起動間隔。failed / Result≠success は anomaly。
+# break_hours=0 の RestartSec=2s（既定）はクラッシュ時の短い再起動間隔。failed / Result≠success は anomaly。
 #
 # 状態変化チェック（連打防止）: 前回 classify 結果を $STATE_DIR/last_status に保存し、
 # anomaly 突入時と anomaly からの復帰時のみ通知する。同種類の連続は無音。
