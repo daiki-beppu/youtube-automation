@@ -379,6 +379,87 @@ test("狭い画面で公開活動を領域内スクロールと keyboard で確�
   await expect(cell).toHaveAttribute("aria-describedby", await details.getAttribute("id"))
 })
 
+test("公開活動の empty・stale・fatal 状態を切り替えられる", async ({
+  page,
+}) => {
+  let holdResponse = true
+  let releaseResponse: (() => void) | undefined
+  let response = {
+    status: 200,
+    body: { days: {}, channels: [] },
+  }
+  await page.route("**/api/publications", async (route) => {
+    if (holdResponse) {
+      await new Promise<void>((resolveResponse) => {
+        releaseResponse = resolveResponse
+      })
+    }
+    await route.fulfill({
+      body: JSON.stringify(response.body),
+      contentType: "application/json",
+      status: response.status,
+    })
+  })
+
+  await page.goto(baseURL)
+  await expect(
+    page.getByRole("status", { name: "公開活動を読み込み中" })
+  ).toBeVisible()
+  await expect.poll(() => Boolean(releaseResponse)).toBe(true)
+  holdResponse = false
+  releaseResponse?.()
+  await expect(page.getByText("公開活動データがありません")).toBeVisible()
+  await expect(page.getByRole("grid", { name: "日別公開本数" })).toHaveCount(0)
+
+  response = {
+    status: 200,
+    body: {
+      days: { [publicationDate]: 2 },
+      channels: [
+        {
+          id: "night-drive",
+          name: "Night Drive",
+          status: "refresh_failed",
+          fetched_at: "2026-08-08T10:00:00Z",
+          timezone: "Asia/Tokyo",
+          days: { [publicationDate]: 2 },
+          error: {
+            code: "publication_refresh_failed",
+            message: "quota exceeded",
+            attempted_at: "2026-08-08T12:00:00Z",
+          },
+        },
+      ],
+    },
+  }
+  await page.reload()
+  const heatmap = page.getByRole("region", { name: "過去365日の公開活動" })
+  await expect(
+    heatmap.getByRole("gridcell", {
+      name: `${publicationDate}: 2本`,
+      exact: true,
+    })
+  ).toBeVisible()
+  await expect(heatmap.getByText(/^最終更新/)).toBeVisible()
+  const staleAlert = heatmap.getByRole("alert", {
+    name: "Night Drive の公開活動更新失敗",
+  })
+  await expect(staleAlert).toBeVisible()
+  await expect(staleAlert).toContainText("前回データを表示しています")
+  await expect(staleAlert).toContainText("quota exceeded")
+
+  response = { status: 503, body: { error: "failed" } }
+  await page.reload()
+  const fatalAlert = page.getByRole("alert", {
+    name: "公開活動を読み込めませんでした",
+  })
+  await expect(fatalAlert).toBeVisible()
+  await expect(fatalAlert).toContainText("HTTP 503")
+  await expect(
+    page.getByRole("region", { name: "過去365日の公開活動" })
+  ).toHaveCount(0)
+})
+
 test("ダークテーマでも背景とカードの階調を識別できる", async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.setItem("theme", "dark")
