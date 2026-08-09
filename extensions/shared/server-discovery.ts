@@ -161,6 +161,12 @@ async function validatedSource(
       id: serverSourceIdFromUrl(registeredUrl),
       label: info.label,
       url: registeredUrl,
+      ...(info.capabilities === undefined
+        ? {}
+        : { capabilities: info.capabilities }),
+      ...(info.collections_root === undefined
+        ? {}
+        : { collectionsRoot: info.collections_root }),
     };
   } catch {
     return undefined;

@@ -222,6 +222,74 @@ describe("shared live server discovery", () => {
     ]);
   });
 
+  it("should propagate optional metadata from the validated probe instead of the registry", async () => {
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url === DISCOVERY_REGISTRY_URL) {
+        return response(
+          200,
+          registry([
+            {
+              ...registryEntry(LIVE_URL, "live"),
+              server_info: {
+                ...serverInfo(LIVE_URL, "Registry"),
+                capabilities: { distrokid: { mode: "disabled" } },
+                collections_root: "registry-root",
+              },
+            },
+          ])
+        );
+      }
+      if (url === `${LIVE_URL}/server-info`) {
+        return response(200, {
+          ...serverInfo(LIVE_URL, "Probe"),
+          capabilities: { distrokid: { mode: "dir" } },
+          collections_root: "planning",
+        });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+
+    await expect(discoverServerSources({ fetch: fetchMock })).resolves.toEqual([
+      DEFAULT_SERVER_SOURCES[0],
+      {
+        id: "live-localhost-49152",
+        label: "Probe",
+        url: LIVE_URL,
+        capabilities: { distrokid: { mode: "dir" } },
+        collectionsRoot: "planning",
+      },
+    ]);
+  });
+
+  it("should preserve exact source shapes when optional metadata is omitted", async () => {
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url === DISCOVERY_REGISTRY_URL) {
+        return response(200, registry([registryEntry(LIVE_URL, "legacy")]));
+      }
+      if (url === `${LIVE_URL}/server-info`) {
+        return response(200, serverInfo(LIVE_URL, "Legacy"));
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+
+    const sources = await discoverServerSources({ fetch: fetchMock });
+
+    expect(DEFAULT_SERVER_SOURCES[0]).toEqual({
+      id: "youtube-automation-localhost-7873",
+      label: "YouTube Automation (default)",
+      url: DEFAULT_URL,
+    });
+    expect(sources[1]).toEqual({
+      id: "live-localhost-49152",
+      label: "Legacy",
+      url: LIVE_URL,
+    });
+    expect(sources[1]).not.toHaveProperty("capabilities");
+    expect(sources[1]).not.toHaveProperty("collectionsRoot");
+  });
+
   it.each([
     ["HTTP failure", () => Promise.resolve(response(503, {}))],
     [
