@@ -1,0 +1,12 @@
+[Unit]
+Description=Check YouTube live broadcast every ${interval_seconds} seconds
+
+[Timer]
+OnBootSec=${interval_seconds}s
+OnUnitActiveSec=${interval_seconds}s
+AccuracySec=15s
+Persistent=false
+Unit=youtube-broadcast-recovery.service
+
+[Install]
+WantedBy=timers.target

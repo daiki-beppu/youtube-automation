@@ -13,6 +13,7 @@ Vultr VPS をプロビジョニングし、ローカル MP4 を YouTube Live に
 - `vultr_instance` × 1（Ubuntu 24.04 LTS / vc2-1c-2gb / 東京リージョン）
 - `null_resource.deploy` × 1（動画アップロード + `EnvironmentFile` 配置 + systemd 起動 + 死活監視配置）
 - `null_resource.live_chat_reply` × 0..1（opt-in のライブチャット返信 daemon。認証・config 配布 + Codex / Python package + systemd 起動）
+- `null_resource.broadcast_recovery` × 0..1（24/7 専用 opt-in。OAuth / 復旧 CLI + 2 分 systemd timer 配布）
 
 ## 前提
 
@@ -175,6 +176,38 @@ terraform -chdir=infra/terraform/streaming apply -var='enable_live_chat_reply=fa
 opt-out は unit、`/var/lib/live-chat-reply` の OAuth / Codex 認証、専用 venv を削除する。既存 `youtube-stream` の unit、動画、stream key には触れない。token 失効時は人間がブラウザ認証を行って 1Password の値を更新し、同じラッパーを再実行する。
 
 設計根拠: [Terraform ephemeral values](https://developer.hashicorp.com/terraform/language/manage-sensitive-data#ephemeral-values)、[Terraform file provisioner](https://developer.hashicorp.com/terraform/language/block/resource#file)、[OpenAI Codex](https://github.com/openai/codex)、[1Password secret references](https://developer.1password.com/docs/cli/secret-references/)。
+
+## 24/7 broadcast 自動復旧 timer
+
+`enable_broadcast_recovery=true` かつ `stream_hours=0` のときだけ、`youtube-broadcast-recovery.timer` が既定 120 秒間隔で #3674 の復旧 CLI を実行する。`stream_hours>0` へ切り替えると resource が destroy されるため、11h+1h の計画休止中に配信枠を作らない。各回の runner も `youtube-stream.service` が inactive なら API write をせず `waiting_ingest` を journald に残す。
+
+```hcl
+enable_broadcast_recovery          = true
+broadcast_recovery_stream_id       = "<persistent-live-stream-id>"
+broadcast_recovery_title           = "<再試行でも変えない title>"
+broadcast_recovery_automation_git_ref = "<release-tag-or-commit-sha>"
+# broadcast_recovery_interval_seconds = 120
+```
+
+OAuth JSON は tfvars に書かず、1Password の secret reference だけを deploy wrapper へ渡す。wrapper は JSON 本文を argv / log に出さず ephemeral Terraform 変数へ注入し、終了時に shell 変数を unset する。state / plan / triggers には本文ではなく非秘密の SHA-256 revision だけが残る。VPS では専用 user `youtube-broadcast-recovery` 所有の `/var/lib/youtube-broadcast-recovery/channel/auth/{token_streaming.json,client_secrets.json}` に mode `0600` で保持する。
+
+```bash
+export OP_BROADCAST_RECOVERY_TOKEN_REF='op://<vault>/<item>/<field>'
+export OP_BROADCAST_RECOVERY_CLIENT_SECRETS_REF='op://<vault>/<item>/<field>'
+.claude/skills/streaming/references/deploy_broadcast_recovery.sh
+
+# 状態・構造化結果・journal
+systemctl status youtube-broadcast-recovery.timer
+cat /var/lib/youtube-broadcast-recovery/last-result.json
+journalctl -t youtube-broadcast-recovery --since '15 min ago'
+
+# disable: plan で broadcast_recovery だけが destroy されることを確認して apply
+terraform -chdir=infra/terraform/streaming apply -var='enable_broadcast_recovery=false'
+```
+
+`recovered` のときだけ既存 `notify.sh` を呼ぶ。webhook 未設定・不正・送信失敗でも、通知開始と復旧結果は先に journald へ記録される。automation Git ref、OAuth revision、interval、service/timer/runner/notifier の hash は独立 resource の triggers なので、VPS を再作成せず再配備できる。disable は timer/service、専用 venv、OAuth、`last-result.json` を削除し、既存 ffmpeg と動画には触れない。
+
+実機検証で配信枠を手動終了すると視聴者影響が生じるため、明示承認なしに実行しない。承認後は (1) `youtube-stream.service` と ingest が active、(2) upcoming 再利用対象の有無、(3) `last-result.json` baseline を記録し、対象 broadcast だけを手動終了する。最大 2 分後に `status=recovered`、同じ stream への bind、broadcast が 1 件だけ、journald と通知の記録を確認する。最後に同じ service を手動再実行して `healthy` no-op となり増殖しないことを確認する。
 
 ## 配信元動画のプリフライト
 

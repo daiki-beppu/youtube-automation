@@ -48,3 +48,15 @@ allowed_ssh_cidr = ["203.0.113.5/32"]
 # OP_LIVE_CHAT_CLIENT_SECRETS_REF='op://<vault>/<item>/<field>' \
 # OP_CODEX_AUTH_REF='op://<vault>/<item>/<field>' \
 # .claude/skills/streaming/references/deploy_live_chat.sh /absolute/path/to/channel
+
+# 24/7 broadcast 自動復旧（既定 false / stream_hours=0 専用）:
+# OAuth JSON は tfvars に書かず、1Password 参照を専用ラッパーへ渡す。
+# enable_broadcast_recovery             = true
+# broadcast_recovery_stream_id          = "<persistent-live-stream-id>"
+# broadcast_recovery_title              = "<stable-broadcast-title>"
+# broadcast_recovery_interval_seconds   = 120
+# broadcast_recovery_automation_git_ref = "<release-tag-or-commit-sha>"
+#
+# OP_BROADCAST_RECOVERY_TOKEN_REF='op://<vault>/<item>/<field>' \
+# OP_BROADCAST_RECOVERY_CLIENT_SECRETS_REF='op://<vault>/<item>/<field>' \
+# .claude/skills/streaming/references/deploy_broadcast_recovery.sh

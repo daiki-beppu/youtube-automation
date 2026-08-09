@@ -44,6 +44,7 @@ description: "Use when ライブ配信用 Vultr VPS・動画配信本体を Terr
 | 月間帯域見積もり用の MP4 実測 | `uv run yt-stream-bandwidth --probe-bitrate ./stream.mp4` |
 | アーカイブ件数確認（11h+1h 運用時） | `uv run yt-stream-archive-check --expected 2` |
 | ingest 稼働中に消えた配信枠を復旧 | `uv run yt-stream-broadcast-recover --stream-id <stream-id> --title '<stable-title>' --dry-run` で確認後、`--dry-run` を外す |
+| 24/7 の配信枠自動復旧を配備 | `OP_BROADCAST_RECOVERY_TOKEN_REF=... OP_BROADCAST_RECOVERY_CLIENT_SECRETS_REF=... .claude/skills/streaming/references/deploy_broadcast_recovery.sh` |
 | サービス状態 | `ssh -i ~/.ssh/yt_stream_key root@$(terraform -chdir=infra/terraform/streaming output -raw instance_ip) systemctl status youtube-stream` |
 | ログ追跡 | 同上 + `journalctl -u youtube-stream -f` |
 | 破棄 | §5 |
@@ -134,6 +135,8 @@ ffmpeg -i input.mp4 \
 - `/etc/logrotate.d/youtube-stream`（daily / rotate 7 / copytruncate）
 - `/etc/youtube-stream-healthcheck.env`（mode 0600、Discord webhook URL）
 
+`enable_broadcast_recovery=true` かつ `stream_hours=0` では、専用 user と 0600 OAuth files、`youtube-broadcast-recovery.service/.timer` も配備される。既定 120 秒ごとに ffmpeg service と ingest を確認し、active broadcast が消えたときだけ upcoming 再利用または create → bind → live を行う。`recovered` は既存 notify 経路へ送り、結果は常に `journalctl -t youtube-broadcast-recovery` に残る。導入、disable cleanup、資格情報更新、明示承認が必要な手動終了テストは [README の「24/7 broadcast 自動復旧 timer」](../../../infra/terraform/streaming/README.md#247-broadcast-自動復旧-timer) を正本とする。
+
 healthcheck は systemd 状態を 4 通りに分類し、**真の異常のみ通知**:
 
 | 状態 | 分類 | 通知 |
@@ -165,6 +168,7 @@ healthcheck は systemd 状態を 4 通りに分類し、**真の異常のみ通
 | `Permission denied (publickey)` | ssh-agent に鍵が登録されていない or 鍵ペアが食い違っている。`ssh-add -l` で確認し、未登録なら `ssh-add ~/.ssh/yt_stream_key`。鍵ペアが対になっていなければ `ssh-keygen -t ed25519 -f ~/.ssh/yt_stream_key` で再生成して `ssh-add` し直す。**`ssh -i` 経由の手動 SSH が通っても判定材料にならない（provisioner は agent 経由）** |
 | `Error: Output refers to sensitive values` | `triggers` を `nonsensitive(sha256(...))` でラップ済みのはず。`main.tf` を確認 |
 | Discord 通知が来ない | `/etc/youtube-stream-healthcheck.env` の `DISCORD_WEBHOOK_URL` を確認 / 実行ログは `journalctl -t youtube-stream-healthcheck --since '15 min ago'` で参照 / 構文だけ確かめたい場合は `bash -n /opt/youtube-stream/bin/healthcheck.sh`（実行されない）。**`bash -x` は trace 出力に `DISCORD_WEBHOOK_URL` が展開されるため使わない。誤って実行した場合も出力をどこにも貼り付けない**（`notify.sh` が `/etc/youtube-stream-healthcheck.env` を `source` してそのまま `curl` するため） |
+| broadcast 復旧 timer が動かない | `systemctl status youtube-broadcast-recovery.timer`、`journalctl -t youtube-broadcast-recovery --since '15 min ago'`、`/var/lib/youtube-broadcast-recovery/last-result.json` を確認。`stream_hours>0` と `youtube-stream.service` inactive は安全な disable/no-op |
 | 帯域 80% 超アラート | README §超過時の対応方針（4 Mbps → 3 Mbps 化 / プランアップ）|
 | 11h+1h 運用で 1 日のアーカイブが 2 本未満 | `RuntimeMaxSec` 到達前に `failed` した可能性。`journalctl -u youtube-stream --since today` |
 | `Invalid value for variable` (`allowed_ssh_cidr`) で plan が落ちる | `terraform.tfvars` の `allowed_ssh_cidr` が空 `[]`。`curl -s ifconfig.me` で取得した IP を `/32` 付きで 1 件以上記入 |

@@ -168,3 +168,79 @@ variable "live_chat_codex_auth_json" {
   ephemeral   = true
   default     = ""
 }
+
+variable "enable_broadcast_recovery" {
+  type        = bool
+  description = "24/7 配信で YouTube broadcast 復旧 timer を配備する opt-in"
+  default     = false
+}
+
+variable "broadcast_recovery_stream_id" {
+  type        = string
+  description = "復旧対象の persistent YouTube live stream ID"
+  default     = ""
+
+  validation {
+    condition     = var.broadcast_recovery_stream_id == "" || can(regex("^[0-9A-Za-z_-]+$", var.broadcast_recovery_stream_id))
+    error_message = "broadcast_recovery_stream_id は英数字と _- のみ指定できます。"
+  }
+}
+
+variable "broadcast_recovery_title" {
+  type        = string
+  description = "復旧する broadcast title。未 bind upcoming 枠の冪等キーとして固定する"
+  default     = ""
+
+  validation {
+    condition     = !strcontains(var.broadcast_recovery_title, "\n") && !strcontains(var.broadcast_recovery_title, "\r")
+    error_message = "broadcast_recovery_title に改行は使用できません。"
+  }
+}
+
+variable "broadcast_recovery_interval_seconds" {
+  type        = number
+  description = "broadcast 復旧 timer の実行間隔（秒）"
+  default     = 120
+
+  validation {
+    condition = (
+      var.broadcast_recovery_interval_seconds >= 30 &&
+      var.broadcast_recovery_interval_seconds <= 3600 &&
+      floor(var.broadcast_recovery_interval_seconds) == var.broadcast_recovery_interval_seconds
+    )
+    error_message = "broadcast_recovery_interval_seconds は 30〜3600 の整数で指定してください。"
+  }
+}
+
+variable "broadcast_recovery_automation_git_ref" {
+  type        = string
+  description = "復旧 CLI を VPS に install する youtube-automation Git ref。commit SHA pin を推奨"
+  default     = "main"
+
+  validation {
+    condition     = can(regex("^[0-9A-Za-z._/-]+$", var.broadcast_recovery_automation_git_ref))
+    error_message = "broadcast_recovery_automation_git_ref は Git ref に使える英数字と ._/- のみ指定できます。"
+  }
+}
+
+variable "broadcast_recovery_credentials_revision" {
+  type        = string
+  description = "ephemeral OAuth 認証差し替えを検知する非秘密 SHA-256"
+  default     = ""
+}
+
+variable "broadcast_recovery_youtube_token_json" {
+  type        = string
+  description = "streaming 用 YouTube OAuth token JSON。state / plan に保存しない ephemeral secret"
+  sensitive   = true
+  ephemeral   = true
+  default     = ""
+}
+
+variable "broadcast_recovery_client_secrets_json" {
+  type        = string
+  description = "YouTube OAuth client secrets JSON。state / plan に保存しない ephemeral secret"
+  sensitive   = true
+  ephemeral   = true
+  default     = ""
+}
