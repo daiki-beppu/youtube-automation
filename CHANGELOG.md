@@ -111,6 +111,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `feat(dashboard)`: 公開履歴 cache が fresh な場合は通常の Analytics snapshot 更新だけを行い、公開履歴用の追加 YouTube Data API 呼び出しと cache 保存を省略するようにした。cache が missing / stale / corrupt の場合は従来どおり再取得・保存する（#3375）。
 - `feat(extensions)`: ローカル配信元が 0 件の selector に「サーバーが起動されていません」と表示して操作を無効化し、候補の再出現時は通常の選択へ戻るようにした（#3453）。
 - `fix(extensions)`: ローカル配信元 discovery は registry entry のうち稼働確認できたサーバーだけを URL 順で返し、registry が空・到達不能・不正、または全 probe 失敗の場合は未確認の既定候補を混ぜず空配列を返すようにした（#2992）。
+- `docs(channel-new)`: `/channel-new` の bootstrap / config、TTP seed / duration、persona / branding / readiness、initial save / settings push / troubleshooting の詳細を、下流へ配布される専用 references へ分離して段階的開示した。SKILL 本文の mode routing、不可逆操作前の承認、実行コマンドと順序、完了・停止条件、保存先・成果物の実行契約は変更しない（#3509）。
 - `docs(collection-ideate)`: 企画規則、preview の設定・生成、候補選択後の handoff 詳細を、下流へ配布される `planning-rules` / `preview-contract` / `preview-generation` / `selection-handoff` references へ段階的に分離した。SKILL 本文の実行コマンド、承認・停止ゲート、状態更新、後工程案内は維持し、実行時の振る舞いと成果物契約は変更しない（#3500）。
 - `docs(thumbnail)`: `/thumbnail` の長大な provider、generation、quality / operations 詳細を配布対象の references へ段階的に分離し、SKILL.md 本文には実行コマンド・承認ゲート・完了条件と明示的な導線を維持した。あわせて prompt schema 参照を wheel 内の正規パスへ統一した。実行時の振る舞いと成果物契約は変更しない（#3005）。
 - `refactor(automation-update)`: `yt-automation-update apply --help` だけで各 flag の用途と制約を確認できるようにし、追従スキルは代表フローと破壊的・直感に反する操作の承認案内へ整理した。既存の pin 更新・同期・smoke check の実行挙動は変更しない（#3513）。
