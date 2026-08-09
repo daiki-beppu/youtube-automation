@@ -87,7 +87,7 @@ self-check が pass したら提案をユーザーに見せ、承認 or 修正�
 | テーマ → アクティビティ・シーンの対応表 | `config/channel/content.json::title.theme_scenes`（TTP 形式・推奨）または `title.theme_activities`（レガシー） |
 | 投稿頻度 | `config/schedule_config.json`（Step R5） |
 | 音楽エンジン | `config/channel/youtube.json::music_engine`（`suno` / `lyria`） |
-| アップロード metadata | `config/channel/youtube.json::youtube.{category_id,privacy_status}` |
+| アップロード metadata | `config/channel/youtube.json::youtube.{category_id,privacy_status}`（新規生成時の `privacy_status` は `private`。公開は予約または手動） |
 | ジャンル / スタイル / コンテキスト | `config/channel/content.json::genre.{primary,style,context}` |
 
 `title.theme_scenes` を空で残すと `yt-populate-scene-phrases` が `--en` 手動指定を要求する。
