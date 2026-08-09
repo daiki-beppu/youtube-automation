@@ -12,7 +12,7 @@
         ]
       },
       {
-        "matcher": "Bash",
+        "matcher": "Bash|Task|Agent|Workflow",
         "hooks": [
           {
             "type": "command",
@@ -22,6 +22,15 @@
       }
     ],
     "PostToolUse": [
+      {
+        "matcher": "Bash|Task|Agent|Workflow",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run yt-progress-hook"
+          }
+        ]
+      },
       {
         "matcher": "Edit|Write|NotebookEdit",
         "hooks": [

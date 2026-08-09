@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(dx)`: 進捗図 hook を subagent / workflow・分類済み前景処理・完了時にも発火させ、実行コマンドに対応する段または具体的な未分類作業を表示（#3291）。
 - `feat(dx)`: バックグラウンド Bash 開始時に固定パイプラインの進捗図を Claude Code hook の `systemMessage` で claude.app へ表示する `yt-progress-hook` CLI を追加（#3290）。
 - `feat(ci)`: skill E2E eval を pull request CI から分離した `workflow_dispatch` / nightly workflow で実行し、Claude 認証 secret 未設定時は理由を summary に残して有料 job を明示的に skip する（#3094）。
 - `fix(playlist)`: `theme_scenes.activities` のカンマ区切りと中黒区切りを同じ複数 activity として解釈し、`auto_add_activities` によるプレイリスト割り当て漏れを防止（#3099）。
