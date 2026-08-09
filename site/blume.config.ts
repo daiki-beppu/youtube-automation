@@ -9,6 +9,7 @@ import {
   operatorDocReleaseField,
 } from "./operator-doc-source";
 import { releaseFrontmatter } from "./release-schema";
+import { createSkillPageSource } from "./skill-page-source";
 
 const lightAccent = dadsTokens.Color.Key["800"].$value;
 const darkAccent = dadsTokens.Color.Key["400"].$value;
@@ -34,6 +35,10 @@ export default defineConfig({
         source: createOperatorDocSource({ map: operatorDocMap, repositoryRoot }),
         type: "custom",
       },
+      {
+        source: createSkillPageSource({ repositoryRoot }),
+        type: "custom",
+      },
     ],
   },
   frontmatter: {
@@ -52,6 +57,7 @@ export default defineConfig({
       {
         label: "使う",
         items: [
+          "/skills",
           "/features",
           "/workflow-cheatsheet",
           "/dashboard",

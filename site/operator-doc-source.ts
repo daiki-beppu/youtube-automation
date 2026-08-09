@@ -125,6 +125,12 @@ export const rewriteMarkdownLinks = (
   );
 };
 
+export const rewriteFeatureSkillLinks = (markdown: string): string =>
+  markdown.replace(
+    /^(\|\s*)\/([a-z0-9]+(?:-[a-z0-9]+)*)(\s*\|)/gmu,
+    "$1[/$2](/skills/$2)$3"
+  );
+
 const assertReadableSource = (repositoryRoot: string, source: string): string => {
   const path = resolve(repositoryRoot, source);
   if (!existsSync(path)) {
@@ -157,7 +163,11 @@ export const createOperatorDocSource = (options: {
   const readEntry = async (mapping: OperatorDocMapping): Promise<SourceEntry> => {
     const path = assertReadableSource(repositoryRoot, mapping.source);
     const original = await readFile(path, "utf8");
-    const text = rewriteMarkdownLinks(original, mapping.source, map);
+    const rewritten = rewriteMarkdownLinks(original, mapping.source, map);
+    const text =
+      mapping.source === "docs/features.md"
+        ? rewriteFeatureSkillLinks(rewritten)
+        : rewritten;
     return {
       body: { format: "md", text },
       data: {
