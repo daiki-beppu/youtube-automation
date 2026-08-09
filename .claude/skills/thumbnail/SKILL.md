@@ -343,7 +343,7 @@ from the reference image. Keep all corners clean and free of such marks.
 - **textless main 再生成**: 承認済み `thumbnail.jpg` を参照し、除去指示（`text_strip_clause` を設定していれば展開、未設定なら `Remove all text` 相当を明記）だけを足す
 - **two_phase（テキストオーバーレイ）**: `thumbnail_text.text_overlay_prompt` が単一の入口。旧個別フィールド（`channel_name_style` / `title_format` / `title_prefix` / `copy_position` / `color` / `decoration`）は deprecated で、位置・色・装飾の意図は `text_overlay_prompt` の本文に直接書く（段階的廃止 #1702。override は当面 deep-merge され続けるが、config ロード時に DeprecationWarning が出る）
 
-> 将来検討（issue #654）: imagegen の 14 項目 Shared prompt schema 形式と既存 skill-config の bridge ヘルパが `references/prompt-schema.md` および `youtube_automation.infrastructure.media.image_provider.prompt_schema` に試験導入されている。実本番フローからは未接続。設計判断は `docs/skill-design/ADR-001-thumbnail-prompt-schema.md`。
+> 将来検討（issue #654）: imagegen の 14 項目 Shared prompt schema 形式と既存 skill-config の bridge ヘルパが `references/prompt-schema.md` および `youtube_automation.infrastructure.media.image_provider.prompt_schema` に試験導入されている。実本番フローからは未接続。設計判断は `references/prompt-schema.md`。
 
 ## ワークフロー
 
