@@ -161,7 +161,8 @@ subagent へは次を具体値で渡す:
 ### 収益メトリクス
 
 `yt-analytics` は基本メトリクスとは別クエリで
-`estimatedRevenue` / `monetizedPlaybacks` / `cpm` / `playbackBasedCpm` を収集する。
+`estimatedRevenue` / `monetizedPlaybacks` / `adImpressions` / `cpm` / `playbackBasedCpm` を収集する。
+日別・動画別に `adImpressions / monetizedPlaybacks` の `ads_per_playback` も保存する。
 成果物では `revenue_analytics.daily_metrics` と `revenue_analytics.by_video` に保存し、
 各行の `rpm` は `estimated_revenue / views * 1000` で算出する。
 

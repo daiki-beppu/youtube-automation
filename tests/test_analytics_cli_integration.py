@@ -42,7 +42,7 @@ class _AnalyticsReports:
             return _Request({"rows": [["VIDEO_1", "2026-04-01", 100]]})
         if dimensions == "video":
             if "estimatedRevenue" in metrics:
-                return _Request({"rows": [["VIDEO_1", 100, 2.5, 80, 4.0, 5.0]]})
+                return _Request({"rows": [["VIDEO_1", 100, 2.5, 80, 160, 4.0, 5.0]]})
             if metrics.startswith("views,estimatedMinutesWatched"):
                 return _Request({"rows": [["VIDEO_1", 100, 500, 120, 5, 0, 1, 2, 4]]})
             return _Request({"rows": [["VIDEO_1", 100, 5, 1, 500]]})
@@ -53,7 +53,7 @@ class _AnalyticsReports:
         if dimensions == "day" and metrics.startswith("views,estimatedMinutesWatched,averageViewDuration"):
             return _Request({"rows": [["2026-04-01", 100, 500, 120, 4, 0, 5, 0, 1, 2, 50, 0, 0, 0]]})
         if dimensions == "day" and "estimatedRevenue" in metrics:
-            return _Request({"rows": [["2026-04-01", 100, 2.5, 80, 4.0, 5.0]]})
+            return _Request({"rows": [["2026-04-01", 100, 2.5, 80, 160, 4.0, 5.0]]})
         if dimensions == "day":
             return _Request({"rows": [["2026-04-01", 100, 500]]})
         return _Request({"rows": [[100, 5, 1, 2, 4]]})
@@ -216,6 +216,8 @@ def test_yt_analytics_collects_and_saves_subscribed_status_via_cli(cli_dependenc
         },
         "total_views": 100,
     }
+    assert payload["video_analytics"]["VIDEO_1"]["ad_impressions"] == 160
+    assert payload["video_analytics"]["VIDEO_1"]["ads_per_playback"] == 2.0
     assert any(query.get("dimensions") == "subscribedStatus" for query in reports.queries)
 
 

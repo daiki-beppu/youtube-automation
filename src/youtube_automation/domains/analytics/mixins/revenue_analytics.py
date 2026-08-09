@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_REVENUE_METRICS = "views,estimatedRevenue,monetizedPlaybacks,cpm,playbackBasedCpm"
+_REVENUE_METRICS = "views,estimatedRevenue,monetizedPlaybacks,adImpressions,cpm,playbackBasedCpm"
 
 
 class RevenueAnalyticsMixin:
@@ -81,16 +81,24 @@ class RevenueAnalyticsMixin:
         dimension = str(row[0])
         views = int(row[1])
         estimated_revenue = float(row[2])
+        monetized_playbacks = int(row[3])
+        ad_impressions = int(row[4])
         return {
             dimension_key: dimension,
             "views": views,
             "estimated_revenue": estimated_revenue,
-            "monetized_playbacks": int(row[3]),
-            "cpm": float(row[4]),
-            "playback_based_cpm": float(row[5]),
+            "monetized_playbacks": monetized_playbacks,
+            "ad_impressions": ad_impressions,
+            "ads_per_playback": RevenueAnalyticsMixin._calculate_ads_per_playback(ad_impressions, monetized_playbacks),
+            "cpm": float(row[5]),
+            "playback_based_cpm": float(row[6]),
             "rpm": RevenueAnalyticsMixin._calculate_rpm(estimated_revenue, views),
         }
 
     @staticmethod
     def _calculate_rpm(estimated_revenue: float, views: int) -> float:
         return estimated_revenue / views * 1000 if views else 0.0
+
+    @staticmethod
+    def _calculate_ads_per_playback(ad_impressions: int, monetized_playbacks: int) -> float:
+        return ad_impressions / monetized_playbacks if monetized_playbacks else 0.0
