@@ -717,13 +717,16 @@ class BenchmarkCollector:
         logger.info("サムネイルDL: %d 件（スキップ: %d 件）→ %s", downloaded, skipped, thumbnails_dir)
 
 
+_DEFAULT_THUMBNAIL_ANALYSIS_MODEL = "gemini-3.5-flash"
+
+
 class BenchmarkThumbnailAnalyzer:
     """ベンチマークサムネイルの Gemini 分析"""
 
     def __init__(self, benchmarks_dir: Path):
         self.benchmarks_dir = benchmarks_dir
         cfg = load_skill_config("benchmark").get("thumbnail_analysis", {})
-        self.model = cfg.get("model", "gemini-2.5-flash")
+        self.model = cfg.get("model", _DEFAULT_THUMBNAIL_ANALYSIS_MODEL)
         self.delay_sec = float(cfg.get("delay_sec", 5))
         self.prompt = cfg.get("prompt", "").strip()
 
@@ -1377,7 +1380,7 @@ def main():
     if args.no_thumbnails:
         print("  サムネイル分析: OFF（--no-thumbnails）")
     elif analyze_thumbnails:
-        model = collector.benchmark_config.get("thumbnail_analysis", {}).get("model", "gemini-2.5-flash")
+        model = collector.benchmark_config.get("thumbnail_analysis", {}).get("model", _DEFAULT_THUMBNAIL_ANALYSIS_MODEL)
         print(f"  サムネイル分析: Gemini ({model}) — Vertex AI 課金が発生します")
     else:
         print("  サムネイル分析: ON（エージェント — 追加課金なし）")

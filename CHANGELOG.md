@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 - `feat(doctor)`: 下流の `config/skills/thumbnail.yaml` に廃止済み Gemini preview 画像モデルが明示されている場合、`yt-doctor` が実行前に警告するようにした（#3304）。
+- `chore(gemini)`: Vertex AI の `global` endpoint で画像・テキスト入力に対応する GA 世代 `gemini-3.5-flash` を thumbnail-check、benchmark サムネイル解析、collection-ideate の既定モデルへ採用し、ELA 移行予定の `gemini-2.5-flash` から移行（#3306）。
 - `feat(dx)`: 進捗図 hook が `planning/`・`live/` の `workflow-state.json` と公開後履歴・分析レポートから実際の完了段を判定し、対象を特定できない場合も最新コレクションまたは固定表示へ安全にフォールバックするようにした（#3292）。
 - `feat(dx)`: 進捗図 hook を subagent / workflow・分類済み前景処理・完了時にも発火させ、実行コマンドに対応する段または具体的な未分類作業を表示（#3291）。
 - `feat(dx)`: バックグラウンド Bash 開始時に固定パイプラインの進捗図を Claude Code hook の `systemMessage` で claude.app へ表示する `yt-progress-hook` CLI を追加（#3290）。
