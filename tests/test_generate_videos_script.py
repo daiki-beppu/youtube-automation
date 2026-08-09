@@ -844,6 +844,41 @@ def test_final_output_duration_exactly_one_frame_succeeds(tmp_path: Path) -> Non
     assert "final output duration mismatch" not in result.stdout
 
 
+def test_final_output_duration_allows_reported_decimal_rounding_error(tmp_path: Path) -> None:
+    """#3098: 1 frame と計測値の小数丸め誤差の合計までは許容する."""
+    result, _ = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        with_loop=False,
+        extra_env={
+            "FFPROBE_DURATION": "10981.44",
+            "FFPROBE_OUTPUT_DURATION": "10981.398000",
+            "FFPROBE_OUTPUT_FRAME_RATE": "24/1",
+        },
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "final output duration mismatch" not in result.stdout
+
+
+def test_final_output_duration_beyond_decimal_rounding_error_fails_loud(tmp_path: Path) -> None:
+    """#3098: 小数精度から導く丸め余裕を超えた 1 frame 超過は許容しない."""
+    result, _ = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        with_loop=False,
+        extra_env={
+            "FFPROBE_DURATION": "10981.44",
+            "FFPROBE_OUTPUT_DURATION": "10981.393332",
+            "FFPROBE_OUTPUT_FRAME_RATE": "24/1",
+        },
+    )
+
+    assert result.returncode != 0
+    assert "final output duration mismatch" in result.stdout
+    assert "delta=0.046668s" in result.stdout
+
+
 @pytest.mark.parametrize(
     ("output_duration", "output_frame_rate"),
     [

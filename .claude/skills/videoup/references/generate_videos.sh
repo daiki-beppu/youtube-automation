@@ -1491,6 +1491,12 @@ output_frame_rate="$(ffprobe -v error -select_streams v:0 \
     -show_entries stream=r_frame_rate -of default=noprint_wrappers=1:nokey=1 "$MASTER_OUTPUT" 2>/dev/null | head -1)"
 output_duration="$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$MASTER_OUTPUT" 2>/dev/null)"
 duration_check="$(awk -v actual="$output_duration" -v expected="$video_duration" -v rate="$output_frame_rate" '
+    function decimal_rounding_error(value, parts, digits) {
+        if (index(value, ".") == 0) return 0
+        split(value, parts, ".")
+        digits = length(parts[2])
+        return 0.5 / (10 ^ digits)
+    }
     BEGIN {
         split(rate, fps, "/")
         if (actual !~ /^[0-9]+([.][0-9]+)?$/ || expected !~ /^[0-9]+([.][0-9]+)?$/ ||
@@ -1498,10 +1504,12 @@ duration_check="$(awk -v actual="$output_duration" -v expected="$video_duration"
             print "invalid"
             exit
         }
-        tolerance = fps[2] / fps[1]
+        # ffprobe and afinfo serialize durations at different decimal precision.
+        # Add only the maximum half-ULP rounding error of each value to the one-frame budget.
+        tolerance = fps[2] / fps[1] + decimal_rounding_error(actual) + decimal_rounding_error(expected)
         delta = actual - expected
         if (delta < 0) delta = -delta
-        printf "%s|%.6f|%.6f", (delta <= tolerance + 0.000001 ? "ok" : "mismatch"), delta, tolerance
+        printf "%s|%.6f|%.6f", (delta <= tolerance ? "ok" : "mismatch"), delta, tolerance
     }
 ')"
 IFS='|' read -r duration_status duration_delta duration_tolerance <<< "$duration_check"
