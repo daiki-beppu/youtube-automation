@@ -119,11 +119,7 @@ class TestMainTf:
         assert lifecycle is not None, "vultr_instance.this に lifecycle が無い"
         ignore_changes = re.search(r"ignore_changes\s*=\s*\[([^]]+)\]", lifecycle, flags=re.DOTALL)
         assert ignore_changes is not None, "lifecycle.ignore_changes が無い"
-        ignored_attributes = {
-            value.strip()
-            for value in ignore_changes.group(1).split(",")
-            if value.strip()
-        }
+        ignored_attributes = {value.strip() for value in ignore_changes.group(1).split(",") if value.strip()}
         assert ignored_attributes == {"user_data", "ssh_key_ids"}
 
     def test_null_resource_connection_enables_host_key_verification(self):
