@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(distrokid-helper)`: `/server-info` に DistroKid の `disabled` / `single` / `dir` 実行モードを判別できる optional capability を追加し、既存必須フィールドと discovery schema v1 の互換性を維持（#2985）。
+
 - `fix(suno-helper)`: 無人実行中の可視 Turnstile も手動実行と同じ10分間 `waiting-captcha` で待機し、即時エラー終了しないように統一（#2978）。
 
 - `fix(doctor)`: read-only OAuth token の発行状況を独立診断し、未発行時は対象チャンネルの context 付きで `uv run yt-oauth --readonly` を案内する warning を追加（#2957）。

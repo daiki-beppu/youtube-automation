@@ -424,7 +424,55 @@ def test_get_server_info_returns_json_body(serve):
     assert body["hostname"] == "youtube-automation.localhost"
     assert body["port"] == urllib.parse.urlparse(base).port
     assert body["base_url"] == f"http://youtube-automation.localhost:{body['port']}"
-    assert set(body) == {"channel_name", "channel_short", "hostname", "port", "base_url", "label"}
+    assert body["capabilities"] == {"distrokid": {"mode": "disabled"}}
+    assert set(body) == {
+        "channel_name",
+        "channel_short",
+        "hostname",
+        "port",
+        "base_url",
+        "label",
+        "capabilities",
+    }
+
+
+@pytest.mark.parametrize(
+    ("distrokid", "collections_root", "expected_mode"),
+    [
+        (None, None, "disabled"),
+        (collection_serve_module.Distrokid(enabled=True), None, "single"),
+        (collection_serve_module.Distrokid(enabled=True), "planning", "dir"),
+    ],
+)
+def test_get_server_info_distinguishes_distrokid_capability_modes(tmp_path, distrokid, collections_root, expected_mode):
+    """旧 server-info payload を入力しても DistroKid の実行 capability を判別できる。"""
+    json_path = tmp_path / "suno-prompts.json"
+    json_path.write_text("[]", encoding="utf-8")
+    old_server_info = build_server_info("Test Channel", "TC", 7873)
+    old_required_fields = old_server_info.copy()
+    server = create_server(
+        0,
+        None,
+        server_info=old_server_info,
+        prompts_path=json_path if collections_root is None else None,
+        collection_dir=tmp_path if collections_root is None else None,
+        distrokid=distrokid,
+        collections_root=tmp_path / collections_root if collections_root is not None else None,
+    )
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+
+    try:
+        base = f"http://localhost:{server.server_address[1]}"
+        with urllib.request.urlopen(f"{base}{_SERVER_INFO_ROUTE}") as response:
+            body = json.load(response)
+
+        assert {key: body[key] for key in old_required_fields} == old_required_fields
+        assert body["capabilities"] == {"distrokid": {"mode": expected_mode}}
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
 
 
 def test_post_suno_playlists_single_mode_returns_404_without_creating_legacy_json(serve, tmp_path):
