@@ -145,6 +145,8 @@ jobs:
         run: uv sync
       - name: Test cost tracker on Windows
         run: uv run pytest tests/infrastructure/test_cost_tracker.py -q
+      - name: Test collection serve import on Windows
+        run: uv run pytest tests/commands/collections/test_collection_serve.py::test_module_import_succeeds_without_fcntl -q
 
   changelog:
     runs-on: ubuntu-latest
