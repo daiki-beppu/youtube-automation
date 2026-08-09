@@ -1,4 +1,5 @@
 locals {
+  instance_name           = var.channel_slug == "" ? "youtube-stream" : "youtube-stream-${var.channel_slug}"
   scripts_dir             = "${path.module}/../../../.claude/skills/streaming/references"
   ssh_host_key_algorithm  = "ED25519"
   ssh_host_public_key     = trimspace(tls_private_key.ssh_host.public_key_openssh)
@@ -58,8 +59,8 @@ resource "vultr_instance" "this" {
   plan     = var.plan
   os_id    = var.os_id
   hostname = "youtube-stream"
-  label    = "youtube-stream"
-  tags     = ["youtube-stream"]
+  label    = local.instance_name
+  tags     = [local.instance_name]
 
   firewall_group_id = vultr_firewall_group.stream.id
 

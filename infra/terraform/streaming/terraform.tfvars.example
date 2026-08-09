@@ -27,6 +27,7 @@ allowed_ssh_cidr = ["203.0.113.5/32"]
 # region           = "nrt"
 # plan             = "vc2-1c-2gb"
 # os_id            = 2284
+# channel_slug     = "005ch-abyss"
 
 # 配信サイクル:
 #   0 / 0 は 24/7 連続配信（RuntimeMaxSec なし、クラッシュ時は 10 秒後に再起動）。

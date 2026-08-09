@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(streaming)`: optional な `channel_slug` を Vultr instance の label / tags に反映し、未指定時の既存名と replace 対象の hostname を維持した（#2525）。
 - `fix(doctor)`: `initial_setup_readiness` でも有効な thumbnail ユーザー承認済み例外を尊重し、承認済みの規約外参照パスだけで恒久的に warn にならないようにした（#2509）。
 - `fix(suno-helper)`: downloaded POST 失敗の endpoint と download phase を overlay の中断表示と無人実行の `required-action` へ保持し、token 取得先で起点 request を覆わないエラー契約を固定（#3001）。
 

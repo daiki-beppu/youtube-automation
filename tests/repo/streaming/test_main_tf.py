@@ -139,7 +139,7 @@ class TestMainTf:
     def test_vultr_instance_uses_plural_tags_not_deprecated_tag(self):
         """Given main.tf
         When vultr_instance.this を読む
-        Then 単数 tag ではなく複数 tags を使い、"youtube-stream" を含む。
+        Then 単数 tag ではなく複数 tags を使い、解決済み instance name を含む。
 
         Vultr provider v2.x で単数 tag は非推奨。
         """
@@ -147,19 +147,34 @@ class TestMainTf:
         block = extract_block(text, r'resource\s+"vultr_instance"\s+"this"')
         assert block is not None
         assert re.search(r"\btags\s*=\s*\[", block), "tags 属性（複数形）が無い"
-        assert re.search(r'tags\s*=\s*\[\s*"youtube-stream"\s*\]', block), 'tags = ["youtube-stream"] の形式でない'
+        assert re.search(r"tags\s*=\s*\[\s*local\.instance_name\s*\]", block), (
+            "tags が解決済み local.instance_name を参照していない"
+        )
         # 旧属性 `tag = "..."`（単一文字列）を使っていないこと
         assert not re.search(r'(?<!s)\btag\s*=\s*"', block), "旧形式の単数 tag を使っている（Vultr v2.x で非推奨）"
 
-    def test_vultr_instance_label_is_youtube_stream(self):
+    def test_vultr_instance_label_uses_resolved_instance_name(self):
         """Given main.tf
         When vultr_instance.this.label を読む
-        Then "youtube-stream" が設定されている（運用識別用）。
+        Then channel_slug を反映する解決済み instance name が設定されている。
         """
         text = strip_hcl_comments(read_file(_MAIN_TF))
         block = extract_block(text, r'resource\s+"vultr_instance"\s+"this"')
         assert block is not None
-        assert re.search(r'label\s*=\s*"youtube-stream"', block), 'label = "youtube-stream" が設定されていない'
+        assert re.search(r"label\s*=\s*local\.instance_name", block), (
+            "label が解決済み local.instance_name を参照していない"
+        )
+
+    def test_instance_name_preserves_default_and_appends_channel_slug(self):
+        """Given channel_slug の設定有無
+        When locals.instance_name を解決する
+        Then 未指定は従来名、指定時は channel slug 付きの名前になる。
+        """
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        assert re.search(
+            r'instance_name\s*=\s*var\.channel_slug\s*==\s*""\s*\?\s*"youtube-stream"\s*:\s*"youtube-stream-\$\{var\.channel_slug\}"',
+            text,
+        ), "instance_name が channel_slug 未指定時の後方互換と指定時の識別名を両立していない"
 
     def test_vultr_instance_hostname_is_youtube_stream(self):
         """Given main.tf

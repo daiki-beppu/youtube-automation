@@ -338,6 +338,16 @@ class TestTfvarsExample:
             "TF_VAR_vultr_api_key の案内コメントが無い（運用者が secret 注入方法を発見できない）"
         )
 
+    def test_documents_optional_channel_slug(self):
+        """Given terraform.tfvars.example
+        When 任意項目を読む
+        Then channel_slug のチャンネル別設定例を発見できる。
+        """
+        raw = read_file(_TFVARS_EXAMPLE)
+        assert re.search(r'^#\s*channel_slug\s*=\s*"005ch-abyss"', raw, flags=re.MULTILINE), (
+            "channel_slug のコメント付き設定例が無い"
+        )
+
 
 # ============================================================================
 # terraform.tfvars.example — #125 で video_path / TF_VAR_stream_key 注入手順を追記
