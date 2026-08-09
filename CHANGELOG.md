@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `feat(analytics)`: 収集済み動画の ads-per-playback をチャンネル中央値と比較し、低カバレッジの疑いを抽出する `yt-ad-coverage` CLI を追加（#3310）。
 - `feat(analytics)`: 収益メトリクスへ広告インプレッションを追加し、日別・動画別の ads-per-playback を保存する（#3309）。
+- `fix(suno)`: `exclude_styles` が空のときに video_analysis の全 slug から除外語を集約する fallback を撤去し、空設定を空のまま出力へ反映する（#3311）。
 - `chore(gemini)`: video-analyze の既定を Vertex AI `global` endpoint で動画入力に対応する GA 世代 `gemini-3.5-flash` へ移行し、`yt-doctor` の非対応判定から同モデルを除外。動画入力非対応の画像生成 preview モデルを診断対象に更新（#3307）。
 - `breaking(thumbnail)`: 利用実績のない `gemini_cli` 画像 provider と subprocess 実装を削除し、指定時は `gemini`（Vertex AI）への移行先を明示する `ConfigError` で停止する（#3308）。
 - `feat(doctor)`: 下流の `config/skills/thumbnail.yaml` に廃止済み Gemini preview 画像モデルが明示されている場合、`yt-doctor` が実行前に警告するようにした（#3304）。

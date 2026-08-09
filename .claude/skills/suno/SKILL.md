@@ -179,7 +179,7 @@ jq -c 'select(.status == "open" and .lever == "bgm")' data/insights.jsonl
 
 ### Suno プリセット推奨（suno_preset fallback）
 
-`20-documentation/suno-patterns.yaml` の root 値があれば collection-local override として最優先する。root に無いキーは `config/skills/suno.yaml` の channel 共通値へ fallback し、その対応キーも空のときだけ `data/video_analysis/<slug>/*.json` の `suno_preset.genre_line` / `suno_preset.exclude_styles` を `uv run yt-generate-suno` が全 slug 横断で集約して採用する。これにより既存の channel override 優先も維持する（後方互換）。
+`20-documentation/suno-patterns.yaml` の root 値があれば collection-local override として最優先する。root に無いキーは `config/skills/suno.yaml` の channel 共通値へ fallback する。`genre_line` は対応キーも空のときだけ `data/video_analysis/<slug>/*.json` の `suno_preset.genre_line` を `uv run yt-generate-suno` が全 slug 横断で集約して採用する。`exclude_styles` は video_analysis から継承せず、config が空なら空のまま扱う。
 
 > **推奨であり必須ではない**: collection 固有の方向性が確定している場合は、generator が根拠を示して `suno-patterns.yaml::genre_line` へ直接書く。共有 `config/skills/suno.yaml` へ collection 固有値を転記しない。
 

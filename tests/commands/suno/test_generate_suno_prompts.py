@@ -483,27 +483,26 @@ def test_fallback_uses_video_analysis_genre_line_when_config_empty(channel_dir, 
     assert "warm rhodes" in output
 
 
-def test_fallback_uses_video_analysis_exclude_styles_when_config_empty(channel_dir, tmp_path):
-    """`config/skills/suno.yaml` 空欄時、video_analysis JSON の exclude_styles を採用."""
-    _write_suno_override(channel_dir, genre_line="lo-fi jazz")  # exclude_styles だけ空
+def test_empty_config_does_not_inherit_video_analysis_exclude_styles(channel_dir, tmp_path):
+    """空の channel 設定へ video_analysis の exclude_styles を継承しない."""
+    _write_suno_override(channel_dir, genre_line="lo-fi jazz", exclude_styles="")
     _write_video_analysis(
         channel_dir,
         slug="ref-channel",
         video_id="vid001",
         suno_preset={
             "genre_line": "ignored",
-            "exclude_styles": "heavy metal, EDM, dubstep",
+            "exclude_styles": "forbidden benchmark style",
             "rationale": "",
         },
     )
     patterns_path = _write_minimal_patterns(tmp_path)
 
     output = generate(patterns_path)
+    entries = build_prompt_entries(patterns_path)
 
-    assert "**Exclude Styles:**" in output
-    assert "heavy metal" in output
-    assert "EDM" in output
-    assert "dubstep" in output
+    assert "**Exclude Styles:**" not in output
+    assert all("exclude_styles" not in entry for entry in entries)
 
 
 def test_default_exclude_styles_prevent_sudden_transitions_without_using_style_budget(channel_dir, tmp_path):
@@ -562,8 +561,8 @@ def test_missing_suno_preset_falls_back_silently(channel_dir, tmp_path):
 
 
 def test_aggregates_multiple_video_analysis_jsons(channel_dir, tmp_path):
-    """2 slug × 複数 JSON で genre_line 多数決・exclude_styles 和集合が機能する."""
-    _write_suno_override(channel_dir)  # 空 override で fallback 強制
+    """2 slug × 複数 JSON では genre_line だけを多数決で集約する."""
+    _write_suno_override(channel_dir, exclude_styles="")
 
     # slug A: 2 件、共通 "lo-fi jazz" / 各自固有句あり
     _write_video_analysis(
@@ -607,10 +606,7 @@ def test_aggregates_multiple_video_analysis_jsons(channel_dir, tmp_path):
     assert "warm rhodes" in output
     assert "mellow drums" in output
 
-    # exclude_styles: 和集合で重複排除されつつ全種が現れる
-    assert "heavy metal" in output
-    assert "EDM" in output
-    assert "dubstep" in output
+    assert "**Exclude Styles:**" not in output
 
     # genre_line の出現順は多数決優先 — "lo-fi jazz" が他の単発句より先
     lo_fi_idx = output.find("lo-fi jazz")

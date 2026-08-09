@@ -376,15 +376,15 @@ def _build_advanced_json_fields(override: dict) -> dict:
 
     - override に明示されたキーのみ含める (default.yaml の既定値は無視、#900 の A 案)
     - vocal_gender は "" を「未指定」として skip する (拡張型契約と一貫させる)
-    - 他キー (style_influence: 0 / weirdness: 0 / exclude_styles: "") は明示設定なら値そのまま wire
-      (0 などの falsy 境界値が脱落しない契約は #900 で pin 済み)
+    - style_influence / weirdness の 0 は明示設定なら値そのまま wire
+    - exclude_styles の空文字は未指定として skip する
     """
     out: dict = {}
     for key in _ADVANCED_JSON_KEYS:
         if key not in override:
             continue
         value = override[key]
-        if key == "vocal_gender" and value == "":
+        if key in {"exclude_styles", "vocal_gender"} and value == "":
             continue
         out[key] = value
     return out
@@ -847,7 +847,7 @@ def build_prompt_entries(patterns_path: Path) -> list[dict]:
                 "lyrics": lyrics,
             }
             # More Options 3 フィールド (#900)。channel override に明示されたキーのみ collection
-            # スコープで全 entry に載せる。0 や "" の falsy 値も有効値なので無条件に反映する
+            # スコープで全 entry に載せる。0 の falsy 値も有効値なので無条件に反映する
             # (gating は resolve 段で `key in override` 済み)。
             entry.update(resolved.advanced_json_fields)
             entries.append(entry)
