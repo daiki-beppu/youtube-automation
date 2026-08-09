@@ -128,7 +128,7 @@ class YouTubeOAuthHandler:
     # token_streaming.json（#135）と並ぶ第 3 の用途別 token（#1699）
     READONLY_TOKEN_FILENAME: ClassVar[str] = "token.readonly.json"
 
-    def __init__(self, auth_dir=None, scopes=None, token_path=None):
+    def __init__(self, auth_dir=None, scopes=None, token_path=None, *, interactive: bool = True):
         """
         初期化
 
@@ -137,6 +137,7 @@ class YouTubeOAuthHandler:
             scopes (list[str] | None): OAuth scopes。未指定時はクラス属性 ``SCOPES``（既存挙動）
             token_path (str | Path | None): token ファイルパス。未指定時は ``<auth_dir>/token.json``。
                 stream key 取得用に ``token_streaming.json`` を分離する用途で使用する（issue #135）
+            interactive (bool): token を利用できない場合に browser OAuth を開始してよいか。
         """
         from youtube_automation.configuration import channel_dir as _channel_dir
 
@@ -168,6 +169,7 @@ class YouTubeOAuthHandler:
         else:
             self.token_file = resolve_token_path(self.auth_dir)
         self.credentials = None
+        self._interactive = interactive
 
     @classmethod
     def readonly_token_path(cls) -> Path | None:
@@ -192,7 +194,7 @@ class YouTubeOAuthHandler:
         return None
 
     @classmethod
-    def create_readonly(cls) -> "YouTubeOAuthHandler":
+    def create_readonly(cls, *, interactive: bool = True) -> "YouTubeOAuthHandler":
         """read-only スコープ + ``token.readonly.json`` のハンドラーを生成する。
 
         未発行時の保存先は ``token.json`` と同じ規則で解決する
@@ -208,7 +210,16 @@ class YouTubeOAuthHandler:
             if main_root is not None:
                 auth_dir = main_root / "auth"
             resolved_token_path = resolve_token_path(auth_dir, cls.READONLY_TOKEN_FILENAME)
-        return cls(scopes=cls.READONLY_SCOPES, token_path=resolved_token_path)
+        return cls(scopes=cls.READONLY_SCOPES, token_path=resolved_token_path, interactive=interactive)
+
+    def _require_interactive_reauthentication(self) -> None:
+        if self._interactive:
+            return
+        command = "uv run yt-oauth --readonly" if self._scopes == self.READONLY_SCOPES else "uv run yt-oauth"
+        raise AuthError(
+            "非対話実行では OAuth token を新規発行できません。"
+            f"対話可能なターミナルで `{command}` を実行して token を発行してください。"
+        )
 
     def _channel_label(self) -> str:
         """認証メッセージに埋め込むチャンネル識別ラベルを返す。
@@ -267,9 +278,6 @@ class YouTubeOAuthHandler:
         """
         print("🔐 YouTube Data API OAuth 2.0 認証開始...")
 
-        # client_secrets.json の確認
-        self._validate_client_secrets()
-
         # 既存トークンの読み込み
         if not force_reauth and self.token_file.exists():
             try:
@@ -289,7 +297,7 @@ class YouTubeOAuthHandler:
                     self.credentials.refresh(Request())
                     print("✅ トークン更新成功")
                     self._save_credentials()
-                except google.auth.exceptions.RefreshError as e:
+                except google.auth.exceptions.GoogleAuthError as e:
                     # AuthError を raise すると新規認証へのフォールスルー recovery が壊れる。
                     # credentials=None に落として下の新規認証ブロックで recovery する。
                     logger.warning("token refresh 失敗: %s", redact_sensitive_data(str(e)))
@@ -297,6 +305,8 @@ class YouTubeOAuthHandler:
 
         # 新規認証が必要な場合
         if not self.credentials or not self.credentials.valid:
+            self._require_interactive_reauthentication()
+            self._validate_client_secrets()
             channel_label = self._channel_label()
             print(f"🌐 [{channel_label}] ブラウザで認証を実行します...")
             print("📝 注意: 初回認証時はブラウザが開き、Googleアカウントでのログインが必要です")
