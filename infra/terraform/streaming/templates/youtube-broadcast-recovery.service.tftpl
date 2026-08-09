@@ -1,0 +1,40 @@
+[Unit]
+Description=Recover missing YouTube live broadcast
+Wants=network-online.target
+After=network-online.target youtube-stream.service
+
+[Service]
+Type=oneshot
+User=youtube-broadcast-recovery
+Group=youtube-broadcast-recovery
+WorkingDirectory=${state_root}/channel
+Environment=CHANNEL_DIR=${state_root}/channel
+Environment=BROADCAST_RECOVERY_CLI=${install_root}/venv/bin/yt-stream-broadcast-recover
+Environment=BROADCAST_RECOVERY_STREAM_ID_B64=${stream_id_b64}
+Environment=BROADCAST_RECOVERY_TITLE_B64=${title_b64}
+Environment=BROADCAST_RECOVERY_RESULT=${state_root}/last-result.json
+Environment=YOUTUBE_STREAM_NOTIFY_SCRIPT=${stream_install_root}/bin/notify.sh
+UMask=0077
+ExecStart=${install_root}/bin/run-broadcast-recovery.sh
+ExecStartPost=+${install_root}/bin/notify-broadcast-recovery.sh
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+ReadWritePaths=${state_root}
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RestrictSUIDSGID=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+SystemCallFilter=@system-service
+SystemCallArchitectures=native
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+RemoveIPC=yes

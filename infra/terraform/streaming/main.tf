@@ -12,8 +12,10 @@ locals {
   live_chat_config_hash = var.enable_live_chat_reply ? sha256(join("", [
     for name in sort(tolist(local.live_chat_config_files)) : filesha256("${local.live_chat_config_dir}/${name}")
   ])) : "disabled"
-  live_chat_install_root = "${var.install_root}/live-chat-reply"
-  live_chat_state_root   = "/var/lib/live-chat-reply"
+  live_chat_install_root          = "${var.install_root}/live-chat-reply"
+  live_chat_state_root            = "/var/lib/live-chat-reply"
+  broadcast_recovery_install_root = "${var.install_root}/broadcast-recovery"
+  broadcast_recovery_state_root   = "/var/lib/youtube-broadcast-recovery"
 }
 
 data "external" "source_video_preflight" {
@@ -320,6 +322,136 @@ resource "null_resource" "live_chat_reply" {
       "systemctl disable --now live-chat-reply 2>/dev/null || true",
       "rm -f /etc/systemd/system/live-chat-reply.service",
       "rm -rf /var/lib/live-chat-reply ${self.triggers.install_root}",
+      "systemctl daemon-reload",
+    ]
+  }
+}
+
+resource "null_resource" "broadcast_recovery" {
+  count      = var.enable_broadcast_recovery && var.stream_hours == 0 ? 1 : 0
+  depends_on = [null_resource.deploy]
+
+  triggers = {
+    instance_id         = vultr_instance.this.id
+    instance_ip         = vultr_instance.this.main_ip
+    ssh_host_key        = local.ssh_host_public_key
+    credentials         = var.broadcast_recovery_credentials_revision
+    automation_git_ref  = var.broadcast_recovery_automation_git_ref
+    interval_seconds    = tostring(var.broadcast_recovery_interval_seconds)
+    stream_id           = var.broadcast_recovery_stream_id
+    title_hash          = sha256(var.broadcast_recovery_title)
+    install_root        = local.broadcast_recovery_install_root
+    service_unit        = filemd5("${path.module}/templates/youtube-broadcast-recovery.service.tftpl")
+    timer_unit          = filemd5("${path.module}/templates/youtube-broadcast-recovery.timer.tftpl")
+    runner_script       = filemd5("${path.module}/scripts/run-broadcast-recovery.sh")
+    notification_script = filemd5("${path.module}/scripts/notify-broadcast-recovery.sh")
+  }
+
+  lifecycle {
+    precondition {
+      condition     = var.broadcast_recovery_stream_id != ""
+      error_message = "enable_broadcast_recovery=true では broadcast_recovery_stream_id が必要です。"
+    }
+    precondition {
+      condition     = var.broadcast_recovery_title != ""
+      error_message = "enable_broadcast_recovery=true では broadcast_recovery_title が必要です。"
+    }
+    precondition {
+      condition     = length(var.broadcast_recovery_credentials_revision) == 64
+      error_message = "broadcast_recovery_credentials_revision に deploy script が生成する SHA-256 を指定してください。"
+    }
+  }
+
+  connection {
+    type     = "ssh"
+    host     = self.triggers.instance_ip
+    user     = "root"
+    agent    = true
+    host_key = self.triggers.ssh_host_key
+  }
+
+  provisioner "remote-exec" {
+    inline = [
+      "install -d -m 0700 -o root -g root /run/youtube-broadcast-recovery",
+    ]
+  }
+
+  provisioner "file" {
+    content     = var.broadcast_recovery_youtube_token_json
+    destination = "/run/youtube-broadcast-recovery/token_streaming.json"
+  }
+
+  provisioner "file" {
+    content     = var.broadcast_recovery_client_secrets_json
+    destination = "/run/youtube-broadcast-recovery/client_secrets.json"
+  }
+
+  provisioner "file" {
+    content = templatefile("${path.module}/templates/youtube-broadcast-recovery.service.tftpl", {
+      install_root        = local.broadcast_recovery_install_root
+      state_root          = local.broadcast_recovery_state_root
+      stream_install_root = var.install_root
+      stream_id_b64       = base64encode(var.broadcast_recovery_stream_id)
+      title_b64           = base64encode(var.broadcast_recovery_title)
+    })
+    destination = "/run/youtube-broadcast-recovery/youtube-broadcast-recovery.service"
+  }
+
+  provisioner "file" {
+    content = templatefile("${path.module}/templates/youtube-broadcast-recovery.timer.tftpl", {
+      interval_seconds = var.broadcast_recovery_interval_seconds
+    })
+    destination = "/run/youtube-broadcast-recovery/youtube-broadcast-recovery.timer"
+  }
+
+  provisioner "file" {
+    source      = "${path.module}/scripts/run-broadcast-recovery.sh"
+    destination = "/run/youtube-broadcast-recovery/run-broadcast-recovery.sh"
+  }
+
+  provisioner "file" {
+    source      = "${path.module}/scripts/notify-broadcast-recovery.sh"
+    destination = "/run/youtube-broadcast-recovery/notify-broadcast-recovery.sh"
+  }
+
+  provisioner "remote-exec" {
+    inline = [
+      "set -eu",
+      "trap 'rm -rf /run/youtube-broadcast-recovery' EXIT HUP INT TERM",
+      "export DEBIAN_FRONTEND=noninteractive",
+      "apt-get update -qq",
+      "apt-get install -y -qq ca-certificates git python3-venv",
+      "python3 -m json.tool /run/youtube-broadcast-recovery/token_streaming.json >/dev/null",
+      "python3 -m json.tool /run/youtube-broadcast-recovery/client_secrets.json >/dev/null",
+      "id -u youtube-broadcast-recovery >/dev/null 2>&1 || useradd --system --home-dir ${local.broadcast_recovery_state_root} --create-home --shell /usr/sbin/nologin youtube-broadcast-recovery",
+      "install -d -m 0755 -o root -g root ${local.broadcast_recovery_install_root}/bin",
+      "install -d -m 0700 -o youtube-broadcast-recovery -g youtube-broadcast-recovery ${local.broadcast_recovery_state_root}/channel/auth",
+      "install -m 0600 -o youtube-broadcast-recovery -g youtube-broadcast-recovery /run/youtube-broadcast-recovery/token_streaming.json ${local.broadcast_recovery_state_root}/channel/auth/token_streaming.json",
+      "install -m 0600 -o youtube-broadcast-recovery -g youtube-broadcast-recovery /run/youtube-broadcast-recovery/client_secrets.json ${local.broadcast_recovery_state_root}/channel/auth/client_secrets.json",
+      "python3 -m venv ${local.broadcast_recovery_install_root}/venv",
+      "${local.broadcast_recovery_install_root}/venv/bin/pip install --quiet --upgrade pip",
+      "${local.broadcast_recovery_install_root}/venv/bin/pip install --quiet --upgrade git+https://github.com/daiki-beppu/youtube-automation.git@${var.broadcast_recovery_automation_git_ref}",
+      "install -m 0755 -o root -g root /run/youtube-broadcast-recovery/run-broadcast-recovery.sh ${local.broadcast_recovery_install_root}/bin/run-broadcast-recovery.sh",
+      "install -m 0755 -o root -g root /run/youtube-broadcast-recovery/notify-broadcast-recovery.sh ${local.broadcast_recovery_install_root}/bin/notify-broadcast-recovery.sh",
+      "install -m 0644 -o root -g root /run/youtube-broadcast-recovery/youtube-broadcast-recovery.service /etc/systemd/system/youtube-broadcast-recovery.service",
+      "install -m 0644 -o root -g root /run/youtube-broadcast-recovery/youtube-broadcast-recovery.timer /etc/systemd/system/youtube-broadcast-recovery.timer",
+      "rm -rf /run/youtube-broadcast-recovery",
+      "trap - EXIT HUP INT TERM",
+      "systemctl daemon-reload",
+      "systemctl enable --now youtube-broadcast-recovery.timer",
+      "systemctl is-active --quiet youtube-broadcast-recovery.timer",
+    ]
+  }
+
+  provisioner "remote-exec" {
+    when       = destroy
+    on_failure = continue
+    inline = [
+      "systemctl disable --now youtube-broadcast-recovery.timer 2>/dev/null || true",
+      "systemctl stop youtube-broadcast-recovery.service 2>/dev/null || true",
+      "rm -f /etc/systemd/system/youtube-broadcast-recovery.service /etc/systemd/system/youtube-broadcast-recovery.timer",
+      "rm -rf /var/lib/youtube-broadcast-recovery ${self.triggers.install_root}",
+      "rm -rf /run/youtube-broadcast-recovery",
       "systemctl daemon-reload",
     ]
   }
