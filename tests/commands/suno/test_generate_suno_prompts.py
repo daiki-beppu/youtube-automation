@@ -20,6 +20,7 @@ _DEFAULT_YAML = REPO_ROOT / ".claude" / "skills" / "suno" / "config.default.yaml
 _SUNO_LYRIC_DEFAULT_YAML = REPO_ROOT / ".claude" / "skills" / "suno-lyric" / "config.default.yaml"
 _SKILL_MD = REPO_ROOT / ".claude" / "skills" / "suno" / "SKILL.md"
 _CONFIG_RULES_MD = REPO_ROOT / ".claude" / "skills" / "channel-new" / "references" / "config-generation-rules.md"
+_STYLE_VARIANTS_UNSET = object()
 
 
 @pytest.fixture
@@ -1488,7 +1489,13 @@ def test_legacy_patterns_per_collection_key_is_silently_ignored(channel_dir, tmp
 # ---------------------------------------------------------------------------
 
 
-def _write_patterns_with_explicit_entries(dir_: Path, entries: list[dict], tracks_top: int) -> Path:
+def _write_patterns_with_explicit_entries(
+    dir_: Path,
+    entries: list[dict],
+    tracks_top: int,
+    *,
+    style_variants: object = _STYLE_VARIANTS_UNSET,
+) -> Path:
     """name_jp / name_en を明示した複数 entry の yaml を書き出す.
 
     重複検証テスト用に各 entry の name を任意に指定したいので独立 helper を用意する。
@@ -1499,6 +1506,8 @@ def _write_patterns_with_explicit_entries(dir_: Path, entries: list[dict], track
         "tracks": tracks_top,
         "patterns": entries,
     }
+    if style_variants is not _STYLE_VARIANTS_UNSET:
+        payload["style_variants"] = style_variants
     path = dir_ / "patterns.yaml"
     path.write_text(yaml.safe_dump(payload, allow_unicode=True), encoding="utf-8")
     return path
@@ -1860,6 +1869,76 @@ def _four_distinct_entries() -> list[dict]:
         {"name_jp": "港の夜明け", "name_en": "Harbor Dawn", "tempo": "slow", "scenes": ["a still harbor"]},
         {"name_jp": "路地の灯り", "name_en": "Alley Glow", "tempo": "slow", "scenes": ["a narrow alley"]},
     ]
+
+
+def test_patterns_style_variants_override_same_named_channel_variant(channel_dir, tmp_path):
+    """collection variant は同名の channel variant より優先される。"""
+    channel_genre = "channel ambient pad"
+    collection_genre = "collection acoustic soul"
+    _write_suno_override(
+        channel_dir,
+        genre_line="channel base",
+        style_variants={"ambient": {"name": "Channel Ambient", "genre_line": channel_genre}},
+    )
+    entries_def = _four_distinct_entries()
+    entries_def[0]["style"] = "ambient"
+    patterns_path = _write_patterns_with_explicit_entries(
+        tmp_path,
+        entries=entries_def,
+        tracks_top=8,
+        style_variants={"ambient": {"name": "Collection Soul", "genre_line": collection_genre}},
+    )
+
+    markdown = generate(patterns_path)
+    entries = build_prompt_entries(patterns_path)
+
+    assert _style_first_lines(entries)[0] == f"slow, {collection_genre},"
+    assert "[ambient: Collection Soul]" in markdown
+    assert channel_genre not in entries[0]["style"]
+
+
+def test_empty_patterns_style_variants_does_not_inherit_channel_keys(channel_dir, tmp_path):
+    """明示した空 mapping は channel variant を継承せず未定義 key を拒否する。"""
+    _write_suno_override(
+        channel_dir,
+        genre_line="channel base",
+        style_variants={"ambient": {"name": "Channel Ambient", "genre_line": "channel ambient pad"}},
+    )
+    entries_def = _four_distinct_entries()
+    entries_def[0]["style"] = "ambient"
+    patterns_path = _write_patterns_with_explicit_entries(
+        tmp_path,
+        entries=entries_def,
+        tracks_top=8,
+        style_variants={},
+    )
+
+    with pytest.raises(ConfigError, match="未定義の style variant"):
+        build_prompt_entries(patterns_path)
+
+
+@pytest.mark.parametrize(
+    ("style_variants", "error_pattern"),
+    [
+        (None, r"style_variants.*mapping"),
+        ([], r"style_variants.*mapping"),
+        ({"ambient": []}, r"style_variants\.ambient.*mapping"),
+        ({"ambient": {"name": "Ambient"}}, r"style_variants\.ambient\.genre_line.*string"),
+        ({"ambient": {"genre_line": "ambient pad"}}, r"style_variants\.ambient\.name.*string"),
+    ],
+)
+def test_patterns_style_variants_reject_invalid_shapes(channel_dir, tmp_path, style_variants, error_pattern):
+    """collection variant の不正 shape は entry 解決前に拒否する。"""
+    _write_suno_override(channel_dir, genre_line="channel base")
+    patterns_path = _write_patterns_with_explicit_entries(
+        tmp_path,
+        entries=_four_distinct_entries(),
+        tracks_top=8,
+        style_variants=style_variants,
+    )
+
+    with pytest.raises(ConfigError, match=error_pattern):
+        build_prompt_entries(patterns_path)
 
 
 def test_default_yaml_enables_style_variation_with_pools():
