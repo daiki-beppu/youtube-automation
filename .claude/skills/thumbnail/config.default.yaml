@@ -70,7 +70,7 @@ image_generation:
 
   gemini:
     # 使用する Gemini 画像生成モデル
-    model: gemini-3.1-flash-image-preview
+    model: gemini-3.1-flash-image
 
     # 生成モード:
     #   single_step   : ベンチマーク模倣 (TTP) の推奨実装。テキスト付き参照画像から

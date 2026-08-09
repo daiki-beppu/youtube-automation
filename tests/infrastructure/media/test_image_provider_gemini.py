@@ -61,7 +61,7 @@ def _fake_response(parts: list) -> MagicMock:
 
 @pytest.fixture
 def gemini_config() -> GeminiConfig:
-    return GeminiConfig(model="gemini-3.1-flash-image-preview", image_size="2K")
+    return GeminiConfig(model="gemini-3.1-flash-image", image_size="2K")
 
 
 @pytest.fixture
@@ -131,7 +131,7 @@ class TestForwardsRequestToGeminiApi:
         # Then
         assert result.success is True
         kwargs = client.models.generate_content.call_args.kwargs
-        assert kwargs["model"] == "gemini-3.1-flash-image-preview"
+        assert kwargs["model"] == "gemini-3.1-flash-image"
         # config 引数の中に aspect_ratio / image_size がセットされている
         cfg_arg = kwargs["config"]
         # GenerateContentConfig は属性アクセス可能
@@ -201,7 +201,7 @@ class TestVariationGuard:
         # Given
         ref_path = tmp_path / "ref.png"
         ref_path.write_bytes(_png_bytes())
-        config = GeminiConfig(model="gemini-3.1-flash-image-preview", variation_guard_enabled=True)
+        config = GeminiConfig(model="gemini-3.1-flash-image", variation_guard_enabled=True)
         provider = GeminiImageProvider(config)
         req = request_factory(prompt="a calm ocean sunset", references=[ref_path])
         response = _fake_response([_fake_image_part(_png_bytes())])
@@ -222,7 +222,7 @@ class TestVariationGuard:
         # Given
         ref_path = tmp_path / "ref.png"
         ref_path.write_bytes(_png_bytes())
-        config = GeminiConfig(model="gemini-3.1-flash-image-preview", variation_guard_enabled=False)
+        config = GeminiConfig(model="gemini-3.1-flash-image", variation_guard_enabled=False)
         provider = GeminiImageProvider(config)
         req = request_factory(prompt="a calm ocean sunset", references=[ref_path])
         response = _fake_response([_fake_image_part(_png_bytes())])
@@ -240,7 +240,7 @@ class TestVariationGuard:
     def test_no_references_no_guard_regardless_of_config(self, request_factory, patched_genai_client):
         """参照画像なし → variation_guard_enabled の値にかかわらず guard は付かない。"""
         # Given
-        config = GeminiConfig(model="gemini-3.1-flash-image-preview", variation_guard_enabled=True)
+        config = GeminiConfig(model="gemini-3.1-flash-image", variation_guard_enabled=True)
         provider = GeminiImageProvider(config)
         req = request_factory(prompt="a calm ocean sunset", references=[])
         response = _fake_response([_fake_image_part(_png_bytes())])
