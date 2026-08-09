@@ -95,9 +95,10 @@ _STYLE_VARIATION_BARE_INSTRUMENTS = frozenset(
 # Style text の 5 要素順序: ジャンル名 → 音響特性 → キー楽器 → リズム/ベース → テンポ
 # 厳密な順序検証は不可能（自然言語のため）だが、テンポ語が先頭付近にある場合は警告する
 _TEMPO_WORDS = frozenset({"very slow", "slow", "gentle", "moderate", "lively", "fast", "uptempo", "downtempo"})
+_DEFAULT_FULL_STYLE_CHAR_LIMIT = 256
 
 
-def validate_style_char_limit(style_text: str, *, limit: int = 120) -> list[str]:
+def validate_style_char_limit(style_text: str, *, limit: int = _DEFAULT_FULL_STYLE_CHAR_LIMIT) -> list[str]:
     """Style テキストが文字数上限を超えていないか検証する.
 
     Returns: 警告メッセージのリスト (空なら問題なし)。
@@ -106,6 +107,22 @@ def validate_style_char_limit(style_text: str, *, limit: int = 120) -> list[str]
     if len(style_text) > limit:
         warnings_list.append(f"Style text exceeds {limit} char limit ({len(style_text)} chars): {style_text[:80]}...")
     return warnings_list
+
+
+def _resolve_full_style_char_limit(suno: Mapping[str, object], override: Mapping[str, object]) -> int:
+    """完成形 Style の soft budget を後方互換の優先順位で解決する."""
+    if "full_style_char_limit" in override:
+        value = override["full_style_char_limit"]
+        source = "full_style_char_limit"
+    elif "style_char_limit" in override:
+        value = override["style_char_limit"]
+        source = "style_char_limit"
+    else:
+        value = suno.get("full_style_char_limit", _DEFAULT_FULL_STYLE_CHAR_LIMIT)
+        source = "full_style_char_limit"
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        raise ConfigError(f"config/skills/suno.yaml::{source} must be a positive integer")
+    return value
 
 
 def validate_banned_artists(style_text: str, banned_artists: list[str]) -> list[str]:
@@ -379,6 +396,7 @@ class _ResolvedPrompts:
     style_influence: int
     weirdness: int
     exclude_styles: str
+    full_style_char_limit: int
     # channel override に明示設定された More Options フィールドのみを保持する (#900)。
     # collection スコープ: 全 entry に同じ値が載る。未設定キーは dict に含めない。
     advanced_json_fields: dict
@@ -521,6 +539,7 @@ def _resolve_prompts(patterns_path: Path) -> _ResolvedPrompts:
     # default.yaml の既定値と区別できないため、override 単体を別途読む。
     override = load_channel_override("suno")
     _validate_duration_sec_override(override)
+    full_style_char_limit = _resolve_full_style_char_limit(suno, override)
     advanced_json_fields = _build_advanced_json_fields(override)
     resolved_suno = resolve_suno_config(suno)
 
@@ -662,6 +681,7 @@ def _resolve_prompts(patterns_path: Path) -> _ResolvedPrompts:
         style_influence=style_influence,
         weirdness=weirdness,
         exclude_styles=exclude_styles,
+        full_style_char_limit=full_style_char_limit,
         advanced_json_fields=advanced_json_fields,
         patterns=resolved,
     )
@@ -747,7 +767,6 @@ def build_prompt_entries(patterns_path: Path) -> list[dict]:
     """
     resolved = _resolve_prompts(patterns_path)
     suno = load_skill_config("suno")
-    style_char_limit = suno.get("style_char_limit", 120)
     banned_artists = suno.get("banned_artists", [])
     auto_lyrics = suno.get("auto_lyrics_structure", False)
 
@@ -771,11 +790,11 @@ def build_prompt_entries(patterns_path: Path) -> list[dict]:
             full_style = f"{style_line}\n{scene}"
 
             # Quality rules: Style テキストの検証 (#904)
-            # style_char_limit と banned_artists は完成形の full_style を検証する。
+            # full_style_char_limit と banned_artists は完成形の full_style を検証する。
             # 5 要素順序チェックは genre_line（ユーザーが config に書く部分）を検証する。
             # Styles 第 1 行の先頭は `_style_line` が tempo を置くため、
             # full_style での先頭テンポ検知は false positive になる。
-            report.warnings.extend(validate_style_char_limit(full_style, limit=style_char_limit))
+            report.warnings.extend(validate_style_char_limit(full_style, limit=resolved.full_style_char_limit))
             report.errors.extend(validate_banned_artists(full_style, banned_artists))
 
             # auto_lyrics_structure: 歌詞構造の自動補強 (#904)

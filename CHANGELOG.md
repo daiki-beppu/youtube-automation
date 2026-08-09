@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `fix(suno)`: effective `genre_line` の hard guard `style_char_limit: 120` を維持しつつ、完成形 Style の soft quality budget を `full_style_char_limit: 256` へ分離。明示した新キー、明示した legacy キー、既定値の順で解決し、既存チャンネルの override を保ったまま構造的な警告を解消（#2589）。
 - `docs(thumbnail)`: 承認済み画像生成を subagent / background session で実行する場合は stdin を `/dev/null` へ閉じ、process の exit と成果物を観測するまで完了報告しない契約を追加（#2950）。
 - `docs(suno)`: `suno_preset` を hard gate から推奨入力へ変更し、collection 固有の effective Style と vocal gender を `suno-patterns.yaml` に保存して共有 channel config を変更せず `/wf-new`・`/suno-lyric`・`yt-suno-verify` へ引き渡す正規手順を追加（#2999）。
 - `fix(suno)`: `suno-patterns.yaml` が上書きした effective Style にも channel の `banned_artists` を適用し、禁止アーティスト検出時は channel Style と同じ `ConfigError` で出力前に停止する契約を固定（#2998）。
