@@ -3528,6 +3528,42 @@ class TestCheckTtpWfNewReadinessChannelNew:
 
         assert r.status == "ok"
 
+    def test_multiline_approved_thumbnail_exception_satisfies_missing_reference(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        (tmp_path / "data" / "thumbnail_compare" / "benchmark" / "rival_1.jpg").unlink()
+        seed_path = tmp_path / "docs" / "channel" / "ttp-seed-confirmation.md"
+        seed_path.write_text(
+            seed_path.read_text(encoding="utf-8")
+            + """
+## ユーザー承認済み例外
+
+- category: thumbnail
+- 未反映内容: reference image の収集をスキップ
+- 理由: 初回公開を優先するため
+- 後続: /thumbnail で補完する
+""",
+            encoding="utf-8",
+        )
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "ok"
+
+    def test_multiline_approved_exception_reports_missing_followup(self, tmp_path):
+        approved, missing = doctor._approved_ttp_exceptions(
+            """
+## ユーザー承認済み例外
+
+- category: thumbnail
+- 未反映内容: reference image の収集をスキップ
+- 理由: 初回公開を優先するため
+"""
+        )
+
+        assert approved == set()
+        assert missing == ["thumbnail のユーザー承認済み例外に後続 /thumbnail が未記録"]
+
     def test_approved_thumbnail_exception_does_not_skip_channel_branding_config(self, tmp_path):
         _write_ttp_analytics(tmp_path, [_ttp_channel()])
         _write_ttp_readiness_files(tmp_path)
@@ -3649,6 +3685,32 @@ class TestCheckTtpWfNewReadinessChannelNew:
         assert r.status == "warn"
         assert "source が未記録" in r.message
         assert "seed fetch 要約 が未記録" in r.message
+
+    def test_seed_confirmation_accepts_natural_seed_summary_and_user_decision(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        seed_path = tmp_path / "docs" / "channel" / "ttp-seed-confirmation.md"
+        seed_text = seed_path.read_text(encoding="utf-8")
+        seed_text = seed_text.replace("seed fetch 要約:", "seed 要約:")
+        seed_text = seed_text.replace("承認 / 不採用判断: Rival を承認済み", "ユーザー承認: 承認済み (Rival)")
+        seed_path.write_text(seed_text, encoding="utf-8")
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "ok"
+
+    def test_seed_confirmation_rejects_pending_user_decision(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        seed_path = tmp_path / "docs" / "channel" / "ttp-seed-confirmation.md"
+        seed_text = seed_path.read_text(encoding="utf-8")
+        seed_text = seed_text.replace("承認 / 不採用判断: Rival を承認済み", "ユーザー承認: 確認待ち (Rival)")
+        seed_path.write_text(seed_text, encoding="utf-8")
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "承認 / 不採用判断 が未記録" in r.message
 
     def test_seed_confirmation_https_only_does_not_satisfy_transfer_elements(self, tmp_path):
         _write_ttp_analytics(tmp_path, [_ttp_channel()])

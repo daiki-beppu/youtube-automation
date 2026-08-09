@@ -103,7 +103,7 @@ TTP メモは最低限、以下の観点を含める:
 - ジャンル / 音楽スタイル
 - branding description / keywords の段落構造と語彙
 
-意図的に thumbnail reference / music structure の一部をスキップする場合は、「何が TTP 未反映か」「なぜ進めるか」「後続でどの skill を使って解消するか」を `ユーザー承認済み例外: thumbnail ...` または `ユーザー承認済み例外: music ...` の marker 付きで `docs/channel/ttp-seed-confirmation.md` と最終 handoff に明記する。branding snapshot は承認済み TTP 対象の `snippet` / `brandingSettings` / `localizations` を保存し、snapshot 不足を例外扱いにしない。
+意図的に thumbnail reference / music structure の一部をスキップする場合は、「何が TTP 未反映か」「なぜ進めるか」「後続でどの skill を使って解消するか」を `ユーザー承認済み例外: thumbnail ...` / `ユーザー承認済み例外: music ...` の 1 行、または `ユーザー承認済み例外` 見出し配下の箇条書きとして `docs/channel/ttp-seed-confirmation.md` と最終 handoff に明記する。複数行形式の category・未反映内容・理由・後続 skill は同じ Markdown section に置く。branding snapshot は承認済み TTP 対象の `snippet` / `brandingSettings` / `localizations` を保存し、snapshot 不足を例外扱いにしない。
 
 ## 外部データの扱い
 
