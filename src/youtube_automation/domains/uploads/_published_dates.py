@@ -63,7 +63,7 @@ def _scheduling_enabled(schedule_cfg: dict) -> bool:
     優先順位（#647 ユーザーが「予約投稿の設定をしたつもりが即時公開された」FB 対応）:
 
     1. ``auto_schedule_enabled`` が明示的に ``true`` → 有効。
-    2. ``auto_schedule_enabled`` が明示的に ``false`` → 無効（即時公開を強制）。
+    2. ``auto_schedule_enabled`` が明示的に ``false`` → 無効（予約日時を設定しない）。
     3. キー未設定で ``cadence`` (非空) または ``publish_time`` が明示設定 → 暗黙オプトイン: 有効。
     4. 上記いずれにも該当しなければ無効（即時公開）。
 
@@ -112,7 +112,7 @@ class PublishedDatesMixin:
         スケジュール公開が無効な場合は None（即時公開）。
 
         Returns:
-            ISO 8601 形式の公開日時文字列。即時公開時は None。
+            ISO 8601 形式の公開日時文字列。予約日時を設定しない場合は None。
         """
         schedule_cfg = self.config.get("schedule", {})
         if not _scheduling_enabled(schedule_cfg):

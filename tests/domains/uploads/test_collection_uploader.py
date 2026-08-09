@@ -1077,10 +1077,10 @@ class TestShowPlanPrivacyDisplay:
         assert "📅 公開設定: 非公開 (private)" in out
         assert "即時公開 (public)" not in out
 
-    def test_public_channel_keeps_immediate_publish_wording(self, tmp_path, capsys):
-        """skill docs（test_skill_docs_consistency）が例示する文字列を維持する。"""
+    def test_public_channel_shows_safe_private_upload_wording(self, tmp_path, capsys):
+        """予約日時なしの public は実挙動どおり非公開アップロードと案内する."""
         out = self._plan_output(tmp_path, capsys, "public")
-        assert "📅 公開設定: 即時公開 (public)" in out
+        assert "📅 公開設定: 非公開でアップロード（即時公開は行いません）" in out
 
     def test_plan_separates_daily_buckets_from_unit_pool(self, tmp_path, capsys):
         out = self._plan_output(tmp_path, capsys, "private")

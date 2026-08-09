@@ -1405,7 +1405,7 @@ class TestUploadVideoScheduledPublish:
         assert body["status"]["publishAt"] == "2099-06-15T11:00:00Z"
 
     def test_should_omit_publish_at_when_metadata_does_not_have_it(self, tmp_path):
-        """publish_at が無いメタデータでは status.publishAt は付与されない（即時公開経路）."""
+        """publish_at が無いメタデータでは status.publishAt は付与されない."""
         from youtube_automation.domains.uploads.youtube import YouTubeAutoUploader
 
         uploader = YouTubeAutoUploader(collections_root=str(tmp_path / "collections"))
@@ -1420,6 +1420,57 @@ class TestUploadVideoScheduledPublish:
 
         body = mock_core_upload.call_args.args[1]
         assert "publishAt" not in body["status"]
+
+    def test_should_downgrade_public_to_private_without_publish_at(self, tmp_path, caplog):
+        """予約日時なしの public は公開事故を避けるため private へ降格する."""
+        from youtube_automation.domains.uploads.youtube import YouTubeAutoUploader
+
+        uploader = YouTubeAutoUploader(collections_root=str(tmp_path / "collections"))
+        video = tmp_path / "v.mp4"
+        video.write_bytes(b"\x00")
+        metadata = _make_metadata()
+        metadata["privacy_status"] = "public"
+
+        with (
+            patch(
+                "youtube_automation.domains.uploads.youtube.ResumableUploader.upload_video",
+                return_value="VID_PRIVATE",
+            ) as mock_core_upload,
+            caplog.at_level(logging.WARNING),
+        ):
+            uploader.upload_video(str(video), metadata)
+
+        body = mock_core_upload.call_args.args[1]
+        assert body["status"]["privacyStatus"] == "private"
+        assert "publishAt" not in body["status"]
+        warning = "\n".join(record.getMessage() for record in caplog.records)
+        assert "即時公開を抑止" in warning
+        assert "schedule_config.json" in warning
+        assert "YouTube Studio" in warning
+
+    def test_should_keep_unlisted_without_publish_at(self, tmp_path, caplog):
+        """予約日時なしの unlisted はレビュー共有用途のため維持する."""
+        from youtube_automation.domains.uploads.youtube import YouTubeAutoUploader
+
+        uploader = YouTubeAutoUploader(collections_root=str(tmp_path / "collections"))
+        video = tmp_path / "v.mp4"
+        video.write_bytes(b"\x00")
+        metadata = _make_metadata()
+        metadata["privacy_status"] = "unlisted"
+
+        with (
+            patch(
+                "youtube_automation.domains.uploads.youtube.ResumableUploader.upload_video",
+                return_value="VID_UNLISTED",
+            ) as mock_core_upload,
+            caplog.at_level(logging.WARNING),
+        ):
+            uploader.upload_video(str(video), metadata)
+
+        body = mock_core_upload.call_args.args[1]
+        assert body["status"]["privacyStatus"] == "unlisted"
+        assert "publishAt" not in body["status"]
+        assert not caplog.records
 
 
 class TestDefaultPublishAt:

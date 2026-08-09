@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `feat(ci)`: skill E2E eval を pull request CI から分離した `workflow_dispatch` / nightly workflow で実行し、Claude 認証 secret 未設定時は理由を summary に残して有料 job を明示的に skip する（#3094）。
 - `fix(playlist)`: `theme_scenes.activities` のカンマ区切りと中黒区切りを同じ複数 activity として解釈し、`auto_add_activities` によるプレイリスト割り当て漏れを防止（#3099）。
+- `fix(video-upload)`: 予約日時なしで `privacy_status=public` が指定されても即時公開せず private へ安全に降格し、plan・skill・予約公開ガイドを実挙動へ揃えた（#3138）。
 
 - `fix(video-upload)`: localizations title の 100 codepoint 超過診断に、実際の duration・activities 等を含む固定部分と scene phrase の codepoint 内訳を locale ごとに表示する（#3685）。
 - `feat(evals)`: promptfoo 0.122.0 から権限を読み取り専用へ制限した `claude -p` provider を起動し、v1 / v2 fixture 上の `/wf-status` が実行系 tool を試行せず `workflow-state.json` と fixture 全体を変更しないことをローカル E2E で検出できるようにした（#3093）。

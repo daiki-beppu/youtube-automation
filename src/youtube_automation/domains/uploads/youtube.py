@@ -278,12 +278,13 @@ class YouTubeAutoUploader(
             status_body["privacyStatus"] = "private"
             status_body["publishAt"] = normalized
             logger.info(f"スケジュール公開（private + publishAt={normalized}）")
-        else:
-            # publishAt 未指定でユーザーが privacy_status="public" を明示している場合、
-            # その動画は即時公開される。スケジュール公開を期待していたユーザー向けの
-            # 早期可視化として INFO ログを残す（#647）。
-            if status_body.get("privacyStatus") == "public":
-                logger.info("即時公開: status.privacyStatus=public でアップロードします")
+        elif status_body["privacyStatus"] == "public":
+            status_body["privacyStatus"] = "private"
+            logger.warning(
+                "即時公開を抑止して非公開でアップロードします。"
+                "公開する場合は schedule_config.json で予約公開を設定するか、"
+                "アップロード後に YouTube Studio で手動公開してください"
+            )
 
         body = {
             "snippet": {
