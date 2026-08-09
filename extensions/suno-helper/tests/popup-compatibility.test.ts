@@ -3507,7 +3507,7 @@ describe("Suno popup compatibility check", () => {
     });
   });
 
-  it("clip ID が無い状態で Download から再開しても retryDownload を送らずエラー表示する", async () => {
+  it("clip ID が無い状態では選択中の曲を採用してから Download を再試行するよう案内する", async () => {
     fetchMock
       .mockResolvedValueOnce(
         jsonResponse(200, {
@@ -3546,8 +3546,51 @@ describe("Suno popup compatibility check", () => {
       expect.anything()
     );
     expect(container.textContent).toContain(
-      "ダウンロード再開に必要な clip ID がありません。ページを再読み込みしてから再試行してください。"
+      "ダウンロード再開に必要な clip ID がありません。Suno 上で対象曲を選択し、「選択中の曲を採用」を押してから「Download から再開」を再試行してください。"
     );
+  });
+
+  it("完全自動生成の FINISHED snapshot をリロード後に復元して正確な期待数で Download を再開する", async () => {
+    const autoRunClipIds = ["auto-clip-a", "auto-clip-b", "auto-clip-c"];
+    messagingMocks.sendMessage.mockImplementation(
+      (message: string, payload?: Record<string, string>) => {
+        if (message === "queryProgress") {
+          return Promise.resolve({
+            collectionId: "20260601-clm-theme-a-collection",
+            entries: [
+              { name: "p1", style: "lofi", lyrics: "" },
+              { name: "p2", style: "ambient", lyrics: "" },
+            ],
+            itemStates: ["done", "done"],
+            isRunning: false,
+            progress: { phase: PHASE.FINISHED, total: 2 },
+            playlistName: "clm | theme-a",
+            submittedClipIds: autoRunClipIds,
+            submittedClipIdsAreDurationFiltered: true,
+            playlistExpectedClipCount: 3,
+          });
+        }
+        return defaultSendMessage(message, payload);
+      }
+    );
+
+    await rerenderApp();
+    await waitFor(() => {
+      expect(container.textContent).toContain(
+        "完了: 2 パターンを実行しました。"
+      );
+    });
+
+    messagingMocks.sendMessage.mockClear();
+    await act(async () => {
+      buttonByText(container, "Download から再開").click();
+    });
+
+    expect(messagingMocks.sendMessage).toHaveBeenCalledWith("retryDownload", {
+      collectionId: "20260601-clm-theme-a-collection",
+      submittedClipIds: autoRunClipIds,
+      expectedClipCount: 3,
+    });
   });
 
   it("期待 clip 数を解決できない場合は採用を送らずページ再読み込みを案内する", async () => {

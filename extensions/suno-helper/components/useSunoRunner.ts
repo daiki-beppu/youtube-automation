@@ -589,6 +589,24 @@ export function useSunoRunner(): RunnerState {
     );
   }, [playlistExpectedClipCountForResume, entries.length, selectedCollection]);
 
+  const expectedClipCountForDownloadResume = useMemo<number | undefined>(() => {
+    if (
+      phase === PHASE.FINISHED &&
+      restoredCollectionId === selectedCollectionId &&
+      restoredPlaylistExpectedClipCount !== undefined &&
+      restoredPlaylistExpectedClipCount > 0
+    ) {
+      return restoredPlaylistExpectedClipCount;
+    }
+    return expectedClipCountForManualAdoption;
+  }, [
+    phase,
+    restoredCollectionId,
+    selectedCollectionId,
+    restoredPlaylistExpectedClipCount,
+    expectedClipCountForManualAdoption,
+  ]);
+
   const report = useCallback((text: string, error = false) => {
     setStatus(text);
     setIsError(error);
@@ -1511,7 +1529,7 @@ export function useSunoRunner(): RunnerState {
     }
     if (submittedClipIdsForResume.length === 0) {
       report(
-        "ダウンロード再開に必要な clip ID がありません。ページを再読み込みしてから再試行してください。",
+        "ダウンロード再開に必要な clip ID がありません。Suno 上で対象曲を選択し、「選択中の曲を採用」を押してから「Download から再開」を再試行してください。",
         true
       );
       return;
@@ -1522,7 +1540,7 @@ export function useSunoRunner(): RunnerState {
       const payload = {
         collectionId: selectedCollectionId,
         submittedClipIds: submittedClipIdsForResume,
-        expectedClipCount: expectedClipCountForManualAdoption,
+        expectedClipCount: expectedClipCountForDownloadResume,
       };
       await sendMessage("retryDownload", payload);
       report("ダウンロードを再実行しています…");
@@ -1533,7 +1551,7 @@ export function useSunoRunner(): RunnerState {
     isRunning,
     selectedCollectionId,
     submittedClipIdsForResume,
-    expectedClipCountForManualAdoption,
+    expectedClipCountForDownloadResume,
     report,
     reportRunDispatchFailure,
     setRunning,
