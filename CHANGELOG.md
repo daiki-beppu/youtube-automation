@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `fix(suno)`: `genre_line` のモード推定で否定表現をボーカル語より優先し、完全な語境界だけを照合して部分文字列による誤判定を防止（#2954）。
+
 - `fix(thumbnail)`: Codex batch の channel 解決を共通 resolver へ統一し、multi-channel workspace の `CHANNEL=<slug>` を受理するとともに、未指定・不正 slug を jobs 起動前に候補付きで診断する（#2949）。
 
 - `fix(thumbnail)`: Codex batch manifest を実行ごとの `mktemp` で作成し、その実行が所有する path だけを終了時に削除する運用契約へ変更して、並列 collection 間の上書きを防止する（#2948）。
