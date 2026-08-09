@@ -142,6 +142,9 @@ class SceneTitleViolation:
 
     lang: str
     length: int
+    excess: int
+    fixed_length: int
+    scene_phrase_length: int
     title: str
     template: str
 
@@ -211,10 +214,24 @@ def validate_scene_phrases(
             context=f"localizations.json: language '{lang}' の title_template",
         )
         if len(title) > 100:
+            fixed_title = format_title_template(
+                title_tpl,
+                _localized_title_values(
+                    scene_phrase="",
+                    activities=activities,
+                    scene_emoji=scene_emoji,
+                    duration_display=duration_display,
+                ),
+                context=f"localizations.json: language '{lang}' の title_template",
+            )
+            fixed_length = len(fixed_title)
             violations.append(
                 SceneTitleViolation(
                     lang=lang,
                     length=len(title),
+                    excess=len(title) - 100,
+                    fixed_length=fixed_length,
+                    scene_phrase_length=len(title) - fixed_length,
                     title=title,
                     template=title_tpl,
                 )
@@ -224,4 +241,8 @@ def validate_scene_phrases(
 
 def format_scene_title_violations(violations: List[SceneTitleViolation]) -> str:
     """違反リストを人間可読な複数行テキストに整形する（CLI / エラーメッセージ共通）."""
-    return "\n".join(f"  - [{v.lang}] {v.length} codepoints (+{v.length - 100}): {v.title}" for v in violations)
+    return "\n".join(
+        f"  - [{v.lang}] {v.length} codepoints "
+        f"(+{v.excess}; fixed={v.fixed_length}c; scene_phrase={v.scene_phrase_length}c): {v.title}"
+        for v in violations
+    )

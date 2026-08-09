@@ -950,6 +950,42 @@ class TestValidateScenePhrases:
         assert v.length == len(v.title)
         assert "{scene_phrase}" in v.template
 
+    def test_violation_breakdown_uses_actual_expanded_title(self):
+        from types import SimpleNamespace
+
+        config = SimpleNamespace(
+            localizations=SimpleNamespace(
+                data={
+                    "supported_languages": ["en", "de"],
+                    "languages": {
+                        "en": {
+                            "title_template": "{scene_phrase} | BGM ({activities}) [{duration_display}]",
+                            "activities": "Study",
+                        },
+                        "de": {
+                            "title_template": "{scene_phrase} | BGM ({activities}) [{duration_display}]",
+                            "activities": "Lernen",
+                        },
+                    },
+                }
+            ),
+            content=SimpleNamespace(descriptions=SimpleNamespace(metadata={})),
+        )
+        scene_phrases = {"en": "x" * 90, "de": "y" * 90}
+
+        violations = validate_scene_phrases(scene_phrases, config, 10 * 3600 + 32 * 60)
+
+        assert len(violations) == 2
+        expected_fixed_titles = {
+            "en": " | BGM (Study) [10.5 Hours]",
+            "de": " | BGM (Lernen) [10.5 Std]",
+        }
+        for violation in violations:
+            assert violation.excess == violation.length - 100
+            assert violation.fixed_length == len(expected_fixed_titles[violation.lang])
+            assert violation.scene_phrase_length == len(scene_phrases[violation.lang])
+            assert violation.length == violation.fixed_length + violation.scene_phrase_length
+
     def test_missing_phrase_raises(self):
         """scene_phrases に不足言語があれば ValueError（existing 挙動を踏襲）"""
         config = load_config()
@@ -978,6 +1014,9 @@ class TestValidateScenePhrases:
         for v in violations:
             assert f"[{v.lang}]" in text
             assert str(v.length) in text
+            assert f"fixed={v.fixed_length}c" in text
+            assert f"scene_phrase={v.scene_phrase_length}c" in text
+            assert f"+{v.excess}" in text
 
 
 class TestGenerateLocalizationsSingleLanguage:
@@ -1025,6 +1064,9 @@ class TestGenerateLocalizationsBulkReport:
         msg = str(excinfo.value)
         for lang in config.localizations.supported_languages:
             assert f"[{lang}]" in msg
+        for violation in validate_scene_phrases(phrases, config, 3600):
+            assert f"fixed={violation.fixed_length}c" in msg
+            assert f"scene_phrase={violation.scene_phrase_length}c" in msg
 
 
 # ===========================================================================
