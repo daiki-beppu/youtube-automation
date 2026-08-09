@@ -278,6 +278,16 @@ uv run yt-generate-image \
 
 ### 標準生成順序とファイル契約
 
+`/wf-new` から実行され、採用済み `10-assets/planning-preview.png` がある場合だけ、通常の候補生成より前に次の決定的確定経路を使う。`/thumbnail` の単独実行ではこの分岐を推測せず、通常の生成モードに従う。
+
+```bash
+uv run python .claude/skills/thumbnail/references/finalize_planning_preview.py <collection-path>
+```
+
+`status: FINALIZED` は Pillow による RGB JPEG 形式変換と原子的な `10-assets/thumbnail.jpg` 置換が成功したことを表す。構図変更、テキスト追加、AI 生成、候補再選択は行わない。既存 `thumbnail.jpg` は変換と JPEG の dimensions 検証が完了するまで保持する。確定後は `/thumbnail-compare` と既存目視 QA、承認済みサムネイルの archive Hard Gate を通すが、企画選択時と同じ画像を thumbnail の AskUserQuestion へ再度出さない。その後の `textless.enabled` 未設定 / `true` の textless `main.png/jpg` 生成と、`false` の `share_thumbnail_as_main.py` 共用、state 更新ゲートは通常契約を維持する。
+
+`status: MISSING` の場合だけ、`/wf-new` は既存の `/thumbnail <theme>` 候補生成へフォールバックする。空ファイルや代替画像を作らない。変換エラーは `MISSING` とみなさず、既存成果物と state を変更せず停止する。
+
 `/thumbnail` の標準手順は、**textless 動画背景の生成 → `yt-thumbnail-text` による実フォント合成**の 2 段構成で進める（#1907）。タイトル文字は AI に焼き込ませず、承認済みの textless 背景へ実フォント（Pillow 描画）で決定的に合成する。同一の背景・テキスト・設定なら常に同一出力になり、AI っぽい書体の揺れが発生しない。
 
 ただし deep-merge 後の `textless.enabled: false` は明示 opt-in の共用経路とする。この場合は textless 候補の AI 生成、セルフチェック、プレビュー、承認をすべて省略し、テキスト付き最終 `10-assets/thumbnail.jpg` の確定後に次を実行する。

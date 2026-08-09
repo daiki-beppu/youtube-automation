@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+from PIL import Image, ImageChops, ImageStat
 
 from tests.helpers.paths import REPO_ROOT
 
@@ -402,6 +403,115 @@ def _load_shared_main_module(name: str):
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
+
+
+def _load_preview_finalizer_module(name: str):
+    script = _repo_root() / ".claude/skills/thumbnail/references/finalize_planning_preview.py"
+    spec = importlib.util.spec_from_file_location(name, script)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_finalize_planning_preview_preserves_visual_content(tmp_path: Path) -> None:
+    module = _load_preview_finalizer_module("finalize_planning_preview")
+    collection = tmp_path / "collection"
+    assets = collection / "10-assets"
+    assets.mkdir(parents=True)
+    preview = assets / "planning-preview.png"
+    source = Image.new("RGB", (48, 32), "#17324d")
+    for x in range(24, 48):
+        for y in range(16, 32):
+            source.putpixel((x, y), (220, 145, 38))
+    source.save(preview, "PNG")
+
+    result = module.finalize_planning_preview(collection)
+
+    thumbnail = assets / "thumbnail.jpg"
+    with Image.open(thumbnail) as converted:
+        assert converted.format == "JPEG"
+        assert converted.size == source.size
+        difference = ImageStat.Stat(ImageChops.difference(source, converted.convert("RGB")))
+    assert max(difference.mean) < 1.0
+    assert result == {
+        "status": "FINALIZED",
+        "source": str(preview),
+        "destination": str(thumbnail),
+    }
+    assert not list(assets.glob(".thumbnail-preview-*"))
+
+
+def test_finalize_planning_preview_reports_missing_without_creating_thumbnail(tmp_path: Path) -> None:
+    module = _load_preview_finalizer_module("finalize_planning_preview_missing")
+    collection = tmp_path / "collection"
+    assets = collection / "10-assets"
+    assets.mkdir(parents=True)
+
+    result = module.finalize_planning_preview(collection)
+
+    assert result == {
+        "status": "MISSING",
+        "source": str(assets / "planning-preview.png"),
+    }
+    assert not (assets / "thumbnail.jpg").exists()
+
+
+def test_finalize_planning_preview_failure_preserves_existing_thumbnail(tmp_path: Path) -> None:
+    module = _load_preview_finalizer_module("finalize_planning_preview_failure")
+    collection = tmp_path / "collection"
+    assets = collection / "10-assets"
+    assets.mkdir(parents=True)
+    (assets / "planning-preview.png").write_bytes(b"not-an-image")
+    thumbnail = assets / "thumbnail.jpg"
+    thumbnail.write_bytes(b"existing-thumbnail")
+
+    with pytest.raises(OSError):
+        module.finalize_planning_preview(collection)
+
+    assert thumbnail.read_bytes() == b"existing-thumbnail"
+    assert not list(assets.glob(".thumbnail-preview-*"))
+
+
+def test_finalize_planning_preview_rejects_broken_symlink(tmp_path: Path) -> None:
+    module = _load_preview_finalizer_module("finalize_planning_preview_broken_symlink")
+    collection = tmp_path / "collection"
+    assets = collection / "10-assets"
+    assets.mkdir(parents=True)
+    preview = assets / "planning-preview.png"
+    preview.symlink_to(assets / "missing.png")
+    thumbnail = assets / "thumbnail.jpg"
+    thumbnail.write_bytes(b"existing-thumbnail")
+
+    with pytest.raises(module.ValidationError, match="通常ファイル"):
+        module.finalize_planning_preview(collection)
+
+    assert thumbnail.read_bytes() == b"existing-thumbnail"
+    assert not list(assets.glob(".thumbnail-preview-*"))
+
+
+def test_finalize_planning_preview_permission_failure_preserves_existing_thumbnail(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_preview_finalizer_module("finalize_planning_preview_permission")
+    collection = tmp_path / "collection"
+    assets = collection / "10-assets"
+    assets.mkdir(parents=True)
+    Image.new("RGB", (8, 8), "navy").save(assets / "planning-preview.png", "PNG")
+    thumbnail = assets / "thumbnail.jpg"
+    thumbnail.write_bytes(b"existing-thumbnail")
+
+    def deny_temporary_file(*_args, **_kwargs):
+        raise PermissionError("injected permission failure")
+
+    monkeypatch.setattr(module.tempfile, "mkstemp", deny_temporary_file)
+
+    with pytest.raises(PermissionError, match="injected permission failure"):
+        module.finalize_planning_preview(collection)
+
+    assert thumbnail.read_bytes() == b"existing-thumbnail"
 
 
 def test_thumbnail_textless_shared_main_default_and_contract() -> None:

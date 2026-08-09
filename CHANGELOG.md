@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `fix(doctor)`: `initial_setup_readiness` でも有効な thumbnail ユーザー承認済み例外を尊重し、承認済みの規約外参照パスだけで恒久的に warn にならないようにした（#2509）。
 - `fix(suno-helper)`: downloaded POST 失敗の endpoint と download phase を overlay の中断表示と無人実行の `required-action` へ保持し、token 取得先で起点 request を覆わないエラー契約を固定（#3001）。
+- `feat(wf-new)`: 採用済み `planning-preview.png` を AI 再生成や重複承認なしで原子的に `thumbnail.jpg` へ形式変換し、プレビュー不在時だけ既存 `/thumbnail` 生成へフォールバックする経路を追加（#2514）。
+
 - `feat(collection-ideate)`: 採用した `planning-preview.png` を最終 `thumbnail.jpg` の正規入力として後段へ引き渡し、未生成時だけ `/thumbnail` フォールバックへ合流する契約に変更（#2513）。
 
 - `feat(workspace)`: SessionStart で cwd 由来の対象チャンネル、または未確定時の候補と書き込み基準をコンテキストへ注入する hook を追加（#3372）。

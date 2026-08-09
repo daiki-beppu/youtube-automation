@@ -12,7 +12,7 @@ description: "Use when 新規コレクション制作を立ち上げるとき（
 
 新コレクション開始オーケストレーター。子スキルを順番に呼び、通常は企画選択 + サムネイル承認の2箇所で一時停止する。`workflow.wf_new.skip_plan_selection: true` の analytics mode / benchmark fallback mode では企画選択だけを自動化する。
 `/wf-auto` から新規開始または対象 collection 固定で委譲された場合も本スキルの既存 gate と完了条件を維持し、統合 runner 側で工程を再実装しない。新規初期化後は作成した collection 名を返し、同じ run 内の再評価へ接続する。
-`image_generation.auto_selection.enabled: true` かつ `mode: full` のチャンネルでは、サムネイル工程のテーマ確認・生成可否・textless 背景承認・候補承認を省略し、企画で確定した theme を `/thumbnail` へ渡して無人で確定する。
+`image_generation.auto_selection.enabled: true` かつ `mode: full` のチャンネルでは、サムネイル工程のテーマ確認・生成可否・textless 背景承認・候補承認を省略する。`planning-preview.png` があればそれを無人で最終サムネイルへ確定し、無ければ企画で確定した theme を `/thumbnail` へ渡して無人で確定する。
 Suno チャンネルではプロンプト生成後、`suno-helper` 用の `uv run yt-collection-serve` 起動と疎通確認まで行い、続きは `/suno-helper` が browser use で Suno タブ上の拡張 overlay を操作できる状態にする。
 minimal mode では企画候補生成前にテーマ / ジャンル / 雰囲気の直接入力確認が追加される既存挙動を、`ttp_mode: false` の場合だけ適用する。`true` の場合は `/benchmark` を案内して停止する。
 アナリティクス未収集の新チャンネルでも、ベンチマークから初回企画を開始する。`ttp_mode: false` の場合だけ、ベンチマークも無ければユーザー直接入力を使う。
@@ -173,8 +173,8 @@ success を記録した後は同じ fixed collection を `plan --collection <fix
 | 1 | subagent: `/collection-ideate` | 入力モード候補を渡し、成果物検証後にメインが企画選択で停止 | 選択企画、プレビュー画像 |
 | 2 | `uv run yt-init-collection` | 選択企画から collection dir と初期 state を作る | `workflow-state.json` |
 | 3 | `uv run yt-populate-scene-phrases` | 多言語チャンネルの scene phrases を初期化 | `scene_phrases` |
-| 4 | subagent: `/thumbnail` | テキスト付き候補生成を委譲し、メインが成果物を検証する | `10-assets/thumbnail-vN.jpg/png` |
-| 5 | user 承認 + subagent: `/thumbnail` | 通常はテキスト付き候補を承認・確定後、textless 候補生成を委譲し、承認・確定・state 更新を行う。`thumbnail::textless.enabled: false` では確定済み thumbnail を `main.jpg` へ共用する。`mode: full` は承認を省略して自動確定する | `10-assets/thumbnail.jpg`, `10-assets/main.png/jpg` |
+| 4 | preview finalizer または subagent: `/thumbnail` | `planning-preview.png` があれば決定的 JPEG 変換で確定し、無い場合だけテキスト付き候補生成を委譲する | `10-assets/thumbnail.jpg` または `thumbnail-vN.jpg/png` |
+| 5 | quality gate + textless subagent | 採用済み `planning-preview.png` があれば再承認せず品質検証し、無い場合は `/thumbnail` 候補を既存契約で確定する。その後は textless 候補生成または `textless.enabled: false` の `main.jpg` 共用、state 更新を行う。`mode: full` は承認を省略する | `10-assets/thumbnail.jpg`, `10-assets/main.png/jpg` |
 | 6 | subagent: `/suno` または `/lyria` | 音楽エンジンに応じたプロンプト生成を委譲し、メインが成果物を検証する | `suno-prompts.json` または Lyria 設計 |
 | 7 | subagent: `/loop-video` または静止背景運用 | `loop-video.enabled=true` なら生成を委譲しメインが検証。`enabled=false` なら Veo を呼ばず、メインが既存 textless `main.png/jpg` を静止背景として使う | `10-assets/loop.mp4` または textless `10-assets/main.png/jpg` |
 | 8 | subagent: `uv run yt-collection-serve`（Suno のみ） | server 起動と疎通確認を委譲し、結果をメインが検証する | `http://localhost:<PORT>` |
@@ -289,21 +289,40 @@ uv run yt-populate-scene-phrases <collection-dir-name> \
 
 ##### 2c-1. サムネイル候補生成
 
-このステップはサムネイル候補の生成までを行う。候補の承認と確定は 2c-2 に一元化する。`mode: full` では承認ゲートではなく自動確定分岐として実行する。
+このステップは採用済み企画プレビューの確定、またはプレビューが無い場合のサムネイル候補生成までを行う。候補の承認と確定は 2c-2 に一元化する。`mode: full` では承認ゲートではなく自動確定分岐として実行する。
 
 1. **企画成果物を collection に固定**:
-   - 選択した企画のプレビュー画像は企画参照として保存する。`10-assets/main.png` にはコピーしない
+   - 選択した企画のプレビュー画像は `10-assets/planning-preview.png` に保存する。`10-assets/main.png/jpg` にはコピーしない
    - Phase 1 の企画候補一覧と選択結果を `20-documentation/` に保存
    - プレビューディレクトリの自セッション分を削除
 
-2. **サムネイル skill を順番に処理**:
+2. **企画プレビューの有無を決定的に解決**:
+
+   ```bash
+   uv run python .claude/skills/thumbnail/references/finalize_planning_preview.py <collection-path>
+   ```
+
+   - `status: FINALIZED`: `planning-preview.png` を RGB JPEG へ原子的に形式変換した同じ画像内容の `10-assets/thumbnail.jpg` が確定済み。文字入り候補の AI 生成、再選択、thumbnail の AskUserQuestion を行わず、2c-2 の品質検証へ進む
+   - `status: MISSING`: 空ファイルや代替画像を作らず、下記の既存 `/thumbnail <theme>` フォールバックへ進む
+   - コマンド失敗、symlink、画像として読めない入力、JPEG 検証失敗: 既存 `thumbnail.jpg` と state を変更せず停止する
+
+3. **`status: MISSING` の場合だけサムネイル skill を順番に処理**:
    - `single_step` モードまたは `image_generation.provider: codex` を含め、mode / provider にかかわらず、メインが対象 collection、Phase 1 で確定し `workflow-state.json::theme` に保存した theme、生成対象 `thumbnail` を指定して Agent ツールで `/thumbnail <theme>` の Subagent Contract を委譲する。subagent はテキスト付き候補と `20-documentation/thumbnail-prompts.md` を生成するが、承認、確定コピー、state 更新は行わない。`mode: full` では生成可否を質問せず `-y` 相当で進める
    - メインの承認・確定と 2c-2 の別 subagent 委譲を合わせ、テキスト付き `10-assets/thumbnail.jpg` を先に生成・承認し、承認済み `thumbnail.jpg` からテキストなし `10-assets/main.png` または `main.jpg` を再生成する既存 `/thumbnail` 契約を維持する
-   - メインが候補ファイルと `thumbnail-prompts.md` の存在を検証する。ここでは AskUserQuestion、確定コピー、state 更新を行わず Phase 2d へ進む
+   - メインが候補ファイルと `thumbnail-prompts.md` の存在を検証する。ここでは AskUserQuestion、確定コピー、state 更新を行わず 2c-2 へ進む
 
 ##### 2c-2. サムネイル承認・確定 + 音楽素材生成
 
 このステップにテキスト付き候補の承認ゲートと `mode: full` の自動確定分岐を一元化する。最初に thumbnail の `config.default.yaml` と `config/skills/thumbnail.yaml` を deep-merge し、`textless.enabled` を確定する。未設定は既定の `true` として扱う。以下の 1〜4 は mode 別に実行する。
+
+**`planning-preview.png` から確定済み**:
+
+1. 企画選択時に承認済みの同じ画像なので、文字入り候補の生成・再選択・thumbnail の AskUserQuestion は行わない。`10-assets/thumbnail.jpg` を `/thumbnail-compare` で 320px 視認性検証し、署名・透かし・ロゴ・手指破綻の既存目視 QA を通す。失敗時は state を更新せず停止する
+2. QA 成功後に `uv run python .claude/skills/thumbnail/references/archive-approved-thumbnail.py <collection-path>` を実行する。archive の Hard Gate は既存契約どおり維持する
+3. `textless.enabled` が未設定または `true` なら、確定した `thumbnail.jpg` を入力、生成対象 `main` を指定して別 subagent へ委譲する。`mode: full` は生成可否と textless 背景承認を質問せず既存の check 成功後に確定し、それ以外は既存どおり textless 候補だけをプレビュー・承認して `main.png/jpg` へ確定する。`false` なら textless 生成・承認を省略し、`share_thumbnail_as_main.py <collection-path>` を実行して `status: SHARED`、同一 SHA-256、`main.png` 不在を検証する
+4. `thumbnail.jpg` と `main.png/jpg` の確定検証後だけ `assets.thumbnail = true`、`thumbnail.approved = true`、`updated_at` を更新する。この `thumbnail.jpg` を再度 AskUserQuestion にかけない
+
+以下の mode 別分岐は `status: MISSING` から既存 `/thumbnail` フォールバックへ進んだ場合だけ実行する。
 
 **`mode: full`**:
 
