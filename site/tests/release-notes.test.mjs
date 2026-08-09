@@ -96,12 +96,21 @@ test("DADS key と neutral token を system mode の site 配色へ割り当て�
     sourceCss,
     /--release-extension:\s*var\(--color-neutral-solid-gray-700\)/
   );
+  assert.match(sourceCss, /--release-border:\s*var\(--color-neutral-solid-gray-420\)/);
   assert.match(
     sourceCss,
-    /:root\[data-theme=["']dark["']\][\s\S]*--release-main:\s*var\(--color-key-400\)[\s\S]*--release-extension:\s*var\(--color-neutral-solid-gray-300\)/
+    /:root\[data-theme=["']dark["']\][\s\S]*--release-main:\s*var\(--color-key-400\)[\s\S]*--release-extension:\s*var\(--color-neutral-solid-gray-300\)[\s\S]*--release-border:\s*var\(--color-neutral-solid-gray-600\)/
+  );
+  assert.match(
+    sourceCss,
+    /:root\[data-theme=["']dark["']\][\s\S]*--release-main-bg:\s*color-mix\(in srgb, var\(--color-key-400\) 8%, transparent\)/
   );
   assert.match(sourceCss, /color:\s*var\(--color-muted-foreground\)/);
-  assert.match(sourceCss, /border:\s*1px solid var\(--color-border\)/);
+  assert.match(sourceCss, /border:\s*1px solid var\(--release-border\)/);
+  assert.match(
+    sourceCss,
+    /\.release-card:hover\s*\{[\s\S]*border-color:\s*color-mix\(in srgb, var\(--release-main\) 60%, transparent\)/
+  );
   assert.doesNotMatch(sourceCss, /#[0-9a-f]{3,8}\b/i);
   assert.doesNotMatch(sourceCss, /#7c3aed|#0f766e|--color-text-muted/i);
   assert.doesNotMatch(
@@ -112,6 +121,8 @@ test("DADS key と neutral token を system mode の site 配色へ割り当て�
   assert.match(generatedCss, /--color-key-400/);
   assert.match(generatedCss, /--color-neutral-solid-gray-700/);
   assert.match(generatedCss, /--color-neutral-solid-gray-300/);
+  assert.match(generatedCss, /--release-border:var\(--color-neutral-solid-gray-420\)/);
+  assert.match(generatedCss, /--release-border:var\(--color-neutral-solid-gray-600\)/);
   assert.doesNotMatch(generatedCss, /#7c3aed|#0f766e/i);
 });
 
