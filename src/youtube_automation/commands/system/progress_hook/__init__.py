@@ -11,7 +11,9 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import TextIO
 
-_STAGES = ("企画", "音源生成", "マスター化", "動画化", "サムネイル", "アップロード", "公開後処理", "分析")
+from youtube_automation.commands.system.progress_hook.workflow_state import STAGES as _STAGES
+from youtube_automation.commands.system.progress_hook.workflow_state import load_progress_snapshot
+
 _STAGE_COMMANDS = {
     "音源生成": ("yt-generate-lyria-master", "yt-generate-suno", "yt-suno-unattended-request"),
     "マスター化": ("yt-generate-master", "yt-finalize-master"),
@@ -31,6 +33,7 @@ class _Invocation:
     tool_input: Mapping[object, object]
     stage: str | None
     command_name: str | None
+    cwd: str | None
 
 
 def _nonempty_string(value: object) -> str | None:
@@ -57,7 +60,8 @@ def _parse_invocation(payload: object) -> _Invocation | None:
     event = _nonempty_string(payload.get("hook_event_name")) or "PreToolUse"
     command = _nonempty_string(tool_input.get("command"))
     stage, command_name = _classify_command(command)
-    return _Invocation(event, tool_name, tool_input, stage, command_name)
+    cwd = _nonempty_string(payload.get("cwd"))
+    return _Invocation(event, tool_name, tool_input, stage, command_name, cwd)
 
 
 def _should_display(invocation: _Invocation) -> bool:
@@ -93,16 +97,26 @@ def _unclassified_detail(invocation: _Invocation) -> str:
 
 def _render(invocation: _Invocation) -> str:
     completed = invocation.event == "PostToolUse"
+    command = _nonempty_string(invocation.tool_input.get("command"))
+    snapshot = load_progress_snapshot(invocation.cwd, command)
     lines = ["```"]
     if invocation.stage is None:
         for index, stage in enumerate(_STAGES):
-            marker = "✓" if index <= 2 else "○"
+            marker = (
+                "✓"
+                if (snapshot is not None and stage in snapshot.completed_stages) or (snapshot is None and index <= 2)
+                else "○"
+            )
             lines.append(f"  {marker}  {stage}")
         lines.append(f"  ⋯  {_unclassified_detail(invocation)}")
     else:
         current_index = _STAGES.index(invocation.stage)
         for index, stage in enumerate(_STAGES):
-            if index < current_index or (completed and index == current_index):
+            if snapshot is not None and not completed and index == current_index:
+                marker = "▸"
+            elif snapshot is not None:
+                marker = "✓" if stage in snapshot.completed_stages else "○"
+            elif index < current_index or (completed and index == current_index):
                 marker = "✓"
             elif index == current_index:
                 marker = "▸"
