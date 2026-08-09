@@ -86,6 +86,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `docs(automation-release)`: Python 本体と Chrome 拡張の GitHub Release publish 完了後、同一 release 情報から公開リリースノート案を生成し、明示承認後だけ branch protection 下の専用 PR へ載せる post-release flow を追加した。site は PR pending とし、merge 後に production 公開される。既存の Python / extension publish contract は変更しない（#3586）。
 - `feat(suno-helper)`: prompt entry の `duration_sec` が明示された場合、解決済みの Custom Duration button を押してから既存の bridge-first / keydown fallback 経路で Duration slider へ秒数を注入するようにした（#3160）。
 - `feat(suno-helper)`: prompt entry の optional な `duration_sec` を wire 型で受理し、明示された数値を失わず保持するようにした（#3153）。
 - `docs(suno)`: optional な `duration_sec` の単位・値域・明示時のみ全 entry へ出力する契約と、生成後の採用範囲を担う `duration_filter` との責務分離を配布設定と Suno 手順へ記載した（#3133）。
