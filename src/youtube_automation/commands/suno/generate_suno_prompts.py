@@ -309,7 +309,7 @@ class _ResolvedPattern:
     lyrics_by_scene: list[str]  # scenes と同じ長さ。各値は rstrip 済み。歌詞が無ければ ""
 
 
-# suno-prompts.json へ wire する More Options の key 一覧 (#900, vocal_gender 追加)。
+# suno-prompts.json へ wire する More Options の key 一覧 (#900, vocal_gender / duration_sec 追加)。
 # JSON への反映は **channel override (config/skills/suno.yaml) に明示設定されたキーのみ**。
 # config.default.yaml 同梱の既定値 (style_influence: 50 等) は JSON には載せない
 # (= 「何も足さない既存 collection は name/style/lyrics の 3 キーちょうど」の後方互換を守るため)。
@@ -317,9 +317,9 @@ class _ResolvedPattern:
 # vocal_gender は suno-helper 拡張が Suno UI Voice section の Male / Female ボタン押下に使う
 # (拡張型契約: "male" | "female" | "neutral" | "auto")。空文字は「未指定」として JSON 出力から省く
 # (_build_advanced_json_fields の skip ロジック参照)。
-_ADVANCED_JSON_KEYS = ("style_influence", "weirdness", "exclude_styles", "vocal_gender")
-_VOCAL_GENDERS = frozenset({"male", "female", "neutral", "auto"})
 _DURATION_SEC_KEY = "duration_sec"
+_ADVANCED_JSON_KEYS = ("style_influence", "weirdness", "exclude_styles", "vocal_gender", _DURATION_SEC_KEY)
+_VOCAL_GENDERS = frozenset({"male", "female", "neutral", "auto"})
 
 
 def _validate_duration_sec_override(override: Mapping[str, object]) -> None:
