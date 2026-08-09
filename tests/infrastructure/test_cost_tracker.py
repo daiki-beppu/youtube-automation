@@ -95,14 +95,14 @@ def test_log_generation_image_records_metadata_with_null_cost(tmp_channel: Path)
     """
     entry = cost_tracker.log_generation(
         "image",
-        model="gemini-3.1-flash-image-preview",
+        model="gemini-3.1-flash-image",
         quantity=1,
         unit="image",
         metadata={"image_size": "2K", "aspect_ratio": "16:9"},
     )
     assert entry is not None
     assert entry["category"] == "image"
-    assert entry["model"] == "gemini-3.1-flash-image-preview"
+    assert entry["model"] == "gemini-3.1-flash-image"
     assert entry["unit"] == "image"
     assert entry["estimated_cost_usd"] is None
     assert entry["metadata"]["image_size"] == "2K"
@@ -195,7 +195,7 @@ def test_log_generation_gpt_image_2_keeps_image_size_metadata_without_cost(tmp_c
 @pytest.mark.parametrize(
     "category, model, unit",
     [
-        ("image", "gemini-3.1-flash-image-preview", "image"),
+        ("image", "gemini-3.1-flash-image", "image"),
         ("video", "veo-3.1-lite-generate-preview", "second"),
         ("audio", "lyria-3-pro-preview", "song"),
     ],
@@ -252,7 +252,7 @@ def test_log_generation_uses_fcntl_when_available(tmp_channel: Path, monkeypatch
 
     entry = cost_tracker.log_generation(
         "image",
-        model="gemini-3.1-flash-image-preview",
+        model="gemini-3.1-flash-image",
         quantity=1,
         unit="image",
     )
@@ -387,7 +387,7 @@ def test_log_generation_retries_msvcrt_lock_contention(tmp_channel: Path, monkey
 
     entry = cost_tracker.log_generation(
         "image",
-        model="gemini-3.1-flash-image-preview",
+        model="gemini-3.1-flash-image",
         quantity=1,
         unit="image",
     )
@@ -433,7 +433,7 @@ def test_log_generation_does_not_retry_non_contention_msvcrt_errors(tmp_channel:
 
     entry = cost_tracker.log_generation(
         "image",
-        model="gemini-3.1-flash-image-preview",
+        model="gemini-3.1-flash-image",
         quantity=1,
         unit="image",
     )
@@ -470,7 +470,7 @@ def test_log_generation_stops_after_msvcrt_contention_retry_limit(tmp_channel: P
 
     entry = cost_tracker.log_generation(
         "image",
-        model="gemini-3.1-flash-image-preview",
+        model="gemini-3.1-flash-image",
         quantity=1,
         unit="image",
     )
@@ -513,7 +513,7 @@ def test_log_generation_releases_msvcrt_lock_when_write_fails(tmp_channel: Path,
 
     entry = cost_tracker.log_generation(
         "image",
-        model="gemini-3.1-flash-image-preview",
+        model="gemini-3.1-flash-image",
         quantity=1,
         unit="image",
     )
@@ -558,7 +558,7 @@ def test_log_generation_without_platform_file_lock_preserves_threaded_writes(tmp
 @pytest.mark.parametrize(
     "category, model",
     [
-        ("image", "gemini-3.1-flash-image-preview"),
+        ("image", "gemini-3.1-flash-image"),
         ("video", "veo-3.1-lite-generate-preview"),
         ("audio", "lyria-3-pro-preview"),
     ],
@@ -580,7 +580,7 @@ def test_log_generation_rejects_empty_unit(tmp_channel: Path):
     with pytest.raises(ValueError, match="unit"):
         cost_tracker.log_generation(
             "image",
-            model="gemini-3.1-flash-image-preview",
+            model="gemini-3.1-flash-image",
             quantity=1,
             unit="",
         )
@@ -594,7 +594,7 @@ def test_log_generation_rejects_empty_unit(tmp_channel: Path):
 def test_read_all_combines_all_categories(tmp_channel: Path):
     cost_tracker.log_generation(
         "image",
-        model="gemini-3.1-flash-image-preview",
+        model="gemini-3.1-flash-image",
         quantity=1,
         unit="image",
         metadata={"image_size": "1K"},
@@ -629,7 +629,7 @@ def test_read_log_reads_legacy_float_estimated_cost_usd(tmp_channel: Path):
                 {
                     "timestamp": "2026-04-01T10:00:00+00:00",
                     "category": "image",
-                    "model": "gemini-3.1-flash-image-preview",
+                    "model": "gemini-3.1-flash-image",
                     "quantity": 1,
                     "unit": "image",
                     "estimated_cost_usd": 0.04,
@@ -709,7 +709,7 @@ def test_print_last_report_omits_usd_jpy(tmp_channel: Path, capsys):
     """
     cost_tracker.log_generation(
         "image",
-        model="gemini-3.1-flash-image-preview",
+        model="gemini-3.1-flash-image",
         quantity=1,
         unit="image",
         metadata={"image_size": "2K"},
@@ -740,7 +740,7 @@ def test_print_summary_shows_monthly_counts_only(tmp_channel: Path, capsys):
                 {
                     "timestamp": "2026-03-15T10:00:00+00:00",
                     "category": "image",
-                    "model": "gemini-3.1-flash-image-preview",
+                    "model": "gemini-3.1-flash-image",
                     "quantity": 1,
                     "unit": "image",
                     "estimated_cost_usd": None,
@@ -749,7 +749,7 @@ def test_print_summary_shows_monthly_counts_only(tmp_channel: Path, capsys):
                 {
                     "timestamp": "2026-04-10T10:00:00+00:00",
                     "category": "image",
-                    "model": "gemini-3.1-flash-image-preview",
+                    "model": "gemini-3.1-flash-image",
                     "quantity": 1,
                     "unit": "image",
                     "estimated_cost_usd": None,
@@ -796,7 +796,7 @@ def test_print_last_report_with_null_cost_does_not_emit_dollar(tmp_channel: Path
     """
     cost_tracker.log_generation(
         "image",
-        model="gemini-3.1-flash-image-preview",
+        model="gemini-3.1-flash-image",
         quantity=1,
         unit="image",
         metadata={"image_size": "2K"},
@@ -840,7 +840,7 @@ def test_log_generation_rejects_cost_usd_keyword(tmp_channel: Path):
     with pytest.raises(TypeError, match="cost_usd"):
         cost_tracker.log_generation(
             "image",
-            model="gemini-3.1-flash-image-preview",
+            model="gemini-3.1-flash-image",
             quantity=1,
             unit="image",
             cost_usd=0.04,  # type: ignore[call-arg]

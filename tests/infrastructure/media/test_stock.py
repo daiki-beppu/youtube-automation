@@ -89,7 +89,7 @@ class TestArchiveToStock:
                 "source_role": "thumbnail_candidate",
                 "prompt": "warm candlelit interior",
                 "provider": "gemini",
-                "model": "gemini-3.1-flash-image-preview",
+                "model": "gemini-3.1-flash-image",
             },
             channel_dir=channel,
         )

@@ -316,7 +316,7 @@ def test_cli_default_summary_appends_quota_when_present(tmp_channel: Path, monke
     When 引数なしで yt-cost-report を実行
     Then 生成サマリに続けて quota サマリが表示される。
     """
-    cost_tracker.log_generation("image", model="gemini-3.1-flash-image-preview", quantity=1, unit="image")
+    cost_tracker.log_generation("image", model="gemini-3.1-flash-image", quantity=1, unit="image")
     cost_tracker.log_quota("youtube-data-api", "videos.insert", 1600)
     capsys.readouterr()
     assert _run_cli(monkeypatch, []) == 0
@@ -330,7 +330,7 @@ def test_cli_default_summary_without_quota_is_backward_compatible(tmp_channel: P
     When 引数なしで yt-cost-report を実行
     Then 従来どおり生成サマリのみで quota セクションは表示されない。
     """
-    cost_tracker.log_generation("image", model="gemini-3.1-flash-image-preview", quantity=1, unit="image")
+    cost_tracker.log_generation("image", model="gemini-3.1-flash-image", quantity=1, unit="image")
     capsys.readouterr()
     assert _run_cli(monkeypatch, []) == 0
     out = capsys.readouterr().out
