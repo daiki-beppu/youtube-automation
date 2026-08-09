@@ -10,7 +10,7 @@ description: "Use when コレクションの YouTube コミュニティ投稿を
 
 ## Hard Gates
 
-- `CLAUDE.md` と `docs/adr/0019-community-helper-extension.md` を読む。
+- `CLAUDE.md` を読む。
 - `config/channel/community-draft.json` が存在し、`load_config().community_draft.posts`
   が空でないこと。欠落時は
   `examples/channel_config.example/community-draft.example.json` をコピーしてチャンネル値へ
@@ -33,8 +33,7 @@ generator が exit 0 で終了し、`<collection>/30-promo/community-posts.json`
 `config/channel/community-draft.json::community_draft` の投稿テンプレートから
 `<collection>/30-promo/community-posts.json` を決定的に生成する。実行モードは
 `--batch` のみ。変数解決・日時計算・path 検証・JSON schema の単一ソースは
-`references/generate_batch.py` と `docs/adr/0019-community-helper-extension.md` とし、
-SKILL.md 側で再実装しない。
+`references/generate_batch.py` とし、SKILL.md 側で再実装しない。
 
 ## 実行
 
