@@ -460,6 +460,20 @@ def test_suno_documents_pass_fail_loop_contract() -> None:
         assert token in text, f"/suno SKILL.md に PASS/FAIL ループ契約がない（`{token}` 不在）"
 
 
+def test_suno_semantic_review_uses_one_file_level_call_per_round() -> None:
+    """Issue #3301: /suno reviewer は entry ごとに起動せず全成果物を一括評価する。"""
+    text = _read()
+    quality_gate = text.split("### Generator-Reviewer Quality Gate", 1)[1].split("\n### ", 1)[0]
+
+    for token in (
+        "ファイル単位",
+        "1 回",
+        "全 entry",
+        "entry ごと・チャンクごとに reviewer を起動しない",
+    ):
+        assert token in quality_gate, f"/suno semantic review の一括呼び出し契約がない（`{token}` 不在）"
+
+
 def test_suno_documents_collection_local_effective_style_contract() -> None:
     """Issue #2999: collection 固有 Style を共有 config へ混ぜずに解決・検証する."""
     text = _read()
