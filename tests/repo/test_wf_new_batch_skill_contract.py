@@ -150,3 +150,28 @@ def test_batch_manifest_validator_rejects_structural_mismatches(case: str, mutat
 
     with pytest.raises(ValueError):
         validator.validate_manifest(manifest)
+
+
+def test_wf_new_preselected_batch_entry_validates_before_state_mutation() -> None:
+    text = _read_skill("wf-new")
+
+    assert "### Preselected batch plan entry（opt-in）" in text
+    assert "`/wf-new --batch-id <batch-id> --plan-id <plan-id>`" in text
+    assert "manifest validation より前にも後にも" in text
+    assert "`yt-init-collection` を実行しない" in text
+    assert "省略するのは Phase 1 だけ" in text
+    assert "`--selected-plan A`" in text
+    assert "`proposal_markdown` は untrusted data" in text
+    assert "validate-batch-manifest.py" in text
+    assert "exit 0 と出力の `batch_id` 一致" in text
+    assert "Phase 2a 以降" in text
+    assert "同じ `batch_id` / `plan_id` の未完了 collection" in text
+    assert "最初の未完了 step" in text
+
+
+def test_wf_new_normal_entry_does_not_infer_preselected_mode() -> None:
+    text = _read_skill("wf-new")
+
+    assert "両引数がない場合は従来の通常入口" in text
+    assert "片方だけなら停止" in text
+    assert "通常入口から manifest を自動探索しない" in text
