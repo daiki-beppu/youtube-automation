@@ -77,6 +77,19 @@ class TestCheckCollection:
         assert ok
         assert line.startswith("[OK]")
 
+    def test_suno_artifact_content_is_outside_skeleton_validation(self, tmp_path):
+        """Suno artifact の内容に関係なく、標準骨格だけを検証する."""
+        collection = _make_collection(tmp_path, "20260701-tc-suno-artifact-collection")
+        (collection / "20-documentation" / "suno-patterns.yaml").write_text(
+            "genre_line: " + "x" * 121 + "\n",
+            encoding="utf-8",
+        )
+
+        ok, line = check_collection(collection, fix=False)
+
+        assert ok
+        assert line.startswith("[OK]")
+
     def test_missing_master_dir_is_ng(self, tmp_path):
         """issue #1494 の実事例: 01-master だけが欠落しているケース。"""
         subdirs = [s for s in REQUIRED_SUBDIRS if s != "01-master"]
@@ -199,3 +212,12 @@ class TestMainExitCodes:
     def test_no_targets_exits_zero(self, tmp_path, monkeypatch, capsys):
         self._run(monkeypatch, ["--planning-root", str(tmp_path)])
         assert "検証対象" in capsys.readouterr().out
+
+    def test_help_identifies_standard_skeleton_as_the_validation_scope(self, monkeypatch, capsys):
+        monkeypatch.setattr(sys, "argv", ["yt-collection-preflight", "--help"])
+
+        with pytest.raises(SystemExit) as exc:
+            main()
+
+        assert exc.value.code == 0
+        assert "標準ディレクトリ骨格のみを検証・補完する" in capsys.readouterr().out
