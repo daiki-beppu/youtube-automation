@@ -1,5 +1,6 @@
 import {
   DEFAULT_DURATION_FILTER,
+  type DownloadSummary,
   type DurationFilter,
   playlistNameForCollection,
   type PromptEntry,
@@ -1525,6 +1526,7 @@ export default defineContentScript({
       const stalledEntryIndices: number[] = [];
       let queueClipIdsByEntry: Map<number, string[]> | null = null;
       let keepResumeStateForDownloadRetry = false;
+      let downloadSummary: DownloadSummary | undefined;
       let playlistPersistInfo: PlaylistClipPersistInfo | null = null;
       // 中断 entry を永続化し、reload 後の ResumeBanner で続きから再開できるようにする。
       // ERROR phase (#872 要件3) と STOPPED phase (#898 要件1/2/3) の共通処理。failedIndex 名は
@@ -2273,19 +2275,20 @@ export default defineContentScript({
             unattended?.request.downloadFormat
           );
           assertUnattendedUiIsSafe();
-          const downloadError = await downloadFlow.downloadBestEffort(
+          const downloadResult = await downloadFlow.downloadBestEffortResult(
             downloadContext,
             collectionId,
             total,
             verifiedPlaylistClipCount
           );
-          keepResumeStateForDownloadRetry = downloadError !== null;
-          if (downloadError !== null) {
+          downloadSummary = downloadResult.summary;
+          keepResumeStateForDownloadRetry = downloadResult.error !== null;
+          if (downloadResult.error !== null) {
             emitProgress({
               phase: PHASE.ERROR,
               index: total,
               total,
-              message: downloadError,
+              message: downloadResult.error,
             });
             return;
           }
@@ -2342,7 +2345,11 @@ export default defineContentScript({
           );
         }
       }
-      emitProgress({ phase: PHASE.FINISHED, total });
+      emitProgress({
+        phase: PHASE.FINISHED,
+        total,
+        ...(downloadSummary === undefined ? {} : { downloadSummary }),
+      });
       // run 一式完了時リロード (#1411 要件2)。playlist 追加で作った multi-select 状態は
       // Suno 内部 state に残り、同一タブの次 run の Cmd+P に混入するためページごと破棄する。
       // collection mode の run は playlist phase を実行するため対象。
