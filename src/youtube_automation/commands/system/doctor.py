@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import argparse
+import importlib.metadata
 import io
 import json
 import os
 import re
 import shlex
 import shutil
+import site
 import stat
 import subprocess
 import sys
@@ -310,15 +312,41 @@ def _is_automation_project(project_name: Optional[str]) -> bool:
     return project_name is not None and _canonical_package_name(project_name) == AUTOMATION_PACKAGE_NAME
 
 
-def _has_automation_tool() -> bool:
-    returncode, stdout, _ = _run(["uv", "tool", "list"])
-    if returncode != 0:
-        return False
-    return any(
-        _canonical_package_name(line.split(maxsplit=1)[0]) == AUTOMATION_PACKAGE_NAME
-        for line in stdout.splitlines()
-        if line and not line[0].isspace()
-    )
+def _path_is_within(path: Path, root: Path) -> bool:
+    return path == root or root in path.parents
+
+
+def _uv_tool_root() -> Path | None:
+    returncode, stdout, _ = _run(["uv", "tool", "dir"])
+    if returncode != 0 or not stdout.strip():
+        return None
+    return Path(stdout.strip()).expanduser().resolve()
+
+
+def _running_global_installation_mode() -> str | None:
+    try:
+        distribution = importlib.metadata.distribution(AUTOMATION_PACKAGE_NAME)
+    except importlib.metadata.PackageNotFoundError:
+        return None
+
+    installation_path = Path(distribution.locate_file("")).resolve()
+    installer_text = distribution.read_text("INSTALLER")
+    installer = installer_text.strip().lower() if installer_text is not None else None
+
+    if sys.prefix == sys.base_prefix:
+        if installer == "pip":
+            user_site = Path(site.getusersitepackages()).expanduser().resolve()
+            return "pip user" if _path_is_within(installation_path, user_site) else "pip system"
+        return "global（installer 不明）"
+
+    tool_root = _uv_tool_root()
+    if (
+        tool_root is not None
+        and _path_is_within(Path(sys.prefix).resolve(), tool_root)
+        and _path_is_within(installation_path, tool_root)
+    ):
+        return "uv tool"
+    return None
 
 
 def _skills_sync_failure(message: str) -> CheckResult:
@@ -446,12 +474,13 @@ def check_uv() -> CheckResult:
 def check_uv_project(channel_dir: Path) -> CheckResult:
     pyproject_path = _bootstrap_root(channel_dir) / PYPROJECT_FILENAME
     if not pyproject_path.exists():
-        if _has_automation_tool():
+        installation_mode = _running_global_installation_mode()
+        if installation_mode is not None:
             return CheckResult(
                 id="uv_project",
                 status="ok",
                 category=BOOTSTRAP_CATEGORY,
-                message="uv tool 導入済み（uv project 初期化不要）",
+                message=f"{installation_mode} 導入済み（uv project 初期化不要）",
             )
         return CheckResult(
             id="uv_project",
@@ -473,12 +502,13 @@ def check_uv_project(channel_dir: Path) -> CheckResult:
 def check_automation_package(channel_dir: Path) -> CheckResult:
     pyproject_path = _bootstrap_root(channel_dir) / PYPROJECT_FILENAME
     if not pyproject_path.exists():
-        if _has_automation_tool():
+        installation_mode = _running_global_installation_mode()
+        if installation_mode is not None:
             return CheckResult(
                 id="automation_package",
                 status="ok",
                 category=BOOTSTRAP_CATEGORY,
-                message="uv tool で automation パッケージ導入済み",
+                message=f"{installation_mode} で automation パッケージ導入済み",
             )
         return CheckResult(
             id="automation_package",
@@ -513,12 +543,13 @@ def check_automation_package(channel_dir: Path) -> CheckResult:
             message="automation パッケージ本体プロジェクト",
         )
     if not _has_automation_dependency(dependencies):
-        if _has_automation_tool():
+        installation_mode = _running_global_installation_mode()
+        if installation_mode is not None:
             return CheckResult(
                 id="automation_package",
                 status="ok",
                 category=BOOTSTRAP_CATEGORY,
-                message="uv tool で automation パッケージ導入済み",
+                message=f"{installation_mode} で automation パッケージ導入済み",
             )
         return CheckResult(
             id="automation_package",
@@ -534,7 +565,7 @@ def check_automation_package(channel_dir: Path) -> CheckResult:
         id="automation_package",
         status="ok",
         category=BOOTSTRAP_CATEGORY,
-        message="automation パッケージ導入済み",
+        message="uv project で automation パッケージ導入済み",
     )
 
 
