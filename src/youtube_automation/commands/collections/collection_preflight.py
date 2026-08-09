@@ -42,7 +42,7 @@ def _resolve_targets(collections: list[str], planning_root: Path | None) -> list
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="コレクションの標準ディレクトリ骨格を検証・補完する")
+    parser = argparse.ArgumentParser(description="コレクションの標準ディレクトリ骨格のみを検証・補完する")
     parser.add_argument("collections", nargs="*", help="対象コレクション（ディレクトリ名 or パス）")
     parser.add_argument("--fix", action="store_true", help="欠落サブディレクトリを冪等に作成する")
     parser.add_argument("--planning-root", type=Path, default=None, help="planning ディレクトリの明示指定")
