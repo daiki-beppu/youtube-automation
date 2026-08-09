@@ -1251,6 +1251,25 @@ class TestDetectDuplicateTrackTitles:
         # 表現は元のタイトルどちらか 1 つに正規化される（実装依存）が、indices は両方含む
         assert any(sorted(v) == [0, 1] for v in result.values())
 
+    def test_canonical_suno_clip_variants_are_grouped_by_track_title(self, tmp_path, monkeypatch):
+        collection = tmp_path / "20260810-live-night-focus"
+        music_dir = collection / "02-Individual-music"
+        music_dir.mkdir(parents=True)
+        (music_dir / "01a-Headphones On At Two.m4a").write_bytes(b"audio")
+        (music_dir / "01b-Headphones On At Two.m4a").write_bytes(b"audio")
+
+        gen = _make_generator("20260810-live-night-focus")
+        gen.collection_path = collection
+        monkeypatch.setattr(gen, "_get_audio_duration", lambda _path: 60)
+
+        tracks = gen.analyze_audio_files()
+
+        assert [track["title"] for track in tracks] == [
+            "Headphones on at Two",
+            "Headphones on at Two",
+        ]
+        assert gen.detect_duplicate_track_titles() == {"Headphones on at Two": [0, 1]}
+
 
 # ===========================================================================
 # 16. 同名楽曲リネームの適用と永続化

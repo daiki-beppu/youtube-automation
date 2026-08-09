@@ -233,6 +233,9 @@ class BAHMetadataGenerator:
         # プレフィックス削除 ("8bit ")
         title = re.sub(r"^8bit\s+", "", title, flags=re.IGNORECASE)
 
+        # 同じ曲の clip variant を番号込みの別タイトルとして扱わない
+        title = re.sub(r"^\d{2,}[ab]-", "", title, flags=re.IGNORECASE)
+
         # 番号プレフィックス削除 ("01-", "02-" 等)
         title = re.sub(r"^\d{2}-", "", title)
 
