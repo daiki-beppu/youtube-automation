@@ -97,7 +97,7 @@ class TestVariablesTf:
         block = extract_block(text, r'variable\s+"channel_slug"')
         assert block is not None, 'variable "channel_slug" が存在しない'
         assert re.search(r"type\s*=\s*string", block), "channel_slug.type が string でない"
-        assert re.search(r'default\s*=\s*""', block), 'channel_slug.default が空文字でない'
+        assert re.search(r'default\s*=\s*""', block), "channel_slug.default が空文字でない"
         assert re.search(r"description\s*=", block), "channel_slug.description が無い"
 
 
