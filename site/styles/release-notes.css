@@ -56,15 +56,77 @@
   margin: 1.5rem 0 0;
 }
 
-.release-sections {
+.doc-sections {
   display: grid;
   gap: clamp(3rem, 7vw, 5rem);
   margin-top: clamp(3rem, 7vw, 5rem);
 }
 
-.release-section > h2 {
+.doc-section > h2 {
   font-size: clamp(1.6rem, 3vw, 2.25rem);
   letter-spacing: -0.035em;
+  margin: 0 0 1.5rem;
+}
+
+.doc-section-lead {
+  color: var(--color-muted-foreground);
+  line-height: 1.75;
+  margin: -0.75rem 0 2rem;
+}
+
+.doc-list {
+  display: grid;
+  gap: 1rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.doc-card {
+  border: 1px solid var(--release-border);
+  border-radius: 1rem;
+  color: inherit;
+  display: block;
+  height: 100%;
+  padding: clamp(1.25rem, 3vw, 1.75rem);
+  text-decoration: none;
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.doc-card:hover {
+  border-color: color-mix(in srgb, var(--release-main) 60%, transparent);
+  box-shadow: 0 18px 50px color-mix(in srgb, var(--release-main) 10%, transparent);
+  transform: translateY(-2px);
+}
+
+.doc-card h3 {
+  font-size: clamp(1.2rem, 2.5vw, 1.5rem);
+  letter-spacing: -0.025em;
+  margin: 0;
+}
+
+.doc-card p {
+  color: var(--color-muted-foreground);
+  line-height: 1.7;
+  margin: 0.75rem 0 0;
+}
+
+.doc-card span {
+  color: var(--release-main);
+  display: inline-block;
+  font-size: 0.875rem;
+  font-weight: 700;
+  margin-top: 1rem;
+}
+
+.release-sections {
+  display: grid;
+  gap: clamp(3rem, 7vw, 5rem);
+}
+
+.release-section > h3 {
+  font-size: clamp(1.35rem, 2.5vw, 1.75rem);
+  letter-spacing: -0.03em;
   margin: 0 0 1.5rem;
 }
 
@@ -72,7 +134,7 @@
   margin-top: 2rem;
 }
 
-.release-scale > h3 {
+.release-scale > h4 {
   color: var(--color-muted-foreground);
   font-size: clamp(1.1rem, 2vw, 1.35rem);
   letter-spacing: -0.02em;
@@ -132,7 +194,7 @@
   color: var(--release-extension);
 }
 
-.release-card h4 {
+.release-card h5 {
   font-size: clamp(1.45rem, 3vw, 2rem);
   letter-spacing: -0.025em;
   margin: 1.1rem 0 0.55rem;
@@ -163,12 +225,14 @@
 }
 
 @media (min-width: 52rem) {
+  .doc-list,
   .release-list {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .doc-card,
   .release-card,
   .release-link span {
     transition: none;
