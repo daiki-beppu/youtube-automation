@@ -74,6 +74,7 @@ cd infra/terraform/streaming
 cp terraform.tfvars.example terraform.tfvars
 # → video_path を絶対パスに書き換え
 # → allowed_ssh_cidr を operator の IP/32 に書き換え（例: ["203.0.113.5/32"]、`curl -s ifconfig.me` で取得）
+# → 複数チャンネル運用では channel_slug を設定（例: `005ch-abyss`）
 
 export TF_VAR_vultr_api_key=$(op read 'op://Personal/Vultr/api_key')
 export TF_VAR_stream_key=$(op read 'op://Personal/YouTube/stream_key')
@@ -85,6 +86,8 @@ terraform apply
 ```
 
 apply 完了で 1 本目の配信が即開始。`terraform output -raw instance_ip` で IP を確認。
+
+`channel_slug` を指定すると Vultr の instance `label` / `tags` は `youtube-stream-<channel_slug>` になり、複数チャンネルの VPS を一覧で識別できる。未指定時は従来の `youtube-stream` を維持する。Vultr provider では hostname 変更が instance の replace を誘発するため、`hostname` は `youtube-stream` のまま変更しない。
 
 `terraform plan` / `apply` は、ローカルに `ffprobe` があれば配信元 MP4 をプリフライト検証する。`run-ffmpeg.sh` は `-c:v copy` で映像をストリームコピーするため、ソース動画のキーフレーム間隔・ビットレート・H.264 profile が YouTube Live 品質をそのまま決める。キーフレーム最大間隔 > 4 秒、または 1080p で 4,500 Kbps 未満 / 720p で 2,500 Kbps 未満なら plan 時点で止まる。H.264 High profile 以外は warning。`ffprobe` が無い場合は soft skip される。
 

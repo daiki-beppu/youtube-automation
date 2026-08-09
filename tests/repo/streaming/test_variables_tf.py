@@ -88,6 +88,18 @@ class TestVariablesTf:
         assert re.search(r"default\s*=\s*2284\b", block), "os_id.default が 2284 でない"
         assert re.search(r"description\s*=", block), "os_id.description が無い（マジックナンバー禁止）"
 
+    def test_channel_slug_is_optional_string_with_empty_default(self):
+        """Given variables.tf
+        When channel_slug 変数定義を読む
+        Then string 型かつ空文字 default で既存名を維持する。
+        """
+        text = strip_hcl_comments(read_file(_VARIABLES_TF))
+        block = extract_block(text, r'variable\s+"channel_slug"')
+        assert block is not None, 'variable "channel_slug" が存在しない'
+        assert re.search(r"type\s*=\s*string", block), "channel_slug.type が string でない"
+        assert re.search(r'default\s*=\s*""', block), "channel_slug.default が空文字でない"
+        assert re.search(r"description\s*=", block), "channel_slug.description が無い"
+
 
 # ============================================================================
 # variables.tf — #125 追加変数（video_path / stream_key）

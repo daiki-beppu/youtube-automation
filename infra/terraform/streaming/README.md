@@ -81,6 +81,7 @@ terraform workspace select <workspace>
 export TF_VAR_video_path="$(realpath /path/to/<workspace>/video.mp4)"
 export TF_VAR_stream_key="$(op read 'op://Personal/<workspace>-YouTube/stream_key')"
 export TF_VAR_discord_webhook_url="$(op read 'op://Personal/<workspace>-Discord-Webhook/url')"
+export TF_VAR_channel_slug="<workspace>"
 
 # workspace → state → plan の順で照合する
 terraform workspace show
@@ -91,7 +92,9 @@ terraform plan
 terraform apply
 ```
 
-`terraform workspace show` が意図した `<workspace>` と完全一致することを最初に確認する。既存 workspace では `terraform state list` がそのチャンネルの既存リソースを示すこと、新規 workspace では意図どおり空であることを確認する。最後に `terraform plan` の対象動画、作成・変更・削除されるリソースが選択中のチャンネルに限られることを確認する。workspace が違う、既存 state が空、または plan に別チャンネルの削除・置換や想定外の変更が含まれる場合は **apply しない**。正しい workspace を再選択し、3 つの `TF_VAR_*` を再注入して `workspace show` から確認し直す。
+`terraform workspace show` が意図した `<workspace>` と完全一致することを最初に確認する。既存 workspace では `terraform state list` がそのチャンネルの既存リソースを示すこと、新規 workspace では意図どおり空であることを確認する。最後に `terraform plan` の対象動画、作成・変更・削除されるリソースが選択中のチャンネルに限られることを確認する。workspace が違う、既存 state が空、または plan に別チャンネルの削除・置換や想定外の変更が含まれる場合は **apply しない**。正しい workspace を再選択し、4 つの `TF_VAR_*` を再注入して `workspace show` から確認し直す。
+
+`channel_slug` は Vultr instance の `label` / `tags` を `youtube-stream-<channel_slug>` にして一覧上の識別を可能にする。未指定時は従来の `youtube-stream` のままで差分は出ない。Vultr provider v2.32 では `hostname` が ForceNew のため、既存 instance を replace しないよう hostname は固定する。
 
 ## 既存 Vultr リソースの import
 

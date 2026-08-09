@@ -28,6 +28,12 @@ variable "os_id" {
   default     = 2284
 }
 
+variable "channel_slug" {
+  type        = string
+  description = "Vultr instance の label / tags に付与するチャンネル識別子。空文字は従来の youtube-stream を維持する"
+  default     = ""
+}
+
 variable "video_path" {
   type        = string
   description = "VPS にアップロードするローカル動画ファイルの絶対パス（環境依存のため必須項目）"
