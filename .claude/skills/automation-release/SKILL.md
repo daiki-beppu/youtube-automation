@@ -127,6 +127,23 @@ git checkout -b "release/v${VER}"
 `Edit` ツールで `pyproject.toml` の `version = "X.Y.Z"` 行のみ差し替える。
 他のフィールドや CLI 一覧には触らない。
 
+#### 1-3a. Python module 移動監査
+
+<!-- import-migration-audit-contract:start -->
+1. previous tag から HEAD までの production module 差分を rename 検出付きで取得する。
+
+   ```bash
+   previous_tag=$(git tag --list 'v[0-9]*' --sort=-v:refname | head -1)
+   test -n "${previous_tag}" || { echo "ERROR: previous Python tag が見つかりません"; exit 1; }
+   git diff --find-renames --name-status "${previous_tag}..HEAD" -- src/youtube_automation
+   ```
+
+2. rename として検出されなかった deleted / added module は、内容・責務・git history を確認して **手動 D/A pairing** する。package marker を含む各候補について、旧 module が HEAD に残る互換 facade か、facade 無し移動かを分類する。
+3. facade 無し移動のうち、旧 path が **documented / exported / known-downstream-use** のいずれかなら下流影響対象とする。判断根拠と old/new path を監査結果に残す。
+4. 対象 move ごとに `[Unreleased]` の `### Migration` を照合する。`Python module 移動: あり`、`互換 facade: なし`、旧→新の **fully-qualified** `youtube_automation.*` row が全件揃わなければならない。1件でも未記載なら release prepare を停止し、CHANGELOG を補完してから再監査する。
+5. 対象となる facade 無し移動が 0 件なら、監査結果と `### Migration` に `Python module 移動: なし` を明示する。
+<!-- import-migration-audit-contract:end -->
+
 #### 1-4. CHANGELOG.md の昇格
 
 `references/changelog-promotion.md` の 3 段階手順をそのまま実行する。
