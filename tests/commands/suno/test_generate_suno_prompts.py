@@ -22,6 +22,7 @@ _SKILL_MD = REPO_ROOT / ".claude" / "skills" / "suno" / "SKILL.md"
 _CONFIG_RULES_MD = REPO_ROOT / ".claude" / "skills" / "channel-new" / "references" / "config-generation-rules.md"
 _STYLE_VARIANTS_UNSET = object()
 _EXCLUDE_STYLES_UNSET = object()
+_VOCAL_GENDER_UNSET = object()
 
 
 @pytest.fixture
@@ -1497,6 +1498,7 @@ def _write_patterns_with_explicit_entries(
     *,
     style_variants: object = _STYLE_VARIANTS_UNSET,
     exclude_styles: object = _EXCLUDE_STYLES_UNSET,
+    vocal_gender: object = _VOCAL_GENDER_UNSET,
 ) -> Path:
     """name_jp / name_en を明示した複数 entry の yaml を書き出す.
 
@@ -1512,6 +1514,8 @@ def _write_patterns_with_explicit_entries(
         payload["style_variants"] = style_variants
     if exclude_styles is not _EXCLUDE_STYLES_UNSET:
         payload["exclude_styles"] = exclude_styles
+    if vocal_gender is not _VOCAL_GENDER_UNSET:
+        payload["vocal_gender"] = vocal_gender
     path = dir_ / "patterns.yaml"
     path.write_text(yaml.safe_dump(payload, allow_unicode=True), encoding="utf-8")
     return path
@@ -1802,6 +1806,57 @@ def test_build_prompt_entries_omits_empty_vocal_gender(channel_dir, tmp_path):
     entries = build_prompt_entries(patterns_path)
 
     assert "vocal_gender" not in entries[0]
+
+
+def test_collection_vocal_gender_overrides_channel_for_every_json_entry(channel_dir, tmp_path):
+    """collection の vocal_gender は全 JSON entry で channel より優先する."""
+    _write_suno_override(channel_dir, genre_line="lo-fi jazz", vocal_gender="male")
+    patterns_path = _write_patterns_with_explicit_entries(
+        tmp_path,
+        entries=[
+            {"name_jp": "屋上", "name_en": "Rooftop", "tempo": "slow", "scenes": ["quiet rooftop"]},
+            {"name_jp": "書斎", "name_en": "Study", "tempo": "gentle", "scenes": ["warm study"]},
+        ],
+        tracks_top=4,
+        vocal_gender="female",
+    )
+
+    entries = build_prompt_entries(patterns_path)
+
+    assert all(entry["vocal_gender"] == "female" for entry in entries)
+
+
+def test_collection_empty_vocal_gender_omits_channel_value_from_every_json_entry(channel_dir, tmp_path):
+    """collection の空文字は channel 値へ fallback せず JSON から省略する."""
+    _write_suno_override(channel_dir, genre_line="lo-fi jazz", vocal_gender="male")
+    patterns_path = _write_patterns_with_explicit_entries(
+        tmp_path,
+        entries=[
+            {"name_jp": "屋上", "name_en": "Rooftop", "tempo": "slow", "scenes": ["quiet rooftop"]},
+            {"name_jp": "書斎", "name_en": "Study", "tempo": "gentle", "scenes": ["warm study"]},
+        ],
+        tracks_top=4,
+        vocal_gender="",
+    )
+
+    entries = build_prompt_entries(patterns_path)
+
+    assert all("vocal_gender" not in entry for entry in entries)
+
+
+@pytest.mark.parametrize("vocal_gender", [None, "other"])
+def test_collection_vocal_gender_rejects_values_outside_json_contract(channel_dir, tmp_path, vocal_gender):
+    """collection の vocal_gender が拡張の型契約外なら生成前に拒否する."""
+    _write_suno_override(channel_dir, genre_line="lo-fi jazz")
+    patterns_path = _write_patterns_with_explicit_entries(
+        tmp_path,
+        entries=[{"name_jp": "屋上", "name_en": "Rooftop", "tempo": "slow", "scenes": ["quiet rooftop"]}],
+        tracks_top=2,
+        vocal_gender=vocal_gender,
+    )
+
+    with pytest.raises(ConfigError, match=r"patterns\.yaml.*vocal_gender.*male.*female.*neutral.*auto"):
+        build_prompt_entries(patterns_path)
 
 
 def test_build_prompt_entries_omits_advanced_fields_without_channel_override(channel_dir, tmp_path):
