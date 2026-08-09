@@ -16,7 +16,7 @@ Complete Collection を YouTube にアップロードし、`planning/` → `live
 
 - **collection 型**: Complete Collection のアップロードが完了し、コレクションが `collections/live/` へ移動、`20-documentation/upload_tracking.json` に記録されている
 - **release 型（単曲リリース）**: `content_model.languages` の全言語分のアップロード・プレイリスト追加・概要欄の相互リンク更新が完了している
-- 公開タイミングを、collection 型では `--plan` の結果（即時公開 / 予約公開 / 限定・非公開）どおりにユーザーへ案内済み
+- 公開タイミングを、collection 型では `--plan` の結果（予約公開 / 非公開アップロード / 限定・非公開）どおりにユーザーへ案内済み
 
 ## Subagent Contract
 
@@ -114,8 +114,8 @@ $ARGUMENTS
 
 `content_model.type = "collection"` のとき、以下を自動実行:
 
-0. **公開タイミング確定（必須）** — ユーザーに公開方法を案内・確認する前に必ず `uv run yt-upload-collection --plan [-c NAME]` を実行し、実際の公開挙動を確定する。`config/schedule_config.json` の予約設定や `config/channel/youtube.json` の既定時刻により、`privacy=public` でも `status.publishAt` が設定される場合があるため、plan 結果なしに「即時公開」と案内しない
-   - この turn でユーザーが指定した「即時公開 / 予約公開」と plan 結果が衝突したら upload しない。相違（要求と実効設定）を提示し、設定変更または今回の要求撤回を人間に選んでもらってから plan を再実行する。会話を黙って durable config で上書きしない
+0. **公開タイミング確定（必須）** — ユーザーに公開方法を案内・確認する前に必ず `uv run yt-upload-collection --plan [-c NAME]` を実行し、実際の公開挙動を確定する。`config/schedule_config.json` の予約設定や `config/channel/youtube.json` の既定時刻により、予約公開または非公開アップロードになるため、plan 結果をそのまま案内する
+   - この turn でユーザーが即時公開を指定しても、アップローダーは即時公開しない。予約設定を追加して再 plan するか、非公開でアップロード後に YouTube Studio で手動公開するかを人間に選んでもらう。会話を黙って durable config で上書きしない
 1. **Complete Collection アップロード** — マスター動画、メタデータ（descriptions.md から読み込み）、サムネイル設定
 2. **live 移動** — `collections/planning/` → `collections/live/`
 3. **公開後処理** — `load_config().workflow.post_publish.configured` が `true` なら、live 移動後のコレクションパスを `/post-publish` に引き継ぎ、manifest 順の `community-post → pinned-comment → metadata-audit` を実行する。チェーン側の承認・履歴・再開契約に委ね、ここで子スキルを個別に再実装しない。未設定（`false`）なら後方互換として、`config/channel/community.json` が存在する場合だけ従来どおり `/community-post` を案内し、後続 2 スキルは手動実行のままとする
@@ -159,28 +159,28 @@ uv run yt-upload-auto
 
 ### 予約投稿（スケジュール公開）
 
-CC は `config/schedule_config.json` の `schedule` セクションに応じて即時公開と予約公開を切り替える。
+CC は `config/schedule_config.json` の `schedule` セクションに応じて予約公開し、予約日時が無い場合は安全のため非公開でアップロードする。
 
 - **予約公開を有効化** — 以下のいずれかを `schedule` 内に設定する:
   - `auto_schedule_enabled: true`（明示的に有効化）
   - `cadence: ["tue", "thu", "sat"]` のような曜日リスト（暗黙オプトイン）
   - `publish_time: "20:00"` のような時刻指定（暗黙オプトイン）
 - **チャンネル既定時刻** — `config/channel/youtube.json` の `youtube.default_publish_time` / `default_publish_timezone` を設定すると、`schedule_config.json` で予約設定が無い場合の fallback として次回の予約時刻を自動適用する
-- **即時公開のまま** — `auto_schedule_enabled: false` を明示すれば、他のキーが設定されていても即時公開を強制する
-- **今回の直接指定との衝突** — AskUserQuestion 等で今回「即時公開」を選んでも、設定を暗黙上書きする意味にはならない。`--plan` が予約日時を返したら conflict として停止し、設定を変更して再 plan するか、予約公開を受け入れるかを再確認する
+- **自動予約を無効化** — `auto_schedule_enabled: false` を明示すると予約日時を設定せず、`privacy_status=public` でも非公開でアップロードする
+- **今回の直接指定との衝突** — AskUserQuestion 等で今回「即時公開」を選んでも即時公開は行わない。予約設定を変更して再 plan するか、非公開アップロード後の手動公開を選ぶ
 
 collection 型では、ユーザーに公開方法を提示する前の挙動確認は必ず `--plan` を実行する。`--plan` はアップロード API は叩かないが、予約日時計算のため YouTube read API を呼ぶ場合がある:
 
 ```bash
 uv run yt-upload-collection --plan -c <NAME>
 # → "📅 公開予定: 2026-06-15T20:00:00+09:00" が出れば予約公開、
-#   "📅 公開設定: 即時公開 (public)" なら即時公開、
+#   "📅 公開設定: 非公開でアップロード（即時公開は行いません）" ならアップロード後に手動公開、
 #   "📅 公開設定: 限定公開 (unlisted)" / "📅 公開設定: 非公開 (private)" ならその公開範囲でアップロード
 ```
 
-「即時公開」と断定してよいのは、plan 結果が `📅 公開設定: 即時公開 (public)` の場合のみ。`📅 公開設定: 限定公開 (unlisted)` / `📅 公開設定: 非公開 (private)` が出た場合は、その公開範囲でアップロードされることを明示する。`📅 公開予定: <日時>` が出た場合は「今アップロード → `<日時>` に自動で一般公開」と、実際の公開予定時刻を明示して案内する。
+`📅 公開設定: 非公開でアップロード（即時公開は行いません）` が出た場合は、予約設定を追加するか、アップロード後に YouTube Studio で手動公開するかを案内する。`📅 公開設定: 限定公開 (unlisted)` / `📅 公開設定: 非公開 (private)` が出た場合は、その公開範囲でアップロードされることを明示する。`📅 公開予定: <日時>` が出た場合は「今アップロード → `<日時>` に自動で一般公開」と、実際の公開予定時刻を明示して案内する。
 
-詳細とトラブルシュート（"設定したのに即時公開された" の早期発見手順）は `references/scheduled-publish.md` を参照。
+詳細とトラブルシュートは `references/scheduled-publish.md` を参照。
 
 ### API ステータス設定（自動適用）
 

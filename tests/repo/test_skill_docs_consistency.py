@@ -954,7 +954,7 @@ def test_upload_schedule_plan_must_precede_publish_guidance() -> None:
 
     for text in (video_upload, wf_next, posting_checklist, scheduled_publish):
         assert "uv run yt-upload-collection --plan" in text
-        assert "📅 公開設定: 即時公開 (public)" in text
+        assert "📅 公開設定: 非公開でアップロード（即時公開は行いません）" in text
         assert "📅 公開設定: 限定公開 (unlisted)" in text
         assert "📅 公開設定: 非公開 (private)" in text
         assert "📅 公開予定" in text

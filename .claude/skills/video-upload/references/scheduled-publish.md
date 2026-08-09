@@ -11,6 +11,8 @@ YouTube Data API の `status.publishAt` を使った予約公開の正しい設�
 
 これにより YouTube 上で **「予約済み（scheduled）」状態** になる。`status.publishAt` を設定するには `privacyStatus=private` が必須（API 仕様）。
 
+予約日時が無く `privacy_status="public"` の場合も、アップローダーは即時公開を抑止して `private` へ降格する。公開経路は予約公開、または非公開アップロード後に YouTube Studio で手動公開する方法に限る。
+
 ## 予約公開の有効化
 
 `schedule_config.json` の `schedule` セクションに以下のいずれかを設定する:
@@ -65,9 +67,9 @@ YouTube Data API の `status.publishAt` を使った予約公開の正しい設�
 - 明示 `publish_at` を渡した場合は、その値が最優先される
 - 既定時刻が今日すでに過ぎている場合は翌日の同時刻を使う
 
-### 即時公開を強制
+### 自動予約を無効化
 
-`auto_schedule_enabled: false` を **明示** すれば、他のキーが設定されていても即時公開する:
+`auto_schedule_enabled: false` を **明示** すれば、他のキーが設定されていても予約日時を付けない。`privacy_status="public"` でも即時公開はせず、非公開でアップロードする:
 
 ```json
 {
@@ -90,10 +92,10 @@ uv run yt-upload-collection --plan -c <COLLECTION_NAME>
 ```
 
 - 予約公開時 → `📅 公開予定: 2026-06-15T20:00:00+09:00`
-- 即時公開時 → `📅 公開設定: 即時公開 (public)`
+- 予約日時なし・`public` 時 → `📅 公開設定: 非公開でアップロード（即時公開は行いません）`
 - 限定公開時 → `📅 公開設定: 限定公開 (unlisted)`
 - 非公開時 → `📅 公開設定: 非公開 (private)`
-- 「設定したのに即時公開」の場合は `⚠️  schedule.auto_schedule_enabled が false ...` という警告が出る
+- 予約設定らしいキーがあるのに `auto_schedule_enabled: false` の場合は、予約公開を有効にするための警告が出る
 
 ### 2. 実アップロード後の YouTube 側状態確認
 
@@ -125,11 +127,11 @@ curl -H "Authorization: Bearer $(gcloud auth print-access-token)" \
 
 ## トラブルシュート
 
-### Q. 予約日時を指定したのに即時公開された
+### Q. 予約日時が付かず非公開でアップロードされた
 
 1. `--plan` で `schedule_config.json` の有効性を確認
-2. `auto_schedule_enabled: false` が明示されていないか確認（明示 false は即時を強制する）
-3. `config/channel/youtube.json` の `privacy_status` が `"public"` の場合、`publish_at` が `None` だと公開されるので、上記設定で予約日時が計算されているか改めて `--plan` で確認
+2. `auto_schedule_enabled: false` が明示されていないか確認（明示 false は自動予約を無効にする）
+3. 予約公開するなら設定を直して再度 `--plan` を実行する。今回だけ公開するなら、非公開アップロード後に YouTube Studio で手動公開する
 
 ### Q. publish_time の TZ がズレる
 
@@ -144,7 +146,7 @@ curl -H "Authorization: Bearer $(gcloud auth print-access-token)" \
 
 ## 関連
 
-- `agents/_published_dates.py::_calculate_publish_at` — スケジュール計算ロジック（`CollectionUploader` が mixin 経由で使用）
-- `agents/_published_dates.py::_scheduling_enabled` — 有効性判定ヘルパー（#647、`collection_uploader.py` から re-export）
-- `agents/youtube_auto_uploader.py::_normalize_publish_at` — `status.publishAt` の UTC 正規化
+- `domains/uploads/_published_dates.py::_calculate_publish_at` — スケジュール計算ロジック（`CollectionUploader` が mixin 経由で使用）
+- `domains/uploads/_published_dates.py::_scheduling_enabled` — 有効性判定ヘルパー（#647、`collection.py` から使用）
+- `domains/uploads/youtube.py::_normalize_publish_at` — `status.publishAt` の UTC 正規化
 - YouTube Data API: <https://developers.google.com/youtube/v3/docs/videos>

@@ -256,11 +256,11 @@ class CollectionUploader(
             print(f"  📅 公開予定: {publish_at}")
         else:
             privacy_status = load_config().youtube.api.privacy_status
-            privacy_label = {"public": "即時公開", "unlisted": "限定公開", "private": "非公開"}.get(
-                privacy_status, privacy_status
-            )
-            print(f"  📅 公開設定: {privacy_label} ({privacy_status})")
-            if privacy_status != "public":
+            if privacy_status == "public":
+                print("  📅 公開設定: 非公開でアップロード（即時公開は行いません）")
+            else:
+                privacy_label = {"unlisted": "限定公開", "private": "非公開"}.get(privacy_status, privacy_status)
+                print(f"  📅 公開設定: {privacy_label} ({privacy_status})")
                 print("     └ config/channel/youtube.json::privacy_status を反映")
             looks_like_schedule_intent = any(schedule_cfg.get(k) for k in ("cadence", "publish_time", "day1_time"))
             if looks_like_schedule_intent and schedule_cfg.get("auto_schedule_enabled") is False:
