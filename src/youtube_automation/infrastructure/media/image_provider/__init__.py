@@ -21,6 +21,8 @@ from youtube_automation.domains.media.image import (
 from youtube_automation.infrastructure.media.image_provider import prompt_schema
 from youtube_automation.infrastructure.media.image_provider.config import (
     ImageGenerationConfig,
+    _is_retired_subprocess_provider,
+    _retired_subprocess_provider_error,
     parse_image_generation_config,
 )
 from youtube_automation.infrastructure.media.image_provider.prompt_schema import PromptSchema
@@ -59,12 +61,8 @@ def get_provider(cfg: ImageGenerationConfig) -> ImageProvider:
             raise ConfigError("provider=openai だが openai 設定が見つかりません")
         return OpenAIImageProvider(cfg.openai)
 
-    if cfg.provider == "gemini_cli":
-        from youtube_automation.infrastructure.media.image_provider.gemini_cli import GeminiCliImageProvider
-
-        if cfg.gemini_cli is None:
-            raise ConfigError("provider=gemini_cli だが gemini_cli 設定が見つかりません")
-        return GeminiCliImageProvider(cfg.gemini_cli)
+    if _is_retired_subprocess_provider(cfg.provider):
+        raise _retired_subprocess_provider_error(cfg.provider)
 
     if cfg.provider == "codex":
         raise ConfigError(

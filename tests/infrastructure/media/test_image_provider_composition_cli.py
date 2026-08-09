@@ -157,7 +157,6 @@ class TestGenerateImageCliHelperContracts:
             provider="gemini",
             gemini=SimpleNamespace(model="test-model"),
             openai=None,
-            gemini_cli=None,
         )
         monkeypatch.setattr(generate_image, "load_image_generation_config", lambda: cfg)
         monkeypatch.setattr(generate_image, "get_provider", lambda _cfg: provider)

@@ -105,7 +105,7 @@ jq -c 'select(.status == "open" and .lever == "thumbnail")' data/insights.jsonl
 
 | API | call 数 / 実行 | 変動要因 |
 |---|---|---|
-| 画像生成（Gemini / OpenAI、`image_generation.provider` で切替） | 候補 1 枚あたり max_attempts × 1 call（既定 1、失敗時の内部リトライで最大 ×3） | max_attempts / 候補枚数 / 再生成回数。provider が codex / gemini_cli は API 経路外で課金なし |
+| 画像生成（Gemini / OpenAI、`image_generation.provider` で切替） | 候補 1 枚あたり max_attempts × 1 call（既定 1、失敗時の内部リトライで最大 ×3） | max_attempts / 候補枚数 / 再生成回数。provider が codex は API 経路外で課金なし |
 | 画像生成（textless 背景 main.png/jpg） | 承認後の再生成で +1 call | 再生成回数 |
 | Vertex AI Gemini Vision（yt-thumbnail-check） | 画像 1 枚 = 1 call | `self_check.enabled: false` なら 0 |
 

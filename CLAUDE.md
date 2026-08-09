@@ -14,6 +14,7 @@ YouTube チャンネル運営を自動化するツールキット。`youtube-cha
 - パッケージ内 import は `from youtube_automation.xxx import ...` の fully-qualified 固定
 - 新規 CLI は必ず `yt-*` プレフィックスで `pyproject.toml::[project.scripts]` に登録。CLI は SKILL.md から呼ばれるインターフェースなので、引数は `choices=` / `help=` で自己記述にする
 - `google-auth-httplib2` の直 import を新規追加しない（回帰テストで機械担保。経緯は `docs/migration/google-auth-httplib2.md`）
+- Gemini の画像生成は Vertex AI（ADC）経路に統一し、Gemini CLI の subprocess 起動を追加しない（回帰テストで機械担保）
 - スクリプトは該当 skill の `.claude/skills/<skill>/references/` 配下に置く。ルート直下に `scripts/` を設けない
 - skill の実体は常に `.claude/skills/` 側（`.agents/skills` は Codex 用 symlink — 編集しない）。SKILL.md frontmatter の `description:` は double-quoted 必須（値内の `: ` が strict YAML で誤解釈される）。検証は `uv run yt-skills lint`
 - `.claude/skills/` と `.claude/CLAUDE.template.md` は wheel に force-include される。バージョン bump は `pyproject.toml::version` のみ（`__version__` は動的読込）

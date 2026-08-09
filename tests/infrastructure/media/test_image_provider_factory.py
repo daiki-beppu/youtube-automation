@@ -11,13 +11,11 @@ import pytest
 from youtube_automation.core.errors import ConfigError
 from youtube_automation.infrastructure.media.image_provider import get_provider
 from youtube_automation.infrastructure.media.image_provider.config import (
-    GeminiCliConfig,
     GeminiConfig,
     ImageGenerationConfig,
     OpenAIConfig,
 )
 from youtube_automation.infrastructure.media.image_provider.gemini import GeminiImageProvider
-from youtube_automation.infrastructure.media.image_provider.gemini_cli import GeminiCliImageProvider
 from youtube_automation.infrastructure.media.image_provider.openai import OpenAIImageProvider
 
 
@@ -47,13 +45,6 @@ def _codex_config() -> ImageGenerationConfig:
     return ImageGenerationConfig(provider="codex", gemini=None, openai=None)
 
 
-def _gemini_cli_config() -> ImageGenerationConfig:
-    return ImageGenerationConfig(
-        provider="gemini_cli",
-        gemini_cli=GeminiCliConfig(model="gemini-2.5-flash-image-preview", image_size="2K"),
-    )
-
-
 class TestGetProvider:
     def test_returns_gemini_provider_when_provider_is_gemini(self):
         # Given
@@ -77,24 +68,20 @@ class TestGetProvider:
         assert isinstance(provider, OpenAIImageProvider)
         assert provider.name == "openai"
 
-    def test_returns_gemini_cli_provider_when_provider_is_gemini_cli(self):
-        # Given
-        cfg = _gemini_cli_config()
+    def test_rejects_retired_gemini_cli_provider_with_vertex_ai_guidance(self):
+        # Given: 設定境界を迂回した廃止 provider
+        cfg = _gemini_config()
+        object.__setattr__(cfg, "provider", "gemini_cli")
 
         # When
-        provider = get_provider(cfg)
+        with pytest.raises(ConfigError) as exc_info:
+            get_provider(cfg)
 
         # Then
-        assert isinstance(provider, GeminiCliImageProvider)
-        assert provider.name == "gemini_cli"
-
-    def test_gemini_cli_without_subconfig_raises_config_error(self):
-        # Given: provider=gemini_cli だが sub-config が None
-        cfg = ImageGenerationConfig(provider="gemini_cli", gemini_cli=None)
-
-        # When / Then
-        with pytest.raises(ConfigError, match="gemini_cli"):
-            get_provider(cfg)
+        message = str(exc_info.value)
+        assert "gemini_cli は廃止されました" in message
+        assert "provider: gemini" in message
+        assert "Vertex AI" in message
 
     def test_unknown_provider_raises_config_error(self):
         # Given: 強制的に provider 名を破壊（ImageGenerationConfig は frozen でも

@@ -399,12 +399,12 @@ class TestParseImageGenerationConfig:
     def test_supported_providers_declares_codex(self):
         """Given provider 設定の許容値
         When SUPPORTED_PROVIDERS を読む
-        Then codex / gemini_cli が gemini/openai と同じ provider 値として列挙される。
+        Then codex が gemini/openai と同じ provider 値として列挙される。
         """
-        assert SUPPORTED_PROVIDERS == ("gemini", "openai", "codex", "gemini_cli")
+        assert SUPPORTED_PROVIDERS == ("gemini", "openai", "codex")
 
-    def test_parses_image_generation_namespace_for_gemini_cli(self):
-        """#474: provider=gemini_cli で GeminiCliConfig が組み立てられる。"""
+    def test_rejects_retired_gemini_cli_provider_with_vertex_ai_guidance(self):
+        """廃止 provider は汎用エラーではなく Vertex AI 経路へ誘導する。"""
         # Given
         skill_cfg = {
             "image_generation": {
@@ -419,43 +419,14 @@ class TestParseImageGenerationConfig:
         }
 
         # When
-        cfg = parse_image_generation_config(skill_cfg)
+        with pytest.raises(ConfigError) as exc_info:
+            parse_image_generation_config(skill_cfg)
 
         # Then
-        assert cfg.provider == "gemini_cli"
-        assert cfg.gemini_cli is not None
-        assert cfg.gemini_cli.model == "gemini-2.5-flash-image-preview"
-        assert cfg.gemini_cli.image_size == "2K"
-        assert cfg.gemini_cli.timeout_seconds == 120
-        assert cfg.gemini_cli.generation_mode == "single_step"
-        # 他 provider の sub-config は埋めない
-        assert cfg.gemini is None
-        assert cfg.openai is None
-
-    def test_gemini_cli_uses_defaults_when_subconfig_omitted(self):
-        """#474: gemini_cli sub-config 省略時は既定値で組み立てる。"""
-        # Given
-        skill_cfg = {"image_generation": {"provider": "gemini_cli"}}
-
-        # When
-        cfg = parse_image_generation_config(skill_cfg)
-
-        # Then
-        assert cfg.provider == "gemini_cli"
-        assert cfg.gemini_cli.model == "gemini-2.5-flash-image-preview"
-        assert cfg.gemini_cli.image_size == "2K"
-        assert cfg.gemini_cli.timeout_seconds == 300
-
-    def test_replace_model_overrides_gemini_cli_model(self):
-        """#474: replace_model が gemini_cli の active provider 側モデルを差し替える。"""
-        # Given
-        cfg = parse_image_generation_config({"image_generation": {"provider": "gemini_cli"}})
-
-        # When
-        replaced = replace_model(cfg, "gemini-3.0-flash-image-preview")
-
-        # Then
-        assert replaced.gemini_cli.model == "gemini-3.0-flash-image-preview"
+        message = str(exc_info.value)
+        assert "gemini_cli は廃止されました" in message
+        assert "provider: gemini" in message
+        assert "Vertex AI" in message
 
     def test_replace_model_overrides_only_gemini_model(self):
         cfg = ImageGenerationConfig(
@@ -492,7 +463,6 @@ class TestParseImageGenerationConfig:
         [
             ImageGenerationConfig(provider="gemini", gemini=None),
             ImageGenerationConfig(provider="openai", openai=None),
-            ImageGenerationConfig(provider="gemini_cli", gemini_cli=None),
         ],
     )
     def test_replace_model_rejects_missing_active_subconfig(self, cfg):
