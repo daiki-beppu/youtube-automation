@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `fix(masterup)`: Step 5.1 のラウドネス検証スクリプトが見つからない場合を、逸脱 FAIL の exit 2 ではなく起動エラーの exit 1 として明示する事前検証を追加した（#3317）。
+
 - `fix(video-upload)`: post-upload の `playlistItems.insert` 失敗を workflow と CLI へ伝播し、プレイリスト割り当て成功前の completed state 確定・live 移動・workflow 更新を防ぐ（#3717）。
 - `fix(video-description)`: Suno の正準 `NN{a|b}-Title` ファイル名から clip index を除去して同一曲の variant を重複検出し、表示名リネーム手順へ確実に渡す（#3316）。
 - `fix(suno)`: 同梱 `exclude_styles` の既定を空にし、チャンネルまたは collection が明示した場合だけ Suno の Exclude Styles 欄を使うように変更（#3313）。
