@@ -1351,7 +1351,7 @@ describe("shared/api postDownloaded: 異常系 (fail-loud)", () => {
     });
     vi.stubGlobal("fetch", fetchFn);
 
-    const request = postDownloaded(BASE_URL, "20260601-clm-aaa-collection", {
+    const request = postDownloaded(BASE_URL, "retry collection/slash", {
       file_count: 0,
       format: "mp3",
       suno_playlist_url: "https://suno.com/playlist/test",
@@ -1359,8 +1359,11 @@ describe("shared/api postDownloaded: 異常系 (fail-loud)", () => {
 
     await expect(request).rejects.toMatchObject({
       method: "POST",
-      path: "/collections/20260601-clm-aaa-collection/downloaded",
+      path: "/collections/retry%20collection%2Fslash/downloaded",
       status: 403,
+      statusText: "Forbidden",
+      message:
+        "POST /collections/retry%20collection%2Fslash/downloaded failed: 403 Forbidden",
     });
     await expect(request).rejects.toBeInstanceOf(ApiRequestError);
     await expect(request).rejects.not.toThrow(/GET \/auth\/token/);
@@ -1436,7 +1439,7 @@ describe("shared/api postDownloaded: 異常系 (fail-loud)", () => {
     expect(fetchFn).toHaveBeenCalledTimes(1);
   });
 
-  it("Given HTTP 500 When postDownloaded Then ステータスを含めて throw する", async () => {
+  it("Given HTTP 500 When postDownloaded Then encode 済み endpoint とステータスを含めて throw する", async () => {
     mockFetchForDownloaded(() => ({
       ok: false,
       status: 500,
@@ -1444,13 +1447,20 @@ describe("shared/api postDownloaded: 異常系 (fail-loud)", () => {
       json: async () => ({}),
     }));
 
-    await expect(
-      postDownloaded(BASE_URL, "20260601-clm-aaa-collection", {
-        file_count: 0,
-        format: "mp3",
-        suno_playlist_url: "https://suno.com/playlist/test",
-      })
-    ).rejects.toThrow(/POST downloaded failed: 500/);
+    const request = postDownloaded(BASE_URL, "collection with spaces/slash", {
+      file_count: 0,
+      format: "mp3",
+      suno_playlist_url: "https://suno.com/playlist/test",
+    });
+
+    await expect(request).rejects.toMatchObject({
+      method: "POST",
+      path: "/collections/collection%20with%20spaces%2Fslash/downloaded",
+      status: 500,
+      statusText: "Internal Server Error",
+      message:
+        "POST /collections/collection%20with%20spaces%2Fslash/downloaded failed: 500 Internal Server Error",
+    });
   });
 });
 
