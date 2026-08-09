@@ -143,6 +143,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `feat(suno-helper)`: unattended preflight・Create 直前・生成完了待ち中の challenge 検知を共通記録経路へ接続し、検知箇所と run・pacing・inflight の実行コンテキストを区別して蓄積するようにした（#3435）。
 - `feat(suno-helper)`: overlay で蓄積済み challenge 履歴の総件数と直近 5 件を確認し、安全な全レコードを JSON として clipboard へコピーできるようにした（#2984）。
 
+- `feat(streaming)`: Terraform apply 完了時、healthcheck の Discord webhook が空または空白だけなら、1Password からの export コマンドと再 apply 手順を非機密 output で警告する。設定済みの場合は警告を表示せず、未設定でも明示的に空値を渡した apply は従来どおり完走する（#3460）。
 - `docs(adr)`: ADR-0024「クラウド移譲アーキテクチャの原則」を追加した。cloud/local 境界を能力ベースの規則 1 本（ブラウザ工程のみ local）で定義し、状態正本の Git 管理移行・工程所有権による分散ロック排除・二重チェック + fail-closed の冪等性・R2 の境界越え受け渡し専用化・マニフェスト = 完了マーカーの受け渡し規約・pull → run → push のサンドイッチ実行モデルを確定した。あわせて architecture の用語集へ「クラウド移譲」節（制御面 / データ面・工程所有権・サンドイッチ実行モデル・受け渡しマニフェスト・MediaStore）を追加した（#3299）。
 - `feat(thumbnail-compare)`: 公開済み live に加えて planning 中コレクションの確定済み `10-assets/thumbnail.jpg` を比較へ収集する。同一実体を重複させず、planning 出力名を stage・collection 単位で分離して既存 live 成果物との衝突を防ぐ（#3230）。
 - `feat(wf-new-batch)`: batch ledger の許可遷移・単一 active plan・current plan 整合性と atomic 保存を実行時に検証し、child が prepared + hard artifacts 完了後に ledger 更新前 crash した場合は same-provenance actual state から workflow-state を変更せず completed へ reconcile できる state helper を追加した。Done 再検証で artifact / provenance drift を検知した completed plan は、reason と resume_action を伴う guarded transition だけ blocked へ戻せる（#3279）。
