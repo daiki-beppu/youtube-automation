@@ -306,7 +306,7 @@ uv run python .claude/skills/thumbnail/references/share_thumbnail_as_main.py <co
 
 1. 「thumbnail-text-profile 適用」節の手順で、フォント選定・コピー生成制約・配置を確定する（profile 不在なら実効デフォルト値のまま進む。エラーにしない）。
 2. ベンチマーク先サムネを参照画像にして、`thumbnail-analysis.md` がある場合はその勝ちパターンも使い、構図・色温度・主役スケール・背景テクスチャを踏襲した textless 背景候補 `main-v*.png/jpg` を生成する。差分プロンプトには `single_step.text_strip_clause` 相当の除去指示を展開し、タイトル文字・字幕・ロゴ・透かしを焼き込ませない（参照画像の選定・プロンプト構築・CLI 引数は「Single-Step / TTP モード」章の機構を流用する）。
-3. 背景候補を `open` と `uv run yt-thumbnail-check <collection-path>/10-assets/main-v1.png --json` で確認する。`mode: full` では `open` と AskUserQuestion を省略し、check が exit 0 かつ期待した画像ファイルが存在するときに `cp main-v1.png main.png` で確定する。それ以外では従来どおりユーザー承認後に `10-assets/main.png` または `10-assets/main.jpg` として確定する。
+3. 背景候補は「手動候補の比較選択 Hard Gate」に従い、各候補を thumbnail check CLI で検証してから比較・選択する。候補が 1 枚なら `uv run yt-thumbnail-check <collection-path>/10-assets/main-v1.png --json` の成功とユーザー承認後に `cp main-v1.png main.png` で確定する。`mode: full` では `open` と AskUserQuestion を省略し、check が exit 0 かつ期待した画像ファイルが存在するときに既存の自動経路で確定する。
 4. 承認済み textless 背景に、profile 適用済みの実効 config で実フォントのタイトルを合成し、テキスト付き候補を作る:
 
 ```bash
@@ -317,13 +317,26 @@ uv run yt-thumbnail-text \
   --output <collection-path>/10-assets/thumbnail-v1.jpg
 ```
 
-5. テキスト付き最終サムネを `10-assets/thumbnail.jpg` として確定する。`mode: full` では候補承認を求めず「自動選択」章の `yt-thumbnail-auto-select <collection-path> --apply` で確定する。それ以外では `/thumbnail-compare` で 320px 視認性検証後にユーザー承認し、`cp thumbnail-v1.jpg thumbnail.jpg` で確定して `uv run python .claude/skills/thumbnail/references/archive-approved-thumbnail.py <collection-path>` を実行する。自動確定後の `/thumbnail-compare` は省略せず別途実行する。
+5. テキスト付き候補は「手動候補の比較選択 Hard Gate」に従い、選択された 1 枚を `10-assets/thumbnail.jpg` として確定する。候補が 1 枚なら `/thumbnail-compare` とユーザー承認後に `cp thumbnail-v1.jpg thumbnail.jpg` で確定する。`auto_selection.enabled: true` では手動比較を行わず「自動選択」章の `yt-thumbnail-auto-select <collection-path> --apply` で確定する。手動・自動とも確定後に `uv run python .claude/skills/thumbnail/references/archive-approved-thumbnail.py <collection-path>` が成功したことを確認する。自動確定後の `/thumbnail-compare` は省略せず別途実行する。
 6. `config/skills/loop-video.yaml::enabled: true` のチャンネルでは、テキストなし `main.png/jpg` を `/loop-video` に渡して `loop.mp4` を生成する。
 7. `config/skills/loop-video.yaml::enabled: false` のチャンネルでは Veo を実行せず、テキストなし `main.png/jpg` を静止画背景として `/videoup` に渡す。
 
 `thumbnail.jpg` はアップロード用、`main.png/jpg` は動画背景・loop-video 入力用の成果物とする。`textless.enabled` が未設定または `true` では文字入りと文字なしを分離し、両者を同一画像で代用しない。`false` だけは上記の検証済みコピーを正規契約とする。symlink や拡張子偽装では代用しない。
 
 決定的合成経路は `text_render.mode: deterministic` の場合だけ使う。未設定 / `ai_burn_in` では上記の textless 先行手順へ入らず、AI 焼き込み経路を実行する。
+
+#### 手動候補の比較選択 Hard Gate
+
+この契約は `thumbnail-v*.jpg/png` と `main-v*.png/jpg` のどちらにも適用する。`auto_selection.enabled: false` / 未設定で、生成に成功した候補が 2 枚以上ある場合は、次の比較選択が完了するまで `thumbnail.jpg` または `main.png/jpg` を確定してはならない。
+
+1. 成功した全候補を `open` で同時に開く。3 枚の JPEG サムネ候補なら `open <collection-path>/10-assets/thumbnail-v{1,2,3}.jpg` とし、候補数・拡張子・`main-v*` に応じてブレース展開を調整する。
+2. Read（Codex では同等の画像閲覧機能）でも成功した候補を 1 枚ずつ表示する。期待した attempt のファイルがない場合は候補から黙って除外せず、該当番号を「生成失敗」と明記する。
+3. テキスト付き候補では、ユーザー選択より前に全候補を `/thumbnail-compare` へ渡し、320px 視認性を比較検証する。textless 背景候補では、各候補を thumbnail check CLI で検証する。
+4. 構図・可読性・検証結果を並べて示し、採用する候補番号（`v1` / `v2` / `v3`）をユーザーから受け取る。番号を受け取る前に先頭候補を暗黙採用しない。
+5. 選択後だけ、成果物の種類と実拡張子に合わせて `cp thumbnail-v<選択番号>.jpg thumbnail.jpg` または `cp main-v<選択番号>.png main.png` を実行する。JPEG の textless 背景なら `.jpg` 同士で確定し、拡張子を偽装しない。
+6. 全案 NG の場合は確定せず、別の `--reference-index` で再生成するか、`diff_prompt_template` の差分指示を見直して再生成する経路を示す。
+
+成功候補が 1 枚だけなら、従来どおりその 1 枚をプレビュー・検証して Yes/No 承認を受け、承認後だけ確定する。`auto_selection.enabled: true` の `selection_only` / `full` ではテキスト付き候補の比較提示・番号選択を行わず、既存の `yt-thumbnail-auto-select` 経路を使う。`full` は既存どおり textless 背景承認も省略し、`selection_only` の textless 背景承認は維持する。
 
 ### Test & compare 用 A/B pattern（opt-in）
 
@@ -446,7 +459,7 @@ uv run yt-generate-image \
 
 stock 画像を別スコープとして混ぜたい場合だけ、`config/skills/thumbnail.yaml` の `image_generation.gemini.reference_images.stock.enabled: true` を明示し、採用ログ stderr の `[INFO] stock 採用: ...` を保存する。stock を混ぜると「同じベンチマークチャンネルの別サムネ」ではなくなるため、生成後の `thumbnail-prompts.md` に attempt ごとの参照元を必ず記録する。
 
-4. `open` でプレビュー → `/thumbnail-compare` で 320px 視認性検証 → ユーザー承認 → `cp thumbnail-v1.jpg thumbnail.jpg` → `uv run python .claude/skills/thumbnail/references/archive-approved-thumbnail.py <collection-path>`
+4. テキスト付き候補は「手動候補の比較選択 Hard Gate」に従い、`/thumbnail-compare` 後にユーザーが指定した候補だけを `thumbnail.jpg` として確定する。成功候補が `thumbnail-v1.jpg` の 1 枚だけなら、単一候補の承認後に `cp thumbnail-v1.jpg thumbnail.jpg` で確定する。確定後に `uv run python .claude/skills/thumbnail/references/archive-approved-thumbnail.py <collection-path>` を実行する。
 5. 承認済み `thumbnail.jpg` を参照画像にして、textless 動画背景を AI 再生成:
 
 ```bash
@@ -531,7 +544,7 @@ Two-Phase は旧チャンネル向けのフォールバック。使う場合も�
 `text_overlay_prompt` が実質単一の入口。旧個別フィールド（`channel_name_style` / `title_format` / `title_prefix` / `copy_position` / `color` / `decoration`）は deprecated で、位置・色・装飾の意図は `text_overlay_prompt` の本文に直接書く（段階的廃止 #1702）。
 
 3. 生成: `uv run yt-generate-image --reference <既存参照画像> --prompt <テキスト指示> --output 10-assets/thumbnail-v1.jpg -y`
-4. `open` でプレビュー → ユーザー承認 → `cp thumbnail-v1.jpg thumbnail.jpg` → `uv run python .claude/skills/thumbnail/references/archive-approved-thumbnail.py <collection-path>`
+4. テキスト付き候補は「手動候補の比較選択 Hard Gate」に従い、`/thumbnail-compare` 後にユーザーが指定した候補だけを `thumbnail.jpg` として確定する。確定後に `uv run python .claude/skills/thumbnail/references/archive-approved-thumbnail.py <collection-path>` を実行する。
 
 #### Phase 3: 承認済み thumbnail から textless main を再生成
 

@@ -399,6 +399,59 @@ def test_thumbnail_skill_documents_ai_burn_in_default_and_deterministic_opt_in()
     assert "テキストなし版の先行確定" not in single_step_block
 
 
+def test_thumbnail_skill_requires_manual_comparison_before_selecting_multiple_candidates() -> None:
+    """#3622: 手動経路では全候補を比較し、選択された候補だけを確定する。"""
+    skill = _read_thumbnail_skill()
+
+    comparison_contract = _slice_between(
+        skill,
+        "#### 手動候補の比較選択 Hard Gate",
+        "### Test & compare 用 A/B pattern（opt-in）",
+    )
+    for required in (
+        "候補が 2 枚以上",
+        "open <collection-path>/10-assets/thumbnail-v{1,2,3}.jpg",
+        "Read（Codex では同等の画像閲覧機能）",
+        "生成失敗",
+        "v1` / `v2` / `v3",
+        "cp thumbnail-v<選択番号>.jpg thumbnail.jpg",
+        "cp main-v<選択番号>.png main.png",
+        "候補が 1 枚",
+        "auto_selection.enabled: true",
+        "selection_only",
+        "full",
+        "別の `--reference-index`",
+        "diff_prompt_template",
+    ):
+        assert required in comparison_contract
+
+    assert comparison_contract.find("`/thumbnail-compare`") < comparison_contract.find("候補番号（`v1` / `v2` / `v3`）")
+    assert comparison_contract.find("候補番号（`v1` / `v2` / `v3`）") < comparison_contract.find(
+        "cp thumbnail-v<選択番号>.jpg thumbnail.jpg"
+    )
+
+    standard_block = _slice_between(
+        skill,
+        "### 標準生成順序とファイル契約",
+        "### Test & compare 用 A/B pattern（opt-in）",
+    )
+    single_step_block = _slice_between(
+        skill,
+        "### Single-Step / TTP モード",
+        "### Two-Phase モード（従来方式・フォールバック）",
+    )
+    two_phase_block = _slice_between(
+        skill,
+        "### Two-Phase モード（従来方式・フォールバック）",
+        "## フォント安定化",
+    )
+
+    assert "背景候補は「手動候補の比較選択 Hard Gate」" in standard_block
+    assert "テキスト付き候補は「手動候補の比較選択 Hard Gate」" in standard_block
+    assert "4. テキスト付き候補は「手動候補の比較選択 Hard Gate」" in single_step_block
+    assert "4. テキスト付き候補は「手動候補の比較選択 Hard Gate」" in two_phase_block
+
+
 def _load_shared_main_module(name: str):
     script = _repo_root() / ".claude/skills/thumbnail/references/share_thumbnail_as_main.py"
     spec = importlib.util.spec_from_file_location(name, script)
