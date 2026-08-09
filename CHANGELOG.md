@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 - `docs(thumbnail)`: 承認済み画像生成を subagent / background session で実行する場合は stdin を `/dev/null` へ閉じ、process の exit と成果物を観測するまで完了報告しない契約を追加（#2950）。
+- `docs(suno)`: `suno_preset` を hard gate から推奨入力へ変更し、collection 固有の effective Style と vocal gender を `suno-patterns.yaml` に保存して共有 channel config を変更せず `/wf-new`・`/suno-lyric`・`yt-suno-verify` へ引き渡す正規手順を追加（#2999）。
 - `fix(suno)`: `suno-patterns.yaml` が上書きした effective Style にも channel の `banned_artists` を適用し、禁止アーティスト検出時は channel Style と同じ `ConfigError` で出力前に停止する契約を固定（#2998）。
 - `docs(suno)`: `yt-collection-preflight` は標準骨格、`yt-suno-verify` は collection ごとの effective Style を含む Suno artifact の検証を担う責務境界を確定し、CLI と契約テストで固定（#3155）。
 - `feat(streaming)`: optional な `channel_slug` を Vultr instance の label / tags に反映し、未指定時の既存名と replace 対象の hostname を維持した（#2525）。
