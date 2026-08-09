@@ -45,7 +45,7 @@ description: "Use when 本リポジトリの新規リリースを作成すると
 - `gh` CLI がインストール済みで認証済み（`gh auth status` が green）であること。未認証なら `gh auth login` を依頼して停止する
 - prepare（Python 本体）の場合、`CHANGELOG.md` の `[Unreleased]` セクションに内容が書き溜められていること。空の場合は prepare を中止する（各 PR 時点で書き溜める運用が前提）
 - Python 本体のバージョン管理は `pyproject.toml::version` を **唯一のソース** とする（`src/youtube_automation/__init__.py` は `importlib.metadata` 経由で自動追従）。配布は git+https + tag pin（PyPI 公開しない）
-- extension release のバージョン管理は `extensions/<name>/package.json::version` を **唯一のソース** とし、Python 本体とは完全独立（`docs/adr/0011-extension-distribution.md`）。extension release では `pyproject.toml` / `uv.lock` / `CHANGELOG.md` 昇格に一切触らない
+- extension release のバージョン管理は `extensions/<name>/package.json::version` を **唯一のソース** とし、Python 本体とは完全独立（契約: `references/release-contracts.md`）。extension release では `pyproject.toml` / `uv.lock` / `CHANGELOG.md` 昇格に一切触らない
 - extension release の場合、`references/verify-extensions.sh <name>` がexit 0を返すこと。non-zeroなら出力された原因を解消するまで停止する
 - extension release の install / build / zip は Nix extensions shell（Node 24 / pnpm 11.15.1）経由で実行する。ambient `node` / `pnpm` は使わず、`extensions/<name>/pnpm-workspace.yaml::allowBuilds` を有効に保つため `--ignore-workspace` も使わない
 
@@ -149,7 +149,7 @@ git checkout -b "release/v${VER}"
 `references/changelog-promotion.md` の 3 段階手順をそのまま実行する。
 日付は `date +%Y-%m-%d` で取得して `[VER] - YYYY-MM-DD` のフォーマットに埋める。
 
-**Migration セクション存在チェック**: `[Unreleased]` 配下に `### Migration` セクションが無い場合は warning を出し、`AskUserQuestion` で「Migration セクション無しで続行するか」を確認する。Migration セクションは下流の `/automation-update` が `所要時間の目安` / `local fix 衝突注意` を抽出する契約上の入力源（詳細: `docs/changelog-contract.md`）。
+**Migration セクション存在チェック**: `[Unreleased]` 配下に `### Migration` セクションが無い場合は warning を出し、`AskUserQuestion` で「Migration セクション無しで続行するか」を確認する。Migration セクションは下流の `/automation-update` が `所要時間の目安` / `local fix 衝突注意` を抽出する契約上の入力源（詳細: `references/release-contracts.md`）。
 
 ```bash
 # Unreleased セクション配下に "### Migration" があるか
@@ -389,7 +389,7 @@ open_ext_branch=$(git ls-remote --heads origin "release/ext-v*" | head -1)
 
 判定結果をユーザーに伝え、`AskUserQuestion` で進行確認する（誤判定時の脱出口を残す）。
 
-**tag 版数の決定**: `ext-v*` は3拡張共通の単一系列（`docs/adr/0011-extension-distribution.md`）。原則、bump する拡張の新バージョンをそのまま tag 版数に使う。ただし要求版数が `latest_ext_tag` の版数以下になる場合は tag だけ系列の次番号へ進め、`AskUserQuestion` で tag 版数を確認する（前例: `ext-v0.2.3` で distrokid-helper を 0.2.1 に bump）。この場合 Release asset 名は tag 版数ではなく package.json 版数（例: `distrokid-helper-0.2.1-chrome.zip`）になる。
+**tag 版数の決定**: `ext-v*` は3拡張共通の単一系列（`references/release-contracts.md`）。原則、bump する拡張の新バージョンをそのまま tag 版数に使う。ただし要求版数が `latest_ext_tag` の版数以下になる場合は tag だけ系列の次番号へ進め、`AskUserQuestion` で tag 版数を確認する（前例: `ext-v0.2.3` で distrokid-helper を 0.2.1 に bump）。この場合 Release asset 名は tag 版数ではなく package.json 版数（例: `distrokid-helper-0.2.1-chrome.zip`）になる。
 
 ### Phase E1: extension prepare
 
@@ -608,7 +608,7 @@ merge 後の公開 URL: https://youtube-automation-release-notes.pages.dev/ext-v
 - prepare 1-4 で `Migration` セクション欠落を warning する（下流の `/automation-update` が `所要時間` / `local fix 衝突注意` を抽出する契約上の入力源）
 - prepare 1-5 で **必ず** `uv lock` を実行し、`uv.lock` の version を `pyproject.toml::version` と同期させる（#515 再発防止）。bump コミットに `uv.lock` を含めず main にマージするのは禁止
 - 状態判定（Phase R / Phase 0 / Phase E0）の結果は `AskUserQuestion` でユーザー確認してから次に進む（誤判定時の脱出口）
-- extension release は `extensions/<name>/package.json::version` のみを変更する。`pyproject.toml` / `uv.lock` / `CHANGELOG.md` 昇格には触らない（バージョン系列は完全独立、ADR 0011）
+- extension release は `extensions/<name>/package.json::version` のみを変更する。`pyproject.toml` / `uv.lock` / `CHANGELOG.md` 昇格には触らない（バージョン系列は完全独立。`references/release-contracts.md`）
 - `release/ext-v<VER>` ブランチ命名は固定（Phase E0 の状態判定と E2-5 のクリーンアップが依存）
 - extension の commit / PR タイトルは `chore(<name>): ext-v<VER>` 固定（日本語 Conventional Commits 準拠 + 検索容易性）
 - extension のlocal verifyは `references/verify-extensions.sh` を単一ソースとし、workflow契約を変える場合は同スクリプトと同時に更新する
@@ -623,10 +623,9 @@ merge 後の公開 URL: https://youtube-automation-release-notes.pages.dev/ext-v
 - `references/verify-extensions.sh` — Nix toolchain / frozen install / build / zip / asset / lockfileを検証する単一ソース
 - `references/version-rules.md` — semver bump 判定ルール
 - `references/changelog-promotion.md` — CHANGELOG.md 昇格手順
+- `references/release-contracts.md` — Python Migration producer と extension GitHub Release 配布の実行契約
 - `.github/workflows/release-extensions.yml` — extension の install / build / zip 契約（local verify はこれと同一コマンド列で実行する）
-- `docs/adr/0011-extension-distribution.md` — 拡張の配布形態 / 統一 tag `ext-v*` / バージョン独立の決定
 - `extensions/README.md` — 拡張の開発フローと release 添付方針
-- `docs/changelog-contract.md` — CHANGELOG.md / Release 本文の Migration セクションフォーマット契約（下流 `/automation-update` との接合点）
 - `/automation-update`（下流チャンネルリポジトリ）— publish 後の追従スキル
 - `/ext-install` — Release asset を読む消費側スキル（tag / asset 命名契約の依存先）
 - CLAUDE.md「開発ワークフロー」— commit メッセージ規約（日本語 Conventional Commits）
