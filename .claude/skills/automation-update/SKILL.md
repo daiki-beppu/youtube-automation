@@ -357,15 +357,13 @@ uv run yt-skills diff
 
 ### Step 3-2. 追従の一括実行（CLI）
 
-Step 3-1 の判断結果に応じて 1 コマンドで実行:
+Step 3-1 の判断結果に応じて 1 コマンドで実行する。以下は Step 2-4 で合意した tag pin の代表例:
 
 ```bash
-uv run yt-automation-update apply --tag <target_tag>                    # tag pin。Step 2-4 で同意済みの v 付き tag を必ず固定
-uv run yt-automation-update apply --tag <target_tag> --force-sync       # tag pin + (a) 上書き
-uv run yt-automation-update apply --tag <target_tag> --sync-only <skill1> <skill2> ...  # tag pin + (b) local fix 解消後に指定 skill だけ同期（claude-md も同期）
-uv run yt-automation-update apply                                    # main 追従。pin 書き換えなしで lock/sync する
-uv run yt-automation-update apply --rev <sha>                        # sha pin（bump 先は Step 1-1 の [HUMAN STEP] で確定）
+uv run yt-automation-update apply --tag <target_tag>
 ```
+
+pin 形式ごとの指定方法と通常のオプションは `uv run yt-automation-update apply --help` を正とする。
 
 `apply` の内部ステップ（順に実行、失敗時は **失敗ステップ名を明示して非 0 終了**）:
 
