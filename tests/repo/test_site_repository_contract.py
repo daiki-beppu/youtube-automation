@@ -1,7 +1,8 @@
-"""公開リリースノートサイトの CI・配布・文書境界を検証する。"""
+"""運用者向け公開ドキュメントサイトの CI・配布・文書境界を検証する。"""
 
 from __future__ import annotations
 
+import re
 import subprocess
 import tarfile
 import tomllib
@@ -14,6 +15,23 @@ from tests.helpers.paths import REPO_ROOT
 
 ROOT = REPO_ROOT
 WORKFLOW_PATH = ROOT / ".github/workflows/site.yml"
+OPERATOR_DOC_SOURCES = (
+    "ONBOARDING.md",
+    "docs/oauth-setup.md",
+    "docs/features.md",
+    "docs/workflow-cheatsheet.md",
+    "docs/chrome-extension-install-guide.md",
+    "docs/dashboard.md",
+    "docs/channel-workspace-migration.md",
+)
+NONPUBLIC_DOC_PREFIXES = (
+    "docs/adr/",
+    "docs/audits/",
+    "docs/investigations/",
+    "docs/research/",
+    "docs/strategy/",
+    "docs/benchmarks/",
+)
 
 
 def _workflow() -> dict[str, object]:
@@ -26,12 +44,19 @@ def _triggers(workflow: dict[str, object]) -> dict[str, object]:
     return triggers
 
 
+def _operator_doc_sources() -> tuple[str, ...]:
+    source = (ROOT / "site/operator-doc-source.ts").read_text(encoding="utf-8")
+    map_block = source.split("export const operatorDocMap = [", maxsplit=1)[1].split("] as const", maxsplit=1)[0]
+    return tuple(re.findall(r'source:\s*"([^"]+)"', map_block))
+
+
 def test_site_workflow_checks_every_stacked_pull_request_and_main_push() -> None:
     workflow = _workflow()
     triggers = _triggers(workflow)
     expected_paths = [
         "site/**",
         "docs/release-notes/**",
+        *OPERATOR_DOC_SOURCES,
         ".github/workflows/site.yml",
         "flake.nix",
         "flake.lock",
@@ -42,6 +67,14 @@ def test_site_workflow_checks_every_stacked_pull_request_and_main_push() -> None
     assert "branches" not in pull_request
     assert pull_request["paths"] == expected_paths
     assert triggers["push"] == {"branches": ["main"], "paths": expected_paths}
+
+
+def test_site_content_map_is_an_existing_exact_allowlist() -> None:
+    sources = _operator_doc_sources()
+
+    assert sources == OPERATOR_DOC_SOURCES
+    assert all((ROOT / source).is_file() for source in sources)
+    assert not any(source.startswith(prefix) for source in sources for prefix in NONPUBLIC_DOC_PREFIXES)
 
 
 def test_site_workflow_uses_frozen_dependencies_and_all_quality_gates() -> None:
@@ -82,6 +115,19 @@ def test_python_build_configuration_excludes_site_workspace() -> None:
     assert all(not str(source).startswith("site") for source in sdist["only-include"])
     assert all(not str(source).startswith("site") for source in sdist.get("force-include", {}))
 
+    wheel_operator_sources = set(wheel.get("force-include", {})) & set(OPERATOR_DOC_SOURCES)
+    sdist_operator_sources = set(sdist["only-include"]) & set(OPERATOR_DOC_SOURCES)
+    assert wheel_operator_sources == {
+        "docs/features.md",
+        "docs/workflow-cheatsheet.md",
+    }
+    assert sdist_operator_sources == {
+        "ONBOARDING.md",
+        "docs/oauth-setup.md",
+        "docs/features.md",
+        "docs/workflow-cheatsheet.md",
+    }
+
 
 def test_built_python_archives_do_not_contain_site_workspace(tmp_path: Path) -> None:
     dist = tmp_path / "dist"
@@ -115,6 +161,12 @@ def test_repository_docs_define_the_site_as_a_typescript_exception_and_separate_
     assert "`site/`" in claude and "TypeScript" in claude
     assert "## リリースノートサイト開発" in development
     assert "Python wheel / sdist には同梱しない" in development
-    assert "**release notes site**" in architecture
+    assert "**operator documentation site**" in architecture
+    assert "site/operator-doc-source.ts" in architecture
+    assert "read-in-place" in architecture
+    assert "allowlist" in architecture
+    assert all(source in architecture for source in OPERATOR_DOC_SOURCES)
+    assert all(prefix in architecture for prefix in NONPUBLIC_DOC_PREFIXES)
+    assert "Python wheel / sdist" in architecture
     assert "Blume" in adr and "Cloudflare Pages" in adr
     assert "公開リリースノート" in readme
