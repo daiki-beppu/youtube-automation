@@ -1,15 +1,15 @@
 # Preview generation
 
-Phase 4 の parallel / sequential preview について、prompt 構築、provider 呼び出し、生成物、検証、retry、failure handling の詳細を定義する。mode 判定、コスト承認、セッション作成、実行コマンド、停止条件の順序は `../SKILL.md` を正とする。候補内容とセルフチェック設定は `preview-contract.md` に従う。
+Phase 4 の parallel / sequential preview について、prompt 構築、provider 呼び出し、生成物、検証、retry、failure handling の詳細を定義する。mode 判定、コスト承認、セッション作成、代表的な実行コマンド、停止条件の順序は `../SKILL.md` を正とする。`yt-generate-image` の通常 flag は CLI help を正とし、ここでは再定義しない。候補内容とセルフチェック設定は `preview-contract.md` に従う。
 
 ## Parallel 生成詳細
 
-preview contract の候補 schema で確定した prompt を使い、`candidate_count` 件を a / b / c ... の順に生成する。候補ごとに `select-ttp-references.py` が返した別々の benchmark 参照画像を1枚だけ割り当てる。TTP strict preview に stock を混ぜない。
+preview contract の候補 schema で確定した prompt を使い、`candidate_count` 件を a / b / c ... の順に生成する。候補ごとに `select-ttp-references.py` が返した別々の benchmark 参照画像を1枚だけ割り当てる。TTP strict preview は一意な benchmark 参照だけを使い、stock を混ぜない。
 
 - Codex provider は `image_generation.codex.default_prompt_template` と `thumbnail/references/codex-prompt.py` を使う。title 引数には画像へ焼く見出しと短いサブタイトルだけを渡し、動画タイトル全文、composition rule、legend、楽器を重複注入しない。候補数ぶんの一意な参照画像が無ければ生成前に停止する。
-- Gemini / OpenAI provider は候補の確定済み prompt を `yt-generate-image --ttp-strict-references --reference ... --max-attempts 1` へ渡す。provider 内部の追加 retry は行わない。
+- Gemini / OpenAI provider は候補の確定済み prompt と一意な参照割当をSKILL本体の代表コマンドへ渡す。provider 内部の追加 retry は行わない。
 - 1候補の生成が non-zero でも、残り候補は順番どおり試行する。成功候補は比較対象へ残し、失敗候補は画像無しのテキスト候補として扱う。
-- 出力は `collections/planning/_plan-previews/<dir>/plan-<label>-<slug>.png` とする。`-y` 経路で同名が存在する場合は上書きせず `-v2`, `-v3` ... を使う。
+- 出力は `collections/planning/_plan-previews/<dir>/plan-<label>-<slug>.png` とする。
 
 成功画像は一度に開き、同じ候補順で画像、タイトル、prompt、オブジェクトの名前とストーリーを提示する。個別画像の再生成は同じ候補と参照割当でその候補の4-4 commandだけを再実行する。企画自体を変える場合は Phase 3 へ戻る。
 
