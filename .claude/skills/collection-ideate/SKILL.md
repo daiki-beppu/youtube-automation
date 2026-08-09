@@ -14,7 +14,7 @@ description: "Use when 新コレクションの企画・テーマ選定をデー
 
 ## 完了条件
 
-企画候補をコレクションの `20-documentation/plan_proposals.md` に保存し、`workflow-state.json` の `planning.generated = true` へ更新（企画確定時は `planning.final_title` も記録）し、Next Step（`/thumbnail <theme>` → `/suno <theme>`）を案内した時点で完了。open insights を企画入力にした場合は、「open insights の消費と status 反映」に従う企画確定時の status 更新（adopted / dismissed）まで完了扱いにしない。画像生成を実施した場合は、採用企画の参照画像を `20-documentation/thumbnail-prompts.md` の `Reference Assignments` へ保存できるまで完了扱いにせず、保存失敗時は停止する。
+企画候補をコレクションの `20-documentation/plan_proposals.md` に保存し、`workflow-state.json` の `planning.generated = true` へ更新（企画確定時は `planning.final_title` も記録）し、採用画像がある場合は最終 `thumbnail.jpg` の正規入力として後段へ引き渡し、無い場合は `/thumbnail <theme>` フォールバックを案内してから `/suno <theme>` へ進む Next Step を示した時点で完了。open insights を企画入力にした場合は、「open insights の消費と status 反映」に従う企画確定時の status 更新（adopted / dismissed）まで完了扱いにしない。画像生成を実施した場合は、採用企画の参照画像を `20-documentation/thumbnail-prompts.md` の `Reference Assignments` へ保存できるまで完了扱いにせず、保存失敗時は停止する。
 
 **JSON ペア検証 Hard Gate**: `references/freshness-rules.md` の鮮度判定へ進む前に、ファイル名日付が最新の `reports/analysis_*.md` と同日付の `.json` の存在を確認し、`.claude/skills/analytics-analyze/references/analysis-json-validator.md` の validator を同日付 JSON に実行する。exit 0 の場合だけ analytics mode の入力として使用する。Markdown だけが存在する、または validator が失敗した場合は必須入力不足として中断し、`/analytics-analyze` 再実行を案内する。
 
@@ -441,7 +441,7 @@ sequential モードでは Next Step で stock 退避は走らない（不採用
 
 企画選択時にタイトルも確定する（`workflow-state.json` の `planning.final_title` に記録）。
 
-企画確定後は `thumbnail_mode` と画像の有無で分岐する。採用画像は企画参照へ保存し、**`main.png` にはコピーしない**。不可逆操作は、参照割当の保存 → 採用画像のコピー → 不採用画像の stock 退避 → セッション cleanup の順で実行する。
+企画確定後は `thumbnail_mode` と画像の有無で分岐する。採用画像は `planning-preview.png` に保存し、最終 `thumbnail.jpg` の正規入力として後段へ引き渡す。**`main.png` にはコピーしない**。不可逆操作は、参照割当の保存 → 採用画像のコピー → 不採用画像の stock 退避 → セッション cleanup の順で実行する。
 
 画像生成を実施した場合、企画確定後かつプレビューディレクトリ削除前に、今回使用した参照割当を collection の履歴へ必ず保存する。保存に失敗した場合は処理を継続せず、エラーを解消して同じコマンドを再実行する。
 
@@ -457,7 +457,7 @@ uv run python3 .claude/skills/collection-ideate/references/record-ttp-reference-
 不採用 (`candidate_count` - 1) 枚を `assets/stock/<theme>/` に退避してからプレビューディレクトリを削除する（#364）:
 
 ```bash
-# 1. 選択した企画のプレビュー画像を企画参照として保存（最終背景 main.png にはしない）
+# 1. 選択した企画のプレビュー画像を最終 thumbnail.jpg の正規入力として保存（main.png にはしない）
 cp collections/planning/_plan-previews/<session-dir>/plan-<x>-<slug>.png <collection-path>/10-assets/planning-preview.png
 
 # 2. 不採用プレビューを stock 退避（--exclude で採用 1 枚だけ除外）
@@ -488,7 +488,7 @@ rm -rf collections/planning/_plan-previews/<session-dir>/
 不採用 (`candidate_count` - 1) 案は画像が未生成なので stock 退避は不要。`cp` 1 回 + `rm -rf` だけで済む:
 
 ```bash
-# 1. 選択した企画のプレビュー画像を企画参照として保存（最終背景 main.png にはしない）
+# 1. 選択した企画のプレビュー画像を最終 thumbnail.jpg の正規入力として保存（main.png にはしない）
 cp collections/planning/_plan-previews/<session-dir>/plan-<x>-<slug>.png <collection-path>/10-assets/planning-preview.png
 
 # 2. セッションディレクトリ削除
@@ -505,8 +505,10 @@ rm -rf collections/planning/_plan-previews/<session-dir>/
 [ -d collections/planning/_plan-previews/<session-dir> ] && rm -rf collections/planning/_plan-previews/<session-dir>/
 ```
 
-このケースも下記「企画選択後」へ合流する。
+このケースは `planning-preview.png` が無い状態を後段へ明示的に引き渡し、`/thumbnail <theme>` フォールバックへ合流する。
 
 企画選択後:
-- `/thumbnail <theme>` で、テキスト付き `thumbnail.jpg` を先に確定し、承認済み `thumbnail.jpg` から textless `main.png/jpg` を別成果物として再生成・確定する。企画プレビューは参照素材であり、`main.png` として動画背景に流用しない
+- `planning-preview.png` がある場合は、後段がその画像を最終 `thumbnail.jpg` に確定する正規入力として使い、`/thumbnail` フォールバックへは進まない
+- `planning-preview.png` が無い場合だけ `/thumbnail <theme>` フォールバックで `thumbnail.jpg` を生成・確定する
+- どちらの場合も採用プレビューを `main.png/jpg` へ直接コピーしない。textless `main.png/jpg` は後段の生成契約に従い別成果物として確定する
 - サムネイル確定後に `/suno <theme>` で SunoAI 音楽プロンプト生成（テーマ確定後に初めて実行）
