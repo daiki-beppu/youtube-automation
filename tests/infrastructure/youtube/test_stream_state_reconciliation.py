@@ -55,7 +55,15 @@ def test_fetch_tagged_instances_filters_vultr_tags_and_paginates() -> None:
 
 @pytest.mark.parametrize(
     "payload",
-    [[], {}, {"instances": {}}, {"instances": [{"id": "vps", "tags": "youtube-stream"}]}],
+    [
+        [],
+        {},
+        {"instances": {}},
+        {"instances": [{"id": "vps", "tags": "youtube-stream"}]},
+        {"instances": [], "meta": []},
+        {"instances": [], "meta": {"links": []}},
+        {"instances": [], "meta": {"links": {"next": 1}}},
+    ],
 )
 def test_fetch_tagged_instances_rejects_unexpected_api_shapes(payload: object) -> None:
     with patch(

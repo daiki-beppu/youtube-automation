@@ -8,7 +8,7 @@ import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import cast
 from urllib.parse import urlparse
 
 from youtube_automation.core.errors import ConfigError, YouTubeAPIError
@@ -48,16 +48,16 @@ def fetch_tagged_instance_ids(*, api_key: str) -> frozenset[str]:
     return frozenset(instance_ids)
 
 
-def _fetch_vultr_page(*, url: str, api_key: str) -> dict[str, Any]:
+def _fetch_vultr_page(*, url: str, api_key: str) -> dict[str, object]:
     request = urllib.request.Request(url, headers={"Authorization": f"Bearer {api_key}"})
     try:
         with urllib.request.urlopen(request, timeout=_HTTP_TIMEOUT_SECONDS) as response:
-            payload: Any = json.loads(response.read().decode("utf-8"))
+            payload: object = json.loads(response.read().decode("utf-8"))
     except (urllib.error.URLError, TimeoutError, UnicodeDecodeError, json.JSONDecodeError) as error:
         raise YouTubeAPIError(f"Vultr instances API request failed: {error}") from error
-    if not isinstance(payload, dict):
+    if not isinstance(payload, dict) or not all(isinstance(key, str) for key in payload):
         raise YouTubeAPIError(f"Vultr instances API returned unexpected shape: {payload!r}")
-    return payload
+    return cast(dict[str, object], payload)
 
 
 def _parse_vultr_instance(instance: object) -> tuple[str, frozenset[str]]:
@@ -72,13 +72,16 @@ def _parse_vultr_instance(instance: object) -> tuple[str, frozenset[str]]:
     return instance_id, frozenset(tags)
 
 
-def _next_page_url(payload: dict[str, Any]) -> str | None:
+def _next_page_url(payload: dict[str, object]) -> str | None:
     meta = payload.get("meta")
     if meta is None:
         return None
-    if not isinstance(meta, dict) or not isinstance(meta.get("links"), dict):
+    if not isinstance(meta, dict):
         raise YouTubeAPIError(f"Vultr instances API returned unexpected shape: {payload!r}")
-    next_url = meta["links"].get("next")
+    links = meta.get("links")
+    if not isinstance(links, dict):
+        raise YouTubeAPIError(f"Vultr instances API returned unexpected shape: {payload!r}")
+    next_url = links.get("next")
     if next_url in (None, ""):
         return None
     if not isinstance(next_url, str):
