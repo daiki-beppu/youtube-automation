@@ -553,6 +553,11 @@ def check_collection(
     *,
     supported_languages: list[str] | None = None,
 ) -> tuple[bool, str]:
+    """標準骨格と workflow-state の初期構造だけを検証・補完する.
+
+    Suno の設定解決や生成 artifact の内容検証は、effective Style と同じ
+    source を読める ``yt-suno-verify`` の責務とする。
+    """
     paths = CollectionPaths(collection_dir)
     name = collection_dir.name
     langs = ["en"] if supported_languages is None else list(dict.fromkeys(supported_languages))
