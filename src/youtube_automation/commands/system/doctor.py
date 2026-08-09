@@ -105,6 +105,10 @@ UPLOAD_REQUIRED_SCOPES = [
 UNSUPPORTED_VIDEO_ANALYZE_MODELS = {
     "gemini-3.5-flash",
 }
+UNSUPPORTED_THUMBNAIL_MODELS = {
+    "gemini-3.1-flash-image-preview",
+    "gemini-3-pro-image-preview",
+}
 
 MAX_DISPLAY_VALUE_LEN = 120
 GCP_PROJECT_ID_RE = re.compile(r"[a-z][a-z0-9-]{4,28}[a-z0-9]\Z")
@@ -1879,6 +1883,12 @@ def _missing_ttp_readiness_items(channel_dir: Path, channels: list[dict[str, obj
     thumbnail_read = _skill_config_mapping(channel_dir, "thumbnail")
     if thumbnail_read.error:
         missing.append(thumbnail_read.error)
+    thumbnail_override = _read_yaml_mapping(channel_dir / "config" / "skills" / "thumbnail.yaml").data
+    image_generation = thumbnail_override.get("image_generation")
+    gemini = image_generation.get("gemini") if isinstance(image_generation, dict) else None
+    model = gemini.get("model") if isinstance(gemini, dict) else None
+    if isinstance(model, str) and model in UNSUPPORTED_THUMBNAIL_MODELS:
+        missing.append(f"thumbnail model が旧/非対応: {model}")
     if "thumbnail" not in approved_exceptions:
         thumbnail_missing = _thumbnail_ttp_reference_missing_reason(channel_dir, thumbnail_read.data)
         if thumbnail_missing:

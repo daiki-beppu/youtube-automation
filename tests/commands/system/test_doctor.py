@@ -4570,6 +4570,47 @@ class TestCheckTtpWfNewReadinessChannelNew:
         assert r.status == "warn"
         assert "video-analyze model が旧/非対応: gemini-3.5-flash" in r.message
 
+    @pytest.mark.parametrize(
+        "model",
+        ["gemini-3.1-flash-image-preview", "gemini-3-pro-image-preview"],
+    )
+    def test_explicit_old_thumbnail_model_warns(self, tmp_path, model):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        config_path = tmp_path / "config" / "skills" / "thumbnail.yaml"
+        config_path.write_text(
+            config_path.read_text(encoding="utf-8").replace(
+                "  gemini:\n",
+                f"  gemini:\n    model: {model}\n",
+                1,
+            ),
+            encoding="utf-8",
+        )
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert f"thumbnail model が旧/非対応: {model}" in r.message
+
+    @pytest.mark.parametrize("model", [None, "gemini-3.1-flash-image"])
+    def test_supported_or_implicit_thumbnail_model_does_not_warn(self, tmp_path, model):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        if model is not None:
+            config_path = tmp_path / "config" / "skills" / "thumbnail.yaml"
+            config_path.write_text(
+                config_path.read_text(encoding="utf-8").replace(
+                    "  gemini:\n",
+                    f"  gemini:\n    model: {model}\n",
+                    1,
+                ),
+                encoding="utf-8",
+            )
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert "thumbnail model が旧/非対応" not in r.message
+
     def test_suno_long_genre_line_warns_even_with_variants(self, tmp_path):
         _write_ttp_analytics(tmp_path, [_ttp_channel()])
         _write_ttp_readiness_files(tmp_path)
