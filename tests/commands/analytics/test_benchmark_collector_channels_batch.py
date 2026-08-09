@@ -13,6 +13,8 @@
 from __future__ import annotations
 
 import builtins
+import json
+import sys
 from datetime import date
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -560,6 +562,126 @@ class TestCollectAllPrefetchesChannels:
         # When / Then: 欠落を黙ってスキップせず収集失敗として停止（issue #619）
         with pytest.raises(YouTubeAPIError, match="UC_DEL"):
             collector.collect_all(force=True)
+
+
+class TestSaveJson:
+    def _collector(self, tmp_path) -> BenchmarkCollector:
+        collector = _make_collector(MagicMock())
+        collector.data_dir = tmp_path
+        collector.today = date(2026, 8, 6)
+        return collector
+
+    def test_competitor_saves_preserve_other_channels(self, tmp_path):
+        collector = self._collector(tmp_path)
+        collector.save_json(
+            {"channels": [{"slug": "channel-a", "views": 100}], "collected_at": "first", "source": "api"},
+            competitor_slug="channel-a",
+        )
+
+        path = collector.save_json(
+            {"channels": [{"slug": "channel-b", "views": 200}], "collected_at": "second"},
+            competitor_slug="channel-b",
+        )
+
+        saved = json.loads(path.read_text(encoding="utf-8"))
+        assert saved == {
+            "channels": [
+                {"slug": "channel-a", "views": 100},
+                {"slug": "channel-b", "views": 200},
+            ],
+            "collected_at": "second",
+            "source": "api",
+        }
+
+    def test_competitor_save_updates_same_slug_and_preserves_playlists(self, tmp_path):
+        collector = self._collector(tmp_path)
+        collector.save_json(
+            {
+                "channels": [
+                    {"slug": "channel-a", "views": 100, "playlists": [{"playlist_id": "PL_A"}]},
+                    {"slug": "channel-b", "views": 200},
+                ],
+                "collected_at": "first",
+            }
+        )
+
+        path = collector.save_json(
+            {"channels": [{"slug": "channel-a", "views": 300}], "collected_at": "second"},
+            competitor_slug="channel-a",
+        )
+
+        saved = json.loads(path.read_text(encoding="utf-8"))
+        assert saved["channels"] == [
+            {"slug": "channel-a", "views": 300, "playlists": [{"playlist_id": "PL_A"}]},
+            {"slug": "channel-b", "views": 200},
+        ]
+
+    def test_full_collection_replaces_existing_channels_and_top_level_fields(self, tmp_path):
+        collector = self._collector(tmp_path)
+        collector.save_json(
+            {"channels": [{"slug": "channel-a"}], "collected_at": "first", "source": "legacy"},
+            competitor_slug="channel-a",
+        )
+
+        replacement = {"channels": [{"slug": "channel-b"}], "collected_at": "second"}
+        path = collector.save_json(replacement)
+
+        assert json.loads(path.read_text(encoding="utf-8")) == replacement
+
+    def test_competitor_save_recovers_from_malformed_existing_json(self, tmp_path):
+        collector = self._collector(tmp_path)
+        path = tmp_path / "benchmark_20260806.json"
+        path.write_text("{broken", encoding="utf-8")
+        incoming = {"channels": [{"slug": "channel-a", "views": 100}], "collected_at": "recovered"}
+
+        saved_path = collector.save_json(incoming, competitor_slug="channel-a")
+
+        assert saved_path == path
+        assert json.loads(path.read_text(encoding="utf-8")) == incoming
+
+    def test_main_passes_competitor_slug_to_save(self, monkeypatch, tmp_path):
+        calls = []
+
+        class FakeCollector:
+            config = SimpleNamespace(
+                analytics=SimpleNamespace(
+                    benchmark=SimpleNamespace(channels=[{"id": "UC_A", "name": "Channel A", "slug": "channel-a"}])
+                )
+            )
+
+            def __init__(self):
+                self.benchmark_config = {"gemini_thumbnail_analysis": False, "scan_recent": 1, "freshness_days": 3}
+
+            def initialize(self):
+                pass
+
+            def collect_all(self, *, force, competitor_slug):
+                assert force is True
+                assert competitor_slug == "channel-a"
+                return {"channels": [{"slug": "channel-a", "name": "Channel A", "videos": []}]}
+
+            def save_json(self, data, *, competitor_slug):
+                calls.append((data, competitor_slug))
+                return tmp_path / "benchmark_20260806.json"
+
+        monkeypatch.setattr(benchmark_collector, "BenchmarkCollector", FakeCollector)
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            [
+                "yt-benchmark-collect",
+                "--competitor",
+                "channel-a",
+                "--force",
+                "--yes",
+                "--json-only",
+                "--no-thumbnails",
+            ],
+        )
+
+        benchmark_collector.main()
+
+        assert calls == [({"channels": [{"slug": "channel-a", "name": "Channel A", "videos": []}]}, "channel-a")]
 
 
 class TestBenchmarkReportGeneratorDescriptionSamples:
