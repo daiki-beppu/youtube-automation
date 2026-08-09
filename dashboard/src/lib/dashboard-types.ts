@@ -19,3 +19,28 @@ export type ChannelOverview = {
   refresh_error: { code: string; message: string } | null
   video_count: number
 }
+
+export type WorkflowTimingMetrics = {
+  manual_baseline_seconds: number
+  ai_seconds: number
+  human_seconds: number
+  work_seconds: number
+  ai_inclusive_saved_seconds: number
+  human_freed_seconds: number
+}
+
+export type WorkflowTimingStep = WorkflowTimingMetrics & {
+  action: string
+  status: "success" | "blocked" | "failed"
+}
+
+export type WorkflowTimingCollection = {
+  collection_id: string
+  stage: "planning" | "live"
+  steps: WorkflowTimingStep[]
+  totals: WorkflowTimingMetrics
+}
+
+export type WorkflowTiming = {
+  collections: WorkflowTimingCollection[]
+}
