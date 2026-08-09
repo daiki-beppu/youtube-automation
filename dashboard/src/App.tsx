@@ -50,6 +50,8 @@ import {
 import { ChannelStockTable } from "@/features/channel-stock/channel-stock-table"
 import {
   PublicationHeatmap,
+  type PublicationActivityChannel,
+  type PublicationActivityError,
   type PublicationActivityResponse,
 } from "@/features/publication-activity/publication-heatmap"
 import type { ChannelOverview, Summary } from "@/lib/dashboard-types"
@@ -85,6 +87,11 @@ type Video = {
 
 type ChannelDetail = Omit<ChannelOverview, "video_count"> & { videos: Video[] }
 type OverviewResponse = { schema_version: number; channels: ChannelOverview[] }
+type PublicationActivityState =
+  | { status: "loading" }
+  | { status: "ready"; data: PublicationActivityResponse }
+  | { status: "empty" }
+  | { status: "error"; message: string }
 
 const chartConfig = {
   views: { label: "再生数", color: "var(--chart-3)" },
@@ -100,15 +107,55 @@ async function requestJson<T>(path: string): Promise<T> {
   return response.clone().json() as Promise<T>
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+function isPublicationDays(value: unknown): value is Record<string, number> {
+  return (
+    isRecord(value) &&
+    Object.values(value).every(
+      (count) =>
+        typeof count === "number" && Number.isFinite(count) && count >= 0
+    )
+  )
+}
+
+function isPublicationError(
+  value: unknown
+): value is PublicationActivityError | null {
+  if (value === null) return true
+  return (
+    isRecord(value) &&
+    typeof value.code === "string" &&
+    typeof value.message === "string" &&
+    typeof value.attempted_at === "string"
+  )
+}
+
+function isPublicationChannel(
+  value: unknown
+): value is PublicationActivityChannel {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    typeof value.name === "string" &&
+    typeof value.status === "string" &&
+    (value.fetched_at === null || typeof value.fetched_at === "string") &&
+    (value.timezone === null || typeof value.timezone === "string") &&
+    isPublicationDays(value.days) &&
+    isPublicationError(value.error)
+  )
+}
+
 function isPublicationActivityResponse(
   value: unknown
 ): value is PublicationActivityResponse {
-  if (typeof value !== "object" || value === null) return false
-  const response = value as Record<string, unknown>
   return (
-    typeof response.days === "object" &&
-    response.days !== null &&
-    Array.isArray(response.channels)
+    isRecord(value) &&
+    isPublicationDays(value.days) &&
+    Array.isArray(value.channels) &&
+    value.channels.every(isPublicationChannel)
   )
 }
 
@@ -127,6 +174,59 @@ function LoadingState() {
         </Card>
       ))}
     </div>
+  )
+}
+
+function PublicationActivityPanel({
+  state,
+}: {
+  state: PublicationActivityState
+}) {
+  if (state.status === "loading") {
+    return (
+      <Card role="status" aria-label="公開活動を読み込み中">
+        <CardHeader>
+          <Skeleton className="h-5 w-40" />
+          <Skeleton className="h-4 w-56" />
+        </CardHeader>
+        <CardContent>
+          <Skeleton className="h-24 w-full" />
+        </CardContent>
+      </Card>
+    )
+  }
+  if (state.status === "empty") {
+    return (
+      <Empty className="border">
+        <EmptyHeader>
+          <EmptyMedia variant="icon">
+            <CalendarRangeIcon />
+          </EmptyMedia>
+          <EmptyTitle>公開活動データがありません</EmptyTitle>
+          <EmptyDescription>
+            公開済み動画が取得されると日別の公開本数を表示します。
+          </EmptyDescription>
+        </EmptyHeader>
+      </Empty>
+    )
+  }
+  if (state.status === "error") {
+    return (
+      <Alert
+        variant="destructive"
+        aria-label="公開活動を読み込めませんでした"
+      >
+        <AlertCircleIcon />
+        <AlertTitle>公開活動を読み込めませんでした</AlertTitle>
+        <AlertDescription>{state.message}</AlertDescription>
+      </Alert>
+    )
+  }
+  return (
+    <PublicationHeatmap
+      channels={state.data.channels}
+      days={state.data.days}
+    />
   )
 }
 
@@ -480,7 +580,7 @@ export function App() {
   const { theme, setTheme } = useTheme()
   const [channels, setChannels] = useState<ChannelOverview[] | null>(null)
   const [publicationActivity, setPublicationActivity] =
-    useState<PublicationActivityResponse | null>(null)
+    useState<PublicationActivityState>({ status: "loading" })
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [detail, setDetail] = useState<ChannelDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -494,16 +594,27 @@ export function App() {
         setError(reason instanceof Error ? reason.message : String(reason))
       })
 
-    void Promise.allSettled([requestJson<unknown>("/api/publications")]).then(
-      ([publicationResult]) => {
-        if (
-          publicationResult.status === "fulfilled" &&
-          isPublicationActivityResponse(publicationResult.value)
-        ) {
-          setPublicationActivity(publicationResult.value)
+    void requestJson<unknown>("/api/publications")
+      .then((response) => {
+        if (!isPublicationActivityResponse(response)) {
+          throw new Error("応答形式が不正です")
         }
-      }
-    )
+        const publicationCount = Object.values(response.days).reduce(
+          (total, count) => total + count,
+          0
+        )
+        setPublicationActivity(
+          publicationCount === 0
+            ? { status: "empty" }
+            : { status: "ready", data: response }
+        )
+      })
+      .catch((reason: unknown) => {
+        setPublicationActivity({
+          status: "error",
+          message: reason instanceof Error ? reason.message : String(reason),
+        })
+      })
   }, [])
 
   async function selectChannel(channelId: string) {
@@ -598,12 +709,7 @@ export function App() {
           </div>
         </header>
 
-        {publicationActivity ? (
-          <PublicationHeatmap
-            channels={publicationActivity.channels}
-            days={publicationActivity.days}
-          />
-        ) : null}
+        <PublicationActivityPanel state={publicationActivity} />
 
         {error ? (
           <Alert variant="destructive">
