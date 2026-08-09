@@ -9,9 +9,10 @@ const CLIP_ROW_SELECTOR =
   '[data-testid="clip-row"], .clip-row, article, [role="group"]';
 const CONTEXT_MENU_SELECTOR = 'div[data-context-menu="true"]';
 const DOWNLOAD_MENU_ITEM_TEXT = /download\s*all/i;
-const FORMAT_MODAL_SELECTOR = "div.modal-class.modal-overlay";
-const FORMAT_OPTION_SELECTOR = "button.flex.w-full";
-const DOWNLOAD_CONFIRM_SELECTOR = "button.hxc-btn-variant-primary";
+const DIALOG_SELECTOR = '[role="dialog"]';
+const BUTTON_SELECTOR = "button";
+const DOWNLOAD_CONFIRM_LABEL = "Download";
+const FORMAT_OPTION_LABELS = ["M4A", "MP3", "WAV"] as const;
 const MENU_APPEAR_POLL_MS = 10;
 const MENU_APPEAR_TIMEOUT_MS = 1500;
 const MAX_DOWNLOAD_MENU_ATTEMPTS = 3;
@@ -20,27 +21,6 @@ const MODAL_APPEAR_TIMEOUT_MS = 10000;
 const MODAL_CLOSE_POLL_MS = 200;
 const MODAL_CLOSE_TIMEOUT_MS = 120000;
 const SETTLE_AFTER_CLICK_MS = 500;
-
-async function waitForElement<T extends HTMLElement>(
-  selector: string,
-  timeoutMs: number,
-  pollMs: number,
-  filter?: (el: T) => boolean
-): Promise<T> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const candidates = document.querySelectorAll<T>(selector);
-    for (const el of candidates) {
-      if (!filter || filter(el)) {
-        return el;
-      }
-    }
-    await sleep(pollMs);
-  }
-  throw new Error(
-    `waitForElement timed out: selector="${selector}" (${timeoutMs}ms)`
-  );
-}
 
 function findElementByTextContent<T extends HTMLElement>(
   parent: HTMLElement | Document,
@@ -54,6 +34,67 @@ function findElementByTextContent<T extends HTMLElement>(
     }
   }
   return null;
+}
+
+function findButtonByExactLabel(
+  parent: HTMLElement,
+  label: string
+): HTMLButtonElement | null {
+  for (const button of parent.querySelectorAll<HTMLButtonElement>(
+    BUTTON_SELECTOR
+  )) {
+    const accessibleLabel =
+      button.getAttribute("aria-label") ?? button.textContent?.trim();
+    if (accessibleLabel?.toLowerCase() === label.toLowerCase()) {
+      return button;
+    }
+  }
+  return null;
+}
+
+function isVisibleDialog(dialog: HTMLElement): boolean {
+  if (dialog.hidden || dialog.getAttribute("aria-hidden") === "true") {
+    return false;
+  }
+  const style = getComputedStyle(dialog);
+  return style.display !== "none" && style.visibility !== "hidden";
+}
+
+function resolveFormatModal(): HTMLElement | null {
+  const matchingDialogs = Array.from(
+    document.querySelectorAll<HTMLElement>(DIALOG_SELECTOR)
+  ).filter(
+    (dialog) =>
+      isVisibleDialog(dialog) &&
+      FORMAT_OPTION_LABELS.every((label) =>
+        findButtonByExactLabel(dialog, label)
+      ) &&
+      findButtonByExactLabel(dialog, DOWNLOAD_CONFIRM_LABEL)
+  );
+  if (matchingDialogs.length > 1) {
+    throw new Error(
+      "ダウンロード形式モーダルが複数見つかりました。Suno の UI 変更の可能性があります。"
+    );
+  }
+  return matchingDialogs[0] ?? null;
+}
+
+async function waitForFormatModal(
+  timeoutMs: number,
+  pollMs: number
+): Promise<HTMLElement> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const modal = resolveFormatModal();
+    if (modal) {
+      return modal;
+    }
+    await sleep(pollMs);
+  }
+  throw new Error(
+    `Download 確認ボタンと M4A / MP3 / WAV を持つ可視ダイアログが見つかりませんでした (${timeoutMs}ms)。` +
+      "Suno の UI 変更の可能性があります。"
+  );
 }
 
 function resolveClipRowFromSelectButton(
@@ -143,9 +184,7 @@ async function waitForDownloadMenuItem(
 
 function selectFormatInModal(modal: HTMLElement, format: string): void {
   const formatPattern = new RegExp(`^${format}$`, "i");
-  const candidates = modal.querySelectorAll<HTMLButtonElement>(
-    FORMAT_OPTION_SELECTOR
-  );
+  const candidates = modal.querySelectorAll<HTMLButtonElement>(BUTTON_SELECTOR);
   for (const btn of candidates) {
     if (btn.disabled) continue;
     if (btn.textContent && formatPattern.test(btn.textContent.trim())) {
@@ -160,7 +199,7 @@ function selectFormatInModal(modal: HTMLElement, format: string): void {
 }
 
 function clickDownloadConfirm(modal: HTMLElement): void {
-  const btn = modal.querySelector<HTMLButtonElement>(DOWNLOAD_CONFIRM_SELECTOR);
+  const btn = findButtonByExactLabel(modal, DOWNLOAD_CONFIRM_LABEL);
   if (!btn) {
     throw new Error(
       "ダウンロード確認ボタンが見つかりませんでした。Suno の UI 変更の可能性があります。"
@@ -176,11 +215,7 @@ async function waitForFormatModalClose(
 ): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    if (
-      !modal.isConnected ||
-      !document.contains(modal) ||
-      !document.querySelector(FORMAT_MODAL_SELECTOR)
-    ) {
+    if (!modal.isConnected || !document.contains(modal)) {
       return;
     }
     await sleep(pollMs);
@@ -217,8 +252,7 @@ function defaultDownloadDeps(): TriggerDownloadAllDeps {
     findMoreButton: findScopedMoreButton,
     waitForDownloadMenuItem: (timeoutMs, pollMs) =>
       waitForDownloadMenuItem(timeoutMs, pollMs),
-    waitForFormatModal: (timeoutMs, pollMs) =>
-      waitForElement<HTMLElement>(FORMAT_MODAL_SELECTOR, timeoutMs, pollMs),
+    waitForFormatModal,
     waitForModalClose: waitForFormatModalClose,
     selectFormat: selectFormatInModal,
     clickConfirm: clickDownloadConfirm,

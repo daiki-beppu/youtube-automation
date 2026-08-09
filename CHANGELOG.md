@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `feat(streaming)`: 24/7 配信時だけ YouTube 配信枠復旧 CLI を既定 2 分の systemd timer で実行し、ephemeral OAuth 配備、ffmpeg 停止時 no-op、recovered 通知と journald 記録、安全な disable cleanup を行う Terraform opt-in を追加（#3675）。
 
 - `feat(streaming)`: active broadcast / ingest 状態を確認し、active ingest だけが残った場合に upcoming 配信枠を冪等再利用、または新規作成して bind → live 遷移する `yt-stream-broadcast-recover` CLI を追加。dry-run、構造化結果、secret 非出力を備えた（#3674）。
+- `fix(suno-helper)`: 現行 Base UI の可視 dialog から Download 確認ボタンと M4A / MP3 / WAV の3形式を持つ一意なモーダルを検出し、M4A 既定から MP3 を選択して同じモーダルの閉鎖まで待機するよう修正。DOM 契約不一致時は Suno UI 変更を明示する（#3039）。
 
 - `fix(thumbnail)`: TTP 参照プールの centroid 距離外れ値を参照ごとに診断し、`selection_only` は警告継続、`full` は strict 画像生成の API 呼び出し前と自動選択前に停止するようにした（#2952）。
 
