@@ -65,6 +65,9 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         if path == "/api/channels":
             self._json(HTTPStatus.OK, self.server.api.overview())
             return True
+        if path == "/api/publications":
+            self._json(HTTPStatus.OK, cast(dict[str, object], self.server.api.model["publications"]))
+            return True
         prefix = "/api/channels/"
         if path.startswith(prefix):
             channel_id = unquote(path.removeprefix(prefix))

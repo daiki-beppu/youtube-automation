@@ -28,6 +28,22 @@ def _write_channel(root: Path) -> Path:
         ),
         encoding="utf-8",
     )
+    (channel / "data" / "dashboard_publications.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "fetched_at": "2026-07-20T13:00:00+00:00",
+                "timezone": "Asia/Tokyo",
+                "days": {"2026-07-20": 2},
+                "error": {
+                    "code": "publication_refresh_failed",
+                    "message": "quota exceeded",
+                    "attempted_at": "2026-07-20T14:00:00+00:00",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
     return channel
 
 
@@ -67,6 +83,24 @@ def test_server_exposes_overview_and_channel_detail(dashboard_server: str):
     detail_status, detail = _json(f"{dashboard_server}/api/channels/{channel['id']}")
     assert detail_status == 200
     assert detail["videos"][0]["title"] == "Midnight"
+
+
+def test_server_exposes_saved_publication_read_model(dashboard_server: str) -> None:
+    status, payload = _json(f"{dashboard_server}/api/publications")
+
+    assert status == 200
+    assert payload["days"] == {"2026-07-20": 2}
+    assert len(payload["channels"]) == 1
+    channel = payload["channels"][0]
+    assert channel["name"] == "Night Drive"
+    assert channel["status"] == "refresh_failed"
+    assert channel["fetched_at"] == "2026-07-20T13:00:00+00:00"
+    assert channel["days"] == {"2026-07-20": 2}
+    assert channel["error"] == {
+        "code": "publication_refresh_failed",
+        "message": "quota exceeded",
+        "attempted_at": "2026-07-20T14:00:00+00:00",
+    }
 
 
 @pytest.mark.parametrize("path", ["/api/unknown", "/api/channels/not-registered"])
