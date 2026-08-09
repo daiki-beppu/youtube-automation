@@ -332,16 +332,44 @@ test("本体とChrome拡張を区別し、詳細ページへリンクする", as
   assert.match(html, /href="\/ext-v0\.3\.0\/?"/);
 });
 
-test("詳細ページはタイトルを一度だけ表示し、サイドバーを種類別・新しい順に並べる", async () => {
-  const html = await readRelease("v5.6.0");
-  const titleMatches = html.match(/<h1(?:\s[^>]*)?>youtube-automation v5\.6\.0<\/h1>/g) ?? [];
+const sidebarGroups = (html) => {
   const sidebar = html.match(/<nav data-blume-nav-tree>([\s\S]*?)<\/nav>/)?.[1] ?? "";
-  const hrefs = [...sidebar.matchAll(/href="(\/[^"#]+)"/g)].map((match) => match[1]);
+  const groupPattern = /<p\b[^>]*>\s*<span\b[^>]*>([^<]+)<\/span>\s*<\/p>\s*<div\b[^>]*>\s*<ul\b[^>]*>([\s\S]*?)<\/ul>/g;
+  return [...sidebar.matchAll(groupPattern)].map((match) => ({
+    label: match[1],
+    hrefs: [...match[2].matchAll(/href="(\/[^"#]+)"/g)].map((href) => href[1]),
+  }));
+};
 
-  assert.equal(titleMatches.length, 1);
-  assert.match(html, /youtube-automation ドキュメント/);
-  assert.ok(sidebar.indexOf("本体") < sidebar.indexOf("Chrome 拡張"));
-  assert.deepEqual(hrefs, ["/v5.6.0", "/v5.5.17", "/ext-v0.3.0", "/ext-v0.2.5"]);
+test("全詳細ページのサイドバーを kind × 更新規模の4 flat groupで表示する", async () => {
+  const expectedGroups = [
+    { label: "本体｜大きいアップデート", hrefs: ["/v5.6.0"] },
+    { label: "本体｜小さいアップデート", hrefs: ["/v5.5.17"] },
+    { label: "Chrome 拡張｜大きいアップデート", hrefs: ["/ext-v0.3.0"] },
+    { label: "Chrome 拡張｜小さいアップデート", hrefs: ["/ext-v0.2.5"] },
+  ];
+  const details = [
+    { version: "v5.6.0", title: "youtube-automation v5.6.0" },
+    { version: "v5.5.17", title: "youtube-automation v5.5.17" },
+    { version: "ext-v0.3.0", title: "Chrome 拡張 ext-v0.3.0" },
+    { version: "ext-v0.2.5", title: "Chrome 拡張 ext-v0.2.5" },
+  ];
+
+  for (const detail of details) {
+    const html = await readRelease(detail.version);
+    const titles = [...html.matchAll(/<h1(?:\s[^>]*)?>([^<]+)<\/h1>/g)].map(
+      (match) => match[1]
+    );
+    const groups = sidebarGroups(html);
+
+    assert.equal(titles.filter((title) => title === detail.title).length, 1);
+    assert.match(html, /youtube-automation ドキュメント/);
+    assert.deepEqual(groups, expectedGroups);
+    assert.deepEqual(
+      groups.flatMap((group) => group.hrefs),
+      expectedGroups.flatMap((group) => group.hrefs)
+    );
+  }
 });
 
 test("アップデートコマンドをコピー可能なコードブロックで表示する", async () => {
