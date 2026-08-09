@@ -55,7 +55,7 @@ while IFS= read -r path || [ -n "$path" ]; do
   esac
 
   case "$path" in
-    src/youtube_automation/infrastructure/cost_tracker* | tests/infrastructure/test_cost_tracker.py | pyproject.toml | uv.lock | flake.nix | flake.lock | .github/workflows/ci.yml)
+    src/youtube_automation/infrastructure/cost_tracker* | tests/infrastructure/test_cost_tracker.py | src/youtube_automation/infrastructure/file_lock.py | tests/infrastructure/test_file_lock.py | src/youtube_automation/commands/collections/collection_serve.py | tests/commands/collections/test_collection_serve.py | tests/commands/collections/test_collection_serve_lifecycle.py | pyproject.toml | uv.lock | flake.nix | flake.lock | .github/workflows/ci.yml)
       windows=true
       ;;
   esac

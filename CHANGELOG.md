@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `fix(collection-serve)`: 共通ファイルロックを使って `fcntl` 非対応環境でも起動時の排他を維持し、Windows で `yt-collection-serve` を import・起動できるようにした（#3387）。
+
 - `fix(masterup)`: Step 5.1 のラウドネス検証スクリプトが見つからない場合を、逸脱 FAIL の exit 2 ではなく起動エラーの exit 1 として明示する事前検証を追加した（#3317）。
 
 - `fix(masterup)`: channel の目標尺が SSOT の場合、skill-config の `audio.target_duration_min` が同値でも無視されることを stderr へ警告し、同梱設定コメントと skill の優先順位説明を実挙動へ揃えた（#3318）。

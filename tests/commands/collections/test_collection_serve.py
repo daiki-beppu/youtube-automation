@@ -29,6 +29,7 @@ import re
 import shutil
 import signal
 import socket
+import subprocess
 import sys
 import threading
 import urllib.error
@@ -85,6 +86,33 @@ _VERSION_ROUTE = "/version"
 
 # 外部 HTTP 契約（#1352）: 拡張が接続先 selector の label 更新に使う配信元情報。
 _SERVER_INFO_ROUTE = "/server-info"
+
+
+def test_module_import_succeeds_without_fcntl() -> None:
+    """Given fcntl がない環境, When module を import, Then ImportError にならない。"""
+    script = """
+import builtins
+import importlib
+
+original_import = builtins.__import__
+
+def import_without_fcntl(name, *args, **kwargs):
+    if name == "fcntl":
+        raise ImportError("No module named 'fcntl'")
+    return original_import(name, *args, **kwargs)
+
+builtins.__import__ = import_without_fcntl
+importlib.import_module("youtube_automation.commands.collections.collection_serve")
+"""
+
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
 
 
 def _collection_prompts_route(cid: str) -> str:

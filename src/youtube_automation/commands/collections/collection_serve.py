@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import argparse
 import contextlib
-import fcntl
 import hashlib
 import http.client
 import json
@@ -87,6 +86,7 @@ from youtube_automation.infrastructure.collections.chrome_extensions import (
     ChromeExtensionOrigin,
     resolve_unpacked_extension_origin,
 )
+from youtube_automation.infrastructure.file_lock import file_lock
 from youtube_automation.infrastructure.media.collection_paths import CollectionPaths
 
 DEFAULT_PORT = 7873
@@ -725,19 +725,14 @@ def _lifecycle_stop_path(record: _LifecycleRecord, attempt_token: str) -> str:
 
 
 def _startup_lock_path(root: Path, port: int) -> Path:
-    return root / f".collection-serve-{port}.lock"
+    return root / f".collection-serve-{port}"
 
 
 @contextlib.contextmanager
 def _startup_lock(path: Path):
     """同じ lifecycle record に対する check→bind→publish を直列化する。"""
-    descriptor = os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
-    try:
-        fcntl.flock(descriptor, fcntl.LOCK_EX)
+    with file_lock(path):
         yield
-    finally:
-        fcntl.flock(descriptor, fcntl.LOCK_UN)
-        os.close(descriptor)
 
 
 def _read_pid_file(path: Path) -> _LifecycleRecord | None:

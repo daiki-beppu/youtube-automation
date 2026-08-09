@@ -226,7 +226,14 @@ def test_extensions_pull_request_trigger_keeps_path_filter() -> None:
             ["extensions/shared-ui/src/button.tsx"],
             {"suno", "distrokid", "community"},
         ),
-        (["src/youtube_automation/commands/collections/collection_serve.py"], {"python", "packaging"}),
+        (
+            ["src/youtube_automation/commands/collections/collection_serve.py"],
+            {"python", "packaging", "windows"},
+        ),
+        (
+            ["src/youtube_automation/infrastructure/file_lock.py"],
+            {"python", "packaging", "windows"},
+        ),
         (
             ["src/youtube_automation/infrastructure/cost_tracker.py"],
             {"python", "packaging", "windows"},
@@ -270,6 +277,12 @@ def test_ci_required_jobs_always_report_but_gate_heavy_python_steps() -> None:
 
     assert jobs["build-smoke"]["if"] == "needs.changes.outputs.packaging == 'true'"
     assert jobs["windows-cost-tracker"]["if"] == "needs.changes.outputs.windows == 'true'"
+    windows_steps = jobs["windows-cost-tracker"]["steps"]
+    collection_serve_import_test = (
+        "uv run pytest tests/commands/collections/test_collection_serve.py"
+        "::test_module_import_succeeds_without_fcntl -q"
+    )
+    assert any(step.get("run") == collection_serve_import_test for step in windows_steps)
     assert jobs["adr-numbering"]["if"] == "needs.changes.outputs.adr == 'true'"
 
 
