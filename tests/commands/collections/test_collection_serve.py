@@ -3958,9 +3958,9 @@ def test_post_downloaded_empty_zip_returns_500(serve_dir, tmp_path):
 
 
 def test_post_downloaded_partial_zip_succeeds_with_warning(serve_dir, tmp_path):
-    """Given prompts 2 件（期待 4 clips）に対して ZIP 内の音声が 2 件
+    """Given prompts 2 件（期待 4 clips）に対して ZIP 内の音声が 3 件、配置可能が 2 件
     When POST /collections/<id>/downloaded を送る
-    Then 200 で受理してファイルを配置し、warning と expected/actual/missing を記録する（#1913）。
+    Then 200 で受理して生成不足・配置 skip の内訳を応答と workflow state に記録する。
     """
     planning = tmp_path / "planning"
     _make_collection(
@@ -3971,7 +3971,10 @@ def test_post_downloaded_partial_zip_succeeds_with_warning(serve_dir, tmp_path):
             {"name": "曲B — Song B", "style": "s", "lyrics": ""},
         ],
     )
-    zip_path = _make_zip(tmp_path / "partial.zip", {"Song A.mp3": b"audio1", "Song A_1.mp3": b"audio2"})
+    zip_path = _make_zip(
+        tmp_path / "partial.zip",
+        {"Song A.mp3": b"audio1", "Song A_1.mp3": b"audio2", "Unknown.mp3": b"unmatched"},
+    )
     base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
     token = _fetch_token(base)
     payload = {
@@ -3991,7 +3994,8 @@ def test_post_downloaded_partial_zip_succeeds_with_warning(serve_dir, tmp_path):
 
     assert result["ok"] is True
     assert result["placed_count"] == 2
-    assert result["warning"] == "placed 2 files, expected 4 (2 missing)"
+    assert result["missing_reasons"] == {"suno_unfulfilled": 1, "apply_skipped": 1}
+    assert result["warning"] == "placed 2 files, expected 4 (2 missing; Suno 未生成 1 / 配置 skip 1)"
     music_dir = planning / "20260601-clm-aaa-collection" / "02-Individual-music"
     assert len(list(music_dir.glob("*.mp3"))) == 2
     ws_path = planning / "20260601-clm-aaa-collection" / "workflow-state.json"
@@ -4000,6 +4004,7 @@ def test_post_downloaded_partial_zip_succeeds_with_warning(serve_dir, tmp_path):
     assert music["expected_file_count"] == 4
     assert music["actual_file_count"] == 2
     assert music["missing_file_count"] == 2
+    assert music["missing_reasons"] == result["missing_reasons"]
     assert workflow_state["assets"]["music_downloaded"] is True
 
 
@@ -4092,10 +4097,12 @@ def test_post_downloaded_full_redownload_resets_missing_file_count(serve_dir, tm
 
     assert result["placed_count"] == 4
     assert "warning" not in result
+    assert "missing_reasons" not in result
     ws_path = planning / "20260601-clm-aaa-collection" / "workflow-state.json"
     music = json.loads(ws_path.read_text(encoding="utf-8"))["planning"]["music"]
     assert music["actual_file_count"] == 4
     assert music["missing_file_count"] == 0
+    assert "missing_reasons" not in music
 
 
 def test_post_downloaded_unmatched_zip_returns_500_and_does_not_set_music_downloaded(serve_dir, tmp_path):
@@ -4321,7 +4328,7 @@ def test_post_downloaded_partial_zip_cleans_up_download_archive(serve_dir, tmp_p
         assert resp.status == 200
         result = json.loads(resp.read().decode("utf-8"))
 
-    assert result["warning"] == "placed 1 files, expected 4 (3 missing)"
+    assert result["warning"] == "placed 1 files, expected 4 (3 missing; Suno 未生成 3 / 配置 skip 0)"
     assert not zip_path.exists()
 
 
