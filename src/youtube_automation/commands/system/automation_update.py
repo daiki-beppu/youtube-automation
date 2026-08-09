@@ -45,6 +45,7 @@ EXIT_UP_TO_DATE = 0
 EXIT_DIFF = 1
 EXIT_ERROR = 2
 _STABLE_RELEASE_TAG_RE = re.compile(r"v\d+\.\d+\.\d+")
+_TARGET_HELP = "下流チャンネルリポジトリのルート。省略時は CWD から親方向へ自動解決"
 
 
 class _StepFailed(Exception):
@@ -432,35 +433,58 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     p_check = sub.add_parser("check", help="実行場所・pin 形式・upstream 最新との差分を判定 (read-only)")
-    p_check.add_argument("--target", default=None, help="対象チャンネルリポジトリ (default: CWD から自動解決)")
-    p_check.add_argument("--tag", default=None, help="比較先 tag を明示 (default: upstream 最新リリース)")
+    p_check.add_argument("--target", default=None, help=_TARGET_HELP)
+    p_check.add_argument(
+        "--tag",
+        default=None,
+        help="tag pin 専用の比較先。vX.Y.Z 形式で指定し、省略時は upstream の最新 stable release",
+    )
     p_check.set_defaults(func=cmd_check)
 
     p_apply = sub.add_parser("apply", help="pin 書き換え → uv lock → yt-skills sync → smoke check を一括実行")
-    p_apply.add_argument("--target", default=None, help="対象チャンネルリポジトリ (default: CWD から自動解決)")
-    p_apply.add_argument("--tag", default=None, help="追従先 tag を明示 (default: upstream 最新リリース)")
-    p_apply.add_argument("--rev", default=None, help="sha pin の bump 先 sha（sha pin では必須）")
+    p_apply.add_argument("--target", default=None, help=_TARGET_HELP)
+    p_apply.add_argument(
+        "--tag",
+        default=None,
+        help="tag pin 専用の追従先。vX.Y.Z 形式で指定し、省略時は upstream の最新 stable release",
+    )
+    p_apply.add_argument(
+        "--rev",
+        default=None,
+        help="sha pin 専用の追従先。40 桁の hex SHA を指定し、sha pin では必須",
+    )
     p_apply.add_argument(
         "--force-sync",
         action="store_true",
-        help="互換用。apply は human step 後の機械実行として常に yt-skills sync --force を使う",
+        help=(
+            "local fix の破棄を承認済みの場合に、yt-skills diff の local fix guard だけを bypass し、"
+            "upstream 版で上書きする"
+        ),
     )
     p_apply.add_argument(
         "--accept-hooks",
         action="store_true",
-        help="settings asset が提示する新規 hook の追加を承認する（省略時は hook だけスキップ）",
+        help=(
+            "--sync-only では使用しない。全 asset 同期時に settings asset の新規 hook 追加を承認する。"
+            "省略時は新規 hook だけ追加しない"
+        ),
     )
     p_apply.add_argument(
         "--sync-only",
         nargs="+",
         default=None,
         metavar="SKILL",
-        help="skills asset を指定スキルのみ同期する（claude-md asset も同期するため local fix guard は実行）",
+        help=(
+            "配布済み skill 名を 1 件以上指定し、skills asset の指定スキルと claude-md asset だけを同期する。"
+            "local fix guard は既定で維持し、--force-sync 併用時のみ bypass"
+        ),
     )
     p_apply.add_argument(
         "--allow-dirty",
         action="store_true",
-        help="作業ツリーが clean でなくても実行する（途中失敗からの再実行用）",
+        help=(
+            "途中失敗からの再実行時に作業ツリーの clean guard だけを bypass する。それ単独では local fix guard は維持"
+        ),
     )
     p_apply.set_defaults(func=cmd_apply)
 

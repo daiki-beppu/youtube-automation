@@ -150,6 +150,56 @@ def recorded_commands(monkeypatch: pytest.MonkeyPatch) -> list[list[str]]:
     return commands
 
 
+def _subcommand_help(command: str, capsys: pytest.CaptureFixture) -> str:
+    with pytest.raises(SystemExit) as exc_info:
+        main([command, "--help"])
+
+    assert exc_info.value.code == 0
+    return " ".join(capsys.readouterr().out.split())
+
+
+@pytest.mark.parametrize("command", ["check", "apply"])
+def test_subcommand_help_explains_target_resolution(command: str, capsys: pytest.CaptureFixture) -> None:
+    help_text = _subcommand_help(command, capsys)
+
+    assert "下流チャンネルリポジトリのルート" in help_text
+    assert "省略時は CWD から親方向へ自動解決" in help_text
+
+
+def test_check_help_explains_tag_pin_comparison(capsys: pytest.CaptureFixture) -> None:
+    help_text = _subcommand_help("check", capsys)
+
+    assert "tag pin 専用" in help_text
+    assert "vX.Y.Z 形式" in help_text
+    assert "省略時は upstream の最新 stable release" in help_text
+
+
+def test_apply_help_explains_pin_specific_revision_inputs(capsys: pytest.CaptureFixture) -> None:
+    help_text = _subcommand_help("apply", capsys)
+
+    assert "tag pin 専用" in help_text
+    assert "vX.Y.Z 形式" in help_text
+    assert "省略時は upstream の最新 stable release" in help_text
+    assert "sha pin 専用" in help_text
+    assert "40 桁の hex SHA" in help_text
+    assert "sha pin では必須" in help_text
+
+
+def test_apply_help_explains_safety_flag_scope(capsys: pytest.CaptureFixture) -> None:
+    help_text = _subcommand_help("apply", capsys)
+
+    assert "local fix の破棄を承認済み" in help_text
+    assert "local fix guard だけを bypass" in help_text
+    assert "配布済み skill 名を 1 件以上指定" in help_text
+    assert "skills asset の指定スキルと claude-md asset" in help_text
+    assert "local fix guard は既定で維持" in help_text
+    assert "全 asset 同期時" in help_text
+    assert "--sync-only では使用しない" in help_text
+    assert "省略時は新規 hook だけ追加しない" in help_text
+    assert "作業ツリーの clean guard だけを bypass" in help_text
+    assert "それ単独では local fix guard は維持" in help_text
+
+
 # ---------------------------------------------------------------------------
 # 実行場所判定 (要件 3)
 # ---------------------------------------------------------------------------
