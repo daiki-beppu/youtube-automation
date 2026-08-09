@@ -1035,8 +1035,12 @@ def record_bootstrap_attempt(
     reason: str,
     now: str,
     ai_started_at: str | None = None,
+    human_intervals: list[list[str]] | None = None,
 ) -> None:
     """Record an unattended `/wf-new` stop before a collection exists."""
+    if human_intervals and ai_started_at is None:
+        raise ValueError("record-bootstrap: human_interval には ai_started_at が必要です")
+    segments = _timing_segments(ai_started_at, human_intervals or [], now) if ai_started_at is not None else None
     record_attempt(
         root,
         token=token,
@@ -1046,7 +1050,7 @@ def record_bootstrap_attempt(
         reason=reason,
         resume_action="wf-new",
         now=now,
-        segments=[_ai_timing_segment(ai_started_at, now)] if ai_started_at is not None else None,
+        segments=segments,
     )
 
 
@@ -1082,6 +1086,7 @@ def _parser() -> argparse.ArgumentParser:
     bootstrap.add_argument("--status", choices=("blocked", "failed"), required=True)
     bootstrap.add_argument("--reason", required=True)
     bootstrap.add_argument("--ai-started-at")
+    bootstrap.add_argument("--human-interval", action="append", nargs=2, metavar=("START", "END"))
     return parser
 
 
@@ -1113,6 +1118,7 @@ def main(argv: list[str] | None = None) -> int:
                 reason=args.reason,
                 now=recorded_at,
                 ai_started_at=args.ai_started_at,
+                human_intervals=args.human_interval,
             )
             result = {"status": "recorded"}
         else:

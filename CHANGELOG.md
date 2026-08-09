@@ -150,6 +150,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `feat(collection-ideate)`: 明示的な batch plan mode で N 件の企画を既存 collection と batch 内の全組合せに対して相互差別化し、全件承認・件数・slug 一意性・provenance を検証した manifest だけを atomic に保存する契約を追加した。通常の single collection 企画契約は維持する（#3262）。
 - `feat(wf-auto)`: action 別手作業基準を同じ collection / action の work item 数へ適用し、全 retry の AI・人間時間を差し引いた「AI 込み削減時間」と「人間が浮いた時間」を action 別・全体で返す集計を追加した。負値は available な 0 に丸め、基準欠落と legacy timing は unavailable を維持する（#3273）。
 - `feat(wf-auto)`: schema v2 history の全 attempt を status に関係なく同じ collection / action の work item と action 別に集約し、AI 秒・人間秒・attempt 数・work item 数を決定的に返す純粋関数を追加した。schema v1 または timing 欠落は 0 とせず unavailable を返す（#3272）。
+- `feat(wf-auto)`: collection 作成前の bootstrap attempt でも複数の人間介入区間を AI 区間と分離し、同じ canonical timing history に保存できるようにした（#3342）。
 - `docs(wf-auto)`: blocked の停止決定時点で attempt を閉じて再開までの放置時間を計上せず、再開は新しい attempt と AI 開始時刻に分離する契約を追加した。通常の API polling と agent が保持する background wait は human interval ではなく AI 実行時間として分類する（#3321）。
 - `docs(wf-auto)`: 同一 run で回答を待つ人間介入 gate の直前・直後をメインエージェントが採時し、同じ canonical action attempt の全閉区間を発生順に `record --human-interval` へ渡す実行契約を追加した（#3320）。
 - `feat(wf-auto)`: state CLI の `record` に repeatable な `--human-interval START END` を追加し、AI 開始から記録時刻までを連続した AI / human timing segment として保存できるようにした。不正な逆転・重複・範囲外・timezone 不一致は既存 history を変更せず拒否する（#3319）。
