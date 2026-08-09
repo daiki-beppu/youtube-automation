@@ -25,11 +25,11 @@ function response(status: number, body: unknown): Response {
   } as Response;
 }
 
-function serverInfo(baseUrl: string, label: string) {
+function serverInfo(baseUrl: string, channelName: string, label = channelName) {
   const parsed = new URL(baseUrl);
   return {
-    channel_name: label,
-    channel_short: label.toLowerCase(),
+    channel_name: channelName,
+    channel_short: channelName.toLowerCase(),
     hostname: parsed.hostname,
     port: Number(parsed.port),
     base_url: baseUrl,
@@ -173,6 +173,48 @@ describe("shared live server discovery", () => {
     vi.useRealTimers();
   });
 
+  it("should expose a structured channel name on the permanent default source", () => {
+    expect(DEFAULT_SERVER_SOURCES[0]).toEqual({
+      id: "youtube-automation-localhost-7873",
+      channelName: "YouTube Automation",
+      label: "YouTube Automation (default)",
+      url: DEFAULT_URL,
+    });
+  });
+
+  it("should preserve the probed channel name independently from the legacy label", async () => {
+    const fetchMock = vi.fn((input: string | URL | Request) => {
+      const url = String(input);
+      if (url === DISCOVERY_REGISTRY_URL) {
+        return Promise.resolve(
+          response(200, registry([registryEntry(LIVE_URL, "ambient-night")]))
+        );
+      }
+      if (url === `${LIVE_URL}/server-info`) {
+        return Promise.resolve(
+          response(
+            200,
+            serverInfo(
+              LIVE_URL,
+              "Ambient (Night)",
+              "Ambient (Night) (live.localhost:49152)"
+            )
+          )
+        );
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+
+    const sources = await discoverServerSources({ fetch: fetchMock });
+
+    expect(sources[1]).toEqual({
+      id: "live-localhost-49152",
+      channelName: "Ambient (Night)",
+      label: "Ambient (Night) (live.localhost:49152)",
+      url: LIVE_URL,
+    });
+  });
+
   it("should probe only registry entries and keep only validated canonical matches in URL order", async () => {
     const mismatchUrl = "http://mismatch.localhost:49154";
     const fetchMock = vi.fn(async (input: string | URL | Request) => {
@@ -254,6 +296,7 @@ describe("shared live server discovery", () => {
       DEFAULT_SERVER_SOURCES[0],
       {
         id: "live-localhost-49152",
+        channelName: "Probe",
         label: "Probe",
         url: LIVE_URL,
         capabilities: { distrokid: { mode: "dir" } },
@@ -278,11 +321,13 @@ describe("shared live server discovery", () => {
 
     expect(DEFAULT_SERVER_SOURCES[0]).toEqual({
       id: "youtube-automation-localhost-7873",
+      channelName: "YouTube Automation",
       label: "YouTube Automation (default)",
       url: DEFAULT_URL,
     });
     expect(sources[1]).toEqual({
       id: "live-localhost-49152",
+      channelName: "Legacy",
       label: "Legacy",
       url: LIVE_URL,
     });
