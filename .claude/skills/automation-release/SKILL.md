@@ -14,7 +14,7 @@ description: "Use when 本リポジトリの新規リリースを作成すると
 - 「前提」のいずれかが不成立なら、記載した復旧手順を案内して停止する。前提が満たされるまで後続Phaseへ進まない。
 - extension verify は repository root で `bash .claude/skills/automation-release/references/verify-extensions.sh [<name>]` を実行し、exit 0を必須とする。non-zeroならreleaseを停止する。
 - tag push前に tag名・対象commit SHA・対象版数を表示し、取消不能な外部反映操作であることを警告して `AskUserQuestion` の「実行 / 中止」2択で承認を得る。承認前にpushしない。
-- Python prepare完了 = version / CHANGELOG / uv.lockが同期したPRを作成済み。Python publish完了 = tagとGitHub Releaseを作成済み。
+- Python prepare完了 = version / CHANGELOG / uv.lockが同期したPRを作成済み。Python publish完了 = tagとGitHub Releaseを作成済み。post-release note の PR は別の完了状態として扱い、skip や PR pending を release publish の失敗へ巻き戻さない。
 - extension prepare完了 = package.jsonのversion差分だけを含むPRを作成し、verifyと差分ガードがPASS。extension publish完了 = merge commitへのtag、workflow成功、Releaseのzip asset 3件を確認済み。
 
 ## Overview
@@ -280,7 +280,68 @@ gh release edit "v${VER}" --notes "${section}
 ${auto}"
 ```
 
-#### 2-4. リリースブランチのクリーンアップ
+#### 2-4. 公開リリースノート案の生成と内容確認
+
+`gh release create` の成功を確認してから、canonical contract の `references/release-notes-authoring.md` を読み、対象 version の CHANGELOG section を公開向けに変換する。
+
+```bash
+TAG="v${VER}"
+NOTE_PATH="docs/release-notes/v${VER}.md"
+POST_RELEASE_BRANCH="docs/release-notes-v${VER}"
+
+section=$(awk -v ver="${VER}" '
+  $0 ~ "^## \\[" ver "\\]" { flag = 1; next }
+  /^## \\[/                  { flag = 0 }
+  flag
+' CHANGELOG.md)
+test -n "${section}" || { echo "ERROR: CHANGELOG.md に ${TAG} section がありません"; exit 1; }
+```
+
+`section` の運営者影響を全件保持し、`docs/release-notes/v${VER}.md` を作る。canonical reference の frontmatter、見出し順、同一 tag link、内部実装・issue・PR 番号の除外を満たすこと。既存ファイルがある場合は上書きせず停止し、差分を確認して再開方法をユーザーへ提示する。
+
+生成後、ファイル全文と `git diff -- "${NOTE_PATH}"` を確認し、生成内容・対象 tag・post-release branch・変更 path をユーザーへ提示する。期待する変更 path は `${NOTE_PATH}` だけとし、別 path の差分があれば承認へ進まず原因を解消する。
+
+#### 2-5. post-release PR の承認
+
+`AskUserQuestion` で「PR 作成 / 非承認 / skip」の選択を得る。承認前に commit / push / pull request 作成を行わない。main へ直接 push しない。
+
+- 内容修正を求められたら生成内容を修正して再提示し、同じ承認 gate に戻る。
+- 非承認 / skip ではノートを commit せず、GitHub Release publish は完了扱いとする。`references/release-notes-authoring.md` と `${NOTE_PATH}` を使う手動作成手順を報告し、Phase 2-7 の release branch cleanup へ進む。
+- 承認された場合だけ Phase 2-6 へ進む。
+
+#### 2-6. post-release 専用 branch と pull request
+
+既存 branch / PR を破壊・重複作成しないため、最初に local・remote・GitHub の状態を確認する。
+
+```bash
+if git show-ref --verify --quiet "refs/heads/${POST_RELEASE_BRANCH}" \
+  || git ls-remote --exit-code --heads origin "${POST_RELEASE_BRANCH}" >/dev/null 2>&1; then
+  echo "ERROR: 既存 post-release branch: ${POST_RELEASE_BRANCH}"
+  gh pr list --state all --head "${POST_RELEASE_BRANCH}" --json number,state,url
+  echo "既存 branch / pull request を削除・上書きせず、内容を照合して retry してください"
+else
+  git checkout -b "${POST_RELEASE_BRANCH}" origin/main
+fi
+```
+
+既存 post-release branch を検出した場合は自動処理を停止し、既存 pull request の URL または branch の照合・retry 手順を報告する。GitHub Release publish は完了したまま、Phase 2-7 の release branch cleanup は必ず続行する。
+
+新規 branch を作れた場合は `references/publish-checklist.md` の「post-release note の local gates」を記載順にそのまま実行する。non-zero なら commit / push せず、失敗した gate と retry 手順を報告する。
+
+全 gate が green の場合だけ commit、push、main 向け PR 作成へ進む。
+
+```bash
+git add "${NOTE_PATH}"
+git commit -m "docs(release-notes): ${TAG} の公開ノートを追加する"
+git push -u origin "${POST_RELEASE_BRANCH}"
+PR_URL=$(gh pr create --base main --head "${POST_RELEASE_BRANCH}" \
+  --title "docs(release-notes): ${TAG}" \
+  --body "${TAG} の公開リリースノート。Cloudflare Pages preview と required checks を確認後に merge する。")
+```
+
+pull request では Cloudflare Pages preview と branch protection の required checks の `lint` / `test` を通す。production site は PR merge 後に更新されるため、この時点では site は PR pending として報告する。
+
+#### 2-7. リリースブランチのクリーンアップ
 
 ```bash
 # リモート
@@ -292,14 +353,22 @@ git branch -D "release/v${VER}" 2>/dev/null || true
 
 PR マージ時に GitHub 側で自動削除されているケースもあるため、エラーは無視。
 
-#### 2-5. 次工程の案内
+#### 2-8. 完了報告
 
 ```
 ✅ v${VER} のリリースが完了しました。
 
+GitHub Release: https://github.com/daiki-beppu/youtube-automation/releases/tag/v${VER}
+生成 path: docs/release-notes/v${VER}.md
+post-release PR: ${PR_URL または skip / retry 状態}
+site は PR pending: Cloudflare Pages preview と required checks の確認待ち
+merge 後の公開 URL: https://youtube-automation-release-notes.pages.dev/v${VER}/
+
 次の選択肢:
 - 各チャンネルリポジトリで `/automation-update` を実行すれば CHANGELOG.md / Release 本文から累積影響を要約して追従可能
 ```
+
+非承認 / skip、生成失敗、local gate 失敗、既存 branch 検出でも GitHub Release publish 自体は完了として同じ URL を報告する。PR が無い場合は理由と手動作成手順を、PR 作成途中の失敗では重複作成しない retry 手順を併記する。
 
 ### Phase E0: 状態判定（extension）
 

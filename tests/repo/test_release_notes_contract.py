@@ -14,6 +14,8 @@ from tests.helpers.paths import REPO_ROOT
 ROOT = REPO_ROOT
 NOTES_DIR = ROOT / "docs" / "release-notes"
 AUTHORING_REFERENCE = ROOT / ".claude" / "skills" / "automation-release" / "references" / "release-notes-authoring.md"
+RELEASE_SKILL = ROOT / ".claude" / "skills" / "automation-release" / "SKILL.md"
+PUBLISH_CHECKLIST = ROOT / ".claude" / "skills" / "automation-release" / "references" / "publish-checklist.md"
 REQUIRED_FRONTMATTER_KEYS = {"title", "version", "released_at", "kind", "summary", "sidebar"}
 REQUIRED_HEADINGS = (
     "## 30 秒サマリー",
@@ -124,3 +126,54 @@ def test_ci_python_test_checkout_fetches_full_tag_history() -> None:
     checkout = next(step for step in test_job["steps"] if str(step.get("uses", "")).startswith("actions/checkout@"))
 
     assert checkout["with"]["fetch-depth"] == 0
+
+
+def test_python_publish_orders_release_authoring_review_approval_and_pull_request() -> None:
+    skill = RELEASE_SKILL.read_text(encoding="utf-8")
+    phase_two = skill[skill.index("### Phase 2: publish") : skill.index("### Phase E0: 状態判定（extension）")]
+    ordered_contract = (
+        'gh release create "v${VER}" --generate-notes --title "v${VER}"',
+        "references/release-notes-authoring.md",
+        "docs/release-notes/v${VER}.md",
+        "生成内容・対象 tag・post-release branch・変更 path",
+        "AskUserQuestion",
+        'git push -u origin "${POST_RELEASE_BRANCH}"',
+        'gh pr create --base main --head "${POST_RELEASE_BRANCH}"',
+    )
+
+    positions = [phase_two.index(fragment) for fragment in ordered_contract]
+    assert positions == sorted(positions)
+
+
+def test_python_publish_requires_approval_and_reports_pending_site_on_skip() -> None:
+    skill = RELEASE_SKILL.read_text(encoding="utf-8")
+
+    for required in (
+        "承認前に commit / push / pull request 作成を行わない",
+        "main へ直接 push しない",
+        "非承認 / skip",
+        "GitHub Release publish は完了扱い",
+        "手動作成手順",
+        "Cloudflare Pages preview",
+        "required checks の `lint` / `test`",
+        "site は PR pending",
+        "merge 後の公開 URL",
+    ):
+        assert required in skill
+
+
+def test_python_post_release_failures_are_retryable_without_weakening_release_cleanup() -> None:
+    checklist = PUBLISH_CHECKLIST.read_text(encoding="utf-8")
+
+    for required in (
+        "生成内容を修正して再提示",
+        "承認されるまで git 副作用を起こさない",
+        "local gates が失敗",
+        "push せず retry 手順を報告",
+        "既存 post-release branch",
+        "削除・上書きしない",
+        "既存 pull request",
+        "重複作成しない",
+        "release branch cleanup は必ず続行",
+    ):
+        assert required in checklist
