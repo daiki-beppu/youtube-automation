@@ -12,6 +12,33 @@ function stubElement(): HTMLElement {
   return { click: vi.fn() } as unknown as HTMLElement;
 }
 
+interface FormatModalFixtureOptions {
+  confirm?: boolean;
+  formats?: readonly string[];
+  hidden?: boolean;
+  mp3Disabled?: boolean;
+  testId?: string;
+}
+
+function formatModalFixture(options: FormatModalFixtureOptions = {}): string {
+  const formats = options.formats ?? ["M4A", "MP3", "WAV"];
+  const formatButtons = formats
+    .map(
+      (format) =>
+        `<button class="flex w-full"${
+          format === "MP3" && options.mp3Disabled ? " disabled" : ""
+        }${format === "M4A" ? ' aria-pressed="true"' : ""}>${format}</button>`
+    )
+    .join("");
+  const confirm =
+    options.confirm === false
+      ? ""
+      : '<button class="hxc-btn-variant-primary">Download</button>';
+  return `<div role="dialog" data-open data-base-ui-focusable data-testid="${
+    options.testId ?? "format-modal"
+  }"${options.hidden ? " hidden" : ""}>${formatButtons}${confirm}</div>`;
+}
+
 function createMockDeps(
   overrides?: Partial<TriggerDownloadAllDeps>
 ): TriggerDownloadAllDeps {
@@ -225,12 +252,9 @@ describe("triggerDownloadAll", () => {
       <div data-context-menu="true">
         <button aria-label="Download all">Download all</button>
       </div>
-      <div class="modal-class modal-overlay">
-        <button class="flex w-full">M4A</button>
-        <button class="flex w-full">MP3</button>
-        <button class="flex w-full">WAV</button>
-        <button class="hxc-btn-variant-primary">Download</button>
-      </div>
+      <div role="dialog" data-testid="unrelated-dialog"><button>Cancel</button></div>
+      ${formatModalFixture({ hidden: true, testId: "hidden-format-modal" })}
+      ${formatModalFixture()}
     `;
     const more = document.querySelector<HTMLButtonElement>(
       'button[aria-label="More options"]'
@@ -238,10 +262,13 @@ describe("triggerDownloadAll", () => {
     const downloadAll = document.querySelector<HTMLButtonElement>(
       'button[aria-label="Download all"]'
     )!;
+    const formatModal = document.querySelector<HTMLElement>(
+      '[data-testid="format-modal"]'
+    )!;
     const mp3 = Array.from(
-      document.querySelectorAll<HTMLButtonElement>("button.flex.w-full")
+      formatModal.querySelectorAll<HTMLButtonElement>("button.flex.w-full")
     ).find((button) => button.textContent?.trim() === "MP3")!;
-    const confirm = document.querySelector<HTMLButtonElement>(
+    const confirm = formatModal.querySelector<HTMLButtonElement>(
       "button.hxc-btn-variant-primary"
     )!;
     more.addEventListener("click", () => clicked.push("more"));
@@ -249,7 +276,7 @@ describe("triggerDownloadAll", () => {
     mp3.addEventListener("click", () => clicked.push("mp3"));
     confirm.addEventListener("click", () => {
       clicked.push("confirm");
-      document.querySelector(".modal-class.modal-overlay")?.remove();
+      document.querySelector('[data-testid="format-modal"]')?.remove();
     });
 
     await triggerDownloadAll("mp3");
@@ -272,23 +299,26 @@ describe("triggerDownloadAll", () => {
       <div data-context-menu="true">
         <button aria-label="Download all">Download all</button>
       </div>
-      <div class="modal-class modal-overlay">
-        <button class="flex w-full">MP3</button>
-        <button class="hxc-btn-variant-primary">Download</button>
-      </div>
+      ${formatModalFixture()}
     `;
     document
       .querySelector<HTMLButtonElement>('button[aria-label="Download all"]')!
       .addEventListener("click", () => clicked.push("download-all"));
-    document
-      .querySelector<HTMLButtonElement>("button.flex.w-full")!
+    Array.from(
+      document.querySelectorAll<HTMLButtonElement>("button.flex.w-full")
+    )
+      .find((button) => button.textContent?.trim() === "MP3")!
       .addEventListener("click", () => clicked.push("mp3"));
     document
       .querySelector<HTMLButtonElement>("button.hxc-btn-variant-primary")!
       .addEventListener("click", () => {
         clicked.push("confirm");
         setTimeout(() => {
-          document.querySelector(".modal-class.modal-overlay")?.remove();
+          document.body.insertAdjacentHTML(
+            "beforeend",
+            formatModalFixture({ testId: "next-format-modal" })
+          );
+          document.querySelector('[data-testid="format-modal"]')?.remove();
         }, 11_000);
       });
 
@@ -314,10 +344,7 @@ describe("triggerDownloadAll", () => {
       <div data-context-menu="true">
         <button aria-label="Download all">Download all</button>
       </div>
-      <div class="modal-class modal-overlay">
-        <button class="flex w-full">MP3</button>
-        <button class="hxc-btn-variant-primary">Download</button>
-      </div>
+      ${formatModalFixture()}
     `;
     document
       .querySelector<HTMLButtonElement>('[data-testid="unrelated-more"]')!
@@ -328,14 +355,16 @@ describe("triggerDownloadAll", () => {
     document
       .querySelector<HTMLButtonElement>('button[aria-label="Download all"]')!
       .addEventListener("click", () => clicked.push("download-all"));
-    document
-      .querySelector<HTMLButtonElement>("button.flex.w-full")!
+    Array.from(
+      document.querySelectorAll<HTMLButtonElement>("button.flex.w-full")
+    )
+      .find((button) => button.textContent?.trim() === "MP3")!
       .addEventListener("click", () => clicked.push("mp3"));
     document
       .querySelector<HTMLButtonElement>("button.hxc-btn-variant-primary")!
       .addEventListener("click", () => {
         clicked.push("confirm");
-        document.querySelector(".modal-class.modal-overlay")?.remove();
+        document.querySelector('[data-testid="format-modal"]')?.remove();
       });
 
     await triggerDownloadAll("mp3");
@@ -366,10 +395,7 @@ describe("triggerDownloadAll", () => {
       <div data-context-menu="true">
         <button aria-label="Download all">Download all</button>
       </div>
-      <div class="modal-class modal-overlay">
-        <button class="flex w-full">M4A</button>
-        <button class="hxc-btn-variant-primary">Download</button>
-      </div>
+      ${formatModalFixture()}
     `;
     document
       .querySelector<HTMLButtonElement>('[data-testid="list-row-more"]')!
@@ -384,7 +410,7 @@ describe("triggerDownloadAll", () => {
       .querySelector<HTMLButtonElement>("button.hxc-btn-variant-primary")!
       .addEventListener("click", () => {
         clicked.push("confirm");
-        document.querySelector(".modal-class.modal-overlay")?.remove();
+        document.querySelector('[data-testid="format-modal"]')?.remove();
       });
 
     await triggerDownloadAll("m4a");
@@ -411,10 +437,7 @@ describe("triggerDownloadAll", () => {
       <div data-context-menu="true">
         <button aria-label="Download all">Download all</button>
       </div>
-      <div class="modal-class modal-overlay">
-        <button class="flex w-full">MP3</button>
-        <button class="hxc-btn-variant-primary">Download</button>
-      </div>
+      ${formatModalFixture()}
     `;
     document
       .querySelector<HTMLButtonElement>('[data-testid="selected-row-more"]')!
@@ -422,14 +445,16 @@ describe("triggerDownloadAll", () => {
     document
       .querySelector<HTMLButtonElement>('button[aria-label="Download all"]')!
       .addEventListener("click", () => clicked.push("download-all"));
-    document
-      .querySelector<HTMLButtonElement>("button.flex.w-full")!
+    Array.from(
+      document.querySelectorAll<HTMLButtonElement>("button.flex.w-full")
+    )
+      .find((button) => button.textContent?.trim() === "MP3")!
       .addEventListener("click", () => clicked.push("mp3"));
     document
       .querySelector<HTMLButtonElement>("button.hxc-btn-variant-primary")!
       .addEventListener("click", () => {
         clicked.push("confirm");
-        document.querySelector(".modal-class.modal-overlay")?.remove();
+        document.querySelector('[data-testid="format-modal"]')?.remove();
       });
 
     await triggerDownloadAll("mp3");
@@ -482,10 +507,7 @@ describe("triggerDownloadAll", () => {
       <div data-context-menu="true">
         <button>Download all</button>
       </div>
-      <div class="modal-class modal-overlay">
-        <button class="flex w-full">MP3</button>
-        <button class="hxc-btn-variant-primary">Download</button>
-      </div>
+      ${formatModalFixture()}
     `;
     const downloadAll = Array.from(
       document.querySelectorAll<HTMLButtonElement>("button")
@@ -495,7 +517,7 @@ describe("triggerDownloadAll", () => {
       .querySelector<HTMLButtonElement>("button.hxc-btn-variant-primary")!
       .addEventListener("click", () => {
         clicked.push("confirm");
-        document.querySelector(".modal-class.modal-overlay")?.remove();
+        document.querySelector('[data-testid="format-modal"]')?.remove();
       });
 
     await triggerDownloadAll("mp3");
@@ -514,16 +536,14 @@ describe("triggerDownloadAll", () => {
         </article>
       </div>
       <div data-context-menu="true"><button>Download all</button></div>
-      <div class="modal-class modal-overlay">
-        <button class="flex w-full" disabled>MP3</button>
-        <button class="hxc-btn-variant-primary">Download</button>
-      </div>
+      ${formatModalFixture({ mp3Disabled: true })}
     `;
 
     await expect(triggerDownloadAll("mp3")).rejects.toThrow(/形式 "mp3"/);
   });
 
-  it("DOM fixture: default deps は format button が無ければ throw する", async () => {
+  it("DOM fixture: 形式3択が崩れた場合は UI 変更を示して throw する", async () => {
+    vi.useFakeTimers();
     vi.stubGlobal("PointerEvent", MouseEvent);
     document.body.innerHTML = `
       <div class="clip-browser-list-scroller">
@@ -534,16 +554,18 @@ describe("triggerDownloadAll", () => {
         </article>
       </div>
       <div data-context-menu="true"><button>Download all</button></div>
-      <div class="modal-class modal-overlay">
-        <button class="flex w-full">WAV</button>
-        <button class="hxc-btn-variant-primary">Download</button>
-      </div>
+      ${formatModalFixture({ formats: ["M4A", "WAV"] })}
     `;
 
-    await expect(triggerDownloadAll("mp3")).rejects.toThrow(/形式 "mp3"/);
+    const result = triggerDownloadAll("mp3");
+    const rejection = expect(result).rejects.toThrow(/Suno の UI 変更/);
+    await vi.advanceTimersByTimeAsync(25_000);
+
+    await rejection;
   });
 
-  it("DOM fixture: default deps は confirm button が無ければ throw する", async () => {
+  it("DOM fixture: Download 確認ボタンが無ければ UI 変更を示して throw する", async () => {
+    vi.useFakeTimers();
     vi.stubGlobal("PointerEvent", MouseEvent);
     document.body.innerHTML = `
       <div class="clip-browser-list-scroller">
@@ -554,13 +576,38 @@ describe("triggerDownloadAll", () => {
         </article>
       </div>
       <div data-context-menu="true"><button>Download all</button></div>
-      <div class="modal-class modal-overlay">
-        <button class="flex w-full">MP3</button>
-      </div>
+      ${formatModalFixture({ confirm: false })}
     `;
 
-    await expect(triggerDownloadAll("mp3")).rejects.toThrow(
-      /ダウンロード確認ボタン/
+    const result = triggerDownloadAll("mp3");
+    const rejection = expect(result).rejects.toThrow(/Suno の UI 変更/);
+    await vi.advanceTimersByTimeAsync(25_000);
+
+    await rejection;
+  });
+
+  it("DOM fixture: 形式モーダルが複数可視なら一意に決めず UI 変更を示す", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("PointerEvent", MouseEvent);
+    document.body.innerHTML = `
+      <div class="clip-browser-list-scroller">
+        <article>
+          <img src="clip.jpg" alt="" />
+          <div class="multi-select-button"><button aria-label="Deselect clip">Selected</button></div>
+          <button aria-label="More options">...</button>
+        </article>
+      </div>
+      <div data-context-menu="true"><button>Download all</button></div>
+      ${formatModalFixture({ testId: "format-modal-a" })}
+      ${formatModalFixture({ testId: "format-modal-b" })}
+    `;
+
+    const result = triggerDownloadAll("mp3");
+    const rejection = expect(result).rejects.toThrow(
+      /形式モーダルが複数.*Suno の UI 変更/
     );
+    await vi.advanceTimersByTimeAsync(2_000);
+
+    await rejection;
   });
 });
