@@ -138,6 +138,24 @@ test("全 Blume page の stylesheet closure で DADS accent を解決する", as
   }
 });
 
+const sectionByAttribute = (html, attribute, value) => {
+  const opening = new RegExp(`<section\\b[^>]*\\b${attribute}="${value}"[^>]*>`).exec(html);
+  assert.notEqual(opening, null, `${attribute}="${value}" の section が必要です`);
+
+  const sectionTags = /<\/?section\b[^>]*>/g;
+  const sectionMarkup = html.slice(opening.index);
+  let depth = 0;
+
+  for (const match of sectionMarkup.matchAll(sectionTags)) {
+    depth += match[0].startsWith("</") ? -1 : 1;
+    if (depth === 0) {
+      return html.slice(opening.index, opening.index + match.index + match[0].length);
+    }
+  }
+
+  throw new Error(`${attribute}="${value}" の section が閉じられていません`);
+};
+
 test("patch が 0 の version は major、それ以外は minor に分類する", () => {
   assert.equal(scaleFromVersion("v5.6.0"), "major");
   assert.equal(scaleFromVersion("ext-v0.3.0"), "major");
@@ -197,6 +215,82 @@ test("release がない規模の group は返さない", () => {
   ]);
 });
 
+test("top page は kind の下に非空の更新規模 section を見出し階層付きで描画する", async () => {
+  const html = await readIndex();
+
+  for (const [kind, kindLabel] of [
+    ["main", "本体"],
+    ["extension", "Chrome 拡張"],
+  ]) {
+    const kindSection = sectionByAttribute(html, "data-release-kind", kind);
+    const majorSection = sectionByAttribute(kindSection, "data-release-scale", "major");
+    const minorSection = sectionByAttribute(kindSection, "data-release-scale", "minor");
+
+    assert.match(kindSection, new RegExp(`<h2>${kindLabel}</h2>`));
+    assert.equal([...kindSection.matchAll(/<section[^>]*data-release-scale=/g)].length, 2);
+    assert.match(majorSection, /<h3>大きいアップデート<\/h3>/);
+    assert.match(minorSection, /<h3>小さいアップデート<\/h3>/);
+    assert.match(majorSection, /<ol[^>]*class="release-list"[^>]*>\s*<li>/);
+    assert.match(minorSection, /<ol[^>]*class="release-list"[^>]*>\s*<li>/);
+    assert.doesNotMatch(kindSection, /<section[^>]*data-release-scale[^>]*>\s*<h3>[^<]+<\/h3>\s*<ol[^>]*>\s*<\/ol>/);
+  }
+});
+
+test("top page の kind × 更新規模 group は4 releaseの所属・日付・リンクを維持する", async () => {
+  const html = await readIndex();
+  const expectedGroups = [
+    {
+      kind: "main",
+      scale: "major",
+      version: "v5.6.0",
+      date: "2026-07-31T00:00:00.000Z",
+      href: "/v5.6.0",
+    },
+    {
+      kind: "main",
+      scale: "minor",
+      version: "v5.5.17",
+      date: "2026-07-10T00:00:00.000Z",
+      href: "/v5.5.17",
+    },
+    {
+      kind: "extension",
+      scale: "major",
+      version: "ext-v0.3.0",
+      date: "2026-07-31T00:00:00.000Z",
+      href: "/ext-v0.3.0",
+    },
+    {
+      kind: "extension",
+      scale: "minor",
+      version: "ext-v0.2.5",
+      date: "2026-07-10T00:00:00.000Z",
+      href: "/ext-v0.2.5",
+    },
+  ];
+
+  for (const expected of expectedGroups) {
+    const kindSection = sectionByAttribute(html, "data-release-kind", expected.kind);
+    const scaleSection = sectionByAttribute(
+      kindSection,
+      "data-release-scale",
+      expected.scale
+    );
+    const hrefs = [...scaleSection.matchAll(/class="release-card" href="([^"]+)"/g)].map(
+      (match) => match[1]
+    );
+
+    assert.deepEqual(hrefs, [expected.href]);
+    assert.match(scaleSection, new RegExp(`<h4>${expected.version}</h4>`));
+    assert.match(scaleSection, new RegExp(`<time datetime="${expected.date}">[^<]+</time>`));
+    assert.match(
+      scaleSection,
+      new RegExp(`<span class="release-kind release-kind--${expected.kind}">`)
+    );
+    assert.match(scaleSection, /<p>[^<]+<\/p>/);
+  }
+});
+
 test("対応形式でない version は version を示して拒否する", () => {
   const invalidVersions = ["5.6.0", "v5.6", "plugin-v1.0.0", "v1.0.0-beta"];
 
@@ -207,11 +301,8 @@ test("対応形式でない version は version を示して拒否する", () =>
 
 test("一覧は本体とChrome拡張に分かれ、それぞれ公開日の新しい順で表示する", async () => {
   const html = await readIndex();
-  const section = (kind) =>
-    html.match(new RegExp(`<section[^>]*data-release-kind="${kind}"[^>]*>([\\s\\S]*?)<\\/section>`))
-      ?.[1] ?? "";
-  const main = section("main");
-  const extension = section("extension");
+  const main = sectionByAttribute(html, "data-release-kind", "main");
+  const extension = sectionByAttribute(html, "data-release-kind", "extension");
   const hrefs = (markup) =>
     [...markup.matchAll(/class="release-card" href="([^"]+)"/g)].map((match) => match[1]);
 
