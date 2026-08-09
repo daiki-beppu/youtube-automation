@@ -55,4 +55,4 @@ DistroKid（distrokid.com/new）の songwriter 欄は法的な実名登録を求
 
 - `distrokid.json` はローカルに実体があれば `load_config` / `yt-collection-serve` から通常どおり読める（git 管理の有無は動作に影響しない）
 - 新しいクローン・別マシンにはファイルが存在しないため、手動で再作成が必要になる。1Password 等のシークレット管理にファイル内容を控えておくと復元しやすい
-- `yt-config-migrate` / `yt-doctor` などの診断はファイルの存在を前提とするため、クローン直後は再作成してから実行する
+- `yt-doctor` などの診断はファイルの存在を前提とするため、クローン直後は再作成してから実行する
