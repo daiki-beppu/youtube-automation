@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `fix(thumbnail)`: Codex batch の channel 解決を共通 resolver へ統一し、multi-channel workspace の `CHANNEL=<slug>` を受理するとともに、未指定・不正 slug を jobs 起動前に候補付きで診断する（#2949）。
+
 - `fix(thumbnail)`: Codex batch manifest を実行ごとの `mktemp` で作成し、その実行が所有する path だけを終了時に削除する運用契約へ変更して、並列 collection 間の上書きを防止する（#2948）。
 
 - `fix(thumbnail)`: Codex のテキスト付きサムネイルプロンプトへ、deep-merge 後の `single_step.ip_safety_clause` を自動で一度だけ付与する（#2586）。

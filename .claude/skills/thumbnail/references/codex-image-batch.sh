@@ -104,16 +104,18 @@ PY
     exit 1
   fi
   if ! max_parallel=$(uv run python - <<'PY'
-import os
-from pathlib import Path
-
+from youtube_automation.configuration import channel_dir
 from youtube_automation.infrastructure.media.image_provider.config import parse_image_generation_config
 from youtube_automation.configuration.skills import load_skill_config
+from youtube_automation.core.errors import ConfigError
 
-channel_root = Path(os.environ.get("CHANNEL_DIR", "."))
-config = parse_image_generation_config(
-    load_skill_config("thumbnail", use_cache=False, channel_dir=channel_root)
-)
+try:
+    channel_root = channel_dir()
+    config = parse_image_generation_config(
+        load_skill_config("thumbnail", use_cache=False, channel_dir=channel_root)
+    )
+except ConfigError as exc:
+    raise SystemExit(f"ERROR: {exc}") from None
 if config.codex is None:
     raise SystemExit("image_generation.provider must be codex")
 print(config.codex.max_parallel)
