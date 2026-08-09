@@ -23,6 +23,68 @@ def _comparer(tmp_path: Path) -> mod.ThumbnailComparer:
     return comparer
 
 
+def _write_thumbnail(tmp_path: Path, stage: str, collection: str, content: bytes = b"image") -> Path:
+    thumbnail = tmp_path / "collections" / stage / collection / "10-assets" / "thumbnail.jpg"
+    thumbnail.parent.mkdir(parents=True, exist_ok=True)
+    thumbnail.write_bytes(content)
+    return thumbnail
+
+
+def test_collect_channel_thumbnails_preserves_live_discovery(tmp_path: Path):
+    comparer = _comparer(tmp_path)
+    live = _write_thumbnail(tmp_path, "live", "20260101-x-rain-collection")
+
+    assert comparer._collect_channel_thumbnails() == [live]
+
+
+def test_collect_channel_thumbnails_includes_only_planning_final_thumbnail(tmp_path: Path):
+    comparer = _comparer(tmp_path)
+    planning = _write_thumbnail(tmp_path, "planning", "20260202-x-snow-collection")
+    assets = planning.parent
+    for excluded in ("thumbnail-v1.jpg", "planning-preview.png", "main.png", "main.jpg"):
+        (assets / excluded).write_bytes(b"excluded")
+
+    assert comparer._collect_channel_thumbnails() == [planning]
+
+
+def test_collect_channel_thumbnails_orders_live_before_planning(tmp_path: Path):
+    comparer = _comparer(tmp_path)
+    planning = _write_thumbnail(tmp_path, "planning", "20260202-x-snow-collection")
+    live = _write_thumbnail(tmp_path, "live", "20260101-x-rain-collection")
+
+    assert comparer._collect_channel_thumbnails() == [live, planning]
+
+
+def test_collect_channel_thumbnails_deduplicates_same_resolved_file(tmp_path: Path):
+    comparer = _comparer(tmp_path)
+    live = _write_thumbnail(tmp_path, "live", "20260101-x-rain-collection")
+    planning = tmp_path / "collections" / "planning" / "20260101-x-rain-collection" / "10-assets" / "thumbnail.jpg"
+    planning.parent.mkdir(parents=True)
+    planning.symlink_to(live)
+
+    assert comparer._collect_channel_thumbnails() == [live]
+
+
+def test_live_and_planning_output_names_do_not_collide_or_overwrite(tmp_path: Path, monkeypatch):
+    comparer = _comparer(tmp_path)
+    live = _write_thumbnail(tmp_path, "live", "20260101-x-rain-collection", b"live")
+    _write_thumbnail(tmp_path, "planning", "20260101-x-rain-collection", b"planning")
+    planning_output = comparer.channel_thumb_dir / "mine_planning_20260101-x-rain-collection.jpg"
+    planning_output.parent.mkdir(parents=True)
+    planning_output.write_bytes(b"existing")
+    monkeypatch.setattr(mod, "ensure_benchmark_fresh", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(mod, "load_benchmark_videos", lambda *_args, **_kwargs: [])
+    resized = []
+    comparer._resize_thumbnail = lambda source, _output: resized.append(source) or True
+
+    comparer.collect_and_compare(no_open=True)
+
+    live_output = comparer.channel_thumb_dir / "mine_rain.jpg"
+    assert live_output.resolve() == live.resolve()
+    assert planning_output.read_bytes() == b"existing"
+    assert resized == [live_output, planning_output]
+
+
 def test_download_thumbnail_writes_requested_destination(tmp_path: Path, monkeypatch):
     comparer = _comparer(tmp_path)
     destination = tmp_path / "download.jpg"

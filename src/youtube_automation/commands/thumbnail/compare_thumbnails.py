@@ -70,8 +70,27 @@ class ThumbnailComparer:
 
     def _collect_channel_thumbnails(self) -> list[Path]:
         """自チャンネルの全サムネイルパスを収集"""
-        collections_dir = self.channel_dir / "collections" / "live"
-        return sorted(collections_dir.glob("*/10-assets/thumbnail.jpg"))
+        collections_dir = self.channel_dir / "collections"
+        thumbnails: list[Path] = []
+        resolved_paths: set[Path] = set()
+        for stage in ("live", "planning"):
+            for thumbnail in sorted((collections_dir / stage).glob("*/10-assets/thumbnail.jpg")):
+                resolved = thumbnail.resolve()
+                if resolved in resolved_paths:
+                    continue
+                resolved_paths.add(resolved)
+                thumbnails.append(thumbnail)
+        return thumbnails
+
+    def _channel_thumbnail_destination(self, thumbnail: Path) -> Path:
+        collection = thumbnail.parent.parent
+        if collection.parent.name == "planning":
+            filename = f"{self.channel_slug}_planning_{collection.name}.jpg"
+            return self.channel_thumb_dir / filename
+
+        parts = collection.name.split("-")
+        theme = "-".join(parts[2:-1]) if len(parts) > 3 else collection.name
+        return self.channel_thumb_dir / f"{self.channel_slug}_{theme}.jpg"
 
     def _download_thumbnail(self, url: str, output_path: Path) -> bool:
         if output_path.exists():
@@ -172,11 +191,7 @@ class ThumbnailComparer:
 
         channel_copies = []
         for thumb in channel_thumbs:
-            # コレクション名からテーマを抽出（例: 20260304-clm-fairy-forest-collection → fairy-forest）
-            collection_name = thumb.parent.parent.name
-            parts = collection_name.split("-")
-            theme = "-".join(parts[2:-1]) if len(parts) > 3 else collection_name
-            dest = self.channel_thumb_dir / f"{self.channel_slug}_{theme}.jpg"
+            dest = self._channel_thumbnail_destination(thumb)
             if not dest.exists():
                 try:
                     os.symlink(thumb.resolve(), dest)
