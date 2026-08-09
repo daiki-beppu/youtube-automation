@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `feat(dx)`: 進捗図 hook を subagent / workflow・分類済み前景処理・完了時にも発火させ、実行コマンドに対応する段または具体的な未分類作業を表示（#3291）。
 - `feat(dx)`: バックグラウンド Bash 開始時に固定パイプラインの進捗図を Claude Code hook の `systemMessage` で claude.app へ表示する `yt-progress-hook` CLI を追加（#3290）。
 - `fix(suno)`: generator→reviewer 品質ゲートの semantic review を entry / chunk ごとの複数起動から、全 `suno-prompts.json` を判定する round あたり 1 回のファイル単位呼び出しへ統一（#3301）。
+- `fix(suno)`: generator subagent の入力を collection pattern、effective config key、音制約、benchmark JSON の必要 field、open BGM insight に限定し、分析・設定ファイル全文の反復読み込みを防ぐ bounded context 契約を追加（#3302）。
 - `feat(ci)`: skill E2E eval を pull request CI から分離した `workflow_dispatch` / nightly workflow で実行し、Claude 認証 secret 未設定時は理由を summary に残して有料 job を明示的に skip する（#3094）。
 - `fix(playlist)`: `theme_scenes.activities` のカンマ区切りと中黒区切りを同じ複数 activity として解釈し、`auto_add_activities` によるプレイリスト割り当て漏れを防止（#3099）。
 - `feat(channel-new)`: `yt-channel-init` と `/channel-new` が生成する新規チャンネル設定の `privacy_status` 既定を `private` にし、予約公開または手動公開を前提とする安全な初期状態へ変更（#3139）。

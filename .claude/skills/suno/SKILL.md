@@ -74,7 +74,26 @@ subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実�
 
 Style プロンプト生成は generator に委譲し、品質検証は生成とは別コンテキストの reviewer が行う。Claude Code では subagent 起動として扱い、Codex では同等の別エージェント / 別コンテキスト実行に読み替える。
 
-generator は pattern draft、設定、benchmark analysis、必要な References を読んで `20-documentation/suno-prompts.md` と `20-documentation/suno-prompts.json` を作る。reviewer は生成時のメモや会話を読まず、成果物 `20-documentation/suno-prompts.json` と `/suno-lyric` の `references/review-rubric.md` のみを読んで検証する。`suno-prompts.json` の reviewer 入力は既存 consumer 互換の `name`, `style`, `lyrics` と、存在する場合のみ More Options 補助 field に限定する。`/suno` reviewer は `review_context` を要求せず、不足する theme / scene / quote 情報を外部資料で補完しない。
+generator は下記の bounded context だけを読み、`20-documentation/suno-prompts.md` と `20-documentation/suno-prompts.json` を作る。
+
+#### Generator context budget
+
+generator を起動する前に、呼び出し元が次の manifest を collection 境界で 1 回だけ解決する。generator は source file を探索せず、この範囲を越えて入力を増やさない。
+
+| source | generator へ渡す範囲 |
+|---|---|
+| `20-documentation/suno-patterns.yaml` | pattern draft 全体（collection-local の正規入力） |
+| Suno skill config | `genre_line`、`exclude_styles`、使用中 variant、文字数 budget、生成数など今回の出力へ効く effective key と値だけ |
+| `docs/channel/creative-constraints.md` | `## 音` section だけ。ファイル全文を読まない |
+| `data/video_analysis/<slug>/*.json` | `suno_preset` / `bgm_arc` / `scene_timeline[].summary` の projection だけ。元 JSON 全文を読まない |
+| `data/insights.jsonl` | validator 通過後の open `lever=bgm` entry だけ |
+| skill References | 適用する quality rule の該当 section だけ。例示集・rubric 全文を先回りで読まない |
+
+benchmark の Markdown analysis、他 lever の insight、`config/channel/` 全体、別 collection の資料は generator 入力にしない。必要な field / section は呼び出し元が抽出して一度に渡し、生成中の各 entry や再生成 round で同じ資料を読み直さない。必須 field が projection に無い場合は原典を丸ごと読むのではなく、欠けた field 名を呼び出し元へ返して manifest を 1 回だけ更新する。
+
+#### Reviewer context budget
+
+reviewer は生成時のメモや会話を読まず、成果物 `20-documentation/suno-prompts.json` と `/suno-lyric` の `references/review-rubric.md` のみを読んで検証する。`suno-prompts.json` の reviewer 入力は既存 consumer 互換の `name`, `style`, `lyrics` と、存在する場合のみ More Options 補助 field に限定する。`/suno` reviewer は `review_context` を要求せず、不足する theme / scene / quote 情報を外部資料で補完しない。
 
 LLM semantic review はファイル単位で実行する。各 review round では `suno-prompts.json` 全体を 1 回の reviewer 呼び出しへ渡し、その 1 回で全 entry の判定を返させる。entry ごと・チャンクごとに reviewer を起動しない。複数 reviewer への分割や並列化もしない。`FAIL` entry を再生成した次の round でも、更新済みファイル全体を同じ 1 回の呼び出しで再検証する。
 

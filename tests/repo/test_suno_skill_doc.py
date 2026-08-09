@@ -474,6 +474,23 @@ def test_suno_semantic_review_uses_one_file_level_call_per_round() -> None:
         assert token in quality_gate, f"/suno semantic review の一括呼び出し契約がない（`{token}` 不在）"
 
 
+def test_suno_generator_uses_a_bounded_context_manifest() -> None:
+    """Issue #3302: generator は必要な field / section だけを入力にする。"""
+    text = _read()
+    context_contract = text.split("#### Generator context budget", 1)[1].split("\n#### ", 1)[0]
+
+    for token in (
+        "`20-documentation/suno-patterns.yaml`",
+        "effective key",
+        "`## 音`",
+        "`suno_preset` / `bgm_arc` / `scene_timeline[].summary`",
+        "`lever=bgm`",
+        "全文を読まない",
+        "同じ資料を読み直さない",
+    ):
+        assert token in context_contract, f"/suno generator の bounded context 契約がない（`{token}` 不在）"
+
+
 def test_suno_documents_collection_local_effective_style_contract() -> None:
     """Issue #2999: collection 固有 Style を共有 config へ混ぜずに解決・検証する."""
     text = _read()
