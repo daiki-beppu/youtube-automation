@@ -151,6 +151,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `feat(wf-new-batch)`: 相互差別化済み manifest を canonical `/wf-new` へ 1 件ずつ渡し、atomic ledger と実成果物照合により completed を飛ばして最初の未完了 plan から再開する batch orchestrator を追加した。child 完了後・ledger 更新前 crash は same-provenance の prepared state と hard artifacts を再検証し、workflow state を変更せず ledger だけを completed へ reconcile する。失敗・承認待ちでは後続を開始しない（#3264）。
 - `feat(wf-new)`: 検証済み batch manifest の 1 plan を指定して開始する opt-in 入口を追加し、企画生成だけを省略して初期化以降の承認・state・failure gate を通常入口と共有する契約を固定した。不正・曖昧な入力は state mutation 前に拒否する（#3263）。
 - `feat(collection-ideate)`: 明示的な batch plan mode で N 件の企画を既存 collection と batch 内の全組合せに対して相互差別化し、全件承認・件数・slug 一意性・provenance を検証した manifest だけを atomic に保存する契約を追加した。通常の single collection 企画契約は維持する（#3262）。
+- `feat(dashboard)`: workflow timing の公開 status を `ready` / `unavailable` / `in_progress` に正規化し、基準未設定・旧 schema・未計測・実行中を 0 と区別できるようにした（#3334）。
 - `feat(dashboard)`: registry の各 channel から検証済み手作業基準と workflow history を読み、collection timing summary を channel detail API へ配線した（#3325）。
 - `feat(dashboard)`: workflow timing summary を channel detail read model に追加し、overview からは除外して一覧 API の軽量契約を維持した（#3324）。
 - `feat(dashboard)`: active planning と latest live collection を最大 2 件選び、`wf-auto-state.py` の正規集計から step 状態と 6 種の時間指標を構築する read adapter を追加した（#3323）。
