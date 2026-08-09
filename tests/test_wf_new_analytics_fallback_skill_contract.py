@@ -12,6 +12,7 @@ from youtube_automation.commands.system import doctor
 
 _REPO_ROOT = REPO_ROOT
 _FRESHNESS_RULES = _REPO_ROOT / ".claude" / "skills" / "collection-ideate" / "references" / "freshness-rules.md"
+_WF_NEW_SKILL = _REPO_ROOT / ".claude" / "skills" / "wf-new" / "SKILL.md"
 
 
 def _freshness_script() -> str:
@@ -131,3 +132,36 @@ def test_freshness_script_returns_refresh_contract_for_stale_analytics(
 
     assert result.returncode == 3
     assert f"AUTO_REFRESH_SKILLS={expected_refresh}" in result.stdout
+
+
+def test_wf_new_routes_preview_finalization_before_thumbnail_fallback() -> None:
+    skill = _WF_NEW_SKILL.read_text(encoding="utf-8")
+    thumbnail_step = skill.split("##### 2c-1. サムネイル候補生成", 1)[1].split(
+        "##### 2c-2. サムネイル承認・確定 + 音楽素材生成", 1
+    )[0]
+
+    finalizer = "finalize_planning_preview.py <collection-path>"
+    assert finalizer in thumbnail_step
+    assert "status: FINALIZED" in thumbnail_step
+    assert "status: MISSING" in thumbnail_step
+    assert thumbnail_step.index(finalizer) < thumbnail_step.index("/thumbnail <theme>")
+    assert "FINALIZED" in thumbnail_step and "AI 生成" in thumbnail_step
+    assert "MISSING" in thumbnail_step and "既存 `/thumbnail <theme>`" in thumbnail_step
+
+
+def test_wf_new_preview_path_keeps_quality_state_and_textless_contracts() -> None:
+    skill = _WF_NEW_SKILL.read_text(encoding="utf-8")
+    approval_step = skill.split("##### 2c-2. サムネイル承認・確定 + 音楽素材生成", 1)[1].split(
+        "#### 2e. ループ動画生成", 1
+    )[0]
+
+    for contract in (
+        "/thumbnail-compare",
+        "assets.thumbnail = true",
+        "thumbnail.approved = true",
+        "未設定または `true`",
+        "share_thumbnail_as_main.py <collection-path>",
+    ):
+        assert contract in approval_step
+    assert "`planning-preview.png` から確定済み" in approval_step
+    assert "再度 AskUserQuestion にかけない" in approval_step
