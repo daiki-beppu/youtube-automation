@@ -24,7 +24,7 @@ from youtube_automation.infrastructure.media.image_provider.openai import OpenAI
 def _gemini_config() -> ImageGenerationConfig:
     return ImageGenerationConfig(
         provider="gemini",
-        gemini=GeminiConfig(model="gemini-3.1-flash-image-preview", image_size="2K"),
+        gemini=GeminiConfig(model="gemini-3.1-flash-image", image_size="2K"),
         openai=None,
     )
 
