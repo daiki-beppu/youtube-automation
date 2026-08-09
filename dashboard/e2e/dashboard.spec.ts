@@ -304,6 +304,44 @@ test.afterAll(async () => {
   if (fixtureRoot) await rm(fixtureRoot, { recursive: true, force: true })
 })
 
+test("初期表示で公開活動を概況とチャンネル比較より前に表示する", async ({
+  page,
+}) => {
+  await page.goto(baseURL)
+
+  const publicationActivity = page.getByRole("region", {
+    name: "過去365日の公開活動",
+  })
+  const overview = page.getByRole("region", { name: "概況" })
+  const comparison = page.getByRole("table", {
+    name: "チャンネル横断ストック一覧",
+  })
+  await expect(publicationActivity).toBeVisible()
+  await expect(overview).toBeVisible()
+  await expect(comparison).toBeVisible()
+
+  expect(
+    await publicationActivity.evaluate(
+      (activity, laterElement) =>
+        Boolean(
+          activity.compareDocumentPosition(laterElement) &
+            Node.DOCUMENT_POSITION_FOLLOWING
+        ),
+      await overview.elementHandle()
+    )
+  ).toBe(true)
+  expect(
+    await publicationActivity.evaluate(
+      (activity, laterElement) =>
+        Boolean(
+          activity.compareDocumentPosition(laterElement) &
+            Node.DOCUMENT_POSITION_FOLLOWING
+        ),
+      await comparison.elementHandle()
+    )
+  ).toBe(true)
+})
+
 test("概要から動画詳細まで keyboard で確認できる", async ({ page }) => {
   await page.setViewportSize({ width: 760, height: 900 })
   await page.goto(baseURL)
