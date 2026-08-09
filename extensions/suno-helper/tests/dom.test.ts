@@ -1612,6 +1612,44 @@ describe("resolveAdvancedFields: More Options 3 フィールドの解決 (#900, 
     expect(fields.styleInfluence).toBe(styleInfluence);
   });
 
+  it("Given Duration Custom button と slider が存在 When 解決する Then controls を同じ field として返す", () => {
+    const customButton = document.createElement("button");
+    customButton.type = "button";
+    customButton.textContent = "Custom";
+    document.body.appendChild(customButton);
+    setRect(customButton, VISIBLE_RECT);
+    const slider = addSlider({ ariaLabel: "Duration", value: 120 });
+    slider.setAttribute("aria-valuemin", "60");
+    slider.setAttribute("aria-valuemax", "480");
+
+    const fields = resolveAdvancedFields();
+
+    expect(fields.duration).toEqual({ customButton, slider });
+  });
+
+  it("Given 同名 Custom button が複数存在 When 解決する Then Duration slider に最も近い button を返す", () => {
+    const unrelatedSection = document.createElement("section");
+    const unrelatedButton = document.createElement("button");
+    unrelatedButton.type = "button";
+    unrelatedButton.textContent = "Custom";
+    unrelatedSection.appendChild(unrelatedButton);
+    document.body.appendChild(unrelatedSection);
+    setRect(unrelatedButton, VISIBLE_RECT);
+
+    const durationSection = document.createElement("section");
+    const durationButton = document.createElement("button");
+    durationButton.type = "button";
+    durationButton.textContent = "Custom";
+    const durationSlider = addSlider({ ariaLabel: "Duration", value: 120 });
+    durationSection.append(durationButton, durationSlider);
+    document.body.appendChild(durationSection);
+    setRect(durationButton, VISIBLE_RECT);
+
+    const fields = resolveAdvancedFields();
+
+    expect(fields.duration?.customButton).toBe(durationButton);
+  });
+
   it("Given 要素が何も無い When 解決する Then すべて null（throw しない fail-soft）", () => {
     const fields = resolveAdvancedFields();
 

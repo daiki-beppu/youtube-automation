@@ -98,6 +98,8 @@ build 後は `.output/chrome-mv3/manifest.json`、zip 後は `.output/suno-helpe
 6. 全件完了後、対象 clip を一括選択 → playlist 追加 → More menu の **Download all** → format 選択 → ZIP ダウンロード完了監視 → `POST /collections/<id>/downloaded` で ZIP パス通知、まで実行する。サーバーは ZIP を展開し、`02-Individual-music/` と `workflow-state.json` を更新する。
 7. captcha challenge は waiting-captcha 表示で解消（多くは自動 verify）を待って続行する。entry 単位の一時的な失敗は Balanced 固定の上限で自動リトライし、上限超過分はスキップして完走する（#948）。スキップされた entry は一覧表示され、**失敗分のみ再実行** で再投入できる。
 
+prompt entry に `duration_sec` がある場合は、各 Generate 前に Duration の **Custom** を選択し、Suno UI の slider が公開する最小値・最大値の範囲内で指定秒数を注入する。selector 不在、範囲外、操作不受理、読戻し不一致は entry をエラー停止し、popup に原因を表示する。`duration_sec` がない entry では Auto / Custom と slider の現在状態を変更しない。
+
 通知は初期状態で ON。最終 `FINISHED` は OS 通知と明るい3音上昇音、`ERROR` はエラー概要付き OS 通知と短い2音下降ベルで知らせる。手動 `STOPPED` と collection queue の途中完了では通知しない。Switch の設定は再読み込み後も維持され、旧 preset 設定は enabled を保ったまま自動移行される。OS 通知と Web Audio は独立して試行するため、一方の失敗は run 結果へ影響しない。
 
 複数 collection queue は各 collection の `/downloaded` 完了または失敗結果を extension storage へ保存してから Suno タブを再読み込みする。この境界処理が clip tracker と Suno 内部 multi-select を collection 間で破棄し、次の collection は保存済み index から自動開始する。タブ再読み込みや Stop で中断した queue は同じ current collection から再開でき、全件終了後は summary の **失敗したコレクションだけ再実行** を使う。
