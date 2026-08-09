@@ -104,12 +104,32 @@ def test_collect_channel_restores_environment_and_configuration_after_success(
     assert os.environ.get("CHANNEL") == initial_slug
 
 
-def test_collect_channel_reuses_system_collector_and_saves_publications_with_config_timezone(
+@pytest.mark.parametrize(
+    "cache_contents",
+    [
+        None,
+        json.dumps(
+            {
+                "schema_version": 1,
+                "fetched_at": "2026-08-07T11:59:59+00:00",
+                "timezone": "UTC",
+                "days": {},
+            }
+        ),
+        "{not-json",
+    ],
+    ids=["missing", "stale", "corrupt"],
+)
+def test_collect_channel_should_refresh_publication_cache_when_cache_is_unusable(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    cache_contents: str | None,
 ) -> None:
     channel = tmp_path / "selected"
     fixed_now = datetime(2026, 8, 8, 12, tzinfo=UTC)
+    if cache_contents is not None:
+        (channel / "data").mkdir(parents=True, exist_ok=True)
+        (channel / "data" / "dashboard_publications.json").write_text(cache_contents, encoding="utf-8")
 
     class FixedDateTime(datetime):
         @classmethod
@@ -136,7 +156,7 @@ def test_collect_channel_reuses_system_collector_and_saves_publications_with_con
     def run_data_collection(*, days: int, depth: str) -> dict[str, bool]:
         assert (days, depth) == (30, "standard")
         collector.get_all_channel_videos()
-        (channel / "data").mkdir(parents=True)
+        (channel / "data").mkdir(parents=True, exist_ok=True)
         return {"success": True}
 
     system.run_data_collection.side_effect = run_data_collection
@@ -153,6 +173,53 @@ def test_collect_channel_reuses_system_collector_and_saves_publications_with_con
         "timezone": "America/Los_Angeles",
         "days": {"2026-08-07": 1, "2026-08-08": 1},
     }
+
+
+def test_collect_channel_should_reuse_publication_cache_when_cache_is_fresh(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    channel = tmp_path / "selected"
+    fixed_now = datetime(2026, 8, 8, 12, tzinfo=UTC)
+    publication_path = channel / "data" / "dashboard_publications.json"
+    cached_payload = {
+        "schema_version": 1,
+        "fetched_at": "2026-08-08T12:00:00+00:00",
+        "timezone": "Asia/Tokyo",
+        "days": {"2026-08-08": 2},
+    }
+    publication_path.parent.mkdir(parents=True)
+    publication_path.write_text(json.dumps(cached_payload), encoding="utf-8")
+
+    class FixedDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return fixed_now if tz is None else fixed_now.astimezone(tz)
+
+    monkeypatch.setattr(dashboard_refresh, "datetime", FixedDateTime)
+    monkeypatch.setattr(
+        configuration,
+        "load_config",
+        Mock(
+            return_value=SimpleNamespace(youtube=SimpleNamespace(api=SimpleNamespace(default_publish_timezone="UTC")))
+        ),
+    )
+    collector = Mock()
+    collector.get_all_channel_videos.return_value = []
+    system = Mock(collector=collector)
+
+    def run_data_collection(*, days: int, depth: str) -> dict[str, bool]:
+        assert (days, depth) == (30, "standard")
+        collector.get_all_channel_videos()
+        return {"success": True}
+
+    system.run_data_collection.side_effect = run_data_collection
+
+    collect_channel_analytics(channel, Mock(return_value=system))
+
+    system.run_data_collection.assert_called_once_with(days=30, depth="standard")
+    collector.get_all_channel_videos.assert_called_once_with()
+    assert json.loads(publication_path.read_text(encoding="utf-8")) == cached_payload
 
 
 def test_collect_channel_restores_environment_and_raises_automation_error(
