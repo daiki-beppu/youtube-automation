@@ -74,6 +74,7 @@ def _make_entrypoint(module_path: str, function_name: str = "main") -> Callable[
 
 
 yt_analytics = _make_entrypoint("youtube_automation.commands.analytics.analytics_system")
+yt_ad_coverage = _make_entrypoint("youtube_automation.commands.analytics.ad_coverage")
 yt_audio_visualizer_fill = _make_entrypoint("youtube_automation.commands.media.audio_visualizer_fill")
 yt_apply_rain_layers = _make_entrypoint("youtube_automation.commands.media.apply_rain_layers")
 yt_automation_update = _make_entrypoint("youtube_automation.commands.system.automation_update")
