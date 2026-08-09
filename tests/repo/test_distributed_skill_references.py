@@ -40,7 +40,6 @@ _KNOWN_UNRESOLVED: frozenset[tuple[str, str]] = frozenset(
         (".claude/skills/automation-release/SKILL.md", "docs/changelog-contract.md"),
         (".claude/skills/automation-release/references/changelog-promotion.md", "docs/changelog-contract.md"),
         (".claude/skills/automation-release/references/prepare-checklist.md", "docs/changelog-contract.md"),
-        (".claude/skills/automation-update/SKILL.md", "docs/changelog-contract.md"),
         (
             ".claude/skills/automation-update/references/gotchas.md",
             "docs/migration/numbered-duplicate-files-cleanup.md",
