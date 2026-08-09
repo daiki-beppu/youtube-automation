@@ -131,13 +131,13 @@ nix develop .#extensions --command pnpm -C site test
 
 ### 実 skill 挙動のローカル E2E
 
-`evals/` は、静的な skill lint / repository contract では検証できない LLM の実挙動を `promptfoo` + `claude -p` で確認する独立レーンです。モデル利用料金と Claude Code の認証を伴うため、`pytest` や CI からは起動しません。
+`evals/` は、静的な skill lint / repository contract では検証できない LLM の実挙動を `promptfoo` + `claude -p` で確認する独立レーンです。モデル利用料金と Claude Code の認証を伴うため、`pytest` や pull request CI からは起動しません。
 
 ```bash
 nix develop --command pnpm dlx promptfoo@0.122.0 eval -c evals/promptfooconfig.yaml
 ```
 
-現在の対象、権限制限、fixture 不変確認、禁止事項 assertion の検出力確認は [`evals/README.md`](../evals/README.md) を参照してください。
+GitHub Actions では独立した `evals.yml` を nightly / `workflow_dispatch` で起動します。Actions secret の `CLAUDE_CODE_OAUTH_TOKEN` または `ANTHROPIC_API_KEY` がどちらも未設定なら、有料の eval job を理由付きで skip します。現在の対象、権限制限、fixture 不変確認、禁止事項 assertion の検出力確認、CI の summary 契約は [`evals/README.md`](../evals/README.md) を参照してください。
 
 ### 1. 編集
 

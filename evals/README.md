@@ -35,3 +35,9 @@ nix develop --command pnpm dlx promptfoo@0.122.0 eval \
 ```
 
 promptfoo の履歴と cache は既定で `~/.promptfoo/` に保存されます。リポジトリ内へ明示出力する場合は ignore 済みの `evals/results/` を使ってください。
+
+## GitHub Actions
+
+`.github/workflows/evals.yml` は、この評価だけを毎日 18:17 UTC（03:17 JST）と `workflow_dispatch` で実行します。通常の pull request CI には含めません。認証には Actions secret の `CLAUDE_CODE_OAUTH_TOKEN` または `ANTHROPIC_API_KEY` を使用します。
+
+両方の secret が未設定なら、認証確認 job が理由を notice と `$GITHUB_STEP_SUMMARY` に記録し、有料の eval job を明示的に skip します。secret をリポジトリへ追加するまでは、手動実行もこの skip 契約の確認だけを行います。評価を実行した場合は assertion ごとの成否と理由を summary に記録し、失敗 assertion があれば workflow も失敗します。
