@@ -22,7 +22,7 @@ Phase 2 の入力源の優先順位:
 2. 上記が空 / 取得失敗した場合は `gh api .../contents/CHANGELOG.md` または raw `CHANGELOG.md` を `curl` で取得し、`[<target_version>] - <DATE>` セクションを抽出（`target_version="${target_tag#v}"`）
 3. main 追従の場合は release tag を使わず、`yt-automation-update check` が出力した `uv.lock` の `<current_sha>` と `upstream main HEAD` の `<target_sha>` を使って GitHub compare / commit API から変更要約を作る
 
-Migration セクションの構造契約は `docs/changelog-contract.md` を参照（所要時間の目安 / local fix 衝突注意 が必須要素）。
+Migration セクションの構造契約は本スキルの Step 2-3 を単一ソースとする（所要時間の目安 / local fix 衝突注意 が必須要素）。
 
 ## 前提
 
@@ -163,7 +163,7 @@ command -v gh >/dev/null 2>&1 && gh auth status 2>&1 | head -3
 
 ## Phase 2: リリース本文読み込みと要約
 
-入力源は `gh release view --json body`（第 1 経路、`gh` 未インストール時は `curl`）と `CHANGELOG.md` の該当バージョンセクション（第 2 経路 / fallback）。フォーマット契約は upstream の `docs/changelog-contract.md` を参照。
+入力源は `gh release view --json body`（第 1 経路、`gh` 未インストール時は `curl`）と `CHANGELOG.md` の該当バージョンセクション（第 2 経路 / fallback）。section 境界と Migration の入力契約は Step 2-3 を正とする。
 
 経路の決定:
 
@@ -282,7 +282,7 @@ current 〜 `<target_tag>` の間に挟まる全 tag を抽出し、各 tag に�
 
 ### Step 2-3. リリース本文から抽出する固定要素
 
-CHANGELOG / Release 本文の各バージョンセクションは以下の構造を持つ（フォーマット契約: `docs/changelog-contract.md`）:
+CHANGELOG / Release 本文の各バージョンセクションは以下の構造を持つ。この Step 2-3 を配布先での入力契約の単一ソースとする:
 
 - `### Added` / `### Changed` / `### Fixed` / `### Removed` / `### Migration`（必要なもののみ存在）
 - `### Migration` セクションには以下が含まれる:
@@ -454,11 +454,10 @@ git commit -m "chore: youtube-automation <target_ref> への追従 (#N)"
 - 人間が答えるべきステップ（上書き判断 / push 判断 / sha pin の bump 先 / `--prune` 付与）を AI が勝手に決めない
 - `--force-sync` / `--prune` 系の破壊的操作は必ず `[HUMAN STEP]` の同意を経る
 - commit / push は CLI の責務外。Phase 4 で AI が commit まで行い、push は人間に依頼する
-- Step 2-3 の抽出セクション境界（`### Added` / `### Changed` / `### Fixed` / `### Migration`）と Migration セクション必須要素（`所要時間の目安` / `local fix 衝突注意`）は upstream の `docs/changelog-contract.md` との **インターフェース契約**。upstream 側の契約が変わったら Phase 2-3 も同期更新する
+- Step 2-3 の抽出セクション境界（`### Added` / `### Changed` / `### Fixed` / `### Removed` / `### Migration`）と Migration セクション必須要素（`所要時間の目安` / `local fix 衝突注意`）を配布先での **入力契約** とする。upstream 側のリリース本文契約が変わったら Step 2-3 も同期更新する
 
 ## Cross References
 
 - `src/youtube_automation/commands/system/automation_update.py`（upstream リポ）— 本スキルが委譲する機械的手順の実体（`yt-automation-update check` / `apply`）
-- `docs/changelog-contract.md`（upstream リポ）— CHANGELOG.md / Release 本文の Migration セクションフォーマット契約（本スキルの入力構造定義）
 - `/automation-release`（upstream リポ）— リリース PR を作成し CHANGELOG.md を昇格させる upstream 側スキル（本スキルが読み取るリリース本文を生成する）
 - `/setup` — 追従後に `yt-doctor` で WARNING / FAILED が出た場合の再診断入口、および `[HUMAN STEP]` の書き方の参考実装
