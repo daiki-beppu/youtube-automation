@@ -86,6 +86,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `docs(site)`: 公開サイトをリリースノート専用から下流運用者向けドキュメントへ拡張し、「はじめる」「使う」「リリースノート」の目的別 navigation に統一した。`ONBOARDING.md`、`docs/oauth-setup.md`、`docs/features.md`、`docs/workflow-cheatsheet.md`、`docs/chrome-extension-install-guide.md`、`docs/dashboard.md`、`docs/channel-workspace-migration.md` の7原本を read-in-place allowlist で掲載し、allowlist 内リンクは公開 route、掲載外の運用資料は GitHub 原本へ fallback する。ADR・audit・内部運用資料は公開境界の外に維持し、Cloudflare Pages の watch 設定と preview 受け入れ手順を更新した（#3579、#3580、#3581、#3582）。
 - `docs(automation-release)`: Python 本体と Chrome 拡張の GitHub Release publish 完了後、同一 release 情報から公開リリースノート案を生成し、明示承認後だけ branch protection 下の専用 PR へ載せる post-release flow を追加した。site は PR pending とし、merge 後に production 公開される。既存の Python / extension publish contract は変更しない（#3586）。
 - `feat(suno-helper)`: prompt entry の `duration_sec` が明示された場合、解決済みの Custom Duration button を押してから既存の bridge-first / keydown fallback 経路で Duration slider へ秒数を注入するようにした（#3160）。
 - `feat(suno-helper)`: prompt entry の optional な `duration_sec` を wire 型で受理し、明示された数値を失わず保持するようにした（#3153）。
