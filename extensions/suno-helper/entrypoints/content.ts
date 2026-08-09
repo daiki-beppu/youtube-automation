@@ -2788,7 +2788,13 @@ export default defineContentScript({
 
       try {
         const blocker = detectUnattendedPreflightBlocker();
-        if (blocker) {
+        if (blocker?.reason === "captcha-required") {
+          await waitForCaptchaClear({
+            isAborted: () => false,
+            pollIntervalMs: POLL_INTERVAL_MS,
+            timeoutMs: CAPTCHA_WAIT_TIMEOUT_MS,
+          });
+        } else if (blocker) {
           await writeUnattendedRunState(
             createUnattendedManualState({
               request,
