@@ -746,96 +746,113 @@ function validateDurationTarget(slider: HTMLElement, target: number): void {
   }
 }
 
+function injectExcludeStyles(
+  value: string | undefined,
+  field: HTMLInputElement | HTMLTextAreaElement | null
+): void {
+  if (value === undefined) {
+    return;
+  }
+  if (!field) {
+    throw new FatalRunError(
+      "Exclude styles 欄が見つかりません。Suno の「書く」モードでその他のオプションを開いてから再実行してください。"
+    );
+  }
+  setNativeValue(field, value);
+}
+
+function injectVocalGender(
+  value: AdvancedFieldValues["vocal_gender"],
+  fields: ResolvedAdvancedFields["vocalGender"]
+): void {
+  if (value !== "male" && value !== "female") {
+    return;
+  }
+  const target = value === "male" ? fields.male : fields.female;
+  if (!target) {
+    throw new FatalRunError(
+      `Vocal gender button (${value}) が見つかりません。Suno の UI 変更の可能性があります。`
+    );
+  }
+  if (target.getAttribute("data-selected") !== "true") {
+    target.click();
+  }
+}
+
+async function injectDuration(
+  value: number | undefined,
+  fields: ResolvedAdvancedFields["duration"],
+  bridgeSetSlider: AdvancedInjectOptions["bridgeSetSlider"]
+): Promise<void> {
+  if (value === undefined) {
+    return;
+  }
+  if (!fields) {
+    throw new FatalRunError(
+      "Duration の Custom button または slider が見つかりません。Suno の「書く」モードでその他のオプションを開いてから再実行してください。"
+    );
+  }
+  validateDurationTarget(fields.slider, value);
+  fields.customButton.click();
+  await injectSliderValue(fields.slider, value, bridgeSetSlider);
+  const actual = readDurationSliderAttribute(fields.slider, "aria-valuenow");
+  if (actual !== value) {
+    throw new FatalRunError(
+      `Duration slider の読戻し値 ${actual} 秒が指定値 ${value} 秒と一致しません。生成を停止します。`
+    );
+  }
+}
+
+type OptionalSliderName = "Weirdness" | "Style Influence";
+
+async function injectOptionalSlider(
+  value: number | null | undefined,
+  slider: HTMLElement | null,
+  name: OptionalSliderName,
+  options: AdvancedInjectOptions
+): Promise<void> {
+  if (value == null) {
+    return;
+  }
+  if (!slider) {
+    console.warn(
+      `[suno-helper] ${name} slider が見つかりません（Suno の UI 変更の可能性）。注入を skip して続行します。`
+    );
+    options.onSliderSkip?.(name);
+    return;
+  }
+  try {
+    await injectSliderValue(slider, value, options.bridgeSetSlider);
+  } catch (error) {
+    console.warn(`[suno-helper] ${name} slider 注入を skip:`, error);
+    options.onSliderSkip?.(name);
+  }
+}
+
 export async function injectAdvancedFields(
   entry: AdvancedFieldValues,
   fields: ResolvedAdvancedFields,
   options: AdvancedInjectOptions = {}
 ): Promise<void> {
-  if (entry.exclude_styles !== undefined) {
-    if (!fields.excludeStyles) {
-      throw new FatalRunError(
-        "Exclude styles 欄が見つかりません。Suno の「書く」モードでその他のオプションを開いてから再実行してください。"
-      );
-    }
-    setNativeValue(fields.excludeStyles, entry.exclude_styles);
-  }
-  if (entry.vocal_gender === "male" || entry.vocal_gender === "female") {
-    const target =
-      entry.vocal_gender === "male"
-        ? fields.vocalGender.male
-        : fields.vocalGender.female;
-    if (!target) {
-      throw new FatalRunError(
-        `Vocal gender button (${entry.vocal_gender}) が見つかりません。Suno の UI 変更の可能性があります。`
-      );
-    }
-    if (target.getAttribute("data-selected") !== "true") {
-      target.click();
-    }
-  }
-  if (entry.duration_sec !== undefined) {
-    if (!fields.duration) {
-      throw new FatalRunError(
-        "Duration の Custom button または slider が見つかりません。Suno の「書く」モードでその他のオプションを開いてから再実行してください。"
-      );
-    }
-    validateDurationTarget(fields.duration.slider, entry.duration_sec);
-    fields.duration.customButton.click();
-    await injectSliderValue(
-      fields.duration.slider,
-      entry.duration_sec,
-      options.bridgeSetSlider
-    );
-    const actual = readDurationSliderAttribute(
-      fields.duration.slider,
-      "aria-valuenow"
-    );
-    if (actual !== entry.duration_sec) {
-      throw new FatalRunError(
-        `Duration slider の読戻し値 ${actual} 秒が指定値 ${entry.duration_sec} 秒と一致しません。生成を停止します。`
-      );
-    }
-  }
-  if (entry.weirdness != null) {
-    // slider 未検出は throw せず warn + skip（#1720）。値は UI で手動設定でき Create を跨いで
-    // 永続するため、Suno のリネーム / UI 改装で run 全体を中断しない。
-    if (!fields.weirdness) {
-      console.warn(
-        "[suno-helper] Weirdness slider が見つかりません（Suno の UI 変更の可能性）。注入を skip して続行します。"
-      );
-      options.onSliderSkip?.("Weirdness");
-    } else {
-      try {
-        await injectSliderValue(
-          fields.weirdness,
-          entry.weirdness,
-          options.bridgeSetSlider
-        );
-      } catch (e) {
-        console.warn("[suno-helper] Weirdness slider 注入を skip:", e);
-        options.onSliderSkip?.("Weirdness");
-      }
-    }
-  }
-  if (entry.style_influence != null) {
-    if (!fields.styleInfluence) {
-      console.warn(
-        "[suno-helper] Style Influence slider が見つかりません（Suno の UI 変更の可能性）。注入を skip して続行します。"
-      );
-      options.onSliderSkip?.("Style Influence");
-    } else {
-      try {
-        await injectSliderValue(
-          fields.styleInfluence,
-          entry.style_influence,
-          options.bridgeSetSlider
-        );
-      } catch (e) {
-        console.warn("[suno-helper] Style Influence slider 注入を skip:", e);
-        options.onSliderSkip?.("Style Influence");
-      }
-    }
-  }
+  injectExcludeStyles(entry.exclude_styles, fields.excludeStyles);
+  injectVocalGender(entry.vocal_gender, fields.vocalGender);
+  await injectDuration(
+    entry.duration_sec,
+    fields.duration,
+    options.bridgeSetSlider
+  );
+  await injectOptionalSlider(
+    entry.weirdness,
+    fields.weirdness,
+    "Weirdness",
+    options
+  );
+  await injectOptionalSlider(
+    entry.style_influence,
+    fields.styleInfluence,
+    "Style Influence",
+    options
+  );
 }
 
 /**
