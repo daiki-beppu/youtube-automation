@@ -12,5 +12,5 @@ workspace_name: "{{WORKSPACE_NAME}}"
 # 手書きしてしまうことを防ぐ唯一のソース）
 genre_line: "{{GENRE_LINE}}"
 
-# Suno Exclude Styles 欄。チャンネル方向性と相反するジャンルを列挙
+# Suno Exclude Styles 欄。同梱既定は空。必要な場合だけ短い除外語を列挙
 exclude_styles: "{{EXCLUDE_STYLES}}"
