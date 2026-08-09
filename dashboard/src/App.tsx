@@ -54,18 +54,20 @@ import {
   type PublicationActivityError,
   type PublicationActivityResponse,
 } from "@/features/publication-activity/publication-heatmap"
+import {
+  WorkflowTimingMetricsList,
+  WorkflowStepTable,
+} from "@/features/workflow-timing/workflow-step-table"
 import type {
   ChannelOverview,
   Summary,
   WorkflowTiming,
   WorkflowTimingCollection,
-  WorkflowTimingMetrics,
 } from "@/lib/dashboard-types"
 import {
   formatCollectedAt,
   formatDateRange,
   formatInteger,
-  formatSignedDuration,
   formatSignedInteger,
 } from "@/lib/dashboard-formatters"
 import { dashboardStatusPresentation } from "@/lib/dashboard-status"
@@ -102,18 +104,6 @@ type PublicationActivityState =
   | { status: "ready"; data: PublicationActivityResponse }
   | { status: "empty" }
   | { status: "error"; message: string }
-
-const timingMetrics = [
-  { key: "manual_baseline_seconds", label: "手作業基準" },
-  { key: "ai_seconds", label: "AI 実行時間" },
-  { key: "human_seconds", label: "人間使用時間" },
-  { key: "work_seconds", label: "総作業時間" },
-  { key: "ai_inclusive_saved_seconds", label: "AI 込み削減時間" },
-  { key: "human_freed_seconds", label: "人間が浮いた時間" },
-] as const satisfies ReadonlyArray<{
-  key: keyof WorkflowTimingMetrics
-  label: string
-}>
 
 const chartConfig = {
   views: { label: "再生数", color: "var(--chart-3)" },
@@ -234,10 +224,7 @@ function PublicationActivityPanel({
   }
   if (state.status === "error") {
     return (
-      <Alert
-        variant="destructive"
-        aria-label="公開活動を読み込めませんでした"
-      >
+      <Alert variant="destructive" aria-label="公開活動を読み込めませんでした">
         <AlertCircleIcon />
         <AlertTitle>公開活動を読み込めませんでした</AlertTitle>
         <AlertDescription>{state.message}</AlertDescription>
@@ -245,10 +232,7 @@ function PublicationActivityPanel({
     )
   }
   return (
-    <PublicationHeatmap
-      channels={state.data.channels}
-      days={state.data.days}
-    />
+    <PublicationHeatmap channels={state.data.channels} days={state.data.days} />
   )
 }
 
@@ -465,24 +449,6 @@ function collectionStageLabel(
   }
 }
 
-function TimingMetrics({ totals }: { totals: WorkflowTimingMetrics }) {
-  return (
-    <dl className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-      {timingMetrics.map((metric) => (
-        <div
-          key={metric.key}
-          className="dashboard-metric-surface rounded-lg p-3"
-        >
-          <dt className="text-xs text-foreground">{metric.label}</dt>
-          <dd className="mt-1 font-semibold tabular-nums">
-            {formatSignedDuration(totals[metric.key])}
-          </dd>
-        </div>
-      ))}
-    </dl>
-  )
-}
-
 function WorkflowTimingCard({
   collection,
 }: {
@@ -498,8 +464,14 @@ function WorkflowTimingCard({
         <CardTitle>{stageLabel}</CardTitle>
         <CardDescription>{collection.collection_id}</CardDescription>
       </CardHeader>
-      <CardContent>
-        <TimingMetrics totals={collection.totals} />
+      <CardContent className="grid gap-4">
+        <WorkflowTimingMetricsList totals={collection.totals} />
+        {collection.steps.length > 0 ? (
+          <WorkflowStepTable
+            collectionId={collection.collection_id}
+            steps={collection.steps}
+          />
+        ) : null}
       </CardContent>
     </Card>
   )
@@ -520,7 +492,7 @@ function WorkflowTimingSummary({
           API が集計した作業時間と削減時間をコレクション単位で比較します。
         </p>
       </div>
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-4">
         {workflowTiming.collections.map((collection) => (
           <WorkflowTimingCard
             key={`${collection.stage}-${collection.collection_id}`}
