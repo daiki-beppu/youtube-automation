@@ -13,11 +13,14 @@ from typing import Protocol
 from youtube_automation.core.errors import AutomationError
 from youtube_automation.infrastructure.analytics.dashboard_publications import (
     build_dashboard_publications,
+    load_dashboard_publications,
     load_fresh_dashboard_publications,
     save_dashboard_publications,
+    with_dashboard_publication_error,
 )
 
 logger = logging.getLogger(__name__)
+_PUBLICATION_REFRESH_ERROR_CODE = "publication_refresh_failed"
 
 
 class _AnalyticsCollector(Protocol):
@@ -68,19 +71,30 @@ def collect_channel_analytics(channel: Path, analytics_system_factory: Callable[
         if load_fresh_dashboard_publications(publication_path, now=fetched_at) is not None:
             return
 
-        published_at_values: list[str] = []
-        for video in system.collector.get_all_channel_videos():
-            published_at = video.get("published_at")
-            if not isinstance(published_at, str):
-                raise ValueError("動画の published_at は ISO 8601 文字列でなければなりません")
-            published_at_values.append(published_at)
-
         timezone = load_config().youtube.api.default_publish_timezone
-        payload = build_dashboard_publications(
-            published_at_values,
-            timezone=timezone,
-            fetched_at=fetched_at,
-        )
+        try:
+            published_at_values: list[str] = []
+            for video in system.collector.get_all_channel_videos():
+                published_at = video.get("published_at")
+                if not isinstance(published_at, str):
+                    raise ValueError("動画の published_at は ISO 8601 文字列でなければなりません")
+                published_at_values.append(published_at)
+
+            payload = build_dashboard_publications(
+                published_at_values,
+                timezone=timezone,
+                fetched_at=fetched_at,
+            )
+        except (AutomationError, OSError, RuntimeError, ValueError) as exc:
+            cached_payload = load_dashboard_publications(publication_path)
+            if cached_payload is None:
+                raise
+            payload = with_dashboard_publication_error(
+                cached_payload,
+                code=_PUBLICATION_REFRESH_ERROR_CODE,
+                message=str(exc),
+                attempted_at=fetched_at,
+            )
         save_dashboard_publications(publication_path, payload)
 
 
