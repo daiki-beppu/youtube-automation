@@ -475,6 +475,50 @@ def test_get_server_info_distinguishes_distrokid_capability_modes(tmp_path, dist
         thread.join(timeout=5)
 
 
+@pytest.mark.parametrize("root_name", ["planning", "live"])
+def test_dir_mode_server_info_round_trips_safe_collections_root_basename(tmp_path, root_name):
+    """Dir mode の用途ラベルを absolute path なしで registry まで保持する。"""
+    collections_root = tmp_path / "channel" / "collections" / root_name
+    collections_root.mkdir(parents=True)
+    state = RegistryState()
+    server = create_server(
+        0,
+        None,
+        prompts_path=None,
+        collection_dir=None,
+        distrokid=None,
+        collections_root=collections_root,
+        discovery_registry_state=state,
+    )
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base = f"http://localhost:{server.server_address[1]}"
+
+    try:
+        with urllib.request.urlopen(f"{base}{_SERVER_INFO_ROUTE}") as response:
+            server_info = json.load(response)
+
+        registration = {"instance_id": f"dir-{root_name}", "server_info": server_info}
+        request = urllib.request.Request(
+            f"{base}{DISCOVERY_PATH}",
+            data=json.dumps(registration).encode(),
+            method="POST",
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(request) as response:
+            assert response.status == 200
+        with urllib.request.urlopen(f"{base}{DISCOVERY_PATH}") as response:
+            registry = json.load(response)
+
+        assert server_info["collections_root"] == root_name
+        assert str(tmp_path) not in json.dumps(server_info)
+        assert registry["servers"][0]["server_info"]["collections_root"] == root_name
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
 def test_post_suno_playlists_single_mode_returns_404_without_creating_legacy_json(serve, tmp_path):
     """Given single mode サーバー
     When 旧 POST /suno/playlists に送信する
