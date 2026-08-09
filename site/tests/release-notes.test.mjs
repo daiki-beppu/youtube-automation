@@ -3,6 +3,11 @@ import { execFile } from "node:child_process";
 import { readdir, readFile } from "node:fs/promises";
 import test from "node:test";
 import { promisify } from "node:util";
+import {
+  groupReleasesByScale,
+  releaseScaleLabels,
+  scaleFromVersion,
+} from "../release-scale.ts";
 
 const readIndex = () => readFile(new URL("../dist/index.html", import.meta.url), "utf8");
 const readRelease = (version) =>
@@ -130,6 +135,73 @@ test("全 Blume page の stylesheet closure で DADS accent を解決する", as
     }
     assert.match(styles, new RegExp(`--blume-accent:\\s*${lightAccent}`));
     assert.match(styles, new RegExp(`--blume-accent:\\s*${darkAccent}`));
+  }
+});
+
+test("patch が 0 の version は major、それ以外は minor に分類する", () => {
+  assert.equal(scaleFromVersion("v5.6.0"), "major");
+  assert.equal(scaleFromVersion("ext-v0.3.0"), "major");
+  assert.equal(scaleFromVersion("v5.5.17"), "minor");
+  assert.equal(scaleFromVersion("ext-v0.2.5"), "minor");
+});
+
+test("release scale の表示名を一元的に提供する", () => {
+  assert.deepEqual(releaseScaleLabels, {
+    major: "大きいアップデート",
+    minor: "小さいアップデート",
+  });
+});
+
+test("release を規模別にまとめ、各 group 内を公開日の降順にする", () => {
+  const releases = [
+    { version: "v5.5.17", released_at: new Date("2026-01-02") },
+    { version: "ext-v0.2.5", released_at: new Date("2026-02-02") },
+    { version: "v5.6.0", released_at: new Date("2026-01-01") },
+    { version: "ext-v0.3.0", released_at: new Date("2026-02-01") },
+  ];
+
+  const groups = groupReleasesByScale(releases);
+
+  assert.deepEqual(
+    groups.map((group) => ({
+      scale: group.scale,
+      label: group.label,
+      versions: group.releases.map((release) => release.version),
+    })),
+    [
+      {
+        scale: "major",
+        label: "大きいアップデート",
+        versions: ["ext-v0.3.0", "v5.6.0"],
+      },
+      {
+        scale: "minor",
+        label: "小さいアップデート",
+        versions: ["ext-v0.2.5", "v5.5.17"],
+      },
+    ]
+  );
+});
+
+test("release がない規模の group は返さない", () => {
+  const groups = groupReleasesByScale([
+    { version: "v5.6.0", released_at: new Date("2026-01-01") },
+  ]);
+
+  assert.deepEqual(groups, [
+    {
+      scale: "major",
+      label: "大きいアップデート",
+      releases: [{ version: "v5.6.0", released_at: new Date("2026-01-01") }],
+    },
+  ]);
+});
+
+test("対応形式でない version は version を示して拒否する", () => {
+  const invalidVersions = ["5.6.0", "v5.6", "plugin-v1.0.0", "v1.0.0-beta"];
+
+  for (const version of invalidVersions) {
+    assert.throws(() => scaleFromVersion(version), new RegExp(version.replaceAll(".", "\\.")));
   }
 });
 
