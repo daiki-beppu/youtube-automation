@@ -411,13 +411,36 @@ function durationFilterOrDefault(
   return durationFilter ?? { ...DEFAULT_DURATION_FILTER };
 }
 
+function validatePromptEntryDurations(entries: unknown[]): PromptEntry[] {
+  entries.forEach((entry, index) => {
+    if (typeof entry !== "object" || entry === null || Array.isArray(entry)) {
+      return;
+    }
+    const durationSec = (entry as Record<string, unknown>).duration_sec;
+    if (durationSec === undefined) {
+      return;
+    }
+    if (
+      typeof durationSec !== "number" ||
+      !Number.isFinite(durationSec) ||
+      !Number.isInteger(durationSec) ||
+      durationSec <= 0
+    ) {
+      throw new Error(
+        `entries[${index}].duration_sec must be positive integer`
+      );
+    }
+  });
+  return entries as PromptEntry[];
+}
+
 function normalizePromptResponse(data: unknown): PromptResponse {
   if (Array.isArray(data)) {
     if (data.length === 0) {
       throw new Error("空、または配列ではない JSON が返りました。");
     }
     return {
-      entries: data as PromptEntry[],
+      entries: validatePromptEntryDurations(data),
       duration_filter: durationFilterOrDefault(),
     };
   }
@@ -432,7 +455,7 @@ function normalizePromptResponse(data: unknown): PromptResponse {
       ? undefined
       : assertDurationFilter(record.duration_filter, "duration_filter");
   return {
-    entries: entries as PromptEntry[],
+    entries: validatePromptEntryDurations(entries),
     duration_filter: durationFilterOrDefault(durationFilter),
   };
 }
