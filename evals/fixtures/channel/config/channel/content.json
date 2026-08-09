@@ -1,0 +1,21 @@
+{
+  "genre": {
+    "primary": "ambient",
+    "style": "calm",
+    "context": "focus"
+  },
+  "tags": {
+    "base": ["ambient music"],
+    "themes": {
+      "night": ["night focus"]
+    }
+  },
+  "descriptions": {
+    "opening": "Calm ambient music for focus.",
+    "perfect_for": ["Focus"],
+    "hashtags": ["#AmbientMusic"]
+  },
+  "title": {
+    "template": "{style} {theme} - {activity} [{duration_display}]"
+  }
+}

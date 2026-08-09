@@ -1,0 +1,27 @@
+{
+  "collection_name": "Quiet Night Focus",
+  "theme": "quiet-night-focus",
+  "created_at": "2026-08-01T00:00:00.000Z",
+  "updated_at": "2026-08-01T00:00:00.000Z",
+  "stage": "planning",
+  "phase": "prepared",
+  "selected_plan": "A",
+  "track_count": 8,
+  "music_engine": "suno",
+  "planning": {},
+  "assets": {
+    "thumbnail": true,
+    "loop_video": true,
+    "music_prompts": true,
+    "music_downloaded": false,
+    "raw_master": null,
+    "master_audio": null,
+    "master_video": null,
+    "description": false
+  },
+  "upload": {
+    "video_id": null,
+    "video_url": null,
+    "publish_at": null
+  }
+}
