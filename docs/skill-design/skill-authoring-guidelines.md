@@ -82,6 +82,8 @@
 
 skill に新しい mode・variant を設ける場合は、呼び出しを `--<mode>` 形式の引数で表す。`mode=<name>` 形式や自然言語の mode 名を新規に導入しない。値を伴う variant も、名前付き引数として表現する。
 
+既存 skill と責務・完了条件を共有する新しい利用形態は、skill を新設する前に、既存 skill へ `--<mode>` 引数を追加できないかを先に検討する。新しい責務または独立した完了条件を持つ場合の skill 新設は禁止しない。また、この原則を既存の skill family へ遡及適用して統合することは要求しない。
+
 - mode の実例: [community-draft の `--batch`](../../.claude/skills/community-draft/SKILL.md)
 - 値を伴う variant の実例: [flop-analysis の `--since <N>`](../../.claude/skills/flop-analysis/SKILL.md)
 
