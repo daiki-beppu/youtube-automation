@@ -338,8 +338,14 @@ def test_metadata_private_helpers_are_owned_by_their_leaf_modules() -> None:
 
     assert titles._extract_pattern_key("01-pattern-b1-song") == "b1"
     assert localizations._localized_title_values.__module__ == localizations.__name__
-    assert localizations._localized_title_values(scene_phrase="Rain", activities="Study", scene_emoji="☔") == {
+    assert localizations._localized_title_values(
+        scene_phrase="Rain",
+        activities="Study",
+        scene_emoji="☔",
+        duration_display="10.5 Hours",
+    ) == {
         "scene_phrase": "Rain",
         "activities": "Study",
         "scene_emoji": "☔",
+        "duration_display": "10.5 Hours",
     }
