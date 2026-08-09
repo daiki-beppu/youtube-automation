@@ -1223,6 +1223,24 @@ def test_videoup_skill_documents_current_overlay_support() -> None:
     assert "#511 の実装を待つ" not in skill
 
 
+def test_videoup_skill_documents_subscribe_popup_path_resolution_order() -> None:
+    """#3209: popup の実行契約は runtime と同じ探索順と失敗条件を示す。"""
+    skill = _VIDEOUP_SKILL_PATH.read_text(encoding="utf-8")
+    contract = next(line for line in skill.splitlines() if line.startswith("- **popup 画像探索順**:"))
+    ordered_paths = (
+        "絶対パス",
+        "`10-assets/<image>`",
+        "`<collection-dir>/<image>`",
+        "`<channel-root>/<image>`",
+    )
+
+    indexes = [contract.index(path) for path in ordered_paths]
+    assert indexes == sorted(indexes)
+    assert "`branding/subscribe-popup.png`" in contract
+    assert "選択チャンネル" in contract
+    assert "エラー終了" in contract
+
+
 def _audio_visualizer_env(style: str, **overrides: str) -> dict[str, str]:
     env = {
         "OVERLAY_AV_ENABLED": "true",
