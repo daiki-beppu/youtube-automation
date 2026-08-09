@@ -4,7 +4,6 @@ import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
-  DEFAULT_SERVER_SOURCES,
   DISCOVERY_REGISTRY_URL,
   DISCOVERY_REQUEST_TIMEOUT_MS,
 } from "../../shared/constants";
@@ -173,15 +172,6 @@ describe("shared live server discovery", () => {
     vi.useRealTimers();
   });
 
-  it("should expose a structured channel name on the permanent default source", () => {
-    expect(DEFAULT_SERVER_SOURCES[0]).toEqual({
-      id: "youtube-automation-localhost-7873",
-      channelName: "YouTube Automation",
-      label: "YouTube Automation (default)",
-      url: DEFAULT_URL,
-    });
-  });
-
   it("should preserve the probed channel name independently from the legacy label", async () => {
     const fetchMock = vi.fn((input: string | URL | Request) => {
       const url = String(input);
@@ -207,7 +197,7 @@ describe("shared live server discovery", () => {
 
     const sources = await discoverServerSources({ fetch: fetchMock });
 
-    expect(sources[1]).toEqual({
+    expect(sources[0]).toEqual({
       id: "live-localhost-49152",
       channelName: "Ambient (Night)",
       label: "Ambient (Night) (live.localhost:49152)",
@@ -252,8 +242,8 @@ describe("shared live server discovery", () => {
     const sources = await discoverServerSources({ fetch: fetchMock });
 
     expect(sources.map(({ url }: { url: string }) => url)).toEqual([
-      DEFAULT_URL,
       LIVE_URL,
+      DEFAULT_URL,
     ]);
     expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([
       DISCOVERY_REGISTRY_URL,
@@ -293,7 +283,6 @@ describe("shared live server discovery", () => {
     });
 
     await expect(discoverServerSources({ fetch: fetchMock })).resolves.toEqual([
-      DEFAULT_SERVER_SOURCES[0],
       {
         id: "live-localhost-49152",
         channelName: "Probe",
@@ -319,20 +308,14 @@ describe("shared live server discovery", () => {
 
     const sources = await discoverServerSources({ fetch: fetchMock });
 
-    expect(DEFAULT_SERVER_SOURCES[0]).toEqual({
-      id: "youtube-automation-localhost-7873",
-      channelName: "YouTube Automation",
-      label: "YouTube Automation (default)",
-      url: DEFAULT_URL,
-    });
-    expect(sources[1]).toEqual({
+    expect(sources[0]).toEqual({
       id: "live-localhost-49152",
       channelName: "Legacy",
       label: "Legacy",
       url: LIVE_URL,
     });
-    expect(sources[1]).not.toHaveProperty("capabilities");
-    expect(sources[1]).not.toHaveProperty("collectionsRoot");
+    expect(sources[0]).not.toHaveProperty("capabilities");
+    expect(sources[0]).not.toHaveProperty("collectionsRoot");
   });
 
   it.each([
@@ -346,18 +329,27 @@ describe("shared live server discovery", () => {
       () => Promise.resolve(response(200, { schema_version: 1, servers: {} })),
     ],
   ])(
-    "should return only the permanent default after a registry %s",
+    "should return no sources after a registry %s",
     async (_label, registryFetch) => {
       const fetchMock = vi.fn(registryFetch);
 
       await expect(
         discoverServerSources({ fetch: fetchMock })
-      ).resolves.toEqual(DEFAULT_SERVER_SOURCES);
+      ).resolves.toEqual([]);
       expect(fetchMock).toHaveBeenCalledOnce();
     }
   );
 
-  it("should fall back without probing when the registry exceeds its entry limit", async () => {
+  it("should return no sources without probing when the registry is empty", async () => {
+    const fetchMock = vi.fn(() => Promise.resolve(response(200, registry([]))));
+
+    await expect(discoverServerSources({ fetch: fetchMock })).resolves.toEqual(
+      []
+    );
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it("should return no sources without probing when the registry exceeds its entry limit", async () => {
     const fetchMock = vi.fn(() =>
       Promise.resolve(
         response(
@@ -372,7 +364,7 @@ describe("shared live server discovery", () => {
     );
 
     await expect(discoverServerSources({ fetch: fetchMock })).resolves.toEqual(
-      DEFAULT_SERVER_SOURCES
+      []
     );
     expect(fetchMock).toHaveBeenCalledOnce();
   });
@@ -412,7 +404,6 @@ describe("shared live server discovery", () => {
     resolveFirst(response(200, serverInfo(firstUrl, "Alpha")));
 
     await expect(pending).resolves.toEqual([
-      DEFAULT_SERVER_SOURCES[0],
       expect.objectContaining({ url: firstUrl }),
       expect.objectContaining({ url: secondUrl }),
     ]);
@@ -455,7 +446,7 @@ describe("shared live server discovery", () => {
     const pending = discoverServerSources({ fetch: fetchMock });
     await vi.advanceTimersByTimeAsync(DISCOVERY_REQUEST_TIMEOUT_MS);
 
-    await expect(pending).resolves.toEqual(DEFAULT_SERVER_SOURCES);
+    await expect(pending).resolves.toEqual([]);
     expect(signals).toHaveLength(1);
     expect(signals[0].aborted).toBe(true);
     expect(vi.getTimerCount()).toBe(0);
@@ -480,7 +471,7 @@ describe("shared live server discovery", () => {
 
     const pending = discoverServerSources({ fetch: fetchMock });
     await vi.advanceTimersByTimeAsync(DISCOVERY_REQUEST_TIMEOUT_MS);
-    await expect(pending).resolves.toEqual(DEFAULT_SERVER_SOURCES);
+    await expect(pending).resolves.toEqual([]);
 
     expect(registrySignal?.aborted).toBe(true);
     resolveRegistry(response(200, registry([registryEntry(LIVE_URL, "late")])));
@@ -506,7 +497,7 @@ describe("shared live server discovery", () => {
     const pending = discoverServerSources({ fetch: fetchMock });
     await vi.advanceTimersByTimeAsync(DISCOVERY_REQUEST_TIMEOUT_MS);
 
-    await expect(pending).resolves.toEqual(DEFAULT_SERVER_SOURCES);
+    await expect(pending).resolves.toEqual([]);
     expect(signal?.aborted).toBe(true);
     expect(vi.getTimerCount()).toBe(0);
   });
