@@ -599,7 +599,10 @@ export function App() {
         </header>
 
         {publicationActivity ? (
-          <PublicationHeatmap days={publicationActivity.days} />
+          <PublicationHeatmap
+            channels={publicationActivity.channels}
+            days={publicationActivity.days}
+          />
         ) : null}
 
         {error ? (
