@@ -23,6 +23,7 @@ from __future__ import annotations
 import json
 import stat
 import warnings
+from collections.abc import Mapping
 from importlib.resources import as_file, files
 from pathlib import Path
 from typing import Any
@@ -248,7 +249,7 @@ def _load_override(path: Path) -> dict[str, Any]:
     return _load_yaml(path)
 
 
-def _validate_thumbnail_text_render(config: dict[str, Any]) -> None:
+def _validate_thumbnail_text_render(config: Mapping[str, object]) -> None:
     text_render = config.get("text_render")
     if not isinstance(text_render, dict):
         raise ConfigError("thumbnail.text_render.mode は ai_burn_in / deterministic のいずれかで指定してください")
@@ -259,7 +260,7 @@ def _validate_thumbnail_text_render(config: dict[str, Any]) -> None:
         )
 
 
-def _validate_skill_config(skill: str, config: dict[str, Any]) -> None:
+def _validate_skill_config(skill: str, config: Mapping[str, object]) -> None:
     if skill == "thumbnail":
         _validate_thumbnail_text_render(config)
 
