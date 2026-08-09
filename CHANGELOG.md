@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 - `fix(collection-serve)`: 共通ファイルロックを使って `fcntl` 非対応環境でも起動時の排他を維持し、Windows で `yt-collection-serve` を import・起動できるようにした（#3387）。
+- `docs(thumbnail)`: 手動生成で成功候補が複数ある場合、全候補を同時表示・320px 検証して候補番号を受け取るまで確定せず、選択された候補だけを `thumbnail.jpg` / `main.png` として確定する比較選択契約を追加した（#3622）。
 
 - `fix(masterup)`: Step 5.1 のラウドネス検証スクリプトが見つからない場合を、逸脱 FAIL の exit 2 ではなく起動エラーの exit 1 として明示する事前検証を追加した（#3317）。
 
