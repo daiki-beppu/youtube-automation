@@ -76,6 +76,8 @@ Style プロンプト生成は generator に委譲し、品質検証は生成と
 
 generator は pattern draft、設定、benchmark analysis、必要な References を読んで `20-documentation/suno-prompts.md` と `20-documentation/suno-prompts.json` を作る。reviewer は生成時のメモや会話を読まず、成果物 `20-documentation/suno-prompts.json` と `/suno-lyric` の `references/review-rubric.md` のみを読んで検証する。`suno-prompts.json` の reviewer 入力は既存 consumer 互換の `name`, `style`, `lyrics` と、存在する場合のみ More Options 補助 field に限定する。`/suno` reviewer は `review_context` を要求せず、不足する theme / scene / quote 情報を外部資料で補完しない。
 
+LLM semantic review はファイル単位で実行する。各 review round では `suno-prompts.json` 全体を 1 回の reviewer 呼び出しへ渡し、その 1 回で全 entry の判定を返させる。entry ごと・チャンクごとに reviewer を起動しない。複数 reviewer への分割や並列化もしない。`FAIL` entry を再生成した次の round でも、更新済みファイル全体を同じ 1 回の呼び出しで再検証する。
+
 検証順序は必ず直列にする:
 
 1. `uv run yt-suno-verify <collection-path>` を実行し、曲数・entry name・section tag・Style 文字数などの機械的検証が exit 0 で通過したことを確認する
@@ -500,7 +502,7 @@ override 後は `uv run yt-generate-suno` を再実行して `suno-prompts.json`
 uv run yt-suno-verify <collection-path>
 ```
 
-`suno-prompts.json` / `suno-lyrics.json` の展開後 entry 数、entry name、歌詞構造に加え、patterns root と使用中 variant、channel fallback を解決した effective Style の `genre_line` 文字数を検証し、exit 0 を確認する。その後、別コンテキスト reviewer が `suno-prompts.json` のみを読み、`.claude/skills/suno-lyric/references/review-rubric.md` に従って LLM semantic review を実行し、entry ごとに `PASS` / `FAIL` + 理由を出す。reviewer は `name`, `style`, `lyrics` と、存在する場合のみ More Options 補助 field だけを判定材料にし、`review_context` 欠落を `/suno` entry の failure reason にしない。`FAIL` entry のみ最大 2 周まで generator subagent（Codex では別コンテキスト実行）に再生成させる。全 entry が `PASS` した後にだけ Suno UI へ投入する。上限到達時に `FAIL` が残る場合は Step 3 へ進まず、残課題をユーザーに提示する。
+`suno-prompts.json` / `suno-lyrics.json` の展開後 entry 数、entry name、歌詞構造に加え、patterns root と使用中 variant、channel fallback を解決した effective Style の `genre_line` 文字数を検証し、exit 0 を確認する。その後、別コンテキスト reviewer が `suno-prompts.json` 全体をファイル単位の 1 回の呼び出しで読み、`.claude/skills/suno-lyric/references/review-rubric.md` に従って LLM semantic review を実行し、全 entry の `PASS` / `FAIL` + 理由をまとめて出す。reviewer は `name`, `style`, `lyrics` と、存在する場合のみ More Options 補助 field だけを判定材料にし、`review_context` 欠落を `/suno` entry の failure reason にしない。`FAIL` entry のみ最大 2 周まで generator subagent（Codex では別コンテキスト実行）に再生成させ、各 round は更新済み JSON 全体を reviewer 1 回で再検証する。全 entry が `PASS` した後にだけ Suno UI へ投入する。上限到達時に `FAIL` が残る場合は Step 3 へ進まず、残課題をユーザーに提示する。
 
 `yt-generate-suno` 自体は `workflow-state.json` を更新しない。`/suno` を呼び出したメインエージェント（`/wf-new` / `/wf-next` からの呼び出しと、`/suno` の直接実行を含む）が、生成された成果物、`yt-suno-verify` の成功、semantic review の全 entry `PASS` を確認した後にだけ、`assets.music_prompts = true`、`planning.music`、`updated_at` を更新する。subagent は state を書き込まない。
 
