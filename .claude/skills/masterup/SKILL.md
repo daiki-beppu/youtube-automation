@@ -353,13 +353,13 @@ uv run yt-suno-audio-cleanup apply <collection-path>  # 元ファイルを origi
 cleanup の有効・無効にかかわらず、マスター結合前に次の単一スクリプトを実行する。計測・閾値判定・逸脱曲の特定はスクリプトを正とし、本文で再計算しない。
 
 ```bash
-uv run python3 "$(git rev-parse --show-toplevel)/.claude/skills/masterup/references/check_loudness_deviation.py" <collection-path>
+LOUDNESS_SCRIPT="$(git rev-parse --show-toplevel 2>/dev/null)/.claude/skills/masterup/references/check_loudness_deviation.py"; if [ ! -f "$LOUDNESS_SCRIPT" ]; then printf 'ERROR: loudness gate script not found: %s\n' "$LOUDNESS_SCRIPT" >&2; exit 1; fi; uv run python3 "$LOUDNESS_SCRIPT" <collection-path>
 ```
 
 `git rev-parse` は同期済み skill が置かれた workspace root だけを解決し、実行 CWD は変更しない。したがって `channels/<channel>` を CWD にするマルチチャンネル workspace でも、そのチャンネルの `config/channel/` を読みながら同梱スクリプトを起動できる。
 
 - exit 0: PASS と全曲の実測 LUFS を表示し、Step 5 本体へ進む
-- exit 1: 計測または設定エラー。表示された原因を解消して再実行し、Step 5 本体へ進まない
+- exit 1: スクリプト不在などの起動失敗、計測または設定エラー。表示された原因を解消して再実行し、Step 5 本体へ進まない
 - exit 2: FAIL。逸脱曲、実測 LUFS、目標範囲を表示し、AskUserQuestion で次の明示2択を提示する
   1. `cleanup を再処理して再検証する`
   2. `今回の逸脱を許容して続行する`

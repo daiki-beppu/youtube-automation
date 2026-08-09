@@ -68,7 +68,7 @@ print(json.dumps({"cwd": str(Path.cwd()), "script": str(Path(__file__).resolve()
     documented = next(
         line
         for line in SKILL.read_text(encoding="utf-8").splitlines()
-        if line.startswith("uv run python3 ") and SCRIPT.name in line
+        if "uv run python3 " in line and SCRIPT.name in line
     )
     command = documented.replace("<collection-path>", shlex.quote(str(collection)))
     env = os.environ.copy()
@@ -91,6 +91,33 @@ print(json.dumps({"cwd": str(Path.cwd()), "script": str(Path(__file__).resolve()
         "script": str(distributed_script),
         "collection": str(collection),
     }
+
+
+def test_documented_invocation_reports_missing_script_as_startup_error(tmp_path: Path) -> None:
+    """#3317: script 不在は逸脱 FAIL ではなく起動エラーとして exit 1 にする。"""
+    workspace = tmp_path / "workspace"
+    subprocess.run(["git", "init", "-q", str(workspace)], check=True)
+    collection = workspace / "collections" / "planning" / "demo"
+    collection.mkdir(parents=True)
+    documented = next(
+        line
+        for line in SKILL.read_text(encoding="utf-8").splitlines()
+        if "uv run python3 " in line and SCRIPT.name in line
+    )
+    command = documented.replace("<collection-path>", shlex.quote(str(collection)))
+
+    completed = subprocess.run(
+        command,
+        shell=True,
+        executable="/bin/bash",
+        cwd=workspace,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 1
+    assert "ERROR:" in completed.stderr
+    assert SCRIPT.name in completed.stderr
 
 
 def test_parse_loudnorm_input_i_uses_ffmpeg_json(module):
