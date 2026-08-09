@@ -426,7 +426,7 @@ class TestMainPassesAnalysisWindow:
     def test_analysis_window_sec_flows_from_cfg_to_analyzer(self, tmp_path):
         # Given: skill-config が窓幅 600 を返す (境界で 1 度だけ解決する既存方針)
         cfg = {
-            "model": "gemini-2.5-flash",
+            "model": "gemini-3.5-flash",
             "prompt": "analyze",
             "delay_sec": 0,
             "analysis_window_sec": 600,
@@ -450,6 +450,13 @@ class TestMainPassesAnalysisWindow:
 
 
 class TestAnalysisWindowSkillConfig:
+    def test_default_model_supports_video_on_vertex_global_endpoint(self, tmp_path):
+        # Given: チャンネル側 override なし
+        cfg = load_skill_config("video-analyze", use_cache=False, channel_dir=tmp_path)
+
+        # Then: Vertex AI global endpoint の動画入力対応 GA モデル
+        assert cfg["model"] == "gemini-3.5-flash"
+
     def test_default_window_is_900(self, tmp_path):
         # Given: チャンネル側 override なし
         cfg = load_skill_config("video-analyze", use_cache=False, channel_dir=tmp_path)
@@ -475,7 +482,7 @@ class TestAnalysisWindowValidation:
     def test_rejects_non_positive_or_non_int_window(self, value):
         # Given: skill-config から読み込まれた契約外の窓幅
         cfg = {
-            "model": "gemini-2.5-flash",
+            "model": "gemini-3.5-flash",
             "prompt": "analyze",
             "delay_sec": 0,
             "analysis_window_sec": value,
