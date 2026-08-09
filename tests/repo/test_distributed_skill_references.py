@@ -20,6 +20,8 @@ from tests.helpers.paths import REPO_ROOT
 _REPO_ROOT = REPO_ROOT
 _SKILLS_DIR = _REPO_ROOT / ".claude" / "skills"
 _CLAUDE_TEMPLATE = _REPO_ROOT / ".claude" / "CLAUDE.template.md"
+_RELEASE_SKILL = _SKILLS_DIR / "automation-release" / "SKILL.md"
+_RELEASE_CONTRACTS = _SKILLS_DIR / "automation-release" / "references" / "release-contracts.md"
 
 # 配布ファイル内で走査する拡張子（prose / スクリプト双方に参照が現れうる）
 _SCANNED_SUFFIXES = (".md", ".py", ".sh")
@@ -36,8 +38,6 @@ _SECTION_REF = re.compile(r"CLAUDE\.md\s*§\s*\d+")
 # (test_known_unresolved_refs_are_still_present が stale entry を検出する)。
 _KNOWN_UNRESOLVED: frozenset[tuple[str, str]] = frozenset(
     {
-        (".claude/skills/automation-release/SKILL.md", "docs/adr/0011-extension-distribution.md"),
-        (".claude/skills/automation-release/SKILL.md", "docs/changelog-contract.md"),
         (".claude/skills/automation-release/references/changelog-promotion.md", "docs/changelog-contract.md"),
         (".claude/skills/automation-release/references/prepare-checklist.md", "docs/changelog-contract.md"),
     }
@@ -110,6 +110,43 @@ def test_videoup_encoder_benchmark_contract_is_self_contained() -> None:
     assert "既定は引き続き `libx264`" in skill
     assert "1-frame 起動 probe 失敗時は `libx264` へ戻り" in skill
     assert "docs/benchmarks/videoup-overlay-encoder-2026-07-21.md" not in skill
+
+
+def test_automation_release_routes_to_distributed_release_contracts() -> None:
+    skill = _RELEASE_SKILL.read_text(encoding="utf-8")
+
+    assert "references/release-contracts.md" in skill
+
+
+def test_python_release_migration_producer_contract_is_distributed() -> None:
+    contract = _RELEASE_CONTRACTS.read_text(encoding="utf-8")
+
+    for required in (
+        "`[Unreleased]` 配下の `### Migration`",
+        "所要時間の目安",
+        "local fix 衝突注意",
+        "サマリ",
+        "warning",
+        "`AskUserQuestion`",
+        "無条件 abort しない",
+    ):
+        assert required in contract
+
+
+def test_extension_release_distribution_contract_is_distributed() -> None:
+    contract = _RELEASE_CONTRACTS.read_text(encoding="utf-8")
+
+    for required in (
+        "GitHub Release の zip",
+        "suno-helper",
+        "distrokid-helper",
+        "community-helper",
+        "統一 `ext-v*` tag 系列",
+        "Python 本体 version と独立",
+        "package version",
+        "release asset 名",
+    ):
+        assert required in contract
 
 
 def test_no_new_unresolvable_docs_references() -> None:
