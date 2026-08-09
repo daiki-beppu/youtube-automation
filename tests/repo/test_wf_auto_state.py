@@ -230,6 +230,94 @@ def test_schema_v2_appends_typed_segments_and_preserves_every_attempt(tmp_path: 
     }
 
 
+@pytest.mark.parametrize(
+    ("segment", "message"),
+    [
+        (
+            {"kind": "ai", "started_at": "2026-07-21T00:00:00+00:00", "duration_seconds": 1.0},
+            "open segment",
+        ),
+        (
+            {
+                "kind": "ai",
+                "started_at": "2026-07-21T00:00:01+00:00",
+                "ended_at": "2026-07-21T00:00:00+00:00",
+                "duration_seconds": 1.0,
+            },
+            "ended_at",
+        ),
+        (
+            {
+                "kind": "human",
+                "started_at": "2026-07-21T00:00:00+00:00",
+                "ended_at": "2026-07-21T00:00:01+00:00",
+                "duration_seconds": -1.0,
+            },
+            "duration_seconds",
+        ),
+        (
+            {
+                "kind": "ai",
+                "started_at": "2026-07-21T00:00:00+00:00",
+                "ended_at": "2026-07-21T00:00:01+00:00",
+                "duration_seconds": float("nan"),
+            },
+            "duration_seconds",
+        ),
+        (
+            {
+                "kind": "ai",
+                "started_at": "2026-07-21T00:00:00+00:00",
+                "ended_at": "2026-07-21T00:00:01+00:00",
+                "duration_seconds": float("inf"),
+            },
+            "duration_seconds",
+        ),
+        (
+            {
+                "kind": "human",
+                "started_at": "2026-07-21T00:00:00+00:00",
+                "ended_at": "2026-07-21T00:00:01+00:00",
+                "duration_seconds": float("-inf"),
+            },
+            "duration_seconds",
+        ),
+    ],
+)
+def test_invalid_timing_fails_loud_on_read_and_append_without_mutating_history(
+    tmp_path: Path,
+    runner: ModuleType,
+    segment: dict,
+    message: str,
+) -> None:
+    token = runner.acquire_lease(tmp_path, now=time.time(), ttl_seconds=60)
+    history_path = tmp_path / ".automation-run" / "history.json"
+    invalid_history = {
+        "schema_version": 2,
+        "attempts": [{"action": "wf-new", "status": "failed", "timing": {"segments": [segment]}}],
+    }
+    history_path.write_text(json.dumps(invalid_history), encoding="utf-8")
+
+    with pytest.raises(ValueError, match=message):
+        runner.read_history(tmp_path)
+
+    original = json.dumps({"schema_version": 2, "attempts": []})
+    history_path.write_text(original, encoding="utf-8")
+    with pytest.raises(ValueError, match=message):
+        runner.record_attempt(
+            tmp_path,
+            token=token,
+            collection=None,
+            action="wf-new",
+            status="failed",
+            reason="invalid_timing",
+            resume_action="wf-new",
+            now="2026-07-21T00:00:02+00:00",
+            segments=[segment],
+        )
+    assert history_path.read_text(encoding="utf-8") == original
+
+
 def test_completed_live_collection_finishes_after_post_publish_history(tmp_path: Path, runner: ModuleType) -> None:
     collection = _collection(
         tmp_path,
