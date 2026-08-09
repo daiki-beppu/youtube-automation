@@ -41,6 +41,27 @@ export type WorkflowTimingCollection = {
   totals: WorkflowTimingMetrics
 }
 
-export type WorkflowTiming = {
-  collections: WorkflowTimingCollection[]
+export type WorkflowTimingError = {
+  code: string
+  message: string
 }
+
+export type WorkflowTiming =
+  | {
+      status: "ready"
+      collections: WorkflowTimingCollection[]
+    }
+  | {
+      status: "unavailable"
+      reason: string
+      collections: []
+    }
+  | {
+      status: "in_progress"
+      collections: WorkflowTimingCollection[]
+    }
+  | {
+      status: "error"
+      collections: []
+      error: WorkflowTimingError
+    }
