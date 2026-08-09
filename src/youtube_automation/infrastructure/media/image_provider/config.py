@@ -23,7 +23,7 @@ SUPPORTED_PROVIDERS: tuple[str, ...] = ("gemini", "openai", "codex", "gemini_cli
 OPENAI_SUPPORTED_ASPECT_RATIOS: tuple[str, ...] = ("16:9", "9:16")
 
 # 既定値（skill-config 不在時のフォールバック）
-_DEFAULT_GEMINI_MODEL = "gemini-3.1-flash-image-preview"
+_DEFAULT_GEMINI_MODEL = "gemini-3.1-flash-image"
 _DEFAULT_GEMINI_IMAGE_SIZE = "2K"
 
 # gemini_cli provider 既定値（サブスク認証の gemini CLI 経由 / nano-banana）
