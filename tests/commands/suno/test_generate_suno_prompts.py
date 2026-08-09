@@ -2148,8 +2148,54 @@ def test_empty_patterns_style_variants_does_not_inherit_channel_keys(channel_dir
         style_variants={},
     )
 
-    with pytest.raises(ConfigError, match="未定義の style variant"):
+    with pytest.raises(ConfigError) as exc_info:
         build_prompt_entries(patterns_path)
+
+    message = str(exc_info.value)
+    assert "未定義の style variant" in message
+    assert "ambient" in message
+    assert str(patterns_path) in message
+    assert "channel fallback drift" not in message
+
+
+def test_main_legacy_style_variant_drift_preserves_stale_outputs(channel_dir, tmp_path, monkeypatch):
+    """legacy fallback の key drift は復旧手順を示し、既存成果物を変更しない。"""
+    _write_suno_override(
+        channel_dir,
+        genre_line="channel base",
+        style_variants={"opening": {"name": "Opening", "genre_line": "soft opening"}},
+    )
+    entries_def = _four_distinct_entries()
+    entries_def[0]["style"] = "intro"
+    patterns_path = _write_patterns_with_explicit_entries(
+        tmp_path,
+        entries=entries_def,
+        tracks_top=8,
+    )
+    md_path = patterns_path.parent / "suno-prompts.md"
+    json_path = patterns_path.parent / "suno-prompts.json"
+    original_md = b"legacy markdown\n"
+    original_json = b'{"legacy": true}\n'
+    md_path.write_bytes(original_md)
+    json_path.write_bytes(original_json)
+    monkeypatch.setattr(sys, "argv", ["yt-generate-suno", str(patterns_path)])
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        with pytest.raises(ConfigError) as exc_info:
+            main()
+
+    message = str(exc_info.value)
+    assert "intro" in message
+    assert str(patterns_path) in message
+    assert "channel fallback drift" in message
+    assert "suno-patterns.yaml::style_variants" in message
+    assert "stale" in message
+    assert "再生成" in message
+    assert f"uv run yt-suno-verify {patterns_path.parent}" in message
+    assert md_path.read_bytes() == original_md
+    assert json_path.read_bytes() == original_json
+    assert not [warning for warning in caught if "未知のトップレベルキー" in str(warning.message)]
 
 
 @pytest.mark.parametrize(

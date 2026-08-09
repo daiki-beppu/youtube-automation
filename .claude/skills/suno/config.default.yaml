@@ -70,6 +70,7 @@ model: V5.5
 # 代表ジャンル (lo-fi / ambient / piano / nature) の参考テンプレ — 実値は
 # `/video-analyze --source benchmark` の `suno_preset.genre_line` を起点に
 # チャンネル側 config/skills/suno.yaml で上書き推奨
+style_variants: {}
 # style_variants:
 #   lo-fi:
 #     name: "lo-fi jazz"
