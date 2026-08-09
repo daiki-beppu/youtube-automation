@@ -180,9 +180,19 @@ describe("PatternList checkbox UI", () => {
       for (const token of stateTokens[states[index]!]!) {
         expect(control.className).toContain(token);
       }
-      expect(control.className).toContain(selected ? "ring-2" : "shadow-none");
+      expect(control.className).not.toContain("ring-2");
+      expect(control.className).not.toContain("ring-current");
       expect(control.className).not.toContain("text-primary-foreground");
     });
+    for (let index = 0; index < rows.length; index += 2) {
+      const unselectedControl = rows[index]!.querySelector<HTMLElement>(
+        '[data-slot="field-label"]'
+      )!;
+      const selectedControl = rows[index + 1]!.querySelector<HTMLElement>(
+        '[data-slot="field-label"]'
+      )!;
+      expect(selectedControl.className).toBe(unselectedControl.className);
+    }
   });
 
   it("各 entry の selection を shadcn variant と semantic token に反映する", () => {
@@ -281,9 +291,8 @@ describe("PatternList checkbox UI", () => {
       for (const token of stateTokens[index]!) {
         expect(control.className).toContain(token);
       }
-      expect(control.className).toContain(
-        [true, false, true, false, true][index] ? "ring-2" : "shadow-none"
-      );
+      expect(control.className).not.toContain("ring-2");
+      expect(control.className).not.toContain("ring-current");
       expect(control.className).toContain("p-2");
       expect(control.className).not.toContain("p-0");
     });

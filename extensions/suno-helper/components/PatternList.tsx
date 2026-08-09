@@ -35,11 +35,6 @@ const STATE_CLASS: Record<ItemState, string> = {
     "border-destructive-border bg-destructive-background font-medium text-destructive-foreground",
 };
 
-const SELECTION_CLASS: Record<"selected" | "unselected", string> = {
-  selected: "ring-2 ring-current/20",
-  unselected: "shadow-none",
-};
-
 export function PatternList({
   entries,
   itemStates,
@@ -98,7 +93,7 @@ export function PatternList({
                       className={buttonVariants({
                         variant: "outline",
                         size: "sm",
-                        className: `h-auto w-full items-start justify-start whitespace-normal p-2 font-normal ${STATE_CLASS[itemState]} ${SELECTION_CLASS[selected ? "selected" : "unselected"]}`,
+                        className: `h-auto w-full items-start justify-start whitespace-normal p-2 font-normal ${STATE_CLASS[itemState]}`,
                       })}
                     >
                       <Checkbox
