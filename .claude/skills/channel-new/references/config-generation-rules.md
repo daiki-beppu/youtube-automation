@@ -23,7 +23,7 @@
 - `content_model` — collection / release など
 - `music_engine` — `"suno"` または `"lyria"`（チャンネルのデフォルト音楽エンジン）
 - `genre` — primary, style, context
-- `youtube` — デフォルトのアップロード設定。アップロード metadata に使う `youtube.category_id` / `youtube.privacy_status` もここで決める
+- `youtube` — デフォルトのアップロード設定。アップロード metadata に使う `youtube.category_id` / `youtube.privacy_status` もここで決める。新規チャンネルの `privacy_status` は `private` とし、公開は予約公開またはアップロード後の手動公開で行う
 - `tags` — base, themes
 - `descriptions` — opening, sub_opening, perfect_for, hashtags
 - `analytics` — 計測対象の設定

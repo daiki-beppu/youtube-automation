@@ -199,7 +199,7 @@ def test_youtube_json_has_expected_defaults(tmp_path):
     assert rc == 0
     youtube = _read_json(_channel_dir(tmp_path) / "youtube.json")
     assert youtube["youtube"]["category_id"] == "10"
-    assert youtube["youtube"]["privacy_status"] == "public"
+    assert youtube["youtube"]["privacy_status"] == "private"
     assert youtube["youtube"]["language"] == "en"
     assert youtube["music_engine"] == "suno"
 
@@ -1196,7 +1196,7 @@ def test_scaffold_output_is_loadable_by_new_config_loader(tmp_path, monkeypatch)
     assert config.meta.channel_name == "Demo Channel"
     assert config.meta.channel_short == "DEMO"
     assert config.youtube.api.category_id == "10"
-    assert config.youtube.api.privacy_status == "public"
+    assert config.youtube.api.privacy_status == "private"
     assert config.youtube.api.language == "en"
 
 

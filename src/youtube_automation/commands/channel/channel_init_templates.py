@@ -90,7 +90,7 @@ def _render_youtube(ctx: ChannelInitContext) -> dict:
     return {
         "youtube": {
             "category_id": "10",
-            "privacy_status": "public",
+            "privacy_status": "private",
             "language": "en",
         },
         "content_model": {
