@@ -8,8 +8,10 @@ import pytest
 from youtube_automation.infrastructure.analytics import dashboard_publications
 from youtube_automation.infrastructure.analytics.dashboard_publications import (
     build_dashboard_publications,
+    load_dashboard_publications,
     load_fresh_dashboard_publications,
     save_dashboard_publications,
+    with_dashboard_publication_error,
 )
 
 
@@ -185,3 +187,70 @@ def test_load_fresh_dashboard_publications_should_return_none_when_cache_is_miss
     )
 
     assert result is None
+
+
+def test_load_dashboard_publications_should_return_valid_payload_when_cache_is_stale(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "dashboard_publications.json"
+    payload = _publication_payload("2025-08-08T12:00:00+00:00")
+    source.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = load_dashboard_publications(source)
+
+    assert result == payload
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        None,
+        {},
+        {
+            "code": "youtube_api_error",
+            "message": "uploads playlist request failed",
+            "attempted_at": "not-a-timestamp",
+        },
+    ],
+)
+def test_load_dashboard_publications_should_return_none_when_error_is_malformed(
+    tmp_path: Path,
+    error: object,
+) -> None:
+    source = tmp_path / "dashboard_publications.json"
+    source.write_text(
+        json.dumps({**_publication_payload("2026-08-08T12:00:00+00:00"), "error": error}),
+        encoding="utf-8",
+    )
+
+    result = load_dashboard_publications(source)
+
+    assert result is None
+
+
+def test_with_dashboard_publication_error_should_preserve_cached_data_when_refresh_fails(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "dashboard_publications.json"
+    payload = _publication_payload("2025-08-08T12:00:00+00:00")
+
+    failed_payload = with_dashboard_publication_error(
+        payload,
+        code="youtube_api_error",
+        message="uploads playlist request failed",
+        attempted_at=datetime.fromisoformat("2026-08-08T21:00:00+09:00"),
+    )
+    source.write_text(json.dumps(failed_payload), encoding="utf-8")
+
+    assert load_dashboard_publications(source) == {
+        "schema_version": 1,
+        "fetched_at": "2025-08-08T12:00:00+00:00",
+        "timezone": "UTC",
+        "days": {"2026-08-08": 2},
+        "error": {
+            "code": "youtube_api_error",
+            "message": "uploads playlist request failed",
+            "attempted_at": "2026-08-08T12:00:00+00:00",
+        },
+    }
+    assert payload == _publication_payload("2025-08-08T12:00:00+00:00")

@@ -36,9 +36,19 @@ def _validate_payload(value: object) -> dict[str, object] | None:
     days = value.get("days")
     if not isinstance(fetched_at, str) or not isinstance(timezone, str) or not isinstance(days, dict):
         return None
+    error = value.get("error")
+    if "error" in value:
+        if not isinstance(error, dict):
+            return None
+        if not isinstance(error.get("code"), str) or not isinstance(error.get("message"), str):
+            return None
+        if not isinstance(error.get("attempted_at"), str):
+            return None
 
     try:
         _parse_timestamp(fetched_at, field_name="fetched_at")
+        if "error" in value:
+            _parse_timestamp(cast(str, error["attempted_at"]), field_name="error.attempted_at")
         ZoneInfo(timezone)
         for local_day, count in days.items():
             if not isinstance(local_day, str) or type(count) is not int or count < 0:
@@ -78,17 +88,21 @@ def build_dashboard_publications(
     }
 
 
+def load_dashboard_publications(source: Path) -> dict[str, object] | None:
+    """鮮度に関係なく有効な公開履歴 cache を返す。"""
+    try:
+        value: object = json.loads(source.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    return _validate_payload(value)
+
+
 def load_fresh_dashboard_publications(source: Path, *, now: datetime) -> dict[str, object] | None:
     """有効かつ取得から24時間以内の公開履歴 cache を返す。"""
     if now.tzinfo is None:
         raise ValueError("now は timezone-aware datetime でなければなりません")
 
-    try:
-        value: object = json.loads(source.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
-        return None
-
-    payload = _validate_payload(value)
+    payload = load_dashboard_publications(source)
     if payload is None:
         return None
 
@@ -97,6 +111,29 @@ def load_fresh_dashboard_publications(source: Path, *, now: datetime) -> dict[st
     if age < timedelta(0) or age > CACHE_MAX_AGE:
         return None
     return payload
+
+
+def with_dashboard_publication_error(
+    payload: dict[str, object],
+    *,
+    code: str,
+    message: str,
+    attempted_at: datetime,
+) -> dict[str, object]:
+    """公開履歴の前回値を維持して構造化された更新失敗を付与する。"""
+    if _validate_payload(payload) is None:
+        raise ValueError("有効な公開履歴 payload が必要です")
+    if attempted_at.tzinfo is None:
+        raise ValueError("attempted_at は timezone-aware datetime でなければなりません")
+
+    return {
+        **payload,
+        "error": {
+            "code": code,
+            "message": message,
+            "attempted_at": attempted_at.astimezone(UTC).isoformat(),
+        },
+    }
 
 
 def save_dashboard_publications(destination: Path, payload: dict[str, object]) -> None:
