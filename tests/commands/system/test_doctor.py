@@ -1927,6 +1927,63 @@ class TestCheckInitialSetupReadiness:
 
         assert r.status == "ok"
 
+    def test_approved_thumbnail_exception_allows_non_benchmark_reference(self, tmp_path):
+        ref = tmp_path / "branding" / "proven-thumbnail.jpg"
+        ref.parent.mkdir(parents=True)
+        ref.write_bytes(b"jpg")
+        skills_dir = tmp_path / "config" / "skills"
+        skills_dir.mkdir(parents=True)
+        (skills_dir / "thumbnail.yaml").write_text(
+            "\n".join(
+                [
+                    "image_generation:",
+                    "  gemini:",
+                    "    generation_mode: single_step",
+                    "    reference_images:",
+                    "      default:",
+                    "        - branding/proven-thumbnail.jpg",
+                    "      path_base: channel_dir",
+                    "    composition_rules:",
+                    '      text_lines: "2 lines"',
+                ]
+            ),
+            encoding="utf-8",
+        )
+        (skills_dir / "suno.yaml").write_text('genre_line: "lo-fi jazz"\n', encoding="utf-8")
+        seed_confirmation = tmp_path / "docs" / "channel" / "ttp-seed-confirmation.md"
+        seed_confirmation.parent.mkdir(parents=True)
+        seed_confirmation.write_text(
+            "- 未反映項目: ユーザー承認済み例外: thumbnail reference は実績画像を使うため"
+            "後続 /thumbnail で確認し、benchmark path への転写はスキップ\n",
+            encoding="utf-8",
+        )
+
+        r = doctor.check_initial_setup_readiness(tmp_path)
+
+        assert r.status == "ok"
+
+    def test_approved_thumbnail_exception_keeps_composition_validation(self, tmp_path):
+        skills_dir = tmp_path / "config" / "skills"
+        skills_dir.mkdir(parents=True)
+        (skills_dir / "thumbnail.yaml").write_text(
+            "image_generation:\n  gemini:\n    composition_rules:\n      text_lines: TBD\n",
+            encoding="utf-8",
+        )
+        (skills_dir / "suno.yaml").write_text('genre_line: "lo-fi jazz"\n', encoding="utf-8")
+        seed_confirmation = tmp_path / "docs" / "channel" / "ttp-seed-confirmation.md"
+        seed_confirmation.parent.mkdir(parents=True)
+        seed_confirmation.write_text(
+            "- 未反映項目: ユーザー承認済み例外: thumbnail reference は実績画像を使うため"
+            "後続 /thumbnail で確認し、benchmark path への転写はスキップ\n",
+            encoding="utf-8",
+        )
+
+        r = doctor.check_initial_setup_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "composition_rules" in r.message
+        assert "reference_images.default" not in r.message
+
     def test_descriptions_md_symlink_escape_warns_without_reading_external_heading(self, tmp_path):
         outside = tmp_path.parent / f"{tmp_path.name}-outside"
         outside_desc = outside / "descriptions.md"
