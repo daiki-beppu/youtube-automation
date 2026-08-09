@@ -1,8 +1,25 @@
+@import "@digital-go-jp/design-tokens/dist/tokens-simple.css";
+
 :root {
-  --release-main: #7c3aed;
-  --release-main-bg: color-mix(in srgb, #7c3aed 12%, transparent);
-  --release-extension: #0f766e;
-  --release-extension-bg: color-mix(in srgb, #0f766e 12%, transparent);
+  --release-main: var(--color-key-800);
+  --release-main-bg: color-mix(in srgb, var(--color-key-800) 12%, transparent);
+  --release-extension: var(--color-neutral-solid-gray-700);
+  --release-extension-bg: color-mix(
+    in srgb,
+    var(--color-neutral-solid-gray-700) 12%,
+    transparent
+  );
+}
+
+:root[data-theme="dark"] {
+  --release-main: var(--color-key-400);
+  --release-main-bg: color-mix(in srgb, var(--color-key-400) 12%, transparent);
+  --release-extension: var(--color-neutral-solid-gray-300);
+  --release-extension-bg: color-mix(
+    in srgb,
+    var(--color-neutral-solid-gray-300) 12%,
+    transparent
+  );
 }
 
 .release-shell {
@@ -31,7 +48,7 @@
 }
 
 .release-hero > p:last-child {
-  color: var(--color-text-muted, #6b7280);
+  color: var(--color-muted-foreground);
   font-size: clamp(1rem, 2vw, 1.2rem);
   line-height: 1.8;
   margin: 1.5rem 0 0;
@@ -58,7 +75,7 @@
 }
 
 .release-card {
-  border: 1px solid var(--color-border, #e5e7eb);
+  border: 1px solid var(--color-border);
   border-radius: 1rem;
   color: inherit;
   display: block;
@@ -69,7 +86,7 @@
 
 .release-card:hover {
   border-color: color-mix(in srgb, var(--release-main) 45%, transparent);
-  box-shadow: 0 18px 50px rgb(30 20 60 / 10%);
+  box-shadow: 0 18px 50px color-mix(in srgb, var(--release-main) 10%, transparent);
   transform: translateY(-2px);
 }
 
@@ -81,7 +98,7 @@
 }
 
 .release-meta time {
-  color: var(--color-text-muted, #6b7280);
+  color: var(--color-muted-foreground);
   font-size: 0.875rem;
 }
 
@@ -109,7 +126,7 @@
 }
 
 .release-card > p {
-  color: var(--color-text-muted, #6b7280);
+  color: var(--color-muted-foreground);
   line-height: 1.75;
   margin: 0;
   max-width: 52rem;

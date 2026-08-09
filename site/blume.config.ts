@@ -1,5 +1,9 @@
+import dadsTokens from "@digital-go-jp/design-tokens";
 import { defineConfig } from "blume";
 import { releaseFrontmatter } from "./release-schema";
+
+const lightAccent = dadsTokens.Color.Key["800"].$value;
+const darkAccent = dadsTokens.Color.Key["400"].$value;
 
 export default defineConfig({
   title: "youtube-automation ドキュメント",
@@ -24,7 +28,10 @@ export default defineConfig({
     tabs: [{ label: "リリースノート", path: "/", href: "/" }],
   },
   theme: {
-    accent: "violet",
+    accent: {
+      light: lightAccent,
+      dark: darkAccent,
+    },
     mode: "system",
     radius: "lg",
   },
