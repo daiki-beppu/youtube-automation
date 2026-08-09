@@ -182,11 +182,14 @@ bash .claude/skills/thumbnail/references/codex-image.sh --require-reference \
 
 複数候補を作る場合でも、1 回の `codex-image.sh --require-reference` 呼び出しには候補に対応する参照画像 1 枚だけを渡す。TTP 生成では参照画像 0 件で停止する。DistroKid cover などの汎用 codex 生成は `--require-reference` を付けない。
 
-2 件以上の候補を同時生成する場合は、`id` / `prompt` / `output` / 任意の `reference` を持つ JSON 配列を manifest に保存し、batch launcher を使う。互換 preflight は batch 全体で 1 回だけ実行され、各 job は独立した出力先で単発 `codex-image.sh` の stale-artifact / PNG / MD5 gate を通る。一部失敗時も残りを完走し、最後に失敗一覧と非 0 exit を返す。
+2 件以上の候補を同時生成する場合は、`id` / `prompt` / `output` / 任意の `reference` を持つ JSON 配列を manifest に保存し、batch launcher を使う。manifest は共有 scratchpad の固定名に置かず、実行ごとに `mktemp` で作成する。cleanup はその実行が取得した path だけを `trap` で削除し、glob や固定名で他の並列実行の manifest を削除しない。互換 preflight は batch 全体で 1 回だけ実行され、各 job は独立した出力先で単発 `codex-image.sh` の stale-artifact / PNG / MD5 gate を通る。一部失敗時も残りを完走し、最後に失敗一覧と非 0 exit を返す。
 
 ```bash
+manifest=$(mktemp "${TMPDIR:-/tmp}/codex-thumbnail-jobs.XXXXXX")
+trap 'rm -f "$manifest"' EXIT
+# id / prompt / output / 任意の reference を持つ JSON 配列を "$manifest" へ保存してから実行する
 bash .claude/skills/thumbnail/references/codex-image-batch.sh \
-  --manifest /tmp/codex-thumbnail-jobs.json
+  --manifest "$manifest"
 # 実行単位で上書きする場合だけ: --max-parallel 2
 ```
 

@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `fix(thumbnail)`: Codex batch manifest を実行ごとの `mktemp` で作成し、その実行が所有する path だけを終了時に削除する運用契約へ変更して、並列 collection 間の上書きを防止する（#2948）。
+
 - `fix(thumbnail)`: Codex のテキスト付きサムネイルプロンプトへ、deep-merge 後の `single_step.ip_safety_clause` を自動で一度だけ付与する（#2586）。
 
 - `fix(videoup)`: 有効化した登録ポップアップ画像を解決できない場合、ポップアップを黙って省略せず動画生成前にエラー終了する（#2579）。
