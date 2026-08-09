@@ -92,6 +92,8 @@ uv run yt-benchmark-collect -v               # 詳細ログ
 5. サムネイル画像を `docs/benchmarks/thumbnails/` にダウンロード
 6. `data/benchmark_YYYYMMDD.json` に中間データ保存
 7. `docs/benchmarks/*.md`（個別 + common-patterns + README）を自動生成
+   - 個別レポートは `benchmark:generated:start/end` 間だけを再生成し、`benchmark:user:start/end` 間の手書き分析を保持する
+   - marker が欠損・重複・順序不正なら、手書き内容を失わないよう全 Markdown の更新前に停止する
    - 該当動画が 0 件のチャンネルは「該当動画なし」注記付きの空レポートになる
 
 ### Step 2: サムネイル分析（subagent）
@@ -107,7 +109,10 @@ uv run yt-benchmark-collect -v               # 詳細ログ
    - **キャラ活動**: キャラクターの動作（いなければ 'none'）
    - **雰囲気**: 全体のムード・ライティング・環境効果
    - **強み**: 効果的な要素のリスト
-4. 分析結果を `docs/benchmarks/{slug}.md` の末尾に `## サムネイル分析` セクションとして追記
+4. 分析結果を `docs/benchmarks/{slug}.md` の `<!-- benchmark:user:start -->` と
+   `<!-- benchmark:user:end -->` の間に `## サムネイル分析` セクションとして記録する
+   - marker の外側やファイル末尾には追記しない
+   - 旧形式に末尾の `## サムネイル分析` がある場合、次回収集時に user 領域へ自動移行される
 
 ### Step 3: 結果確認・戦略的評価
 

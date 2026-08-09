@@ -46,6 +46,7 @@ from youtube_automation.infrastructure.analytics.benchmark_analyzer import (
 )
 from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
 from youtube_automation.infrastructure.cost_tracker import log_quota
+from youtube_automation.infrastructure.filesystem import write_text_files_transactionally
 from youtube_automation.infrastructure.google.youtube import YouTubeClients
 from youtube_automation.infrastructure.observability.profile import section
 from youtube_automation.infrastructure.retry import execute_with_retry
@@ -62,6 +63,56 @@ _DESCRIPTION_TTP_SECTION_TITLE = "概要欄TTPサンプル"
 _DESCRIPTION_TTP_SAMPLE_LIMIT = 3
 _SHORT_THUMBNAIL_KEYS = ("high", "medium", "default")
 _DEFAULT_THUMBNAIL_KEYS = ("maxres", "standard", "high", "medium", "default")
+_GENERATED_START = "<!-- benchmark:generated:start -->"
+_GENERATED_END = "<!-- benchmark:generated:end -->"
+_USER_START = "<!-- benchmark:user:start -->"
+_USER_END = "<!-- benchmark:user:end -->"
+_REPORT_MARKERS = (_GENERATED_START, _GENERATED_END, _USER_START, _USER_END)
+_LEGACY_USER_HEADING = "## サムネイル分析"
+
+
+def _render_managed_report(generated: str, user: str = "") -> str:
+    """Render a channel report with explicit generated/user ownership regions."""
+    generated = generated.rstrip("\r\n")
+    user = user.strip("\r\n")
+    user_body = f"{user}\n" if user else ""
+    return f"{_GENERATED_START}\n{generated}\n{_GENERATED_END}\n\n{_USER_START}\n{user_body}{_USER_END}\n"
+
+
+def _extract_marker_region(content: str, start: str, end: str, path: Path) -> str:
+    lines = content.splitlines()
+    for marker in _REPORT_MARKERS:
+        if content.count(marker) != 1 or lines.count(marker) != 1:
+            raise ConfigError(
+                f"{path}: benchmark report marker が欠損・重複・行内配置されています: {marker}. "
+                "手書き分析を退避し、4 marker を各1行に復元して再実行してください。"
+            )
+    positions = [content.index(marker) for marker in _REPORT_MARKERS]
+    if positions != sorted(positions):
+        raise ConfigError(
+            f"{path}: benchmark report marker の順序が不正です。generated start/end, "
+            "user start/end の順に復元して再実行してください。"
+        )
+    start_at = content.index(start) + len(start)
+    end_at = content.index(end, start_at)
+    return content[start_at:end_at].strip("\r\n")
+
+
+def _existing_user_content(path: Path) -> str:
+    if not path.exists():
+        return ""
+    content = path.read_text(encoding="utf-8")
+    if any(marker in content for marker in _REPORT_MARKERS):
+        return _extract_marker_region(content, _USER_START, _USER_END, path)
+
+    lines = content.splitlines(keepends=True)
+    matches = [i for i, line in enumerate(lines) if line.rstrip("\r\n") == _LEGACY_USER_HEADING]
+    if len(matches) > 1:
+        raise ConfigError(
+            f"{path}: legacy の '{_LEGACY_USER_HEADING}' が複数あります。"
+            "手書き分析を1セクションへ統合して再実行してください。"
+        )
+    return "".join(lines[matches[0] :]).strip("\r\n") if matches else ""
 
 
 def _markdown_code_fence(content: str) -> str:
@@ -768,7 +819,7 @@ class BenchmarkReportGenerator:
         md_map = {}
 
         for channel in data.get("channels", []):
-            md_map[channel["slug"]] = self._generate_channel_md(channel)
+            md_map[channel["slug"]] = _render_managed_report(self._generate_channel_md(channel))
 
         # common-patterns は全チャンネルのデータが必要
         if data.get("channels"):
@@ -778,12 +829,20 @@ class BenchmarkReportGenerator:
         return md_map
 
     def write_markdown(self, md_map: dict[str, str]):
-        """Markdown ファイルを書き出す。"""
+        """Markdown ファイルを事前検証後に一括で原子的に書き出す。"""
         self.benchmarks_dir.mkdir(parents=True, exist_ok=True)
-
+        contents = {}
         for key, content in md_map.items():
             path = self.benchmarks_dir / f"{key}.md"
-            path.write_text(content, encoding="utf-8")
+            if _GENERATED_START in content:
+                generated = _extract_marker_region(content, _GENERATED_START, _GENERATED_END, path)
+                content = _render_managed_report(generated, _existing_user_content(path))
+            contents[path] = content
+
+        if not contents:
+            return
+        write_text_files_transactionally(contents)
+        for path in contents:
             logger.info("Markdown 更新: %s", path.name)
 
     def generate_playlists_markdown(self, playlists_results: list[dict]) -> dict[str, str]:

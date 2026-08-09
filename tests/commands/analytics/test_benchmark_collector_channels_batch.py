@@ -837,3 +837,117 @@ class TestBenchmarkReportGeneratorDescriptionSamples:
 
         # Then: 空の概要欄セクションを作らない
         assert "## 概要欄TTPサンプル" not in markdown
+
+
+class TestBenchmarkReportUserRegion:
+    def _generator(self, tmp_path):
+        config = SimpleNamespace(analytics=SimpleNamespace(benchmark=SimpleNamespace(channels=[])))
+        return BenchmarkReportGenerator(config, tmp_path, date(2026, 8, 10))
+
+    def test_generate_markdown_marks_only_channel_reports(self, tmp_path, monkeypatch):
+        generator = self._generator(tmp_path)
+        monkeypatch.setattr(generator, "_generate_channel_md", lambda _channel: "# generated")
+        monkeypatch.setattr(generator, "_generate_common_patterns", lambda _data: "# common")
+        monkeypatch.setattr(generator, "_generate_readme", lambda _data: "# index")
+
+        reports = generator.generate_markdown({"channels": [{"slug": "reference"}]})
+
+        assert "<!-- benchmark:generated:start -->" in reports["reference"]
+        assert "<!-- benchmark:user:start -->" in reports["reference"]
+        assert "benchmark:generated" not in reports["common-patterns"]
+        assert "benchmark:generated" not in reports["README"]
+
+    def test_preserves_marked_user_content_while_replacing_generated_content(self, tmp_path):
+        path = tmp_path / "reference.md"
+        path.write_text(
+            benchmark_collector._render_managed_report("old generated", "## サムネイル分析\nhand written"),
+            encoding="utf-8",
+        )
+
+        self._generator(tmp_path).write_markdown(
+            {"reference": benchmark_collector._render_managed_report("new generated")}
+        )
+
+        result = path.read_text(encoding="utf-8")
+        assert "new generated" in result
+        assert "old generated" not in result
+        assert "## サムネイル分析\nhand written" in result
+
+    def test_migrates_legacy_manual_thumbnail_section(self, tmp_path):
+        path = tmp_path / "reference.md"
+        path.write_text(
+            "# old generated\n\n## サムネイル分析（Gemini API）\nautomatic\n\n## サムネイル分析\nmanual notes\n",
+            encoding="utf-8",
+        )
+
+        self._generator(tmp_path).write_markdown(
+            {"reference": benchmark_collector._render_managed_report("# refreshed")}
+        )
+
+        result = path.read_text(encoding="utf-8")
+        assert "# refreshed" in result
+        assert "manual notes" in result
+        assert "automatic" not in result
+        assert result.count("<!-- benchmark:user:start -->") == 1
+
+    def test_empty_user_region_is_valid(self, tmp_path):
+        path = tmp_path / "reference.md"
+        path.write_text(benchmark_collector._render_managed_report("old"), encoding="utf-8")
+
+        self._generator(tmp_path).write_markdown({"reference": benchmark_collector._render_managed_report("new")})
+
+        assert "<!-- benchmark:user:start -->\n<!-- benchmark:user:end -->" in path.read_text(encoding="utf-8")
+
+    @pytest.mark.parametrize(
+        "broken",
+        [
+            "<!-- benchmark:generated:start -->\nold\n<!-- benchmark:generated:end -->\n",
+            benchmark_collector._render_managed_report("old").replace(
+                "<!-- benchmark:user:end -->", "<!-- benchmark:user:start -->"
+            ),
+            "<!-- benchmark:user:start -->\nmanual\n<!-- benchmark:user:end -->\n"
+            "<!-- benchmark:generated:start -->\nold\n<!-- benchmark:generated:end -->\n",
+        ],
+        ids=["missing-markers", "duplicate-marker", "wrong-order"],
+    )
+    def test_invalid_markers_abort_all_files_before_publish(self, tmp_path, broken):
+        valid_path = tmp_path / "valid.md"
+        broken_path = tmp_path / "broken.md"
+        valid_path.write_text(benchmark_collector._render_managed_report("valid old"), encoding="utf-8")
+        broken_path.write_text(broken, encoding="utf-8")
+
+        with pytest.raises(ConfigError, match="marker"):
+            self._generator(tmp_path).write_markdown(
+                {
+                    "valid": benchmark_collector._render_managed_report("valid new"),
+                    "broken": benchmark_collector._render_managed_report("broken new"),
+                }
+            )
+
+        assert "valid old" in valid_path.read_text(encoding="utf-8")
+        assert broken_path.read_text(encoding="utf-8") == broken
+
+    def test_transaction_failure_leaves_existing_reports_unchanged(self, tmp_path, monkeypatch):
+        path = tmp_path / "reference.md"
+        original = benchmark_collector._render_managed_report("old", "manual")
+        path.write_text(original, encoding="utf-8")
+
+        def fail_publish(_contents):
+            raise OSError("publish failed")
+
+        monkeypatch.setattr(benchmark_collector, "write_text_files_transactionally", fail_publish)
+
+        with pytest.raises(OSError, match="publish failed"):
+            self._generator(tmp_path).write_markdown({"reference": benchmark_collector._render_managed_report("new")})
+
+        assert path.read_text(encoding="utf-8") == original
+
+    def test_unmanaged_shared_report_remains_backward_compatible(self, tmp_path):
+        self._generator(tmp_path).write_markdown({"README": "# Benchmark index\n"})
+
+        assert (tmp_path / "README.md").read_text(encoding="utf-8") == "# Benchmark index\n"
+
+    def test_empty_report_map_remains_a_noop(self, tmp_path):
+        self._generator(tmp_path).write_markdown({})
+
+        assert list(tmp_path.iterdir()) == []
