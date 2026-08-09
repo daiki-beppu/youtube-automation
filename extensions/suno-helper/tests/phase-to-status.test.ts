@@ -41,7 +41,7 @@ describe("phaseToStatus: 非終了 phase の進捗文言（live と同一）", (
     [
       "WAITING_CAPTCHA",
       { phase: PHASE.WAITING_CAPTCHA, index: 1, total: 3 },
-      "[2/3] captcha 解消待ち…（多くは自動で解消します）",
+      "[2/3] CAPTCHA 解消待ち…（自動解消を待機中・最大10分）",
     ],
     [
       "GENERATING",

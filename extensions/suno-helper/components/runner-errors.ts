@@ -153,7 +153,7 @@ export function phaseToStatus(
       };
     case PHASE.WAITING_CAPTCHA:
       return {
-        text: `[${n}/${total}] captcha 解消待ち…（多くは自動で解消します）`,
+        text: `[${n}/${total}] CAPTCHA 解消待ち…（自動解消を待機中・最大10分）`,
       };
     case PHASE.GENERATING:
       return {

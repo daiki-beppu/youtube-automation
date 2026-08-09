@@ -43,6 +43,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `feat(distrokid-helper)`: `/server-info` に DistroKid の `disabled` / `single` / `dir` 実行モードを判別できる optional capability を追加し、既存必須フィールドと discovery schema v1 の互換性を維持（#2985）。
 - `fix(suno-helper)`: 無人実行の CAPTCHA 解消待機が timeout した場合、未投入 entry をすべて checkpoint に保持して `manual-intervention / captcha-required` で停止するようにした。待機中の Stop はエラー化せず、同じ checkpoint から再開できる（#3426）。
+- `fix(suno-helper)`: CAPTCHA 待機中の popup に自動解消を最大10分待つことを明示し、手動・無人実行で共通の待機契約と表示を一致させた（#3427）。
 
 - `fix(suno-helper)`: 無人実行中の CAPTCHA challenge を致命的な UI blocker とせず、serial / queue 共通の解消待機後に未投入 entry を重複なく再開するようにした（#2980）。
 
