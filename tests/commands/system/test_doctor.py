@@ -1327,8 +1327,8 @@ class TestMain:
         payload = json.loads(out)
         assert payload["channel_dir"] == str(tmp_path)
         assert "summary" in payload
-        # 7 bootstrap + 13 api + 3 channel + 4 data + 1 upload = 28
-        assert len(payload["checks"]) == 28
+        # 7 bootstrap + 14 api + 3 channel + 4 data + 1 upload = 29
+        assert len(payload["checks"]) == 29
         for c in payload["checks"]:
             assert c["status"] in ("ok", "info", "warn", "fail", "unknown")
             # category フィールドが JSON に含まれていること
@@ -5247,20 +5247,93 @@ class TestCheckNumberedDuplicates:
         assert r.status == "ok"
 
 
+class TestStreamingVpsState:
+    def test_skips_without_vultr_api_key(self, monkeypatch, tmp_path):
+        (tmp_path / "infra" / "terraform" / "streaming").mkdir(parents=True)
+        monkeypatch.delenv("VULTR_API_KEY", raising=False)
+        monkeypatch.delenv("TF_VAR_vultr_api_key", raising=False)
+        reconcile = MagicMock(side_effect=AssertionError("must not access external state"))
+        monkeypatch.setattr(doctor, "reconcile_streaming_vps", reconcile)
+
+        result = doctor.check_streaming_vps_state(tmp_path)
+
+        assert result.status == "info"
+        assert result.data == {"reason": "vultr_api_key_missing"}
+        reconcile.assert_not_called()
+
+    def test_warns_with_unmanaged_tagged_instance_ids(self, monkeypatch, tmp_path):
+        terraform_dir = tmp_path / "infra" / "terraform" / "streaming"
+        terraform_dir.mkdir(parents=True)
+        monkeypatch.setenv("VULTR_API_KEY", "secret")
+        inventory = MagicMock(
+            actual_instance_ids=frozenset({"managed", "unmanaged"}),
+            managed_instance_ids=frozenset({"managed"}),
+            unmanaged_instance_ids=frozenset({"unmanaged"}),
+        )
+        reconcile = MagicMock(return_value=inventory)
+        monkeypatch.setattr(doctor, "reconcile_streaming_vps", reconcile)
+
+        result = doctor.check_streaming_vps_state(tmp_path)
+
+        assert result.status == "warn"
+        assert result.data == {
+            "actual_instance_count": 2,
+            "managed_instance_count": 1,
+            "unmanaged_instance_ids": ["unmanaged"],
+        }
+        assert result.next_action["kind"] == "human"
+        assert "import" in result.next_action["instructions"]
+        reconcile.assert_called_once_with(
+            terraform_dir=terraform_dir,
+            api_key="secret",
+            run_command=doctor._run,
+        )
+
+    def test_is_ok_when_all_tagged_instances_are_managed(self, monkeypatch, tmp_path):
+        (tmp_path / "infra" / "terraform" / "streaming").mkdir(parents=True)
+        monkeypatch.setenv("TF_VAR_vultr_api_key", "terraform-secret")
+        monkeypatch.delenv("VULTR_API_KEY", raising=False)
+        inventory = MagicMock(
+            actual_instance_ids=frozenset({"managed"}),
+            managed_instance_ids=frozenset({"managed"}),
+            unmanaged_instance_ids=frozenset(),
+        )
+        monkeypatch.setattr(doctor, "reconcile_streaming_vps", MagicMock(return_value=inventory))
+
+        result = doctor.check_streaming_vps_state(tmp_path)
+
+        assert result.status == "ok"
+        assert result.data["unmanaged_instance_ids"] == []
+
+    def test_reports_unknown_when_reconciliation_fails(self, monkeypatch, tmp_path):
+        (tmp_path / "infra" / "terraform" / "streaming").mkdir(parents=True)
+        monkeypatch.setenv("VULTR_API_KEY", "secret")
+        monkeypatch.setattr(
+            doctor,
+            "reconcile_streaming_vps",
+            MagicMock(side_effect=ConfigError("backend unavailable")),
+        )
+
+        result = doctor.check_streaming_vps_state(tmp_path)
+
+        assert result.status == "unknown"
+        assert "backend unavailable" in result.message
+
+
 class TestRunAllChecksExtended:
-    def test_returns_28_checks(self, monkeypatch, tmp_path):
-        """7 bootstrap + 13 api + 3 channel + 4 data + 1 upload = 計 28 件."""
+    def test_returns_29_checks(self, monkeypatch, tmp_path):
+        """7 bootstrap + 14 api + 3 channel + 4 data + 1 upload = 計 29 件."""
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
         results = doctor.run_all_checks(tmp_path)
-        assert len(results) == 28
+        assert len(results) == 29
 
-    def test_13_api_checks_present(self, monkeypatch, tmp_path):
-        """readonly token と oauth_client_sharing を含む 13 check が api カテゴリにある."""
+    def test_14_api_checks_present(self, monkeypatch, tmp_path):
+        """streaming VPS state 突合を含む 14 check が api カテゴリにある."""
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
         results = doctor.run_all_checks(tmp_path)
         api_results = [r for r in results if r.category == "api"]
-        assert len(api_results) == 13
-        assert api_results[-1].id == "reporting_job"
+        assert len(api_results) == 14
+        assert api_results[-1].id == "streaming_vps_state"
         assert any(r.id == "oauth_client_sharing" for r in api_results)
         assert any(r.id == "oauth_token_readonly" for r in api_results)
 
@@ -5282,6 +5355,7 @@ class TestRunAllChecksExtended:
         assert "initial_setup_readiness" in ids
         assert "upload_ready" in ids
         assert "reporting_job" in ids
+        assert "streaming_vps_state" in ids
 
     def test_category_order_bootstrap_then_api_then_channel_then_data_then_upload(self, monkeypatch, tmp_path):
         """runway 順序: bootstrap → api → channel → data → upload."""

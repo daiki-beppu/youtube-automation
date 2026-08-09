@@ -37,6 +37,7 @@ description: "Use when ライブ配信用 Vultr VPS・動画配信本体を Terr
 | workspace 作成 | `terraform -chdir=infra/terraform/streaming workspace new <workspace>` |
 | workspace 切替 | `terraform -chdir=infra/terraform/streaming workspace select <workspace>` |
 | 選択 workspace の GCS state | `workspace=$(terraform -chdir=infra/terraform/streaming workspace show); bucket=$(jq -r '.backend.config.bucket' infra/terraform/streaming/.terraform/terraform.tfstate); gcloud storage ls "gs://${bucket}/streaming/${workspace}.tfstate"` |
+| VPS / state 突合診断 | `VULTR_API_KEY="$(op read 'op://Personal/Vultr/api_key')" uv run yt-doctor --json` (`streaming_vps_state` を確認) |
 | ライブチャット自動返信 | `/live-chat-reply` |
 | 動画差し替え | `$(git rev-parse --show-toplevel)/.claude/skills/streaming/references/swap_video.sh ./new_video.mp4` |
 | 帯域チェック | `uv run yt-stream-bandwidth --check-threshold --terraform-dir infra/terraform/streaming` |
