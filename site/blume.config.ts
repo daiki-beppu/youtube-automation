@@ -1,5 +1,6 @@
 import dadsTokens from "@digital-go-jp/design-tokens";
 import { defineConfig } from "blume";
+import { releaseScaleLabels } from "./release-scale";
 import { releaseFrontmatter } from "./release-schema";
 
 const lightAccent = dadsTokens.Color.Key["800"].$value;
@@ -17,12 +18,20 @@ export default defineConfig({
   navigation: {
     sidebar: [
       {
-        label: "本体",
-        items: ["/v5.6.0", "/v5.5.17"],
+        label: `本体｜${releaseScaleLabels.major}`,
+        items: ["/v5.6.0"],
       },
       {
-        label: "Chrome 拡張",
-        items: ["/ext-v0.3.0", "/ext-v0.2.5"],
+        label: `本体｜${releaseScaleLabels.minor}`,
+        items: ["/v5.5.17"],
+      },
+      {
+        label: `Chrome 拡張｜${releaseScaleLabels.major}`,
+        items: ["/ext-v0.3.0"],
+      },
+      {
+        label: `Chrome 拡張｜${releaseScaleLabels.minor}`,
+        items: ["/ext-v0.2.5"],
       },
     ],
     tabs: [{ label: "リリースノート", path: "/", href: "/" }],
