@@ -144,6 +144,77 @@ describe("createClipTracker: status ベースの in-flight 集計", () => {
 });
 
 describe("createClipTracker: playlist 対象 submitted ID 管理", () => {
+  it("Given fresh tracker が保存済み ID の requested status を観測 When 明示 ID を読む Then registerSubmitted なしでも error ID を返す", () => {
+    const tracker = createClipTracker();
+    tracker.applyRequestedStatuses([
+      { id: "saved-complete", status: "complete" },
+      { id: "saved-error", status: "error" },
+    ]);
+
+    expect(
+      tracker.getFailedIdsByIds([
+        "saved-complete",
+        "saved-error",
+        "not-observed",
+      ])
+    ).toEqual(["saved-error"]);
+    expect(tracker.getFailedSubmittedIds()).toEqual([]);
+  });
+
+  it("Given submitted clip の一部が error When 読む Then 失敗 ID だけを投入順で返す", () => {
+    const tracker = createClipTracker();
+
+    tracker.registerSubmitted([
+      { id: "failed-a", status: "submitted" },
+      { id: "complete", status: "submitted" },
+      { id: "failed-b", status: "submitted" },
+    ]);
+    tracker.applyRequestedStatuses([
+      { id: "failed-b", status: "error" },
+      { id: "complete", status: "complete" },
+      { id: "failed-a", status: "error" },
+      { id: "passive", status: "error" },
+    ]);
+
+    expect(tracker.getFailedSubmittedIds()).toEqual(["failed-a", "failed-b"]);
+    expect(tracker.getSubmittedIds()).toEqual([
+      "failed-a",
+      "complete",
+      "failed-b",
+    ]);
+    expect(tracker.getPendingSubmittedIds()).toEqual([]);
+  });
+
+  it("Given error clip の status が更新される When 読む Then 失敗 ID から外す", () => {
+    const tracker = createClipTracker();
+    tracker.registerSubmitted([{ id: "recovered", status: "submitted" }]);
+    tracker.applyRequestedStatuses([{ id: "recovered", status: "error" }]);
+    expect(tracker.getFailedSubmittedIds()).toEqual(["recovered"]);
+
+    tracker.applyRequestedStatuses([{ id: "recovered", status: "streaming" }]);
+
+    expect(tracker.getFailedSubmittedIds()).toEqual([]);
+    expect(tracker.getPendingSubmittedIds()).toEqual(["recovered"]);
+  });
+
+  it("Given error clip を drop または clear When 読む Then 失敗 ID を返さない", () => {
+    const tracker = createClipTracker();
+    tracker.registerSubmitted([
+      { id: "dropped", status: "submitted" },
+      { id: "cleared", status: "submitted" },
+    ]);
+    tracker.applyRequestedStatuses([
+      { id: "dropped", status: "error" },
+      { id: "cleared", status: "error" },
+    ]);
+
+    tracker.dropSubmittedIds(["dropped"]);
+    expect(tracker.getFailedSubmittedIds()).toEqual(["cleared"]);
+
+    tracker.clearSubmittedIds();
+    expect(tracker.getFailedSubmittedIds()).toEqual([]);
+  });
+
   it("Given generate 観測が複数回ある When 読む Then submitted ID を初回観測順で重複なく返す", () => {
     const tracker = createClipTracker();
 
