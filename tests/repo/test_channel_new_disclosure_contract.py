@@ -10,6 +10,7 @@ SKILL_DIR = REPO_ROOT / ".claude" / "skills" / "channel-new"
 SKILL_MD = SKILL_DIR / "SKILL.md"
 BOOTSTRAP_REFERENCE_MD = SKILL_DIR / "references" / "new-channel-bootstrap.md"
 TTP_SEED_DURATION_REFERENCE_MD = SKILL_DIR / "references" / "ttp-seed-and-duration.md"
+PERSONA_BRANDING_READINESS_REFERENCE_MD = SKILL_DIR / "references" / "persona-branding-readiness.md"
 
 BOOTSTRAP_DETAIL_HEADINGS = {
     "Repository initialization details",
@@ -23,6 +24,12 @@ TTP_SEED_DURATION_DETAIL_HEADINGS = {
     "Thumbnail reference schema",
     "Duration derivation schema",
     "Duration evidence and exceptions",
+}
+PERSONA_BRANDING_READINESS_DETAIL_HEADINGS = {
+    "Optional research delegation details",
+    "Prelaunch persona chain details",
+    "Branding generation and review details",
+    "Readiness matrix details",
 }
 
 
@@ -196,3 +203,58 @@ def test_reference_owns_ttp_seed_branding_and_duration_schema_details() -> None:
     ):
         assert reference.count(detail) == 1
         assert detail not in step_5_details
+
+
+def test_skill_dispatches_persona_branding_readiness_reference_before_step_6_actions() -> None:
+    skill = SKILL_MD.read_text(encoding="utf-8")
+    relative_reference = PERSONA_BRANDING_READINESS_REFERENCE_MD.relative_to(SKILL_DIR).as_posix()
+
+    step_6 = skill.index("### Step 6:")
+    dispatch = skill.index(f"]({relative_reference})", step_6)
+    first_delegation = skill.index("/discover-competitors", dispatch)
+
+    assert PERSONA_BRANDING_READINESS_REFERENCE_MD.is_file()
+    assert step_6 < dispatch < first_delegation
+
+
+def test_persona_branding_readiness_detail_sections_have_one_reference_owner() -> None:
+    skill_headings = _headings(SKILL_MD.read_text(encoding="utf-8"))
+    reference_headings = _headings(PERSONA_BRANDING_READINESS_REFERENCE_MD.read_text(encoding="utf-8"))
+
+    assert PERSONA_BRANDING_READINESS_DETAIL_HEADINGS <= reference_headings
+    assert PERSONA_BRANDING_READINESS_DETAIL_HEADINGS.isdisjoint(skill_headings)
+
+
+def test_persona_branding_readiness_and_wf_new_handoff_keep_order() -> None:
+    skill = SKILL_MD.read_text(encoding="utf-8")
+
+    persona = skill.index("/viewer-voice` → `/audience-persona-design` → `/viewing-scene`")
+    branding = skill.index("### Step 8:", persona)
+    image_approval = skill.index("ユーザーに提示して承認", branding)
+    branding_apply = skill.index("yt-channel-settings push --apply", image_approval)
+    readiness = skill.index("### Step 9:", branding_apply)
+    doctor = skill.index("uv run yt-doctor --json", readiness)
+    wf_new = skill.index("/wf-new", doctor)
+
+    assert persona < branding < image_approval < branding_apply < readiness < doctor < wf_new
+
+
+def test_skill_keeps_persona_branding_readiness_artifacts_and_stop_contracts() -> None:
+    skill = SKILL_MD.read_text(encoding="utf-8")
+
+    for artifact in (
+        "docs/plans/viewer-voice-analysis.md",
+        "docs/channel/personas/persona-definition.md",
+        "docs/plans/viewing-scene-matrix.md",
+        "branding/icon.png",
+        "branding/banner.png",
+    ):
+        assert artifact in skill
+    for contract in (
+        "Step 8 へ進まない",
+        "承認前に YouTube 側へ反映しない",
+        "ttp_wf_new_readiness",
+        "成功案内を出さない",
+        "Step 1/5 に戻って候補を再確認",
+    ):
+        assert contract in skill
