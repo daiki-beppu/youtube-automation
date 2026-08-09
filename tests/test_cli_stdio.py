@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 EXPECTED_ENTRYPOINT_MODULES = {
+    "yt-ad-coverage": "youtube_automation.commands.analytics.ad_coverage",
     "yt-analytics": "youtube_automation.commands.analytics.analytics_system",
     "yt-apply-rain-layers": "youtube_automation.commands.media.apply_rain_layers",
     "yt-audio-visualizer-fill": "youtube_automation.commands.media.audio_visualizer_fill",

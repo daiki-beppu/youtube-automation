@@ -35,6 +35,7 @@ Repository = "https://github.com/daiki-beppu/youtube-automation"
 [project.scripts]
 yt-audio-visualizer-fill = "youtube_automation.entrypoints:yt_audio_visualizer_fill"
 # CLI script entry points (yt-* prefix)
+yt-ad-coverage = "youtube_automation.entrypoints:yt_ad_coverage"
 yt-analytics = "youtube_automation.entrypoints:yt_analytics"
 yt-apply-rain-layers = "youtube_automation.entrypoints:yt_apply_rain_layers"
 yt-automation-update = "youtube_automation.entrypoints:yt_automation_update"
