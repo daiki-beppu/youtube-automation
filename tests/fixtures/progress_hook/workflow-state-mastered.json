@@ -1,0 +1,15 @@
+{
+  "collection_name": "Mastered Collection",
+  "phase": "mastered",
+  "updated_at": "2026-08-01T00:00:00+00:00",
+  "assets": {
+    "raw_master": "raw.wav",
+    "master_audio": "master.wav",
+    "video": null,
+    "thumbnail": true
+  },
+  "upload": {
+    "video_id": null,
+    "publish_at": null
+  }
+}
