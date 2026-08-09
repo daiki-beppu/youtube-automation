@@ -96,6 +96,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `fix(skills-sync)`: legacy `feedback` skill を既知の削除対象へ追加し、`yt-skills sync --prune --yes` でのみ削除するようにした（#3189）。
 - `docs(skill-feedback)`: 配布テンプレートと skill catalog の公開 operator route を `/skill-feedback` へ移行した（#3188）。
 - `refactor(skill-feedback)`: `/feedback` との命名衝突を避ける canonical `/skill-feedback` entrypoint を旧名と並行配置し、B6 integration receipt の owner を新 skill と issue template へ移した（#3187）。
+- `fix(suno-helper)`: active feed poll で要求 clip が欠落した場合、認証済みの単体 clip API を順次照会して `status=error` を含む終端状態を観測できるようにした。feed で確認済みの ID は重複照会せず、個別失敗は残りの照会を妨げず、401 後は token の再捕捉まで自前通信を停止する（#3203）。
 - `refactor(tests)`: 旧 `unit` / `streaming` テストを canonical owner と `tests/repo/streaming/` へ整理し、root allowlist・source layer・source owner の配置規約を repository contract として機械担保した（#3047）。
 - `fix(tests)`: collection serve の subprocess lifecycle テストで待機処理を共通化し、デッドライン到達時に待機対象を明示して失敗させるようにした。server 起動完了は PID ファイルの存在ではなく HTTP identity endpoint の応答まで確認し、高負荷時の起動途中を準備完了と誤認しないようにした（#3091）。
 - `refactor(tests)`: domains / application / configuration 層と同名衝突分のテストを production module の鏡像配置へ移し、repository contract は `tests/repo/`、infrastructure の裁定分は各鏡像へ配置した。active consumer の参照を canonical path に追従させ、複数テストが同一 production module に対応する場合の共存規則と root 残置理由を配置規約へ記録した（#3046）。

@@ -38,6 +38,8 @@ import {
   setSliderValueViaReact,
 } from "../lib/slider-bridge";
 
+const CLIP_PATH_PREFIX = "/api/clip/";
+
 export default defineContentScript({
   matches: [...SUNO_MATCHES],
   // ページの最初の fetch（認証付き）から token を捕捉できるよう document_start で注入する。
@@ -117,6 +119,53 @@ export default defineContentScript({
     Object.assign(observedFetch, originalFetch);
     window.fetch = observedFetch as typeof fetch;
 
+    function isEmptyFeedResponse(json: unknown): boolean {
+      if (Array.isArray(json)) {
+        return json.length === 0;
+      }
+      if (typeof json !== "object" || json === null) {
+        return false;
+      }
+      const clips = (json as { clips?: unknown }).clips;
+      return Array.isArray(clips) && clips.length === 0;
+    }
+
+    async function lookupMissingClips(
+      ids: string[],
+      found: Map<string, ObservedClip>
+    ): Promise<ObservedClip[] | null> {
+      for (const id of ids) {
+        if (found.has(id)) {
+          continue;
+        }
+        const authorization = authHeader;
+        if (!authorization) {
+          return null;
+        }
+        try {
+          const response = await originalFetch(
+            `${SUNO_API_ORIGIN}${CLIP_PATH_PREFIX}${encodeURIComponent(id)}`,
+            { headers: { authorization } }
+          );
+          if (response.status === 401) {
+            authHeader = null;
+            return null;
+          }
+          if (!response.ok) {
+            continue;
+          }
+          const clips = parseClipsFromFeedResponse([await response.json()]);
+          const clip = clips?.find((candidate) => candidate.id === id);
+          if (clip) {
+            found.set(id, clip);
+          }
+        } catch {
+          // Suno の個別 clip 観測失敗は、他 ID の終端観測を妨げない。
+        }
+      }
+      return [...found.values()];
+    }
+
     /** content script からの active feed poll 要求に応える。token 未捕捉・失敗は clips: null。 */
     async function handleFeedPoll(
       requestId: number,
@@ -153,7 +202,9 @@ export default defineContentScript({
             return;
           }
           const json = await res.json();
-          const clips = parseClipsFromFeedResponse(json);
+          const clips =
+            parseClipsFromFeedResponse(json) ??
+            (isEmptyFeedResponse(json) ? [] : null);
           if (clips === null) {
             respond(null);
             return;
@@ -172,13 +223,13 @@ export default defineContentScript({
               ? (json as { next_cursor?: unknown }).next_cursor
               : undefined;
           if (typeof nextCursor !== "string" || nextCursor.length === 0) {
-            respond([...found.values()]);
+            respond(await lookupMissingClips(ids, found));
             return;
           }
           cursor = nextCursor;
           await sleep(FEED_V3_PAGE_DELAY_MS);
         }
-        respond([...found.values()]);
+        respond(await lookupMissingClips(ids, found));
       } catch {
         respond(null);
       }
