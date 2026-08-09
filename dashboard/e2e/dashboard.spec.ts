@@ -450,6 +450,30 @@ test("timing error でも実 HTTP の Analytics 詳細を維持する", async ({
   ).toBeVisible()
 })
 
+test("削減時間の2式を実 HTTP の数値見出しから確認できる", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 })
+  await page.goto(baseURL)
+  await page
+    .getByRole("button", { name: "Night Drive の動画詳細を見る" })
+    .click()
+
+  const aiFormula = "AI込み削減時間 = 手作業基準 - 総作業時間"
+  const humanFormula = "人間が浮いた時間 = 手作業基準 - 人間使用時間"
+  const formulaGuide = page.getByRole("note", { name: "削減時間の算出式" })
+  await expect(formulaGuide.getByText(aiFormula)).toBeVisible()
+  await expect(formulaGuide.getByText(humanFormula)).toBeVisible()
+
+  const stepTable = page.getByRole("table", {
+    name: "active の workflow step",
+  })
+  await expect(
+    stepTable.getByRole("columnheader", { name: "AI 込み削減時間" })
+  ).toHaveAccessibleDescription(aiFormula)
+  await expect(
+    stepTable.getByRole("columnheader", { name: "人間が浮いた時間" })
+  ).toHaveAccessibleDescription(humanFormula)
+})
+
 test("768px 幅でも比較行と詳細操作が見切れない", async ({ page }) => {
   await page.setViewportSize({ width: 768, height: 900 })
   await page.goto(baseURL)

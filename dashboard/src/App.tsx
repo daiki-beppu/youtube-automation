@@ -55,6 +55,7 @@ import {
   type PublicationActivityResponse,
 } from "@/features/publication-activity/publication-heatmap"
 import {
+  WorkflowTimingFormulaGuide,
   WorkflowTimingMetricsList,
   WorkflowStepTable,
 } from "@/features/workflow-timing/workflow-step-table"
@@ -502,6 +503,7 @@ function WorkflowTimingSummary({
           API が集計した作業時間と削減時間をコレクション単位で比較します。
         </p>
       </div>
+      <WorkflowTimingFormulaGuide />
       <WorkflowTimingState presentation={presentation} />
       <div className="grid gap-4">
         {collections.map((collection) => (

@@ -341,6 +341,56 @@ describe("dashboard", () => {
     expect(within(latestTotals).getByText("+00:45:00")).toBeInTheDocument()
   })
 
+  it("explains both saved-time formulas and associates them with card and table metrics", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const payload = String(input).endsWith("channel-a") ? detail : overview
+      return new Response(JSON.stringify(payload), { status: 200 })
+    })
+    const user = userEvent.setup()
+
+    renderDashboard()
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Night Drive の動画詳細を見る",
+      })
+    )
+
+    const aiFormula = "AI込み削減時間 = 手作業基準 - 総作業時間"
+    const humanFormula = "人間が浮いた時間 = 手作業基準 - 人間使用時間"
+    const formulaGuide = screen.getByRole("note", {
+      name: "削減時間の算出式",
+    })
+    expect(within(formulaGuide).getByText(aiFormula)).toBeInTheDocument()
+    expect(within(formulaGuide).getByText(humanFormula)).toBeInTheDocument()
+
+    const active = screen.getByRole("region", {
+      name: "進行中コレクション active",
+    })
+    const activeTotals = within(active).getByRole("group", {
+      name: "collection totals",
+    })
+    expect(
+      within(activeTotals).getByText("AI 込み削減時間").closest("dt")
+    ).toHaveAccessibleDescription(aiFormula)
+    expect(
+      within(activeTotals).getByText("人間が浮いた時間").closest("dt")
+    ).toHaveAccessibleDescription(humanFormula)
+
+    const stepTable = within(active).getByRole("table", {
+      name: "active の workflow step",
+    })
+    expect(
+      within(stepTable).getByRole("columnheader", {
+        name: "AI 込み削減時間",
+      })
+    ).toHaveAccessibleDescription(aiFormula)
+    expect(
+      within(stepTable).getByRole("columnheader", {
+        name: "人間が浮いた時間",
+      })
+    ).toHaveAccessibleDescription(humanFormula)
+  })
+
   it.each([
     ["manual_baseline_unconfigured", "未設定"],
     ["attempt_timing_unavailable", "—"],
