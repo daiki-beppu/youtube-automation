@@ -9,6 +9,34 @@ const readRelease = (version) =>
   readFile(new URL(`../dist/${version}/index.html`, import.meta.url), "utf8");
 const execFileAsync = promisify(execFile);
 
+test("公式 DADS design tokens の exact dependency と CSS token surface を提供する", async () => {
+  const sitePackage = JSON.parse(
+    await readFile(new URL("../package.json", import.meta.url), "utf8")
+  );
+  const designTokensPackage = JSON.parse(
+    await readFile(
+      new URL(
+        "../node_modules/@digital-go-jp/design-tokens/package.json",
+        import.meta.url
+      ),
+      "utf8"
+    )
+  );
+  const tokens = await readFile(
+    new URL(
+      "../node_modules/@digital-go-jp/design-tokens/dist/tokens-simple.css",
+      import.meta.url
+    ),
+    "utf8"
+  );
+
+  assert.equal(sitePackage.dependencies["@digital-go-jp/design-tokens"], "2.0.1");
+  assert.equal(designTokensPackage.version, "2.0.1");
+  assert.match(tokens, /--color-key-/);
+  assert.match(tokens, /--color-neutral-/);
+  assert.match(tokens, /--color-semantic-/);
+});
+
 test("一覧は本体とChrome拡張に分かれ、それぞれ公開日の新しい順で表示する", async () => {
   const html = await readIndex();
   const section = (kind) =>
