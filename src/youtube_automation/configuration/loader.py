@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 from pathlib import Path
 
@@ -709,7 +710,43 @@ def _build_workflow(merged: dict) -> Workflow:
             ),
         ),
         scheduled_automation=_build_scheduled_automation(wf),
+        manual_baseline_minutes=_build_manual_baseline_minutes(wf),
     )
+
+
+def _build_manual_baseline_minutes(wf: dict) -> dict[str, float] | None:
+    """action 別の手作業基準（分）を optional 設定から正規化する."""
+    if "manual_baseline_minutes" not in wf:
+        return None
+    raw = wf["manual_baseline_minutes"]
+    if not isinstance(raw, dict):
+        raise ConfigError(
+            f"workflow.manual_baseline_minutes は object でなければなりません（got {type(raw).__name__}）"
+        )
+
+    baselines: dict[str, float] = {}
+    for action_id, value in raw.items():
+        if not isinstance(action_id, str) or not action_id.strip():
+            raise ConfigError("workflow.manual_baseline_minutes の action ID は空でない string でなければなりません")
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or value < 0:
+            raise ConfigError(
+                f"workflow.manual_baseline_minutes.{action_id} は 0 以上の有限 number でなければなりません"
+                f"（got {value!r}）"
+            )
+        try:
+            normalized = float(value)
+        except OverflowError as error:
+            raise ConfigError(
+                f"workflow.manual_baseline_minutes.{action_id} は 0 以上の有限 number でなければなりません"
+                f"（got {value!r}）"
+            ) from error
+        if not math.isfinite(normalized):
+            raise ConfigError(
+                f"workflow.manual_baseline_minutes.{action_id} は 0 以上の有限 number でなければなりません"
+                f"（got {value!r}）"
+            )
+        baselines[action_id] = normalized
+    return baselines
 
 
 def _build_scheduled_automation(wf: dict) -> ScheduledAutomation:
