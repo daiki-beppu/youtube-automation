@@ -515,9 +515,9 @@ def _resolve_vocal_gender(data: Mapping[str, object], channel_json_fields: dict,
 
 def _resolve_style_variants(
     data: Mapping[str, object], channel_fallback: object, patterns_path: Path
-) -> Mapping[str, Mapping[str, str]]:
+) -> tuple[Mapping[str, Mapping[str, str]], bool]:
     if "style_variants" not in data:
-        return cast(Mapping[str, Mapping[str, str]], channel_fallback)
+        return cast(Mapping[str, Mapping[str, str]], channel_fallback), True
     style_variants = data["style_variants"]
     if not isinstance(style_variants, Mapping):
         raise ConfigError(f"{patterns_path}: style_variants must be a mapping")
@@ -529,7 +529,41 @@ def _resolve_style_variants(
         for field_name in ("name", "genre_line"):
             if not isinstance(variant.get(field_name), str):
                 raise ConfigError(f"{patterns_path}: style_variants.{key}.{field_name} must be a string")
-    return cast(Mapping[str, Mapping[str, str]], style_variants)
+    return cast(Mapping[str, Mapping[str, str]], style_variants), False
+
+
+def _undefined_style_variant_error(style_key: object, patterns_path: Path, uses_channel_fallback: bool) -> ConfigError:
+    base_message = f"{patterns_path}: pattern.style に未定義の style variant が指定されています: {style_key!r}。"
+    if not uses_channel_fallback:
+        return ConfigError(
+            base_message
+            + "collection-local style_variants にこの key を追加するか、pattern.style の typo を修正してください。"
+        )
+
+    message = (
+        base_message + "patterns root に style_variants がない legacy collection のため、"
+        "channel fallback drift（config/skills/suno.yaml 側で key が変更・削除された可能性）があります。"
+        "channel 共有設定には依存せず、必要な定義を collection-local "
+        "suno-patterns.yaml::style_variants へ移してください。"
+    )
+    existing_outputs = [
+        path.name
+        for path in (
+            patterns_path.parent / SUNO_PROMPTS_MD_FILENAME,
+            patterns_path.parent / SUNO_PROMPTS_JSON_FILENAME,
+        )
+        if path.exists()
+    ]
+    if existing_outputs:
+        collection_path = (
+            patterns_path.parent.parent if patterns_path.parent.name == DOCUMENTATION_DIRNAME else patterns_path.parent
+        )
+        message += (
+            f"既存成果物 ({', '.join(existing_outputs)}) は更新されず stale のままです。"
+            "設定修正後に再生成し、"
+            f"`uv run yt-suno-verify {collection_path}` を実行してください。"
+        )
+    return ConfigError(message)
 
 
 def _resolve_prompts(patterns_path: Path) -> _ResolvedPrompts:
@@ -555,7 +589,11 @@ def _resolve_prompts(patterns_path: Path) -> _ResolvedPrompts:
         patterns_path,
     )
     advanced_json_fields = _resolve_vocal_gender(data, advanced_json_fields, patterns_path)
-    style_variants = _resolve_style_variants(data, suno.get("style_variants", {}), patterns_path)
+    style_variants, uses_channel_style_variants = _resolve_style_variants(
+        data,
+        suno.get("style_variants", {}),
+        patterns_path,
+    )
     style_influence = suno.get("style_influence", 50)
     weirdness = suno.get("weirdness", 50)
 
@@ -603,7 +641,7 @@ def _resolve_prompts(patterns_path: Path) -> _ResolvedPrompts:
 
         # Per-pattern style variant override
         if style_key and style_key not in style_variants:
-            raise ConfigError(f"pattern.style に未定義の style variant が指定されています: {style_key!r}")
+            raise _undefined_style_variant_error(style_key, patterns_path, uses_channel_style_variants)
         has_explicit_variant = bool(style_key)
         if has_explicit_variant:
             variant = style_variants[style_key]
