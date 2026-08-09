@@ -57,6 +57,7 @@ EXPECTED_ENTRYPOINT_MODULES = {
     "yt-playlist-status": "youtube_automation.commands.youtube.playlist_status",
     "yt-populate-scene-phrases": "youtube_automation.commands.media.populate_scene_phrases",
     "yt-preflight": "youtube_automation.commands.system.preflight",
+    "yt-progress-hook": "youtube_automation.commands.system.progress_hook",
     "yt-raw-master-check": "youtube_automation.commands.media.check_raw_master",
     "yt-retention-timeline": "youtube_automation.commands.analytics.retention_timeline",
     "yt-stock-archive": "youtube_automation.commands.media.stock_archive",

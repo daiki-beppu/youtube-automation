@@ -10,6 +10,15 @@
             "command": "for f in $CLAUDE_FILE_PATHS; do case \"$f\" in *auth/client_secrets.json|*auth/token.json|*.env|*/uv.lock|*/flake.lock) echo \"BLOCKED: $f は AI から直接編集禁止。専用ツール（uv lock / op など）経由で更新してください\" >&2; exit 2;; esac; done"
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run yt-progress-hook"
+          }
+        ]
       }
     ],
     "PostToolUse": [
