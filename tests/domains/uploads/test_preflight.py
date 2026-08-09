@@ -336,8 +336,12 @@ def test_plan_preflight_rejects_overlong_localized_title(
         description="A continuous BGM mix without chapter markers.",
     )
 
-    with pytest.raises(ValidationError, match=r"\[de\] 114 codepoints.*ruhiger Fokus"):
+    with pytest.raises(ValidationError, match=r"\[de\] 114 codepoints.*ruhiger Fokus") as excinfo:
         _run_preflight(channel_dir, collection_dir, monkeypatch)
+
+    message = str(excinfo.value)
+    assert "fixed=101c" in message
+    assert "scene_phrase=13c" in message
 
 
 def test_plan_preflight_rejects_static_localized_duration(

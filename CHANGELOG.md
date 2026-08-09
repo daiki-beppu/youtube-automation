@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `fix(video-upload)`: localizations title の 100 codepoint 超過診断に、実際の duration・activities 等を含む固定部分と scene phrase の codepoint 内訳を locale ごとに表示する（#3685）。
+
 - `feat(streaming)`: 24/7 配信時だけ YouTube 配信枠復旧 CLI を既定 2 分の systemd timer で実行し、ephemeral OAuth 配備、ffmpeg 停止時 no-op、recovered 通知と journald 記録、安全な disable cleanup を行う Terraform opt-in を追加（#3675）。
 
 - `feat(streaming)`: active broadcast / ingest 状態を確認し、active ingest だけが残った場合に upcoming 配信枠を冪等再利用、または新規作成して bind → live 遷移する `yt-stream-broadcast-recover` CLI を追加。dry-run、構造化結果、secret 非出力を備えた（#3674）。
