@@ -135,7 +135,9 @@ terraform plan
 
 import しなかった 2 resource は state に存在しないため、plan では `# tls_private_key.ssh_host will be created` と `# null_resource.deploy will be created` がそれぞれ `+ create` 予定になる。この 2 件の `+ create` だけなら import 漏れや instance replacement ではなく、未管理 resource を Terraform 管理へ加える想定差分である。
 
-既存 VPS の SSH host key と新規の `tls_private_key.ssh_host` は一致しない。さらに、その生成鍵を埋め込む `vultr_instance.this.user_data` と provisioner の `host_key` は既存 VPS の値を Terraform から復元できない。同じ plan に `vultr_instance.this must be replaced` が併記された場合に限り、破壊的な instance replacement として **apply しない**。既存 host key と `user_data` を保全した移行方針が別途承認されるまで停止し、`terraform apply` や `-target` で差分を部分適用しない。
+`vultr_instance.this` は、Vultr API が import 後に読み戻せない `user_data` と `ssh_key_ids` の差分だけを `lifecycle.ignore_changes` で無視する。これらの差分だけで `vultr_instance.this must be replaced` にはならない。この lifecycle は既存 instance の差分判定にだけ作用し、新規構築時は従来どおり両属性を Vultr API へ渡す。
+
+既存 VPS の SSH host key と新規の `tls_private_key.ssh_host` は一致せず、provisioner の `host_key` に既存 VPS の値を Terraform から復元できない。そのため、この手順は state 復旧と非破壊 plan の確認までとし、`tls_private_key.ssh_host` / `null_resource.deploy` の create 予定は **apply しない**。`user_data` / `ssh_key_ids` 以外の変更が原因で同じ plan に `vultr_instance.this must be replaced` が併記された場合も、破壊的な instance replacement として停止し、`terraform apply` や `-target` で差分を部分適用しない。
 
 ## ライブチャット自動返信（opt-in）
 

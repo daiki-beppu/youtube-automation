@@ -107,6 +107,25 @@ class TestMainTf:
             "cloud-init に ssh_host_public_key が渡されていない"
         )
 
+    def test_vultr_instance_ignores_import_only_force_new_differences(self):
+        """Given import 後に API から復元できない force-new 属性
+        When vultr_instance.this の lifecycle を読む
+        Then user_data / ssh_key_ids だけを ignore し、instance replacement を防ぐ。
+        """
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        block = extract_block(text, r'resource\s+"vultr_instance"\s+"this"')
+        assert block is not None
+        lifecycle = extract_block(block, r"lifecycle")
+        assert lifecycle is not None, "vultr_instance.this に lifecycle が無い"
+        ignore_changes = re.search(r"ignore_changes\s*=\s*\[([^]]+)\]", lifecycle, flags=re.DOTALL)
+        assert ignore_changes is not None, "lifecycle.ignore_changes が無い"
+        ignored_attributes = {
+            value.strip()
+            for value in ignore_changes.group(1).split(",")
+            if value.strip()
+        }
+        assert ignored_attributes == {"user_data", "ssh_key_ids"}
+
     def test_null_resource_connection_enables_host_key_verification(self):
         """Given main.tf
         When null_resource.deploy.connection を読む
