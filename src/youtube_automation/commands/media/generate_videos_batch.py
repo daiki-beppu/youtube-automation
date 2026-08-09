@@ -216,9 +216,27 @@ def _script_path(root: Path) -> Path:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="マスター済み・未動画化の collection を並列動画化")
-    parser.add_argument("--include-live", action="store_true", help="collections/live/ も検出対象に含める")
-    parser.add_argument("--max-workers", type=int, help="最大並列数")
+    parser = argparse.ArgumentParser(
+        description=(
+            "assets.master_audio が設定済みかつ assets.master_video: null の collection を並列動画化。"
+            "既定では collections/planning/ のみを対象にし、--include-live で collections/live/ も含める。"
+            "成功した collection のみ assets.master_video を更新し、部分失敗は non-zero で終了"
+        )
+    )
+    parser.add_argument(
+        "--include-live",
+        action="store_true",
+        help="既定の collections/planning/ に加えて collections/live/ も検出対象に含める",
+    )
+    parser.add_argument(
+        "--max-workers",
+        type=int,
+        help=(
+            "最大並列数（1 以上）。未指定時は CLI > YT_VIDEOUP_MAX_WORKERS > channel skill-config > "
+            "CPU 検出 > 3 の優先順で解決。channel skill-config は "
+            "config/skills/videoup.yaml::batch.max_workers"
+        ),
+    )
     args = parser.parse_args()
 
     root = Path(channel_dir()).resolve()
