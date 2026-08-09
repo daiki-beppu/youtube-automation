@@ -28,7 +28,18 @@
         ]
       },
       {
-        "matcher": "Bash",
+        "matcher": "Bash|Task|Agent|Workflow",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run yt-progress-hook"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash|Task|Agent|Workflow",
         "hooks": [
           {
             "type": "command",
