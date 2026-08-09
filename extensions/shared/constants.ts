@@ -2,7 +2,7 @@
 // これらは yt-collection-serve (#692/#698) との互換契約であり、変更すると
 // サーバー側 (`/suno/prompts.json`) と整合しなくなる。
 // SSOT: src/youtube_automation/domains/suno/downloaded/models.py SUNO_PROMPTS_ROUTE
-import type { DurationFilter, PromptEntry } from "./api";
+import type { DownloadSummary, DurationFilter, PromptEntry } from "./api";
 
 /** chrome.storage.local に保存するサーバー URL の key。 */
 export const STORAGE_KEY = "sunoServerUrl";
@@ -399,6 +399,8 @@ type ProgressPayloadBase = {
   /** duration yield guard を通過した clip ID (#1268)。 */
   acceptedClipIds?: string[];
   durationOutlierWarning?: string;
+  /** downloaded API が検証した配置結果。warning 文言から再構築しない。 */
+  downloadSummary?: DownloadSummary;
 };
 
 type ProgressPayloadWithoutLog = ProgressPayloadBase & {
