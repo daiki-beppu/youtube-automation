@@ -14,9 +14,10 @@ audio:
   # `audio.finalize.bitrate` が明示指定されていればそちらが uv run yt-finalize-master の出力に勝つ。
   bitrate: "192k"
 
-  # CLI フラグ (`--loop` / `--target-duration`) が両方未指定のときに
-  # `uv run yt-generate-master --target-duration MIN` 相当のデフォルト値として使われる。
-  # 同梱デフォルトでは未設定 (= 1 ループで終了)。チャンネル側で opt-in する。
+  # 旧 channel override。config/channel/audio.json に target_duration_min がある場合は
+  # そちらが SSOT となり、この値は警告付きで無視される。channel 側未設定時のみ、
+  # CLI フラグ (`--loop` / `--target-duration`) 未指定時の互換 fallback として使われる。
+  # 同梱デフォルトでは未設定 (= 1 ループで終了)。
   # target_duration_min: 120
 
   # CLI フラグ (`--shuffle` / `--shuffle-seed`) のいずれも未指定のときに

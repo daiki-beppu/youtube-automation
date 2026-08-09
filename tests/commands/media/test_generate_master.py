@@ -367,7 +367,36 @@ class TestCliSkillConfigTargetDuration:
         assert generate_master.main() == 0
         assert captured["kwargs"]["target_duration_min"] == 60
         assert captured["kwargs"]["target_duration_max"] == 90
-        assert "channel=60分 / skill=120分" in capsys.readouterr().out
+        captured_output = capsys.readouterr()
+        assert captured_output.out == ""
+        assert "WARNING" in captured_output.err
+        assert "skill-config=120分" in captured_output.err
+        assert "channel=60分" in captured_output.err
+        assert "無視" in captured_output.err
+
+    def test_equal_skill_target_still_warns_that_channel_target_wins(self, monkeypatch, tmp_path, capsys):
+        # Given: channel と skill-config に同じ値が設定されていても skill-config は参照されない
+        captured = self._patch_main_dependencies(
+            monkeypatch,
+            {"audio": {"target_duration_min": 60}},
+        )
+        monkeypatch.setattr(
+            "youtube_automation.commands.media.generate_master.load_config",
+            lambda: SimpleNamespace(
+                audio=SimpleNamespace(
+                    target_duration_min=60,
+                    target_duration_max=90,
+                )
+            ),
+        )
+        monkeypatch.setattr("sys.argv", ["yt-generate-master", str(tmp_path)])
+
+        # When
+        assert generate_master.main() == 0
+
+        # Then: 値の一致に隠れず、skill-config が無視される事実を警告する
+        assert captured["kwargs"]["target_duration_min"] == 60
+        assert "skill-config=60分" in capsys.readouterr().err
 
     def test_cli_loop_ignores_skill_config_target_duration(self, monkeypatch, tmp_path):
         # Given: --loop 指定時は skill-config の target_duration_min を黙って無視
