@@ -1,0 +1,260 @@
+import { existsSync, realpathSync } from "node:fs";
+import { readdir, readFile } from "node:fs/promises";
+import { join, resolve, sep } from "node:path";
+import type { ContentSource, SourceEntry } from "blume/sources/types";
+import { operatorDocReleaseField } from "./operator-doc-source.ts";
+
+const GITHUB_SKILL_BASE =
+  "https://github.com/daiki-beppu/youtube-automation/blob/main/.claude/skills/";
+const SKILL_NAME_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
+
+export interface SkillPage {
+  readonly category?: string;
+  readonly description: string;
+  readonly name: string;
+  readonly prerequisites?: string;
+  readonly workflow: string;
+}
+
+export interface SkillCategory {
+  readonly label: string;
+  readonly skills: readonly string[];
+}
+
+const extractSection = (markdown: string, heading: string): string | undefined => {
+  const lines = markdown.split("\n");
+  const start = lines.findIndex((line) => line === `## ${heading}`);
+  if (start === -1) return undefined;
+  const end = lines.findIndex(
+    (line, index) => index > start && line.startsWith("## ")
+  );
+  return lines.slice(start + 1, end === -1 ? undefined : end).join("\n").trim();
+};
+
+const parseQuotedField = (
+  frontmatter: string,
+  field: string,
+  skillName: string
+): string => {
+  const match = frontmatter.match(
+    new RegExp(`^${field}:\\s*("(?:[^"\\\\]|\\\\.)*")\\s*$`, "mu")
+  );
+  if (!match) {
+    throw new Error(`Skill ${skillName} is missing a double-quoted ${field}`);
+  }
+  try {
+    return JSON.parse(match[1]) as string;
+  } catch (error) {
+    throw new Error(`Skill ${skillName} has an invalid ${field}`, { cause: error });
+  }
+};
+
+export const parseSkillMarkdown = (
+  markdown: string,
+  directoryName: string
+): SkillPage => {
+  const frontmatterMatch = markdown.match(/^---\n([\s\S]*?)\n---(?:\n|$)/u);
+  if (!frontmatterMatch) {
+    throw new Error(`Skill ${directoryName} is missing frontmatter`);
+  }
+  const nameMatch = frontmatterMatch[1].match(/^name:\s*([^\s]+)\s*$/mu);
+  const name = nameMatch?.[1];
+  if (!name || !SKILL_NAME_PATTERN.test(name)) {
+    throw new Error(`Skill ${directoryName} has an invalid name`);
+  }
+  if (name !== directoryName) {
+    throw new Error(
+      `Skill ${directoryName} frontmatter name does not match directory: ${name}`
+    );
+  }
+  const workflow = extractSection(markdown, "前後工程");
+  if (!workflow) {
+    throw new Error(`Skill ${name} is missing section: 前後工程`);
+  }
+  return {
+    description: parseQuotedField(frontmatterMatch[1], "description", name),
+    name,
+    prerequisites: extractSection(markdown, "前提"),
+    workflow,
+  };
+};
+
+export const parseSkillCategories = (markdown: string): SkillCategory[] => {
+  const categories: Array<{ label: string; skills: string[] }> = [];
+  let current: { label: string; skills: string[] } | undefined;
+  for (const line of markdown.split("\n")) {
+    const heading = line.match(/^## ([^#].*)$/u);
+    if (heading) {
+      current = { label: heading[1].trim(), skills: [] };
+      categories.push(current);
+      continue;
+    }
+    const row = line.match(
+      /^\|\s*(?:\[`)?\/([a-z0-9]+(?:-[a-z0-9]+)*)(?:`?\]\(\/skills\/[^)]+\))?\s*\|/u
+    );
+    if (row && current) current.skills.push(row[1]);
+  }
+  return categories.filter((category) => category.skills.length > 0);
+};
+
+const linkSkillReferences = (
+  markdown: string,
+  skillNames: ReadonlySet<string>
+): string => {
+  let linked = markdown;
+  const names = [...skillNames].sort((left, right) => right.length - left.length);
+  for (const name of names) {
+    const escaped = name;
+    linked = linked.replace(
+      new RegExp("`/" + escaped + "`", "gu"),
+      `[/${name}](/skills/${name})`
+    );
+    linked = linked.replace(
+      new RegExp(`(?<![\\w/.(\\[])\\/${escaped}(?![\\w-]|\\)\\])`, "gu"),
+      `[/${name}](/skills/${name})`
+    );
+  }
+  return linked;
+};
+
+const renderSkillPage = (
+  skill: SkillPage,
+  skillNames: ReadonlySet<string>
+): string => {
+  const sections = [
+    `# /${skill.name}`,
+    linkSkillReferences(skill.description, skillNames),
+  ];
+  if (skill.prerequisites) {
+    sections.push(
+      "## 前提",
+      linkSkillReferences(skill.prerequisites, skillNames)
+    );
+  }
+  sections.push("## 前後工程", linkSkillReferences(skill.workflow, skillNames));
+  return `${sections.join("\n\n")}\n`;
+};
+
+const renderSkillIndex = (
+  skills: readonly SkillPage[],
+  categories: readonly SkillCategory[]
+): string => {
+  const byName = new Map(skills.map((skill) => [skill.name, skill]));
+  const categorized = new Set(categories.flatMap((category) => category.skills));
+  const sections = categories.map((category) => {
+    const rows = category.skills.map((name) => {
+      const skill = byName.get(name);
+      if (!skill) {
+        throw new Error(`Skill catalog references missing skill: ${name}`);
+      }
+      return `- [/${name}](/skills/${name}) — ${skill.description}`;
+    });
+    return `## ${category.label}\n\n${rows.join("\n")}`;
+  });
+  const uncategorized = skills
+    .filter((skill) => !categorized.has(skill.name))
+    .map(
+      (skill) =>
+        `- [/${skill.name}](/skills/${skill.name}) — ${skill.description}`
+    );
+  if (uncategorized.length > 0) {
+    sections.push(`## 未分類\n\n${uncategorized.join("\n")}`);
+  }
+  return `# 全 skill 一覧\n\n${skills.length} 個の skill を用途別に掲載しています。\n\n${sections.join("\n\n")}\n`;
+};
+
+const assertInsideRepository = (repositoryRoot: string, path: string): string => {
+  const realRoot = realpathSync(repositoryRoot);
+  const realPath = realpathSync(path);
+  if (realPath !== realRoot && !realPath.startsWith(`${realRoot}${sep}`)) {
+    throw new Error(`Skill source escapes repository: ${path}`);
+  }
+  return realPath;
+};
+
+const sourceEntry = (
+  ref: string,
+  slug: string,
+  text: string,
+  editUrl?: string
+): SourceEntry => ({
+  body: { format: "md", text },
+  data: {
+    kind: operatorDocReleaseField,
+    released_at: operatorDocReleaseField,
+    summary: operatorDocReleaseField,
+    type: "doc",
+    version: operatorDocReleaseField,
+  },
+  ...(editUrl ? { editUrl } : {}),
+  raw: `---\ntype: doc\n---\n\n${text}`,
+  ref,
+  slug,
+});
+
+const loadSkillEntries = async (repositoryRoot: string): Promise<SourceEntry[]> => {
+  const skillsRoot = resolve(repositoryRoot, ".claude/skills");
+  const catalogPath = resolve(repositoryRoot, "docs/features.md");
+  if (!existsSync(skillsRoot) || !existsSync(catalogPath)) {
+    throw new Error("Skill pages require .claude/skills and docs/features.md");
+  }
+  assertInsideRepository(repositoryRoot, skillsRoot);
+  assertInsideRepository(repositoryRoot, catalogPath);
+  const directories = (await readdir(skillsRoot, { withFileTypes: true }))
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort();
+  const skills = await Promise.all(
+    directories.map(async (directoryName) => {
+      const path = join(skillsRoot, directoryName, "SKILL.md");
+      if (!existsSync(path)) return undefined;
+      const realPath = assertInsideRepository(repositoryRoot, path);
+      return parseSkillMarkdown(await readFile(realPath, "utf8"), directoryName);
+    })
+  );
+  const pages = skills.filter((skill): skill is SkillPage => skill !== undefined);
+  const names = new Set(pages.map((skill) => skill.name));
+  if (names.size !== pages.length) throw new Error("Duplicate skill names detected");
+  const categories = parseSkillCategories(await readFile(catalogPath, "utf8"));
+  const entries = pages.map((skill) => {
+    const text = renderSkillPage(skill, names);
+    return sourceEntry(
+      `${skill.name}.md`,
+      `/skills/${skill.name}`,
+      text,
+      `${GITHUB_SKILL_BASE}${skill.name}/SKILL.md`
+    );
+  });
+  entries.unshift(
+    sourceEntry(
+      "index.md",
+      "/skills",
+      renderSkillIndex(pages, categories),
+      "https://github.com/daiki-beppu/youtube-automation/blob/main/docs/features.md"
+    )
+  );
+  return entries;
+};
+
+export const createSkillPageSource = (options: {
+  readonly repositoryRoot: string;
+}): ContentSource => {
+  const repositoryRoot = resolve(options.repositoryRoot);
+  return {
+    load: async () => ({ diagnostics: [], entries: await loadSkillEntries(repositoryRoot) }),
+    name: "skill-pages",
+    read: async (ref) => {
+      const entry = (await loadSkillEntries(repositoryRoot)).find(
+        (candidate) => candidate.ref === ref
+      );
+      if (!entry) throw new Error(`Unknown skill page source: ${ref}`);
+      return entry.body.text;
+    },
+    staged: true,
+    validate: () => {
+      if (!existsSync(resolve(repositoryRoot, ".claude/skills"))) {
+        throw new Error("Skill source root not found: .claude/skills");
+      }
+    },
+  };
+};

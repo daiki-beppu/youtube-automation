@@ -108,7 +108,7 @@ component 追加前は対象 workspace で `shadcn info` と registry/公式 doc
 
 ## リリースノートサイト開発
 
-`site/` は ADR-0023 / ADR-0021 で許可された Blume ベースの公開静的サイトで、`docs/release-notes/*.md` を唯一のコンテンツソースとして読む。Node.js / pnpm は dashboard・extensions と同じ Nix toolchain を使い、ambient `pnpm` や `npx` は使わない。
+`site/` は ADR-0023 / ADR-0021 で許可された Blume ベースの公開静的サイトで、`docs/release-notes/*.md`、明示 allowlist の運用文書、`.claude/skills/*/SKILL.md` の公開可能な規定フィールドだけを読む。skill ページ生成も `site/` の TypeScript 内で完結し、Python CLI を起動しない。Node.js / pnpm は dashboard・extensions と同じ Nix toolchain を使い、ambient `pnpm` や `npx` は使わない。
 
 ```bash
 nix develop .#extensions --command pnpm -C site install --frozen-lockfile

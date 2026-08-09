@@ -6,6 +6,7 @@ import test from "node:test";
 import {
   createOperatorDocSource,
   operatorDocMap,
+  rewriteFeatureSkillLinks,
   rewriteMarkdownLinks,
 } from "../operator-doc-source.ts";
 
@@ -141,5 +142,15 @@ test("anchor、絶対 URL、非 Markdown link は変更しない", () => {
   assert.equal(
     rewriteMarkdownLinks(markdown, "docs/features.md", operatorDocMap),
     markdown
+  );
+});
+
+test("features の skill 行は個別ページへの導線にする", () => {
+  const markdown = "| /thumbnail | CTR 最適化 |\n| /wf-new-batch | 一括企画 |\n";
+
+  assert.equal(
+    rewriteFeatureSkillLinks(markdown),
+    "| [/thumbnail](/skills/thumbnail) | CTR 最適化 |\n" +
+      "| [/wf-new-batch](/skills/wf-new-batch) | 一括企画 |\n"
   );
 });

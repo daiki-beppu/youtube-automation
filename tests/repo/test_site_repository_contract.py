@@ -55,6 +55,7 @@ def test_site_workflow_checks_every_stacked_pull_request_and_main_push() -> None
     triggers = _triggers(workflow)
     expected_paths = [
         "site/**",
+        ".claude/skills/**",
         "docs/release-notes/**",
         *OPERATOR_DOC_SOURCES,
         ".github/workflows/site.yml",
