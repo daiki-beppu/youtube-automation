@@ -19,6 +19,13 @@ EXPECTED_B3_MAPPINGS = {
     for mapping in json.loads(B3_RECEIPT_PATH.read_text(encoding="utf-8"))["mappings"]
 }
 
+EXPECTED_SKILL_FEEDBACK_OWNER_MAPPINGS = {
+    "legacy..claude.skills.feedback.SKILL.md": ".claude/skills/skill-feedback/SKILL.md",
+    "legacy..claude.skills.feedback.references.upstream-issue-template.md": (
+        ".claude/skills/skill-feedback/references/upstream-issue-template.md"
+    ),
+}
+
 EXPECTED_GROUP_EVIDENCE = {
     "C-01": "unreferenced after consumer search",
     "C-02": "unreferenced after consumer search",
@@ -137,6 +144,19 @@ def test_b6_receipt_accounts_for_every_old_owner_without_duplicates() -> None:
 
     mapping_pairs = {(mapping["old_owner"], mapping["exact_new_owner"]) for mapping in mappings}
     assert EXPECTED_B3_MAPPINGS <= mapping_pairs
+
+
+def test_b6_receipt_maps_historical_feedback_owners_to_skill_feedback() -> None:
+    mappings = _read_receipt().get("mappings")
+    assert isinstance(mappings, list)
+
+    actual = {
+        mapping["old_owner"]: mapping["exact_new_owner"]
+        for mapping in mappings
+        if isinstance(mapping, dict) and mapping.get("old_owner") in EXPECTED_SKILL_FEEDBACK_OWNER_MAPPINGS
+    }
+
+    assert actual == EXPECTED_SKILL_FEEDBACK_OWNER_MAPPINGS
 
 
 @pytest.mark.parametrize(

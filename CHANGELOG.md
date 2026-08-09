@@ -92,6 +92,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `feat(suno)`: channel override に明示した `duration_sec` を、既定値や `duration_filter` から補完せず全 prompt entry へ数値として出力するようにした（#3132）。
 - `feat(suno)`: channel override の `duration_sec` を正の整数に限定し、bool・文字列・float・非有限値・0 以下を prompt 生成前に `ConfigError` で拒否する検証境界を追加した（#3131）。
 - `docs(streaming)`: `/streaming` の Quick Reference にチャンネル別 Terraform workspace の確認・作成・切替入口を追加し、切替後のチャンネル固有 `TF_VAR_*` 再注入と README 正本への導線を明示した（#3184）。
+- `refactor(skill-feedback)`: `/feedback` との命名衝突を避ける canonical `/skill-feedback` entrypoint を旧名と並行配置し、B6 integration receipt の owner を新 skill と issue template へ移した（#3187）。
 - `refactor(tests)`: 旧 `unit` / `streaming` テストを canonical owner と `tests/repo/streaming/` へ整理し、root allowlist・source layer・source owner の配置規約を repository contract として機械担保した（#3047）。
 - `fix(tests)`: collection serve の subprocess lifecycle テストで待機処理を共通化し、デッドライン到達時に待機対象を明示して失敗させるようにした。server 起動完了は PID ファイルの存在ではなく HTTP identity endpoint の応答まで確認し、高負荷時の起動途中を準備完了と誤認しないようにした（#3091）。
 - `refactor(tests)`: domains / application / configuration 層と同名衝突分のテストを production module の鏡像配置へ移し、repository contract は `tests/repo/`、infrastructure の裁定分は各鏡像へ配置した。active consumer の参照を canonical path に追従させ、複数テストが同一 production module に対応する場合の共存規則と root 残置理由を配置規約へ記録した（#3046）。
