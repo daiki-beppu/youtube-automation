@@ -65,6 +65,7 @@ from youtube_automation.infrastructure.collections.numbered_duplicates import (
 )
 from youtube_automation.infrastructure.retry import QUOTA_REASONS
 from youtube_automation.infrastructure.youtube.reporting_api import ReportingAPIClient
+from youtube_automation.infrastructure.youtube.streaming.state_reconciliation import reconcile_streaming_vps
 
 PYPROJECT_FILENAME = "pyproject.toml"
 CLAUDE_SKILLS_DIR = Path(".claude") / "skills"
@@ -1208,6 +1209,68 @@ def check_reporting_job(channel_dir: Path) -> CheckResult:
         id="reporting_job",
         status="ok",
         message=f"Reporting API ジョブ作成済み (jobId: {existing_job['id']})",
+    )
+
+
+def check_streaming_vps_state(channel_dir: Path) -> CheckResult:
+    """Vultr 上の streaming VPS と全 GCS workspace state を突合する。"""
+    terraform_dir = _bootstrap_root(channel_dir) / "infra" / "terraform" / "streaming"
+    if not terraform_dir.is_dir():
+        return CheckResult(
+            id="streaming_vps_state",
+            status="info",
+            message="streaming Terraform module がないため VPS state 突合をスキップ",
+            data={"reason": "streaming_terraform_module_missing"},
+        )
+
+    api_key = os.environ.get("VULTR_API_KEY", "").strip() or os.environ.get("TF_VAR_vultr_api_key", "").strip()
+    if not api_key:
+        return CheckResult(
+            id="streaming_vps_state",
+            status="info",
+            message="Vultr API key 未設定のため VPS state 突合をスキップ",
+            data={"reason": "vultr_api_key_missing"},
+        )
+
+    try:
+        inventory = reconcile_streaming_vps(
+            terraform_dir=terraform_dir,
+            api_key=api_key,
+            run_command=_run,
+        )
+    except AutomationError as error:
+        return CheckResult(
+            id="streaming_vps_state",
+            status="unknown",
+            message=f"streaming VPS state 突合に失敗: {error}",
+        )
+
+    unmanaged_ids = sorted(inventory.unmanaged_instance_ids)
+    data = {
+        "actual_instance_count": len(inventory.actual_instance_ids),
+        "managed_instance_count": len(inventory.managed_instance_ids),
+        "unmanaged_instance_ids": unmanaged_ids,
+    }
+    if unmanaged_ids:
+        return CheckResult(
+            id="streaming_vps_state",
+            status="warn",
+            message=f"Terraform state 管理外の youtube-stream VPS を検出: {', '.join(unmanaged_ids)}",
+            next_action={
+                "kind": "human",
+                "instructions": (
+                    "`infra/terraform/streaming/README.md` の既存 Vultr リソース import 手順で"
+                    "対応 workspace へ手動 import し、`uv run yt-doctor --json` を再実行してください"
+                ),
+            },
+            data=data,
+        )
+
+    return CheckResult(
+        id="streaming_vps_state",
+        status="ok",
+        message="youtube-stream VPS はすべて Terraform state 管理下",
+        data=data,
     )
 
 
@@ -3150,6 +3213,7 @@ def run_all_checks(channel_dir: Path) -> list[CheckResult]:
         check_oauth_token(channel_dir),
         check_oauth_token_readonly(channel_dir),
         check_reporting_job(channel_dir),
+        check_streaming_vps_state(channel_dir),
         check_channel_config(channel_dir),
         check_playlist_config(channel_dir),
         check_playlist_create_dry_run(channel_dir),

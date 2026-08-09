@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `feat(collection-ideate)`: 採用した `planning-preview.png` を最終 `thumbnail.jpg` の正規入力として後段へ引き渡し、未生成時だけ `/thumbnail` フォールバックへ合流する契約に変更（#2513）。
 - `fix(doctor)`: TTP seed 確認で `seed 要約` と自然なユーザー承認 / 不採用表現を受理し、ユーザー承認済み例外の category・未反映内容・理由・後続 skill を同じ Markdown section の複数行箇条書きでも検証できるようにした（#2510）。
+- `fix(doctor)`: Vultr 上の `youtube-stream` タグ付き VPS と streaming GCS backend の全 workspace state を突合し、state 管理外の instance ID を読み取り専用診断で警告。Vultr API key 未設定時は外部アクセスせず skip するようにした（#2524）。
 
 - `feat(workspace)`: SessionStart で cwd 由来の対象チャンネル、または未確定時の候補と書き込み基準をコンテキストへ注入する hook を追加（#3372）。
 

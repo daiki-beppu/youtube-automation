@@ -253,6 +253,10 @@ uv run yt-analytics --reporting-create-job
 
 コマンドは冪等で、既存ジョブがあれば再利用する。成功後は `--apply` が再診断して次の check へ進む。
 
+#### `streaming_vps_state` — Terraform state 管理外の streaming VPS
+
+`VULTR_API_KEY` または `TF_VAR_vultr_api_key` が未設定なら読み取り診断を skip する。warning では自動 import せず、`infra/terraform/streaming/README.md` の「既存 Vultr リソースの import」に従い、表示された instance ID を対応 workspace へ手動 import する。完了後に `uv run yt-doctor --json` を再実行し、同 check が `ok` になることを確認する。
+
 ### channel カテゴリ
 
 #### `channel_config` — チャンネル設定未ロード
@@ -375,4 +379,3 @@ scope 不足の場合は、削除対象を表示して承認を得た後、AI �
 ```
 
 remote ID がまだ取得できていない channel_id 未設定は、AI が `uv run yt-channel-status` を起動して ID を取得し、上の「remote channel ID のローカル反映」に戻る。再認証が必要なら先に `uv run yt-oauth` の background flow を完了する。手書きで `meta.json` を更新しない。
-
