@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 - `fix(video-upload)`: post-upload の `playlistItems.insert` 失敗を workflow と CLI へ伝播し、プレイリスト割り当て成功前の completed state 確定・live 移動・workflow 更新を防ぐ（#3717）。
+- `fix(video-description)`: Suno の正準 `NN{a|b}-Title` ファイル名から clip index を除去して同一曲の variant を重複検出し、表示名リネーム手順へ確実に渡す（#3316）。
 - `fix(suno)`: 同梱 `exclude_styles` の既定を空にし、チャンネルまたは collection が明示した場合だけ Suno の Exclude Styles 欄を使うように変更（#3313）。
 - `fix(video-upload)`: upload preflight で OAuth 認証済みチャンネル ID と `config/channel/meta.json` を照合し、不一致時は動画作成やローカル state 更新より前に停止する（#3716）。
 - `feat(analytics)`: 収集済み動画の ads-per-playback をチャンネル中央値と比較し、低カバレッジの疑いを抽出する `yt-ad-coverage` CLI を追加（#3310）。
