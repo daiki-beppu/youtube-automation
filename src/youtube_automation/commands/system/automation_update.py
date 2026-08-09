@@ -231,12 +231,12 @@ def _skills_diff_has_changes(root: Path) -> bool:
     output = "\n".join(part for part in [proc.stdout, proc.stderr] if part)
     local_fix_markers = (
         "内容が異なる",
-        "target にのみ存在",
         "target がファイルではありません",
     )
     safe_missing_markers = (
         "同梱版にのみ存在",
         "target が存在しません",
+        "target にのみ存在 (未知のローカル entry として prune から保護されます)",
     )
     known_markers = local_fix_markers + safe_missing_markers
     if proc.returncode != 0 and not any(marker in output for marker in known_markers):

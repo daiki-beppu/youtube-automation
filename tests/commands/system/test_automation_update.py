@@ -865,6 +865,32 @@ def test_apply_local_fix_diff_requires_explicit_sync_decision(
     assert 'tag = "v5.5.0"' in (repo / "pyproject.toml").read_text(encoding="utf-8")
 
 
+def test_apply_allows_protected_local_skill_without_force_sync(
+    tmp_path: Path, no_network, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _write_repo(tmp_path, INLINE_TABLE_PYPROJECT)
+    commands: list[list[str]] = []
+    monkeypatch.setattr(automation_update, "_run_command", lambda cmd, cwd: commands.append(cmd) or 0)
+    monkeypatch.setattr(automation_update, "_check_channel_config", lambda root: "config/channel/ ロード成功")
+    monkeypatch.setattr(automation_update, "_git_status_porcelain", lambda root: "")
+
+    def _diff_protected_local(*args, **kwargs):
+        return automation_update.subprocess.CompletedProcess(
+            args=args[0],
+            returncode=0,
+            stdout=(
+                "target にのみ存在 (未知のローカル entry として prune から保護されます):\n"
+                "  - youtube-production-manager\n"
+            ),
+            stderr="",
+        )
+
+    monkeypatch.setattr(automation_update.subprocess, "run", _diff_protected_local)
+
+    assert main(["apply", "--target", str(repo), "--tag", "v5.6.0"]) == 0
+    assert commands
+
+
 def test_skills_diff_missing_target_is_not_local_fix(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     def _diff_missing(*args, **kwargs):
         return automation_update.subprocess.CompletedProcess(
@@ -875,6 +901,23 @@ def test_skills_diff_missing_target_is_not_local_fix(tmp_path: Path, monkeypatch
         )
 
     monkeypatch.setattr(automation_update.subprocess, "run", _diff_missing)
+
+    assert automation_update._skills_diff_has_changes(tmp_path) is False
+
+
+def test_skills_diff_protected_local_skill_is_not_local_fix(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def _diff_protected_local(*args, **kwargs):
+        return automation_update.subprocess.CompletedProcess(
+            args=args[0],
+            returncode=0,
+            stdout=(
+                "target にのみ存在 (未知のローカル entry として prune から保護されます):\n"
+                "  - youtube-production-manager\n"
+            ),
+            stderr="",
+        )
+
+    monkeypatch.setattr(automation_update.subprocess, "run", _diff_protected_local)
 
     assert automation_update._skills_diff_has_changes(tmp_path) is False
 
