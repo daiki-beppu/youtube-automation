@@ -7,9 +7,7 @@ import logging
 from pathlib import Path
 
 from youtube_automation.configuration import load_config
-from youtube_automation.core.adapters.errors import ConfigError, YouTubeAPIError
 from youtube_automation.core.adapters.filesystem import path_exists, read_file_text
-from youtube_automation.core.adapters.google.upload import HttpError
 from youtube_automation.core.adapters.media import CollectionPaths
 from youtube_automation.domains.uploads.playlists import PlaylistManager
 
@@ -20,7 +18,7 @@ class PlaylistAssignmentMixin:
     """アップロード後にプレイリストへ自動追加する mixin。"""
 
     def _assign_to_playlists(self, video_id: str, collection_path: Path):
-        """アップロード後にプレイリストへ自動追加（失敗してもアップロードはブロックしない）"""
+        """アップロード後にプレイリストへ自動追加する。"""
         ws_path = CollectionPaths(collection_path).workflow_state_path
         if not path_exists(ws_path):
             return
@@ -35,14 +33,11 @@ class PlaylistAssignmentMixin:
         if not config.playlists.items:
             return
 
-        try:
-            clients = self.youtube_clients
-            pm = PlaylistManager(clients=clients)
-            assigned = pm.assign_video(video_id, theme, collection_path=collection_path)
-            if assigned:
-                logger.info(f"📋 プレイリスト追加: {assigned}")
-        except (ConfigError, YouTubeAPIError, HttpError) as e:
-            logger.warning(f"⚠️  プレイリスト追加エラー（非致命的）: {e}")
+        clients = self.youtube_clients
+        pm = PlaylistManager(clients=clients)
+        assigned = pm.assign_video(video_id, theme, collection_path=collection_path)
+        if assigned:
+            logger.info(f"📋 プレイリスト追加: {assigned}")
 
 
 __all__ = ["PlaylistAssignmentMixin"]

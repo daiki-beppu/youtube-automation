@@ -49,6 +49,9 @@ class CompleteCollectionExecutorMixin:
         complete_video: dict,
         publish_at: str | None,
     ) -> dict:
+        # playlist 所有権エラー時にローカル状態を成功確定しないため、最初に割り当てる。
+        self._assign_to_playlists(complete_video["video_id"], collection_path)
+
         tracking = {
             **tracking,
             "complete_collection": self._completed_tracking_record(complete_video, publish_at),
@@ -74,15 +77,6 @@ class CompleteCollectionExecutorMixin:
             post_processing_errors.append("workflow_upload")
             logger.error(
                 "⚠️  Complete Collection 後処理エラー (workflow_upload): %s",
-                redact_sensitive_data(str(error), collection_path),
-            )
-
-        try:
-            self._assign_to_playlists(complete_video["video_id"], collection_path)
-        except AutomationError as error:
-            post_processing_errors.append("playlist_assignment")
-            logger.error(
-                "⚠️  Complete Collection 後処理エラー (playlist_assignment): %s",
                 redact_sensitive_data(str(error), collection_path),
             )
 

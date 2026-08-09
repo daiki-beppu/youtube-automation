@@ -19,7 +19,7 @@ import pytest
 from googleapiclient.errors import HttpError
 from httplib2 import Response
 
-from youtube_automation.core.errors import ValidationError
+from youtube_automation.core.errors import ValidationError, YouTubeAPIError
 from youtube_automation.infrastructure.google.youtube import YouTubeClients
 
 # ---------------------------------------------------------------------------
@@ -404,12 +404,11 @@ class TestAddVideoToPlaylist:
         assert result is True
 
     def test_failure(self, manager, mock_youtube):
-        """API 例外時は False を返す"""
+        """API 例外時は呼び出し元へ失敗を伝播する。"""
         mock_youtube.playlistItems.return_value.insert.return_value.execute.side_effect = OSError("API Error")
 
-        result = manager._add_video_to_playlist("PL123", "VID456")
-
-        assert result is False
+        with pytest.raises(YouTubeAPIError, match="playlistItems.insert failed"):
+            manager._add_video_to_playlist("PL123", "VID456")
 
     def test_passes_correct_body(self, manager, mock_youtube):
         """playlistId / resourceId / position が body に渡される"""
@@ -615,13 +614,13 @@ class TestQuotaLogging:
         assert quota_log.call_count == 3
         assert quota_log.call_args.args == ("youtube-data-api", "playlists.insert", 50)
 
-    def test_add_video_failure_still_records_quota_and_keeps_error(self, manager, mock_youtube, quota_log):
-        """add 失敗時も quota が記録され、元のエラーハンドリング（False 返却）が維持される"""
+    def test_add_video_failure_records_quota_and_propagates_error(self, manager, mock_youtube, quota_log):
+        """playlistItems.insert 失敗は quota を記録し、呼び出し元へ伝播する。"""
         mock_youtube.playlistItems.return_value.insert.return_value.execute.side_effect = OSError("API Error")
 
-        result = manager._add_video_to_playlist("PL_F", "VID_F")
+        with pytest.raises(YouTubeAPIError, match="playlistItems.insert failed"):
+            manager._add_video_to_playlist("PL_F", "VID_F")
 
-        assert result is False
         assert quota_log.call_count == 3
         assert quota_log.call_args.args == ("youtube-data-api", "playlistItems.insert", 50)
 

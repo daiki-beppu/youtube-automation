@@ -89,6 +89,25 @@ def test_main_exits_before_state_changes_when_channel_identity_preflight_fails(m
     mock_uploader.show_status.assert_not_called()
 
 
+def test_collection_cli_returns_nonzero_when_playlist_assignment_fails(monkeypatch, tmp_path):
+    """post-upload playlist 失敗は CLI の非ゼロ終了へ伝播する。"""
+    from youtube_automation.commands.uploads import collection_uploader
+    from youtube_automation.core.errors import YouTubeAPIError
+
+    target = tmp_path / "collections" / "planning" / "20990101-test-collection"
+    target.mkdir(parents=True)
+    uploader = MagicMock()
+    uploader.find_collection.return_value = target
+    uploader.execute_next_step.side_effect = YouTubeAPIError("playlistItems.insert failed", status_code=403)
+
+    monkeypatch.setattr(sys, "argv", ["yt-upload-collection", "-c", target.name])
+    with (
+        patch("youtube_automation.commands.uploads.collection_uploader.CollectionUploader", return_value=uploader),
+        pytest.raises(SystemExit, match="1"),
+    ):
+        collection_uploader.main()
+
+
 def test_collection_preflight_uses_public_inner_uploader_operation(monkeypatch, tmp_path):
     """Collection domain は内部 uploader の private preflight を直接呼ばない。"""
     from youtube_automation.domains.uploads import collection as collection_domain
@@ -244,6 +263,28 @@ def test_assign_to_playlists_calls_playlist_manager(workflow_state_file):
     mock_pm_instance.assign_video.assert_called_once_with(
         "VIDEO_ID_123", "Rainy Jazz", collection_path=workflow_state_file
     )
+
+
+def test_assign_to_playlists_propagates_playlist_api_failure(workflow_state_file):
+    """post-upload の playlist API 失敗を workflow 呼び出し元へ伝播する。"""
+    from youtube_automation.core.errors import YouTubeAPIError
+    from youtube_automation.domains.uploads.collection import CollectionUploader
+
+    mock_config = MagicMock()
+    mock_config.playlists.items = {"all": {"title": "All", "playlist_id": "PL_ALL"}}
+    failure = YouTubeAPIError("playlistItems.insert failed", status_code=403)
+
+    with (
+        patch("youtube_automation.domains.uploads._playlist_assignment.load_config", return_value=mock_config),
+        patch("youtube_automation.domains.uploads._playlist_assignment.PlaylistManager") as manager_class,
+        pytest.raises(YouTubeAPIError, match="playlistItems.insert failed"),
+    ):
+        manager_class.return_value.assign_video.side_effect = failure
+        CollectionUploader._assign_to_playlists(
+            SimpleNamespace(youtube_clients=MagicMock()),
+            "VIDEO_ID_123",
+            workflow_state_file,
+        )
 
 
 def test_assign_to_playlists_skips_when_no_theme(tmp_path):
@@ -849,6 +890,37 @@ class TestExecuteCompleteCollectionResume:
         assert tracking["complete_collection"]["video_id"] == "V_PRESERVED"
         assert tracking["complete_collection"]["post_processing_status"] == "partial"
         assert any(diagnostic in record.getMessage() for record in caplog.records)
+
+    def test_playlist_failure_prevents_completed_state_workflow_update_and_live_move(self, tmp_path):
+        """playlistItems.insert 失敗時は planning の未完了 state を維持して例外を返す。"""
+        from youtube_automation.core.errors import YouTubeAPIError
+
+        col, tracking_path = _make_tracking_collection(tmp_path, resume_uri=None)
+        uploader, mock_inner = _make_uploader_with_collection_mock(tmp_path)
+        uploader.config["collections_management"]["auto_move_to_live"] = True
+        mock_inner.upload_collection.return_value = {
+            "complete_video": {
+                "video_id": "V_PLAYLIST_FAILED",
+                "video_url": "https://www.youtube.com/watch?v=V_PLAYLIST_FAILED",
+                "title": "t",
+                "file_path": "p",
+            }
+        }
+        state_before = (col / "workflow-state.json").read_text(encoding="utf-8")
+        failure = YouTubeAPIError("playlistItems.insert failed", status_code=403)
+
+        with (
+            patch.object(uploader, "_assign_to_playlists", side_effect=failure),
+            pytest.raises(YouTubeAPIError, match="playlistItems.insert failed"),
+        ):
+            uploader._execute_complete_collection(col, uploader._load_tracking(col), publish_at=None)
+
+        tracking = json.loads(tracking_path.read_text(encoding="utf-8"))
+        assert tracking["status"] == "in_progress"
+        assert tracking["complete_collection"]["status"] == "pending"
+        assert (col / "workflow-state.json").read_text(encoding="utf-8") == state_before
+        assert col.is_dir()
+        assert not (tmp_path / "collections" / "live" / col.name).exists()
 
     def test_should_distinguish_dedup_skip_and_keep_tracking_workflow_consistent_after_live_move(self, tmp_path):
         """dedup skip 時も live 移動後の tracking/workflow-state に既存 video_id を記録する."""

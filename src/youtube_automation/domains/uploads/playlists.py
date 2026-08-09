@@ -106,24 +106,20 @@ class PlaylistManager:
         where = "末尾" if position is None else f"position={position}"
         logger.info(f"➕ Adding video {video_id} to playlist {playlist_id} ({where})")
 
-        try:
-            snippet: dict = {
-                "playlistId": playlist_id,
-                "resourceId": {"kind": "youtube#video", "videoId": video_id},
-            }
-            if position is not None:
-                snippet["position"] = position
-            request = youtube.playlistItems().insert(part="snippet", body={"snippet": snippet})
-            execute_youtube_request(
-                request,
-                "playlistItems.insert failed",
-                on_attempt=_log_playlist_quota("playlistItems.insert", playlist_id=playlist_id, video_id=video_id),
-            )
-            logger.info(f"✅ Video added to playlist ({where})")
-            return True
-        except (TypeError, ValueError, OSError, ValidationError, YouTubeAPIError) as e:
-            logger.error(f"❌ Failed to add video to playlist: {e}")
-            return False
+        snippet: dict = {
+            "playlistId": playlist_id,
+            "resourceId": {"kind": "youtube#video", "videoId": video_id},
+        }
+        if position is not None:
+            snippet["position"] = position
+        request = youtube.playlistItems().insert(part="snippet", body={"snippet": snippet})
+        execute_youtube_request(
+            request,
+            "playlistItems.insert failed",
+            on_attempt=_log_playlist_quota("playlistItems.insert", playlist_id=playlist_id, video_id=video_id),
+        )
+        logger.info(f"✅ Video added to playlist ({where})")
+        return True
 
     # ─── プレイリスト解決 ──────────────────────────────
 
