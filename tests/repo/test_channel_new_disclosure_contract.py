@@ -11,6 +11,7 @@ SKILL_MD = SKILL_DIR / "SKILL.md"
 BOOTSTRAP_REFERENCE_MD = SKILL_DIR / "references" / "new-channel-bootstrap.md"
 TTP_SEED_DURATION_REFERENCE_MD = SKILL_DIR / "references" / "ttp-seed-and-duration.md"
 PERSONA_BRANDING_READINESS_REFERENCE_MD = SKILL_DIR / "references" / "persona-branding-readiness.md"
+SAVE_PUSH_TROUBLESHOOTING_REFERENCE_MD = SKILL_DIR / "references" / "save-push-troubleshooting.md"
 
 BOOTSTRAP_DETAIL_HEADINGS = {
     "Repository initialization details",
@@ -30,6 +31,12 @@ PERSONA_BRANDING_READINESS_DETAIL_HEADINGS = {
     "Prelaunch persona chain details",
     "Branding generation and review details",
     "Readiness matrix details",
+}
+SAVE_PUSH_TROUBLESHOOTING_DETAIL_HEADINGS = {
+    "Initial save and cleanup details",
+    "Settings push details",
+    "Settings API constraints",
+    "Troubleshooting details",
 }
 
 
@@ -256,5 +263,71 @@ def test_skill_keeps_persona_branding_readiness_artifacts_and_stop_contracts() -
         "ttp_wf_new_readiness",
         "成功案内を出さない",
         "Step 1/5 に戻って候補を再確認",
+    ):
+        assert contract in skill
+
+
+def test_skill_dispatches_save_push_troubleshooting_reference_in_both_paths() -> None:
+    skill = SKILL_MD.read_text(encoding="utf-8")
+    relative_reference = SAVE_PUSH_TROUBLESHOOTING_REFERENCE_MD.relative_to(SKILL_DIR).as_posix()
+
+    step_10 = skill.index("### Step 10:")
+    new_channel_dispatch = skill.index(f"]({relative_reference})", step_10)
+    first_save_check = skill.index("git status --porcelain", new_channel_dispatch)
+    settings_mode = skill.index("## 設定 push モード")
+    settings_dispatch = skill.index(f"]({relative_reference})", settings_mode)
+    settings_diff = skill.index("uv run yt-channel-settings diff", settings_dispatch)
+
+    assert SAVE_PUSH_TROUBLESHOOTING_REFERENCE_MD.is_file()
+    assert step_10 < new_channel_dispatch < first_save_check
+    assert settings_mode < settings_dispatch < settings_diff
+
+
+def test_save_push_troubleshooting_detail_sections_have_one_reference_owner() -> None:
+    skill_headings = _headings(SKILL_MD.read_text(encoding="utf-8"))
+    reference_headings = _headings(SAVE_PUSH_TROUBLESHOOTING_REFERENCE_MD.read_text(encoding="utf-8"))
+
+    assert SAVE_PUSH_TROUBLESHOOTING_DETAIL_HEADINGS <= reference_headings
+    assert SAVE_PUSH_TROUBLESHOOTING_DETAIL_HEADINGS.isdisjoint(skill_headings)
+
+
+def test_initial_save_cleanup_keeps_guarded_mutation_order() -> None:
+    skill = SKILL_MD.read_text(encoding="utf-8")
+    step_10 = skill.index("### Step 10:")
+
+    porcelain_before = skill.index("git status --porcelain", step_10)
+    git_add = skill.index("git add -A", porcelain_before)
+    staged_review = skill.index("git diff --cached --name-only", git_add)
+    secret_guard = skill.index("initial_save_guard.sh || exit 1", staged_review)
+    commit = skill.index('git commit -m "chore: 初回チャンネル設定を保存"', secret_guard)
+    porcelain_after = skill.index("git status --porcelain", commit)
+
+    assert porcelain_before < git_add < staged_review < secret_guard < commit < porcelain_after
+
+
+def test_settings_push_requires_review_and_approval_before_apply() -> None:
+    skill = SKILL_MD.read_text(encoding="utf-8")
+    settings_mode = skill.index("## 設定 push モード")
+
+    diff = skill.index("uv run yt-channel-settings diff", settings_mode)
+    dry_run = skill.index("uv run yt-channel-settings push", diff)
+    approval = skill.index("ユーザー承認", dry_run)
+    apply = skill.index("uv run yt-channel-settings push --apply", approval)
+
+    assert settings_mode < diff < dry_run < approval < apply
+
+
+def test_skill_keeps_save_push_artifacts_and_failure_stop_contracts() -> None:
+    skill = SKILL_MD.read_text(encoding="utf-8")
+
+    for contract in (
+        "config/channel/meta.json",
+        "config/localizations.json",
+        "auth/token.json",
+        "secret-like file staged; unstaged before commit",
+        "保存未完了として",
+        "成功案内は出さない",
+        "branding_settings cannot be used with other parts",
+        "youtube.force-ssl",
     ):
         assert contract in skill
