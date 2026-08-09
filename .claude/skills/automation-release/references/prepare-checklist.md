@@ -42,7 +42,7 @@ awk '/^## \[Unreleased\]/{flag=1; next} /^## \[/{flag=0} flag' CHANGELOG.md \
   || echo "WARNING: Unreleased に Migration セクションがありません"
 ```
 
-無くても abort はしない。`AskUserQuestion` で「Migration セクション無しで続行するか」を確認する。Migration セクションは下流の `/automation-update` が `所要時間の目安` / `local fix 衝突注意` を抽出する契約上の入力源（詳細: `docs/changelog-contract.md`）。
+無くても abort はしない。`AskUserQuestion` で「Migration セクション無しで続行するか」を確認する。Migration セクションは下流の `/automation-update` が `所要時間の目安` / `local fix 衝突注意` を抽出する契約上の入力源（詳細: [release contract](release-contracts.md#python-migration-producer-contract)）。
 
 ### 4a. Python module 移動監査（必須）
 

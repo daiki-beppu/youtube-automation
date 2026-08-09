@@ -22,6 +22,8 @@ _SKILLS_DIR = _REPO_ROOT / ".claude" / "skills"
 _CLAUDE_TEMPLATE = _REPO_ROOT / ".claude" / "CLAUDE.template.md"
 _RELEASE_SKILL = _SKILLS_DIR / "automation-release" / "SKILL.md"
 _RELEASE_CONTRACTS = _SKILLS_DIR / "automation-release" / "references" / "release-contracts.md"
+_CHANGELOG_PROMOTION = _SKILLS_DIR / "automation-release" / "references" / "changelog-promotion.md"
+_PREPARE_CHECKLIST = _SKILLS_DIR / "automation-release" / "references" / "prepare-checklist.md"
 
 # 配布ファイル内で走査する拡張子（prose / スクリプト双方に参照が現れうる）
 _SCANNED_SUFFIXES = (".md", ".py", ".sh")
@@ -36,12 +38,7 @@ _SECTION_REF = re.compile(r"CLAUDE\.md\s*§\s*\d+")
 # 規約の適用方針「既存スキルの一括改修を本規約で要求しない」に従い現状を凍結し、
 # 解消は issue #2568 で個別に行う。修正したらこの表から削除すること
 # (test_known_unresolved_refs_are_still_present が stale entry を検出する)。
-_KNOWN_UNRESOLVED: frozenset[tuple[str, str]] = frozenset(
-    {
-        (".claude/skills/automation-release/references/changelog-promotion.md", "docs/changelog-contract.md"),
-        (".claude/skills/automation-release/references/prepare-checklist.md", "docs/changelog-contract.md"),
-    }
-)
+_KNOWN_UNRESOLVED: frozenset[tuple[str, str]] = frozenset()
 
 
 def _wheel_included_paths() -> frozenset[str]:
@@ -116,6 +113,21 @@ def test_automation_release_routes_to_distributed_release_contracts() -> None:
     skill = _RELEASE_SKILL.read_text(encoding="utf-8")
 
     assert "references/release-contracts.md" in skill
+
+
+def test_automation_release_auxiliary_references_route_to_release_contracts() -> None:
+    promotion = _CHANGELOG_PROMOTION.read_text(encoding="utf-8")
+    checklist = _PREPARE_CHECKLIST.read_text(encoding="utf-8")
+
+    assert "release-contracts.md#python-migration-producer-contract" in promotion
+    assert "release-contracts.md#python-migration-producer-contract" in checklist
+
+    steps = tuple(promotion.index(f"### Step {number}:") for number in range(1, 4))
+    assert steps == tuple(sorted(steps))
+    for required in ("所要時間の目安", "local fix 衝突注意", "サマリ"):
+        assert required in promotion
+    for required in ("WARNING", "無くても abort はしない", "`AskUserQuestion`"):
+        assert required in checklist
 
 
 def test_python_release_migration_producer_contract_is_distributed() -> None:

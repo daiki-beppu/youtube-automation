@@ -2,7 +2,7 @@
 
 `/automation-release` スキル prepare Phase 1-4 で参照する `CHANGELOG.md` 同期手順。Keep a Changelog 1.1.0 準拠。
 
-Migration セクションのフォーマット契約は `docs/changelog-contract.md` を参照。本ドキュメントは昇格手順（[Unreleased] → [VER] への置換）に絞る。
+Migration セクションのフォーマット契約は [release contract](release-contracts.md#python-migration-producer-contract) を参照。本ドキュメントは昇格手順（[Unreleased] → [VER] への置換）に絞る。
 
 ---
 
@@ -45,7 +45,7 @@ Migration セクションのフォーマット契約は `docs/changelog-contract
 
 ### Step 2: Migration セクションを v<VER> 用に更新
 
-`### Migration` セクションは v<VER> のリリースに合わせて書き換える。必須要素は `docs/changelog-contract.md` 参照（所要時間の目安 / local fix 衝突注意 / サマリ）:
+`### Migration` セクションは v<VER> のリリースに合わせて書き換える。必須要素は [release contract](release-contracts.md#python-migration-producer-contract) 参照（所要時間の目安 / local fix 衝突注意 / サマリ）:
 
 ```diff
  ### Migration
