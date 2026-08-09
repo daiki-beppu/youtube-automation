@@ -704,7 +704,14 @@ stock 合成は default OFF。TTP strict 候補生成では stock を混ぜな�
 
 `uv run yt-generate-image` は Gemini / OpenAI への API 同期呼び出しで **10〜30 秒** ブロックする。`--max-attempts N` でローテーション生成する場合は `N × 10〜30 秒`。
 
-ログを `/tmp/thumbnail-$(date +%s).log` へ redirect し、完了後は末尾から生成された `thumbnail-vN.jpg/png` または `main-vN.png/jpg` のパス、attempt 回数、内部リトライ有無を報告する。プロバイダーが瞬発エラーを返した場合はそのエラー行を抜き出す。
+承認済みの生成を subagent / background session で実行するときは、対話入力を待たない `-y < /dev/null` を必ず付ける。承認前の cost gate をこの指定で迂回してはならない。生成 process は fire-and-forget にせず、同じ担当が exit code を観測するまで foreground で待つか、session を 30 秒以下の間隔で poll する。process が動作中の状態を完了として報告しない。
+
+```bash
+thumbnail_log="/tmp/thumbnail-$(date +%s).log"
+uv run yt-generate-image <approved-args> -y < /dev/null >"$thumbnail_log" 2>&1
+```
+
+exit 0 の後も期待する `thumbnail-vN.jpg/png` または `main-vN.png/jpg` が 1 枚以上存在することを検証してから `status: success` を返す。非 0、process 未終了、成果物 0 枚は `status: failure` とし、ログ末尾と provider error を報告する。ログから attempt 回数と内部リトライ有無も報告する。
 
 ## 障害時ガイダンス
 

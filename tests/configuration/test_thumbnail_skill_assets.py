@@ -1792,7 +1792,8 @@ def test_thumbnail_skill_routes_generation_details_without_moving_runtime_contra
     assert skill.index("## 生成モード判定") < skill.index(route) < skill.index("## ワークフロー")
     for mode in ("`single_step`", "`diff_from_reference`", "`two_phase`"):
         assert mode in _slice_between(skill, "## 生成モード判定", "## ワークフロー")
-    assert skill.count("uv run yt-generate-image") == 11
+    # #2950 adds one canonical non-interactive background-session invocation.
+    assert skill.count("uv run yt-generate-image") == 12
     assert skill.count("uv run yt-thumbnail-text") == 1
     assert skill.count("archive-approved-thumbnail.py") == 5
     assert '### Single-Step / TTP モード（`generation_mode: "single_step"`、デフォルト・推奨）' in skill

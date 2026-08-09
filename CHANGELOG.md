@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `docs(thumbnail)`: 承認済み画像生成を subagent / background session で実行する場合は stdin を `/dev/null` へ閉じ、process の exit と成果物を観測するまで完了報告しない契約を追加（#2950）。
 - `feat(streaming)`: optional な `channel_slug` を Vultr instance の label / tags に反映し、未指定時の既存名と replace 対象の hostname を維持した（#2525）。
 - `fix(streaming)`: Vultr API が import 後に復元できない `user_data` / `ssh_key_ids` の ForceNew 差分だけで稼働中の `vultr_instance` が replace されないようにし、新規構築と動画差し替えの既存結線を維持（#2527）。
 

@@ -1365,6 +1365,24 @@ def test_thumbnail_compare_documents_planning_thumbnail_runtime_contract() -> No
     assert "成功分" in troubleshooting
 
 
+def test_thumbnail_background_generation_is_noninteractive_and_observed_to_completion() -> None:
+    skill = _read(".claude/skills/thumbnail/SKILL.md")
+    completion = skill.split("## 所要時間と完了報告", 1)[1].split("## 障害時ガイダンス", 1)[0]
+
+    for expected in (
+        "-y < /dev/null",
+        "fire-and-forget",
+        "exit code",
+        "30 秒以下",
+        "成果物 0 枚",
+        "status: failure",
+    ):
+        assert expected in completion
+
+    assert completion.index("承認済み") < completion.index("-y < /dev/null")
+    assert completion.index("exit 0") < completion.index("status: success")
+
+
 def test_channel_new_setting_push_mode_contract_is_documented() -> None:
     channel_new = _read(".claude/skills/channel-new/SKILL.md")
     description = _frontmatter(".claude/skills/channel-new/SKILL.md")["description"]
