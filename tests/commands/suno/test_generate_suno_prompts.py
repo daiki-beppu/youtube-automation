@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sys
+import warnings
 from pathlib import Path
 
 import pytest
@@ -1159,6 +1160,30 @@ def test_main_json_output_is_loadable_array_of_entries(channel_dir, tmp_path, mo
     assert len(data["entries"]) == 1
     # #900: strict 等価から subset 検証へ緩和 (build_prompt_entries 側の relaxation と同様)。
     assert {"name", "style", "lyrics"} <= set(data["entries"][0])
+
+
+def test_main_json_output_applies_duration_sec_to_every_entry(channel_dir, tmp_path, monkeypatch):
+    """明示した duration_sec を CLI が生成する全 JSON entry へ数値で出力する。"""
+    _write_suno_override(
+        channel_dir,
+        genre_line="dream pop vocals",
+        duration_sec=180,
+    )
+    patterns_path = _write_vocal_patterns(tmp_path, ["scene one", "scene two"])
+    _write_suno_lyrics_json(
+        tmp_path,
+        ["歌もの — Vocal (Variation 1)", "歌もの — Vocal (Variation 2)"],
+    )
+    monkeypatch.setattr(sys, "argv", ["yt-generate-suno", str(patterns_path)])
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        main()
+
+    data = json.loads((patterns_path.parent / "suno-prompts.json").read_text(encoding="utf-8"))
+    assert [entry["duration_sec"] for entry in data["entries"]] == [180, 180]
+    assert all(isinstance(entry["duration_sec"], int) for entry in data["entries"])
+    assert not [warning for warning in caught if "duration_sec" in str(warning.message)]
 
 
 @pytest.mark.parametrize(

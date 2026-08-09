@@ -97,7 +97,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `feat(suno-helper)`: prompt entry の `duration_sec` が明示された場合、解決済みの Custom Duration button を押してから既存の bridge-first / keydown fallback 経路で Duration slider へ秒数を注入するようにした（#3160）。
 - `feat(suno-helper)`: prompt entry の optional な `duration_sec` を wire 型で受理し、明示された数値を失わず保持するようにした（#3153）。
 - `docs(suno)`: optional な `duration_sec` の単位・値域・明示時のみ全 entry へ出力する契約と、生成後の採用範囲を担う `duration_filter` との責務分離を配布設定と Suno 手順へ記載した（#3133）。
-- `feat(suno)`: channel override に明示した `duration_sec` を、既定値や `duration_filter` から補完せず全 prompt entry へ数値として出力するようにした（#3132）。
+- `feat(suno)`: channel override に明示した `duration_sec` を、既定値や `duration_filter` から補完せず全 prompt entry へ数値として出力するようにした（#2506, #3132）。
 - `feat(suno)`: channel override の `duration_sec` を正の整数に限定し、bool・文字列・float・非有限値・0 以下を prompt 生成前に `ConfigError` で拒否する検証境界を追加した（#3131）。
 - `docs(streaming)`: `/streaming` の Quick Reference にチャンネル別 Terraform workspace の確認・作成・切替入口を追加し、切替後のチャンネル固有 `TF_VAR_*` 再注入と README 正本への導線を明示した（#3184）。
 - `refactor(skill-feedback)`: legacy `/feedback` entrypoint を廃止し、canonical `/skill-feedback` のみを公開するようにした（#3190）。
