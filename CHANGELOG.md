@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(skills-sync)`: `yt-skills sync --asset skills` 後に、対応する同梱 skill がない下流 `config/skills/*.yaml` / `*.json` を削除せず報告する（#3728）。
 - `fix(wf-new)`: `/collection-ideate` と `/wf-new` が現在の channel config・方向性・第一ペルソナ・視聴シーン・creative constraints を固定制約として候補ごとに検証し、違反案を提示・保存・state 反映しない fail-closed gate を追加した（#3727）。
 - `fix(collection-serve)`: 共通ファイルロックを使って `fcntl` 非対応環境でも起動時の排他を維持し、Windows で `yt-collection-serve` を import・起動できるようにした（#3387）。
 - `docs(thumbnail)`: 手動生成で成功候補が複数ある場合、全候補を同時表示・320px 検証して候補番号を受け取るまで確定せず、選択された候補だけを `thumbnail.jpg` / `main.png` として確定する比較選択契約を追加した（#3622）。

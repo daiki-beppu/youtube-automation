@@ -236,6 +236,103 @@ def test_cmd_sync_skills_copies_skill_dirs(fake_repo: Path, tmp_path: Path) -> N
     assert (target / "channel-direction" / "SKILL.md").exists()
 
 
+@pytest.mark.parametrize("suffix", [".yaml", ".json"])
+def test_cmd_sync_skills_reports_orphan_skill_config(
+    fake_repo: Path,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    suffix: str,
+) -> None:
+    # Given: 対応する同梱 skill がない channel override
+    channel_dir = tmp_path / "out"
+    target = channel_dir / ".claude" / "skills"
+    config = channel_dir / "config" / "skills" / f"analytics-collect{suffix}"
+    config.parent.mkdir(parents=True)
+    config.write_text("{}\n", encoding="utf-8")
+
+    # When: skills を sync
+    parser = build_parser()
+    args = parser.parse_args(["sync", "--asset", "skills", "--target", str(target), "--force"])
+    rc = args.func(args)
+
+    # Then: 孤児名を報告するが設定ファイルは残す
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "対応する skill が同梱されていません: analytics-collect" in out
+    assert config.exists()
+
+
+def test_cmd_sync_skills_prune_does_not_delete_orphan_skill_config(
+    fake_repo: Path,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # Given: 同梱外の skill config
+    channel_dir = tmp_path / "out"
+    target = channel_dir / ".claude" / "skills"
+    config = channel_dir / "config" / "skills" / "analytics-report.yaml"
+    config.parent.mkdir(parents=True)
+    config.write_text("enabled: true\n", encoding="utf-8")
+
+    # When: 削除承認付き prune で sync
+    parser = build_parser()
+    args = parser.parse_args(["sync", "--asset", "skills", "--target", str(target), "--force", "--prune", "--yes"])
+    rc = args.func(args)
+
+    # Then: config は列挙されるだけで削除されない
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "対応する skill が同梱されていません: analytics-report" in out
+    assert config.exists()
+
+
+def test_cmd_sync_skills_does_not_report_postmortem_compat_config(
+    fake_repo: Path,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # Given: flop-analysis が互換 override として読む postmortem config
+    channel_dir = tmp_path / "out"
+    target = channel_dir / ".claude" / "skills"
+    config = channel_dir / "config" / "skills" / "postmortem.yaml"
+    config.parent.mkdir(parents=True)
+    config.write_text("{}\n", encoding="utf-8")
+
+    # When: skills を sync
+    parser = build_parser()
+    args = parser.parse_args(["sync", "--asset", "skills", "--target", str(target), "--force"])
+    rc = args.func(args)
+
+    # Then: 互換 config は孤児報告の観測行に含まれない
+    assert rc == 0
+    warning_lines = [line for line in capsys.readouterr().out.splitlines() if "同梱されていません" in line]
+    assert warning_lines == []
+    assert config.exists()
+
+
+def test_cmd_sync_skills_without_orphan_config_emits_no_orphan_report(
+    fake_repo: Path,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # Given: 同梱 skill と対応する config だけがある
+    channel_dir = tmp_path / "out"
+    target = channel_dir / ".claude" / "skills"
+    config = channel_dir / "config" / "skills" / "channel-research.yaml"
+    config.parent.mkdir(parents=True)
+    config.write_text("{}\n", encoding="utf-8")
+
+    # When: skills を sync
+    parser = build_parser()
+    args = parser.parse_args(["sync", "--asset", "skills", "--target", str(target), "--force"])
+    rc = args.func(args)
+
+    # Then: 追加の孤児報告は出ない
+    assert rc == 0
+    warning_lines = [line for line in capsys.readouterr().out.splitlines() if "同梱されていません" in line]
+    assert warning_lines == []
+
+
 def test_cmd_sync_warns_on_numbered_duplicates_in_target(
     fake_repo: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

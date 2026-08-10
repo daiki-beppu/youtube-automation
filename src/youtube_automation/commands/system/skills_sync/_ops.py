@@ -5,6 +5,7 @@
 - `_copy_entry` / `_symlink_entry`: 単一 entry の配置
 - `_ensure_agents_skills_symlink`: Codex 探索パス `.agents/skills` の symlink を張る
 - `_prune_orphans`: 既知の upstream orphan の列挙・削除
+- `_report_orphan_skill_configs`: 対応する同梱 skill がない channel override の報告
 - `_has_diff`: `filecmp.dircmp` の再帰的差分検出
 """
 
@@ -42,9 +43,31 @@ _KNOWN_REMOVED_SKILL_NAMES = frozenset(
     }
 )
 
+_SKILL_CONFIG_SUFFIXES = frozenset({".json", ".yaml"})
+_COMPATIBLE_SKILL_CONFIG_NAMES = frozenset({"postmortem"})
+
 
 def _prunable_orphan_names(entry_names: set[str], bundled: set[str]) -> set[str]:
     return (entry_names - bundled) & _KNOWN_REMOVED_SKILL_NAMES
+
+
+def _orphan_skill_config_names(config_dir: Path, bundled: set[str]) -> list[str]:
+    """対応する同梱 skill がない channel override 名を返す。"""
+    if not config_dir.is_dir():
+        return []
+    configured = {
+        entry.stem for entry in config_dir.iterdir() if entry.is_file() and entry.suffix in _SKILL_CONFIG_SUFFIXES
+    }
+    return sorted(configured - bundled - _COMPATIBLE_SKILL_CONFIG_NAMES)
+
+
+def _report_orphan_skill_configs(target_dir: Path, bundled: set[str]) -> None:
+    """標準 skills 配置に対応する channel override の孤児を報告する。"""
+    if not (target_dir.name == "skills" and target_dir.parent.name == ".claude"):
+        return
+    config_dir = target_dir.parent.parent / "config" / "skills"
+    for name in _orphan_skill_config_names(config_dir, bundled):
+        print(f"  [warn] 対応する skill が同梱されていません: {name}")
 
 
 def _ensure_target_parent(target: Path) -> None:
