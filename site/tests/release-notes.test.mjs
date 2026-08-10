@@ -272,6 +272,36 @@ test("operator docs の7 routeを描画・検索し、内部linkとGitHub fallba
   );
 });
 
+test("operator docs の7 route は原本の先頭見出しを唯一の H1 として描画する", async () => {
+  const expectedTitles = new Map([
+    ["/onboarding", "Onboarding"],
+    [
+      "/oauth-setup",
+      "GCP / YouTube API セットアップ（手動ルートと参照情報）",
+    ],
+    ["/features", "全 skill カタログ"],
+    ["/workflow-cheatsheet", "workflow チートシート"],
+    ["/chrome-extension-install-guide", "Chrome 拡張インストールガイド"],
+    ["/dashboard", "Analytics dashboard"],
+    [
+      "/channel-workspace-migration",
+      "単一チャンネル repository から workspace への移行",
+    ],
+  ]);
+
+  for (const [route, expectedTitle] of expectedTitles) {
+    const html = await readOperatorDoc(route);
+    const headings = [...html.matchAll(/<h1(?:\s[^>]*)?>([^<]+)<\/h1>/g)].map(
+      (match) => match[1]
+    );
+
+    assert.deepEqual(headings, [expectedTitle]);
+    if (route === "/onboarding") {
+      assert.match(html, /<h2 id="1-このリポジトリは何か">/);
+    }
+  }
+});
+
 test("非掲載領域は route、navigation、landing、search に現れない", async () => {
   const distDirectory = new URL("../dist/", import.meta.url);
   const generatedPaths = await readdir(distDirectory, { recursive: true });

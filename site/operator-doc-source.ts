@@ -2,6 +2,7 @@ import { existsSync, realpathSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { isAbsolute, posix, resolve, sep } from "node:path";
 import type { ContentSource, SourceEntry } from "blume/sources/types";
+import { extractMarkdownTitle } from "./markdown-title.ts";
 
 const GITHUB_BLOB_BASE =
   "https://github.com/daiki-beppu/youtube-automation/blob/main/";
@@ -164,21 +165,23 @@ export const createOperatorDocSource = (options: {
     const path = assertReadableSource(repositoryRoot, mapping.source);
     const original = await readFile(path, "utf8");
     const rewritten = rewriteMarkdownLinks(original, mapping.source, map);
-    const text =
+    const rendered =
       mapping.source === "docs/features.md"
         ? rewriteFeatureSkillLinks(rewritten)
         : rewritten;
+    const { text, title } = extractMarkdownTitle(rendered);
     return {
       body: { format: "md", text },
       data: {
         kind: operatorDocReleaseField,
         released_at: operatorDocReleaseField,
         summary: operatorDocReleaseField,
+        title,
         type: "doc",
         version: operatorDocReleaseField,
       },
       editUrl: `${GITHUB_BLOB_BASE}${mapping.source}`,
-      raw: `---\ntype: doc\n---\n\n${text}`,
+      raw: `---\ntitle: ${JSON.stringify(title)}\ntype: doc\n---\n\n${text}`,
       ref: mapping.source,
       slug: mapping.route,
     };
