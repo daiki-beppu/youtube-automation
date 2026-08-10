@@ -104,6 +104,18 @@ analytics mode では `/analytics-analyze` と `/benchmark` を独立・並列�
 
 JSON ペア検証 Hard Gate、入力モード判定、鮮度判定、自動更新、既定 `freshness_days`、workflow-state との同期は `references/freshness-rules.md` を正とし、その判定結果に従う。
 
+### 固定制約の解決
+
+Phase 1 の分析前に、現在のチャンネル規定を 1 回だけ読み、以降の全入力モードで共有する固定制約として解決する。次のうち存在するファイルだけを入力にし、文書不在時は既存の fallback / 非停止契約を維持する。存在しない規定を推測で追加しない。
+
+- `config/channel/*.json` の世界観・コンテンツ・音声等の明示設定
+- `docs/channel/channel-direction.md`
+- `docs/channel/personas/persona-definition.md`
+- `docs/plans/viewing-scene-matrix.md`
+- `docs/channel/creative-constraints.md`
+
+Phase 2〜3 では [planning rules](references/planning-rules.md) の「現在のチャンネル規定（固定制約）」を適用する。Analytics、benchmark、open insights、minimal mode のユーザー直接入力は企画材料であり、固定制約を上書きしない。
+
 ## 想定 API call 数
 
 | API | call 数 / 実行 | 変動要因 |
@@ -185,6 +197,8 @@ analytics mode の `/benchmark` 更新完了後、
 
 Phase 1-1〜1-3 の入力を統合する。`ttp_mode` によって候補の抽出基準を切り替える:
 
+いずれの入力モードでも、上で解決した固定制約を変更不能な境界として先に適用する。分析材料と固定制約が衝突する場合は分析材料を採用候補から除外し、規定内の材料だけを Phase 2 へ渡す。
+
 - `ttp_mode: false`: テーマカバレッジマップ（自チャンネル vs 競合）を作り、未開拓 × 高ポテンシャルのテーマ候補、差別化可能な切り口、競合パターン参照と自チャンネル強みの掛け合わせを抽出する。競合カバー済みテーマは避ける
 - `ttp_mode: true`: 競合の高再生コレクションを順位付けし、実績あるテーマ、その勝ちパターン（構造・パターン・型）、満たしている欲求を `preview.candidate_count` 件以上抽出する。未開拓性や差別化可能性では絞り込まず、競合カバー済みテーマを優先候補として残す。各候補には競合名と対象コレクションまたは勝ちパターン、欲求語彙のソースと根拠を紐づける
 
@@ -208,6 +222,8 @@ analytics mode では CTR 改善に最適なテーマ戦略を優先し、benchm
 ### Phase 3: ペルソナベース企画候補生成
 **rpg-collection-research-agent** と **rpg-storytelling-agent** サブエージェント（Task ツール。Codex では同等のエージェント機能に読み替え）を連携して、第一ペルソナ向けの企画候補を生成。
 benchmark fallback mode または `ttp_mode: false` の minimal mode でペルソナ文書が無い場合は、入力モードごとの材料から初回仮説の視聴者像を明記して候補を生成する。`ttp_mode: true` の minimal mode は Phase 1-3 で停止済みのため Phase 3 へ進めない。
+
+候補生成後、planning rules の固定制約契約に従って候補ごとの適合結果を作る。全候補が PASS し、解決済みの適用規定と適合根拠を持つまで Phase 4 やユーザー選択へ進まない。
 
 `ttp_mode: true` では `differentiation_axes` を候補生成へ使わない。各候補を別々の高再生パターンに対応させ、転写元、転写する構造・パターン・型、参照元が満たす欲求、企画の欲求整合根拠を明記する。
 
@@ -433,9 +449,9 @@ sequential モードでは Next Step で stock 退避は走らない（不採用
 
 ## 企画レポート保存
 
-企画候補は必ずコレクションの `20-documentation/plan_proposals.md` に保存すること。`preview.skip_cost_confirm: true` で画像生成した場合は、Phase 4-2 の生成条件と想定 call 数も同じ文書へ保存する。
+企画候補は必ずコレクションの `20-documentation/plan_proposals.md` に保存すること。候補ごとに固定制約の適用規定、適合根拠、PASS の適合結果を併記し、未検証または FAIL の候補は保存しない。`preview.skip_cost_confirm: true` で画像生成した場合は、Phase 4-2 の生成条件と想定 call 数も同じ文書へ保存する。
 
-保存後、`workflow-state.json` の `planning.generated = true` に更新する。
+解決済みの全規定に対する検証結果と必要候補数の保存を再読込で確認した後だけ、`workflow-state.json` の `planning.generated = true` に更新する。検証結果または期待成果物が欠落していれば state を更新せず停止する。
 
 ## Next Step
 

@@ -41,6 +41,7 @@ minimal mode では企画候補生成前にテーマ / ジャンル / 雰囲気�
 7. **thumbnail full-mode gate**: `.claude/skills/thumbnail/config.default.yaml` と、存在する場合は `config/skills/thumbnail.yaml` を読み、deep-merge 後の `image_generation.auto_selection.enabled` / `mode` を Phase 2c より前に確定する。`enabled: true` かつ `mode: full` のときだけ Phase 2c のサムネイル AskUserQuestion をすべて省略する。mode 未設定は `selection_only` として扱い、従来の候補承認だけを省略する。full で生成・QA・自動選択に失敗した場合は state を更新せず `/thumbnail` の「full モード失敗時の手動切替」を表示して停止する。
 8. **企画選択 skip gate**: `load_config()` の `config.workflow.wf_new.skip_plan_selection` を Phase 1 より前に確定する。`true` かつ analytics mode / benchmark fallback mode のときだけ、`/collection-ideate` が返した推奨順 1 位を自動採用できる。minimal mode のテーマ / ジャンル / 雰囲気入力は省略せず、無人実行では `blocked` とする。
 9. **preselected manifest gate**: `--batch-id` / `--plan-id` を受け取った場合は直下の opt-in 契約を state mutation 前に通す。不正な manifest を通常の Phase 1 へ fallback させない。
+10. **channel constraint verification gate**: 通常入口では `/collection-ideate` が現在のチャンネル規定を固定制約として解決し、候補ごとの適合結果を返すこと。未検証、FAIL、または適合結果を含む期待成果物欠落時は候補を提示・自動採用せず、state を更新せず停止する。規定の解決・候補検証ロジックは `/collection-ideate` の planning rules に一元化し、`/wf-new` で再定義しない。
 
 委譲時は入力パス、実行作業、期待成果物、禁止事項、完了報告形式をすべて具体値で埋める。成果物は絶対パスで受け取る。
 
@@ -204,12 +205,12 @@ Step 1（企画）を自動実行中...
 
 入力モード、JSON ペア検証、stale 判定、自動更新、再検証の完全な定義は `/collection-ideate` の `references/freshness-rules.md::stale report の自動更新` を正とする。`.claude/skills/collection-ideate/config.default.yaml` + `config/skills/collection-ideate.yaml` の deep-merge も同 skill に委譲し、ここでは判定ロジックや更新シーケンスを再定義しない。subagent が stale を検出した場合は SSOT の自動更新シーケンスを完了してから同日付ペア、validator、鮮度、入力モードを再判定し、成功時は中断せず同じ企画フローを続ける。skill 呼び出しまたは再検証に失敗した場合は、失敗した skill / 検証項目、理由、`/wf-new` を再実行できる再開条件を表示し、古い report を採用せず停止する。fresh / benchmark fallback mode / minimal mode では stale 更新用の Analytics skill を追加で呼ばない。`ttp_mode: false` の minimal mode ではテーマ / ジャンル / 雰囲気と、プレビューを生成する場合の候補・枚数・コスト承認を subagent が選択肢を返した後にメインが確定する。`true` の minimal mode では直接入力を確認せず、`/benchmark` を案内して停止する。
 
-2. **Agent ツールで `/collection-ideate` を委譲** — 入力候補パス、`ttp_mode`、プレビュー生成条件、deep-merge 後の `preview.skip_cost_confirm`、1-b で選別した open insights（存在する場合）を列挙し、入力モード判定、SSOT に従う stale 自動更新、再検証、企画候補とプレビュー生成を同じ subagent 作業に実行させる。入力モードはメインが事前確定せず、subagent が再検証後の値を返す。`ttp_mode: false` の minimal mode だけで使う直接入力は、subagent が同 mode を返した後にメインが確認し、再開入力として渡す。AskUserQuestion と state 書き込みは禁止する。`preview.skip_cost_confirm: false` でコスト承認が必要になった場合は生成せずメインへ返し、`true` なら生成条件と call 数を記録して確認なしで進める
+2. **Agent ツールで `/collection-ideate` を委譲** — 入力候補パス、`ttp_mode`、プレビュー生成条件、deep-merge 後の `preview.skip_cost_confirm`、1-b で選別した open insights（存在する場合）、現在の固定制約の入力候補（`config/channel/*.json` と規定文書の path）を列挙し、入力モード判定、SSOT に従う stale 自動更新、再検証、固定制約の解決、企画候補とプレビュー生成を同じ subagent 作業に実行させる。入力モードはメインが事前確定せず、subagent が再検証後の値を返す。`ttp_mode: false` の minimal mode だけで使う直接入力は、subagent が同 mode を返した後にメインが確認し、再開入力として渡す。AskUserQuestion と state 書き込みは禁止する。返却契約には、解決した規定一覧、候補ごとの適合結果・適用規定・適合根拠、候補文書の絶対 path を含める。`preview.skip_cost_confirm: false` でコスト承認が必要になった場合は生成せずメインへ返し、`true` なら生成条件と call 数を記録して確認なしで進める
    - analytics mode: 日次収集データ + 構造化分析 JSON + ベンチマークを基に分析 + ペルソナ別候補を生成
    - benchmark fallback mode: 自チャンネル分析をスキップし、ベンチマークデータ + config から初回候補を生成
    - minimal mode: テーマ / ジャンル / 雰囲気をユーザーに確認し、その直接入力 + config から初回候補を生成する既存挙動は `ttp_mode: false` の場合だけ適用。`true` は候補生成せず `/benchmark` を案内して停止
 
-メインが候補文書と、画像生成を実施した場合はプレビュー画像の存在を検証した後、入力モードと `config.workflow.wf_new.skip_plan_selection` で分岐する:
+メインが候補文書と、画像生成を実施した場合はプレビュー画像の存在を検証する。さらに、返された解決済み規定の全件に対して、必要数の全候補が PASS し、各候補に適用規定と適合根拠が保存されていることを確認する。未検証、FAIL、または候補文書・適合結果の期待成果物欠落時は理由と `/collection-ideate` の再開条件を表示し、候補を提示せず state を更新せず停止する。検証成功後だけ、入力モードと `config.workflow.wf_new.skip_plan_selection` で分岐する:
 
 - `skip_plan_selection: true` かつ analytics mode / benchmark fallback mode: 候補の**推奨順 1 位**を機械的に採用し、確認なしで Phase 2 へ進む。`20-documentation/plan_proposals.md` に「自動選択」、採用候補、選定根拠「推奨順 1 位」を追記する
 - 未設定または `false`: 提示された候補を選択肢としてユーザーに企画選択のみ求め、入力まで一時停止する

@@ -14,6 +14,7 @@ PREVIEW_GENERATION_MD = SKILL_DIR / "references" / "preview-generation.md"
 SELECTION_HANDOFF_MD = SKILL_DIR / "references" / "selection-handoff.md"
 
 PLANNING_RULE_HEADINGS = {
+    "現在のチャンネル規定",
     "ペルソナベース企画フレームワーク",
     "タイトルテンプレート",
     "差別化軸",
@@ -77,6 +78,60 @@ def test_skill_keeps_phase_order_and_approval_boundary() -> None:
     approval = skill.index("confirm_cost", phase_4)
 
     assert dispatch < phase_2 < phase_3 < phase_4 < approval
+
+
+def test_collection_ideate_loads_current_channel_constraints_before_analysis() -> None:
+    skill = SKILL_MD.read_text(encoding="utf-8")
+
+    constraint_resolution = skill.index("固定制約の解決")
+    phase_1_4 = skill.index("#### Phase 1-4:")
+    planning_dispatch = skill.index("](references/planning-rules.md)")
+
+    assert constraint_resolution < planning_dispatch < phase_1_4
+    for path in (
+        "config/channel/*.json",
+        "docs/channel/channel-direction.md",
+        "docs/channel/personas/persona-definition.md",
+        "docs/plans/viewing-scene-matrix.md",
+        "docs/channel/creative-constraints.md",
+    ):
+        assert path in skill
+    assert "存在するファイルだけ" in skill
+    assert "存在しない規定を推測" in skill
+
+
+def test_planning_rules_fail_closed_on_current_channel_constraint_violation() -> None:
+    rules = PLANNING_RULES_MD.read_text(encoding="utf-8")
+    section = rules.split("## 現在のチャンネル規定（固定制約）", 1)[1].split("\n## ", 1)[0]
+
+    for input_source in (
+        "Analytics",
+        "benchmark",
+        "open insights",
+        "ユーザー直接入力",
+    ):
+        assert input_source in section
+    assert "候補ごと" in section
+    assert "適用規定" in section
+    assert "適合根拠" in section
+    assert "FAIL" in section
+    assert "preview.candidate_count" in section
+    assert "警告付きで残さない" in section
+    assert "ユーザー判断へ委ねない" in section
+    assert "違反した規定" in section
+    assert "再開条件" in section
+
+
+def test_wf_new_accepts_only_verified_constraint_compliant_plans() -> None:
+    wf_new = (REPO_ROOT / ".claude" / "skills" / "wf-new" / "SKILL.md").read_text(encoding="utf-8")
+    delegation = wf_new.split("2. **Agent ツールで `/collection-ideate` を委譲**", 1)[1].split("\n### Phase 2:", 1)[0]
+
+    assert "固定制約" in delegation
+    assert "候補ごとの適合結果" in delegation
+    assert "未検証" in delegation
+    assert "FAIL" in delegation
+    assert "期待成果物欠落" in delegation
+    assert "state を更新せず停止" in delegation
 
 
 def test_skill_dispatches_preview_contract_before_preview_steps() -> None:
