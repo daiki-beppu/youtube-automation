@@ -19,6 +19,7 @@ from youtube_automation.commands.system.skills_sync._ops import (
     _ensure_agents_skills_symlink,
     _ensure_target_parent,
     _prune_orphans,
+    _report_orphan_skill_configs,
     _symlink_entry,
 )
 from youtube_automation.commands.system.skills_sync._settings import sync_settings_asset
@@ -176,14 +177,17 @@ def _sync_dir_asset(
         prefix = "[dry-run] " if args.dry_run else ""
         print(f"  {prefix}{result:>8}: {name}")
 
+    # orphan 判定は **全集合** で行う (--only でフィルタしない)。
+    # `--only` 集合と混同すると bundled の他 entry が孤児と誤認される。
+    bundled = set(all_entries)
     if args.prune:
-        # bundled は **全集合** で判定する (--only でフィルタしない)。
-        # `--only` 集合と混同すると bundled の他 entry が誤って prune される。
-        bundled = set(all_entries)
         do_delete = args.yes and not args.dry_run
         prune_counts = _prune_orphans(target_dir, bundled, do_delete=do_delete)
         for key, val in prune_counts.items():
             counts[key] = counts.get(key, 0) + val
+
+    if args.asset == "skills":
+        _report_orphan_skill_configs(target_dir, bundled)
 
     # skills 配布時は Codex CLI の探索パス `.agents/skills` も併設する。
     # 標準レイアウト (`.claude/skills`) でないときは対象外 (None) でスキップ。
