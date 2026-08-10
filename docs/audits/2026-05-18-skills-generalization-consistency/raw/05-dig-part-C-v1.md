@@ -29,7 +29,7 @@ description（frontmatter `description:` 全文）で言及されている **コ
 
 | Skill | description 中の参照 | 実在確認 |
 |---|---|---|
-| `analytics-collect` | `analytics_system.py` | ✓ `src/youtube_automation/commands/analytics/analytics_system.py` |
+| `analytics` | `analytics_system.py` | ✓ `src/youtube_automation/commands/analytics/analytics_system.py` |
 | `benchmark` | `docs/benchmarks/*.md` の更新 | ✓ 生成出力（実装は `benchmark_collector.py`） |
 | `comments-reply` | `config/channel/comments.json`, `comment_reply_history.json` | ✓ `examples/channel_config.example/comments.json` 存在 |
 | `lyria` | Vertex AI Lyria 3 `interactions` REST API / MP3 / PCM s16le WAV | ✓ `generate_lyria_master.py`（`yt-generate-lyria-master`）に対応 |
@@ -101,9 +101,9 @@ description（frontmatter `description:` 全文）で言及されている **コ
 | 9 | `channel-direction` | `channel-setup` | `channel-direction/SKILL.md:130,151` (`次フェーズ: /channel-setup`) | `channel-setup/SKILL.md:3,10,15,111` (`/channel-direction → 前フェーズ`) | ✓ 双方向 |
 | 10 | `channel-import` | `wf-new` | `channel-import/SKILL.md:94,101` (`config 完成後の最初のアクション: /wf-new`) | `wf-new/SKILL.md:16` (`既存チャンネル → /channel-import を案内` — 入口案内のみ、Cross Ref では未列挙) | ↪ 一方向 |
 | 11 | `wf-new` | `wf-next` | `wf-new/SKILL.md:148,157` (`後続ステップ管理: /wf-next`) | `wf-next/SKILL.md:91` (Cross Ref `新規開始: /wf-new`) | ✓ 双方向 |
-| 12 | `wf-next` | `analytics-analyze` | `wf-next/SKILL.md:82` (Next Step `→ /analytics-analyze で初週パフォーマンス`) | `analytics-analyze/SKILL.md` 内に **wf-next 言及なし** | ↪ 一方向 |
-| 13 | `analytics-collect` | `analytics-analyze` | `analytics-collect/SKILL.md:3` (description `/analytics-analyze 実行前のデータ準備`) | `analytics-analyze/SKILL.md:3,20` (`/analytics-collect でデータ収集後に実行`) | ✓ 双方向 |
-| 14 | `analytics-analyze` | `collection-ideate` | `analytics-analyze/SKILL.md:55,85,98` (`→ /collection-ideate`) | `collection-ideate/SKILL.md:33,63,71,72` (`/analytics-analyze が未生成 or stale → 中断`) | ✓ 双方向 |
+| 12 | `wf-next` | `analytics` | `wf-next/SKILL.md:82` (Next Step `→ /analytics --analyze で初週パフォーマンス`) | `analytics/SKILL.md` 内に **wf-next 言及なし** | ↪ 一方向 |
+| 13 | `analytics` | `analytics` | `analytics/SKILL.md:3` (description `/analytics --analyze 実行前のデータ準備`) | `analytics/SKILL.md:3,20` (`/analytics --collect でデータ収集後に実行`) | ✓ 双方向 |
+| 14 | `analytics` | `collection-ideate` | `analytics/SKILL.md:55,85,98` (`→ /collection-ideate`) | `collection-ideate/SKILL.md:33,63,71,72` (`/analytics --analyze が未生成 or stale → 中断`) | ✓ 双方向 |
 | 15 | `collection-ideate` | `thumbnail` | `collection-ideate/SKILL.md:105,107,330` (`→ /thumbnail` Phase 4) | `thumbnail/SKILL.md:222` (`/collection-ideate で本番品質のプレビューが生成され`) | ✓ 双方向 |
 | 16 | `viewer-voice` | `audience-persona` | `viewer-voice/SKILL.md:3` (`/audience-persona や /viewing-scene の前提データ`) | `audience-persona/SKILL.md:3` (`/viewer-voice の結果を前提とし`) | ✓ 双方向 |
 | 17 | `audience-persona` | `viewing-scene` | `audience-persona/SKILL.md:3` (`/viewing-scene の入力になる`) | `viewing-scene/SKILL.md:3` (`/audience-persona の結果を踏まえて`) | ✓ 双方向 |
@@ -123,7 +123,7 @@ P1 候補（双方向であるべき主要バトン）:
 P2 候補（ライフサイクル系で双方向追記が望ましい）:
 
 5. **`channel-import → wf-new`**（#10）: wf-new の Cross References に `既存チャンネル取り込み: /channel-import` を追記したい。
-6. **`wf-next → analytics-analyze`**（#12）: T+7 日後の振り返りエントリポイント。analytics-analyze の「前提」セクションで wf-next との関係を明示してもよい。
+6. **`wf-next → analytics`**（#12）: T+7 日後の振り返りエントリポイント。analytics の「前提」セクションで wf-next との関係を明示してもよい。
 7. **`thumbnail → suno`**（#19）: collection 制作チェーンの主要動線。suno 側で thumbnail を「前工程」として明示すれば、テーマ確定の依存が読み取りやすい。
 8. **`postmortem → 4 skill`**（#20）: postmortem は明示的に「実検証は既存スキルへバトンする」と書いており、検証先 4 スキル側に back-reference が無いのは**設計上妥当**（postmortem は上位レイヤのメタスキル）。追記しなくてもよい — **推測**。
 
@@ -152,8 +152,8 @@ workflow.json      # (v4.0.0 で short / community 撤去、後方互換で素�
 | 分類 | 件数 | 例 |
 |---|---|---|
 | **A. 削除済みスキル `/short` を「現役の参照元」として記述（C-3 該当）** | **1** | `video-description/config.default.yaml:6` |
-| B. channel slug 用 config field `channel.short`（=「短縮名」） | 11 | `channel-setup/references/config-template/meta.json:4`, `config-template/analytics.json:3`, `channel-direction/SKILL.md:106`, `channel-setup/references/config-generation-rules.md:10`, `channel-new/SKILL.md:47,48,94`, `channel-import/SKILL.md:21,22`, `wf-new/SKILL.md:59,73,139`, `analytics-report/SKILL.md:109` |
-| C. YouTube Shorts 動画フォーマット（除外対象） | 3 | `video-analyze/SKILL.md:66`, `analytics-report/SKILL.md:73,123` |
+| B. channel slug 用 config field `channel.short`（=「短縮名」） | 11 | `channel-setup/references/config-template/meta.json:4`, `config-template/analytics.json:3`, `channel-direction/SKILL.md:106`, `channel-setup/references/config-generation-rules.md:10`, `channel-new/SKILL.md:47,48,94`, `channel-import/SKILL.md:21,22`, `wf-new/SKILL.md:59,73,139`, `analytics/SKILL.md:109` |
+| C. YouTube Shorts 動画フォーマット（除外対象） | 3 | `video-analyze/SKILL.md:66`, `analytics/SKILL.md:73,123` |
 | D. 英文形容詞 "short"（楽曲歌詞例ほか） | 2 | `suno/SKILL.md:122`, `suno/references/lyrics-examples.md:17` |
 | E. 英文単語 "community"（音楽 community demographic） | 1 | `audience-persona/SKILL.md:39` |
 | F. 削除済みスキル `/community` を参照 | 0 | — |
@@ -229,7 +229,7 @@ workflow.json      # (v4.0.0 で short / community 撤去、後方互換で素�
 全 35 件:
 
 ```
-alignment-check, analytics-analyze, analytics-collect, analytics-report,
+alignment-check, analytics, analytics, analytics,
 audience-persona, benchmark, channel-direction, channel-import, channel-new,
 channel-research, channel-setup, channel-status, collection-ideate,
 comments-reply, discover-competitors, live-clean, loop-video, lyria,
@@ -243,7 +243,7 @@ video-upload, videoup, viewer-voice, viewing-scene, wf-new, wf-next, wf-status
 - 名前的に紛らわしいペア:
   - `videoup` vs `video-upload` (異なる責務 — videoup = mp3→mp4 ローカル動画ファイル生成、video-upload = YouTube への push)
   - `thumbnail` vs `thumbnail-compare`
-  - `video-analyze` vs `analytics-analyze`
+  - `video-analyze` vs `analytics`
   - これらは責務分離されているが、命名上紛らわしい可能性あり（**推測**）。
 
 ---
@@ -265,7 +265,7 @@ video-upload, videoup, viewer-voice, viewing-scene, wf-new, wf-next, wf-status
 ### 7.1 走査した skill（35/35 件）
 
 ```
-alignment-check, analytics-analyze, analytics-collect, analytics-report,
+alignment-check, analytics, analytics, analytics,
 audience-persona, benchmark, channel-direction, channel-import, channel-new,
 channel-research, channel-setup, channel-status, collection-ideate,
 comments-reply, discover-competitors, live-clean, loop-video, lyria,
@@ -319,7 +319,7 @@ video-upload, videoup, viewer-voice, viewing-scene, wf-new, wf-next, wf-status
 
 4. **`metadata-audit/SKILL.md`** の Cross References に「前工程: `/video-upload`」を追記（C-2 #6）。
 5. **`wf-new/SKILL.md`** の Cross References に「既存チャンネル: `/channel-import`」を追記（C-2 #10）。
-6. **`analytics-analyze/SKILL.md`** の前提セクションに「`/wf-next` から T+7 日後に呼ばれる」を追記（C-2 #12）。
+6. **`analytics/SKILL.md`** の前提セクションに「`/wf-next` から T+7 日後に呼ばれる」を追記（C-2 #12）。
 7. **`suno/SKILL.md`** に「前工程: `/thumbnail`」を Cross References として追記（C-2 #19）。
 
 ### P3（形式統一・大規模リファクタ）

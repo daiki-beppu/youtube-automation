@@ -5,13 +5,13 @@ description: "Use when 伸びた動画を起点にサムネの勝因を分解し
 
 ## 前後工程
 
-- `前工程`: `/analytics-report`, `/thumbnail-test`
+- `前工程`: `/analytics`, `/thumbnail-test`
 - `後工程`: `/thumbnail`, `/thumbnail-test`, `/flop-analysis`
 
 ## Hard Gates
 
 - 対象動画とチャンネル平均の同一期間・同一定義の impressions CTR、および対象動画の Browse features + Suggested videos 構成比が揃うまで停止する。公開後 D+2 未満など Analytics の確定待ちは推測で補わない。
-- `target CTR / channel average CTR >= 1.20` かつ `Browse + Suggested >= 50%` の両方を満たす場合だけサムネ寄与ありとして進む。満たさなければ記録して停止し、原因分析を `/flop-analysis`（旧 `/postmortem`）または `/analytics-analyze` へ委譲する。
+- `target CTR / channel average CTR >= 1.20` かつ `Browse + Suggested >= 50%` の両方を満たす場合だけサムネ寄与ありとして進む。満たさなければ記録して停止し、原因分析を `/flop-analysis`（旧 `/postmortem`）または `/analytics --analyze` へ委譲する。
 - 勝因仮説は `composition` / `text` / `color` / `subject` / `expression` に分解・順位付けし、上位 1〜2 個を提示してユーザー合意を得るまで候補生成しない。
 - 通常 round の control A は現在の勝ちサムネで変更 0、B/C は 1 案につき合意済み要素を厳密に 1 個だけ変える。候補は control を含め最大 3 枚。
 - Studio の Test & Compare 操作と結果記録は `/thumbnail-test` に委譲する。ブラウザ/API で代行せず、Studio の確定結果が出るまで champion を更新しない。
@@ -42,7 +42,7 @@ description: "Use when 伸びた動画を起点にサムネの勝因を分解し
 
 ### 1. 対象と因果を確定
 
-`/analytics-report` の同一期間データから対象 CTR、チャンネル平均 CTR、Browse features と Suggested videos の流入比率を取得する。対象コレクション、`workflow-state.json::upload.video_id`、根拠ファイル/期間を表示する。
+`/analytics --report` の同一期間データから対象 CTR、チャンネル平均 CTR、Browse features と Suggested videos の流入比率を取得する。対象コレクション、`workflow-state.json::upload.video_id`、根拠ファイル/期間を表示する。
 
 閾値を満たさない、値が欠落する、期間がずれる場合は改善案を作らない。helper の `plan` で停止記録を残し、サムネ以外も含む `/flop-analysis` へ route する。
 

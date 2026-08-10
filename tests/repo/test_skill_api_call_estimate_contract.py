@@ -128,15 +128,6 @@ NON_BILLED_CLIS: dict[str, str] = {
 
 # 課金 CLI 名を参照するが、skill 自身の手順としては実行しない skill（非対象理由）。
 NON_TARGET_SKILLS: dict[str, str] = {
-    "analytics-run": (
-        "yt-dashboard への言及は別の収集入口におけるチャンネル数比例の API cost を説明する"
-        " cross-reference で、この skill の手順として実行しない"
-    ),
-    "analytics-analyze": (
-        "収集済み analytics_data_*.json のローカル分析のみ。yt-analytics への言及は"
-        "search_terms 欠測時に再収集（/analytics-collect の責務）を案内する"
-        " cross-reference で、手順として実行しない"
-    ),
     "automation-release": (
         "本リポジトリのリリース作業のみ。yt-upload-collection への言及は"
         "リリースノート内の例示参照で、手順として実行しない"
@@ -165,7 +156,7 @@ EXTRA_BILLED_SKILLS: dict[str, str] = {
 # 機械抽出の期待結果（対象一覧）。candidates ∪ EXTRA − NON_TARGET と一致すること。
 TARGET_SKILLS: frozenset[str] = frozenset(
     {
-        "analytics-collect",
+        "analytics",
         "automation-update",
         "benchmark",
         "channel-new",

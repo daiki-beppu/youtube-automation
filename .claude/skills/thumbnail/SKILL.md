@@ -79,7 +79,7 @@ subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実�
 
 ## 蓄積 insights 参照（lever=thumbnail）
 
-プロンプト構築前に、過去サイクルの検証済みの学び（`data/insights.jsonl`、schema は `.claude/skills/analytics-analyze/references/insights-entry.schema.json` が単一ソース）のうちサムネイルに効くものを参照する。これは前提ガードではない。
+プロンプト構築前に、過去サイクルの検証済みの学び（`data/insights.jsonl`、schema は `.claude/skills/analytics/references/insights-entry.schema.json` が単一ソース）のうちサムネイルに効くものを参照する。これは前提ガードではない。
 
 ```bash
 jq -c 'select(.status == "open" and .lever == "thumbnail")' data/insights.jsonl
@@ -87,7 +87,7 @@ jq -c 'select(.status == "open" and .lever == "thumbnail")' data/insights.jsonl
 
 - 該当エントリがある場合は、生成前に `finding` / `recommended_action` / `evidence` をユーザーへ提示し、差分プロンプトの方針（テキストサイズ・構図・配色など）へ反映する。既存の config 展開結果と TTP / anatomy / IP safety clause は変更・削除しない
 - `data/insights.jsonl` が存在しない、または該当エントリが 0 件の場合は「thumbnail insights なし」と表示して既存フローで続行する
-- 本スキルは insights を提示・参照するだけで、`status` を含むエントリの書き換え・追記はしない（status 反映は `/collection-ideate`、追記は `/analytics-analyze` と `/flop-analysis` の責務）
+- 本スキルは insights を提示・参照するだけで、`status` を含むエントリの書き換え・追記はしない（status 反映は `/collection-ideate`、追記は `/analytics --analyze` と `/flop-analysis` の責務）
 
 ## When to Use
 

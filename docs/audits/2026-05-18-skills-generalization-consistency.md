@@ -14,8 +14,8 @@
 
 | 重大度 | 件数 | 代表事例 |
 |---|---|---|
-| 高（P1） | **6 件** | `analytics-report/SKILL.md:94-101` の HTML レポートカラーパレット 9 色（`#c8a96e` = "ブランドアクセントカラー"）／`channel-new/SKILL.md:29,64`・`channel-import/SKILL.md:20` の `~/01-dev/projects/`・`~/02-yt` 個人パス／`channel-new/SKILL.md:47,49`・`channel-import/SKILL.md:21,26`・`channel-setup/references/claude-md-template.md:71` の `daiki-beppu` 固定 GitHub owner 名 |
-| 中（P2） | **約 25 件** | analytics-collect / analytics-analyze 双方の **「30 分」鮮度しきい値** が双子直書き／postmortem の比率閾値（0.5 / 0.7 / 0.9 / ±10%）／videoup の ffmpeg 解像度・CRF・サンプルレート／suno の禁止形容詞・NG ワード／streaming の `--check-threshold` 80%・`~/.ssh/yt_stream_key`／lyria 184 秒の本文再露出 |
+| 高（P1） | **6 件** | `analytics/SKILL.md:94-101` の HTML レポートカラーパレット 9 色（`#c8a96e` = "ブランドアクセントカラー"）／`channel-new/SKILL.md:29,64`・`channel-import/SKILL.md:20` の `~/01-dev/projects/`・`~/02-yt` 個人パス／`channel-new/SKILL.md:47,49`・`channel-import/SKILL.md:21,26`・`channel-setup/references/claude-md-template.md:71` の `daiki-beppu` 固定 GitHub owner 名 |
+| 中（P2） | **約 25 件** | analytics / analytics 双方の **「30 分」鮮度しきい値** が双子直書き／postmortem の比率閾値（0.5 / 0.7 / 0.9 / ±10%）／videoup の ffmpeg 解像度・CRF・サンプルレート／suno の禁止形容詞・NG ワード／streaming の `--check-threshold` 80%・`~/.ssh/yt_stream_key`／lyria 184 秒の本文再露出 |
 | 低（P3） | **約 20 件** | skill-config 化済の既存値、YouTube API 仕様値（タイトル 100 文字・video_id 11 文字・バナー 2048×1152）など |
 
 **A-1（チャンネル ID / playlist ID）リテラル検出**: **0 件**（`UC[A-Za-z0-9_-]{22}` / `PL[A-Za-z0-9_-]{16,}` の grep で完全一致なし、`@<handle>` リテラルもプレースホルダのみ）。
@@ -34,28 +34,28 @@
 | 状況 | 件数 | 詳細 |
 |---|---|---|
 | 既存 `config.default.yaml` 保有 | **9 スキル** | benchmark / collection-ideate / loop-video / lyria / masterup / suno / thumbnail / video-analyze / video-description |
-| 新規外出し候補（移行コスト「小」） | **11 件** | analytics-collect・analytics-analyze の 30 分鮮度／discover-competitors と channel-new の共有 API パラメータ／live-clean の削除/保護パターン／streaming の cron タイミング／thumbnail-compare の評価軸 8 軸・320×180px／metadata-audit の `<3 / >12` チャプター数／playlist の挿入順 など |
-| 新規外出し候補（移行コスト「中〜大」） | **5 件** | analytics-report HTML テーマ／channel-direction 議論ポイント 7 項目／postmortem 四分位閾値／streaming `healthcheck.sh` 状態分類 4 値／streaming 帯域目安テーブル |
+| 新規外出し候補（移行コスト「小」） | **11 件** | analytics・analytics の 30 分鮮度／discover-competitors と channel-new の共有 API パラメータ／live-clean の削除/保護パターン／streaming の cron タイミング／thumbnail-compare の評価軸 8 軸・320×180px／metadata-audit の `<3 / >12` チャプター数／playlist の挿入順 など |
+| 新規外出し候補（移行コスト「中〜大」） | **5 件** | analytics HTML テーマ／channel-direction 議論ポイント 7 項目／postmortem 四分位閾値／streaming `healthcheck.sh` 状態分類 4 値／streaming 帯域目安テーブル |
 
 ### 観点 1.4 既存 config 未参照
 
 | 重大度 | 件数 | 代表事例 |
 |---|---|---|
-| 高（P1） | **4 件** | `analytics-analyze/SKILL.md:64` の v1.x 名残り **`channel_config.tags.themes`**（v2.0.0 では `content.tags.themes`）／`analytics-report/SKILL.md` のブランド色 → `meta.json::channel.brand_color` 新設要求／`video-description/references/description-templates.md:36,43-44` の英語固定コピー（`usage_attribution_lines` skill-config と二重管理） |
-| 中（P2） | **約 9 件** | `category_id: "10"` が 3 テンプレファイルで重複／`privacy_status` の `"public"` vs `"private"` 矛盾／`comments.json` が「7 ファイル」列挙から漏れている（実は 8 ファイル）／localizations と content.title.template の二重管理／`analytics.collection_filter_keywords` を使わず `#Shorts` 直書きしている analytics-report |
+| 高（P1） | **4 件** | `analytics/SKILL.md:64` の v1.x 名残り **`channel_config.tags.themes`**（v2.0.0 では `content.tags.themes`）／`analytics/SKILL.md` のブランド色 → `meta.json::channel.brand_color` 新設要求／`video-description/references/description-templates.md:36,43-44` の英語固定コピー（`usage_attribution_lines` skill-config と二重管理） |
+| 中（P2） | **約 9 件** | `category_id: "10"` が 3 テンプレファイルで重複／`privacy_status` の `"public"` vs `"private"` 矛盾／`comments.json` が「7 ファイル」列挙から漏れている（実は 8 ファイル）／localizations と content.title.template の二重管理／`analytics.collection_filter_keywords` を使わず `#Shorts` 直書きしている analytics |
 
 ### 観点 2.1 description ↔ 実装乖離
 
 | 重大度 | 件数 | 内容 |
 |---|---|---|
 | Major | **1 件** | `video-analyze/SKILL.md` の「呼び出し側スキル」セクションが `/lyria` と `/channel-direction` を「`bgm_arc` を読み取る現役の利用者」と書いているが、両 SKILL.md にその実装記述・トリガー記述が無い（grep で完全 0 ヒット） |
-| Minor | **2 件** | `video-upload` の description が `collection` 型のみ前提に読めて `single_release` 型に言及なし（実装は対応）／`analytics-report` description は「表示・閲覧」のみ書いて HTML レポート「新規生成」のトリガー語がない |
+| Minor | **2 件** | `video-upload` の description が `collection` 型のみ前提に読めて `single_release` 型に言及なし（実装は対応）／`analytics` description は「表示・閲覧」のみ書いて HTML レポート「新規生成」のトリガー語がない |
 
 ### 観点 2.2 バトン双方向整合
 
 | 整合状態 | 件数 | 主要不整合の所在 |
 |---|---|---|
-| 双方向成立 | **約 14 ペア** | suno↔masterup・analytics-collect↔analytics-analyze・wf-new↔wf-next・channel-new↔channel-research↔channel-direction↔channel-setup・viewer-voice↔audience-persona↔viewing-scene・loop-video↔videoup など、主要動線は良好 |
+| 双方向成立 | **約 14 ペア** | suno↔masterup・analytics↔analytics・wf-new↔wf-next・channel-new↔channel-research↔channel-direction↔channel-setup・viewer-voice↔audience-persona↔viewing-scene・loop-video↔videoup など、主要動線は良好 |
 | **片方向（要修正）** | **4 ペア** | (A) `video-analyze ↔ lyria` 事実誤認／(B) `video-analyze ↔ channel-direction` 事実誤認／(C) `thumbnail → /suno` 単独で `/lyria` 分岐欠落／(D) **`lyria` 出力 `master.wav` / `masterup` 出力 `master.mp3` が `videoup/generate_videos.sh` の検出パターン `master-mix.{wav,m4a,aac,mp3,flac}` + `*-Master.mp3` のいずれにもマッチしない**（実害候補） |
 | 片方向（意図的・許容） | **10 ペア** | `wf-new / wf-next / postmortem` 等のオーケストレータからの fan-out 案内。double-binding は冗長 |
 
@@ -88,7 +88,7 @@
 |---|---|---|---|---|---|---|
 | ハードコード総件数 | 63 件（A-1〜A-5 通算）| A-1=14 / A-2=11 / A-3=22 / A-4=6 / A-5=0（観点定義が違う）| — | — | — | **△ 観点定義差**（第 1 版は A-1 を ID リテラル限定、第 2 版は数値全般を A-1 に統合）→ supervise で **第 1 版の観点定義を採用**するのが order.md 用語と一致 |
 | analytics-{collect,analyze} 「30 分」鮮度 | 検出 ✓ | 検出 ✓ | 検出 ✓（B-3 候補 #1, #2）| — | — | ✓ 3 報告書一致 |
-| analytics-report ブランド色 | 検出 ✓（高）| 検出（HTML 色 8 色）| B-3 候補 #3 | — | — | ✓ 一致 |
+| analytics ブランド色 | 検出 ✓（高）| 検出（HTML 色 8 色）| B-3 候補 #3 | — | — | ✓ 一致 |
 | postmortem 閾値 | 検出 ✓（中）| 検出 ✓ | B-3 候補 #9 | — | — | ✓ 一致 |
 | GCP bootstrap 重複 | — | — | **検出 ✓ MD5 一致** | — | — | ✓ Part B 単独で確定 |
 | `video-description/config.default.yaml:6` の `short` | A-5 では未指摘 | — | — | C-1-①, C-3-① で検出 | C-1-①, C-3-① で検出 | ✓ Part C で確定 |
@@ -173,8 +173,8 @@ supervise は本 analysis を踏まえ、`docs/audits/skills-audit-2026-05-18.md
 
 | ID | 観点 | 内容 | 出典 |
 |---|---|---|---|
-| H-1 | 1.4 | `analytics-analyze/SKILL.md:64` の旧 namespace `channel_config.tags.themes` → `content.tags.themes` への修正 | Part A 第 1 版 #5.1 |
-| H-2 | 1.1 / 1.4 | `analytics-report/SKILL.md:94-101` のブランド色 9 色（`#c8a96e` 含む）→ `meta.json::channel.brand_color` 新設または skill-config `analytics-report.yaml::theme.colors` 新設 | Part A 第 1 版 #2.11 / #5.2 / Part B B-3 #3 |
+| H-1 | 1.4 | `analytics/SKILL.md:64` の旧 namespace `channel_config.tags.themes` → `content.tags.themes` への修正 | Part A 第 1 版 #5.1 |
+| H-2 | 1.1 / 1.4 | `analytics/SKILL.md:94-101` のブランド色 9 色（`#c8a96e` 含む）→ `meta.json::channel.brand_color` 新設または skill-config `analytics.yaml::theme.colors` 新設 | Part A 第 1 版 #2.11 / #5.2 / Part B B-3 #3 |
 | H-3 | 1.4 | `video-description/references/description-templates.md:36,43-44` の英語固定コピー 2 行 → skill-config `usage_attribution_lines` への一元化（二重管理解消） | Part A 第 1 版 #5.4 / #5.5 |
 | H-4 | 1.1 | `channel-new/SKILL.md:29,64`・`channel-import/SKILL.md:20` の `~/01-dev/projects/`・`~/02-yt` 個人パス → `<your-projects-dir>` / `<your-channels-parent>` プレースホルダ化 | Part A 第 1 版 #3.1, #3.2, #3.3 |
 | H-5 | 1.1 | `channel-new/SKILL.md:47,49`・`channel-import/SKILL.md:21,26`・`channel-setup/references/claude-md-template.md:71` の `daiki-beppu/...` GitHub owner 固定 → `{{REPO_OWNER}}` プレースホルダ化または README/CLAUDE.md installation 節への一元化 | Part A 第 1 版 #4.4, #4.5, #4.6 |
@@ -188,7 +188,7 @@ supervise は本 analysis を踏まえ、`docs/audits/skills-audit-2026-05-18.md
 
 | ID | 観点 | 内容 | 出典 |
 |---|---|---|---|
-| M-1 | 1.3 | analytics-collect / analytics-analyze の **30 分鮮度しきい値** を `config/skills/analytics.yaml::freshness_minutes` などに集約（双方で完全に同じ値の直書き重複）| 3 報告書一致 |
+| M-1 | 1.3 | analytics / analytics の **30 分鮮度しきい値** を `config/skills/analytics.yaml::freshness_minutes` などに集約（双方で完全に同じ値の直書き重複）| 3 報告書一致 |
 | M-2 | 1.3 | `discover-competitors` に `config.default.yaml` 新設 + `channel-new` Step 5 の API パラメータも同じ config を参照（min_subscribers / max_subscribers / posted_within_days / top / per_keyword の **完全重複**）| Part B 候補 #6, #7 |
 | M-3 | 1.3 | `live-clean` に `config.default.yaml` 新設（削除/保護パターン外出し）| Part B 候補 #8 |
 | M-4 | 1.3 | `postmortem` に `config.default.yaml::thresholds.{ratio_vs_median, neutral_band_pct}` 新設（0.5 / 0.7 / 0.9 / ±10% を外出し、「文脈調整可」記述は残す）| Part A 第 1 版 #5.16 / Part B 候補 #9 |
@@ -211,15 +211,15 @@ supervise は本 analysis を踏まえ、`docs/audits/skills-audit-2026-05-18.md
 |---|---|---|
 | L-1 | 1.4 | `video-description/config.default.yaml:44-52` の `theme_emoji` を `content.json::title.theme_emoji` に集約（既存 `theme_activities` / `theme_scenes` と一元化） |
 | L-2 | 1.4 | `channel-setup/references/{config-template/content.json, upload-settings-template.json, schedule-template.json, localizations-template.json}` の英語/日本ロケール固定 → プレースホルダ化 |
-| L-3 | 1.4 | `analytics-report/SKILL.md:73,123` の `#Shorts` 文字列固定 → `analytics.collection_filter_keywords` 統合 |
-| L-4 | 1.3 | `analytics-report` HTML KPI カード枚数（4）/ max-width（1200px）を skill-config 化 |
+| L-3 | 1.4 | `analytics/SKILL.md:73,123` の `#Shorts` 文字列固定 → `analytics.collection_filter_keywords` 統合 |
+| L-4 | 1.3 | `analytics` HTML KPI カード枚数（4）/ max-width（1200px）を skill-config 化 |
 | L-5 | 1.3 | `playlist` の `"all"` プレイリスト挿入順（head/tail）を `playlists.json` スキーマに追加 |
 | L-6 | 1.3 | `audience-persona` / `viewing-scene` の WebSearch クエリテンプレを `config.default.yaml` に外出し（AI 指示文と機械パラメータの切り分け前提）|
-| L-7 | 2.2 | `analytics-analyze/SKILL.md` 前提セクションに「`/wf-next` から T+7 日後に呼ばれる」追記 |
+| L-7 | 2.2 | `analytics/SKILL.md` 前提セクションに「`/wf-next` から T+7 日後に呼ばれる」追記 |
 | L-8 | 2.2 | `suno/SKILL.md` Cross References に「前工程: `/thumbnail`」追記 |
 | L-9 | 2.4 | `channel-setup/references/config-template/` → `config-templates/` ディレクトリ複数形リネーム |
 | L-10 | 1.1 | `videoup/references/generate_videos.sh` の ffmpeg 解像度・ビットレート・CRF を `config/skills/videoup.yaml` に外出し |
-| L-11 | 2.1 | `analytics-report/SKILL.md` description にトリガー語「ビジュアル」「ダッシュボード」「HTML レポート生成」を追記 |
+| L-11 | 2.1 | `analytics/SKILL.md` description にトリガー語「ビジュアル」「ダッシュボード」「HTML レポート生成」を追記 |
 | L-12 | 1.1 | `suno` の禁止形容詞 17 語・NG/OK ワード 10 語超を skill-config の `scene_phrase_ng_words` に新設 |
 | L-13 | 1.1 | `metadata-audit` の `< 3` / `> 12` チャプター数閾値を skill-config 化 |
 | L-14 | 1.4 | `localizations-template.json::*.title_template` と `content.json::title.template` の重複統合 |
@@ -240,7 +240,7 @@ supervise は本 analysis を踏まえ、`docs/audits/skills-audit-2026-05-18.md
 
 ## 6. 全体サマリー（supervise への引き継ぎ用 1 段落版）
 
-35 スキルの監査結果として、(A) 観点 1.1〜1.4 の汎用化系では「**画像生成・解析モデル名やしきい値は skill-config 化が大きく進んでおり ID リテラルや API キー直書きはゼロ**」だが、「`analytics-report` のブランド色 9 色、`channel-new`/`channel-import`/`channel-setup` の **`daiki-beppu` GitHub owner 固定** および `~/01-dev/`・`~/02-yt` 個人パス、`analytics-analyze` の **v1.x 旧 namespace `channel_config.*` 残骸**、`scripts/gcp-{bootstrap,terraform-apply}.sh` の **MD5 完全一致 CLAUDE.md 規約違反**」が P1 として残存。(B) 観点 2.1〜2.4 の整合性系では「**frontmatter / 開始句 / kebab-case 命名は 100% 統一**」「**主要バトン 14 ペアは双方向成立**」と良好だが、「`video-analyze` の `/lyria`・`/channel-direction` への事実誤認」「`lyria`/`masterup` 出力 ↔ `videoup/generate_videos.sh` 検出パターン不一致（実害候補）」「description 末尾指示語と本文見出しの 3〜5 系統揺れ」が改善対象。**v4.0.0 deprecated `short` / `community` の真の残存は 1 箇所のみ**（`video-description/config.default.yaml:6` コメント内）で、コード本体には残骸なし。
+35 スキルの監査結果として、(A) 観点 1.1〜1.4 の汎用化系では「**画像生成・解析モデル名やしきい値は skill-config 化が大きく進んでおり ID リテラルや API キー直書きはゼロ**」だが、「`analytics` のブランド色 9 色、`channel-new`/`channel-import`/`channel-setup` の **`daiki-beppu` GitHub owner 固定** および `~/01-dev/`・`~/02-yt` 個人パス、`analytics` の **v1.x 旧 namespace `channel_config.*` 残骸**、`scripts/gcp-{bootstrap,terraform-apply}.sh` の **MD5 完全一致 CLAUDE.md 規約違反**」が P1 として残存。(B) 観点 2.1〜2.4 の整合性系では「**frontmatter / 開始句 / kebab-case 命名は 100% 統一**」「**主要バトン 14 ペアは双方向成立**」と良好だが、「`video-analyze` の `/lyria`・`/channel-direction` への事実誤認」「`lyria`/`masterup` 出力 ↔ `videoup/generate_videos.sh` 検出パターン不一致（実害候補）」「description 末尾指示語と本文見出しの 3〜5 系統揺れ」が改善対象。**v4.0.0 deprecated `short` / `community` の真の残存は 1 箇所のみ**（`video-description/config.default.yaml:6` コメント内）で、コード本体には残骸なし。
 
 ---
 

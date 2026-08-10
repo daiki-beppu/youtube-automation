@@ -126,9 +126,9 @@
 
 | # | skill | 抽出した定数 / 外出し対象 | 想定 YAML キー | 移行コスト |
 |---|---|---|---|---|
-| 1 | `analytics-collect` | 鮮度判定しきい値「30 分以内ならスキップ」（SKILL.md line 38） | `freshness_minutes: 30` | 小 |
-| 2 | `analytics-analyze` | 鮮度判定しきい値「30 分以内に生成されたレポートがあれば分析をスキップ」（SKILL.md line 38） | `freshness_minutes: 30` | 小 |
-| 3 | `analytics-report` | HTML レポートのカラーパレット（#0f1419 / #1a2332 / #c8a96e 等、SKILL.md line 92-100 で 8 色固定） / Chart.js 色定義 / fontsize 系 | `html_report.colors.{bg,card,accent,...}` | 中（HTML テンプレ全体の整理を伴う） |
+| 1 | `analytics` | 鮮度判定しきい値「30 分以内ならスキップ」（SKILL.md line 38） | `freshness_minutes: 30` | 小 |
+| 2 | `analytics` | 鮮度判定しきい値「30 分以内に生成されたレポートがあれば分析をスキップ」（SKILL.md line 38） | `freshness_minutes: 30` | 小 |
+| 3 | `analytics` | HTML レポートのカラーパレット（#0f1419 / #1a2332 / #c8a96e 等、SKILL.md line 92-100 で 8 色固定） / Chart.js 色定義 / fontsize 系 | `html_report.colors.{bg,card,accent,...}` | 中（HTML テンプレ全体の整理を伴う） |
 | 4 | `audience-persona` | WebSearch クエリテンプレ（`{genre.primary} music listener demographics` 等の 3 テンプレ、SKILL.md line 38-39） / 関連コミュニティリスト（Reddit, Discord） | `search_queries: [...]` / `community_hints: [...]` | 小 |
 | 5 | `channel-direction` | 議論ポイント 7 項目の固定リスト（TTP 対象選定 / ジャンル & スタイル / ターゲット / コンテンツ戦略 / ビジュアルアイデンティティ / 差別化 / チャンネル名）と各項目の説明 | `discussion_points: [...]` | 中（フロー記述の構造化が必要） |
 | 6 | `channel-new` | 競合発掘の固定パラメータ「3-5 個（多くて 8 個まで）」「`--min-subscribers 10000 --max-subscribers 1000000`」「`--posted-within-days 30`」「`--top 20`」（SKILL.md line 124-128） | `discovery.{keyword_count_range, default_min_subs, default_max_subs, posted_within_days, top}` | 小 |
@@ -210,7 +210,7 @@
 `scripts/gcp-bootstrap.sh` および `scripts/gcp-terraform-apply.sh` が `.claude/skills/channel-setup/references/` と **MD5 単位で完全重複**。CLAUDE.md 規約に明確に違反しており、配布時に取り残されたコピーをユーザーが叩く事故の温床。**削除アクション 1 つで解消可能**で工数が極小。
 
 ### S-2（影響度: 中、優先度: P2）
-26 スキル中 **15 件以上で skill-config 化候補がある**。特に `analytics-collect` / `analytics-analyze` の鮮度しきい値「30 分」、`postmortem` の四分位閾値、`live-clean` のファイルパターン、`channel-new` / `discover-competitors` の API パラメータデフォルトはチャンネル単位で運用が変わる典型的な可変設定であり、外出ししないとチャンネル固有チューニングのたびに SKILL.md を直接書き換える状況になる。
+26 スキル中 **15 件以上で skill-config 化候補がある**。特に `analytics` / `analytics` の鮮度しきい値「30 分」、`postmortem` の四分位閾値、`live-clean` のファイルパターン、`channel-new` / `discover-competitors` の API パラメータデフォルトはチャンネル単位で運用が変わる典型的な可変設定であり、外出ししないとチャンネル固有チューニングのたびに SKILL.md を直接書き換える状況になる。
 
 ### S-3（影響度: 中、優先度: P2）
 `channel-new` と `discover-competitors` で **完全に同一の API パラメータデフォルト**（min_subscribers, max_subscribers, posted_within_days, top, per_keyword）が別々の SKILL.md 内に記述されている。`discover-competitors` 側に `config.default.yaml` を作って `channel-new` がそれを参照する形に整理すべき。
@@ -228,7 +228,7 @@ shell スクリプト 3 ファイル（gcp-bootstrap.sh / gcp-terraform-apply.sh
 ### 走査済み（全 35 スキル）
 
 ```
-alignment-check / analytics-analyze / analytics-collect / analytics-report / audience-persona /
+alignment-check / analytics / analytics / analytics / audience-persona /
 benchmark / channel-direction / channel-import / channel-new / channel-research /
 channel-setup / channel-status / collection-ideate / comments-reply / discover-competitors /
 live-clean / loop-video / lyria / masterup / metadata-audit /
@@ -292,7 +292,7 @@ viewer-voice / viewing-scene / wf-new / wf-next / wf-status
 
 ### P2（強く推奨）
 
-- **R-2**: `analytics-collect` / `analytics-analyze` に `config.default.yaml` を追加し、鮮度判定しきい値「30 分」を外出し。両 skill で同一の値を使っているため、できれば 1 つの共有 config（`analytics-common.yaml` 等）に集約する案も検討。
+- **R-2**: `analytics` / `analytics` に `config.default.yaml` を追加し、鮮度判定しきい値「30 分」を外出し。両 skill で同一の値を使っているため、できれば 1 つの共有 config（`analytics-common.yaml` 等）に集約する案も検討。
 - **R-3**: `discover-competitors` に `config.default.yaml` を追加し、API パラメータデフォルト（min_subs / max_subs / posted_within_days / top / per_keyword）を外出し。`channel-new` Step 5 もこの config を参照する形に統一。
 - **R-4**: `live-clean` に `config.default.yaml` を追加し、削除対象パターン / 保護対象パターンを外出し。チャンネルごとに「個別トラックは残したい」「マスタービデオは残したい」などの運用差を吸収。
 - **R-5**: `video-upload` に `config.default.yaml` を追加し、`selfDeclaredMadeForKids` / `containsSyntheticMedia` / NG ワードリストを外出し。AI 申告ポリシーは将来的に YouTube 側仕様変更が予想されるため、config 化しておくと変更時の追従が楽。

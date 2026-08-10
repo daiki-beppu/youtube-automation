@@ -1,7 +1,7 @@
 """data/insights.jsonl を insights-entry.schema.json に照らして検証する。
 
 使い方:
-    uv run python3 .claude/skills/analytics-analyze/references/validate_insights.py data/insights.jsonl
+    uv run python3 .claude/skills/analytics/references/validate_insights.py data/insights.jsonl
 
 終了コード:
     0: 全行が schema 準拠（ファイル不在・空ファイルも「エントリ 0 件」として合格）

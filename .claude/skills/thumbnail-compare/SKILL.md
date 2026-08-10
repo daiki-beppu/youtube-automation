@@ -102,7 +102,7 @@ open data/thumbnail_compare/
 
 | 状況 | 兆候 | 対処 |
 |---|---|---|
-| 入力データ不在 | `data/` のベンチマーク/Analytics スナップショットが無い | 先に `/benchmark`・`/analytics-collect` 等を実行して入力を用意 |
+| 入力データ不在 | `data/` のベンチマーク/Analytics スナップショットが無い | 先に `/benchmark`・`/analytics --collect` 等を実行して入力を用意 |
 | サムネ取得失敗 | `yt-thumbnail-compare` の画像 DL が HTTP エラー | YouTube / CDN のステータスを確認し時間を置いて再実行 |
 | 個別 timeout | 画像取得または縮小対象を示す timeout warning | 失敗対象だけを確認する。処理は残りを継続し、成功分の出力と最終件数を提示する |
 

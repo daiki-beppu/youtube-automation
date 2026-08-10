@@ -246,7 +246,7 @@ def test_cmd_sync_skills_reports_orphan_skill_config(
     # Given: 対応する同梱 skill がない channel override
     channel_dir = tmp_path / "out"
     target = channel_dir / ".claude" / "skills"
-    config = channel_dir / "config" / "skills" / f"analytics-collect{suffix}"
+    config = channel_dir / "config" / "skills" / f"analytics{suffix}"
     config.parent.mkdir(parents=True)
     config.write_text("{}\n", encoding="utf-8")
 
@@ -258,7 +258,7 @@ def test_cmd_sync_skills_reports_orphan_skill_config(
     # Then: 孤児名を報告するが設定ファイルは残す
     assert rc == 0
     out = capsys.readouterr().out
-    assert "対応する skill が同梱されていません: analytics-collect" in out
+    assert "対応する skill が同梱されていません: analytics" in out
     assert config.exists()
 
 
@@ -270,7 +270,7 @@ def test_cmd_sync_skills_prune_does_not_delete_orphan_skill_config(
     # Given: 同梱外の skill config
     channel_dir = tmp_path / "out"
     target = channel_dir / ".claude" / "skills"
-    config = channel_dir / "config" / "skills" / "analytics-report.yaml"
+    config = channel_dir / "config" / "skills" / "analytics.yaml"
     config.parent.mkdir(parents=True)
     config.write_text("enabled: true\n", encoding="utf-8")
 
@@ -282,7 +282,7 @@ def test_cmd_sync_skills_prune_does_not_delete_orphan_skill_config(
     # Then: config は列挙されるだけで削除されない
     assert rc == 0
     out = capsys.readouterr().out
-    assert "対応する skill が同梱されていません: analytics-report" in out
+    assert "対応する skill が同梱されていません: analytics" in out
     assert config.exists()
 
 

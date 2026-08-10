@@ -99,7 +99,7 @@ config 生成・認証完了後、以下を案内:
 1. **ブランディング素材**: 未作成の場合は `references/verification.md`（「ブランディング素材生成」）を参照
 2. **ベンチマーク設定**: 競合チャンネルを追加したい場合は `config/channel/analytics.json` の `benchmark.channels` を追加し `/benchmark` で収集
 3. **ペルソナ定義**: `/viewer-voice` → `/audience-persona-design` → `/viewing-scene` の順で実行
-4. **データ収集・分析**: `/analytics-collect` → `/analytics-analyze` で現状のパフォーマンスを把握
+4. **データ収集・分析**: `/analytics --collect` → `/analytics --analyze` で現状のパフォーマンスを把握
 5. **コレクション制作**: `/wf-new` で最初のコレクション制作を開始
 
 Step 1 前段で「方向性見直し」が選ばれていた場合は、上記に加えて `/channel-new` の方向性検討モードへの接続を案内する。ただし、`references/direction-mode.md` の前提は新規開設モードの完了であり、既存チャンネル取り込みモードの完了だけでは満たさないため、方向性検討モードへ直行する案内はしない。新規開設モードを完了して前提を満たしたうえで、TTP メモ（`docs/channel/ttp-seed-confirmation.md` と `docs/channel/competitor-branding-snapshot.json`）または分析レポート（`docs/channel-research.md`）を入力として準備してから方向性検討モードを実行するよう案内する。入力がなければ、`references/direction-mode.md` の Step D1 に従い、新規開設モードで TTP メモを作成するか、必要に応じて `/benchmark` / `/viewer-voice` / `/channel-new` 分析モードを先に実行し、入力を準備するまで方向性検討を停止する旨も明記する。

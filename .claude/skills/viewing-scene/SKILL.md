@@ -44,7 +44,7 @@ Phase 3 で AskUserQuestion によりメインシーンと動画尺の方針を�
 - `config/channel/` が存在しない、または `load_config()` でロードできない → 新規チャンネルは `/channel-new`、既存チャンネルは `/channel-new`（既存チャンネル取り込みモード）を案内して停止する
 - `docs/channel/personas/persona-definition.md` が無い → 前工程 `/audience-persona-design` を案内して停止する
 - 新規開設（公開前）で `docs/plans/viewer-voice-analysis.md`、`docs/channel/ttp-seed-confirmation.md`、`docs/channel/competitor-branding-snapshot.json` のいずれかが無い → `/channel-new` Step 5 または Step 7 の該当前工程へ戻るよう案内して停止する
-- 公開後に `reports/analysis_*.md` が無い → 前工程 `/analytics-collect` → `/analytics-analyze` を案内して停止する
+- 公開後に `reports/analysis_*.md` が無い → 前工程 `/analytics --collect` → `/analytics --analyze` を案内して停止する
 
 ### 許容する fail
 
@@ -110,7 +110,7 @@ AskUserQuestion でメインシーンと動画尺の方針を確認。
 |---|---|---|
 | WebSearch 不可 | 検索結果が取得できない | 手動入力で代替するか、当該分析をスキップする |
 | 公開前入力不在 | 新規開設（公開前）で競合 / TTP / viewer-voice 成果物が不足 | `/channel-new` Step 5 または Step 7 の該当前工程へ戻る |
-| 公開後入力不在 | 公開後に `data/` のベンチマーク/Analytics スナップショットが無い | 先に `/benchmark`・`/analytics-collect` 等を実行して入力を用意 |
+| 公開後入力不在 | 公開後に `data/` のベンチマーク/Analytics スナップショットが無い | 先に `/benchmark`・`/analytics --collect` 等を実行して入力を用意 |
 
 ## 関連ファイル
 

@@ -282,13 +282,13 @@ AI は config をここで生成しない。`yt-setup-dirs` で setup 用ディ�
 
 `reports/analysis_*.md` が存在しないこと自体は setup のブロッカーにしない。`yt-doctor` の message に表示される入力モードは、Markdown の有無と stale の**予備確認**として扱う。`yt-doctor` は同日付 JSON の存在や analysis JSON validator の成否を確認しないため、analytics mode の最終判定には使わない:
 
-- ファイル名日付が最新の `reports/analysis_*.md` と同日付の `.json` が存在し、`.claude/skills/analytics-analyze/references/analysis-json-validator.md` の validator が exit 0 で、stale ではない → analytics mode
+- ファイル名日付が最新の `reports/analysis_*.md` と同日付の `.json` が存在し、`.claude/skills/analytics/references/analysis-json-validator.md` の validator が exit 0 で、stale ではない → analytics mode
 - `reports/analysis_*.md` が無く、`data/benchmark_*.json` がある → benchmark fallback mode
 - `reports/analysis_*.md` と `data/benchmark_*.json` がどちらも無い → minimal mode
 
-Markdown があるのに同日付 JSON がない、または validator が失敗する場合は fallback せず `/analytics-analyze` 再実行を案内する。
+Markdown があるのに同日付 JSON がない、または validator が失敗する場合は fallback せず `/analytics --analyze` 再実行を案内する。
 
-ペアが stale の場合は、`yt-doctor` の message で stale を表示したうえで setup のブロッカーにしない。`apply.stop_reason == "human_required"` かつ `apply.check_id == "analytics_report"` でも `[HUMAN STEP]` として `/analytics-analyze` の実行を利用者へ依頼せず、後続の `/collection-ideate` が同じセッションで自動更新する旨を案内する。`checks` 配列の後続 check を確認し、ほかの未完了 check があればその check の手順へ進む。
+ペアが stale の場合は、`yt-doctor` の message で stale を表示したうえで setup のブロッカーにしない。`apply.stop_reason == "human_required"` かつ `apply.check_id == "analytics_report"` でも `[HUMAN STEP]` として `/analytics --analyze` の実行を利用者へ依頼せず、後続の `/collection-ideate` が同じセッションで自動更新する旨を案内する。`checks` 配列の後続 check を確認し、ほかの未完了 check があればその check の手順へ進む。
 
 自動更新の実行順序、再検証、refresh / API 失敗時の停止・再開条件は `.claude/skills/collection-ideate/references/freshness-rules.md` を参照する。setup は refresh / API 失敗時の停止・再開条件は上書きしない。`/wf-new` はこの stale 判定を重ねない。
 

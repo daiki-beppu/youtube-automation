@@ -4,9 +4,9 @@ rename マッピング:
 
 | 旧 | 新 |
 |---|---|
-| `analyze` | `analytics-analyze` |
-| `collect` | `analytics-collect` |
-| `report` | `analytics-report` |
+| `analyze` | `analytics` |
+| `collect` | `analytics` |
+| `report` | `analytics` |
 | `status` | `channel-status` |
 | `description` | `video-description` |
 | `upload` | `video-upload` |
@@ -77,9 +77,9 @@ _SUNO_LYRIC_PERSONA_DOCS = (
 
 # rename マッピング (order.md §5)
 RENAME_MAP: dict[str, str] = {
-    "analyze": "analytics-analyze",
-    "collect": "analytics-collect",
-    "report": "analytics-report",
+    "analyze": "analytics",
+    "collect": "analytics",
+    "report": "analytics",
     "status": "channel-status",
     "description": "video-description",
     "upload": "video-upload",

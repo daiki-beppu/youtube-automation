@@ -119,7 +119,7 @@ Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJE
 |------|-------|----------|--------|------------|-------|-----|--------|
 | 005 | Sonnet-safe スキル記述規約を docs/skill-design/ に制定 | P1 | M | — | [#1512](https://github.com/daiki-beppu/youtube-automation/issues/1512) | [#1529](https://github.com/daiki-beppu/youtube-automation/pull/1529) | DONE |
 | 006 | comments-reply / pinned-comment に dry-run→apply 承認ゲート追加 | P1 | S | 005 (soft) | [#1513](https://github.com/daiki-beppu/youtube-automation/issues/1513) | [#1537](https://github.com/daiki-beppu/youtube-automation/pull/1537) | DONE |
-| 007 | analytics-report の CTR 解釈記述をコード実態（百分率 float）に修正 | P1 | S | — | [#1514](https://github.com/daiki-beppu/youtube-automation/issues/1514) | [#1536](https://github.com/daiki-beppu/youtube-automation/pull/1536) | DONE |
+| 007 | analytics の CTR 解釈記述をコード実態（百分率 float）に修正 | P1 | S | — | [#1514](https://github.com/daiki-beppu/youtube-automation/issues/1514) | [#1536](https://github.com/daiki-beppu/youtube-automation/pull/1536) | DONE |
 | 008 | 兄弟スキル間の frontmatter 矛盾・発動キーワード衝突を解消 | P1 | S | 005 (soft) | [#1515](https://github.com/daiki-beppu/youtube-automation/issues/1515) | [#1538](https://github.com/daiki-beppu/youtube-automation/pull/1538) | DONE |
 | 009 | 工程チェーンの前提条件ガードを 4 スキルに追加 | P2 | S-M | 005 (soft) | [#1516](https://github.com/daiki-beppu/youtube-automation/issues/1516) | [#1551](https://github.com/daiki-beppu/youtube-automation/pull/1551) | DONE |
 | 010 | channel-new のペルソナ生成前に TTP 中間ゲート追加 | P2 | S | — | [#1517](https://github.com/daiki-beppu/youtube-automation/issues/1517) | [#1533](https://github.com/daiki-beppu/youtube-automation/pull/1533) | DONE |
@@ -151,7 +151,7 @@ Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJE
 - **「channel-new の description に廃止スキル channel-import のトリガー残存」**: by design。旧名で呼ぶユーザーを統合先へルーティングする意図的な alias。
 - **「automation-release の awk が大文字小文字厳密で false positive」**: by design。`### Migration` の完全一致は `docs/changelog-contract.md` の契約仕様。
 - **「thumbnail prompt-schema 試験導入の誤用リスク」**: 本文に「実本番フローからは未接続」と明示済み。
-- **「wf-new / wf-next / wf-status のトリガー衝突」「analytics-collect / analyze / report のトリガー衝突」**: 各 description に相互の否定トリガー（「既存の進行は /wf-next」「/analytics-analyze の前段」等）が既に記述済み。
+- **「wf-new / wf-next / wf-status のトリガー衝突」「analytics / analyze / report のトリガー衝突」**: 各 description に相互の否定トリガー（「既存の進行は /wf-next」「/analytics --analyze の前段」等）が既に記述済み。
 - **「video-analyze / community-post の設定読み込みゲート文言が矛盾」**: 文言は冗長だが「存在しない override は未設定として扱い、勝手に作成しない」「fallback 元としては使わない」と一義的に書かれており誤読の余地は小さい。
 - **「suno-helper 拡張 ID の形式説明不足」「ペーシング定義値が SKILL.md に無い」**: Cross References で `extensions/shared/constants.ts::BALANCED_RUN_PACING` への参照が明示済み。情報の置き場所として妥当。
 - **「community-draft の poll deprecated が frontmatter 未記載」**: 本文の型一覧表に DEPRECATED と移行ガイドが明記済み。frontmatter は現行型のみ列挙しており誤誘導なし。

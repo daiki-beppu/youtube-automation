@@ -103,8 +103,8 @@ skill に新しい mode・variant を設ける場合は、呼び出しを `--<mo
 ```markdown
 ## 前後工程
 
-- `前工程`: `/analytics-collect`
-- `後工程`: `/collection-ideate`, `/analytics-report`, `/flop-analysis`
+- `前工程`: `/analytics --collect`
+- `後工程`: `/collection-ideate`, `/analytics --report`, `/flop-analysis`
 ```
 
 依存がなければ `` `なし` ``、`setup` / `channel-new` のような全体共通基盤だけは `` `*`（共通基盤としてほぼ全スキル） `` と書く。実行手順内で前提未達時に前工程を案内する記述は残してよいが、依存関係の一覧はこのブロックを正とする。

@@ -1,10 +1,10 @@
-"""analytics-analyze の登録転換分析指示を契約化する。"""
+"""analytics の登録転換分析指示を契約化する。"""
 
 from __future__ import annotations
 
 from pathlib import Path
 
-SKILL_PATH = Path(".claude/skills/analytics-analyze/SKILL.md")
+SKILL_PATH = Path(".claude/skills/analytics/references/analyze.md")
 
 
 def test_skill_requires_subscription_conversion_analysis_with_aggregate_caveat() -> None:

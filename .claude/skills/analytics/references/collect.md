@@ -1,12 +1,4 @@
----
-name: analytics-collect
-description: "Use when YouTube Analytics データの収集・最新化だけが必要なとき。「データ更新」「統計を取得」「分析の準備」で発動。収集済みデータの分析のみは /analytics-analyze、収集→分析→表示の一括実行は /analytics-run を使う"
----
-
-## 前後工程
-
-- `前工程`: `/setup`
-- `後工程`: `/analytics-analyze`
+# Analytics collect mode
 
 ## Overview
 
@@ -17,7 +9,7 @@ description: "Use when YouTube Analytics データの収集・最新化だけが
 通常収集（standard / full / include-reporting）は、収集コマンドが exit 0 で終了し、`data/analytics_data_YYYYMMDD_HHMMSS.json` が新規保存された時点で完了。鮮度チェックで収集をスキップした場合は、既存データのファイル名と経過分数の表示で完了。成果物の depth 検証は `references/validate-depth.sh` を単一ソースとし、次が exit 0 になった場合だけ完了とする。
 
 ```bash
-bash .claude/skills/analytics-collect/references/validate-depth.sh <analytics-json> <standard|full>
+bash .claude/skills/analytics/references/validate-depth.sh <analytics-json> <standard|full>
 ```
 
 Reporting 管理サブモード（`--reporting-dry-run` / `--reporting-create-job`）は Analytics JSON を生成しないため depth 検証の対象外。
@@ -32,10 +24,10 @@ subagent へ渡す入力は、解決済みの実行モード、実行コマン�
 
 以下を deep-merge した値を設定として使う。
 
-1. `.claude/skills/analytics-collect/config.default.yaml`
-2. `config/skills/analytics-collect.yaml`（存在する場合）
+1. `.claude/skills/analytics/config.default.yaml`
+2. `config/skills/analytics.yaml`（存在する場合）
 
-合成規則は `youtube_automation.configuration.skills.load_skill_config("analytics-collect")` と同じで、チャンネル上書きが優先される。存在しない override は未設定として扱い、勝手に作成しない。
+合成規則は `youtube_automation.configuration.skills.load_skill_config("analytics")` と同じで、チャンネル上書きが優先される。存在しない override は未設定として扱い、勝手に作成しない。
 
 ## 前提
 
@@ -51,15 +43,15 @@ subagent へ渡す入力は、解決済みの実行モード、実行コマン�
 
 - 分析の前にデータを最新化したいとき
 - チャンネル統計・動画別パフォーマンスデータが必要なとき
-- `/analytics-analyze` 実行前のデータ収集ステップとして
+- `/analytics --analyze` 実行前のデータ収集ステップとして
 
 ## Quick Reference
 
 | 引数 | 説明 | 実行コマンド |
 |------|------|------|
-| `/analytics-collect` | デフォルト: standard（上位50本 + 直近30日投稿、CTR・流入元・デバイス） | `uv run yt-analytics` |
-| `/analytics-collect full` | full（standard + retention・`by_country`） | `uv run yt-analytics --depth full` |
-| `/analytics-collect reporting` | Reporting API の reportType / job 状態を確認し、必要なら job を作成 | `uv run yt-analytics --reporting-dry-run` → 必要なら `--reporting-create-job` |
+| `/analytics --collect` | デフォルト: standard（上位50本 + 直近30日投稿、CTR・流入元・デバイス） | `uv run yt-analytics` |
+| `/analytics --collect full` | full（standard + retention・`by_country`） | `uv run yt-analytics --depth full` |
+| `/analytics --collect reporting` | Reporting API の reportType / job 状態を確認し、必要なら job を作成 | `uv run yt-analytics --reporting-dry-run` → 必要なら `--reporting-create-job` |
 | `$ARGUMENTS` | モード指定（省略可） | — |
 
 ## 想定 API call 数
@@ -83,7 +75,7 @@ subagent へ渡す入力は、解決済みの実行モード、実行コマン�
 2. ファイルの更新時刻が **`freshness_minutes` 分以内** → 収集をスキップし、既存データを使用。ただし `full` 指定時は、冒頭の「完了条件」を満たす既存 JSON だけを再利用する
 3. `freshness_minutes` 分以上経過 or ファイルなし → 通常どおり下記コマンドを実行
 
-`freshness_minutes` は `/analytics-analyze` の鮮度チェックとも共有される単一ソース（`config/skills/analytics-collect.yaml` の上書きが両スキルに効く）。
+`freshness_minutes` は `/analytics --analyze` の鮮度チェックとも共有される単一ソース（`config/skills/analytics.yaml` の上書きが両スキルに効く）。
 
 スキップ時: 「既存データが十分新しいため収集をスキップしました（`<filename>`、`<N>`分前に収集）」と表示。
 
@@ -120,7 +112,7 @@ uv run yt-analytics --include-reporting
 
 subagent へは次を具体値で渡す:
 
-- 入力パス: `.claude/skills/analytics-collect/config.default.yaml`、存在する場合は `config/skills/analytics-collect.yaml`、`config/channel/`
+- 入力パス: `.claude/skills/analytics/config.default.yaml`、存在する場合は `config/skills/analytics.yaml`、`config/channel/`
 - 実行する作業: standard は `uv run yt-analytics`、full は `uv run yt-analytics --depth full`、または Reporting API 確認用の `uv run yt-analytics --reporting-dry-run` / `uv run yt-analytics --reporting-create-job` / `uv run yt-analytics --include-reporting`
 - 期待成果物: `data/analytics_data_YYYYMMDD_HHMMSS.json`（通常収集時）、または鮮度チェックで再利用する既存 `data/analytics_data_*.json`
 - 完了報告: `status: success | failure`、`command`、`artifacts`（`path` は絶対パス、`result` は depth validator の結果）、`skipped_reason`、`errors`
@@ -145,7 +137,7 @@ subagent へは次を具体値で渡す:
 ✅ データ保存: data/analytics_data_YYYYMMDD_HHMMSS.json
 ```
 
-データ収集完了後、`/analytics-analyze` で詳細分析を実行してください。
+データ収集完了後、`/analytics --analyze` で詳細分析を実行してください。
 
 ## 障害時ガイダンス
 
@@ -171,4 +163,4 @@ subagent へは次を具体値で渡す:
 views / CTR / retention など既存メトリクスの収集は継続する。
 
 データ収集完了後:
-- `/analytics-analyze` で収集データの詳細分析を実行
+- `/analytics --analyze` で収集データの詳細分析を実行

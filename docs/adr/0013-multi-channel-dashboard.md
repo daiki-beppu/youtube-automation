@@ -19,7 +19,7 @@ accepted (2026-06-23)、amended (2026-07-21, #2386, #2397)。旧 2 フェーズ�
 - 1 チャンネルの更新失敗は部分エラーとして隔離し、残りの更新を続ける。失敗したチャンネルに前回 snapshot があれば、その値と更新エラーを同時に表示する。
 - OAuth のない配布 smoke やセルフ E2E では `--skip-refresh` を明示し、保存済み snapshot だけで起動できる。通常運用の既定は更新ありのままとする。
 - 概要カードは曖昧な「準備完了」ではなく、YouTube `status.publishAt` が現在より未来である動画の件数を `公開予約 N本` として表示する。取得できない旧 snapshot は `公開予約 未取得` とする。
-- 単一チャンネル用 `yt-kpi-dashboard` と収集用 `/analytics-collect` の責務は変更しない。
+- 単一チャンネル用 `yt-kpi-dashboard` と収集用 `/analytics --collect` の責務は変更しない。
 
 ### frontend の配置と UI 契約
 

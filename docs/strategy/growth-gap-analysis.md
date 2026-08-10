@@ -21,15 +21,15 @@
 
 | # | 成長レバー | 対応する既存スキル / CLI | データソース | カバー度 |
 | --- | --- | --- | --- | --- |
-| L1 | インプレッション獲得 | `/analytics-collect --include-reporting`（動画別 Imp）、traffic source 収集（`insightTrafficSourceType/Detail`）、`/benchmark`（競合の露出獲得パターン）、`/short` `/short-release`（流入面の追加） | Reporting API v1 / Analytics API v2 / Data API v3 | ◯ 計測は可、施策検証は弱い |
+| L1 | インプレッション獲得 | `/analytics --collect --include-reporting`（動画別 Imp）、traffic source 収集（`insightTrafficSourceType/Detail`）、`/benchmark`（競合の露出獲得パターン）、`/short` `/short-release`（流入面の追加） | Reporting API v1 / Analytics API v2 / Data API v3 | ◯ 計測は可、施策検証は弱い |
 | L2 | CTR | `/thumbnail`（TTP ベース生成）、`/thumbnail-compare`（320px 視認性）、`yt-thumbnail-correlate`（特徴量×CTR 相関）、`/alignment-check`（サムネ×タイトル×ムード整合）、`/flop-analysis`（CTR 閾値ルーブリック） | Reporting API v1 + サムネ画像特徴量 | ◎ 最厚のレバー |
 | L3 | 視聴維持 | retention 収集（`audienceWatchRatio` / `relativeRetentionPerformance`）、`/video-analyze`（Gemini によるフック・BGM 展開解析）、`/viewing-scene`（シーン別の最適尺設計） | Analytics API v2 / Vertex AI | ◯ 計測◎、原因照合が手動 |
 | L4 | 回遊・セッション | `/playlist`（`yt-playlist-manager`）、`/video-description`（Complete Collection 導線）、カード指標収集（`cardImpressions/Clicks/ClickRate`）、`/pinned-comment` `/comments-reply` `/community-post` | Analytics API v2 / Data API v3 | △ 導線は張れるが効果測定が薄い |
-| L5 | 登録転換 | `subscribersGained/Lost` の day・video 単位収集、`subscribedStatus` 別視聴データ収集、動画別転換率ランキングを含む `/analytics-analyze`、`yt-channel-trend`（日次 subs 移動平均・z-score 異常検知） | Analytics API v2 | ◯ 動画別転換率と視聴者の登録状態を分析可 |
+| L5 | 登録転換 | `subscribersGained/Lost` の day・video 単位収集、`subscribedStatus` 別視聴データ収集、動画別転換率ランキングを含む `/analytics --analyze`、`yt-channel-trend`（日次 subs 移動平均・z-score 異常検知） | Analytics API v2 | ◯ 動画別転換率と視聴者の登録状態を分析可 |
 | L6 | SEO・メタデータ | `/video-description`（SEO 最適化概要欄）、`/metadata-audit`、`yt-title-duplicate-check`、localizations 同期（`/channel-new` 設定 push、`yt-shorts-bulk-update-loc`） | ローカル config / Data API v3 | ◯ 生成◎、検索流入との突合なし |
 | L7 | 投稿頻度・タイミング | `/benchmark`（競合の投稿間隔）、`yt-launch-curve`（投稿後 N 日の初速比較）、`yt-theme-compare`（テーマ別初速・ロングテール） | Data API v3 / 自チャンネル履歴 | △ 頻度の観測のみ、時刻・曜日分析なし |
 
-横断（レバー非依存）の既存資産: `/analytics-analyze`（全レバーの統合分析・戦略提案）、`/channel-research` + `/viewer-voice` + `/audience-persona-design`（誰に何を作るかの上流）、`/collection-ideate`（企画への落とし込み）、`/flop-analysis`（不振動画の切り分け）。
+横断（レバー非依存）の既存資産: `/analytics --analyze`（全レバーの統合分析・戦略提案）、`/channel-research` + `/viewer-voice` + `/audience-persona-design`（誰に何を作るかの上流）、`/collection-ideate`（企画への落とし込み）、`/flop-analysis`（不振動画の切り分け）。
 
 ## 2. レバー別ギャップ分析
 
@@ -39,7 +39,7 @@
 
 - **足りないもの**
   - Imp の長期履歴: Reporting API の保持は 60 日。`data/analytics_data_*.json` スナップショットに残るが、スナップショット横断で Imp 推移を引く分析器がない → **新規開発**（G6）
-  - トラフィックソース別の露出分析: source type 別 views は取れるが、「ブラウズ/おすすめ面で露出が増えた/減った」をレポートに定型出力する仕組みがない → **運用改善**（`/analytics-analyze` の分析観点に追加）
+  - トラフィックソース別の露出分析: source type 別 views は取れるが、「ブラウズ/おすすめ面で露出が増えた/減った」をレポートに定型出力する仕組みがない → **運用改善**（`/analytics --analyze` の分析観点に追加）
   - Shorts からロング動画への送客効果測定 → **新規開発**（G6 に含める）
 
 ### L2: CTR
@@ -60,7 +60,7 @@
 - **足りないもの**
   - プレイリスト単位の analytics: `playlist` dimension での views / 平均視聴時間を収集していない。Complete Collection 戦略の効果（プレイリスト経由視聴）が観測できない → **新規開発**(G4)
   - エンドスクリーンの管理・分析: 設定も効果測定も未対応（API は endScreen 編集非対応のため設定は手動）→ 計測側のみ **新規開発**候補、設定は **手動補完**
-  - カード指標は収集済みだが `/analytics-analyze` のレポート断面に出ていない → **運用改善**
+  - カード指標は収集済みだが `/analytics --analyze` のレポート断面に出ていない → **運用改善**
 
 ### L5: 登録転換
 
@@ -68,19 +68,19 @@
   - チャンネルページ・トレーラー最適化: 支援機能なし → **手動補完**（優先度低）
 
 - **実装済み**
-  - 動画別の登録転換率（subscribersGained / views）のランキング・傾向分析と、`subscribedStatus` dimension（登録済み/未登録視聴者の視聴データ）の収集を #1813 で追加済み。`/analytics-analyze` の「登録を生む動画の型」断面で、転換率と視聴者の登録状態を合わせて確認できる
+  - 動画別の登録転換率（subscribersGained / views）のランキング・傾向分析と、`subscribedStatus` dimension（登録済み/未登録視聴者の視聴データ）の収集を #1813 で追加済み。`/analytics --analyze` の「登録を生む動画の型」断面で、転換率と視聴者の登録状態を合わせて確認できる
 
 ### L6: SEO・メタデータ
 
 - **足りないもの**
   - 検索流入キーワードの分析: `insightTrafficSourceDetail`（YT_SEARCH）で検索語データは収集し得るが、「どのキーワードで流入 → どのタイトル/タグに反映すべきか」のレポートがない → **新規開発**（G5）
-  - 多言語（localizations）の効果測定: 言語別・国別の視聴データ（`country` dimension は収集済み）と localizations 設定の突合がない → **運用改善**（`/analytics-analyze` の観点追加）
+  - 多言語（localizations）の効果測定: 言語別・国別の視聴データ（`country` dimension は収集済み）と localizations 設定の突合がない → **運用改善**（`/analytics --analyze` の観点追加）
 
 ### L7: 投稿頻度・タイミング
 
 - **足りないもの**
   - 時間帯・曜日別のパフォーマンス分析: 現収集は day 単位のみで、公開時刻と初速の関係を観測できない（Analytics API に時刻 dimension がなく、公開時刻メタデータ × 初日 views の突合になる）→ **新規開発**（優先度低: BGM 系は evergreen 消費でタイミング感度が低い仮説。まず `yt-launch-curve` で公開曜日別の初速差を手動確認 → 差が出たら起票）
-  - 投稿頻度 × 成長率の相関: `/benchmark` で競合の投稿間隔は取れているが、自チャンネルの頻度変化と subs/views 成長の関係分析がない → **運用改善**（`yt-channel-trend` の結果と突き合わせる分析観点を `/analytics-analyze` へ）
+  - 投稿頻度 × 成長率の相関: `/benchmark` で競合の投稿間隔は取れているが、自チャンネルの頻度変化と subs/views 成長の関係分析がない → **運用改善**（`yt-channel-trend` の結果と突き合わせる分析観点を `/analytics --analyze` へ）
 
 ### 横断ギャップ
 
@@ -94,9 +94,9 @@
 ```
 ┌─────────────────── 週次ループ（成績向上のコア） ───────────────────┐
 │                                                                      │
-│  /analytics-collect --include-reporting     … データ最新化（CTR は D+2 ラグ考慮）
+│  /analytics --collect --include-reporting     … データ最新化（CTR は D+2 ラグ考慮）
 │        ↓                                                             │
-│  /analytics-analyze                         … 分析 + 戦略提案（reports/analysis_*.md）
+│  /analytics --analyze                         … 分析 + 戦略提案（reports/analysis_*.md）
 │        ↓                                                             │
 │  不振動画あり？ ── yes → /flop-analysis     … CTR/Imp/Ret で症状切り分け
 │        │                     ↓                                       │
@@ -144,7 +144,7 @@
 
 ### 上位ギャップの起票粒度メモ
 
-- **G1 登録転換分析（#1813 で実装済み）**: `strategic_analytics.py` の video 単位 `subscribersGained` と views から転換率ランキングを算出し、`/analytics-analyze` の「登録を生む動画の型」断面に出力する。`subscribedStatus` dimension の収集 Mixin も追加済み。これにより、転換率と登録済み/未登録視聴者の状態を合わせて確認し、企画選定（`/collection-ideate`）へ反映できる
+- **G1 登録転換分析（#1813 で実装済み）**: `strategic_analytics.py` の video 単位 `subscribersGained` と views から転換率ランキングを算出し、`/analytics --analyze` の「登録を生む動画の型」断面に出力する。`subscribedStatus` dimension の収集 Mixin も追加済み。これにより、転換率と登録済み/未登録視聴者の状態を合わせて確認し、企画選定（`/collection-ideate`）へ反映できる
 - **G2 retention × シーン照合**: `retention_analytics.py` の `audienceWatchRatio`（elapsedVideoTimeRatio）と `data/video_analysis/<slug>/<id>.json` の scene_timeline / bgm_arc を突合し、drop 地点のシーン・曲を特定するレポートを `/flop-analysis` または `/video-analyze` に追加。期待効果: 視聴維持の改善が「どの曲・どの展開を変えるか」の具体アクションに変わる
 - **G3 サムネ A/B 手順化**: Studio の Test & Compare 設定手順・対象選定基準（flop analysis で CTR 起因と判定された動画を優先）・結果記録テンプレ（`docs/plans/` 配下）をスキル or ドキュメント化。期待効果: CTR レバーに API 制約を回避した実験経路が通る。実装は文書のみで最安
 - **G4 プレイリスト analytics**: Analytics API の `playlist` dimension で views / 平均視聴時間を収集する Mixin を追加し、Complete Collection 戦略の効果を可視化。期待効果: 回遊レバー（L4）に初めて計測が通る

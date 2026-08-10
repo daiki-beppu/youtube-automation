@@ -3,7 +3,7 @@
   "steps": [
     {
       "id": "collect",
-      "skill": "analytics-collect",
+      "skill": "analytics",
       "prerequisiteArtifacts": [],
       "outputArtifacts": ["data/analytics_data_*.json"],
       "approvalGate": {
@@ -16,7 +16,7 @@
     },
     {
       "id": "analyze",
-      "skill": "analytics-analyze",
+      "skill": "analytics",
       "prerequisiteArtifacts": ["data/analytics_data_*.json"],
       "outputArtifacts": ["reports/analysis_*.md", "reports/analysis_*.json"],
       "approvalGate": {
@@ -29,7 +29,7 @@
     },
     {
       "id": "report",
-      "skill": "analytics-report",
+      "skill": "analytics",
       "prerequisiteArtifacts": ["reports/analysis_*.md"],
       "outputArtifacts": [],
       "approvalGate": {

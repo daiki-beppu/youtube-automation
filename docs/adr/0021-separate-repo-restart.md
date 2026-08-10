@@ -16,7 +16,7 @@ ADR-0001 以降、TS リライトは同一リポの `feat/ts-rewrite` → main �
 1. **tayk は専用の別リポジトリで 0 ベース開発する**。「Python の移植」ではなく「仕様ベースの新規プロダクト」として作る。既存 `packages/` のコード・ADR-0002〜0004 のセレモニー構造は引き継がない
 2. **本リポの `packages/` (TS 28K 行) と TS ツールチェーン (bun / oxlint / knip の CI レーン) は即削除する**。参照は git 履歴で足りる
 3. **本リポは Python 版のメンテナンスモードに純化する**。Python の削除（cutover）は「first-party 下流の日常運用が tayk のみで回る」時点で判断し、tayk のリリース単位とは独立
-4. **tayk v0.1.0 のゲートは縦スライス 1 本** — collection のフルライフサイクル 1 周（TTP ベンチマーク収集 → 企画 → 音源 → 動画 → upload → description）を first-party チャンネルで dogfood 完走できること。運用の根幹が TTP のため競合ベンチマーク収集は必須スコープ。一方、自チャンネルの実績分析（analytics-analyze / postmortem / dashboard）・knowledge codec 全 5 本・Remotion は v0.2 以降に 1 リリース 1 テーマで直列に積む。tracer は `collection.plan`（現行 architecture/ADR 文書参照 — benchmark 収集 → local store → read model → 企画で SSOT 設計を最初に end-to-end 検証できる）
+4. **tayk v0.1.0 のゲートは縦スライス 1 本** — collection のフルライフサイクル 1 周（TTP ベンチマーク収集 → 企画 → 音源 → 動画 → upload → description）を first-party チャンネルで dogfood 完走できること。運用の根幹が TTP のため競合ベンチマーク収集は必須スコープ。一方、自チャンネルの実績分析（analytics / postmortem / dashboard）・knowledge codec 全 5 本・Remotion は v0.2 以降に 1 リリース 1 テーマで直列に積む。tracer は `collection.plan`（現行 architecture/ADR 文書参照 — benchmark 収集 → local store → read model → 企画で SSOT 設計を最初に end-to-end 検証できる）
 5. **下流チャンネルリポとの契約**: ① 設定 (`config/channel/*.json`) は git 管理 JSON のまま維持。② 状態・履歴は local store (ADR-0017) を SSOT とし「ディレクトリ位置 = 状態」の暗黙表現を廃止。読み取りは local store の read model に一本化する（データ 4 分類は現行 architecture/ADR 文書参照）
 
 ## Why

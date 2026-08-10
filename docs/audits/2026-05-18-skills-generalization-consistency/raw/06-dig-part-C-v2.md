@@ -29,9 +29,9 @@
 
 | # | skill | description 抜粋 | 実装の該当 / 不在 | 乖離の種類 |
 |---|---|---|---|---|
-| C-1.1 | **`/video-analyze`** ↔ **`/lyria`** / **`/channel-direction`** | `/video-analyze` Overview 末尾: 「`/benchmark`・`/analytics-analyze`・`/alignment-check`・`/thumbnail-compare`・`/viewer-voice` の精度を底上げする」+ 本文「呼び出し側スキル」: `/channel-direction` Step 1 と Step 2 議論ポイント 6・Step 3 決定事項「BGM 構造方針」で `bgm_arc` 平均を使う／`/lyria` Step 2「ベンチマーク BGM 構造の参照」で `composition.json` のフェーズ境界の初期値として活用する | `/channel-direction` Step 1 は `docs/channel-research.md` のみを読み込み `bgm_arc` 言及なし。Step 2 議論ポイント 6 は「差別化ポイント」、Step 3 決定事項テーブルに「BGM 構造方針」行なし。`/lyria` 全文に `bgm_arc` / `composition.json` / `phase.at_min` の記述ゼロ（grep 確認済み） | **矛盾／過剰記述** — `/video-analyze` 側が他スキルの仕様を一方的に宣言しているが、相手 SKILL.md にその実装が無い |
+| C-1.1 | **`/video-analyze`** ↔ **`/lyria`** / **`/channel-direction`** | `/video-analyze` Overview 末尾: 「`/benchmark`・`/analytics --analyze`・`/alignment-check`・`/thumbnail-compare`・`/viewer-voice` の精度を底上げする」+ 本文「呼び出し側スキル」: `/channel-direction` Step 1 と Step 2 議論ポイント 6・Step 3 決定事項「BGM 構造方針」で `bgm_arc` 平均を使う／`/lyria` Step 2「ベンチマーク BGM 構造の参照」で `composition.json` のフェーズ境界の初期値として活用する | `/channel-direction` Step 1 は `docs/channel-research.md` のみを読み込み `bgm_arc` 言及なし。Step 2 議論ポイント 6 は「差別化ポイント」、Step 3 決定事項テーブルに「BGM 構造方針」行なし。`/lyria` 全文に `bgm_arc` / `composition.json` / `phase.at_min` の記述ゼロ（grep 確認済み） | **矛盾／過剰記述** — `/video-analyze` 側が他スキルの仕様を一方的に宣言しているが、相手 SKILL.md にその実装が無い |
 | C-1.2 | **`/video-upload`** | description: 「Complete Collection のアップロードと live 移行を実行」 | 本文 Channel Adaptation セクションは `collection` 型 + `single_release` 型（JP+EN 同日 2 本アップ、`yt-upload-auto` 使用）を扱う。description は `single_release` を全く触れていない | **過少記述（minor）** — description が `collection` 型のみ前提に読める。`single_release` チャンネルが description で自スキル発火を期待しにくい |
-| C-1.3 | **`/analytics-report`** | description: 「Analytics分析レポートの表示・閲覧が必要なとき」「既存レポートの参照・比較が必要な場面で必ず使用すること」 | 本文 Quick Reference は `latest` / `list` / `html` の 3 モード。`html` は「データ集約 + Chart.js ビジュアルレポート生成」で**新規生成**の責務がある（line 44-110） | **過少記述（minor）** — description は「表示・閲覧」しか書いていないが、`html` モードは「全 analytics スナップショット + benchmark を集約して HTML を新規生成」する。トリガーワードに「ビジュアル」「ダッシュボード」「HTML レポート生成」が無い |
+| C-1.3 | **`/analytics --report`** | description: 「Analytics分析レポートの表示・閲覧が必要なとき」「既存レポートの参照・比較が必要な場面で必ず使用すること」 | 本文 Quick Reference は `latest` / `list` / `html` の 3 モード。`html` は「データ集約 + Chart.js ビジュアルレポート生成」で**新規生成**の責務がある（line 44-110） | **過少記述（minor）** — description は「表示・閲覧」しか書いていないが、`html` モードは「全 analytics スナップショット + benchmark を集約して HTML を新規生成」する。トリガーワードに「ビジュアル」「ダッシュボード」「HTML レポート生成」が無い |
 
 C-1 で**特に問題ない**例（参考、35 件中の代表）: `/streaming`（description に並べた 12 個のキーワードが全て §1-5 にカバーされる）、`/postmortem`（description 末尾の「`/thumbnail-compare` `/alignment-check` `/viewer-voice` `/video-analyze` 等の既存スキルへバトンする」が Phase 4 表に厳密に対応）、`/masterup`（前工程 / 次工程の明示がそのまま Overview に展開）。
 
@@ -61,10 +61,10 @@ C-1 で**特に問題ない**例（参考、35 件中の代表）: `/streaming`�
 | 14 | `/video-description` | `/video-upload` | Next Step「→ /video-upload <collection-path>」 | Cross References「/video-description — アップロード前に descriptions.md を生成」+ 本文 Step 3 で /video-description を自動実行 | ✓ 双方向 |
 | 15 | `/video-upload` | `/metadata-audit` | Cross References「/metadata-audit — アップロード後の整合性監査」 | Overview「アップロード後に YouTube 側にメタデータが正しく反映されたか確認したいとき」（/video-upload 名指しなし、機能で示唆） | △ 片方向（許容範囲） |
 | 16 | `/video-upload` | `/playlist` | Cross References「/playlist — プレイリスト状態確認」 | Cross References「/video-upload — アップロード時に内部で `assign_video()` が呼ばれる」 | ✓ 双方向 |
-| 17 | `/wf-next` | `/analytics-analyze` | complete phase「→ /analytics-analyze で初週パフォーマンス」 | description「/analytics-collect でデータ収集後に実行」のみ、`/wf-next` 名指しなし | △ 片方向（意図あり: postmortem 経路） |
-| 18 | `/analytics-collect` | `/analytics-analyze` | Next Step「→ /analytics-analyze」 | description / When to Use とも /analytics-collect を前提と明示 | ✓ 双方向 |
-| 19 | `/analytics-analyze` | `/collection-ideate` | Next Step「→ /collection-ideate」 | 前提スキル状態確認 + Phase 1-2 が `reports/analysis_*.md` を読み込む | ✓ 双方向 |
-| 20 | `/analytics-report` | `/analytics-analyze` | Next Step「→ /analytics-analyze で詳細な戦略分析」 | description / 本文に /analytics-report 言及なし | △ 片方向（許容範囲: /analytics-report は読み取り側ツール） |
+| 17 | `/wf-next` | `/analytics --analyze` | complete phase「→ /analytics --analyze で初週パフォーマンス」 | description「/analytics --collect でデータ収集後に実行」のみ、`/wf-next` 名指しなし | △ 片方向（意図あり: postmortem 経路） |
+| 18 | `/analytics --collect` | `/analytics --analyze` | Next Step「→ /analytics --analyze」 | description / When to Use とも /analytics --collect を前提と明示 | ✓ 双方向 |
+| 19 | `/analytics --analyze` | `/collection-ideate` | Next Step「→ /collection-ideate」 | 前提スキル状態確認 + Phase 1-2 が `reports/analysis_*.md` を読み込む | ✓ 双方向 |
+| 20 | `/analytics --report` | `/analytics --analyze` | Next Step「→ /analytics --analyze で詳細な戦略分析」 | description / 本文に /analytics --report 言及なし | △ 片方向（許容範囲: /analytics --report は読み取り側ツール） |
 | 21 | `/viewer-voice` | `/audience-persona` | description「/audience-persona や /viewing-scene の前提データ」 | 前提「`docs/plans/viewer-voice-analysis.md` が存在すること。未実施の場合は先に /viewer-voice」 | ✓ 双方向 |
 | 22 | `/audience-persona` | `/viewing-scene` | description「/viewing-scene の入力になる」 | 前提「`persona-definition.md` が存在すること（未実施なら /audience-persona）」 | ✓ 双方向 |
 | 23 | `/channel-new` | `/discover-competitors` | Step 5 が MANDATORY で `yt-discover-competitors` を呼ぶ + 「詳細は /discover-competitors skill 参照」 | Cross References「/channel-new Step 5: 新チャンネル開設フロー内での前段呼び出し」 | ✓ 双方向 |
@@ -80,7 +80,7 @@ C-1 で**特に問題ない**例（参考、35 件中の代表）: `/streaming`�
 | 33 | `/video-analyze` | `/suno` | 呼び出し側スキル「/suno — Instructions 冒頭で `bgm_arc` 平均を読み込み…」 | Instructions 中盤に「ベンチマーク BGM 構造の参照」セクションがあり `data/video_analysis/<slug>/*.json` を実際に読み込む | ✓ 双方向（**整合する例**） |
 | 34 | `/video-analyze` | `/lyria` | 呼び出し側スキル「/lyria — Step 2…composition.json のフェーズ境界…」 | grep ヒットなし（`bgm_arc` / `composition.json` / `video-analyze` いずれも /lyria SKILL.md 内に存在しない） | × **不整合**（C-1 #1 重複） |
 | 35 | `/video-analyze` | `/channel-direction` | 呼び出し側スキル「/channel-direction — Step 1 の分析サマリーで…BGM 構造方針の根拠データとして使う」 | grep ヒットなし | × **不整合**（C-1 #1 重複） |
-| 36 | `/video-analyze` | `/benchmark` / `/analytics-analyze` / `/alignment-check` / `/thumbnail-compare` / `/viewer-voice` | Overview「これら 5 つの精度を底上げする」 | 5 件すべて 関連ファイルに `data/video_analysis/<slug>/<video_id>.json — /video-analyze の …出力` を明記 | ✓ 双方向（**模範的**） |
+| 36 | `/video-analyze` | `/benchmark` / `/analytics --analyze` / `/alignment-check` / `/thumbnail-compare` / `/viewer-voice` | Overview「これら 5 つの精度を底上げする」 | 5 件すべて 関連ファイルに `data/video_analysis/<slug>/<video_id>.json — /video-analyze の …出力` を明記 | ✓ 双方向（**模範的**） |
 | 37 | `/alignment-check` | `/suno` / `/lyria` | Next Step 不整合カテゴリ表「音楽ミスマッチ → /suno または /lyria」 | `/suno` Step 3 と `/lyria` Step 5「`/alignment-check` がコレクション横断で音楽 mood × サムネ × タイトルの整合を機械的に判定できるよう、`planning.music` を populate」 | ✓ 双方向（**模範的**） |
 
 ### 3.2 「片方向参照のみ」ペア一覧（要修正候補）
@@ -94,7 +94,7 @@ C-1 で**特に問題ない**例（参考、35 件中の代表）: `/streaming`�
 | C | **`/thumbnail` Next Step が `/suno` 単独**（#9） | `/thumbnail` Next Step に「Lyria チャンネルでは `/lyria <theme>`」分岐を追加。現状の `/wf-new` Phase 2c には分岐があるが、`/thumbnail` を**単独で**走らせるユーザーが `/lyria` への接続を見落とす |
 | D | **`/lyria` / `/masterup` → `/videoup` の master ファイル命名**（#11, #12） | `/videoup`/`generate_videos.sh` が探すパターンは `master-mix.{wav,m4a,aac,mp3,flac}` + `*-Master.mp3` フォールバック。`/lyria` (`master.wav`) と `/masterup` (`master.mp3`) 双方の出力名がマッチしないため、(a) generate_videos.sh の検出パターン拡張、(b) 各スキルの出力名統一、(c) 各 SKILL.md の Next Step に「最終マスターは `01-master/master-mix.{ext}` にリネームしてから /videoup」と明示、のいずれかで揃える |
 
-**意図的に片方向**と判断したペア（10 組）: #4, #5, #7, #8, #13, #15, #17, #20, #24, #26, #31 — オーケストレータからの fan-out 案内（/wf-new / /postmortem / /channel-new 等）と「読み取り側ツール」（/wf-status / /analytics-report 等）の組合せ。SKILL.md の双方を膨らませる効用が小さい。
+**意図的に片方向**と判断したペア（10 組）: #4, #5, #7, #8, #13, #15, #17, #20, #24, #26, #31 — オーケストレータからの fan-out 案内（/wf-new / /postmortem / /channel-new 等）と「読み取り側ツール」（/wf-status / /analytics --report 等）の組合せ。SKILL.md の双方を膨らませる効用が小さい。
 
 ---
 
@@ -116,9 +116,9 @@ C-1 で**特に問題ない**例（参考、35 件中の代表）: `/streaming`�
 | `wf-new/SKILL.md:59` | `YYYYMMDD-<short>-<theme>-collection/` | ディレクトリ命名 | × |
 | `wf-new/SKILL.md:73` | 同上 | 同上 | × |
 | `wf-new/SKILL.md:139` | 同上 | 同上 | × |
-| `analytics-report/SKILL.md:73` | `Complete Collection のみ表示（Shorts を除外）` | YouTube Shorts 動画フォーマット | × |
-| `analytics-report/SKILL.md:109` | `channel.short` を小文字化 | meta.json の channel.short | × |
-| `analytics-report/SKILL.md:123` | `Shorts は…除外（タイトルに #Shorts を含む）` | YouTube Shorts | × |
+| `analytics/SKILL.md:73` | `Complete Collection のみ表示（Shorts を除外）` | YouTube Shorts 動画フォーマット | × |
+| `analytics/SKILL.md:109` | `channel.short` を小文字化 | meta.json の channel.short | × |
+| `analytics/SKILL.md:123` | `Shorts は…除外（タイトルに #Shorts を含む）` | YouTube Shorts | × |
 | `suno/SKILL.md:122` | `(short instrumental cue, optional 1-2 line spoken intro)` | 歌詞テンプレ内テキスト | × |
 | `video-analyze/SKILL.md:66` | `Shorts は Gemini の 1fps サンプリング制約により精度が落ちるため非推奨` | YouTube Shorts | × |
 
@@ -142,7 +142,7 @@ C-1 で**特に問題ない**例（参考、35 件中の代表）: `/streaming`�
 
 | スタイル | 件数 | 該当 skill |
 |---|---|---|
-| (A) 「〜場面で必ず使用すること」 | **14** | analytics-analyze / analytics-collect / analytics-report / alignment-check / audience-persona / collection-ideate / live-clean / loop-video / thumbnail / thumbnail-compare / video-description / videoup / viewer-voice / viewing-scene |
+| (A) 「〜場面で必ず使用すること」 | **14** | analytics / analytics / analytics / alignment-check / audience-persona / collection-ideate / live-clean / loop-video / thumbnail / thumbnail-compare / video-description / videoup / viewer-voice / viewing-scene |
 | (B) 「〜場面で使用すること」「使用すること」 | **5** | benchmark / comments-reply / playlist / streaming / video-analyze |
 | (C) cross-ref note で締める（`/X を使う` / `/X が責務` / `/X` 等の参照で終わる） | **9** | channel-status / channel-import / lyria / masterup / metadata-audit / suno / wf-new / wf-next / wf-status |
 | (D) 「〜前に実行する」「〜後に実行する」（ワークフロー序列） | **3** | channel-direction / channel-research / channel-setup |
@@ -212,8 +212,8 @@ C-1 で**特に問題ない**例（参考、35 件中の代表）: `/streaming`�
 走査した SKILL.md 全 35 件（`Glob` で完全一覧化、`Bash ls | wc -l` で総数 35 を確認）:
 
 ```
-alignment-check         analytics-analyze       analytics-collect
-analytics-report        audience-persona        benchmark
+alignment-check         analytics       analytics
+analytics        audience-persona        benchmark
 channel-direction       channel-import          channel-new
 channel-research        channel-setup           channel-status
 collection-ideate       comments-reply          discover-competitors
@@ -264,7 +264,7 @@ C-1: 全 35 件の description ↔ 本文を読み比較 / C-2: `→` `前工程
 | **P1-高** | `/lyria` `/masterup` の出力名と `/videoup`/`generate_videos.sh` の検出パターンを整合させる | C-2 #11, #12 | 実装側の検出パターン拡張 or SKILL.md 上「→ /wf-next」経路への書き換え |
 | **P1-中** | `/thumbnail` Next Step に `/lyria` 分岐を追加 | C-2 #9 | description は変えず Next Step に分岐追加 |
 | **P1-中** | `/video-upload` description に `single_release` 型を追記 | C-1.2 | description 末尾に「single_release 型（JP+EN 同日アップロード）にも対応」追記 |
-| **P2-低** | `/analytics-report` description にトリガーワード「ビジュアル」「HTML レポート生成」を追記 | C-1.3 | description のトリガーキーワード列を拡充 |
+| **P2-低** | `/analytics --report` description にトリガーワード「ビジュアル」「HTML レポート生成」を追記 | C-1.3 | description のトリガーキーワード列を拡充 |
 | **P2-低** | description 末尾指示語のガイドライン化（A〜E 5 系統の使い分け基準）| C-4 | meta-doc `.claude/skills/CONTRIBUTING.md`（仮）で明文化 |
 | **P3-参考** | `/channel-new` description に「既存チャンネルなら /channel-import」相互案内を追加 | C-2 #31 | 1 文追加で /wf-status ↔ /channel-status と同じ模範形に |
 

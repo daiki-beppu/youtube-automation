@@ -7,8 +7,8 @@
 
 analytics mode の stale report は古い結果を企画入力に使わず、追加のユーザー確認なしで次の順に Skill ツールを直接呼ぶ。
 
-- **相対 stale**（最新 report が最新収集データより古い）: `/analytics-analyze` を自動実行する。
-- **絶対 stale**（最新収集データが `freshness_days` を超えて古い）: `/analytics-collect`、続けて `/analytics-analyze` を順に自動実行する。`/analytics-collect` が成功するまで `/analytics-analyze` を呼ばない。
+- **相対 stale**（最新 report が最新収集データより古い）: `/analytics --analyze` を自動実行する。
+- **絶対 stale**（最新収集データが `freshness_days` を超えて古い）: `/analytics --collect`、続けて `/analytics --analyze` を順に自動実行する。`/analytics --collect` が成功するまで `/analytics --analyze` を呼ばない。
 - **fresh**: Analytics skill を追加で呼ばず、既存 report を使って Phase 1-2 へ進む。
 
 自動実行した各 skill の完了条件をその skill の `SKILL.md` に従って確認する。全呼び出しの完了後、この文書の判定擬似コードを先頭から再実行し、新しい Markdown / JSON 同日付ペア、analysis JSON validator、相対・絶対鮮度を再検証する。すべて成功した場合だけ Phase 1-2 へ続行する。
@@ -19,13 +19,13 @@ skill 呼び出し失敗または再検証失敗時は、失敗した skill ま�
 
 analytics mode の前提スキルは **(analyze ∥ benchmark) → audience-persona-design finalization** の構造:
 
-- `/analytics-analyze` と `/benchmark` は**独立・並列**（両者とも生データの分析で上下関係なし）
+- `/analytics --analyze` と `/benchmark` は**独立・並列**（両者とも生データの分析で上下関係なし）
 - `/audience-persona-design` は最新ベンチマークのタグデータと `/viewer-voice` を入力に暫定 `persona-definition.md` を作る
 - `/audience-persona-design` は暫定 persona から `/viewing-scene` を実行し、その結果を反映して最終 `persona-definition.md` を更新する
 
 **analyze / benchmark は並列判定。その後 `/audience-persona-design` の最終 persona chain を判定する。** `persona-definition.md` / `viewing-scene-matrix.md` は存在チェックのみ（mtime 比較なし。更新タイミングは戦略判断のため人間が決める）。analytics mode でこれらが未生成の場合、`ttp_mode: false` は Phase 1 を中断し、`true` は共通の欲求語彙選択規則による fallback で続行する。stale report は `ttp_mode` にかかわらず、自動更新と再検証の成功時だけ続行する。
 
-analytics report の Markdown が存在しない場合は stale ではなく、以下の入力モードに分岐する。Markdown が存在する場合は、同じファイル名日付の JSON と `.claude/skills/analytics-analyze/references/analysis-json-validator.md` の validator 成功を analytics mode の Hard Gate とする。JSON 不在、ファイル名日付不一致、validator の exit 非 0 は fallback せず Phase 1 を中断し、`/analytics-analyze` の再実行を案内する:
+analytics report の Markdown が存在しない場合は stale ではなく、以下の入力モードに分岐する。Markdown が存在する場合は、同じファイル名日付の JSON と `.claude/skills/analytics/references/analysis-json-validator.md` の validator 成功を analytics mode の Hard Gate とする。JSON 不在、ファイル名日付不一致、validator の exit 非 0 は fallback せず Phase 1 を中断し、`/analytics --analyze` の再実行を案内する:
 
 | モード | 判定条件 | 企画生成の入力 |
 |---|---|---|
@@ -37,7 +37,7 @@ analytics report の Markdown が存在しない場合は stale ではなく、�
 
 | 順序 | 前提スキル | 出力ファイル | 鮮度判定ルール | 古い / 未生成の場合 |
 |---|---|---|---|---|
-| 1a | `/analytics-analyze` | 同じファイル名日付の `reports/analysis_*.md` + `.json` | 先に JSON ペア validator が exit 0 であること。次のいずれかを満たせば stale（OR 結合）: (1) **相対比較** — 最新 `data/analytics_data_*.json` のファイル名日付 (YYYYMMDD) より古い / (2) **絶対鮮度** — 最新 `data/analytics_data_*.json` のファイル名日付が実行日 (today) から `config/skills/collection-ideate.yaml` の `freshness_days`（既定 7 日）を超えて経過 | Markdown 不在は benchmark fallback mode / minimal mode へ分岐する。minimal mode は `ttp_mode: false` だけ続行し、`true` は `/benchmark` を案内して停止する。JSON 不在または validator 失敗は従来どおり停止。相対 stale は `/analytics-analyze`、絶対 stale は `/analytics-collect` → `/analytics-analyze` を自動実行し、再検証成功時だけ続行する |
+| 1a | `/analytics --analyze` | 同じファイル名日付の `reports/analysis_*.md` + `.json` | 先に JSON ペア validator が exit 0 であること。次のいずれかを満たせば stale（OR 結合）: (1) **相対比較** — 最新 `data/analytics_data_*.json` のファイル名日付 (YYYYMMDD) より古い / (2) **絶対鮮度** — 最新 `data/analytics_data_*.json` のファイル名日付が実行日 (today) から `config/skills/collection-ideate.yaml` の `freshness_days`（既定 7 日）を超えて経過 | Markdown 不在は benchmark fallback mode / minimal mode へ分岐する。minimal mode は `ttp_mode: false` だけ続行し、`true` は `/benchmark` を案内して停止する。JSON 不在または validator 失敗は従来どおり停止。相対 stale は `/analytics --analyze`、絶対 stale は `/analytics --collect` → `/analytics --analyze` を自動実行し、再検証成功時だけ続行する |
 | 1b | `/benchmark` | `docs/benchmarks/*.md` + `data/benchmark_YYYYMMDD.json` | analytics mode では mtime が `config/skills/benchmark.yaml` の `freshness_days`（既定 3 日）より古ければ stale | analytics mode では `/benchmark` を Skill ツールで実行（内部で鮮度チェック + 差分更新）。benchmark fallback mode では既存データを読む。minimal mode は `ttp_mode: false` ならスキップし、`true` なら `/benchmark` を案内して停止する |
 | 2 | `/audience-persona-design` | `docs/channel/personas/persona-definition.md` | 存在すれば OK（mtime 比較なし。更新タイミングは戦略判断のため人間が決める） | analytics mode かつ `ttp_mode: false` ではユーザーに `/audience-persona-design` 実行を案内して中断。analytics mode かつ `true` では `.claude/skills/channel-new/references/desire-vocabulary.md` の fallback に従い、利用可能な競合コメント / タイトルから初回仮説の視聴者像を作ってソースと根拠を記録する。benchmark fallback mode / `ttp_mode: false` の minimal mode では config と入力データから初回仮説の視聴者像を作る。`ttp_mode: true` の minimal mode はこの判定前に停止する |
 | 3 | `/audience-persona-design` finalization | `docs/plans/viewing-scene-matrix.md` | 存在すれば OK（mtime 比較なし。persona 下流のため連動して判断） | analytics mode かつ `ttp_mode: false` ではユーザーに `/audience-persona-design` で `/viewing-scene` 実行と最終 `persona-definition.md` 更新を行うよう案内して中断。analytics mode かつ `true` では同じ fallback の競合コメント / タイトルから視聴シーンを仮説化し、利用可能な根拠がなければ `判定不能` として続行する。benchmark fallback mode / `ttp_mode: false` の minimal mode では仮説ペルソナから視聴シーンを仮説化する。`ttp_mode: true` の minimal mode はこの判定前に停止する |
@@ -67,11 +67,11 @@ handle_analysis_stale() {
   # 相対・絶対鮮度のすべてが成功した場合だけ Phase 1-2 へ進む。
   case "$stale_kind" in
     relative)
-      echo "AUTO_REFRESH_SKILLS=/analytics-analyze"
+      echo "AUTO_REFRESH_SKILLS=/analytics --analyze"
       return 3
       ;;
     absolute)
-      echo "AUTO_REFRESH_SKILLS=/analytics-collect,/analytics-analyze"
+      echo "AUTO_REFRESH_SKILLS=/analytics --collect,/analytics --analyze"
       return 3
       ;;
     *)
@@ -117,9 +117,9 @@ else
   ANALYSIS_JSON="reports/analysis_${REPORT_DATE}.json"
   # ANALYSIS_JSON の存在を確認し、analysis_json=$ANALYSIS_JSON、
   # analysis_md=$LATEST_REPORT として
-  # .claude/skills/analytics-analyze/references/analysis-json-validator.md の
+  # .claude/skills/analytics/references/analysis-json-validator.md の
   # validator 全体を実行する。JSON 不在または exit 非 0 なら
-  # /collection-ideate を中断し、/analytics-analyze 再実行を案内する。
+  # /collection-ideate を中断し、/analytics --analyze 再実行を案内する。
   INPUT_MODE="analytics mode"
 fi
 
@@ -152,8 +152,8 @@ if [ "$INPUT_MODE" = "analytics mode" ] && [ -n "$LATEST_DATA" ]; then
   if [ "$ELAPSED_DAYS" -gt "$FRESHNESS_DAYS" ]; then
     echo "analyze stale（収集データが ${ELAPSED_DAYS} 日前 > freshness_days=${FRESHNESS_DAYS}）"
     handle_analysis_stale absolute
-    # return 3 を受けたエージェントは /analytics-collect の成功後に
-    # /analytics-analyze を自動実行する。途中失敗時は後続へ進まない。
+    # return 3 を受けたエージェントは /analytics --collect の成功後に
+    # /analytics --analyze を自動実行する。途中失敗時は後続へ進まない。
     exit $?
   fi
 
@@ -161,7 +161,7 @@ if [ "$INPUT_MODE" = "analytics mode" ] && [ -n "$LATEST_DATA" ]; then
   if [ "$DATA_DATE" -gt "$REPORT_DATE" ]; then
     echo "analyze stale（data の方が新しい日付）"
     handle_analysis_stale relative
-    # return 3 を受けたエージェントは /analytics-analyze を自動実行する。
+    # return 3 を受けたエージェントは /analytics --analyze を自動実行する。
     # 呼び出し失敗または再検証失敗は理由と再開条件を表示して停止する。
     exit $?
   fi
@@ -212,9 +212,9 @@ fi
 |---|---|
 | `reports/analysis_*.md` が存在せず、`data/benchmark_*.json` が存在する | benchmark fallback mode として続行し、ベンチマークデータ + config で初回企画を生成 |
 | `reports/analysis_*.md` と `data/benchmark_*.json` がどちらも存在しない | minimal mode として `ttp_mode` を確認する。`false` はユーザー直接入力（テーマ / ジャンル / 雰囲気）+ config で初回企画を生成し、`true` は `/benchmark` を案内して停止する |
-| 最新 `reports/analysis_*.md` と同じファイル名日付の `.json` が存在しない、または analysis JSON validator が exit 非 0 | `/collection-ideate` を中断し、`/analytics-analyze` の再実行を案内 |
-| `reports/analysis_*.md` が最新 `data/analytics_data_*.json` より古い日付 | `/analytics-analyze` を自動実行し、再検証成功時だけ企画フローを続行 |
-| analytics mode で最新 `data/analytics_data_*.json` のファイル名日付が実行日 (today) から `config/skills/collection-ideate.yaml` の `freshness_days`（既定 7 日）を超えて経過（絶対鮮度、#1427） | `/analytics-collect` → `/analytics-analyze` の順で自動実行し、再検証成功時だけ企画フローを続行 |
+| 最新 `reports/analysis_*.md` と同じファイル名日付の `.json` が存在しない、または analysis JSON validator が exit 非 0 | `/collection-ideate` を中断し、`/analytics --analyze` の再実行を案内 |
+| `reports/analysis_*.md` が最新 `data/analytics_data_*.json` より古い日付 | `/analytics --analyze` を自動実行し、再検証成功時だけ企画フローを続行 |
+| analytics mode で最新 `data/analytics_data_*.json` のファイル名日付が実行日 (today) から `config/skills/collection-ideate.yaml` の `freshness_days`（既定 7 日）を超えて経過（絶対鮮度、#1427） | `/analytics --collect` → `/analytics --analyze` の順で自動実行し、再検証成功時だけ企画フローを続行 |
 | analytics mode で `data/benchmark_*.json` が `config/skills/benchmark.yaml` の `freshness_days`（既定 3 日）より古い | `/benchmark` を Skill ツールで自動実行 |
 | analytics mode で `persona-definition.md` が存在しない | `ttp_mode: false` は `/collection-ideate` を中断し、`/audience-persona-design` の先行実行を案内する。`true` は共通の欲求語彙選択規則に従い、利用可能な競合コメント / タイトルから初回仮説の視聴者像を作り、ソースと根拠を明記して続行する |
 | benchmark fallback mode / minimal mode で `persona-definition.md` が存在しない | benchmark fallback mode と `ttp_mode: false` の minimal mode は中断せず、config と入力データから初回仮説の視聴者像を作る。`ttp_mode: true` の minimal mode はこの判定前に停止する |
