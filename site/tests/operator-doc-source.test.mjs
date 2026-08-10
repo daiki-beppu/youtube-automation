@@ -45,17 +45,22 @@ test("source は build ごとに原本を読み、安定 route と doc type を�
   const source = createOperatorDocSource({ map: operatorDocMap, repositoryRoot });
   const onboarding = join(repositoryRoot, "ONBOARDING.md");
 
-  await writeFile(onboarding, "# First\n", "utf8");
+  await writeFile(onboarding, "# First\n\n## Details\n\nFirst body\n", "utf8");
   const first = await source.load();
-  await writeFile(onboarding, "# Second\n", "utf8");
+  await writeFile(onboarding, "# Second\n\n## Details\n\nSecond body\n", "utf8");
   const second = await source.load();
 
   assert.equal(first.entries.length, 7);
-  assert.equal(first.entries[0].body.text, "# First\n");
-  assert.equal(second.entries[0].body.text, "# Second\n");
+  assert.equal(first.entries[0].body.text, "## Details\n\nFirst body\n");
+  assert.equal(second.entries[0].body.text, "## Details\n\nSecond body\n");
+  assert.equal(first.entries[0].data.title, "First");
+  assert.equal(second.entries[0].data.title, "Second");
   assert.equal(first.entries[0].slug, operatorDocMap[0].route);
   assert.equal(first.entries[0].data.type, "doc");
-  assert.match(first.entries[0].raw, /^---\ntype: doc\n---/);
+  assert.equal(
+    first.entries[0].raw,
+    '---\ntitle: "First"\ntype: doc\n---\n\n## Details\n\nFirst body\n'
+  );
 });
 
 test("存在しない原本は解決対象を示して fail closed する", async () => {
