@@ -108,6 +108,24 @@ test("一覧と全 skill ページを生成し、参照をサイト内リンク�
   assert.doesNotMatch(beta.body.text, /## 前提/);
 });
 
+test("一覧と個別ページの先頭 H1 を title へ分離する", async () => {
+  const repositoryRoot = await createRepository();
+  const source = createSkillPageSource({ repositoryRoot });
+  const result = await source.load();
+
+  const index = result.entries.find((entry) => entry.slug === "/skills");
+  const alpha = result.entries.find((entry) => entry.slug === "/skills/alpha");
+
+  assert.equal(index.data.title, "全 skill 一覧");
+  assert.doesNotMatch(index.body.text, /^# /mu);
+  assert.match(index.body.text, /^## category one$/mu);
+  assert.match(index.raw, /^---\ntitle: "全 skill 一覧"\ntype: doc\n---\n\n/mu);
+  assert.equal(alpha.data.title, "/alpha");
+  assert.doesNotMatch(alpha.body.text, /^# /mu);
+  assert.match(alpha.body.text, /^## 前提$/mu);
+  assert.match(alpha.raw, /^---\ntitle: "\/alpha"\ntype: doc\n---\n\n/mu);
+});
+
 test("skill を追加するとカタログ更新前でも個別ページが増える", async () => {
   const repositoryRoot = await createRepository();
   const source = createSkillPageSource({ repositoryRoot });
@@ -149,7 +167,11 @@ test("production build は一覧と55個の個別ページを公開する", asyn
 
   assert.match(index, /55 個の skill/);
   assert.match(index, /href="\/skills\/wf-new-batch"/);
+  assert.equal((index.match(/<h1\b/g) ?? []).length, 1);
+  assert.match(index, /<h1[^>]*>全 skill 一覧<\/h1>/);
   assert.match(thumbnail, /href="\/skills\/thumbnail-compare"/);
+  assert.equal((thumbnail.match(/<h1\b/g) ?? []).length, 1);
+  assert.match(thumbnail, /<h1[^>]*>\/thumbnail<\/h1>/);
   assert.match(thumbnail, /<h2[^>]*>.*?前提.*?<\/h2>/);
   assert.doesNotMatch(thumbnail, /Subagent Contract|run_in_background|Gotchas/);
 });

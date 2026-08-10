@@ -2,6 +2,7 @@ import { existsSync, realpathSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import { join, resolve, sep } from "node:path";
 import type { ContentSource, SourceEntry } from "blume/sources/types";
+import { extractMarkdownTitle } from "./markdown-title.ts";
 import { operatorDocReleaseField } from "./operator-doc-source.ts";
 
 const GITHUB_SKILL_BASE =
@@ -175,22 +176,26 @@ const assertInsideRepository = (repositoryRoot: string, path: string): string =>
 const sourceEntry = (
   ref: string,
   slug: string,
-  text: string,
+  markdown: string,
   editUrl?: string
-): SourceEntry => ({
-  body: { format: "md", text },
-  data: {
-    kind: operatorDocReleaseField,
-    released_at: operatorDocReleaseField,
-    summary: operatorDocReleaseField,
-    type: "doc",
-    version: operatorDocReleaseField,
-  },
-  ...(editUrl ? { editUrl } : {}),
-  raw: `---\ntype: doc\n---\n\n${text}`,
-  ref,
-  slug,
-});
+): SourceEntry => {
+  const { text, title } = extractMarkdownTitle(markdown);
+  return {
+    body: { format: "md", text },
+    data: {
+      kind: operatorDocReleaseField,
+      released_at: operatorDocReleaseField,
+      summary: operatorDocReleaseField,
+      title,
+      type: "doc",
+      version: operatorDocReleaseField,
+    },
+    ...(editUrl ? { editUrl } : {}),
+    raw: `---\ntitle: ${JSON.stringify(title)}\ntype: doc\n---\n\n${text}`,
+    ref,
+    slug,
+  };
+};
 
 const loadSkillEntries = async (repositoryRoot: string): Promise<SourceEntry[]> => {
   const skillsRoot = resolve(repositoryRoot, ".claude/skills");
