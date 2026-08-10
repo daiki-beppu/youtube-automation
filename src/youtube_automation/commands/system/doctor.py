@@ -1557,12 +1557,12 @@ def check_analytics_report(channel_dir: Path) -> CheckResult:
                 "最新 data/analytics_data_*.json が実行日から freshness_days を超えて古い。"
                 "/wf-new は stale report では開始不可"
             )
-            instructions = "/analytics-collect → /analytics-analyze の順で再実行してください"
+            instructions = "/analytics --collect → /analytics --analyze の順で再実行してください"
         else:
             message = (
                 "reports/analysis_*.md が最新 data/analytics_data_*.json より古い。/wf-new は stale report では開始不可"
             )
-            instructions = "/analytics-analyze を再実行してください（必要なら先に /analytics-collect）"
+            instructions = "/analytics --analyze を再実行してください（必要なら先に /analytics --collect）"
         return CheckResult(
             id="analytics_report",
             status="fail",

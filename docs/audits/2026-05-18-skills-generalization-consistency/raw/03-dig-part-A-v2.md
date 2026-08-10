@@ -65,16 +65,16 @@
 
 | # | スキル | file:line | 引用 | 重大度 | 推奨修正先 |
 |---|--------|-----------|------|--------|-----------|
-| 2.11 | analytics-report | `.claude/skills/analytics-report/SKILL.md:94-101` | `背景: #0f1419 / カード背景: #1a2332 / アクセント: #c8a96e (ブランドアクセントカラー) / テキスト: #e8e6e3 / チャート色: #4ecdc4, #45b7d1, #96ceb4, #ffeaa7, #dfe6e9 / 成功: #00b894 / 警告: #fdcb6e / 危険: #e17055` | **高** | **`config/channel/meta.json::channel.brand_color`** 新設、または skill-config `analytics-report.yaml::theme.colors`。「ブランドアクセントカラー」のコメントが付いており明らかにチャンネル固有 |
-| 2.12 | analytics-report | `.claude/skills/analytics-report/SKILL.md:104` | `max-width: 1200px` | 低 | レイアウト定数 |
+| 2.11 | analytics | `.claude/skills/analytics/SKILL.md:94-101` | `背景: #0f1419 / カード背景: #1a2332 / アクセント: #c8a96e (ブランドアクセントカラー) / テキスト: #e8e6e3 / チャート色: #4ecdc4, #45b7d1, #96ceb4, #ffeaa7, #dfe6e9 / 成功: #00b894 / 警告: #fdcb6e / 危険: #e17055` | **高** | **`config/channel/meta.json::channel.brand_color`** 新設、または skill-config `analytics.yaml::theme.colors`。「ブランドアクセントカラー」のコメントが付いており明らかにチャンネル固有 |
+| 2.12 | analytics | `.claude/skills/analytics/SKILL.md:104` | `max-width: 1200px` | 低 | レイアウト定数 |
 
 #### A-2-C: 閾値・件数（中）
 
 | # | スキル | file:line | 引用 | 重大度 | 推奨修正先 |
 |---|--------|-----------|------|--------|-----------|
-| 2.13 | analytics-analyze | `.claude/skills/analytics-analyze/SKILL.md:38` | `30分以内に生成されたレポートがあれば分析をスキップ` | 中 | skill-config `analytics-analyze.yaml::freshness_minutes` |
-| 2.14 | analytics-collect | `.claude/skills/analytics-collect/SKILL.md:36` | `30分以内 → 収集をスキップ` | 中 | 同上（skill-config 横断統一が望ましい） |
-| 2.15 | analytics-collect | `.claude/skills/analytics-collect/SKILL.md:28,62` | `効率モード（上位50本 + 直近30日投稿）` | 中 | skill-config `analytics-collect.yaml::top_n` / `recent_days` |
+| 2.13 | analytics | `.claude/skills/analytics/SKILL.md:38` | `30分以内に生成されたレポートがあれば分析をスキップ` | 中 | skill-config `analytics.yaml::freshness_minutes` |
+| 2.14 | analytics | `.claude/skills/analytics/SKILL.md:36` | `30分以内 → 収集をスキップ` | 中 | 同上（skill-config 横断統一が望ましい） |
+| 2.15 | analytics | `.claude/skills/analytics/SKILL.md:28,62` | `効率モード（上位50本 + 直近30日投稿）` | 中 | skill-config `analytics.yaml::top_n` / `recent_days` |
 | 2.16 | video-description | `.claude/skills/video-description/SKILL.md:89,107` | `ハッシュタグ: 13個（base + theme固有）` | 中 | `config/channel/content.json::descriptions.hashtag_count` を新設 |
 | 2.17 | video-upload | `.claude/skills/video-upload/SKILL.md:113` | `YouTube タイトル長制限準拠（100文字）` | 低 | YouTube 仕様（固定で良いが定数化） |
 | 2.18 | video-upload | `.claude/skills/video-upload/SKILL.md:97` | `指数バックオフによるリトライ（5xx エラー時、最大5回）` | 低 | utils 側で実装。SKILL.md は文章 |
@@ -148,9 +148,9 @@
 
 | # | スキル | file:line | 引用 | 重大度 | 期待される config 参照先 |
 |---|--------|-----------|------|--------|-----------------------|
-| 5.1 | analytics-analyze | `.claude/skills/analytics-analyze/SKILL.md:64` | ``yt-theme-compare`: `channel_config.tags.themes` のキーワードで...` | **高** | v2.0.0 で `channel_config.tags.themes` は **廃止**。**正しくは `content.tags.themes`**（`utils/config/content.py`）。古い namespace 名が SKILL.md に残存している（c-3 deprecated 系とも重複） |
-| 5.2 | analytics-report | `.claude/skills/analytics-report/SKILL.md:96` | `アクセント: #c8a96e (ブランドアクセントカラー)` | **高** | `config/channel/meta.json::channel.brand_color`（新設キー）を導入し、HTML レポートはそこから読む。現状はチャンネル固有のブランドアクセント色が SKILL.md に直書き |
-| 5.3 | analytics-report | `.claude/skills/analytics-report/SKILL.md:73,123` | `Complete Collection のみ表示（Shorts を除外）` / `Shorts は動画パフォーマンス表から除外（タイトルに #Shorts を含む）` | 中 | `config/channel/analytics.json::analytics.collection_filter_keywords` を活用すべき（既に `["collection", "complete"]` を保持）。`#Shorts` 固定文字列マッチは独立した除外ロジックなので skill-config か analytics.json の除外パターンに揃える |
+| 5.1 | analytics | `.claude/skills/analytics/SKILL.md:64` | ``yt-theme-compare`: `channel_config.tags.themes` のキーワードで...` | **高** | v2.0.0 で `channel_config.tags.themes` は **廃止**。**正しくは `content.tags.themes`**（`utils/config/content.py`）。古い namespace 名が SKILL.md に残存している（c-3 deprecated 系とも重複） |
+| 5.2 | analytics | `.claude/skills/analytics/SKILL.md:96` | `アクセント: #c8a96e (ブランドアクセントカラー)` | **高** | `config/channel/meta.json::channel.brand_color`（新設キー）を導入し、HTML レポートはそこから読む。現状はチャンネル固有のブランドアクセント色が SKILL.md に直書き |
+| 5.3 | analytics | `.claude/skills/analytics/SKILL.md:73,123` | `Complete Collection のみ表示（Shorts を除外）` / `Shorts は動画パフォーマンス表から除外（タイトルに #Shorts を含む）` | 中 | `config/channel/analytics.json::analytics.collection_filter_keywords` を活用すべき（既に `["collection", "complete"]` を保持）。`#Shorts` 固定文字列マッチは独立した除外ロジックなので skill-config か analytics.json の除外パターンに揃える |
 | 5.4 | video-description | `.claude/skills/video-description/references/description-templates.md:36` | `🎧 If you enjoyed the vibe, feel free to save and subscribe for more 🌧️` | **高** | 英語固定 + 🌧️ 絵文字は BGM/雨系チャンネル前提。`config/channel/meta.json::channel.cta_subscribe`（既存）に集約済のはずだが、本テンプレ行は別途固定文字列で残存している。`{channel_config: channel.cta_subscribe}` 形式に統一すべき |
 | 5.5 | video-description | `.claude/skills/video-description/references/description-templates.md:43-44` | `🎨 𝐀𝐫𝐭 & 🎹 𝐌𝐮𝐬𝐢𝐜 𝐛𝐲 {channel_config: channel.name}` / `Original AI composition • Free for personal use` | **高** | "Original AI composition • Free for personal use" は固定英語コピー。skill-config `usage_attribution_lines`（既存、`video-description/config.default.yaml:20-24`）と二重管理になっている。テンプレ側を skill-config 参照に置き換えるか、二重管理を解消 |
 | 5.6 | video-description | `.claude/skills/video-description/SKILL.md:89,107` | `ハッシュタグ: 13個` | 中 | `config/channel/content.json::descriptions.hashtag_count` 新設、または `len(descriptions.hashtags)` を運用ルール化。13 は magic number |
@@ -164,7 +164,7 @@
 | 5.14 | suno | `.claude/skills/suno/SKILL.md:158-164` | 禁止形容詞リスト 17 語（`thundering, blazing, crushing, ...`） | 中 | skill-config `suno.yaml::ng_words`（既存だが Lyria 側のみ）と統一できる。`config/skills/suno.yaml::scene_phrase_ng_words` 新設推奨 |
 | 5.15 | suno | `.claude/skills/suno/SKILL.md:172-176` | NG ワード `rain, dripping, drops, ...` / OK ワード `misty, melancholic, ...` | 中 | 同様に skill-config 化推奨 |
 | 5.16 | postmortem | `.claude/skills/postmortem/SKILL.md:71-78,86-89` | 比率閾値 0.5/0.7/0.9 を症状判定 + 仮説マッピングの 2 箇所で重複定義 | 中 | skill-config `postmortem.yaml::thresholds` 一元化。SKILL.md 内に「閾値は固定値ではなく **チャンネル特性に応じて文脈調整可**」と書かれている時点で外出ししたほうが運用と整合 |
-| 5.17 | analytics-collect | `.claude/skills/analytics-collect/SKILL.md:58` | `チャンネル: <channel_config: channel.name>` | 低 | プレースホルダ syntax は OK だが、v2.0.0 namespace では `meta.channel.name`。読み手向けプレース表記なので致命的ではないが統一推奨 |
+| 5.17 | analytics | `.claude/skills/analytics/SKILL.md:58` | `チャンネル: <channel_config: channel.name>` | 低 | プレースホルダ syntax は OK だが、v2.0.0 namespace では `meta.channel.name`。読み手向けプレース表記なので致命的ではないが統一推奨 |
 | 5.18 | streaming | `.claude/skills/streaming/SKILL.md:29,96`, `infra/terraform/streaming/README.md` | `--check-threshold` の閾値（80%）が `src/youtube_automation/utils/streaming/threshold.py` の `THRESHOLD_RATIO` 定数で、`config/channel/` 連動なし | 中 | plan.md A-4 で既知シードとして言及。Vultr 帯域上限は streaming infra 固有なので `config/skills/streaming.yaml::bandwidth_threshold_ratio` 新設が妥当 |
 
 ---
@@ -172,14 +172,14 @@
 ## 3. 主要な発見のサマリー（top 5）
 
 ### ① v2.0.0 namespace の取りこぼし（A-5 #5.1）— **最重要**
-- `analytics-analyze/SKILL.md:64` に `channel_config.tags.themes` が残存。post-v2.0.0 では `content.tags.themes`。
-- 他にも `video-description/references/description-templates.md` および `analytics-collect/SKILL.md` で `{channel_config: ...}` プレースホルダ syntax が使われており、新 namespace（`meta.*` / `content.*`）と表記がずれている。
+- `analytics/SKILL.md:64` に `channel_config.tags.themes` が残存。post-v2.0.0 では `content.tags.themes`。
+- 他にも `video-description/references/description-templates.md` および `analytics/SKILL.md` で `{channel_config: ...}` プレースホルダ syntax が使われており、新 namespace（`meta.*` / `content.*`）と表記がずれている。
 - **理由**: CLAUDE.md「設定アクセス」節と矛盾するため、最終レポートで section 1.4 の代表事例として取り上げるべき。
 
-### ② analytics-report のブランド色直書き（A-5 #5.2, A-2 #2.11）
+### ② analytics のブランド色直書き（A-5 #5.2, A-2 #2.11）
 - HTML レポートのカラーパレット 9 色（特に `#c8a96e` = "ブランドアクセントカラー"）が SKILL.md に直書き。
 - チャンネルごとに変えたい代表的な値だが config 参照ルートが無い。
-- `meta.json::channel.brand_color` 新設 or `analytics-report.yaml::theme` skill-config 導入の 2 択。
+- `meta.json::channel.brand_color` 新設 or `analytics.yaml::theme` skill-config 導入の 2 択。
 
 ### ③ video-description の英語コピー二重管理（A-5 #5.4, #5.5）
 - `usage_attribution_lines` は skill-config に既出だが、`references/description-templates.md` 内の固定テンプレ本文に同じ意図の英語コピー（"🎧 If you enjoyed the vibe..." / "Original AI composition..."）が並走している。
@@ -201,7 +201,7 @@
 ### 走査済み（35 スキル全件）
 
 ```
-alignment-check / analytics-analyze / analytics-collect / analytics-report /
+alignment-check / analytics / analytics / analytics /
 audience-persona / benchmark / channel-direction / channel-import / channel-new /
 channel-research / channel-setup / channel-status / collection-ideate /
 comments-reply / discover-competitors / live-clean / loop-video / lyria /
@@ -246,7 +246,7 @@ A-1〜A-5 通算で **強い検出 (high) が 0 件**だったスキル:
 | `category_id: "10"` | 中 | YouTube Music カテゴリ固定 ID。BGM チャンネル前提なら自然。release 型でゲーム配信なら ID 20（Gaming）等になる |
 | `Asia/Tokyo` (schedule-template) | 低 | 日本以外の運営者は変更必須なのでテンプレ既定値の妥当性自体が議論 |
 | `daiki-beppu/...` | 中 | リポジトリ author としては正しいが、配布パッケージとしては問題 |
-| 色 hex (`#0f1419` 等) | 低 | analytics-report の dark theme は完全に意図された UI 設計 |
+| 色 hex (`#0f1419` 等) | 低 | analytics の dark theme は完全に意図された UI 設計 |
 | postmortem 閾値 (0.5, 0.7) | 中 | ドキュメント自体に「文脈調整可」とある時点で **意図的なソフト固定**。config 化の優先度は判断分かれる |
 | GCP region `us-central1` | 低 | Veo / Lyria の対応 region 制約 (`loop-video/SKILL.md:48`)。意図的固定 |
 | YouTube タイトル 100 文字 | 低 | 仕様値 |
@@ -270,21 +270,21 @@ A-1〜A-5 通算で **強い検出 (high) が 0 件**だったスキル:
 
 ### P1 必須掲載（fix リスト high）
 
-1. **A-5 #5.1**: `analytics-analyze/SKILL.md:64` の旧 namespace `channel_config.tags.themes` → `content.tags.themes` への修正
-2. **A-5 #5.2 + A-2 #2.11**: `analytics-report/SKILL.md:94-101` のブランド色 9 件 → `meta.json::channel.brand_color` または skill-config 新設
+1. **A-5 #5.1**: `analytics/SKILL.md:64` の旧 namespace `channel_config.tags.themes` → `content.tags.themes` への修正
+2. **A-5 #5.2 + A-2 #2.11**: `analytics/SKILL.md:94-101` のブランド色 9 件 → `meta.json::channel.brand_color` または skill-config 新設
 3. **A-5 #5.4 + #5.5**: `video-description/references/description-templates.md:36,43,44` の英語固定コピー → `channel.cta_subscribe` / `usage_attribution_lines` への統合（二重管理解消）
 4. **A-3 #3.1, #3.2, #3.3**: `channel-new/SKILL.md:29,64`, `channel-import/SKILL.md:20` の user-specific path（`~/01-dev/`, `~/02-yt`）一般化
 5. **A-4 #4.4, #4.5, #4.6**: `daiki-beppu` GitHub owner 名の `{{REPO_OWNER}}` プレースホルダ化
 
 ### P2 推奨掲載（fix リスト medium）
 
-6. **A-5 #5.3**: analytics-report の `#Shorts` 文字列フィルタ → `analytics.collection_filter_keywords` 統合
+6. **A-5 #5.3**: analytics の `#Shorts` 文字列フィルタ → `analytics.collection_filter_keywords` 統合
 7. **A-5 #5.6**: video-description のハッシュタグ数 13 固定 → `descriptions.hashtag_count` 化
 8. **A-5 #5.16 / A-2 #2.23**: postmortem の閾値 0.5/0.7/0.9 → skill-config 化
 9. **A-5 #5.14, #5.15**: suno の禁止形容詞・NG/OK ワード → skill-config 化
 10. **A-5 #5.18**: streaming `--check-threshold` の閾値非連動 → `config/skills/streaming.yaml` 新設
 11. **A-3 #3.5**: streaming の `~/.ssh/yt_stream_key` 固定 → skill-config `ssh_key_path`
-12. **A-2 #2.13, #2.14**: analytics-analyze / analytics-collect の `30分` 鮮度ウィンドウ重複定義 → skill-config 横断統一
+12. **A-2 #2.13, #2.14**: analytics / analytics の `30分` 鮮度ウィンドウ重複定義 → skill-config 横断統一
 
 ### P3 補足掲載（fix リスト low）
 
@@ -296,7 +296,7 @@ A-1〜A-5 通算で **強い検出 (high) が 0 件**だったスキル:
 ### 最終レポート構成への寄与
 
 - **観点 1.1（ハードコード値）**: A-1 0 件、A-2 中 25 / 低 20 件、A-3 高 3 / 中 1 件、A-4 中 3 件 → 「絶対値ハードコードはほぼ無いが、設定可能であるべき constants が SKILL.md 本文 / references / config.default.yaml に分散している」がメッセージ
-- **観点 1.4（既存 config 未参照）**: 高 4 件 + 中 9 件 → 「analytics-report のブランド色」「video-description テンプレ文の二重管理」「v2.0.0 namespace 取りこぼし」を 3 大テーマとして掲載
+- **観点 1.4（既存 config 未参照）**: 高 4 件 + 中 9 件 → 「analytics のブランド色」「video-description テンプレ文の二重管理」「v2.0.0 namespace 取りこぼし」を 3 大テーマとして掲載
 
 ---
 

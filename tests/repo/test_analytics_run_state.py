@@ -1,4 +1,4 @@
-"""`/analytics-run` の manifest と成果物鮮度判定の契約テスト。"""
+"""`/analytics` の manifest と成果物鮮度判定の契約テスト。"""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ import pytest
 from tests.helpers.paths import REPO_ROOT
 
 ROOT = REPO_ROOT
-SKILL_DIR = ROOT / ".claude" / "skills" / "analytics-run"
+SKILL_DIR = ROOT / ".claude" / "skills" / "analytics"
 SCRIPT = SKILL_DIR / "references" / "analytics-chain-state.py"
 MANIFEST = SKILL_DIR / "references" / "analytics-chain-manifest.json"
 
@@ -51,9 +51,9 @@ def test_manifest_declares_linear_gate_free_chain() -> None:
     assert manifest["chainId"] == "analytics"
     assert [step["id"] for step in manifest["steps"]] == ["collect", "analyze", "report"]
     assert [step["skill"] for step in manifest["steps"]] == [
-        "analytics-collect",
-        "analytics-analyze",
-        "analytics-report",
+        "analytics",
+        "analytics",
+        "analytics",
     ]
     assert all(step["approvalGate"]["skip"] is True for step in manifest["steps"])
     assert all("enabled" not in step["approvalGate"] for step in manifest["steps"])
@@ -70,12 +70,12 @@ def test_collect_uses_default_freshness_and_exposes_source(tmp_path: Path, state
     assert code == state.EXIT_SKIP
     assert result["decision"] == "skip"
     assert result["freshness_minutes"] == 30
-    assert result["freshness_source"] == ".claude/skills/analytics-collect/config.default.yaml"
+    assert result["freshness_source"] == ".claude/skills/analytics/config.default.yaml"
 
 
 def test_collect_channel_override_changes_freshness_and_is_observable(tmp_path: Path, state: ModuleType) -> None:
     now = 2_000_000_000.0
-    override = tmp_path / "config" / "skills" / "analytics-collect.yaml"
+    override = tmp_path / "config" / "skills" / "analytics.yaml"
     override.parent.mkdir(parents=True)
     override.write_text("freshness_minutes: 5\n", encoding="utf-8")
     _touch(tmp_path / "data" / "analytics_data_20260718_120000.json", now - 6 * 60)
@@ -85,7 +85,7 @@ def test_collect_channel_override_changes_freshness_and_is_observable(tmp_path: 
     assert code == state.EXIT_RUN
     assert result["reason"] == "analytics_data_stale"
     assert result["freshness_minutes"] == 5
-    assert result["freshness_source"] == "config/skills/analytics-collect.yaml"
+    assert result["freshness_source"] == "config/skills/analytics.yaml"
 
 
 def test_analyze_skips_fresh_pair_newer_than_analytics(tmp_path: Path, state: ModuleType) -> None:
@@ -161,7 +161,7 @@ def test_missing_and_stale_artifacts_cover_every_step(tmp_path: Path, state: Mod
 
 
 def test_cli_emits_error_json_and_exit_two_for_invalid_freshness(tmp_path: Path) -> None:
-    override = tmp_path / "config" / "skills" / "analytics-collect.yaml"
+    override = tmp_path / "config" / "skills" / "analytics.yaml"
     override.parent.mkdir(parents=True)
     override.write_text("freshness_minutes: 0\n", encoding="utf-8")
 
@@ -190,8 +190,8 @@ def test_cli_emits_error_json_and_exit_two_for_invalid_freshness(tmp_path: Path)
     assert "正の数" in payload["reason"]
 
 
-def test_existing_skills_route_whole_chain_to_analytics_run() -> None:
-    for name in ("analytics-collect", "analytics-analyze", "analytics-report"):
-        text = (ROOT / ".claude" / "skills" / name / "SKILL.md").read_text(encoding="utf-8")
-        description = text.split("---", 2)[1]
-        assert "/analytics-run" in description
+def test_analytics_description_exposes_every_exclusive_mode() -> None:
+    text = (ROOT / ".claude" / "skills" / "analytics" / "SKILL.md").read_text(encoding="utf-8")
+    description = text.split("---", 2)[1]
+
+    assert all(flag in description for flag in ("--collect", "--analyze", "--report"))

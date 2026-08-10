@@ -1,11 +1,11 @@
 ---
 name: flop-analysis
-description: "Use when 公開済み動画が伸びなかった原因を video_id、collection、または --since で切り分け、postmortem.md に出力するとき。「伸びなかった」「flop 分析」で発動。横断戦略は /analytics-analyze、事前監査は /alignment-check"
+description: "Use when 公開済み動画が伸びなかった原因を video_id、collection、または --since で切り分け、postmortem.md に出力するとき。「伸びなかった」「flop 分析」で発動。横断戦略は /analytics --analyze、事前監査は /alignment-check"
 ---
 
 ## 前後工程
 
-- `前工程`: `/analytics-analyze`, `/alignment-check`
+- `前工程`: `/analytics`, `/alignment-check`
 - `後工程`: `/collection-ideate`
 
 ## Overview
@@ -38,8 +38,8 @@ description: "Use when 公開済み動画が伸びなかった原因を video_id
 - **既存チャンネル**（YouTube で既に運営中）→ `/channel-new`（既存チャンネル取り込みモード）を案内
 
 加えて、対象動画について以下が揃っていること:
-- `data/analytics_data_*.json` の `video_analytics[<video_id>]` に当該動画が含まれている（含まれていない場合は `/analytics-collect` を先に案内）
-- CTR / インプレッションを参照する場合は同 JSON に `reporting_api.impressions_summary.per_video[]` が含まれていること（取得元は `infrastructure/youtube/reporting_api.py`。未取得の場合は CTR / インプレッション欄を「データなし」と明示し、`/analytics-collect` の再実行を案内する）
+- `data/analytics_data_*.json` の `video_analytics[<video_id>]` に当該動画が含まれている（含まれていない場合は `/analytics --collect` を先に案内）
+- CTR / インプレッションを参照する場合は同 JSON に `reporting_api.impressions_summary.per_video[]` が含まれていること（取得元は `infrastructure/youtube/reporting_api.py`。未取得の場合は CTR / インプレッション欄を「データなし」と明示し、`/analytics --collect` の再実行を案内する）
 - コレクション指定の場合は `collections/live/<collection>/20-documentation/upload_tracking.json` が存在する
 
 ## Quick Reference
@@ -207,7 +207,7 @@ uv run python .claude/skills/flop-analysis/references/verification.py --operatio
 `yt-retention-timeline --video <video_id>` を実行し、drop 地点に対応する scene / BGM を
 検証結果へ引用する。`status=skipped` で `/video-analyze 未実行` と返った場合は、既存の
 Phase 4 規則どおり対象 1 動画だけ `/video-analyze` してから再実行する。retention 未収集なら
-この照合だけを `未検証（理由: retention 未収集。/analytics-collect の full 収集が必要）` とし、
+この照合だけを `未検証（理由: retention 未収集。/analytics --collect の full 収集が必要）` とし、
 他の content-signals 検証は続行する。`outside_analysis_window` の scene / BGM は推測しない。
 
 ### Phase 5: postmortem.md の生成
@@ -273,7 +273,7 @@ Phase 4 規則どおり対象 1 動画だけ `/video-analyze` してから再実
 
 ### Phase 6: insights への還元
 
-Phase 5 で保存した postmortem.md の「結論 / 反証 / 学び」から、次サイクルの企画・制作に効く学びを `data/insights.jsonl` へ還元する。エントリ形式は `.claude/skills/analytics-analyze/references/insights-entry.schema.json` を単一ソースとし、本文で必須キーや enum を再定義しない。
+Phase 5 で保存した postmortem.md の「結論 / 反証 / 学び」から、次サイクルの企画・制作に効く学びを `data/insights.jsonl` へ還元する。エントリ形式は `.claude/skills/analytics/references/insights-entry.schema.json` を単一ソースとし、本文で必須キーや enum を再定義しない。
 
 **還元ゲート**: 次をすべて満たす postmortem セクションだけを還元対象にする。満たさない場合は追記せず、「insights 還元なし（理由: <空欄 / 全主仮説が未検証>）」と明示して完了する。
 
@@ -291,7 +291,7 @@ Phase 5 で保存した postmortem.md の「結論 / 反証 / 学び」から、
 追記後（追記 0 件の場合も含め）、次の検証が exit 0 になることを確認してから完了を報告する:
 
 ```bash
-uv run python3 .claude/skills/analytics-analyze/references/validate_insights.py data/insights.jsonl
+uv run python3 .claude/skills/analytics/references/validate_insights.py data/insights.jsonl
 ```
 
 還元された学びは次サイクルで `/wf-new` が open エントリとして収集し、`/collection-ideate` の企画入力・`/thumbnail`（lever=thumbnail）の制作前参照に使われる。本スキルを `/wf-new` から自動実行することはない（公開済み動画の分析・検証は本スキルの既存責務に残る）。

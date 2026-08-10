@@ -114,8 +114,8 @@ def test_freshness_mode_script_executes_each_representative_path(tmp_path: Path,
 @pytest.mark.parametrize(
     ("data_date", "report_date", "expected_refresh"),
     [
-        ("20260702", "20260622", "/analytics-analyze"),
-        ("20260622", "20260622", "/analytics-collect,/analytics-analyze"),
+        ("20260702", "20260622", "/analytics --analyze"),
+        ("20260622", "20260622", "/analytics --collect,/analytics --analyze"),
     ],
     ids=["relative-stale", "absolute-stale"],
 )

@@ -156,12 +156,12 @@ Style は collection 境界で一度だけ解決し、次の優先順を使う�
 
 ### 蓄積 insights 参照（lever=bgm）
 
-プロンプト構築前に、過去サイクルの検証済みの学び（`data/insights.jsonl`）から音楽へ効く open entry を参照する。schema の単一ソースは `.claude/skills/analytics-analyze/references/insights-entry.schema.json` とし、キーや enum を本スキル側で再定義しない。
+プロンプト構築前に、過去サイクルの検証済みの学び（`data/insights.jsonl`）から音楽へ効く open entry を参照する。schema の単一ソースは `.claude/skills/analytics/references/insights-entry.schema.json` とし、キーや enum を本スキル側で再定義しない。
 
 `data/insights.jsonl` が存在する場合は、先に既存 validator が exit 0 になることを確認する。非0なら、壊れたデータをプロンプトへ混入させず、ファイルパスとエラーを提示して停止する。
 
 ```bash
-uv run python3 .claude/skills/analytics-analyze/references/validate_insights.py data/insights.jsonl
+uv run python3 .claude/skills/analytics/references/validate_insights.py data/insights.jsonl
 jq -c 'select(.status == "open" and .lever == "bgm")' data/insights.jsonl
 ```
 
@@ -169,7 +169,7 @@ jq -c 'select(.status == "open" and .lever == "bgm")' data/insights.jsonl
 - 反映する場合は、どの entry `id` を Style 文または Exclude Styles のどちらへ反映したかを生成結果と一緒に報告する。既存 `genre_line` と矛盾する場合は自動で上書きせず、矛盾する語と entry `id` を提示してユーザー判断を待つ
 - `data/insights.jsonl` が存在しない、または該当 entry が0件の場合は「bgm insights なし」と表示し、既存フローを続行する
 - `lever=thumbnail` など bgm 以外の entry と、`adopted` / `dismissed` entry は提示・反映しない
-- 本スキルは insights を読み取るだけで、`status` を含む既存行の変更・追記は行わない。status 反映は `/collection-ideate`、追記は `/analytics-analyze` と `/flop-analysis` の責務
+- 本スキルは insights を読み取るだけで、`status` を含む既存行の変更・追記は行わない。status 反映は `/collection-ideate`、追記は `/analytics --analyze` と `/flop-analysis` の責務
 
 ### ベンチマーク BGM 構造の参照
 

@@ -28,9 +28,9 @@ Issue: [#130 chore: `.claude/skills/*/SKILL.md` の冗長記述を点検し最�
 
 | 旧 | 新 | 改名理由 |
 |---|---|---|
-| `analyze` | `analytics-analyze` | 「何を analyze するか」が名前から不明 |
-| `collect` | `analytics-collect` | 「何を collect するか」が名前から不明 |
-| `report` | `analytics-report` | 「何の report か」が名前から不明 |
+| `analyze` | `analytics` | 「何を analyze するか」が名前から不明 |
+| `collect` | `analytics` | 「何を collect するか」が名前から不明 |
+| `report` | `analytics` | 「何の report か」が名前から不明 |
 | `status` | `channel-status` | YouTube 統計か制作進捗 (`/wf-status`) か曖昧だった |
 | `description` | `video-description` | 名詞 1 語、コンテキスト無し |
 | `upload` | `video-upload` | 「何を upload するか」が名前から不明 |
@@ -69,9 +69,9 @@ Issue: [#130 chore: `.claude/skills/*/SKILL.md` の冗長記述を点検し最�
 | skill | 検出箇所 | 提案修正 |
 |---|---|---|
 | `alignment-check` | description 末尾「方向性見直し時に必ず使用すること」常套句 | 「など」連発と「必ず使用すること」を削り、トリガー語を厳選 |
-| `analytics-analyze` | 「など、データに基づく判断が求められる場面で必ず使用すること」常套句 | トリガー語と前後関係 (`/analytics-collect` 後実行) の 2 文構成に整理 |
-| `analytics-collect` | 「analytics_system.py の実行が必要な場面で必ず使用すること」（陳腐化）— `analytics_system.py` は `yt-analytics` に統合済み | CLI 名 `yt-analytics` に追従（実装乖離も併記） |
-| `analytics-report` | 「など、既存レポートの参照・比較が必要な場面で必ず使用すること」常套句 | 「過去レポートの比較やパフォーマンスレビュー時」と既出冒頭文の重複を解消 |
+| `analytics` | 「など、データに基づく判断が求められる場面で必ず使用すること」常套句 | トリガー語と前後関係 (`/analytics --collect` 後実行) の 2 文構成に整理 |
+| `analytics` | 「analytics_system.py の実行が必要な場面で必ず使用すること」（陳腐化）— `analytics_system.py` は `yt-analytics` に統合済み | CLI 名 `yt-analytics` に追従（実装乖離も併記） |
+| `analytics` | 「など、既存レポートの参照・比較が必要な場面で必ず使用すること」常套句 | 「過去レポートの比較やパフォーマンスレビュー時」と既出冒頭文の重複を解消 |
 | `audience-persona-design` | 「など。…必ず使用すること」常套句、トリガー語が 6 個並列で発動条件がぼやける | 主要 3 トリガー語に絞る |
 | `benchmark` | description 156 chars。冒頭文と「など、競合情報の取得・更新に関わる場面で…」が同義反復 | トリガー語と CLI/output (`docs/benchmarks/*.md`) の 2 文構成に整理 |
 | `channel-direction` | 「など、新チャンネルの戦略的方向性を対話で決定する場面で使用すること」常套句 | トリガー語列挙と前後関係を分離（既に `/channel-research` 後 / `/channel-setup` 前は明記済み） |
@@ -110,9 +110,9 @@ Issue: [#130 chore: `.claude/skills/*/SKILL.md` の冗長記述を点検し最�
 
 | skill | 検出箇所 | 提案修正 |
 |---|---|---|
-| `analytics-analyze` | `Quick Reference` 表と When to Use 本文で「`/analytics-collect` 完了後」を 2 度記載 | When to Use 側に集約 |
-| `analytics-collect` | Overview / Quick Reference / 後続案内で `/analytics-analyze` 連携を 3 度記載 | 1 箇所に集約 |
-| `analytics-report` | `/analytics-report latest` / `/analytics-report html` / `/analytics-report list` の説明が Quick Reference 表 + 本文セクションで重複 | 表のみに統一 |
+| `analytics` | `Quick Reference` 表と When to Use 本文で「`/analytics --collect` 完了後」を 2 度記載 | When to Use 側に集約 |
+| `analytics` | Overview / Quick Reference / 後続案内で `/analytics --analyze` 連携を 3 度記載 | 1 箇所に集約 |
+| `analytics` | `/analytics --report latest` / `/analytics --report html` / `/analytics --report list` の説明が Quick Reference 表 + 本文セクションで重複 | 表のみに統一 |
 | `collection-ideate` | 334 行と巨大。`config/skills/collection-ideate.yaml` への参照が 9 回出現。Phase 4-2 ブロックと「差別化軸」「originality」「objects」セクションは別 reference へ切り出すと SKILL.md が短くなる | 詳細仕様は `references/` へ分割 (現在は `freshness-rules.md` / `collection-lifecycle.md` / `object-design-examples.md` のみ) |
 | `lyria` | 347 行と最長。`composition.json` のスキーマ説明・DJ フェーズ展開ロジック・コスト試算がすべて SKILL.md 直下 | スキーマと展開ロジックを `references/composition-schema.md` に分離 |
 | `suno` | 291 行。Style 文・Lyrics テンプレ・パターン YAML の 3 詳細仕様が同居 | `references/style-templates.md`・`references/lyrics-templates.md` に分割 |
@@ -124,8 +124,8 @@ Issue: [#130 chore: `.claude/skills/*/SKILL.md` の冗長記述を点検し最�
 
 | skill | 検出箇所 | 提案修正 |
 |---|---|---|
-| `analytics-analyze` | `SKILL.md:64` `channel_config.tags.themes` ← v1 の global namespace 表記。v2 では `config.content.tags.themes` (CLAUDE.md「責務別ネームスペース」参照) | `config.content.tags.themes` に置換 |
-| `analytics-collect` | description 中「`analytics_system.py` の実行が必要な場面で」← `analytics_system.py` は `yt-analytics` (entry point) として `pyproject.toml` `[project.scripts]` に統合済み | `yt-analytics` に置換、実体スクリプトの直接実行は最後の手段である旨を明記 |
+| `analytics` | `SKILL.md:64` `channel_config.tags.themes` ← v1 の global namespace 表記。v2 では `config.content.tags.themes` (CLAUDE.md「責務別ネームスペース」参照) | `config.content.tags.themes` に置換 |
+| `analytics` | description 中「`analytics_system.py` の実行が必要な場面で」← `analytics_system.py` は `yt-analytics` (entry point) として `pyproject.toml` `[project.scripts]` に統合済み | `yt-analytics` に置換、実体スクリプトの直接実行は最後の手段である旨を明記 |
 | `benchmark` | `yt-benchmark` CLI に統合済みだが `python scripts/benchmark_*.py` 形式の旧呼び出しが本文に残っていないか要確認 | 全件 grep で `uv run yt-*` 形式に揃える |
 | `channel-setup` | `references/config-generation-rules.md` 内の skill-config 一覧表（rename 後は `collection-ideate` / `video-description`）の整合は本 PR で書換済み | 完了 |
 | `lyria` | `Lyria 3` モデル名と Vertex AI Studio の API バージョンが本文と config.default.yaml で食い違う可能性 | バージョン文字列を 1 箇所定義に集約 |
@@ -165,8 +165,8 @@ Issue: [#130 chore: `.claude/skills/*/SKILL.md` の冗長記述を点検し最�
 | F3 | description triggering | description 内のスキル相互誘導 5 件を本文へ移動 | `chore: description 内のスキル相互誘導を本文へ移動` |
 | F4 | 内部の重複・冗長 | 巨大 SKILL.md 4 件 (`collection-ideate` / `lyria` / `suno` / `thumbnail`) を `references/*.md` 分割 | `refactor: 巨大 SKILL.md を references/ に分割` |
 | F5 | 内部の重複・冗長 | Quick Reference と本文の重複（7 skill） | `chore: SKILL.md の Quick Reference と本文重複を解消` |
-| F6 | 実装との乖離 | `analytics-analyze` の `channel_config.tags.themes` を v2 namespace に追従 | `fix(skill): analytics-analyze の v1 設定参照を v2 namespace に追従` |
-| F7 | 実装との乖離 | `analytics-collect` description の `analytics_system.py` を `yt-analytics` に置換 | `fix(skill): analytics-collect description の旧スクリプト名を CLI 名に追従` |
+| F6 | 実装との乖離 | `analytics` の `channel_config.tags.themes` を v2 namespace に追従 | `fix(skill): analytics の v1 設定参照を v2 namespace に追従` |
+| F7 | 実装との乖離 | `analytics` description の `analytics_system.py` を `yt-analytics` に置換 | `fix(skill): analytics description の旧スクリプト名を CLI 名に追従` |
 | F8 | 実装との乖離 | `pyproject.toml` `[project.scripts]` と SKILL.md の対応表を `docs/cli-skill-mapping.md` として整備 | `docs: yt-* CLI と SKILL.md の対応表を整備` |
 | F9 | ガイドライン | description 上限 150 字 + 常套句禁止を `writing-skills` 系ガイドラインに反映 | `docs: SKILL.md description のガイドラインを明文化` |
 

@@ -669,11 +669,11 @@ def test_collection_ideate_config_has_no_stale_action_contract(tmp_path):
 
 
 def test_analytics_report_theme_colors_default_comes_from_skill_config(tmp_path):
-    """analytics-report の HTML テーマ色 default は実 loader で読める."""
+    """analytics の HTML テーマ色 default は実 loader で読める."""
     channel_dir = tmp_path / "ch"
     channel_dir.mkdir()
 
-    cfg = skill_config.load_skill_config("analytics-report", use_cache=False, channel_dir=channel_dir)
+    cfg = skill_config.load_skill_config("analytics", use_cache=False, channel_dir=channel_dir)
 
     assert cfg.get("theme", {}).get("colors") == {
         "background": "#0f1419",
@@ -688,10 +688,10 @@ def test_analytics_report_theme_colors_default_comes_from_skill_config(tmp_path)
 
 
 def test_analytics_report_theme_colors_channel_override(tmp_path):
-    """analytics-report の HTML テーマ色は channel override で差し替えられる."""
+    """analytics の HTML テーマ色は channel override で差し替えられる."""
     channel_dir = tmp_path / "ch"
     (channel_dir / "config" / "skills").mkdir(parents=True)
-    override = channel_dir / "config" / "skills" / "analytics-report.yaml"
+    override = channel_dir / "config" / "skills" / "analytics.yaml"
     override.write_text(
         yaml.safe_dump(
             {
@@ -706,7 +706,7 @@ def test_analytics_report_theme_colors_channel_override(tmp_path):
         encoding="utf-8",
     )
 
-    cfg = skill_config.load_skill_config("analytics-report", use_cache=False, channel_dir=channel_dir)
+    cfg = skill_config.load_skill_config("analytics", use_cache=False, channel_dir=channel_dir)
 
     colors = cfg.get("theme", {}).get("colors")
     assert colors.get("accent") == "#123456"

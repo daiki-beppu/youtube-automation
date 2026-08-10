@@ -1,4 +1,4 @@
-"""analytics-analyze の analysis JSON / Markdown validator 契約テスト。"""
+"""analytics の analysis JSON / Markdown validator 契約テスト。"""
 
 import json
 import subprocess
@@ -7,7 +7,7 @@ from pathlib import Path
 from tests.helpers.paths import REPO_ROOT
 
 ROOT = REPO_ROOT
-VALIDATOR = ROOT / ".claude/skills/analytics-analyze/references/analysis-json-validator.md"
+VALIDATOR = ROOT / ".claude/skills/analytics/references/analysis-json-validator.md"
 
 
 def _validator_script() -> str:

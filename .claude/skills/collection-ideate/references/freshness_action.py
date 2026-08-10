@@ -115,9 +115,9 @@ def main() -> int:
             )
             return 0
 
-    skills = ["analytics-analyze"]
+    skills = ["analytics --analyze"]
     if args.stale_kind == "absolute":
-        skills.insert(0, "analytics-collect")
+        skills.insert(0, "analytics --collect")
     decision = Decision(action, estimate, report_count, reason, "execute", [], skills)
     step = next_workflow_step(decision, args.skill_result, args.revalidation)
     print(json.dumps({**asdict(decision), "workflow": asdict(step)}, ensure_ascii=False))

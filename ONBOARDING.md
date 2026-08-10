@@ -11,7 +11,7 @@
 
 ## 1. このリポジトリは何か
 
-**ツールキット**: BGM チャンネル運営に必要な CLI 群（`yt-*`）+ Claude Code スキル（`/wf-new` `/analytics-analyze` 等）+ 共通運営方針テンプレ（`.claude/CLAUDE.md`）を 1 つの Python パッケージにまとめたもの。
+**ツールキット**: BGM チャンネル運営に必要な CLI 群（`yt-*`）+ Claude Code スキル（`/wf-new` `/analytics --analyze` 等）+ 共通運営方針テンプレ（`.claude/CLAUDE.md`）を 1 つの Python パッケージにまとめたもの。
 
 **運営者がやること**: 自分の YouTube チャンネル用の独立リポジトリを作り、本パッケージを `uv add` でインストール → `yt-skills sync` でスキルと運営方針を取り込む → Claude Code 上で `/channel-new` `/wf-new` `/wf-next` を回す。**コードを書く必要はない**（本リポジトリを編集したい場合は §6）。
 
@@ -188,7 +188,7 @@ uv run yt-init-collection "Pilot Direction Check" "pilot-direction-check" --trac
 | シーン | スキル |
 |---|---|
 | データドリブンで次企画を決めたい | `/collection-ideate` |
-| 既存テーマの横展開を判断したい | `/analytics-analyze`（テーマ別パフォーマンス） |
+| 既存テーマの横展開を判断したい | `/analytics --analyze`（テーマ別パフォーマンス） |
 
 ### 4.2 制作工程の典型フロー
 
@@ -240,8 +240,8 @@ uv run yt-init-collection "Pilot Direction Check" "pilot-direction-check" --trac
 
 | 頻度 | コマンド | 用途 |
 |---|---|---|
-| 週次 | `/analytics-collect` | YouTube Analytics データ最新化 |
-| 週次 | `/analytics-analyze` | CTR / 視聴維持率の戦略分析と改善提案 |
+| 週次 | `/analytics --collect` | YouTube Analytics データ最新化 |
+| 週次 | `/analytics --analyze` | CTR / 視聴維持率の戦略分析と改善提案 |
 | 隔週 | `/comments-reply` | ルール駆動コメント返信（dry-run → apply の 2 段） |
 | 月次 | `/benchmark` | 競合チャンネル最新データ取得 |
 | 月次 | `/channel-status` | チャンネル全体統計（登録者数・総再生回数）取得 |
@@ -256,7 +256,7 @@ uv run yt-init-collection "Pilot Direction Check" "pilot-direction-check" --trac
 | いまどこまで進んでる？ | `/wf-status`（制作） / `/channel-status`（YouTube 統計） |
 | 次に何やる？ | `/wf-next`（既存コレクション継続） / `/collection-ideate`（新規企画） |
 | このコレクション CTR 弱くない？ | `/alignment-check` → `/thumbnail-compare` |
-| シリーズ広げるべき？ | `/analytics-analyze`（テーマ別パフォーマンス） |
+| シリーズ広げるべき？ | `/analytics --analyze`（テーマ別パフォーマンス） |
 | 視聴者は誰？何を求めてる？ | `/viewer-voice` → `/audience-persona-design` → `/viewing-scene` |
 | 競合は今どんな動画出してる？ | `/benchmark` → `/video-analyze` |
 

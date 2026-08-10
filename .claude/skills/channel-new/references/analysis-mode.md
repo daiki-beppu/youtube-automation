@@ -238,7 +238,7 @@ subagent は全分析結果を `docs/channel-research.md` に保存:
 
 | 状況 | 兆候 | 対処 |
 |---|---|---|
-| 入力データ不在 | `data/` のベンチマーク/Analytics スナップショットが無い | 先に `/benchmark`・`/analytics-collect` 等を実行して入力を用意 |
+| 入力データ不在 | `data/` のベンチマーク/Analytics スナップショットが無い | 先に `/benchmark`・`/analytics --collect` 等を実行して入力を用意 |
 
 ## Cross References
 

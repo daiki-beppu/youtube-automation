@@ -127,7 +127,7 @@ uv run yt-init-collection "Pilot Direction Check" "pilot-direction-check" --trac
 
 `/wf-new` は「順番にスキルを呼ぶ」ための薄いオーケストレーターである。各工程の詳細ロジックは子スキルへ寄せ、ここでは呼び出し順、停止点、成果物確認、`workflow-state.json` 更新だけを持つ。
 
-定期的なデータ収集は `/analytics-collect`（`uv run yt-analytics` のラッパー）が担当し、通常時は workflow から呼び出さない。stale report の自動更新時だけは `/collection-ideate` の freshness SSOT が指定するシーケンスに従って subagent が呼び出す。必要に応じた cron / launchd 登録はユーザー側の運用とする。テーマは企画の結果で決定されるため、最初に手入力しない。
+定期的なデータ収集は `/analytics --collect`（`uv run yt-analytics` のラッパー）が担当し、通常時は workflow から呼び出さない。stale report の自動更新時だけは `/collection-ideate` の freshness SSOT が指定するシーケンスに従って subagent が呼び出す。必要に応じた cron / launchd 登録はユーザー側の運用とする。テーマは企画の結果で決定されるため、最初に手入力しない。
 
 ### 直接実行の canonical timing 契約
 
@@ -198,7 +198,7 @@ Step 1（企画）を自動実行中...
 | benchmark fallback mode | `reports/analysis_*.md` が存在せず、`data/benchmark_*.json` が存在する | ベンチマークデータ + config |
 | minimal mode | `reports/analysis_*.md` と `data/benchmark_*.json` がどちらも存在しない | `ttp_mode: false` はユーザー直接入力（テーマ / ジャンル / 雰囲気）+ config。`true` は `/benchmark` を案内して停止 |
 
-1-b. **蓄積 insights の収集（open エントリ、gate ではない）** — 入力モードの予備確認と合わせて、メインは `data/insights.jsonl` の存在を確認する。存在する場合は `uv run python3 .claude/skills/analytics-analyze/references/validate_insights.py data/insights.jsonl` が exit 0 であることを確認し、`jq -c 'select(.status == "open")' data/insights.jsonl` で open エントリだけを選別して Step 2 の `/collection-ideate` 委譲プロンプトへ企画入力として渡す。`/wf-new` が担うのは蓄積済み insights の選別と受け渡しだけで、学びの生成・検証（`/flop-analysis` の分析ロジック）や企画生成（`/collection-ideate` のロジック）を再実装しない。
+1-b. **蓄積 insights の収集（open エントリ、gate ではない）** — 入力モードの予備確認と合わせて、メインは `data/insights.jsonl` の存在を確認する。存在する場合は `uv run python3 .claude/skills/analytics/references/validate_insights.py data/insights.jsonl` が exit 0 であることを確認し、`jq -c 'select(.status == "open")' data/insights.jsonl` で open エントリだけを選別して Step 2 の `/collection-ideate` 委譲プロンプトへ企画入力として渡す。`/wf-new` が担うのは蓄積済み insights の選別と受け渡しだけで、学びの生成・検証（`/flop-analysis` の分析ロジック）や企画生成（`/collection-ideate` のロジック）を再実装しない。
 
    - `data/insights.jsonl` が存在しない、validator が失敗する、または open エントリが 0 件の場合は、insights なしとして既存の analytics / benchmark fallback / minimal mode のフローを阻害せず継続する（前提ガードにしない。validator 失敗時は失敗内容を警告表示だけする）
    - `/wf-new` は `/flop-analysis`（postmortem 生成・検証）を自動実行しない。公開済み動画の分析・検証は `/flop-analysis` の既存責務に残り、ここでは還元済みエントリを読むだけとする
@@ -457,7 +457,7 @@ Suno-helper server: ✅ http://<channel>.localhost:<PORT> 起動済み / ⚠️ 
 ## Cross References
 
 - 企画生成: `/collection-ideate` スキル
-  - 蓄積 insights: `data/insights.jsonl` の open エントリ（書き手は `/analytics-analyze` と `/flop-analysis`、schema は `.claude/skills/analytics-analyze/references/insights-entry.schema.json` が単一ソース）を Phase 1 で選別して渡す。無ければ渡さずに続行
+  - 蓄積 insights: `data/insights.jsonl` の open エントリ（書き手は `/analytics --analyze` と `/flop-analysis`、schema は `.claude/skills/analytics/references/insights-entry.schema.json` が単一ソース）を Phase 1 で選別して渡す。無ければ渡さずに続行
   - analytics mode: validator 成功済みの同日付 `reports/analysis_*.md` / `.json` ペア + ベンチマーク + config を使用
   - benchmark fallback mode: `data/benchmark_*.json` + config のみで初回企画を生成
   - minimal mode: `ttp_mode: false` はユーザー直接入力（テーマ / ジャンル / 雰囲気）+ config のみで初回企画を生成。`true` は `/benchmark` を案内して停止

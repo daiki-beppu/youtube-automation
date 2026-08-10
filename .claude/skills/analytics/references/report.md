@@ -1,12 +1,4 @@
----
-name: analytics-report
-description: "Use when 既存の Analytics レポートの表示・比較だけを行いたいとき。「レポート見せて」「過去データ確認」「前回の分析結果」で発動。収集→分析→表示の一括実行は /analytics-run を使う"
----
-
-## 前後工程
-
-- `前工程`: `/analytics-analyze`
-- `後工程`: `なし`
+# Analytics report mode
 
 ## Overview
 
@@ -21,10 +13,10 @@ description: "Use when 既存の Analytics レポートの表示・比較だけ�
 
 以下を deep-merge した値を設定として使う。
 
-1. `.claude/skills/analytics-report/config.default.yaml`
-2. `config/skills/analytics-report.yaml`（存在する場合）
+1. `.claude/skills/analytics/config.default.yaml`
+2. `config/skills/analytics.yaml`（存在する場合）
 
-合成規則は `youtube_automation.configuration.skills.load_skill_config("analytics-report")` と同じで、チャンネル上書きが優先される。存在しない override は未設定として扱い、勝手に作成しない。HTML レポートの KPI カードは `html.kpi_cards`、Shorts 除外キーワードは `html.exclude_title_keywords`、テーマ色は `theme.colors` を参照する。
+合成規則は `youtube_automation.configuration.skills.load_skill_config("analytics")` と同じで、チャンネル上書きが優先される。存在しない override は未設定として扱い、勝手に作成しない。HTML レポートの KPI カードは `html.kpi_cards`、Shorts 除外キーワードは `html.exclude_title_keywords`、テーマ色は `theme.colors` を参照する。
 
 ## 前提
 
@@ -45,22 +37,22 @@ description: "Use when 既存の Analytics レポートの表示・比較だけ�
 
 | 引数 | 説明 |
 |------|------|
-| `/analytics-report latest` | 最新の分析レポートを表示 |
-| `/analytics-report html` | HTML ビジュアルレポートを生成（全履歴データ集約） |
-| `/analytics-report list` | 全レポートファイル一覧表示 |
-| `/analytics-report` | 引数なし = 最新レポート表示 |
+| `/analytics --report latest` | 最新の分析レポートを表示 |
+| `/analytics --report html` | HTML ビジュアルレポートを生成（全履歴データ集約） |
+| `/analytics --report list` | 全レポートファイル一覧表示 |
+| `/analytics --report` | 引数なし = 最新レポート表示 |
 
 ## Instructions
 
-### `/analytics-report latest` / `/analytics-report`（デフォルト）
+### `/analytics --report latest` / `/analytics --report`（デフォルト）
 
-`reports/` ディレクトリから更新時刻が最新の Markdown 分析レポート（`ls -t reports/analysis_*.md | head -1` で取得できるもの）を検出して内容を表示する。同日付の `analysis_YYYYMMDD.json` は `/analytics-analyze` の数値根拠を保持する構造化成果物であり、`latest` の表示対象にはしない。
+`reports/` ディレクトリから更新時刻が最新の Markdown 分析レポート（`ls -t reports/analysis_*.md | head -1` で取得できるもの）を検出して内容を表示する。同日付の `analysis_YYYYMMDD.json` は `/analytics --analyze` の数値根拠を保持する構造化成果物であり、`latest` の表示対象にはしない。
 
-### `/analytics-report list`
+### `/analytics --report list`
 
 `reports/` ディレクトリ内の全レポートファイルを一覧表示する。
 
-### `/analytics-report html` — ビジュアルレポート生成
+### `/analytics --report html` — ビジュアルレポート生成
 
 `data/` 配下の **全 analytics スナップショット** と `benchmark` データを集約し、視覚的な HTML レポートを `reports/` に生成する（KPI カード・Shorts 除外・テーマ色は「設定読み込みゲート」で読んだ skill-config を使う）。
 
@@ -108,7 +100,7 @@ description: "Use when 既存の Analytics レポートの表示・比較だけ�
 
 #### デザインテーマ
 
-色は skill-config `theme.colors` を使用する。既定パレットは `.claude/skills/analytics-report/config.default.yaml` に定義し、チャンネルごとの差し替えは `config/skills/analytics-report.yaml` で必要なキーだけ上書きする。
+色は skill-config `theme.colors` を使用する。既定パレットは `.claude/skills/analytics/config.default.yaml` に定義し、チャンネルごとの差し替えは `config/skills/analytics.yaml` で必要なキーだけ上書きする。
 
 必須キー:
 - `background`
@@ -148,11 +140,11 @@ description: "Use when 既存の Analytics レポートの表示・比較だけ�
 
 | 状況 | 兆候 | 対処 |
 |---|---|---|
-| 入力データ不在 | `data/` のベンチマーク/Analytics スナップショットが無い | 先に `/benchmark`・`/analytics-collect` 等を実行して入力を用意 |
+| 入力データ不在 | `data/` のベンチマーク/Analytics スナップショットが無い | 先に `/benchmark`・`/analytics --collect` 等を実行して入力を用意 |
 | OAuth 未認証/失効 | `infrastructure.auth.youtube` の `FileNotFoundError`（`client_secrets.json` 不在）/ `AuthError` / HTTP 403 | 初回認証フローを再実行。403 が続く場合は `auth/token.json` を削除しスコープを確認のうえ再認証 |
 
 ## Next Step
 
 レポート生成後:
-- `/analytics-analyze` で詳細な戦略分析を実行
+- `/analytics --analyze` で詳細な戦略分析を実行
 - `/collection-ideate` でデータに基づくコレクション企画を生成

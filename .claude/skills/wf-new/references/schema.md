@@ -16,7 +16,7 @@ Phase 3: 公開             /wf-next    動画→概要欄→アップロード�
 | `prepared` | サムネ承認済み+音楽素材準備完了 | Suno 作成 or Lyria 生成 → ミキシング+マスタリング |
 | `mastered` | 最終マスター音源配置済み | /wf-next で全自動公開 |
 | `publishing` | 公開フロー実行中 | 自動完了待ち（エラー時は /wf-next で再実行） |
-| `complete` | 全工程完了 | /analytics-analyze で初週パフォーマンス確認 |
+| `complete` | 全工程完了 | /analytics --analyze で初週パフォーマンス確認 |
 
 `phase` は最後に実行した操作の結果を反映する。自動計算ではなくスキルが明示的に更新する。
 

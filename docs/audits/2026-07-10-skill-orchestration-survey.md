@@ -24,9 +24,9 @@ Issue: [#1810 [skills] 全スキル横断オーケストレーション化の調
 | # | skill | グループ | 前工程 | 後工程 |
 |---|-------|---------|--------|--------|
 | 1 | wf-new | 制作オーケストレーター | channel-new, setup, collection-ideate（内部呼出） | wf-next, suno-helper |
-| 2 | wf-next | 制作オーケストレーター | wf-new | analytics-analyze（T+7 案内）, postmortem |
+| 2 | wf-next | 制作オーケストレーター | wf-new | analytics（T+7 案内）, postmortem |
 | 3 | wf-status | 制作オーケストレーター（read-only） | wf-new | wf-next |
-| 4 | collection-ideate | 制作チェーン入口 | analytics-analyze / benchmark（fallback）/ audience-persona-design | wf-new, community-draft |
+| 4 | collection-ideate | 制作チェーン入口 | analytics / benchmark（fallback）/ audience-persona-design | wf-new, community-draft |
 | 5 | thumbnail | 制作チェーン | collection-ideate, wf-new | loop-video, thumbnail-compare, alignment-check |
 | 6 | loop-video | 制作チェーン | thumbnail（main.png） | videoup |
 | 7 | suno-lyric | 制作チェーン（Suno パス先頭） | — | suno |
@@ -49,13 +49,13 @@ Issue: [#1810 [skills] 全スキル横断オーケストレーション化の調
 | 24 | viewer-voice | リサーチ・戦略 | benchmark, discover-competitors | audience-persona-design（viewer-voice-analysis.md を供給） |
 | 25 | audience-persona-design | リサーチ・戦略 | viewer-voice（viewer-voice-analysis.md 必須） | viewing-scene, collection-ideate |
 | 26 | viewing-scene | リサーチ・戦略 | audience-persona-design | collection-ideate |
-| 27 | analytics-collect | analytics（収集） | setup（OAuth） | analytics-analyze |
-| 28 | analytics-analyze | analytics（分析） | analytics-collect | collection-ideate, analytics-report, postmortem |
-| 29 | analytics-report | analytics（表示、read-only） | analytics-analyze | — |
+| 27 | analytics | analytics（収集） | setup（OAuth） | analytics |
+| 28 | analytics | analytics（分析） | analytics | collection-ideate, analytics, postmortem |
+| 29 | analytics | analytics（表示、read-only） | analytics | — |
 | 30 | video-analyze | analytics / リサーチ横断 | 公開動画・競合動画（benchmark 等） | collection-ideate, suno（genre_line 供給）, alignment-check |
 | 31 | alignment-check | 監査 | thumbnail, suno / lyria | postmortem（事前監査） |
 | 32 | thumbnail-compare | 監査 | thumbnail, benchmark | （方向性見直しループ） |
-| 33 | postmortem | analytics（事後分析ハブ） | analytics-analyze, alignment-check | collection-ideate（次企画改善） |
+| 33 | postmortem | analytics（事後分析ハブ） | analytics, alignment-check | collection-ideate（次企画改善） |
 | 34 | short | ショート（collection 型。short-release と排他） | setup, 完成コレクション | short-thumbnail, video-upload |
 | 35 | short-release | ショート（release 型。short と排他） | 完成リリース楽曲 | short-thumbnail |
 | 36 | short-thumbnail | ショート | short / short-release | — |
@@ -71,7 +71,7 @@ Issue: [#1810 [skills] 全スキル横断オーケストレーション化の調
 
 横断ノードの補足:
 
-- `benchmark` はリサーチ収集の起点で、制作（collection-ideate fallback）・監査（thumbnail-compare / alignment-check）・analytics（analytics-analyze の比較材料）すべてが参照する。
+- `benchmark` はリサーチ収集の起点で、制作（collection-ideate fallback）・監査（thumbnail-compare / alignment-check）・analytics（analytics の比較材料）すべてが参照する。
 - Suno パス（suno-lyric → suno → suno-helper → masterup）と Lyria パス（lyria）は音楽エンジンで排他、`videoup` 以降で合流する。`short` / `short-release` も同様にチャンネル型で排他。この 2 組の排他はスキル authoring ガイドライン①（発動キーワード相互排他）で担保されている。
 
 ## 3. 連鎖グループの同定とオーケストレーター化評価
@@ -79,7 +79,7 @@ Issue: [#1810 [skills] 全スキル横断オーケストレーション化の調
 | グループ | 構成スキル | 評価 | 理由 |
 |---------|-----------|------|------|
 | 制作チェーン | wf-new / wf-next / wf-status + 4〜15 | **済（先行事例）** | `/wf-next` が workflow-state.json 駆動で既にオーケストレーション済み。組み替え不要、他グループへの展開元パターン |
-| analytics チェーン | analytics-collect → analytics-analyze → analytics-report | **可** | 3 段の線形チェーンで人の判断分岐がなく、各段の成果物（生データ → レポート）がファイルとして残るため状態判定を機械化できる。外部反映がなく承認ゲート不要で、最も低リスクにオーケストレーター化できる |
+| analytics チェーン | analytics → analytics → analytics | **可** | 3 段の線形チェーンで人の判断分岐がなく、各段の成果物（生データ → レポート）がファイルとして残るため状態判定を機械化できる。外部反映がなく承認ゲート不要で、最も低リスクにオーケストレーター化できる |
 | リリース後チェーン | video-upload 後続の community-post / pinned-comment / metadata-audit（+ comments-reply） | **条件付き可** | `/video-upload` → `/community-post` の自動呼出という散文連鎖が既にあり、後続 3 スキルを 1 つの「公開後処理」として束ねる余地がある。ただし全て外部反映（YouTube への書き込み）のため、config 駆動承認ゲート（wf-next の approval_gates パターン）が必須条件。comments-reply は動画公開に非同期（任意時点で実行）なのでチェーンに含めない |
 | リサーチ・戦略チェーン | benchmark → (discover-competitors) → viewer-voice → audience-persona-design → viewing-scene → collection-ideate, channel-research | **条件付き（前提ガードのみ強化、自動連鎖は不可）** | 各段の出力（persona-definition.md 等）はユーザーの戦略判断を経て確定するもので、自動で次段に進めるとチャンネルの方向性が無審査で決まってしまう。実行頻度も低く（方向性見直し時のみ）、自動化の便益が薄い。成果物ファイルの存在ガード（ガイドライン③）を統一する改善に留めるのが妥当 |
 | ショート系 | short / short-release → short-thumbnail | **不可** | 実質 2 段のチェーンで、オーケストレーター（state ファイル + 制御スキル）の導入コストが連鎖の複雑さを上回る。現行の散文委譲（description の前後工程明記）で十分 |
@@ -136,7 +136,7 @@ Issue: [#1810 [skills] 全スキル横断オーケストレーション化の調
 
 | グループ | 推奨 | wf-next パターン踏襲 | 理由 |
 |---------|------|---------------------|------|
-| analytics チェーン | 案 A でオーケストレーター skill 化（`/analytics-run` 仮称: collect → analyze → report を 1 コマンドで） | **条件付き踏襲** — ②冪等性・④薄い委譲層は踏襲。①はコレクション単位 state ファイルでなく成果物タイムスタンプ（データ鮮度）判定に軽量化。③承認ゲートは外部反映がないため省略（既定で全自動） | 線形・無分岐・read 系のため、state 管理の複雑さが不要。「データ更新してから分析」という 2 段の手動発動を 1 段に畳める即効性がある |
+| analytics チェーン | 案 A でオーケストレーター skill 化（`/analytics` 仮称: collect → analyze → report を 1 コマンドで） | **条件付き踏襲** — ②冪等性・④薄い委譲層は踏襲。①はコレクション単位 state ファイルでなく成果物タイムスタンプ（データ鮮度）判定に軽量化。③承認ゲートは外部反映がないため省略（既定で全自動） | 線形・無分岐・read 系のため、state 管理の複雑さが不要。「データ更新してから分析」という 2 段の手動発動を 1 段に畳める即効性がある |
 | リリース後チェーン | 案 A で `/video-upload` 後続（community-post → pinned-comment → metadata-audit）を post-publish チェーン化 | **踏襲** — ①②④に加え、③config 駆動承認ゲートを必須採用（外部反映のため）。upload 済み動画 ID 単位の実行履歴で冪等性を担保 | 現状 `/video-upload` → `/community-post` だけが散文自動呼出で、pinned-comment / metadata-audit は手動発動が漏れやすい。ゲート付き連鎖で「公開後のやり忘れ」を機械的に防げる |
 | リサーチ・戦略チェーン | オーケストレーター化しない。前提ガード（ガイドライン③）の統一強化のみ | **踏襲しない** — 自動で次段に進める設計自体が不適（各段の確定はユーザーの戦略判断） | 成果物ファイル（viewer-voice-analysis.md, persona-definition.md）の存在ガードは既に一部スキルにあるため、書式と失敗時案内（前工程スキルへの誘導）を統一するだけで連鎖の迷子は解消する |
 | ショート系・音楽配信・システムリリース・基盤 | 現状維持（案 D の表記統一のみ適用） | **踏襲しない** | §3 のとおり、チェーンが短すぎる / 人・外部システムのイベントを挟む / 連鎖がない |
@@ -145,7 +145,7 @@ Issue: [#1810 [skills] 全スキル横断オーケストレーション化の調
 
 1. **表記統一（案 D 部分）**: 全 45 スキルの description・本文の前後工程表記を統一書式に揃え、依存関係を機械抽出できる状態にする（本レポート §2 の表が初版データになる）。
 2. **マニフェスト schema 設計（案 A 基盤)**: チェーン定義（step 列・前提成果物パス・ゲート宣言・冪等判定 script 参照）の JSON schema を設計し、`config/channel/workflow.json` の `workflow.wf_next` を同 schema の一インスタンスとして位置づける（wf-next は書き換えず整合のみ確認）。
-3. **analytics チェーンで先行実装**: リスク最小（read 系・ゲート不要）の `/analytics-run` をインタープリタ skill の初号として実装し、マニフェスト + 状態判定 script のパターンを確立する。
+3. **analytics チェーンで先行実装**: リスク最小（read 系・ゲート不要）の `/analytics` をインタープリタ skill の初号として実装し、マニフェスト + 状態判定 script のパターンを確立する。
 4. **リリース後チェーンへ展開**: 確立したパターンに③承認ゲートを加えて post-publish チェーンを実装する。既存の `/video-upload` → `/community-post` 散文呼出は新チェーンへ委譲するよう書き換える。
 5. **リサーチ系の前提ガード統一**: オーケストレーター化はせず、ガイドライン③準拠の存在ガードと前工程誘導を各スキルに揃える。
 6. 各段で `yt-skills sync` の配布確認（下流 config 未設定時に後方互換で全自動 / 既定動作が変わらないこと）をテストで担保する。
@@ -156,7 +156,7 @@ Issue: [#1810 [skills] 全スキル横断オーケストレーション化の調
 |---|--------------------|---------|------|
 | F1 | [skills] 前後工程表記の統一書式化 — 全 45 スキルの description / 本文の連鎖表記を機械可読に揃える | 全 SKILL.md の表記のみ（ロジック変更なし）。書式は skill-authoring-guidelines に追記 | なし |
 | F2 | [skills] チェーン定義マニフェストの schema 設計 — step / 前提成果物 / ゲート / 冪等判定の宣言形式 | schema 文書 + examples。wf-next の workflow.json 設定を同 schema で説明できることを検証 | F1 |
-| F3 | [skills] /analytics-run オーケストレーター新設 — collect → analyze → report のマニフェスト駆動連鎖 | 新規 skill + 状態判定 reference script + テスト。承認ゲートなし | F2 |
+| F3 | [skills] /analytics オーケストレーター新設 — collect → analyze → report のマニフェスト駆動連鎖 | 新規 skill + 状態判定 reference script + テスト。承認ゲートなし | F2 |
 | F4 | [skills] post-publish チェーン化 — video-upload 後続（community-post / pinned-comment / metadata-audit）の config 駆動ゲート付き連鎖 | 新規 or video-upload 拡張 + `config/channel/` へのゲート宣言追加（既定 false で後方互換） | F2, F3 |
 | F5 | [skills] リサーチ系 6 スキルの前提ガード統一 — 成果物存在チェックと前工程誘導をガイドライン③準拠に | benchmark / discover-competitors / viewer-voice / audience-persona-design / viewing-scene / channel-research の本文修正のみ | F1 |
 

@@ -2598,7 +2598,7 @@ class TestCheckAnalyticsReport:
         assert r.status == "fail"
         assert "stale report" in r.message
         assert r.next_action is not None
-        assert "/analytics-analyze" in r.next_action["instructions"]
+        assert "/analytics --analyze" in r.next_action["instructions"]
 
     def test_analysis_file_same_date_as_latest_data_is_ok(self, tmp_path, monkeypatch):
         """analysis report が latest data と同日なら stale ではない."""
@@ -2630,8 +2630,8 @@ class TestCheckAnalyticsReport:
         assert r.status == "fail"
         assert "freshness_days" in r.message
         assert r.next_action is not None
-        assert "/analytics-collect" in r.next_action["instructions"]
-        assert "/analytics-analyze" in r.next_action["instructions"]
+        assert "/analytics --collect" in r.next_action["instructions"]
+        assert "/analytics --analyze" in r.next_action["instructions"]
 
     def test_analysis_file_absolute_stale_respects_collection_ideate_override(self, tmp_path, monkeypatch):
         """collection-ideate freshness_days override は doctor の絶対鮮度判定にも効く."""
@@ -2704,11 +2704,11 @@ class TestCheckAnalyticsReport:
         assert r.next_action is None
 
     def test_missing_report_does_not_force_analytics_tools(self, tmp_path):
-        """analytics 不在だけでは /analytics-collect / /analytics-analyze に誘導しない."""
+        """analytics 不在だけでは /analytics --collect / /analytics --analyze に誘導しない."""
         r = doctor.check_analytics_report(tmp_path)
         payload = json.dumps({"message": r.message, "next_action": r.next_action}, ensure_ascii=False)
-        assert "analytics-collect" not in payload
-        assert "analytics-analyze" not in payload
+        assert "analytics" not in payload
+        assert "analytics" not in payload
 
 
 # ---------------------------------------------------------------------------

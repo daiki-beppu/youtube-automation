@@ -158,19 +158,19 @@ def test_wf_auto_is_the_only_integrated_workflow_entrypoint() -> None:
 
 def test_theme_compare_docs_and_error_use_content_tags_themes() -> None:
     for path in (
-        ".claude/skills/analytics-analyze/SKILL.md",
+        ".claude/skills/analytics/references/analyze.md",
         "src/youtube_automation/commands/analytics/theme_compare.py",
     ):
         text = _read(path)
         assert "channel_config.tags.themes" not in text
         assert "config/channel/content.json::tags.themes" in text
 
-    assert "load_config().content.tags.themes" in _read(".claude/skills/analytics-analyze/SKILL.md")
+    assert "load_config().content.tags.themes" in _read(".claude/skills/analytics/references/analyze.md")
 
 
 def test_analytics_analyze_documents_playlist_effect_section() -> None:
-    analytics_analyze = _read(".claude/skills/analytics-analyze/SKILL.md")
-    analytics_collect = _read(".claude/skills/analytics-collect/SKILL.md")
+    analytics_analyze = _read(".claude/skills/analytics/references/analyze.md")
+    analytics_collect = _read(".claude/skills/analytics/references/collect.md")
 
     assert "分析項目」の 7 項目" in analytics_analyze
     assert "**プレイリスト効果分析**" in analytics_analyze
@@ -624,7 +624,7 @@ def test_channel_new_pre_wf_new_checks_include_analytics_reporting_and_live_stre
     assert "Analytics / Reporting レポート取得設定が未確認" in step9
     assert "YouTube Analytics / Reporting API" in step9
     assert "Reporting API job 作成状態" in step9
-    assert "`/analytics-collect`" in step9
+    assert "`/analytics --collect`" in step9
     assert "`/setup`" in step9
     assert "初回制作は止めず" in step9
 
@@ -633,7 +633,7 @@ def test_channel_new_pre_wf_new_checks_include_analytics_reporting_and_live_stre
     assert "初回配信可能になるまで最大 24 時間" in step9
     assert "`/streaming`" in step9
 
-    assert "公開後の分析は /analytics-collect" in success_message
+    assert "公開後の分析は /analytics --collect" in success_message
     assert "Live streaming 有効化" in success_message
     assert "/streaming の準備確認" in success_message
 
@@ -662,9 +662,9 @@ def test_wf_new_fail_fast_contract_points_to_channel_new_and_collection_local_su
 
 
 def test_analytics_collect_documents_reporting_api_preflight() -> None:
-    analytics_collect = _read(".claude/skills/analytics-collect/SKILL.md")
+    analytics_collect = _read(".claude/skills/analytics/references/collect.md")
 
-    assert "`/analytics-collect reporting`" in analytics_collect
+    assert "`/analytics --collect reporting`" in analytics_collect
     assert "uv run yt-analytics --reporting-dry-run" in analytics_collect
     assert "uv run yt-analytics --reporting-create-job" in analytics_collect
     assert "uv run yt-analytics --include-reporting" in analytics_collect
@@ -673,9 +673,9 @@ def test_analytics_collect_documents_reporting_api_preflight() -> None:
 
 
 def test_analytics_collect_documents_full_depth_collection_path() -> None:
-    analytics_collect = _read(".claude/skills/analytics-collect/SKILL.md")
+    analytics_collect = _read(".claude/skills/analytics/references/collect.md")
 
-    assert "`/analytics-collect full`" in analytics_collect
+    assert "`/analytics --collect full`" in analytics_collect
     assert "uv run yt-analytics --depth full" in analytics_collect
     assert "references/validate-depth.sh" in analytics_collect
     assert "retention" in analytics_collect
@@ -683,8 +683,8 @@ def test_analytics_collect_documents_full_depth_collection_path() -> None:
 
 
 def test_analytics_analyze_requires_numeric_retention_evidence_for_full_data() -> None:
-    analytics_analyze = _read(".claude/skills/analytics-analyze/SKILL.md")
-    validator = _read(".claude/skills/analytics-analyze/references/analysis-json-validator.md")
+    analytics_analyze = _read(".claude/skills/analytics/references/analyze.md")
+    validator = _read(".claude/skills/analytics/references/analysis-json-validator.md")
 
     assert "視聴維持率分析" in analytics_analyze
     assert "references/analysis-json-validator.md" in analytics_analyze
@@ -695,18 +695,14 @@ def test_analytics_analyze_requires_numeric_retention_evidence_for_full_data() -
 
 @pytest.mark.parametrize(
     "skill_path",
-    [
-        ".claude/skills/analytics-collect/SKILL.md",
-        ".claude/skills/analytics-analyze/SKILL.md",
-    ],
+    [".claude/skills/analytics/SKILL.md"],
 )
 def test_revised_analytics_skills_stop_when_channel_config_is_invalid(skill_path: str) -> None:
     skill = _read(skill_path)
-    prerequisite = skill.split("## 前提", 1)[1].split("\n## ", 1)[0]
+    prerequisite = skill.split("## 共通前提", 1)[1].split("\n## ", 1)[0]
 
     assert "`load_config()` でロード可能" in prerequisite
-    assert "ここで停止" in prerequisite
-    assert "後続手順へ進まない" in prerequisite
+    assert "停止" in prerequisite
 
 
 @pytest.mark.parametrize(
@@ -1065,7 +1061,7 @@ def test_post_publish_skip_approvals_are_documented_consistently() -> None:
 def test_chain_manifest_approval_gate_uses_true_equals_skip() -> None:
     schema = _read("docs/skill-design/chain-manifest-schema.md")
     post_publish = _read(".claude/skills/post-publish/SKILL.md")
-    analytics_run = _read(".claude/skills/analytics-run/SKILL.md")
+    analytics_run = _read(".claude/skills/analytics/SKILL.md")
 
     assert '"required": ["skip"]' in schema
     assert '"required": ["enabled"]' in schema
@@ -1215,8 +1211,8 @@ def test_skill_config_defaults_have_read_gate_in_skill_docs() -> None:
 
 
 def test_analytics_report_theme_colors_are_config_driven() -> None:
-    skill = _read(".claude/skills/analytics-report/SKILL.md")
-    default_config = yaml.safe_load(_read(".claude/skills/analytics-report/config.default.yaml")) or {}
+    skill = _read(".claude/skills/analytics/references/report.md")
+    default_config = yaml.safe_load(_read(".claude/skills/analytics/config.default.yaml")) or {}
 
     colors = default_config.get("theme", {}).get("colors")
     assert colors == {
@@ -1231,7 +1227,7 @@ def test_analytics_report_theme_colors_are_config_driven() -> None:
     }
 
     assert "`theme.colors`" in skill
-    assert "config/skills/analytics-report.yaml" in skill
+    assert "config/skills/analytics.yaml" in skill
     for color in (
         "#0f1419",
         "#1a2332",
@@ -1485,8 +1481,8 @@ def test_channel_new_regeneration_does_not_recopy_youtube_json_after_config_comp
     assert "`config/channel/youtube.json`" not in step_r5
 
 
-_INSIGHTS_VALIDATOR = ROOT / ".claude/skills/analytics-analyze/references/validate_insights.py"
-_INSIGHTS_SCHEMA_PATH = ".claude/skills/analytics-analyze/references/insights-entry.schema.json"
+_INSIGHTS_VALIDATOR = ROOT / ".claude/skills/analytics/references/validate_insights.py"
+_INSIGHTS_SCHEMA_PATH = ".claude/skills/analytics/references/insights-entry.schema.json"
 
 
 def _insights_entry(**overrides: object) -> dict:
@@ -1535,7 +1531,7 @@ def test_insights_entry_schema_is_single_source_for_writers_and_readers() -> Non
     assert properties["lever"]["enum"] == ["thumbnail", "title", "topic", "bgm", "metadata", "other"]
     assert properties["status"]["enum"] == ["open", "adopted", "dismissed"]
 
-    analytics_analyze = _read(".claude/skills/analytics-analyze/SKILL.md")
+    analytics_analyze = _read(".claude/skills/analytics/references/analyze.md")
     flop_analysis = _read(".claude/skills/flop-analysis/SKILL.md")
     wf_new = _read(".claude/skills/wf-new/SKILL.md")
     collection_ideate = _read(".claude/skills/collection-ideate/SKILL.md")
@@ -1547,9 +1543,7 @@ def test_insights_entry_schema_is_single_source_for_writers_and_readers() -> Non
     for text in (analytics_analyze, flop_analysis, wf_new, collection_ideate, thumbnail):
         assert "data/insights.jsonl" in text
 
-    validator_command = (
-        "uv run python3 .claude/skills/analytics-analyze/references/validate_insights.py data/insights.jsonl"
-    )
+    validator_command = "uv run python3 .claude/skills/analytics/references/validate_insights.py data/insights.jsonl"
     for text in (analytics_analyze, flop_analysis, wf_new, collection_ideate):
         assert validator_command in text
 

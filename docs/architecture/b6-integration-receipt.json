@@ -248,49 +248,49 @@
     },
     {
       "old_owner": "legacy..claude.skills.analytics-analyze.SKILL.md",
-      "exact_new_owner": ".claude/skills/analytics-analyze/SKILL.md",
+      "exact_new_owner": ".claude/skills/analytics/SKILL.md",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"
     },
     {
       "old_owner": "legacy..claude.skills.analytics-analyze.references.analysis-json-validator.md",
-      "exact_new_owner": ".claude/skills/analytics-analyze/references/analysis-json-validator.md",
+      "exact_new_owner": ".claude/skills/analytics/references/analysis-json-validator.md",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"
     },
     {
       "old_owner": "legacy..claude.skills.analytics-analyze.references.validate_insights",
-      "exact_new_owner": ".claude/skills/analytics-analyze/references/validate_insights.py",
+      "exact_new_owner": ".claude/skills/analytics/references/validate_insights.py",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"
     },
     {
       "old_owner": "legacy..claude.skills.analytics-collect.SKILL.md",
-      "exact_new_owner": ".claude/skills/analytics-collect/SKILL.md",
+      "exact_new_owner": ".claude/skills/analytics/SKILL.md",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"
     },
     {
       "old_owner": "legacy..claude.skills.analytics-report.SKILL.md",
-      "exact_new_owner": ".claude/skills/analytics-report/SKILL.md",
+      "exact_new_owner": ".claude/skills/analytics/SKILL.md",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"
     },
     {
       "old_owner": "legacy..claude.skills.analytics-run.SKILL.md",
-      "exact_new_owner": ".claude/skills/analytics-run/SKILL.md",
+      "exact_new_owner": ".claude/skills/analytics/SKILL.md",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"
     },
     {
       "old_owner": "legacy..claude.skills.analytics-run.references.analytics-chain-state",
-      "exact_new_owner": ".claude/skills/analytics-run/references/analytics-chain-state.py",
+      "exact_new_owner": ".claude/skills/analytics/references/analytics-chain-state.py",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"

@@ -6,7 +6,7 @@ ROOT = REPO_ROOT
 
 
 def test_analytics_collect_documents_graceful_monetary_skip():
-    skill = (ROOT / ".claude/skills/analytics-collect/SKILL.md").read_text()
+    skill = (ROOT / ".claude/skills/analytics/references/collect.md").read_text()
 
     assert "estimatedRevenue" in skill
     assert 'revenue_analytics.status: "unavailable"' in skill
@@ -14,7 +14,7 @@ def test_analytics_collect_documents_graceful_monetary_skip():
 
 
 def test_analytics_analyze_requires_weighted_theme_and_collection_rpm():
-    skill = (ROOT / ".claude/skills/analytics-analyze/SKILL.md").read_text()
+    skill = (ROOT / ".claude/skills/analytics/references/analyze.md").read_text()
 
     assert "テーマ別・コレクション別" in skill
     assert "収益合計 / 再生合計 * 1000" in skill

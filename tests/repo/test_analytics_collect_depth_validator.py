@@ -1,4 +1,4 @@
-"""analytics-collect の depth 成果物 validator 契約テスト。"""
+"""analytics の depth 成果物 validator 契約テスト。"""
 
 import json
 import subprocess
@@ -7,7 +7,7 @@ from pathlib import Path
 from tests.helpers.paths import REPO_ROOT
 
 ROOT = REPO_ROOT
-VALIDATOR = ROOT / ".claude/skills/analytics-collect/references/validate-depth.sh"
+VALIDATOR = ROOT / ".claude/skills/analytics/references/validate-depth.sh"
 
 
 def _run_validator_cli(*args: str) -> subprocess.CompletedProcess[str]:

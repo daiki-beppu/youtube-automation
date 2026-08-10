@@ -28,7 +28,7 @@
 | 観点 | 例 |
 |------|-----|
 | **BGM チャンネル全般に当てはまる収益化原則** | CTR 最適化原則、誇張表現禁止、Complete Collection 原則 |
-| **`yt-*` CLI / スキルの使い方早見表** | `/wf-status` `/analytics-analyze` `/comments-reply` の用途一覧 |
+| **`yt-*` CLI / スキルの使い方早見表** | `/wf-status` `/analytics --analyze` `/comments-reply` の用途一覧 |
 | **音楽エンジン切替ルール** | `lyria` / `suno` の選択基準と後工程フロー |
 | **多言語ローカライゼーション原則** | `localizations.json` の運用 |
 | **このリポジトリ全般の開発規約** | `load_config()` 経由の設定アクセス、ドメイン例外の使用 |

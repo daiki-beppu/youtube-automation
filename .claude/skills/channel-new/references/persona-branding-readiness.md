@@ -71,7 +71,7 @@ banner.save('branding/banner.png', optimize=True)
 | `config/skills/suno.yaml` が placeholder | Step 4 の初期ジャンル情報を `genre_line` に反映する。 |
 | `config/channel/playlists.json` に `playlist_id` 未設定がある | 初投稿前に `/playlist` が status → init dry-run → init の順で初期化する。初回動画の追加は `/video-upload` の自動 assign に任せる。 |
 | `auth/token.json` が無い | `/setup` を再実行し、OAuth 完了後に YouTube API 操作へ戻る。 |
-| Analytics / Reporting 設定が未確認 | 初回制作は止めず、`/analytics-collect` で収集前提と Reporting API job 作成状態を確認する。不足する GCP / OAuth / API 設定は `/setup` に戻す。 |
+| Analytics / Reporting 設定が未確認 | 初回制作は止めず、`/analytics --collect` で収集前提と Reporting API job 作成状態を確認する。不足する GCP / OAuth / API 設定は `/setup` に戻す。 |
 | ライブ配信を使う可能性がある | 初回制作は止めず、YouTube Studio で早めに有効化する。初回配信へ進む前に `/streaming` で配信側を確認する。 |
 
 `ttp_wf_new_readiness` の不足を意図的にスキップする場合だけ、`docs/channel/ttp-seed-confirmation.md` にユーザー承認済み例外を残す。それ以外は不足を解消してから doctor を再実行する。

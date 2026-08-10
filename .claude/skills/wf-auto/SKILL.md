@@ -6,7 +6,7 @@ description: "Use when 正規入口から collection の有無を問わず、企
 ## 前後工程
 
 - `前工程`: `/automation-schedule`, `/wf-new`
-- `後工程`: `/post-publish`, `/analytics-run`
+- `後工程`: `/post-publish`, `/analytics`
 
 ## Overview
 

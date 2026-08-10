@@ -62,7 +62,7 @@ dig step（観点 3〜6 を 3 Part 並列 + Part C 3 回再実行）で生成さ
 | P1-3 | `discover-competitors` は実行ごとに search.list 660 unit を毎回焼く | `competitor_discovery.py:46-67` | 3 / 4 |
 | P1-4 | YouTube Data API 系の API call が **retry 一切なし**（playlist / benchmark / analytics / comments-reply / discover-competitors） | `data-failure-recovery.md §4.1` | 3 |
 | P1-5 | `live-clean` SIGINT 時のリカバリ未記述 | SKILL.md（実装側未読） | 3 |
-| P1-6 | `analytics-collect` OAuth token 期限切れリカバリ未記述 | SKILL.md | 3 |
+| P1-6 | `analytics` OAuth token 期限切れリカバリ未記述 | SKILL.md | 3 |
 | P1-7 | `streaming swap_video.sh` の terraform apply 中断時 rollback 案内なし | `swap_video.sh:18-122` | 3 |
 | P1-8 | `loop-video` のバックアップ `loop-v{n}.mp4` が無限増殖の余地 | `generate_loop_video.py:59-67` | 3 |
 | P1-9 | OpenAI Image の `quality=high` 既定 — provider 切替時に無自覚に高単価 | `image_provider/config.py:151`, `thumbnail/config.default.yaml:92` | 4 |

@@ -1,6 +1,6 @@
 ---
 name: skill-feedback
-description: "Use when 下流チャンネルリポジトリでスキル実行中の不具合・摩擦・改善案を構造化記録するとき、または記録済み feedback を上流 issue に還流するとき。「/skill-feedback」「摩擦を記録」「改善案を残す」「feedback を上流に還流して」「今週の feedback 還流して」で発動。分析の学びは /analytics-analyze や /flop-analysis を使う"
+description: "Use when 下流チャンネルリポジトリでスキル実行中の不具合・摩擦・改善案を構造化記録するとき、または記録済み feedback を上流 issue に還流するとき。「/skill-feedback」「摩擦を記録」「改善案を残す」「feedback を上流に還流して」「今週の feedback 還流して」で発動。分析の学びは /analytics --analyze や /flop-analysis を使う"
 ---
 
 ## 前後工程
@@ -52,7 +52,7 @@ description: "Use when 下流チャンネルリポジトリでスキル実行中
 | 「このスキル、ここでエラーになった」 | 記録 |
 | 「feedback を上流に還流して」 | 還流 |
 | 「今週の feedback 還流して」 | 還流 |
-| YouTube Analytics や投稿結果から得た運営上の学びを残す | 対象外。`/analytics-analyze` や `/flop-analysis` を使う |
+| YouTube Analytics や投稿結果から得た運営上の学びを残す | 対象外。`/analytics --analyze` や `/flop-analysis` を使う |
 
 ## Entry Schema
 

@@ -115,7 +115,7 @@ class YouTubeOAuthHandler:
         "https://www.googleapis.com/auth/yt-analytics-monetary.readonly",
     ]
 
-    # read-only skill（analytics-collect / benchmark / channel-status 等）用の
+    # read-only skill（analytics / benchmark / channel-status 等）用の
     # 最小権限スコープ。write 系（youtube / youtube.force-ssl）を含めない。
     # token 漏洩時の blast radius を読み取りに限定する（#1699）。
     READONLY_SCOPES: ClassVar[list[str]] = [

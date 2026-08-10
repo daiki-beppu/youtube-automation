@@ -18,7 +18,7 @@
 | **A-4 既存 config キーと重複している直書き** | **6 箇所** | `descriptions.perfect_for` の項目数 "4" / `descriptions.hashtags` "5 個" / `tags.base` 件数 "10 個程度" / `tags.themes` "6-10 テーマ" / `audio.target_duration_min/max` 監査文言 / `youtube.category_id="10"` 等 |
 | **A-5 raw `json.load` / `yaml.safe_load` で channel config を読んでいる references スクリプト** | **0 箇所**（false positive 1 件） | `channel-setup/references/verification.md:12` の `json.load(open(p))` は **JSON 構文検証**用途で、設定値の消費ではないため対象外 |
 
-**Top 影響度（P1）**: §7 サマリー参照。最も対応価値が高いのは **(1) 30 分鮮度しきい値の skill-config 化**（analytics-collect / analytics-analyze で全く同じ「30 分」が直書き）、**(2) API timeout / Veo duration の skill-config 化**、**(3) `descriptions.perfect_for` 個数や `tags.base` 個数の SKILL.md→config-generation-rules.md 一元化**。
+**Top 影響度（P1）**: §7 サマリー参照。最も対応価値が高いのは **(1) 30 分鮮度しきい値の skill-config 化**（analytics / analytics で全く同じ「30 分」が直書き）、**(2) API timeout / Veo duration の skill-config 化**、**(3) `descriptions.perfect_for` 個数や `tags.base` 個数の SKILL.md→config-generation-rules.md 一元化**。
 
 ---
 
@@ -29,8 +29,8 @@
 
 | # | file:line | 値 | 文脈 | 提案外出し先（推測） |
 |---|---|---|---|---|
-| A1-1 | `.claude/skills/analytics-collect/SKILL.md:36-39` | **30 分** | 「ファイルの更新時刻が **30分以内** → 収集をスキップ」 | `config/skills/analytics-collect.yaml::freshness_minutes`（新規） |
-| A1-2 | `.claude/skills/analytics-analyze/SKILL.md:38-39` | **30 分** | 「30分以内に生成されたレポートがあれば分析をスキップ」 | 同上（共通の `analytics.freshness_minutes` を 1 か所に） |
+| A1-1 | `.claude/skills/analytics/SKILL.md:36-39` | **30 分** | 「ファイルの更新時刻が **30分以内** → 収集をスキップ」 | `config/skills/analytics.yaml::freshness_minutes`（新規） |
+| A1-2 | `.claude/skills/analytics/SKILL.md:38-39` | **30 分** | 「30分以内に生成されたレポートがあれば分析をスキップ」 | 同上（共通の `analytics.freshness_minutes` を 1 か所に） |
 | A1-3 | `.claude/skills/streaming/references/notify.sh:67-68` | **5 秒 / 10 秒** | `curl --connect-timeout 5 --max-time 10` | `config/skills/streaming.yaml::notify.{connect_timeout_sec,max_time_sec}`（要確認・streaming は ops 性が強い） |
 | A1-4 | `.claude/skills/streaming/references/healthcheck.sh:79`（SKILL.md 参照） | **5 分間隔 / RuntimeMaxSec=11h / RestartSec=1h** | systemd cron / Terraform 定義由来。SKILL.md L8, L80 で参照 | `infra/terraform/streaming/` の tfvar が Single Source。SKILL.md 側はドキュメントなので **正当**（要確認） |
 | A1-5 | `.claude/skills/loop-video/SKILL.md:118` / `loop-video/config.default.yaml:20` | **8 秒** | `veo.duration_seconds: 8`（Veo API 制約） | **既に skill-config 化済み**（OK、追加対応不要） |
@@ -48,7 +48,7 @@
 | A1-17 | `.claude/skills/video-analyze/config.default.yaml:10` | **10** | `delay_sec: 10`（API レート対策） | **既に skill-config 化済み**（OK） |
 | A1-18 | `.claude/skills/masterup/config.default.yaml:10,13` | **1.0 / "192k"** | `audio.crossfade_duration / bitrate` | **既に skill-config 化済み**（OK） |
 | A1-19 | `.claude/skills/thumbnail/config.default.yaml:101` | **1** | `openai.batch: 1` | **既に skill-config 化済み**（OK） |
-| A1-20 | `.claude/skills/analytics-report/SKILL.md:62,104` | **4 / 1200px** | KPI カード枚数 / `max-width: 1200px` | 影響度低。HTML テンプレ側に集約（**P3**） |
+| A1-20 | `.claude/skills/analytics/SKILL.md:62,104` | **4 / 1200px** | KPI カード枚数 / `max-width: 1200px` | 影響度低。HTML テンプレ側に集約（**P3**） |
 | A1-21 | `.claude/skills/wf-next/SKILL.md:41` / `lyria/SKILL.md:201` | **184 秒 / 30〜90 秒** | ガイド文書内の数値 | A1-6 参照（CLI 定数で集約） |
 | A1-22 | `.claude/skills/channel-setup/references/verification.md:68-69` | **2048×1152 / 800×800 / 6MB / 4MB** | YouTube バナー・アイコン上限値 | YouTube API 仕様値。**正当**（外出し不要） |
 
@@ -98,7 +98,7 @@
 | A3-10 | `.claude/skills/channel-setup/references/verification.md:68-69,72-83` | `branding/banner.png` / `branding/icon.png` | ブランディング素材生成手順 | Convention。**正当** |
 | A3-11 | `.claude/skills/channel-setup/references/verification.md:11` | `config/channel/*.json` | JSON 構文検証 Glob | **正当**（検証用途） |
 | A3-12 | `.claude/skills/postmortem/SKILL.md:152-158` | `data/analytics_data_<YYYYMMDD>.json` / `data/benchmark_<YYYYMMDD>.json` etc. | データソースの参照ガイド | **正当**（仕様書） |
-| A3-13 | `.claude/skills/analytics-report/SKILL.md:109` | `reports/{channel_slug}_analytics_YYYYMMDD.html` | HTML レポート保存先 | `channel_slug` は `config/channel/meta.json::channel.short` 由来と明記 → 外出し不要。**正当** |
+| A3-13 | `.claude/skills/analytics/SKILL.md:109` | `reports/{channel_slug}_analytics_YYYYMMDD.html` | HTML レポート保存先 | `channel_slug` は `config/channel/meta.json::channel.short` 由来と明記 → 外出し不要。**正当** |
 | A3-14 | `.claude/skills/streaming/references/swap_video.sh:20` | `infra/terraform/streaming` | Terraform モジュールパス | CLI 引数で上書き可能。**正当** |
 | A3-15 | `.claude/skills/lyria/SKILL.md:169,210` | `02-Individual-music/{NN}_{name}.wav` / `worktree_sync.sh` パス | コレクション内ファイル命名規約 | CollectionPaths 想定。**正当** |
 | A3-16 | `.claude/skills/comments-reply/SKILL.md:24,64` | `config/channel/comments.json` / `comment_reply_history.json` | 設定・履歴ファイル | `config/channel/comments.json` 自体は `examples/channel_config.example/comments.json` と一致。**正当** |
@@ -157,7 +157,7 @@
 | 順位 | 検出 | 影響度 | 推奨アクション |
 |---|---|---|---|
 | **1** | A4-2/A4-3 — `descriptions.perfect_for` 個数（4）と `hashtags` 個数（5 vs 13）がドキュメント間で矛盾 | **高**（誤実装の温床） | `channel-setup/references/config-generation-rules.md` と `video-description/SKILL.md` でガイドラインを統一。`content.json` に `descriptions.perfect_for_target_count` 等の Single Source キーを置く |
-| **2** | A1-1/A1-2 — 「30 分」鮮度しきい値が analytics-collect / analytics-analyze で完全に直書き重複 | **中**（運用変更時に 2 箇所同時修正必要） | `config/skills/analytics.yaml::freshness_minutes` または `config/channel/analytics.json::cache.freshness_minutes` に統合 |
+| **2** | A1-1/A1-2 — 「30 分」鮮度しきい値が analytics / analytics で完全に直書き重複 | **中**（運用変更時に 2 箇所同時修正必要） | `config/skills/analytics.yaml::freshness_minutes` または `config/channel/analytics.json::cache.freshness_minutes` に統合 |
 | **3** | A1-9/A1-11 — postmortem の CTR 判定閾値（0.5/0.7/0.9/±10%）が SKILL.md 内に固定 | **中**（チャンネルごとに調整したい運用シーンが想定される） | `config/skills/postmortem.yaml::thresholds` を新設 |
 | **4** | A4-12/A4-13 — `comments.json` が「config/channel/*.json 計 7 ファイル」から漏れている | **中**（新規チャンネルで comments-reply skill を使う際に config が欠落する） | `channel-setup/references/claude-md-template.md:13` / `channel-new/SKILL.md:100` の列挙を 8 ファイルに更新 |
 | **5** | A4-4 / A4-5 — `category_id="10"` / `privacy_status` が 3 テンプレファイルに重複（しかも privacy で値が揺れている） | **中**（設計上の Single Source 違反） | `channel-setup/references/config-template/youtube.json` を Single Source とし、`upload-settings-template.json` / `schedule-template.json` から削除 or 参照記述に置換 |
@@ -174,7 +174,7 @@
 ### 走査した skill 一覧（35 件、全件）
 
 ```
-alignment-check / analytics-analyze / analytics-collect / analytics-report /
+alignment-check / analytics / analytics / analytics /
 audience-persona / benchmark / channel-direction / channel-import / channel-new /
 channel-research / channel-setup / channel-status / collection-ideate / comments-reply /
 discover-competitors / live-clean / loop-video / lyria / masterup / metadata-audit /
@@ -261,7 +261,7 @@ viewing-scene / wf-new / wf-next / wf-status
 
 | ID | 内容 |
 |---|---|
-| **P2-a** | analytics-collect / analytics-analyze の **30 分鮮度** を `config/skills/analytics.yaml` に集約 |
+| **P2-a** | analytics / analytics の **30 分鮮度** を `config/skills/analytics.yaml` に集約 |
 | **P2-b** | postmortem の **CTR 判定閾値**（0.5/0.7/0.9/±10%）を `config/skills/postmortem.yaml::thresholds` に集約 |
 | **P2-c** | streaming の **notify timeout**（5 秒 / 10 秒）と **1Password ボルトパス**を `config/skills/streaming.yaml` に外出し |
 | **P2-d** | masterup SKILL.md 本文の Suno CDN URL 4 箇所を skill-config 値の引用に統一（実コードが skill-config を読んでいるなら SKILL.md の文字列は「`{cdn_url_template}` 参照」表現に変更） |
@@ -273,7 +273,7 @@ viewing-scene / wf-new / wf-next / wf-status
 
 | ID | 内容 |
 |---|---|
-| **P3-a** | analytics-report HTML の KPI カード枚数（4）/ max-width（1200px） を skill-config 化 |
+| **P3-a** | analytics HTML の KPI カード枚数（4）/ max-width（1200px） を skill-config 化 |
 | **P3-b** | playlist の `"all"` プレイリスト挿入順（head/tail）を `playlists.json` スキーマに追加 |
 | **P3-c** | `schedule-template.json` の存在意義の整理（examples 側に対応キーが無いため、`config/channel/upload.json` 新設 or テンプレ削除を検討） |
 | **P3-d** | `upload-settings-template.json::thumbnail_search_patterns` を `config/channel/youtube.json` に統合 |

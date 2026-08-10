@@ -57,7 +57,7 @@ def test_flop_analysis_keeps_identity_symptom_mapping_and_output_contract() -> N
     assert "name: flop-analysis" in frontmatter
     assert (
         'description: "Use when 公開済み動画が伸びなかった原因を video_id、collection、または --since で切り分け、'
-        "postmortem.md に出力するとき。「伸びなかった」「flop 分析」で発動。横断戦略は /analytics-analyze、"
+        "postmortem.md に出力するとき。「伸びなかった」「flop 分析」で発動。横断戦略は /analytics --analyze、"
         '事前監査は /alignment-check"'
     ) in frontmatter
 

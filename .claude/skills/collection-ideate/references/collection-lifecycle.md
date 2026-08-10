@@ -24,7 +24,7 @@ collections/live/XXX-name/        → 投稿済み・公開中（Step 5 完了�
 ### 1. 企画段階（planning/）
 1. `/collection-ideate` を直接実行するか、`/wf-new` から分析フェーズを開始
 2. 入力モードを判定
-   - analytics mode: 同じファイル名日付の `reports/analysis_*.md` / `.json` ペアが存在し、`.claude/skills/analytics-analyze/references/analysis-json-validator.md` の validator が exit 0 で、stale ではない。日次収集データ + 構造化分析 JSON + ベンチマーク + config を使う
+   - analytics mode: 同じファイル名日付の `reports/analysis_*.md` / `.json` ペアが存在し、`.claude/skills/analytics/references/analysis-json-validator.md` の validator が exit 0 で、stale ではない。日次収集データ + 構造化分析 JSON + ベンチマーク + config を使う
    - benchmark fallback mode: `reports/analysis_*.md` が存在せず、`data/benchmark_*.json` が存在する。ベンチマーク + config を使う
    - minimal mode: `reports/analysis_*.md` と `data/benchmark_*.json` がどちらも存在しない。`ttp_mode: false` は企画候補生成前にテーマ / ジャンル / 雰囲気を直接確認し、その入力 + config を使う。`true` は `/benchmark` を案内して停止し、`data/benchmark_*.json` が生成されるまで企画候補を生成しない
 3. `/collection-ideate` を直接実行する場合、analytics report のペア検証、stale 判定、自動更新、再検証、失敗時の停止は `freshness-rules.md::stale report の自動更新` に委譲し、ここでは再定義しない。`/wf-new` 経由は同 skill の Hard Gates に委譲し、本 lifecycle では上書きしない

@@ -150,4 +150,4 @@
 
 - 新しい偉人を追加するときは、`config/skills/suno-lyric.yaml::affinity_weights` に追記
 - `iyashitour.com` 側で URL 構造が変わった場合は、本マッピングのスラグを更新する。別 host への自動取得は行わない
-- A/B テストとして「偉人カテゴリ縛り」の曲を作って `/analytics-analyze` のテーマ別パフォーマンスで効果検証
+- A/B テストとして「偉人カテゴリ縛り」の曲を作って `/analytics --analyze` のテーマ別パフォーマンスで効果検証

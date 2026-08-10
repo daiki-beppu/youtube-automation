@@ -44,7 +44,7 @@ def test_ask_first_stage_returns_estimate_and_exact_three_choices(tmp_path: Path
 def test_ask_second_stage_maps_every_choice(tmp_path: Path) -> None:
     _report(tmp_path)
     expected = {
-        "auto": ("execute", ["analytics-analyze"]),
+        "auto": ("execute", ["analytics --analyze"]),
         "manual": ("manual", []),
         "abort": ("abort", []),
     }
@@ -88,20 +88,20 @@ def test_auto_within_limit_requests_skills_in_production_order(tmp_path: Path) -
     relative = _run(tmp_path, "--action", "auto", "--stale-kind", "relative")[1]
     absolute = _run(tmp_path, "--action", "auto", "--stale-kind", "absolute")[1]
     assert relative["outcome"] == "execute"
-    assert relative["skills"] == ["analytics-analyze"]
+    assert relative["skills"] == ["analytics --analyze"]
     assert absolute["outcome"] == "execute"
-    assert absolute["skills"] == ["analytics-collect", "analytics-analyze"]
-    assert relative["workflow"] == {"outcome": "tool_call", "skill": "analytics-analyze", "message": None}
-    assert absolute["workflow"] == {"outcome": "tool_call", "skill": "analytics-collect", "message": None}
+    assert absolute["skills"] == ["analytics --collect", "analytics --analyze"]
+    assert relative["workflow"] == {"outcome": "tool_call", "skill": "analytics --analyze", "message": None}
+    assert absolute["workflow"] == {"outcome": "tool_call", "skill": "analytics --collect", "message": None}
 
 
 def test_execute_path_calls_every_skill_then_revalidates_and_continues(tmp_path: Path) -> None:
     _report(tmp_path)
     first = _run(tmp_path, "--action", "auto", "--stale-kind", "absolute")[1]
-    assert first["workflow"]["skill"] == "analytics-collect"
+    assert first["workflow"]["skill"] == "analytics --collect"
 
     second = _run(tmp_path, "--action", "auto", "--stale-kind", "absolute", "--skill-result", "success")[1]
-    assert second["workflow"]["skill"] == "analytics-analyze"
+    assert second["workflow"]["skill"] == "analytics --analyze"
 
     third = _run(
         tmp_path,

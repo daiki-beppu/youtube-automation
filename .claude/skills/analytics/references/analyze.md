@@ -1,12 +1,4 @@
----
-name: analytics-analyze
-description: "Use when 収集済み Analytics データの分析と戦略提案だけが必要なとき。「パフォーマンス分析」「戦略検討」「振り返り」で発動。データ収集・最新化だけは /analytics-collect、収集→分析→表示の一括実行は /analytics-run を使う"
----
-
-## 前後工程
-
-- `前工程`: `/analytics-collect`
-- `後工程`: `/collection-ideate`, `/analytics-report`, `/flop-analysis`
+# Analytics analyze mode
 
 ## Overview
 
@@ -44,7 +36,7 @@ CLI 未実行、終了コード非 0、JSON のパース失敗、4 CLI のいず
 
 ## When to Use
 
-- `/analytics-collect` でデータ収集を完了した後
+- `/analytics --collect` でデータ収集を完了した後
 - `/wf-next` 完了（動画公開）から T+7 日後の初週パフォーマンス確認（推奨タイミング）
 - 戦略検討のための詳細分析が必要なとき
 - CTR 改善やコンテンツ最適化の根拠データが欲しいとき
@@ -53,8 +45,8 @@ CLI 未実行、終了コード非 0、JSON のパース失敗、4 CLI のいず
 
 | 引数 | 説明 | 例 |
 |------|------|-----|
-| `$ARGUMENTS` | 分析本文の対象ファイル指定（省略可） | `/analytics-analyze data/analytics.json` |
-| 未指定 | 更新時刻が最新の analytics データファイルを分析本文の対象にする | `/analytics-analyze` |
+| `$ARGUMENTS` | 分析本文の対象ファイル指定（省略可） | `/analytics --analyze data/analytics.json` |
+| 未指定 | 更新時刻が最新の analytics データファイルを分析本文の対象にする | `/analytics --analyze` |
 
 `$ARGUMENTS` は分析本文の対象だけを指定する。必須 4 CLI には入力ファイル指定オプションがないため、引数の有無にかかわらず各 CLI が実装上選択する最新スナップショットを使う。分析本文の対象と CLI 入力は混同せず、構造化 JSON の `inputs.analysis_target` と `inputs.cli_selected` に分けて記録する。
 
@@ -64,10 +56,10 @@ CLI 未実行、終了コード非 0、JSON のパース失敗、4 CLI のいず
 
 ### 鮮度チェック（並列実行対応）
 
-しきい値は `/analytics-collect` の skill-config が単一ソース。まず以下を Read（Codex では同等のファイル閲覧）で開き、`freshness_minutes`（既定 30 分）を確定する:
+しきい値は `/analytics --collect` の skill-config が単一ソース。まず以下を Read（Codex では同等のファイル閲覧）で開き、`freshness_minutes`（既定 30 分）を確定する:
 
-1. `.claude/skills/analytics-collect/config.default.yaml`
-2. `config/skills/analytics-collect.yaml`（存在する場合。deep-merge でチャンネル上書きを優先）
+1. `.claude/skills/analytics/config.default.yaml`
+2. `config/skills/analytics.yaml`（存在する場合。deep-merge でチャンネル上書きを優先）
 
 分析実行前に `reports/` 配下の最新レポートを確認する:
 - `freshness_minutes` 分以内に生成された同日付の `analysis_YYYYMMDD.md` / `.json` ペアがあり、`references/analysis-json-validator.md` の validator が exit 0 の場合だけ分析をスキップし、その内容を使用
@@ -175,7 +167,7 @@ subagent は分析結果を同じ日付の `reports/analysis_YYYYMMDD.md` と `r
 追記後（追記 0 件の場合も含め）、メインエージェントが次の検証を実行し、exit 0 を確認してから完了を報告する:
 
 ```bash
-uv run python3 .claude/skills/analytics-analyze/references/validate_insights.py data/insights.jsonl
+uv run python3 .claude/skills/analytics/references/validate_insights.py data/insights.jsonl
 ```
 
 validator が失敗した場合は未完了として扱い、不正エントリを修正してから再検証する。鮮度チェックで分析をスキップした場合は、同日の分析で追記済みのため insights を再追記しない。
@@ -186,7 +178,7 @@ validator が失敗した場合は未完了として扱い、不正エントリ�
 
 | 状況 | 兆候 | 対処 |
 |---|---|---|
-| 入力データ不在 | `data/` のベンチマーク/Analytics スナップショットが無い | 先に `/benchmark`・`/analytics-collect` 等を実行して入力を用意 |
+| 入力データ不在 | `data/` のベンチマーク/Analytics スナップショットが無い | 先に `/benchmark`・`/analytics --collect` 等を実行して入力を用意 |
 | OAuth 未認証/失効 | `infrastructure.auth.youtube` の `FileNotFoundError`（`client_secrets.json` 不在）/ `AuthError` / HTTP 403 | 初回認証フローを再実行。403 が続く場合は `auth/token.json` を削除しスコープを確認のうえ再認証 |
 
 ## Next Step

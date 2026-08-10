@@ -20,7 +20,7 @@ description: "Use when 動画本体の中身（フック構造・シーン・BGM
 - `thumbnail_alignment` — サムネで提示した要素が本編（窓内）に映っているかの整合性
 - `editing_metrics` — 平均カット長・テキスト出現頻度（窓内平均）
 
-既存スキルが扱えていなかった「動画の中身」というドメインを埋め、`/benchmark`・`/analytics-analyze`・`/alignment-check`・`/thumbnail-compare`・`/viewer-voice` の精度を底上げする。
+既存スキルが扱えていなかった「動画の中身」というドメインを埋め、`/benchmark`・`/analytics --analyze`・`/alignment-check`・`/thumbnail-compare`・`/viewer-voice` の精度を底上げする。
 
 ## 完了条件
 
@@ -125,7 +125,7 @@ skill-config (`.claude/skills/video-analyze/config.default.yaml`):
   比例するため、長尺 BGM 動画の全尺解析を避ける。窓幅は `config/skills/video-analyze.yaml` の
   `analysis_window_sec` で上書きできる（deep-merge、曲数が多い・イントロが長いチャンネル向け）
 - Public/Unlisted のみ対応 (Private 動画は API 側で拒否される)
-- Shorts は Gemini の 1fps サンプリング制約により短尺フック構造の解析精度が落ちる。`/short` で生成・投稿した自チャンネル Shorts は本 skill の対象外として扱い、リテンション / CTR 分析は `/analytics-analyze` に任せる
+- Shorts は Gemini の 1fps サンプリング制約により短尺フック構造の解析精度が落ちる。`/short` で生成・投稿した自チャンネル Shorts は本 skill の対象外として扱い、リテンション / CTR 分析は `/analytics --analyze` に任せる
 - API レート制限対策で動画間に `delay_sec` 秒スリープ
 
 ## 呼び出し側スキル

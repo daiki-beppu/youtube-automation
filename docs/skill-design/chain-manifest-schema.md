@@ -283,7 +283,7 @@ fallback してはならない。chain 固有の運用オプションが必要�
 
 ## analytics 初期マニフェスト例
 
-以下は後続の `/analytics-run` issue が同梱デフォルトの初期値として転記する完全な
+以下は後続の `/analytics` issue が同梱デフォルトの初期値として転記する完全な
 `bundledManifest` 例である。各判定 script は後続 issue で `references/` に実装する。
 `report` は既存レポートを表示する read-only 経路なので、追加ファイル出力を要求しない。
 
@@ -293,7 +293,7 @@ fallback してはならない。chain 固有の運用オプションが必要�
   "steps": [
     {
       "id": "collect",
-      "skill": "analytics-collect",
+      "skill": "analytics",
       "prerequisiteArtifacts": [],
       "outputArtifacts": ["data/analytics_data_*.json"],
       "approvalGate": {
@@ -306,7 +306,7 @@ fallback してはならない。chain 固有の運用オプションが必要�
     },
     {
       "id": "analyze",
-      "skill": "analytics-analyze",
+      "skill": "analytics",
       "prerequisiteArtifacts": ["data/analytics_data_*.json"],
       "outputArtifacts": [
         "reports/analysis_*.md",
@@ -322,7 +322,7 @@ fallback してはならない。chain 固有の運用オプションが必要�
     },
     {
       "id": "report",
-      "skill": "analytics-report",
+      "skill": "analytics",
       "prerequisiteArtifacts": ["reports/analysis_*.md"],
       "outputArtifacts": [],
       "approvalGate": {

@@ -82,12 +82,12 @@ def _latest_analysis_pair(root: Path) -> tuple[Artifact, Artifact] | None:
 
 
 def _freshness(root: Path) -> tuple[float, str]:
-    config = load_skill_config("analytics-collect", use_cache=False, channel_dir=root)
+    config = load_skill_config("analytics", use_cache=False, channel_dir=root)
     value = config.get("freshness_minutes", 30)
     if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
-        raise ConfigError(f"analytics-collect.freshness_minutes は正の数である必要があります: {value!r}")
-    override = root / "config" / "skills" / "analytics-collect.yaml"
-    source = _relative(override, root) if override.is_file() else ".claude/skills/analytics-collect/config.default.yaml"
+        raise ConfigError(f"analytics.freshness_minutes は正の数である必要があります: {value!r}")
+    override = root / "config" / "skills" / "analytics.yaml"
+    source = _relative(override, root) if override.is_file() else ".claude/skills/analytics/config.default.yaml"
     return float(value), source
 
 
