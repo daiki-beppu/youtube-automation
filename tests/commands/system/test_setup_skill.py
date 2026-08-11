@@ -319,14 +319,26 @@ def test_channel_new_setup_gate_does_not_require_doctor_all_green() -> None:
 def test_setup_skill_handles_ttp_wf_new_readiness_next_check() -> None:
     text = _setup_text()
     assert (
-        "`data` | `/wf-new` の入力モード判定データ + 初期セットアップ事前検査"
-        "（analytics_report / benchmark_data / ttp_wf_new_readiness / initial_setup_readiness）" in text
+        "（analytics_report / benchmark_data / ttp_wf_new_readiness / wf_new_readiness / "
+        "initial_setup_readiness）" in text
     )
     assert "#### `ttp_wf_new_readiness` — 承認済み TTP の `/channel-new` benchmark 反映状態" in text
     assert "/channel-new benchmark 反映未完了" in text
     assert "`config/skills/thumbnail.yaml::image_generation.gemini.reference_images.default`" in text
     assert "`data/thumbnail_compare/benchmark/`" in text
     assert "uv run yt-doctor --apply --json" in text
+
+
+def test_setup_skill_handles_wf_new_readiness_next_check() -> None:
+    text = _setup_text()
+    section = text.split("#### `wf_new_readiness`", 1)[1].split("\n#### `initial_setup_readiness`", 1)[0]
+
+    assert "`ttp_mode: true` × `minimal mode`" in section
+    assert '`next_action.kind == "human"`' in section
+    assert section.index("benchmark.channels") < section.index("/benchmark")
+    assert section.index("/benchmark") < section.index("yt-doctor --json")
+    assert "persona 文書の有無も停止条件に加えない" in section
+    assert "`benchmark_data` / `analytics_report` / `ttp_wf_new_readiness` の意味を変更せず" in section
 
 
 def test_setup_stale_report_guidance_delegates_to_collection_ideate_contract() -> None:

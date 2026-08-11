@@ -316,6 +316,18 @@ minimal mode / benchmark fallback mode は新規チャンネル初回制作を�
 
 `benchmark.channels` 未設定の場合は minimal mode として扱われるため、setup の完了を止めない。
 
+#### `wf_new_readiness` — `/wf-new` の到達可否
+
+`/collection-ideate` と同じ入力モード判定と `config/skills/collection-ideate.yaml::ttp_mode` の組み合わせを確認する。override ファイルまたは `ttp_mode` が未設定なら、同梱既定どおり `false` として扱う。`analytics mode`、`benchmark fallback mode`、または `ttp_mode: false` の `minimal mode` は、`yt-doctor` の message に表示されたモードのまま `/wf-new` を開始できる。
+
+`ttp_mode: true` × `minimal mode` の warning は、転写元ベンチマークが無く `/collection-ideate` から `/wf-new` へ到達できない状態を示す。`next_action.kind == "human"` の指示を次の順に扱う:
+
+1. 利用者と TTP 対象を決め、`config/channel/analytics.json::benchmark.channels` に保存する
+2. AI が `/benchmark` を実行して `data/benchmark_*.json` を生成する
+3. AI が `uv run yt-doctor --json` を再実行し、`wf_new_readiness` が `ok` になったことを確認する
+
+この check は `/wf-new` の到達可否だけを判定する。`benchmark_data` / `analytics_report` / `ttp_wf_new_readiness` の意味を変更せず、persona 文書の有無も停止条件に加えない。
+
 #### `initial_setup_readiness` — 初期セットアップ事前検査
 
 `config/skills/thumbnail.yaml` / `config/skills/suno.yaml` の空欄・不備（reference_images / composition_rules の未設定、`genre_line` の文字数超過など）と、planning 中コレクションの `descriptions.md` parse 失敗を warn として一括検出する。`yt-doctor` の `next_action` に従い、skill config の転記は `/channel-new`（再生成モード）、descriptions.md の再生成は `/video-description` を案内する。config 未転記の新規チャンネルでは `/channel-new` 完了までの正常な中間状態として扱う。

@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(doctor)`: `ttp_mode` と `/collection-ideate` の入力モードを組み合わせて `/wf-new` の到達可否を診断する `wf_new_readiness` check を追加し、転写元の無い TTP minimal mode に復旧順を案内する（#3761）。
 - `fix(suno)`: Suno の prompt 名・ZIP 内ファイル名・ローカル選曲名を、Unicode の文字・結合文字・数字だけを残す共通キーで照合し、em dash / en dash / horizontal bar の空白化とアポストロフィ除去を吸収する。正規化後に複数 prompt が候補になる場合は誤選択せず停止する（#3759）。
 - `docs(changelog)`: v5.6.0 Migration に `youtube_automation.utils.upload_core` / `youtube_automation.utils.youtube_service` の削除を補記し、1 対 1 の代替がない class ベースから関数ベースへの再設計を、近い新 API を置換先と誤認させない独立形式で記録した（#3758）。
 - `fix(skills-sync)`: `/analytics` 統合後の旧 `analytics-collect` / `analytics-analyze` / `analytics-report` / `analytics-run` を既知の削除対象へ追加し、`yt-skills sync --prune` の候補表示と `--yes` による削除を可能にした（#3756）。
