@@ -154,9 +154,20 @@ def load_collection(col: str) -> dict:
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--dry-run", action="store_true")
-    parser.add_argument("--only", help="comma-separated substring filter for collection names")
+    parser = argparse.ArgumentParser(
+        description=(
+            "descriptions.md の内容を YouTube 上の公開済み動画の概要欄へ一括書き込みする（通常実行は API write）"
+        )
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="YouTube への書き込みを行わず、更新予定を安全にプレビューする",
+    )
+    parser.add_argument(
+        "--only",
+        help="collection 名のカンマ区切り部分一致フィルター（指定した collection のみ対象）",
+    )
     args = parser.parse_args()
 
     targets = discover_collections()
