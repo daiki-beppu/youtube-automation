@@ -573,6 +573,38 @@ def test_channel_new_import_mode_contract_is_separate_from_ttp_completion() -> N
     assert "config-template/*.json" in config_rules
 
 
+def test_channel_new_import_step_8_presents_reachable_wf_new_guidance() -> None:
+    import_mode = _read(".claude/skills/channel-new/references/import-mode.md")
+    step_8 = import_mode.split("## 取り込み Step 8:", 1)[1]
+
+    assert "uv run yt-doctor --json" in step_8
+    assert "`checks` から `id: wf_new_readiness`" in step_8
+    ok_guidance = step_8.split("### `status: ok`", 1)[1].split("### `status: warn`", 1)[0]
+    assert "`message`" in ok_guidance
+    assert "確定した入力モード" in ok_guidance
+    assert "今すぐ `/wf-new`" in ok_guidance
+    assert "品質を上げる任意項目" in ok_guidance
+    for optional_item in ("ブランディング素材", "ペルソナ定義", "追加ベンチマーク"):
+        assert optional_item in ok_guidance
+
+
+def test_channel_new_import_step_8_preserves_warn_recovery_without_blocking_import() -> None:
+    channel_new = _read(".claude/skills/channel-new/SKILL.md")
+    import_mode = _read(".claude/skills/channel-new/references/import-mode.md")
+    step_8 = import_mode.split("## 取り込み Step 8:", 1)[1]
+    warn_guidance = step_8.split("### `status: warn`", 1)[1].split("### 共通の完了契約", 1)[0]
+    completion = step_8.split("### 共通の完了契約", 1)[1]
+
+    assert "`next_action.instructions`" in warn_guidance
+    assert "順序を保ったまま" in warn_guidance
+    assert "`/wf-new` 到達に必須" in warn_guidance
+    assert "品質を上げる任意項目" in warn_guidance
+    assert "`warn` でも取り込みモード自体は完了" in completion
+    assert "`wf_new_readiness` を `ok` にすることは取り込みモードの完了条件に加えない" in completion
+    assert "`wf_new_readiness` の判定結果に基づく必須／任意の次ステップ案内" in channel_new
+    assert "ttp_mode" not in import_mode
+
+
 def test_channel_new_localizations_priority_matches_generation_rules() -> None:
     regeneration_mode = _read(".claude/skills/channel-new/references/regeneration-mode.md")
     rules = _read(".claude/skills/channel-new/references/config-generation-rules.md")

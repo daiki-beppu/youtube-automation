@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(channel-new)`: 既存チャンネル取り込み完了時に `wf_new_readiness` の判定を提示し、`/wf-new` 到達に必須の最短手順とブランディング・ペルソナ・追加ベンチマークなどの任意改善を分離する。警告時も取り込み自体は完了扱いを維持する（#3762）。
 - `feat(doctor)`: `ttp_mode` と `/collection-ideate` の入力モードを組み合わせて `/wf-new` の到達可否を診断する `wf_new_readiness` check を追加し、転写元の無い TTP minimal mode に復旧順を案内する（#3761）。
 - `fix(suno)`: Suno の prompt 名・ZIP 内ファイル名・ローカル選曲名を、Unicode の文字・結合文字・数字だけを残す共通キーで照合し、em dash / en dash / horizontal bar の空白化とアポストロフィ除去を吸収する。正規化後に複数 prompt が候補になる場合は誤選択せず停止する（#3759）。
 - `docs(changelog)`: v5.6.0 Migration に `youtube_automation.utils.upload_core` / `youtube_automation.utils.youtube_service` の削除を補記し、1 対 1 の代替がない class ベースから関数ベースへの再設計を、近い新 API を置換先と誤認させない独立形式で記録した（#3758）。

@@ -10,7 +10,7 @@ description: "Use when 新しい YouTube チャンネルを初期化・取り込
 
 ## 完了条件（新規開設モード）
 
-新規開設モードの `/channel-new` は以下が揃うまで完了扱いにしない。未完了のまま成功案内を出さない。既存チャンネル取り込みモードにはこの TTP 完了条件を適用しない。取り込みモードは「取り込み Step 8: 次ステップ案内」の完了条件で終了できる。
+新規開設モードの `/channel-new` は以下が揃うまで完了扱いにしない。未完了のまま成功案内を出さない。既存チャンネル取り込みモードにはこの TTP 完了条件を適用しない。取り込みモードは「取り込み Step 8: 次ステップ案内」で `wf_new_readiness` の必須／任意案内を提示すれば、その判定が `warn` でも終了できる。
 
 - `config/channel/analytics.json::benchmark.channels` に承認済み TTP 対象が 1 件以上あり、各 entry に relationship（何を転写するか）が入っている
 - `docs/channel/ttp-seed-confirmation.md` に、候補ごとの source、seed fetch 要約、承認 / 不採用判断、転写したい要素、relationship、branding snapshot 参照または description / keywords / localizations の転写方針、未反映項目が保存されている
@@ -400,7 +400,7 @@ guard が `secret-like file staged; unstaged before commit` を出した場合�
 
 - **目的**: 既に YouTube で運営中のチャンネルの情報をヒアリングし、`config/channel/*.json`（責務別分割）を生成して自動化システムに取り込む
 - **実行場所**: `/setup` 完了後の channel repo ルート。`.git` がない場合は新規開設モードの Step 2、環境未整備の場合は Step 3 と同じく `uv run yt-doctor --json` → `/setup` を先に完了させる
-- **完了条件**: `config/channel/*.json` の生成、`uv run yt-doctor --json` の `channel_config.status` が `ok`、OAuth 認証、`channel_id` の `config/channel/meta.json::channel.channel_id` 保存、次ステップ案内まで到達した時点で完了。新規開設モードの TTP 完了条件（`benchmark.channels` / `ttp-seed-confirmation.md` / branding snapshot / `ttp_wf_new_readiness`）は取り込みモードには適用しない
+- **完了条件**: `config/channel/*.json` の生成、`uv run yt-doctor --json` の `channel_config.status` が `ok`、OAuth 認証、`channel_id` の `config/channel/meta.json::channel.channel_id` 保存、`wf_new_readiness` の判定結果に基づく必須／任意の次ステップ案内まで到達した時点で完了。判定が `warn` でも取り込みは完了し、新規開設モードの TTP 完了条件（`benchmark.channels` / `ttp-seed-confirmation.md` / branding snapshot / `ttp_wf_new_readiness`）は取り込みモードには適用しない
 
 ## 設定 push モード（運用中チャンネルの設定同期）
 
