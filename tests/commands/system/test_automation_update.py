@@ -1093,6 +1093,60 @@ def test_apply_channel_config_check_uses_target_even_when_channel_dir_differs(
     assert main(["apply", "--target", str(repo), "--tag", "v5.6.0"]) == 0
 
 
+def test_channel_config_check_validates_every_channel_in_multi_channel_workspace(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo = tmp_path / "workspace"
+    repo.mkdir()
+    (repo / "pyproject.toml").write_text(INLINE_TABLE_PYPROJECT, encoding="utf-8")
+    channel_roots = [repo / "channels" / slug for slug in ("ambient", "jazz")]
+    for channel_root in channel_roots:
+        (channel_root / "config" / "channel").mkdir(parents=True)
+    observed_targets: list[Path] = []
+
+    def _doctor(cmd: list[str], **kwargs):
+        target = Path(cmd[-1])
+        observed_targets.append(target)
+        assert kwargs["cwd"] == target
+        payload = {"checks": [{"id": "channel_config", "status": "ok", "message": "config/channel/ ロード成功"}]}
+        return automation_update.subprocess.CompletedProcess(cmd, 0, json.dumps(payload), "")
+
+    monkeypatch.setattr(automation_update.subprocess, "run", _doctor)
+
+    result = automation_update._check_channel_config(repo)
+
+    assert observed_targets == channel_roots
+    assert result == "2 チャンネルの config/channel/ ロード成功"
+
+
+def test_channel_config_check_fails_when_workspace_has_no_channel_config(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo = tmp_path / "workspace"
+    repo.mkdir()
+
+    def _doctor(cmd: list[str], **kwargs):
+        assert cmd == ["uv", "run", "yt-doctor", "--json", "--target", str(repo)]
+        assert kwargs["cwd"] == repo
+        payload = {
+            "checks": [
+                {
+                    "id": "channel_config",
+                    "status": "fail",
+                    "message": "config/channel/ ディレクトリが存在しない",
+                }
+            ]
+        }
+        return automation_update.subprocess.CompletedProcess(cmd, 1, json.dumps(payload), "")
+
+    monkeypatch.setattr(automation_update.subprocess, "run", _doctor)
+
+    with pytest.raises(automation_update._StepFailed, match="config/channel/ ディレクトリが存在しない"):
+        automation_update._check_channel_config(repo)
+
+
 def test_apply_returns_nonzero_when_target_channel_config_is_invalid(
     tmp_path: Path,
     no_network,
