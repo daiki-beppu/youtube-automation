@@ -11,10 +11,11 @@ import pytest
 from googleapiclient.errors import HttpError
 
 from youtube_automation import entrypoints
+from youtube_automation.core.errors import YouTubeAPIError
 
 
 class _Request:
-    def __init__(self, response: dict | None = None, error: HttpError | None = None) -> None:
+    def __init__(self, response: dict | None = None, error: HttpError | YouTubeAPIError | None = None) -> None:
         self.response = response or {}
         self.error = error
 
@@ -27,6 +28,8 @@ class _Request:
 class _AnalyticsReports:
     def __init__(self, subscribed_status_error: HttpError | None = None) -> None:
         self.subscribed_status_error = subscribed_status_error
+        self.daily_revenue_error: YouTubeAPIError | None = None
+        self.video_revenue_error: YouTubeAPIError | None = None
         self.queries: list[dict] = []
 
     def query(self, **kwargs: str | int) -> _Request:
@@ -42,7 +45,10 @@ class _AnalyticsReports:
             return _Request({"rows": [["VIDEO_1", "2026-04-01", 100]]})
         if dimensions == "video":
             if "estimatedRevenue" in metrics:
-                return _Request({"rows": [["VIDEO_1", 100, 2.5, 80, 4.0, 5.0]]})
+                return _Request(
+                    {"rows": [["VIDEO_1", 100, 2.5, 80, 4.0, 5.0]]},
+                    error=self.video_revenue_error,
+                )
             if metrics.startswith("views,estimatedMinutesWatched"):
                 return _Request({"rows": [["VIDEO_1", 100, 500, 120, 5, 0, 1, 2, 4]]})
             return _Request({"rows": [["VIDEO_1", 100, 5, 1, 500]]})
@@ -53,7 +59,10 @@ class _AnalyticsReports:
         if dimensions == "day" and metrics.startswith("views,estimatedMinutesWatched,averageViewDuration"):
             return _Request({"rows": [["2026-04-01", 100, 500, 120, 4, 0, 5, 0, 1, 2, 50, 0, 0, 0]]})
         if dimensions == "day" and "estimatedRevenue" in metrics:
-            return _Request({"rows": [["2026-04-01", 100, 2.5, 80, 160, 4.0, 5.0]]})
+            return _Request(
+                {"rows": [["2026-04-01", 100, 2.5, 80, 160, 4.0, 5.0]]},
+                error=self.daily_revenue_error,
+            )
         if dimensions == "day":
             return _Request({"rows": [["2026-04-01", 100, 500]]})
         return _Request({"rows": [[100, 5, 1, 2, 4]]})
@@ -238,3 +247,22 @@ def test_yt_analytics_returns_failure_when_subscribed_status_collection_fails(cl
 
     assert exited.value.code == 1
     assert not list((tmp_path / "data").glob("analytics_data_*.json"))
+
+
+def test_yt_analytics_saves_daily_revenue_when_video_revenue_query_fails(cli_dependencies) -> None:
+    tmp_path, reports = cli_dependencies
+    reports.video_revenue_error = YouTubeAPIError("video query unsupported", status_code=400, reason="badRequest")
+
+    with patch.object(sys, "argv", ["yt-analytics", "--days", "7"]):
+        with pytest.raises(SystemExit) as exited:
+            entrypoints.yt_analytics()
+
+    assert exited.value.code == 0
+    saved_files = list((tmp_path / "data").glob("analytics_data_*.json"))
+    assert len(saved_files) == 1
+    payload = json.loads(saved_files[0].read_text(encoding="utf-8"))
+    revenue = payload["revenue_analytics"]
+    assert revenue["status"] == "partial"
+    assert revenue["daily_metrics"][0]["estimated_revenue"] == 2.5
+    assert revenue["by_video"] == {}
+    assert revenue["errors"]["video"]
