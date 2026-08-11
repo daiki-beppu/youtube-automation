@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `fix(metadata)`: `apply_track_display_names` が `workflow-state.json` の読み失敗・root 非 object 時に既存 state 全体を空 dict で上書きしていた経路を `ValidationError` の fail-loud に変更し、書き込みを tempfile + `os.replace` の atomic 方式にした（#3871）。
 - `fix(masterup)`: `yt-generate-master` に存在しない bitrate / crossfade の CLI 上書き例を配布 skill から削除し、`config/skills/masterup.json` または YAML fallback の `audio` 設定を使う実装契約へ案内を統一した（#3763）。
 - `feat(channel-new)`: 既存チャンネル取り込み完了時に `wf_new_readiness` の判定を提示し、`/wf-new` 到達に必須の最短手順とブランディング・ペルソナ・追加ベンチマークなどの任意改善を分離する。警告時も取り込み自体は完了扱いを維持する（#3762）。
 - `feat(doctor)`: `ttp_mode` と `/collection-ideate` の入力モードを組み合わせて `/wf-new` の到達可否を診断する `wf_new_readiness` check を追加し、転写元の無い TTP minimal mode に復旧順を案内する（#3761）。
