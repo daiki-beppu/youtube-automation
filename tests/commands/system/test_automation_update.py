@@ -1005,6 +1005,54 @@ def test_apply_accept_hooks_propagates_explicit_approval(
     assert ["uv", "run", "yt-skills", "sync", "--force", "--accept-hooks"] in recorded_commands
 
 
+def test_apply_accept_hooks_reports_that_changed_hooks_start_next_session(
+    tmp_path: Path, no_network, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    repo = _write_repo(tmp_path, INLINE_TABLE_PYPROJECT)
+    settings_path = repo / ".claude" / "settings.json"
+    settings_path.parent.mkdir()
+    settings_path.write_text('{"permissions": {}}', encoding="utf-8")
+
+    def _run_and_add_hook(cmd: list[str], cwd: Path) -> int:
+        if cmd[:4] == ["uv", "run", "yt-skills", "sync"]:
+            settings_path.write_text(
+                json.dumps(
+                    {
+                        "permissions": {},
+                        "hooks": {
+                            "SessionStart": [
+                                {"hooks": [{"type": "command", "command": "uv run yt-session-start-context"}]}
+                            ]
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+        return 0
+
+    monkeypatch.setattr(automation_update, "_run_command", _run_and_add_hook)
+    monkeypatch.setattr(automation_update, "_check_channel_config", lambda root: "config/channel/ ロード成功")
+    monkeypatch.setattr(automation_update, "_git_status_porcelain", lambda root: "")
+    monkeypatch.setattr(automation_update, "_skills_diff_has_changes", lambda root: False)
+
+    assert main(["apply", "--target", str(repo), "--tag", "v5.6.0", "--accept-hooks"]) == 0
+
+    assert "hook の変更は次回の Claude Code セッションから有効になります" in capsys.readouterr().out
+
+
+def test_apply_accept_hooks_omits_next_session_notice_when_hooks_are_unchanged(
+    tmp_path: Path,
+    no_network,
+    recorded_commands: list[list[str]],
+    capsys: pytest.CaptureFixture,
+) -> None:
+    repo = _write_repo(tmp_path, INLINE_TABLE_PYPROJECT)
+
+    assert main(["apply", "--target", str(repo), "--tag", "v5.6.0", "--accept-hooks"]) == 0
+
+    assert "次回の Claude Code セッション" not in capsys.readouterr().out
+
+
 def test_apply_force_sync_bypasses_local_fix_diff_guard(
     tmp_path: Path, no_network, monkeypatch: pytest.MonkeyPatch, recorded_commands: list[list[str]]
 ) -> None:
