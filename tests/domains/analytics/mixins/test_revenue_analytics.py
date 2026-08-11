@@ -26,7 +26,7 @@ def test_collects_daily_and_video_revenue_metrics():
                 ["2026-07-02", 3000, 21.0, 1500, 4500, 14.0, 12.0],
             ],
         },
-        {"rows": [["video-1", 1000, 8.0, 600, 1800, 13.0, 11.0]]},
+        {"rows": [["video-1", 1000, 8.0, 600, 13.0, 11.0]]},
     ]
     service.query.reset_mock()
 
@@ -43,8 +43,6 @@ def test_collects_daily_and_video_revenue_metrics():
         "views": 1000,
         "estimated_revenue": 8.0,
         "monetized_playbacks": 600,
-        "ad_impressions": 1800,
-        "ads_per_playback": 3.0,
         "cpm": 13.0,
         "playback_based_cpm": 11.0,
         "rpm": 8.0,
@@ -57,6 +55,9 @@ def test_collects_daily_and_video_revenue_metrics():
     }
     assert service.query.call_args_list[0].kwargs["metrics"] == (
         "views,estimatedRevenue,monetizedPlaybacks,adImpressions,cpm,playbackBasedCpm"
+    )
+    assert service.query.call_args_list[1].kwargs["metrics"] == (
+        "views,estimatedRevenue,monetizedPlaybacks,cpm,playbackBasedCpm"
     )
 
 
@@ -77,7 +78,7 @@ def test_zero_views_and_empty_responses_have_stable_available_summary():
     zero_service = MagicMock()
     zero_service.query.side_effect = [
         {"currency": "JPY", "rows": [["2026-07-01", 0, 0.0, 0, 3, 0.0, 0.0]]},
-        {"rows": [["video-1", 0, 0.0, 0, 3, 0.0, 0.0]]},
+        {"rows": [["video-1", 0, 0.0, 0, 0.0, 0.0]]},
     ]
 
     zero = DummyCollector(zero_service).get_revenue_analytics("2026-07-01", "2026-07-01")
@@ -85,7 +86,6 @@ def test_zero_views_and_empty_responses_have_stable_available_summary():
     assert zero["daily_metrics"][0]["rpm"] == 0.0
     assert zero["daily_metrics"][0]["ads_per_playback"] == 0.0
     assert zero["by_video"]["video-1"]["rpm"] == 0.0
-    assert zero["by_video"]["video-1"]["ads_per_playback"] == 0.0
     assert zero["summary"]["rpm"] == 0.0
 
     empty_service = MagicMock()
