@@ -60,38 +60,11 @@ _LEGACY_CHANNEL_SETUP_REFERENCES = (
     "channel-setup" + "/references",
     ".claude/skills/" + "channel-setup",
 )
-_STALE_REFERENCE_EXCLUDED_DIRS = {
-    ".git",
-    ".mypy_cache",
-    ".pytest_cache",
-    ".ruff_cache",
-    ".takt",
-    ".venv",
-    ".worktrees",
-    "__pycache__",
-    "node_modules",
-}
-_STALE_REFERENCE_EXCLUDED_FILES = {"CHANGELOG.md"}
-_STALE_REFERENCE_EXCLUDED_PATH_PREFIXES = {
-    ("docs", "audits"),
-    ("docs", "superpowers"),
-}
-
-
 # ---------- 共通ヘルパー ----------
 
 
 def _bash_available() -> bool:
     return shutil.which("bash") is not None
-
-
-def _is_stale_reference_scan_target(path: Path) -> bool:
-    relative = path.relative_to(_REPO_ROOT)
-    if relative.name in _STALE_REFERENCE_EXCLUDED_FILES:
-        return False
-    if any(relative.parts[: len(prefix)] == prefix for prefix in _STALE_REFERENCE_EXCLUDED_PATH_PREFIXES):
-        return False
-    return not any(part in _STALE_REFERENCE_EXCLUDED_DIRS for part in relative.parts)
 
 
 # ---------- ルート scripts/ から skill 固有ファイルが消えているか ----------
