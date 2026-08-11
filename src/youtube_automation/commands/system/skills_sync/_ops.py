@@ -40,6 +40,10 @@ _KNOWN_REMOVED_SKILL_NAMES = frozenset(
         "automation-release",
         "shadcn",
         "feedback",
+        "analytics-collect",
+        "analytics-analyze",
+        "analytics-report",
+        "analytics-run",
     }
 )
 
