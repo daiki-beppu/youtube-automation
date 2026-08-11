@@ -112,6 +112,21 @@ Python module 移動: あり
 - 1 module の移動を 1 行とし、旧 path と新 path に同じ値を書かない
 - 旧 path に互換 facade を残す移動はこの表の対象外とし、通常の Migration サマリで互換範囲を説明する
 
+旧 module の削除に伴って API が再設計され、同じ責務を持つ新 module が存在しない場合は、参考にできる新 module を「新 import path」へ書かない。1 対 1 移動の対応表とは分けて、次の行フォーマットで削除と再設計を記録する。
+
+```markdown
+Python module 再設計: あり
+
+| 削除された import path | 移行区分 | 参考 module（置換先ではない） |
+|---|---|---|
+| `youtube_automation.utils.legacy_client` | 1 対 1 代替なし（再設計） | `youtube_automation.infrastructure.google.client` |
+```
+
+- 削除された import path と参考 module は、いずれも `youtube_automation.*` から始まる fully-qualified module path とする
+- 移行区分は `1 対 1 代替なし（再設計）` とし、class ベースから関数ベースへの変更など、呼び出し側の再設計が必要なことを Migration 本文で説明する
+- 参考 module は置換先ではない。機能が近い class・関数を併記する場合も、自動置換できる API と誤認させず、利用者が責務を組み直すための参照として示す
+- 互換 facade / shim がある削除や、単純な module 移動はこの行フォーマットへ混在させない
+
 facade 無しの Python module 移動がないリリースでは、対応表を空のまま置かず、次の 1 行だけを記載する。この状態は「module を移動したが facade が無い」状態と区別される。
 
 ```markdown
