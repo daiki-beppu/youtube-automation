@@ -12,7 +12,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_REVENUE_METRICS = "views,estimatedRevenue,monetizedPlaybacks,adImpressions,cpm,playbackBasedCpm"
+_DAILY_REVENUE_METRICS = "views,estimatedRevenue,monetizedPlaybacks,adImpressions,cpm,playbackBasedCpm"
+_VIDEO_REVENUE_METRICS = "views,estimatedRevenue,monetizedPlaybacks,cpm,playbackBasedCpm"
 
 
 class RevenueAnalyticsMixin:
@@ -30,7 +31,7 @@ class RevenueAnalyticsMixin:
                 ids=f"channel=={self.channel_id}",
                 startDate=start_date,
                 endDate=end_date,
-                metrics=_REVENUE_METRICS,
+                metrics=_DAILY_REVENUE_METRICS,
                 dimensions="day",
             )
             daily_response = daily_request
@@ -39,7 +40,7 @@ class RevenueAnalyticsMixin:
                 ids=f"channel=={self.channel_id}",
                 startDate=start_date,
                 endDate=end_date,
-                metrics=_REVENUE_METRICS,
+                metrics=_VIDEO_REVENUE_METRICS,
                 dimensions="video",
                 sort="-estimatedRevenue",
             )
@@ -57,8 +58,8 @@ class RevenueAnalyticsMixin:
                 "summary": {},
             }
 
-        daily_metrics = [self._revenue_row(row, dimension_key="date") for row in daily_response.get("rows", [])]
-        by_video = {row[0]: self._revenue_row(row, dimension_key="video_id") for row in video_response.get("rows", [])}
+        daily_metrics = [self._daily_revenue_row(row) for row in daily_response.get("rows", [])]
+        by_video = {row[0]: self._video_revenue_row(row) for row in video_response.get("rows", [])}
         total_views = sum(row["views"] for row in daily_metrics)
         total_revenue = sum(row["estimated_revenue"] for row in daily_metrics)
 
@@ -76,15 +77,15 @@ class RevenueAnalyticsMixin:
         }
 
     @staticmethod
-    def _revenue_row(row: list[object], *, dimension_key: str) -> dict[str, str | int | float]:
-        """dimension + monetary metrics の API row を安定したキーへ変換する。"""
+    def _daily_revenue_row(row: list[object]) -> dict[str, str | int | float]:
+        """日次の monetary metrics を安定したキーへ変換する。"""
         dimension = str(row[0])
         views = int(row[1])
         estimated_revenue = float(row[2])
         monetized_playbacks = int(row[3])
         ad_impressions = int(row[4])
         return {
-            dimension_key: dimension,
+            "date": dimension,
             "views": views,
             "estimated_revenue": estimated_revenue,
             "monetized_playbacks": monetized_playbacks,
@@ -92,6 +93,21 @@ class RevenueAnalyticsMixin:
             "ads_per_playback": RevenueAnalyticsMixin._calculate_ads_per_playback(ad_impressions, monetized_playbacks),
             "cpm": float(row[5]),
             "playback_based_cpm": float(row[6]),
+            "rpm": RevenueAnalyticsMixin._calculate_rpm(estimated_revenue, views),
+        }
+
+    @staticmethod
+    def _video_revenue_row(row: list[object]) -> dict[str, str | int | float]:
+        """動画別の monetary metrics を安定したキーへ変換する。"""
+        views = int(row[1])
+        estimated_revenue = float(row[2])
+        return {
+            "video_id": str(row[0]),
+            "views": views,
+            "estimated_revenue": estimated_revenue,
+            "monetized_playbacks": int(row[3]),
+            "cpm": float(row[4]),
+            "playback_based_cpm": float(row[5]),
             "rpm": RevenueAnalyticsMixin._calculate_rpm(estimated_revenue, views),
         }
 

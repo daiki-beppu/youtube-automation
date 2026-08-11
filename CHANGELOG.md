@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `docs(changelog)`: v5.6.0 Migration に `youtube_automation.utils.upload_core` / `youtube_automation.utils.youtube_service` の削除を補記し、1 対 1 の代替がない class ベースから関数ベースへの再設計を、近い新 API を置換先と誤認させない独立形式で記録した（#3758）。
 - `fix(skills-sync)`: `/analytics` 統合後の旧 `analytics-collect` / `analytics-analyze` / `analytics-report` / `analytics-run` を既知の削除対象へ追加し、`yt-skills sync --prune` の候補表示と `--yes` による削除を可能にした（#3756）。
 - `fix(automation-update)`: multi-channel workspace の `channels/<slug>/config/channel/` を Step 7 smoke check の対象として全件検証し、single-channel と config 未生成時の既存契約を維持する（#3755）。
+- `fix(analytics)`: 動画別収益クエリから YouTube Analytics API 非対応の `adImpressions` を除外し、日次クエリでは広告表示回数の収集を維持する（#3837）。
 - `breaking(skills)`: Analytics の収集・分析・表示・一括実行を `/analytics` に統合し、一段実行を排他的な `--collect` / `--analyze` / `--report` へ移行した。下流更新では `yt-skills sync --prune` で旧 skill ディレクトリを除去し、`config/skills/` の旧 Analytics 設定を `config/skills/analytics.yaml` へ統合する（#3729）。
 - `feat(skills-sync)`: `yt-skills sync --asset skills` 後に、対応する同梱 skill がない下流 `config/skills/*.yaml` / `*.json` を削除せず報告する（#3728）。
 - `fix(wf-new)`: `/collection-ideate` と `/wf-new` が現在の channel config・方向性・第一ペルソナ・視聴シーン・creative constraints を固定制約として候補ごとに検証し、違反案を提示・保存・state 反映しない fail-closed gate を追加した（#3727）。
