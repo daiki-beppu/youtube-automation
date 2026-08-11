@@ -11,8 +11,10 @@ Features:
 
 import json
 import logging
+import os
 import re
 import subprocess
+import tempfile
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List
@@ -55,6 +57,23 @@ from youtube_automation.domains.metadata.titles import (
 from youtube_automation.domains.uploads.preflight import requires_scene_phrases
 
 logger = logging.getLogger(__name__)
+
+
+def _write_workflow_state(workflow_state_path: Path, state: Dict) -> None:
+    """workflow-state.json を同一ディレクトリの一時ファイル + os.replace で原子的に更新する。"""
+    payload = json.dumps(state, ensure_ascii=False, indent=2) + "\n"
+    fd, tmp_name = tempfile.mkstemp(
+        dir=workflow_state_path.parent,
+        prefix=".workflow-state.",
+        suffix=".tmp",
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(payload)
+        os.replace(tmp_name, workflow_state_path)
+    except BaseException:
+        Path(tmp_name).unlink(missing_ok=True)
+        raise
 
 
 class BAHMetadataGenerator:
@@ -498,6 +517,10 @@ class BAHMetadataGenerator:
             - `self.tracks[i]["title"]` を上書き
             - `workflow-state.json` の `track_display_names` キーに
               `{filename: display_name}` 形式で永続化（既存キーは保持）
+
+        Raises:
+            ValidationError: 既存 workflow-state.json が破損・読取不能な場合
+                （既存 state の消失を防ぐため上書きせず中断する）
         """
         if not name_map:
             return
@@ -518,17 +541,23 @@ class BAHMetadataGenerator:
         ws_path = paths.workflow_state_path
         state: Dict = {}
         if ws_path.exists():
+            # 読み失敗時に state={} で続行すると、下の書き込みで
+            # 既存 state 全体（phase / assets / upload 等）を消してしまうため fail-loud にする
             try:
                 with open(ws_path, "r", encoding="utf-8") as f:
-                    state = json.load(f) or {}
-            except (json.JSONDecodeError, OSError):
-                state = {}
+                    state = json.load(f)
+            except json.JSONDecodeError as e:
+                raise ValidationError(f"workflow-state.json のパースに失敗: {e}") from e
+            except OSError as e:
+                raise ValidationError(f"workflow-state.json を読めません: {e}") from e
+            if not isinstance(state, dict):
+                raise ValidationError("workflow-state.json の root は object である必要があります")
         existing = state.get("track_display_names") or {}
         if not isinstance(existing, dict):
             existing = {}
         existing.update(filename_map)
         state["track_display_names"] = existing
-        ws_path.write_text(json.dumps(state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        _write_workflow_state(ws_path, state)
 
     # ─── タイトル生成（2026リブランド） ─────────────────
 

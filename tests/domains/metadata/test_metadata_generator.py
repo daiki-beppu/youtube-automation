@@ -1325,6 +1325,76 @@ class TestApplyTrackDisplayNames:
         gen._apply_persisted_display_names()
         assert gen.tracks[0]["title"] == "Persisted Name"
 
+    def test_corrupted_state_fails_loud_and_preserves_file(self, tmp_path):
+        """破損した workflow-state.json を空 dict で上書きしない（データ消失防止）."""
+        gen = _make_generator()
+        gen.collection_path = tmp_path
+        ws_path = tmp_path / "workflow-state.json"
+        corrupted = '{"phase": "upload", "assets": {'
+        ws_path.write_text(corrupted, encoding="utf-8")
+
+        gen.tracks = [_track("01-pattern-a-foo.mp3", "Original", "00:00", "a")]
+
+        with pytest.raises(ValidationError):
+            gen.apply_track_display_names({0: "New Name"})
+
+        # 既存内容（phase / assets 等）が失われていないこと
+        assert ws_path.read_text(encoding="utf-8") == corrupted
+
+    def test_non_dict_state_fails_loud_and_preserves_file(self, tmp_path):
+        """root が object でない workflow-state.json は上書きせず fail-loud."""
+        import json as _json
+
+        gen = _make_generator()
+        gen.collection_path = tmp_path
+        ws_path = tmp_path / "workflow-state.json"
+        ws_path.write_text(_json.dumps(["not", "a", "dict"]), encoding="utf-8")
+
+        gen.tracks = [_track("01-pattern-a-foo.mp3", "Original", "00:00", "a")]
+
+        with pytest.raises(ValidationError):
+            gen.apply_track_display_names({0: "New Name"})
+
+        assert _json.loads(ws_path.read_text(encoding="utf-8")) == ["not", "a", "dict"]
+
+    def test_unreadable_state_fails_loud(self, tmp_path):
+        """一時的 I/O エラー（OSError）でも state={} フォールバックしない."""
+        gen = _make_generator()
+        gen.collection_path = tmp_path
+        # ディレクトリを置くと exists() は True だが open() が IsADirectoryError(OSError)
+        ws_path = tmp_path / "workflow-state.json"
+        ws_path.mkdir()
+
+        gen.tracks = [_track("01-pattern-a-foo.mp3", "Original", "00:00", "a")]
+
+        with pytest.raises(ValidationError):
+            gen.apply_track_display_names({0: "New Name"})
+
+    def test_write_failure_preserves_existing_state(self, tmp_path, monkeypatch):
+        """書き込み途中の失敗で既存 workflow-state.json が壊れない（atomic write）."""
+        import json as _json
+        import os as _os
+
+        gen = _make_generator()
+        gen.collection_path = tmp_path
+        ws_path = tmp_path / "workflow-state.json"
+        original = _json.dumps({"phase": "upload", "collection_name": "Test"})
+        ws_path.write_text(original, encoding="utf-8")
+
+        gen.tracks = [_track("01-pattern-a-foo.mp3", "Original", "00:00", "a")]
+
+        def _fail_replace(src, dst):
+            raise OSError("simulated replace failure")
+
+        monkeypatch.setattr(_os, "replace", _fail_replace)
+
+        with pytest.raises(OSError):
+            gen.apply_track_display_names({0: "New Name"})
+
+        # 元ファイルが無傷で、一時ファイルの残骸も無いこと
+        assert ws_path.read_text(encoding="utf-8") == original
+        assert sorted(p.name for p in tmp_path.iterdir()) == ["workflow-state.json"]
+
 
 # ===========================================================================
 # 17. pattern 表示名解決ロジック
