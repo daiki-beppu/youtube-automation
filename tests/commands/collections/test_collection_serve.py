@@ -3087,6 +3087,39 @@ def test_extract_apostrophe_exact_match_still_wins(tmp_path):
     assert [f.name for f in music_dir.iterdir()] == ["01a-Greed's Rhythm.mp3"]
 
 
+@pytest.mark.parametrize("separator", ["—", "–", "―"])
+def test_extract_symbol_normalized_zip_names_match_prompts(tmp_path, separator):
+    coll = _make_collection(
+        tmp_path,
+        "20260601-clm-aaa-collection",
+        entries=[{"name": f"Midnight {separator} Echo", "style": "s", "lyrics": ""}],
+    )
+    zip_path = _make_zip(tmp_path / "download.zip", {"Midnight Echo.mp3": b"audio"})
+
+    result = extract_and_rename_music(coll, str(zip_path))
+
+    assert result == 1
+    music_dir = coll / "02-Individual-music"
+    assert [f.name for f in music_dir.iterdir()] == ["01a-Midnight Echo.mp3"]
+
+
+def test_extract_rejects_zip_name_ambiguous_after_symbol_normalization(tmp_path):
+    coll = _make_collection(
+        tmp_path,
+        "20260601-clm-aaa-collection",
+        entries=[
+            {"name": "AB — C", "style": "s", "lyrics": ""},
+            {"name": "A — BC", "style": "s", "lyrics": ""},
+        ],
+    )
+    zip_path = _make_zip(tmp_path / "download.zip", {"ABC.mp3": b"audio"})
+
+    with pytest.raises(DownloadedArtifactError, match="ambiguous Suno name"):
+        extract_and_rename_music(coll, str(zip_path))
+
+    assert not (coll / "02-Individual-music").exists()
+
+
 def test_extract_unmatched_files(tmp_path):
     """prompts にマッチしないファイルは配置せず、完了件数にも数えない。"""
     coll = _make_collection(

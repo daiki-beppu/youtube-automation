@@ -88,6 +88,37 @@ def test_instrumental_prompt_keeps_both_clips_after_duration_filter(tmp_path, mo
     assert result.mode_counts == {"vocal": 0, "instrumental": 1}
 
 
+@pytest.mark.parametrize("separator", ["—", "–", "―"])
+def test_symbol_normalized_noncanonical_names_are_selected(tmp_path, monkeypatch, separator):
+    collection = _make_collection(
+        tmp_path,
+        [{"name": f"Midnight {separator} Echo", "lyrics": ""}],
+    )
+    first = _write_audio(collection, "Midnight Echo.mp3")
+    second = _write_audio(collection, "Midnight Echo_1.mp3")
+    monkeypatch.setattr(suno_track_selection, "probe_duration", lambda _: 120.0)
+
+    result = suno_track_selection.select_suno_tracks(collection, _cfg(), dry_run=True)
+
+    assert result.kept == [first, second]
+    assert result.mode_counts == {"vocal": 0, "instrumental": 1}
+
+
+def test_noncanonical_name_collision_stops_selection(tmp_path, monkeypatch):
+    collection = _make_collection(
+        tmp_path,
+        [
+            {"name": "AB — C", "lyrics": ""},
+            {"name": "A — BC", "lyrics": ""},
+        ],
+    )
+    _write_audio(collection, "ABC.mp3")
+    monkeypatch.setattr(suno_track_selection, "probe_duration", lambda _: 120.0)
+
+    with pytest.raises(ValidationError, match="ambiguous Suno name"):
+        suno_track_selection.select_suno_tracks(collection, _cfg(), dry_run=True)
+
+
 def test_prompt_response_envelope_keeps_track_selection_compatible(tmp_path, monkeypatch):
     collection = _make_collection(
         tmp_path,

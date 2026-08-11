@@ -42,6 +42,7 @@ _DOMAIN_MODULES = (
     f"{_DOWNLOADED_ROOT}.apply",
     f"{_SUNO_ROOT}.config",
     f"{_SUNO_ROOT}.lyrics",
+    f"{_SUNO_ROOT}.name_matching",
     f"{_SUNO_ROOT}.prompts",
     f"{_SUNO_ROOT}.playlist",
     f"{_SUNO_ROOT}.selection",
@@ -177,7 +178,10 @@ def test_domain_dependency_edges_are_one_way() -> None:
             f"{_DOWNLOADED_ROOT}.workflow",
             f"{_DOWNLOADED_ROOT}.models",
         },
-        f"{_DOWNLOADED_ROOT}.archive": {f"{_DOWNLOADED_ROOT}.models"},
+        f"{_DOWNLOADED_ROOT}.archive": {
+            f"{_DOWNLOADED_ROOT}.models",
+            f"{_SUNO_ROOT}.name_matching",
+        },
         f"{_DOWNLOADED_ROOT}.apply": {
             f"{_DOWNLOADED_ROOT}.archive",
             f"{_DOWNLOADED_ROOT}.workflow",

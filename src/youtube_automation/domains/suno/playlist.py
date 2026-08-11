@@ -11,24 +11,21 @@ fail-loud で検出する。
 
 from __future__ import annotations
 
-import re
 import unicodedata
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable, Mapping
 
 from youtube_automation.core.adapters.errors import ValidationError
+from youtube_automation.domains.suno.name_matching import normalize_suno_name_for_lookup
 from youtube_automation.domains.suno.prompts import read_suno_prompt_entries
 
-_WS_RE = re.compile(r"\s+")
 _MAX_DISPLAY_TEXT_LEN = 200
 
 
 def normalize_title(value: str) -> str:
-    """タイトル照合キーを正規化する（NFKC + 空白圧縮 + casefold）."""
-    text = unicodedata.normalize("NFKC", value)
-    text = _WS_RE.sub(" ", text).strip()
-    return text.casefold()
+    """タイトル照合キーを Suno filename と同じ方針で正規化する."""
+    return normalize_suno_name_for_lookup(value)
 
 
 @dataclass(frozen=True)
