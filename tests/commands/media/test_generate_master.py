@@ -313,6 +313,21 @@ class TestCliSkillConfigTargetDuration:
         )
         return captured
 
+    def test_skill_config_controls_crossfade_and_bitrate_without_cli_flags(self, monkeypatch, tmp_path):
+        # Given: チャンネル固有の crossfade / bitrate を skill-config に設定
+        captured = self._patch_main_dependencies(
+            monkeypatch,
+            {"audio": {"crossfade_duration": 0.3, "bitrate": "256k"}},
+        )
+        monkeypatch.setattr("sys.argv", ["yt-generate-master", str(tmp_path)])
+
+        # When: 上書き CLI フラグを使わずに実行
+        rc = generate_master.main()
+
+        # Then: 設定値が生成処理へ渡る
+        assert rc == 0
+        assert captured["args"][1:] == (0.3, "256k")
+
     def test_skill_config_target_duration_used_when_cli_unspecified(self, monkeypatch, tmp_path):
         # Given: skill-config に target_duration_min=120、CLI フラグ未指定
         captured = self._patch_main_dependencies(

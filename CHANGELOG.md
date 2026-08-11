@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `fix(masterup)`: `yt-generate-master` に存在しない bitrate / crossfade の CLI 上書き例を配布 skill から削除し、`config/skills/masterup.json` または YAML fallback の `audio` 設定を使う実装契約へ案内を統一した（#3763）。
 - `feat(channel-new)`: 既存チャンネル取り込み完了時に `wf_new_readiness` の判定を提示し、`/wf-new` 到達に必須の最短手順とブランディング・ペルソナ・追加ベンチマークなどの任意改善を分離する。警告時も取り込み自体は完了扱いを維持する（#3762）。
 - `feat(doctor)`: `ttp_mode` と `/collection-ideate` の入力モードを組み合わせて `/wf-new` の到達可否を診断する `wf_new_readiness` check を追加し、転写元の無い TTP minimal mode に復旧順を案内する（#3761）。
 - `fix(suno)`: Suno の prompt 名・ZIP 内ファイル名・ローカル選曲名を、Unicode の文字・結合文字・数字だけを残す共通キーで照合し、em dash / en dash / horizontal bar の空白化とアポストロフィ除去を吸収する。正規化後に複数 prompt が候補になる場合は誤選択せず停止する（#3759）。

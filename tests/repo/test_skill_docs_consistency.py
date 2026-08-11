@@ -1242,6 +1242,28 @@ def test_skill_config_defaults_have_read_gate_in_skill_docs() -> None:
             )
 
 
+def test_masterup_generate_master_examples_only_use_cli_help_options() -> None:
+    skill = _read(".claude/skills/masterup/SKILL.md")
+    result = subprocess.run(
+        [sys.executable, "-m", "youtube_automation.commands.media.generate_master", "--help"],
+        cwd=ROOT,
+        check=True,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+
+    help_options = set(re.findall(r"--[a-z][a-z0-9-]*", result.stdout))
+    documented_commands = re.findall(r"uv run yt-generate-master[^\n`]*", skill)
+    documented_options = {
+        option for command in documented_commands for option in re.findall(r"--[a-z][a-z0-9-]*", command)
+    }
+
+    assert documented_commands
+    assert documented_options <= help_options
+    assert {"--bitrate", "--crossfade-duration"}.isdisjoint(set(re.findall(r"--[a-z][a-z0-9-]*", skill)))
+
+
 def test_analytics_report_theme_colors_are_config_driven() -> None:
     skill = _read(".claude/skills/analytics/references/report.md")
     default_config = yaml.safe_load(_read(".claude/skills/analytics/config.default.yaml")) or {}
