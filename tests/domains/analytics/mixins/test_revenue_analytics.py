@@ -61,9 +61,49 @@ def test_collects_daily_and_video_revenue_metrics():
     )
 
 
-def test_monetary_api_failure_warns_and_returns_unavailable(caplog):
+def test_returns_daily_metrics_as_partial_when_video_query_fails(caplog):
     service = MagicMock()
-    service.query.side_effect = YouTubeAPIError("monetary data forbidden", status_code=403, reason="forbidden")
+    service.query.side_effect = [
+        {"currency": "USD", "rows": [["2026-07-01", 2000, 10.0, 1000, 2500, 12.5, 10.0]]},
+        YouTubeAPIError("video query unsupported", status_code=400, reason="badRequest"),
+    ]
+
+    with caplog.at_level(logging.WARNING):
+        result = DummyCollector(service).get_revenue_analytics("2026-07-01", "2026-07-01")
+
+    assert result["status"] == "partial"
+    assert result["daily_metrics"][0]["estimated_revenue"] == 10.0
+    assert result["by_video"] == {}
+    assert result["summary"]["estimated_revenue"] == 10.0
+    assert result["errors"] == {"video": "video query unsupported"}
+    assert "動画別収益メトリクス" in caplog.text
+
+
+def test_returns_video_metrics_as_partial_when_daily_query_fails(caplog):
+    service = MagicMock()
+    service.query.side_effect = [
+        YouTubeAPIError("daily query forbidden", status_code=403, reason="forbidden"),
+        {"currency": "JPY", "rows": [["video-1", 1000, 8.0, 600, 13.0, 11.0]]},
+    ]
+
+    with caplog.at_level(logging.WARNING):
+        result = DummyCollector(service).get_revenue_analytics("2026-07-01", "2026-07-01")
+
+    assert result["status"] == "partial"
+    assert result["currency"] == "JPY"
+    assert result["daily_metrics"] == []
+    assert result["by_video"]["video-1"]["estimated_revenue"] == 8.0
+    assert result["summary"] == {}
+    assert result["errors"] == {"day": "daily query forbidden"}
+    assert "日次収益メトリクス" in caplog.text
+
+
+def test_returns_unavailable_when_both_monetary_queries_fail(caplog):
+    service = MagicMock()
+    service.query.side_effect = [
+        YouTubeAPIError("daily query forbidden", status_code=403, reason="forbidden"),
+        YouTubeAPIError("video query unsupported", status_code=400, reason="badRequest"),
+    ]
 
     with caplog.at_level(logging.WARNING):
         result = DummyCollector(service).get_revenue_analytics("2026-07-01", "2026-07-02")
@@ -71,6 +111,12 @@ def test_monetary_api_failure_warns_and_returns_unavailable(caplog):
     assert result["status"] == "unavailable"
     assert result["daily_metrics"] == []
     assert result["by_video"] == {}
+    assert result["errors"] == {
+        "day": "daily query forbidden",
+        "video": "video query unsupported",
+    }
+    assert result["reason"] == "day: daily query forbidden; video: video query unsupported"
+    assert service.query.call_count == 2
     assert "基本メトリクスの収集は継続" in caplog.text
 
 

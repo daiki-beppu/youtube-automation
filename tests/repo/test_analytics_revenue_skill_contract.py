@@ -9,6 +9,7 @@ def test_analytics_collect_documents_graceful_monetary_skip():
     skill = (ROOT / ".claude/skills/analytics/references/collect.md").read_text()
 
     assert "estimatedRevenue" in skill
+    assert 'revenue_analytics.status: "partial"' in skill
     assert 'revenue_analytics.status: "unavailable"' in skill
     assert "既存メトリクスの収集は継続" in skill
 

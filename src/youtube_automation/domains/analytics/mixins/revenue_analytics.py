@@ -26,54 +26,109 @@ class RevenueAnalyticsMixin:
         収益取得を基本メトリクスと別クエリにすることで、収益化状態が既存収集を
         失敗させないようにしている。
         """
-        try:
-            daily_request = self.analytics_service.query(
-                ids=f"channel=={self.channel_id}",
-                startDate=start_date,
-                endDate=end_date,
-                metrics=_DAILY_REVENUE_METRICS,
-                dimensions="day",
-            )
-            daily_response = daily_request
+        daily_response, daily_error = self._get_daily_revenue(start_date, end_date)
+        video_response, video_error = self._get_video_revenue(start_date, end_date)
+        errors = {
+            dimension: str(error)
+            for dimension, error in (("day", daily_error), ("video", video_error))
+            if error is not None
+        }
 
-            video_request = self.analytics_service.query(
-                ids=f"channel=={self.channel_id}",
-                startDate=start_date,
-                endDate=end_date,
-                metrics=_VIDEO_REVENUE_METRICS,
-                dimensions="video",
-                sort="-estimatedRevenue",
-            )
-            video_response = video_request
-        except YouTubeAPIError as error:
-            logger.warning(
-                "収益メトリクスを取得できないため skip します。基本メトリクスの収集は継続します: %s",
-                error,
-            )
+        if daily_response is None and video_response is None:
             return {
                 "status": "unavailable",
-                "reason": str(error),
+                "reason": "; ".join(f"{dimension}: {reason}" for dimension, reason in errors.items()),
+                "errors": errors,
                 "daily_metrics": [],
                 "by_video": {},
                 "summary": {},
             }
 
-        daily_metrics = [self._daily_revenue_row(row) for row in daily_response.get("rows", [])]
-        by_video = {row[0]: self._video_revenue_row(row) for row in video_response.get("rows", [])}
-        total_views = sum(row["views"] for row in daily_metrics)
-        total_revenue = sum(row["estimated_revenue"] for row in daily_metrics)
-
-        return {
-            "status": "available",
-            "currency": daily_response.get("currency"),
+        daily_metrics = (
+            [self._daily_revenue_row(row) for row in daily_response.get("rows", [])]
+            if daily_response is not None
+            else []
+        )
+        by_video = (
+            {row[0]: self._video_revenue_row(row) for row in video_response.get("rows", [])}
+            if video_response is not None
+            else {}
+        )
+        result: dict[str, object] = {
+            "status": "partial" if errors else "available",
+            "currency": self._revenue_currency(daily_response, video_response),
             "daily_metrics": daily_metrics,
             "by_video": by_video,
-            "summary": {
-                "estimated_revenue": total_revenue,
-                "monetized_playbacks": sum(row["monetized_playbacks"] for row in daily_metrics),
-                "views": total_views,
-                "rpm": self._calculate_rpm(total_revenue, total_views),
-            },
+            "summary": self._revenue_summary(daily_metrics) if daily_response is not None else {},
+        }
+        if errors:
+            result["errors"] = errors
+        return result
+
+    def _get_daily_revenue(
+        self, start_date: str, end_date: str
+    ) -> tuple[dict[str, object] | None, YouTubeAPIError | None]:
+        """日次収益を取得し、失敗情報を動画別クエリから隔離する。"""
+        try:
+            return (
+                self.analytics_service.query(
+                    ids=f"channel=={self.channel_id}",
+                    startDate=start_date,
+                    endDate=end_date,
+                    metrics=_DAILY_REVENUE_METRICS,
+                    dimensions="day",
+                ),
+                None,
+            )
+        except YouTubeAPIError as error:
+            logger.warning(
+                "日次収益メトリクスを取得できません。基本メトリクスの収集は継続します: %s",
+                error,
+            )
+            return None, error
+
+    def _get_video_revenue(
+        self, start_date: str, end_date: str
+    ) -> tuple[dict[str, object] | None, YouTubeAPIError | None]:
+        """動画別収益を取得し、失敗情報を日次クエリから隔離する。"""
+        try:
+            return (
+                self.analytics_service.query(
+                    ids=f"channel=={self.channel_id}",
+                    startDate=start_date,
+                    endDate=end_date,
+                    metrics=_VIDEO_REVENUE_METRICS,
+                    dimensions="video",
+                    sort="-estimatedRevenue",
+                ),
+                None,
+            )
+        except YouTubeAPIError as error:
+            logger.warning(
+                "動画別収益メトリクスを取得できません。基本メトリクスの収集は継続します: %s",
+                error,
+            )
+            return None, error
+
+    @staticmethod
+    def _revenue_currency(daily_response: dict[str, object] | None, video_response: dict[str, object] | None) -> object:
+        """成功した収益レスポンスから通貨を返す。"""
+        if daily_response is not None:
+            return daily_response.get("currency")
+        if video_response is not None:
+            return video_response.get("currency")
+        raise ValueError("収益レスポンスがありません")
+
+    @staticmethod
+    def _revenue_summary(daily_metrics: list[dict[str, str | int | float]]) -> dict[str, int | float]:
+        """日次収益から期間集計を算出する。"""
+        total_views = sum(int(row["views"]) for row in daily_metrics)
+        total_revenue = sum(float(row["estimated_revenue"]) for row in daily_metrics)
+        return {
+            "estimated_revenue": total_revenue,
+            "monetized_playbacks": sum(int(row["monetized_playbacks"]) for row in daily_metrics),
+            "views": total_views,
+            "rpm": RevenueAnalyticsMixin._calculate_rpm(total_revenue, total_views),
         }
 
     @staticmethod
