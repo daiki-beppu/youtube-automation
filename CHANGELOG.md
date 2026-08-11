@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `fix(automation-update)`: multi-channel workspace の `channels/<slug>/config/channel/` を Step 7 smoke check の対象として全件検証し、single-channel と config 未生成時の既存契約を維持する（#3755）。
 - `breaking(skills)`: Analytics の収集・分析・表示・一括実行を `/analytics` に統合し、一段実行を排他的な `--collect` / `--analyze` / `--report` へ移行した。下流更新では `yt-skills sync --prune` で旧 skill ディレクトリを除去し、`config/skills/` の旧 Analytics 設定を `config/skills/analytics.yaml` へ統合する（#3729）。
 - `feat(skills-sync)`: `yt-skills sync --asset skills` 後に、対応する同梱 skill がない下流 `config/skills/*.yaml` / `*.json` を削除せず報告する（#3728）。
 - `fix(wf-new)`: `/collection-ideate` と `/wf-new` が現在の channel config・方向性・第一ペルソナ・視聴シーン・creative constraints を固定制約として候補ごとに検証し、違反案を提示・保存・state 反映しない fail-closed gate を追加した（#3727）。
