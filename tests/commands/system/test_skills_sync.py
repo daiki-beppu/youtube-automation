@@ -941,32 +941,73 @@ def test_cmd_sync_prune_removes_orphan_dir_when_yes(fake_repo: Path, tmp_path: P
 
 
 @pytest.mark.parametrize(
-    ("prune_flags", "feedback_exists"),
+    ("prune_flags", "legacy_skill_exists"),
     [
         pytest.param([], True, id="normal-sync-keeps"),
         pytest.param(["--prune"], True, id="unapproved-prune-keeps"),
         pytest.param(["--prune", "--yes"], False, id="approved-prune-removes"),
     ],
 )
-def test_cmd_sync_legacy_feedback_prune_requires_explicit_yes(
+@pytest.mark.parametrize(
+    "legacy_skill_name",
+    ["feedback", "analytics-collect", "analytics-analyze", "analytics-report", "analytics-run"],
+)
+def test_cmd_sync_should_prune_legacy_skill_only_with_explicit_yes(
     fake_repo: Path,
     tmp_path: Path,
     prune_flags: list[str],
-    feedback_exists: bool,
+    legacy_skill_exists: bool,
+    legacy_skill_name: str,
 ) -> None:
-    """legacy feedback は明示承認した prune でだけ削除する。"""
+    """legacy skill は明示承認した prune でだけ削除する。"""
+    # Given: 同期済み target に既知の旧 skill が残っている
     target = tmp_path / "out" / ".claude" / "skills"
     _seed_bundled_target(target)
-    legacy_feedback = target / "feedback"
-    legacy_feedback.mkdir()
-    (legacy_feedback / "SKILL.md").write_text("# legacy feedback\n", encoding="utf-8")
+    legacy_skill = target / legacy_skill_name
+    legacy_skill.mkdir()
+    (legacy_skill / "SKILL.md").write_text("# legacy skill\n", encoding="utf-8")
 
+    # When: 指定された prune flags で同期する
     parser = build_parser()
     args = parser.parse_args(["sync", "--asset", "skills", "--target", str(target), "--force", *prune_flags])
     rc = args.func(args)
 
+    # Then: 明示承認時だけ旧 skill が削除される
     assert rc == 0
-    assert legacy_feedback.exists() is feedback_exists
+    assert legacy_skill.exists() is legacy_skill_exists
+
+
+def test_cmd_sync_should_list_only_removed_analytics_skills_in_prune_dry_run(
+    fake_repo: Path,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """dry-run は旧 analytics だけを候補にし、現行・未知 skill を保護する。"""
+    # Given: 現行 analytics、旧 analytics、未知の自作 skill が同居する
+    bundled_analytics = fake_repo / ".claude" / "skills" / "analytics"
+    bundled_analytics.mkdir()
+    (bundled_analytics / "SKILL.md").write_text("# analytics\n", encoding="utf-8")
+    target = tmp_path / "out" / ".claude" / "skills"
+    _seed_bundled_target(target)
+    legacy_skills = {"analytics-collect", "analytics-analyze", "analytics-report", "analytics-run"}
+    for skill_name in legacy_skills:
+        (target / skill_name).mkdir()
+    custom_skill = target / "analytics-custom"
+    custom_skill.mkdir()
+
+    # When: 承認なしの prune で同期する
+    parser = build_parser()
+    args = parser.parse_args(["sync", "--asset", "skills", "--target", str(target), "--force", "--prune"])
+    rc = args.func(args)
+
+    # Then: 旧 analytics だけが候補になり、すべての skill が残る
+    assert rc == 0
+    output_lines = capsys.readouterr().out.splitlines()
+    would_prune_names = {line.split(":", maxsplit=1)[1].strip() for line in output_lines if "would-prune:" in line}
+    assert would_prune_names == legacy_skills
+    assert all((target / skill_name).is_dir() for skill_name in legacy_skills)
+    assert (target / "analytics" / "SKILL.md").is_file()
+    assert custom_skill.is_dir()
 
 
 @pytest.mark.parametrize(
