@@ -49,6 +49,27 @@ def test_check_allows_channel_path_from_workspace_root(tmp_path, monkeypatch, ca
     assert capsys.readouterr().err == ""
 
 
+@pytest.mark.parametrize("absolute", [False, True], ids=["relative", "absolute"])
+def test_check_allows_workspace_feedback_from_workspace_root(tmp_path, absolute, monkeypatch, capsys):
+    _make_channel(tmp_path, "alpha")
+    monkeypatch.chdir(tmp_path)
+    target = tmp_path / "data" / "feedback" / "feedback-log.jsonl"
+    raw_target = str(target) if absolute else "data/feedback/feedback-log.jsonl"
+
+    assert workspace_guard.main(["check", raw_target]) == workspace_guard.EXIT_OK
+    assert capsys.readouterr().err == ""
+
+
+def test_check_blocks_workspace_root_channel_config_from_workspace_root(tmp_path, monkeypatch, capsys):
+    _make_channel(tmp_path, "alpha")
+    monkeypatch.chdir(tmp_path)
+
+    rc = workspace_guard.main(["check", "config/channel/meta.json"])
+
+    assert rc == workspace_guard.EXIT_BLOCKED
+    assert "config/channel/meta.json" in capsys.readouterr().err
+
+
 @pytest.mark.parametrize("layout", ["collections", "config/channel", "assets", "data", "auth"])
 def test_check_blocks_workspace_root_channel_layout(tmp_path, layout, monkeypatch, capsys):
     current = _make_channel(tmp_path, "alpha")
