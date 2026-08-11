@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `docs(changelog)`: v5.6.0 Migration に `youtube_automation.utils.upload_core` / `youtube_automation.utils.youtube_service` の削除を補記し、1 対 1 の代替がない class ベースから関数ベースへの再設計を、近い新 API を置換先と誤認させない独立形式で記録した（#3758）。
 - `fix(skills-sync)`: `/analytics` 統合後の旧 `analytics-collect` / `analytics-analyze` / `analytics-report` / `analytics-run` を既知の削除対象へ追加し、`yt-skills sync --prune` の候補表示と `--yes` による削除を可能にした（#3756）。
 - `fix(automation-update)`: multi-channel workspace の `channels/<slug>/config/channel/` を Step 7 smoke check の対象として全件検証し、single-channel と config 未生成時の既存契約を維持する（#3755）。
 - `breaking(skills)`: Analytics の収集・分析・表示・一括実行を `/analytics` に統合し、一段実行を排他的な `--collect` / `--analyze` / `--report` へ移行した。下流更新では `yt-skills sync --prune` で旧 skill ディレクトリを除去し、`config/skills/` の旧 Analytics 設定を `config/skills/analytics.yaml` へ統合する（#3729）。
@@ -750,6 +751,15 @@ Python module 移動: あり
 | `youtube_automation.utils.config` | `youtube_automation.configuration` |
 | `youtube_automation.utils.descriptions_md` | `youtube_automation.domains.metadata.descriptions` |
 | `youtube_automation.utils.preflight_checks` | `youtube_automation.domains.uploads.preflight` |
+
+Python module 再設計: あり
+
+| 削除された import path | 移行区分 | 参考 module（置換先ではない） |
+|---|---|---|
+| `youtube_automation.utils.upload_core` | 1 対 1 代替なし（再設計） | `youtube_automation.infrastructure.google.upload` |
+| `youtube_automation.utils.youtube_service` | 1 対 1 代替なし（再設計） | `youtube_automation.infrastructure.google.youtube` |
+
+この 2 件には 1 対 1 の代替 module がない。旧 `YouTubeUploadCore` / `ServiceRegistry` の class ベースから関数ベースへ設計が変わり、利用側で責務を組み直す必要があるため、import 文だけでは移行できない。近い新 API として `youtube_automation.infrastructure.google.upload` の `create_media_upload()`、`youtube_automation.infrastructure.google.youtube` の `create_authenticated_youtube_clients()` を参照できるが、いずれも旧 class の 1 対 1 の置き換えではない。下流の独自スクリプトは必要な認証・client 保持・upload body 生成の責務を確認して再設計する。互換 facade / shim は提供しない。
 
 local fix 衝突注意:
 - flop-analysis: `/postmortem` からの改称（#2023）。下流の `config/skills/postmortem.yaml` は `config/skills/flop-analysis.yaml` へリネームが必要。旧ファイル名は警告付きの互換読み込みのみで、旧 command alias と旧 skill directory は残らない

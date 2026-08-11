@@ -22,8 +22,12 @@ _MOVE_MARKER = "Python module 移動: あり"
 _NO_MOVE_MARKER = "Python module 移動: なし"
 _FACADE_MARKER = "互換 facade: なし"
 _TABLE_HEADER = "| 旧 import path | 新 import path |"
+_REDESIGN_MARKER = "Python module 再設計: あり"
+_REDESIGN_TABLE_HEADER = "| 削除された import path | 移行区分 | 参考 module（置換先ではない） |"
+_REDESIGN_CLASSIFICATION = "1 対 1 代替なし（再設計）"
 _MODULE_PATH_PATTERN = re.compile(r"youtube_automation(?:\.[A-Za-z_][A-Za-z0-9_]*)+\Z")
 _ROW_PATTERN = re.compile(r"\| `([^`]+)` \| `([^`]+)` \|")
+_REDESIGN_ROW_PATTERN = re.compile(rf"\| `([^`]+)` \| {_REDESIGN_CLASSIFICATION} \| `([^`]+)` \|")
 _LEGACY_UTILS_PREFIX = "youtube_automation." + "utils"
 _V560_IMPORT_MAPPINGS = [
     (
@@ -38,6 +42,18 @@ _V560_IMPORT_MAPPINGS = [
     (
         f"{_LEGACY_UTILS_PREFIX}.preflight_checks",
         "youtube_automation.domains.uploads.preflight",
+    ),
+]
+_V560_REDESIGN_MAPPINGS = [
+    (
+        f"{_LEGACY_UTILS_PREFIX}.upload_core",
+        "youtube_automation.infrastructure.google.upload",
+        "create_media_upload",
+    ),
+    (
+        f"{_LEGACY_UTILS_PREFIX}.youtube_service",
+        "youtube_automation.infrastructure.google.youtube",
+        "create_authenticated_youtube_clients",
     ),
 ]
 
@@ -101,6 +117,30 @@ def test_no_move_example_is_a_distinct_table_free_state() -> None:
     assert _FACADE_MARKER not in no_move_example
 
 
+def test_redesign_example_has_a_distinct_non_replacement_row_format() -> None:
+    examples = _markdown_examples()
+    redesign_example = next(example for example in examples if example.startswith(_REDESIGN_MARKER))
+    lines = redesign_example.splitlines()
+    rows = [_REDESIGN_ROW_PATTERN.fullmatch(line) for line in lines]
+    mappings = [match.groups() for match in rows if match is not None]
+
+    assert _REDESIGN_TABLE_HEADER in lines
+    assert "|---|---|---|" in lines
+    assert mappings
+    for removed_path, reference_path in mappings:
+        assert _MODULE_PATH_PATTERN.fullmatch(removed_path)
+        assert _MODULE_PATH_PATTERN.fullmatch(reference_path)
+        assert removed_path != reference_path
+
+
+def test_redesign_contract_does_not_represent_a_reference_as_a_replacement() -> None:
+    section = _contract_section()
+
+    assert "1 対 1 移動の対応表とは分けて" in section
+    assert "参考 module は置換先ではない" in section
+    assert "class ベースから関数ベース" in section
+
+
 def test_v560_migration_lists_the_facade_less_import_mappings() -> None:
     migration = _v560_migration_section()
     rows = [_ROW_PATTERN.fullmatch(line) for line in migration.splitlines()]
@@ -111,9 +151,53 @@ def test_v560_migration_lists_the_facade_less_import_mappings() -> None:
     assert mappings == _V560_IMPORT_MAPPINGS
 
 
+def test_v560_migration_lists_the_modules_removed_by_redesign() -> None:
+    migration = _v560_migration_section()
+    rows = [_REDESIGN_ROW_PATTERN.fullmatch(line) for line in migration.splitlines()]
+    mappings = [match.groups() for match in rows if match is not None]
+    expected = [(removed_path, reference_path) for removed_path, reference_path, _ in _V560_REDESIGN_MAPPINGS]
+
+    assert _REDESIGN_MARKER in migration
+    assert mappings == expected
+    assert "class ベースから関数ベース" in migration
+    assert "1 対 1 の置き換えではない" in migration
+
+
 def test_v560_canonical_import_paths_are_importable_in_subprocess() -> None:
     canonical_paths = [new_path for _, new_path in _V560_IMPORT_MAPPINGS]
     script = "\n".join(["import importlib", *(f'importlib.import_module("{path}")' for path in canonical_paths)])
+
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_v560_removed_modules_are_unimportable_and_reference_apis_are_importable() -> None:
+    legacy_paths = [old_path for old_path, _, _ in _V560_REDESIGN_MAPPINGS]
+    reference_apis = [(module_path, symbol) for _, module_path, symbol in _V560_REDESIGN_MAPPINGS]
+    script = "\n".join(
+        [
+            "import importlib",
+            f"legacy_paths = {legacy_paths!r}",
+            "for path in legacy_paths:",
+            "    try:",
+            "        importlib.import_module(path)",
+            "    except ModuleNotFoundError as exc:",
+            "        assert exc.name == path, (path, exc.name)",
+            "    else:",
+            "        raise AssertionError(f'{path} must not be importable')",
+            f"reference_apis = {reference_apis!r}",
+            "for module_path, symbol in reference_apis:",
+            "    module = importlib.import_module(module_path)",
+            "    assert callable(getattr(module, symbol))",
+        ]
+    )
 
     result = subprocess.run(
         [sys.executable, "-c", script],
