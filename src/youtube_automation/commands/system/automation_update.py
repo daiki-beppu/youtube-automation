@@ -262,6 +262,20 @@ def _skills_diff_has_changes(root: Path) -> bool:
     return any(marker in output for marker in local_fix_markers)
 
 
+def _hooks_snapshot(root: Path) -> dict[str, object] | None:
+    settings_path = root / ".claude" / "settings.json"
+    if not settings_path.exists():
+        return {}
+    try:
+        settings = json.loads(settings_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(settings, dict):
+        return None
+    hooks = settings.get("hooks", {})
+    return hooks if isinstance(hooks, dict) else None
+
+
 def cmd_check(args: argparse.Namespace) -> int:
     try:
         root = _resolve_repo_root(args.target)
@@ -349,6 +363,7 @@ def cmd_apply(args: argparse.Namespace) -> int:
     print(f"pin 形式: {_describe_pin(pin)}")
     if new_ref:
         print(f"追従先: {new_ref}")
+    hooks_before = _hooks_snapshot(root)
 
     def step_worktree() -> None:
         status = _git_status_porcelain(root)
@@ -440,6 +455,12 @@ def cmd_apply(args: argparse.Namespace) -> int:
             )
             return 1
     print("✓ 追従が完了しました。commit / push は本 CLI の責務外です（スキル / 人間側で実施してください）")
+    hooks_after = _hooks_snapshot(root)
+    if args.accept_hooks and hooks_before is not None and hooks_after is not None and hooks_before != hooks_after:
+        print(
+            "⚠ hook の変更は次回の Claude Code セッションから有効になります。"
+            "現在のセッションには反映されないため、Claude Code を再起動してください。"
+        )
     return 0
 
 
