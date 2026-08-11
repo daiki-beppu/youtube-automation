@@ -35,12 +35,12 @@ description: "Use when ツール導入と GCP / OAuth の API 設定をセット
 | `bootstrap` | ffmpeg / ffprobe / uv / pyproject.toml / automation パッケージ / `yt-skills sync` / 番号付き重複ファイル検知（7 check） |
 | `api` | gcloud CLI・GCP プロジェクト・Billing・APIs・ADC・IAM・OAuth 認証・Reporting API ジョブ |
 | `channel` | config/channel/ のロード可能性・playlists.json の妥当性・playlist 作成 dry-run（3 check: `channel_config` / `playlist_config` / `playlist_create_dry_run`）。fail 時は `/channel-new`（新規開設 / 既存チャンネル取り込み / 再生成モード）を案内するだけ |
-| `data` | `/wf-new` の入力モード判定データ + 初期セットアップ事前検査（analytics_report / benchmark_data / ttp_wf_new_readiness / initial_setup_readiness）。minimal mode / benchmark fallback mode は setup のブロッカーにしない。analytics report は最新 `data/analytics_data_*.json` との相対比較に加え、`collection-ideate` の解決済み `freshness_days` を超えた絶対鮮度 stale も検出する。承認済み TTP がある場合だけ `/channel-new`（再生成モード） benchmark 反映完了を確認する |
+| `data` | `/wf-new` の入力モード判定データ + 到達可否 + 初期セットアップ事前検査（analytics_report / benchmark_data / ttp_wf_new_readiness / wf_new_readiness / initial_setup_readiness）。`ttp_mode: false` の minimal mode と benchmark fallback mode は setup のブロッカーにしない。analytics report は最新 `data/analytics_data_*.json` との相対比較に加え、`collection-ideate` の解決済み `freshness_days` を超えた絶対鮮度 stale も検出する。承認済み TTP がある場合だけ `/channel-new`（再生成モード） benchmark 反映完了を確認し、`ttp_mode: true` の minimal mode は転写元不足として警告する |
 | `upload` | upload 必須 scope 充足・channel_id 設定済み（1 check） |
 
 ### 完了条件
 
-`uv run yt-doctor --apply --json` の `apply.stop_reason` が `completed`（全 check 緑）になり、ツール、API 認証、アップロード前提が揃った状態が完了（報告文面は「完了時」セクションを参照）。例外として `analytics_report` の stale fail だけは後続スキルが自動解消するため setup のブロッカーにせず、`checks` 配列のほかの check がすべて `ok` なら `human_required` で停止しても同じ完了状態として扱う。`data` カテゴリは `/wf-new` の入力モード確認用で、stale analytics report、minimal mode、benchmark fallback mode のいずれも新規チャンネル初回制作を止めない。新規チャンネル作成は次に `/channel-new` を実行する。
+`uv run yt-doctor --apply --json` の `apply.stop_reason` が `completed`（全 check 緑）になり、ツール、API 認証、アップロード前提が揃った状態が完了（報告文面は「完了時」セクションを参照）。例外として `analytics_report` の stale fail だけは後続スキルが自動解消するため setup のブロッカーにせず、`checks` 配列のほかの check がすべて `ok` なら `human_required` で停止しても同じ完了状態として扱う。`data` カテゴリは `/wf-new` の入力モード確認用で、stale analytics report、`ttp_mode: false` の minimal mode、benchmark fallback mode は新規チャンネル初回制作を止めない。`wf_new_readiness` が `ttp_mode: true` × minimal mode を警告した場合は転写元を準備するまで完了扱いにしない。新規チャンネル作成は次に `/channel-new` を実行する。
 
 ## 想定 API call 数
 

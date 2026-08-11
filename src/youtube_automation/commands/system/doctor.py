@@ -1698,6 +1698,38 @@ def check_benchmark_data(channel_dir: Path) -> CheckResult:
     )
 
 
+def check_wf_new_readiness(channel_dir: Path) -> CheckResult:
+    input_mode = _resolve_wf_new_input_mode(channel_dir)
+    collection_ideate_config = load_skill_config("collection-ideate", use_cache=False, channel_dir=channel_dir)
+    ttp_mode = collection_ideate_config.get("ttp_mode", False) is True
+    ttp_mode_display = str(ttp_mode).lower()
+
+    if ttp_mode and input_mode.mode == "minimal mode":
+        return CheckResult(
+            id="wf_new_readiness",
+            status="warn",
+            category=DATA_CATEGORY,
+            message=(
+                "minimal mode / ttp_mode: true では転写元ベンチマークが必須のため、"
+                "/collection-ideate が停止し /wf-new へ到達不可"
+            ),
+            next_action={
+                "kind": "human",
+                "instructions": (
+                    "config/channel/analytics.json::benchmark.channels に TTP 対象を保存 → "
+                    "/benchmark を実行 → `uv run yt-doctor --json` を再実行してください"
+                ),
+            },
+        )
+
+    return CheckResult(
+        id="wf_new_readiness",
+        status="ok",
+        category=DATA_CATEGORY,
+        message=f"{input_mode.mode} / ttp_mode: {ttp_mode_display} で /wf-new を開始可能",
+    )
+
+
 def check_ttp_wf_new_readiness(channel_dir: Path) -> CheckResult:
     persona_definition = channel_dir / "docs" / "channel" / "personas" / "persona-definition.md"
     missing_persona = [] if persona_definition.is_file() else ["docs/channel/personas/persona-definition.md 未作成"]
@@ -3230,6 +3262,7 @@ def run_all_checks(channel_dir: Path) -> list[CheckResult]:
         check_analytics_report(channel_dir),
         check_benchmark_data(channel_dir),
         check_ttp_wf_new_readiness(channel_dir),
+        check_wf_new_readiness(channel_dir),
         check_initial_setup_readiness(channel_dir),
         check_upload_ready(channel_dir),
     ]

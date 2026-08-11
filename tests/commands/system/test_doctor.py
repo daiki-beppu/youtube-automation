@@ -1327,8 +1327,8 @@ class TestMain:
         payload = json.loads(out)
         assert payload["channel_dir"] == str(tmp_path)
         assert "summary" in payload
-        # 7 bootstrap + 14 api + 3 channel + 4 data + 1 upload = 29
-        assert len(payload["checks"]) == 29
+        # 7 bootstrap + 14 api + 3 channel + 5 data + 1 upload = 30
+        assert len(payload["checks"]) == 30
         for c in payload["checks"]:
             assert c["status"] in ("ok", "info", "warn", "fail", "unknown")
             # category フィールドが JSON に含まれていること
@@ -2794,6 +2794,93 @@ class TestCheckBenchmarkData:
         assert r.status == "ok"
         assert "analytics mode" in r.message
         assert "minimal mode" not in r.message
+
+
+class TestCheckWfNewReadiness:
+    @staticmethod
+    def _write_input_mode(channel_dir: Path, input_mode: str) -> None:
+        if input_mode == "analytics mode":
+            reports_dir = channel_dir / "reports"
+            reports_dir.mkdir()
+            (reports_dir / "analysis_20240101.md").write_text("# Analysis", encoding="utf-8")
+        elif input_mode == "benchmark fallback mode":
+            data_dir = channel_dir / "data"
+            data_dir.mkdir()
+            (data_dir / "benchmark_20240101.json").write_text("{}", encoding="utf-8")
+
+    @staticmethod
+    def _write_ttp_mode(channel_dir: Path, value: bool | None) -> None:
+        config_dir = channel_dir / "config" / "skills"
+        config_dir.mkdir(parents=True)
+        content = "{}\n" if value is None else f"ttp_mode: {str(value).lower()}\n"
+        (config_dir / "collection-ideate.yaml").write_text(content, encoding="utf-8")
+
+    @pytest.mark.parametrize(
+        ("ttp_mode", "input_mode"),
+        [
+            (False, "analytics mode"),
+            (False, "benchmark fallback mode"),
+            (None, "minimal mode"),
+            (True, "analytics mode"),
+            (True, "benchmark fallback mode"),
+        ],
+    )
+    def test_all_reachable_mode_combinations_are_ok(self, tmp_path, ttp_mode, input_mode):
+        """ttp_mode=true × minimal mode 以外の 5 通りは /wf-new を開始できる."""
+        self._write_input_mode(tmp_path, input_mode)
+        self._write_ttp_mode(tmp_path, ttp_mode)
+
+        result = doctor.check_wf_new_readiness(tmp_path)
+
+        expected_ttp_mode = "true" if ttp_mode is True else "false"
+        assert result.id == "wf_new_readiness"
+        assert result.status == "ok"
+        assert result.category == "data"
+        assert input_mode in result.message
+        assert f"ttp_mode: {expected_ttp_mode}" in result.message
+        assert "/wf-new を開始可能" in result.message
+        assert result.next_action is None
+
+    def test_ttp_minimal_mode_warns_with_ordered_recovery(self, tmp_path):
+        """ttp_mode=true × minimal mode は転写元不足として最短復旧順を返す."""
+        self._write_ttp_mode(tmp_path, True)
+
+        result = doctor.check_wf_new_readiness(tmp_path)
+
+        assert result.status == "warn"
+        assert "minimal mode" in result.message
+        assert "ttp_mode: true" in result.message
+        assert "転写元ベンチマークが必須" in result.message
+        assert "/wf-new へ到達不可" in result.message
+        assert result.next_action is not None
+        assert result.next_action["kind"] == "human"
+        instructions = result.next_action["instructions"]
+        assert instructions.index("benchmark.channels") < instructions.index("/benchmark")
+        assert instructions.index("/benchmark") < instructions.index("yt-doctor")
+
+    def test_missing_skill_override_defaults_ttp_mode_to_false(self, tmp_path):
+        """channel override 自体が無い場合も同梱既定 false で minimal mode を許容する."""
+        result = doctor.check_wf_new_readiness(tmp_path)
+
+        assert result.status == "ok"
+        assert "minimal mode" in result.message
+        assert "ttp_mode: false" in result.message
+
+    def test_main_json_exposes_warn_contract(self, monkeypatch, tmp_path, capsys):
+        """公開 --json 出力で wf_new_readiness の status と next_action を保持する."""
+        monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
+        _write_minimal_config(tmp_path)
+        self._write_ttp_mode(tmp_path, True)
+
+        code = doctor.main(["--json", "--target", str(tmp_path)])
+
+        assert code == 0
+        payload = json.loads(capsys.readouterr().out)
+        result = next(check for check in payload["checks"] if check["id"] == "wf_new_readiness")
+        assert result["status"] == "warn"
+        assert result["category"] == "data"
+        assert result["next_action"]["kind"] == "human"
+        assert "benchmark.channels" in result["next_action"]["instructions"]
 
 
 class TestCheckTtpWfNewReadinessChannelSetup:
@@ -5374,11 +5461,11 @@ class TestStreamingVpsState:
 
 
 class TestRunAllChecksExtended:
-    def test_returns_29_checks(self, monkeypatch, tmp_path):
-        """7 bootstrap + 14 api + 3 channel + 4 data + 1 upload = 計 29 件."""
+    def test_returns_30_checks(self, monkeypatch, tmp_path):
+        """7 bootstrap + 14 api + 3 channel + 5 data + 1 upload = 計 30 件."""
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
         results = doctor.run_all_checks(tmp_path)
-        assert len(results) == 29
+        assert len(results) == 30
 
     def test_14_api_checks_present(self, monkeypatch, tmp_path):
         """streaming VPS state 突合を含む 14 check が api カテゴリにある."""
@@ -5405,6 +5492,7 @@ class TestRunAllChecksExtended:
         assert "analytics_report" in ids
         assert "benchmark_data" in ids
         assert "ttp_wf_new_readiness" in ids
+        assert "wf_new_readiness" in ids
         assert "initial_setup_readiness" in ids
         assert "upload_ready" in ids
         assert "reporting_job" in ids
@@ -5451,16 +5539,17 @@ class TestRunAllChecksExtended:
         }
 
     def test_data_checks_include_readiness_checks(self, monkeypatch, tmp_path):
-        """data カテゴリは analytics / benchmark と 2 種類の readiness check を含む."""
+        """data カテゴリは analytics / benchmark と 3 種類の readiness check を含む."""
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
         results = doctor.run_all_checks(tmp_path)
-        data_ids = {r.id for r in results if r.category == "data"}
-        assert data_ids == {
+        data_ids = [r.id for r in results if r.category == "data"]
+        assert data_ids == [
             "analytics_report",
             "benchmark_data",
             "ttp_wf_new_readiness",
+            "wf_new_readiness",
             "initial_setup_readiness",
-        }
+        ]
 
     def test_upload_ready_is_only_upload_check(self, monkeypatch, tmp_path):
         """upload カテゴリは upload_ready の 1 件のみ."""
@@ -5506,6 +5595,7 @@ class TestRenderTableCategories:
         assert "analytics_report" in output
         assert "benchmark_data" in output
         assert "ttp_wf_new_readiness" in output
+        assert "wf_new_readiness" in output
         assert "initial_setup_readiness" in output
         assert "upload_ready" in output
 
