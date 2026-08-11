@@ -23,6 +23,12 @@ from pathlib import Path
 
 from youtube_automation.core.adapters.errors import ValidationError
 from youtube_automation.core.adapters.media import CollectionPaths, probe_duration
+from youtube_automation.domains.suno.name_matching import (
+    AmbiguousSunoNameError,
+    SunoNameIndex,
+    split_suno_duplicate_stem,
+    suno_name_lookup_candidates,
+)
 from youtube_automation.domains.suno.prompts import read_suno_prompt_entries
 
 DOCUMENTATION_DIRNAME = "20-documentation"
@@ -42,6 +48,7 @@ _STOCK_TEMPLATE_FIELDS = {"collection_slug", "song_id", "title_slug", "ext"}
 class PromptEntry:
     index: int
     has_lyrics: bool
+    aliases: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -307,10 +314,20 @@ def load_prompts(collection_dir: Path) -> list[PromptEntry]:
     for i, entry in enumerate(data, 1):
         if not isinstance(entry, Mapping):
             raise ValidationError(f"{SUNO_PROMPTS_JSON_FILENAME}: entry {i} must be an object")
+        name = entry.get("name")
+        title = entry.get("title")
+        if not isinstance(name, str) or not name.strip():
+            raise ValidationError(f"{SUNO_PROMPTS_JSON_FILENAME}: entry {i}.name must be a non-empty string")
+        if title is not None and not isinstance(title, str):
+            raise ValidationError(f"{SUNO_PROMPTS_JSON_FILENAME}: entry {i}.title must be a string")
+        sources = (name, title) if title and title.strip() else (name,)
         prompts.append(
             PromptEntry(
                 index=i,
                 has_lyrics=_has_substantive_lyrics(entry.get("lyrics")),
+                aliases=tuple(
+                    dict.fromkeys(candidate for source in sources for candidate in suno_name_lookup_candidates(source))
+                ),
             )
         )
     return prompts
@@ -321,25 +338,31 @@ def _slugify(value: str) -> str:
     return slug or "untitled"
 
 
-def _parse_candidate(path: Path) -> tuple[int, str, str] | None:
+def _parse_candidate(path: Path, name_index: SunoNameIndex) -> tuple[int, str, str] | None:
     if path.suffix.lower() not in _AUDIO_EXTENSIONS:
         return None
     match = _DOWNLOADED_NAME_RE.match(path.stem)
-    if match is None:
+    if match is not None:
+        return int(match.group("idx")), (match.group("variant") or ""), match.group("title")
+    base, duplicate_number = split_suno_duplicate_stem(path.stem)
+    prompt_index = name_index.resolve(suno_name_lookup_candidates(base))
+    if prompt_index is None:
         return None
-    return int(match.group("idx")), (match.group("variant") or ""), match.group("title")
+    variant = "b" if duplicate_number == 1 else "a"
+    return prompt_index, variant, base
 
 
-def collect_candidates(collection_dir: Path) -> list[Candidate]:
+def collect_candidates(collection_dir: Path, prompts: Mapping[int, PromptEntry]) -> list[Candidate]:
     music_dir = collection_dir / "02-Individual-music"
     if not music_dir.is_dir():
         raise ValidationError(f"02-Individual-music が見つかりません: {music_dir}")
     candidates: list[Candidate] = []
     invalid_audio: list[str] = []
+    name_index = SunoNameIndex.build((prompt.index, prompt.aliases) for prompt in prompts.values())
     for path in sorted(music_dir.iterdir(), key=lambda p: p.name):
         if not path.is_file():
             continue
-        parsed = _parse_candidate(path)
+        parsed = _parse_candidate(path, name_index)
         if parsed is None:
             if path.suffix.lower() in _AUDIO_EXTENSIONS:
                 invalid_audio.append(path.name)
@@ -858,7 +881,10 @@ def select_suno_tracks(
         return SelectionResult([], [], [], [], [], [], {}, parsed_cfg.pair.selection_log_path)
 
     prompts = {p.index: p for p in load_prompts(collection_dir)}
-    candidates = collect_candidates(collection_dir)
+    try:
+        candidates = collect_candidates(collection_dir, prompts)
+    except AmbiguousSunoNameError as exc:
+        raise ValidationError(str(exc)) from exc
     _validate_download_complete(prompts, candidates)
     plan = _plan_suno_selection(
         collection_dir=collection_dir,

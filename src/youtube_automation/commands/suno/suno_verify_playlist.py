@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -16,8 +15,11 @@ from youtube_automation.domains.suno.downloaded.archive import (
     _AUDIO_EXTENSIONS,
     _CANONICAL_MUSIC_FILENAME_RE,
     _sanitize_output_stem,
-    _suno_name_lookup_candidates,
     canonicalize_noncanonical_music_files,
+)
+from youtube_automation.domains.suno.name_matching import (
+    normalize_suno_name_for_lookup,
+    suno_name_lookup_candidates,
 )
 from youtube_automation.domains.suno.playlist import (
     format_verification_report,
@@ -28,7 +30,6 @@ from youtube_automation.domains.suno.playlist import (
 from youtube_automation.domains.suno.prompts import read_suno_prompt_entries
 from youtube_automation.infrastructure.media.collection_paths import resolve_collection_dir
 
-_APOSTROPHE_RE = re.compile(r"['’]")
 _TITLE_SOURCE_ERROR = (
     "playlist 曲名の入力元は --titles / --titles-file / --music-dir / stdin のいずれか 1 つにしてください"
 )
@@ -42,16 +43,13 @@ class SunoPromptTitleIdentity:
 
 def _suno_title_aliases(value: str) -> tuple[str, ...]:
     aliases: list[str] = []
-    for candidate in _suno_name_lookup_candidates(value):
+    for candidate in suno_name_lookup_candidates(value):
         try:
             sanitized = _sanitize_output_stem(candidate)
         except ValueError as exc:
             raise ValidationError(str(exc)) from exc
         if sanitized and sanitized not in aliases:
             aliases.append(sanitized)
-        without_apostrophe = _APOSTROPHE_RE.sub("", sanitized)
-        if without_apostrophe and without_apostrophe not in aliases:
-            aliases.append(without_apostrophe)
     return tuple(aliases)
 
 
@@ -91,7 +89,7 @@ def _build_music_dir_title_lookups(
     for identity in identities:
         for alias in identity.aliases:
             exact_lookup.setdefault(alias, set()).add(identity.canonical_title)
-            normalized_lookup.setdefault(normalize_title(alias), set()).add(identity.canonical_title)
+            normalized_lookup.setdefault(normalize_suno_name_for_lookup(alias), set()).add(identity.canonical_title)
     return exact_lookup, normalized_lookup
 
 
@@ -131,7 +129,10 @@ def _read_music_dir_titles(
         indexed_title = identities[entry_index - 1].canonical_title
         canonical_titles = exact_title_lookup.get(title)
         if canonical_titles is None:
-            canonical_titles = normalized_title_lookup.get(normalize_title(title), set())
+            canonical_titles = normalized_title_lookup.get(normalize_suno_name_for_lookup(title), set())
+            if len(canonical_titles) > 1:
+                matches = ", ".join(sorted(canonical_titles))
+                raise ValidationError(f"ambiguous Suno name {title!r}: matches {matches}")
         canonical_title = indexed_title if indexed_title in canonical_titles else None
         if canonical_title is None:
             titles.append(audio_path.name)

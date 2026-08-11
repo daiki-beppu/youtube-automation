@@ -16,6 +16,11 @@ from youtube_automation.domains.suno.downloaded.models import (
     DownloadedArtifactError,
     PromptEntriesReader,
 )
+from youtube_automation.domains.suno.name_matching import (
+    SunoNameIndex,
+    split_suno_duplicate_stem,
+    suno_name_lookup_candidates,
+)
 
 _AUDIO_EXTENSIONS = frozenset({".mp3", ".m4a", ".wav"})
 _ZIP_MAX_TOTAL_SIZE = 2 * 1024 * 1024 * 1024
@@ -95,44 +100,8 @@ def extract_downloaded_archive(
 
 _CANONICAL_MUSIC_FILENAME_RE = re.compile(r"^(?P<index>\d{2,})(?P<variant>[ab])-(?P<title>.+)$")
 # ブラウザ手動 DL の重複ベース名（`Title (1).mp3`）と Suno ZIP 由来の `Title_1.mp3` を同一 entry の別 clip とみなす
-_DUP_SUFFIX_RE = re.compile(r"^(?P<base>.+?)(?:\s*\((?P<paren>\d+)\)|_(?P<underscore>\d+))$")
-_SUNO_TRACK_PREFIX_RE = re.compile(r"^Track\s+\d+\s+(.+)$", re.IGNORECASE)
-_LATIN_TITLE_TAIL_RE = re.compile(r"([A-Za-z][A-Za-z0-9 &'(),.!?:/-]*)$")
-# Suno はダウンロード ZIP 内のファイル名からアポストロフィを除去する（例: Greed's Rhythm → Greeds Rhythm.m4a）。
-# typographic apostrophe（U+2019）も同一視する。それ以外の記号は Suno 仕様が未確認のため除去しない
-_APOSTROPHE_RE = re.compile(r"['’]")
-_LOOKUP_EM_DASH_RE = re.compile(r"\s*—\s*")
-_LOOKUP_SPACE_RE = re.compile(r"\s+")
 _OUTPUT_STEM_SEPARATOR_RE = re.compile(r"[\\/]+")
 _OUTPUT_STEM_SPACE_RE = re.compile(r"\s+")
-
-
-def _strip_suno_track_prefix(stem: str) -> str:
-    match = _SUNO_TRACK_PREFIX_RE.match(stem.strip())
-    if match is None:
-        return stem.strip()
-    return match.group(1).strip()
-
-
-def _suno_name_lookup_candidates(name: str) -> list[str]:
-    base = _strip_suno_track_prefix(name)
-    candidates = [base]
-    if " — " in base:
-        candidates.append(base.split(" — ", 1)[1].strip())
-    tail_match = _LATIN_TITLE_TAIL_RE.search(base)
-    if tail_match:
-        candidates.append(tail_match.group(1).strip())
-
-    deduped: list[str] = []
-    for candidate in candidates:
-        if candidate and candidate not in deduped:
-            deduped.append(candidate)
-    return deduped
-
-
-def _normalize_suno_name_for_lookup(name: str) -> str:
-    with_canonical_dash = _LOOKUP_EM_DASH_RE.sub(" — ", name)
-    return _LOOKUP_SPACE_RE.sub(" ", with_canonical_dash).strip()
 
 
 def _zip_member_lookup_candidates(filename: str) -> list[tuple[str, str]]:
@@ -141,18 +110,12 @@ def _zip_member_lookup_candidates(filename: str) -> list[tuple[str, str]]:
     raw_stems = [relative_stem, member_path.stem]
     deduped: list[tuple[str, str]] = []
     for raw_stem in raw_stems:
-        dup_match = _DUP_SUFFIX_RE.fullmatch(raw_stem.strip())
-        if dup_match is not None and int(dup_match.group("paren") or dup_match.group("underscore")) == 1:
-            stem = dup_match.group("base")
-            variant = "b"
-        else:
-            stem = raw_stem
-            variant = "a"
-        for candidate in _suno_name_lookup_candidates(stem):
-            for lookup in (candidate, _normalize_suno_name_for_lookup(candidate)):
-                item = (lookup, variant)
-                if lookup and item not in deduped:
-                    deduped.append(item)
+        stem, duplicate_number = split_suno_duplicate_stem(raw_stem)
+        variant = "b" if duplicate_number == 1 else "a"
+        for candidate in suno_name_lookup_candidates(stem):
+            item = (candidate, variant)
+            if item not in deduped:
+                deduped.append(item)
     return deduped
 
 
@@ -164,55 +127,41 @@ def _sanitize_output_stem(stem: str) -> str:
     return sanitized
 
 
-def _build_name_to_index(coll_dir: Path, prompt_entries_reader: PromptEntriesReader) -> dict[str, int]:
+def _build_name_to_index(coll_dir: Path, prompt_entries_reader: PromptEntriesReader) -> SunoNameIndex:
     prompts_path = coll_dir / DOCUMENTATION_DIRNAME / SUNO_PROMPTS_JSON_FILENAME
-    name_to_index: dict[str, int] = {}
     if not prompts_path.is_file():
-        return name_to_index
+        return SunoNameIndex.build([])
     try:
         prompts = prompt_entries_reader(coll_dir)
     except ValueError as exc:
         print(f"[yt-collection-serve] invalid {SUNO_PROMPTS_JSON_FILENAME}: {prompts_path}: {exc}")
         raise ValueError(f"invalid {SUNO_PROMPTS_JSON_FILENAME}") from exc
+    alias_groups: list[tuple[int, tuple[str, ...]]] = []
     for i, entry in enumerate(prompts, 1):
         if not isinstance(entry, dict):
             raise ValueError(f"invalid {SUNO_PROMPTS_JSON_FILENAME}: entry {i} must be an object")
         full_name = entry.get("name", "")
         if not isinstance(full_name, str):
             raise ValueError(f"invalid {SUNO_PROMPTS_JSON_FILENAME}: entry {i}.name must be a string")
-        parts = full_name.split(" — ", 1)
-        english_name = parts[1] if len(parts) == 2 else full_name
-        for candidate in _suno_name_lookup_candidates(english_name):
-            name_to_index[candidate] = i
-        for candidate in _suno_name_lookup_candidates(full_name):
-            name_to_index[candidate] = i
         title = entry.get("title")
         if title is not None and not isinstance(title, str):
             raise ValueError(f"invalid {SUNO_PROMPTS_JSON_FILENAME}: entry {i}.title must be a string")
-        if title:
-            for candidate in _suno_name_lookup_candidates(title):
-                name_to_index.setdefault(candidate, i)
-    # Suno が ZIP ファイル名から除去するアポストロフィの除去版キーを fallback として登録する (#1787)。
-    # exact match を優先するため setdefault（既存キーは上書きしない）
-    for key, track_index in list(name_to_index.items()):
-        stripped = _APOSTROPHE_RE.sub("", key)
-        if stripped and stripped != key:
-            name_to_index.setdefault(stripped, track_index)
-        normalized = _normalize_suno_name_for_lookup(key)
-        if normalized and normalized != key:
-            name_to_index.setdefault(normalized, track_index)
-    return name_to_index
+        sources = (full_name, title) if title else (full_name,)
+        aliases = tuple(
+            dict.fromkeys(candidate for source in sources for candidate in suno_name_lookup_candidates(source))
+        )
+        alias_groups.append((i, aliases))
+    return SunoNameIndex.build(alias_groups)
 
 
 def _music_stem_lookup_candidates(stem: str) -> list[tuple[str, int]]:
     """非正準形 stem から (照合候補, 重複連番) を列挙する。重複連番 0 は suffix なしの基準ファイル。"""
     candidates: list[tuple[str, int]] = []
-    for candidate in _suno_name_lookup_candidates(stem):
+    for candidate in suno_name_lookup_candidates(stem):
         candidates.append((candidate, 0))
-    dup_match = _DUP_SUFFIX_RE.fullmatch(stem.strip())
-    if dup_match is not None:
-        dup_no = int(dup_match.group("paren") or dup_match.group("underscore"))
-        for candidate in _suno_name_lookup_candidates(dup_match.group("base")):
+    base, dup_no = split_suno_duplicate_stem(stem)
+    if dup_no:
+        for candidate in suno_name_lookup_candidates(base):
             item = (candidate, dup_no)
             if item not in candidates:
                 candidates.append(item)
@@ -231,8 +180,8 @@ def canonicalize_noncanonical_music_files(
     """
     if not music_dir.is_dir():
         return []
-    name_to_index = _build_name_to_index(coll_dir, prompt_entries_reader)
-    if not name_to_index:
+    name_index = _build_name_to_index(coll_dir, prompt_entries_reader)
+    if not name_index:
         return []
 
     occupied_variants: dict[int, set[str]] = {}
@@ -246,11 +195,12 @@ def canonicalize_noncanonical_music_files(
                 canonical_match.group("variant")
             )
             continue
-        for candidate, dup_no in _music_stem_lookup_candidates(audio_path.stem):
-            track_num = name_to_index.get(candidate)
-            if track_num is not None:
-                matched_files.setdefault(track_num, []).append((dup_no, audio_path.name, audio_path, candidate))
-                break
+        lookup_candidates = _music_stem_lookup_candidates(audio_path.stem)
+        resolved = name_index.resolve_with_candidate(candidate for candidate, _ in lookup_candidates)
+        if resolved is not None:
+            track_num, lookup = resolved
+            dup_no = next(number for candidate, number in lookup_candidates if candidate == lookup)
+            matched_files.setdefault(track_num, []).append((dup_no, audio_path.name, audio_path, lookup))
 
     renames: list[tuple[Path, Path]] = []
     planned_dests: set[str] = set()
@@ -291,7 +241,7 @@ def _extract_and_rename_music_to_dir(
         print(f"[yt-collection-serve] ZIP が無効です（skip）: {download_path}")
         return DownloadedArchiveResult(audio_count=0, placed_count=0)
 
-    name_to_index = _build_name_to_index(coll_dir, prompt_entries_reader)
+    name_index = _build_name_to_index(coll_dir, prompt_entries_reader)
     target_dir.mkdir(parents=True, exist_ok=True)
     tmp_dir = tempfile.mkdtemp(prefix="suno-extract-")
     try:
@@ -321,18 +271,13 @@ def _extract_and_rename_music_to_dir(
                     print(f"[yt-collection-serve] 危険な ZIP entry をスキップします: {info.filename}")
                     continue
                 extracted_path = Path(zf.extract(info, tmp_dir))
-                track_num = None
-                lookup = ""
-                variant = "a"
-                for candidate, candidate_variant in _zip_member_lookup_candidates(info.filename):
-                    if candidate in name_to_index:
-                        lookup = candidate
-                        variant = candidate_variant
-                        track_num = name_to_index[candidate]
-                        break
-                if track_num is None:
+                lookup_candidates = _zip_member_lookup_candidates(info.filename)
+                resolved = name_index.resolve_with_candidate(candidate for candidate, _ in lookup_candidates)
+                if resolved is None:
                     print(f"[yt-collection-serve] prompts に未対応の音声ファイルをスキップします: {info.filename}")
                     continue
+                track_num, lookup = resolved
+                variant = next(value for candidate, value in lookup_candidates if candidate == lookup)
                 extracted_audio.append((extracted_path, lookup, track_num, variant))
 
         moved_count = 0
