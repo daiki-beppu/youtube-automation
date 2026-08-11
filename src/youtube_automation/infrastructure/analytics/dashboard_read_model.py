@@ -8,13 +8,109 @@ import math
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import cast
+from typing import TypedDict, cast
 
 from youtube_automation.core.errors import DashboardChannelNotFoundError
-from youtube_automation.infrastructure.analytics.dashboard_publications import load_dashboard_publications
+from youtube_automation.infrastructure.analytics.dashboard_publications import (
+    DashboardPublicationError,
+    load_dashboard_publications,
+)
 
 SCHEMA_VERSION = 2
 LEGACY_SCHEMA_VERSION = 1
+
+
+class ErrorResponse(TypedDict):
+    code: str
+    message: str
+
+
+class PeriodResponse(TypedDict):
+    start_date: str | None
+    end_date: str | None
+
+
+class SummaryResponse(TypedDict):
+    views: int | float
+    watch_time_minutes: int | float
+    subscribers_net: int | float
+    engagements: int | float
+    average_view_percentage: int | float
+
+
+class VideoResponse(TypedDict):
+    video_id: str
+    title: str
+    views: int | float
+    impressions: int | float
+    ctr_percentage: int | float
+    likes: int | float
+    comments: int | float
+    shares: int | float
+    subscribers_gained: int | float
+    average_view_duration_seconds: int | float
+    engagements: int | float
+
+
+class ChannelSourceResponse(TypedDict):
+    id: str
+    name: str
+    status: str
+    snapshot: str | None
+    collected_at: str | None
+    period: PeriodResponse
+    scheduled_count: int | None
+    summary: SummaryResponse | None
+    videos: list[VideoResponse]
+    error: ErrorResponse | None
+
+
+class ChannelWorkflowTimingResponse(TypedDict, total=False):
+    workflow_timing: dict[str, object]
+
+
+class ChannelDetailResponse(ChannelSourceResponse, ChannelWorkflowTimingResponse):
+    refresh_error: ErrorResponse | None
+
+
+class PublicationChannelResponse(TypedDict):
+    id: str
+    name: str
+    status: str
+    fetched_at: str | None
+    timezone: str | None
+    days: dict[str, int]
+    error: DashboardPublicationError | None
+
+
+class PublicationsResponse(TypedDict):
+    days: dict[str, int]
+    channels: list[PublicationChannelResponse]
+
+
+class DashboardReadModel(TypedDict):
+    schema_version: int
+    channels: list[ChannelDetailResponse]
+    publications: PublicationsResponse
+
+
+class ChannelOverviewResponse(TypedDict):
+    id: str
+    name: str
+    status: str
+    snapshot: str | None
+    collected_at: str | None
+    period: PeriodResponse
+    scheduled_count: int | None
+    summary: SummaryResponse | None
+    error: ErrorResponse | None
+    refresh_error: ErrorResponse | None
+    video_count: int
+
+
+class OverviewResponse(TypedDict):
+    schema_version: int
+    channels: list[ChannelOverviewResponse]
 
 
 def _object(value: object) -> dict[str, object]:
@@ -82,10 +178,10 @@ def _reporting_by_video(snapshot: dict[str, object]) -> dict[str, dict[str, obje
     return result
 
 
-def _videos(snapshot: dict[str, object]) -> list[dict[str, object]]:
+def _videos(snapshot: dict[str, object]) -> list[VideoResponse]:
     analytics = _object(snapshot.get("video_analytics"))
     reporting = _reporting_by_video(snapshot)
-    videos: list[dict[str, object]] = []
+    videos: list[VideoResponse] = []
     for key, raw in analytics.items():
         source = _object(raw)
         video_id = _text(source.get("video_id"), key)
@@ -94,19 +190,19 @@ def _videos(snapshot: dict[str, object]) -> list[dict[str, object]]:
         comments = _non_negative_number(source.get("comments"))
         shares = _non_negative_number(source.get("shares"))
         videos.append(
-            {
-                "video_id": video_id,
-                "title": _text(source.get("title"), "Unknown"),
-                "views": _non_negative_number(source.get("views")),
-                "impressions": _non_negative_number(reach.get("impressions")),
-                "ctr_percentage": _non_negative_number(reach.get("ctr_percentage")),
-                "likes": likes,
-                "comments": comments,
-                "shares": shares,
-                "subscribers_gained": _non_negative_number(source.get("subscribers_gained")),
-                "average_view_duration_seconds": _non_negative_number(source.get("average_view_duration")),
-                "engagements": likes + comments + shares,
-            }
+            VideoResponse(
+                video_id=video_id,
+                title=_text(source.get("title"), "Unknown"),
+                views=_non_negative_number(source.get("views")),
+                impressions=_non_negative_number(reach.get("impressions")),
+                ctr_percentage=_non_negative_number(reach.get("ctr_percentage")),
+                likes=likes,
+                comments=comments,
+                shares=shares,
+                subscribers_gained=_non_negative_number(source.get("subscribers_gained")),
+                average_view_duration_seconds=_non_negative_number(source.get("average_view_duration")),
+                engagements=likes + comments + shares,
+            )
         )
     return sorted(videos, key=lambda item: (-cast(int | float, item["views"]), cast(str, item["video_id"])))
 
@@ -118,19 +214,19 @@ def _error_channel(
     status: str,
     code: str,
     message: str,
-) -> dict[str, object]:
-    return {
-        "id": _channel_id(channel),
-        "name": name,
-        "status": status,
-        "snapshot": None,
-        "collected_at": None,
-        "period": {"start_date": None, "end_date": None},
-        "scheduled_count": None,
-        "summary": None,
-        "videos": [],
-        "error": {"code": code, "message": message},
-    }
+) -> ChannelSourceResponse:
+    return ChannelSourceResponse(
+        id=_channel_id(channel),
+        name=name,
+        status=status,
+        snapshot=None,
+        collected_at=None,
+        period=PeriodResponse(start_date=None, end_date=None),
+        scheduled_count=None,
+        summary=None,
+        videos=[],
+        error=ErrorResponse(code=code, message=message),
+    )
 
 
 def _load_name(channel: Path) -> str:
@@ -157,34 +253,34 @@ def _ready_channel(
     name: str,
     snapshot_path: Path,
     snapshot: dict[str, object],
-) -> dict[str, object]:
+) -> ChannelSourceResponse:
     period = _object(snapshot.get("collection_period"))
     summary = _object(_object(snapshot.get("channel_analytics")).get("summary"))
     scheduled = _object(snapshot.get("scheduled_videos"))
-    return {
-        "id": _channel_id(channel),
-        "name": name,
-        "status": "ready",
-        "snapshot": snapshot_path.name,
-        "collected_at": _text(period.get("collected_at")) or None,
-        "period": {
-            "start_date": _text(period.get("start_date")) or None,
-            "end_date": _text(period.get("end_date")) or None,
-        },
-        "scheduled_count": _integer_or_none(scheduled.get("count")),
-        "summary": {
-            "views": _non_negative_number(summary.get("total_views")),
-            "watch_time_minutes": _non_negative_number(summary.get("total_watch_time")),
-            "subscribers_net": _number(summary.get("net_subscribers")),
-            "engagements": _non_negative_number(summary.get("total_engagement")),
-            "average_view_percentage": _non_negative_number(summary.get("avg_view_percentage")),
-        },
-        "videos": _videos(snapshot),
-        "error": None,
-    }
+    return ChannelSourceResponse(
+        id=_channel_id(channel),
+        name=name,
+        status="ready",
+        snapshot=snapshot_path.name,
+        collected_at=_text(period.get("collected_at")) or None,
+        period=PeriodResponse(
+            start_date=_text(period.get("start_date")) or None,
+            end_date=_text(period.get("end_date")) or None,
+        ),
+        scheduled_count=_integer_or_none(scheduled.get("count")),
+        summary=SummaryResponse(
+            views=_non_negative_number(summary.get("total_views")),
+            watch_time_minutes=_non_negative_number(summary.get("total_watch_time")),
+            subscribers_net=_number(summary.get("net_subscribers")),
+            engagements=_non_negative_number(summary.get("total_engagement")),
+            average_view_percentage=_non_negative_number(summary.get("avg_view_percentage")),
+        ),
+        videos=_videos(snapshot),
+        error=None,
+    )
 
 
-def _build_channel(channel: Path, *, allow_snapshot_fallback: bool = False) -> dict[str, object]:
+def _build_channel(channel: Path, *, allow_snapshot_fallback: bool = False) -> ChannelSourceResponse:
     try:
         name = _load_name(channel)
     except (OSError, json.JSONDecodeError, ValueError) as exc:
@@ -224,48 +320,45 @@ def _build_channel(channel: Path, *, allow_snapshot_fallback: bool = False) -> d
     )
 
 
-def _publication_channel(channel: Path, item: dict[str, object]) -> dict[str, object]:
+def _publication_channel(channel: Path, item: ChannelDetailResponse) -> PublicationChannelResponse:
     publication_path = channel / "data" / "dashboard_publications.json"
     payload = load_dashboard_publications(publication_path)
     if payload is None:
-        return {
-            "id": item["id"],
-            "name": item["name"],
-            "status": "invalid" if publication_path.exists() else "missing",
-            "fetched_at": None,
-            "timezone": None,
-            "days": {},
-            "error": None,
-        }
+        return PublicationChannelResponse(
+            id=item["id"],
+            name=item["name"],
+            status="invalid" if publication_path.exists() else "missing",
+            fetched_at=None,
+            timezone=None,
+            days={},
+            error=None,
+        )
 
     error = payload.get("error")
-    return {
-        "id": item["id"],
-        "name": item["name"],
-        "status": "refresh_failed" if error is not None else "ready",
-        "fetched_at": payload["fetched_at"],
-        "timezone": payload["timezone"],
-        "days": payload["days"],
-        "error": error,
-    }
+    return PublicationChannelResponse(
+        id=item["id"],
+        name=item["name"],
+        status="refresh_failed" if error is not None else "ready",
+        fetched_at=payload["fetched_at"],
+        timezone=payload["timezone"],
+        days=payload["days"],
+        error=error,
+    )
 
 
 def _publication_read_model(
     channel_paths: list[Path],
-    channels: list[dict[str, object]],
-) -> dict[str, object]:
+    channels: list[ChannelDetailResponse],
+) -> PublicationsResponse:
     totals: dict[str, int] = {}
-    publication_channels: list[dict[str, object]] = []
+    publication_channels: list[PublicationChannelResponse] = []
     for channel, item in zip(channel_paths, channels, strict=True):
         publication = _publication_channel(channel, item)
         publication_channels.append(publication)
-        days = cast(dict[str, int], publication["days"])
+        days = publication["days"]
         for local_day, count in days.items():
             totals[local_day] = totals.get(local_day, 0) + count
-    return {
-        "days": dict(sorted(totals.items())),
-        "channels": publication_channels,
-    }
+    return PublicationsResponse(days=dict(sorted(totals.items())), channels=publication_channels)
 
 
 def build_dashboard_read_model(
@@ -273,17 +366,20 @@ def build_dashboard_read_model(
     *,
     refresh_errors: dict[Path, str] | None = None,
     workflow_timing_by_channel: Mapping[Path, object] | None = None,
-) -> dict[str, object]:
+) -> DashboardReadModel:
     """登録順のチャンネルから JSON serializable な read model を作る。"""
     errors = refresh_errors or {}
     workflow_timings = workflow_timing_by_channel or {}
     timing_requested = workflow_timing_by_channel is not None
-    channels: list[dict[str, object]] = []
+    channels: list[ChannelDetailResponse] = []
     for channel in channel_paths:
         refresh_message = errors.get(channel)
-        item = _build_channel(channel, allow_snapshot_fallback=refresh_message is not None)
-        item["refresh_error"] = (
-            {"code": "refresh_failed", "message": refresh_message} if refresh_message is not None else None
+        source = _build_channel(channel, allow_snapshot_fallback=refresh_message is not None)
+        item = ChannelDetailResponse(
+            **source,
+            refresh_error=(
+                ErrorResponse(code="refresh_failed", message=refresh_message) if refresh_message is not None else None
+            ),
         )
         if timing_requested:
             if channel in workflow_timings:
@@ -294,11 +390,11 @@ def build_dashboard_read_model(
                     "channel の workflow timing がありません",
                 )
         channels.append(item)
-    return {
-        "schema_version": SCHEMA_VERSION if timing_requested else LEGACY_SCHEMA_VERSION,
-        "channels": channels,
-        "publications": _publication_read_model(channel_paths, channels),
-    }
+    return DashboardReadModel(
+        schema_version=SCHEMA_VERSION if timing_requested else LEGACY_SCHEMA_VERSION,
+        channels=channels,
+        publications=_publication_read_model(channel_paths, channels),
+    )
 
 
 @dataclass(frozen=True)
@@ -313,7 +409,7 @@ class DashboardAPI:
             return []
         return [cast(dict[str, object], item) for item in channels if isinstance(item, dict)]
 
-    def overview(self) -> dict[str, object]:
+    def overview(self) -> OverviewResponse:
         """動画行を除いた全チャンネル概要を返す。"""
         overview_channels: list[dict[str, object]] = []
         for item in self._channels():
@@ -321,17 +417,17 @@ class DashboardAPI:
             overview = {key: value for key, value in item.items() if key not in {"videos", "workflow_timing"}}
             overview["video_count"] = len(videos) if isinstance(videos, list) else 0
             overview_channels.append(overview)
-        return {
-            "schema_version": self.model.get("schema_version", SCHEMA_VERSION),
-            "channels": overview_channels,
-        }
+        return OverviewResponse(
+            schema_version=cast(int, self.model.get("schema_version", SCHEMA_VERSION)),
+            channels=cast(list[ChannelOverviewResponse], overview_channels),
+        )
 
-    def channel(self, channel_id: str) -> dict[str, object]:
+    def channel(self, channel_id: str) -> ChannelDetailResponse:
         """選択チャンネルの動画を含む詳細を返す。"""
         for item in self._channels():
             if item.get("id") == channel_id:
                 detail = dict(item)
                 if not isinstance(detail.get("videos"), list):
                     detail["videos"] = []
-                return detail
+                return cast(ChannelDetailResponse, detail)
         raise DashboardChannelNotFoundError(f"dashboard channel が見つかりません: {channel_id}")

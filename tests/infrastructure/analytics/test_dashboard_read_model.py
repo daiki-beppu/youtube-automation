@@ -4,11 +4,19 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import is_typeddict
 
 import pytest
 
 from youtube_automation.core.errors import DashboardChannelNotFoundError
-from youtube_automation.infrastructure.analytics.dashboard_read_model import DashboardAPI, build_dashboard_read_model
+from youtube_automation.infrastructure.analytics.dashboard_read_model import (
+    ChannelDetailResponse,
+    DashboardAPI,
+    DashboardReadModel,
+    OverviewResponse,
+    PublicationsResponse,
+    build_dashboard_read_model,
+)
 
 
 def _write_channel(channel: Path, *, name: str, snapshots: dict[str, dict]) -> None:
@@ -73,6 +81,99 @@ def _write_publications(
     if error is not None:
         payload["error"] = error
     (channel / "data" / "dashboard_publications.json").write_text(json.dumps(payload), encoding="utf-8")
+
+
+def test_dashboard_api_json_bytes_remain_stable() -> None:
+    channel = {
+        "id": "channel-1",
+        "name": "Night Drive",
+        "status": "ready",
+        "snapshot": "analytics_data_20260720.json",
+        "collected_at": "2026-07-20T12:00:00Z",
+        "period": {"start_date": "2026-07-01", "end_date": "2026-07-20"},
+        "scheduled_count": 2,
+        "summary": {
+            "views": 900,
+            "watch_time_minutes": 420,
+            "subscribers_net": 8,
+            "engagements": 31,
+            "average_view_percentage": 62.5,
+        },
+        "videos": [
+            {
+                "video_id": "video-b",
+                "title": "Later video",
+                "views": 700,
+                "impressions": 1000,
+                "ctr_percentage": 4.5,
+                "likes": 20,
+                "comments": 4,
+                "shares": 3,
+                "subscribers_gained": 2,
+                "average_view_duration_seconds": 180,
+                "engagements": 27,
+            }
+        ],
+        "error": None,
+        "refresh_error": None,
+        "workflow_timing": {"status": "ready", "collections": []},
+    }
+    api = DashboardAPI(
+        {
+            "schema_version": 2,
+            "channels": [channel],
+            "publications": {"days": {}, "channels": []},
+        }
+    )
+
+    overview_bytes = json.dumps(api.overview(), ensure_ascii=False).encode("utf-8")
+    detail_bytes = json.dumps(api.channel("channel-1"), ensure_ascii=False).encode("utf-8")
+
+    assert overview_bytes == (
+        b'{"schema_version": 2, "channels": [{"id": "channel-1", "name": "Night Drive", '
+        b'"status": "ready", "snapshot": "analytics_data_20260720.json", '
+        b'"collected_at": "2026-07-20T12:00:00Z", "period": {"start_date": "2026-07-01", '
+        b'"end_date": "2026-07-20"}, "scheduled_count": 2, "summary": {"views": 900, '
+        b'"watch_time_minutes": 420, "subscribers_net": 8, "engagements": 31, '
+        b'"average_view_percentage": 62.5}, "error": null, "refresh_error": null, "video_count": 1}]}'
+    )
+    assert detail_bytes == (
+        b'{"id": "channel-1", "name": "Night Drive", "status": "ready", '
+        b'"snapshot": "analytics_data_20260720.json", "collected_at": "2026-07-20T12:00:00Z", '
+        b'"period": {"start_date": "2026-07-01", "end_date": "2026-07-20"}, '
+        b'"scheduled_count": 2, "summary": {"views": 900, "watch_time_minutes": 420, '
+        b'"subscribers_net": 8, "engagements": 31, "average_view_percentage": 62.5}, '
+        b'"videos": [{"video_id": "video-b", "title": "Later video", "views": 700, '
+        b'"impressions": 1000, "ctr_percentage": 4.5, "likes": 20, "comments": 4, "shares": 3, '
+        b'"subscribers_gained": 2, "average_view_duration_seconds": 180, "engagements": 27}], '
+        b'"error": null, "refresh_error": null, "workflow_timing": {"status": "ready", "collections": []}}'
+    )
+
+
+def test_dashboard_api_response_contracts_are_typed_dicts() -> None:
+    assert is_typeddict(DashboardReadModel)
+    assert is_typeddict(OverviewResponse)
+    assert is_typeddict(ChannelDetailResponse)
+    assert is_typeddict(PublicationsResponse)
+    assert DashboardReadModel.__required_keys__ == frozenset({"schema_version", "channels", "publications"})
+    assert OverviewResponse.__required_keys__ == frozenset({"schema_version", "channels"})
+    assert ChannelDetailResponse.__required_keys__ == frozenset(
+        {
+            "id",
+            "name",
+            "status",
+            "snapshot",
+            "collected_at",
+            "period",
+            "scheduled_count",
+            "summary",
+            "videos",
+            "error",
+            "refresh_error",
+        }
+    )
+    assert ChannelDetailResponse.__optional_keys__ == frozenset({"workflow_timing"})
+    assert PublicationsResponse.__required_keys__ == frozenset({"days", "channels"})
 
 
 def test_read_model_aggregates_publication_days_and_channel_cache_state(tmp_path: Path) -> None:

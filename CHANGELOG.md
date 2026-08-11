@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `fix(metadata)`: `yt-bulk-update-desc --help` に公開済み動画の概要欄を一括書き込みする通常実行と、API write を行わない `--dry-run` プレビュー、`--only` の対象絞り込みを明記した（#3796）。
 - `fix(cli)`: `yt-benchmark-comments` と `yt-thumbnail-compare` の旧 `--channel` を共通 entrypoint が先に消費せず、`--competitor` への移行案内で誤チャンネル選択前に停止するよう修正した（#3923）。
 - `feat(skill-feedback)`: feedback entry に `resolved` / `wontfix` の終端状態と理由・更新時刻を追加し、`recorded` だけを還流候補として扱う契約を明確化した。schema 非準拠行があれば全停止する fail-closed 挙動は維持する（#3914）。
+- dashboard read model と publications 応答のキー契約を TypedDict で固定し、API JSON の既存 bytes を維持する回帰テストを追加 (#3897)
+
 - `fix(metadata)`: `apply_track_display_names` が `workflow-state.json` の読み失敗・root 非 object 時に既存 state 全体を空 dict で上書きしていた経路を `ValidationError` の fail-loud に変更し、書き込みを tempfile + `os.replace` の atomic 方式にした（#3871）。
 - `fix(masterup)`: `yt-generate-master` に存在しない bitrate / crossfade の CLI 上書き例を配布 skill から削除し、`config/skills/masterup.json` または YAML fallback の `audio` 設定を使う実装契約へ案内を統一した（#3763）。
 - `feat(channel-new)`: 既存チャンネル取り込み完了時に `wf_new_readiness` の判定を提示し、`/wf-new` 到達に必須の最短手順とブランディング・ペルソナ・追加ベンチマークなどの任意改善を分離する。警告時も取り込み自体は完了扱いを維持する（#3762）。
