@@ -32,11 +32,20 @@
     },
     "status": {
       "type": "string",
-      "enum": ["recorded", "filed"]
+      "enum": ["recorded", "filed", "resolved", "wontfix"]
     },
     "issue_url": {
       "type": "string",
       "format": "uri"
+    },
+    "disposition_reason": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Concise reason for marking the feedback resolved or intentionally wontfix."
+    },
+    "disposition_at": {
+      "type": "string",
+      "format": "date-time"
     }
   },
   "allOf": [
@@ -50,7 +59,13 @@
         "required": ["status"]
       },
       "then": {
-        "required": ["issue_url"]
+        "required": ["issue_url"],
+        "not": {
+          "anyOf": [
+            { "required": ["disposition_reason"] },
+            { "required": ["disposition_at"] }
+          ]
+        }
       }
     },
     {
@@ -63,6 +78,42 @@
         "required": ["status"]
       },
       "then": {
+        "not": {
+          "anyOf": [
+            { "required": ["issue_url"] },
+            { "required": ["disposition_reason"] },
+            { "required": ["disposition_at"] }
+          ]
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "resolved"
+          }
+        },
+        "required": ["status"]
+      },
+      "then": {
+        "required": ["disposition_reason", "disposition_at"],
+        "not": {
+          "required": ["issue_url"]
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "wontfix"
+          }
+        },
+        "required": ["status"]
+      },
+      "then": {
+        "required": ["disposition_reason", "disposition_at"],
         "not": {
           "required": ["issue_url"]
         }

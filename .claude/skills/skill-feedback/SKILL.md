@@ -17,7 +17,8 @@ description: "Use when 下流チャンネルリポジトリでスキル実行中
 ## Hard Gates
 
 - 記録モードでは既存行を変更せず、schema 準拠の JSON object を末尾に 1 行だけ追加する
-- 還流モードでは `status="recorded"` の行だけを候補にする。`status="filed"` の行は表示も起票もせず、二重起票を防ぐ
+- 還流モードでは `status="recorded"` の行だけを候補にする。`filed` / `resolved` / `wontfix` は終端状態として表示・選択・起票・変更の対象にしない
+- `resolved` / `wontfix` への更新は、ユーザーが対象行と disposition を明示的に確認した場合だけ行う。空でない簡潔な `disposition_reason` と更新時刻 `disposition_at` を必須とする
 - issue 起票前に open issue のタイトルを照合し、類似候補ごとに新規起票かスキップかをユーザーに確認する
 - 起票対象、件数、タイトル、チャンネル名の掲載有無を表示し、`AskUserQuestion` で「起票する / 中止」の明示 2 択を提示する。承認されるまで `gh issue create` を絶対に実行しない
 - GitHub issue は外部へ反映され、起票後はこのスキルから取り消せないことを承認時に警告する
@@ -36,6 +37,7 @@ description: "Use when 下流チャンネルリポジトリでスキル実行中
 
 - ユーザーが承認した entry ごとに、上流へ `feedback` ラベル付き issue が 1 件起票されている
 - 起票に成功した行だけが `status="filed"` と `issue_url` を持つ
+- ユーザーが確認した解決済みの行だけが `status="resolved"`、意図的に起票しないと確認した行だけが `status="wontfix"` となり、`disposition_reason` と `disposition_at` を持つ
 - 未選択、スキップ、起票失敗の行は変更されていない
 - 更新後の全行が entry schema に準拠し、JSONL の行数と順序が更新前と同じである
 
@@ -65,8 +67,22 @@ description: "Use when 下流チャンネルリポジトリでスキル実行中
 | `category` | yes | `bug` / `friction` / `idea` のいずれか |
 | `summary` | yes | 1 文の要約 |
 | `context` | yes | 再現状況・エラー抜粋・期待と実際の差分 |
-| `status` | yes | 未還流は `recorded`、起票済みは `filed` |
+| `status` | yes | 未還流は `recorded`、起票済みは `filed`、解決確認済みは `resolved`、意図的な見送りは `wontfix` |
 | `issue_url` | filed only | `filed` にした GitHub issue の URL |
+| `disposition_reason` | resolved / wontfix only | 終端 disposition にした根拠を 1 文で簡潔に記録する |
+| `disposition_at` | resolved / wontfix only | disposition 更新日時。ISO 8601 の date-time 文字列 |
+
+## Entry lifecycle contract
+
+| status | filing candidate | terminal | required metadata |
+|---|---|---|---|
+| recorded | yes | no | none |
+| filed | no | yes | issue_url |
+| resolved | no | yes | disposition_reason, disposition_at |
+| wontfix | no | yes | disposition_reason, disposition_at |
+
+`recorded` だけが還流候補である。`filed` / `resolved` / `wontfix` は終端状態であり、
+次回以降の還流モードで一覧表示、選択、起票、変更を行わない。
 
 ## 共通: 機密情報のマスク
 
@@ -131,8 +147,31 @@ feedback を記録するよう案内して停止する。各行を JSON とし�
 `summary` とともに一覧表示する。`context` は一覧に表示しない。候補が 0 件なら
 「未還流 feedback は 0 件」と報告して終了する。
 
-ユーザーに起票する行を選んでもらう。選択した各行について、行番号と元の JSON object
-全体を保持する。以後の更新対象はこの組で識別し、同内容の entry が複数あっても混同しない。
+`filed` / `resolved` / `wontfix` の行は終端 entry のため、一覧表示、選択、起票、
+状態更新のいずれにも含めない。
+
+ユーザーに各 `recorded` entry の扱いを「起票候補 / 解決済み / 意図的に見送り / 今回は保留」
+から選んでもらう。選択した各行について、行番号と元の JSON object 全体を保持する。
+以後の更新対象はこの組で識別し、同内容の entry が複数あっても混同しない。
+
+### Step 1a: 非起票の終端 disposition を確定
+
+「解決済み」は現行版で問題が解決していると検証できた entry だけに使い、`resolved` とする。
+「意図的に見送り」は問題を確認した上で起票しないと判断した entry だけに使い、`wontfix` とする。
+各 entry について、空でない 1 文の簡潔な理由をユーザーに確認する。推測で理由を補わない。
+
+対象行、更新後の status、理由を表示し、`AskUserQuestion` で「disposition を記録する / 中止」の
+明示 2 択を提示する。確認された場合だけ、保持した行番号の現在値が元 JSON object と完全一致する
+ことを確認し、次のフィールドを 1 回の atomic rewrite で更新する。
+
+- `status`: `resolved` または `wontfix`
+- `disposition_reason`: ユーザーが確認した簡潔な理由
+- `disposition_at`: 更新時点の UTC を ISO 8601 date-time で記録した値
+
+terminal entry に `issue_url` を追加しない。更新後の全行が schema に準拠し、行数と行順が同じで、
+対象外の行が byte-for-byte で同一であることを確認してから元ファイルを置換する。確認失敗、
+元行の不一致、schema 検証失敗ではログを変更せず停止する。更新済みの terminal entry は Step 2
+以降へ渡さず、起票も行わない。「今回は保留」の entry は `recorded` のまま変更しない。
 
 ### Step 2: 本文案とチャンネル名の掲載可否を確認
 
@@ -212,10 +251,12 @@ exit code が 0 で、標準出力から当該 issue URL を取得できた場�
 
 ### Step 6: 完了報告
 
-起票した issue のタイトルと URL、`filed` に更新した行番号、スキップした entry を報告する。
+起票した issue のタイトルと URL、`filed` に更新した行番号、`resolved` / `wontfix` に更新した
+行番号と理由、スキップした entry を報告する。
 機密値、本文全文、長い error log は再掲しない。
 
 ## Non-goals
 
 - 起票された上流 issue のトリアージ・優先度付け
 - Analytics / flop-analysis 由来の運営知見の記録
+- schema 非準拠行を飛ばして valid entry の還流を続けること（#3939）
