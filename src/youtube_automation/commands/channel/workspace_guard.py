@@ -18,6 +18,7 @@ _ROOT_CHANNEL_LAYOUTS = (
     ("data",),
     ("auth",),
 )
+_WORKSPACE_FEEDBACK_LAYOUT = ("data", "feedback")
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -56,12 +57,23 @@ def _is_root_channel_layout(path: Path, workspace_root: Path) -> bool:
     return any(relative_parts[: len(prefix)] == prefix for prefix in _ROOT_CHANNEL_LAYOUTS)
 
 
+def _is_workspace_feedback_layout(path: Path, workspace_root: Path) -> bool:
+    try:
+        relative_parts = path.relative_to(workspace_root).parts
+    except ValueError:
+        return False
+    return relative_parts[: len(_WORKSPACE_FEEDBACK_LAYOUT)] == _WORKSPACE_FEEDBACK_LAYOUT
+
+
 def _blocked_reason(
     target: Path,
     workspace_root: Path,
+    cwd: Path,
     current_slug: str | None,
     channels: dict[str, Path],
 ) -> str | None:
+    if cwd == workspace_root and _is_workspace_feedback_layout(target, workspace_root):
+        return None
     if _is_root_channel_layout(target, workspace_root):
         return f"workspace root のチャンネル専用レイアウトです (cwd slug={current_slug or '(none)'})"
 
@@ -83,7 +95,7 @@ def check_paths(raw_paths: list[str], cwd: Path) -> list[tuple[str, str]]:
     blocked: list[tuple[str, str]] = []
     for raw_path in raw_paths:
         target = _resolve_target(raw_path, resolved_cwd, workspace_root)
-        reason = _blocked_reason(target, workspace_root, current_slug, channels)
+        reason = _blocked_reason(target, workspace_root, resolved_cwd, current_slug, channels)
         if reason is not None:
             blocked.append((raw_path, reason))
     return blocked
