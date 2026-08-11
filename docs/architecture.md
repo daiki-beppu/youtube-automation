@@ -96,6 +96,8 @@ CLAUDE.md の「アーキテクチャ」節の詳細版。要点は CLAUDE.md �
 
 **MediaStore**: 境界を越えるメディアの pull / push を行う転送層の抽象。第一実装は R2 で、将来のストレージ交換点をここに限定する。工程や resolver へのストレージ抽象の注入は行わない（ADR-0024）。
 
+**軽量レジーム / 重量レジーム**: メディア工程（動画生成）の負荷 2 分類。分岐の正体は `config/channel/youtube.json::overlays.enabled` で、軽量は映像 stream copy（2 時間尺でも数分・クラウド実行対象）、重量はオーディオスペクトラム visualizer 等を全尺 filter_complex + libx264 再エンコード（当面 local 実行の暫定例外）。実行基盤の適性はこの 2 レジームで別々に評価する（ADR-0025）。
+
 ## 自リポジトリ
 
 ### 再配置後の責務境界と配置規則
