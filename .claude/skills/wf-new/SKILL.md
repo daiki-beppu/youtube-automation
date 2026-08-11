@@ -321,7 +321,7 @@ uv run yt-populate-scene-phrases <collection-dir-name> \
 1. 企画選択時に承認済みの同じ画像なので、文字入り候補の生成・再選択・thumbnail の AskUserQuestion は行わない。`10-assets/thumbnail.jpg` を `/thumbnail-compare` で 320px 視認性検証し、署名・透かし・ロゴ・手指破綻の既存目視 QA を通す。失敗時は state を更新せず停止する
 2. QA 成功後に `uv run python .claude/skills/thumbnail/references/archive-approved-thumbnail.py <collection-path>` を実行する。archive の Hard Gate は既存契約どおり維持する
 3. `textless.enabled` が未設定または `true` なら、確定した `thumbnail.jpg` を入力、生成対象 `main` を指定して別 subagent へ委譲する。`mode: full` は生成可否と textless 背景承認を質問せず既存の check 成功後に確定し、それ以外は既存どおり textless 候補だけをプレビュー・承認して `main.png/jpg` へ確定する。`false` なら textless 生成・承認を省略し、`share_thumbnail_as_main.py <collection-path>` を実行して `status: SHARED`、同一 SHA-256、`main.png` 不在を検証する
-4. `thumbnail.jpg` と `main.png/jpg` の確定検証後だけ `assets.thumbnail = true`、`thumbnail.approved = true`、`updated_at` を更新する。この `thumbnail.jpg` を再度 AskUserQuestion にかけない
+4. `thumbnail.jpg` と `main.png/jpg` の確定検証後だけ `assets.thumbnail = true`、`updated_at` を更新する。この `thumbnail.jpg` を再度 AskUserQuestion にかけない
 
 以下の mode 別分岐は `status: MISSING` から既存 `/thumbnail` フォールバックへ進んだ場合だけ実行する。
 
@@ -330,7 +330,7 @@ uv run yt-populate-scene-phrases <collection-dir-name> \
 1. AskUserQuestion と `open` を実行せず、`uv run yt-thumbnail-auto-select <collection-path> --dry-run` が exit 0 であることを確認してから `uv run yt-thumbnail-auto-select <collection-path> --apply` を実行する。`10-assets/thumbnail.jpg` と `workflow-state.json::thumbnail_auto_selection.mode == "full"` を検証する
 2. `textless.enabled` が未設定または `true` なら、確定した `thumbnail.jpg` を入力、生成対象 `main` を指定して別 subagent へ委譲する。生成可否と textless 背景承認は質問せず、`yt-thumbnail-check` が exit 0 かつ候補が存在するときだけ `10-assets/main.png/jpg` へ確定コピーする。`false` なら textless 委譲・生成・承認を再要求せず、`share_thumbnail_as_main.py <collection-path>` を実行し、`status: SHARED`、`thumbnail.jpg` と `main.jpg` の同一 SHA-256、`main.png` 不在を検証する
 3. `/thumbnail-compare` の 320px 視認性検証はスコープ外のまま省略せず、自動確定後に別途実行する。失敗しても不適格候補を強制採用せず、`/thumbnail` の「full モード失敗時の手動切替」を表示して state を更新せず停止する
-4. `thumbnail.jpg` と `main.png/jpg` の確定検証後だけ、`assets.thumbnail = true`、`thumbnail.approved = true`、`updated_at` を更新して音楽素材生成へ進む
+4. `thumbnail.jpg` と `main.png/jpg` の確定検証後だけ、`assets.thumbnail = true`、`updated_at` を更新して音楽素材生成へ進む
 
 **`selection_only` または auto-selection 無効**（従来フロー）:
 
@@ -360,7 +360,7 @@ uv run yt-populate-scene-phrases <collection-dir-name> \
    - `thumbnail.jpg` と `main.png/jpg` を同一画像で代用しない。`main.png` を `thumbnail.jpg` にコピーする旧運用は禁止
    - QA が NG、再生成、または中断の場合は `/collection-ideate` または `/thumbnail` の該当生成ステップへ戻し、state を更新せず停止する
 
-4. `thumbnail.jpg` と `main.png/jpg` の確定を検証した後だけ、メインが `assets.thumbnail = true`、`thumbnail.approved = true`、`updated_at` を更新する。このゲートで承認済みの `thumbnail.jpg` を再度 AskUserQuestion にかけない。
+4. `thumbnail.jpg` と `main.png/jpg` の確定を検証した後だけ、メインが `assets.thumbnail = true`、`updated_at` を更新する。このゲートで承認済みの `thumbnail.jpg` を再度 AskUserQuestion にかけない。
 
 5. **音楽 skill を順番に処理**:
    - Suno: 対象 collection、theme、確定企画、書き込み先 `20-documentation/suno-patterns.yaml` を指定して Agent ツールで `/suno <theme>` のプロンプト生成を委譲する。共有 `config/skills/suno.yaml` の書き換えを禁止し、collection root の Style 値と channel fallback を解決した後に `uv run yt-suno-verify <collection-path>` を通す。ボーカルでは root `vocal_gender` を `/suno-lyric` の語り手性別入力にも引き渡す

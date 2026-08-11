@@ -157,11 +157,26 @@ def test_wf_new_preview_path_keeps_quality_state_and_textless_contracts() -> Non
 
     for contract in (
         "/thumbnail-compare",
-        "assets.thumbnail = true",
-        "thumbnail.approved = true",
         "未設定または `true`",
         "share_thumbnail_as_main.py <collection-path>",
     ):
         assert contract in approval_step
     assert "`planning-preview.png` から確定済み" in approval_step
     assert "再度 AskUserQuestion にかけない" in approval_step
+
+
+def test_wf_new_records_thumbnail_approval_in_canonical_asset_state_only() -> None:
+    skill = _WF_NEW_SKILL.read_text(encoding="utf-8")
+    approval_step = skill.split("##### 2c-2. サムネイル承認・確定 + 音楽素材生成", 1)[1].split(
+        "#### 2e. ループ動画生成", 1
+    )[0]
+
+    state_assignments = re.findall(r"(?:`)?([a-z_]+(?:\.[a-z_]+)+)\s*=\s*true", approval_step)
+    thumbnail_state_updates = [line for line in approval_step.splitlines() if "assets.thumbnail = true" in line]
+
+    assert state_assignments.count("assets.thumbnail") == 3
+    assert "thumbnail.approved" not in state_assignments
+    assert len(thumbnail_state_updates) == 3
+    for update in thumbnail_state_updates:
+        assert "thumbnail.jpg" in update
+        assert "main.png/jpg" in update
