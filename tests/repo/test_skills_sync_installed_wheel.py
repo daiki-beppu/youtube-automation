@@ -19,6 +19,33 @@ _FILE_ASSETS = {
         "src/youtube_automation/infrastructure/resources/auth/client_secrets.template.json"
     ),
 }
+_CHANNEL_NEW_SHARED_ASSETS = frozenset(
+    {
+        "analysis-mode.md",
+        "benchmark_collector.py",
+        "claude-md-template.md",
+        "config-generation-rules.md",
+        "config-template/analytics.json",
+        "config-template/audio.json",
+        "config-template/content.json",
+        "config-template/meta.json",
+        "config-template/skills/suno.yaml",
+        "config-template/skills/thumbnail.yaml",
+        "config-template/youtube.json",
+        "desire-vocabulary.md",
+        "direction-mode.md",
+        "directory-structure.md",
+        "fetch_benchmark_comments.py",
+        "fetch_branding_snapshot.py",
+        "generate_image.py",
+        "import-mode.md",
+        "localizations-template.json",
+        "regeneration-mode.md",
+        "save-push-troubleshooting.md",
+        "schedule-template.json",
+        "verification.md",
+    }
+)
 
 
 def _run(*args: str | Path, cwd: Path, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
@@ -148,7 +175,9 @@ assert "wheel-identity-check" not in legacy._cache
     }
     assert target_skill_files == source_skill_files
     for relative in source_skill_files:
-        assert (target_skills / relative).read_bytes() == (repo_root / ".claude" / "skills" / relative).read_bytes()
+        target = target_skills / relative
+        source = repo_root / ".claude" / "skills" / relative
+        assert target.read_bytes() == source.read_bytes()
 
     for target_relative, source_relative in _FILE_ASSETS.items():
         assert (downstream / target_relative).read_bytes() == (repo_root / source_relative).read_bytes()
@@ -175,16 +204,25 @@ assert "wheel-identity-check" not in legacy._cache
         assert local_links
         assert all((markdown.parent / link).is_file() for link in local_links)
 
-    legacy_channel_new = downstream / ".claude" / "skills" / "channel-new" / "SKILL.md"
-    legacy_text = legacy_channel_new.read_text(encoding="utf-8")
-    for relative in (
-        "../setup/references/channel-mode.md",
-        "../setup/references/new-channel-bootstrap.md",
-        "../setup/references/ttp-seed-and-duration.md",
-        "../setup/references/persona-branding-readiness.md",
-    ):
-        assert relative in legacy_text
-        assert (legacy_channel_new.parent / relative).is_file()
+    channel_new = downstream / ".claude" / "skills" / "channel-new" / "SKILL.md"
+    channel_new_text = channel_new.read_text(encoding="utf-8")
+    assert "`/setup --channel` を案内して停止する" in channel_new_text
+    assert "ファイルやディレクトリの作成・更新を行わない" in channel_new_text
+    assert "## Instructions（新規開設モード）" not in channel_new_text
+    channel_new_references = channel_new.parent / "references"
+    installed_shared_assets = {
+        path.relative_to(channel_new_references).as_posix()
+        for path in channel_new_references.rglob("*")
+        if path.is_file() or path.is_symlink()
+    }
+    assert installed_shared_assets == _CHANNEL_NEW_SHARED_ASSETS
+    local_links = [
+        link
+        for link in re.findall(r"\[[^]]+\]\(([^)]+)\)", channel_new_text)
+        if not link.startswith(("http://", "https://", "#"))
+    ]
+    assert local_links
+    assert all((channel_new.parent / link).is_file() for link in local_links)
 
     bootstrap_guide = distributed_references / "gcp-bootstrap.md"
     assert bootstrap_guide.is_file()
@@ -238,7 +276,8 @@ def test_candidate_sdist_contains_setup_channel_owner_once(tmp_path: Path) -> No
         "initial_save_guard.sh",
     }
     with tarfile.open(sdist, "r:gz") as archive:
-        names = {Path(name) for name in archive.getnames()}
+        members = archive.getmembers()
+        names = {Path(member.name) for member in members}
 
     for asset in opening_assets:
         setup_matches = [path for path in names if str(path).endswith(f"/.claude/skills/setup/references/{asset}")]
@@ -249,3 +288,22 @@ def test_candidate_sdist_contains_setup_channel_owner_once(tmp_path: Path) -> No
         assert channel_new_matches == []
     assert any(str(path).endswith("/.claude/skills/setup/references/channel-mode.md") for path in names)
     assert any(str(path).endswith("/.claude/skills/setup/references/setup-mode-guard.py") for path in names)
+    for relative in _CHANNEL_NEW_SHARED_ASSETS:
+        matches = [
+            member for member in members if member.name.endswith(f"/.claude/skills/channel-new/references/{relative}")
+        ]
+        assert len(matches) == 1
+
+    expected_links = {
+        "benchmark_collector.py": "../../../../src/youtube_automation/commands/analytics/benchmark_collector.py",
+        "fetch_benchmark_comments.py": (
+            "../../../../src/youtube_automation/commands/analytics/fetch_benchmark_comments.py"
+        ),
+        "generate_image.py": "../../../../src/youtube_automation/commands/media/generate_image.py",
+    }
+    for relative, linkname in expected_links.items():
+        member = next(
+            member for member in members if member.name.endswith(f"/.claude/skills/channel-new/references/{relative}")
+        )
+        assert member.issym()
+        assert member.linkname == linkname

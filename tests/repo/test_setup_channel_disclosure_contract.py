@@ -7,6 +7,8 @@ import shutil
 from hashlib import sha256
 from pathlib import Path
 
+import yaml
+
 from tests.helpers.paths import REPO_ROOT
 
 SKILL_DIR = REPO_ROOT / ".claude" / "skills" / "setup"
@@ -64,20 +66,33 @@ def _opening_asset_violations(skills_dir: Path) -> set[str]:
     return violations
 
 
-def _legacy_channel_new_opening_violations(markdown: str) -> set[str]:
-    required = {
-        "trigger:チャンネル追加": "チャンネル追加",
-        "trigger:新チャンネル": "新チャンネル",
-        "trigger:チャンネル開設": "チャンネル開設",
-        "mode": "1. **新規開設モード**（Step 1〜10）",
-        "completion": "## 完了条件（新規開設モード）",
-        "instructions": "## Instructions（新規開設モード）",
-        "canonical delegation": "[setup channel mode](../setup/references/channel-mode.md)",
-    }
-    violations = {name for name, marker in required.items() if marker not in markdown}
-    for step in range(1, 11):
-        if f"### Step {step}:" not in markdown:
-            violations.add(f"step:{step}")
+def _channel_new_opening_routing_violations(markdown: str) -> set[str]:
+    frontmatter = yaml.safe_load(markdown.split("---", 2)[1])
+    description = frontmatter["description"]
+    routing = markdown.split("## モード判別", 1)[1].split("## 外部データの扱い", 1)[0]
+    opening_triggers = ("チャンネル追加", "新チャンネル", "チャンネル開設")
+    violations = {f"description trigger:{trigger}" for trigger in opening_triggers if trigger in description}
+    violations.update(f"rejection context:{trigger}" for trigger in opening_triggers if trigger not in routing)
+    if "`/setup --channel` を案内して停止する" not in routing:
+        violations.add("positive setup route")
+    if "質問、reference の Read、コマンド実行、ファイルやディレクトリの作成・更新を行わない" not in routing:
+        violations.add("no-write stop")
+    for marker in (
+        "## 完了条件（新規開設モード）",
+        "1. **新規開設モード**（Step 1〜10）",
+        "## Instructions（新規開設モード）",
+    ):
+        if marker in markdown:
+            violations.add(f"opening execution:{marker}")
+    for path in (
+        "../setup/references/new-channel-bootstrap.md",
+        "../setup/references/ttp-seed-and-duration.md",
+        "../setup/references/persona-branding-readiness.md",
+        ".claude/skills/setup/references/derive_ttp_duration.py",
+        ".claude/skills/setup/references/initial_save_guard.sh",
+    ):
+        if path in markdown:
+            violations.add(f"opening asset:{path}")
     return violations
 
 
@@ -367,36 +382,37 @@ def test_opening_assets_have_exactly_one_setup_owner() -> None:
     assert _opening_asset_violations(REPO_ROOT / ".claude" / "skills") == set()
 
 
-def test_channel_new_preserves_legacy_opening_entrypoint_without_asset_ownership() -> None:
+def test_channel_new_rejects_opening_contexts_without_artifact_ownership_or_writes() -> None:
     channel_new = CHANNEL_NEW_SKILL_MD.read_text(encoding="utf-8")
 
-    assert _legacy_channel_new_opening_violations(channel_new) == set()
+    assert _channel_new_opening_routing_violations(channel_new) == set()
     for asset in OPENING_ASSETS:
         assert f"channel-new/references/{asset}" not in channel_new
-    for path in (
-        "../setup/references/new-channel-bootstrap.md",
-        "../setup/references/ttp-seed-and-duration.md",
-        "../setup/references/persona-branding-readiness.md",
-        ".claude/skills/setup/references/derive_ttp_duration.py",
-        ".claude/skills/setup/references/initial_save_guard.sh",
-    ):
-        assert path in channel_new
 
 
-def test_legacy_opening_contract_detects_real_routing_deletion(tmp_path: Path) -> None:
+def test_channel_new_opening_rejection_detects_trigger_route_write_and_execution_mutations() -> None:
     source = CHANNEL_NEW_SKILL_MD.read_text(encoding="utf-8")
-    mutated = source.replace("チャンネル追加", "").replace(
-        "[setup channel mode](../setup/references/channel-mode.md)",
-        "",
-        1,
-    )
-    candidate = tmp_path / "SKILL.md"
-    candidate.write_text(mutated, encoding="utf-8")
-
-    assert _legacy_channel_new_opening_violations(candidate.read_text(encoding="utf-8")) == {
-        "trigger:チャンネル追加",
-        "canonical delegation",
+    mutations = {
+        "description trigger:チャンネル追加": source.replace(
+            "未作成 channel の初回 bootstrap",
+            "チャンネル追加の初回 bootstrap",
+            1,
+        ),
+        "positive setup route": source.replace("`/setup --channel` を案内して停止する", "停止する", 1),
+        "no-write stop": source.replace(
+            "質問、reference の Read、コマンド実行、ファイルやディレクトリの作成・更新を行わない",
+            "",
+            1,
+        ),
+        "opening execution:## Instructions（新規開設モード）": source.replace(
+            "## 外部データの扱い",
+            "## Instructions（新規開設モード）\n\n## 外部データの扱い",
+            1,
+        ),
     }
+
+    for expected, mutated in mutations.items():
+        assert expected in _channel_new_opening_routing_violations(mutated)
 
 
 def test_opening_asset_inventory_detects_real_removal_and_duplicate(tmp_path: Path) -> None:
