@@ -63,7 +63,7 @@ def test_resolve_cleanup_config_rejects_bad_shape() -> None:
         resolve_cleanup_config({"post_processing": {"suno_audio_cleanup": "yes"}})
 
 
-@pytest.mark.parametrize("value", [0, -1, True, 1.5, "2", None])
+@pytest.mark.parametrize("value", [0, -1, 9, 10**100, True, 1.5, "2", None])
 def test_resolve_max_workers_rejects_invalid_config_value(value: object) -> None:
     with pytest.raises(ConfigError, match="max_workers"):
         resolve_max_workers(None, {"post_processing": {"suno_audio_cleanup": {"max_workers": value}}})
@@ -75,16 +75,56 @@ def test_resolve_max_workers_prefers_cli_value() -> None:
 
 
 def test_resolve_max_workers_uses_config_then_safe_default() -> None:
-    configured = {"post_processing": {"suno_audio_cleanup": {"max_workers": 4}}}
-    assert resolve_max_workers(None, configured) == 4
+    configured = {"post_processing": {"suno_audio_cleanup": {"max_workers": 8}}}
+    assert resolve_max_workers(None, configured) == 8
     assert resolve_max_workers(None, {}) == 2
 
 
-def test_parser_rejects_non_positive_jobs_before_execution() -> None:
+@pytest.mark.parametrize("value", [0, 9, 10**100])
+def test_parser_rejects_jobs_outside_safe_range_before_execution(value: int) -> None:
     with pytest.raises(SystemExit) as exc_info:
-        mod.build_parser().parse_args(["apply", "collection", "--jobs", "0"])
+        mod.build_parser().parse_args(["apply", "collection", "--jobs", str(value)])
 
     assert exc_info.value.code == 2
+
+
+@pytest.mark.parametrize("value", [0, 9, 10**100, True])
+def test_resolve_max_workers_rejects_invalid_programmatic_cli_value(value: object) -> None:
+    with pytest.raises(mod.ValidationError, match="jobs"):
+        resolve_max_workers(value, {})
+
+
+@pytest.mark.parametrize(
+    ("jobs", "configured", "error_type"),
+    [(9, 2, mod.ValidationError), (None, 9, ConfigError)],
+)
+def test_cleanup_collection_rejects_unsafe_jobs_before_collecting_files(
+    tmp_path: Path,
+    monkeypatch,
+    jobs: int | None,
+    configured: int,
+    error_type: type[Exception],
+) -> None:
+    collection = _make_collection(tmp_path, ["00.mp3"])
+    monkeypatch.setattr(
+        mod,
+        "load_skill_config",
+        lambda _skill: {"post_processing": {"suno_audio_cleanup": {"enabled": True, "max_workers": configured}}},
+    )
+
+    def fail_collect(_collection):
+        raise AssertionError("files must not be collected before jobs validation")
+
+    monkeypatch.setattr(mod, "collect_audio_files", fail_collect)
+
+    with pytest.raises(error_type):
+        cleanup_collection(collection, apply=True, jobs=jobs)
+
+
+@pytest.mark.parametrize("value", [1, 8])
+def test_parser_accepts_jobs_boundary_values(value: int) -> None:
+    args = mod.build_parser().parse_args(["apply", "collection", "--jobs", str(value)])
+    assert args.jobs == value
 
 
 def test_main_passes_jobs_to_cleanup_collection(monkeypatch) -> None:
@@ -172,10 +212,45 @@ def test_cleanup_collection_apply_uses_bounded_default_concurrency(tmp_path: Pat
     assert peak == 2
 
 
-def test_cleanup_collection_jobs_one_preserves_sequential_execution(tmp_path: Path, monkeypatch) -> None:
-    collection = _make_collection(tmp_path, [f"{index:02d}.mp3" for index in range(3)])
+def test_cleanup_collection_caps_concurrency_at_explicit_upper_boundary(tmp_path: Path, monkeypatch) -> None:
+    collection = _make_collection(tmp_path, [f"{index:02d}.mp3" for index in range(16)])
+    lock = threading.Lock()
+    eight_running = threading.Event()
     active = 0
     peak = 0
+
+    monkeypatch.setattr(
+        mod,
+        "load_skill_config",
+        lambda _skill: {"post_processing": {"suno_audio_cleanup": {"enabled": True}}},
+    )
+
+    def fake_process_file(path, cfg, *, apply, force, quiet):
+        nonlocal active, peak
+        with lock:
+            active += 1
+            peak = max(peak, active)
+            if active == 8:
+                eight_running.set()
+        assert eight_running.wait(timeout=1)
+        with lock:
+            active -= 1
+        return True
+
+    monkeypatch.setattr(mod, "process_file", fake_process_file)
+
+    assert cleanup_collection(collection, apply=True, jobs=8, quiet=True) == 0
+    assert peak == 8
+
+
+def test_cleanup_collection_jobs_one_uses_legacy_main_thread_and_immediate_progress(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    collection = _make_collection(tmp_path, [f"{index:02d}.mp3" for index in range(3)])
+    main_thread = threading.current_thread()
+    observed_threads: list[threading.Thread] = []
 
     monkeypatch.setattr(
         mod,
@@ -184,16 +259,57 @@ def test_cleanup_collection_jobs_one_preserves_sequential_execution(tmp_path: Pa
     )
 
     def fake_process_file(path, cfg, *, apply, force, quiet):
-        nonlocal active, peak
-        active += 1
-        peak = max(peak, active)
-        active -= 1
+        observed_threads.append(threading.current_thread())
+        assert quiet is False
+        if path.name != "00.mp3":
+            assert f"cleaned: {int(path.stem) - 1:02d}.mp3" in capsys.readouterr().out
+        print(f"cleaned: {path.name}")
         return True
 
     monkeypatch.setattr(mod, "process_file", fake_process_file)
 
-    assert cleanup_collection(collection, apply=True, jobs=1, quiet=True) == 0
-    assert peak == 1
+    assert cleanup_collection(collection, apply=True, jobs=1) == 0
+    assert observed_threads == [main_thread, main_thread, main_thread]
+
+
+def test_cleanup_collection_jobs_one_preserves_original_exception_type_and_message(tmp_path: Path, monkeypatch) -> None:
+    collection = _make_collection(tmp_path, ["00.mp3", "01.mp3"])
+
+    monkeypatch.setattr(
+        mod,
+        "load_skill_config",
+        lambda _skill: {"post_processing": {"suno_audio_cleanup": {"enabled": True}}},
+    )
+
+    def fake_process_file(path, cfg, *, apply, force, quiet):
+        raise ValueError("legacy exact failure")
+
+    monkeypatch.setattr(mod, "process_file", fake_process_file)
+
+    with pytest.raises(ValueError, match="^legacy exact failure$"):
+        cleanup_collection(collection, apply=True, jobs=1)
+
+
+def test_cleanup_collection_jobs_one_prints_skip_progress_immediately(tmp_path: Path, monkeypatch, capsys) -> None:
+    collection = _make_collection(tmp_path, ["00.mp3", "01.mp3"])
+    music = collection / "02-Individual-music"
+    backup = music / "originals-pre-cleanup"
+    backup.mkdir()
+    for name in ("00.mp3", "01.mp3"):
+        (backup / name).write_bytes(b"original")
+
+    monkeypatch.setattr(
+        mod,
+        "load_skill_config",
+        lambda _skill: {"post_processing": {"suno_audio_cleanup": {"enabled": True}}},
+    )
+
+    assert cleanup_collection(collection, apply=True, jobs=1) == 0
+    assert capsys.readouterr().out.splitlines() == [
+        "skip already cleaned: 00.mp3 (backup exists)",
+        "skip already cleaned: 01.mp3 (backup exists)",
+        "processed: 2 file(s), changed=0",
+    ]
 
 
 def test_cleanup_collection_stops_submitting_after_failure(tmp_path: Path, monkeypatch) -> None:
@@ -327,7 +443,7 @@ def test_cleanup_collection_aggregates_errors_in_filename_order(tmp_path: Path, 
     assert message.index("01.mp3") < message.index("02.mp3") < message.index("03.mp3")
 
 
-def test_cleanup_collection_plan_stays_sequential_and_deterministic(tmp_path: Path, monkeypatch, capsys) -> None:
+def test_cleanup_collection_plan_stays_sequential_without_ffmpeg_encode(tmp_path: Path, monkeypatch, capsys) -> None:
     collection = _make_collection(tmp_path, ["02.mp3", "01.mp3"])
     active = 0
     peak = 0
@@ -339,10 +455,10 @@ def test_cleanup_collection_plan_stays_sequential_and_deterministic(tmp_path: Pa
     )
     monkeypatch.setattr(mod, "probe_duration", lambda _path: 60)
 
-    def fail_run(*args, **kwargs):
-        raise AssertionError("plan must not execute ffmpeg")
+    def fail_encode(*args, **kwargs):
+        raise AssertionError("plan must not execute ffmpeg encode")
 
-    monkeypatch.setattr(mod.subprocess, "run", fail_run)
+    monkeypatch.setattr(mod.subprocess, "run", fail_encode)
     real_process_file = mod.process_file
 
     def observed_process_file(*args, **kwargs):

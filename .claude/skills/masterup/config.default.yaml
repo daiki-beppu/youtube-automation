@@ -129,7 +129,7 @@ validation:
 post_processing:
   suno_audio_cleanup:
     enabled: true               # 既定 ON。false で Suno DL 後の個別音源 cleanup を無効化
-    max_workers: 2              # apply の曲単位最大並列数。CLI --jobs が優先
+    max_workers: 2              # apply の曲単位最大並列数 (1〜8)。CLI --jobs が優先
     backup_originals: true      # 02-Individual-music/originals-pre-cleanup/ に元ファイルを保存
     bitrate: "192k"             # libmp3lame 出力ビットレート (未指定なら audio.bitrate)
     codec: "libmp3lame"

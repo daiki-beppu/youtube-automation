@@ -70,7 +70,7 @@ TS CLI `uv run yt-generate-master` は `audio` の実行時既定値を組み込
 | `post_processing.rain_layers.output_name` | `master-rain.wav` | 後処理出力ファイル名（`01-master/` 配下）。成功時に `workflow-state.json::assets.raw_master` がこの名前へ書き換わる |
 | `post_processing.rain_layers.output_codec` / `.output_sample_rate` | `pcm_s16le` / `44100` | 出力 WAV の ffmpeg コーデックとサンプリングレート（ステレオ固定）。後段の外部 DAW でミキシング+マスタリングする運用想定 |
 | `post_processing.suno_audio_cleanup.enabled` | `true` | Suno ダウンロード直後の個別音源に、無音カット / EQ / dynaudnorm / limiter / LUFS 正規化 / 末尾 fade guard を適用する。従来挙動へ戻す場合はチャンネル側で `false` にする |
-| `post_processing.suno_audio_cleanup.max_workers` | `2` | `apply` の曲単位最大並列数。CLI `--jobs` が優先し、`--jobs 1` で直列実行する |
+| `post_processing.suno_audio_cleanup.max_workers` | `2` | `apply` の曲単位最大並列数（1〜8）。CLI `--jobs` が優先し、`--jobs 1` で従来どおり main thread の直列実行を選ぶ。範囲外は処理開始前に失敗する |
 | `post_processing.suno_audio_cleanup.loudnorm.I` | `-14` | YouTube 向け LUFS 正規化の目標値。チャンネル側 `config/skills/masterup.json` 優先、既存 `masterup.yaml` fallback で調整可能 |
 | `validation.loudness_deviation.max_lu` | `2.0` | マスター結合前に許容するコレクション内 integrated LUFS の最大差（LU）。0 より大きい数値のみ |
 | `pair_selection.mode` | `auto` | `suno-prompts.json` の `lyrics` から歌詞あり/なしを判定し、歌詞ありならペアから 1 曲、歌詞なしなら 2 clip 両方を採用する。`never` で整理をスキップ |
@@ -325,7 +325,7 @@ uv run yt-suno-audio-cleanup apply <collection-path>  # 元ファイルを origi
 uv run yt-suno-audio-cleanup apply <collection-path> --jobs 1  # 明示的な直列実行
 ```
 
-`apply` は曲単位で最大2件を並列処理する。最大並列数は `--jobs` → `post_processing.suno_audio_cleanup.max_workers` → `2` の順で解決する。失敗時は新しい曲を投入せず、開始済み処理を回収してファイル名順にエラーを報告する。`plan` は並列処理や ffmpeg 実行を行わず、従来どおりファイル名順のコマンドだけを表示する。
+`apply` は曲単位で最大2件を並列処理する。最大並列数は `--jobs` → `post_processing.suno_audio_cleanup.max_workers` → `2` の順で解決し、安全上限は8とする。失敗時は新しい曲を投入せず、開始済み処理を回収してファイル名順にエラーを報告する。`--jobs 1` は worker thread を作らず、従来どおり各曲の進捗と例外を直ちに呼び出し元へ渡す。`plan` はファイル名順に ffprobe で長さを調べてコマンドを表示するが、ffmpeg encode は起動しない。
 
 適用内容:
 

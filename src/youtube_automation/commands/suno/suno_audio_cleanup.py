@@ -12,6 +12,7 @@ import sys
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 
 from youtube_automation.configuration.skills import load_skill_config
 from youtube_automation.core.errors import ConfigError, ValidationError
@@ -23,6 +24,7 @@ _SKILL_NAME = "masterup"
 _BACKUP_DIRNAME = "originals-pre-cleanup"
 _SUPPORTED_EXTS = tuple(sorted(AUDIO_EXTS))
 _DEFAULT_MAX_WORKERS = 2
+_MAX_WORKERS_LIMIT = 8
 
 
 @dataclass(frozen=True)
@@ -96,14 +98,19 @@ def resolve_max_workers(cli_jobs: int | None, skill_cfg: Mapping[str, object]) -
         post = _as_mapping(skill_cfg.get("post_processing"), "post_processing")
         raw = _as_mapping(post.get("suno_audio_cleanup"), "post_processing.suno_audio_cleanup")
         config_value = raw.get("max_workers", _DEFAULT_MAX_WORKERS)
-        if isinstance(config_value, bool) or not isinstance(config_value, int) or config_value < 1:
+        if (
+            isinstance(config_value, bool)
+            or not isinstance(config_value, int)
+            or not 1 <= config_value <= _MAX_WORKERS_LIMIT
+        ):
             raise ConfigError(
-                "skill-config の post_processing.suno_audio_cleanup.max_workers は 1 以上の整数である必要があります: "
+                "skill-config の post_processing.suno_audio_cleanup.max_workers は "
+                f"1 以上 {_MAX_WORKERS_LIMIT} 以下の整数である必要があります: "
                 f"{config_value!r}"
             )
         return config_value
-    if isinstance(cli_jobs, bool) or not isinstance(cli_jobs, int) or cli_jobs < 1:
-        raise ValidationError(f"jobs は 1 以上の整数である必要があります: {cli_jobs!r}")
+    if isinstance(cli_jobs, bool) or not isinstance(cli_jobs, int) or not 1 <= cli_jobs <= _MAX_WORKERS_LIMIT:
+        raise ValidationError(f"jobs は 1 以上 {_MAX_WORKERS_LIMIT} 以下の整数である必要があります: {cli_jobs!r}")
     return cli_jobs
 
 
@@ -111,9 +118,11 @@ def _positive_jobs(value: str) -> int:
     try:
         jobs = int(value)
     except ValueError as error:
-        raise argparse.ArgumentTypeError("--jobs は 1 以上の整数を指定してください") from error
-    if jobs < 1:
-        raise argparse.ArgumentTypeError("--jobs は 1 以上の整数を指定してください")
+        raise argparse.ArgumentTypeError(
+            f"--jobs は 1 以上 {_MAX_WORKERS_LIMIT} 以下の整数を指定してください"
+        ) from error
+    if not 1 <= jobs <= _MAX_WORKERS_LIMIT:
+        raise argparse.ArgumentTypeError(f"--jobs は 1 以上 {_MAX_WORKERS_LIMIT} 以下の整数を指定してください")
     return jobs
 
 
@@ -274,6 +283,20 @@ def _process_files_parallel(
     return results, errors
 
 
+def _process_files_sequential(
+    files: list[Path],
+    cfg: CleanupConfig,
+    *,
+    force: bool,
+    quiet: bool,
+) -> int:
+    changed = 0
+    for path in files:
+        if process_file(path, cfg, apply=True, force=force, quiet=quiet):
+            changed += 1
+    return changed
+
+
 def cleanup_collection(
     collection_dir: Path,
     *,
@@ -289,6 +312,8 @@ def cleanup_collection(
             print("post_processing.suno_audio_cleanup.enabled=false のため何もしません")
         return 0
 
+    max_workers = resolve_max_workers(jobs, skill_cfg) if apply else None
+
     files = collect_audio_files(collection_dir)
     if not files:
         music_dir = CollectionPaths(collection_dir).music_dir
@@ -302,8 +327,13 @@ def cleanup_collection(
             print(f"planned: {len(files)} file(s), changed=0")
         return 0
 
-    max_workers = resolve_max_workers(jobs, skill_cfg)
-    results, errors = _process_files_parallel(files, cfg, max_workers=max_workers, force=force)
+    if max_workers == 1:
+        changed = _process_files_sequential(files, cfg, force=force, quiet=quiet)
+        if not quiet:
+            print(f"processed: {len(files)} file(s), changed={changed}")
+        return 0
+
+    results, errors = _process_files_parallel(files, cfg, max_workers=cast(int, max_workers), force=force)
     if not quiet:
         for path in files:
             if path not in results:
@@ -336,7 +366,10 @@ def build_parser() -> argparse.ArgumentParser:
         p.add_argument(
             "--jobs",
             type=_positive_jobs,
-            help="maximum concurrent files (default: post_processing.suno_audio_cleanup.max_workers, then 2)",
+            help=(
+                f"maximum concurrent files, 1-{_MAX_WORKERS_LIMIT} "
+                "(default: post_processing.suno_audio_cleanup.max_workers, then 2)"
+            ),
         )
     return parser
 
