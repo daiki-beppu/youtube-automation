@@ -95,8 +95,10 @@ description: "Use when 下流チャンネルリポジトリでスキル実行中
 | valid terminal | no | no | leave unchanged |
 
 schema-invalid には JSON として parse できない行と、parse できても entry schema に準拠しない行を
-含む。invalid 行と terminal entry は変更しない。invalid 行の内容は警告へ転記せず、1 始まりの
-行番号と JSON parse または schema 検証の簡潔な理由だけを表示する。
+含む。invalid 行と terminal entry は変更しない。警告理由は error class、schema keyword、JSON pointer、line、column
+のうち該当する safe metadata だけから組み立てる。invalid raw bytes、instance value、validator の raw message
+は、未マスクの secret-like value や object 全体を含み得るため表示しない。たとえば `summary` が空の
+7 行目は `line 7: schema keyword=minLength pointer=/summary` と表示し、実際の値は付けない。
 
 ## 共通: 機密情報のマスク
 
@@ -166,6 +168,16 @@ terminator を保持できない、または atomic rewrite の事前検証を�
 issue 起票や disposition 更新を開始せず fail-closed に停止する。事前確認用の一時ファイルで元ログを置換せず、
 確認後に削除する。
 
+保持状態は、最新 snapshot、全行の bytes、各 line terminator、valid entry の行番号と JSON object で
+構成する。atomic rewrite が成功するたびに更新するため、置換後のファイルを読み直して全行を再分類し、
+期待した対象行だけが変わり、それ以外の bytes が保存されたことを検証してから、保持状態全体を新しい
+内容へ置き換える。検証または保持状態の更新に失敗した場合は、次の disposition 更新や issue 起票へ
+進まず停止する。
+
+この progression は処理種別をまたいで適用する。disposition rewrite の成功後も filing flow の前に最新状態へ進める。
+その際に最新 snapshot、全行の bytes、未処理 entry の保持値を置換後の内容から再構築し、処理済み entry は
+候補から除く。各 filing candidate の atomic rewrite 成功後にも同じ更新を行い、次の candidate は更新済みの最新 snapshot を基準に処理する。
+
 `status` が `"recorded"` の行だけを、元の行番号、`date`、`skill`、`category`、
 `summary` とともに一覧表示する。`context` は一覧に表示しない。候補が 0 件なら
 「未還流 feedback は 0 件」と報告して終了する。
@@ -234,6 +246,11 @@ gh api --paginate --method GET \
 この entry をスキップ」の明示 2 択を提示する。ユーザーが選ぶまでその entry を起票しない。
 スキップした entry はログも変更しない。
 
+同じ entry の前回処理で issue 作成だけが成功した可能性があり、open issue のタイトルとマスク済み本文が
+今回の生成物に完全一致する場合は `created-unrecorded` の recovery 候補として扱う。この場合は
+「それでも新規起票する」を提示せず、既存 issue URL を使う recovery rewrite を Step 5 の更新契約で
+行うか、中止するかを確認する。完全一致を証明できなければ新規起票せず fail-closed に停止する。
+
 ### Step 4: 最終承認ゲート
 
 スキップを除いた起票対象について、件数、各タイトル、発生チャンネル欄の内容を表示する。
@@ -248,7 +265,9 @@ gh api --paginate --method GET \
 
 ### Step 5: issue 起票と直後のログ更新
 
-承認済み entry を 1 件ずつ処理する。マスク済み本文を一時ファイルへ保存し、次を実行する。
+承認済み entry を 1 件ずつ処理する。各 `gh issue create` の直前にファイル全体を再読し、current bytes が最新 snapshot と完全一致
+することを検証する。不一致ならコマンドを実行せず fail-closed に停止する。一致した場合だけ、マスク済み本文を
+一時ファイルへ保存し、次を実行する。
 
 ```bash
 gh issue create \
@@ -276,8 +295,15 @@ exit code が 0 で、標準出力から当該 issue URL を取得できた場�
 terminator を連結して構成する。置換直前に現在のファイル全体が保持した snapshot と同一であることを
 再確認し、不一致なら置換せず停止する。
 
-1 件の起票またはログ更新が失敗したら後続 entry を起票せず停止する。失敗した entry は
-`recorded` のままにし、成功済み issue の URL、未処理 entry、失敗箇所を報告する。
+1 件の起票またはログ更新が失敗したら後続 entry を起票せず停止する。`gh issue create` が成功した後に
+ログ更新だけが失敗した場合は、その entry を `created-unrecorded` として行番号、作成済み issue URL、
+失敗箇所とともに報告する。同じ entry で `gh issue create` を再実行してはならない。再開時は Step 3 で
+作成済み issue のタイトルとマスク済み本文の完全一致を確認し、既存 issue URL を使う recovery rewrite
+だけを行う。recovery rewrite も current bytes と新しく取得した snapshot の一致、対象 entry の元 JSON
+object 一致、schema、行数、行順、対象外 bytes を通常更新と同じ条件で検証し、成功後は保持状態を進める。
+対応する issue を一意に証明できなければ新規起票もログ更新も行わず停止する。
+
+issue が作成されていない失敗では entry は `recorded` のままとし、未処理 entry と失敗箇所を報告する。
 
 ### Step 6: 完了報告
 

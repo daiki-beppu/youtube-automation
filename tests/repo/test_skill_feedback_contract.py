@@ -161,3 +161,57 @@ def test_skill_stops_following_entries_after_filing_or_rewrite_failure() -> None
 
     assert "1 件の起票またはログ更新が失敗したら後続 entry を起票せず停止する" in skill
     assert "invalid 行と terminal entry は変更しない" in skill
+
+
+def test_skill_advances_snapshot_after_disposition_then_filing_rewrite() -> None:
+    skill = _SKILL_PATH.read_text(encoding="utf-8")
+
+    assert "disposition rewrite の成功後も filing flow の前に最新状態へ進める" in skill
+    assert "最新 snapshot、全行の bytes、未処理 entry の保持値" in skill
+    assert "atomic rewrite が成功するたびに更新する" in skill
+
+
+def test_skill_advances_snapshot_between_multiple_filing_candidates() -> None:
+    skill = _SKILL_PATH.read_text(encoding="utf-8")
+
+    assert "各 filing candidate の atomic rewrite 成功後" in skill
+    assert "次の candidate は更新済みの最新 snapshot を基準に処理する" in skill
+
+
+def test_skill_checks_latest_snapshot_immediately_before_each_issue_creation() -> None:
+    skill = _SKILL_PATH.read_text(encoding="utf-8")
+
+    assert "各 `gh issue create` の直前" in skill
+    assert "current bytes が最新 snapshot と完全一致" in skill
+    assert "コマンドを実行せず fail-closed" in skill
+
+
+def test_skill_blocks_automatic_retry_after_created_issue_rewrite_failure() -> None:
+    skill = _SKILL_PATH.read_text(encoding="utf-8")
+
+    assert "created-unrecorded" in skill
+    assert "同じ entry で `gh issue create` を再実行してはならない" in skill
+    assert "既存 issue URL を使う recovery rewrite" in skill
+
+
+def test_schema_invalid_warning_excludes_secret_like_instance_data() -> None:
+    skill = _SKILL_PATH.read_text(encoding="utf-8")
+    secret_like_invalid_value = "sk-live-contract-secret-value"
+    invalid_entry_fixture = json.dumps(
+        {
+            "date": "2026-08-12T00:00:00Z",
+            "skill": "thumbnail",
+            "category": "bug",
+            "summary": "",
+            "context": secret_like_invalid_value,
+            "status": "recorded",
+        }
+    )
+    expected_warning = "line 7: schema keyword=minLength pointer=/summary"
+
+    assert secret_like_invalid_value in invalid_entry_fixture
+    assert json.loads(invalid_entry_fixture)["summary"] == ""
+    assert secret_like_invalid_value not in expected_warning
+    assert expected_warning in skill
+    assert "error class、schema keyword、JSON pointer、line、column" in skill
+    assert "invalid raw bytes、instance value、validator の raw message" in skill
