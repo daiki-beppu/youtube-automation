@@ -4,11 +4,21 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import is_typeddict
 
 import pytest
 
 from youtube_automation.core.errors import DashboardChannelNotFoundError
-from youtube_automation.infrastructure.analytics.dashboard_read_model import DashboardAPI, build_dashboard_read_model
+from youtube_automation.infrastructure.analytics.dashboard_read_model import (
+    ChannelDetailResponse,
+    ChannelOverviewResponse,
+    DashboardAPI,
+    DashboardReadModel,
+    OverviewResponse,
+    PublicationChannelResponse,
+    PublicationsResponse,
+    build_dashboard_read_model,
+)
 
 
 def _write_channel(channel: Path, *, name: str, snapshots: dict[str, dict]) -> None:
@@ -73,6 +83,52 @@ def _write_publications(
     if error is not None:
         payload["error"] = error
     (channel / "data" / "dashboard_publications.json").write_text(json.dumps(payload), encoding="utf-8")
+
+
+def test_dashboard_api_response_contracts_are_typed_dicts() -> None:
+    assert is_typeddict(DashboardReadModel)
+    assert is_typeddict(OverviewResponse)
+    assert is_typeddict(ChannelOverviewResponse)
+    assert is_typeddict(ChannelDetailResponse)
+    assert is_typeddict(PublicationsResponse)
+    assert is_typeddict(PublicationChannelResponse)
+    assert DashboardReadModel.__required_keys__ == frozenset({"schema_version", "channels", "publications"})
+    assert OverviewResponse.__required_keys__ == frozenset({"schema_version", "channels"})
+    assert ChannelOverviewResponse.__required_keys__ == frozenset(
+        {
+            "id",
+            "name",
+            "status",
+            "snapshot",
+            "collected_at",
+            "period",
+            "scheduled_count",
+            "summary",
+            "error",
+            "refresh_error",
+            "video_count",
+        }
+    )
+    assert ChannelDetailResponse.__required_keys__ == frozenset(
+        {
+            "id",
+            "name",
+            "status",
+            "snapshot",
+            "collected_at",
+            "period",
+            "scheduled_count",
+            "summary",
+            "videos",
+            "error",
+            "refresh_error",
+        }
+    )
+    assert ChannelDetailResponse.__optional_keys__ == frozenset({"workflow_timing"})
+    assert PublicationsResponse.__required_keys__ == frozenset({"days", "channels"})
+    assert PublicationChannelResponse.__required_keys__ == frozenset(
+        {"id", "name", "status", "fetched_at", "timezone", "days", "error"}
+    )
 
 
 def test_read_model_aggregates_publication_days_and_channel_cache_state(tmp_path: Path) -> None:
@@ -501,3 +557,38 @@ def test_dashboard_api_filters_non_object_channels_and_non_list_videos() -> None
 
     assert api.overview()["channels"] == [{"id": "valid", "name": "Valid", "video_count": 0}]
     assert api.channel("valid")["videos"] == []
+
+
+def test_dashboard_api_preserves_channel_without_refresh_error() -> None:
+    channel = {
+        "id": "legacy",
+        "name": "Legacy",
+        "status": "ready",
+        "snapshot": None,
+        "collected_at": None,
+        "period": {"start_date": None, "end_date": None},
+        "scheduled_count": None,
+        "summary": None,
+        "videos": [],
+        "error": None,
+    }
+    api = DashboardAPI({"schema_version": 1, "channels": [channel]})
+
+    assert api.overview() == {
+        "schema_version": 1,
+        "channels": [
+            {
+                "id": "legacy",
+                "name": "Legacy",
+                "status": "ready",
+                "snapshot": None,
+                "collected_at": None,
+                "period": {"start_date": None, "end_date": None},
+                "scheduled_count": None,
+                "summary": None,
+                "error": None,
+                "video_count": 0,
+            }
+        ],
+    }
+    assert api.channel("legacy") == channel

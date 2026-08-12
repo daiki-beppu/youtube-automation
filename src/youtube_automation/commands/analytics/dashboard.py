@@ -7,7 +7,7 @@ import json
 import logging
 import mimetypes
 import webbrowser
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.resources import files
@@ -69,7 +69,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
     def log_message(self, format: str, *args: object) -> None:
         return None
 
-    def _json(self, status: HTTPStatus, payload: dict[str, object]) -> None:
+    def _json(self, status: HTTPStatus, payload: Mapping[str, object]) -> None:
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -86,7 +86,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             self._json(HTTPStatus.OK, self.server.api.overview())
             return True
         if path == "/api/publications":
-            self._json(HTTPStatus.OK, cast(dict[str, object], self.server.api.model["publications"]))
+            self._json(HTTPStatus.OK, self.server.api.model["publications"])
             return True
         prefix = "/api/channels/"
         if path.startswith(prefix):

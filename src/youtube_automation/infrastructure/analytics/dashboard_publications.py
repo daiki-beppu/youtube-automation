@@ -6,15 +6,32 @@ import json
 import os
 import tempfile
 from collections import Counter
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
-from typing import cast
+from typing import TypedDict, cast
 from zoneinfo import ZoneInfo
 
 SCHEMA_VERSION = 1
 ROLLING_WINDOW_DAYS = 365
 CACHE_MAX_AGE = timedelta(hours=24)
+
+
+class DashboardPublicationError(TypedDict):
+    code: str
+    message: str
+    attempted_at: str
+
+
+class DashboardPublicationsRequired(TypedDict):
+    schema_version: int
+    fetched_at: str
+    timezone: str
+    days: dict[str, int]
+
+
+class DashboardPublications(DashboardPublicationsRequired, total=False):
+    error: DashboardPublicationError
 
 
 def _parse_timestamp(value: str, *, field_name: str) -> datetime:
@@ -24,7 +41,7 @@ def _parse_timestamp(value: str, *, field_name: str) -> datetime:
     return timestamp.astimezone(UTC)
 
 
-def _validate_payload(value: object) -> dict[str, object] | None:
+def _validate_payload(value: object) -> DashboardPublications | None:
     if not isinstance(value, dict) or not all(isinstance(key, str) for key in value):
         return None
     schema_version = value.get("schema_version")
@@ -37,18 +54,21 @@ def _validate_payload(value: object) -> dict[str, object] | None:
     if not isinstance(fetched_at, str) or not isinstance(timezone, str) or not isinstance(days, dict):
         return None
     error = value.get("error")
+    error_attempted_at: str | None = None
     if "error" in value:
         if not isinstance(error, dict):
             return None
         if not isinstance(error.get("code"), str) or not isinstance(error.get("message"), str):
             return None
-        if not isinstance(error.get("attempted_at"), str):
+        attempted_at_value = error.get("attempted_at")
+        if not isinstance(attempted_at_value, str):
             return None
+        error_attempted_at = attempted_at_value
 
     try:
         _parse_timestamp(fetched_at, field_name="fetched_at")
-        if "error" in value:
-            _parse_timestamp(cast(str, error["attempted_at"]), field_name="error.attempted_at")
+        if error_attempted_at is not None:
+            _parse_timestamp(error_attempted_at, field_name="error.attempted_at")
         ZoneInfo(timezone)
         for local_day, count in days.items():
             if not isinstance(local_day, str) or type(count) is not int or count < 0:
@@ -56,7 +76,7 @@ def _validate_payload(value: object) -> dict[str, object] | None:
             date.fromisoformat(local_day)
     except (ValueError, KeyError):
         return None
-    return cast(dict[str, object], value)
+    return cast(DashboardPublications, value)
 
 
 def build_dashboard_publications(
@@ -64,7 +84,7 @@ def build_dashboard_publications(
     *,
     timezone: str,
     fetched_at: datetime,
-) -> dict[str, object]:
+) -> DashboardPublications:
     """公開日時を rolling 365 日のローカル暦日別件数へ変換する。"""
     if fetched_at.tzinfo is None:
         raise ValueError("fetched_at は timezone-aware datetime でなければなりません")
@@ -80,15 +100,15 @@ def build_dashboard_publications(
             local_day = published_at.astimezone(local_timezone).date().isoformat()
             counts[local_day] += 1
 
-    return {
-        "schema_version": SCHEMA_VERSION,
-        "fetched_at": fetched_at_utc.isoformat(),
-        "timezone": timezone,
-        "days": dict(sorted(counts.items())),
-    }
+    return DashboardPublications(
+        schema_version=SCHEMA_VERSION,
+        fetched_at=fetched_at_utc.isoformat(),
+        timezone=timezone,
+        days=dict(sorted(counts.items())),
+    )
 
 
-def load_dashboard_publications(source: Path) -> dict[str, object] | None:
+def load_dashboard_publications(source: Path) -> DashboardPublications | None:
     """鮮度に関係なく有効な公開履歴 cache を返す。"""
     try:
         value: object = json.loads(source.read_text(encoding="utf-8"))
@@ -97,7 +117,7 @@ def load_dashboard_publications(source: Path) -> dict[str, object] | None:
     return _validate_payload(value)
 
 
-def load_fresh_dashboard_publications(source: Path, *, now: datetime) -> dict[str, object] | None:
+def load_fresh_dashboard_publications(source: Path, *, now: datetime) -> DashboardPublications | None:
     """有効かつ取得から24時間以内の公開履歴 cache を返す。"""
     if now.tzinfo is None:
         raise ValueError("now は timezone-aware datetime でなければなりません")
@@ -106,7 +126,7 @@ def load_fresh_dashboard_publications(source: Path, *, now: datetime) -> dict[st
     if payload is None:
         return None
 
-    fetched_at = _parse_timestamp(cast(str, payload["fetched_at"]), field_name="fetched_at")
+    fetched_at = _parse_timestamp(payload["fetched_at"], field_name="fetched_at")
     age = now.astimezone(UTC) - fetched_at
     if age < timedelta(0) or age > CACHE_MAX_AGE:
         return None
@@ -114,29 +134,29 @@ def load_fresh_dashboard_publications(source: Path, *, now: datetime) -> dict[st
 
 
 def with_dashboard_publication_error(
-    payload: dict[str, object],
+    payload: Mapping[str, object],
     *,
     code: str,
     message: str,
     attempted_at: datetime,
-) -> dict[str, object]:
+) -> DashboardPublications:
     """公開履歴の前回値を維持して構造化された更新失敗を付与する。"""
-    if _validate_payload(payload) is None:
+    validated = _validate_payload(payload)
+    if validated is None:
         raise ValueError("有効な公開履歴 payload が必要です")
     if attempted_at.tzinfo is None:
         raise ValueError("attempted_at は timezone-aware datetime でなければなりません")
 
-    return {
-        **payload,
-        "error": {
-            "code": code,
-            "message": message,
-            "attempted_at": attempted_at.astimezone(UTC).isoformat(),
-        },
-    }
+    result = validated.copy()
+    result["error"] = DashboardPublicationError(
+        code=code,
+        message=message,
+        attempted_at=attempted_at.astimezone(UTC).isoformat(),
+    )
+    return result
 
 
-def save_dashboard_publications(destination: Path, payload: dict[str, object]) -> None:
+def save_dashboard_publications(destination: Path, payload: Mapping[str, object]) -> None:
     """同一ディレクトリの一時ファイルを置換して payload を原子的に保存する。"""
     descriptor, temporary_name = tempfile.mkstemp(
         dir=destination.parent,

@@ -2,11 +2,13 @@ import json
 import os
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import is_typeddict
 
 import pytest
 
 from youtube_automation.infrastructure.analytics import dashboard_publications
 from youtube_automation.infrastructure.analytics.dashboard_publications import (
+    DashboardPublications,
     build_dashboard_publications,
     load_dashboard_publications,
     load_fresh_dashboard_publications,
@@ -22,6 +24,12 @@ def _publication_payload(fetched_at: str) -> dict[str, object]:
         "timezone": "UTC",
         "days": {"2026-08-08": 2},
     }
+
+
+def test_dashboard_publications_response_contract_is_a_typed_dict() -> None:
+    assert is_typeddict(DashboardPublications)
+    assert DashboardPublications.__required_keys__ == frozenset({"schema_version", "fetched_at", "timezone", "days"})
+    assert DashboardPublications.__optional_keys__ == frozenset({"error"})
 
 
 def test_build_dashboard_publications_groups_by_local_calendar_day() -> None:

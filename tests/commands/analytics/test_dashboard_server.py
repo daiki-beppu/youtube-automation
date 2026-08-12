@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import threading
+from datetime import UTC, datetime
 from pathlib import Path
 from urllib.error import HTTPError
 from urllib.request import urlopen
@@ -9,6 +10,11 @@ from urllib.request import urlopen
 import pytest
 
 from youtube_automation.commands.analytics.dashboard import create_server, main
+from youtube_automation.infrastructure.analytics.dashboard_publications import (
+    build_dashboard_publications,
+    save_dashboard_publications,
+    with_dashboard_publication_error,
+)
 
 
 def _write_channel(root: Path) -> Path:
@@ -58,22 +64,18 @@ def _write_channel(root: Path) -> Path:
         ),
         encoding="utf-8",
     )
-    (channel / "data" / "dashboard_publications.json").write_text(
-        json.dumps(
-            {
-                "schema_version": 1,
-                "fetched_at": "2026-07-20T13:00:00+00:00",
-                "timezone": "Asia/Tokyo",
-                "days": {"2026-07-20": 2},
-                "error": {
-                    "code": "publication_refresh_failed",
-                    "message": "quota exceeded",
-                    "attempted_at": "2026-07-20T14:00:00+00:00",
-                },
-            }
-        ),
-        encoding="utf-8",
+    publications = build_dashboard_publications(
+        ["2026-07-20T04:00:00Z", "2026-07-20T05:00:00Z"],
+        timezone="Asia/Tokyo",
+        fetched_at=datetime(2026, 7, 20, 13, tzinfo=UTC),
     )
+    publications_with_error = with_dashboard_publication_error(
+        publications,
+        code="publication_refresh_failed",
+        message="quota exceeded",
+        attempted_at=datetime(2026, 7, 20, 14, tzinfo=UTC),
+    )
+    save_dashboard_publications(channel / "data" / "dashboard_publications.json", publications_with_error)
     active = channel / "collections" / "planning" / "active"
     active.mkdir(parents=True)
     (active / "workflow-state.json").write_text(
@@ -165,6 +167,57 @@ def dashboard_server(tmp_path: Path):
 def _json(url: str) -> tuple[int, dict[str, object]]:
     with urlopen(url, timeout=5) as response:
         return response.status, json.loads(response.read())
+
+
+def _response_bytes(url: str) -> bytes:
+    with urlopen(url, timeout=5) as response:
+        assert response.status == 200
+        return response.read()
+
+
+def test_server_api_json_bytes_match_production_builder_golden(dashboard_server: str) -> None:
+    overview = _response_bytes(f"{dashboard_server}/api/channels")
+    channel_id = json.loads(overview)["channels"][0]["id"]
+    detail = _response_bytes(f"{dashboard_server}/api/channels/{channel_id}")
+    publications = _response_bytes(f"{dashboard_server}/api/publications")
+    channel_id_bytes = channel_id.encode("utf-8")
+
+    assert overview.replace(channel_id_bytes, b"<channel-id>") == (
+        b'{"schema_version": 2, "channels": [{"id": "<channel-id>", "name": "Night Drive", '
+        b'"status": "ready", "snapshot": "analytics_data_2026-07-20.json", '
+        b'"collected_at": "2026-07-20T12:00:00Z", "period": {"start_date": null, "end_date": null}, '
+        b'"scheduled_count": null, "summary": {"views": 123, "watch_time_minutes": 0, '
+        b'"subscribers_net": 0, "engagements": 0, "average_view_percentage": 0}, "error": null, '
+        b'"refresh_error": null, "video_count": 1}]}'
+    )
+    assert detail.replace(channel_id_bytes, b"<channel-id>") == (
+        b'{"id": "<channel-id>", "name": "Night Drive", "status": "ready", '
+        b'"snapshot": "analytics_data_2026-07-20.json", "collected_at": "2026-07-20T12:00:00Z", '
+        b'"period": {"start_date": null, "end_date": null}, "scheduled_count": null, '
+        b'"summary": {"views": 123, "watch_time_minutes": 0, "subscribers_net": 0, "engagements": 0, '
+        b'"average_view_percentage": 0}, "videos": [{"video_id": "video-1", "title": "Midnight", '
+        b'"views": 123, "impressions": 0, "ctr_percentage": 0, "likes": 0, "comments": 0, "shares": 0, '
+        b'"subscribers_gained": 0, "average_view_duration_seconds": 0, "engagements": 0}], "error": null, '
+        b'"refresh_error": null, "workflow_timing": {"status": "ready", "collections": '
+        b'[{"collection_id": "active", "stage": "planning", "steps": [{"action": "wf-next", '
+        b'"status": "success", "manual_baseline_seconds": 60.0, "ai_seconds": 10.0, '
+        b'"human_seconds": 5.0, "work_seconds": 15.0, "ai_inclusive_saved_seconds": 45.0, '
+        b'"human_freed_seconds": 55.0}], "totals": {"manual_baseline_seconds": 60.0, "ai_seconds": 10.0, '
+        b'"human_seconds": 5.0, "work_seconds": 15.0, "ai_inclusive_saved_seconds": 45.0, '
+        b'"human_freed_seconds": 55.0}}, {"collection_id": "latest", "stage": "live", "steps": '
+        b'[{"action": "post-publish", "status": "success", "manual_baseline_seconds": 120.0, '
+        b'"ai_seconds": 20.0, "human_seconds": 10.0, "work_seconds": 30.0, '
+        b'"ai_inclusive_saved_seconds": 90.0, "human_freed_seconds": 110.0}], "totals": '
+        b'{"manual_baseline_seconds": 120.0, "ai_seconds": 20.0, "human_seconds": 10.0, '
+        b'"work_seconds": 30.0, "ai_inclusive_saved_seconds": 90.0, "human_freed_seconds": 110.0}}]}}'
+    )
+    assert publications.replace(channel_id_bytes, b"<channel-id>") == (
+        b'{"days": {"2026-07-20": 2}, "channels": [{"id": "<channel-id>", "name": "Night Drive", '
+        b'"status": "refresh_failed", "fetched_at": "2026-07-20T13:00:00+00:00", '
+        b'"timezone": "Asia/Tokyo", "days": {"2026-07-20": 2}, "error": '
+        b'{"code": "publication_refresh_failed", "message": "quota exceeded", '
+        b'"attempted_at": "2026-07-20T14:00:00+00:00"}}]}'
+    )
 
 
 def test_server_exposes_overview_and_channel_detail(dashboard_server: str):
