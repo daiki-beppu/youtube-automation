@@ -76,8 +76,8 @@ _FILE_CHECK_IDS = {
     "auth/token.json": "oauth_token",
 }
 _BRANDING_ARTIFACTS = {
-    "branding/icon.*": ({".png": "PNG"}, 1.0, 4 * 1024 * 1024),
-    "branding/banner.*": ({".png": "PNG", ".jpg": "JPEG", ".jpeg": "JPEG"}, 16 / 9, 6 * 1024 * 1024),
+    "branding/icon.*": ({".png": "PNG"}, (1, 1), 4 * 1024 * 1024),
+    "branding/banner.*": ({".png": "PNG", ".jpg": "JPEG", ".jpeg": "JPEG"}, (16, 9), 6 * 1024 * 1024),
 }
 _STEP_KEYS = frozenset({"id", "skill", "prerequisiteArtifacts", "outputArtifacts", "approvalGate", "idempotency"})
 
@@ -182,20 +182,49 @@ def _check_map(checks: list[doctor.CheckResult]) -> dict[str, str]:
     return statuses
 
 
-def _git_status(root: Path) -> str:
-    result = subprocess.run(
-        ["git", "status", "--porcelain", "--untracked-files=all"],
+def _run_git(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["git", *args],
         cwd=root,
         text=True,
         capture_output=True,
         check=False,
     )
-    if result.returncode != 0:
+
+
+def _artifact_committed(root: Path, artifact: str) -> bool:
+    if artifact.startswith(("doctor:", "git:")):
+        return True
+    if artifact in _BRANDING_ARTIFACTS:
+        formats, ratio, max_size = _BRANDING_ARTIFACTS[artifact]
+        candidates = [path for path in root.glob(artifact) if _valid_branding_image(path, formats, ratio, max_size)]
+    else:
+        candidates = [root / artifact]
+    return any(
+        _run_git(root, "cat-file", "-e", f"HEAD:{path.relative_to(root).as_posix()}").returncode == 0
+        for path in candidates
+    )
+
+
+def _git_status(root: Path, artifacts: list[str]) -> str:
+    top_level = _run_git(root, "rev-parse", "--show-toplevel")
+    if top_level.returncode != 0:
         return "missing"
-    return "ready" if not result.stdout else "dirty"
+    if Path(top_level.stdout.strip()).resolve() != root:
+        return "root_mismatch"
+    if _run_git(root, "rev-parse", "--verify", "HEAD").returncode != 0:
+        return "unborn"
+    status = _run_git(root, "status", "--porcelain", "--untracked-files=all")
+    if status.returncode != 0:
+        return "missing"
+    if status.stdout:
+        return "dirty"
+    if not all(_artifact_committed(root, artifact) for artifact in artifacts):
+        return "unsaved"
+    return "ready"
 
 
-def _valid_branding_image(path: Path, formats: dict[str, str], expected_ratio: float, max_size: int) -> bool:
+def _valid_branding_image(path: Path, formats: dict[str, str], ratio: tuple[int, int], max_size: int) -> bool:
     try:
         metadata = path.lstat()
         if path.is_symlink() or not stat.S_ISREG(metadata.st_mode) or metadata.st_size == 0:
@@ -213,13 +242,14 @@ def _valid_branding_image(path: Path, formats: dict[str, str], expected_ratio: f
         return False
     if actual_format != expected_format or width <= 0 or height <= 0:
         return False
-    return abs(width / height - expected_ratio) <= 0.03
+    ratio_width, ratio_height = ratio
+    return width * ratio_height == height * ratio_width
 
 
 def _branding_status(root: Path, artifact: str) -> str:
-    formats, expected_ratio, max_size = _BRANDING_ARTIFACTS[artifact]
+    formats, ratio, max_size = _BRANDING_ARTIFACTS[artifact]
     candidates = sorted(root.glob(artifact))
-    if any(_valid_branding_image(path, formats, expected_ratio, max_size) for path in candidates):
+    if any(_valid_branding_image(path, formats, ratio, max_size) for path in candidates):
         return "ready"
     return "invalid" if candidates else "missing"
 
@@ -231,7 +261,7 @@ def _artifact_payload(root: Path, statuses: dict[str, str], artifacts: list[str]
             check_status = statuses.get(artifact.removeprefix("doctor:"), "missing")
             status = "ready" if check_status == "ok" else check_status
         elif artifact == "git:clean":
-            status = _git_status(root)
+            status = _git_status(root, artifacts)
         elif artifact in _BRANDING_ARTIFACTS:
             status = _branding_status(root, artifact)
         else:

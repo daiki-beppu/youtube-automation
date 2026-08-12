@@ -124,6 +124,98 @@ def test_channel_stays_run_when_initial_save_is_dirty(tmp_path: Path, state: Mod
     assert {item["artifact"] for item in result["artifacts"] if item["status"] != "ready"} == {"git:clean"}
 
 
+def test_channel_does_not_inherit_clean_ancestor_repository(tmp_path: Path, state: ModuleType) -> None:
+    manifest = state.load_manifest(MANIFEST)
+    parent = tmp_path / "parent"
+    channel_root = parent / "channel"
+    parent.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=parent, check=True)
+    (parent / ".gitignore").write_text("channel/\n", encoding="utf-8")
+    subprocess.run(["git", "add", ".gitignore"], cwd=parent, check=True)
+    subprocess.run(
+        ["git", "-c", "user.name=Setup Test", "-c", "user.email=setup@example.invalid", "commit", "-qm", "parent"],
+        cwd=parent,
+        check=True,
+    )
+    tool, channel = manifest["steps"]
+    _write_file_artifacts(channel_root, tool["outputArtifacts"] + channel["outputArtifacts"])
+
+    code, result = state.evaluate(channel_root, _checks(state), manifest, "channel")
+
+    assert code == state.EXIT_RUN
+    assert result["decision"] == "run"
+    assert {item["artifact"]: item["status"] for item in result["artifacts"] if item["status"] != "ready"} == {
+        "git:clean": "root_mismatch"
+    }
+
+
+def test_channel_does_not_treat_unborn_repository_as_saved(tmp_path: Path, state: ModuleType) -> None:
+    manifest = state.load_manifest(MANIFEST)
+    tool, channel = manifest["steps"]
+    _write_file_artifacts(tmp_path, tool["outputArtifacts"] + channel["outputArtifacts"])
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+
+    code, result = state.evaluate(tmp_path, _checks(state), manifest, "channel")
+
+    assert code == state.EXIT_RUN
+    assert result["decision"] == "run"
+    assert {item["artifact"]: item["status"] for item in result["artifacts"] if item["status"] != "ready"} == {
+        "git:clean": "unborn"
+    }
+
+
+def test_channel_does_not_accept_nested_directory_inside_committed_repository(
+    tmp_path: Path, state: ModuleType
+) -> None:
+    manifest = state.load_manifest(MANIFEST)
+    repo = tmp_path / "repo"
+    channel_root = repo / "nested-channel"
+    tool, channel = manifest["steps"]
+    _write_file_artifacts(channel_root, tool["outputArtifacts"] + channel["outputArtifacts"])
+    _commit_workspace(repo)
+
+    code, result = state.evaluate(channel_root, _checks(state), manifest, "channel")
+
+    assert code == state.EXIT_RUN
+    assert result["decision"] == "run"
+    assert {item["artifact"]: item["status"] for item in result["artifacts"] if item["status"] != "ready"} == {
+        "git:clean": "root_mismatch"
+    }
+
+
+def test_channel_does_not_accept_ignored_setup_output_as_saved(tmp_path: Path, state: ModuleType) -> None:
+    manifest = state.load_manifest(MANIFEST)
+    tool, channel = manifest["steps"]
+    _write_file_artifacts(tmp_path, tool["outputArtifacts"] + channel["outputArtifacts"])
+    ignored_output = "config/channel/meta.json"
+    (tmp_path / ".gitignore").write_text(f"/{ignored_output}\n", encoding="utf-8")
+    _commit_workspace(tmp_path)
+
+    code, result = state.evaluate(tmp_path, _checks(state), manifest, "channel")
+
+    assert code == state.EXIT_RUN
+    assert result["decision"] == "run"
+    assert {item["artifact"]: item["status"] for item in result["artifacts"] if item["status"] != "ready"} == {
+        "git:clean": "unsaved"
+    }
+
+
+def test_channel_does_not_accept_untracked_file_after_initial_save(tmp_path: Path, state: ModuleType) -> None:
+    manifest = state.load_manifest(MANIFEST)
+    tool, channel = manifest["steps"]
+    _write_file_artifacts(tmp_path, tool["outputArtifacts"] + channel["outputArtifacts"])
+    _commit_workspace(tmp_path)
+    (tmp_path / "untracked.txt").write_text("not saved\n", encoding="utf-8")
+
+    code, result = state.evaluate(tmp_path, _checks(state), manifest, "channel")
+
+    assert code == state.EXIT_RUN
+    assert result["decision"] == "run"
+    assert {item["artifact"]: item["status"] for item in result["artifacts"] if item["status"] != "ready"} == {
+        "git:clean": "dirty"
+    }
+
+
 @pytest.mark.parametrize("channel_config_status", ["fail", "warn"])
 def test_channel_does_not_skip_when_channel_config_is_unresolved(
     tmp_path: Path, state: ModuleType, channel_config_status: str
@@ -254,7 +346,8 @@ def test_channel_branding_glob_rejects_invalid_matches(
 
     assert code == state.EXIT_RUN
     assert result["decision"] == "run"
-    assert {item["artifact"] for item in result["artifacts"] if item["status"] != "ready"} == {f"branding/{kind}.*"}
+    statuses = {item["artifact"]: item["status"] for item in result["artifacts"]}
+    assert statuses[f"branding/{kind}.*"] == "invalid"
 
 
 @pytest.mark.parametrize(
@@ -283,7 +376,8 @@ def test_channel_branding_glob_rejects_unsupported_valid_image_formats(
 
     assert code == state.EXIT_RUN
     assert result["decision"] == "run"
-    assert {item["artifact"] for item in result["artifacts"] if item["status"] != "ready"} == {f"branding/{kind}.*"}
+    statuses = {item["artifact"]: item["status"] for item in result["artifacts"]}
+    assert statuses[f"branding/{kind}.*"] == "invalid"
 
 
 def test_channel_branding_globs_accept_valid_png_and_jpeg(tmp_path: Path, state: ModuleType) -> None:
@@ -302,6 +396,60 @@ def test_channel_branding_globs_accept_valid_png_and_jpeg(tmp_path: Path, state:
         item["artifact"]: item["status"] for item in result["artifacts"] if item["artifact"].startswith("branding/")
     }
     assert branding == {"branding/icon.*": "ready", "branding/banner.*": "ready"}
+
+
+@pytest.mark.parametrize(
+    ("kind", "size"),
+    [
+        ("icon", (799, 800)),
+        ("icon", (801, 800)),
+        ("banner", (1599, 900)),
+        ("banner", (1601, 900)),
+        ("banner", (1800, 1000)),
+    ],
+)
+def test_channel_branding_rejects_near_ratio_misses(
+    tmp_path: Path, state: ModuleType, kind: str, size: tuple[int, int]
+) -> None:
+    manifest = state.load_manifest(MANIFEST)
+    tool, channel = manifest["steps"]
+    _write_file_artifacts(tmp_path, tool["outputArtifacts"] + channel["outputArtifacts"])
+    PILImage.new("RGB", size, color=(40, 80, 120)).save(tmp_path / "branding" / f"{kind}.png", format="PNG")
+    _commit_workspace(tmp_path)
+
+    code, result = state.evaluate(tmp_path, _checks(state), manifest, "channel")
+
+    assert code == state.EXIT_RUN
+    assert result["decision"] == "run"
+    statuses = {item["artifact"]: item["status"] for item in result["artifacts"]}
+    assert statuses[f"branding/{kind}.*"] == "invalid"
+
+
+@pytest.mark.parametrize(
+    ("icon_size", "banner_size"),
+    [
+        ((64, 64), (16, 9)),
+        ((800, 800), (2048, 1152)),
+        ((1200, 1200), (2560, 1440)),
+    ],
+)
+def test_channel_branding_accepts_exact_ratio_at_multiple_resolutions(
+    tmp_path: Path,
+    state: ModuleType,
+    icon_size: tuple[int, int],
+    banner_size: tuple[int, int],
+) -> None:
+    manifest = state.load_manifest(MANIFEST)
+    tool, channel = manifest["steps"]
+    _write_file_artifacts(tmp_path, tool["outputArtifacts"] + channel["outputArtifacts"])
+    PILImage.new("RGB", icon_size, color=(40, 80, 120)).save(tmp_path / "branding" / "icon.png", format="PNG")
+    PILImage.new("RGB", banner_size, color=(120, 80, 40)).save(tmp_path / "branding" / "banner.png", format="PNG")
+    _commit_workspace(tmp_path)
+
+    code, result = state.evaluate(tmp_path, _checks(state), manifest, "channel")
+
+    assert code == state.EXIT_SKIP
+    assert result["decision"] == "skip"
 
 
 def test_unrelated_informational_doctor_check_does_not_change_tool_decision(tmp_path: Path, state: ModuleType) -> None:
