@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `refactor(core)`: consumer 移行済みの browser / google.youtube / google.upload wildcard facade を削除し、provider-neutral な authoritative infrastructure module を唯一の import owner にする（#3965）。
 - `refactor(core)`: consumer 移行済みの filesystem / process / quota wildcard facade を削除し、provider-neutral な authoritative infrastructure module を唯一の import owner にする（#3964）。
 - `refactor(core)`: consumer 移行済みの `core.adapters.errors` 自己 re-export を削除し、ドメイン例外の canonical owner を `core.errors` のみに統一する（#3963）。
 - `refactor(youtube)`: youtube domain の wildcard facade consumer import を authoritative owner の `core.errors` と provider-neutral な `infrastructure` module へ移行し、例外・object identity と channel seed/settings/listing の成功・失敗時挙動を維持する（#3962）。
