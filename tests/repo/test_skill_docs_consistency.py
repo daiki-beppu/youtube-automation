@@ -343,6 +343,7 @@ def test_setup_channel_ttp_hearing_routes_direction_to_residual_mode() -> None:
 
     viewer_voice = _read(".claude/skills/viewer-voice/SKILL.md")
     assert "新規開設モードでは Step 7 の必須前工程" in viewer_voice
+    assert "その互換入口である `/channel-new` の新規開設モードでも同じ契約を適用する" in viewer_voice
     assert "公開後の再分析では" in viewer_voice
     assert "標準フローでは実行せず" not in viewer_voice
 

@@ -70,7 +70,7 @@ def _channel_new_opening_routing_violations(markdown: str) -> set[str]:
     frontmatter = yaml.safe_load(markdown.split("---", 2)[1])
     description = frontmatter["description"]
     routing = markdown.split("## モード判別", 1)[1].split("## 外部データの扱い", 1)[0]
-    opening_triggers = ("チャンネル追加", "新チャンネル", "チャンネル開設")
+    opening_triggers = ("チャンネル追加", "新チャンネル", "新規チャンネル", "チャンネル開設")
     violations = {f"description trigger:{trigger}" for trigger in opening_triggers if trigger in description}
     violations.update(f"rejection context:{trigger}" for trigger in opening_triggers if trigger not in routing)
     if "`/setup --channel` を案内して停止する" not in routing:
@@ -81,9 +81,15 @@ def _channel_new_opening_routing_violations(markdown: str) -> set[str]:
         "## 完了条件（新規開設モード）",
         "1. **新規開設モード**（Step 1〜10）",
         "## Instructions（新規開設モード）",
+        "## TTP 原則",
     ):
         if marker in markdown:
             violations.add(f"opening execution:{marker}")
+    for heading in re.findall(r"^#{2,4}\s+(Step\s+(?:[1-9]|10)(?=[:：.\s]).*)$", markdown, re.MULTILINE):
+        violations.add(f"opening step:{heading}")
+    for command in ("yt-channel-init", "yt-channel-seed", "derive_ttp_duration.py", "initial_save_guard.sh"):
+        if re.search(rf"(?m)^\s*(?:uv run )?[^\n`]*{re.escape(command)}(?:\s|`|$)", markdown):
+            violations.add(f"opening command:{command}")
     for path in (
         "../setup/references/new-channel-bootstrap.md",
         "../setup/references/ttp-seed-and-duration.md",
@@ -409,10 +415,44 @@ def test_channel_new_opening_rejection_detects_trigger_route_write_and_execution
             "## Instructions（新規開設モード）\n\n## 外部データの扱い",
             1,
         ),
+        "opening step:Step 1: TTP ヒアリング": source.replace(
+            "## 外部データの扱い",
+            "### Step 1: TTP ヒアリング\n\nTTP 対象を確認する。\n\n## 外部データの扱い",
+            1,
+        ),
+        "opening command:yt-channel-init": source.replace(
+            "## 外部データの扱い",
+            "### Step 4: フルパッケージ config / 初期運用ファイル生成\n\n"
+            "```bash\nuv run yt-channel-init\n```\n\n## 外部データの扱い",
+            1,
+        ),
     }
 
     for expected, mutated in mutations.items():
         assert expected in _channel_new_opening_routing_violations(mutated)
+
+
+def test_channel_new_opening_rejection_detects_reviewer_combined_counterexample() -> None:
+    source = CHANNEL_NEW_SKILL_MD.read_text(encoding="utf-8")
+    mutated = source.replace(
+        'description: "Use when ',
+        'description: "Use when 新規チャンネルを開設するとき、',
+        1,
+    ).replace(
+        "## 外部データの扱い",
+        "### Step 1: TTP ヒアリング\n\n"
+        "### Step 4: フルパッケージ config / 初期運用ファイル生成\n\n"
+        "```bash\nuv run yt-channel-init\n```\n\n"
+        "## 外部データの扱い",
+        1,
+    )
+
+    assert _channel_new_opening_routing_violations(mutated) >= {
+        "description trigger:新規チャンネル",
+        "opening step:Step 1: TTP ヒアリング",
+        "opening step:Step 4: フルパッケージ config / 初期運用ファイル生成",
+        "opening command:yt-channel-init",
+    }
 
 
 def test_opening_asset_inventory_detects_real_removal_and_duplicate(tmp_path: Path) -> None:

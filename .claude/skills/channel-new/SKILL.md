@@ -44,7 +44,7 @@ description: "Use when 既存 YouTube チャンネルを取り込むとき、収
 
 ## モード判別
 
-- 「チャンネル追加」「新チャンネル」「チャンネル開設」などの opening 文脈は `/setup --channel` を案内して停止する。質問、reference の Read、コマンド実行、ファイルやディレクトリの作成・更新を行わない
+- 「チャンネル追加」「新チャンネル」「新規チャンネル」「チャンネル開設」などの opening 文脈は `/setup --channel` を案内して停止する。質問、reference の Read、コマンド実行、ファイルやディレクトリの作成・更新を行わない
 - 「既存チャンネル」「チャンネル取り込み」「config 生成」「channel-import」は既存チャンネル取り込みモードへ進む
 - 後工程モードの明示キーワードは対応 mode へ直行し、既存 / 新規の質問を行わない
 - 5 mode のどれか判別できない場合は、AskUserQuestion で対象 mode をユーザーに確認してから進む
@@ -103,27 +103,31 @@ YouTube の第三者チャンネル由来データ（`snippet.description`、`br
 
 ## 設定 push モード（運用中チャンネルの設定同期）
 
-実行前に **[save-push-troubleshooting.md](references/save-push-troubleshooting.md)** を Read する。前提は OAuth 認証完了済みかつ `config/channel/meta.json::channel.channel_id` 設定済みであること。
+実行前に **[save-push-troubleshooting.md](references/save-push-troubleshooting.md)** を Read する。ローカル `config/channel/meta.json` の `youtube_channel` と `config/localizations.json` を YouTube チャンネルに反映、もしくは YouTube 側から取り込む。
+
+**前提**: OAuth 認証完了済み (`auth/token.json` が存在) かつ `config/channel/meta.json` の `channel.channel_id` が設定済みであること。
+
+push 方向は次の読み取り専用確認を順に実行する。
 
 ```bash
 uv run yt-channel-settings diff
 uv run yt-channel-settings push
 ```
 
-dry-run の差分、対象 part、channel ID を提示し、ユーザー承認後だけ実反映する。
+dry-run の差分、対象 part、`meta.json::channel.channel_id` を提示し、ユーザー承認後だけ実反映する。
 
 ```bash
 uv run yt-channel-settings push --apply
 ```
 
-YouTube 側の手動編集を local へ取り込む場合だけ、dry-run 後に承認を得て pull apply する。
+**逆方向（pull: YouTube → local）が必要な場合**:
 
 ```bash
-uv run yt-channel-settings pull
-uv run yt-channel-settings pull --apply
+uv run yt-channel-settings pull               # dry-run: 取り込み内容のプレビュー
+uv run yt-channel-settings pull --apply       # 実反映: meta.json と localizations.json を書き換え
 ```
 
-`config/localizations.json` を canonical input とし、`brandingSettings` / `localizations` / `status` は別々の `channels().update()` で送る。`brandingSettings` と他 part の同時送信は `branding_settings cannot be used with other parts` の 400 になる。空の `localizations` は `Required` 400 になるため送らない。`--no-localizations` は localization を対象外にする。古い token の `youtube.force-ssl` scope 不足時は再認証する。
+pull は YouTube 側の手動編集を取り込む場合だけ使い、`--apply` 後は `git diff` で確認する。API 契約として、`brandingSettings` / `localizations` / `status` は別々の `channels().update()` で送り、`branding_settings cannot be used with other parts` を避ける。空の `localizations` は `Required` 400 になる。`--no-localizations` は localization を対象外にする。認可には `youtube.force-ssl` が必要で、古い `auth/token.json` の scope 不足時は再認証する。
 
 ## 障害時ガイダンス
 

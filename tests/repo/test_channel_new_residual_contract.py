@@ -39,7 +39,7 @@ SHARED_ASSET_SHA256 = {
     "schedule-template.json": "2e950062bef269cea670d219024528e06079697997f9c59f244cebdf6a6f3026",
     "verification.md": "9d1a2ffe02a4dfd7e229adc005054c550fb9a2dc3c5a1466a2db8ce3a0d6871f",
 }
-SETTINGS_PUSH_SHA256 = "0be75096963bbd3b74e99bca04b651bf5d3964025ebe05921ab17b260b05c1ef"
+SETTINGS_PUSH_SHA256 = "86d216c837df6939f8c88676605112f473c268ebc41808d43539d9876ef0fedf"
 
 
 def _asset_digest(path: Path) -> str:
@@ -130,8 +130,8 @@ def test_settings_push_contract_is_byte_exact_and_requires_review_before_apply()
     push_dry_run = settings_mode.index("uv run yt-channel-settings push", diff)
     approval = settings_mode.index("ユーザー承認", push_dry_run)
     push_apply = settings_mode.index("uv run yt-channel-settings push --apply", approval)
-    pull_approval = settings_mode.index("dry-run 後に承認", push_apply)
     pull_dry_run = settings_mode.index("uv run yt-channel-settings pull", push_apply)
-    pull_apply = settings_mode.index("uv run yt-channel-settings pull --apply", pull_approval)
+    pull_apply = settings_mode.index("uv run yt-channel-settings pull --apply", pull_dry_run)
+    post_pull_diff = settings_mode.index("`--apply` 後は `git diff` で確認する", pull_apply)
 
-    assert diff < push_dry_run < approval < push_apply < pull_approval < pull_dry_run < pull_apply
+    assert diff < push_dry_run < approval < push_apply < pull_dry_run < pull_apply < post_pull_diff
