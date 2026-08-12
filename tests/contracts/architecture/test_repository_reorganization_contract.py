@@ -8,9 +8,12 @@ from __future__ import annotations
 import ast
 import importlib
 import json
+import shutil
 import subprocess
 import sys
+import tarfile
 import tomllib
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -239,6 +242,30 @@ DOMAIN_EXISTING_EXTERNAL_IMPORT_EXCEPTIONS = frozenset(
     }
 )
 
+EXPECTED_CORE_ADAPTER_FILES = frozenset(
+    {
+        "core/adapters/__init__.py",
+        "core/adapters/google/__init__.py",
+        "core/adapters/media.py",
+        "core/adapters/observability.py",
+        "core/adapters/runtime.py",
+        "core/adapters/security.py",
+        "core/adapters/youtube.py",
+    }
+)
+
+CORE_ADAPTER_DOC_START = "<!-- core-adapter-surface:start -->"
+CORE_ADAPTER_DOC_END = "<!-- core-adapter-surface:end -->"
+
+
+def test_core_adapter_source_surface_is_exact() -> None:
+    # Given: #3895 後に保持する明示 adapter と package file の最終集合
+    # When: source tree の adapter member を file type に関係なく列挙する
+    actual = _core_adapter_source_files(SRC)
+
+    # Then: file の追加・削除をどちらも許可しない
+    assert actual == EXPECTED_CORE_ADAPTER_FILES
+
 
 def _receipt() -> dict[str, object]:
     return json.loads(RECEIPT.read_text(encoding="utf-8"))
@@ -326,6 +353,38 @@ def _imports(path: Path, source_root: Path = SRC) -> set[str]:
                     imports.add(candidate)
                 else:
                     imports.add(module_name)
+    imports.update(imported for _, imported in _literal_dynamic_imports(tree))
+    return imports
+
+
+def _literal_dynamic_imports(tree: ast.AST) -> list[tuple[int, str]]:
+    importlib_bindings: set[str] = set()
+    import_module_bindings: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            importlib_bindings.update(alias.asname or "importlib" for alias in node.names if alias.name == "importlib")
+        elif isinstance(node, ast.ImportFrom) and node.module == "importlib":
+            import_module_bindings.update(
+                alias.asname or alias.name for alias in node.names if alias.name == "import_module"
+            )
+
+    imports: list[tuple[int, str]] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or not node.args:
+            continue
+        module = node.args[0]
+        if not isinstance(module, ast.Constant) or not isinstance(module.value, str):
+            continue
+        builtin_loader = isinstance(node.func, ast.Name) and node.func.id == "__import__"
+        direct_loader = isinstance(node.func, ast.Name) and node.func.id in import_module_bindings
+        module_loader = (
+            isinstance(node.func, ast.Attribute)
+            and node.func.attr == "import_module"
+            and isinstance(node.func.value, ast.Name)
+            and node.func.value.id in importlib_bindings
+        )
+        if builtin_loader or direct_loader or module_loader:
+            imports.append((node.lineno, module.value))
     return imports
 
 
@@ -357,6 +416,315 @@ def _layer_import_offenders(layer: str, source_root: Path = SRC) -> list[str]:
             if _is_forbidden_layer_import(layer, imported):
                 offenders.append(f"{display_path} -> {imported}")
     return offenders
+
+
+def _core_adapter_source_files(source_root: Path) -> set[str]:
+    adapter_root = source_root / "core" / "adapters"
+    return {
+        path.relative_to(source_root).as_posix()
+        for path in adapter_root.rglob("*")
+        if path.is_file() and "__pycache__" not in path.relative_to(adapter_root).parts
+    }
+
+
+def _core_adapter_surface_offenders(source_root: Path = SRC) -> list[str]:
+    adapter_root = source_root / "core" / "adapters"
+    actual_files = _core_adapter_source_files(source_root)
+    offenders = [f"missing core adapter file: {path}" for path in sorted(EXPECTED_CORE_ADAPTER_FILES - actual_files)]
+    offenders.extend(
+        f"unexpected core adapter file: {path}" for path in sorted(actual_files - EXPECTED_CORE_ADAPTER_FILES)
+    )
+
+    adapter_namespace = "youtube_automation.core.adapters"
+    for path in source_root.rglob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        display_path: str | Path = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path
+        for lineno, imported in _literal_dynamic_imports(tree):
+            if imported == adapter_namespace or imported.startswith(f"{adapter_namespace}."):
+                offenders.append(f"{display_path}:{lineno} -> {imported} dynamic import")
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ImportFrom) or all(alias.name != "*" for alias in node.names):
+                continue
+            imported = _resolve_from_module(node, path, source_root)
+            imports_core_adapter = imported == adapter_namespace or (
+                imported is not None and imported.startswith(f"{adapter_namespace}.")
+            )
+            if path.is_relative_to(adapter_root) or imports_core_adapter:
+                offenders.append(f"{display_path}:{node.lineno} -> {imported or '<relative>'} import *")
+    return offenders
+
+
+def _repository_reorganization_offenders(source_root: Path = SRC) -> list[str]:
+    offenders = _core_adapter_surface_offenders(source_root)
+    for layer in LAYER_FORBIDDEN_IMPORTS:
+        offenders.extend(_layer_import_offenders(layer, source_root))
+    return sorted(offenders)
+
+
+def _mutation_source_root(tmp_path: Path) -> Path:
+    source_root = tmp_path / "youtube_automation"
+    shutil.copytree(SRC / "core" / "adapters", source_root / "core" / "adapters")
+    return source_root
+
+
+def _documented_core_adapter_files() -> frozenset[str]:
+    architecture = (ROOT / "docs" / "architecture.md").read_text(encoding="utf-8")
+    _, separator, remainder = architecture.partition(CORE_ADAPTER_DOC_START)
+    assert separator, f"missing {CORE_ADAPTER_DOC_START}"
+    surface, separator, _ = remainder.partition(CORE_ADAPTER_DOC_END)
+    assert separator, f"missing {CORE_ADAPTER_DOC_END}"
+    return frozenset(
+        line.removeprefix("- `").removesuffix("`")
+        for line in surface.splitlines()
+        if line.startswith("- `src/youtube_automation/core/adapters/") and line.endswith("`")
+    )
+
+
+@pytest.mark.parametrize("allowed_import", sorted(DOMAIN_ALLOWED_INFRASTRUCTURE_IMPORTS))
+def test_repository_scanner_allows_each_provider_neutral_import_mutation(
+    tmp_path: Path,
+    allowed_import: str,
+) -> None:
+    # Given: the frozen adapter surface plus one exact provider-neutral domain import
+    source_root = _mutation_source_root(tmp_path)
+    domain = source_root / "domains" / "probe.py"
+    domain.parent.mkdir(parents=True)
+    domain.write_text(f"import {allowed_import}\n", encoding="utf-8")
+
+    # When: the same scanner used for the real repository evaluates the mutation
+    offenders = _repository_reorganization_offenders(source_root)
+
+    # Then: every enumerated authoritative owner remains allowed
+    assert offenders == []
+
+
+@pytest.mark.parametrize("forbidden_import", DOMAIN_FORBIDDEN_EXTERNAL_IMPORTS)
+def test_repository_scanner_rejects_each_external_import_mutation(
+    tmp_path: Path,
+    forbidden_import: str,
+) -> None:
+    # Given: the frozen adapter surface plus one SDK, auth, network, or process import
+    source_root = _mutation_source_root(tmp_path)
+    domain = source_root / "domains" / "probe.py"
+    domain.parent.mkdir(parents=True)
+    domain.write_text(f"import {forbidden_import}\n", encoding="utf-8")
+
+    # When: the same scanner used for the real repository evaluates the mutation
+    offenders = _repository_reorganization_offenders(source_root)
+
+    # Then: every namespace in the explicit external inventory is rejected
+    assert offenders == [f"{domain} -> {forbidden_import}"]
+
+
+@pytest.mark.parametrize(
+    ("mutation", "expected_offender"),
+    [
+        ("add", "unexpected core adapter file: core/adapters/reintroduced.pyi"),
+        ("remove", "missing core adapter file: core/adapters/security.py"),
+    ],
+)
+def test_repository_scanner_rejects_core_adapter_file_surface_mutations(
+    tmp_path: Path,
+    mutation: str,
+    expected_offender: str,
+) -> None:
+    # Given: one file is added to or removed from the frozen adapter surface
+    source_root = _mutation_source_root(tmp_path)
+    adapter_root = source_root / "core" / "adapters"
+    if mutation == "add":
+        (adapter_root / "reintroduced.pyi").write_text("def reintroduced() -> None: ...\n", encoding="utf-8")
+    else:
+        (adapter_root / "security.py").unlink()
+
+    # When: the production repository scanner evaluates the mutated source tree
+    offenders = _repository_reorganization_offenders(source_root)
+
+    # Then: both additions and removals fail the exact surface contract
+    assert expected_offender in offenders
+
+
+@pytest.mark.parametrize("loader", ["importlib", "builtin"])
+@pytest.mark.parametrize("forbidden_import", DOMAIN_FORBIDDEN_EXTERNAL_IMPORTS)
+def test_repository_scanner_rejects_literal_dynamic_external_import_mutations(
+    tmp_path: Path,
+    loader: str,
+    forbidden_import: str,
+) -> None:
+    # Given: a domain resolves an SDK, auth, network, or process module from a literal
+    source_root = _mutation_source_root(tmp_path)
+    domain = source_root / "domains" / "probe.py"
+    domain.parent.mkdir(parents=True)
+    source = (
+        f'import importlib\nimportlib.import_module("{forbidden_import}")\n'
+        if loader == "importlib"
+        else f'__import__("{forbidden_import}")\n'
+    )
+    domain.write_text(source, encoding="utf-8")
+
+    # When: the production repository scanner resolves literal dynamic imports
+    offenders = _repository_reorganization_offenders(source_root)
+
+    # Then: a dynamic loader cannot bypass the explicit external inventory
+    assert offenders == [f"{domain} -> {forbidden_import}"]
+
+
+@pytest.mark.parametrize("loader", ["importlib", "builtin"])
+def test_repository_scanner_rejects_literal_dynamic_core_adapter_consumers(
+    tmp_path: Path,
+    loader: str,
+) -> None:
+    # Given: a domain dynamically resolves an otherwise explicit core adapter
+    source_root = _mutation_source_root(tmp_path)
+    domain = source_root / "domains" / "probe.py"
+    domain.parent.mkdir(parents=True)
+    adapter_import = "youtube_automation.core.adapters.runtime"
+    source = (
+        f'import importlib\nimportlib.import_module("{adapter_import}")\n'
+        if loader == "importlib"
+        else f'__import__("{adapter_import}")\n'
+    )
+    domain.write_text(source, encoding="utf-8")
+
+    # When: the production repository scanner resolves literal dynamic imports
+    offenders = _repository_reorganization_offenders(source_root)
+
+    # Then: dynamic adapter consumers cannot recreate an opaque facade path
+    assert any(adapter_import in offender and "dynamic import" in offender for offender in offenders)
+
+
+@pytest.mark.parametrize(
+    ("relative_path", "source", "expected_fragment"),
+    [
+        (
+            "core/adapters/reintroduced.py",
+            "from youtube_automation.infrastructure.filesystem import *\n",
+            "youtube_automation.infrastructure.filesystem import *",
+        ),
+        (
+            "core/adapters/runtime.py",
+            "from youtube_automation.infrastructure.runtime import *\n",
+            "youtube_automation.infrastructure.runtime import *",
+        ),
+        (
+            "domains/probe.py",
+            "from youtube_automation.core.adapters.runtime import *\n",
+            "youtube_automation.core.adapters.runtime import *",
+        ),
+    ],
+)
+def test_repository_scanner_rejects_wildcard_facade_and_consumer_mutations(
+    tmp_path: Path,
+    relative_path: str,
+    source: str,
+    expected_fragment: str,
+) -> None:
+    # Given: an import-star facade definition or consumer is reintroduced
+    source_root = _mutation_source_root(tmp_path)
+    mutation = source_root / relative_path
+    mutation.parent.mkdir(parents=True, exist_ok=True)
+    mutation.write_text(source, encoding="utf-8")
+
+    # When: the production repository scanner evaluates the mutation
+    offenders = _repository_reorganization_offenders(source_root)
+
+    # Then: wildcard reintroduction cannot pass through an otherwise allowed boundary
+    assert any(expected_fragment in offender for offender in offenders)
+
+
+def test_architecture_enumerates_the_exact_core_adapter_surface() -> None:
+    # Given: the machine-readable final-surface enumeration in architecture.md
+    # When: documented repository paths are read from the bounded contract section
+    documented = _documented_core_adapter_files()
+
+    # Then: docs and executable source contract enumerate the same files
+    expected = frozenset(f"src/youtube_automation/{path}" for path in EXPECTED_CORE_ADAPTER_FILES)
+    assert documented == expected
+
+
+def _build_distributions(repository_root: Path, dist: Path) -> tuple[Path, Path]:
+    result = subprocess.run(
+        ["uv", "build", "--out-dir", str(dist)],
+        cwd=repository_root,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    wheels = list(dist.glob("*.whl"))
+    sdists = list(dist.glob("*.tar.gz"))
+    assert len(wheels) == 1
+    assert len(sdists) == 1
+    return wheels[0], sdists[0]
+
+
+def _built_core_adapter_surfaces(wheel: Path, sdist: Path) -> tuple[set[str], set[str]]:
+    wheel_prefix = "youtube_automation/core/adapters/"
+    with zipfile.ZipFile(wheel) as archive:
+        wheel_surface = {
+            member for member in archive.namelist() if member.startswith(wheel_prefix) and not member.endswith("/")
+        }
+    sdist_prefix = "src/youtube_automation/core/adapters/"
+    with tarfile.open(sdist) as archive:
+        sdist_surface = set()
+        for member in archive.getmembers():
+            relative = Path(*Path(member.name).parts[1:]).as_posix()
+            if member.isfile() and relative.startswith(sdist_prefix):
+                sdist_surface.add(relative)
+    return wheel_surface, sdist_surface
+
+
+def _built_core_adapter_surface_offenders(wheel: Path, sdist: Path) -> list[str]:
+    wheel_surface, sdist_surface = _built_core_adapter_surfaces(wheel, sdist)
+    expected_wheel = {f"youtube_automation/{path}" for path in EXPECTED_CORE_ADAPTER_FILES}
+    expected_sdist = {f"src/youtube_automation/{path}" for path in EXPECTED_CORE_ADAPTER_FILES}
+    offenders = [f"wheel missing core adapter file: {path}" for path in sorted(expected_wheel - wheel_surface)]
+    offenders.extend(f"wheel unexpected core adapter file: {path}" for path in sorted(wheel_surface - expected_wheel))
+    offenders.extend(f"sdist missing core adapter file: {path}" for path in sorted(expected_sdist - sdist_surface))
+    offenders.extend(f"sdist unexpected core adapter file: {path}" for path in sorted(sdist_surface - expected_sdist))
+    return offenders
+
+
+def test_built_distributions_contain_the_exact_core_adapter_surface(tmp_path: Path) -> None:
+    # Given: wheel and sdist built from the current repository source
+    wheel, sdist = _build_distributions(ROOT, tmp_path / "dist")
+
+    # When: every archive member under core/adapters is checked by the artifact contract
+    offenders = _built_core_adapter_surface_offenders(wheel, sdist)
+
+    # Then: packaging preserves exactly the frozen source surface
+    assert offenders == []
+
+
+def test_non_python_core_adapter_mutation_fails_source_and_built_artifact_contracts(tmp_path: Path) -> None:
+    # Given: a real repository snapshot with an unapproved typed-stub member added
+    repository_root = tmp_path / "repository"
+    repository_root.mkdir()
+    snapshot = subprocess.run(
+        ["git", "archive", "--format=tar", "HEAD"],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+    )
+    snapshot_path = tmp_path / "repository.tar"
+    snapshot_path.write_bytes(snapshot.stdout)
+    with tarfile.open(snapshot_path) as archive:
+        archive.extractall(repository_root, filter="data")
+    source_root = repository_root / "src" / "youtube_automation"
+    mutation = source_root / "core" / "adapters" / "reintroduced.pyi"
+    mutation.write_text("def reintroduced() -> None: ...\n", encoding="utf-8")
+
+    # When: production source and built-artifact contracts inspect the same mutation
+    source_offenders = _repository_reorganization_offenders(source_root)
+    wheel, sdist = _build_distributions(repository_root, tmp_path / "mutated-dist")
+    artifact_offenders = _built_core_adapter_surface_offenders(wheel, sdist)
+
+    # Then: the unapproved file type cannot enter source, wheel, or sdist unnoticed
+    assert "unexpected core adapter file: core/adapters/reintroduced.pyi" in source_offenders
+    assert "wheel unexpected core adapter file: youtube_automation/core/adapters/reintroduced.pyi" in artifact_offenders
+    assert (
+        "sdist unexpected core adapter file: src/youtube_automation/core/adapters/reintroduced.pyi"
+        in artifact_offenders
+    )
 
 
 @pytest.mark.parametrize("allowed_import", sorted(DOMAIN_ALLOWED_INFRASTRUCTURE_IMPORTS))
@@ -424,13 +792,13 @@ def test_domain_layer_external_inventory_does_not_use_broad_or_substring_matches
 
 def test_domain_layer_rejects_broad_parent_from_import_mutation(tmp_path: Path) -> None:
     # Given: a domain imports the broad infrastructure package through an alias
-    source_root = tmp_path / "youtube_automation"
+    source_root = _mutation_source_root(tmp_path)
     domain = source_root / "domains" / "probe.py"
     domain.parent.mkdir(parents=True)
     domain.write_text("from youtube_automation import infrastructure\n", encoding="utf-8")
 
     # When: the production layer scanner resolves the effective import target
-    offenders = _layer_import_offenders("domains", source_root)
+    offenders = _repository_reorganization_offenders(source_root)
 
     # Then: the alias resolves to the forbidden infrastructure package
     assert offenders == [f"{domain} -> youtube_automation.infrastructure"]
@@ -438,13 +806,13 @@ def test_domain_layer_rejects_broad_parent_from_import_mutation(tmp_path: Path) 
 
 def test_domain_layer_rejects_relative_unlisted_from_import_mutation(tmp_path: Path) -> None:
     # Given: a domain reaches an unlisted infrastructure package through a relative import
-    source_root = tmp_path / "youtube_automation"
+    source_root = _mutation_source_root(tmp_path)
     domain = source_root / "domains" / "probe.py"
     domain.parent.mkdir(parents=True)
     domain.write_text("from ..infrastructure import auth\n", encoding="utf-8")
 
     # When: the production layer scanner resolves the relative level and alias
-    offenders = _layer_import_offenders("domains", source_root)
+    offenders = _repository_reorganization_offenders(source_root)
 
     # Then: the effective infrastructure owner remains forbidden
     assert offenders == [f"{domain} -> youtube_automation.infrastructure.auth"]
@@ -452,7 +820,7 @@ def test_domain_layer_rejects_relative_unlisted_from_import_mutation(tmp_path: P
 
 def test_domain_layer_allows_actual_symbol_from_exact_module_mutation(tmp_path: Path) -> None:
     # Given: an exact allowed module defines the symbol imported by a domain
-    source_root = tmp_path / "youtube_automation"
+    source_root = _mutation_source_root(tmp_path)
     filesystem = source_root / "infrastructure" / "filesystem" / "__init__.py"
     filesystem.parent.mkdir(parents=True)
     filesystem.write_text("def path_exists(path):\n    return True\n", encoding="utf-8")
@@ -464,7 +832,7 @@ def test_domain_layer_allows_actual_symbol_from_exact_module_mutation(tmp_path: 
     )
 
     # When: the production layer scanner distinguishes the module from its symbol
-    offenders = _layer_import_offenders("domains", source_root)
+    offenders = _repository_reorganization_offenders(source_root)
 
     # Then: importing an actual symbol from the exact authoritative module is allowed
     assert offenders == []
@@ -472,7 +840,7 @@ def test_domain_layer_allows_actual_symbol_from_exact_module_mutation(tmp_path: 
 
 def test_domain_layer_rejects_child_module_from_allowed_package_mutation(tmp_path: Path) -> None:
     # Given: a domain imports a child module from an otherwise allowed package
-    source_root = tmp_path / "youtube_automation"
+    source_root = _mutation_source_root(tmp_path)
     filesystem = source_root / "infrastructure" / "filesystem" / "__init__.py"
     filesystem.parent.mkdir(parents=True)
     filesystem.write_text("", encoding="utf-8")
@@ -485,7 +853,7 @@ def test_domain_layer_rejects_child_module_from_allowed_package_mutation(tmp_pat
     )
 
     # When: the production layer scanner resolves the alias as a child module
-    offenders = _layer_import_offenders("domains", source_root)
+    offenders = _repository_reorganization_offenders(source_root)
 
     # Then: an allowed package cannot widen the exact allowlist to child modules
     assert offenders == [f"{domain} -> youtube_automation.infrastructure.filesystem.path"]
@@ -526,13 +894,13 @@ def test_domain_layer_rejects_external_import_mutations_outside_uploads(
     forbidden_import: str,
 ) -> None:
     # Given: a non-uploads domain directly imports an external I/O or auth dependency
-    source_root = tmp_path / "youtube_automation"
+    source_root = _mutation_source_root(tmp_path)
     domain = source_root / "domains" / domain_path
     domain.parent.mkdir(parents=True)
     domain.write_text(source, encoding="utf-8")
 
     # When: the central production layer scanner evaluates every domain package
-    offenders = _layer_import_offenders("domains", source_root)
+    offenders = _repository_reorganization_offenders(source_root)
 
     # Then: specialized uploads contracts are not required to reject the edge
     assert offenders == [f"{domain} -> {forbidden_import}"]
@@ -635,12 +1003,12 @@ def test_streaming_healthcheck_describes_the_canonical_daily_archive_owner() -> 
     assert legacy_package_owner not in source
 
 
-def test_canonical_layers_do_not_import_lower_boundary_owners() -> None:
-    # Given: layer ごとの依存方向が再配置後の canonical source で定義される
-    # When: source の import edge を layer 単位で収集する
-    offenders = [offender for layer in LAYER_FORBIDDEN_IMPORTS for offender in _layer_import_offenders(layer)]
+def test_repository_reorganization_scanner_accepts_real_source() -> None:
+    # Given: #3895 後の canonical source tree と最終 adapter surface
+    # When: mutation tests と同じ production repository scanner で全契約を評価する
+    offenders = _repository_reorganization_offenders()
 
-    # Then: CLI、application、domain、infrastructure の責務が逆流しない
+    # Then: layer 依存、adapter file、wildcard import の違反がない
     assert offenders == []
 
 

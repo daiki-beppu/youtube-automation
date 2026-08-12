@@ -108,6 +108,22 @@ CLAUDE.md の「アーキテクチャ」節の詳細版。要点は CLAUDE.md �
 
 `infrastructure/legacy_utils/` と `utils/` は下流公開 import のための compatibility facade であり、canonical implementation の owner ではない。canonical source、tests、skills、bench から facade へ依存してはならない。`dashboard/` と `extensions/` はそれぞれ独立した表示層・拡張層で、Python domain 実装の owner にはしない。
 
+#### `core/adapters` の最終 surface
+
+#3895 の移行後、`core/adapters` は wildcard facade を持たず、既存 domain が利用する明示 re-export と package file の次の集合だけを保持する。拡張子を問わない file の追加・削除、adapter 内または consumer 側からの `import *`、literal dynamic import による adapter consumer の再導入は repository-reorganization contract が拒否する。
+
+<!-- core-adapter-surface:start -->
+- `src/youtube_automation/core/adapters/__init__.py`
+- `src/youtube_automation/core/adapters/google/__init__.py`
+- `src/youtube_automation/core/adapters/media.py`
+- `src/youtube_automation/core/adapters/observability.py`
+- `src/youtube_automation/core/adapters/runtime.py`
+- `src/youtube_automation/core/adapters/security.py`
+- `src/youtube_automation/core/adapters/youtube.py`
+<!-- core-adapter-surface:end -->
+
+`runtime.py`、`media.py`、`youtube.py` を含む各明示 adapter の symbol と runtime behavior はこの最終 surface 固定では変更しない。`infrastructure/legacy_utils/` の compatibility facade は別契約であり、この集合には含めない。
+
 #### 新規ファイルの配置判断
 
 新しいファイルは、次の順で最も狭い責務の owner に置く。
