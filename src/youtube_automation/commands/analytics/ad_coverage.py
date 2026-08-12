@@ -60,6 +60,20 @@ def _parse_video_rows(by_video: object) -> list[VideoAdCoverage]:
     return videos
 
 
+def _partial_unavailable_reason(errors: object) -> str:
+    if not isinstance(errors, Mapping) or not errors:
+        raise ConfigError("partial な revenue_analytics.errors は空でない JSON object である必要があります")
+
+    reasons: list[str] = []
+    for dimension, reason in errors.items():
+        if not isinstance(dimension, str) or not dimension:
+            raise ConfigError("revenue_analytics.errors の dimension は空でない文字列である必要があります")
+        if not isinstance(reason, str) or not reason:
+            raise ConfigError(f"revenue_analytics.errors.{dimension} は空でない文字列である必要があります")
+        reasons.append(f"{dimension}: {reason}")
+    return "; ".join(reasons)
+
+
 def analyze_ad_coverage(
     revenue_analytics: Mapping[str, object], *, threshold: float, min_playbacks: int
 ) -> dict[str, object]:
@@ -70,6 +84,8 @@ def analyze_ad_coverage(
         raise ConfigError("min_playbacks は 1 以上で指定してください")
 
     status = revenue_analytics.get("status")
+    if not isinstance(status, str):
+        raise ConfigError("revenue_analytics.status は available、partial、unavailable のいずれかである必要があります")
     if status == "unavailable":
         reason = revenue_analytics.get("reason")
         if not isinstance(reason, str) or not reason:
@@ -80,10 +96,17 @@ def analyze_ad_coverage(
             "warning_count": 0,
             "warnings": [],
         }
-    if status != "available":
-        raise ConfigError("revenue_analytics.status は available または unavailable である必要があります")
+    if status not in {"available", "partial"}:
+        raise ConfigError("revenue_analytics.status は available、partial、unavailable のいずれかである必要があります")
 
     videos = _parse_video_rows(revenue_analytics.get("by_video"))
+    if status == "partial" and not videos:
+        return {
+            "status": "unavailable",
+            "reason": _partial_unavailable_reason(revenue_analytics.get("errors")),
+            "warning_count": 0,
+            "warnings": [],
+        }
     eligible = [video for video in videos if video.monetized_playbacks >= min_playbacks]
     median_value = float(median(video.ads_per_playback for video in eligible)) if eligible else None
 
