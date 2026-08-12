@@ -5,10 +5,10 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from youtube_automation.core.adapters.browser import RedirectRejectedError, fetch_html, parse_url
-from youtube_automation.core.adapters.errors import ValidationError, YouTubeAPIError
-from youtube_automation.core.adapters.google.upload import HttpError
-from youtube_automation.core.adapters.google.youtube import execute_youtube_request, validate_youtube_response_items
+from youtube_automation.core.errors import ValidationError, YouTubeAPIError
+from youtube_automation.infrastructure.browser import RedirectRejectedError, fetch_html, parse_url
+from youtube_automation.infrastructure.google.upload import HttpError
+from youtube_automation.infrastructure.google.youtube import execute_youtube_request, validate_youtube_response_items
 
 CHANNELS_PART = "snippet,statistics,contentDetails"
 PLAYLIST_ITEMS_PART = "snippet"
