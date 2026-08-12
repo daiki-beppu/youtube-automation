@@ -94,4 +94,4 @@ TTP 入替候補は、現行 TTP より優れると観測できた軸と劣る�
 - `/discover-competitors` — 追加競合を API で広く発掘・ランキング化する場合
 - `/benchmark` — 承認済み候補の動画・サムネイルデータを収集する場合
 - `/channel-new` 分析モード — 収集済み benchmark / comments を詳細分析する場合
-- `/channel-new` — 初回 TTP 確認と channel config 生成を行う場合
+- `/setup --channel` Step 1/4/5（`.claude/skills/setup/references/new-channel-bootstrap.md` / `ttp-seed-and-duration.md`）— 初回 TTP 確認と channel config 生成を行う場合

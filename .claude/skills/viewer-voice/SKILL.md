@@ -1,6 +1,6 @@
 ---
 name: viewer-voice
-description: "Use when 競合コメントの収集・分析で視聴者インサイトを抽出するとき。「視聴者の声」「コメント分析」「ユーザーリサーチ」で発動。/audience-persona-design の必須入力（viewer-voice-analysis.md）を作る。新規開設では /channel-new Step 7 で必須、公開後の再分析では任意"
+description: "Use when 競合コメントの収集・分析で視聴者インサイトを抽出するとき。「視聴者の声」「コメント分析」「ユーザーリサーチ」で発動。/audience-persona-design の必須入力（viewer-voice-analysis.md）を作る。新規開設では /setup --channel Step 7 で必須、公開後の再分析では任意"
 ---
 
 ## 前後工程
@@ -12,7 +12,7 @@ description: "Use when 競合コメントの収集・分析で視聴者インサ
 
 承認済みベンチマークチャンネルの1万再生以上の動画から YouTube Data API でコメントを取得し、
 感情・利用シーン・リクエスト・キャラ愛着の4軸で分析する。
-`/setup --channel` の新規開設モードでは Step 7 の必須前工程として実行する。その互換入口である `/channel-new` の新規開設モードでも同じ契約を適用する。公開後の再分析では、コメントを含む視聴者インサイトが必要になった時点で明示的に実行する。
+`/setup --channel` の新規開設モードでは Step 7 の必須前工程として実行する（`.claude/skills/setup/references/persona-branding-readiness.md`）。公開後の再分析では、コメントを含む視聴者インサイトが必要になった時点で明示的に実行する。
 
 ## 完了条件
 
@@ -30,8 +30,8 @@ description: "Use when 競合コメントの収集・分析で視聴者インサ
 
 ### 停止する fail
 
-- `config/channel/` が存在しない、または `load_config()` でロードできない → `/channel-new`（既存チャンネルは取り込みモード）を案内して停止する
-- `config/channel/analytics.json::benchmark.channels` に承認済みベンチマークチャンネルが設定されていない → `/channel-new` / `/discover-competitors` を案内して停止する
+- `config/channel/` が存在しない、または `load_config()` でロードできない → 新規チャンネルは `/setup --channel` Step 4、既存チャンネルは `/channel-new`（既存チャンネル取り込みモード）を案内して停止する
+- `config/channel/analytics.json::benchmark.channels` に承認済みベンチマークチャンネルが設定されていない → `/setup --channel` Step 5 / `/discover-competitors` を案内して停止する
 - `auth/token.json` が存在しない、または OAuth 認証が無効 → `/setup` を案内して停止する
 
 ### 許容する fail
