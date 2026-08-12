@@ -1,0 +1,49 @@
+{
+  "schema_version": 2,
+  "channels": [
+    {
+      "id": "channel-ready",
+      "name": "Contract Ready",
+      "status": "ready",
+      "snapshot": "analytics_data_20260812.json",
+      "collected_at": "2026-08-12T00:00:00+00:00",
+      "period": {
+        "start_date": "2026-08-01",
+        "end_date": "2026-08-12"
+      },
+      "scheduled_count": 2,
+      "summary": {
+        "views": 1200,
+        "watch_time_minutes": 420,
+        "subscribers_net": 8,
+        "engagements": 31,
+        "average_view_percentage": 62.5
+      },
+      "error": null,
+      "refresh_error": {
+        "code": "refresh_failed",
+        "message": "refresh failed"
+      },
+      "video_count": 1
+    },
+    {
+      "id": "channel-invalid",
+      "name": "invalid",
+      "status": "invalid_channel",
+      "snapshot": null,
+      "collected_at": null,
+      "period": {
+        "start_date": null,
+        "end_date": null
+      },
+      "scheduled_count": null,
+      "summary": null,
+      "error": {
+        "code": "meta_invalid",
+        "message": "Expecting value: line 1 column 1 (char 0)"
+      },
+      "refresh_error": null,
+      "video_count": 0
+    }
+  ]
+}

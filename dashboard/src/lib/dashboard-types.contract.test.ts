@@ -1,6 +1,43 @@
 import { describe, expect, it } from "vitest"
 import ts from "typescript"
 
+import overviewGolden from "@/lib/__fixtures__/overview.golden.json"
+import {
+  DASHBOARD_SCHEMA_VERSION,
+  type OverviewResponse,
+} from "@/lib/dashboard-types"
+
+type KeysOfUnion<Value> = Value extends Value ? keyof Value : never
+type PresentValue<Value> = Exclude<Value, null | undefined>
+type NullishValue<Value> = Extract<Value, null | undefined>
+type NormalizeObjectUnion<Value> = [PresentValue<Value>] extends [never]
+  ? NullishValue<Value>
+  : [PresentValue<Value>] extends [object]
+    ? MergeObjectUnion<PresentValue<Value>> | NullishValue<Value>
+    : Value
+type FieldOfUnion<Value, Key extends PropertyKey> =
+  Value extends Record<Key, infer Field> ? Field : never
+type MergeObjectUnion<Value> = {
+  [Key in KeysOfUnion<Value>]: NormalizeObjectUnion<FieldOfUnion<Value, Key>>
+}
+type BidirectionallyExact<Left, Right> = [Left] extends [Right]
+  ? [Right] extends [Left]
+    ? true
+    : false
+  : false
+
+type GoldenChannel = (typeof overviewGolden.channels)[number]
+type GoldenChannelShape = MergeObjectUnion<GoldenChannel>
+type GoldenOverviewShape = Omit<typeof overviewGolden, "channels"> & {
+  channels: GoldenChannelShape[]
+}
+
+const overviewFixture: OverviewResponse = overviewGolden
+const overviewTypesMatch: BidirectionallyExact<
+  GoldenOverviewShape,
+  OverviewResponse
+> = true
+
 const apiResponseTypeNames = [
   "Video",
   "ChannelDetail",
@@ -92,5 +129,12 @@ describe("dashboard API response type ownership", () => {
     expect(importedTypeNames).toEqual(
       expect.arrayContaining([...appResponseTypeNames])
     )
+  })
+})
+
+describe("Python dashboard overview schema contract", () => {
+  it("accepts the generated Python response as the exact TypeScript response shape", () => {
+    expect(overviewFixture.schema_version).toBe(DASHBOARD_SCHEMA_VERSION)
+    expect(overviewTypesMatch).toBe(true)
   })
 })
