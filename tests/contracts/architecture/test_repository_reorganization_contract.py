@@ -197,6 +197,17 @@ LAYER_FORBIDDEN_IMPORTS = {
     "commands": ("utils",),
 }
 
+DOMAIN_ALLOWED_INFRASTRUCTURE_IMPORTS = frozenset(
+    {
+        "youtube_automation.infrastructure.browser",
+        "youtube_automation.infrastructure.filesystem",
+        "youtube_automation.infrastructure.google.upload",
+        "youtube_automation.infrastructure.google.youtube",
+        "youtube_automation.infrastructure.process",
+        "youtube_automation.infrastructure.quota",
+    }
+)
+
 
 def _receipt() -> dict[str, object]:
     return json.loads(RECEIPT.read_text(encoding="utf-8"))
@@ -211,6 +222,55 @@ def _imports(path: Path) -> set[str]:
         elif isinstance(node, ast.ImportFrom) and node.module:
             imports.add(node.module)
     return imports
+
+
+def _is_forbidden_layer_import(layer: str, imported: str) -> bool:
+    for forbidden_layer in LAYER_FORBIDDEN_IMPORTS[layer]:
+        forbidden_namespace = f"youtube_automation.{forbidden_layer}"
+        if imported != forbidden_namespace and not imported.startswith(f"{forbidden_namespace}."):
+            continue
+        if layer == "domains" and imported in DOMAIN_ALLOWED_INFRASTRUCTURE_IMPORTS:
+            return False
+        return True
+    return False
+
+
+@pytest.mark.parametrize("allowed_import", sorted(DOMAIN_ALLOWED_INFRASTRUCTURE_IMPORTS))
+def test_domain_layer_allows_each_authoritative_provider_neutral_import(allowed_import: str) -> None:
+    # Given: provider-neutral infrastructure owner explicitly approved for domains
+    # When: the domain layer evaluates the direct import edge
+    # Then: the exact authoritative module is allowed
+    assert not _is_forbidden_layer_import("domains", allowed_import)
+
+
+@pytest.mark.parametrize(
+    "forbidden_import",
+    [
+        "youtube_automation.infrastructure",
+        "youtube_automation.infrastructure.auth",
+        "youtube_automation.infrastructure.browser.extension",
+        "youtube_automation.infrastructure.browser_evasion",
+        "youtube_automation.infrastructure.filesystem.path",
+        "youtube_automation.infrastructure.filesystem_backup",
+        "youtube_automation.infrastructure.google",
+        "youtube_automation.infrastructure.google.upload.client",
+        "youtube_automation.infrastructure.google.upload_backup",
+        "youtube_automation.infrastructure.google.youtube.client",
+        "youtube_automation.infrastructure.google.youtube_backup",
+        "youtube_automation.infrastructure.media",
+        "youtube_automation.infrastructure.network",
+        "youtube_automation.infrastructure.process.runner",
+        "youtube_automation.infrastructure.process_backup",
+        "youtube_automation.infrastructure.quota.internal",
+        "youtube_automation.infrastructure.quota_backup",
+        "youtube_automation.infrastructure.subprocess",
+    ],
+)
+def test_domain_layer_rejects_unlisted_and_non_exact_infrastructure_imports(forbidden_import: str) -> None:
+    # Given: an unlisted infrastructure owner or a prefix/substring lookalike
+    # When: the domain layer evaluates the direct import edge
+    # Then: broad and near-match infrastructure imports remain forbidden
+    assert _is_forbidden_layer_import("domains", forbidden_import)
 
 
 def test_reorganization_receipt_has_one_canonical_owner_per_moved_source() -> None:
@@ -315,14 +375,13 @@ def test_canonical_layers_do_not_import_lower_boundary_owners() -> None:
     offenders: list[str] = []
 
     # When: source の import edge を layer 単位で収集する
-    for layer, forbidden_layers in LAYER_FORBIDDEN_IMPORTS.items():
+    for layer in LAYER_FORBIDDEN_IMPORTS:
         for path in (SRC / layer).rglob("*.py"):
             if "/infrastructure/legacy_utils/" in str(path):
                 continue
             for imported in _imports(path):
-                for forbidden in forbidden_layers:
-                    if imported.startswith(f"youtube_automation.{forbidden}"):
-                        offenders.append(f"{path.relative_to(ROOT)} -> {imported}")
+                if _is_forbidden_layer_import(layer, imported):
+                    offenders.append(f"{path.relative_to(ROOT)} -> {imported}")
 
     # Then: CLI、application、domain、infrastructure の責務が逆流しない
     assert offenders == []
