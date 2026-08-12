@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `refactor(uploads)`: uploads domain の wildcard facade consumer import を canonical owner の `core.errors` と provider-neutral な `infrastructure` module へ移行し、例外 class identity と upload の成功・失敗・byte 挙動を維持する（#3961）。
 - `refactor(thumbnail)`: thumbnail domain の例外 import を互換 facade 経由から canonical owner の `youtube_automation.core.errors` へ移行し、例外 class identity と既存の成功・失敗時挙動を維持する（#3960）。
 - `refactor(suno)`: Suno domain の例外 import を互換 facade 経由から canonical owner の `youtube_automation.core.errors` へ移行し、例外 class identity と既存の成功・失敗時挙動を維持する（#3959）。
 - `refactor(metadata)`: metadata domain の例外 import を互換 facade 経由から canonical owner の `youtube_automation.core.errors` へ移行し、例外 class identity と既存の成功・失敗時挙動を維持する（#3958）。

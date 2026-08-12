@@ -8,8 +8,21 @@ from pathlib import Path
 import schedule
 
 from youtube_automation.configuration import channel_dir, load_config
-from youtube_automation.core.adapters.errors import ValidationError
-from youtube_automation.core.adapters.filesystem import (
+from youtube_automation.core.adapters.media import CollectionPaths
+from youtube_automation.core.adapters.youtube import (
+    DAILY_BUCKET_LIMITS,
+    UNIT_COSTS,
+    UNIT_POOL_LIMIT,
+    complete_collection_quota_plan,
+)
+from youtube_automation.core.errors import ValidationError
+from youtube_automation.domains.uploads._complete_collection_executor import CompleteCollectionExecutorMixin
+from youtube_automation.domains.uploads._playlist_assignment import PlaylistAssignmentMixin
+from youtube_automation.domains.uploads._published_dates import PublishedDatesMixin
+from youtube_automation.domains.uploads._tracking_io import TrackingIOMixin
+from youtube_automation.domains.uploads.preflight import ensure_collection_preflight
+from youtube_automation.domains.uploads.youtube import YouTubeAutoUploader
+from youtube_automation.infrastructure.filesystem import (
     list_directory,
     make_directory,
     path_exists,
@@ -18,20 +31,7 @@ from youtube_automation.core.adapters.filesystem import (
     read_json,
     rename_path,
 )
-from youtube_automation.core.adapters.google.youtube import YouTubeClients
-from youtube_automation.core.adapters.media import CollectionPaths
-from youtube_automation.core.adapters.youtube import (
-    DAILY_BUCKET_LIMITS,
-    UNIT_COSTS,
-    UNIT_POOL_LIMIT,
-    complete_collection_quota_plan,
-)
-from youtube_automation.domains.uploads._complete_collection_executor import CompleteCollectionExecutorMixin
-from youtube_automation.domains.uploads._playlist_assignment import PlaylistAssignmentMixin
-from youtube_automation.domains.uploads._published_dates import PublishedDatesMixin
-from youtube_automation.domains.uploads._tracking_io import TrackingIOMixin
-from youtube_automation.domains.uploads.preflight import ensure_collection_preflight
-from youtube_automation.domains.uploads.youtube import YouTubeAutoUploader
+from youtube_automation.infrastructure.google.youtube import YouTubeClients
 
 logger = logging.getLogger(__name__)
 
