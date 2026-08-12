@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import importlib.util
+import json
 import os
 import re
+import sys
 from pathlib import Path
+from types import ModuleType
 
 import yaml
 
@@ -14,7 +18,10 @@ from youtube_automation.commands.system import doctor
 _REPO_ROOT = REPO_ROOT
 _SKILLS_DIR = _REPO_ROOT / ".claude" / "skills"
 _SETUP_SKILL = _SKILLS_DIR / "setup" / "SKILL.md"
+_SETUP_TOOL = _SKILLS_DIR / "setup" / "references" / "tool.md"
 _SETUP_RUNBOOK = _SKILLS_DIR / "setup" / "references" / "check-runbook.md"
+_SETUP_CHAIN_MANIFEST = _SKILLS_DIR / "setup" / "references" / "setup-chain-manifest.json"
+_SETUP_CHAIN_STATE = _SKILLS_DIR / "setup" / "references" / "setup-chain-state.py"
 _FRESHNESS_RULES = _SKILLS_DIR / "collection-ideate" / "references" / "freshness-rules.md"
 _CHANNEL_NEW_SKILL = _SKILLS_DIR / "channel-new" / "SKILL.md"
 _ONBOARD_DIR = _SKILLS_DIR / "onboard"
@@ -27,11 +34,26 @@ _CURRENT_SETUP_DOCS = [
 def _setup_text() -> str:
     """SKILL.md 本体 + 段階的開示で切り出した references/ を合わせた全文。
 
-    check id ごとの対応手順は `references/check-runbook.md` へ分離したため、
-    「/setup の手順として書かれていること」を担保する契約は両方を対象にする。
+    tool wizard と check id ごとの対応手順は references/ へ分離したため、
+    「/setup の手順として書かれていること」を担保する契約は 3 ファイルを対象にする。
     SKILL.md 本体に残っていること自体が要件のものだけ `_SETUP_SKILL` を直接読む。
     """
-    return _SETUP_SKILL.read_text(encoding="utf-8") + "\n" + _SETUP_RUNBOOK.read_text(encoding="utf-8")
+    return (
+        _SETUP_SKILL.read_text(encoding="utf-8")
+        + "\n"
+        + _SETUP_TOOL.read_text(encoding="utf-8")
+        + "\n"
+        + _SETUP_RUNBOOK.read_text(encoding="utf-8")
+    )
+
+
+def _load_setup_chain_state() -> ModuleType:
+    spec = importlib.util.spec_from_file_location("setup_chain_state", _SETUP_CHAIN_STATE)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
 
 
 def _frontmatter(skill_md: Path) -> dict:
@@ -51,6 +73,86 @@ def test_onboard_skill_directory_is_removed() -> None:
 def test_setup_skill_frontmatter_matches_directory_name() -> None:
     frontmatter = _frontmatter(_SETUP_SKILL)
     assert frontmatter["name"] == "setup"
+
+
+def test_setup_skill_declares_exclusive_tool_mode_and_default_chain() -> None:
+    text = _SETUP_SKILL.read_text(encoding="utf-8")
+    description = _frontmatter(_SETUP_SKILL)["description"]
+
+    assert "--tool" in description
+    assert "`$ARGUMENTS` から `--tool` の個数を最初に数える" in text
+    assert "2 個以上なら排他違反として停止し、1 つだけ指定するよう促す" in text
+    assert "1 個なら対応する reference を読み、その一段だけを実行する" in text
+    assert "0 個なら chain manifest に従い tool を状態判定付きで進める" in text
+    assert "| `--tool` | `references/tool.md` |" in text
+
+
+def test_setup_chain_manifest_declares_exactly_one_tool_step() -> None:
+    manifest = json.loads(_SETUP_CHAIN_MANIFEST.read_text(encoding="utf-8"))
+
+    assert manifest == {
+        "chainId": "setup",
+        "steps": [
+            {
+                "id": "tool",
+                "skill": "setup",
+                "prerequisiteArtifacts": [],
+                "outputArtifacts": [],
+                "approvalGate": {
+                    "skip": True,
+                    "configPath": "workflow.setup.skip_approvals.tool",
+                },
+                "idempotency": {"script": "references/setup-chain-state.py"},
+            }
+        ],
+    }
+
+
+def test_setup_chain_state_runs_unresolved_tool_and_skips_ready_tool() -> None:
+    state = _load_setup_chain_state()
+    unresolved = [doctor.CheckResult(id="uv", status="fail", message="uv missing")]
+    ready = [doctor.CheckResult(id="uv", status="ok", message="uv ready")]
+
+    run_code, run_result = state.evaluate(unresolved, "tool")
+    skip_code, skip_result = state.evaluate(ready, "tool")
+
+    assert (run_code, run_result["decision"], run_result["reason"]) == (
+        state.EXIT_RUN,
+        "run",
+        "setup_checks_unresolved",
+    )
+    assert run_result["checks"] == [{"id": "uv", "status": "fail"}]
+    assert (skip_code, skip_result["decision"], skip_result["reason"]) == (
+        state.EXIT_SKIP,
+        "skip",
+        "setup_ready",
+    )
+    assert skip_result["checks"] == []
+
+
+def test_setup_chain_state_preserves_stale_analytics_completion_exception() -> None:
+    state = _load_setup_chain_state()
+    checks = [
+        doctor.CheckResult(id="uv", status="ok", message="uv ready"),
+        doctor.CheckResult(id="analytics_report", status="fail", message="stale report"),
+    ]
+
+    code, result = state.evaluate(checks, "tool")
+
+    assert code == state.EXIT_SKIP
+    assert result["decision"] == "skip"
+    assert result["reason"] == "setup_ready_analytics_report_stale"
+    assert result["checks"] == [{"id": "analytics_report", "status": "fail"}]
+
+
+def test_setup_chain_state_is_idempotent_for_the_same_doctor_state() -> None:
+    state = _load_setup_chain_state()
+    checks = [doctor.CheckResult(id="oauth_token", status="warn", message="login required")]
+
+    first = state.evaluate(checks, "tool")
+    second = state.evaluate(checks, "tool")
+
+    assert first == second
 
 
 def test_setup_skill_description_mentions_new_and_legacy_commands() -> None:
@@ -154,7 +256,7 @@ def test_setup_skill_gates_numbered_duplicate_deletion() -> None:
 
 
 def test_setup_skill_keeps_pre_doctor_bootstrap_in_skill() -> None:
-    text = _SETUP_SKILL.read_text(encoding="utf-8")
+    text = _SETUP_TOOL.read_text(encoding="utf-8")
     startup = text.split("## 起動時のチェック", 1)[1].split("## 認証コマンドと人間操作の責務", 1)[0]
 
     assert "`pyproject.toml` が無ければ `uv init`" in startup

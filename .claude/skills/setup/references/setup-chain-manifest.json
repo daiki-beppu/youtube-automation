@@ -1,0 +1,18 @@
+{
+  "chainId": "setup",
+  "steps": [
+    {
+      "id": "tool",
+      "skill": "setup",
+      "prerequisiteArtifacts": [],
+      "outputArtifacts": [],
+      "approvalGate": {
+        "skip": true,
+        "configPath": "workflow.setup.skip_approvals.tool"
+      },
+      "idempotency": {
+        "script": "references/setup-chain-state.py"
+      }
+    }
+  ]
+}
