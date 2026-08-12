@@ -1,26 +1,6 @@
-# Save, settings push, and troubleshooting details
+# Settings push and troubleshooting details
 
-新規開設モード Step 10 の初回保存、設定 push モード、障害対応の実施詳細を定義する。mode routing、不可逆操作前の承認、実行コマンドと順序、完了・停止条件、成果物は `../SKILL.md` を正とする。
-
-## Initial save and cleanup details
-
-`/channel-new` 完了直後は `/setup` と本スキルの生成物が未コミットで残りやすい。後続 `/automation-update` は dirty worktree で停止するため、最初と最後の `git status --porcelain` で cleanup 状態を判定する。
-
-- 最初の出力が空なら、初回保存済みとして成功案内へ進む。
-- 非空なら差分をユーザーへ提示し、root の順序どおり全変更を stage、一覧確認、secret guard、commit、最終確認する。
-- ignore 済み `.env` は exclude pathspec 付き `git add` でも exit 1 になり得るため、`git add -A` 後の `initial_save_guard.sh` を唯一の安全境界とする。
-- guard が失敗したら secret-like file は staged から自動で外れる。commit せず、`.gitignore` を確認してから再実行する。
-
-remote 作成保留、git user identity 未設定、またはユーザーが今 commit しない判断をした場合は、次の案内を提示して保存未完了として停止する。
-
-```text
-未コミット変更が残っています。/automation-update の前に以下を完了してください:
-  1. git status --short で差分を確認
-  2. .env / auth/client_secrets.json / auth/token*.json が staged されていないことを確認
-  3. git commit -m "chore: 初回チャンネル設定を保存"
-```
-
-作業ツリーが最初から clean、または初回 commit 後の `git status --porcelain` が空の場合だけ、root の成功案内を提示する。
+設定 push モードと障害対応の実施詳細を定義する。mode routing、不可逆操作前の承認、実行コマンドと順序、完了・停止条件、成果物は `../SKILL.md` を正とする。新規開設 Step 10 の初回保存は `/setup --channel` の `setup/references/channel-mode.md` が所有する。
 
 ## Settings push details
 

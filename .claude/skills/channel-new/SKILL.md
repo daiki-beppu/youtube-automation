@@ -1,6 +1,6 @@
 ---
 name: channel-new
-description: "Use when 新しい YouTube チャンネルを初期化・取り込みするとき、収集済み benchmark/comments からチャンネル全体を分析するとき、方向性を再検討するとき、config を再生成するとき、または YouTube 側設定を同期するとき。「チャンネル追加」「新チャンネル」「チャンネル開設」「既存チャンネル」「チャンネル取り込み」「config 生成」「channel-import」「競合分析」「チャンネルリサーチ」「TTP 対象抽出」「方向性決めたい」「ポジショニング」「差別化」「ブレスト」「config 再生成」「詳細セットアップ」「設定反映」「チャンネル設定更新」「branding push」「ローカライゼーション同期」「meta.json を YouTube に反映」で発動。データ収集・更新だけなら /benchmark、サムネイルだけの深掘りは /thumbnail-research、追加競合の発掘だけなら /discover-competitors を使う。"
+description: "Use when 新しい YouTube チャンネルを初期化・取り込みするとき、収集済み benchmark/comments からチャンネル全体を分析するとき、方向性を再検討するとき、config を再生成するとき、または YouTube 側設定を同期するとき。「チャンネル追加」「新チャンネル」「チャンネル開設」「既存チャンネル」「チャンネル取り込み」「config 生成」「channel-import」「競合分析」「チャンネルリサーチ」「TTP 対象抽出」「方向性決めたい」「ポジショニング」「差別化」「ブレスト」「config 再生成」「詳細セットアップ」「設定反映」「チャンネル設定更新」「branding push」「ローカライゼーション同期」「meta.json を YouTube に反映」で発動。新規開設は canonical /setup --channel への互換入口として動く。データ収集・更新だけなら /benchmark、サムネイルだけの深掘りは /thumbnail-research、追加競合の発掘だけなら /discover-competitors を使う。"
 ---
 
 ## 前後工程
@@ -10,7 +10,7 @@ description: "Use when 新しい YouTube チャンネルを初期化・取り込
 
 ## 完了条件（新規開設モード）
 
-新規開設モードの `/channel-new` は以下が揃うまで完了扱いにしない。未完了のまま成功案内を出さない。既存チャンネル取り込みモードにはこの TTP 完了条件を適用しない。取り込みモードは「取り込み Step 8: 次ステップ案内」で `wf_new_readiness` の必須／任意案内を提示すれば、その判定が `warn` でも終了できる。
+新規開設モードの `/channel-new` は `/setup --channel` への互換入口である。実行前に **[setup channel mode](../setup/references/channel-mode.md)** を Read し、同ファイルを完了契約の唯一の正として以下の Step 1〜10 を実行する。以下が揃うまで完了扱いにせず、未完了のまま成功案内を出さない。既存チャンネル取り込みモードにはこの TTP 完了条件を適用しない。取り込みモードは「取り込み Step 8: 次ステップ案内」で `wf_new_readiness` の必須／任意案内を提示すれば、その判定が `warn` でも終了できる。
 
 - `config/channel/analytics.json::benchmark.channels` に承認済み TTP 対象が 1 件以上あり、各 entry に relationship（何を転写するか）が入っている
 - `docs/channel/ttp-seed-confirmation.md` に、候補ごとの source、seed fetch 要約、承認 / 不採用判断、転写したい要素、relationship、branding snapshot 参照または description / keywords / localizations の転写方針、未反映項目が保存されている
@@ -30,11 +30,12 @@ description: "Use when 新しい YouTube チャンネルを初期化・取り込
 ## Overview
 
 新チャンネル開設を `/setup`（onboard）後の 1 スキルで完結させるエントリポイント。
+新規開設の Step 1〜10 は `/setup --channel` が canonical owner であり、本スキルの新規開設モードは同じ contract を実行する互換入口として保持する。
 現在の作業ディレクトリをそのまま channel repo として使い、TTP 対象の確認と TTP に必要な情報収集、フルパッケージ config 生成、本格ペルソナ作成、YouTube branding 初回反映まで進める。
 
 本スキルは 6 つのモードを持つ。入口系の発動では既存 / 新規をユーザーに確認し、後工程モードの明示キーワードでは呼び出し文脈から自動判別する:
 
-1. **新規開設モード**（Step 1〜10）: 新規チャンネルの初期化 end-to-end。「チャンネル追加」「新チャンネル」など新規立ち上げの文脈で使う。
+1. **新規開設モード**（Step 1〜10）: `/setup --channel` の canonical contract を実行する互換入口。「チャンネル追加」「新チャンネル」など新規立ち上げの文脈で使う。
 2. **既存チャンネル取り込みモード**（取り込み Step 1〜8）: 既に YouTube で運営中のチャンネルを `config/channel/*.json` へ取り込む。「既存チャンネル」「チャンネル取り込み」「config 生成」「channel-import」の文脈で使う。
 3. **方向性検討モード**（Step D1〜D5）: 新規開設モード後、または `docs/channel-research.md` 作成後に方向性・ポジショニングを対話で再検討する。「方向性決めたい」「ポジショニング」「差別化」「ブレスト」の文脈で使う。
 4. **再生成モード**（Step R1〜R8）: 新規開設モードの初期生成後、または方向性検討モードで再決定した方向性をもとに `config/channel/*.json` と skill config を完成させる。「config 再生成」「詳細セットアップ」の文脈で使う。
@@ -71,7 +72,7 @@ description: "Use when 新しい YouTube チャンネルを初期化・取り込
 入口確認の選択肢と遷移:
 
 1. **既存チャンネル**: 既存チャンネル取り込みモードを選び、`references/import-mode.md` の「取り込み Step 1 前段」から実行する。そこで実績を提示し、「既存踏襲 / 方向性見直し」をユーザーに確認する
-2. **新規開設**: 新規開設モードを選び、本ファイルの Step 1（TTP ヒアリング）へ進む
+2. **新規開設**: 「新チャンネル」等の opening 文脈では新規開設モードを選び、canonical `/setup --channel` の `../setup/references/channel-mode.md` を Read してから本ファイルの Step 1（TTP ヒアリング）へ進む
 
 後工程モードを明示された場合、または入口確認後は、以下の表に従って実行する。
 
@@ -87,7 +88,7 @@ description: "Use when 新しい YouTube チャンネルを初期化・取り込
 YouTube 側にまだチャンネル実体がない（これから開設する）場合は新規開設モード、既に YouTube で公開・運営中のチャンネルの設定ファイルを生成して取り込む場合は取り込みモードを使う。
 方向性の検討・精緻化が必要な場合も、新規開設モードでは質問せず `/channel-new` 完了後に方向性検討モードへ進める。
 
-手順詳細の配置: 新規開設モードと設定 push モードは本ファイル内、分析モードは `references/analysis-mode.md`、方向性検討モードは `references/direction-mode.md`、再生成モードは `references/regeneration-mode.md`、取り込みモードは `references/import-mode.md`。references 側のモードと判定したら、実行前に必ず該当ファイルを Read する。
+手順詳細の配置: 新規開設モードは互換入口として本ファイル内の Step 1〜10 を保持し、完了契約の正は `../setup/references/channel-mode.md` とする。設定 push モードは本ファイル内、分析モードは `references/analysis-mode.md`、方向性検討モードは `references/direction-mode.md`、再生成モードは `references/regeneration-mode.md`、取り込みモードは `references/import-mode.md`。references 側のモードと判定したら、実行前に必ず該当ファイルを Read する。
 
 ## TTP 原則
 
@@ -141,7 +142,7 @@ TTP に関する質問は、TTP 対象への転写要素（タイトル構造 / 
 このヒアリング結果は後続の seed fetch / TTP 対象反映に使う。
 ヒアリング後は `docs/channel/ttp-seed-confirmation.md` を作成し、TTP したいチャンネル URL / handle / channel ID、転写したい要素、関係性メモを保存する。
 
-新規開設モードで Step 2 へ進む前に、repository 初期化、setup gate の check 分類、config 入力 schema、初期ファイル生成詳細の唯一の正である **[new-channel-bootstrap.md](references/new-channel-bootstrap.md)** を必ず Read する。本体に残す Step 2〜4 の順序、承認点、実行コマンド、成功・停止条件と組み合わせて実行する。
+新規開設モードで Step 2 へ進む前に、repository 初期化、setup gate の check 分類、config 入力 schema、初期ファイル生成詳細の唯一の正である **[new-channel-bootstrap.md](../setup/references/new-channel-bootstrap.md)** を必ず Read する。本体に残す Step 2〜4 の順序、承認点、実行コマンド、成功・停止条件と組み合わせて実行する。
 
 ### Step 2: 現在のディレクトリを repo 初期化
 
@@ -220,7 +221,7 @@ DistroKid 配信しない場合は `--distrokid-enabled` を付けず、`config/
 
 ### Step 5: TTP seed fetch と承認済み対象反映
 
-Step 1 の TTP チャンネルを YouTube Data API で実データ化する。実行前に seed 確認、branding snapshot、approval evidence、duration 導出 schema の唯一の正である **[ttp-seed-and-duration.md](references/ttp-seed-and-duration.md)** を必ず Read する。
+Step 1 の TTP チャンネルを YouTube Data API で実データ化する。実行前に seed 確認、branding snapshot、approval evidence、duration 導出 schema の唯一の正である **[ttp-seed-and-duration.md](../setup/references/ttp-seed-and-duration.md)** を必ず Read する。
 
 ```bash
 uv run yt-channel-seed "https://www.youtube.com/@example" \
@@ -257,7 +258,7 @@ uv run python .claude/skills/channel-new/references/fetch_branding_snapshot.py \
 次の helper を **dry-run** し、reference の duration schema に照らして JSON を確認する:
 
 ```bash
-uv run python .claude/skills/channel-new/references/derive_ttp_duration.py \
+uv run python .claude/skills/setup/references/derive_ttp_duration.py \
   --channel-dir .
 ```
 
@@ -266,7 +267,7 @@ helper が `status: insufficient`（exit 2）または `status: error`（exit 1�
 推奨値と根拠をユーザーへ提示し、明示承認を得るまで config を変更しない。承認後だけ次を実行する:
 
 ```bash
-uv run python .claude/skills/channel-new/references/derive_ttp_duration.py \
+uv run python .claude/skills/setup/references/derive_ttp_duration.py \
   --channel-dir . \
   --apply
 ```
@@ -277,7 +278,7 @@ uv run python .claude/skills/channel-new/references/derive_ttp_duration.py \
 
 ### Step 6: 追加調査は後続スキルへ委譲
 
-Step 6〜9 を始める前に [persona / branding / readiness の実施詳細](references/persona-branding-readiness.md) を Read し、その手順を参照する。
+Step 6〜9 を始める前に [persona / branding / readiness の実施詳細](../setup/references/persona-branding-readiness.md) を Read し、その手順を参照する。
 
 `/channel-new` の標準フローでは、次の追加調査を必要になった時点でユーザーに目的を確認し、後続スキルへ委譲する。`/viewer-voice` はこの任意の追加調査には含めず、Step 7 の必須前工程として実行する:
 
@@ -358,7 +359,7 @@ git status --porcelain
 git status --short
 git add -A
 git diff --cached --name-only
-bash .claude/skills/channel-new/references/initial_save_guard.sh || exit 1
+bash .claude/skills/setup/references/initial_save_guard.sh || exit 1
 git commit -m "chore: 初回チャンネル設定を保存"
 git status --porcelain
 ```
@@ -436,6 +437,7 @@ pull は YouTube 側の手動編集を取り込む場合だけ使い、`--apply`
 
 ## Cross References
 
+- `/setup --channel` → 新規開設 Step 1〜10 と opening-only assets の canonical owner。`/channel-new` 新規開設モードはこの contract への互換入口
 - `/setup` → 前提: automation ツール導入 + GCP / OAuth / ADC 準備
 - `/discover-competitors` → TTP 対象外の追加競合発掘
 - `/market-research` → 現行 TTP の入替候補・ニッチ仮説を読み取り専用で横断比較

@@ -1432,14 +1432,14 @@ class TestCheckChannelConfig:
         assert r.id == "channel_config"
         assert r.category == "channel"
 
-    def test_config_dir_absent_is_fail_with_channel_new(self, tmp_path):
-        """config/channel/ ディレクトリが存在しない場合: fail + /channel-new 案内."""
+    def test_config_dir_absent_is_fail_with_setup_channel(self, tmp_path):
+        """config/channel/ ディレクトリが存在しない場合: fail + /setup --channel 案内."""
         r = doctor.check_channel_config(tmp_path)
         assert r.status == "fail"
         assert "setup 用ディレクトリのみでは未生成" in r.message
         assert r.next_action is not None
         instructions = r.next_action["instructions"]
-        assert "/channel-new" in instructions
+        assert "/setup --channel" in instructions
         assert "setup 用ディレクトリ生成は完了していても config は未作成" in instructions
 
     def test_config_dir_exists_but_invalid_json_is_fail_with_channel_new_import_mode(self, tmp_path):
@@ -2902,14 +2902,14 @@ class TestCheckTtpWfNewReadinessChannelSetup:
         assert r.status == "warn"
         assert "承認済み TTP 対象が 0 件" in r.message
 
-    def test_benchmark_channels_without_artifacts_warns_channel_new_incomplete(self, tmp_path):
-        """承認済み TTP 対象があるのに成果物が無ければ /channel-new 再生成モード未完了へ誘導する."""
+    def test_benchmark_channels_without_artifacts_warns_setup_or_regeneration_incomplete(self, tmp_path):
+        """承認済み TTP 対象があるのに成果物が無ければ owner mode 未完了へ誘導する."""
         _write_benchmark_channels(tmp_path)
 
         r = doctor.check_ttp_wf_new_readiness(tmp_path)
 
         assert r.status == "warn"
-        assert "/channel-new benchmark 反映未完了" in r.message
+        assert "/setup --channel または /channel-new 再生成モードの TTP 完了条件が未充足" in r.message
         assert "data/benchmark_*.json が無い" in r.message
         assert "docs/benchmarks/*.md が無い" in r.message
         assert "data/thumbnail_compare/benchmark/" in r.message
@@ -3187,7 +3187,7 @@ def _write_music_engine(base: Path, music_engine: str) -> None:
 
 def _duration_ttp_seed_lines() -> list[str]:
     return [
-        "- duration TTP 根拠: .claude/skills/channel-new/references/derive_ttp_duration.py",
+        "- duration TTP 根拠: .claude/skills/setup/references/derive_ttp_duration.py",
         "- duration 対象 channel: rival (UC123)",
         "- duration selected video: VID1 views=50000 duration=PT60M (3600s)",
         "- duration selected video: VID2 views=49999 duration=PT61M (3660s)",
@@ -3211,7 +3211,7 @@ def _semantic_duration_ttp_evidence() -> str:
 ## 動画尺 TTP
 
 ### 根拠 | Evidence
-- `.claude/skills/channel-new/references/derive_ttp_duration.py` の算出結果
+- `.claude/skills/setup/references/derive_ttp_duration.py` の算出結果
 
 ### 対象チャンネル
 - rival (UC123)

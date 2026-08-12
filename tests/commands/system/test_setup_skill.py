@@ -6,10 +6,12 @@ import importlib.util
 import json
 import os
 import re
+import subprocess
 import sys
 from pathlib import Path
 from types import ModuleType
 
+import pytest
 import yaml
 
 from tests.helpers.paths import REPO_ROOT
@@ -22,7 +24,9 @@ _SETUP_TOOL = _SKILLS_DIR / "setup" / "references" / "tool.md"
 _SETUP_RUNBOOK = _SKILLS_DIR / "setup" / "references" / "check-runbook.md"
 _SETUP_CHAIN_MANIFEST = _SKILLS_DIR / "setup" / "references" / "setup-chain-manifest.json"
 _SETUP_CHAIN_STATE = _SKILLS_DIR / "setup" / "references" / "setup-chain-state.py"
+_SETUP_MODE_GUARD = _SKILLS_DIR / "setup" / "references" / "setup-mode-guard.py"
 _SETUP_GCP_GUIDE = _SKILLS_DIR / "setup" / "references" / "gcp-bootstrap.md"
+_SETUP_CHANNEL_MODE = _SKILLS_DIR / "setup" / "references" / "channel-mode.md"
 _FRESHNESS_RULES = _SKILLS_DIR / "collection-ideate" / "references" / "freshness-rules.md"
 _CHANNEL_NEW_SKILL = _SKILLS_DIR / "channel-new" / "SKILL.md"
 _ONBOARD_DIR = _SKILLS_DIR / "onboard"
@@ -76,16 +80,57 @@ def test_setup_skill_frontmatter_matches_directory_name() -> None:
     assert frontmatter["name"] == "setup"
 
 
-def test_setup_skill_declares_exclusive_tool_mode_and_default_chain() -> None:
+def test_setup_skill_declares_exclusive_tool_channel_modes_and_default_chain() -> None:
     text = _SETUP_SKILL.read_text(encoding="utf-8")
     description = _frontmatter(_SETUP_SKILL)["description"]
 
     assert "--tool" in description
-    assert "`$ARGUMENTS` から `--tool` の個数を最初に数える" in text
-    assert "2 個以上なら排他違反として停止し、1 つだけ指定するよう促す" in text
+    assert "mode flag（`--tool` / `--channel`）の出現数" in text
+    assert "2 個以上なら、同じ flag の重複を含めて排他違反として停止" in text
     assert "1 個なら対応する reference を読み、その一段だけを実行する" in text
     assert "0 個なら chain manifest に従い tool を状態判定付きで進める" in text
     assert "| `--tool` | `references/tool.md` |" in text
+    assert "| `--channel` | `references/channel-mode.md` |" in text
+
+
+@pytest.mark.parametrize("arguments", [("--tool", "--channel"), ("--channel", "--channel")])
+def test_setup_mode_guard_rejects_multiple_modes_without_artifact_mutation(
+    tmp_path: Path,
+    arguments: tuple[str, ...],
+) -> None:
+    artifact = tmp_path / "config" / "channel" / "meta.json"
+    artifact.parent.mkdir(parents=True)
+    artifact.write_text('{"sentinel": true}\n', encoding="utf-8")
+    before = {path.relative_to(tmp_path): path.read_bytes() for path in tmp_path.rglob("*") if path.is_file()}
+
+    result = subprocess.run(
+        [sys.executable, str(_SETUP_MODE_GUARD), *arguments],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    after = {path.relative_to(tmp_path): path.read_bytes() for path in tmp_path.rglob("*") if path.is_file()}
+    assert result.returncode == 2
+    assert '"reason": "exclusive_mode"' in result.stderr
+    assert after == before
+
+
+@pytest.mark.parametrize(
+    ("arguments", "mode"),
+    [((), "default"), (("--tool",), "--tool"), (("--channel",), "--channel")],
+)
+def test_setup_mode_guard_resolves_each_exclusive_mode(arguments: tuple[str, ...], mode: str) -> None:
+    result = subprocess.run(
+        [sys.executable, str(_SETUP_MODE_GUARD), *arguments],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    assert json.loads(result.stdout) == {"status": "ok", "mode": mode}
 
 
 def test_setup_tool_is_the_canonical_gcp_oauth_adc_bootstrap_entrypoint() -> None:
@@ -181,8 +226,8 @@ def test_setup_skill_description_mentions_new_and_legacy_commands() -> None:
     description = _frontmatter(_SETUP_SKILL)["description"]
     assert "/setup" in description
     assert "/onboard" in description
-    assert "/channel-new" in description
-    assert "config・ペルソナ・branding" in description
+    assert "--channel" in description
+    assert "新規 YouTube チャンネル" in description
 
 
 def test_setup_skill_uses_uv_run_for_automation_commands() -> None:
@@ -405,8 +450,8 @@ def test_current_setup_docs_do_not_route_to_legacy_onboard() -> None:
     assert offenders == []
 
 
-def test_channel_new_setup_gate_does_not_require_doctor_all_green() -> None:
-    text = _CHANNEL_NEW_SKILL.read_text(encoding="utf-8")
+def test_setup_channel_gate_does_not_require_doctor_all_green() -> None:
+    text = _SETUP_CHANNEL_MODE.read_text(encoding="utf-8")
     assert "summary.next_check_id" not in text
     assert (
         "`channel_config`: `config/channel/ ディレクトリが存在しない "

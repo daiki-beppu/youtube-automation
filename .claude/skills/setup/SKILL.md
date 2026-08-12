@@ -1,6 +1,6 @@
 ---
 name: setup
-description: "Use when ツール導入と GCP / OAuth の API 設定をセットアップ・再診断するとき。「セットアップして」「環境構築」「/setup」「旧 /onboard」で発動。フラグなしは状態判定付きで進め、yt-doctor 診断 wizard だけは排他的な --tool を使う。新規チャンネルの config・ペルソナ・branding を作る場合は /channel-new を使う"
+description: "Use when ツール導入と GCP / OAuth の API 設定をセットアップ・再診断するとき、または新規 YouTube チャンネルを Step 1〜10 で開設するとき。「セットアップして」「環境構築」「新チャンネル」「チャンネル追加」「チャンネル開設」「/setup」「旧 /onboard」で発動。フラグなしは状態判定付きで進め、排他的な --tool / --channel mode を使える"
 ---
 
 ## 前後工程
@@ -10,17 +10,26 @@ description: "Use when ツール導入と GCP / OAuth の API 設定をセット
 
 ## モード判定
 
-`$ARGUMENTS` から `--tool` の個数を最初に数える。
+`$ARGUMENTS` から mode flag（`--tool` / `--channel`）の出現数を、reference の Read や成果物確認・変更より先に次の read-only guard で数える。
 
-- 2 個以上なら排他違反として停止し、1 つだけ指定するよう促す
+```bash
+uv run python .claude/skills/setup/references/setup-mode-guard.py $ARGUMENTS
+```
+
+guard が exit 2 を返したら、その出力だけを提示して即時停止する。
+
+- 2 個以上なら、同じ flag の重複を含めて排他違反として停止し、1 つだけ指定するよう促す。この拒否経路では reference を Read せず、ファイル作成・更新、repo 初期化、API call、stage / commit を一切行わない
 - 1 個なら対応する reference を読み、その一段だけを実行する。残りの引数はその mode の引数として扱う
 - 0 個なら chain manifest に従い tool を状態判定付きで進める
 
 | mode | 読む reference |
 |---|---|
 | `--tool` | `references/tool.md` |
+| `--channel` | `references/channel-mode.md` |
 
-`--tool` は `uv run yt-setup-dirs` を含む現行 doctor wizard をそのまま実行し、GCP / OAuth / ADC bootstrap の唯一の正規入口とする。Google Auth Platform の Branding / Audience / Clients 設定と `client_secrets.json` の既存契約も `references/tool.md` で維持する。手動 script / Terraform を明示的に選ぶ上級者向け資産は同じ owner の `references/gcp-bootstrap.md` に置く。`/setup` では `config/channel/*.json` を生成しない。新規チャンネルの TTP 対象確認、config 生成、ペルソナ、branding は `/channel-new` の責務であり、この段では変更しない。運用設定の `workflow.post-publish.skip_approvals` も `references/tool.md` の既存インタビューで扱う。
+`--tool` は `uv run yt-setup-dirs` を含む現行 doctor wizard をそのまま実行し、GCP / OAuth / ADC bootstrap の唯一の正規入口とする。Google Auth Platform の Branding / Audience / Clients 設定と `client_secrets.json` の既存契約も `references/tool.md` で維持する。手動 script / Terraform を明示的に選ぶ上級者向け資産は同じ owner の `references/gcp-bootstrap.md` に置く。`--tool` では `config/channel/*.json` を生成しない。運用設定の `workflow.post-publish.skip_approvals` も `references/tool.md` の既存インタビューで扱う。
+
+`--channel` は `references/channel-mode.md` を唯一の正として読み、旧 `/channel-new` 新規開設モードと同じ Step 1〜10 を実行する。TTP hearing、seed confirmation、config、duration、persona、branding、readiness、initial save の順序、success / failure / blocked / resume / idempotency、不可逆操作前の承認 gate と成果物契約を変えない。既存チャンネル取り込み、分析、方向性検討、再生成、設定 push は residual `/channel-new` の責務であり、`--channel` に吸収しない。
 
 ## 一括実行
 
@@ -55,5 +64,6 @@ uv run python .claude/skills/setup/references/setup-chain-state.py \
 
 - フラグなし: tool が `skip` または実行後 `skip` になっている
 - `--tool`: `references/tool.md` の完了条件だけを満たしている
+- `--channel`: `references/channel-mode.md` の Step 1〜10 と完了条件をすべて満たしている
 
 実行または skip と、状態判定の `reason` を短く報告する。

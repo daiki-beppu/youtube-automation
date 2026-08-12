@@ -1,6 +1,6 @@
 # Persona, branding, and readiness details
 
-新規開設モードの Step 6〜9 で、追加調査の委譲、公開前ペルソナチェーン、branding の生成・確認、`/wf-new` 接続前判定を実行するときに参照する。順序、実行コマンド、承認ゲート、停止条件、成果物は `../SKILL.md` を正とし、本書は各 Step の実施詳細だけを所有する。
+新規開設モードの Step 6〜9 で、追加調査の委譲、公開前ペルソナチェーン、branding の生成・確認、`/wf-new` 接続前判定を実行するときに参照する。順序、実行コマンド、承認ゲート、停止条件、成果物は [channel-mode.md](channel-mode.md) を正とし、本書は各 Step の実施詳細だけを所有する。
 
 ## Optional research delegation details
 
