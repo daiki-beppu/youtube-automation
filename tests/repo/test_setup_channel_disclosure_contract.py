@@ -17,6 +17,9 @@ BOOTSTRAP_REFERENCE_MD = SKILL_DIR / "references" / "new-channel-bootstrap.md"
 TTP_SEED_DURATION_REFERENCE_MD = SKILL_DIR / "references" / "ttp-seed-and-duration.md"
 PERSONA_BRANDING_READINESS_REFERENCE_MD = SKILL_DIR / "references" / "persona-branding-readiness.md"
 CHANNEL_NEW_SKILL_MD = REPO_ROOT / ".claude" / "skills" / "channel-new" / "SKILL.md"
+CHANNEL_NEW_RESIDUAL_SKILL_SHA256 = "5162365c94df5662cc057bcb07f17e82652042cdb7859875919683e535ad7400"
+CHANNEL_NEW_DESCRIPTION_SHA256 = "f6723ead03cbeaa889a3a10a4ef7195468841b049f256289c5795469cd752a9d"
+CHANNEL_NEW_ROUTING_SHA256 = "9e66e6cb0b6818436cf215be521fcd67576ed2668927017f05e1af6aebd3adf1"
 OPENING_ASSETS = {
     "new-channel-bootstrap.md",
     "ttp-seed-and-duration.md",
@@ -71,7 +74,14 @@ def _channel_new_opening_routing_violations(markdown: str) -> set[str]:
     description = frontmatter["description"]
     routing = markdown.split("## モード判別", 1)[1].split("## 外部データの扱い", 1)[0]
     opening_triggers = ("チャンネル追加", "新チャンネル", "新規チャンネル", "チャンネル開設")
-    violations = {f"description trigger:{trigger}" for trigger in opening_triggers if trigger in description}
+    violations = set()
+    if sha256(markdown.encode()).hexdigest() != CHANNEL_NEW_RESIDUAL_SKILL_SHA256:
+        violations.add("residual skill content")
+    if sha256(description.encode()).hexdigest() != CHANNEL_NEW_DESCRIPTION_SHA256:
+        violations.add("frontmatter description")
+    if sha256(routing.encode()).hexdigest() != CHANNEL_NEW_ROUTING_SHA256:
+        violations.add("opening routing content")
+    violations.update(f"description trigger:{trigger}" for trigger in opening_triggers if trigger in description)
     violations.update(f"rejection context:{trigger}" for trigger in opening_triggers if trigger not in routing)
     if "`/setup --channel` を案内して停止する" not in routing:
         violations.add("positive setup route")
@@ -453,6 +463,39 @@ def test_channel_new_opening_rejection_detects_reviewer_combined_counterexample(
         "opening step:Step 4: フルパッケージ config / 初期運用ファイル生成",
         "opening command:yt-channel-init",
     }
+
+
+def test_channel_new_opening_rejection_detects_new_channel_creation_description() -> None:
+    source = CHANNEL_NEW_SKILL_MD.read_text(encoding="utf-8")
+    mutated = source.replace(
+        'description: "Use when ',
+        'description: "Use when 新しいチャンネルを作るとき、',
+        1,
+    )
+
+    assert "residual skill content" in _channel_new_opening_routing_violations(mutated)
+
+
+def test_channel_new_opening_rejection_detects_channel_establishment_description() -> None:
+    source = CHANNEL_NEW_SKILL_MD.read_text(encoding="utf-8")
+    mutated = source.replace(
+        'description: "Use when ',
+        'description: "Use when YouTube チャンネルを新設するとき、',
+        1,
+    )
+
+    assert "residual skill content" in _channel_new_opening_routing_violations(mutated)
+
+
+def test_channel_new_opening_rejection_detects_prose_execution_reintroduction() -> None:
+    source = CHANNEL_NEW_SKILL_MD.read_text(encoding="utf-8")
+    mutated = source.replace(
+        "## 外部データの扱い",
+        "TTP 対象を聞き、config/channel/*.json を生成して branding を反映する。\n\n## 外部データの扱い",
+        1,
+    )
+
+    assert "residual skill content" in _channel_new_opening_routing_violations(mutated)
 
 
 def test_opening_asset_inventory_detects_real_removal_and_duplicate(tmp_path: Path) -> None:
