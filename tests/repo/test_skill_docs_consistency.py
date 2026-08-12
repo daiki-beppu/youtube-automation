@@ -308,7 +308,7 @@ def test_setup_channel_ttp_hearing_routes_direction_to_residual_mode() -> None:
     assert "Step 1 の TTP ヒアリングとは別に、config 生成に必要な初期値だけをここで確認する" in step4
 
     assert "新規開設の Step 1〜10 は `/setup --channel`" in overview
-    assert "fallback しない" in overview
+    assert "互換入口として保持" in overview
     assert "方向性検討モード" in mode_routing
     assert "Step D1〜D5" in mode_routing
     assert "新チャンネル" in mode_routing and "`/setup --channel`" in mode_routing

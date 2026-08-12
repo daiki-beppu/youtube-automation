@@ -11,7 +11,7 @@
 
 ## Setup gate details
 
-必須 check ID と、config 未生成でも許容する代表的な stop contract は `../SKILL.md` に残す。次の config 生成で解消する分類詳細だけをこの reference で定義する。
+必須 check ID と、config 未生成でも許容する代表的な stop contract は [channel-mode.md](channel-mode.md) に置く。次の config 生成で解消する分類詳細だけをこの reference で定義する。
 
 Step 4 の config 生成で解消する次の fail / warn だけは許容する。
 

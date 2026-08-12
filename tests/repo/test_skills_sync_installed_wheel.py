@@ -175,6 +175,17 @@ assert "wheel-identity-check" not in legacy._cache
         assert local_links
         assert all((markdown.parent / link).is_file() for link in local_links)
 
+    legacy_channel_new = downstream / ".claude" / "skills" / "channel-new" / "SKILL.md"
+    legacy_text = legacy_channel_new.read_text(encoding="utf-8")
+    for relative in (
+        "../setup/references/channel-mode.md",
+        "../setup/references/new-channel-bootstrap.md",
+        "../setup/references/ttp-seed-and-duration.md",
+        "../setup/references/persona-branding-readiness.md",
+    ):
+        assert relative in legacy_text
+        assert (legacy_channel_new.parent / relative).is_file()
+
     bootstrap_guide = distributed_references / "gcp-bootstrap.md"
     assert bootstrap_guide.is_file()
     guide_text = bootstrap_guide.read_text(encoding="utf-8")

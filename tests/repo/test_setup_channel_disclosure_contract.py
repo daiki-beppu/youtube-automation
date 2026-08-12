@@ -64,6 +64,23 @@ def _opening_asset_violations(skills_dir: Path) -> set[str]:
     return violations
 
 
+def _legacy_channel_new_opening_violations(markdown: str) -> set[str]:
+    required = {
+        "trigger:チャンネル追加": "チャンネル追加",
+        "trigger:新チャンネル": "新チャンネル",
+        "trigger:チャンネル開設": "チャンネル開設",
+        "mode": "1. **新規開設モード**（Step 1〜10）",
+        "completion": "## 完了条件（新規開設モード）",
+        "instructions": "## Instructions（新規開設モード）",
+        "canonical delegation": "[setup channel mode](../setup/references/channel-mode.md)",
+    }
+    violations = {name for name, marker in required.items() if marker not in markdown}
+    for step in range(1, 11):
+        if f"### Step {step}:" not in markdown:
+            violations.add(f"step:{step}")
+    return violations
+
+
 def test_skill_dispatches_bootstrap_reference_before_step_2() -> None:
     skill = SKILL_MD.read_text(encoding="utf-8")
     relative_reference = BOOTSTRAP_REFERENCE_MD.relative_to(SKILL_MD.parent).as_posix()
@@ -111,6 +128,37 @@ def test_reference_owns_setup_gate_check_classification() -> None:
     ):
         assert reference.count(detail) == 1
         assert detail not in bootstrap
+
+
+def test_bootstrap_setup_gate_owner_link_resolves_to_required_check_contract() -> None:
+    reference = BOOTSTRAP_REFERENCE_MD.read_text(encoding="utf-8")
+    owner_link = re.search(r"\[channel-mode\.md\]\(([^)]+)\)", reference)
+    assert owner_link is not None
+    owner = BOOTSTRAP_REFERENCE_MD.parent / owner_link.group(1)
+    assert owner.resolve() == SKILL_MD.resolve()
+    owner_text = owner.read_text(encoding="utf-8")
+    for check_id in (
+        "ffmpeg",
+        "ffprobe",
+        "uv",
+        "uv_project",
+        "automation_package",
+        "skills_synced",
+        "gcloud",
+        "gcloud_account",
+        "gcp_project",
+        "billing_linked",
+        "apis_enabled",
+        "adc",
+        "adc_quota_project",
+        "iam_aiplatform_user",
+        "env_file",
+        "client_secrets",
+        "oauth_token",
+    ):
+        assert f"`{check_id}`" in owner_text
+    assert "いずれかが `ok` でなければ" in owner_text
+    assert "Step 4 以降へ進まない" in owner_text
 
 
 def test_reference_owns_configuration_schema_and_initial_file_rules() -> None:
@@ -319,6 +367,38 @@ def test_opening_assets_have_exactly_one_setup_owner() -> None:
     assert _opening_asset_violations(REPO_ROOT / ".claude" / "skills") == set()
 
 
+def test_channel_new_preserves_legacy_opening_entrypoint_without_asset_ownership() -> None:
+    channel_new = CHANNEL_NEW_SKILL_MD.read_text(encoding="utf-8")
+
+    assert _legacy_channel_new_opening_violations(channel_new) == set()
+    for asset in OPENING_ASSETS:
+        assert f"channel-new/references/{asset}" not in channel_new
+    for path in (
+        "../setup/references/new-channel-bootstrap.md",
+        "../setup/references/ttp-seed-and-duration.md",
+        "../setup/references/persona-branding-readiness.md",
+        ".claude/skills/setup/references/derive_ttp_duration.py",
+        ".claude/skills/setup/references/initial_save_guard.sh",
+    ):
+        assert path in channel_new
+
+
+def test_legacy_opening_contract_detects_real_routing_deletion(tmp_path: Path) -> None:
+    source = CHANNEL_NEW_SKILL_MD.read_text(encoding="utf-8")
+    mutated = source.replace("チャンネル追加", "").replace(
+        "[setup channel mode](../setup/references/channel-mode.md)",
+        "",
+        1,
+    )
+    candidate = tmp_path / "SKILL.md"
+    candidate.write_text(mutated, encoding="utf-8")
+
+    assert _legacy_channel_new_opening_violations(candidate.read_text(encoding="utf-8")) == {
+        "trigger:チャンネル追加",
+        "canonical delegation",
+    }
+
+
 def test_opening_asset_inventory_detects_real_removal_and_duplicate(tmp_path: Path) -> None:
     skills_dir = tmp_path / "skills"
     setup_references = skills_dir / "setup" / "references"
@@ -356,6 +436,12 @@ def test_moved_opening_assets_preserve_pre_move_bytes_or_owner_only_semantics() 
             text = payload.decode()
             assert current in text
             payload = text.replace(current, original, 1).encode()
+        if asset == "new-channel-bootstrap.md":
+            payload = payload.replace(
+                b"[channel-mode.md](channel-mode.md) \xe3\x81\xab\xe7\xbd\xae\xe3\x81\x8f",
+                b"`../SKILL.md` \xe3\x81\xab\xe6\xae\x8b\xe3\x81\x99",
+                1,
+            )
         if asset == "ttp-seed-and-duration.md":
             payload = payload.replace(b".claude/skills/setup/references/", b".claude/skills/channel-new/references/")
         assert sha256(payload).hexdigest() == expected
