@@ -5,7 +5,7 @@ description: "Use when YouTube Data API で追加競合候補を自動発掘・�
 
 ## 前後工程
 
-- `前工程`: `/benchmark`, `/setup`
+- `前工程`: `/benchmark`, `/setup --channel`
 - `後工程`: `/viewer-voice`, `/benchmark`
 
 ## Overview
@@ -18,7 +18,7 @@ description: "Use when YouTube Data API で追加競合候補を自動発掘・�
 - 出力: ランキング付き Markdown + 同名 CSV（スコア内訳列付き）
 - 想定時間: 5 分以内（初回または強制更新時の API quota 約 660 units。24 時間以内の同一検索条件はキャッシュを利用）
 
-前工程の `/setup` は `/setup --channel` Step 6（`.claude/skills/setup/references/persona-branding-readiness.md`）を指す。標準フローでは本スキルを実行せず、必要性を確認して委譲する。TTP 対象確認後に追加の競合候補を広げたい場合や、複数のニッチ仮説を
+このスキルの前工程は `/setup --channel` Step 6（`.claude/skills/setup/references/persona-branding-readiness.md`）を指す。標準フローでは本スキルを実行せず、必要性を確認して委譲する。TTP 対象確認後に追加の競合候補を広げたい場合や、複数のニッチ仮説を
 並行検証したい場合に、このスキルを任意で走らせる。
 
 ## 完了条件
@@ -46,7 +46,7 @@ Step 3 の実行で出力ペア（Markdown ランキング + 同名 CSV）を生
 
 ### 停止する fail
 
-- 実行場所がチャンネルリポジトリ（`CHANNEL_DIR`）配下ではない → `/channel-new` を案内して停止する
+- 実行場所がチャンネルリポジトリ（`CHANNEL_DIR`）配下ではない → 新規・未作成チャンネルは `/setup --channel`、既存チャンネルの取り込みは `/channel-new`（既存チャンネル取り込みモード）を案内して停止する
 - `auth/token.json` が存在しない、または OAuth 認証が無効 → `/setup` の OAuth 認証を案内して停止する
 
 ### 許容する fail

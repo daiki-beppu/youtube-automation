@@ -25,9 +25,10 @@ def test_all_skills_use_machine_readable_chain_block() -> None:
         r"- `後工程`: (?P<downstream>[^\n]+)\n",
         re.DOTALL,
     )
+    chain_reference = r"`(?:/[a-z0-9-]+|/setup --channel)`"
     chain_value = re.compile(
-        r"^(?:`なし`|`\*`（共通基盤としてほぼ全スキル）|"
-        r"`/[a-z0-9-]+`(?:, `/[a-z0-9-]+`)*)$"
+        rf"^(?:`なし`|`\*`（共通基盤としてほぼ全スキル）|"
+        rf"{chain_reference}(?:, {chain_reference})*)$"
     )
     known_skills = {path.parent.name for path in skill_paths}
 
@@ -39,7 +40,7 @@ def test_all_skills_use_machine_readable_chain_block() -> None:
         for direction in ("upstream", "downstream"):
             value = match.group(direction)
             assert chain_value.fullmatch(value), f"{path}: {direction} の書式が不正: {value}"
-            for reference in re.findall(r"`/([a-z0-9-]+)`", value):
+            for reference in re.findall(r"`/([a-z0-9-]+)(?: --channel)?`", value):
                 assert reference in known_skills, f"{path}: 存在しない skill 参照 /{reference}"
 
 
@@ -875,7 +876,7 @@ def test_channel_new_followup_skill_routing_uses_new_contract() -> None:
     features = _read("docs/features.md")
 
     assert "/channel-new Step 5 の前段" not in discover
-    assert "前工程の `/setup` は `/setup --channel` Step 6" in discover
+    assert "このスキルの前工程は `/setup --channel` Step 6" in discover
     assert "標準フローでは本スキルを実行せず" in discover
     assert "ユーザー承認と relationship メモを必ず残す" in discover
     assert "genre_keywords" not in discover
