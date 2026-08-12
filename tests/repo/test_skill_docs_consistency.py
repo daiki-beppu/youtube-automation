@@ -261,7 +261,7 @@ def test_setup_channel_ttp_hearing_routes_direction_to_residual_mode() -> None:
     setup_channel = _read(".claude/skills/setup/references/channel-mode.md")
     channel_new = _read(".claude/skills/channel-new/SKILL.md")
     overview = channel_new.split("## Overview", 1)[1].split("## モード判別", 1)[0]
-    mode_routing = channel_new.split("## モード判別", 1)[1].split("## TTP 原則", 1)[0]
+    mode_routing = channel_new.split("## モード判別", 1)[1].split("## 外部データの扱い", 1)[0]
     direction_mode_row = next(line for line in mode_routing.splitlines() if line.startswith("| 方向性検討モード |"))
     direction_mode_stub = channel_new.split("## 方向性検討モード", 1)[1].split("\n## 再生成モード", 1)[0]
     direction_mode = _read(".claude/skills/channel-new/references/direction-mode.md")
@@ -308,7 +308,7 @@ def test_setup_channel_ttp_hearing_routes_direction_to_residual_mode() -> None:
     assert "Step 1 の TTP ヒアリングとは別に、config 生成に必要な初期値だけをここで確認する" in step4
 
     assert "新規開設の Step 1〜10 は `/setup --channel`" in overview
-    assert "互換入口として保持" in overview
+    assert "fallback しない" in overview
     assert "方向性検討モード" in mode_routing
     assert "Step D1〜D5" in mode_routing
     assert "新チャンネル" in mode_routing and "`/setup --channel`" in mode_routing
@@ -343,6 +343,7 @@ def test_setup_channel_ttp_hearing_routes_direction_to_residual_mode() -> None:
 
     viewer_voice = _read(".claude/skills/viewer-voice/SKILL.md")
     assert "新規開設モードでは Step 7 の必須前工程" in viewer_voice
+    assert "その互換入口である `/channel-new` の新規開設モードでも同じ契約を適用する" in viewer_voice
     assert "公開後の再分析では" in viewer_voice
     assert "標準フローでは実行せず" not in viewer_voice
 
@@ -1438,7 +1439,7 @@ def test_channel_new_setting_push_mode_contract_is_documented() -> None:
     ):
         assert trigger in description
 
-    overview = channel_new.split("## Overview", 1)[1].split("## TTP 原則", 1)[0]
+    overview = channel_new.split("## Overview", 1)[1].split("## モード判別", 1)[0]
     assert "設定 push モード" in overview
     assert "本モードへ直行し、他モードの Step はスキップする" in overview
 

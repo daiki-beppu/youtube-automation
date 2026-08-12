@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `refactor(channel-new)`: 新規開設 trigger と Step 1〜10 の互換実行を `/channel-new` から除去し、opening 文脈を artifact 無変更のまま `/setup --channel` へ案内して停止する residual 5-mode contract に固定した。取り込み・分析・方向性検討・再生成・設定 push と共有 branding/config 資産は変更しない（#3982）。
 - `refactor(setup)`: 排他的な `/setup --channel` を追加し、新規開設 Step 1〜10 の canonical contract と opening-only references / helpers の owner を setup へ移した。旧 `/channel-new` の opening trigger・Step 1〜10 は setup contract への互換入口として維持し、取り込み・分析・方向性検討・再生成・設定 push と共有 branding/config 資産も変更しない（#3983）。
 - `refactor(setup)`: GCP / OAuth / ADC bootstrap の正規入口を `/setup --tool` doctor wizard に一意化し、手動 script と Terraform 配布資産を `setup/references/` へ移して source / wheel / sdist / `yt-skills sync` の到達契約を維持する（#3984）。
 - `feat(setup)`: `/setup` に排他的な `--tool` mode と 1-step chain manifest を追加し、フラグなし実行を `yt-doctor` の現在状態に応じて再開・skip できるようにする（#3744）。

@@ -22,13 +22,13 @@ def test_analysis_mode_replaces_standalone_skill_and_is_not_bundled() -> None:
     assert "channel-research" not in bundled_skill_names()
 
 
-def test_channel_new_routes_analysis_keywords_to_sixth_mode() -> None:
+def test_channel_new_routes_analysis_keywords_to_residual_fifth_mode() -> None:
     skill = _read(CHANNEL_NEW)
     frontmatter = yaml.safe_load(skill.split("---", 2)[1])
     description = frontmatter["description"]
 
-    assert "6 つのモード" in skill
-    assert "6. **分析モード**" in skill
+    assert "5 つの mode" in skill
+    assert "5. **分析モード**" in skill
     for keyword in ("競合分析", "チャンネルリサーチ", "TTP 対象抽出"):
         assert keyword in description
         assert keyword in skill
