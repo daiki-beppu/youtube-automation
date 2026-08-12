@@ -142,6 +142,49 @@ for module_name in legacy_modules:
     module = importlib.import_module(module_name)
     assert module.__name__ == module_name
 
+removed_modules = (
+    "youtube_automation.infrastructure.legacy_utils.profile",
+    "youtube_automation.infrastructure.legacy_utils.worktree",
+    "youtube_automation.utils.profile",
+    "youtube_automation.utils.worktree",
+)
+for module_name in removed_modules:
+    try:
+        importlib.import_module(module_name)
+    except ModuleNotFoundError as exc:
+        assert exc.name == module_name
+    else:
+        raise AssertionError(f"removed duplicate module remains importable: {module_name}")
+
+errors = importlib.import_module("youtube_automation.infrastructure.errors")
+canonical_errors = importlib.import_module("youtube_automation.core.errors")
+assert errors.ConfigError is canonical_errors.ConfigError
+try:
+    raise errors.ConfigError("wheel-facade-behavior")
+except errors.ConfigError as exc:
+    assert str(exc) == "wheel-facade-behavior"
+
+paths = importlib.import_module("youtube_automation.utils.collection_paths")
+canonical_paths = importlib.import_module("youtube_automation.infrastructure.media.collection_paths")
+assert paths.CollectionPaths is canonical_paths.CollectionPaths
+assert paths.CollectionPaths("example").collection_name == "example"
+
+image_provider = importlib.import_module("youtube_automation.utils.image_provider")
+canonical_image_provider = importlib.import_module("youtube_automation.infrastructure.media.image_provider")
+assert image_provider.PromptSchema is canonical_image_provider.PromptSchema
+assert image_provider.PromptSchema(primary_request="wheel").primary_request == "wheel"
+for submodule in ("config", "composition", "prompt_schema", "gemini", "openai"):
+    facade_submodule = importlib.import_module(f"youtube_automation.utils.image_provider.{submodule}")
+    canonical_submodule = importlib.import_module(
+        f"youtube_automation.infrastructure.media.image_provider.{submodule}"
+    )
+    assert facade_submodule.__name__ != canonical_submodule.__name__
+
+mask = importlib.import_module("youtube_automation.utils.audio_visualizer_mask")
+canonical_mask = importlib.import_module("youtube_automation.infrastructure.media.audio_visualizer_mask")
+assert mask.parse_size is canonical_mask.parse_size
+assert mask.parse_size("12x34") == (12, 34)
+
 canonical = importlib.import_module("youtube_automation.configuration.channel_target")
 legacy_channel_target = importlib.import_module("youtube_automation.infrastructure.legacy_utils.channel_target")
 compat_channel_target = importlib.import_module("youtube_automation.utils.channel_target")
@@ -154,6 +197,9 @@ legacy = importlib.import_module("youtube_automation.infrastructure.legacy_utils
 canonical_skills = importlib.import_module("youtube_automation.configuration.skills")
 assert legacy.reset is canonical_skills.reset
 assert legacy._cache is canonical_skills._cache
+compat_skills = importlib.import_module("youtube_automation.utils.skill_config")
+assert compat_skills.reset is canonical_skills.reset
+assert compat_skills._cache is canonical_skills._cache
 legacy.reset()
 legacy._cache["wheel-identity-check"] = {}
 canonical_skills.reset("wheel-identity-check")

@@ -257,6 +257,47 @@ EXPECTED_CORE_ADAPTER_FILES = frozenset(
 CORE_ADAPTER_DOC_START = "<!-- core-adapter-surface:start -->"
 CORE_ADAPTER_DOC_END = "<!-- core-adapter-surface:end -->"
 
+LEGACY_UTILS = SRC / "infrastructure" / "legacy_utils"
+REMOVED_DUPLICATE_LEGACY_UTILS = frozenset(
+    {
+        "infrastructure/legacy_utils/profile.py",
+        "infrastructure/legacy_utils/worktree.py",
+    }
+)
+CANONICAL_LEGACY_UTILS_OWNERS = frozenset(
+    {
+        "infrastructure/observability/profile.py",
+        "infrastructure/vcs/worktree.py",
+    }
+)
+CONFIRMED_DOWNSTREAM_FACADES = (
+    (
+        "youtube_automation.infrastructure.errors",
+        "youtube_automation.core.errors",
+        "ConfigError",
+    ),
+    (
+        "youtube_automation.utils.skill_config",
+        "youtube_automation.configuration.skills",
+        "reset",
+    ),
+    (
+        "youtube_automation.utils.collection_paths",
+        "youtube_automation.infrastructure.media.collection_paths",
+        "CollectionPaths",
+    ),
+    (
+        "youtube_automation.utils.image_provider",
+        "youtube_automation.infrastructure.media.image_provider",
+        "PromptSchema",
+    ),
+    (
+        "youtube_automation.utils.audio_visualizer_mask",
+        "youtube_automation.infrastructure.media.audio_visualizer_mask",
+        "parse_size",
+    ),
+)
+
 
 def test_core_adapter_source_surface_is_exact() -> None:
     # Given: #3895 後に保持する明示 adapter と package file の最終集合
@@ -682,6 +723,160 @@ def _built_core_adapter_surface_offenders(wheel: Path, sdist: Path) -> list[str]
     offenders.extend(f"sdist missing core adapter file: {path}" for path in sorted(expected_sdist - sdist_surface))
     offenders.extend(f"sdist unexpected core adapter file: {path}" for path in sorted(sdist_surface - expected_sdist))
     return offenders
+
+
+def _distribution_python_sources(wheel: Path, sdist: Path) -> tuple[set[str], set[str]]:
+    with zipfile.ZipFile(wheel) as archive:
+        wheel_sources = {member for member in archive.namelist() if member.endswith(".py")}
+    with tarfile.open(sdist) as archive:
+        sdist_sources = {
+            Path(*Path(member.name).parts[1:]).as_posix()
+            for member in archive.getmembers()
+            if member.isfile() and member.name.endswith(".py")
+        }
+    return wheel_sources, sdist_sources
+
+
+def _is_string_sequence(node: ast.AST) -> bool:
+    return isinstance(node, (ast.List, ast.Tuple)) and all(
+        isinstance(element, ast.Constant) and isinstance(element.value, str) for element in node.elts
+    )
+
+
+def _is_module_alias_target(node: ast.AST) -> bool:
+    if not isinstance(node, ast.Subscript):
+        return False
+    modules = node.value
+    if not (
+        isinstance(modules, ast.Attribute)
+        and isinstance(modules.value, ast.Name)
+        and modules.value.id == "sys"
+        and modules.attr == "modules"
+    ):
+        return False
+    key = node.slice
+    return isinstance(key, ast.Name) and key.id == "__name__"
+
+
+def _is_reexport_assignment(node: ast.Assign) -> bool:
+    if len(node.targets) != 1:
+        return False
+    target = node.targets[0]
+    if isinstance(target, ast.Name) and target.id == "__all__":
+        return _is_string_sequence(node.value)
+    if isinstance(target, ast.Name):
+        return (
+            isinstance(node.value, ast.Attribute)
+            and isinstance(node.value.value, ast.Name)
+            and node.value.value.id.startswith("_")
+        )
+    return _is_module_alias_target(target) and isinstance(node.value, ast.Name) and node.value.id.startswith("_")
+
+
+def _legacy_facade_purity_offenders(legacy_root: Path) -> list[str]:
+    offenders: list[str] = []
+    for path in sorted(legacy_root.rglob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for statement in tree.body:
+            is_docstring = (
+                isinstance(statement, ast.Expr)
+                and isinstance(statement.value, ast.Constant)
+                and isinstance(statement.value.value, str)
+            )
+            is_reexport_import = isinstance(statement, ast.ImportFrom)
+            is_sys_import = isinstance(statement, ast.Import) and all(alias.name == "sys" for alias in statement.names)
+            is_reexport_assignment = isinstance(statement, ast.Assign) and _is_reexport_assignment(statement)
+            if is_docstring or is_reexport_import or is_sys_import or is_reexport_assignment:
+                continue
+            relative = path.relative_to(legacy_root).as_posix()
+            offenders.append(f"{relative}:{statement.lineno}: {type(statement).__name__}")
+    return offenders
+
+
+def test_legacy_utils_contains_only_declarative_reexport_facades() -> None:
+    # Given: every Python member of the recursive compatibility-facade namespace
+    # When: the facade purity contract classifies every top-level statement
+    offenders = _legacy_facade_purity_offenders(LEGACY_UTILS)
+
+    # Then: no implementation, control flow, or import-time execution remains
+    assert offenders == []
+
+
+def test_legacy_utils_purity_allows_only_declarative_reexport_shapes(tmp_path: Path) -> None:
+    # Given: a facade composed only of a docstring, imports, aliases, and __all__
+    facade = tmp_path / "facades" / "example.py"
+    facade.parent.mkdir()
+    facade.write_text(
+        '"""Compatibility facade."""\n'
+        "import sys\n"
+        "from canonical import exported as exported\n"
+        "from canonical import module as _canonical\n"
+        "alias = _canonical.alias\n"
+        "sys.modules[__name__] = _canonical\n"
+        '__all__ = ["alias", "exported"]\n',
+        encoding="utf-8",
+    )
+
+    # When: the generic recursive purity scanner inspects the facade
+    # Then: the supported declarative re-export surface is accepted
+    assert _legacy_facade_purity_offenders(facade.parent) == []
+
+
+@pytest.mark.parametrize(
+    ("mutation_name", "source"),
+    [
+        ("function", "def implementation():\n    return 1\n"),
+        ("class", "class Implementation:\n    pass\n"),
+        ("assignment", "state = {}\n"),
+        ("control-flow", "if True:\n    value = 1\n"),
+        ("side-effect", "print('facade import')\n"),
+        ("import-time-call", "initialize()\n"),
+        ("plain-import", "import side_effect_module\n"),
+    ],
+)
+def test_legacy_utils_purity_rejects_implementation_reintroduction_mutations(
+    tmp_path: Path,
+    mutation_name: str,
+    source: str,
+) -> None:
+    # Given: an arbitrary new facade file with one prohibited implementation shape
+    facade = tmp_path / "facades" / f"{mutation_name}.py"
+    facade.parent.mkdir(exist_ok=True)
+    facade.write_text(source, encoding="utf-8")
+
+    # When: the same recursive scanner used for production source inspects it
+    offenders = _legacy_facade_purity_offenders(facade.parent)
+
+    # Then: the mutation cannot reintroduce executable implementation into a facade
+    assert offenders, mutation_name
+
+
+def test_duplicate_legacy_utils_sources_are_removed_but_canonical_owners_remain() -> None:
+    # Given: the duplicate facade paths and their canonical implementation owners
+    source_files = {path.relative_to(SRC).as_posix() for path in SRC.rglob("*.py") if path.is_file()}
+
+    # When: the source distribution boundary is enumerated
+    # Then: duplicate paths are absent and both canonical owners remain present
+    assert source_files.isdisjoint(REMOVED_DUPLICATE_LEGACY_UTILS)
+    assert CANONICAL_LEGACY_UTILS_OWNERS <= source_files
+
+
+def test_built_distributions_exclude_duplicate_legacy_utils_sources(tmp_path: Path) -> None:
+    # Given: wheel and sdist built from the current repository source
+    wheel, sdist = _build_distributions(ROOT, tmp_path / "legacy-utils-dist")
+
+    # When: every Python source member in both archives is enumerated
+    wheel_sources, sdist_sources = _distribution_python_sources(wheel, sdist)
+    removed_wheel = {f"youtube_automation/{path}" for path in REMOVED_DUPLICATE_LEGACY_UTILS}
+    removed_sdist = {f"src/youtube_automation/{path}" for path in REMOVED_DUPLICATE_LEGACY_UTILS}
+    canonical_wheel = {f"youtube_automation/{path}" for path in CANONICAL_LEGACY_UTILS_OWNERS}
+    canonical_sdist = {f"src/youtube_automation/{path}" for path in CANONICAL_LEGACY_UTILS_OWNERS}
+
+    # Then: neither archive ships a duplicate and both ship the canonical owners
+    assert wheel_sources.isdisjoint(removed_wheel)
+    assert sdist_sources.isdisjoint(removed_sdist)
+    assert canonical_wheel <= wheel_sources
+    assert canonical_sdist <= sdist_sources
 
 
 def test_built_distributions_contain_the_exact_core_adapter_surface(tmp_path: Path) -> None:
@@ -1416,20 +1611,59 @@ assert 'identity-check' not in first._cache
     assert result.returncode == 0, result.stderr
 
 
-@pytest.mark.parametrize(
-    "legacy_module",
-    [
-        "youtube_automation.infrastructure.errors",
-        "youtube_automation.utils.skill_config",
-        "youtube_automation.utils.collection_paths",
-        "youtube_automation.utils.image_provider",
-        "youtube_automation.utils.audio_visualizer_mask",
-    ],
-)
-def test_only_confirmed_downstream_imports_remain_as_compatibility_facades(legacy_module: str) -> None:
+@pytest.mark.parametrize(("legacy_module", "canonical_module", "symbol"), CONFIRMED_DOWNSTREAM_FACADES)
+def test_only_confirmed_downstream_imports_remain_as_compatibility_facades(
+    legacy_module: str,
+    canonical_module: str,
+    symbol: str,
+) -> None:
     # Given: 計画で下流利用を確認した旧 import path
     # When: 旧 path を下流利用可能な facade として解決する
     module = importlib.import_module(legacy_module)
+    canonical = importlib.import_module(canonical_module)
 
-    # Then: facade は空の placeholder ではなく、公開 module としてロードできる
+    # Then: facade は公開 module としてロードでき、canonical symbol identity を保つ
     assert module.__name__ == legacy_module
+    assert getattr(module, symbol) is getattr(canonical, symbol)
+
+
+def test_confirmed_downstream_facades_preserve_runtime_behavior() -> None:
+    # Given: the five confirmed downstream facades loaded in an isolated interpreter
+    code = """
+import importlib
+from pathlib import Path
+
+errors = importlib.import_module("youtube_automation.infrastructure.errors")
+try:
+    raise errors.ConfigError("facade-behavior")
+except errors.ConfigError as exc:
+    assert str(exc) == "facade-behavior"
+
+skills = importlib.import_module("youtube_automation.utils.skill_config")
+canonical_skills = importlib.import_module("youtube_automation.configuration.skills")
+skills.reset()
+skills._cache["facade-behavior"] = {}
+canonical_skills.reset("facade-behavior")
+assert "facade-behavior" not in skills._cache
+
+paths = importlib.import_module("youtube_automation.utils.collection_paths")
+assert paths.CollectionPaths("example").root == Path("example").resolve()
+
+image_provider = importlib.import_module("youtube_automation.utils.image_provider")
+assert image_provider.PromptSchema(primary_request="facade-behavior").primary_request == "facade-behavior"
+
+mask = importlib.import_module("youtube_automation.utils.audio_visualizer_mask")
+assert mask.parse_size("12x34") == (12, 34)
+"""
+
+    # When: representative behavior is exercised through each historical path
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    # Then: every facade delegates behavior to its canonical owner without divergence
+    assert result.returncode == 0, result.stderr
