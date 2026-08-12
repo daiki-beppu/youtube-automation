@@ -23,6 +23,7 @@ import pytest
 
 from tests.helpers.paths import REPO_ROOT
 from youtube_automation.infrastructure import cost_tracker
+from youtube_automation.infrastructure import file_lock as file_lock_module
 
 
 @pytest.fixture
@@ -81,6 +82,14 @@ def _write_audio_entries_concurrently(count: int) -> None:
         ]
         for f in futures:
             f.result()
+
+
+def test_cost_tracker_uses_canonical_file_lock_owner() -> None:
+    """Given cost tracker の排他境界
+    When lock callable の owner identity を確認する
+    Then infrastructure.file_lock の canonical 実装を直接利用する。
+    """
+    assert cost_tracker._file_lock is file_lock_module.file_lock
 
 
 # ============================================================
@@ -247,8 +256,8 @@ def test_log_generation_uses_fcntl_when_available(tmp_channel: Path, monkeypatch
             raise AssertionError("msvcrt should not be used when fcntl is available")
 
     fake_fcntl = FakeFcntl()
-    monkeypatch.setattr(cost_tracker, "_fcntl", fake_fcntl)
-    monkeypatch.setattr(cost_tracker, "_msvcrt", UnexpectedMsvcrt())
+    monkeypatch.setattr(file_lock_module, "_fcntl", fake_fcntl)
+    monkeypatch.setattr(file_lock_module, "_msvcrt", UnexpectedMsvcrt())
 
     entry = cost_tracker.log_generation(
         "image",
@@ -344,8 +353,8 @@ def test_log_generation_uses_msvcrt_when_fcntl_is_unavailable(tmp_channel: Path,
             self.calls.append((mode, nbytes))
 
     fake_msvcrt = FakeMsvcrt()
-    monkeypatch.setattr(cost_tracker, "_fcntl", None)
-    monkeypatch.setattr(cost_tracker, "_msvcrt", fake_msvcrt)
+    monkeypatch.setattr(file_lock_module, "_fcntl", None)
+    monkeypatch.setattr(file_lock_module, "_msvcrt", fake_msvcrt)
 
     N = 20
     _write_audio_entries_concurrently(N)
@@ -381,9 +390,9 @@ def test_log_generation_retries_msvcrt_lock_contention(tmp_channel: Path, monkey
 
     fake_msvcrt = FakeMsvcrt()
     sleep_calls: list[float] = []
-    monkeypatch.setattr(cost_tracker, "_fcntl", None)
-    monkeypatch.setattr(cost_tracker, "_msvcrt", fake_msvcrt)
-    monkeypatch.setattr(cost_tracker.time, "sleep", sleep_calls.append)
+    monkeypatch.setattr(file_lock_module, "_fcntl", None)
+    monkeypatch.setattr(file_lock_module, "_msvcrt", fake_msvcrt)
+    monkeypatch.setattr(file_lock_module.time, "sleep", sleep_calls.append)
 
     entry = cost_tracker.log_generation(
         "image",
@@ -402,8 +411,8 @@ def test_log_generation_retries_msvcrt_lock_contention(tmp_channel: Path, monkey
         (fake_msvcrt.LK_UNLCK, 1),
     ]
     assert sleep_calls == [
-        cost_tracker._MSVCRT_LOCK_RETRY_DELAY_SECONDS,
-        cost_tracker._MSVCRT_LOCK_RETRY_DELAY_SECONDS,
+        file_lock_module._MSVCRT_LOCK_RETRY_DELAY_SECONDS,
+        file_lock_module._MSVCRT_LOCK_RETRY_DELAY_SECONDS,
     ]
 
 
@@ -427,9 +436,9 @@ def test_log_generation_does_not_retry_non_contention_msvcrt_errors(tmp_channel:
 
     fake_msvcrt = FakeMsvcrt()
     sleep_calls: list[float] = []
-    monkeypatch.setattr(cost_tracker, "_fcntl", None)
-    monkeypatch.setattr(cost_tracker, "_msvcrt", fake_msvcrt)
-    monkeypatch.setattr(cost_tracker.time, "sleep", sleep_calls.append)
+    monkeypatch.setattr(file_lock_module, "_fcntl", None)
+    monkeypatch.setattr(file_lock_module, "_msvcrt", fake_msvcrt)
+    monkeypatch.setattr(file_lock_module.time, "sleep", sleep_calls.append)
 
     entry = cost_tracker.log_generation(
         "image",
@@ -463,10 +472,10 @@ def test_log_generation_stops_after_msvcrt_contention_retry_limit(tmp_channel: P
 
     fake_msvcrt = FakeMsvcrt()
     sleep_calls: list[float] = []
-    monkeypatch.setattr(cost_tracker, "_fcntl", None)
-    monkeypatch.setattr(cost_tracker, "_msvcrt", fake_msvcrt)
-    monkeypatch.setattr(cost_tracker, "_MSVCRT_LOCK_MAX_ATTEMPTS", 3)
-    monkeypatch.setattr(cost_tracker.time, "sleep", sleep_calls.append)
+    monkeypatch.setattr(file_lock_module, "_fcntl", None)
+    monkeypatch.setattr(file_lock_module, "_msvcrt", fake_msvcrt)
+    monkeypatch.setattr(file_lock_module, "_MSVCRT_LOCK_MAX_ATTEMPTS", 3)
+    monkeypatch.setattr(file_lock_module.time, "sleep", sleep_calls.append)
 
     entry = cost_tracker.log_generation(
         "image",
@@ -482,8 +491,8 @@ def test_log_generation_stops_after_msvcrt_contention_retry_limit(tmp_channel: P
         (fake_msvcrt.LK_NBLCK, 1),
     ]
     assert sleep_calls == [
-        cost_tracker._MSVCRT_LOCK_RETRY_DELAY_SECONDS,
-        cost_tracker._MSVCRT_LOCK_RETRY_DELAY_SECONDS,
+        file_lock_module._MSVCRT_LOCK_RETRY_DELAY_SECONDS,
+        file_lock_module._MSVCRT_LOCK_RETRY_DELAY_SECONDS,
     ]
 
 
@@ -507,8 +516,8 @@ def test_log_generation_releases_msvcrt_lock_when_write_fails(tmp_channel: Path,
         raise RuntimeError(f"forced read failure: {path.name}")
 
     fake_msvcrt = FakeMsvcrt()
-    monkeypatch.setattr(cost_tracker, "_fcntl", None)
-    monkeypatch.setattr(cost_tracker, "_msvcrt", fake_msvcrt)
+    monkeypatch.setattr(file_lock_module, "_fcntl", None)
+    monkeypatch.setattr(file_lock_module, "_msvcrt", fake_msvcrt)
     monkeypatch.setattr(cost_tracker, "_read_entries", fail_read_entries)
 
     entry = cost_tracker.log_generation(
@@ -538,8 +547,8 @@ def test_log_generation_without_platform_file_lock_preserves_threaded_writes(tmp
     When 同一プロセス内で並列に cost 記録する
     Then プロセス内ロックで全エントリが保持される。
     """
-    monkeypatch.setattr(cost_tracker, "_fcntl", None)
-    monkeypatch.setattr(cost_tracker, "_msvcrt", None)
+    monkeypatch.setattr(file_lock_module, "_fcntl", None)
+    monkeypatch.setattr(file_lock_module, "_msvcrt", None)
 
     N = 20
     _write_audio_entries_concurrently(N)
