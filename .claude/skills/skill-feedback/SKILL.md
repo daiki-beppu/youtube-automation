@@ -18,6 +18,7 @@ description: "Use when 下流チャンネルリポジトリでスキル実行中
 
 - 記録モードでは既存行を変更せず、schema 準拠の JSON object を末尾に 1 行だけ追加する
 - 還流モードでは `status="recorded"` の行だけを候補にする。`filed` / `resolved` / `wontfix` は終端状態として表示・選択・起票・変更の対象にしない
+- schema-invalid 行は行番号と schema または JSON parse の失敗理由を警告し、候補から除外する。valid な `recorded` entry の処理は継続する
 - `resolved` / `wontfix` への更新は、ユーザーが対象行と disposition を明示的に確認した場合だけ行う。空でない簡潔な `disposition_reason` と更新時刻 `disposition_at` を必須とする
 - issue 起票前に open issue のタイトルを照合し、類似候補ごとに新規起票かスキップかをユーザーに確認する
 - 起票対象、件数、タイトル、チャンネル名の掲載有無を表示し、`AskUserQuestion` で「起票する / 中止」の明示 2 択を提示する。承認されるまで `gh issue create` を絶対に実行しない
@@ -39,7 +40,8 @@ description: "Use when 下流チャンネルリポジトリでスキル実行中
 - 起票に成功した行だけが `status="filed"` と `issue_url` を持つ
 - ユーザーが確認した解決済みの行だけが `status="resolved"`、意図的に起票しないと確認した行だけが `status="wontfix"` となり、`disposition_reason` と `disposition_at` を持つ
 - 未選択、スキップ、起票失敗の行は変更されていない
-- 更新後の全行が entry schema に準拠し、JSONL の行数と順序が更新前と同じである
+- 更新した行が entry schema に準拠し、JSONL の行数と順序が更新前と同じである
+- invalid 行、terminal entry、未選択、スキップ、起票失敗の行は byte-for-byte で変更されていない
 
 ## References
 
@@ -83,6 +85,18 @@ description: "Use when 下流チャンネルリポジトリでスキル実行中
 
 `recorded` だけが還流候補である。`filed` / `resolved` / `wontfix` は終端状態であり、
 次回以降の還流モードで一覧表示、選択、起票、変更を行わない。
+
+## Schema-invalid line contract
+
+| line classification | filing candidate | mutable | required action |
+|---|---|---|---|
+| schema-invalid | no | no | warn with line number and reason; continue |
+| valid recorded | yes | after approval only | continue filing flow |
+| valid terminal | no | no | leave unchanged |
+
+schema-invalid には JSON として parse できない行と、parse できても entry schema に準拠しない行を
+含む。invalid 行と terminal entry は変更しない。invalid 行の内容は警告へ転記せず、1 始まりの
+行番号と JSON parse または schema 検証の簡潔な理由だけを表示する。
 
 ## 共通: 機密情報のマスク
 
@@ -140,8 +154,17 @@ pretty print した複数行 JSON は使わない。
 ### Step 1: 前提確認と未還流 entry の一覧提示
 
 `data/feedback/feedback-log.jsonl` の存在を確認する。存在しない場合は、先に記録モードで
-feedback を記録するよう案内して停止する。各行を JSON として読み、schema に準拠しない
-行が 1 行でもあれば、行番号だけを示して停止する。壊れた行を飛ばして続行しない。
+feedback を記録するよう案内して停止する。ファイル全体を bytes の snapshot として読み、
+各 physical line の元の bytes と line terminator を行番号に対応づけて保持する。全行を先に走査し、
+JSON parse と `references/feedback-entry.schema.json` の検証結果から各行を上の contract に分類する。
+schema-invalid 行ごとに `line <行番号>: <簡潔な理由>` を警告し、候補から除外して処理を続ける。
+
+走査後、元 snapshot と同一内容を一時ファイルへ書き、同じディレクトリで atomic replace できる
+ことと、置換後に行数、行順、対象外行の byte-for-byte 同一性を検証できることを、外部副作用を
+始める前に事前確認する。読取エラーなどで全 physical line を分類できない、元 bytes と line
+terminator を保持できない、または atomic rewrite の事前検証を完了できない場合は、
+issue 起票や disposition 更新を開始せず fail-closed に停止する。事前確認用の一時ファイルで元ログを置換せず、
+確認後に削除する。
 
 `status` が `"recorded"` の行だけを、元の行番号、`date`、`skill`、`category`、
 `summary` とともに一覧表示する。`context` は一覧に表示しない。候補が 0 件なら
@@ -168,9 +191,12 @@ feedback を記録するよう案内して停止する。各行を JSON とし�
 - `disposition_reason`: ユーザーが確認した簡潔な理由
 - `disposition_at`: 更新時点の UTC を ISO 8601 date-time で記録した値
 
-terminal entry に `issue_url` を追加しない。更新後の全行が schema に準拠し、行数と行順が同じで、
-対象外の行が byte-for-byte で同一であることを確認してから元ファイルを置換する。確認失敗、
-元行の不一致、schema 検証失敗ではログを変更せず停止する。更新済みの terminal entry は Step 2
+terminal entry に `issue_url` を追加しない。更新対象行が schema に準拠し、行数と行順が同じで、
+対象外の行が byte-for-byte で同一であることを確認してから元ファイルを置換する。具体的には、
+更新対象だけを schema-valid な JSON 1 行へ serialize し、invalid 行、terminal entry、未選択行を元の bytes のまま複写する。
+更新直前にファイル全体が保持した bytes snapshot と同一であることも確認する。確認失敗、元 snapshot
+の不一致、更新対象の schema 検証失敗ではログを変更せず停止する。既存の schema-invalid 行は
+検証対象から除外して元 bytes のまま保持する。更新済みの terminal entry は Step 2
 以降へ渡さず、起票も行わない。「今回は保留」の entry は `recorded` のまま変更しない。
 
 ### Step 2: 本文案とチャンネル名の掲載可否を確認
@@ -242,9 +268,13 @@ exit code が 0 で、標準出力から当該 issue URL を取得できた場�
 
 - 更新対象は保持した行番号の 1 行だけである
 - 更新後の対象行は `status="filed"` と取得した `issue_url` を持つ
-- 全行が `references/feedback-entry.schema.json` に準拠する
+- 更新対象行が `references/feedback-entry.schema.json` に準拠する
 - 行数と行順は更新前と同じである
-- 対象以外の行は byte-for-byte で同じである
+- invalid 行、terminal entry、未選択行を含む対象以外の行は byte-for-byte で同じである
+
+一時ファイルは、更新対象行だけを JSON 1 行へ serialize し、ほかの行は保持した元 bytes と line
+terminator を連結して構成する。置換直前に現在のファイル全体が保持した snapshot と同一であることを
+再確認し、不一致なら置換せず停止する。
 
 1 件の起票またはログ更新が失敗したら後続 entry を起票せず停止する。失敗した entry は
 `recorded` のままにし、成功済み issue の URL、未処理 entry、失敗箇所を報告する。
@@ -259,4 +289,5 @@ exit code が 0 で、標準出力から当該 issue URL を取得できた場�
 
 - 起票された上流 issue のトリアージ・優先度付け
 - Analytics / flop-analysis 由来の運営知見の記録
-- schema 非準拠行を飛ばして valid entry の還流を続けること（#3939）
+- status enum と disposition metadata の追加・変更
+- feedback JSONL を処理する runtime Python 実装の追加

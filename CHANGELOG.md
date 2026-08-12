@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `fix(skill-feedback)`: schema-invalid JSONL 行を行番号と理由付きで警告して変更対象から隔離し、valid な `recorded` entry の還流を継続する。更新時は invalid・terminal・未選択行の bytes を保持し、安全な全件走査や atomic rewrite を証明できない場合は外部副作用前に停止する（#3939）。
 - `fix(wf-new)`: サムネイル確定時の state 更新を schema に存在する `assets.thumbnail` へ統一し、未定義の `thumbnail.approved` を書き込む指示を削除した（#3868）。
 - `fix(metadata)`: `yt-bulk-update-desc --help` に公開済み動画の概要欄を一括書き込みする通常実行と、API write を行わない `--dry-run` プレビュー、`--only` の対象絞り込みを明記した（#3796）。
 - `fix(cli)`: `yt-benchmark-comments` と `yt-thumbnail-compare` の旧 `--channel` を共通 entrypoint が先に消費せず、`--competitor` への移行案内で誤チャンネル選択前に停止するよう修正した（#3923）。

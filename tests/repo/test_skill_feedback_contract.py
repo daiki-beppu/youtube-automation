@@ -69,6 +69,24 @@ def _lifecycle_rows() -> dict[str, tuple[str, str, str]]:
     return rows
 
 
+def _invalid_line_rows() -> dict[str, tuple[str, str, str]]:
+    skill = _SKILL_PATH.read_text(encoding="utf-8")
+    match = re.search(
+        r"^## Schema-invalid line contract\n\n"
+        r"\| line classification \| filing candidate \| mutable \| required action \|\n"
+        r"\|[-| ]+\|\n"
+        r"(?P<rows>(?:\|[^\n]+\|\n)+)",
+        skill,
+        flags=re.MULTILINE,
+    )
+    assert match is not None
+    rows: dict[str, tuple[str, str, str]] = {}
+    for row in match.group("rows").splitlines():
+        classification, candidate, mutable, action = [cell.strip() for cell in row.strip("|").split("|")]
+        rows[classification] = (candidate, mutable, action)
+    return rows
+
+
 def test_feedback_schema_declares_all_lifecycle_statuses() -> None:
     properties = _schema()["properties"]
     assert isinstance(properties, dict)
@@ -114,10 +132,32 @@ def test_skill_lifecycle_only_exposes_recorded_entries_as_filing_candidates() ->
     }
 
 
-def test_skill_keeps_schema_invalid_jsonl_fail_closed() -> None:
-    skill = _SKILL_PATH.read_text(encoding="utf-8")
-    fail_closed_contract = (
-        "schema に準拠しない\n行が 1 行でもあれば、行番号だけを示して停止する。壊れた行を飛ばして続行しない。"
-    )
+def test_skill_continues_with_valid_recorded_entries_after_invalid_line_warning() -> None:
+    assert _invalid_line_rows() == {
+        "schema-invalid": ("no", "no", "warn with line number and reason; continue"),
+        "valid recorded": ("yes", "after approval only", "continue filing flow"),
+        "valid terminal": ("no", "no", "leave unchanged"),
+    }
 
-    assert fail_closed_contract in skill
+
+def test_skill_preserves_non_target_lines_as_original_bytes() -> None:
+    skill = _SKILL_PATH.read_text(encoding="utf-8")
+
+    assert "各 physical line の元の bytes と line terminator" in skill
+    assert "invalid 行、terminal entry、未選択行を元の bytes のまま複写" in skill
+    assert "行数、行順、対象外行の byte-for-byte 同一性" in skill
+
+
+def test_skill_fails_closed_before_side_effects_when_partial_processing_is_unsafe() -> None:
+    skill = _SKILL_PATH.read_text(encoding="utf-8")
+
+    assert "全 physical line を分類できない" in skill
+    assert "atomic rewrite の事前検証を完了できない" in skill
+    assert "issue 起票や disposition 更新を開始せず fail-closed" in skill
+
+
+def test_skill_stops_following_entries_after_filing_or_rewrite_failure() -> None:
+    skill = _SKILL_PATH.read_text(encoding="utf-8")
+
+    assert "1 件の起票またはログ更新が失敗したら後続 entry を起票せず停止する" in skill
+    assert "invalid 行と terminal entry は変更しない" in skill
