@@ -15,7 +15,7 @@ YouTube 検索需要調査で、注力すべきシーンと最適な動画尺を
 
 入口で渡された実行コンテキストにより入力だけを切り替える。時間帯・行動・感情状態・動画尺を検証する分析観点と、Phase 2〜3 の意思決定手順は変えない。
 
-- **新規開設（公開前）**: `/channel-new` Step 7 → `/audience-persona-design` から明示的に引き継がれた場合だけ使用する。自チャンネル Analytics の代わりに、既存の競合 / TTP / viewer-voice 成果物を初回仮説の入力にする
+- **新規開設（公開前）**: `/setup --channel` Step 7（`.claude/skills/setup/references/persona-branding-readiness.md`）→ `/audience-persona-design` から明示的に引き継がれた場合だけ使用する。自チャンネル Analytics の代わりに、既存の競合 / TTP / viewer-voice 成果物を初回仮説の入力にする
 - **公開後**: 通常の直接実行および公開後の見直しで使用する。従来どおり自チャンネル Analytics report と benchmark を入力にする。実行コンテキストが明示されない場合もこちらとして扱う
 
 ## 完了条件
@@ -41,9 +41,9 @@ Phase 3 で AskUserQuestion によりメインシーンと動画尺の方針を�
 
 ### 停止する fail
 
-- `config/channel/` が存在しない、または `load_config()` でロードできない → 新規チャンネルは `/channel-new`、既存チャンネルは `/channel-new`（既存チャンネル取り込みモード）を案内して停止する
+- `config/channel/` が存在しない、または `load_config()` でロードできない → 新規チャンネルは `/setup --channel` Step 4、既存チャンネルは `/channel-new`（既存チャンネル取り込みモード）を案内して停止する
 - `docs/channel/personas/persona-definition.md` が無い → 前工程 `/audience-persona-design` を案内して停止する
-- 新規開設（公開前）で `docs/plans/viewer-voice-analysis.md`、`docs/channel/ttp-seed-confirmation.md`、`docs/channel/competitor-branding-snapshot.json` のいずれかが無い → `/channel-new` Step 5 または Step 7 の該当前工程へ戻るよう案内して停止する
+- 新規開設（公開前）で `docs/plans/viewer-voice-analysis.md`、`docs/channel/ttp-seed-confirmation.md`、`docs/channel/competitor-branding-snapshot.json` のいずれかが無い → `/setup --channel` Step 5 または Step 7 の該当前工程へ戻るよう案内して停止する
 - 公開後に `reports/analysis_*.md` が無い → 前工程 `/analytics --collect` → `/analytics --analyze` を案内して停止する
 
 ### 許容する fail
@@ -109,7 +109,7 @@ AskUserQuestion でメインシーンと動画尺の方針を確認。
 | 状況 | 兆候 | 対処 |
 |---|---|---|
 | WebSearch 不可 | 検索結果が取得できない | 手動入力で代替するか、当該分析をスキップする |
-| 公開前入力不在 | 新規開設（公開前）で競合 / TTP / viewer-voice 成果物が不足 | `/channel-new` Step 5 または Step 7 の該当前工程へ戻る |
+| 公開前入力不在 | 新規開設（公開前）で競合 / TTP / viewer-voice 成果物が不足 | `/setup --channel` Step 5 または Step 7 の該当前工程へ戻る |
 | 公開後入力不在 | 公開後に `data/` のベンチマーク/Analytics スナップショットが無い | 先に `/benchmark`・`/analytics --collect` 等を実行して入力を用意 |
 
 ## 関連ファイル

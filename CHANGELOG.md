@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 - `refactor(cost)`: `cost_tracker` の重複ファイルロック実装を削除し、owner identity と既存の排他・失敗・cleanup・並列書き込み契約を維持したまま `infrastructure.file_lock` の canonical 実装へ一本化する（#3894）。
+- `refactor(skills)`: research / persona 系 8 skill の新規開設 handoff と config 未生成時の誘導だけを `/setup --channel` の対応 Step へ移し、分析・方向性検討・既存取り込み・再生成・共有 reference の `/channel-new` 経路は維持した（#3985）。
 - `feat(setup)`: フラグなし `/setup` を strict manifest と決定的 state resolver による `tool` → `channel` の再開可能な chain にし、前提未達・不正 manifest・途中失敗では後段を止め、完了済み段の副作用を再実行しない（#3988）。
 - `refactor(channel-new)`: 新規開設 trigger と Step 1〜10 の互換実行を `/channel-new` から除去し、opening 文脈を artifact 無変更のまま `/setup --channel` へ案内して停止する residual 5-mode contract に固定した。取り込み・分析・方向性検討・再生成・設定 push と共有 branding/config 資産は変更しない（#3982）。
 - `refactor(setup)`: 排他的な `/setup --channel` を追加し、新規開設 Step 1〜10 の canonical contract と opening-only references / helpers の owner を setup へ移した。旧 `/channel-new` の opening trigger・Step 1〜10 は setup contract への互換入口として維持し、取り込み・分析・方向性検討・再生成・設定 push と共有 branding/config 資産も変更しない（#3983）。

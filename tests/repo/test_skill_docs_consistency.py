@@ -343,7 +343,8 @@ def test_setup_channel_ttp_hearing_routes_direction_to_residual_mode() -> None:
 
     viewer_voice = _read(".claude/skills/viewer-voice/SKILL.md")
     assert "新規開設モードでは Step 7 の必須前工程" in viewer_voice
-    assert "その互換入口である `/channel-new` の新規開設モードでも同じ契約を適用する" in viewer_voice
+    assert "その互換入口である `/channel-new` の新規開設モード" not in viewer_voice
+    assert ".claude/skills/setup/references/persona-branding-readiness.md" in viewer_voice
     assert "公開後の再分析では" in viewer_voice
     assert "標準フローでは実行せず" not in viewer_voice
 
@@ -874,7 +875,8 @@ def test_channel_new_followup_skill_routing_uses_new_contract() -> None:
     features = _read("docs/features.md")
 
     assert "/channel-new Step 5 の前段" not in discover
-    assert "`/channel-new` の標準フローでは実行しない" in discover
+    assert "前工程の `/setup` は `/setup --channel` Step 6" in discover
+    assert "標準フローでは本スキルを実行せず" in discover
     assert "ユーザー承認と relationship メモを必ず残す" in discover
     assert "genre_keywords" not in discover
     assert "target_scene" not in discover

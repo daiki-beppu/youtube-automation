@@ -39,8 +39,8 @@ Step 1 のスクリプトが exit 0 で終了して `docs/benchmarks/*.md` と `
 
 ### 停止する fail
 
-- `config/channel/` が存在しない、または `load_config()` でロードできない → 新規チャンネルは `/channel-new`、既存チャンネルは `/channel-new`（既存チャンネル取り込みモード）を案内して停止する
-- `config/channel/analytics.json::benchmark.channels` に承認済みベンチマークチャンネルが設定されていない → `/channel-new` / `/discover-competitors` を案内して停止する
+- `config/channel/` が存在しない、または `load_config()` でロードできない → 新規チャンネルは `/setup --channel` Step 4、既存チャンネルは `/channel-new`（既存チャンネル取り込みモード）を案内して停止する
+- `config/channel/analytics.json::benchmark.channels` に承認済みベンチマークチャンネルが設定されていない → `/setup --channel` Step 5（`.claude/skills/setup/references/ttp-seed-and-duration.md`）/ `/discover-competitors` を案内して停止する
 - `auth/token.json` が存在しない、または OAuth 認証が無効 → `/setup` を案内して停止する
 
 ### 許容する fail

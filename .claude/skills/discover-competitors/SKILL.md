@@ -5,7 +5,7 @@ description: "Use when YouTube Data API で追加競合候補を自動発掘・�
 
 ## 前後工程
 
-- `前工程`: `/benchmark`, `/channel-new`
+- `前工程`: `/benchmark`, `/setup`
 - `後工程`: `/viewer-voice`, `/benchmark`
 
 ## Overview
@@ -18,7 +18,7 @@ description: "Use when YouTube Data API で追加競合候補を自動発掘・�
 - 出力: ランキング付き Markdown + 同名 CSV（スコア内訳列付き）
 - 想定時間: 5 分以内（初回または強制更新時の API quota 約 660 units。24 時間以内の同一検索条件はキャッシュを利用）
 
-`/channel-new` の標準フローでは実行しない。TTP 対象確認後に追加の競合候補を広げたい場合や、複数のニッチ仮説を
+前工程の `/setup` は `/setup --channel` Step 6（`.claude/skills/setup/references/persona-branding-readiness.md`）を指す。標準フローでは本スキルを実行せず、必要性を確認して委譲する。TTP 対象確認後に追加の競合候補を広げたい場合や、複数のニッチ仮説を
 並行検証したい場合に、このスキルを任意で走らせる。
 
 ## 完了条件
@@ -80,7 +80,7 @@ Step 3 の実行で出力ペア（Markdown ランキング + 同名 CSV）を生
 |--------|--------|---------------|
 | **既存チャンネル**で競合再発掘 | チャンネル config | `config/channel/content.json` の `genre` / `tags.base` / `descriptions.perfect_for` |
 | **既存チャンネル**で類似帯探索 | 既存ベンチマーク | `config/channel/analytics.json` の `benchmark.channels` を YouTube で開いてタイトル頻出語を抽出 |
-| **新規チャンネル企画** | `/channel-new` の TTP メモと初期 config | `config/channel/content.json::genre.{primary,style,context}` / `tags.base` / TTP メモ内の用途・シーン語彙 |
+| **新規チャンネル企画** | `/setup --channel` Step 1/4/5 の TTP メモと初期 config | `config/channel/content.json::genre.{primary,style,context}` / `tags.base` / TTP メモ内の用途・シーン語彙 |
 | **完全に手探り** | ユーザー宣言 | 「夜カフェ系の lo-fi」のような自然文を Claude が分解 |
 
 config からの抽出例（rjn）:
@@ -206,6 +206,6 @@ subagent へは次を具体値で渡す:
 
 ## Cross References
 
-- `/channel-new`: TTP 対象確認と初期 config 生成。追加競合発掘が必要な場合に本スキルへ委譲
+- `/setup --channel`: TTP 対象確認と初期 config 生成。Step 6 で追加競合発掘が必要な場合に本スキルへ委譲
 - `/benchmark`: 発掘済みチャンネルのベンチマークデータ収集
 - `/channel-new` 分析モード: 収集データの徹底分析
