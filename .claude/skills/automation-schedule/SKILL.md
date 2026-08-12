@@ -5,7 +5,7 @@ description: "Use when チャンネルの定期制作スケジュール（workfl
 
 ## 前後工程
 
-- `前工程`: `/channel-new`, `/setup`
+- `前工程`: `/setup --channel`, `/setup`
 - `後工程`: `/wf-auto`, `/wf-next`
 
 ## Overview

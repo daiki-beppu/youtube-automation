@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `refactor(skills)`: workflow / upload 系 11 skill の新規開設誘導だけを `/setup --channel` へ移し、既存取り込み・再生成・設定 push・共有 reference の `/channel-new` 経路と既存 failure gate を維持した（#3986）。
 - `refactor(cost)`: `cost_tracker` の重複ファイルロック実装を削除し、owner identity と既存の排他・失敗・cleanup・並列書き込み契約を維持したまま `infrastructure.file_lock` の canonical 実装へ一本化する（#3894）。
 - `refactor(skills)`: research / persona 系 8 skill の新規開設 handoff と config 未生成時の誘導だけを `/setup --channel` の対応 Step へ移し、分析・方向性検討・既存取り込み・再生成・共有 reference の `/channel-new` 経路は維持した（#3985）。
 - `perf(masterup)`: `yt-suno-audio-cleanup apply` を安全上限8の曲単位 bounded 並列処理にし、CLI `--jobs` → skill-config → 既定値2の解決、main thread の直列 override、ファイル単位原子性、失敗後の未投入停止、決定的な結果・エラー順を維持する（#3860）。

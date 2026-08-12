@@ -128,7 +128,8 @@ resolver が `action: suno-helper` を返したら、agent 自身が `/suno-help
 
 ## 実行手順
 
-1. `config/channel/` が無ければ `/channel-new` を案内して停止し、`load_config()` が失敗した場合も既存チャンネル取り込みモードの `/channel-new` を案内して停止する。state resolver または上記子 skill が無ければ `/automation-update`（本リポジトリ内では `yt-skills sync`）を案内して停止する。すべて満たすまで lease と子 skill を開始しない。
+1. `config/channel/` が無ければ `/setup --channel` を案内して停止する。
+   `load_config()` が失敗した場合は既存チャンネル取り込みモードの `/channel-new` を案内して停止する。state resolver または上記子 skill が無ければ `/automation-update`（本リポジトリ内では `yt-skills sync`）を案内して停止する。すべて満たすまで lease と子 skill を開始しない。
 2. `acquire` で token を保持する。exit 20 / `busy` なら子 skill を開始せず終了する。
 3. 初回 `plan` を実行する。
    - `reason: no_active_collection`: `/wf-new` を canonical action として選び、step 4 の heartbeat と AI 開始時刻取得後に `SKILL.md` を読んで、既存 gate と明示 opt-in の skip 分岐を保って新規開始する。`skip_plan_selection: true` の analytics / benchmark fallback mode は推奨順 1 位で続行し、minimal mode など設定で省略されていない入力が必要なら `record-bootstrap --status blocked --reason user_input_required --ai-started-at <current-attempt-ai-started-at>` で停止する。

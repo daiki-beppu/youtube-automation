@@ -40,7 +40,7 @@ subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実�
 `config/channel/` が存在すること（`load_config()` でロード可能）。
 
 存在しない場合、ユーザーに確認:
-- **新規チャンネル** → `/channel-new` を案内
+- **新規チャンネル** → `/setup --channel` を案内
 - **既存チャンネル**（YouTube で既に運営中）→ `/channel-new`（既存チャンネル取り込みモード）を案内
 
 ## When to Use

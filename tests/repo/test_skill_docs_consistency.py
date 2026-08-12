@@ -661,7 +661,7 @@ def test_channel_new_pre_wf_new_checks_include_analytics_reporting_and_live_stre
     assert "/streaming の準備確認" in success_message
 
 
-def test_wf_new_fail_fast_contract_points_to_channel_new_and_collection_local_suno_style() -> None:
+def test_wf_new_fail_fast_contract_points_to_setup_import_and_collection_local_suno_style() -> None:
     wf_new = _read(".claude/skills/wf-new/SKILL.md")
     channel_new = _read(".claude/skills/channel-new/SKILL.md")
     doctor = _read("src/youtube_automation/commands/system/doctor.py")
@@ -669,8 +669,8 @@ def test_wf_new_fail_fast_contract_points_to_channel_new_and_collection_local_su
     hard_gates = wf_new.split("## Hard Gates", 1)[1].split("## When to Use", 1)[0]
 
     assert "config/channel/` が存在し、`load_config()` でロードできること" in hard_gates
-    assert "存在しない場合は `/channel-new`" in hard_gates
-    assert "ロード失敗の場合は `/channel-new`（既存チャンネル取り込みモード）" in hard_gates
+    assert "存在しない場合は `/setup --channel`" in hard_gates
+    assert "`load_config()` が失敗する場合は `/channel-new`（既存チャンネル取り込みモード）" in hard_gates
     assert "Suno collection Style boundary" in hard_gates
     assert "`20-documentation/suno-patterns.yaml`" in hard_gates
     assert "共有 `config/skills/suno.yaml` を書き換えない" in hard_gates
