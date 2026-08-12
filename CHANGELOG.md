@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `refactor(media)`: media domain の例外 import を互換 facade 経由から canonical owner の `youtube_automation.core.errors` へ移行し、例外 class identity と既存の成功・失敗時挙動を維持する（#3957）。
 - `refactor(distrokid)`: DistroKid domain の例外 import を互換 facade 経由から canonical owner の `youtube_automation.core.errors` へ移行し、例外 class identity と既存の成功・失敗時挙動を維持する（#3956）。
 - `refactor(collections)`: collections domain の例外 import を互換 facade 経由から canonical owner の `youtube_automation.core.errors` へ移行し、例外 class identity と既存の成功・失敗時挙動を維持する（#3955）。
 - `refactor(analytics)`: analytics domain の例外 import を互換 facade 経由から canonical owner の `youtube_automation.core.errors` へ移行し、例外 class identity と既存の成功・失敗時挙動を維持する（#3954）。
