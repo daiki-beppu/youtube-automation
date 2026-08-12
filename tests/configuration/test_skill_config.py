@@ -333,6 +333,7 @@ def test_load_skill_config_masterup_enables_suno_cleanup_by_default(tmp_path, mo
     cfg = skill_config.load_skill_config("masterup", use_cache=False)
 
     assert cfg["post_processing"]["suno_audio_cleanup"]["enabled"] is True
+    assert cfg["post_processing"]["suno_audio_cleanup"]["max_workers"] == 2
     assert cfg["post_processing"]["suno_audio_cleanup"]["loudnorm"]["I"] == -14
 
 
