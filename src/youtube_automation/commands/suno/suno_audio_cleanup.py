@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import os
 import shutil
 import subprocess
@@ -11,6 +12,7 @@ import sys
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 
 from youtube_automation.configuration.skills import load_skill_config
 from youtube_automation.core.errors import ConfigError, ValidationError
@@ -21,6 +23,8 @@ from youtube_automation.infrastructure.media.probe import probe_duration
 _SKILL_NAME = "masterup"
 _BACKUP_DIRNAME = "originals-pre-cleanup"
 _SUPPORTED_EXTS = tuple(sorted(AUDIO_EXTS))
+_DEFAULT_MAX_WORKERS = 2
+_MAX_WORKERS_LIMIT = 8
 
 
 @dataclass(frozen=True)
@@ -65,7 +69,6 @@ def resolve_cleanup_config(skill_cfg: Mapping[str, object]) -> CleanupConfig:
     trim = _as_mapping(raw.get("trim_silence"), "post_processing.suno_audio_cleanup.trim_silence")
     limiter = _as_mapping(raw.get("limiter"), "post_processing.suno_audio_cleanup.limiter")
     tail = _as_mapping(raw.get("tail_fade_guard"), "post_processing.suno_audio_cleanup.tail_fade_guard")
-
     return CleanupConfig(
         enabled=bool(raw.get("enabled", False)),
         backup_originals=bool(raw.get("backup_originals", True)),
@@ -88,6 +91,39 @@ def resolve_cleanup_config(skill_cfg: Mapping[str, object]) -> CleanupConfig:
         bitrate=str(raw.get("bitrate") or audio.get("bitrate") or "192k"),
         codec=str(raw.get("codec") or "libmp3lame"),
     )
+
+
+def resolve_max_workers(cli_jobs: int | None, skill_cfg: Mapping[str, object]) -> int:
+    if cli_jobs is None:
+        post = _as_mapping(skill_cfg.get("post_processing"), "post_processing")
+        raw = _as_mapping(post.get("suno_audio_cleanup"), "post_processing.suno_audio_cleanup")
+        config_value = raw.get("max_workers", _DEFAULT_MAX_WORKERS)
+        if (
+            isinstance(config_value, bool)
+            or not isinstance(config_value, int)
+            or not 1 <= config_value <= _MAX_WORKERS_LIMIT
+        ):
+            raise ConfigError(
+                "skill-config の post_processing.suno_audio_cleanup.max_workers は "
+                f"1 以上 {_MAX_WORKERS_LIMIT} 以下の整数である必要があります: "
+                f"{config_value!r}"
+            )
+        return config_value
+    if isinstance(cli_jobs, bool) or not isinstance(cli_jobs, int) or not 1 <= cli_jobs <= _MAX_WORKERS_LIMIT:
+        raise ValidationError(f"jobs は 1 以上 {_MAX_WORKERS_LIMIT} 以下の整数である必要があります: {cli_jobs!r}")
+    return cli_jobs
+
+
+def _positive_jobs(value: str) -> int:
+    try:
+        jobs = int(value)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError(
+            f"--jobs は 1 以上 {_MAX_WORKERS_LIMIT} 以下の整数を指定してください"
+        ) from error
+    if not 1 <= jobs <= _MAX_WORKERS_LIMIT:
+        raise argparse.ArgumentTypeError(f"--jobs は 1 以上 {_MAX_WORKERS_LIMIT} 以下の整数を指定してください")
+    return jobs
 
 
 def _output_codec_for(path: Path, cfg: CleanupConfig) -> str:
@@ -207,12 +243,76 @@ def process_file(path: Path, cfg: CleanupConfig, *, apply: bool, force: bool, qu
     return True
 
 
-def cleanup_collection(collection_dir: Path, *, apply: bool, force: bool = False, quiet: bool = False) -> int:
-    cfg = resolve_cleanup_config(load_skill_config(_SKILL_NAME))
+def _process_files_parallel(
+    files: list[Path],
+    cfg: CleanupConfig,
+    *,
+    max_workers: int,
+    force: bool,
+) -> tuple[dict[Path, bool], dict[Path, Exception]]:
+    results: dict[Path, bool] = {}
+    errors: dict[Path, Exception] = {}
+    next_index = 0
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=min(max_workers, len(files)))
+    pending: dict[concurrent.futures.Future[bool], Path] = {}
+
+    def submit_next() -> None:
+        nonlocal next_index
+        path = files[next_index]
+        next_index += 1
+        future = executor.submit(process_file, path, cfg, apply=True, force=force, quiet=True)
+        pending[future] = path
+
+    try:
+        for _ in range(min(max_workers, len(files))):
+            submit_next()
+        while pending:
+            done, _ = concurrent.futures.wait(pending, return_when=concurrent.futures.FIRST_COMPLETED)
+            for future in done:
+                path = pending.pop(future)
+                try:
+                    results[path] = future.result()
+                except Exception as error:
+                    errors[path] = error
+            if errors:
+                continue
+            for _ in range(min(len(done), len(files) - next_index)):
+                submit_next()
+    finally:
+        executor.shutdown(wait=True, cancel_futures=True)
+    return results, errors
+
+
+def _process_files_sequential(
+    files: list[Path],
+    cfg: CleanupConfig,
+    *,
+    force: bool,
+    quiet: bool,
+) -> int:
+    changed = 0
+    for path in files:
+        if process_file(path, cfg, apply=True, force=force, quiet=quiet):
+            changed += 1
+    return changed
+
+
+def cleanup_collection(
+    collection_dir: Path,
+    *,
+    apply: bool,
+    jobs: int | None = None,
+    force: bool = False,
+    quiet: bool = False,
+) -> int:
+    skill_cfg = load_skill_config(_SKILL_NAME)
+    cfg = resolve_cleanup_config(skill_cfg)
     if not cfg.enabled and not force:
         if not quiet:
             print("post_processing.suno_audio_cleanup.enabled=false のため何もしません")
         return 0
+
+    max_workers = resolve_max_workers(jobs, skill_cfg) if apply else None
 
     files = collect_audio_files(collection_dir)
     if not files:
@@ -220,14 +320,34 @@ def cleanup_collection(collection_dir: Path, *, apply: bool, force: bool = False
         supported_exts = ", ".join(_SUPPORTED_EXTS)
         raise ValidationError(f"音声ファイル ({supported_exts}) が見つかりません: {music_dir}")
 
-    changed = 0
-    for path in files:
-        if process_file(path, cfg, apply=apply, force=force, quiet=quiet):
-            changed += 1
+    if not apply:
+        for path in files:
+            process_file(path, cfg, apply=False, force=force, quiet=quiet)
+        if not quiet:
+            print(f"planned: {len(files)} file(s), changed=0")
+        return 0
+
+    if max_workers == 1:
+        changed = _process_files_sequential(files, cfg, force=force, quiet=quiet)
+        if not quiet:
+            print(f"processed: {len(files)} file(s), changed={changed}")
+        return 0
+
+    results, errors = _process_files_parallel(files, cfg, max_workers=cast(int, max_workers), force=force)
+    if not quiet:
+        for path in files:
+            if path not in results:
+                continue
+            message = "cleaned" if results[path] else "skip already cleaned"
+            suffix = " (backup exists)" if not results[path] else ""
+            print(f"{message}: {path.name}{suffix}")
+    if errors:
+        details = "\n".join(f"{path.name}: {errors[path]}" for path in files if path in errors)
+        raise RuntimeError(f"audio cleanup failed:\n{details}")
 
     if not quiet:
-        action = "processed" if apply else "planned"
-        print(f"{action}: {len(files)} file(s), changed={changed}")
+        changed = sum(results.values())
+        print(f"processed: {len(files)} file(s), changed={changed}")
     return 0
 
 
@@ -243,6 +363,14 @@ def build_parser() -> argparse.ArgumentParser:
             help="run even when config is disabled; reprocess existing backups",
         )
         p.add_argument("--quiet", action="store_true")
+        p.add_argument(
+            "--jobs",
+            type=_positive_jobs,
+            help=(
+                f"maximum concurrent files, 1-{_MAX_WORKERS_LIMIT} "
+                "(default: post_processing.suno_audio_cleanup.max_workers, then 2)"
+            ),
+        )
     return parser
 
 
@@ -252,6 +380,7 @@ def main(argv: list[str] | None = None) -> int:
     return cleanup_collection(
         collection_dir,
         apply=args.command == "apply",
+        jobs=args.jobs,
         force=args.force,
         quiet=args.quiet,
     )
