@@ -29,12 +29,12 @@ skill / CLI ごとの実効 scope と read-only token の設計は [`oauth-scope
 | ルート | 推奨対象 | 手数 |
 | --- | --- | --- |
 | **ルート 0**: `/setup` skill (Claude Code) | GCP / OAuth に不慣れな利用者、初心者 | 1 発話 + 手動 3 ステップ |
-| **ルート A**: `.claude/skills/channel-new/references/gcp-bootstrap.sh` | シェルから直接叩きたい、手動派 | 1 コマンド + Google Auth Platform 手動設定 |
+| **ルート A**: `.claude/skills/setup/references/gcp-bootstrap.sh` | シェルから直接叩きたい、手動派 | 1 コマンド + Google Auth Platform 手動設定 |
 | **ルート B**: `infra/terraform/gcp/` | 複数プロジェクト管理 / 別 PC 引っ越し / drift 検出が欲しい上級者 | tfvars 編集 + apply + Google Auth Platform 手動設定 |
 
 「初回 1 チャンネルだけ立ち上げ」ならルート 0 or A、「2 つ目以降」「IaC 管理したい」ならルート B が向く。詳細な選択基準は [`infra/terraform/gcp/README.md`](../infra/terraform/gcp/README.md) の「いつ terraform を選ぶか」を参照。
 
-ルート 0 は [`ONBOARDING.md`](../ONBOARDING.md) の「2.3 OAuth セットアップ」を参照する。内部では本書のルート A (`gcp-bootstrap.sh`) を呼ぶ。
+ルート 0 は [`ONBOARDING.md`](../ONBOARDING.md) の「2.3 OAuth セットアップ」を参照する。`/setup --tool` の doctor wizard が正規入口であり、ルート A / B は明示的に選ぶ上級者向け代替経路である。
 
 ### ルート A: `gcp-bootstrap.sh`（gcloud 半自動化・最速）
 
@@ -42,10 +42,10 @@ skill / CLI ごとの実効 scope と read-only token の設計は [`oauth-scope
 
 ```bash
 # 最小 (既存プロジェクト流用)
-.claude/skills/channel-new/references/gcp-bootstrap.sh my-existing-project
+.claude/skills/setup/references/gcp-bootstrap.sh my-existing-project
 
 # 新規プロジェクト作成 + Billing 紐付け
-.claude/skills/channel-new/references/gcp-bootstrap.sh \
+.claude/skills/setup/references/gcp-bootstrap.sh \
   --create \
   --billing-account 012345-6789AB-CDEF01 \
   my-new-yt-channel
@@ -74,7 +74,7 @@ cp terraform.tfvars.example terraform.tfvars
 
 # apply
 cd ../../..
-.claude/skills/channel-new/references/gcp-terraform-apply.sh
+.claude/skills/setup/references/gcp-terraform-apply.sh
 ```
 
 `terraform.tfvars` の必須キーは `project_id` / `adc_email`。新規作成時は `billing_account` も必要（既存流用なら `create_project = false` にして不要）。

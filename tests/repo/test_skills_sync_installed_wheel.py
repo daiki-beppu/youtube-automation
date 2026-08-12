@@ -143,10 +143,24 @@ assert "wheel-identity-check" not in legacy._cache
     for target_relative, source_relative in _FILE_ASSETS.items():
         assert (downstream / target_relative).read_bytes() == (repo_root / source_relative).read_bytes()
 
-    distributed_references = downstream / ".claude" / "skills" / "channel-new" / "references"
+    distributed_references = downstream / ".claude" / "skills" / "setup" / "references"
     bootstrap_guide = distributed_references / "gcp-bootstrap.md"
     assert bootstrap_guide.is_file()
-    assert bootstrap_guide.read_text(encoding="utf-8")
+    guide_text = bootstrap_guide.read_text(encoding="utf-8")
+    local_links = [
+        link
+        for link in re.findall(r"\[[^]]+\]\(([^)]+)\)", guide_text)
+        if not link.startswith(("http://", "https://", "#"))
+    ]
+    assert local_links
+    assert all((distributed_references / link).is_file() for link in local_links)
+    for relative in (
+        "gcp-bootstrap.sh",
+        "gcp-terraform-apply.sh",
+        "terraform-gcp/terraform.tfvars.example",
+        "terraform-gcp/variables.tf",
+    ):
+        assert (distributed_references / relative).is_file()
     for script_name in ("gcp-bootstrap.sh", "gcp-terraform-apply.sh"):
         script = distributed_references / script_name
         assert script.is_file()

@@ -215,7 +215,7 @@ uv run pytest tests/repo/test_skills_sync_installed_wheel.py -q
 | `.claude/skills/automation-update/SKILL.md` | 冒頭 prose と Step 1-0 の既定値表記、cleanup guide への doc リンク |
 | `.claude/skills/ext-install/SKILL.md` | `gh` 未導入時の手動ダウンロード fallback 用 Release ページ URL、Step 0 の既定値表記 |
 | `.claude/skills/automation-release/references/*.md` | リリースチェックリスト / CHANGELOG 昇格手順内の URL 例 |
-| `.claude/skills/channel-new/references/claude-md-template.md` / `gcp-bootstrap.md` | upstream リポジトリ名の説明 |
+| `.claude/skills/channel-new/references/claude-md-template.md` / `.claude/skills/setup/references/gcp-bootstrap.md` | upstream リポジトリ名の説明 |
 | `src/youtube_automation/commands/system/skills_sync/__init__.py` | module docstring の導入コマンド例 |
 
 上表は代表箇所のポインタであり、全箇所は `rg -n "daiki-beppu/youtube-automation"` で列挙する。

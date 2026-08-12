@@ -2,7 +2,7 @@
 # gcp-terraform-apply.sh — Terraform apply と ADC quota project 設定を 1 コマンドで
 #
 # Usage:
-#   .claude/skills/channel-new/references/gcp-terraform-apply.sh [--tf-dir DIR] [--auto-approve]
+#   .claude/skills/setup/references/gcp-terraform-apply.sh [--tf-dir DIR] [--auto-approve]
 #
 # Options:
 #   --tf-dir DIR       Terraform モジュールパス (既定: infra/terraform/gcp)

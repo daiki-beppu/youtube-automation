@@ -150,7 +150,7 @@ Fail Fast 原則）。再生成モード側で空欄を残さないことで、�
 
 事前に `uv run yt-doctor --json` を叩き、`checks[]` のうち `category == "api"` の全 check が `ok` なら `/setup` は完了済みのため本 step を skip して **Step R7 へ進む**（`channel` / `upload` カテゴリは config 生成後フェーズで満たす）。
 
-旧: bootstrap.sh / terraform を手動で叩く手順は `references/gcp-bootstrap.md` に残してあるが、通常ルートは `/setup` に統一する。
+bootstrap.sh / terraform を手動で叩く上級者向け手順は `.claude/skills/setup/references/gcp-bootstrap.md` に集約し、通常ルートは `/setup --tool` に統一する。
 
 ## Step R7: 検証
 

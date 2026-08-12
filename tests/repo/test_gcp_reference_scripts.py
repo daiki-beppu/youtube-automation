@@ -11,7 +11,37 @@ import pytest
 from tests.helpers.paths import REPO_ROOT
 
 ROOT = REPO_ROOT
-REFERENCES = ROOT / ".claude" / "skills" / "channel-new" / "references"
+REFERENCES = ROOT / ".claude" / "skills" / "setup" / "references"
+GCP_ASSET_NAMES = {
+    "gcp-bootstrap.md",
+    "gcp-bootstrap.sh",
+    "gcp-terraform-apply.sh",
+    "terraform-gcp/.gitignore",
+    "terraform-gcp/README.md",
+    "terraform-gcp/apis.tf",
+    "terraform-gcp/iam.tf",
+    "terraform-gcp/main.tf",
+    "terraform-gcp/outputs.tf",
+    "terraform-gcp/terraform.tfvars.example",
+    "terraform-gcp/variables.tf",
+    "terraform-gcp/versions.tf",
+}
+
+
+def test_setup_owns_the_complete_distributed_gcp_asset_inventory() -> None:
+    actual = {
+        path.relative_to(REFERENCES).as_posix()
+        for path in REFERENCES.rglob("*")
+        if path.is_file() and (path.name.startswith("gcp-") or "terraform-gcp" in path.parts)
+    }
+    owners = {
+        path.relative_to(ROOT / ".claude" / "skills").parts[0]
+        for path in (ROOT / ".claude" / "skills").rglob("*")
+        if path.is_file() and (path.name.startswith("gcp-") or "terraform-gcp" in path.parts)
+    }
+
+    assert actual == GCP_ASSET_NAMES
+    assert owners == {"setup"}
 
 
 def _write_executable(path: Path, body: str) -> None:

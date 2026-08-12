@@ -465,7 +465,7 @@
     },
     {
       "old_owner": "legacy..claude.skills.channel-new.references.gcp-bootstrap.md",
-      "exact_new_owner": ".claude/skills/channel-new/references/gcp-bootstrap.md",
+      "exact_new_owner": ".claude/skills/setup/references/gcp-bootstrap.md",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"
@@ -486,7 +486,7 @@
     },
     {
       "old_owner": "legacy..claude.skills.channel-new.references.terraform-gcp.README.md",
-      "exact_new_owner": ".claude/skills/channel-new/references/terraform-gcp/README.md",
+      "exact_new_owner": ".claude/skills/setup/references/terraform-gcp/README.md",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"
