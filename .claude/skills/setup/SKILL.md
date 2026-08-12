@@ -20,7 +20,7 @@ guard が exit 2 を返したら、その出力だけを提示して即時停止
 
 - 2 個以上なら、同じ flag の重複を含めて排他違反として停止し、1 つだけ指定するよう促す。この拒否経路では reference を Read せず、ファイル作成・更新、repo 初期化、API call、stage / commit を一切行わない
 - 1 個なら対応する reference を読み、その一段だけを実行する。残りの引数はその mode の引数として扱う
-- 0 個なら chain manifest に従い tool を状態判定付きで進める
+- 0 個なら chain manifest に従い `tool` → `channel` を状態判定付きで進める
 
 | mode | 読む reference |
 |---|---|
@@ -33,22 +33,25 @@ guard が exit 2 を返したら、その出力だけを提示して即時停止
 
 ## 一括実行
 
-`references/setup-chain-manifest.json` と `references/setup-chain-state.py` が存在し、manifest の `chainId`、step 順、step mode、approval gate、状態判定 script が妥当であることを確認する。欠損、未知・重複 step、複数 mode、`approvalGate.skip != true` があれば停止する。旧 `enabled` だけの gate は `skip = not enabled` として解決し、`skip` と `enabled` の同時指定は拒否する。
+`references/setup-chain-state.py` は `references/setup-chain-manifest.json` を実行前に strict 検証する。`chainId`、`tool` → `channel` の順序、未知・重複 step、prerequisite / output artifact、approval gate、状態判定 script のいずれかが不正なら `error` で停止する。旧 `enabled` だけの gate は `skip = not enabled` として解決し、`skip` と `enabled` の同時指定は拒否する。
 
-最初の bootstrap で `uv`、`pyproject.toml`、automation package のいずれかが無く状態判定 script を起動できない場合は、`tool` を `run` として `references/tool.md` を実行する。起動可能ならチャンネルルートで manifest 順に次を実行する。
+最初の bootstrap で `uv`、`pyproject.toml`、automation package のいずれかが無く状態判定 script を起動できない場合は、`tool` だけを `run` として `references/tool.md` を実行する。script が起動可能になったら先頭から状態判定を再開する。起動可能ならチャンネルルートで manifest 順に各 step を判定する。
 
 ```bash
 uv run python .claude/skills/setup/references/setup-chain-state.py \
-  --channel-dir . --step tool
+  --channel-dir . --step <tool|channel>
 ```
 
 | exit | `decision` | 処理 |
 |---:|---|---|
-| 0 | `skip` | setup 済みとして終了する |
-| 10 | `run` | `references/tool.md` を読み、現行の診断 wizard を実行する |
-| その他 | `error` | doctor / script のエラーとして停止する |
+| 0 | `skip` | 完了済みとして次の step へ進む。最終 step なら終了する |
+| 10 | `run` | `tool` は `references/tool.md`、`channel` は `references/channel-mode.md` を読み、その一段だけ実行する |
+| 20 | `blocked` | prerequisite 未完了として停止し、後段を実行しない |
+| 2 | `error` | manifest / doctor / script のエラーとして停止し、後段を実行しない |
 
-実行後は同じ状態判定を再実行し、exit 0 にならなければ停止する。既存の stale analytics 完了例外も exit 0 とする。途中失敗時はその段で止め、再発動時は状態判定から再開する。
+各 step の実行後は同じ状態判定を再実行し、exit 0 にならなければ停止する。`tool` 完了済みなら `channel` から再開し、`channel` 完了済みならどの副作用も再実行しない。既存の stale analytics 完了例外も `tool` の exit 0 とする。途中失敗時はその段で止め、後段を実行せず、再発動時は状態判定から再開する。
+
+明示 `--tool` / `--channel` はこの一括実行へ入らない。選択した reference の完了条件だけを実行・判定し、もう一段を暗黙実行しない。各 reference 内の不可逆操作・外部反映の承認 gate は chain の `approvalGate.skip` では省略されない。
 
 ## 想定 API call 数
 
@@ -62,7 +65,7 @@ uv run python .claude/skills/setup/references/setup-chain-state.py \
 
 ## 完了条件
 
-- フラグなし: tool が `skip` または実行後 `skip` になっている
+- フラグなし: `tool` と `channel` が manifest 順にどちらも `skip` になっている
 - `--tool`: `references/tool.md` の完了条件だけを満たしている
 - `--channel`: `references/channel-mode.md` の Step 1〜10 と完了条件をすべて満たしている
 

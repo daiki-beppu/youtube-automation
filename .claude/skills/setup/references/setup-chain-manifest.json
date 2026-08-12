@@ -5,10 +5,79 @@
       "id": "tool",
       "skill": "setup",
       "prerequisiteArtifacts": [],
-      "outputArtifacts": [],
+      "outputArtifacts": [
+        "doctor:ffmpeg",
+        "doctor:ffprobe",
+        "doctor:uv",
+        "doctor:uv_project",
+        "doctor:automation_package",
+        "doctor:skills_synced",
+        "doctor:gcloud",
+        "doctor:gcloud_account",
+        "doctor:gcp_project",
+        "doctor:billing_linked",
+        "doctor:apis_enabled",
+        "doctor:adc",
+        "doctor:adc_quota_project",
+        "doctor:iam_aiplatform_user",
+        "auth/client_secrets.json",
+        "auth/token.json"
+      ],
       "approvalGate": {
         "skip": true,
         "configPath": "workflow.setup.skip_approvals.tool"
+      },
+      "idempotency": {
+        "script": "references/setup-chain-state.py"
+      }
+    },
+    {
+      "id": "channel",
+      "skill": "setup",
+      "prerequisiteArtifacts": [
+        "doctor:ffmpeg",
+        "doctor:ffprobe",
+        "doctor:uv",
+        "doctor:uv_project",
+        "doctor:automation_package",
+        "doctor:skills_synced",
+        "doctor:gcloud",
+        "doctor:gcloud_account",
+        "doctor:gcp_project",
+        "doctor:billing_linked",
+        "doctor:apis_enabled",
+        "doctor:adc",
+        "doctor:adc_quota_project",
+        "doctor:iam_aiplatform_user",
+        "auth/client_secrets.json",
+        "auth/token.json"
+      ],
+      "outputArtifacts": [
+        "config/channel/meta.json",
+        "config/channel/content.json",
+        "config/channel/youtube.json",
+        "config/channel/analytics.json",
+        "config/channel/playlists.json",
+        "config/channel/workflow.json",
+        "config/channel/audio.json",
+        "config/localizations.json",
+        "config/schedule_config.json",
+        "config/skills/suno.yaml",
+        "config/skills/thumbnail.yaml",
+        "docs/channel/ttp-seed-confirmation.md",
+        "docs/channel/competitor-branding-snapshot.json",
+        "docs/plans/viewer-voice-analysis.md",
+        "docs/plans/viewing-scene-matrix.md",
+        "docs/channel/personas/persona-definition.md",
+        "branding/icon.*",
+        "branding/banner.*",
+        "doctor:ttp_wf_new_readiness",
+        "doctor:initial_setup_readiness",
+        "git:clean"
+      ],
+      "approvalGate": {
+        "skip": true,
+        "configPath": "workflow.setup.skip_approvals.channel"
       },
       "idempotency": {
         "script": "references/setup-chain-state.py"
