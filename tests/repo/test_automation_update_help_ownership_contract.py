@@ -19,7 +19,7 @@ def test_skill_keeps_one_representative_apply_command_between_decision_and_smoke
     assert commands == ["uv run yt-automation-update apply --tag <target_tag>"]
     assert SKILL_TEXT.index("uv run yt-automation-update check") < SKILL_TEXT.index("### Step 2-4.")
     assert SKILL_TEXT.index("### Step 2-4.") < SKILL_TEXT.index(commands[0])
-    assert SKILL_TEXT.index(commands[0]) < SKILL_TEXT.index("uv run yt-doctor")
+    assert SKILL_TEXT.index(commands[0]) < SKILL_TEXT.index('command = ["uv", "run", "yt-doctor", "--json"]')
 
 
 def test_skill_keeps_nonintuitive_safety_contracts_owned_by_the_wizard() -> None:
