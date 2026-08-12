@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `fix(metadata)`: duration display の locale を case・region 非依存で正規化し、fr/es/it/fil は各言語の単位、未知の有効 locale は warning 付き英語単位で生成して、多言語 metadata 全体の失敗を防ぐ（#3911）。
 - `refactor(skills)`: workflow / upload 系 11 skill の新規開設誘導だけを `/setup --channel` へ移し、既存取り込み・再生成・設定 push・共有 reference の `/channel-new` 経路と既存 failure gate を維持した（#3986）。
 - `refactor(legacy-utils)`: canonical owner と同一だった `legacy_utils/{worktree,profile}.py` を削除し、確認済み下流 facade 5 本の import・親属性・module/symbol identity・patch/state 挙動と配布互換は維持したまま、facade への実装・未許可 import/alias の再導入および削除 path の symlink/hardlink 復活を recursive 契約テストで拒否する（#3896）。
 - `refactor(cost)`: `cost_tracker` の重複ファイルロック実装を削除し、owner identity と既存の排他・失敗・cleanup・並列書き込み契約を維持したまま `infrastructure.file_lock` の canonical 実装へ一本化する（#3894）。

@@ -5,6 +5,7 @@ BAHMetadataGenerator のユニットテスト
 副作用のない純粋ロジック（タイムスタンプ計算、ファイル名サニタイズ、メタデータ生成）を検証する。
 """
 
+import copy
 import json
 import shutil
 import sys
@@ -470,6 +471,143 @@ class TestGenerateCompleteCollectionMetadata:
         assert "ja" in locs
         assert "雨の街の夜テスト" in locs["ja"]["title"]
 
+    def test_generate_localizations_handles_supported_and_unknown_locales_with_or_without_duration_placeholder(
+        self, caplog
+    ):
+        gen = _make_generator()
+        gen.config = copy.deepcopy(gen.config)
+        supported = ["fr", "es", "it", "fil", "EN-us", "xx-ZZ"]
+        gen.config.localizations.data.clear()
+        gen.config.localizations.data.update(
+            {
+                "supported_languages": supported,
+                "languages": {
+                    lang: {
+                        "title_template": ("{scene_phrase} [{duration_display}]" if lang != "fil" else "{scene_phrase}")
+                    }
+                    for lang in supported
+                },
+            }
+        )
+        scene_phrases = {lang: f"focus {lang}" for lang in supported}
+
+        with caplog.at_level("WARNING"):
+            localizations = gen.generate_localizations(
+                english_title="Focus",
+                timestamp_body="00:00 Track 1",
+                scene_phrases=scene_phrases,
+                duration_seconds=90 * 60,
+            )
+
+        assert set(localizations) == set(supported)
+        assert localizations["fr"]["title"] == "focus fr [1.5 heures]"
+        assert localizations["es"]["title"] == "focus es [1.5 horas]"
+        assert localizations["it"]["title"] == "focus it [1.5 ore]"
+        assert localizations["fil"]["title"] == "focus fil"
+        assert localizations["EN-us"]["title"] == "focus EN-us [1.5 Hours]"
+        assert localizations["xx-ZZ"]["title"] == "focus xx-ZZ [1.5 Hours]"
+        assert "xx-ZZ" in caplog.text
+
+    @pytest.mark.parametrize(
+        "title_template, expected_calls, expected_warning_count",
+        [
+            ("{scene_phrase}", [], 0),
+            ("{scene_phrase} [{duration_display}]", ["pt-BR", "en"], 1),
+        ],
+    )
+    def test_generation_computes_duration_only_when_referenced_and_warns_once(
+        self,
+        title_template,
+        expected_calls,
+        expected_warning_count,
+        caplog,
+        monkeypatch,
+    ):
+        import youtube_automation.domains.metadata.localizations as localizations_module
+
+        gen = _make_generator()
+        gen.config = copy.deepcopy(gen.config)
+        supported = ["pt-BR", "en"]
+        gen.config.localizations.data.clear()
+        gen.config.localizations.data.update(
+            {
+                "supported_languages": supported,
+                "languages": {lang: {"title_template": title_template} for lang in supported},
+            }
+        )
+        calls = []
+        original_formatter = localizations_module.format_localized_duration_display
+
+        def tracked_formatter(duration_seconds, locale):
+            calls.append(locale)
+            return original_formatter(duration_seconds, locale)
+
+        monkeypatch.setattr(localizations_module, "format_localized_duration_display", tracked_formatter)
+
+        with caplog.at_level("WARNING"):
+            result = gen.generate_localizations(
+                english_title="Focus",
+                timestamp_body="00:00 Track 1",
+                scene_phrases={"pt-BR": "foco", "en": "focus"},
+                duration_seconds=3600,
+            )
+
+        warnings = [record for record in caplog.records if "duration_display locale" in record.getMessage()]
+        assert calls == expected_calls
+        assert len(warnings) == expected_warning_count
+        assert result["pt-BR"]["title"] == ("foco" if not expected_calls else "foco [1 Hour]")
+
+    @pytest.mark.parametrize(
+        "locale",
+        [
+            "en-a-aaa-b-bbb",
+            "en-x-private",
+            "x-private",
+            "i-default",
+        ],
+    )
+    def test_generation_accepts_structurally_valid_bcp47_locale(self, locale):
+        gen = _make_generator()
+        gen.config = copy.deepcopy(gen.config)
+        supported = [locale, "en"]
+        gen.config.localizations.data.clear()
+        gen.config.localizations.data.update(
+            {
+                "supported_languages": supported,
+                "languages": {lang: {"title_template": "{scene_phrase} [{duration_display}]"} for lang in supported},
+            }
+        )
+
+        result = gen.generate_localizations(
+            english_title="Focus",
+            timestamp_body="00:00 Track 1",
+            scene_phrases={locale: "focus locale", "en": "focus en"},
+            duration_seconds=3600,
+        )
+
+        assert result[locale]["title"] == "focus locale [1 Hour]"
+
+    @pytest.mark.parametrize("locale", ["en-12", "de-419-DE", "en-US-Latn"])
+    def test_generation_rejects_structurally_invalid_bcp47_locale(self, locale):
+        gen = _make_generator()
+        gen.config = copy.deepcopy(gen.config)
+        supported = [locale, "en"]
+        gen.config.localizations.data.clear()
+        gen.config.localizations.data.update(
+            {
+                "supported_languages": supported,
+                "languages": {lang: {"title_template": "{scene_phrase} [{duration_display}]"} for lang in supported},
+            }
+        )
+
+        with pytest.raises(ValueError, match="locale"):
+            gen.generate_localizations(
+                english_title="Focus",
+                timestamp_body="00:00 Track 1",
+                scene_phrases={locale: "focus locale", "en": "focus en"},
+                duration_seconds=3600,
+            )
+
     def test_localizations_missing_phrases_raises(self):
         """scene_phrase が一部欠落していると ValueError を raise する（fail-silent 防止）"""
         gen = _make_generator()
@@ -650,9 +788,8 @@ class TestFormatDurationDisplay:
     def test_localized_duration_uses_common_rounded_number(self, seconds, locale, expected):
         assert format_localized_duration_display(seconds, locale) == expected
 
-    def test_localized_duration_rejects_unsupported_locale(self):
-        with pytest.raises(ValueError, match="対応していない locale"):
-            format_localized_duration_display(3600, "fr")
+    def test_localized_duration_supports_french(self):
+        assert format_localized_duration_display(3600, "fr") == "1 heure"
 
     def test_very_short(self):
         """60秒 = 1分 → 最小 5 min"""
@@ -918,6 +1055,47 @@ class TestValidateScenePhrases:
         config = load_config()
         violations = validate_scene_phrases(_all_langs_phrases("short phrase"), config, 3600)
         assert violations == []
+
+    def test_supported_and_unknown_locales_validate_with_or_without_duration_placeholder(self, caplog, monkeypatch):
+        from types import SimpleNamespace
+
+        import youtube_automation.domains.metadata.localizations as localizations_module
+
+        supported = ["fr", "es", "it", "fil", "EN-us", "xx-ZZ"]
+        config = SimpleNamespace(
+            localizations=SimpleNamespace(
+                data={
+                    "supported_languages": supported,
+                    "languages": {
+                        lang: {
+                            "title_template": (
+                                "{scene_phrase} [{duration_display}]" if lang != "fil" else "{scene_phrase}"
+                            )
+                        }
+                        for lang in supported
+                    },
+                }
+            ),
+            content=SimpleNamespace(descriptions=SimpleNamespace(metadata={})),
+        )
+        scene_phrases = {lang: "focus" for lang in supported}
+        calls = []
+        original_formatter = localizations_module.format_localized_duration_display
+
+        def tracked_formatter(duration_seconds, locale):
+            calls.append(locale)
+            return original_formatter(duration_seconds, locale)
+
+        monkeypatch.setattr(localizations_module, "format_localized_duration_display", tracked_formatter)
+
+        with caplog.at_level("WARNING"):
+            violations = validate_scene_phrases(scene_phrases, config, 3600)
+
+        assert violations == []
+        assert calls == ["fr", "es", "it", "EN-us", "xx-ZZ"]
+        warnings = [record for record in caplog.records if "duration_display locale" in record.getMessage()]
+        assert len(warnings) == 1
+        assert "xx-ZZ" in warnings[0].getMessage()
 
     def test_single_language_over_limit(self):
         """1 言語だけ超過すれば 1 件返る"""
