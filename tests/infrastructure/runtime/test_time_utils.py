@@ -11,6 +11,7 @@ from youtube_automation.infrastructure.runtime.time_utils import (
     format_duration_mmss,
     format_duration_mss,
     format_duration_short,
+    format_localized_duration_display,
     format_timestamp,
 )
 
@@ -162,3 +163,70 @@ class TestFormatDurationDisplay:
     )
     def test_rounds_to_half_hours_above_135min(self, seconds, expected):
         assert format_duration_display(seconds) == expected
+
+
+class TestFormatLocalizedDurationDisplay:
+    @pytest.mark.parametrize(
+        ("locale", "expected"),
+        [
+            ("ja", "1.5時間"),
+            ("en", "1.5 Hours"),
+            ("de", "1.5 Std"),
+            ("fr", "1.5 heures"),
+            ("ES-es", "1.5 horas"),
+            ("it_IT", "1.5 ore"),
+            ("fil-PH", "1.5 oras"),
+        ],
+    )
+    def test_formats_supported_base_locale_after_case_and_region_normalization(self, locale, expected):
+        assert format_localized_duration_display(90 * 60, locale) == expected
+
+    def test_unknown_valid_locale_uses_observable_english_fallback(self, caplog):
+        with caplog.at_level("WARNING"):
+            result = format_localized_duration_display(3600, "pt-BR")
+
+        assert result == "1 Hour"
+        assert "pt-BR" in caplog.text
+        assert "English" in caplog.text
+
+    @pytest.mark.parametrize(
+        "locale",
+        [
+            "en-a-aaa-b-bbb",
+            "en-x-private",
+            "x-private",
+            "i-default",
+        ],
+    )
+    def test_accepts_structurally_valid_bcp47_tags(self, locale):
+        assert format_localized_duration_display(3600, locale) == "1 Hour"
+
+    @pytest.mark.parametrize(
+        "locale",
+        [
+            "en-12",
+            "de-419-DE",
+            "en-US-Latn",
+            "en-a-aaa-a-bbb",
+            "en-1901-1901",
+        ],
+    )
+    def test_rejects_structurally_invalid_bcp47_tags(self, locale):
+        with pytest.raises(ValueError, match="locale"):
+            format_localized_duration_display(3600, locale)
+
+    @pytest.mark.parametrize(
+        ("locale", "expected_bytes"),
+        [
+            ("ja", "1時間".encode()),
+            ("en", b"1 Hour"),
+            ("de", b"1 Std"),
+        ],
+    )
+    def test_preserves_existing_54_minute_output_bytes(self, locale, expected_bytes):
+        assert format_localized_duration_display(54 * 60, locale).encode() == expected_bytes
+
+    @pytest.mark.parametrize("locale", ["", "   ", None, 42])
+    def test_invalid_locale_fails_loudly(self, locale):
+        with pytest.raises((TypeError, ValueError), match="locale"):
+            format_localized_duration_display(3600, locale)

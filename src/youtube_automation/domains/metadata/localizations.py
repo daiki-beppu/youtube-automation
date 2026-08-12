@@ -174,12 +174,29 @@ def validate_scene_phrases(
         ValueError: 多言語チャンネルで scene_phrases が一部言語で欠落している場合、
             または `localizations.json` に `title_template` が無い言語がある場合.
     """
+    violations, _ = _validate_and_format_scene_titles(
+        scene_phrases,
+        config,
+        duration_seconds,
+        scene_emoji=scene_emoji,
+    )
+    return violations
+
+
+def _validate_and_format_scene_titles(
+    scene_phrases: Dict[str, str],
+    config,
+    duration_seconds: int | float,
+    *,
+    scene_emoji: str,
+) -> tuple[List[SceneTitleViolation], Dict[str, str]]:
+    """多言語タイトルを一度だけ検証・生成し、service と結果を共有する."""
     loc_config = config.localizations.data
     supported = loc_config.get("supported_languages", [])
 
     # 単一言語チャンネルは scene_phrases 不要（populate も no-op）#1470
     if not requires_scene_phrases(supported):
-        return []
+        return [], {}
 
     missing_langs = [lang for lang in supported if not scene_phrases.get(lang)]
     if missing_langs:
@@ -195,6 +212,7 @@ def validate_scene_phrases(
     best_for_line = desc_metadata.get("best_for", "Study, Focus, Late Night")
 
     violations: List[SceneTitleViolation] = []
+    titles: Dict[str, str] = {}
     for lang in supported:
         lang_data = loc_config["languages"].get(lang, {})
         title_tpl = lang_data.get("title_template")
@@ -202,7 +220,11 @@ def validate_scene_phrases(
             raise ValueError(f"localizations.json: language '{lang}' に title_template が無い")
         activities = lang_data.get("activities", best_for_line)
         scene = scene_phrases[lang]
-        duration_display = format_localized_duration_display(duration_seconds, lang)
+        duration_display = (
+            format_localized_duration_display(duration_seconds, lang)
+            if "duration_display" in _referenced_placeholders(title_tpl)
+            else ""
+        )
         title = format_title_template(
             title_tpl,
             _localized_title_values(
@@ -213,6 +235,7 @@ def validate_scene_phrases(
             ),
             context=f"localizations.json: language '{lang}' の title_template",
         )
+        titles[lang] = title
         if len(title) > 100:
             fixed_title = format_title_template(
                 title_tpl,
@@ -236,7 +259,7 @@ def validate_scene_phrases(
                     template=title_tpl,
                 )
             )
-    return violations
+    return violations, titles
 
 
 def format_scene_title_violations(violations: List[SceneTitleViolation]) -> str:

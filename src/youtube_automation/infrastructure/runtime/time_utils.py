@@ -8,6 +8,41 @@ Usage:
     )
 """
 
+import logging
+
+logger = logging.getLogger(__name__)
+
+_GRANDFATHERED_LANGUAGE_TAGS = frozenset(
+    {
+        "art-lojban",
+        "cel-gaulish",
+        "en-gb-oed",
+        "i-ami",
+        "i-bnn",
+        "i-default",
+        "i-enochian",
+        "i-hak",
+        "i-klingon",
+        "i-lux",
+        "i-mingo",
+        "i-navajo",
+        "i-pwn",
+        "i-tao",
+        "i-tay",
+        "i-tsu",
+        "no-bok",
+        "no-nyn",
+        "sgn-be-fr",
+        "sgn-be-nl",
+        "sgn-ch-de",
+        "zh-guoyu",
+        "zh-hakka",
+        "zh-min",
+        "zh-min-nan",
+        "zh-xiang",
+    }
+)
+
 
 def format_duration_mss(seconds: float) -> str:
     """秒数を m:ss 形式にフォーマット（例: 225.0 → '3:45'）。"""
@@ -67,18 +102,111 @@ def format_duration_display(total_seconds: int | float) -> str:
 
 
 def format_localized_duration_display(total_seconds: int | float, locale: str) -> str:
-    """共通の丸め数値を locale ごとの単位で表示する."""
+    """共通の丸め数値を locale の単位で表示し、未知の有効 locale は英語 fallback を警告する."""
+    if not isinstance(locale, str):
+        raise TypeError(f"locale は文字列でなければなりません: {type(locale).__name__}")
+    normalized_locale = locale.strip().replace("_", "-")
+    if not _is_well_formed_bcp47_tag(normalized_locale):
+        raise ValueError(f"locale の形式が不正です: {locale!r}")
+
+    base_locale = normalized_locale.casefold().split("-", 1)[0]
     value, unit = _rounded_duration(total_seconds)
     units = {
         "en": {"minute": "min", "hour": "Hour" if value == "1" else "Hours"},
         "de": {"minute": "Min", "hour": "Std"},
         "ja": {"minute": "分", "hour": "時間"},
+        "fr": {"minute": "min", "hour": "heure" if value == "1" else "heures"},
+        "es": {"minute": "min", "hour": "hora" if value == "1" else "horas"},
+        "it": {"minute": "min", "hour": "ora" if value == "1" else "ore"},
+        "fil": {"minute": "min", "hour": "oras"},
     }
-    locale_units = units.get(locale)
+    locale_units = units.get(base_locale)
     if locale_units is None:
-        raise ValueError(f"duration_display に対応していない locale: {locale!r}。対応 locale は ja, en, de です")
-    separator = "" if locale == "ja" else " "
+        # YouTube が追加した有効 locale で metadata 全体を止めず、英語使用を warning で可視化する。
+        logger.warning("duration_display locale %r has no dedicated units; using English units", locale)
+        locale_units = units["en"]
+    separator = "" if base_locale == "ja" else " "
     return f"{value}{separator}{locale_units[unit]}"
+
+
+def _is_well_formed_bcp47_tag(locale: str) -> bool:
+    """RFC 5646 の Language-Tag ABNF と重複禁止規則を構造検証する."""
+    if not locale or not locale.isascii():
+        return False
+    subtags = locale.casefold().split("-")
+    if any(not _is_alphanumeric(subtag, minimum=1, maximum=8) for subtag in subtags):
+        return False
+    if locale.casefold() in _GRANDFATHERED_LANGUAGE_TAGS:
+        return True
+    if subtags[0] == "x":
+        return len(subtags) > 1
+
+    language = subtags[0]
+    if not _is_alpha(language, minimum=2, maximum=8):
+        return False
+    if len(language) == 4 or len(language) > 4:
+        index = 1
+    else:
+        index = 1
+        extlang_count = 0
+        while index < len(subtags) and extlang_count < 3 and _is_alpha(subtags[index], minimum=3, maximum=3):
+            index += 1
+            extlang_count += 1
+
+    if index < len(subtags) and _is_alpha(subtags[index], minimum=4, maximum=4):
+        index += 1
+    if index < len(subtags) and (
+        _is_alpha(subtags[index], minimum=2, maximum=2) or (len(subtags[index]) == 3 and subtags[index].isdigit())
+    ):
+        index += 1
+
+    variants: set[str] = set()
+    while index < len(subtags) and _is_variant(subtags[index]):
+        if subtags[index] in variants:
+            return False
+        variants.add(subtags[index])
+        index += 1
+
+    extension_singletons: set[str] = set()
+    while index < len(subtags) and _is_extension_singleton(subtags[index]):
+        singleton = subtags[index]
+        if singleton in extension_singletons:
+            return False
+        extension_singletons.add(singleton)
+        index += 1
+        extension_start = index
+        while index < len(subtags) and _is_alphanumeric(subtags[index], minimum=2, maximum=8):
+            index += 1
+        if index == extension_start:
+            return False
+
+    if index < len(subtags) and subtags[index] == "x":
+        index += 1
+        private_use_start = index
+        while index < len(subtags) and _is_alphanumeric(subtags[index], minimum=1, maximum=8):
+            index += 1
+        if index == private_use_start:
+            return False
+
+    return index == len(subtags)
+
+
+def _is_alpha(value: str, *, minimum: int, maximum: int) -> bool:
+    return minimum <= len(value) <= maximum and value.isascii() and value.isalpha()
+
+
+def _is_alphanumeric(value: str, *, minimum: int, maximum: int) -> bool:
+    return minimum <= len(value) <= maximum and value.isascii() and value.isalnum()
+
+
+def _is_variant(value: str) -> bool:
+    return _is_alphanumeric(value, minimum=5, maximum=8) or (
+        len(value) == 4 and value[0].isdigit() and _is_alphanumeric(value, minimum=4, maximum=4)
+    )
+
+
+def _is_extension_singleton(value: str) -> bool:
+    return len(value) == 1 and value != "x" and value.isascii() and value.isalnum()
 
 
 def _rounded_duration(total_seconds: int | float) -> tuple[str, str]:

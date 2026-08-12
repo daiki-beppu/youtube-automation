@@ -27,7 +27,6 @@ from youtube_automation.core.adapters.media import CollectionPaths, probe_durati
 from youtube_automation.core.adapters.runtime import (
     format_duration_display,
     format_duration_short,
-    format_localized_duration_display,
     format_timestamp,
 )
 from youtube_automation.core.errors import ValidationError
@@ -37,11 +36,10 @@ from youtube_automation.domains.metadata.descriptions import (
     build_short_description,
 )
 from youtube_automation.domains.metadata.localizations import (
-    _localized_title_values,
+    _validate_and_format_scene_titles,
     build_short_localizations,
     format_scene_title_violations,
     validate_localizations_title_templates,
-    validate_scene_phrases,
 )
 from youtube_automation.domains.metadata.tags import (
     build_collection_tags,
@@ -52,7 +50,6 @@ from youtube_automation.domains.metadata.titles import (
     _extract_pattern_key,
     build_collection_title,
     build_short_title,
-    format_title_template,
 )
 from youtube_automation.domains.uploads.preflight import requires_scene_phrases
 
@@ -725,7 +722,7 @@ class BAHMetadataGenerator:
 
         # 欠落チェック + 100 codepoint 超過を全言語まとめて検出する
         # （従来は 1 言語ずつ fail していたため多言語対応チャンネルで再アップロードを繰り返していた）
-        violations = validate_scene_phrases(
+        violations, localized_titles = _validate_and_format_scene_titles(
             scene_phrases,
             self.config,
             duration_seconds,
@@ -742,21 +739,8 @@ class BAHMetadataGenerator:
             lang_data = loc_config["languages"].get(lang, {})
             desc_data = lang_data.get("description", {})
 
-            # --- タイトル ---（validate_scene_phrases 済みなので必須キーは揃っている前提）
-            scene = scene_phrases[lang]
-            title_tpl = lang_data["title_template"]
-            activities = lang_data.get("activities", best_for_line)
-            duration_display = format_localized_duration_display(duration_seconds, lang)
-            loc_title = format_title_template(
-                title_tpl,
-                _localized_title_values(
-                    scene_phrase=scene,
-                    activities=activities,
-                    scene_emoji=scene_emoji,
-                    duration_display=duration_display,
-                ),
-                context=f"localizations.json: language '{lang}' の title_template",
-            )
+            # --- タイトル ---（検証時に同じ入力から生成済み）
+            loc_title = localized_titles[lang]
 
             # --- 概要欄（ハイブリッド方式）---
             opening_poem = desc_data.get("opening_poem", "")
