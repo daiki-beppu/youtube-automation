@@ -96,7 +96,7 @@ pip install "git+https://github.com/daiki-beppu/youtube-automation@v1.1.0"
 
 インストールすると `yt-*` という CLI コマンド群と `yt-skills` 同期ツールが PATH に入ります。
 
-> **submodule 形式 (legacy)**: GCP セットアップスクリプト（`.claude/skills/channel-new/references/`）は、submodule 利用者は `automation/.claude/skills/channel-new/references/gcp-bootstrap.sh` のように submodule パス経由で参照するか、`yt-skills sync` を先に実行してください（pip install 環境のみ）。新規チャンネルは pip install を推奨。移行手順: [`docs/migration-submodule-to-uv.md`](docs/migration-submodule-to-uv.md)
+> **submodule 形式 (legacy)**: GCP セットアップスクリプト（`.claude/skills/setup/references/`）は、submodule 利用者は `automation/.claude/skills/setup/references/gcp-bootstrap.sh` のように submodule パス経由で参照するか、`yt-skills sync` を先に実行してください（pip install 環境のみ）。新規チャンネルは pip install を推奨。移行手順: [`docs/migration-submodule-to-uv.md`](docs/migration-submodule-to-uv.md)
 
 ### 2. Claude Code 配布物を同期
 

@@ -11,7 +11,7 @@ from tests.helpers.paths import REPO_ROOT
 REPO_ROOT = REPO_ROOT
 SETUP_SKILL = REPO_ROOT / ".claude" / "skills" / "setup" / "SKILL.md"
 CHANNEL_NEW_SKILL = REPO_ROOT / ".claude" / "skills" / "channel-new" / "SKILL.md"
-GCP_BOOTSTRAP_MD = REPO_ROOT / ".claude" / "skills" / "channel-new" / "references" / "gcp-bootstrap.md"
+GCP_BOOTSTRAP_MD = REPO_ROOT / ".claude" / "skills" / "setup" / "references" / "gcp-bootstrap.md"
 REGENERATION_MODE_MD = REPO_ROOT / ".claude" / "skills" / "channel-new" / "references" / "regeneration-mode.md"
 
 GOOGLE_AUTH_PLATFORM_KEYWORDS = (
@@ -67,7 +67,7 @@ esac
 """,
     )
     env = os.environ | {"PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"}
-    script = REPO_ROOT / ".claude/skills/channel-new/references/gcp-bootstrap.sh"
+    script = REPO_ROOT / ".claude/skills/setup/references/gcp-bootstrap.sh"
     env_path = tmp_path / ".env"
 
     result = subprocess.run(
@@ -108,7 +108,7 @@ exit 0
 """,
     )
     env = os.environ | {"PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"}
-    script = REPO_ROOT / ".claude/skills/channel-new/references/gcp-terraform-apply.sh"
+    script = REPO_ROOT / ".claude/skills/setup/references/gcp-terraform-apply.sh"
     env_path = tmp_path / ".env"
 
     result = subprocess.run(

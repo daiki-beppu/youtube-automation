@@ -331,6 +331,14 @@ def test_built_sdist_contains_only_approved_members(tmp_path: Path) -> None:
         "infra/terraform/gcp/README.md",
     }
     assert oauth_entrypoints <= members
+    setup_gcp_assets = {
+        ".claude/skills/setup/references/gcp-bootstrap.md",
+        ".claude/skills/setup/references/gcp-bootstrap.sh",
+        ".claude/skills/setup/references/gcp-terraform-apply.sh",
+        ".claude/skills/setup/references/terraform-gcp/README.md",
+        ".claude/skills/setup/references/terraform-gcp/terraform.tfvars.example",
+    }
+    assert setup_gcp_assets <= members
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     assert all(link in readme for link in ("(ONBOARDING.md)", "(docs/oauth-setup.md)"))
 

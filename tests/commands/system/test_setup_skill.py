@@ -22,6 +22,7 @@ _SETUP_TOOL = _SKILLS_DIR / "setup" / "references" / "tool.md"
 _SETUP_RUNBOOK = _SKILLS_DIR / "setup" / "references" / "check-runbook.md"
 _SETUP_CHAIN_MANIFEST = _SKILLS_DIR / "setup" / "references" / "setup-chain-manifest.json"
 _SETUP_CHAIN_STATE = _SKILLS_DIR / "setup" / "references" / "setup-chain-state.py"
+_SETUP_GCP_GUIDE = _SKILLS_DIR / "setup" / "references" / "gcp-bootstrap.md"
 _FRESHNESS_RULES = _SKILLS_DIR / "collection-ideate" / "references" / "freshness-rules.md"
 _CHANNEL_NEW_SKILL = _SKILLS_DIR / "channel-new" / "SKILL.md"
 _ONBOARD_DIR = _SKILLS_DIR / "onboard"
@@ -85,6 +86,27 @@ def test_setup_skill_declares_exclusive_tool_mode_and_default_chain() -> None:
     assert "1 個なら対応する reference を読み、その一段だけを実行する" in text
     assert "0 個なら chain manifest に従い tool を状態判定付きで進める" in text
     assert "| `--tool` | `references/tool.md` |" in text
+
+
+def test_setup_tool_is_the_canonical_gcp_oauth_adc_bootstrap_entrypoint() -> None:
+    skill = _SETUP_SKILL.read_text(encoding="utf-8")
+    tool = _SETUP_TOOL.read_text(encoding="utf-8")
+    guide = _SETUP_GCP_GUIDE.read_text(encoding="utf-8")
+
+    assert "GCP / OAuth / ADC bootstrap の唯一の正規入口" in skill
+    assert "doctor wizard が正規入口" in guide
+    for contract in (
+        "Google Auth Platform",
+        "Branding",
+        "Audience",
+        "Clients",
+        "client_secrets.json",
+        "approval",
+        "API 有効化",
+        "ADC quota project",
+        "IAM 付与",
+    ):
+        assert contract in tool
 
 
 def test_setup_chain_manifest_declares_exactly_one_tool_step() -> None:

@@ -20,7 +20,7 @@ description: "Use when ツール導入と GCP / OAuth の API 設定をセット
 |---|---|
 | `--tool` | `references/tool.md` |
 
-`--tool` は `uv run yt-setup-dirs` を含む現行 wizard をそのまま実行する。Google Auth Platform の Branding / Audience / Clients 設定と `client_secrets.json` の既存契約も `references/tool.md` で維持する。`/setup` では `config/channel/*.json` を生成しない。新規チャンネルの TTP 対象確認、config 生成、ペルソナ、branding は `/channel-new` の責務であり、この段では変更しない。運用設定の `workflow.post-publish.skip_approvals` も `references/tool.md` の既存インタビューで扱う。
+`--tool` は `uv run yt-setup-dirs` を含む現行 doctor wizard をそのまま実行し、GCP / OAuth / ADC bootstrap の唯一の正規入口とする。Google Auth Platform の Branding / Audience / Clients 設定と `client_secrets.json` の既存契約も `references/tool.md` で維持する。手動 script / Terraform を明示的に選ぶ上級者向け資産は同じ owner の `references/gcp-bootstrap.md` に置く。`/setup` では `config/channel/*.json` を生成しない。新規チャンネルの TTP 対象確認、config 生成、ペルソナ、branding は `/channel-new` の責務であり、この段では変更しない。運用設定の `workflow.post-publish.skip_approvals` も `references/tool.md` の既存インタビューで扱う。
 
 ## 一括実行
 

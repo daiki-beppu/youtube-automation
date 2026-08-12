@@ -4,7 +4,7 @@
 
 ## いつ terraform を選ぶか
 
-`.claude/skills/channel-new/references/gcp-bootstrap.sh` と機能ほぼ同等だが、tfstate を持つ分以下のシナリオで強い:
+`.claude/skills/setup/references/gcp-bootstrap.sh` と機能ほぼ同等だが、tfstate を持つ分以下のシナリオで強い:
 
 | シナリオ | 推奨 |
 | --- | --- |
@@ -16,7 +16,7 @@
 
 初回 1 チャンネル限定なら bootstrap.sh の方が tfvars 編集の手間が無い分シンプル。複数管理・継続運用を見据えるなら terraform に切り替える価値がある。
 
-`/setup` skill (AI 主導の wizard) は内部で bootstrap.sh を呼ぶ前提だが、AI に tfvars 編集 + `gcp-terraform-apply.sh` を Bash で叩かせれば terraform ルートも自動化可能。
+`/setup --tool` の doctor wizard が正規入口。上級者が IaC を明示的に選んだ場合は、AI が tfvars 編集 + 同じ setup references の `gcp-terraform-apply.sh` を Bash で叩けば terraform ルートも自動化可能。
 
 ## 管理するリソース
 
