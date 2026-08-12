@@ -7,7 +7,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from youtube_automation.core.adapters.errors import ValidationError
+from youtube_automation.core.errors import ValidationError
 from youtube_automation.domains.metadata.descriptions import extract_descriptions_md_section
 
 _TIMESTAMP_RE = re.compile(r"^(?P<timestamp>(?:\d{1,2}:)?\d{1,2}:\d{2})\s+(?P<title>.+?)\s*$")
