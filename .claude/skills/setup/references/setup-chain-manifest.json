@@ -64,6 +64,7 @@
         "config/schedule_config.json",
         "config/skills/suno.yaml",
         "config/skills/thumbnail.yaml",
+        "doctor:channel_config",
         "docs/channel/ttp-seed-confirmation.md",
         "docs/channel/competitor-branding-snapshot.json",
         "docs/plans/viewer-voice-analysis.md",

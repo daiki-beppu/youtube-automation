@@ -11,6 +11,7 @@ from pathlib import Path
 from types import ModuleType
 
 import pytest
+from PIL import Image as PILImage
 
 from tests.helpers.paths import REPO_ROOT
 from youtube_automation.commands.system import doctor
@@ -43,6 +44,16 @@ def _checks(state: ModuleType, **statuses: str) -> list[doctor.CheckResult]:
 def _write_file_artifacts(root: Path, artifacts: list[str]) -> None:
     for artifact in artifacts:
         if artifact.startswith(("doctor:", "git:")):
+            continue
+        if artifact == "branding/icon.*":
+            path = root / "branding" / "icon.png"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            PILImage.new("RGB", (800, 800), color=(40, 80, 120)).save(path, format="PNG")
+            continue
+        if artifact == "branding/banner.*":
+            path = root / "branding" / "banner.png"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            PILImage.new("RGB", (2048, 1152), color=(120, 80, 40)).save(path, format="PNG")
             continue
         path = root / artifact.replace("*", "png")
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -111,6 +122,186 @@ def test_channel_stays_run_when_initial_save_is_dirty(tmp_path: Path, state: Mod
     assert result["decision"] == "run"
     assert result["reason"] == "channel_outputs_incomplete"
     assert {item["artifact"] for item in result["artifacts"] if item["status"] != "ready"} == {"git:clean"}
+
+
+@pytest.mark.parametrize("channel_config_status", ["fail", "warn"])
+def test_channel_does_not_skip_when_channel_config_is_unresolved(
+    tmp_path: Path, state: ModuleType, channel_config_status: str
+) -> None:
+    manifest = state.load_manifest(MANIFEST)
+    tool, channel = manifest["steps"]
+    _write_file_artifacts(tmp_path, tool["outputArtifacts"] + channel["outputArtifacts"])
+    _commit_workspace(tmp_path)
+
+    code, result = state.evaluate(
+        tmp_path,
+        _checks(state, channel_config=channel_config_status),
+        manifest,
+        "channel",
+    )
+
+    assert (code, result["decision"], result["reason"]) == (
+        state.EXIT_RUN,
+        "run",
+        "channel_outputs_incomplete",
+    )
+    assert {item["artifact"]: item["status"] for item in result["artifacts"] if item["status"] != "ready"} == {
+        "doctor:channel_config": channel_config_status
+    }
+
+
+def test_channel_does_not_skip_when_channel_config_check_is_missing(tmp_path: Path, state: ModuleType) -> None:
+    manifest = state.load_manifest(MANIFEST)
+    tool, channel = manifest["steps"]
+    _write_file_artifacts(tmp_path, tool["outputArtifacts"] + channel["outputArtifacts"])
+    _commit_workspace(tmp_path)
+    checks = [check for check in _checks(state) if check.id != "channel_config"]
+
+    code, result = state.evaluate(tmp_path, checks, manifest, "channel")
+
+    assert code == state.EXIT_RUN
+    assert result["decision"] == "run"
+    assert {item["artifact"]: item["status"] for item in result["artifacts"] if item["status"] != "ready"} == {
+        "doctor:channel_config": "missing"
+    }
+
+
+def test_present_but_invalid_channel_config_does_not_skip(tmp_path: Path, state: ModuleType) -> None:
+    manifest = state.load_manifest(MANIFEST)
+    tool, channel = manifest["steps"]
+    _write_file_artifacts(tmp_path, tool["outputArtifacts"] + channel["outputArtifacts"])
+    (tmp_path / "config" / "channel" / "meta.json").write_text("not-json\n", encoding="utf-8")
+    _commit_workspace(tmp_path)
+    real_config_check = doctor.check_channel_config(tmp_path)
+    checks = [check for check in _checks(state) if check.id != "channel_config"] + [real_config_check]
+
+    code, result = state.evaluate(tmp_path, checks, manifest, "channel")
+
+    assert real_config_check.status == "fail"
+    assert code == state.EXIT_RUN
+    assert result["decision"] == "run"
+    assert {item["artifact"]: item["status"] for item in result["artifacts"] if item["status"] != "ready"} == {
+        "doctor:channel_config": "fail"
+    }
+
+
+def _write_valid_branding(root: Path, *, banner_format: str = "PNG", banner_suffix: str = ".png") -> None:
+    branding = root / "branding"
+    branding.mkdir(parents=True, exist_ok=True)
+    PILImage.new("RGB", (800, 800), color=(40, 80, 120)).save(branding / "icon.png", format="PNG")
+    PILImage.new("RGB", (2048, 1152), color=(120, 80, 40)).save(
+        branding / f"banner{banner_suffix}", format=banner_format
+    )
+
+
+@pytest.mark.parametrize(
+    "kind",
+    ["icon", "banner"],
+)
+@pytest.mark.parametrize(
+    ("suffix", "mutation"),
+    [
+        (".txt", "text"),
+        (".png", "empty"),
+        (".png", "corrupt"),
+        (".png", "directory"),
+        (".png", "symlink"),
+        (".png", "broken_symlink"),
+        (".png.backup", "false_positive"),
+        (".png", "wrong_ratio"),
+        (".png", "oversize"),
+        (".png", "format_mismatch"),
+    ],
+)
+def test_channel_branding_glob_rejects_invalid_matches(
+    tmp_path: Path, state: ModuleType, kind: str, suffix: str, mutation: str
+) -> None:
+    manifest = state.load_manifest(MANIFEST)
+    tool, channel = manifest["steps"]
+    _write_file_artifacts(tmp_path, tool["outputArtifacts"] + channel["outputArtifacts"])
+    valid = tmp_path / "branding" / f"{kind}.png"
+    valid.unlink()
+    invalid = tmp_path / "branding" / f"{kind}{suffix}"
+    if mutation == "text":
+        invalid.write_text("not an image\n", encoding="utf-8")
+    elif mutation == "empty":
+        invalid.write_bytes(b"")
+    elif mutation in {"corrupt", "false_positive"}:
+        invalid.write_bytes(b"\x89PNG\r\n\x1a\ntruncated")
+    elif mutation == "directory":
+        invalid.mkdir()
+    elif mutation == "symlink":
+        target = tmp_path / f"valid-{kind}.png"
+        size = (800, 800) if kind == "icon" else (2048, 1152)
+        PILImage.new("RGB", size, color=(40, 80, 120)).save(target, format="PNG")
+        invalid.symlink_to(target)
+    elif mutation == "broken_symlink":
+        invalid.symlink_to(tmp_path / "missing-image.png")
+    elif mutation == "wrong_ratio":
+        PILImage.new("RGB", (800, 600), color=(40, 80, 120)).save(invalid, format="PNG")
+    elif mutation == "oversize":
+        size = (800, 800) if kind == "icon" else (2048, 1152)
+        max_size = 4 * 1024 * 1024 if kind == "icon" else 6 * 1024 * 1024
+        PILImage.new("RGB", size, color=(40, 80, 120)).save(invalid, format="PNG")
+        with invalid.open("ab") as stream:
+            stream.write(b"x" * max_size)
+    elif mutation == "format_mismatch":
+        size = (800, 800) if kind == "icon" else (2048, 1152)
+        PILImage.new("RGB", size, color=(40, 80, 120)).save(invalid, format="JPEG")
+    _commit_workspace(tmp_path)
+
+    code, result = state.evaluate(tmp_path, _checks(state), manifest, "channel")
+
+    assert code == state.EXIT_RUN
+    assert result["decision"] == "run"
+    assert {item["artifact"] for item in result["artifacts"] if item["status"] != "ready"} == {f"branding/{kind}.*"}
+
+
+@pytest.mark.parametrize(
+    ("kind", "suffix", "image_format", "size"),
+    [
+        ("icon", ".jpg", "JPEG", (800, 800)),
+        ("banner", ".webp", "WEBP", (2048, 1152)),
+    ],
+)
+def test_channel_branding_glob_rejects_unsupported_valid_image_formats(
+    tmp_path: Path,
+    state: ModuleType,
+    kind: str,
+    suffix: str,
+    image_format: str,
+    size: tuple[int, int],
+) -> None:
+    manifest = state.load_manifest(MANIFEST)
+    tool, channel = manifest["steps"]
+    _write_file_artifacts(tmp_path, tool["outputArtifacts"] + channel["outputArtifacts"])
+    (tmp_path / "branding" / f"{kind}.png").unlink()
+    PILImage.new("RGB", size, color=(40, 80, 120)).save(tmp_path / "branding" / f"{kind}{suffix}", format=image_format)
+    _commit_workspace(tmp_path)
+
+    code, result = state.evaluate(tmp_path, _checks(state), manifest, "channel")
+
+    assert code == state.EXIT_RUN
+    assert result["decision"] == "run"
+    assert {item["artifact"] for item in result["artifacts"] if item["status"] != "ready"} == {f"branding/{kind}.*"}
+
+
+def test_channel_branding_globs_accept_valid_png_and_jpeg(tmp_path: Path, state: ModuleType) -> None:
+    manifest = state.load_manifest(MANIFEST)
+    tool, channel = manifest["steps"]
+    _write_file_artifacts(tmp_path, tool["outputArtifacts"] + channel["outputArtifacts"])
+    (tmp_path / "branding" / "banner.png").unlink()
+    _write_valid_branding(tmp_path, banner_format="JPEG", banner_suffix=".jpg")
+    _commit_workspace(tmp_path)
+
+    code, result = state.evaluate(tmp_path, _checks(state), manifest, "channel")
+
+    assert code == state.EXIT_SKIP
+    assert result["decision"] == "skip"
+    branding = {
+        item["artifact"]: item["status"] for item in result["artifacts"] if item["artifact"].startswith("branding/")
+    }
+    assert branding == {"branding/icon.*": "ready", "branding/banner.*": "ready"}
 
 
 def test_unrelated_informational_doctor_check_does_not_change_tool_decision(tmp_path: Path, state: ModuleType) -> None:

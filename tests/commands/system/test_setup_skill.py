@@ -184,6 +184,7 @@ def test_setup_chain_manifest_declares_tool_then_channel_with_machine_detectable
     assert {
         "config/channel/meta.json",
         "config/channel/analytics.json",
+        "doctor:channel_config",
         "docs/channel/ttp-seed-confirmation.md",
         "docs/channel/competitor-branding-snapshot.json",
         "docs/channel/personas/persona-definition.md",

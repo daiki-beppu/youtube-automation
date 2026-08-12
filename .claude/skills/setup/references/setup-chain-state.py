@@ -5,10 +5,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import stat
 import subprocess
 import sys
 from pathlib import Path
 from typing import TypedDict, cast
+
+from PIL import Image as PILImage
+from PIL import UnidentifiedImageError
 
 from youtube_automation.commands.system import doctor
 from youtube_automation.core.errors import ConfigError
@@ -36,7 +40,7 @@ TOOL_CHECK_IDS = (
     "client_secrets",
     "oauth_token",
 )
-CHANNEL_CHECK_IDS = ("ttp_wf_new_readiness", "initial_setup_readiness")
+CHANNEL_CHECK_IDS = ("channel_config", "ttp_wf_new_readiness", "initial_setup_readiness")
 TOOL_OUTPUT_ARTIFACTS = (
     *(f"doctor:{check_id}" for check_id in TOOL_CHECK_IDS[:-2]),
     "auth/client_secrets.json",
@@ -54,6 +58,7 @@ CHANNEL_OUTPUT_ARTIFACTS = (
     "config/schedule_config.json",
     "config/skills/suno.yaml",
     "config/skills/thumbnail.yaml",
+    "doctor:channel_config",
     "docs/channel/ttp-seed-confirmation.md",
     "docs/channel/competitor-branding-snapshot.json",
     "docs/plans/viewer-voice-analysis.md",
@@ -69,6 +74,10 @@ _ALLOWED_CHECK_STATUSES = frozenset({"ok", "info", "warn", "fail", "unknown"})
 _FILE_CHECK_IDS = {
     "auth/client_secrets.json": "client_secrets",
     "auth/token.json": "oauth_token",
+}
+_BRANDING_ARTIFACTS = {
+    "branding/icon.*": ({".png": "PNG"}, 1.0, 4 * 1024 * 1024),
+    "branding/banner.*": ({".png": "PNG", ".jpg": "JPEG", ".jpeg": "JPEG"}, 16 / 9, 6 * 1024 * 1024),
 }
 _STEP_KEYS = frozenset({"id", "skill", "prerequisiteArtifacts", "outputArtifacts", "approvalGate", "idempotency"})
 
@@ -186,6 +195,35 @@ def _git_status(root: Path) -> str:
     return "ready" if not result.stdout else "dirty"
 
 
+def _valid_branding_image(path: Path, formats: dict[str, str], expected_ratio: float, max_size: int) -> bool:
+    try:
+        metadata = path.lstat()
+        if path.is_symlink() or not stat.S_ISREG(metadata.st_mode) or metadata.st_size == 0:
+            return False
+        if metadata.st_size > max_size:
+            return False
+        expected_format = formats.get(path.suffix.lower())
+        if expected_format is None:
+            return False
+        with PILImage.open(path) as image:
+            width, height = image.size
+            actual_format = image.format
+            image.verify()
+    except (OSError, UnidentifiedImageError):
+        return False
+    if actual_format != expected_format or width <= 0 or height <= 0:
+        return False
+    return abs(width / height - expected_ratio) <= 0.03
+
+
+def _branding_status(root: Path, artifact: str) -> str:
+    formats, expected_ratio, max_size = _BRANDING_ARTIFACTS[artifact]
+    candidates = sorted(root.glob(artifact))
+    if any(_valid_branding_image(path, formats, expected_ratio, max_size) for path in candidates):
+        return "ready"
+    return "invalid" if candidates else "missing"
+
+
 def _artifact_payload(root: Path, statuses: dict[str, str], artifacts: list[str]) -> list[ArtifactPayload]:
     payload: list[ArtifactPayload] = []
     for artifact in artifacts:
@@ -194,6 +232,8 @@ def _artifact_payload(root: Path, statuses: dict[str, str], artifacts: list[str]
             status = "ready" if check_status == "ok" else check_status
         elif artifact == "git:clean":
             status = _git_status(root)
+        elif artifact in _BRANDING_ARTIFACTS:
+            status = _branding_status(root, artifact)
         else:
             exists = any(path.is_file() for path in root.glob(artifact))
             check_id = _FILE_CHECK_IDS.get(artifact)
