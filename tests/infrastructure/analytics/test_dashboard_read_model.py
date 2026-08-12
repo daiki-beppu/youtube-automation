@@ -557,3 +557,38 @@ def test_dashboard_api_filters_non_object_channels_and_non_list_videos() -> None
 
     assert api.overview()["channels"] == [{"id": "valid", "name": "Valid", "video_count": 0}]
     assert api.channel("valid")["videos"] == []
+
+
+def test_dashboard_api_preserves_channel_without_refresh_error() -> None:
+    channel = {
+        "id": "legacy",
+        "name": "Legacy",
+        "status": "ready",
+        "snapshot": None,
+        "collected_at": None,
+        "period": {"start_date": None, "end_date": None},
+        "scheduled_count": None,
+        "summary": None,
+        "videos": [],
+        "error": None,
+    }
+    api = DashboardAPI({"schema_version": 1, "channels": [channel]})
+
+    assert api.overview() == {
+        "schema_version": 1,
+        "channels": [
+            {
+                "id": "legacy",
+                "name": "Legacy",
+                "status": "ready",
+                "snapshot": None,
+                "collected_at": None,
+                "period": {"start_date": None, "end_date": None},
+                "scheduled_count": None,
+                "summary": None,
+                "error": None,
+                "video_count": 0,
+            }
+        ],
+    }
+    assert api.channel("legacy") == channel

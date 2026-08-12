@@ -8,7 +8,7 @@ import math
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TypedDict, cast
+from typing import TypeAlias, TypedDict, cast
 
 from youtube_automation.core.errors import DashboardChannelNotFoundError
 from youtube_automation.infrastructure.analytics.dashboard_publications import (
@@ -111,6 +111,18 @@ class ChannelOverviewResponse(TypedDict):
 class OverviewResponse(TypedDict):
     schema_version: int
     channels: list[ChannelOverviewResponse]
+
+
+IncompleteChannelResponse: TypeAlias = dict[str, object]
+
+
+class IncompleteOverviewResponse(TypedDict):
+    schema_version: object
+    channels: list[IncompleteChannelResponse]
+
+
+DashboardOverviewResponse: TypeAlias = OverviewResponse | IncompleteOverviewResponse
+DashboardChannelResponse: TypeAlias = ChannelDetailResponse | IncompleteChannelResponse
 
 
 def _object(value: object) -> dict[str, object]:
@@ -409,57 +421,51 @@ class DashboardAPI:
             return []
         return [item for item in channels if isinstance(item, dict)]
 
-    def overview(self) -> OverviewResponse:
-        """動画行を除いた全チャンネル概要を返す。"""
-        overview_channels: list[ChannelOverviewResponse] = []
-        for item in self._channels():
-            videos = item.get("videos")
-            if not ChannelSourceResponse.__required_keys__ <= item.keys():
-                # DashboardAPI の型付き入力契約より前から、直接生成した不完全な
-                # model を best-effort で返す互換挙動がある。完全な型を一度作り、
-                # 実際の入力に存在しなかった required key だけを動的に除くことで、
-                # 正規 builder 経路の required-key 契約は弱めずに維持する。
-                legacy_overview = ChannelOverviewResponse(
-                    id=item.get("id", ""),
-                    name=item.get("name", ""),
-                    status=item.get("status", ""),
-                    snapshot=item.get("snapshot"),
-                    collected_at=item.get("collected_at"),
-                    period=item.get("period", PeriodResponse(start_date=None, end_date=None)),
-                    scheduled_count=item.get("scheduled_count"),
-                    summary=item.get("summary"),
-                    error=item.get("error"),
-                    refresh_error=item.get("refresh_error"),
-                    video_count=len(videos) if isinstance(videos, list) else 0,
-                )
-                for key in ChannelOverviewResponse.__required_keys__ - item.keys() - {"video_count"}:
-                    legacy_overview.pop(key, None)
-                overview_channels.append(legacy_overview)
-                continue
-            overview = ChannelOverviewResponse(
-                id=item["id"],
-                name=item["name"],
-                status=item["status"],
-                snapshot=item["snapshot"],
-                collected_at=item["collected_at"],
-                period=item["period"],
-                scheduled_count=item["scheduled_count"],
-                summary=item["summary"],
-                error=item["error"],
-                refresh_error=item["refresh_error"],
-                video_count=len(videos) if isinstance(videos, list) else 0,
-            )
-            overview_channels.append(overview)
-        return OverviewResponse(
-            schema_version=self.model.get("schema_version", SCHEMA_VERSION),
-            channels=overview_channels,
+    @staticmethod
+    def _overview_channel(item: ChannelDetailResponse) -> ChannelOverviewResponse:
+        videos = item["videos"]
+        return ChannelOverviewResponse(
+            id=item["id"],
+            name=item["name"],
+            status=item["status"],
+            snapshot=item["snapshot"],
+            collected_at=item["collected_at"],
+            period=item["period"],
+            scheduled_count=item["scheduled_count"],
+            summary=item["summary"],
+            error=item["error"],
+            refresh_error=item["refresh_error"],
+            video_count=len(videos) if isinstance(videos, list) else 0,
         )
 
-    def channel(self, channel_id: str) -> ChannelDetailResponse:
+    @staticmethod
+    def _incomplete_overview_channel(item: Mapping[str, object]) -> dict[str, object]:
+        videos = item.get("videos")
+        overview = {key: value for key, value in item.items() if key not in {"videos", "workflow_timing"}}
+        overview["video_count"] = len(videos) if isinstance(videos, list) else 0
+        return overview
+
+    def overview(self) -> DashboardOverviewResponse:
+        """動画行を除いた全チャンネル概要を返す。"""
+        channels = self._channels()
+        if any(not ChannelDetailResponse.__required_keys__ <= item.keys() for item in channels):
+            return IncompleteOverviewResponse(
+                schema_version=self.model.get("schema_version", SCHEMA_VERSION),
+                channels=[self._incomplete_overview_channel(item) for item in channels],
+            )
+        return OverviewResponse(
+            schema_version=self.model.get("schema_version", SCHEMA_VERSION),
+            channels=[self._overview_channel(item) for item in channels],
+        )
+
+    def channel(self, channel_id: str) -> DashboardChannelResponse:
         """選択チャンネルの動画を含む詳細を返す。"""
         for item in self._channels():
             if item.get("id") == channel_id:
-                detail = item.copy()
+                if ChannelDetailResponse.__required_keys__ <= item.keys():
+                    detail: DashboardChannelResponse = item.copy()
+                else:
+                    detail = dict(item.items())
                 if not isinstance(detail.get("videos"), list):
                     detail["videos"] = []
                 return detail
