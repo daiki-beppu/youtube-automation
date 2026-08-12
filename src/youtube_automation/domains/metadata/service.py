@@ -23,7 +23,6 @@ import yaml
 
 from youtube_automation.configuration import channel_dir, load_config
 from youtube_automation.configuration.skills import load_skill_config
-from youtube_automation.core.adapters.errors import ValidationError
 from youtube_automation.core.adapters.media import CollectionPaths, probe_duration
 from youtube_automation.core.adapters.runtime import (
     format_duration_display,
@@ -31,6 +30,7 @@ from youtube_automation.core.adapters.runtime import (
     format_localized_duration_display,
     format_timestamp,
 )
+from youtube_automation.core.errors import ValidationError
 from youtube_automation.domains.media.audio_formats import AUDIO_EXTS
 from youtube_automation.domains.metadata.descriptions import (
     build_complete_collection_description,
