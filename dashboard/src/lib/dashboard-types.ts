@@ -1,5 +1,7 @@
 import type { PublicationActivityResponse } from "@/features/publication-activity/publication-heatmap"
 
+export const DASHBOARD_SCHEMA_VERSION = 2
+
 export type Summary = {
   views: number
   watch_time_minutes: number

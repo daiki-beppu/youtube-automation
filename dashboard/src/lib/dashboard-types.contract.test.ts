@@ -1,6 +1,44 @@
 import { describe, expect, it } from "vitest"
 import ts from "typescript"
 
+import overviewGolden from "@/lib/__fixtures__/overview.golden.json"
+import {
+  DASHBOARD_SCHEMA_VERSION,
+  type ChannelOverview,
+  type OverviewResponse,
+  type Summary,
+} from "@/lib/dashboard-types"
+
+type SameKeys<Left, Right> = [
+  Exclude<keyof Left, keyof Right>,
+  Exclude<keyof Right, keyof Left>,
+] extends [never, never]
+  ? true
+  : false
+
+type GoldenChannel = (typeof overviewGolden.channels)[number]
+
+const overviewFixture: OverviewResponse = overviewGolden
+const overviewKeysMatch: SameKeys<typeof overviewGolden, OverviewResponse> =
+  true
+const channelKeysMatch: SameKeys<GoldenChannel, ChannelOverview> = true
+const periodKeysMatch: SameKeys<
+  GoldenChannel["period"],
+  ChannelOverview["period"]
+> = true
+const summaryKeysMatch: SameKeys<
+  NonNullable<GoldenChannel["summary"]>,
+  Summary
+> = true
+const errorKeysMatch: SameKeys<
+  NonNullable<GoldenChannel["error"]>,
+  NonNullable<ChannelOverview["error"]>
+> = true
+const refreshErrorKeysMatch: SameKeys<
+  NonNullable<GoldenChannel["refresh_error"]>,
+  NonNullable<ChannelOverview["refresh_error"]>
+> = true
+
 const apiResponseTypeNames = [
   "Video",
   "ChannelDetail",
@@ -92,5 +130,19 @@ describe("dashboard API response type ownership", () => {
     expect(importedTypeNames).toEqual(
       expect.arrayContaining([...appResponseTypeNames])
     )
+  })
+})
+
+describe("Python dashboard overview schema contract", () => {
+  it("accepts the generated Python response as the exact TypeScript response shape", () => {
+    expect(overviewFixture.schema_version).toBe(DASHBOARD_SCHEMA_VERSION)
+    expect([
+      overviewKeysMatch,
+      channelKeysMatch,
+      periodKeysMatch,
+      summaryKeysMatch,
+      errorKeysMatch,
+      refreshErrorKeysMatch,
+    ]).toEqual([true, true, true, true, true, true])
   })
 })
