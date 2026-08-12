@@ -464,6 +464,28 @@ class TestMainTargetSelection:
         assert result.stdout == ""
         assert result.stderr == "INFO: nothing to do\n"
 
+    def test_console_entrypoint_help_should_explain_write_and_safe_preview_contract(self):
+        """``--help`` だけで通常実行の write と dry-run の no-write を判別できる."""
+        entrypoint = Path(sys.executable).with_name("yt-bulk-update-desc")
+        assert entrypoint.is_file()
+
+        result = subprocess.run(
+            [entrypoint, "--help"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        help_text = " ".join(result.stdout.split())
+
+        assert result.returncode == 0
+        assert result.stderr == ""
+        assert "YouTube 上の公開済み動画の概要欄へ一括書き込みする" in help_text
+        assert "通常実行は API write" in help_text
+        assert "--dry-run" in help_text
+        assert "YouTube への書き込みを行わず、更新予定を安全にプレビューする" in help_text
+        assert "--only ONLY" in help_text
+        assert "collection 名のカンマ区切り部分一致フィルター" in help_text
+
 
 # ---------------------------------------------------------------------------
 # 3. main — 既存挙動の維持（リグレッションガード）
