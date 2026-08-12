@@ -6,7 +6,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from youtube_automation.core.adapters.errors import ConfigError
+from youtube_automation.core.errors import ConfigError
 from youtube_automation.domains.metadata.placeholders import is_placeholder_value
 
 DEFAULT_DEDUP_RECENT_COLLECTIONS = 5
