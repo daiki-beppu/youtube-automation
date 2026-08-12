@@ -1522,6 +1522,36 @@ class TestCheckChannelConfig:
         assert "config/localizations.json 検証失敗" in config_check["message"]
         assert "axis_label" in config_check["message"]
 
+    def test_main_json_reports_japanese_particle_static_duration_without_changing_exit_code(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        """診断 CLI は固定尺を fail check で報告し、既存どおり診断自体は exit 0 にする。"""
+        monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
+        _write_minimal_config(tmp_path)
+        (tmp_path / "config" / "localizations.json").write_text(
+            json.dumps(
+                {
+                    "supported_languages": ["ja", "ja-JP"],
+                    "default_language": "ja",
+                    "languages": {
+                        "ja": {"title_template": "{scene_phrase} [{duration_display}]"},
+                        "ja-JP": {"title_template": "3時間の{scene_phrase}"},
+                    },
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+
+        exit_code = doctor.main(["--json", "--target", str(tmp_path)])
+
+        assert exit_code == 0
+        payload = json.loads(capsys.readouterr().out)
+        config_check = next(check for check in payload["checks"] if check["id"] == "channel_config")
+        assert config_check["status"] == "fail"
+        assert "config/localizations.json 検証失敗" in config_check["message"]
+        assert "languages.ja-JP.title_template: 固定尺 '3時間'" in config_check["message"]
+
     def test_channel_dir_env_restored_after_call(self, tmp_path, monkeypatch):
         """check_channel_config 呼び出し後、CHANNEL_DIR 環境変数が元に戻っている."""
         original = str(tmp_path / "original")

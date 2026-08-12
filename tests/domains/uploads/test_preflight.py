@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import unicodedata
 from pathlib import Path
 
 import pytest
@@ -344,29 +345,67 @@ def test_plan_preflight_rejects_overlong_localized_title(
     assert "scene_phrase=13c" in message
 
 
+@pytest.mark.parametrize(
+    ("locale", "title_template", "expected_literal"),
+    [
+        ("ja-JP", "3時間の{scene_phrase}", "3時間"),
+        ("FR-fr", "3 Heures de {scene_phrase}", "3 Heures"),
+        ("es-419", "3 Horas de {scene_phrase}", "3 Horas"),
+        ("it-IT", "3 Ore di {scene_phrase}", "3 Ore"),
+    ],
+)
 def test_plan_preflight_rejects_static_localized_duration(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    locale: str,
+    title_template: str,
+    expected_literal: str,
 ) -> None:
-    channel_dir = _write_minimal_channel(tmp_path, youtube_language="en", supported_languages=["en", "de"])
+    channel_dir = _write_minimal_channel(tmp_path, youtube_language="en", supported_languages=["en", locale])
     _write_json(
         channel_dir / "config" / "localizations.json",
         {
-            "supported_languages": ["en", "de"],
+            "supported_languages": ["en", locale],
             "languages": {
-                "en": {"title_template": "{scene_phrase} [3 Hours]"},
-                "de": {"title_template": "{scene_phrase} [{duration_display}]"},
+                "en": {"title_template": "{scene_phrase} [{duration_display}]"},
+                locale: {"title_template": title_template},
             },
         },
     )
     collection_dir = _write_collection(
         channel_dir,
-        scene_phrases={"en": "focus", "de": "ruhiger Fokus"},
+        scene_phrases={"en": "focus", locale: "localized focus"},
         description="A continuous BGM mix without chapter markers.",
     )
 
-    with pytest.raises(ValidationError, match=r"固定尺 '3 Hours'"):
+    with pytest.raises(ValidationError, match=rf"固定尺 '{re.escape(expected_literal)}'"):
         _run_preflight(channel_dir, collection_dir, monkeypatch)
+
+
+def test_plan_preflight_accepts_nfd_word_continuation_after_hour_prefix(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    locale = "es-ES"
+    channel_dir = _write_minimal_channel(tmp_path, youtube_language="en", supported_languages=["en", locale])
+    title_template = unicodedata.normalize("NFD", "{scene_phrase} | 3 horário mix")
+    _write_json(
+        channel_dir / "config" / "localizations.json",
+        {
+            "supported_languages": ["en", locale],
+            "languages": {
+                "en": {"title_template": "{scene_phrase} [{duration_display}]"},
+                locale: {"title_template": title_template},
+            },
+        },
+    )
+    collection_dir = _write_collection(
+        channel_dir,
+        scene_phrases={"en": "focus", locale: "enfoque"},
+        description="A continuous BGM mix without chapter markers.",
+    )
+
+    _run_preflight(channel_dir, collection_dir, monkeypatch)
 
 
 def test_plan_preflight_passes_actual_master_duration_to_localizations(

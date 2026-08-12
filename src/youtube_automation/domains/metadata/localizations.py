@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from dataclasses import dataclass
 from typing import Dict, List
 
@@ -15,10 +16,29 @@ from youtube_automation.domains.metadata.titles import (
 from youtube_automation.domains.uploads.preflight import requires_scene_phrases
 
 LOCALIZED_TITLE_PLACEHOLDERS = frozenset({"scene_phrase", "activities", "scene_emoji", "duration_display"})
+_DURATION_LITERAL_PREFIX = r"(?<!\w)\d+(?:[.,]\d+)?\s*"
+_JAPANESE_DURATION_PARTICLE = r"(?:の|を|に|は|が|と|で|へ|も)"
 _STATIC_DURATION_LITERAL = re.compile(
-    r"(?<!\w)\d+(?:[.,]\d+)?\s*(?:hours?|hrs?|std\.?|stunden?|時間|minutes?|mins?|min\.?|分)(?!\w)",
+    rf"{_DURATION_LITERAL_PREFIX}(?:"
+    r"(?:hours?|hrs?|std\.?|stunden?|minutes?|mins?|min\.?)(?!\w)"
+    rf"|(?:時間|分)(?=$|[^\w]|{_JAPANESE_DURATION_PARTICLE}(?=$|[^\w])))",
     re.IGNORECASE,
 )
+_LOCALIZED_STATIC_HOUR_LITERAL = {
+    "fr": re.compile(rf"{_DURATION_LITERAL_PREFIX}heures?(?!\w)", re.IGNORECASE),
+    "es": re.compile(rf"{_DURATION_LITERAL_PREFIX}horas?(?!\w)", re.IGNORECASE),
+    "it": re.compile(rf"{_DURATION_LITERAL_PREFIX}(?:ora|ore)(?!\w)", re.IGNORECASE),
+}
+
+
+def _find_static_duration_literal(template: str, locale: object) -> re.Match[str] | None:
+    matching_template = unicodedata.normalize("NFC", template)
+    static_duration = _STATIC_DURATION_LITERAL.search(matching_template)
+    if static_duration is not None or not isinstance(locale, str):
+        return static_duration
+    base_locale = locale.strip().replace("_", "-").casefold().split("-", 1)[0]
+    localized_pattern = _LOCALIZED_STATIC_HOUR_LITERAL.get(base_locale)
+    return localized_pattern.search(matching_template) if localized_pattern is not None else None
 
 
 def build_short_localizations(
@@ -119,7 +139,7 @@ def validate_localizations_title_templates(loc_data: Dict) -> List[str]:
         template = lang_data.get("title_template")
         if not isinstance(template, str):
             continue
-        static_duration = _STATIC_DURATION_LITERAL.search(template)
+        static_duration = _find_static_duration_literal(template, lang)
         if static_duration:
             errors.append(
                 f"languages.{lang}.title_template: 固定尺 {static_duration.group(0)!r} が含まれています。\n"

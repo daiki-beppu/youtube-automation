@@ -9,6 +9,7 @@ import copy
 import json
 import shutil
 import sys
+import unicodedata
 from pathlib import Path
 
 from tests.helpers.paths import FIXTURES_DIR, REPO_ROOT
@@ -1839,21 +1840,76 @@ class TestTitleTemplateUnknownPlaceholder:
         }
         assert validate_localizations_title_templates(loc) == []
 
-    @pytest.mark.parametrize("literal", ["[3 Hours]", "[3 Std]", "3時間"])
-    def test_validate_localizations_title_templates_rejects_static_duration(self, literal):
-        loc = {"languages": {"en": {"title_template": f"{{scene_phrase}} | {literal}"}}}
+    @pytest.mark.parametrize(
+        ("locale", "literal"),
+        [
+            ("en-US", "[3 Hours]"),
+            ("de-DE", "[3 Std]"),
+            ("ja-JP", "3時間"),
+            ("ja-JP", "3時間。"),
+            ("ja-JP", "3時間の{scene_phrase}"),
+            ("FR-fr", "3 Heures de {scene_phrase}"),
+            ("es-419", "3 Horas de {scene_phrase}"),
+            ("it-IT", "3 Ore di {scene_phrase}"),
+            ("fr-FR", "1 HEURE"),
+            ("es-ES", "1 hora"),
+            ("it-IT", "1 ora"),
+            ("fr-CA", "2,5 heures"),
+            ("es-MX", "2.5 HORAS"),
+        ],
+    )
+    def test_validate_localizations_title_templates_rejects_static_duration(self, locale, literal):
+        loc = {"languages": {locale: {"title_template": f"{{scene_phrase}} | {literal}"}}}
 
         errors = validate_localizations_title_templates(loc)
 
         assert len(errors) == 1
         assert "固定尺" in errors[0]
         assert "{duration_display}" in errors[0]
+        assert f"languages.{locale}.title_template" in errors[0]
+
+    @pytest.mark.parametrize(
+        ("locale", "template"),
+        [
+            ("en-US", "x3 Hours | {scene_phrase}"),
+            ("en-US", "{scene_phrase} | 3 HoursMix"),
+            ("fr-FR", "{scene_phrase} | 3 heuresFocus"),
+            ("es-419", "{scene_phrase} | 3 horas_extra"),
+            ("it-IT", "{scene_phrase} | 3 Oregon"),
+            ("en-US", "{scene_phrase} | 3 ore"),
+            ("fr-FR", "{scene_phrase} | 3 horas"),
+            ("ja-JP", "{scene_phrase} | 3時間帯"),
+            ("ja-JP", "{scene_phrase} | 3時間のりもの"),
+            ("en-US", "{scene_phrase} | Track 3"),
+            ("en-US", "{scene_phrase} | 2026 mix"),
+        ],
+    )
+    def test_validate_localizations_title_templates_ignores_non_duration_substrings(self, locale, template):
+        loc = {"languages": {locale: {"title_template": template}}}
+
+        assert validate_localizations_title_templates(loc) == []
+
+    @pytest.mark.parametrize(
+        ("locale", "unrelated_word"),
+        [
+            ("fr-FR", "heuréka"),
+            ("es-ES", "horário"),
+            ("it-IT", "orégon"),
+        ],
+    )
+    def test_validate_localizations_title_templates_ignores_normalized_word_continuations(self, locale, unrelated_word):
+        for normalization in ("NFC", "NFD"):
+            template = unicodedata.normalize(normalization, f"{{scene_phrase}} | 3 {unrelated_word} mix")
+            loc = {"languages": {locale: {"title_template": template}}}
+
+            assert validate_localizations_title_templates(loc) == []
 
     def test_validate_localizations_title_templates_tolerates_missing_sections(self):
         # languages 無し / title_template 無し / 非 dict 言語エントリは検証対象外として黙って通す
         assert validate_localizations_title_templates({}) == []
         assert validate_localizations_title_templates({"languages": {"en": {}}}) == []
         assert validate_localizations_title_templates({"languages": {"en": "broken"}}) == []
+        assert validate_localizations_title_templates({"languages": {"en": {"title_template": 3}}}) == []
 
     # --- _generate_title 経路 ---------------------------------------------
 
