@@ -12,7 +12,7 @@ from typing import cast
 
 import yaml
 
-from youtube_automation.core.adapters.errors import ConfigError
+from youtube_automation.core.errors import ConfigError
 from youtube_automation.domains.suno.downloaded.models import (
     DOCUMENTATION_DIRNAME,
     SUNO_LYRICS_JSON_FILENAME,

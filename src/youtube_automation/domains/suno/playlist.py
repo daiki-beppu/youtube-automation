@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable, Mapping
 
-from youtube_automation.core.adapters.errors import ValidationError
+from youtube_automation.core.errors import ValidationError
 from youtube_automation.domains.suno.name_matching import normalize_suno_name_for_lookup
 from youtube_automation.domains.suno.prompts import read_suno_prompt_entries
 

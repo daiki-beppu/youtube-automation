@@ -21,8 +21,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from youtube_automation.core.adapters.errors import ValidationError
 from youtube_automation.core.adapters.media import CollectionPaths, probe_duration
+from youtube_automation.core.errors import ValidationError
 from youtube_automation.domains.suno.name_matching import (
     AmbiguousSunoNameError,
     SunoNameIndex,
