@@ -50,6 +50,7 @@ REPO_CONTRACT_MODULES = frozenset(
         "test_actions_parallel_workflows.py",
         "test_analytics_analyze_skill_contract.py",
         "test_analytics_revenue_skill_contract.py",
+        "test_automation_update_doctor_skill_contract.py",
         "test_any_usage_gate.py",
         "test_changelog_ci_contract.py",
         "test_channel_new_analysis_mode.py",

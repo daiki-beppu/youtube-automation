@@ -384,7 +384,108 @@ pin 形式ごとの指定方法と通常のオプションは `uv run yt-automat
 `apply` の smoke check は機械ゲートのみ。以下は AI が結果を読んで判断する:
 
 ```bash
-uv run yt-doctor
+python3 - <<'PY'
+import json
+import subprocess
+import sys
+import unicodedata
+
+MAX_RENDERED_TEXT = 240
+
+
+def safe_text(value: str) -> str:
+    without_controls = "".join(" " if unicodedata.category(character).startswith("C") else character for character in value)
+    rendered = " ".join(without_controls.split())
+    if len(rendered) <= MAX_RENDERED_TEXT:
+        return rendered
+    return f"{rendered[: MAX_RENDERED_TEXT - 3]}..."
+
+
+def safe_line(prefix: str, value: str) -> str:
+    return safe_text(f"{prefix}{value}")
+
+
+def validate_action(action: dict, index: int) -> None:
+    if not isinstance(action.get("kind"), str):
+        raise SystemExit(f"uv run yt-doctor --json の checks[{index}].next_action.kind が文字列ではありません")
+    for field, value in action.items():
+        if not isinstance(field, str) or not isinstance(value, str):
+            raise SystemExit(
+                f"uv run yt-doctor --json の checks[{index}].next_action.{safe_text(str(field))} "
+                "が文字列ではありません"
+            )
+
+
+def render_action(check: dict) -> None:
+    action = check.get("next_action")
+    if not isinstance(action, dict):
+        return
+    field_order = ["kind", *sorted(field for field in action if field != "kind")]
+    safe_id = safe_text(check["id"])
+    for field in field_order:
+        safe_field = safe_text(field)
+        print(
+            safe_line(f"doctor next_action [{safe_id}].{safe_field}: ", action[field]),
+            file=sys.stderr,
+        )
+
+command = ["uv", "run", "yt-doctor", "--json"]
+try:
+    completed = subprocess.run(command, capture_output=True, text=True, check=False)
+except OSError as error:
+    raise SystemExit(safe_text(f"uv run yt-doctor --json を起動できません: {error}")) from error
+
+try:
+    payload = json.loads(completed.stdout)
+except json.JSONDecodeError as error:
+    details = safe_text(completed.stderr.strip() or completed.stdout.strip())
+    if completed.returncode != 0:
+        raise SystemExit(
+            safe_text(f"uv run yt-doctor --json が exit code {completed.returncode} で失敗しました: {details}")
+        ) from error
+    raise SystemExit(safe_text(f"uv run yt-doctor --json の出力を解析できません: {error}")) from error
+
+if not isinstance(payload, dict) or not isinstance(payload.get("checks"), list):
+    raise SystemExit("uv run yt-doctor --json の出力に checks 配列がありません")
+
+checks = payload["checks"]
+for index, check in enumerate(checks):
+    if not isinstance(check, dict):
+        raise SystemExit(f"uv run yt-doctor --json の checks[{index}] が object ではありません")
+    for field in ("id", "status", "message"):
+        if not isinstance(check.get(field), str):
+            raise SystemExit(f"uv run yt-doctor --json の checks[{index}].{field} が文字列ではありません")
+    action = check.get("next_action")
+    if action is not None and not isinstance(action, dict):
+        raise SystemExit(f"uv run yt-doctor --json の checks[{index}].next_action が object ではありません")
+    if isinstance(action, dict):
+        validate_action(action, index)
+
+channel_config_checks = [check for check in checks if check["id"] == "channel_config"]
+if len(channel_config_checks) != 1:
+    raise SystemExit("uv run yt-doctor --json は id == channel_config の check を exactly 1 件返す必要があります")
+channel_config = channel_config_checks[0]
+
+message = channel_config.get("message")
+if channel_config.get("status") != "ok":
+    render_action(channel_config)
+    raise SystemExit(safe_text(message))
+
+print(safe_text(message))
+render_action(channel_config)
+for check in checks:
+    if check["id"] == "channel_config":
+        continue
+    if check["status"] in {"warn", "fail", "unknown"}:
+        safe_id = safe_text(check["id"])
+        print(safe_line(f"doctor {check['status']} [{safe_id}]: ", check["message"]), file=sys.stderr)
+    render_action(check)
+if completed.returncode != 0:
+    print(
+        safe_text(f"warning: yt-doctor の他 check が失敗し exit code {completed.returncode}"),
+        file=sys.stderr,
+    )
+PY
 uv run yt-channel-status
 ```
 
@@ -399,7 +500,7 @@ uv lock --upgrade-package youtube-channels-automation
 uv sync
 ```
 
-`yt-doctor` で WARNING / FAILED が出た場合は `/setup` を起動して再診断するよう案内。
+`channel_config` 以外の `yt-doctor` check が `warn` / `fail` / `unknown` の場合は、安全化して表示された `message` / `next_action` を省略せず利用者へ示し、`/setup` を起動して再診断するよう案内。`channel_config` 自体が `ok` 以外、check の重複・欠落・型不正、JSON 破損、またはコマンドを起動できない場合は `yt-channel-status` へ進まず停止する。
 ただし `branding/icon.png` / `branding/banner.png` の「未生成」が報告された場合は、新規生成の前に必ず `branding/` 配下の既存ファイルを確認する。同名 stem の別拡張子（例: `icon.jpg` / `banner.webp`）と別サフィックス（例: `banner-v2.jpg` / `banner-v3.png`）も候補に含め、複数候補がある場合はどれが最終版か人間に確認してからリネーム/変換する。
 
 sync 直後に、次の 2 点を Phase 4 へ進む前に判定する。手順は [references/post-apply-checks.md](references/post-apply-checks.md) を読む:
