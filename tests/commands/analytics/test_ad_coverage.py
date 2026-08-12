@@ -108,6 +108,56 @@ def test_analyze_preserves_unavailable_reason_without_warnings() -> None:
     }
 
 
+def test_analyze_accepts_partial_revenue_with_video_coverage_data() -> None:
+    revenue = {
+        "status": "partial",
+        "errors": {"day": "daily query forbidden"},
+        "by_video": {
+            "video-normal": _video(300, 2.0),
+            "video-low": _video(300, 0.4),
+        },
+    }
+
+    result = ad_coverage.analyze_ad_coverage(revenue, threshold=0.5, min_playbacks=100)
+
+    assert result["status"] == "available"
+    assert result["warning_count"] == 1
+    assert [warning["video_id"] for warning in result["warnings"]] == ["video-low"]
+
+
+def test_analyze_partial_revenue_keeps_missing_coverage_metrics_fail_closed() -> None:
+    revenue = {
+        "status": "partial",
+        "errors": {"day": "daily query forbidden"},
+        "by_video": {
+            "video-1": {
+                "monetized_playbacks": 600,
+                "estimated_revenue": 8.0,
+                "cpm": 13.0,
+            }
+        },
+    }
+
+    with pytest.raises(ConfigError, match="ads_per_playback は数値"):
+        ad_coverage.analyze_ad_coverage(revenue, threshold=0.5, min_playbacks=100)
+
+
+@pytest.mark.parametrize("status", [None, "unknown", 1])
+def test_analyze_rejects_unknown_or_malformed_revenue_status(status: object) -> None:
+    revenue = {"status": status, "by_video": {}}
+
+    with pytest.raises(ConfigError, match="available、partial、unavailable"):
+        ad_coverage.analyze_ad_coverage(revenue, threshold=0.5, min_playbacks=100)
+
+
+@pytest.mark.parametrize("status", [[], {}], ids=["list", "object"])
+def test_analyze_rejects_unhashable_revenue_status_as_config_error(status: object) -> None:
+    revenue = {"status": status, "by_video": {}}
+
+    with pytest.raises(ConfigError, match="available、partial、unavailable"):
+        ad_coverage.analyze_ad_coverage(revenue, threshold=0.5, min_playbacks=100)
+
+
 def test_entrypoint_reads_latest_snapshot_and_prints_json(tmp_path: Path, monkeypatch, capsys) -> None:
     _write_snapshot(tmp_path, "20260801", _available_revenue({"old": _video(200, 0.1)}))
     _write_snapshot(
@@ -131,6 +181,32 @@ def test_entrypoint_reads_latest_snapshot_and_prints_json(tmp_path: Path, monkey
     assert [warning["video_id"] for warning in output["warnings"]] == ["video-mid"]
     assert output["warnings"][0]["ads_per_playback"] == 1.2
     assert output["warnings"][0]["median_ratio"] == pytest.approx(0.6)
+
+
+def test_entrypoint_degrades_empty_partial_video_data_without_breaking_pipeline(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    _write_snapshot(
+        tmp_path,
+        "20260802",
+        {
+            "status": "partial",
+            "errors": {"video": "video query unsupported"},
+            "daily_metrics": [{"date": "2026-08-01", "estimated_revenue": 10.0}],
+            "by_video": {},
+        },
+    )
+    monkeypatch.setattr(ad_coverage, "_channel_dir", lambda: tmp_path)
+    monkeypatch.setattr(sys, "argv", ["yt-ad-coverage"])
+
+    assert entrypoints.yt_ad_coverage() == 0
+
+    assert json.loads(capsys.readouterr().out) == {
+        "status": "unavailable",
+        "reason": "video: video query unsupported",
+        "warning_count": 0,
+        "warnings": [],
+    }
 
 
 def test_cli_text_reports_zero_warnings(tmp_path: Path, monkeypatch, capsys) -> None:
@@ -174,6 +250,21 @@ def test_cli_returns_two_for_invalid_snapshot_shape(tmp_path: Path, monkeypatch,
     assert ad_coverage.main() == 2
 
     assert "JSON object" in caplog.text
+
+
+@pytest.mark.parametrize("status", [[], {}], ids=["list", "object"])
+def test_cli_returns_two_without_traceback_for_unhashable_revenue_status(
+    status: object, tmp_path: Path, monkeypatch, caplog, capsys
+) -> None:
+    _write_snapshot(tmp_path, "20260802", {"status": status, "by_video": {}})
+    monkeypatch.setattr(ad_coverage, "_channel_dir", lambda: tmp_path)
+    monkeypatch.setattr(sys, "argv", ["yt-ad-coverage"])
+
+    assert ad_coverage.main() == 2
+
+    captured = capsys.readouterr()
+    assert "available、partial、unavailable" in caplog.text
+    assert "Traceback" not in captured.err
 
 
 @pytest.mark.parametrize(
