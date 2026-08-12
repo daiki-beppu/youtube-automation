@@ -1,3 +1,5 @@
+import type { PublicationActivityResponse } from "@/features/publication-activity/publication-heatmap"
+
 export type Summary = {
   views: number
   watch_time_minutes: number
@@ -65,3 +67,31 @@ export type WorkflowTiming =
       collections: []
       error: WorkflowTimingError
     }
+
+export type Video = {
+  video_id: string
+  title: string
+  views: number
+  impressions: number
+  ctr_percentage: number
+  likes: number
+  comments: number
+  shares: number
+  subscribers_gained: number
+  average_view_duration_seconds: number
+  engagements: number
+}
+
+export type ChannelDetail = Omit<ChannelOverview, "video_count"> & {
+  videos: Video[]
+  workflow_timing: WorkflowTiming
+}
+export type OverviewResponse = {
+  schema_version: number
+  channels: ChannelOverview[]
+}
+export type PublicationActivityState =
+  | { status: "loading" }
+  | { status: "ready"; data: PublicationActivityResponse }
+  | { status: "empty" }
+  | { status: "error"; message: string }
