@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `refactor(core)`: #3895 後の `core.adapters` を 7 個の明示 adapter/package file に固定し、wildcard facade、literal dynamic import consumer、拡張子を問わない file surface の増減、domain への外部 SDK・認証・network・process import、wheel/sdist の配布差分を repository contract で拒否する（#3966）。
 - `refactor(core)`: consumer 移行済みの browser / google.youtube / google.upload wildcard facade を削除し、provider-neutral な authoritative infrastructure module を唯一の import owner にする（#3965）。
 - `refactor(core)`: consumer 移行済みの filesystem / process / quota wildcard facade を削除し、provider-neutral な authoritative infrastructure module を唯一の import owner にする（#3964）。
 - `refactor(core)`: consumer 移行済みの `core.adapters.errors` 自己 re-export を削除し、ドメイン例外の canonical owner を `core.errors` のみに統一する（#3963）。
