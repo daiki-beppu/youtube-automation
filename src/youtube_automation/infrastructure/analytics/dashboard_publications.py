@@ -6,7 +6,7 @@ import json
 import os
 import tempfile
 from collections import Counter
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import TypedDict, cast
@@ -60,9 +60,10 @@ def _validate_payload(value: object) -> DashboardPublications | None:
             return None
         if not isinstance(error.get("code"), str) or not isinstance(error.get("message"), str):
             return None
-        if not isinstance(error.get("attempted_at"), str):
+        attempted_at_value = error.get("attempted_at")
+        if not isinstance(attempted_at_value, str):
             return None
-        error_attempted_at = cast(str, error["attempted_at"])
+        error_attempted_at = attempted_at_value
 
     try:
         _parse_timestamp(fetched_at, field_name="fetched_at")
@@ -125,7 +126,7 @@ def load_fresh_dashboard_publications(source: Path, *, now: datetime) -> Dashboa
     if payload is None:
         return None
 
-    fetched_at = _parse_timestamp(cast(str, payload["fetched_at"]), field_name="fetched_at")
+    fetched_at = _parse_timestamp(payload["fetched_at"], field_name="fetched_at")
     age = now.astimezone(UTC) - fetched_at
     if age < timedelta(0) or age > CACHE_MAX_AGE:
         return None
@@ -133,32 +134,29 @@ def load_fresh_dashboard_publications(source: Path, *, now: datetime) -> Dashboa
 
 
 def with_dashboard_publication_error(
-    payload: dict[str, object],
+    payload: Mapping[str, object],
     *,
     code: str,
     message: str,
     attempted_at: datetime,
 ) -> DashboardPublications:
     """公開履歴の前回値を維持して構造化された更新失敗を付与する。"""
-    if _validate_payload(payload) is None:
+    validated = _validate_payload(payload)
+    if validated is None:
         raise ValueError("有効な公開履歴 payload が必要です")
     if attempted_at.tzinfo is None:
         raise ValueError("attempted_at は timezone-aware datetime でなければなりません")
 
-    return cast(
-        DashboardPublications,
-        {
-            **payload,
-            "error": {
-                "code": code,
-                "message": message,
-                "attempted_at": attempted_at.astimezone(UTC).isoformat(),
-            },
-        },
+    result = validated.copy()
+    result["error"] = DashboardPublicationError(
+        code=code,
+        message=message,
+        attempted_at=attempted_at.astimezone(UTC).isoformat(),
     )
+    return result
 
 
-def save_dashboard_publications(destination: Path, payload: dict[str, object]) -> None:
+def save_dashboard_publications(destination: Path, payload: Mapping[str, object]) -> None:
     """同一ディレクトリの一時ファイルを置換して payload を原子的に保存する。"""
     descriptor, temporary_name = tempfile.mkstemp(
         dir=destination.parent,
