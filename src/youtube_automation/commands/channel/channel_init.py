@@ -1,4 +1,4 @@
-"""yt-channel-init — config 一式と channel-new 初期運用ファイルを生成する CLI."""
+"""yt-channel-init — config 一式と setup --channel 初期運用ファイルを生成する CLI."""
 
 from __future__ import annotations
 
@@ -248,7 +248,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="yt-channel-init",
         description=(
-            "config 一式と channel-new 初期運用ファイルを生成する。既存ファイルは --force がない限り上書きしない。"
+            "config 一式と setup --channel 初期運用ファイルを生成する。既存ファイルは --force がない限り上書きしない。"
         ),
     )
     parser.add_argument(

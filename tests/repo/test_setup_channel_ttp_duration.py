@@ -8,7 +8,7 @@ import pytest
 
 from tests.helpers.paths import REPO_ROOT
 
-_SCRIPT_PATH = REPO_ROOT / ".claude" / "skills" / "channel-new" / "references" / "derive_ttp_duration.py"
+_SCRIPT_PATH = REPO_ROOT / ".claude" / "skills" / "setup" / "references" / "derive_ttp_duration.py"
 _SPEC = importlib.util.spec_from_file_location("derive_ttp_duration", _SCRIPT_PATH)
 assert _SPEC is not None and _SPEC.loader is not None
 duration = importlib.util.module_from_spec(_SPEC)
@@ -135,7 +135,7 @@ def test_apply_updates_only_audio_duration_fields(tmp_path: Path) -> None:
 
 
 def test_skill_documents_dry_run_approval_apply_and_exception_contract() -> None:
-    skill = (_SCRIPT_PATH.parent.parent / "SKILL.md").read_text(encoding="utf-8")
+    skill = (_SCRIPT_PATH.parent / "channel-mode.md").read_text(encoding="utf-8")
 
     assert "### Step 5.5: TTP Long VOD から動画尺を導出・承認" in skill
     assert "derive_ttp_duration.py" in skill

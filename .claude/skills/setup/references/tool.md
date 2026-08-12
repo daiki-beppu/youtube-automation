@@ -16,7 +16,7 @@
 - `uv` が利用可能であること。無ければ最初の step（bootstrap カテゴリの `uv` check）でインストールを案内する
 - 利用者が Google アカウントを持ち、AI / setup が起動した認証フローに対して、自分のブラウザでログイン・OAuth 同意・Google Auth Platform 設定を行えること（認証本人にしかできない `[HUMAN STEP]` として依頼する）
 
-`config/channel/*.json` の存在は前提にしない（channel カテゴリの check が fail でも `/channel-new` を案内するだけで setup 自体は完了できる）。
+`config/channel/*.json` の存在は前提にしない（channel カテゴリの check が fail でも `/setup --channel` を案内するだけで `--tool` 自体は完了できる）。
 
 ### カテゴリ別チェック構成
 
@@ -128,7 +128,7 @@ project ID が解決済み、または `apply_flags` へ `--project-id` / `--bil
 
 ### 実行条件と共通ルール
 
-1. `config/channel/` が存在せず `channel_config` の未生成経路に入った場合は、インタビューを実行しない。`channel_config` の手順どおり「運用設定は `/channel-new` 完了後に `/setup` を再実行して設定できます」と案内する。`/setup` は config を生成しない。
+1. `config/channel/` が存在せず `channel_config` の未生成経路に入った場合は、インタビューを実行しない。`channel_config` の手順どおり「運用設定は `/setup --channel` 完了後に `/setup --tool` を再実行して設定できます」と案内する。`--tool` は config を生成しない。
 2. `config/channel/` がロード可能なら、`config/channel/workflow.json` は任意であり、未存在でもインタビューを実行する。下表の workflow 6 行は、`workflow.json` またはその入れ子のキーが未設定なら表の default を現在値として扱う。回答が現在値と異なる場合は、必要な入れ子を含む `workflow.json` を作成または更新する。
 3. 下表の各行について、質問する直前に config を読んで現在値を取得する。現在値を利用者に質問してはならない。loop-video はまず `.claude/skills/loop-video/config.default.yaml` を読み、`config/skills/loop-video.yaml` が存在する場合はそれも読んで、`youtube_automation.configuration.skills.load_skill_config("loop-video")` と同じ deep-merge（default の上に override）で `enabled` の現在値を解決する。override に `enabled` が無い場合も default の値を現在値とする。
 4. 質問は必ず 1 問ずつ表示し、回答を待ってから次の行へ進む。各質問には現在値と、現在値を維持する推奨回答を添える。複数の質問をまとめて表示してはならない。

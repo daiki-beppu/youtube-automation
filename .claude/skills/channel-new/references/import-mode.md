@@ -5,9 +5,9 @@
 
 既に YouTube で運営中のチャンネルの情報をヒアリングし、`config/channel/*.json`（責務別分割、v2.0.0 以降）を生成して自動化システムに取り込む。
 
-**実行場所**: `/setup` 完了後の channel repo ルート。新規開設モードと同じく、テンプレートリポジトリから clone せず今いるディレクトリを使う。
+**実行場所**: `/setup --tool` 完了後の channel repo ルート。`/setup --channel` と同じく、テンプレートリポジトリから clone せず今いるディレクトリを使う。
 
-**リポジトリ準備**: `.git` がない場合は新規開設モードの Step 2（現在のディレクトリを repo 初期化）を実行する。automation パッケージ未導入・OAuth クライアント未配置など環境が未整備の場合は、新規開設モードの Step 3 と同じく `uv run yt-doctor --json` で状態を確認し、`/setup` を案内して完了させてから取り込み Step 1 前段へ進む。
+**リポジトリ準備**: `.git` がない場合は `/setup --channel` Step 2 と同じ承認付き repo 初期化だけを実行する。automation パッケージ未導入・OAuth クライアント未配置など環境が未整備の場合は `uv run yt-doctor --json` で状態を確認し、`/setup --tool` を案内して完了させてから取り込み Step 1 前段へ進む。
 
 ## 取り込み Step 1 前段: 実績取得と方向性確認
 
@@ -120,6 +120,6 @@ JSON の `checks` から `id: wf_new_readiness` の結果を 1 件選び、次�
 
 `wf_new_readiness` の結果提示は Step 8 の必須手順だが、`warn` でも取り込みモード自体は完了する。`wf_new_readiness` を `ok` にすることは取り込みモードの完了条件に加えない。警告された不足項目は取り込み完了後の最短手順として引き継ぐ。
 
-Step 1 前段で「方向性見直し」が選ばれていた場合は、上記に加えて `/channel-new` の方向性検討モードへの接続を案内する。ただし、`references/direction-mode.md` の前提は新規開設モードの完了であり、既存チャンネル取り込みモードの完了だけでは満たさないため、方向性検討モードへ直行する案内はしない。新規開設モードを完了して前提を満たしたうえで、TTP メモ（`docs/channel/ttp-seed-confirmation.md` と `docs/channel/competitor-branding-snapshot.json`）または分析レポート（`docs/channel-research.md`）を入力として準備してから方向性検討モードを実行するよう案内する。入力がなければ、`references/direction-mode.md` の Step D1 に従い、新規開設モードで TTP メモを作成するか、必要に応じて `/benchmark` / `/viewer-voice` / `/channel-new` 分析モードを先に実行し、入力を準備するまで方向性検討を停止する旨も明記する。
+Step 1 前段で「方向性見直し」が選ばれていた場合は、上記に加えて `/channel-new` の方向性検討モードへの接続を案内する。ただし、`references/direction-mode.md` の前提は `/setup --channel` の完了であり、既存チャンネル取り込みモードの完了だけでは満たさないため、方向性検討モードへ直行する案内はしない。`/setup --channel` を完了して前提を満たしたうえで、TTP メモ（`docs/channel/ttp-seed-confirmation.md` と `docs/channel/competitor-branding-snapshot.json`）または分析レポート（`docs/channel-research.md`）を入力として準備してから方向性検討モードを実行するよう案内する。入力がなければ、`references/direction-mode.md` の Step D1 に従い、`/setup --channel` で TTP メモを作成するか、必要に応じて `/benchmark` / `/viewer-voice` / `/channel-new` 分析モードを先に実行し、入力を準備するまで方向性検討を停止する旨も明記する。
 
-取り込みモードは、`config/channel/*.json` の生成、`uv run yt-doctor --json` の `channel_config.status` が `ok`、OAuth 認証、`channel_id` の `config/channel/meta.json::channel.channel_id` 保存、`wf_new_readiness` の判定結果に基づく必須／任意の次ステップ案内まで到達した時点で完了扱いにできる。新規開設モードの `benchmark.channels`、`ttp-seed-confirmation.md`、branding snapshot、`ttp_wf_new_readiness` は取り込みモードの必須完了条件ではない。
+取り込みモードは、`config/channel/*.json` の生成、`uv run yt-doctor --json` の `channel_config.status` が `ok`、OAuth 認証、`channel_id` の `config/channel/meta.json::channel.channel_id` 保存、`wf_new_readiness` の判定結果に基づく必須／任意の次ステップ案内まで到達した時点で完了扱いにできる。`/setup --channel` の `benchmark.channels`、`ttp-seed-confirmation.md`、branding snapshot、`ttp_wf_new_readiness` は取り込みモードの必須完了条件ではない。

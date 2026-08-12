@@ -263,14 +263,14 @@ uv run yt-analytics --reporting-create-job
 
 `yt-doctor` の `next_action.instructions` を確認:
 
-- **`/channel-new` 案内** (config/channel/ ディレクトリ未存在): 新規チャンネルの場合は `/channel-new` を実行して設定を作成する。この経路では対象 config が未生成のため「運用設定インタビュー」はスキップし、「運用設定は `/channel-new` 完了後に `/setup` を再実行して設定できます」と案内する
+- **`/setup --channel` 案内** (config/channel/ ディレクトリ未存在): 新規チャンネルの場合は `/setup --channel` を実行して設定を作成する。この経路では対象 config が未生成のため「運用設定インタビュー」はスキップし、「運用設定は `/setup --channel` 完了後に `/setup --tool` を再実行して設定できます」と案内する
 - **`/channel-new` 取り込みモード案内** (ディレクトリ存在・ロード失敗): 既存チャンネルの config を持ち込む場合は `/channel-new`（既存チャンネル取り込みモード）を実行して設定を修復する
 
 AI は config をここで生成しない。`yt-setup-dirs` で setup 用ディレクトリが作成済みでも `config/channel/*.json` は未生成で正常な中間状態として扱う。`yt-doctor` の `message` に含まれるエラー詳細をそのまま利用者に示し、どちらのルートかを確認してから案内する。
 
 #### `playlist_config` — `config/channel/playlists.json` の妥当性
 
-`config/channel/playlists.json` が未存在（warn）または JSON 不正 / `playlists` 定義不備（fail）の状態。`/channel-new`（再生成モード）で `playlists.json` を作成・修正するよう案内するだけで、setup 側では生成しない。config 未生成の新規チャンネルでは `/channel-new` 完了までの正常な中間状態として扱う。
+`config/channel/playlists.json` が未存在（warn）または JSON 不正 / `playlists` 定義不備（fail）の状態。`/channel-new`（再生成モード）で `playlists.json` を修復するよう案内する。config 未生成の新規チャンネルでは `/setup --channel` 完了までの正常な中間状態として扱う。
 
 #### `playlist_create_dry_run` — playlist 作成 dry-run
 
@@ -330,7 +330,7 @@ minimal mode / benchmark fallback mode は新規チャンネル初回制作を�
 
 #### `initial_setup_readiness` — 初期セットアップ事前検査
 
-`config/skills/thumbnail.yaml` / `config/skills/suno.yaml` の空欄・不備（reference_images / composition_rules の未設定、`genre_line` の文字数超過など）と、planning 中コレクションの `descriptions.md` parse 失敗を warn として一括検出する。`yt-doctor` の `next_action` に従い、skill config の転記は `/channel-new`（再生成モード）、descriptions.md の再生成は `/video-description` を案内する。config 未転記の新規チャンネルでは `/channel-new` 完了までの正常な中間状態として扱う。
+`config/skills/thumbnail.yaml` / `config/skills/suno.yaml` の空欄・不備（reference_images / composition_rules の未設定、`genre_line` の文字数超過など）と、planning 中コレクションの `descriptions.md` parse 失敗を warn として一括検出する。`yt-doctor` の `next_action` に従い、開設時の初期転記は `/setup --channel`、開設後の再転記は `/channel-new`（再生成モード）、descriptions.md の再生成は `/video-description` を案内する。config 未転記の新規チャンネルでは `/setup --channel` 完了までの正常な中間状態として扱う。
 
 ### upload カテゴリ
 

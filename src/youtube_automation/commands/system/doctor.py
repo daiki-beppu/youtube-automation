@@ -1291,7 +1291,7 @@ def check_channel_config(channel_dir: Path) -> CheckResult:
                 "kind": "human",
                 "instructions": (
                     "setup 用ディレクトリ生成は完了していても config は未作成です。"
-                    "/channel-new を実行して新規チャンネル設定を作成してください"
+                    "/setup --channel を実行して新規チャンネル設定を作成してください"
                 ),
             },
         )
@@ -1748,7 +1748,7 @@ def check_ttp_wf_new_readiness(channel_dir: Path) -> CheckResult:
             next_action={
                 "kind": "human",
                 "instructions": (
-                    "/channel-new Step 4 で config を生成し、Step 5 以降で承認済み TTP 対象を "
+                    "/setup --channel Step 4 で config を生成し、Step 5 以降で承認済み TTP 対象を "
                     "config/channel/analytics.json::benchmark.channels に保存してください"
                 ),
             },
@@ -1776,12 +1776,13 @@ def check_ttp_wf_new_readiness(channel_dir: Path) -> CheckResult:
             status="warn",
             category=DATA_CATEGORY,
             message=(
-                "承認済み TTP 対象が 0 件。/channel-new は /wf-new 接続前に TTP 対象承認が必要" + missing_persona_suffix
+                "承認済み TTP 対象が 0 件。/setup --channel は /wf-new 接続前に TTP 対象承認が必要"
+                + missing_persona_suffix
             ),
             next_action={
                 "kind": "human",
                 "instructions": (
-                    "/channel-new Step 1/5 に戻り、TTP 対象を確認して "
+                    "/setup --channel Step 1/5 に戻り、TTP 対象を確認して "
                     "config/channel/analytics.json::benchmark.channels に承認済み対象を保存してください"
                 ),
             },
@@ -1803,13 +1804,14 @@ def check_ttp_wf_new_readiness(channel_dir: Path) -> CheckResult:
             id="ttp_wf_new_readiness",
             status="warn",
             category=DATA_CATEGORY,
-            message="/channel-new benchmark 反映未完了の可能性 / TTP 完了条件が未充足: "
+            message="/setup --channel または /channel-new 再生成モードの TTP 完了条件が未充足: "
             + "; ".join(missing)
             + note_suffix,
             next_action={
                 "kind": "human",
                 "instructions": (
-                    "/channel-new 初回モード Step 5-9 と再生成モード Step R3.5 の不足項目を解消してください。"
+                    "/setup --channel Step 5-9 または "
+                    "/channel-new 再生成モード Step R3.5 の不足項目を解消してください。"
                     "意図的にスキップする場合は docs/channel/ttp-seed-confirmation.md に "
                     "ユーザー承認済み例外として未反映項目を明記し、最後に `uv run yt-doctor --json` で "
                     "`ttp_wf_new_readiness` が ok になることを確認してください"

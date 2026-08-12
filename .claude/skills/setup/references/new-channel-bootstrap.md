@@ -1,6 +1,6 @@
 # New channel bootstrap
 
-新規開設モードの Step 2〜4 で使う repository 初期化、setup gate、config 入力 schema、初期ファイル生成の詳細を定義する。実行順、承認点、コマンド、成功・停止条件は `../SKILL.md` を正とし、必ず本体の dispatch からこの reference を読んで実行する。
+新規開設モードの Step 2〜4 で使う repository 初期化、setup gate、config 入力 schema、初期ファイル生成の詳細を定義する。実行順、承認点、コマンド、成功・停止条件は [channel-mode.md](channel-mode.md) を正とし、必ず `/setup --channel` の dispatch からこの reference を読んで実行する。
 
 ## Repository initialization details
 

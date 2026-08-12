@@ -203,90 +203,78 @@ def test_wf_new_theme_scenes_fallback_uses_agent_generated_en_phrase() -> None:
 
 
 def test_upload_settings_contract_is_nested_in_schedule_config() -> None:
-    channel_new = _read(".claude/skills/channel-new/SKILL.md")
+    setup_channel = _read(".claude/skills/setup/references/channel-mode.md")
     regeneration_mode = _read(".claude/skills/channel-new/references/regeneration-mode.md")
     channel_init = _read("src/youtube_automation/commands/channel/channel_init_templates.py")
     channel_init_test = _read("tests/commands/channel/test_channel_init.py")
     schedule_template = _read(".claude/skills/channel-new/references/schedule-template.json")
 
-    for text in (channel_new, regeneration_mode, channel_init, channel_init_test):
+    for text in (setup_channel, regeneration_mode, channel_init, channel_init_test):
         assert "config/upload_settings.json" not in text
 
-    assert "`config/schedule_config.json`（`upload_settings` を含む）" in channel_new
+    assert "`config/schedule_config.json`（`upload_settings` を含む）" in setup_channel
     assert "投稿頻度と `upload_settings`" in regeneration_mode
     assert '"upload_settings": {' in schedule_template
 
 
 def test_setup_directory_generation_contract_is_separate_from_channel_config() -> None:
     setup = _read(".claude/skills/setup/SKILL.md")
-    channel_new = _read(".claude/skills/channel-new/SKILL.md")
+    setup_channel = _read(".claude/skills/setup/references/channel-mode.md")
     setup_dirs = _read("src/youtube_automation/commands/system/setup_dirs.py")
     channel_init = _read("src/youtube_automation/commands/channel/channel_init.py")
     setup_directory_contract = _read("src/youtube_automation/infrastructure/legacy_utils/setup_directory_contract.py")
     pyproject = _read("pyproject.toml")
 
     assert "uv run yt-setup-dirs" in setup
-    assert "`/setup` では `config/channel/*.json` を生成しない" in setup
-    assert "`/setup` が作成済みのディレクトリはそのまま再利用する" in channel_new
+    assert "`--tool` では `config/channel/*.json` を生成しない" in setup
+    assert "`/setup` が作成済みのディレクトリはそのまま再利用する" in setup_channel
     assert "setup_directory_contract" in setup_dirs
     assert "setup_directory_contract" in channel_init
     assert "SETUP_DIRECTORIES" in setup_directory_contract
     assert 'yt-setup-dirs = "youtube_automation.entrypoints:yt_setup_dirs"' in pyproject
 
 
-def test_channel_new_ttp_confirmation_contract_is_documented() -> None:
-    channel_new = _read(".claude/skills/channel-new/SKILL.md")
+def test_setup_channel_ttp_confirmation_contract_is_documented() -> None:
+    setup_channel = _read(".claude/skills/setup/references/channel-mode.md")
     branding_snapshot_script = _read(".claude/skills/channel-new/references/fetch_branding_snapshot.py")
 
-    forbidden = (
-        "--benchmark-channel",
-        "uv run yt-discover-competitors",
-        "uv run yt-benchmark-collect",
-        "uv run yt-benchmark-comments",
-        "data/benchmark_YYYYMMDD.json",
-        "data/comments_YYYYMMDD.json",
-        "/channel-new  → TTP hearing + benchmark",
-        "TTP ベンチマーク収集",
-    )
-    for text in forbidden:
-        assert text not in channel_new
-
-    assert "TTP seed fetch と承認済み対象反映" in channel_new
-    assert "承認前に `benchmark.channels` へ書き込まない" in channel_new
-    assert "追加調査は後続スキルへ委譲" in channel_new
-    assert "docs/channel/ttp-seed-confirmation.md" in channel_new
-    assert "docs/channel/competitor-branding-snapshot.json" in channel_new
-    assert ".claude/skills/channel-new/references/fetch_branding_snapshot.py" in channel_new
-    assert "`description` / `keywords` / `localizations` / `brandingSettings` は含まない" in channel_new
-    assert "untrusted data" in channel_new
-    assert "承認済み TTP 対象が 0 件の場合は Step 7 以降へ進まない" in channel_new
-    assert "TTP 完了条件" in channel_new
-    assert "relationship（何を転写するか）" in channel_new
-    assert "ttp_wf_new_readiness" in channel_new
-    assert "`warn` の場合は成功案内を出さない" in channel_new
-    assert "ユーザー承認済み例外" in channel_new
-
+    for forbidden in ("--benchmark-channel", "uv run yt-discover-competitors", "uv run yt-benchmark-comments"):
+        assert forbidden not in setup_channel
+    for contract in (
+        "TTP seed fetch と承認済み対象反映",
+        "承認前に `benchmark.channels` へ書き込まない",
+        "追加調査は後続スキルへ委譲",
+        "docs/channel/ttp-seed-confirmation.md",
+        "docs/channel/competitor-branding-snapshot.json",
+        ".claude/skills/channel-new/references/fetch_branding_snapshot.py",
+        "承認済み TTP 対象が 0 件の場合は Step 7 以降へ進まない",
+        "relationship（何を転写するか）",
+        "ttp_wf_new_readiness",
+        "ユーザー承認済み例外",
+    ):
+        assert contract in setup_channel
     assert 'CHANNELS_PART = "snippet,brandingSettings,localizations"' in branding_snapshot_script
     assert '"untrusted_data": True' in branding_snapshot_script
 
 
-def test_channel_new_ttp_hearing_routes_direction_to_integrated_mode() -> None:
+def test_setup_channel_ttp_hearing_routes_direction_to_residual_mode() -> None:
+    setup_channel = _read(".claude/skills/setup/references/channel-mode.md")
     channel_new = _read(".claude/skills/channel-new/SKILL.md")
     overview = channel_new.split("## Overview", 1)[1].split("## モード判別", 1)[0]
     mode_routing = channel_new.split("## モード判別", 1)[1].split("## TTP 原則", 1)[0]
     direction_mode_row = next(line for line in mode_routing.splitlines() if line.startswith("| 方向性検討モード |"))
     direction_mode_stub = channel_new.split("## 方向性検討モード", 1)[1].split("\n## 再生成モード", 1)[0]
     direction_mode = _read(".claude/skills/channel-new/references/direction-mode.md")
-    ttp_principles = channel_new.split("## TTP 原則", 1)[1].split("## 外部データの扱い", 1)[0]
-    step1 = channel_new.split("### Step 1: TTP ヒアリング", 1)[1].split(
+    ttp_principles = setup_channel.split("## TTP 原則", 1)[1].split("## 外部データの扱い", 1)[0]
+    step1 = setup_channel.split("### Step 1: TTP ヒアリング", 1)[1].split(
         "### Step 2: 現在のディレクトリを repo 初期化",
         1,
     )[0]
-    step4 = channel_new.split("### Step 4: フルパッケージ config / 初期運用ファイル生成", 1)[1].split(
+    step4 = setup_channel.split("### Step 4: フルパッケージ config / 初期運用ファイル生成", 1)[1].split(
         "### Step 5: TTP seed fetch と承認済み対象反映",
         1,
     )[0]
-    step7 = channel_new.split("### Step 7: 本格ペルソナ作成チェーン", 1)[1].split(
+    step7 = setup_channel.split("### Step 7: 本格ペルソナ作成チェーン", 1)[1].split(
         "### Step 8: branding 初回反映",
         1,
     )[0]
@@ -316,15 +304,14 @@ def test_channel_new_ttp_hearing_routes_direction_to_integrated_mode() -> None:
     ):
         assert config_prompt not in step1
         assert config_prompt in step4
-    assert "検討が必要なら `/channel-new` 完了後の方向性検討モードに委譲" in step1
+    assert "検討が必要なら `/setup --channel` 完了後の方向性検討モードに委譲" in step1
     assert "Step 1 の TTP ヒアリングとは別に、config 生成に必要な初期値だけをここで確認する" in step4
 
-    assert "方向性の検討・精緻化（必要な場合だけ、方向性検討モード）" in overview
-    assert "`/channel-new` は方向性を聞かず" in overview
-    assert "旧 `/channel-direction`" not in overview
+    assert "新規開設の Step 1〜10 は `/setup --channel`" in overview
+    assert "fallback しない" in overview
     assert "方向性検討モード" in mode_routing
     assert "Step D1〜D5" in mode_routing
-    assert "方向性の検討・精緻化が必要な場合も、新規開設モードでは質問せず" in mode_routing
+    assert "新チャンネル" in mode_routing and "`/setup --channel`" in mode_routing
     for trigger in ("方向性決めたい", "ポジショニング", "差別化", "ブレスト"):
         assert trigger in direction_mode_row
 
@@ -346,7 +333,7 @@ def test_channel_new_ttp_hearing_routes_direction_to_integrated_mode() -> None:
     assert "必須" in step7
     assert "docs/channel/personas/persona-definition.md" in step7
     assert "Step 8 へ進まない" in step7
-    assert "channel-new-persona.md" not in channel_new
+    assert "channel-new-persona.md" not in setup_channel
 
     audience_persona = _read(".claude/skills/audience-persona-design/SKILL.md")
     assert "新規開設時" in audience_persona
@@ -364,7 +351,7 @@ def test_channel_new_ttp_hearing_routes_direction_to_integrated_mode() -> None:
 
 def test_branding_missing_report_requires_existing_file_check_before_generation() -> None:
     skill_docs = {
-        "channel-new": _read(".claude/skills/channel-new/SKILL.md"),
+        "setup-channel": _read(".claude/skills/setup/references/channel-mode.md"),
         "automation-update": _read(".claude/skills/automation-update/SKILL.md"),
     }
 
@@ -396,12 +383,12 @@ def test_channel_new_frontmatter_keeps_import_dispatch_keywords() -> None:
         assert keyword in description
 
 
-def test_channel_new_ttp_completion_condition_is_an_early_hard_gate() -> None:
-    channel_new = _read(".claude/skills/channel-new/SKILL.md")
-    completion_heading = "## 完了条件（新規開設モード）"
+def test_setup_channel_ttp_completion_condition_is_an_early_hard_gate() -> None:
+    setup_channel = _read(".claude/skills/setup/references/channel-mode.md")
+    completion_heading = "## 完了条件（--channel）"
 
-    assert channel_new.splitlines().index(completion_heading) < 60
-    completion = channel_new.split(completion_heading, 1)[1].split("## Overview", 1)[0]
+    assert setup_channel.splitlines().index(completion_heading) < 60
+    completion = setup_channel.split(completion_heading, 1)[1].split("## TTP 原則", 1)[0]
     assert "docs/channel/personas/persona-definition.md" in completion
     assert "候補ごとの source、seed fetch 要約、承認 / 不採用判断" in completion
     assert "`snippet` / `brandingSettings` / `localizations` snapshot" in completion
@@ -423,12 +410,12 @@ def test_channel_new_docs_distinguish_required_initial_persona_from_optional_rea
     assert "公開後の見直しでは従来どおりそれらを入力にする" in onboarding
 
 
-def test_channel_new_prelaunch_persona_chain_propagates_context_without_analytics() -> None:
-    channel_new = _read(".claude/skills/channel-new/SKILL.md")
+def test_setup_channel_prelaunch_persona_chain_propagates_context_without_analytics() -> None:
+    setup_channel = _read(".claude/skills/setup/references/channel-mode.md")
     audience_persona = _read(".claude/skills/audience-persona-design/SKILL.md")
     viewing_scene = _read(".claude/skills/viewing-scene/SKILL.md")
 
-    step7 = channel_new.split("### Step 7: 本格ペルソナ作成チェーン", 1)[1].split(
+    step7 = setup_channel.split("### Step 7: 本格ペルソナ作成チェーン", 1)[1].split(
         "### Step 8: branding 初回反映",
         1,
     )[0]
@@ -540,14 +527,15 @@ def test_viewing_scene_keeps_post_publish_inputs_and_analysis_phases() -> None:
 
 
 def test_channel_new_import_mode_contract_is_separate_from_ttp_completion() -> None:
+    setup_channel = _read(".claude/skills/setup/references/channel-mode.md")
     channel_new = _read(".claude/skills/channel-new/SKILL.md")
     import_mode = _read(".claude/skills/channel-new/references/import-mode.md")
     config_rules = _read(".claude/skills/channel-new/references/config-generation-rules.md")
 
-    assert "TTP 完了条件（新規開設モード）" in channel_new
-    assert "docs/channel/personas/persona-definition.md" in channel_new
-    assert "既存チャンネル取り込みモードにはこの TTP 完了条件を適用しない" in channel_new
-    assert "取り込み Step 8: 次ステップ案内" in channel_new
+    assert "完了条件（--channel）" in setup_channel
+    assert "docs/channel/personas/persona-definition.md" in setup_channel
+    assert "既存チャンネル取り込みモードにはこの TTP 完了条件を適用しない" in setup_channel
+    assert "取り込み Step 8: 次ステップ案内" in setup_channel
     assert "references/import-mode.md" in channel_new
     assert "`music_engine` に入れる値は `suno` / `lyria` のどちらか" in import_mode
     assert "both` は config 契約外" in import_mode
@@ -622,36 +610,36 @@ def test_channel_new_localizations_priority_matches_generation_rules() -> None:
 
 
 def test_channel_new_requires_initial_save_before_followup_update() -> None:
-    channel_new = _read(".claude/skills/channel-new/SKILL.md")
+    setup_channel = _read(".claude/skills/setup/references/channel-mode.md")
     automation_update = _read(".claude/skills/automation-update/SKILL.md")
 
-    assert "初回保存と automation-update 前の整理" in channel_new
-    assert "git status --porcelain" in channel_new
-    assert "後続の `/automation-update` は dirty worktree で停止する" in channel_new
-    assert "git add -A" in channel_new
-    assert "`git add -A` 後の guard を唯一の安全境界にする" in channel_new
-    assert "bash .claude/skills/channel-new/references/initial_save_guard.sh || exit 1" in channel_new
-    assert 'git commit -m "chore: 初回チャンネル設定を保存"' in channel_new
-    assert "secret-like file staged; unstaged before commit" in channel_new
-    assert "staged secret を自動で外して停止" in channel_new
-    assert "未コミット変更が残っています。/automation-update の前に以下を完了してください" in channel_new
-    assert "保存未完了として終了した場合は、以下の成功案内は出さない" in channel_new
-    assert "初回保存も完了しているため" in channel_new
+    assert "初回保存と automation-update 前の整理" in setup_channel
+    assert "git status --porcelain" in setup_channel
+    assert "後続の `/automation-update` は dirty worktree で停止する" in setup_channel
+    assert "git add -A" in setup_channel
+    assert "`git add -A` 後の guard を唯一の安全境界にする" in setup_channel
+    assert "bash .claude/skills/setup/references/initial_save_guard.sh || exit 1" in setup_channel
+    assert 'git commit -m "chore: 初回チャンネル設定を保存"' in setup_channel
+    assert "secret-like file staged; unstaged before commit" in setup_channel
+    assert "staged secret を自動で外して停止" in setup_channel
+    assert "未コミット変更が残っています。/automation-update の前に以下を完了してください" in setup_channel
+    assert "保存未完了として終了した場合は、以下の成功案内は出さない" in setup_channel
+    assert "初回保存も完了しているため" in setup_channel
 
     assert "`git status --porcelain` が **非空** の場合" in automation_update
     assert "/channel-new 直後の初回保存が未完了なら" in automation_update
 
 
 def test_channel_new_pre_wf_new_checks_include_analytics_reporting_and_live_streaming() -> None:
-    channel_new = _read(".claude/skills/channel-new/SKILL.md")
-    step9 = channel_new.split("### Step 9: wf-new 接続前チェック", 1)[1].split(
+    setup_channel = _read(".claude/skills/setup/references/channel-mode.md")
+    step9 = setup_channel.split("### Step 9: wf-new 接続前チェック", 1)[1].split(
         "### Step 10: 初回保存と automation-update 前の整理",
         1,
     )[0]
-    success_message = channel_new.split("保存未完了として終了した場合は、以下の成功案内は出さない", 1)[1].split(
-        "## 障害時ガイダンス",
+    success_message = setup_channel.split(
+        "保存未完了として終了した場合は、以下の成功案内は出さない",
         1,
-    )[0]
+    )[1]
 
     assert "Analytics / Reporting レポート取得設定が未確認" in step9
     assert "YouTube Analytics / Reporting API" in step9
@@ -741,7 +729,7 @@ def test_revised_analytics_skills_stop_when_channel_config_is_invalid(skill_path
     "secret_path",
     [".env", "auth/client_secrets.json", "auth/token.json", "auth/token_streaming.json"],
 )
-def test_channel_new_initial_save_guard_blocks_staged_secrets(tmp_path: Path, secret_path: str) -> None:
+def test_setup_channel_initial_save_guard_blocks_staged_secrets(tmp_path: Path, secret_path: str) -> None:
     repo = tmp_path / "channel"
     repo.mkdir()
     _git(repo, "init")
@@ -759,7 +747,7 @@ def test_channel_new_initial_save_guard_blocks_staged_secrets(tmp_path: Path, se
     _git(repo, "add", "-A")
     _git(repo, "add", "-f", secret_path)
 
-    guard = ROOT / ".claude/skills/channel-new/references/initial_save_guard.sh"
+    guard = ROOT / ".claude/skills/setup/references/initial_save_guard.sh"
     result = subprocess.run(
         [
             "bash",
@@ -781,7 +769,7 @@ def test_channel_new_initial_save_guard_blocks_staged_secrets(tmp_path: Path, se
     assert secret_path not in _git(repo, "diff", "--cached", "--name-only").stdout.splitlines()
 
 
-def test_channel_new_initial_save_plain_add_then_guard_blocks_oauth_secret(tmp_path: Path) -> None:
+def test_setup_channel_initial_save_plain_add_then_guard_blocks_oauth_secret(tmp_path: Path) -> None:
     repo = tmp_path / "channel"
     repo.mkdir()
     _git(repo, "init")
@@ -796,7 +784,7 @@ def test_channel_new_initial_save_plain_add_then_guard_blocks_oauth_secret(tmp_p
     assert "config/channel.json" in staged
     assert "auth/token_streaming.json" in staged
 
-    guard = ROOT / ".claude/skills/channel-new/references/initial_save_guard.sh"
+    guard = ROOT / ".claude/skills/setup/references/initial_save_guard.sh"
     result = subprocess.run(
         ["bash", str(guard)],
         cwd=repo,
@@ -814,7 +802,7 @@ def test_channel_new_initial_save_plain_add_then_guard_blocks_oauth_secret(tmp_p
     assert "auth/token_streaming.json" not in staged_after_guard
 
 
-def test_channel_new_initial_save_guard_allows_non_secret_staged_files(tmp_path: Path) -> None:
+def test_setup_channel_initial_save_guard_allows_non_secret_staged_files(tmp_path: Path) -> None:
     repo = tmp_path / "channel"
     repo.mkdir()
     _git(repo, "init")
@@ -822,7 +810,7 @@ def test_channel_new_initial_save_guard_allows_non_secret_staged_files(tmp_path:
     (repo / "config" / "channel.json").write_text("{}\n", encoding="utf-8")
     _git(repo, "add", "-A")
 
-    guard = ROOT / ".claude/skills/channel-new/references/initial_save_guard.sh"
+    guard = ROOT / ".claude/skills/setup/references/initial_save_guard.sh"
     result = subprocess.run(
         ["bash", str(guard)],
         cwd=repo,
@@ -837,7 +825,7 @@ def test_channel_new_initial_save_guard_allows_non_secret_staged_files(tmp_path:
     assert result.stderr == ""
 
 
-def test_channel_new_initial_save_success_path_commits_and_cleans_worktree(tmp_path: Path) -> None:
+def test_setup_channel_initial_save_success_path_commits_and_cleans_worktree(tmp_path: Path) -> None:
     repo = tmp_path / "channel"
     repo.mkdir()
     _git(repo, "init")
@@ -855,7 +843,7 @@ def test_channel_new_initial_save_success_path_commits_and_cleans_worktree(tmp_p
     (repo / "config").mkdir()
     (repo / "config" / "channel.json").write_text("{}\n", encoding="utf-8")
 
-    guard = ROOT / ".claude/skills/channel-new/references/initial_save_guard.sh"
+    guard = ROOT / ".claude/skills/setup/references/initial_save_guard.sh"
     _git(repo, "add", "-A")
     guard_result = subprocess.run(
         ["bash", str(guard)],
@@ -896,7 +884,7 @@ def test_channel_new_followup_skill_routing_uses_new_contract() -> None:
     assert "/viewer-voice` → 前提" in research
 
     assert "チャンネル立ち上げ・方向性見直し時に必ず使用" not in viewer_voice
-    assert "`/channel-new` の新規開設モードでは Step 7 の必須前工程として実行する" in viewer_voice
+    assert "`/setup --channel` の新規開設モードでは Step 7 の必須前工程として実行する" in viewer_voice
     assert "公開後の再分析では" in viewer_voice
     assert "任意後続スキル" not in viewer_voice
     assert "/audience-persona-design の必須入力（viewer-voice-analysis.md）" in viewer_voice
@@ -905,7 +893,8 @@ def test_channel_new_followup_skill_routing_uses_new_contract() -> None:
         assert "TTP benchmark" not in path_text
         assert "TTP ベンチマーク収集" not in path_text
 
-    assert "TTP 対象確認、config 生成、ペルソナ、branding" in setup
+    for stage in ("TTP hearing", "seed confirmation", "config", "persona", "branding"):
+        assert stage in setup
     assert "TTP 対象確認 / seed fetch / 承認済み benchmark.channels 反映" in channel_regeneration_mode
     assert "旧 `/channel-direction` は本スキルの方向性検討モードに統合済み" not in channel_new
     assert "docs/channel/ttp-seed-confirmation.md" in channel_direction_mode
@@ -913,7 +902,7 @@ def test_channel_new_followup_skill_routing_uses_new_contract() -> None:
     assert "config/channel/analytics.json::benchmark.channels" in channel_direction_mode
     assert "入力がすべて欠けている場合" in channel_direction_mode
     assert "根拠なしに方向性検討を進めない" in channel_direction_mode
-    assert "/channel-new` 新規開設モード" in channel_direction_mode
+    assert "`/setup --channel` が保存した" in channel_direction_mode
     assert "untrusted data" in channel_direction_mode
     assert "動画尺 / 投稿頻度 / コメント語彙は収集済みデータがある場合だけ使う" in channel_direction_mode
 
@@ -1021,7 +1010,7 @@ def test_first_post_playlist_initialization_contract_is_documented() -> None:
     playlist = _read(".claude/skills/playlist/SKILL.md")
     video_upload = _read(".claude/skills/video-upload/SKILL.md")
     wf_next = _read(".claude/skills/wf-next/SKILL.md")
-    channel_new = _read(".claude/skills/channel-new/SKILL.md")
+    setup_channel = _read(".claude/skills/setup/references/channel-mode.md")
     checklist = _read(".claude/skills/video-upload/references/posting-checklist.md")
 
     description = _frontmatter(".claude/skills/playlist/SKILL.md")["description"]
@@ -1037,10 +1026,10 @@ def test_first_post_playlist_initialization_contract_is_documented() -> None:
         assert command in wf_next
         assert command in checklist
 
-    assert "/playlist" in channel_new
-    assert "`yt-playlist-status` → `yt-playlist-manager --init --dry-run` → `--init`" in channel_new
+    assert "/playlist" in setup_channel
+    assert "`yt-playlist-status` → `yt-playlist-manager --init --dry-run` → `--init`" in setup_channel
 
-    for text in (playlist, video_upload, wf_next, channel_new, checklist):
+    for text in (playlist, video_upload, wf_next, setup_channel, checklist):
         assert "playlist_id" in text
         assert "自動 assign" in text
 
@@ -1310,6 +1299,7 @@ def test_collection_lifecycle_uses_mp3_as_public_audio_contract() -> None:
 def test_collection_localization_docs_use_root_localizations_contract() -> None:
     for path in (
         ".claude/skills/video-upload/SKILL.md",
+        ".claude/skills/setup/references/channel-mode.md",
         ".claude/skills/channel-new/SKILL.md",
         ".claude/skills/channel-new/references/config-generation-rules.md",
     ):
@@ -1741,8 +1731,8 @@ def test_automation_schedule_skill_contract() -> None:
     assert "--confirm-os-fallback" in skill
 
 
-def test_channel_new_points_scheduled_automation_to_automation_schedule() -> None:
-    """#1892: channel-new は scheduled_automation を生成せず /automation-schedule へ誘導する."""
-    channel_new = _read(".claude/skills/channel-new/SKILL.md")
-    assert "`scheduled_automation`" in channel_new
-    assert "/automation-schedule" in channel_new
+def test_setup_channel_points_scheduled_automation_to_automation_schedule() -> None:
+    """#1892: setup --channel は scheduled_automation を生成せず後続 skill へ誘導する."""
+    setup_channel = _read(".claude/skills/setup/references/channel-mode.md")
+    assert "`scheduled_automation`" in setup_channel
+    assert "/automation-schedule" in setup_channel

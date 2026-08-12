@@ -6,6 +6,7 @@ import json
 import os
 import re
 import subprocess
+import tarfile
 from pathlib import Path
 
 from tests.helpers.paths import REPO_ROOT
@@ -46,6 +47,15 @@ def _candidate_wheel(repo_root: Path, tmp_path: Path) -> Path:
     wheels = list(wheel_dir.glob("*.whl"))
     assert len(wheels) == 1, f"candidate wheel は1件を期待: {wheels}"
     return wheels[0]
+
+
+def _candidate_sdist(repo_root: Path, tmp_path: Path) -> Path:
+    sdist_dir = tmp_path / "sdist"
+    result = _run("uv", "build", "--sdist", "--out-dir", sdist_dir, cwd=repo_root)
+    assert result.returncode == 0, result.stderr
+    sdists = list(sdist_dir.glob("*.tar.gz"))
+    assert len(sdists) == 1, f"candidate sdist は1件を期待: {sdists}"
+    return sdists[0]
 
 
 def _tracked_skill_files(repo_root: Path) -> set[Path]:
@@ -144,6 +154,27 @@ assert "wheel-identity-check" not in legacy._cache
         assert (downstream / target_relative).read_bytes() == (repo_root / source_relative).read_bytes()
 
     distributed_references = downstream / ".claude" / "skills" / "setup" / "references"
+    channel_mode = distributed_references / "channel-mode.md"
+    assert channel_mode.is_file()
+    opening_assets = {
+        "new-channel-bootstrap.md",
+        "ttp-seed-and-duration.md",
+        "persona-branding-readiness.md",
+        "derive_ttp_duration.py",
+        "initial_save_guard.sh",
+    }
+    for asset in opening_assets | {"setup-mode-guard.py"}:
+        assert (distributed_references / asset).is_file()
+        assert not (downstream / ".claude" / "skills" / "channel-new" / "references" / asset).exists()
+    for markdown in (channel_mode, *(distributed_references / name for name in opening_assets if name.endswith(".md"))):
+        local_links = [
+            link
+            for link in re.findall(r"\[[^]]+\]\(([^)]+)\)", markdown.read_text(encoding="utf-8"))
+            if not link.startswith(("http://", "https://", "#"))
+        ]
+        assert local_links
+        assert all((markdown.parent / link).is_file() for link in local_links)
+
     bootstrap_guide = distributed_references / "gcp-bootstrap.md"
     assert bootstrap_guide.is_file()
     guide_text = bootstrap_guide.read_text(encoding="utf-8")
@@ -184,3 +215,26 @@ assert "wheel-identity-check" not in legacy._cache
     assert diffed.returncode == 0, diffed.stdout + diffed.stderr
     assert diffed.stdout.count("差分なし") == 5
     assert "hooks.PreToolUse" in diffed.stdout
+
+
+def test_candidate_sdist_contains_setup_channel_owner_once(tmp_path: Path) -> None:
+    sdist = _candidate_sdist(REPO_ROOT, tmp_path)
+    opening_assets = {
+        "new-channel-bootstrap.md",
+        "ttp-seed-and-duration.md",
+        "persona-branding-readiness.md",
+        "derive_ttp_duration.py",
+        "initial_save_guard.sh",
+    }
+    with tarfile.open(sdist, "r:gz") as archive:
+        names = {Path(name) for name in archive.getnames()}
+
+    for asset in opening_assets:
+        setup_matches = [path for path in names if str(path).endswith(f"/.claude/skills/setup/references/{asset}")]
+        channel_new_matches = [
+            path for path in names if str(path).endswith(f"/.claude/skills/channel-new/references/{asset}")
+        ]
+        assert len(setup_matches) == 1
+        assert channel_new_matches == []
+    assert any(str(path).endswith("/.claude/skills/setup/references/channel-mode.md") for path in names)
+    assert any(str(path).endswith("/.claude/skills/setup/references/setup-mode-guard.py") for path in names)

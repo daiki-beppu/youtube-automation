@@ -1,17 +1,34 @@
-"""段階開示後の channel-new bootstrap 実行契約。"""
+"""`/setup --channel` の段階開示・承認・停止契約。"""
 
 from __future__ import annotations
 
 import re
+import shutil
+from hashlib import sha256
+from pathlib import Path
 
 from tests.helpers.paths import REPO_ROOT
 
-SKILL_DIR = REPO_ROOT / ".claude" / "skills" / "channel-new"
-SKILL_MD = SKILL_DIR / "SKILL.md"
+SKILL_DIR = REPO_ROOT / ".claude" / "skills" / "setup"
+SKILL_MD = SKILL_DIR / "references" / "channel-mode.md"
 BOOTSTRAP_REFERENCE_MD = SKILL_DIR / "references" / "new-channel-bootstrap.md"
 TTP_SEED_DURATION_REFERENCE_MD = SKILL_DIR / "references" / "ttp-seed-and-duration.md"
 PERSONA_BRANDING_READINESS_REFERENCE_MD = SKILL_DIR / "references" / "persona-branding-readiness.md"
-SAVE_PUSH_TROUBLESHOOTING_REFERENCE_MD = SKILL_DIR / "references" / "save-push-troubleshooting.md"
+CHANNEL_NEW_SKILL_MD = REPO_ROOT / ".claude" / "skills" / "channel-new" / "SKILL.md"
+OPENING_ASSETS = {
+    "new-channel-bootstrap.md",
+    "ttp-seed-and-duration.md",
+    "persona-branding-readiness.md",
+    "derive_ttp_duration.py",
+    "initial_save_guard.sh",
+}
+BEFORE_MOVE_SHA256 = {
+    "new-channel-bootstrap.md": "dbae6fc0b7bba180d8c7ec3a40667428ca584e50977127e7ab7a21e9391160c4",
+    "ttp-seed-and-duration.md": "2e0235597d247d954cfe437ce72ead8e9800376cebe35c03e8e7021e607b452d",
+    "persona-branding-readiness.md": "f40a2050cd6fbc134651c627e494694b29cc86eda9702825f96b1d8ac3ff0d61",
+    "derive_ttp_duration.py": "bed2ac050d67f3974e84815dbd79388809c4b8174bfa246f24a83d858990a132",
+    "initial_save_guard.sh": "93e9503da8d1e1c2680f682be25c053988fd0fd45fa3bf193e8272d2dd704ac3",
+}
 
 BOOTSTRAP_DETAIL_HEADINGS = {
     "Repository initialization details",
@@ -32,21 +49,24 @@ PERSONA_BRANDING_READINESS_DETAIL_HEADINGS = {
     "Branding generation and review details",
     "Readiness matrix details",
 }
-SAVE_PUSH_TROUBLESHOOTING_DETAIL_HEADINGS = {
-    "Initial save and cleanup details",
-    "Settings push details",
-    "Settings API constraints",
-    "Troubleshooting details",
-}
 
 
 def _headings(markdown: str) -> set[str]:
     return {match.group(1).strip() for match in re.finditer(r"^#{2,4}\s+(.+?)\s*$", markdown, re.MULTILINE)}
 
 
+def _opening_asset_violations(skills_dir: Path) -> set[str]:
+    violations = set()
+    for asset in OPENING_ASSETS:
+        owners = list(skills_dir.glob(f"*/references/{asset}"))
+        if len(owners) != 1 or owners[0].parent.parent.name != "setup":
+            violations.add(asset)
+    return violations
+
+
 def test_skill_dispatches_bootstrap_reference_before_step_2() -> None:
     skill = SKILL_MD.read_text(encoding="utf-8")
-    relative_reference = BOOTSTRAP_REFERENCE_MD.relative_to(SKILL_DIR).as_posix()
+    relative_reference = BOOTSTRAP_REFERENCE_MD.relative_to(SKILL_MD.parent).as_posix()
 
     dispatch = skill.index(f"]({relative_reference})")
     step_2 = skill.index("### Step 2:")
@@ -145,7 +165,7 @@ def test_skill_keeps_bootstrap_commands_defaults_artifacts_and_stop_conditions()
 
 def test_skill_dispatches_ttp_reference_before_step_5_actions() -> None:
     skill = SKILL_MD.read_text(encoding="utf-8")
-    relative_reference = TTP_SEED_DURATION_REFERENCE_MD.relative_to(SKILL_DIR).as_posix()
+    relative_reference = TTP_SEED_DURATION_REFERENCE_MD.relative_to(SKILL_MD.parent).as_posix()
 
     dispatch = skill.index(f"]({relative_reference})")
     step_5 = skill.index("### Step 5:")
@@ -214,7 +234,7 @@ def test_reference_owns_ttp_seed_branding_and_duration_schema_details() -> None:
 
 def test_skill_dispatches_persona_branding_readiness_reference_before_step_6_actions() -> None:
     skill = SKILL_MD.read_text(encoding="utf-8")
-    relative_reference = PERSONA_BRANDING_READINESS_REFERENCE_MD.relative_to(SKILL_DIR).as_posix()
+    relative_reference = PERSONA_BRANDING_READINESS_REFERENCE_MD.relative_to(SKILL_MD.parent).as_posix()
 
     step_6 = skill.index("### Step 6:")
     dispatch = skill.index(f"]({relative_reference})", step_6)
@@ -267,28 +287,86 @@ def test_skill_keeps_persona_branding_readiness_artifacts_and_stop_contracts() -
         assert contract in skill
 
 
-def test_skill_dispatches_save_push_troubleshooting_reference_in_both_paths() -> None:
+def test_setup_channel_preserves_all_steps_and_lifecycle_contracts() -> None:
     skill = SKILL_MD.read_text(encoding="utf-8")
-    relative_reference = SAVE_PUSH_TROUBLESHOOTING_REFERENCE_MD.relative_to(SKILL_DIR).as_posix()
+    headings = [
+        "### Step 1:",
+        "### Step 2:",
+        "### Step 3:",
+        "### Step 4:",
+        "### Step 5:",
+        "### Step 5.5:",
+        "### Step 6:",
+        "### Step 7:",
+        "### Step 8:",
+        "### Step 9:",
+        "### Step 10:",
+    ]
+    positions = [skill.index(heading) for heading in headings]
+    assert positions == sorted(positions)
+    for contract in (
+        "失敗または blocked になった Step で停止",
+        "最初の未完了 Step から再開",
+        "完了済み成果物を無断で上書きしない",
+        "同じ状態での再実行は同じ停止・skip・完了判定",
+        "承認 gate より前に実行しない",
+        "成功案内を出さない",
+    ):
+        assert contract in skill
 
-    step_10 = skill.index("### Step 10:")
-    new_channel_dispatch = skill.index(f"]({relative_reference})", step_10)
-    first_save_check = skill.index("git status --porcelain", new_channel_dispatch)
-    settings_mode = skill.index("## 設定 push モード")
-    settings_dispatch = skill.index(f"]({relative_reference})", settings_mode)
-    settings_diff = skill.index("uv run yt-channel-settings diff", settings_dispatch)
 
-    assert SAVE_PUSH_TROUBLESHOOTING_REFERENCE_MD.is_file()
-    assert step_10 < new_channel_dispatch < first_save_check
-    assert settings_mode < settings_dispatch < settings_diff
+def test_opening_assets_have_exactly_one_setup_owner() -> None:
+    assert _opening_asset_violations(REPO_ROOT / ".claude" / "skills") == set()
 
 
-def test_save_push_troubleshooting_detail_sections_have_one_reference_owner() -> None:
-    skill_headings = _headings(SKILL_MD.read_text(encoding="utf-8"))
-    reference_headings = _headings(SAVE_PUSH_TROUBLESHOOTING_REFERENCE_MD.read_text(encoding="utf-8"))
+def test_opening_asset_inventory_detects_real_removal_and_duplicate(tmp_path: Path) -> None:
+    skills_dir = tmp_path / "skills"
+    setup_references = skills_dir / "setup" / "references"
+    setup_references.mkdir(parents=True)
+    for asset in OPENING_ASSETS:
+        shutil.copy2(SKILL_DIR / "references" / asset, setup_references / asset)
 
-    assert SAVE_PUSH_TROUBLESHOOTING_DETAIL_HEADINGS <= reference_headings
-    assert SAVE_PUSH_TROUBLESHOOTING_DETAIL_HEADINGS.isdisjoint(skill_headings)
+    (setup_references / "derive_ttp_duration.py").unlink()
+    duplicate = skills_dir / "channel-new" / "references"
+    duplicate.mkdir(parents=True)
+    shutil.copy2(setup_references / "initial_save_guard.sh", duplicate / "initial_save_guard.sh")
+
+    assert _opening_asset_violations(skills_dir) == {"derive_ttp_duration.py", "initial_save_guard.sh"}
+
+
+def test_moved_opening_assets_preserve_pre_move_bytes_or_owner_only_semantics() -> None:
+    canonical_pointer_rewrites = {
+        "new-channel-bootstrap.md": (
+            "[channel-mode.md](channel-mode.md) を正とし、必ず `/setup --channel` の dispatch から",
+            "`../SKILL.md` を正とし、必ず本体の dispatch から",
+        ),
+        "ttp-seed-and-duration.md": (
+            "[channel-mode.md](channel-mode.md) を正とする",
+            "`../SKILL.md` を正とする",
+        ),
+        "persona-branding-readiness.md": (
+            "[channel-mode.md](channel-mode.md) を正とし",
+            "`../SKILL.md` を正とし",
+        ),
+    }
+    for asset, expected in BEFORE_MOVE_SHA256.items():
+        payload = (SKILL_DIR / "references" / asset).read_bytes()
+        if asset in canonical_pointer_rewrites:
+            current, original = canonical_pointer_rewrites[asset]
+            text = payload.decode()
+            assert current in text
+            payload = text.replace(current, original, 1).encode()
+        if asset == "ttp-seed-and-duration.md":
+            payload = payload.replace(b".claude/skills/setup/references/", b".claude/skills/channel-new/references/")
+        assert sha256(payload).hexdigest() == expected
+
+
+def test_channel_new_keeps_shared_assets_without_opening_asset_duplicates() -> None:
+    references = CHANNEL_NEW_SKILL_MD.parent / "references"
+    for shared in ("fetch_branding_snapshot.py", "config-generation-rules.md", "verification.md"):
+        assert (references / shared).is_file()
+    for opening in OPENING_ASSETS:
+        assert not (references / opening).exists()
 
 
 def test_initial_save_cleanup_keeps_guarded_mutation_order() -> None:
@@ -305,29 +383,12 @@ def test_initial_save_cleanup_keeps_guarded_mutation_order() -> None:
     assert porcelain_before < git_add < staged_review < secret_guard < commit < porcelain_after
 
 
-def test_settings_push_requires_review_and_approval_before_apply() -> None:
-    skill = SKILL_MD.read_text(encoding="utf-8")
-    settings_mode = skill.index("## 設定 push モード")
-
-    diff = skill.index("uv run yt-channel-settings diff", settings_mode)
-    dry_run = skill.index("uv run yt-channel-settings push", diff)
-    approval = skill.index("ユーザー承認", dry_run)
-    apply = skill.index("uv run yt-channel-settings push --apply", approval)
-
-    assert settings_mode < diff < dry_run < approval < apply
-
-
-def test_skill_keeps_save_push_artifacts_and_failure_stop_contracts() -> None:
+def test_skill_keeps_initial_save_artifacts_and_failure_stop_contracts() -> None:
     skill = SKILL_MD.read_text(encoding="utf-8")
 
     for contract in (
-        "config/channel/meta.json",
-        "config/localizations.json",
-        "auth/token.json",
         "secret-like file staged; unstaged before commit",
         "保存未完了として",
         "成功案内は出さない",
-        "branding_settings cannot be used with other parts",
-        "youtube.force-ssl",
     ):
         assert contract in skill

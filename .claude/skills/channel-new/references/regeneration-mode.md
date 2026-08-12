@@ -3,13 +3,13 @@
 `/channel-new` 再生成モードの手順詳細。SKILL.md の「モード判別」で本モードと判定された場合に、このファイルの手順どおりに実行する。
 本ファイル内の `references/...` は `.claude/skills/channel-new/references/...`（本ファイルと同じディレクトリ配下）を指す。
 
-新規開設モードの初期生成後、または方向性検討モードで再決定した方向性をもとに、`config/channel/*.json` と skill config を完成させる。
+`/setup --channel` の初期生成後、または方向性検討モードで再決定した方向性をもとに、`config/channel/*.json` と skill config を完成させる。
 
 **実行場所**: リポジトリルート（独立リポジトリ）
 
 **前提**:
 
-- 新規開設モードが完了していること（TTP 対象確認 / seed fetch / 承認済み benchmark.channels 反映 / config / persona / branding の初期生成は新規開設モードが担当する）
+- `/setup --channel` が完了していること（TTP 対象確認 / seed fetch / 承認済み benchmark.channels 反映 / config / persona / branding の初期生成は同 mode が担当する）
 - 方向性検討モードが完了し、`docs/channel/channel-direction.md` が存在すること
 
 ## Step R1: 方向性ドキュメントの読み込み
@@ -23,7 +23,7 @@
 
 ### Step R2.1: 競合 TTP 面のスナップショット取得（必須）
 
-`config/channel/analytics.json::benchmark.channels` に承認済み TTP 対象が指定されている場合、**Step R2.2 の config 案作成前に必ず**競合チャンネルの TTP 対象面を全件取得し、snapshot を AI のコンテキストに載せる。取得は `references/fetch_branding_snapshot.py` に一本化する（新規開設モード Step 5 と同じスクリプト）。1 回のコマンドで承認済み `benchmark.channels` 全件の `id` を `--channel-id` として繰り返し指定する:
+`config/channel/analytics.json::benchmark.channels` に承認済み TTP 対象が指定されている場合、**Step R2.2 の config 案作成前に必ず**競合チャンネルの TTP 対象面を全件取得し、snapshot を AI のコンテキストに載せる。取得は `references/fetch_branding_snapshot.py` に一本化する（`/setup --channel` Step 5 と同じ共有スクリプト）。1 回のコマンドで承認済み `benchmark.channels` 全件の `id` を `--channel-id` として繰り返し指定する:
 
 ```bash
 uv run python .claude/skills/channel-new/references/fetch_branding_snapshot.py \
@@ -73,11 +73,11 @@ self-check が pass したら提案をユーザーに見せ、承認 or 修正�
 
 ## Step R3: config/channel/*.json の完成
 
-新規開設モードが作成した初期 config を完全版に拡張。`references/config-template/` の各ファイルを
+`/setup --channel` が作成した初期 config を完全版に拡張。`references/config-template/` の各ファイルを
 `config/channel/` 配下に配置し、全フィールドを埋める。
 
 含めるべきセクション（必須・skill-config 管理・オプション）は **`references/config-generation-rules.md`** を参照。
-`benchmark.channels` は新規開設モードで承認済み TTP 対象だけが設定済み（`config/channel/analytics.json`）。
+`benchmark.channels` は `/setup --channel` で承認済み TTP 対象だけが設定済み（`config/channel/analytics.json`）。
 
 **channel-direction.md からの転記（必須・空のまま終了しないこと、issue #567）**:
 
@@ -162,6 +162,6 @@ JSON 構文検証・config ロードテスト・channel_id 自動取得コマン
 1. **YouTube チャンネル作成**（まだの場合）→ `config/channel/meta.json` の `channel.youtube_handle`、`channel.url`、`channel.channel_id` を更新
 2. **OAuth 認証と channel_id 取得**: 手順は `references/verification.md`（「OAuth 認証」「channel_id の自動取得」）を参照
 3. **ブランディング素材**: 生成手順は `references/verification.md`（「ブランディング素材生成」）を参照
-4. **YouTube 側に設定を反映**: 初回反映は新規開設モード Step 8 で実施済み。再反映や運用中の更新は設定 push モードを参照
+4. **YouTube 側に設定を反映**: 初回反映は `/setup --channel` Step 8 で実施済み。再反映や運用中の更新は設定 push モードを参照
 5. **任意のパイロット検証**: 色味・構図・ムード・テンポを先に確認したい場合は、仮コレクションで `/thumbnail` → `/thumbnail-compare`、および `music_engine` が `suno` なら `/suno` → `/suno-helper`、`lyria` なら `/lyria` を実行し、OK/NG を判断する。NG なら `config/skills/thumbnail.yaml` / `config/skills/suno.yaml` / `config/skills/lyria.yaml` を調整して再試作する。OK なら仮コレクションを削除するか、既存 `collections/planning/` として `/wf-next` で継続する
 6. **初回コレクション制作**: パイロットを省略する、またはパイロット OK 後に新規本制作を始める場合は `/wf-new` を実行

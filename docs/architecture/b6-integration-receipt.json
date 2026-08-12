@@ -430,7 +430,7 @@
     },
     {
       "old_owner": "legacy..claude.skills.channel-new.references.derive_ttp_duration",
-      "exact_new_owner": ".claude/skills/channel-new/references/derive_ttp_duration.py",
+      "exact_new_owner": ".claude/skills/setup/references/derive_ttp_duration.py",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"

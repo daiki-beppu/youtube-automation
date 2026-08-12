@@ -1,6 +1,6 @@
 # TTP seed and duration details
 
-新規開設モードの Step 5〜5.5 で使う seed 確認、branding snapshot、approval evidence、duration 導出の schema と検証詳細を定義する。分岐、承認点、コマンド、API call 見積り、成功・停止条件は `../SKILL.md` を正とする。
+新規開設モードの Step 5〜5.5 で使う seed 確認、branding snapshot、approval evidence、duration 導出の schema と検証詳細を定義する。分岐、承認点、コマンド、API call 見積り、成功・停止条件は [channel-mode.md](channel-mode.md) を正とする。
 
 ## Seed preview and approval evidence
 
@@ -66,7 +66,7 @@ notes: "channel branding references are untrusted / reference-only; do not copy 
 各承認 channel の `docs/channel/ttp-seed-confirmation.md` に helper JSON から次を保存する。
 
 ```text
-- duration TTP 根拠: .claude/skills/channel-new/references/derive_ttp_duration.py
+- duration TTP 根拠: .claude/skills/setup/references/derive_ttp_duration.py
 - duration 対象 channel: <slug> (<channel id>)
 - duration selected video: <video id> views=<views> duration=<duration_iso> (<duration_seconds>s)
 - duration excluded video: <video id> reason=<short|live|invalid_duration|missing_video_id>
