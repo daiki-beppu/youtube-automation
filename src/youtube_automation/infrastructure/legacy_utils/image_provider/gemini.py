@@ -1,3 +1,7 @@
-"""Compatibility facade for the Gemini image provider."""
+"""Compatibility module alias for the Gemini image provider."""
 
-from youtube_automation.infrastructure.media.image_provider.gemini import *  # noqa: F403
+import sys
+
+from youtube_automation.infrastructure.media.image_provider import gemini as _canonical
+
+sys.modules[__name__] = _canonical

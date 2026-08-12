@@ -1,3 +1,7 @@
-"""Compatibility facade for the OpenAI image provider."""
+"""Compatibility module alias for the OpenAI image provider."""
 
-from youtube_automation.infrastructure.media.image_provider.openai import *  # noqa: F403
+import sys
+
+from youtube_automation.infrastructure.media.image_provider import openai as _canonical
+
+sys.modules[__name__] = _canonical

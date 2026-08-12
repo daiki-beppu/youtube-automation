@@ -130,6 +130,7 @@ def test_candidate_wheel_syncs_all_assets_into_clean_downstream(tmp_path: Path) 
         "-c",
         """
 import importlib
+import sys
 
 legacy_modules = (
     "youtube_automation.infrastructure.errors",
@@ -174,11 +175,26 @@ canonical_image_provider = importlib.import_module("youtube_automation.infrastru
 assert image_provider.PromptSchema is canonical_image_provider.PromptSchema
 assert image_provider.PromptSchema(primary_request="wheel").primary_request == "wheel"
 for submodule in ("config", "composition", "prompt_schema", "gemini", "openai"):
+    canonical_name = f"youtube_automation.infrastructure.media.image_provider.{submodule}"
+    canonical_submodule = sys.modules[canonical_name]
+    assert getattr(image_provider, submodule) is canonical_submodule
+    assert sys.modules[f"youtube_automation.utils.image_provider.{submodule}"] is canonical_submodule
+for submodule in ("config", "composition", "prompt_schema", "gemini", "openai"):
     facade_submodule = importlib.import_module(f"youtube_automation.utils.image_provider.{submodule}")
     canonical_submodule = importlib.import_module(
         f"youtube_automation.infrastructure.media.image_provider.{submodule}"
     )
-    assert facade_submodule.__name__ != canonical_submodule.__name__
+    assert facade_submodule is canonical_submodule
+
+composition = importlib.import_module("youtube_automation.utils.image_provider.composition")
+canonical_composition = importlib.import_module(
+    "youtube_automation.infrastructure.media.image_provider.composition"
+)
+original_log_image_cost = composition.log_image_cost
+assert original_log_image_cost.__globals__ is composition.__dict__
+replacement_log_image_cost = object()
+composition.log_image_cost = replacement_log_image_cost
+assert canonical_composition.log_image_cost is replacement_log_image_cost
 
 mask = importlib.import_module("youtube_automation.utils.audio_visualizer_mask")
 canonical_mask = importlib.import_module("youtube_automation.infrastructure.media.audio_visualizer_mask")

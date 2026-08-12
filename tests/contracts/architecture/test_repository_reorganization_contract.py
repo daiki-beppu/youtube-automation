@@ -9,6 +9,7 @@ import ast
 import importlib
 import json
 import shutil
+import stat
 import subprocess
 import sys
 import tarfile
@@ -732,15 +733,167 @@ def _distribution_python_sources(wheel: Path, sdist: Path) -> tuple[set[str], se
         sdist_sources = {
             Path(*Path(member.name).parts[1:]).as_posix()
             for member in archive.getmembers()
-            if member.isfile() and member.name.endswith(".py")
+            if member.name.endswith(".py")
         }
     return wheel_sources, sdist_sources
 
 
-def _is_string_sequence(node: ast.AST) -> bool:
-    return isinstance(node, (ast.List, ast.Tuple)) and all(
-        isinstance(element, ast.Constant) and isinstance(element.value, str) for element in node.elts
-    )
+def _source_python_entries(source_root: Path) -> set[str]:
+    return {path.relative_to(source_root).as_posix() for path in source_root.rglob("*.py")}
+
+
+def _duplicate_legacy_utils_source_offenders(source_root: Path) -> list[str]:
+    entries = _source_python_entries(source_root)
+    offenders = [f"reintroduced duplicate source: {path}" for path in sorted(entries & REMOVED_DUPLICATE_LEGACY_UTILS)]
+    offenders.extend(f"missing canonical owner: {path}" for path in sorted(CANONICAL_LEGACY_UTILS_OWNERS - entries))
+    return offenders
+
+
+def _duplicate_legacy_utils_artifact_offenders(wheel: Path, sdist: Path) -> list[str]:
+    wheel_sources, sdist_sources = _distribution_python_sources(wheel, sdist)
+    removed_wheel = {f"youtube_automation/{path}" for path in REMOVED_DUPLICATE_LEGACY_UTILS}
+    removed_sdist = {f"src/youtube_automation/{path}" for path in REMOVED_DUPLICATE_LEGACY_UTILS}
+    canonical_wheel = {f"youtube_automation/{path}" for path in CANONICAL_LEGACY_UTILS_OWNERS}
+    canonical_sdist = {f"src/youtube_automation/{path}" for path in CANONICAL_LEGACY_UTILS_OWNERS}
+    offenders = [f"wheel reintroduced duplicate source: {path}" for path in sorted(wheel_sources & removed_wheel)]
+    offenders.extend(f"sdist reintroduced duplicate source: {path}" for path in sorted(sdist_sources & removed_sdist))
+    offenders.extend(f"wheel missing canonical owner: {path}" for path in sorted(canonical_wheel - wheel_sources))
+    offenders.extend(f"sdist missing canonical owner: {path}" for path in sorted(canonical_sdist - sdist_sources))
+    return offenders
+
+
+_LEGACY_FACADE_IMPORTS = {
+    "audio_visualizer_mask.py": {
+        ("youtube_automation.infrastructure.media.audio_visualizer_mask", (("*", None),)),
+    },
+    "channel_target.py": {
+        ("youtube_automation.configuration", (("channel_target", "_canonical"),)),
+    },
+    "cli_arguments.py": {
+        ("youtube_automation.commands._shared", (("arguments", "_canonical"),)),
+    },
+    "collection_paths.py": {
+        ("youtube_automation.infrastructure.media.collection_paths", (("*", None),)),
+    },
+    "genai_client.py": {
+        (
+            "youtube_automation.infrastructure.media.genai_client",
+            (
+                ("GLOBAL_LOCATION", None),
+                ("VEO_LOCATION", None),
+                ("create_genai_client", None),
+                ("create_global_genai_client", None),
+                ("create_veo_genai_client", None),
+            ),
+        ),
+    },
+    "image_provider/__init__.py": {
+        ("youtube_automation.infrastructure.media.image_provider", (("*", None),)),
+        (
+            "youtube_automation.infrastructure.media.image_provider",
+            (("composition", "composition"),),
+        ),
+        ("youtube_automation.infrastructure.media.image_provider", (("config", "config"),)),
+        ("youtube_automation.infrastructure.media.image_provider", (("gemini", "gemini"),)),
+        ("youtube_automation.infrastructure.media.image_provider", (("openai", "openai"),)),
+        (
+            "youtube_automation.infrastructure.media.image_provider",
+            (("prompt_schema", "prompt_schema"),),
+        ),
+    },
+    "image_provider/composition.py": {
+        (
+            "youtube_automation.infrastructure.media.image_provider",
+            (("composition", "_canonical"),),
+        ),
+    },
+    "image_provider/config.py": {
+        ("youtube_automation.infrastructure.media.image_provider", (("config", "_canonical"),)),
+    },
+    "image_provider/gemini.py": {
+        ("youtube_automation.infrastructure.media.image_provider", (("gemini", "_canonical"),)),
+    },
+    "image_provider/openai.py": {
+        ("youtube_automation.infrastructure.media.image_provider", (("openai", "_canonical"),)),
+    },
+    "image_provider/prompt_schema.py": {
+        (
+            "youtube_automation.infrastructure.media.image_provider",
+            (("prompt_schema", "_canonical"),),
+        ),
+    },
+    "setup_directory_contract.py": {
+        ("youtube_automation.infrastructure.collections.setup_directory_contract", (("*", None),)),
+        (
+            "youtube_automation.infrastructure.collections.setup_directory_contract",
+            (
+                ("SETUP_DIRECTORIES", None),
+                ("validate_existing_setup_directories", None),
+                ("validate_setup_directory_target", None),
+            ),
+        ),
+    },
+    "skill_config.py": {
+        ("youtube_automation.configuration", (("skills", "_canonical"),)),
+    },
+}
+_LEGACY_FACADE_SYMBOL_ALIASES = {
+    "cli_arguments.py": {"CompetitorArgumentParser": "CompetitorArgumentParser"},
+    "skill_config.py": {
+        "_cache": "_cache",
+        "_collect_deprecated_override_keys": "_collect_deprecated_override_keys",
+        "_warn_deprecated_override_keys": "_warn_deprecated_override_keys",
+        "_default_path": "_default_path",
+        "_channel_override_path": "_channel_override_path",
+        "_channel_override_candidates": "_channel_override_candidates",
+        "_override_candidate_exists": "_override_candidate_exists",
+        "_resolve_channel_override": "_resolve_channel_override",
+        "_deep_merge": "_deep_merge",
+        "_load_yaml": "_load_yaml",
+        "_load_json": "_load_json",
+        "_load_override": "_load_override",
+        "THUMBNAIL_MODE_PARALLEL": "THUMBNAIL_MODE_PARALLEL",
+        "THUMBNAIL_MODE_SEQUENTIAL": "THUMBNAIL_MODE_SEQUENTIAL",
+        "load_skill_config": "load_skill_config",
+        "load_channel_override": "load_channel_override",
+        "get_collection_ideate_thumbnail_mode": "get_collection_ideate_thumbnail_mode",
+        "reset": "reset",
+    },
+}
+_LEGACY_FACADE_ALL = {
+    "genai_client.py": (
+        "GLOBAL_LOCATION",
+        "VEO_LOCATION",
+        "create_genai_client",
+        "create_global_genai_client",
+        "create_veo_genai_client",
+    ),
+    "setup_directory_contract.py": (
+        "SETUP_DIRECTORIES",
+        "validate_existing_setup_directories",
+        "validate_setup_directory_target",
+    ),
+}
+_LEGACY_FACADE_MODULE_ALIASES = frozenset(
+    {
+        "channel_target.py",
+        "image_provider/composition.py",
+        "image_provider/config.py",
+        "image_provider/gemini.py",
+        "image_provider/openai.py",
+        "image_provider/prompt_schema.py",
+    }
+)
+_LEGACY_FACADE_CHILD_MODULE_ALIASES = {
+    "image_provider/__init__.py": frozenset({"composition", "config", "gemini", "openai", "prompt_schema"}),
+}
+_LEGACY_FACADE_PATHS = frozenset(
+    {
+        "__init__.py",
+        "schemas/__init__.py",
+        *_LEGACY_FACADE_IMPORTS,
+    }
+)
 
 
 def _is_module_alias_target(node: ast.AST) -> bool:
@@ -758,24 +911,79 @@ def _is_module_alias_target(node: ast.AST) -> bool:
     return isinstance(key, ast.Name) and key.id == "__name__"
 
 
-def _is_reexport_assignment(node: ast.Assign) -> bool:
+def _historical_child_alias_name(node: ast.AST) -> str | None:
+    if not isinstance(node, ast.Subscript):
+        return None
+    modules = node.value
+    if not (
+        isinstance(modules, ast.Attribute)
+        and isinstance(modules.value, ast.Name)
+        and modules.value.id == "sys"
+        and modules.attr == "modules"
+    ):
+        return None
+    key = node.slice
+    if not isinstance(key, ast.JoinedStr) or len(key.values) != 2:
+        return None
+    parent, suffix = key.values
+    if not (
+        isinstance(parent, ast.FormattedValue)
+        and isinstance(parent.value, ast.Name)
+        and parent.value.id == "__name__"
+        and parent.conversion == -1
+        and parent.format_spec is None
+        and isinstance(suffix, ast.Constant)
+        and isinstance(suffix.value, str)
+        and suffix.value.startswith(".")
+    ):
+        return None
+    return suffix.value.removeprefix(".")
+
+
+def _is_allowed_reexport_assignment(relative: str, node: ast.Assign) -> bool:
     if len(node.targets) != 1:
         return False
     target = node.targets[0]
     if isinstance(target, ast.Name) and target.id == "__all__":
-        return _is_string_sequence(node.value)
-    if isinstance(target, ast.Name):
-        return (
-            isinstance(node.value, ast.Attribute)
-            and isinstance(node.value.value, ast.Name)
-            and node.value.value.id.startswith("_")
+        if not isinstance(node.value, (ast.List, ast.Tuple)):
+            return False
+        values = tuple(
+            element.value
+            for element in node.value.elts
+            if isinstance(element, ast.Constant) and isinstance(element.value, str)
         )
-    return _is_module_alias_target(target) and isinstance(node.value, ast.Name) and node.value.id.startswith("_")
+        return len(values) == len(node.value.elts) and values == _LEGACY_FACADE_ALL.get(relative)
+    if isinstance(target, ast.Name):
+        aliases = _LEGACY_FACADE_SYMBOL_ALIASES.get(relative, {})
+        return (
+            aliases.get(target.id) is not None
+            and isinstance(node.value, ast.Attribute)
+            and isinstance(node.value.value, ast.Name)
+            and node.value.value.id == "_canonical"
+            and node.value.attr == aliases[target.id]
+        )
+    is_whole_module_alias = (
+        relative in _LEGACY_FACADE_MODULE_ALIASES
+        and _is_module_alias_target(target)
+        and isinstance(node.value, ast.Name)
+        and node.value.id == "_canonical"
+    )
+    child_alias = _historical_child_alias_name(target)
+    is_child_module_alias = (
+        child_alias in _LEGACY_FACADE_CHILD_MODULE_ALIASES.get(relative, frozenset())
+        and isinstance(node.value, ast.Name)
+        and node.value.id == child_alias
+    )
+    return is_whole_module_alias or is_child_module_alias
 
 
 def _legacy_facade_purity_offenders(legacy_root: Path) -> list[str]:
     offenders: list[str] = []
     for path in sorted(legacy_root.rglob("*.py")):
+        relative = path.relative_to(legacy_root).as_posix()
+        if relative not in _LEGACY_FACADE_PATHS:
+            offenders.append(f"{relative}: unexpected facade path")
+            continue
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         for statement in tree.body:
             is_docstring = (
@@ -783,12 +991,25 @@ def _legacy_facade_purity_offenders(legacy_root: Path) -> list[str]:
                 and isinstance(statement.value, ast.Constant)
                 and isinstance(statement.value.value, str)
             )
-            is_reexport_import = isinstance(statement, ast.ImportFrom)
-            is_sys_import = isinstance(statement, ast.Import) and all(alias.name == "sys" for alias in statement.names)
-            is_reexport_assignment = isinstance(statement, ast.Assign) and _is_reexport_assignment(statement)
+            import_signature = (
+                (
+                    statement.module,
+                    tuple((alias.name, alias.asname) for alias in statement.names),
+                )
+                if isinstance(statement, ast.ImportFrom) and statement.level == 0
+                else None
+            )
+            is_reexport_import = import_signature in _LEGACY_FACADE_IMPORTS.get(relative, set())
+            is_sys_import = (
+                (relative in _LEGACY_FACADE_MODULE_ALIASES or relative in _LEGACY_FACADE_CHILD_MODULE_ALIASES)
+                and isinstance(statement, ast.Import)
+                and tuple((alias.name, alias.asname) for alias in statement.names) == (("sys", None),)
+            )
+            is_reexport_assignment = isinstance(statement, ast.Assign) and _is_allowed_reexport_assignment(
+                relative, statement
+            )
             if is_docstring or is_reexport_import or is_sys_import or is_reexport_assignment:
                 continue
-            relative = path.relative_to(legacy_root).as_posix()
             offenders.append(f"{relative}:{statement.lineno}: {type(statement).__name__}")
     return offenders
 
@@ -800,26 +1021,6 @@ def test_legacy_utils_contains_only_declarative_reexport_facades() -> None:
 
     # Then: no implementation, control flow, or import-time execution remains
     assert offenders == []
-
-
-def test_legacy_utils_purity_allows_only_declarative_reexport_shapes(tmp_path: Path) -> None:
-    # Given: a facade composed only of a docstring, imports, aliases, and __all__
-    facade = tmp_path / "facades" / "example.py"
-    facade.parent.mkdir()
-    facade.write_text(
-        '"""Compatibility facade."""\n'
-        "import sys\n"
-        "from canonical import exported as exported\n"
-        "from canonical import module as _canonical\n"
-        "alias = _canonical.alias\n"
-        "sys.modules[__name__] = _canonical\n"
-        '__all__ = ["alias", "exported"]\n',
-        encoding="utf-8",
-    )
-
-    # When: the generic recursive purity scanner inspects the facade
-    # Then: the supported declarative re-export surface is accepted
-    assert _legacy_facade_purity_offenders(facade.parent) == []
 
 
 @pytest.mark.parametrize(
@@ -839,10 +1040,11 @@ def test_legacy_utils_purity_rejects_implementation_reintroduction_mutations(
     mutation_name: str,
     source: str,
 ) -> None:
-    # Given: an arbitrary new facade file with one prohibited implementation shape
-    facade = tmp_path / "facades" / f"{mutation_name}.py"
-    facade.parent.mkdir(exist_ok=True)
-    facade.write_text(source, encoding="utf-8")
+    # Given: a real allowed facade with one prohibited implementation shape appended
+    facades = tmp_path / "facades"
+    shutil.copytree(LEGACY_UTILS, facades, symlinks=True)
+    facade = facades / "cli_arguments.py"
+    facade.write_text(f"{facade.read_text(encoding='utf-8')}\n{source}", encoding="utf-8")
 
     # When: the same recursive scanner used for production source inspects it
     offenders = _legacy_facade_purity_offenders(facade.parent)
@@ -851,14 +1053,126 @@ def test_legacy_utils_purity_rejects_implementation_reintroduction_mutations(
     assert offenders, mutation_name
 
 
+@pytest.mark.parametrize(
+    ("relative_path", "source"),
+    [
+        (
+            "cli_arguments.py",
+            "from youtube_automation.commands._shared import arguments as _canonical\n__path__ = _canonical.__path__\n",
+        ),
+        (
+            "cli_arguments.py",
+            "from youtube_automation.commands._shared import arguments as _canonical\n"
+            "__builtins__ = _canonical.__builtins__\n",
+        ),
+        (
+            "cli_arguments.py",
+            "from youtube_automation.commands._shared import arguments as _canonical\nrun = _canonical.side_effect\n",
+        ),
+        (
+            "channel_target.py",
+            "import sys\nimport evil as _canonical\nsys.modules[__name__] = _canonical\n",
+        ),
+        (
+            "image_provider/config.py",
+            "import sys\n"
+            "from youtube_automation.infrastructure.media.image_provider import openai as _canonical\n"
+            "sys.modules[__name__] = _canonical\n",
+        ),
+        ("collection_paths.py", "from evil.side_effect import *\n"),
+    ],
+)
+def test_legacy_utils_purity_rejects_fail_open_declarative_mutations(
+    tmp_path: Path,
+    relative_path: str,
+    source: str,
+) -> None:
+    # Given: an existing facade is replaced by a superficially declarative mutation
+    facades = tmp_path / "facades"
+    shutil.copytree(LEGACY_UTILS, facades, symlinks=True)
+    (facades / relative_path).write_text(source, encoding="utf-8")
+
+    # When: the production purity scanner checks the path-specific facade contract
+    offenders = _legacy_facade_purity_offenders(facades)
+
+    # Then: arbitrary aliases, import dunders, and external import redirects are rejected
+    assert offenders, relative_path
+
+
+@pytest.mark.parametrize(
+    ("expected", "mutation"),
+    [
+        (
+            'sys.modules[f"{__name__}.config"] = config',
+            'sys.modules[f"{__name__}.evil"] = config',
+        ),
+        (
+            'sys.modules[f"{__name__}.config"] = config',
+            'sys.modules[f"{__name__}.config"] = openai',
+        ),
+        (
+            'sys.modules[f"{__name__}.config"] = config',
+            'sys.modules[f"{__name__!r}.config"] = config',
+        ),
+        (
+            'sys.modules[f"{__name__}.config"] = config',
+            'sys.modules[f"{__name__!a}.config"] = config',
+        ),
+        (
+            'sys.modules[f"{__name__}.config"] = config',
+            'sys.modules[f"{__name__:>80}.config"] = config',
+        ),
+        (
+            'sys.modules[f"{__name__}.config"] = config',
+            "sys.modules[f\"{__name__:{print('facade side effect')}}.config\"] = config",
+        ),
+    ],
+)
+def test_legacy_utils_purity_rejects_unapproved_parent_child_module_aliases(
+    tmp_path: Path,
+    expected: str,
+    mutation: str,
+) -> None:
+    # Given: a real parent facade redirects an unknown key or the wrong canonical child
+    facades = tmp_path / "facades"
+    shutil.copytree(LEGACY_UTILS, facades, symlinks=True)
+    parent = facades / "image_provider" / "__init__.py"
+    source = parent.read_text(encoding="utf-8")
+    assert expected in source
+    parent.write_text(source.replace(expected, mutation), encoding="utf-8")
+
+    # When: the path-aware purity scanner checks its exact child alias declarations
+    offenders = _legacy_facade_purity_offenders(facades)
+
+    # Then: only the five approved key-to-canonical-module pairs are accepted
+    assert offenders
+
+
 def test_duplicate_legacy_utils_sources_are_removed_but_canonical_owners_remain() -> None:
     # Given: the duplicate facade paths and their canonical implementation owners
-    source_files = {path.relative_to(SRC).as_posix() for path in SRC.rglob("*.py") if path.is_file()}
-
     # When: the source distribution boundary is enumerated
+    offenders = _duplicate_legacy_utils_source_offenders(SRC)
+
     # Then: duplicate paths are absent and both canonical owners remain present
-    assert source_files.isdisjoint(REMOVED_DUPLICATE_LEGACY_UTILS)
-    assert CANONICAL_LEGACY_UTILS_OWNERS <= source_files
+    assert offenders == []
+
+
+def test_duplicate_legacy_utils_source_symlink_mutation_is_detected(tmp_path: Path) -> None:
+    # Given: a dangling symlink reintroduces one deleted Python path
+    source_root = tmp_path / "youtube_automation"
+    shutil.copytree(LEGACY_UTILS, source_root / "infrastructure" / "legacy_utils", symlinks=True)
+    for owner in CANONICAL_LEGACY_UTILS_OWNERS:
+        canonical = source_root / owner
+        canonical.parent.mkdir(parents=True, exist_ok=True)
+        canonical.write_text("# canonical owner\n", encoding="utf-8")
+    mutation = source_root / "infrastructure" / "legacy_utils" / "profile.py"
+    mutation.symlink_to("../observability/missing-profile.py")
+
+    # When: every Python directory entry is enumerated regardless of file type
+    offenders = _duplicate_legacy_utils_source_offenders(source_root)
+
+    # Then: the deleted path cannot return as a dangling symlink unnoticed
+    assert "reintroduced duplicate source: infrastructure/legacy_utils/profile.py" in offenders
 
 
 def test_built_distributions_exclude_duplicate_legacy_utils_sources(tmp_path: Path) -> None:
@@ -866,17 +1180,52 @@ def test_built_distributions_exclude_duplicate_legacy_utils_sources(tmp_path: Pa
     wheel, sdist = _build_distributions(ROOT, tmp_path / "legacy-utils-dist")
 
     # When: every Python source member in both archives is enumerated
-    wheel_sources, sdist_sources = _distribution_python_sources(wheel, sdist)
-    removed_wheel = {f"youtube_automation/{path}" for path in REMOVED_DUPLICATE_LEGACY_UTILS}
-    removed_sdist = {f"src/youtube_automation/{path}" for path in REMOVED_DUPLICATE_LEGACY_UTILS}
-    canonical_wheel = {f"youtube_automation/{path}" for path in CANONICAL_LEGACY_UTILS_OWNERS}
-    canonical_sdist = {f"src/youtube_automation/{path}" for path in CANONICAL_LEGACY_UTILS_OWNERS}
+    offenders = _duplicate_legacy_utils_artifact_offenders(wheel, sdist)
 
     # Then: neither archive ships a duplicate and both ship the canonical owners
-    assert wheel_sources.isdisjoint(removed_wheel)
-    assert sdist_sources.isdisjoint(removed_sdist)
-    assert canonical_wheel <= wheel_sources
-    assert canonical_sdist <= sdist_sources
+    assert offenders == []
+
+
+def test_distribution_symlink_and_hardlink_mutations_are_detected(tmp_path: Path) -> None:
+    # Given: real built archives are copied with deleted paths restored as links
+    wheel, sdist = _build_distributions(ROOT, tmp_path / "original-dist")
+    mutated_wheel = tmp_path / "mutated.whl"
+    with zipfile.ZipFile(wheel) as source, zipfile.ZipFile(mutated_wheel, "w") as target:
+        for member in source.infolist():
+            target.writestr(member, source.read(member.filename))
+        link = zipfile.ZipInfo("youtube_automation/infrastructure/legacy_utils/profile.py")
+        link.create_system = 3
+        link.external_attr = (stat.S_IFLNK | 0o777) << 16
+        target.writestr(link, "../observability/profile.py")
+
+    mutated_sdist = tmp_path / "mutated.tar.gz"
+    with tarfile.open(sdist) as source, tarfile.open(mutated_sdist, "w:gz") as target:
+        members = source.getmembers()
+        for member in members:
+            target.addfile(member, source.extractfile(member) if member.isfile() else None)
+        package_root = Path(members[0].name).parts[0]
+        symlink = tarfile.TarInfo(f"{package_root}/src/youtube_automation/infrastructure/legacy_utils/profile.py")
+        symlink.type = tarfile.SYMTYPE
+        symlink.linkname = "../observability/profile.py"
+        target.addfile(symlink)
+        hardlink = tarfile.TarInfo(f"{package_root}/src/youtube_automation/infrastructure/legacy_utils/worktree.py")
+        hardlink.type = tarfile.LNKTYPE
+        hardlink.linkname = f"{package_root}/src/youtube_automation/infrastructure/vcs/worktree.py"
+        target.addfile(hardlink)
+
+    # When: every Python archive member name is enumerated regardless of member type
+    offenders = _duplicate_legacy_utils_artifact_offenders(mutated_wheel, mutated_sdist)
+
+    # Then: wheel symlinks and sdist symlink/hardlink entries all violate the absence contract
+    assert (
+        "wheel reintroduced duplicate source: youtube_automation/infrastructure/legacy_utils/profile.py"
+    ) in offenders
+    assert (
+        "sdist reintroduced duplicate source: src/youtube_automation/infrastructure/legacy_utils/profile.py"
+    ) in offenders
+    assert (
+        "sdist reintroduced duplicate source: src/youtube_automation/infrastructure/legacy_utils/worktree.py"
+    ) in offenders
 
 
 def test_built_distributions_contain_the_exact_core_adapter_surface(tmp_path: Path) -> None:
@@ -1666,4 +2015,83 @@ assert mask.parse_size("12x34") == (12, 34)
     )
 
     # Then: every facade delegates behavior to its canonical owner without divergence
+    assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize("submodule", ("config", "composition", "prompt_schema", "gemini", "openai"))
+def test_image_provider_submodule_facades_preserve_canonical_module_identity(submodule: str) -> None:
+    # Given: a downstream image-provider submodule path and its canonical owner
+    code = f"""
+import importlib
+
+facade = importlib.import_module("youtube_automation.utils.image_provider.{submodule}")
+canonical = importlib.import_module("youtube_automation.infrastructure.media.image_provider.{submodule}")
+assert facade is canonical
+"""
+
+    # When: both paths are imported in an isolated interpreter
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    # Then: patching and module state share the exact canonical module object
+    assert result.returncode == 0, result.stderr
+
+
+def test_image_provider_parent_import_registers_exact_canonical_child_modules() -> None:
+    # Given: a fresh interpreter that imports only the historical parent facade
+    code = """
+import importlib
+import sys
+
+parent_name = "youtube_automation.utils.image_provider"
+parent = importlib.import_module(parent_name)
+for child in ("config", "composition", "prompt_schema", "gemini", "openai"):
+    canonical_name = f"youtube_automation.infrastructure.media.image_provider.{child}"
+    canonical = sys.modules[canonical_name]
+    assert getattr(parent, child) is canonical
+    assert sys.modules[f"{parent_name}.{child}"] is canonical
+"""
+
+    # When: parent attributes and import registry entries are observed without child imports
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    # Then: all five historical child surfaces retain exact canonical module identity
+    assert result.returncode == 0, result.stderr
+
+
+def test_image_provider_composition_facade_preserves_patch_and_globals_seam() -> None:
+    # Given: downstream code imports the historical composition submodule
+    code = """
+import importlib
+
+facade = importlib.import_module("youtube_automation.utils.image_provider.composition")
+canonical = importlib.import_module("youtube_automation.infrastructure.media.image_provider.composition")
+original = facade.log_image_cost
+assert original.__globals__ is facade.__dict__
+replacement = object()
+facade.log_image_cost = replacement
+assert canonical.log_image_cost is replacement
+"""
+
+    # When: a downstream patch mutates the facade module
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    # Then: the canonical owner observes the same patch and function globals
     assert result.returncode == 0, result.stderr
