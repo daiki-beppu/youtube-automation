@@ -7,9 +7,9 @@ import logging
 from pathlib import Path
 
 from youtube_automation.configuration import load_config
-from youtube_automation.core.adapters.filesystem import path_exists, read_file_text
 from youtube_automation.core.adapters.media import CollectionPaths
 from youtube_automation.domains.uploads.playlists import PlaylistManager
+from youtube_automation.infrastructure.filesystem import path_exists, read_file_text
 
 logger = logging.getLogger(__name__)
 
