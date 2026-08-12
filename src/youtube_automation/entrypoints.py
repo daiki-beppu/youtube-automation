@@ -13,7 +13,9 @@ _CHANNEL_OPTION_CONFLICTS = {
     "youtube_automation.commands.channel.channel",
     "youtube_automation.commands.channel.channel_import",
     "youtube_automation.commands.analytics.benchmark_collector",
+    "youtube_automation.commands.analytics.fetch_benchmark_comments",
     "youtube_automation.commands.analytics.video_analyze",
+    "youtube_automation.commands.thumbnail.compare_thumbnails",
 }
 
 
