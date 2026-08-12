@@ -24,8 +24,8 @@ from pathlib import Path
 
 from PIL import Image, UnidentifiedImageError
 
-from youtube_automation.core.adapters.errors import ConfigError, ValidationError
 from youtube_automation.core.adapters.runtime import format_duration_mss
+from youtube_automation.core.errors import ConfigError, ValidationError
 from youtube_automation.domains.distrokid.metadata import (
     parse_album_metadata,
     parse_track_table,

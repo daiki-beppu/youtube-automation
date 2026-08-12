@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `refactor(distrokid)`: DistroKid domain の例外 import を互換 facade 経由から canonical owner の `youtube_automation.core.errors` へ移行し、例外 class identity と既存の成功・失敗時挙動を維持する（#3956）。
 - `refactor(collections)`: collections domain の例外 import を互換 facade 経由から canonical owner の `youtube_automation.core.errors` へ移行し、例外 class identity と既存の成功・失敗時挙動を維持する（#3955）。
 - `refactor(analytics)`: analytics domain の例外 import を互換 facade 経由から canonical owner の `youtube_automation.core.errors` へ移行し、例外 class identity と既存の成功・失敗時挙動を維持する（#3954）。
 - `fix(skill-feedback)`: schema-invalid JSONL 行を行番号と理由付きで警告して変更対象から隔離し、valid な `recorded` entry の還流を継続する。更新時は invalid・terminal・未選択行の bytes を保持し、安全な全件走査や atomic rewrite を証明できない場合は外部副作用前に停止する（#3939）。
