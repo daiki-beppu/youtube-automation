@@ -5,7 +5,7 @@ description: "Use when チャンネルの YouTube 統計（登録者・再生回
 
 ## 前後工程
 
-- `前工程`: `/channel-new`
+- `前工程`: `/setup --channel`
 - `後工程`: `なし`
 
 ## Overview
@@ -21,7 +21,7 @@ description: "Use when チャンネルの YouTube 統計（登録者・再生回
 `config/channel/` が存在すること（`load_config()` でロード可能）。
 
 存在しない場合、ユーザーに確認:
-- **新規チャンネル** → `/channel-new` を案内
+- **新規チャンネル** → `/setup --channel` を案内
 - **既存チャンネル**（YouTube で既に運営中）→ `/channel-new`（既存チャンネル取り込みモード）を案内
 
 ## 想定 API call 数

@@ -5,7 +5,7 @@ description: "Use when 新規コレクション制作を立ち上げるとき（
 
 ## 前後工程
 
-- `前工程`: `/channel-new`, `/setup`, `/collection-ideate`
+- `前工程`: `/setup --channel`, `/setup`, `/collection-ideate`
 - `後工程`: `/wf-auto`, `/wf-next`, `/suno-helper`
 
 ## Overview
@@ -24,7 +24,8 @@ minimal mode では企画候補生成前にテーマ / ジャンル / 雰囲気�
 
 以下を確認し、満たさなければ前工程を案内して停止する（機械的な停止条件は直下の Hard Gates が正）:
 
-- `config/channel/` が存在し `load_config()` でロード可能であること。存在しない場合は `/channel-new`、ロード失敗の場合は `/channel-new`（既存チャンネル取り込みモード）を案内して停止する
+- `config/channel/` が存在しない場合は `/setup --channel` を案内して停止する
+- `config/channel/` が存在しても `load_config()` が失敗する場合は `/channel-new`（既存チャンネル取り込みモード）を案内して停止する
 - `/setup` が完了していること（ffmpeg / uv / automation パッケージ / OAuth）。未完なら `/setup` を案内して停止する
 - Suno チャンネルで `/suno` を呼ぶ場合は、collection の確定企画と書き込み先 `20-documentation/suno-patterns.yaml` を明示する。channel config と `suno_preset` は fallback / 推奨入力として扱う（詳細は Hard Gates 3）
 
@@ -32,7 +33,10 @@ minimal mode では企画候補生成前にテーマ / ジャンル / 雰囲気�
 
 `/wf-new` は以下の前提を最初に確認し、1 つでも満たさなければ停止する。満たすまで後続 Step へ進まない。
 
-1. **channel config gate**: `config/channel/` が存在し、`load_config()` でロードできること。存在しない場合は `/channel-new`、ロード失敗の場合は `/channel-new`（既存チャンネル取り込みモード）を案内して停止する。この状態では `/collection-ideate`、`/thumbnail`、`/suno`、`/lyria` を呼ばない。
+1. **channel config gate**: `config/channel/` が存在し、`load_config()` でロードできること。
+   - 存在しない場合は `/setup --channel` を案内して停止する。
+   - `load_config()` が失敗する場合は `/channel-new`（既存チャンネル取り込みモード）を案内して停止する。
+   この状態では `/collection-ideate`、`/thumbnail`、`/suno`、`/lyria` を呼ばない。
 2. **前提未達時の state 変更禁止**: channel config gate で停止した場合、`uv run yt-init-collection` を実行しない。`collections/planning/`、`workflow-state.json`、`assets.*` を新規作成・更新しない。
 3. **Suno collection Style boundary**: Suno チャンネルで `/suno` を呼ぶときは、対象 collection の絶対 path、確定企画、theme、書き込み先 `20-documentation/suno-patterns.yaml` を subagent へ渡す。collection 固有の `genre_line` / `exclude_styles` / `style_variants` / `vocal_gender` は同ファイルの root に書き、共有 `config/skills/suno.yaml` を書き換えない。root に無い値だけが channel config へ fallback する。`suno_preset` は推奨入力であり、不在だけを理由に停止しない。利用可能なら TTP 根拠として渡し、無ければ `/suno` が確定企画と制約から collection-local Style を設計する。`assets.music_prompts = true` は subagent 報告だけで更新せず、成果物、`yt-suno-verify`、semantic review をメインが検証した後に限る。
 4. **analytics input gate**: 入力モード判定、同日付 JSON、validator、stale 判定、自動更新、再検証は `/collection-ideate` の `references/freshness-rules.md::stale report の自動更新` に一元化する。`/wf-new` は判定ロジックを再定義せず、stale 判定や AskUserQuestion を先行実行しない。subagent が stale を検出した場合は、同 SSOT が返す自動更新シーケンスを同じ subagent 作業内で順次実行し、全呼び出し成功後に入力モード判定を先頭からやり直す。`yt-doctor` の `analytics_report` は予備確認にだけ使い、analytics mode の最終判定には使わない。

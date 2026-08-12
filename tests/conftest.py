@@ -74,6 +74,7 @@ REPO_CONTRACT_MODULES = frozenset(
         "test_tests_layout_contract.py",
         "test_upgrade_guide_command_guard.py",
         "test_video_description_skill_contract.py",
+        "test_workflow_upload_setup_redirect_contract.py",
         "test_wf_new_analytics_fallback_skill_contract.py",
     }
 )

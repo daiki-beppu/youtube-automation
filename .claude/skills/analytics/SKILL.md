@@ -24,7 +24,10 @@ description: "Use when YouTube Analytics の収集・分析・レポート表示
 
 ## 共通前提
 
-`config/channel/` が存在し、`load_config()` でロード可能であること。満たさない場合は `/channel-new` を案内して停止する。
+`config/channel/` が存在し、`load_config()` でロード可能であること。満たさない場合はここで停止する。
+
+- **新規チャンネル（config 未作成）** → `/setup --channel` を案内して停止する
+- **既存チャンネル（load_config() 失敗）** → `/channel-new`（既存チャンネル取り込みモード）を案内して停止する
 
 ## 設定読み込みゲート
 

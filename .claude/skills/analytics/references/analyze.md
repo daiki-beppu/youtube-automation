@@ -29,7 +29,7 @@ CLI 未実行、終了コード非 0、JSON のパース失敗、4 CLI のいず
 `config/channel/` が存在すること（`load_config()` でロード可能）。
 
 存在しない場合はここで停止し、ユーザーに確認:
-- **新規チャンネル** → `/channel-new` を案内
+- **新規チャンネル** → `/setup --channel` を案内
 - **既存チャンネル**（YouTube で既に運営中）→ `/channel-new`（既存チャンネル取り込みモード）を案内
 
 `config/channel/` が `load_config()` でロード可能になるまで後続手順へ進まない。
