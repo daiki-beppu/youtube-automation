@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from youtube_automation.core.adapters.errors import YouTubeAPIError
+from youtube_automation.core.errors import YouTubeAPIError
 from youtube_automation.domains.analytics.collection.strategic_analytics import StrategicAnalyticsMixin
 from youtube_automation.domains.analytics.mixins.audience_analytics import AudienceAnalyticsMixin
 from youtube_automation.domains.analytics.mixins.channel_analytics import ChannelAnalyticsMixin

@@ -8,7 +8,7 @@ from __future__ import annotations
 import logging
 from typing import Dict
 
-from youtube_automation.core.adapters.errors import YouTubeAPIError
+from youtube_automation.core.errors import YouTubeAPIError
 
 logger = logging.getLogger(__name__)
 

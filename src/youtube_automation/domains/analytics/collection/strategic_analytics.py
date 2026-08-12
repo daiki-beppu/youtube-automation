@@ -10,8 +10,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Dict, List
 
-from youtube_automation.core.adapters.errors import YouTubeAPIError
 from youtube_automation.core.adapters.observability import section
+from youtube_automation.core.errors import YouTubeAPIError
 
 if TYPE_CHECKING:
     from youtube_automation.domains.analytics.ports import AnalyticsBase  # noqa: F401
