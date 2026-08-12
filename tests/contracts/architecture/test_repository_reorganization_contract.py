@@ -197,20 +197,345 @@ LAYER_FORBIDDEN_IMPORTS = {
     "commands": ("utils",),
 }
 
+DOMAIN_ALLOWED_INFRASTRUCTURE_IMPORTS = frozenset(
+    {
+        "youtube_automation.infrastructure.browser",
+        "youtube_automation.infrastructure.filesystem",
+        "youtube_automation.infrastructure.google.upload",
+        "youtube_automation.infrastructure.google.youtube",
+        "youtube_automation.infrastructure.process",
+        "youtube_automation.infrastructure.quota",
+    }
+)
+
+DOMAIN_FORBIDDEN_SDK_AUTH_IMPORTS = (
+    "google.auth",
+    "google.genai",
+    "google.oauth2",
+    "google_auth_httplib2",
+    "google_auth_oauthlib",
+    "googleapiclient",
+    "httplib2",
+    "oauthlib",
+    "openai",
+)
+
+DOMAIN_FORBIDDEN_EXTERNAL_IO_IMPORTS = (
+    "aiohttp",
+    "http.client",
+    "httpx",
+    "requests",
+    "socket",
+    "subprocess",
+    "urllib.error",
+    "urllib.request",
+)
+
+DOMAIN_FORBIDDEN_EXTERNAL_IMPORTS = DOMAIN_FORBIDDEN_SDK_AUTH_IMPORTS + DOMAIN_FORBIDDEN_EXTERNAL_IO_IMPORTS
+
+DOMAIN_EXISTING_EXTERNAL_IMPORT_EXCEPTIONS = frozenset(
+    {
+        ("domains/metadata/service.py", "subprocess"),
+    }
+)
+
 
 def _receipt() -> dict[str, object]:
     return json.loads(RECEIPT.read_text(encoding="utf-8"))
 
 
-def _imports(path: Path) -> set[str]:
+def _module_source_path(module_name: str, source_root: Path) -> Path | None:
+    package_prefix = "youtube_automation"
+    if module_name == package_prefix:
+        relative = Path()
+    elif module_name.startswith(f"{package_prefix}."):
+        relative = Path(*module_name.removeprefix(f"{package_prefix}.").split("."))
+    else:
+        return None
+    if relative.parts:
+        module_path = source_root / relative.with_suffix(".py")
+        if module_path.is_file():
+            return module_path
+    package_path = source_root / relative / "__init__.py"
+    return package_path if package_path.is_file() else None
+
+
+def _module_binding_names(module_name: str, source_root: Path) -> set[str]:
+    module_path = _module_source_path(module_name, source_root)
+    if module_path is None:
+        return set()
+    tree = ast.parse(module_path.read_text(encoding="utf-8"))
+    bindings: set[str] = set()
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            bindings.add(node.name)
+        elif isinstance(node, (ast.Assign, ast.AnnAssign)):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            bindings.update(target.id for target in targets if isinstance(target, ast.Name))
+        elif isinstance(node, ast.Import):
+            bindings.update(alias.asname or alias.name.partition(".")[0] for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            bindings.update(alias.asname or alias.name for alias in node.names if alias.name != "*")
+    return bindings
+
+
+def _module_parts_for_path(path: Path, source_root: Path) -> tuple[str, ...] | None:
+    try:
+        relative = path.relative_to(source_root).with_suffix("")
+    except ValueError:
+        return None
+    parts = relative.parts
+    if parts and parts[-1] == "__init__":
+        parts = parts[:-1]
+    return ("youtube_automation", *parts)
+
+
+def _resolve_from_module(node: ast.ImportFrom, path: Path, source_root: Path) -> str | None:
+    if node.level == 0:
+        return node.module
+    module_parts = _module_parts_for_path(path, source_root)
+    if module_parts is None:
+        return node.module
+    package_parts = module_parts if path.name == "__init__.py" else module_parts[:-1]
+    retained_count = len(package_parts) - node.level + 1
+    if retained_count < 0:
+        return node.module
+    resolved = [*package_parts[:retained_count]]
+    if node.module:
+        resolved.extend(node.module.split("."))
+    return ".".join(resolved) or None
+
+
+def _imports(path: Path, source_root: Path = SRC) -> set[str]:
     tree = ast.parse(path.read_text(encoding="utf-8"))
     imports: set[str] = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             imports.update(alias.name for alias in node.names)
-        elif isinstance(node, ast.ImportFrom) and node.module:
-            imports.add(node.module)
+        elif isinstance(node, ast.ImportFrom):
+            module_name = _resolve_from_module(node, path, source_root)
+            if module_name is None:
+                continue
+            bindings = _module_binding_names(module_name, source_root)
+            for alias in node.names:
+                if alias.name == "*":
+                    imports.add(module_name)
+                    continue
+                candidate = f"{module_name}.{alias.name}"
+                if _module_source_path(candidate, source_root) is not None or alias.name not in bindings:
+                    imports.add(candidate)
+                else:
+                    imports.add(module_name)
     return imports
+
+
+def _is_forbidden_layer_import(layer: str, imported: str) -> bool:
+    if layer == "domains" and any(
+        imported == namespace or imported.startswith(f"{namespace}.") for namespace in DOMAIN_FORBIDDEN_EXTERNAL_IMPORTS
+    ):
+        return True
+    for forbidden_layer in LAYER_FORBIDDEN_IMPORTS[layer]:
+        forbidden_namespace = f"youtube_automation.{forbidden_layer}"
+        if imported != forbidden_namespace and not imported.startswith(f"{forbidden_namespace}."):
+            continue
+        if layer == "domains" and imported in DOMAIN_ALLOWED_INFRASTRUCTURE_IMPORTS:
+            return False
+        return True
+    return False
+
+
+def _layer_import_offenders(layer: str, source_root: Path = SRC) -> list[str]:
+    offenders: list[str] = []
+    for path in (source_root / layer).rglob("*.py"):
+        if path.is_relative_to(source_root / "infrastructure" / "legacy_utils"):
+            continue
+        relative_path = path.relative_to(source_root).as_posix()
+        display_path: str | Path = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path
+        for imported in _imports(path, source_root):
+            if (relative_path, imported) in DOMAIN_EXISTING_EXTERNAL_IMPORT_EXCEPTIONS:
+                continue
+            if _is_forbidden_layer_import(layer, imported):
+                offenders.append(f"{display_path} -> {imported}")
+    return offenders
+
+
+@pytest.mark.parametrize("allowed_import", sorted(DOMAIN_ALLOWED_INFRASTRUCTURE_IMPORTS))
+def test_domain_layer_allows_each_authoritative_provider_neutral_import(allowed_import: str) -> None:
+    # Given: provider-neutral infrastructure owner explicitly approved for domains
+    # When: the domain layer evaluates the direct import edge
+    # Then: the exact authoritative module is allowed
+    assert not _is_forbidden_layer_import("domains", allowed_import)
+
+
+@pytest.mark.parametrize(
+    "forbidden_import",
+    [
+        "google.auth",
+        "google.genai",
+        "google_auth_httplib2",
+        "google_auth_oauthlib",
+        "googleapiclient",
+        "openai",
+        "subprocess",
+        "urllib.request",
+        "youtube_automation.infrastructure",
+        "youtube_automation.infrastructure.auth",
+        "youtube_automation.infrastructure.browser.extension",
+        "youtube_automation.infrastructure.browser_evasion",
+        "youtube_automation.infrastructure.filesystem.path",
+        "youtube_automation.infrastructure.filesystem_backup",
+        "youtube_automation.infrastructure.google",
+        "youtube_automation.infrastructure.google.upload.client",
+        "youtube_automation.infrastructure.google.upload_backup",
+        "youtube_automation.infrastructure.google.youtube.client",
+        "youtube_automation.infrastructure.google.youtube_backup",
+        "youtube_automation.infrastructure.media",
+        "youtube_automation.infrastructure.network",
+        "youtube_automation.infrastructure.process.runner",
+        "youtube_automation.infrastructure.process_backup",
+        "youtube_automation.infrastructure.quota.internal",
+        "youtube_automation.infrastructure.quota_backup",
+        "youtube_automation.infrastructure.subprocess",
+    ],
+)
+def test_domain_layer_rejects_unlisted_external_and_non_exact_imports(forbidden_import: str) -> None:
+    # Given: an unlisted infrastructure owner or a prefix/substring lookalike
+    # When: the domain layer evaluates the direct import edge
+    # Then: broad and near-match infrastructure imports remain forbidden
+    assert _is_forbidden_layer_import("domains", forbidden_import)
+
+
+@pytest.mark.parametrize(
+    "unrelated_import",
+    [
+        "google",
+        "google.cloud",
+        "google_auth_oauthlib_backup",
+        "googleapiclient_backup",
+        "openai_tools",
+    ],
+)
+def test_domain_layer_external_inventory_does_not_use_broad_or_substring_matches(unrelated_import: str) -> None:
+    # Given: a root namespace or substring lookalike outside the explicit SDK/auth inventory
+    # When: the domain layer evaluates the import edge
+    # Then: the inventory does not turn into a broad google or substring rejection
+    assert not _is_forbidden_layer_import("domains", unrelated_import)
+
+
+def test_domain_layer_rejects_broad_parent_from_import_mutation(tmp_path: Path) -> None:
+    # Given: a domain imports the broad infrastructure package through an alias
+    source_root = tmp_path / "youtube_automation"
+    domain = source_root / "domains" / "probe.py"
+    domain.parent.mkdir(parents=True)
+    domain.write_text("from youtube_automation import infrastructure\n", encoding="utf-8")
+
+    # When: the production layer scanner resolves the effective import target
+    offenders = _layer_import_offenders("domains", source_root)
+
+    # Then: the alias resolves to the forbidden infrastructure package
+    assert offenders == [f"{domain} -> youtube_automation.infrastructure"]
+
+
+def test_domain_layer_rejects_relative_unlisted_from_import_mutation(tmp_path: Path) -> None:
+    # Given: a domain reaches an unlisted infrastructure package through a relative import
+    source_root = tmp_path / "youtube_automation"
+    domain = source_root / "domains" / "probe.py"
+    domain.parent.mkdir(parents=True)
+    domain.write_text("from ..infrastructure import auth\n", encoding="utf-8")
+
+    # When: the production layer scanner resolves the relative level and alias
+    offenders = _layer_import_offenders("domains", source_root)
+
+    # Then: the effective infrastructure owner remains forbidden
+    assert offenders == [f"{domain} -> youtube_automation.infrastructure.auth"]
+
+
+def test_domain_layer_allows_actual_symbol_from_exact_module_mutation(tmp_path: Path) -> None:
+    # Given: an exact allowed module defines the symbol imported by a domain
+    source_root = tmp_path / "youtube_automation"
+    filesystem = source_root / "infrastructure" / "filesystem" / "__init__.py"
+    filesystem.parent.mkdir(parents=True)
+    filesystem.write_text("def path_exists(path):\n    return True\n", encoding="utf-8")
+    domain = source_root / "domains" / "probe.py"
+    domain.parent.mkdir(parents=True)
+    domain.write_text(
+        "from youtube_automation.infrastructure.filesystem import path_exists\n",
+        encoding="utf-8",
+    )
+
+    # When: the production layer scanner distinguishes the module from its symbol
+    offenders = _layer_import_offenders("domains", source_root)
+
+    # Then: importing an actual symbol from the exact authoritative module is allowed
+    assert offenders == []
+
+
+def test_domain_layer_rejects_child_module_from_allowed_package_mutation(tmp_path: Path) -> None:
+    # Given: a domain imports a child module from an otherwise allowed package
+    source_root = tmp_path / "youtube_automation"
+    filesystem = source_root / "infrastructure" / "filesystem" / "__init__.py"
+    filesystem.parent.mkdir(parents=True)
+    filesystem.write_text("", encoding="utf-8")
+    (filesystem.parent / "path.py").write_text("", encoding="utf-8")
+    domain = source_root / "domains" / "probe.py"
+    domain.parent.mkdir(parents=True)
+    domain.write_text(
+        "from youtube_automation.infrastructure.filesystem import path\n",
+        encoding="utf-8",
+    )
+
+    # When: the production layer scanner resolves the alias as a child module
+    offenders = _layer_import_offenders("domains", source_root)
+
+    # Then: an allowed package cannot widen the exact allowlist to child modules
+    assert offenders == [f"{domain} -> youtube_automation.infrastructure.filesystem.path"]
+
+
+@pytest.mark.parametrize(
+    ("domain_path", "source", "forbidden_import"),
+    [
+        ("collections/genai_import_probe.py", "import google.genai\n", "google.genai"),
+        ("collections/genai_from_probe.py", "from google import genai\n", "google.genai"),
+        ("collections/openai_import_probe.py", "import openai\n", "openai"),
+        ("collections/openai_from_probe.py", "from openai import OpenAI\n", "openai.OpenAI"),
+        (
+            "metadata/oauth_import_probe.py",
+            "import google_auth_oauthlib\n",
+            "google_auth_oauthlib",
+        ),
+        (
+            "metadata/oauth_from_probe.py",
+            "from google_auth_oauthlib.flow import InstalledAppFlow\n",
+            "google_auth_oauthlib.flow.InstalledAppFlow",
+        ),
+        ("collections/sdk_probe.py", "import googleapiclient\n", "googleapiclient"),
+        (
+            "collections/sdk_from_probe.py",
+            "from googleapiclient.discovery import build\n",
+            "googleapiclient.discovery.build",
+        ),
+        ("collections/auth_probe.py", "import google.auth\n", "google.auth"),
+        ("metadata/network_probe.py", "import urllib.request\n", "urllib.request"),
+        ("metadata/process_probe.py", "import subprocess\n", "subprocess"),
+    ],
+)
+def test_domain_layer_rejects_external_import_mutations_outside_uploads(
+    tmp_path: Path,
+    domain_path: str,
+    source: str,
+    forbidden_import: str,
+) -> None:
+    # Given: a non-uploads domain directly imports an external I/O or auth dependency
+    source_root = tmp_path / "youtube_automation"
+    domain = source_root / "domains" / domain_path
+    domain.parent.mkdir(parents=True)
+    domain.write_text(source, encoding="utf-8")
+
+    # When: the central production layer scanner evaluates every domain package
+    offenders = _layer_import_offenders("domains", source_root)
+
+    # Then: specialized uploads contracts are not required to reject the edge
+    assert offenders == [f"{domain} -> {forbidden_import}"]
 
 
 def test_reorganization_receipt_has_one_canonical_owner_per_moved_source() -> None:
@@ -312,17 +637,8 @@ def test_streaming_healthcheck_describes_the_canonical_daily_archive_owner() -> 
 
 def test_canonical_layers_do_not_import_lower_boundary_owners() -> None:
     # Given: layer ごとの依存方向が再配置後の canonical source で定義される
-    offenders: list[str] = []
-
     # When: source の import edge を layer 単位で収集する
-    for layer, forbidden_layers in LAYER_FORBIDDEN_IMPORTS.items():
-        for path in (SRC / layer).rglob("*.py"):
-            if "/infrastructure/legacy_utils/" in str(path):
-                continue
-            for imported in _imports(path):
-                for forbidden in forbidden_layers:
-                    if imported.startswith(f"youtube_automation.{forbidden}"):
-                        offenders.append(f"{path.relative_to(ROOT)} -> {imported}")
+    offenders = [offender for layer in LAYER_FORBIDDEN_IMPORTS for offender in _layer_import_offenders(layer)]
 
     # Then: CLI、application、domain、infrastructure の責務が逆流しない
     assert offenders == []
