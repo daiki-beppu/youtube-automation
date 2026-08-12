@@ -4,39 +4,38 @@ import ts from "typescript"
 import overviewGolden from "@/lib/__fixtures__/overview.golden.json"
 import {
   DASHBOARD_SCHEMA_VERSION,
-  type ChannelOverview,
   type OverviewResponse,
-  type Summary,
 } from "@/lib/dashboard-types"
 
-type SameKeys<Left, Right> = [
-  Exclude<keyof Left, keyof Right>,
-  Exclude<keyof Right, keyof Left>,
-] extends [never, never]
-  ? true
+type KeysOfUnion<Value> = Value extends Value ? keyof Value : never
+type PresentValue<Value> = Exclude<Value, null | undefined>
+type NullishValue<Value> = Extract<Value, null | undefined>
+type NormalizeObjectUnion<Value> = [PresentValue<Value>] extends [never]
+  ? NullishValue<Value>
+  : [PresentValue<Value>] extends [object]
+    ? MergeObjectUnion<PresentValue<Value>> | NullishValue<Value>
+    : Value
+type FieldOfUnion<Value, Key extends PropertyKey> =
+  Value extends Record<Key, infer Field> ? Field : never
+type MergeObjectUnion<Value> = {
+  [Key in KeysOfUnion<Value>]: NormalizeObjectUnion<FieldOfUnion<Value, Key>>
+}
+type BidirectionallyExact<Left, Right> = [Left] extends [Right]
+  ? [Right] extends [Left]
+    ? true
+    : false
   : false
 
 type GoldenChannel = (typeof overviewGolden.channels)[number]
+type GoldenChannelShape = MergeObjectUnion<GoldenChannel>
+type GoldenOverviewShape = Omit<typeof overviewGolden, "channels"> & {
+  channels: GoldenChannelShape[]
+}
 
 const overviewFixture: OverviewResponse = overviewGolden
-const overviewKeysMatch: SameKeys<typeof overviewGolden, OverviewResponse> =
-  true
-const channelKeysMatch: SameKeys<GoldenChannel, ChannelOverview> = true
-const periodKeysMatch: SameKeys<
-  GoldenChannel["period"],
-  ChannelOverview["period"]
-> = true
-const summaryKeysMatch: SameKeys<
-  NonNullable<GoldenChannel["summary"]>,
-  Summary
-> = true
-const errorKeysMatch: SameKeys<
-  NonNullable<GoldenChannel["error"]>,
-  NonNullable<ChannelOverview["error"]>
-> = true
-const refreshErrorKeysMatch: SameKeys<
-  NonNullable<GoldenChannel["refresh_error"]>,
-  NonNullable<ChannelOverview["refresh_error"]>
+const overviewTypesMatch: BidirectionallyExact<
+  GoldenOverviewShape,
+  OverviewResponse
 > = true
 
 const apiResponseTypeNames = [
@@ -136,13 +135,6 @@ describe("dashboard API response type ownership", () => {
 describe("Python dashboard overview schema contract", () => {
   it("accepts the generated Python response as the exact TypeScript response shape", () => {
     expect(overviewFixture.schema_version).toBe(DASHBOARD_SCHEMA_VERSION)
-    expect([
-      overviewKeysMatch,
-      channelKeysMatch,
-      periodKeysMatch,
-      summaryKeysMatch,
-      errorKeysMatch,
-      refreshErrorKeysMatch,
-    ]).toEqual([true, true, true, true, true, true])
+    expect(overviewTypesMatch).toBe(true)
   })
 })
