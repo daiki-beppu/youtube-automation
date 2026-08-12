@@ -1200,7 +1200,6 @@
         "Updated consumer: src/youtube_automation/commands/media/stock_archive.py",
         "Updated consumer: src/youtube_automation/commands/media/generate_master.py",
         "Updated consumer: src/youtube_automation/commands/media/generate_short_loop.py",
-        "Updated consumer: src/youtube_automation/core/adapters/errors.py",
         "Updated consumer: tests/domains/analytics/mixins/test_playlist_analytics.py",
         "Updated consumer: tests/configuration/test_channel_target.py",
         "Updated consumer: tests/infrastructure/youtube/test_reporting_api.py",
