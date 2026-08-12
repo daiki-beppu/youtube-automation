@@ -40,7 +40,7 @@ description: "Use when コレクションの YouTube サムネイル（thumbnail
 `config/skills/thumbnail.yaml` はオプション。`yt-skills sync` で配布される `config.default.yaml` がそのまま使われるため、default 動作で問題なければ作成不要。カスタマイズしたい場合のみ `config.default.yaml` をコピーして `config/skills/thumbnail.yaml` に置き、必要な値だけ上書きする（deep-merge される）。
 
 `config/channel/` が存在しない場合、ユーザーに確認:
-- **新規チャンネル** → `/channel-new` を案内
+- **新規チャンネル** → `/setup --channel` を案内
 - **既存チャンネル**（YouTube で既に運営中）→ `/channel-new`（既存チャンネル取り込みモード）を案内
 
 ## 完了条件
