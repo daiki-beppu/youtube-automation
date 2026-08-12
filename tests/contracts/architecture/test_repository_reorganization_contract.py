@@ -208,21 +208,30 @@ DOMAIN_ALLOWED_INFRASTRUCTURE_IMPORTS = frozenset(
     }
 )
 
-DOMAIN_FORBIDDEN_EXTERNAL_IMPORTS = (
-    "aiohttp",
+DOMAIN_FORBIDDEN_SDK_AUTH_IMPORTS = (
     "google.auth",
+    "google.genai",
     "google.oauth2",
+    "google_auth_httplib2",
+    "google_auth_oauthlib",
     "googleapiclient",
     "httplib2",
+    "oauthlib",
+    "openai",
+)
+
+DOMAIN_FORBIDDEN_EXTERNAL_IO_IMPORTS = (
+    "aiohttp",
     "http.client",
     "httpx",
-    "oauthlib",
     "requests",
     "socket",
     "subprocess",
     "urllib.error",
     "urllib.request",
 )
+
+DOMAIN_FORBIDDEN_EXTERNAL_IMPORTS = DOMAIN_FORBIDDEN_SDK_AUTH_IMPORTS + DOMAIN_FORBIDDEN_EXTERNAL_IO_IMPORTS
 
 DOMAIN_EXISTING_EXTERNAL_IMPORT_EXCEPTIONS = frozenset(
     {
@@ -362,7 +371,11 @@ def test_domain_layer_allows_each_authoritative_provider_neutral_import(allowed_
     "forbidden_import",
     [
         "google.auth",
+        "google.genai",
+        "google_auth_httplib2",
+        "google_auth_oauthlib",
         "googleapiclient",
+        "openai",
         "subprocess",
         "urllib.request",
         "youtube_automation.infrastructure",
@@ -390,6 +403,23 @@ def test_domain_layer_rejects_unlisted_external_and_non_exact_imports(forbidden_
     # When: the domain layer evaluates the direct import edge
     # Then: broad and near-match infrastructure imports remain forbidden
     assert _is_forbidden_layer_import("domains", forbidden_import)
+
+
+@pytest.mark.parametrize(
+    "unrelated_import",
+    [
+        "google",
+        "google.cloud",
+        "google_auth_oauthlib_backup",
+        "googleapiclient_backup",
+        "openai_tools",
+    ],
+)
+def test_domain_layer_external_inventory_does_not_use_broad_or_substring_matches(unrelated_import: str) -> None:
+    # Given: a root namespace or substring lookalike outside the explicit SDK/auth inventory
+    # When: the domain layer evaluates the import edge
+    # Then: the inventory does not turn into a broad google or substring rejection
+    assert not _is_forbidden_layer_import("domains", unrelated_import)
 
 
 def test_domain_layer_rejects_broad_parent_from_import_mutation(tmp_path: Path) -> None:
@@ -464,7 +494,26 @@ def test_domain_layer_rejects_child_module_from_allowed_package_mutation(tmp_pat
 @pytest.mark.parametrize(
     ("domain_path", "source", "forbidden_import"),
     [
+        ("collections/genai_import_probe.py", "import google.genai\n", "google.genai"),
+        ("collections/genai_from_probe.py", "from google import genai\n", "google.genai"),
+        ("collections/openai_import_probe.py", "import openai\n", "openai"),
+        ("collections/openai_from_probe.py", "from openai import OpenAI\n", "openai.OpenAI"),
+        (
+            "metadata/oauth_import_probe.py",
+            "import google_auth_oauthlib\n",
+            "google_auth_oauthlib",
+        ),
+        (
+            "metadata/oauth_from_probe.py",
+            "from google_auth_oauthlib.flow import InstalledAppFlow\n",
+            "google_auth_oauthlib.flow.InstalledAppFlow",
+        ),
         ("collections/sdk_probe.py", "import googleapiclient\n", "googleapiclient"),
+        (
+            "collections/sdk_from_probe.py",
+            "from googleapiclient.discovery import build\n",
+            "googleapiclient.discovery.build",
+        ),
         ("collections/auth_probe.py", "import google.auth\n", "google.auth"),
         ("metadata/network_probe.py", "import urllib.request\n", "urllib.request"),
         ("metadata/process_probe.py", "import subprocess\n", "subprocess"),
