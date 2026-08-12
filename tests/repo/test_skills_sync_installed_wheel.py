@@ -185,6 +185,14 @@ assert "wheel-identity-check" not in legacy._cache
     distributed_references = downstream / ".claude" / "skills" / "setup" / "references"
     channel_mode = distributed_references / "channel-mode.md"
     assert channel_mode.is_file()
+    setup_manifest = distributed_references / "setup-chain-manifest.json"
+    setup_state = distributed_references / "setup-chain-state.py"
+    assert setup_manifest.is_file()
+    assert setup_state.is_file()
+    assert os.access(setup_state, os.X_OK)
+    state_help = _run(python, setup_state, "--help", cwd=downstream, env=clean_env)
+    assert state_help.returncode == 0, state_help.stderr
+    assert "--step {tool,channel}" in state_help.stdout
     opening_assets = {
         "new-channel-bootstrap.md",
         "ttp-seed-and-duration.md",
@@ -288,6 +296,17 @@ def test_candidate_sdist_contains_setup_channel_owner_once(tmp_path: Path) -> No
         assert channel_new_matches == []
     assert any(str(path).endswith("/.claude/skills/setup/references/channel-mode.md") for path in names)
     assert any(str(path).endswith("/.claude/skills/setup/references/setup-mode-guard.py") for path in names)
+    manifest_members = [
+        member
+        for member in members
+        if member.name.endswith("/.claude/skills/setup/references/setup-chain-manifest.json")
+    ]
+    state_members = [
+        member for member in members if member.name.endswith("/.claude/skills/setup/references/setup-chain-state.py")
+    ]
+    assert len(manifest_members) == 1
+    assert len(state_members) == 1
+    assert state_members[0].mode & 0o111
     for relative in _CHANNEL_NEW_SHARED_ASSETS:
         matches = [
             member for member in members if member.name.endswith(f"/.claude/skills/channel-new/references/{relative}")

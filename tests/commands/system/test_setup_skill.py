@@ -88,12 +88,23 @@ def test_setup_skill_declares_exclusive_tool_channel_modes_and_default_chain() -
     assert "mode flag（`--tool` / `--channel`）の出現数" in text
     assert "2 個以上なら、同じ flag の重複を含めて排他違反として停止" in text
     assert "1 個なら対応する reference を読み、その一段だけを実行する" in text
-    assert "0 個なら chain manifest に従い tool を状態判定付きで進める" in text
+    assert "0 個なら chain manifest に従い `tool` → `channel` を状態判定付きで進める" in text
     assert "| `--tool` | `references/tool.md` |" in text
     assert "| `--channel` | `references/channel-mode.md` |" in text
 
 
-@pytest.mark.parametrize("arguments", [("--tool", "--channel"), ("--channel", "--channel")])
+def test_setup_explicit_modes_never_enter_the_default_chain() -> None:
+    text = _SETUP_SKILL.read_text(encoding="utf-8")
+
+    assert "明示 `--tool` / `--channel` はこの一括実行へ入らない" in text
+    assert "もう一段を暗黙実行しない" in text
+    assert "各 reference 内の不可逆操作・外部反映の承認 gate" in text
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [("--tool", "--channel"), ("--tool", "--tool"), ("--channel", "--channel")],
+)
 def test_setup_mode_guard_rejects_multiple_modes_without_artifact_mutation(
     tmp_path: Path,
     arguments: tuple[str, ...],
@@ -154,70 +165,100 @@ def test_setup_tool_is_the_canonical_gcp_oauth_adc_bootstrap_entrypoint() -> Non
         assert contract in tool
 
 
-def test_setup_chain_manifest_declares_exactly_one_tool_step() -> None:
+def test_setup_chain_manifest_declares_tool_then_channel_with_machine_detectable_artifacts() -> None:
     manifest = json.loads(_SETUP_CHAIN_MANIFEST.read_text(encoding="utf-8"))
 
-    assert manifest == {
-        "chainId": "setup",
-        "steps": [
-            {
-                "id": "tool",
-                "skill": "setup",
-                "prerequisiteArtifacts": [],
-                "outputArtifacts": [],
-                "approvalGate": {
-                    "skip": True,
-                    "configPath": "workflow.setup.skip_approvals.tool",
-                },
-                "idempotency": {"script": "references/setup-chain-state.py"},
-            }
-        ],
-    }
+    assert manifest["chainId"] == "setup"
+    assert [step["id"] for step in manifest["steps"]] == ["tool", "channel"]
+    tool, channel = manifest["steps"]
+    assert tool["prerequisiteArtifacts"] == []
+    assert channel["prerequisiteArtifacts"] == tool["outputArtifacts"]
+    assert {
+        "doctor:automation_package",
+        "doctor:skills_synced",
+        "doctor:gcp_project",
+        "doctor:adc",
+        "auth/client_secrets.json",
+        "auth/token.json",
+    }.issubset(tool["outputArtifacts"])
+    assert {
+        "config/channel/meta.json",
+        "config/channel/analytics.json",
+        "doctor:channel_config",
+        "docs/channel/ttp-seed-confirmation.md",
+        "docs/channel/competitor-branding-snapshot.json",
+        "docs/channel/personas/persona-definition.md",
+        "branding/icon.*",
+        "branding/banner.*",
+        "doctor:ttp_wf_new_readiness",
+        "git:clean",
+    }.issubset(channel["outputArtifacts"])
+    assert all(step["approvalGate"]["skip"] is True for step in manifest["steps"])
+    assert {step["idempotency"]["script"] for step in manifest["steps"]} == {"references/setup-chain-state.py"}
 
 
-def test_setup_chain_state_runs_unresolved_tool_and_skips_ready_tool() -> None:
+def test_setup_chain_state_runs_unresolved_tool_and_skips_ready_tool(tmp_path: Path) -> None:
     state = _load_setup_chain_state()
-    unresolved = [doctor.CheckResult(id="uv", status="fail", message="uv missing")]
-    ready = [doctor.CheckResult(id="uv", status="ok", message="uv ready")]
+    manifest = state.load_manifest(_SETUP_CHAIN_MANIFEST)
+    unresolved = [
+        doctor.CheckResult(id=check_id, status="fail" if check_id == "uv" else "ok", message=check_id)
+        for check_id in state.TOOL_CHECK_IDS
+    ]
+    ready = [doctor.CheckResult(id=check_id, status="ok", message=check_id) for check_id in state.TOOL_CHECK_IDS]
+    for artifact in manifest["steps"][0]["outputArtifacts"]:
+        if not artifact.startswith("doctor:"):
+            path = tmp_path / artifact
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("ready\n", encoding="utf-8")
 
-    run_code, run_result = state.evaluate(unresolved, "tool")
-    skip_code, skip_result = state.evaluate(ready, "tool")
+    run_code, run_result = state.evaluate(tmp_path, unresolved, manifest, "tool")
+    skip_code, skip_result = state.evaluate(tmp_path, ready, manifest, "tool")
 
     assert (run_code, run_result["decision"], run_result["reason"]) == (
         state.EXIT_RUN,
         "run",
-        "setup_checks_unresolved",
+        "tool_checks_unresolved",
     )
     assert run_result["checks"] == [{"id": "uv", "status": "fail"}]
     assert (skip_code, skip_result["decision"], skip_result["reason"]) == (
         state.EXIT_SKIP,
         "skip",
-        "setup_ready",
+        "tool_ready",
     )
     assert skip_result["checks"] == []
 
 
-def test_setup_chain_state_preserves_stale_analytics_completion_exception() -> None:
+def test_setup_chain_state_preserves_stale_analytics_completion_exception(tmp_path: Path) -> None:
     state = _load_setup_chain_state()
-    checks = [
-        doctor.CheckResult(id="uv", status="ok", message="uv ready"),
+    manifest = state.load_manifest(_SETUP_CHAIN_MANIFEST)
+    checks = [doctor.CheckResult(id=check_id, status="ok", message=check_id) for check_id in state.TOOL_CHECK_IDS]
+    checks.append(
         doctor.CheckResult(id="analytics_report", status="fail", message="stale report"),
-    ]
+    )
+    for artifact in manifest["steps"][0]["outputArtifacts"]:
+        if not artifact.startswith("doctor:"):
+            path = tmp_path / artifact
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("ready\n", encoding="utf-8")
 
-    code, result = state.evaluate(checks, "tool")
+    code, result = state.evaluate(tmp_path, checks, manifest, "tool")
 
     assert code == state.EXIT_SKIP
     assert result["decision"] == "skip"
-    assert result["reason"] == "setup_ready_analytics_report_stale"
+    assert result["reason"] == "tool_ready_analytics_report_stale"
     assert result["checks"] == [{"id": "analytics_report", "status": "fail"}]
 
 
-def test_setup_chain_state_is_idempotent_for_the_same_doctor_state() -> None:
+def test_setup_chain_state_is_idempotent_for_the_same_doctor_state(tmp_path: Path) -> None:
     state = _load_setup_chain_state()
-    checks = [doctor.CheckResult(id="oauth_token", status="warn", message="login required")]
+    manifest = state.load_manifest(_SETUP_CHAIN_MANIFEST)
+    checks = [
+        doctor.CheckResult(id=check_id, status="warn" if check_id == "oauth_token" else "ok", message=check_id)
+        for check_id in state.TOOL_CHECK_IDS
+    ]
 
-    first = state.evaluate(checks, "tool")
-    second = state.evaluate(checks, "tool")
+    first = state.evaluate(tmp_path, checks, manifest, "tool")
+    second = state.evaluate(tmp_path, checks, manifest, "tool")
 
     assert first == second
 
