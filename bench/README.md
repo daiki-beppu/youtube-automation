@@ -32,7 +32,7 @@ uv run python -m bench.main --only cost_tracker
 
 ## section logger との連携
 
-`YT_PROFILE=1` を併用すると各 bench 内の section 計測 (`utils/profile.py`) も stderr に流れる。詳細プロファイルを JSONL で取りたい場合:
+`YT_PROFILE=1` を併用すると各 bench 内の section 計測 (`infrastructure/observability/profile.py`) も stderr に流れる。詳細プロファイルを JSONL で取りたい場合:
 
 ```bash
 YT_PROFILE=1 YT_PROFILE_OUT=/tmp/profile.jsonl \

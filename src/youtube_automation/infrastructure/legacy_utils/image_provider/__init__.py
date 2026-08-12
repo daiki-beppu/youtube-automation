@@ -1,12 +1,26 @@
 """Compatibility facade for the downstream image-provider import path."""
 
-import importlib
 import sys
 
 from youtube_automation.infrastructure.media.image_provider import *  # noqa: F403
-from youtube_automation.infrastructure.media.image_provider import prompt_schema as prompt_schema
+from youtube_automation.infrastructure.media.image_provider import (
+    composition as composition,
+)
+from youtube_automation.infrastructure.media.image_provider import (
+    config as config,
+)
+from youtube_automation.infrastructure.media.image_provider import (
+    gemini as gemini,
+)
+from youtube_automation.infrastructure.media.image_provider import (
+    openai as openai,
+)
+from youtube_automation.infrastructure.media.image_provider import (
+    prompt_schema as prompt_schema,
+)
 
-for _name in ("config", "composition", "prompt_schema", "gemini", "openai"):
-    _module = importlib.import_module(f"youtube_automation.infrastructure.media.image_provider.{_name}")
-    sys.modules[f"{__name__}.{_name}"] = _module
-    setattr(sys.modules[__name__], _name, _module)
+sys.modules[f"{__name__}.composition"] = composition
+sys.modules[f"{__name__}.config"] = config
+sys.modules[f"{__name__}.gemini"] = gemini
+sys.modules[f"{__name__}.openai"] = openai
+sys.modules[f"{__name__}.prompt_schema"] = prompt_schema

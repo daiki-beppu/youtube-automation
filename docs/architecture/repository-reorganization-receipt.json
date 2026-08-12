@@ -657,7 +657,6 @@
         "Canonical owner: src/youtube_automation/infrastructure/observability/profile.py",
         "Moved-source audit: src/youtube_automation/utils/profile.py",
         "Updated consumer: src/youtube_automation/infrastructure/cost_tracker.py",
-        "Updated consumer: src/youtube_automation/infrastructure/legacy_utils/profile.py",
         "Updated consumer: src/youtube_automation/infrastructure/media/veo_generator.py",
         "Updated consumer: src/youtube_automation/commands/analytics/benchmark_collector.py",
         "Updated consumer: src/youtube_automation/commands/media/generate_image.py",
