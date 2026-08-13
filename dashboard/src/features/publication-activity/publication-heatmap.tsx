@@ -82,7 +82,8 @@ export function PublicationHeatmap({
   const [hoveredDate, setHoveredDate] = useState<string | null>(null)
   const activity = activityDays(days)
   const weekCount = activity.at(-1)!.week + 1
-  const weekColumns = `repeat(${weekCount}, 11px)`
+  const weekColumns = `repeat(${weekCount}, minmax(11px, 1fr))`
+  const minimumGridWidth = `calc(${weekCount * 11}px + ${(weekCount - 1) * 3}px)`
   const activeDate = hoveredDate ?? focusedDate
   const activeDay = activeDate
     ? activity.find((day) => day.key === activeDate)
@@ -153,8 +154,8 @@ export function PublicationHeatmap({
             display: "grid",
             gap: 3,
             gridTemplateColumns: weekColumns,
-            gridTemplateRows: "repeat(7, 11px)",
-            width: "max-content",
+            minWidth: minimumGridWidth,
+            width: "100%",
           }}
         >
           {WEEKDAYS.map((_, weekday) => (
@@ -192,10 +193,11 @@ export function PublicationHeatmap({
                       role="gridcell"
                       style={{
                         backgroundColor: INTENSITY_COLORS[level],
+                        aspectRatio: "1 / 1",
                         borderRadius: 2,
                         gridColumn: day.week + 1,
-                        height: 11,
-                        width: 11,
+                        minWidth: 11,
+                        width: "100%",
                       }}
                       tabIndex={0}
                     />
