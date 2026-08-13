@@ -160,7 +160,7 @@ class VideoAnalyticsMixin:
                 batch_ids = video_ids[i : i + 50]
 
                 response = self.youtube_service.list_videos(
-                    ",".join(batch_ids), part="snippet,statistics,contentDetails,topicDetails"
+                    ",".join(batch_ids), part="snippet,statistics,status,contentDetails,topicDetails"
                 )
 
                 for item in response.get("items", []):
@@ -169,6 +169,7 @@ class VideoAnalyticsMixin:
                     content_details = item.get("contentDetails", {})
                     topic_details = item.get("topicDetails", {})
                     statistics = item.get("statistics", {})
+                    status = item.get("status", {})
 
                     all_details[video_id] = {
                         "title": snippet["title"],
@@ -181,6 +182,8 @@ class VideoAnalyticsMixin:
                         "caption": content_details.get("caption", "false"),
                         "topic_categories": topic_details.get("topicCategories", []),
                         "view_count": statistics.get("viewCount"),
+                        "privacy_status": status.get("privacyStatus"),
+                        "publish_at": status.get("publishAt"),
                     }
 
             return all_details

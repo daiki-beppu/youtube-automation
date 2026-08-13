@@ -1575,7 +1575,7 @@ def test_insights_entry_schema_is_single_source_for_writers_and_readers() -> Non
     }
     properties = schema["properties"]
     assert properties["schema_version"]["const"] == 1
-    assert properties["source"]["enum"] == ["analysis", "postmortem"]
+    assert properties["source"]["enum"] == ["analysis", "postmortem", "experiment"]
     assert properties["lever"]["enum"] == ["thumbnail", "title", "topic", "bgm", "metadata", "other"]
     assert properties["status"]["enum"] == ["open", "adopted", "dismissed"]
 
@@ -1595,7 +1595,7 @@ def test_insights_entry_schema_is_single_source_for_writers_and_readers() -> Non
     for text in (analytics_analyze, flop_analysis, wf_new, collection_ideate):
         assert validator_command in text
 
-    # 書き手 2 本: 追記契約（source 値 / append-only / schema 再定義禁止）
+    # 文書型 writer 2 本: 追記契約（source 値 / append-only / schema 再定義禁止）
     for writer in (analytics_analyze, flop_analysis):
         assert "append-only" in writer
         assert "本文で必須キーや enum を再定義しない" in writer
@@ -1605,6 +1605,8 @@ def test_insights_entry_schema_is_single_source_for_writers_and_readers() -> Non
     assert 'source: "postmortem"' in flop_analysis
     assert "「結論 / 反証 / 学び」の 3 項目がすべて記入済み" in flop_analysis
     assert "`未検証` の仮説だけを根拠にした学びは還元しない" in flop_analysis
+    for reader in (wf_new, collection_ideate, thumbnail):
+        assert "yt-experiment judge" in reader
 
     # 読み手 3 本: 消費契約（open 選別 / status 反映 / lever=thumbnail）
     assert "jq -c 'select(.status == \"open\")' data/insights.jsonl" in wf_new
@@ -1632,6 +1634,14 @@ def test_insights_validator_enforces_schema_and_id_uniqueness(tmp_path: Path) ->
             ),
             ensure_ascii=False,
         ),
+        json.dumps(
+            _insights_entry(
+                id="experiment-20260717-thumbnail-textless",
+                source="experiment",
+                source_path="data/experiments.jsonl",
+            ),
+            ensure_ascii=False,
+        ),
     ]
     valid_path.write_text("\n".join(valid_lines) + "\n", encoding="utf-8")
     ok = _run_insights_validator(valid_path)
@@ -1644,6 +1654,7 @@ def test_insights_validator_enforces_schema_and_id_uniqueness(tmp_path: Path) ->
         {k: v for k, v in _insights_entry(id="missing-evidence").items() if k != "evidence"},
         _insights_entry(id="unknown-key", unknown_key="x"),
         _insights_entry(id="bad-date", date="2026/07/17"),
+        _insights_entry(id="impossible-date", date="2026-02-30"),
     ]
     invalid_path.write_text(
         "\n".join(json.dumps(entry, ensure_ascii=False) for entry in invalid_entries) + "\n",
