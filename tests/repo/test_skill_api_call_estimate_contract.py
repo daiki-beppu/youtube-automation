@@ -123,6 +123,7 @@ NON_BILLED_CLIS: dict[str, str] = {
     "yt-traffic-trend": "収集済み analytics_data_*.json のローカル分析のみ",
     "yt-vote-log": "ローカルの投票ログ記録のみ",
     "yt-vpd-rank": "YouTube Data API（無料枠）で全動画の累計再生回数を取得",
+    "yt-win-pattern": "YouTube Data API（無料枠）または取得済み ranking のローカル分析",
 }
 
 # --- 2 段目: skill → 対象 / 非対象 ---
