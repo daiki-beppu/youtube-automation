@@ -88,10 +88,28 @@ class PublicationsResponse(TypedDict):
     channels: list[PublicationChannelResponse]
 
 
+class TrendPointResponse(TypedDict):
+    date: str
+    views: int | float
+
+
+class TrendChannelResponse(TypedDict):
+    id: str
+    name: str
+    status: str
+    points: list[TrendPointResponse]
+    error: ErrorResponse | None
+
+
+class TrendsResponse(TypedDict):
+    channels: list[TrendChannelResponse]
+
+
 class DashboardReadModel(TypedDict):
     schema_version: int
     channels: list[ChannelDetailResponse]
     publications: PublicationsResponse
+    trends: TrendsResponse
 
 
 class ChannelOverviewResponse(TypedDict):
@@ -373,6 +391,32 @@ def _publication_read_model(
     return PublicationsResponse(days=dict(sorted(totals.items())), channels=publication_channels)
 
 
+def _trend_channel(channel: Path, item: ChannelDetailResponse) -> TrendChannelResponse:
+    if item["status"] != "ready" or item["snapshot"] is None:
+        return TrendChannelResponse(
+            id=item["id"], name=item["name"], status=item["status"], points=[], error=item["error"]
+        )
+    try:
+        snapshot = _load_snapshot(channel / "data" / item["snapshot"])
+    except (OSError, json.JSONDecodeError, ValueError) as exc:
+        return TrendChannelResponse(
+            id=item["id"],
+            name=item["name"],
+            status="invalid_snapshot",
+            points=[],
+            error=ErrorResponse(code="snapshot_invalid", message=str(exc)),
+        )
+    rows = _object(snapshot.get("channel_analytics")).get("daily_metrics")
+    points: list[TrendPointResponse] = []
+    if isinstance(rows, list):
+        for row in rows:
+            source = _object(row)
+            date = _text(source.get("date"))
+            if date:
+                points.append(TrendPointResponse(date=date, views=_non_negative_number(source.get("views"))))
+    return TrendChannelResponse(id=item["id"], name=item["name"], status="ready", points=points, error=None)
+
+
 def build_dashboard_read_model(
     channel_paths: list[Path],
     *,
@@ -406,6 +450,9 @@ def build_dashboard_read_model(
         schema_version=SCHEMA_VERSION if timing_requested else LEGACY_SCHEMA_VERSION,
         channels=channels,
         publications=_publication_read_model(channel_paths, channels),
+        trends=TrendsResponse(
+            channels=[_trend_channel(path, item) for path, item in zip(channel_paths, channels, strict=True)]
+        ),
     )
 
 
@@ -470,3 +517,8 @@ class DashboardAPI:
                     detail["videos"] = []
                 return detail
         raise DashboardChannelNotFoundError(f"dashboard channel が見つかりません: {channel_id}")
+
+    def trends(self) -> TrendsResponse:
+        """登録順のチャンネル別日次再生数を返す。"""
+        trends = self.model.get("trends")
+        return trends if isinstance(trends, dict) else TrendsResponse(channels=[])

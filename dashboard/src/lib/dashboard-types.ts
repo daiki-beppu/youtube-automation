@@ -92,6 +92,15 @@ export type OverviewResponse = {
   schema_version: number
   channels: ChannelOverview[]
 }
+export type TrendsResponse = {
+  channels: Array<{
+    id: string
+    name: string
+    status: string
+    points: Array<{ date: string; views: number }>
+    error: { code: string; message: string } | null
+  }>
+}
 export type PublicationActivityState =
   | { status: "loading" }
   | { status: "ready"; data: PublicationActivityResponse }

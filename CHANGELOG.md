@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(dashboard)`: 収集済み日次指標を返す `GET /api/trends` と、palette 非依存の色相別系列で全チャンネルの再生数推移を比較する折れ線グラフを追加する（#3776）。
 - `fix(dashboard)`: 公開活動ヒートマップの内訳をフロー外の浮動レイヤーにし、セル間のgapでは維持してグリッド退出時だけ閉じることで点滅とレイアウトシフトを防ぐ（#3774）。
 - `feat(dashboard)`: 公開活動ヒートマップの53週列を11px下限の可変正方形セルにし、狭幅時の領域内スクロールを保ちながら親コンテナ幅いっぱいに広げる（#3773）。
 - `feat(dashboard)`: 公開活動ヒートマップから月・曜日の軸ラベルと余分な外枠グリッドを削除し、日別セルとアクセシブルな内訳・凡例を維持する（#3772）。

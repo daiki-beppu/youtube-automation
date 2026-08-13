@@ -150,6 +150,10 @@ test.beforeAll(async () => {
     JSON.stringify({
       collection_period: { collected_at: "2026-07-20T12:00:00Z" },
       channel_analytics: {
+        daily_metrics: [
+          { date: "2026-07-19", views: 120 },
+          { date: "2026-07-20", views: 180 },
+        ],
         summary: {
           total_views: 3200,
           total_watch_time: 900,
@@ -301,6 +305,9 @@ test.beforeAll(async () => {
 
 test("保存済み snapshot から画面を更新できる", async ({ page }) => {
   await page.goto(baseURL)
+  await expect(
+    page.getByRole("region", { name: "日次再生数の推移" })
+  ).toBeVisible()
   await expect(
     page.getByRole("button", { name: "30 日", pressed: true })
   ).toBeVisible()

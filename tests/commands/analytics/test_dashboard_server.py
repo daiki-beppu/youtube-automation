@@ -307,6 +307,7 @@ def test_server_api_json_bytes_match_production_builder_golden(dashboard_server:
     channel_id = json.loads(overview)["channels"][0]["id"]
     detail = _response_bytes(f"{dashboard_server}/api/channels/{channel_id}")
     publications = _response_bytes(f"{dashboard_server}/api/publications")
+    trends = _response_bytes(f"{dashboard_server}/api/trends")
     channel_id_bytes = channel_id.encode("utf-8")
 
     assert overview.replace(channel_id_bytes, b"<channel-id>") == (
@@ -345,6 +346,7 @@ def test_server_api_json_bytes_match_production_builder_golden(dashboard_server:
         b'{"code": "publication_refresh_failed", "message": "quota exceeded", '
         b'"attempted_at": "2026-07-20T14:00:00+00:00"}}]}'
     )
+    assert json.loads(trends)["channels"][0]["name"] == "Night Drive"
 
 
 def test_server_exposes_overview_and_channel_detail(dashboard_server: str):

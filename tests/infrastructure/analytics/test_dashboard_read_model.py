@@ -39,13 +39,17 @@ def _snapshot(*, collected_at: str, views: int, video_views: int) -> dict:
             "collected_at": collected_at,
         },
         "channel_analytics": {
+            "daily_metrics": [
+                {"date": "2026-07-19", "views": 12, "watch_time": 30},
+                {"date": "2026-07-20", "views": 18},
+            ],
             "summary": {
                 "total_views": views,
                 "total_watch_time": 420,
                 "net_subscribers": 8,
                 "total_engagement": 31,
                 "avg_view_percentage": 62.5,
-            }
+            },
         },
         "scheduled_videos": {"count": 2},
         "video_analytics": {
@@ -88,11 +92,29 @@ def _write_publications(
 def test_dashboard_api_response_contracts_are_typed_dicts() -> None:
     assert is_typeddict(DashboardReadModel)
     assert is_typeddict(OverviewResponse)
+
+
+def test_trends_extract_daily_views_without_changing_channel_response(tmp_path: Path) -> None:
+    channel = tmp_path / "ready"
+    _write_channel(
+        channel,
+        name="Night Drive",
+        snapshots={"analytics_data_2026-07-20.json": _snapshot(collected_at="now", views=30, video_views=20)},
+    )
+    api = DashboardAPI(build_dashboard_read_model([channel]))
+
+    trend = api.trends()["channels"][0]
+    assert trend["name"] == "Night Drive"
+    assert trend["points"] == [
+        {"date": "2026-07-19", "views": 12},
+        {"date": "2026-07-20", "views": 18},
+    ]
+    assert "points" not in api.overview()["channels"][0]
     assert is_typeddict(ChannelOverviewResponse)
     assert is_typeddict(ChannelDetailResponse)
     assert is_typeddict(PublicationsResponse)
     assert is_typeddict(PublicationChannelResponse)
-    assert DashboardReadModel.__required_keys__ == frozenset({"schema_version", "channels", "publications"})
+    assert DashboardReadModel.__required_keys__ == frozenset({"schema_version", "channels", "publications", "trends"})
     assert OverviewResponse.__required_keys__ == frozenset({"schema_version", "channels"})
     assert ChannelOverviewResponse.__required_keys__ == frozenset(
         {
