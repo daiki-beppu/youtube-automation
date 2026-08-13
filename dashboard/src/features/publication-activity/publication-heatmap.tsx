@@ -65,8 +65,6 @@ function activityDays(days: Record<string, number>) {
       count: days[key] ?? 0,
       weekday: date.getDay(),
       week: Math.floor((index + start.getDay()) / 7),
-      month: date.getMonth() + 1,
-      showMonth: index === 0 || date.getDate() === 1,
     }
   })
 }
@@ -149,109 +147,62 @@ export function PublicationHeatmap({
         }}
       >
         <div
+          aria-label="日別公開本数"
+          role="grid"
           style={{
             display: "grid",
-            columnGap: 8,
-            gridTemplateColumns: "max-content max-content",
+            gap: 3,
+            gridTemplateColumns: weekColumns,
+            gridTemplateRows: "repeat(7, 11px)",
             width: "max-content",
           }}
         >
-          <span aria-hidden="true" />
-          <ol
-            aria-label="月"
-            style={{
-              display: "grid",
-              gap: 3,
-              gridTemplateColumns: weekColumns,
-              listStyle: "none",
-              margin: 0,
-              padding: 0,
-            }}
-          >
-            {activity
-              .filter((day) => day.showMonth)
-              .map((day) => (
-                <li
-                  data-week={day.week}
-                  key={day.key}
-                  style={{ gridColumn: day.week + 1, gridRow: 1 }}
-                >
-                  {day.month}月
-                </li>
-              ))}
-          </ol>
-          <ol
-            aria-label="曜日"
-            style={{
-              display: "grid",
-              gap: 3,
-              gridTemplateRows: "repeat(7, 11px)",
-              listStyle: "none",
-              margin: 0,
-              padding: 0,
-            }}
-          >
-            {WEEKDAYS.map((weekday) => (
-              <li key={weekday}>{weekday}</li>
-            ))}
-          </ol>
-          <div
-            aria-label="日別公開本数"
-            role="grid"
-            style={{
-              display: "grid",
-              gap: 3,
-              gridTemplateColumns: weekColumns,
-              gridTemplateRows: "repeat(7, 11px)",
-            }}
-          >
-            {WEEKDAYS.map((_, weekday) => (
-              <div
-                key={weekday}
-                role="row"
-                style={{
-                  display: "grid",
-                  gap: 3,
-                  gridColumn: "1 / -1",
-                  gridRow: weekday + 1,
-                  gridTemplateColumns: weekColumns,
-                }}
-              >
-                {activity
-                  .filter((day) => day.weekday === weekday)
-                  .map((day) => {
-                    const level = intensity(day.count)
-                    return (
-                      <span
-                        aria-describedby={
-                          activeDate === day.key ? detailsId : undefined
-                        }
-                        aria-label={`${day.key}: ${day.count}本`}
-                        data-count={day.count}
-                        data-date={day.key}
-                        data-intensity={level}
-                        data-week={day.week}
-                        data-weekday={day.weekday}
-                        key={day.key}
-                        onBlur={() => setFocusedDate(null)}
-                        onFocus={() => setFocusedDate(day.key)}
-                        onMouseEnter={() => setHoveredDate(day.key)}
-                        onMouseLeave={() => setHoveredDate(null)}
-                        role="gridcell"
-                        style={{
-                          backgroundColor: INTENSITY_COLORS[level],
-                          borderRadius: 2,
-                          gridColumn: day.week + 1,
-                          height: 11,
-                          width: 11,
-                        }}
-                        tabIndex={0}
-                      />
-                    )
-                  })}
-              </div>
-            ))}
-          </div>
+          {WEEKDAYS.map((_, weekday) => (
+            <div
+              key={weekday}
+              role="row"
+              style={{
+                display: "grid",
+                gap: 3,
+                gridColumn: "1 / -1",
+                gridRow: weekday + 1,
+                gridTemplateColumns: weekColumns,
+              }}
+            >
+              {activity
+                .filter((day) => day.weekday === weekday)
+                .map((day) => {
+                  const level = intensity(day.count)
+                  return (
+                    <span
+                      aria-describedby={
+                        activeDate === day.key ? detailsId : undefined
+                      }
+                      aria-label={`${day.key}: ${day.count}本`}
+                      data-count={day.count}
+                      data-date={day.key}
+                      data-intensity={level}
+                      data-week={day.week}
+                      data-weekday={day.weekday}
+                      key={day.key}
+                      onBlur={() => setFocusedDate(null)}
+                      onFocus={() => setFocusedDate(day.key)}
+                      onMouseEnter={() => setHoveredDate(day.key)}
+                      onMouseLeave={() => setHoveredDate(null)}
+                      role="gridcell"
+                      style={{
+                        backgroundColor: INTENSITY_COLORS[level],
+                        borderRadius: 2,
+                        gridColumn: day.week + 1,
+                        height: 11,
+                        width: 11,
+                      }}
+                      tabIndex={0}
+                    />
+                  )
+                })}
+            </div>
+          ))}
         </div>
       </div>
       {activeDate && activeDay && detailsId ? (

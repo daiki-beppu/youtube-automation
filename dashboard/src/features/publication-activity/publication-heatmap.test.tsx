@@ -79,39 +79,17 @@ describe("PublicationHeatmap", () => {
     ).toEqual(["0本", "1本", "2本", "3本", "4本以上"])
   })
 
-  it("aligns ordered month labels to their week columns", () => {
+  it("omits month and weekday axis labels", () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date("2026-08-08T12:00:00Z"))
 
     render(<PublicationHeatmap channels={[]} days={{}} />)
 
-    const months = screen.getByRole("list", { name: "月" })
-    const labels = within(months).getAllByRole("listitem")
-    expect(labels.slice(0, 4).map((item) => item.textContent)).toEqual([
-      "8月",
-      "9月",
-      "10月",
-      "11月",
-    ])
-    expect(labels.slice(0, 4).map((item) => item.dataset.week)).toEqual([
-      "0",
-      "4",
-      "8",
-      "12",
-    ])
-    expect(labels.slice(0, 4).map((item) => item.style.gridColumn)).toEqual([
-      "1",
-      "5",
-      "9",
-      "13",
-    ])
-
-    const weekdays = screen.getByRole("list", { name: "曜日" })
+    expect(screen.queryByRole("list", { name: "月" })).not.toBeInTheDocument()
+    expect(screen.queryByRole("list", { name: "曜日" })).not.toBeInTheDocument()
     expect(
-      within(weekdays)
-        .getAllByRole("listitem")
-        .map((item) => item.textContent)
-    ).toEqual(["日", "月", "火", "水", "木", "金", "土"])
+      screen.getByRole("grid", { name: "日別公開本数" })
+    ).toBeInTheDocument()
   })
 
   it("contains the fixed-width week grid in a horizontal scroll boundary", () => {
@@ -152,10 +130,7 @@ describe("PublicationHeatmap", () => {
     ]
 
     render(
-      <PublicationHeatmap
-        channels={channels}
-        days={{ "2026-08-08": 3 }}
-      />
+      <PublicationHeatmap channels={channels} days={{ "2026-08-08": 3 }} />
     )
 
     const cell = screen.getByRole("gridcell", {
@@ -235,10 +210,7 @@ describe("PublicationHeatmap", () => {
     ]
 
     render(
-      <PublicationHeatmap
-        channels={channels}
-        days={{ "2026-08-08": 3 }}
-      />
+      <PublicationHeatmap channels={channels} days={{ "2026-08-08": 3 }} />
     )
 
     const alert = screen.getByRole("alert", {
