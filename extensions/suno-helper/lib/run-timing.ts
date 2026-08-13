@@ -6,7 +6,7 @@ import {
   type RunTimingReceipt,
 } from "../../shared/constants";
 
-export const RUN_TIMING_RECEIPT_VERSION = 1 as const;
+const RUN_TIMING_RECEIPT_VERSION = 1 as const;
 
 export type { RunTimingReceipt } from "../../shared/constants";
 

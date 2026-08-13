@@ -6,6 +6,7 @@
 import {
   DEFAULT_REGENERATE_DURATION_OUTLIERS,
   PHASE,
+  type Phase,
   type ProgressLog,
   type SnapshotPayload,
 } from "../../shared/constants";
@@ -125,6 +126,41 @@ function formatAllowedProgressLog(
   }
 }
 
+type TimingDetailPhase =
+  | typeof PHASE.WAITING_GENERATION
+  | typeof PHASE.PLACING_ARCHIVE
+  | typeof PHASE.DOWNLOADING
+  | typeof PHASE.ADDING_TO_PLAYLIST;
+
+function isTimingDetailPhase(phase: Phase): phase is TimingDetailPhase {
+  return (
+    phase === PHASE.WAITING_GENERATION ||
+    phase === PHASE.PLACING_ARCHIVE ||
+    phase === PHASE.DOWNLOADING ||
+    phase === PHASE.ADDING_TO_PLAYLIST
+  );
+}
+
+function formatTimingDetailStatus(
+  phase: TimingDetailPhase,
+  n: number,
+  total: number,
+  message: string | undefined
+): { text: string } {
+  if (phase === PHASE.WAITING_GENERATION) {
+    return { text: `[${n}/${total}] 生成完了を確認中…` };
+  }
+  if (phase === PHASE.PLACING_ARCHIVE) {
+    return {
+      text: `localhost へ archive を配置中…${message ? `（${message}）` : ""}`,
+    };
+  }
+  if (phase === PHASE.DOWNLOADING) {
+    return { text: `ダウンロード中…${message ? `（${message}）` : ""}` };
+  }
+  return { text: `Playlist '${message ?? ""}' へ追加中…` };
+}
+
 /**
  * 直近 progress（と entry 名解決用の entries）を popup の status 文字列へ変換する。
  * content の snapshot 構築 (live) と popup の再 open 復元 (restore) の双方が同一文言を使うための SSOT。
@@ -141,6 +177,9 @@ export function phaseToStatus(
 
   const { phase, index, total, message, downloadSummary } = progress;
   const n = (index ?? 0) + 1;
+  if (isTimingDetailPhase(phase)) {
+    return formatTimingDetailStatus(phase, n, total, message);
+  }
   switch (phase) {
     case PHASE.INJECTING:
       return {
@@ -159,8 +198,6 @@ export function phaseToStatus(
       return {
         text: `[${n}/${total}] 生成待ち…${message ? `（${message}）` : ""}`,
       };
-    case PHASE.WAITING_GENERATION:
-      return { text: `[${n}/${total}] 生成完了を確認中…` };
     case PHASE.SUBMITTED:
       return { text: `[${n}/${total}] 投入済み（生成完了待ち）` };
     case PHASE.DONE:
@@ -170,15 +207,6 @@ export function phaseToStatus(
     case PHASE.ENTRY_FAILED:
       // entry 単位の失敗スキップ (#948)。run 全体は継続するため error フラグは立てない（status は黄信号扱い）。
       return { text: `[${n}/${total}] 失敗のためスキップ: ${message ?? ""}` };
-    case PHASE.DOWNLOADING:
-      return { text: `ダウンロード中…${message ? `（${message}）` : ""}` };
-    case PHASE.PLACING_ARCHIVE:
-      return {
-        text: `localhost へ archive を配置中…${message ? `（${message}）` : ""}`,
-      };
-    case PHASE.ADDING_TO_PLAYLIST:
-      // playlist 名は ProgressPayload.message で運ぶ（専用フィールドを足さず既存経路で表示する）。
-      return { text: `Playlist '${message ?? ""}' へ追加中…` };
     case PHASE.FINISHED:
       // 失敗スキップ付き完走 (#948) を成功した配置 summary で覆わない。
       if (message) {

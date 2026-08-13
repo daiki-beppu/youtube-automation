@@ -152,6 +152,28 @@ import {
   type DurationOutlierPolicy,
 } from "../lib/yield-guard";
 
+function advanceRunTimingReceipt(
+  receipt: RunTimingReceipt,
+  payload: ProgressPayload,
+  now: number
+): RunTimingReceipt {
+  switch (payload.phase) {
+    case PHASE.FINISHED:
+      return finalizeRunTiming(receipt, "finished", now);
+    case PHASE.STOPPED:
+      return finalizeRunTiming(receipt, "stopped", now);
+    case PHASE.ERROR:
+      return finalizeRunTiming(receipt, "error", now);
+    default:
+      return transitionRunTiming(
+        receipt,
+        payload.phase,
+        now,
+        payload.log?.kind === "retry"
+      );
+  }
+}
+
 function assertNonEmptyString(value: unknown, field: string): string {
   if (typeof value !== "string" || value.length === 0) {
     throw new Error(`${field} must be non-empty string`);
@@ -900,33 +922,11 @@ export default defineContentScript({
       if (!currentTimingReceipt) {
         throw new Error("timing receipt missing before progress emit");
       }
-      const now = Date.now();
-      if (payload.phase === PHASE.FINISHED) {
-        currentTimingReceipt = finalizeRunTiming(
-          currentTimingReceipt,
-          "finished",
-          now
-        );
-      } else if (payload.phase === PHASE.STOPPED) {
-        currentTimingReceipt = finalizeRunTiming(
-          currentTimingReceipt,
-          "stopped",
-          now
-        );
-      } else if (payload.phase === PHASE.ERROR) {
-        currentTimingReceipt = finalizeRunTiming(
-          currentTimingReceipt,
-          "error",
-          now
-        );
-      } else {
-        currentTimingReceipt = transitionRunTiming(
-          currentTimingReceipt,
-          payload.phase,
-          now,
-          payload.log?.kind === "retry"
-        );
-      }
+      currentTimingReceipt = advanceRunTimingReceipt(
+        currentTimingReceipt,
+        payload,
+        Date.now()
+      );
       const timedPayload = { ...payload, timingReceipt: currentTimingReceipt };
       currentSnapshot = applyProgress(currentSnapshot, timedPayload);
       if (activeUnattended) {

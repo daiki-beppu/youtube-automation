@@ -120,6 +120,13 @@ interface RunnerState {
   timingReceipt: RunTimingReceipt | null;
 }
 
+function retainTimingReceipt(
+  current: RunTimingReceipt | null,
+  received: RunTimingReceipt | undefined
+): RunTimingReceipt | null {
+  return received === undefined ? current : received;
+}
+
 type RejectedRunAcknowledgement =
   | { ok: false; busy: true }
   | { ok: false; error: string };
@@ -912,7 +919,9 @@ export function useSunoRunner(): RunnerState {
     const unwatch = onMessage("progress", ({ data }) => {
       setItemStates((prev) => nextItemStates(prev, data));
       setPhase(data.phase);
-      if (data.timingReceipt) setTimingReceipt(data.timingReceipt);
+      setTimingReceipt((current) =>
+        retainTimingReceipt(current, data.timingReceipt)
+      );
       if (data.durationOutlierWarning) {
         durationOutlierWarningsRef.current.push(data.durationOutlierWarning);
       }
