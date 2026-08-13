@@ -213,12 +213,45 @@ describe("dashboard", () => {
 
     await user.click(refreshButton)
     expect(screen.getByRole("button", { name: "更新中" })).toBeDisabled()
+    expect(screen.getByRole("button", { name: "7 日" })).toBeDisabled()
     refreshResponse.resolve(
       new Response(JSON.stringify(updatedOverview), { status: 200 })
     )
 
     expect(await screen.findByText("2,400")).toBeInTheDocument()
     expect(screen.getByRole("button", { name: "データを更新" })).toBeEnabled()
+  })
+
+  it("defaults to 30 days and refreshes with the selected period", async () => {
+    const requests: Array<{ path: string; method?: string; body?: string }> = []
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const path = String(input)
+      requests.push({ path, method: init?.method, body: init?.body as string })
+      if (path === "/api/publications") {
+        return new Response(JSON.stringify(publicationActivity), { status: 200 })
+      }
+      return new Response(JSON.stringify(overview), { status: 200 })
+    })
+    const user = userEvent.setup()
+    renderDashboard()
+
+    expect(
+      await screen.findByRole("button", { name: "30 日", pressed: true })
+    ).toBeInTheDocument()
+    expect(screen.getByText("直近 30 日")).toBeInTheDocument()
+    await user.click(screen.getByRole("button", { name: "7 日" }))
+
+    await waitFor(() =>
+      expect(
+        requests.some(
+          (request) =>
+            request.path === "/api/refresh" &&
+            request.method === "POST" &&
+            request.body === JSON.stringify({ days: 7 })
+        )
+      ).toBe(true)
+    )
+    expect(screen.getByText("直近 7 日")).toBeInTheDocument()
   })
 
   it("presents overview, data context, metric definitions, and comparison in decision order", async () => {

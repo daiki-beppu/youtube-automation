@@ -60,6 +60,7 @@ def collect_channel_analytics(
     channel: Path,
     analytics_system_factory: Callable[[], _AnalyticsSystem],
     *,
+    days: int = 30,
     force_publication_refresh: bool = False,
 ) -> None:
     """同じ AnalyticsSystem で standard snapshot と公開履歴を保存する。"""
@@ -67,7 +68,7 @@ def collect_channel_analytics(
 
     with _channel_context(channel):
         system = analytics_system_factory()
-        result = system.run_data_collection(days=30, depth="standard")
+        result = system.run_data_collection(days=days, depth="standard")
         if not result.get("success"):
             raise AutomationError(str(result.get("error", "Analytics refresh failed")))
 

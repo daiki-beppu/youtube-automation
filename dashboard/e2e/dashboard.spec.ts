@@ -301,6 +301,11 @@ test.beforeAll(async () => {
 
 test("保存済み snapshot から画面を更新できる", async ({ page }) => {
   await page.goto(baseURL)
+  await expect(
+    page.getByRole("button", { name: "30 日", pressed: true })
+  ).toBeVisible()
+  await page.getByRole("button", { name: "7 日" }).click()
+  await expect(page.getByText("直近 7 日")).toBeVisible()
   const button = page.getByRole("button", { name: "データを更新" })
   await expect(button).toBeEnabled()
   await button.click()

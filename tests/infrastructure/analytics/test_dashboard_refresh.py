@@ -104,6 +104,27 @@ def test_collect_channel_restores_environment_and_configuration_after_success(
     assert os.environ.get("CHANNEL") == initial_slug
 
 
+@pytest.mark.parametrize("days", [7, 30, 90])
+def test_collect_channel_passes_selected_days_to_standard_collection(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, days: int
+) -> None:
+    (tmp_path / "selected" / "data").mkdir(parents=True)
+    monkeypatch.setattr(
+        configuration,
+        "load_config",
+        Mock(
+            return_value=SimpleNamespace(youtube=SimpleNamespace(api=SimpleNamespace(default_publish_timezone="UTC")))
+        ),
+    )
+    system = Mock()
+    system.run_data_collection.return_value = {"success": True}
+    system.collector.get_all_channel_videos.return_value = []
+
+    collect_channel_analytics(tmp_path / "selected", Mock(return_value=system), days=days)
+
+    system.run_data_collection.assert_called_once_with(days=days, depth="standard")
+
+
 @pytest.mark.parametrize(
     "cache_contents",
     [
