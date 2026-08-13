@@ -18,6 +18,7 @@ jobs:
       packaging: ${{ steps.classify.outputs.packaging }}
       windows: ${{ steps.classify.outputs.windows }}
       adr: ${{ steps.classify.outputs.adr }}
+      test_plan: ${{ steps.test-plan.outputs.plan }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -49,6 +50,12 @@ jobs:
           esac
           git diff --name-only "${base}${separator}${head}" > "$RUNNER_TEMP/changed-paths.txt"
           bash .github/scripts/classify-ci-paths.sh "$RUNNER_TEMP/changed-paths.txt" | tee -a "$GITHUB_OUTPUT"
+      - name: Build affected-test plan
+        id: test-plan
+        run: |
+          set -eu
+          plan=$(python .github/scripts/select-affected-tests.py --format json "$RUNNER_TEMP/changed-paths.txt")
+          printf 'plan=%s\n' "$plan" >> "$GITHUB_OUTPUT"
 
   lint:
     needs: changes
@@ -105,7 +112,63 @@ jobs:
         run: nix develop --command uv sync
       - name: Test
         if: needs.changes.outputs.python == 'true'
-        run: nix develop --command uv run pytest -n auto
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          TEST_PLAN_JSON: ${{ needs.changes.outputs.test_plan }}
+        run: |
+          set -euo pipefail
+          plan_file="$RUNNER_TEMP/affected-test-plan.txt"
+          python - <<'PY' > "$plan_file"
+          import json
+          import os
+          from pathlib import Path
+
+          payload = json.loads(os.environ["TEST_PLAN_JSON"])
+          if set(payload) != {"mode", "targets"}:
+              raise SystemExit("invalid affected-test plan keys")
+          mode = payload["mode"]
+          targets = payload["targets"]
+          if mode == "all":
+              if targets != []:
+                  raise SystemExit("ALL plan must not contain targets")
+          elif mode == "selected":
+              if not isinstance(targets, list) or not targets:
+                  raise SystemExit("selected plan must contain targets")
+              if any(
+                  not isinstance(target, str)
+                  or not target.startswith("tests/")
+                  or "\n" in target
+                  or not Path(target).is_file()
+                  for target in targets
+              ):
+                  raise SystemExit("selected plan contains an unsafe target")
+          else:
+              raise SystemExit("invalid affected-test plan mode")
+          print(mode)
+          print(*targets, sep="\n")
+          PY
+          mapfile -t plan_lines < "$plan_file"
+          plan_mode="${plan_lines[0]}"
+          targets=("${plan_lines[@]:1}")
+          total_count=$(python - <<'PY'
+          from pathlib import Path
+
+          print(
+              sum(
+                  1
+                  for path in Path("tests").rglob("*.py")
+                  if path.name.startswith("test_") or path.name.endswith("_test.py")
+              )
+          )
+          PY
+          )
+          if [ "$EVENT_NAME" = "pull_request" ] && [ "$plan_mode" = "selected" ]; then
+            echo "Selected pytest targets: ${#targets[@]}/${total_count}"
+            nix develop --command uv run pytest -n auto -- "${targets[@]}"
+          else
+            echo "Full pytest suite: ${total_count}/${total_count} targets"
+            nix develop --command uv run pytest -n auto
+          fi
 
   build-smoke:
     needs: changes

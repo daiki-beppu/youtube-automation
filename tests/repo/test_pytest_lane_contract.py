@@ -202,11 +202,14 @@ def test_slow_node_ids_reference_existing_modules_and_tests() -> None:
     assert collected == set(expected)
 
 
-def test_ci_runs_the_full_pytest_suite_without_lane_filters() -> None:
+def test_ci_main_push_and_fail_safe_run_full_suite_without_lane_filters() -> None:
     workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
 
-    assert "nix develop --command uv run pytest -n auto" in workflow
+    assert '[ "$EVENT_NAME" = "pull_request" ]' in workflow
+    assert '[ "$plan_mode" = "selected" ]' in workflow
+    assert "nix develop --command uv run pytest -n auto\n" in workflow
     assert '-m "not repo_contract and not slow"' not in workflow
+    assert "-m repo_contract" not in workflow
 
 
 def test_development_documents_each_pytest_lane_command() -> None:
