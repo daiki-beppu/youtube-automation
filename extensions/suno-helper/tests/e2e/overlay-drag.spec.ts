@@ -16,6 +16,7 @@ test("実ビルドした overlay は drag・最小化・automation selector 契�
     context = await chromium.launchPersistentContext(profile, {
       channel: "chromium",
       headless: false,
+      ignoreDefaultArgs: ["--disable-extensions"],
       args: [
         `--disable-extensions-except=${extensionPath}`,
         `--load-extension=${extensionPath}`,
@@ -28,6 +29,13 @@ test("実ビルドした overlay は drag・最小化・automation selector 契�
     let worker = context.serviceWorkers()[0];
     worker ??= await context.waitForEvent("serviceworker");
     expect(worker.url()).toContain("chrome-extension://");
+
+    const commandLinePage = await context.newPage();
+    await commandLinePage.goto("chrome://version/");
+    await expect(commandLinePage.locator("#command_line")).not.toContainText(
+      /(?:^|\s)--disable-extensions(?:\s|$)/
+    );
+    await commandLinePage.close();
 
     await context.route("https://suno.com/create", (route) =>
       route.fulfill({
