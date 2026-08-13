@@ -11,10 +11,9 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from youtube_automation.commands.analytics import vpd_rank
-from youtube_automation.commands.analytics.analytics_system import AnalyticsSystem
 from youtube_automation.configuration import load_config
 from youtube_automation.configuration.skills import load_skill_config
-from youtube_automation.core.errors import AuthError, AutomationError, ValidationError
+from youtube_automation.core.errors import AutomationError, ValidationError
 from youtube_automation.infrastructure.analytics.win_pattern import (
     build_automatic_attributes,
     build_win_pattern_result,
@@ -31,13 +30,6 @@ def _read_ranking(path: Path) -> dict:
     except (OSError, json.JSONDecodeError) as error:
         raise ValidationError(f"ranking JSON を読めません: {path}") from error
     return validate_ranking(payload)
-
-
-def _load_live_details(video_ids: list[str]) -> dict[str, dict]:
-    system = AnalyticsSystem()
-    if not system.authenticate() or system.collector is None:
-        raise AuthError("YouTube read-only 認証に失敗しました")
-    return system.collector.get_video_details(video_ids)
 
 
 def _title_patterns() -> object:
@@ -57,18 +49,14 @@ def _load_result(
 ) -> dict[str, object]:
     if ranking_path is None:
         ranking = vpd_rank._load_ranking(min_age_days=min_age_days, top_count=top_count)
-        video_ids = [item["video_id"] for item in ranking["ranking"]]
-        details = _load_live_details(video_ids)
     else:
         ranking = _read_ranking(ranking_path)
-        details = {}
     ranking = validate_ranking(ranking)
     videos = ranking["ranking"]
     video_ids = {item["video_id"] for item in videos}
     config = load_config()
     automatic = build_automatic_attributes(
         videos,
-        details=details,
         theme_keywords=config.content.tags.themes,
         title_patterns=_title_patterns(),
     )

@@ -126,7 +126,6 @@ def _published_bins(raw: object, video_id: str) -> tuple[str, str]:
 def build_automatic_attributes(
     videos: list[dict],
     *,
-    details: dict[str, dict],
     theme_keywords: dict[str, list[str]],
     title_patterns: object,
 ) -> dict[str, dict[str, str]]:
@@ -143,12 +142,9 @@ def build_automatic_attributes(
             raise ValidationError(f"title が不正です: {video_id}")
         title_pattern = next((name for name, pattern in compiled_patterns if pattern.search(title)), "other")
         weekday, time_bin = _published_bins(video.get("published_at"), video_id)
-        detail = details.get(video_id)
-        if detail is not None and not isinstance(detail, dict):
-            raise ValidationError(f"video details が不正です: {video_id}")
         output["theme"][video_id] = themes[video_id]
         output["title_pattern"][video_id] = title_pattern
-        output["duration"][video_id] = _duration_bin(detail.get("duration") if detail else video.get("duration"))
+        output["duration"][video_id] = _duration_bin(video.get("duration"))
         output["publish_weekday"][video_id] = weekday
         output["publish_time"][video_id] = time_bin
     return output

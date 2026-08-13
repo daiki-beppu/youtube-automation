@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from youtube_automation.commands.analytics import analytics_system
 from youtube_automation.commands.analytics import win_pattern as cli
 from youtube_automation.core.errors import ValidationError
 from youtube_automation.infrastructure.analytics.win_pattern import (
@@ -19,7 +20,13 @@ from youtube_automation.infrastructure.analytics.win_pattern import (
 )
 
 
-def _item(video_id: str, title: str = "Focus Mix", published_at: str = "2026-08-10T12:00:00Z") -> dict:
+def _item(
+    video_id: str,
+    title: str = "Focus Mix",
+    published_at: str = "2026-08-10T12:00:00Z",
+    *,
+    duration: object = "PT1M",
+) -> dict:
     return {
         "video_id": video_id,
         "title": title,
@@ -27,6 +34,7 @@ def _item(video_id: str, title: str = "Focus Mix", published_at: str = "2026-08-
         "cumulative_views": 100,
         "days_since_publish": 10,
         "vpd": 10.0,
+        "duration": duration,
     }
 
 
@@ -66,14 +74,12 @@ def test_ranking_inconsistency_overlap_or_gap_fails_closed(mutate) -> None:
 
 def test_automatic_attributes_use_theme_first_regex_duration_and_utc_publish_bins() -> None:
     videos = [
-        _item("a", "Night Focus Question?", "2026-08-10T23:30:00-05:00"),
-        _item("b", "Other", "2026-08-10T05:59:00Z"),
+        _item("a", "Night Focus Question?", "2026-08-10T23:30:00-05:00", duration="PT59S"),
+        _item("b", "Other", "2026-08-10T05:59:00Z", duration="PT1H"),
     ]
-    details = {"a": {"duration": "PT59S"}, "b": {"duration": "PT1H"}}
 
     result = build_automatic_attributes(
         videos,
-        details=details,
         theme_keywords={"focus": ["night"]},
         title_patterns=[{"name": "question", "regex": r"[?？]"}],
     )
@@ -98,8 +104,7 @@ def test_automatic_attributes_use_theme_first_regex_duration_and_utc_publish_bin
 )
 def test_duration_bins_have_explicit_inclusive_boundaries(duration: str, expected: str) -> None:
     result = build_automatic_attributes(
-        [_item("a")],
-        details={"a": {"duration": duration}},
+        [_item("a", duration=duration)],
         theme_keywords={},
         title_patterns=[],
     )
@@ -120,7 +125,6 @@ def test_invalid_title_pattern_config_fails_loud(patterns: object) -> None:
     with pytest.raises(ValidationError, match="title_patterns"):
         build_automatic_attributes(
             [_item("a")],
-            details={"a": {"duration": "PT1M"}},
             theme_keywords={},
             title_patterns=patterns,
         )
@@ -225,7 +229,10 @@ def test_json_and_text_render_the_same_result(monkeypatch, capsys) -> None:
 
 def test_offline_ranking_never_calls_live_loader(tmp_path: Path, monkeypatch) -> None:
     path = tmp_path / "ranking.json"
-    path.write_text(json.dumps(_ranking([_item("top")], [], [_item("bottom")])), encoding="utf-8")
+    path.write_text(
+        json.dumps(_ranking([_item("top", duration="PT59S")], [], [_item("bottom", duration=None)])),
+        encoding="utf-8",
+    )
     calls = 0
 
     def live_loader(**_kwargs):
@@ -241,25 +248,38 @@ def test_offline_ranking_never_calls_live_loader(tmp_path: Path, monkeypatch) ->
 
     assert result["n"] == 2
     assert calls == 0
+    duration = result["attributes"]["duration"]
+    assert duration["values"]["under_60_seconds"]["top_count"] == 1
+    assert duration["undetermined_count"]["bottom"] == 1
 
 
 def test_default_mode_calls_live_loader_exactly_once(monkeypatch) -> None:
-    calls = 0
+    ranking_calls = 0
+    details_calls = 0
 
     def live_loader(**_kwargs):
-        nonlocal calls
-        calls += 1
-        return _ranking([_item("top")], [], [_item("bottom")])
+        nonlocal ranking_calls
+        ranking_calls += 1
+        return _ranking([_item("top", duration="PT10M")], [], [_item("bottom", duration=None)])
+
+    def analytics_system_factory():
+        nonlocal details_calls
+        details_calls += 1
+        raise AssertionError("ranking に含まれる duration 以外を取得してはならない")
 
     monkeypatch.setattr(cli.vpd_rank, "_load_ranking", live_loader)
-    monkeypatch.setattr(cli, "_load_live_details", lambda _ids: {})
+    monkeypatch.setattr(analytics_system, "AnalyticsSystem", analytics_system_factory)
     monkeypatch.setattr(cli, "load_config", lambda: _config())
     monkeypatch.setattr(cli, "load_skill_config", lambda _name: {"win_pattern": {"title_patterns": []}})
 
     result = cli._load_result(ranking_path=None, annotations_path=None, min_age_days=7, top_count=None)
 
     assert result["n"] == 2
-    assert calls == 1
+    assert ranking_calls == 1
+    assert details_calls == 0
+    duration = result["attributes"]["duration"]
+    assert duration["values"]["600_to_3599_seconds"]["top_count"] == 1
+    assert duration["undetermined_count"]["bottom"] == 1
 
 
 def _config():
