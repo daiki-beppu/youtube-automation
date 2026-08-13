@@ -59,6 +59,7 @@ def test_collects_daily_and_video_revenue_metrics():
     assert service.query.call_args_list[1].kwargs["metrics"] == (
         "views,estimatedRevenue,monetizedPlaybacks,cpm,playbackBasedCpm"
     )
+    assert service.query.call_args_list[1].kwargs["maxResults"] == 200
 
 
 def test_returns_daily_metrics_as_partial_when_video_query_fails(caplog):

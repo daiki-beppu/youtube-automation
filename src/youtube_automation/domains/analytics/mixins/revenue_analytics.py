@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 _DAILY_REVENUE_METRICS = "views,estimatedRevenue,monetizedPlaybacks,adImpressions,cpm,playbackBasedCpm"
 _VIDEO_REVENUE_METRICS = "views,estimatedRevenue,monetizedPlaybacks,cpm,playbackBasedCpm"
+_VIDEO_REVENUE_MAX_RESULTS = 200
 
 
 class RevenueAnalyticsMixin:
@@ -100,6 +101,7 @@ class RevenueAnalyticsMixin:
                     metrics=_VIDEO_REVENUE_METRICS,
                     dimensions="video",
                     sort="-estimatedRevenue",
+                    maxResults=_VIDEO_REVENUE_MAX_RESULTS,
                 ),
                 None,
             )
