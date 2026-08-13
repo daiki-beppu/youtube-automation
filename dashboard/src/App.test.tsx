@@ -228,7 +228,9 @@ describe("dashboard", () => {
       const path = String(input)
       requests.push({ path, method: init?.method, body: init?.body as string })
       if (path === "/api/publications") {
-        return new Response(JSON.stringify(publicationActivity), { status: 200 })
+        return new Response(JSON.stringify(publicationActivity), {
+          status: 200,
+        })
       }
       return new Response(JSON.stringify(overview), { status: 200 })
     })
@@ -238,7 +240,7 @@ describe("dashboard", () => {
     expect(
       await screen.findByRole("button", { name: "30 日", pressed: true })
     ).toBeInTheDocument()
-    expect(screen.getByText("直近 30 日")).toBeInTheDocument()
+    expect(await screen.findByText("直近 30 日")).toBeInTheDocument()
     await user.click(screen.getByRole("button", { name: "7 日" }))
 
     await waitFor(() =>
@@ -798,10 +800,7 @@ describe("dashboard", () => {
     ],
     [
       "non-finite day count",
-      () =>
-        new Response(
-          '{"days":{"2026-08-08":1e999},"channels":[]}'
-        ),
+      () => new Response('{"days":{"2026-08-08":1e999},"channels":[]}'),
       "応答形式が不正です",
     ],
   ])(

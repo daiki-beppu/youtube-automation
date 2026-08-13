@@ -49,6 +49,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet"
 import { ChannelStockTable } from "@/features/channel-stock/channel-stock-table"
+import { ChannelTrendChart } from "@/features/channel-trend/channel-trend-chart"
 import {
   PublicationHeatmap,
   type PublicationActivityChannel,
@@ -66,6 +67,7 @@ import type {
   OverviewResponse,
   PublicationActivityState,
   Summary,
+  TrendsResponse,
   WorkflowTiming,
   WorkflowTimingCollection,
 } from "@/lib/dashboard-types"
@@ -122,6 +124,16 @@ function isPublicationDays(value: unknown): value is Record<string, number> {
     Object.values(value).every(
       (count) =>
         typeof count === "number" && Number.isFinite(count) && count >= 0
+    )
+  )
+}
+
+function isTrendsResponse(value: unknown): value is TrendsResponse {
+  return (
+    isRecord(value) &&
+    Array.isArray(value.channels) &&
+    value.channels.every(
+      (channel) => isRecord(channel) && Array.isArray(channel.points)
     )
   )
 }
@@ -330,7 +342,9 @@ function DashboardOverview({
                 <CalendarRangeIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
                 <div>
                   <dt className="font-medium">選択期間</dt>
-                  <dd className="text-muted-foreground">直近 {selectedDays} 日</dd>
+                  <dd className="text-muted-foreground">
+                    直近 {selectedDays} 日
+                  </dd>
                 </div>
               </div>
               <div className="flex gap-3">
@@ -718,6 +732,7 @@ export function App() {
   const [detailLoading, setDetailLoading] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [selectedDays, setSelectedDays] = useState(30)
+  const [trends, setTrends] = useState<TrendsResponse | null>(null)
   const detailRequestId = useRef(0)
 
   useEffect(() => {
@@ -748,6 +763,13 @@ export function App() {
           message: reason instanceof Error ? reason.message : String(reason),
         })
       })
+    void requestJson<TrendsResponse>("/api/trends")
+      .then((response) => {
+        if (isTrendsResponse(response)) setTrends(response)
+      })
+      .catch((reason: unknown) => {
+        setError(reason instanceof Error ? reason.message : String(reason))
+      })
   }, [])
 
   async function refreshDashboard(days = selectedDays) {
@@ -755,20 +777,26 @@ export function App() {
     setError(null)
     try {
       await requestJson<OverviewResponse>("/api/refresh", "POST", { days })
-      const [overviewResponse, publicationsResponse, detailResponse] =
-        await Promise.all([
-          requestJson<OverviewResponse>("/api/channels"),
-          requestJson<unknown>("/api/publications"),
-          selectedId
-            ? requestJson<ChannelDetail>(
-                `/api/channels/${encodeURIComponent(selectedId)}`
-              )
-            : Promise.resolve(null),
-        ])
+      const [
+        overviewResponse,
+        publicationsResponse,
+        trendsResponse,
+        detailResponse,
+      ] = await Promise.all([
+        requestJson<OverviewResponse>("/api/channels"),
+        requestJson<unknown>("/api/publications"),
+        requestJson<TrendsResponse>("/api/trends"),
+        selectedId
+          ? requestJson<ChannelDetail>(
+              `/api/channels/${encodeURIComponent(selectedId)}`
+            )
+          : Promise.resolve(null),
+      ])
       if (!isPublicationActivityResponse(publicationsResponse)) {
         throw new Error("応答形式が不正です")
       }
       setChannels(overviewResponse.channels)
+      if (isTrendsResponse(trendsResponse)) setTrends(trendsResponse)
       setDetail(detailResponse)
       const publicationCount = Object.values(publicationsResponse.days).reduce(
         (total, count) => total + count,
@@ -853,7 +881,9 @@ export function App() {
               disabled={refreshing}
               onClick={() => void refreshDashboard()}
             >
-              <RefreshCwIcon className={refreshing ? "animate-spin" : undefined} />
+              <RefreshCwIcon
+                className={refreshing ? "animate-spin" : undefined}
+              />
               {refreshing ? "更新中" : "データを更新"}
             </Button>
             <Button
@@ -907,6 +937,7 @@ export function App() {
         </header>
 
         <PublicationActivityPanel state={publicationActivity} />
+        {trends ? <ChannelTrendChart data={trends} /> : null}
 
         {error ? (
           <Alert variant="destructive">
@@ -932,7 +963,10 @@ export function App() {
         ) : null}
         {channels && channels.length > 0 ? (
           <div className="grid gap-8">
-            <DashboardOverview channels={channels} selectedDays={selectedDays} />
+            <DashboardOverview
+              channels={channels}
+              selectedDays={selectedDays}
+            />
             <ChannelStockTable
               channels={channels}
               selectedId={selectedId}
