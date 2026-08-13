@@ -98,6 +98,7 @@ test("最初の開操作では停止済み候補を提示せず、検出完了�
     context = await chromium.launchPersistentContext(profile, {
       channel: "chromium",
       headless: false,
+      ignoreDefaultArgs: ["--disable-extensions"],
       args: [
         `--disable-extensions-except=${extensionPath}`,
         `--load-extension=${extensionPath}`,
@@ -188,6 +189,7 @@ test("配信元候補が空なら操作不能な専用表示を保つ", async ()
     context = await chromium.launchPersistentContext(profile, {
       channel: "chromium",
       headless: false,
+      ignoreDefaultArgs: ["--disable-extensions"],
       args: [
         `--disable-extensions-except=${extensionPath}`,
         `--load-extension=${extensionPath}`,
