@@ -57,8 +57,9 @@ site を変更した pull request では、Cloudflare Pages の commit 固有 pr
 fork からの pull request には preview URL が作られないため、同一 repository の branch で確認する。
 
 - トップページと sidebar / tabs に「はじめる」「使う」「リリースノート」の3区分が表示される。
-- 次の7ページが preview URL 配下で表示される: `/onboarding/`、`/oauth-setup/`、`/chrome-extension-install-guide/`、`/features/`、`/workflow-cheatsheet/`、`/dashboard/`、`/channel-workspace-migration/`。
-- `/features/` から `/workflow-cheatsheet/`、`/onboarding/` と `/oauth-setup/` の相互リンクが preview 内の route を指す。
+- 公開 navigation とトップページには次の6ページだけが表示される: `/oauth-setup/`、`/chrome-extension-install-guide/`、`/features/`、`/workflow-cheatsheet/`、`/dashboard/`、`/channel-workspace-migration/`。
+- `/onboarding/` は直接 URL で表示でき、robots noindex を持つ一方、sidebar、トップページ、検索、AI 出力、sitemap には現れない。
+- `/features/` から `/workflow-cheatsheet/`、`/onboarding/` と `/oauth-setup/` の相互リンクは preview 内の route を指す。
 - `/onboarding/` の Python 版から `tayk` への移行リンクは、GitHub の `docs/migration/python-to-tayk.md` 原本へ fallback する。
 - `/audits/` route が生成されず、navigation と検索結果にも内部 audit が現れない。
 

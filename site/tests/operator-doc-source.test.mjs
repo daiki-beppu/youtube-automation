@@ -32,7 +32,7 @@ const createRepository = async (map = operatorDocMap) => {
   return repositoryRoot;
 };
 
-test("operator document map は公開対象7件だけを明示列挙する", () => {
+test("operator document map は生成対象7件だけを明示列挙する", () => {
   assert.deepEqual(
     operatorDocMap.map(({ source }) => source),
     expectedSources
@@ -57,9 +57,17 @@ test("source は build ごとに原本を読み、安定 route と doc type を�
   assert.equal(second.entries[0].data.title, "Second");
   assert.equal(first.entries[0].slug, operatorDocMap[0].route);
   assert.equal(first.entries[0].data.type, "doc");
+  assert.deepEqual(first.entries[0].data.ai, { exclude: true });
+  assert.deepEqual(first.entries[0].data.search, { exclude: true });
+  assert.equal(first.entries[0].data.noindex, true);
+  for (const entry of first.entries.slice(1)) {
+    assert.equal(entry.data.ai, undefined);
+    assert.equal(entry.data.search, undefined);
+    assert.equal(entry.data.noindex, undefined);
+  }
   assert.equal(
     first.entries[0].raw,
-    '---\ntitle: "First"\ntype: doc\n---\n\n## Details\n\nFirst body\n'
+    '---\ntitle: "First"\ntype: doc\nai:\n  exclude: true\nnoindex: true\nsearch:\n  exclude: true\nseo:\n  noindex: true\n---\n\n## Details\n\nFirst body\n'
   );
 });
 
