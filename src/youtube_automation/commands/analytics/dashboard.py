@@ -33,6 +33,7 @@ from youtube_automation.infrastructure.analytics.workflow_timing import build_wo
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8765
+ALLOWED_REFRESH_DAYS = frozenset({7, 30, 90})
 
 
 def _build_channel_workflow_timing(channel: Path) -> dict[str, object] | None:
@@ -65,7 +66,7 @@ class DashboardServer(ThreadingHTTPServer):
         asset_root: Traversable,
         *,
         channels: list[Path],
-        collect_channel: Callable[[Path], None] | None,
+        collect_channel: Callable[[Path, int], None] | None,
     ) -> None:
         super().__init__(address, DashboardRequestHandler)
         self.api = api
@@ -74,13 +75,16 @@ class DashboardServer(ThreadingHTTPServer):
         self.collect_channel = collect_channel
         self.refresh_lock = threading.Lock()
 
-    def refresh(self) -> Mapping[str, object] | None:
+    def refresh(self, days: int) -> Mapping[str, object] | None:
         """収集と read model 再構築を排他的に実行する。"""
         if not self.refresh_lock.acquire(blocking=False):
             return None
         try:
             refresh_errors = (
-                refresh_dashboard_channels(self.channels, collect_channel=self.collect_channel)
+                refresh_dashboard_channels(
+                    self.channels,
+                    collect_channel=lambda channel: self.collect_channel(channel, days),
+                )
                 if self.collect_channel is not None
                 else {}
             )
@@ -114,6 +118,25 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
 
     def _not_found(self, message: str) -> None:
         self._json(HTTPStatus.NOT_FOUND, {"error": {"code": "not_found", "message": message}})
+
+    def _bad_request(self, message: str) -> None:
+        self._json(HTTPStatus.BAD_REQUEST, {"error": {"code": "invalid_request", "message": message}})
+
+    def _refresh_days(self) -> int | None:
+        try:
+            content_length = int(self.headers.get("Content-Length", "0"))
+            payload = json.loads(self.rfile.read(content_length)) if content_length else {}
+        except (json.JSONDecodeError, ValueError):
+            self._bad_request("JSON body が不正です")
+            return None
+        if not isinstance(payload, dict):
+            self._bad_request("JSON body は object で指定してください")
+            return None
+        days = payload.get("days", 30)
+        if type(days) is not int or days not in ALLOWED_REFRESH_DAYS:
+            self._bad_request("days は 7、30、90 のいずれかで指定してください")
+            return None
+        return days
 
     def _api(self, path: str) -> bool:
         if path == "/api/channels":
@@ -174,7 +197,10 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         path = urlsplit(self.path).path
         if path == "/api/refresh":
-            overview = self.server.refresh()
+            days = self._refresh_days()
+            if days is None:
+                return
+            overview = self.server.refresh(days)
             if overview is None:
                 self._json(
                     HTTPStatus.CONFLICT,
@@ -193,7 +219,7 @@ def create_server(
     asset_root: Traversable | None = None,
     channel_paths: list[Path] | None = None,
     refresh_errors: dict[Path, str] | None = None,
-    collect_channel: Callable[[Path], None] | None = None,
+    collect_channel: Callable[[Path, int], None] | None = None,
 ) -> DashboardServer:
     """registry を一度読み、loopback にだけ bind する server を作る。"""
     channels = channel_paths if channel_paths is not None else load_channel_registry(registry_path)
@@ -265,9 +291,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         collect_channel=(
             None
             if args.skip_refresh
-            else lambda channel: collect_channel_analytics(
+            else lambda channel, days: collect_channel_analytics(
                 channel,
                 AnalyticsSystem,
+                days=days,
                 force_publication_refresh=args.refresh_publications,
             )
         ),

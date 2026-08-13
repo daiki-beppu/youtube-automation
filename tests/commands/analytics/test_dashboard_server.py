@@ -175,15 +175,17 @@ def _response_bytes(url: str) -> bytes:
         return response.read()
 
 
-def _post_json(url: str) -> tuple[int, dict[str, object]]:
-    with urlopen(Request(url, method="POST"), timeout=5) as response:
+def _post_json(url: str, payload: object | None = None) -> tuple[int, dict[str, object]]:
+    data = None if payload is None else json.dumps(payload).encode("utf-8")
+    with urlopen(Request(url, data=data, method="POST"), timeout=5) as response:
         return response.status, json.loads(response.read())
 
 
 def test_refresh_endpoint_recollects_and_rebuilds_read_model(tmp_path: Path) -> None:
     channel = _write_channel(tmp_path)
 
-    def collect(path: Path) -> None:
+    def collect(path: Path, days: int) -> None:
+        assert days == 30
         snapshot = path / "data" / "analytics_data_2026-07-20.json"
         payload = json.loads(snapshot.read_text(encoding="utf-8"))
         payload["channel_analytics"]["summary"]["total_views"] = 456
@@ -224,7 +226,7 @@ def test_refresh_endpoint_returns_conflict_while_refresh_is_running(tmp_path: Pa
     started = threading.Event()
     release = threading.Event()
 
-    def collect(_path: Path) -> None:
+    def collect(_path: Path, _days: int) -> None:
         started.set()
         assert release.wait(timeout=5)
 
@@ -254,6 +256,50 @@ def test_server_returns_json_404_for_unknown_post_api(dashboard_server: str) -> 
         _post_json(f"{dashboard_server}/api/unknown")
     assert exc_info.value.code == 404
     assert json.loads(exc_info.value.read())["error"]["code"] == "not_found"
+
+
+@pytest.mark.parametrize("days", [7, 30, 90])
+def test_refresh_endpoint_passes_allowed_days_to_collector(tmp_path: Path, days: int) -> None:
+    channel = _write_channel(tmp_path)
+    received: list[int] = []
+    server = create_server(
+        port=0,
+        channel_paths=[channel],
+        collect_channel=lambda _channel, selected_days: received.append(selected_days),
+    )
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        status, _ = _post_json(f"http://127.0.0.1:{server.server_port}/api/refresh", {"days": days})
+        assert status == 200
+        assert received == [days]
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+        server.server_close()
+
+
+@pytest.mark.parametrize("days", [45, 0, "7", True, None])
+def test_refresh_endpoint_rejects_invalid_days_without_collection(tmp_path: Path, days: object) -> None:
+    channel = _write_channel(tmp_path)
+    received: list[int] = []
+    server = create_server(
+        port=0,
+        channel_paths=[channel],
+        collect_channel=lambda _channel, selected_days: received.append(selected_days),
+    )
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        with pytest.raises(HTTPError) as exc_info:
+            _post_json(f"http://127.0.0.1:{server.server_port}/api/refresh", {"days": days})
+        assert exc_info.value.code == 400
+        assert json.loads(exc_info.value.read())["error"]["code"] == "invalid_request"
+        assert received == []
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+        server.server_close()
 
 
 def test_server_api_json_bytes_match_production_builder_golden(dashboard_server: str) -> None:

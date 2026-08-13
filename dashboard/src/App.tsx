@@ -39,6 +39,7 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty"
 import { Skeleton } from "@/components/ui/skeleton"
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import {
   Sheet,
   SheetContent,
@@ -92,10 +93,18 @@ const chartConfig = {
   views: { label: "再生数", color: "var(--chart-3)" },
 } satisfies ChartConfig
 
-async function requestJson<T>(path: string, method = "GET"): Promise<T> {
+async function requestJson<T>(
+  path: string,
+  method = "GET",
+  body?: object
+): Promise<T> {
   const response = await fetch(path, {
     method,
-    headers: { Accept: "application/json" },
+    headers: {
+      Accept: "application/json",
+      ...(body ? { "Content-Type": "application/json" } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
   })
   if (!response.ok) {
     throw new Error(`HTTP ${response.status}`)
@@ -220,7 +229,13 @@ function PublicationActivityPanel({
   )
 }
 
-function DashboardOverview({ channels }: { channels: ChannelOverview[] }) {
+function DashboardOverview({
+  channels,
+  selectedDays,
+}: {
+  channels: ChannelOverview[]
+  selectedDays: number
+}) {
   const scheduledChannels = channels.filter(
     (channel) => channel.scheduled_count !== null
   )
@@ -311,6 +326,13 @@ function DashboardOverview({ channels }: { channels: ChannelOverview[] }) {
           </CardHeader>
           <CardContent>
             <dl className="grid gap-4 text-sm">
+              <div className="flex gap-3">
+                <CalendarRangeIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+                <div>
+                  <dt className="font-medium">選択期間</dt>
+                  <dd className="text-muted-foreground">直近 {selectedDays} 日</dd>
+                </div>
+              </div>
               <div className="flex gap-3">
                 <CalendarRangeIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
                 <div>
@@ -695,6 +717,7 @@ export function App() {
   const [error, setError] = useState<string | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
+  const [selectedDays, setSelectedDays] = useState(30)
   const detailRequestId = useRef(0)
 
   useEffect(() => {
@@ -727,11 +750,11 @@ export function App() {
       })
   }, [])
 
-  async function refreshDashboard() {
+  async function refreshDashboard(days = selectedDays) {
     setRefreshing(true)
     setError(null)
     try {
-      await requestJson<OverviewResponse>("/api/refresh", "POST")
+      await requestJson<OverviewResponse>("/api/refresh", "POST", { days })
       const [overviewResponse, publicationsResponse, detailResponse] =
         await Promise.all([
           requestJson<OverviewResponse>("/api/channels"),
@@ -805,6 +828,26 @@ export function App() {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            <ToggleGroup
+              aria-label="集計期間"
+              variant="outline"
+              spacing={0}
+              value={[String(selectedDays)]}
+              disabled={refreshing}
+              onValueChange={(values) => {
+                const value = values.at(-1)
+                if (!value) return
+                const days = Number(value)
+                setSelectedDays(days)
+                void refreshDashboard(days)
+              }}
+            >
+              {[7, 30, 90].map((days) => (
+                <ToggleGroupItem key={days} value={String(days)}>
+                  {days} 日
+                </ToggleGroupItem>
+              ))}
+            </ToggleGroup>
             <Button
               variant="outline"
               disabled={refreshing}
@@ -889,7 +932,7 @@ export function App() {
         ) : null}
         {channels && channels.length > 0 ? (
           <div className="grid gap-8">
-            <DashboardOverview channels={channels} />
+            <DashboardOverview channels={channels} selectedDays={selectedDays} />
             <ChannelStockTable
               channels={channels}
               selectedId={selectedId}
