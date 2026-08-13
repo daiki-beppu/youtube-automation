@@ -6,8 +6,9 @@ import argparse
 import json
 import logging
 import mimetypes
+import threading
 import webbrowser
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.resources import files
@@ -57,10 +58,43 @@ class DashboardServer(ThreadingHTTPServer):
 
     daemon_threads = True
 
-    def __init__(self, address: tuple[str, int], api: DashboardAPI, asset_root: Traversable) -> None:
+    def __init__(
+        self,
+        address: tuple[str, int],
+        api: DashboardAPI,
+        asset_root: Traversable,
+        *,
+        channels: list[Path],
+        collect_channel: Callable[[Path], None] | None,
+    ) -> None:
         super().__init__(address, DashboardRequestHandler)
         self.api = api
         self.asset_root = asset_root
+        self.channels = channels
+        self.collect_channel = collect_channel
+        self.refresh_lock = threading.Lock()
+
+    def refresh(self) -> Mapping[str, object] | None:
+        """収集と read model 再構築を排他的に実行する。"""
+        if not self.refresh_lock.acquire(blocking=False):
+            return None
+        try:
+            refresh_errors = (
+                refresh_dashboard_channels(self.channels, collect_channel=self.collect_channel)
+                if self.collect_channel is not None
+                else {}
+            )
+            workflow_timings = {channel: _build_channel_workflow_timing(channel) for channel in self.channels}
+            self.api = DashboardAPI(
+                build_dashboard_read_model(
+                    self.channels,
+                    refresh_errors=refresh_errors,
+                    workflow_timing_by_channel=workflow_timings,
+                )
+            )
+            return self.api.overview()
+        finally:
+            self.refresh_lock.release()
 
 
 class DashboardRequestHandler(BaseHTTPRequestHandler):
@@ -137,6 +171,20 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         if not self._api(path):
             self._static(path)
 
+    def do_POST(self) -> None:
+        path = urlsplit(self.path).path
+        if path == "/api/refresh":
+            overview = self.server.refresh()
+            if overview is None:
+                self._json(
+                    HTTPStatus.CONFLICT,
+                    {"error": {"code": "refresh_in_progress", "message": "データを更新中です"}},
+                )
+            else:
+                self._json(HTTPStatus.OK, overview)
+            return
+        self._not_found(f"API path が見つかりません: {path}")
+
 
 def create_server(
     *,
@@ -145,6 +193,7 @@ def create_server(
     asset_root: Traversable | None = None,
     channel_paths: list[Path] | None = None,
     refresh_errors: dict[Path, str] | None = None,
+    collect_channel: Callable[[Path], None] | None = None,
 ) -> DashboardServer:
     """registry を一度読み、loopback にだけ bind する server を作る。"""
     channels = channel_paths if channel_paths is not None else load_channel_registry(registry_path)
@@ -157,7 +206,13 @@ def create_server(
         )
     )
     resolved_assets = asset_root or files("youtube_automation").joinpath("dashboard_dist")
-    return DashboardServer((DEFAULT_HOST, port), api, resolved_assets)
+    return DashboardServer(
+        (DEFAULT_HOST, port),
+        api,
+        resolved_assets,
+        channels=channels,
+        collect_channel=collect_channel,
+    )
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -207,6 +262,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         registry_path=registry_path,
         channel_paths=channels,
         refresh_errors=refresh_errors,
+        collect_channel=(
+            None
+            if args.skip_refresh
+            else lambda channel: collect_channel_analytics(
+                channel,
+                AnalyticsSystem,
+                force_publication_refresh=args.refresh_publications,
+            )
+        ),
     )
     url = f"http://{DEFAULT_HOST}:{server.server_port}/"
     print(f"dashboard: {url}")

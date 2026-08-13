@@ -299,6 +299,15 @@ test.beforeAll(async () => {
   await waitUntilReady(baseURL)
 })
 
+test("保存済み snapshot から画面を更新できる", async ({ page }) => {
+  await page.goto(baseURL)
+  const button = page.getByRole("button", { name: "データを更新" })
+  await expect(button).toBeEnabled()
+  await button.click()
+  await expect(button).toHaveText("データを更新")
+  await expect(page.getByText("3,200").first()).toBeVisible()
+})
+
 test.afterAll(async () => {
   process?.kill("SIGTERM")
   if (fixtureRoot) await rm(fixtureRoot, { recursive: true, force: true })
