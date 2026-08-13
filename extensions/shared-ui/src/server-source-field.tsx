@@ -72,6 +72,24 @@ export function ServerSourceField({
       setOpen(false);
     }
   }, [interactionDisabled]);
+  React.useEffect(() => {
+    const field = fieldRef.current;
+    if (!field) return;
+    const blockDisabledOpen = (event: Event): void => {
+      if (!interactionDisabledRef.current) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    };
+    const openEvents = ["pointerdown", "mousedown", "click", "keydown"];
+    for (const eventName of openEvents) {
+      field.addEventListener(eventName, blockDisabledOpen, true);
+    }
+    return () => {
+      for (const eventName of openEvents) {
+        field.removeEventListener(eventName, blockDisabledOpen, true);
+      }
+    };
+  }, []);
 
   const handleOpenChange = (nextOpen: boolean): void => {
     if (!nextOpen) {
