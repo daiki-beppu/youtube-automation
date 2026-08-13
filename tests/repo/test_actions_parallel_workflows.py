@@ -239,6 +239,7 @@ def test_extensions_pull_request_trigger_keeps_path_filter() -> None:
             {"python", "packaging", "windows"},
         ),
         (["docs/adr/0024-example.md"], {"python", "adr"}),
+        ([".github/scripts/select-affected-tests.py"], {"python"}),
         (
             [],
             {"python", "packaging", "windows", "adr", "suno", "distrokid", "community"},
@@ -284,6 +285,121 @@ def test_ci_required_jobs_always_report_but_gate_heavy_python_steps() -> None:
     )
     assert any(step.get("run") == collection_serve_import_test for step in windows_steps)
     assert jobs["adr-numbering"]["if"] == "needs.changes.outputs.adr == 'true'"
+
+
+def test_ci_passes_selector_plan_as_job_output_without_shell_interpolation() -> None:
+    workflow = _load_workflow(_CI_WORKFLOW_PATH)
+    changes = workflow["jobs"]["changes"]
+    test_job = workflow["jobs"]["test"]
+
+    assert changes["outputs"]["test_plan"] == "${{ steps.test-plan.outputs.plan }}"
+    plan_step = _top_level_step(changes["steps"], "Build affected-test plan")
+    assert plan_step["id"] == "test-plan"
+    assert "select-affected-tests.py --format json" in plan_step["run"]
+    assert "changed-paths.txt" in plan_step["run"]
+    assert "GITHUB_OUTPUT" in plan_step["run"]
+
+    test_step = _top_level_step(test_job["steps"], "Test")
+    assert test_step["env"] == {
+        "EVENT_NAME": "${{ github.event_name }}",
+        "TEST_PLAN_JSON": "${{ needs.changes.outputs.test_plan }}",
+    }
+    run = test_step["run"]
+    assert "${{" not in run
+    assert "eval " not in run
+    assert "xargs" not in run
+
+
+def test_ci_pr_selected_plan_uses_safe_array_while_main_and_all_run_exact_full_suite() -> None:
+    workflow = _load_workflow(_CI_WORKFLOW_PATH)
+    jobs = workflow["jobs"]
+    assert "test" in jobs
+    assert "if" not in jobs["test"]
+
+    run = _top_level_step(jobs["test"]["steps"], "Test")["run"]
+    assert '[ "$EVENT_NAME" = "pull_request" ]' in run
+    assert '[ "$plan_mode" = "selected" ]' in run
+    assert 'targets=("${plan_lines[@]:1}")' in run
+    assert 'pytest -n auto -- "${targets[@]}"' in run
+    assert "Selected pytest targets: ${#targets[@]}/${total_count}" in run
+    assert "nix develop --command uv run pytest -n auto\n" in run
+    assert "-m repo_contract" not in run
+    assert "not repo_contract and not slow" not in run
+
+
+def _run_ci_test_step(
+    tmp_path: Path, *, event_name: str, payload: dict[str, object]
+) -> tuple[subprocess.CompletedProcess[str], list[str]]:
+    run = _top_level_step(_load_workflow(_CI_WORKFLOW_PATH)["jobs"]["test"]["steps"], "Test")["run"]
+    repository = tmp_path / "repository"
+    (repository / "tests").mkdir(parents=True)
+    (repository / "tests/test_selected.py").write_text("", encoding="utf-8")
+    (repository / "tests/test_other.py").write_text("", encoding="utf-8")
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    nix = fake_bin / "nix"
+    nix.write_text('#!/usr/bin/env bash\nprintf "%s\\n" "$@" > "$NIX_ARGS_LOG"\n', encoding="utf-8")
+    nix.chmod(0o755)
+    args_log = tmp_path / "nix-args.txt"
+    runner_temp = tmp_path / "runner-temp"
+    runner_temp.mkdir()
+
+    result = subprocess.run(
+        ["bash", "-c", run],
+        cwd=repository,
+        env=os.environ
+        | {
+            "EVENT_NAME": event_name,
+            "TEST_PLAN_JSON": json.dumps(payload),
+            "RUNNER_TEMP": str(runner_temp),
+            "NIX_ARGS_LOG": str(args_log),
+            "PATH": f"{fake_bin}:{os.environ['PATH']}",
+        },
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    arguments = args_log.read_text(encoding="utf-8").splitlines() if args_log.exists() else []
+    return result, arguments
+
+
+def test_ci_pr_executes_only_selected_targets_and_logs_selected_over_total(tmp_path: Path) -> None:
+    result, arguments = _run_ci_test_step(
+        tmp_path,
+        event_name="pull_request",
+        payload={"mode": "selected", "targets": ["tests/test_selected.py"]},
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "Selected pytest targets: 1/2" in result.stdout
+    assert arguments == [
+        "develop",
+        "--command",
+        "uv",
+        "run",
+        "pytest",
+        "-n",
+        "auto",
+        "--",
+        "tests/test_selected.py",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("event_name", "payload"),
+    [
+        ("push", {"mode": "selected", "targets": ["tests/test_selected.py"]}),
+        ("pull_request", {"mode": "all", "targets": []}),
+    ],
+)
+def test_ci_main_push_and_pr_fail_safe_execute_exact_full_suite(
+    tmp_path: Path, event_name: str, payload: dict[str, object]
+) -> None:
+    result, arguments = _run_ci_test_step(tmp_path, event_name=event_name, payload=payload)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "Full pytest suite: 2/2 targets" in result.stdout
+    assert arguments == ["develop", "--command", "uv", "run", "pytest", "-n", "auto"]
 
 
 def test_extensions_jobs_are_gated_by_their_changed_path_outputs() -> None:
