@@ -128,6 +128,22 @@ class _FakeVideos:
 
 
 class TestGetAllChannelVideosCache:
+    def test_fetches_more_than_fifty_uploads_across_every_page(self) -> None:
+        first_page = [_video_item(f"V{i:02d}", "2026-01-01T00:00:00Z") for i in range(50)]
+        playlist_items = _FakePlaylistItems(
+            pages=[
+                {"items": first_page, "nextPageToken": "1"},
+                {"items": [_video_item("V50", "2026-01-01T00:00:00Z")]},
+            ]
+        )
+        collector = _StubCollector(playlist_items)
+
+        videos = collector.get_all_channel_videos(refresh=True)
+
+        assert len(videos) == 51
+        assert videos[-1]["video_id"] == "V50"
+        assert playlist_items.call_count == 2
+
     def test_second_call_uses_cache(self) -> None:
         playlist_items = _FakePlaylistItems(pages=[{"items": [_video_item("V1", "2026-01-01T00:00:00Z")]}])
         collector = _StubCollector(playlist_items)
