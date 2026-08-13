@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "experiment-entry.schema.json",
+  "title": "Experiment entry",
+  "description": "data/experiments.jsonl の単一変数実験登録契約。schema_version 1 は pending 登録だけを表し、既存行を保持した append-only 追記を前提とする。",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "id",
+    "registered_date",
+    "lever",
+    "change",
+    "hypothesis_source",
+    "target",
+    "baseline_vpd",
+    "baseline_basis",
+    "judge_after_days",
+    "status"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "registered_date": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+    },
+    "lever": {
+      "$ref": "insights-entry.schema.json#/properties/lever"
+    },
+    "change": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": ".*\\S.*"
+    },
+    "hypothesis_source": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": ".*\\S.*"
+    },
+    "target": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": ".*\\S.*"
+    },
+    "baseline_vpd": {
+      "type": "number",
+      "minimum": 0
+    },
+    "baseline_basis": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": ".*\\S.*"
+    },
+    "judge_after_days": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "status": {
+      "const": "pending"
+    }
+  }
+}
