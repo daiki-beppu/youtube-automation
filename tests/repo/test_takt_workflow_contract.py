@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import os
+import shutil
+import subprocess
+import sys
 from collections.abc import Iterable
 from pathlib import Path
 
@@ -13,6 +17,7 @@ TAKT = REPO_ROOT / ".takt"
 WORKFLOWS = TAKT / "workflows"
 STEPS = TAKT / "steps"
 FACETS = TAKT / "facets"
+LOCAL_TEST_GATE = REPO_ROOT / ".github/scripts/run-affected-tests.py"
 
 PUBLIC_WORKFLOWS = {
     "audit-unit-split",
@@ -217,6 +222,160 @@ def test_delivery_lanes_put_ci_before_final_gate_and_spillover() -> None:
         names = [str(step["name"]) for step in _steps(_workflow(name))]
         assert names.index("ci_verify") < names.index("final_gate") < names.index("spillover")
         assert _step(_workflow(name), "ci_verify").get("uses") == "ci-verify"
+
+
+def test_ci_verify_uses_affected_test_gate_without_weakening_other_baselines() -> None:
+    instruction = (FACETS / "instructions" / "yt-auto-ci-verify.md").read_text(encoding="utf-8")
+
+    assert "python .github/scripts/run-affected-tests.py" in instruction
+    assert "nix develop --command uv run pytest -n auto\n" not in instruction
+    for command in (
+        "nix develop --command uv run ruff check .",
+        "nix develop --command uv run ruff format --check .",
+        "bash .github/scripts/any-usage-gate.sh",
+        "git diff --check",
+    ):
+        assert command in instruction
+    assert "skip" in instruction
+    assert "scope" in instruction
+    assert "main" in instruction
+
+
+def _git(repository: Path, *arguments: str) -> str:
+    result = subprocess.run(
+        ["git", *arguments],
+        cwd=repository,
+        env=os.environ
+        | {
+            "GIT_CONFIG_GLOBAL": os.devnull,
+            "GIT_CONFIG_SYSTEM": os.devnull,
+            "GIT_AUTHOR_NAME": "local-test-gate",
+            "GIT_AUTHOR_EMAIL": "local-test-gate@example.invalid",
+            "GIT_COMMITTER_NAME": "local-test-gate",
+            "GIT_COMMITTER_EMAIL": "local-test-gate@example.invalid",
+        },
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return result.stdout.strip()
+
+
+def _local_gate_repository(tmp_path: Path) -> tuple[Path, str, Path]:
+    repository = tmp_path / "repository"
+    repository.mkdir()
+    _git(repository, "init", "-q", "-b", "work")
+    for relative in (
+        ".github/scripts/select-affected-tests.py",
+        ".github/scripts/run-affected-tests.py",
+    ):
+        destination = repository / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(REPO_ROOT / relative, destination)
+    source = repository / "src/youtube_automation/core/leaf.py"
+    source.parent.mkdir(parents=True)
+    source.write_text("VALUE = 1\n", encoding="utf-8")
+    test = repository / "tests/core/test_leaf.py"
+    test.parent.mkdir(parents=True)
+    test.write_text(
+        "from youtube_automation.core.leaf import VALUE\n\ndef test_leaf(): assert VALUE == 1\n",
+        encoding="utf-8",
+    )
+    conftest = repository / "tests/conftest.py"
+    conftest.write_text("", encoding="utf-8")
+    _git(repository, "add", ".")
+    _git(repository, "commit", "-q", "-m", "base")
+    base = _git(repository, "rev-parse", "HEAD")
+
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    nix = fake_bin / "nix"
+    nix.write_text(
+        '#!/usr/bin/env bash\nprintf "%s\\n" "$@" > "$NIX_ARGS_LOG"\n',
+        encoding="utf-8",
+    )
+    nix.chmod(0o755)
+    return repository, base, fake_bin
+
+
+def _run_local_gate(repository: Path, base: str, fake_bin: Path, args_log: Path) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, str(repository / ".github/scripts/run-affected-tests.py")],
+        cwd=repository,
+        env=os.environ
+        | {
+            "PRE_PUSH_DIFF_BASE": base,
+            "NIX_ARGS_LOG": str(args_log),
+            "PATH": f"{fake_bin}:{os.environ['PATH']}",
+        },
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+def test_local_ci_gate_runs_selected_target_and_reports_count(tmp_path: Path) -> None:
+    repository, base, fake_bin = _local_gate_repository(tmp_path)
+    source = repository / "src/youtube_automation/core/leaf.py"
+    source.write_text("VALUE = 2\n", encoding="utf-8")
+    args_log = tmp_path / "selected-args.txt"
+
+    result = _run_local_gate(repository, base, fake_bin, args_log)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "Selected pytest targets: 1/1" in result.stdout
+    assert args_log.read_text(encoding="utf-8").splitlines() == [
+        "develop",
+        "--command",
+        "uv",
+        "run",
+        "pytest",
+        "-n",
+        "auto",
+        "--",
+        "tests/core/test_leaf.py",
+    ]
+
+
+def test_local_ci_gate_runs_full_suite_for_fail_safe_change(tmp_path: Path) -> None:
+    repository, base, fake_bin = _local_gate_repository(tmp_path)
+    (repository / "tests/conftest.py").write_text("VALUE = 1\n", encoding="utf-8")
+    args_log = tmp_path / "all-args.txt"
+
+    result = _run_local_gate(repository, base, fake_bin, args_log)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "Full pytest suite: 1/1 targets" in result.stdout
+    assert args_log.read_text(encoding="utf-8").splitlines() == [
+        "develop",
+        "--command",
+        "uv",
+        "run",
+        "pytest",
+        "-n",
+        "auto",
+    ]
+
+
+def test_local_ci_gate_runs_full_suite_when_diff_base_cannot_be_resolved(tmp_path: Path) -> None:
+    repository, _, fake_bin = _local_gate_repository(tmp_path)
+    source = repository / "src/youtube_automation/core/leaf.py"
+    source.write_text("VALUE = 2\n", encoding="utf-8")
+    args_log = tmp_path / "missing-base-args.txt"
+
+    result = _run_local_gate(repository, "missing-base", fake_bin, args_log)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "Full pytest suite: 1/1 targets" in result.stdout
+    assert args_log.read_text(encoding="utf-8").splitlines() == [
+        "develop",
+        "--command",
+        "uv",
+        "run",
+        "pytest",
+        "-n",
+        "auto",
+    ]
 
 
 def test_no_planning_step_can_bypass_required_delivery_gates() -> None:

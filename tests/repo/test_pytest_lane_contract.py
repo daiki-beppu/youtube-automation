@@ -219,6 +219,15 @@ def test_development_documents_each_pytest_lane_command() -> None:
         assert expression in development
 
 
+def test_development_documents_local_selection_and_main_full_safety_net() -> None:
+    development = (ROOT / "docs/development.md").read_text(encoding="utf-8")
+
+    assert "python .github/scripts/run-affected-tests.py" in development
+    assert "main" in development
+    assert "選別漏れ" in development
+    assert "marker" in development
+
+
 def test_development_documents_position_independent_lane_registry() -> None:
     """REQ-3042-07b: development docs describe registry placement independence."""
     development = (ROOT / "docs/development.md").read_text(encoding="utf-8")
