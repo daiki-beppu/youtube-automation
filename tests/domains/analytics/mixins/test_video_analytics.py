@@ -61,6 +61,7 @@ class TestGetVideoAnalytics:
                     "topicDetails": {
                         "topicCategories": ["https://en.wikipedia.org/wiki/Music"],
                     },
+                    "statistics": {"viewCount": "54321"},
                 }
             ]
         }
@@ -70,6 +71,7 @@ class TestGetVideoAnalytics:
         assert len(result) == 1
         video = result[0]
         assert video["video_id"] == "VID_001"
+        assert video["view_count"] == "54321"
         assert video["views"] == 1000
         assert video["watch_time_minutes"] == 500
         assert video["average_view_duration"] == 300
@@ -187,6 +189,7 @@ class TestGetVideoDetails:
                     "topicDetails": {
                         "topicCategories": ["https://en.wikipedia.org/wiki/Music"],
                     },
+                    "statistics": {"viewCount": "12345"},
                 }
             ]
         }
@@ -197,3 +200,4 @@ class TestGetVideoDetails:
         assert result["VID_001"]["definition"] == "hd"
         assert result["VID_001"]["caption"] == "true"
         assert len(result["VID_001"]["topic_categories"]) == 1
+        assert result["VID_001"]["view_count"] == "12345"

@@ -145,6 +145,7 @@ yt_thumbnail_correlate = _make_entrypoint("youtube_automation.commands.thumbnail
 yt_thumbnail_text = _make_entrypoint("youtube_automation.commands.thumbnail.thumbnail_text")
 yt_title_duplicate_check = _make_entrypoint("youtube_automation.commands.metadata.title_duplicate_check")
 yt_video_analyze = _make_entrypoint("youtube_automation.commands.analytics.video_analyze")
+yt_vpd_rank = _make_entrypoint("youtube_automation.commands.analytics.vpd_rank")
 yt_vote_log = _make_entrypoint("youtube_automation.commands.collections.vote_log")
 yt_wf_batch = _make_entrypoint("youtube_automation.commands.uploads.wf_batch")
 yt_upload_auto = _make_entrypoint("youtube_automation.commands.uploads.youtube_auto_uploader")

@@ -62,6 +62,7 @@ class VideoAnalyticsMixin:
                             "video_id": video_id,
                             "title": video_detail.get("title", "Unknown"),
                             "published_at": video_detail.get("published_at"),
+                            "view_count": video_detail.get("view_count"),
                             "collection_type": self._classify_video_type(video_detail.get("title", "")),
                             "views": row[1],
                             "watch_time_minutes": row[2],
@@ -167,6 +168,7 @@ class VideoAnalyticsMixin:
                     snippet = item["snippet"]
                     content_details = item.get("contentDetails", {})
                     topic_details = item.get("topicDetails", {})
+                    statistics = item.get("statistics", {})
 
                     all_details[video_id] = {
                         "title": snippet["title"],
@@ -178,6 +180,7 @@ class VideoAnalyticsMixin:
                         "dimension": content_details.get("dimension", ""),
                         "caption": content_details.get("caption", "false"),
                         "topic_categories": topic_details.get("topicCategories", []),
+                        "view_count": statistics.get("viewCount"),
                     }
 
             return all_details
@@ -185,6 +188,10 @@ class VideoAnalyticsMixin:
         except YouTubeAPIError as e:
             logger.warning(f"YouTube API エラー（動画詳細取得）: {e}")
             return {}
+
+    def get_video_details(self, video_ids: List[str]) -> Dict:
+        """Data API の動画詳細を 50 件ずつ取得する公開境界。"""
+        return self._get_video_details(video_ids)
 
     def _classify_video_type(self, title: str) -> str:
         """動画タイプ分類（Complete Collection vs Individual Track）"""
