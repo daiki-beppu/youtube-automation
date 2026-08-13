@@ -69,6 +69,7 @@ def _write_fixture(
         "published_at": "2026-06-01T00:00:00Z",
         "cumulative_views": 4200,
         "days_since_publish": 42,
+        "duration": "PT1H",
         "vpd": 100.0,
     }
     bottom = {
@@ -77,6 +78,7 @@ def _write_fixture(
         "published_at": "2026-05-01T00:00:00Z",
         "cumulative_views": 420,
         "days_since_publish": 42,
+        "duration": "PT45M",
         "vpd": 10.0,
     }
     vpd_ranking = {
@@ -120,6 +122,15 @@ def _write_fixture(
         }
         for name in ("color", "text_placement", "visual_flow", "subject")
     }
+    automatic_known = {
+        name: {
+            "top_known_count": 1,
+            "bottom_known_count": 1,
+            "undetermined_count": {"top": 0, "bottom": 0},
+            "values": {},
+        }
+        for name in ("title_pattern", "duration", "publish_weekday", "publish_time")
+    }
     win_pattern = {
         "n": 2,
         "k": 1,
@@ -144,6 +155,7 @@ def _write_fixture(
                     }
                 },
             },
+            **automatic_known,
             "composition": {
                 "top_known_count": 1,
                 "bottom_known_count": 1,
@@ -660,6 +672,54 @@ def test_win_pattern_population_mismatch_fails(tmp_path: Path) -> None:
     report_path = tmp_path / "reports/analysis_20260717.json"
     report = json.loads(report_path.read_text(encoding="utf-8"))
     report["win_pattern"]["n"] = 3
+    win_path = tmp_path / report["inputs"]["intermediate"]["win_pattern"]
+    win_path.write_text(json.dumps(report["win_pattern"]), encoding="utf-8")
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+
+    assert _run_validator(tmp_path).returncode != 0
+
+
+def test_missing_automatic_attribute_fails(tmp_path: Path) -> None:
+    _write_fixture(tmp_path, depth="standard")
+    _append_standard_retention_section(tmp_path)
+    report_path = tmp_path / "reports/analysis_20260717.json"
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    del report["win_pattern"]["attributes"]["publish_time"]
+    win_path = tmp_path / report["inputs"]["intermediate"]["win_pattern"]
+    win_path.write_text(json.dumps(report["win_pattern"]), encoding="utf-8")
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+
+    assert _run_validator(tmp_path).returncode != 0
+
+
+def test_all_duration_undetermined_fails(tmp_path: Path) -> None:
+    _write_fixture(tmp_path, depth="standard")
+    _append_standard_retention_section(tmp_path)
+    report_path = tmp_path / "reports/analysis_20260717.json"
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    duration = report["win_pattern"]["attributes"]["duration"]
+    duration["top_known_count"] = 0
+    duration["bottom_known_count"] = 0
+    duration["undetermined_count"] = {"top": 1, "bottom": 1}
+    for item in report["vpd_ranking"]["ranking"]:
+        item["duration"] = None
+    for group in ("top", "bottom"):
+        report["vpd_ranking"]["groups"][group]["items"][0]["duration"] = None
+    ranking_path = tmp_path / report["inputs"]["intermediate"]["vpd_ranking"]
+    ranking_path.write_text(json.dumps(report["vpd_ranking"]), encoding="utf-8")
+    win_path = tmp_path / report["inputs"]["intermediate"]["win_pattern"]
+    win_path.write_text(json.dumps(report["win_pattern"]), encoding="utf-8")
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+
+    assert _run_validator(tmp_path).returncode != 0
+
+
+def test_attribute_known_and_undetermined_population_mismatch_fails(tmp_path: Path) -> None:
+    _write_fixture(tmp_path, depth="standard")
+    _append_standard_retention_section(tmp_path)
+    report_path = tmp_path / "reports/analysis_20260717.json"
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    report["win_pattern"]["attributes"]["color"]["undetermined_count"]["top"] = 0
     win_path = tmp_path / report["inputs"]["intermediate"]["win_pattern"]
     win_path.write_text(json.dumps(report["win_pattern"]), encoding="utf-8")
     report_path.write_text(json.dumps(report), encoding="utf-8")

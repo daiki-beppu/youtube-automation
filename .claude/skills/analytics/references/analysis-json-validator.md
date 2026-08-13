@@ -231,6 +231,8 @@ jq -e '
     and (.video_id | nonempty_string)
     and (.cumulative_views | integer)
     and (.days_since_publish | integer and . >= 1)
+    and (has("duration"))
+    and ((.duration == null) or (.duration | nonempty_string))
     and (.vpd | type == "number");
 
   def vpd_ranking_ok:
@@ -253,18 +255,41 @@ jq -e '
       and (([$ranking.groups.top.items[], $ranking.groups.middle.items[], $ranking.groups.bottom.items[]]
             | map(.video_id)) == ($ranking.ranking | map(.video_id)));
 
+  def automatic_attributes:
+    ["theme", "title_pattern", "duration", "publish_weekday", "publish_time"];
+
+  def visual_attributes:
+    ["composition", "color", "text_placement", "visual_flow", "subject"];
+
+  def attribute_population_ok($summary; $k):
+    ($summary | type == "object")
+    and ($summary.top_known_count | integer)
+    and ($summary.bottom_known_count | integer)
+    and ($summary.undetermined_count | type == "object")
+    and ($summary.undetermined_count.top | integer)
+    and ($summary.undetermined_count.bottom | integer)
+    and ($summary.values | type == "object")
+    and (($summary.top_known_count + $summary.undetermined_count.top) == $k)
+    and (($summary.bottom_known_count + $summary.undetermined_count.bottom) == $k);
+
   def win_pattern_ok($ranking):
     . as $win
     | (type == "object")
       and (.n == $ranking.n)
       and (.k == $ranking.k)
       and (.attributes | type == "object")
-      and (["composition", "color", "text_placement", "visual_flow", "subject"]
+      and (($win.attributes | keys | sort) == ((automatic_attributes + visual_attributes) | sort))
+      and ((automatic_attributes + visual_attributes)
+           | all(.[]; . as $name | attribute_population_ok($win.attributes[$name]; $ranking.k)))
+      and (["theme", "title_pattern", "publish_weekday", "publish_time"]
            | all(.[]; . as $name
-             | ($win.attributes[$name] | type == "object")
-               and ($win.attributes[$name].undetermined_count | type == "object")
-               and ($win.attributes[$name].undetermined_count.top | integer)
-               and ($win.attributes[$name].undetermined_count.bottom | integer)))
+             | ($win.attributes[$name].top_known_count == $ranking.k)
+               and ($win.attributes[$name].bottom_known_count == $ranking.k)))
+      and ($win.attributes.duration.undetermined_count.top
+           == ([$ranking.groups.top.items[] | select(.duration == null)] | length))
+      and ($win.attributes.duration.undetermined_count.bottom
+           == ([$ranking.groups.bottom.items[] | select(.duration == null)] | length))
+      and (($win.attributes.duration.top_known_count + $win.attributes.duration.bottom_known_count) > 0)
       and (.disclaimer | type == "string")
       and (.disclaimer | test("correlation"; "i"))
       and (.disclaimer | test("causation"; "i"));
