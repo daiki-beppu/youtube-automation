@@ -38,7 +38,7 @@
 
 ## 制作の 3 フェーズと skill の流れ
 
-`/wf-new` と `/wf-next` はオーケストレーターとして動作する。各 phase の生成・変換処理は Agent ツールで一作業ずつ subagent へ委譲し、メインエージェントは `workflow-state.json` の管理、AskUserQuestion / config 駆動の承認ゲート、成果物の存在・phase 整合検証を担当する。subagent は state を書き込まず、承認を取得しない。
+`/wf-new` と `/wf-next` はオーケストレーターとして動作する。各 phase の生成・変換処理は Agent ツールで一作業ずつ subagent へ委譲し、メインエージェントは `workflow-state.json` の管理、AskUserQuestion / config 駆動の承認ゲート、成果物の存在・phase 整合検証を担当する。subagent は state を書き込まず、承認を取得しない。唯一 `/wf-new` Phase 2c で thumbnail / music が両方未完了の場合は、同じ dispatch の 2 Agent を同時起動する。Phase 2c 以外と片側だけの再開は一作業ずつのままである。
 
 subagent が失敗した、期待成果物が無い、または現在の phase と整合しない場合、メインは state を更新しない。次の `/wf-new` / `/wf-next` は同じ未完了ステップから再開する。`skip_audio_approval` / `skip_upload_approval`、`skip_manual_mastering`、thumbnail 承認、playlist 初期化承認はメインが config と実ファイルを確認して処理する。廃止済みの `approval_gates.audio` / `approval_gates.upload` が残っている場合は `ConfigError` で停止する。
 
