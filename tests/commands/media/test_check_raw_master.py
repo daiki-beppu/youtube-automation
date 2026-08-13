@@ -115,6 +115,59 @@ class TestCheckRawMaster:
             check_raw_master.check_raw_master(coll)
         assert (coll / "workflow-state.json").read_text(encoding="utf-8") == "{broken"
 
+    def test_apply_validates_loudness_receipt_before_state_update(self, tmp_path, monkeypatch):
+        coll = _make_collection(tmp_path, master_files=["master.mp3"])
+        receipt = coll / "01-master" / ".loudness-receipt.json"
+        receipt.write_text("{}", encoding="utf-8")
+        calls: list[tuple[Path, Path]] = []
+
+        def validate(collection: Path, receipt_path: Path, _max_lu: float) -> dict:
+            calls.append((collection, receipt_path))
+            return {"status": "PASS", "raw_master_output": "master.mp3"}
+
+        monkeypatch.setattr(check_raw_master, "validate_loudness_receipt", validate)
+        monkeypatch.setattr(check_raw_master, "load_max_deviation_lu", lambda: 2.0)
+
+        result = check_raw_master.apply_raw_master(coll, "master.mp3", loudness_receipt=receipt)
+
+        assert result is None
+        assert calls == [(coll, receipt)]
+        assert _read_state(coll)["assets"]["raw_master"] == "master.mp3"
+
+    def test_apply_does_not_advance_state_when_receipt_is_invalid(self, tmp_path, monkeypatch):
+        coll = _make_collection(tmp_path, master_files=["master.mp3"])
+        receipt = coll / "01-master" / ".loudness-receipt.json"
+        receipt.write_text("{}", encoding="utf-8")
+
+        def reject(_collection: Path, _receipt_path: Path, _max_lu: float) -> dict:
+            raise ValidationError("receipt mismatch")
+
+        monkeypatch.setattr(check_raw_master, "validate_loudness_receipt", reject)
+        monkeypatch.setattr(check_raw_master, "load_max_deviation_lu", lambda: 2.0)
+
+        with pytest.raises(ValidationError, match="receipt mismatch"):
+            check_raw_master.apply_raw_master(coll, "master.mp3", loudness_receipt=receipt)
+
+        state = _read_state(coll)
+        assert state["assets"]["raw_master"] is None
+        assert state["updated_at"] == "2026-01-01T00:00:00.000Z"
+
+    def test_apply_does_not_advance_state_when_receipt_identifies_another_output(self, tmp_path, monkeypatch):
+        coll = _make_collection(tmp_path, master_files=["master.mp3"])
+        receipt = coll / "01-master" / ".loudness-receipt.json"
+        receipt.write_text("{}", encoding="utf-8")
+        monkeypatch.setattr(
+            check_raw_master,
+            "validate_loudness_receipt",
+            lambda *_args: {"status": "PASS", "raw_master_output": "other.mp3"},
+        )
+        monkeypatch.setattr(check_raw_master, "load_max_deviation_lu", lambda: 2.0)
+
+        with pytest.raises(ValidationError, match="更新候補と一致しません"):
+            check_raw_master.apply_raw_master(coll, "master.mp3", loudness_receipt=receipt)
+
+        assert _read_state(coll)["assets"]["raw_master"] is None
+
     def test_path_traversal_in_recorded_value_raises(self, tmp_path):
         coll = _make_collection(tmp_path, raw_master="../evil.mp3", master_files=["master.mp3"])
         with pytest.raises(ValidationError):

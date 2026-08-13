@@ -34,8 +34,9 @@ def module():
 
 def _collection(tmp_path: Path) -> Path:
     collection = tmp_path / "collection"
+    (collection / "01-master").mkdir(parents=True)
     music = collection / "02-Individual-music"
-    music.mkdir(parents=True)
+    music.mkdir()
     for name in ("01-a.mp3", "02-b.mp3", "03-c.wav"):
         (music / name).write_bytes(b"fixture")
     return collection
@@ -138,6 +139,76 @@ def test_main_passes_when_all_tracks_are_within_two_lu(module, tmp_path, monkeyp
     output = capsys.readouterr().out
     assert "PASS" in output
     assert "1.70 LU" in output
+
+
+def test_receipt_records_one_full_scan_and_validates_without_measuring(module, tmp_path, monkeypatch, capsys):
+    collection = _collection(tmp_path)
+    receipt = collection / "01-master" / ".loudness-receipt.json"
+    music = collection / "02-Individual-music"
+    for index in range(4, 13):
+        (music / f"{index:02d}-fixture.mp3").write_bytes(f"fixture-{index}".encode())
+    input_names = sorted(path.name for path in music.iterdir())
+    values = {name: -14.8 + index * 0.1 for index, name in enumerate(input_names)}
+    measured: list[str] = []
+    monkeypatch.setattr(module, "load_max_deviation_lu", lambda: 2.0)
+
+    def measure(path: Path) -> float:
+        measured.append(path.name)
+        return values[path.name]
+
+    monkeypatch.setattr(module, "measure_integrated_lufs", measure)
+
+    assert module.main([str(collection), "--receipt", str(receipt), "--json"]) == 0
+    generated = json.loads(receipt.read_text(encoding="utf-8"))
+    assert measured == input_names
+    assert generated["schema_version"] == 1
+    assert generated["collection"] == "collection"
+    assert generated["raw_master_output"] == "master.mp3"
+    assert generated["full_collection_scans"] == 1
+    assert generated["track_count"] == 12
+    assert generated["max_deviation_lu"] == 2.0
+    assert generated["status"] == "PASS"
+    assert all(track["sha256"] for track in generated["tracks"])
+    capsys.readouterr()
+
+    measured.clear()
+    assert module.main([str(collection), "--validate-receipt", str(receipt), "--json"]) == 0
+    assert measured == []
+    validated = json.loads(capsys.readouterr().out)
+    assert validated["status"] == "PASS"
+
+
+@pytest.mark.parametrize("receipt_case", ("missing", "corrupt", "input-mismatch", "threshold-mismatch"))
+def test_receipt_validation_fails_closed(module, tmp_path, monkeypatch, capsys, receipt_case):
+    collection = _collection(tmp_path)
+    receipt = collection / "receipt.json"
+    values = {"01-a.mp3": -14.8, "02-b.mp3": -14.0, "03-c.wav": -13.1}
+    monkeypatch.setattr(module, "load_max_deviation_lu", lambda: 2.0)
+    monkeypatch.setattr(module, "measure_integrated_lufs", lambda path: values[path.name])
+
+    if receipt_case != "missing":
+        assert module.main([str(collection), "--receipt", str(receipt)]) == 0
+    if receipt_case == "corrupt":
+        receipt.write_text("{broken", encoding="utf-8")
+    elif receipt_case == "input-mismatch":
+        (collection / "02-Individual-music" / "01-a.mp3").write_bytes(b"changed")
+    elif receipt_case == "threshold-mismatch":
+        monkeypatch.setattr(module, "load_max_deviation_lu", lambda: 1.5)
+
+    assert module.main([str(collection), "--validate-receipt", str(receipt)]) == 1
+    assert "ERROR:" in capsys.readouterr().err
+
+
+def test_receipt_validation_rejects_threshold_violation(module, tmp_path, monkeypatch, capsys):
+    collection = _collection(tmp_path)
+    receipt = collection / "receipt.json"
+    values = {"01-a.mp3": -17.0, "02-b.mp3": -14.0, "03-c.wav": -12.0}
+    monkeypatch.setattr(module, "load_max_deviation_lu", lambda: 2.0)
+    monkeypatch.setattr(module, "measure_integrated_lufs", lambda path: values[path.name])
+
+    assert module.main([str(collection), "--receipt", str(receipt)]) == 2
+    assert module.main([str(collection), "--validate-receipt", str(receipt)]) == 2
+    assert "FAIL" in capsys.readouterr().out
 
 
 def test_main_fails_and_lists_outliers_above_two_lu(module, tmp_path, monkeypatch, capsys):

@@ -8,56 +8,28 @@ import json
 import math
 import re
 import shutil
-import statistics
 import subprocess
 import sys
+import time
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 from youtube_automation.configuration.skills import load_skill_config
 from youtube_automation.core.errors import ConfigError, ValidationError
-from youtube_automation.domains.media.audio_formats import AUDIO_EXTS
+from youtube_automation.domains.media.loudness_receipt import (
+    build_loudness_receipt,
+    collect_audio_files,
+    resolve_max_deviation_lu,
+    validate_loudness_receipt,
+    write_loudness_receipt,
+)
 
-_DEFAULT_MAX_DEVIATION_LU = 2.0
 _FFMPEG_JSON_OBJECT = re.compile(r"\{[^{}]*\}", re.DOTALL)
-
-
-def _as_mapping(value: object, context: str) -> Mapping[str, object]:
-    if value is None:
-        return {}
-    if not isinstance(value, Mapping):
-        raise ConfigError(f"skill-config の {context} は mapping である必要があります: {value!r}")
-    return value
 
 
 def load_max_deviation_lu() -> float:
     """Resolve the deviation threshold from the merged masterup skill config."""
-    config = load_skill_config("masterup")
-    validation = _as_mapping(config.get("validation"), "validation")
-    loudness = _as_mapping(validation.get("loudness_deviation"), "validation.loudness_deviation")
-    raw_value = loudness.get("max_lu", _DEFAULT_MAX_DEVIATION_LU)
-    if isinstance(raw_value, bool):
-        raise ConfigError("validation.loudness_deviation.max_lu は 0 より大きい数値で指定してください")
-    try:
-        value = float(raw_value)
-    except (TypeError, ValueError) as error:
-        raise ConfigError("validation.loudness_deviation.max_lu は 0 より大きい数値で指定してください") from error
-    if not math.isfinite(value) or value <= 0:
-        raise ConfigError("validation.loudness_deviation.max_lu は 0 より大きい数値で指定してください")
-    return value
-
-
-def collect_audio_files(collection_dir: Path) -> list[Path]:
-    """Return supported top-level source tracks in deterministic order."""
-    music_dir = collection_dir / "02-Individual-music"
-    if not music_dir.is_dir():
-        raise ValidationError(f"ディレクトリが見つかりません: {music_dir}")
-    files = sorted(
-        path.resolve() for path in music_dir.iterdir() if path.is_file() and path.suffix.lower() in AUDIO_EXTS
-    )
-    if not files:
-        raise ValidationError(f"計測対象の音源がありません: {music_dir}")
-    return files
+    return resolve_max_deviation_lu(load_skill_config("masterup"))
 
 
 def parse_loudnorm_input_i(stderr: str) -> float:
@@ -102,34 +74,6 @@ def measure_integrated_lufs(path: Path) -> float:
     return parse_loudnorm_input_i(completed.stderr)
 
 
-def evaluate_measurements(measurements: Sequence[tuple[Path, float]], max_lu: float) -> dict[str, object]:
-    """Build the single-source PASS/FAIL result and median-centered target range."""
-    values = [value for _, value in measurements]
-    minimum = min(values)
-    maximum = max(values)
-    deviation = maximum - minimum
-    center = statistics.median(values)
-    lower = center - max_lu / 2
-    upper = center + max_lu / 2
-    tracks = [
-        {
-            "file": path.name,
-            "integrated_lufs": value,
-            "outlier": value < lower or value > upper,
-        }
-        for path, value in measurements
-    ]
-    return {
-        "status": "PASS" if deviation <= max_lu else "FAIL",
-        "max_deviation_lu": max_lu,
-        "measured_deviation_lu": deviation,
-        "minimum_lufs": minimum,
-        "maximum_lufs": maximum,
-        "target_range_lufs": [lower, upper],
-        "tracks": tracks,
-    }
-
-
 def _print_human(result: Mapping[str, object]) -> None:
     lower, upper = result["target_range_lufs"]
     print(
@@ -146,6 +90,9 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("collection", type=Path, help="collection directory")
     parser.add_argument("--json", action="store_true", help="emit the result as JSON")
+    modes = parser.add_mutually_exclusive_group()
+    modes.add_argument("--receipt", type=Path, help="write a machine-readable receipt after measuring")
+    modes.add_argument("--validate-receipt", type=Path, help="validate a receipt without running FFmpeg")
     return parser
 
 
@@ -153,9 +100,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
     try:
         max_lu = load_max_deviation_lu()
-        files = collect_audio_files(args.collection.resolve())
-        measurements = [(path, measure_integrated_lufs(path)) for path in files]
-        result = evaluate_measurements(measurements, max_lu)
+        collection = args.collection.resolve()
+        if args.validate_receipt is not None:
+            result = validate_loudness_receipt(collection, args.validate_receipt.resolve(), max_lu)
+        else:
+            files = collect_audio_files(collection)
+            started = time.monotonic()
+            measurements = [(path, measure_integrated_lufs(path)) for path in files]
+            elapsed = time.monotonic() - started
+            result = build_loudness_receipt(collection, measurements, max_lu, elapsed)
+            if args.receipt is not None:
+                write_loudness_receipt(args.receipt.resolve(), result)
     except (ConfigError, ValidationError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
         return 1

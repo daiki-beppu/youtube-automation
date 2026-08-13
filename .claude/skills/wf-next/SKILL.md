@@ -145,9 +145,9 @@ status を記録した後は、成功時だけでなく blocked / failed の停�
 1. `assets.music_prompts = true` + `assets.raw_master = null`:
    - `workflow-state.json::planning.music.suno_playlist_url` の記録有無と `02-Individual-music/` の音声ファイル（mp3 / m4a / wav）実在を確認する
    - **`02-Individual-music/` に音声ファイルが 1 件以上存在（URL 記録の有無は問わない）**:
-     - AskUserQuestion による URL 入力はスキップする。title list は `/masterup` Step 1.6 がローカルファイル名から自動復元するため playlist URL は不要。メインが `/masterup` の dry-run / 検証ゲートを実行し、選曲・混入許容・over-max 例外などの承認分岐をすべて解決する
+     - AskUserQuestion による URL 入力はスキップする。title list は `/masterup` Step 1.6 がローカルファイル名から自動復元するため playlist URL は不要。メインが `/masterup` の dry-run / Step 5.1 以外の検証ゲートを実行し、選曲・混入許容・over-max 例外などの承認分岐をすべて解決する。ラウドネス全曲走査は subagent 内の Step 5.1 で1回だけ行う
      - Agent ツールで subagent を起動し、対象 collection、（記録があれば）playlist URL、承認済み選択条件を入力として `/masterup` の Subagent Contract を実行させる。`workflow-state.json` 更新と雨レイヤー後処理は実行させない
-     - 期待成果物 `01-master/master.*` と `01-master/.selection.log` の存在をメインが確認し、成功時だけ `assets.raw_master` と `updated_at` を更新する。雨レイヤーが有効なら、その後にメインが `/masterup` Step 5.6 を実行し、出力と state を再検証する
+     - 期待成果物 `01-master/master.*`、`01-master/.selection.log`、`01-master/.loudness-receipt.json` の存在をメインが確認する。`yt-raw-master-check --apply --loudness-receipt <receipt>` で receipt と現在の collection / 入力 SHA-256 / 閾値 / PASS 判定を検証し、成功時だけ `assets.raw_master` と `updated_at` を更新する。検証時に FFmpeg の全曲走査を再実行しない。雨レイヤーが有効なら、その後にメインが `/masterup` Step 5.6 を実行し、出力と state を再検証する
      - ガイダンス: 「raw master をミキシング+マスタリングし、最終マスターを 01-master/ に配置後、`/wf-next` を再実行してください」
      - **ここでフロー停止**
    - **URL 記録済みだが `02-Individual-music/` に音声ファイルが無い**:
@@ -156,7 +156,7 @@ status を記録した後は、成功時だけでなく blocked / failed の停�
    - **URL 未記録（キー自体が無い、または `null`）かつ `02-Individual-music/` に音声ファイルも無い**:
      - 従来通りユーザーにプレイリスト URL を AskUserQuestion で取得
      - URL 取得後、上記と同じくメインが `/masterup` の承認分岐を解決し、Agent ツールで Subagent Contract を委譲する
-     - メインが `01-master/master.*` と `01-master/.selection.log` を検証し、成功時だけ `assets.raw_master` と `updated_at` を更新する
+     - メインが `01-master/master.*`、`01-master/.selection.log`、`01-master/.loudness-receipt.json` を検証し、上記と同じ receipt 付き `yt-raw-master-check --apply` が成功した場合だけ `assets.raw_master` と `updated_at` を更新する
      - ガイダンス: 「raw master をミキシング+マスタリングし、最終マスターを 01-master/ に配置後、`/wf-next` を再実行してください」
      - **ここでフロー停止**
 

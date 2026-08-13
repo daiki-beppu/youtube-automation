@@ -18,17 +18,17 @@ SunoAI 楽曲のクロスフェード結合でマスター音源を自動生成�
 
 以下がすべて満たされたとき本スキルは完了とする（各項目の詳細は該当 Step が正）:
 
-1. Step 1.5 / 1.6 / 3〜4.5 / 5.1 の検証ゲートがすべて通過している（FAIL / MISSING / 混入 / 生成漏れ / 未承認の曲間音量差が残る間は Step 5 本体に進まない）
+1. Step 1.5 / 1.6 / 3〜4.5 / 5.1 の検証ゲートがすべて通過し、現在の入力と閾値に一致する PASS receipt を検証済みである（FAIL / MISSING / 混入 / 生成漏れ / 曲間音量差が残る間は Step 5 本体または state 更新に進まない）
 2. `01-master/` にマスター音源（既定 `master.mp3`）が生成されている
 3. `workflow-state.json` の `assets.raw_master` と `updated_at` が更新されている（`phase` は `"prepared"` のまま。`"mastered"` への遷移は `/wf-next` の責務）
 
 ## Subagent Contract
 
 - **入力**: 対象コレクション、fallback path を使う場合は確定済み playlist URL または title list、実行する処理
-- **成果物**: `01-master/master.*`、`01-master/.selection.log`
+- **成果物**: `01-master/master.*`、`01-master/.selection.log`、`01-master/.loudness-receipt.json`
 - **委譲しない処理**: 選曲・混入許容・over-max 例外採用の承認。Step 5.6 の雨レイヤー後処理は成果物生成時に `workflow-state.json` を更新するためメインが実行する
 
-subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実行しない。承認が要る処理は、メインが承認を得るまで委譲しない。完了報告は `status: success | failure`、成果物の絶対パス一覧、エラー。成果物の存在検証と state 更新はメインが行う。
+subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実行しない。承認が要る処理は、メインが承認を得るまで委譲しない。Step 5.1 の全曲走査は subagent が1回だけ実行して receipt を返し、メインは FFmpeg を再実行せず receipt を検証する。完了報告は `status: success | failure`、成果物の絶対パス一覧、エラー。成果物の存在検証、receipt 検証、state 更新はメインが行う。
 
 ## 設定読み込みゲート
 
@@ -352,23 +352,19 @@ uv run yt-suno-audio-cleanup apply <collection-path> --jobs 1  # 明示的な直
 
 #### Step 5.1: 曲間ラウドネス偏差ゲート
 
-cleanup の有効・無効にかかわらず、マスター結合前に次の単一スクリプトを実行する。計測・閾値判定・逸脱曲の特定はスクリプトを正とし、本文で再計算しない。
+cleanup の有効・無効にかかわらず、マスター結合前に次の単一スクリプトを1回だけ実行する。計測・閾値判定・逸脱曲の特定はスクリプトを正とし、本文で再計算しない。receipt は対象 collection、全入力ファイルの basename / size / SHA-256、実測 LUFS、適用閾値、判定、全曲走査回数を保持する。
 
 ```bash
-LOUDNESS_SCRIPT="$(git rev-parse --show-toplevel 2>/dev/null)/.claude/skills/masterup/references/check_loudness_deviation.py"; if [ ! -f "$LOUDNESS_SCRIPT" ]; then printf 'ERROR: loudness gate script not found: %s\n' "$LOUDNESS_SCRIPT" >&2; exit 1; fi; uv run python3 "$LOUDNESS_SCRIPT" <collection-path>
+LOUDNESS_SCRIPT="$(git rev-parse --show-toplevel 2>/dev/null)/.claude/skills/masterup/references/check_loudness_deviation.py"; if [ ! -f "$LOUDNESS_SCRIPT" ]; then printf 'ERROR: loudness gate script not found: %s\n' "$LOUDNESS_SCRIPT" >&2; exit 1; fi; uv run python3 "$LOUDNESS_SCRIPT" <collection-path> --receipt <collection-path>/01-master/.loudness-receipt.json
 ```
 
 `git rev-parse` は同期済み skill が置かれた workspace root だけを解決し、実行 CWD は変更しない。したがって `channels/<channel>` を CWD にするマルチチャンネル workspace でも、そのチャンネルの `config/channel/` を読みながら同梱スクリプトを起動できる。
 
-- exit 0: PASS と全曲の実測 LUFS を表示し、Step 5 本体へ進む
+- exit 0: PASS と全曲の実測 LUFS を表示し、atomic write 済み receipt とともに Step 5 本体へ進む
 - exit 1: スクリプト不在などの起動失敗、計測または設定エラー。表示された原因を解消して再実行し、Step 5 本体へ進まない
-- exit 2: FAIL。逸脱曲、実測 LUFS、目標範囲を表示し、AskUserQuestion で次の明示2択を提示する
-  1. `cleanup を再処理して再検証する`
-  2. `今回の逸脱を許容して続行する`
+- exit 2: FAIL。逸脱曲、実測 LUFS、目標範囲を表示し、state を変更せず停止する。`uv run yt-suno-audio-cleanup plan <collection-path> --force` で対象を確認し、`apply --force` 後に本ゲートを再実行する
 
-exit 2 では、曲間の音量差が視聴者の注意を奪う可能性と、続行後の公開物からその差を自動で取り消せないことを警告する。承認前は Step 5 本体へ進まない。
-
-1 を選んだ場合は `uv run yt-suno-audio-cleanup plan <collection-path> --force` で対象を表示し、続けて `apply --force`、本ゲートを再実行する。再検証が exit 2 なら再度2択を提示する。2 を選んだ場合だけ、対象コレクション、実測差、設定閾値、承認結果を完了報告へ残して Step 5 本体へ進む。
+receipt が欠落・JSON破損・別 collection・入力ファイル不一致・現在の設定閾値と不一致・FAIL のいずれかなら fail closed とする。古い receipt や閾値違反を承認だけで通過させず、現在の全入力に対する PASS receipt を作り直す。
 
 #### Step 5 本体: マスター結合の実行
 
@@ -387,6 +383,15 @@ uv run yt-generate-master --pin-first-count 1 --shuffle               # ソー�
 
 `02-Individual-music/` のオーディオファイル（MP3 / M4A / WAV）を自動検出し、skill-config の `audio.crossfade_duration` / `audio.bitrate` でクロスフェード結合します。チャンネルごとに変更する場合は `config/skills/masterup.json`、または JSON が存在しない既存チャンネルでは `config/skills/masterup.yaml` の `audio` section を更新してから、フラグなしで本 CLI を実行します。`domains.metadata.service.BAHMetadataGenerator` のタイムスタンプ計算と同じ設定値を参照するため、実音声と description のタイムスタンプが常に一致します。suno-helper の DL フォーマット設定（`sunoDownloadFormat`）により入力形式が MP3 以外になる場合があるため、拡張子で判別する。
 **この処理は常にダウンロード後（または suno-helper DL 済み確認後）に自動実行する。**
+
+生成成功後、メインは次のコマンドで receipt と現在の入力・閾値を再検証し、PASS の場合だけ `assets.raw_master` / `updated_at` を原子的に更新する。receipt 検証は SHA-256 と保存済み測定値の再計算だけを行い、FFmpeg の全曲走査を繰り返さない。
+
+```bash
+uv run yt-raw-master-check <collection-path> --apply \
+  --loudness-receipt <collection-path>/01-master/.loudness-receipt.json
+```
+
+このコマンドが非 0 なら state を変更せず停止する。`workflow-state.json` を手編集して検証を迂回しない。
 
 **ループ時の注意**: `--loop` / `--target-duration` は Suno/Lyria のトラック数が少ないコレクションで raw master の尺を target に届かせるためのオプション。`--loop` / `--target-duration` / `--no-loop` は同時指定不可。実行前にトラック総尺・目標尺・ループ回数・見込み尺の preview が表示される。目標尺の SSOT は `config/channel/audio.json::audio.target_duration_min/max`。1 pass が min 未満かつ整数ループが max を超える場合は生成を停止し、`--no-loop`、部分ループ素材、target 変更、または operator 判断の `--allow-duration-outside-target` を選ぶ。upload plan も同じ範囲を検証し、例外時は同 flag の明示が必要。全ループ分の YouTube チャプターが必要な場合は、preview の loop count と同じ `N` を `domains.metadata.service.BAHMetadataGenerator.generate_timestamps(loops=N)` / `format_timestamps_text(loops=N)` に渡して展開する。1 ループ分のみ載せる従来運用は `loops=1` のままで変更なし。
 
