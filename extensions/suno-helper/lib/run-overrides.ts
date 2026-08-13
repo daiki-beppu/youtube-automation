@@ -2,6 +2,7 @@ import type { DurationFilter, PromptEntry } from "../../shared/api";
 import {
   DEFAULT_REGENERATE_DURATION_OUTLIERS,
   type RunModeId,
+  type RunTimingReceipt,
 } from "../../shared/constants";
 import type { RunPayload } from "./messaging";
 import {
@@ -25,12 +26,14 @@ export interface RunOverrides {
   regenerateDurationOutliers?: boolean;
   /** resume の開始で live 警告を消去しないよう、前 run の警告を payload へ戻す。 */
   durationOutlierWarnings?: Record<number, string>;
+  timingReceipt?: RunTimingReceipt;
 }
 
 export interface PlaylistResumePayload {
   submittedClipIds: string[];
   submittedClipIdsAreDurationFiltered: boolean;
   playlistExpectedClipCount: number | undefined;
+  timingReceipt?: RunTimingReceipt;
 }
 
 export interface RunPayloadInput {
@@ -68,6 +71,7 @@ export function buildRunPayload(input: RunPayloadInput): RunPayload {
     playlistExpectedClipCount: input.overrides?.playlistExpectedClipCount,
     durationOutlierWarnings:
       input.overrides?.durationOutlierWarnings ?? input.durationOutlierWarnings,
+    timingReceipt: input.overrides?.timingReceipt,
   };
 }
 
@@ -85,6 +89,7 @@ export function buildResumeRunOverrides(
       submittedClipIdsAreDurationFiltered:
         playlistResume.submittedClipIdsAreDurationFiltered,
       playlistExpectedClipCount: playlistResume.playlistExpectedClipCount,
+      timingReceipt: playlistResume.timingReceipt,
     };
   }
   return {
@@ -93,6 +98,7 @@ export function buildResumeRunOverrides(
     submittedClipIdsAreDurationFiltered:
       playlistResume.submittedClipIdsAreDurationFiltered,
     playlistExpectedClipCount: playlistResume.playlistExpectedClipCount,
+    timingReceipt: playlistResume.timingReceipt,
   };
 }
 
@@ -106,6 +112,7 @@ export function buildFailedEntriesRunOverrides(
     submittedClipIdsAreDurationFiltered:
       playlistResume.submittedClipIdsAreDurationFiltered,
     playlistExpectedClipCount: playlistResume.playlistExpectedClipCount,
+    timingReceipt: playlistResume.timingReceipt,
   };
 }
 

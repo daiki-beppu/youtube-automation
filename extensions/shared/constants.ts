@@ -357,6 +357,7 @@ export const SERVER_HOST_PERMISSIONS = [
 export const PHASE = {
   INJECTING: "injecting",
   GENERATING: "generating",
+  WAITING_GENERATION: "waiting-generation",
   WAITING_SLOT: "waiting-slot",
   // captcha challenge の解消（自動 verify or 手動解決）待ち。即 fail-loud せず待機して自動続行する。非終了 phase。
   WAITING_CAPTCHA: "waiting-captcha",
@@ -368,6 +369,8 @@ export const PHASE = {
   ENTRY_FAILED: "entry-failed",
   // 全 entry の生成 DONE 後、playlist 追加完了後に Suno playlist を一括ダウンロードする phase (#1215)。非終了 phase。
   DOWNLOADING: "downloading",
+  // browser download 完了後、localhost server が archive を検証・配置する phase。
+  PLACING_ARCHIVE: "placing-archive",
   // 全 entry の生成 DONE 後の clip 一括 playlist 追加 phase (#854)。ADDING_TO_PLAYLIST → DOWNLOADING → FINISHED の順。非終了 phase。
   ADDING_TO_PLAYLIST: "adding-to-playlist",
   FINISHED: "finished",
@@ -376,6 +379,33 @@ export const PHASE = {
 } as const;
 
 export type Phase = (typeof PHASE)[keyof typeof PHASE];
+
+export type RunTimingOutcome = "running" | "finished" | "stopped" | "error";
+
+export interface RunTimingEvent {
+  phase: Phase;
+  attempt: number;
+  started_at_ms: number;
+  ended_at_ms: number | null;
+  duration_ms: number | null;
+}
+
+export interface RunTimingSession {
+  started_at_ms: number;
+  ended_at_ms: number | null;
+}
+
+export interface RunTimingReceipt {
+  version: 1;
+  started_at_ms: number;
+  ended_at_ms: number | null;
+  outcome: RunTimingOutcome;
+  failed_phase: Phase | null;
+  sessions: RunTimingSession[];
+  events: RunTimingEvent[];
+  active_duration_ms: number;
+  unmeasured_gap_ms: number;
+}
 
 /** runner content が overlay / popup に表示させる構造化ログ (#1270)。 */
 export type ProgressLog =
@@ -410,6 +440,7 @@ type ProgressPayloadBase = {
   durationOutlierWarning?: string;
   /** downloaded API が検証した配置結果。warning 文言から再構築しない。 */
   downloadSummary?: DownloadSummary;
+  timingReceipt?: RunTimingReceipt;
 };
 
 type ProgressPayloadWithoutLog = ProgressPayloadBase & {
@@ -450,6 +481,7 @@ export interface SnapshotPayload {
   itemStates: ItemState[];
   isRunning: boolean;
   progress: ProgressPayload;
+  timingReceipt?: RunTimingReceipt;
   // playlist 名 (#854)。再 open 復元時の display 用。download-only snapshot では undefined。
   playlistName?: string;
   // collection 単位 duration guard 閾値 (#1259)。再 open 後も同じ OK/NG 判定を維持する。

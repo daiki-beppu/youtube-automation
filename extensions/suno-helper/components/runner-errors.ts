@@ -159,6 +159,8 @@ export function phaseToStatus(
       return {
         text: `[${n}/${total}] 生成待ち…${message ? `（${message}）` : ""}`,
       };
+    case PHASE.WAITING_GENERATION:
+      return { text: `[${n}/${total}] 生成完了を確認中…` };
     case PHASE.SUBMITTED:
       return { text: `[${n}/${total}] 投入済み（生成完了待ち）` };
     case PHASE.DONE:
@@ -170,6 +172,10 @@ export function phaseToStatus(
       return { text: `[${n}/${total}] 失敗のためスキップ: ${message ?? ""}` };
     case PHASE.DOWNLOADING:
       return { text: `ダウンロード中…${message ? `（${message}）` : ""}` };
+    case PHASE.PLACING_ARCHIVE:
+      return {
+        text: `localhost へ archive を配置中…${message ? `（${message}）` : ""}`,
+      };
     case PHASE.ADDING_TO_PLAYLIST:
       // playlist 名は ProgressPayload.message で運ぶ（専用フィールドを足さず既存経路で表示する）。
       return { text: `Playlist '${message ?? ""}' へ追加中…` };

@@ -30,6 +30,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `fix(site)`: production の onboarding exact 4 path を Pages Function の共有 key で fail-closed に保護し、明示 preview binding だけを bypass する runtime gate と運用契約を追加する（#4002）。
 - `fix(site)`: onboarding の直接表示と Markdown 生成を維持しつつ、公開 navigation・トップページ・検索・AI 出力・sitemap から除外して HTML に noindex を付与する（#4001）。
 - `fix(extensions)`: 配信元候補が空の disabled selector では forced / programmatic open event を共有 field 境界で遮断し、registry refresh と listbox open を発火させない（#4079）。
+- `suno-helper` の browser run に versioned timing receipt を追加し、生成/polling・playlist・download・localhost 配置を canonical phase ごとの attempt として記録、停止時間を除外して resume/retry 後も snapshot に保存し、完了 UI から privacy-safe JSON をコピー可能にした (#3861)
+
 - `perf(masterup)`: ラウドネス全曲走査を1回だけ実行して入力 SHA-256・実測値・閾値・判定を receipt 化し、親 orchestration は receipt 検証成功後だけ raw master state を更新する fail-closed 契約へ変更した（#3777）。
 - `fix(metadata)`: localization title の固定尺検出で `3時間の{scene_phrase}` と fr/es/it の `heure(s)` / `hora(s)` / `ora` / `ore` を認識し、Unicode 正規化形式を問わない単語境界を保ったまま実尺追従漏れを公開前診断で停止する（#3912）。
 - `fix(analytics)`: `yt-ad-coverage` が部分成功の収益 snapshot を受理し、動画別データが空なら unavailable 相当の JSON を exit 0 で返して分析パイプラインを継続する（#3910）。

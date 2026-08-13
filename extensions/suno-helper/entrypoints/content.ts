@@ -20,6 +20,7 @@ import {
   QUEUE_SLOT_WAIT_TIMEOUT_MS,
   RUN_MODES,
   type RunModeId,
+  type RunTimingReceipt,
   type SnapshotPayload,
   SUNO_MATCHES,
 } from "../../shared/constants";
@@ -119,6 +120,12 @@ import {
   type RunRange,
   writeResumeState,
 } from "../lib/resume-state";
+import {
+  beginRunTiming,
+  finalizeRunTiming,
+  resumeRunTiming,
+  transitionRunTiming,
+} from "../lib/run-timing";
 import { applyProgress, initSnapshot } from "../lib/snapshot";
 import {
   downloadFormatItem,
@@ -803,6 +810,7 @@ export default defineContentScript({
     // popup を閉じても進捗を維持・復元するための SSOT (#852)。run 開始で initSnapshot、
     // 以降は emitProgress が sendMessage より前に同期更新する（queryProgress と race しないため）。
     let currentSnapshot: SnapshotPayload | null = null;
+    let currentTimingReceipt: RunTimingReceipt | null = null;
     let activeUnattended: RunPayload["unattended"];
     let activeRunMode: RunModeId | null = null;
     let runCreateCount = 0;
@@ -889,11 +897,42 @@ export default defineContentScript({
         // run ハンドラで initSnapshot 済みのため到達しない。万一来たら不変条件違反として fail-loud。
         throw new Error("progress emit before run initialization");
       }
-      currentSnapshot = applyProgress(currentSnapshot, payload);
+      if (!currentTimingReceipt) {
+        throw new Error("timing receipt missing before progress emit");
+      }
+      const now = Date.now();
+      if (payload.phase === PHASE.FINISHED) {
+        currentTimingReceipt = finalizeRunTiming(
+          currentTimingReceipt,
+          "finished",
+          now
+        );
+      } else if (payload.phase === PHASE.STOPPED) {
+        currentTimingReceipt = finalizeRunTiming(
+          currentTimingReceipt,
+          "stopped",
+          now
+        );
+      } else if (payload.phase === PHASE.ERROR) {
+        currentTimingReceipt = finalizeRunTiming(
+          currentTimingReceipt,
+          "error",
+          now
+        );
+      } else {
+        currentTimingReceipt = transitionRunTiming(
+          currentTimingReceipt,
+          payload.phase,
+          now,
+          payload.log?.kind === "retry"
+        );
+      }
+      const timedPayload = { ...payload, timingReceipt: currentTimingReceipt };
+      currentSnapshot = applyProgress(currentSnapshot, timedPayload);
       if (activeUnattended) {
         const state = nextUnattendedRunState({
           request: activeUnattended.request,
-          progress: payload,
+          progress: timedPayload,
           deferredIndices: activeUnattended.deferredIndices,
           now: Date.now(),
           verifiedComplete: verifiedUnattendedRequests.has(
@@ -912,7 +951,19 @@ export default defineContentScript({
             );
           });
       }
-      void sendMessage("progress", payload);
+      if (payload.phase === PHASE.ERROR || payload.phase === PHASE.STOPPED) {
+        const receipt = currentTimingReceipt;
+        const collectionId = currentSnapshot.collectionId;
+        if (typeof browser !== "undefined" && browser.runtime) {
+          resumeStateWrite = resumeStateWrite.then(async () => {
+            const state = await readResumeState();
+            if (state && state.collectionId === collectionId) {
+              await writeResumeState({ ...state, timingReceipt: receipt });
+            }
+          });
+        }
+      }
+      void sendMessage("progress", timedPayload);
     }
 
     async function releaseExecutionLease(
@@ -1219,6 +1270,7 @@ export default defineContentScript({
       if (button === null) {
         return;
       }
+      emitProgress({ phase: PHASE.WAITING_GENERATION, index, total });
       await waitForGeneration(button, {
         isAborted: () => aborted,
         timeoutMs: GENERATE_TIMEOUT_MS,
@@ -1550,6 +1602,10 @@ export default defineContentScript({
       durationFilter: DurationFilter,
       isAborted: () => boolean
     ) {
+      emitProgress({
+        phase: PHASE.WAITING_GENERATION,
+        total: currentSnapshot?.entries.length ?? 0,
+      });
       await waitForAttemptClipsComplete(clipIds, {
         getPendingIdsByIds: (ids) => tracker.getPendingIdsByIds(ids),
         requestFeedPoll,
@@ -2403,6 +2459,10 @@ export default defineContentScript({
                 waitForRegeneratedClips: async (
                   regeneratedClipIds: string[]
                 ) => {
+                  emitProgress({
+                    phase: PHASE.WAITING_GENERATION,
+                    total,
+                  });
                   await waitForAttemptClipsComplete(regeneratedClipIds, {
                     getPendingIdsByIds: (ids) =>
                       tracker.getPendingIdsByIds(ids),
@@ -2619,6 +2679,7 @@ export default defineContentScript({
         runMode,
         regenerateDurationOutliers,
         durationOutlierWarnings,
+        timingReceipt,
         indices,
         submittedClipIds,
         submittedClipIdsAreDurationFiltered,
@@ -2637,12 +2698,17 @@ export default defineContentScript({
       // リロードが巻き添えに殺すと STOPPED/ERROR も resume state も残らない。取り消しで
       // 残る stale selection は Cmd+P 前ガードが検知する。
       cancelScheduledRunCompleteReload();
+      const timingStartedAt = Date.now();
+      currentTimingReceipt = timingReceipt
+        ? resumeRunTiming(timingReceipt, PHASE.INJECTING, timingStartedAt)
+        : beginRunTiming(PHASE.INJECTING, timingStartedAt);
       currentSnapshot = initSnapshot(entries, {
         collectionId,
         playlistName,
         durationFilter,
         regenerateDurationOutliers,
         durationOutlierWarnings,
+        timingReceipt: currentTimingReceipt,
       });
       // 新 run 開始で直近完了 run の退避 snapshot を消去する（前 run の完了表示が復元されるのを防ぐ）。
       // in-memory の currentSnapshot が queryProgress で優先されるため fire-and-forget でよい。
@@ -2733,6 +2799,7 @@ export default defineContentScript({
         submittedClipIdsAreDurationFiltered,
         shouldDownload,
         unattended,
+        timingReceipt,
       } = assertRetryPlaylistPayload(data);
       const durationOutlierPolicy: DurationOutlierPolicy =
         regenerateDurationOutliers
@@ -2742,12 +2809,21 @@ export default defineContentScript({
         return { ok: false, busy: true } as const;
       }
       activeUnattended = unattended;
+      const retryPlaylistStartedAt = Date.now();
+      currentTimingReceipt = timingReceipt
+        ? resumeRunTiming(
+            timingReceipt,
+            PHASE.ADDING_TO_PLAYLIST,
+            retryPlaylistStartedAt
+          )
+        : beginRunTiming(PHASE.ADDING_TO_PLAYLIST, retryPlaylistStartedAt);
       currentSnapshot = initSnapshot([], {
         collectionId,
         playlistName,
         durationFilter,
         regenerateDurationOutliers,
         durationOutlierWarnings,
+        timingReceipt: currentTimingReceipt,
       });
       // 新しい実行の開始なので直近完了 run の退避 snapshot を消去する（run handler と同じ）。
       void clearFinishedSnapshot();
@@ -2861,13 +2937,29 @@ export default defineContentScript({
       if (running) {
         return { ok: false, busy: true } as const;
       }
-      const { collectionId, submittedClipIds, expectedClipCount, unattended } =
-        assertRetryDownloadPayload(data);
+      const {
+        collectionId,
+        submittedClipIds,
+        expectedClipCount,
+        unattended,
+        timingReceipt,
+      } = assertRetryDownloadPayload(data);
       if (!acquireRunLock()) {
         return { ok: false, busy: true } as const;
       }
       activeUnattended = unattended;
-      currentSnapshot = initSnapshot([], { collectionId });
+      const retryDownloadStartedAt = Date.now();
+      currentTimingReceipt = timingReceipt
+        ? resumeRunTiming(
+            timingReceipt,
+            PHASE.DOWNLOADING,
+            retryDownloadStartedAt
+          )
+        : beginRunTiming(PHASE.DOWNLOADING, retryDownloadStartedAt);
+      currentSnapshot = initSnapshot([], {
+        collectionId,
+        timingReceipt: currentTimingReceipt,
+      });
       // 新しい実行の開始なので直近完了 run の退避 snapshot を消去する（run handler と同じ）。
       void clearFinishedSnapshot();
       // 直前 run の完了時リロードが保留中なら取り消す (#1411)。理由は run handler と同じ。
@@ -2898,13 +2990,6 @@ export default defineContentScript({
           // リロード前に FINISHED snapshot を退避する（runAll の完了経路と同じ）。
           if (result.completedAndCleared) {
             await verifyUnattendedCompletion(unattended);
-            emitProgress({
-              phase: PHASE.FINISHED,
-              total: 0,
-              ...(result.summary === undefined
-                ? {}
-                : { downloadSummary: result.summary }),
-            });
             if (await persistFinishedSnapshotForReload()) {
               scheduleRunCompleteReload();
             }

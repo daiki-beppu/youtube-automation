@@ -21,6 +21,7 @@ import {
   type ItemState,
   type LocalServerSource,
   type RunModeId,
+  type RunTimingReceipt,
 } from "../../shared/constants";
 import {
   createCollectionQueue,
@@ -116,6 +117,7 @@ interface RunnerState {
   // overrides.indices はチェック選択や失敗分再実行の部分実行対象。指定時は range より優先される。
   run: (overrides?: RunOverrides) => Promise<void>;
   stop: () => Promise<void>;
+  timingReceipt: RunTimingReceipt | null;
 }
 
 type RejectedRunAcknowledgement =
@@ -170,6 +172,7 @@ function queueResumeOverrides(
         submittedClipIdsAreDurationFiltered:
           resume.submittedClipIdsAreDurationFiltered === true,
         playlistExpectedClipCount: resume.playlistExpectedClipCount,
+        timingReceipt: resume.timingReceipt,
       }
     ),
     durationOutlierWarnings: resume.durationOutlierWarnings,
@@ -210,6 +213,9 @@ export function useSunoRunner(): RunnerState {
   const [itemStates, setItemStates] = useState<ItemState[]>([]);
   const [status, setStatus] = useState("");
   const [phase, setPhase] = useState("idle");
+  const [timingReceipt, setTimingReceipt] = useState<RunTimingReceipt | null>(
+    null
+  );
   const [isError, setIsError] = useState(false);
   const [compatibilityWarning, setCompatibilityWarning] = useState("");
   const [isRunning, setIsRunning] = useState(false);
@@ -647,6 +653,7 @@ export function useSunoRunner(): RunnerState {
         const checkedAt = Date.now();
         persistedResumeRef.current = state;
         setPersistedResume(state);
+        setTimingReceipt(state?.timingReceipt ?? null);
         setResumeCheckedAt(checkedAt);
         if (
           state &&
@@ -905,6 +912,7 @@ export function useSunoRunner(): RunnerState {
     const unwatch = onMessage("progress", ({ data }) => {
       setItemStates((prev) => nextItemStates(prev, data));
       setPhase(data.phase);
+      if (data.timingReceipt) setTimingReceipt(data.timingReceipt);
       if (data.durationOutlierWarning) {
         durationOutlierWarningsRef.current.push(data.durationOutlierWarning);
       }
@@ -975,6 +983,7 @@ export function useSunoRunner(): RunnerState {
           restored.durationOutlierWarnings
         );
         setPhase(snapshot.progress.phase);
+        setTimingReceipt(snapshot.timingReceipt ?? null);
         report(restored.status, restored.isError);
       } catch {
         // runner content 未注入（中継先不在）では queryProgress が到達しない。復元を諦め従来表示を維持する。
@@ -1442,6 +1451,7 @@ export function useSunoRunner(): RunnerState {
         submittedClipIdsAreDurationFiltered:
           submittedClipIdsAreDurationFilteredForResume,
         shouldDownload,
+        timingReceipt: persistedResume?.timingReceipt,
       });
       setResumeDismissed(true);
       report("playlist 追加とダウンロードを再実行しています…");
@@ -1466,6 +1476,7 @@ export function useSunoRunner(): RunnerState {
     selectedCollectionId,
     report,
     setRunning,
+    persistedResume?.timingReceipt,
   ]);
 
   // バナー承認 = 1-click 自動再開 (#892 要件6)。failedIndex === total（全 entry 投入済み）のときは
@@ -1496,6 +1507,7 @@ export function useSunoRunner(): RunnerState {
         submittedClipIdsAreDurationFiltered:
           submittedClipIdsAreDurationFilteredForResume,
         playlistExpectedClipCount: playlistExpectedClipCountForResume,
+        timingReceipt: persistedResume?.timingReceipt,
       }),
       runMode: runModeForResume,
       regenerateDurationOutliers: regenerateDurationOutliersForResume,
@@ -1508,6 +1520,7 @@ export function useSunoRunner(): RunnerState {
     report,
     run,
     submittedClipIdsForResume,
+    persistedResume?.timingReceipt,
     submittedClipIdsAreDurationFilteredForResume,
     playlistExpectedClipCountForResume,
     runModeForResume,
@@ -1541,6 +1554,7 @@ export function useSunoRunner(): RunnerState {
         collectionId: selectedCollectionId,
         submittedClipIds: submittedClipIdsForResume,
         expectedClipCount: expectedClipCountForDownloadResume,
+        timingReceipt: persistedResume?.timingReceipt,
       };
       await sendMessage("retryDownload", payload);
       report("ダウンロードを再実行しています…");
@@ -1552,6 +1566,7 @@ export function useSunoRunner(): RunnerState {
     selectedCollectionId,
     submittedClipIdsForResume,
     expectedClipCountForDownloadResume,
+    persistedResume?.timingReceipt,
     report,
     reportRunDispatchFailure,
     setRunning,
@@ -1669,6 +1684,7 @@ export function useSunoRunner(): RunnerState {
         submittedClipIdsAreDurationFiltered:
           submittedClipIdsAreDurationFilteredForResume,
         playlistExpectedClipCount: playlistExpectedClipCountForResume,
+        timingReceipt: persistedResume?.timingReceipt,
       }),
       runMode: runModeForResume,
       regenerateDurationOutliers: regenerateDurationOutliersForResume,
@@ -1683,6 +1699,7 @@ export function useSunoRunner(): RunnerState {
     runModeForResume,
     regenerateDurationOutliersForResume,
     durationOutlierWarningsForResume,
+    persistedResume?.timingReceipt,
   ]);
 
   const stop = useCallback(async () => {
@@ -1743,5 +1760,6 @@ export function useSunoRunner(): RunnerState {
     adoptSelectedClips,
     run,
     stop,
+    timingReceipt,
   };
 }
