@@ -42,6 +42,8 @@
 
 subagent が失敗した、期待成果物が無い、または現在の phase と整合しない場合、メインは state を更新しない。次の `/wf-new` / `/wf-next` は同じ未完了ステップから再開する。`skip_audio_approval` / `skip_upload_approval`、`skip_manual_mastering`、thumbnail 承認、playlist 初期化承認はメインが config と実ファイルを確認して処理する。廃止済みの `approval_gates.audio` / `approval_gates.upload` が残っている場合は `ConfigError` で停止する。
 
+例外として `/wf-new` Phase 2c の thumbnail / music は独立 branch である。メインは実成果物を branch ごとに検証し、成功した branch の `assets` flag だけを更新して保持する。片側が失敗した場合は、次回も成功側を再生成・再承認せず、失敗した branch だけを同じ collection で再開する。flag と成果物が不整合なら完了扱いせず停止する。Phase 2c 以外は従来どおり、失敗した作業について state を更新しない。
+
 ```
 Phase 1 ─ 企画 + 素材準備           /wf-new
    ├─ /collection-ideate            (analytics mode / benchmark fallback mode、または ttp_mode=false の minimal mode で 3 候補生成)

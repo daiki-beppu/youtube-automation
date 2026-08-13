@@ -41,7 +41,7 @@ minimal mode では企画候補生成前にテーマ / ジャンル / 雰囲気�
 3. **Suno collection Style boundary**: Suno チャンネルで `/suno` を呼ぶときは、対象 collection の絶対 path、確定企画、theme、書き込み先 `20-documentation/suno-patterns.yaml` を subagent へ渡す。collection 固有の `genre_line` / `exclude_styles` / `style_variants` / `vocal_gender` は同ファイルの root に書き、共有 `config/skills/suno.yaml` を書き換えない。root に無い値だけが channel config へ fallback する。`suno_preset` は推奨入力であり、不在だけを理由に停止しない。利用可能なら TTP 根拠として渡し、無ければ `/suno` が確定企画と制約から collection-local Style を設計する。`assets.music_prompts = true` は subagent 報告だけで更新せず、成果物、`yt-suno-verify`、semantic review をメインが検証した後に限る。
 4. **analytics input gate**: 入力モード判定、同日付 JSON、validator、stale 判定、自動更新、再検証は `/collection-ideate` の `references/freshness-rules.md::stale report の自動更新` に一元化する。`/wf-new` は判定ロジックを再定義せず、stale 判定や AskUserQuestion を先行実行しない。subagent が stale を検出した場合は、同 SSOT が返す自動更新シーケンスを同じ subagent 作業内で順次実行し、全呼び出し成功後に入力モード判定を先頭からやり直す。`yt-doctor` の `analytics_report` は予備確認にだけ使い、analytics mode の最終判定には使わない。
 5. **subagent state boundary**: 各フェーズの生成処理は Agent ツールで subagent へ一作業ずつ委譲する。subagent は `workflow-state.json` を書き込まず AskUserQuestion を実行しない。メインエージェントだけが承認、成果物検証、`assets` / `phase` / `updated_at` 更新を行う。
-6. **failure boundary**: subagent の失敗、期待成果物欠落、現在の phase との不整合時は state を更新しない。同じ未完了ステップから再実行できる状態で停止する。
+6. **failure boundary**: subagent の失敗、期待成果物欠落、現在の phase との不整合時は state を更新しない。同じ未完了ステップから再実行できる状態で停止する。Phase 2c の thumbnail / music だけは独立 branch とし、[`references/phase-2c-artifact-contract.md`](references/phase-2c-artifact-contract.md) の実成果物検証に成功した側だけを反映して、失敗側だけを再開する。
 7. **thumbnail full-mode gate**: `.claude/skills/thumbnail/config.default.yaml` と、存在する場合は `config/skills/thumbnail.yaml` を読み、deep-merge 後の `image_generation.auto_selection.enabled` / `mode` を Phase 2c より前に確定する。`enabled: true` かつ `mode: full` のときだけ Phase 2c のサムネイル AskUserQuestion をすべて省略する。mode 未設定は `selection_only` として扱い、従来の候補承認だけを省略する。full で生成・QA・自動選択に失敗した場合は state を更新せず `/thumbnail` の「full モード失敗時の手動切替」を表示して停止する。
 8. **企画選択 skip gate**: `load_config()` の `config.workflow.wf_new.skip_plan_selection` を Phase 1 より前に確定する。`true` かつ analytics mode / benchmark fallback mode のときだけ、`/collection-ideate` が返した推奨順 1 位を自動採用できる。minimal mode のテーマ / ジャンル / 雰囲気入力は省略せず、無人実行では `blocked` とする。
 9. **preselected manifest gate**: `--batch-id` / `--plan-id` を受け取った場合は直下の opt-in 契約を state mutation 前に通す。不正な manifest を通常の Phase 1 へ fallback させない。
@@ -292,6 +292,8 @@ uv run yt-populate-scene-phrases <collection-dir-name> \
 
 サムネイル候補生成、承認・確定、音楽素材生成を以下の 2 substep で順に進める。Suno チャンネルでは、メインが対象 collection と確定企画を固定し、`config/skills/suno.yaml` と利用可能な `data/video_analysis/<slug>/*.json` を fallback / 推奨入力として `/suno` へ渡す。subagent は共有 config を変更せず、その collection の `20-documentation/suno-patterns.yaml` に effective Style 系の root 値を保存する。`suno_preset` が無くても確定企画と制約から collection-local Style を設計して続行し、検証前に `assets.music_prompts = true` へ更新しない。
 
+各 branch の成果物検証、state 適用、partial failure、再開判定は、最初に [`Phase 2c 成果物・再開契約`](references/phase-2c-artifact-contract.md) を読み、その契約だけを正とする。この段では同時 dispatch を導入せず、既存の順次実行を維持する。
+
 ##### 2c-1. サムネイル候補生成
 
 このステップは採用済み企画プレビューの確定、またはプレビューが無い場合のサムネイル候補生成までを行う。候補の承認と確定は 2c-2 に一元化する。`mode: full` では承認ゲートではなく自動確定分岐として実行する。
@@ -325,7 +327,7 @@ uv run yt-populate-scene-phrases <collection-dir-name> \
 1. 企画選択時に承認済みの同じ画像なので、文字入り候補の生成・再選択・thumbnail の AskUserQuestion は行わない。`10-assets/thumbnail.jpg` を `/thumbnail-compare` で 320px 視認性検証し、署名・透かし・ロゴ・手指破綻の既存目視 QA を通す。失敗時は state を更新せず停止する
 2. QA 成功後に `uv run python .claude/skills/thumbnail/references/archive-approved-thumbnail.py <collection-path>` を実行する。archive の Hard Gate は既存契約どおり維持する
 3. `textless.enabled` が未設定または `true` なら、確定した `thumbnail.jpg` を入力、生成対象 `main` を指定して別 subagent へ委譲する。`mode: full` は生成可否と textless 背景承認を質問せず既存の check 成功後に確定し、それ以外は既存どおり textless 候補だけをプレビュー・承認して `main.png/jpg` へ確定する。`false` なら textless 生成・承認を省略し、`share_thumbnail_as_main.py <collection-path>` を実行して `status: SHARED`、同一 SHA-256、`main.png` 不在を検証する
-4. `thumbnail.jpg` と `main.png/jpg` の確定検証後だけ `assets.thumbnail = true`、`updated_at` を更新する。この `thumbnail.jpg` を再度 AskUserQuestion にかけない
+4. `thumbnail.jpg` と `main.png/jpg` の確定検証結果を Phase 2c 成果物・再開契約へ thumbnail branch の結果として渡し、成功時だけメインが `assets.thumbnail = true` と `updated_at` を更新する。この `thumbnail.jpg` を再度 AskUserQuestion にかけない
 
 以下の mode 別分岐は `status: MISSING` から既存 `/thumbnail` フォールバックへ進んだ場合だけ実行する。
 
@@ -334,7 +336,7 @@ uv run yt-populate-scene-phrases <collection-dir-name> \
 1. AskUserQuestion と `open` を実行せず、`uv run yt-thumbnail-auto-select <collection-path> --dry-run` が exit 0 であることを確認してから `uv run yt-thumbnail-auto-select <collection-path> --apply` を実行する。`10-assets/thumbnail.jpg` と `workflow-state.json::thumbnail_auto_selection.mode == "full"` を検証する
 2. `textless.enabled` が未設定または `true` なら、確定した `thumbnail.jpg` を入力、生成対象 `main` を指定して別 subagent へ委譲する。生成可否と textless 背景承認は質問せず、`yt-thumbnail-check` が exit 0 かつ候補が存在するときだけ `10-assets/main.png/jpg` へ確定コピーする。`false` なら textless 委譲・生成・承認を再要求せず、`share_thumbnail_as_main.py <collection-path>` を実行し、`status: SHARED`、`thumbnail.jpg` と `main.jpg` の同一 SHA-256、`main.png` 不在を検証する
 3. `/thumbnail-compare` の 320px 視認性検証はスコープ外のまま省略せず、自動確定後に別途実行する。失敗しても不適格候補を強制採用せず、`/thumbnail` の「full モード失敗時の手動切替」を表示して state を更新せず停止する
-4. `thumbnail.jpg` と `main.png/jpg` の確定検証後だけ、`assets.thumbnail = true`、`updated_at` を更新して音楽素材生成へ進む
+4. `thumbnail.jpg` と `main.png/jpg` の確定検証結果を Phase 2c 成果物・再開契約へ thumbnail branch の結果として渡し、成功時だけメインが `assets.thumbnail = true` と `updated_at` を更新して、既存の順序どおり音楽素材生成へ進む
 
 **`selection_only` または auto-selection 無効**（従来フロー）:
 
@@ -364,14 +366,14 @@ uv run yt-populate-scene-phrases <collection-dir-name> \
    - `thumbnail.jpg` と `main.png/jpg` を同一画像で代用しない。`main.png` を `thumbnail.jpg` にコピーする旧運用は禁止
    - QA が NG、再生成、または中断の場合は `/collection-ideate` または `/thumbnail` の該当生成ステップへ戻し、state を更新せず停止する
 
-4. `thumbnail.jpg` と `main.png/jpg` の確定を検証した後だけ、メインが `assets.thumbnail = true`、`updated_at` を更新する。このゲートで承認済みの `thumbnail.jpg` を再度 AskUserQuestion にかけない。
+4. `thumbnail.jpg` と `main.png/jpg` の確定検証結果を Phase 2c 成果物・再開契約へ thumbnail branch の結果として渡し、成功時だけメインが `assets.thumbnail = true` と `updated_at` を更新する。このゲートで承認済みの `thumbnail.jpg` を再度 AskUserQuestion にかけない。
 
 5. **音楽 skill を順番に処理**:
    - Suno: 対象 collection、theme、確定企画、書き込み先 `20-documentation/suno-patterns.yaml` を指定して Agent ツールで `/suno <theme>` のプロンプト生成を委譲する。共有 `config/skills/suno.yaml` の書き換えを禁止し、collection root の Style 値と channel fallback を解決した後に `uv run yt-suno-verify <collection-path>` を通す。ボーカルでは root `vocal_gender` を `/suno-lyric` の語り手性別入力にも引き渡す
    - Lyria: 対象 collection と theme を指定して Agent ツールで `/lyria <theme>` のプロンプト設計だけを委譲する（Lyria 3 API 呼び出しは `/wf-next`）
-   - subagent には state 更新と AskUserQuestion を禁止する。メインが `20-documentation/suno-prompts.json` または Lyria 設計成果物の存在を検証し、成功時だけ `assets.music_prompts = true` と `updated_at` を更新する
+   - subagent には state 更新と AskUserQuestion を禁止する。メインが `20-documentation/suno-prompts.json` または Lyria 設計成果物を検証し、Phase 2c 成果物・再開契約へ music branch の結果として渡す
 
-音楽素材生成に失敗した場合はエラーを報告し、次に手動で呼ぶべき `/suno` または `/lyria` コマンドを表示して停止する。
+音楽素材生成または成果物検証に失敗した場合は、Phase 2c 成果物・再開契約に従って thumbnail の成功結果を保持し、次に呼ぶべき `/suno` または `/lyria` コマンドを表示して停止する。
 
 #### 2e. ループ動画生成
 

@@ -226,7 +226,9 @@ EXPECTED_ACTIVE_ROUTES = (
     ),
 )
 
-MUTABLE_FILES = frozenset(path for path, _, _ in EXPECTED_ACTIVE_ROUTES if path != "automation-update/SKILL.md")
+MUTABLE_FILES = frozenset(path for path, _, _ in EXPECTED_ACTIVE_ROUTES if path != "automation-update/SKILL.md") | {
+    "wf-new/references/phase-2c-artifact-contract.md"
+}
 EXPECTED_ISSUE_3986_CHANGED_PATHS = frozenset(
     {
         ".claude/skills/analytics/SKILL.md",
