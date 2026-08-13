@@ -25,6 +25,8 @@ from youtube_automation.infrastructure.analytics.theme_performance import classi
 
 _SCHEMA_NAME = "experiment-entry.schema.json"
 _INSIGHTS_SCHEMA_NAME = "insights-entry.schema.json"
+DEFAULT_CHANGE_TEMPLATE = "{lever}: unspecified -> unspecified"
+DEFAULT_HYPOTHESIS_SOURCE = "unspecified"
 
 
 def _reference_path(name: str) -> Path:
@@ -355,8 +357,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="変更する単一レバー",
     )
     register.add_argument("--target", required=True, help="対象 collection slug または video_id")
-    register.add_argument("--change", required=True, help="変更内容（旧状態 -> 新状態）")
-    register.add_argument("--hypothesis-source", required=True, help="根拠 win pattern / insight id")
+    register.add_argument(
+        "--change",
+        help=f"変更内容（旧状態 -> 新状態）。省略時: {DEFAULT_CHANGE_TEMPLATE!r} の lever 展開値",
+    )
+    register.add_argument(
+        "--hypothesis-source",
+        default=DEFAULT_HYPOTHESIS_SOURCE,
+        help=f"根拠 win pattern / insight id。省略時: {DEFAULT_HYPOTHESIS_SOURCE!r}",
+    )
     register.add_argument("--baseline-scope", default="all", help="all または config の theme 名")
     register.add_argument(
         "--min-age-days",
@@ -372,7 +381,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         record = register_experiment(
             lever=args.lever[0],
             target=args.target,
-            change=args.change,
+            change=args.change if args.change is not None else DEFAULT_CHANGE_TEMPLATE.format(lever=args.lever[0]),
             hypothesis_source=args.hypothesis_source,
             baseline_scope=args.baseline_scope,
             experiments_path=channel_dir() / "data" / "experiments.jsonl",

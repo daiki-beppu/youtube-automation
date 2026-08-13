@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `feat(dashboard)`: 7 / 30 / 90 日の期間プリセットを追加し、選択日数を検証して全チャンネルの Analytics を再収集できるようにする（#3769）。
 - `feat(dashboard)`: `POST /api/refresh` と排他制御を追加し、画面のデータ更新ボタンから全チャンネルの再収集と read model の再取得を行えるようにする（#3768）。
 - `feat(analytics)`: 単一レバーの pending 実験を全 eligible 動画または同一テーマの VPD 中央値と算出根拠付きで、検証済み `data/experiments.jsonl` へ原子的かつ append-only に登録する `yt-experiment register` を追加した（#3784）。
+- `feat(analytics)`: 単一レバーの pending 実験を全 eligible 動画または同一テーマの VPD 中央値と算出根拠付きで、検証済み `data/experiments.jsonl` へ原子的かつ append-only に登録する `yt-experiment register` を追加した。`--change` / `--hypothesis-source` の省略時は架空の根拠を作らず、それぞれ `<lever>: unspecified -> unspecified` / `unspecified` を記録する（#3784）。
 - `feat(analytics)`: `/analytics --analyze` が VPD ranking を 1 回 capture し、同じ top / bottom snapshot の目視 5 属性を `yt-win-pattern` へ渡して、schema v3 レポートへ stdout object・6 CLI の数値 evidence・相関 disclaimer を検証付きで保存する（#3783）。
 - `feat(analytics)`: VPD 上位・下位群を同一集計器で機械属性と目視 5 属性に分け、known denominator の 60% / 20pp 境界から相関上の勝ち・負け・保留を返す `yt-win-pattern` を追加した（#3782）。
 - `feat(analytics)`: 全 uploads をページ走査し Data API の累計 `viewCount` を 50 件ずつ取得して、UTC 公開日齢で正規化した VPD の上位・中間・下位群を JSON / text で確定する `yt-vpd-rank` を追加した（#3781）。

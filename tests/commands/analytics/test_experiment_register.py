@@ -96,6 +96,102 @@ def test_register_appends_one_schema_valid_line_and_stdout_record_matches(tmp_pa
     assert cli.validate_entries(path) == []
 
 
+def test_two_argument_register_uses_explicit_sentinels_and_loads_ranking_once(tmp_path, monkeypatch, capsys) -> None:
+    path = tmp_path / "data" / "experiments.jsonl"
+    ranking = _ranking([_item("a", 10), _item("b", 20)])
+    calls = 0
+
+    def load_ranking(**_kwargs):
+        nonlocal calls
+        calls += 1
+        return ranking
+
+    monkeypatch.setattr(cli, "channel_dir", lambda: tmp_path)
+    monkeypatch.setattr(cli.vpd_rank, "_load_ranking", load_ranking)
+    monkeypatch.setattr(cli, "load_skill_config", lambda _name: _config())
+    monkeypatch.setattr(cli, "load_config", lambda: _channel_config())
+    monkeypatch.setattr(cli, "_today", lambda: TODAY)
+
+    assert cli.main(["register", "--lever", "thumbnail", "--target", "next-collection"]) == 0
+
+    record = json.loads(capsys.readouterr().out)
+    assert record == json.loads(path.read_text(encoding="utf-8"))
+    assert record["change"] == "thumbnail: unspecified -> unspecified"
+    assert record["hypothesis_source"] == "unspecified"
+    assert record["status"] == "pending"
+    assert cli.validate_entries(path) == []
+    assert calls == 1
+
+
+@pytest.mark.parametrize(
+    ("option", "value", "expected_change", "expected_source"),
+    [
+        ("--change", "text-heavy -> textless", "text-heavy -> textless", "unspecified"),
+        (
+            "--hypothesis-source",
+            "20260812-analysis-thumbnail",
+            "thumbnail: unspecified -> unspecified",
+            "20260812-analysis-thumbnail",
+        ),
+    ],
+)
+def test_each_optional_metadata_flag_overrides_only_its_sentinel(
+    tmp_path,
+    monkeypatch,
+    capsys,
+    option: str,
+    value: str,
+    expected_change: str,
+    expected_source: str,
+) -> None:
+    monkeypatch.setattr(cli, "channel_dir", lambda: tmp_path)
+    monkeypatch.setattr(
+        cli.vpd_rank,
+        "_load_ranking",
+        lambda **_kwargs: _ranking([_item("a", 10), _item("b", 20)]),
+    )
+    monkeypatch.setattr(cli, "load_skill_config", lambda _name: _config())
+    monkeypatch.setattr(cli, "load_config", lambda: _channel_config())
+    monkeypatch.setattr(cli, "_today", lambda: TODAY)
+
+    assert cli.main(["register", "--lever", "thumbnail", "--target", "next", option, value]) == 0
+
+    record = json.loads(capsys.readouterr().out)
+    assert record["change"] == expected_change
+    assert record["hypothesis_source"] == expected_source
+
+
+def test_register_help_documents_optional_sentinels(capsys) -> None:
+    with pytest.raises(SystemExit) as raised:
+        cli.main(["register", "--help"])
+
+    assert raised.value.code == 0
+    help_text = " ".join(capsys.readouterr().out.split())
+    assert cli.DEFAULT_CHANGE_TEMPLATE in help_text
+    assert cli.DEFAULT_HYPOTHESIS_SOURCE in help_text
+
+
+@pytest.mark.parametrize(("option", "value"), [("--change", "  "), ("--hypothesis-source", "")])
+def test_explicit_blank_optional_metadata_is_rejected_before_ranking(
+    tmp_path, monkeypatch, option: str, value: str
+) -> None:
+    calls = 0
+
+    def load_ranking(**_kwargs):
+        nonlocal calls
+        calls += 1
+        return _ranking([_item("a", 10), _item("b", 20)])
+
+    monkeypatch.setattr(cli, "channel_dir", lambda: tmp_path)
+    monkeypatch.setattr(cli.vpd_rank, "_load_ranking", load_ranking)
+    monkeypatch.setattr(cli, "load_skill_config", lambda _name: _config())
+    monkeypatch.setattr(cli, "load_config", lambda: _channel_config())
+
+    assert cli.main(["register", "--lever", "thumbnail", "--target", "next", option, value]) == 2
+    assert calls == 0
+    assert not (tmp_path / "data" / "experiments.jsonl").exists()
+
+
 @pytest.mark.parametrize("values, expected", [([0, 10, 20], 10.0), ([0, 0, 10, 20], 5.0)])
 def test_baseline_uses_all_eligible_ranking_median_for_odd_even_and_zero(
     tmp_path, values: list[int], expected: float
