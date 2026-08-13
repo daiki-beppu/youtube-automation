@@ -140,94 +140,97 @@ export function PublicationHeatmap({
           </AlertDescription>
         </Alert>
       ))}
-      <div
-        data-testid="publication-heatmap-scroll"
-        style={{
-          maxWidth: "100%",
-          overflowX: "auto",
-        }}
-      >
+      <div style={{ position: "relative" }}>
         <div
-          aria-label="日別公開本数"
-          role="grid"
+          data-testid="publication-heatmap-scroll"
           style={{
-            display: "grid",
-            gap: 3,
-            gridTemplateColumns: weekColumns,
-            minWidth: minimumGridWidth,
-            width: "100%",
+            maxWidth: "100%",
+            overflowX: "auto",
           }}
         >
-          {WEEKDAYS.map((_, weekday) => (
-            <div
-              key={weekday}
-              role="row"
-              style={{
-                display: "grid",
-                gap: 3,
-                gridColumn: "1 / -1",
-                gridRow: weekday + 1,
-                gridTemplateColumns: weekColumns,
-              }}
-            >
-              {activity
-                .filter((day) => day.weekday === weekday)
-                .map((day) => {
-                  const level = intensity(day.count)
-                  return (
-                    <span
-                      aria-describedby={
-                        activeDate === day.key ? detailsId : undefined
-                      }
-                      aria-label={`${day.key}: ${day.count}本`}
-                      data-count={day.count}
-                      data-date={day.key}
-                      data-intensity={level}
-                      data-week={day.week}
-                      data-weekday={day.weekday}
-                      key={day.key}
-                      onBlur={() => setFocusedDate(null)}
-                      onFocus={() => setFocusedDate(day.key)}
-                      onMouseEnter={() => setHoveredDate(day.key)}
-                      onMouseLeave={() => setHoveredDate(null)}
-                      role="gridcell"
-                      style={{
-                        backgroundColor: INTENSITY_COLORS[level],
-                        aspectRatio: "1 / 1",
-                        borderRadius: 2,
-                        gridColumn: day.week + 1,
-                        minWidth: 11,
-                        width: "100%",
-                      }}
-                      tabIndex={0}
-                    />
-                  )
-                })}
-            </div>
-          ))}
+          <div
+            aria-label="日別公開本数"
+            onMouseLeave={() => setHoveredDate(null)}
+            role="grid"
+            style={{
+              display: "grid",
+              gap: 3,
+              gridTemplateColumns: weekColumns,
+              minWidth: minimumGridWidth,
+              width: "100%",
+            }}
+          >
+            {WEEKDAYS.map((_, weekday) => (
+              <div
+                key={weekday}
+                role="row"
+                style={{
+                  display: "grid",
+                  gap: 3,
+                  gridColumn: "1 / -1",
+                  gridRow: weekday + 1,
+                  gridTemplateColumns: weekColumns,
+                }}
+              >
+                {activity
+                  .filter((day) => day.weekday === weekday)
+                  .map((day) => {
+                    const level = intensity(day.count)
+                    return (
+                      <span
+                        aria-describedby={
+                          activeDate === day.key ? detailsId : undefined
+                        }
+                        aria-label={`${day.key}: ${day.count}本`}
+                        data-count={day.count}
+                        data-date={day.key}
+                        data-intensity={level}
+                        data-week={day.week}
+                        data-weekday={day.weekday}
+                        key={day.key}
+                        onBlur={() => setFocusedDate(null)}
+                        onFocus={() => setFocusedDate(day.key)}
+                        onMouseEnter={() => setHoveredDate(day.key)}
+                        role="gridcell"
+                        style={{
+                          backgroundColor: INTENSITY_COLORS[level],
+                          aspectRatio: "1 / 1",
+                          borderRadius: 2,
+                          gridColumn: day.week + 1,
+                          minWidth: 11,
+                          width: "100%",
+                        }}
+                        tabIndex={0}
+                      />
+                    )
+                  })}
+              </div>
+            ))}
+          </div>
         </div>
+        {activeDate && activeDay && detailsId ? (
+          <div
+            className="mt-3 max-w-sm rounded-md border bg-popover p-3 text-sm text-popover-foreground shadow-md"
+            id={detailsId}
+            role="tooltip"
+            style={{ left: 0, position: "absolute", top: "100%", zIndex: 10 }}
+          >
+            <p className="font-medium">{activeDate}</p>
+            <p>合計 {activeDay.count}本</p>
+            {activeChannels.length > 0 ? (
+              <ul aria-label="チャンネル別内訳" className="mt-2 grid gap-1">
+                {activeChannels.map((channel) => (
+                  <li key={channel.id}>
+                    {channel.name} {channel.count}本
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-2 text-muted-foreground">公開チャンネルなし</p>
+            )}
+          </div>
+        ) : null}
       </div>
-      {activeDate && activeDay && detailsId ? (
-        <div
-          className="mt-3 max-w-sm rounded-md border bg-popover p-3 text-sm text-popover-foreground shadow-md"
-          id={detailsId}
-          role="tooltip"
-        >
-          <p className="font-medium">{activeDate}</p>
-          <p>合計 {activeDay.count}本</p>
-          {activeChannels.length > 0 ? (
-            <ul aria-label="チャンネル別内訳" className="mt-2 grid gap-1">
-              {activeChannels.map((channel) => (
-                <li key={channel.id}>
-                  {channel.name} {channel.count}本
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="mt-2 text-muted-foreground">公開チャンネルなし</p>
-          )}
-        </div>
-      ) : null}
       <ol
         aria-label="公開本数の凡例"
         style={{
