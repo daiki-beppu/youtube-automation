@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(dashboard)`: 公開活動ヒートマップの53週列を11px下限の可変正方形セルにし、狭幅時の領域内スクロールを保ちながら親コンテナ幅いっぱいに広げる（#3773）。
 - `feat(dashboard)`: 公開活動ヒートマップから月・曜日の軸ラベルと余分な外枠グリッドを削除し、日別セルとアクセシブルな内訳・凡例を維持する（#3772）。
 - `feat(dashboard)`: 7 / 30 / 90 日の期間プリセットを追加し、選択日数を検証して全チャンネルの Analytics を再収集できるようにする（#3769）。
 - `feat(dashboard)`: `POST /api/refresh` と排他制御を追加し、画面のデータ更新ボタンから全チャンネルの再収集と read model の再取得を行えるようにする（#3768）。

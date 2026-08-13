@@ -92,7 +92,7 @@ describe("PublicationHeatmap", () => {
     ).toBeInTheDocument()
   })
 
-  it("contains the fixed-width week grid in a horizontal scroll boundary", () => {
+  it("fills the scroll boundary with week columns that keep an 11px minimum", () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date("2026-08-08T12:00:00Z"))
 
@@ -100,8 +100,16 @@ describe("PublicationHeatmap", () => {
 
     const boundary = screen.getByTestId("publication-heatmap-scroll")
     expect(boundary).toHaveStyle({ maxWidth: "100%", overflowX: "auto" })
-    expect(screen.getByRole("grid", { name: "日別公開本数" })).toHaveStyle({
-      gridTemplateColumns: "repeat(53, 11px)",
+    const grid = screen.getByRole("grid", { name: "日別公開本数" })
+    expect(grid).toHaveStyle({
+      gridTemplateColumns: "repeat(53, minmax(11px, 1fr))",
+      minWidth: "calc(583px + 156px)",
+      width: "100%",
+    })
+    expect(within(grid).getAllByRole("gridcell")[0]).toHaveStyle({
+      aspectRatio: "1 / 1",
+      minWidth: "11px",
+      width: "100%",
     })
   })
 

@@ -563,6 +563,58 @@ test("768px 幅でも比較行と詳細操作が見切れない", async ({ page 
   expect(layout.buttonRight).toBeLessThanOrEqual(layout.rowRight)
 })
 
+test("1440px 幅で公開活動が境界いっぱいに広がり横スクロールしない", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.goto(baseURL)
+
+  const heatmap = page.getByRole("region", { name: "過去365日の公開活動" })
+  const scrollBoundary = heatmap.getByTestId("publication-heatmap-scroll")
+  const grid = heatmap.getByRole("grid", { name: "日別公開本数" })
+  await expect(grid).toBeVisible()
+
+  const layout = await scrollBoundary.evaluate(
+    (boundary, renderedGrid) => {
+      const boundaryBounds = boundary.getBoundingClientRect()
+      const gridBounds = renderedGrid.getBoundingClientRect()
+      return {
+        boundaryRight: boundaryBounds.right,
+        boundaryWidth: boundary.clientWidth,
+        contentWidth: boundary.scrollWidth,
+        gridRight: gridBounds.right,
+      }
+    },
+    await grid.elementHandle()
+  )
+  const cssPixelTolerance = 1
+  expect(Math.abs(layout.gridRight - layout.boundaryRight)).toBeLessThanOrEqual(
+    cssPixelTolerance
+  )
+  expect(layout.contentWidth).toBeLessThanOrEqual(layout.boundaryWidth)
+})
+
+test("描画後の公開活動セルが正方形を保つ", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.goto(baseURL)
+
+  const heatmap = page.getByRole("region", { name: "過去365日の公開活動" })
+  const cell = heatmap.getByRole("gridcell", {
+    name: `${publicationDate}: 3本`,
+    exact: true,
+  })
+  await expect(cell).toBeVisible()
+
+  const bounds = await cell.evaluate((element) => {
+    const rectangle = element.getBoundingClientRect()
+    return { height: rectangle.height, width: rectangle.width }
+  })
+  const cssPixelTolerance = 1
+  expect(Math.abs(bounds.width - bounds.height)).toBeLessThanOrEqual(
+    cssPixelTolerance
+  )
+})
+
 test("狭い画面で公開活動を領域内スクロールと keyboard で確認できる", async ({
   page,
 }) => {
