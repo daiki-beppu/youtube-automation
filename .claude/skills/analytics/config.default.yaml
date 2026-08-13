@@ -5,6 +5,10 @@
 # Analytics データと分析レポートの鮮度判定しきい値（分）。
 freshness_minutes: 30
 
+experiment:
+  # pending 実験を評価するまでの最低日数。
+  judge_after_days: 14
+
 win_pattern:
   # 先勝ちの名前付き正規表現。マッチしないタイトルは other。
   title_patterns:

@@ -106,6 +106,7 @@ yt-traffic-trend = "youtube_automation.entrypoints:yt_traffic_trend"
 yt-video-analyze = "youtube_automation.entrypoints:yt_video_analyze"
 yt-vpd-rank = "youtube_automation.entrypoints:yt_vpd_rank"
 yt-win-pattern = "youtube_automation.entrypoints:yt_win_pattern"
+yt-experiment = "youtube_automation.entrypoints:yt_experiment"
 yt-vote-log = "youtube_automation.entrypoints:yt_vote_log"
 yt-wf-batch = "youtube_automation.entrypoints:yt_wf_batch"
 

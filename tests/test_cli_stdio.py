@@ -85,6 +85,7 @@ EXPECTED_ENTRYPOINT_MODULES = {
     "yt-video-analyze": "youtube_automation.commands.analytics.video_analyze",
     "yt-vpd-rank": "youtube_automation.commands.analytics.vpd_rank",
     "yt-win-pattern": "youtube_automation.commands.analytics.win_pattern",
+    "yt-experiment": "youtube_automation.commands.analytics.experiment",
     "yt-vote-log": "youtube_automation.commands.collections.vote_log",
     "yt-wf-batch": "youtube_automation.commands.uploads.wf_batch",
     "yt-upload-auto": "youtube_automation.commands.uploads.youtube_auto_uploader",
