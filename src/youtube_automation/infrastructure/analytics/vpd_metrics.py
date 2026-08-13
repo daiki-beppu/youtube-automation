@@ -8,6 +8,7 @@ from fractions import Fraction
 from typing import Protocol
 
 from youtube_automation.core.errors import ValidationError
+from youtube_automation.infrastructure.analytics.retention_timeline import parse_iso8601_duration
 
 
 class _VideoCollector(Protocol):
@@ -26,6 +27,18 @@ def _parse_view_count(value: object, video_id: str) -> int:
     if parsed < 0 or str(parsed) != str(value):
         raise ValidationError(f"videos.list statistics.viewCount が不正です: {video_id}")
     return parsed
+
+
+def _normalize_duration(value: object) -> str | None:
+    """YouTube の正の ISO 8601 動画尺だけを保持する。"""
+    if not isinstance(value, str):
+        return None
+    duration = value.strip()
+    try:
+        parse_iso8601_duration(duration)
+    except ValidationError:
+        return None
+    return duration
 
 
 def collect_all_video_statistics(collector: _VideoCollector) -> list[dict[str, object]]:
@@ -49,6 +62,7 @@ def collect_all_video_statistics(collector: _VideoCollector) -> list[dict[str, o
                 "title": video["title"],
                 "published_at": video["published_at"],
                 "cumulative_views": _parse_view_count(detail["view_count"], video_id),
+                "duration": _normalize_duration(detail.get("duration")),
             }
         )
     return result
@@ -110,6 +124,7 @@ def build_vpd_ranking(
             "title": video.get("title", ""),
             "published_at": video["published_at"],
             "cumulative_views": views,
+            "duration": _normalize_duration(video.get("duration")),
             "days_since_publish": days_since_publish,
             "vpd": round(float(ratio), 6),
         }

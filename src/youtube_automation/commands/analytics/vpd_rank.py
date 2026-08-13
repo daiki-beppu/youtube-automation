@@ -44,7 +44,8 @@ def _print_text(result: dict[str, object]) -> None:
         for item in group["items"]:
             print(
                 f"- {item['video_id']}  vpd={item['vpd']}  views={item['cumulative_views']}  "
-                f"days={item['days_since_publish']}  {item['title']}"
+                f"days={item['days_since_publish']}  duration={item['duration'] or 'undetermined'}  "
+                f"{item['title']}"
             )
 
 
