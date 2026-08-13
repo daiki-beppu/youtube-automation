@@ -68,6 +68,7 @@ uv run pytest tests/ --ignore=tests/integration -n auto -m slow           # 実 
 - **CI では `-n auto` を有効化済み**（`.github/workflows/ci.yml` の test ジョブ）
 - **外部 GitHub Actions は full commit SHA で固定**し、追跡する stable version を同じ `uses:` 行のコメントに残す。複数 workflow で同じ action を使う場合も SHA/version を統一し、`tests/repo/test_github_actions_pinning.py` で mutable ref・drift・未棚卸し action を拒否する
 - **CI の changed-path 分岐**: `.github/scripts/classify-ci-paths.sh` が PR と `main` push の差分を Python / packaging / Windows / ADR / 3 helper に分類する。branch protection の required check である `lint` / `test` job は path filter や job-level `if` で消さず、extension-only 変更では成功する軽量 step を返して Nix・uv・pytest を起動しない。空 diff は全 gate を有効化する fail-safe とし、分類変更時は `tests/repo/test_actions_parallel_workflows.py` の対応表も更新する
+- **影響テスト選別エンジン**: `.github/scripts/select-affected-tests.py <changed-paths-file>` は、1行1pathの変更一覧から production import の推移的な逆参照、鏡像 test、直接変更 test、repository契約の明示対応表を統合し、pytest targetを決定的に1行1件で返す。`--format json` でも同じplanを出力する。空入力、削除・rename旧path、未知/config/docs path、解析失敗、`tests/conftest.py`・helper・fixture・依存lock等のfail-safe pathでは `ALL` を返す。markerでは絞り込まない。この段階ではCIとローカルの既存実行経路は切り替えない
 - worker ごとの分離: `tests/conftest.py` が `CHANNEL_DIR` の tmp コピーを **worker プロセスごとに独立して** 作り直す（controller が自動設定した値を環境変数継承でそのまま共有しない）。ユーザーが明示的に `CHANNEL_DIR` を指定した場合は全 worker がその指定を尊重する
 - 注意: nix devShell / CLI を実 subprocess で叩く契約テストはホスト負荷に敏感で、混雑したマシンでは並列時に所要時間が大きく伸びることがある
 

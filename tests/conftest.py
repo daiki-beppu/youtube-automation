@@ -63,6 +63,7 @@ REPO_CONTRACT_MODULES = frozenset(
         "test_no_google_auth_httplib2_direct_import.py",
         "test_pytest_lane_contract.py",
         "test_readme_dev_install_documentation.py",
+        "test_select_affected_tests.py",
         "test_research_persona_setup_handoff_contract.py",
         "test_scripts_layout.py",
         "test_skill_api_call_estimate_contract.py",
