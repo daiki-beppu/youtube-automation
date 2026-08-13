@@ -15,6 +15,7 @@ import type {
 import type {
   ProgressPayload,
   RunModeId,
+  RunTimingReceipt,
   SnapshotPayload,
 } from "../../shared/constants";
 import type { LocalServerSource } from "../../shared/constants";
@@ -41,6 +42,7 @@ export interface RunPayload {
   runMode: RunModeId;
   regenerateDurationOutliers: boolean;
   durationOutlierWarnings?: Record<number, string>;
+  timingReceipt?: RunTimingReceipt;
   /** 任意の部分実行対象の 0-based index 列。チェック選択や失敗分再実行で使う。指定時は range より優先。 */
   indices?: number[];
   /** 再開前の run で観測済みの playlist 対象 clip ID。 */
@@ -78,6 +80,7 @@ export interface RetryPlaylistPayload {
     deferredIndices: number[];
     leaseToken: string;
   };
+  timingReceipt?: RunTimingReceipt;
 }
 
 /** overlay → runner: Suno UI でユーザーが手動選択した clip を resume 用 ID として採用する。 */
@@ -108,6 +111,7 @@ export interface RetryDownloadPayload {
     deferredIndices: number[];
     leaseToken: string;
   };
+  timingReceipt?: RunTimingReceipt;
 }
 
 interface ProtocolMap {

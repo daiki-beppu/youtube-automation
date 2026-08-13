@@ -174,6 +174,10 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
     expectedFileCount: number,
     filename: string
   ): Promise<DownloadSummary | undefined> {
+    deps.emitProgress({
+      phase: PHASE.PLACING_ARCHIVE,
+      total: progressTotal,
+    });
     await deps.onDownloadComplete?.(filename);
     const postResult = await sendMessage("postDownloaded", {
       baseUrl: context.baseUrl,
@@ -190,7 +194,7 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
     if (postResult?.warning) {
       console.warn(`[suno-helper] 部分ダウンロード: ${postResult.warning}`);
       deps.emitProgress({
-        phase: PHASE.DOWNLOADING,
+        phase: PHASE.PLACING_ARCHIVE,
         total: progressTotal,
         message: `部分ダウンロード（不足あり）: ${postResult.warning}`,
       });

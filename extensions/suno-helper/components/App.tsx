@@ -56,6 +56,7 @@ import {
 import { CompletionSoundControls } from "./CompletionSoundControls";
 import { PatternList } from "./PatternList";
 import { ReloadRequiredNotice } from "./ReloadRequiredNotice";
+import { RunTimingPanel } from "./RunTimingPanel";
 import { useSunoRunner } from "./useSunoRunner";
 
 // RUN_MODES のキー集合から導出する（手書き複製だと mode 追加時に UI へ出ないまま型チェックが通る）。
@@ -108,6 +109,7 @@ export function App() {
     adoptSelectedClips,
     run,
     stop,
+    timingReceipt,
   } = useSunoRunner();
   const queueInProgress = collectionQueue?.status === "running";
   const controlsLocked = isRunning || queueInProgress;
@@ -781,6 +783,9 @@ export function App() {
         >
           {status}
         </Alert>
+      )}
+      {timingReceipt && timingReceipt.outcome !== "running" && (
+        <RunTimingPanel receipt={timingReceipt} />
       )}
     </div>
   );

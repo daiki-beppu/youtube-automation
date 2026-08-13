@@ -13,6 +13,7 @@ import {
   CLIPS_PER_REQUEST,
   RESUME_STATE_KEY,
   type RunModeId,
+  type RunTimingReceipt,
 } from "../../shared/constants";
 
 /** ERROR 停止時に永続化する再開メタ情報 (#872)。 */
@@ -54,6 +55,7 @@ export interface ResumeState {
   downloadCompletedFilename?: string;
   /** Same-named playlist URLs observed before the create side effect. */
   playlistUrlsBeforeCreate?: string[];
+  timingReceipt?: RunTimingReceipt;
 }
 
 /** content へ渡す 0-based inclusive な実行範囲。 */

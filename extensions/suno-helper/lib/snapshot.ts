@@ -17,6 +17,7 @@ interface InitSnapshotOptions {
   durationFilter?: DurationFilter;
   regenerateDurationOutliers?: boolean;
   durationOutlierWarnings?: Record<number, string>;
+  timingReceipt?: SnapshotPayload["timingReceipt"];
 }
 
 /**
@@ -33,6 +34,7 @@ export function initSnapshot(
     itemStates: entries.map(() => "idle"),
     isRunning: true,
     progress: { phase: PHASE.INJECTING, total: entries.length },
+    timingReceipt: options.timingReceipt,
     playlistName: options.playlistName,
     regenerateDurationOutliers:
       options.regenerateDurationOutliers ??
@@ -115,6 +117,7 @@ export function applyProgress(
     ...snap,
     itemStates: nextItemStates(snap.itemStates, payload),
     progress: payload,
+    timingReceipt: payload.timingReceipt ?? snap.timingReceipt,
     isRunning: isTerminalPhase(payload.phase) ? false : snap.isRunning,
     // ERROR phase でのみ failedIndex を確定する（chrome.storage の resume state と二重化, #872）。
     // 非 ERROR phase では既存値を保つ。ERROR が index 無し（playlist phase 等）なら undefined のまま。
