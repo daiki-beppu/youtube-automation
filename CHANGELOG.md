@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(wf-new)`: Phase 2c の thumbnail と music を exactly-two Agent で同時 dispatch する（#4096）。
+
 - `feat(wf-new)`: Phase 2c の thumbnail / music 成果物を独立検証し、片側失敗時も成功側の state を保持して失敗 branch だけを再開する契約を追加する（#4095）。
 - `feat(dashboard)`: 収集済み日次指標を返す `GET /api/trends` と、palette 非依存の色相別系列で全チャンネルの再生数推移を比較する折れ線グラフを追加する（#3776）。
 - `fix(dashboard)`: 公開活動ヒートマップの内訳をフロー外の浮動レイヤーにし、セル間のgapでは維持してグリッド退出時だけ閉じることで点滅とレイアウトシフトを防ぐ（#3774）。
