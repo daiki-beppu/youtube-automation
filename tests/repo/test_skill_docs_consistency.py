@@ -260,6 +260,7 @@ def test_setup_channel_ttp_confirmation_contract_is_documented() -> None:
 
 def test_setup_channel_ttp_hearing_routes_direction_to_residual_mode() -> None:
     setup_channel = _read(".claude/skills/setup/references/channel-mode.md")
+    seed_details = _read(".claude/skills/setup/references/ttp-seed-and-duration.md")
     channel_new = _read(".claude/skills/channel-new/SKILL.md")
     overview = channel_new.split("## Overview", 1)[1].split("## モード判別", 1)[0]
     mode_routing = channel_new.split("## モード判別", 1)[1].split("## 外部データの扱い", 1)[0]
@@ -284,15 +285,16 @@ def test_setup_channel_ttp_hearing_routes_direction_to_residual_mode() -> None:
     assert "「どんなチャンネルにしたいか」より先に" not in ttp_principles
     assert "`/channel-new` では方向性・差別化・ポジショニングを聞かず" in ttp_principles
 
-    assert "TTP 対象への転写要素（タイトル構造 / サムネ構図 / 投稿頻度 / 尺 / ジャンル / branding）に限定" in step1
     step1_questions = [line for line in step1.splitlines() if line.startswith("- **")]
     assert step1_questions == [
         "- **TTP したいチャンネル**: URL / handle / channel ID を 1 件以上",
-        "- **転写したい要素**: タイトル構造 / サムネ構図 / 投稿頻度 / 尺 / ジャンル / branding のどれか",
-        "- **要素ごとの関係性メモ**: "
-        "タイトル構造 / サムネ構図 / 投稿頻度 / 尺 / ジャンル / branding のうち、どの観察をどう転写するか",
         "- **branding 方針**: TTP 対象の description / keywords / localizations をどの程度転写するか",
     ]
+    all_elements_default = "タイトル構造 / サムネ構図 / 投稿頻度 / 尺 / ジャンル / branding の全要素を TTP 準拠とする"
+    assert f"既定値 `{all_elements_default}` を記録する" in step1
+    assert f'--relationship "{all_elements_default}"' in setup_channel
+    assert seed_details.count(f"`{all_elements_default}`") == 2
+    assert "固定の既定値は実データ確認済みを意味しない" in seed_details
     for forbidden in ("方向性を聞く", "差別化を聞く", "ポジショニングを聞く"):
         assert forbidden not in step1
     for config_prompt in (

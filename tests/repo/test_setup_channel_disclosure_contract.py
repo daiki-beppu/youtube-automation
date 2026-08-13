@@ -29,7 +29,7 @@ OPENING_ASSETS = {
 }
 BEFORE_MOVE_SHA256 = {
     "new-channel-bootstrap.md": "dbae6fc0b7bba180d8c7ec3a40667428ca584e50977127e7ab7a21e9391160c4",
-    "ttp-seed-and-duration.md": "2e0235597d247d954cfe437ce72ead8e9800376cebe35c03e8e7021e607b452d",
+    "ttp-seed-and-duration.md": "6be5874c9ea6f71b2158cbb6931d542c3e21493dd2546634d4d95bae97945c93",
     "persona-branding-readiness.md": "f40a2050cd6fbc134651c627e494694b29cc86eda9702825f96b1d8ac3ff0d61",
     "derive_ttp_duration.py": "bed2ac050d67f3974e84815dbd79388809c4b8174bfa246f24a83d858990a132",
     "initial_save_guard.sh": "93e9503da8d1e1c2680f682be25c053988fd0fd45fa3bf193e8272d2dd704ac3",
