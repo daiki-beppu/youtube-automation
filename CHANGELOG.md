@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(dashboard)`: `POST /api/refresh` と排他制御を追加し、画面のデータ更新ボタンから全チャンネルの再収集と read model の再取得を行えるようにする（#3768）。
 - `fix(metadata)`: localization title の固定尺検出で `3時間の{scene_phrase}` と fr/es/it の `heure(s)` / `hora(s)` / `ora` / `ore` を認識し、Unicode 正規化形式を問わない単語境界を保ったまま実尺追従漏れを公開前診断で停止する（#3912）。
 - `fix(analytics)`: `yt-ad-coverage` が部分成功の収益 snapshot を受理し、動画別データが空なら unavailable 相当の JSON を exit 0 で返して分析パイプラインを継続する（#3910）。
 - `fix(automation-update)`: 追従後診断を `yt-doctor --json` の exact `channel_config.status` 判定へ揃え、doctor 全体の exit code 0 で config fail を見逃す手順を修正する（#3915）。

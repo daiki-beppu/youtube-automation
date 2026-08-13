@@ -224,7 +224,7 @@ assets/stock/           # ボツ画像ストック (#364)。<theme-slug>/ 配下
 
 ### dashboard architecture
 
-`yt-dashboard` は channel registry、起動時の収集、read model、JSON API、loopback 限定配信を担当する。通常起動では `yt-dashboard` が全チャンネルを更新し、1 チャンネルの更新失敗は部分エラーとして隔離する。`dashboard/` の React + Vite frontend は shadcn/ui を使った JSON API の表示だけを担当し、dashboard 限定の TypeScript 例外として `extensions/shared-ui` を直接 import しない。
+`yt-dashboard` は channel registry、起動時および `POST /api/refresh` の排他的な収集、read model、JSON API、loopback 限定配信を担当する。通常起動と画面からの更新では全チャンネルを更新し、1 チャンネルの更新失敗は部分エラーとして隔離する。`--skip-refresh` 時の endpoint は保存済み snapshot から read model だけを再構築する。`dashboard/` の React + Vite frontend は shadcn/ui を使った同一 origin JSON API の表示・更新操作だけを担当し、dashboard 限定の TypeScript 例外として `extensions/shared-ui` を直接 import しない。
 
 ### operator documentation site architecture
 

@@ -5,7 +5,7 @@ import threading
 from datetime import UTC, datetime
 from pathlib import Path
 from urllib.error import HTTPError
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 
 import pytest
 
@@ -173,6 +173,87 @@ def _response_bytes(url: str) -> bytes:
     with urlopen(url, timeout=5) as response:
         assert response.status == 200
         return response.read()
+
+
+def _post_json(url: str) -> tuple[int, dict[str, object]]:
+    with urlopen(Request(url, method="POST"), timeout=5) as response:
+        return response.status, json.loads(response.read())
+
+
+def test_refresh_endpoint_recollects_and_rebuilds_read_model(tmp_path: Path) -> None:
+    channel = _write_channel(tmp_path)
+
+    def collect(path: Path) -> None:
+        snapshot = path / "data" / "analytics_data_2026-07-20.json"
+        payload = json.loads(snapshot.read_text(encoding="utf-8"))
+        payload["channel_analytics"]["summary"]["total_views"] = 456
+        snapshot.write_text(json.dumps(payload), encoding="utf-8")
+
+    server = create_server(port=0, channel_paths=[channel], collect_channel=collect)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        status, overview = _post_json(f"http://127.0.0.1:{server.server_port}/api/refresh")
+        assert status == 200
+        assert overview["channels"][0]["summary"]["views"] == 456
+        _, current = _json(f"http://127.0.0.1:{server.server_port}/api/channels")
+        assert current == overview
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+        server.server_close()
+
+
+def test_refresh_endpoint_skips_collection_when_server_is_offline(tmp_path: Path) -> None:
+    channel = _write_channel(tmp_path)
+    server = create_server(port=0, channel_paths=[channel], collect_channel=None)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        status, overview = _post_json(f"http://127.0.0.1:{server.server_port}/api/refresh")
+        assert status == 200
+        assert overview["channels"][0]["summary"]["views"] == 123
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+        server.server_close()
+
+
+def test_refresh_endpoint_returns_conflict_while_refresh_is_running(tmp_path: Path) -> None:
+    channel = _write_channel(tmp_path)
+    started = threading.Event()
+    release = threading.Event()
+
+    def collect(_path: Path) -> None:
+        started.set()
+        assert release.wait(timeout=5)
+
+    server = create_server(port=0, channel_paths=[channel], collect_channel=collect)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    first = threading.Thread(
+        target=lambda: _post_json(f"http://127.0.0.1:{server.server_port}/api/refresh"), daemon=True
+    )
+    first.start()
+    try:
+        assert started.wait(timeout=5)
+        with pytest.raises(HTTPError) as exc_info:
+            _post_json(f"http://127.0.0.1:{server.server_port}/api/refresh")
+        assert exc_info.value.code == 409
+        assert json.loads(exc_info.value.read())["error"]["code"] == "refresh_in_progress"
+    finally:
+        release.set()
+        first.join(timeout=5)
+        server.shutdown()
+        thread.join(timeout=5)
+        server.server_close()
+
+
+def test_server_returns_json_404_for_unknown_post_api(dashboard_server: str) -> None:
+    with pytest.raises(HTTPError) as exc_info:
+        _post_json(f"{dashboard_server}/api/unknown")
+    assert exc_info.value.code == 404
+    assert json.loads(exc_info.value.read())["error"]["code"] == "not_found"
 
 
 def test_server_api_json_bytes_match_production_builder_golden(dashboard_server: str) -> None:

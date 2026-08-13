@@ -299,6 +299,15 @@ test.beforeAll(async () => {
   await waitUntilReady(baseURL)
 })
 
+test("保存済み snapshot から画面を更新できる", async ({ page }) => {
+  await page.goto(baseURL)
+  const button = page.getByRole("button", { name: "データを更新" })
+  await expect(button).toBeEnabled()
+  await button.click()
+  await expect(button).toHaveText("データを更新")
+  await expect(page.getByText("3,200").first()).toBeVisible()
+})
+
 test.afterAll(async () => {
   process?.kill("SIGTERM")
   if (fixtureRoot) await rm(fixtureRoot, { recursive: true, force: true })
@@ -903,7 +912,7 @@ test("ライトでは公式5段階色、ダークでは背景と識別できる�
       const title = document.querySelector("h1")
       const accentDescription = [...document.querySelectorAll("div")].find(
         (element) =>
-          element.textContent === "起動時に読み込んだ全チャンネルの集計です。"
+          element.textContent === "最後に更新した全チャンネルの集計です。"
       )
       const metricLabel = [...document.querySelectorAll("dt")].find(
         (term) => term.textContent === "登録チャンネル"

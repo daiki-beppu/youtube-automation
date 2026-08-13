@@ -92,8 +92,9 @@ const chartConfig = {
   views: { label: "再生数", color: "var(--chart-3)" },
 } satisfies ChartConfig
 
-async function requestJson<T>(path: string): Promise<T> {
+async function requestJson<T>(path: string, method = "GET"): Promise<T> {
   const response = await fetch(path, {
+    method,
     headers: { Accept: "application/json" },
   })
   if (!response.ok) {
@@ -263,7 +264,7 @@ function DashboardOverview({ channels }: { channels: ChannelOverview[] }) {
           <CardHeader>
             <CardTitle>現在の状態</CardTitle>
             <CardDescription>
-              起動時に読み込んだ全チャンネルの集計です。
+              最後に更新した全チャンネルの集計です。
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -693,6 +694,7 @@ export function App() {
   const [detail, setDetail] = useState<ChannelDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
   const detailRequestId = useRef(0)
 
   useEffect(() => {
@@ -724,6 +726,42 @@ export function App() {
         })
       })
   }, [])
+
+  async function refreshDashboard() {
+    setRefreshing(true)
+    setError(null)
+    try {
+      await requestJson<OverviewResponse>("/api/refresh", "POST")
+      const [overviewResponse, publicationsResponse, detailResponse] =
+        await Promise.all([
+          requestJson<OverviewResponse>("/api/channels"),
+          requestJson<unknown>("/api/publications"),
+          selectedId
+            ? requestJson<ChannelDetail>(
+                `/api/channels/${encodeURIComponent(selectedId)}`
+              )
+            : Promise.resolve(null),
+        ])
+      if (!isPublicationActivityResponse(publicationsResponse)) {
+        throw new Error("応答形式が不正です")
+      }
+      setChannels(overviewResponse.channels)
+      setDetail(detailResponse)
+      const publicationCount = Object.values(publicationsResponse.days).reduce(
+        (total, count) => total + count,
+        0
+      )
+      setPublicationActivity(
+        publicationCount === 0
+          ? { status: "empty" }
+          : { status: "ready", data: publicationsResponse }
+      )
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason))
+    } finally {
+      setRefreshing(false)
+    }
+  }
 
   async function selectChannel(channelId: string) {
     const requestId = detailRequestId.current + 1
@@ -757,16 +795,24 @@ export function App() {
           <div className="flex flex-col gap-2">
             <Badge variant="secondary" className="gap-1">
               <DatabaseIcon data-icon="inline-start" />
-              起動時更新
+              手動更新対応
             </Badge>
             <h1 className="text-3xl font-semibold tracking-tight text-primary sm:text-4xl">
               YouTube Analytics Dashboard
             </h1>
             <p className="max-w-2xl text-muted-foreground">
-              起動時に全チャンネルを更新し、チャンネルと動画のパフォーマンスを確認します。
+              全チャンネルを更新し、チャンネルと動画の最新パフォーマンスを確認できます。
             </p>
           </div>
           <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              disabled={refreshing}
+              onClick={() => void refreshDashboard()}
+            >
+              <RefreshCwIcon className={refreshing ? "animate-spin" : undefined} />
+              {refreshing ? "更新中" : "データを更新"}
+            </Button>
             <Button
               variant="outline"
               size="icon"

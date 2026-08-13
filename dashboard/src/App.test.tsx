@@ -171,6 +171,56 @@ function renderDashboard() {
 }
 
 describe("dashboard", () => {
+  it("refreshes every dashboard read model and disables the button while running", async () => {
+    const refreshResponse = deferred<Response>()
+    const updatedOverview = {
+      ...overview,
+      channels: [
+        {
+          ...overview.channels[0],
+          summary: { ...overview.channels[0].summary, views: 2400 },
+        },
+      ],
+    }
+    let refreshRequested = false
+    vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+      const path = String(input)
+      if (path === "/api/refresh" && init?.method === "POST") {
+        refreshRequested = true
+        return refreshResponse.promise
+      }
+      if (path === "/api/publications") {
+        return Promise.resolve(
+          new Response(JSON.stringify(publicationActivity), { status: 200 })
+        )
+      }
+      return Promise.resolve(
+        new Response(
+          JSON.stringify(
+            path === "/api/channels" && refreshRequested
+              ? updatedOverview
+              : overview
+          ),
+          { status: 200 }
+        )
+      )
+    })
+    const user = userEvent.setup()
+    renderDashboard()
+    const refreshButton = await screen.findByRole("button", {
+      name: "データを更新",
+    })
+
+    await user.click(refreshButton)
+    expect(screen.getByRole("button", { name: "更新中" })).toBeDisabled()
+    refreshResponse.resolve(
+      new Response(JSON.stringify(updatedOverview), { status: 200 })
+    )
+
+    expect(await screen.findByText("2,400")).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "データを更新" })).toBeEnabled()
+  })
+
   it("presents overview, data context, metric definitions, and comparison in decision order", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(JSON.stringify(overview), { status: 200 })
