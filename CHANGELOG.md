@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `feat(analytics)`: VPD 上位・下位群を同一集計器で機械属性と目視 5 属性に分け、known denominator の 60% / 20pp 境界から相関上の勝ち・負け・保留を返す `yt-win-pattern` を追加した（#3782）。
 - `feat(analytics)`: 全 uploads をページ走査し Data API の累計 `viewCount` を 50 件ずつ取得して、UTC 公開日齢で正規化した VPD の上位・中間・下位群を JSON / text で確定する `yt-vpd-rank` を追加した（#3781）。
 - `feat(setup)`: `/setup --channel` Step 1 の質問を TTP 対象と branding 方針だけに絞り、転写要素と relationship は全要素 TTP 準拠の既定値として自動記録する。投稿頻度と動画尺の seed-only 仮説扱いは維持する（#3997）。
+- `perf(dev)`: takt `ci_verify` とworktreeのローカルtest入口をPR CI共通selectorへ切り替え、selected件数を表示しつつfail-safe変更では無選別full suiteを維持する（#4012）。
 - `perf(ci)`: PR のPython test jobを影響test selectorの安全なtarget配列へ切り替え、選別件数を記録しつつ、fail-safe planとmain pushでは無選別full suiteを維持する（#4011）。
 - `feat(ci)`: 変更pathから鏡像・推移的import・repository契約の影響pytest targetを算出し、不明・削除・基盤変更・解析失敗では全suiteへfail-safeする共通selectorを追加する（#4010）。
 - `fix(metadata)`: localization title の固定尺検出で `3時間の{scene_phrase}` と fr/es/it の `heure(s)` / `hora(s)` / `ora` / `ore` を認識し、Unicode 正規化形式を問わない単語境界を保ったまま実尺追従漏れを公開前診断で停止する（#3912）。

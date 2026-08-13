@@ -3,10 +3,12 @@ Act as a read-only CI-equivalent delivery gate. Inspect `.github/workflows/ci.ym
 ```bash
 nix develop --command uv run ruff check .
 nix develop --command uv run ruff format --check .
-nix develop --command uv run pytest -n auto
+python .github/scripts/run-affected-tests.py
 bash .github/scripts/any-usage-gate.sh
 git diff --check
 ```
+
+The affected-test runner collects committed, staged, unstaged, and untracked worktree paths, applies the same selector as pull-request CI, reports selected/total target counts, and runs the exact full `pytest -n auto` suite when the plan is `ALL`. This dependency-based selection is the required CI contract, not permission to manually skip tests, narrow scope, add marker filters, or omit a target. The unselected surface remains protected by the exact full suite on CI's `main` push.
 
 Also run applicable packaging, frontend/extension, ADR, skill, and CHANGELOG checks selected by the CI path contract. Never edit files, skip tests, narrow scope, or reinterpret a failed command as success.
 
