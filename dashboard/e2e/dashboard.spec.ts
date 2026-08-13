@@ -912,7 +912,7 @@ test("ライトでは公式5段階色、ダークでは背景と識別できる�
       const title = document.querySelector("h1")
       const accentDescription = [...document.querySelectorAll("div")].find(
         (element) =>
-          element.textContent === "起動時に読み込んだ全チャンネルの集計です。"
+          element.textContent === "最後に更新した全チャンネルの集計です。"
       )
       const metricLabel = [...document.querySelectorAll("dt")].find(
         (term) => term.textContent === "登録チャンネル"
