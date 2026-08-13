@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `feat(dashboard)`: 公開活動ヒートマップから月・曜日の軸ラベルと余分な外枠グリッドを削除し、日別セルとアクセシブルな内訳・凡例を維持する（#3772）。
 - `feat(dashboard)`: 7 / 30 / 90 日の期間プリセットを追加し、選択日数を検証して全チャンネルの Analytics を再収集できるようにする（#3769）。
 - `feat(dashboard)`: `POST /api/refresh` と排他制御を追加し、画面のデータ更新ボタンから全チャンネルの再収集と read model の再取得を行えるようにする（#3768）。
+- `feat(analytics)`: `/analytics --analyze` が VPD ranking を 1 回 capture し、同じ top / bottom snapshot の目視 5 属性を `yt-win-pattern` へ渡して、schema v3 レポートへ stdout object・6 CLI の数値 evidence・相関 disclaimer を検証付きで保存する（#3783）。
 - `feat(analytics)`: VPD 上位・下位群を同一集計器で機械属性と目視 5 属性に分け、known denominator の 60% / 20pp 境界から相関上の勝ち・負け・保留を返す `yt-win-pattern` を追加した（#3782）。
 - `feat(analytics)`: 全 uploads をページ走査し Data API の累計 `viewCount` を 50 件ずつ取得して、UTC 公開日齢で正規化した VPD の上位・中間・下位群を JSON / text で確定する `yt-vpd-rank` を追加した（#3781）。
 - `fix(metadata)`: localization title の固定尺検出で `3時間の{scene_phrase}` と fr/es/it の `heure(s)` / `hora(s)` / `ora` / `ore` を認識し、Unicode 正規化形式を問わない単語境界を保ったまま実尺追従漏れを公開前診断で停止する（#3912）。

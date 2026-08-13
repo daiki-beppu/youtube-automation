@@ -67,11 +67,12 @@ uv run python .claude/skills/analytics/references/analytics-chain-state.py \
 
 ## 想定 API call 数
 
-`--analyze` と `--report` はローカル成果物だけを読む。フラグなしまたは `--collect` で収集が必要な場合は次の call 数を見込む。
+`--report` はローカル成果物だけを読む。`--analyze` は VPD ranking のため YouTube Data API を 1 回の走査で使う。フラグなしまたは `--collect` で収集が必要な場合は collect 分も加えて次の call 数を見込む。
 
 | API | call 数 / 実行 | 変動要因 |
 |---|---|---|
 | YouTube Data API v3 | 約 3 + ceil(動画数/50) units | チャンネルの動画数 |
+| YouTube Data API v3（analyze VPD） | 約 3 + 2 × ceil(動画数/50) units | uploads 全ページ + statistics 50 件 batch。鮮度内 schema v3 レポートは再利用 |
 | YouTube Analytics API | standard で約 10 + 直近動画数 call | 対象期間、動画数 |
 | YouTube Analytics API（full 追加分） | country / retention で最大 +11 call | full 指定時のみ |
 | YouTube Reporting API | reporting mode 時のみ数 call | job と生成済み report の状態 |
