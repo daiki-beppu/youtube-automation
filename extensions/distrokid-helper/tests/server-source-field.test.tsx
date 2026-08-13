@@ -154,6 +154,30 @@ describe("ServerSourceField and Shadow portal ref", () => {
     ).toBe(true);
   });
 
+  it("should not refresh when a no-source disabled trigger receives forced open events", async () => {
+    const onRefresh = vi.fn(async () => undefined);
+    await renderField({ sources: [], value: "", onRefresh });
+    const trigger = shadow.querySelector<HTMLButtonElement>("#server-source")!;
+
+    let pointerAllowed = true;
+    let clickAllowed = true;
+    await act(async () => {
+      pointerAllowed = trigger.dispatchEvent(
+        new PointerEvent("pointerdown", { bubbles: true, cancelable: true })
+      );
+      clickAllowed = trigger.dispatchEvent(
+        new MouseEvent("click", { bubbles: true, cancelable: true })
+      );
+      await Promise.resolve();
+    });
+
+    expect(trigger.disabled).toBe(true);
+    expect(pointerAllowed).toBe(false);
+    expect(clickAllowed).toBe(false);
+    expect(onRefresh).not.toHaveBeenCalled();
+    expect(shadow.querySelector('[role="listbox"]')).toBeNull();
+  });
+
   it("forwards callback/object refs, resolves the portal parent, and clears it on null", async () => {
     const callbackRef = vi.fn();
     const objectRef = createRef<HTMLButtonElement>();
