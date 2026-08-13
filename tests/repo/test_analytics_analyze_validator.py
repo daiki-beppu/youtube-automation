@@ -28,7 +28,19 @@ def _write_fixture(
     content_path = tmp_path / "config/channel/content.json"
     report_path = tmp_path / "reports/analysis_20260717.json"
     markdown_path = tmp_path / "reports/analysis_20260717.md"
-    for path in (analytics_path, daily_path, content_path, report_path, markdown_path):
+    ranking_path = tmp_path / "reports/analysis_20260717.vpd-ranking.json"
+    annotations_path = tmp_path / "reports/analysis_20260717.visual-annotations.json"
+    win_pattern_path = tmp_path / "reports/analysis_20260717.win-pattern.json"
+    for path in (
+        analytics_path,
+        daily_path,
+        content_path,
+        report_path,
+        markdown_path,
+        ranking_path,
+        annotations_path,
+        win_pattern_path,
+    ):
         path.parent.mkdir(parents=True, exist_ok=True)
 
     retention = retention_override or [
@@ -51,8 +63,115 @@ def _write_fixture(
     daily_path.write_text("{}", encoding="utf-8")
     content_path.write_text("{}", encoding="utf-8")
 
+    top = {
+        "video_id": "VID_TOP",
+        "title": "Top",
+        "published_at": "2026-06-01T00:00:00Z",
+        "cumulative_views": 4200,
+        "days_since_publish": 42,
+        "duration": "PT1H",
+        "vpd": 100.0,
+    }
+    bottom = {
+        "video_id": "VID_BOTTOM",
+        "title": "Bottom",
+        "published_at": "2026-05-01T00:00:00Z",
+        "cumulative_views": 420,
+        "days_since_publish": 42,
+        "duration": "PT45M",
+        "vpd": 10.0,
+    }
+    vpd_ranking = {
+        "n": 2,
+        "k": 1,
+        "min_age_days": 7,
+        "excluded_count": 0,
+        "ranking": [top, bottom],
+        "groups": {
+            "top": {"count": 1, "min_vpd": 100.0, "max_vpd": 100.0, "items": [top]},
+            "middle": {"count": 0, "min_vpd": None, "max_vpd": None, "items": []},
+            "bottom": {"count": 1, "min_vpd": 10.0, "max_vpd": 10.0, "items": [bottom]},
+        },
+    }
+    visual_annotations = {
+        "videos": [
+            {
+                "video_id": "VID_TOP",
+                "composition": "centered",
+                "color": None,
+                "text_placement": None,
+                "visual_flow": None,
+                "subject": None,
+            },
+            {
+                "video_id": "VID_BOTTOM",
+                "composition": "left",
+                "color": None,
+                "text_placement": None,
+                "visual_flow": None,
+                "subject": None,
+            },
+        ]
+    }
+    visual_undetermined = {
+        name: {
+            "top_known_count": 0,
+            "bottom_known_count": 0,
+            "undetermined_count": {"top": 1, "bottom": 1},
+            "values": {},
+        }
+        for name in ("color", "text_placement", "visual_flow", "subject")
+    }
+    automatic_known = {
+        name: {
+            "top_known_count": 1,
+            "bottom_known_count": 1,
+            "undetermined_count": {"top": 0, "bottom": 0},
+            "values": {},
+        }
+        for name in ("title_pattern", "duration", "publish_weekday", "publish_time")
+    }
+    win_pattern = {
+        "n": 2,
+        "k": 1,
+        "min_age_days": 7,
+        "attributes": {
+            "theme": {
+                "top_known_count": 1,
+                "bottom_known_count": 1,
+                "undetermined_count": {"top": 0, "bottom": 0},
+                "values": {
+                    "focus": {
+                        "top_count": 1,
+                        "bottom_count": 0,
+                        "top_known_count": 1,
+                        "bottom_known_count": 1,
+                        "top_percentage": 100.0,
+                        "bottom_percentage": 0.0,
+                        "pp_difference": 100.0,
+                        "classification": "win",
+                        "undetermined_count": {"top": 0, "bottom": 0},
+                        "representative_video_ids": ["VID_TOP"],
+                    }
+                },
+            },
+            **automatic_known,
+            "composition": {
+                "top_known_count": 1,
+                "bottom_known_count": 1,
+                "undetermined_count": {"top": 0, "bottom": 0},
+                "values": {},
+            },
+            **visual_undetermined,
+        },
+        "disclaimer": "Observed correlation in this VPD-ranked population; correlation does not imply causation.",
+    }
+    ranking_path.write_text(json.dumps(vpd_ranking), encoding="utf-8")
+    annotations_path.write_text(json.dumps(visual_annotations), encoding="utf-8")
+    win_pattern_path.write_text(json.dumps(win_pattern), encoding="utf-8")
+
     report = {
-        "schema_version": 2,
+        "schema_version": 3,
         "generated_at": "2026-07-17T03:00:00Z",
         "inputs": {
             "analysis_target": str(analytics_path.relative_to(tmp_path)),
@@ -62,12 +181,22 @@ def _write_fixture(
                 str(content_path.relative_to(tmp_path)),
             ],
             "supplemental": [],
+            "intermediate": {
+                "vpd_ranking": str(ranking_path.relative_to(tmp_path)),
+                "visual_annotations": str(annotations_path.relative_to(tmp_path)),
+                "win_pattern": str(win_pattern_path.relative_to(tmp_path)),
+            },
         },
         "commands": {
             "launch_curve": "uv run yt-launch-curve --latest",
             "channel_trend": "uv run yt-channel-trend",
             "theme_compare": "uv run yt-theme-compare",
             "traffic_trend": "uv run yt-traffic-trend",
+            "vpd_ranking": "uv run yt-vpd-rank",
+            "win_pattern": (
+                "uv run yt-win-pattern --ranking reports/analysis_20260717.vpd-ranking.json "
+                "--annotations reports/analysis_20260717.visual-annotations.json"
+            ),
         },
         "cli_outputs": {
             "launch_curve": {"target": {"ratio_vs_median": 1.42}},
@@ -105,6 +234,8 @@ def _write_fixture(
                 }
             ],
         },
+        "vpd_ranking": vpd_ranking,
+        "win_pattern": win_pattern,
         "ctr_strategy": [],
         "channel_performance": [],
         "strategic_improvements": [
@@ -126,6 +257,22 @@ def _write_fixture(
                         "source": "traffic_trend",
                         "json_path": "$.cli_outputs.traffic_trend.summary.top_source_share_percent",
                         "value": 45.2,
+                    }
+                ],
+                "confidence": "medium",
+            },
+            {
+                "statement": "VPD 上位群の規模",
+                "evidence": [{"source": "vpd_ranking", "json_path": "$.vpd_ranking.n", "value": 2}],
+                "confidence": "high",
+            },
+            {
+                "statement": "勝ち型の上位割合",
+                "evidence": [
+                    {
+                        "source": "win_pattern",
+                        "json_path": "$.win_pattern.attributes.theme.values.focus.top_percentage",
+                        "value": 100.0,
                     }
                 ],
                 "confidence": "medium",
@@ -188,9 +335,24 @@ def _write_fixture(
         "analysis_20260717.json#$.cli_outputs.channel_trend.summary.wow_growth_rate = 8.5",
         "analysis_20260717.json#$.cli_outputs.theme_compare.themes[0].day7_mean = 1234.0",
         "analysis_20260717.json#$.cli_outputs.traffic_trend.summary.top_source_share_percent = 45.2",
+        "analysis_20260717.json#$.vpd_ranking.n = 2",
+        "analysis_20260717.json#$.win_pattern.attributes.theme.values.focus.top_percentage = 100.0",
     ]
     citations.extend(extra_citations)
-    markdown_path.write_text("\n".join(citations) + "\n\n## 収益・RPM 分析\n", encoding="utf-8")
+    vpd_section = (
+        "## VPD 上位 / 下位の定量比較",
+        "相関注記: Observed correlation in this VPD-ranked population; correlation does not imply causation.",
+        "判定不能: visual attributes",
+    )
+    undetermined_citations = [
+        f"analysis_20260717.json#$.win_pattern.attributes.{attribute}.undetermined_count.{group} = 1"
+        for attribute in ("color", "text_placement", "visual_flow", "subject")
+        for group in ("top", "bottom")
+    ]
+    markdown_path.write_text(
+        "\n".join([*citations, *vpd_section, *undetermined_citations]) + "\n\n## 収益・RPM 分析\n",
+        encoding="utf-8",
+    )
 
 
 def _append_retention_section(tmp_path: Path) -> None:
@@ -467,13 +629,164 @@ def test_standard_report_with_full_collection_guidance_passes(tmp_path: Path) ->
     assert result.returncode == 0, result.stderr
 
 
-def test_schema_version_one_fails(tmp_path: Path) -> None:
+def test_fresh_schema_version_two_fails(tmp_path: Path) -> None:
     _write_fixture(tmp_path, depth="standard")
     _append_standard_retention_section(tmp_path)
     report_path = tmp_path / "reports/analysis_20260717.json"
     report = json.loads(report_path.read_text(encoding="utf-8"))
-    report["schema_version"] = 1
+    report["schema_version"] = 2
     report_path.write_text(json.dumps(report), encoding="utf-8")
+
+    assert _run_validator(tmp_path).returncode != 0
+
+
+def test_vpd_partition_overlap_fails(tmp_path: Path) -> None:
+    _write_fixture(tmp_path, depth="standard")
+    _append_standard_retention_section(tmp_path)
+    report_path = tmp_path / "reports/analysis_20260717.json"
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    report["vpd_ranking"]["groups"]["bottom"]["items"] = report["vpd_ranking"]["groups"]["top"]["items"]
+    ranking_path = tmp_path / report["inputs"]["intermediate"]["vpd_ranking"]
+    ranking_path.write_text(json.dumps(report["vpd_ranking"]), encoding="utf-8")
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+
+    assert _run_validator(tmp_path).returncode != 0
+
+
+def test_vpd_duplicate_ranking_id_fails(tmp_path: Path) -> None:
+    _write_fixture(tmp_path, depth="standard")
+    _append_standard_retention_section(tmp_path)
+    report_path = tmp_path / "reports/analysis_20260717.json"
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    report["vpd_ranking"]["ranking"][1]["video_id"] = "VID_TOP"
+    ranking_path = tmp_path / report["inputs"]["intermediate"]["vpd_ranking"]
+    ranking_path.write_text(json.dumps(report["vpd_ranking"]), encoding="utf-8")
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+
+    assert _run_validator(tmp_path).returncode != 0
+
+
+def test_win_pattern_population_mismatch_fails(tmp_path: Path) -> None:
+    _write_fixture(tmp_path, depth="standard")
+    _append_standard_retention_section(tmp_path)
+    report_path = tmp_path / "reports/analysis_20260717.json"
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    report["win_pattern"]["n"] = 3
+    win_path = tmp_path / report["inputs"]["intermediate"]["win_pattern"]
+    win_path.write_text(json.dumps(report["win_pattern"]), encoding="utf-8")
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+
+    assert _run_validator(tmp_path).returncode != 0
+
+
+def test_missing_automatic_attribute_fails(tmp_path: Path) -> None:
+    _write_fixture(tmp_path, depth="standard")
+    _append_standard_retention_section(tmp_path)
+    report_path = tmp_path / "reports/analysis_20260717.json"
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    del report["win_pattern"]["attributes"]["publish_time"]
+    win_path = tmp_path / report["inputs"]["intermediate"]["win_pattern"]
+    win_path.write_text(json.dumps(report["win_pattern"]), encoding="utf-8")
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+
+    assert _run_validator(tmp_path).returncode != 0
+
+
+def test_all_duration_undetermined_fails(tmp_path: Path) -> None:
+    _write_fixture(tmp_path, depth="standard")
+    _append_standard_retention_section(tmp_path)
+    report_path = tmp_path / "reports/analysis_20260717.json"
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    duration = report["win_pattern"]["attributes"]["duration"]
+    duration["top_known_count"] = 0
+    duration["bottom_known_count"] = 0
+    duration["undetermined_count"] = {"top": 1, "bottom": 1}
+    for item in report["vpd_ranking"]["ranking"]:
+        item["duration"] = None
+    for group in ("top", "bottom"):
+        report["vpd_ranking"]["groups"][group]["items"][0]["duration"] = None
+    ranking_path = tmp_path / report["inputs"]["intermediate"]["vpd_ranking"]
+    ranking_path.write_text(json.dumps(report["vpd_ranking"]), encoding="utf-8")
+    win_path = tmp_path / report["inputs"]["intermediate"]["win_pattern"]
+    win_path.write_text(json.dumps(report["win_pattern"]), encoding="utf-8")
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+
+    assert _run_validator(tmp_path).returncode != 0
+
+
+def test_attribute_known_and_undetermined_population_mismatch_fails(tmp_path: Path) -> None:
+    _write_fixture(tmp_path, depth="standard")
+    _append_standard_retention_section(tmp_path)
+    report_path = tmp_path / "reports/analysis_20260717.json"
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    report["win_pattern"]["attributes"]["color"]["undetermined_count"]["top"] = 0
+    win_path = tmp_path / report["inputs"]["intermediate"]["win_pattern"]
+    win_path.write_text(json.dumps(report["win_pattern"]), encoding="utf-8")
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+
+    assert _run_validator(tmp_path).returncode != 0
+
+
+def test_modified_captured_stdout_fails(tmp_path: Path) -> None:
+    _write_fixture(tmp_path, depth="standard")
+    _append_standard_retention_section(tmp_path)
+    ranking_path = tmp_path / "reports/analysis_20260717.vpd-ranking.json"
+    ranking = json.loads(ranking_path.read_text(encoding="utf-8"))
+    ranking["excluded_count"] = 99
+    ranking_path.write_text(json.dumps(ranking), encoding="utf-8")
+
+    assert _run_validator(tmp_path).returncode != 0
+
+
+def test_missing_vpd_numeric_evidence_fails(tmp_path: Path) -> None:
+    _write_fixture(tmp_path, depth="standard")
+    _append_standard_retention_section(tmp_path)
+    report_path = tmp_path / "reports/analysis_20260717.json"
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    report["strategic_improvements"] = [
+        item
+        for item in report["strategic_improvements"]
+        if all(evidence["source"] != "vpd_ranking" for evidence in item["evidence"])
+    ]
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+
+    assert _run_validator(tmp_path).returncode != 0
+
+
+def test_phrase_only_vpd_section_without_exact_numeric_citation_fails(tmp_path: Path) -> None:
+    _write_fixture(tmp_path, depth="standard")
+    _append_standard_retention_section(tmp_path)
+    markdown_path = tmp_path / "reports/analysis_20260717.md"
+    markdown = markdown_path.read_text(encoding="utf-8")
+    markdown_path.write_text(
+        markdown.replace("analysis_20260717.json#$.vpd_ranking.n = 2", "VPD n は 2"), encoding="utf-8"
+    )
+
+    assert _run_validator(tmp_path).returncode != 0
+
+
+def test_visual_undetermined_requires_exact_count_citation_and_label(tmp_path: Path) -> None:
+    _write_fixture(tmp_path, depth="standard")
+    _append_standard_retention_section(tmp_path)
+    markdown_path = tmp_path / "reports/analysis_20260717.md"
+    markdown = markdown_path.read_text(encoding="utf-8")
+    markdown = markdown.replace("判定不能: visual attributes\n", "")
+    markdown = markdown.replace(
+        "analysis_20260717.json#$.win_pattern.attributes.color.undetermined_count.top = 1\n", ""
+    )
+    markdown_path.write_text(markdown, encoding="utf-8")
+
+    assert _run_validator(tmp_path).returncode != 0
+
+
+def test_missing_vpd_heading_or_correlation_disclaimer_fails(tmp_path: Path) -> None:
+    _write_fixture(tmp_path, depth="standard")
+    _append_standard_retention_section(tmp_path)
+    markdown_path = tmp_path / "reports/analysis_20260717.md"
+    markdown = markdown_path.read_text(encoding="utf-8")
+    markdown = markdown.replace("## VPD 上位 / 下位の定量比較\n", "")
+    markdown = markdown.replace("相関注記: Observed correlation", "note: Observed correlation")
+    markdown_path.write_text(markdown, encoding="utf-8")
 
     assert _run_validator(tmp_path).returncode != 0
 

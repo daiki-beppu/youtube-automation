@@ -6,7 +6,7 @@
 
 ```json
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "generated_at": "2026-07-13T03:34:56Z",
   "inputs": {
     "analysis_target": "data/analytics_data_YYYYMMDD_HHMMSS.json",
@@ -15,14 +15,23 @@
       "data/analytics/daily_per_video/YYYY-MM-DD_to_YYYY-MM-DD.json",
       "config/channel/content.json"
     ],
-    "supplemental": []
+    "supplemental": [],
+    "intermediate": {
+      "vpd_ranking": "reports/analysis_YYYYMMDD.vpd-ranking.json",
+      "visual_annotations": "reports/analysis_YYYYMMDD.visual-annotations.json",
+      "win_pattern": "reports/analysis_YYYYMMDD.win-pattern.json"
+    }
   },
   "commands": {
     "launch_curve": "uv run yt-launch-curve --latest",
     "channel_trend": "uv run yt-channel-trend",
     "theme_compare": "uv run yt-theme-compare",
-    "traffic_trend": "uv run yt-traffic-trend"
+    "traffic_trend": "uv run yt-traffic-trend",
+    "vpd_ranking": "uv run yt-vpd-rank",
+    "win_pattern": "uv run yt-win-pattern --ranking reports/analysis_YYYYMMDD.vpd-ranking.json --annotations reports/analysis_YYYYMMDD.visual-annotations.json"
   },
+  "vpd_ranking": {"n": 4, "k": 1, "ranking": [], "groups": {}},
+  "win_pattern": {"n": 4, "k": 1, "attributes": {}, "disclaimer": "Observed correlation in this VPD-ranked population; correlation does not imply causation."},
   "cli_outputs": {
     "launch_curve": {"target": {"ratio_vs_median": 1.42}},
     "channel_trend": {"summary": {"wow_growth_rate": 8.5}},
@@ -108,12 +117,14 @@
 }
 ```
 
-- `cli_outputs` の 4 キーには各 CLI の stdout JSON object を変更せず保存する
+- `cli_outputs` の 4 キーには既存 4 CLI の stdout JSON object を変更せず保存する
+- `vpd_ranking` / `win_pattern` には対応する CLI の stdout JSON object を変更せず保存する。stdout はそれぞれ `inputs.intermediate.vpd_ranking` / `inputs.intermediate.win_pattern` にも capture し、validator が JSON object の等価性を確認する
+- `inputs.intermediate.visual_annotations` は、同じ captured ranking の top / bottom 全動画を目視 5 属性で分類した JSON とする。観測不能値は `null` とし、`yt-win-pattern` の `undetermined` 集計へ渡す
 - `ttp_health` には `uv run yt-ttp-health` の stdout JSON object を変更せず保存する。benchmark 入力がない場合もキーを省略せず、CLI が返す `{"status":"unavailable", ...}` を保存する
 - 戦略提案・次期候補・戦略ディスカッションの正本は `strategic_improvements` / `next_collection_candidates` / `strategic_discussion` とする。Markdown は人間向けの説明と数値引用を担う派生成果物であり、後続スキルはこの 3 固定キーから提案を読む
 - 固定キーの各要素は、空でない `statement`、1 件以上の `evidence`、`high` / `medium` / `low` の `confidence` を持つ
 - `generated_at` は UTC の `YYYY-MM-DDTHH:MM:SSZ` 形式で保存する
-- `inputs.analysis_target` / `inputs.supplemental` には分析本文が実際に読み込んだファイルの相対パスを保存する
+- `inputs.analysis_target` / `inputs.supplemental` には分析本文が実際に読み込んだファイルの相対パスを保存する。既存の意味を変更せず、中間成果物 3 件は `inputs.intermediate` に分離して保存する
 - `inputs.cli_selected` は、必須 4 CLI が直接選択する分析入力 3 件（最新 `data/analytics_data_*.json`、最新 `data/analytics/daily_per_video/*.json`、テーマ定義元 `config/channel/content.json`）だけを保存する。`yt-theme-compare` の `load_config()` が間接的にロードする他の `config/channel/*.json` や `config/localizations.json`、`yt-traffic-trend` がシェア推移のために読む過去の `data/analytics_data_*.json` スナップショット群は含めない
 - `inputs.analysis_target` の `collection_depth` が `full` の場合、`retention_analysis` を必須とする。`source` は `inputs.analysis_target` と一致させ、単位は入力値と同じ `ratio`、仮説評価は `supported` / `not_supported` / `inconclusive` のいずれかとする
 - `retention_analysis.videos[]` は `error` がなく、`data_points > 0` かつ空でない `retention_curve` を持つ実測データだけを対象にする。対象 index、video_id、average / midpoint、curve 低下点の index と値は入力 JSON の実値に一致させる
@@ -160,10 +171,14 @@ jq -e '
   def evidence_ok($root):
     . as $e
     | (type == "object")
-      and ($e.source | IN("launch_curve", "channel_trend", "theme_compare", "traffic_trend"))
+      and ($e.source | IN("launch_curve", "channel_trend", "theme_compare", "traffic_trend", "vpd_ranking", "win_pattern"))
       and ($e.json_path | type == "string")
-      and ($e.json_path | test("^\\$\\.cli_outputs\\.(launch_curve|channel_trend|theme_compare|traffic_trend)(\\.[A-Za-z0-9_-]+|\\[[0-9]+\\])+$"))
-      and ($e.json_path | startswith("$.cli_outputs.\($e.source)."))
+      and ($e.json_path | test("^\\$\\.(cli_outputs\\.(launch_curve|channel_trend|theme_compare|traffic_trend)|(vpd_ranking|win_pattern))(\\.[A-Za-z0-9_-]+|\\[[0-9]+\\])+$"))
+      and (if ($e.source | IN("vpd_ranking", "win_pattern")) then
+             ($e.json_path | startswith("$.\($e.source)."))
+           else
+             ($e.json_path | startswith("$.cli_outputs.\($e.source)."))
+           end)
       and ($e.value | type == "number")
       and (($e.json_path | path_parts) as $parts
            | (try ($root | getpath($parts)) catch null) as $actual
@@ -208,9 +223,80 @@ jq -e '
        $root.next_collection_candidates[],
        $root.strategic_discussion[]) | .evidence[])];
 
+  def integer:
+    type == "number" and . >= 0 and . == floor;
+
+  def ranking_item_ok:
+    (type == "object")
+    and (.video_id | nonempty_string)
+    and (.cumulative_views | integer)
+    and (.days_since_publish | integer and . >= 1)
+    and (has("duration"))
+    and ((.duration == null) or (.duration | nonempty_string))
+    and (.vpd | type == "number");
+
+  def vpd_ranking_ok:
+    . as $ranking
+    | ($ranking | type == "object")
+      and ($ranking.n | integer and . >= 2)
+      and ($ranking.k | integer and . >= 1 and . <= (($ranking.n / 2) | floor))
+      and ($ranking.ranking | type == "array" and length == $ranking.n and all(.[]; ranking_item_ok))
+      and (($ranking.ranking | map(.video_id)) as $ids | ($ids | unique | length) == ($ids | length))
+      and ($ranking.groups | type == "object")
+      and (["top", "middle", "bottom"] | all(.[];
+            . as $name
+            | ($ranking.groups[$name] | type == "object")
+              and ($ranking.groups[$name].items | type == "array")
+              and ($ranking.groups[$name].count == ($ranking.groups[$name].items | length))
+              and ($ranking.groups[$name].items | all(.[]; ranking_item_ok))))
+      and ($ranking.groups.top.count == $ranking.k)
+      and ($ranking.groups.bottom.count == $ranking.k)
+      and ($ranking.groups.middle.count == ($ranking.n - (2 * $ranking.k)))
+      and (([$ranking.groups.top.items[], $ranking.groups.middle.items[], $ranking.groups.bottom.items[]]
+            | map(.video_id)) == ($ranking.ranking | map(.video_id)));
+
+  def automatic_attributes:
+    ["theme", "title_pattern", "duration", "publish_weekday", "publish_time"];
+
+  def visual_attributes:
+    ["composition", "color", "text_placement", "visual_flow", "subject"];
+
+  def attribute_population_ok($summary; $k):
+    ($summary | type == "object")
+    and ($summary.top_known_count | integer)
+    and ($summary.bottom_known_count | integer)
+    and ($summary.undetermined_count | type == "object")
+    and ($summary.undetermined_count.top | integer)
+    and ($summary.undetermined_count.bottom | integer)
+    and ($summary.values | type == "object")
+    and (($summary.top_known_count + $summary.undetermined_count.top) == $k)
+    and (($summary.bottom_known_count + $summary.undetermined_count.bottom) == $k);
+
+  def win_pattern_ok($ranking):
+    . as $win
+    | (type == "object")
+      and (.n == $ranking.n)
+      and (.k == $ranking.k)
+      and (.attributes | type == "object")
+      and (($win.attributes | keys | sort) == ((automatic_attributes + visual_attributes) | sort))
+      and ((automatic_attributes + visual_attributes)
+           | all(.[]; . as $name | attribute_population_ok($win.attributes[$name]; $ranking.k)))
+      and (["theme", "title_pattern", "publish_weekday", "publish_time"]
+           | all(.[]; . as $name
+             | ($win.attributes[$name].top_known_count == $ranking.k)
+               and ($win.attributes[$name].bottom_known_count == $ranking.k)))
+      and ($win.attributes.duration.undetermined_count.top
+           == ([$ranking.groups.top.items[] | select(.duration == null)] | length))
+      and ($win.attributes.duration.undetermined_count.bottom
+           == ([$ranking.groups.bottom.items[] | select(.duration == null)] | length))
+      and (($win.attributes.duration.top_known_count + $win.attributes.duration.bottom_known_count) > 0)
+      and (.disclaimer | type == "string")
+      and (.disclaimer | test("correlation"; "i"))
+      and (.disclaimer | test("causation"; "i"));
+
   . as $root
   | (type == "object")
-    and (.schema_version == 2)
+    and (.schema_version == 3)
     and (.generated_at | type == "string")
     and (.generated_at | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"))
     and (.generated_at
@@ -223,11 +309,17 @@ jq -e '
     and (.inputs.cli_selected | any(.[]; test("^data/analytics/daily_per_video/.+\\.json$")))
     and (.inputs.cli_selected | index("config/channel/content.json") != null)
     and (.inputs.supplemental | type == "array" and all(.[]; repository_relative_path))
+    and (.inputs.intermediate | type == "object")
+    and (.inputs.intermediate.vpd_ranking | repository_relative_path)
+    and (.inputs.intermediate.visual_annotations | repository_relative_path)
+    and (.inputs.intermediate.win_pattern | repository_relative_path)
     and (.commands == {
       "launch_curve": "uv run yt-launch-curve --latest",
       "channel_trend": "uv run yt-channel-trend",
       "theme_compare": "uv run yt-theme-compare",
-      "traffic_trend": "uv run yt-traffic-trend"
+      "traffic_trend": "uv run yt-traffic-trend",
+      "vpd_ranking": "uv run yt-vpd-rank",
+      "win_pattern": ("uv run yt-win-pattern --ranking " + .inputs.intermediate.vpd_ranking + " --annotations " + .inputs.intermediate.visual_annotations)
     })
     and (.cli_outputs | type == "object")
     and (.cli_outputs.launch_curve | nonempty_object)
@@ -235,12 +327,14 @@ jq -e '
     and (.cli_outputs.theme_compare | nonempty_object)
     and (.cli_outputs.traffic_trend | nonempty_object)
     and (.ttp_health | ttp_health_ok)
+    and (.vpd_ranking | vpd_ranking_ok)
+    and (.win_pattern | win_pattern_ok($root.vpd_ranking))
     and (["strategic_improvements", "next_collection_candidates", "strategic_discussion"]
          | all(.[];
              . as $key
              | (($root[$key] | type == "array" and length > 0)
                 and ($root[$key] | all(.[]; fixed_item_ok($root))))))
-    and (["launch_curve", "channel_trend", "theme_compare", "traffic_trend"]
+    and (["launch_curve", "channel_trend", "theme_compare", "traffic_trend", "vpd_ranking", "win_pattern"]
          | all(.[];
              . as $source
              | (all_evidence($root) | any(.[]; .source == $source))))
@@ -248,7 +342,61 @@ jq -e '
 
 while IFS= read -r input_path; do
   test -f "$input_path"
-done < <(jq -er '.inputs | [.analysis_target, .cli_selected[], .supplemental[]] | .[]' "$analysis_json")
+done < <(jq -er '.inputs | [.analysis_target, .cli_selected[], .supplemental[], .intermediate[]] | .[]' "$analysis_json")
+
+vpd_ranking_path=$(jq -er '.inputs.intermediate.vpd_ranking' "$analysis_json")
+visual_annotations_path=$(jq -er '.inputs.intermediate.visual_annotations' "$analysis_json")
+win_pattern_path=$(jq -er '.inputs.intermediate.win_pattern' "$analysis_json")
+
+jq -e \
+  --slurpfile captured_ranking "$vpd_ranking_path" \
+  --slurpfile annotations "$visual_annotations_path" \
+  --slurpfile captured_win "$win_pattern_path" '
+  def visual_attributes:
+    ["composition", "color", "text_placement", "visual_flow", "subject"];
+
+  def annotation_for($id):
+    $annotations[0].videos[] | select(.video_id == $id);
+
+  . as $root
+  | ($root.vpd_ranking == $captured_ranking[0])
+    and ($root.win_pattern == $captured_win[0])
+    and ($annotations[0] | type == "object" and keys == ["videos"])
+    and ($annotations[0].videos | type == "array" and length == (2 * $root.vpd_ranking.k))
+    and ($annotations[0].videos | all(.[];
+          . as $annotation
+          | type == "object"
+          and (keys | sort) == ((["video_id"] + visual_attributes) | sort)
+          and (.video_id | type == "string" and length > 0)
+          and (visual_attributes | all(.[]; . as $name
+                | ($annotation[$name] == null
+                   or ($annotation[$name] | type == "string" and length > 0))))))
+    and (($annotations[0].videos | map(.video_id) | sort)
+         == ([$root.vpd_ranking.groups.top.items[].video_id,
+              $root.vpd_ranking.groups.bottom.items[].video_id] | sort))
+    and (visual_attributes | all(.[]; . as $attribute
+          | ([ $root.vpd_ranking.groups.top.items[].video_id as $id
+               | annotation_for($id) | select(.[$attribute] == null) ] | length)
+              == $root.win_pattern.attributes[$attribute].undetermined_count.top
+            and ([ $root.vpd_ranking.groups.bottom.items[].video_id as $id
+                   | annotation_for($id) | select(.[$attribute] == null) ] | length)
+              == $root.win_pattern.attributes[$attribute].undetermined_count.bottom))
+' "$analysis_json" >/dev/null
+
+grep -Eq '^#{1,6}[[:space:]]+VPD 上位 / 下位の定量比較' "$analysis_md"
+win_disclaimer=$(jq -er '.win_pattern.disclaimer' "$analysis_json")
+grep -Fqx "相関注記: $win_disclaimer" "$analysis_md"
+
+for attribute in composition color text_placement visual_flow subject; do
+  for group in top bottom; do
+    undetermined_count=$(jq -er --arg attribute "$attribute" --arg group "$group" \
+      '.win_pattern.attributes[$attribute].undetermined_count[$group]' "$analysis_json")
+    if test "$undetermined_count" -gt 0; then
+      grep -Eq '^判定不能: .+' "$analysis_md"
+      grep -Fqx "$(basename "$analysis_json")#$.win_pattern.attributes.$attribute.undetermined_count.$group = $undetermined_count" "$analysis_md"
+    fi
+  done
+done
 
 analysis_target=$(jq -er '.inputs.analysis_target' "$analysis_json")
 if jq -e '.collection_depth == "full"' "$analysis_target" >/dev/null; then
@@ -367,7 +515,7 @@ jq -e --slurpfile targets "$analysis_target" '
          end)
 ' "$analysis_json" >/dev/null
 
-for source in launch_curve channel_trend theme_compare traffic_trend; do
+for source in launch_curve channel_trend theme_compare traffic_trend vpd_ranking win_pattern; do
   found=false
   while IFS= read -r citation; do
     if grep -Fqx "$citation" "$analysis_md"; then
@@ -389,14 +537,14 @@ done
 
 ## 検証する evidence 契約
 
-- `source` は `launch_curve` / `channel_trend` / `theme_compare` / `traffic_trend` のいずれか
-- `json_path` は `$.cli_outputs.<source>` から始まり、object key は `.key`、array index は `[0]` 形式で表す
+- `source` は `launch_curve` / `channel_trend` / `theme_compare` / `traffic_trend` / `vpd_ranking` / `win_pattern` のいずれか
+- 既存 4 CLI の `json_path` は `$.cli_outputs.<source>`、VPD 2 CLI は `$.<source>` から始まり、object key は `.key`、array index は `[0]` 形式で表す
 - `json_path` の `<source>` は `source` と一致する
 - `json_path` が指す値は実在する number で、`value` と一致する
 
-CLI 出力 4 件はそれぞれ非空 object でなければならない。固定キーの配列・要素形状、`confidence`、evidence のいずれかが不正な場合も validator は失敗する。
+CLI 出力 6 件はそれぞれ非空 object でなければならない。VPD ranking は N / K、unique ID、top / middle / bottom の重複・欠落・順序を検証し、win pattern は同じ N / K と目視 annotation の判定不能件数を検証する。固定キーの配列・要素形状、`confidence`、evidence のいずれかが不正な場合も validator は失敗する。
 
-Markdown の数値引用は `<JSON ファイル名>#<json_path> = <value>` の形式に統一する。上の手順は、検証済み evidence と一致する引用が 4 CLI それぞれについて Markdown に 1 件以上あることも確認する。
+Markdown の数値引用は `<JSON ファイル名>#<json_path> = <value>` の形式に統一する。上の手順は、検証済み evidence と一致する引用が 6 CLI それぞれについて Markdown に 1 件以上あることも確認する。さらに「VPD 上位 / 下位の定量比較」見出し、win stdout と一致する相関≠因果 disclaimer、目視属性の `undetermined` が 1 件以上なら「判定不能」と top / bottom exact 件数引用を要求する。
 
 各引用は Markdown の単独行に記載する。行全体を固定文字列として照合するため、次の負例のように evidence が `1.42` なのに Markdown が `1.421` の場合は一致しない。
 

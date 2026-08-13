@@ -173,7 +173,7 @@ def test_analytics_analyze_documents_playlist_effect_section() -> None:
     analytics_analyze = _read(".claude/skills/analytics/references/analyze.md")
     analytics_collect = _read(".claude/skills/analytics/references/collect.md")
 
-    assert "分析項目」の 7 項目" in analytics_analyze
+    assert "分析項目」の全項目" in analytics_analyze
     assert "**プレイリスト効果分析**" in analytics_analyze
     assert "`playlist_analytics.playlists`" in analytics_analyze
     assert "`view_share_percent`" in analytics_analyze

@@ -8,21 +8,21 @@
 
 **Hard Gate**: 次のすべてを満たすまで完了としない。
 
-1. `yt-launch-curve --latest` / `yt-channel-trend` / `yt-theme-compare` / `yt-traffic-trend` / `yt-ttp-health` を `--text` なしで実行し、5 コマンドすべてが成功している
-2. 分析 4 CLI の JSON 出力と `yt-ttp-health` の出力を、schema version 2 の「構造化 JSON 契約」に従って `reports/analysis_YYYYMMDD.json` に保存している
-3. 「分析項目」の 7 項目をカバーした `reports/analysis_YYYYMMDD.md` を保存している
-4. Markdown の根拠に、4 CLI **それぞれから少なくとも 1 つの数値**を JSON path と共に引用している
+1. `yt-launch-curve --latest` / `yt-channel-trend` / `yt-theme-compare` / `yt-traffic-trend` / `yt-vpd-rank` / `yt-win-pattern` / `yt-ttp-health` を `--text` なしで実行し、7 コマンドすべてが成功している。`yt-vpd-rank` と `yt-win-pattern` は各 1 回だけ実行している
+2. 既存分析 4 CLI、`yt-vpd-rank`、`yt-win-pattern`、`yt-ttp-health` の JSON 出力を schema version 3 の「構造化 JSON 契約」に従って `reports/analysis_YYYYMMDD.json` に保存している
+3. 「分析項目」の全項目をカバーした `reports/analysis_YYYYMMDD.md` を保存している
+4. Markdown の根拠に、`yt-ttp-health` を除く 6 CLI **それぞれから少なくとも 1 つの数値**を JSON path と共に引用している
 5. ユーザーに Markdown / JSON の両パスと要約を提示している
 6. `references/analysis-json-validator.md` の validator が、full 収集データに対する構造化 `retention_analysis` と視聴維持率の数値引用を含めて exit 0 になっている
 7. 「学びの insights 蓄積」に従い、主要な学びを `data/insights.jsonl` へ `references/insights-entry.schema.json` 準拠で追記し（新規知見が無い場合は「追記 0 件」を明示）、`references/validate_insights.py` が exit 0 になっている
 
-CLI 未実行、終了コード非 0、JSON のパース失敗、4 CLI のいずれかの数値引用欠落、Markdown / JSON の片方のみの場合は未完了。鮮度チェックでスキップできるのも、同じ `YYYYMMDD` のこの完了条件を満たす Markdown / JSON ペアが存在する場合だけ（スキップ時は insights の再追記も行わない）。
+CLI 未実行、終了コード非 0、JSON のパース失敗、6 CLI のいずれかの数値引用欠落、Markdown / JSON の片方のみの場合は未完了。鮮度チェックでスキップできるのも、同じ `YYYYMMDD` の schema version 3 の完了条件を満たす Markdown / JSON ペアが存在する場合だけで、鮮度内でも schema version 2 は再分析する（スキップ時は insights の再追記も行わない）。
 
 ## Subagent 委譲ゲート
 
 メインエージェントは前提確認、鮮度チェック、対象ファイルの選定、成果物存在確認、ユーザーへの短い報告だけを担当する。`data/analytics_data_*.json`、専門 CLI の JSON 出力、`data/video_analysis/` の詳細 JSON はメイン会話で直接 Read せず、分析 subagent へ入力パスとして渡す。
 
-分析 subagent は指定された入力パスを読み、必須の分析 4 CLI と `yt-ttp-health` を実行し、分析結果を同じ日付の `reports/analysis_YYYYMMDD.md` と `reports/analysis_YYYYMMDD.json` に保存する。`yt-ttp-health` の stdout JSON は値を変更せずトップレベル `ttp_health` キーへ埋め込む。完了報告では `status`、読んだ入力パス、実行した CLI、生成または再利用したレポートパス、主要発見の要約だけを返し、生データ本文や CLI JSON 全文を返さない。メインエージェントは Markdown / JSON ペアの存在と、`references/analysis-json-validator.md` の validator が exit 0 になることを機械的に確認してから完了を報告する。
+分析 subagent は指定された入力パスを読み、必須 7 CLI を実行し、分析結果を同じ日付の `reports/analysis_YYYYMMDD.md` と `reports/analysis_YYYYMMDD.json` に保存する。既存 4 CLI は `cli_outputs`、VPD 2 CLI はトップレベル `vpd_ranking` / `win_pattern`、`yt-ttp-health` は `ttp_health` へ stdout JSON object を値を変更せず埋め込む。完了報告では `status`、読んだ入力パス、実行した CLI、生成または再利用したレポートパス、主要発見の要約だけを返し、生データ本文や CLI JSON 全文を返さない。メインエージェントは Markdown / JSON ペアの存在と、`references/analysis-json-validator.md` の validator が exit 0 になることを機械的に確認してから完了を報告する。
 
 ## 前提
 
@@ -86,13 +86,39 @@ $ARGUMENTS
 subagent へは次を具体値で渡す:
 
 - 入力パス: 分析本文の対象、CLI が選択する `data/analytics_data_*.json` と `data/analytics/daily_per_video/*.json`、`config/channel/content.json`、存在する場合は `data/video_analysis/<slug>/<video_id>.json`
-- 実行する作業: 「分析項目」の 7 項目をカバーする分析と、必須の `yt-launch-curve --latest` / `yt-channel-trend` / `yt-theme-compare` / `yt-traffic-trend` / `yt-ttp-health`
+- 実行する作業: 「分析項目」の全項目をカバーする分析と、必須の `yt-launch-curve --latest` / `yt-channel-trend` / `yt-theme-compare` / `yt-traffic-trend` / `yt-vpd-rank` / `yt-win-pattern` / `yt-ttp-health`
+- VPD 中間成果物: `reports/analysis_YYYYMMDD.vpd-ranking.json` / `.visual-annotations.json` / `.win-pattern.json`。最初の JSON は `yt-vpd-rank` stdout、最後は `yt-win-pattern` stdout を直接 capture する
+- 目視分類: captured ranking の top / bottom 全動画を `/thumbnail-research` と同じ構図 / 配色 / テキスト配置 / 視線誘導 / キャラ・被写体の 5 軸で分類する。同じ captured JSON の `video_id` だけを使い、観測不能は推測せず JSON `null` にする
 - 期待成果物: 同じ日付の `reports/analysis_YYYYMMDD.md` と `reports/analysis_YYYYMMDD.json`
 - 完了報告: `status: success | failure`、`inputs`、`commands`、`artifacts`、`summary`、`errors`
 
+#### VPD snapshot と目視 annotation の固定手順
+
+分析 subagent は同じ `YYYYMMDD` を使い、次の順序を変えない。各 CLI 行は再試行を含めて **成功した 1 回だけ**を採用し、失敗時は途中成果物をレポートへ埋め込まず未完了にする。
+
+```bash
+vpd_ranking_path="reports/analysis_YYYYMMDD.vpd-ranking.json"
+visual_annotations_path="reports/analysis_YYYYMMDD.visual-annotations.json"
+win_pattern_path="reports/analysis_YYYYMMDD.win-pattern.json"
+
+uv run yt-vpd-rank >"$vpd_ranking_path"
+jq -e 'type == "object"' "$vpd_ranking_path" >/dev/null
+
+# この間に captured ranking の groups.top.items / groups.bottom.items だけを目視分類し、
+# 下記契約の visual_annotations_path を生成する。
+
+uv run yt-win-pattern \
+  --ranking "$vpd_ranking_path" \
+  --annotations "$visual_annotations_path" \
+  >"$win_pattern_path"
+jq -e 'type == "object"' "$win_pattern_path" >/dev/null
+```
+
+annotation は `{"videos": [...]}` のみを root に持ち、top / bottom の各 `video_id` を重複なく 1 件ずつ含める。各要素は `video_id` と `composition` / `color` / `text_placement` / `visual_flow` / `subject` の 5 キーを必須とし、観測できた分類値は空でない文字列、観測不能は `null` とする。中間群や captured ranking 外の ID は入れない。`yt-win-pattern` は `null` を `undetermined` として集計するため、`other` や推測値で補わない。
+
 ### 分析項目
 
-以下の7項目をカバーする。各項目は `/collection-ideate` での企画立案と `/thumbnail` でのCTR最適化に直接活用されるため、断片的な分析では後続ステップの品質が下がる:
+以下の全項目をカバーする。各項目は `/collection-ideate` での企画立案と `/thumbnail` でのCTR最適化に直接活用されるため、断片的な分析では後続ステップの品質が下がる:
 
 1. **CTR 改善戦略分析**: 高CTRコンテンツの特徴分析、サムネイル・タイトル最適化提案 — サムネイル制作の方向性決定に直結
 2. **チャンネル特化パフォーマンス分析**: コレクション別比較、テーマ別パフォーマンス — 次期テーマ選定の根拠データ
@@ -103,6 +129,7 @@ subagent へは次を具体値で渡す:
 7. **収益・RPM 分析**: `revenue_analytics.status == "available"` の場合、`video_analytics` のタイトルと `config/channel/content.json::tags.themes` を使ってテーマ別・コレクション別に `estimated_revenue` と `views` を合計し、加重 RPM（`収益合計 / 再生合計 * 1000`）を算出する。動画別 RPM の単純平均は使わない。各グループの収益・再生・RPM・対象動画数を Markdown の「収益・RPM 分析」へ JSON path 付きで記載し、企画判断へ接続する。`status == "unavailable"` または旧データで `revenue_analytics` が無い場合は推測せず、それぞれ「収益データ利用不可」「収益メトリクスの再収集が必要」と明記する
 8. **プレイリスト効果分析**: JSON の `playlist_analytics.playlists` から、視聴数上位 200 件のプレイリスト別の views・`view_share_percent`・`average_view_duration` を表で報告する。`view_share_percent` は上位 200 件内のシェアであり、チャンネル全体に対するシェアとして扱わない。`config/channel/playlists.json` と照合できる ID は名前／キーを併記し、Complete Collection を識別する。未登録 ID は ID のまま明記する。views とシェアはプレイリスト内視聴の多寡を示す観測値であり、概要欄・固定コメントなどの導線施策が原因であるとは断定しない。データ欠損・0件時はその旨を記載し、再収集を案内する。
 9. **登録を生む動画の型**: `strategic_analysis.subscriber_conversion_ranking` の動画別登録転換率（`subscribers_gained ÷ views × 100`）上位を、タイトル・説明文からのテーマ、`duration`、`views`、`subscribers_gained` とともに要約する。`audience.by_subscribed_status` の登録済み／未登録の視聴比率を併記し、未登録視聴が多いのに転換率が低いのか、登録済み視聴が中心なのかを切り分けて次企画の仮説を示す。サムネイル傾向は動画 URL の実画像または `yt-thumbnail-correlate` の根拠を確認できた場合だけ記述する。`subscribedStatus` はチャンネル全体集計であり、個別動画の転換原因とは断定しない。`views` が 0 の動画の転換率は 0% として扱う。
+10. **VPD 上位 / 下位の定量比較**: `vpd_ranking` の N / K と上位・下位動画、`win_pattern` の属性値別本数・known denominator の割合・pp 差・勝ち / 負け / 保留を記載する。目視属性の `undetermined` は判定不能として exact 件数を JSON path 付きで引用する。この母集団で観測した相関であり因果ではない旨を明記する。
 
 ### pandas ベースの詳細分析 CLI (v1.3+)
 
@@ -113,6 +140,8 @@ subagent へは次を具体値で渡す:
 - **`yt-theme-compare`**: `config/channel/content.json::tags.themes`（コードからは `load_config().content.tags.themes`）のキーワードでタイトル分類し、各テーマの平均 launch curve・ピーク日齢平均・初速最強/ロングテール最強テーマを返す。テーマ選定の根拠データ。
 - **`yt-traffic-trend`**: `data/analytics_data_*.json` スナップショット横断の流入源シェア推移（前スナップショット比の `share_delta` 含む）、最新のデバイス別集計、YT_SEARCH 検索語トップ N（`--top-search N`、default 10）を返す。流入構成の変化検知・SEO キーワード判断に必須。
 - **`yt-ttp-health`**: 最新 `benchmark_YYYYMMDD.json` の pre-filter 投稿走査から、TTP 対象ごとの投稿停滞・再生低下・データ不足・入力欠損を返す。stdout JSON は変更せずトップレベル `ttp_health` へ保存する。
+- **`yt-vpd-rank`**: 全動画を累計再生回数 / UTC 公開日齢の VPD で並べ、上位 / 中間 / 下位群を返す。1 回だけ実行し、stdout を同日付 captured artifact とトップレベル `vpd_ranking` へ変更せず保存する。
+- **`yt-win-pattern`**: captured ranking と目視 annotation を受け、機械属性と目視 5 属性の本数・割合・pp 差・判定を返す。`--ranking` / `--annotations` で同じ snapshot を渡して 1 回だけ実行し、stdout を同日付 captured artifact とトップレベル `win_pattern` へ変更せず保存する。
 - **`yt-thumbnail-correlate`**: サムネ画像の特徴量 (brightness/contrast/saturation/dominant_hue/colorfulness) と CTR/views/engagement の Pearson 相関。`--metric` 未指定なら CTR 欠測時に views へ自動フォールバックし、出力 JSON の `metric_fallback` に理由が残る。各相関には `p_value` / `p_value_adjusted`（Benjamini-Hochberg 補正）/ `significant` が付く。**`significant: false` の相関を方針の根拠に使わないこと**（引用時は「有意でない」と明記）。`note: "サンプル不足で判定不能"`（n<10）は判断材料にしない。次回サムネ制作の方向性。
 - **`yt-kpi-dashboard`**: 成長 KPI 定点ビュー。`data/analytics_data_*.json` 全スナップショットを横断し、レバー別 KPI（views / Imp / CTR / 平均視聴維持率 / 登録者純増）の週次推移を前週比付きで返す。Reporting API の保持期間（60 日）を超えた過去の Imp / CTR も時系列に含まれ、欠測週は補間せず明示される。週次運用ループの冒頭で「どのレバーが先週動いたか」を 1 枚で確認し、深掘り対象の選定に使う（`--markdown` でテーブル表示、`--save` で `reports/kpi_weekly_YYYYMMDD.{json,md}` 保存）。`yt-channel-trend` が最新スナップショット 1 件の日次系列を見るのに対し、こちらはスナップショット横断の週次俯瞰。
 
@@ -120,13 +149,13 @@ subagent はこれらの出力 JSON を分析の根拠として使い、「数�
 
 ### 構造化 JSON 契約
 
-構造、固定キー、evidence、検証コマンドは `references/analysis-json-validator.md` を単一ソースとする。`schema_version` は `2` とする。分析 4 CLI は `--text` を付けずに実行し、終了コード 0 の stdout をキー名や値を変更せず、同 reference の対応する `cli_outputs` キーに保存する。`yt-ttp-health` も stdout を変更せずトップレベル `ttp_health` に保存する。入力がなく `status: unavailable` の場合も `ttp_health` 自体は省略しない。標準エラー出力、`--text` 出力、失敗した CLI の出力は保存対象にしない。
+構造、固定キー、evidence、検証コマンドは `references/analysis-json-validator.md` を単一ソースとする。`schema_version` は `3` とする。既存分析 4 CLI は `--text` を付けずに実行し、終了コード 0 の stdout をキー名や値を変更せず対応する `cli_outputs` キーに保存する。`yt-vpd-rank` / `yt-win-pattern` の stdout object も再構成せずトップレベル `vpd_ranking` / `win_pattern` に保存し、captured artifact と JSON 等価にする。`yt-ttp-health` も stdout を変更せずトップレベル `ttp_health` に保存する。入力がなく `status: unavailable` の場合も `ttp_health` 自体は省略しない。標準エラー出力、`--text` 出力、失敗した CLI の出力は保存対象にしない。
 
 Markdown には `TTP 健全性` 節を設ける。`alert` のチャンネルは alert type と reason、`missing_data` / `insufficient_data` は不足理由を要約する。`status: unavailable` の場合は `/benchmark` の再実行が必要な旨を明記し、欠損を健全として扱わない。
 
 成果物保存後に同 reference の検証手順を実行し、すべて成功した場合だけ完成扱いにする。戦略提案・次期候補・戦略ディスカッションの正本は JSON の `strategic_improvements` / `next_collection_candidates` / `strategic_discussion` とする。Markdown は人間向けの説明と数値引用を担う派生成果物であり、後続スキルが提案を読み取るときは JSON 固定キーを使用する。
 
-`inputs` にはプレースホルダーではなく相対パスを保存する。`analysis_target` は `$ARGUMENTS` または更新時刻で選んだ分析本文の対象、`supplemental` は分析本文が実際に読み込んだ `data/video_analysis/` などの追加 JSON とする。`cli_selected` は必須 4 CLI の**直接分析入力 3 件**（最新 `data/analytics_data_*.json`、最新 `data/analytics/daily_per_video/*.json`、テーマ定義元 `config/channel/content.json`）だけを記録する。`yt-theme-compare` の `load_config()` が間接的にロードする他の `config/channel/*.json` や `config/localizations.json`、`yt-traffic-trend` がシェア推移のために読む過去の `data/analytics_data_*.json` スナップショット群は `cli_selected` に含めない。必須 4 CLI を再実行するときに異なる最新ファイルへ進んでしまわないよう、CLI 実行直後に確定済みパスが引き続き各ディレクトリの辞書順末尾であることを再確認する。変わっていた場合はその出力を保存せず、入力選定からやり直す。
+`inputs` にはプレースホルダーではなく相対パスを保存する。`analysis_target` は `$ARGUMENTS` または更新時刻で選んだ分析本文の対象、`supplemental` は分析本文が実際に読み込んだ `data/video_analysis/` などの追加 JSON とする。`cli_selected` は既存 4 CLI の**直接分析入力 3 件**（最新 `data/analytics_data_*.json`、最新 `data/analytics/daily_per_video/*.json`、テーマ定義元 `config/channel/content.json`）だけを記録し、その既存の意味を変えない。VPD の captured ranking / annotation / win stdout は `inputs.intermediate` の 3 固定キーへ分離する。`yt-theme-compare` の `load_config()` が間接的にロードする他の `config/channel/*.json` や `config/localizations.json`、`yt-traffic-trend` がシェア推移のために読む過去の `data/analytics_data_*.json` スナップショット群は `cli_selected` に含めない。既存 4 CLI を再実行するときに異なる最新ファイルへ進んでしまわないよう、CLI 実行直後に確定済みパスが引き続き各ディレクトリの辞書順末尾であることを再確認する。変わっていた場合はその出力を保存せず、入力選定からやり直す。
 
 ### 分析品質基準
 
