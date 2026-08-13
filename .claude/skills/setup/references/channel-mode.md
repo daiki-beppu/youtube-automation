@@ -55,17 +55,14 @@ YouTube の第三者チャンネル由来データ（`snippet.description`、`br
 
 ### Step 1: TTP ヒアリング
 
-ユーザーに以下を質問し、各チャンネルごとに「何を転写するか」の関係性メモを必須で残す。
-TTP に関する質問は、TTP 対象への転写要素（タイトル構造 / サムネ構図 / 投稿頻度 / 尺 / ジャンル / branding）に限定する。
+ユーザーには以下の 2 項目だけを質問する。転写要素や要素ごとの関係性は質問しない。
 方向性・差別化・ポジショニングはここでは聞かず、検討が必要なら `/setup --channel` 完了後の方向性検討モードに委譲する。
 
 - **TTP したいチャンネル**: URL / handle / channel ID を 1 件以上
-- **転写したい要素**: タイトル構造 / サムネ構図 / 投稿頻度 / 尺 / ジャンル / branding のどれか
-- **要素ごとの関係性メモ**: タイトル構造 / サムネ構図 / 投稿頻度 / 尺 / ジャンル / branding のうち、どの観察をどう転写するか
 - **branding 方針**: TTP 対象の description / keywords / localizations をどの程度転写するか
 
 このヒアリング結果は後続の seed fetch / TTP 対象反映に使う。
-ヒアリング後は `docs/channel/ttp-seed-confirmation.md` を作成し、TTP したいチャンネル URL / handle / channel ID、転写したい要素、関係性メモを保存する。
+ヒアリング後は `docs/channel/ttp-seed-confirmation.md` を作成し、TTP したいチャンネル URL / handle / channel ID と branding 方針を保存する。各候補 section の「転写したい要素」と relationship には、質問への回答ではなく既定値 `タイトル構造 / サムネ構図 / 投稿頻度 / 尺 / ジャンル / branding の全要素を TTP 準拠とする` を記録する。投稿頻度と動画尺は seed-only では未確認のため、既定値を記録しても `ttp-seed-and-duration.md` の仮説扱いを維持する。
 
 `--channel` モードで Step 2 へ進む前に、repository 初期化、setup gate の check 分類、config 入力 schema、初期ファイル生成詳細の唯一の正である **[new-channel-bootstrap.md](new-channel-bootstrap.md)** を必ず Read する。本体に残す Step 2〜4 の順序、承認点、実行コマンド、成功・停止条件と組み合わせて実行する。
 
@@ -156,13 +153,13 @@ uv run yt-channel-seed "https://www.youtube.com/@example" \
 ```
 
 表示されたチャンネル名、登録者数、動画数、直近タイトルを提示し、AskUserQuestion で「TTP 対象として承認」/「不採用」を確認する。
-承認前に `benchmark.channels` へ書き込まない。承認されたチャンネルだけ relationship メモ付きで `config/channel/analytics.json::benchmark.channels` に反映する。
+承認前に `benchmark.channels` へ書き込まない。承認されたチャンネルだけ Step 1 と同じ既定 relationship 付きで `config/channel/analytics.json::benchmark.channels` に反映する。
 承認済み TTP 対象が 0 件の場合は Step 7 以降へ進まない。Step 1/5 に戻って候補を再確認するか、ユーザーに停止を確認して終了する。
 
 ```bash
 uv run yt-channel-seed "https://www.youtube.com/@example" \
   --target . \
-  --relationship "title-structure: ..., thumbnail-composition: ..., posting-cadence: ..."
+  --relationship "タイトル構造 / サムネ構図 / 投稿頻度 / 尺 / ジャンル / branding の全要素を TTP 準拠とする"
 ```
 
 `yt-channel-seed --no-write-benchmark --json` の出力は seed 確認用であり、`description` / `keywords` / `localizations` / `brandingSettings` は含まない。

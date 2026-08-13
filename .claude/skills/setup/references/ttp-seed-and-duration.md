@@ -9,14 +9,15 @@
 - source URL / handle / channel ID
 - seed preview の要約: チャンネル名、登録者数、動画数、uploads playlist ID、直近タイトル
 - ユーザーの承認 / 不採用判断
-- 承認済み対象だけの relationship メモ
+- 「転写したい要素」: `タイトル構造 / サムネ構図 / 投稿頻度 / 尺 / ジャンル / branding の全要素を TTP 準拠とする`（Step 1 の質問ではなく固定の既定値）
+- 承認済み対象だけの relationship: `タイトル構造 / サムネ構図 / 投稿頻度 / 尺 / ジャンル / branding の全要素を TTP 準拠とする`
 - branding snapshot 参照、または description / keywords / localizations の転写方針
 - `config/channel/analytics.json::benchmark.channels` に反映した id / slug / name / relationship
 - 後続 `/discover-competitors` / `/benchmark` / `/viewer-voice` / `/channel-new` 分析モードの要否
 
 `yt-doctor` は表現を完全一致ではなく意味ラベルで判定する。seed preview は `seed fetch 要約` / `seed 要約` / `取得要約`、判断は `承認 / 不採用判断` / `ユーザー承認: 承認済み` / `ユーザー不採用: 不採用` のいずれかの自然な表現で記録できる。候補ごとの section 内には source、seed 要約、判断、転写したい要素、relationship、branding の参照または転写方針、未反映項目の各概念を残す。
 
-TTP 実データメモにはタイトル構造とサムネ構図を含める。投稿頻度と動画尺は手動観察または `/benchmark` のデータを使い、seed-only で未確認なら仮説と明記する。
+TTP 実データメモにはタイトル構造とサムネ構図を含める。固定の既定値は実データ確認済みを意味しない。投稿頻度と動画尺は手動観察または `/benchmark` のデータを使い、seed-only で未確認なら仮説と明記する。
 
 ## Branding snapshot schema
 
