@@ -18,11 +18,7 @@ const execFileAsync = promisify(execFile);
 const operatorSections = [
   {
     label: "はじめる",
-    routes: [
-      "/onboarding",
-      "/oauth-setup",
-      "/chrome-extension-install-guide",
-    ],
+    routes: ["/oauth-setup", "/chrome-extension-install-guide"],
     section: "getting-started",
   },
   {
@@ -194,7 +190,7 @@ const sectionByAttribute = (html, attribute, value) => {
 const hrefsWithin = (markup) =>
   [...markup.matchAll(/href="(\/[^"#?]*)"/g)].map((match) => match[1]);
 
-test("landing page は3区分を表示し、operator docs 7件へ1回ずつ到達できる", async () => {
+test("landing page は3区分を表示し、公開operator docs 6件だけへ1回ずつ到達できる", async () => {
   const html = await readIndex();
   const sectionLabels = [
     ["getting-started", "はじめる"],
@@ -214,6 +210,7 @@ test("landing page は3区分を表示し、operator docs 7件へ1回ずつ到�
     operatorRoutes.includes(href)
   );
   assert.deepEqual(operatorHrefs, operatorRoutes);
+  assert.doesNotMatch(operatorMarkup, /href="\/onboarding(?:\/|"|#)/);
 });
 
 test("全ページ共通 sidebar と tabs は operator 区分・release規模・exact route ownership を保つ", async () => {
@@ -245,10 +242,11 @@ test("全ページ共通 sidebar と tabs は operator 区分・release規模・
     for (const route of operatorRoutes) {
       assert.equal(hrefsWithin(sidebar).filter((href) => href === route).length, 1);
     }
+    assert.equal(hrefsWithin(sidebar).includes("/onboarding"), false);
   }
 });
 
-test("operator docs の7 routeを描画・検索し、内部linkとGitHub fallbackを保つ", async () => {
+test("onboarding は直接描画だけを維持し、公開operator docs 6件だけを検索へ載せる", async () => {
   const search = JSON.parse(
     await readFile(new URL("../dist/blume-search.json", import.meta.url), "utf8")
   );
@@ -260,8 +258,15 @@ test("operator docs の7 routeを描画・検索し、内部linkとGitHub fallba
     assert.equal(searchRoutes.filter((candidate) => candidate === route).length, 1);
   }
 
-  const features = await readOperatorDoc("/features");
   const onboarding = await readOperatorDoc("/onboarding");
+  assert.match(onboarding, /<article\b/);
+  assert.match(
+    onboarding,
+    /<meta(?=[^>]*name="robots")(?=[^>]*content="noindex")[^>]*>/i
+  );
+  assert.equal(searchRoutes.includes("/onboarding"), false);
+
+  const features = await readOperatorDoc("/features");
   const oauth = await readOperatorDoc("/oauth-setup");
   assert.match(features, /href="\/workflow-cheatsheet"/);
   assert.match(onboarding, /href="\/oauth-setup"/);
@@ -298,6 +303,41 @@ test("operator docs の7 route は原本の先頭見出しを唯一の H1 とし
     assert.deepEqual(headings, [expectedTitle]);
     if (route === "/onboarding") {
       assert.match(html, /<h2 id="1-このリポジトリは何か">/);
+    }
+  }
+});
+
+test("AI出力はonboardingだけを除外し、直接取得用Markdown生成は維持する", async () => {
+  const llms = await readFile(new URL("../dist/llms.txt", import.meta.url), "utf8");
+  const llmsFull = await readFile(new URL("../dist/llms-full.txt", import.meta.url), "utf8");
+
+  assert.doesNotMatch(llms, /\[Onboarding\]\(\/onboarding\)/i);
+  assert.doesNotMatch(llmsFull, /^# Onboarding$/mu);
+  assert.doesNotMatch(llmsFull, /## 1\. このリポジトリは何か/);
+  for (const route of operatorRoutes) {
+    assert.match(llms, new RegExp(route.replaceAll("/", "\\/")));
+    assert.match(llmsFull, new RegExp(`^Source: ${route}$`, "mu"));
+  }
+  for (const extension of ["md", "mdx"]) {
+    const markdown = await readFile(
+      new URL(`../dist/onboarding.${extension}`, import.meta.url),
+      "utf8"
+    );
+    assert.match(markdown, /このリポジトリは何か/);
+  }
+});
+
+test("sitemap が生成された場合だけ onboarding route を含めない", async () => {
+  const generatedPaths = await readdir(new URL("../dist/", import.meta.url), {
+    recursive: true,
+  });
+  const sitemapPaths = generatedPaths.filter((path) => /(?:^|\/)sitemap[^/]*\.xml$/u.test(path));
+
+  for (const path of sitemapPaths) {
+    const sitemap = await readFile(new URL(`../dist/${path}`, import.meta.url), "utf8");
+    assert.doesNotMatch(sitemap, /\/onboarding\/?(?:<|$)/);
+    for (const route of operatorRoutes) {
+      assert.match(sitemap, new RegExp(`${route}/?`));
     }
   }
 });

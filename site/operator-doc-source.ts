@@ -31,6 +31,12 @@ export const operatorDocMap = [
 /** Internal marker allowing staged operator entries through release-only fields. */
 export const operatorDocReleaseField = Symbol("operator-doc-release-field");
 
+const onboardingDiscoveryMetadata = {
+  ai: { exclude: true },
+  noindex: true,
+  search: { exclude: true },
+} as const;
+
 const normalizedRepositoryPath = (path: string): string => {
   const normalized = posix.normalize(path.replaceAll("\\", "/"));
   if (
@@ -170,6 +176,12 @@ export const createOperatorDocSource = (options: {
         ? rewriteFeatureSkillLinks(rewritten)
         : rewritten;
     const { text, title } = extractMarkdownTitle(rendered);
+    const discoveryMetadata =
+      mapping.source === "ONBOARDING.md" ? onboardingDiscoveryMetadata : {};
+    const rawDiscoveryMetadata =
+      mapping.source === "ONBOARDING.md"
+        ? "ai:\n  exclude: true\nnoindex: true\nsearch:\n  exclude: true\nseo:\n  noindex: true\n"
+        : "";
     return {
       body: { format: "md", text },
       data: {
@@ -179,9 +191,10 @@ export const createOperatorDocSource = (options: {
         title,
         type: "doc",
         version: operatorDocReleaseField,
+        ...discoveryMetadata,
       },
       editUrl: `${GITHUB_BLOB_BASE}${mapping.source}`,
-      raw: `---\ntitle: ${JSON.stringify(title)}\ntype: doc\n---\n\n${text}`,
+      raw: `---\ntitle: ${JSON.stringify(title)}\ntype: doc\n${rawDiscoveryMetadata}---\n\n${text}`,
       ref: mapping.source,
       slug: mapping.route,
     };
