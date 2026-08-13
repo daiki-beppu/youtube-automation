@@ -140,7 +140,10 @@ export function PublicationHeatmap({
           </AlertDescription>
         </Alert>
       ))}
-      <div style={{ position: "relative" }}>
+      <div
+        data-testid="publication-heatmap-anchor"
+        style={{ minWidth: 0, position: "relative", width: "100%" }}
+      >
         <div
           data-testid="publication-heatmap-scroll"
           style={{

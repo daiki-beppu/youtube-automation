@@ -177,6 +177,11 @@ describe("PublicationHeatmap", () => {
       />
     )
     const grid = screen.getByRole("grid", { name: "日別公開本数" })
+    expect(screen.getByTestId("publication-heatmap-anchor")).toHaveStyle({
+      minWidth: "0",
+      position: "relative",
+      width: "100%",
+    })
     const first = screen.getByRole("gridcell", { name: "2026-08-07: 1本" })
     const second = screen.getByRole("gridcell", { name: "2026-08-08: 2本" })
 
