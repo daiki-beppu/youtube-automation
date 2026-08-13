@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "experiment-entry.schema.json",
   "title": "Experiment entry",
-  "description": "data/experiments.jsonl の単一変数実験登録契約。schema_version 1 は pending 登録だけを表し、既存行を保持した append-only 追記を前提とする。",
+  "description": "data/experiments.jsonl の単一変数実験契約。schema_version 1 は pending 登録と judged 判定を表す。登録は append-only、判定時は status と judged_date / result_vpd / verdict だけを一体更新する。",
   "type": "object",
   "required": [
     "schema_version",
@@ -63,7 +63,33 @@
       "minimum": 1
     },
     "status": {
-      "const": "pending"
+      "enum": ["pending", "judged"]
+    },
+    "judged_date": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+    },
+    "result_vpd": {
+      "type": "number",
+      "minimum": 0
+    },
+    "verdict": {
+      "enum": ["improved", "no_change", "worse"]
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"status": {"const": "judged"}}},
+      "then": {"required": ["judged_date", "result_vpd", "verdict"]},
+      "else": {
+        "not": {
+          "anyOf": [
+            {"required": ["judged_date"]},
+            {"required": ["result_vpd"]},
+            {"required": ["verdict"]}
+          ]
+        }
+      }
+    }
+  ]
 }

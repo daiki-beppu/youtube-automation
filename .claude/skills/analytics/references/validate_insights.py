@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import re
 import sys
+from datetime import date
 from pathlib import Path
 
 _SCHEMA_PATH = Path(__file__).resolve().parent / "insights-entry.schema.json"
@@ -72,6 +73,13 @@ def validate_entry(entry: object, schema: dict) -> list[str]:
         prop_schema = properties.get(key)
         if isinstance(prop_schema, dict):
             errors.extend(_validate_value(key, value, prop_schema))
+
+    date_value = entry.get("date")
+    if isinstance(date_value, str) and re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", date_value):
+        try:
+            date.fromisoformat(date_value)
+        except ValueError:
+            errors.append("date: 実在する日付にしてください")
 
     return errors
 

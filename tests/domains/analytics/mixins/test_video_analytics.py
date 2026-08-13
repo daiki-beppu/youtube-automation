@@ -190,6 +190,7 @@ class TestGetVideoDetails:
                         "topicCategories": ["https://en.wikipedia.org/wiki/Music"],
                     },
                     "statistics": {"viewCount": "12345"},
+                    "status": {"privacyStatus": "public", "publishAt": "2026-01-02T00:00:00Z"},
                 }
             ]
         }
@@ -201,3 +202,8 @@ class TestGetVideoDetails:
         assert result["VID_001"]["caption"] == "true"
         assert len(result["VID_001"]["topic_categories"]) == 1
         assert result["VID_001"]["view_count"] == "12345"
+        assert result["VID_001"]["privacy_status"] == "public"
+        assert result["VID_001"]["publish_at"] == "2026-01-02T00:00:00Z"
+        collector.youtube_service.list_videos.assert_called_once_with(
+            "VID_001", part="snippet,statistics,status,contentDetails,topicDetails"
+        )

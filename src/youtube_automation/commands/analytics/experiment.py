@@ -12,12 +12,12 @@ import stat
 import sys
 import tempfile
 from collections.abc import Callable, Sequence
-from datetime import date
+from datetime import date, datetime, timezone
 from importlib.resources import as_file, files
 from pathlib import Path
 from statistics import median
 
-from youtube_automation.commands.analytics import vpd_rank
+from youtube_automation.commands.analytics import experiment_judge, vpd_rank
 from youtube_automation.configuration import channel_dir, load_config
 from youtube_automation.configuration.skills import load_skill_config
 from youtube_automation.core.errors import AutomationError, ValidationError
@@ -115,12 +115,19 @@ def validate_entry(entry: object, schema: dict[str, object], insights_schema: di
         property_schema = properties.get(name)
         if isinstance(property_schema, dict):
             errors.extend(_validate_property(name, value, _resolved_property_schema(property_schema, insights_schema)))
-    registered_date = entry.get("registered_date")
-    if isinstance(registered_date, str) and re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", registered_date):
-        try:
-            date.fromisoformat(registered_date)
-        except ValueError:
-            errors.append("registered_date: 実在する日付にしてください")
+    for date_field in ("registered_date", "judged_date", "date"):
+        date_value = entry.get(date_field)
+        if isinstance(date_value, str) and re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", date_value):
+            try:
+                date.fromisoformat(date_value)
+            except ValueError:
+                errors.append(f"{date_field}: 実在する日付にしてください")
+    if "registered_date" in entry:
+        judged_fields = {"judged_date", "result_vpd", "verdict"}
+        if entry.get("status") == "judged":
+            errors.extend(f"status=judged には {key} が必要です" for key in judged_fields if key not in entry)
+        elif entry.get("status") == "pending":
+            errors.extend(f"status=pending には {key} を指定できません" for key in judged_fields if key in entry)
     return errors
 
 
@@ -271,6 +278,13 @@ def _judge_after_days(config: dict[str, object]) -> int:
     return value
 
 
+def _judge_threshold_percent(config: dict[str, object]) -> object:
+    experiment_config = config.get("experiment")
+    if not isinstance(experiment_config, dict) or "judge_threshold_percent" not in experiment_config:
+        raise ValidationError("analytics.experiment.judge_threshold_percent が未設定です")
+    return experiment_config["judge_threshold_percent"]
+
+
 def _atomic_append(path: Path, original: bytes, record: dict[str, object]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     separator = b"" if not original or original.endswith(b"\n") else b"\n"
@@ -345,8 +359,11 @@ def _today() -> date:
     return date.today()
 
 
+judge_experiments = experiment_judge.judge_experiments
+
+
 def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="単一変数 experiment の登録")
+    parser = argparse.ArgumentParser(description="単一変数 experiment の登録と判定")
     subparsers = parser.add_subparsers(dest="command", required=True)
     register = subparsers.add_parser("register", help="pending experiment を append-only 登録")
     register.add_argument(
@@ -373,10 +390,31 @@ def main(argv: Sequence[str] | None = None) -> int:
         default=7,
         help="baseline 対象の最低公開日齢",
     )
+    judge = subparsers.add_parser("judge", help="due experiment を判定して insights へ一体還流")
+    judge.add_argument(
+        "--min-age-days",
+        type=_nonnegative_integer,
+        default=7,
+        help="判定対象の最低公開日齢",
+    )
     args = parser.parse_args(argv)
-    if len(args.lever) != 1:
+    if args.command == "register" and len(args.lever) != 1:
         parser.error("--lever は 1 回だけ指定してください")
     try:
+        if args.command == "judge":
+            root = channel_dir()
+            config = load_skill_config("analytics")
+            result = judge_experiments(
+                experiments_path=root / "data" / "experiments.jsonl",
+                insights_path=root / "data" / "insights.jsonl",
+                channel_root=root,
+                now=datetime.now(timezone.utc),
+                min_age_days=args.min_age_days,
+                threshold_percent=_judge_threshold_percent(config),
+                snapshot_loader=experiment_judge.load_judge_snapshot,
+            )
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0
         config = load_config()
         record = register_experiment(
             lever=args.lever[0],

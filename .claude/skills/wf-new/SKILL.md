@@ -461,7 +461,7 @@ Suno-helper server: ✅ http://<channel>.localhost:<PORT> 起動済み / ⚠️ 
 ## Cross References
 
 - 企画生成: `/collection-ideate` スキル
-  - 蓄積 insights: `data/insights.jsonl` の open エントリ（書き手は `/analytics --analyze` と `/flop-analysis`、schema は `.claude/skills/analytics/references/insights-entry.schema.json` が単一ソース）を Phase 1 で選別して渡す。無ければ渡さずに続行
+  - 蓄積 insights: `data/insights.jsonl` の open エントリ（書き手は `/analytics --analyze`、`/flop-analysis`、`yt-experiment judge`、schema は `.claude/skills/analytics/references/insights-entry.schema.json` が単一ソース）を `source` にかかわらず Phase 1 で選別して渡す。無ければ渡さずに続行
   - analytics mode: validator 成功済みの同日付 `reports/analysis_*.md` / `.json` ペア + ベンチマーク + config を使用
   - benchmark fallback mode: `data/benchmark_*.json` + config のみで初回企画を生成
   - minimal mode: `ttp_mode: false` はユーザー直接入力（テーマ / ジャンル / 雰囲気）+ config のみで初回企画を生成。`true` は `/benchmark` を案内して停止

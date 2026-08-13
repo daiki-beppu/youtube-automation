@@ -185,7 +185,7 @@ subagent は分析結果を同じ日付の `reports/analysis_YYYYMMDD.md` と `r
 
 ### 学びの insights 蓄積
 
-レポート保存の検証（validator exit 0）後、subagent は次サイクルの企画・制作に効く主要な学びを `data/insights.jsonl` へ追記する。エントリ形式は `references/insights-entry.schema.json` を単一ソースとし、本文で必須キーや enum を再定義しない。
+レポート保存の検証（validator exit 0）後、subagent は次サイクルの企画・制作に効く主要な学びを `data/insights.jsonl` へ追記する。エントリ形式は `references/insights-entry.schema.json` を単一ソースとし、本文で必須キーや enum を再定義しない。この節は `source: "analysis"` の書き手契約であり、判定済み単一変数実験は `yt-experiment judge` が `source: "experiment"` として同じ schema へ exactly-once 還流する。
 
 - 抽出元は構造化 JSON の固定キー `strategic_improvements` / `next_collection_candidates` / `strategic_discussion` とし、そこから次の制作行動に直結する学びを 1〜5 件に絞る。Markdown 本文からの再抽出はしない
 - 各エントリは `source: "analysis"`、`source_path` に同日付の `reports/analysis_YYYYMMDD.json`、`status: "open"` で追記する。`evidence` には `<JSON ファイル名>#<json_path> = <value>` 形式の数値引用を最低 1 つ含める

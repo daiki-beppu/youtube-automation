@@ -8,6 +8,8 @@ freshness_minutes: 30
 experiment:
   # pending 実験を評価するまでの最低日数。
   judge_after_days: 14
+  # baseline 比で improved / worse とする inclusive の変化率。
+  judge_threshold_percent: 20
 
 win_pattern:
   # 先勝ちの名前付き正規表現。マッチしないタイトルは other。
