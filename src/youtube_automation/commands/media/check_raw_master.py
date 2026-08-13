@@ -31,7 +31,9 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+from youtube_automation.configuration.skills import load_skill_config
 from youtube_automation.core.errors import ValidationError
+from youtube_automation.domains.media.loudness_receipt import resolve_max_deviation_lu, validate_loudness_receipt
 from youtube_automation.infrastructure.media.collection_paths import (
     CollectionPaths,
     resolve_collection_dir,
@@ -40,6 +42,10 @@ from youtube_automation.infrastructure.media.collection_paths import (
 # 判定結果の status 値。
 STATUS_CONSISTENT = "consistent"
 STATUS_MISMATCH = "mismatch"
+
+
+def load_max_deviation_lu() -> float:
+    return resolve_max_deviation_lu(load_skill_config("masterup"))
 
 
 @dataclass(frozen=True)
@@ -148,7 +154,7 @@ def check_raw_master(collection_dir: Path) -> RawMasterCheckResult:
     )
 
 
-def apply_raw_master(collection_dir: Path, new_name: str) -> None:
+def apply_raw_master(collection_dir: Path, new_name: str, *, loudness_receipt: Path | None = None) -> None:
     """assets.raw_master と updated_at を原子的に更新する。
 
     書き込みは同一ディレクトリの一時ファイル + ``os.replace`` で行い、
@@ -157,6 +163,12 @@ def apply_raw_master(collection_dir: Path, new_name: str) -> None:
     paths = CollectionPaths(collection_dir)
     if not (paths.master_dir / new_name).is_file():
         raise ValidationError(f"更新候補が 01-master/ に存在しません: {new_name}")
+    if loudness_receipt is not None:
+        receipt = validate_loudness_receipt(collection_dir, loudness_receipt, load_max_deviation_lu())
+        if receipt["status"] != "PASS":
+            raise ValidationError("loudness receipt が閾値違反を記録しているため state を更新しません")
+        if receipt["raw_master_output"] != new_name:
+            raise ValidationError("loudness receipt の raw master 出力が更新候補と一致しません")
 
     state = _load_state(paths.workflow_state_path)
     assets = state.setdefault("assets", {})
@@ -195,6 +207,11 @@ def main() -> int:
         action="store_true",
         help="不整合検知時に assets.raw_master / updated_at を候補ファイル名で更新する",
     )
+    parser.add_argument(
+        "--loudness-receipt",
+        type=Path,
+        help="--apply 前に検証する loudness receipt（欠落・破損・入力/閾値不一致・FAIL は state を更新しない）",
+    )
     args = parser.parse_args()
 
     try:
@@ -218,7 +235,7 @@ def main() -> int:
             )
             return 2
 
-        apply_raw_master(collection_dir, result.candidate)
+        apply_raw_master(collection_dir, result.candidate, loudness_receipt=args.loudness_receipt)
         print(f"Updated: assets.raw_master = {result.candidate} (updated_at も更新)")
         return 0
     except ValidationError as e:
