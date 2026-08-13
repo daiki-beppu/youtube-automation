@@ -144,6 +144,7 @@ describe("PublicationHeatmap", () => {
     const cell = screen.getByRole("gridcell", {
       name: "2026-08-08: 3本",
     })
+    const grid = screen.getByRole("grid", { name: "日別公開本数" })
     fireEvent.mouseEnter(cell)
     const pointerDetails = screen.getByRole("tooltip")
     expect(pointerDetails).toHaveTextContent("2026-08-08")
@@ -152,7 +153,10 @@ describe("PublicationHeatmap", () => {
     expect(pointerDetails).toHaveTextContent("Morning Focus 1本")
     const pointerContent = pointerDetails.textContent
 
-    fireEvent.mouseLeave(cell)
+    fireEvent.mouseLeave(cell, { relatedTarget: grid })
+    expect(screen.getByRole("tooltip")).toBeInTheDocument()
+
+    fireEvent.mouseLeave(grid)
     expect(screen.queryByRole("tooltip")).not.toBeInTheDocument()
 
     cell.focus()
@@ -161,6 +165,36 @@ describe("PublicationHeatmap", () => {
     expect(focusDetails.textContent).toBe(pointerContent)
     expect(cell).toHaveFocus()
     expect(cell).toHaveAttribute("aria-describedby", focusDetails.id)
+  })
+
+  it("keeps hover details out of document flow and visible across cell gaps", () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-08-08T12:00:00Z"))
+    render(
+      <PublicationHeatmap
+        channels={[]}
+        days={{ "2026-08-07": 1, "2026-08-08": 2 }}
+      />
+    )
+    const grid = screen.getByRole("grid", { name: "日別公開本数" })
+    expect(screen.getByTestId("publication-heatmap-anchor")).toHaveStyle({
+      minWidth: "0",
+      position: "relative",
+      width: "100%",
+    })
+    const first = screen.getByRole("gridcell", { name: "2026-08-07: 1本" })
+    const second = screen.getByRole("gridcell", { name: "2026-08-08: 2本" })
+
+    fireEvent.mouseEnter(first)
+    fireEvent.mouseLeave(first, { relatedTarget: grid })
+    expect(screen.getByRole("tooltip")).toHaveTextContent("2026-08-07")
+    fireEvent.mouseEnter(second)
+    const details = screen.getByRole("tooltip")
+    expect(details).toHaveTextContent("2026-08-08")
+    expect(details).toHaveStyle({ position: "absolute" })
+
+    fireEvent.mouseLeave(grid)
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument()
   })
 
   it("shows the hovered cell after another cell received keyboard focus", () => {
