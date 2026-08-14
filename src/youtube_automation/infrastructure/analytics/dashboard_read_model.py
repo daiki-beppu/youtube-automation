@@ -180,6 +180,17 @@ def _workflow_timing(value: object) -> dict[str, object]:
     timing = cast(dict[str, object], value)
     status = timing.get("status")
     collections = timing.get("collections")
+    if status == "error":
+        error = timing.get("error")
+        if (
+            isinstance(collections, list)
+            and not collections
+            and isinstance(error, dict)
+            and _text(error.get("code"))
+            and _text(error.get("message"))
+        ):
+            return timing
+        return _workflow_timing_error("workflow_timing_invalid", "error workflow timing の形式が不正です")
     if status not in {"ready", "unavailable", "in_progress"} or not isinstance(collections, list):
         return _workflow_timing_error("workflow_timing_invalid", "workflow timing の status/collections が不正です")
     if any(not isinstance(collection, dict) for collection in collections):

@@ -50,8 +50,12 @@ def _build_channel_workflow_timing(channel: Path) -> dict[str, object] | None:
             return {"status": "unavailable", "reason": "collection_missing", "collections": []}
         config = load_config_from_path(channel)
         return build_workflow_timing(channel, config.workflow.manual_baseline_minutes)
-    except (ConfigError, OSError, ValueError):
-        return None
+    except (ConfigError, OSError, ValueError) as exc:
+        return {
+            "status": "error",
+            "collections": [],
+            "error": {"code": "workflow_timing_failed", "message": str(exc)},
+        }
 
 
 class DashboardServer(ThreadingHTTPServer):
