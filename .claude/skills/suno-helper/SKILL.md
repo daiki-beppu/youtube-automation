@@ -181,6 +181,7 @@ overlay / popup 上部の live region と root の `data-suno-phase` に進捗�
 |---|---|
 | `injecting` | Style/Lyrics を当該 entry に注入中 |
 | `generating` | Generate 押下後、Suno の生成完了待ち（最大 3 分） |
+| `waiting-generation` | Generate 投入後、生成完了の検知待ち |
 | `waiting-captcha` | CAPTCHA / bot check の解消待ち。多くは自動 verify 後に `generating` へ戻る |
 | `waiting-slot` | Suno のキュー上限に達した。空きスロット待ち（in-flight 変化があれば継続）|
 | `submitted` | 高速モード（内部値: queue）のみ。投入 ACK 済み・生成未完了（琥珀色）。全 entry 投入後の完了待ちで `done` へ遷移 |
@@ -188,6 +189,7 @@ overlay / popup 上部の live region と root の `data-suno-phase` に進捗�
 | `entry-failed` | 当該 entry は失敗としてスキップし、run 全体は次 entry へ継続 |
 | `adding-to-playlist` | 全 entry 完了、clip を一括 playlist 化中 |
 | `downloading` | playlist 追加完了後、全 clip を ZIP 一括ダウンロード中 |
+| `placing-archive` | browser download 完了後、server が ZIP を検証・配置中 |
 | `finished` | DL 通知成功。`placed > 0` なら部分配置も終端成功とし、status に配置数 / 期待数 / 欠損数と `missing_reasons` の内訳を表示 |
 | `stopped` | user が停止ボタンで中断 |
 | `error` | server reject を含む失敗（赤色で停止）。`placed = 0` は成功へ縮退せずこの phase |

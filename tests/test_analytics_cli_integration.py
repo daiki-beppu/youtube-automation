@@ -230,9 +230,9 @@ def test_yt_analytics_collects_and_saves_subscribed_status_via_cli(cli_dependenc
     assert next(query for query in revenue_queries if query["dimensions"] == "day")["metrics"] == (
         "views,estimatedRevenue,monetizedPlaybacks,adImpressions,cpm,playbackBasedCpm"
     )
-    assert next(query for query in revenue_queries if query["dimensions"] == "video")["metrics"] == (
-        "views,estimatedRevenue,monetizedPlaybacks,cpm,playbackBasedCpm"
-    )
+    video_revenue_query = next(query for query in revenue_queries if query["dimensions"] == "video")
+    assert video_revenue_query["metrics"] == ("views,estimatedRevenue,monetizedPlaybacks,cpm,playbackBasedCpm")
+    assert video_revenue_query["maxResults"] == 200
     assert any(query.get("dimensions") == "subscribedStatus" for query in reports.queries)
 
 

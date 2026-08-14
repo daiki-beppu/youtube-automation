@@ -157,6 +157,8 @@ subagent へは次を具体値で渡す:
 日別では `adImpressions / monetizedPlaybacks` の `ads_per_playback` も保存する。
 成果物では `revenue_analytics.daily_metrics` と `revenue_analytics.by_video` に保存し、
 各行の `rpm` は `estimated_revenue / views * 1000` で算出する。
+動画別収益は YouTube Analytics API の Top videos 契約に従い、`sort=-estimatedRevenue` と
+`maxResults=200` を組み合わせて取得する。
 
 日次・動画別の片方だけを取得できた場合は `revenue_analytics.status: "partial"` とし、
 成功したデータと失敗した dimension の `errors` を保存する。両方を取得できない場合は

@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `fix(analytics)`: 動画別収益クエリへ必須の `maxResults=200` を付与して HTTP 400 を解消する（#3771）。
+
 - `feat(wf-new)`: Phase 2c の thumbnail と music を exactly-two Agent で同時 dispatch する（#4096）。
 
 - `feat(wf-new)`: Phase 2c の thumbnail / music 成果物を独立検証し、片側失敗時も成功側の state を保持して失敗 branch だけを再開する契約を追加する（#4095）。
