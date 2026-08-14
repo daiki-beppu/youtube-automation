@@ -279,6 +279,18 @@ class TestYouTubeClientsReadonly:
 
 
 class TestMainReadonlyFlag:
+    def test_refresh_only_uses_noninteractive_handler_without_connection_test(self):
+        from youtube_automation.commands.system import oauth as oauth_cli
+
+        mock_cls = MagicMock()
+        with patch.object(oauth_cli, "YouTubeOAuthHandler", mock_cls):
+            oauth_cli.main(["--refresh-only"])
+
+        mock_cls.assert_called_once_with(interactive=False)
+        mock_cls.return_value.refresh_existing_credentials.assert_called_once_with()
+        mock_cls.return_value.authenticate.assert_not_called()
+        mock_cls.return_value.test_connection.assert_not_called()
+
     def test_readonly_flag_uses_create_readonly(self):
         from youtube_automation.commands.system import oauth as oauth_cli
 

@@ -83,10 +83,94 @@ def test_unknown_top_level_override_key_warns_but_still_merges(tmp_path, monkeyp
     )
     monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
 
-    with pytest.warns(UserWarning, match=r"thumbnail\.yaml.*auto_select"):
+    with pytest.warns(UserWarning, match=r"thumbnail\.yaml.*auto_select") as caught:
         cfg = skill_config.load_skill_config("thumbnail", use_cache=False)
 
     assert cfg["auto_select"] == {"enabled": True}
+    message = str(caught[0].message)
+    assert "コードからは参照されない可能性があります" in message
+    assert "SKILL.md 経由で AI が読む設計であれば意図どおりです" in message
+    assert "利用側に参照されない可能性があります" not in message
+
+
+def test_acknowledged_unknown_keys_suppress_only_named_warning(tmp_path, monkeypatch):
+    channel_dir = tmp_path / "ch"
+    override_dir = channel_dir / "config" / "skills"
+    override_dir.mkdir(parents=True)
+    (override_dir / "suno.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "acknowledged_unknown_keys": ["tracks_per_pattern"],
+                "tracks_per_pattern": 1,
+                "duration_policy": "legacy",
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
+
+    with pytest.warns(UserWarning, match=r"suno\.yaml.*duration_policy") as caught:
+        cfg = skill_config.load_skill_config("suno", use_cache=False)
+
+    assert "tracks_per_pattern" not in str(caught[0].message)
+    assert cfg["tracks_per_pattern"] == 1
+    assert "acknowledged_unknown_keys" not in cfg
+    assert "acknowledged_unknown_keys" not in skill_config.load_channel_override("suno")
+
+
+@pytest.mark.parametrize("value", ["tracks_per_pattern", [""], [1], {"tracks_per_pattern": True}])
+def test_acknowledged_unknown_keys_must_be_non_empty_string_list(tmp_path, monkeypatch, value):
+    channel_dir = tmp_path / "ch"
+    override_dir = channel_dir / "config" / "skills"
+    override_dir.mkdir(parents=True)
+    (override_dir / "suno.yaml").write_text(
+        yaml.safe_dump({"acknowledged_unknown_keys": value, "tracks_per_pattern": 1}),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
+
+    with pytest.raises(ConfigError, match="acknowledged_unknown_keys は空でない string の array"):
+        skill_config.load_skill_config("suno", use_cache=False)
+
+
+@pytest.mark.parametrize(
+    ("skill", "override"),
+    [
+        ("suno", {"vocal_gender": "female", "tracklist_strategy": "ttp"}),
+        ("videoup", {"effect": {"type": "particles"}, "shrink": {"enabled": True}}),
+    ],
+)
+def test_known_override_only_top_level_keys_do_not_warn(tmp_path, monkeypatch, skill, override):
+    """#3795: default 外でも正規の直接参照キーは未知キー扱いしない。"""
+    channel_dir = tmp_path / "ch"
+    override_dir = channel_dir / "config" / "skills"
+    override_dir.mkdir(parents=True)
+    (override_dir / f"{skill}.yaml").write_text(yaml.safe_dump(override), encoding="utf-8")
+    monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        cfg = skill_config.load_skill_config(skill, use_cache=False)
+
+    assert not [warning for warning in caught if "未知のトップレベルキー" in str(warning.message)]
+    assert all(cfg[key] == value for key, value in override.items())
+
+
+def test_known_override_only_keys_do_not_hide_genuinely_unknown_key(tmp_path, monkeypatch):
+    """#3795: allowlist と同居する未知キーには従来どおり警告する。"""
+    channel_dir = tmp_path / "ch"
+    override_dir = channel_dir / "config" / "skills"
+    override_dir.mkdir(parents=True)
+    (override_dir / "suno.yaml").write_text(
+        yaml.safe_dump({"vocal_gender": "female", "tracks_per_pattern": 3}),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
+
+    with pytest.warns(UserWarning, match=r"suno\.yaml.*tracks_per_pattern") as caught:
+        skill_config.load_skill_config("suno", use_cache=False)
+
+    assert "vocal_gender" not in str(caught[0].message)
 
 
 def test_misplaced_top_level_override_key_warns_with_nested_path(tmp_path, monkeypatch):
@@ -140,6 +224,36 @@ def test_thumbnail_deprecated_override_keys_warn_but_still_merge(tmp_path, monke
     assert gemini["composition_rules"]["environment"] == "cozy tavern"
     assert gemini["composition_rules"]["text_lines"] == "1 行"
     assert gemini["thumbnail_text"]["copy_position"] == "left of character"
+
+
+def test_thumbnail_codex_composition_rules_are_not_deprecated(tmp_path, monkeypatch):
+    channel_dir = tmp_path / "ch"
+    override_dir = channel_dir / "config" / "skills"
+    override_dir.mkdir(parents=True)
+    (override_dir / "thumbnail.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "image_generation": {
+                    "provider": "codex",
+                    "gemini": {
+                        "composition_rules": {
+                            "environment": "bright studio",
+                            "background": "light gray",
+                        }
+                    },
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        cfg = skill_config.load_skill_config("thumbnail", use_cache=False)
+
+    assert not [warning for warning in caught if issubclass(warning.category, DeprecationWarning)]
+    assert cfg["image_generation"]["gemini"]["composition_rules"]["background"] == "light gray"
 
 
 def test_thumbnail_override_without_deprecated_keys_does_not_warn(tmp_path, monkeypatch):

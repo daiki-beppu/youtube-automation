@@ -73,6 +73,25 @@ def test_auto_selection_defaults_reference_distance_threshold_to_point_four():
     assert settings.max_reference_distance == 0.40
 
 
+def test_auto_selection_defaults_aspect_tolerance_for_gemini_rounding():
+    settings = resolve_auto_selection_settings({})
+    assert settings.aspect_tolerance == 0.06
+
+
+@pytest.mark.parametrize("size", [(172, 96), (176, 96)])
+def test_default_aspect_tolerance_accepts_gemini_rounded_16_9_outputs(tmp_path: Path, size: tuple[int, int]):
+    candidate = tmp_path / "gemini.png"
+    _solid_image(candidate, _NEAR_COLOR, size=size)
+    settings = resolve_auto_selection_settings(
+        {"image_generation": {"auto_selection": {"min_width": 1, "min_height": 1}}}
+    )
+
+    scores = score_candidates([candidate], extract_features_from_path(candidate), settings)
+
+    assert scores[0].eligible is True
+    assert scores[0].reasons == []
+
+
 @pytest.mark.parametrize("value", [True, -0.1, float("nan"), float("inf"), "0.4"])
 def test_auto_selection_rejects_invalid_reference_distance_threshold(value):
     with pytest.raises(ConfigError, match="max_reference_distance"):

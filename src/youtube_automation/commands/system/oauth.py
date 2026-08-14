@@ -29,6 +29,11 @@ def main(argv: list[str] | None = None) -> None:
         action="store_true",
         help="read-only スコープの token.readonly.json を発行する（write scope を含まない。#1699）",
     )
+    parser.add_argument(
+        "--refresh-only",
+        action="store_true",
+        help="既存 refresh token で非対話更新する（ブラウザ認証・API 接続テストは行わない）",
+    )
     args = parser.parse_args(argv)
 
     mode_label = "read-only" if args.readonly else "full access"
@@ -39,9 +44,18 @@ def main(argv: list[str] | None = None) -> None:
     try:
         # OAuth ハンドラー初期化
         if args.readonly:
-            auth_handler = YouTubeOAuthHandler.create_readonly()
+            auth_handler = (
+                YouTubeOAuthHandler.create_readonly(interactive=False)
+                if args.refresh_only
+                else YouTubeOAuthHandler.create_readonly()
+            )
         else:
-            auth_handler = YouTubeOAuthHandler()
+            auth_handler = YouTubeOAuthHandler(interactive=False) if args.refresh_only else YouTubeOAuthHandler()
+
+        if args.refresh_only:
+            auth_handler.refresh_existing_credentials()
+            print("\n✅ OAuth token の非対話更新が完了しました。")
+            return
 
         # 認証実行
         auth_handler.authenticate()

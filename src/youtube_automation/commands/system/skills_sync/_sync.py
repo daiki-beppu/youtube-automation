@@ -187,7 +187,7 @@ def _sync_dir_asset(
             counts[key] = counts.get(key, 0) + val
 
     if args.asset == "skills":
-        _report_orphan_skill_configs(target_dir, bundled)
+        _report_orphan_skill_configs(target_dir, root)
 
     # skills 配布時は Codex CLI の探索パス `.agents/skills` も併設する。
     # 標準レイアウト (`.claude/skills`) でないときは対象外 (None) でスキップ。

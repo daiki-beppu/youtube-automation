@@ -21,7 +21,7 @@ description: "Use when 下流チャンネルリポジトリでスキル実行中
 - schema-invalid 行は行番号と schema または JSON parse の失敗理由を警告し、候補から除外する。valid な `recorded` entry の処理は継続する
 - `resolved` / `wontfix` への更新は、ユーザーが対象行と disposition を明示的に確認した場合だけ行う。空でない簡潔な `disposition_reason` と更新時刻 `disposition_at` を必須とする
 - issue 起票前に open issue のタイトルを照合し、類似候補ごとに新規起票かスキップかをユーザーに確認する
-- 起票対象、件数、タイトル、チャンネル名の掲載有無を表示し、`AskUserQuestion` で「起票する / 中止」の明示 2 択を提示する。承認されるまで `gh issue create` を絶対に実行しない
+- 起票対象、件数、タイトルを表示し、`AskUserQuestion` で「起票する / 中止」の明示 2 択を提示する。承認されるまで `gh issue create` を絶対に実行しない
 - GitHub issue は外部へ反映され、起票後はこのスキルから取り消せないことを承認時に警告する
 - entry の `context` と issue のタイトル・本文に、未マスクの機密情報を含めない
 - `gh issue create` が成功して issue URL を返した entry だけを `status="filed"` に更新し、同じ URL を `issue_url` に記録する
@@ -211,16 +211,11 @@ terminal entry に `issue_url` を追加しない。更新対象行が schema �
 検証対象から除外して元 bytes のまま保持する。更新済みの terminal entry は Step 2
 以降へ渡さず、起票も行わない。「今回は保留」の entry は `recorded` のまま変更しない。
 
-### Step 2: 本文案とチャンネル名の掲載可否を確認
+### Step 2: 本文案を確認
 
 各選択 entry から、タイトルを `[feedback][<skill>] <summary>` の形で作る。
 `references/upstream-issue-template.md` の全セクションを埋める。entry に独立したエラー
 抜粋がなければ「なし」と書き、情報を推測で補わない。
-
-発生チャンネル名は entry schema に含まれないため、自動推定・自動掲載しない。
-`AskUserQuestion` で「チャンネル名を掲載する / 掲載しない」の明示 2 択を entry ごとに
-提示する。掲載する場合はユーザーが明示した名前だけを使い、掲載しない場合は
-テンプレートの発生チャンネル欄を「掲載しない（ユーザー確認済み）」とする。
 
 タイトルと本文へ共通のマスク規則を再適用した後、ユーザーへ全文を提示する。
 
@@ -253,7 +248,7 @@ gh api --paginate --method GET \
 
 ### Step 4: 最終承認ゲート
 
-スキップを除いた起票対象について、件数、各タイトル、発生チャンネル欄の内容を表示する。
+スキップを除いた起票対象について、件数と各タイトルを表示する。
 「GitHub issue として外部へ反映され、このスキルからは取り消せない」と警告し、
 `AskUserQuestion` で次の 2 択を提示する。
 

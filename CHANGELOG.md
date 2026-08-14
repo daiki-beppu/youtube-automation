@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(setup)`: `yt-oauth --refresh-only` で既存 refresh token を非対話更新し、ブラウザ認証や YouTube API 接続テストなしで token を延命できるようにする（#3936）。
+
+- `fix(thumbnail)`: Codex provider が prompt へ決定的に注入する `composition_rules` は deprecated 扱いせず、他の移行対象には Codex 固有の移行先を案内する（#3913）。
+
+- `fix(thumbnail)`: auto-selection の既定 aspect tolerance を Gemini の 1K / 2K 出力における 64px 丸めを吸収する 0.06 へ広げる（#3867）。
+
+- `feat(config)`: skill-config の `acknowledged_unknown_keys` に調査済みキーを明示すると、そのキーだけ未知トップレベル警告から除外できるようにする（#3814）。
+
+- `fix(config)`: skill-config の未知キー警告で、コード参照が不確実でも SKILL.md 経由で AI が読む設計は有効になり得ることを区別する（#3813）。
+
+- `fix(automation-update)`: skills sync の孤児 override 検出を multi-channel workspace まで広げ、skill directory ではなく `config.default.yaml` の有無で設定対応を判定する（#3812）。
+
+- `fix(config)`: `workflow` 直下と `wf_new` / `wf_next` の未知キーを `ConfigError` で拒否し、効かない設定が silent ignore されないようにする（#3811）。
+
+- `fix(dashboard)`: latest live collection の選択では `created_at` だけを緩く読み、未選択 collection の不正 phase で timing 全体を落とさず、選択対象の検証失敗は原因メッセージ付きで表示する（#3810）。
+
+- `docs(skill-feedback)`: 還流 issue から発生チャンネル欄と掲載可否の確認を廃止し、起票前の確認項目を件数とタイトルだけに整理する（#3798）。
+
+- `fix(config)`: skill-config の未知キー検査で、`suno` と `videoup` が override や同梱 script から直接参照する正規のトップレベルキーを誤検知しないようにする（#3795）。
+
+- `fix(analytics)`: 動画別収益クエリへ必須の `maxResults=200` を付与して HTTP 400 を解消する（#3771）。
+
 - `feat(wf-new)`: Phase 2c の thumbnail と music を exactly-two Agent で同時 dispatch する（#4096）。
 
 - `feat(wf-new)`: Phase 2c の thumbnail / music 成果物を独立検証し、片側失敗時も成功側の state を保持して失敗 branch だけを再開する契約を追加する（#4095）。
@@ -36,7 +58,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `fix(metadata)`: localization title の固定尺検出で `3時間の{scene_phrase}` と fr/es/it の `heure(s)` / `hora(s)` / `ora` / `ore` を認識し、Unicode 正規化形式を問わない単語境界を保ったまま実尺追従漏れを公開前診断で停止する（#3912）。
 - `fix(analytics)`: `yt-ad-coverage` が部分成功の収益 snapshot を受理し、動画別データが空なら unavailable 相当の JSON を exit 0 で返して分析パイプラインを継続する（#3910）。
 - `fix(automation-update)`: 追従後診断を `yt-doctor --json` の exact `channel_config.status` 判定へ揃え、doctor 全体の exit code 0 で config fail を見逃す手順を修正する（#3915）。
+- `refactor(suno)`: prompt 生成の設定・patterns・歌詞・track count 解決と事後検証を `domains.suno.prompt_resolution` へ抽出し、command 側の pattern 生成と既存の 2 回解決配線、出力・警告・失敗契約を維持する（#3907）。
 - `fix(metadata)`: duration display の locale を case・region 非依存で正規化し、fr/es/it/fil は各言語の単位、未知の有効 locale は warning 付き英語単位で生成して、多言語 metadata 全体の失敗を防ぐ（#3911）。
+- `refactor(skills)`: production / quality 系 13 skill の新規開設誘導だけを `/setup --channel` へ移し、既存取り込み・再生成・分析・方向性検討・共有 reference・hard gate・成果物契約を維持した（#3987）。
 - `refactor(skills)`: workflow / upload 系 11 skill の新規開設誘導だけを `/setup --channel` へ移し、既存取り込み・再生成・設定 push・共有 reference の `/channel-new` 経路と既存 failure gate を維持した（#3986）。
 - `refactor(legacy-utils)`: canonical owner と同一だった `legacy_utils/{worktree,profile}.py` を削除し、確認済み下流 facade 5 本の import・親属性・module/symbol identity・patch/state 挙動と配布互換は維持したまま、facade への実装・未許可 import/alias の再導入および削除 path の symlink/hardlink 復活を recursive 契約テストで拒否する（#3896）。
 - `refactor(cost)`: `cost_tracker` の重複ファイルロック実装を削除し、owner identity と既存の排他・失敗・cleanup・並列書き込み契約を維持したまま `infrastructure.file_lock` の canonical 実装へ一本化する（#3894）。

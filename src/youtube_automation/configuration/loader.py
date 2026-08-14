@@ -622,6 +622,19 @@ def _build_workflow(merged: dict) -> Workflow:
         wf = {}
     if not isinstance(wf, dict):
         raise ConfigError(f"workflow セクションは object でなければなりません（got {type(wf).__name__}）")
+    unexpected = set(wf) - {
+        "wf_new",
+        "wf_next",
+        "post-publish",
+        "scheduled_automation",
+        "manual_baseline_minutes",
+        # 移行期間の互換性契約として引き続き無視する旧キー。
+        "post_upload",
+        "short",
+    }
+    if unexpected:
+        names = ", ".join(sorted(unexpected))
+        raise ConfigError(f"workflow に未知のキーがあります: {names}")
 
     if "wf_new" in wf:
         wf_new_raw = wf["wf_new"]
@@ -629,6 +642,10 @@ def _build_workflow(merged: dict) -> Workflow:
         wf_new_raw = {}
     if not isinstance(wf_new_raw, dict):
         raise ConfigError(f"workflow.wf_new は object でなければなりません（got {type(wf_new_raw).__name__}）")
+    unexpected = set(wf_new_raw) - {"skip_plan_selection"}
+    if unexpected:
+        names = ", ".join(sorted(unexpected))
+        raise ConfigError(f"workflow.wf_new に未知のキーがあります: {names}")
 
     if "wf_next" in wf:
         wf_next_raw = wf["wf_next"]
@@ -636,6 +653,16 @@ def _build_workflow(merged: dict) -> Workflow:
         wf_next_raw = {}
     if not isinstance(wf_next_raw, dict):
         raise ConfigError(f"workflow.wf_next は object でなければなりません（got {type(wf_next_raw).__name__}）")
+
+    unexpected = set(wf_next_raw) - {
+        "skip_audio_approval",
+        "skip_upload_approval",
+        "skip_manual_mastering",
+        "approval_gates",
+    }
+    if unexpected:
+        names = ", ".join(sorted(unexpected))
+        raise ConfigError(f"workflow.wf_next に未知のキーがあります: {names}")
 
     if "approval_gates" in wf_next_raw:
         raise ConfigError("workflow.wf_next.approval_gates は廃止されました")

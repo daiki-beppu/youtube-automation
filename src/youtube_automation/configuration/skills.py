@@ -36,6 +36,7 @@ from youtube_automation.core.errors import ConfigError
 _cache: dict[str, dict[str, Any]] = {}
 
 _THUMBNAIL_TEXT_RENDER_MODES = frozenset({"ai_burn_in", "deterministic"})
+_ACKNOWLEDGED_UNKNOWN_KEYS = "acknowledged_unknown_keys"
 
 # #1702: 基底 config から縮小済みのキー。channel override は引き続き deep-merge で
 # 有効（挙動は壊さない）だが、後続リリースでの物理削除に先立ち DeprecationWarning で
@@ -58,8 +59,18 @@ _DEPRECATED_OVERRIDE_KEYS: dict[str, tuple[tuple[str, ...], ...]] = {
     ),
 }
 
+# config.default.yaml との merge ではなく、load_channel_override() や skill 同梱
+# script から直接参照する正規のトップレベルキー。defaults に値を置くと「明示設定の
+# 有無」を区別できなくなるため、未知キー検査だけで skill ごとに宣言する。
+_KNOWN_OVERRIDE_ONLY_KEYS: dict[str, frozenset[str]] = {
+    "suno": frozenset({"tracklist_strategy", "vocal_gender"}),
+    "videoup": frozenset({"effect", "shrink"}),
+}
 
-def _collect_deprecated_override_keys(skill: str, override: dict[str, object]) -> list[str]:
+
+def _collect_deprecated_override_keys(
+    skill: str, override: dict[str, object], *, codex_provider: bool = False
+) -> list[str]:
     """override に含まれる deprecated キーを dotted path のリストで返す。"""
     found: list[str] = []
     for key_path in _DEPRECATED_OVERRIDE_KEYS.get(skill, ()):
@@ -69,20 +80,33 @@ def _collect_deprecated_override_keys(skill: str, override: dict[str, object]) -
                 break
             node = node[key]
         else:
-            found.append(".".join(key_path))
+            dotted_path = ".".join(key_path)
+            if not (codex_provider and dotted_path.startswith("image_generation.gemini.composition_rules.")):
+                found.append(dotted_path)
     return found
 
 
-def _warn_deprecated_override_keys(skill: str, override: dict[str, object], override_path: Path) -> None:
-    deprecated_keys = _collect_deprecated_override_keys(skill, override)
+def _warn_deprecated_override_keys(
+    skill: str,
+    override: dict[str, object],
+    override_path: Path,
+    merged: dict[str, object],
+) -> None:
+    image_generation = merged.get("image_generation")
+    codex_provider = isinstance(image_generation, dict) and image_generation.get("provider") == "codex"
+    deprecated_keys = _collect_deprecated_override_keys(skill, override, codex_provider=codex_provider)
     if not deprecated_keys:
         return
+    migration_target = (
+        "image_generation.codex.default_prompt_template または single_step の opt-in clause"
+        if codex_provider
+        else "diff_prompt_template / thumbnail_text.text_overlay_prompt の本文"
+    )
     warnings.warn(
         f"skill-config {override_path} の deprecated キーを検出しました: "
         f"{', '.join(deprecated_keys)}。これらは基底 config から縮小済みで、"
         "後続リリースで削除予定です（現時点では従来どおり deep-merge されます）。"
-        "意図は diff_prompt_template / thumbnail_text.text_overlay_prompt の本文へ"
-        "移行してください (#1702)。",
+        f"意図は {migration_target} へ移行してください (#1702)。",
         DeprecationWarning,
         stacklevel=3,
     )
@@ -104,9 +128,14 @@ def _find_nested_key_paths(defaults: dict[str, object], target_key: str) -> list
 
 
 def _warn_unknown_top_level_override_keys(
-    override: dict[str, object], defaults: dict[str, object], override_path: Path
+    skill: str,
+    override: dict[str, object],
+    defaults: dict[str, object],
+    override_path: Path,
+    acknowledged: set[str],
 ) -> None:
-    unknown_keys = sorted(override.keys() - defaults.keys())
+    known_keys = defaults.keys() | _KNOWN_OVERRIDE_ONLY_KEYS.get(skill, frozenset())
+    unknown_keys = sorted(override.keys() - known_keys - acknowledged)
     if not unknown_keys:
         return
     suggestions = [
@@ -119,10 +148,23 @@ def _warn_unknown_top_level_override_keys(
         f"skill-config {override_path} の未知のトップレベルキーを検出しました: "
         f"{', '.join(unknown_keys)}。キー名または階層を確認してください。"
         f"{suggestion_message}"
-        "値は互換性のためマージされますが、利用側に参照されない可能性があります。",
+        "値は互換性のためマージされますが、コードからは参照されない可能性があります。"
+        "SKILL.md 経由で AI が読む設計であれば意図どおりです。",
         UserWarning,
         stacklevel=3,
     )
+
+
+def _split_acknowledged_unknown_keys(
+    override: dict[str, object], override_path: Path
+) -> tuple[dict[str, object], set[str]]:
+    raw = override.get(_ACKNOWLEDGED_UNKNOWN_KEYS, [])
+    if not isinstance(raw, list) or any(not isinstance(key, str) or not key for key in raw):
+        raise ConfigError(
+            f"skill-config {override_path} の acknowledged_unknown_keys は空でない string の array で指定してください"
+        )
+    cleaned = {key: value for key, value in override.items() if key != _ACKNOWLEDGED_UNKNOWN_KEYS}
+    return cleaned, set(raw)
 
 
 def _default_path(skill: str) -> Path:
@@ -293,10 +335,10 @@ def load_skill_config(
 
     override_path = _resolve_channel_override(skill, channel_dir)
     if override_path is not None:
-        override = _load_override(override_path)
-        _warn_deprecated_override_keys(skill, override, override_path)
-        _warn_unknown_top_level_override_keys(override, defaults, override_path)
+        override, acknowledged = _split_acknowledged_unknown_keys(_load_override(override_path), override_path)
         merged = _deep_merge(defaults, override)
+        _warn_deprecated_override_keys(skill, override, override_path, merged)
+        _warn_unknown_top_level_override_keys(skill, override, defaults, override_path, acknowledged)
     else:
         merged = defaults
 
@@ -316,7 +358,8 @@ def load_channel_override(skill: str) -> dict[str, Any]:
     path = _resolve_channel_override(skill)
     if path is None:
         return {}
-    return _load_override(path)
+    override, _ = _split_acknowledged_unknown_keys(_load_override(path), path)
+    return override
 
 
 THUMBNAIL_MODE_PARALLEL = "parallel"
