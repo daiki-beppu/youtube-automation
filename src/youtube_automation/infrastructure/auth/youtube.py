@@ -340,6 +340,25 @@ class YouTubeOAuthHandler:
 
         return self.credentials
 
+    def refresh_existing_credentials(self) -> Credentials:
+        """既存 refresh token だけを使い、ブラウザを開かず access token を更新する。"""
+        if not self.token_file.is_file():
+            raise AuthError(f"既存の OAuth token がありません: {self.token_file}")
+        try:
+            credentials = Credentials.from_authorized_user_file(str(self.token_file), self._scopes)
+        except (OSError, ValueError) as exc:
+            raise AuthError("既存の OAuth token を読み込めません") from exc
+        if not credentials.refresh_token:
+            raise AuthError("既存の OAuth token に refresh token がありません")
+        try:
+            credentials.refresh(Request())
+        except google.auth.exceptions.GoogleAuthError as exc:
+            logger.warning("token refresh 失敗: %s", redact_sensitive_data(str(exc)))
+            raise AuthError("OAuth token の更新に失敗しました。refresh token が失効している可能性があります") from exc
+        self.credentials = credentials
+        self._save_credentials()
+        return credentials
+
     def _save_credentials(self):
         """認証情報をファイルに 0o600 で保存する。
 

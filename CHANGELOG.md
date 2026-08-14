@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(setup)`: `yt-oauth --refresh-only` で既存 refresh token を非対話更新し、ブラウザ認証や YouTube API 接続テストなしで token を延命できるようにする（#3936）。
+
 - `fix(thumbnail)`: Codex provider が prompt へ決定的に注入する `composition_rules` は deprecated 扱いせず、他の移行対象には Codex 固有の移行先を案内する（#3913）。
 
 - `fix(thumbnail)`: auto-selection の既定 aspect tolerance を Gemini の 1K / 2K 出力における 64px 丸めを吸収する 0.06 へ広げる（#3867）。
