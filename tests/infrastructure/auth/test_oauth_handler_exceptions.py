@@ -670,6 +670,31 @@ class TestAuthenticateRefresh:
             handler.authenticate()
 
 
+class TestRefreshExistingCredentials:
+    def test_refreshes_valid_access_token_and_saves_it(self, tmp_path: Path, monkeypatch):
+        token_path = tmp_path / "token.json"
+        token_path.write_text("{}")
+        handler = _make_handler(tmp_path, token_path=token_path)
+        credentials = _make_credentials(expired=False, valid=True, refresh_token="rt")
+        monkeypatch.setattr(
+            "youtube_automation.infrastructure.auth.youtube.Credentials.from_authorized_user_file",
+            MagicMock(return_value=credentials),
+        )
+        monkeypatch.setattr(handler, "_save_credentials", MagicMock())
+
+        result = handler.refresh_existing_credentials()
+
+        assert result is credentials
+        credentials.refresh.assert_called_once()
+        handler._save_credentials.assert_called_once_with()
+
+    def test_missing_token_fails_without_interactive_fallback(self, tmp_path: Path):
+        handler = _make_handler(tmp_path, token_path=tmp_path / "missing.json")
+
+        with pytest.raises(AuthError, match="既存の OAuth token がありません"):
+            handler.refresh_existing_credentials()
+
+
 # ===========================================================================
 # 7. L159 — 新規認証（#26〜#32）
 # ===========================================================================
