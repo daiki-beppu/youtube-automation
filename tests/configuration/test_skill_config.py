@@ -89,6 +89,46 @@ def test_unknown_top_level_override_key_warns_but_still_merges(tmp_path, monkeyp
     assert cfg["auto_select"] == {"enabled": True}
 
 
+@pytest.mark.parametrize(
+    ("skill", "override"),
+    [
+        ("suno", {"vocal_gender": "female", "tracklist_strategy": "ttp"}),
+        ("videoup", {"effect": {"type": "particles"}, "shrink": {"enabled": True}}),
+    ],
+)
+def test_known_override_only_top_level_keys_do_not_warn(tmp_path, monkeypatch, skill, override):
+    """#3795: default 外でも正規の直接参照キーは未知キー扱いしない。"""
+    channel_dir = tmp_path / "ch"
+    override_dir = channel_dir / "config" / "skills"
+    override_dir.mkdir(parents=True)
+    (override_dir / f"{skill}.yaml").write_text(yaml.safe_dump(override), encoding="utf-8")
+    monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        cfg = skill_config.load_skill_config(skill, use_cache=False)
+
+    assert not [warning for warning in caught if "未知のトップレベルキー" in str(warning.message)]
+    assert all(cfg[key] == value for key, value in override.items())
+
+
+def test_known_override_only_keys_do_not_hide_genuinely_unknown_key(tmp_path, monkeypatch):
+    """#3795: allowlist と同居する未知キーには従来どおり警告する。"""
+    channel_dir = tmp_path / "ch"
+    override_dir = channel_dir / "config" / "skills"
+    override_dir.mkdir(parents=True)
+    (override_dir / "suno.yaml").write_text(
+        yaml.safe_dump({"vocal_gender": "female", "tracks_per_pattern": 3}),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
+
+    with pytest.warns(UserWarning, match=r"suno\.yaml.*tracks_per_pattern") as caught:
+        skill_config.load_skill_config("suno", use_cache=False)
+
+    assert "vocal_gender" not in str(caught[0].message)
+
+
 def test_misplaced_top_level_override_key_warns_with_nested_path(tmp_path, monkeypatch):
     """#2558: nested schema と同名の誤配置には正しい dotted path を示す。"""
     channel_dir = tmp_path / "ch"
