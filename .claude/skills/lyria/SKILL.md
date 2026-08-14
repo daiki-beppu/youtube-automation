@@ -46,7 +46,7 @@ subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実�
 `config/skills/lyria.yaml` はオプション。`yt-skills sync` で配布される `config.default.yaml` がそのまま使われるため、default 動作で問題なければ作成不要。カスタマイズしたい場合のみ `config.default.yaml` をコピーして `config/skills/lyria.yaml` に置き、必要な値だけ上書きする（deep-merge される）。
 
 不足する場合、ユーザーに確認:
-- **`config/channel/` が無い新規チャンネル** → `/channel-new` を案内
+- **`config/channel/` が無い新規チャンネル** → `/setup --channel` を案内
 - **`config/channel/` が無い既存チャンネル** → `/channel-new`（既存チャンネル取り込みモード）を案内
 - **`_disabled: true` のチャンネル** → `/suno` を案内して終了する（Lyria を使わない方針）
 
