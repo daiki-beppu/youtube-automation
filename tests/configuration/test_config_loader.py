@@ -920,6 +920,27 @@ def test_workflow_wf_new_skip_plan_selection_explicit(tmp_path, monkeypatch):
     assert load_config().workflow.wf_new.skip_plan_selection is True
 
 
+@pytest.mark.parametrize(
+    ("workflow", "message"),
+    [
+        ({"wf_new": {"skip_loop_video": True}}, "workflow.wf_new に未知のキーがあります: skip_loop_video"),
+        (
+            {"wf_next": {"mix_phase": {"skip": True}, "thumbnail": {"mode": "reuse"}}},
+            "workflow.wf_next に未知のキーがあります: mix_phase, thumbnail",
+        ),
+        ({"steps": []}, "workflow に未知のキーがあります: steps"),
+    ],
+)
+def test_workflow_unknown_keys_are_rejected(tmp_path, monkeypatch, workflow, message):
+    sections = _minimal_sections()
+    sections["workflow.json"] = {"workflow": workflow}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match=message):
+        load_config()
+
+
 @pytest.mark.parametrize("invalid", ["false", "true", 1, 0, None, {}, []])
 def test_workflow_wf_new_skip_plan_selection_must_be_boolean(tmp_path, monkeypatch, invalid):
     """#2416: truthy/falsy coercion で企画選択を誤って省略しない."""
