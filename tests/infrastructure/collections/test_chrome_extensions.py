@@ -37,6 +37,7 @@ def test_resolve_unpacked_extension_origin_rejects_empty_name_with_manual_fallba
 
 
 def test_resolve_unpacked_extension_origin_uses_default_chrome_user_data_root(tmp_path, monkeypatch):
+    monkeypatch.setattr(chrome_extensions.platform, "system", lambda: "Darwin")
     extension_id = "gdjhjiphejeeclngbljhajiffhpdepee"
     default_root = tmp_path / "Library" / "Application Support" / "Google" / "Chrome"
     _write_preferences(
@@ -50,6 +51,43 @@ def test_resolve_unpacked_extension_origin_uses_default_chrome_user_data_root(tm
 
     assert resolved.extension_id == extension_id
     assert resolved.profile == "Default"
+
+
+def test_default_chrome_user_data_dir_windows_uses_localappdata(tmp_path, monkeypatch):
+    monkeypatch.setattr(chrome_extensions.platform, "system", lambda: "Windows")
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+
+    result = chrome_extensions._default_chrome_user_data_dir()
+
+    assert result == tmp_path / "Google" / "Chrome" / "User Data"
+
+
+def test_default_chrome_user_data_dir_windows_falls_back_without_localappdata(tmp_path, monkeypatch):
+    monkeypatch.setattr(chrome_extensions.platform, "system", lambda: "Windows")
+    monkeypatch.delenv("LOCALAPPDATA", raising=False)
+    monkeypatch.setattr(chrome_extensions.Path, "home", lambda: tmp_path)
+
+    result = chrome_extensions._default_chrome_user_data_dir()
+
+    assert result == tmp_path / "AppData" / "Local" / "Google" / "Chrome" / "User Data"
+
+
+def test_default_chrome_user_data_dir_linux_uses_config_dir(tmp_path, monkeypatch):
+    monkeypatch.setattr(chrome_extensions.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(chrome_extensions.Path, "home", lambda: tmp_path)
+
+    result = chrome_extensions._default_chrome_user_data_dir()
+
+    assert result == tmp_path / ".config" / "google-chrome"
+
+
+def test_default_chrome_user_data_dir_macos_uses_application_support(tmp_path, monkeypatch):
+    monkeypatch.setattr(chrome_extensions.platform, "system", lambda: "Darwin")
+    monkeypatch.setattr(chrome_extensions.Path, "home", lambda: tmp_path)
+
+    result = chrome_extensions._default_chrome_user_data_dir()
+
+    assert result == tmp_path / "Library" / "Application Support" / "Google" / "Chrome"
 
 
 def test_resolve_unpacked_extension_origin_matches_secure_preferences(tmp_path):

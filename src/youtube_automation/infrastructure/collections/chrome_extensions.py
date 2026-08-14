@@ -3,14 +3,28 @@
 from __future__ import annotations
 
 import json
+import os
+import platform
 import re
 from dataclasses import dataclass
 from pathlib import Path
 
 from youtube_automation.core.errors import ConfigError
 
-_CHROME_USER_DATA_RELPATH = Path("Library") / "Application Support" / "Google" / "Chrome"
 _EXTENSION_ORIGIN_PREFIX = "chrome-extension://"
+
+
+def _default_chrome_user_data_dir() -> Path:
+    """OS 別の Chrome User Data ディレクトリを返す。"""
+
+    system = platform.system()
+    if system == "Windows":
+        local_app_data = os.environ.get("LOCALAPPDATA")
+        base = Path(local_app_data) if local_app_data else Path.home() / "AppData" / "Local"
+        return base / "Google" / "Chrome" / "User Data"
+    if system == "Darwin":
+        return Path.home() / "Library" / "Application Support" / "Google" / "Chrome"
+    return Path.home() / ".config" / "google-chrome"
 
 
 @dataclass(frozen=True)
@@ -44,7 +58,7 @@ def resolve_unpacked_extension_origin(
     if not extension_name:
         raise ConfigError("Chrome extension name must not be empty. Use --allow-origin for manual fallback.")
 
-    root = chrome_user_data_dir if chrome_user_data_dir is not None else Path.home() / _CHROME_USER_DATA_RELPATH
+    root = chrome_user_data_dir if chrome_user_data_dir is not None else _default_chrome_user_data_dir()
     candidates, near_candidates = _find_unpacked_extension_candidates(extension_name, root)
     if not candidates:
         near_candidate_guidance = (
