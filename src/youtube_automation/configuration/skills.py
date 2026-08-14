@@ -36,6 +36,7 @@ from youtube_automation.core.errors import ConfigError
 _cache: dict[str, dict[str, Any]] = {}
 
 _THUMBNAIL_TEXT_RENDER_MODES = frozenset({"ai_burn_in", "deterministic"})
+_ACKNOWLEDGED_UNKNOWN_KEYS = "acknowledged_unknown_keys"
 
 # #1702: 基底 config から縮小済みのキー。channel override は引き続き deep-merge で
 # 有効（挙動は壊さない）だが、後続リリースでの物理削除に先立ち DeprecationWarning で
@@ -112,10 +113,14 @@ def _find_nested_key_paths(defaults: dict[str, object], target_key: str) -> list
 
 
 def _warn_unknown_top_level_override_keys(
-    skill: str, override: dict[str, object], defaults: dict[str, object], override_path: Path
+    skill: str,
+    override: dict[str, object],
+    defaults: dict[str, object],
+    override_path: Path,
+    acknowledged: set[str],
 ) -> None:
     known_keys = defaults.keys() | _KNOWN_OVERRIDE_ONLY_KEYS.get(skill, frozenset())
-    unknown_keys = sorted(override.keys() - known_keys)
+    unknown_keys = sorted(override.keys() - known_keys - acknowledged)
     if not unknown_keys:
         return
     suggestions = [
@@ -133,6 +138,18 @@ def _warn_unknown_top_level_override_keys(
         UserWarning,
         stacklevel=3,
     )
+
+
+def _split_acknowledged_unknown_keys(
+    override: dict[str, object], override_path: Path
+) -> tuple[dict[str, object], set[str]]:
+    raw = override.get(_ACKNOWLEDGED_UNKNOWN_KEYS, [])
+    if not isinstance(raw, list) or any(not isinstance(key, str) or not key for key in raw):
+        raise ConfigError(
+            f"skill-config {override_path} の acknowledged_unknown_keys は空でない string の array で指定してください"
+        )
+    cleaned = {key: value for key, value in override.items() if key != _ACKNOWLEDGED_UNKNOWN_KEYS}
+    return cleaned, set(raw)
 
 
 def _default_path(skill: str) -> Path:
@@ -303,9 +320,9 @@ def load_skill_config(
 
     override_path = _resolve_channel_override(skill, channel_dir)
     if override_path is not None:
-        override = _load_override(override_path)
+        override, acknowledged = _split_acknowledged_unknown_keys(_load_override(override_path), override_path)
         _warn_deprecated_override_keys(skill, override, override_path)
-        _warn_unknown_top_level_override_keys(skill, override, defaults, override_path)
+        _warn_unknown_top_level_override_keys(skill, override, defaults, override_path, acknowledged)
         merged = _deep_merge(defaults, override)
     else:
         merged = defaults
@@ -326,7 +343,8 @@ def load_channel_override(skill: str) -> dict[str, Any]:
     path = _resolve_channel_override(skill)
     if path is None:
         return {}
-    return _load_override(path)
+    override, _ = _split_acknowledged_unknown_keys(_load_override(path), path)
+    return override
 
 
 THUMBNAIL_MODE_PARALLEL = "parallel"

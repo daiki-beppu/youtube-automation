@@ -93,6 +93,46 @@ def test_unknown_top_level_override_key_warns_but_still_merges(tmp_path, monkeyp
     assert "利用側に参照されない可能性があります" not in message
 
 
+def test_acknowledged_unknown_keys_suppress_only_named_warning(tmp_path, monkeypatch):
+    channel_dir = tmp_path / "ch"
+    override_dir = channel_dir / "config" / "skills"
+    override_dir.mkdir(parents=True)
+    (override_dir / "suno.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "acknowledged_unknown_keys": ["tracks_per_pattern"],
+                "tracks_per_pattern": 1,
+                "duration_policy": "legacy",
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
+
+    with pytest.warns(UserWarning, match=r"suno\.yaml.*duration_policy") as caught:
+        cfg = skill_config.load_skill_config("suno", use_cache=False)
+
+    assert "tracks_per_pattern" not in str(caught[0].message)
+    assert cfg["tracks_per_pattern"] == 1
+    assert "acknowledged_unknown_keys" not in cfg
+    assert "acknowledged_unknown_keys" not in skill_config.load_channel_override("suno")
+
+
+@pytest.mark.parametrize("value", ["tracks_per_pattern", [""], [1], {"tracks_per_pattern": True}])
+def test_acknowledged_unknown_keys_must_be_non_empty_string_list(tmp_path, monkeypatch, value):
+    channel_dir = tmp_path / "ch"
+    override_dir = channel_dir / "config" / "skills"
+    override_dir.mkdir(parents=True)
+    (override_dir / "suno.yaml").write_text(
+        yaml.safe_dump({"acknowledged_unknown_keys": value, "tracks_per_pattern": 1}),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
+
+    with pytest.raises(ConfigError, match="acknowledged_unknown_keys は空でない string の array"):
+        skill_config.load_skill_config("suno", use_cache=False)
+
+
 @pytest.mark.parametrize(
     ("skill", "override"),
     [
