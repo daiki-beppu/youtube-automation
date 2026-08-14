@@ -128,7 +128,8 @@ def _warn_unknown_top_level_override_keys(
         f"skill-config {override_path} の未知のトップレベルキーを検出しました: "
         f"{', '.join(unknown_keys)}。キー名または階層を確認してください。"
         f"{suggestion_message}"
-        "値は互換性のためマージされますが、利用側に参照されない可能性があります。",
+        "値は互換性のためマージされますが、コードからは参照されない可能性があります。"
+        "SKILL.md 経由で AI が読む設計であれば意図どおりです。",
         UserWarning,
         stacklevel=3,
     )

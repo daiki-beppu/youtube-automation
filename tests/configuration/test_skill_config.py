@@ -83,10 +83,14 @@ def test_unknown_top_level_override_key_warns_but_still_merges(tmp_path, monkeyp
     )
     monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
 
-    with pytest.warns(UserWarning, match=r"thumbnail\.yaml.*auto_select"):
+    with pytest.warns(UserWarning, match=r"thumbnail\.yaml.*auto_select") as caught:
         cfg = skill_config.load_skill_config("thumbnail", use_cache=False)
 
     assert cfg["auto_select"] == {"enabled": True}
+    message = str(caught[0].message)
+    assert "コードからは参照されない可能性があります" in message
+    assert "SKILL.md 経由で AI が読む設計であれば意図どおりです" in message
+    assert "利用側に参照されない可能性があります" not in message
 
 
 @pytest.mark.parametrize(
