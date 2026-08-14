@@ -58,6 +58,14 @@ _DEPRECATED_OVERRIDE_KEYS: dict[str, tuple[tuple[str, ...], ...]] = {
     ),
 }
 
+# config.default.yaml との merge ではなく、load_channel_override() や skill 同梱
+# script から直接参照する正規のトップレベルキー。defaults に値を置くと「明示設定の
+# 有無」を区別できなくなるため、未知キー検査だけで skill ごとに宣言する。
+_KNOWN_OVERRIDE_ONLY_KEYS: dict[str, frozenset[str]] = {
+    "suno": frozenset({"tracklist_strategy", "vocal_gender"}),
+    "videoup": frozenset({"effect", "shrink"}),
+}
+
 
 def _collect_deprecated_override_keys(skill: str, override: dict[str, object]) -> list[str]:
     """override に含まれる deprecated キーを dotted path のリストで返す。"""
@@ -104,9 +112,10 @@ def _find_nested_key_paths(defaults: dict[str, object], target_key: str) -> list
 
 
 def _warn_unknown_top_level_override_keys(
-    override: dict[str, object], defaults: dict[str, object], override_path: Path
+    skill: str, override: dict[str, object], defaults: dict[str, object], override_path: Path
 ) -> None:
-    unknown_keys = sorted(override.keys() - defaults.keys())
+    known_keys = defaults.keys() | _KNOWN_OVERRIDE_ONLY_KEYS.get(skill, frozenset())
+    unknown_keys = sorted(override.keys() - known_keys)
     if not unknown_keys:
         return
     suggestions = [
@@ -295,7 +304,7 @@ def load_skill_config(
     if override_path is not None:
         override = _load_override(override_path)
         _warn_deprecated_override_keys(skill, override, override_path)
-        _warn_unknown_top_level_override_keys(override, defaults, override_path)
+        _warn_unknown_top_level_override_keys(skill, override, defaults, override_path)
         merged = _deep_merge(defaults, override)
     else:
         merged = defaults

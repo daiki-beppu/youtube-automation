@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `fix(config)`: skill-config の未知キー検査で、`suno` と `videoup` が override や同梱 script から直接参照する正規のトップレベルキーを誤検知しないようにする（#3795）。
+
 - `fix(analytics)`: 動画別収益クエリへ必須の `maxResults=200` を付与して HTTP 400 を解消する（#3771）。
 
 - `feat(wf-new)`: Phase 2c の thumbnail と music を exactly-two Agent で同時 dispatch する（#4096）。
