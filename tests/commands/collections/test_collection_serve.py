@@ -61,6 +61,7 @@ from youtube_automation.domains.suno.downloaded.archive import commit_staged_mus
 from youtube_automation.domains.suno.downloaded.archive import extract_and_rename_music as _extract_and_rename_music
 from youtube_automation.domains.suno.downloaded.models import DownloadedArtifactError, DownloadedPayload
 from youtube_automation.domains.suno.prompts import read_suno_prompt_entries
+from youtube_automation.infrastructure.collections import chrome_extensions as chrome_extensions_module
 from youtube_automation.infrastructure.collections.chrome_extensions import (
     ChromeExtensionOrigin,
     resolve_unpacked_extension_origin,
@@ -1544,7 +1545,8 @@ def test_main_resolves_allow_extension_from_chrome_preferences(monkeypatch, caps
         recorded.append(allow_origin)
         return fake_server
 
-    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setattr(chrome_extensions_module.platform, "system", lambda: "Darwin")
+    monkeypatch.setattr(chrome_extensions_module.Path, "home", lambda: home)
     monkeypatch.setattr(collection_serve_module, "create_server", fake_create_server)
     monkeypatch.setattr(sys, "argv", ["yt-collection-serve", str(planning), "--allow-extension", "suno-helper"])
 
@@ -1566,7 +1568,8 @@ def test_main_allow_extension_parse_failure_guides_manual_origin(monkeypatch, tm
     planning = tmp_path / "planning"
     _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
 
-    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setattr(chrome_extensions_module.platform, "system", lambda: "Darwin")
+    monkeypatch.setattr(chrome_extensions_module.Path, "home", lambda: home)
     monkeypatch.setattr(sys, "argv", ["yt-collection-serve", str(planning), "--allow-extension", "suno-helper"])
 
     with pytest.raises(ConfigError) as exc_info:

@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `fix(collection-serve)`: Chrome 拡張の自動検出パスとプロセス生存確認を OS ごとに切り替え、Windows で `yt-collection-serve --allow-extension` がクラッシュする問題を修正する（#4106）。
+
 - `feat(setup)`: `yt-oauth --refresh-only` で既存 refresh token を非対話更新し、ブラウザ認証や YouTube API 接続テストなしで token を延命できるようにする（#3936）。
 
 - `fix(thumbnail)`: Codex provider が prompt へ決定的に注入する `composition_rules` は deprecated 扱いせず、他の移行対象には Codex 固有の移行先を案内する（#3913）。

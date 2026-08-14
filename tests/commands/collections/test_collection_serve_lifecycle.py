@@ -201,6 +201,25 @@ def test_pid_record_is_published_atomically_before_parallel_claim_can_observe_it
     assert observed == [record]
 
 
+def test_pid_is_running_dispatches_to_windows_implementation_on_win32(monkeypatch):
+    monkeypatch.setattr(collection_serve.sys, "platform", "win32")
+    calls: list[int] = []
+    monkeypatch.setattr(collection_serve, "_pid_is_running_windows", lambda pid: calls.append(pid) or True)
+
+    assert collection_serve._pid_is_running(4242) is True
+    assert calls == [4242]
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows 固有の WinAPI 経路を検証する")
+def test_pid_is_running_windows_reports_true_for_current_process():
+    assert collection_serve._pid_is_running_windows(os.getpid()) is True
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows 固有の WinAPI 経路を検証する")
+def test_pid_is_running_windows_reports_false_for_missing_process():
+    assert collection_serve._pid_is_running_windows(999_999_999) is False
+
+
 def test_process_exit_watcher_uses_pidfd_and_closes_descriptor(monkeypatch):
     closed: list[int] = []
     monkeypatch.setattr(collection_serve.os, "pidfd_open", lambda pid: 123, raising=False)

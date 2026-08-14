@@ -147,6 +147,8 @@ os.environ.setdefault(_OP_READ_DISABLED_ENV, "1")
 
 def _pid_is_running(pid: int) -> bool:
     """Return whether a process exists without sending it a signal."""
+    if sys.platform == "win32":
+        return _pid_is_running_windows(pid)
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
@@ -154,6 +156,25 @@ def _pid_is_running(pid: int) -> bool:
     except PermissionError:
         return True
     return True
+
+
+def _pid_is_running_windows(pid: int) -> bool:
+    """Windows は signal 0 での kill() 生存確認に対応しないため WinAPI で判定する。"""
+    import ctypes
+
+    PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+    STILL_ACTIVE = 259
+    kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+    handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+    if not handle:
+        return False
+    try:
+        exit_code = ctypes.c_ulong()
+        if not kernel32.GetExitCodeProcess(handle, ctypes.byref(exit_code)):
+            return False
+        return exit_code.value == STILL_ACTIVE
+    finally:
+        kernel32.CloseHandle(handle)
 
 
 def _cleanup_stale_isolated_channel_dirs() -> None:
