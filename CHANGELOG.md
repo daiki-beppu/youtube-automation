@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `fix(thumbnail)`: auto-selection の既定 aspect tolerance を Gemini の 1K / 2K 出力における 64px 丸めを吸収する 0.06 へ広げる（#3867）。
+
 - `feat(config)`: skill-config の `acknowledged_unknown_keys` に調査済みキーを明示すると、そのキーだけ未知トップレベル警告から除外できるようにする（#3814）。
 
 - `fix(config)`: skill-config の未知キー警告で、コード参照が不確実でも SKILL.md 経由で AI が読む設計は有効になり得ることを区別する（#3813）。

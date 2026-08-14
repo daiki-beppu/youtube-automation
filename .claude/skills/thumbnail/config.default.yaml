@@ -73,8 +73,8 @@ image_generation:
     # 候補が満たすべき最小解像度 (YouTube 推奨 1280x720)
     min_width: 1280
     min_height: 720
-    # 16:9 判定の許容誤差 (|width/height - 16/9| がこの値以下なら適格)
-    aspect_tolerance: 0.01
+    # 16:9 判定の許容誤差。Gemini の 64px 丸め（2K: 2752x1536、1K: 1408x768）を吸収する。
+    aspect_tolerance: 0.06
     # 参照画像ごとの centroid 距離上限。超過時は selection_only では警告、
     # full では生成 API 呼び出し前および自動選択前に停止する。
     max_reference_distance: 0.40
