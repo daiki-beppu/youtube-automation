@@ -14,10 +14,6 @@
 
 {{redacted_error_excerpt_or_none}}
 
-## 発生チャンネル
-
-{{user_approved_channel_name_or_omission}}
-
 ---
 
 下流チャンネルリポジトリの `/skill-feedback` から還流。
