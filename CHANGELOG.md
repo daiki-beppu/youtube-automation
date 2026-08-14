@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `fix(thumbnail)`: Codex provider が prompt へ決定的に注入する `composition_rules` は deprecated 扱いせず、他の移行対象には Codex 固有の移行先を案内する（#3913）。
+
 - `fix(thumbnail)`: auto-selection の既定 aspect tolerance を Gemini の 1K / 2K 出力における 64px 丸めを吸収する 0.06 へ広げる（#3867）。
 
 - `feat(config)`: skill-config の `acknowledged_unknown_keys` に調査済みキーを明示すると、そのキーだけ未知トップレベル警告から除外できるようにする（#3814）。

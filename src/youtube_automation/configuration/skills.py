@@ -68,7 +68,9 @@ _KNOWN_OVERRIDE_ONLY_KEYS: dict[str, frozenset[str]] = {
 }
 
 
-def _collect_deprecated_override_keys(skill: str, override: dict[str, object]) -> list[str]:
+def _collect_deprecated_override_keys(
+    skill: str, override: dict[str, object], *, codex_provider: bool = False
+) -> list[str]:
     """override に含まれる deprecated キーを dotted path のリストで返す。"""
     found: list[str] = []
     for key_path in _DEPRECATED_OVERRIDE_KEYS.get(skill, ()):
@@ -78,20 +80,33 @@ def _collect_deprecated_override_keys(skill: str, override: dict[str, object]) -
                 break
             node = node[key]
         else:
-            found.append(".".join(key_path))
+            dotted_path = ".".join(key_path)
+            if not (codex_provider and dotted_path.startswith("image_generation.gemini.composition_rules.")):
+                found.append(dotted_path)
     return found
 
 
-def _warn_deprecated_override_keys(skill: str, override: dict[str, object], override_path: Path) -> None:
-    deprecated_keys = _collect_deprecated_override_keys(skill, override)
+def _warn_deprecated_override_keys(
+    skill: str,
+    override: dict[str, object],
+    override_path: Path,
+    merged: dict[str, object],
+) -> None:
+    image_generation = merged.get("image_generation")
+    codex_provider = isinstance(image_generation, dict) and image_generation.get("provider") == "codex"
+    deprecated_keys = _collect_deprecated_override_keys(skill, override, codex_provider=codex_provider)
     if not deprecated_keys:
         return
+    migration_target = (
+        "image_generation.codex.default_prompt_template または single_step の opt-in clause"
+        if codex_provider
+        else "diff_prompt_template / thumbnail_text.text_overlay_prompt の本文"
+    )
     warnings.warn(
         f"skill-config {override_path} の deprecated キーを検出しました: "
         f"{', '.join(deprecated_keys)}。これらは基底 config から縮小済みで、"
         "後続リリースで削除予定です（現時点では従来どおり deep-merge されます）。"
-        "意図は diff_prompt_template / thumbnail_text.text_overlay_prompt の本文へ"
-        "移行してください (#1702)。",
+        f"意図は {migration_target} へ移行してください (#1702)。",
         DeprecationWarning,
         stacklevel=3,
     )
@@ -321,9 +336,9 @@ def load_skill_config(
     override_path = _resolve_channel_override(skill, channel_dir)
     if override_path is not None:
         override, acknowledged = _split_acknowledged_unknown_keys(_load_override(override_path), override_path)
-        _warn_deprecated_override_keys(skill, override, override_path)
-        _warn_unknown_top_level_override_keys(skill, override, defaults, override_path, acknowledged)
         merged = _deep_merge(defaults, override)
+        _warn_deprecated_override_keys(skill, override, override_path, merged)
+        _warn_unknown_top_level_override_keys(skill, override, defaults, override_path, acknowledged)
     else:
         merged = defaults
 

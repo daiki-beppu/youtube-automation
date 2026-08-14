@@ -226,6 +226,36 @@ def test_thumbnail_deprecated_override_keys_warn_but_still_merge(tmp_path, monke
     assert gemini["thumbnail_text"]["copy_position"] == "left of character"
 
 
+def test_thumbnail_codex_composition_rules_are_not_deprecated(tmp_path, monkeypatch):
+    channel_dir = tmp_path / "ch"
+    override_dir = channel_dir / "config" / "skills"
+    override_dir.mkdir(parents=True)
+    (override_dir / "thumbnail.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "image_generation": {
+                    "provider": "codex",
+                    "gemini": {
+                        "composition_rules": {
+                            "environment": "bright studio",
+                            "background": "light gray",
+                        }
+                    },
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        cfg = skill_config.load_skill_config("thumbnail", use_cache=False)
+
+    assert not [warning for warning in caught if issubclass(warning.category, DeprecationWarning)]
+    assert cfg["image_generation"]["gemini"]["composition_rules"]["background"] == "light gray"
+
+
 def test_thumbnail_override_without_deprecated_keys_does_not_warn(tmp_path, monkeypatch):
     """#1702: 縮小後の実効キーだけの override では DeprecationWarning を出さない。"""
     channel_dir = tmp_path / "ch"
