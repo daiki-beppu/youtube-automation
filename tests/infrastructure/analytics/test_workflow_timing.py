@@ -135,6 +135,20 @@ def test_build_workflow_timing_returns_canonical_step_and_total_metrics(tmp_path
     assert latest["totals"]["work_seconds"] == 20.0
 
 
+def test_build_workflow_timing_ignores_invalid_phase_in_unselected_live_collection(tmp_path: Path) -> None:
+    _write_collection(tmp_path, "live", "older", phase="live", created_at="2026-07-01")
+    _write_collection(tmp_path, "live", "latest", phase="complete", created_at="2026-08-01")
+    _write_history(
+        tmp_path,
+        [_attempt("collections/live/latest", "post-publish", "success", 15, 5)],
+    )
+
+    result = build_workflow_timing(tmp_path, {"post-publish": 2.0})
+
+    assert result["status"] == "ready"
+    assert [item["collection_id"] for item in result["collections"]] == ["latest"]
+
+
 @pytest.mark.parametrize(
     ("history", "baseline", "reason"),
     [

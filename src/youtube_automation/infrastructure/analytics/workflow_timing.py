@@ -27,8 +27,6 @@ class _TimingRunner(Protocol):
 
     def select_collection(self, root: Path, requested: str | None = None) -> Path: ...
 
-    def _collection_sort_key(self, collection: Path) -> tuple[str, str]: ...
-
     def summarize_time_savings(
         self,
         history: dict[str, object],
@@ -76,11 +74,22 @@ def _selected_collections(channel: Path, runner: _TimingRunner) -> list[tuple[st
 
     live_states = list((channel / "collections" / "live").glob("*/workflow-state.json"))
     if live_states:
-        latest_path = max((state.parent for state in live_states), key=runner._collection_sort_key)
+        latest_path = max((state.parent for state in live_states), key=_collection_sort_key)
         latest = runner.select_collection(channel, str(latest_path.resolve()))
         if active is None or latest != active:
             selected.append(("live", latest))
     return selected
+
+
+def _collection_sort_key(collection: Path) -> tuple[str, str]:
+    """完全検証せず created_at だけを読んで latest live を選ぶ。"""
+    state_path = collection / "workflow-state.json"
+    try:
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        state = None
+    created_at = state.get("created_at") if isinstance(state, dict) else None
+    return (created_at if isinstance(created_at, str) else "9999", collection.name)
 
 
 def _collection_history(history: dict[str, object], channel: Path, collection: Path) -> dict[str, object]:

@@ -397,7 +397,7 @@ def test_server_exposes_saved_publication_read_model(dashboard_server: str) -> N
     ("timing_state", "expected_status", "expected_code"),
     [
         ("unavailable", "unavailable", None),
-        ("error", "error", "workflow_timing_invalid"),
+        ("error", "error", "workflow_timing_failed"),
     ],
 )
 def test_server_keeps_analytics_payload_when_workflow_timing_is_unavailable_or_error(
@@ -458,6 +458,30 @@ def test_server_isolates_corrupt_history_from_healthy_channel(tmp_path: Path) ->
         assert healthy_overview["summary"]["views"] == 123
         assert healthy_detail["videos"][0]["title"] == "Midnight"
         assert healthy_detail["workflow_timing"]["status"] == "ready"
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+        server.server_close()
+
+
+def test_server_exposes_workflow_timing_failure_reason(tmp_path: Path) -> None:
+    channel = _write_channel(tmp_path)
+    state_path = channel / "collections" / "live" / "latest" / "workflow-state.json"
+    state_path.write_text(json.dumps({"phase": "live", "created_at": "2026-07-20"}), encoding="utf-8")
+
+    server = create_server(port=0, channel_paths=[channel])
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base_url = f"http://127.0.0.1:{server.server_port}"
+    try:
+        _, overview = _json(f"{base_url}/api/channels")
+        _, detail = _json(f"{base_url}/api/channels/{overview['channels'][0]['id']}")
+
+        assert detail["workflow_timing"] == {
+            "status": "error",
+            "collections": [],
+            "error": {"code": "workflow_timing_failed", "message": "未対応 phase です: 'live'"},
+        }
     finally:
         server.shutdown()
         thread.join(timeout=5)
