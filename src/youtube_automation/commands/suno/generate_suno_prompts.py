@@ -7,87 +7,25 @@ import math
 import re
 import sys
 from collections import Counter
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import cast
-
-import yaml
 
 from youtube_automation.configuration.skills import load_channel_override, load_skill_config
 from youtube_automation.core.errors import ConfigError
-from youtube_automation.domains.suno.config import infer_suno_mode, resolve_suno_config
+from youtube_automation.domains.suno import prompt_resolution
 from youtube_automation.domains.suno.downloaded.models import (
     DOCUMENTATION_DIRNAME,
-    SUNO_LYRICS_JSON_FILENAME,
     SUNO_PATTERNS_FILENAME,
     SUNO_PROMPTS_JSON_FILENAME,
     SUNO_PROMPTS_MD_FILENAME,
 )
 from youtube_automation.domains.suno.downloaded.validation import (
-    positive_integer_issue,
-    require_instrumental_track_count,
-    require_matching_suno_lyrics_names,
-    require_unique_entry_names,
-    require_vocal_track_count,
     suno_prompt_entry_names,
     surrounding_whitespace_issue,
 )
 from youtube_automation.domains.suno.lyrics import load_suno_lyrics_by_name
 from youtube_automation.infrastructure.filesystem import write_text_files_transactionally
-from youtube_automation.infrastructure.media.collection_paths import CollectionPaths
-
-_STYLE_VARIATION_BANNED_ADJECTIVES = frozenset(
-    {
-        "thundering",
-        "blazing",
-        "crushing",
-        "soaring",
-        "screaming",
-        "devastating",
-        "explosive",
-        "ferocious",
-        "towering",
-        "surging",
-        "crystalline",
-        "shimmering",
-        "lush",
-        "sweeping",
-        "majestic",
-        "glorious",
-        "echoing",
-    }
-)
-_STYLE_VARIATION_ENVIRONMENT_NG_WORDS = frozenset(
-    {
-        "ambient noise",
-        "dripping",
-        "drops",
-        "puddles",
-        "pouring",
-        "rain",
-        "rain sounds",
-        "splashing",
-        "streaming water",
-        "trickling",
-        "vinyl crackle",
-        "white noise",
-    }
-)
-_STYLE_VARIATION_BARE_INSTRUMENTS = frozenset(
-    {
-        "bass",
-        "cello",
-        "drums",
-        "flute",
-        "guitar",
-        "organ",
-        "piano",
-        "strings",
-        "synth",
-        "trumpet",
-    }
-)
 
 # ---------------------------------------------------------------------------
 # Quality rules (#904): suno-bgm ベースの品質ガード
@@ -96,10 +34,11 @@ _STYLE_VARIATION_BARE_INSTRUMENTS = frozenset(
 # Style text の 5 要素順序: ジャンル名 → 音響特性 → キー楽器 → リズム/ベース → テンポ
 # 厳密な順序検証は不可能（自然言語のため）だが、テンポ語が先頭付近にある場合は警告する
 _TEMPO_WORDS = frozenset({"very slow", "slow", "gentle", "moderate", "lively", "fast", "uptempo", "downtempo"})
-_DEFAULT_FULL_STYLE_CHAR_LIMIT = 256
 
 
-def validate_style_char_limit(style_text: str, *, limit: int = _DEFAULT_FULL_STYLE_CHAR_LIMIT) -> list[str]:
+def validate_style_char_limit(
+    style_text: str, *, limit: int = prompt_resolution.DEFAULT_FULL_STYLE_CHAR_LIMIT
+) -> list[str]:
     """Style テキストが文字数上限を超えていないか検証する.
 
     Returns: 警告メッセージのリスト (空なら問題なし)。
@@ -108,22 +47,6 @@ def validate_style_char_limit(style_text: str, *, limit: int = _DEFAULT_FULL_STY
     if len(style_text) > limit:
         warnings_list.append(f"Style text exceeds {limit} char limit ({len(style_text)} chars): {style_text[:80]}...")
     return warnings_list
-
-
-def _resolve_full_style_char_limit(suno: Mapping[str, object], override: Mapping[str, object]) -> int:
-    """完成形 Style の soft budget を後方互換の優先順位で解決する."""
-    if "full_style_char_limit" in override:
-        value = override["full_style_char_limit"]
-        source = "full_style_char_limit"
-    elif "style_char_limit" in override:
-        value = override["style_char_limit"]
-        source = "style_char_limit"
-    else:
-        value = suno.get("full_style_char_limit", _DEFAULT_FULL_STYLE_CHAR_LIMIT)
-        source = "full_style_char_limit"
-    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
-        raise ConfigError(f"config/skills/suno.yaml::{source} must be a positive integer")
-    return value
 
 
 def validate_banned_artists(style_text: str, banned_artists: list[str]) -> list[str]:
@@ -225,95 +148,10 @@ def _style_line(tempo: str | None, effective_style: str, variation_descriptor: s
     return ", ".join(parts) + ","
 
 
-def _build_variation_sequence(pools: Mapping[str, list[str]]) -> list[str]:
-    # Sort axes so channel config key order cannot change generated prompts.
-    axes = [pools[name] for name in sorted(pools) if pools[name]]
-    if not axes:
-        return []
-    sequence: list[str] = []
-    for i in range(max(len(axis) for axis in axes)):
-        for axis in axes:
-            if i < len(axis):
-                sequence.append(axis[i])
-    return sequence
-
-
-def _variation_descriptor(entry_index: int, sequence: list[str]) -> str:
+def _variation_descriptor(entry_index: int, sequence: Sequence[str]) -> str:
     if entry_index == 0 or not sequence:
         return ""
     return sequence[(entry_index - 1) % len(sequence)]
-
-
-@dataclass(frozen=True)
-class _ResolvedStyleVariation:
-    enabled: bool
-    sequence: list[str]
-
-
-def _contains_token_or_phrase(text: str, phrase: str) -> bool:
-    if " " in phrase:
-        return phrase in text
-    return re.search(rf"\b{re.escape(phrase)}\b", text) is not None
-
-
-def _validate_style_variation_descriptor(axis: str, descriptor: str, banned_artists: list[str]) -> None:
-    normalized = " ".join(descriptor.lower().split())
-    if normalized in _STYLE_VARIATION_BARE_INSTRUMENTS:
-        raise ConfigError(f"suno.style_variation.pools.{axis} の descriptor は裸楽器名を使用できません: {descriptor!r}")
-    for word in sorted(_STYLE_VARIATION_BANNED_ADJECTIVES):
-        if _contains_token_or_phrase(normalized, word):
-            raise ConfigError(
-                f"suno.style_variation.pools.{axis} の descriptor に禁止形容詞を含めることはできません: {descriptor!r}"
-            )
-    for word in sorted(_STYLE_VARIATION_ENVIRONMENT_NG_WORDS):
-        if _contains_token_or_phrase(normalized, word):
-            raise ConfigError(
-                f"suno.style_variation.pools.{axis} の descriptor に"
-                f"雨音・環境音 NG ワードを含めることはできません: {descriptor!r}"
-            )
-    for artist in banned_artists:
-        if isinstance(artist, str) and artist.strip() and artist.lower() in normalized:
-            raise ConfigError(
-                f"suno.style_variation.pools.{axis} の descriptor に"
-                f"アーティスト名を含めることはできません: {descriptor!r}"
-            )
-
-
-def _resolve_style_variation(raw: object, *, banned_artists: list[str] | None = None) -> _ResolvedStyleVariation:
-    if raw is None:
-        raise ConfigError("suno.style_variation は mapping である必要があります: None")
-    if not isinstance(raw, Mapping):
-        raise ConfigError(f"suno.style_variation は mapping である必要があります: {raw!r}")
-
-    enabled = raw.get("enabled", False)
-    if not isinstance(enabled, bool):
-        raise ConfigError(f"suno.style_variation.enabled は bool である必要があります: {enabled!r}")
-
-    pools_raw = raw.get("pools", {})
-    if pools_raw is None:
-        raise ConfigError("suno.style_variation.pools は mapping である必要があります: None")
-    if not isinstance(pools_raw, Mapping):
-        raise ConfigError(f"suno.style_variation.pools は mapping である必要があります: {pools_raw!r}")
-
-    pools: dict[str, list[str]] = {}
-    for axis, descriptors_raw in pools_raw.items():
-        if not isinstance(axis, str) or not axis.strip():
-            raise ConfigError(f"suno.style_variation.pools の axis 名は非空文字列である必要があります: {axis!r}")
-        if not isinstance(descriptors_raw, list):
-            raise ConfigError(
-                f"suno.style_variation.pools.{axis} は list[str] である必要があります: {descriptors_raw!r}"
-            )
-        descriptors: list[str] = []
-        for descriptor in descriptors_raw:
-            if not isinstance(descriptor, str) or not descriptor.strip():
-                raise ConfigError(
-                    f"suno.style_variation.pools.{axis} の descriptor は非空文字列である必要があります: {descriptor!r}"
-                )
-            _validate_style_variation_descriptor(axis, descriptor, banned_artists or [])
-            descriptors.append(descriptor)
-        pools[axis] = descriptors
-
-    return _ResolvedStyleVariation(enabled=enabled, sequence=_build_variation_sequence(pools) if enabled else [])
 
 
 @dataclass
@@ -323,30 +161,8 @@ class _ResolvedPattern:
     style_label: str
     entry_names: list[str]
     style_lines: list[str]  # scenes と同じ長さ。entry ごとの Styles 第 1 行 (#1456)
-    scenes: list[str]
+    scenes: Sequence[str]
     lyrics_by_scene: list[str]  # scenes と同じ長さ。各値は rstrip 済み。歌詞が無ければ ""
-
-
-# suno-prompts.json へ wire する More Options の key 一覧 (#900, vocal_gender / duration_sec 追加)。
-# JSON への反映は **channel override (config/skills/suno.yaml) に明示設定されたキーのみ**。
-# config.default.yaml 同梱の既定値 (style_influence: 50 等) は JSON には載せない
-# (= 「何も足さない既存 collection は name/style/lyrics の 3 キーちょうど」の後方互換を守るため)。
-# MD 出力は従来どおり merged 値 (既定込み) を表示する。
-# vocal_gender は suno-helper 拡張が Suno UI Voice section の Male / Female ボタン押下に使う
-# (拡張型契約: "male" | "female" | "neutral" | "auto")。空文字は「未指定」として JSON 出力から省く
-# (_build_advanced_json_fields の skip ロジック参照)。
-_DURATION_SEC_KEY = "duration_sec"
-_ADVANCED_JSON_KEYS = ("style_influence", "weirdness", "exclude_styles", "vocal_gender", _DURATION_SEC_KEY)
-_VOCAL_GENDERS = frozenset({"male", "female", "neutral", "auto"})
-
-
-def _validate_duration_sec_override(override: Mapping[str, object]) -> None:
-    """明示された duration_sec が正の整数であることを検証する。"""
-    if _DURATION_SEC_KEY not in override:
-        return
-    value = override[_DURATION_SEC_KEY]
-    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
-        raise ConfigError("config/skills/suno.yaml::duration_sec must be a positive integer")
 
 
 def _duration_filter_from_config(suno: dict) -> dict:
@@ -371,27 +187,8 @@ def _duration_filter_from_config(suno: dict) -> dict:
     return {"min_sec": min_sec, "max_sec": max_sec}
 
 
-def _build_advanced_json_fields(override: dict) -> dict:
-    """channel override から JSON 反映用 advanced フィールド dict を構築する (#900)。
-
-    - override に明示されたキーのみ含める (default.yaml の既定値は無視、#900 の A 案)
-    - vocal_gender は "" を「未指定」として skip する (拡張型契約と一貫させる)
-    - style_influence / weirdness の 0 は明示設定なら値そのまま wire
-    - exclude_styles の空文字は未指定として skip する
-    """
-    out: dict = {}
-    for key in _ADVANCED_JSON_KEYS:
-        if key not in override:
-            continue
-        value = override[key]
-        if key in {"exclude_styles", "vocal_gender"} and value == "":
-            continue
-        out[key] = value
-    return out
-
-
 @dataclass
-class _ResolvedPrompts:
+class _GeneratedPrompts:
     title: str
     is_vocal: bool
     style_influence: int
@@ -400,7 +197,7 @@ class _ResolvedPrompts:
     full_style_char_limit: int
     # channel override に明示設定された More Options フィールドのみを保持する (#900)。
     # collection スコープ: 全 entry に同じ値が載る。未設定キーは dict に含めない。
-    advanced_json_fields: dict
+    advanced_json_fields: Mapping[str, object]
     patterns: list[_ResolvedPattern]
 
 
@@ -414,15 +211,6 @@ def _entry_names_from_resolved(resolved: list[_ResolvedPattern]) -> list[str]:
     for p in resolved:
         names.extend(p.entry_names)
     return names
-
-
-def _load_external_lyrics(lyrics_path: Path) -> dict[str, str]:
-    """`suno-lyrics.json` から entry name -> lyrics を読み込む.
-
-    `/suno-lyric` は lyrics 専任で、`/suno` がここで Style と結合する。
-    vocal mode のファイル必須チェックは呼び出し元で行う。
-    """
-    return load_suno_lyrics_by_name(lyrics_path)
 
 
 def _require_pattern_name_without_padding(
@@ -440,199 +228,17 @@ def _require_pattern_name_without_padding(
         raise ConfigError(f"{patterns_path}: {issue}")
 
 
-def _vocal_workflow_state_path(patterns_path: Path) -> Path | None:
-    """Return the workflow-state path for a standard collection artifact.
-
-    The CLI also accepts a standalone patterns file, which has no collection
-    workflow state to validate.  A file in the standard
-    ``20-documentation/suno-patterns.yaml`` location must have one.
-    """
-    if patterns_path.name != SUNO_PATTERNS_FILENAME or patterns_path.parent.name != DOCUMENTATION_DIRNAME:
-        return None
-    return CollectionPaths(patterns_path.parent.parent).workflow_state_path
-
-
-def _read_vocal_workflow_track_count(workflow_state_path: Path) -> int:
-    if not workflow_state_path.is_file():
-        raise ConfigError(f"workflow-state.json is required for vocal mode: {workflow_state_path}")
-    try:
-        data = json.loads(workflow_state_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise ConfigError(f"workflow-state.json を読み取れませんでした: {workflow_state_path}") from exc
-    if not isinstance(data, Mapping):
-        raise ConfigError(f"workflow-state.json のトップレベルは object である必要があります: {workflow_state_path}")
-
-    track_count = data.get("track_count")
-    issue = positive_integer_issue(track_count, "workflow-state.json::track_count")
-    if issue is not None:
-        raise ConfigError(f"{issue}: {workflow_state_path}")
-    return cast(int, track_count)
-
-
-def _read_vocal_patterns_track_count(data: Mapping[str, object], patterns_path: Path) -> int:
-    track_count = data.get("tracks")
-    issue = positive_integer_issue(track_count, "suno-patterns.yaml::tracks")
-    if issue is not None:
-        raise ConfigError(f"{issue}: {patterns_path}")
-    return cast(int, track_count)
-
-
-def _resolve_genre_line(data: Mapping[str, object], channel_fallback: str, patterns_path: Path) -> str:
-    if "genre_line" not in data:
-        return channel_fallback
-    genre_line = data["genre_line"]
-    if not isinstance(genre_line, str):
-        raise ConfigError(f"{patterns_path}: genre_line must be a string")
-    return genre_line
-
-
-def _resolve_exclude_styles(
-    data: Mapping[str, object],
-    channel_fallback: str,
-    channel_json_fields: dict,
-    patterns_path: Path,
-) -> tuple[str, dict]:
-    if "exclude_styles" not in data:
-        return channel_fallback, channel_json_fields
-    exclude_styles = data["exclude_styles"]
-    if not isinstance(exclude_styles, str):
-        raise ConfigError(f"{patterns_path}: exclude_styles must be a string")
-    return exclude_styles, {**channel_json_fields, "exclude_styles": exclude_styles}
-
-
-def _resolve_vocal_gender(data: Mapping[str, object], channel_json_fields: dict, patterns_path: Path) -> dict:
-    if "vocal_gender" not in data:
-        return channel_json_fields
-    vocal_gender = data["vocal_gender"]
-    if not isinstance(vocal_gender, str) or (vocal_gender and vocal_gender not in _VOCAL_GENDERS):
-        raise ConfigError(f"{patterns_path}: vocal_gender must be empty or one of: male, female, neutral, auto")
-    resolved_fields = channel_json_fields.copy()
-    if vocal_gender:
-        resolved_fields["vocal_gender"] = vocal_gender
-    else:
-        resolved_fields.pop("vocal_gender", None)
-    return resolved_fields
-
-
-def _resolve_style_variants(
-    data: Mapping[str, object], channel_fallback: object, patterns_path: Path
-) -> tuple[Mapping[str, Mapping[str, str]], bool]:
-    if "style_variants" not in data:
-        return cast(Mapping[str, Mapping[str, str]], channel_fallback), True
-    style_variants = data["style_variants"]
-    if not isinstance(style_variants, Mapping):
-        raise ConfigError(f"{patterns_path}: style_variants must be a mapping")
-    for key, variant in style_variants.items():
-        if not isinstance(key, str) or not key:
-            raise ConfigError(f"{patterns_path}: style_variants keys must be non-empty strings")
-        if not isinstance(variant, Mapping):
-            raise ConfigError(f"{patterns_path}: style_variants.{key} must be a mapping")
-        for field_name in ("name", "genre_line"):
-            if not isinstance(variant.get(field_name), str):
-                raise ConfigError(f"{patterns_path}: style_variants.{key}.{field_name} must be a string")
-    return cast(Mapping[str, Mapping[str, str]], style_variants), False
-
-
-def _undefined_style_variant_error(style_key: object, patterns_path: Path, uses_channel_fallback: bool) -> ConfigError:
-    base_message = f"{patterns_path}: pattern.style に未定義の style variant が指定されています: {style_key!r}。"
-    if not uses_channel_fallback:
-        return ConfigError(
-            base_message
-            + "collection-local style_variants にこの key を追加するか、pattern.style の typo を修正してください。"
-        )
-
-    message = (
-        base_message + "patterns root に style_variants がない legacy collection のため、"
-        "channel fallback drift（config/skills/suno.yaml 側で key が変更・削除された可能性）があります。"
-        "channel 共有設定には依存せず、必要な定義を collection-local "
-        "suno-patterns.yaml::style_variants へ移してください。"
-    )
-    existing_outputs = [
-        path.name
-        for path in (
-            patterns_path.parent / SUNO_PROMPTS_MD_FILENAME,
-            patterns_path.parent / SUNO_PROMPTS_JSON_FILENAME,
-        )
-        if path.exists()
-    ]
-    if existing_outputs:
-        collection_path = (
-            patterns_path.parent.parent if patterns_path.parent.name == DOCUMENTATION_DIRNAME else patterns_path.parent
-        )
-        message += (
-            f"既存成果物 ({', '.join(existing_outputs)}) は更新されず stale のままです。"
-            "設定修正後に再生成し、"
-            f"`uv run yt-suno-verify {collection_path}` を実行してください。"
-        )
-    return ConfigError(message)
-
-
-def _resolve_prompts(patterns_path: Path) -> _ResolvedPrompts:
-    """config + patterns.yaml を解決し、md / JSON 双方の共通中間表現を返す."""
-    suno = load_skill_config("suno")
-    # JSON 反映は channel override に明示されたキーのみ gating する (#900、A 案)。merged config では
-    # default.yaml の既定値と区別できないため、override 単体を別途読む。
-    override = load_channel_override("suno")
-    _validate_duration_sec_override(override)
-    full_style_char_limit = _resolve_full_style_char_limit(suno, override)
-    advanced_json_fields = _build_advanced_json_fields(override)
-    resolved_suno = resolve_suno_config(suno)
-
-    with open(patterns_path) as f:
-        data = yaml.safe_load(f)
-
-    genre_line = _resolve_genre_line(data, resolved_suno.genre_line, patterns_path)
-    mood_descriptors = suno.get("mood_descriptors", "")
-    exclude_styles, advanced_json_fields = _resolve_exclude_styles(
-        data,
-        resolved_suno.exclude_styles,
-        advanced_json_fields,
+def _resolve_prompts(patterns_path: Path) -> _GeneratedPrompts:
+    resolution = prompt_resolution.resolve_from_path(
         patterns_path,
+        skill_config_loader=load_skill_config,
+        channel_override_loader=load_channel_override,
+        lyrics_loader=load_suno_lyrics_by_name,
     )
-    advanced_json_fields = _resolve_vocal_gender(data, advanced_json_fields, patterns_path)
-    style_variants, uses_channel_style_variants = _resolve_style_variants(
-        data,
-        suno.get("style_variants", {}),
-        patterns_path,
-    )
-    style_influence = suno.get("style_influence", 50)
-    weirdness = suno.get("weirdness", 50)
-
-    style_variation = _resolve_style_variation(
-        suno.get("style_variation"),
-        banned_artists=suno.get("banned_artists", []),
-    )
-
-    base_parts = [genre_line]
-    if mood_descriptors:
-        base_parts.append(mood_descriptors)
-    base_style = ", ".join(base_parts)
-
-    title = data.get("title", "Suno Prompts")
-    patterns = data.get("patterns", [])
-
-    mode = data.get("mode", infer_suno_mode(genre_line))
-    is_vocal = mode == "vocal"
-    workflow_state_path = _vocal_workflow_state_path(patterns_path) if is_vocal else None
-    workflow_track_count = (
-        _read_vocal_workflow_track_count(workflow_state_path) if workflow_state_path is not None else None
-    )
-    patterns_track_count = (
-        _read_vocal_patterns_track_count(data, patterns_path) if is_vocal and workflow_state_path else None
-    )
-    external_lyrics_path = patterns_path.parent / SUNO_LYRICS_JSON_FILENAME
-    has_external_lyrics = is_vocal and external_lyrics_path.exists()
-    if is_vocal and not has_external_lyrics:
-        raise ConfigError(
-            f"{SUNO_LYRICS_JSON_FILENAME} is required for vocal mode. "
-            f"Run /suno-lyric first and write: {external_lyrics_path}"
-        )
-    external_lyrics = _load_external_lyrics(external_lyrics_path) if is_vocal else {}
-
     resolved: list[_ResolvedPattern] = []
     expected_external_lyrics_names: set[str] = set()
     entry_index = 0
-    for pattern_index, pattern in enumerate(patterns, 1):
+    for pattern_index, pattern in enumerate(resolution.patterns, 1):
         tempo = pattern.get("tempo")
         style_key = pattern.get("style")
         name_jp = pattern["name_jp"]
@@ -640,16 +246,13 @@ def _resolve_prompts(patterns_path: Path) -> _ResolvedPrompts:
         _require_pattern_name_without_padding(patterns_path, pattern_index, "name_jp", name_jp)
         _require_pattern_name_without_padding(patterns_path, pattern_index, "name_en", name_en)
 
-        # Per-pattern style variant override
-        if style_key and style_key not in style_variants:
-            raise _undefined_style_variant_error(style_key, patterns_path, uses_channel_style_variants)
-        has_explicit_variant = bool(style_key)
-        if has_explicit_variant:
-            variant = style_variants[style_key]
+        variant = prompt_resolution.resolve_style_variant(resolution, style_key)
+        has_explicit_variant = variant is not None
+        if variant is not None:
             effective_style = variant["genre_line"]
             style_label = f" [{style_key}: {variant['name']}]"
         else:
-            effective_style = base_style
+            effective_style = resolution.base_style
             style_label = ""
 
         scenes = pattern["scenes"]
@@ -660,15 +263,15 @@ def _resolve_prompts(patterns_path: Path) -> _ResolvedPrompts:
         lyrics_by_scene = []
         style_lines = []
         for entry_name in entry_names:
-            if has_external_lyrics:
+            if resolution.has_external_lyrics:
                 expected_external_lyrics_names.add(entry_name)
-                lyrics_by_scene.append(external_lyrics.get(entry_name, ""))
+                lyrics_by_scene.append(resolution.external_lyrics.get(entry_name, ""))
             else:
                 lyrics_by_scene.append(fallback_lyrics)
 
             descriptor = ""
-            if style_variation.enabled and not has_explicit_variant:
-                descriptor = _variation_descriptor(entry_index, style_variation.sequence)
+            if resolution.style_variation.enabled and not has_explicit_variant:
+                descriptor = _variation_descriptor(entry_index, resolution.style_variation.sequence)
             style_lines.append(_style_line(tempo, effective_style, descriptor))
             # Explicit variants keep their override style but still reserve the YAML entry position.
             entry_index += 1
@@ -685,43 +288,22 @@ def _resolve_prompts(patterns_path: Path) -> _ResolvedPrompts:
             )
         )
 
-    if has_external_lyrics:
-        require_matching_suno_lyrics_names(
-            lyrics_path=external_lyrics_path,
-            expected_names=expected_external_lyrics_names,
-            actual_names=set(external_lyrics),
-        )
+    entry_names = _entry_names_from_resolved(resolved)
+    prompt_resolution.validate_generated_prompts(
+        resolution,
+        entry_names=entry_names,
+        entries_count=sum(len(pattern.scenes) for pattern in resolved),
+        expected_external_lyrics_names=expected_external_lyrics_names,
+    )
 
-    # インストモード: yaml `tracks:` (コレクション上書き) > config `tracks_per_collection` の順で曲数を解決し、
-    # ceil(N/2) と yaml の entry 数 (scene 行数の合計) が一致するか fail-loud で検証する。
-    # ボーカルの標準 collection は workflow-state.json::track_count を SSOT とし、yaml `tracks:` の完全一致と
-    # prompt entry 数の下限を検証する。standalone patterns file は workflow state を持たないため対象外。
-    # tracks_per_collection が未指定の旧インスト運用は silent skip して後方互換を保つ。
-    if not is_vocal:
-        tracks_override = data.get("tracks")
-        tracks_per_collection = tracks_override if tracks_override is not None else suno.get("tracks_per_collection")
-        if tracks_per_collection is not None:
-            entries_count = sum(len(p.scenes) for p in resolved)
-            require_instrumental_track_count(patterns_path, entries_count, tracks_per_collection)
-    elif workflow_track_count is not None and patterns_track_count is not None:
-        require_vocal_track_count(
-            entries_count=len(_entry_names_from_resolved(resolved)),
-            patterns_tracks=patterns_track_count,
-            workflow_track_count=workflow_track_count,
-        )
-
-    # 全曲ユニーク title: Suno UI Song Title 欄に注入される最終 name の重複を fail-loud で弾く。
-    # インスト・ボーカル両モード一律で、後工程の同名 clip 追跡不能を生成時に弾く。
-    require_unique_entry_names(patterns_path, _entry_names_from_resolved(resolved))
-
-    return _ResolvedPrompts(
-        title=title,
-        is_vocal=is_vocal,
-        style_influence=style_influence,
-        weirdness=weirdness,
-        exclude_styles=exclude_styles,
-        full_style_char_limit=full_style_char_limit,
-        advanced_json_fields=advanced_json_fields,
+    return _GeneratedPrompts(
+        title=resolution.title,
+        is_vocal=resolution.is_vocal,
+        style_influence=resolution.style_influence,
+        weirdness=resolution.weirdness,
+        exclude_styles=resolution.exclude_styles,
+        full_style_char_limit=resolution.full_style_char_limit,
+        advanced_json_fields=resolution.advanced_json_fields,
         patterns=resolved,
     )
 

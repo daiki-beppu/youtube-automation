@@ -36,6 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `fix(metadata)`: localization title の固定尺検出で `3時間の{scene_phrase}` と fr/es/it の `heure(s)` / `hora(s)` / `ora` / `ore` を認識し、Unicode 正規化形式を問わない単語境界を保ったまま実尺追従漏れを公開前診断で停止する（#3912）。
 - `fix(analytics)`: `yt-ad-coverage` が部分成功の収益 snapshot を受理し、動画別データが空なら unavailable 相当の JSON を exit 0 で返して分析パイプラインを継続する（#3910）。
 - `fix(automation-update)`: 追従後診断を `yt-doctor --json` の exact `channel_config.status` 判定へ揃え、doctor 全体の exit code 0 で config fail を見逃す手順を修正する（#3915）。
+- `refactor(suno)`: prompt 生成の設定・patterns・歌詞・track count 解決と事後検証を `domains.suno.prompt_resolution` へ抽出し、command 側の pattern 生成と既存の 2 回解決配線、出力・警告・失敗契約を維持する（#3907）。
 - `fix(metadata)`: duration display の locale を case・region 非依存で正規化し、fr/es/it/fil は各言語の単位、未知の有効 locale は warning 付き英語単位で生成して、多言語 metadata 全体の失敗を防ぐ（#3911）。
 - `refactor(skills)`: production / quality 系 13 skill の新規開設誘導だけを `/setup --channel` へ移し、既存取り込み・再生成・分析・方向性検討・共有 reference・hard gate・成果物契約を維持した（#3987）。
 - `refactor(skills)`: workflow / upload 系 11 skill の新規開設誘導だけを `/setup --channel` へ移し、既存取り込み・再生成・設定 push・共有 reference の `/channel-new` 経路と既存 failure gate を維持した（#3986）。
