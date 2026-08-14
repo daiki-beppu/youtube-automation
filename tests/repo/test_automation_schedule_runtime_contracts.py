@@ -287,7 +287,7 @@ def test_schedule_config_generate_show_dry_run_shape_and_exclusive_flags(
     schedule = _load("schedule_config.py")
     workflow_path = tmp_path / "config" / "channel" / "workflow.json"
     workflow_path.parent.mkdir(parents=True)
-    workflow_path.write_text('{"workflow":{"existing":"kept"}}\n', encoding="utf-8")
+    workflow_path.write_text('{"workflow":{"manual_baseline_minutes":{"wf-next":90}}}\n', encoding="utf-8")
     monkeypatch.setattr(schedule, "_workflow_path", lambda: workflow_path)
 
     args = _generate_args(
@@ -310,7 +310,7 @@ def test_schedule_config_generate_show_dry_run_shape_and_exclusive_flags(
     args.dry_run = False
     assert schedule.cmd_generate(args) == 0
     payload = json.loads(workflow_path.read_text(encoding="utf-8"))
-    assert payload["workflow"]["existing"] == "kept"
+    assert payload["workflow"]["manual_baseline_minutes"] == {"wf-next": 90}
     assert payload["workflow"]["scheduled_automation"]["cadence"] == ["mon", "fri"]
     assert payload["workflow"]["scheduled_automation"]["allow_external_publish"] is False
 
