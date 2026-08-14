@@ -35,6 +35,7 @@ def fake_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     skills_dir.mkdir(parents=True)
     (skills_dir / "channel-research").mkdir()
     (skills_dir / "channel-research" / "SKILL.md").write_text("# research\n", encoding="utf-8")
+    (skills_dir / "channel-research" / "config.default.yaml").write_text("{}\n", encoding="utf-8")
     (skills_dir / "channel-direction").mkdir()
     (skills_dir / "channel-direction" / "SKILL.md").write_text("# direction\n", encoding="utf-8")
     (tmp_path / ".claude" / "settings.template.json").write_text(
@@ -331,6 +332,44 @@ def test_cmd_sync_skills_without_orphan_config_emits_no_orphan_report(
     assert rc == 0
     warning_lines = [line for line in capsys.readouterr().out.splitlines() if "同梱されていません" in line]
     assert warning_lines == []
+
+
+def test_cmd_sync_skills_reports_orphan_configs_in_multi_channel_workspace(
+    fake_repo: Path,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    workspace = tmp_path / "workspace"
+    target = workspace / ".claude" / "skills"
+    config = workspace / "channels" / "ambient" / "config" / "skills" / "missing.yaml"
+    config.parent.mkdir(parents=True)
+    config.write_text("{}\n", encoding="utf-8")
+
+    parser = build_parser()
+    args = parser.parse_args(["sync", "--asset", "skills", "--target", str(target), "--force"])
+    assert args.func(args) == 0
+
+    assert "対応する skill が同梱されていません: missing" in capsys.readouterr().out
+
+
+def test_cmd_sync_skills_reports_config_for_skill_without_default_config(
+    fake_repo: Path,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    skill = fake_repo / ".claude" / "skills" / "wf-next"
+    skill.mkdir()
+    (skill / "SKILL.md").write_text("# wf-next\n", encoding="utf-8")
+    channel = tmp_path / "out"
+    config = channel / "config" / "skills" / "wf-next.yaml"
+    config.parent.mkdir(parents=True)
+    config.write_text("{}\n", encoding="utf-8")
+
+    parser = build_parser()
+    args = parser.parse_args(["sync", "--asset", "skills", "--target", str(channel / ".claude" / "skills"), "--force"])
+    assert args.func(args) == 0
+
+    assert "対応する skill が同梱されていません: wf-next" in capsys.readouterr().out
 
 
 def test_cmd_sync_warns_on_numbered_duplicates_in_target(

@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `fix(automation-update)`: skills sync の孤児 override 検出を multi-channel workspace まで広げ、skill directory ではなく `config.default.yaml` の有無で設定対応を判定する（#3812）。
+
 - `fix(config)`: `workflow` 直下と `wf_new` / `wf_next` の未知キーを `ConfigError` で拒否し、効かない設定が silent ignore されないようにする（#3811）。
 
 - `fix(dashboard)`: latest live collection の選択では `created_at` だけを緩く読み、未選択 collection の不正 phase で timing 全体を落とさず、選択対象の検証失敗は原因メッセージ付きで表示する（#3810）。

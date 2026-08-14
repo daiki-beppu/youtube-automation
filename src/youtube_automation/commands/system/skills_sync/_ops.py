@@ -55,23 +55,34 @@ def _prunable_orphan_names(entry_names: set[str], bundled: set[str]) -> set[str]
     return (entry_names - bundled) & _KNOWN_REMOVED_SKILL_NAMES
 
 
-def _orphan_skill_config_names(config_dir: Path, bundled: set[str]) -> list[str]:
-    """対応する同梱 skill がない channel override 名を返す。"""
+def _orphan_skill_config_names(config_dir: Path, configurable: set[str]) -> list[str]:
+    """対応する同梱 default config がない channel override 名を返す。"""
     if not config_dir.is_dir():
         return []
     configured = {
         entry.stem for entry in config_dir.iterdir() if entry.is_file() and entry.suffix in _SKILL_CONFIG_SUFFIXES
     }
-    return sorted(configured - bundled - _COMPATIBLE_SKILL_CONFIG_NAMES)
+    return sorted(configured - configurable - _COMPATIBLE_SKILL_CONFIG_NAMES)
 
 
-def _report_orphan_skill_configs(target_dir: Path, bundled: set[str]) -> None:
+def _report_orphan_skill_configs(target_dir: Path, source_dir: Path) -> None:
     """標準 skills 配置に対応する channel override の孤児を報告する。"""
     if not (target_dir.name == "skills" and target_dir.parent.name == ".claude"):
         return
-    config_dir = target_dir.parent.parent / "config" / "skills"
-    for name in _orphan_skill_config_names(config_dir, bundled):
-        print(f"  [warn] 対応する skill が同梱されていません: {name}")
+    configurable = {
+        skill_dir.name
+        for skill_dir in source_dir.iterdir()
+        if skill_dir.is_dir() and (skill_dir / "config.default.yaml").is_file()
+    }
+    workspace = target_dir.parent.parent
+    config_dirs = [workspace / "config" / "skills"]
+    channels_dir = workspace / "channels"
+    if channels_dir.is_dir():
+        config_dirs.extend(channel / "config" / "skills" for channel in channels_dir.iterdir() if channel.is_dir())
+    for config_dir in config_dirs:
+        for name in _orphan_skill_config_names(config_dir, configurable):
+            location = config_dir.relative_to(workspace).as_posix()
+            print(f"  [warn] 対応する skill が同梱されていません: {name} ({location})")
 
 
 def _ensure_target_parent(target: Path) -> None:
