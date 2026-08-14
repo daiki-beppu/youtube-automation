@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(config)`: skill-config の `acknowledged_unknown_keys` に調査済みキーを明示すると、そのキーだけ未知トップレベル警告から除外できるようにする（#3814）。
+
 - `fix(config)`: skill-config の未知キー警告で、コード参照が不確実でも SKILL.md 経由で AI が読む設計は有効になり得ることを区別する（#3813）。
 
 - `fix(automation-update)`: skills sync の孤児 override 検出を multi-channel workspace まで広げ、skill directory ではなく `config.default.yaml` の有無で設定対応を判定する（#3812）。
