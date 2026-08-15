@@ -36,5 +36,5 @@
 |---|---|
 | 0 | plan 保存、winner/勝者なしの安全な反映 |
 | 1 | JSON、パス、symlink、要素差分、hash、履歴対応の契約違反 |
-| 2 | CTR または流入構成比が因果閾値未達。`/flop-analysis` へ route |
+| 2 | CTR または流入構成比が因果閾値未達。`/analytics --flop` へ route |
 | 3 | 複数 winner 要素を coherent regeneration + final comparison すべき状態 |

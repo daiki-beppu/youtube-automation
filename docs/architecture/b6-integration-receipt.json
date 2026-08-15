@@ -955,21 +955,21 @@
     },
     {
       "old_owner": "legacy..claude.skills.thumbnail-iterate.SKILL.md",
-      "exact_new_owner": ".claude/skills/thumbnail-iterate/SKILL.md",
+      "exact_new_owner": ".claude/skills/thumbnail/references/iterate.md",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"
     },
     {
       "old_owner": "legacy..claude.skills.thumbnail-iterate.references.state-contract.md",
-      "exact_new_owner": ".claude/skills/thumbnail-iterate/references/state-contract.md",
+      "exact_new_owner": ".claude/skills/thumbnail/references/state-contract.md",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"
     },
     {
       "old_owner": "legacy..claude.skills.thumbnail-iterate.references.thumbnail-iterate-state",
-      "exact_new_owner": ".claude/skills/thumbnail-iterate/references/thumbnail-iterate-state.py",
+      "exact_new_owner": ".claude/skills/thumbnail/references/thumbnail-iterate-state.py",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"

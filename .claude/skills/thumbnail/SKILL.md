@@ -1,17 +1,17 @@
 ---
 name: thumbnail
 purpose: 作る
-description: "Use when コレクションの YouTube サムネイル（thumbnail.jpg）を CTR 最適化し、textless main.png/jpg を先行生成して実フォント合成するとき、`--compare` で生成済み候補を競合と 320px 比較するとき、または `--test` で Studio の A/B テストを設計・記録するとき。「サムネイル生成」「画像生成」「アイキャッチ」「サムネ比較」「モバイル表示テスト」「サムネ A/B テスト」「Test & Compare」で発動。伸びた動画起点の改善ループは /thumbnail-iterate、競合の勝ちパターン分析は channel-research の thumbnail mode、SVG・汎用画像生成には使わない"
+description: "Use when コレクションの YouTube サムネイル（thumbnail.jpg）を CTR 最適化し、textless main.png/jpg を先行生成して実フォント合成するとき、`--compare` で生成済み候補を競合と 320px 比較するとき、`--test` で Studio の A/B テストを設計・記録するとき、または `--iterate` で伸びた動画の勝因を次のサムネへ還元するとき。「サムネイル生成」「画像生成」「アイキャッチ」「サムネ比較」「モバイル表示テスト」「サムネ A/B テスト」「Test & Compare」「伸びた動画のサムネ改善」で発動。競合の勝ちパターン分析は channel-research の thumbnail mode、SVG・汎用画像生成には使わない"
 ---
 
 ## 前後工程
 
-- `前工程`: `/channel-strategy --constraints`, `/wf-new`, `/thumbnail-iterate`
-- `後工程`: `/loop-video`, `/thumbnail --compare`, `/thumbnail --test`, `/alignment-check`
+- `前工程`: `/channel-strategy --constraints`, `/wf-new`, `/thumbnail --iterate`
+- `後工程`: `/loop-video`, `/thumbnail --compare`, `/thumbnail --test`, `/thumbnail --iterate`, `/alignment-check`
 - `委譲先`: `なし`
 ## 成果物
-- `書き込む`: `collections/<id>/10-assets/thumbnail.jpg`, `collections/<id>/10-assets/main.png`, `collections/<id>/10-assets/main.jpg`, `collections/<id>/20-documentation/thumbnail-prompts.md`, `collections/<id>/20-documentation/thumbnail-test-active.json`, `collections/<id>/20-documentation/thumbnail-test-history.json`, `collections/<id>/workflow-state.json`, `assets/thumbnail-gallery/<id>.<ext>`, `docs/plans/thumbnail-comparison.md`, `data/thumbnail_compare/*`
-- `読み込む`: `docs/channel/creative-constraints.md`, `docs/benchmarks/thumbnail-analysis.md`, `data/thumbnail-iterate/champion.json`, `collections/<id>/20-documentation/thumbnail-test-history.json`, `config/skills/thumbnail.yaml`, `data/benchmark_*.json`, `docs/benchmarks/thumbnails/*.jpg`
+- `書き込む`: `collections/<id>/10-assets/thumbnail.jpg`, `collections/<id>/10-assets/main.png`, `collections/<id>/10-assets/main.jpg`, `collections/<id>/20-documentation/thumbnail-prompts.md`, `collections/<id>/20-documentation/thumbnail-test-active.json`, `collections/<id>/20-documentation/thumbnail-test-history.json`, `collections/<id>/workflow-state.json`, `assets/thumbnail-gallery/<id>.<ext>`, `docs/plans/thumbnail-comparison.md`, `data/thumbnail_compare/*`, `data/thumbnail-iterate/runs/<video-id>.json`, `data/thumbnail-iterate/champion.json`, `data/thumbnail-iterate/synthesis-required.json`
+- `読み込む`: `docs/channel/creative-constraints.md`, `docs/benchmarks/thumbnail-analysis.md`, `data/thumbnail-iterate/champion.json`, `collections/<id>/20-documentation/thumbnail-test-history.json`, `collections/<id>/workflow-state.json`, `config/skills/thumbnail.yaml`, `data/benchmark_*.json`, `docs/benchmarks/thumbnails/*.jpg`
 ## Overview
 コレクション用サムネイルを `config/skills/thumbnail.yaml`（skill-config）に基づいて生成する。 チャンネルごとにスタイル・キャラ・参照画像が異なり、すべて skill-config から動的に読み取る。 画像生成プロバイダー（Gemini / OpenAI / codex）は `image_generation.provider` で切り替え可能。
 > imagegen taxonomy 対応: `Use case: product-mockup (YouTube thumbnail variant)`（imagegen の 19 スラグでは product-mockup に相当）。
@@ -39,10 +39,9 @@ description: "Use when コレクションの YouTube サムネイル（thumbnail
 - **委譲しない処理**: 候補画像生成前の承認、および候補承認後の確定コピーと state 更新
 subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実行しない。承認が要る処理は、メインが承認を得るまで委譲しない。完了報告は `status: success | failure`、成果物の絶対パス一覧、エラー。成果物の存在検証と state 更新はメインが行う。
 ## 勝ちパターン参照ゲート
-プロンプト構築前に [参照画像と検証済み insights](references/reference-and-insights.md) を読み、`data/thumbnail-iterate/champion.json`、完了済み thumbnail test 履歴、`data/insights.jsonl` を検証して反映する。insights schema の単一ソースは `.claude/skills/analytics/references/insights-entry.schema.json`。`jq -c 'select(.status == "open" and .lever == "thumbnail")' data/insights.jsonl` で選別し、`status` を含むエントリの書き換え・追記はしない（status 反映は `/wf-new`、追記は `yt-experiment judge` 等の writer の責務）。検証不能な値は使わず、このスキルから champion JSON・test 履歴・insights を更新しない。 **読み順**: 標準フローは「ワークフロー > 標準生成順序とファイル契約」から読み、実効 `text_render.mode` に対応する経路へ進む。「フォント安定化」章は 2 経路の再現性差を確認するときに読む。「codex 経由の生成」章は `image_generation.provider: codex` のチャンネルのみ、「自動選択」章は該当機能を明示的に使うチャンネルのみ参照すればよい。
+プロンプト構築前に [参照画像と検証済み insights](references/reference-and-insights.md) を読み、`data/thumbnail-iterate/champion.json`、完了済み thumbnail test 履歴、`data/insights.jsonl` を検証して反映する。insights schema の単一ソースは `.claude/skills/analytics/references/insights-entry.schema.json`。`jq -c 'select(.status == "open" and .lever == "thumbnail")' data/insights.jsonl` で選別し、`status` を含むエントリの書き換え・追記はしない（status 反映は `/wf-new`、追記は `yt-experiment judge` 等の writer の責務）。検証不能な値は使わず、通常生成 mode から champion JSON・test 履歴・insights を更新しない。 **読み順**: 標準フローは「ワークフロー > 標準生成順序とファイル契約」から読み、実効 `text_render.mode` に対応する経路へ進む。「フォント安定化」章は 2 経路の再現性差を確認するときに読む。「codex 経由の生成」章は `image_generation.provider: codex` のチャンネルのみ、「自動選択」章は該当機能を明示的に使うチャンネルのみ参照すればよい。
 ## When to Use
-- コレクションが確定し、サムネイル制作に着手するとき
-- CTR 最適化されたサムネイルが必要なとき
+- コレクションが確定し、CTR 最適化されたサムネイル制作に着手するとき
 ## Quick Reference
 | 引数 | 説明 | 例 |
 |------|------|-----|
@@ -104,6 +103,7 @@ Use the title {title}.
 |---|---|
 | `--compare` | `references/compare.md` |
 | `--test` | `references/test.md` |
+| `--iterate` | `references/iterate.md` |
 ## 生成モード判定
 `image_generation.gemini.generation_mode` を確認:
 | モード | 説明 |

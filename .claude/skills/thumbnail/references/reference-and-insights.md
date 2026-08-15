@@ -4,7 +4,7 @@
 
 ## 勝ちパターン参照ゲート
 
-最初に `data/thumbnail-iterate/champion.json` の有無を確認する。存在する場合は `.claude/skills/thumbnail-iterate/references/state-contract.md` を読み、`file` が repository 内の実ファイル（symlink 不可）で、現在の SHA-256 が `sha256` と一致することを検証する。失敗時は黙って external TTP へ fallback せず対象と不一致を表示して停止する。検証済み champion は **internal TTP** として external benchmark より先に参照画像と `validated_elements` をプロンプトへ反映する。このスキルから champion JSON を作成・更新しない。
+最初に `data/thumbnail-iterate/champion.json` の有無を確認する。存在する場合は `.claude/skills/thumbnail/references/state-contract.md` を読み、`file` が repository 内の実ファイル（symlink 不可）で、現在の SHA-256 が `sha256` と一致することを検証する。失敗時は黙って external TTP へ fallback せず対象と不一致を表示して停止する。検証済み champion は **internal TTP** として external benchmark より先に参照画像と `validated_elements` をプロンプトへ反映する。通常生成 mode から champion JSON を作成・更新しない。
 
 `collections/planning/*/20-documentation/thumbnail-test-history.json` と `collections/live/*/20-documentation/thumbnail-test-history.json` を列挙する。各ファイルは `.claude/skills/thumbnail/references/history-schema.md` の `### Completed history` にある履歴構造検証コマンドだけで確認する。失敗した履歴は対象パスとエラーを表示して修正を案内し、集計から除外してよいが、未検証値をプロンプトへ入れない。
 

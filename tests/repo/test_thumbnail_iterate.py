@@ -1,4 +1,4 @@
-"""Contract tests for the /thumbnail-iterate state helper (issue #1969)."""
+"""Contract tests for the /thumbnail --iterate state helper (issue #1969)."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from tests.helpers.paths import REPO_ROOT
 from youtube_automation.domains.skills.inventory import SkillInventory
 
 ROOT = REPO_ROOT
-SCRIPT = ROOT / ".claude/skills/thumbnail-iterate/references/thumbnail-iterate-state.py"
+SCRIPT = ROOT / ".claude/skills/thumbnail/references/thumbnail-iterate-state.py"
 THUMBNAIL_TEST_HISTORY = "collections/<id>/20-documentation/thumbnail-test-history.json"
 
 
@@ -312,7 +312,7 @@ def test_promote_copy_failure_preserves_run_and_removes_temporary_artifact(
 
 
 def test_skill_docs_define_routing_thresholds_and_champion_contract() -> None:
-    iterate = (ROOT / ".claude/skills/thumbnail-iterate/SKILL.md").read_text()
+    iterate = (ROOT / ".claude/skills/thumbnail/references/iterate.md").read_text()
     thumbnail = (ROOT / ".claude/skills/thumbnail/SKILL.md").read_text()
 
     for phrase in (
@@ -326,7 +326,7 @@ def test_skill_docs_define_routing_thresholds_and_champion_contract() -> None:
         "codex-image.sh",
     ):
         assert phrase in iterate
-    assert "/thumbnail-iterate" in thumbnail
+    assert "/thumbnail --iterate" in thumbnail
     assert "champion.json" in thumbnail
 
 
@@ -338,7 +338,22 @@ def test_thumbnail_test_is_reachable_from_the_thumbnail_mode_dispatch() -> None:
     assert inventory.resolve_reference("thumbnail", "references/test.md").is_file()
 
 
-def test_thumbnail_test_history_has_two_declared_writers() -> None:
+def test_thumbnail_iterate_is_reachable_from_the_thumbnail_mode_dispatch() -> None:
+    inventory = SkillInventory(ROOT)
+    mode_dispatch = inventory.section("thumbnail", "## モード判定")
+
+    assert "| `--iterate` | `references/iterate.md` |" in mode_dispatch
+    assert inventory.resolve_reference("thumbnail", "references/iterate.md").is_file()
+
+
+def test_thumbnail_mode_dispatch_has_exactly_three_modes() -> None:
+    inventory = SkillInventory(ROOT)
+    mode_dispatch = inventory.section("thumbnail", "## モード判定")
+
+    assert mode_dispatch.count("| `--") == 3
+
+
+def test_thumbnail_test_history_has_one_declared_writer() -> None:
     inventory = SkillInventory(ROOT)
     writers = {
         skill_dir.name
@@ -346,4 +361,4 @@ def test_thumbnail_test_history_has_two_declared_writers() -> None:
         if THUMBNAIL_TEST_HISTORY in inventory.artifacts(skill_dir.name).writes
     }
 
-    assert writers == {"thumbnail", "thumbnail-iterate"}
+    assert writers == {"thumbnail"}
