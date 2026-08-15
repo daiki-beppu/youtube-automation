@@ -23,7 +23,6 @@ _FILE_ASSETS = {
 _CHANNEL_NEW_SHARED_ASSETS = frozenset(
     {
         "analysis-mode.md",
-        "benchmark_collector.py",
         "claude-md-template.md",
         "config-generation-rules.md",
         "config-template/analytics.json",
@@ -319,6 +318,16 @@ assert "wheel-identity-check" not in legacy._cache
         assert f"references/{residual_reference}" in channel_new_text
         assert (channel_new_references / residual_reference).is_file()
 
+    channel_research = downstream / ".claude" / "skills" / "channel-research"
+    collector = channel_research / "references" / "benchmark_collector.py"
+    assert collector.is_file()
+    assert not collector.is_symlink()
+    assert (
+        collector.read_bytes()
+        == (REPO_ROOT / "src/youtube_automation/commands/analytics/benchmark_collector.py").read_bytes()
+    )
+    assert not (downstream / ".claude" / "skills" / "benchmark").exists()
+
     bootstrap_guide = distributed_references / "gcp-bootstrap.md"
     assert bootstrap_guide.is_file()
     guide_text = bootstrap_guide.read_text(encoding="utf-8")
@@ -410,7 +419,6 @@ def test_candidate_sdist_contains_setup_channel_owner_once(tmp_path: Path) -> No
         assert channel_new_matches == []
 
     expected_links = {
-        "benchmark_collector.py": "../../../../src/youtube_automation/commands/analytics/benchmark_collector.py",
         "fetch_benchmark_comments.py": (
             "../../../../src/youtube_automation/commands/analytics/fetch_benchmark_comments.py"
         ),
@@ -422,3 +430,15 @@ def test_candidate_sdist_contains_setup_channel_owner_once(tmp_path: Path) -> No
         )
         assert member.issym()
         assert member.linkname == linkname
+
+    collector_members = [
+        member
+        for member in members
+        if member.name.endswith("/.claude/skills/channel-research/references/benchmark_collector.py")
+    ]
+    assert len(collector_members) == 1
+    assert collector_members[0].issym()
+    assert collector_members[0].linkname == (
+        "../../../../src/youtube_automation/commands/analytics/benchmark_collector.py"
+    )
+    assert not any("/.claude/skills/benchmark/" in member.name for member in members)

@@ -13,6 +13,7 @@ import pytest
 import yaml
 
 from tests.helpers.paths import REPO_ROOT
+from youtube_automation.configuration import skills as skill_config
 from youtube_automation.domains.skills.inventory import SkillInventory
 
 ROOT = REPO_ROOT
@@ -27,7 +28,7 @@ def test_all_skills_use_machine_readable_chain_block() -> None:
         r"- `後工程`: (?P<downstream>[^\n]+)\n",
         re.DOTALL,
     )
-    chain_reference = r"`(?:/[a-z0-9-]+|/setup --channel)`"
+    chain_reference = r"`/[a-z0-9-]+(?: --[a-z0-9-]+)?`"
     chain_value = re.compile(
         rf"^(?:`なし`|`\*`（共通基盤としてほぼ全スキル）|"
         rf"{chain_reference}(?:, {chain_reference})*)$"
@@ -42,7 +43,7 @@ def test_all_skills_use_machine_readable_chain_block() -> None:
         for direction in ("upstream", "downstream"):
             value = match.group(direction)
             assert chain_value.fullmatch(value), f"{path}: {direction} の書式が不正: {value}"
-            for reference in re.findall(r"`/([a-z0-9-]+)(?: --channel)?`", value):
+            for reference in re.findall(r"`/([a-z0-9-]+)(?: --[a-z0-9-]+)?`", value):
                 assert reference in known_skills, f"{path}: 存在しない skill 参照 /{reference}"
 
 
@@ -430,7 +431,7 @@ def test_setup_channel_prelaunch_persona_chain_propagates_context_without_analyt
         "docs/channel/competitor-branding-snapshot.json",
     ):
         assert path in step7
-    assert "任意の `/benchmark`" in step7
+    assert "任意の `/channel-research --benchmark`" in step7
     assert "`reports/analysis_*.md` は要求しない" in step7
 
     entry_contract = SKILL_INVENTORY.section("audience-persona-design", "## Overview").split(
@@ -438,7 +439,7 @@ def test_setup_channel_prelaunch_persona_chain_propagates_context_without_analyt
     )[1]
     assert "新規開設（公開前）" in entry_contract
     assert "公開後" in entry_contract
-    assert "任意の `/benchmark` 成果物" in entry_contract
+    assert "任意の `/channel-research --benchmark` 成果物" in entry_contract
     for path in (
         "docs/plans/viewer-voice-analysis.md",
         "docs/channel/ttp-seed-confirmation.md",
@@ -877,7 +878,7 @@ def test_channel_new_followup_skill_routing_uses_new_contract() -> None:
     assert "target_scene" not in discover
     assert "config/channel/content.json::genre.{primary,style,context}" in discover
 
-    assert "/benchmark` と `/viewer-voice` で収集した" in research
+    assert "/channel-research --benchmark` と `/viewer-voice` で収集した" in research
     assert "docs/channel-research.md" in research
     assert "/viewer-voice` → 前提" in research
 
@@ -933,14 +934,14 @@ def test_channel_new_followup_skill_routing_uses_new_contract() -> None:
 
 
 def test_skill_frontmatter_descriptions_disambiguate_sibling_routes() -> None:
-    benchmark_desc = _skill_frontmatter("benchmark")["description"]
+    benchmark_desc = _skill_frontmatter("channel-research")["description"]
     channel_new_desc = _skill_frontmatter("channel-new")["description"]
     videoup_desc = _skill_frontmatter("videoup")["description"]
     video_upload_desc = _skill_frontmatter("video-upload")["description"]
 
     assert "「競合分析」" not in benchmark_desc
     assert "「競合データ収集」" in benchmark_desc
-    assert "収集済みデータのチャンネル全体分析は /channel-new 分析モード" in benchmark_desc
+    assert "--benchmark" in benchmark_desc
     assert "「競合分析」" in channel_new_desc
     assert "収集済み benchmark/comments" in channel_new_desc
 
@@ -1190,7 +1191,13 @@ def test_skill_config_defaults_have_read_gate_in_skill_docs() -> None:
         assert "## 設定読み込みゲート" in text, f"{skill} missing config read gate"
         assert f".claude/skills/{skill}/config.default.yaml" in text
         assert f"config/skills/{skill}.yaml" in text
-        loader_key = "postmortem" if skill == "flop-analysis" else skill
+        registered = skill_config.SKILL_CONFIG_KEYS | skill_config.SKILL_ONLY_CONFIG_KEYS
+        loader_keys = [
+            key
+            for key in registered
+            if skill_config.skill_config_default_relative_path(key.partition(".")[0]).parts[0] == skill
+        ]
+        loader_key = "postmortem" if skill == "flop-analysis" else loader_keys[0]
         assert f'load_skill_config("{loader_key}")' in text
         assert "存在する場合" in text
         assert "勝手に作成しない" in text

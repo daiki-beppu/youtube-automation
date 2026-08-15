@@ -16,19 +16,18 @@ REFERENCES = SKILL_DIR / "references"
 SETUP_REFERENCES = REPO_ROOT / ".claude" / "skills" / "setup" / "references"
 
 SHARED_ASSET_SHA256 = {
-    "analysis-mode.md": "3c71c613e009766268f6eb2d7aaed23921009313756889f077f0e88352acf518",
-    "benchmark_collector.py": "82a83d1c23cb128f312732fbb928bdacbec8a3006ce6766ae278233a86ed3b45",
+    "analysis-mode.md": "5429e00c0c1a673d3b2f40e820ad3c1b23bf76f50ab2b14c01454c98884ab3e2",
     "claude-md-template.md": "c63c2e6411b4103183a9d228ef36265ca098574468f2a28f7fce039b32d138fe",
-    "config-generation-rules.md": "0f27bf52c1c5609a1576820ee5c033d50df440d0a8d7bfad15931dc623a35cdf",
+    "config-generation-rules.md": "5b336c56a31e4f4d46e44bc1cb6923c8b8af7fd1f41b67d4576f33535ef07e50",
     "config-template/analytics.json": "4344ad8d4c9a1c81958b721eb3d999172f14f71f17d863a1708492ce687b68d2",
     "config-template/audio.json": "c55033dc448cb91fe3cdb47e20f220c5879c05f95855d918a8e72297a5f20a43",
     "config-template/content.json": "5a60fc3327bb2cca1daa5da3744dc218495f3f0f304aebdad41fd2ba32d1bed0",
     "config-template/meta.json": "324194e12d576604b3751af469bd7e965efb28db088b4671d76bb80b499d9da4",
     "config-template/skills/suno.yaml": "2500c62eb81531b722d4ddabddc223c8e4ec9bb9441637b1d5cc2df435145765",
-    "config-template/skills/thumbnail.yaml": "77a05753fa35fec9192f01d8f7166774f99c56c25ef057465958d4c29d649533",
+    "config-template/skills/thumbnail.yaml": "3e5b6d35963ab1313bc691d0e7cd9f2ec4f118abf1a66d689d4813511e785231",
     "config-template/youtube.json": "849f4b0912cb7be3d1cc92b7607d355e856b5af3e9e85db0449fabdf1713bb6c",
     "desire-vocabulary.md": "b166b310ccac37333070cd548d66857582d3551bc942c4618363713111c8ccb8",
-    "direction-mode.md": "9a39d50375112462e90b3ba16bec815832216d59c491ce1040a929ec983c5850",
+    "direction-mode.md": "3d6bb7824941eabcdf05dade6c2886fa45ba4ab6e32ac68671c52626ddc2fc67",
     "directory-structure.md": "d8590189cf8929b968b4f1169b723cc0ed71e0be06dbd57cc3ed405967bc4e14",
     "fetch_benchmark_comments.py": "d69ee100c7f3655394a6fb50b0aa9c4a1ae8b8b733d8243c0600ec9acfc2b93e",
     "fetch_branding_snapshot.py": "9735fa8d2af47b932c2c5318d0f4a4efa2bfdbd95e2bb33dece0752994bf7fef",
@@ -37,10 +36,10 @@ SHARED_ASSET_SHA256 = {
     "verification.md": "4ce440663e0faf0f1e5916920486f9e62c3ed0a3ab86624c189ebbe19cd5d8f1",
 }
 MOVED_ASSET_SHA256 = {
-    "import-mode.md": "02f0097515d697caff2e366aedd5f809bcfd2bfdfaf63c7e1b0ae1e05ec8e9fc",
+    "import-mode.md": "be1a3878d34e1ed75cb93774ff7f301c8db8573dca398896d144f52dac0bd9e7",
     "localizations-template.json": "d0267074151af61f27856d0e67e8f0c3d56cf327b2255e00a8035e2851cde558",
     "push-mode.md": "be122ecbe19c803cfe09465f68ab364636f46f92f0ec842fb803566337eb57ee",
-    "regeneration-mode.md": "de7b830eaae6e94db7e2166a9527f0a3bbf84f2a6daf939b76875575f9e323d4",
+    "regeneration-mode.md": "510151e90b9d7ef19714ec73eace7c8990d62312da1627430bf3979756ea68d3",
     "save-push-troubleshooting.md": "89a7cab34a96ddf7f10636293621c8b39e6cdf9f17e033a0469d5b14c0fc9a45",
 }
 
@@ -113,14 +112,14 @@ def test_shared_asset_inventory_detects_removal_content_change_and_symlink_retar
     (candidate / "fetch_branding_snapshot.py").write_bytes(
         (candidate / "fetch_branding_snapshot.py").read_bytes() + b"\n# mutation\n"
     )
-    symlink = candidate / "benchmark_collector.py"
+    symlink = candidate / "generate_image.py"
     symlink.unlink()
     symlink.symlink_to("../../../../src/youtube_automation/commands/analytics/wrong.py")
 
     assert _shared_asset_violations(candidate) == {
         "missing:verification.md",
         "changed:fetch_branding_snapshot.py",
-        "changed:benchmark_collector.py",
+        "changed:generate_image.py",
     }
 
 

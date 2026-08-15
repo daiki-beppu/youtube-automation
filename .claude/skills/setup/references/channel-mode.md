@@ -13,7 +13,7 @@
 - `docs/channel/personas/persona-definition.md` が存在する
 - thumbnail TTP の参照元として `config/skills/thumbnail.yaml::image_generation.gemini.reference_images.default` が設定済み、またはスキップ理由が `ユーザー承認済み例外: thumbnail ...` として `ttp-seed-confirmation.md` に残っている
 - `music_engine: suno` の場合、`config/skills/suno.yaml::genre_line` または `data/video_analysis/<slug>/*.json::suno_preset.genre_line` が準備済み、または曲構造 TTP 未反映が `ユーザー承認済み例外: music ...` / `ユーザー承認済み例外: 曲構造 ...` として `ttp-seed-confirmation.md` に残っている
-- 承認済み TTP ごとの上位 5 Long VOD から算出した duration 根拠・推奨 min/max・ユーザー承認結果が `ttp-seed-confirmation.md` に残っている、または手入力値・理由・後続 `/benchmark` が `ユーザー承認済み例外: duration ...` として記録されている
+- 承認済み TTP ごとの上位 5 Long VOD から算出した duration 根拠・推奨 min/max・ユーザー承認結果が `ttp-seed-confirmation.md` に残っている、または手入力値・理由・後続 `/channel-research --benchmark` が `ユーザー承認済み例外: duration ...` として記録されている
 - `uv run yt-doctor --json` の `ttp_wf_new_readiness` が `ok` である。`warn` の場合は不足項目を解消するか、ユーザー承認済み例外を明記してから再確認する
 ## TTP 原則
 
@@ -24,8 +24,8 @@ TTP メモは最低限、以下の観点を含める:
 
 - タイトル構造
 - サムネ構図
-- 投稿頻度（ユーザーの手動観察または `/benchmark` 実行後のデータ。seed-only では未確認なら仮説扱い）
-- 動画尺（ユーザーの手動観察または `/benchmark` 実行後のデータ。seed-only では未確認なら仮説扱い）
+- 投稿頻度（ユーザーの手動観察または `/channel-research --benchmark` 実行後のデータ。seed-only では未確認なら仮説扱い）
+- 動画尺（ユーザーの手動観察または `/channel-research --benchmark` 実行後のデータ。seed-only では未確認なら仮説扱い）
 - ジャンル / 音楽スタイル
 - branding description / keywords の段落構造と語彙
 
@@ -175,7 +175,7 @@ uv run python .claude/skills/channel-new/references/fetch_branding_snapshot.py \
 
 ### Step 5.5: TTP Long VOD から動画尺を導出・承認
 
-承認済み TTP 対象を `benchmark.channels` へ保存した後、`/benchmark` を実行して最新の `data/benchmark_*.json` を生成する。動画尺は seed-only の目視や手計算で決めない。
+承認済み TTP 対象を `benchmark.channels` へ保存した後、`/channel-research --benchmark` を実行して最新の `data/benchmark_*.json` を生成する。動画尺は seed-only の目視や手計算で決めない。
 
 次の helper を **dry-run** し、reference の duration schema に照らして JSON を確認する:
 
@@ -184,7 +184,7 @@ uv run python .claude/skills/setup/references/derive_ttp_duration.py \
   --channel-dir .
 ```
 
-helper が `status: insufficient`（exit 2）または `status: error`（exit 1）を返した場合は推測で補完せず、`/benchmark` 再実行を案内して停止する。
+helper が `status: insufficient`（exit 2）または `status: error`（exit 1）を返した場合は推測で補完せず、`/channel-research --benchmark` 再実行を案内して停止する。
 
 推奨値と根拠をユーザーへ提示し、明示承認を得るまで config を変更しない。承認後だけ次を実行する:
 
@@ -206,7 +206,7 @@ Step 6〜9 を始める前に [persona / branding / readiness の実施詳細](p
 
 - 追加の競合候補を広げたい → `/discover-competitors`
 - 現行 TTP の入替候補やニッチ仮説を、外部根拠と同じ評価軸で比較したい → `/market-research`（会話内レポートが既定。TTP / config は変更しない）
-- 承認済み TTP 対象の追加動画データやサムネイルを再収集したい → `/benchmark`（Step 5.5 の初回 duration 算出では必須）
+- 承認済み TTP 対象の追加動画データやサムネイルを再収集したい → `/channel-research --benchmark`（Step 5.5 の初回 duration 算出では必須）
 - 収集済みデータから方向性を深掘りしたい → `/channel-new` 分析モード
 
 ### Step 7: 本格ペルソナ作成チェーン
@@ -215,7 +215,7 @@ Step 6〜9 を始める前に [persona / branding / readiness の実施詳細](p
 
 `/viewer-voice` → `/audience-persona-design` → `/viewing-scene` を必須チェーンとして順に実行する。このチェーンには **実行コンテキスト: 新規開設（公開前）** を明示して引き継ぐ。公開後の自チャンネル Analytics を前提に切り替えない。
 
-`/audience-persona-design` へ `docs/plans/viewer-voice-analysis.md`、`docs/channel/ttp-seed-confirmation.md`、`docs/channel/competitor-branding-snapshot.json`、任意の `/benchmark` 成果物を渡す。`reports/analysis_*.md` は要求しない。`/audience-persona-design` から同じ実行コンテキストを引き継いで `/viewing-scene` を実行し、`docs/plans/viewing-scene-matrix.md` を生成してから、最終 `docs/channel/personas/persona-definition.md` を更新する。
+`/audience-persona-design` へ `docs/plans/viewer-voice-analysis.md`、`docs/channel/ttp-seed-confirmation.md`、`docs/channel/competitor-branding-snapshot.json`、任意の `/channel-research --benchmark` 成果物を渡す。`reports/analysis_*.md` は要求しない。`/audience-persona-design` から同じ実行コンテキストを引き継いで `/viewing-scene` を実行し、`docs/plans/viewing-scene-matrix.md` を生成してから、最終 `docs/channel/personas/persona-definition.md` を更新する。
 
 最終 `persona-definition.md` が通常ファイルとして存在することを確認する。欠落している場合は Step 7 未完了として成功案内を出さず、Step 8 へ進まない。
 

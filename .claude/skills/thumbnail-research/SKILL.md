@@ -1,12 +1,12 @@
 ---
 name: thumbnail-research
 purpose: 調べる
-description: "Use when 収集済み競合サムネイルだけを再生数上位群 vs 下位群で深掘りし、勝ちパターンを抽出するとき。「サムネイル徹底分析」「競合サムネ分析」「サムネ勝ちパターン」で発動。データ収集は /benchmark、チャンネル全体の TTP 分析は /channel-new 分析モード、生成は /thumbnail、320px 視認性比較は /thumbnail-compare"
+description: "Use when 収集済み競合サムネイルだけを再生数上位群 vs 下位群で深掘りし、勝ちパターンを抽出するとき。「サムネイル徹底分析」「競合サムネ分析」「サムネ勝ちパターン」で発動。データ収集は channel-research のベンチマーク mode、チャンネル全体の TTP 分析は /channel-new 分析モード、生成は /thumbnail、320px 視認性比較は /thumbnail-compare"
 ---
 
 ## 前後工程
 
-- `前工程`: `/benchmark`
+- `前工程`: `/channel-research --benchmark`
 - `後工程`: `/thumbnail`
 - `委譲先`: `なし`
 
@@ -20,9 +20,9 @@ description: "Use when 収集済み競合サムネイルだけを再生数上位
 - `data/benchmark_*.json` と、次のいずれかの視覚情報が必要:
   - `docs/benchmarks/thumbnails/` または `data/thumbnail_compare/benchmark/` の JPEG / PNG / WebP 画像
   - 最新 benchmark JSON の `channels[].videos[].thumbnail_analysis` にある既存分析
-- `data/benchmark_*.json` が無い場合は、サムネイル画像の有無にかかわらず、再生数による上位群 / 下位群を決められないため、先に `/benchmark` を案内して停止する。
-- benchmark JSON があっても視覚情報が 1 件も無い場合は、`/benchmark` をサムネイル取得あり（`--no-thumbnails` を付けない）で再実行するよう案内して停止する。JSON の `thumbnail_url` だけを画像分析の代わりにしない。
-- 視覚情報と JSON を `video_id` で対応付けられる動画が 2 件未満なら、上位群 vs 下位群を比較できないためレポートを生成せず、`/benchmark` で対象データを増やすよう案内して停止する。
+- `data/benchmark_*.json` が無い場合は、サムネイル画像の有無にかかわらず、再生数による上位群 / 下位群を決められないため、先に `/channel-research --benchmark` を案内して停止する。
+- benchmark JSON があっても視覚情報が 1 件も無い場合は、`/channel-research --benchmark` をサムネイル取得あり（`--no-thumbnails` を付けない）で再実行するよう案内して停止する。JSON の `thumbnail_url` だけを画像分析の代わりにしない。
+- 視覚情報と JSON を `video_id` で対応付けられる動画が 2 件未満なら、上位群 vs 下位群を比較できないためレポートを生成せず、`/channel-research --benchmark` で対象データを増やすよう案内して停止する。
 - データ収集・画像生成・自チャンネル画像との 320px 比較は行わない。外部 API を呼ばず、既存のローカル成果物だけを分析する。
 
 ## 完了条件
@@ -36,7 +36,7 @@ description: "Use when 収集済み競合サムネイルだけを再生数上位
 
 ## Overview
 
-`/benchmark` が収集した競合動画の再生数とサムネイル視覚情報を対応付け、上位群と下位群の差からサムネイル固有の勝ちパターンを抽出する。出力は `/thumbnail` の TTP 入力であり、サムネイルの生成や自チャンネルとの視認性比較はこのスキルでは行わない。
+`/channel-research --benchmark` が収集した競合動画の再生数とサムネイル視覚情報を対応付け、上位群と下位群の差からサムネイル固有の勝ちパターンを抽出する。出力は `/thumbnail` の TTP 入力であり、サムネイルの生成や自チャンネルとの視認性比較はこのスキルでは行わない。
 
 ## 実行フロー
 
@@ -52,7 +52,7 @@ find docs/benchmarks/thumbnails data/thumbnail_compare/benchmark \
   2>/dev/null | sort
 ```
 
-`latest_benchmark` が空なら `/benchmark` を案内して停止する。画像一覧が空の場合は、最新 JSON の `channels[].videos[].thumbnail_analysis` に非 null の分析があるか確認する。画像も既存分析も無ければ、`/benchmark` を `--no-thumbnails` なしで再実行するよう案内して停止する。
+`latest_benchmark` が空なら `/channel-research --benchmark` を案内して停止する。画像一覧が空の場合は、最新 JSON の `channels[].videos[].thumbnail_analysis` に非 null の分析があるか確認する。画像も既存分析も無ければ、`/channel-research --benchmark` を `--no-thumbnails` なしで再実行するよう案内して停止する。
 
 ### Step 1: 分析対象の対応付け
 
@@ -159,14 +159,14 @@ find docs/benchmarks/thumbnails data/thumbnail_compare/benchmark \
 
 | 状況 | 対処 |
 |---|---|
-| benchmark JSON が無い | `/benchmark` を実行してから再実行する |
-| JSON はあるが画像も `thumbnail_analysis` も無い | `/benchmark` を `--no-thumbnails` なしで再実行する |
-| JSON と画像の `video_id` が対応しない | 最新 JSON と同じ収集結果の画像か確認し、`/benchmark` で揃え直す |
-| 対応付けが 2 件未満 | `/benchmark` の対象チャンネル / 収集結果を確認し、比較可能な件数を用意する |
+| benchmark JSON が無い | `/channel-research --benchmark` を実行してから再実行する |
+| JSON はあるが画像も `thumbnail_analysis` も無い | `/channel-research --benchmark` を `--no-thumbnails` なしで再実行する |
+| JSON と画像の `video_id` が対応しない | 最新 JSON と同じ収集結果の画像か確認し、`/channel-research --benchmark` で揃え直す |
+| 対応付けが 2 件未満 | `/channel-research --benchmark` の対象チャンネル / 収集結果を確認し、比較可能な件数を用意する |
 
 ## Cross References
 
-- `/benchmark`: 競合動画データとサムネイル画像の収集・更新
+- `/channel-research --benchmark`: 競合動画データとサムネイル画像の収集・更新
 - `/thumbnail`: `docs/benchmarks/thumbnail-analysis.md` の勝ちパターンと参照候補を TTP 入力として生成
 - `/thumbnail-compare` → 生成候補と競合を並べた 320px 視認性比較
 - `/channel-new` 分析モード → タイトル・動画尺・投稿・コメントを含むチャンネル全体の TTP 分析

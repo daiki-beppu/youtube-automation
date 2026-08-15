@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(skills)`: `/channel-research` を新設し、旧 `/benchmark` の収集契約を排他 `--benchmark` mode と 1-step chain manifest へ移設する。collector の skill reference は新 owner 1 箇所へ集約し、下流 `config/skills/benchmark.yaml` の互換読み込みは維持する（#3815）。
+
 - `refactor(skills)`: `/channel-new` の既存チャンネル取り込み・config 再生成・YouTube 設定同期を `/setup --import` / `--regenerate` / `--push` へ移設し、分析・方向性検討の 2 mode だけを残す（#3746）。
 
 - `refactor(skills)`: `collection-ideate` の企画契約と補助資産を `/wf-new` の通常入口へ吸収し、旧 skill directory と直接起動導線を削除する。下流互換の `config/skills/collection-ideate.yaml` キーは維持する（#3858）。

@@ -17,7 +17,7 @@ BOOTSTRAP_REFERENCE_MD = SKILL_DIR / "references" / "new-channel-bootstrap.md"
 TTP_SEED_DURATION_REFERENCE_MD = SKILL_DIR / "references" / "ttp-seed-and-duration.md"
 PERSONA_BRANDING_READINESS_REFERENCE_MD = SKILL_DIR / "references" / "persona-branding-readiness.md"
 CHANNEL_NEW_SKILL_MD = REPO_ROOT / ".claude" / "skills" / "channel-new" / "SKILL.md"
-CHANNEL_NEW_RESIDUAL_SKILL_SHA256 = "af6963300d021298153b0bd20797818d0aad7a3e186460170f86f443470e4959"
+CHANNEL_NEW_RESIDUAL_SKILL_SHA256 = "6582a155ed94b3432fa1d6a01df58147bbb0e87e8c85fb76b9ca028dd1ef0602"
 CHANNEL_NEW_DESCRIPTION_SHA256 = "6ac621c1d796be7943c9ba2a0e0ff42a17c9ee2baa621770e2b9cb2236da7faa"
 CHANNEL_NEW_ROUTING_SHA256 = "1eef9878b5fa93a85a5985308a1be484b95e071157c355bd584e4f898b63cc60"
 OPENING_ASSETS = {
@@ -29,9 +29,9 @@ OPENING_ASSETS = {
 }
 BEFORE_MOVE_SHA256 = {
     "new-channel-bootstrap.md": "dbae6fc0b7bba180d8c7ec3a40667428ca584e50977127e7ab7a21e9391160c4",
-    "ttp-seed-and-duration.md": "6be5874c9ea6f71b2158cbb6931d542c3e21493dd2546634d4d95bae97945c93",
-    "persona-branding-readiness.md": "f40a2050cd6fbc134651c627e494694b29cc86eda9702825f96b1d8ac3ff0d61",
-    "derive_ttp_duration.py": "bed2ac050d67f3974e84815dbd79388809c4b8174bfa246f24a83d858990a132",
+    "ttp-seed-and-duration.md": "2b61abd7944f29740bdd34b1a12b17cb83d3789f9128541dba982270fc62bb4f",
+    "persona-branding-readiness.md": "f0178b0dd960cc0e36cf002b2436ab68286a98b423890e29f3f90b269f1d48b6",
+    "derive_ttp_duration.py": "8440e25a6b527498ab1eddbd07918ccd0e2ac2d81f326c94991a731432c5d2f2",
     "initial_save_guard.sh": "93e9503da8d1e1c2680f682be25c053988fd0fd45fa3bf193e8272d2dd704ac3",
 }
 

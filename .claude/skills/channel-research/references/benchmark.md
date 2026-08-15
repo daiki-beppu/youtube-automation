@@ -1,20 +1,3 @@
----
-name: benchmark
-purpose: 調べる
-description: "Use when 競合チャンネルのベンチマークデータを最新化するとき。「競合データ収集」「ベンチマーク更新」で発動。docs/benchmarks/*.md を更新。収集済みデータのチャンネル全体分析は /channel-new 分析モード、サムネイルだけの深掘りは /thumbnail-research"
----
-
-## 前後工程
-
-- `前工程`: `なし`
-- `後工程`: `/channel-new`, `/viewer-voice`, `/wf-new`, `/thumbnail-research`
-- `委譲先`: `なし`
-
-## 成果物
-
-- `書き込む`: `docs/benchmarks/<channel>.md`, `docs/benchmarks/thumbnails/<channel>_<video-id>.jpg`, `data/benchmark_<YYYYMMDD>.json`
-- `読み込む`: `config/channel/analytics.json`, `config/skills/benchmark.yaml`
-
 ## Overview
 
 `benchmark_collector.py` で競合チャンネルの**直近投稿のうち再生数しきい値（既定 10,000）以上**の動画だけを収集し、`docs/benchmarks/*.md` を自動更新する。
@@ -35,7 +18,7 @@ Step 1 のスクリプトが exit 0 で終了して `docs/benchmarks/*.md` と `
 
 以下を deep-merge した値を設定として使う。
 
-1. `.claude/skills/benchmark/config.default.yaml`
+1. `.claude/skills/channel-research/config.default.yaml`
 2. `config/skills/benchmark.yaml`（存在する場合）
 
 合成規則は `youtube_automation.configuration.skills.load_skill_config("benchmark")` と同じで、チャンネル上書きが優先される。存在しない override は未設定として扱い、勝手に作成しない。
@@ -52,7 +35,7 @@ Step 1 のスクリプトが exit 0 で終了して `docs/benchmarks/*.md` と `
 
 ### 許容する fail
 
-- `config/skills/benchmark.yaml` が無い → `.claude/skills/benchmark/config.default.yaml` を使うため停止しない
+- `config/skills/benchmark.yaml` が無い → `.claude/skills/channel-research/config.default.yaml` を使うため停止しない
 - `data/benchmark_*.json` / `docs/benchmarks/*.md` が無い → 本スキルの Step 1 で生成するため停止しない
 
 ## 取得データ（拡充版）
@@ -132,7 +115,7 @@ uv run yt-benchmark-collect -v               # 詳細ログ
 
 subagent へは次を具体値で渡す:
 
-- 入力パス: `.claude/skills/benchmark/config.default.yaml`、存在する場合は `config/skills/benchmark.yaml`、`config/channel/analytics.json`
+- 入力パス: `.claude/skills/channel-research/config.default.yaml`、存在する場合は `config/skills/benchmark.yaml`、`config/channel/analytics.json`
 - 実行する作業: `uv run yt-benchmark-collect -y` と、必要なサムネイル分析追記
 - 期待成果物: `data/benchmark_YYYYMMDD.json`、`docs/benchmarks/*.md`、必要に応じて `docs/benchmarks/thumbnails/{slug}_{video_id}.jpg`
 - 完了報告: `status: success | failure`、`commands`、`artifacts`、`updated_reports`、`summary`、`errors`
@@ -162,7 +145,7 @@ subagent へは次を具体値で渡す:
 }
 ```
 
-走査・分析の動作パラメータは skill-config (`.claude/skills/benchmark/config.default.yaml`) で管理。
+走査・分析の動作パラメータは skill-config (`.claude/skills/channel-research/config.default.yaml`) で管理。
 チャンネル側で上書きする場合は `config/skills/benchmark.yaml`:
 
 | 項目 | 既定 | 説明 |

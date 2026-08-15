@@ -162,7 +162,7 @@ TARGET_SKILLS: frozenset[str] = frozenset(
     {
         "analytics",
         "automation-update",
-        "benchmark",
+        "channel-research",
         "channel-new",
         "channel-status",
         "comments-reply",

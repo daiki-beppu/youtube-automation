@@ -6,7 +6,7 @@ description: "Use when 自チャンネルの生成済みサムネイルを競合
 
 ## 前後工程
 
-- `前工程`: `/thumbnail`, `/benchmark`
+- `前工程`: `/thumbnail`, `/channel-research --benchmark`
 - `後工程`: `なし`
 - `委譲先`: `なし`
 
@@ -31,7 +31,7 @@ description: "Use when 自チャンネルの生成済みサムネイルを競合
 
 - `config/channel/` が存在すること（`load_config()` でロード可能）。存在しない場合は `/setup --import` を案内して停止する
 - `config/channel/analytics.json::benchmark.channels` に承認済みベンチマークチャンネルが設定済みであること。未設定なら `/channel-new` / `/discover-competitors` を案内して停止する
-- `data/benchmark_*.json` が存在すること（鮮度が古い場合はスクリプトが自動更新する）。一度も収集していなければ先に `/benchmark` を案内する
+- `data/benchmark_*.json` が存在すること（鮮度が古い場合はスクリプトが自動更新する）。一度も収集していなければ先に `/channel-research --benchmark` を案内する
 - 自チャンネルの確定済みサムネイル `collections/live/*/10-assets/thumbnail.jpg` または `collections/planning/*/10-assets/thumbnail.jpg` が 1 件以上存在すること。どちらにも無ければ比較対象なしとして `/thumbnail` を案内する
 - ベンチマーク更新は YouTube Data API を使うため `auth/token.json` の OAuth 認証が必要。未認証なら `/setup` を案内する
 
@@ -40,9 +40,9 @@ description: "Use when 自チャンネルの生成済みサムネイルを競合
 | API | call 数 / 実行 | 変動要因 |
 |---|---|---|
 | YouTube Data API v3（直接呼び出し） | 0（ローカル比較 + CDN 画像 DL のみ） | — |
-| YouTube Data API v3（ベンチマーク自動再収集） | ベンチマークが鮮度切れの場合のみ /benchmark 相当（1 チャンネルあたり数 units） | ベンチマークデータの鮮度 |
+| YouTube Data API v3（ベンチマーク自動再収集） | ベンチマークが鮮度切れの場合のみ /channel-research --benchmark 相当（1 チャンネルあたり数 units） | ベンチマークデータの鮮度 |
 
-- 上限 / 承認: 事前に `/benchmark` でデータを最新化しておけば API call 0 で完結する（サムネイル DL は CDN 直取得で quota を消費しない）。
+- 上限 / 承認: 事前に `/channel-research --benchmark` でデータを最新化しておけば API call 0 で完結する（サムネイル DL は CDN 直取得で quota を消費しない）。
 
 ## 実行フロー
 
@@ -109,7 +109,7 @@ open data/thumbnail_compare/
 
 | 状況 | 兆候 | 対処 |
 |---|---|---|
-| 入力データ不在 | `data/` のベンチマーク/Analytics スナップショットが無い | 先に `/benchmark`・`/analytics --collect` 等を実行して入力を用意 |
+| 入力データ不在 | `data/` のベンチマーク/Analytics スナップショットが無い | 先に `/channel-research --benchmark`・`/analytics --collect` 等を実行して入力を用意 |
 | サムネ取得失敗 | `yt-thumbnail-compare` の画像 DL が HTTP エラー | YouTube / CDN のステータスを確認し時間を置いて再実行 |
 | 個別 timeout | 画像取得または縮小対象を示す timeout warning | 失敗対象だけを確認する。処理は残りを継続し、成功分の出力と最終件数を提示する |
 

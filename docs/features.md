@@ -95,7 +95,7 @@ YouTube Analytics と動画本体の解析。
 
 | Skill | なにができるか |
 |---|---|
-| /benchmark | 競合チャンネルの最新動画データを取得し `docs/benchmarks/*.md` を更新 |
+| /channel-research | チャンネル調査を状態判定付きで実行。`--benchmark` で競合の最新動画データを取得し `docs/benchmarks/*.md` を更新 |
 | /thumbnail-research | 収集済み競合サムネイルの再生数上位群 / 下位群を比較し、勝ちパターンと `/thumbnail` 向け TTP 推奨事項を生成 |
 
 ## 配信インフラ

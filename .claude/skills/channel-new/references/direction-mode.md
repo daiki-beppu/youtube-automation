@@ -28,13 +28,13 @@ YouTube の第三者チャンネル由来データ（description、keywords、lo
 
 上記の入力がすべて欠けている場合は、根拠なしに方向性検討を進めない。不足している入力を明示し、
 `/setup --channel` で TTP seed confirmation / branding snapshot / benchmark.channels を作成するか、
-必要に応じて `/benchmark` / `/viewer-voice` / `/channel-new` 分析モードを先に実行するよう案内して停止する。
+必要に応じて `/channel-research --benchmark` / `/viewer-voice` / `/channel-new` 分析モードを先に実行するよう案内して停止する。
 
 - 承認済み TTP 対象の全体像（チャンネル名、登録者数、動画数、直近タイトル）
 - 最も参考になるチャンネル（ロールモデル候補）
 - 転写したい型（タイトル構造、サムネ構図、branding。投稿頻度と動画尺は収集済みデータまたは手動メモがある場合だけ）
 - `data/video_analysis/<slug>/*.json` があれば、競合 BGM 構造（intro / peak / outro 秒）の平均と代表例
-- 後続 `/benchmark` / `/viewer-voice` / `/channel-new` 分析モードが必要な未確認事項
+- 後続 `/channel-research --benchmark` / `/viewer-voice` / `/channel-new` 分析モードが必要な未確認事項
 
 ## Step D2: ポジショニング議論
 
@@ -61,11 +61,11 @@ YouTube の第三者チャンネル由来データ（description、keywords、lo
    - 狙うべきセグメント
    - 利用シーン（勉強、睡眠、作業、ゲーム等）
 4. **コンテンツ戦略**
-   - 動画の長さ（`/benchmark` 実行済みなら競合データ、未実行ならユーザー手動メモまたは仮説を参考に `audio.target_duration_min` を決定）
-   - 投稿頻度（`/benchmark` 実行済みなら競合の投稿間隔データ、未実行ならユーザー手動メモまたは仮説）
+   - 動画の長さ（`/channel-research --benchmark` 実行済みなら競合データ、未実行ならユーザー手動メモまたは仮説を参考に `audio.target_duration_min` を決定）
+   - 投稿頻度（`/channel-research --benchmark` 実行済みなら競合の投稿間隔データ、未実行ならユーザー手動メモまたは仮説）
    - テーマの幅（専門特化 vs 多様性）
 5. **ビジュアルアイデンティティ**
-   - サムネイルの方向性（`/benchmark` 実行済みなら競合サムネイル、未実行なら `docs/channel/ttp-seed-confirmation.md` の手動選定メモを参考に）
+   - サムネイルの方向性（`/channel-research --benchmark` 実行済みなら競合サムネイル、未実行なら `docs/channel/ttp-seed-confirmation.md` の手動選定メモを参考に）
    - チャンネル全体のトーン＆マナー
 6. **競合の BGM 構造**
    - `/video-analyze` 済みなら `bgm_arc` 平均（intro / peak / outro 秒）と `suno_preset` を根拠に、曲展開の初期方針を決める
@@ -93,8 +93,8 @@ YouTube の第三者チャンネル由来データ（description、keywords、lo
 | コアメッセージ | | 視聴者インサイト |
 | 差別化ポイント | | 競合にない要素 |
 | ターゲット視聴者 | | TTP メモ / コメント分析 |
-| 動画の長さ（分） | | `/benchmark` 済みデータ、または手動メモ / 仮説 |
-| 投稿頻度 | | `/benchmark` 済みデータ、または手動メモ / 仮説 |
+| 動画の長さ（分） | | `/channel-research --benchmark` 済みデータ、または手動メモ / 仮説 |
+| 投稿頻度 | | `/channel-research --benchmark` 済みデータ、または手動メモ / 仮説 |
 | 音楽エンジン（デフォルト） | suno / lyria のどちらか | ジャンル適性・API 可用性 |
 | BGM 構造方針 | | `/video-analyze` 済みデータ、または未実行理由 |
 | サムネイル方針 | | 競合サムネイル分析 |
@@ -109,7 +109,7 @@ YouTube の第三者チャンネル由来データ（description、keywords、lo
 |---|---|---|
 | Suno `genre_line`（音楽方向性の英語直訳） | | `config/skills/suno.yaml::genre_line` |
 | Suno `exclude_styles`（排除する音楽要素）| | `config/skills/suno.yaml::exclude_styles` |
-| TTP 対象サムネ（manual note、または `/benchmark` 実行済みなら competitor 名 + 代表 video_id ×3）| | `config/skills/thumbnail.yaml::image_generation.gemini.reference_images.default` |
+| TTP 対象サムネ（manual note、または `/channel-research --benchmark` 実行済みなら competitor 名 + 代表 video_id ×3）| | `config/skills/thumbnail.yaml::image_generation.gemini.reference_images.default` |
 | ブランド背景色 | | `config/skills/thumbnail.yaml::image_generation.gemini.brand_background` |
 | サムネ構図ルール（キャラサイズ / NG ポーズ 等）| | `config/skills/thumbnail.yaml::image_generation.gemini.composition_rules.*` |
 | テーマ → アクティビティ・シーン対応表 | | `config/channel/content.json::title.theme_scenes` |
@@ -147,8 +147,8 @@ YouTube の第三者チャンネル由来データ（description、keywords、lo
 - トーン＆マナー: ...
 - ブランド背景色: ...
 - TTP 対象サムネ:
-  - `/benchmark` 未実行: 手動選定メモ ...
-  - `/benchmark` 実行済み:
+  - `/channel-research --benchmark` 未実行: 手動選定メモ ...
+  - `/channel-research --benchmark` 実行済み:
     - `data/thumbnail_compare/benchmark/<channel>-<vid1>.jpg`
     - `data/thumbnail_compare/benchmark/<channel>-<vid2>.jpg`
     - `data/thumbnail_compare/benchmark/<channel>-<vid3>.jpg`

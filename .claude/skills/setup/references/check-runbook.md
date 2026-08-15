@@ -323,7 +323,7 @@ minimal mode / benchmark fallback mode は新規チャンネル初回制作を�
 `ttp_mode: true` × `minimal mode` の warning は、転写元ベンチマークが無く `/wf-new` 企画工程を完了できない状態を示す。`next_action.kind == "human"` の指示を次の順に扱う:
 
 1. 利用者と TTP 対象を決め、`config/channel/analytics.json::benchmark.channels` に保存する
-2. AI が `/benchmark` を実行して `data/benchmark_*.json` を生成する
+2. AI が `/channel-research --benchmark` を実行して `data/benchmark_*.json` を生成する
 3. AI が `uv run yt-doctor --json` を再実行し、`wf_new_readiness` が `ok` になったことを確認する
 
 この check は `/wf-new` の到達可否だけを判定する。`benchmark_data` / `analytics_report` / `ttp_wf_new_readiness` の意味を変更せず、persona 文書の有無も停止条件に加えない。

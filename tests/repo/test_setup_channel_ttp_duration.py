@@ -142,4 +142,4 @@ def test_skill_documents_dry_run_approval_apply_and_exception_contract() -> None
     assert "--apply" in skill
     assert "duration selected video" in skill
     assert "ユーザー承認済み例外: duration" in skill
-    assert "/benchmark" in skill
+    assert "/channel-research --benchmark" in skill

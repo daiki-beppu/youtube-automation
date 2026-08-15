@@ -129,7 +129,7 @@ def evaluate_ttp_health(
                 _missing_channel(
                     config_channel,
                     "missing_upload_scan",
-                    f"{identity} に upload_scan がありません。/benchmark を再実行してください。",
+                    f"{identity} に upload_scan がありません。/channel-research --benchmark を再実行してください。",
                 )
             )
             continue
@@ -203,7 +203,7 @@ def evaluate_ttp_health(
                         f"走査範囲が前期開始日 {prior_start.isoformat()} まで到達していません"
                         f"（oldest_upload_at={upload_scan.get('oldest_upload_at')!r}）。"
                         f" {_BENCHMARK_CONFIG_PATH} に scan_recent: {recommended_scan_recent} 以上を設定して"
-                        " /benchmark を再実行してください。"
+                        " /channel-research --benchmark を再実行してください。"
                     ),
                     **recommendation,
                 }

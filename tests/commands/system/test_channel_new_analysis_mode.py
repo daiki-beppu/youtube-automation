@@ -16,10 +16,11 @@ def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def test_analysis_mode_replaces_standalone_skill_and_is_not_bundled() -> None:
-    assert not (ROOT / ".claude/skills/channel-research").exists()
+def test_channel_research_is_reintroduced_without_replacing_analysis_mode() -> None:
+    assert (ROOT / ".claude/skills/channel-research").is_dir()
     assert ANALYSIS_MODE.is_file()
-    assert "channel-research" not in bundled_skill_names()
+    assert "channel-research" in bundled_skill_names()
+    assert "benchmark" not in bundled_skill_names()
 
 
 def test_channel_new_routes_analysis_keywords_to_residual_mode() -> None:
@@ -65,7 +66,7 @@ def test_analysis_mode_preserves_inputs_gates_delegation_and_outputs() -> None:
 
 def test_sibling_routes_point_to_channel_new_analysis_mode() -> None:
     paths = (
-        ".claude/skills/benchmark/SKILL.md",
+        ".claude/skills/channel-research/SKILL.md",
         ".claude/skills/thumbnail-research/SKILL.md",
         ".claude/skills/discover-competitors/SKILL.md",
         ".claude/skills/market-research/SKILL.md",
@@ -74,10 +75,10 @@ def test_sibling_routes_point_to_channel_new_analysis_mode() -> None:
         text = _read(ROOT / relative)
         assert "/channel-new" in text
         assert "分析モード" in text
-        assert "`/channel-research`" not in text
+        assert "/channel-research --benchmark" in text or relative.endswith("channel-research/SKILL.md")
 
 
-def test_feature_catalog_has_no_standalone_channel_research() -> None:
+def test_feature_catalog_lists_channel_research_and_keeps_analysis_mode() -> None:
     features = _read(ROOT / "docs/features.md")
-    assert "| /channel-research |" not in features
+    assert "| /channel-research |" in features
     assert "/channel-new" in features and "分析モード" in features

@@ -284,7 +284,6 @@ MUTABLE_FILES = frozenset(path for path, _, _ in EXPECTED_ACTIVE_ROUTES if path 
     "wf-new/references/schema.md",
     "wf-new/references/validate-batch-manifest.py",
     "wf-new/references/wf-auto-state.py",
-    "wf-new/references/benchmark_collector.py",
     "wf-new/references/collection-ideate.config.default.yaml",
     "wf-new/references/collection-lifecycle.md",
     "wf-new/references/freshness_action.py",

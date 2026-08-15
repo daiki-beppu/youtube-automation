@@ -136,7 +136,7 @@ class BenchmarkCommentCollector:
             competitor_slug=self.competitor_slug,
         )
         if not targets:
-            logger.error("対象動画が見つかりません。先に /benchmark を実行してください。")
+            logger.error("対象動画が見つかりません。先に /channel-research --benchmark を実行してください。")
             return {}
 
         logger.info("対象動画: %d本（%s再生以上）", len(targets), f"{self.min_views:,}")

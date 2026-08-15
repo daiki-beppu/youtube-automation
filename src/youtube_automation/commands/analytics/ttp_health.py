@@ -34,7 +34,7 @@ def build_report(
     if benchmark_path is None:
         return _unavailable(
             "no_benchmark_json",
-            f"{data_dir} に benchmark_YYYYMMDD.json がありません。/benchmark を実行してください。",
+            f"{data_dir} に benchmark_YYYYMMDD.json がありません。/channel-research --benchmark を実行してください。",
         )
 
     benchmark_data = json.loads(benchmark_path.read_text(encoding="utf-8"))

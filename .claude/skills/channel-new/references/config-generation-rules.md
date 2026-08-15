@@ -123,12 +123,12 @@
 | キー | 転記元 |
 |---|---|
 | `image_generation.gemini.brand_background` | 「ビジュアルアイデンティティ」の背景色 |
-| `image_generation.gemini.reference_images.default` | TTP 対象の代表サムネ（`data/thumbnail_compare/benchmark/<channel>-<vid>.jpg`、`/benchmark` で download される） |
+| `image_generation.gemini.reference_images.default` | TTP 対象の代表サムネ（`data/thumbnail_compare/benchmark/<channel>-<vid>.jpg`、`/channel-research --benchmark` で download される） |
 | `image_generation.gemini.reference_images.channel_branding` | `docs/channel/competitor-branding-snapshot.json` 由来の icon / banner reference と `branding/icon.png` / `branding/banner.png` の出力先 |
 | `image_generation.gemini.composition_rules.*` | 「ビジュアルアイデンティティ」「サムネイル方針」 |
 | `image_generation.gemini.diff_prompt_template` | コレクション側 `prompts/<theme>.md` への差分指示テンプレ |
 
-`reference_images.default` の TTP サムネは `/benchmark` skill（CLI は `yt-benchmark-collect`）が
+`reference_images.default` の TTP サムネは `/channel-research --benchmark` skill（CLI は `yt-benchmark-collect`）が
 `docs/benchmarks/*.md` 取得時に `data/thumbnail_compare/benchmark/` に自動 download する。
 **手動 download はしない**（issue #567）。
 

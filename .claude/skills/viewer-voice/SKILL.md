@@ -6,7 +6,7 @@ description: "Use when 競合コメントの収集・分析で視聴者インサ
 
 ## 前後工程
 
-- `前工程`: `/benchmark`, `/discover-competitors`
+- `前工程`: `/channel-research --benchmark`, `/discover-competitors`
 - `後工程`: `/audience-persona-design`
 - `委譲先`: `なし`
 
@@ -69,7 +69,7 @@ description: "Use when 競合コメントの収集・分析で視聴者インサ
 | API | call 数 / 実行 | 変動要因 |
 |---|---|---|
 | YouTube Data API v3 commentThreads.list（1 unit/call） | 対象動画数 × 1 call | ベンチマーク中の 1 万再生以上の動画数（`--min-views` で決定） |
-| YouTube Data API v3（ベンチマーク自動再収集） | 鮮度切れ時のみ /benchmark 相当（1 チャンネルあたり数 units） | ベンチマークデータの鮮度 |
+| YouTube Data API v3（ベンチマーク自動再収集） | 鮮度切れ時のみ /channel-research --benchmark 相当（1 チャンネルあたり数 units） | ベンチマークデータの鮮度 |
 
 - 上限 / 承認: `-y` / `--force` なしの実行では収集前に `[Y/n]` 確認プロンプトで停止し、`--max-comments` は 1 call 内の maxResults として取得量を制限する。
 
