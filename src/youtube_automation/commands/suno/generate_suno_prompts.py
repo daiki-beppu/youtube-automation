@@ -3,7 +3,6 @@
 
 import argparse
 import json
-import math
 import re
 import sys
 from collections import Counter
@@ -11,7 +10,6 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from youtube_automation.configuration.skills import load_channel_override, load_skill_config
 from youtube_automation.core.errors import ConfigError
 from youtube_automation.domains.suno import prompt_resolution
 from youtube_automation.domains.suno.downloaded.models import (
@@ -24,7 +22,6 @@ from youtube_automation.domains.suno.downloaded.validation import (
     suno_prompt_entry_names,
     surrounding_whitespace_issue,
 )
-from youtube_automation.domains.suno.lyrics import load_suno_lyrics_by_name
 from youtube_automation.infrastructure.filesystem import write_text_files_transactionally
 
 # ---------------------------------------------------------------------------
@@ -49,7 +46,7 @@ def validate_style_char_limit(
     return warnings_list
 
 
-def validate_banned_artists(style_text: str, banned_artists: list[str]) -> list[str]:
+def validate_banned_artists(style_text: str, banned_artists: Sequence[str]) -> list[str]:
     """Style テキストに禁止アーティスト名が含まれていないか検証する.
 
     Returns: エラーメッセージのリスト (空なら問題なし)。
@@ -165,28 +162,6 @@ class _ResolvedPattern:
     lyrics_by_scene: list[str]  # scenes と同じ長さ。各値は rstrip 済み。歌詞が無ければ ""
 
 
-def _duration_filter_from_config(suno: dict) -> dict:
-    raw = suno.get("duration_filter", {})
-    if raw is None:
-        raw = {}
-    if not isinstance(raw, dict):
-        raise ConfigError("config/skills/music.yaml::prompt.duration_filter must be a mapping")
-    min_sec = raw.get("min_sec", 60)
-    max_sec = raw.get("max_sec", 300)
-    if (
-        isinstance(min_sec, bool)
-        or isinstance(max_sec, bool)
-        or not isinstance(min_sec, (int, float))
-        or not isinstance(max_sec, (int, float))
-        or not math.isfinite(min_sec)
-        or not math.isfinite(max_sec)
-    ):
-        raise ConfigError("config/skills/music.yaml::prompt.duration_filter min_sec/max_sec must be finite numeric")
-    if min_sec < 0 or max_sec < 0 or min_sec > max_sec:
-        raise ConfigError("config/skills/music.yaml::prompt.duration_filter must satisfy 0 <= min_sec <= max_sec")
-    return {"min_sec": min_sec, "max_sec": max_sec}
-
-
 @dataclass
 class _GeneratedPrompts:
     title: str
@@ -194,6 +169,10 @@ class _GeneratedPrompts:
     style_influence: int
     weirdness: int
     exclude_styles: str
+    genre_line: str
+    banned_artists: tuple[str, ...]
+    auto_lyrics_structure: bool
+    duration_filter: Mapping[str, int | float]
     full_style_char_limit: int
     # channel override に明示設定された More Options フィールドのみを保持する (#900)。
     # collection スコープ: 全 entry に同じ値が載る。未設定キーは dict に含めない。
@@ -229,12 +208,7 @@ def _require_pattern_name_without_padding(
 
 
 def _resolve_prompts(patterns_path: Path) -> _GeneratedPrompts:
-    resolution = prompt_resolution.resolve_from_path(
-        patterns_path,
-        skill_config_loader=load_skill_config,
-        channel_override_loader=load_channel_override,
-        lyrics_loader=load_suno_lyrics_by_name,
-    )
+    resolution = prompt_resolution.resolve_from_path(patterns_path)
     resolved: list[_ResolvedPattern] = []
     expected_external_lyrics_names: set[str] = set()
     entry_index = 0
@@ -302,14 +276,18 @@ def _resolve_prompts(patterns_path: Path) -> _GeneratedPrompts:
         style_influence=resolution.style_influence,
         weirdness=resolution.weirdness,
         exclude_styles=resolution.exclude_styles,
+        genre_line=resolution.genre_line,
+        banned_artists=resolution.banned_artists,
+        auto_lyrics_structure=resolution.auto_lyrics_structure,
+        duration_filter=resolution.duration_filter,
         full_style_char_limit=resolution.full_style_char_limit,
         advanced_json_fields=resolution.advanced_json_fields,
         patterns=resolved,
     )
 
 
-def generate(patterns_path: Path) -> str:
-    resolved = _resolve_prompts(patterns_path)
+def generate(patterns_path: Path, *, resolved: _GeneratedPrompts | None = None) -> str:
+    resolved = _resolve_prompts(patterns_path) if resolved is None else resolved
 
     lines = [
         f"# Suno Prompts — {resolved.title}",
@@ -370,7 +348,7 @@ def generate(patterns_path: Path) -> str:
     return "\n".join(lines) + "\n"
 
 
-def build_prompt_entries(patterns_path: Path) -> list[dict]:
+def build_prompt_entries(patterns_path: Path, *, resolved: _GeneratedPrompts | None = None) -> list[dict]:
     """拡張へ配信する `[{name, style, lyrics}]` を md と同じ部品から派生させる.
 
     `_resolve_prompts()` が作る entry_names 単位で出力する。
@@ -386,18 +364,14 @@ def build_prompt_entries(patterns_path: Path) -> list[dict]:
 
     Style 重複検証 (#1456): 全 entry の Style 文が完全一致する組があれば警告する
     """
-    resolved = _resolve_prompts(patterns_path)
-    suno = load_skill_config("music.prompt")
-    banned_artists = suno.get("banned_artists", [])
-    auto_lyrics = suno.get("auto_lyrics_structure", False)
+    resolved = _resolve_prompts(patterns_path) if resolved is None else resolved
 
     report = QualityReport()
 
     # 5 要素順序チェックは genre_line（ユーザーが config に書く部分）を 1 回だけ検証する。
     # Styles 第 1 行の先頭は `_style_line` が tempo を置くため full_style では false positive になる。
-    genre_line = suno.get("genre_line", "")
-    if genre_line:
-        report.warnings.extend(validate_5_element_order(genre_line))
+    if resolved.genre_line:
+        report.warnings.extend(validate_5_element_order(resolved.genre_line))
 
     entries: list[dict] = []
     for pattern in resolved.patterns:
@@ -416,11 +390,11 @@ def build_prompt_entries(patterns_path: Path) -> list[dict]:
             # Styles 第 1 行の先頭は `_style_line` が tempo を置くため、
             # full_style での先頭テンポ検知は false positive になる。
             report.warnings.extend(validate_style_char_limit(full_style, limit=resolved.full_style_char_limit))
-            report.errors.extend(validate_banned_artists(full_style, banned_artists))
+            report.errors.extend(validate_banned_artists(full_style, resolved.banned_artists))
 
             # auto_lyrics_structure: 歌詞構造の自動補強 (#904)
             lyrics = lyrics_source
-            if auto_lyrics:
+            if resolved.auto_lyrics_structure:
                 lyrics = apply_auto_lyrics_structure(lyrics, is_vocal=resolved.is_vocal)
 
             entry = {
@@ -470,11 +444,12 @@ def main():
     if not patterns_path.exists():
         parser.error(f"{patterns_path} not found")
 
-    entries = build_prompt_entries(patterns_path)
-    markdown = generate(patterns_path)
+    resolved = _resolve_prompts(patterns_path)
+    entries = build_prompt_entries(patterns_path, resolved=resolved)
+    markdown = generate(patterns_path, resolved=resolved)
     payload = {
         "entries": entries,
-        "duration_filter": _duration_filter_from_config(load_skill_config("music.prompt")),
+        "duration_filter": dict(resolved.duration_filter),
     }
 
     md_path = patterns_path.parent / SUNO_PROMPTS_MD_FILENAME
