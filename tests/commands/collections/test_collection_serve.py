@@ -3875,22 +3875,6 @@ def test_get_auth_token_rejects_wrong_declared_extension_origin(serve_dir, tmp_p
     assert exc_info.value.code == 403
 
 
-def test_apply_downloaded_artifacts_propagates_unknown_atomic_write_error(tmp_path):
-    """未知例外は DownloadedArtifactError に丸めず、上位へ伝播する。"""
-    coll = _make_collection(tmp_path, "20260601-clm-aaa-collection", entries=[])
-
-    def fail_unexpected(_path: Path, _data: dict, *, prefix: str) -> None:
-        raise RuntimeError("unexpected writer failure")
-
-    with pytest.raises(RuntimeError, match="unexpected writer failure"):
-        apply_downloaded_artifacts(
-            coll,
-            DownloadedPayload(file_count=0, format="mp3", suno_playlist_url="https://suno.com/playlist/abc"),
-            prompt_entries_reader=read_suno_prompt_entries,
-            atomic_json_write=fail_unexpected,
-        )
-
-
 def test_apply_downloaded_artifacts_restores_outer_backup_when_inner_music_rollback_fails(tmp_path, monkeypatch):
     """内側 commit rollback が失敗しても外側 transaction backup から music dir を戻す。"""
     coll = _make_collection(
@@ -3919,9 +3903,6 @@ def test_apply_downloaded_artifacts_restores_outer_backup_when_inner_music_rollb
         fail_staged_move_and_inner_restore,
     )
 
-    def write_json(_path: Path, _data: dict, *, prefix: str) -> None:
-        return None
-
     with pytest.raises(DownloadedArtifactError, match="simulated staged move failure|simulated inner rollback failure"):
         apply_downloaded_artifacts(
             coll,
@@ -3932,7 +3913,6 @@ def test_apply_downloaded_artifacts_restores_outer_backup_when_inner_music_rollb
                 download_path=str(zip_path),
             ),
             prompt_entries_reader=read_suno_prompt_entries,
-            atomic_json_write=write_json,
         )
 
     assert {p.name: p.read_bytes() for p in sorted(music_dir.iterdir())} == original_files
@@ -4366,8 +4346,6 @@ def test_post_downloaded_zip_output_name_collision_returns_500_without_partial_m
 
 def test_post_downloaded_workflow_write_failure_rolls_back_music_and_workflow(serve_dir, tmp_path, monkeypatch):
     """ZIP commit 後に workflow-state.json 更新が失敗しても music と workflow を元に戻す。"""
-    import youtube_automation.commands.collections.collection_serve as cs
-
     planning = tmp_path / "planning"
     coll = _make_collection(
         planning,
@@ -4381,14 +4359,14 @@ def test_post_downloaded_workflow_write_failure_rolls_back_music_and_workflow(se
     original_ws = {"planning": {"thumbnail": {"approved": True}}, "assets": {"music_downloaded": False}}
     ws_path.write_text(json.dumps(original_ws, ensure_ascii=False), encoding="utf-8")
     zip_path = _make_zip(tmp_path / "valid.zip", {"Song A.mp3": b"new-a", "Song A_1.mp3": b"new-b"})
-    original_atomic_json_write = cs._atomic_json_write
 
-    def fail_workflow_write(path: Path, data: dict, *, prefix: str) -> None:
-        if path.name == "workflow-state.json":
-            raise OSError("simulated workflow write failure")
-        original_atomic_json_write(path, data, prefix=prefix)
+    def fail_workflow_write(_path: Path, _updater) -> None:
+        raise OSError("simulated workflow write failure")
 
-    monkeypatch.setattr(cs, "_atomic_json_write", fail_workflow_write)
+    monkeypatch.setattr(
+        "youtube_automation.domains.suno.downloaded.workflow.update_workflow_state",
+        fail_workflow_write,
+    )
     base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
     token = _fetch_token(base)
 

@@ -17,7 +17,6 @@ from youtube_automation.domains.suno.downloaded.models import (
     PromptEntriesReader,
 )
 from youtube_automation.domains.suno.downloaded.workflow import (
-    AtomicJsonWriter,
     expected_download_count,
     read_pattern_count,
     update_workflow_state_downloaded,
@@ -55,10 +54,7 @@ class DownloadedApplyResult:
 def _restore_downloaded_transaction(
     *,
     music_dir: Path,
-    workflow_state_path: Path,
     music_backup_dir: Path | None,
-    workflow_existed: bool,
-    workflow_backup: bytes | None,
     restore_music: bool,
 ) -> None:
     if restore_music:
@@ -67,11 +63,6 @@ def _restore_downloaded_transaction(
             restored = music_backup_dir / "02-Individual-music"
             if restored.exists():
                 shutil.copytree(restored, music_dir)
-    if workflow_backup is not None:
-        workflow_state_path.parent.mkdir(parents=True, exist_ok=True)
-        workflow_state_path.write_bytes(workflow_backup)
-    elif not workflow_existed:
-        workflow_state_path.unlink(missing_ok=True)
 
 
 def apply_downloaded_artifacts_detailed(
@@ -79,7 +70,6 @@ def apply_downloaded_artifacts_detailed(
     payload: DownloadedPayload,
     *,
     prompt_entries_reader: PromptEntriesReader,
-    atomic_json_write: AtomicJsonWriter,
 ) -> DownloadedApplyResult:
     pattern_count = read_pattern_count(coll_dir, prompt_entries_reader=prompt_entries_reader, default=0)
     expected_count = cast(int, expected_download_count(pattern_count, payload.expected_file_count))
@@ -87,10 +77,7 @@ def apply_downloaded_artifacts_detailed(
     placed_count = payload.file_count
     paths = CollectionPaths(coll_dir)
     music_dir = paths.music_dir
-    workflow_state_path = paths.workflow_state_path
     music_backup_dir: Path | None = None
-    workflow_existed = workflow_state_path.exists()
-    workflow_backup = workflow_state_path.read_bytes() if workflow_existed else None
     restore_music_on_error = False
 
     try:
@@ -118,25 +105,18 @@ def apply_downloaded_artifacts_detailed(
             expected_file_count=result.expected_count,
             missing_reasons=result.missing_reasons,
             prompt_entries_reader=prompt_entries_reader,
-            atomic_json_write=atomic_json_write,
         )
     except DownloadedArtifactError:
         _restore_downloaded_transaction(
             music_dir=music_dir,
-            workflow_state_path=workflow_state_path,
             music_backup_dir=music_backup_dir,
-            workflow_existed=workflow_existed,
-            workflow_backup=workflow_backup,
             restore_music=restore_music_on_error,
         )
         raise
     except (OSError, ValueError, shutil.Error) as exc:
         _restore_downloaded_transaction(
             music_dir=music_dir,
-            workflow_state_path=workflow_state_path,
             music_backup_dir=music_backup_dir,
-            workflow_existed=workflow_existed,
-            workflow_backup=workflow_backup,
             restore_music=restore_music_on_error,
         )
         raise DownloadedArtifactError(str(exc)) from exc
@@ -156,11 +136,9 @@ def apply_downloaded_artifacts(
     payload: DownloadedPayload,
     *,
     prompt_entries_reader: PromptEntriesReader,
-    atomic_json_write: AtomicJsonWriter,
 ) -> int:
     return apply_downloaded_artifacts_detailed(
         coll_dir,
         payload,
         prompt_entries_reader=prompt_entries_reader,
-        atomic_json_write=atomic_json_write,
     ).placed_count
