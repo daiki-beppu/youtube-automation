@@ -17,7 +17,7 @@ import sys
 import tempfile
 import tomllib
 import unicodedata
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from contextlib import contextmanager, redirect_stdout
 from contextvars import ContextVar
 from dataclasses import asdict, dataclass
@@ -1979,15 +1979,23 @@ def _declared_category(result: CheckResult) -> str:
     return definition.category if definition is not None else result.category
 
 
-def run_all_checks(channel_dir: Path) -> list[CheckResult]:
+def run_checks(channel_dir: Path, check_ids: Iterable[str]) -> list[CheckResult]:
+    """Run the selected check set in registry declaration order."""
+    selected_ids = set(check_ids)
     results: list[CheckResult] = []
     for definition in CHECK_REGISTRY:
+        if definition.id not in selected_ids:
+            continue
         result = definition.run(channel_dir)
         if result.id != definition.id:
             raise RuntimeError(f"doctor check id mismatch: declared={definition.id}, returned={result.id}")
         result.category = definition.category
         results.append(result)
     return results
+
+
+def run_all_checks(channel_dir: Path) -> list[CheckResult]:
+    return run_checks(channel_dir, (definition.id for definition in CHECK_REGISTRY))
 
 
 def summarize(results: list[CheckResult]) -> dict:
@@ -2643,6 +2651,12 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("--json", action="store_true", help="JSON 出力 (AI 用)")
     parser.add_argument("--target", help="対象 channel dir (既定: CHANNEL_DIR env → CWD)")
     parser.add_argument(
+        "--check",
+        action="append",
+        choices=tuple(definition.id for definition in CHECK_REGISTRY),
+        help="指定 check のみ実行（複数回指定可）",
+    )
+    parser.add_argument(
         "--apply",
         action="store_true",
         help="ai-exec の診断 step を human / 決定待ちまで自動実行",
@@ -2695,7 +2709,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         apply_summary = outcome.summary
         exit_code = outcome.exit_code
     else:
-        results = run_all_checks(channel_dir)
+        results = run_checks(channel_dir, args.check) if args.check else run_all_checks(channel_dir)
     summary = summarize(results)
 
     if args.json or args.apply:

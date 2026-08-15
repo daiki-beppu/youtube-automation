@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(doctor)`: registry の check ID を `--check <id>` で複数選択し、宣言順・対象集合内 summary を保って部分診断できるようにし、automation update の channel config 確認を単一 check 実行へ切り替える（#3922）。
 - `refactor(configuration)`: CLI の明示 channel 選択を公開 API として提供し、doctor から loader の private symbol への越境 import を解消する（#3921）。
 - `refactor(doctor)`: OAuth token の読み込み・refresh・0o600 atomic 永続化、upload 必須 scope、YouTube service 生成を `infrastructure.auth` に集約し、doctor は診断結果への変換だけを担う（#3920）。
 - `refactor(doctor)`: TTP と初期セットアップの readiness 判定を provider-neutral な `domains.channel_readiness` へ移し、doctor を診断結果へ変換する薄い adapter にする（#3919）。
