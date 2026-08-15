@@ -16,7 +16,8 @@ from youtube_automation.core.adapters.youtube import (
     complete_collection_quota_plan,
 )
 from youtube_automation.core.errors import ValidationError
-from youtube_automation.domains.uploads._complete_collection_executor import CompleteCollectionExecutorMixin
+from youtube_automation.domains.uploads._collection_uploader_constants import ACTION_COMPLETE_COLLECTION_QUOTA_EXHAUSTED
+from youtube_automation.domains.uploads._complete_collection_executor import CompleteCollectionExecutor
 from youtube_automation.domains.uploads._playlist_assignment import PlaylistAssignment
 from youtube_automation.domains.uploads._published_dates import PublishedDatesScheduler
 from youtube_automation.domains.uploads._tracking_io import TrackingStore
@@ -35,22 +36,27 @@ from youtube_automation.infrastructure.google.youtube import YouTubeClients
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["CollectionUploader"]
+__all__ = [
+    "ACTION_COMPLETE_COLLECTION_QUOTA_EXHAUSTED",
+    "CollectionUploader",
+    "CompleteCollectionExecutor",
+    "PlaylistAssignment",
+    "PublishedDatesScheduler",
+    "TrackingStore",
+]
 
 
-class CollectionUploader(
-    CompleteCollectionExecutorMixin,
-):
+class CollectionUploader:
     """Collection Uploader — CC アップロード専用
 
     Complete Collection を YouTube にアップロードし、
     publishAt によるスケジュール公開を管理する。
 
-    責務別の挙動は mixin に分離されている（Issue #465）:
+    責務別の挙動は collaborator へ委譲する:
     - tracking I/O           : ``TrackingStore`` への委譲
     - 公開日 / publishAt 計算: ``PublishedDatesScheduler`` への委譲
     - プレイリスト割り当て    : ``PlaylistAssignment`` への委譲
-    - CC 実行ループ           : ``CompleteCollectionExecutorMixin``
+    - CC 実行ループ           : ``CompleteCollectionExecutor``
     """
 
     def __init__(
@@ -61,6 +67,7 @@ class CollectionUploader(
         tracking_store: TrackingStore | None = None,
         published_dates: PublishedDatesScheduler | None = None,
         playlist_assignment: PlaylistAssignment | None = None,
+        complete_collection_executor: CompleteCollectionExecutor | None = None,
     ):
         if collections_root is None:
             collections_root = channel_dir() / "collections"
@@ -78,6 +85,17 @@ class CollectionUploader(
         self.published_dates = published_dates or PublishedDatesScheduler(self.config, self._provide_youtube_service)
         self.playlist_assignment = (
             playlist_assignment if playlist_assignment is not None else PlaylistAssignment(youtube_clients)
+        )
+        self.complete_collection_executor = (
+            complete_collection_executor
+            if complete_collection_executor is not None
+            else CompleteCollectionExecutor(
+                self.uploader,
+                self.tracking_store,
+                self.config,
+                self.playlist_assignment,
+                self._move_collection_to_live,
+            )
         )
 
     # ─── 設定・初期化 ───────────────────────────────
@@ -216,6 +234,26 @@ class CollectionUploader(
         self.tracking_store.save(collection_path, tracking)
         logger.info("✅ 全ステップ完了")
         return {"action": "all_completed", "details": {}}
+
+    def _failed_complete_collection(self, collection_path: Path, tracking: dict, error) -> dict:
+        return self.complete_collection_executor.failed(collection_path, tracking, error)
+
+    def _finish_uploaded_collection(
+        self,
+        collection_path: Path,
+        tracking: dict,
+        complete_video: dict,
+        publish_at: str | None,
+    ) -> dict:
+        return self.complete_collection_executor.finish(collection_path, tracking, complete_video, publish_at)
+
+    def _execute_complete_collection(
+        self,
+        collection_path: Path,
+        tracking: dict,
+        publish_at: str | None = None,
+    ) -> dict:
+        return self.complete_collection_executor.run(collection_path, tracking, publish_at)
 
     def ensure_upload_preflight(self, collection_path: Path) -> None:
         """CLI の各入口で共通の骨格・タイトル preflight を実行する。"""

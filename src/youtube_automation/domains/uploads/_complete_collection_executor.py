@@ -1,10 +1,4 @@
-"""Complete Collection アップロード実行ループ。
-
-責務分割（Issue #465）の一環で ``collection_uploader.py`` から分離した。
-``self.uploader`` / ``self.tracking_store`` / ``self.config`` /
-``self._move_collection_to_live`` / ``self.playlist_assignment`` は合成先クラス
-（``CollectionUploader`` 本体）が提供する。
-"""
+"""Complete Collection アップロード実行 collaborator。"""
 
 from __future__ import annotations
 
@@ -28,10 +22,24 @@ logger = logging.getLogger(__name__)
 _COMPLETE_COLLECTION_ERROR = "complete collection upload failed"
 
 
-class CompleteCollectionExecutorMixin:
-    """Complete Collection アップロード実行ループを提供する mixin。"""
+class CompleteCollectionExecutor:
+    """明示された collaborator で Complete Collection 実行ループを進める。"""
 
-    def _failed_complete_collection(self, collection_path: Path, tracking: dict, error: AutomationError) -> dict:
+    def __init__(
+        self,
+        uploader,
+        tracking_store,
+        config: dict,
+        playlist_assignment,
+        move_collection_to_live,
+    ) -> None:
+        self.uploader = uploader
+        self.tracking_store = tracking_store
+        self.config = config
+        self.playlist_assignment = playlist_assignment
+        self.move_collection_to_live = move_collection_to_live
+
+    def failed(self, collection_path: Path, tracking: dict, error: AutomationError) -> dict:
         current = self.tracking_store.load(collection_path) or tracking
         cc_current = current.setdefault("complete_collection", {})
         cc_current["status"] = "failed"
@@ -40,7 +48,7 @@ class CompleteCollectionExecutorMixin:
         logger.error("❌ Complete Collection エラー: %s", redact_sensitive_data(str(error), collection_path))
         return {"action": "complete_collection_failed", "details": {"error": _COMPLETE_COLLECTION_ERROR}}
 
-    def _finish_uploaded_collection(
+    def finish(
         self,
         collection_path: Path,
         tracking: dict,
@@ -61,7 +69,7 @@ class CompleteCollectionExecutorMixin:
         post_processing_errors: list[str] = []
         if self.config["collections_management"].get("auto_move_to_live", True):
             try:
-                collection_path = self._move_collection_to_live(collection_path)
+                collection_path = self.move_collection_to_live(collection_path)
             except AutomationError as error:
                 post_processing_errors.append("move_to_live")
                 logger.error(
@@ -95,9 +103,7 @@ class CompleteCollectionExecutorMixin:
         logger.info(f"📹 {complete_video['video_url']}")
         return {"action": action, "details": {**tracking["complete_collection"]}}
 
-    def _execute_complete_collection(
-        self, collection_path: Path, tracking: dict, publish_at: str | None = None
-    ) -> dict:
+    def run(self, collection_path: Path, tracking: dict, publish_at: str | None = None) -> dict:
         """Complete Collection アップロード"""
         logger.info("📅 Complete Collection アップロード開始")
         logger.info(f"🎵 コレクション: {collection_path.name}")
@@ -156,11 +162,11 @@ class CompleteCollectionExecutorMixin:
                 "details": {"error": "quota exhausted", "retry_after_seconds": e.retry_after_seconds},
             }
         except AutomationError as error:
-            return self._failed_complete_collection(collection_path, tracking, error)
+            return self.failed(collection_path, tracking, error)
 
         complete_video = result.get("complete_video")
         if complete_video and "video_id" in complete_video:
-            return self._finish_uploaded_collection(collection_path, tracking, complete_video, publish_at)
+            return self.finish(collection_path, tracking, complete_video, publish_at)
 
         error_msg = _COMPLETE_COLLECTION_ERROR
         # callback が disk に書いた URI 状態（session 失効クリア等）を保ったまま
@@ -174,4 +180,4 @@ class CompleteCollectionExecutorMixin:
         return {"action": "complete_collection_failed", "details": {"error": error_msg}}
 
 
-__all__ = ["CompleteCollectionExecutorMixin"]
+__all__ = ["CompleteCollectionExecutor"]

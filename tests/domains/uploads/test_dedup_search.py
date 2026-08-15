@@ -2,7 +2,7 @@
 
 from unittest.mock import MagicMock
 
-from youtube_automation.domains.uploads._dedup_search import DedupSearch
+from youtube_automation.domains.uploads.youtube import DedupSearch
 
 
 def test_search_helper_uses_injected_youtube_service() -> None:

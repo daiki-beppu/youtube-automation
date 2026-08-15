@@ -21,9 +21,7 @@ from googleapiclient.errors import HttpError
 from httplib2 import Response
 
 from tests.helpers.paths import FIXTURES_DIR, REPO_ROOT
-from youtube_automation.domains.uploads._playlist_assignment import PlaylistAssignment
-from youtube_automation.domains.uploads._published_dates import PublishedDatesScheduler
-from youtube_automation.domains.uploads._tracking_io import TrackingStore
+from youtube_automation.domains.uploads.collection import PlaylistAssignment, PublishedDatesScheduler, TrackingStore
 
 sys.path.insert(0, str(REPO_ROOT))
 
@@ -405,6 +403,21 @@ def test_collection_uploader_accepts_injected_playlist_assignment(tmp_path: Path
         )
 
     assert uploader.playlist_assignment is playlist_assignment
+
+
+def test_collection_uploader_delegates_to_injected_complete_collection_executor(tmp_path: Path) -> None:
+    from youtube_automation.domains.uploads.collection import CollectionUploader
+
+    executor = MagicMock()
+    executor.run.return_value = {"action": "delegated"}
+    uploader = CollectionUploader(collections_root=str(tmp_path), complete_collection_executor=executor)
+    collection = tmp_path / "collection"
+    tracking = {"status": "pending"}
+
+    assert uploader._execute_complete_collection(collection, tracking, publish_at="2099-01-01T00:00:00Z") == {
+        "action": "delegated"
+    }
+    executor.run.assert_called_once_with(collection, tracking, "2099-01-01T00:00:00Z")
 
 
 def test_collection_uploader_delegates_publish_date_calculation(tmp_path: Path) -> None:
@@ -1195,9 +1208,7 @@ class TestExecuteCompleteCollectionResume:
         （callback が既に永続化済み）を温存したまま次回実行に委ねる。
         """
         from youtube_automation.core.errors import QuotaExhaustedError
-        from youtube_automation.domains.uploads._collection_uploader_constants import (
-            ACTION_COMPLETE_COLLECTION_QUOTA_EXHAUSTED,
-        )
+        from youtube_automation.domains.uploads.collection import ACTION_COMPLETE_COLLECTION_QUOTA_EXHAUSTED
 
         col, tracking_path = _make_tracking_collection(tmp_path, resume_uri=None)
         uploader, mock_inner = _make_uploader_with_collection_mock(tmp_path)

@@ -259,7 +259,7 @@ def _write_preflight_collection(tmp_path: Path, scene_languages: list[str]) -> P
 
 class TestPreflightLocalizationLanguages:
     def test_should_pass_when_supported_scene_languages_are_present(self, tmp_path):
-        from youtube_automation.domains.uploads._preflight import PreflightChecker
+        from youtube_automation.domains.uploads.youtube import PreflightChecker
 
         col_dir = _write_preflight_collection(tmp_path, ["en", "ja"])
         checker = PreflightChecker(tmp_path, config_loader=lambda: _make_preflight_config(["ja", "en"]))
@@ -267,7 +267,7 @@ class TestPreflightLocalizationLanguages:
         checker.check(col_dir)
 
     def test_should_pass_when_required_high_cpm_languages_are_present(self, tmp_path):
-        from youtube_automation.domains.uploads._preflight import PreflightChecker
+        from youtube_automation.domains.uploads.youtube import PreflightChecker
 
         col_dir = _write_preflight_collection(tmp_path, ["en", "ja", "de"])
         checker = PreflightChecker(tmp_path, config_loader=lambda: _make_preflight_config(["ja", "en", "de"]))
@@ -275,7 +275,7 @@ class TestPreflightLocalizationLanguages:
         checker.check(col_dir)
 
     def test_should_warn_and_continue_when_low_cpm_language_is_present(self, tmp_path, caplog):
-        from youtube_automation.domains.uploads._preflight import PreflightChecker
+        from youtube_automation.domains.uploads.youtube import PreflightChecker
 
         col_dir = _write_preflight_collection(tmp_path, ["en", "ja", "de", "ko"])
         checker = PreflightChecker(
@@ -364,7 +364,7 @@ class TestPreflightTitleTemplateCompliance:
     """#602: 鋳型逸脱・巻数表記・RHS 重複を preflight で block する."""
 
     def test_should_fail_on_volume_and_rhs_duplicate(self, tmp_path):
-        from youtube_automation.domains.uploads._preflight import PreflightChecker
+        from youtube_automation.domains.uploads.youtube import PreflightChecker
 
         _write_live_title(
             tmp_path,
@@ -384,7 +384,7 @@ class TestPreflightTitleTemplateCompliance:
             checker.check(col_dir)
 
     def test_should_pass_on_compliant_title(self, tmp_path):
-        from youtube_automation.domains.uploads._preflight import PreflightChecker
+        from youtube_automation.domains.uploads.youtube import PreflightChecker
 
         _write_live_title(
             tmp_path,
@@ -403,7 +403,7 @@ class TestPreflightTitleTemplateCompliance:
         checker.check(col_dir)
 
     def test_should_allow_opted_in_volume_without_disabling_default_detection(self, tmp_path):
-        from youtube_automation.domains.uploads._preflight import PreflightChecker
+        from youtube_automation.domains.uploads.youtube import PreflightChecker
 
         opted_in_collection = _write_title_collection(
             tmp_path,
@@ -434,8 +434,7 @@ class TestPreflightTitleTemplateCompliance:
             checker.check(false_collection)
 
     def test_upload_collection_reaches_post_preflight_for_opted_in_volume(self, tmp_path):
-        from youtube_automation.domains.uploads._preflight import PreflightChecker
-        from youtube_automation.domains.uploads.youtube import YouTubeAutoUploader
+        from youtube_automation.domains.uploads.youtube import PreflightChecker, YouTubeAutoUploader
 
         class PostPreflightReached(Exception):
             pass
@@ -462,8 +461,7 @@ class TestPreflightTitleTemplateCompliance:
             uploader.upload_collection(collection)
 
     def test_upload_collection_rejects_default_volume_before_metadata_generation(self, tmp_path):
-        from youtube_automation.domains.uploads._preflight import PreflightChecker
-        from youtube_automation.domains.uploads.youtube import YouTubeAutoUploader
+        from youtube_automation.domains.uploads.youtube import PreflightChecker, YouTubeAutoUploader
 
         collection = _write_title_collection(
             tmp_path,
@@ -673,6 +671,26 @@ class TestUploadCollectionForwarding:
         assert call_kwargs.get("on_session_uri_changed") is on_session
         assert call_kwargs.get("on_upload_complete") is on_complete
 
+
+def test_uploader_delegates_complete_collection_to_injected_strategy(tmp_path):
+    from youtube_automation.domains.uploads.youtube import YouTubeAutoUploader
+
+    strategy = MagicMock()
+    strategy.upload.return_value = {"video_id": "v1"}
+    uploader = YouTubeAutoUploader(collections_root=str(tmp_path), complete_collection_strategy=strategy)
+    collection = tmp_path / "collection"
+    metadata_generator = MagicMock()
+
+    assert uploader._upload_complete_collection(collection, metadata_generator) == {"video_id": "v1"}
+    strategy.upload.assert_called_once_with(
+        collection,
+        metadata_generator,
+        None,
+        resume_session_uri=None,
+        on_session_uri_changed=None,
+        on_upload_complete=None,
+    )
+
     def test_should_forward_resume_kwargs_from_complete_collection_to_upload_video(self, tmp_path):
         """`_upload_complete_collection` が `self.upload_video` に resume kwargs を渡す."""
         # Given
@@ -723,7 +741,7 @@ class TestFindExistingVideoByTitle:
     """publish 直前の同タイトル検索（dedup 安全網）の振る舞い."""
 
     def _make_uploader_with_mock_youtube(self, tmp_path):
-        from youtube_automation.domains.uploads._dedup_search import DedupSearch
+        from youtube_automation.domains.uploads.youtube import DedupSearch
 
         mock_youtube = MagicMock()
         return DedupSearch(mock_youtube), mock_youtube
@@ -942,7 +960,7 @@ class TestDedupSearchQuotaRecording:
     """重複検索 helper が実 request ごとに quota を記録すること."""
 
     def _make_uploader_with_mock_youtube(self, tmp_path):
-        from youtube_automation.domains.uploads._dedup_search import DedupSearch
+        from youtube_automation.domains.uploads.youtube import DedupSearch
 
         mock_youtube = MagicMock()
         return DedupSearch(mock_youtube), mock_youtube
@@ -1287,7 +1305,7 @@ class TestUploadCompleteCollectionDedup:
         mock_youtube = MagicMock()
         mock_youtube.search.return_value.list.return_value.execute.side_effect = _make_http_error(500)
         uploader.youtube = mock_youtube
-        from youtube_automation.domains.uploads._dedup_search import DedupSearch
+        from youtube_automation.domains.uploads.youtube import DedupSearch
 
         uploader._dedup_search = DedupSearch(mock_youtube)
 
@@ -1685,7 +1703,7 @@ class TestNormalizePublishAt:
     [{"snippet": {"title": "Rainy Jazz"}}, {"id": {"videoId": "v9"}}],
 )
 def test_dedup_fails_open_for_invalid_search_response_shape(tmp_path, search_item):
-    from youtube_automation.domains.uploads._dedup_search import DedupSearch
+    from youtube_automation.domains.uploads.youtube import DedupSearch
 
     uploader = DedupSearch(MagicMock())
     uploader.youtube.search.return_value.list.return_value.execute.return_value = {"items": [search_item]}
@@ -1695,7 +1713,7 @@ def test_dedup_fails_open_for_invalid_search_response_shape(tmp_path, search_ite
 
 @pytest.mark.parametrize("response", [None, {"items": None}, {"items": {}}])
 def test_dedup_fails_open_for_invalid_search_response_container(tmp_path, response):
-    from youtube_automation.domains.uploads._dedup_search import DedupSearch
+    from youtube_automation.domains.uploads.youtube import DedupSearch
 
     uploader = DedupSearch(MagicMock())
     uploader.youtube.search.return_value.list.return_value.execute.return_value = response
@@ -1712,7 +1730,7 @@ def test_dedup_fails_open_for_invalid_search_response_container(tmp_path, respon
     ],
 )
 def test_dedup_fails_open_for_invalid_video_response_shape(tmp_path, video_item):
-    from youtube_automation.domains.uploads._dedup_search import DedupSearch
+    from youtube_automation.domains.uploads.youtube import DedupSearch
 
     uploader = DedupSearch(MagicMock())
     uploader.youtube.search.return_value.list.return_value.execute.return_value = {
@@ -1725,7 +1743,7 @@ def test_dedup_fails_open_for_invalid_video_response_shape(tmp_path, video_item)
 
 @pytest.mark.parametrize("response", [None, {"items": None}, {"items": {}}])
 def test_dedup_fails_open_for_invalid_video_response_container(tmp_path, response):
-    from youtube_automation.domains.uploads._dedup_search import DedupSearch
+    from youtube_automation.domains.uploads.youtube import DedupSearch
 
     uploader = DedupSearch(MagicMock())
     uploader.youtube.search.return_value.list.return_value.execute.return_value = {
