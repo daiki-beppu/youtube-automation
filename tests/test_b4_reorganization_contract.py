@@ -54,7 +54,7 @@ LEGACY_AGENT_OWNERS = {
     "_dedup_search": ("youtube_automation.domains.uploads._dedup_search", "DedupSearchMixin"),
     "_playlist_assignment": ("youtube_automation.domains.uploads._playlist_assignment", "PlaylistAssignmentMixin"),
     "_preflight": ("youtube_automation.domains.uploads._preflight", "PreflightMixin"),
-    "_published_dates": ("youtube_automation.domains.uploads._published_dates", "PublishedDatesMixin"),
+    "_published_dates": ("youtube_automation.domains.uploads._published_dates", "PublishedDatesScheduler"),
     "_tracking_io": ("youtube_automation.domains.uploads._tracking_io", "TrackingStore"),
     "_uploader_constants": (
         "youtube_automation.domains.uploads._uploader_constants",
