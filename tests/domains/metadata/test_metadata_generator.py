@@ -1464,7 +1464,10 @@ class TestApplyTrackDisplayNames:
         gen = _make_generator()
         gen.collection_path = tmp_path
         ws_path = tmp_path / "workflow-state.json"
-        ws_path.write_text(_json.dumps({"collection_name": "Test"}), encoding="utf-8")
+        ws_path.write_text(
+            _json.dumps({"collection_name": "Test", "future_section": {"keep": True}}),
+            encoding="utf-8",
+        )
 
         gen.tracks = [
             _track("01-pattern-a-foo.mp3", "Original A", "00:00", "a"),
@@ -1480,6 +1483,7 @@ class TestApplyTrackDisplayNames:
         assert state["track_display_names"]["02-pattern-b-bar.mp3"] == "Focused Pulse"
         # 既存キーが壊れない
         assert state["collection_name"] == "Test"
+        assert state["future_section"] == {"keep": True}
 
     def test_loads_persisted_names_in_analyze(self, tmp_path, monkeypatch):
         """workflow-state.json の track_display_names が次回ロード時に適用される."""
@@ -1572,7 +1576,7 @@ class TestApplyTrackDisplayNames:
 
         # 元ファイルが無傷で、一時ファイルの残骸も無いこと
         assert ws_path.read_text(encoding="utf-8") == original
-        assert sorted(p.name for p in tmp_path.iterdir()) == ["workflow-state.json"]
+        assert list(tmp_path.glob(".workflow-state.*.tmp")) == []
 
 
 # ===========================================================================

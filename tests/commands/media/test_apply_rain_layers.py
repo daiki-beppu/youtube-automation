@@ -471,7 +471,12 @@ class TestApplyRainLayersRun:
         collection = _setup_collection(tmp_path, n_rain=1)
         wf = collection / "workflow-state.json"
         wf.write_text(
-            json.dumps({"assets": {"raw_master": "master.mp3", "master_audio": None}}),
+            json.dumps(
+                {
+                    "assets": {"raw_master": "master.mp3", "master_audio": None},
+                    "future_section": {"keep": True},
+                }
+            ),
             encoding="utf-8",
         )
         monkeypatch.setattr(mod.shutil, "which", lambda _: "/usr/bin/ffmpeg")
@@ -487,6 +492,7 @@ class TestApplyRainLayersRun:
         state = json.loads(wf.read_text(encoding="utf-8"))
         assert state["assets"]["raw_master"] == "master-rain.wav"
         assert state["assets"]["master_audio"] is None  # 他フィールドは触らない
+        assert state["future_section"] == {"keep": True}
 
     def test_workflow_state_missing_is_not_fatal(self, tmp_path, monkeypatch):
         # Given: workflow-state.json が存在しない (古いコレクション or 別レイアウト)

@@ -306,7 +306,7 @@ class TestMainCLI:
         ch = _setup_channel(
             tmp_path,
             supported_languages=["en", "ja", "ko"],
-            workflow_state={"theme": "city"},
+            workflow_state={"theme": "city", "future_section": {"keep": True}},
         )
         monkeypatch.setenv("CHANNEL_DIR", str(ch))
 
@@ -326,6 +326,7 @@ class TestMainCLI:
         assert ws["scene_phrases"]["en"] == "Late-night neon city, jazz between rain and streetlights"
         assert ws["scene_phrases"]["ja"] == "深夜のネオン街"
         assert ws["scene_phrases"]["ko"] == "심야 네온"
+        assert ws["future_section"] == {"keep": True}
 
     def test_writes_translated_phrases_from_file(self, tmp_path, monkeypatch):
         ch = _setup_channel(

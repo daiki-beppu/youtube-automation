@@ -811,6 +811,10 @@ class TestUpdateWorkflowState:
         """初回書き込みで `post_upload.shorts = [{...}]` の list を作る."""
         # Given: workflow-state.json が空
         col = _setup_collection(tmp_path)
+        ws_path = col / "workflow-state.json"
+        state = json.loads(ws_path.read_text(encoding="utf-8"))
+        state["future_section"] = {"keep": True}
+        ws_path.write_text(json.dumps(state), encoding="utf-8")
         with _make_short_uploader() as (uploader, _):
             # When
             uploader._update_workflow_state(
@@ -827,6 +831,7 @@ class TestUpdateWorkflowState:
         assert len(shorts) == 1
         assert shorts[0]["short_num"] == 1
         assert shorts[0]["video_id"] == "V1"
+        assert ws["future_section"] == {"keep": True}
 
     def test_uploaded_at_is_schedule_timezone_aware(self, tmp_path):
         """uploaded_at は schedule timezone 付き ISO 8601 で書かれる."""
