@@ -12,7 +12,7 @@ import pytest
 from tests.helpers.paths import REPO_ROOT
 
 ROOT = REPO_ROOT
-REFERENCE_DIR = ROOT / ".claude" / "skills" / "automation-schedule" / "references"
+REFERENCE_DIR = ROOT / ".claude" / "skills" / "wf-new" / "references"
 
 
 def _load_backend_module():
@@ -77,6 +77,8 @@ def test_plan_is_dry_run_and_preserves_external_publish_gate(tmp_path, monkeypat
     assert plan["prevent_concurrent_runs"] is True
     assert plan["target_workflow"] == "wf-new --auto"
     assert plan["prompt"].startswith("/wf-new --auto")
+    assert "/automation-schedule" not in plan["prompt"]
+    assert "/wf-auto" not in plan["prompt"]
     assert plan["dependency_mode"] == "local"
     assert "local dependencies require desktop local project" in plan["management"]
 

@@ -541,6 +541,7 @@ def test_moved_opening_assets_preserve_pre_move_bytes_or_owner_only_semantics() 
                 b"`../SKILL.md` \xe3\x81\xab\xe6\xae\x8b\xe3\x81\x99",
                 1,
             )
+            payload = payload.replace(b"/wf-new --schedule", b"/automation-schedule", 1)
         if asset == "ttp-seed-and-duration.md":
             payload = payload.replace(b".claude/skills/setup/references/", b".claude/skills/channel-new/references/")
         assert sha256(payload).hexdigest() == expected

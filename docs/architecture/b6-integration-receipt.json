@@ -346,21 +346,21 @@
     },
     {
       "old_owner": "legacy..claude.skills.automation-schedule.SKILL.md",
-      "exact_new_owner": ".claude/skills/automation-schedule/SKILL.md",
+      "exact_new_owner": ".claude/skills/wf-new/references/schedule.md",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"
     },
     {
       "old_owner": "legacy..claude.skills.automation-schedule.references.schedule_backend",
-      "exact_new_owner": ".claude/skills/automation-schedule/references/schedule_backend.py",
+      "exact_new_owner": ".claude/skills/wf-new/references/schedule_backend.py",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"
     },
     {
       "old_owner": "legacy..claude.skills.automation-schedule.references.schedule_config",
-      "exact_new_owner": ".claude/skills/automation-schedule/references/schedule_config.py",
+      "exact_new_owner": ".claude/skills/wf-new/references/schedule_config.py",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"

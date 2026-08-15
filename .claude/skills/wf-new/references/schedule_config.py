@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""`workflow.scheduled_automation` の表示・生成・差分更新（/automation-schedule 用）（#1892）.
+"""`workflow.scheduled_automation` の表示・生成・差分更新（/wf-new --schedule 用）（#1892）.
 
 チャンネルリポジトリ直下で実行する:
 
-    uv run python .claude/skills/automation-schedule/references/schedule_config.py show
-    uv run python .claude/skills/automation-schedule/references/schedule_config.py generate --dry-run
-    uv run python .claude/skills/automation-schedule/references/schedule_config.py generate \
+    uv run python .claude/skills/wf-new/references/schedule_config.py show
+    uv run python .claude/skills/wf-new/references/schedule_config.py generate --dry-run
+    uv run python .claude/skills/wf-new/references/schedule_config.py generate \
         --enable --run-time 09:00 --cadence mon,wed,fri
 
 - `show`: 現在の effective 設定（loader 検証済み）を JSON で表示する。

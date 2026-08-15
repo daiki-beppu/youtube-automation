@@ -137,7 +137,7 @@ DistroKid 配信しない場合は `--distrokid-enabled` を付けず、`config/
 - `.gitignore`
 - `auth/client_secrets.template.json`
 
-定期制作の自動起動（`workflow.json` の `scheduled_automation`）は本スキルでは生成しない（既定は未設定 = 無効）。運用開始後に定期実行したくなったら `/automation-schedule` で有効化する。
+定期制作の自動起動（`workflow.json` の `scheduled_automation`）は本スキルでは生成しない（既定は未設定 = 無効）。運用開始後に定期実行したくなったら `/wf-new --schedule` で有効化する。
 
 冪等性: 既存ファイルは `--force` がない限り上書きしない。差分がある場合は unified diff を確認してから `--force` を判断する。初期ディレクトリは `/setup` の生成物を再利用する。
 

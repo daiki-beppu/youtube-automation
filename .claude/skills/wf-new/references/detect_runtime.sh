@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ネイティブ定期実行の前提診断（/automation-schedule Step 0）（#1892, #2369）。
+# ネイティブ定期実行の前提診断（/wf-new --schedule Step 0）（#1892, #2369）。
 # チャンネルリポジトリ直下で実行し、`ok|fail|warn <check> <detail>` を 1 行ずつ出力する。
 # fail が 1 件でもあれば exit 1（SKILL.md 側はこれを hard gate に使う）。
 set -u

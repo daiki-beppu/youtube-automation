@@ -61,7 +61,7 @@ SCHEDULED_AUTOMATION_NOTIFICATIONS: tuple[str, ...] = ("terminal", "none")
 class ScheduledAutomation:
     """定期制作の宣言設定（`workflow.scheduled_automation` セクション、optional）（#1892）.
 
-    Claude Code / Codex の定期実行アダプタ（`/automation-schedule`）が参照する
+    Claude Code / Codex の定期実行アダプタ（`/wf-new --schedule`）が参照する
     実行環境非依存の宣言。未設定チャンネルは全 default（`enabled = False`）で
     ロードされ、手動制作・公開フローの挙動を一切変えない。
 
@@ -77,7 +77,7 @@ class ScheduledAutomation:
     - `notification`: 実行結果の通知先。`terminal`（既定） / `none`。
     - `allow_external_publish`: `True` のときのみ、定期実行内で YouTube への
       書き込み（アップロード・公開）を許可する。`False`（既定）では外部反映
-      直前で停止する。有効化には `/automation-schedule` の明示確認が必要。
+      直前で停止する。有効化には `/wf-new --schedule` の明示確認が必要。
     """
 
     enabled: bool = False

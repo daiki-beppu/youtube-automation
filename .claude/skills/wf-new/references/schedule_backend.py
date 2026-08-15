@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Native scheduler plan and backend identity state for /automation-schedule (#2369)."""
+"""Native scheduler plan and backend identity state for /wf-new --schedule (#2369)."""
 
 from __future__ import annotations
 

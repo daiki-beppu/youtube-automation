@@ -1,9 +1,3 @@
----
-name: automation-schedule
-purpose: 進める
-description: "Use when チャンネルの定期制作スケジュール（workflow.json の scheduled_automation）を設定し、Codex / Claude のネイティブ Scheduled Task を作成・更新・確認・停止するとき。「定期実行」「スケジュール設定」「自動で回して」「automation-schedule」で発動。automation のリリース追従は /automation-update、本体リリースは /automation-release、制作を手動で一段進めるのは /wf-next"
----
-
 ## 前後工程
 
 - `前工程`: `/setup --channel`, `/setup`
@@ -18,6 +12,8 @@ description: "Use when チャンネルの定期制作スケジュール（workfl
 ## Overview
 
 `config/channel/workflow.json::workflow.scheduled_automation` を製品非依存の単一ソースとして、実行中製品のネイティブ scheduler に登録する。Codex は Scheduled Task、Claude は依存性に応じて `/schedule` Cloud Job または Cowork local Scheduled Task を使う。launchd / cron は明示承認された fallback に限る。
+
+automation のリリース追従は `/automation-update`、本体リリースは `/automation-release`、制作を手動で一段進めるのは `/wf-next` の責務とし、この mode では代行しない。
 
 ## Hard Gates
 
@@ -58,8 +54,8 @@ Claude Code `/loop` は最長 3 日の一時反復専用で、永続スケジュ
 ### Step 0. 診断と backend 決定
 
 ```bash
-bash .claude/skills/automation-schedule/references/detect_runtime.sh
-uv run python .claude/skills/automation-schedule/references/schedule_backend.py show
+bash .claude/skills/wf-new/references/detect_runtime.sh
+uv run python .claude/skills/wf-new/references/schedule_backend.py show
 ```
 
 1. `product-codex` / `product-claude` を既定候補にする。判定不能時だけユーザーに製品を確認する。
@@ -69,12 +65,12 @@ uv run python .claude/skills/automation-schedule/references/schedule_backend.py 
 ### Step 1. config と native task の dry-run
 
 ```bash
-uv run python .claude/skills/automation-schedule/references/schedule_config.py show
-uv run python .claude/skills/automation-schedule/references/schedule_config.py generate --dry-run --enable \
+uv run python .claude/skills/wf-new/references/schedule_config.py show
+uv run python .claude/skills/wf-new/references/schedule_config.py generate --dry-run --enable \
   --run-time <HH:MM> --cadence <mon,wed,fri> [--timezone <IANA>] \
   [--target-workflow "wf-new --auto"] [--max-retries <N>] \
   [--retry-delay-seconds <N>] [--notification terminal|none]
-uv run python .claude/skills/automation-schedule/references/schedule_backend.py plan \
+uv run python .claude/skills/wf-new/references/schedule_backend.py plan \
   --product <codex|claude> --dependency-mode <cloud|local> \
   --run-time <HH:MM> --cadence <mon,wed,fri> [--timezone <IANA>] \
   [--target-workflow "wf-new --auto"] [--max-retries <N>] \
@@ -92,7 +88,7 @@ Step 1 の config diff、backend、title、prompt、cwd、timezone、RRULE、依
 まず次を実行し、別 backend が active なら登録しない。
 
 ```bash
-uv run python .claude/skills/automation-schedule/references/schedule_backend.py guard --backend <backend>
+uv run python .claude/skills/wf-new/references/schedule_backend.py guard --backend <backend>
 ```
 
 - `codex-automation`: Codex/ChatGPT の Scheduled Task 管理 capability を使う。CLI の `codex exec` や launchd / cron は使わない。local 依存では desktop local project と cwd を指定する。同じ external ID があれば更新する。
@@ -100,15 +96,17 @@ uv run python .claude/skills/automation-schedule/references/schedule_backend.py 
 - `claude-cowork-local`: Cowork Scheduled Task に local folder を指定して作成/更新する。製品側で local folder 実行を選べない場合は中止する。
 - `os-fallback`: ネイティブが使えない理由と制約を提示して別途承認を取り、次だけを実行する。
 
+統合前の絶対 script path を登録済みの OS fallback job は自動更新しない。ユーザーへ再インストールが必要な理由を案内し、承認後に現在の `scheduler_job.sh disable`、続けて `scheduler_job.sh install` の順で実行する。
+
 ```bash
-bash .claude/skills/automation-schedule/references/scheduler_job.sh install \
+bash .claude/skills/wf-new/references/scheduler_job.sh install \
   --backend os-fallback --confirm-os-fallback --runtime <claude|codex>
 ```
 
 ネイティブ登録が成功した後だけ、返された不変 ID を記録する。
 
 ```bash
-uv run python .claude/skills/automation-schedule/references/schedule_backend.py record \
+uv run python .claude/skills/wf-new/references/schedule_backend.py record \
   --backend <backend> --external-id <product-task-id>
 ```
 

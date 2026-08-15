@@ -47,7 +47,7 @@ Step 1 の TTP ヒアリングとは別に、次の初期値をユーザーへ�
 
 DistroKid 配信時だけ `config/channel/distrokid.json` を追加生成する。配信しない場合は `--distrokid-enabled` を指定せず、ファイル未配置を config loader が `distrokid.enabled=false` として扱う。
 
-`workflow.json::scheduled_automation` は生成せず、未設定を既定の無効状態とする。定期実行は運用開始後に `/automation-schedule` で有効化する。
+`workflow.json::scheduled_automation` は生成せず、未設定を既定の無効状態とする。定期実行は運用開始後に `/wf-new --schedule` で有効化する。
 
 既存ファイルは `--force` なしで上書きしない。差分がある場合は unified diff を確認してから `--force` を判断する。初期ディレクトリ生成は `/setup` の責務であり、`yt-channel-init` は setup が作成済みのディレクトリを削除・再生成しない。
 
