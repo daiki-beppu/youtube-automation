@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `feat(skills)`: `/music --lyric` に旧 `/suno-lyric` の歌詞生成・hard gate・generator/reviewer 契約を統合する。chain を `prompt` → `lyric` へ拡張し、mode 別 config、旧 override 互換と `suno-lyric.yaml` → `music.yaml::lyric` の明示 migration を追加して、旧 skill directory と利用者導線・配布・site 契約を更新する（#3825）。
 
 - `feat(skills)`: `/music` を新設し、`--prompt` に旧 `/suno` の Style / プロンプト生成契約を統合する。1-step chain、mode 別 config、旧 override 互換と `suno.yaml` → `music.yaml::prompt` の明示 migration を追加し、旧 skill directory と利用者導線・配布・site 契約を更新する（#3824）。
+- `feat(skills)`: 旧 `/thumbnail-test` の Studio A/B テスト設計・結果記録を `/thumbnail --test` の排他 mode へ統合し、active/history schema・operator guide・writer owner と利用者導線を `/thumbnail` 配下へ移す（#3830）。
+
 - `feat(skills)`: 旧 `/thumbnail-compare` の 320px 視認性比較を `/thumbnail --compare` の排他 mode へ統合し、比較手順・helper・成果物 owner と全利用者導線を `/thumbnail` 配下へ移す（#3829）。
 
 - `refactor(skills)`: `/thumbnail` の詳細な参照選定・insights 還元・channel adaptation を `references/` へ分離し、通常入口の Hard Gate とコマンド契約を維持したまま SKILL.md を 400 行以下へ短縮する。後続 mode を受ける排他判定の骨格も追加する（#3828）。

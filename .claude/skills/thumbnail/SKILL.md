@@ -1,16 +1,16 @@
 ---
 name: thumbnail
 purpose: 作る
-description: "Use when コレクションの YouTube サムネイル（thumbnail.jpg）を CTR 最適化し、textless main.png/jpg を先行生成して実フォント合成するとき、または `--compare` で生成済みサムネイルを競合と並べて 320px 視認性を比較検証するとき。「サムネイル生成」「画像生成」「アイキャッチ」「サムネ比較」「モバイル表示テスト」で発動。伸びた動画起点の改善ループは /thumbnail-iterate、競合の勝ちパターン分析は channel-research の thumbnail mode、単独の Studio A/B 設計・結果記録は /thumbnail-test、SVG・汎用画像生成には使わない"
+description: "Use when コレクションの YouTube サムネイル（thumbnail.jpg）を CTR 最適化し、textless main.png/jpg を先行生成して実フォント合成するとき、`--compare` で生成済み候補を競合と 320px 比較するとき、または `--test` で Studio の A/B テストを設計・記録するとき。「サムネイル生成」「画像生成」「アイキャッチ」「サムネ比較」「モバイル表示テスト」「サムネ A/B テスト」「Test & Compare」で発動。伸びた動画起点の改善ループは /thumbnail-iterate、競合の勝ちパターン分析は channel-research の thumbnail mode、SVG・汎用画像生成には使わない"
 ---
 
 ## 前後工程
 
 - `前工程`: `/channel-strategy --constraints`, `/wf-new`, `/thumbnail-iterate`
-- `後工程`: `/loop-video`, `/thumbnail --compare`, `/alignment-check`, `/thumbnail-test`
+- `後工程`: `/loop-video`, `/thumbnail --compare`, `/thumbnail --test`, `/alignment-check`
 - `委譲先`: `なし`
 ## 成果物
-- `書き込む`: `collections/<id>/10-assets/thumbnail.jpg`, `collections/<id>/10-assets/main.png`, `collections/<id>/10-assets/main.jpg`, `collections/<id>/20-documentation/thumbnail-prompts.md`, `collections/<id>/20-documentation/thumbnail-test-history.json`, `collections/<id>/workflow-state.json`, `assets/thumbnail-gallery/<id>.<ext>`, `docs/plans/thumbnail-comparison.md`, `data/thumbnail_compare/*`
+- `書き込む`: `collections/<id>/10-assets/thumbnail.jpg`, `collections/<id>/10-assets/main.png`, `collections/<id>/10-assets/main.jpg`, `collections/<id>/20-documentation/thumbnail-prompts.md`, `collections/<id>/20-documentation/thumbnail-test-active.json`, `collections/<id>/20-documentation/thumbnail-test-history.json`, `collections/<id>/workflow-state.json`, `assets/thumbnail-gallery/<id>.<ext>`, `docs/plans/thumbnail-comparison.md`, `data/thumbnail_compare/*`
 - `読み込む`: `docs/channel/creative-constraints.md`, `docs/benchmarks/thumbnail-analysis.md`, `data/thumbnail-iterate/champion.json`, `collections/<id>/20-documentation/thumbnail-test-history.json`, `config/skills/thumbnail.yaml`, `data/benchmark_*.json`, `docs/benchmarks/thumbnails/*.jpg`
 ## Overview
 コレクション用サムネイルを `config/skills/thumbnail.yaml`（skill-config）に基づいて生成する。 チャンネルごとにスタイル・キャラ・参照画像が異なり、すべて skill-config から動的に読み取る。 画像生成プロバイダー（Gemini / OpenAI / codex）は `image_generation.provider` で切り替え可能。
@@ -103,6 +103,7 @@ Use the title {title}.
 | mode | 読む reference |
 |---|---|
 | `--compare` | `references/compare.md` |
+| `--test` | `references/test.md` |
 ## 生成モード判定
 `image_generation.gemini.generation_mode` を確認:
 | モード | 説明 |

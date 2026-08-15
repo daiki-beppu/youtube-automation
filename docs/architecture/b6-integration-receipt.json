@@ -983,21 +983,21 @@
     },
     {
       "old_owner": "legacy..claude.skills.thumbnail-test.SKILL.md",
-      "exact_new_owner": ".claude/skills/thumbnail-test/SKILL.md",
+      "exact_new_owner": ".claude/skills/thumbnail/references/test.md",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"
     },
     {
       "old_owner": "legacy..claude.skills.thumbnail-test.references.history-schema.md",
-      "exact_new_owner": ".claude/skills/thumbnail-test/references/history-schema.md",
+      "exact_new_owner": ".claude/skills/thumbnail/references/history-schema.md",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"
     },
     {
       "old_owner": "legacy..claude.skills.thumbnail-test.references.operator-guide.md",
-      "exact_new_owner": ".claude/skills/thumbnail-test/references/operator-guide.md",
+      "exact_new_owner": ".claude/skills/thumbnail/references/operator-guide.md",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"

@@ -82,7 +82,7 @@ description: "Use when 公開済み動画が伸びなかった原因を video_id
 
 確定した `video_id` から、所属コレクション名（`upload_tracking.json` を逆引き）と公開日（`video_analytics[<id>].published_at`）を取得する。コレクションが解決できない場合は **エラーで停止** し、利用者に `<collection>` 引数か対応する `upload_tracking.json` の整備を促す（新規ディレクトリ規約は作らない）。
 
-所属コレクションの `20-documentation/thumbnail-test-history.json` が存在する場合は、`.claude/skills/thumbnail-test/references/history-schema.md` の `### Completed history` にある履歴構造検証コマンドだけを実行する。検証が非0なら履歴を根拠に使わず、ファイルパスとエラーを postmortem のデータ不足として記録する。検証済みなら `video_id` が一致する全 entry を Phase 2 へ渡す。履歴が存在しない場合は「A/B テスト履歴なし」と明示し、従来の Analytics 根拠だけで続行する。
+所属コレクションの `20-documentation/thumbnail-test-history.json` が存在する場合は、`.claude/skills/thumbnail/references/history-schema.md` の `### Completed history` にある履歴構造検証コマンドだけを実行する。検証が非0なら履歴を根拠に使わず、ファイルパスとエラーを postmortem のデータ不足として記録する。検証済みなら `video_id` が一致する全 entry を Phase 2 へ渡す。履歴が存在しない場合は「A/B テスト履歴なし」と明示し、従来の Analytics 根拠だけで続行する。
 
 ### Phase 2: 症状の定量化
 
@@ -344,7 +344,7 @@ Phase 4 は子スキル / CLI / API へ委譲する orchestration。個別検証
 - `data/analytics_data_<YYYYMMDD>.json` — `video_analytics[<id>]`（`average_view_duration` / `published_at` / `title`）、`reporting_api.impressions_summary.per_video[]`（`ctr_percentage` / `impressions`）、`reporting_api.impressions_summary.aggregated_ctr_percentage`（チャンネル全体平均 CTR）。`traffic_sources` 欄はチャンネル全体集計のみで per-video シェアは含まない
 - `data/benchmark_<YYYYMMDD>.json` — 競合ベンチマーク（`views` / `likes` / `comments` / `duration_display`。CTR / 平均視聴時間は含まれない）
 - `collections/live/<collection>/20-documentation/upload_tracking.json` — `complete_collection.video_id`（コレクション → video_id 逆引きにも使用、`agents/_tracking_io.py`（`collection_uploader.py` から分離）の schema_version=3 で生成）
-- `collections/live/<collection>/20-documentation/thumbnail-test-history.json` — `/thumbnail-test` が記録する Studio A/B テスト結果。存在時は `.claude/skills/thumbnail-test/references/history-schema.md` で検証してから使用
+- `collections/live/<collection>/20-documentation/thumbnail-test-history.json` — `/thumbnail --test` が記録する Studio A/B テスト結果。存在時は `.claude/skills/thumbnail/references/history-schema.md` で検証してから使用
 - `src/youtube_automation/commands/analytics/launch_curve.py` — `yt-launch-curve --video <id>` の出力定義（`target.ratio_vs_median` / `target.quartile_label` / `target.trace[]` / `target.benchmark_median`）
 - `src/youtube_automation/domains/analytics/analysis/launch_curve_analyzer.py` — `compute_benchmark` / `judge_video_vs_benchmark`（p25/p50/p75 四分位）
 - `src/youtube_automation/infrastructure/youtube/reporting_api.py` — `collect_impressions_summary` / `_aggregate_rows`（`per_video[].ctr_percentage` / `per_video[].impressions` を生成）

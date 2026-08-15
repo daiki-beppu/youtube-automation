@@ -1,19 +1,4 @@
----
-name: thumbnail-test
-purpose: 作る
-description: "Use when 長尺動画で YouTube Studio のサムネイル A/B テストを単独で設計し、結果を記録するとき。「サムネ A/B テスト」「Test & Compare」「サムネテスト結果」で発動。伸びた動画起点の勝因検証ループは /thumbnail-iterate、公開前の競合・320px 視認性比較は thumbnail の比較 mode、候補生成は /thumbnail を使う"
----
-
-## 前後工程
-
-- `前工程`: `/thumbnail`, `/video-upload`, `/thumbnail-iterate`
-- `後工程`: `/thumbnail`, `/thumbnail-iterate`, `/flop-analysis`
-- `委譲先`: `なし`
-
-## 成果物
-
-- `書き込む`: `collections/<id>/20-documentation/thumbnail-test-active.json`, `collections/<id>/20-documentation/thumbnail-test-history.json`
-- `読み込む`: `collections/<id>/workflow-state.json`, `config/skills/thumbnail.yaml`
+# `--test`: YouTube Studio サムネイル A/B テスト
 
 ## Overview
 
@@ -140,7 +125,7 @@ Studio 設定へ進む前に次を PASS/FAIL で表示する。
 [HUMAN STEP]
 YouTube Studio で候補 A〜C をアップロードし、Done を選んで A/B テストを設定してください。
 テスト中は候補ファイルと thumbnail-test-active.json を変更・削除しないでください。
-完了後、Studio の結果ラベル、A〜C それぞれの watch time share、結果を確認した日時を指定して /thumbnail-test を再実行してください。候補対応は保存済み active design から読みます。
+完了後、Studio の結果ラベル、A〜C それぞれの watch time share、結果を確認した日時を指定して /thumbnail --test を再実行してください。候補対応は保存済み active design から読みます。
 ```
 
 `中止する` が選ばれた場合は外部反映なしで停止する。
