@@ -1,6 +1,6 @@
 # 全 skill カタログ
 
-`yt-skills sync` で各チャンネルリポジトリに配布される Claude Code skill の一覧（全 **48 個**）。各行は「なにができるか」（what）の 1 行要約。発動トリガー・前提・前後工程はサイトの [skill ガイド](/skills)、詳細手順は `.claude/skills/<name>/SKILL.md` を参照。
+`yt-skills sync` で各チャンネルリポジトリに配布される Claude Code skill の一覧（全 **47 個**）。各行は「なにができるか」（what）の 1 行要約。発動トリガー・前提・前後工程はサイトの [skill ガイド](/skills)、詳細手順は `.claude/skills/<name>/SKILL.md` を参照。
 
 > 個別の使い分けは各カテゴリの冒頭リンクや [`docs/workflow-cheatsheet.md`](workflow-cheatsheet.md)（workflow 系）も併せて参照。
 
@@ -92,8 +92,7 @@ YouTube Analytics と動画本体の解析。
 
 | Skill | なにができるか |
 |---|---|
-| /channel-research | チャンネル調査を状態判定付きで実行。`--benchmark` で競合データを収集、`--discover` で追加候補を発掘、`--voice` でコメント分析、`--market` で市場比較または収集済みデータ分析へ自動分岐 |
-| /thumbnail-research | 収集済み競合サムネイルの再生数上位群 / 下位群を比較し、勝ちパターンと `/thumbnail` 向け TTP 推奨事項を生成 |
+| /channel-research | チャンネル調査を状態判定付きで実行。`--benchmark` で競合データを収集、`--discover` で追加候補を発掘、`--voice` でコメント分析、`--market` で市場比較または収集済みデータ分析へ自動分岐し、`--thumbnail` で競合サムネイルの上位群 / 下位群から勝ちパターンを抽出 |
 
 ## 配信インフラ
 

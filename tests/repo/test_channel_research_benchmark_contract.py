@@ -38,6 +38,7 @@ def test_chain_manifest_has_four_steps_and_complete_schema() -> None:
     manifest = json.loads((SKILL_DIR / "references/channel-research-chain-manifest.json").read_text())
     assert manifest["chainId"] == "channel-research"
     assert [step["id"] for step in manifest["steps"]] == ["benchmark", "discover", "voice", "market"]
+    assert "thumbnail" not in {step["id"] for step in manifest["steps"]}
     step = manifest["steps"][0]
     assert set(step) == {
         "id",

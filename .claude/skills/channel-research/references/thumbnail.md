@@ -1,9 +1,3 @@
----
-name: thumbnail-research
-purpose: 調べる
-description: "Use when 収集済み競合サムネイルだけを再生数上位群 vs 下位群で深掘りし、勝ちパターンを抽出するとき。「サムネイル徹底分析」「競合サムネ分析」「サムネ勝ちパターン」で発動。データ収集は channel-research のベンチマーク mode、チャンネル全体の TTP 分析は同 skill の market mode、生成は /thumbnail、320px 視認性比較は /thumbnail-compare"
----
-
 ## 前後工程
 
 - `前工程`: `/channel-research --benchmark`

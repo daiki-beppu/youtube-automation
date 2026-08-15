@@ -12,6 +12,7 @@ CHANNEL_NEW = ROOT / ".claude/skills/channel-new/SKILL.md"
 CHANNEL_RESEARCH = ROOT / ".claude/skills/channel-research/SKILL.md"
 MARKET_MODE = ROOT / ".claude/skills/channel-research/references/market.md"
 VOICE_MODE = ROOT / ".claude/skills/channel-research/references/voice.md"
+THUMBNAIL_MODE = ROOT / ".claude/skills/channel-research/references/thumbnail.md"
 
 
 def _read(path: Path) -> str:
@@ -29,6 +30,12 @@ def test_channel_research_owns_voice_and_legacy_skill_is_not_distributed() -> No
     assert VOICE_MODE.is_file()
     assert "viewer-voice" not in bundled_skill_names()
     assert not (ROOT / ".claude/skills/viewer-voice").exists()
+
+
+def test_channel_research_owns_thumbnail_research_and_legacy_skill_is_not_distributed() -> None:
+    assert THUMBNAIL_MODE.is_file()
+    assert "thumbnail-research" not in bundled_skill_names()
+    assert not (ROOT / ".claude/skills/thumbnail-research").exists()
 
 
 def test_channel_new_keeps_only_direction_mode() -> None:
@@ -65,20 +72,24 @@ def test_market_mode_preserves_both_branches_inputs_gates_and_outputs() -> None:
         assert contract in mode
 
 
-def test_channel_research_exposes_four_modes_without_splitting_market_depth() -> None:
+def test_channel_research_exposes_five_modes_without_splitting_market_depth() -> None:
     skill = _read(CHANNEL_RESEARCH)
     frontmatter = yaml.safe_load(skill.split("---", 2)[1])
     paths = (
-        ".claude/skills/thumbnail-research/SKILL.md",
+        ".claude/skills/channel-research/references/thumbnail.md",
         ".claude/skills/channel-research/references/discover.md",
     )
-    assert all(flag in frontmatter["description"] for flag in ("--benchmark", "--discover", "--market", "--voice"))
+    assert all(
+        flag in frontmatter["description"]
+        for flag in ("--benchmark", "--discover", "--market", "--voice", "--thumbnail")
+    )
     mode_table = skill.split("| mode | 読む reference |", 1)[1].split("## 共通前提", 1)[0]
     assert [line.split("|", 2)[1].strip() for line in mode_table.splitlines() if line.startswith("| `--")] == [
         "`--benchmark`",
         "`--discover`",
         "`--market`",
         "`--voice`",
+        "`--thumbnail`",
     ]
     for relative in paths:
         text = _read(ROOT / relative)
@@ -90,6 +101,7 @@ def test_feature_catalog_lists_channel_research_as_market_owner() -> None:
     assert "| /channel-research |" in features
     assert "`--market`" in features
     assert "`--voice`" in features
+    assert "`--thumbnail`" in features
 
 
 def test_comment_collector_has_one_skill_reference_owner() -> None:
