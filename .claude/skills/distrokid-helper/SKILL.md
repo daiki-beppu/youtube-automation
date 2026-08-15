@@ -6,7 +6,7 @@ description: "Use when コレクションの楽曲を DistroKid 配信用に準�
 
 ## 前後工程
 
-- `前工程`: `/masterup`, `/lyria`, `/thumbnail`, `/ext-install`
+- `前工程`: `/masterup`, `/lyria`, `/thumbnail`, `/extension`
 - `後工程`: `なし`
 - `委譲先`: `なし`
 
@@ -43,7 +43,7 @@ verify が green で、Chrome 拡張へのハンドオフ後にユーザーが�
    - **設定して進める** — `config/channel/distrokid.json` に `profile.songwriter` を追記してから続行する。songwriter は PII（本名）のため、**追記する前に必ず `references/pii-gitignore.md` を Read し**、記入例とあわせてリポジトリの公開範囲・`.gitignore` 運用を確認する
    - **手入力を了承して進める** — 未設定のまま続行し、DistroKid Web フォームで songwriter 欄を曲ごとに手入力することを了承する
 
-DistroKid Web への転記・アップロードは Chrome 拡張（`/ext-install` で導入する distrokid-helper）の責務であり、本スキルの前提には含まない。
+DistroKid Web への転記・アップロードは Chrome 拡張（`/extension` で導入する distrokid-helper）の責務であり、本スキルの前提には含まない。
 
 ## When to Use
 
@@ -59,7 +59,7 @@ DistroKid Web への転記・アップロードは Chrome 拡張（`/ext-install
 | `uv run yt-distrokid-prepare build --spec <spec.json> <collection> [--force] [--release-date YYYY-MM-DD]` | spec 検証 → mp3 分割コピー → ffprobe 尺計測 → metadata.md + README.md 生成 |
 | `uv run yt-distrokid-prepare cover --input <image> <collection> [--force] [--crop]` | 新規 AI 生成した 1:1 画像を 3000×3000 JPEG（`30-distrokid/cover_art_3000.jpg`）に最終化 |
 | `uv run yt-distrokid-prepare verify <collection>` | cover サイズ / タイトルユニーク / ≤35 曲 を最終検証（release_date 未設定は warning） |
-| `uv run yt-collection-serve <collections-root> --distrokid-capture-root <channel-root> --allow-extension distrokid-helper --port 7874` | distrokid-helper 拡張向けに DistroKid dir mode サーバーを起動し、配信済み記録の POST も有効化 |
+| `.claude/skills/extension/references/serve.md` の `--distrokid` 契約 | DistroKid dir mode server の再利用・起動・疎通確認・停止 |
 
 ## 想定 API call 数
 
@@ -260,35 +260,9 @@ verify のサマリーをユーザーに提示して完了を確認する。
 
 ### ステップ 9: distrokid-helper サーバー起動
 
-verify が green になったら、DistroKid Web 操作へ進む前に `uv run yt-collection-serve` を **DistroKid dir mode** で起動する。これは本スキルの責務に含める。
+verify が green になったら `.claude/skills/extension/references/serve.md` を読み、`--distrokid` の起動・既存 server 再利用・疎通確認契約を実行する。server lifecycle のコマンドや判定は本 skill に複製しない。返された実 URL / port / detected origin を後続 handoff で使う。
 
-```bash
-# CHANNEL_DIR がチャンネルルートを指している場合
-uv run yt-collection-serve "$CHANNEL_DIR/collections/planning" --distrokid-capture-root "$CHANNEL_DIR" --allow-extension distrokid-helper --port 7874
-
-# CHANNEL_DIR が未設定、またはチャンネル外の CWD から起動する場合
-CHANNEL_DIR=/path/to/channel uv run yt-collection-serve /path/to/channel/collections/planning --distrokid-capture-root /path/to/channel --allow-extension distrokid-helper --port 7874
-```
-
-起動後、以下を確認する:
-
-```bash
-curl -s http://localhost:7874/distrokid/collections | python3 -m json.tool | head -40
-```
-
-`yt-collection-serve collections/planning --port 49152` の稼働情報は固定 registry `http://localhost:7872/.well-known/yt-collection-serve` から動的検出する。popup の selector を開くと候補更新が始まり、更新完了後に選択肢が開く。既定の `http://youtube-automation.localhost:7873` は常に表示される。候補履歴は保存しない。
-
-確認ポイント:
-
-1. JSON array が返ること
-2. 対象 collection と `30-distrokid/<disc>` が一覧に含まれること
-3. サーバー出力に `distrokid dir mode enabled` が表示されること
-4. サーバー出力に `distrokid releases enabled` が表示されること
-5. サーバー出力に `detected extension: distrokid-helper -> <id> (chrome-extension://<id>)` が表示されること
-
-`--distrokid-capture-root` は distrokid-helper の配信済み記録 `POST /distrokid/releases` に必要。DistroKid dir mode では必ずチャンネルルートを指定する。`--allow-extension distrokid-helper` は Chrome の profile preferences から unpacked 拡張 ID を検出し、DistroKid page origin からの write POST を許可しない exact origin lock として使う。検出 0 件・複数 ID 競合・Preferences 読み取り不可・Preferences JSON parse failure で失敗する場合のみ、エラーに表示された候補を確認して `--allow-origin chrome-extension://<EXTENSION_ID>` を手動指定する。
-
-ユーザーには distrokid-helper popup の **ローカル配信元** selector から動的検出された配信元を選ぶよう案内する。コレクション一覧と選択 disc の release.json が自動取得される。Chrome 拡張 **distrokid-helper** を使った DistroKid Web フォームへの転記・アップロード操作そのものは本スキルの範囲外。
+ユーザーには distrokid-helper popup の **ローカル配信元** selector を開くと動的検出される配信元から対象を選ぶよう案内する。候補履歴は保存しない。コレクション一覧と選択 disc の release.json が自動取得される。Chrome 拡張 **distrokid-helper** を使った DistroKid Web フォームへの転記・アップロード操作そのものは本スキルの範囲外。
 
 ---
 
@@ -302,9 +276,9 @@ curl -s http://localhost:7874/distrokid/collections | python3 -m json.tool | hea
 | 既存 30-distrokid がある | build 時に「disc dir already exists」エラー | `build --force` で spec 記載の disc だけ再生成される。`cover_art_3000.jpg` は `--force` でも上書きされない（cover は `cover --force` で別途上書き）。`spec.json` は build が毎回上書きする（`--force` 有無問わず） |
 | `distrokid.enabled` が false | ConfigError または plan 実行時エラー | `config/channel/distrokid.json` の `distrokid.enabled` を `true` に設定してからリトライ |
 | タイトル重複エラー | build 時に「duplicate title across discs」エラー | spec.json を開き `needs_unique: true` のトラックに em-dash サフィックスを付与して再度 build |
-| `/distrokid/collections` が 404 | single file mode で起動している、または collections root が違う | `<collection>` ではなく `<channel>/collections/planning` を渡して `uv run yt-collection-serve` を起動し直す |
+| `/distrokid/collections` が 404 | single file mode で起動している、または collections root が違う | `extension/references/serve.md` の `--distrokid` 契約で起動し直す |
 | `distrokid dir mode enabled` が出ない | `config/channel/distrokid.json` が読めない、または `enabled=false` | `CHANNEL_DIR` がチャンネルルートを指していることと `distrokid.enabled` を確認してからサーバーを再起動 |
-| `distrokid releases` が disabled または POST が 404 | `--distrokid-capture-root` が未指定、またはチャンネルルート以外を指している | `--distrokid-capture-root "$CHANNEL_DIR"` または `--distrokid-capture-root /path/to/channel` を付けて再起動 |
+| `distrokid releases` が disabled または POST が 404 | capture root が未指定、またはチャンネルルート以外を指している | `extension/references/serve.md` の `--distrokid` 契約で再起動 |
 
 ---
 
@@ -314,14 +288,6 @@ curl -s http://localhost:7874/distrokid/collections | python3 -m json.tool | hea
 
 1. distrokid-helper popup の **ローカル配信元** selector を開き、候補更新後に表示された対象を選択する
 2. Chrome 拡張 **distrokid-helper** を使って `30-distrokid/README.md` の手順に従い DistroKid Web フォームへ転記・アップロードを行う
-3. ユーザーが転記・アップロード完了を確認したらサーバーを停止し、プロセスが残っていないことを確認する
-
-```bash
-# Step 9 の fallback 起動と同じチャンネルルートを指定する
-CHANNEL_DIR=/path/to/channel uv run yt-collection-serve --stop --port 7874
-ps aux | grep '[y]t-collection-serve'
-```
-
-チャンネルリポジトリ内で `CHANNEL_DIR` が既に設定済みなら `CHANNEL_DIR=/path/to/channel` は不要。別 port で起動した場合は `7874` をその port に置き換える。`ps aux` に対象プロセスが表示される場合は完了扱いにしない。
+3. ユーザーが転記・アップロード完了を確認したら `.claude/skills/extension/references/serve.md` の停止契約を実 port へ適用し、対象 process が残っていないことを確認する
 
 DistroKid 申請後の DSP リンク（Spotify / Apple Music）到着は通常 1〜2 週間かかる。

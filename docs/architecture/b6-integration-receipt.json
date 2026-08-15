@@ -619,7 +619,7 @@
     },
     {
       "old_owner": "legacy..claude.skills.ext-install.SKILL.md",
-      "exact_new_owner": ".claude/skills/ext-install/SKILL.md",
+      "exact_new_owner": ".claude/skills/extension/SKILL.md",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"

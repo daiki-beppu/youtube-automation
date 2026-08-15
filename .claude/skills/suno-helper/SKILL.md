@@ -58,7 +58,7 @@ Chrome DevTools MCP は必須ではない。通常運用は browser use を prim
 
 | 役割 | コマンド |
 |---|---|
-| サーバー起動（必須: dir mode + 拡張 origin lock） | `uv run yt-collection-serve "$CHANNEL_DIR/collections/planning" --allow-extension suno-helper` |
+| サーバー起動・再利用・停止 | `.claude/skills/extension/references/serve.md` の `--suno` 契約 |
 | 拡張 ID 手動指定（検出失敗時のみ） | `--allow-origin "chrome-extension://<EXTENSION_ID>"` |
 | ポート変更（並走時） | 末尾に `--port 7874` |
 | 拡張をリロード | chrome://extensions → suno-helper の再読み込みアイコン |
@@ -70,34 +70,7 @@ Chrome DevTools MCP は必須ではない。通常運用は browser use を prim
 
 ### Step 1. サーバーを起動または再利用する
 
-起動（または再利用確認）の前に、対象コレクションの骨格プリフライトを実行する（fail-loud、#1494）:
-
-```bash
-uv run yt-collection-preflight <collection-dir-name>
-```
-
-`[NG]`（`01-master/` 等の欠落）が報告されたら `--fix` で補完してから進む。DL 完走後に初期化漏れへ気づく事故を防ぐため、このステップは省略しない。
-
-**必ず dir mode + 拡張 origin lock 付き**で起動する。
-
-```bash
-PYTHONUNBUFFERED=1 uv run yt-collection-serve "$CHANNEL_DIR/collections/planning" \
-  --allow-extension suno-helper
-```
-
-`--allow-extension suno-helper` は Chrome の profile preferences から unpacked 拡張 ID を検出し、`chrome-extension://<id>` の exact origin lock として使う。検出 0 件・複数 ID 競合・Preferences 読み取り不可・Preferences JSON parse failure なら **server は listen せず fail-loud に終了する**。エラーに表示された候補を確認して `--allow-origin "chrome-extension://<EXTENSION_ID>"` を手動指定する。`POST /collections/<id>/downloaded` と `GET /auth/token` はどちらもこの exact origin lock を必要とする。診断用 curl にも必ず `Origin: chrome-extension://<id>` を付け、Origin なしの応答を拡張からの POST 成功根拠にしない。
-
-background 起動では `PYTHONUNBUFFERED=1 nohup uv run yt-collection-serve ... > .tmp/logs/collection-serve-<PORT>.log 2>&1 &` を使う。server 自身も stdout/stderr を line-buffered にするため、起動直後の `detected extension:` 行を log から確認できる。
-
-collection 単体パスを直接渡す single file mode は playlist phase がスキップされるため本 skill では使わない。dir mode で読まれるのは **`-collection` suffix を持つ dir のみ**。それ以外（例: `01-master` や雑多ファイル）は無視される。
-
-`/wf-new` 完了ガイダンスに `Suno-helper server: ✅ http://<channel>.localhost:<PORT>` が出ている場合は、その URL を使って下記 3 点の確認だけ行い、追加起動しない。確認に失敗する場合のみ、空き port を選んで起動し直す。
-
-起動後の確認（**3 点すべてパスすること**）:
-
-1. `curl -s http://<channel>.localhost:7873/collections | python3 -m json.tool | head -20` が JSON array を返す（404 なら single file mode で起動してしまっている。名前解決に迷う場合は同じ port の `localhost` でも確認可）
-2. 各 collection に `"status"` フィールド（`"needs_prompts"` / `"ready"` / `"downloaded"`）、`"pattern_count"`、`"downloaded_count"` がある（`playlist_name` は返らない）
-3. サーバー出力の `detected extension: suno-helper -> <id> (chrome-extension://<id>)` を確認し、`curl -s -H "Origin: chrome-extension://<id>" http://<channel>.localhost:7873/auth/token | python3 -m json.tool` が `{ "token": "..." }` を返す
+`.claude/skills/extension/references/serve.md` を読み、`--suno` の起動・既存 server 再利用・疎通確認契約を実行する。server lifecycle のコマンドや判定は本 skill に複製しない。返された実 URL / port / detected origin を後続 Step で使う。
 
 ### Agent primary flow: browser use で操作する
 
@@ -243,14 +216,7 @@ handoff 条件（agent は自動突破しない）:
 
 音声配置と `workflow-state.json` 更新の両方に成功した後、ユーザーの Downloads 配下にある Suno ZIP は自動削除される。削除に失敗しても配置済み音声と workflow-state は維持され、警告が記録される。完了判定は ZIP の存在ではなく、展開済み音声ファイルと `workflow-state.json` を見る。
 
-上記 6 点を確認したら、起動時と同じ port のサーバーを停止し、プロセスが残っていないことを確認する（既定 port は 7873）。
-
-```bash
-uv run yt-collection-serve --stop --port 7873
-ps aux | grep '[y]t-collection-serve'
-```
-
-別 port で起動した場合は `7873` をその port に置き換える。`ps aux` に対象プロセスが表示される場合は完了扱いにしない。
+上記 6 点を確認したら、`.claude/skills/extension/references/serve.md` の停止契約を、起動時に記録した実 port へ適用する。対象 process が残る場合は完了扱いにしない。
 
 ### Step 7. 中断時
 
@@ -275,7 +241,7 @@ DL が止まる・形式が違う・`workflow-state.json` へ反映されない�
 
 ## Gotchas
 
-- **`--allow-extension` / `--allow-origin` 無しで起動すると token 取得と DL 完了 POST が 403 になる**。通常は `--allow-extension suno-helper` で検出し、検出失敗時のみ `--allow-origin "chrome-extension://<EXTENSION_ID>"` を exact 指定して Step 1 の `/auth/token` 確認を通すこと。
+- **origin lock 無しで起動すると token 取得と DL 完了 POST が 403 になる**。検出と fallback は `extension/references/serve.md` の `--suno` 契約を使う。
 - **誤って single file mode で起動すると playlist phase がスキップされる**。`/collections` 404 が返り、popup 側で derivedPlaylistName が undefined になり playlist phase に分岐しない。Step 1 の `curl /collections` 確認を必ず通すこと。
 - **Advanced → More options → Lyrics mode を毎回確認**。prompt entry の `lyrics` が非空なら、`[Instrumental]` を含め Write と Style / Lyrics 欄を使う。`lyrics` が真に空の entry だけは Instrumental と Style 欄を使える。Suno が UI 状態を覚えていないことがあり、`lyrics` が非空の entry で Lyrics 欄が消えていると Step 5 開始直後に ERROR で止まる。
 - **Cmd+P を手動で押す必要はない**。拡張は background script から `chrome.debugger` の `Input.dispatchKeyEvent` で trusted key event を送る。dispatchEvent では Suno listener に届かない（isTrusted=false）ため、user 側で打鍵してはいけない（衝突する）。失敗時は拡張 manifest の `debugger` 権限、対象 Suno tab への attach 失敗、DevTools/別 debugger の競合を確認する。

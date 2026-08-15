@@ -41,7 +41,7 @@ description: "Use when 新規コレクション制作を立ち上げるとき、
 新コレクション開始オーケストレーター。フラグなしの通常入口は [`references/ideate.md`](references/ideate.md) の企画工程を読んでから立ち上げを続け、通常は企画選択 + サムネイル承認の2箇所で一時停止する。`workflow.wf_new.skip_plan_selection: true` の analytics mode / benchmark fallback mode では企画選択だけを自動化する。
 `/wf-new --auto` から同一 SKILL.md の通常入口へ入った場合も既存 gate と完了条件を維持し、auto mode 側で工程を再実装しない。新規初期化後は作成した collection 名を返し、同じ run 内の再評価へ接続する。
 `image_generation.auto_selection.enabled: true` かつ `mode: full` のチャンネルでは、サムネイル工程のテーマ確認・生成可否・textless 背景承認・候補承認を省略する。`planning-preview.png` があればそれを無人で最終サムネイルへ確定し、無ければ企画で確定した theme を `/thumbnail` へ渡して無人で確定する。
-Suno チャンネルではプロンプト生成後、`suno-helper` 用の `uv run yt-collection-serve` 起動と疎通確認まで行い、続きは `/suno-helper` が browser use で Suno タブ上の拡張 overlay を操作できる状態にする。
+Suno チャンネルではプロンプト生成後、`.claude/skills/extension/references/serve.md` の `--suno` 契約を直接読んで server の再利用または起動と疎通確認まで行い、続きは `/suno-helper` が browser use で Suno タブ上の拡張 overlay を操作できる状態にする。
 minimal mode では企画候補生成前にテーマ / ジャンル / 雰囲気の直接入力確認が追加される既存挙動を、`ttp_mode: false` の場合だけ適用する。`true` の場合は `/channel-research --benchmark` を案内して停止する。
 アナリティクス未収集の新チャンネルでも、ベンチマークから初回企画を開始する。`ttp_mode: false` の場合だけ、ベンチマークも無ければユーザー直接入力を使う。
 新規チャンネルの初回制作では、本制作 state を作る前に任意のパイロット検証を実施済みか確認し、未実施でもユーザーがスキップを選べば通常フローへ進める。
@@ -209,7 +209,7 @@ success を記録した後は同じ fixed collection を `plan --collection <fix
 | 4 | Phase 2c initial dispatch: thumbnail + music | preview status を固定し、両方未完了なら thumbnail branch と `/music --prompt` または `/lyria` branch の exactly two Agent calls を同時起動する | `10-assets/thumbnail.jpg` または候補、Suno prompts または Lyria 設計 |
 | 5 | Phase 2c join + quality gate + textless subagent | 両初期 Agent を join し、メインが thumbnail の承認・QA・textless 確定と両 branch の成果物検証、直列 state 適用を行う。片側再開では未完了側だけを委譲する | `10-assets/thumbnail.jpg`, `10-assets/main.png/jpg`, music prompts |
 | 6 | subagent: `/thumbnail --loop` または静止背景運用 | `loop-video.enabled=true` なら生成を委譲しメインが検証。`enabled=false` なら Veo を呼ばず、メインが既存 textless `main.png/jpg` を静止背景として使う | `10-assets/loop.mp4` または textless `10-assets/main.png/jpg` |
-| 7 | subagent: `uv run yt-collection-serve`（Suno のみ） | server 起動と疎通確認を委譲し、結果をメインが検証する | `http://localhost:<PORT>` |
+| 7 | `extension/references/serve.md`（Suno のみ） | 共有契約を直接読み、server 再利用または起動と疎通確認を行う | `http://localhost:<PORT>` |
 
 `/suno-helper` の Chrome 操作と `/wf-next` は `/wf-new` 内では実行しない。`/wf-new` は Suno 用 server 起動までを担い、次工程として `/suno-helper` の browser use 主導フローを案内する。
 

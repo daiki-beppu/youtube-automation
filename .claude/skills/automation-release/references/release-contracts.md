@@ -20,4 +20,4 @@ Python release の prepare では、`[Unreleased]` 配下の `### Migration` を
 - 各extensionの `package.json::version` は唯一のpackage versionで、Python 本体 version と独立する。extension releaseはPython側の `pyproject.toml` / `uv.lock` / `CHANGELOG.md` 昇格を変更しない。
 - release asset 名は `<name>-<package version>-chrome.zip` とする。統一tagを系列の次番号へ進めた結果tag versionとpackage versionが異なっても、asset名にはtag versionではなくpackage versionを使う。
 
-SKILL.md のPhase E、`references/verify-extensions.sh`、`.github/workflows/release-extensions.yml`、消費側の `/ext-install` は、このtag・version・asset命名を同じ契約として扱う。
+SKILL.md のPhase E、`references/verify-extensions.sh`、`.github/workflows/release-extensions.yml`、消費側の `/extension` は、このtag・version・asset命名を同じ契約として扱う。

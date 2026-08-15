@@ -1,7 +1,7 @@
 ---
 name: automation-release
 purpose: 準備する
-description: "Use when 本リポジトリの新規リリースを作成するとき。「リリースして」「/automation-release」「suno-helper をリリースしたい」「ext-v0.2.2 を出したい」で発動。Python 本体（vX.Y.Z）と Chrome 拡張（ext-vX.Y.Z）を判定し prepare / publish に自動分岐。グローバル /release は使わない。下流追従は /automation-update、拡張のインストールは /ext-install"
+description: "Use when 本リポジトリの新規リリースを作成するとき。「リリースして」「/automation-release」「suno-helper をリリースしたい」「ext-v0.2.2 を出したい」で発動。Python 本体（vX.Y.Z）と Chrome 拡張（ext-vX.Y.Z）を判定し prepare / publish に自動分岐。グローバル /release は使わない。下流追従は /automation-update、拡張のインストールは /extension"
 ---
 
 ## 前後工程
@@ -41,7 +41,7 @@ description: "Use when 本リポジトリの新規リリースを作成すると
 **責務分離**:
 - 本スキル = リリース実施（prepare + publish、Python 本体 / 拡張の両系列）
 - 下流追従 = 各チャンネルリポジトリで `/automation-update` スキル（本リポジトリで配布）が CHANGELOG.md / GitHub Release 本文を読み取って実施
-- 拡張の配布・インストール側は `/ext-install`（Release asset を読む消費側。tag `ext-v*` / asset `<name>-<version>-chrome.zip` の命名契約を本スキルから変えない）
+- 拡張の配布・インストール側は `/extension`（Release asset を読む消費側。tag `ext-v*` / asset `<name>-<version>-chrome.zip` の命名契約を本スキルから変えない）
 - グローバル `/release` スキルは廃止済みで存在しない。本リポジトリのリリースは常に本スキルを使う
 
 ## 前提
@@ -583,7 +583,7 @@ merge 後の公開 URL: https://youtube-automation-release-notes.pages.dev/ext-v
 
 次のステップ:
 - 利用者への告知はチャットで Release URL を共有（ADR 0011。自動アップデート通知は無し）
-- 手元 Chrome の拡張更新は `/ext-install`
+- 手元 Chrome の拡張更新は `/extension --update`
 ```
 
 非承認 / skip、Release body 欠落、local gate 失敗、既存 branch 検出でも tag・workflow・3 zip assets が確認済みなら extension publish 自体は完了として報告する。PR が無い場合は理由と手動作成手順を、途中失敗では重複作成しない retry 手順を併記する。
@@ -619,7 +619,7 @@ merge 後の公開 URL: https://youtube-automation-release-notes.pages.dev/ext-v
 - `release/ext-v<VER>` ブランチ命名は固定（Phase E0 の状態判定と E2-5 のクリーンアップが依存）
 - extension の commit / PR タイトルは `chore(<name>): ext-v<VER>` 固定（日本語 Conventional Commits 準拠 + 検索容易性）
 - extension のlocal verifyは `references/verify-extensions.sh` を単一ソースとし、workflow契約を変える場合は同スクリプトと同時に更新する
-- `ext-v<VER>` tag は PR の merge commit（`gh pr view <N> --json mergeCommit`）に打つ。tag `ext-v*` / asset `<name>-<version>-chrome.zip` の命名契約は `/ext-install` が読む側で依存しているため変えない
+- `ext-v<VER>` tag は PR の merge commit（`gh pr view <N> --json mergeCommit`）に打つ。tag `ext-v*` / asset `<name>-<version>-chrome.zip` の命名契約は `/extension` が読む側で依存しているため変えない
 - prepare 1-6 で **必ず** `references/verify-extensions.sh` を引数なしで実行し、exit 0を確認する
 
 ## Cross References
@@ -634,5 +634,5 @@ merge 後の公開 URL: https://youtube-automation-release-notes.pages.dev/ext-v
 - `.github/workflows/release-extensions.yml` — extension の install / build / zip 契約（local verify はこれと同一コマンド列で実行する）
 - `extensions/README.md` — 拡張の開発フローと release 添付方針
 - `/automation-update`（下流チャンネルリポジトリ）— publish 後の追従スキル
-- `/ext-install` — Release asset を読む消費側スキル（tag / asset 命名契約の依存先）
+- `/extension` — Release asset を読む消費側スキル（tag / asset 命名契約の依存先）
 - CLAUDE.md「開発ワークフロー」— commit メッセージ規約（日本語 Conventional Commits）

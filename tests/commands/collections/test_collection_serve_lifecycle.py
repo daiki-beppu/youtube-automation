@@ -932,11 +932,14 @@ def test_idle_timeout_rejects_non_finite_and_non_positive_values(value):
 @pytest.mark.parametrize("skill", ["suno-helper", "distrokid-helper"])
 def test_helper_skill_stops_collection_server_after_user_workflow(skill):
     text = (Path(".claude/skills") / skill / "SKILL.md").read_text(encoding="utf-8")
+    lifecycle = (Path(".claude/skills/extension/references/serve.md")).read_text(encoding="utf-8")
     hard_gates = "\n".join(text.splitlines()[:60])
 
     assert "## 完了条件" in hard_gates
     assert "プロセス" in hard_gates
-    assert "yt-collection-serve --stop --port" in text
-    assert "ps aux" in text
+    assert "extension/references/serve.md" in text
+    assert "yt-collection-serve --stop --port" in lifecycle
+    assert "ps aux" in lifecycle
     if skill == "distrokid-helper":
-        assert "CHANNEL_DIR=/path/to/channel uv run yt-collection-serve --stop --port 7874" in text
+        assert '--distrokid-capture-root "$CHANNEL_DIR"' in lifecycle
+        assert "--port 7874" in lifecycle
