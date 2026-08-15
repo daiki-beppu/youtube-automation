@@ -2,9 +2,8 @@
 
 責務分割（Issue #465）の一環で ``collection_uploader.py`` から分離した。
 ``self.uploader`` / ``self.tracking_store`` / ``self.config`` /
-``self._move_collection_to_live`` /
-``self._assign_to_playlists`` は合成先クラス（``CollectionUploader`` 本体および
-他 mixin）が提供する。
+``self._move_collection_to_live`` / ``self.playlist_assignment`` は合成先クラス
+（``CollectionUploader`` 本体）が提供する。
 """
 
 from __future__ import annotations
@@ -49,7 +48,7 @@ class CompleteCollectionExecutorMixin:
         publish_at: str | None,
     ) -> dict:
         # playlist 所有権エラー時にローカル状態を成功確定しないため、最初に割り当てる。
-        self._assign_to_playlists(complete_video["video_id"], collection_path)
+        self.playlist_assignment.assign(complete_video["video_id"], collection_path)
 
         tracking = {
             **tracking,
