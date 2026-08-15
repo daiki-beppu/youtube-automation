@@ -45,6 +45,7 @@ class MigrationPlan:
 # 統合先 skill と名前空間 loader key が成立した段から移行を有効化する。
 # apply は利用者の明示実行だけで行い、旧 loader key は互換入口として維持する。
 SKILL_CONFIG_MIGRATIONS: Final[Mapping[str, SkillConfigMigration]] = {
+    "community-post": SkillConfigMigration("publish", "community"),
     "suno": SkillConfigMigration("music", "prompt"),
     "suno-lyric": SkillConfigMigration("music", "lyric"),
     "video-upload": SkillConfigMigration("publish", "upload"),

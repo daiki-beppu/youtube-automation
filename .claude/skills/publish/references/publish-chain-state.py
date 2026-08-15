@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Decide whether publish playlist and upload steps must run."""
+"""Decide whether publish playlist, upload, and community steps must run."""
 
 from __future__ import annotations
 
@@ -68,8 +68,10 @@ def evaluate(
     """Return a stable exit code and JSON-serializable decision."""
     if step == "playlist":
         return _evaluate_playlist(channel_dir or Path.cwd())
-    if step != "upload":
+    if step not in {"upload", "community"}:
         return EXIT_BLOCKED, _result("blocked", "unknown_step")
+    if step == "community" and collection_dir is None:
+        return EXIT_RUN, _result("run", "collection_not_provided")
     if collection_dir is None:
         return EXIT_BLOCKED, _result("blocked", "collection_dir_missing")
 
@@ -90,6 +92,23 @@ def evaluate(
         return EXIT_BLOCKED, _result("blocked", "upload_state_invalid")
 
     video_id = upload.get("video_id")
+    if step == "community":
+        if video_id is None:
+            return EXIT_BLOCKED, _result("blocked", "video_id_missing")
+        if not isinstance(video_id, str) or not video_id.strip():
+            return EXIT_BLOCKED, _result("blocked", "video_id_invalid")
+        output = collection_dir / "20-documentation" / "community-post.txt"
+        try:
+            exists = output.is_file() and bool(output.read_text(encoding="utf-8").strip())
+        except OSError:
+            return EXIT_BLOCKED, _result("blocked", "community_post_invalid")
+        if not exists:
+            return EXIT_RUN, _result("run", "community_post_missing")
+        return EXIT_SKIP, _result(
+            "skip",
+            "community_post_recorded",
+            artifacts=["20-documentation/community-post.txt"],
+        )
     if video_id is None:
         return EXIT_RUN, _result("run", "video_id_missing")
     if not isinstance(video_id, str) or not video_id.strip():

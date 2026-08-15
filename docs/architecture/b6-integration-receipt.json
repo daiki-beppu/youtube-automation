@@ -584,7 +584,7 @@
     },
     {
       "old_owner": "legacy..claude.skills.community-post.SKILL.md",
-      "exact_new_owner": ".claude/skills/community-post/SKILL.md",
+      "exact_new_owner": ".claude/skills/publish/references/community.md",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"

@@ -51,7 +51,7 @@ YouTube への公開、視聴者対応、容量整理、コミュニティ投稿
 | Skill | なにができるか |
 |---|---|
 | /video-description | YouTube 概要欄を自動生成（情景フック + タイムスタンプ + Perfect for） |
-| /publish | `--playlist` でプレイリスト管理、`--upload` で YouTube アップロード + live 移行 |
+| /publish | `--playlist` でプレイリスト管理、`--upload` で YouTube アップロード + live 移行、`--community` で投稿文準備 + Studio 起動 |
 | /post-publish | 公開後の community-post → pinned-comment → metadata-audit を承認ゲート・実行履歴付きで一括実行 |
 | /comments-reply | ルール駆動コメント自動返信（dry-run → apply、二重返信防止） |
 | /live-chat-reply | 配信中ライブチャットの Codex 自動返信 daemon を設定・VPS 配備・運用 |
@@ -59,7 +59,6 @@ YouTube への公開、視聴者対応、容量整理、コミュニティ投稿
 | /metadata-audit | ローカル descriptions.md と YouTube 上メタデータの整合性監査 |
 | /live-clean | live コレクションの大容量メディアを削除してディスク回復 |
 | /community-draft | コミュニティ投稿を config テンプレートから JSON バッチ生成 |
-| /community-post | 動画公開と連動した固定テンプレ投稿（Studio 起動まで） |
 | /short | collection 型の生成・ローカライズ投稿と release 型の JP+EN クリップ生成を設定から自動分岐 |
 | /distrokid-helper | コレクション楽曲を DistroKid 配信用に整備し、Chrome 拡張向けサーバー起動まで実行 |
 

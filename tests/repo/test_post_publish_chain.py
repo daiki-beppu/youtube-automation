@@ -64,7 +64,7 @@ def test_manifest_declares_ordered_gated_chain() -> None:
 
     assert manifest["chainId"] == "post-publish"
     assert [step["id"] for step in manifest["steps"]] == list(STEPS)
-    assert [step["skill"] for step in manifest["steps"]] == list(STEPS)
+    assert [step["skill"] for step in manifest["steps"]] == ["publish", "pinned-comment", "metadata-audit"]
     assert len({step["id"] for step in manifest["steps"]}) == len(STEPS)
     assert all(step["approvalGate"]["skip"] is True for step in manifest["steps"])
     assert all("enabled" not in step["approvalGate"] for step in manifest["steps"])
@@ -195,7 +195,11 @@ def test_publish_time_reached_resumes_same_video_and_clears_pending_on_complete(
 
 
 def test_child_skills_support_chain_and_standalone_invocation() -> None:
-    for name in STEPS:
+    community = (ROOT / ".claude" / "skills" / "publish" / "references" / "community.md").read_text(encoding="utf-8")
+    assert "/post-publish" in community
+    assert "単独" in community
+
+    for name in ("pinned-comment", "metadata-audit"):
         text = (ROOT / ".claude" / "skills" / name / "SKILL.md").read_text(encoding="utf-8")
         assert "/post-publish" in text
         assert "単独" in text
