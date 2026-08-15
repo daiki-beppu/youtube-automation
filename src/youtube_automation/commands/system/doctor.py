@@ -1684,7 +1684,7 @@ def check_benchmark_data(channel_dir: Path) -> CheckResult:
             category=DATA_CATEGORY,
             message=(
                 "data/benchmark_*.json 未生成。analytics mode では "
-                "/wf-new の企画工程が /benchmark の鮮度確認・必要時更新を扱う"
+                "/wf-new の企画工程が /channel-research --benchmark の鮮度確認・必要時更新を扱う"
             ),
         )
 
@@ -1715,7 +1715,7 @@ def check_wf_new_readiness(channel_dir: Path) -> CheckResult:
                 "kind": "human",
                 "instructions": (
                     "config/channel/analytics.json::benchmark.channels に TTP 対象を保存 → "
-                    "/benchmark を実行 → `uv run yt-doctor --json` を再実行してください"
+                    "/channel-research --benchmark を実行 → `uv run yt-doctor --json` を再実行してください"
                 ),
             },
         )
@@ -2280,8 +2280,10 @@ def _validate_approved_ttp_exception_blocks(
         if "music" in categories and "/suno" not in lower_block:
             missing.append("music のユーザー承認済み例外に後続 /suno が未記録")
             continue
-        if "duration" in categories and "/benchmark" not in lower_block:
-            missing.append("duration のユーザー承認済み例外に後続 /benchmark が未記録")
+        if "duration" in categories and not any(
+            command in lower_block for command in ("/benchmark", "/channel-research --benchmark")
+        ):
+            missing.append("duration のユーザー承認済み例外に後続 /channel-research --benchmark が未記録")
             continue
 
         exceptions.update(categories)

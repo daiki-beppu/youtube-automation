@@ -6,8 +6,8 @@ description: "Use when YouTube Data API で追加競合候補を自動発掘・�
 
 ## 前後工程
 
-- `前工程`: `/benchmark`, `/setup --channel`
-- `後工程`: `/viewer-voice`, `/benchmark`
+- `前工程`: `/channel-research --benchmark`, `/setup --channel`
+- `後工程`: `/viewer-voice`, `/channel-research --benchmark`
 - `委譲先`: `なし`
 
 ## 成果物
@@ -204,15 +204,15 @@ subagent へは次を具体値で渡す:
 
 ## スコープ外（他スキルへバトン）
 
-- 競合の動画詳細分析 → `/benchmark`
+- 競合の動画詳細分析 → `/channel-research --benchmark`
 - 視聴者コメント分析 → `/viewer-voice`
 - 方向性決定・config 生成 → `/channel-new`（方向性検討モード）/ `/setup --regenerate`
-- ベンチマーク再収集 → `/benchmark`
+- ベンチマーク再収集 → `/channel-research --benchmark`
 
 このスキルは **発掘**だけに責任を持つ。深堀分析は専用スキルにバトンを渡す。
 
 ## Cross References
 
 - `/setup --channel`: TTP 対象確認と初期 config 生成。Step 6 で追加競合発掘が必要な場合に本スキルへ委譲
-- `/benchmark`: 発掘済みチャンネルのベンチマークデータ収集
+- `/channel-research --benchmark`: 発掘済みチャンネルのベンチマークデータ収集
 - `/channel-new` 分析モード: 収集データの徹底分析

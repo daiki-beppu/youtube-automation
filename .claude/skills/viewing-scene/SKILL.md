@@ -117,7 +117,7 @@ AskUserQuestion でメインシーンと動画尺の方針を確認。
 |---|---|---|
 | WebSearch 不可 | 検索結果が取得できない | 手動入力で代替するか、当該分析をスキップする |
 | 公開前入力不在 | 新規開設（公開前）で競合 / TTP / viewer-voice 成果物が不足 | `/setup --channel` Step 5 または Step 7 の該当前工程へ戻る |
-| 公開後入力不在 | 公開後に `data/` のベンチマーク/Analytics スナップショットが無い | 先に `/benchmark`・`/analytics --collect` 等を実行して入力を用意 |
+| 公開後入力不在 | 公開後に `data/` のベンチマーク/Analytics スナップショットが無い | 先に `/channel-research --benchmark`・`/analytics --collect` 等を実行して入力を用意 |
 
 ## 関連ファイル
 

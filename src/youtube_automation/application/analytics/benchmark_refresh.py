@@ -102,7 +102,7 @@ def ensure_benchmark_fresh(
         raise YouTubeAPIError(
             "ベンチマークの最新化に失敗しました（収集結果が空）。"
             "API 認証・クォータ・benchmark.channels の設定を確認のうえ "
-            "`/benchmark`（uv run yt-benchmark-collect）を再実行してください。"
+            "`/channel-research --benchmark`（uv run yt-benchmark-collect）を再実行してください。"
         )
 
     collector.download_thumbnails(data, force=True)

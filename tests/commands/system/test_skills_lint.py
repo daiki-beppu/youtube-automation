@@ -343,6 +343,24 @@ def test_cli_lint_resolves_namespaced_key_to_owning_skill_default(
     assert "lint 合格" in capsys.readouterr().out
 
 
+def test_cli_lint_accepts_registered_key_whose_default_moved_to_another_skill(
+    fake_repo: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    skills_dir = fake_repo / ".claude" / "skills"
+    _write_skill(skills_dir, "channel-research", _VALID_SKILL_MD.replace("good-skill", "channel-research"))
+    (skills_dir / "channel-research" / "config.default.yaml").write_text("freshness_days: 3\n", encoding="utf-8")
+    monkeypatch.setattr(skill_config, "SKILL_CONFIG_KEYS", frozenset({"benchmark"}))
+    monkeypatch.setattr(skill_config, "SKILL_ONLY_CONFIG_KEYS", frozenset())
+    monkeypatch.setattr(
+        skill_config,
+        "_MOVED_SKILL_CONFIG_DEFAULTS",
+        {"benchmark": Path("channel-research/config.default.yaml")},
+    )
+
+    assert main(["lint"]) == 0
+    assert "lint 合格" in capsys.readouterr().out
+
+
 def test_cli_lint_guides_unmigrated_downstream_skill_config(
     fake_repo: Path,
     monkeypatch: pytest.MonkeyPatch,

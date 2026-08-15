@@ -9,7 +9,7 @@ from tests.helpers.paths import REPO_ROOT
 SKILLS_DIR = REPO_ROOT / ".claude" / "skills"
 TARGET_SKILLS = (
     "audience-persona-design",
-    "benchmark",
+    "channel-research",
     "discover-competitors",
     "market-research",
     "thumbnail-research",
@@ -37,11 +37,11 @@ OCCURRENCE_LEDGER = (
         (("missing-config-existing", "existing-import"),),
     ),
     *_occurrences(
-        "benchmark",
-        (("missing-config-new", "new-opening"), ("missing-benchmarks", "new-opening")),
+        "channel-research",
+        (("upstream-setup", "new-opening"), ("missing-config-new", "new-opening")),
         (
-            ("frontmatter-analysis", "analysis"),
             ("downstream-analysis", "analysis"),
+            ("upstream-import", "existing-import"),
             ("missing-config-existing", "existing-import"),
         ),
     ),
@@ -104,29 +104,29 @@ OCCURRENCE_LEDGER = (
 # SHA-256 of ordered ``section heading + active route line`` records. This binds
 # every route to its exact active Markdown context without duplicating long prose.
 ROUTE_CONTEXT_SHA256 = {
-    "audience-persona-design": "950bfb445df84ba0a48282a57111208fe16b33755c4629b5c7f42493784cb298",
-    "benchmark": "656994321cc145397dfa7899e494527d3e62f35356a34d4cf0eaec3584e7fd5f",
-    "discover-competitors": "310ad921849dd489cf09cc9cb48d51b09f303af804ee423e2ca974e7863ad455",
+    "audience-persona-design": "689f9b8c157450a8881ab51852d4d896ffff9bfbfbcb2ed5f3f9975f88903512",
+    "channel-research": "b48a5b4a26e1a8901161f85faa26bb5ecbee228035c9c4366ee453d0e6af8491",
+    "discover-competitors": "4c87873652b5c3ca7bf32227e8622a883bddae8aea26942af509ac9f97a29b85",
     "market-research": "b54b28a9d6cddd9d91e49002b787b38a7b5381546a6fa643532d34aef451bfef",
-    "thumbnail-research": "ea3a96bf784d4d510491d9c2ac5f516dfaa6984f0e6acfbc0754c8b753662609",
+    "thumbnail-research": "6b32a4225ab8e86a8d6772515672ddc57413a24f13351d441ebf479191dcf527",
     "video-analyze": "f28ee9c9b0a18c3ecae15b631f970d780b18bda72185a25935b56f0a66ba6552",
     "viewer-voice": "a93cc57011974813712992610bc39cc223a162e6c1ff7ead1aa4b58e373961a2",
     "viewing-scene": "03df44376f9ef446067801d083cbeeceec339a2c24b1e248b4443b4c51914f83",
 }
 SETUP_ASSET_OWNERS = {
     "audience-persona-design": "persona-branding-readiness.md",
-    "benchmark": "ttp-seed-and-duration.md",
+    "channel-research": "ttp-seed-and-duration.md",
     "discover-competitors": "persona-branding-readiness.md",
     "market-research": "new-channel-bootstrap.md",
     "viewer-voice": "persona-branding-readiness.md",
     "viewing-scene": "persona-branding-readiness.md",
 }
 UNCHANGED_SKILL_SHA256 = {
-    "thumbnail-research": "552d8563ac152a4219ad2c66ddeb66fd910cc72b743ca7e2c6982227bde3d6ed",
-    "video-analyze": "453977e832dc9b2c649b54f20f55b8187b60c60b6e180c4e6a0b4ade5878d26d",
+    "thumbnail-research": "e3b769a72ebeec411244ed6358e9ffc3f44a4817bac60e6e972ff86081e4a723",
+    "video-analyze": "721d555b7bbca0f35e2391961781c71d7af639e89ef4de0fdbf2fed2e6945d9b",
 }
 RESIDUAL_LINE_MARKERS = {
-    "benchmark": ("description:", "- `後工程`:"),
+    "channel-research": ("description:", "- `後工程`:"),
     "discover-competitors": (
         "description:",
         "- 実行場所がチャンネルリポジトリ",
@@ -140,7 +140,7 @@ RESIDUAL_LINE_MARKERS = {
     ),
 }
 RESIDUAL_SHA256 = {
-    "benchmark": "52064fb2db0e90530134e33823a3125bf1282da339bfc89e91d3c062dba330d5",
+    "channel-research": "e000a60f21eff7d119bbffd11252eeb8247e29e25354e55caf0c4fcd08327600",
     "discover-competitors": "c1434d5d91f521e1023aebfce6d56c09960faf1a5a6d97996df508cb19b2aed1",
     "market-research": "a6350cc0f44adf9895aefb0b98fc177415b5bebb55e17b3fb056d3df8d111448",
 }

@@ -1,0 +1,18 @@
+{
+  "chainId": "channel-research",
+  "steps": [
+    {
+      "id": "benchmark",
+      "skill": "channel-research",
+      "prerequisiteArtifacts": ["config/channel/analytics.json"],
+      "outputArtifacts": ["data/benchmark_*.json", "docs/benchmarks/*.md"],
+      "approvalGate": {
+        "skip": true,
+        "configPath": "workflow.channel-research.skip_approvals.benchmark"
+      },
+      "idempotency": {
+        "script": "references/channel-research-chain-state.py"
+      }
+    }
+  ]
+}

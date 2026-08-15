@@ -15,7 +15,7 @@ PDCA 対応: 準備 = 準備する / Plan = 調べる → 決める / Do = 進�
 
 ## 調べる
 
-- `/benchmark` — Use when 競合チャンネルのベンチマークデータを最新化するとき。
+- `/channel-research` — Use when チャンネル調査を状態判定付きで一括実行または一段だけ実行するとき。
 - `/discover-competitors` — Use when YouTube Data API で追加競合候補を自動発掘・ランキング化するとき。
 - `/market-research` — Use when 既存チャンネルから任意に市場を調べ、TTP 入替候補やニッチ仮説を根拠付きで比較するとき。
 - `/thumbnail-research` — Use when 収集済み競合サムネイルだけを再生数上位群 vs 下位群で深掘りし、勝ちパターンを抽出するとき。

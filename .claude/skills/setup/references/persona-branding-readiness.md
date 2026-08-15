@@ -8,7 +8,7 @@
 
 - 競合候補を広げる場合は `/discover-competitors` を使う。
 - 現行 TTP の入替候補やニッチ仮説を外部根拠と同じ評価軸で比較する場合は `/market-research` を使う。既定は会話内レポートで、TTP や config を変更しない。
-- 承認済み TTP 対象の追加動画データやサムネイルを再収集する場合は `/benchmark` を使う。Step 5.5 の初回 duration 算出では必須とする。
+- 承認済み TTP 対象の追加動画データやサムネイルを再収集する場合は `/channel-research --benchmark` を使う。Step 5.5 の初回 duration 算出では必須とする。
 - 収集済みデータから方向性を深掘りする場合は `/channel-new` 分析モードを使う。
 
 `/viewer-voice` は任意の追加調査に分類せず、Step 7 の必須前工程として扱う。
@@ -22,7 +22,7 @@
    - `docs/plans/viewer-voice-analysis.md`
    - `docs/channel/ttp-seed-confirmation.md`
    - `docs/channel/competitor-branding-snapshot.json`
-   - 任意の `/benchmark` 成果物
+   - 任意の `/channel-research --benchmark` 成果物
 3. 公開後にしか得られない `reports/analysis_*.md` は要求しない。コメント分析を必須入力として第一ペルソナを設計する。
 4. `/audience-persona-design` から同じ実行コンテキストを引き継いで `/viewing-scene` を実行する。暫定ペルソナと既存の競合 / TTP / viewer-voice 成果物から視聴時間帯・行動・感情状態を検証し、`docs/plans/viewing-scene-matrix.md` を生成する。
 5. `/audience-persona-design` の Phase 6 に戻り、視聴シーン検証結果を反映した最終 `docs/channel/personas/persona-definition.md` に更新する。
@@ -66,7 +66,7 @@ banner.save('branding/banner.png', optimize=True)
 | 前提 | 初回対応 |
 |---|---|
 | Analytics データがまだ無い | 初回は TTP メモと seed fetch 結果を企画根拠として使う。 |
-| `config/skills/thumbnail.yaml` の reference images が空 | default へ存在する参照画像を設定する。意図的に後続へ回す場合は `docs/channel/ttp-seed-confirmation.md` に `ユーザー承認済み例外: thumbnail ... /thumbnail ...` として未反映内容・理由・後続 skill を残す。本格収集は `/benchmark` に委譲する。 |
+| `config/skills/thumbnail.yaml` の reference images が空 | default へ存在する参照画像を設定する。意図的に後続へ回す場合は `docs/channel/ttp-seed-confirmation.md` に `ユーザー承認済み例外: thumbnail ... /thumbnail ...` として未反映内容・理由・後続 skill を残す。本格収集は `/channel-research --benchmark` に委譲する。 |
 | channel branding の icon / banner references が空 | `docs/channel/competitor-branding-snapshot.json::channel_image_references` の URL 参照を転記する。取得できない場合は TTP メモ由来の fallback 根拠を reference notes に残して画像を生成する。 |
 | `config/skills/suno.yaml` が placeholder | Step 4 の初期ジャンル情報を `genre_line` に反映する。 |
 | `config/channel/playlists.json` に `playlist_id` 未設定がある | 初投稿前に `/playlist` が status → init dry-run → init の順で初期化する。初回動画の追加は `/video-upload` の自動 assign に任せる。 |

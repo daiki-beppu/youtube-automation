@@ -25,7 +25,8 @@ def load_benchmark_videos(
     if not benchmark_path:
         raise ConfigError(
             f"ベンチマーク JSON が見つかりません ({data_dir})。"
-            "先に `/benchmark`（uv run yt-benchmark-collect）を実行して競合データを収集してください。"
+            "先に `/channel-research --benchmark`（uv run yt-benchmark-collect）を実行して"
+            "競合データを収集してください。"
         )
     with benchmark_path.open(encoding="utf-8") as benchmark_file:
         data = json.load(benchmark_file)
@@ -62,7 +63,7 @@ def load_benchmark_videos(
         raise ConfigError(
             f"ベンチマーク JSON に {min_views:,} 再生以上の動画{thumb_note}が 1 件もありません "
             f"({benchmark_path.name})。min_views しきい値を見直すか、"
-            "`/benchmark`（uv run yt-benchmark-collect）で最新データを再収集してください。"
+            "`/channel-research --benchmark`（uv run yt-benchmark-collect）で最新データを再収集してください。"
         )
     targets.sort(key=lambda item: item["views"], reverse=True)
     return targets

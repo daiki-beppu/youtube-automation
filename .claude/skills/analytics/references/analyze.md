@@ -151,7 +151,7 @@ subagent はこれらの出力 JSON を分析の根拠として使い、「数�
 
 構造、固定キー、evidence、検証コマンドは `references/analysis-json-validator.md` を単一ソースとする。`schema_version` は `3` とする。既存分析 4 CLI は `--text` を付けずに実行し、終了コード 0 の stdout をキー名や値を変更せず対応する `cli_outputs` キーに保存する。`yt-vpd-rank` / `yt-win-pattern` の stdout object も再構成せずトップレベル `vpd_ranking` / `win_pattern` に保存し、captured artifact と JSON 等価にする。`yt-ttp-health` も stdout を変更せずトップレベル `ttp_health` に保存する。入力がなく `status: unavailable` の場合も `ttp_health` 自体は省略しない。標準エラー出力、`--text` 出力、失敗した CLI の出力は保存対象にしない。
 
-Markdown には `TTP 健全性` 節を設ける。`alert` のチャンネルは alert type と reason、`missing_data` / `insufficient_data` は不足理由を要約する。`status: unavailable` の場合は `/benchmark` の再実行が必要な旨を明記し、欠損を健全として扱わない。
+Markdown には `TTP 健全性` 節を設ける。`alert` のチャンネルは alert type と reason、`missing_data` / `insufficient_data` は不足理由を要約する。`status: unavailable` の場合は `/channel-research --benchmark` の再実行が必要な旨を明記し、欠損を健全として扱わない。
 
 成果物保存後に同 reference の検証手順を実行し、すべて成功した場合だけ完成扱いにする。戦略提案・次期候補・戦略ディスカッションの正本は JSON の `strategic_improvements` / `next_collection_candidates` / `strategic_discussion` とする。Markdown は人間向けの説明と数値引用を担う派生成果物であり、後続スキルが提案を読み取るときは JSON 固定キーを使用する。
 
@@ -207,7 +207,7 @@ validator が失敗した場合は未完了として扱い、不正エントリ�
 
 | 状況 | 兆候 | 対処 |
 |---|---|---|
-| 入力データ不在 | `data/` のベンチマーク/Analytics スナップショットが無い | 先に `/benchmark`・`/analytics --collect` 等を実行して入力を用意 |
+| 入力データ不在 | `data/` のベンチマーク/Analytics スナップショットが無い | 先に `/channel-research --benchmark`・`/analytics --collect` 等を実行して入力を用意 |
 | OAuth 未認証/失効 | `infrastructure.auth.youtube` の `FileNotFoundError`（`client_secrets.json` 不在）/ `AuthError` / HTTP 403 | 初回認証フローを再実行。403 が続く場合は `auth/token.json` を削除しスコープを確認のうえ再認証 |
 
 ## Next Step

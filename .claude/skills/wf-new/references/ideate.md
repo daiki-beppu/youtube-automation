@@ -31,7 +31,7 @@
 - `false`: 既存どおり、競合カバー済みテーマを避け、`differentiation_axes` の掛け合わせで差別化する
 - `true`: `differentiation_axes` の掛け合わせをスキップし、競合の高再生コレクションから抽出した構造・パターン・型と、それが満たしている欲求を直接転写する。競合カバー済みの実績あるテーマを優先し、各企画に転写元（競合名と高再生コレクションまたは勝ちパターン）、参照元が満たす欲求、企画が同じ欲求を満たす根拠を明記する
 
-`ttp_mode: true` なのに入力モードが minimal mode の場合、転写元となるベンチマークが無いため企画生成へ進まない。`/benchmark` を案内し、`data/benchmark_*.json` が生成された後に再実行する。
+`ttp_mode: true` なのに入力モードが minimal mode の場合、転写元となるベンチマークが無いため企画生成へ進まない。`/channel-research --benchmark` を案内し、`data/benchmark_*.json` が生成された後に再実行する。
 
 ### 欲求語彙のソース
 
@@ -83,13 +83,13 @@ Phase 1 に入る前に入力モードを 1 回だけ判定し、以降の分析
 |---|---|---|---|
 | analytics mode | 同日付の `reports/analysis_*.md` / `.json` ペアが存在し、JSON 契約を満たし、stale ではない | 日次収集データ + 同日付の構造化分析 JSON + ベンチマーク + config | analyze / benchmark / persona / viewing-scene を通常確認 |
 | benchmark fallback mode | `reports/analysis_*.md` が存在せず、`data/benchmark_*.json` が存在する | ベンチマークデータ + config | analytics 依存をスキップ。persona / viewing-scene は存在すれば使い、無ければ config と benchmark から仮説化 |
-| minimal mode | `reports/analysis_*.md` と `data/benchmark_*.json` がどちらも存在しない | `ttp_mode: false` はユーザー直接入力（テーマ / ジャンル / 雰囲気）+ config。`true` は入力不足のため企画生成しない | `false` は analytics / benchmark 依存をスキップし、persona / viewing-scene を初回仮説として扱う。`true` は `/benchmark` を案内して停止する |
+| minimal mode | `reports/analysis_*.md` と `data/benchmark_*.json` がどちらも存在しない | `ttp_mode: false` はユーザー直接入力（テーマ / ジャンル / 雰囲気）+ config。`true` は入力不足のため企画生成しない | `false` は analytics / benchmark 依存をスキップし、persona / viewing-scene を初回仮説として扱う。`true` は `/channel-research --benchmark` を案内して停止する |
 
-analytics mode では `/analytics --analyze` と `/benchmark` を独立・並列で鮮度判定（stale 検出）し、
+analytics mode では `/analytics --analyze` と `/channel-research --benchmark` を独立・並列で鮮度判定（stale 検出）し、
 `/audience-persona-design` の最終 persona chain（`persona-definition.md` と `viewing-scene-matrix.md`）は存在チェックのみ行う（更新タイミングは戦略判断のため人間が決める）。
 
 - analytics report の stale / fresh 処理は `references/freshness-rules.md::stale report の自動更新` をそのまま適用し、入口側で分岐、呼出順、成功条件、停止条件を再定義しない
-- analytics mode で `/benchmark` が stale → Skill ツールで実行（内部で差分更新）
+- analytics mode で `/channel-research --benchmark` が stale → Skill ツールで実行（内部で差分更新）
 - persona / viewing-scene の欠落時は `references/freshness-rules.md` の判定結果をそのまま適用し、入口側で停止 / fallback 条件を再定義しない
 
 JSON ペア検証 Hard Gate、入力モード判定、鮮度判定、自動更新、既定 `freshness_days`、workflow-state との同期は `references/freshness-rules.md` を正とし、その判定結果に従う。
@@ -156,7 +156,7 @@ JSON から読む前に、冒頭の JSON ペア検証 Hard Gate が成功済み�
 
 **エラーハンドリング**:
 
-- `reports/analysis_*.md` が存在しない → 中断せず入力モード判定へ進み、benchmark fallback mode または minimal mode へ分岐する（対応する Markdown がない孤立 JSON は企画入力に使わない）。minimal mode かつ `ttp_mode: false` は続行し、`true` は `/benchmark` を案内して停止する
+- `reports/analysis_*.md` が存在しない → 中断せず入力モード判定へ進み、benchmark fallback mode または minimal mode へ分岐する（対応する Markdown がない孤立 JSON は企画入力に使わない）。minimal mode かつ `ttp_mode: false` は続行し、`true` は `/channel-research --benchmark` を案内して停止する
 - Markdown だけが存在する、または冒頭の JSON ペア検証 Hard Gate が失敗 → fallback せず中断。`/analytics --analyze` 再実行を案内
 - stale / fresh の分岐以降は `references/freshness-rules.md::stale report の自動更新` へ委譲し、ここでは再定義しない
 
@@ -170,13 +170,13 @@ JSON から読む前に、冒頭の JSON ペア検証 Hard Gate が成功済み�
 
 #### Phase 1-3: 競合ベンチマーク分析
 
-analytics mode では **Skill ツールで `/benchmark` を実行** — `config/skills/benchmark.yaml` の `freshness_days`（既定 3 日）より古いファイルがあれば YouTube Data API (OAuth) で最新データを自動取得・更新する。最新であればスキップされる。
+analytics mode では **Skill ツールで `/channel-research --benchmark` を実行** — `config/skills/benchmark.yaml` の `freshness_days`（既定 3 日）より古いファイルがあれば YouTube Data API (OAuth) で最新データを自動取得・更新する。最新であればスキップされる。
 
-benchmark fallback mode では `data/benchmark_*.json` を Read で読み込み、config と合わせて企画入力にする。`/benchmark` の自動実行や `docs/benchmarks/` の読み込みはしない。
+benchmark fallback mode では `data/benchmark_*.json` を Read で読み込み、config と合わせて企画入力にする。`/channel-research --benchmark` の自動実行や `docs/benchmarks/` の読み込みはしない。
 
-minimal mode では `ttp_mode` で分岐する。`false` はベンチマーク分析をスキップし、ユーザーにテーマ / ジャンル / 雰囲気を確認して企画入力にする。`true` は転写元が無いため `/benchmark` を案内して停止し、`data/benchmark_*.json` が生成されるまで Phase 1-4 へ進まない。
+minimal mode では `ttp_mode` で分岐する。`false` はベンチマーク分析をスキップし、ユーザーにテーマ / ジャンル / 雰囲気を確認して企画入力にする。`true` は転写元が無いため `/channel-research --benchmark` を案内して停止し、`data/benchmark_*.json` が生成されるまで Phase 1-4 へ進まない。
 
-analytics mode の `/benchmark` 更新完了後、
+analytics mode の `/channel-research --benchmark` 更新完了後、
 `docs/benchmarks/` 配下の全 `.md` ファイルを Read（Codex では同等のファイル閲覧）で読み込み、以下を抽出:
 - 競合チャンネルの高パフォーマンステーマ（再生数上位）
 - 共通成功パターン（`common-patterns.md`）

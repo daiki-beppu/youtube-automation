@@ -2882,8 +2882,8 @@ class TestCheckWfNewReadiness:
         assert result.next_action is not None
         assert result.next_action["kind"] == "human"
         instructions = result.next_action["instructions"]
-        assert instructions.index("benchmark.channels") < instructions.index("/benchmark")
-        assert instructions.index("/benchmark") < instructions.index("yt-doctor")
+        assert instructions.index("benchmark.channels") < instructions.index("/channel-research --benchmark")
+        assert instructions.index("/channel-research --benchmark") < instructions.index("yt-doctor")
 
     def test_missing_skill_override_defaults_ttp_mode_to_false(self, tmp_path):
         """channel override 自体が無い場合も同梱既定 false で minimal mode を許容する."""
@@ -5012,7 +5012,7 @@ class TestCheckTtpWfNewReadinessChannelNew:
         r = doctor.check_ttp_wf_new_readiness(tmp_path)
 
         assert r.status == "warn"
-        assert "duration のユーザー承認済み例外に後続 /benchmark が未記録" in r.message
+        assert "duration のユーザー承認済み例外に後続 /channel-research --benchmark が未記録" in r.message
 
 
 # ---------------------------------------------------------------------------

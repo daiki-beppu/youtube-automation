@@ -140,7 +140,7 @@
 
 | 状況 | 兆候 | 対処 |
 |---|---|---|
-| 入力データ不在 | `data/` のベンチマーク/Analytics スナップショットが無い | 先に `/benchmark`・`/analytics --collect` 等を実行して入力を用意 |
+| 入力データ不在 | `data/` のベンチマーク/Analytics スナップショットが無い | 先に `/channel-research --benchmark`・`/analytics --collect` 等を実行して入力を用意 |
 | OAuth 未認証/失効 | `infrastructure.auth.youtube` の `FileNotFoundError`（`client_secrets.json` 不在）/ `AuthError` / HTTP 403 | 初回認証フローを再実行。403 が続く場合は `auth/token.json` を削除しスコープを確認のうえ再認証 |
 
 ## Next Step

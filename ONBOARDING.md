@@ -96,23 +96,23 @@ uv run yt-doctor --json
 
 ---
 
-## 3. 新規チャンネル開設フロー — `/channel-new` 起点
+## 3. 新規チャンネル開設フロー — `/setup --channel` 起点
 
 新しい YouTube チャンネルを 1 本立ち上げるときの標準フロー。Claude Code 上で 1 ステップずつ実行する。
 
 ```
 /setup             → Phase 0: ツール導入 + API 設定 (GCP + OAuth) を AI 主導で完結
-/channel-new       → Phase 1: TTP 対象確認 + seed confirmation artifacts + config + persona + branding
+/setup --channel   → Phase 1: TTP 対象確認 + seed confirmation artifacts + config + persona + branding
 パイロット検証    → 任意: 仮コレクションでサムネ/楽曲の方向性を確認
 /wf-new            → Phase 2: 初回コレクション制作
 
 # 任意後続: 追加調査や方向性再検討が必要なときだけ実行
 /discover-competitors → 追加競合候補の発掘
-/benchmark            → 承認済み TTP 対象の動画データ収集
+/channel-research --benchmark → 承認済み TTP 対象の動画データ収集
 /viewer-voice         → 公開後のコメント再分析
-/channel-research     → /benchmark / /viewer-voice 後の詳細分析
+/channel-new 分析モード → /channel-research --benchmark / /viewer-voice 後の詳細分析
 /channel-new 方向性検討モード → 方向性ブレスト（差別化決定）
-/channel-new 再生成モード → config 再生成 / branding 再反映
+/setup --regenerate   → config 再生成 / branding 再反映
 yt-skills sync                # Claude Code スキル群を新リポへ展開
 yt-skills sync --asset claude-md   # BGM 運営方針テンプレを新リポへ展開
 ```
@@ -127,15 +127,15 @@ yt-skills sync --asset claude-md   # BGM 運営方針テンプレを新リポへ
 
 詳細は [`/channel-new` skill](./.claude/skills/channel-new/SKILL.md)。
 
-### 3.2 任意: `/channel-research`（ベンチマーク分析）
+### 3.2 任意: `/channel-new` 分析モード（ベンチマーク分析）
 
-`/benchmark` や `/viewer-voice` で集めたデータを徹底分析。タイトル構造・サムネ構図・動画尺・投稿頻度・コメント語彙の **型** を抽出する。
+`/channel-research --benchmark` や `/viewer-voice` で集めたデータを徹底分析。タイトル構造・サムネ構図・動画尺・投稿頻度・コメント語彙の **型** を抽出する。
 
 ### 3.3 任意: `/channel-new` 方向性検討モード（方向性決定）
 
-`/channel-new` が保存した `docs/channel/ttp-seed-confirmation.md` と `docs/channel/competitor-branding-snapshot.json`、または `/channel-research` の分析結果をもとに、対話で「このチャンネルは何で勝つか」を決める。コメント分析が必要な場合は `/viewer-voice` を先に実行してターゲット層と利用シーンを言語化する。
+`/setup --channel` が保存した `docs/channel/ttp-seed-confirmation.md` と `docs/channel/competitor-branding-snapshot.json`、または `/channel-new` 分析モードの結果をもとに、対話で「このチャンネルは何で勝つか」を決める。コメント分析が必要な場合は `/viewer-voice` を先に実行してターゲット層と利用シーンを言語化する。
 
-### 3.4 任意: `/channel-new` 再生成モード（テクニカルセットアップ）
+### 3.4 任意: `/setup --regenerate`（テクニカルセットアップ）
 
 方向性検討後の config 再生成や、運用中の branding 再反映が必要な場合に使う。GCP / OAuth / ADC の API 設定は `/setup` が担当する。
 
@@ -243,7 +243,7 @@ uv run yt-init-collection "Pilot Direction Check" "pilot-direction-check" --trac
 | 週次 | `/analytics --collect` | YouTube Analytics データ最新化 |
 | 週次 | `/analytics --analyze` | CTR / 視聴維持率の戦略分析と改善提案 |
 | 隔週 | `/comments-reply` | ルール駆動コメント返信（dry-run → apply の 2 段） |
-| 月次 | `/benchmark` | 競合チャンネル最新データ取得 |
+| 月次 | `/channel-research --benchmark` | 競合チャンネル最新データ取得 |
 | 月次 | `/channel-status` | チャンネル全体統計（登録者数・総再生回数）取得 |
 | 月次 | `/alignment-check` | 過去動画のタイトル × サムネ × 音楽整合性監査 |
 | 四半期 | `/viewer-voice` → `/audience-persona-design` → `/viewing-scene` 見直し | ターゲット層・利用シーンの再検証 |
@@ -258,7 +258,7 @@ uv run yt-init-collection "Pilot Direction Check" "pilot-direction-check" --trac
 | このコレクション CTR 弱くない？ | `/alignment-check` → `/thumbnail-compare` |
 | シリーズ広げるべき？ | `/analytics --analyze`（テーマ別パフォーマンス） |
 | 視聴者は誰？何を求めてる？ | `/viewer-voice` → `/audience-persona-design` → `/viewing-scene` |
-| 競合は今どんな動画出してる？ | `/benchmark` → `/video-analyze` |
+| 競合は今どんな動画出してる？ | `/channel-research --benchmark` → `/video-analyze` |
 
 ### 5.3 共通運営方針の更新
 

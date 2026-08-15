@@ -582,8 +582,8 @@ def test_setup_skill_handles_wf_new_readiness_next_check() -> None:
 
     assert "`ttp_mode: true` × `minimal mode`" in section
     assert '`next_action.kind == "human"`' in section
-    assert section.index("benchmark.channels") < section.index("/benchmark")
-    assert section.index("/benchmark") < section.index("yt-doctor --json")
+    assert section.index("benchmark.channels") < section.index("/channel-research --benchmark")
+    assert section.index("/channel-research --benchmark") < section.index("yt-doctor --json")
     assert "persona 文書の有無も停止条件に加えない" in section
     assert "`benchmark_data` / `analytics_report` / `ttp_wf_new_readiness` の意味を変更せず" in section
 

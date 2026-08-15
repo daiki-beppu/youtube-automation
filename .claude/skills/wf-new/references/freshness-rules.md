@@ -19,7 +19,7 @@ skill 呼び出し失敗または再検証失敗時は、失敗した skill ま�
 
 analytics mode の前提スキルは **(analyze ∥ benchmark) → audience-persona-design finalization** の構造:
 
-- `/analytics --analyze` と `/benchmark` は**独立・並列**（両者とも生データの分析で上下関係なし）
+- `/analytics --analyze` と `/channel-research --benchmark` は**独立・並列**（両者とも生データの分析で上下関係なし）
 - `/audience-persona-design` は最新ベンチマークのタグデータと `/viewer-voice` を入力に暫定 `persona-definition.md` を作る
 - `/audience-persona-design` は暫定 persona から `/viewing-scene` を実行し、その結果を反映して最終 `persona-definition.md` を更新する
 
@@ -31,14 +31,14 @@ analytics report の Markdown が存在しない場合は stale ではなく、�
 |---|---|---|
 | analytics mode | 同じファイル名日付の `reports/analysis_*.md` / `.json` ペアが存在し、validator が exit 0 で、stale ではない | 日次収集データ + 構造化分析 JSON + ベンチマーク + config |
 | benchmark fallback mode | `reports/analysis_*.md` が存在せず、`data/benchmark_*.json` が存在する | ベンチマークデータ + config |
-| minimal mode | `reports/analysis_*.md` と `data/benchmark_*.json` がどちらも存在しない | `ttp_mode: false` はユーザー直接入力（テーマ / ジャンル / 雰囲気）+ config。`true` は `/benchmark` を案内して停止し、企画生成しない |
+| minimal mode | `reports/analysis_*.md` と `data/benchmark_*.json` がどちらも存在しない | `ttp_mode: false` はユーザー直接入力（テーマ / ジャンル / 雰囲気）+ config。`true` は `/channel-research --benchmark` を案内して停止し、企画生成しない |
 
 ## 鮮度判定表
 
 | 順序 | 前提スキル | 出力ファイル | 鮮度判定ルール | 古い / 未生成の場合 |
 |---|---|---|---|---|
-| 1a | `/analytics --analyze` | 同じファイル名日付の `reports/analysis_*.md` + `.json` | 先に JSON ペア validator が exit 0 であること。次のいずれかを満たせば stale（OR 結合）: (1) **相対比較** — 最新 `data/analytics_data_*.json` のファイル名日付 (YYYYMMDD) より古い / (2) **絶対鮮度** — 最新 `data/analytics_data_*.json` のファイル名日付が実行日 (today) から `config/skills/collection-ideate.yaml` の `freshness_days`（既定 7 日）を超えて経過 | Markdown 不在は benchmark fallback mode / minimal mode へ分岐する。minimal mode は `ttp_mode: false` だけ続行し、`true` は `/benchmark` を案内して停止する。JSON 不在または validator 失敗は従来どおり停止。相対 stale は `/analytics --analyze`、絶対 stale は `/analytics --collect` → `/analytics --analyze` を自動実行し、再検証成功時だけ続行する |
-| 1b | `/benchmark` | `docs/benchmarks/*.md` + `data/benchmark_YYYYMMDD.json` | analytics mode では mtime が `config/skills/benchmark.yaml` の `freshness_days`（既定 3 日）より古ければ stale | analytics mode では `/benchmark` を Skill ツールで実行（内部で鮮度チェック + 差分更新）。benchmark fallback mode では既存データを読む。minimal mode は `ttp_mode: false` ならスキップし、`true` なら `/benchmark` を案内して停止する |
+| 1a | `/analytics --analyze` | 同じファイル名日付の `reports/analysis_*.md` + `.json` | 先に JSON ペア validator が exit 0 であること。次のいずれかを満たせば stale（OR 結合）: (1) **相対比較** — 最新 `data/analytics_data_*.json` のファイル名日付 (YYYYMMDD) より古い / (2) **絶対鮮度** — 最新 `data/analytics_data_*.json` のファイル名日付が実行日 (today) から `config/skills/collection-ideate.yaml` の `freshness_days`（既定 7 日）を超えて経過 | Markdown 不在は benchmark fallback mode / minimal mode へ分岐する。minimal mode は `ttp_mode: false` だけ続行し、`true` は `/channel-research --benchmark` を案内して停止する。JSON 不在または validator 失敗は従来どおり停止。相対 stale は `/analytics --analyze`、絶対 stale は `/analytics --collect` → `/analytics --analyze` を自動実行し、再検証成功時だけ続行する |
+| 1b | `/channel-research --benchmark` | `docs/benchmarks/*.md` + `data/benchmark_YYYYMMDD.json` | analytics mode では mtime が `config/skills/benchmark.yaml` の `freshness_days`（既定 3 日）より古ければ stale | analytics mode では `/channel-research --benchmark` を Skill ツールで実行（内部で鮮度チェック + 差分更新）。benchmark fallback mode では既存データを読む。minimal mode は `ttp_mode: false` ならスキップし、`true` なら `/channel-research --benchmark` を案内して停止する |
 | 2 | `/audience-persona-design` | `docs/channel/personas/persona-definition.md` | 存在すれば OK（mtime 比較なし。更新タイミングは戦略判断のため人間が決める） | analytics mode かつ `ttp_mode: false` ではユーザーに `/audience-persona-design` 実行を案内して中断。analytics mode かつ `true` では `.claude/skills/channel-new/references/desire-vocabulary.md` の fallback に従い、利用可能な競合コメント / タイトルから初回仮説の視聴者像を作ってソースと根拠を記録する。benchmark fallback mode / `ttp_mode: false` の minimal mode では config と入力データから初回仮説の視聴者像を作る。`ttp_mode: true` の minimal mode はこの判定前に停止する |
 | 3 | `/audience-persona-design` finalization | `docs/plans/viewing-scene-matrix.md` | 存在すれば OK（mtime 比較なし。persona 下流のため連動して判断） | analytics mode かつ `ttp_mode: false` ではユーザーに `/audience-persona-design` で `/viewing-scene` 実行と最終 `persona-definition.md` 更新を行うよう案内して中断。analytics mode かつ `true` では同じ fallback の競合コメント / タイトルから視聴シーンを仮説化し、利用可能な根拠がなければ `判定不能` として続行する。benchmark fallback mode / `ttp_mode: false` の minimal mode では仮説ペルソナから視聴シーンを仮説化する。`ttp_mode: true` の minimal mode はこの判定前に停止する |
 
@@ -49,8 +49,8 @@ analytics report の Markdown が存在しない場合は stale ではなく、�
 | workflow-state.phase | 入力モード | 想定される前提スキル状態 |
 |---|---|---|
 | `planning` | analytics mode | benchmark は `/wf-new` セッション内で鮮度確認・必要時更新される。persona / viewing-scene は存在確認し、不足時は `ttp_mode: false` なら中断してユーザーに前提スキル実行を促し、`true` なら共通 fallback で続行する |
-| `planning` | benchmark fallback mode | 既存 `data/benchmark_*.json` を読むが `/benchmark` は自動実行しない。persona / viewing-scene が無ければ、ベンチマークデータ + config から初回仮説として扱う |
-| `planning` | minimal mode | `ttp_mode: false` は benchmark を持たず、persona / viewing-scene が無ければユーザー直接入力（テーマ / ジャンル / 雰囲気）+ config から初回仮説として扱う。`true` は `/benchmark` を案内して停止し、`data/benchmark_*.json` 生成後に入力モードを再判定する |
+| `planning` | benchmark fallback mode | 既存 `data/benchmark_*.json` を読むが `/channel-research --benchmark` は自動実行しない。persona / viewing-scene が無ければ、ベンチマークデータ + config から初回仮説として扱う |
+| `planning` | minimal mode | `ttp_mode: false` は benchmark を持たず、persona / viewing-scene が無ければユーザー直接入力（テーマ / ジャンル / 雰囲気）+ config から初回仮説として扱う。`true` は `/channel-research --benchmark` を案内して停止し、`data/benchmark_*.json` 生成後に入力モードを再判定する |
 | `thumbnail-*` 以降 | 全モード | ideate はすでに完了している。ideate に戻るときは入力モード判定と前提スキル確認を改めて実行する |
 
 ## 判定擬似コード
@@ -107,7 +107,7 @@ if [ -z "$LATEST_REPORT" ]; then
   else
     INPUT_MODE="minimal mode"
     if [ "$COLLECTION_IDEATE_TTP_MODE" = "true" ]; then
-      echo "analyze / benchmark 未生成かつ ttp_mode=true → /benchmark を案内して停止"
+      echo "analyze / benchmark 未生成かつ ttp_mode=true → /channel-research --benchmark を案内して停止"
       exit 1
     fi
     echo "analyze / benchmark 未生成かつ ttp_mode=false → minimal mode でユーザー直接入力を確認"
@@ -170,10 +170,10 @@ fi
 # 1b. benchmark
 case "$INPUT_MODE" in
   "analytics mode")
-    echo "benchmark stale 判定は /benchmark スキル内の鮮度チェックに委譲"
+    echo "benchmark stale 判定は /channel-research --benchmark スキル内の鮮度チェックに委譲"
     ;;
   "benchmark fallback mode")
-    echo "既存の data/benchmark_*.json を Read で読み込む。/benchmark は自動実行しない"
+    echo "既存の data/benchmark_*.json を Read で読み込む。/channel-research --benchmark は自動実行しない"
     ;;
   "minimal mode")
     # ttp_mode=true は入力モード判定時に停止済み。
@@ -211,11 +211,11 @@ fi
 | 発動条件 | 対応 |
 |---|---|
 | `reports/analysis_*.md` が存在せず、`data/benchmark_*.json` が存在する | benchmark fallback mode として続行し、ベンチマークデータ + config で初回企画を生成 |
-| `reports/analysis_*.md` と `data/benchmark_*.json` がどちらも存在しない | minimal mode として `ttp_mode` を確認する。`false` はユーザー直接入力（テーマ / ジャンル / 雰囲気）+ config で初回企画を生成し、`true` は `/benchmark` を案内して停止する |
+| `reports/analysis_*.md` と `data/benchmark_*.json` がどちらも存在しない | minimal mode として `ttp_mode` を確認する。`false` はユーザー直接入力（テーマ / ジャンル / 雰囲気）+ config で初回企画を生成し、`true` は `/channel-research --benchmark` を案内して停止する |
 | 最新 `reports/analysis_*.md` と同じファイル名日付の `.json` が存在しない、または analysis JSON validator が exit 非 0 | `/wf-new` を中断し、`/analytics --analyze` の再実行を案内 |
 | `reports/analysis_*.md` が最新 `data/analytics_data_*.json` より古い日付 | `/analytics --analyze` を自動実行し、再検証成功時だけ企画フローを続行 |
 | analytics mode で最新 `data/analytics_data_*.json` のファイル名日付が実行日 (today) から `config/skills/collection-ideate.yaml` の `freshness_days`（既定 7 日）を超えて経過（絶対鮮度、#1427） | `/analytics --collect` → `/analytics --analyze` の順で自動実行し、再検証成功時だけ企画フローを続行 |
-| analytics mode で `data/benchmark_*.json` が `config/skills/benchmark.yaml` の `freshness_days`（既定 3 日）より古い | `/benchmark` を Skill ツールで自動実行 |
+| analytics mode で `data/benchmark_*.json` が `config/skills/benchmark.yaml` の `freshness_days`（既定 3 日）より古い | `/channel-research --benchmark` を Skill ツールで自動実行 |
 | analytics mode で `persona-definition.md` が存在しない | `ttp_mode: false` は `/wf-new` を中断し、`/audience-persona-design` の先行実行を案内する。`true` は共通の欲求語彙選択規則に従い、利用可能な競合コメント / タイトルから初回仮説の視聴者像を作り、ソースと根拠を明記して続行する |
 | benchmark fallback mode / minimal mode で `persona-definition.md` が存在しない | benchmark fallback mode と `ttp_mode: false` の minimal mode は中断せず、config と入力データから初回仮説の視聴者像を作る。`ttp_mode: true` の minimal mode はこの判定前に停止する |
 | analytics mode で `viewing-scene-matrix.md` が存在しない | `ttp_mode: false` は `/wf-new` を中断し、`/audience-persona-design` で `/viewing-scene` 実行と最終 `persona-definition.md` 更新を行うよう案内する。`true` は共通 fallback から視聴シーンを仮説化し、利用可能な根拠がなければ `判定不能` として続行する |
@@ -224,5 +224,5 @@ fi
 ## 関連
 
 - `references/collection-lifecycle.md` — コレクション作成全体のライフサイクル
-- `/benchmark` skill 内の鮮度チェック実装（benchmark 側 `freshness_days` が真のソース）
+- `/channel-research --benchmark` skill 内の鮮度チェック実装（benchmark 側 `freshness_days` が真のソース）
 - `.claude/skills/wf-new/references/collection-ideate.config.default.yaml` の `freshness_days` — 分析データの絶対鮮度チェック既定値（チャンネル側は `config/skills/collection-ideate.yaml` で上書き）

@@ -103,7 +103,7 @@ def test_analytics_mode_has_priority_when_benchmark_also_exists(tmp_path: Path) 
 @pytest.mark.parametrize(
     ("kwargs", "expected"),
     [
-        ({"report": True}, "benchmark stale 判定は /benchmark"),
+        ({"report": True}, "benchmark stale 判定は /channel-research --benchmark"),
         ({"benchmark": True}, "既存の data/benchmark_*.json"),
         ({}, "ttp_mode=false のため benchmark をスキップ"),
     ],

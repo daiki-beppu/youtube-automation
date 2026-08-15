@@ -23,7 +23,7 @@ description: "Use when ターゲット視聴者を第一ペルソナとして設
 
 入口で実行コンテキストを次のどちらかに確定し、Phase 5 の `/viewing-scene` まで同じ値を引き継ぐ。
 
-- **新規開設（公開前）**: `/setup --channel` Step 7 から呼ばれた経路（`.claude/skills/setup/references/persona-branding-readiness.md`）。`docs/plans/viewer-voice-analysis.md`、`docs/channel/ttp-seed-confirmation.md`、`docs/channel/competitor-branding-snapshot.json` を競合 / TTP 入力として扱う。任意の `/benchmark` 成果物や、自チャンネル公開後の `reports/analysis_*.md` は前提にしない
+- **新規開設（公開前）**: `/setup --channel` Step 7 から呼ばれた経路（`.claude/skills/setup/references/persona-branding-readiness.md`）。`docs/plans/viewer-voice-analysis.md`、`docs/channel/ttp-seed-confirmation.md`、`docs/channel/competitor-branding-snapshot.json` を競合 / TTP 入力として扱う。任意の `/channel-research --benchmark` 成果物や、自チャンネル公開後の `reports/analysis_*.md` は前提にしない
 - **公開後**: 通常の見直し経路。従来どおり viewer-voice、benchmark、Web 調査、自チャンネル Analytics を入力にする
 
 ## 完了条件
@@ -173,7 +173,7 @@ options:
 | viewer-voice 未実施 | `docs/plans/viewer-voice-analysis.md` が無い | `/viewer-voice` を先に実行するよう案内して停止する |
 | viewing-scene 未反映 | `docs/plans/viewing-scene-matrix.md` が無い | 暫定 `persona-definition.md` 保存後に `/viewing-scene` を実行し、結果を反映して最終化する |
 | 公開前入力不在 | 新規開設（公開前）で競合 / TTP / viewer-voice 成果物が不足 | `/setup --channel` Step 5 または Step 7 の該当前工程へ戻る |
-| 公開後入力不在 | 公開後に `data/` のベンチマーク/Analytics スナップショットが無い | 先に `/benchmark`・`/analytics --collect` 等を実行して入力を用意 |
+| 公開後入力不在 | 公開後に `data/` のベンチマーク/Analytics スナップショットが無い | 先に `/channel-research --benchmark`・`/analytics --collect` 等を実行して入力を用意 |
 
 ## 関連ファイル
 

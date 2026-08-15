@@ -153,7 +153,7 @@ Style は collection 境界で一度だけ解決し、次の優先順を使う�
 3. `genre_line` が両方で空なら、`data/video_analysis/<slug>/*.json` の集約済み `suno_preset.genre_line` を fallback として使う
 4. `suno_preset` も無い場合は、確定企画、creative constraints、benchmark 分析を根拠に generator が collection 固有の `genre_line` を設計し、`suno-patterns.yaml` に保存してよい
 
-`suno_preset` は推奨入力であり hard gate ではない。利用可能なら TTP 根拠として優先的に参照し、無ければ必要に応じて `/benchmark` と `uv run yt-video-analyze --source benchmark --competitor <slug> --top 5` で準備する。ただし取得不能だけを理由に collection-local Style の設計を停止しない。
+`suno_preset` は推奨入力であり hard gate ではない。利用可能なら TTP 根拠として優先的に参照し、無ければ必要に応じて `/channel-research --benchmark` と `uv run yt-video-analyze --source benchmark --competitor <slug> --top 5` で準備する。ただし取得不能だけを理由に collection-local Style の設計を停止しない。
 
 `/suno` の generator と呼び出し元は、collection 固有値のために共有 config を書き換えない。別 collection の実行時はその collection 自身の `suno-patterns.yaml` を読み直し、前の collection の root 値を再利用・転記しない。これにより同一 process や連続する subagent 委譲でも collection 間の Style 混線を防ぐ。channel 全体の既定を意図的に変更するときだけ、別途ユーザーが `config/skills/suno.yaml` を更新する。
 

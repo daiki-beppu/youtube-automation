@@ -217,7 +217,9 @@ def main(argv: Iterable[str] | None = None) -> int:
         approved = _approved_channels(channel_dir)
         benchmark_path = find_latest_benchmark_json(channel_dir / "data")
         if benchmark_path is None:
-            raise DurationDerivationError("data/benchmark_*.json がありません。先に /benchmark を実行してください")
+            raise DurationDerivationError(
+                "data/benchmark_*.json がありません。先に /channel-research --benchmark を実行してください"
+            )
         report = derive_ttp_duration(_read_json_object(benchmark_path), approved)
         report["benchmark_path"] = benchmark_path.relative_to(channel_dir).as_posix()
         if args.apply:

@@ -72,6 +72,7 @@ _LEGACY_SKILL_CONFIG_ALIASES: Final[frozenset[str]] = frozenset({"postmortem"})
 # 公開 skill directory の統合後も、下流 override の旧キーと同梱 default の対応を
 # 維持する。キー名の移行は migrate-config の責務であり、loader は先行変更しない。
 _MOVED_SKILL_CONFIG_DEFAULTS: Final[dict[str, Path]] = {
+    "benchmark": Path("channel-research", "config.default.yaml"),
     "collection-ideate": Path("wf-new", "references", "collection-ideate.config.default.yaml"),
 }
 

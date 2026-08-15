@@ -86,7 +86,9 @@ def _lint_skill_config_contract(inventory: SkillInventory) -> list[str]:
     python_keys = skill_config.SKILL_CONFIG_KEYS
     skill_only_keys = skill_config.SKILL_ONLY_CONFIG_KEYS
     registered = python_keys | skill_only_keys
-    registered_owners = {key.partition(".")[0] for key in registered}
+    registered_default_owners = {
+        skill_config.skill_config_default_relative_path(key.partition(".")[0]).parts[0] for key in registered
+    }
     defaults = {
         skill_dir.name for skill_dir in inventory.skill_directories() if (skill_dir / "config.default.yaml").is_file()
     }
@@ -100,7 +102,7 @@ def _lint_skill_config_contract(inventory: SkillInventory) -> list[str]:
     ]
     violations.extend(
         f"{key}/config.default.yaml がどちらのキー集合にも登録されていません"
-        for key in sorted(defaults - registered_owners)
+        for key in sorted(defaults - registered_default_owners)
     )
     violations.extend(
         f"{key} が SKILL_CONFIG_KEYS と SKILL_ONLY_CONFIG_KEYS の両方に登録されています"

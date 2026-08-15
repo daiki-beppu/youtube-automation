@@ -39,7 +39,6 @@ TARGET_SKILLS = (
 )
 WF_NEW_IDEATION_MEMBERS = frozenset(
     {
-        "references/benchmark_collector.py",
         "references/collection-ideate.config.default.yaml",
         "references/collection-lifecycle.md",
         "references/freshness-rules.md",

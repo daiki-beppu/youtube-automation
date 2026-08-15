@@ -14,20 +14,20 @@
 | --- | --- | --- |
 | サムネ CTR / インプレッションは Analytics API v2 で取得不可 | `videoThumbnailImpressions*` は dimensions 全パターンで 400 拒否 | `domains/analytics/mixins/ctr_analytics.py`, `domains/analytics/mixins/channel_analytics.py` のコメント |
 | CTR / Imp は Reporting API v1 のみ | Reach 系レポート（`channel_reach_basic_a1` 等）の非同期 CSV。**D+2 ラグ・データ保持 60 日・要ジョブ事前作成**（初回は取得まで最大 48h） | `utils/reporting_api.py`, `yt-analytics --include-reporting` |
-| 競合の CTR / 視聴維持 / 平均視聴時間は取得不能 | Data API v3 は公開統計（views / likes / comments）のみ | `/benchmark`, `/flop-analysis` SKILL.md に明記 |
+| 競合の CTR / 視聴維持 / 平均視聴時間は取得不能 | Data API v3 は公開統計（views / likes / comments）のみ | `/channel-research --benchmark`, `/flop-analysis` SKILL.md に明記 |
 | 競合比較の代替手段 | 自チャンネル中央値との比較（`yt-launch-curve`）+ サムネ視認性の定性比較（`/thumbnail-compare`） | 設計済みの回避策 |
 
 ## 1. 成長レバー × 既存機能マッピング
 
 | # | 成長レバー | 対応する既存スキル / CLI | データソース | カバー度 |
 | --- | --- | --- | --- | --- |
-| L1 | インプレッション獲得 | `/analytics --collect --include-reporting`（動画別 Imp）、traffic source 収集（`insightTrafficSourceType/Detail`）、`/benchmark`（競合の露出獲得パターン）、`/short` `/short-release`（流入面の追加） | Reporting API v1 / Analytics API v2 / Data API v3 | ◯ 計測は可、施策検証は弱い |
+| L1 | インプレッション獲得 | `/analytics --collect --include-reporting`（動画別 Imp）、traffic source 収集（`insightTrafficSourceType/Detail`）、`/channel-research --benchmark`（競合の露出獲得パターン）、`/short` `/short-release`（流入面の追加） | Reporting API v1 / Analytics API v2 / Data API v3 | ◯ 計測は可、施策検証は弱い |
 | L2 | CTR | `/thumbnail`（TTP ベース生成）、`/thumbnail-compare`（320px 視認性）、`yt-thumbnail-correlate`（特徴量×CTR 相関）、`/alignment-check`（サムネ×タイトル×ムード整合）、`/flop-analysis`（CTR 閾値ルーブリック） | Reporting API v1 + サムネ画像特徴量 | ◎ 最厚のレバー |
 | L3 | 視聴維持 | retention 収集（`audienceWatchRatio` / `relativeRetentionPerformance`）、`/video-analyze`（Gemini によるフック・BGM 展開解析）、`/viewing-scene`（シーン別の最適尺設計） | Analytics API v2 / Vertex AI | ◯ 計測◎、原因照合が手動 |
 | L4 | 回遊・セッション | `/playlist`（`yt-playlist-manager`）、`/video-description`（Complete Collection 導線）、カード指標収集（`cardImpressions/Clicks/ClickRate`）、`/pinned-comment` `/comments-reply` `/community-post` | Analytics API v2 / Data API v3 | △ 導線は張れるが効果測定が薄い |
 | L5 | 登録転換 | `subscribersGained/Lost` の day・video 単位収集、`subscribedStatus` 別視聴データ収集、動画別転換率ランキングを含む `/analytics --analyze`、`yt-channel-trend`（日次 subs 移動平均・z-score 異常検知） | Analytics API v2 | ◯ 動画別転換率と視聴者の登録状態を分析可 |
 | L6 | SEO・メタデータ | `/video-description`（SEO 最適化概要欄）、`/metadata-audit`、`yt-title-duplicate-check`、localizations 同期（`/channel-new` 設定 push、`yt-shorts-bulk-update-loc`） | ローカル config / Data API v3 | ◯ 生成◎、検索流入との突合なし |
-| L7 | 投稿頻度・タイミング | `/benchmark`（競合の投稿間隔）、`yt-launch-curve`（投稿後 N 日の初速比較）、`yt-theme-compare`（テーマ別初速・ロングテール） | Data API v3 / 自チャンネル履歴 | △ 頻度の観測のみ、時刻・曜日分析なし |
+| L7 | 投稿頻度・タイミング | `/channel-research --benchmark`（競合の投稿間隔）、`yt-launch-curve`（投稿後 N 日の初速比較）、`yt-theme-compare`（テーマ別初速・ロングテール） | Data API v3 / 自チャンネル履歴 | △ 頻度の観測のみ、時刻・曜日分析なし |
 
 横断（レバー非依存）の既存資産: `/analytics --analyze`（全レバーの統合分析・戦略提案）、`/channel-research` + `/viewer-voice` + `/audience-persona-design`（誰に何を作るかの上流）、`/collection-ideate`（企画への落とし込み）、`/flop-analysis`（不振動画の切り分け）。
 
@@ -80,7 +80,7 @@
 
 - **足りないもの**
   - 時間帯・曜日別のパフォーマンス分析: 現収集は day 単位のみで、公開時刻と初速の関係を観測できない（Analytics API に時刻 dimension がなく、公開時刻メタデータ × 初日 views の突合になる）→ **新規開発**（優先度低: BGM 系は evergreen 消費でタイミング感度が低い仮説。まず `yt-launch-curve` で公開曜日別の初速差を手動確認 → 差が出たら起票）
-  - 投稿頻度 × 成長率の相関: `/benchmark` で競合の投稿間隔は取れているが、自チャンネルの頻度変化と subs/views 成長の関係分析がない → **運用改善**（`yt-channel-trend` の結果と突き合わせる分析観点を `/analytics --analyze` へ）
+  - 投稿頻度 × 成長率の相関: `/channel-research --benchmark` で競合の投稿間隔は取れているが、自チャンネルの頻度変化と subs/views 成長の関係分析がない → **運用改善**（`yt-channel-trend` の結果と突き合わせる分析観点を `/analytics --analyze` へ）
 
 ### 横断ギャップ
 
@@ -112,7 +112,7 @@
 │  T+7: yt-launch-curve で初速を過去中央値と比較 → 週次ループ先頭へ    │
 └──────────────────────────────────────────────────────────────────────┘
 
-月次: /benchmark → /channel-research         … 競合追従・機会領域の再確認
+月次: /channel-research --benchmark → /channel-research         … 競合追従・機会領域の再確認
       /viewer-voice                          … コメントから視聴者インサイト更新
 
 四半期 or 方向性見直し時:

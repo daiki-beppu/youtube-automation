@@ -1213,7 +1213,7 @@ class BenchmarkReportGenerator:
 
 ## 分析対象
 
-このファイルは `/benchmark` スキルで自動更新される。
+このファイルは `/channel-research --benchmark` スキルで自動更新される。
 手書きのパターン分析は「運用ベンチマーク」セクションより上に記載すること。
 
 """

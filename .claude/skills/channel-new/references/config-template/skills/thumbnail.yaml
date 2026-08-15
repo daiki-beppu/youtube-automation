@@ -12,9 +12,9 @@
 #     （channel-direction で確定した構図・環境の意図はここへ短い文で直接書く。
 #       旧 composition_rules.* の個別キーは deprecated、#1702）
 #
-# `reference_images.default` は `/benchmark` 取得済みの TTP 競合サムネを
+# `reference_images.default` は `/channel-research --benchmark` 取得済みの TTP 競合サムネを
 # `data/thumbnail_compare/benchmark/<channel>-<vid>.jpg` 形式で並べる。
-# `/channel-new`（再生成モード）中に `/benchmark`（CLI は `yt-benchmark-collect`）で
+# `/channel-new`（再生成モード）中に `/channel-research --benchmark`（CLI は `yt-benchmark-collect`）で
 # 自動 download される想定（手動 download を回避する導線、issue #567）。
 
 image_generation:

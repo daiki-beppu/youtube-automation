@@ -113,7 +113,7 @@ self-check が pass したら提案をユーザーに見せ、承認 or 修正�
 `Logged in using ChatGPT` を返すことが前提。Gemini を選ぶ場合は ADC / GCP 課金が必要。
 
 **TTP 参照画像の自動 download**: `config/channel/analytics.json::benchmark.channels` が
-設定済みなら `/benchmark` skill（CLI は `yt-benchmark-collect`）で
+設定済みなら `/channel-research --benchmark` skill（CLI は `yt-benchmark-collect`）で
 `docs/benchmarks/*.md` と `data/thumbnail_compare/benchmark/`
 に各競合の代表サムネが download される。それを `image_generation.gemini.reference_images.default`
 に列挙する（`path_base: channel_dir` でプロジェクトルートからの相対パス）。
