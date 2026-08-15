@@ -1,13 +1,13 @@
 ---
 name: analytics
 purpose: 振り返る
-description: "Use when YouTube Analytics の収集・分析・レポート表示を一括実行または一段だけ実行するとき。フラグなしは収集→分析→表示を状態判定付きで進める。「Analytics 一括実行」「データ更新」「パフォーマンス分析」「レポート見せて」で発動。一段だけは排他的な --collect / --analyze / --report を使う"
+description: "Use when YouTube Analytics の収集・分析・レポート表示を一括実行または一段だけ実行するとき。フラグなしは収集→分析→表示を状態判定付きで進める。公開済み動画の失速分析は --flop と video_id / collection / --since <N> を使う。「Analytics 一括実行」「データ更新」「パフォーマンス分析」「レポート見せて」「伸びなかった」「flop 分析」で発動。一段だけは排他的な --collect / --analyze / --report / --flop を使う"
 ---
 
 ## 前後工程
 
 - `前工程`: `/setup`
-- `後工程`: `/wf-new`, `/flop-analysis`
+- `後工程`: `/wf-new`
 - `委譲先`: `なし`
 
 ## 成果物
@@ -17,7 +17,7 @@ description: "Use when YouTube Analytics の収集・分析・レポート表示
 
 ## モード判定
 
-`$ARGUMENTS` から `--collect` / `--analyze` / `--report` の個数を最初に数える。
+`$ARGUMENTS` から `--collect` / `--analyze` / `--report` / `--flop` の個数を最初に数える。
 
 - 2 個以上なら排他違反として停止し、1 つだけ指定するよう促す
 - 1 個なら対応する reference を読み、その一段だけを実行する。残りの引数はその mode の引数として扱う
@@ -28,6 +28,15 @@ description: "Use when YouTube Analytics の収集・分析・レポート表示
 | `--collect` | `references/collect.md` |
 | `--analyze` | `references/analyze.md` |
 | `--report` | `references/report.md` |
+| `--flop` | `references/flop.md` |
+
+## 修飾フラグ
+
+mode 判定後に、選んだ mode の reference へ渡す値を解決する。
+
+| flag | 対象 mode | 意味 |
+|---|---|---|
+| `--since <N>` | `--flop` | 公開後 N 日以内に公開された動画を候補化する |
 
 ## 共通前提
 
@@ -44,6 +53,8 @@ skill-config は次を deep-merge する。
 2. `config/skills/analytics.yaml`（存在する場合）
 
 合成規則は `youtube_automation.configuration.skills.load_skill_config("analytics")` と同じで、チャンネル上書きを優先する。存在しない override は勝手に作成しない。
+
+`--flop` は `.claude/skills/analytics/config.default.yaml::flop` と旧 `config/skills/flop-analysis.yaml` を deep-merge する。`load_skill_config("flop-analysis")` を正規の互換 loader とし、旧 `config/skills/postmortem.yaml` だけが存在する場合の fallback と `load_skill_config("postmortem")` の入口も維持する。
 
 ## 一括実行
 
@@ -69,6 +80,7 @@ uv run python .claude/skills/analytics/references/analytics-chain-state.py \
 
 - フラグなし: collect と analyze が `skip` または実行後 `skip`、report が `run` となり、最新 Markdown を表示している
 - mode 指定: 対応する reference の完了条件だけを満たし、他の mode を実行していない
+- `--flop`: `references/flop.md` の完了条件を満たし、collect → analyze → report の chain を実行していない
 
 実行段、skip 段、`freshness_minutes` と `freshness_source`、成果物または表示したレポートを短く報告する。
 

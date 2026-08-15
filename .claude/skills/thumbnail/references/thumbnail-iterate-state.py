@@ -128,7 +128,7 @@ def _plan(args: argparse.Namespace) -> int:
                 "attribution": attribution,
             },
         )
-        print("thumbnail causality is not supported; route to /flop-analysis", file=sys.stderr)
+        print("thumbnail causality is not supported; route to /analytics --flop", file=sys.stderr)
         return 2
 
     hypotheses = payload.get("hypotheses")

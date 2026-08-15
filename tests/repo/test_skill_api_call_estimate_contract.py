@@ -143,11 +143,7 @@ NON_TARGET_SKILLS: dict[str, str] = {
 }
 
 # 課金 CLI の参照を伴わずに課金 API 呼び出しを誘発する skill（追加対象理由）。
-EXTRA_BILLED_SKILLS: dict[str, str] = {
-    "flop-analysis": (
-        "Phase 4 の仮説検証で /audit --video（Vertex AI Gemini 課金)を承認プロンプトなしで自律実行しうる"
-    ),
-}
+EXTRA_BILLED_SKILLS: dict[str, str] = {}
 
 # 機械抽出の期待結果（対象一覧）。candidates ∪ EXTRA − NON_TARGET と一致すること。
 TARGET_SKILLS: frozenset[str] = frozenset(
@@ -158,7 +154,6 @@ TARGET_SKILLS: frozenset[str] = frozenset(
         "channel-status",
         "reply",
         "distrokid-helper",
-        "flop-analysis",
         "music",
         "setup",
         "short",

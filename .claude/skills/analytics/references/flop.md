@@ -1,12 +1,8 @@
----
-name: flop-analysis
-purpose: 振り返る
-description: "Use when 公開済み動画が伸びなかった原因を video_id、collection、または --since で切り分け、postmortem.md に出力するとき。「伸びなかった」「flop 分析」で発動。横断戦略は /analytics --analyze、事前監査は /audit --alignment"
----
+# Analytics flop mode
 
 ## 前後工程
 
-- `前工程`: `/analytics`, `/audit --alignment`
+- `前工程`: `/analytics --collect`, `/audit --alignment`
 - `後工程`: `/wf-new`
 - `委譲先`: `/audit --video`
 
@@ -31,7 +27,7 @@ description: "Use when 公開済み動画が伸びなかった原因を video_id
 
 以下を deep-merge した値を設定として使う。
 
-1. `.claude/skills/flop-analysis/config.default.yaml`
+1. `.claude/skills/analytics/config.default.yaml::flop`
 2. `config/skills/flop-analysis.yaml`（存在する場合）
 
 新 override を正規経路として優先する。新 override がなく `config/skills/postmortem.yaml` だけが存在する場合は、移行 fallback として旧 override を読み込み、`config/skills/flop-analysis.yaml` へのリネームを案内する。合成規則は `youtube_automation.configuration.skills.load_skill_config("postmortem")` と同じで、チャンネル上書きが優先される。存在しない override は未設定として扱い、勝手に作成しない。Phase 2 の症状判定は `thresholds.*`、Phase 3 の仮説マッピングは `hypothesis_ratios.*` を参照する。
@@ -53,9 +49,9 @@ description: "Use when 公開済み動画が伸びなかった原因を video_id
 
 | 引数 | 説明 | 例 |
 |------|------|-----|
-| `<video_id>` | YouTube 動画 ID を直接指定 | `/flop-analysis dQw4w9WgXcQ` |
-| `<collection>` | コレクション名を指定（`upload_tracking.json` の `complete_collection.video_id` を解決） | `/flop-analysis rain-jazz-night` |
-| `--since <N>` | 公開後 N 日以内に公開された動画から候補を提示 | `/flop-analysis --since 14` |
+| `<video_id>` | YouTube 動画 ID を直接指定 | `/analytics --flop dQw4w9WgXcQ` |
+| `<collection>` | コレクション名を指定（`upload_tracking.json` の `complete_collection.video_id` を解決） | `/analytics --flop rain-jazz-night` |
+| `--since <N>` | 公開後 N 日以内に公開された動画から候補を提示 | `/analytics --flop --since 14` |
 
 複数候補がある場合は AskUserQuestion で対象を選ばせる。
 
@@ -147,7 +143,7 @@ Phase 3 で列挙した主仮説（全件）について、次の表から対応
 - 実行結果の要約と、参照した数値・成果物パス
 - 判定: `支持` / `反証` / `未検証（理由: <具体的な理由>）`
 
-主仮説は途中で支持されたものがあっても省略せず、全件を検証する。全主仮説の判定後は、`.claude/skills/flop-analysis/references/verification.py --operation secondary-transition` に全主仮説の判定を渡し、その `action` と `reason` に従う。`未検証` は反証として扱わない。
+主仮説は途中で支持されたものがあっても省略せず、全件を検証する。全主仮説の判定後は、`.claude/skills/analytics/references/verification.py --operation secondary-transition` に全主仮説の判定を渡し、その `action` と `reason` に従う。`未検証` は反証として扱わない。
 
 副仮説を実行しない場合も、各副仮説に該当する上記の理由を記録する。これにより、データ不足または子スキル失敗で主仮説が未検証のときに、主仮説が支持されたとは記録しない。
 
@@ -173,10 +169,10 @@ Phase 4 は改善策を適用せず、次の境界を守る:
 
 **実行可能な判定境界**
 
-語彙の NFKC 正規化・token 化、タイトル整合性、サムネ特徴量と A/B 根拠の統合、中身の弱さ、主仮説後の状態遷移は `.claude/skills/flop-analysis/references/verification.py` を単一ソースとする。本文で判定を再実装せず、各検証結果を JSON object として標準入力へ渡す。
+語彙の NFKC 正規化・token 化、タイトル整合性、サムネ特徴量と A/B 根拠の統合、中身の弱さ、主仮説後の状態遷移は `.claude/skills/analytics/references/verification.py` を単一ソースとする。本文で判定を再実装せず、各検証結果を JSON object として標準入力へ渡す。
 
 ```bash
-uv run python .claude/skills/flop-analysis/references/verification.py --operation <term-classification|title-alignment|thumbnail|content-signals|hypothesis|secondary-transition> < input.json
+uv run python .claude/skills/analytics/references/verification.py --operation <term-classification|title-alignment|thumbnail|content-signals|hypothesis|secondary-transition> < input.json
 ```
 
 `title-alignment` の語彙候補は対象だけに限定しない。`genre_vocabulary` は `collections/live/*/workflow-state.json::theme` と各音楽プロンプトの style / genre 行、`scene_vocabulary` は同 `workflow-state.json::scene_phrases.*` から収集する。対象タイトル、対象の theme・`planning.music.mood[]`・音楽プロンプト、対象の scene phrases、検証済み A/B 履歴で `file` が `thumbnail.jpg` / `thumbnail.png` の候補の `composition.scene`、実動画尺をそれぞれ `title`、`actual_genre_texts`、`actual_scene_texts`、`thumbnail_scene_texts`、`duration_seconds` として渡す。本スキルは collection 型だけを対象とするため `actual_content_type` は `collection` とする。これにより、対象内容と一致しない `rock` や `sleep` も語彙候補に存在すれば矛盾へ到達する。必須入力が空ならスクリプトの `unverified` と `reason` をそのまま記録する。
@@ -357,7 +353,7 @@ postmortem.md 保存後、支持された主仮説と「学び」に基づく改
 | 支持された主仮説カテゴリ | 改善候補 |
 |-------------------------|----------|
 | サムネ訴求弱 | `/thumbnail --compare` → 必要なら `/thumbnail <collection>` で再生成 |
-| タイトル訴求弱 | `/audit --alignment` で改善候補を再監査し、タイトル変更は別途判断 |
+| タイトル訴求弱 | `/audit --alignment` → `config/channel/content.json` の `title.template` を更新 |
 | 中身の弱さ | `/audit --video --source own --collection <name>` |
 | ターゲット層ミスマッチ | `/channel-research --voice` → `/channel-strategy --persona` → `/channel-strategy --scene` |
 | テーマ自体の市場性不足 | `/channel-research --discover` → `/channel-strategy --direction`（方向性検討モード） |

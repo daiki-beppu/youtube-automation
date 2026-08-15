@@ -188,7 +188,7 @@ purpose: [作る, 公開する]
     assert "multiple-purposes: 'purpose' は単一の文字列で指定してください" in out
 
 
-def test_cli_lint_allowlisted_violation_is_reported_without_failing(
+def test_cli_lint_removed_flop_analysis_allowlist_now_fails(
     fake_repo: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     skills_dir = fake_repo / ".claude" / "skills"
@@ -212,11 +212,11 @@ purpose: 振り返る
 """,
     )
 
-    assert main(["lint", "flop-analysis"]) == 0
+    assert main(["lint", "flop-analysis"]) == 1
     out = capsys.readouterr().out
     assert "flop-analysis:" in out
-    assert "allowlist" in out
-    assert "lint 合格: 1 skill" in out
+    assert "allowlist" not in out
+    assert "lint 失敗: 1/1 skill" in out
 
 
 def test_cli_lint_allowlist_does_not_hide_another_violation(

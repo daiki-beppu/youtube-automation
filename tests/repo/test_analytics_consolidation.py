@@ -52,8 +52,20 @@ def test_analytics_exposes_full_chain_and_exclusive_modes() -> None:
 
     assert frontmatter["name"] == "analytics"
     assert all(f"--{mode}" in frontmatter["description"] for mode in LEGACY_MODES[:3])
+    assert "--flop" in frontmatter["description"]
+    assert "--since <N>" in frontmatter["description"]
     assert "排他" in skill
     assert "collect → analyze → report" in skill
+
+    mode_rows = [line for line in skill.splitlines() if line.startswith("| `--") and "references/" in line]
+    assert mode_rows == [
+        "| `--collect` | `references/collect.md` |",
+        "| `--analyze` | `references/analyze.md` |",
+        "| `--report` | `references/report.md` |",
+        "| `--flop` | `references/flop.md` |",
+    ]
+    assert "| `--since <N>` |" in skill
+    assert "- `後工程`: `/wf-new`" in skill
 
 
 def test_analytics_uses_one_merged_skill_config() -> None:
@@ -62,6 +74,14 @@ def test_analytics_uses_one_merged_skill_config() -> None:
     assert config["freshness_minutes"] == 30
     assert config["html"]["kpi_cards"]
     assert config["theme"]["colors"]["chart_palette"]
+    assert config["flop"]["thresholds"]["ratio_vs_median"]["strong"] == 0.5
+    assert config["flop"]["hypothesis_ratios"]["ctr_low"] == 0.7
+
+
+def test_analytics_owns_flop_runtime_assets() -> None:
+    assert (SKILL_DIR / "references" / "flop.md").is_file()
+    assert (SKILL_DIR / "references" / "verification.py").is_file()
+    assert not os.path.lexists(REPO_ROOT / ".claude" / "skills" / "flop-analysis")
 
 
 def test_legacy_analytics_entrypoints_and_paths_are_removed() -> None:

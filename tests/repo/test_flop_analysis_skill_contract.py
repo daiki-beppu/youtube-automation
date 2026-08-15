@@ -1,4 +1,4 @@
-"""`/flop-analysis` の自律検証契約を配布 SKILL.md の公開境界で検証する。"""
+"""`/analytics --flop` の自律検証契約を mode reference の公開境界で検証する。"""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import re
 from tests.helpers.paths import REPO_ROOT
 
 ROOT = REPO_ROOT
-SKILL_MD = ROOT / ".claude" / "skills" / "flop-analysis" / "SKILL.md"
+SKILL_MD = ROOT / ".claude" / "skills" / "analytics" / "references" / "flop.md"
 VIDEO_ANALYZE_CONFIG = ROOT / ".claude" / "skills" / "audit" / "config.default.yaml"
 
 
@@ -46,20 +46,14 @@ def _table_rows(section: str, header: tuple[str, ...]) -> list[dict[str, str]]:
     return rows
 
 
-def test_flop_analysis_keeps_identity_symptom_mapping_and_output_contract() -> None:
-    """Issue #1972 scope外: 名称、Phase 2〜3、出力先の既存契約を維持する。"""
+def test_flop_analysis_keeps_symptom_mapping_and_output_contract() -> None:
+    """Issue #3850: analytics ownership keeps the existing Phase 2-3 behavior."""
     text = _skill_text()
-    frontmatter = text.split("---\n", 2)[1]
     phase_2 = _section(text, "### Phase 2: 症状の定量化")
     phase_3 = _section(text, "### Phase 3: 仮説マッピング")
     phase_5 = _section(text, "### Phase 5: postmortem.md の生成")
 
-    assert "name: flop-analysis" in frontmatter
-    assert (
-        'description: "Use when 公開済み動画が伸びなかった原因を video_id、collection、または --since で切り分け、'
-        "postmortem.md に出力するとき。「伸びなかった」「flop 分析」で発動。横断戦略は /analytics --analyze、"
-        '事前監査は /audit --alignment"'
-    ) in frontmatter
+    assert text.startswith("# Analytics flop mode\n")
 
     for metric in (
         "`cumulative_views` ベンチマーク比",
@@ -91,7 +85,7 @@ def test_flop_analysis_keeps_identity_symptom_mapping_and_output_contract() -> N
 def test_flop_analysis_calls_executable_verification_reference() -> None:
     phase_4 = _section(_skill_text(), "### Phase 4: 検証の自律実行")
 
-    assert ".claude/skills/flop-analysis/references/verification.py" in phase_4
+    assert ".claude/skills/analytics/references/verification.py" in phase_4
     assert "--operation" in phase_4
 
 

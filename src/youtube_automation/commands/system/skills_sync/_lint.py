@@ -48,7 +48,6 @@ _ALLOWLISTED_SKILL_MD_LINE_COUNTS: Final[dict[str, int]] = {
 
 _ALLOWLISTED_VIOLATIONS = frozenset(
     {
-        ("flop-analysis", "flag_tables_missing"),
         ("shadcn", "flag_tables_missing"),
         ("setup", "mode_reference_name_mismatch"),
     }

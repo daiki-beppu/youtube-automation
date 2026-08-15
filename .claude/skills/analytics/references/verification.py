@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Deterministic verdict helpers for the flop-analysis orchestration."""
+"""Deterministic verdict helpers for the analytics flop mode."""
 
 from __future__ import annotations
 

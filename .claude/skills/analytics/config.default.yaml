@@ -47,3 +47,17 @@ theme:
     success: "#00b894"
     warning: "#fdcb6e"
     danger: "#e17055"
+
+# 公開済み動画の失速分析。旧 flop-analysis default と同じ値を維持する。
+flop:
+  thresholds:
+    ratio_vs_median:
+      strong: 0.5
+      moderate: 0.7
+      mild: 0.9
+    neutral_band_pct: 10
+  hypothesis_ratios:
+    ctr_low: 0.7
+    ctr_healthy: 0.9
+    avd_low: 0.7
+    impressions_low: 0.5

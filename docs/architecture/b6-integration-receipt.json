@@ -640,14 +640,14 @@
     },
     {
       "old_owner": "legacy..claude.skills.flop-analysis.SKILL.md",
-      "exact_new_owner": ".claude/skills/flop-analysis/SKILL.md",
+      "exact_new_owner": ".claude/skills/analytics/references/flop.md",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"
     },
     {
       "old_owner": "legacy..claude.skills.flop-analysis.references.verification",
-      "exact_new_owner": ".claude/skills/flop-analysis/references/verification.py",
+      "exact_new_owner": ".claude/skills/analytics/references/verification.py",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"

@@ -1685,7 +1685,7 @@ def test_reorganization_references_use_canonical_owner_paths() -> None:
     # Given: 再配置で更新対象になった CI と active documentation
     dashboard_workflow = (ROOT / ".github" / "workflows" / "dashboard.yml").read_text(encoding="utf-8")
     architecture = (ROOT / "docs" / "architecture.md").read_text(encoding="utf-8")
-    flop_analysis = (ROOT / ".claude" / "skills" / "flop-analysis" / "SKILL.md").read_text(encoding="utf-8")
+    flop_analysis = (ROOT / ".claude" / "skills" / "analytics" / "references" / "flop.md").read_text(encoding="utf-8")
 
     # Then: 旧内部 path を案内せず、実在する owner を案内する
     assert "src/youtube_automation/utils/channel_registry.py" not in dashboard_workflow

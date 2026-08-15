@@ -14,7 +14,7 @@ from PIL import Image
 from tests.helpers.paths import REPO_ROOT
 
 ROOT = REPO_ROOT
-SCRIPT = ROOT / ".claude" / "skills" / "flop-analysis" / "references" / "verification.py"
+SCRIPT = ROOT / ".claude" / "skills" / "analytics" / "references" / "verification.py"
 
 
 def _run_cli(operation: str, payload: dict[str, object]) -> subprocess.CompletedProcess[str]:
