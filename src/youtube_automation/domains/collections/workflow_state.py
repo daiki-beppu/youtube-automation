@@ -1,0 +1,356 @@
+"""workflow-state.json の document object と安全な永続化境界。"""
+
+from __future__ import annotations
+
+import json
+import os
+import tempfile
+from collections.abc import Callable, Iterator, Mapping, MutableMapping
+from copy import deepcopy
+from pathlib import Path
+from typing import Literal, cast
+
+from youtube_automation.core.errors import WorkflowStateError
+from youtube_automation.infrastructure.filesystem import JSONValue, file_lock
+
+Phase = Literal["planning", "prepared", "mastered", "publishing", "complete"]
+Stage = Literal["planning", "live"]
+MusicEngine = Literal["suno", "lyria"]
+WorkflowStateUpdater = Callable[["WorkflowState"], "WorkflowState | None"]
+
+_PHASES = frozenset({"planning", "prepared", "mastered", "publishing", "complete"})
+_STAGES = frozenset({"planning", "live"})
+_MUSIC_ENGINES = frozenset({"suno", "lyria"})
+_KNOWN_OBJECT_SECTIONS = frozenset(
+    {
+        "assets",
+        "description",
+        "music_pair_selection",
+        "planning",
+        "post_upload",
+        "scene_phrases",
+        "thumbnail",
+        "thumbnail_auto_selection",
+        "title_template_check",
+        "upload",
+    }
+)
+
+
+def _optional_string(data: Mapping[str, JSONValue], key: str, label: str) -> str | None:
+    value = data.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise WorkflowStateError(f"{label} must be a string or null")
+    return value
+
+
+def _optional_bool(data: Mapping[str, JSONValue], key: str, label: str) -> bool | None:
+    value = data.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, bool):
+        raise WorkflowStateError(f"{label} must be a boolean or null")
+    return value
+
+
+class _ObjectSection(MutableMapping[str, JSONValue]):
+    def __init__(self, data: dict[str, JSONValue]) -> None:
+        self._data = data
+
+    def __getitem__(self, key: str) -> JSONValue:
+        return deepcopy(self._data[key])
+
+    def __setitem__(self, key: str, value: JSONValue) -> None:
+        self._data[key] = deepcopy(value)
+
+    def __delitem__(self, key: str) -> None:
+        del self._data[key]
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._data)
+
+    def __len__(self) -> int:
+        return len(self._data)
+
+
+class AssetsState(_ObjectSection):
+    """生成済み collection assets の型付き view。"""
+
+    @property
+    def thumbnail(self) -> bool | str | None:
+        value = self._data.get("thumbnail")
+        if value is None or isinstance(value, bool | str):
+            return value
+        raise WorkflowStateError("workflow-state.json::assets.thumbnail must be a boolean, string, or null")
+
+    @thumbnail.setter
+    def thumbnail(self, value: bool | str | None) -> None:
+        self._data["thumbnail"] = value
+
+    @property
+    def description(self) -> bool | None:
+        return _optional_bool(self._data, "description", "workflow-state.json::assets.description")
+
+    @description.setter
+    def description(self, value: bool) -> None:
+        self._data["description"] = value
+
+    @property
+    def raw_master(self) -> str | None:
+        return _optional_string(self._data, "raw_master", "workflow-state.json::assets.raw_master")
+
+    @raw_master.setter
+    def raw_master(self, value: str | None) -> None:
+        self._data["raw_master"] = value
+
+    @property
+    def master_audio(self) -> str | None:
+        return _optional_string(self._data, "master_audio", "workflow-state.json::assets.master_audio")
+
+    @master_audio.setter
+    def master_audio(self, value: str | None) -> None:
+        self._data["master_audio"] = value
+
+    @property
+    def master_video(self) -> str | None:
+        return _optional_string(self._data, "master_video", "workflow-state.json::assets.master_video")
+
+    @master_video.setter
+    def master_video(self, value: str | None) -> None:
+        self._data["master_video"] = value
+
+
+class MusicPlanningState(_ObjectSection):
+    """planning.music の型付き view。"""
+
+    @property
+    def engine(self) -> MusicEngine | None:
+        value = _optional_string(self._data, "engine", "workflow-state.json::planning.music.engine")
+        if value is None:
+            return None
+        if value not in _MUSIC_ENGINES:
+            raise WorkflowStateError(f"unsupported workflow-state music engine: {value}")
+        return cast(MusicEngine, value)
+
+    @engine.setter
+    def engine(self, value: MusicEngine) -> None:
+        self._data["engine"] = value
+
+
+class PlanningState(_ObjectSection):
+    """planning metadata の型付き view。"""
+
+    @property
+    def music(self) -> MusicPlanningState | None:
+        value = self._data.get("music")
+        if value is None:
+            return None
+        if not isinstance(value, dict):
+            raise WorkflowStateError("workflow-state.json::planning.music must be an object")
+        return MusicPlanningState(value)
+
+
+class UploadState(_ObjectSection):
+    """YouTube upload state の型付き view。"""
+
+    @property
+    def video_id(self) -> str | None:
+        return _optional_string(self._data, "video_id", "workflow-state.json::upload.video_id")
+
+    @video_id.setter
+    def video_id(self, value: str | None) -> None:
+        self._data["video_id"] = value
+
+    @property
+    def video_url(self) -> str | None:
+        return _optional_string(self._data, "video_url", "workflow-state.json::upload.video_url")
+
+    @video_url.setter
+    def video_url(self, value: str | None) -> None:
+        self._data["video_url"] = value
+
+    @property
+    def publish_at(self) -> str | None:
+        return _optional_string(self._data, "publish_at", "workflow-state.json::upload.publish_at")
+
+    @publish_at.setter
+    def publish_at(self, value: str | None) -> None:
+        self._data["publish_at"] = value
+
+
+class WorkflowState(MutableMapping[str, JSONValue]):
+    """既知 section を型付きで扱い、未知キーも保持する document object。"""
+
+    def __init__(self, data: Mapping[str, JSONValue]) -> None:
+        self._data = deepcopy(dict(data))
+        self._validate_object_sections()
+
+    def __getitem__(self, key: str) -> JSONValue:
+        return deepcopy(self._data[key])
+
+    def __setitem__(self, key: str, value: JSONValue) -> None:
+        if key in _KNOWN_OBJECT_SECTIONS and not isinstance(value, dict):
+            raise WorkflowStateError(f"workflow-state.json::{key} must be an object")
+        self._data[key] = deepcopy(value)
+
+    def __delitem__(self, key: str) -> None:
+        del self._data[key]
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._data)
+
+    def __len__(self) -> int:
+        return len(self._data)
+
+    def _validate_object_sections(self) -> None:
+        for key in _KNOWN_OBJECT_SECTIONS & self._data.keys():
+            if not isinstance(self._data[key], dict):
+                raise WorkflowStateError(f"workflow-state.json::{key} must be an object")
+        planning = self.planning
+        if planning is not None:
+            _music = planning.music
+
+    @property
+    def phase(self) -> Phase | None:
+        value = _optional_string(self._data, "phase", "workflow-state.json::phase")
+        if value is None:
+            return None
+        if value not in _PHASES:
+            raise WorkflowStateError(f"unsupported workflow-state phase: {value}")
+        return cast(Phase, value)
+
+    @phase.setter
+    def phase(self, value: Phase) -> None:
+        if value not in _PHASES:
+            raise WorkflowStateError(f"unsupported workflow-state phase: {value}")
+        self._data["phase"] = value
+
+    @property
+    def stage(self) -> Stage | None:
+        value = _optional_string(self._data, "stage", "workflow-state.json::stage")
+        if value is None:
+            return None
+        if value not in _STAGES:
+            raise WorkflowStateError(f"unsupported workflow-state stage: {value}")
+        return cast(Stage, value)
+
+    @stage.setter
+    def stage(self, value: Stage) -> None:
+        if value not in _STAGES:
+            raise WorkflowStateError(f"unsupported workflow-state stage: {value}")
+        self._data["stage"] = value
+
+    @property
+    def planning(self) -> PlanningState | None:
+        value = self._data.get("planning")
+        return PlanningState(value) if isinstance(value, dict) else None
+
+    @property
+    def assets(self) -> AssetsState | None:
+        value = self._data.get("assets")
+        return AssetsState(value) if isinstance(value, dict) else None
+
+    @property
+    def upload(self) -> UploadState | None:
+        value = self._data.get("upload")
+        return UploadState(value) if isinstance(value, dict) else None
+
+    @property
+    def thumbnail_approved(self) -> bool:
+        legacy = self._section_bool("thumbnail", "approved")
+        assets = self.assets
+        current = assets.thumbnail if assets is not None else None
+        return legacy is True or current is True
+
+    @property
+    def description_generated(self) -> bool:
+        legacy = self._section_bool("description", "generated")
+        assets = self.assets
+        current = assets.description if assets is not None else None
+        return legacy is True or current is True
+
+    @property
+    def music_engine(self) -> MusicEngine | None:
+        top_level = _optional_string(self._data, "music_engine", "workflow-state.json::music_engine")
+        planning = self.planning
+        music = planning.music if planning is not None else None
+        nested = music.engine if music is not None else None
+        if top_level is not None and top_level not in _MUSIC_ENGINES:
+            raise WorkflowStateError(f"unsupported workflow-state music engine: {top_level}")
+        if top_level is not None and nested is not None and top_level != nested:
+            raise WorkflowStateError(
+                f"workflow-state music engine mismatch: top-level={top_level}, planning.music={nested}"
+            )
+        return nested or cast(MusicEngine | None, top_level)
+
+    def _section_bool(self, section: str, key: str) -> bool | None:
+        value = self._data.get(section)
+        if not isinstance(value, dict):
+            return None
+        return _optional_bool(value, key, f"workflow-state.json::{section}.{key}")
+
+    def to_dict(self) -> dict[str, JSONValue]:
+        """永続化用に document の独立したコピーを返す。"""
+        return deepcopy(self._data)
+
+
+def _read_payload(path: Path) -> dict[str, JSONValue]:
+    if path.is_symlink():
+        raise WorkflowStateError(f"workflow-state.json must not be a symlink: {path}")
+    if not path.is_file():
+        raise WorkflowStateError(f"workflow-state.json is not a regular file: {path}")
+    try:
+        payload: object = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise WorkflowStateError(f"workflow-state.json could not be read: {path}") from exc
+    if not isinstance(payload, dict):
+        raise WorkflowStateError(f"workflow-state.json root must be an object: {path}")
+    return cast(dict[str, JSONValue], payload)
+
+
+def read(path: Path) -> WorkflowState:
+    """通常ファイルの workflow-state.json を厳密に読み込む。"""
+    return WorkflowState(_read_payload(path))
+
+
+def read_or_none(path: Path) -> WorkflowState | None:
+    """ファイル不在だけを None とし、破損や symlink は拒否する。"""
+    if path.is_symlink():
+        raise WorkflowStateError(f"workflow-state.json must not be a symlink: {path}")
+    if not path.exists():
+        return None
+    return read(path)
+
+
+def _write_atomically(path: Path, state: WorkflowState) -> None:
+    descriptor, temporary_name = tempfile.mkstemp(dir=path.parent, prefix=".workflow-state.", suffix=".tmp")
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+            json.dump(state.to_dict(), stream, ensure_ascii=False, indent=2)
+            stream.write("\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        if path.is_symlink():
+            raise WorkflowStateError(f"workflow-state.json must not be a symlink: {path}")
+        os.replace(temporary, path)
+    except WorkflowStateError:
+        temporary.unlink(missing_ok=True)
+        raise
+    except (OSError, TypeError, ValueError) as exc:
+        temporary.unlink(missing_ok=True)
+        raise WorkflowStateError(f"workflow-state.json could not be written: {path}") from exc
+
+
+def update(path: Path, updater: WorkflowStateUpdater) -> WorkflowState:
+    """lock 内で read-modify-write し、更新後の document を返す。"""
+    with file_lock(path):
+        current = read_or_none(path)
+        state = current if current is not None else WorkflowState({})
+        replacement = updater(state)
+        if replacement is not None:
+            state = replacement
+        _write_atomically(path, state)
+        return state

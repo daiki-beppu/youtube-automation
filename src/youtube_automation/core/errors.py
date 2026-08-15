@@ -97,6 +97,10 @@ class DiscoveryRegistryError(AutomationError):
     """ローカル server discovery registry の所有・容量契約エラー。"""
 
 
+class WorkflowStateError(AutomationError):
+    """workflow-state.json の読み取り・検証・永続化エラー。"""
+
+
 def _http_error_reason(error) -> str | None:
     content = getattr(error, "content", b"")
     if isinstance(content, bytes):

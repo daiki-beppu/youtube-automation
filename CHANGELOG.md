@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(collections)`: `workflow-state.json` の型付き document object、未知キー保持、明示的な厳格/不在許容 read、process lock 下の atomic update を共通 owner として追加する（#3874）。
+
 - `feat(skills)`: `/reply --live` に旧 `/live-chat-reply` の streaming 前提ガード、認証、常駐 daemon の配備・停止・障害復旧契約を統合し、旧 skill と利用者導線を削除する（#3849）。
 - `fix(packaging)`: upstream 開発専用の `/automation-release` と `/shadcn` を wheel・sdist から物理的に除外し、editable install での表示・除外契約は維持する（#3753）。
 - `refactor(suno)`: Suno prompt の設定・patterns・歌詞解決を CLI 実行ごとに1回へ集約し、生成側へ解決済みの品質設定と duration filter を渡して、生成内容を維持したまま重複警告を解消する（#3908）。
