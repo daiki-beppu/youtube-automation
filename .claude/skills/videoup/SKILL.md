@@ -6,7 +6,7 @@ description: "Use when 音声ファイルが揃い動画生成が必要なとき
 
 ## 前後工程
 
-- `前工程`: `/wf-new`, `/masterup`, `/lyria`, `/loop-video`
+- `前工程`: `/wf-new`, `/masterup`, `/lyria`, `/thumbnail --loop`
 - `後工程`: `/video-upload`, `/video-description`
 - `委譲先`: `なし`
 
@@ -52,7 +52,7 @@ subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実�
 
 - 対象コレクション（`collections/planning/` 配下）に `workflow-state.json` が存在すること。無ければ `/wf-new` を案内して停止する
 - マスター音源が存在すること（`workflow-state.json::assets.master_audio` が指すファイル、または `01-master/master-mix.*` / `master.*`）。無ければ `/masterup`（Suno）または `/lyria`（Lyria）を案内して停止する（DAW バウンス済みなら `master-mix.m4a` の手動配置でも可）
-- 動画背景素材が存在すること: `10-assets/main.png` / `main.jpg`（無ければ `/thumbnail` を案内）。`thumbnail::textless.enabled: false` では承認済み thumbnail と同一内容の文字入り `main.jpg` を正規入力として受け入れ、未設定または `true` では textless main を要求する。ループ動画運用チャンネル（`loop-video.enabled` が `false` でない）で `10-assets/loop.mp4` が無ければ `/loop-video` を案内する
+- 動画背景素材が存在すること: `10-assets/main.png` / `main.jpg`（無ければ `/thumbnail` を案内）。`thumbnail::textless.enabled: false` では承認済み thumbnail と同一内容の文字入り `main.jpg` を正規入力として受け入れ、未設定または `true` では textless main を要求する。ループ動画運用チャンネル（`loop-video.enabled` が `false` でない）で `10-assets/loop.mp4` が無ければ `/thumbnail --loop` を案内する
 - `ffmpeg` / `ffprobe` が利用可能であること（`generate_videos.sh` が使用）。無ければ `/setup` を案内する
 
 ## Scripts
@@ -91,9 +91,9 @@ $ARGUMENTS
 1. **対象コレクション確認**: `workflow-state.json` で状態確認
 2. **マスター音源**: `workflow-state.json::assets.master_audio` にファイル名が記録されていればそれを最優先で使用し、`01-master/` 内に存在することを確認する。未設定の場合のみ `master-mix.{wav,m4a,aac,mp3,flac}` → `master.{wav,m4a,aac,mp3,flac}` の順で探す。`assets.master_audio` が不正 JSON / 非 string / パス付き / 存在しないファイルを指す場合、`generate_videos.sh` は固定名探索へ fallback せずエラー停止する。なければ `/masterup` または `/lyria` でのマスター音源生成を案内（DAW バウンス済みの場合は `master-mix.m4a` をそのまま配置可、`/lyria` / `/masterup` の自動生成出力は `master.{wav,mp3}` で配置される）
 3. **ループ動画背景**: `10-assets/loop.mp4` が既にあればスキップ。
-   `config/skills/loop-video.yaml::enabled: false` のチャンネルではループ動画化が無効化されているため、`/loop-video` を案内せず `10-assets/main.png` または `main.jpg` を静止背景として使用する。`thumbnail::textless.enabled: false` の共有 `main.jpg` は文字入りでも正規入力として扱い、textless 再生成へ戻さない。
+   `config/skills/loop-video.yaml::enabled: false` のチャンネルではループ動画化が無効化されているため、`/thumbnail --loop` を案内せず `10-assets/main.png` または `main.jpg` を静止背景として使用する。`thumbnail::textless.enabled: false` の共有 `main.jpg` は文字入りでも正規入力として扱い、textless 再生成へ戻さない。
    この場合、既存の `10-assets/loop.mp4` が残っていても `generate_videos.sh` は無視し、静止背景に切り替える。
-   それ以外（`enabled` 未指定 or `true`）で `loop.mp4` が無ければ `/loop-video` でのループ動画生成を案内。
+   それ以外（`enabled` 未指定 or `true`）で `loop.mp4` が無ければ `/thumbnail --loop` でのループ動画生成を案内。
    `loop.mp4` があると `generate_videos.sh` が自動的に動画背景を使用（静止画の代わり）
 4. **プレビュー確認ゲート**: `config/skills/videoup.yaml::effect.type != none` または `config/channel/youtube.json::overlays.enabled: true` の場合、`skip_preview_approval` に関係なく全尺生成の前に必ず `generate_videos.sh --preview 20 <collection-path>` を実行する（所要時間とログの扱いは「所要時間と完了報告」を参照）。`01-master/<Collection>-Preview.mp4` とスクリプト出力の `Full output outlook`（経路種別・時間見通し）を残す。プレビューは `*-Master.mp4` と `workflow-state.json` を変更しない
 5. **承認分岐**: `skip_preview_approval: false`（既定）はプレビューを提示し、ユーザーが受理した場合のみ全尺生成へ進む。受理しない場合は設定調整へ戻り、全尺エンコードと `assets.master_video` の更新を開始しない。選択 UI では「全尺生成へ進む」「設定を調整する」の 2 択、非対応環境ではテキスト承認を待つ。`true` はプレビューファイルの存在を確認して承認だけを省略し、そのまま全尺生成へ進む

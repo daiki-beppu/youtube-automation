@@ -6,7 +6,7 @@ ROOT = REPO_ROOT
 SKILLS = {
     "music/references/prompt.md": ("## 音", "BPM", "Style"),
     "thumbnail/SKILL.md": ("## サムネ", "色温度", "被写体"),
-    "loop-video/SKILL.md": ("## 映像", "動きの種類数上限", "禁止要素"),
+    "thumbnail/references/loop.md": ("## 映像", "動きの種類数上限", "禁止要素"),
     "alignment-check/SKILL.md": ("## 音", "## サムネ", "整合性マトリクス"),
 }
 

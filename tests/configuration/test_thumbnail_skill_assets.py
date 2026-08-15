@@ -50,7 +50,7 @@ def _read_thumbnail_prompt_schema() -> str:
 
 
 def _read_loop_video_skill() -> str:
-    path = _repo_root() / ".claude" / "skills" / "loop-video" / "SKILL.md"
+    path = _repo_root() / ".claude" / "skills" / "thumbnail" / "references" / "loop.md"
     return path.read_text(encoding="utf-8")
 
 
@@ -377,7 +377,8 @@ def test_thumbnail_skill_documents_ai_burn_in_default_and_deterministic_opt_in()
         "cp thumbnail-v1.jpg thumbnail.jpg",
         "/thumbnail --compare",
         "config/skills/loop-video.yaml::enabled: true",
-        "config/skills/loop-video.yaml::enabled: false",
+        "/thumbnail --loop",
+        "/video --generate",
         "静止画背景",
         "両者を同一画像で代用しない",
         "AI 焼き込み経路（既定）",
@@ -880,7 +881,7 @@ def test_thumbnail_skill_prompt_log_and_file_contract_cover_issue_1310_outputs()
     for required in (
         "`thumbnail.jpg` | YouTube アップロード用のテキスト付き最終サムネ",
         "`thumbnail-v{N}.jpg` / `thumbnail-v{N}.png` / `thumbnail-codex-v{N}.png` | テキスト付き候補",
-        "`main.png` / `main.jpg` | 動画背景・`/loop-video` 入力用のテキストなし最終画像",
+        "`main.png` / `main.jpg` | 動画背景・`/thumbnail --loop` 入力用のテキストなし最終画像",
         "`main-v{N}.png` / `main-v{N}.jpg` | テキストなし背景候補",
         "`loop.mp4` | `loop-video` 有効チャンネルだけで生成する動画背景",
         "無効チャンネルでは作らない",
@@ -997,8 +998,8 @@ def test_thumbnail_skill_ai_text_path_is_default_and_deterministic_is_opt_in() -
     assert "AI 経路へ無断で切り替えない" in font_block
 
 
-def test_loop_video_skill_uses_textless_main_image_and_respects_disabled_channels() -> None:
-    """#1310: /loop-video は文字入り thumbnail ではなく文字なし main を入力にする。"""
+def test_thumbnail_loop_mode_uses_textless_main_image_and_respects_disabled_channels() -> None:
+    """#1310/#3832: --loop は文字入り thumbnail ではなく文字なし main を入力にする。"""
     skill = _read_loop_video_skill()
     prerequisites_block = _slice_between(skill, "### 前提条件", "### ステップ")
     steps_block = _slice_between(skill, "### ステップ", "### 構造化プロンプト（推奨）")
@@ -1006,7 +1007,7 @@ def test_loop_video_skill_uses_textless_main_image_and_respects_disabled_channel
     for required in (
         "テキストなし `main.png/jpg`",
         "`thumbnail.jpg` は YouTube アップロード用のテキスト付きサムネイル",
-        "`/loop-video` の入力には使わない",
+        "`/thumbnail --loop` の入力には使わない",
         "config/skills/loop-video.yaml::enabled: false",
         "テキストなし `main.png/jpg` を静止画背景として使う",
     ):

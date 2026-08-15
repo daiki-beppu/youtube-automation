@@ -23,6 +23,7 @@ Veo 実 API は再課金リスクのため絶対に叩かない（全ケース m
 from __future__ import annotations
 
 import argparse
+import subprocess
 import sys
 from pathlib import Path
 from unittest.mock import DEFAULT, patch
@@ -56,6 +57,7 @@ LOOP_V3 = "loop-v3.mp4"
 
 # `patch.multiple` で `main()` の境界を一括 mock する対象モジュール
 _TARGET_MODULE = "youtube_automation.commands.media.generate_loop_video"
+_DISTRIBUTED_SCRIPT = REPO_ROOT / ".claude" / "skills" / "thumbnail" / "references" / "generate_loop_video.py"
 
 
 def _make_collection(tmp_path: Path, *, name: str = "20260519-loop-foo") -> Path:
@@ -91,6 +93,17 @@ class TestBuildParser:
 
         # Then
         assert isinstance(parser, argparse.ArgumentParser)
+
+    def test_distributed_script_help_keeps_engine_choices(self):
+        result = subprocess.run(
+            [sys.executable, str(_DISTRIBUTED_SCRIPT), "--help"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        assert result.returncode == 0
+        assert "--engine {veo,omni}" in result.stdout
 
     def test_parser_accepts_lite_preview_model(self):
         # Given: Issue #129 のメインケース。preview モデルを CLI から指定可能。
@@ -411,7 +424,7 @@ class TestResolvePrompt:
 # ---------- 強度制御は motion_targets の文言のみで行う (Issue #1747) ----------
 
 # 同梱 default config を実物のまま検証する（外部 IO ではなくリポジトリ内資産の読み取り）。
-_LOOP_VIDEO_DEFAULT_CONFIG = REPO_ROOT / ".claude" / "skills" / "loop-video" / "config.default.yaml"
+_THUMBNAIL_DEFAULT_CONFIG = REPO_ROOT / ".claude" / "skills" / "thumbnail" / "config.default.yaml"
 
 # 既定 template が付加してはいけない強度断定語（issue #1747 の regression 対象）
 _INTENSITY_SOFTENERS = ("subtle", "gentle", "barely perceptible")
@@ -420,8 +433,8 @@ _INTENSITY_SOFTENERS = ("subtle", "gentle", "barely perceptible")
 def _default_veo_config() -> dict:
     import yaml
 
-    with _LOOP_VIDEO_DEFAULT_CONFIG.open(encoding="utf-8") as f:
-        return yaml.safe_load(f)["veo"]
+    with _THUMBNAIL_DEFAULT_CONFIG.open(encoding="utf-8") as f:
+        return yaml.safe_load(f)["loop"]["veo"]
 
 
 class TestMotionIntensityControlledByTargets:
@@ -482,8 +495,8 @@ class TestAttentionGuardDefaults:
     def test_omni_prompt_has_same_attention_guards(self):
         import yaml
 
-        with _LOOP_VIDEO_DEFAULT_CONFIG.open(encoding="utf-8") as file:
-            prompt = yaml.safe_load(file)["omni"]["default_prompt"]
+        with _THUMBNAIL_DEFAULT_CONFIG.open(encoding="utf-8") as file:
+            prompt = yaml.safe_load(file)["loop"]["omni"]["default_prompt"]
 
         for forbidden_visual in (
             "full-frame flashes",

@@ -346,11 +346,19 @@ def test_thumbnail_iterate_is_reachable_from_the_thumbnail_mode_dispatch() -> No
     assert inventory.resolve_reference("thumbnail", "references/iterate.md").is_file()
 
 
-def test_thumbnail_mode_dispatch_has_exactly_three_modes() -> None:
+def test_thumbnail_loop_is_reachable_from_the_thumbnail_mode_dispatch() -> None:
     inventory = SkillInventory(ROOT)
     mode_dispatch = inventory.section("thumbnail", "## モード判定")
 
-    assert mode_dispatch.count("| `--") == 3
+    assert "| `--loop` | `references/loop.md` |" in mode_dispatch
+    assert inventory.resolve_reference("thumbnail", "references/loop.md").is_file()
+
+
+def test_thumbnail_mode_dispatch_has_exactly_four_modes() -> None:
+    inventory = SkillInventory(ROOT)
+    mode_dispatch = inventory.section("thumbnail", "## モード判定")
+
+    assert mode_dispatch.count("| `--") == 4
 
 
 def test_thumbnail_test_history_has_one_declared_writer() -> None:

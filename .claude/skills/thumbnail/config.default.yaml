@@ -3,6 +3,79 @@
 # チャンネル側で上書きする場合は config/skills/thumbnail.yaml に記述する。
 # deep-merge でマージされる (dict は再帰マージ、リスト・スカラは上書き)。
 
+# テキストなし main.png/jpg からループ動画背景を生成する --loop mode。
+# 旧 config/skills/loop-video.yaml override は loader がこの節へ deep-merge する。
+loop:
+  # 動画の構成タイプ。現行 generator は loop のみを実装する。
+  video_type: loop
+
+  # false で yt-generate-loop-video を fail-loud 停止し、Veo 課金を防ぐ。
+  enabled: true
+
+  # Veo / Omni 実行前の [y/N] 課金確認を -y 相当で省略する opt-in。
+  skip_billing_approval: false
+
+  # 生成成功後の動画プレビュー承認を省略する opt-in。
+  skip_preview_approval: false
+
+  # 既存 loop.mp4 を loop-v{n}.mp4 へ退避するときの保持上限。
+  max_backups: 3
+
+  veo:
+    # Veo モデル ID。
+    model: "veo-3.1-fast-generate-001"
+
+    default_prompt: |
+      Static scene with only natural subtle movements: gentle flickering of candle flames,
+      slight sway of character breathing, soft light shifts on surfaces.
+      No smoke, no magical effects, no particles, no falling objects.
+      Lighting and contrast remain steady and gradual across the full frame.
+      The composition stays free of full-frame flashes, strobing, sudden brightness changes,
+      and close-up human faces; local candle-flame movement stays confined to each flame.
+      Keep the scene calm and grounded, like a living painting.
+
+    # 構造化プロンプト。強度語は motion_targets 側に含める。
+    motion_targets: []
+    static_targets: []
+
+    prompt_template: |
+      Locked camera, static composition, no camera movement.
+      The scene is a living painting: {static_clause} remain exactly as in the source image — same count, same shape, same position, perfectly still.
+      The only motion is {motion_clause}.
+      {base_rules}
+      Loop seamlessly with the first frame matching the last frame.
+
+    base_rules: |
+      Preserve the original lighting, color palette, depth, and framing.
+      No new objects, no new creatures, no smoke or magical particles appear; the world is closed and stable.
+      Lighting and contrast remain steady and gradual across the full frame.
+      The composition stays free of full-frame flashes, strobing, sudden brightness changes,
+      and close-up human faces; local candle-flame movement stays confined to each flame.
+
+    # Veo API 制約で現状 8 秒固定。
+    duration_seconds: 8
+    crossfade_sec: 0.5
+
+  # Gemini Developer API Interactions API の代替エンジン。
+  omni:
+    model: "gemini-omni-flash-preview"
+    timeout_seconds: 600
+    poll_interval_seconds: 5
+    default_prompt: |
+      Static scene with only natural subtle movements: gentle flickering of candle flames,
+      slight sway of character breathing, soft light shifts on surfaces.
+      No smoke, no magical effects, no particles, no falling objects.
+      Lighting and contrast remain steady and gradual across the full frame.
+      The composition stays free of full-frame flashes, strobing, sudden brightness changes,
+      and close-up human faces; local candle-flame movement stays confined to each flame.
+      Keep the scene calm and grounded, like a living painting.
+
+  # Veo 出力直後に libx264 で再エンコードして容量を削減する。
+  compression:
+    enabled: true
+    crf: 22
+    preset: slow
+
 # 動画背景用の textless main をサムネイルと分離する既定契約。
 # false に明示したチャンネルだけ、確定済み thumbnail.jpg を同一内容の main.jpg
 # として共用し、追加の textless 生成・承認を省略する。

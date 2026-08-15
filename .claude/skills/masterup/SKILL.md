@@ -528,7 +528,7 @@ else
 fi
 ```
 
-**`--delete` を付けない理由**: メイン側で `/thumbnail` や `/loop-video` 等によって先行生成された素材（例: `10-assets/main.png`, `10-assets/loop.mp4`）が worktree 側に存在しないことがあり、`--delete` を付けるとそれらが消えてしまう。worktree 側で新規追加されたファイルだけメインに上書き反映する片方向追加同期で十分。
+**`--delete` を付けない理由**: メイン側で `/thumbnail` や `/thumbnail --loop` 等によって先行生成された素材（例: `10-assets/main.png`, `10-assets/loop.mp4`）が worktree 側に存在しないことがあり、`--delete` を付けるとそれらが消えてしまう。worktree 側で新規追加されたファイルだけメインに上書き反映する片方向追加同期で十分。
 
 **この処理は常にマスター生成後に自動実行する（ワークツリー実行時のみ）。**
 

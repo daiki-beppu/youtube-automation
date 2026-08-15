@@ -839,6 +839,17 @@ def test_collection_ideate_freshness_days_default_comes_from_skill_config(tmp_pa
     assert cfg.get("freshness_days") == 7
 
 
+def test_thumbnail_owns_loop_video_defaults(tmp_path):
+    """#3832: thumbnail の loop 節がループ生成 default の正本になる。"""
+    channel_dir = tmp_path / "ch"
+    channel_dir.mkdir()
+
+    cfg = skill_config.load_skill_config("thumbnail", use_cache=False, channel_dir=channel_dir)
+
+    assert cfg["loop"]["enabled"] is True
+    assert cfg["loop"]["veo"]["duration_seconds"] == 8
+
+
 @pytest.mark.parametrize(
     ("skill", "path"),
     [

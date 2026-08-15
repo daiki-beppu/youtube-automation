@@ -213,7 +213,7 @@ tmp/ 残骸クリーンアップ完了
 |------|------|
 | live コレクションの大容量メディア削除（容量回復の本丸） | 本 skill の Step 1〜5 |
 | collections 配下の tmp/ 残骸掃除（衛生維持） | 本 skill の tmp/ モード（`/live-clean tmp`） |
-| `<CHANNEL_DIR>/tmp/veo-operations/` の resume state | /loop-video（不要時の手動削除手順は同 skill 参照） |
+| `<CHANNEL_DIR>/tmp/veo-operations/` の resume state | /thumbnail --loop（不要時の手動削除手順は同 skill 参照） |
 | `<CHANNEL_DIR>/tmp/lyria-recovered/` の退避音源 | /lyria |
 
 tmp/ 掃除は「スキャン → ドライラン → 明示承認 → 削除 → レポート」という本 skill の既存安全フローと完全に同型であり、専用 CLI（yt-clean 等）を新設すると承認ゲートを CLI 側に再実装する重複が生じるため、本 skill への統合とした（#1671）。

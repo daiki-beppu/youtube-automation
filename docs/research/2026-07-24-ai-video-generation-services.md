@@ -55,7 +55,7 @@
 
 ## 現行フローとの対応
 
-現行の `.claude/skills/loop-video/config.default.yaml` は `veo-3.1-fast-generate-001`、1080p、8 秒を選び、`src/youtube_automation/infrastructure/media/veo_generator.py` は同じ静止画を first frame と last frame に渡す。生成後は音声を除去し、`loop-video` 側の後処理で smooth 処理を行う。
+現行の `.claude/skills/thumbnail/config.default.yaml::loop` は `veo-3.1-fast-generate-001`、1080p、8 秒を選び、`src/youtube_automation/infrastructure/media/veo_generator.py` は同じ静止画を first frame と last frame に渡す。生成後は音声を除去し、`loop-video` 側の後処理で smooth 処理を行う。
 
 | 必須契約 | Veo 3.1 | BytePlus | Magnific | Seevio | Dreamina |
 |---|---|---|---|---|---|
