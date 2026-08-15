@@ -10,10 +10,6 @@ import pytest
 from youtube_automation.domains.suno.downloaded.workflow import update_workflow_state_downloaded
 
 
-def _write_json(target: Path, data: dict, *, prefix: str) -> None:
-    target.write_text(json.dumps(data), encoding="utf-8")
-
-
 def _read_music(collection_dir: Path) -> dict:
     state = json.loads((collection_dir / "workflow-state.json").read_text(encoding="utf-8"))
     return state["planning"]["music"]
@@ -25,7 +21,6 @@ def test_should_store_missing_reasons_as_non_negative_integers(tmp_path: Path) -
         file_count=2,
         missing_reasons={"suno_unfulfilled": 1, "apply_skipped": 1},
         prompt_entries_reader=lambda _collection_dir: [],
-        atomic_json_write=_write_json,
     )
 
     assert _read_music(tmp_path)["missing_reasons"] == {
@@ -50,7 +45,6 @@ def test_should_reject_invalid_missing_reason_counts(tmp_path: Path, key: str, i
             expected_file_count=4,
             missing_reasons=missing_reasons,
             prompt_entries_reader=lambda _collection_dir: [],
-            atomic_json_write=_write_json,
         )
 
     assert not (tmp_path / "workflow-state.json").exists()
@@ -71,7 +65,6 @@ def test_should_reject_invalid_missing_reason_shape(tmp_path: Path, missing_reas
             expected_file_count=4,
             missing_reasons=missing_reasons,
             prompt_entries_reader=lambda _collection_dir: [],
-            atomic_json_write=_write_json,
         )
 
     assert not (tmp_path / "workflow-state.json").exists()
@@ -99,7 +92,6 @@ def test_should_remove_previous_missing_reasons_when_download_is_complete(tmp_pa
         file_count=4,
         expected_file_count=4,
         prompt_entries_reader=lambda _collection_dir: [],
-        atomic_json_write=_write_json,
     )
 
     music = _read_music(tmp_path)
@@ -113,10 +105,24 @@ def test_should_preserve_existing_caller_path_without_missing_reasons(tmp_path: 
         file_count=2,
         expected_file_count=4,
         prompt_entries_reader=lambda _collection_dir: [],
-        atomic_json_write=_write_json,
     )
 
     music = _read_music(tmp_path)
     assert music["actual_file_count"] == 2
     assert music["missing_file_count"] == 2
     assert "missing_reasons" not in music
+
+
+def test_should_preserve_unknown_workflow_state_fields(tmp_path: Path) -> None:
+    state_path = tmp_path / "workflow-state.json"
+    state_path.write_text(json.dumps({"future_section": {"keep": True}}), encoding="utf-8")
+
+    update_workflow_state_downloaded(
+        tmp_path,
+        file_count=2,
+        expected_file_count=4,
+        prompt_entries_reader=lambda _collection_dir: [],
+    )
+
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    assert state["future_section"] == {"keep": True}

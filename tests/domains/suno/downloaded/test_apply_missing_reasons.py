@@ -34,10 +34,6 @@ def _write_archive(path: Path, files: dict[str, bytes]) -> Path:
     return path
 
 
-def _write_json(target: Path, data: dict, *, prefix: str) -> None:
-    target.write_text(json.dumps(data), encoding="utf-8")
-
-
 def _payload(archive: Path, *, expected_count: int) -> DownloadedPayload:
     return DownloadedPayload(
         file_count=0,
@@ -62,7 +58,6 @@ def test_detailed_apply_calculates_and_persists_missing_reasons(tmp_path: Path) 
         tmp_path,
         _payload(archive, expected_count=4),
         prompt_entries_reader=read_entries,
-        atomic_json_write=_write_json,
     )
 
     assert result == DownloadedApplyResult(
@@ -87,7 +82,6 @@ def test_detailed_apply_clamps_unfulfilled_when_archive_exceeds_expected(tmp_pat
         tmp_path,
         _payload(archive, expected_count=1),
         prompt_entries_reader=read_entries,
-        atomic_json_write=_write_json,
     )
 
     assert result.suno_unfulfilled == 0
@@ -105,7 +99,6 @@ def test_legacy_apply_still_returns_placed_count(tmp_path: Path) -> None:
         tmp_path,
         _payload(archive, expected_count=2),
         prompt_entries_reader=read_entries,
-        atomic_json_write=_write_json,
     )
 
     assert placed_count == 1
@@ -120,7 +113,6 @@ def test_detailed_apply_keeps_zero_placed_fail_loud(tmp_path: Path) -> None:
             tmp_path,
             _payload(archive, expected_count=2),
             prompt_entries_reader=read_entries,
-            atomic_json_write=_write_json,
         )
 
     assert archive.exists()

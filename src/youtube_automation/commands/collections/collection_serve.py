@@ -53,7 +53,8 @@ from youtube_automation.commands.collections.collection_serve_discovery import (
     handle_registry_request,
 )
 from youtube_automation.configuration import Distrokid, channel_dir, load_config
-from youtube_automation.core.errors import ConfigError
+from youtube_automation.core.errors import ConfigError, WorkflowStateError
+from youtube_automation.domains.collections.workflow_state import read_or_none as read_workflow_state_or_none
 from youtube_automation.domains.distrokid.metadata import parse_album_metadata
 from youtube_automation.domains.distrokid.release import (
     DISTROKID_ASSETS_PREFIX,
@@ -373,6 +374,15 @@ def find_collection_dirs(root: Path) -> list[Path]:
     return sorted(dirs, key=lambda p: p.name)
 
 
+def _read_workflow_state_lenient(path: Path) -> dict:
+    """配信一覧の fail-open 契約に合わせ、読めない state を空として扱う。"""
+    try:
+        state = read_workflow_state_or_none(path)
+    except WorkflowStateError:
+        return {}
+    return state.to_dict() if state is not None else {}
+
+
 def _is_live_complete_collection(root: Path, collection_id: str) -> bool:
     """planning の対応する live collection が完了済みなら True を返す（#2331）。
 
@@ -383,13 +393,7 @@ def _is_live_complete_collection(root: Path, collection_id: str) -> bool:
     if root.name != "planning" or root.parent.name != "collections":
         return False
     workflow_state = root.parent / "live" / collection_id / "workflow-state.json"
-    if not workflow_state.is_file():
-        return False
-    try:
-        data = json.loads(workflow_state.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
-        return False
-    return isinstance(data, dict) and data.get("phase") == "complete"
+    return _read_workflow_state_lenient(workflow_state).get("phase") == "complete"
 
 
 def _find_suno_collection_dirs(root: Path) -> list[Path]:
@@ -420,14 +424,7 @@ def _determine_status(
 def _read_music_downloaded_flag(coll_dir: Path) -> bool:
     """workflow-state.json の assets.music_downloaded を読む（#1913 部分完了の貫通契約）."""
     ws_path = CollectionPaths(coll_dir).workflow_state_path
-    if not ws_path.is_file():
-        return False
-    try:
-        data = json.loads(ws_path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
-        return False
-    if not isinstance(data, dict):
-        return False
+    data = _read_workflow_state_lenient(ws_path)
     assets = data.get("assets")
     if not isinstance(assets, dict):
         return False
@@ -437,14 +434,7 @@ def _read_music_downloaded_flag(coll_dir: Path) -> bool:
 def _read_music_expected_file_count(coll_dir: Path) -> int | None:
     """workflow-state.json から full playlist download の期待ファイル数を読む."""
     ws_path = CollectionPaths(coll_dir).workflow_state_path
-    if not ws_path.is_file():
-        return None
-    try:
-        data = json.loads(ws_path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
-        return None
-    if not isinstance(data, dict):
-        return None
+    data = _read_workflow_state_lenient(ws_path)
     planning = data.get("planning")
     if not isinstance(planning, dict):
         return None
@@ -460,14 +450,7 @@ def _read_music_expected_file_count(coll_dir: Path) -> int | None:
 def _read_music_suno_playlist_url(coll_dir: Path) -> str | None:
     """workflow-state.json から保存済み Suno playlist URL を読む."""
     ws_path = CollectionPaths(coll_dir).workflow_state_path
-    if not ws_path.is_file():
-        return None
-    try:
-        data = json.loads(ws_path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
-        return None
-    if not isinstance(data, dict):
-        return None
+    data = _read_workflow_state_lenient(ws_path)
     planning = data.get("planning")
     if not isinstance(planning, dict):
         return None
@@ -483,14 +466,7 @@ def _read_music_suno_playlist_url(coll_dir: Path) -> str | None:
 def _read_workflow_theme(coll_dir: Path) -> str | None:
     """workflow-state.json から collection theme slug を読む。"""
     ws_path = CollectionPaths(coll_dir).workflow_state_path
-    if not ws_path.is_file():
-        return None
-    try:
-        data = json.loads(ws_path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
-        return None
-    if not isinstance(data, dict):
-        return None
+    data = _read_workflow_state_lenient(ws_path)
     theme = data.get("theme")
     return theme if isinstance(theme, str) and theme else None
 
@@ -1188,7 +1164,6 @@ def create_server(
                     coll_dir,
                     downloaded,
                     prompt_entries_reader=read_suno_prompt_entries,
-                    atomic_json_write=_atomic_json_write,
                 )
             except DownloadedPayloadError:
                 self.send_error(400, "Bad Request")

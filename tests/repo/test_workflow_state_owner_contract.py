@@ -13,7 +13,6 @@ OWNER = "src/youtube_automation/domains/collections/workflow_state.py"
 DIRECT_IO_ALLOWLIST = frozenset(
     {
         "src/youtube_automation/commands/analytics/experiment_judge.py",
-        "src/youtube_automation/commands/collections/collection_serve.py",
         "src/youtube_automation/commands/distrokid/distrokid_prepare.py",
         "src/youtube_automation/commands/media/check_raw_master.py",
         "src/youtube_automation/commands/media/generate_videos_batch.py",
@@ -24,8 +23,6 @@ DIRECT_IO_ALLOWLIST = frozenset(
         "src/youtube_automation/commands/youtube/pinned_comment.py",
         "src/youtube_automation/domains/distrokid/preparation.py",
         "src/youtube_automation/domains/distrokid/release.py",
-        "src/youtube_automation/domains/suno/downloaded/apply.py",
-        "src/youtube_automation/domains/suno/downloaded/workflow.py",
         "src/youtube_automation/domains/suno/prompt_resolution.py",
         "src/youtube_automation/domains/suno/selection.py",
         "src/youtube_automation/domains/uploads/_complete_collection_strategy.py",
