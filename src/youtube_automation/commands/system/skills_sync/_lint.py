@@ -45,7 +45,6 @@ _ALLOWLISTED_SKILL_MD_LINE_COUNTS: Final[dict[str, int]] = {
     "loop-video": 410,
     "masterup": 566,
     "suno": 594,
-    "thumbnail": 748,
 }
 
 _ALLOWLISTED_VIOLATIONS = frozenset(
