@@ -6,7 +6,7 @@
 
 最初に `data/thumbnail-iterate/champion.json` の有無を確認する。存在する場合は `.claude/skills/thumbnail-iterate/references/state-contract.md` を読み、`file` が repository 内の実ファイル（symlink 不可）で、現在の SHA-256 が `sha256` と一致することを検証する。失敗時は黙って external TTP へ fallback せず対象と不一致を表示して停止する。検証済み champion は **internal TTP** として external benchmark より先に参照画像と `validated_elements` をプロンプトへ反映する。このスキルから champion JSON を作成・更新しない。
 
-`collections/planning/*/20-documentation/thumbnail-test-history.json` と `collections/live/*/20-documentation/thumbnail-test-history.json` を列挙する。各ファイルは `.claude/skills/thumbnail-test/references/history-schema.md` の `### Completed history` にある履歴構造検証コマンドだけで確認する。失敗した履歴は対象パスとエラーを表示して修正を案内し、集計から除外してよいが、未検証値をプロンプトへ入れない。
+`collections/planning/*/20-documentation/thumbnail-test-history.json` と `collections/live/*/20-documentation/thumbnail-test-history.json` を列挙する。各ファイルは `.claude/skills/thumbnail/references/history-schema.md` の `### Completed history` にある履歴構造検証コマンドだけで確認する。失敗した履歴は対象パスとエラーを表示して修正を案内し、集計から除外してよいが、未検証値をプロンプトへ入れない。
 
 検証済み entry のうち `result.status == "winner"` だけを対象に、`result.result_candidate_id` と一致する candidate の `composition.subject_position` / `composition.subject_scale` / `color_palette[]` / `text_amount` を値ごとに集計する。自由記述の `composition.scene` は結果説明だけに使い、反復集計しない。
 
@@ -14,7 +14,7 @@
 - 1 entry だけ: 「単発観測」として表示するが、プロンプトの必須方針にはしない
 - Winner が 0 件または履歴ファイルが 0 件: 「勝ちパターン履歴なし」と表示し、既存のプロンプト方針だけで続行する
 
-履歴の `performed_same` / `inconclusive` は強い方針へ還元しない。履歴の作成・追記は `/thumbnail-test` の責務であり、このスキルから変更しない。
+履歴の `performed_same` / `inconclusive` は強い方針へ還元しない。履歴の作成・追記は `/thumbnail --test` の責務であり、このスキルから変更しない。
 
 ## 蓄積 insights 参照（lever=thumbnail）
 

@@ -13,9 +13,11 @@ from types import SimpleNamespace
 import pytest
 
 from tests.helpers.paths import REPO_ROOT
+from youtube_automation.domains.skills.inventory import SkillInventory
 
 ROOT = REPO_ROOT
 SCRIPT = ROOT / ".claude/skills/thumbnail-iterate/references/thumbnail-iterate-state.py"
+THUMBNAIL_TEST_HISTORY = "collections/<id>/20-documentation/thumbnail-test-history.json"
 
 
 def _load_module():
@@ -312,12 +314,11 @@ def test_promote_copy_failure_preserves_run_and_removes_temporary_artifact(
 def test_skill_docs_define_routing_thresholds_and_champion_contract() -> None:
     iterate = (ROOT / ".claude/skills/thumbnail-iterate/SKILL.md").read_text()
     thumbnail = (ROOT / ".claude/skills/thumbnail/SKILL.md").read_text()
-    thumbnail_test = (ROOT / ".claude/skills/thumbnail-test/SKILL.md").read_text()
 
     for phrase in (
         "1.20",
         "50%",
-        "/thumbnail-test",
+        "/thumbnail --test",
         "最大 3",
         "champion.json",
         "機械的に合成",
@@ -327,4 +328,22 @@ def test_skill_docs_define_routing_thresholds_and_champion_contract() -> None:
         assert phrase in iterate
     assert "/thumbnail-iterate" in thumbnail
     assert "champion.json" in thumbnail
-    assert "/thumbnail-iterate" in thumbnail_test
+
+
+def test_thumbnail_test_is_reachable_from_the_thumbnail_mode_dispatch() -> None:
+    inventory = SkillInventory(ROOT)
+    mode_dispatch = inventory.section("thumbnail", "## モード判定")
+
+    assert "| `--test` | `references/test.md` |" in mode_dispatch
+    assert inventory.resolve_reference("thumbnail", "references/test.md").is_file()
+
+
+def test_thumbnail_test_history_has_two_declared_writers() -> None:
+    inventory = SkillInventory(ROOT)
+    writers = {
+        skill_dir.name
+        for skill_dir in inventory.skill_directories()
+        if THUMBNAIL_TEST_HISTORY in inventory.artifacts(skill_dir.name).writes
+    }
+
+    assert writers == {"thumbnail", "thumbnail-iterate"}
