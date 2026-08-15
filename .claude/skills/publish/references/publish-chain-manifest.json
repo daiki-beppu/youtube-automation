@@ -35,6 +35,23 @@
       "idempotency": {
         "script": "references/publish-chain-state.py"
       }
+    },
+    {
+      "id": "community",
+      "skill": "publish",
+      "prerequisiteArtifacts": [
+        "collections/<id>/workflow-state.json::upload.video_id"
+      ],
+      "outputArtifacts": [
+        "collections/<id>/20-documentation/community-post.txt"
+      ],
+      "approvalGate": {
+        "skip": true,
+        "configPath": "workflow.post-publish.skip_approvals.community-post"
+      },
+      "idempotency": {
+        "script": "references/publish-chain-state.py"
+      }
     }
   ]
 }

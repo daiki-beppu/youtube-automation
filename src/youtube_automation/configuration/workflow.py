@@ -115,7 +115,7 @@ class PostPublish:
     """公開後チェーン設定.
 
     `configured` は `workflow.json` に `workflow.post-publish` が明示されたかを示す。
-    未設定時は従来の `/community-post` 案内だけを維持する。
+    未設定時は従来相当の `/publish --community` 案内だけを維持する。
     """
 
     configured: bool = False

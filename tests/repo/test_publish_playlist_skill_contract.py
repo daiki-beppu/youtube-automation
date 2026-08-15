@@ -27,7 +27,7 @@ def test_publish_owns_playlist_mode_and_closed_references() -> None:
 def test_publish_chain_runs_playlist_before_upload() -> None:
     manifest = json.loads((PUBLISH / "references" / "publish-chain-manifest.json").read_text(encoding="utf-8"))
 
-    assert [step["id"] for step in manifest["steps"]] == ["playlist", "upload"]
+    assert [step["id"] for step in manifest["steps"][:2]] == ["playlist", "upload"]
     playlist = manifest["steps"][0]
     assert playlist == {
         "id": "playlist",

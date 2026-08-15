@@ -3,7 +3,7 @@
   "steps": [
     {
       "id": "community-post",
-      "skill": "community-post",
+      "skill": "publish",
       "prerequisiteArtifacts": ["collections/live/*/workflow-state.json"],
       "outputArtifacts": ["collections/live/*/20-documentation/community-post.txt"],
       "approvalGate": {

@@ -77,6 +77,7 @@ _LEGACY_SKILL_CONFIG_ALIASES: Final[frozenset[str]] = frozenset({"postmortem"})
 _MOVED_SKILL_CONFIG_DEFAULTS: Final[dict[str, Path]] = {
     "benchmark": Path("channel-research", "config.default.yaml"),
     "collection-ideate": Path("wf-new", "references", "collection-ideate.config.default.yaml"),
+    "community-post": Path("publish", "config.default.yaml"),
     "discover-competitors": Path("channel-research", "config.default.yaml"),
     "loop-video": Path("thumbnail", "config.default.yaml"),
     "lyria": Path("music", "config.default.yaml"),
@@ -89,6 +90,7 @@ _MOVED_SKILL_CONFIG_DEFAULTS: Final[dict[str, Path]] = {
 
 _MOVED_SKILL_CONFIG_SECTIONS: Final[dict[str, tuple[str, ...]]] = {
     "benchmark": ("benchmark",),
+    "community-post": ("community",),
     "discover-competitors": ("discover",),
     "loop-video": ("loop",),
     "lyria": ("generate", "lyria"),

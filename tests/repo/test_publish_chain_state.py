@@ -117,3 +117,38 @@ def test_upload_blocks_on_invalid_upload_state(tmp_path: Path) -> None:
     assert code == module.EXIT_BLOCKED
     assert result["decision"] == "blocked"
     assert result["reason"] == "upload_state_invalid"
+
+
+def test_community_runs_when_post_text_is_missing(tmp_path: Path) -> None:
+    module = _module()
+    collection = _collection(tmp_path, {"video_id": "youtube-id"})
+
+    code, result = module.evaluate(collection, "community")
+
+    assert code == module.EXIT_RUN
+    assert result["decision"] == "run"
+    assert result["reason"] == "community_post_missing"
+
+
+def test_community_skips_when_post_text_exists(tmp_path: Path) -> None:
+    module = _module()
+    collection = _collection(tmp_path, {"video_id": "youtube-id"})
+    documentation = collection / "20-documentation"
+    documentation.mkdir()
+    (documentation / "community-post.txt").write_text("Ready", encoding="utf-8")
+
+    code, result = module.evaluate(collection, "community")
+
+    assert code == module.EXIT_SKIP
+    assert result["decision"] == "skip"
+    assert result["artifacts"] == ["20-documentation/community-post.txt"]
+
+
+def test_community_blocks_until_upload_is_recorded(tmp_path: Path) -> None:
+    module = _module()
+    collection = _collection(tmp_path, {"video_id": None})
+
+    code, result = module.evaluate(collection, "community")
+
+    assert code == module.EXIT_BLOCKED
+    assert result["reason"] == "video_id_missing"

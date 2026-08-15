@@ -56,7 +56,7 @@ def test_publish_chain_manifest_keeps_upload_approval_gate() -> None:
 def test_publish_default_config_namespaces_upload_mode() -> None:
     config = yaml.safe_load((PUBLISH / "config.default.yaml").read_text(encoding="utf-8"))
 
-    assert set(config) == {"upload"}
+    assert "upload" in config
     assert config["upload"]["preflight"]["master_video_globs"][0] == "01-master/*.mp4"
 
 

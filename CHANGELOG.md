@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(skills)`: `/publish --community` に旧 `/community-post` の固定テンプレ保存・クリップボードコピー・Studio 起動契約を統合する。chain を `playlist` → `upload` → `community` へ拡張し、post-publish の承認設定と旧 override 互換を維持したまま、旧 skill directory と利用者導線・配布・site 契約を更新する（#3843）。
+
 - `feat(skills)`: `/publish --playlist` に旧 `/playlist` の状態確認・初期化・割り当て・cleanup 契約を統合する。chain を `playlist` → `upload` へ拡張し、playlist 作成の dry-run・明示承認を維持したまま、旧 skill directory と利用者導線・配布・site 契約を更新する（#3842）。
 
 - `feat(skills)`: `/publish --upload` を新設し、旧 `/video-upload` の collection / release 自動分岐、公開承認ゲート、post-publish 委譲を 1-step chain へ統合する。mode 別 config、旧 override 互換と `video-upload.yaml` → `publish.yaml::upload` の明示 migration を追加し、旧 skill directory と利用者導線・配布・site 契約を更新する（#3841）。

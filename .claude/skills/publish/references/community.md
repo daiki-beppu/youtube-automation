@@ -1,8 +1,4 @@
----
-name: community-post
-purpose: 公開する
-description: "Use when コミュニティ投稿テキスト生成から Studio 起動まで単独実行するとき。「コミュニティ投稿」「投稿準備」で発動。公開後 3 処理を一括実行する場合は /post-publish、JSON バッチ生成は /community-draft を使う"
----
+# Community mode
 
 ## 前後工程
 
@@ -13,7 +9,7 @@ description: "Use when コミュニティ投稿テキスト生成から Studio �
 ## 成果物
 
 - `書き込む`: `なし`
-- `読み込む`: `config/skills/community-post.yaml`, `collections/<id>/workflow-state.json`
+- `読み込む`: `config/skills/publish.yaml::community`, `collections/<id>/workflow-state.json`
 
 ## Overview
 
@@ -31,10 +27,10 @@ Step 6 のユーザー案内（クリップボードコピー済み + Studio で
 
 以下を deep-merge した値を設定として使う。
 
-1. `.claude/skills/community-post/config.default.yaml`
-2. `config/skills/community-post.yaml`（存在する場合）
+1. `.claude/skills/publish/config.default.yaml::community`
+2. `config/skills/publish.yaml::community`（存在する場合）
 
-読み込み後は `youtube_automation.configuration.skills.load_skill_config("community-post")` と同じ順序で default と任意 override を確認する。ただし、この skill の `config.default.yaml` は既存の skill-local raw JSON 例外を明示するためのプレースホルダであり、投稿本文・Studio URL の実データには使わない。実データは必ず `config/channel/community.json` を読む。存在しない override は未設定として扱い、勝手に作成しない。
+読み込み後は `youtube_automation.configuration.skills.load_skill_config("publish")["community"]` と同じ順序で default と任意 override を確認する。旧 `community-post.yaml` は `yt-skills migrate-config` で `publish.yaml::community` へ移行でき、移行前も互換 loader で同じ値を読む。ただし、この community 節は既存の skill-local raw JSON 例外を明示するためのプレースホルダであり、投稿本文・Studio URL の実データには使わない。実データは必ず `config/channel/community.json` を読む。存在しない override は未設定として扱い、勝手に作成しない。
 
 ## 前提
 
@@ -49,7 +45,7 @@ Step 6 のユーザー案内（クリップボードコピー済み + Studio で
 - **macOS 専用**: `pbcopy` / `open` を使用。cross-platform 化は YAGNI で見送り（follow-up 候補）。失敗時は stdout フォールバックで運用継続できるようにする。
 - **YouTube Data API にコミュニティ投稿作成エンドポイントは存在しない**: テキスト準備と Studio 起動までを自動化し、添付・投稿は Studio 上で手動。
 - **完全固定テンプレ運用**: バリエーション / 多言語 / Studio 自動入力 / 動画 URL 埋め込みは Non-goals。テンプレ本文に変数展開は行わない（ブランドボイスの反復刷り込みが狙い）。
-- **設定アクセス**: 本スキルでは `config/channel/community.json` を skill-local raw JSON 例外として `python3 -c "import json; ..."` で直接読む。`configuration.load_config()` は現時点で `community` section を持たないため、共通 loader へ統合するかは別タスクで判断する。`.claude/skills/community-post/config.default.yaml` と `config/skills/community-post.yaml` は gate で Read するが、`template` / `studio_url` の fallback 元としては使わない。
+- **設定アクセス**: 本 mode では `config/channel/community.json` を skill-local raw JSON 例外として `python3 -c "import json; ..."` で直接読む。`configuration.load_config()` は現時点で `community` section を持たないため、共通 loader へ統合するかは別タスクで判断する。`.claude/skills/publish/config.default.yaml::community` と `config/skills/publish.yaml::community` は gate で Read するが、`template` / `studio_url` の fallback 元としては使わない。
 
 ## When to Use
 
@@ -61,9 +57,9 @@ Step 6 のユーザー案内（クリップボードコピー済み + Studio で
 
 | 引数 | 説明 | 例 |
 |------|------|-----|
-| 動画 URL | テキスト生成のみ（コレクション特定不可なので保存は省略） | `/community-post https://youtu.be/abc123` |
-| コレクションパス | テキスト生成 + `20-documentation/community-post.txt` 保存 | `/community-post collections/live/20260511-xxx` |
-| 引数なし | `collections/live/` 配下から最新（`YYYYMMDD-*` の辞書順最大）を自動検出 | `/community-post` |
+| 動画 URL | テキスト生成のみ（コレクション特定不可なので保存は省略） | `/publish --community https://youtu.be/abc123` |
+| コレクションパス | テキスト生成 + `20-documentation/community-post.txt` 保存 | `/publish --community collections/live/20260511-xxx` |
+| 引数なし | `collections/live/` 配下から最新（`YYYYMMDD-*` の辞書順最大）を自動検出 | `/publish --community` |
 
 ## Instructions
 
@@ -93,7 +89,7 @@ fi
 
 ### Step 2: テンプレ読み込み
 
-`config/channel/community.json` から `template` と `studio_url` を読み込む。`config.default.yaml` や `config/skills/community-post.yaml` に同名キーがあっても、この raw JSON 例外では fallback や merge 元にしない。
+`config/channel/community.json` から `template` と `studio_url` を読み込む。`config.default.yaml::community` や `config/skills/publish.yaml::community` に同名キーがあっても、この raw JSON 例外では fallback や merge 元にしない。
 
 ```bash
 TEMPLATE=$(python3 -c "import json; print(json.load(open('config/channel/community.json'))['template'])")
@@ -160,3 +156,4 @@ open "$STUDIO_URL"
 - `/publish --upload` — アップロード完了後、設定済みなら `/post-publish`、未設定なら本スキルを案内する
 - `/post-publish` — 公開後チェーンから対象 collection を引き継いで本スキルを呼び出す
 - `/publish --playlist` — プレイリスト assign は別経路
+- `/community-draft` — JSON バッチ生成。後続段で `--community --batch` に統合予定
