@@ -200,6 +200,6 @@ def test_child_skills_support_chain_and_standalone_invocation() -> None:
         assert "/post-publish" in text
         assert "単独" in text
 
-    upload = (ROOT / ".claude" / "skills" / "video-upload" / "SKILL.md").read_text(encoding="utf-8")
+    upload = (ROOT / ".claude" / "skills" / "publish" / "references" / "upload.md").read_text(encoding="utf-8")
     assert "workflow.post_publish.configured" in upload
     assert "/post-publish" in upload

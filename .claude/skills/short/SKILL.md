@@ -7,7 +7,7 @@ description: "Use when collection 型（BGM テイスター）または release 
 ## 前後工程
 
 - `前工程`: `/setup`
-- `後工程`: `/video-upload`
+- `後工程`: `/publish --upload`
 - `委譲先`: `なし`
 
 ## 成果物
@@ -79,7 +79,7 @@ generation = load_skill_config("short")[content_type]
 - `config.shorts.enabled == true`
 - 型別 reference に記載した対象素材が存在する
 
-いずれか欠ける場合は早期に止めて該当 skill / config 更新を案内する（`/setup --import` / `/setup` / `/video-upload`）。
+いずれか欠ける場合は早期に止めて該当 skill / config 更新を案内する（`/setup --import` / `/setup` / `/publish --upload`）。
 
 ## Quick Reference
 

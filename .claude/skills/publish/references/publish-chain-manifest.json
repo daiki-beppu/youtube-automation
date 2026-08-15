@@ -1,0 +1,24 @@
+{
+  "chainId": "publish",
+  "steps": [
+    {
+      "id": "upload",
+      "skill": "publish",
+      "prerequisiteArtifacts": [
+        "collections/<id>/01-master/*.mp4",
+        "collections/<id>/20-documentation/descriptions.md"
+      ],
+      "outputArtifacts": [
+        "collections/<id>/20-documentation/upload_tracking.json",
+        "collections/<id>/workflow-state.json::upload.video_id"
+      ],
+      "approvalGate": {
+        "skip": false,
+        "configPath": "workflow.wf_next.skip_upload_approval"
+      },
+      "idempotency": {
+        "script": "references/publish-chain-state.py"
+      }
+    }
+  ]
+}

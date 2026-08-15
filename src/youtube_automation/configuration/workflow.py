@@ -28,7 +28,7 @@ class WfNext:
       確定前に skill 側 (`/wf-next`) がユーザー承認を取りに行く。
       旧キー `approval_gates.audio`（true=承認する）は廃止されており、loader が拒否する。
     - `skip_upload_approval`: `True`（既定）のとき、`mastered` フェーズ 3-B の
-      アップロード承認ゲートを設けず自動進行する。`False` にすると `/video-upload`
+      アップロード承認ゲートを設けず自動進行する。`False` にすると `/publish --upload`
       実行直前にユーザー承認を取りに行う。旧キー `approval_gates.upload` も廃止されており、loader が拒否する。
     - `skip_manual_mastering`: `True` のとき、`prepared` フェーズ 2-B（マスター音源検出）で
       `01-master/` に raw master と別の最終マスター候補が見つからなくても、

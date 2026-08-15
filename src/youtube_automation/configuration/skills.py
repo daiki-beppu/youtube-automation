@@ -57,6 +57,7 @@ SKILL_ONLY_CONFIG_KEYS: Final[frozenset[str]] = frozenset(
         "live-clean",
         "lyria",
         "music.lyric",
+        "publish",
         "short",
         "suno-lyric",
         "video-analyze",
@@ -79,6 +80,7 @@ _MOVED_SKILL_CONFIG_DEFAULTS: Final[dict[str, Path]] = {
     "loop-video": Path("thumbnail", "config.default.yaml"),
     "suno": Path("music", "config.default.yaml"),
     "suno-lyric": Path("music", "config.default.yaml"),
+    "video-upload": Path("publish", "config.default.yaml"),
 }
 
 _MOVED_SKILL_CONFIG_SECTIONS: Final[dict[str, str]] = {
@@ -87,6 +89,7 @@ _MOVED_SKILL_CONFIG_SECTIONS: Final[dict[str, str]] = {
     "loop-video": "loop",
     "suno": "prompt",
     "suno-lyric": "lyric",
+    "video-upload": "upload",
 }
 
 # 名前空間移行後も、明示 migration 前の下流 override を同じ実行経路で読む。

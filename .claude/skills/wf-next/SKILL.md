@@ -8,7 +8,7 @@ description: "Use when 既存コレクション（collections/planning/）を一
 
 - `前工程`: `/wf-new`, `/wf-new`
 - `後工程`: `/analytics`, `/flop-analysis`
-- `委譲先`: `/masterup`, `/lyria`, `/videoup`, `/video-description`, `/playlist`, `/video-upload`
+- `委譲先`: `/masterup`, `/lyria`, `/videoup`, `/video-description`, `/playlist`, `/publish --upload`
 
 ## 成果物
 
@@ -67,7 +67,7 @@ description: "Use when 既存コレクション（collections/planning/）を一
 ```
 
 - `skip_audio_approval` (default `true`): `false` にすると `prepared` フェーズ 2-B（音源承認ゲート）で、最終マスター候補を検出した時点で承認を取る
-- `skip_upload_approval` (default `true`): `false` にすると `mastered` フェーズ 3-B（アップロード承認ゲート）で、`/video-upload` 実行直前に承認を取る
+- `skip_upload_approval` (default `true`): `false` にすると `mastered` フェーズ 3-B（アップロード承認ゲート）で、`/publish --upload` 実行直前に承認を取る
 - 既定値は両方 `true` で、`workflow.json` に何も書かれていない既存チャンネルは従来通り全自動進行（後方互換）
 - 旧キー `approval_gates.audio` / `approval_gates.upload` は廃止済みで、設定に残っている場合は `ConfigError` で停止する。`skip_audio_approval` / `skip_upload_approval` へ移行する
 - 値の解決は `youtube_automation.configuration.load_config().workflow.wf_next` 経由（`skip_audio_approval` / `skip_upload_approval` / `skip_manual_mastering`。コード側で参照可能）
@@ -215,17 +215,17 @@ status を記録した後は、成功時だけでなく blocked / failed の停�
 3. **アップロード承認ゲート 3-B（`skip_upload_approval = false` のとき）**:
    - 並列 A 完了直後、ユーザーに公開方法を提示する前に必ず `uv run yt-upload-collection --plan [-c <collection-name>]` を実行し、`config/schedule_config.json` / `config/channel/youtube.json` を反映した実際の公開タイミングを確定する
    - plan 結果が `📅 公開設定: 非公開でアップロード（即時公開は行いません）` の場合は、予約設定または YouTube Studio での手動公開を案内する。`📅 公開設定: 限定公開 (unlisted)` / `📅 公開設定: 非公開 (private)` が出た場合は、その公開範囲でアップロードされることを AskUserQuestion の文面に含める。`📅 公開予定: <日時>` が出た場合は「今アップロード → `<日時>` に自動で一般公開」と、実際の予約時刻を AskUserQuestion の文面に含める
-   - `/video-upload` を呼ぶ前に AskUserQuestion で「YouTube にアップロード + live 移行してよいか」を確認する。このとき、plan 結果に基づく公開タイミングまたは公開範囲（非公開アップロード / 限定公開 / 非公開 / 予約公開日時）を必ず明示する
+   - `/publish --upload` を呼ぶ前に AskUserQuestion で「YouTube にアップロード + live 移行してよいか」を確認する。このとき、plan 結果に基づく公開タイミングまたは公開範囲（非公開アップロード / 限定公開 / 非公開 / 予約公開日時）を必ず明示する
    - 承認されたら次ステップへ進む。却下されたら `phase` を `mastered` のままにして停止し、ガイダンス「準備が整ったら `/wf-next` を再実行してください」を表示
    - `skip_upload_approval = true` のときは確認なしでそのまま進む（従来の全自動挙動）
 4. **初投稿プレイリスト初期化**:
    - `config/channel/playlists.json` が存在する場合、Skill `/playlist` で `uv run yt-playlist-status` を実行する
-   - `playlist_id` 未設定の `(未作成)` がある場合は、`uv run yt-playlist-manager --init --dry-run` を表示し、ユーザー確認後に `uv run yt-playlist-manager --init` を実行してから `/video-upload` へ進む
+   - `playlist_id` 未設定の `(未作成)` がある場合は、`uv run yt-playlist-manager --init --dry-run` を表示し、ユーザー確認後に `uv run yt-playlist-manager --init` を実行してから `/publish --upload` へ進む
    - この確認は `skip_upload_approval` とは別の playlist 作成ゲート。`skip_upload_approval = true` でも、YouTube 上の playlist 作成と `config/channel/playlists.json` 書き戻しを伴うため未作成 playlist がある場合は確認を省略しない
-   - ユーザーが playlist 初期化を却下した場合は `/video-upload` を実行せず停止し、`/playlist` で初期化してから `/wf-next` を再実行するよう案内する
-   - これは YouTube 上の playlist 作成と `playlist_id` 書き戻しが目的。初回動画の追加は次の `/video-upload` 内部の自動 assign (`assign_video()`) に任せる
+   - ユーザーが playlist 初期化を却下した場合は `/publish --upload` を実行せず停止し、`/playlist` で初期化してから `/wf-next` を再実行するよう案内する
+   - これは YouTube 上の playlist 作成と `playlist_id` 書き戻しが目的。初回動画の追加は次の `/publish --upload` 内部の自動 assign (`assign_video()`) に任せる
    - `config/channel/playlists.json` が無い、または全 playlist に `playlist_id` がある場合はスキップ
-5. **順次**: Agent ツールで subagent を起動し、対象 collection、動画、thumbnail、description を明示して Skill `/video-upload` の Subagent Contract の `plan` / preflight だけを実行させる。state / tracking 更新と実アップロードは実行させない
+5. **順次**: Agent ツールで subagent を起動し、対象 collection、動画、thumbnail、description を明示して Skill `/publish --upload` の Subagent Contract の `plan` / preflight だけを実行させる。state / tracking 更新と実アップロードは実行させない
    - メインが完了報告の動画・メタデータパスと plan 結果を実ファイルおよび Step 3 の承認済み公開条件と突合する。不整合なら state を更新せず停止する
    - PASS 後、メインが `uv run yt-upload-collection [-c <collection-name>]`（release 型は `uv run yt-upload-auto`）を実行する。実 CLI が upload tracking、state 更新、collection 型の planning → live 移行を一体で行うため、メインは同じ変更を手作業で重ねない
    - 実行後、メインが `20-documentation/upload_tracking.json`、対象動画、移動先 collection の state に記録された `upload.video_id` / `upload.video_url`、`stage: "live"`、`phase: "complete"` を検証する。いずれかが欠落・不整合なら完了扱いにしない
@@ -234,7 +234,7 @@ status を記録した後は、成功時だけでなく blocked / failed の停�
 
 メインが `assets` フラグと実ファイルを突合して未完了ステップを特定し、同じ subagent 委譲から再実行する。
 - `assets.master_video = null` → 並列 A から
-- `upload.video_id = null` → 初投稿プレイリスト初期化ゲート（`uv run yt-playlist-status` → 必要なら `--init --dry-run` → 確認後 `--init`）を通してから `/video-upload` へ進む
+- `upload.video_id = null` → 初投稿プレイリスト初期化ゲート（`uv run yt-playlist-status` → 必要なら `--init --dry-run` → 確認後 `--init`）を通してから `/publish --upload` へ進む
 - `upload.video_id != null` かつ phase / stage / live 移動が未完了 → `20-documentation/upload_tracking.json` が schema v3、全体と Complete Collection の status が `completed`、video ID が state と完全一致する場合だけ、remote upload と playlist assign を skip する。planning 側 collection を同名の `collections/live/` へ移動（同名 live が既にあれば停止）し、移動先 state の `stage: "live"`、`phase: "complete"`、`updated_at` だけを atomic write で補完する。tracking 欠落・不一致なら `upload_state_inconsistent` で停止し、upload を再実行しない
 
 #### `complete` → 完了案内

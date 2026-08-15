@@ -19,7 +19,7 @@ uv run yt-playlist-manager --init
 - [ ] `uv run yt-playlist-status` で `(未作成)` の有無を確認した
 - [ ] `(未作成)` がある場合、`uv run yt-playlist-manager --init --dry-run` の内容を確認した
 - [ ] ユーザー確認後に `uv run yt-playlist-manager --init` を実行し、`playlist_id` が `config/channel/playlists.json` に書き戻された
-- [ ] 初回動画の追加は `/video-upload` 内部の自動 assign に任せる。手動 `--assign` は実行しない
+- [ ] 初回動画の追加は `/publish --upload` 内部の自動 assign に任せる。手動 `--assign` は実行しない
 
 ## コンテンツ品質確認
 

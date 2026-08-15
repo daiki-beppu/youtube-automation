@@ -105,7 +105,7 @@
 │        ↓ no                  ↓                                       │
 │  /collection-ideate ←────────┘              … 分析結果を次企画へ反映
 │        ↓                                                             │
-│  制作（/wf-new → /wf-next → /thumbnail → 公開 /video-upload）        │
+│  制作（/wf-new → /wf-next → /thumbnail → 公開 /publish --upload）    │
 │        ↓                                                             │
 │  公開直後: /playlist・/pinned-comment・/community-post（回遊導線）   │
 │        ↓                                                             │

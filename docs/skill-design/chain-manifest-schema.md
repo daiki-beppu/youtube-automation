@@ -268,7 +268,7 @@ fallback してはならない。chain 固有の運用オプションが必要�
 | 既存キー | schema のフィールド | `/wf-next` 内の対象 | 既定値 |
 |---|---|---|---:|
 | `workflow.wf_next.skip_audio_approval` | `wfNextChannelOverride.skip_audio_approval` → 音源確定 step の `approvalGate.skip` | `prepared` phase 2-B。最終 master 候補を `assets.master_audio` に採用し、`phase: "mastered"` にする直前。 | `true` |
-| `workflow.wf_next.skip_upload_approval` | `wfNextChannelOverride.skip_upload_approval` → upload step の `approvalGate.skip` | `mastered` phase 3-B。`/video-upload` の直前。 | `true` |
+| `workflow.wf_next.skip_upload_approval` | `wfNextChannelOverride.skip_upload_approval` → upload step の `approvalGate.skip` | `mastered` phase 3-B。`/publish --upload` の直前。 | `true` |
 | `workflow.wf_next.approval_gates.{audio,upload}` | 廃止。設定 loader が `ConfigError` を返す | 上記 2 step | — |
 | `workflow.wf_next.skip_manual_mastering` | `wfNextChannelOverride.skip_manual_mastering` | `prepared` phase 2-B で最終候補がないとき、`assets.raw_master` を `assets.master_audio` として直採用するか。 | `false` |
 

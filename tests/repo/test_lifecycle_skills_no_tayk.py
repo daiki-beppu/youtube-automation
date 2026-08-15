@@ -29,7 +29,7 @@ _LIFECYCLE_SKILL_NAMES: Final[tuple[str, ...]] = (
     "suno-helper",
     "masterup",
     "videoup",
-    "video-upload",
+    "publish",
     "thumbnail",
     "video-description",
     "analytics",

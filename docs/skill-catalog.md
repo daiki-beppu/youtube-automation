@@ -49,7 +49,7 @@ PDCA 対応: 準備 = 準備する / Plan = 調べる → 決める / Do = 進�
 - `/pinned-comment` — Use when 新規動画へオーナー固定コメントを自動投稿するとき。
 - `/playlist` — Use when プレイリストの作成・割り当て・確認をするとき。
 - `/post-publish` — Use when 動画公開直後の community-post → pinned-comment → metadata-audit を承認ゲート付きで一括実行・途中再開するとき。
-- `/video-upload` — Use when コレクションの動画または release 型（単曲リリース）の楽曲リリース動画が完成し、YouTubeへのアップロード自動化が必要なとき。
+- `/publish` — Use when 完成した動画を公開工程へ進めるとき。
 
 ## 振り返る
 

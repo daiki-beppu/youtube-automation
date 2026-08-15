@@ -175,7 +175,7 @@ uv run yt-generate-image \
 ```
    決定的合成経路では `variation` の構図・配色を textless 背景候補の生成へ反映し、コピー差分は pattern ごとの `yt-thumbnail-text --title ... --output thumbnail-<name>-v1.jpg` に反映する。`mode: full` 以外では各 pattern で `/thumbnail --compare` と目視確認を行い、個別にユーザー承認を得る。`full` では AskUserQuestion を省略し、期待候補が存在することを検証して自動確定した後、全 pattern を `/thumbnail --compare` へ回す。
 3. `full` 以外では承認済み候補だけを、`full` では存在検証に成功した候補だけを `10-assets/thumbnail-<name>.jpg` へ確定する。全 pattern の承認が揃うまでは `thumbnail.approved` を `true` にしない（`full` では全 pattern の自動確定完了を承認完了として扱う）。
-4. 全 pattern 確定後、先頭 pattern を互換出力へコピーする（例: `cmp thumbnail-a.jpg thumbnail.jpg` が成功する内容にする）。`/video-upload` は従来どおり `thumbnail.jpg` を使うため変更不要。
+4. 全 pattern 確定後、先頭 pattern を互換出力へコピーする（例: `cmp thumbnail-a.jpg thumbnail.jpg` が成功する内容にする）。`/publish --upload` は従来どおり `thumbnail.jpg` を使うため変更不要。
 5. `20-documentation/thumbnail-prompts.md` の `A/B Test Pattern Prompts` に、全 pattern の name / final output / variation / API へ渡した最終プロンプトを保存する。
 6. YouTube Studio で対象動画のサムネイル編集を開き、**Test & compare** から最大 3 枚の `thumbnail-<name>.jpg` を手動登録する。公式 API はないため、このスキルから自動登録しない。
 ### thumbnail-text-profile 適用（#1907）

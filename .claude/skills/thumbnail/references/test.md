@@ -40,7 +40,7 @@
 - **設計モード**: 結果値が未提示。Step 2〜4 を行う。
 - **結果記録モード**: Studio の結果ラベルと各候補の watch time share が提示済み。Step 2 で active design の固定済み対応を検証後、Step 5 を行う。
 
-`workflow-state.json` から `upload.video_id` を読む。欠落または `null` ならアップロード済み動画を特定できないため、設計表までは提示してよいが Studio 設定手順へ進まず `/video-upload` 後の再実行を案内して停止する。この値を対象コレクションの記録用 `video_id` として保持し、Step 5 で唯一の正とする。
+`workflow-state.json` から `upload.video_id` を読む。欠落または `null` ならアップロード済み動画を特定できないため、設計表までは提示してよいが Studio 設定手順へ進まず `/publish --upload` 後の再実行を案内して停止する。この値を対象コレクションの記録用 `video_id` として保持し、Step 5 で唯一の正とする。
 
 `20-documentation/thumbnail-test-active.json` が存在する場合は `references/history-schema.md` の active design 検証を行う。設計モードでは進行中テストとして内容を表示し、再選定・上書きせず結果確認後の再実行を案内して停止する。結果記録モードでは active design が存在しなければ、Studio に渡した対応を確定できないため履歴 JSON を変更せず停止する。
 

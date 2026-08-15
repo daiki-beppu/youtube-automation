@@ -6,7 +6,7 @@ description: "Use when ローカル descriptions.md と YouTube メタデータ�
 
 ## 前後工程
 
-- `前工程`: `/video-upload`, `/post-publish`
+- `前工程`: `/publish --upload`, `/post-publish`
 - `後工程`: `/video-description`
 - `委譲先`: `なし`
 
@@ -45,7 +45,7 @@ description: "Use when ローカル descriptions.md と YouTube メタデータ�
 以下を確認し、満たさなければ前工程を案内して停止する:
 
 - `config/channel/` が存在すること（`load_config()` でロード可能）。存在しない場合は `/setup --import` を案内して停止する
-- `collections/live/` 配下に監査対象のコレクション（`20-documentation/descriptions.md` + `workflow-state.json`）が 1 件以上存在すること。存在しない場合は監査対象なしとして終了し、先に `/video-upload` での公開を案内する
+- `collections/live/` 配下に監査対象のコレクション（`20-documentation/descriptions.md` + `workflow-state.json`）が 1 件以上存在すること。存在しない場合は監査対象なしとして終了し、先に `/publish --upload` での公開を案内する
 - remote 監査（既定および `--remote`）は `auth/token.json` の OAuth 認証が必要。未認証なら `/setup` を案内するか、API 不要の `--local` に切り替える
 
 ## When to Use
@@ -121,7 +121,7 @@ GitHub Actions や cron で常時監視する場合は `--strict` を付ける�
 
 ## Cross References
 
-- `/video-upload` — 前工程。YouTube へのアップロード + live 移行（本スキルはその後の反映確認に使う）
+- `/publish --upload` — 前工程。YouTube へのアップロード + live 移行（本スキルはその後の反映確認に使う）
 - `/post-publish` — 公開後チェーンから本スキルを呼び出す。単独監査は従来どおり本スキルを直接使う
 - `/video-description` — descriptions.md の生成・更新（修正の入口）
 - `yt-bulk-update-synthetic-media` — 公開済み動画の `status.containsSyntheticMedia` が `false` のまま残っている場合に `True` へ一括是正する（#606、#603 是正前のアップロード分の遡及）

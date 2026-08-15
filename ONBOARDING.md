@@ -205,7 +205,7 @@ uv run yt-init-collection "Pilot Direction Check" "pilot-direction-check" --trac
   ↓
 /video-description → /alignment-check → 概要欄生成 + 整合性監査
   ↓
-/video-upload                    → YouTube アップロード + live 移行
+/publish --upload                → YouTube アップロード + live 移行
 ```
 
 `/wf-next` を呼べば現在の進捗を読んで次の必要工程を自動で判定して案内する。
