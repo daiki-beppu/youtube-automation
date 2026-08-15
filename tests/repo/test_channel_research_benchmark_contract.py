@@ -34,10 +34,10 @@ def test_channel_research_replaces_legacy_skills_and_exposes_two_modes() -> None
     assert "references/discover.md" in skill
 
 
-def test_chain_manifest_has_only_benchmark_step_and_complete_schema() -> None:
+def test_chain_manifest_has_three_steps_and_complete_schema() -> None:
     manifest = json.loads((SKILL_DIR / "references/channel-research-chain-manifest.json").read_text())
     assert manifest["chainId"] == "channel-research"
-    assert [step["id"] for step in manifest["steps"]] == ["benchmark", "discover"]
+    assert [step["id"] for step in manifest["steps"]] == ["benchmark", "discover", "market"]
     step = manifest["steps"][0]
     assert set(step) == {
         "id",
@@ -55,6 +55,13 @@ def test_chain_manifest_has_only_benchmark_step_and_complete_schema() -> None:
     assert discover["skill"] == "channel-research"
     assert discover["prerequisiteArtifacts"] == ["docs/benchmarks/*.md"]
     assert discover["outputArtifacts"] == ["research/*-discovery.md", "research/*-discovery.csv"]
+    market = manifest["steps"][2]
+    assert market["prerequisiteArtifacts"] == []
+    assert market["outputArtifacts"] == [
+        "docs/research/market-*.md",
+        "docs/channel-research.md",
+        "docs/benchmarks/thumbnail-text-profile.md",
+    ]
 
 
 def test_benchmark_collector_has_one_skill_reference_owner() -> None:

@@ -7,9 +7,9 @@
 標準フローでは TTP 対象以外の競合発掘や本格ベンチマーク収集を実行しない。追加調査が必要になった時点で目的を確認し、次の責務へ委譲する。
 
 - 競合候補を広げる場合は `/channel-research --discover` を使う。
-- 現行 TTP の入替候補やニッチ仮説を外部根拠と同じ評価軸で比較する場合は `/market-research` を使う。既定は会話内レポートで、TTP や config を変更しない。
+- 現行 TTP の入替候補やニッチ仮説を外部根拠と同じ評価軸で比較する場合は `/channel-research --market` を使う。既定は会話内レポートで、TTP や config を変更しない。
 - 承認済み TTP 対象の追加動画データやサムネイルを再収集する場合は `/channel-research --benchmark` を使う。Step 5.5 の初回 duration 算出では必須とする。
-- 収集済みデータから方向性を深掘りする場合は `/channel-new` 分析モードを使う。
+- 収集済みデータから方向性を深掘りする場合は `/channel-research --market` を使う。
 
 `/viewer-voice` は任意の追加調査に分類せず、Step 7 の必須前工程として扱う。
 

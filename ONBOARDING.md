@@ -110,7 +110,7 @@ uv run yt-doctor --json
 /channel-research --discover → 追加競合候補の発掘
 /channel-research --benchmark → 承認済み TTP 対象の動画データ収集
 /viewer-voice         → 公開後のコメント再分析
-/channel-new 分析モード → /channel-research --benchmark / /viewer-voice 後の詳細分析
+/channel-research --market → /channel-research --benchmark / /viewer-voice 後の詳細分析
 /channel-new 方向性検討モード → 方向性ブレスト（差別化決定）
 /setup --regenerate   → config 再生成 / branding 再反映
 yt-skills sync                # Claude Code スキル群を新リポへ展開
@@ -127,13 +127,13 @@ yt-skills sync --asset claude-md   # BGM 運営方針テンプレを新リポへ
 
 詳細は [`/channel-new` skill](./.claude/skills/channel-new/SKILL.md)。
 
-### 3.2 任意: `/channel-new` 分析モード（ベンチマーク分析）
+### 3.2 任意: `/channel-research --market`（ベンチマーク分析）
 
 `/channel-research --benchmark` や `/viewer-voice` で集めたデータを徹底分析。タイトル構造・サムネ構図・動画尺・投稿頻度・コメント語彙の **型** を抽出する。
 
 ### 3.3 任意: `/channel-new` 方向性検討モード（方向性決定）
 
-`/setup --channel` が保存した `docs/channel/ttp-seed-confirmation.md` と `docs/channel/competitor-branding-snapshot.json`、または `/channel-new` 分析モードの結果をもとに、対話で「このチャンネルは何で勝つか」を決める。コメント分析が必要な場合は `/viewer-voice` を先に実行してターゲット層と利用シーンを言語化する。
+`/setup --channel` が保存した `docs/channel/ttp-seed-confirmation.md` と `docs/channel/competitor-branding-snapshot.json`、または `/channel-research --market` の結果をもとに、対話で「このチャンネルは何で勝つか」を決める。コメント分析が必要な場合は `/viewer-voice` を先に実行してターゲット層と利用シーンを言語化する。
 
 ### 3.4 任意: `/setup --regenerate`（テクニカルセットアップ）
 

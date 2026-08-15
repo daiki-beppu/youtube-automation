@@ -8,7 +8,7 @@ PDCA 対応: 準備 = 準備する / Plan = 調べる → 決める / Do = 進�
 
 - `/automation-release` — Use when 本リポジトリの新規リリースを作成するとき。
 - `/automation-update` — Use when 下流リポジトリで automation を最新リリースへ追従させるとき。
-- `/channel-new` — Use when 収集済み benchmark/comments からチャンネル全体を分析するとき、または方向性を再検討するとき。
+- `/channel-new` — Use when チャンネルの方向性を再検討するとき。
 - `/ext-install` — Use when Chrome 拡張（suno-helper / distrokid-helper / community-helper）のインストール・更新をするとき。
 - `/setup` — Use when ツール導入と GCP / OAuth の設定、新規 YouTube チャンネル開設、既存チャンネル取り込み、config 再生成、または YouTube 側設定同期を行うとき。
 - `/shadcn` — Manages shadcn components and projects — adding, searching, fixing, debugging, styling, and composing UI, including chat interfaces. Provides project context, component docs, and usage examples. Applies when working with shadcn/ui, component registries, presets, --preset codes, or any project with a components.json file. Also triggers for 'shadcn init', 'create an app with --preset', or 'switch to --preset'.
@@ -16,7 +16,6 @@ PDCA 対応: 準備 = 準備する / Plan = 調べる → 決める / Do = 進�
 ## 調べる
 
 - `/channel-research` — Use when チャンネル調査を状態判定付きで一括実行または一段だけ実行するとき。
-- `/market-research` — Use when 既存チャンネルから任意に市場を調べ、TTP 入替候補やニッチ仮説を根拠付きで比較するとき。
 - `/thumbnail-research` — Use when 収集済み競合サムネイルだけを再生数上位群 vs 下位群で深掘りし、勝ちパターンを抽出するとき。
 - `/viewer-voice` — Use when 競合コメントの収集・分析で視聴者インサイトを抽出するとき。
 

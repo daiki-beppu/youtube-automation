@@ -1,4 +1,4 @@
-"""Deterministic classification and persistence contract for /market-research."""
+"""Deterministic classification and persistence contract for channel-research market mode."""
 
 from __future__ import annotations
 
@@ -83,7 +83,7 @@ def deliver_report(
 def route_for(intent: Literal["market-comparison", "discover", "analyze-collected"]) -> str:
     """Keep market comparison, discovery, and collected-data analysis distinct."""
     return {
-        "market-comparison": "market-research",
+        "market-comparison": "channel-research --market",
         "discover": "channel-research --discover",
-        "analyze-collected": "channel-new",
+        "analyze-collected": "channel-research --market",
     }[intent]

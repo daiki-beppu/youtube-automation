@@ -1,4 +1,4 @@
-"""Executable /market-research classification and persistence contracts."""
+"""Executable ``/channel-research --market`` contracts."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ import pytest
 from tests.helpers.paths import REPO_ROOT
 
 ROOT = REPO_ROOT
-SCRIPT = ROOT / ".claude" / "skills" / "market-research" / "references" / "market_research_contract.py"
+SCRIPT = ROOT / ".claude" / "skills" / "channel-research" / "references" / "market_research_contract.py"
 
 
 def _load_contract():
@@ -118,7 +118,7 @@ def test_dry_run_with_insufficient_evidence_is_fail_closed() -> None:
     )
 
 
-def test_channel_new_and_discovery_keep_distinct_routes() -> None:
-    assert contract.route_for("market-comparison") == "market-research"
+def test_market_branches_share_one_public_route_and_discovery_stays_distinct() -> None:
+    assert contract.route_for("market-comparison") == "channel-research --market"
     assert contract.route_for("discover") == "channel-research --discover"
-    assert contract.route_for("analyze-collected") == "channel-new"
+    assert contract.route_for("analyze-collected") == "channel-research --market"

@@ -231,7 +231,8 @@ def test_setup_owns_import_regenerate_and_push_execution_contracts() -> None:
     assert "Step R1" in regenerated and "Step R8" in regenerated
     assert "yt-channel-settings push --apply" in pushed
     assert "ユーザー承認後だけ実反映" in pushed
-    assert "分析モードと方向性検討モードは `/channel-new`" in setup
+    assert "市場・収集済みデータ分析は `/channel-research --market`" in setup
+    assert "方向性検討は `/channel-new`" in setup
 
 
 def test_setup_chain_state_runs_unresolved_tool_and_skips_ready_tool(tmp_path: Path) -> None:

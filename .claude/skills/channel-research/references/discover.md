@@ -198,4 +198,4 @@ subagent へは次を具体値で渡す:
 
 - `/setup --channel`: TTP 対象確認と初期 config 生成。Step 6 で追加競合発掘が必要な場合に本スキルへ委譲
 - `/channel-research --benchmark`: 発掘済みチャンネルのベンチマークデータ収集
-- `/channel-new` 分析モード: 収集データの徹底分析
+- `/channel-research --market`: 収集データの徹底分析

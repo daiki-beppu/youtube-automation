@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(skills)`: `/channel-research --market` を追加し、旧 `/market-research` の市場比較と `/channel-new` 分析モードの収集済みデータ分析を成果物に応じた内部自動分岐へ統合する。旧 market skill と `analysis-mode.md` は削除し、`/channel-new` は方向性検討専用として維持する（#3817）。
+
 - `feat(skills)`: 旧 `/discover-competitors` の競合発掘・ランキング契約を `/channel-research --discover` へ統合し、benchmark 前提の chain state と Markdown/CSV ペアの冪等判定を追加する。下流 `config/skills/discover-competitors.yaml` と同名 loader key は互換維持する（#3816）。
 
 - `feat(skills)`: `/channel-research` を新設し、旧 `/benchmark` の収集契約を排他 `--benchmark` mode と 1-step chain manifest へ移設する。collector の skill reference は新 owner 1 箇所へ集約し、下流 `config/skills/benchmark.yaml` の互換読み込みは維持する（#3815）。

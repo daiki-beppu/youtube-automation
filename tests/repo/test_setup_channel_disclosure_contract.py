@@ -17,9 +17,9 @@ BOOTSTRAP_REFERENCE_MD = SKILL_DIR / "references" / "new-channel-bootstrap.md"
 TTP_SEED_DURATION_REFERENCE_MD = SKILL_DIR / "references" / "ttp-seed-and-duration.md"
 PERSONA_BRANDING_READINESS_REFERENCE_MD = SKILL_DIR / "references" / "persona-branding-readiness.md"
 CHANNEL_NEW_SKILL_MD = REPO_ROOT / ".claude" / "skills" / "channel-new" / "SKILL.md"
-CHANNEL_NEW_RESIDUAL_SKILL_SHA256 = "0c925fc957a6ee2aa3676b6a8dc179df80e9f1ef4616ee879272924400a557d5"
-CHANNEL_NEW_DESCRIPTION_SHA256 = "6ac621c1d796be7943c9ba2a0e0ff42a17c9ee2baa621770e2b9cb2236da7faa"
-CHANNEL_NEW_ROUTING_SHA256 = "1eef9878b5fa93a85a5985308a1be484b95e071157c355bd584e4f898b63cc60"
+CHANNEL_NEW_RESIDUAL_SKILL_SHA256 = "0080440979d32d893d7c7fe55383fb91dd8c4d936971cfbb2c6cdcf620939b62"
+CHANNEL_NEW_DESCRIPTION_SHA256 = "d473454ede296799118ddbf00a9b5bb3b57544cd873fc6b5ce99d34071cb7716"
+CHANNEL_NEW_ROUTING_SHA256 = "cdbbaee2613c951cc2bf34b3100410494aee268ce4f9351903538fdcce6a9305"
 OPENING_ASSETS = {
     "new-channel-bootstrap.md",
     "ttp-seed-and-duration.md",
@@ -546,6 +546,22 @@ def test_moved_opening_assets_preserve_pre_move_bytes_or_owner_only_semantics() 
             payload = payload.replace(b".claude/skills/setup/references/", b".claude/skills/channel-new/references/")
         if asset in {"ttp-seed-and-duration.md", "persona-branding-readiness.md"}:
             payload = payload.replace(b"/channel-research --discover", b"/discover-competitors")
+        if asset == "ttp-seed-and-duration.md":
+            payload = payload.replace(
+                "/channel-research --market` の".encode(),
+                "/channel-new` 分析モードの".encode(),
+            )
+        if asset == "persona-branding-readiness.md":
+            payload = payload.replace(
+                "/channel-research --market` を使う。既定は".encode(),
+                "/market-research` を使う。既定は".encode(),
+                1,
+            )
+            payload = payload.replace(
+                "/channel-research --market` を使う。".encode(),
+                "/channel-new` 分析モードを使う。".encode(),
+                1,
+            )
         assert sha256(payload).hexdigest() == expected
 
 

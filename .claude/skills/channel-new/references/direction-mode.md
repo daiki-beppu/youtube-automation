@@ -2,7 +2,7 @@
 
 `/channel-new` 方向性検討モードの手順詳細。SKILL.md の「モード判別」で本モードと判定された場合に、このファイルの手順どおりに実行する。
 
-分析モードの分析レポート、または `/setup --channel` が保存した
+`/channel-research --market` の分析レポート、または `/setup --channel` が保存した
 `docs/channel/ttp-seed-confirmation.md` と `docs/channel/competitor-branding-snapshot.json` をもとに、
 ユーザーと対話で新チャンネルの方向性を再検討する。データに基づいた議論を行い、
 決定事項を `docs/channel/channel-direction.md` に保存する。
@@ -28,19 +28,20 @@ YouTube の第三者チャンネル由来データ（description、keywords、lo
 
 上記の入力がすべて欠けている場合は、根拠なしに方向性検討を進めない。不足している入力を明示し、
 `/setup --channel` で TTP seed confirmation / branding snapshot / benchmark.channels を作成するか、
-必要に応じて `/channel-research --benchmark` / `/viewer-voice` / `/channel-new` 分析モードを先に実行するよう案内して停止する。
+必要に応じて `/channel-research --benchmark` / `/viewer-voice` / `/channel-research --market` を先に実行するよう案内して停止する。
 
 - 承認済み TTP 対象の全体像（チャンネル名、登録者数、動画数、直近タイトル）
 - 最も参考になるチャンネル（ロールモデル候補）
 - 転写したい型（タイトル構造、サムネ構図、branding。投稿頻度と動画尺は収集済みデータまたは手動メモがある場合だけ）
 - `data/video_analysis/<slug>/*.json` があれば、競合 BGM 構造（intro / peak / outro 秒）の平均と代表例
-- 後続 `/channel-research --benchmark` / `/viewer-voice` / `/channel-new` 分析モードが必要な未確認事項
+- 後続 `/channel-research --benchmark` / `/viewer-voice` / `/channel-research --market` が必要な未確認事項
 
 ## Step D2: ポジショニング議論
 
 `docs/channel-research.md` がある場合は分析レポートの「推奨事項」をベースに、ない場合は
 `/setup --channel` の TTP seed confirmation と branding snapshot をベースに、ユーザーと以下を議論する。
 **常にデータ根拠を示しながら**議論を進めること。
+各論点は AskUserQuestion で選択肢と根拠を提示し、ユーザーの明示回答を得てから次へ進む。
 
 ### 議論ポイント
 
