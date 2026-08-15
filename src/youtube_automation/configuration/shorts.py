@@ -26,7 +26,7 @@ class ShortsCollection:
 
 @dataclass(frozen=True)
 class ShortsRelease:
-    """release 型（`/short-release`）固有の生成設定."""
+    """release 型（`/short`）固有の生成設定."""
 
     languages: tuple[str, ...] = ("jp", "en")
     start_sec: int = 30

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Mode A (collection 型) — 複数チャプターから一括ショート動画生成
+# content_model.type に従って collection / release のショート動画を生成
 #
 # 素材の優先順位:
 #   1. 10-assets/short-loop.mp4 … Veo 3.1 ループ動画（テキスト焼き込み済み）
@@ -7,7 +7,8 @@
 #   3. 10-assets/loop.mp4 + main.png … 16:9 ループ + drawtext でテキスト重畳
 #
 # 引数:
-#   $1 collection_path
+#   $1 collection_path または release_path
+#   -s <秒> / -t <秒> は release 型のみ（開始位置 / 切り出し長さ）
 #
 # 必須 env:
 #   SHORT_STARTS     チャプター開始秒のスペース区切り（例: "30 3960 6420"）
@@ -22,7 +23,52 @@
 #   SHORT_FONT              drawtext フォント（既定: Palatino.ttc）
 set -euo pipefail
 
-COLLECTION_DIR="${1:?usage: $(basename "$0") <collection_path>}"
+TARGET_DIR="${1:?usage: $(basename "$0") <collection_path|release_path> [-s start_sec] [-t duration_sec]}"
+CONTENT_MODEL="$(uv run python -c 'from youtube_automation.configuration import load_config; print(load_config().youtube.content_model.type)')"
+
+if [[ "$CONTENT_MODEL" == "release" ]]; then
+  shift || true
+  START="30"
+  DUR="40"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -s) START="$2"; shift 2 ;;
+      -t) DUR="$2"; shift 2 ;;
+      *) echo "Unknown option: $1" >&2; exit 1 ;;
+    esac
+  done
+
+  MOTIF="$(basename "$TARGET_DIR" | sed 's/^[0-9]*-//')"
+  found=0
+  for LANG in jp en; do
+    SRC="${TARGET_DIR}/video/${MOTIF}-${LANG}.mp4"
+    OUT="${TARGET_DIR}/video/short-${LANG}.mp4"
+    if [[ ! -f "$SRC" ]]; then
+      echo "skip: ${SRC} not found" >&2
+      continue
+    fi
+    found=1
+    ffmpeg -y -i "$SRC" \
+      -ss "$START" -t "$DUR" \
+      -vf "crop=ih*9/16:ih,scale=1080:1920,fps=30" \
+      -c:v libx264 -preset "${SHORT_PRESET:-slow}" -crf "${SHORT_CRF:-18}" -pix_fmt yuv420p \
+      -c:a aac -b:a "${SHORT_AUDIO_BITRATE:-192k}" \
+      "$OUT"
+    echo "✓ $OUT"
+  done
+  if [[ "$found" -eq 0 ]]; then
+    echo "no release source videos found under ${TARGET_DIR}/video" >&2
+    exit 1
+  fi
+  exit 0
+fi
+
+if [[ "$CONTENT_MODEL" != "collection" ]]; then
+  echo "unsupported content_model.type: $CONTENT_MODEL" >&2
+  exit 2
+fi
+
+COLLECTION_DIR="$TARGET_DIR"
 
 SHORT_LOOP="${COLLECTION_DIR}/10-assets/short-loop.mp4"
 SHORT_PNG="${COLLECTION_DIR}/10-assets/short.png"

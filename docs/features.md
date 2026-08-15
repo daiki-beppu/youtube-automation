@@ -69,8 +69,7 @@ YouTube への公開、視聴者対応、容量整理、コミュニティ投稿
 | /live-clean | live コレクションの大容量メディアを削除してディスク回復 |
 | /community-draft | コミュニティ投稿を config テンプレートから JSON バッチ生成 |
 | /community-post | 動画公開と連動した固定テンプレ投稿（Studio 起動まで） |
-| /short | BGM テイスター（collection 型）チャンネル用 9:16 ショートを生成・投稿 |
-| /short-release | 楽曲リリース（release 型）チャンネル用 JP+EN クリップショート生成 |
+| /short | collection 型の生成・ローカライズ投稿と release 型の JP+EN クリップ生成を設定から自動分岐 |
 | /distrokid-helper | コレクション楽曲を DistroKid 配信用に整備し、Chrome 拡張向けサーバー起動まで実行 |
 
 ## 分析・振り返り

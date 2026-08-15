@@ -5,11 +5,16 @@
 #
 # チャンネル側上書きは config/skills/short.yaml。
 
-# generate-shorts.sh の env デフォルト
-duration_sec: 20          # 1 ショートあたりの尺
-fade_in_sec: 1.0          # フェードイン秒数
-fade_out_sec: 1.5         # フェードアウト秒数
-chapter_offset_sec: 30    # 各チャプター開始からのオフセット秒（Step 3 提案値）
+collection:
+  # generate-shorts.sh の env デフォルト
+  duration_sec: 20          # 1 ショートあたりの尺
+  fade_in_sec: 1.0          # フェードイン秒数
+  fade_out_sec: 1.5         # フェードアウト秒数
+  chapter_offset_sec: 30    # 各チャプター開始からのオフセット秒
+  # drawtext で使うフォントパス（macOS デフォルト）
+  font_path: "/System/Library/Fonts/Palatino.ttc"
 
-# drawtext で使うフォントパス（macOS デフォルト）
-font_path: "/System/Library/Fonts/Palatino.ttc"
+release:
+  crf: 18                   # 画質（小さいほど高品質）
+  preset: slow              # x264 エンコーダプリセット
+  audio_bitrate: "192k"     # AAC ビットレート
