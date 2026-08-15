@@ -7,7 +7,7 @@ description: "Use when プレイリストの作成・割り当て・確認をす
 ## 前後工程
 
 - `前工程`: `/wf-next`
-- `後工程`: `/video-upload`
+- `後工程`: `/publish --upload`
 - `委譲先`: `なし`
 
 ## 成果物
@@ -83,7 +83,7 @@ uv run yt-playlist-manager --init              # 実反映
 
 実行後、`playlists.json` の各エントリに `playlist_id` が書き戻される。
 
-**初投稿前の扱い**: `collections/live/` がまだ空でも `--init` を実行してよい。この場合は未作成プレイリストの作成と `playlist_id` 書き戻しが主目的で、初回動画の追加は後続の `/video-upload` に任せる。collection 型では `/video-upload` 内部の自動 assign (`assign_video()`) が追加を担う。初投稿前に `(未作成)` が残っているとアップロード時の自動 assign がスキップされるため、公開前に必ず初期化する。
+**初投稿前の扱い**: `collections/live/` がまだ空でも `--init` を実行してよい。この場合は未作成プレイリストの作成と `playlist_id` 書き戻しが主目的で、初回動画の追加は後続の `/publish --upload` に任せる。collection 型では `/publish --upload` 内部の自動 assign (`assign_video()`) が追加を担う。初投稿前に `(未作成)` が残っているとアップロード時の自動 assign がスキップされるため、公開前に必ず初期化する。
 
 ### Step 3: 単一動画の追加（運用フェーズ）
 
@@ -97,7 +97,7 @@ uv run yt-playlist-manager --assign <VIDEO_ID> --theme <THEME>
 - マッチするプレイリストキーが返り値として表示される
 - `"all"` プレイリストには末尾追加、それ以外は先頭追加（YouTube 表示順制御）
 
-**自動連携**: `/video-upload` から呼ばれる `collection_uploader` 内部でも同じ `assign_video()` が走るため、通常運用では手動 assign は不要。手動 assign が必要なのは: 過去動画の再割り当て / 新テーマ追加後のレトロフィット / マッチングルール変更後の再同期。
+**自動連携**: `/publish --upload` から呼ばれる `collection_uploader` 内部でも同じ `assign_video()` が走るため、通常運用では手動 assign は不要。手動 assign が必要なのは: 過去動画の再割り当て / 新テーマ追加後のレトロフィット / マッチングルール変更後の再同期。
 
 ### Step 4: 削除動画のクリーンアップ（定期メンテナンス）
 
@@ -118,7 +118,7 @@ uv run yt-playlist-manager --clean-deleted              # 実反映
 
 ## Cross References
 
-- `/video-upload` — アップロード時に内部で `assign_video()` が呼ばれる（手動 assign 不要が基本）
+- `/publish --upload` — アップロード時に内部で `assign_video()` が呼ばれる（手動 assign 不要が基本）
 - `/setup --regenerate` — `playlists.json` の初期定義
 - `config/channel/playlists.json` — Canonical ソース
 - `src/youtube_automation/commands/youtube/playlist_manager.py` — 実装本体

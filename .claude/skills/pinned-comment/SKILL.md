@@ -6,7 +6,7 @@ description: "Use when 新規動画へオーナー固定コメントを自動投
 
 ## 前後工程
 
-- `前工程`: `/video-upload`, `/post-publish`
+- `前工程`: `/publish --upload`, `/post-publish`
 - `後工程`: `なし`
 - `委譲先`: `なし`
 
@@ -119,7 +119,7 @@ uv run yt-pinned-comment --collection collections/live/<latest-dir> --apply --la
 
 ## 運用フロー（推奨）
 
-1. `/video-upload <collection-path>` で動画公開
+1. `/publish --upload <collection-path>` で動画公開
 2. 公開直後に `yt-pinned-comment --collection <path> --dry-run` でプレビュー
 3. テキスト OK なら `--apply` で投稿
 4. Studio UI でピン留め

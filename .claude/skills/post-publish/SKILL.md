@@ -6,7 +6,7 @@ description: "Use when 動画公開直後の community-post → pinned-comment �
 
 ## 前後工程
 
-- `前工程`: `/wf-new`, `/video-upload`
+- `前工程`: `/wf-new`, `/publish --upload`
 - `後工程`: `なし`
 - `委譲先`: `/community-post`, `/pinned-comment`, `/metadata-audit`
 
@@ -17,7 +17,7 @@ description: "Use when 動画公開直後の community-post → pinned-comment �
 
 ## Hard Gates
 
-- `config/channel/` と対象 `collections/live/<collection>/workflow-state.json` が存在し、`load_config()` でロード可能であること。満たさなければ `/video-upload` を案内して停止する。
+- `config/channel/` と対象 `collections/live/<collection>/workflow-state.json` が存在し、`load_config()` でロード可能であること。満たさなければ `/publish --upload` を案内して停止する。
 - `references/post-publish-chain-manifest.json` と `references/post-publish-chain-state.py` を読み、chain ID、step 順、重複 ID、未知 step、state script 参照を検証する。`approvalGate.skip` は `true = 承認省略`。旧 `enabled` だけなら `skip = not enabled` として解決し、両方の同時指定は拒否する。違反時は停止する。
 - `load_config().workflow.post_publish.configured` が `false` ならチェーンを開始しない。従来互換として `/community-post <collection>` だけを案内し、`/pinned-comment` と `/metadata-audit` は手動実行できると表示して終了する。
 - 解決済み `approvalGate.skip` が `false` の step は、外部反映の直前に対象動画 ID・対象コレクション・件数を表示し、明示 2 択で承認されるまで子 skill を実行しない。却下時は履歴を更新せずチェーンを停止する。

@@ -175,7 +175,7 @@ Phase 3: 公開             /wf-next    動画→概要欄→アップロード�
 
 | タイミング | 移行 | トリガー |
 |-----------|------|---------|
-| `/video-upload` 完了 | `planning/` → `live/` | `upload.video_id` が記録された時点 |
+| `/publish --upload` 完了 | `planning/` → `live/` | `upload.video_id` が記録された時点 |
 
 ## 冪等性ルール
 

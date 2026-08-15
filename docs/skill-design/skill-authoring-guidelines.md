@@ -111,7 +111,7 @@ frontmatter の `purpose:` は必須であり、次の 7 語のいずれか 1 �
 | 2 | 排他 mode | 利用者の意図でしか決まらない分岐。`--<flag>` 形式で表し、同時指定は 0〜1 個、1 skill あたり 5 個までとする |
 | 3 | modifier | mode と直交する調整。`--<flag>` 形式で表し、複数指定を認め、個数の上限は設けない |
 
-自動判定できる分岐をフラグ指定必須の設計にしない。mode は、通常の自動実行とは別に一段だけを明示実行するための上書き入口として置く。[analytics](../../.claude/skills/analytics/SKILL.md) は、フラグなしでは chain 全体を実行し、`--collect`、`--analyze`、`--report` では一段だけを実行する。[video-upload](../../.claude/skills/video-upload/SKILL.md) は、`content_model.type` から内部で自動分岐する。
+自動判定できる分岐をフラグ指定必須の設計にしない。mode は、通常の自動実行とは別に一段だけを明示実行するための上書き入口として置く。[analytics](../../.claude/skills/analytics/SKILL.md) は、フラグなしでは chain 全体を実行し、`--collect`、`--analyze`、`--report` では一段だけを実行する。[publish](../../.claude/skills/publish/SKILL.md) の `--upload` は、mode 選択後に `content_model.type` から内部経路を自動分岐する。
 
 mode と modifier は次のように分けて記載する。
 

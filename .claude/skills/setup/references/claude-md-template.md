@@ -82,7 +82,7 @@ youtube-automation パッケージの構造は GitHub リポジトリ（`daiki-b
 ```
 planning/ → live/
 ```
-- `/video-upload` 完了時: `planning/` → `live/`
+- `/publish --upload` 完了時: `planning/` → `live/`
 
 ### 標準ディレクトリ構造
 ```

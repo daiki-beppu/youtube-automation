@@ -22,7 +22,7 @@ config key は実装しない。現行 `/wf-next` の state 更新主体と冪�
   `load_config().workflow.wf_next` で解決され、未指定時を含む既定値は両方 `true` である。
   廃止された `workflow.wf_next.approval_gates` が設定されている場合は `ConfigError` になる。
   `audio` は最終音源を採用して `mastered` に進む直前、`upload` は
-  `/video-upload` の直前のゲートである。
+  `/publish --upload` の直前のゲートである。
 - これらの skip キー以外にも、複数 collection、Suno playlist URL、複数の最終 master
   候補、`masterup` の選曲例外、未作成 playlist の初期化などは現行 skill で人間への
   確認になり得る。半自動 runner はこれらを暗黙に承認しない。入力が一意かつ事前設定
@@ -118,7 +118,7 @@ state が不完全な書き込み途中、symlink、未知 phase、schema 不整
 `failed` にして通知する。
 
 watcher 起動時は `collections/planning/*/workflow-state.json` を必ず full scan する。
-これにより停止中に起きた変更を回収する。`/video-upload` により collection が
+これにより停止中に起きた変更を回収する。`/publish --upload` により collection が
 `planning/` から `live/` へ移動した場合は、直前 job の state と移動先の
 `phase = complete`、`stage = live`、`upload.video_id` を runner が検証し、単なる source
 path 消失を failure にしない。
@@ -147,7 +147,7 @@ dispatcher は `load_config().workflow.wf_next` で解決済み設定を読み�
 | gate | 停止位置 | request に固定する対象 | 承認後 |
 |---|---|---|---|
 | `audio` | 最終候補を `assets.master_audio` に採用し、`phase` を `mastered` にする直前 | collection、候補 ID / filename、state digest | 同じ対象と digest を再検証し、音源採用処理から再開 |
-| `upload` | `/video-upload` の直前 | collection、公開範囲または予約日時、動画・概要欄、state digest | upload plan を再検証し、upload から再開 |
+| `upload` | `/publish --upload` の直前 | collection、公開範囲または予約日時、動画・概要欄、state digest | upload plan を再検証し、upload から再開 |
 
 音源 gate は既存 `master_audio_transition.py` の `needs_selection`、`needs_approval`、
 承認対象一致検証を再利用し、判定を watcher に複製しない。upload gate は後続実装で

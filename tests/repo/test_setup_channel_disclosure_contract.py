@@ -425,6 +425,7 @@ def test_moved_opening_assets_preserve_pre_move_bytes_or_owner_only_semantics() 
             )
         payload = payload.replace(b"/music --prompt", b"/suno")
         payload = payload.replace(b"config/skills/music.yaml::prompt", b"config/skills/suno.yaml")
+        payload = payload.replace(b"/publish --upload", b"/video-upload")
         assert sha256(payload).hexdigest() == expected
 
 

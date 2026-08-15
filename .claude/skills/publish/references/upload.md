@@ -1,8 +1,4 @@
----
-name: video-upload
-purpose: 公開する
-description: "Use when コレクションの動画または release 型（単曲リリース）の楽曲リリース動画が完成し、YouTubeへのアップロード自動化が必要なとき。「楽曲リリースをアップロード」「リリース動画を公開」で発動。collection 型は Complete Collection のアップロードと live 移行、release 型は言語別アップロードを実行。動画ファイルの生成（MP3→MP4）は /videoup、ショート生成は /short"
----
+# Upload mode
 
 ## 前後工程
 
@@ -37,10 +33,10 @@ subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実�
 
 以下を deep-merge した値を設定として使う。
 
-1. `.claude/skills/video-upload/config.default.yaml`
-2. `config/skills/video-upload.yaml`（存在する場合）
+1. `.claude/skills/publish/config.default.yaml::upload`
+2. `config/skills/publish.yaml::upload`（存在する場合）
 
-合成規則は `youtube_automation.configuration.skills.load_skill_config("video-upload")` と同じで、チャンネル上書きが優先される。存在しない override は未設定として扱い、勝手に作成しない。前提条件チェックの探索パターンは `preflight.*`、メタデータ基準の誇張語は `metadata.banned_exaggeration_words` を参照する。
+合成規則は `youtube_automation.configuration.skills.load_skill_config("publish")["upload"]` と同じで、チャンネル上書きが優先される。存在しない override は未設定として扱い、勝手に作成しない。旧 `video-upload.yaml` は `yt-skills migrate-config` で `publish.yaml::upload` へ移行でき、移行前も互換 loader で同じ値を読む。前提条件チェックの探索パターンは `preflight.*`、メタデータ基準の誇張語は `metadata.banned_exaggeration_words` を参照する。
 
 ## 前提
 
@@ -59,8 +55,8 @@ subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実�
 
 | 引数 | 説明 | 例 |
 |------|------|-----|
-| `$ARGUMENTS` | コレクションディレクトリパス（省略可） | `/video-upload collections/planning/20260304-clm-fairy-forest-collection` |
-| 未指定 | `collections/planning/` の `phase=mastered` かつ `upload.video_id=null` の未公開候補が 1 件だけなら自動検出（0 件・複数件は `-c` 明示を要求） | `/video-upload` |
+| `$ARGUMENTS` | コレクションディレクトリパス（省略可） | `/publish --upload collections/planning/20260304-clm-fairy-forest-collection` |
+| 未指定 | `collections/planning/` の `phase=mastered` かつ `upload.video_id=null` の未公開候補が 1 件だけなら自動検出（0 件・複数件は `-c` 明示を要求） | `/publish --upload` |
 
 ## Channel Adaptation
 

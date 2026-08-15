@@ -1,13 +1,13 @@
 ---
 name: videoup
 purpose: 作る
-description: "Use when 音声ファイルが揃い動画生成が必要なとき。「動画変換」「MP3→MP4」「generate_videos」「videoup」で発動。マスター音源・マスター動画生成を案内。YouTube への投稿は /video-upload"
+description: "Use when 音声ファイルが揃い動画生成が必要なとき。「動画変換」「MP3→MP4」「generate_videos」「videoup」で発動。マスター音源・マスター動画生成を案内。YouTube への投稿は /publish の upload mode"
 ---
 
 ## 前後工程
 
 - `前工程`: `/wf-new`, `/masterup`, `/lyria`, `/thumbnail --loop`
-- `後工程`: `/video-upload`, `/video-description`
+- `後工程`: `/publish --upload`, `/video-description`
 - `委譲先`: `なし`
 
 ## 成果物

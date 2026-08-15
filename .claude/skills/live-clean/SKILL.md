@@ -6,7 +6,7 @@ description: "Use when live コレクションの大容量メディアを削除�
 
 ## 前後工程
 
-- `前工程`: `/video-upload`, `/videoup`
+- `前工程`: `/publish --upload`, `/videoup`
 - `後工程`: `なし`
 - `委譲先`: `なし`
 
@@ -35,7 +35,7 @@ description: "Use when live コレクションの大容量メディアを削除�
 以下を確認し、満たさなければ案内して終了する（外部 API・認証には依存しないローカル操作）:
 
 - 実行場所がチャンネルリポジトリ（`CHANNEL_DIR`）配下で、`collections/` ディレクトリが存在すること。無ければ対象なしとして終了する
-- 通常モードでは `collections/live/*/workflow-state.json` を持つ公開済みコレクションが 1 件以上存在すること。無ければ削除対象なしとして終了し、公開前なら `/video-upload` が前工程であることを案内する（削除可否は Step 1 の 3 条件 — `stage: "live"` / `phase: "complete"` / `upload.video_id` 非空 — で機械判定する）
+- 通常モードでは `collections/live/*/workflow-state.json` を持つ公開済みコレクションが 1 件以上存在すること。無ければ削除対象なしとして終了し、公開前なら `/publish --upload` が前工程であることを案内する（削除可否は Step 1 の 3 条件 — `stage: "live"` / `phase: "complete"` / `upload.video_id` 非空 — で機械判定する）
 - `workflow-state.json` が読めない / JSON 破損のコレクションは安全条件未達としてスキップし、削除しない
 
 ## Quick Reference

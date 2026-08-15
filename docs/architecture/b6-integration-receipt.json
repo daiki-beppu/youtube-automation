@@ -1081,21 +1081,21 @@
     },
     {
       "old_owner": "legacy..claude.skills.video-upload.SKILL.md",
-      "exact_new_owner": ".claude/skills/video-upload/SKILL.md",
+      "exact_new_owner": ".claude/skills/publish/references/upload.md",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"
     },
     {
       "old_owner": "legacy..claude.skills.video-upload.references.posting-checklist.md",
-      "exact_new_owner": ".claude/skills/video-upload/references/posting-checklist.md",
+      "exact_new_owner": ".claude/skills/publish/references/posting-checklist.md",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"
     },
     {
       "old_owner": "legacy..claude.skills.video-upload.references.scheduled-publish.md",
-      "exact_new_owner": ".claude/skills/video-upload/references/scheduled-publish.md",
+      "exact_new_owner": ".claude/skills/publish/references/scheduled-publish.md",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"

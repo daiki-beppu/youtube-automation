@@ -66,7 +66,7 @@ Phase 2 ─ 制作                      /wf-next
 Phase 3 ─ 公開（全自動）             /wf-next
    ├─ /videoup           (動画生成)
    ├─ /video-description (概要欄)
-   └─ /video-upload      (YouTube アップロード + planning/ → live/ 移行)
+   └─ /publish --upload  (YouTube アップロード + planning/ → live/ 移行)
                           ↓ phase: "complete"
 振り返り（T+7 日後推奨）             /analytics --analyze
 ```
@@ -125,4 +125,4 @@ A. `phase: "publishing"` で停止していれば、`assets` フラグの状態�
 A. `reports/analysis_*.md` が無い場合、`data/benchmark_*.json` があれば benchmark fallback mode で続行する。どちらも無ければ minimal mode として `ttp_mode` を確認する。minimal mode では企画候補生成前にテーマ / ジャンル / 雰囲気を直接確認する既存挙動は `ttp_mode: false` の場合だけ適用し、`true` は転写元が無いため `/channel-research --benchmark` を案内して停止し、`data/benchmark_*.json` 生成後に再実行する。analytics mode へ進めるのは、ファイル名日付が最新の Markdown と同日付 JSON が揃い、analysis JSON validator が成功し、ペアが stale でない場合だけ。Markdown があるのに同日付 JSON がない、または validator が失敗する場合は fallback せず停止する。stale の判定と更新手順は `.claude/skills/wf-new/references/freshness-rules.md::stale report の自動更新` を正とし、`/wf-new` は独自に再定義しない。相対 stale は `/analytics --analyze`、絶対 stale は `/analytics --collect` → `/analytics --analyze` を追加確認なしで同じ subagent 作業内に自動実行する。全呼び出し後に Markdown / JSON 同日付ペア、validator、相対・絶対鮮度、入力モードを先頭から再検証し、成功時は中断せず企画フローを続ける。skill 呼び出しまたは再検証に失敗した場合は、失敗した skill / 検証項目、理由、`/wf-new` の再開条件を表示し、古い report を採用せず停止する。fresh / benchmark fallback mode / minimal mode では stale 更新用の Analytics skill を追加で呼ばない。`yt-doctor` の入力モード表示は Markdown と stale の予備確認であり、JSON/validator の最終 Hard Gate には使わない。`freshness_days` は `.claude/skills/wf-new/references/collection-ideate.config.default.yaml` の既定 7 日を使い、`config/skills/collection-ideate.yaml` で上書きできる。
 
 **Q. 「planning/」と「live/」って何**
-A. 制作中は `collections/planning/<dir>/`、`/video-upload` で公開完了すると `collections/live/<dir>/` に移動する（`/wf-next` の Phase 3 最後）。
+A. 制作中は `collections/planning/<dir>/`、`/publish --upload` で公開完了すると `collections/live/<dir>/` に移動する（`/wf-next` の Phase 3 最後）。

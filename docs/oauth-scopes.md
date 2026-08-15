@@ -43,7 +43,7 @@ scope 定義の単一ソースは `src/youtube_automation/infrastructure/auth/yo
 | /metadata-audit | `yt-metadata-audit`（監査のみ） | read-only | readonly 優先 |
 | /playlist（状態確認） | `yt-playlist-status` | read-only | readonly 優先 |
 | /streaming（帯域集計） | `yt-stream-bandwidth` / `yt-stream-archive-check` | read-only | readonly 優先 |
-| /video-upload | `domains/uploads/youtube.py` | write（`youtube`） | `token.json` |
+| /publish --upload | `domains/uploads/youtube.py` | write（`youtube`） | `token.json` |
 | /playlist（作成・割り当て） | `yt-playlist-manager` | write（`youtube`） | `token.json` |
 | /setup（seed / 設定 push） | `yt-channel-seed` / `yt-channel-settings` | write（`youtube`） | `token.json` |
 | /video-description ほか一括更新 | `yt-bulk-update-desc` / `yt-bulk-update-synthetic-media` | write（`youtube`） | `token.json` |

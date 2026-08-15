@@ -17,7 +17,7 @@ TARGET_SKILLS = (
     "automation-update",
     "channel-status",
     "video-description",
-    "video-upload",
+    "publish",
     "wf-auto",
     "wf-new",
     "wf-next",
@@ -69,8 +69,8 @@ INITIAL_OCCURRENCE_LEDGER = (
     _entry("video-description", "SKILL.md", "missing-config-new", "opening"),
     _entry("video-description", "SKILL.md", "missing-config-existing", "import"),
     _entry("video-description", "SKILL.md", "config-generation-rules", "shared-reference"),
-    _entry("video-upload", "SKILL.md", "missing-config-new", "opening"),
-    _entry("video-upload", "SKILL.md", "missing-config-existing", "import"),
+    _entry("publish", "references/upload.md", "missing-config-new", "opening"),
+    _entry("publish", "references/upload.md", "missing-config-existing", "import"),
     _entry("wf-auto", "SKILL.md", "missing-config-new", "opening"),
     _entry("wf-auto", "SKILL.md", "load-config-existing", "import"),
     _entry("wf-new", "SKILL.md", "upstream-new-channel", "opening"),
@@ -159,7 +159,7 @@ EXPECTED_ACTIVE_ROUTES = (
         "3ハッシュタグをタイトル下に表示するため、順序が重要",
     ),
     *(
-        _route("video-upload/SKILL.md", "## 前提", line)
+        _route("publish/references/upload.md", "## 前提", line)
         for line in (
             "- **新規チャンネル** → `/setup --channel` を案内",
             "- **既存チャンネル**（YouTube で既に運営中）→ `/setup --import` を案内",
@@ -253,6 +253,12 @@ EXPECTED_ACTIVE_ROUTES = (
 MUTABLE_FILES = frozenset(path for path, _, _ in EXPECTED_ACTIVE_ROUTES if path != "automation-update/SKILL.md") | {
     "analytics/references/analysis-json-validator.md",
     "analytics/references/insights-entry.schema.json",
+    "publish/SKILL.md",
+    "publish/config.default.yaml",
+    "publish/references/posting-checklist.md",
+    "publish/references/publish-chain-manifest.json",
+    "publish/references/publish-chain-state.py",
+    "publish/references/scheduled-publish.md",
     "wf-new/references/phase-2c-artifact-contract.md",
     "wf-new/references/phase2.md",
     "wf-new/references/auto.md",
@@ -300,7 +306,7 @@ EXPECTED_ISSUE_3986_CHANGED_PATHS = frozenset(
         "tests/repo/test_workflow_upload_setup_redirect_contract.py",
     }
 )
-IMMUTABLE_TARGET_FILES_SHA256 = "bbaa4f4d458fb51ee60536c16cd0ce73f4cfc231f2fdbb2695e02628a3fe5085"
+IMMUTABLE_TARGET_FILES_SHA256 = "c82023c8c401eee6fd3e8775ebce37a8418a780b7b473169bfe70d12c3003af1"
 AUTOMATION_SCHEDULE_REGENERATE_SHA256 = "11d460f727fe50c41f00571b416a1486cb07d0b1548524bc650a7161c16f6c42"
 AUTOMATION_UPDATE_PUSH_SHA256 = "d2e903b505ace3035da345f9f89ba1c0875e93b5633c1ddc31550db2433771eb"
 ALLOWED_FENCED_ROUTES = {

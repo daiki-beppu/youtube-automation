@@ -948,7 +948,7 @@ def test_skill_frontmatter_descriptions_disambiguate_sibling_routes() -> None:
     benchmark_desc = _skill_frontmatter("channel-research")["description"]
     channel_strategy_desc = _skill_frontmatter("channel-strategy")["description"]
     videoup_desc = _skill_frontmatter("videoup")["description"]
-    video_upload_desc = _skill_frontmatter("video-upload")["description"]
+    publish_desc = _skill_frontmatter("publish")["description"]
 
     assert "「競合分析」" in benchmark_desc
     assert "「競合データ収集」" in benchmark_desc
@@ -958,15 +958,15 @@ def test_skill_frontmatter_descriptions_disambiguate_sibling_routes() -> None:
     assert "方向性" in channel_strategy_desc
     assert "channel-research の voice mode、市場比較は market mode" in channel_strategy_desc
 
-    assert "YouTube への投稿は /video-upload" in videoup_desc
-    assert "動画ファイルの生成（MP3→MP4）は /videoup" in video_upload_desc
+    assert "YouTube への投稿は /publish の upload mode" in videoup_desc
+    assert "動画生成は /videoup" in publish_desc
 
 
 def test_thumbnail_search_order_is_documented() -> None:
     expected_order = "`10-assets/thumbnail.jpg` → `10-assets/thumbnail.png`"
     for path in (
-        ".claude/skills/video-upload/SKILL.md",
-        ".claude/skills/video-upload/references/posting-checklist.md",
+        ".claude/skills/publish/references/upload.md",
+        ".claude/skills/publish/references/posting-checklist.md",
     ):
         text = _read(path)
         assert expected_order in text
@@ -975,10 +975,10 @@ def test_thumbnail_search_order_is_documented() -> None:
 
 
 def test_upload_schedule_plan_must_precede_publish_guidance() -> None:
-    video_upload = _read(".claude/skills/video-upload/SKILL.md")
+    video_upload = _read(".claude/skills/publish/references/upload.md")
     wf_next = _read(".claude/skills/wf-next/SKILL.md")
-    posting_checklist = _read(".claude/skills/video-upload/references/posting-checklist.md")
-    scheduled_publish = _read(".claude/skills/video-upload/references/scheduled-publish.md")
+    posting_checklist = _read(".claude/skills/publish/references/posting-checklist.md")
+    scheduled_publish = _read(".claude/skills/publish/references/scheduled-publish.md")
 
     for text in (video_upload, wf_next, posting_checklist, scheduled_publish):
         assert "uv run yt-upload-collection --plan" in text
@@ -1014,15 +1014,15 @@ def test_upload_schedule_plan_must_precede_publish_guidance() -> None:
 
     wf_next_gate = wf_next[wf_next.index("skip_upload_approval = false") :]
     _assert_appears_before(wf_next_gate, "uv run yt-upload-collection --plan", "AskUserQuestion")
-    _assert_appears_before(wf_next_gate, "uv run yt-upload-collection --plan", "/video-upload")
+    _assert_appears_before(wf_next_gate, "uv run yt-upload-collection --plan", "/publish --upload")
 
 
 def test_first_post_playlist_initialization_contract_is_documented() -> None:
     playlist = _read(".claude/skills/playlist/SKILL.md")
-    video_upload = _read(".claude/skills/video-upload/SKILL.md")
+    video_upload = _read(".claude/skills/publish/references/upload.md")
     wf_next = _read(".claude/skills/wf-next/SKILL.md")
     setup_channel = _read(".claude/skills/setup/references/channel-mode.md")
-    checklist = _read(".claude/skills/video-upload/references/posting-checklist.md")
+    checklist = _read(".claude/skills/publish/references/posting-checklist.md")
 
     description = _skill_frontmatter("playlist")["description"]
     for trigger in ("初投稿", "初回投稿", "初回公開前にプレイリスト初期化"):
@@ -1050,12 +1050,12 @@ def test_first_post_playlist_initialization_contract_is_documented() -> None:
     assert "`skip_upload_approval = true` でも" in wf_next
     assert "確認を省略しない" in wf_next
     assert "ユーザーが playlist 初期化を却下した場合" in wf_next
-    assert "`/video-upload` を実行せず停止" in wf_next
+    assert "`/publish --upload` を実行せず停止" in wf_next
     assert "`config/channel/playlists.json` が無い" in wf_next
     assert "全 playlist に `playlist_id` がある場合はスキップ" in wf_next
     assert "初投稿プレイリスト初期化ゲート" in wf_next
     assert "`upload.video_id = null`" in wf_next
-    assert "初回動画の追加は `/video-upload` 内部の自動 assign に任せる" in checklist
+    assert "初回動画の追加は `/publish --upload` 内部の自動 assign に任せる" in checklist
 
 
 def test_wf_next_example_uses_skip_approval_keys() -> None:
@@ -1316,7 +1316,7 @@ def test_collection_lifecycle_uses_mp3_as_public_audio_contract() -> None:
 
 def test_collection_localization_docs_use_root_localizations_contract() -> None:
     for path in (
-        ".claude/skills/video-upload/SKILL.md",
+        ".claude/skills/publish/references/upload.md",
         ".claude/skills/setup/references/channel-mode.md",
         ".claude/skills/setup/references/regeneration-mode.md",
         ".claude/skills/setup/references/config-generation-rules.md",

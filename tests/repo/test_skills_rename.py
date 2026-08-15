@@ -9,7 +9,7 @@ rename マッピング:
 | `report` | `analytics` |
 | `status` | `channel-status` |
 | `description` | `video-description` |
-| `upload` | `video-upload` |
+| `upload` | `publish` |
 | `ideate` | `wf-new` |
 | `persona` | `channel-strategy` |
 
@@ -80,7 +80,7 @@ RENAME_MAP: dict[str, str] = {
     "report": "analytics",
     "status": "channel-status",
     "description": "video-description",
-    "upload": "video-upload",
+    "upload": "publish",
     "ideate": "wf-new",
     "persona": "channel-strategy",
 }

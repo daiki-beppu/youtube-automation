@@ -256,7 +256,7 @@ uv run yt-channel-settings push --apply
 
 ### Step 9: wf-new 接続前チェック
 
-`/wf-new` へ進む前に、reference の readiness matrix を確認する。`playlist_id` 未設定は初投稿前に `/playlist` が `yt-playlist-status` → `yt-playlist-manager --init --dry-run` → `--init` の順で解消し、初回動画は `/video-upload` の自動 assign に任せる。Analytics / Reporting レポート取得設定が未確認でも初回制作は止めず、公開後の分析に備えて `/analytics --collect` で YouTube Analytics / Reporting API の収集前提と Reporting API job 作成状態を確認し、不足する GCP / OAuth / API 設定は `/setup` に戻す。ライブ配信を使う可能性がある場合も初回制作は止めず、YouTube Studio で Live streaming を早めに有効化する。初回配信可能になるまで最大 24 時間かかるため、初回配信へ進む前に `/streaming` で準備を確認する。
+`/wf-new` へ進む前に、reference の readiness matrix を確認する。`playlist_id` 未設定は初投稿前に `/playlist` が `yt-playlist-status` → `yt-playlist-manager --init --dry-run` → `--init` の順で解消し、初回動画は `/publish --upload` の自動 assign に任せる。Analytics / Reporting レポート取得設定が未確認でも初回制作は止めず、公開後の分析に備えて `/analytics --collect` で YouTube Analytics / Reporting API の収集前提と Reporting API job 作成状態を確認し、不足する GCP / OAuth / API 設定は `/setup` に戻す。ライブ配信を使う可能性がある場合も初回制作は止めず、YouTube Studio で Live streaming を早めに有効化する。初回配信可能になるまで最大 24 時間かかるため、初回配信へ進む前に `/streaming` で準備を確認する。
 
 最後に `yt-doctor` で TTP 完了条件を確認する:
 

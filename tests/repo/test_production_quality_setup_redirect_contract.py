@@ -225,7 +225,7 @@ _RAW_EXPECTED_ACTIVE_ROUTES = (
         "short/SKILL.md",
         "## 前提",
         "いずれか欠ける場合は早期に止めて該当 skill / config 更新を案内する"
-        "（`/setup --import` / `/setup` / `/video-upload`）。",
+        "（`/setup --import` / `/setup` / `/publish --upload`）。",
     ),
     _route(
         "short/references/thumbnail.md",

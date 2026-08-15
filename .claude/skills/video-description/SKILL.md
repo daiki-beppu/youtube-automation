@@ -7,7 +7,7 @@ description: "Use when YouTube 概要欄を Complete Collection 形式で自動�
 ## 前後工程
 
 - `前工程`: `/videoup`
-- `後工程`: `/video-upload`, `/metadata-audit`
+- `後工程`: `/publish --upload`, `/metadata-audit`
 - `委譲先`: `なし`
 
 ## 成果物
@@ -232,4 +232,4 @@ uv run yt-title-duplicate-check "$COLLECTION_DIR" --title "$PROPOSED_TITLE"
 ## Next Step
 
 概要欄生成後:
-- `/video-upload <collection-path>` で YouTube へアップロード
+- `/publish --upload <collection-path>` で YouTube へアップロード

@@ -6,7 +6,7 @@ description: "Use when コミュニティ投稿テキスト生成から Studio �
 
 ## 前後工程
 
-- `前工程`: `/video-upload`, `/post-publish`
+- `前工程`: `/publish --upload`, `/post-publish`
 - `後工程`: `なし`
 - `委譲先`: `なし`
 
@@ -41,7 +41,7 @@ Step 6 のユーザー案内（クリップボードコピー済み + Studio で
 以下を確認し、満たさなければ案内して停止する:
 
 - `config/channel/community.json` が存在すること。存在しない場合は雛形 `examples/channel_config.example/community.example.json` を案内してエラー終了する（Step 2 参照）
-- 引数なしの自動検出モードでは、`collections/live/` に公開済みコレクション（`YYYYMMDD-*`）が 1 件以上存在すること。存在しない場合は先に `/video-upload` の実行を案内して停止する
+- 引数なしの自動検出モードでは、`collections/live/` に公開済みコレクション（`YYYYMMDD-*`）が 1 件以上存在すること。存在しない場合は先に `/publish --upload` の実行を案内して停止する
 - macOS であること（`pbcopy` / `open` を使用）。非 macOS では stdout フォールバックで運用継続する
 
 ## 制約
@@ -55,7 +55,7 @@ Step 6 のユーザー案内（クリップボードコピー済み + Studio で
 
 - コレクションのアップロード完了後、コミュニティ投稿を貼りたいとき
 - 過去動画に紐づけて単発で投稿したいとき（URL 指定）
-- `/video-upload` の最終ステップから自動で呼ばれる
+- `/publish --upload` の最終ステップから自動で呼ばれる
 
 ## Quick Reference
 
@@ -78,7 +78,7 @@ if [ -z "$ARGUMENTS" ]; then
   COLLECTION_PATH=$(ls -d collections/live/[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-* 2>/dev/null | sort | tail -1)
   if [ -z "$COLLECTION_PATH" ]; then
     echo "エラー: collections/live/ に公開済みコレクションがありません。"
-    echo "まず /video-upload を実行してコレクションをアップロードしてください。"
+    echo "まず /publish --upload を実行してコレクションをアップロードしてください。"
     exit 1
   fi
   MODE="collection"
@@ -143,7 +143,7 @@ open "$STUDIO_URL"
 | `community.json` が存在しない | エラー終了し、`examples/channel_config.example/community.example.json` を雛形として案内する |
 | `pbcopy` 失敗 | テンプレを stdout に出力 |
 | `open` 失敗 | URL を stdout に出力 |
-| 引数なし & `collections/live/` が空 | エラー終了し、`/video-upload` の実行を促す |
+| 引数なし & `collections/live/` が空 | エラー終了し、`/publish --upload` の実行を促す |
 
 ## Non-goals（YAGNI）
 
@@ -157,6 +157,6 @@ open "$STUDIO_URL"
 
 ## Cross References
 
-- `/video-upload` — アップロード完了後、設定済みなら `/post-publish`、未設定なら本スキルを案内する
+- `/publish --upload` — アップロード完了後、設定済みなら `/post-publish`、未設定なら本スキルを案内する
 - `/post-publish` — 公開後チェーンから対象 collection を引き継いで本スキルを呼び出す
 - `/playlist` — プレイリスト assign は別経路
