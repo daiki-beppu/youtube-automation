@@ -3,7 +3,7 @@
 import json
 import os
 import tempfile
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import TypeAlias
 
@@ -125,7 +125,12 @@ def _cleanup_paths(paths: list[Path]) -> None:
         path.unlink(missing_ok=True)
 
 
-def write_text_files_transactionally(contents: Mapping[Path, str], *, encoding: str = "utf-8") -> None:
+def _write_text_files_transactionally(
+    contents: Mapping[Path, str],
+    verifier: Callable[[], None] | None,
+    *,
+    encoding: str,
+) -> None:
     """Publish text files as one rollback-capable transaction.
 
     Process termination and filesystem loss are outside this local transaction's
@@ -152,7 +157,9 @@ def write_text_files_transactionally(contents: Mapping[Path, str], *, encoding: 
             backed_up_targets.add(target)
         for target in targets:
             replace_file(temporaries[target], target)
-    except (OSError, UnicodeError) as publish_error:
+        if verifier is not None:
+            verifier()
+    except Exception as publish_error:
         try:
             _rollback_files(targets, original_targets, backups, backed_up_targets)
         except OSError as rollback_error:
@@ -161,6 +168,21 @@ def write_text_files_transactionally(contents: Mapping[Path, str], *, encoding: 
         _cleanup_paths([*temporaries.values(), *backups.values()])
         raise
     _cleanup_paths([*temporaries.values(), *backups.values()])
+
+
+def write_text_files_transactionally(contents: Mapping[Path, str], *, encoding: str = "utf-8") -> None:
+    """Publish text files as one rollback-capable transaction."""
+    _write_text_files_transactionally(contents, None, encoding=encoding)
+
+
+def write_verified_text_files_transactionally(
+    contents: Mapping[Path, str],
+    verifier: Callable[[], None],
+    *,
+    encoding: str = "utf-8",
+) -> None:
+    """Publish text files and roll all targets back when post-write verification fails."""
+    _write_text_files_transactionally(contents, verifier, encoding=encoding)
 
 
 def current_working_directory() -> Path:

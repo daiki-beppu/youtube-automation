@@ -145,6 +145,7 @@ def test_candidate_wheel_syncs_all_assets_into_clean_downstream(tmp_path: Path) 
         """
 import importlib
 import sys
+import tempfile
 from pathlib import Path
 
 import youtube_automation
@@ -171,6 +172,17 @@ rendered = rendering.render_repository_document(
 )
 assert "Content-Security-Policy" in rendered
 assert ".view-card, .view-table-section, .view-media" in rendered
+document_migration = importlib.import_module("youtube_automation.application.documents.migration")
+with tempfile.TemporaryDirectory() as directory:
+    target = Path(directory) / "weekly.json"
+    result = document_migration.write_operational_document(
+        target,
+        schema_registry.RepositorySchema.WEEKLY_VOTE_LOG,
+        lambda: {"schema_version": 1, "entries": []},
+        document_migration.MarkdownMigrationDecision.NOT_REQUIRED,
+    )
+    assert result is document_migration.DocumentWriteResult.CREATED
+    assert target.is_file() and target.with_suffix(".html").is_file()
 
 legacy_modules = (
     "youtube_automation.infrastructure.errors",

@@ -88,6 +88,10 @@ class DocumentRenderError(ValidationError):
     """検証済み構造化文書の HTML 生成・検証エラー。"""
 
 
+class DocumentMigrationError(ValidationError):
+    """skill 生成 Markdown から構造化文書への状態遷移エラー。"""
+
+
 class UploadError(AutomationError):
     """動画・サムネイルアップロードの失敗
 
