@@ -8,7 +8,7 @@ description: "Use when 既存コレクション（collections/planning/）を一
 
 - `前工程`: `/wf-new`, `/wf-new`
 - `後工程`: `/analytics`, `/flop-analysis`
-- `委譲先`: `/masterup`, `/lyria`, `/videoup`, `/video-description`, `/playlist`, `/publish --upload`
+- `委譲先`: `/masterup`, `/lyria`, `/videoup`, `/video-description`, `/publish --playlist`, `/publish --upload`
 
 ## 成果物
 
@@ -219,10 +219,10 @@ status を記録した後は、成功時だけでなく blocked / failed の停�
    - 承認されたら次ステップへ進む。却下されたら `phase` を `mastered` のままにして停止し、ガイダンス「準備が整ったら `/wf-next` を再実行してください」を表示
    - `skip_upload_approval = true` のときは確認なしでそのまま進む（従来の全自動挙動）
 4. **初投稿プレイリスト初期化**:
-   - `config/channel/playlists.json` が存在する場合、Skill `/playlist` で `uv run yt-playlist-status` を実行する
+   - `config/channel/playlists.json` が存在する場合、Skill `/publish --playlist` で `uv run yt-playlist-status` を実行する
    - `playlist_id` 未設定の `(未作成)` がある場合は、`uv run yt-playlist-manager --init --dry-run` を表示し、ユーザー確認後に `uv run yt-playlist-manager --init` を実行してから `/publish --upload` へ進む
    - この確認は `skip_upload_approval` とは別の playlist 作成ゲート。`skip_upload_approval = true` でも、YouTube 上の playlist 作成と `config/channel/playlists.json` 書き戻しを伴うため未作成 playlist がある場合は確認を省略しない
-   - ユーザーが playlist 初期化を却下した場合は `/publish --upload` を実行せず停止し、`/playlist` で初期化してから `/wf-next` を再実行するよう案内する
+   - ユーザーが playlist 初期化を却下した場合は `/publish --upload` を実行せず停止し、`/publish --playlist` で初期化してから `/wf-next` を再実行するよう案内する
    - これは YouTube 上の playlist 作成と `playlist_id` 書き戻しが目的。初回動画の追加は次の `/publish --upload` 内部の自動 assign (`assign_video()`) に任せる
    - `config/channel/playlists.json` が無い、または全 playlist に `playlist_id` がある場合はスキップ
 5. **順次**: Agent ツールで subagent を起動し、対象 collection、動画、thumbnail、description を明示して Skill `/publish --upload` の Subagent Contract の `plan` / preflight だけを実行させる。state / tracking 更新と実アップロードは実行させない

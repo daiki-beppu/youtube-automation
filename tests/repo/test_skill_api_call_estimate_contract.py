@@ -167,7 +167,6 @@ TARGET_SKILLS: frozenset[str] = frozenset(
         "lyria",
         "metadata-audit",
         "pinned-comment",
-        "playlist",
         "setup",
         "short",
         "streaming",

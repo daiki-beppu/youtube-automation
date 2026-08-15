@@ -2,6 +2,22 @@
   "chainId": "publish",
   "steps": [
     {
+      "id": "playlist",
+      "skill": "publish",
+      "prerequisiteArtifacts": [
+        "config/channel/playlists.json"
+      ],
+      "outputArtifacts": [
+        "config/channel/playlists.json::playlists.*.playlist_id"
+      ],
+      "approvalGate": {
+        "skip": false
+      },
+      "idempotency": {
+        "script": "references/publish-chain-state.py"
+      }
+    },
+    {
       "id": "upload",
       "skill": "publish",
       "prerequisiteArtifacts": [

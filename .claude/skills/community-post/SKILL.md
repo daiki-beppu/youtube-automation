@@ -159,4 +159,4 @@ open "$STUDIO_URL"
 
 - `/publish --upload` — アップロード完了後、設定済みなら `/post-publish`、未設定なら本スキルを案内する
 - `/post-publish` — 公開後チェーンから対象 collection を引き継いで本スキルを呼び出す
-- `/playlist` — プレイリスト assign は別経路
+- `/publish --playlist` — プレイリスト assign は別経路

@@ -27,6 +27,56 @@ def _collection(tmp_path: Path, upload: object) -> Path:
     return collection
 
 
+def _channel(tmp_path: Path, playlists: object) -> Path:
+    channel = tmp_path / "channel"
+    config = channel / "config" / "channel"
+    config.mkdir(parents=True)
+    (config / "playlists.json").write_text(json.dumps({"playlists": playlists}), encoding="utf-8")
+    return channel
+
+
+def test_playlist_runs_when_any_playlist_id_is_missing(tmp_path: Path) -> None:
+    module = _module()
+    collection = _collection(tmp_path, {"video_id": None})
+    channel = _channel(tmp_path, {"focus": {"title": "Focus", "playlist_id": None}})
+
+    code, result = module.evaluate(collection, "playlist", channel)
+
+    assert code == module.EXIT_RUN
+    assert result["decision"] == "run"
+    assert result["reason"] == "playlist_id_missing"
+
+
+def test_playlist_skips_when_all_playlist_ids_are_recorded(tmp_path: Path) -> None:
+    module = _module()
+    collection = _collection(tmp_path, {"video_id": None})
+    channel = _channel(
+        tmp_path,
+        {
+            "focus": {"title": "Focus", "playlist_id": "PL-focus"},
+            "all": {"title": "All", "playlist_id": "PL-all"},
+        },
+    )
+
+    code, result = module.evaluate(collection, "playlist", channel)
+
+    assert code == module.EXIT_SKIP
+    assert result["decision"] == "skip"
+    assert result["artifacts"] == ["config/channel/playlists.json::playlists.*.playlist_id"]
+
+
+def test_playlist_blocks_on_invalid_config(tmp_path: Path) -> None:
+    module = _module()
+    collection = _collection(tmp_path, {"video_id": None})
+    channel = _channel(tmp_path, "invalid")
+
+    code, result = module.evaluate(collection, "playlist", channel)
+
+    assert code == module.EXIT_BLOCKED
+    assert result["decision"] == "blocked"
+    assert result["reason"] == "playlists_invalid"
+
+
 def test_upload_runs_when_video_id_is_missing(tmp_path: Path) -> None:
     module = _module()
     collection = _collection(tmp_path, {"video_id": None})
@@ -36,6 +86,15 @@ def test_upload_runs_when_video_id_is_missing(tmp_path: Path) -> None:
     assert code == module.EXIT_RUN
     assert result["decision"] == "run"
     assert result["reason"] == "video_id_missing"
+
+
+def test_upload_blocks_when_collection_dir_is_missing() -> None:
+    module = _module()
+
+    code, result = module.evaluate(None, "upload")
+
+    assert code == module.EXIT_BLOCKED
+    assert result["reason"] == "collection_dir_missing"
 
 
 def test_upload_skips_when_video_id_is_recorded(tmp_path: Path) -> None:

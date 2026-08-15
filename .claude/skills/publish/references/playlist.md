@@ -1,8 +1,4 @@
----
-name: playlist
-purpose: 公開する
-description: "Use when プレイリストの作成・割り当て・確認をするとき。「プレイリスト作って」「初投稿」「初回投稿」「初回公開前にプレイリスト初期化」「/playlist」で発動"
----
+# Playlist mode
 
 ## 前後工程
 
@@ -123,3 +119,5 @@ uv run yt-playlist-manager --clean-deleted              # 実反映
 - `config/channel/playlists.json` — Canonical ソース
 - `src/youtube_automation/commands/youtube/playlist_manager.py` — 実装本体
 - `src/youtube_automation/commands/youtube/playlist_status.py` — 状態表示の読み取り専用 viewer
+- `.claude/skills/publish/references/playlist_manager.py` — 実装本体への同一 skill 内参照
+- `.claude/skills/publish/references/playlist_status.py` — 状態 viewer への同一 skill 内参照

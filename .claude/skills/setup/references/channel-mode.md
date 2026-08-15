@@ -256,7 +256,7 @@ uv run yt-channel-settings push --apply
 
 ### Step 9: wf-new 接続前チェック
 
-`/wf-new` へ進む前に、reference の readiness matrix を確認する。`playlist_id` 未設定は初投稿前に `/playlist` が `yt-playlist-status` → `yt-playlist-manager --init --dry-run` → `--init` の順で解消し、初回動画は `/publish --upload` の自動 assign に任せる。Analytics / Reporting レポート取得設定が未確認でも初回制作は止めず、公開後の分析に備えて `/analytics --collect` で YouTube Analytics / Reporting API の収集前提と Reporting API job 作成状態を確認し、不足する GCP / OAuth / API 設定は `/setup` に戻す。ライブ配信を使う可能性がある場合も初回制作は止めず、YouTube Studio で Live streaming を早めに有効化する。初回配信可能になるまで最大 24 時間かかるため、初回配信へ進む前に `/streaming` で準備を確認する。
+`/wf-new` へ進む前に、reference の readiness matrix を確認する。`playlist_id` 未設定は初投稿前に `/publish --playlist` が `yt-playlist-status` → `yt-playlist-manager --init --dry-run` → `--init` の順で解消し、初回動画は `/publish --upload` の自動 assign に任せる。Analytics / Reporting レポート取得設定が未確認でも初回制作は止めず、公開後の分析に備えて `/analytics --collect` で YouTube Analytics / Reporting API の収集前提と Reporting API job 作成状態を確認し、不足する GCP / OAuth / API 設定は `/setup` に戻す。ライブ配信を使う可能性がある場合も初回制作は止めず、YouTube Studio で Live streaming を早めに有効化する。初回配信可能になるまで最大 24 時間かかるため、初回配信へ進む前に `/streaming` で準備を確認する。
 
 最後に `yt-doctor` で TTP 完了条件を確認する:
 
@@ -291,5 +291,5 @@ guard が `secret-like file staged; unstaged before commit` を出した場合�
 保存未完了として終了した場合は、以下の成功案内は出さない。作業ツリーが最初から clean、または初回 commit が成功した場合だけ最後に案内する:
 
 ```text
-チャンネル初期化が完了しました。初回保存も完了しているため、色味・構図・ムード・テンポの方向性を先に確認したい場合は、仮コレクションで任意のパイロット検証（/thumbnail → /thumbnail --compare、music_engine が suno なら /music --prompt → /suno-helper、lyria なら /lyria）を実施してから /wf-new に進めます。検証を省略する場合は、そのまま /wf-new で初回コレクション制作に進めます。初投稿前のプレイリスト未作成状態は、公開フロー内の /playlist 初期化で解消します。公開後の分析は /analytics --collect、ライブ配信を使う場合は YouTube Studio の Live streaming 有効化と /streaming の準備確認へ進んでください。
+チャンネル初期化が完了しました。初回保存も完了しているため、色味・構図・ムード・テンポの方向性を先に確認したい場合は、仮コレクションで任意のパイロット検証（/thumbnail → /thumbnail --compare、music_engine が suno なら /music --prompt → /suno-helper、lyria なら /lyria）を実施してから /wf-new に進めます。検証を省略する場合は、そのまま /wf-new で初回コレクション制作に進めます。初投稿前のプレイリスト未作成状態は、公開フロー内の /publish --playlist 初期化で解消します。公開後の分析は /analytics --collect、ライブ配信を使う場合は YouTube Studio の Live streaming 有効化と /streaming の準備確認へ進んでください。
 ```

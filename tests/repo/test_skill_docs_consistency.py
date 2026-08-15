@@ -1018,13 +1018,13 @@ def test_upload_schedule_plan_must_precede_publish_guidance() -> None:
 
 
 def test_first_post_playlist_initialization_contract_is_documented() -> None:
-    playlist = _read(".claude/skills/playlist/SKILL.md")
+    playlist = _read(".claude/skills/publish/references/playlist.md")
     video_upload = _read(".claude/skills/publish/references/upload.md")
     wf_next = _read(".claude/skills/wf-next/SKILL.md")
     setup_channel = _read(".claude/skills/setup/references/channel-mode.md")
     checklist = _read(".claude/skills/publish/references/posting-checklist.md")
 
-    description = _skill_frontmatter("playlist")["description"]
+    description = _skill_frontmatter("publish")["description"]
     for trigger in ("初投稿", "初回投稿", "初回公開前にプレイリスト初期化"):
         assert trigger in description
 
@@ -1037,7 +1037,7 @@ def test_first_post_playlist_initialization_contract_is_documented() -> None:
         assert command in wf_next
         assert command in checklist
 
-    assert "/playlist" in setup_channel
+    assert "/publish --playlist" in setup_channel
     assert "`yt-playlist-status` → `yt-playlist-manager --init --dry-run` → `--init`" in setup_channel
 
     for text in (playlist, video_upload, wf_next, setup_channel, checklist):

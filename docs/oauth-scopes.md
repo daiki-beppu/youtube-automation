@@ -41,10 +41,10 @@ scope 定義の単一ソースは `src/youtube_automation/infrastructure/auth/yo
 | /channel-research --voice（コメント収集） | `yt-benchmark-comments` | `youtube.force-ssl`（`commentThreads.list` の API 要件） | `token.json` |
 | /channel-research --discover | `yt-discover-competitors` | read-only | readonly 優先 |
 | /metadata-audit | `yt-metadata-audit`（監査のみ） | read-only | readonly 優先 |
-| /playlist（状態確認） | `yt-playlist-status` | read-only | readonly 優先 |
+| /publish --playlist（状態確認） | `yt-playlist-status` | read-only | readonly 優先 |
 | /streaming（帯域集計） | `yt-stream-bandwidth` / `yt-stream-archive-check` | read-only | readonly 優先 |
 | /publish --upload | `domains/uploads/youtube.py` | write（`youtube`） | `token.json` |
-| /playlist（作成・割り当て） | `yt-playlist-manager` | write（`youtube`） | `token.json` |
+| /publish --playlist（作成・割り当て） | `yt-playlist-manager` | write（`youtube`） | `token.json` |
 | /setup（seed / 設定 push） | `yt-channel-seed` / `yt-channel-settings` | write（`youtube`） | `token.json` |
 | /video-description ほか一括更新 | `yt-bulk-update-desc` / `yt-bulk-update-synthetic-media` | write（`youtube`） | `token.json` |
 | /comments-reply | `yt-comments-reply` | write（`youtube.force-ssl`） | `token.json` |

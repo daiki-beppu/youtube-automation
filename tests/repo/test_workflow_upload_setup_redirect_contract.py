@@ -158,6 +158,17 @@ EXPECTED_ACTIVE_ROUTES = (
         "`/setup --regenerate` の config-generation-rules と同じ **5 個程度**）— YouTube は概要欄の最初の"
         "3ハッシュタグをタイトル下に表示するため、順序が重要",
     ),
+    _route(
+        "publish/references/playlist.md",
+        "## 前提",
+        "`config/channel/playlists.json` が存在し、`playlists` セクションが定義されていること。"
+        "未定義の場合は `/setup --regenerate` を案内する。",
+    ),
+    _route(
+        "publish/references/playlist.md",
+        "## Cross References",
+        "- `/setup --regenerate` — `playlists.json` の初期定義",
+    ),
     *(
         _route("publish/references/upload.md", "## 前提", line)
         for line in (
