@@ -1,6 +1,6 @@
 # 全 skill カタログ
 
-`yt-skills sync` で各チャンネルリポジトリに配布される Claude Code skill の一覧（全 **45 個**）。各行は「なにができるか」（what）の 1 行要約。発動トリガー・前提・前後工程はサイトの [skill ガイド](/skills)、詳細手順は `.claude/skills/<name>/SKILL.md` を参照。
+`yt-skills sync` で各チャンネルリポジトリに配布される Claude Code skill の一覧（全 **44 個**）。各行は「なにができるか」（what）の 1 行要約。発動トリガー・前提・前後工程はサイトの [skill ガイド](/skills)、詳細手順は `.claude/skills/<name>/SKILL.md` を参照。
 
 > 個別の使い分けは各カテゴリの冒頭リンクや [`docs/workflow-cheatsheet.md`](workflow-cheatsheet.md)（workflow 系）も併せて参照。
 
@@ -16,12 +16,11 @@
 
 ## チャンネル立ち上げ
 
-標準フローは `/setup` → `/channel-new`（`/channel-research --voice` → `/channel-strategy --persona` → `/channel-strategy --scene` → `/channel-strategy --constraints` を含む）→ `/wf-new`。公開前のペルソナチェーンは既存の競合 / TTP / viewer-voice 成果物を入力に完走し、自チャンネル Analytics report や任意の本格 benchmark 収集を要求しない。追加競合発掘、benchmark、方向性再検討、branding 再反映は必要なときだけ任意後続として実行する。`/channel-research --voice` は公開後の再分析では任意で、公開後の `/channel-strategy --scene` は従来どおり Analytics report を要求する。
+標準フローは `/setup` → `/channel-research --voice` → `/channel-strategy`（`--persona` → `--scene` → `--constraints`）→ `/wf-new`。公開前のペルソナチェーンは既存の競合 / TTP / viewer-voice 成果物を入力に完走し、自チャンネル Analytics report や任意の本格 benchmark 収集を要求しない。追加競合発掘、benchmark、`/channel-strategy --direction` による方向性再検討、branding 再反映は必要なときだけ任意後続として実行する。`/channel-research --voice` は公開後の再分析では任意で、公開後の `/channel-strategy --scene` は従来どおり Analytics report を要求する。
 
 | Skill | なにができるか |
 |---|---|
 | /setup | ツール導入と GCP / OAuth 設定を wizard 形式で診断・セットアップ |
-| /channel-new | TTP メモまたは分析レポートを入力に、チャンネルの方向性・ポジショニング・差別化を対話で決定 |
 | /channel-status | 登録者数・総再生回数・動画別パフォーマンスを YouTube API から取得 |
 
 ## オーディエンス・ポジショニング検証
@@ -30,7 +29,7 @@
 
 | Skill | なにができるか |
 |---|---|
-| /channel-strategy | チャンネル戦略を状態判定付きで実行し、`--persona` で第一ペルソナ、`--scene` で視聴シーン、`--constraints` で機械検証可能な制作制約を設計・見直し |
+| /channel-strategy | チャンネル戦略を状態判定付きで実行し、`--persona` で第一ペルソナ、`--scene` で視聴シーン、`--constraints` で制作制約、`--direction` で方向性・ポジショニング・差別化を設計・見直し |
 | /value-loop-audit | シーン定義・制約翻訳・公開前ゲート・指標還流の価値ループを読み取り専用で横断診断 |
 | /alignment-check | 音楽ムード × サムネ × タイトル訴求の整合性を監査 |
 | /thumbnail-compare | サムネをベンチマーク競合と並べてモバイル視認性（320px）を検証 |

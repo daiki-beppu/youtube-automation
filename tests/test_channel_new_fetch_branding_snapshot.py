@@ -10,7 +10,7 @@ from tests.helpers.paths import REPO_ROOT
 from youtube_automation.core.errors import ValidationError, YouTubeAPIError
 
 ROOT = REPO_ROOT
-SCRIPT_PATH = ROOT / ".claude/skills/channel-new/references/fetch_branding_snapshot.py"
+SCRIPT_PATH = ROOT / ".claude/skills/setup/references/fetch_branding_snapshot.py"
 
 
 def _load_module():

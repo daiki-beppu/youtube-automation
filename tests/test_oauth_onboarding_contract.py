@@ -10,7 +10,6 @@ from tests.helpers.paths import REPO_ROOT
 
 REPO_ROOT = REPO_ROOT
 SETUP_SKILL = REPO_ROOT / ".claude" / "skills" / "setup" / "SKILL.md"
-CHANNEL_NEW_SKILL = REPO_ROOT / ".claude" / "skills" / "channel-new" / "SKILL.md"
 GCP_BOOTSTRAP_MD = REPO_ROOT / ".claude" / "skills" / "setup" / "references" / "gcp-bootstrap.md"
 REGENERATION_MODE_MD = REPO_ROOT / ".claude" / "skills" / "setup" / "references" / "regeneration-mode.md"
 
@@ -132,12 +131,12 @@ def test_setup_entrypoints_do_not_keep_stale_oauth_contract() -> None:
         "作成直後",
         "JSON をダウンロード",
     )
-    # channel-new は OAuth 案内を含む再生成モード（Step R6）が references へ切り出されているため、
-    # SKILL.md 本体と regeneration-mode.md を合わせて 1 つの entrypoint として扱う
-    channel_new_docs = "\n".join(p.read_text(encoding="utf-8") for p in (CHANNEL_NEW_SKILL, REGENERATION_MODE_MD))
+    # setup は OAuth 案内を含む再生成モード（Step R6）が references へ切り出されているため、
+    # SKILL.md 本体と regeneration-mode.md を合わせて 1 つの entrypoint として扱う。
+    setup_docs = "\n".join(p.read_text(encoding="utf-8") for p in (SETUP_SKILL, REGENERATION_MODE_MD))
     for text in (
         SETUP_SKILL.read_text(encoding="utf-8"),
-        channel_new_docs,
+        setup_docs,
         GCP_BOOTSTRAP_MD.read_text(encoding="utf-8"),
     ):
         assert "Google Auth Platform" in text

@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(skills)`: `/channel-strategy --direction` に旧方向性検討 Step D1〜D5 を統合し、初回 chain から独立した 4 番目の mode として公開する。旧 `/channel-new` skill を削除し、方向性資産は `channel-strategy`、config・branding 共有資産は `setup` へ移して利用者導線・配布・site 契約を更新する（#3823）。
+
 - `feat(skills)`: `/channel-strategy --constraints` を追加し、旧 `/creative-constraints` の制作制約翻訳契約を統合する。chain manifest/state を `persona` → `scene` → `constraints` の 3-step に拡張し、制作系 consumer・配布・site の owner 導線を更新する（#3822）。
 
 - `feat(skills)`: `/channel-strategy --scene` を追加し、旧 `/viewing-scene` の公開前 / 公開後の視聴シーン定義契約を統合する。chain manifest/state を `persona` → `scene` の 2-step に拡張し、旧 skill directory と利用者導線を新 owner へ移す（#3821）。

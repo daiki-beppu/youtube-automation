@@ -7,8 +7,6 @@ import shutil
 from hashlib import sha256
 from pathlib import Path
 
-import yaml
-
 from tests.helpers.paths import REPO_ROOT
 
 SKILL_DIR = REPO_ROOT / ".claude" / "skills" / "setup"
@@ -16,10 +14,6 @@ SKILL_MD = SKILL_DIR / "references" / "channel-mode.md"
 BOOTSTRAP_REFERENCE_MD = SKILL_DIR / "references" / "new-channel-bootstrap.md"
 TTP_SEED_DURATION_REFERENCE_MD = SKILL_DIR / "references" / "ttp-seed-and-duration.md"
 PERSONA_BRANDING_READINESS_REFERENCE_MD = SKILL_DIR / "references" / "persona-branding-readiness.md"
-CHANNEL_NEW_SKILL_MD = REPO_ROOT / ".claude" / "skills" / "channel-new" / "SKILL.md"
-CHANNEL_NEW_RESIDUAL_SKILL_SHA256 = "4240e3bd12722169905203cacaa8fe3c864d72e50071bafa5e2c9ab5e6ea1b88"
-CHANNEL_NEW_DESCRIPTION_SHA256 = "d473454ede296799118ddbf00a9b5bb3b57544cd873fc6b5ce99d34071cb7716"
-CHANNEL_NEW_ROUTING_SHA256 = "cdbbaee2613c951cc2bf34b3100410494aee268ce4f9351903538fdcce6a9305"
 OPENING_ASSETS = {
     "new-channel-bootstrap.md",
     "ttp-seed-and-duration.md",
@@ -66,49 +60,6 @@ def _opening_asset_violations(skills_dir: Path) -> set[str]:
         owners = list(skills_dir.glob(f"*/references/{asset}"))
         if len(owners) != 1 or owners[0].parent.parent.name != "setup":
             violations.add(asset)
-    return violations
-
-
-def _channel_new_opening_routing_violations(markdown: str) -> set[str]:
-    frontmatter = yaml.safe_load(markdown.split("---", 2)[1])
-    description = frontmatter["description"]
-    routing = markdown.split("## モード判別", 1)[1].split("## 外部データの扱い", 1)[0]
-    opening_triggers = ("チャンネル追加", "新チャンネル", "新規チャンネル", "チャンネル開設")
-    violations = set()
-    if sha256(markdown.encode()).hexdigest() != CHANNEL_NEW_RESIDUAL_SKILL_SHA256:
-        violations.add("residual skill content")
-    if sha256(description.encode()).hexdigest() != CHANNEL_NEW_DESCRIPTION_SHA256:
-        violations.add("frontmatter description")
-    if sha256(routing.encode()).hexdigest() != CHANNEL_NEW_ROUTING_SHA256:
-        violations.add("opening routing content")
-    violations.update(f"description trigger:{trigger}" for trigger in opening_triggers if trigger in description)
-    violations.update(f"rejection context:{trigger}" for trigger in opening_triggers if trigger not in routing)
-    if "`/setup --channel` を案内して停止する" not in routing:
-        violations.add("positive setup route")
-    if "質問、reference の Read、コマンド実行、ファイルやディレクトリの作成・更新を行わない" not in routing:
-        violations.add("no-write stop")
-    for marker in (
-        "## 完了条件（新規開設モード）",
-        "1. **新規開設モード**（Step 1〜10）",
-        "## Instructions（新規開設モード）",
-        "## TTP 原則",
-    ):
-        if marker in markdown:
-            violations.add(f"opening execution:{marker}")
-    for heading in re.findall(r"^#{2,4}\s+(Step\s+(?:[1-9]|10)(?=[:：.\s]).*)$", markdown, re.MULTILINE):
-        violations.add(f"opening step:{heading}")
-    for command in ("yt-channel-init", "yt-channel-seed", "derive_ttp_duration.py", "initial_save_guard.sh"):
-        if re.search(rf"(?m)^\s*(?:uv run )?[^\n`]*{re.escape(command)}(?:\s|`|$)", markdown):
-            violations.add(f"opening command:{command}")
-    for path in (
-        "../setup/references/new-channel-bootstrap.md",
-        "../setup/references/ttp-seed-and-duration.md",
-        "../setup/references/persona-branding-readiness.md",
-        ".claude/skills/setup/references/derive_ttp_duration.py",
-        ".claude/skills/setup/references/initial_save_guard.sh",
-    ):
-        if path in markdown:
-            violations.add(f"opening asset:{path}")
     return violations
 
 
@@ -398,104 +349,8 @@ def test_opening_assets_have_exactly_one_setup_owner() -> None:
     assert _opening_asset_violations(REPO_ROOT / ".claude" / "skills") == set()
 
 
-def test_channel_new_rejects_opening_contexts_without_artifact_ownership_or_writes() -> None:
-    channel_new = CHANNEL_NEW_SKILL_MD.read_text(encoding="utf-8")
-
-    assert _channel_new_opening_routing_violations(channel_new) == set()
-    for asset in OPENING_ASSETS:
-        assert f"channel-new/references/{asset}" not in channel_new
-
-
-def test_channel_new_opening_rejection_detects_trigger_route_write_and_execution_mutations() -> None:
-    source = CHANNEL_NEW_SKILL_MD.read_text(encoding="utf-8")
-    mutations = {
-        "description trigger:チャンネル追加": source.replace(
-            "環境・チャンネル設定を整える操作",
-            "チャンネル追加の操作",
-            1,
-        ),
-        "positive setup route": source.replace("`/setup --channel` を案内して停止する", "停止する", 1),
-        "no-write stop": source.replace(
-            "質問、reference の Read、コマンド実行、ファイルやディレクトリの作成・更新を行わない",
-            "",
-            1,
-        ),
-        "opening execution:## Instructions（新規開設モード）": source.replace(
-            "## 外部データの扱い",
-            "## Instructions（新規開設モード）\n\n## 外部データの扱い",
-            1,
-        ),
-        "opening step:Step 1: TTP ヒアリング": source.replace(
-            "## 外部データの扱い",
-            "### Step 1: TTP ヒアリング\n\nTTP 対象を確認する。\n\n## 外部データの扱い",
-            1,
-        ),
-        "opening command:yt-channel-init": source.replace(
-            "## 外部データの扱い",
-            "### Step 4: フルパッケージ config / 初期運用ファイル生成\n\n"
-            "```bash\nuv run yt-channel-init\n```\n\n## 外部データの扱い",
-            1,
-        ),
-    }
-
-    for expected, mutated in mutations.items():
-        assert expected in _channel_new_opening_routing_violations(mutated)
-
-
-def test_channel_new_opening_rejection_detects_reviewer_combined_counterexample() -> None:
-    source = CHANNEL_NEW_SKILL_MD.read_text(encoding="utf-8")
-    mutated = source.replace(
-        'description: "Use when ',
-        'description: "Use when 新規チャンネルを開設するとき、',
-        1,
-    ).replace(
-        "## 外部データの扱い",
-        "### Step 1: TTP ヒアリング\n\n"
-        "### Step 4: フルパッケージ config / 初期運用ファイル生成\n\n"
-        "```bash\nuv run yt-channel-init\n```\n\n"
-        "## 外部データの扱い",
-        1,
-    )
-
-    assert _channel_new_opening_routing_violations(mutated) >= {
-        "description trigger:新規チャンネル",
-        "opening step:Step 1: TTP ヒアリング",
-        "opening step:Step 4: フルパッケージ config / 初期運用ファイル生成",
-        "opening command:yt-channel-init",
-    }
-
-
-def test_channel_new_opening_rejection_detects_new_channel_creation_description() -> None:
-    source = CHANNEL_NEW_SKILL_MD.read_text(encoding="utf-8")
-    mutated = source.replace(
-        'description: "Use when ',
-        'description: "Use when 新しいチャンネルを作るとき、',
-        1,
-    )
-
-    assert "residual skill content" in _channel_new_opening_routing_violations(mutated)
-
-
-def test_channel_new_opening_rejection_detects_channel_establishment_description() -> None:
-    source = CHANNEL_NEW_SKILL_MD.read_text(encoding="utf-8")
-    mutated = source.replace(
-        'description: "Use when ',
-        'description: "Use when YouTube チャンネルを新設するとき、',
-        1,
-    )
-
-    assert "residual skill content" in _channel_new_opening_routing_violations(mutated)
-
-
-def test_channel_new_opening_rejection_detects_prose_execution_reintroduction() -> None:
-    source = CHANNEL_NEW_SKILL_MD.read_text(encoding="utf-8")
-    mutated = source.replace(
-        "## 外部データの扱い",
-        "TTP 対象を聞き、config/channel/*.json を生成して branding を反映する。\n\n## 外部データの扱い",
-        1,
-    )
-
-    assert "residual skill content" in _channel_new_opening_routing_violations(mutated)
+def test_removed_hub_does_not_compete_with_setup_opening_owner() -> None:
+    assert not (REPO_ROOT / ".claude" / "skills" / "channel-new").exists()
 
 
 def test_opening_asset_inventory_detects_real_removal_and_duplicate(tmp_path: Path) -> None:
@@ -543,7 +398,10 @@ def test_moved_opening_assets_preserve_pre_move_bytes_or_owner_only_semantics() 
             )
             payload = payload.replace(b"/wf-new --schedule", b"/automation-schedule", 1)
         if asset == "ttp-seed-and-duration.md":
-            payload = payload.replace(b".claude/skills/setup/references/", b".claude/skills/channel-new/references/")
+            payload = payload.replace(
+                b".claude/skills/setup/references/",
+                b".claude/skills/channel-new/references/",
+            )
         if asset in {"ttp-seed-and-duration.md", "persona-branding-readiness.md"}:
             payload = payload.replace(b"/channel-research --discover", b"/discover-competitors")
             payload = payload.replace(b"/channel-research --voice", b"/viewer-voice")
@@ -568,12 +426,11 @@ def test_moved_opening_assets_preserve_pre_move_bytes_or_owner_only_semantics() 
         assert sha256(payload).hexdigest() == expected
 
 
-def test_channel_new_keeps_shared_assets_without_opening_asset_duplicates() -> None:
-    references = CHANNEL_NEW_SKILL_MD.parent / "references"
+def test_setup_keeps_shared_assets_without_opening_asset_duplicates() -> None:
+    references = SKILL_DIR / "references"
     for shared in ("fetch_branding_snapshot.py", "config-generation-rules.md", "verification.md"):
         assert (references / shared).is_file()
-    for opening in OPENING_ASSETS:
-        assert not (references / opening).exists()
+    assert _opening_asset_violations(REPO_ROOT / ".claude" / "skills") == set()
 
 
 def test_initial_save_cleanup_keeps_guarded_mutation_order() -> None:

@@ -1,13 +1,13 @@
 ---
 name: channel-research
 purpose: 調べる
-description: "Use when チャンネル調査を状態判定付きで一括実行または一段だけ実行するとき。競合データ収集は --benchmark、追加競合候補の発掘は --discover、TTP・ニッチ仮説の比較または収集済みデータ分析は --market、競合コメントからの視聴者インサイト抽出は --voice、競合サムネイルの上位群・下位群比較は --thumbnail を使う。「競合データ収集」「ベンチマーク更新」「競合候補」「競合発掘」「市場調査」「競合分析」「チャンネルリサーチ」「TTP 対象抽出」「視聴者の声」「コメント分析」「ユーザーリサーチ」「サムネイル徹底分析」「競合サムネ分析」「サムネ勝ちパターン」で発動。方向性の決定は /channel-new、サムネイル生成は /thumbnail を使う"
+description: "Use when チャンネル調査を状態判定付きで一括実行または一段だけ実行するとき。競合データ収集は --benchmark、追加競合候補の発掘は --discover、TTP・ニッチ仮説の比較または収集済みデータ分析は --market、競合コメントからの視聴者インサイト抽出は --voice、競合サムネイルの上位群・下位群比較は --thumbnail を使う。「競合データ収集」「ベンチマーク更新」「競合候補」「競合発掘」「市場調査」「競合分析」「チャンネルリサーチ」「TTP 対象抽出」「視聴者の声」「コメント分析」「ユーザーリサーチ」「サムネイル徹底分析」「競合サムネ分析」「サムネ勝ちパターン」で発動。方向性の決定は channel-strategy の direction mode、サムネイル生成は /thumbnail を使う"
 ---
 
 ## 前後工程
 
 - `前工程`: `/setup --channel`, `/setup --import`
-- `後工程`: `/channel-new`, `/channel-strategy --persona`, `/wf-new`, `/thumbnail`
+- `後工程`: `/channel-strategy --direction`, `/channel-strategy --persona`, `/wf-new`, `/thumbnail`
 - `委譲先`: `なし`
 
 ## 成果物

@@ -59,16 +59,9 @@ def _read_thumbnail_diff_report() -> str:
     return path.read_text(encoding="utf-8")
 
 
-def _read_channel_new_thumbnail_template() -> str:
+def _read_setup_thumbnail_template() -> str:
     path = (
-        _repo_root()
-        / ".claude"
-        / "skills"
-        / "channel-new"
-        / "references"
-        / "config-template"
-        / "skills"
-        / "thumbnail.yaml"
+        _repo_root() / ".claude" / "skills" / "setup" / "references" / "config-template" / "skills" / "thumbnail.yaml"
     )
     return path.read_text(encoding="utf-8")
 
@@ -89,8 +82,8 @@ def _load_thumbnail_default_config() -> dict:
     return yaml.safe_load(_read_thumbnail_default_config()) or {}
 
 
-def _load_channel_new_thumbnail_template() -> dict:
-    return yaml.safe_load(_read_channel_new_thumbnail_template()) or {}
+def _load_setup_thumbnail_template() -> dict:
+    return yaml.safe_load(_read_setup_thumbnail_template()) or {}
 
 
 def _codex_prompt_template(config: dict) -> str:
@@ -1688,13 +1681,13 @@ def test_thumbnail_default_config_codex_template_matches_skill_md_block() -> Non
     assert config_template == skill_template
 
 
-def test_channel_new_thumbnail_template_includes_codex_ttp_upgrade_prompt() -> None:
-    """#1300 / #1680: channel-new（再生成モード）で生成される thumbnail config も同じ Codex 既定文言を持つ。"""
+def test_setup_thumbnail_template_includes_codex_ttp_upgrade_prompt() -> None:
+    """#1300 / #1680: setup 再生成モードの thumbnail config も同じ Codex 既定文言を持つ。"""
     default_template = _codex_prompt_template(_load_thumbnail_default_config())
-    channel_new_template = _codex_prompt_template(_load_channel_new_thumbnail_template())
+    setup_template = _codex_prompt_template(_load_setup_thumbnail_template())
 
-    assert channel_new_template == default_template
-    assert channel_new_template.count("{title}") == 1
+    assert setup_template == default_template
+    assert setup_template.count("{title}") == 1
     for required in (
         "TTP this reference thumbnail, then improve it into a stronger original thumbnail",
         "winning layout",
@@ -1706,11 +1699,11 @@ def test_channel_new_thumbnail_template_includes_codex_ttp_upgrade_prompt() -> N
         "no broken hands",
         "Use the title {title}.",
     ):
-        assert required in channel_new_template
+        assert required in setup_template
 
 
-def test_channel_new_thumbnail_template_includes_channel_branding_contract() -> None:
-    template = _load_channel_new_thumbnail_template()
+def test_setup_thumbnail_template_includes_channel_branding_contract() -> None:
+    template = _load_setup_thumbnail_template()
     reference_images = template["image_generation"]["gemini"]["reference_images"]
 
     assert reference_images["channel_branding"] == {

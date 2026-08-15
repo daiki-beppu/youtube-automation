@@ -1,19 +1,19 @@
 ---
 name: channel-strategy
 purpose: 決める
-description: "Use when チャンネル戦略を状態判定付きで一括実行または一段だけ実行するとき。第一ペルソナは --persona、視聴シーンは --scene、音・映像・サムネ・タイトル・測定の機械検証可能なチャンネル制約への翻訳は --constraints を使う。「ペルソナ設定」「視聴者像」「ターゲット層」「視聴シーン」「利用シーン」「シーン分析」「制作制約」「creative constraints」「制約リスト」「チャンネル戦略」で発動。前提となる視聴者インサイト抽出は channel-research の voice mode を使う"
+description: "Use when チャンネル戦略を状態判定付きで一括実行または一段だけ実行するとき。第一ペルソナは --persona、視聴シーンは --scene、制作制約への翻訳は --constraints、開設後の方向性・ポジショニング・差別化の再検討は --direction を使う。「ペルソナ設定」「視聴者像」「ターゲット層」「視聴シーン」「利用シーン」「シーン分析」「制作制約」「creative constraints」「制約リスト」「方向性決めたい」「ポジショニング」「差別化」「ブレスト」「チャンネル戦略」で発動。視聴者インサイト抽出は channel-research の voice mode、市場比較は market mode を使う"
 ---
 
 ## 前後工程
 
-- `前工程`: `/channel-research --voice`
-- `後工程`: `/channel-new`, `/wf-new`
+- `前工程`: `/setup --channel`, `/channel-research --voice`, `/channel-research --market`
+- `後工程`: `/setup --regenerate`, `/wf-new`
 - `委譲先`: `なし`
 
 ## 成果物
 
-- `書き込む`: `docs/channel/personas/persona-definition.md`, `docs/plans/viewing-scene-matrix.md`, `docs/channel/creative-constraints.md`
-- `読み込む`: `docs/plans/viewer-voice-analysis.md`, `docs/plans/viewing-scene-matrix.md`, `data/benchmark_*.json`
+- `書き込む`: `docs/channel/personas/persona-definition.md`, `docs/plans/viewing-scene-matrix.md`, `docs/channel/creative-constraints.md`, `docs/channel/channel-direction.md`
+- `読み込む`: `docs/plans/viewer-voice-analysis.md`, `docs/plans/viewing-scene-matrix.md`, `docs/channel-research.md`, `docs/channel/ttp-seed-confirmation.md`, `docs/channel/competitor-branding-snapshot.json`, `data/benchmark_*.json`
 
 ## モード判定
 
@@ -23,15 +23,16 @@ description: "Use when チャンネル戦略を状態判定付きで一括実行
 - 1 個が `--persona` なら `references/persona.md` を読み、その一段だけを実行する。残りの引数は persona mode の引数として扱う
 - 1 個が `--scene` なら `references/scene.md` を読み、その一段だけを実行する。残りの引数は scene mode の引数として扱う
 - 1 個が `--constraints` なら `references/constraints.md` を読み、その一段だけを実行する。残りの引数は constraints mode の引数として扱う
+- 1 個が `--direction` なら `references/direction.md` を読み、その一段だけを実行する。残りの引数は direction mode の引数として扱う
 - 0 個なら chain manifest に従い状態判定付きで進める
-- `--direction` は後続段で登録する予約名であり、現段では未知の mode として停止する
-- mode はこの表へ最大 4 件まで追加でき、判定規則を複製しない。予約名以外の未知の mode flag も停止する
+- mode はこの表の 4 件を正とし、判定規則を複製しない。未知の mode flag は停止する
 
 | mode | 読む reference |
 |---|---|
 | `--persona` | `references/persona.md` |
 | `--scene` | `references/scene.md` |
 | `--constraints` | `references/constraints.md` |
+| `--direction` | `references/direction.md` |
 
 ## 共通前提
 
@@ -65,6 +66,7 @@ uv run python .claude/skills/channel-strategy/references/channel-strategy-chain-
 - `--persona`: `references/persona.md` の完了条件を満たしている
 - `--scene`: `references/scene.md` の完了条件を満たしている
 - `--constraints`: `references/constraints.md` の完了条件を満たしている
+- `--direction`: `references/direction.md` の Step D1〜D5 を完了し、`docs/channel/channel-direction.md` を保存している
 
 実行段、skip 段、前提不足、更新成果物を短く報告する。
 

@@ -8,7 +8,7 @@ from tests.helpers.paths import REPO_ROOT
 from youtube_automation.commands.system.skills_sync import bundled_skill_names
 
 ROOT = REPO_ROOT
-CHANNEL_NEW = ROOT / ".claude/skills/channel-new/SKILL.md"
+CHANNEL_STRATEGY = ROOT / ".claude/skills/channel-strategy/SKILL.md"
 CHANNEL_RESEARCH = ROOT / ".claude/skills/channel-research/SKILL.md"
 MARKET_MODE = ROOT / ".claude/skills/channel-research/references/market.md"
 VOICE_MODE = ROOT / ".claude/skills/channel-research/references/voice.md"
@@ -38,14 +38,14 @@ def test_channel_research_owns_thumbnail_research_and_legacy_skill_is_not_distri
     assert not (ROOT / ".claude/skills/thumbnail-research").exists()
 
 
-def test_channel_new_keeps_only_direction_mode() -> None:
-    skill = _read(CHANNEL_NEW)
+def test_channel_strategy_owns_direction_without_market_analysis() -> None:
+    skill = _read(CHANNEL_STRATEGY)
     frontmatter = yaml.safe_load(skill.split("---", 2)[1])
     description = frontmatter["description"]
 
     for keyword in ("競合分析", "チャンネルリサーチ", "TTP 対象抽出"):
         assert keyword not in description
-    assert "references/direction-mode.md" in skill
+    assert "references/direction.md" in skill
     assert "references/analysis-mode.md" not in skill
 
 
@@ -67,7 +67,7 @@ def test_market_mode_preserves_both_branches_inputs_gates_and_outputs() -> None:
         "docs/research/market-<YYYY-MM-DD>.md",
         "market-comparison",
         "collected-analysis",
-        ".claude/skills/channel-new/references/desire-vocabulary.md",
+        ".claude/skills/channel-strategy/references/desire-vocabulary.md",
     ):
         assert contract in mode
 

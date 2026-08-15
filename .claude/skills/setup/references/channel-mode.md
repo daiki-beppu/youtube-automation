@@ -1,6 +1,6 @@
 # Channel setup mode（Step 1〜10）
 
-`/setup --channel` は、旧 `/channel-new` 新規開設モードと同じ TTP hearing → seed confirmation → config → duration → persona → branding → readiness → initial save を 1 つの完了契約として実行する正本である。開始時に本書が指示する reference を読み、失敗または blocked になった Step で停止する。再実行時は既存成果物と状態を確認して最初の未完了 Step から再開し、完了済み成果物を無断で上書きしない。同じ状態での再実行は同じ停止・skip・完了判定を返す。
+`/setup --channel` は、移設前の新規開設モードと同じ TTP hearing → seed confirmation → config → duration → persona → branding → readiness → initial save を 1 つの完了契約として実行する正本である。開始時に本書が指示する reference を読み、失敗または blocked になった Step で停止する。再実行時は既存成果物と状態を確認して最初の未完了 Step から再開し、完了済み成果物を無断で上書きしない。同じ状態での再実行は同じ停止・skip・完了判定を返す。
 
 不可逆操作は各 Step の承認 gate より前に実行しない。承認されなかった場合、前段までの成果物を保持して停止し、成功案内を出さない。
 ## 完了条件（--channel）
@@ -17,8 +17,8 @@
 - `uv run yt-doctor --json` の `ttp_wf_new_readiness` が `ok` である。`warn` の場合は不足項目を解消するか、ユーザー承認済み例外を明記してから再確認する
 ## TTP 原則
 
-`/channel-new` の主目的は、競合チャンネルを **seed** ではなく **TTP 対象** として収集し、転写する型を明文化すること。
-「`/channel-new` では方向性・差別化・ポジショニングを聞かず、TTP 対象の転写に必要な情報だけを確認する」という従来原則は `--channel` モードへ移る。既存チャンネル取り込みモードの方向性確認は residual `/channel-new` に従う。
+`/setup --channel` の主目的は、競合チャンネルを **seed** ではなく **TTP 対象** として収集し、転写する型を明文化すること。
+新規開設では方向性・差別化・ポジショニングを聞かず、TTP 対象の転写に必要な情報だけを確認する。既存チャンネル取り込み後の方向性確認は `/channel-strategy --direction` に従う。
 
 TTP メモは最低限、以下の観点を含める:
 
@@ -95,7 +95,7 @@ Step 4 で解消するため、`channel_config`: `config/channel/ ディレク�
 Step 1 の TTP ヒアリングとは別に、config 生成に必要な初期値だけをここで確認する。確認項目は **仮チャンネル名と SHORT** / **初期ジャンル情報** / **音楽エンジン** / **DistroKid 配信有無** / **DistroKid 初期 profile**。値の schema と確認規則は reference に従う。
 **動画尺** はここで確認せず、Step 5 の TTP seed fetch 後に Step 5.5 で承認済み TTP の benchmark から導出する。
 
-`yt-channel-init` で `config/channel/*.json` と channel-new に必要な初期運用ファイルを一括生成し、`/setup` が作成済みのディレクトリはそのまま再利用する。
+`yt-channel-init` で `config/channel/*.json` とチャンネル運用に必要な初期ファイルを一括生成し、`/setup` が作成済みのディレクトリはそのまま再利用する。
 
 ```bash
 uv run yt-channel-init \
@@ -166,7 +166,7 @@ uv run yt-channel-seed "https://www.youtube.com/@example" \
 承認済み TTP 対象についてだけ、branding 転写に必要な情報を取得して保存する:
 
 ```bash
-uv run python .claude/skills/channel-new/references/fetch_branding_snapshot.py \
+uv run python .claude/skills/setup/references/fetch_branding_snapshot.py \
   --channel-id "UC..." \
   --output docs/channel/competitor-branding-snapshot.json
 ```

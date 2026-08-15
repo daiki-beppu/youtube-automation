@@ -908,7 +908,7 @@ def test_main_is_safe_after_setup_dirs_precreated_directories(tmp_path):
     assert setup_dirs_main(["--target", str(tmp_path)]) == 0
     assert not (tmp_path / "config" / "channel").exists()
 
-    # When: /channel-new が後続で yt-channel-init を実行
+    # When: /channel-strategy --direction が後続で yt-channel-init を実行
     rc = main(_required_args(tmp_path))
 
     # Then: config 生成と既存ディレクトリの .gitkeep 維持が両立する

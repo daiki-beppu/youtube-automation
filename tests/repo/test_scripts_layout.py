@@ -4,7 +4,7 @@ Issue #140: skill 固有スクリプト (``generate_videos.sh`` / ``worktree_syn
 ルート ``scripts/`` から ``.claude/skills/<skill>/references/`` 配下に canonical 化する整理。
 
 Issue #388: ``scripts/gcp-bootstrap.sh`` / ``scripts/gcp-terraform-apply.sh`` が
-``.claude/skills/channel-new/references/`` 側と MD5 完全一致していたため、
+``.claude/skills/setup/references/`` 側と MD5 完全一致していたため、
 ルート ``scripts/`` 側を削除し canonical path に一本化する整理。
 
 このテストは以下の不変条件を維持する:

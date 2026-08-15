@@ -21,7 +21,7 @@ from youtube_automation.infrastructure import filesystem
 _DEFAULT_YAML = REPO_ROOT / ".claude" / "skills" / "suno" / "config.default.yaml"
 _SUNO_LYRIC_DEFAULT_YAML = REPO_ROOT / ".claude" / "skills" / "suno-lyric" / "config.default.yaml"
 _SKILL_MD = REPO_ROOT / ".claude" / "skills" / "suno" / "SKILL.md"
-_CONFIG_RULES_MD = REPO_ROOT / ".claude" / "skills" / "channel-new" / "references" / "config-generation-rules.md"
+_CONFIG_RULES_MD = REPO_ROOT / ".claude" / "skills" / "setup" / "references" / "config-generation-rules.md"
 _STYLE_VARIANTS_UNSET = object()
 _EXCLUDE_STYLES_UNSET = object()
 _VOCAL_GENDER_UNSET = object()
@@ -397,7 +397,7 @@ def test_suno_lyric_default_yaml_defines_cta_and_safe_quote_source_contract():
     assert data["source"]["index_path"].startswith("/meigen/")
 
 
-def test_channel_new_rules_list_suno_lyrics_override_keys():
+def test_setup_rules_list_suno_lyrics_override_keys():
     text = _CONFIG_RULES_MD.read_text(encoding="utf-8")
 
     assert "config/skills/suno-lyric.yaml" in text

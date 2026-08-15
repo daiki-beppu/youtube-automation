@@ -1,6 +1,6 @@
 # 方向性検討モード（Step D1〜D5）
 
-`/channel-new` 方向性検討モードの手順詳細。SKILL.md の「モード判別」で本モードと判定された場合に、このファイルの手順どおりに実行する。
+`/channel-strategy --direction` 方向性検討モードの手順詳細。SKILL.md の「モード判別」で本モードと判定された場合に、このファイルの手順どおりに実行する。
 
 `/channel-research --market` の分析レポート、または `/setup --channel` が保存した
 `docs/channel/ttp-seed-confirmation.md` と `docs/channel/competitor-branding-snapshot.json` をもとに、

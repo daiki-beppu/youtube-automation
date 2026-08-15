@@ -24,7 +24,7 @@ def _occurrences(
     )
 
 
-# The 35 /channel-new occurrences on main before #3985, classified by execution context.
+# The 35 /channel-strategy --direction occurrences on main before #3985, classified by execution context.
 OCCURRENCE_LEDGER = (
     *_occurrences(
         "channel-strategy",
@@ -99,9 +99,9 @@ OCCURRENCE_LEDGER = (
 # SHA-256 of ordered ``section heading + active route line`` records. This binds
 # every route to its exact active Markdown context without duplicating long prose.
 ROUTE_CONTEXT_SHA256 = {
-    "channel-strategy": "6828984d0f40eedc3ec54099033325c5c251f9887e8130d167417bf6836681f6",
-    "channel-research": "626835fe7b37f18bdbf3e233dcc070b533415a4538133ffbb0e02a448fe59b5b",
-    "video-analyze": "f28ee9c9b0a18c3ecae15b631f970d780b18bda72185a25935b56f0a66ba6552",
+    "channel-strategy": "b3a1ffa6b21191d5dabed4e68fa9f0ee639202b46a267d67fc63602615e3946b",
+    "channel-research": "0e2fa9b5d7a880898d41f421614aa8f6d61af3683494e551161c67701b6cf6bb",
+    "video-analyze": "4741c7bf870c47151ce99877201e4ca590d52159013b0a82dbaaea43ea253d01",
 }
 SETUP_ASSET_OWNERS = {
     "channel-strategy": ("persona-branding-readiness.md",),
@@ -112,7 +112,7 @@ SETUP_ASSET_OWNERS = {
     ),
 }
 UNCHANGED_SKILL_SHA256 = {
-    "video-analyze": "45032757ba0366fa467160d1cde67f8bc28033cc24c1a7b9d8a8cb436af2e666",
+    "video-analyze": "de60a84b6c57df1f4a1c829d453c6df4ba3027d2d8b25a17555027287df2b0be",
 }
 RESIDUAL_LINE_MARKERS = {
     "channel-research": (
@@ -126,7 +126,7 @@ RESIDUAL_LINE_MARKERS = {
     ),
 }
 RESIDUAL_SHA256 = {
-    "channel-research": "7757b2717f72bf8af2f28346f91497c36ff53d5f276fb9d2aeb61d7fe8a1aee5",
+    "channel-research": "d4c181aeb49c0d1c2913733fd317e629c29ac221e075d1b1349f6a40891a864b",
 }
 
 
@@ -156,7 +156,8 @@ def _active_route_snapshot(text: str) -> tuple[bytes, bool]:
             in_fence = not in_fence
             continue
         has_route = any(
-            route in line for route in ("/channel-new", "/setup --channel", "/setup --import", "/setup --regenerate")
+            route in line
+            for route in ("/channel-strategy --direction", "/setup --channel", "/setup --import", "/setup --regenerate")
         )
         starts_comment = "<!--" in line
         ends_comment = "-->" in line
@@ -199,7 +200,7 @@ def test_all_three_skills_match_the_context_classified_occurrence_ledger() -> No
 
 def test_opening_route_validator_detects_wrong_redirect_and_residual_overwrite() -> None:
     strategy = _skill_text("channel-strategy")
-    wrong_redirect = strategy.replace("`/setup --channel` Step 7", "`/channel-new` Step 7", 1)
+    wrong_redirect = strategy.replace("`/setup --channel` Step 7", "`/channel-strategy --direction` Step 7", 1)
     assert "active route context ledger" in _route_violations("channel-strategy", wrong_redirect)
 
     research = _skill_text("channel-research")
@@ -212,7 +213,8 @@ def test_route_validator_rejects_inactive_mixed_swapped_and_relocated_routes() -
     canonical = next(line for line in strategy.splitlines() if "新規チャンネルは `/setup --channel` Step 4" in line)
     inactive_mixed = strategy.replace(
         canonical,
-        "~~新規チャンネルは /setup --channel Step 4~~ 新規チャンネルは /channel-new Step 4、既存チャンネルは /setup",
+        "~~新規チャンネルは /setup --channel Step 4~~ "
+        "新規チャンネルは /channel-strategy --direction Step 4、既存チャンネルは /setup",
     )
     assert _route_violations("channel-strategy", inactive_mixed) >= {
         "active route context ledger",
@@ -230,7 +232,9 @@ def test_route_validator_rejects_inactive_mixed_swapped_and_relocated_routes() -
     )
     assert "active route context ledger" in _route_violations("channel-strategy", relocated)
 
-    commented = strategy.replace(canonical, f"<!-- {canonical} -->\n新規チャンネルは `/channel-new` Step 4")
+    commented = strategy.replace(
+        canonical, f"<!-- {canonical} -->\n新規チャンネルは `/channel-strategy --direction` Step 4"
+    )
     assert _route_violations("channel-strategy", commented) >= {
         "active route context ledger",
         "inactive Markdown route",
