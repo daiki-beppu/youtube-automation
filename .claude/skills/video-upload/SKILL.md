@@ -1,7 +1,7 @@
 ---
 name: video-upload
 purpose: 公開する
-description: "Use when コレクションの動画または release 型（単曲リリース）の楽曲リリース動画が完成し、YouTubeへのアップロード自動化が必要なとき。「楽曲リリースをアップロード」「リリース動画を公開」で発動。collection 型は Complete Collection のアップロードと live 移行、release 型は言語別アップロードを実行。動画ファイルの生成（MP3→MP4）は /videoup、リリースショート生成は /short-release"
+description: "Use when コレクションの動画または release 型（単曲リリース）の楽曲リリース動画が完成し、YouTubeへのアップロード自動化が必要なとき。「楽曲リリースをアップロード」「リリース動画を公開」で発動。collection 型は Complete Collection のアップロードと live 移行、release 型は言語別アップロードを実行。動画ファイルの生成（MP3→MP4）は /videoup、ショート生成は /short"
 ---
 
 ## 前後工程

@@ -21,7 +21,7 @@
 
 | # | 成長レバー | 対応する既存スキル / CLI | データソース | カバー度 |
 | --- | --- | --- | --- | --- |
-| L1 | インプレッション獲得 | `/analytics --collect --include-reporting`（動画別 Imp）、traffic source 収集（`insightTrafficSourceType/Detail`）、`/channel-research --benchmark`（競合の露出獲得パターン）、`/short` `/short-release`（流入面の追加） | Reporting API v1 / Analytics API v2 / Data API v3 | ◯ 計測は可、施策検証は弱い |
+| L1 | インプレッション獲得 | `/analytics --collect --include-reporting`（動画別 Imp）、traffic source 収集（`insightTrafficSourceType/Detail`）、`/channel-research --benchmark`（競合の露出獲得パターン）、`/short`（流入面の追加） | Reporting API v1 / Analytics API v2 / Data API v3 | ◯ 計測は可、施策検証は弱い |
 | L2 | CTR | `/thumbnail`（TTP ベース生成）、`/thumbnail-compare`（320px 視認性）、`yt-thumbnail-correlate`（特徴量×CTR 相関）、`/alignment-check`（サムネ×タイトル×ムード整合）、`/flop-analysis`（CTR 閾値ルーブリック） | Reporting API v1 + サムネ画像特徴量 | ◎ 最厚のレバー |
 | L3 | 視聴維持 | retention 収集（`audienceWatchRatio` / `relativeRetentionPerformance`）、`/video-analyze`（Gemini によるフック・BGM 展開解析）、`/channel-strategy --scene`（シーン別の最適尺設計） | Analytics API v2 / Vertex AI | ◯ 計測◎、原因照合が手動 |
 | L4 | 回遊・セッション | `/playlist`（`yt-playlist-manager`）、`/video-description`（Complete Collection 導線）、カード指標収集（`cardImpressions/Clicks/ClickRate`）、`/pinned-comment` `/comments-reply` `/community-post` | Analytics API v2 / Data API v3 | △ 導線は張れるが効果測定が薄い |

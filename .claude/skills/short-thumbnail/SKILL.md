@@ -6,7 +6,7 @@ description: "Use when ショート用 9:16 サムネ作成、または short.pn
 
 ## 前後工程
 
-- `前工程`: `/short`, `/short-release`
+- `前工程`: `/short`
 - `後工程`: `なし`
 - `委譲先`: `なし`
 

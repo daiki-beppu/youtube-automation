@@ -1,5 +1,7 @@
 # Changelog
 
+- `feat(skills)`: `/short` が `content_model.type` から collection / release の手順を自動分岐し、`/short-release` の生成契約・設定・参照スクリプトを統合した（#3833）
+
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),

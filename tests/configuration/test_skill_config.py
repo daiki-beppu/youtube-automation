@@ -34,7 +34,6 @@ EXPECTED_SKILL_ONLY_CONFIG_KEYS = frozenset(
         "live-clean",
         "lyria",
         "short",
-        "short-release",
         "suno-lyric",
         "video-analyze",
         "video-description",

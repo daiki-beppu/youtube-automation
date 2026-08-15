@@ -147,6 +147,10 @@ esac
         bin_dir / "open",
         '#!/bin/bash\nprintf \'open:%s\\n\' "$*" >> "$FFMPEG_CALLS"\n',
     )
+    _write_executable(
+        bin_dir / "uv",
+        "#!/bin/bash\nprintf '%s\\n' \"$TEST_CONTENT_MODEL\"\n",
+    )
     env = os.environ.copy()
     env.update(
         {
@@ -158,16 +162,17 @@ esac
     return env, calls
 
 
-def test_release_shorts_generates_jp_and_en_and_propagates_ffmpeg_failure(tmp_path: Path) -> None:
+def test_short_generates_release_clips_when_config_content_model_is_release(tmp_path: Path) -> None:
     release = tmp_path / "01-blue-night"
     video = release / "video"
     video.mkdir(parents=True)
     (video / "blue-night-jp.mp4").write_bytes(b"jp")
     (video / "blue-night-en.mp4").write_bytes(b"en")
     env, calls = _ffmpeg_env(tmp_path / "ok")
+    env["TEST_CONTENT_MODEL"] = "release"
 
     result = _run(
-        SKILLS / "short-release" / "references" / "generate-shorts.sh",
+        SKILLS / "short" / "references" / "generate-shorts.sh",
         str(release),
         "-s",
         "11",
@@ -186,8 +191,9 @@ def test_release_shorts_generates_jp_and_en_and_propagates_ffmpeg_failure(tmp_pa
     failure_root = tmp_path / "failure"
     failure_root.mkdir()
     fail_env, _ = _ffmpeg_env(failure_root, fail_pattern="blue-night-en.mp4")
+    fail_env["TEST_CONTENT_MODEL"] = "release"
     failed = _run(
-        SKILLS / "short-release" / "references" / "generate-shorts.sh",
+        SKILLS / "short" / "references" / "generate-shorts.sh",
         str(release),
         cwd=tmp_path,
         env=fail_env,
@@ -207,7 +213,13 @@ def _collection(tmp_path: Path) -> Path:
 def test_collection_shorts_generates_every_label_and_fails_if_any_background_job_fails(tmp_path: Path) -> None:
     collection = _collection(tmp_path)
     env, calls = _ffmpeg_env(tmp_path / "ok")
-    env.update({"SHORT_STARTS": "10 20", "SHORT_LABELS": "first second"})
+    env.update(
+        {
+            "TEST_CONTENT_MODEL": "collection",
+            "SHORT_STARTS": "10 20",
+            "SHORT_LABELS": "first second",
+        }
+    )
     result = _run(
         SKILLS / "short" / "references" / "generate-shorts.sh",
         str(collection),
@@ -222,7 +234,13 @@ def test_collection_shorts_generates_every_label_and_fails_if_any_background_job
     failure_root = tmp_path / "partial-failure"
     failure_root.mkdir()
     fail_env, _ = _ffmpeg_env(failure_root, fail_pattern="short-02-second.mp4")
-    fail_env.update({"SHORT_STARTS": "10 20", "SHORT_LABELS": "first second"})
+    fail_env.update(
+        {
+            "TEST_CONTENT_MODEL": "collection",
+            "SHORT_STARTS": "10 20",
+            "SHORT_LABELS": "first second",
+        }
+    )
     failed = _run(
         SKILLS / "short" / "references" / "generate-shorts.sh",
         str(collection),
@@ -231,6 +249,22 @@ def test_collection_shorts_generates_every_label_and_fails_if_any_background_job
     )
     assert failed.returncode == 12
     assert "ffmpeg job failed" in failed.stderr
+
+
+def test_short_rejects_unknown_config_content_model(tmp_path: Path) -> None:
+    env, calls = _ffmpeg_env(tmp_path / "unknown")
+    env["TEST_CONTENT_MODEL"] = "other"
+
+    result = _run(
+        SKILLS / "short" / "references" / "generate-shorts.sh",
+        str(tmp_path / "target"),
+        cwd=tmp_path,
+        env=env,
+    )
+
+    assert result.returncode == 2
+    assert "unsupported content_model.type: other" in result.stderr
+    assert not calls.exists()
 
 
 def test_crop_positions_rejects_missing_input_and_propagates_ffmpeg_failure(tmp_path: Path) -> None:

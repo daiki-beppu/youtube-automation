@@ -133,7 +133,7 @@ mode と modifier は次のように分けて記載する。
 - skill が mode・variant を持つ場合は、対応する引数（`--batch`、`--since <N>` など）を `description` に列挙する。本文だけに記載してもスキル選択時には見えないため、本文を `description` の代わりにしない。
 - 標準型: 用途 + 発動キーワード + `〜の場合は /<sibling> を使う`。棲み分けは双方向に書く（A→B と B→A の両方）。
 - frontmatter の記法規約（`description:` の double-quote 等）は `CLAUDE.md`「### skill frontmatter」を正とし、ここでは再掲しない。検証は `uv run yt-skills lint`。
-- **良い実例**: [.claude/skills/short/SKILL.md](../../.claude/skills/short/SKILL.md) と [.claude/skills/short-release/SKILL.md](../../.claude/skills/short-release/SKILL.md) — collection 型 / release 型を互いに否定トリガーで排他している。
+- **良い実例**: [.claude/skills/short/SKILL.md](../../.claude/skills/short/SKILL.md) — `content_model.type` から collection / release を自動分岐し、利用者に型の選択を求めない。
 
 ### 前後工程
 

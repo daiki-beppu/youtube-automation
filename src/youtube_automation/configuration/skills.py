@@ -56,7 +56,6 @@ SKILL_ONLY_CONFIG_KEYS: Final[frozenset[str]] = frozenset(
         "live-clean",
         "lyria",
         "short",
-        "short-release",
         "suno-lyric",
         "video-analyze",
         "video-description",

@@ -151,13 +151,13 @@ test("実リポジトリでは9カテゴリと全skillを生成する", async ()
     await readFile(join(repositoryRoot, "docs/features.md"), "utf8")
   ).match(/^\| \/[a-z0-9-]+ /gmu);
 
-  assert.equal(result.entries.length, 45);
-  assert.equal(skillDirectories?.length, 44);
+  assert.equal(result.entries.length, 44);
+  assert.equal(skillDirectories?.length, 43);
   assert.equal(parseSkillCategories(await readFile(join(repositoryRoot, "docs/features.md"), "utf8")).length, 9);
   assert.doesNotMatch(result.entries[0].body.text, /## 未分類/);
 });
 
-test("production build は一覧と44個の個別ページを公開する", async () => {
+test("production build は一覧と43個の個別ページを公開する", async () => {
   const siteRoot = resolve(import.meta.dirname, "..");
   const index = await readFile(join(siteRoot, "dist/skills/index.html"), "utf8");
   const thumbnail = await readFile(
@@ -165,7 +165,7 @@ test("production build は一覧と44個の個別ページを公開する", asyn
     "utf8"
   );
 
-  assert.match(index, /44 個の skill/);
+  assert.match(index, /43 個の skill/);
   assert.match(index, /href="\/skills\/wf-new"/);
   assert.equal((index.match(/<h1\b/g) ?? []).length, 1);
   assert.match(index, /<h1[^>]*>全 skill 一覧<\/h1>/);

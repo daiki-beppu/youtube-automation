@@ -136,10 +136,6 @@ NON_TARGET_SKILLS: dict[str, str] = {
         "本リポジトリのリリース作業のみ。yt-upload-collection への言及は"
         "リリースノート内の例示参照で、手順として実行しない"
     ),
-    "short-release": (
-        "9:16 クリップの ffmpeg ローカル生成のみ。yt-upload-shorts への言及は"
-        "アップロード未実装（スコープ外）の案内で、手順として実行しない"
-    ),
     "suno": (
         "Suno プロンプトのローカル生成のみ。yt-video-analyze への言及は"
         "/video-analyze 出力 JSON の読込参照で、手順として実行しない"
