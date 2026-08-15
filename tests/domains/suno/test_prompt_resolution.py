@@ -34,6 +34,229 @@ def _patterns() -> dict[str, object]:
     }
 
 
+def _resolve_direct(
+    *,
+    patterns: Mapping[str, object] | None = None,
+    config: Mapping[str, object] | None = None,
+    override: Mapping[str, object] | None = None,
+) -> prompt_resolution.ResolvedPrompts:
+    """Resolver core を file I/O なしの mapping 入力で呼ぶ。"""
+    raw_override = {} if override is None else dict(override)
+    merged_config = {**_config(), **raw_override} if config is None else dict(config)
+    return prompt_resolution.resolve(
+        _patterns() if patterns is None else patterns,
+        merged_config,
+        raw_override,
+        patterns_path=Path("patterns.yaml"),
+        workflow_state_path=None,
+        workflow_track_count=None,
+        lyrics=None,
+        existing_output_names=(),
+        verification_collection_path=Path("."),
+    )
+
+
+def test_resolve_explicit_instrumental_mode_overrides_vocal_genre_line():
+    resolved = _resolve_direct(
+        patterns={**_patterns(), "mode": "instrumental"},
+        override={"genre_line": "dream pop vocals"},
+    )
+
+    assert not resolved.is_vocal
+    assert resolved.genre_line == "dream pop vocals"
+
+
+def test_resolve_collection_genre_line_overrides_channel_style_and_mode():
+    resolved = _resolve_direct(
+        patterns={**_patterns(), "mode": None, "genre_line": "collection lo-fi instrumental"},
+        override={"genre_line": "channel dream pop vocals"},
+    )
+
+    assert resolved.genre_line == "collection lo-fi instrumental"
+    assert not resolved.is_vocal
+
+
+@pytest.mark.parametrize("first_genre", ["first collection soul", "second collection jazz"])
+def test_resolve_collection_genre_line_is_isolated_between_calls(first_genre: str):
+    first = _resolve_direct(patterns={**_patterns(), "genre_line": first_genre})
+    second = _resolve_direct(patterns={**_patterns(), "genre_line": "other collection style"})
+
+    assert first.genre_line == first_genre
+    assert second.genre_line == "other collection style"
+
+
+def test_resolve_collection_genre_line_rejects_non_string_value():
+    with pytest.raises(ConfigError, match=r"patterns\.yaml.*genre_line.*string"):
+        _resolve_direct(patterns={**_patterns(), "genre_line": ["not", "a", "string"]})
+
+
+@pytest.mark.parametrize(
+    "duration_sec",
+    [True, False, "180", 180.0, float("nan"), float("inf"), float("-inf"), 0, -1],
+)
+def test_resolve_rejects_invalid_duration_sec_override(duration_sec: object):
+    with pytest.raises(ConfigError, match=r"duration_sec.*positive integer"):
+        _resolve_direct(override={"duration_sec": duration_sec})
+
+
+def test_resolve_includes_positive_duration_sec_when_explicitly_overridden():
+    resolved = _resolve_direct(override={"duration_sec": 180})
+
+    assert resolved.advanced_json_fields["duration_sec"] == 180
+
+
+def test_resolve_does_not_derive_duration_sec_from_duration_filter():
+    resolved = _resolve_direct(override={"duration_filter": {"min_sec": 120, "max_sec": 240}})
+
+    assert "duration_sec" not in resolved.advanced_json_fields
+
+
+def test_resolve_collection_exclude_styles_overrides_channel_value():
+    resolved = _resolve_direct(
+        patterns={**_patterns(), "exclude_styles": "collection edm"},
+        override={"exclude_styles": "channel metal"},
+    )
+
+    assert resolved.exclude_styles == "collection edm"
+    assert resolved.advanced_json_fields["exclude_styles"] == "collection edm"
+
+
+def test_resolve_collection_empty_exclude_styles_is_explicit():
+    resolved = _resolve_direct(
+        patterns={**_patterns(), "exclude_styles": ""},
+        override={"exclude_styles": "channel metal"},
+    )
+
+    assert resolved.exclude_styles == ""
+    assert resolved.advanced_json_fields == {"exclude_styles": ""}
+
+
+@pytest.mark.parametrize("exclude_styles", [None, [], {}])
+def test_resolve_collection_exclude_styles_rejects_non_string(exclude_styles: object):
+    with pytest.raises(ConfigError, match=r"patterns\.yaml.*exclude_styles.*string"):
+        _resolve_direct(patterns={**_patterns(), "exclude_styles": exclude_styles})
+
+
+@pytest.mark.parametrize(
+    ("override", "expected"),
+    [
+        ({"style_influence": 85}, {"style_influence": 85}),
+        ({"weirdness": 30}, {"weirdness": 30}),
+        ({"exclude_styles": "hyperpop, edm"}, {"exclude_styles": "hyperpop, edm"}),
+        (
+            {"style_influence": 85, "weirdness": 30, "exclude_styles": "hyperpop, edm"},
+            {"style_influence": 85, "weirdness": 30, "exclude_styles": "hyperpop, edm"},
+        ),
+        ({"style_influence": 0, "weirdness": 0}, {"style_influence": 0, "weirdness": 0}),
+        ({"vocal_gender": "male"}, {"vocal_gender": "male"}),
+        ({"vocal_gender": ""}, {}),
+        ({}, {}),
+    ],
+)
+def test_resolve_gates_advanced_fields_on_explicit_override(override: dict[str, object], expected: dict[str, object]):
+    assert _resolve_direct(override=override).advanced_json_fields == expected
+
+
+def test_resolve_collection_vocal_gender_overrides_channel_value():
+    resolved = _resolve_direct(
+        patterns={**_patterns(), "vocal_gender": "female"},
+        override={"vocal_gender": "male"},
+    )
+
+    assert resolved.advanced_json_fields["vocal_gender"] == "female"
+
+
+def test_resolve_collection_empty_vocal_gender_removes_channel_value():
+    resolved = _resolve_direct(
+        patterns={**_patterns(), "vocal_gender": ""},
+        override={"vocal_gender": "male"},
+    )
+
+    assert "vocal_gender" not in resolved.advanced_json_fields
+
+
+@pytest.mark.parametrize("vocal_gender", [None, "other"])
+def test_resolve_collection_vocal_gender_rejects_values_outside_contract(vocal_gender: object):
+    with pytest.raises(ConfigError, match=r"patterns\.yaml.*vocal_gender.*male.*female.*neutral.*auto"):
+        _resolve_direct(patterns={**_patterns(), "vocal_gender": vocal_gender})
+
+
+def test_resolve_collection_style_variant_overrides_same_named_channel_variant():
+    resolved = _resolve_direct(
+        patterns={
+            **_patterns(),
+            "style_variants": {"ambient": {"name": "Collection Soul", "genre_line": "collection acoustic soul"}},
+        },
+        override={"style_variants": {"ambient": {"name": "Channel Ambient", "genre_line": "channel ambient pad"}}},
+    )
+
+    assert prompt_resolution.resolve_style_variant(resolved, "ambient") == {
+        "name": "Collection Soul",
+        "genre_line": "collection acoustic soul",
+    }
+
+
+def test_resolve_explicit_empty_style_variants_does_not_inherit_channel_keys():
+    resolved = _resolve_direct(
+        patterns={**_patterns(), "style_variants": {}},
+        override={"style_variants": {"ambient": {"name": "Channel Ambient", "genre_line": "channel ambient pad"}}},
+    )
+
+    with pytest.raises(ConfigError, match="未定義の style variant"):
+        prompt_resolution.resolve_style_variant(resolved, "ambient")
+
+
+@pytest.mark.parametrize(
+    ("style_variants", "error_pattern"),
+    [
+        (None, r"style_variants.*mapping"),
+        ([], r"style_variants.*mapping"),
+        ({"ambient": []}, r"style_variants\.ambient.*mapping"),
+        ({"ambient": {"name": "Ambient"}}, r"style_variants\.ambient\.genre_line.*string"),
+        ({"ambient": {"genre_line": "ambient pad"}}, r"style_variants\.ambient\.name.*string"),
+    ],
+)
+def test_resolve_collection_style_variants_reject_invalid_shapes(style_variants: object, error_pattern: str):
+    with pytest.raises(ConfigError, match=error_pattern):
+        _resolve_direct(patterns={**_patterns(), "style_variants": style_variants})
+
+
+@pytest.mark.parametrize(
+    ("style_variation", "error_pattern"),
+    [
+        (None, r"suno\.style_variation は mapping"),
+        ([], r"suno\.style_variation は mapping"),
+        ({"enabled": "yes"}, r"enabled は bool"),
+        ({"enabled": True, "pools": None}, r"pools は mapping"),
+        ({"enabled": True, "pools": []}, r"pools は mapping"),
+        ({"enabled": True, "pools": {"": ["warm texture"]}}, r"axis 名"),
+        ({"enabled": True, "pools": {1: ["warm texture"]}}, r"axis 名"),
+        ({"enabled": True, "pools": {"texture": "warm texture"}}, r"texture は list\[str\]"),
+        ({"enabled": True, "pools": {"texture": [3]}}, r"descriptor は非空文字列"),
+        ({"enabled": True, "pools": {"texture": [""]}}, r"descriptor は非空文字列"),
+        ({"enabled": True, "pools": {"texture": ["thundering warmth"]}}, r"禁止形容詞"),
+        ({"enabled": True, "pools": {"texture": ["rain texture"]}}, r"雨音・環境音 NG ワード"),
+        ({"enabled": True, "pools": {"texture": ["piano"]}}, r"裸楽器名"),
+        ({"enabled": True, "pools": {"texture": ["Drake texture"]}}, r"アーティスト名"),
+    ],
+)
+def test_resolve_style_variation_rejects_invalid_config_shapes(style_variation: object, error_pattern: str):
+    with pytest.raises(ConfigError, match=error_pattern):
+        _resolve_direct(
+            config={**_config(), "style_variation": style_variation, "banned_artists": ["Drake"]},
+            override={"style_variation": style_variation},
+        )
+
+
+def test_resolve_style_variant_rejects_unknown_explicit_key():
+    resolved = _resolve_direct(
+        patterns={**_patterns(), "style_variants": {"ambient": {"name": "Ambient", "genre_line": "ambient pad"}}}
+    )
+
+    with pytest.raises(ConfigError, match="未定義の style variant"):
+        prompt_resolution.resolve_style_variant(resolved, "typo_variant")
+
+
 def test_resolve_from_path_matches_mapping_core(monkeypatch, tmp_path: Path):
     patterns_path = tmp_path / "patterns.yaml"
     patterns = _patterns()

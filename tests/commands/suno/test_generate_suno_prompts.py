@@ -23,8 +23,6 @@ _SUNO_LYRIC_DEFAULT_YAML = REPO_ROOT / ".claude" / "skills" / "music" / "config.
 _SKILL_MD = REPO_ROOT / ".claude" / "skills" / "music" / "references" / "prompt.md"
 _CONFIG_RULES_MD = REPO_ROOT / ".claude" / "skills" / "setup" / "references" / "config-generation-rules.md"
 _STYLE_VARIANTS_UNSET = object()
-_EXCLUDE_STYLES_UNSET = object()
-_VOCAL_GENDER_UNSET = object()
 
 
 @pytest.fixture
@@ -175,15 +173,6 @@ def test_infer_suno_mode_prioritizes_negative_expressions(genre_line):
 )
 def test_infer_suno_mode_matches_terms_at_token_boundaries(genre_line, expected):
     assert infer_suno_mode(genre_line) == expected
-
-
-def test_explicit_instrumental_mode_overrides_vocal_genre_line(channel_dir, tmp_path):
-    _write_suno_override(channel_dir, genre_line="dream pop vocals")
-    patterns_path = _write_minimal_patterns(tmp_path)
-
-    output = generate(patterns_path)
-
-    assert "dream pop vocals" in output
 
 
 # ---------------------------------------------------------------------------
@@ -409,56 +398,6 @@ def test_setup_rules_list_suno_lyrics_override_keys():
 # ---------------------------------------------------------------------------
 # issue #360: video_analysis の suno_preset を fallback として参照する動作
 # ---------------------------------------------------------------------------
-
-
-def test_patterns_genre_line_overrides_channel_style_and_mode(channel_dir, tmp_path):
-    """patterns の genre_line は Style と mode 推定の共通 SSOT になる。"""
-    _write_suno_override(channel_dir, genre_line="channel dream pop vocals")
-    patterns_path = _write_minimal_patterns(
-        tmp_path,
-        genre_line="collection lo-fi instrumental",
-        mode=None,
-    )
-
-    markdown = generate(patterns_path)
-    entries = build_prompt_entries(patterns_path)
-
-    assert "collection lo-fi instrumental" in markdown
-    assert "collection lo-fi instrumental" in entries[0]["style"]
-    assert "channel dream pop vocals" not in entries[0]["style"]
-    assert "| Instrumental | ON（インストモード） |" in markdown
-
-
-@pytest.mark.parametrize("order", [("first", "second"), ("second", "first")])
-def test_patterns_genre_line_is_isolated_between_collections(channel_dir, tmp_path, order):
-    """同一 process で生成順を変えても collection の Style は混線しない。"""
-    _write_suno_override(channel_dir, genre_line="shared channel style")
-    paths: dict[str, Path] = {}
-    styles = {
-        "first": "first collection soul",
-        "second": "second collection jazz",
-    }
-    for name, genre_line in styles.items():
-        collection_dir = tmp_path / name
-        collection_dir.mkdir()
-        paths[name] = _write_minimal_patterns(collection_dir, genre_line=genre_line)
-
-    generated = {name: build_prompt_entries(paths[name])[0]["style"] for name in order}
-
-    for name, style in generated.items():
-        other_name = "second" if name == "first" else "first"
-        assert styles[name] in style
-        assert styles[other_name] not in style
-        assert "shared channel style" not in style
-
-
-def test_patterns_genre_line_rejects_non_string_value(channel_dir, tmp_path):
-    """patterns の genre_line は不正 shape を mode 推定前に拒否する。"""
-    _write_suno_override(channel_dir, genre_line="channel fallback")
-    patterns_path = _write_minimal_patterns(tmp_path, genre_line=["not", "a", "string"], mode=None)
-
-    with pytest.raises(ConfigError, match=r"patterns\.yaml.*genre_line.*string"):
-        build_prompt_entries(patterns_path)
 
 
 def test_fallback_uses_video_analysis_genre_line_when_config_empty(channel_dir, tmp_path):
@@ -1612,8 +1551,6 @@ def _write_patterns_with_explicit_entries(
     tracks_top: int,
     *,
     style_variants: object = _STYLE_VARIANTS_UNSET,
-    exclude_styles: object = _EXCLUDE_STYLES_UNSET,
-    vocal_gender: object = _VOCAL_GENDER_UNSET,
 ) -> Path:
     """name_jp / name_en を明示した複数 entry の yaml を書き出す.
 
@@ -1627,10 +1564,6 @@ def _write_patterns_with_explicit_entries(
     }
     if style_variants is not _STYLE_VARIANTS_UNSET:
         payload["style_variants"] = style_variants
-    if exclude_styles is not _EXCLUDE_STYLES_UNSET:
-        payload["exclude_styles"] = exclude_styles
-    if vocal_gender is not _VOCAL_GENDER_UNSET:
-        payload["vocal_gender"] = vocal_gender
     path = dir_ / "patterns.yaml"
     path.write_text(yaml.safe_dump(payload, allow_unicode=True), encoding="utf-8")
     return path
@@ -1740,30 +1673,6 @@ def test_unique_titles_allow_same_pattern_name_when_variation_suffix_disambiguat
     assert entries[1]["name"].endswith("(Variation 2)")
 
 
-@pytest.mark.parametrize(
-    "duration_sec",
-    [True, False, "180", 180.0, float("nan"), float("inf"), float("-inf"), 0, -1],
-)
-def test_build_prompt_entries_rejects_invalid_duration_sec_override(channel_dir, tmp_path, duration_sec):
-    """明示された duration_sec が正の整数でなければ fail-loud に拒否する。"""
-    _write_suno_override(channel_dir, genre_line="lo-fi jazz", duration_sec=duration_sec)
-    patterns_path = _write_minimal_patterns(tmp_path)
-
-    with pytest.raises(ConfigError, match=r"duration_sec.*positive integer"):
-        build_prompt_entries(patterns_path)
-
-
-def test_build_prompt_entries_includes_positive_integer_duration_sec_override(channel_dir, tmp_path):
-    """正の整数の duration_sec を数値のまま prompt entry へ出力する。"""
-    _write_suno_override(channel_dir, genre_line="lo-fi jazz", duration_sec=180)
-    patterns_path = _write_minimal_patterns(tmp_path)
-
-    entries = build_prompt_entries(patterns_path)
-
-    assert entries[0]["duration_sec"] == 180
-    assert isinstance(entries[0]["duration_sec"], int)
-
-
 def test_build_prompt_entries_applies_duration_sec_to_every_scene(channel_dir, tmp_path):
     """collection 共通の duration_sec を multi-scene の全 entry へ伝搬する。"""
     _write_suno_override(channel_dir, genre_line="dream pop vocals", duration_sec=180)
@@ -1779,20 +1688,6 @@ def test_build_prompt_entries_applies_duration_sec_to_every_scene(channel_dir, t
     assert [entry["duration_sec"] for entry in entries] == [180, 180]
 
 
-def test_build_prompt_entries_does_not_derive_duration_sec_from_duration_filter(channel_dir, tmp_path):
-    """duration_filter だけの設定から duration_sec を推定・同期しない。"""
-    _write_suno_override(
-        channel_dir,
-        genre_line="lo-fi jazz",
-        duration_filter={"min_sec": 120, "max_sec": 240},
-    )
-    patterns_path = _write_minimal_patterns(tmp_path)
-
-    entries = build_prompt_entries(patterns_path)
-
-    assert "duration_sec" not in entries[0]
-
-
 # ---------------------------------------------------------------------------
 # issue #900: More Options 3 フィールド (style_influence / weirdness / exclude_styles)
 # の suno-prompts.json への wire
@@ -1805,247 +1700,6 @@ def test_build_prompt_entries_does_not_derive_duration_sec_from_duration_filter(
 # 【要レビュー】product owner が B 案 (同梱既定の暗黙 auto-flow) を意図する場合、本セクションの
 # テストは設計やり直しが必要 (特に backward-compat の exact-3-keys テスト)。
 # ---------------------------------------------------------------------------
-
-
-def test_collection_exclude_styles_overrides_channel_in_md_and_every_json_entry(channel_dir, tmp_path):
-    """collection の exclude_styles は表示と全 JSON entry で channel より優先する."""
-    _write_suno_override(channel_dir, genre_line="lo-fi jazz", exclude_styles="channel metal")
-    patterns_path = _write_patterns_with_explicit_entries(
-        tmp_path,
-        entries=[
-            {"name_jp": "屋上", "name_en": "Rooftop", "tempo": "slow", "scenes": ["quiet rooftop"]},
-            {"name_jp": "書斎", "name_en": "Study", "tempo": "gentle", "scenes": ["warm study"]},
-        ],
-        tracks_top=4,
-        exclude_styles="collection edm",
-    )
-
-    md = generate(patterns_path)
-    entries = build_prompt_entries(patterns_path)
-
-    assert "collection edm" in md
-    assert "channel metal" not in md
-    assert all(entry["exclude_styles"] == "collection edm" for entry in entries)
-
-
-def test_collection_empty_exclude_styles_is_explicit_for_md_and_json(channel_dir, tmp_path):
-    """collection の空文字は channel 値へ fallback せず、JSON にも明示値として載せる."""
-    _write_suno_override(channel_dir, genre_line="lo-fi jazz", exclude_styles="channel metal")
-    patterns_path = _write_patterns_with_explicit_entries(
-        tmp_path,
-        entries=[
-            {"name_jp": "屋上", "name_en": "Rooftop", "tempo": "slow", "scenes": ["quiet rooftop"]},
-            {"name_jp": "書斎", "name_en": "Study", "tempo": "gentle", "scenes": ["warm study"]},
-        ],
-        tracks_top=4,
-        exclude_styles="",
-    )
-
-    md = generate(patterns_path)
-    entries = build_prompt_entries(patterns_path)
-
-    assert "**Exclude Styles:**" not in md
-    assert all("exclude_styles" in entry and entry["exclude_styles"] == "" for entry in entries)
-
-
-@pytest.mark.parametrize("exclude_styles", [None, [], {}])
-def test_collection_exclude_styles_rejects_non_string(channel_dir, tmp_path, exclude_styles):
-    """collection の exclude_styles が文字列でなければ生成前に拒否する."""
-    _write_suno_override(channel_dir, genre_line="lo-fi jazz")
-    patterns_path = _write_patterns_with_explicit_entries(
-        tmp_path,
-        entries=[{"name_jp": "屋上", "name_en": "Rooftop", "tempo": "slow", "scenes": ["quiet rooftop"]}],
-        tracks_top=2,
-        exclude_styles=exclude_styles,
-    )
-
-    with pytest.raises(ConfigError, match=r"patterns\.yaml.*exclude_styles.*string"):
-        build_prompt_entries(patterns_path)
-
-
-def test_build_prompt_entries_includes_style_influence_from_channel_override(channel_dir, tmp_path):
-    """要件1: Given channel override に style_influence: 85
-    When build_prompt_entries を呼ぶ
-    Then entry に "style_influence": 85 (int) が含まれる。
-    """
-    _write_suno_override(channel_dir, genre_line="lo-fi jazz", style_influence=85)
-    patterns_path = _write_minimal_patterns(tmp_path)
-
-    entries = build_prompt_entries(patterns_path)
-
-    assert entries[0]["style_influence"] == 85
-    assert isinstance(entries[0]["style_influence"], int)
-
-
-def test_build_prompt_entries_includes_weirdness_from_channel_override(channel_dir, tmp_path):
-    """要件1: Given channel override に weirdness: 30
-    When build_prompt_entries を呼ぶ
-    Then entry に "weirdness": 30 (int) が含まれる。
-    """
-    _write_suno_override(channel_dir, genre_line="lo-fi jazz", weirdness=30)
-    patterns_path = _write_minimal_patterns(tmp_path)
-
-    entries = build_prompt_entries(patterns_path)
-
-    assert entries[0]["weirdness"] == 30
-    assert isinstance(entries[0]["weirdness"], int)
-
-
-def test_build_prompt_entries_includes_exclude_styles_from_channel_override(channel_dir, tmp_path):
-    """要件1: Given channel override に exclude_styles: "hyperpop, edm"
-    When build_prompt_entries を呼ぶ
-    Then entry に "exclude_styles": "hyperpop, edm" (str) が含まれる。
-    """
-    _write_suno_override(channel_dir, genre_line="lo-fi jazz", exclude_styles="hyperpop, edm")
-    patterns_path = _write_minimal_patterns(tmp_path)
-
-    entries = build_prompt_entries(patterns_path)
-
-    assert entries[0]["exclude_styles"] == "hyperpop, edm"
-    assert isinstance(entries[0]["exclude_styles"], str)
-
-
-def test_build_prompt_entries_includes_all_three_advanced_fields(channel_dir, tmp_path):
-    """要件6: 新規 3 フィールドを全て含む test ケース 1 件。
-
-    Given channel override に style_influence / weirdness / exclude_styles 全て設定
-    When build_prompt_entries を呼ぶ
-    Then base 3 キーに加え 3 フィールドが正しい値で載る (合計 6 キーちょうど)。
-    """
-    _write_suno_override(
-        channel_dir,
-        genre_line="lo-fi jazz",
-        style_influence=85,
-        weirdness=30,
-        exclude_styles="hyperpop, edm",
-    )
-    patterns_path = _write_minimal_patterns(tmp_path)
-
-    entries = build_prompt_entries(patterns_path)
-    entry = entries[0]
-
-    assert {"name", "style", "lyrics"} <= set(entry)
-    assert entry["style_influence"] == 85
-    assert entry["weirdness"] == 30
-    assert entry["exclude_styles"] == "hyperpop, edm"
-    assert set(entry) == {"name", "style", "lyrics", "style_influence", "weirdness", "exclude_styles"}
-
-
-def test_build_prompt_entries_includes_zero_valued_sliders(channel_dir, tmp_path):
-    """境界値: Given channel override に style_influence: 0 / weirdness: 0
-    When build_prompt_entries を呼ぶ
-    Then 0 は falsy だが有効値なので両方とも entry に載る。
-
-    `if value is not None` でなく `if value:` でガードすると 0 が脱落する典型バグの回帰ガード。
-    """
-    _write_suno_override(channel_dir, genre_line="lo-fi jazz", style_influence=0, weirdness=0)
-    patterns_path = _write_minimal_patterns(tmp_path)
-
-    entries = build_prompt_entries(patterns_path)
-
-    assert entries[0]["style_influence"] == 0
-    assert entries[0]["weirdness"] == 0
-
-
-def test_build_prompt_entries_includes_vocal_gender_male(channel_dir, tmp_path):
-    """channel override に vocal_gender: male があれば entry に wire される。
-
-    suno-helper 拡張は entry.vocal_gender を読んで Suno UI Voice section の Male/Female ボタンを click する。
-    Python → JSON → 拡張の経路を pin する。"male" / "female" / "neutral" / "auto" が拡張型契約。
-    """
-    _write_suno_override(channel_dir, genre_line="lo-fi jazz", vocal_gender="male")
-    patterns_path = _write_minimal_patterns(tmp_path)
-
-    entries = build_prompt_entries(patterns_path)
-
-    assert entries[0]["vocal_gender"] == "male"
-
-
-def test_build_prompt_entries_omits_empty_vocal_gender(channel_dir, tmp_path):
-    """channel override に vocal_gender: "" (空文字) があれば JSON に出さない (skip)。
-
-    config.default.yaml は `vocal_gender: ""` を既定値として持つ。チャンネルが明示的に空文字を上書き
-    しても、拡張型契約 ("male"|"female"|"neutral"|"auto") に "" は無く、拡張側は何もしない。
-    JSON に "" を載せると型契約とミスマッチするため Python 側で skip する (一貫性と冗長排除)。
-    """
-    _write_suno_override(channel_dir, genre_line="lo-fi jazz", vocal_gender="")
-    patterns_path = _write_minimal_patterns(tmp_path)
-
-    entries = build_prompt_entries(patterns_path)
-
-    assert "vocal_gender" not in entries[0]
-
-
-def test_collection_vocal_gender_overrides_channel_for_every_json_entry(channel_dir, tmp_path):
-    """collection の vocal_gender は全 JSON entry で channel より優先する."""
-    _write_suno_override(channel_dir, genre_line="lo-fi jazz", vocal_gender="male")
-    patterns_path = _write_patterns_with_explicit_entries(
-        tmp_path,
-        entries=[
-            {"name_jp": "屋上", "name_en": "Rooftop", "tempo": "slow", "scenes": ["quiet rooftop"]},
-            {"name_jp": "書斎", "name_en": "Study", "tempo": "gentle", "scenes": ["warm study"]},
-        ],
-        tracks_top=4,
-        vocal_gender="female",
-    )
-
-    entries = build_prompt_entries(patterns_path)
-
-    assert all(entry["vocal_gender"] == "female" for entry in entries)
-
-
-def test_collection_empty_vocal_gender_omits_channel_value_from_every_json_entry(channel_dir, tmp_path):
-    """collection の空文字は channel 値へ fallback せず JSON から省略する."""
-    _write_suno_override(channel_dir, genre_line="lo-fi jazz", vocal_gender="male")
-    patterns_path = _write_patterns_with_explicit_entries(
-        tmp_path,
-        entries=[
-            {"name_jp": "屋上", "name_en": "Rooftop", "tempo": "slow", "scenes": ["quiet rooftop"]},
-            {"name_jp": "書斎", "name_en": "Study", "tempo": "gentle", "scenes": ["warm study"]},
-        ],
-        tracks_top=4,
-        vocal_gender="",
-    )
-
-    entries = build_prompt_entries(patterns_path)
-
-    assert all("vocal_gender" not in entry for entry in entries)
-
-
-@pytest.mark.parametrize("vocal_gender", [None, "other"])
-def test_collection_vocal_gender_rejects_values_outside_json_contract(channel_dir, tmp_path, vocal_gender):
-    """collection の vocal_gender が拡張の型契約外なら生成前に拒否する."""
-    _write_suno_override(channel_dir, genre_line="lo-fi jazz")
-    patterns_path = _write_patterns_with_explicit_entries(
-        tmp_path,
-        entries=[{"name_jp": "屋上", "name_en": "Rooftop", "tempo": "slow", "scenes": ["quiet rooftop"]}],
-        tracks_top=2,
-        vocal_gender=vocal_gender,
-    )
-
-    with pytest.raises(ConfigError, match=r"patterns\.yaml.*vocal_gender.*male.*female.*neutral.*auto"):
-        build_prompt_entries(patterns_path)
-
-
-def test_build_prompt_entries_omits_advanced_fields_without_channel_override(channel_dir, tmp_path):
-    """要件2 + A 案の核心: Given channel override が genre_line のみ (More Options 無し) の既存 collection
-    When build_prompt_entries を呼ぶ
-    Then name/style/lyrics の 3 キーちょうど。
-
-    config.default.yaml の style_influence: 50 / exclude_styles リストは merged config に存在するが、
-    A 案では JSON に **載せない** (channel override に明示されたキーのみ wire する)。
-    この test が A 案 (明示 gating) と B 案 (既定の暗黙 auto-flow) を機械的に区別し、後方互換を pin する。
-    """
-    _write_suno_override(channel_dir, genre_line="lo-fi jazz")
-    patterns_path = _write_minimal_patterns(tmp_path)
-
-    entries = build_prompt_entries(patterns_path)
-
-    assert set(entries[0]) == {"name", "style", "lyrics"}
-    assert "style_influence" not in entries[0]
-    assert "weirdness" not in entries[0]
-    assert "exclude_styles" not in entries[0]
-    assert "duration_sec" not in entries[0]
 
 
 def test_build_prompt_entries_omits_advanced_fields_when_no_override_file(channel_dir, tmp_path):
@@ -2155,58 +1809,6 @@ def _four_distinct_entries() -> list[dict]:
     ]
 
 
-def test_patterns_style_variants_override_same_named_channel_variant(channel_dir, tmp_path):
-    """collection variant は同名の channel variant より優先される。"""
-    channel_genre = "channel ambient pad"
-    collection_genre = "collection acoustic soul"
-    _write_suno_override(
-        channel_dir,
-        genre_line="channel base",
-        style_variants={"ambient": {"name": "Channel Ambient", "genre_line": channel_genre}},
-    )
-    entries_def = _four_distinct_entries()
-    entries_def[0]["style"] = "ambient"
-    patterns_path = _write_patterns_with_explicit_entries(
-        tmp_path,
-        entries=entries_def,
-        tracks_top=8,
-        style_variants={"ambient": {"name": "Collection Soul", "genre_line": collection_genre}},
-    )
-
-    markdown = generate(patterns_path)
-    entries = build_prompt_entries(patterns_path)
-
-    assert _style_first_lines(entries)[0] == f"slow, {collection_genre},"
-    assert "[ambient: Collection Soul]" in markdown
-    assert channel_genre not in entries[0]["style"]
-
-
-def test_empty_patterns_style_variants_does_not_inherit_channel_keys(channel_dir, tmp_path):
-    """明示した空 mapping は channel variant を継承せず未定義 key を拒否する。"""
-    _write_suno_override(
-        channel_dir,
-        genre_line="channel base",
-        style_variants={"ambient": {"name": "Channel Ambient", "genre_line": "channel ambient pad"}},
-    )
-    entries_def = _four_distinct_entries()
-    entries_def[0]["style"] = "ambient"
-    patterns_path = _write_patterns_with_explicit_entries(
-        tmp_path,
-        entries=entries_def,
-        tracks_top=8,
-        style_variants={},
-    )
-
-    with pytest.raises(ConfigError) as exc_info:
-        build_prompt_entries(patterns_path)
-
-    message = str(exc_info.value)
-    assert "未定義の style variant" in message
-    assert "ambient" in message
-    assert str(patterns_path) in message
-    assert "channel fallback drift" not in message
-
-
 def test_main_legacy_style_variant_drift_preserves_stale_outputs(channel_dir, tmp_path, monkeypatch):
     """legacy fallback の key drift は復旧手順を示し、既存成果物を変更しない。"""
     _write_suno_override(
@@ -2248,30 +1850,6 @@ def test_main_legacy_style_variant_drift_preserves_stale_outputs(channel_dir, tm
     assert not [warning for warning in caught if "未知のトップレベルキー" in str(warning.message)]
 
 
-@pytest.mark.parametrize(
-    ("style_variants", "error_pattern"),
-    [
-        (None, r"style_variants.*mapping"),
-        ([], r"style_variants.*mapping"),
-        ({"ambient": []}, r"style_variants\.ambient.*mapping"),
-        ({"ambient": {"name": "Ambient"}}, r"style_variants\.ambient\.genre_line.*string"),
-        ({"ambient": {"genre_line": "ambient pad"}}, r"style_variants\.ambient\.name.*string"),
-    ],
-)
-def test_patterns_style_variants_reject_invalid_shapes(channel_dir, tmp_path, style_variants, error_pattern):
-    """collection variant の不正 shape は entry 解決前に拒否する。"""
-    _write_suno_override(channel_dir, genre_line="channel base")
-    patterns_path = _write_patterns_with_explicit_entries(
-        tmp_path,
-        entries=_four_distinct_entries(),
-        tracks_top=8,
-        style_variants=style_variants,
-    )
-
-    with pytest.raises(ConfigError, match=error_pattern):
-        build_prompt_entries(patterns_path)
-
-
 def test_default_yaml_enables_style_variation_with_pools():
     """default.yaml が style_variation を有効化し、非空の pools を持つこと (#1456 の既定動作を pin)."""
     data = yaml.safe_load(_DEFAULT_YAML.read_text(encoding="utf-8"))["prompt"]
@@ -2281,47 +1859,6 @@ def test_default_yaml_enables_style_variation_with_pools():
     pools = variation["pools"]
     assert isinstance(pools, dict) and pools
     assert all(isinstance(pool, list) and pool for pool in pools.values())
-
-
-@pytest.mark.parametrize(
-    ("style_variation", "error_pattern"),
-    [
-        (None, r"suno\.style_variation は mapping"),
-        ([], r"suno\.style_variation は mapping"),
-        ({"enabled": "yes"}, r"enabled は bool"),
-        ({"enabled": True, "pools": None}, r"pools は mapping"),
-        ({"enabled": True, "pools": []}, r"pools は mapping"),
-        ({"enabled": True, "pools": {"": ["warm texture"]}}, r"axis 名"),
-        ({"enabled": True, "pools": {1: ["warm texture"]}}, r"axis 名"),
-        ({"enabled": True, "pools": {"texture": "warm texture"}}, r"texture は list\[str\]"),
-        ({"enabled": True, "pools": {"texture": [3]}}, r"descriptor は非空文字列"),
-        ({"enabled": True, "pools": {"texture": [""]}}, r"descriptor は非空文字列"),
-        ({"enabled": True, "pools": {"texture": ["thundering warmth"]}}, r"禁止形容詞"),
-        ({"enabled": True, "pools": {"texture": ["rain texture"]}}, r"雨音・環境音 NG ワード"),
-        ({"enabled": True, "pools": {"texture": ["piano"]}}, r"裸楽器名"),
-        ({"enabled": True, "pools": {"texture": ["Drake texture"]}}, r"アーティスト名"),
-    ],
-)
-def test_style_variation_rejects_invalid_config_shapes(channel_dir, tmp_path, style_variation, error_pattern):
-    _write_suno_override(channel_dir, genre_line="lo-fi jazz", style_variation=style_variation)
-    patterns_path = _write_patterns_with_explicit_entries(tmp_path, entries=_four_distinct_entries(), tracks_top=8)
-
-    with pytest.raises(ConfigError, match=error_pattern):
-        build_prompt_entries(patterns_path)
-
-
-def test_style_variation_rejects_unknown_explicit_style_variant(channel_dir, tmp_path):
-    _write_suno_override(
-        channel_dir,
-        genre_line="lo-fi jazz",
-        style_variants={"ambient": {"name": "ambient pad", "genre_line": "ambient pad, soft synth"}},
-    )
-    entries_def = _four_distinct_entries()
-    entries_def[1]["style"] = "typo_variant"
-    patterns_path = _write_patterns_with_explicit_entries(tmp_path, entries=entries_def, tracks_top=8)
-
-    with pytest.raises(ConfigError, match="未定義の style variant"):
-        build_prompt_entries(patterns_path)
 
 
 def test_style_variation_makes_entry_style_first_lines_distinct(channel_dir, tmp_path):
