@@ -23,7 +23,7 @@ pytestmark = pytest.mark.repo_contract
 
 SKILLS_DIR = REPO_ROOT / ".claude" / "skills"
 TARGET_SKILLS = (
-    "alignment-check",
+    "audit",
     "wf-new",
     "flop-analysis",
     "metadata-audit",
@@ -125,14 +125,14 @@ def _route(path: str, section: str, line: str) -> tuple[str, str, str]:
 
 
 _RAW_EXPECTED_ACTIVE_ROUTES = (
-    _route("alignment-check/SKILL.md", "## 前提", "- **新規チャンネル** → `/setup --channel` を案内"),
+    _route("audit/references/alignment.md", "## 前提", "- **新規チャンネル** → `/setup --channel` を案内"),
     _route(
-        "alignment-check/SKILL.md",
+        "audit/references/alignment.md",
         "## 前提",
         "- **既存チャンネル**（YouTube で既に運営中）→ `/setup --import` を案内",
     ),
     _route(
-        "alignment-check/SKILL.md",
+        "audit/references/alignment.md",
         "## Next Step",
         "| **横断的な方向性ズレ** | 複数コレクションで同じ不整合パターン | "
         "`/channel-strategy --direction`（方向性検討モード）でチャンネル全体の方向性を再検討 |",
@@ -164,10 +164,9 @@ _RAW_EXPECTED_ACTIVE_ROUTES = (
     _route(
         "flop-analysis/SKILL.md",
         "### Phase 4: 検証の自律実行",
-        "- `/alignment-check`、`/channel-research --voice`、`/channel-strategy --persona`、"
+        "- `/audit --alignment`、`/channel-research --voice`、`/channel-strategy --persona`、"
         "`/channel-strategy --scene`、"
-        "`/channel-strategy --direction` はスキルとして起動しない。これらは AskUserQuestion、"
-        "設定更新、または別成果物の保存を"
+        "`/channel-strategy --direction` はスキルとして起動しない。これらは別成果物の保存または設定更新を"
         "完了条件に含むため、既存の `docs/plans/alignment-audit.md`、`docs/plans/viewer-voice-analysis.md`、"
         "`docs/channel/personas/persona-definition.md`、`docs/plans/viewing-scene-matrix.md` がある場合だけ "
         "read-only 入力として読む。必要な成果物がなければ、その仮説を理由付きの `未検証` とする",
@@ -850,6 +849,7 @@ def _implementation_changed_paths(issue: int) -> frozenset[str]:
 def test_initial_occurrences_have_a_complete_context_ledger() -> None:
     historical_skills = {entry[0] for entry in INITIAL_OCCURRENCE_LEDGER}
     current_owners = {
+        "alignment-check": "audit",
         "collection-ideate": "wf-new",
         "lyria": "music",
         "playlist": "publish",
@@ -869,7 +869,7 @@ def test_active_routes_match_the_section_and_complete_line_contract() -> None:
 
 
 def test_route_contract_rejects_inactive_swap_mixed_and_relocated_mutations() -> None:
-    relative = "alignment-check/SKILL.md"
+    relative = "audit/references/alignment.md"
     source = (SKILLS_DIR / relative).read_text(encoding="utf-8")
     opening = "- **新規チャンネル** → `/setup --channel` を案内"
     existing = "- **既存チャンネル**（YouTube で既に運営中）→ `/setup --import` を案内"
@@ -920,7 +920,7 @@ def test_route_contract_rejects_inactive_swap_mixed_and_relocated_mutations() ->
 
 
 def test_route_contract_rejects_arbitrary_extension_members(tmp_path: Path) -> None:
-    relative = "alignment-check/references/reintroduced.txt"
+    relative = "audit/references/reintroduced.txt"
     reintroduced = tmp_path / relative
     reintroduced.parent.mkdir(parents=True)
     reintroduced.write_text("opening fallback: `/channel-strategy --direction`\n", encoding="utf-8")
@@ -929,11 +929,11 @@ def test_route_contract_rejects_arbitrary_extension_members(tmp_path: Path) -> N
 
 def test_route_contract_allows_genuine_binary_without_route_tokens() -> None:
     png = b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=")
-    assert _active_route_records({"alignment-check/references/pixel.png": png}) == EXPECTED_ACTIVE_ROUTES
+    assert _active_route_records({"audit/references/pixel.png": png}) == EXPECTED_ACTIVE_ROUTES
 
 
 def test_route_contract_keeps_open_details_content_visible() -> None:
-    relative = "alignment-check/SKILL.md"
+    relative = "audit/references/alignment.md"
     source = (SKILLS_DIR / relative).read_text(encoding="utf-8")
     opening = "- **新規チャンネル** → `/setup --channel` を案内"
     visible_details = source.replace(
@@ -945,7 +945,7 @@ def test_route_contract_keeps_open_details_content_visible() -> None:
 
 
 def test_inline_code_literals_do_not_change_markdown_or_html_visibility() -> None:
-    relative = "alignment-check/SKILL.md"
+    relative = "audit/references/alignment.md"
     source = (SKILLS_DIR / relative).read_text(encoding="utf-8")
     opening = "- **新規チャンネル** → `/setup --channel` を案内"
     mutations = (
@@ -967,16 +967,16 @@ def test_route_contract_allows_supported_distributed_binary_images() -> None:
         ),
     }
     for filename, payload in images.items():
-        assert _active_route_records({f"alignment-check/references/{filename}": payload}) == EXPECTED_ACTIVE_ROUTES
+        assert _active_route_records({f"audit/references/{filename}": payload}) == EXPECTED_ACTIVE_ROUTES
 
 
 def test_route_contract_fails_closed_for_undecodable_text_or_route_bearing_binary() -> None:
     text_like = b"opening fallback: \xff\n"
     route_bearing_png = b"\x89PNG\r\n\x1a\n/channel-strategy --direction\xff"
     with pytest.raises(UnicodeDecodeError):
-        _active_route_records({"alignment-check/references/broken.txt": text_like})
+        _active_route_records({"audit/references/broken.txt": text_like})
     with pytest.raises(UnicodeDecodeError):
-        _active_route_records({"alignment-check/references/route.png": route_bearing_png})
+        _active_route_records({"audit/references/route.png": route_bearing_png})
 
 
 def test_source_wheel_sdist_and_installed_downstream_share_the_complete_route_contract(tmp_path: Path) -> None:

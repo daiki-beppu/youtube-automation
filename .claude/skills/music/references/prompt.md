@@ -538,7 +538,7 @@ UI 変更で注入先セレクタが外れた場合は `extensions/shared/dom.ts
 
 ### Step 4: workflow-state.json の planning.music を更新
 
-`/alignment-check` が音楽 mood × サムネ × タイトルの整合を判定できるよう、`workflow-state.json` の `planning.music` を populate する。
+`/audit --alignment` が音楽 mood × サムネ × タイトルの整合を判定できるよう、`workflow-state.json` の `planning.music` を populate する。
 
 ```json
 {

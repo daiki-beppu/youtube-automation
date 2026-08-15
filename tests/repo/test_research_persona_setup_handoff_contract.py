@@ -112,7 +112,7 @@ SETUP_ASSET_OWNERS = {
     ),
 }
 UNCHANGED_SKILL_SHA256 = {
-    "video-analyze": "130194761dbf160897af81f585184ce25a54ca227b9cce44a0a856d041a2a1bb",
+    "video-analyze": "ebb8f96d3bd441a29d9ab8eb2c866abd1fb5acb2e71ebda4ee0fec4530ba5bdd",
 }
 RESIDUAL_LINE_MARKERS = {
     "channel-research": (

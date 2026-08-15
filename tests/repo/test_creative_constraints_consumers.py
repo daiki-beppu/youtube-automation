@@ -7,7 +7,7 @@ SKILLS = {
     "music/references/prompt.md": ("## 音", "BPM", "Style"),
     "thumbnail/SKILL.md": ("## サムネ", "色温度", "被写体"),
     "thumbnail/references/loop.md": ("## 映像", "動きの種類数上限", "禁止要素"),
-    "alignment-check/SKILL.md": ("## 音", "## サムネ", "整合性マトリクス"),
+    "audit/references/alignment.md": ("## 音", "## サムネ", "整合性マトリクス"),
 }
 
 
@@ -16,6 +16,8 @@ def test_generation_and_audit_skills_consume_creative_constraints_non_blocking()
         text = (ROOT / ".claude" / "skills" / relative).read_text(encoding="utf-8")
         if relative == "music/references/prompt.md":
             text = (ROOT / ".claude" / "skills" / "music" / "SKILL.md").read_text(encoding="utf-8") + text
+        if relative == "audit/references/alignment.md":
+            text = (ROOT / ".claude" / "skills" / "audit" / "SKILL.md").read_text(encoding="utf-8") + text
 
         assert "`前工程`" in text
         assert "/channel-strategy --constraints" in text

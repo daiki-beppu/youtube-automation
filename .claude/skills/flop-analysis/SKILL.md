@@ -1,12 +1,12 @@
 ---
 name: flop-analysis
 purpose: 振り返る
-description: "Use when 公開済み動画が伸びなかった原因を video_id、collection、または --since で切り分け、postmortem.md に出力するとき。「伸びなかった」「flop 分析」で発動。横断戦略は /analytics --analyze、事前監査は /alignment-check"
+description: "Use when 公開済み動画が伸びなかった原因を video_id、collection、または --since で切り分け、postmortem.md に出力するとき。「伸びなかった」「flop 分析」で発動。横断戦略は /analytics --analyze、事前監査は /audit --alignment"
 ---
 
 ## 前後工程
 
-- `前工程`: `/analytics`, `/alignment-check`
+- `前工程`: `/analytics`, `/audit --alignment`
 - `後工程`: `/wf-new`
 - `委譲先`: `/video-analyze`
 
@@ -157,8 +157,8 @@ Phase 3 で列挙した主仮説（全件）について、次の表から対応
 
 Phase 4 は改善策を適用せず、次の境界を守る:
 
-- `/alignment-check`、`/channel-research --voice`、`/channel-strategy --persona`、`/channel-strategy --scene`、`/channel-strategy --direction` はスキルとして起動しない。これらは AskUserQuestion、設定更新、または別成果物の保存を完了条件に含むため、既存の `docs/plans/alignment-audit.md`、`docs/plans/viewer-voice-analysis.md`、`docs/channel/personas/persona-definition.md`、`docs/plans/viewing-scene-matrix.md` がある場合だけ read-only 入力として読む。必要な成果物がなければ、その仮説を理由付きの `未検証` とする
-- タイトル整合性は `/alignment-check` を起動せず、対象コレクションの `workflow-state.json`、音楽プロンプト、実動画尺、検証済み A/B 履歴の現在サムネ候補を read-only で照合する。`config/channel/content.json`、タイトル、サムネイル、音源、方向性文書は変更しない
+- `/audit --alignment`、`/channel-research --voice`、`/channel-strategy --persona`、`/channel-strategy --scene`、`/channel-strategy --direction` はスキルとして起動しない。これらは別成果物の保存または設定更新を完了条件に含むため、既存の `docs/plans/alignment-audit.md`、`docs/plans/viewer-voice-analysis.md`、`docs/channel/personas/persona-definition.md`、`docs/plans/viewing-scene-matrix.md` がある場合だけ read-only 入力として読む。必要な成果物がなければ、その仮説を理由付きの `未検証` とする
+- タイトル整合性は `/audit --alignment` を起動せず、対象コレクションの `workflow-state.json`、音楽プロンプト、実動画尺、検証済み A/B 履歴の現在サムネ候補を read-only で照合する。`config/channel/content.json`、タイトル、サムネイル、音源、方向性文書は変更しない
 - 差別化・市場性は `/channel-research --discover` や `/channel-strategy --direction` を起動せず、最新の既存 `data/benchmark_*.json` と `yt-theme-compare` の標準出力だけを使う。競合の追加、方向性決定、config 更新は行わない
 - `/thumbnail --compare` と `/video-analyze` は各スキルの分析成果物生成まで実行してよいが、Next Step の再生成・設定更新には進まない
 
@@ -357,7 +357,7 @@ postmortem.md 保存後、支持された主仮説と「学び」に基づく改
 | 支持された主仮説カテゴリ | 改善候補 |
 |-------------------------|----------|
 | サムネ訴求弱 | `/thumbnail --compare` → 必要なら `/thumbnail <collection>` で再生成 |
-| タイトル訴求弱 | `/alignment-check` → `config/channel/content.json` の `title.template` を更新 |
+| タイトル訴求弱 | `/audit --alignment` で改善候補を再監査し、タイトル変更は別途判断 |
 | 中身の弱さ | `/video-analyze --source own --collection <name>` |
 | ターゲット層ミスマッチ | `/channel-research --voice` → `/channel-strategy --persona` → `/channel-strategy --scene` |
 | テーマ自体の市場性不足 | `/channel-research --discover` → `/channel-strategy --direction`（方向性検討モード） |

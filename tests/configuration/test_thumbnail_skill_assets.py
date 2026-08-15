@@ -300,7 +300,7 @@ def test_thumbnail_skill_documents_thumbnail_compare_and_alignment_check_roles()
     assert quality_idx < role_idx < prompt_idx
 
     assert "/thumbnail --compare" in role_block
-    assert "/alignment-check" in role_block
+    assert "/audit --alignment" in role_block
     assert "視認性検証" in role_block
     assert "整合性監査" in role_block
     assert "320px" in role_block

@@ -203,7 +203,7 @@ uv run yt-init-collection "Pilot Direction Check" "pilot-direction-check" --trac
   ↓
 /video --generate                         → マスター音源 + 背景動画から最終 MP4 生成
   ↓
-/video-description → /alignment-check → 概要欄生成 + 整合性監査
+/video-description → /audit --alignment → 概要欄生成 + 整合性監査
   ↓
 /publish --upload                → YouTube アップロード + live 移行
 ```
@@ -245,7 +245,7 @@ uv run yt-init-collection "Pilot Direction Check" "pilot-direction-check" --trac
 | 隔週 | `/comments-reply` | ルール駆動コメント返信（dry-run → apply の 2 段） |
 | 月次 | `/channel-research --benchmark` | 競合チャンネル最新データ取得 |
 | 月次 | `/channel-status` | チャンネル全体統計（登録者数・総再生回数）取得 |
-| 月次 | `/alignment-check` | 過去動画のタイトル × サムネ × 音楽整合性監査 |
+| 月次 | `/audit --alignment` | 過去動画のタイトル × サムネ × 音楽整合性監査 |
 | 四半期 | `/channel-research --voice` → `/channel-strategy --persona` → `/channel-strategy --scene` 見直し | ターゲット層・利用シーンの再検証 |
 | 容量逼迫時 | `/publish --clean` | 公開済みコレクションの大容量メディア削除 |
 
@@ -255,7 +255,7 @@ uv run yt-init-collection "Pilot Direction Check" "pilot-direction-check" --trac
 |---|---|
 | いまどこまで進んでる？ | `/wf-status`（制作） / `/channel-status`（YouTube 統計） |
 | 次に何やる？ | `/wf-next`（既存コレクション継続） / `/wf-new`（新規企画） |
-| このコレクション CTR 弱くない？ | `/alignment-check` → `/thumbnail --compare` |
+| このコレクション CTR 弱くない？ | `/audit --alignment` → `/thumbnail --compare` |
 | シリーズ広げるべき？ | `/analytics --analyze`（テーマ別パフォーマンス） |
 | 視聴者は誰？何を求めてる？ | `/channel-research --voice` → `/channel-strategy --persona` → `/channel-strategy --scene` |
 | 競合は今どんな動画出してる？ | `/channel-research --benchmark` → `/video-analyze` |
