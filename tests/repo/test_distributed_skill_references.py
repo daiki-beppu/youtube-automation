@@ -16,14 +16,15 @@ import tomllib
 from pathlib import Path
 
 from tests.helpers.paths import REPO_ROOT
+from youtube_automation.domains.skills.inventory import SkillInventory
 
 _REPO_ROOT = REPO_ROOT
-_SKILLS_DIR = _REPO_ROOT / ".claude" / "skills"
+_SKILL_INVENTORY = SkillInventory(_REPO_ROOT)
 _CLAUDE_TEMPLATE = _REPO_ROOT / ".claude" / "CLAUDE.template.md"
-_RELEASE_SKILL = _SKILLS_DIR / "automation-release" / "SKILL.md"
-_RELEASE_CONTRACTS = _SKILLS_DIR / "automation-release" / "references" / "release-contracts.md"
-_CHANGELOG_PROMOTION = _SKILLS_DIR / "automation-release" / "references" / "changelog-promotion.md"
-_PREPARE_CHECKLIST = _SKILLS_DIR / "automation-release" / "references" / "prepare-checklist.md"
+_RELEASE_SKILL = _SKILL_INVENTORY.skill_directory("automation-release") / "SKILL.md"
+_RELEASE_CONTRACTS = _SKILL_INVENTORY.resolve_reference("automation-release", "references/release-contracts.md")
+_CHANGELOG_PROMOTION = _SKILL_INVENTORY.resolve_reference("automation-release", "references/changelog-promotion.md")
+_PREPARE_CHECKLIST = _SKILL_INVENTORY.resolve_reference("automation-release", "references/prepare-checklist.md")
 
 # 配布ファイル内で走査する拡張子（prose / スクリプト双方に参照が現れうる）
 _SCANNED_SUFFIXES = (".md", ".py", ".sh")
@@ -50,7 +51,12 @@ def _wheel_included_paths() -> frozenset[str]:
 
 def _distributed_files() -> list[Path]:
     """wheel に同梱され `yt-skills sync` で下流へ配布されるテキストファイル。"""
-    files = [p for p in sorted(_SKILLS_DIR.rglob("*")) if p.is_file() and p.suffix in _SCANNED_SUFFIXES]
+    files = [
+        path
+        for skill_dir in _SKILL_INVENTORY.skill_directories()
+        for path in sorted(skill_dir.rglob("*"))
+        if path.is_file() and path.suffix in _SCANNED_SUFFIXES
+    ]
     files.append(_CLAUDE_TEMPLATE)
     return files
 
@@ -95,7 +101,7 @@ def test_no_claude_md_section_number_references() -> None:
 
 def test_videoup_encoder_benchmark_contract_is_self_contained() -> None:
     """videoup の配布物だけで encoder 採用基準と安全な fallback を判断できる。"""
-    skill = (_SKILLS_DIR / "videoup" / "SKILL.md").read_text(encoding="utf-8")
+    skill = (_SKILL_INVENTORY.skill_directory("videoup") / "SKILL.md").read_text(encoding="utf-8")
 
     assert "median wall-clock が `libx264 medium` baseline より 20% 以上短い候補だけ" in skill
     assert "H.264 / yuv420p / profile / maxrate / bufsize / fps / AAC / duration" in skill
