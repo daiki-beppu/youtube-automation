@@ -45,7 +45,7 @@ YouTube の第三者チャンネル由来データ（`snippet.description`、`br
 | yt-channel-seed の read 群（約 2 units / 対象） | 承認 TTP 対象数 | TTP 対象数 |
 | channels.list（1〜2 units、yt-channel-settings pull / diff・fetch_branding_snapshot） | 数回 | — |
 | channels.update（50 units / part、yt-channel-settings push --apply） | 反映 part 数 | 変更 part 数 |
-| commentThreads.list（Step 7 の /viewer-voice 委譲） | /viewer-voice の「想定 API call 数」を参照 | — |
+| commentThreads.list（Step 7 の /channel-research --voice 委譲） | /channel-research --voice の「想定 API call 数」を参照 | — |
 
 - 上限 / 承認: yt-generate-image は `confirm_cost` の y/N 確認を挟み、yt-channel-settings push は `--apply` 明示 + `verify_channel_id` で誤チャンネル反映を防止する。yt-doctor smoke は Reporting API の無料枠のみ。
 
@@ -202,7 +202,7 @@ uv run python .claude/skills/setup/references/derive_ttp_duration.py \
 
 Step 6〜9 を始める前に [persona / branding / readiness の実施詳細](persona-branding-readiness.md) を Read し、その手順を参照する。
 
-`/setup --channel` の標準フローでは、次の追加調査を必要になった時点でユーザーに目的を確認し、後続スキルへ委譲する。`/viewer-voice` はこの任意の追加調査には含めず、Step 7 の必須前工程として実行する:
+`/setup --channel` の標準フローでは、次の追加調査を必要になった時点でユーザーに目的を確認し、後続スキルへ委譲する。`/channel-research --voice` はこの任意の追加調査には含めず、Step 7 の必須前工程として実行する:
 
 - 追加の競合候補を広げたい → `/channel-research --discover`
 - 現行 TTP の入替候補やニッチ仮説を、外部根拠と同じ評価軸で比較したい → `/channel-research --market`（会話内レポートが既定。TTP / config は変更しない）
@@ -213,7 +213,7 @@ Step 6〜9 を始める前に [persona / branding / readiness の実施詳細](p
 
 **入口ゲート**: 開始前に `config/channel/analytics.json::benchmark.channels` に承認済み TTP 対象が 1 件以上あることを確認する。0 件なら本 Step 以降に進まず Step 5 に戻って候補を再確認するか、ユーザーに停止を確認して終了する（判定基準は冒頭「TTP 完了条件（--channel）」を参照）。
 
-`/viewer-voice` → `/audience-persona-design` → `/viewing-scene` を必須チェーンとして順に実行する。このチェーンには **実行コンテキスト: 新規開設（公開前）** を明示して引き継ぐ。公開後の自チャンネル Analytics を前提に切り替えない。
+`/channel-research --voice` → `/audience-persona-design` → `/viewing-scene` を必須チェーンとして順に実行する。このチェーンには **実行コンテキスト: 新規開設（公開前）** を明示して引き継ぐ。公開後の自チャンネル Analytics を前提に切り替えない。
 
 `/audience-persona-design` へ `docs/plans/viewer-voice-analysis.md`、`docs/channel/ttp-seed-confirmation.md`、`docs/channel/competitor-branding-snapshot.json`、任意の `/channel-research --benchmark` 成果物を渡す。`reports/analysis_*.md` は要求しない。`/audience-persona-design` から同じ実行コンテキストを引き継いで `/viewing-scene` を実行し、`docs/plans/viewing-scene-matrix.md` を生成してから、最終 `docs/channel/personas/persona-definition.md` を更新する。
 

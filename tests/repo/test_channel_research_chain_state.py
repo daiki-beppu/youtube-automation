@@ -98,6 +98,41 @@ def test_discover_skips_only_for_complete_output_pair(tmp_path: Path, state: Mod
     assert skip["reason"] == "discover_output_pair_complete"
 
 
+def test_voice_blocks_until_benchmark_and_discover_outputs_exist(tmp_path: Path, state: ModuleType) -> None:
+    now = 2_000_000_000.0
+    _touch(tmp_path / "data/benchmark_20260815.json", now)
+    _touch(tmp_path / "docs/benchmarks/rival.md", now)
+
+    code, result = state.evaluate(tmp_path, "voice", now)
+
+    assert code == state.EXIT_BLOCKED
+    assert result["reason"] == "voice_prerequisites_missing"
+
+
+def test_voice_runs_and_skips_only_after_both_outputs_exist(tmp_path: Path, state: ModuleType) -> None:
+    now = 2_000_000_000.0
+    for relative in (
+        "data/benchmark_20260815.json",
+        "docs/benchmarks/rival.md",
+        "research/lofi-discovery.md",
+        "research/lofi-discovery.csv",
+    ):
+        _touch(tmp_path / relative, now)
+
+    run_code, run = state.evaluate(tmp_path, "voice", now)
+    _touch(tmp_path / "data/comments_20260815.json", now)
+    partial_code, partial = state.evaluate(tmp_path, "voice", now)
+    _touch(tmp_path / "docs/plans/viewer-voice-analysis.md", now)
+    skip_code, skip = state.evaluate(tmp_path, "voice", now)
+
+    assert run_code == state.EXIT_RUN
+    assert run["reason"] == "voice_outputs_missing"
+    assert partial_code == state.EXIT_RUN
+    assert partial["reason"] == "voice_outputs_incomplete"
+    assert skip_code == state.EXIT_SKIP
+    assert skip["reason"] == "voice_outputs_complete"
+
+
 def test_market_uses_comparison_branch_when_collected_inputs_are_absent(tmp_path: Path, state: ModuleType) -> None:
     code, result = state.evaluate(tmp_path, "market", 2_000_000_000.0)
 

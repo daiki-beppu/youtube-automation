@@ -183,7 +183,6 @@ TARGET_SKILLS: frozenset[str] = frozenset(
         "thumbnail-iterate",
         "video-analyze",
         "video-upload",
-        "viewer-voice",
         "wf-new",
         "wf-next",
     }

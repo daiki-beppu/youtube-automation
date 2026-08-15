@@ -142,9 +142,52 @@ def _evaluate_market(
     )
 
 
+def _evaluate_voice(root: Path, data: list[Path], reports: list[Path]) -> tuple[int, StateResult]:
+    discovery_markdown = list((root / "research").glob("*-discovery.md"))
+    discovery_csv = list((root / "research").glob("*-discovery.csv"))
+    markdown_stems = {path.with_suffix("") for path in discovery_markdown}
+    csv_stems = {path.with_suffix("") for path in discovery_csv}
+    prerequisites = [*data, *reports, *discovery_markdown, *discovery_csv]
+    if not data or not reports or not discovery_markdown or markdown_stems != csv_stems:
+        return EXIT_BLOCKED, _result(
+            "voice",
+            "blocked",
+            "voice_prerequisites_missing",
+            0.0,
+            "",
+            prerequisites,
+            root,
+        )
+
+    comments = list((root / "data").glob("comments_*.json"))
+    report = root / "docs" / "plans" / "viewer-voice-analysis.md"
+    outputs = [*comments, *([report] if report.is_file() else [])]
+    if not outputs:
+        return EXIT_RUN, _result("voice", "run", "voice_outputs_missing", 0.0, "", prerequisites, root)
+    if not comments or not report.is_file():
+        return EXIT_RUN, _result(
+            "voice",
+            "run",
+            "voice_outputs_incomplete",
+            0.0,
+            "",
+            [*prerequisites, *outputs],
+            root,
+        )
+    return EXIT_SKIP, _result(
+        "voice",
+        "skip",
+        "voice_outputs_complete",
+        0.0,
+        "",
+        [*prerequisites, *outputs],
+        root,
+    )
+
+
 def evaluate(root: Path, step: str, now: float) -> tuple[int, StateResult]:
     root = root.resolve()
-    freshness_days, source = (0.0, "") if step == "market" else _freshness(root)
+    freshness_days, source = (0.0, "") if step in {"market", "voice"} else _freshness(root)
     analytics = root / "config" / "channel" / "analytics.json"
     if step == "benchmark" and not analytics.is_file():
         return EXIT_BLOCKED, {
@@ -158,6 +201,8 @@ def evaluate(root: Path, step: str, now: float) -> tuple[int, StateResult]:
 
     data = list((root / "data").glob("benchmark_*.json"))
     reports = _benchmark_reports(root)
+    if step == "voice":
+        return _evaluate_voice(root, data, reports)
     if step == "market":
         comments = list((root / "data").glob("comments_*.json"))
         return _evaluate_market(root, data, reports, comments)
@@ -243,7 +288,7 @@ def evaluate(root: Path, step: str, now: float) -> tuple[int, StateResult]:
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--channel-dir", type=Path, default=Path.cwd())
-    parser.add_argument("--step", choices=("benchmark", "discover", "market"), required=True)
+    parser.add_argument("--step", choices=("benchmark", "discover", "voice", "market"), required=True)
     parser.add_argument("--now", type=float, default=None)
     parser.add_argument("--pretty", action="store_true")
     return parser

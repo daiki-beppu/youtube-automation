@@ -11,13 +11,13 @@
 - 承認済み TTP 対象の追加動画データやサムネイルを再収集する場合は `/channel-research --benchmark` を使う。Step 5.5 の初回 duration 算出では必須とする。
 - 収集済みデータから方向性を深掘りする場合は `/channel-research --market` を使う。
 
-`/viewer-voice` は任意の追加調査に分類せず、Step 7 の必須前工程として扱う。
+`/channel-research --voice` は任意の追加調査に分類せず、Step 7 の必須前工程として扱う。
 
 ## Prelaunch persona chain details
 
 チェーン全体へ **実行コンテキスト: 新規開設（公開前）** を渡し、公開後の自チャンネル Analytics を前提に切り替えない。
 
-1. `/viewer-voice` で承認済み TTP 対象を含む競合チャンネルのコメントを収集・分析し、`docs/plans/viewer-voice-analysis.md` を生成する。
+1. `/channel-research --voice` で承認済み TTP 対象を含む競合チャンネルのコメントを収集・分析し、`docs/plans/viewer-voice-analysis.md` を生成する。
 2. `/audience-persona-design` に実行コンテキストと次の入力を渡し、暫定 `docs/channel/personas/persona-definition.md` を生成する。
    - `docs/plans/viewer-voice-analysis.md`
    - `docs/channel/ttp-seed-confirmation.md`

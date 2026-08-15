@@ -1,6 +1,6 @@
 # 全 skill カタログ
 
-`yt-skills sync` で各チャンネルリポジトリに配布される Claude Code skill の一覧（全 **49 個**）。各行は「なにができるか」（what）の 1 行要約。発動トリガー・前提・前後工程はサイトの [skill ガイド](/skills)、詳細手順は `.claude/skills/<name>/SKILL.md` を参照。
+`yt-skills sync` で各チャンネルリポジトリに配布される Claude Code skill の一覧（全 **48 個**）。各行は「なにができるか」（what）の 1 行要約。発動トリガー・前提・前後工程はサイトの [skill ガイド](/skills)、詳細手順は `.claude/skills/<name>/SKILL.md` を参照。
 
 > 個別の使い分けは各カテゴリの冒頭リンクや [`docs/workflow-cheatsheet.md`](workflow-cheatsheet.md)（workflow 系）も併せて参照。
 
@@ -16,7 +16,7 @@
 
 ## チャンネル立ち上げ
 
-標準フローは `/setup` → `/channel-new`（`/viewer-voice` → `/audience-persona-design` → `/viewing-scene` を含む）→ `/wf-new`。公開前のペルソナチェーンは既存の競合 / TTP / viewer-voice 成果物を入力に完走し、自チャンネル Analytics report や任意の本格 benchmark 収集を要求しない。追加競合発掘、benchmark、方向性再検討、branding 再反映は必要なときだけ任意後続として実行する。`/viewer-voice` は公開後の再分析では任意で、公開後の `/viewing-scene` は従来どおり Analytics report を要求する。
+標準フローは `/setup` → `/channel-new`（`/channel-research --voice` → `/audience-persona-design` → `/viewing-scene` を含む）→ `/wf-new`。公開前のペルソナチェーンは既存の競合 / TTP / viewer-voice 成果物を入力に完走し、自チャンネル Analytics report や任意の本格 benchmark 収集を要求しない。追加競合発掘、benchmark、方向性再検討、branding 再反映は必要なときだけ任意後続として実行する。`/channel-research --voice` は公開後の再分析では任意で、公開後の `/viewing-scene` は従来どおり Analytics report を要求する。
 
 | Skill | なにができるか |
 |---|---|
@@ -30,7 +30,6 @@
 
 | Skill | なにができるか |
 |---|---|
-| /viewer-voice | 競合コメント収集で視聴者インサイトを抽出 |
 | /audience-persona-design | ターゲット視聴者のペルソナを定義 |
 | /viewing-scene | 視聴シーン（いつ・どこで・なぜ聴くか）を検証・定義 |
 | /creative-constraints | ペルソナと視聴シーンを、音・映像・サムネ・タイトル・測定の機械検証可能な制約へ翻訳 |
@@ -93,7 +92,7 @@ YouTube Analytics と動画本体の解析。
 
 | Skill | なにができるか |
 |---|---|
-| /channel-research | チャンネル調査を状態判定付きで実行。`--benchmark` で競合データを収集、`--discover` で追加候補を発掘、`--market` で市場比較または収集済みデータ分析へ自動分岐 |
+| /channel-research | チャンネル調査を状態判定付きで実行。`--benchmark` で競合データを収集、`--discover` で追加候補を発掘、`--voice` でコメント分析、`--market` で市場比較または収集済みデータ分析へ自動分岐 |
 | /thumbnail-research | 収集済み競合サムネイルの再生数上位群 / 下位群を比較し、勝ちパターンと `/thumbnail` 向け TTP 推奨事項を生成 |
 
 ## 配信インフラ

@@ -34,7 +34,6 @@ _CHANNEL_NEW_SHARED_ASSETS = frozenset(
         "desire-vocabulary.md",
         "direction-mode.md",
         "directory-structure.md",
-        "fetch_benchmark_comments.py",
         "fetch_branding_snapshot.py",
         "generate_image.py",
         "schedule-template.json",
@@ -422,9 +421,6 @@ def test_candidate_sdist_contains_setup_channel_owner_once(tmp_path: Path) -> No
         assert channel_new_matches == []
 
     expected_links = {
-        "fetch_benchmark_comments.py": (
-            "../../../../src/youtube_automation/commands/analytics/fetch_benchmark_comments.py"
-        ),
         "generate_image.py": "../../../../src/youtube_automation/commands/media/generate_image.py",
     }
     for relative, linkname in expected_links.items():
@@ -443,5 +439,14 @@ def test_candidate_sdist_contains_setup_channel_owner_once(tmp_path: Path) -> No
     assert collector_members[0].issym()
     assert collector_members[0].linkname == (
         "../../../../src/youtube_automation/commands/analytics/benchmark_collector.py"
+    )
+    comment_collector = next(
+        member
+        for member in members
+        if member.name.endswith("/.claude/skills/channel-research/references/fetch_benchmark_comments.py")
+    )
+    assert comment_collector.issym()
+    assert comment_collector.linkname == (
+        "../../../../src/youtube_automation/commands/analytics/fetch_benchmark_comments.py"
     )
     assert not any("/.claude/skills/benchmark/" in member.name for member in members)

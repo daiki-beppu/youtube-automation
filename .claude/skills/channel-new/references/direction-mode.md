@@ -28,13 +28,13 @@ YouTube の第三者チャンネル由来データ（description、keywords、lo
 
 上記の入力がすべて欠けている場合は、根拠なしに方向性検討を進めない。不足している入力を明示し、
 `/setup --channel` で TTP seed confirmation / branding snapshot / benchmark.channels を作成するか、
-必要に応じて `/channel-research --benchmark` / `/viewer-voice` / `/channel-research --market` を先に実行するよう案内して停止する。
+必要に応じて `/channel-research --benchmark` / `/channel-research --voice` / `/channel-research --market` を先に実行するよう案内して停止する。
 
 - 承認済み TTP 対象の全体像（チャンネル名、登録者数、動画数、直近タイトル）
 - 最も参考になるチャンネル（ロールモデル候補）
 - 転写したい型（タイトル構造、サムネ構図、branding。投稿頻度と動画尺は収集済みデータまたは手動メモがある場合だけ）
 - `data/video_analysis/<slug>/*.json` があれば、競合 BGM 構造（intro / peak / outro 秒）の平均と代表例
-- 後続 `/channel-research --benchmark` / `/viewer-voice` / `/channel-research --market` が必要な未確認事項
+- 後続 `/channel-research --benchmark` / `/channel-research --voice` / `/channel-research --market` が必要な未確認事項
 
 ## Step D2: ポジショニング議論
 
@@ -57,7 +57,7 @@ YouTube の第三者チャンネル由来データ（description、keywords、lo
    - ユーザーの好み・得意分野とのマッチング
    - `genre.primary` / `genre.style` / `genre.context` を確定
 3. **ターゲット視聴者**
-   - `/viewer-voice` 実行済みならコメント分析から見える主要な視聴者像
+   - `/channel-research --voice` 実行済みならコメント分析から見える主要な視聴者像
    - 未実行なら `docs/channel/ttp-seed-confirmation.md` と `docs/channel/competitor-branding-snapshot.json` から置いた仮説
    - 狙うべきセグメント
    - 利用シーン（勉強、睡眠、作業、ゲーム等）

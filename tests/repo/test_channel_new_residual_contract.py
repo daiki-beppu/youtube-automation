@@ -26,16 +26,15 @@ SHARED_ASSET_SHA256 = {
     "config-template/skills/thumbnail.yaml": "3e5b6d35963ab1313bc691d0e7cd9f2ec4f118abf1a66d689d4813511e785231",
     "config-template/youtube.json": "849f4b0912cb7be3d1cc92b7607d355e856b5af3e9e85db0449fabdf1713bb6c",
     "desire-vocabulary.md": "05b3cf85f3bc4a44dc83e43e5a3cba3525973521ec1964d2e8573bb2046f9865",
-    "direction-mode.md": "5e676e6ad573911813b6d0ae4a1bc4580eec31d2faf91432a88a0569f7048f72",
+    "direction-mode.md": "47efcc813fd99ccbf7736a8d122b407c00fd2e2bb1b6bf6056dbc68e439b7e3a",
     "directory-structure.md": "d8590189cf8929b968b4f1169b723cc0ed71e0be06dbd57cc3ed405967bc4e14",
-    "fetch_benchmark_comments.py": "d69ee100c7f3655394a6fb50b0aa9c4a1ae8b8b733d8243c0600ec9acfc2b93e",
     "fetch_branding_snapshot.py": "9735fa8d2af47b932c2c5318d0f4a4efa2bfdbd95e2bb33dece0752994bf7fef",
     "generate_image.py": "537257487c8cf1b5828ddeae85ff329326d4961b6ce90bd7d1f8a16c8fa684c6",
     "schedule-template.json": "2e950062bef269cea670d219024528e06079697997f9c59f244cebdf6a6f3026",
     "verification.md": "4ce440663e0faf0f1e5916920486f9e62c3ed0a3ab86624c189ebbe19cd5d8f1",
 }
 MOVED_ASSET_SHA256 = {
-    "import-mode.md": "be3be013876d84bd21fdc341885a1a6f988e0829b290b4a0e038133e8291f0b5",
+    "import-mode.md": "c9e8eb78de548fab2f720964bc2a6b97565e368cbc71be6d014914a74233c9bc",
     "localizations-template.json": "d0267074151af61f27856d0e67e8f0c3d56cf327b2255e00a8035e2851cde558",
     "push-mode.md": "be122ecbe19c803cfe09465f68ab364636f46f92f0ec842fb803566337eb57ee",
     "regeneration-mode.md": "152a4e233862da2abc84cc7fa229c6ac630a2830d4ac7297828f8ab6bef39347",

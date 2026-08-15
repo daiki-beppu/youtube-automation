@@ -76,7 +76,7 @@ YouTube の第三者チャンネル由来データ（`snippet.description`、`br
 - `/channel-research --discover` → 追加競合発掘
 - `/channel-research --market` → TTP 入替候補・ニッチ仮説の比較と収集済みデータ分析
 - `/channel-research --benchmark` → 本格ベンチマーク収集
-- `/viewer-voice` / `/audience-persona-design` → コメント分析と第一ペルソナ設計
+- `/channel-research --voice` / `/audience-persona-design` → コメント分析と第一ペルソナ設計
 - `references/config-template/*.json` / `references/config-generation-rules.md` / `references/verification.md` → setup の取り込み・再生成 mode と共有する config 資産
 - `references/fetch_branding_snapshot.py` → setup の再生成 mode と共有する branding snapshot helper
 - `/wf-new` → 初回コレクション制作

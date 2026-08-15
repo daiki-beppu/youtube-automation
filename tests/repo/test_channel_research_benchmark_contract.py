@@ -34,10 +34,10 @@ def test_channel_research_replaces_legacy_skills_and_exposes_two_modes() -> None
     assert "references/discover.md" in skill
 
 
-def test_chain_manifest_has_three_steps_and_complete_schema() -> None:
+def test_chain_manifest_has_four_steps_and_complete_schema() -> None:
     manifest = json.loads((SKILL_DIR / "references/channel-research-chain-manifest.json").read_text())
     assert manifest["chainId"] == "channel-research"
-    assert [step["id"] for step in manifest["steps"]] == ["benchmark", "discover", "market"]
+    assert [step["id"] for step in manifest["steps"]] == ["benchmark", "discover", "voice", "market"]
     step = manifest["steps"][0]
     assert set(step) == {
         "id",
@@ -55,7 +55,15 @@ def test_chain_manifest_has_three_steps_and_complete_schema() -> None:
     assert discover["skill"] == "channel-research"
     assert discover["prerequisiteArtifacts"] == ["docs/benchmarks/*.md"]
     assert discover["outputArtifacts"] == ["research/*-discovery.md", "research/*-discovery.csv"]
-    market = manifest["steps"][2]
+    voice = manifest["steps"][2]
+    assert voice["prerequisiteArtifacts"] == [
+        "data/benchmark_*.json",
+        "docs/benchmarks/*.md",
+        "research/*-discovery.md",
+        "research/*-discovery.csv",
+    ]
+    assert voice["outputArtifacts"] == ["data/comments_*.json", "docs/plans/viewer-voice-analysis.md"]
+    market = manifest["steps"][3]
     assert market["prerequisiteArtifacts"] == []
     assert market["outputArtifacts"] == [
         "docs/research/market-*.md",

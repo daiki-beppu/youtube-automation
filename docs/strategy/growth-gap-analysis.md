@@ -29,7 +29,7 @@
 | L6 | SEO・メタデータ | `/video-description`（SEO 最適化概要欄）、`/metadata-audit`、`yt-title-duplicate-check`、localizations 同期（`/channel-new` 設定 push、`yt-shorts-bulk-update-loc`） | ローカル config / Data API v3 | ◯ 生成◎、検索流入との突合なし |
 | L7 | 投稿頻度・タイミング | `/channel-research --benchmark`（競合の投稿間隔）、`yt-launch-curve`（投稿後 N 日の初速比較）、`yt-theme-compare`（テーマ別初速・ロングテール） | Data API v3 / 自チャンネル履歴 | △ 頻度の観測のみ、時刻・曜日分析なし |
 
-横断（レバー非依存）の既存資産: `/analytics --analyze`（全レバーの統合分析・戦略提案）、`/channel-research` + `/viewer-voice` + `/audience-persona-design`（誰に何を作るかの上流）、`/collection-ideate`（企画への落とし込み）、`/flop-analysis`（不振動画の切り分け）。
+横断（レバー非依存）の既存資産: `/analytics --analyze`（全レバーの統合分析・戦略提案）、`/channel-research --voice` + `/audience-persona-design`（誰に何を作るかの上流）、`/collection-ideate`（企画への落とし込み）、`/flop-analysis`（不振動画の切り分け）。
 
 ## 2. レバー別ギャップ分析
 
@@ -113,7 +113,7 @@
 └──────────────────────────────────────────────────────────────────────┘
 
 月次: /channel-research --benchmark → /channel-research         … 競合追従・機会領域の再確認
-      /viewer-voice                          … コメントから視聴者インサイト更新
+      /channel-research --voice              … コメントから視聴者インサイト更新
 
 四半期 or 方向性見直し時:
       /audience-persona-design（+ viewing-scene）… ペルソナ・視聴シーン再設計

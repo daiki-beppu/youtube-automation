@@ -17,7 +17,6 @@ PDCA 対応: 準備 = 準備する / Plan = 調べる → 決める / Do = 進�
 
 - `/channel-research` — Use when チャンネル調査を状態判定付きで一括実行または一段だけ実行するとき。
 - `/thumbnail-research` — Use when 収集済み競合サムネイルだけを再生数上位群 vs 下位群で深掘りし、勝ちパターンを抽出するとき。
-- `/viewer-voice` — Use when 競合コメントの収集・分析で視聴者インサイトを抽出するとき。
 
 ## 決める
 

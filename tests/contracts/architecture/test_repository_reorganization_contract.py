@@ -1552,6 +1552,13 @@ def test_reorganization_receipt_names_existing_non_contract_consumers() -> None:
         ".claude/skills/market-research/references/report-contract.md": (
             ".claude/skills/channel-research/references/report-contract.md"
         ),
+        ".claude/skills/viewer-voice/SKILL.md": ".claude/skills/channel-research/references/voice.md",
+        ".claude/skills/viewer-voice/references/fetch_benchmark_comments.py": (
+            ".claude/skills/channel-research/references/fetch_benchmark_comments.py"
+        ),
+        ".claude/skills/channel-new/references/fetch_benchmark_comments.py": (
+            ".claude/skills/channel-research/references/fetch_benchmark_comments.py"
+        ),
         ".claude/skills/collection-ideate/references/generate_image.py": (
             ".claude/skills/wf-new/references/generate_image.py"
         ),

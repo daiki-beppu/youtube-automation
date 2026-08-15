@@ -12,7 +12,6 @@ TARGET_SKILLS = (
     "channel-research",
     "thumbnail-research",
     "video-analyze",
-    "viewer-voice",
     "viewing-scene",
 )
 
@@ -78,7 +77,7 @@ OCCURRENCE_LEDGER = (
     ),
     *_occurrences("video-analyze", (), (("direction-caller", "direction"),)),
     *_occurrences(
-        "viewer-voice",
+        "channel-research",
         (
             ("frontmatter-prelaunch", "new-opening"),
             ("prelaunch-entry", "new-opening"),
@@ -103,10 +102,9 @@ OCCURRENCE_LEDGER = (
 # every route to its exact active Markdown context without duplicating long prose.
 ROUTE_CONTEXT_SHA256 = {
     "audience-persona-design": "689f9b8c157450a8881ab51852d4d896ffff9bfbfbcb2ed5f3f9975f88903512",
-    "channel-research": "a554a65760fce4c466e37981a813eaa975e85c9f8b7ffe6dc63ea9e5450df12b",
+    "channel-research": "3d98915ccce66afc4291bc6dbf84c92ec6191cfd1053ac6db0a06f0c6ea59738",
     "thumbnail-research": "e91bde533c117155b8034d0ea462d608a469c194ed95e56cb0ce7678410f331a",
     "video-analyze": "f28ee9c9b0a18c3ecae15b631f970d780b18bda72185a25935b56f0a66ba6552",
-    "viewer-voice": "976755019cfee0ccecb602d26ba86f4cc8701fbb8ea66ec500477317d40d682f",
     "viewing-scene": "03df44376f9ef446067801d083cbeeceec339a2c24b1e248b4443b4c51914f83",
 }
 SETUP_ASSET_OWNERS = {
@@ -116,12 +114,11 @@ SETUP_ASSET_OWNERS = {
         "persona-branding-readiness.md",
         "new-channel-bootstrap.md",
     ),
-    "viewer-voice": ("persona-branding-readiness.md",),
     "viewing-scene": ("persona-branding-readiness.md",),
 }
 UNCHANGED_SKILL_SHA256 = {
     "thumbnail-research": "d625bca054ffe2cc6f1d0df5dfbf0e07a130b3e671175df29a95cb0f28856bab",
-    "video-analyze": "721d555b7bbca0f35e2391961781c71d7af639e89ef4de0fdbf2fed2e6945d9b",
+    "video-analyze": "45032757ba0366fa467160d1cde67f8bc28033cc24c1a7b9d8a8cb436af2e666",
 }
 RESIDUAL_LINE_MARKERS = {
     "channel-research": (
@@ -135,7 +132,7 @@ RESIDUAL_LINE_MARKERS = {
     ),
 }
 RESIDUAL_SHA256 = {
-    "channel-research": "a0f402daf972b1823652a5cc3deba0c1cf826ee27a30e4f755e6670fedfd6f0c",
+    "channel-research": "9f2ef08047ef712e09e774c5a7bc5b8c4ea373c3221ca2eae9ecbbba20ef595e",
 }
 
 
@@ -144,6 +141,7 @@ def _skill_text(skill: str) -> str:
     if skill == "channel-research":
         text += (SKILLS_DIR / skill / "references" / "discover.md").read_text(encoding="utf-8")
         text += (SKILLS_DIR / skill / "references" / "market.md").read_text(encoding="utf-8")
+        text += (SKILLS_DIR / skill / "references" / "voice.md").read_text(encoding="utf-8")
     return text
 
 
