@@ -38,13 +38,13 @@ _cache: dict[str, dict[str, Any]] = {}
 SKILL_CONFIG_KEYS: Final[frozenset[str]] = frozenset(
     {
         "analytics",
+        "audit.metadata",
         "audit.video",
         "benchmark",
         "collection-ideate",
         "discover-competitors",
         "loop-video",
         "masterup",
-        "metadata-audit",
         "music.prompt",
         "suno",
         "suno-helper",
@@ -58,6 +58,7 @@ SKILL_ONLY_CONFIG_KEYS: Final[frozenset[str]] = frozenset(
         "live-clean",
         "lyria",
         "music.lyric",
+        "metadata-audit",
         "publish",
         "short",
         "suno-lyric",
@@ -84,6 +85,7 @@ _MOVED_SKILL_CONFIG_DEFAULTS: Final[dict[str, Path]] = {
     "live-clean": Path("publish", "config.default.yaml"),
     "lyria": Path("music", "config.default.yaml"),
     "masterup": Path("music", "config.default.yaml"),
+    "metadata-audit": Path("audit", "config.default.yaml"),
     "suno": Path("music", "config.default.yaml"),
     "suno-helper": Path("music", "config.default.yaml"),
     "suno-lyric": Path("music", "config.default.yaml"),
@@ -100,6 +102,7 @@ _MOVED_SKILL_CONFIG_SECTIONS: Final[dict[str, tuple[str, ...]]] = {
     "live-clean": ("clean",),
     "lyria": ("generate", "lyria"),
     "masterup": ("master",),
+    "metadata-audit": ("metadata",),
     "suno": ("prompt",),
     "suno-helper": ("generate", "suno"),
     "suno-lyric": ("lyric",),
@@ -112,6 +115,7 @@ _MOVED_SKILL_CONFIG_SECTIONS: Final[dict[str, tuple[str, ...]]] = {
 _NAMESPACED_LEGACY_OVERRIDE_OWNERS: Final[dict[str, str]] = {
     "music.prompt": "suno",
     "music.lyric": "suno-lyric",
+    "audit.metadata": "metadata-audit",
     "video.generate": "videoup",
     "audit.video": "video-analyze",
 }

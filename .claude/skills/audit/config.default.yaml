@@ -71,3 +71,10 @@ video:
         "rationale": "1-2 sentences grounded in bgm_arc — must not contradict observed dynamics"
       }
     }
+
+metadata:
+  # REMOTE チェック: YouTube 側 description のタイムスタンプ行数がこの値を超えたら
+  # variation expansion regression として issue 化する。
+  # チャンネル側では config/skills/audit.yaml::metadata で上書きできる。
+  chapters:
+    remote_max: 12

@@ -7,7 +7,7 @@ description: "Use when 完成した動画を公開工程へ進めるとき。--p
 ## 前後工程
 
 - `前工程`: `/wf-new`, `/video --generate`, `/video-description`, `/thumbnail`
-- `後工程`: `/post-publish`, `/metadata-audit`
+- `後工程`: `/post-publish`, `/audit --metadata`
 - `委譲先`: `/post-publish`
 
 ## 成果物
@@ -82,7 +82,7 @@ description: "Use when 完成した動画を公開工程へ進めるとき。--p
 
 `--clean` では `references/clean.md` を読み、公開完了の 3 条件を同一 skill 内で検証する。対象と容量を dry-run 表示し、不可逆な物理削除への明示承認を得た場合だけ削除する。clean は任意操作のため chain manifest へ追加しない。
 
-`/post-publish` が構成済みなら upload 完了後にその chain へ委譲する。community-post、pinned-comment、metadata-audit の承認・履歴・再開契約をここへ複製しない。
+`/post-publish` が構成済みなら upload 完了後にその chain へ委譲する。community-post、pinned-comment、audit --metadata の承認・履歴・再開契約をここへ複製しない。
 
 ## 想定 API call 数
 

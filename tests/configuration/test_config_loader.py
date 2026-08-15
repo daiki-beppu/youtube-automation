@@ -1066,6 +1066,19 @@ def test_workflow_post_publish_legacy_gate_alias_preserves_behavior(tmp_path, mo
     assert config.workflow.post_publish.approval_gates.metadata_audit is True
 
 
+@pytest.mark.parametrize("key", ["skip_approvals", "approval_gates"])
+def test_workflow_post_publish_metadata_audit_gate_is_deprecated_but_preserved(tmp_path, monkeypatch, key):
+    sections = _minimal_sections()
+    sections["workflow.json"] = {"workflow": {"post-publish": {key: {"metadata-audit": True}}}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.warns(DeprecationWarning, match=rf"workflow\.post-publish\.{key}\.metadata-audit"):
+        post_publish = load_config().workflow.post_publish
+
+    assert post_publish.skip_approvals.metadata_audit is (key == "skip_approvals")
+
+
 @pytest.mark.parametrize("invalid", ["true", 1, None, {}, []])
 def test_workflow_post_publish_gate_must_be_boolean(tmp_path, monkeypatch, invalid):
     sections = _minimal_sections()

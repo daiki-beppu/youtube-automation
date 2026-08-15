@@ -26,7 +26,6 @@ TARGET_SKILLS = (
     "audit",
     "wf-new",
     "flop-analysis",
-    "metadata-audit",
     "publish",
     "short",
     "music",
@@ -137,6 +136,12 @@ _RAW_EXPECTED_ACTIVE_ROUTES = (
         "`/channel-strategy --direction`（方向性検討モード）でチャンネル全体の方向性を再検討 |",
     ),
     _route(
+        "audit/references/metadata.md",
+        "## 前提",
+        "- `config/channel/` が存在すること（`load_config()` でロード可能）。存在しない場合は "
+        "`/setup --import` を案内して停止する",
+    ),
+    _route(
         "audit/references/value-loop.md",
         "## Hard Gates",
         "  - 新規チャンネルでは `/setup --channel` を案内して停止する。",
@@ -204,12 +209,6 @@ _RAW_EXPECTED_ACTIVE_ROUTES = (
         "## Next Step",
         "改善策の実行は本スキルの完了条件に含めない。必要なら "
         "`/channel-strategy --direction`（方向性検討モード）でチャンネル全体の方向性を見直す。",
-    ),
-    _route(
-        "metadata-audit/SKILL.md",
-        "## 前提",
-        "- `config/channel/` が存在すること（`load_config()` でロード可能）。存在しない場合は "
-        "`/setup --import` を案内して停止する",
     ),
     _route(
         "publish/references/playlist.md",
@@ -857,6 +856,7 @@ def test_initial_occurrences_have_a_complete_context_ledger() -> None:
         "alignment-check": "audit",
         "collection-ideate": "wf-new",
         "lyria": "music",
+        "metadata-audit": "audit",
         "playlist": "publish",
         "short-thumbnail": "short",
         "value-loop-audit": "audit",

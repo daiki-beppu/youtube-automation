@@ -7,7 +7,7 @@ description: "Use when YouTube 概要欄を Complete Collection 形式で自動�
 ## 前後工程
 
 - `前工程`: `/video --generate`
-- `後工程`: `/publish --upload`, `/metadata-audit`
+- `後工程`: `/publish --upload`, `/audit --metadata`
 - `委譲先`: `なし`
 
 ## 成果物

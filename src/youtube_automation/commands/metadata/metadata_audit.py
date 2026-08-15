@@ -59,6 +59,7 @@ TS_RE = re.compile(r"^\d{1,2}:\d{2}")
 
 # skill-config に chapters.remote_max が無い場合の最終フォールバック
 _FALLBACK_REMOTE_CHAPTER_MAX = 12
+SKILL_CONFIG_KEY = "audit.metadata"
 
 _QUOTA_SERVICE = "youtube-data-api"
 _READ_QUOTA_UNITS = 1
@@ -76,10 +77,10 @@ def _record_read_quota(bucket: str) -> None:
 def _remote_chapter_max() -> int:
     """REMOTE チェックのチャプター上限を skill-config から解決する。
 
-    `.claude/skills/metadata-audit/config.default.yaml::chapters.remote_max` が default、
-    `config/skills/metadata-audit.yaml` のチャンネル上書きが優先される。
+    `.claude/skills/audit/config.default.yaml::metadata.chapters.remote_max` が default、
+    `config/skills/audit.yaml::metadata` のチャンネル上書きが優先される。
     """
-    chapters = load_skill_config("metadata-audit").get("chapters") or {}
+    chapters = load_skill_config(SKILL_CONFIG_KEY).get("chapters") or {}
     if not isinstance(chapters, dict):
         return _FALLBACK_REMOTE_CHAPTER_MAX
     return int(chapters.get("remote_max", _FALLBACK_REMOTE_CHAPTER_MAX))

@@ -1081,13 +1081,13 @@ def test_post_publish_skip_approvals_are_documented_consistently() -> None:
     assert config["skip_approvals"] == {
         "community-post": True,
         "pinned-comment": True,
-        "metadata-audit": True,
     }
     for text in (post_publish, setup, readme):
         assert "skip_approvals" in text
     assert "`false` の step だけ承認対象" in post_publish
     assert "後方互換 alias" in post_publish
     assert "同一 step" in post_publish and "ConfigError" in post_publish
+    assert "metadata-audit" in readme and "非推奨" in readme
 
 
 def test_chain_manifest_approval_gate_uses_true_equals_skip() -> None:

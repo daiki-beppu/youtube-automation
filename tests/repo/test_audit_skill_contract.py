@@ -9,6 +9,7 @@ import yaml
 
 from tests.helpers.paths import REPO_ROOT
 from youtube_automation.commands.analytics import video_analyze
+from youtube_automation.commands.metadata import metadata_audit
 from youtube_automation.commands.system.skills_sync import _migrate_config
 from youtube_automation.configuration import skills as skill_config
 from youtube_automation.domains.skills.inventory import SkillInventory
@@ -26,6 +27,7 @@ def test_audit_exposes_alignment_as_an_exclusive_mode() -> None:
     assert "alignment-check" not in skill_names
     assert "value-loop-audit" not in skill_names
     assert "video-analyze" not in skill_names
+    assert "metadata-audit" not in skill_names
     assert isinstance(frontmatter, dict)
     assert frontmatter["name"] == "audit"
     assert frontmatter["purpose"] == "振り返る"
@@ -36,9 +38,11 @@ def test_audit_exposes_alignment_as_an_exclusive_mode() -> None:
     assert "| `--alignment` | `references/alignment.md` |" in mode
     assert "| `--value-loop` | `references/value-loop.md` |" in mode
     assert "| `--video` | `references/video.md` |" in mode
+    assert "| `--metadata` | `references/metadata.md` |" in mode
     assert INVENTORY.reference_exists("audit", "references/alignment.md")
     assert INVENTORY.reference_exists("audit", "references/value-loop.md")
     assert INVENTORY.reference_exists("audit", "references/video.md")
+    assert INVENTORY.reference_exists("audit", "references/metadata.md")
 
 
 def test_alignment_mode_keeps_the_audit_inputs_and_external_read_only_boundary() -> None:
@@ -154,3 +158,48 @@ def test_video_config_reads_canonical_audit_section(tmp_path: Path) -> None:
     loaded = skill_config.load_skill_config("audit.video", use_cache=False, channel_dir=tmp_path)
 
     assert loaded["analysis_window_sec"] == 450
+
+
+def test_metadata_mode_keeps_local_remote_audit_read_only() -> None:
+    metadata = (AUDIT_DIR / "references" / "metadata.md").read_text(encoding="utf-8")
+
+    for command in (
+        "yt-metadata-audit",
+        "yt-metadata-audit --local",
+        "yt-metadata-audit --remote",
+        "yt-metadata-audit --strict",
+    ):
+        assert command in metadata
+    assert "読み取り専用" in metadata
+    assert "/video --describe" in metadata
+    assert "自身では修正しない" in metadata
+
+
+def test_metadata_config_is_namespaced_and_keeps_legacy_override(tmp_path: Path) -> None:
+    defaults = yaml.safe_load((AUDIT_DIR / "config.default.yaml").read_text(encoding="utf-8"))
+
+    assert defaults["metadata"]["chapters"]["remote_max"] == 12
+    assert "audit.metadata" in skill_config.SKILL_CONFIG_KEYS
+    assert metadata_audit.SKILL_CONFIG_KEY == "audit.metadata"
+    assert skill_config.skill_config_default_relative_path("metadata-audit") == Path("audit/config.default.yaml")
+    assert _migrate_config.SKILL_CONFIG_MIGRATIONS["metadata-audit"] == _migrate_config.SkillConfigMigration(
+        "audit", "metadata"
+    )
+
+    config_dir = tmp_path / "config" / "skills"
+    config_dir.mkdir(parents=True)
+    (config_dir / "metadata-audit.yaml").write_text("chapters:\n  remote_max: 8\n", encoding="utf-8")
+
+    loaded = skill_config.load_skill_config("audit.metadata", use_cache=False, channel_dir=tmp_path)
+
+    assert loaded["chapters"]["remote_max"] == 8
+
+
+def test_metadata_config_reads_canonical_audit_section(tmp_path: Path) -> None:
+    config_dir = tmp_path / "config" / "skills"
+    config_dir.mkdir(parents=True)
+    (config_dir / "audit.yaml").write_text("metadata:\n  chapters:\n    remote_max: 6\n", encoding="utf-8")
+
+    loaded = skill_config.load_skill_config("audit.metadata", use_cache=False, channel_dir=tmp_path)
+
+    assert loaded["chapters"]["remote_max"] == 6
