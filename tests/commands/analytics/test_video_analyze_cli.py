@@ -518,7 +518,7 @@ class TestMainAnalysisWindowFlow:
 
         monkeypatch.setenv("CHANNEL_DIR", str(tmp_path))
         reset_config()
-        reset_skill_config("video-analyze")
+        reset_skill_config("audit.video")
 
         client = MagicMock()
         response = MagicMock()
@@ -548,7 +548,7 @@ class TestMainAnalysisWindowFlow:
             ):
                 main()
         finally:
-            reset_skill_config("video-analyze")
+            reset_skill_config("audit.video")
             reset_config()
 
         return client

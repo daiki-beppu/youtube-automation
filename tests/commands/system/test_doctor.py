@@ -4685,7 +4685,7 @@ class TestCheckTtpWfNewReadinessChannelNew:
         r = doctor.check_ttp_wf_new_readiness(tmp_path)
 
         assert r.status == "warn"
-        assert "video-analyze model が旧/非対応: gemini-3.1-flash-image-preview" in r.message
+        assert "audit.video model が旧/非対応: gemini-3.1-flash-image-preview" in r.message
 
     def test_video_input_supported_ga_model_does_not_warn(self, tmp_path):
         _write_ttp_analytics(tmp_path, [_ttp_channel()])
@@ -4697,7 +4697,7 @@ class TestCheckTtpWfNewReadinessChannelNew:
 
         r = doctor.check_ttp_wf_new_readiness(tmp_path)
 
-        assert "video-analyze model が旧/非対応" not in r.message
+        assert "audit.video model が旧/非対応" not in r.message
 
     @pytest.mark.parametrize(
         "model",

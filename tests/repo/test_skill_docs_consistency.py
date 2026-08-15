@@ -920,7 +920,7 @@ def test_channel_strategy_followup_skill_routing_uses_new_contract() -> None:
         ".claude/skills/wf-new/references/ideate.md",
         ".claude/skills/music/references/generate.md",
         ".claude/skills/flop-analysis/SKILL.md",
-        ".claude/skills/video-analyze/SKILL.md",
+        ".claude/skills/audit/references/video.md",
     ]
     for path in followup_direction_files:
         content = _read(path)

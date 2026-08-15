@@ -52,7 +52,7 @@ def main(argv: list[str] | None = None) -> int:
         if analysis_path is None:
             return _print_skip(
                 args.video,
-                "/video-analyze 未実行です。`yt-video-analyze` で対象動画を解析してください。",
+                "/audit --video 未実行です。`yt-video-analyze` で対象動画を解析してください。",
             )
         analysis = _load_json_object(analysis_path, label="video_analysis")
         duration = _resolve_duration(analytics, analysis, args.video)

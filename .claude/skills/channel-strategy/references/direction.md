@@ -69,7 +69,7 @@ YouTube の第三者チャンネル由来データ（description、keywords、lo
    - サムネイルの方向性（`/channel-research --benchmark` 実行済みなら競合サムネイル、未実行なら `docs/channel/ttp-seed-confirmation.md` の手動選定メモを参考に）
    - チャンネル全体のトーン＆マナー
 6. **競合の BGM 構造**
-   - `/video-analyze` 済みなら `bgm_arc` 平均（intro / peak / outro 秒）と `suno_preset` を根拠に、曲展開の初期方針を決める
+   - `/audit --video` 済みなら `bgm_arc` 平均（intro / peak / outro 秒）と `suno_preset` を根拠に、曲展開の初期方針を決める
    - 未実行なら必要性だけを確認し、勝手に解析を追加しない
 7. **差別化ポイント**
    - TTP で転写した型の上に重ねる独自要素は何か（テーマ、スタイル、世界観、品質）
@@ -97,7 +97,7 @@ YouTube の第三者チャンネル由来データ（description、keywords、lo
 | 動画の長さ（分） | | `/channel-research --benchmark` 済みデータ、または手動メモ / 仮説 |
 | 投稿頻度 | | `/channel-research --benchmark` 済みデータ、または手動メモ / 仮説 |
 | 音楽エンジン（デフォルト） | suno / lyria のどちらか | ジャンル適性・API 可用性 |
-| BGM 構造方針 | | `/video-analyze` 済みデータ、または未実行理由 |
+| BGM 構造方針 | | `/audit --video` 済みデータ、または未実行理由 |
 | サムネイル方針 | | 競合サムネイル分析 |
 
 ### 再生成モードへの引き継ぎ項目（必須・issue #567）

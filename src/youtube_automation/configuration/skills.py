@@ -38,6 +38,7 @@ _cache: dict[str, dict[str, Any]] = {}
 SKILL_CONFIG_KEYS: Final[frozenset[str]] = frozenset(
     {
         "analytics",
+        "audit.video",
         "benchmark",
         "collection-ideate",
         "discover-competitors",
@@ -88,6 +89,7 @@ _MOVED_SKILL_CONFIG_DEFAULTS: Final[dict[str, Path]] = {
     "suno-lyric": Path("music", "config.default.yaml"),
     "video-upload": Path("publish", "config.default.yaml"),
     "videoup": Path("video", "config.default.yaml"),
+    "video-analyze": Path("audit", "config.default.yaml"),
 }
 
 _MOVED_SKILL_CONFIG_SECTIONS: Final[dict[str, tuple[str, ...]]] = {
@@ -103,6 +105,7 @@ _MOVED_SKILL_CONFIG_SECTIONS: Final[dict[str, tuple[str, ...]]] = {
     "suno-lyric": ("lyric",),
     "video-upload": ("upload",),
     "videoup": ("generate",),
+    "video-analyze": ("video",),
 }
 
 # 名前空間移行後も、明示 migration 前の下流 override を同じ実行経路で読む。
@@ -110,6 +113,7 @@ _NAMESPACED_LEGACY_OVERRIDE_OWNERS: Final[dict[str, str]] = {
     "music.prompt": "suno",
     "music.lyric": "suno-lyric",
     "video.generate": "videoup",
+    "audit.video": "video-analyze",
 }
 
 _THUMBNAIL_TEXT_RENDER_MODES = frozenset({"ai_burn_in", "deterministic"})

@@ -171,4 +171,4 @@ subagent へは次を具体値で渡す:
 
 ## 関連ファイル
 
-- `data/video_analysis/<slug>/<video_id>.json` — `/video-analyze` の動画本体スコアリング出力（競合スコアリングの追加入力）
+- `data/video_analysis/<slug>/<video_id>.json` — `/audit --video` の動画本体スコアリング出力（競合スコアリングの追加入力）

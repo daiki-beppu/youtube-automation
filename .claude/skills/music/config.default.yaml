@@ -69,7 +69,7 @@ prompt:
   # スタイルバリアント (A/B テスト用、省略可)
   # 各パターンで style: <key> を指定すると variant 固有の genre_line が使われる
   # 代表ジャンル (lo-fi / ambient / piano / nature) の参考テンプレ — 実値は
-  # `/video-analyze --source benchmark` の `suno_preset.genre_line` を起点に
+  # `/audit --video --source benchmark` の `suno_preset.genre_line` を起点に
   # チャンネル側 config/skills/music.yaml::prompt で上書き推奨
   style_variants: {}
   # style_variants:

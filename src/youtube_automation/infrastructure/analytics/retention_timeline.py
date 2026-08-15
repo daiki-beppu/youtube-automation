@@ -205,7 +205,7 @@ def render_retention_report(result: dict[str, object], *, analytics_path: Path, 
     lines.extend(
         [
             "",
-            "> `outside_analysis_window` は `/video-analyze` の冒頭クリップ窓外です。scene / BGM を推測していません。",
+            "> `outside_analysis_window` は `/audit --video` の冒頭クリップ窓外です。scene / BGM を推測していません。",
             "",
         ]
     )

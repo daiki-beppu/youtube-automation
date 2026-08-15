@@ -8,7 +8,7 @@ description: "Use when 公開済み動画が伸びなかった原因を video_id
 
 - `前工程`: `/analytics`, `/audit --alignment`
 - `後工程`: `/wf-new`
-- `委譲先`: `/video-analyze`
+- `委譲先`: `/audit --video`
 
 ## 成果物
 
@@ -21,7 +21,7 @@ description: "Use when 公開済み動画が伸びなかった原因を video_id
 過去自チャンネル平均 + 競合ベンチマークと突き合わせ、症状から仮説を立て、対応する既存スキル / CLI / API で検証する。
 最終出力は `collections/live/<collection>/20-documentation/postmortem.md`。
 
-責務は **症状の定量化 + 仮説リスト生成 + 検証の自律実行 + 結論の記入** まで。Gemini 等の API コストが発生する `/video-analyze` を含め、仮説検証はユーザーの承認プロンプトを挟まず実行する。改善策の適用は本スキルの責務に含めない。
+責務は **症状の定量化 + 仮説リスト生成 + 検証の自律実行 + 結論の記入** まで。Gemini 等の API コストが発生する `/audit --video` を含め、仮説検証はユーザーの承認プロンプトを挟まず実行する。改善策の適用は本スキルの責務に含めない。
 
 ## 完了条件
 
@@ -64,9 +64,9 @@ description: "Use when 公開済み動画が伸びなかった原因を video_id
 | API | call 数 / 実行 | 変動要因 |
 |---|---|---|
 | 直接実行 CLI（yt-launch-curve / yt-theme-compare / yt-thumbnail-correlate） | 0 call（ローカル処理のみ） | — |
-| Vertex AI Gemini（Phase 4 で /video-analyze を自律実行する場合） | 対象 1 動画 = 1 call | 仮説検証で /video-analyze を実行するかどうか |
+| Vertex AI Gemini（Phase 4 で /audit --video を自律実行する場合） | 対象 1 動画 = 1 call | 仮説検証で /audit --video を実行するかどうか |
 
-- 上限 / 承認: /video-analyze は承認プロンプトなしで自律実行されうるが、対象は当該 video_id 1 本に限定される。見積もりの詳細は /video-analyze の「想定 API call 数」を参照。
+- 上限 / 承認: /audit --video は承認プロンプトなしで自律実行されうるが、対象は当該 video_id 1 本に限定される。見積もりの詳細は /audit --video の「想定 API call 数」を参照。
 
 ## 実行フロー
 
@@ -139,7 +139,7 @@ per-video 流入経路シェア（`YT_SEARCH` / `YT_BROWSE` 等）に基づく�
 
 ### Phase 4: 検証の自律実行
 
-Phase 3 で列挙した主仮説（全件）について、次の表から対応する検証手段を選び、ユーザーの承認プロンプトを挟まず対応する検証手段を自動実行する。`/video-analyze` 等の有料 API を使う検証も同じ扱いとする。
+Phase 3 で列挙した主仮説（全件）について、次の表から対応する検証手段を選び、ユーザーの承認プロンプトを挟まず対応する検証手段を自動実行する。`/audit --video` 等の有料 API を使う検証も同じ扱いとする。
 
 各検証の直後に、postmortem.md の「検証ステップ」欄へ以下を記録する:
 
@@ -160,7 +160,7 @@ Phase 4 は改善策を適用せず、次の境界を守る:
 - `/audit --alignment`、`/channel-research --voice`、`/channel-strategy --persona`、`/channel-strategy --scene`、`/channel-strategy --direction` はスキルとして起動しない。これらは別成果物の保存または設定更新を完了条件に含むため、既存の `docs/plans/alignment-audit.md`、`docs/plans/viewer-voice-analysis.md`、`docs/channel/personas/persona-definition.md`、`docs/plans/viewing-scene-matrix.md` がある場合だけ read-only 入力として読む。必要な成果物がなければ、その仮説を理由付きの `未検証` とする
 - タイトル整合性は `/audit --alignment` を起動せず、対象コレクションの `workflow-state.json`、音楽プロンプト、実動画尺、検証済み A/B 履歴の現在サムネ候補を read-only で照合する。`config/channel/content.json`、タイトル、サムネイル、音源、方向性文書は変更しない
 - 差別化・市場性は `/channel-research --discover` や `/channel-strategy --direction` を起動せず、最新の既存 `data/benchmark_*.json` と `yt-theme-compare` の標準出力だけを使う。競合の追加、方向性決定、config 更新は行わない
-- `/thumbnail --compare` と `/video-analyze` は各スキルの分析成果物生成まで実行してよいが、Next Step の再生成・設定更新には進まない
+- `/thumbnail --compare` と `/audit --video` は各スキルの分析成果物生成まで実行してよいが、Next Step の再生成・設定更新には進まない
 
 **共通の期間・比較・記録契約**
 
@@ -195,8 +195,8 @@ uv run python .claude/skills/flop-analysis/references/verification.py --operatio
 | タイトル訴求弱 | 対象タイトル、全コレクション由来の語彙候補、対象の workflow-state・音楽prompt・実動画尺、現在サムネ候補の `composition.scene`。collection 型なので `actual_content_type=collection` | `title-alignment` |
 | ターゲット層ミスマッチ | `viewer-voice-analysis.md`、`persona-definition.md`、`viewing-scene-matrix.md` の主対象一致件数 | `hypothesis: target-mismatch` |
 | 差別化不足 | 最新 benchmark 上位10本と `term-classification` の出力 | `hypothesis: differentiation` |
-| 中身の弱さ（音源 / 編集 / テーマ） | 対象と同じ冒頭クリップ窓で保存済みの `/video-analyze` 成果物: 対象の `hook_structure.intro_sec` / `bgm_arc.peak` / `scene_timeline` / `editing_metrics.avg_cut_sec`、同ジャンル競合3本以上の `editing_metrics.avg_cut_sec` 中央値 `competitor_avg_cut_median`。retention 収集済みなら `yt-retention-timeline --video <video_id>` の `reports/retention_analysis/<video_id>.md` も引用 | `content-signals` |
-| サムネと中身の不一致 | `/video-analyze` の `thumbnail_alignment.signature_present` | `hypothesis: thumbnail-content-alignment` |
+| 中身の弱さ（音源 / 編集 / テーマ） | 対象と同じ冒頭クリップ窓で保存済みの `/audit --video` 成果物: 対象の `hook_structure.intro_sec` / `bgm_arc.peak` / `scene_timeline` / `editing_metrics.avg_cut_sec`、同ジャンル競合3本以上の `editing_metrics.avg_cut_sec` 中央値 `competitor_avg_cut_median`。retention 収集済みなら `yt-retention-timeline --video <video_id>` の `reports/retention_analysis/<video_id>.md` も引用 | `content-signals` |
+| サムネと中身の不一致 | `/audit --video` の `thumbnail_alignment.signature_present` | `hypothesis: thumbnail-content-alignment` |
 | タイトル / タグ SEO 弱 | 同期間の per-video / channel Analytics API 結果と `term-classification` の出力 | `hypothesis: seo` |
 | 初動エンゲージメント低 | `commentThreads.list` と `yt-launch-curve` の day 0〜6 | `hypothesis: engagement` |
 | 公開時刻ミス | `published_at` と他動画の公開初期 cumulative views | `hypothesis: publish-time` |
@@ -206,14 +206,14 @@ uv run python .claude/skills/flop-analysis/references/verification.py --operatio
 
 入力 JSON のキー・閾値・支持 / 反証 / 未検証条件は reference の各公開関数を正とする。必要な入力を収集できない場合は operation を推測値で埋めず、欠けた入力名を理由に `未検証` とする。A/B 履歴は `result.status`、`result.result_candidate_id`、`candidates[].{id,file}` をそのまま `thumbnail` に渡し、現行候補か挑戦候補かも reference で解決する。主観評価は verdict の入力にしない。
 
-`/video-analyze` の各出力は動画全尺ではなく冒頭クリップ窓（既定 900 秒、JSON の
-`analysis_window_sec`）内の分析結果として扱う。`bgm_arc.peak` は実スキーマの `M:SS` / `H:MM:SS` 文字列を reference が秒へ変換する。競合の `competitor_avg_cut_median` は対象と同じ `analysis_window_sec` の既存 `/video-analyze` 成果物が3本以上ある場合だけその `editing_metrics.avg_cut_sec` の中央値を使い、不足時は推定せず `未検証` とする。`bgm_arc.outro` や `editing_metrics`
+`/audit --video` の各出力は動画全尺ではなく冒頭クリップ窓（既定 900 秒、JSON の
+`analysis_window_sec`）内の分析結果として扱う。`bgm_arc.peak` は実スキーマの `M:SS` / `H:MM:SS` 文字列を reference が秒へ変換する。競合の `competitor_avg_cut_median` は対象と同じ `analysis_window_sec` の既存 `/audit --video` 成果物が3本以上ある場合だけその `editing_metrics.avg_cut_sec` の中央値を使い、不足時は推定せず `未検証` とする。`bgm_arc.outro` や `editing_metrics`
 を動画全体の終盤・全尺平均として読まない。
 
 対象動画の retention が最新 `data/analytics_data_*.json::retention[]` にある場合は、
 `yt-retention-timeline --video <video_id>` を実行し、drop 地点に対応する scene / BGM を
-検証結果へ引用する。`status=skipped` で `/video-analyze 未実行` と返った場合は、既存の
-Phase 4 規則どおり対象 1 動画だけ `/video-analyze` してから再実行する。retention 未収集なら
+検証結果へ引用する。`status=skipped` で `/audit --video 未実行` と返った場合は、既存の
+Phase 4 規則どおり対象 1 動画だけ `/audit --video` してから再実行する。retention 未収集なら
 この照合だけを `未検証（理由: retention 未収集。/analytics --collect の full 収集が必要）` とし、
 他の content-signals 検証は続行する。`outside_analysis_window` の scene / BGM は推測しない。
 
@@ -358,7 +358,7 @@ postmortem.md 保存後、支持された主仮説と「学び」に基づく改
 |-------------------------|----------|
 | サムネ訴求弱 | `/thumbnail --compare` → 必要なら `/thumbnail <collection>` で再生成 |
 | タイトル訴求弱 | `/audit --alignment` で改善候補を再監査し、タイトル変更は別途判断 |
-| 中身の弱さ | `/video-analyze --source own --collection <name>` |
+| 中身の弱さ | `/audit --video --source own --collection <name>` |
 | ターゲット層ミスマッチ | `/channel-research --voice` → `/channel-strategy --persona` → `/channel-strategy --scene` |
 | テーマ自体の市場性不足 | `/channel-research --discover` → `/channel-strategy --direction`（方向性検討モード） |
 | 初動エンゲージメント低 | 公開直後のコメント・日次視聴を確認後、必要なら `/comments-reply` をそのスキル固有の明示承認ゲート付きで実行 |

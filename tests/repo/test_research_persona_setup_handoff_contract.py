@@ -10,7 +10,7 @@ SKILLS_DIR = REPO_ROOT / ".claude" / "skills"
 TARGET_SKILLS = (
     "channel-strategy",
     "channel-research",
-    "video-analyze",
+    "audit",
 )
 
 
@@ -73,7 +73,7 @@ OCCURRENCE_LEDGER = (
             ("analysis-cross-reference", "analysis"),
         ),
     ),
-    *_occurrences("video-analyze", (), (("direction-caller", "direction"),)),
+    *_occurrences("audit", (), (("direction-caller", "direction"),)),
     *_occurrences(
         "channel-research",
         (
@@ -101,7 +101,7 @@ OCCURRENCE_LEDGER = (
 ROUTE_CONTEXT_SHA256 = {
     "channel-strategy": "b3a1ffa6b21191d5dabed4e68fa9f0ee639202b46a267d67fc63602615e3946b",
     "channel-research": "0e2fa9b5d7a880898d41f421614aa8f6d61af3683494e551161c67701b6cf6bb",
-    "video-analyze": "4741c7bf870c47151ce99877201e4ca590d52159013b0a82dbaaea43ea253d01",
+    "audit": "4741c7bf870c47151ce99877201e4ca590d52159013b0a82dbaaea43ea253d01",
 }
 SETUP_ASSET_OWNERS = {
     "channel-strategy": ("persona-branding-readiness.md",),
@@ -111,9 +111,7 @@ SETUP_ASSET_OWNERS = {
         "new-channel-bootstrap.md",
     ),
 }
-UNCHANGED_SKILL_SHA256 = {
-    "video-analyze": "ebb8f96d3bd441a29d9ab8eb2c866abd1fb5acb2e71ebda4ee0fec4530ba5bdd",
-}
+UNCHANGED_SKILL_SHA256: dict[str, str] = {}
 RESIDUAL_LINE_MARKERS = {
     "channel-research": (
         "description:",
@@ -131,6 +129,8 @@ RESIDUAL_SHA256 = {
 
 
 def _skill_text(skill: str) -> str:
+    if skill == "audit":
+        return (SKILLS_DIR / skill / "references" / "video.md").read_text(encoding="utf-8")
     text = (SKILLS_DIR / skill / "SKILL.md").read_text(encoding="utf-8")
     if skill == "channel-strategy":
         text += (SKILLS_DIR / skill / "references" / "persona.md").read_text(encoding="utf-8")
@@ -245,12 +245,6 @@ def test_route_validator_rejects_inactive_mixed_swapped_and_relocated_routes() -
         "active route context ledger",
         "inactive Markdown route",
     }
-
-
-def test_skills_without_opening_occurrences_remain_byte_identical() -> None:
-    for skill, expected in UNCHANGED_SKILL_SHA256.items():
-        payload = (SKILLS_DIR / skill / "SKILL.md").read_bytes()
-        assert sha256(payload).hexdigest() == expected
 
 
 def test_analysis_and_direction_residual_routes_remain_byte_identical() -> None:

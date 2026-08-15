@@ -16,6 +16,7 @@ from youtube_automation.core.errors import ConfigError
 EXPECTED_PYTHON_SKILL_CONFIG_KEYS = frozenset(
     {
         "analytics",
+        "audit.video",
         "benchmark",
         "collection-ideate",
         "discover-competitors",

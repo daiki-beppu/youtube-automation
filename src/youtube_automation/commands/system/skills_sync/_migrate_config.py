@@ -51,6 +51,7 @@ SKILL_CONFIG_MIGRATIONS: Final[Mapping[str, SkillConfigMigration]] = {
     "suno-lyric": SkillConfigMigration("music", "lyric"),
     "video-upload": SkillConfigMigration("publish", "upload"),
     "videoup": SkillConfigMigration("video", "generate"),
+    "video-analyze": SkillConfigMigration("audit", "video"),
 }
 
 _COMPATIBLE_CONFIG_NAMES: Final[frozenset[str]] = frozenset({"postmortem"})

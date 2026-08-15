@@ -96,7 +96,7 @@ Phase 1-4 の根拠・判定・改善候補を `docs/plans/alignment-audit.md` �
 - `collections/live/*/10-assets/thumbnail.jpg` — サムネイル
 - `collections/live/*/20-documentation/` — 音楽プロンプト
 - `collections/live/*/workflow-state.json` — タイトル・テーマ
-- `data/video_analysis/<slug>/<video_id>.json` — `/video-analyze` の `thumbnail_alignment` 出力（サムネ vs 本編の整合性監査の根拠）
+- `data/video_analysis/<slug>/<video_id>.json` — `/audit --video` の `thumbnail_alignment` 出力（サムネ vs 本編の整合性監査の根拠）
   - 冒頭クリップ窓（既定 900 秒、JSON の `analysis_window_sec`）内の整合性データ。窓外で回収される訴求まで確認済みとは扱わない。
 
 ## Next Step

@@ -1926,12 +1926,12 @@ def _missing_ttp_readiness_items(channel_dir: Path, channels: list[dict[str, obj
         if thumbnail_missing:
             missing.append(thumbnail_missing)
 
-    video_analyze_read = _skill_config_mapping(channel_dir, "video-analyze")
+    video_analyze_read = _skill_config_mapping(channel_dir, "audit.video")
     if video_analyze_read.error:
         missing.append(video_analyze_read.error)
     model = video_analyze_read.data.get("model")
     if isinstance(model, str) and model in UNSUPPORTED_VIDEO_ANALYZE_MODELS:
-        missing.append(f"video-analyze model が旧/非対応: {model}")
+        missing.append(f"audit.video model が旧/非対応: {model}")
 
     youtube_read = _read_json_mapping(channel_dir / "config" / "channel" / "youtube.json")
     if youtube_read.error:
