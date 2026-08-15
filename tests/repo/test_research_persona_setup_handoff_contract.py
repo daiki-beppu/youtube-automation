@@ -122,8 +122,8 @@ SETUP_ASSET_OWNERS = {
     "viewing-scene": "persona-branding-readiness.md",
 }
 UNCHANGED_SKILL_SHA256 = {
-    "thumbnail-research": "4f1052032ca41873e9642e8a25824a5c64e9330c15df77e90d0046e0dbc12f94",
-    "video-analyze": "b1049a71ace16481363318d89886c14ef49401fd0d77691e73b36ab167bdeb96",
+    "thumbnail-research": "b298c39d5548d56ada90e5c74d876bfc8d67797548ec8c0f3e62d4c718843cc7",
+    "video-analyze": "12b3820d2a59f2317709b2bf3a6a4df95148dbebc74989213152b0d835188caa",
 }
 RESIDUAL_LINE_MARKERS = {
     "benchmark": ("description:", "- `後工程`:"),

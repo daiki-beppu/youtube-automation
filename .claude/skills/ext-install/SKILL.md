@@ -7,6 +7,7 @@ description: "Use when Chrome 拡張（suno-helper / distrokid-helper / communit
 
 - `前工程`: `なし`
 - `後工程`: `/suno-helper`, `/distrokid-helper`
+- `委譲先`: `なし`
 
 ## Overview
 

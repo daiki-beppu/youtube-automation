@@ -7,6 +7,7 @@ description: "Use when collection 型（BGM テイスター）チャンネルで
 
 - `前工程`: `/setup`
 - `後工程`: `/short-thumbnail`, `/video-upload`
+- `委譲先`: `なし`
 
 ## Overview
 

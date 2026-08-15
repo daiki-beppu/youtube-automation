@@ -7,6 +7,7 @@ description: "Use when 新コレクションの企画・テーマ選定をデー
 
 - `前工程`: `/analytics`, `/benchmark`, `/audience-persona-design`
 - `後工程`: `/wf-new`, `/community-draft`
+- `委譲先`: `/analytics`
 
 ## Overview
 

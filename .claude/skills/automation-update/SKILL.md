@@ -7,6 +7,7 @@ description: "Use when 下流リポジトリで automation を最新リリース
 
 - `前工程`: `/automation-release`
 - `後工程`: `なし`
+- `委譲先`: `なし`
 
 ## Overview
 

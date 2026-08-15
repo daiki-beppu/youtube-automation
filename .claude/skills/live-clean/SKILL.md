@@ -7,6 +7,7 @@ description: "Use when live コレクションの大容量メディアを削除�
 
 - `前工程`: `/video-upload`, `/videoup`
 - `後工程`: `なし`
+- `委譲先`: `なし`
 
 ## Overview
 

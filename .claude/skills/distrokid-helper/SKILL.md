@@ -7,6 +7,7 @@ description: "Use when コレクションの楽曲を DistroKid 配信用に準�
 
 - `前工程`: `/masterup`, `/lyria`, `/thumbnail`, `/ext-install`
 - `後工程`: `なし`
+- `委譲先`: `なし`
 
 ## Overview
 

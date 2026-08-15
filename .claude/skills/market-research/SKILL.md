@@ -7,6 +7,7 @@ description: "Use when 既存チャンネルから任意に市場を調べ、TTP
 
 - `前工程`: `なし`
 - `後工程`: `/benchmark`, `/discover-competitors`
+- `委譲先`: `なし`
 
 ## Hard Gates
 

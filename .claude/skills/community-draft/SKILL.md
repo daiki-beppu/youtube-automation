@@ -7,6 +7,7 @@ description: "Use when コレクションの YouTube コミュニティ投稿を
 
 - `前工程`: `/collection-ideate`
 - `後工程`: `なし`
+- `委譲先`: `なし`
 
 ## 修飾フラグ
 

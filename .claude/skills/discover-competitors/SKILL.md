@@ -7,6 +7,7 @@ description: "Use when YouTube Data API で追加競合候補を自動発掘・�
 
 - `前工程`: `/benchmark`, `/setup --channel`
 - `後工程`: `/viewer-voice`, `/benchmark`
+- `委譲先`: `なし`
 
 ## Overview
 

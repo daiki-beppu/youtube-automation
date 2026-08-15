@@ -7,6 +7,7 @@ description: "Use when プレイリストの作成・割り当て・確認をす
 
 - `前工程`: `/wf-next`
 - `後工程`: `/video-upload`
+- `委譲先`: `なし`
 
 ## Overview
 

@@ -7,6 +7,7 @@ description: "Use when コミュニティ投稿テキスト生成から Studio �
 
 - `前工程`: `/video-upload`, `/post-publish`
 - `後工程`: `なし`
+- `委譲先`: `なし`
 
 ## Overview
 

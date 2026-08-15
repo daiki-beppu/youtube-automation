@@ -7,6 +7,7 @@ description: "Use when 正規入口から collection の有無を問わず、企
 
 - `前工程`: `/automation-schedule`, `/wf-new`
 - `後工程`: `/post-publish`, `/analytics`
+- `委譲先`: `/wf-new`, `/lyria`, `/suno-helper`, `/masterup`, `/wf-next`, `/post-publish`
 
 ## Overview
 

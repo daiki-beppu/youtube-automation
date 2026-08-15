@@ -7,6 +7,7 @@ description: "Use when 収集済み競合サムネイルだけを再生数上位
 
 - `前工程`: `/benchmark`
 - `後工程`: `/thumbnail`
+- `委譲先`: `なし`
 
 ## Hard Gates
 

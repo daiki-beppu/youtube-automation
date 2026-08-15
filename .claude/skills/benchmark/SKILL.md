@@ -7,6 +7,7 @@ description: "Use when 競合チャンネルのベンチマークデータを最
 
 - `前工程`: `なし`
 - `後工程`: `/channel-new`, `/viewer-voice`, `/collection-ideate`, `/thumbnail-research`
+- `委譲先`: `なし`
 
 ## Overview
 

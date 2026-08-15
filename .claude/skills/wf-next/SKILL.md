@@ -7,6 +7,7 @@ description: "Use when 既存コレクション（collections/planning/）を一
 
 - `前工程`: `/wf-auto`, `/wf-new`
 - `後工程`: `/analytics`, `/flop-analysis`
+- `委譲先`: `/masterup`, `/lyria`, `/videoup`, `/video-description`, `/playlist`, `/video-upload`
 
 ## Overview
 

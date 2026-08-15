@@ -7,6 +7,7 @@ description: "Use when 公開済み YouTube 動画のコメントへ自動返信
 
 - `前工程`: `なし`
 - `後工程`: `なし`
+- `委譲先`: `なし`
 
 ## Overview
 

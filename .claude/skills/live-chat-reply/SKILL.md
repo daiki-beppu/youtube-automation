@@ -7,6 +7,7 @@ description: "Use when 配信中の YouTube ライブチャットへ常駐 daemo
 
 - `前工程`: `/streaming`
 - `後工程`: `なし`
+- `委譲先`: `なし`
 
 ## Hard Gates
 

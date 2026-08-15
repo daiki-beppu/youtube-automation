@@ -9,6 +9,7 @@ allowed-tools: Bash(npx shadcn@latest *), Bash(pnpm dlx shadcn@latest *), Bash(b
 
 - `前工程`: `なし`
 - `後工程`: `なし`
+- `委譲先`: `なし`
 
 # shadcn/ui
 

@@ -7,6 +7,7 @@ description: "Use when 本リポジトリの新規リリースを作成すると
 
 - `前工程`: `なし`
 - `後工程`: `/automation-update`
+- `委譲先`: `なし`
 
 ## Hard Gates / 完了条件
 

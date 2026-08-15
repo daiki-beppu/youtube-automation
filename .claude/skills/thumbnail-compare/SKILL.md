@@ -7,6 +7,7 @@ description: "Use when 自チャンネルの生成済みサムネイルを競合
 
 - `前工程`: `/thumbnail`, `/benchmark`
 - `後工程`: `なし`
+- `委譲先`: `なし`
 
 ## Overview
 

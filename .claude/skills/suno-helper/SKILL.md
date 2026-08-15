@@ -7,6 +7,7 @@ description: "Use when Suno UI に投入する曲をブラウザで連続生成 
 
 - `前工程`: `/wf-auto`, `/suno`, `/wf-new`
 - `後工程`: `/masterup`
+- `委譲先`: `なし`
 
 ## Overview
 

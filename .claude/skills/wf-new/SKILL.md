@@ -7,6 +7,7 @@ description: "Use when 新規コレクション制作を立ち上げるとき（
 
 - `前工程`: `/setup --channel`, `/setup`, `/collection-ideate`
 - `後工程`: `/wf-auto`, `/wf-next`, `/suno-helper`
+- `委譲先`: `/collection-ideate`, `/thumbnail`, `/suno`, `/lyria`, `/loop-video`
 
 ## Overview
 

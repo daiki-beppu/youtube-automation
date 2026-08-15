@@ -7,6 +7,7 @@ description: "Use when release 型（楽曲リリース）チャンネルで JP+
 
 - `前工程`: `なし`
 - `後工程`: `/short-thumbnail`
+- `委譲先`: `なし`
 
 ## Overview
 
