@@ -99,7 +99,7 @@ OCCURRENCE_LEDGER = (
 # SHA-256 of ordered ``section heading + active route line`` records. This binds
 # every route to its exact active Markdown context without duplicating long prose.
 ROUTE_CONTEXT_SHA256 = {
-    "channel-strategy": "6ffe3799d52297a6b98bad83b6871e796c09a3be8beae084f412f66682e13902",
+    "channel-strategy": "6828984d0f40eedc3ec54099033325c5c251f9887e8130d167417bf6836681f6",
     "channel-research": "626835fe7b37f18bdbf3e233dcc070b533415a4538133ffbb0e02a448fe59b5b",
     "video-analyze": "f28ee9c9b0a18c3ecae15b631f970d780b18bda72185a25935b56f0a66ba6552",
 }
@@ -135,6 +135,7 @@ def _skill_text(skill: str) -> str:
     if skill == "channel-strategy":
         text += (SKILLS_DIR / skill / "references" / "persona.md").read_text(encoding="utf-8")
         text += (SKILLS_DIR / skill / "references" / "scene.md").read_text(encoding="utf-8")
+        text += (SKILLS_DIR / skill / "references" / "constraints.md").read_text(encoding="utf-8")
     if skill == "channel-research":
         text += (SKILLS_DIR / skill / "references" / "discover.md").read_text(encoding="utf-8")
         text += (SKILLS_DIR / skill / "references" / "market.md").read_text(encoding="utf-8")

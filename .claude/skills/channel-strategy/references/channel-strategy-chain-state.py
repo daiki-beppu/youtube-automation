@@ -16,6 +16,7 @@ EXIT_BLOCKED = 20
 _VIEWER_VOICE = "docs/plans/viewer-voice-analysis.md"
 _PERSONA = "docs/channel/personas/persona-definition.md"
 _SCENE = "docs/plans/viewing-scene-matrix.md"
+_CONSTRAINTS = "docs/channel/creative-constraints.md"
 
 
 class ManifestError(ValueError):
@@ -31,10 +32,14 @@ def _validate_manifest() -> None:
     if manifest.get("chainId") != "channel-strategy":
         raise ManifestError("chainId must be channel-strategy")
     steps = manifest.get("steps")
-    if not isinstance(steps, list) or len(steps) != 2 or not all(isinstance(step, dict) for step in steps):
-        raise ManifestError("steps must contain persona followed by scene")
+    if not isinstance(steps, list) or len(steps) != 3 or not all(isinstance(step, dict) for step in steps):
+        raise ManifestError("steps must contain persona, scene, and constraints")
     identities = [(step.get("id"), step.get("skill")) for step in steps]
-    if identities != [("persona", "channel-strategy"), ("scene", "channel-strategy")]:
+    if identities != [
+        ("persona", "channel-strategy"),
+        ("scene", "channel-strategy"),
+        ("constraints", "channel-strategy"),
+    ]:
         raise ManifestError("step order or owner is inconsistent")
 
 
@@ -91,18 +96,46 @@ def _evaluate_scene(channel_dir: Path) -> tuple[int, dict[str, object]]:
     }
 
 
+def _evaluate_constraints(channel_dir: Path) -> tuple[int, dict[str, object]]:
+    prerequisites = (_PERSONA, _SCENE)
+    missing = [relative for relative in prerequisites if not _artifact_exists(channel_dir, relative)]
+    if missing:
+        return EXIT_BLOCKED, {
+            "step": "constraints",
+            "decision": "blocked",
+            "reason": "constraints_prerequisites_missing",
+            "missing": missing,
+            "next": "channel-strategy --persona" if _PERSONA in missing else "channel-strategy --scene",
+        }
+    if not _artifact_exists(channel_dir, _CONSTRAINTS):
+        return EXIT_RUN, {
+            "step": "constraints",
+            "decision": "run",
+            "reason": "constraints_missing",
+            "missing": [_CONSTRAINTS],
+        }
+    return EXIT_SKIP, {
+        "step": "constraints",
+        "decision": "skip",
+        "reason": "constraints_complete",
+        "outputs": [_CONSTRAINTS],
+    }
+
+
 def evaluate(channel_dir: Path, step: str) -> tuple[int, dict[str, object]]:
     if step == "persona":
         return _evaluate_persona(channel_dir)
     if step == "scene":
         return _evaluate_scene(channel_dir)
+    if step == "constraints":
+        return _evaluate_constraints(channel_dir)
     raise ManifestError(f"unknown step: {step}")
 
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--channel-dir", type=Path, required=True)
-    parser.add_argument("--step", choices=("persona", "scene"), required=True)
+    parser.add_argument("--step", choices=("persona", "scene", "constraints"), required=True)
     return parser
 
 

@@ -112,7 +112,7 @@ def test_flop_analysis_returns_postmortem_learning_to_creative_constraints() -> 
     assert "`追記しない`" in phase_7
     assert "1 が明示された場合だけ" in phase_7
     assert "`制約還流対象なし`" in phase_7
-    assert "`/creative-constraints` の実行を案内" in phase_7
+    assert "`/channel-strategy --constraints` の実行を案内" in phase_7
     assert "ファイルやディレクトリを本 Phase で新規作成しない" in phase_7
 
 

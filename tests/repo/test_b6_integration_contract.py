@@ -257,6 +257,7 @@ def test_b6_receipt_points_every_mapping_to_an_existing_owner() -> None:
         ".claude/skills/thumbnail-research/SKILL.md": ".claude/skills/channel-research/references/thumbnail.md",
         ".claude/skills/audience-persona-design/SKILL.md": ".claude/skills/channel-strategy/references/persona.md",
         ".claude/skills/viewing-scene/SKILL.md": ".claude/skills/channel-strategy/references/scene.md",
+        ".claude/skills/creative-constraints/SKILL.md": (".claude/skills/channel-strategy/references/constraints.md"),
     }
     assert all(
         (ROOT / moved_owner_aliases.get(mapping["exact_new_owner"], mapping["exact_new_owner"])).exists()
