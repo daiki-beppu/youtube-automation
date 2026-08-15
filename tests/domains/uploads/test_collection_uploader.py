@@ -78,11 +78,10 @@ def test_main_exits_before_state_changes_when_channel_identity_preflight_fails(m
     mock_uploader.ensure_upload_preflight.side_effect = ConfigError("channel_id mismatch")
 
     monkeypatch.setattr(sys, "argv", ["yt-upload-collection", "-c", target.name])
-    with (
-        patch("youtube_automation.commands.uploads.collection_uploader.CollectionUploader", return_value=mock_uploader),
-        pytest.raises(SystemExit, match="1"),
+    with patch(
+        "youtube_automation.commands.uploads.collection_uploader.CollectionUploader", return_value=mock_uploader
     ):
-        collection_uploader.main()
+        assert collection_uploader.main() == 1
 
     mock_uploader.execute_next_step.assert_not_called()
     mock_uploader.show_plan.assert_not_called()
@@ -101,11 +100,8 @@ def test_collection_cli_returns_nonzero_when_playlist_assignment_fails(monkeypat
     uploader.execute_next_step.side_effect = YouTubeAPIError("playlistItems.insert failed", status_code=403)
 
     monkeypatch.setattr(sys, "argv", ["yt-upload-collection", "-c", target.name])
-    with (
-        patch("youtube_automation.commands.uploads.collection_uploader.CollectionUploader", return_value=uploader),
-        pytest.raises(SystemExit, match="1"),
-    ):
-        collection_uploader.main()
+    with patch("youtube_automation.commands.uploads.collection_uploader.CollectionUploader", return_value=uploader):
+        assert collection_uploader.main() == 1
 
 
 def test_collection_preflight_uses_public_inner_uploader_operation(monkeypatch, tmp_path):
@@ -211,12 +207,11 @@ def test_main_title_preflight_honors_collection_opt_in_for_each_cli_entry(
         patch.object(CollectionUploader, method_name) as mock_action,
     ):
         if expected_outcome == "pass":
-            collection_uploader.main()
+            assert collection_uploader.main() == 0
             mock_action.assert_called_once_with(collection)
         else:
-            with pytest.raises(SystemExit, match="1"):
-                collection_uploader.main()
-            assert "巻数表記を検出" in capsys.readouterr().out
+            assert collection_uploader.main() == 1
+            assert "巻数表記を検出" in capsys.readouterr().err
             mock_action.assert_not_called()
 
 
@@ -518,14 +513,11 @@ class TestAutoDetectCollection:
         mock_config.meta.channel_short = "test"
         monkeypatch.setattr(sys, "argv", ["yt-upload-collection", *argv])
 
-        with (
-            patch("youtube_automation.commands.uploads.collection_uploader.CollectionUploader", return_value=uploader),
-            pytest.raises(SystemExit) as exc_info,
-        ):
-            collection_uploader.main()
+        with patch("youtube_automation.commands.uploads.collection_uploader.CollectionUploader", return_value=uploader):
+            exit_code = collection_uploader.main()
 
-        assert exc_info.value.code == 1
-        assert "-c で対象を明示してください" in capsys.readouterr().out
+        assert exit_code == 1
+        assert "-c で対象を明示してください" in capsys.readouterr().err
 
     @pytest.mark.parametrize(
         ("argv", "method_name"),
@@ -550,12 +542,11 @@ class TestAutoDetectCollection:
         with (
             patch("youtube_automation.commands.uploads.collection_uploader.CollectionUploader", return_value=uploader),
             patch("youtube_automation.domains.uploads.preflight.ensure_collection_preflight") as mock_preflight,
-            pytest.raises(SystemExit) as exc_info,
         ):
-            collection_uploader.main()
+            exit_code = collection_uploader.main()
 
-        assert exc_info.value.code == 1
-        assert "-c で対象を明示してください" in capsys.readouterr().out
+        assert exit_code == 1
+        assert "-c で対象を明示してください" in capsys.readouterr().err
         mock_preflight.assert_not_called()
         method.assert_not_called()
 

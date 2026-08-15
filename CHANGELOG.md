@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `feat(collections)`: `workflow-state.json` の型付き document object、未知キー保持、明示的な厳格/不在許容 read、process lock 下の atomic update を共通 owner として追加する（#3874）。
 - `feat(skills)`: `/automation --question <質問>` と排他フラグなしの自然文に、配布物ローカルを優先する読み取り専用 question mode を追加する。ローカルで未解決の場合だけ upstream GitHub を参照し、version 差分を明示する。回答不能時は書き込みを行わず `/skill-feedback` へ案内する（#3754）。
+- `refactor(cli)`: argparse 互換の共通 CLI harness を追加し、uploads 3 コマンドの引数解析・期待済みエラー・中断処理を共通境界へ集約する。各 `main(argv)` は exit code を返し、AutomationError は機密情報を除去して stderr へ出力する（#3924）。
 
 - `refactor(doctor)`: 30 件の診断を実行順・category・apply 種別・cwd 意味論を持つ宣言 registry へ集約し、診断・表示・JSON・自動修復の重複判定を単一化する（#3918）。
 - `feat(skills)`: `/reply --live` に旧 `/live-chat-reply` の streaming 前提ガード、認証、常駐 daemon の配備・停止・障害復旧契約を統合し、旧 skill と利用者導線を削除する（#3849）。
