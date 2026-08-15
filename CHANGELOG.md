@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `feat(skills)`: `/reply --live` に旧 `/live-chat-reply` の streaming 前提ガード、認証、常駐 daemon の配備・停止・障害復旧契約を統合し、旧 skill と利用者導線を削除する（#3849）。
 
+- `feat(skills)`: 旧 `/channel-status` の登録者数・総再生回数・動画別パフォーマンス表示を `/analytics --status` へ統合する。status は分析 chain に含めず、`/wf-status` との YouTube 統計 / 制作進捗の責務境界と利用者導線を新 owner へ更新する（#3851）。
 - `feat(skills)`: フラグなしの `/audit` に alignment → video → metadata → value-loop の読み取り専用 chain manifest と再開可能な状態判定を追加する。公開済み動画がない場合は理由付きで停止し、永続化しない metadata / value-loop は実行後も runnable として扱う（#3856）。
 - `feat(skills)`: `/reply` を新設し、旧 `/comments-reply` の公開済み動画コメント返信、別コンテキスト Reviewer、dry-run 後の明示承認、二重返信防止をフラグなし mode と references へ移設する（#3848）。
 

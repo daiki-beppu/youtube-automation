@@ -1,7 +1,7 @@
 ---
 name: wf-status
 purpose: 進める
-description: "Use when コレクション制作の進捗を読むだけで確認するとき（実行しない）。「どこまで進んだ？」「制作中コレクション一覧」で発動。YouTube 統計は /channel-status"
+description: "Use when コレクション制作の進捗を読むだけで確認するとき（実行しない）。「どこまで進んだ？」「制作中コレクション一覧」で発動。登録者・再生回数など YouTube 統計は /analytics --status"
 ---
 
 ## 前後工程
@@ -29,7 +29,7 @@ description: "Use when コレクション制作の進捗を読むだけで確認
 | 「次のステップ実行して」 | ❌ `/wf-next` を使う（`/wf-status` は **実行系を一切呼ばない**） |
 | 「企画から公開後処理まで継続して」 | ❌ `/wf-new --auto` を使う（`/wf-status` は **実行系を一切呼ばない**） |
 | 「workflow-state.json を見せて」 | ✅ 使う（生 JSON ではなく phase / assets を整形表示する） |
-| 「YouTube 側の登録者数・再生数を見せて」 | ❌ `/channel-status` を使う |
+| 「YouTube 側の登録者数・再生数を見せて」 | ❌ `/analytics --status` を使う |
 
 `/wf-status` は読み取り専用で `workflow-state.json` を一切更新しない。`/wf-next` を呼んだら何が起きるか **事前に確認するための skill**。
 

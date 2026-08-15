@@ -500,7 +500,7 @@
     },
     {
       "old_owner": "legacy..claude.skills.channel-status.SKILL.md",
-      "exact_new_owner": ".claude/skills/channel-status/SKILL.md",
+      "exact_new_owner": ".claude/skills/analytics/references/status.md",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"

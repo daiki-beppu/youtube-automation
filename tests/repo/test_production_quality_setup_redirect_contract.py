@@ -239,6 +239,17 @@ _RAW_EXPECTED_ACTIVE_ROUTES = (
         "- **既存チャンネル**（YouTube で既に運営中）→ `/setup --import` を案内",
     ),
     _route(
+        "analytics/references/status.md",
+        "## 前後工程",
+        "- `前工程`: `/setup --channel`",
+    ),
+    _route("analytics/references/status.md", "## 前提", "- **新規チャンネル** → `/setup --channel` を案内"),
+    _route(
+        "analytics/references/status.md",
+        "## 前提",
+        "- **既存チャンネル**（YouTube で既に運営中）→ `/setup --import` を案内",
+    ),
+    _route(
         "publish/references/playlist.md",
         "## 前提",
         "`config/channel/playlists.json` が存在し、`playlists` セクションが定義されていること。"

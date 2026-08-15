@@ -1,7 +1,7 @@
 ---
 name: analytics
 purpose: 振り返る
-description: "Use when YouTube Analytics の収集・分析・レポート表示を一括実行または一段だけ実行するとき。フラグなしは収集→分析→表示を状態判定付きで進める。公開済み動画の失速分析は --flop と video_id / collection / --since <N> を使う。「Analytics 一括実行」「データ更新」「パフォーマンス分析」「レポート見せて」「伸びなかった」「flop 分析」で発動。一段だけは排他的な --collect / --analyze / --report / --flop を使う"
+description: "Use when YouTube Analytics の収集・分析・レポート表示を一括実行または一段だけ実行するとき。フラグなしは収集→分析→表示を状態判定付きで進める。公開済み動画の失速分析は --flop と video_id / collection / --since <N>、登録者・再生回数など YouTube 統計の表示は --status を使う。「Analytics 一括実行」「データ更新」「パフォーマンス分析」「レポート見せて」「伸びなかった」「登録者数は？」で発動。一段だけは排他的な --collect / --analyze / --report / --flop / --status を使う。制作進捗は /wf-status"
 ---
 
 ## 前後工程
@@ -13,11 +13,11 @@ description: "Use when YouTube Analytics の収集・分析・レポート表示
 ## 成果物
 
 - `書き込む`: `data/analytics_data_*.json`, `reports/analysis_*.md`, `reports/analysis_*.json`, `data/insights.jsonl`
-- `読み込む`: `config/skills/analytics.yaml`, `config/channel/analytics.json`, `collections/<id>/workflow-state.json`
+- `読み込む`: `config/skills/analytics.yaml`, `config/channel/*.json`, `auth/token.json`, `collections/<id>/workflow-state.json`
 
 ## モード判定
 
-`$ARGUMENTS` から `--collect` / `--analyze` / `--report` / `--flop` の個数を最初に数える。
+`$ARGUMENTS` から `--collect` / `--analyze` / `--report` / `--flop` / `--status` の個数を最初に数える。
 
 - 2 個以上なら排他違反として停止し、1 つだけ指定するよう促す
 - 1 個なら対応する reference を読み、その一段だけを実行する。残りの引数はその mode の引数として扱う
@@ -29,6 +29,7 @@ description: "Use when YouTube Analytics の収集・分析・レポート表示
 | `--analyze` | `references/analyze.md` |
 | `--report` | `references/report.md` |
 | `--flop` | `references/flop.md` |
+| `--status` | `references/status.md` |
 
 ## 修飾フラグ
 
@@ -81,12 +82,13 @@ uv run python .claude/skills/analytics/references/analytics-chain-state.py \
 - フラグなし: collect と analyze が `skip` または実行後 `skip`、report が `run` となり、最新 Markdown を表示している
 - mode 指定: 対応する reference の完了条件だけを満たし、他の mode を実行していない
 - `--flop`: `references/flop.md` の完了条件を満たし、collect → analyze → report の chain を実行していない
+- `--status`: `references/status.md` の完了条件を満たし、collect → analyze → report の chain を実行していない
 
 実行段、skip 段、`freshness_minutes` と `freshness_source`、成果物または表示したレポートを短く報告する。
 
 ## 想定 API call 数
 
-`--report` はローカル成果物だけを読む。`--analyze` は VPD ranking のため YouTube Data API を 1 回の走査で使う。フラグなしまたは `--collect` で収集が必要な場合は collect 分も加えて次の call 数を見込む。
+`--report` はローカル成果物だけを読む。`--analyze` は VPD ranking のため YouTube Data API を 1 回の走査で使う。フラグなしまたは `--collect` で収集が必要な場合は collect 分も加えて次の call 数を見込む。`--status` は単独実行し、call 数は `references/status.md` を正とする。
 
 | API | call 数 / 実行 | 変動要因 |
 |---|---|---|

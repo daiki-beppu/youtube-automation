@@ -13,6 +13,7 @@ _FRONTMATTER_DELIMITER = "---"
 _DESCRIPTION_DOUBLE_QUOTED = re.compile(r'^description:\s*"', re.MULTILINE)
 _MARKDOWN_HEADING = re.compile(r"^(?P<marks>#{1,6})\s+\S")
 _DESCRIPTION_FLAG = re.compile(r"(?<![\w-])--[a-z0-9]+(?:-[a-z0-9]+)*(?![a-z0-9-])")
+_QUALIFIED_SKILL_ROUTE_BEFORE_FLAG = re.compile(r"/[a-z0-9]+(?:-[a-z0-9]+)*\s+$")
 _VALUE_PLACEHOLDER = re.compile(r"\s*<[^>\n]+>")
 _TABLE_FLAG = re.compile(r"^`(?P<flag>--[a-z0-9]+(?:-[a-z0-9]+)*)`$")
 _TABLE_REFERENCE = re.compile(r"^`(?P<reference>[^`]+)`$")
@@ -204,6 +205,8 @@ def _lint_flag_contract(skill_dir: Path, text: str, description: str) -> list[Sk
 def _extract_description_flags(description: str) -> set[str]:
     flags: set[str] = set()
     for match in _DESCRIPTION_FLAG.finditer(description):
+        if _QUALIFIED_SKILL_ROUTE_BEFORE_FLAG.search(description[: match.start()]) is not None:
+            continue
         if _VALUE_PLACEHOLDER.match(description, match.end()) is None:
             flags.add(match.group())
     return flags

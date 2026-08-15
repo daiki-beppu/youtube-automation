@@ -216,6 +216,12 @@ def test_lint_skill_ignores_flags_with_value_placeholders(tmp_path: Path) -> Non
     assert lint_skill(skill_dir) == []
 
 
+def test_lint_skill_ignores_flags_owned_by_a_qualified_cross_skill_route(tmp_path: Path) -> None:
+    skill_dir = _write_flag_skill(tmp_path, "sample", "YouTube 統計は /analytics --status", "## 本文\n")
+
+    assert lint_skill(skill_dir) == []
+
+
 def test_lint_skill_requires_exclusive_mode_instruction(tmp_path: Path) -> None:
     skill_dir = _write_flag_skill(
         tmp_path,

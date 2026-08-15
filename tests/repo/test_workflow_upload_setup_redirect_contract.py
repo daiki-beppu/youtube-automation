@@ -15,7 +15,6 @@ TARGET_SKILLS = (
     "analytics",
     "automation-schedule",
     "automation-update",
-    "channel-status",
     "video",
     "publish",
     "wf-auto",
@@ -63,9 +62,9 @@ INITIAL_OCCURRENCE_LEDGER = (
         "regenerate",
     ),
     _entry("automation-update", "SKILL.md", "initial-save-commit", "push"),
-    _entry("channel-status", "SKILL.md", "upstream-new-channel", "opening"),
-    _entry("channel-status", "SKILL.md", "missing-config-new", "opening"),
-    _entry("channel-status", "SKILL.md", "missing-config-existing", "import"),
+    _entry("analytics", "references/status.md", "upstream-new-channel", "opening"),
+    _entry("analytics", "references/status.md", "missing-config-new", "opening"),
+    _entry("analytics", "references/status.md", "missing-config-existing", "import"),
     _entry("video", "references/describe.md", "missing-config-new", "opening"),
     _entry("video", "references/describe.md", "missing-config-existing", "import"),
     _entry("video", "references/describe.md", "config-generation-rules", "shared-reference"),
@@ -168,12 +167,12 @@ EXPECTED_ACTIVE_ROUTES = (
         )
     ),
     _route(
-        "channel-status/SKILL.md",
+        "analytics/references/status.md",
         "## 前後工程",
         "- `前工程`: `/setup --channel`",
     ),
     *(
-        _route("channel-status/SKILL.md", "## 前提", line)
+        _route("analytics/references/status.md", "## 前提", line)
         for line in (
             "- **新規チャンネル** → `/setup --channel` を案内",
             "- **既存チャンネル**（YouTube で既に運営中）→ `/setup --import` を案内",
