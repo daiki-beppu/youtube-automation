@@ -668,7 +668,7 @@
     },
     {
       "old_owner": "legacy..claude.skills.loop-video.SKILL.md",
-      "exact_new_owner": ".claude/skills/loop-video/SKILL.md",
+      "exact_new_owner": ".claude/skills/thumbnail/references/loop.md",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"

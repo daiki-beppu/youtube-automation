@@ -86,7 +86,7 @@ uv run yt-populate-scene-phrases <collection-dir-name> \
    - コマンド失敗、symlink、画像として読めない入力、JPEG 検証失敗: 既存 `thumbnail.jpg` と state を変更せず停止する
 
 3. **両 branch が未完了なら exactly two calls を同時起動**:
-   - 1 回の Agent tool dispatch に次の独立した 2 call だけを含め、同じ message で同時起動する。順次 2 回に分けず、3 call 目や `/loop-video` を混ぜない
+   - 1 回の Agent tool dispatch に次の独立した 2 call だけを含め、同じ message で同時起動する。順次 2 回に分けず、3 call 目や `/thumbnail --loop` を混ぜない
    - Agent 1: thumbnail branch。`status: FINALIZED` なら AI 生成を行わない（候補生成も再選択もしない）。既存 preview の品質検証・確定経路のうち、承認を伴わない `thumbnail.jpg` の実在・可読性確認だけを行い evidence を返す。`status: MISSING` なら `single_step` / provider を問わず `/thumbnail <theme>` の Subagent Contract でテキスト付き候補と `20-documentation/thumbnail-prompts.md` を候補生成する。承認、確定コピー、state 更新は行わない
    - Agent 2: music branch。`music_engine: suno` なら `/music --prompt <theme>` で `20-documentation/suno-patterns.yaml` と `suno-prompts.json` を生成する。`music_engine: lyria` なら `/lyria <theme>` のプロンプト設計だけを行い `lyria-prompt.md` を生成する。この Phase では Lyria 3 API を実行しない
    - 両 Agent へ、固定した対象 collection の絶対 path、確定企画、theme、engine / effective config という具体的な入力、期待成果物の絶対 path、禁止事項、完了報告形式を渡す。両 Agent は `workflow-state.json` を更新しない、AskUserQuestion を実行しない、共有 config を変更しない
@@ -152,8 +152,8 @@ initial dispatch を行った場合は両 Agent の完了を待つ。片方の�
 
 サムネイル承認後、`config/skills/loop-video.yaml::enabled` を確認する。
 
-- `enabled: false` の場合: `/loop-video` は呼ばず、既定では textless `main.png/jpg` の静止画背景運用として続行する。`thumbnail::textless.enabled: false` では例外として文字入りの共有 `main.jpg` が正規入力である。`assets.loop_video = false` を維持し、`phase = "prepared"` に更新する
-- `enabled` 未指定 or `true` の場合: Agent ツールで subagent を起動し、`main.png/jpg` を入力、`10-assets/loop.mp4` を期待成果物として `/loop-video` の生成だけを委譲する。`thumbnail::textless.enabled: false` の共有 `main.jpg` も正規入力として渡す
+- `enabled: false` の場合: `/thumbnail --loop` は呼ばず、既定では textless `main.png/jpg` の静止画背景運用として続行する。`thumbnail::textless.enabled: false` では例外として文字入りの共有 `main.jpg` が正規入力である。`assets.loop_video = false` を維持し、`phase = "prepared"` に更新する
+- `enabled` 未指定 or `true` の場合: Agent ツールで subagent を起動し、`main.png/jpg` を入力、`10-assets/loop.mp4` を期待成果物として `/thumbnail --loop` の生成だけを委譲する。`thumbnail::textless.enabled: false` の共有 `main.jpg` も正規入力として渡す
   - 成功: メインが `loop.mp4` の存在を確認後、`assets.loop_video = true`、`phase = "prepared"`、`updated_at` を更新する
   - 失敗または欠落: state は更新せず、同じ loop-video 委譲から再試行できる状態で停止する
 

@@ -1,13 +1,9 @@
----
-name: loop-video
-purpose: 作る
-description: "Use when テキストなし main.png/jpg から Veo または Gemini Omni Flash でループ動画背景を生成するとき。「ループ動画」「背景動画」「loop.mp4」で発動"
----
+# Thumbnail loop mode
 
 ## 前後工程
 
 - `前工程`: `/channel-strategy --constraints`, `/thumbnail`
-- `後工程`: `/videoup`
+- `後工程`: `/video --generate`
 - `委譲先`: `なし`
 
 ## 成果物
@@ -20,7 +16,7 @@ description: "Use when テキストなし main.png/jpg から Veo または Gemi
 Veo 3.1（既定）または Gemini Omni Flash を使い、コレクションのテキストなし `main.png/jpg` からシームレスループ動画を生成します。
 生成された `loop.mp4` は `generate_videos.sh` が自動検出し、静止画の代わりに動画背景として使用します。
 
-`thumbnail.jpg` は YouTube アップロード用のテキスト付きサムネイルであり、`/loop-video` の入力には使わない。`/thumbnail` で先に生成・承認したテキストなし `main.png` または `main.jpg` を入力にする。
+`thumbnail.jpg` は YouTube アップロード用のテキスト付きサムネイルであり、`/thumbnail --loop` の入力には使わない。`/thumbnail` で先に生成・承認したテキストなし `main.png` または `main.jpg` を入力にする。
 
 動画構成は skill-config の `video_type` で明示し、現行 generator は `loop` を実装する。新しいタイプの追加箇所と hook 契約は `.claude/skills/videoup/references/video-type-extension.md` を参照する。
 
@@ -37,7 +33,7 @@ Veo 3.1（既定）または Gemini Omni Flash を使い、コレクションの
 ## 確認・プレビュー承認ゲート
 
 - `skip_preview_approval: false`（既定）では、生成・リトライ・`--smooth` の各処理が成功するたび `10-assets/loop.mp4` を**動画として再生できるプレビュー**で開く。静止画やキーフレームだけを提示して代替してはならない
-- 同じく `false` では、`/thumbnail` と同じ順序で成果物を開いた後に `AskUserQuestion` の明示 2 択「承認する」/「受理せず修正する」を提示する。承認されるまで `/videoup` などの後工程へ進まず、完了報告もしない
+- 同じく `false` では、`/thumbnail` と同じ順序で成果物を開いた後に `AskUserQuestion` の明示 2 択「承認する」/「受理せず修正する」を提示する。承認されるまで `/video --generate` などの後工程へ進まず、完了報告もしない
 - `skip_preview_approval: true` では確認だけを省略し、生成成功した `loop.mp4` を確定して後工程へ進む。品質 NG を推測した自動再生成や `--smooth` は行わない
 - 「受理せず修正する」の場合は現行 `loop.mp4` を最終出力として扱わない。継ぎ目だけの問題は `--smooth`、動き・構図・静止画 fallback は prompt 調整後の Veo 再生成へ戻す。Veo 再生成はフル再課金なので、既存の課金承認を再度得るまで実行しない
 - 修正またはリトライ成功後は `[改善しました]` と表示し、直後に再び同じ動画プレビューを開く。改善したというメッセージだけで承認済みにしてはならない
@@ -54,7 +50,7 @@ subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実�
 
 以下を deep-merge した値を設定として使う。
 
-1. `.claude/skills/loop-video/config.default.yaml`
+1. `.claude/skills/thumbnail/config.default.yaml::loop`
 2. `config/skills/loop-video.yaml`（存在する場合）
 
 合成規則は `youtube_automation.configuration.skills.load_skill_config("loop-video")` と同じで、チャンネル上書きが優先される。存在しない override は未設定として扱い、勝手に作成しない。
@@ -107,7 +103,7 @@ subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実�
 ### 運用ガイドライン
 
 - **冪等再実行のデフォルト**: バッチや CI から繰り返し叩く経路では `--skip-existing` を必ず付ける。既存があれば 0 円で no-op、無ければ通常生成にフォールバック（ではなく early exit のため事前に生成済みの前提を明示）。
-- **継ぎ目だけ直したいとき**: `--smooth` を **単独 mode** として使う。`/loop-video` で 1 度生成 → 品質確認 → 継ぎ目が気になる → `--smooth` 再実行、という二段運用にすれば Veo は 1 回しか叩かない。
+- **継ぎ目だけ直したいとき**: `--smooth` を **単独 mode** として使う。`/thumbnail --loop` で 1 度生成 → 品質確認 → 継ぎ目が気になる → `--smooth` 再実行、という二段運用にすれば Veo は 1 回しか叩かない。
 - **本気で作り直したいとき**: 素の `yt-generate-loop-video <path> -y` を再実行。既存は `loop-v{n}.mp4` に自動退避され、`max_backups` まで保持される。ただし **必ず Veo 再課金が発生する**ので意図的に行うこと。
 
 ## 想定 API call 数
@@ -142,7 +138,7 @@ $ARGUMENTS
 1. **有効/無効確認**: `config/skills/loop-video.yaml::enabled` を確認。`false` なら Veo を実行せず、`main.png/jpg` の静止画背景運用として終了する
 2. **対象確認**: `10-assets/` に `main.png` or `main.jpg` があることを確認。`thumbnail::textless.enabled: false` では共有済み文字入り `main.jpg` を受理し、textless 再生成を要求しない。未設定または `true` で文字入り `thumbnail.jpg` しか無い場合は `/thumbnail` に戻って textless 背景を生成・承認する
 3. **プロンプト検討**: シーンに応じた自然な動きを指定
-   - デフォルトプロンプトは skill-config (`config/skills/loop-video.yaml` または `.claude/skills/loop-video/config.default.yaml`) の `veo.default_prompt` を使用
+   - デフォルトプロンプトは skill-config (`config/skills/loop-video.yaml` または `.claude/skills/thumbnail/config.default.yaml::loop`) の `veo.default_prompt` を使用
    - シーンに合わない場合は `--prompt` でカスタマイズ
 4. **生成実行**: deep-merge 後の `skip_billing_approval` でコマンドを決める。`false`（既定）は `uv run yt-generate-loop-video <collection-path>` を実行して CLI の [y/N] 承認を待ち、`true` のときだけ `uv run yt-generate-loop-video <collection-path> -y` で課金確認を省略する。どちらも Step 1 の `enabled: false` なら実行せず fail-loud のまま停止する
    - 冪等再実行が必要な場面（CI / バッチ / 「もう生成済みか分からない」ケース）では `--skip-existing` を付けて Veo 再課金を避ける
@@ -169,7 +165,7 @@ $ARGUMENTS
    - **ループの継ぎ目だけが不自然**: **`--smooth` 単独 mode で再実行**（`uv run yt-generate-loop-video <path> --smooth -y`）。Veo は叩かず FFmpeg クロスフェード補正のみ適用するため **追加課金は発生しない**
    - **動きがない / 静止画 fallback / 意図しない対象が動く / 構図が崩れる**: motion/static targets または prompt を修正する。Veo 再生成の内容とフル再課金を表示し、ユーザーの承認後にだけ通常生成を再実行する
 
-   どちらの経路も処理成功時に `[改善しました]` と表示し、Step 5 に戻って再び同じ動画プレビューを開く。ユーザーが「承認する」を選ぶまで Step 5-6 を繰り返し、`/videoup` へ進まない。`--smooth` は post-process 専用 mode で、生成と post-process は別コマンドとして 2 段に分かれている — 「再生成 + post-process」を 1 コマンドでまとめる API は **意図的に提供していない**（再生成は明示的なフル再課金イベントとして扱うため）。
+   どちらの経路も処理成功時に `[改善しました]` と表示し、Step 5 に戻って再び同じ動画プレビューを開く。ユーザーが「承認する」を選ぶまで Step 5-6 を繰り返し、`/video --generate` へ進まない。`--smooth` は post-process 専用 mode で、生成と post-process は別コマンドとして 2 段に分かれている — 「再生成 + post-process」を 1 コマンドでまとめる API は **意図的に提供していない**（再生成は明示的なフル再課金イベントとして扱うため）。
 
 ### 構造化プロンプト（推奨）
 
@@ -290,13 +286,13 @@ PD（パブリックドメイン）の童話キャラでも、ディズニー版
 
 ### 設定
 
-skill-config (`.claude/skills/loop-video/config.default.yaml`) で管理。チャンネル側上書きは `config/skills/loop-video.yaml`:
+skill-config (`.claude/skills/thumbnail/config.default.yaml::loop`) で管理。チャンネル側上書きは `config/skills/loop-video.yaml`:
 
 ループ動画化を停止したいチャンネルは 1 行で無効化できる:
 
 ```yaml
 # config/skills/loop-video.yaml
-enabled: false  # default: true。/loop-video は fail-loud 停止、/videoup は静止背景を使用
+enabled: false  # default: true。/thumbnail --loop は fail-loud 停止、/video --generate は静止背景を使用
 ```
 
 ```yaml
@@ -321,7 +317,7 @@ veo:
 
 | 項目 | 既定 | 説明 |
 |---|---|---|
-| `enabled` | `true` | このチャンネルでループ動画化を行うか。`false` で CLI は fail-loud 停止（Veo 課金防止）、`/videoup` は静止画背景にフォールバック |
+| `enabled` | `true` | このチャンネルでループ動画化を行うか。`false` で CLI は fail-loud 停止（Veo 課金防止）、`/video --generate` は静止画背景にフォールバック |
 | `skip_billing_approval` | `false` | `true` のときだけ生成コマンドへ `-y` を付けて課金確認を省略。`enabled: false` は上書きしない |
 | `skip_preview_approval` | `false` | `true` なら生成成功した `loop.mp4` を確認なしで確定。自動再生成はしない |
 | `veo.model` | veo-3.1-fast-generate-001 | Veo API モデル（選択肢: veo-3.1-fast-generate-001 / veo-3.1-generate-001 / veo-3.1-lite-generate-preview） |
@@ -345,7 +341,7 @@ veo:
 静止画の代わりにループ動画を背景として使用します（24fps、CRF 22 で正規化）。
 
 パイプラインは **Veo 生成 → strip_audio → CRF 圧縮**（`compression.enabled=true` のとき）。
-`--smooth` 経路でも同じ crf/preset が適用されるため、`/loop-video` → `--smooth` のいずれの順でも
+`--smooth` 経路でも同じ crf/preset が適用されるため、`/thumbnail --loop` → `--smooth` のいずれの順でも
 最終的な `loop.mp4` ビットレートは設定値（既定 CRF 22 ≒ 3〜4 Mbps）に揃う。
 
 ## 中断 (Ctrl+C) 時の挙動
@@ -401,7 +397,7 @@ veo:
 ## Next Step
 
 ループ動画生成後:
-- `/videoup <collection-path>` でマスター動画を生成
+- `/video --generate <collection-path>` でマスター動画を生成
 
 ## 参考リンク
 

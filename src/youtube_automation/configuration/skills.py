@@ -76,6 +76,7 @@ _MOVED_SKILL_CONFIG_DEFAULTS: Final[dict[str, Path]] = {
     "benchmark": Path("channel-research", "config.default.yaml"),
     "collection-ideate": Path("wf-new", "references", "collection-ideate.config.default.yaml"),
     "discover-competitors": Path("channel-research", "config.default.yaml"),
+    "loop-video": Path("thumbnail", "config.default.yaml"),
     "suno": Path("music", "config.default.yaml"),
     "suno-lyric": Path("music", "config.default.yaml"),
 }
@@ -83,6 +84,7 @@ _MOVED_SKILL_CONFIG_DEFAULTS: Final[dict[str, Path]] = {
 _MOVED_SKILL_CONFIG_SECTIONS: Final[dict[str, str]] = {
     "benchmark": "benchmark",
     "discover-competitors": "discover",
+    "loop-video": "loop",
     "suno": "prompt",
     "suno-lyric": "lyric",
 }

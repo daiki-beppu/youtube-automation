@@ -26,7 +26,6 @@ TARGET_SKILLS = (
     "alignment-check",
     "wf-new",
     "flop-analysis",
-    "loop-video",
     "lyria",
     "metadata-audit",
     "playlist",
@@ -84,8 +83,8 @@ INITIAL_OCCURRENCE_LEDGER = (
     _entry("flop-analysis", "SKILL.md", "benchmark-input", "analysis"),
     _entry("flop-analysis", "SKILL.md", "market-direction", "direction"),
     _entry("flop-analysis", "SKILL.md", "whole-channel-direction", "direction"),
-    _entry("loop-video", "SKILL.md", "missing-config-new", "opening"),
-    _entry("loop-video", "SKILL.md", "missing-config-existing", "import"),
+    _entry("thumbnail", "references/loop.md", "missing-config-new", "opening"),
+    _entry("thumbnail", "references/loop.md", "missing-config-existing", "import"),
     _entry("lyria", "SKILL.md", "missing-config-new", "opening"),
     _entry("lyria", "SKILL.md", "missing-config-existing", "import"),
     _entry("lyria", "SKILL.md", "engine-direction", "direction"),
@@ -193,12 +192,6 @@ _RAW_EXPECTED_ACTIVE_ROUTES = (
         "改善策の実行は本スキルの完了条件に含めない。必要なら "
         "`/channel-strategy --direction`（方向性検討モード）でチャンネル全体の方向性を見直す。",
     ),
-    _route("loop-video/SKILL.md", "## 前提", "- **新規チャンネル** → `/setup --channel` を案内"),
-    _route(
-        "loop-video/SKILL.md",
-        "## 前提",
-        "- **既存チャンネル**（YouTube で既に運営中）→ `/setup --import` を案内",
-    ),
     _route(
         "lyria/SKILL.md",
         "## 前提",
@@ -266,6 +259,12 @@ _RAW_EXPECTED_ACTIVE_ROUTES = (
         "## 前提",
         "- `config/channel/analytics.json::benchmark.channels` に承認済みベンチマークチャンネルが設定済みであること。"
         "未設定なら `/channel-strategy --direction` / `/channel-research --discover` を案内して停止する",
+    ),
+    _route("thumbnail/references/loop.md", "## 前提", "- **新規チャンネル** → `/setup --channel` を案内"),
+    _route(
+        "thumbnail/references/loop.md",
+        "## 前提",
+        "- **既存チャンネル**（YouTube で既に運営中）→ `/setup --import` を案内",
     ),
     _route(
         "value-loop-audit/SKILL.md",

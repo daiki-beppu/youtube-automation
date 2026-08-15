@@ -19,7 +19,7 @@ Veo などの生成エンジン選択とは別の軸として扱う。
    呼び出し側は `generate_video(video_type, ...)` で dispatch する。
 3. `src/youtube_automation/commands/media/` の CLI で `VideoTypeConfig.from_mapping()` を使い、
    選択タイプをログへ出す。タイプ固有の入出力名はその CLI に閉じ込める。
-4. `.claude/skills/loop-video/config.default.yaml` と
+4. `.claude/skills/thumbnail/config.default.yaml::loop` と
    `.claude/skills/videoup/config.default.yaml`、必要な下流テンプレートへ既定値を追加する。
 5. `.claude/skills/videoup/references/generate_videos.sh` の `VIDEO_TYPE` validation と
    background selection に分岐を追加する。ファイルの有無だけでタイプを決めない。

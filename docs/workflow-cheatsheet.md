@@ -55,7 +55,7 @@ Phase 1 ─ 企画 + 素材準備           /wf-new
    ├─ yt-init-collection             (ディレクトリ + workflow-state.json 作成)
    ├─ /thumbnail   または main.png    (サムネ確定)
    ├─ /music --prompt もしくは /lyria          (音楽プロンプト or 設計)
-   └─ /loop-video                    (背景ループ動画)
+   └─ /thumbnail --loop               (背景ループ動画)
                           ↓ phase: "prepared"
 Phase 2 ─ 制作                      /wf-next
    ├─ Suno パス: /masterup           (Suno UI で人手生成 → DL + クロスフェード)

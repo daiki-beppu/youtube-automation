@@ -361,7 +361,7 @@
         "Updated consumer: .claude/skills/collection-ideate/references/benchmark_collector.py",
         "Updated consumer: .claude/skills/channel-new/references/benchmark_collector.py",
         "Updated consumer: .claude/skills/short/references/generate_short_loop.py",
-        "Updated consumer: .claude/skills/loop-video/references/generate_loop_video.py",
+        "Updated consumer: .claude/skills/thumbnail/references/generate_loop_video.py",
         "Updated consumer: .claude/skills/benchmark/references/benchmark_collector.py"
       ]
     },
@@ -629,7 +629,7 @@
         "Updated consumer: src/youtube_automation/commands/media/generate_loop_video.py",
         "Updated consumer: tests/commands/media/test_generate_loop_video_cli.py",
         "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py",
-        "Updated consumer: .claude/skills/loop-video/references/generate_loop_video.py"
+        "Updated consumer: .claude/skills/thumbnail/references/generate_loop_video.py"
       ]
     },
     {
@@ -807,7 +807,7 @@
         "Updated consumer: .claude/skills/thumbnail/SKILL.md",
         "Updated consumer: .claude/skills/masterup/SKILL.md",
         "Updated consumer: .claude/skills/videoup/SKILL.md",
-        "Updated consumer: .claude/skills/loop-video/SKILL.md",
+        "Updated consumer: .claude/skills/thumbnail/references/loop.md",
         "Updated consumer: .claude/skills/community-post/SKILL.md",
         "Updated consumer: .claude/skills/flop-analysis/SKILL.md",
         "Updated consumer: .claude/skills/discover-competitors/SKILL.md",
@@ -834,7 +834,7 @@
         "Updated consumer: .claude/skills/channel-new/references/generate_image.py",
         "Updated consumer: .claude/skills/channel-new/references/benchmark_collector.py",
         "Updated consumer: .claude/skills/short/references/generate_short_loop.py",
-        "Updated consumer: .claude/skills/loop-video/references/generate_loop_video.py",
+        "Updated consumer: .claude/skills/thumbnail/references/generate_loop_video.py",
         "Updated consumer: .claude/skills/masterup/references/finalize_master.py",
         "Updated consumer: .claude/skills/masterup/references/check_loudness_deviation.py",
         "Updated consumer: .claude/skills/thumbnail/references/codex-image-batch.sh",
@@ -1020,7 +1020,7 @@
         "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py",
         "Updated consumer: .claude/skills/short-thumbnail/references/generate_short_loop.py",
         "Updated consumer: .claude/skills/short/references/generate_short_loop.py",
-        "Updated consumer: .claude/skills/loop-video/references/generate_loop_video.py",
+        "Updated consumer: .claude/skills/thumbnail/references/generate_loop_video.py",
         "Updated consumer: .claude/skills/videoup/references/video-type-extension.md"
       ]
     },
@@ -1339,7 +1339,7 @@
         "Updated consumer: .claude/skills/short/references/generate_short_loop.py",
         "Updated consumer: .claude/skills/music/references/check_lyric_duplication.py",
         "Updated consumer: .claude/skills/analytics/references/analytics_system.py",
-        "Updated consumer: .claude/skills/loop-video/references/generate_loop_video.py",
+        "Updated consumer: .claude/skills/thumbnail/references/generate_loop_video.py",
         "Updated consumer: .claude/skills/masterup/references/finalize_master.py",
         "Updated consumer: .claude/skills/masterup/references/check_loudness_deviation.py",
         "Updated consumer: .claude/skills/thumbnail/references/share_thumbnail_as_main.py",

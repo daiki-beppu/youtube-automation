@@ -8,7 +8,7 @@ description: "Use when 新規コレクション制作を立ち上げるとき、
 
 - `前工程`: `/setup --channel`, `/setup`
 - `後工程`: `/wf-next`, `/suno-helper`, `/post-publish`, `/analytics`
-- `委譲先`: `/analytics`, `/thumbnail`, `/music --prompt`, `/lyria`, `/loop-video`, `/suno-helper`, `/masterup`, `/wf-next`, `/post-publish`
+- `委譲先`: `/analytics`, `/thumbnail`, `/music --prompt`, `/lyria`, `/thumbnail --loop`, `/suno-helper`, `/masterup`, `/wf-next`, `/post-publish`
 
 ## 成果物
 
@@ -151,7 +151,7 @@ uv run yt-init-collection "Pilot Direction Check" "pilot-direction-check" --trac
 | 直接実行 CLI（yt-init-collection / yt-populate-scene-phrases / yt-collection-preflight / yt-collection-serve） | 0 call（ローカル処理のみ） | — |
 | 内部企画工程（YouTube Data 数 units + Analytics、任意で Gemini） | 1 回分 | 企画プレビュー画像の実施有無 |
 | 委譲先 /thumbnail（Gemini 画像生成 + Vision） | 1 回分 | 候補枚数 / 再生成回数 |
-| 委譲先 /loop-video（Veo 3.1） | 1 call | `enabled: true` のチャンネルのみ。/lyria は本スキルでは設計のみで実行は /wf-next |
+| 委譲先 /thumbnail --loop（Veo 3.1） | 1 call | `enabled: true` のチャンネルのみ。/lyria は本スキルでは設計のみで実行は /wf-next |
 
 - 上限 / 承認: 課金はすべて subagent 委譲先で発生するため、各委譲先 skill の「想定 API call 数」と承認ゲートに従う。各 skill-config で明示 opt-in された skip は承認済み設定として扱い、call 数・生成条件を成果物へ残す。
 
@@ -208,7 +208,7 @@ success を記録した後は同じ fixed collection を `plan --collection <fix
 | 3 | `uv run yt-populate-scene-phrases` | 多言語チャンネルの scene phrases を初期化 | `scene_phrases` |
 | 4 | Phase 2c initial dispatch: thumbnail + music | preview status を固定し、両方未完了なら thumbnail branch と `/music --prompt` または `/lyria` branch の exactly two Agent calls を同時起動する | `10-assets/thumbnail.jpg` または候補、Suno prompts または Lyria 設計 |
 | 5 | Phase 2c join + quality gate + textless subagent | 両初期 Agent を join し、メインが thumbnail の承認・QA・textless 確定と両 branch の成果物検証、直列 state 適用を行う。片側再開では未完了側だけを委譲する | `10-assets/thumbnail.jpg`, `10-assets/main.png/jpg`, music prompts |
-| 6 | subagent: `/loop-video` または静止背景運用 | `loop-video.enabled=true` なら生成を委譲しメインが検証。`enabled=false` なら Veo を呼ばず、メインが既存 textless `main.png/jpg` を静止背景として使う | `10-assets/loop.mp4` または textless `10-assets/main.png/jpg` |
+| 6 | subagent: `/thumbnail --loop` または静止背景運用 | `loop-video.enabled=true` なら生成を委譲しメインが検証。`enabled=false` なら Veo を呼ばず、メインが既存 textless `main.png/jpg` を静止背景として使う | `10-assets/loop.mp4` または textless `10-assets/main.png/jpg` |
 | 7 | subagent: `uv run yt-collection-serve`（Suno のみ） | server 起動と疎通確認を委譲し、結果をメインが検証する | `http://localhost:<PORT>` |
 
 `/suno-helper` の Chrome 操作と `/wf-next` は `/wf-new` 内では実行しない。`/wf-new` は Suno 用 server 起動までを担い、次工程として `/suno-helper` の browser use 主導フローを案内する。
@@ -276,7 +276,7 @@ Step 1（企画）を自動実行中...
   - benchmark fallback mode: `data/benchmark_*.json` + config のみで初回企画を生成
   - minimal mode: `ttp_mode: false` はユーザー直接入力（テーマ / ジャンル / 雰囲気）+ config のみで初回企画を生成。`true` は `/channel-research --benchmark` を案内して停止
 - サムネイル生成: `/thumbnail` スキル
-- ループ動画生成: `/loop-video` スキル
+- ループ動画生成: `/thumbnail --loop` スキル
 - 音楽プロンプト生成: `/music --prompt` スキル
 - Suno UI への連続注入 + playlist 一括追加: `/suno-helper` スキル
 - 音楽プロンプト設計 + Lyria 3 API 呼び出し: `/lyria` スキル

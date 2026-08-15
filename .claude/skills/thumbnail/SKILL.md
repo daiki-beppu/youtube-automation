@@ -1,16 +1,16 @@
 ---
 name: thumbnail
 purpose: 作る
-description: "Use when コレクションの YouTube サムネイル（thumbnail.jpg）を CTR 最適化し、textless main.png/jpg を先行生成して実フォント合成するとき、`--compare` で生成済み候補を競合と 320px 比較するとき、`--test` で Studio の A/B テストを設計・記録するとき、または `--iterate` で伸びた動画の勝因を次のサムネへ還元するとき。「サムネイル生成」「画像生成」「アイキャッチ」「サムネ比較」「モバイル表示テスト」「サムネ A/B テスト」「Test & Compare」「伸びた動画のサムネ改善」で発動。競合の勝ちパターン分析は channel-research の thumbnail mode、SVG・汎用画像生成には使わない"
+description: "Use when コレクションの YouTube サムネイル（thumbnail.jpg）を CTR 最適化し、textless main.png/jpg を先行生成して実フォント合成するとき、`--compare` で生成済み候補を競合と 320px 比較するとき、`--test` で Studio の A/B テストを設計・記録するとき、`--iterate` で伸びた動画の勝因を次のサムネへ還元するとき、または `--loop` で textless main.png/jpg から Veo / Gemini Omni Flash のループ動画背景を生成するとき。「サムネイル生成」「画像生成」「アイキャッチ」「サムネ比較」「モバイル表示テスト」「サムネ A/B テスト」「Test & Compare」「伸びた動画のサムネ改善」「ループ動画」「背景動画」「loop.mp4」で発動。競合の勝ちパターン分析は channel-research の thumbnail mode、SVG・汎用画像生成には使わない"
 ---
 
 ## 前後工程
 
 - `前工程`: `/channel-strategy --constraints`, `/wf-new`, `/thumbnail --iterate`
-- `後工程`: `/loop-video`, `/thumbnail --compare`, `/thumbnail --test`, `/thumbnail --iterate`, `/alignment-check`
+- `後工程`: `/thumbnail --loop`, `/thumbnail --compare`, `/thumbnail --test`, `/thumbnail --iterate`, `/alignment-check`
 - `委譲先`: `なし`
 ## 成果物
-- `書き込む`: `collections/<id>/10-assets/thumbnail.jpg`, `collections/<id>/10-assets/main.png`, `collections/<id>/10-assets/main.jpg`, `collections/<id>/20-documentation/thumbnail-prompts.md`, `collections/<id>/20-documentation/thumbnail-test-active.json`, `collections/<id>/20-documentation/thumbnail-test-history.json`, `collections/<id>/workflow-state.json`, `assets/thumbnail-gallery/<id>.<ext>`, `docs/plans/thumbnail-comparison.md`, `data/thumbnail_compare/*`, `data/thumbnail-iterate/runs/<video-id>.json`, `data/thumbnail-iterate/champion.json`, `data/thumbnail-iterate/synthesis-required.json`
+- `書き込む`: `collections/<id>/10-assets/thumbnail.jpg`, `collections/<id>/10-assets/main.png`, `collections/<id>/10-assets/main.jpg`, `collections/<id>/10-assets/loop.mp4`, `collections/<id>/20-documentation/thumbnail-prompts.md`, `collections/<id>/20-documentation/thumbnail-test-active.json`, `collections/<id>/20-documentation/thumbnail-test-history.json`, `collections/<id>/workflow-state.json`, `assets/thumbnail-gallery/<id>.<ext>`, `docs/plans/thumbnail-comparison.md`, `data/thumbnail_compare/*`, `data/thumbnail-iterate/runs/<video-id>.json`, `data/thumbnail-iterate/champion.json`, `data/thumbnail-iterate/synthesis-required.json`
 - `読み込む`: `docs/channel/creative-constraints.md`, `docs/benchmarks/thumbnail-analysis.md`, `data/thumbnail-iterate/champion.json`, `collections/<id>/20-documentation/thumbnail-test-history.json`, `collections/<id>/workflow-state.json`, `config/skills/thumbnail.yaml`, `data/benchmark_*.json`, `docs/benchmarks/thumbnails/*.jpg`
 ## Overview
 コレクション用サムネイルを `config/skills/thumbnail.yaml`（skill-config）に基づいて生成する。 チャンネルごとにスタイル・キャラ・参照画像が異なり、すべて skill-config から動的に読み取る。 画像生成プロバイダー（Gemini / OpenAI / codex）は `image_generation.provider` で切り替え可能。
@@ -21,7 +21,7 @@ description: "Use when コレクションの YouTube サムネイル（thumbnail
 以下を deep-merge した値を設定として使う。
 1. `.claude/skills/thumbnail/config.default.yaml`
 2. `config/skills/thumbnail.yaml`（存在する場合）
-合成規則は `youtube_automation.configuration.skills.load_skill_config("thumbnail")` と同じで、チャンネル上書きが優先される。存在しない override は未設定として扱い、勝手に作成しない。このスキルが別 skill の skill-config を直接参照する段階では、その skill の `config.default.yaml` と `config/skills/<skill>.yaml` も同じ手順で読む。 **Hard Gate**: `archive.enabled: true` の場合、確定直後のアーカイブが設定不正・確定サムネ欠落・シンボリックリンク・コピー失敗で失敗したら後工程へ進まず停止する。ギャラリー保存を成功したように扱わない。`textless.enabled` は boolean だけを許可し、`false` の共用処理が失敗した場合も `thumbnail.approved` を更新せず停止する。
+合成規則は `youtube_automation.configuration.skills.load_skill_config("thumbnail")` と同じで、チャンネル上書きが優先される。`loop` default は互換入口 `load_skill_config("loop-video")` が旧 `config/skills/loop-video.yaml` と deep-merge する。存在しない override は未設定として扱い、勝手に作成しない。 **Hard Gate**: `archive.enabled: true` の場合、確定直後のアーカイブが設定不正・確定サムネ欠落・シンボリックリンク・コピー失敗で失敗したら後工程へ進まず停止する。ギャラリー保存を成功したように扱わない。`textless.enabled` は boolean だけを許可し、`false` の共用処理が失敗した場合も `thumbnail.approved` を更新せず停止する。
 ## 前提
 `config/channel/` が存在すること（`load_config()` でロード可能）。 `config/skills/thumbnail.yaml` はオプション。`yt-skills sync` で配布される `config.default.yaml` がそのまま使われるため、default 動作で問題なければ作成不要。カスタマイズしたい場合のみ `config.default.yaml` をコピーして `config/skills/thumbnail.yaml` に置き、必要な値だけ上書きする（deep-merge される）。 `config/channel/` が存在しない場合、ユーザーに確認:
 - **新規チャンネル** → `/setup --channel` を案内
@@ -104,6 +104,7 @@ Use the title {title}.
 | `--compare` | `references/compare.md` |
 | `--test` | `references/test.md` |
 | `--iterate` | `references/iterate.md` |
+| `--loop` | `references/loop.md` |
 ## 生成モード判定
 `image_generation.gemini.generation_mode` を確認:
 | モード | 説明 |
@@ -145,8 +146,7 @@ uv run python .claude/skills/thumbnail/references/share_thumbnail_as_main.py <co
 uv run yt-thumbnail-text --background <collection-path>/10-assets/main.png --title "<Title Line 1>" --title "<Title Line 2>" --channel-name "<channel_name>" --output <collection-path>/10-assets/thumbnail-v1.jpg
 ```
 5. テキスト付き候補は「手動候補の比較選択 Hard Gate」に従い、選択された 1 枚を `10-assets/thumbnail.jpg` として確定する。候補が 1 枚なら `/thumbnail --compare` とユーザー承認後に `cp thumbnail-v1.jpg thumbnail.jpg` で確定する。`auto_selection.enabled: true` では手動比較を行わず「自動選択」章の `yt-thumbnail-auto-select <collection-path> --apply` で確定する。手動・自動とも確定後に `uv run python .claude/skills/thumbnail/references/archive-approved-thumbnail.py <collection-path>` が成功したことを確認する。自動確定後の `/thumbnail --compare` は省略せず別途実行する。
-6. `config/skills/loop-video.yaml::enabled: true` のチャンネルでは、テキストなし `main.png/jpg` を `/loop-video` に渡して `loop.mp4` を生成する。
-7. `config/skills/loop-video.yaml::enabled: false` のチャンネルでは Veo を実行せず、テキストなし `main.png/jpg` を静止画背景として `/videoup` に渡す。
+6. `config/skills/loop-video.yaml::enabled: true` ならテキストなし `main.png/jpg` を `/thumbnail --loop` に渡して `loop.mp4` を生成し、`false` なら Veo を実行せず静止画背景として `/video --generate` に渡す。
 `thumbnail.jpg` はアップロード用、`main.png/jpg` は動画背景・loop-video 入力用の成果物とする。`textless.enabled` が未設定または `true` では文字入りと文字なしを分離し、両者を同一画像で代用しない。`false` だけは上記の検証済みコピーを正規契約とする。symlink や拡張子偽装では代用しない。 決定的合成経路は `text_render.mode: deterministic` の場合だけ使う。未設定 / `ai_burn_in` では上記の textless 先行手順へ入らず、AI 焼き込み経路を実行する。
 #### 手動候補の比較選択 Hard Gate
 この契約は `thumbnail-v*.jpg/png` と `main-v*.png/jpg` のどちらにも適用する。`auto_selection.enabled: false` / 未設定で、生成に成功した候補が 2 枚以上ある場合は、次の比較選択が完了するまで `thumbnail.jpg` または `main.png/jpg` を確定してはならない。
@@ -350,7 +350,7 @@ TTP 構図逸脱（wet_runway 不在・矩形ロゴ混入・テキスト burned-
 | `thumbnail-<name>.jpg` | `ab_test.enabled: true` の Test & compare 用最終サムネ（最大 3 枚） |
 | `thumbnail-<name>-v{N}.jpg` / `.png` | pattern 別の承認前候補 |
 | `thumbnail-v{N}.jpg` / `thumbnail-v{N}.png` / `thumbnail-codex-v{N}.png` | テキスト付き候補 |
-| `main.png` / `main.jpg` | 動画背景・`/loop-video` 入力用のテキストなし最終画像 |
+| `main.png` / `main.jpg` | 動画背景・`/thumbnail --loop` 入力用のテキストなし最終画像 |
 | `main-v{N}.png` / `main-v{N}.jpg` | テキストなし背景候補 |
 | `loop.mp4` | `loop-video` 有効チャンネルだけで生成する動画背景。無効チャンネルでは作らない |
 ### クリーンアップ（承認後に必ず実行・stock 退避）

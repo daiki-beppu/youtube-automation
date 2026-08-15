@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `feat(skills)`: `/music --lyric` に旧 `/suno-lyric` の歌詞生成・hard gate・generator/reviewer 契約を統合する。chain を `prompt` → `lyric` へ拡張し、mode 別 config、旧 override 互換と `suno-lyric.yaml` → `music.yaml::lyric` の明示 migration を追加して、旧 skill directory と利用者導線・配布・site 契約を更新する（#3825）。
 
 - `feat(skills)`: `/music` を新設し、`--prompt` に旧 `/suno` の Style / プロンプト生成契約を統合する。1-step chain、mode 別 config、旧 override 互換と `suno.yaml` → `music.yaml::prompt` の明示 migration を追加し、旧 skill directory と利用者導線・配布・site 契約を更新する（#3824）。
+- `feat(skills)`: 旧 `/loop-video` の Veo / Gemini Omni Flash ループ動画生成を `/thumbnail --loop` の排他 mode へ統合し、helper・`loop` default config・成果物 owner と利用者導線を `/thumbnail` 配下へ移す（#3832）。
+
 - `feat(skills)`: 旧 `/thumbnail-iterate` のサムネ勝因分解・統制比較・champion 還元を `/thumbnail --iterate` の排他 mode へ統合し、状態 helper・契約・成果物 owner と利用者導線を `/thumbnail` 配下へ移す（#3831）。
 
 - `feat(skills)`: 旧 `/thumbnail-test` の Studio A/B テスト設計・結果記録を `/thumbnail --test` の排他 mode へ統合し、active/history schema・operator guide・writer owner と利用者導線を `/thumbnail` 配下へ移す（#3830）。

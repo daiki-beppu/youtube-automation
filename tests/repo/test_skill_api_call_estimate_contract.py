@@ -163,7 +163,6 @@ TARGET_SKILLS: frozenset[str] = frozenset(
         "comments-reply",
         "distrokid-helper",
         "flop-analysis",
-        "loop-video",
         "live-chat-reply",
         "lyria",
         "metadata-audit",

@@ -64,8 +64,8 @@ def test_videoup_skip_still_generates_preview_before_full_output() -> None:
 
 
 def test_loop_video_skips_are_independent_and_keep_safety_gates() -> None:
-    text = _text("loop-video")
-    config = _config("loop-video")
+    text = (SKILLS / "thumbnail" / "references" / "loop.md").read_text(encoding="utf-8")
+    config = _config("thumbnail")["loop"]
 
     assert config["skip_billing_approval"] is False
     assert config["skip_preview_approval"] is False
