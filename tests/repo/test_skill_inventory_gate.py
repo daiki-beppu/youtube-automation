@@ -27,7 +27,6 @@ _LEGACY_SKILL_SCAN_ALLOWLIST = frozenset(
         "test_shadcn_skill_contract.py",
         "test_skill_api_call_estimate_contract.py",
         "test_skill_cost_documentation.py",
-        "test_skill_docs_consistency.py",
         "test_skill_page_generation_contract.py",
         "test_skill_shell_reference_runtime.py",
         "test_skills_rename.py",
