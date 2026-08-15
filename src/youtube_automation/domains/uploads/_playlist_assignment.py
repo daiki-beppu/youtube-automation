@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-import json
 import logging
 from pathlib import Path
 
 from youtube_automation.configuration import ChannelConfig, load_config
 from youtube_automation.core.adapters.media import CollectionPaths
+from youtube_automation.core.errors import WorkflowStateError
+from youtube_automation.domains.collections.workflow_state import read_or_none as read_workflow_state_or_none
 from youtube_automation.domains.uploads.playlists import PlaylistManager
-from youtube_automation.infrastructure.filesystem import path_exists, read_file_text
 from youtube_automation.infrastructure.google.youtube import YouTubeClients
 
 logger = logging.getLogger(__name__)
@@ -31,12 +31,12 @@ class PlaylistAssignment:
     def assign(self, video_id: str, collection_path: Path) -> None:
         """アップロード後にプレイリストへ自動追加する。"""
         ws_path = CollectionPaths(collection_path).workflow_state_path
-        if not path_exists(ws_path):
+        try:
+            state = read_workflow_state_or_none(ws_path)
+            theme = state.theme if state is not None else None
+        except WorkflowStateError as exc:
+            logger.warning(f"workflow-state.json 読み込み失敗 ({ws_path}): {exc}")
             return
-
-        ws = json.loads(read_file_text(ws_path))
-
-        theme = ws.get("theme", "")
         if not theme:
             return
 

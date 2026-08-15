@@ -20,12 +20,6 @@ DIRECT_IO_ALLOWLIST = frozenset(
         "src/youtube_automation/commands/youtube/pinned_comment.py",
         "src/youtube_automation/domains/distrokid/release.py",
         "src/youtube_automation/domains/suno/prompt_resolution.py",
-        "src/youtube_automation/domains/uploads/_complete_collection_strategy.py",
-        "src/youtube_automation/domains/uploads/_playlist_assignment.py",
-        "src/youtube_automation/domains/uploads/_preflight.py",
-        "src/youtube_automation/domains/uploads/collection.py",
-        "src/youtube_automation/domains/uploads/playlists.py",
-        "src/youtube_automation/domains/uploads/preflight.py",
         "src/youtube_automation/infrastructure/analytics/workflow_timing.py",
     }
 )

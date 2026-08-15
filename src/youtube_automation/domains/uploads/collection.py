@@ -15,7 +15,8 @@ from youtube_automation.core.adapters.youtube import (
     UNIT_POOL_LIMIT,
     complete_collection_quota_plan,
 )
-from youtube_automation.core.errors import ValidationError
+from youtube_automation.core.errors import ValidationError, WorkflowStateError
+from youtube_automation.domains.collections.workflow_state import read as read_workflow_state
 from youtube_automation.domains.uploads._collection_uploader_constants import ACTION_COMPLETE_COLLECTION_QUOTA_EXHAUSTED
 from youtube_automation.domains.uploads._complete_collection_executor import CompleteCollectionExecutor
 from youtube_automation.domains.uploads._playlist_assignment import PlaylistAssignment
@@ -29,7 +30,6 @@ from youtube_automation.infrastructure.filesystem import (
     path_exists,
     path_is_directory,
     read_file_text,
-    read_json,
     rename_path,
 )
 from youtube_automation.infrastructure.google.youtube import YouTubeClients
@@ -169,19 +169,13 @@ class CollectionUploader:
         for collection in self.find_collections(("planning",)):
             state_path = CollectionPaths(collection).workflow_state_path
             try:
-                state = read_json(state_path)
-            except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+                state = read_workflow_state(state_path)
+            except WorkflowStateError as exc:
                 logger.warning(f"⚠️  workflow-state.json を読み取れないため候補から除外します: {state_path}: {exc}")
                 continue
 
-            upload = state.get("upload") if isinstance(state, dict) else None
-            if (
-                isinstance(state, dict)
-                and state.get("phase") == "mastered"
-                and isinstance(upload, dict)
-                and "video_id" in upload
-                and upload["video_id"] is None
-            ):
+            upload = state.upload
+            if state.phase == "mastered" and upload is not None and "video_id" in upload and upload.video_id is None:
                 candidates.append(collection)
 
         if not candidates:

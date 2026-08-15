@@ -1,13 +1,13 @@
 """YouTube playlist upload operations owned by the uploads domain."""
 
-import json
 import logging
 from pathlib import Path
 from typing import Protocol
 
 from youtube_automation.configuration import channel_dir, load_config, reset
 from youtube_automation.core.adapters.media import CollectionPaths
-from youtube_automation.core.errors import ValidationError, YouTubeAPIError
+from youtube_automation.core.errors import ValidationError, WorkflowStateError, YouTubeAPIError
+from youtube_automation.domains.collections.workflow_state import read_or_none as read_workflow_state_or_none
 from youtube_automation.infrastructure.filesystem import (
     list_directory,
     path_exists,
@@ -213,14 +213,13 @@ class PlaylistManager:
         `activity_for_theme` fallback させる（プレイリスト追加は非致命的機能のため）。
         """
         ws_path = CollectionPaths(collection_path).workflow_state_path
-        if not path_exists(ws_path):
-            return None
         try:
-            data = read_json(ws_path)
-        except (OSError, json.JSONDecodeError) as e:
+            state = read_workflow_state_or_none(ws_path)
+            planning = state.planning if state is not None else None
+            explicit = planning.activities if planning is not None else None
+        except WorkflowStateError as e:
             logger.warning(f"workflow-state.json 読み込み失敗 ({ws_path}): {e}")
             return None
-        explicit = data.get("planning", {}).get("activities")
         return explicit if isinstance(explicit, str) and explicit else None
 
     def _list_playlist_video_ids(self, playlist_id: str) -> set[str]:
@@ -325,13 +324,12 @@ class PlaylistManager:
 
             # workflow-state.json からテーマ取得
             ws_path = paths.workflow_state_path
-            if not path_exists(ws_path):
+            state = read_workflow_state_or_none(ws_path)
+            if state is None:
                 logger.warning(f"  {col_path.name}: workflow-state.json なし — スキップ")
                 continue
 
-            ws = read_json(ws_path)
-
-            theme = ws.get("theme", "")
+            theme = state.theme
             if not theme:
                 logger.warning(f"  {col_path.name}: theme 未設定 — スキップ")
                 continue
@@ -350,7 +348,9 @@ class PlaylistManager:
                 continue
 
             # タイトル取得（表示用）
-            title = ws.get("steps", {}).get("planning", {}).get("final_title", col_path.name)
+            steps = state.get("steps")
+            planning = steps.get("planning") if isinstance(steps, dict) else None
+            title = planning.get("final_title", col_path.name) if isinstance(planning, dict) else col_path.name
 
             activity_override = self._planning_activities(col_path)
 

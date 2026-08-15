@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import json
 import logging
 from pathlib import Path
 from typing import Callable, Dict, Optional
 
 from youtube_automation.core.adapters.media import CollectionPaths, probe_duration
-from youtube_automation.core.errors import ValidationError
+from youtube_automation.core.errors import ValidationError, WorkflowStateError
+from youtube_automation.domains.collections.workflow_state import read_or_none as read_workflow_state_or_none
 from youtube_automation.domains.metadata import BAHMetadataGenerator
 from youtube_automation.domains.uploads._uploader_constants import (
     UPLOAD_SOURCE_EXISTING,
@@ -18,7 +18,7 @@ from youtube_automation.domains.uploads.descriptions_md import (
     extract_body_for_localizations,
     load_descriptions_md,
 )
-from youtube_automation.infrastructure.filesystem import glob_files, path_exists, path_is_file, read_json
+from youtube_automation.infrastructure.filesystem import glob_files, path_is_file
 
 logger = logging.getLogger(__name__)
 
@@ -27,23 +27,24 @@ def resolve_master_video(collection_dir: Path) -> Path:
     """workflow-state の明示値を優先し、Preview をマスター扱いしない。"""
     paths = CollectionPaths(collection_dir)
     state_path = paths.workflow_state_path
-    if path_exists(state_path):
+    try:
+        state = read_workflow_state_or_none(state_path)
+    except WorkflowStateError as exc:
+        if "root must be an object" in str(exc):
+            raise ValidationError("workflow-state.json root は object である必要があります") from exc
+        if "::assets must be an object" in str(exc):
+            raise ValidationError("workflow-state.json::assets は object である必要があります") from exc
+        raise ValidationError(f"workflow-state.json を読めません: {state_path}: {exc}") from exc
+    if state is not None:
+        assets = state.assets
         try:
-            state = read_json(state_path)
-        except (OSError, json.JSONDecodeError) as exc:
-            raise ValidationError(f"workflow-state.json を読めません: {state_path}: {exc}") from exc
-        if not isinstance(state, dict):
-            raise ValidationError("workflow-state.json root は object である必要があります")
-        assets = state.get("assets", {})
-        if not isinstance(assets, dict):
-            raise ValidationError("workflow-state.json::assets は object である必要があります")
-        configured = assets.get("master_video")
+            configured = assets.master_video if assets is not None else None
+        except WorkflowStateError as exc:
+            raise ValidationError(
+                "workflow-state.json::assets.master_video は .mp4 のファイル名で指定してください"
+            ) from exc
         if configured is not None:
-            if (
-                not isinstance(configured, str)
-                or Path(configured).name != configured
-                or Path(configured).suffix.lower() != ".mp4"
-            ):
+            if Path(configured).name != configured or Path(configured).suffix.lower() != ".mp4":
                 raise ValidationError("workflow-state.json::assets.master_video は .mp4 のファイル名で指定してください")
             selected = paths.master_dir / configured
             if not path_is_file(selected):

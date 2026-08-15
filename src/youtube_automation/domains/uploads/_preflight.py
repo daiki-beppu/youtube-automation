@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 from pathlib import Path
 
 from youtube_automation.configuration import load_config
 from youtube_automation.core.adapters.media import CollectionPaths, probe_duration
-from youtube_automation.core.errors import ValidationError
+from youtube_automation.core.errors import ValidationError, WorkflowStateError
+from youtube_automation.domains.collections.workflow_state import read as read_workflow_state
 from youtube_automation.domains.metadata import BAHMetadataGenerator
 from youtube_automation.domains.metadata.descriptions import (
     build_descriptions_md_parse_diagnostics,
@@ -33,7 +35,6 @@ from youtube_automation.infrastructure.filesystem import (
     path_exists,
     path_is_directory,
     read_file_text,
-    read_json,
 )
 
 logger = logging.getLogger(__name__)
@@ -136,14 +137,18 @@ class PreflightChecker:
             raise ValidationError(
                 f"❌ {ws_path} が存在しません。/wf-new または /video --describe の前提を確認してください。"
             )
-        state = read_json(ws_path)
-        title_template_check = state.get("title_template_check")
+        try:
+            state = read_workflow_state(ws_path)
+        except WorkflowStateError as exc:
+            if isinstance(exc.__cause__, json.JSONDecodeError):
+                raise exc.__cause__ from exc
+            raise
 
         # タイトル鋳型準拠チェック（巻数表記・RHS 重複・鋳型逸脱を機械検出）。
         # 鋳型語彙・パターンは config 駆動、` | ` 鋳型を使うチャンネルでのみ適用。
         title_cfg = config.content.title
         template_check_cfg = {**dict(title_cfg.template_check), "template": title_cfg.template}
-        if isinstance(title_template_check, dict) and title_template_check.get("allow_volume_patterns") is True:
+        if state.allow_volume_patterns:
             template_check_cfg["volume_patterns"] = ()
         existing_titles = self._collect_live_titles(exclude_dir=collection_dir)
         msg = check_title_template_compliance(title, existing_titles, template_check_cfg)
@@ -166,7 +171,7 @@ class PreflightChecker:
         if msg:
             raise ValidationError(f"❌ {msg}: 1 パターン = 1 chapter で再生成してください。")
 
-        scene_phrases = state.get("scene_phrases") or {}
+        scene_phrases = state.scene_phrases or {}
 
         if requires_scene_phrases(config.localizations.supported_languages):
             required_langs = list(dict.fromkeys(config.localizations.supported_languages))
