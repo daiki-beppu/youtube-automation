@@ -89,7 +89,7 @@ def test_missing_persona_artifact_is_a_failure_not_an_empty_fallback(tmp_path: P
 
 def test_canonical_routes_dispatch_and_legacy_aliases_fail_closed() -> None:
     assert flow.route_skill("persona") == "channel-strategy --persona"
-    assert flow.route_skill("flop") == "flop-analysis"
+    assert flow.route_skill("flop") == "analytics --flop"
     for legacy in ("audience-persona", "postmortem"):
         with pytest.raises(flow.PersonaContractError, match="legacy route"):
             flow.route_skill(legacy)
@@ -106,7 +106,7 @@ def test_flop_analysis_consumes_only_existing_read_only_artifacts(tmp_path: Path
 
 def test_cli_reports_success_and_failure_with_exit_codes(tmp_path: Path, capsys) -> None:
     assert flow.main(["route", "--intent", "flop"]) == 0
-    assert json.loads(capsys.readouterr().out) == {"skill": "flop-analysis"}
+    assert json.loads(capsys.readouterr().out) == {"skill": "analytics --flop"}
     assert flow.main(["route", "--intent", "postmortem"]) == 1
     error = json.loads(capsys.readouterr().out)
     assert error["status"] == "error"

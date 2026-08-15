@@ -124,7 +124,7 @@ mode と modifier は次のように分けて記載する。
 
 - mode の実例: [analytics の `--collect`](../../.claude/skills/analytics/SKILL.md)
 - modifier の実例: [publish の `--batch`](../../.claude/skills/publish/SKILL.md)（`--community` mode の生成方法を修飾）
-- 値を伴う variant の実例: [flop-analysis の `--since <N>`](../../.claude/skills/flop-analysis/SKILL.md)
+- 値を伴う variant の実例: [analytics flop mode の `--since <N>`](../../.claude/skills/analytics/SKILL.md)
 
 ### description（スキル選択の API）
 
@@ -143,7 +143,7 @@ mode と modifier は次のように分けて記載する。
 ## 前後工程
 
 - `前工程`: `/analytics --collect`
-- `後工程`: `/collection-ideate`, `/analytics --report`, `/flop-analysis`
+- `後工程`: `/wf-new`, `/analytics --report`, `/analytics --flop`
 - `委譲先`: `/wf-new`, `/publish`
 ```
 

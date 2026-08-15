@@ -26,4 +26,4 @@ jq -c 'select(.status == "open" and .lever == "thumbnail")' data/insights.jsonl
 
 - 該当エントリがある場合は、生成前に `finding` / `recommended_action` / `evidence` をユーザーへ提示し、差分プロンプトの方針（テキストサイズ・構図・配色など）へ反映する
 - `data/insights.jsonl` が存在しない、または該当エントリが 0 件の場合は「thumbnail insights なし」と表示して既存フローで続行する
-- 本スキルは insights を提示・参照するだけで、`status` を含むエントリの書き換え・追記はしない。status 反映は `/wf-new`、追記は `/analytics --analyze`、`/flop-analysis`、`yt-experiment judge` の責務である。`source` にかかわらず `status = open` かつ `lever = thumbnail` だけを読む
+- 本スキルは insights を提示・参照するだけで、`status` を含むエントリの書き換え・追記はしない。status 反映は `/wf-new`、追記は `/analytics --analyze`、`/analytics --flop`、`yt-experiment judge` の責務である。`source` にかかわらず `status = open` かつ `lever = thumbnail` だけを読む

@@ -919,7 +919,7 @@ def test_channel_strategy_followup_skill_routing_uses_new_contract() -> None:
         ".claude/skills/audit/references/alignment.md",
         ".claude/skills/wf-new/references/ideate.md",
         ".claude/skills/music/references/generate.md",
-        ".claude/skills/flop-analysis/SKILL.md",
+        ".claude/skills/analytics/references/flop.md",
         ".claude/skills/audit/references/video.md",
     ]
     for path in followup_direction_files:
@@ -1592,7 +1592,7 @@ def test_insights_entry_schema_is_single_source_for_writers_and_readers() -> Non
     assert properties["status"]["enum"] == ["open", "adopted", "dismissed"]
 
     analytics_analyze = _read(".claude/skills/analytics/references/analyze.md")
-    flop_analysis = _read(".claude/skills/flop-analysis/SKILL.md")
+    flop_analysis = _read(".claude/skills/analytics/references/flop.md")
     wf_new = _read_wf_new()
     collection_ideate = _read(".claude/skills/wf-new/references/ideate.md")
     thumbnail = _read(".claude/skills/thumbnail/SKILL.md")

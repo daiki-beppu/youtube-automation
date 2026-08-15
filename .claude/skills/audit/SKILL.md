@@ -7,7 +7,7 @@ description: "Use when 整合性・動画本体・公開後メタデータ・価
 ## 前後工程
 
 - `前工程`: `/channel-strategy --constraints`, `/thumbnail`, `/music`, `/publish --upload`, `/publish`
-- `後工程`: `/wf-new`, `/music --prompt`, `/audit --alignment`, `/flop-analysis`, `/video --describe`
+- `後工程`: `/wf-new`, `/music --prompt`, `/audit --alignment`, `/analytics --flop`, `/video --describe`
 - `委譲先`: `なし`
 
 ## 成果物

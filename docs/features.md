@@ -59,8 +59,7 @@ YouTube Analytics と動画本体の解析。
 
 | Skill | なにができるか |
 |---|---|
-| /analytics | 収集・分析・レポート表示を一括実行。`--collect` / `--analyze` / `--report` で各段だけを実行 |
-| /flop-analysis | 伸びなかった動画の原因を仮説 → 検証で切り分け |
+| /analytics | 収集・分析・レポート表示を一括実行。`--collect` / `--analyze` / `--report` で各段だけを実行し、`--flop` で伸びなかった動画の原因を切り分け |
 
 ## ベンチマーク
 

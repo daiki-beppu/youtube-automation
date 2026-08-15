@@ -229,10 +229,10 @@ Step 1（企画）を自動実行中...
 | benchmark fallback mode | `reports/analysis_*.md` が存在せず、`data/benchmark_*.json` が存在する | ベンチマークデータ + config |
 | minimal mode | `reports/analysis_*.md` と `data/benchmark_*.json` がどちらも存在しない | `ttp_mode: false` はユーザー直接入力（テーマ / ジャンル / 雰囲気）+ config。`true` は `/channel-research --benchmark` を案内して停止 |
 
-1-b. **蓄積 insights の収集（open エントリ、gate ではない）** — 入力モードの予備確認と合わせて、メインは `data/insights.jsonl` の存在を確認する。存在する場合は `uv run python3 .claude/skills/analytics/references/validate_insights.py data/insights.jsonl` が exit 0 であることを確認し、`jq -c 'select(.status == "open")' data/insights.jsonl` で open エントリだけを選別して Step 2 の `/wf-new` 委譲プロンプトへ企画入力として渡す。`/wf-new` が担うのは蓄積済み insights の選別と受け渡しだけで、学びの生成・検証（`/flop-analysis` の分析ロジック）や企画生成（`/wf-new` のロジック）を再実装しない。
+1-b. **蓄積 insights の収集（open エントリ、gate ではない）** — 入力モードの予備確認と合わせて、メインは `data/insights.jsonl` の存在を確認する。存在する場合は `uv run python3 .claude/skills/analytics/references/validate_insights.py data/insights.jsonl` が exit 0 であることを確認し、`jq -c 'select(.status == "open")' data/insights.jsonl` で open エントリだけを選別して Step 2 の `/wf-new` 委譲プロンプトへ企画入力として渡す。`/wf-new` が担うのは蓄積済み insights の選別と受け渡しだけで、学びの生成・検証（`/analytics --flop` の分析ロジック）や企画生成（`/wf-new` のロジック）を再実装しない。
 
    - `data/insights.jsonl` が存在しない、validator が失敗する、または open エントリが 0 件の場合は、insights なしとして既存の analytics / benchmark fallback / minimal mode のフローを阻害せず継続する（前提ガードにしない。validator 失敗時は失敗内容を警告表示だけする）
-   - `/wf-new` は `/flop-analysis`（postmortem 生成・検証）を自動実行しない。公開済み動画の分析・検証は `/flop-analysis` の既存責務に残り、ここでは還元済みエントリを読むだけとする
+   - `/wf-new` は `/analytics --flop`（postmortem 生成・検証）を自動実行しない。公開済み動画の分析・検証は `/analytics --flop` の既存責務に残り、ここでは還元済みエントリを読むだけとする
 
 入力モード、JSON ペア検証、stale 判定、自動更新、再検証の完全な定義は `/wf-new` の `references/freshness-rules.md::stale report の自動更新` を正とする。`.claude/skills/wf-new/references/collection-ideate.config.default.yaml` + `config/skills/collection-ideate.yaml` の deep-merge も同 skill に委譲し、ここでは判定ロジックや更新シーケンスを再定義しない。subagent が stale を検出した場合は SSOT の自動更新シーケンスを完了してから同日付ペア、validator、鮮度、入力モードを再判定し、成功時は中断せず同じ企画フローを続ける。skill 呼び出しまたは再検証に失敗した場合は、失敗した skill / 検証項目、理由、`/wf-new` を再実行できる再開条件を表示し、古い report を採用せず停止する。fresh / benchmark fallback mode / minimal mode では stale 更新用の Analytics skill を追加で呼ばない。`ttp_mode: false` の minimal mode ではテーマ / ジャンル / 雰囲気と、プレビューを生成する場合の候補・枚数・コスト承認を subagent が選択肢を返した後にメインが確定する。`true` の minimal mode では直接入力を確認せず、`/channel-research --benchmark` を案内して停止する。
 
@@ -271,7 +271,7 @@ Step 1（企画）を自動実行中...
 ## Cross References
 
 - 企画生成: `/wf-new` スキル
-  - 蓄積 insights: `data/insights.jsonl` の open エントリ（書き手は `/analytics --analyze`、`/flop-analysis`、`yt-experiment judge`、schema は `.claude/skills/analytics/references/insights-entry.schema.json` が単一ソース）を `source` にかかわらず Phase 1 で選別して渡す。無ければ渡さずに続行
+  - 蓄積 insights: `data/insights.jsonl` の open エントリ（書き手は `/analytics --analyze`、`/analytics --flop`、`yt-experiment judge`、schema は `.claude/skills/analytics/references/insights-entry.schema.json` が単一ソース）を `source` にかかわらず Phase 1 で選別して渡す。無ければ渡さずに続行
   - analytics mode: validator 成功済みの同日付 `reports/analysis_*.md` / `.json` ペア + ベンチマーク + config を使用
   - benchmark fallback mode: `data/benchmark_*.json` + config のみで初回企画を生成
   - minimal mode: `ttp_mode: false` はユーザー直接入力（テーマ / ジャンル / 雰囲気）+ config のみで初回企画を生成。`true` は `/channel-research --benchmark` を案内して停止

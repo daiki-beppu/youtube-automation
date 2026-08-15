@@ -18,7 +18,7 @@ PERSONA_FIELDS = (
 )
 _CANONICAL_ROUTES = {
     "persona": "channel-strategy --persona",
-    "flop": "flop-analysis",
+    "flop": "analytics --flop",
 }
 
 

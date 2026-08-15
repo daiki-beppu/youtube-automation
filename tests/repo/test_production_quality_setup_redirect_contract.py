@@ -25,7 +25,7 @@ SKILLS_DIR = REPO_ROOT / ".claude" / "skills"
 TARGET_SKILLS = (
     "audit",
     "wf-new",
-    "flop-analysis",
+    "analytics",
     "publish",
     "short",
     "music",
@@ -74,12 +74,12 @@ INITIAL_OCCURRENCE_LEDGER = (
     _entry("collection-ideate", "SKILL.md", "analysis-report", "analysis"),
     _entry("collection-ideate", "SKILL.md", "missing-direction-record", "direction"),
     _entry("collection-ideate", "references/freshness-rules.md", "desire-vocabulary", "shared-reference"),
-    _entry("flop-analysis", "SKILL.md", "missing-config-new", "opening"),
-    _entry("flop-analysis", "SKILL.md", "missing-config-existing", "import"),
-    _entry("flop-analysis", "SKILL.md", "read-only-input", "analysis"),
-    _entry("flop-analysis", "SKILL.md", "benchmark-input", "analysis"),
-    _entry("flop-analysis", "SKILL.md", "market-direction", "direction"),
-    _entry("flop-analysis", "SKILL.md", "whole-channel-direction", "direction"),
+    _entry("analytics", "SKILL.md", "missing-config-new", "opening"),
+    _entry("analytics", "SKILL.md", "missing-config-existing", "import"),
+    _entry("analytics", "SKILL.md", "read-only-input", "analysis"),
+    _entry("analytics", "SKILL.md", "benchmark-input", "analysis"),
+    _entry("analytics", "SKILL.md", "market-direction", "direction"),
+    _entry("analytics", "SKILL.md", "whole-channel-direction", "direction"),
     _entry("thumbnail", "references/loop.md", "missing-config-new", "opening"),
     _entry("thumbnail", "references/loop.md", "missing-config-existing", "import"),
     _entry("lyria", "SKILL.md", "missing-config-new", "opening"),
@@ -175,14 +175,36 @@ _RAW_EXPECTED_ACTIVE_ROUTES = (
         "どちらも任意扱い。存在しない場合は warning を表示して進行する"
         "（方向性決定記録は `/channel-strategy --direction` の方向性検討モードで生成できる旨を案内）。",
     ),
-    _route("flop-analysis/SKILL.md", "## 前提", "- **新規チャンネル** → `/setup --channel` を案内"),
     _route(
-        "flop-analysis/SKILL.md",
+        "analytics/SKILL.md",
+        "## 共通前提",
+        "- **新規チャンネル（config 未作成）** → `/setup --channel` を案内して停止する",
+    ),
+    _route(
+        "analytics/SKILL.md",
+        "## 共通前提",
+        "- **既存チャンネル（load_config() 失敗）** → `/setup --import` を案内して停止する",
+    ),
+    _route("analytics/references/analyze.md", "## 前提", "- **新規チャンネル** → `/setup --channel` を案内"),
+    _route(
+        "analytics/references/analyze.md",
+        "## 前提",
+        "- **既存チャンネル**（YouTube で既に運営中）→ `/setup --import` を案内",
+    ),
+    _route("analytics/references/collect.md", "## 前提", "- **新規チャンネル** → `/setup --channel` を案内"),
+    _route(
+        "analytics/references/collect.md",
+        "## 前提",
+        "- **既存チャンネル**（YouTube で既に運営中）→ `/setup --import` を案内",
+    ),
+    _route("analytics/references/flop.md", "## 前提", "- **新規チャンネル** → `/setup --channel` を案内"),
+    _route(
+        "analytics/references/flop.md",
         "## 前提",
         "- **既存チャンネル**（YouTube で既に運営中）→ `/setup --import` を案内",
     ),
     _route(
-        "flop-analysis/SKILL.md",
+        "analytics/references/flop.md",
         "### Phase 4: 検証の自律実行",
         "- `/audit --alignment`、`/channel-research --voice`、`/channel-strategy --persona`、"
         "`/channel-strategy --scene`、"
@@ -192,23 +214,29 @@ _RAW_EXPECTED_ACTIVE_ROUTES = (
         "read-only 入力として読む。必要な成果物がなければ、その仮説を理由付きの `未検証` とする",
     ),
     _route(
-        "flop-analysis/SKILL.md",
+        "analytics/references/flop.md",
         "### Phase 4: 検証の自律実行",
         "- 差別化・市場性は `/channel-research --discover` や `/channel-strategy --direction` を起動せず、"
         "最新の既存 `data/benchmark_*.json` と `yt-theme-compare` の標準出力だけを使う。"
         "競合の追加、方向性決定、config 更新は行わない",
     ),
     _route(
-        "flop-analysis/SKILL.md",
+        "analytics/references/flop.md",
         "## Next Step",
         "| テーマ自体の市場性不足 | `/channel-research --discover` → "
         "`/channel-strategy --direction`（方向性検討モード） |",
     ),
     _route(
-        "flop-analysis/SKILL.md",
+        "analytics/references/flop.md",
         "## Next Step",
         "改善策の実行は本スキルの完了条件に含めない。必要なら "
         "`/channel-strategy --direction`（方向性検討モード）でチャンネル全体の方向性を見直す。",
+    ),
+    _route("analytics/references/report.md", "## 前提", "- **新規チャンネル** → `/setup --channel` を案内"),
+    _route(
+        "analytics/references/report.md",
+        "## 前提",
+        "- **既存チャンネル**（YouTube で既に運営中）→ `/setup --import` を案内",
     ),
     _route(
         "publish/references/playlist.md",
@@ -860,6 +888,7 @@ def test_initial_occurrences_have_a_complete_context_ledger() -> None:
         "playlist": "publish",
         "short-thumbnail": "short",
         "value-loop-audit": "audit",
+        "flop-analysis": "analytics",
     }
     assert {current_owners.get(skill, skill) for skill in historical_skills} == set(TARGET_SKILLS)
     assert {entry[3] for entry in INITIAL_OCCURRENCE_LEDGER} <= set(CONTEXTS)

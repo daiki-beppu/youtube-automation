@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `feat(skills)`: `/reply` を新設し、旧 `/comments-reply` の公開済み動画コメント返信、別コンテキスト Reviewer、dry-run 後の明示承認、二重返信防止をフラグなし mode と references へ移設する（#3848）。
 
 - `feat(skills)`: 旧 `/post-publish` の公開後チェーンをフラグなし `/publish` の `playlist` → `upload` → `community` → `pinned` へ統合し、成果物ベースの途中再開へ移行する。metadata 監査を chain から外し、旧 skill と全利用者導線を削除する（#3847）。
+- `feat(skills)`: 旧 `/flop-analysis` の video / collection / `--since <N>` による失速分析を `/analytics --flop` へ統合し、既存 3-step chain を維持したまま設定・検証 helper・利用者導線と後工程 `/wf-new` を新 owner へ移す（#3850）。
 
 - `feat(skills)`: `/publish --clean` に旧 `/live-clean` の公開完了ガード、不可逆削除の dry-run・明示承認、大容量メディアと `tmp/` 残骸の掃除を統合する。clean は任意 mode として publish chain へ追加せず、旧 config を `publish.yaml::clean` へ移行できる互換入口と利用者導線・site 契約を更新する（#3846）。
 

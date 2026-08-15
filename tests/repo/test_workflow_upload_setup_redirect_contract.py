@@ -125,7 +125,43 @@ EXPECTED_ACTIVE_ROUTES = (
     ),
     *(
         _route(f"analytics/references/{mode}.md", "## 前提", line)
-        for mode in ("analyze", "collect", "report")
+        for mode in ("analyze", "collect", "flop")
+        for line in (
+            "- **新規チャンネル** → `/setup --channel` を案内",
+            "- **既存チャンネル**（YouTube で既に運営中）→ `/setup --import` を案内",
+        )
+    ),
+    _route(
+        "analytics/references/flop.md",
+        "### Phase 4: 検証の自律実行",
+        "- `/audit --alignment`、`/channel-research --voice`、`/channel-strategy --persona`、"
+        "`/channel-strategy --scene`、`/channel-strategy --direction` はスキルとして起動しない。"
+        "これらは別成果物の保存または設定更新を完了条件に含むため、既存の "
+        "`docs/plans/alignment-audit.md`、`docs/plans/viewer-voice-analysis.md`、"
+        "`docs/channel/personas/persona-definition.md`、`docs/plans/viewing-scene-matrix.md` がある場合だけ "
+        "read-only 入力として読む。必要な成果物がなければ、その仮説を理由付きの `未検証` とする",
+    ),
+    _route(
+        "analytics/references/flop.md",
+        "### Phase 4: 検証の自律実行",
+        "- 差別化・市場性は `/channel-research --discover` や `/channel-strategy --direction` を起動せず、"
+        "最新の既存 `data/benchmark_*.json` と `yt-theme-compare` の標準出力だけを使う。"
+        "競合の追加、方向性決定、config 更新は行わない",
+    ),
+    _route(
+        "analytics/references/flop.md",
+        "## Next Step",
+        "| テーマ自体の市場性不足 | `/channel-research --discover` → "
+        "`/channel-strategy --direction`（方向性検討モード） |",
+    ),
+    _route(
+        "analytics/references/flop.md",
+        "## Next Step",
+        "改善策の実行は本スキルの完了条件に含めない。必要なら "
+        "`/channel-strategy --direction`（方向性検討モード）でチャンネル全体の方向性を見直す。",
+    ),
+    *(
+        _route("analytics/references/report.md", "## 前提", line)
         for line in (
             "- **新規チャンネル** → `/setup --channel` を案内",
             "- **既存チャンネル**（YouTube で既に運営中）→ `/setup --import` を案内",
@@ -263,7 +299,10 @@ EXPECTED_ACTIVE_ROUTES = (
 
 MUTABLE_FILES = frozenset(path for path, _, _ in EXPECTED_ACTIVE_ROUTES if path != "automation-update/SKILL.md") | {
     "analytics/references/analysis-json-validator.md",
+    "analytics/config.default.yaml",
+    "analytics/references/flop.md",
     "analytics/references/insights-entry.schema.json",
+    "analytics/references/verification.py",
     "publish/SKILL.md",
     "publish/config.default.yaml",
     "publish/references/posting-checklist.md",
@@ -321,7 +360,7 @@ EXPECTED_ISSUE_3986_CHANGED_PATHS = frozenset(
         "tests/repo/test_workflow_upload_setup_redirect_contract.py",
     }
 )
-IMMUTABLE_TARGET_FILES_SHA256 = "e4ef4e13d6c9fac08fbd3277e0a56c1af97e0da950dfcf02ae420c70ae46813a"
+IMMUTABLE_TARGET_FILES_SHA256 = "a6c0a8dc9b73b31f25fa327453f72e20a98c76d8a744c2557e7d5fde1891e4af"
 AUTOMATION_SCHEDULE_REGENERATE_SHA256 = "11d460f727fe50c41f00571b416a1486cb07d0b1548524bc650a7161c16f6c42"
 AUTOMATION_UPDATE_PUSH_SHA256 = "d2e903b505ace3035da345f9f89ba1c0875e93b5633c1ddc31550db2433771eb"
 ALLOWED_FENCED_ROUTES = {

@@ -21,6 +21,7 @@ EXPECTED_PYTHON_SKILL_CONFIG_KEYS = frozenset(
         "benchmark",
         "collection-ideate",
         "discover-competitors",
+        "flop-analysis",
         "loop-video",
         "masterup",
         "music.prompt",
@@ -32,7 +33,6 @@ EXPECTED_PYTHON_SKILL_CONFIG_KEYS = frozenset(
 EXPECTED_SKILL_ONLY_CONFIG_KEYS = frozenset(
     {
         "community-post",
-        "flop-analysis",
         "live-clean",
         "lyria",
         "music.lyric",
