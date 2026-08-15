@@ -30,9 +30,10 @@ from pathlib import Path
 import pytest
 
 from tests.helpers.paths import REPO_ROOT
+from youtube_automation.domains.skills.inventory import SkillInventory
 
 ROOT = REPO_ROOT
-SKILLS_DIR = ROOT / ".claude" / "skills"
+SKILL_INVENTORY = SkillInventory(ROOT)
 
 # --- 1 段目: CLI → 課金 API 分類（実装の execute() / クライアント呼び出しを根拠に判定） ---
 
@@ -203,7 +204,7 @@ def _registered_clis() -> set[str]:
 
 
 def _skill_dirs() -> list[Path]:
-    return sorted(d for d in SKILLS_DIR.iterdir() if (d / "SKILL.md").is_file())
+    return [directory for directory in SKILL_INVENTORY.skill_directories() if (directory / "SKILL.md").is_file()]
 
 
 def _referenced_clis(skill_dir: Path, registered: set[str]) -> set[str]:
@@ -285,12 +286,11 @@ def test_target_set_matches_mechanical_extraction() -> None:
 @pytest.mark.parametrize("skill", sorted(TARGET_SKILLS))
 def test_target_skill_documents_estimated_api_calls(skill: str) -> None:
     """対象 skill の SKILL.md に「想定 API call 数」の見積もり契約が記載されている。"""
-    skill_md = SKILLS_DIR / skill / "SKILL.md"
+    skill_md = SKILL_INVENTORY.skill_directory(skill) / "SKILL.md"
     text = skill_md.read_text(encoding="utf-8")
 
     assert _SECTION_HEADING in text, f"{skill}/SKILL.md に `{_SECTION_HEADING}` セクションがありません"
-    section = text.split(_SECTION_HEADING, 1)[1]
-    section = re.split(r"^## ", section, maxsplit=1, flags=re.MULTILINE)[0]
+    section = SKILL_INVENTORY.section(skill, _SECTION_HEADING)
 
     assert _TABLE_HEADER in section, (
         f"{skill}/SKILL.md の想定 API call 数セクションに判定表 `{_TABLE_HEADER}` がありません"

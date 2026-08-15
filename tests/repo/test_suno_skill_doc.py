@@ -18,17 +18,19 @@ import re
 from pathlib import Path
 
 from tests.helpers.paths import REPO_ROOT
+from youtube_automation.domains.skills.inventory import SkillInventory
 
 # リポジトリルート (tests/ の親)
 _REPO_ROOT = REPO_ROOT
-SKILL_MD = _REPO_ROOT / ".claude" / "skills" / "suno" / "SKILL.md"
-SUNO_HELPER_SKILL_MD = _REPO_ROOT / ".claude" / "skills" / "suno-helper" / "SKILL.md"
+_SKILL_INVENTORY = SkillInventory(_REPO_ROOT)
+SKILL_MD = _SKILL_INVENTORY.skill_directory("suno") / "SKILL.md"
+SUNO_HELPER_SKILL_MD = _SKILL_INVENTORY.skill_directory("suno-helper") / "SKILL.md"
 SUNO_HELPER_README_MD = _REPO_ROOT / "extensions" / "suno-helper" / "README.md"
-WF_NEW_SKILL_MD = _REPO_ROOT / ".claude" / "skills" / "wf-new" / "SKILL.md"
-WF_AUTO_SKILL_MD = _REPO_ROOT / ".claude" / "skills" / "wf-auto" / "SKILL.md"
+WF_NEW_SKILL_MD = _SKILL_INVENTORY.skill_directory("wf-new") / "SKILL.md"
+WF_AUTO_SKILL_MD = _SKILL_INVENTORY.skill_directory("wf-auto") / "SKILL.md"
 SUNO_HELPER_PHASE_CONSTANTS_TS = _REPO_ROOT / "extensions" / "shared" / "constants.ts"
-SUNO_LYRIC_SKILL_MD = _REPO_ROOT / ".claude" / "skills" / "suno-lyric" / "SKILL.md"
-REVIEW_RUBRIC_MD = _REPO_ROOT / ".claude" / "skills" / "suno-lyric" / "references" / "review-rubric.md"
+SUNO_LYRIC_SKILL_MD = _SKILL_INVENTORY.skill_directory("suno-lyric") / "SKILL.md"
+REVIEW_RUBRIC_MD = _SKILL_INVENTORY.resolve_reference("suno-lyric", "references/review-rubric.md")
 
 
 def _read(path: Path = SKILL_MD) -> str:
