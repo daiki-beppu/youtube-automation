@@ -16,7 +16,7 @@ def test_generation_and_audit_skills_consume_creative_constraints_non_blocking()
         text = (ROOT / ".claude" / "skills" / skill / "SKILL.md").read_text(encoding="utf-8")
 
         assert "`前工程`" in text
-        assert "/creative-constraints" in text
+        assert "/channel-strategy --constraints" in text
         assert "CHANNEL_DIR/docs/channel/creative-constraints.md" in text
         assert "存在しなければ従来フローのまま続行" in text
         assert "不在だけを理由に" in text

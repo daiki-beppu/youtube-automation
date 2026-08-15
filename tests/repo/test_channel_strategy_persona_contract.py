@@ -1,4 +1,4 @@
-"""Executable contracts for ``/channel-strategy`` modes (#3820, #3821)."""
+"""Executable contracts for ``/channel-strategy`` modes (#3820-#3822)."""
 
 from __future__ import annotations
 
@@ -14,6 +14,7 @@ SKILL_DIR = ROOT / ".claude" / "skills" / "channel-strategy"
 SKILL = SKILL_DIR / "SKILL.md"
 PERSONA = SKILL_DIR / "references" / "persona.md"
 SCENE = SKILL_DIR / "references" / "scene.md"
+CONSTRAINTS = SKILL_DIR / "references" / "constraints.md"
 MANIFEST = SKILL_DIR / "references" / "channel-strategy-chain-manifest.json"
 STATE = SKILL_DIR / "references" / "channel-strategy-chain-state.py"
 INVENTORY = SkillInventory(ROOT)
@@ -36,17 +37,19 @@ def _touch(root: Path, relative: str) -> None:
     path.write_text("# artifact\n", encoding="utf-8")
 
 
-def test_channel_strategy_distributes_persona_and_scene_as_the_canonical_owner() -> None:
+def test_channel_strategy_distributes_all_registered_modes_as_the_canonical_owner() -> None:
     names = {path.name for path in INVENTORY.skill_directories()}
 
     assert "channel-strategy" in names
     assert "audience-persona-design" not in names
     assert "viewing-scene" not in names
+    assert "creative-constraints" not in names
     assert PERSONA.is_file()
     assert SCENE.is_file()
+    assert CONSTRAINTS.is_file()
 
 
-def test_channel_strategy_registers_persona_and_scene_and_reserves_later_modes() -> None:
+def test_channel_strategy_registers_three_modes_and_reserves_direction() -> None:
     text = SKILL.read_text(encoding="utf-8")
     frontmatter = INVENTORY.frontmatter("channel-strategy")
     mode_table = text.split("| mode | 読む reference |", 1)[1].split("## 共通前提", 1)[0]
@@ -55,11 +58,11 @@ def test_channel_strategy_registers_persona_and_scene_and_reserves_later_modes()
     assert frontmatter["name"] == "channel-strategy"
     assert frontmatter["purpose"] == "決める"
     assert "--persona" in frontmatter["description"]
-    assert modes == ["`--persona`", "`--scene`"]
-    assert all(flag in text for flag in ("--constraints", "--direction"))
+    assert modes == ["`--persona`", "`--scene`", "`--constraints`"]
+    assert "--direction" in text
 
 
-def test_channel_strategy_manifest_orders_persona_before_scene() -> None:
+def test_channel_strategy_manifest_orders_persona_scene_constraints() -> None:
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
 
     assert manifest == {
@@ -77,6 +80,16 @@ def test_channel_strategy_manifest_orders_persona_before_scene() -> None:
                 "skill": "channel-strategy",
                 "prerequisiteArtifacts": ["docs/channel/personas/persona-definition.md"],
                 "outputArtifacts": ["docs/plans/viewing-scene-matrix.md"],
+                "idempotency": {"script": "references/channel-strategy-chain-state.py"},
+            },
+            {
+                "id": "constraints",
+                "skill": "channel-strategy",
+                "prerequisiteArtifacts": [
+                    "docs/channel/personas/persona-definition.md",
+                    "docs/plans/viewing-scene-matrix.md",
+                ],
+                "outputArtifacts": ["docs/channel/creative-constraints.md"],
                 "idempotency": {"script": "references/channel-strategy-chain-state.py"},
             },
         ],
@@ -135,3 +148,35 @@ def test_scene_state_runs_then_skips_after_output_exists(tmp_path: Path) -> None
     assert exit_code == 0
     assert result["decision"] == "skip"
     assert result["reason"] == "scene_complete"
+
+
+def test_constraints_state_blocks_until_persona_and_scene_exist(tmp_path: Path) -> None:
+    exit_code, result = _run_state(tmp_path, "constraints")
+    assert exit_code == 20
+    assert result["reason"] == "constraints_prerequisites_missing"
+    assert result["missing"] == [
+        "docs/channel/personas/persona-definition.md",
+        "docs/plans/viewing-scene-matrix.md",
+    ]
+    assert result["next"] == "channel-strategy --persona"
+
+    _touch(tmp_path, "docs/channel/personas/persona-definition.md")
+    exit_code, result = _run_state(tmp_path, "constraints")
+    assert exit_code == 20
+    assert result["missing"] == ["docs/plans/viewing-scene-matrix.md"]
+    assert result["next"] == "channel-strategy --scene"
+
+
+def test_constraints_state_runs_then_skips_after_output_exists(tmp_path: Path) -> None:
+    _touch(tmp_path, "docs/channel/personas/persona-definition.md")
+    _touch(tmp_path, "docs/plans/viewing-scene-matrix.md")
+    exit_code, result = _run_state(tmp_path, "constraints")
+    assert exit_code == 10
+    assert result["decision"] == "run"
+    assert result["reason"] == "constraints_missing"
+
+    _touch(tmp_path, "docs/channel/creative-constraints.md")
+    exit_code, result = _run_state(tmp_path, "constraints")
+    assert exit_code == 0
+    assert result["decision"] == "skip"
+    assert result["reason"] == "constraints_complete"

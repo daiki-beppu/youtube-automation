@@ -415,7 +415,10 @@ def test_channel_new_docs_distinguish_required_initial_persona_from_optional_rea
     features = _read("docs/features.md")
     onboarding = _read("ONBOARDING.md")
 
-    assert "/channel-research --voice` → `/channel-strategy --persona` → `/channel-strategy --scene`" in features
+    assert (
+        "/channel-research --voice` → `/channel-strategy --persona` → `/channel-strategy --scene` → "
+        "`/channel-strategy --constraints`"
+    ) in features
     assert "`/channel-research --voice` は公開後の再分析では任意" in features
     assert "公開前のペルソナチェーンは既存の競合 / TTP / viewer-voice 成果物を入力に完走" in features
     assert "公開後の `/channel-strategy --scene` は従来どおり Analytics report を要求する" in features
@@ -943,7 +946,7 @@ def test_channel_new_followup_skill_routing_uses_new_contract() -> None:
     assert "新規チャンネル開設 → 競合発掘 → 方向性決定 → セットアップ" not in features
     assert (
         "`/setup` → `/channel-new`（`/channel-research --voice` → `/channel-strategy --persona` → "
-        "`/channel-strategy --scene` を含む）→ `/wf-new`"
+        "`/channel-strategy --scene` → `/channel-strategy --constraints` を含む）→ `/wf-new`"
     ) in features
 
 

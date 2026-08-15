@@ -18,6 +18,18 @@
       "idempotency": {
         "script": "references/channel-strategy-chain-state.py"
       }
+    },
+    {
+      "id": "constraints",
+      "skill": "channel-strategy",
+      "prerequisiteArtifacts": [
+        "docs/channel/personas/persona-definition.md",
+        "docs/plans/viewing-scene-matrix.md"
+      ],
+      "outputArtifacts": ["docs/channel/creative-constraints.md"],
+      "idempotency": {
+        "script": "references/channel-strategy-chain-state.py"
+      }
     }
   ]
 }

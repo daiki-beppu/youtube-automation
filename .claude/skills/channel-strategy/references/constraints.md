@@ -1,12 +1,6 @@
----
-name: creative-constraints
-purpose: 決める
-description: "Use when ペルソナと視聴シーンを、音・映像・サムネ・タイトル・測定の機械検証可能なチャンネル制約へ翻訳するとき。「制作制約」「creative constraints」「制約リスト」で発動。動画・コレクション単位のムード整合監査は /alignment-check を使う"
----
-
 ## 前後工程
 
-- `前工程`: `/channel-strategy --persona`
+- `前工程`: `/channel-strategy --persona`, `/channel-strategy --scene`
 - `後工程`: `なし`
 - `委譲先`: `なし`
 
