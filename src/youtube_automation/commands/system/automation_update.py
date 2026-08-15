@@ -191,7 +191,16 @@ def _channel_roots(root: Path) -> list[Path]:
 
 
 def _check_single_channel_config(channel_root: Path) -> str:
-    cmd = ["uv", "run", "yt-doctor", "--json", "--target", str(channel_root)]
+    cmd = [
+        "uv",
+        "run",
+        "yt-doctor",
+        "--check",
+        "channel_config",
+        "--json",
+        "--target",
+        str(channel_root),
+    ]
     try:
         proc = subprocess.run(
             cmd,

@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from youtube_automation.commands.system import doctor
 
 EXPECTED_CHECK_IDS = (
@@ -57,6 +59,53 @@ def test_json_should_expose_all_check_ids_and_check_shape(monkeypatch, tmp_path:
 
     streaming_check = next(check for check in payload["checks"] if check["id"] == "streaming_vps_state")
     assert streaming_check["data"]["reason"] == "streaming_terraform_module_missing"
+
+
+def test_check_filter_runs_repeated_ids_in_registry_order_and_scopes_summary(
+    monkeypatch,
+    tmp_path: Path,
+    capsys,
+) -> None:
+    def definition(check_id: str, status: str) -> doctor.CheckDefinition:
+        return doctor.CheckDefinition(
+            id=check_id,
+            category=doctor.DATA_CATEGORY,
+            run=lambda _channel_dir: doctor.CheckResult(id=check_id, status=status, message=check_id),
+            apply_kind=doctor.ApplyKind.NONE,
+            cwd_semantics=doctor.CwdSemantics.CHANNEL,
+        )
+
+    monkeypatch.setattr(
+        doctor,
+        "CHECK_REGISTRY",
+        (definition("alpha", "warn"), definition("beta", "ok"), definition("gamma", "fail")),
+    )
+
+    code = doctor.main(["--check", "gamma", "--check", "alpha", "--json", "--target", str(tmp_path)])
+
+    assert code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert [check["id"] for check in payload["checks"]] == ["alpha", "gamma"]
+    assert payload["summary"] == {
+        "ok": 0,
+        "info": 0,
+        "warn": 1,
+        "fail": 1,
+        "unknown": 0,
+        "next_check_id": "alpha",
+    }
+    assert all(
+        set(check) == {"id", "status", "message", "category", "next_action", "data"} for check in payload["checks"]
+    )
+
+
+def test_check_filter_rejects_ids_outside_registry(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(doctor, "CHECK_REGISTRY", ())
+
+    with pytest.raises(SystemExit) as error:
+        doctor.main(["--check", "missing", "--json", "--target", str(tmp_path)])
+
+    assert error.value.code != 0
 
 
 def test_json_should_keep_internal_action_fields_out_of_public_contract(

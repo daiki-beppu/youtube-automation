@@ -1131,7 +1131,16 @@ def test_apply_channel_config_check_uses_target_even_when_channel_dir_differs(
     monkeypatch.setattr(automation_update, "_skills_diff_has_changes", lambda root: False)
 
     def _doctor(cmd: list[str], **kwargs):
-        assert cmd == ["uv", "run", "yt-doctor", "--json", "--target", str(repo)]
+        assert cmd == [
+            "uv",
+            "run",
+            "yt-doctor",
+            "--check",
+            "channel_config",
+            "--json",
+            "--target",
+            str(repo),
+        ]
         assert kwargs["cwd"] == repo
         payload = {"checks": [{"id": "channel_config", "status": "ok", "message": "config/channel/ ロード成功"}]}
         return automation_update.subprocess.CompletedProcess(cmd, 0, json.dumps(payload), "")
@@ -1176,7 +1185,16 @@ def test_channel_config_check_fails_when_workspace_has_no_channel_config(
     repo.mkdir()
 
     def _doctor(cmd: list[str], **kwargs):
-        assert cmd == ["uv", "run", "yt-doctor", "--json", "--target", str(repo)]
+        assert cmd == [
+            "uv",
+            "run",
+            "yt-doctor",
+            "--check",
+            "channel_config",
+            "--json",
+            "--target",
+            str(repo),
+        ]
         assert kwargs["cwd"] == repo
         payload = {
             "checks": [
@@ -1209,7 +1227,16 @@ def test_apply_returns_nonzero_when_target_channel_config_is_invalid(
     monkeypatch.setattr(automation_update, "_skills_diff_has_changes", lambda root: False)
 
     def _doctor(cmd: list[str], **kwargs):
-        assert cmd == ["uv", "run", "yt-doctor", "--json", "--target", str(repo)]
+        assert cmd == [
+            "uv",
+            "run",
+            "yt-doctor",
+            "--check",
+            "channel_config",
+            "--json",
+            "--target",
+            str(repo),
+        ]
         payload = {
             "checks": [
                 {
