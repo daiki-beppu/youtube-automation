@@ -3,7 +3,7 @@
 
 - `前工程`: `/wf-new`
 - `後工程`: `/post-publish`, `/analytics`
-- `委譲先`: `/wf-new`, `/music --generate`, `/music --generate`, `/masterup`, `/wf-next`, `/post-publish`
+- `委譲先`: `/wf-new`, `/music --generate`, `/music --generate`, `/music --master`, `/wf-next`, `/post-publish`
 
 ## 成果物
 
@@ -12,7 +12,7 @@
 
 ## Overview
 
-`workflow-state.json` と実成果物を毎段再評価し、新規企画または active collection の未完了地点から公開後処理まで継続する正規入口。判断・lease・履歴は `references/wf-auto-state.py` を使い、実作業は同一 SKILL.md の通常入口、`/music --generate`、`/music --generate`、`/masterup`、`/wf-next`、`/post-publish` に委譲する。子 skill の処理は本文へ複製しない。`thumbnail::textless.enabled` も独自解釈せず、通常入口と `/wf-next` の契約をそのまま貫通させる。
+`workflow-state.json` と実成果物を毎段再評価し、新規企画または active collection の未完了地点から公開後処理まで継続する正規入口。判断・lease・履歴は `references/wf-auto-state.py` を使い、実作業は同一 SKILL.md の通常入口、`/music --generate`、`/music --generate`、`/music --master`、`/wf-next`、`/post-publish` に委譲する。子 skill の処理は本文へ複製しない。`thumbnail::textless.enabled` も独自解釈せず、通常入口と `/wf-next` の契約をそのまま貫通させる。
 
 ## Hard Gates
 
@@ -67,7 +67,7 @@ uv run python "$STATE_SCRIPT" release --channel-dir . --token <token>
 | `wf-new` | 同一 SKILL.md の通常入口。不在時は新規開始、固定済み planning では未完了工程から再開 |
 | `lyria` | `/music --generate` |
 | `suno-helper` | `/music --generate` の browser use 主導フロー。人間への handoff は login / CAPTCHA の該当操作だけ |
-| `masterup` | strict Suno 成果物を入力に `/masterup` |
+| `masterup` | strict Suno 成果物を入力に `/music --master` |
 | `wf-next-local` | `/wf-next` のローカル動画・metadata 生成まで。YouTube write は行わない |
 | `wf-next` | `/wf-next`。config が許可した場合だけ upload を含める |
 | `post-publish` | `/post-publish`。history により完了 step を skip |

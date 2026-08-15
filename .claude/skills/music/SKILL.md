@@ -1,13 +1,13 @@
 ---
 name: music
 purpose: 作る
-description: "Use when 音楽制作を状態判定付きで一括実行または一段だけ実行するとき。Suno UI 投入用の Style / プロンプト生成は --prompt、ボーカル曲の歌詞生成は --lyric、music_engine に応じた Suno / Lyria 音源生成は --generate を使う。「音楽制作」「Suno プロンプト」「歌詞生成」「Suno 連続生成」「Lyria」「vocal」「rap」で発動。マスター化は後続 mode で統合予定"
+description: "Use when 音楽制作を状態判定付きで一括実行または一段だけ実行するとき。Suno UI 投入用の Style / プロンプト生成は --prompt、ボーカル曲の歌詞生成は --lyric、music_engine に応じた音源生成は --generate、Suno 音源の一括 DL とマスター化は --master を使う。「音楽制作」「Suno プロンプト」「歌詞生成」「Suno 連続生成」「Lyria」「マスター化」「vocal」「rap」で発動"
 ---
 
 ## 前後工程
 
 - `前工程`: `/channel-strategy --constraints`
-- `後工程`: `/masterup`, `/video --generate`
+- `後工程`: `/video --generate`
 - `委譲先`: `なし`
 
 ## 成果物
@@ -22,7 +22,7 @@ description: "Use when 音楽制作を状態判定付きで一括実行または
 - 2 個以上なら排他違反として停止し、1 つだけ指定するよう促す
 - 1 個なら対応する reference を読み、その一段だけを実行する。残りの引数はその mode の引数として扱う
 - 0 個なら chain manifest に従い状態判定付きで進める
-- 現段で実装済みの mode は `--prompt` / `--lyric` / `--generate`。`--master` は後続段で追加する予約名であり、現段では未知の mode として停止する
+- 現段で実装済みの mode は `--prompt` / `--lyric` / `--generate` / `--master`
 - mode は最大 5 件とし、判定規則を複製しない
 
 | mode | 読む reference |
@@ -30,6 +30,7 @@ description: "Use when 音楽制作を状態判定付きで一括実行または
 | `--prompt` | `references/prompt.md` |
 | `--lyric` | `references/lyric.md` |
 | `--generate` | `references/generate.md` |
+| `--master` | `references/master.md` |
 
 ## 共通前提
 
@@ -51,15 +52,17 @@ loader は `load_skill_config("music.prompt")` を使う。存在しない overr
 
 `--generate` は `music_engine` を先に一度だけ解決し、Suno なら `.claude/skills/music/config.default.yaml::generate.suno` と旧 `config/skills/suno-helper.yaml`、Lyria なら `::generate.lyria` と旧 `config/skills/lyria.yaml` を deep-merge する。互換入口 `load_skill_config("suno-helper")` / `load_skill_config("lyria")` を維持し、存在しない override は勝手に作成しない。
 
+`--master` も `music_engine` を先に一度だけ解決する。Lyria は `--generate` が `01-master/master.mp3` を直接生成するため完了済みとして skip する。Suno は `.claude/skills/music/config.default.yaml::master` と旧 `config/skills/masterup.json`（優先）または `config/skills/masterup.yaml` を deep-merge し、互換入口 `load_skill_config("masterup")` を維持する。
+
 Suno 経路の server lifecycle は `extension/references/serve.md` を直接読み、起動済み server の再利用を含む `--suno` 契約を実行する。`/extension` への委譲や手順の複製は行わない。
 
 ## 一括実行
 
-`references/music-chain-manifest.json` と `references/music-chain-state.py` を検証する。本段の chain は `prompt` → `lyric` → `generate` の 3 step で、後続段が `master` を追加する。Suno の instrumental collection では不要な `lyric` の blocked 判定を完了済みとして扱い、`generate` へ進む。Lyria は `music_engine` により `generate` へ直接分岐する。
+`references/music-chain-manifest.json` と `references/music-chain-state.py` を検証する。chain は `prompt` → `lyric` → `generate` → `master` の 4 step。Suno の instrumental collection では不要な `lyric` の blocked 判定を完了済みとして扱い、`generate` へ進む。Lyria は `music_engine` により `generate` へ直接分岐し、`master` は完了済みとして skip する。
 
 ```bash
 uv run python .claude/skills/music/references/music-chain-state.py \
-  --collection-path <collection-path> --step <prompt|lyric|generate>
+  --collection-path <collection-path> --step <prompt|lyric|generate|master>
 ```
 
 | exit | `decision` | 処理 |
@@ -73,10 +76,11 @@ uv run python .claude/skills/music/references/music-chain-state.py \
 
 ## 完了条件
 
-- フラグなし: `prompt`、必要な場合の `lyric`、`generate` が `skip` または実行後 `skip` になっている
+- フラグなし: `prompt`、必要な場合の `lyric`、`generate`、必要な場合の `master` が `skip` または実行後 `skip` になっている
 - `--prompt`: `references/prompt.md` の完了条件を満たし、他の mode を実行していない
 - `--lyric`: `references/lyric.md` の完了条件を満たし、他の mode を実行していない
 - `--generate`: `references/generate.md` の engine 別完了条件を満たし、他の mode を実行していない
+- `--master`: Suno は `references/master.md` の完了条件を満たし、Lyria は完了済みとして skip し、他の mode を実行していない
 
 実行段、skip 段、対象 collection、更新成果物を短く報告する。
 

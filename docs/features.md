@@ -40,8 +40,7 @@
 | Skill | なにができるか |
 |---|---|
 | /thumbnail | CTR 最適化サムネを生成。`--compare` で 320px 視認性検証、`--test` で Studio A/B テスト、`--iterate` で champion 還元、`--loop` で textless main から Veo / Omni ループ動画を生成 |
-| /music | `--prompt` で Suno Style、`--lyric` でボーカル曲の歌詞と構成メモ、`--generate` で engine に応じた Suno UI 連続生成または Lyria 3 長尺マスター生成を実行 |
-| /masterup | Suno で生成した楽曲を DL + クロスフェードマスター化 |
+| /music | `--prompt` で Suno Style、`--lyric` でボーカル曲の歌詞と構成メモ、`--generate` で engine に応じた Suno UI 連続生成または Lyria 3 長尺マスター生成、`--master` で Suno 音源の DL + クロスフェードマスター化を実行 |
 | /video | `--generate` でマスター音源 + 背景画像 / 動画から最終 MP4 を合成 |
 
 ## 公開・運用

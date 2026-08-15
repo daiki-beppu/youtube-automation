@@ -987,8 +987,8 @@ def test_project_scripts_registers_suno_select_tracks_entrypoint():
     )
 
 
-def test_masterup_skill_documents_under_min_confirmation_gate():
-    text = Path(".claude/skills/masterup/SKILL.md").read_text(encoding="utf-8")
+def test_music_master_documents_under_min_confirmation_gate():
+    text = Path(".claude/skills/music/references/master.md").read_text(encoding="utf-8")
 
     assert "uv run yt-suno-select-tracks --dry-run <collection-path>" in text
     assert "[dropped_under_min]" in text

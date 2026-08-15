@@ -1,6 +1,6 @@
 """Suno playlist の曲名と suno-prompts.json entry title/name の突合検証.
 
-/masterup の前段ゲート。playlist に別コレクションの曲が混入したまま
+/music --master の前段ゲート。playlist に別コレクションの曲が混入したまま
 master 化される事故（前コレクション曲の紛れ込み・最新セット未完）を
 fail-loud で検出する。
 
@@ -139,7 +139,7 @@ def format_verification_report(result: PlaylistVerificationResult) -> str:
     if result.ok:
         lines.append("  → OK")
     else:
-        lines.append("  → NG: playlist を修正（混入除外 / 追補生成）してから /masterup を再実行してください")
+        lines.append("  → NG: playlist を修正（混入除外 / 追補生成）してから /music --master を再実行してください")
     return "\n".join(lines)
 
 

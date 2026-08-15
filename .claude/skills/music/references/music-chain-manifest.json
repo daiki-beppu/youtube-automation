@@ -57,6 +57,23 @@
       "idempotency": {
         "script": "references/music-chain-state.py"
       }
+    },
+    {
+      "id": "master",
+      "skill": "music",
+      "prerequisiteArtifacts": [
+        "02-Individual-music/"
+      ],
+      "outputArtifacts": [
+        "01-master/master.mp3"
+      ],
+      "approvalGate": {
+        "skip": false,
+        "configPath": "workflow.music.skip_approvals.master"
+      },
+      "idempotency": {
+        "script": "references/music-chain-state.py"
+      }
     }
   ]
 }

@@ -7,7 +7,7 @@ Suno の公式 API ではなく UI の HTML と CDN URL パターンに依存し
 
 > **注**: suno-helper の一括ダウンロード機能により、以下の WebFetch / CDN 依存は fallback 経路に格下げされた。通常運用では suno-helper が DL を完了するため、本セクションの脆弱性は fallback 使用時にのみ該当する。
 
-本スキルの fallback 経路は **Suno の公式 API ではなく**、UI でレンダリングされる HTML（WebFetch）と CDN URL パターン（`https://cdn1.suno.ai/{song_id}.mp3`）への curl アクセスという **非公式・非サポートな経路** に依存している。Suno 側の UI / CDN 仕様は事前告知なく変更されうるため、ある日突然 `/masterup` の Step 2 / Step 3 が壊れる可能性があることを前提に運用すること。
+本スキルの fallback 経路は **Suno の公式 API ではなく**、UI でレンダリングされる HTML（WebFetch）と CDN URL パターン（`https://cdn1.suno.ai/{song_id}.mp3`）への curl アクセスという **非公式・非サポートな経路** に依存している。Suno 側の UI / CDN 仕様は事前告知なく変更されうるため、ある日突然 `/music --master` の Step 2 / Step 3 が壊れる可能性があることを前提に運用すること。
 
 ### どこが壊れうるか
 
@@ -25,15 +25,15 @@ Suno の公式 API ではなく UI の HTML と CDN URL パターンに依存し
 
 ### フォールバック運用（手動ダウンロード → `uv run yt-generate-master` 直叩き）
 
-`/masterup` の Step 1 / Step 5 / Step 5.5 / Step 6 / 完了時の更新は MP3 が `02-Individual-music/` に揃っていれば成立するため、Step 2 / Step 3 を **手動で代替**することで運用継続できる:
+`/music --master` の Step 1 / Step 5 / Step 5.5 / Step 6 / 完了時の更新は MP3 が `02-Individual-music/` に揃っていれば成立するため、Step 2 / Step 3 を **手動で代替**することで運用継続できる:
 
 1. Suno UI から曲を 1 つずつ MP3 ダウンロード（公式に提供されている UI 経路。サブスク権利範囲内）
 2. アクティブコレクションの `02-Individual-music/` に配置し、ファイル名を連番 + タイトルで揃える（例: `01-pattern-a-arrival.mp3`）
 3. `uv run yt-generate-master`（または `--target-duration` / `--shuffle` などのオプション付き）を **直接実行**
 4. 必要に応じて `uv run yt-finalize-master`（雨音レイヤー）→ Step 6 の `rsync` 同期を **手動で順番に実行**
-5. `uv run yt-raw-master-check <コレクションディレクトリ> --apply` で `workflow-state.json` の `assets.raw_master` / `updated_at` を更新する（手動編集は不要。更新し忘れても次回の `/masterup` / `/wf-status` 起動時に Step 1.4 の突合チェックが不整合を検知・警告する）
+5. `uv run yt-raw-master-check <コレクションディレクトリ> --apply` で `workflow-state.json` の `assets.raw_master` / `updated_at` を更新する（手動編集は不要。更新し忘れても次回の `/music --master` / `/wf-status` 起動時に Step 1.4 の突合チェックが不整合を検知・警告する）
 
-このフォールバックは **`/masterup` が壊れていても master.mp3 を生成できる最小経路**であり、Suno 公式 API 公開までの暫定運用として機能する。
+このフォールバックは **`/music --master` が壊れていても master.mp3 を生成できる最小経路**であり、Suno 公式 API 公開までの暫定運用として機能する。
 
 ### Suno 公式 API 公開時の移行プラン（将来案 / 現行手順ではない）
 
@@ -41,7 +41,7 @@ Suno の公式 API ではなく UI の HTML と CDN URL パターンに依存し
 
 1. **新規 `yt-suno-fetch` CLI を追加**（`scripts/` 配下、`yt-*` プレフィックス踏襲、`pyproject.toml::[project.scripts]` 登録）。公式 API クライアントを実装し、認証情報は `auth/suno_token.json` 等の独立ファイル + `infrastructure/secrets.py::_SECRET_REFS` 経由で解決する。
 2. **本 SKILL.md の Step 2 / Step 3 を書き換え**、WebFetch + CDN curl の経路を `yt-suno-fetch` 呼び出しに置換する。skill-config の `suno_download.cdn_url_template` は deprecated として `config.default.yaml` に deprecation note を残し、しばらくは「API 障害時の緊急 fallback」として併存させる。
-3. **非公式経路は別 skill `/masterup-legacy` へ退避**するか、もしくは本 SKILL.md 内で `mode: "official" | "legacy"` を切替可能にする（移行期間中の保険）。
+3. **非公式経路は専用 legacy mode へ退避**するか、もしくは本 reference 内で `mode: "official" | "legacy"` を切替可能にする（移行期間中の保険）。
 4. 公式 API が安定し下流チャンネル全てが移行完了したら非公式経路を削除し、`suno_download.cdn_url_template` を skill-config からも除去する（破壊的変更として major version bump）。
 
 移行作業は本 issue とは別 issue で扱う。Suno が公式 API 公開を発表した時点で本セクションのリンクとして issue を起票すること。

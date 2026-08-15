@@ -703,21 +703,21 @@
     },
     {
       "old_owner": "legacy..claude.skills.masterup.SKILL.md",
-      "exact_new_owner": ".claude/skills/masterup/SKILL.md",
+      "exact_new_owner": ".claude/skills/music/references/master.md",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"
     },
     {
       "old_owner": "legacy..claude.skills.masterup.references.check_loudness_deviation",
-      "exact_new_owner": ".claude/skills/masterup/references/check_loudness_deviation.py",
+      "exact_new_owner": ".claude/skills/music/references/check_loudness_deviation.py",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"
     },
     {
       "old_owner": "legacy..claude.skills.masterup.references.suno-fallback.md",
-      "exact_new_owner": ".claude/skills/masterup/references/suno-fallback.md",
+      "exact_new_owner": ".claude/skills/music/references/suno-fallback.md",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"

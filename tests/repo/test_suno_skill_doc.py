@@ -327,7 +327,7 @@ def test_suno_helper_documents_partial_finished_operator_contract() -> None:
         "`planning.music.missing_reasons`",
         "`suno_unfulfilled + apply_skipped = missing_file_count`",
         "strict 完了ではない",
-        "`/masterup` へ進めない",
+        "`/music --master` へ進めない",
     ):
         assert token in completion_section, f"Step 6 に部分配置の照合契約がない（`{token}` 不在）"
 

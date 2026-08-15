@@ -99,7 +99,7 @@
 | collection-ideate | `config/skills/collection-ideate.yaml` |
 | benchmark | `config/skills/benchmark.yaml` |
 | video-description | `config/skills/video-description.yaml` |
-| masterup（`audio.crossfade_duration` 等） | `config/skills/masterup.yaml` |
+| music --master（`audio.crossfade_duration` 等。旧 override） | `config/skills/masterup.yaml` |
 | loop-video（Veo 3.1 ループ生成） | `config/skills/loop-video.yaml` |
 
 ### channel-direction.md の決定を必ず転記する skill-config（issue #567）

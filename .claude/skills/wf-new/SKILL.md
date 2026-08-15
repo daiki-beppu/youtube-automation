@@ -8,7 +8,7 @@ description: "Use when 新規コレクション制作を立ち上げるとき、
 
 - `前工程`: `/setup --channel`, `/setup`
 - `後工程`: `/wf-next`, `/music --generate`, `/post-publish`, `/analytics`
-- `委譲先`: `/analytics`, `/thumbnail`, `/music --prompt`, `/music --generate`, `/thumbnail --loop`, `/music --generate`, `/masterup`, `/wf-next`, `/post-publish`
+- `委譲先`: `/analytics`, `/thumbnail`, `/music --prompt`, `/music --generate`, `/thumbnail --loop`, `/music --generate`, `/music --master`, `/wf-next`, `/post-publish`
 
 ## 成果物
 

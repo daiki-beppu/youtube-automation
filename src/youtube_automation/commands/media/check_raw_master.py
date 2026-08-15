@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """workflow-state.json::assets.raw_master と 01-master/ 実ファイルの整合チェック。
 
-`/masterup` のフォールバック運用（Suno 手動 DL → `yt-generate-master` 直接実行）では
+`/music --master` のフォールバック運用（Suno 手動 DL → `yt-generate-master` 直接実行）では
 `01-master/master.mp3` は生成されるが `assets.raw_master` は自動更新されない。
 本 CLI は記録値と実ファイルを突合し、不整合を検知・警告する（#1668）。
 
