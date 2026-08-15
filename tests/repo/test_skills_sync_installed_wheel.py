@@ -156,6 +156,15 @@ wheel_inventory = SkillInventory(wheel_skills_root)
 assert wheel_inventory.skills_root == wheel_skills_root
 assert "setup" in {path.name for path in wheel_inventory.skill_directories()}
 
+schema_registry = importlib.import_module("youtube_automation.domains.documents.schema_registry")
+schema_registry.compile_repository_schemas()
+assert set(schema_registry.repository_schema_names()) == {
+    "experiment-entry.schema.json",
+    "feedback-entry.schema.json",
+    "insights-entry.schema.json",
+    "weekly_vote_log.schema.json",
+}
+
 legacy_modules = (
     "youtube_automation.infrastructure.errors",
     "youtube_automation.utils.skill_config",

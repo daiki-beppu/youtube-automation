@@ -1,5 +1,5 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://github.com/daiki-beppu/youtube-automation/schemas/feedback-entry.schema.json",
   "title": "Feedback log entry",
   "type": "object",

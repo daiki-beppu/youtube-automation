@@ -21,6 +21,9 @@ import sys
 from datetime import date
 from pathlib import Path
 
+from youtube_automation.core.errors import DocumentValidationError
+from youtube_automation.domains.documents.schema_registry import RepositorySchema, validate_repository_document
+
 _SCHEMA_PATH = Path(__file__).resolve().parent / "insights-entry.schema.json"
 
 
@@ -54,6 +57,12 @@ def _validate_value(name: str, value: object, prop_schema: dict) -> list[str]:
 
 
 def validate_entry(entry: object, schema: dict) -> list[str]:
+    schema_error: DocumentValidationError | None = None
+    try:
+        validate_repository_document(RepositorySchema.INSIGHTS_ENTRY, entry)
+    except DocumentValidationError as error:
+        schema_error = error
+
     if not isinstance(entry, dict):
         return ["エントリは JSON object にしてください"]
 
@@ -81,7 +90,9 @@ def validate_entry(entry: object, schema: dict) -> list[str]:
         except ValueError:
             errors.append("date: 実在する日付にしてください")
 
-    return errors
+    if errors:
+        return errors
+    return [str(schema_error)] if schema_error is not None else []
 
 
 def main(argv: list[str]) -> int:
