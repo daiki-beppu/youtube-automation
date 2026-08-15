@@ -228,22 +228,15 @@ def test_should_mark_post_publish_and_analysis_from_channel_artifacts(
         },
     )
     assert collection.is_dir()
-    (tmp_path / "post_publish_history.json").write_text(
-        json.dumps(
-            {
-                "schema_version": 1,
-                "videos": {
-                    "video-123": {
-                        "completed": {
-                            "community-post": "2026-07-20T00:00:00+00:00",
-                            "pinned-comment": "2026-07-20T00:01:00+00:00",
-                            "metadata-audit": "2026-07-20T00:02:00+00:00",
-                        }
-                    }
-                },
-            }
-        ),
-        encoding="utf-8",
+    (collection / "20-documentation").mkdir()
+    (collection / "20-documentation" / "community-post.txt").write_text("published", encoding="utf-8")
+    config_dir = tmp_path / "config" / "channel"
+    config_dir.mkdir(parents=True)
+    (config_dir / "pinned-comment.json").write_text(
+        json.dumps({"pinned_comment": {"history_file": "pinned_comment_history.json"}}), encoding="utf-8"
+    )
+    (tmp_path / "pinned_comment_history.json").write_text(
+        json.dumps({"schema_version": 1, "posted": {"video-123": {"posted_at": "done"}}}), encoding="utf-8"
     )
     reports = tmp_path / "reports"
     reports.mkdir()
@@ -265,7 +258,7 @@ def test_should_not_complete_post_publish_for_other_video_or_analysis_before_pub
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    _write_collection(
+    collection = _write_collection(
         tmp_path,
         "live",
         "published",
@@ -275,27 +268,15 @@ def test_should_not_complete_post_publish_for_other_video_or_analysis_before_pub
             "upload": {"video_id": "target-video", "publish_at": "2026-07-20T12:00:00+09:00"},
         },
     )
-    (tmp_path / "post_publish_history.json").write_text(
-        json.dumps(
-            {
-                "videos": {
-                    "other-video": {
-                        "completed": {
-                            "community-post": "done",
-                            "pinned-comment": "done",
-                            "metadata-audit": "done",
-                        }
-                    },
-                    "target-video": {
-                        "completed": {
-                            "community-post": "done",
-                            "pinned-comment": "done",
-                        }
-                    },
-                }
-            }
-        ),
-        encoding="utf-8",
+    (collection / "20-documentation").mkdir()
+    (collection / "20-documentation" / "community-post.txt").write_text("published", encoding="utf-8")
+    config_dir = tmp_path / "config" / "channel"
+    config_dir.mkdir(parents=True)
+    (config_dir / "pinned-comment.json").write_text(
+        json.dumps({"pinned_comment": {"history_file": "pinned_comment_history.json"}}), encoding="utf-8"
+    )
+    (tmp_path / "pinned_comment_history.json").write_text(
+        json.dumps({"schema_version": 1, "posted": {"other-video": {"posted_at": "done"}}}), encoding="utf-8"
     )
     reports = tmp_path / "reports"
     reports.mkdir()

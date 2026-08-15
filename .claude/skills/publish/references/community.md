@@ -2,7 +2,7 @@
 
 ## 前後工程
 
-- `前工程`: `/publish --upload`, `/post-publish`
+- `前工程`: `/publish --upload`, `/publish`
 - `後工程`: `なし`
 - `委譲先`: `なし`
 
@@ -24,7 +24,7 @@
 
 ## チェーンからの呼出
 
-`/post-publish <collection>` から呼ばれた場合も Step 1〜6 と完了条件は同じで、単独発動を無効化しない。チェーンへ完了を返すのは Step 6 到達後だけとし、失敗時は履歴更新を行わせない。
+フラグなし `/publish <collection>` から呼ばれた場合も Step 1〜6 と完了条件は同じで、単独発動を無効化しない。チェーンへ完了を返すのは Step 6 到達後だけとし、失敗時は出力成果物を完了扱いにしない。
 
 ## 設定読み込みゲート
 
@@ -194,7 +194,7 @@ open "$STUDIO_URL"
 
 ## Cross References
 
-- `/publish --upload` — アップロード完了後、設定済みなら `/post-publish`、未設定なら本スキルを案内する
-- `/post-publish` — 公開後チェーンから対象 collection を引き継いで本スキルを呼び出す
+- `/publish --upload` — アップロード完了後、設定済みなら `/publish`、未設定なら本スキルを案内する
+- `/publish` — 統合チェーンから対象 collection を引き継いで本 mode を呼び出す
 - `/publish --playlist` — プレイリスト assign は別経路
 - `/publish --community --batch` — config テンプレートから JSON 投稿バッチを生成

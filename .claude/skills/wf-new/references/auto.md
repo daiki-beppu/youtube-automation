@@ -2,17 +2,17 @@
 ## 前後工程
 
 - `前工程`: `/wf-new`
-- `後工程`: `/post-publish`, `/analytics`
-- `委譲先`: `/wf-new`, `/music --generate`, `/music --generate`, `/music --master`, `/wf-next`, `/post-publish`
+- `後工程`: `/publish`, `/analytics`
+- `委譲先`: `/wf-new`, `/music --generate`, `/music --generate`, `/music --master`, `/wf-next`, `/publish`
 
 ## 成果物
 
 - `書き込む`: `.automation-run/history.json`
-- `読み込む`: `collections/<id>/workflow-state.json`, `collections/<id>/20-documentation/post_publish_history.json`
+- `読み込む`: `collections/<id>/workflow-state.json`, `collections/<id>/20-documentation/community-post.txt`, `pinned_comment_history.json`
 
 ## Overview
 
-`workflow-state.json` と実成果物を毎段再評価し、新規企画または active collection の未完了地点から公開後処理まで継続する正規入口。判断・lease・履歴は `references/wf-auto-state.py` を使い、実作業は同一 SKILL.md の通常入口、`/music --generate`、`/music --generate`、`/music --master`、`/wf-next`、`/post-publish` に委譲する。子 skill の処理は本文へ複製しない。`thumbnail::textless.enabled` も独自解釈せず、通常入口と `/wf-next` の契約をそのまま貫通させる。
+`workflow-state.json` と実成果物を毎段再評価し、新規企画または active collection の未完了地点から公開後処理まで継続する正規入口。判断・lease・履歴は `references/wf-auto-state.py` を使い、実作業は同一 SKILL.md の通常入口、`/music --generate`、`/music --generate`、`/music --master`、`/wf-next`、`/publish` に委譲する。子 skill の処理は本文へ複製しない。`thumbnail::textless.enabled` も独自解釈せず、通常入口と `/wf-next` の契約をそのまま貫通させる。
 
 ## Hard Gates
 
@@ -21,7 +21,7 @@
 3. **公開許可の正は config だけ**: `workflow.scheduled_automation.allow_external_publish` が `true` の場合だけ YouTube upload / publish を許可する。会話、prompt、環境変数で上書きしない。`false` ではローカル成果物まで進め、`external_publish_disabled` で停止する。
 4. **一段ごとに再評価**: 子 skill 完了後、同じ run 内で固定 collection を `plan` し直す。前 decision から次 action を推測しない。state と成果物が変化しない成功報告は `failed` として停止する。
 5. **手動介入を突破しない**: 対話実行では子 skill の企画選択・承認へ回答後、同じ run 内で再評価する。`workflow.wf_new.skip_plan_selection` または子 skill-config の `skip_*_approval` / `skip_cost_confirm` が `true` の停止点はチャンネル設定による明示 opt-in なので突破には当たらず続行する。それ以外のユーザー入力、login、CAPTCHA、課金確認、承認待ちが無人実行で必要なら自動承認せず `blocked` と再開 action を履歴へ記録する。Suno の UI 非互換・拡張障害・生成失敗は人間操作の blocker に広げず、agent が診断・再試行するか根拠付き `failed` とする。
-6. **不可逆操作を重複させない**: upload reconciliation、Suno 成果物数、post-publish idempotency は state resolver と委譲先の既存契約に従う。既存 video ID の remote upload や完了済み投稿を再発行しない。
+6. **不可逆操作を重複させない**: upload reconciliation、Suno 成果物数、publish idempotency は state resolver と委譲先の既存契約に従う。既存 video ID の remote upload や完了済み投稿を再発行しない。
 7. **state 更新責務を維持**: 本 skill と state resolver は `workflow-state.json` を直接更新しない。更新は `/wf-new`、`/wf-next` と各子 skill が成果物検証後に行う。
 8. **長時間処理の待機主体を消さない**: 子 agent に Monitor を arm させて self-stop / completed にしてはならない。実行中 tool call を維持するか background session を30秒以下の間隔で poll させ、終了を自分で観測してから報告させる。
 
@@ -29,7 +29,7 @@
 
 - 固定 collection に対して resolver が `action: complete` を返す。
 - `phase: complete`、`stage: live`、`upload.video_id` が揃う。
-- post-publish 設定済みなら、同 video ID の必要 step が `post_publish_history.json` で完了している。
+- publish 設定済みなら、community 投稿文と同 video ID の pinned comment 履歴が揃っている。
 - 最終 action が `.automation-run/history.json` に記録され、lease が release される。
 
 ## 状態判定契約
@@ -70,7 +70,7 @@ uv run python "$STATE_SCRIPT" release --channel-dir . --token <token>
 | `masterup` | strict Suno 成果物を入力に `/music --master` |
 | `wf-next-local` | `/wf-next` のローカル動画・metadata 生成まで。YouTube write は行わない |
 | `wf-next` | `/wf-next`。config が許可した場合だけ upload を含める |
-| `post-publish` | `/post-publish`。history により完了 step を skip |
+| `publish` | `/publish`。各成果物の状態判定により完了 step を skip |
 | `blocked` | reason / resume_action を記録して停止 |
 | `complete` | 完了を記録して停止 |
 
@@ -139,7 +139,7 @@ resolver が `action: suno-helper` を返したら、agent 自身が `/music --g
 4. 選ばれた各 action の直前に `heartbeat` を実行する。owner なら直後に「canonical action の AI timing 契約」の開始時刻を取得して保持する。子 skill action は対応する `SKILL.md` を読み、固定 collection、期待成果物、外部公開許可を明示して委譲する。`blocked` / `complete` は同じ開始時刻取得後に terminal action として処理する。`not-owner` なら開始時刻を取得せず、action を開始しない。
 5. `/wf-new` が collection を初期化したら、出力 path と `workflow-state.json` の実在を検証して名前を固定する。step 4 で保持した開始時刻を渡して `record --action wf-new --status success --ai-started-at <current-attempt-ai-started-at>` を実行した後、同じ run 内で `plan --collection <fixed-name>` を実行する。企画選択等で対話が一時停止しても lease を保持した実行文脈へ回答を戻し、完了後に同じ固定処理を行う。
 6. 子 skill の期待成果物と state を検証する。検証成功だけを `record --status success`、手動介入は `blocked`、検証失敗を含むその他は `failed` として reason / resume_action を残し、すべてに同じ attempt の `--ai-started-at` を渡す。成功時だけ固定 collection を再度 `plan` する。
-7. `post-publish` 後も再評価し、`phase: complete`、`stage: live`、`upload.video_id` と必要な post-publish history が揃って `action: complete` になったら、同じ timing 契約で完了記録を残す。
+7. `publish` 後も再評価し、`phase: complete`、`stage: live`、`upload.video_id`、community 投稿文、pinned comment 履歴が揃って `action: complete` になったら、同じ timing 契約で完了記録を残す。
 8. `finally` 相当で必ず自分の token を指定して `release` する。`not-owner` でも他 token の lease は削除しない。
 
 ## 再開と停止報告
@@ -151,11 +151,11 @@ resolver が `action: suno-helper` を返したら、agent 自身が `/music --g
 
 ## 想定 API call 数
 
-resolver、lease、履歴は API 0。実行前に選ばれた子 skill の見積もりを提示する。`allow_external_publish: false` では YouTube write API は 0。再開時は完了済み upload / post-publish step を再発行しない。
+resolver、lease、履歴は API 0。実行前に選ばれた子 skill の見積もりを提示する。`allow_external_publish: false` では YouTube write API は 0。再開時は完了済み upload / publish step を再発行しない。
 
 ## References
 
 - `references/wf-auto-state.py`: collection 選択、新規開始判定、次 action、成果物検証、lease、実行履歴の正規実装
 - `/wf-new`: 企画・collection 初期化・素材準備
 - `/wf-next`: 制作・公開と state 更新
-- `/post-publish`: 公開後 chain と idempotency history
+- `/publish`: 公開 chain と成果物ベースの idempotency 判定

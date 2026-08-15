@@ -744,15 +744,15 @@
       "handoff": "B6"
     },
     {
-      "old_owner": "legacy..claude.skills.post-publish.SKILL.md",
-      "exact_new_owner": ".claude/skills/post-publish/SKILL.md",
+      "old_owner": "legacy..claude.skills.publish.SKILL.md",
+      "exact_new_owner": ".claude/skills/publish/SKILL.md",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"
     },
     {
-      "old_owner": "legacy..claude.skills.post-publish.references.post-publish-chain-state",
-      "exact_new_owner": ".claude/skills/post-publish/references/post-publish-chain-state.py",
+      "old_owner": "legacy..claude.skills.publish.references.publish-chain-state",
+      "exact_new_owner": ".claude/skills/publish/references/publish-chain-state.py",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"

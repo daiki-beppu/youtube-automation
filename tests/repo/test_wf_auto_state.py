@@ -830,7 +830,7 @@ def test_cli_record_rejects_invalid_human_intervals_without_mutating_history(
     assert history_path.read_text(encoding="utf-8") == original
 
 
-def test_completed_live_collection_finishes_after_post_publish_history(tmp_path: Path, runner: ModuleType) -> None:
+def test_completed_live_collection_finishes_after_publish_artifacts(tmp_path: Path, runner: ModuleType) -> None:
     collection = _collection(
         tmp_path,
         "20260721-complete",
@@ -838,22 +838,14 @@ def test_completed_live_collection_finishes_after_post_publish_history(tmp_path:
         phase="complete",
         upload={"video_id": "video-123", "video_url": "https://youtu.be/video-123"},
     )
-    (tmp_path / "post_publish_history.json").write_text(
-        json.dumps(
-            {
-                "schema_version": 1,
-                "videos": {
-                    "video-123": {
-                        "completed": {
-                            "community-post": "done",
-                            "pinned-comment": "done",
-                            "metadata-audit": "done",
-                        }
-                    }
-                },
-            }
-        ),
-        encoding="utf-8",
+    (collection / "20-documentation" / "community-post.txt").write_text("published", encoding="utf-8")
+    config_dir = tmp_path / "config" / "channel"
+    config_dir.mkdir(parents=True)
+    (config_dir / "pinned-comment.json").write_text(
+        json.dumps({"pinned_comment": {"history_file": "pinned_comment_history.json"}}), encoding="utf-8"
+    )
+    (tmp_path / "pinned_comment_history.json").write_text(
+        json.dumps({"schema_version": 1, "posted": {"video-123": {"posted_at": "done"}}}), encoding="utf-8"
     )
 
     decision = runner.resolve_action(

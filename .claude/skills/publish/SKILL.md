@@ -7,8 +7,8 @@ description: "Use when 完成した動画を公開工程へ進めるとき。--p
 ## 前後工程
 
 - `前工程`: `/wf-new`, `/video --generate`, `/video --describe`, `/thumbnail`
-- `後工程`: `/post-publish`, `/audit --metadata`
-- `委譲先`: `/post-publish`
+- `後工程`: `/audit --metadata`
+- `委譲先`: `なし`
 
 ## 成果物
 
@@ -64,11 +64,13 @@ description: "Use when 完成した動画を公開工程へ進めるとき。--p
 2. exit 0 は成果物記録済みのため skip、exit 10 は run、exit 20 は state 不正のため停止する。
 3. prerequisite artifacts を検証し、playlist step は `references/playlist.md`、upload step は `references/upload.md`、community step は `references/community.md`、pinned step は `references/pinned.md` の前提を満たす。
 4. manifest の `approvalGate.configPath` を `load_config()` から解決する。値が未設定なら `approvalGate.skip` を使う。
+   legacy `approvalGate.enabled` を読む場合は `skip = not enabled` とし、同一 gate への `skip` と `enabled` の同時指定はエラーにする。
 5. playlist step の gate は常に `skip=false`。status と dry-run を先に実行し、作成されるプレイリスト名と割り当て件数を提示して、明示承認されるまで実反映を行わない。upload step の resolved skip が `false` の場合、対象 collection、`content_model.type`、動画本数、plan が示す公開日時または公開範囲を提示し、「この先は YouTube への取り消し不能な外部アップロードを実行する」と明示する。選択肢を **「アップロードする」/「中止する」** の 2 つに限定し、承認されるまで upload CLI、tracking 更新、state 更新を行わない。
-6. community step は manifest の `workflow.post-publish.skip_approvals.community-post` を正規 config path とし、`config/channel/workflow.json::post_publish.skip_approvals.community_post` から解決する。旧 `workflow.json::post_publish.approval_gates.community_post` が有効なら逆向き alias により resolved skip は `false` になる。同一 step への新旧同時指定は拒否し、resolved skip が `false` の場合は対象 collection/動画と Studio 投稿準備 1 件を提示して、承認されるまで community mode を実行しない。
-7. pinned step は manifest の `workflow.post-publish.skip_approvals.pinned-comment` を正規 config path とし、`config/channel/workflow.json::post_publish.skip_approvals.pinned_comment` から解決する。旧 `workflow.json::post_publish.approval_gates.pinned_comment` が有効なら逆向き alias により resolved skip は `false` になる。同一 step への新旧同時指定は拒否し、resolved skip が `false` の場合は dry-run の対象 video ID・件数・代表テキストを提示して、「投稿する」/「キャンセル」の 2 択で承認されるまで apply を実行しない。
+6. community step は `load_config().workflow.post_publish.skip_approvals.community_post` から gate を解決する。旧 `approval_gates.community_post` が有効なら逆向き alias により resolved skip は `false` になる。同一 step への新旧同時指定は拒否し、resolved skip が `false` の場合は対象 collection/動画と Studio 投稿準備 1 件を提示して、承認されるまで community mode を実行しない。
+7. pinned step は `load_config().workflow.post_publish.skip_approvals.pinned_comment` から gate を解決する。旧 `approval_gates.pinned_comment` が有効なら逆向き alias により resolved skip は `false` になる。同一 step への新旧同時指定は拒否し、resolved skip が `false` の場合は dry-run の対象 video ID・件数・代表テキストを提示して、「投稿する」/「キャンセル」の 2 択で承認されるまで apply を実行しない。
 8. resolved skip が `true` の場合だけ upload/community/pinned の chain gate を省略する。pinned reference 自身の safety gate は、同じ video ID・件数への明示承認を引き継げない限り省略しない。
 9. 各 step 成功後に output artifacts を実在確認する。`workflow-state.json::upload.video_id` が空なら upload/community/pinned を完了扱いにしない。
+10. 途中失敗後の再発動でも必ず先頭 step から状態判定し、完了済み step は exit 0 の `skip` として副作用を再実行しない。
 
 ## Instructions
 
@@ -82,7 +84,7 @@ description: "Use when 完成した動画を公開工程へ進めるとき。--p
 
 `--clean` では `references/clean.md` を読み、公開完了の 3 条件を同一 skill 内で検証する。対象と容量を dry-run 表示し、不可逆な物理削除への明示承認を得た場合だけ削除する。clean は任意操作のため chain manifest へ追加しない。
 
-`/post-publish` が構成済みなら upload 完了後にその chain へ委譲する。community-post、pinned-comment、audit --metadata の承認・履歴・再開契約をここへ複製しない。
+upload 完了後も同じ chain を続行し、community、pinned を順に状態判定する。metadata 監査はこの chain に含めず、必要な場合は `/audit --metadata` を独立して実行する。
 
 ## 想定 API call 数
 

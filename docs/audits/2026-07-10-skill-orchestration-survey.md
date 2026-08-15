@@ -137,7 +137,7 @@ Issue: [#1810 [skills] 全スキル横断オーケストレーション化の調
 | グループ | 推奨 | wf-next パターン踏襲 | 理由 |
 |---------|------|---------------------|------|
 | analytics チェーン | 案 A でオーケストレーター skill 化（`/analytics` 仮称: collect → analyze → report を 1 コマンドで） | **条件付き踏襲** — ②冪等性・④薄い委譲層は踏襲。①はコレクション単位 state ファイルでなく成果物タイムスタンプ（データ鮮度）判定に軽量化。③承認ゲートは外部反映がないため省略（既定で全自動） | 線形・無分岐・read 系のため、state 管理の複雑さが不要。「データ更新してから分析」という 2 段の手動発動を 1 段に畳める即効性がある |
-| リリース後チェーン | 案 A で `/video-upload` 後続（community-post → pinned-comment → metadata-audit）を post-publish チェーン化 | **踏襲** — ①②④に加え、③config 駆動承認ゲートを必須採用（外部反映のため）。upload 済み動画 ID 単位の実行履歴で冪等性を担保 | 現状 `/video-upload` → `/community-post` だけが散文自動呼出で、pinned-comment / metadata-audit は手動発動が漏れやすい。ゲート付き連鎖で「公開後のやり忘れ」を機械的に防げる |
+| リリース後チェーン | 案 A で `/video-upload` 後続（community-post → pinned-comment → metadata-audit）を publish チェーン化 | **踏襲** — ①②④に加え、③config 駆動承認ゲートを必須採用（外部反映のため）。upload 済み動画 ID 単位の実行履歴で冪等性を担保 | 現状 `/video-upload` → `/community-post` だけが散文自動呼出で、pinned-comment / metadata-audit は手動発動が漏れやすい。ゲート付き連鎖で「公開後のやり忘れ」を機械的に防げる |
 | リサーチ・戦略チェーン | オーケストレーター化しない。前提ガード（ガイドライン③）の統一強化のみ | **踏襲しない** — 自動で次段に進める設計自体が不適（各段の確定はユーザーの戦略判断） | 成果物ファイル（viewer-voice-analysis.md, persona-definition.md）の存在ガードは既に一部スキルにあるため、書式と失敗時案内（前工程スキルへの誘導）を統一するだけで連鎖の迷子は解消する |
 | ショート系・音楽配信・システムリリース・基盤 | 現状維持（案 D の表記統一のみ適用） | **踏襲しない** | §3 のとおり、チェーンが短すぎる / 人・外部システムのイベントを挟む / 連鎖がない |
 
@@ -146,7 +146,7 @@ Issue: [#1810 [skills] 全スキル横断オーケストレーション化の調
 1. **表記統一（案 D 部分）**: 全 45 スキルの description・本文の前後工程表記を統一書式に揃え、依存関係を機械抽出できる状態にする（本レポート §2 の表が初版データになる）。
 2. **マニフェスト schema 設計（案 A 基盤)**: チェーン定義（step 列・前提成果物パス・ゲート宣言・冪等判定 script 参照）の JSON schema を設計し、`config/channel/workflow.json` の `workflow.wf_next` を同 schema の一インスタンスとして位置づける（wf-next は書き換えず整合のみ確認）。
 3. **analytics チェーンで先行実装**: リスク最小（read 系・ゲート不要）の `/analytics` をインタープリタ skill の初号として実装し、マニフェスト + 状態判定 script のパターンを確立する。
-4. **リリース後チェーンへ展開**: 確立したパターンに③承認ゲートを加えて post-publish チェーンを実装する。既存の `/video-upload` → `/community-post` 散文呼出は新チェーンへ委譲するよう書き換える。
+4. **リリース後チェーンへ展開**: 確立したパターンに③承認ゲートを加えて publish チェーンを実装する。既存の `/video-upload` → `/community-post` 散文呼出は新チェーンへ委譲するよう書き換える。
 5. **リサーチ系の前提ガード統一**: オーケストレーター化はせず、ガイドライン③準拠の存在ガードと前工程誘導を各スキルに揃える。
 6. 各段で `yt-skills sync` の配布確認（下流 config 未設定時に後方互換で全自動 / 既定動作が変わらないこと）をテストで担保する。
 
@@ -157,7 +157,7 @@ Issue: [#1810 [skills] 全スキル横断オーケストレーション化の調
 | F1 | [skills] 前後工程表記の統一書式化 — 全 45 スキルの description / 本文の連鎖表記を機械可読に揃える | 全 SKILL.md の表記のみ（ロジック変更なし）。書式は skill-authoring-guidelines に追記 | なし |
 | F2 | [skills] チェーン定義マニフェストの schema 設計 — step / 前提成果物 / ゲート / 冪等判定の宣言形式 | schema 文書 + examples。wf-next の workflow.json 設定を同 schema で説明できることを検証 | F1 |
 | F3 | [skills] /analytics オーケストレーター新設 — collect → analyze → report のマニフェスト駆動連鎖 | 新規 skill + 状態判定 reference script + テスト。承認ゲートなし | F2 |
-| F4 | [skills] post-publish チェーン化 — video-upload 後続（community-post / pinned-comment / metadata-audit）の config 駆動ゲート付き連鎖 | 新規 or video-upload 拡張 + `config/channel/` へのゲート宣言追加（既定 false で後方互換） | F2, F3 |
+| F4 | [skills] publish チェーン化 — video-upload 後続（community-post / pinned-comment / metadata-audit）の config 駆動ゲート付き連鎖 | 新規 or video-upload 拡張 + `config/channel/` へのゲート宣言追加（既定 false で後方互換） | F2, F3 |
 | F5 | [skills] リサーチ系 6 スキルの前提ガード統一 — 成果物存在チェックと前工程誘導をガイドライン③準拠に | benchmark / discover-competitors / viewer-voice / audience-persona-design / viewing-scene / channel-research の本文修正のみ | F1 |
 
 ## 8. 検証

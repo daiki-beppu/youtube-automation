@@ -47,7 +47,7 @@
       ],
       "approvalGate": {
         "skip": true,
-        "configPath": "workflow.post-publish.skip_approvals.community-post"
+        "configPath": "workflow.post_publish.skip_approvals.community_post"
       },
       "idempotency": {
         "script": "references/publish-chain-state.py"
@@ -64,7 +64,7 @@
       ],
       "approvalGate": {
         "skip": true,
-        "configPath": "workflow.post-publish.skip_approvals.pinned-comment"
+        "configPath": "workflow.post_publish.skip_approvals.pinned_comment"
       },
       "idempotency": {
         "script": "references/publish-chain-state.py"

@@ -34,7 +34,7 @@
 
 | Skill | 何をする | 何をしない | 一時停止する場面 |
 |---|---|---|---|
-| `/wf-new --auto` | collection 不在なら `/wf-new` から開始し、存在すれば未完了地点から制作・公開・post-publish まで状態駆動で再評価する | 子 skill の実装を複製しない | 認証、CAPTCHA、承認待ち、公開未許可など人間の介入が必要な場面 |
+| `/wf-new --auto` | collection 不在なら `/wf-new` から開始し、存在すれば未完了地点から制作・公開・publish まで状態駆動で再評価する | 子 skill の実装を複製しない | 認証、CAPTCHA、承認待ち、公開未許可など人間の介入が必要な場面 |
 | `/wf-new --batch` | 複数企画を一括承認し、同一 `/wf-new` の通常入口へ 1 件ずつ渡して準備する | child gate を省略せず、並列実行しない | child の失敗、承認待ち、外部前提待ち、成果物不整合 |
 | `/wf-new --schedule` | `workflow.scheduled_automation` と native Scheduled Task を設定・確認・停止する | 明示承認なしに外部公開や OS fallback を有効化しない | dry-run 適用承認、backend 切替、外部公開・OS fallback の明示承認 |
 | `/wf-new` | 企画選択 → `yt-init-collection` でディレクトリ + `workflow-state.json` 作成 → サムネ・音楽素材生成 | 楽曲の最終マスタリングや動画化はしない | 通常は (1) 企画選択 (2) サムネ承認。`ttp_mode: false` の minimal mode は企画候補生成前にテーマ / ジャンル / 雰囲気の直接入力確認を追加し、`true` は `/channel-research --benchmark` の案内で停止 |

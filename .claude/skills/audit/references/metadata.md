@@ -25,7 +25,7 @@
 
 ## チェーンからの呼出
 
-`/post-publish <collection>` の互換 chain から内部 step `metadata-audit` として呼ばれた場合も、既定の local + remote 監査と完了条件は同じ。単独発動では `/audit --metadata` を使う。監査が完走した場合だけ chain へ完了を返し、認証・API・監査処理の失敗時は履歴更新を行わせない。
+本 mode は公開 chain から独立した読み取り専用監査である。公開済み collection を対象に `/audit --metadata` で単独発動し、認証・API・監査処理の失敗を公開工程の完了状態へ書き込まない。
 
 ## 設定読み込みゲート
 

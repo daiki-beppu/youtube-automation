@@ -101,7 +101,7 @@ Phase 3: 公開             /wf-next    動画→概要欄→アップロード�
 
 #### wf-new --auto の判定責務
 
-`/wf-new --auto` は active collection が無ければ state を事前作成せず `/wf-new` へ委譲し、初期化後は返された collection を固定する。active collection があれば本 state と実成果物を一段ごとに再評価し、Lyria / Suno / masterup / 制作 / 公開 / post-publish の委譲先を選ぶ。統合 runner 自身は本ファイルを更新せず、各既存 skill の検証済み更新契約を使う。`workflow.scheduled_automation.allow_external_publish` が `false` の場合はローカル動画・metadata 生成後、YouTube 書き込み前で停止する。`.automation-run/history.json` は停止理由と再開地点の監査記録であり、本 state や成果物の代替 source of truth ではない。
+`/wf-new --auto` は active collection が無ければ state を事前作成せず `/wf-new` へ委譲し、初期化後は返された collection を固定する。active collection があれば本 state と実成果物を一段ごとに再評価し、Lyria / Suno / masterup / 制作 / 公開 / publish の委譲先を選ぶ。統合 runner 自身は本ファイルを更新せず、各既存 skill の検証済み更新契約を使う。`workflow.scheduled_automation.allow_external_publish` が `false` の場合はローカル動画・metadata 生成後、YouTube 書き込み前で停止する。`.automation-run/history.json` は停止理由と再開地点の監査記録であり、本 state や成果物の代替 source of truth ではない。
 
 #### Suno 定期実行 checkpoint の責務
 

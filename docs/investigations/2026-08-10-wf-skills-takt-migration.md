@@ -68,11 +68,11 @@ takt 0.55.1 は step、facet、決定的な `when(...)`、人間入力 rule、ru
 | lease acquire / heartbeat / release | `wf-auto-state.py` | 前処理・各 step instruction・終了処理 | 条件付き可 | takt の task/run と制作 lease は識別子・寿命が違う。既存 resolver を残す必要がある |
 | active collection の固定 | `plan --collection` | intake output を後続へ渡す | 条件付き可 | collection identity を全 step で固定する custom contract が要る |
 | state + 成果物から action 決定 | `wf-auto-state.py plan` | router step + deterministic rule | 条件付き可 | 判定ロジックを YAML の自然言語へ複製せず resolver を呼ぶ必要がある |
-| `/wf-new` / `/lyria` / `/suno-helper` / `/masterup` / `/wf-next` / `/post-publish` 委譲 | 各 child skill | workflow step / workflow call | 条件付き可 | child skill の tool、config、成果物 contract は facet だけでは置換できない |
+| `/wf-new` / `/lyria` / `/suno-helper` / `/masterup` / `/wf-next` / `/publish` 委譲 | 各 child skill | workflow step / workflow call | 条件付き可 | child skill の tool、config、成果物 contract は facet だけでは置換できない |
 | 成果物検証 → history record → 再 plan | resolver と各 child skill | verify step → router loop | 条件付き可 | `workflow-state.json` を正として再評価する限り表せる |
 | external publish 禁止 | durable config | deterministic `when(...)` | 写像可 | config 解決を既存 loader に一元化すれば決定的に分岐できる |
 | login / CAPTCHA handoff | browser の実画面 | blocked rule | 写像不可 | 停止は表せるが、認証や CAPTCHA の突破は workflow が行ってはならない |
-| complete / post-publish / release | state、history、lease | terminal verify step | 条件付き可 | remote ID、post-publish history、lease release の既存検証が必要 |
+| complete / publish / release | state、history、lease | terminal verify step | 条件付き可 | remote ID、publish history、lease release の既存検証が必要 |
 
 結論として `/wf-auto` を takt workflow に置き換えても、resolver と child skill はほぼ全て残る。YAML 化できるのは外側の順序であり、現在地の正規判定ではない。
 
@@ -150,7 +150,7 @@ takt の current step を制作 phase として扱うと、例えば takt が `u
 2. **各再開は最初に resolver を呼ぶ。** takt の前回 step から無条件に続けず、collection identity を固定して action を再計算する。
 3. **takt run は観測・report に限定する。** phase、remote ID、approval 済み対象を独自保存しない。
 4. **state update は既存 deterministic CLI / script に一元化する。** agent output や status tag だけで phase を進めない。
-5. **外部副作用の直前と直後に reconciliation を行う。** upload、playlist、post-publish を takt retry だけで再発行しない。
+5. **外部副作用の直前と直後に reconciliation を行う。** upload、playlist、publish を takt retry だけで再発行しない。
 6. **長期 handoff は run を閉じる。** マスタリングや login 待ちの放置時間を生きた agent session として保持せず、次回は新しい attempt で再検証する。
 
 ただしこの回避策では takt が既存 `/wf-auto` resolver の外殻になる。二重化事故は避けられるが、置換による削減効果も小さい。
@@ -215,7 +215,7 @@ facet は skill directory を 1 ファイルへ変換する機構ではない。
 | 不変条件 | policy | plan-first、privacy/publishAt 表示、metadata path、重複 upload 禁止、tracking reconciliation | durable config と remote state の検証は code が正本 |
 | 参照情報 | knowledge | posting checklist、scheduled publish、YouTube metadata contract | OAuth credential 自体を knowledge / report に入れない |
 | 手順 | instruction | plan → preflight →承認済み条件突合 → uploader 実行 → tracking/live 検証 | 実 upload は deterministic CLI を明示的に呼ぶべき |
-| 完了形 | output-contract | plan、video ID、tracking path、live state、post-publish handoff | agent の自己申告だけで成功にできない |
+| 完了形 | output-contract | plan、video ID、tracking path、live state、publish handoff | agent の自己申告だけで成功にできない |
 
 判定は **条件付き可**。plan / review は facet 化できるが、不可逆な upload と reconciliation は `yt-upload-collection` / `yt-upload-auto` に残す。
 
