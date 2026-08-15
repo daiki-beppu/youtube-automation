@@ -22,7 +22,7 @@
 | # | 成長レバー | 対応する既存スキル / CLI | データソース | カバー度 |
 | --- | --- | --- | --- | --- |
 | L1 | インプレッション獲得 | `/analytics --collect --include-reporting`（動画別 Imp）、traffic source 収集（`insightTrafficSourceType/Detail`）、`/channel-research --benchmark`（競合の露出獲得パターン）、`/short`（流入面の追加） | Reporting API v1 / Analytics API v2 / Data API v3 | ◯ 計測は可、施策検証は弱い |
-| L2 | CTR | `/thumbnail`（TTP ベース生成）、`/thumbnail --compare`（320px 視認性）、`yt-thumbnail-correlate`（特徴量×CTR 相関）、`/alignment-check`（サムネ×タイトル×ムード整合）、`/flop-analysis`（CTR 閾値ルーブリック） | Reporting API v1 + サムネ画像特徴量 | ◎ 最厚のレバー |
+| L2 | CTR | `/thumbnail`（TTP ベース生成）、`/thumbnail --compare`（320px 視認性）、`yt-thumbnail-correlate`（特徴量×CTR 相関）、`/audit --alignment`（サムネ×タイトル×ムード整合）、`/flop-analysis`（CTR 閾値ルーブリック） | Reporting API v1 + サムネ画像特徴量 | ◎ 最厚のレバー |
 | L3 | 視聴維持 | retention 収集（`audienceWatchRatio` / `relativeRetentionPerformance`）、`/video-analyze`（Gemini によるフック・BGM 展開解析）、`/channel-strategy --scene`（シーン別の最適尺設計） | Analytics API v2 / Vertex AI | ◯ 計測◎、原因照合が手動 |
 | L4 | 回遊・セッション | `/publish --playlist`（`yt-playlist-manager`）、`/video-description`（Complete Collection 導線）、カード指標収集（`cardImpressions/Clicks/ClickRate`）、`/publish --pinned` `/comments-reply` `/publish --community` | Analytics API v2 / Data API v3 | △ 導線は張れるが効果測定が薄い |
 | L5 | 登録転換 | `subscribersGained/Lost` の day・video 単位収集、`subscribedStatus` 別視聴データ収集、動画別転換率ランキングを含む `/analytics --analyze`、`yt-channel-trend`（日次 subs 移動平均・z-score 異常検知） | Analytics API v2 | ◯ 動画別転換率と視聴者の登録状態を分析可 |
@@ -100,7 +100,7 @@
 │        ↓                                                             │
 │  不振動画あり？ ── yes → /flop-analysis     … CTR/Imp/Ret で症状切り分け
 │        │                     ↓                                       │
-│        │              /thumbnail --compare or /alignment-check or /video-analyze
+│        │              /thumbnail --compare or /audit --alignment or /video-analyze
 │        │                     ↓ （原因に応じた個別監査）              │
 │        ↓ no                  ↓                                       │
 │  /collection-ideate ←────────┘              … 分析結果を次企画へ反映
@@ -118,7 +118,7 @@
 四半期 or 方向性見直し時:
       /channel-strategy --persona（+ --scene）… ペルソナ・視聴シーン再設計
       /channel-research --discover                  … 競合プールの入れ替え
-      /alignment-check                       … チャンネル全体の整合性監査
+      /audit --alignment                     … チャンネル全体の整合性監査
 ```
 
 運用ルール:

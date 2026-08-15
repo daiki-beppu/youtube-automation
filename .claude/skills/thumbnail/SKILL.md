@@ -7,7 +7,7 @@ description: "Use when コレクションの YouTube サムネイル（thumbnail
 ## 前後工程
 
 - `前工程`: `/channel-strategy --constraints`, `/wf-new`, `/thumbnail --iterate`
-- `後工程`: `/thumbnail --loop`, `/thumbnail --compare`, `/thumbnail --test`, `/thumbnail --iterate`, `/alignment-check`
+- `後工程`: `/thumbnail --loop`, `/thumbnail --compare`, `/thumbnail --test`, `/thumbnail --iterate`, `/audit --alignment`
 - `委譲先`: `なし`
 ## 成果物
 - `書き込む`: `collections/<id>/10-assets/thumbnail.jpg`, `collections/<id>/10-assets/main.png`, `collections/<id>/10-assets/main.jpg`, `collections/<id>/10-assets/loop.mp4`, `collections/<id>/20-documentation/thumbnail-prompts.md`, `collections/<id>/20-documentation/thumbnail-test-active.json`, `collections/<id>/20-documentation/thumbnail-test-history.json`, `collections/<id>/workflow-state.json`, `assets/thumbnail-gallery/<id>.<ext>`, `docs/plans/thumbnail-comparison.md`, `data/thumbnail_compare/*`, `data/thumbnail-iterate/runs/<video-id>.json`, `data/thumbnail-iterate/champion.json`, `data/thumbnail-iterate/synthesis-required.json`
@@ -333,14 +333,14 @@ uv run yt-thumbnail-check <collection-path>/10-assets/main-v1.png --json
 JSON で返す（終了コード 0=合格 / 1=不合格）。手作業チェックの前段スクリーニングとして、
 TTP 構図逸脱（wet_runway 不在・矩形ロゴ混入・テキスト burned-in 等）を機械的に検出する。 テキスト付き thumbnail 候補は、承認前に `/thumbnail --compare` で 320px 可読性・コントラスト・主役認識を確認し、署名・透かし・ロゴと手指の破綻がないことを目視確認する。textless main 候補は承認済み `thumbnail.jpg` の構図を維持し、タイトル文字・字幕・ロゴ・透かし・タイポグラフィ・チャンネル名が残っていないことを確認する。 完整な thumbnail / textless main の QA チェックリストと `anatomy_clause` の対処は [quality / operations 詳細](references/quality-and-operations.md) を読む。JPEG 候補は `uv run yt-thumbnail-check <collection-path>/10-assets/main-v1.jpg --json` のように実ファイルを指定する。セルフチェック、上記の目視 QA、`/thumbnail --compare` が揃うまで承認・確定しない。
 ## 視認性検証と整合性監査の役割分担
-`/thumbnail --compare` と `/alignment-check` は並走で使うが、見る対象とタイミングが異なる。
+`/thumbnail --compare` と `/audit --alignment` は並走で使うが、見る対象とタイミングが異なる。
 | スキル | 役割 | スコープ | 主指標 | 実行タイミング |
 |---|---|---|---|---|
 | `/thumbnail --compare` | 視認性検証 | 単体サムネ × ベンチマーク | 320px 縮小可読性・コントラスト・キャラ認識 | サムネ承認**前**（TTP プリフライトでも確認） |
-| `/alignment-check` | 整合性監査 | コレクション全体（音楽 × サムネ × タイトル） | ムード / ビジュアル / タイトル訴求の一致 | 公開**後**、または方向性見直し時 |
+| `/audit --alignment` | 整合性監査 | コレクション全体（音楽 × サムネ × タイトル） | ムード / ビジュアル / タイトル訴求の一致 | 公開**後**、または方向性見直し時 |
 1. `/thumbnail` で候補生成後、承認前に `/thumbnail --compare` を実行して視認性検証を通す。
-2. 承認・公開後、または方向性見直し時に `/alignment-check` でコレクション全体の整合性監査を行う。
-3. `/alignment-check` で不整合が出たコレクションは `/thumbnail` で再生成し、再度 `/thumbnail --compare` で 320px 視認性を確認する。
+2. 承認・公開後、または方向性見直し時に `/audit --alignment` でコレクション全体の整合性監査を行う。
+3. `/audit --alignment` で不整合が出たコレクションは `/thumbnail` で再生成し、再度 `/thumbnail --compare` で 320px 視認性を確認する。
 ## プロンプト保存
 プロンプトは `20-documentation/thumbnail-prompts.md` に保存する。provider / model / style、attempt ごとの output / reference / benchmark channel、テキスト付き生成プロンプト、textless 背景生成プロンプト、A/B pattern ごとの最終プロンプトを欠落なく記録する。正規テンプレートは [quality / operations 詳細](references/quality-and-operations.md) を使う。
 ## ファイル命名ルール（上書き禁止）

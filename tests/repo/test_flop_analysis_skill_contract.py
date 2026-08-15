@@ -58,7 +58,7 @@ def test_flop_analysis_keeps_identity_symptom_mapping_and_output_contract() -> N
     assert (
         'description: "Use when 公開済み動画が伸びなかった原因を video_id、collection、または --since で切り分け、'
         "postmortem.md に出力するとき。「伸びなかった」「flop 分析」で発動。横断戦略は /analytics --analyze、"
-        '事前監査は /alignment-check"'
+        '事前監査は /audit --alignment"'
     ) in frontmatter
 
     for metric in (
@@ -177,7 +177,7 @@ def test_flop_analysis_uses_noninteractive_analysis_boundaries() -> None:
     assert "read-only 入力として読む" in phase_4
     assert "config 更新は行わない" in phase_4
     prohibited_routes = (
-        "/alignment-check",
+        "/audit --alignment",
         "/channel-research --voice",
         "/channel-strategy --persona",
         "/channel-strategy --scene",
@@ -188,7 +188,6 @@ def test_flop_analysis_uses_noninteractive_analysis_boundaries() -> None:
         assert not any(route in mapping["read-only 入力"] for route in prohibited_routes)
 
     interactive_skill_texts = (
-        (ROOT / ".claude/skills/alignment-check/SKILL.md").read_text(encoding="utf-8"),
         (ROOT / ".claude/skills/channel-strategy/references/scene.md").read_text(encoding="utf-8"),
         (ROOT / ".claude/skills/channel-strategy/SKILL.md").read_text(encoding="utf-8")
         + (ROOT / ".claude/skills/channel-strategy/references/direction.md").read_text(encoding="utf-8"),

@@ -241,7 +241,7 @@
     },
     {
       "old_owner": "legacy..claude.skills.alignment-check.SKILL.md",
-      "exact_new_owner": ".claude/skills/alignment-check/SKILL.md",
+      "exact_new_owner": ".claude/skills/audit/references/alignment.md",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"

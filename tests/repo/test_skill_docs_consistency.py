@@ -916,7 +916,7 @@ def test_channel_strategy_followup_skill_routing_uses_new_contract() -> None:
     assert "動画尺 / 投稿頻度 / コメント語彙は収集済みデータがある場合だけ使う" in channel_direction_mode
 
     followup_direction_files = [
-        ".claude/skills/alignment-check/SKILL.md",
+        ".claude/skills/audit/references/alignment.md",
         ".claude/skills/wf-new/references/ideate.md",
         ".claude/skills/music/references/generate.md",
         ".claude/skills/flop-analysis/SKILL.md",

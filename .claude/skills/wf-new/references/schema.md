@@ -146,7 +146,7 @@ Phase 3: 公開             /wf-next    動画→概要欄→アップロード�
 
 #### planning.music
 
-`/music --prompt` または `/music --generate` 実行時に populate する。新規コレクションのみ必須化（既存コレクションは未マイグレーション、`/alignment-check` 側でフォールバック実装済み）。
+`/music --prompt` または `/music --generate` 実行時に populate する。新規コレクションのみ必須化（既存コレクションは未マイグレーション、`/audit --alignment` 側でフォールバック実装済み）。
 
 | フィールド | 型 | 必須 | 説明 |
 |-----------|-----|---|------|
