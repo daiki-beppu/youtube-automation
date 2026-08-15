@@ -8,6 +8,12 @@ description: "Use when 既存 YouTube チャンネルを取り込むとき、収
 - `前工程`: `なし`
 - `後工程`: `*`（共通基盤としてほぼ全スキル）
 
+## 修飾フラグ
+
+| modifier | 効果 |
+|---|---|
+| `--channel` | 未作成 channel の初回 bootstrap は `/setup` へ委譲する |
+
 ## Hard Gates / 完了条件（分析モード）
 
 分析モードの Hard Gates、subagent 委譲ゲート、完了条件は `references/analysis-mode.md` の同名各節を唯一の正とする。分析モードと判定したら入力を読む前に同ファイルを Read し、前提成果物ガードが停止を指示した場合は後続 Step へ進まない。

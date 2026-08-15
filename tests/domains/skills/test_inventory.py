@@ -7,6 +7,7 @@ import pytest
 from youtube_automation.domains.skills.inventory import (
     SkillInventory,
     extract_markdown_section,
+    lint_skill,
     parse_frontmatter,
 )
 
@@ -16,6 +17,16 @@ def _write_skill(root: Path, name: str, *, description: str = "説明") -> Path:
     skill_dir.mkdir(parents=True)
     (skill_dir / "SKILL.md").write_text(
         f'---\nname: {name}\ndescription: "{description}"\n---\n\n## 本文\n\n{name}\n',
+        encoding="utf-8",
+    )
+    return skill_dir
+
+
+def _write_flag_skill(root: Path, name: str, description: str, body: str) -> Path:
+    skill_dir = root / name
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        f'---\nname: {name}\ndescription: "{description}"\n---\n\n{body}',
         encoding="utf-8",
     )
     return skill_dir
@@ -102,3 +113,120 @@ def test_reference_resolution_reports_existing_and_missing_files(tmp_path: Path)
     assert inventory.resolve_reference("sample", "references/details.md") == reference.resolve()
     assert inventory.reference_exists("sample", "references/details.md")
     assert not inventory.reference_exists("sample", "references/missing.md")
+
+
+def test_lint_skill_reports_missing_flag_tables(tmp_path: Path) -> None:
+    skill_dir = _write_flag_skill(tmp_path, "sample", "Use --fast", "## 本文\n")
+
+    violations = lint_skill(skill_dir)
+
+    assert any("モード判定" in violation and "修飾フラグ" in violation for violation in violations)
+
+
+def test_lint_skill_reports_description_flag_missing_from_tables(tmp_path: Path) -> None:
+    skill_dir = _write_flag_skill(
+        tmp_path,
+        "sample",
+        "Use --fast",
+        """## 修飾フラグ
+
+| modifier | 効果 |
+|---|---|
+| `--safe` | 安全に実行する |
+""",
+    )
+
+    violations = lint_skill(skill_dir)
+
+    assert any("--fast" in violation and "未登録" in violation for violation in violations)
+
+
+def test_lint_skill_reports_flag_registered_as_mode_and_modifier(tmp_path: Path) -> None:
+    skill_dir = _write_flag_skill(
+        tmp_path,
+        "sample",
+        "Use --fast",
+        """## モード判定
+
+2 個以上の同時指定なら停止する。
+
+| mode | 読む reference |
+|---|---|
+| `--fast` | `references/fast.md` |
+
+## 修飾フラグ
+
+| modifier | 効果 |
+|---|---|
+| `--fast` | 高速化する |
+""",
+    )
+
+    violations = lint_skill(skill_dir)
+
+    assert any("--fast" in violation and "重複所属" in violation for violation in violations)
+
+
+@pytest.mark.parametrize("mode_count, violates", [(5, False), (6, True)])
+def test_lint_skill_enforces_five_mode_limit(tmp_path: Path, mode_count: int, violates: bool) -> None:
+    flags = [f"--mode-{index}" for index in range(mode_count)]
+    rows = "\n".join(f"| `{flag}` | `references/{flag[2:]}.md` |" for flag in flags)
+    skill_dir = _write_flag_skill(
+        tmp_path,
+        "sample",
+        "Use " + " / ".join(flags),
+        f"""## モード判定
+
+2 個以上の同時指定なら停止する。
+
+| mode | 読む reference |
+|---|---|
+{rows}
+""",
+    )
+
+    violations = lint_skill(skill_dir)
+
+    assert any("mode は 5 個以下" in violation for violation in violations) is violates
+
+
+def test_lint_skill_does_not_limit_modifier_count(tmp_path: Path) -> None:
+    flags = [f"--modifier-{index}" for index in range(6)]
+    rows = "\n".join(f"| `{flag}` | 調整 {flag[11:]} |" for flag in flags)
+    skill_dir = _write_flag_skill(
+        tmp_path,
+        "sample",
+        "Use " + " / ".join(flags),
+        f"""## 修飾フラグ
+
+| modifier | 効果 |
+|---|---|
+{rows}
+""",
+    )
+
+    assert lint_skill(skill_dir) == []
+
+
+def test_lint_skill_ignores_flags_with_value_placeholders(tmp_path: Path) -> None:
+    skill_dir = _write_flag_skill(tmp_path, "sample", "Use --since <N>", "## 本文\n")
+
+    assert lint_skill(skill_dir) == []
+
+
+def test_lint_skill_requires_exclusive_mode_instruction(tmp_path: Path) -> None:
+    skill_dir = _write_flag_skill(
+        tmp_path,
+        "sample",
+        "Use --fast",
+        """## モード判定
+
+| mode | 読む reference |
+|---|---|
+| `--fast` | `references/fast.md` |
+""",
+    )
+
+    violations = lint_skill(skill_dir)
+
+    assert any("2 個以上" in violation and "停止" in violation for violation in violations)

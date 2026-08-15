@@ -11,6 +11,20 @@ import yaml
 _FRONTMATTER_DELIMITER = "---"
 _DESCRIPTION_DOUBLE_QUOTED = re.compile(r'^description:\s*"', re.MULTILINE)
 _MARKDOWN_HEADING = re.compile(r"^(?P<marks>#{1,6})\s+\S")
+_DESCRIPTION_FLAG = re.compile(r"(?<![\w-])--[a-z0-9]+(?:-[a-z0-9]+)*(?![a-z0-9-])")
+_VALUE_PLACEHOLDER = re.compile(r"\s*<[^>\n]+>")
+_TABLE_FLAG = re.compile(r"^`(?P<flag>--[a-z0-9]+(?:-[a-z0-9]+)*)`$")
+_MODE_HEADING = "## モード判定"
+_MODIFIER_HEADING = "## 修飾フラグ"
+_MAX_MODES = 5
+
+
+@dataclass(frozen=True, slots=True)
+class SkillLintViolation:
+    """One categorized skill lint violation."""
+
+    identifier: str
+    message: str
 
 
 def extract_frontmatter(text: str) -> str:
@@ -63,11 +77,120 @@ def lint_frontmatter_text(text: str) -> list[str]:
 
 
 def lint_skill(skill_dir: Path) -> list[str]:
-    """Return frontmatter contract violations for one skill directory."""
+    """Return skill contract violation messages for one skill directory."""
+    return [violation.message for violation in lint_skill_contract(skill_dir)]
+
+
+def lint_skill_contract(skill_dir: Path) -> list[SkillLintViolation]:
+    """Return categorized contract violations for one skill directory."""
     skill_md = skill_dir / "SKILL.md"
     if not skill_md.is_file():
-        return ["SKILL.md がありません"]
-    return lint_frontmatter_text(skill_md.read_text(encoding="utf-8"))
+        return [SkillLintViolation("skill_md_missing", "SKILL.md がありません")]
+
+    text = skill_md.read_text(encoding="utf-8")
+    frontmatter_violations = lint_frontmatter_text(text)
+    if frontmatter_violations:
+        return [SkillLintViolation("frontmatter", message) for message in frontmatter_violations]
+
+    parsed = parse_frontmatter(text)
+    if not isinstance(parsed, dict) or not isinstance(parsed["description"], str):
+        raise AssertionError("lint_frontmatter_text accepted an invalid frontmatter shape")
+    return _lint_flag_contract(text, parsed["description"])
+
+
+def _lint_flag_contract(text: str, description: str) -> list[SkillLintViolation]:
+    description_flags = _extract_description_flags(description)
+    mode_section = _optional_markdown_section(text, _MODE_HEADING)
+    modifier_section = _optional_markdown_section(text, _MODIFIER_HEADING)
+
+    if description_flags and mode_section is None and modifier_section is None:
+        return [
+            SkillLintViolation(
+                "flag_tables_missing",
+                "description に値なしフラグがありますが、## モード判定 / ## 修飾フラグの表がありません",
+            )
+        ]
+
+    mode_rows = _extract_table_flags(mode_section, ("mode", "読む reference"))
+    modifier_rows = _extract_table_flags(modifier_section, ("modifier", "効果"))
+    mode_flags = set(mode_rows)
+    modifier_flags = set(modifier_rows)
+    violations: list[SkillLintViolation] = []
+
+    for flag in sorted(description_flags - mode_flags - modifier_flags):
+        violations.append(
+            SkillLintViolation(
+                "description_flag_unregistered",
+                f"description の {flag} がモード判定表にも修飾フラグ表にも未登録です",
+            )
+        )
+    for flag in sorted(mode_flags & modifier_flags):
+        violations.append(
+            SkillLintViolation(
+                "flag_membership_duplicate",
+                f"{flag} がモード判定表と修飾フラグ表に重複所属しています",
+            )
+        )
+    if len(mode_rows) > _MAX_MODES:
+        violations.append(
+            SkillLintViolation(
+                "mode_limit_exceeded",
+                f"mode は {_MAX_MODES} 個以下にしてください (現在: {len(mode_rows)} 個)",
+            )
+        )
+    if mode_section is not None and not _states_exclusive_stop(mode_section):
+        violations.append(
+            SkillLintViolation(
+                "mode_exclusivity_missing",
+                "## モード判定に、2 個以上の同時指定を停止する旨がありません",
+            )
+        )
+    return violations
+
+
+def _extract_description_flags(description: str) -> set[str]:
+    flags: set[str] = set()
+    for match in _DESCRIPTION_FLAG.finditer(description):
+        if _VALUE_PLACEHOLDER.match(description, match.end()) is None:
+            flags.add(match.group())
+    return flags
+
+
+def _optional_markdown_section(text: str, heading: str) -> str | None:
+    try:
+        return extract_markdown_section(text, heading)
+    except ValueError:
+        return None
+
+
+def _extract_table_flags(section: str | None, expected_header: tuple[str, str]) -> tuple[str, ...]:
+    if section is None:
+        return ()
+    lines = [line.strip() for line in section.splitlines()]
+    header = f"| {expected_header[0]} | {expected_header[1]} |"
+    try:
+        header_index = lines.index(header)
+    except ValueError:
+        return ()
+
+    flags: list[str] = []
+    for line in lines[header_index + 2 :]:
+        if not line.startswith("|"):
+            if flags:
+                break
+            continue
+        cells = [cell.strip() for cell in line.strip("|").split("|")]
+        if len(cells) != 2:
+            continue
+        match = _TABLE_FLAG.fullmatch(cells[0])
+        if match is not None:
+            flags.append(match.group("flag"))
+    return tuple(flags)
+
+
+def _states_exclusive_stop(section: str) -> bool:
+    compact = re.sub(r"\s+", "", section)
+    return "2個以上" in compact and "停止" in compact
 
 
 def extract_markdown_section(text: str, heading: str) -> str:

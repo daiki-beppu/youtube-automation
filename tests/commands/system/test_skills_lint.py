@@ -107,6 +107,49 @@ def test_cli_lint_violation_exits_nonzero(fake_repo: Path, capsys: pytest.Captur
     assert "lint 失敗: 1/2 skill" in out
 
 
+def test_cli_lint_allowlisted_violation_is_reported_without_failing(
+    fake_repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    skills_dir = fake_repo / ".claude" / "skills"
+    _write_skill(
+        skills_dir,
+        "flop-analysis",
+        '---\nname: flop-analysis\ndescription: "Use --since"\n---\n\n## 本文\n',
+    )
+
+    assert main(["lint", "flop-analysis"]) == 0
+    out = capsys.readouterr().out
+    assert "flop-analysis:" in out
+    assert "allowlist" in out
+    assert "lint 合格: 1 skill" in out
+
+
+def test_cli_lint_allowlist_does_not_hide_another_violation(
+    fake_repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    skills_dir = fake_repo / ".claude" / "skills"
+    _write_skill(
+        skills_dir,
+        "flop-analysis",
+        """---
+name: flop-analysis
+description: "Use --since"
+---
+
+## 修飾フラグ
+
+| modifier | 効果 |
+|---|---|
+| `--other` | 別の調整 |
+""",
+    )
+
+    assert main(["lint", "flop-analysis"]) == 1
+    out = capsys.readouterr().out
+    assert "--since" in out
+    assert "未登録" in out
+
+
 def test_cli_lint_single_skill_filters_targets(fake_repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
     skills_dir = fake_repo / ".claude" / "skills"
     _write_skill(skills_dir, "bad-skill", "# frontmatter なし\n")
