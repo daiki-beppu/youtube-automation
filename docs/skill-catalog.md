@@ -6,7 +6,7 @@ PDCA 対応: 準備 = 準備する / Plan = 調べる → 決める / Do = 進�
 
 ## 準備する
 
-- `/automation` — Use when 下流リポジトリで automation を最新リリースへ追従させるとき。
+- `/automation` — Use when 下流リポジトリで automation を最新リリースへ追従させるとき、またはツールキットの仕様・skill・CLIについて質問するとき。
 - `/automation-release` — Use when 本リポジトリの新規リリースを作成するとき。
 - `/extension` — Use when Chrome 拡張（suno-helper / distrokid-helper / community-helper）の導入・更新、または拡張向け collection server の起動・停止を行うとき。
 - `/setup` — Use when ツール導入と GCP / OAuth の設定、新規 YouTube チャンネル開設、既存チャンネル取り込み、config 再生成、または YouTube 側設定同期を行うとき。
