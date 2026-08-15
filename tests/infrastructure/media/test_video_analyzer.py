@@ -25,7 +25,9 @@ from unittest.mock import MagicMock, patch
 import pytest
 from google.genai.errors import APIError
 
-from youtube_automation.core.errors import ValidationError
+from youtube_automation.application.analytics.video_report import write_video_analysis_report
+from youtube_automation.application.documents.migration import MarkdownMigrationDecision
+from youtube_automation.core.errors import DocumentMigrationError, ValidationError
 from youtube_automation.infrastructure.media.video_analyzer import (
     VideoAnalysisReport,
     VideoAnalyzer,
@@ -598,3 +600,31 @@ class TestVideoAnalysisReport:
         # Then: 中間ディレクトリが作成される
         assert out_path.exists()
         assert (deep / "video_analysis").is_dir()
+
+    def test_write_document_creates_validated_json_and_html_pair(self, tmp_path):
+        out_path, state = write_video_analysis_report(
+            reports_dir=tmp_path,
+            slug="ambient",
+            results=[{"video_id": "VID", "url": "https://example.invalid", "analysis_window_sec": 900}],
+            failures=[],
+            migration_decision=MarkdownMigrationDecision.NOT_REQUIRED,
+        )
+
+        assert state.value == "created"
+        assert out_path.suffix == ".json"
+        assert out_path.with_suffix(".html").is_file()
+        assert not out_path.with_suffix(".md").exists()
+
+    def test_write_document_requires_explicit_legacy_markdown_decision(self, tmp_path):
+        legacy = tmp_path / "video_analysis" / "ambient.md"
+        legacy.parent.mkdir(parents=True)
+        legacy.write_text("legacy", encoding="utf-8")
+
+        with pytest.raises(DocumentMigrationError, match="明示的な yes/no"):
+            write_video_analysis_report(
+                reports_dir=tmp_path,
+                slug="ambient",
+                results=[],
+                failures=[],
+                migration_decision=MarkdownMigrationDecision.NOT_REQUIRED,
+            )

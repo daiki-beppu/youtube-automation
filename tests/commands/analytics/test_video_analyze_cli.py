@@ -565,14 +565,16 @@ class TestMainAnalysisWindowFlow:
         contents = client.models.generate_content.call_args.kwargs["contents"]
         assert contents[0].video_metadata.end_offset == "300s"
 
-        # And: JSON / Markdown 生成物にも実際の窓幅が残る
+        # And: 解析 JSON / 監査 JSON+HTML 生成物にも実際の窓幅が残る
         json_path = tmp_path / "data" / "video_analysis" / "url" / "ABCDEFGHIJK.json"
         payload = json.loads(json_path.read_text(encoding="utf-8"))
         assert payload["analysis_window_sec"] == 300
         assert payload["analysis_scope"]["end_offset_sec"] == 300
 
-        report_path = tmp_path / "reports" / "video_analysis" / "url.md"
-        assert "- analysis_window_sec: 300" in report_path.read_text(encoding="utf-8")
+        report_path = tmp_path / "reports" / "video_analysis" / "url.json"
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        assert report["results"][0]["analysis_window_sec"] == 300
+        assert report_path.with_suffix(".html").is_file()
 
     def test_default_window_flows_to_gemini_end_offset(self, tmp_path, monkeypatch):
         # Given: delay だけ override し、analysis_window_sec は配布 default の 900 秒

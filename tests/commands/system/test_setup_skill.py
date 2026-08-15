@@ -605,11 +605,12 @@ def test_setup_stale_report_guidance_delegates_to_wf_new_ideation_contract() -> 
     assert "skill 呼び出し失敗または再検証失敗時" in freshness_rules
 
     assert "stale ではない → analytics mode" in analytics_report_section
-    assert "`reports/analysis_*.md` が無く、`data/benchmark_*.json` がある → benchmark fallback mode" in (
+    assert "検証済み `reports/analysis_*.json` が無く、`data/benchmark_*.json` がある → benchmark fallback mode" in (
         analytics_report_section
     )
     assert (
-        "`reports/analysis_*.md` と `data/benchmark_*.json` がどちらも無い → minimal mode" in analytics_report_section
+        "検証済み `reports/analysis_*.json` と `data/benchmark_*.json` がどちらも無い → minimal mode"
+        in analytics_report_section
     )
 
     assert setup.count("`apply.stop_reason` が `completed`") == 1

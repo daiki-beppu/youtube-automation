@@ -280,11 +280,11 @@ AI は config をここで生成しない。`yt-setup-dirs` で setup 用ディ�
 
 #### `analytics_report` — `/wf-new` 入力モード状態
 
-`reports/analysis_*.md` が存在しないこと自体は setup のブロッカーにしない。`yt-doctor` の message に表示される入力モードは、Markdown の有無と stale の**予備確認**として扱う。`yt-doctor` は同日付 JSON の存在や analysis JSON validator の成否を確認しないため、analytics mode の最終判定には使わない:
+検証済み `reports/analysis_*.json` が存在しないこと自体は setup のブロッカーにしない。`yt-doctor` の message に表示される入力モードは、schema検証済み JSON+HTML pair と stale の確認として扱う:
 
-- ファイル名日付が最新の `reports/analysis_*.md` と同日付の `.json` が存在し、`.claude/skills/analytics/references/analysis-json-validator.md` の validator が exit 0 で、stale ではない → analytics mode
-- `reports/analysis_*.md` が無く、`data/benchmark_*.json` がある → benchmark fallback mode
-- `reports/analysis_*.md` と `data/benchmark_*.json` がどちらも無い → minimal mode
+- ファイル名日付が最新の `reports/analysis_*.json` と同日付 `.html` が存在し、`.claude/skills/analytics/references/analysis-json-validator.md` の validator が exit 0 で、stale ではない → analytics mode
+- 検証済み `reports/analysis_*.json` が無く、`data/benchmark_*.json` がある → benchmark fallback mode
+- 検証済み `reports/analysis_*.json` と `data/benchmark_*.json` がどちらも無い → minimal mode
 
 Markdown があるのに同日付 JSON がない、または validator が失敗する場合は fallback せず `/analytics --analyze` 再実行を案内する。
 
@@ -296,10 +296,10 @@ Markdown があるのに同日付 JSON がない、または validator が失敗
 
 benchmark の有無は analytics report の有無より優先しない:
 
-- `yt-doctor` の予備判定: fresh `reports/analysis_*.md` がある → benchmark の有無に関係なく analytics mode
-- validator 成功済みで fresh な同日付 `reports/analysis_*.md` / `.json` ペアがある → benchmark の有無に関係なく analytics mode
-- `reports/analysis_*.md` が無く、`data/benchmark_*.json` がある → benchmark fallback mode
-- `reports/analysis_*.md` と `data/benchmark_*.json` がどちらも無い → minimal mode
+- `yt-doctor`: fresh で検証済みの同日付 `reports/analysis_*.json` / `.html` ペアがある → benchmark の有無に関係なく analytics mode
+- validator 成功済みで fresh な JSON+HTML pair がある → benchmark の有無に関係なく analytics mode
+- 検証済み analysis JSON が無く、`data/benchmark_*.json` がある → benchmark fallback mode
+- 検証済み analysis JSON と `data/benchmark_*.json` がどちらも無い → minimal mode
 
 1 行目は現行 `yt-doctor` の表示上の予備判定であり、最終 Hard Gate ではない。`/wf-new` 企画工程は 2 行目のペア + validator 条件で判定する。
 

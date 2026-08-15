@@ -7,7 +7,7 @@ Issue #103 で追加: ベンチマーク競合・自チャンネル動画・任�
 責務分割:
 - `VideoTarget`        : 解析対象 1 件分の入力データ (CLI 層で構築)
 - `VideoAnalyzer`      : Gemini 呼出 + JSON パース + ファイル保存
-- `VideoAnalysisReport`: 解析結果を slug 単位で Markdown 集約
+- `VideoAnalysisReport`: 解析結果を slug 単位の監査 JSON+HTML へ集約
 
 Gemini Client は外部から DI する (テスト容易性 + 認証戦略の分裂回避)。
 """
@@ -19,7 +19,7 @@ import logging
 import re
 import time
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -199,7 +199,7 @@ def _attach_metadata(
 
 
 class VideoAnalysisReport:
-    """slug 単位の Markdown 集約レポート。"""
+    """slug 単位の監査レポート owner（legacy Markdown render は互換用）。"""
 
     @staticmethod
     def render(*, slug: str, results: list[dict[str, Any]], failures: list[dict[str, Any]]) -> str:
@@ -239,6 +239,54 @@ class VideoAnalysisReport:
         out_path.write_text(content, encoding="utf-8")
         logger.info("動画分析レポート保存: %s", out_path)
         return out_path
+
+    @staticmethod
+    def document(*, slug: str, results: list[dict[str, Any]], failures: list[dict[str, Any]]) -> dict[str, Any]:
+        """解析結果を audit report schema の固定 matrix へ写像する。"""
+        generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        matrix = [
+            {
+                "check": str(result.get("video_id") or result.get("title") or "video"),
+                "status": "PASS",
+                "evidence": [
+                    str(result.get("url") or "local video analysis"),
+                    f"analysis_window_sec={result.get('analysis_window_sec', 'unknown')}",
+                ],
+                "next_action": None,
+            }
+            for result in results
+        ]
+        matrix.extend(
+            {
+                "check": str(failure.get("video_id") or "video"),
+                "status": "FAIL",
+                "evidence": [str(failure.get("error") or "analysis failed")],
+                "next_action": "入力とAPI状態を確認して /audit --video を再実行",
+            }
+            for failure in failures
+        )
+        if not matrix:
+            matrix.append(
+                {
+                    "check": "video analysis target",
+                    "status": "WARN",
+                    "evidence": ["解析対象が0件"],
+                    "next_action": "公開済み動画を確認",
+                }
+            )
+        status = "FAIL" if failures else ("PASS" if results else "WARN")
+        return {
+            "schema_version": 1,
+            "generated_at": generated_at,
+            "audit_type": "video",
+            "subject": slug,
+            "status": status,
+            "summary": f"成功 {len(results)} 件 / 失敗 {len(failures)} 件",
+            "matrix": matrix,
+            "recommended_actions": (["失敗動画を再解析"] if failures else []),
+            "results": results,
+            "failures": failures,
+        }
 
 
 def _render_video_section(result: dict[str, Any]) -> list[str]:

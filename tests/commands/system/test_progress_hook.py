@@ -9,8 +9,33 @@ import pytest
 
 from tests.helpers.paths import FIXTURES_DIR
 from youtube_automation.commands.system import progress_hook
+from youtube_automation.domains.documents.schema_registry import RepositorySchema
+from youtube_automation.infrastructure.documents.publishing import publish_json_document
 
 _FIXTURES = FIXTURES_DIR / "progress_hook"
+
+
+def _analysis_pair(reports: Path, report_date: str) -> None:
+    path = reports / f"analysis_{report_date}.json"
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": 3,
+                "generated_at": "2026-07-20T00:00:00Z",
+                "summary": "分析サマリ",
+                "inputs": {},
+                "cli_outputs": {},
+                "vpd_ranking": {},
+                "win_pattern": {},
+                "strategic_improvements": [],
+                "next_collection_candidates": [],
+                "action_plan": [],
+                "strategic_discussion": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    publish_json_document(path, RepositorySchema.ANALYSIS_REPORT)
 
 
 def _run(payload: str, capsys: pytest.CaptureFixture[str]) -> tuple[int, str, str]:
@@ -240,8 +265,8 @@ def test_should_mark_post_publish_and_analysis_from_channel_artifacts(
     )
     reports = tmp_path / "reports"
     reports.mkdir()
-    (reports / "analysis_20260719.md").write_text("old", encoding="utf-8")
-    (reports / "analysis_20260720.md").write_text("current", encoding="utf-8")
+    _analysis_pair(reports, "20260719")
+    _analysis_pair(reports, "20260720")
 
     message = _progress_message(
         tmp_path,
@@ -280,8 +305,8 @@ def test_should_not_complete_post_publish_for_other_video_or_analysis_before_pub
     )
     reports = tmp_path / "reports"
     reports.mkdir()
-    (reports / "analysis_20261340.md").write_text("invalid date", encoding="utf-8")
-    (reports / "analysis_20260719.md").write_text("too old", encoding="utf-8")
+    (reports / "analysis_20261340.json").write_text("{}", encoding="utf-8")
+    _analysis_pair(reports, "20260719")
 
     message = _progress_message(tmp_path, capsys, command="gh pr checks 42")
 

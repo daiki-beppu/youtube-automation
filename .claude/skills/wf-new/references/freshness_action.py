@@ -10,6 +10,10 @@ import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+from youtube_automation.core.errors import AutomationError
+from youtube_automation.domains.documents.schema_registry import RepositorySchema
+from youtube_automation.infrastructure.documents.publishing import read_published_json_document
+
 
 @dataclass(frozen=True)
 class Decision:
@@ -49,7 +53,15 @@ def next_workflow_step(
 
 
 def _estimate(reports_dir: Path, count: int, usd_per_kib: float) -> tuple[float | None, int, str | None]:
-    reports = sorted(reports_dir.glob("analysis_*.md"), reverse=True)[:count]
+    reports: list[Path] = []
+    for report in sorted(reports_dir.glob("analysis_*.json"), reverse=True):
+        try:
+            read_published_json_document(report, RepositorySchema.ANALYSIS_REPORT)
+        except AutomationError:
+            continue
+        reports.append(report)
+        if len(reports) == count:
+            break
     if not reports:
         return None, 0, "分析 report がないため見積不能（安全側上限）"
     sizes = [report.stat().st_size for report in reports]

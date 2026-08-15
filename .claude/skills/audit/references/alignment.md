@@ -14,7 +14,7 @@
 
 ## 完了条件
 
-Phase 3 の整合性マトリクスと Phase 4 の改善候補を提示し、`docs/plans/alignment-audit.md` を保存した時点で完了。不整合の解消（サムネ再生成等）は Next Step の各スキルへ委譲し、完了条件に含まない。
+Phase 3 の整合性マトリクスと Phase 4 の改善候補を `audit-report.schema.json` 準拠 JSON にまとめ、`docs/plans/alignment-audit.json` と同 basename HTML を保存した時点で完了。不整合の解消（サムネ再生成等）は Next Step の各スキルへ委譲し、完了条件に含まない。
 
 ## 前提
 
@@ -79,7 +79,18 @@ Phase 1-2 の結果を統合し、各コレクションの整合性を判定す�
 
 ### Phase 5: レポート保存
 
-Phase 1-4 の根拠・判定・改善候補を `docs/plans/alignment-audit.md` に保存する。`config/channel/content.json` の `title.template` は変更しない。
+Phase 1-4 を `.claude/skills/audit/references/audit-report.schema.json` の固定キーへ写像する。`audit_type: alignment`、全体の `status`、`summary`、各行の `check` / `status`（PASS/FAIL/WARN）/ `evidence` / `next_action`、`recommended_actions` を省略しない。candidate JSON は公開先と別の一時 path に作る。
+
+公開先 `docs/plans/alignment-audit.json` と同 basename HTML は共通 migration workflow だけで生成する。既存の `docs/plans/alignment-audit.md` だけがある場合は、candidate を生成する前に利用者へ Markdown 移行の Yes/No を明示確認する。No なら既存ファイルを変更せず停止する。Yes の場合だけ `--migration-decision yes` を付ける。新規または移行済み JSON+HTML 更新では decision を付けない。
+
+```bash
+uv run yt-document-migrate <candidate.json> \
+  --target docs/plans/alignment-audit.json \
+  --schema audit-report.schema.json \
+  [--migration-decision yes]
+```
+
+exit 0 後に JSON と HTML を再読込でき、Markdown-only 移行なら旧 `.md` が削除されたことを確認して完了とする。schema 不正、pair 不一致、stale HTML は成功扱いにしない。`config/channel/content.json` の `title.template` は変更しない。
 
 ## 障害時ガイダンス
 
@@ -101,7 +112,7 @@ Phase 1-4 の根拠・判定・改善候補を `docs/plans/alignment-audit.md` �
 
 ## Next Step
 
-`docs/plans/alignment-audit.md` 保存後、不整合カテゴリに応じて以下のスキルを案内する。自動実行しない。
+`docs/plans/alignment-audit.json` と `.html` 保存後、不整合カテゴリに応じて以下のスキルを案内する。自動実行しない。
 
 | 不整合カテゴリ | 症状 | 再実行スキル |
 |---|---|---|

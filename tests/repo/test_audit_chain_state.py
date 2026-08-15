@@ -12,7 +12,9 @@ from types import ModuleType
 import pytest
 
 from tests.helpers.paths import REPO_ROOT
+from youtube_automation.domains.documents.schema_registry import RepositorySchema
 from youtube_automation.domains.skills.inventory import SkillInventory
+from youtube_automation.infrastructure.documents.publishing import publish_json_document
 
 INVENTORY = SkillInventory(REPO_ROOT)
 SKILL_DIR = INVENTORY.skill_directory("audit")
@@ -47,12 +49,31 @@ def _published_video(root: Path, *, collection: str = "collection-a", video_id: 
 
 
 def _completed_alignment(root: Path) -> None:
-    _write(root / "docs" / "plans" / "alignment-audit.md", "# audit\n")
+    _audit_pair(root / "docs" / "plans" / "alignment-audit.json", "alignment", "channel")
+
+
+def _audit_pair(path: Path, audit_type: str, subject: str) -> None:
+    _write(
+        path,
+        json.dumps(
+            {
+                "schema_version": 1,
+                "generated_at": "2026-08-16T00:00:00Z",
+                "audit_type": audit_type,
+                "subject": subject,
+                "status": "PASS",
+                "summary": "監査完了",
+                "matrix": [{"check": "contract", "status": "PASS", "evidence": ["fixture"], "next_action": None}],
+                "recommended_actions": [],
+            }
+        ),
+    )
+    publish_json_document(path, RepositorySchema.AUDIT_REPORT)
 
 
 def _completed_video(root: Path, *, video_id: str = "video-123") -> None:
     _write(root / "data" / "video_analysis" / "channel" / f"{video_id}.json")
-    _write(root / "reports" / "video_analysis" / "channel.md", "# report\n")
+    _audit_pair(root / "reports" / "video_analysis" / "channel.json", "video", "channel")
 
 
 def test_manifest_declares_four_read_only_steps_in_diagnostic_order() -> None:

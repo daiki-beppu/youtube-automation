@@ -1,0 +1,35 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "audit-report.schema.json",
+  "title": "YouTube 運用監査レポート",
+  "description": "監査判定、根拠、次の action の唯一の正本。",
+  "type": "object",
+  "required": ["schema_version", "generated_at", "audit_type", "subject", "status", "summary", "matrix", "recommended_actions"],
+  "properties": {
+    "schema_version": {"title": "Schema version", "const": 1, "x-view": {"order": 0}},
+    "generated_at": {"title": "Generated at", "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$", "x-view": {"order": 1}},
+    "audit_type": {"title": "Audit type", "enum": ["alignment", "video"], "x-view": {"order": 2}},
+    "subject": {"title": "監査対象", "type": "string", "minLength": 1, "x-view": {"order": 3}},
+    "status": {"title": "総合判定", "enum": ["PASS", "FAIL", "WARN"], "x-view": {"order": 4}},
+    "summary": {"title": "サマリ", "type": "string", "minLength": 1, "x-view": {"order": 10}},
+    "matrix": {
+      "title": "監査マトリクス",
+      "type": "array",
+      "minItems": 1,
+      "x-view": {"order": 20, "presentation": "table"},
+      "items": {
+        "type": "object",
+        "required": ["check", "status", "evidence", "next_action"],
+        "properties": {
+          "check": {"type": "string", "minLength": 1},
+          "status": {"enum": ["PASS", "FAIL", "WARN"]},
+          "evidence": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+          "next_action": {"type": ["string", "null"]}
+        },
+        "additionalProperties": true
+      }
+    },
+    "recommended_actions": {"title": "推奨 action", "type": "array", "items": {"type": "string", "minLength": 1}, "x-view": {"order": 30}}
+  },
+  "additionalProperties": true
+}

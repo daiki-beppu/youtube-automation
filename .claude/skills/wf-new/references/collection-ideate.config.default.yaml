@@ -5,7 +5,7 @@
 
 # 分析データの絶対鮮度 (#1427)
 # 最新 data/analytics_data_*.json のファイル名日付が実行日 (today) から
-# この日数を超えて経過していたら、reports/analysis_*.md との相対比較の結果に
+# この日数を超えて経過していたら、検証済み reports/analysis_*.json との相対比較の結果に
 # かかわらず絶対 stale とみなす。更新手順は references/freshness-rules.md を正とする。
 freshness_days: 7
 

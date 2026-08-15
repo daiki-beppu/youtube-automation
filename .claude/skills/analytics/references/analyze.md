@@ -10,19 +10,19 @@
 
 1. `yt-launch-curve --latest` / `yt-channel-trend` / `yt-theme-compare` / `yt-traffic-trend` / `yt-vpd-rank` / `yt-win-pattern` / `yt-ttp-health` を `--text` なしで実行し、7 コマンドすべてが成功している。`yt-vpd-rank` と `yt-win-pattern` は各 1 回だけ実行している
 2. 既存分析 4 CLI、`yt-vpd-rank`、`yt-win-pattern`、`yt-ttp-health` の JSON 出力を schema version 3 の「構造化 JSON 契約」に従って `reports/analysis_YYYYMMDD.json` に保存している
-3. 「分析項目」の全項目をカバーした `reports/analysis_YYYYMMDD.md` を保存している
-4. Markdown の根拠に、`yt-ttp-health` を除く 6 CLI **それぞれから少なくとも 1 つの数値**を JSON path と共に引用している
-5. ユーザーに Markdown / JSON の両パスと要約を提示している
+3. 「分析項目」の全項目をカバーした schema 準拠 `reports/analysis_YYYYMMDD.json` と同 basename HTML を保存している
+4. JSON の evidence に、`yt-ttp-health` を除く 6 CLI **それぞれから少なくとも 1 つの数値**を JSON path と共に保存している
+5. ユーザーに JSON / HTML の両パスと要約を提示している
 6. `references/analysis-json-validator.md` の validator が、full 収集データに対する構造化 `retention_analysis` と視聴維持率の数値引用を含めて exit 0 になっている
 7. 「学びの insights 蓄積」に従い、主要な学びを `data/insights.jsonl` へ `references/insights-entry.schema.json` 準拠で追記し（新規知見が無い場合は「追記 0 件」を明示）、`references/validate_insights.py` が exit 0 になっている
 
-CLI 未実行、終了コード非 0、JSON のパース失敗、6 CLI のいずれかの数値引用欠落、Markdown / JSON の片方のみの場合は未完了。鮮度チェックでスキップできるのも、同じ `YYYYMMDD` の schema version 3 の完了条件を満たす Markdown / JSON ペアが存在する場合だけで、鮮度内でも schema version 2 は再分析する（スキップ時は insights の再追記も行わない）。
+CLI 未実行、終了コード非 0、JSON のパース失敗、6 CLI のいずれかの evidence 欠落、JSON / HTML の片方のみの場合は未完了。鮮度チェックでスキップできるのも、同じ `YYYYMMDD` の schema version 3 の完了条件を満たす JSON / HTML ペアが存在する場合だけで、鮮度内でも schema version 2 は再分析する（スキップ時は insights の再追記も行わない）。
 
 ## Subagent 委譲ゲート
 
 メインエージェントは前提確認、鮮度チェック、対象ファイルの選定、成果物存在確認、ユーザーへの短い報告だけを担当する。`data/analytics_data_*.json`、専門 CLI の JSON 出力、`data/video_analysis/` の詳細 JSON はメイン会話で直接 Read せず、分析 subagent へ入力パスとして渡す。
 
-分析 subagent は指定された入力パスを読み、必須 7 CLI を実行し、分析結果を同じ日付の `reports/analysis_YYYYMMDD.md` と `reports/analysis_YYYYMMDD.json` に保存する。既存 4 CLI は `cli_outputs`、VPD 2 CLI はトップレベル `vpd_ranking` / `win_pattern`、`yt-ttp-health` は `ttp_health` へ stdout JSON object を値を変更せず埋め込む。完了報告では `status`、読んだ入力パス、実行した CLI、生成または再利用したレポートパス、主要発見の要約だけを返し、生データ本文や CLI JSON 全文を返さない。メインエージェントは Markdown / JSON ペアの存在と、`references/analysis-json-validator.md` の validator が exit 0 になることを機械的に確認してから完了を報告する。
+分析 subagent は指定された入力パスを読み、必須 7 CLI を実行し、分析結果を `analysis-report.schema.json` 準拠 candidate JSON に保存する。`summary`、主要指標、VPD/勝ち型比較、evidence 付き示唆、推奨 action を JSON の固定キーへ保存する。既存 4 CLI は `cli_outputs`、VPD 2 CLI はトップレベル `vpd_ranking` / `win_pattern`、`yt-ttp-health` は `ttp_health` へ stdout JSON object を値を変更せず埋め込む。完了報告では `status`、読んだ入力パス、実行した CLI、生成または再利用したレポートパス、主要発見の要約だけを返し、生データ本文や CLI JSON 全文を返さない。メインエージェントは common migration workflow で `reports/analysis_YYYYMMDD.{json,html}` を公開し、`references/analysis-json-validator.md` の validator が exit 0 になることを機械的に確認してから完了を報告する。
 
 ## 前提
 
@@ -62,7 +62,7 @@ CLI 未実行、終了コード非 0、JSON のパース失敗、6 CLI のいず
 2. `config/skills/analytics.yaml`（存在する場合。deep-merge でチャンネル上書きを優先）
 
 分析実行前に `reports/` 配下の最新レポートを確認する:
-- `freshness_minutes` 分以内に生成された同日付の `analysis_YYYYMMDD.md` / `.json` ペアがあり、`references/analysis-json-validator.md` の validator が exit 0 の場合だけ分析をスキップし、その内容を使用
+- `freshness_minutes` 分以内に生成された同日付の `analysis_YYYYMMDD.json` / `.html` ペアがあり、JSON schema と `references/analysis-json-validator.md` の validator が exit 0 の場合だけ分析をスキップし、AI入力には JSON だけを使用
 - スキップ時: 「既存レポートが十分新しいため分析をスキップしました（`<filename>`、`<N>`分前に生成）」と表示
 
 ### 対象データ
@@ -89,7 +89,7 @@ subagent へは次を具体値で渡す:
 - 実行する作業: 「分析項目」の全項目をカバーする分析と、必須の `yt-launch-curve --latest` / `yt-channel-trend` / `yt-theme-compare` / `yt-traffic-trend` / `yt-vpd-rank` / `yt-win-pattern` / `yt-ttp-health`
 - VPD 中間成果物: `reports/analysis_YYYYMMDD.vpd-ranking.json` / `.visual-annotations.json` / `.win-pattern.json`。最初の JSON は `yt-vpd-rank` stdout、最後は `yt-win-pattern` stdout を直接 capture する
 - 目視分類: captured ranking の top / bottom 全動画を `/channel-research --thumbnail` と同じ構図 / 配色 / テキスト配置 / 視線誘導 / キャラ・被写体の 5 軸で分類する。同じ captured JSON の `video_id` だけを使い、観測不能は推測せず JSON `null` にする
-- 期待成果物: 同じ日付の `reports/analysis_YYYYMMDD.md` と `reports/analysis_YYYYMMDD.json`
+- 期待成果物: 同じ日付の `reports/analysis_YYYYMMDD.json` と `reports/analysis_YYYYMMDD.html`
 - 完了報告: `status: success | failure`、`inputs`、`commands`、`artifacts`、`summary`、`errors`
 
 #### VPD snapshot と目視 annotation の固定手順
@@ -126,7 +126,7 @@ annotation は `{"videos": [...]}` のみを root に持ち、top / bottom の�
 4. **具体的アクションプラン**: CTR 達成のための具体的施策 — 即実行可能なアクションに落とし込む
 5. **視聴維持率分析**: full 収集データでは `references/analysis-json-validator.md` の retention 契約に従って全有効動画を比較し、「中身の弱さ」仮説を数値根拠で評価する。standard データでは推測で補わず、full 収集が必要と明記する
 6. **流入源・デバイス分析**: `yt-traffic-trend` の出力から流入源シェア（ブラウズ / 検索 / 外部等）の構成と推移、デバイス別視聴傾向、YT_SEARCH 検索語トップ N を数値根拠付きで分析する — SEO 施策・企画判断と `/wf-new` / `/video --describe` への接続データ。`search_terms` が空の場合は推測で補わず、`yt-analytics` での再収集が必要と明記する
-7. **収益・RPM 分析**: `revenue_analytics.status == "available"` の場合、`video_analytics` のタイトルと `config/channel/content.json::tags.themes` を使ってテーマ別・コレクション別に `estimated_revenue` と `views` を合計し、加重 RPM（`収益合計 / 再生合計 * 1000`）を算出する。動画別 RPM の単純平均は使わない。各グループの収益・再生・RPM・対象動画数を Markdown の「収益・RPM 分析」へ JSON path 付きで記載し、企画判断へ接続する。`status == "unavailable"` または旧データで `revenue_analytics` が無い場合は推測せず、それぞれ「収益データ利用不可」「収益メトリクスの再収集が必要」と明記する
+7. **収益・RPM 分析**: `revenue_analytics.status == "available"` の場合、`video_analytics` のタイトルと `config/channel/content.json::tags.themes` を使ってテーマ別・コレクション別に `estimated_revenue` と `views` を合計し、加重 RPM（`収益合計 / 再生合計 * 1000`）を算出する。動画別 RPM の単純平均は使わない。各グループの収益・再生・RPM・対象動画数を JSON `revenue_analysis` に記録し、企画判断へ接続する。`status == "unavailable"` または旧データで `revenue_analytics` が無い場合は推測せず状態を保存する
 8. **プレイリスト効果分析**: JSON の `playlist_analytics.playlists` から、視聴数上位 200 件のプレイリスト別の views・`view_share_percent`・`average_view_duration` を表で報告する。`view_share_percent` は上位 200 件内のシェアであり、チャンネル全体に対するシェアとして扱わない。`config/channel/playlists.json` と照合できる ID は名前／キーを併記し、Complete Collection を識別する。未登録 ID は ID のまま明記する。views とシェアはプレイリスト内視聴の多寡を示す観測値であり、概要欄・固定コメントなどの導線施策が原因であるとは断定しない。データ欠損・0件時はその旨を記載し、再収集を案内する。
 9. **登録を生む動画の型**: `strategic_analysis.subscriber_conversion_ranking` の動画別登録転換率（`subscribers_gained ÷ views × 100`）上位を、タイトル・説明文からのテーマ、`duration`、`views`、`subscribers_gained` とともに要約する。`audience.by_subscribed_status` の登録済み／未登録の視聴比率を併記し、未登録視聴が多いのに転換率が低いのか、登録済み視聴が中心なのかを切り分けて次企画の仮説を示す。サムネイル傾向は動画 URL の実画像または `yt-thumbnail-correlate` の根拠を確認できた場合だけ記述する。`subscribedStatus` はチャンネル全体集計であり、個別動画の転換原因とは断定しない。`views` が 0 の動画の転換率は 0% として扱う。
 10. **VPD 上位 / 下位の定量比較**: `vpd_ranking` の N / K と上位・下位動画、`win_pattern` の属性値別本数・known denominator の割合・pp 差・勝ち / 負け / 保留を記載する。目視属性の `undetermined` は判定不能として exact 件数を JSON path 付きで引用する。この母集団で観測した相関であり因果ではない旨を明記する。
@@ -145,15 +145,15 @@ annotation は `{"videos": [...]}` のみを root に持ち、top / bottom の�
 - **`yt-thumbnail-correlate`**: サムネ画像の特徴量 (brightness/contrast/saturation/dominant_hue/colorfulness) と CTR/views/engagement の Pearson 相関。`--metric` 未指定なら CTR 欠測時に views へ自動フォールバックし、出力 JSON の `metric_fallback` に理由が残る。各相関には `p_value` / `p_value_adjusted`（Benjamini-Hochberg 補正）/ `significant` が付く。**`significant: false` の相関を方針の根拠に使わないこと**（引用時は「有意でない」と明記）。`note: "サンプル不足で判定不能"`（n<10）は判断材料にしない。次回サムネ制作の方向性。
 - **`yt-kpi-dashboard`**: 成長 KPI 定点ビュー。`data/analytics_data_*.json` 全スナップショットを横断し、レバー別 KPI（views / Imp / CTR / 平均視聴維持率 / 登録者純増）の週次推移を前週比付きで返す。Reporting API の保持期間（60 日）を超えた過去の Imp / CTR も時系列に含まれ、欠測週は補間せず明示される。週次運用ループの冒頭で「どのレバーが先週動いたか」を 1 枚で確認し、深掘り対象の選定に使う（`--markdown` でテーブル表示、`--save` で `reports/kpi_weekly_YYYYMMDD.{json,md}` 保存）。`yt-channel-trend` が最新スナップショット 1 件の日次系列を見るのに対し、こちらはスナップショット横断の週次俯瞰。
 
-subagent はこれらの出力 JSON を分析の根拠として使い、「数値 (例: 中央値比 6.3倍)」を含む主張を行うこと。Markdown の数値引用は `references/analysis-json-validator.md` の形式に従う。ただしメインエージェントへ返す完了報告には JSON 全文を含めず、レポートパスと主要数値の要約に絞る。
+subagent はこれらの出力 JSON を分析の根拠として使い、「数値 (例: 中央値比 6.3倍)」を含む主張を JSON evidence として保存する。形式は `references/analysis-json-validator.md` に従う。ただしメインエージェントへ返す完了報告には JSON 全文を含めず、レポートパスと主要数値の要約に絞る。
 
 ### 構造化 JSON 契約
 
 構造、固定キー、evidence、検証コマンドは `references/analysis-json-validator.md` を単一ソースとする。`schema_version` は `3` とする。既存分析 4 CLI は `--text` を付けずに実行し、終了コード 0 の stdout をキー名や値を変更せず対応する `cli_outputs` キーに保存する。`yt-vpd-rank` / `yt-win-pattern` の stdout object も再構成せずトップレベル `vpd_ranking` / `win_pattern` に保存し、captured artifact と JSON 等価にする。`yt-ttp-health` も stdout を変更せずトップレベル `ttp_health` に保存する。入力がなく `status: unavailable` の場合も `ttp_health` 自体は省略しない。標準エラー出力、`--text` 出力、失敗した CLI の出力は保存対象にしない。
 
-Markdown には `TTP 健全性` 節を設ける。`alert` のチャンネルは alert type と reason、`missing_data` / `insufficient_data` は不足理由を要約する。`status: unavailable` の場合は `/channel-research --benchmark` の再実行が必要な旨を明記し、欠損を健全として扱わない。
+JSON の `ttp_health` に alert type / reason と不足理由を保存する。`status: unavailable` の場合は欠損を健全として扱わず、推奨 action に `/channel-research --benchmark` の再実行を含める。
 
-成果物保存後に同 reference の検証手順を実行し、すべて成功した場合だけ完成扱いにする。戦略提案・次期候補・戦略ディスカッションの正本は JSON の `strategic_improvements` / `next_collection_candidates` / `strategic_discussion` とする。Markdown は人間向けの説明と数値引用を担う派生成果物であり、後続スキルが提案を読み取るときは JSON 固定キーを使用する。
+成果物保存後に同 reference の検証手順を実行し、すべて成功した場合だけ完成扱いにする。戦略提案・次期候補・戦略ディスカッションの正本は JSON の `strategic_improvements` / `next_collection_candidates` / `strategic_discussion` とする。HTML は common renderer の派生成果物であり、後続スキルは JSON 固定キーだけを使用する。
 
 `inputs` にはプレースホルダーではなく相対パスを保存する。`analysis_target` は `$ARGUMENTS` または更新時刻で選んだ分析本文の対象、`supplemental` は分析本文が実際に読み込んだ `data/video_analysis/` などの追加 JSON とする。`cli_selected` は既存 4 CLI の**直接分析入力 3 件**（最新 `data/analytics_data_*.json`、最新 `data/analytics/daily_per_video/*.json`、テーマ定義元 `config/channel/content.json`）だけを記録し、その既存の意味を変えない。VPD の captured ranking / annotation / win stdout は `inputs.intermediate` の 3 固定キーへ分離する。`yt-theme-compare` の `load_config()` が間接的にロードする他の `config/channel/*.json` や `config/localizations.json`、`yt-traffic-trend` がシェア推移のために読む過去の `data/analytics_data_*.json` スナップショット群は `cli_selected` に含めない。既存 4 CLI を再実行するときに異なる最新ファイルへ進んでしまわないよう、CLI 実行直後に確定済みパスが引き続き各ディレクトリの辞書順末尾であることを再確認する。変わっていた場合はその出力を保存せず、入力選定からやり直す。
 
@@ -171,7 +171,16 @@ Markdown には `TTP 健全性` 節を設ける。`alert` のチャンネルは 
 
 ### レポート保存
 
-subagent は分析結果を同じ日付の `reports/analysis_YYYYMMDD.md` と `reports/analysis_YYYYMMDD.json` に保存する（チャンネル横断レポート）。メインエージェントは保存後にペアの存在を確認し、`references/analysis-json-validator.md` の validator が exit 0 になることを機械的に確認する。レポート本文や CLI JSON 全文は会話へ展開しない。ペアが存在しない、または validator が失敗した場合は未完了として subagent に再実行させる。
+subagent は分析結果を公開先と別の candidate JSON に保存する（チャンネル横断レポート）。公開先の同日付 `.md` だけが存在する場合は candidate 生成前に移行の Yes/No を利用者へ明示確認し、No なら既存 Markdown を変更せず停止する。Yes なら `--migration-decision yes`、新規または移行済み更新なら decision なしで次を実行する。
+
+```bash
+uv run yt-document-migrate <candidate.json> \
+  --target reports/analysis_YYYYMMDD.json \
+  --schema analysis-report.schema.json \
+  [--migration-decision yes]
+```
+
+メインエージェントは同 basename JSON+HTML の存在・再読込・対応関係を確認し、`references/analysis-json-validator.md` の validator が exit 0 になることを機械的に確認する。schema 不正、stale/mismatched HTML、validator 失敗は未完了とし、JSON だけを後続 AI input とする。
 
 このファイルは **`/wf-new` 企画工程の前提必須入力**として読まれる。企画工程の Phase 1-2 で
 以下のセクションが重視される（内容で認識、番号は目安）:

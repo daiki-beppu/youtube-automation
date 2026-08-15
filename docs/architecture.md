@@ -222,8 +222,9 @@ assets/stock/           # ボツ画像ストック (#364)。<theme-slug>/ 配下
 | `domains.documents.schema_registry` | リポジトリ所有 JSON Schema の固定 inventory、Draft 7 compile cache、値非表示の検証エラー変換。外部 schema path は受け取らない |
 | `domains.documents.rendering` | schema annotation / `x-view` による card・table・media の自己完結 HTML 化と escape / CSP / embedded JSON 検証 |
 | `application.documents.migration` | skill 生成運用文書の new / Markdown 明示移行 / JSON+HTML 再更新を判定し、pair の検証付き transaction と旧 Markdown 削除を一操作として調停 |
+| `application.analytics.video_report` | 動画解析結果を audit report schema へ写像し、共通運用文書 migration による JSON+HTML 公開を調停 |
 | `infrastructure.filesystem` | provider-neutral な filesystem I/O と、複数 text file の fsync・rollback・公開後 verifier 付き transaction |
-| `infrastructure.documents.publishing` | 構造化 JSON と同 basename の HTML を temp・fsync・再読込検証・replace で原子的に公開 |
+| `infrastructure.documents.publishing` | 構造化 JSON と同 basename の HTML を temp・fsync・再読込検証・replace で原子的に公開し、consumer 向けに schema 検証済み JSON+HTML 対応 pair を再読込する |
 | `commands.documents.migrate` | skill writer の未公開 candidate JSON と明示 yes/no を共通移行 workflow へ渡す `yt-document-migrate` adapter |
 | `commands.documents.render` | 固定 schema registry から選択して HTML を生成する `yt-document-render` adapter |
 | `infrastructure.media.image_provider` | 画像生成プロバイダー抽象化（Gemini / OpenAI 切り替え） |

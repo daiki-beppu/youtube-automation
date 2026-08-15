@@ -40,6 +40,25 @@ def test_json_document_publishes_same_basename_html_atomically_and_deterministic
     assert not list(tmp_path.glob(".weekly-vote-log.html.*.tmp"))
 
 
+def test_read_published_json_document_returns_validated_json_only(tmp_path: Path) -> None:
+    source = tmp_path / "weekly-vote-log.json"
+    document = _weekly_document()
+    _write_json(source, document)
+    publishing.publish_json_document(source, RepositorySchema.WEEKLY_VOTE_LOG)
+
+    assert publishing.read_published_json_document(source, RepositorySchema.WEEKLY_VOTE_LOG) == document
+
+
+def test_read_published_json_document_rejects_mismatched_html(tmp_path: Path) -> None:
+    source = tmp_path / "weekly-vote-log.json"
+    _write_json(source, _weekly_document())
+    html = publishing.publish_json_document(source, RepositorySchema.WEEKLY_VOTE_LOG)
+    html.write_text("stale", encoding="utf-8")
+
+    with pytest.raises(DocumentRenderError, match="対応していません"):
+        publishing.read_published_json_document(source, RepositorySchema.WEEKLY_VOTE_LOG)
+
+
 def test_schema_failure_preserves_existing_html(tmp_path: Path) -> None:
     source = tmp_path / "weekly-vote-log.json"
     target = source.with_suffix(".html")

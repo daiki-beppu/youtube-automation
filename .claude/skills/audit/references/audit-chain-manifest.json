@@ -9,7 +9,7 @@
         "collections/live/*/10-assets/thumbnail.jpg",
         "collections/live/*/20-documentation/suno-prompts.md|lyria-prompt.md"
       ],
-      "outputArtifacts": ["docs/plans/alignment-audit.md"],
+      "outputArtifacts": ["docs/plans/alignment-audit.json", "docs/plans/alignment-audit.html"],
       "approvalGate": {
         "skip": true,
         "configPath": "workflow.audit.skip_approvals.alignment"
@@ -24,7 +24,8 @@
       "prerequisiteArtifacts": ["collections/live/*/workflow-state.json::upload.video_id"],
       "outputArtifacts": [
         "data/video_analysis/<channel>/<video-id>.json",
-        "reports/video_analysis/<channel>.md"
+        "reports/video_analysis/<channel>.json",
+        "reports/video_analysis/<channel>.html"
       ],
       "approvalGate": {
         "skip": true,
@@ -54,9 +55,11 @@
       "id": "value-loop",
       "skill": "audit",
       "prerequisiteArtifacts": [
-        "docs/plans/alignment-audit.md",
+        "docs/plans/alignment-audit.json",
+        "docs/plans/alignment-audit.html",
         "data/video_analysis/<channel>/<video-id>.json",
-        "reports/video_analysis/<channel>.md"
+        "reports/video_analysis/<channel>.json",
+        "reports/video_analysis/<channel>.html"
       ],
       "outputArtifacts": [],
       "approvalGate": {

@@ -18,7 +18,7 @@
       "id": "analyze",
       "skill": "analytics",
       "prerequisiteArtifacts": ["data/analytics_data_*.json"],
-      "outputArtifacts": ["reports/analysis_*.md", "reports/analysis_*.json"],
+      "outputArtifacts": ["reports/analysis_*.json", "reports/analysis_*.html"],
       "approvalGate": {
         "skip": true,
         "configPath": "workflow.analytics.skip_approvals.analyze"
@@ -30,7 +30,7 @@
     {
       "id": "report",
       "skill": "analytics",
-      "prerequisiteArtifacts": ["reports/analysis_*.md"],
+      "prerequisiteArtifacts": ["reports/analysis_*.json", "reports/analysis_*.html"],
       "outputArtifacts": [],
       "approvalGate": {
         "skip": true,

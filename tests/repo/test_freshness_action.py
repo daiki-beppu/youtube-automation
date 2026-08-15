@@ -6,6 +6,8 @@ import sys
 from pathlib import Path
 
 from tests.helpers.paths import REPO_ROOT
+from youtube_automation.domains.documents.schema_registry import RepositorySchema
+from youtube_automation.infrastructure.documents.publishing import publish_json_document
 
 _RUNNER = REPO_ROOT / ".claude/skills/wf-new/references/freshness_action.py"
 
@@ -20,10 +22,25 @@ def _run(tmp_path: Path, *args: str) -> tuple[subprocess.CompletedProcess[str], 
     return result, json.loads(result.stdout)
 
 
-def _report(tmp_path: Path, size: int = 1024) -> None:
+def _report(tmp_path: Path, size: int = 1) -> None:
     reports = tmp_path / "reports"
     reports.mkdir()
-    (reports / "analysis_20260714.md").write_bytes(b"x" * size)
+    path = reports / "analysis_20260714.json"
+    payload = {
+        "schema_version": 3,
+        "generated_at": "2026-07-14T00:00:00Z",
+        "summary": "分析サマリ",
+        "inputs": {"padding": "x" * size},
+        "cli_outputs": {},
+        "vpd_ranking": {},
+        "win_pattern": {},
+        "strategic_improvements": [],
+        "next_collection_candidates": [],
+        "action_plan": [],
+        "strategic_discussion": [],
+    }
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    publish_json_document(path, RepositorySchema.ANALYSIS_REPORT)
 
 
 def test_ask_first_stage_returns_estimate_and_exact_three_choices(tmp_path: Path) -> None:

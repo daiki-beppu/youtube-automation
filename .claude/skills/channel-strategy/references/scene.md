@@ -7,7 +7,7 @@
 ## 成果物
 
 - `書き込む`: `docs/plans/viewing-scene-matrix.md`
-- `読み込む`: `docs/channel/personas/persona-definition.md`, `docs/plans/viewer-voice-analysis.md`, `data/benchmark_*.json`, `reports/analysis_*.md`
+- `読み込む`: `docs/channel/personas/persona-definition.md`, `docs/plans/viewer-voice-analysis.md`, `data/benchmark_*.json`, 検証済み `reports/analysis_*.json`
 
 ## Overview
 
@@ -45,7 +45,7 @@ Phase 3 で AskUserQuestion によりメインシーンと動画尺の方針を�
 - `config/channel/` が存在しない、または `load_config()` でロードできない → 新規チャンネルは `/setup --channel` Step 4、既存チャンネルは `/setup --import` を案内して停止する
 - `docs/channel/personas/persona-definition.md` が無い → 前工程 `/channel-strategy --persona` を案内して停止する
 - 新規開設（公開前）で `docs/plans/viewer-voice-analysis.md`、`docs/channel/ttp-seed-confirmation.md`、`docs/channel/competitor-branding-snapshot.json` のいずれかが無い → `/setup --channel` Step 5 または Step 7 の該当前工程へ戻るよう案内して停止する
-- 公開後に `reports/analysis_*.md` が無い → 前工程 `/analytics --collect` → `/analytics --analyze` を案内して停止する
+- 公開後に検証済み `reports/analysis_*.json` + `.html` pair が無い → 前工程 `/analytics --collect` → `/analytics --analyze` を案内して停止する
 
 ### 許容する fail
 
@@ -117,7 +117,7 @@ AskUserQuestion でメインシーンと動画尺の方針を確認。
 
 - `docs/channel/personas/persona-definition.md` — ペルソナ定義（入力）
 - `docs/plans/viewer-voice-analysis.md` / `docs/channel/ttp-seed-confirmation.md` / `docs/channel/competitor-branding-snapshot.json` — 新規開設（公開前）の競合 / TTP 入力
-- `reports/analysis_*.md` — 公開後のチャンネルパフォーマンスデータ
+- `reports/analysis_*.json` — schema検証済みの公開後チャンネルパフォーマンス正本（HTMLは入力にしない）
 - `data/benchmark_YYYYMMDD.json` — 公開後のベンチマーク動画データ
 - `config/channel/content.json` — `title.theme_activities`
 - `config/channel/audio.json` — `audio.target_duration_min`

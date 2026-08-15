@@ -6,7 +6,7 @@
 
 企画候補をコレクションの `20-documentation/plan_proposals.md` に保存し、`workflow-state.json` の `planning.generated = true` へ更新（企画確定時は `planning.final_title` も記録）し、採用画像がある場合は最終 `thumbnail.jpg` の正規入力として後段へ引き渡し、無い場合は `/thumbnail <theme>` フォールバックを案内してから `/music --prompt <theme>` へ進む Next Step を示した時点で完了。open insights を企画入力にした場合は、「open insights の消費と status 反映」に従う企画確定時の status 更新（adopted / dismissed）まで完了扱いにしない。画像生成を実施した場合は、採用企画の参照画像を `20-documentation/thumbnail-prompts.md` の `Reference Assignments` へ保存できるまで完了扱いにせず、保存失敗時は停止する。
 
-**JSON ペア検証 Hard Gate**: `references/freshness-rules.md` の鮮度判定へ進む前に、ファイル名日付が最新の `reports/analysis_*.md` と同日付の `.json` の存在を確認し、`.claude/skills/analytics/references/analysis-json-validator.md` の validator を同日付 JSON に実行する。exit 0 の場合だけ analytics mode の入力として使用する。Markdown だけが存在する、または validator が失敗した場合は必須入力不足として中断し、`/analytics --analyze` 再実行を案内する。
+**構造化文書 Hard Gate**: `references/freshness-rules.md` の鮮度判定へ進む前に、ファイル名日付が最新の `reports/analysis_*.json` と同日付 `.html` の存在を確認し、`.claude/skills/analytics/references/analysis-json-validator.md` の validator を実行する。exit 0 の場合だけ JSON を analytics mode の入力として使用する。HTML 欠損、不正 JSON、pair 不一致、validator 失敗は必須入力不足として中断し、`/analytics --analyze` 再実行を案内する。
 
 ## Untrusted Data 境界
 
@@ -81,9 +81,9 @@ Phase 1 に入る前に入力モードを 1 回だけ判定し、以降の分析
 
 | モード | 判定条件 | 企画生成の入力 | 前提スキルの扱い |
 |---|---|---|---|
-| analytics mode | 同日付の `reports/analysis_*.md` / `.json` ペアが存在し、JSON 契約を満たし、stale ではない | 日次収集データ + 同日付の構造化分析 JSON + ベンチマーク + config | analyze / benchmark / persona / viewing-scene を通常確認 |
-| benchmark fallback mode | `reports/analysis_*.md` が存在せず、`data/benchmark_*.json` が存在する | ベンチマークデータ + config | analytics 依存をスキップ。persona / viewing-scene は存在すれば使い、無ければ config と benchmark から仮説化 |
-| minimal mode | `reports/analysis_*.md` と `data/benchmark_*.json` がどちらも存在しない | `ttp_mode: false` はユーザー直接入力（テーマ / ジャンル / 雰囲気）+ config。`true` は入力不足のため企画生成しない | `false` は analytics / benchmark 依存をスキップし、persona / viewing-scene を初回仮説として扱う。`true` は `/channel-research --benchmark` を案内して停止する |
+| analytics mode | 同日付の `reports/analysis_*.json` / `.html` ペアが存在し、JSON 契約を満たし、stale ではない | 日次収集データ + 同日付の構造化分析 JSON + ベンチマーク + config | analyze / benchmark / persona / viewing-scene を通常確認 |
+| benchmark fallback mode | 検証済み analysis JSON が存在せず、`data/benchmark_*.json` が存在する | ベンチマークデータ + config | analytics 依存をスキップ。persona / viewing-scene は存在すれば使い、無ければ config と benchmark から仮説化 |
+| minimal mode | 検証済み analysis JSON と `data/benchmark_*.json` がどちらも存在しない | `ttp_mode: false` はユーザー直接入力（テーマ / ジャンル / 雰囲気）+ config。`true` は入力不足のため企画生成しない | `false` は analytics / benchmark 依存をスキップし、persona / viewing-scene を初回仮説として扱う。`true` は `/channel-research --benchmark` を案内して停止する |
 
 analytics mode では `/analytics --analyze` と `/channel-research --benchmark` を独立・並列で鮮度判定（stale 検出）し、
 `/channel-strategy --persona` の最終 persona chain（`persona-definition.md` と `viewing-scene-matrix.md`）は存在チェックのみ行う（更新タイミングは戦略判断のため人間が決める）。
@@ -137,27 +137,27 @@ uv run yt-channel-status
 
 #### Phase 1-2: 自チャンネル Analytics 分析
 
-analytics mode では `references/freshness-rules.md::latest_by_filename_date` と同じ規則でファイル名日付が最新の `reports/analysis_*.md` を選び、ファイル名の日付部分が同じ `reports/analysis_*.json` を Read（Codex では同等のファイル閲覧）で読み込み、自チャンネルのパフォーマンス示唆を取り込む。
+analytics mode では `references/freshness-rules.md::latest_by_filename_date` と同じ規則でファイル名日付が最新の検証済み `reports/analysis_*.json` を選び、JSON だけを Read（Codex では同等のファイル閲覧）で読み込み、自チャンネルのパフォーマンス示唆を取り込む。
 以下のセクションが本企画工程の直接入力:
 
 - **§ 5 戦略的改善提案** — CTR 改善・コンテンツ最適化の方向性
 - **§ 6 推奨される次期コレクション候補** — データから導出されたテーマ候補
 - **§ 8 戦略ディスカッション** — 長期視点の示唆
 
-戦略提案・次期候補・戦略ディスカッションの正本は同日付 JSON とし、Markdown は人間向けの説明と数値引用として読む。企画立案では見出し表記や採番に依存せず、次の JSON 固定キーを直接入力とする:
+戦略提案・次期候補・戦略ディスカッションの正本は同日付 JSON とする。HTML は human view に限定し、企画立案では次の JSON 固定キーを直接入力とする:
 
-| Markdown の内容 | `analysis_YYYYMMDD.json` 固定キー |
+| 分析内容 | `analysis_YYYYMMDD.json` 固定キー |
 |---|---|
 | § 5 戦略的改善提案 | `strategic_improvements` |
 | § 6 推奨される次期コレクション候補 | `next_collection_candidates` |
 | § 8 戦略ディスカッション | `strategic_discussion` |
 
-JSON から読む前に、冒頭の JSON ペア検証 Hard Gate が成功済みであることを確認する。Markdown 本文から提案を再抽出したり、JSON の `statement` を Markdown 本文との曖昧な意味比較で上書きしたりしない。
+JSON から読む前に、冒頭の構造化文書 Hard Gate が成功済みであることを確認する。HTML から提案を再抽出したり、JSON の `statement` を表示内容との曖昧な意味比較で上書きしたりしない。
 
 **エラーハンドリング**:
 
-- `reports/analysis_*.md` が存在しない → 中断せず入力モード判定へ進み、benchmark fallback mode または minimal mode へ分岐する（対応する Markdown がない孤立 JSON は企画入力に使わない）。minimal mode かつ `ttp_mode: false` は続行し、`true` は `/channel-research --benchmark` を案内して停止する
-- Markdown だけが存在する、または冒頭の JSON ペア検証 Hard Gate が失敗 → fallback せず中断。`/analytics --analyze` 再実行を案内
+- 検証済み `reports/analysis_*.json` が存在しない → 中断せず入力モード判定へ進み、benchmark fallback mode または minimal mode へ分岐する。minimal mode かつ `ttp_mode: false` は続行し、`true` は `/channel-research --benchmark` を案内して停止する
+- JSON または HTML の片方だけが存在する、または構造化文書 Hard Gate が失敗 → fallback せず中断。`/analytics --analyze` 再実行を案内
 - stale / fresh の分岐以降は `references/freshness-rules.md::stale report の自動更新` へ委譲し、ここでは再定義しない
 
 #### Phase 1-2b: open insights の消費と status 反映

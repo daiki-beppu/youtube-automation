@@ -12,7 +12,7 @@ description: "Use when 整合性・動画本体・公開後メタデータ・価
 
 ## 成果物
 
-- `書き込む`: `docs/plans/alignment-audit.md`, `data/video_analysis/<channel>/<video-id>.json`, `reports/video_analysis/<channel>.md`
+- `書き込む`: `docs/plans/alignment-audit.{json,html}`, `data/video_analysis/<channel>/<video-id>.json`, `reports/video_analysis/<channel>.{json,html}`
 - `読み込む`: `collections/<id>/10-assets/thumbnail.jpg`, `collections/<id>/20-documentation/suno-prompts.md`, `collections/<id>/20-documentation/descriptions.md`, `collections/<id>/20-documentation/upload_tracking.json`, `collections/<id>/workflow-state.json`, `data/benchmark_*.json`, `docs/channel/personas/persona-definition.md`, `docs/plans/viewing-scene-matrix.md`, `docs/channel/creative-constraints.md`, `reports/analysis_*.json`, `data/insights.jsonl`, `config/channel/*.json`, `config/skills/audit.yaml`
 
 ## 想定 API call 数

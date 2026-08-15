@@ -24,6 +24,20 @@ def publish_json_document(source: Path, schema: RepositorySchema) -> Path:
     return destination
 
 
+def read_published_json_document(source: Path, schema: RepositorySchema) -> object:
+    """検証済み JSON+HTML pair を読み、AI/下流入力には JSON だけを返す。"""
+    destination = source.with_suffix(".html")
+    try:
+        document = json.loads(source.read_text(encoding="utf-8"))
+        persisted_html = destination.read_text(encoding="utf-8")
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        raise DocumentRenderError(f"structured document pair を読めません: {source}") from error
+    expected_html = render_repository_document(schema, document)
+    if persisted_html != expected_html:
+        raise DocumentRenderError(f"structured document JSON と HTML が対応していません: {source}")
+    return document
+
+
 def _write_html_atomically(destination: Path, html: str) -> None:
     descriptor, temporary_name = tempfile.mkstemp(
         dir=destination.parent,

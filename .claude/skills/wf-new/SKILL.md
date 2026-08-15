@@ -13,7 +13,7 @@ description: "Use when 新規コレクション制作を立ち上げるとき、
 ## 成果物
 
 - `書き込む`: `.automation-run/history.json`, `config/channel/workflow.json`, `reports/wf-new-batches/<batch-id>/plan-manifest.json`, `reports/wf-new-batches/<batch-id>/batch-ledger.json`, `data/insights.jsonl`, `collections/live/<id>/20-documentation/postmortem.md`, `collections/<id>/workflow-state.json`, `collections/<id>/20-documentation/plan_proposals.md`, `collections/<id>/20-documentation/thumbnail-prompts.md`, `collections/<id>/20-documentation/suno-patterns.yaml`, `collections/<id>/20-documentation/suno-prompts.json`, `collections/<id>/10-assets/thumbnail.jpg`, `collections/<id>/10-assets/main.png`, `collections/<id>/10-assets/main.jpg`, `collections/<id>/10-assets/loop.mp4`
-- `読み込む`: `config/channel/*.json`, `config/localizations.json`, `data/analytics_data_*.json`, `data/benchmark_*.json`, `reports/analysis_*.md`, `data/insights.jsonl`, `collections/live/<id>/20-documentation/upload_tracking.json`, `collections/<id>/workflow-state.json`, `collections/<id>/20-documentation/community-post.txt`, `pinned_comment_history.json`
+- `読み込む`: `config/channel/*.json`, `config/localizations.json`, `data/analytics_data_*.json`, `data/benchmark_*.json`, `reports/analysis_*.json`, `data/insights.jsonl`, `collections/live/<id>/20-documentation/upload_tracking.json`, `collections/<id>/workflow-state.json`, `collections/<id>/20-documentation/community-post.txt`, `pinned_comment_history.json`
 
 ## モード判定
 
@@ -252,8 +252,8 @@ Step 1（企画）を自動実行中...
 | モード | 判定条件 | `/wf-new` の入力 |
 |---|---|---|
 | analytics mode | 同日付 report ペアの validator と鮮度判定が成功する | 日次収集データ + 構造化分析 JSON + ベンチマーク + config |
-| benchmark fallback mode | `reports/analysis_*.md` が存在せず、`data/benchmark_*.json` が存在する | ベンチマークデータ + config |
-| minimal mode | `reports/analysis_*.md` と `data/benchmark_*.json` がどちらも存在しない | `ttp_mode: false` はユーザー直接入力（テーマ / ジャンル / 雰囲気）+ config。`true` は `/channel-research --benchmark` を案内して停止 |
+| benchmark fallback mode | 検証済み `reports/analysis_*.json` が存在せず、`data/benchmark_*.json` が存在する | ベンチマークデータ + config |
+| minimal mode | 検証済み `reports/analysis_*.json` と `data/benchmark_*.json` がどちらも存在しない | `ttp_mode: false` はユーザー直接入力（テーマ / ジャンル / 雰囲気）+ config。`true` は `/channel-research --benchmark` を案内して停止 |
 
 1-b. **蓄積 insights の収集（open エントリ、gate ではない）** — Phase 0 で `data/insights.jsonl` を最新化した後、入力モードの予備確認と合わせて、メインは同ファイルの存在を確認する。存在する場合は `uv run python3 .claude/skills/analytics/references/validate_insights.py data/insights.jsonl` が exit 0 であることを確認し、`jq -c 'select(.status == "open")' data/insights.jsonl` で open エントリだけを選別して Step 2 の `/wf-new` 委譲プロンプトへ企画入力として渡す。Phase 1-b が担うのは蓄積済み insights の選別と受け渡しだけで、Phase 0 が委譲する `/analytics --flop` の学びの生成・検証や企画生成（`/wf-new` のロジック）を再実装しない。
 
@@ -298,7 +298,7 @@ Step 1（企画）を自動実行中...
 
 - 企画生成: `/wf-new` スキル
   - 蓄積 insights: `data/insights.jsonl` の open エントリ（書き手は `/analytics --analyze`、`/analytics --flop`、`yt-experiment judge`、schema は `.claude/skills/analytics/references/insights-entry.schema.json` が単一ソース）を `source` にかかわらず Phase 1 で選別して渡す。無ければ渡さずに続行
-  - analytics mode: validator 成功済みの同日付 `reports/analysis_*.md` / `.json` ペア + ベンチマーク + config を使用
+  - analytics mode: validator 成功済みの同日付 `reports/analysis_*.json` / `.html` ペア + ベンチマーク + config を使用し、AI入力は JSON に限定
   - benchmark fallback mode: `data/benchmark_*.json` + config のみで初回企画を生成
   - minimal mode: `ttp_mode: false` はユーザー直接入力（テーマ / ジャンル / 雰囲気）+ config のみで初回企画を生成。`true` は `/channel-research --benchmark` を案内して停止
 - サムネイル生成: `/thumbnail` スキル

@@ -479,9 +479,9 @@ def test_setup_channel_prelaunch_persona_chain_propagates_context_without_analyt
     assert "実行コンテキストが明示されない場合もこちら" in viewing_overview
     guard = _markdown_section(viewing_scene, "### 停止する fail")
     assert "新規開設（公開前）" in guard
-    assert "公開後に `reports/analysis_*.md` が無い" in guard
-    assert "`reports/analysis_*.md` が無い" not in guard.replace(
-        "公開後に `reports/analysis_*.md` が無い",
+    assert "公開後に検証済み `reports/analysis_*.json` + `.html` pair が無い" in guard
+    assert "`reports/analysis_*.json` が無い" not in guard.replace(
+        "公開後に検証済み `reports/analysis_*.json` + `.html` pair が無い",
         "",
     )
     for path in (
@@ -1270,7 +1270,7 @@ def test_music_master_generate_master_examples_only_use_cli_help_options() -> No
     assert {"--bitrate", "--crossfade-duration"}.isdisjoint(set(re.findall(r"--[a-z][a-z0-9-]*", skill)))
 
 
-def test_analytics_report_theme_colors_are_config_driven() -> None:
+def test_analytics_report_uses_common_structured_document_renderer() -> None:
     skill = _read(".claude/skills/analytics/references/report.md")
     default_config = yaml.safe_load(_read(".claude/skills/analytics/config.default.yaml")) or {}
 
@@ -1286,8 +1286,11 @@ def test_analytics_report_theme_colors_are_config_driven() -> None:
         "danger": "#e17055",
     }
 
-    assert "`theme.colors`" in skill
-    assert "config/skills/analytics.yaml" in skill
+    assert "yt-document-render" in skill
+    assert "analysis-report.schema.json" in skill
+    assert "Chart.js" in skill
+    assert "Chart.js/CDN" in skill
+    assert "個別 CSS" in skill
     for color in (
         "#0f1419",
         "#1a2332",
