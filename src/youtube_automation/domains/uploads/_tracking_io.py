@@ -1,9 +1,4 @@
-"""tracking JSON / workflow-state JSON の I/O を提供する mixin。
-
-責務分割（Issue #465）の一環で ``collection_uploader.py`` から分離した。
-挙動は分割前と同一で、``self.config`` / ``self.collections_root`` 等は
-合成先クラス（``CollectionUploader`` 本体）が提供する。
-"""
+"""tracking JSON / workflow-state JSON の永続化コラボレータ。"""
 
 from __future__ import annotations
 
@@ -30,15 +25,19 @@ from youtube_automation.infrastructure.filesystem import (
 logger = logging.getLogger(__name__)
 
 
-class TrackingIOMixin:
-    """tracking JSON / workflow-state JSON の I/O を提供する mixin。"""
+class TrackingStore:
+    """collection tracking と upload workflow state を永続化する。"""
 
-    def _get_tracking_path(self, collection_path: Path) -> Path:
+    def __init__(self, collections_root: Path, config: dict) -> None:
+        self.collections_root = collections_root
+        self.config = config
+
+    def tracking_path(self, collection_path: Path) -> Path:
         return CollectionPaths(collection_path).tracking_path
 
-    def _load_tracking(self, collection_path: Path) -> dict | None:
+    def load(self, collection_path: Path) -> dict | None:
         """tracking ファイル読み込み"""
-        tracking_file = self._get_tracking_path(collection_path)
+        tracking_file = self.tracking_path(collection_path)
         if not path_exists(tracking_file):
             return None
 
@@ -52,9 +51,9 @@ class TrackingIOMixin:
             logger.error(f"❌ tracking 破損を検出、{corrupt_path} へ退避しました（原因: {e}）")
             return None
 
-    def _save_tracking(self, collection_path: Path, tracking: dict):
+    def save(self, collection_path: Path, tracking: dict) -> None:
         """tracking 保存"""
-        tracking_file = self._get_tracking_path(collection_path)
+        tracking_file = self.tracking_path(collection_path)
         make_directory(tracking_file.parent, exist_ok=True)
         try:
             text = json.dumps(tracking, indent=2, ensure_ascii=False)
@@ -65,7 +64,7 @@ class TrackingIOMixin:
         except (OSError, TypeError, ValueError) as e:
             logger.error(f"❌ 追跡ファイル保存エラー: {tracking_file}: {e}")
 
-    def _completed_tracking_record(self, complete_video: dict, publish_at: str | None) -> dict:
+    def completed_record(self, complete_video: dict, publish_at: str | None) -> dict:
         record = {
             "video_id": complete_video["video_id"],
             "video_url": complete_video["video_url"],
@@ -77,7 +76,7 @@ class TrackingIOMixin:
             record["upload_source"] = complete_video["upload_source"]
         return record
 
-    def _update_workflow_upload(self, collection_path: Path, complete_video: dict, publish_at: str | None) -> None:
+    def update_workflow_upload(self, collection_path: Path, complete_video: dict, publish_at: str | None) -> None:
         ws_path = CollectionPaths(collection_path).workflow_state_path
         if not path_exists(ws_path):
             return
@@ -106,7 +105,7 @@ class TrackingIOMixin:
             }
         write_file_text(ws_path, json.dumps(updated_state, indent=2, ensure_ascii=False))
 
-    def _initialize_tracking(self, collection_path: Path) -> dict:
+    def initialize(self, collection_path: Path) -> dict:
         """tracking を初期化"""
         tracking = {
             "schema_version": 3,
@@ -115,8 +114,8 @@ class TrackingIOMixin:
             "complete_collection": {"status": "pending"},
         }
 
-        self._save_tracking(collection_path, tracking)
+        self.save(collection_path, tracking)
         return tracking
 
 
-__all__ = ["TrackingIOMixin"]
+__all__ = ["TrackingStore"]

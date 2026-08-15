@@ -55,7 +55,7 @@ LEGACY_AGENT_OWNERS = {
     "_playlist_assignment": ("youtube_automation.domains.uploads._playlist_assignment", "PlaylistAssignmentMixin"),
     "_preflight": ("youtube_automation.domains.uploads._preflight", "PreflightMixin"),
     "_published_dates": ("youtube_automation.domains.uploads._published_dates", "PublishedDatesMixin"),
-    "_tracking_io": ("youtube_automation.domains.uploads._tracking_io", "TrackingIOMixin"),
+    "_tracking_io": ("youtube_automation.domains.uploads._tracking_io", "TrackingStore"),
     "_uploader_constants": (
         "youtube_automation.domains.uploads._uploader_constants",
         "UPLOAD_SOURCE_EXISTING",
