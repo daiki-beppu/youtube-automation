@@ -15,7 +15,6 @@ _LEGACY_SKILL_SCAN_ALLOWLIST = frozenset(
     {
         "test_analytics_consolidation.py",
         "test_analytics_run_state.py",
-        "test_distributed_skill_references.py",
         "test_flop_analysis_skill_contract.py",
         "test_lifecycle_skills_no_tayk.py",
         "test_live_chat_reply_skill_contract.py",
@@ -30,7 +29,6 @@ _LEGACY_SKILL_SCAN_ALLOWLIST = frozenset(
         "test_skill_page_generation_contract.py",
         "test_skill_shell_reference_runtime.py",
         "test_skills_rename.py",
-        "test_skills_sync_installed_wheel.py",
         "test_unattended_approval_skip_contract.py",
         "test_workflow_upload_setup_redirect_contract.py",
     }

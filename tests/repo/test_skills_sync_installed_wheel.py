@@ -10,6 +10,7 @@ import tarfile
 from pathlib import Path
 
 from tests.helpers.paths import REPO_ROOT
+from youtube_automation.domains.skills.inventory import SkillInventory
 
 _FILE_ASSETS = {
     Path(".claude/CLAUDE.md"): Path(".claude/CLAUDE.template.md"),
@@ -86,14 +87,24 @@ def _candidate_sdist(repo_root: Path, tmp_path: Path) -> Path:
 
 
 def _tracked_skill_files(repo_root: Path) -> set[Path]:
-    result = _run("git", "ls-files", "--", ".claude/skills", cwd=repo_root)
+    inventory = SkillInventory(repo_root)
+    skills_root = inventory.skills_root.relative_to(repo_root)
+    result = _run("git", "ls-files", "--", skills_root, cwd=repo_root)
     assert result.returncode == 0, result.stderr
-    prefix = Path(".claude/skills")
     dev_only = {"automation-release", "shadcn"}
     return {
         relative
         for line in result.stdout.splitlines()
-        if line and (relative := Path(line).relative_to(prefix)).parts[0] not in dev_only
+        if line and (relative := Path(line).relative_to(skills_root)).parts[0] not in dev_only
+    }
+
+
+def _inventory_files(inventory: SkillInventory) -> set[Path]:
+    return {
+        path.relative_to(inventory.skills_root)
+        for skill_dir in inventory.skill_directories()
+        for path in skill_dir.rglob("*")
+        if path.is_file() or path.is_symlink()
     }
 
 
@@ -131,6 +142,16 @@ def test_candidate_wheel_syncs_all_assets_into_clean_downstream(tmp_path: Path) 
         """
 import importlib
 import sys
+from pathlib import Path
+
+import youtube_automation
+
+from youtube_automation.domains.skills.inventory import SkillInventory
+
+wheel_skills_root = Path(youtube_automation.__file__).resolve().parent / "_skills"
+wheel_inventory = SkillInventory(wheel_skills_root)
+assert wheel_inventory.skills_root == wheel_skills_root
+assert "setup" in {path.name for path in wheel_inventory.skill_directories()}
 
 legacy_modules = (
     "youtube_automation.infrastructure.errors",
@@ -231,14 +252,14 @@ assert "wheel-identity-check" not in legacy._cache
     assert synced.returncode == 0, synced.stderr
 
     source_skill_files = _tracked_skill_files(repo_root)
-    target_skills = downstream / ".claude" / "skills"
-    target_skill_files = {
-        path.relative_to(target_skills) for path in target_skills.rglob("*") if path.is_file() or path.is_symlink()
-    }
+    target_inventory = SkillInventory(downstream)
+    target_skills = target_inventory.skills_root
+    assert target_skills == downstream / ".claude" / "skills"
+    target_skill_files = _inventory_files(target_inventory)
     assert target_skill_files == source_skill_files
     for relative in source_skill_files:
         target = target_skills / relative
-        source = repo_root / ".claude" / "skills" / relative
+        source = SkillInventory(repo_root).skills_root / relative
         assert target.read_bytes() == source.read_bytes()
 
     for target_relative, source_relative in _FILE_ASSETS.items():
