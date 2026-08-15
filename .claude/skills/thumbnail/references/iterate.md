@@ -1,14 +1,10 @@
----
-name: thumbnail-iterate
-purpose: 作る
-description: "Use when 伸びた動画を起点にサムネの勝因を分解し、統制した A/B 比較で次の勝ちサムネへ更新するとき。「伸びた動画のサムネ改善」「伸びた動画起点のサムネ A/B テスト」「伸びたサムネテスト」で発動。新規候補生成だけなら /thumbnail、単独の Studio Test & Compare は thumbnail の test mode、失速原因分析は /flop-analysis、競合横並びは thumbnail の比較 mode、整合性監査は /alignment-check を使う"
----
+# Thumbnail iterate mode
 
 ## 前後工程
 
-- `前工程`: `/analytics`, `/thumbnail --test`
-- `後工程`: `/thumbnail`, `/thumbnail --test`, `/flop-analysis`
-- `委譲先`: `/flop-analysis`, `/thumbnail`, `/thumbnail --test`
+- `前工程`: `/analytics --analyze`, `/thumbnail --test`
+- `後工程`: `/thumbnail`, `/thumbnail --test`, `/analytics --flop`
+- `委譲先`: `/analytics --flop`, `/thumbnail`, `/thumbnail --test`
 
 ## 成果物
 
@@ -18,7 +14,7 @@ description: "Use when 伸びた動画を起点にサムネの勝因を分解し
 ## Hard Gates
 
 - 対象動画とチャンネル平均の同一期間・同一定義の impressions CTR、および対象動画の Browse features + Suggested videos 構成比が揃うまで停止する。公開後 D+2 未満など Analytics の確定待ちは推測で補わない。
-- `target CTR / channel average CTR >= 1.20` かつ `Browse + Suggested >= 50%` の両方を満たす場合だけサムネ寄与ありとして進む。満たさなければ記録して停止し、原因分析を `/flop-analysis`（旧 `/postmortem`）または `/analytics --analyze` へ委譲する。
+- `target CTR / channel average CTR >= 1.20` かつ `Browse + Suggested >= 50%` の両方を満たす場合だけサムネ寄与ありとして進む。満たさなければ記録して停止し、原因分析を `/analytics --flop` または `/analytics --analyze` へ委譲する。
 - 勝因仮説は `composition` / `text` / `color` / `subject` / `expression` に分解・順位付けし、上位 1〜2 個を提示してユーザー合意を得るまで候補生成しない。
 - 通常 round の control A は現在の勝ちサムネで変更 0、B/C は 1 案につき合意済み要素を厳密に 1 個だけ変える。候補は control を含め最大 3 枚。
 - Studio の Test & Compare 操作と結果記録は `/thumbnail --test` に委譲する。ブラウザ/API で代行せず、Studio の確定結果が出るまで champion を更新しない。
@@ -35,7 +31,7 @@ description: "Use when 伸びた動画を起点にサムネの勝因を分解し
 
 - `references/state-contract.md` — 保存形式、CLI、停止コード。計画保存と昇格前に読む。
 - `references/thumbnail-iterate-state.py` — パス・hash・差分数・履歴対応を検証して状態を原子的に更新する唯一の writer。
-- `../thumbnail/references/history-schema.md` — Studio 候補と完了履歴の正本。`/thumbnail --test` 委譲前に読む。
+- `history-schema.md` — Studio 候補と完了履歴の正本。`/thumbnail --test` 委譲前に読む。
 
 ## 想定 API call 数
 
@@ -49,9 +45,9 @@ description: "Use when 伸びた動画を起点にサムネの勝因を分解し
 
 ### 1. 対象と因果を確定
 
-`/analytics --report` の同一期間データから対象 CTR、チャンネル平均 CTR、Browse features と Suggested videos の流入比率を取得する。対象コレクション、`workflow-state.json::upload.video_id`、根拠ファイル/期間を表示する。
+`/analytics --analyze` の同一期間データから対象 CTR、チャンネル平均 CTR、Browse features と Suggested videos の流入比率を取得する。対象コレクション、`workflow-state.json::upload.video_id`、根拠ファイル/期間を表示する。
 
-閾値を満たさない、値が欠落する、期間がずれる場合は改善案を作らない。helper の `plan` で停止記録を残し、サムネ以外も含む `/flop-analysis` へ route する。
+閾値を満たさない、値が欠落する、期間がずれる場合は改善案を作らない。helper の `plan` で停止記録を残し、サムネ以外も含む `/analytics --flop` へ route する。
 
 ### 2. 勝因を分解して合意
 
@@ -72,7 +68,7 @@ description: "Use when 伸びた動画を起点にサムネの勝因を分解し
 計画 JSON を作り、次を実行する。入力と保存 schema は `references/state-contract.md` に従う。
 
 ```bash
-python .claude/skills/thumbnail-iterate/references/thumbnail-iterate-state.py plan \
+python .claude/skills/thumbnail/references/thumbnail-iterate-state.py plan \
   --repo . --input /tmp/thumbnail-iterate-plan.json
 ```
 
@@ -85,7 +81,7 @@ python .claude/skills/thumbnail-iterate/references/thumbnail-iterate-state.py pl
 Studio 完了履歴が保存された後だけ実行する。
 
 ```bash
-python .claude/skills/thumbnail-iterate/references/thumbnail-iterate-state.py promote \
+python .claude/skills/thumbnail/references/thumbnail-iterate-state.py promote \
   --repo . --video-id VIDEO_ID \
   --history COLLECTION/20-documentation/thumbnail-test-history.json
 ```
