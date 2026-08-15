@@ -28,7 +28,7 @@ SUNO_HELPER_SKILL_MD = _SKILL_INVENTORY.skill_directory("suno-helper") / "SKILL.
 SUNO_HELPER_README_MD = _REPO_ROOT / "extensions" / "suno-helper" / "README.md"
 WF_NEW_SKILL_MD = _SKILL_INVENTORY.skill_directory("wf-new") / "SKILL.md"
 WF_NEW_PHASE2_MD = _SKILL_INVENTORY.resolve_reference("wf-new", "references/phase2.md")
-WF_AUTO_SKILL_MD = _SKILL_INVENTORY.skill_directory("wf-auto") / "SKILL.md"
+WF_AUTO_SKILL_MD = _SKILL_INVENTORY.resolve_reference("wf-new", "references/auto.md")
 SUNO_HELPER_PHASE_CONSTANTS_TS = _REPO_ROOT / "extensions" / "shared" / "constants.ts"
 SUNO_LYRIC_SKILL_MD = _SKILL_INVENTORY.skill_directory("suno-lyric") / "SKILL.md"
 REVIEW_RUBRIC_MD = _SKILL_INVENTORY.resolve_reference("suno-lyric", "references/review-rubric.md")
@@ -353,7 +353,7 @@ def test_wf_new_hands_off_to_suno_helper_browser_use_flow() -> None:
 
 
 def test_wf_auto_runs_suno_helper_browser_flow_instead_of_handing_it_off() -> None:
-    """Issue #2454: 認証以外の Suno 工程は wf-auto の agent が完走する。"""
+    """Issue #2454: 認証以外の Suno 工程は wf-new --auto の agent が完走する。"""
     text = _read_wf_auto()
     section = text.split("### `suno-helper` action の自律実行契約", 1)[1].split("\n## ", 1)[0]
 

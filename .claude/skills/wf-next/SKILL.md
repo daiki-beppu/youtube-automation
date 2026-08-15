@@ -6,7 +6,7 @@ description: "Use when 既存コレクション（collections/planning/）を一
 
 ## 前後工程
 
-- `前工程`: `/wf-auto`, `/wf-new`
+- `前工程`: `/wf-new`, `/wf-new`
 - `後工程`: `/analytics`, `/flop-analysis`
 - `委譲先`: `/masterup`, `/lyria`, `/videoup`, `/video-description`, `/playlist`, `/video-upload`
 
@@ -18,7 +18,7 @@ description: "Use when 既存コレクション（collections/planning/）を一
 ## Overview
 
 既存コレクションを次工程へ進めるオーケストレーター。完了済みの素材を自動検出し、未完了のステップから再開する。
-`/wf-auto` から固定 collection を委譲された場合も本スキルが state 更新の単一責務を持つ。統合 runner の `allow_external_publish = false` 制約ではローカル動画・metadata 生成まで進め、YouTube 書き込み直前で停止する。対話 gate の承認後は同じ run へ結果を返し、resolver が実成果物を再評価する。
+`/wf-new --auto` から固定 collection を委譲された場合も本スキルが state 更新の単一責務を持つ。統合 runner の `allow_external_publish = false` 制約ではローカル動画・metadata 生成まで進め、YouTube 書き込み直前で停止する。対話 gate の承認後は同じ run へ結果を返し、resolver が実成果物を再評価する。
 
 ## Hard Gates: subagent 委譲境界
 
@@ -97,10 +97,10 @@ description: "Use when 既存コレクション（collections/planning/）を一
 
 ### 直接実行の canonical timing 契約
 
-`/wf-next` を直接呼んだ場合も、state 判定・lease・history/timing の正は `/wf-auto` と同じ state script とする。下記「1. アクティブなコレクションの特定」の既存手順で対象名を `<fixed-name>` として固定した後、フェーズ処理や子 skill を開始する前に、チャンネルルートで次の順序を守る。
+`/wf-next` を直接呼んだ場合も、state 判定・lease・history/timing の正は `/wf-new --auto` と同じ state script とする。下記「1. アクティブなコレクションの特定」の既存手順で対象名を `<fixed-name>` として固定した後、フェーズ処理や子 skill を開始する前に、チャンネルルートで次の順序を守る。
 
 ```bash
-STATE_SCRIPT=.claude/skills/wf-auto/references/wf-auto-state.py
+STATE_SCRIPT=.claude/skills/wf-new/references/wf-auto-state.py
 uv run python "$STATE_SCRIPT" acquire --channel-dir .
 uv run python "$STATE_SCRIPT" plan --channel-dir . --collection <fixed-name>
 uv run python "$STATE_SCRIPT" heartbeat --channel-dir . --token <token>
@@ -120,7 +120,7 @@ resolver action と直接入口の既存責務は次の対応を正とする。
 | `blocked` | resolver の reason / resume action を変更せず blocked で閉じる |
 | `complete` | 下記 complete の既存検証を通過した場合だけ success で閉じる |
 
-既存の成果物検証、承認 gate、state 更新責務を変更せず、子 skill の終了報告だけで成功にしない。期待成果物と state を検証した後、成功だけを success、手動介入または責務外 action への handoff を blocked、検証失敗を含むその他を failed とし、すべて同じ固定 collection、resolver action、同じ attempt の AI 開始時刻で閉じる。対話 gate の時間分類と `--human-interval` は `/wf-auto` の canonical timing 契約をそのまま使う。
+既存の成果物検証、承認 gate、state 更新責務を変更せず、子 skill の終了報告だけで成功にしない。期待成果物と state を検証した後、成功だけを success、手動介入または責務外 action への handoff を blocked、検証失敗を含むその他を failed とし、すべて同じ固定 collection、resolver action、同じ attempt の AI 開始時刻で閉じる。対話 gate の時間分類と `--human-interval` は `/wf-new --auto` の canonical timing 契約をそのまま使う。
 
 ```bash
 uv run python "$STATE_SCRIPT" record --channel-dir . --token <token> --collection <fixed-name> --action <resolver-action> --status success|blocked|failed --reason <reason> [--resume-action <resolver-resume-action>] --ai-started-at <current-attempt-ai-started-at> [--human-interval <human-start> <human-end>]...
@@ -128,7 +128,7 @@ uv run python "$STATE_SCRIPT" record --channel-dir . --token <token> --collectio
 
 status を記録した後は、成功時だけでなく blocked / failed の停止報告前にも同じ固定 collection を `plan --channel-dir . --collection <fixed-name>` で再評価し、次回の再開 action を推測しない。全終了経路の `finally` 相当で `release --channel-dir . --token <token>` を実行し、他 token の lease は変更しない。
 
-`/wf-auto` が token、resolver の action / collection、attempt の開始時刻を固定して本 skill へ委譲した場合は、その実行文脈を再利用する。nested `acquire` や独自 attempt の作成・記録・release は行わず、成果物と state の検証結果を呼び出し元へ返し、canonical history の記録と lease 解放は `/wf-auto` に一度だけ行わせる。
+`/wf-new --auto` が token、resolver の action / collection、attempt の開始時刻を固定して本 skill へ委譲した場合は、その実行文脈を再利用する。nested `acquire` や独自 attempt の作成・記録・release は行わず、成果物と state の検証結果を呼び出し元へ返し、canonical history の記録と lease 解放は `/wf-new --auto` に一度だけ行わせる。
 
 ### 1. アクティブなコレクションの特定
 

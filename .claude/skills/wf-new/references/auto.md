@@ -1,8 +1,3 @@
----
-name: wf-auto
-purpose: 進める
-description: "Use when 正規入口から collection の有無を問わず、企画開始または未完了地点から制作・公開・post-publish まで状態駆動で継続・再開するとき。「制作を最初から最後まで」「wf-auto」で発動。一段だけ進める場合は /wf-next、進捗確認だけなら /wf-status"
----
 
 ## 前後工程
 
@@ -17,7 +12,7 @@ description: "Use when 正規入口から collection の有無を問わず、企
 
 ## Overview
 
-`workflow-state.json` と実成果物を毎段再評価し、新規企画または active collection の未完了地点から公開後処理まで継続する統合入口。判断・lease・履歴は `references/wf-auto-state.py` を使い、実作業は既存 `/wf-new`、`/lyria`、`/suno-helper`、`/masterup`、`/wf-next`、`/post-publish` に委譲する。子 skill の処理は本文へ複製しない。`thumbnail::textless.enabled` も独自解釈せず、`/wf-new` と `/wf-next` の契約をそのまま貫通させる。
+`workflow-state.json` と実成果物を毎段再評価し、新規企画または active collection の未完了地点から公開後処理まで継続する正規入口。判断・lease・履歴は `references/wf-auto-state.py` を使い、実作業は同一 SKILL.md の通常入口、`/lyria`、`/suno-helper`、`/masterup`、`/wf-next`、`/post-publish` に委譲する。子 skill の処理は本文へ複製しない。`thumbnail::textless.enabled` も独自解釈せず、通常入口と `/wf-next` の契約をそのまま貫通させる。
 
 ## Hard Gates
 
@@ -42,7 +37,7 @@ description: "Use when 正規入口から collection の有無を問わず、企
 チャンネルルートで実行する。
 
 ```bash
-STATE_SCRIPT=.claude/skills/wf-auto/references/wf-auto-state.py
+STATE_SCRIPT=.claude/skills/wf-new/references/wf-auto-state.py
 
 uv run python "$STATE_SCRIPT" acquire --channel-dir .
 uv run python "$STATE_SCRIPT" heartbeat --channel-dir . --token <token>
@@ -62,14 +57,14 @@ uv run python "$STATE_SCRIPT" release --channel-dir . --token <token>
 
 | 状態 | action / 処理 |
 |---|---|
-| active collection なし | `wf-new` / `no_active_collection`。`/wf-new` を新規開始する |
+| active collection なし | `wf-new` / `no_active_collection`。同一 SKILL.md の通常入口を新規開始する |
 | active collection あり | state と実成果物から未完了 action を返す |
 
 `plan` の action と委譲先:
 
 | action | 委譲先 / 処理 |
 |---|---|
-| `wf-new` | `/wf-new`。不在時は新規開始、固定済み planning では未完了工程から再開 |
+| `wf-new` | 同一 SKILL.md の通常入口。不在時は新規開始、固定済み planning では未完了工程から再開 |
 | `lyria` | `/lyria` |
 | `suno-helper` | `/suno-helper` の browser use 主導フロー。人間への handoff は login / CAPTCHA の該当操作だけ |
 | `masterup` | strict Suno 成果物を入力に `/masterup` |
@@ -139,7 +134,7 @@ resolver が `action: suno-helper` を返したら、agent 自身が `/suno-help
    `load_config()` が失敗した場合は既存チャンネル取り込みモードの `/channel-new` を案内して停止する。state resolver または上記子 skill が無ければ `/automation-update`（本リポジトリ内では `yt-skills sync`）を案内して停止する。すべて満たすまで lease と子 skill を開始しない。
 2. `acquire` で token を保持する。exit 20 / `busy` なら子 skill を開始せず終了する。
 3. 初回 `plan` を実行する。
-   - `reason: no_active_collection`: `/wf-new` を canonical action として選び、step 4 の heartbeat と AI 開始時刻取得後に `SKILL.md` を読んで、既存 gate と明示 opt-in の skip 分岐を保って新規開始する。`skip_plan_selection: true` の analytics / benchmark fallback mode は推奨順 1 位で続行し、minimal mode など設定で省略されていない入力が必要なら `record-bootstrap --status blocked --reason user_input_required --ai-started-at <current-attempt-ai-started-at>` で停止する。
+   - `reason: no_active_collection`: resolver が `action: wf-new` を返したら別 skill を呼ばず、同一 SKILL.md の通常入口を canonical action として選ぶ。step 4 の heartbeat と AI 開始時刻取得後に通常入口を読み、企画選択、thumbnail 承認、preselected manifest、channel constraint verification を含む既存 gate と明示 opt-in の skip 分岐を保って新規開始する。`skip_plan_selection: true` の analytics / benchmark fallback mode は推奨順 1 位で続行し、minimal mode など設定で省略されていない入力が必要なら `record-bootstrap --status blocked --reason user_input_required --ai-started-at <current-attempt-ai-started-at>` で停止する。
    - collection が返る: その名前を固定する。
 4. 選ばれた各 action の直前に `heartbeat` を実行する。owner なら直後に「canonical action の AI timing 契約」の開始時刻を取得して保持する。子 skill action は対応する `SKILL.md` を読み、固定 collection、期待成果物、外部公開許可を明示して委譲する。`blocked` / `complete` は同じ開始時刻取得後に terminal action として処理する。`not-owner` なら開始時刻を取得せず、action を開始しない。
 5. `/wf-new` が collection を初期化したら、出力 path と `workflow-state.json` の実在を検証して名前を固定する。step 4 で保持した開始時刻を渡して `record --action wf-new --status success --ai-started-at <current-attempt-ai-started-at>` を実行した後、同じ run 内で `plan --collection <fixed-name>` を実行する。企画選択等で対話が一時停止しても lease を保持した実行文脈へ回答を戻し、完了後に同じ固定処理を行う。

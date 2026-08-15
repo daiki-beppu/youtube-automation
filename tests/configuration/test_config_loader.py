@@ -2419,7 +2419,7 @@ def test_scheduled_automation_absent_uses_disabled_defaults(tmp_path, monkeypatc
     assert sa.timezone == "Asia/Tokyo"
     assert sa.run_time == "09:00"
     assert sa.cadence == ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
-    assert sa.target_workflow == "wf-auto"
+    assert sa.target_workflow == "wf-new --auto"
     assert sa.max_retries == 0
     assert sa.retry_delay_seconds == 300
     assert sa.prevent_concurrent_runs is True
@@ -2468,7 +2468,17 @@ def test_scheduled_automation_rejects_removed_automation_run_target(tmp_path, mo
     ch = _setup_channel(tmp_path, sections)
     monkeypatch.setenv("CHANNEL_DIR", str(ch))
 
-    with pytest.raises(ConfigError, match=r"target_workflow.*automation-run.*wf-auto"):
+    with pytest.raises(ConfigError, match=r"target_workflow.*automation-run.*wf-new --auto"):
+        load_config()
+
+
+def test_scheduled_automation_rejects_removed_wf_auto_target(tmp_path, monkeypatch):
+    sections = _minimal_sections()
+    sections["workflow.json"] = {"workflow": {"scheduled_automation": {"target_workflow": "wf-auto"}}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match=r"target_workflow.*wf-auto.*wf-new --auto"):
         load_config()
 
 

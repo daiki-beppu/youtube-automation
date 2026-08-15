@@ -317,7 +317,7 @@ ISSUE_3986_OWNED_PATHS = frozenset(
         ".claude/skills/channel-status/SKILL.md",
         ".claude/skills/video-description/SKILL.md",
         ".claude/skills/video-upload/SKILL.md",
-        ".claude/skills/wf-auto/SKILL.md",
+        ".claude/skills/wf-new/references/auto.md",
         ".claude/skills/wf-new-batch/SKILL.md",
         ".claude/skills/wf-new/SKILL.md",
         ".claude/skills/wf-next/SKILL.md",
@@ -1012,6 +1012,6 @@ def test_issue_3987_commit_has_exact_semantic_diff_scope() -> None:
 
 def test_diff_scope_contract_rejects_missing_target_and_unrelated_mutations() -> None:
     missing_target = EXPECTED_ISSUE_3987_CHANGED_PATHS - {".claude/skills/thumbnail/SKILL.md"}
-    unrelated = EXPECTED_ISSUE_3987_CHANGED_PATHS | {".claude/skills/wf-auto/SKILL.md"}
+    unrelated = EXPECTED_ISSUE_3987_CHANGED_PATHS | {".claude/skills/wf-new/references/auto.md"}
     assert missing_target != EXPECTED_ISSUE_3987_CHANGED_PATHS
     assert unrelated != EXPECTED_ISSUE_3987_CHANGED_PATHS

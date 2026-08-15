@@ -134,7 +134,7 @@ def test_workflow_schema_references_existing_skill_schema() -> None:
 
 
 def test_wf_auto_is_the_integrated_entrypoint_without_copying_child_workflows() -> None:
-    wf_auto = _read(".claude/skills/wf-auto/SKILL.md")
+    wf_auto = _read(".claude/skills/wf-new/references/auto.md")
     wf_new = _read_wf_new()
     wf_next = _read(".claude/skills/wf-next/SKILL.md")
     wf_status = _read(".claude/skills/wf-status/SKILL.md")
@@ -147,21 +147,21 @@ def test_wf_auto_is_the_integrated_entrypoint_without_copying_child_workflows() 
     assert "無人実行" in wf_auto
     assert "allow_external_publish" in wf_auto
     assert "references/wf-auto-state.py" in wf_auto
-    assert "/wf-auto" in wf_new
-    assert "/wf-auto" in wf_next
-    assert "/wf-auto" in wf_status
-    assert "/wf-auto" in schema
+    assert "/wf-new --auto" in wf_new
+    assert "/wf-new --auto" in wf_next
+    assert "/wf-new --auto" in wf_status
+    assert "/wf-new --auto" in schema
 
 
 def test_wf_auto_is_the_only_integrated_workflow_entrypoint() -> None:
-    canonical = _read(".claude/skills/wf-auto/SKILL.md")
+    canonical = _read(".claude/skills/wf-new/references/auto.md")
     features = _read("docs/features.md")
     cheatsheet = _read("docs/workflow-cheatsheet.md")
 
     assert "正規入口" in canonical
     assert not (ROOT / ".claude/skills/automation-run").exists()
     assert "正規入口" in features and "| /automation-run |" not in features
-    assert "/wf-auto" in cheatsheet
+    assert "/wf-new --auto" in cheatsheet
 
 
 def test_theme_compare_docs_and_error_use_content_tags_themes() -> None:

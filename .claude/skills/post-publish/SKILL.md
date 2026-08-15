@@ -6,7 +6,7 @@ description: "Use when 動画公開直後の community-post → pinned-comment �
 
 ## 前後工程
 
-- `前工程`: `/wf-auto`, `/video-upload`
+- `前工程`: `/wf-new`, `/video-upload`
 - `後工程`: `なし`
 - `委譲先`: `/community-post`, `/pinned-comment`, `/metadata-audit`
 

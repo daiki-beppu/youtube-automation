@@ -1,4 +1,4 @@
-"""`/wf-auto` canonical action の AI timing 実行契約を検証する。"""
+"""`/wf-new --auto` canonical action の AI timing 実行契約を検証する。"""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import re
 
 from tests.helpers.paths import REPO_ROOT
 
-SKILL_MD = REPO_ROOT / ".claude" / "skills" / "wf-auto" / "SKILL.md"
+SKILL_MD = REPO_ROOT / ".claude" / "skills" / "wf-new" / "references" / "auto.md"
 
 
 def _section(text: str, heading: str) -> str:

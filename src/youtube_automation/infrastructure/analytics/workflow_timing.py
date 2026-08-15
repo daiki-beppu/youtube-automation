@@ -38,7 +38,7 @@ def _load_module(path: Path) -> _TimingRunner:
     module_name = "youtube_automation._wf_auto_state_dashboard"
     spec = importlib.util.spec_from_file_location(module_name, path)
     if spec is None or spec.loader is None:
-        raise RuntimeError(f"wf-auto timing module をロードできません: {path}")
+        raise RuntimeError(f"wf-new --auto timing module をロードできません: {path}")
     module = importlib.util.module_from_spec(spec)
     sys.modules[module_name] = module
     try:
@@ -51,12 +51,12 @@ def _load_module(path: Path) -> _TimingRunner:
 
 @cache
 def _runner() -> _TimingRunner:
-    resource = files("youtube_automation").joinpath("_skills", "wf-auto", "references", "wf-auto-state.py")
+    resource = files("youtube_automation").joinpath("_skills", "wf-new", "references", "wf-auto-state.py")
     with as_file(resource) as resource_path:
         if resource_path.is_file():
             return _load_module(resource_path)
     source_path = (
-        Path(__file__).resolve().parents[4] / ".claude" / "skills" / "wf-auto" / "references" / "wf-auto-state.py"
+        Path(__file__).resolve().parents[4] / ".claude" / "skills" / "wf-new" / "references" / "wf-auto-state.py"
     )
     if not source_path.is_file():
         raise RuntimeError("wf-auto-state.py が package resource と source checkout のどちらにもありません")

@@ -8,7 +8,7 @@ from tests.helpers.paths import REPO_ROOT
 
 WF_NEW_SKILL = REPO_ROOT / ".claude" / "skills" / "wf-new" / "SKILL.md"
 WF_NEW_PHASE2 = REPO_ROOT / ".claude" / "skills" / "wf-new" / "references" / "phase2.md"
-WF_AUTO_SKILL = REPO_ROOT / ".claude" / "skills" / "wf-auto" / "SKILL.md"
+WF_AUTO_SKILL = REPO_ROOT / ".claude" / "skills" / "wf-new" / "references" / "auto.md"
 
 
 def _wf_new_text() -> str:
@@ -86,4 +86,4 @@ def test_wf_auto_delegation_reuses_one_lease_and_attempt() -> None:
 
     assert "実行文脈を再利用" in direct
     assert "nested `acquire`" in direct
-    assert "canonical history の記録と lease 解放は `/wf-auto` に一度だけ" in direct
+    assert "canonical history の記録と lease 解放は `/wf-new --auto` に一度だけ" in direct

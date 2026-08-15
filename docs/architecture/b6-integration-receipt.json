@@ -1137,14 +1137,14 @@
     },
     {
       "old_owner": "legacy..claude.skills.wf-auto.SKILL.md",
-      "exact_new_owner": ".claude/skills/wf-auto/SKILL.md",
+      "exact_new_owner": ".claude/skills/wf-new/references/auto.md",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"
     },
     {
       "old_owner": "legacy..claude.skills.wf-auto.references.wf-auto-state",
-      "exact_new_owner": ".claude/skills/wf-auto/references/wf-auto-state.py",
+      "exact_new_owner": ".claude/skills/wf-new/references/wf-auto-state.py",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"

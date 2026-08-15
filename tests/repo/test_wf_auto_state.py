@@ -1,4 +1,4 @@
-"""`/wf-auto` の新規開始・固定・再開契約テスト。"""
+"""`/wf-new --auto` の新規開始・固定・再開契約テスト。"""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ import pytest
 from tests.helpers.paths import REPO_ROOT
 
 ROOT = REPO_ROOT
-SKILL_DIR = ROOT / ".claude" / "skills" / "wf-auto"
+SKILL_DIR = ROOT / ".claude" / "skills" / "wf-new"
 SCRIPT = SKILL_DIR / "references" / "wf-auto-state.py"
 
 
