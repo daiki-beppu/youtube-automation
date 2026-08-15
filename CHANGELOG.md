@@ -24,6 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `feat(skills)`: `/publish --upload` を新設し、旧 `/video-upload` の collection / release 自動分岐、公開承認ゲート、post-publish 委譲を 1-step chain へ統合する。mode 別 config、旧 override 互換と `video-upload.yaml` → `publish.yaml::upload` の明示 migration を追加し、旧 skill directory と利用者導線・配布・site 契約を更新する（#3841）。
 - `feat(skills)`: `/suno-helper` と `/lyria` を `music_engine` で自動分岐する `/music --generate` へ統合し、Suno の strict 6 点と Lyria master の完了判定、設定・helper・chain manifest・利用者導線を `music` 配下へ移した（#3826）。
+- `feat(skills)`: `/audit --value-loop` に旧 `/value-loop-audit` の4工程横断診断を読み取り専用のまま統合し、シーン定義・制約翻訳・公開前ゲートの参照先を統合後 mode へ更新する（#3853）。
+
 - `feat(skills)`: `/audit` を新設し、読み取り専用の `--alignment` mode に旧 `/alignment-check` の音楽ムード × サムネ × タイトル整合監査を統合する。外部サービスやチャンネル設定へ反映せず、監査レポートと改善候補だけを生成する（#3852）。
 
 - `feat(skills)`: `/music --lyric` に旧 `/suno-lyric` の歌詞生成・hard gate・generator/reviewer 契約を統合する。chain を `prompt` → `lyric` へ拡張し、mode 別 config、旧 override 互換と `suno-lyric.yaml` → `music.yaml::lyric` の明示 migration を追加して、旧 skill directory と利用者導線・配布・site 契約を更新する（#3825）。

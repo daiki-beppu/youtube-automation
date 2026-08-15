@@ -1,23 +1,10 @@
----
-name: value-loop-audit
-purpose: 振り返る
-description: "Use when チャンネルの価値ループ（シーン定義→制約翻訳→公開前ゲート→指標還流）の整備状況を読み取り専用で横断診断するとき。「価値ループ監査」「value loop audit」「制作基盤診断」で発動。動画単位の整合監査は /audit、説明欄監査は /metadata-audit、制作進捗は /wf-status、YouTube 統計は /channel-status を使う"
----
+# value-loop mode
 
-## 前後工程
-
-- `前工程`: `なし`
-- `後工程`: `なし`
-- `委譲先`: `なし`
-
-## 成果物
-
-- `書き込む`: `なし`
-- `読み込む`: `docs/channel/personas/persona-definition.md`, `docs/plans/viewing-scene-matrix.md`, `docs/channel/creative-constraints.md`, `reports/analysis_*.json`, `data/insights.jsonl`
+シーン定義 → 制約翻訳 → 公開前ゲート → 指標還流の4工程について、整備状況を読み取り専用で横断診断する。
 
 ## Hard Gates
 
-- 本スキルは**読み取り専用**。ファイルの作成・変更・削除、config 更新、外部サービスへの反映、修復スキルの自動実行を禁止する。結果はチャット内にだけ表示する。
+- 本 mode は**読み取り専用**。ファイルの作成・変更・削除、config 更新、外部サービスへの反映、修復スキルの自動実行を禁止する。結果はチャット内にだけ表示する。
 - `CHANNEL_DIR` を特定できない場合は `/setup` を案内して停止する。
 - `CHANNEL_DIR` を特定できても `config/channel/` が存在しない場合:
   - 新規チャンネルでは `/setup --channel` を案内して停止する。
@@ -33,7 +20,7 @@ description: "Use when チャンネルの価値ループ（シーン定義→制
 
 | 工程 | `○` の条件（すべて必須） | `×` の条件（1つでも該当） | `×` の次アクション |
 |---|---|---|---|
-| 1. シーン定義 | `docs/channel/personas/persona-definition.md` と `docs/plans/viewing-scene-matrix.md` が存在し、persona に `viewing-scene 未検証` がない | 2ファイルのいずれかがない、または未検証注記がある | `/channel-strategy --persona` |
+| 1. シーン定義 | `docs/channel/personas/persona-definition.md` と `docs/plans/viewing-scene-matrix.md` が存在し、persona に `viewing-scene 未検証` がない | 2ファイルのいずれかがない、または未検証注記がある | `/channel-strategy --scene` |
 | 2. 制約翻訳 | `docs/channel/creative-constraints.md` が存在し、レベル2見出し `音` `映像` `サムネ` `タイトル` `測定` が各1件ある | ファイルがない、または必須見出しが1つでもない | `/channel-strategy --constraints` |
 | 3. 公開前ゲート | 直近公開コレクションを一意に特定でき、`docs/plans/alignment-audit.md` にそのコレクション名が1回以上ある | 公開コレクションを特定できない、レポートがない、またはレポートに対象名がない | `/audit --alignment` |
 | 4. 指標還流 | `data/insights.jsonl` に有効な analysis または postmortem 由来エントリが1件以上あり、うち1件以上が `status: adopted` かつ `status_note` に `creative-constraints.md` または既存 config の JSON Pointer がある | レポート/postmortemがない、insightsがない、該当エントリがない、または採用先の痕跡がない | `/flop-analysis` または `/analytics --analyze` |
@@ -85,7 +72,7 @@ description: "Use when チャンネルの価値ループ（シーン定義→制
 ```markdown
 | 工程 | 判定 | 確認したパス | 根拠 | 次アクション |
 |---|---|---|---|---|
-| シーン定義 | ○/× | ... | PASS/FAIL 条件との一致 | なし または /channel-strategy --persona |
+| シーン定義 | ○/× | ... | PASS/FAIL 条件との一致 | なし または /channel-strategy --scene |
 | 制約翻訳 | ○/× | ... | PASS/FAIL 条件との一致 | なし または /channel-strategy --constraints |
 | 公開前ゲート | ○/× | ... | PASS/FAIL 条件との一致 | なし または /audit --alignment |
 | 指標還流 | ○/× | ... | PASS/FAIL 条件との一致 | なし または /flop-analysis, /analytics --analyze |
@@ -95,7 +82,7 @@ description: "Use when チャンネルの価値ループ（シーン定義→制
 
 ### 7. 読み取り専用を検証
 
-監査後の作業ツリー差分一覧を確認する。監査前とパス・内容が一致すれば PASS。差分が増減していた場合は監査完了を報告せず、変更したパスを提示する。本スキルから差分を取り消す操作は行わない。
+監査後の作業ツリー差分一覧を確認する。監査前とパス・内容が一致すれば PASS。差分が増減していた場合は監査完了を報告せず、変更したパスを提示する。本 mode から差分を取り消す操作は行わない。
 
 ## 関連ファイル
 

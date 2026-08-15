@@ -31,7 +31,6 @@ TARGET_SKILLS = (
     "short",
     "music",
     "thumbnail",
-    "value-loop-audit",
 )
 WF_NEW_IDEATION_MEMBERS = frozenset(
     {
@@ -136,6 +135,16 @@ _RAW_EXPECTED_ACTIVE_ROUTES = (
         "## Next Step",
         "| **横断的な方向性ズレ** | 複数コレクションで同じ不整合パターン | "
         "`/channel-strategy --direction`（方向性検討モード）でチャンネル全体の方向性を再検討 |",
+    ),
+    _route(
+        "audit/references/value-loop.md",
+        "## Hard Gates",
+        "  - 新規チャンネルでは `/setup --channel` を案内して停止する。",
+    ),
+    _route(
+        "audit/references/value-loop.md",
+        "## Hard Gates",
+        "  - 既存チャンネルでは `/setup --import` を案内して停止する。",
     ),
     _route("wf-new/references/ideate.md", "## 前提", "- **新規チャンネル** → `/setup --channel` を案内"),
     _route(
@@ -268,16 +277,6 @@ _RAW_EXPECTED_ACTIVE_ROUTES = (
         "thumbnail/references/loop.md",
         "## 前提",
         "- **既存チャンネル**（YouTube で既に運営中）→ `/setup --import` を案内",
-    ),
-    _route(
-        "value-loop-audit/SKILL.md",
-        "## Hard Gates",
-        "  - 新規チャンネルでは `/setup --channel` を案内して停止する。",
-    ),
-    _route(
-        "value-loop-audit/SKILL.md",
-        "## Hard Gates",
-        "  - 既存チャンネルでは `/setup --import` を案内して停止する。",
     ),
 )
 
@@ -854,6 +853,7 @@ def test_initial_occurrences_have_a_complete_context_ledger() -> None:
         "lyria": "music",
         "playlist": "publish",
         "short-thumbnail": "short",
+        "value-loop-audit": "audit",
     }
     assert {current_owners.get(skill, skill) for skill in historical_skills} == set(TARGET_SKILLS)
     assert {entry[3] for entry in INITIAL_OCCURRENCE_LEDGER} <= set(CONTEXTS)
