@@ -8,7 +8,7 @@ import tempfile
 from collections.abc import Callable, Iterator, Mapping, MutableMapping
 from copy import deepcopy
 from pathlib import Path
-from typing import Literal, cast
+from typing import Literal, TypedDict, cast
 
 from youtube_automation.core.errors import WorkflowStateError
 from youtube_automation.infrastructure.filesystem import JSONValue, file_lock
@@ -17,6 +17,139 @@ Phase = Literal["planning", "prepared", "mastered", "publishing", "complete"]
 Stage = Literal["planning", "live"]
 MusicEngine = Literal["suno", "lyria"]
 WorkflowStateUpdater = Callable[["WorkflowState"], "WorkflowState | None"]
+
+
+class MusicPlanningDocument(TypedDict, total=False):
+    engine: MusicEngine
+    mood: list[str]
+    atmosphere: str
+    tempo: Literal["very slow", "slow", "gentle", "moderate", "lively"]
+    instruments: list[str]
+    exclude: list[str]
+    suno_playlist_url: str | None
+
+
+class PlanningDocument(TypedDict, total=False):
+    music: MusicPlanningDocument
+    activities: str
+    target_persona: str
+    final_title: str
+    generated: bool
+
+
+class AssetsDocument(TypedDict, total=False):
+    thumbnail: bool | str
+    loop_video: bool | Literal["failed"]
+    music_prompts: bool
+    music_downloaded: bool
+    raw_master: str | None
+    master_audio: str | None
+    master_video: str | None
+    description: bool
+
+
+class MusicPairSelectionExceptionDocument(TypedDict, total=False):
+    prompt_index: int
+    variant: str | None
+    title: str
+    source: str
+    duration_sec: float
+    max_song_sec: float
+    reason: str
+
+
+class MusicPairSelectionDocument(TypedDict, total=False):
+    updated_at: str
+    exceptions_over_limit_count: int
+    exceptions_over_limit: list[MusicPairSelectionExceptionDocument]
+
+
+class UploadDocument(TypedDict, total=False):
+    video_id: str | None
+    video_url: str | None
+    publish_at: str | None
+
+
+class PostUploadShortDocument(TypedDict, total=False):
+    short_num: int | None
+    video_id: str
+    uploaded_at: str
+    publish_at: str | None
+    resume_session_uri: str
+
+
+class PostUploadDocument(TypedDict, total=False):
+    shorts: list[PostUploadShortDocument]
+
+
+class ThumbnailRankingDocument(TypedDict, total=False):
+    candidate: str
+    distance: float
+    width: int
+    height: int
+    eligible: bool
+    reasons: list[str]
+
+
+class ThumbnailReferenceDiagnosticDocument(TypedDict, total=False):
+    reference_image: str
+    distance: float
+    outlier: bool
+
+
+class ThumbnailReferenceDiagnosticsDocument(TypedDict, total=False):
+    max_reference_distance: float
+    references: list[ThumbnailReferenceDiagnosticDocument]
+
+
+class ThumbnailAutoSelectionDocument(TypedDict, total=False):
+    schema_version: int
+    mode: Literal["selection_only", "full"]
+    selected: str
+    distance: float
+    ranking: list[ThumbnailRankingDocument]
+    reference_images: list[str]
+    reference_diagnostics: ThumbnailReferenceDiagnosticsDocument
+    executed_at: str
+
+
+class ThumbnailDocument(TypedDict, total=False):
+    approved: bool
+
+
+class DescriptionDocument(TypedDict, total=False):
+    generated: bool
+
+
+class TitleTemplateCheckDocument(TypedDict, total=False):
+    allow_volume_patterns: bool
+
+
+class WorkflowStateDocument(TypedDict, total=False):
+    """workflow-state.json の schema 正本。未知キーは document object が保持する。"""
+
+    collection_name: str
+    theme: str
+    created_at: str
+    updated_at: str
+    stage: Stage
+    phase: Phase
+    selected_plan: Literal["A", "B", "C", "D", "E"]
+    track_count: int
+    music_engine: MusicEngine
+    planning: PlanningDocument
+    scene_phrases: dict[str, str]
+    title_template_check: TitleTemplateCheckDocument
+    assets: AssetsDocument
+    music_pair_selection: MusicPairSelectionDocument
+    upload: UploadDocument
+    post_upload: PostUploadDocument
+    track_display_names: dict[str, str]
+    title_activity: str
+    thumbnail_auto_selection: ThumbnailAutoSelectionDocument
+    thumbnail: ThumbnailDocument
+    description: DescriptionDocument
+
 
 _PHASES = frozenset({"planning", "prepared", "mastered", "publishing", "complete"})
 _STAGES = frozenset({"planning", "live"})

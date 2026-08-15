@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `docs(collections)`: `workflow-state.json` の schema 正本を owner module の型定義へ移し、追従文書との field 差分を名前付きで検出する契約を追加する（#3875）。
+
 - `feat(collections)`: `workflow-state.json` の型付き document object、未知キー保持、明示的な厳格/不在許容 read、process lock 下の atomic update を共通 owner として追加する（#3874）。
 
 - `feat(skills)`: `/reply --live` に旧 `/live-chat-reply` の streaming 前提ガード、認証、常駐 daemon の配備・停止・障害復旧契約を統合し、旧 skill と利用者導線を削除する（#3849）。

@@ -34,6 +34,10 @@ Phase 3: 公開             /wf-next    動画→概要欄→アップロード�
   "track_count": 12,
   "music_engine": "suno | lyria",
   "planning": {
+    "activities": "Working",
+    "target_persona": "deep-work listener",
+    "final_title": "Rainy Harbor Jazz",
+    "generated": true,
     "music": {
       "engine": "suno | lyria",
       "mood": ["mellow", "introspective"],
@@ -80,6 +84,55 @@ Phase 3: 公開             /wf-next    動画→概要欄→アップロード�
     "video_id": null,
     "video_url": null,
     "publish_at": null
+  },
+  "post_upload": {
+    "shorts": [
+      {
+        "short_num": 1,
+        "video_id": "string",
+        "uploaded_at": "ISO 8601",
+        "publish_at": null,
+        "resume_session_uri": "string"
+      }
+    ]
+  },
+  "track_display_names": {
+    "01-track.mp3": "Display Name"
+  },
+  "title_activity": "Working",
+  "thumbnail_auto_selection": {
+    "schema_version": 1,
+    "mode": "selection_only | full",
+    "selected": "thumbnail-v1.jpg",
+    "distance": 0.125,
+    "ranking": [
+      {
+        "candidate": "thumbnail-v1.jpg",
+        "distance": 0.125,
+        "width": 1280,
+        "height": 720,
+        "eligible": true,
+        "reasons": []
+      }
+    ],
+    "reference_images": ["assets/benchmarks/reference.jpg"],
+    "reference_diagnostics": {
+      "max_reference_distance": 0.5,
+      "references": [
+        {
+          "reference_image": "assets/benchmarks/reference.jpg",
+          "distance": 0.1,
+          "outlier": false
+        }
+      ]
+    },
+    "executed_at": "ISO 8601"
+  },
+  "thumbnail": {
+    "approved": true
+  },
+  "description": {
+    "generated": true
   }
 }
 ```
@@ -98,6 +151,43 @@ Phase 3: 公開             /wf-next    動画→概要欄→アップロード�
 | `description` | boolean | YouTube 概要欄生成済み（`20-documentation/descriptions.md`） |
 
 `music_downloaded: true` かつ `raw_master: null` は、Suno 楽曲が DL 済みで raw master（クロスフェード結合出力）が未生成の中間状態を表す。
+
+### stage フィールド詳細
+
+| 値 | 説明 |
+|---|---|
+| `planning` | `collections/planning/` で制作中 |
+| `live` | upload 完了後に `collections/live/` へ移動済み |
+
+`stage` は collection の配置段階を表し、制作工程の進行を表す `phase` とは独立して更新する。
+
+### post_upload フィールド
+
+`post_upload.shorts` は公開後 short の upload 状態を `short_num` ごとに保持する。`resume_session_uri` は再開可能 upload の途中だけ存在し、完了時の entry は `video_id`、`uploaded_at`、`publish_at` を持つ。
+
+| フィールド | 型 | 説明 |
+|---|---|---|
+| `post_upload.shorts[].short_num` | integer / null | short の番号 |
+| `post_upload.shorts[].video_id` | string | YouTube 動画 ID |
+| `post_upload.shorts[].uploaded_at` | string | upload 日時（ISO 8601） |
+| `post_upload.shorts[].publish_at` | string / null | 公開予約日時（ISO 8601） |
+| `post_upload.shorts[].resume_session_uri` | string | 再開可能 upload session URI |
+
+### track_display_names フィールド
+
+`track_display_names` は音源ファイル名を概要欄で使う表示名へ対応付ける object（`{filename: display_name}`）。重複トラック名の解消結果を再実行時にも維持する。
+
+### title_activity フィールド
+
+`title_activity` は title template に使う collection 固有の activity 文字列。設定から解決した activity より優先する。
+
+### thumbnail_auto_selection フィールド
+
+自動選択を apply したときの監査 record。`mode`、採用候補と距離、候補 ranking、参照画像と外れ値診断、実行日時を保持する。`ranking[].reasons` は候補が不適格な理由の文字列配列である。
+
+### 互換フィールド
+
+`thumbnail.approved` と `description.generated` は既存 state を読めるよう owner が保持する互換 field。正規の生成済み判定はそれぞれ `assets.thumbnail` と `assets.description` であり、新規の状態統合は個別 issue の責務とする。
 
 #### wf-new --auto の判定責務
 
