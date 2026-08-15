@@ -35,6 +35,16 @@ from youtube_automation.infrastructure.vcs.worktree import main_worktree_root
 
 logger = logging.getLogger(__name__)
 
+UPLOAD_REQUIRED_SCOPES = (
+    "https://www.googleapis.com/auth/youtube",
+    "https://www.googleapis.com/auth/youtube.force-ssl",
+)
+
+
+def build_youtube_service(credentials: Credentials):
+    """Build the canonical YouTube Data API v3 service."""
+    return build("youtube", "v3", credentials=credentials)
+
 
 def client_secrets_file_candidates(channel_dir: Path) -> list[Path]:
     """ファイルとして配置された client_secrets.json の候補を検索順で返す。"""
@@ -109,8 +119,7 @@ class YouTubeOAuthHandler:
     # yt-analytics-monetary.readonly は Reporting API v1 (#84) で
     # videoThumbnailImpressions / videoThumbnailImpressionsClickThroughRate を取得するため必須。
     SCOPES: ClassVar[list[str]] = [
-        "https://www.googleapis.com/auth/youtube",
-        "https://www.googleapis.com/auth/youtube.force-ssl",
+        *UPLOAD_REQUIRED_SCOPES,
         "https://www.googleapis.com/auth/yt-analytics.readonly",
         "https://www.googleapis.com/auth/yt-analytics-monetary.readonly",
     ]
@@ -360,10 +369,10 @@ class YouTubeOAuthHandler:
         return credentials
 
     def _save_credentials(self):
-        """認証情報をファイルに 0o600 で保存する。
+        """認証情報をファイルに atomic かつ 0o600 で保存する。
 
-        プロセス umask に依存せず必ず 0o600 で作成し、既存ファイル上書き時も
-        chmod で保険をかける（``O_TRUNC`` は既存ファイルの mode を変更しない）。
+        同じディレクトリの一時ファイルを fsync してから置換するため、既存 token を
+        部分書き込みで壊さず、プロセス umask に依存せず必ず 0o600 で保存する。
         書き込み失敗時は ``ConfigError`` として raise する（握りつぶし禁止 ―
         失敗を黙って成功扱いすると毎回ブラウザ認証が走る運用障害になる）。
 
@@ -390,7 +399,7 @@ class YouTubeOAuthHandler:
             self.authenticate()
 
         try:
-            service = build("youtube", "v3", credentials=self.credentials)
+            service = build_youtube_service(self.credentials)
             print("✅ YouTube Data API サービス接続成功")
             return service
         except HttpError as e:

@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `refactor(doctor)`: OAuth token の読み込み・refresh・0o600 atomic 永続化、upload 必須 scope、YouTube service 生成を `infrastructure.auth` に集約し、doctor は診断結果への変換だけを担う（#3920）。
 - `refactor(doctor)`: TTP と初期セットアップの readiness 判定を provider-neutral な `domains.channel_readiness` へ移し、doctor を診断結果へ変換する薄い adapter にする（#3919）。
 - `docs(collections)`: `workflow-state.json` の schema 正本を owner module の型定義へ移し、追従文書との field 差分を名前付きで検出する契約を追加する（#3875）。
 

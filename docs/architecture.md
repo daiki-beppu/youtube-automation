@@ -221,7 +221,7 @@ assets/stock/           # ボツ画像ストック (#364)。<theme-slug>/ 配下
 | `domains.collections.weekly_vote_log` | 週次投票ログ reader、initializer、schema、保存・検証 |
 | `infrastructure.media.image_provider` | 画像生成プロバイダー抽象化（Gemini / OpenAI 切り替え） |
 | `infrastructure.media.stock` | ボツ画像ストック化（`assets/stock/<theme>/` への退避・列挙・整理、隣接 `.meta.json` 管理） |
-| `infrastructure.auth.youtube` | OAuth 2.0 トークン管理 |
+| `infrastructure.auth` | OAuth 2.0 token の読み込み・refresh・atomic 永続化、scope と YouTube service 生成 |
 | `infrastructure.secrets` | シークレット解決（`_SECRET_REFS` で参照定義） |
 | `application.live_chat.{codex,filters,history,models,runner}` | active broadcast のチャット取得、Codex 構造化判定、入出力フィルタ、PT 日次・時間・連続 user 上限、重複防止履歴、返信投稿 loop |
 | `commands.youtube.live_chat_reply` | `yt-live-chat-reply` 常駐 CLI。`comments.live_chat.enabled` を opt-in とし、VPS では独立した `live-chat-reply.service` から起動 |

@@ -22,6 +22,7 @@ from PIL import Image as PILImage
 import youtube_automation.infrastructure.secrets as secrets_module
 from youtube_automation.commands.system import doctor
 from youtube_automation.core.errors import ConfigError
+from youtube_automation.infrastructure.auth import tokens as auth_tokens
 
 
 def _mock_running_distribution(
@@ -791,7 +792,7 @@ class TestOAuthToken:
         credentials = MagicMock(expired=True, refresh_token="refresh-token", valid=True)
         credentials.to_json.return_value = '{"token": "refreshed", "scopes": ["a"]}'
         monkeypatch.setattr(
-            doctor.Credentials,
+            auth_tokens.Credentials,
             "from_authorized_user_file",
             lambda *_args, **_kwargs: credentials,
         )
@@ -811,7 +812,7 @@ class TestOAuthToken:
         credentials = MagicMock(expired=True, refresh_token="refresh-token", valid=False)
         credentials.refresh.side_effect = RefreshError("invalid_grant")
         monkeypatch.setattr(
-            doctor.Credentials,
+            auth_tokens.Credentials,
             "from_authorized_user_file",
             lambda *_args, **_kwargs: credentials,
         )
@@ -830,7 +831,7 @@ class TestOAuthToken:
         credentials = MagicMock(expired=True, refresh_token="refresh-token", valid=False)
         credentials.refresh.side_effect = TransportError("network unavailable")
         monkeypatch.setattr(
-            doctor.Credentials,
+            auth_tokens.Credentials,
             "from_authorized_user_file",
             lambda *_args, **_kwargs: credentials,
         )
@@ -1080,7 +1081,7 @@ class TestReportingJob:
             credentials.token = "refreshed-access-token"
             credentials.expiry = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=1)
 
-        monkeypatch.setattr(doctor.Credentials, "refresh", refresh)
+        monkeypatch.setattr(auth_tokens.Credentials, "refresh", refresh)
         monkeypatch.setattr(
             doctor,
             "build",
@@ -3179,11 +3180,11 @@ def _mock_upload_channel_api(monkeypatch, *, items=None, error: BaseException | 
     else:
         execute.return_value = {"items": items if items is not None else [{"id": _CHANNEL_ID}]}
     monkeypatch.setattr(
-        doctor.Credentials,
+        auth_tokens.Credentials,
         "from_authorized_user_file",
         lambda _path: MagicMock(),
     )
-    monkeypatch.setattr(doctor, "build", lambda *_args, **_kwargs: service)
+    monkeypatch.setattr(doctor, "build_youtube_service", lambda _credentials: service)
     return service
 
 
