@@ -12,6 +12,7 @@ Subcommands:
     lint   : SKILL.md frontmatter を検証 (strict YAML / name・description 非空 / double-quote)
     catalog: purpose 別の skill catalog を生成・検証
     artifacts: skill が宣言した成果物 writer を一覧表示
+    migrate-config: 下流 skill-config を統合後の名前空間節へ移行
 
 Asset 種別 (`--asset`):
     all                 : デフォルト。下記すべての asset を一括処理する
@@ -241,6 +242,7 @@ from youtube_automation.commands.system.skills_sync._sync import cmd_sync as cmd
 from youtube_automation.commands.system.skills_sync._diff import cmd_diff as cmd_diff  # noqa: E402
 from youtube_automation.commands.system.skills_sync._delegation import cmd_delegation as cmd_delegation  # noqa: E402
 from youtube_automation.commands.system.skills_sync._lint import cmd_lint as cmd_lint  # noqa: E402
+from youtube_automation.commands.system.skills_sync._migrate_config import cmd_migrate_config as cmd_migrate_config  # noqa: E402
 from youtube_automation.commands.system.skills_sync._parser import _resolve_default_target as _resolve_default_target  # noqa: E402
 from youtube_automation.commands.system.skills_sync._parser import build_parser as build_parser  # noqa: E402
 from youtube_automation.domains.skills.inventory import lint_frontmatter_text as lint_frontmatter_text  # noqa: E402

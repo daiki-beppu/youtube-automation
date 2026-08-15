@@ -341,6 +341,15 @@ def _validate_skill_config(skill: str, config: Mapping[str, object]) -> None:
         _validate_thumbnail_text_render(config)
 
 
+def _split_skill_config_key(skill: str) -> tuple[str, str | None]:
+    owner, separator, section = skill.partition(".")
+    if not separator:
+        return owner, None
+    if not owner or not section:
+        raise ConfigError(f"skill-config 名前空間キーが不正です: {skill}")
+    return owner, section
+
+
 def load_skill_config(
     skill: str,
     *,
@@ -368,18 +377,25 @@ def load_skill_config(
     if use_shared_cache and skill in _cache:
         return _cache[skill]
 
-    defaults = _load_yaml(_default_path(skill))
+    owner, section = _split_skill_config_key(skill)
+    defaults = _load_yaml(_default_path(owner))
 
-    override_path = _resolve_channel_override(skill, channel_dir)
+    override_path = _resolve_channel_override(owner, channel_dir)
     if override_path is not None:
         override, acknowledged = _split_acknowledged_unknown_keys(_load_override(override_path), override_path)
         merged = _deep_merge(defaults, override)
-        _warn_deprecated_override_keys(skill, override, override_path, merged)
-        _warn_unknown_top_level_override_keys(skill, override, defaults, override_path, acknowledged)
+        _warn_deprecated_override_keys(owner, override, override_path, merged)
+        _warn_unknown_top_level_override_keys(owner, override, defaults, override_path, acknowledged)
     else:
         merged = defaults
 
-    _validate_skill_config(skill, merged)
+    if section is not None:
+        selected = merged.get(section)
+        if not isinstance(selected, dict):
+            raise ConfigError(f"skill-config {skill} は mapping の節として存在する必要があります")
+        merged = dict(selected)
+
+    _validate_skill_config(owner if section is None else skill, merged)
 
     if use_shared_cache:
         _cache[skill] = merged

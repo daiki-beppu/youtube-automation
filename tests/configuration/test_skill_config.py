@@ -101,6 +101,43 @@ def test_unregistered_skill_config_key_raises_config_error_before_path_resolutio
         skill_config.load_skill_config("unregistered", use_cache=False)
 
 
+def test_load_namespaced_skill_config_returns_only_requested_section(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    default_path = tmp_path / "music.default.yaml"
+    default_path.write_text("prompt:\n  model: v5\nmaster:\n  target_lufs: -14\n", encoding="utf-8")
+    channel_dir = tmp_path / "channel"
+    overrides = channel_dir / "config" / "skills"
+    overrides.mkdir(parents=True)
+    (overrides / "music.yaml").write_text("prompt:\n  model: custom\n", encoding="utf-8")
+    monkeypatch.setattr(
+        skill_config,
+        "SKILL_CONFIG_KEYS",
+        skill_config.SKILL_CONFIG_KEYS | {"music.prompt"},
+    )
+    monkeypatch.setattr(skill_config, "_default_path", lambda owner: default_path if owner == "music" else None)
+
+    loaded = skill_config.load_skill_config("music.prompt", use_cache=False, channel_dir=channel_dir)
+
+    assert loaded == {"model": "custom"}
+
+
+def test_load_namespaced_skill_config_rejects_missing_section(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    default_path = tmp_path / "music.default.yaml"
+    default_path.write_text("master:\n  target_lufs: -14\n", encoding="utf-8")
+    channel_dir = tmp_path / "channel"
+    channel_dir.mkdir()
+    monkeypatch.setattr(
+        skill_config,
+        "SKILL_CONFIG_KEYS",
+        skill_config.SKILL_CONFIG_KEYS | {"music.prompt"},
+    )
+    monkeypatch.setattr(skill_config, "_default_path", lambda owner: default_path if owner == "music" else None)
+
+    with pytest.raises(ConfigError, match=r"music\.prompt.*mapping の節"):
+        skill_config.load_skill_config("music.prompt", use_cache=False, channel_dir=channel_dir)
+
+
 def test_channel_override_merged(tmp_path, monkeypatch):
     """channel override が default とマージされること"""
     channel_dir = tmp_path / "ch"
