@@ -684,7 +684,7 @@ def test_wf_new_fail_fast_contract_points_to_setup_import_and_collection_local_s
     assert "def check_channel_config" in doctor
     assert 'id="channel_config"' in doctor
     assert "def check_ttp_wf_new_readiness" in doctor
-    assert 'id="ttp_wf_new_readiness"' in doctor
+    assert 'CheckDefinition(\n        "ttp_wf_new_readiness"' in doctor
 
 
 def test_analytics_collect_documents_reporting_api_preflight() -> None:

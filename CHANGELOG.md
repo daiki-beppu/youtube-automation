@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `refactor(doctor)`: TTP と初期セットアップの readiness 判定を provider-neutral な `domains.channel_readiness` へ移し、doctor を診断結果へ変換する薄い adapter にする（#3919）。
 - `docs(collections)`: `workflow-state.json` の schema 正本を owner module の型定義へ移し、追従文書との field 差分を名前付きで検出する契約を追加する（#3875）。
 
 - `feat(collections)`: `workflow-state.json` の型付き document object、未知キー保持、明示的な厳格/不在許容 read、process lock 下の atomic update を共通 owner として追加する（#3874）。
