@@ -11,10 +11,8 @@ Features:
 
 import json
 import logging
-import os
 import re
 import subprocess
-import tempfile
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List
@@ -29,7 +27,10 @@ from youtube_automation.core.adapters.runtime import (
     format_duration_short,
     format_timestamp,
 )
-from youtube_automation.core.errors import ValidationError
+from youtube_automation.core.errors import ValidationError, WorkflowStateError
+from youtube_automation.domains.collections.workflow_state import WorkflowState
+from youtube_automation.domains.collections.workflow_state import read_or_none as read_workflow_state_or_none
+from youtube_automation.domains.collections.workflow_state import update as update_workflow_state
 from youtube_automation.domains.media.audio_formats import AUDIO_EXTS
 from youtube_automation.domains.metadata.descriptions import (
     build_complete_collection_description,
@@ -56,21 +57,13 @@ from youtube_automation.domains.uploads.preflight import requires_scene_phrases
 logger = logging.getLogger(__name__)
 
 
-def _write_workflow_state(workflow_state_path: Path, state: Dict) -> None:
-    """workflow-state.json を同一ディレクトリの一時ファイル + os.replace で原子的に更新する。"""
-    payload = json.dumps(state, ensure_ascii=False, indent=2) + "\n"
-    fd, tmp_name = tempfile.mkstemp(
-        dir=workflow_state_path.parent,
-        prefix=".workflow-state.",
-        suffix=".tmp",
-    )
+def _read_workflow_state_lenient(workflow_state_path: Path) -> dict:
+    """既存の best-effort reader 用に owner の失敗を空 state へ変換する。"""
     try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            f.write(payload)
-        os.replace(tmp_name, workflow_state_path)
-    except BaseException:
-        Path(tmp_name).unlink(missing_ok=True)
-        raise
+        state = read_workflow_state_or_none(workflow_state_path)
+    except WorkflowStateError:
+        return {}
+    return state.to_dict() if state is not None else {}
 
 
 class BAHMetadataGenerator:
@@ -372,13 +365,7 @@ class BAHMetadataGenerator:
         paths = CollectionPaths(self.collection_path)
         ws_path = paths.workflow_state_path
         result: Dict[str, str] = {}
-        if not ws_path.exists():
-            return result
-        try:
-            with open(ws_path, "r", encoding="utf-8") as f:
-                state = json.load(f)
-        except (json.JSONDecodeError, OSError):
-            return result
+        state = _read_workflow_state_lenient(ws_path)
         patterns = ((state.get("planning") or {}).get("music") or {}).get("patterns") or {}
         for letter, data in patterns.items():
             key = str(letter).lower()
@@ -486,13 +473,7 @@ class BAHMetadataGenerator:
         """
         paths = CollectionPaths(self.collection_path)
         ws_path = paths.workflow_state_path
-        if not ws_path.exists():
-            return
-        try:
-            with open(ws_path, "r", encoding="utf-8") as f:
-                state = json.load(f)
-        except (json.JSONDecodeError, OSError):
-            return
+        state = _read_workflow_state_lenient(ws_path)
         name_map = state.get("track_display_names") or {}
         if not isinstance(name_map, dict) or not name_map:
             return
@@ -533,25 +514,25 @@ class BAHMetadataGenerator:
 
         paths = CollectionPaths(self.collection_path)
         ws_path = paths.workflow_state_path
-        state: Dict = {}
-        if ws_path.exists():
-            # 読み失敗時に state={} で続行すると、下の書き込みで
-            # 既存 state 全体（phase / assets / upload 等）を消してしまうため fail-loud にする
-            try:
-                with open(ws_path, "r", encoding="utf-8") as f:
-                    state = json.load(f)
-            except json.JSONDecodeError as e:
-                raise ValidationError(f"workflow-state.json のパースに失敗: {e}") from e
-            except OSError as e:
-                raise ValidationError(f"workflow-state.json を読めません: {e}") from e
-            if not isinstance(state, dict):
-                raise ValidationError("workflow-state.json の root は object である必要があります")
-        existing = state.get("track_display_names") or {}
-        if not isinstance(existing, dict):
-            existing = {}
-        existing.update(filename_map)
-        state["track_display_names"] = existing
-        _write_workflow_state(ws_path, state)
+
+        def persist_display_names(state: WorkflowState) -> None:
+            existing = state.get("track_display_names") or {}
+            if not isinstance(existing, dict):
+                existing = {}
+            existing.update(filename_map)
+            state["track_display_names"] = existing
+
+        try:
+            update_workflow_state(ws_path, persist_display_names)
+        except WorkflowStateError as error:
+            cause = error.__cause__
+            if isinstance(cause, OSError) and "could not be written" in str(error):
+                raise cause from error
+            if "root must be an object" in str(error):
+                raise ValidationError("workflow-state.json の root は object である必要があります") from error
+            if isinstance(cause, json.JSONDecodeError):
+                raise ValidationError(f"workflow-state.json のパースに失敗: {cause}") from error
+            raise ValidationError(f"workflow-state.json を読めません: {error}") from error
 
     # ─── タイトル生成（2026リブランド） ─────────────────
 
@@ -562,16 +543,11 @@ class BAHMetadataGenerator:
         """
         paths = CollectionPaths(self.collection_path)
         workflow_state_path = paths.workflow_state_path
-        if workflow_state_path.exists():
-            try:
-                with open(workflow_state_path, "r", encoding="utf-8") as f:
-                    state = json.load(f)
-                if state.get("collection_name"):
-                    name = state["collection_name"]
-                    name = re.sub(r"\s+Collection$", "", name, flags=re.IGNORECASE)
-                    return name
-            except (json.JSONDecodeError, KeyError):
-                pass
+        state = _read_workflow_state_lenient(workflow_state_path)
+        if state.get("collection_name"):
+            name = state["collection_name"]
+            name = re.sub(r"\s+Collection$", "", name, flags=re.IGNORECASE)
+            return name
 
         name = self.collection_name
         name = re.sub(r"\s+Collection$", "", name, flags=re.IGNORECASE)
@@ -584,14 +560,9 @@ class BAHMetadataGenerator:
         """
         paths = CollectionPaths(self.collection_path)
         workflow_state_path = paths.workflow_state_path
-        if workflow_state_path.exists():
-            try:
-                with open(workflow_state_path, "r", encoding="utf-8") as f:
-                    state = json.load(f)
-                if state.get("title_activity"):
-                    return state["title_activity"]
-            except (json.JSONDecodeError, KeyError):
-                pass
+        state = _read_workflow_state_lenient(workflow_state_path)
+        if state.get("title_activity"):
+            return state["title_activity"]
 
         theme = self._extract_theme_name()
         return self.config.content.title.activity_for_theme(theme)
@@ -649,18 +620,19 @@ class BAHMetadataGenerator:
         """workflow-state.json を読み込む。存在しない場合は空 dict を返す。"""
         paths = CollectionPaths(self.collection_path)
         ws_path = paths.workflow_state_path
-        if not ws_path.exists():
-            return {}
         try:
-            with open(ws_path, "r", encoding="utf-8") as f:
-                state = json.load(f)
-        except json.JSONDecodeError as exc:
-            raise ValidationError(f"workflow-state.json の JSON パースに失敗: {ws_path}: {exc}") from exc
-        except OSError as exc:
-            raise ValidationError(f"workflow-state.json を読み込めません: {ws_path}: {exc}") from exc
-        if not isinstance(state, dict):
-            raise ValidationError(f"workflow-state.json の root は object である必要があります: {ws_path}")
-        return state
+            state = read_workflow_state_or_none(ws_path)
+        except WorkflowStateError as error:
+            message = str(error)
+            if "root must be an object" in message:
+                raise ValidationError(
+                    f"workflow-state.json の root は object である必要があります: {ws_path}"
+                ) from error
+            for section in ("planning", "scene_phrases"):
+                if f"workflow-state.json::{section} must be an object" in message:
+                    raise ValidationError(f"workflow-state.json::{section} は object である必要があります") from error
+            raise ValidationError(f"workflow-state.json を読み込めません: {ws_path}: {error}") from error
+        return state.to_dict() if state is not None else {}
 
     def _load_scene_emoji(self) -> str:
         """workflow-state.json から planning.scene_emoji を読み込み"""
@@ -884,14 +856,8 @@ class BAHMetadataGenerator:
         """
         paths = CollectionPaths(self.collection_path)
         ws_path = paths.workflow_state_path
-        if ws_path.exists():
-            try:
-                with open(ws_path, "r", encoding="utf-8") as f:
-                    state = json.load(f)
-                return state.get("theme", "") or ""
-            except (json.JSONDecodeError, KeyError):
-                pass
-        return ""
+        state = _read_workflow_state_lenient(ws_path)
+        return state.get("theme", "") or ""
 
     def generate_shorts_metadata(self, cc_video_url: str) -> Dict:
         """Shorts 用メタデータを生成する.

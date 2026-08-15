@@ -25,7 +25,6 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import json
 import shlex
 import shutil
 import subprocess
@@ -35,7 +34,9 @@ from typing import Any
 
 from youtube_automation.configuration import channel_dir
 from youtube_automation.configuration.skills import load_skill_config
-from youtube_automation.core.errors import ConfigError, ValidationError
+from youtube_automation.core.errors import ConfigError, ValidationError, WorkflowStateError
+from youtube_automation.domains.collections.workflow_state import WorkflowState
+from youtube_automation.domains.collections.workflow_state import update as update_workflow_state
 from youtube_automation.infrastructure.media.collection_paths import (
     CollectionPaths,
     resolve_collection_dir,
@@ -168,23 +169,25 @@ def _update_workflow_state_raw_master(workflow_state_path: Path, new_name: str) 
     if not workflow_state_path.is_file():
         return False
 
+    def record_raw_master(state: WorkflowState) -> None:
+        assets = state.assets
+        if assets is None:
+            state["assets"] = {}
+            assets = state.assets
+        if assets is None:
+            raise ValidationError("workflow-state.json::assets は object である必要があります")
+        assets.raw_master = new_name
+
     try:
-        state = json.loads(workflow_state_path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as e:
-        raise ValidationError(f"workflow-state.json のパースに失敗: {e}") from e
-
-    if not isinstance(state, dict):
-        raise ValidationError("workflow-state.json の root は object である必要があります")
-
-    assets = state.setdefault("assets", {})
-    if not isinstance(assets, dict):
-        raise ValidationError("workflow-state.json::assets は object である必要があります")
-
-    assets["raw_master"] = new_name
-    workflow_state_path.write_text(
-        json.dumps(state, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
+        update_workflow_state(workflow_state_path, record_raw_master)
+    except WorkflowStateError as error:
+        if isinstance(error.__cause__, OSError):
+            raise error.__cause__ from error
+        if "root must be an object" in str(error):
+            raise ValidationError("workflow-state.json の root は object である必要があります") from error
+        if "workflow-state.json::assets must be an object" in str(error):
+            raise ValidationError("workflow-state.json::assets は object である必要があります") from error
+        raise ValidationError(f"workflow-state.json のパースに失敗: {error}") from error
     return True
 
 

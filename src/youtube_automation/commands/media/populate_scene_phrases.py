@@ -29,6 +29,8 @@ from pathlib import Path
 
 from youtube_automation.configuration import channel_dir, load_config
 from youtube_automation.core.errors import AutomationError, ConfigError, ValidationError
+from youtube_automation.domains.collections.workflow_state import read as read_workflow_state
+from youtube_automation.domains.collections.workflow_state import update as update_workflow_state
 from youtube_automation.domains.uploads.preflight import requires_scene_phrases
 
 logger = logging.getLogger(__name__)
@@ -185,7 +187,7 @@ def main(argv: list[str] | None = None) -> int:
         ws_path = col_path / "workflow-state.json"
         if not ws_path.exists():
             raise ConfigError(f"{ws_path} が存在しません")
-        state = json.loads(ws_path.read_text(encoding="utf-8"))
+        state = read_workflow_state(ws_path).to_dict()
 
         supported = list(config.localizations.supported_languages)
         if not requires_scene_phrases(supported):
@@ -226,11 +228,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"\n--dry-run: {ws_path} には書き込みません")
             return 0
 
-        state["scene_phrases"] = scene_phrases
-        ws_path.write_text(
-            json.dumps(state, ensure_ascii=False, indent=2) + "\n",
-            encoding="utf-8",
-        )
+        update_workflow_state(ws_path, lambda current: current.__setitem__("scene_phrases", scene_phrases))
         print(f"✅ {args.collection}: scene_phrases に {len(scene_phrases)} 言語を書き込みました")
         return 0
     except AutomationError as exc:
