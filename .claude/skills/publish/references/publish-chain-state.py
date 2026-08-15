@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Decide whether publish playlist, upload, and community steps must run."""
+"""Decide whether publish playlist, upload, community, and pinned steps must run."""
 
 from __future__ import annotations
 
@@ -60,6 +60,51 @@ def _evaluate_playlist(channel_dir: Path) -> tuple[int, StateResult]:
     )
 
 
+def _evaluate_pinned(channel_dir: Path, video_id: str) -> tuple[int, StateResult]:
+    config_path = channel_dir / "config" / "channel" / "pinned-comment.json"
+    try:
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return EXIT_BLOCKED, _result("blocked", "pinned_comment_config_missing")
+    except (OSError, json.JSONDecodeError):
+        return EXIT_BLOCKED, _result("blocked", "pinned_comment_config_invalid")
+    if not isinstance(config, dict):
+        return EXIT_BLOCKED, _result("blocked", "pinned_comment_config_invalid")
+    pinned_config = config.get("pinned_comment")
+    if not isinstance(pinned_config, dict):
+        return EXIT_BLOCKED, _result("blocked", "pinned_comment_config_invalid")
+    history_file = pinned_config.get("history_file")
+    if not isinstance(history_file, str) or not history_file.strip():
+        return EXIT_BLOCKED, _result("blocked", "pinned_comment_config_invalid")
+
+    relative_history = Path(history_file)
+    if relative_history.is_absolute():
+        return EXIT_BLOCKED, _result("blocked", "pinned_comment_config_invalid")
+    channel_root = channel_dir.resolve()
+    history_path = (channel_dir / relative_history).resolve()
+    if not history_path.is_relative_to(channel_root):
+        return EXIT_BLOCKED, _result("blocked", "pinned_comment_config_invalid")
+
+    try:
+        history = json.loads(history_path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return EXIT_RUN, _result("run", "pinned_comment_missing")
+    except (OSError, json.JSONDecodeError):
+        return EXIT_BLOCKED, _result("blocked", "pinned_comment_history_invalid")
+    if not isinstance(history, dict) or history.get("schema_version") != 1:
+        return EXIT_BLOCKED, _result("blocked", "pinned_comment_history_invalid")
+    posted = history.get("posted")
+    if not isinstance(posted, dict):
+        return EXIT_BLOCKED, _result("blocked", "pinned_comment_history_invalid")
+    if video_id not in posted:
+        return EXIT_RUN, _result("run", "pinned_comment_missing")
+    return EXIT_SKIP, _result(
+        "skip",
+        "pinned_comment_recorded",
+        artifacts=[relative_history.as_posix()],
+    )
+
+
 def evaluate(
     collection_dir: Path | None,
     step: str,
@@ -68,9 +113,9 @@ def evaluate(
     """Return a stable exit code and JSON-serializable decision."""
     if step == "playlist":
         return _evaluate_playlist(channel_dir or Path.cwd())
-    if step not in {"upload", "community"}:
+    if step not in {"upload", "community", "pinned"}:
         return EXIT_BLOCKED, _result("blocked", "unknown_step")
-    if step == "community" and collection_dir is None:
+    if step in {"community", "pinned"} and collection_dir is None:
         return EXIT_RUN, _result("run", "collection_not_provided")
     if collection_dir is None:
         return EXIT_BLOCKED, _result("blocked", "collection_dir_missing")
@@ -92,11 +137,12 @@ def evaluate(
         return EXIT_BLOCKED, _result("blocked", "upload_state_invalid")
 
     video_id = upload.get("video_id")
-    if step == "community":
+    if step in {"community", "pinned"}:
         if video_id is None:
             return EXIT_BLOCKED, _result("blocked", "video_id_missing")
         if not isinstance(video_id, str) or not video_id.strip():
             return EXIT_BLOCKED, _result("blocked", "video_id_invalid")
+    if step == "community":
         output = collection_dir / "20-documentation" / "community-post.txt"
         try:
             exists = output.is_file() and bool(output.read_text(encoding="utf-8").strip())
@@ -109,6 +155,8 @@ def evaluate(
             "community_post_recorded",
             artifacts=["20-documentation/community-post.txt"],
         )
+    if step == "pinned":
+        return _evaluate_pinned(channel_dir or Path.cwd(), video_id)
     if video_id is None:
         return EXIT_RUN, _result("run", "video_id_missing")
     if not isinstance(video_id, str) or not video_id.strip():

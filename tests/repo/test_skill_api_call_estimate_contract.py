@@ -162,7 +162,6 @@ TARGET_SKILLS: frozenset[str] = frozenset(
         "live-chat-reply",
         "music",
         "metadata-audit",
-        "pinned-comment",
         "setup",
         "short",
         "streaming",

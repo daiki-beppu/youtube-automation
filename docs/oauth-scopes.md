@@ -48,7 +48,7 @@ scope 定義の単一ソースは `src/youtube_automation/infrastructure/auth/yo
 | /setup（seed / 設定 push） | `yt-channel-seed` / `yt-channel-settings` | write（`youtube`） | `token.json` |
 | /video-description ほか一括更新 | `yt-bulk-update-desc` / `yt-bulk-update-synthetic-media` | write（`youtube`） | `token.json` |
 | /comments-reply | `yt-comments-reply` | write（`youtube.force-ssl`） | `token.json` |
-| /pinned-comment | `yt-pinned-comment` | write（`youtube.force-ssl`） | `token.json` |
+| /publish --pinned | `yt-pinned-comment` | write（`youtube.force-ssl`） | `token.json` |
 | 字幕アップロード | `yt-captions-upload` | write（`youtube.force-ssl`） | `token.json` |
 | /streaming（stream key 取得） | `yt-fetch-stream-key` | write（`youtube`） | `token_streaming.json` |
 

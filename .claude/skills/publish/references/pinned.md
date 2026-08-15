@@ -1,8 +1,4 @@
----
-name: pinned-comment
-purpose: 公開する
-description: "Use when 新規動画へオーナー固定コメントを自動投稿するとき。「固定コメント」「ピンコメント」で発動。dry-run 後 apply、ピン留めは Studio で手動"
----
+# Pinned mode
 
 ## 前後工程
 
@@ -12,7 +8,7 @@ description: "Use when 新規動画へオーナー固定コメントを自動投
 
 ## 成果物
 
-- `書き込む`: `collections/<id>/20-documentation/pinned_comment_history.json`
+- `書き込む`: `pinned_comment_history.json`
 - `読み込む`: `collections/<id>/20-documentation/upload_tracking.json`, `config/channel/pinned-comment.json`, `auth/token.json`
 
 ## Overview
@@ -36,7 +32,7 @@ Phase 2 の apply が exit 0 で終了し、Studio UI での手動ピン留め�
 
 ## チェーンからの呼出
 
-単独発動では従来どおり Phase 1 後の承認ゲートを必須とする。`/post-publish` から同じ video ID・対象件数を明示して承認済みで呼ばれた場合、その承認を Phase 2 の承認として引き継ぎ、重複確認せず apply へ進める。チェーン gate が無効または対象が一致しない場合は、単独発動と同じ承認を省略しない。apply が exit 0 の場合だけチェーンへ完了を返す。
+単独発動では従来どおり Phase 1 後の承認ゲートを必須とする。`/publish` chain または `/post-publish` から同じ video ID・対象件数を明示して承認済みで呼ばれた場合、その承認を Phase 2 の承認として引き継ぎ、重複確認せず apply へ進める。チェーン gate が承認を省略した場合、または対象が一致しない場合は、単独発動と同じ承認を省略しない。apply が exit 0 の場合だけチェーンへ完了を返す。
 
 ## 設定 (`config/channel/pinned-comment.json`)
 
@@ -125,7 +121,7 @@ uv run yt-pinned-comment --collection collections/live/<latest-dir> --apply --la
 4. Studio UI でピン留め
 5. `pinned_comment_history.json` に記録され、同一 video_id への二重投稿は防止される
 
-公開後 3 処理を一括実行する場合は `/post-publish <collection>` を使う。本スキルの単独発動も従来どおり利用できる。
+公開後 3 処理を一括実行する場合は `/post-publish <collection>` を使う。`/publish --pinned` の単独発動も従来どおり利用できる。
 
 ## トラブルシュート
 

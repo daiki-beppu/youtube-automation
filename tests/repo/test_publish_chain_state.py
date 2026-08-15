@@ -152,3 +152,52 @@ def test_community_blocks_until_upload_is_recorded(tmp_path: Path) -> None:
 
     assert code == module.EXIT_BLOCKED
     assert result["reason"] == "video_id_missing"
+
+
+def _write_pinned_config(channel: Path, history_file: str = "pinned_comment_history.json") -> None:
+    config = channel / "config/channel"
+    config.mkdir(parents=True, exist_ok=True)
+    (config / "pinned-comment.json").write_text(
+        json.dumps({"pinned_comment": {"history_file": history_file}}),
+        encoding="utf-8",
+    )
+
+
+def test_pinned_runs_when_video_is_not_in_history(tmp_path: Path) -> None:
+    module = _module()
+    collection = _collection(tmp_path, {"video_id": "youtube-id"})
+    channel = tmp_path / "channel"
+    _write_pinned_config(channel)
+
+    code, result = module.evaluate(collection, "pinned", channel)
+
+    assert code == module.EXIT_RUN
+    assert result["reason"] == "pinned_comment_missing"
+
+
+def test_pinned_skips_when_video_is_recorded_in_configured_history(tmp_path: Path) -> None:
+    module = _module()
+    collection = _collection(tmp_path, {"video_id": "youtube-id"})
+    channel = tmp_path / "channel"
+    _write_pinned_config(channel, "history/pins.json")
+    history = channel / "history/pins.json"
+    history.parent.mkdir()
+    history.write_text(json.dumps({"schema_version": 1, "posted": {"youtube-id": {}}}), encoding="utf-8")
+
+    code, result = module.evaluate(collection, "pinned", channel)
+
+    assert code == module.EXIT_SKIP
+    assert result["artifacts"] == ["history/pins.json"]
+
+
+def test_pinned_blocks_on_invalid_history(tmp_path: Path) -> None:
+    module = _module()
+    collection = _collection(tmp_path, {"video_id": "youtube-id"})
+    channel = tmp_path / "channel"
+    _write_pinned_config(channel)
+    (channel / "pinned_comment_history.json").write_text("[]", encoding="utf-8")
+
+    code, result = module.evaluate(collection, "pinned", channel)
+
+    assert code == module.EXIT_BLOCKED
+    assert result["reason"] == "pinned_comment_history_invalid"

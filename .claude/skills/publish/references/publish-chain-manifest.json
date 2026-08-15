@@ -52,6 +52,23 @@
       "idempotency": {
         "script": "references/publish-chain-state.py"
       }
+    },
+    {
+      "id": "pinned",
+      "skill": "publish",
+      "prerequisiteArtifacts": [
+        "collections/<id>/workflow-state.json::upload.video_id"
+      ],
+      "outputArtifacts": [
+        "pinned_comment_history.json"
+      ],
+      "approvalGate": {
+        "skip": true,
+        "configPath": "workflow.post-publish.skip_approvals.pinned-comment"
+      },
+      "idempotency": {
+        "script": "references/publish-chain-state.py"
+      }
     }
   ]
 }

@@ -31,7 +31,7 @@ def test_publish_chain_appends_community_with_existing_approval_resolution() -> 
     manifest = json.loads((PUBLISH / "references" / "publish-chain-manifest.json").read_text(encoding="utf-8"))
     skill = (PUBLISH / "SKILL.md").read_text(encoding="utf-8")
 
-    assert [step["id"] for step in manifest["steps"]] == ["playlist", "upload", "community"]
+    assert [step["id"] for step in manifest["steps"]][:3] == ["playlist", "upload", "community"]
     community = manifest["steps"][2]
     assert community == {
         "id": "community",
