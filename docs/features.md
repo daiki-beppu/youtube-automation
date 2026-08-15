@@ -1,6 +1,6 @@
 # 全 skill カタログ
 
-`yt-skills sync` で各チャンネルリポジトリに配布される Claude Code skill の一覧（全 **54 個**）。各行は「なにができるか」（what）の 1 行要約。発動トリガー・前提・前後工程はサイトの [skill ガイド](/skills)、詳細手順は `.claude/skills/<name>/SKILL.md` を参照。
+`yt-skills sync` で各チャンネルリポジトリに配布される Claude Code skill の一覧（全 **53 個**）。各行は「なにができるか」（what）の 1 行要約。発動トリガー・前提・前後工程はサイトの [skill ガイド](/skills)、詳細手順は `.claude/skills/<name>/SKILL.md` を参照。
 
 > 個別の使い分けは各カテゴリの冒頭リンクや [`docs/workflow-cheatsheet.md`](workflow-cheatsheet.md)（workflow 系）も併せて参照。
 
@@ -10,9 +10,8 @@
 
 | Skill | なにができるか |
 |---|---|
-| /wf-new | フラグなしで新規コレクションを立ち上げ、正規入口 `--auto` では active collection の有無を問わず公開後処理まで状態駆動で継続・再開 |
+| /wf-new | フラグなしで新規コレクションを立ち上げ、正規入口 `--auto` では公開後処理まで継続・再開し、`--batch` では複数企画を相互差別化して順次実行 |
 | /wf-next | 既存コレクションを次の工程に 1 段進める（Phase 2-3） |
-| /wf-new-batch | 複数の新規コレクションを相互差別化して一括企画し、正規 `/wf-new` を順次実行・再開 |
 | /wf-status | 制作中コレクションの進捗を読み取り表示（実行はしない） |
 | /automation-schedule | 定期制作設定（`workflow.json` の `scheduled_automation`）の生成と、既定 `/wf-new --auto` を起動する Claude Code / Codex ジョブの作成・更新・確認・停止 |
 | /collection-ideate | データドリブンに次の企画候補を提案 |

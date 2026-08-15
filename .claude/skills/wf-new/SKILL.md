@@ -1,7 +1,7 @@
 ---
 name: wf-new
 purpose: 進める
-description: "Use when 新規コレクション制作を立ち上げるとき、または --auto で collection の有無を問わず公開後処理まで状態駆動で継続・再開するとき。「新しいコレクション始めたい」「制作開始」「制作を最初から最後まで」で発動。一段だけ進める場合は /wf-next"
+description: "Use when 新規コレクション制作を立ち上げるとき、--auto で公開後処理まで継続するとき、または --batch で複数コレクションを一括企画・順次実行するとき。「新しいコレクション始めたい」「制作開始」「制作を最初から最後まで」「複数コレクション制作」「一括制作」で発動。一段だけ進める場合は /wf-next"
 ---
 
 ## 前後工程
@@ -12,12 +12,12 @@ description: "Use when 新規コレクション制作を立ち上げるとき、
 
 ## 成果物
 
-- `書き込む`: `.automation-run/history.json`, `collections/<id>/workflow-state.json`, `collections/<id>/20-documentation/plan_proposals.md`, `collections/<id>/20-documentation/thumbnail-prompts.md`, `collections/<id>/20-documentation/suno-patterns.yaml`, `collections/<id>/20-documentation/suno-prompts.json`, `collections/<id>/10-assets/thumbnail.jpg`, `collections/<id>/10-assets/main.png`, `collections/<id>/10-assets/main.jpg`, `collections/<id>/10-assets/loop.mp4`
+- `書き込む`: `.automation-run/history.json`, `reports/wf-new-batches/<batch-id>/plan-manifest.json`, `reports/wf-new-batches/<batch-id>/batch-ledger.json`, `collections/<id>/workflow-state.json`, `collections/<id>/20-documentation/plan_proposals.md`, `collections/<id>/20-documentation/thumbnail-prompts.md`, `collections/<id>/20-documentation/suno-patterns.yaml`, `collections/<id>/20-documentation/suno-prompts.json`, `collections/<id>/10-assets/thumbnail.jpg`, `collections/<id>/10-assets/main.png`, `collections/<id>/10-assets/main.jpg`, `collections/<id>/10-assets/loop.mp4`
 - `読み込む`: `config/channel/*.json`, `config/localizations.json`, `data/benchmark_*.json`, `reports/analysis_*.md`, `data/insights.jsonl`, `collections/<id>/workflow-state.json`, `collections/<id>/20-documentation/post_publish_history.json`
 
 ## モード判定
 
-`$ARGUMENTS` から `--auto` の個数を最初に数える。
+`$ARGUMENTS` から排他 mode の `--auto` と `--batch` を完全一致で抽出し、その合計個数を最初に数える。前方一致は禁止し、通常入口の preselected 引数 `--batch-id` / `--plan-id` は `--batch` として数えない。
 
 - 2 個以上なら排他違反として停止し、1 つだけ指定するよう促す。state・lease・成果物は一切変更しない
 - 1 個なら対応する reference を読み、その mode だけを実行する。残りの引数はその mode の引数として扱う
@@ -26,6 +26,14 @@ description: "Use when 新規コレクション制作を立ち上げるとき、
 | mode | 読む reference |
 |---|---|
 | `--auto` | `references/auto.md` |
+| `--batch` | `references/batch.md` |
+
+## 修飾フラグ
+
+| flag | 対象 mode | 用途 |
+|---|---|---|
+| `--count <N>` | `--batch` | 2 件以上の初回 batch を開始する |
+| `--resume <batch-id>` | `--batch` | 中断済み batch を再開する |
 
 ## Overview
 
