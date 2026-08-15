@@ -1,9 +1,4 @@
-"""publish 直前の dedup 安全網（同タイトル動画の既存検出）。
-
-``YouTubeAutoUploader`` から分離した mixin。挙動は分割前と同一で、
-``self.youtube`` / ``self._ensure_service`` は合成先（``YouTubeUploadCore`` 継承クラス）
-が提供する。
-"""
+"""publish 直前の dedup 安全網（同タイトル動画の既存検出）。"""
 
 from __future__ import annotations
 
@@ -27,10 +22,13 @@ _VIDEOS_LIST_UNITS = 1
 _QUOTA_CONTEXT = "upload_dedup_search"
 
 
-class DedupSearchMixin:
-    """own channel 内の同タイトル動画検出ロジックを提供する mixin。"""
+class DedupSearch:
+    """注入された YouTube service で同タイトル動画を検索する。"""
 
-    def _find_existing_video_by_title(self, title: str) -> Optional[Dict[str, str]]:
+    def __init__(self, youtube):
+        self.youtube = youtube
+
+    def find_existing_video_by_title(self, title: str) -> Optional[Dict[str, str]]:
         """own channel 内に同タイトル（完全一致）の動画があれば video_id / video_url を返す。
 
         publish 直前の dedup 安全網。session URI 持ち越し（一次対策）が破れた場合の
@@ -43,7 +41,6 @@ class DedupSearchMixin:
         Returns:
             hit: `{"video_id": ..., "video_url": ...}` / miss: None / 検索エラー: None（fail-open）
         """
-        self._ensure_service()
         try:
             search_request = self.youtube.search().list(
                 forMine=True, type="video", q=title, maxResults=10, part="snippet"
@@ -93,7 +90,7 @@ class DedupSearchMixin:
     @staticmethod
     def _first_reusable_video(videos: list[dict], title: str) -> Optional[Dict[str, str]]:
         for video in videos:
-            if not DedupSearchMixin._is_reusable_exact_title_video(video, title):
+            if not DedupSearch._is_reusable_exact_title_video(video, title):
                 continue
             video_id = video.get("id")
             if not isinstance(video_id, str):

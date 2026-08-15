@@ -1,8 +1,7 @@
 """Complete Collection 動画アップロード経路。
 
 ``YouTubeAutoUploader`` から分離した mixin。挙動は分割前と同一で、
-``self.upload_video`` / ``self._find_existing_video_by_title``
-は合成先クラス（本体 + 他 mixin）が提供する。
+``self.upload_video`` / ``self.dedup_search`` は合成先クラスが提供する。
 """
 
 from __future__ import annotations
@@ -146,7 +145,7 @@ class CompleteCollectionMixin:
 
         # publish 直前の dedup 安全網: 同タイトル動画が own channel に既に存在すれば
         # `videos().insert()` を呼ばず既存 video_id を採用する
-        existing = self._find_existing_video_by_title(metadata["title"])
+        existing = self.dedup_search.find_existing_video_by_title(metadata["title"])
         if existing:
             logger.info(f"⚠️  既存動画を検出（upload skip）: {existing['video_url']}")
             return {

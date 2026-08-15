@@ -18,7 +18,7 @@ from youtube_automation.core.errors import (
 )
 from youtube_automation.domains.metadata import BAHMetadataGenerator
 from youtube_automation.domains.uploads._complete_collection_strategy import CompleteCollectionMixin
-from youtube_automation.domains.uploads._dedup_search import DedupSearchMixin
+from youtube_automation.domains.uploads._dedup_search import DedupSearch
 from youtube_automation.domains.uploads._preflight import PreflightMixin
 from youtube_automation.domains.uploads._uploader_constants import (
     UPLOAD_SOURCE_EXISTING,
@@ -236,7 +236,6 @@ __all__ = [
 
 class YouTubeAutoUploader(
     CompleteCollectionMixin,
-    DedupSearchMixin,
     PreflightMixin,
     ResumableUploader,
 ):
@@ -244,10 +243,15 @@ class YouTubeAutoUploader(
 
     YouTubeUploadCore を継承し、コレクション単位のアップロード機能を提供する。
     コアのアップロード・サムネイル・リトライロジックは YouTubeUploadCore に委譲。
-    責務別のロジック（dedup / preflight / CC 経路）は mixin に分離。
+    責務別のロジック（dedup collaborator / preflight / CC 経路）へ委譲する。
     """
 
-    def __init__(self, collections_root: Optional[str] = None, youtube_clients: YouTubeClients | None = None):
+    def __init__(
+        self,
+        collections_root: Optional[str] = None,
+        youtube_clients: YouTubeClients | None = None,
+        dedup_search: DedupSearch | None = None,
+    ) -> None:
         """
         初期化
 
@@ -260,7 +264,16 @@ class YouTubeAutoUploader(
             collections_root = channel_dir() / "collections"
 
         self.collections_root = Path(collections_root)
+        self._dedup_search = dedup_search
         self._verified_authenticated_channel_id: str | None = None
+
+    @property
+    def dedup_search(self) -> DedupSearch:
+        """注入済み helper、または認証後に生成した既定 helper を返す。"""
+        if self._dedup_search is None:
+            self._ensure_service()
+            self._dedup_search = DedupSearch(self.youtube)
+        return self._dedup_search
 
     def _verify_authenticated_upload_channel(self) -> None:
         """OAuth の実チャンネルを config と照合し、同一実行内で結果を保持する。"""
