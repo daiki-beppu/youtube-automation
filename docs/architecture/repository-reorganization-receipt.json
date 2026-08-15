@@ -102,7 +102,7 @@
         "Updated consumer: src/youtube_automation/commands/analytics/fetch_benchmark_comments.py",
         "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py",
         "Updated consumer: .claude/skills/collection-ideate/references/benchmark_collector.py",
-        "Updated consumer: .claude/skills/thumbnail-compare/references/compare_thumbnails.py",
+        "Updated consumer: .claude/skills/thumbnail/references/compare_thumbnails.py",
         "Updated consumer: .claude/skills/channel-new/references/benchmark_collector.py",
         "Updated consumer: .claude/skills/channel-new/references/fetch_benchmark_comments.py",
         "Updated consumer: .claude/skills/viewer-voice/references/fetch_benchmark_comments.py",

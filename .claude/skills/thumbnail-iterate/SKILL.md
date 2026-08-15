@@ -1,7 +1,7 @@
 ---
 name: thumbnail-iterate
 purpose: 作る
-description: "Use when 伸びた動画を起点にサムネの勝因を分解し、統制した A/B 比較で次の勝ちサムネへ更新するとき。「伸びた動画のサムネ改善」「伸びた動画起点のサムネ A/B テスト」「伸びたサムネテスト」で発動。新規候補生成だけなら /thumbnail、単独の Studio Test & Compare は /thumbnail-test、失速原因分析は /flop-analysis、競合横並びは /thumbnail-compare、整合性監査は /alignment-check を使う"
+description: "Use when 伸びた動画を起点にサムネの勝因を分解し、統制した A/B 比較で次の勝ちサムネへ更新するとき。「伸びた動画のサムネ改善」「伸びた動画起点のサムネ A/B テスト」「伸びたサムネテスト」で発動。新規候補生成だけなら /thumbnail、単独の Studio Test & Compare は /thumbnail-test、失速原因分析は /flop-analysis、競合横並びは thumbnail の比較 mode、整合性監査は /alignment-check を使う"
 ---
 
 ## 前後工程

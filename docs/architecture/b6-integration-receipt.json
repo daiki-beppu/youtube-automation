@@ -948,7 +948,7 @@
     },
     {
       "old_owner": "legacy..claude.skills.thumbnail-compare.SKILL.md",
-      "exact_new_owner": ".claude/skills/thumbnail-compare/SKILL.md",
+      "exact_new_owner": ".claude/skills/thumbnail/references/compare.md",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"

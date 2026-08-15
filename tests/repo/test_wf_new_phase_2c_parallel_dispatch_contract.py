@@ -104,7 +104,7 @@ def test_join_keeps_main_owned_quality_state_and_partial_resume_contracts() -> N
     assert "両 Agent" in join
     assert "完了を待つ" in join
     assert "メイン" in join
-    for gate in ("承認", "auto-selection", "textless", "`/thumbnail-compare`"):
+    for gate in ("承認", "auto-selection", "textless", "`/thumbnail --compare`"):
         assert gate in join
     assert "Phase 2c 成果物・再開契約" in join
     assert "branch ごとに直列" in join

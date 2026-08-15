@@ -161,7 +161,7 @@ def test_wf_new_preview_path_keeps_quality_state_and_textless_contracts() -> Non
     )[0]
 
     for contract in (
-        "/thumbnail-compare",
+        "/thumbnail --compare",
         "未設定または `true`",
         "share_thumbnail_as_main.py <collection-path>",
     ):

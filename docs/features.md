@@ -1,6 +1,6 @@
 # 全 skill カタログ
 
-`yt-skills sync` で各チャンネルリポジトリに配布される Claude Code skill の一覧（全 **44 個**）。各行は「なにができるか」（what）の 1 行要約。発動トリガー・前提・前後工程はサイトの [skill ガイド](/skills)、詳細手順は `.claude/skills/<name>/SKILL.md` を参照。
+`yt-skills sync` で各チャンネルリポジトリに配布される Claude Code skill の一覧（全 **43 個**）。各行は「なにができるか」（what）の 1 行要約。発動トリガー・前提・前後工程はサイトの [skill ガイド](/skills)、詳細手順は `.claude/skills/<name>/SKILL.md` を参照。
 
 > 個別の使い分けは各カテゴリの冒頭リンクや [`docs/workflow-cheatsheet.md`](workflow-cheatsheet.md)（workflow 系）も併せて参照。
 
@@ -32,7 +32,6 @@
 | /channel-strategy | チャンネル戦略を状態判定付きで実行し、`--persona` で第一ペルソナ、`--scene` で視聴シーン、`--constraints` で制作制約、`--direction` で方向性・ポジショニング・差別化を設計・見直し |
 | /value-loop-audit | シーン定義・制約翻訳・公開前ゲート・指標還流の価値ループを読み取り専用で横断診断 |
 | /alignment-check | 音楽ムード × サムネ × タイトル訴求の整合性を監査 |
-| /thumbnail-compare | サムネをベンチマーク競合と並べてモバイル視認性（320px）を検証 |
 | /thumbnail-test | Studio のサムネ A/B テストを設計し、watch time share・勝敗・勝ちパターンをコレクション履歴へ記録 |
 | /thumbnail-iterate | 伸びた動画のサムネ寄与を判定し、1 要素ずつ比較して検証済み champion を次回生成へ還元 |
 
@@ -42,7 +41,7 @@
 
 | Skill | なにができるか |
 |---|---|
-| /thumbnail | CTR 最適化プロンプトでサムネイル画像を生成（Gemini / OpenAI） |
+| /thumbnail | CTR 最適化プロンプトでサムネイル画像を生成（Gemini / OpenAI）。`--compare` ではベンチマーク競合との 320px 視認性を検証 |
 | /lyria | Vertex AI Lyria 3 で長尺マスター音源を自動生成（API 完結） |
 | /music | `--prompt` で Suno Style、`--lyric` でボーカル曲の歌詞と構成メモを生成 |
 | /suno-helper | suno-helper Chrome 拡張で Suno UI への連続生成 + playlist 一括追加を運用 |

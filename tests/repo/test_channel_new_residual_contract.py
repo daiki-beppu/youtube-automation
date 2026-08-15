@@ -38,7 +38,7 @@ MOVED_ASSET_SHA256 = {
     "import-mode.md": "2e7a69d0e45994d4ce267a7852c475b8db86bd6971e64311bf53021f337d060b",
     "localizations-template.json": "d0267074151af61f27856d0e67e8f0c3d56cf327b2255e00a8035e2851cde558",
     "push-mode.md": "be122ecbe19c803cfe09465f68ab364636f46f92f0ec842fb803566337eb57ee",
-    "regeneration-mode.md": "d8b1b24487f8932be088b92eedf5a55a347f738be18944efecce763726843120",
+    "regeneration-mode.md": "83eb8f6ff1252544d5e402c206a1322e04424afe8cba287383ac7d1ca09f0de0",
     "save-push-troubleshooting.md": "89a7cab34a96ddf7f10636293621c8b39e6cdf9f17e033a0469d5b14c0fc9a45",
 }
 

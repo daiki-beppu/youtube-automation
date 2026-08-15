@@ -162,5 +162,5 @@ find docs/benchmarks/thumbnails data/thumbnail_compare/benchmark \
 
 - `/channel-research --benchmark`: 競合動画データとサムネイル画像の収集・更新
 - `/thumbnail`: `docs/benchmarks/thumbnail-analysis.md` の勝ちパターンと参照候補を TTP 入力として生成
-- `/thumbnail-compare` → 生成候補と競合を並べた 320px 視認性比較
+- `/thumbnail --compare` → 生成候補と競合を並べた 320px 視認性比較
 - `/channel-research --market` → タイトル・動画尺・投稿・コメントを含むチャンネル全体の TTP 分析
