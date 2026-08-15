@@ -58,6 +58,10 @@ def test_resolve_from_path_matches_mapping_core(monkeypatch, tmp_path: Path):
 
     assert from_path == from_mapping
     assert from_path.base_style == "lo-fi jazz, soft piano, warm, focused"
+    assert from_path.genre_line == "lo-fi jazz, soft piano"
+    assert from_path.banned_artists == ()
+    assert not from_path.auto_lyrics_structure
+    assert from_path.duration_filter == {"min_sec": 60, "max_sec": 300}
     assert from_path.advanced_json_fields == {"style_influence": 0, "vocal_gender": "male"}
 
 

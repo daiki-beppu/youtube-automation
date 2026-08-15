@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 from collections.abc import Callable, Mapping, Sequence, Set
 from dataclasses import dataclass, field
@@ -104,6 +105,9 @@ class ResolvedPrompts:
     title: str
     is_vocal: bool
     genre_line: str
+    banned_artists: tuple[str, ...]
+    auto_lyrics_structure: bool
+    duration_filter: Mapping[str, int | float]
     base_style: str
     style_influence: int
     weirdness: int
@@ -130,6 +134,9 @@ class _ResolvedBase:
     title: str
     is_vocal: bool
     genre_line: str
+    banned_artists: tuple[str, ...]
+    auto_lyrics_structure: bool
+    duration_filter: Mapping[str, int | float]
     base_style: str
     style_influence: int
     weirdness: int
@@ -146,6 +153,9 @@ class _ResolvedBase:
 @dataclass(frozen=True)
 class _ResolvedConfigHead:
     resolved_suno: ResolvedSunoConfig
+    banned_artists: tuple[str, ...]
+    auto_lyrics_structure: bool
+    duration_filter: Mapping[str, int | float]
     full_style_char_limit: int
     advanced_json_fields: dict[str, object]
 
@@ -205,6 +215,28 @@ def _build_advanced_json_fields(override: Mapping[str, object]) -> dict[str, obj
     return fields
 
 
+def _resolve_duration_filter(config: Mapping[str, object]) -> Mapping[str, int | float]:
+    raw = config.get("duration_filter", {})
+    if raw is None:
+        raw = {}
+    if not isinstance(raw, Mapping):
+        raise ConfigError("config/skills/music.yaml::prompt.duration_filter must be a mapping")
+    min_sec = raw.get("min_sec", 60)
+    max_sec = raw.get("max_sec", 300)
+    if (
+        isinstance(min_sec, bool)
+        or isinstance(max_sec, bool)
+        or not isinstance(min_sec, (int, float))
+        or not isinstance(max_sec, (int, float))
+        or not math.isfinite(min_sec)
+        or not math.isfinite(max_sec)
+    ):
+        raise ConfigError("config/skills/music.yaml::prompt.duration_filter min_sec/max_sec must be finite numeric")
+    if min_sec < 0 or max_sec < 0 or min_sec > max_sec:
+        raise ConfigError("config/skills/music.yaml::prompt.duration_filter must satisfy 0 <= min_sec <= max_sec")
+    return MappingProxyType({"min_sec": min_sec, "max_sec": max_sec})
+
+
 def _resolve_config_head(config: Mapping[str, object], override: Mapping[str, object]) -> _ResolvedConfigHead:
     _validate_duration_sec_override(override)
     full_style_char_limit = _resolve_full_style_char_limit(config, override)
@@ -212,6 +244,9 @@ def _resolve_config_head(config: Mapping[str, object], override: Mapping[str, ob
     resolved_suno = resolve_suno_config(config)
     return _ResolvedConfigHead(
         resolved_suno=resolved_suno,
+        banned_artists=tuple(cast(list[str], config.get("banned_artists", []))),
+        auto_lyrics_structure=cast(bool, config.get("auto_lyrics_structure", False)),
+        duration_filter=_resolve_duration_filter(config),
         full_style_char_limit=full_style_char_limit,
         advanced_json_fields=advanced_json_fields,
     )
@@ -393,6 +428,9 @@ def _resolve_base(
         title=cast(str, patterns.get("title", "Suno Prompts")),
         is_vocal=is_vocal,
         genre_line=genre_line,
+        banned_artists=head.banned_artists,
+        auto_lyrics_structure=head.auto_lyrics_structure,
+        duration_filter=head.duration_filter,
         base_style=", ".join(base_parts),
         style_influence=cast(int, config.get("style_influence", 50)),
         weirdness=cast(int, config.get("weirdness", 50)),
@@ -471,6 +509,9 @@ def _finalize(
         title=base.title,
         is_vocal=base.is_vocal,
         genre_line=base.genre_line,
+        banned_artists=base.banned_artists,
+        auto_lyrics_structure=base.auto_lyrics_structure,
+        duration_filter=base.duration_filter,
         base_style=base.base_style,
         style_influence=base.style_influence,
         weirdness=base.weirdness,

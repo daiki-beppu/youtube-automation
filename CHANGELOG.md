@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `feat(skills)`: `/reply --live` に旧 `/live-chat-reply` の streaming 前提ガード、認証、常駐 daemon の配備・停止・障害復旧契約を統合し、旧 skill と利用者導線を削除する（#3849）。
 - `fix(packaging)`: upstream 開発専用の `/automation-release` と `/shadcn` を wheel・sdist から物理的に除外し、editable install での表示・除外契約は維持する（#3753）。
+- `refactor(suno)`: Suno prompt の設定・patterns・歌詞解決を CLI 実行ごとに1回へ集約し、生成側へ解決済みの品質設定と duration filter を渡して、生成内容を維持したまま重複警告を解消する（#3908）。
 
 - `feat(skills)`: 旧 `/channel-status` の登録者数・総再生回数・動画別パフォーマンス表示を `/analytics --status` へ統合する。status は分析 chain に含めず、`/wf-status` との YouTube 統計 / 制作進捗の責務境界と利用者導線を新 owner へ更新する（#3851）。
 - `feat(skills)`: フラグなしの `/audit` に alignment → video → metadata → value-loop の読み取り専用 chain manifest と再開可能な状態判定を追加する。公開済み動画がない場合は理由付きで停止し、永続化しない metadata / value-loop は実行後も runnable として扱う（#3856）。
