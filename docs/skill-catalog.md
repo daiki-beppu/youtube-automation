@@ -29,7 +29,7 @@ PDCA 対応: 準備 = 準備する / Plan = 調べる → 決める / Do = 進�
 
 ## 進める
 
-- `/collection-ideate` — Use when 新コレクションの企画・テーマ選定をデータドリブンに行うとき。
+- `/collection-ideate` — Use when /wf-new から企画・テーマ選定を委譲されて実行する内部 skill。
 - `/streaming` — Use when ライブ配信用 Vultr VPS・動画配信本体を Terraform で構築・運用・トラブルシュートするとき。
 - `/wf-new` — Use when 新規コレクション制作を立ち上げるとき、--auto で公開後処理まで継続するとき、--batch で複数コレクションを一括企画するとき、または --schedule で定期実行を設定・確認・停止するとき。
 - `/wf-next` — Use when 既存コレクション（collections/planning/）を一段進めるとき。

@@ -1,6 +1,6 @@
 # 前提スキル鮮度判定ルール
 
-`/collection-ideate` の Phase 1 を開始する前に、入力モードを 1 回だけ判定し、analytics mode の前提スキル出力が最新であることを確認する。
+`/wf-new` から委譲された `collection-ideate` の Phase 1 を開始する前に、入力モードを 1 回だけ判定し、analytics mode の前提スキル出力が最新であることを確認する。
 鮮度判定で stale を検出した場合は、種類に応じた Analytics skill を同じセッションで自動実行し、最新化に成功した場合だけ企画フローを継続する。
 
 ## stale report の自動更新
@@ -13,7 +13,7 @@ analytics mode の stale report は古い結果を企画入力に使わず、追
 
 自動実行した各 skill の完了条件をその skill の `SKILL.md` に従って確認する。全呼び出しの完了後、この文書の判定擬似コードを先頭から再実行し、新しい Markdown / JSON 同日付ペア、analysis JSON validator、相対・絶対鮮度を再検証する。すべて成功した場合だけ Phase 1-2 へ続行する。
 
-skill 呼び出し失敗または再検証失敗時は、失敗した skill または検証項目と失敗理由を表示し、stale report を使わず停止する。再開条件は、表示した失敗原因を解消して `/collection-ideate` を再実行できる状態になること。停止後に古い分析から企画生成へ進んではならない。
+skill 呼び出し失敗または再検証失敗時は、失敗した skill または検証項目と失敗理由を表示し、stale report を使わず停止する。再開条件は、表示した失敗原因を解消して `/wf-new` を再実行できる状態になること。停止後に古い分析から企画生成へ進んではならない。
 
 ## 順序依存
 

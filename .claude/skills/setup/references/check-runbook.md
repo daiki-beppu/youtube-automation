@@ -288,7 +288,7 @@ AI は config をここで生成しない。`yt-setup-dirs` で setup 用ディ�
 
 Markdown があるのに同日付 JSON がない、または validator が失敗する場合は fallback せず `/analytics --analyze` 再実行を案内する。
 
-ペアが stale の場合は、`yt-doctor` の message で stale を表示したうえで setup のブロッカーにしない。`apply.stop_reason == "human_required"` かつ `apply.check_id == "analytics_report"` でも `[HUMAN STEP]` として `/analytics --analyze` の実行を利用者へ依頼せず、後続の `/collection-ideate` が同じセッションで自動更新する旨を案内する。`checks` 配列の後続 check を確認し、ほかの未完了 check があればその check の手順へ進む。
+ペアが stale の場合は、`yt-doctor` の message で stale を表示したうえで setup のブロッカーにしない。`apply.stop_reason == "human_required"` かつ `apply.check_id == "analytics_report"` でも `[HUMAN STEP]` として `/analytics --analyze` の実行を利用者へ依頼せず、後続の `/wf-new` から委譲される `collection-ideate` が同じセッションで自動更新する旨を案内する。`checks` 配列の後続 check を確認し、ほかの未完了 check があればその check の手順へ進む。
 
 自動更新の実行順序、再検証、refresh / API 失敗時の停止・再開条件は `.claude/skills/collection-ideate/references/freshness-rules.md` を参照する。setup は refresh / API 失敗時の停止・再開条件は上書きしない。`/wf-new` はこの stale 判定を重ねない。
 
@@ -301,7 +301,7 @@ benchmark の有無は analytics report の有無より優先しない:
 - `reports/analysis_*.md` が無く、`data/benchmark_*.json` がある → benchmark fallback mode
 - `reports/analysis_*.md` と `data/benchmark_*.json` がどちらも無い → minimal mode
 
-1 行目は現行 `yt-doctor` の表示上の予備判定であり、最終 Hard Gate ではない。`/wf-new` と `/collection-ideate` は 2 行目のペア + validator 条件で判定する。
+1 行目は現行 `yt-doctor` の表示上の予備判定であり、最終 Hard Gate ではない。`/wf-new` と、そこから委譲される `collection-ideate` は 2 行目のペア + validator 条件で判定する。
 
 minimal mode / benchmark fallback mode は新規チャンネル初回制作を始めるための許容状態であり、setup の完了を止めない。
 
@@ -318,9 +318,9 @@ minimal mode / benchmark fallback mode は新規チャンネル初回制作を�
 
 #### `wf_new_readiness` — `/wf-new` の到達可否
 
-`/collection-ideate` と同じ入力モード判定と `config/skills/collection-ideate.yaml::ttp_mode` の組み合わせを確認する。override ファイルまたは `ttp_mode` が未設定なら、同梱既定どおり `false` として扱う。`analytics mode`、`benchmark fallback mode`、または `ttp_mode: false` の `minimal mode` は、`yt-doctor` の message に表示されたモードのまま `/wf-new` を開始できる。
+`/wf-new` から委譲される `collection-ideate` と同じ入力モード判定と `config/skills/collection-ideate.yaml::ttp_mode` の組み合わせを確認する。override ファイルまたは `ttp_mode` が未設定なら、同梱既定どおり `false` として扱う。`analytics mode`、`benchmark fallback mode`、または `ttp_mode: false` の `minimal mode` は、`yt-doctor` の message に表示されたモードのまま `/wf-new` を開始できる。
 
-`ttp_mode: true` × `minimal mode` の warning は、転写元ベンチマークが無く `/collection-ideate` から `/wf-new` へ到達できない状態を示す。`next_action.kind == "human"` の指示を次の順に扱う:
+`ttp_mode: true` × `minimal mode` の warning は、転写元ベンチマークが無く `/wf-new` 内部の `collection-ideate` を完了できない状態を示す。`next_action.kind == "human"` の指示を次の順に扱う:
 
 1. 利用者と TTP 対象を決め、`config/channel/analytics.json::benchmark.channels` に保存する
 2. AI が `/benchmark` を実行して `data/benchmark_*.json` を生成する

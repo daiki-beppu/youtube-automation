@@ -118,14 +118,14 @@ annotation は `{"videos": [...]}` のみを root に持ち、top / bottom の�
 
 ### 分析項目
 
-以下の全項目をカバーする。各項目は `/collection-ideate` での企画立案と `/thumbnail` でのCTR最適化に直接活用されるため、断片的な分析では後続ステップの品質が下がる:
+以下の全項目をカバーする。各項目は `/wf-new` から委譲される `collection-ideate` での企画立案と `/thumbnail` でのCTR最適化に直接活用されるため、断片的な分析では後続ステップの品質が下がる:
 
 1. **CTR 改善戦略分析**: 高CTRコンテンツの特徴分析、サムネイル・タイトル最適化提案 — サムネイル制作の方向性決定に直結
 2. **チャンネル特化パフォーマンス分析**: コレクション別比較、テーマ別パフォーマンス — 次期テーマ選定の根拠データ
-3. **戦略的改善提案**: 上位動画の共通成功要因、直近投稿の動向分析、次期コレクション企画推奨 — `/collection-ideate` の入力データ
+3. **戦略的改善提案**: 上位動画の共通成功要因、直近投稿の動向分析、次期コレクション企画推奨 — `/wf-new` 内部の `collection-ideate` の入力データ
 4. **具体的アクションプラン**: CTR 達成のための具体的施策 — 即実行可能なアクションに落とし込む
 5. **視聴維持率分析**: full 収集データでは `references/analysis-json-validator.md` の retention 契約に従って全有効動画を比較し、「中身の弱さ」仮説を数値根拠で評価する。standard データでは推測で補わず、full 収集が必要と明記する
-6. **流入源・デバイス分析**: `yt-traffic-trend` の出力から流入源シェア（ブラウズ / 検索 / 外部等）の構成と推移、デバイス別視聴傾向、YT_SEARCH 検索語トップ N を数値根拠付きで分析する — SEO 施策・企画判断と `/collection-ideate` / `/video-description` への接続データ。`search_terms` が空の場合は推測で補わず、`yt-analytics` での再収集が必要と明記する
+6. **流入源・デバイス分析**: `yt-traffic-trend` の出力から流入源シェア（ブラウズ / 検索 / 外部等）の構成と推移、デバイス別視聴傾向、YT_SEARCH 検索語トップ N を数値根拠付きで分析する — SEO 施策・企画判断と `/wf-new` 内部の `collection-ideate` / `/video-description` への接続データ。`search_terms` が空の場合は推測で補わず、`yt-analytics` での再収集が必要と明記する
 7. **収益・RPM 分析**: `revenue_analytics.status == "available"` の場合、`video_analytics` のタイトルと `config/channel/content.json::tags.themes` を使ってテーマ別・コレクション別に `estimated_revenue` と `views` を合計し、加重 RPM（`収益合計 / 再生合計 * 1000`）を算出する。動画別 RPM の単純平均は使わない。各グループの収益・再生・RPM・対象動画数を Markdown の「収益・RPM 分析」へ JSON path 付きで記載し、企画判断へ接続する。`status == "unavailable"` または旧データで `revenue_analytics` が無い場合は推測せず、それぞれ「収益データ利用不可」「収益メトリクスの再収集が必要」と明記する
 8. **プレイリスト効果分析**: JSON の `playlist_analytics.playlists` から、視聴数上位 200 件のプレイリスト別の views・`view_share_percent`・`average_view_duration` を表で報告する。`view_share_percent` は上位 200 件内のシェアであり、チャンネル全体に対するシェアとして扱わない。`config/channel/playlists.json` と照合できる ID は名前／キーを併記し、Complete Collection を識別する。未登録 ID は ID のまま明記する。views とシェアはプレイリスト内視聴の多寡を示す観測値であり、概要欄・固定コメントなどの導線施策が原因であるとは断定しない。データ欠損・0件時はその旨を記載し、再収集を案内する。
 9. **登録を生む動画の型**: `strategic_analysis.subscriber_conversion_ranking` の動画別登録転換率（`subscribers_gained ÷ views × 100`）上位を、タイトル・説明文からのテーマ、`duration`、`views`、`subscribers_gained` とともに要約する。`audience.by_subscribed_status` の登録済み／未登録の視聴比率を併記し、未登録視聴が多いのに転換率が低いのか、登録済み視聴が中心なのかを切り分けて次企画の仮説を示す。サムネイル傾向は動画 URL の実画像または `yt-thumbnail-correlate` の根拠を確認できた場合だけ記述する。`subscribedStatus` はチャンネル全体集計であり、個別動画の転換原因とは断定しない。`views` が 0 の動画の転換率は 0% として扱う。
@@ -173,7 +173,7 @@ Markdown には `TTP 健全性` 節を設ける。`alert` のチャンネルは 
 
 subagent は分析結果を同じ日付の `reports/analysis_YYYYMMDD.md` と `reports/analysis_YYYYMMDD.json` に保存する（チャンネル横断レポート）。メインエージェントは保存後にペアの存在を確認し、`references/analysis-json-validator.md` の validator が exit 0 になることを機械的に確認する。レポート本文や CLI JSON 全文は会話へ展開しない。ペアが存在しない、または validator が失敗した場合は未完了として subagent に再実行させる。
 
-このファイルは **`/collection-ideate` の前提必須入力**として読まれる。`/collection-ideate` Phase 1-2 で
+このファイルは **`/wf-new` から委譲される `collection-ideate` の前提必須入力**として読まれる。`collection-ideate` Phase 1-2 で
 以下のセクションが重視される（内容で認識、番号は目安）:
 
 - **§ 5 戦略的改善提案** — CTR 改善・コンテンツ最適化の方向性
@@ -213,7 +213,7 @@ validator が失敗した場合は未完了として扱い、不正エントリ�
 ## Next Step
 
 分析完了後:
-- `/collection-ideate` でデータに基づくコレクション企画を生成
+- `/wf-new` 経由で内部の `collection-ideate` がデータに基づくコレクション企画を生成
 
 ## 関連ファイル
 

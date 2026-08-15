@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(skills)`: `collection-ideate` を `/wf-new` から委譲される内部 skill へ降格し、利用者向け workflow 入口を `/wf-new` `/wf-next` `/wf-status` の 3 種に固定する（#3743）。
+
 - `feat(skills)`: `/automation-schedule` を `/wf-new --schedule` へ統合し、dry-run・承認・backend 選択・native task・OS fallback 契約を同一 skill へ移設する（#3742）。
 
 - `feat(skills)`: `/wf-new-batch` を `/wf-new --batch` へ統合し、排他 mode 判定、batch ledger・再開・自己通常入口契約を同一 skill へ移設する（#3741）。

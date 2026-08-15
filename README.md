@@ -22,7 +22,7 @@ YouTube チャンネル運営を自動化するツールキット。Analytics �
 
 > **個別 skill のカタログ**: `yt-skills sync` で配布される全 46 skill の「なにができるか」一覧は [`docs/features.md`](docs/features.md) を参照。
 >
-> **workflow 系 skill の使い分け**: `/wf-new` `/wf-next` `/wf-status` `/collection-ideate` と `workflow-state.json` の扱いは [`docs/workflow-cheatsheet.md`](docs/workflow-cheatsheet.md) を参照。
+> **workflow 系 skill の使い分け**: 利用者入口は `/wf-new` `/wf-next` `/wf-status` の 3 種です。`workflow-state.json` の扱いは [`docs/workflow-cheatsheet.md`](docs/workflow-cheatsheet.md) を参照。
 >
 > **自前動画素材を結合する場合**: fps が違う素材を FFmpeg concat する際の注意点は [`docs/media-concat-fps.md`](docs/media-concat-fps.md) を参照。
 

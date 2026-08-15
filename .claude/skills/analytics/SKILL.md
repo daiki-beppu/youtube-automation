@@ -7,7 +7,7 @@ description: "Use when YouTube Analytics の収集・分析・レポート表示
 ## 前後工程
 
 - `前工程`: `/setup`
-- `後工程`: `/collection-ideate`, `/flop-analysis`
+- `後工程`: `/wf-new`, `/flop-analysis`
 - `委譲先`: `なし`
 
 ## 成果物

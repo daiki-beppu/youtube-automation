@@ -22,13 +22,13 @@ collections/live/XXX-name/        → 投稿済み・公開中（Step 5 完了�
 ```
 
 ### 1. 企画段階（planning/）
-1. `/collection-ideate` を直接実行するか、`/wf-new` から分析フェーズを開始
+1. 利用者が `/wf-new` を実行し、内部の `collection-ideate` 分析フェーズを開始
 2. 入力モードを判定
    - analytics mode: 同じファイル名日付の `reports/analysis_*.md` / `.json` ペアが存在し、`.claude/skills/analytics/references/analysis-json-validator.md` の validator が exit 0 で、stale ではない。日次収集データ + 構造化分析 JSON + ベンチマーク + config を使う
    - benchmark fallback mode: `reports/analysis_*.md` が存在せず、`data/benchmark_*.json` が存在する。ベンチマーク + config を使う
    - minimal mode: `reports/analysis_*.md` と `data/benchmark_*.json` がどちらも存在しない。`ttp_mode: false` は企画候補生成前にテーマ / ジャンル / 雰囲気を直接確認し、その入力 + config を使う。`true` は `/benchmark` を案内して停止し、`data/benchmark_*.json` が生成されるまで企画候補を生成しない
-3. `/collection-ideate` を直接実行する場合、analytics report のペア検証、stale 判定、自動更新、再検証、失敗時の停止は `freshness-rules.md::stale report の自動更新` に委譲し、ここでは再定義しない。`/wf-new` 経由は同 skill の Hard Gates に委譲し、本 lifecycle では上書きしない
-4. `/collection-ideate` で企画候補生成（既定: テキスト N 案 → 確認 → N 枚一括生成 → 比較選択、N = `preview.candidate_count`、デフォルト 3）→ ユーザーがテーマを選択
+3. 内部の `collection-ideate` は analytics report のペア検証、stale 判定、自動更新、再検証、失敗時の停止を `freshness-rules.md::stale report の自動更新` に委譲し、ここでは再定義しない。`/wf-new` の Hard Gates は本 lifecycle で上書きしない
+4. 内部の `collection-ideate` で企画候補生成（既定: テキスト N 案 → 確認 → N 枚一括生成 → 比較選択、N = `preview.candidate_count`、デフォルト 3）→ ユーザーがテーマを選択
 5. テーマ確定後にディレクトリ作成・`workflow-state.json` 初期化
 6. `/thumbnail` で本番背景プロンプト生成・画像生成 → textless `10-assets/main.png` または `main.jpg`
 7. 承認済み `main.png/jpg` からテキスト付き `10-assets/thumbnail.jpg` を生成し、サムネイルと動画背景を別成果物として確定

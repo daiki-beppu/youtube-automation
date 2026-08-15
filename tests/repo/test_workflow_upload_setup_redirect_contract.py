@@ -161,7 +161,7 @@ EXPECTED_ACTIVE_ROUTES = (
     _route(
         "wf-new/SKILL.md",
         "## 前後工程",
-        "- `前工程`: `/setup --channel`, `/setup`, `/collection-ideate`",
+        "- `前工程`: `/setup --channel`, `/setup`",
     ),
     _route(
         "wf-new/SKILL.md",

@@ -557,7 +557,9 @@ def test_setup_stale_report_guidance_delegates_to_collection_ideate_contract() -
     analytics_report_section = setup.split("#### `analytics_report`", 1)[1].split("\n#### `benchmark_data`", 1)[0]
 
     assert ".claude/skills/collection-ideate/references/freshness-rules.md" in analytics_report_section
-    assert "後続の `/collection-ideate` が同じセッションで自動更新する" in analytics_report_section
+    assert "後続の `/wf-new` から委譲される `collection-ideate` が同じセッションで自動更新する" in (
+        analytics_report_section
+    )
     assert "`[HUMAN STEP]` として `/analytics --analyze` の実行を利用者へ依頼せず" in analytics_report_section
     assert "freshness.stale_action" not in setup
     assert "refresh / API 失敗時の停止・再開条件は上書きしない" in analytics_report_section

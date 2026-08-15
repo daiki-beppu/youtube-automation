@@ -7,7 +7,7 @@ description: "Use when 公開済み動画が伸びなかった原因を video_id
 ## 前後工程
 
 - `前工程`: `/analytics`, `/alignment-check`
-- `後工程`: `/collection-ideate`
+- `後工程`: `/wf-new`
 - `委譲先`: `/video-analyze`
 
 ## 成果物
