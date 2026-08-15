@@ -86,6 +86,8 @@ CLAUDE.md の「アーキテクチャ」節の詳細版。要点は CLAUDE.md �
 
 ### クラウド移譲
 
+**workflow-state**: collection の制作・公開進捗を Git 管理の `workflow-state.json` に保持する制御面 document。schema の正本と読み書き owner は `domains.collections.workflow_state` であり、追従文書は `.claude/skills/wf-new/references/schema.md`。新規 consumer は owner の `read()` / `read_or_none()` / `update()` を使い、JSON の直パース・直接書き込みを追加しない。既存の直アクセスは段階移行対象で、未知キーを保持したまま移行する。ADR-0024 の single-writer 原則では `phase` が local / cloud 間の引き渡しトークンとなり、R2 のメディアデータとは分離する。
+
 **制御面 / データ面**: ハイブリッド制作基盤の 2 面。制御面は Git（`workflow-state.json` と冪等性 tracking 群が正本）、データ面は R2（メディアの受け渡し）で、状態をデータ面に置かない（ADR-0024）。
 
 **工程所有権**: 各工程の実行者（local / cloud）が境界規則により常に一意である性質。「いま誰の番か」は Git 上の state の phase が表し、single-writer 原則により state 自体が引き渡しトークンになる。ネットワーク越しの分散ロックを作らない根拠（ADR-0024）。
