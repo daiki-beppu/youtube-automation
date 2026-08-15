@@ -123,7 +123,10 @@ def test_planning_rules_fail_closed_on_current_channel_constraint_violation() ->
 
 
 def test_wf_new_accepts_only_verified_constraint_compliant_plans() -> None:
-    wf_new = (REPO_ROOT / ".claude" / "skills" / "wf-new" / "SKILL.md").read_text(encoding="utf-8")
+    skill_dir = REPO_ROOT / ".claude" / "skills" / "wf-new"
+    wf_new = "\n".join(
+        path.read_text(encoding="utf-8") for path in (skill_dir / "SKILL.md", skill_dir / "references" / "phase2.md")
+    )
     delegation = wf_new.split("2. **Agent ツールで `/collection-ideate` を委譲**", 1)[1].split("\n### Phase 2:", 1)[0]
 
     assert "固定制約" in delegation

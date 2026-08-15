@@ -47,7 +47,6 @@ _ALLOWLISTED_SKILL_MD_LINE_COUNTS: Final[dict[str, int]] = {
     "masterup": 566,
     "suno": 594,
     "thumbnail": 748,
-    "wf-new": 483,
 }
 
 _ALLOWLISTED_VIOLATIONS = frozenset(

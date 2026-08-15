@@ -7,7 +7,12 @@ import re
 from tests.helpers.paths import REPO_ROOT
 
 WF_NEW_SKILL = REPO_ROOT / ".claude" / "skills" / "wf-new" / "SKILL.md"
+WF_NEW_PHASE2 = REPO_ROOT / ".claude" / "skills" / "wf-new" / "references" / "phase2.md"
 WF_AUTO_SKILL = REPO_ROOT / ".claude" / "skills" / "wf-auto" / "SKILL.md"
+
+
+def _wf_new_text() -> str:
+    return "\n".join(path.read_text(encoding="utf-8") for path in (WF_NEW_SKILL, WF_NEW_PHASE2))
 
 
 def _section(text: str, heading: str) -> str:
@@ -29,7 +34,7 @@ def _state_script_assignment(text: str) -> str:
 
 
 def test_direct_entry_uses_the_canonical_resolver_before_starting_work() -> None:
-    direct = _section(WF_NEW_SKILL.read_text(encoding="utf-8"), "### 直接実行の canonical timing 契約")
+    direct = _section(_wf_new_text(), "### 直接実行の canonical timing 契約")
     canonical = WF_AUTO_SKILL.read_text(encoding="utf-8")
 
     assert _state_script_assignment(direct) == _state_script_assignment(canonical)
@@ -49,7 +54,7 @@ def test_direct_entry_uses_the_canonical_resolver_before_starting_work() -> None
 
 
 def test_direct_entry_closes_bootstrap_and_fixed_collection_attempts() -> None:
-    direct = _section(WF_NEW_SKILL.read_text(encoding="utf-8"), "### 直接実行の canonical timing 契約")
+    direct = _section(_wf_new_text(), "### 直接実行の canonical timing 契約")
 
     bootstrap = next(line for line in direct.splitlines() if "record-bootstrap" in line)
     assert "--status blocked|failed" in bootstrap
@@ -69,7 +74,7 @@ def test_direct_entry_closes_bootstrap_and_fixed_collection_attempts() -> None:
 
 
 def test_direct_entry_releases_only_its_own_lease_on_every_exit() -> None:
-    direct = _section(WF_NEW_SKILL.read_text(encoding="utf-8"), "### 直接実行の canonical timing 契約")
+    direct = _section(_wf_new_text(), "### 直接実行の canonical timing 契約")
 
     assert "`finally` 相当" in direct
     assert "release --channel-dir . --token <token>" in direct
@@ -77,7 +82,7 @@ def test_direct_entry_releases_only_its_own_lease_on_every_exit() -> None:
 
 
 def test_wf_auto_delegation_reuses_one_lease_and_attempt() -> None:
-    direct = _section(WF_NEW_SKILL.read_text(encoding="utf-8"), "### 直接実行の canonical timing 契約")
+    direct = _section(_wf_new_text(), "### 直接実行の canonical timing 契約")
 
     assert "実行文脈を再利用" in direct
     assert "nested `acquire`" in direct

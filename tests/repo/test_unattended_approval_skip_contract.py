@@ -9,7 +9,11 @@ SKILLS = ROOT / ".claude" / "skills"
 
 
 def _text(skill: str) -> str:
-    return (SKILLS / skill / "SKILL.md").read_text(encoding="utf-8")
+    skill_dir = SKILLS / skill
+    paths = [skill_dir / "SKILL.md"]
+    if skill == "wf-new":
+        paths.append(skill_dir / "references" / "phase2.md")
+    return "\n".join(path.read_text(encoding="utf-8") for path in paths)
 
 
 def _config(skill: str) -> dict:

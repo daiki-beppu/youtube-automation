@@ -7,7 +7,12 @@ import re
 from tests.helpers.paths import REPO_ROOT
 
 SKILL_MD = REPO_ROOT / ".claude" / "skills" / "wf-new" / "SKILL.md"
+PHASE2_MD = REPO_ROOT / ".claude" / "skills" / "wf-new" / "references" / "phase2.md"
 WORKFLOW_CHEATSHEET = REPO_ROOT / "docs" / "workflow-cheatsheet.md"
+
+
+def _skill_text() -> str:
+    return "\n".join(path.read_text(encoding="utf-8") for path in (SKILL_MD, PHASE2_MD))
 
 
 def _between(markdown: str, start: str, end: str) -> str:
@@ -18,7 +23,7 @@ def _between(markdown: str, start: str, end: str) -> str:
 
 
 def test_phase_2c_is_the_only_parallel_subagent_exception() -> None:
-    skill = SKILL_MD.read_text(encoding="utf-8")
+    skill = _skill_text()
     hard_gates = _between(skill, "## Hard Gates", "### Preselected batch plan entry")
     call_rules = _between(skill, "### 呼び出しルール", "### 実行シーケンス")
 
@@ -32,7 +37,7 @@ def test_phase_2c_is_the_only_parallel_subagent_exception() -> None:
 
 
 def test_phase_2c_freezes_shared_inputs_before_one_exactly_two_call_dispatch() -> None:
-    skill = SKILL_MD.read_text(encoding="utf-8")
+    skill = _skill_text()
     initial_dispatch = _between(skill, "##### 2c-1.", "##### 2c-2.")
 
     fixed_inputs = (
@@ -52,7 +57,7 @@ def test_phase_2c_freezes_shared_inputs_before_one_exactly_two_call_dispatch() -
 
 
 def test_thumbnail_call_handles_finalized_and_missing_without_owning_approval() -> None:
-    skill = SKILL_MD.read_text(encoding="utf-8")
+    skill = _skill_text()
     initial_dispatch = _between(skill, "##### 2c-1.", "##### 2c-2.")
 
     assert "`status: FINALIZED`" in initial_dispatch
@@ -65,7 +70,7 @@ def test_thumbnail_call_handles_finalized_and_missing_without_owning_approval() 
 
 
 def test_music_call_selects_suno_or_prompt_only_lyria() -> None:
-    skill = SKILL_MD.read_text(encoding="utf-8")
+    skill = _skill_text()
     initial_dispatch = _between(skill, "##### 2c-1.", "##### 2c-2.")
 
     assert "`music_engine: suno`" in initial_dispatch
@@ -78,7 +83,7 @@ def test_music_call_selects_suno_or_prompt_only_lyria() -> None:
 
 
 def test_both_calls_receive_concrete_contract_and_cannot_mutate_state() -> None:
-    skill = SKILL_MD.read_text(encoding="utf-8")
+    skill = _skill_text()
     initial_dispatch = _between(skill, "##### 2c-1.", "##### 2c-2.")
 
     for contract in (
@@ -93,7 +98,7 @@ def test_both_calls_receive_concrete_contract_and_cannot_mutate_state() -> None:
 
 
 def test_join_keeps_main_owned_quality_state_and_partial_resume_contracts() -> None:
-    skill = SKILL_MD.read_text(encoding="utf-8")
+    skill = _skill_text()
     join = _between(skill, "##### 2c-2.", "#### 2e.")
 
     assert "両 Agent" in join

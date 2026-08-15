@@ -27,6 +27,7 @@ SKILL_MD = _SKILL_INVENTORY.skill_directory("suno") / "SKILL.md"
 SUNO_HELPER_SKILL_MD = _SKILL_INVENTORY.skill_directory("suno-helper") / "SKILL.md"
 SUNO_HELPER_README_MD = _REPO_ROOT / "extensions" / "suno-helper" / "README.md"
 WF_NEW_SKILL_MD = _SKILL_INVENTORY.skill_directory("wf-new") / "SKILL.md"
+WF_NEW_PHASE2_MD = _SKILL_INVENTORY.resolve_reference("wf-new", "references/phase2.md")
 WF_AUTO_SKILL_MD = _SKILL_INVENTORY.skill_directory("wf-auto") / "SKILL.md"
 SUNO_HELPER_PHASE_CONSTANTS_TS = _REPO_ROOT / "extensions" / "shared" / "constants.ts"
 SUNO_LYRIC_SKILL_MD = _SKILL_INVENTORY.skill_directory("suno-lyric") / "SKILL.md"
@@ -54,7 +55,7 @@ def _read_suno_helper_readme() -> str:
 
 
 def _read_wf_new() -> str:
-    return WF_NEW_SKILL_MD.read_text(encoding="utf-8")
+    return "\n".join(path.read_text(encoding="utf-8") for path in (WF_NEW_SKILL_MD, WF_NEW_PHASE2_MD))
 
 
 def _read_wf_auto() -> str:

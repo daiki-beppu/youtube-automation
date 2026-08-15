@@ -80,6 +80,16 @@ def _read(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
 
 
+def _read_wf_new() -> str:
+    return "\n".join(
+        _read(path)
+        for path in (
+            ".claude/skills/wf-new/SKILL.md",
+            ".claude/skills/wf-new/references/phase2.md",
+        )
+    )
+
+
 def _assert_appears_before(text: str, earlier: str, later: str) -> None:
     earlier_idx = text.find(earlier)
     later_idx = text.find(later)
@@ -125,7 +135,7 @@ def test_workflow_schema_references_existing_skill_schema() -> None:
 
 def test_wf_auto_is_the_integrated_entrypoint_without_copying_child_workflows() -> None:
     wf_auto = _read(".claude/skills/wf-auto/SKILL.md")
-    wf_new = _read(".claude/skills/wf-new/SKILL.md")
+    wf_new = _read_wf_new()
     wf_next = _read(".claude/skills/wf-next/SKILL.md")
     wf_status = _read(".claude/skills/wf-status/SKILL.md")
     schema = _read(".claude/skills/wf-new/references/schema.md")
@@ -193,7 +203,7 @@ def test_localizations_docs_use_root_localizations_file() -> None:
 
 
 def test_wf_new_theme_scenes_fallback_uses_agent_generated_en_phrase() -> None:
-    wf_new = _read(".claude/skills/wf-new/SKILL.md")
+    wf_new = _read_wf_new()
 
     assert "theme_scenes[<theme>] が未定義の場合" in wf_new
     assert '--en "<Agent-generated English scene phrase>"' in wf_new
@@ -1571,7 +1581,7 @@ def test_insights_entry_schema_is_single_source_for_writers_and_readers() -> Non
 
     analytics_analyze = _read(".claude/skills/analytics/references/analyze.md")
     flop_analysis = _read(".claude/skills/flop-analysis/SKILL.md")
-    wf_new = _read(".claude/skills/wf-new/SKILL.md")
+    wf_new = _read_wf_new()
     collection_ideate = _read(".claude/skills/collection-ideate/SKILL.md")
     thumbnail = _read(".claude/skills/thumbnail/SKILL.md")
 
