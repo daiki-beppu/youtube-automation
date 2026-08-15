@@ -19,7 +19,6 @@ from youtube_automation.core.errors import (
 from youtube_automation.domains.metadata import BAHMetadataGenerator
 from youtube_automation.domains.uploads._complete_collection_strategy import CompleteCollectionMixin
 from youtube_automation.domains.uploads._dedup_search import DedupSearchMixin
-from youtube_automation.domains.uploads._descriptions_md import DescriptionsMdMixin
 from youtube_automation.domains.uploads._preflight import PreflightMixin
 from youtube_automation.domains.uploads._uploader_constants import (
     UPLOAD_SOURCE_EXISTING,
@@ -238,7 +237,6 @@ __all__ = [
 class YouTubeAutoUploader(
     CompleteCollectionMixin,
     DedupSearchMixin,
-    DescriptionsMdMixin,
     PreflightMixin,
     ResumableUploader,
 ):
@@ -246,7 +244,7 @@ class YouTubeAutoUploader(
 
     YouTubeUploadCore を継承し、コレクション単位のアップロード機能を提供する。
     コアのアップロード・サムネイル・リトライロジックは YouTubeUploadCore に委譲。
-    責務別のロジック（dedup / descriptions.md / preflight / CC 経路）は mixin に分離。
+    責務別のロジック（dedup / preflight / CC 経路）は mixin に分離。
     """
 
     def __init__(self, collections_root: Optional[str] = None, youtube_clients: YouTubeClients | None = None):

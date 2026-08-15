@@ -1,7 +1,6 @@
 """アップロード前メタデータ品質チェック（fail-loud preflight）。
 
 ``YouTubeAutoUploader`` から分離した mixin。挙動は分割前と同一。
-``self._extract_md_section`` は ``DescriptionsMdMixin`` が提供する。
 """
 
 from __future__ import annotations
@@ -19,6 +18,7 @@ from youtube_automation.domains.metadata.descriptions import (
     extract_descriptions_md_section,
 )
 from youtube_automation.domains.uploads._complete_collection_strategy import resolve_master_video
+from youtube_automation.domains.uploads.descriptions_md import extract_md_section
 from youtube_automation.domains.uploads.preflight import (
     check_chapter_count,
     check_chapter_variation_suffix,
@@ -65,7 +65,7 @@ class PreflightMixin:
             desc_path = CollectionPaths(col).descriptions_md_path
             if not path_exists(desc_path):
                 continue
-            title = self._extract_md_section(read_file_text(desc_path), "タイトル案")
+            title = extract_md_section(read_file_text(desc_path), "タイトル案")
             if title:
                 titles.append(title.strip())
         return titles
