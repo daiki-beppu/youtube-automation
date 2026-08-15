@@ -10,6 +10,11 @@ description: "Use when コミュニティ投稿テキスト生成から Studio �
 - `後工程`: `なし`
 - `委譲先`: `なし`
 
+## 成果物
+
+- `書き込む`: `なし`
+- `読み込む`: `config/skills/community-post.yaml`, `collections/<id>/workflow-state.json`
+
 ## Overview
 
 `config/channel/community.json` の固定テンプレを展開し、対象コレクションの `20-documentation/community-post.txt` に保存、クリップボードへコピー、YouTube Studio のコミュニティ投稿作成ページを開きます。動画添付と投稿ボタン押下はユーザーが Studio 上で手動実行します。

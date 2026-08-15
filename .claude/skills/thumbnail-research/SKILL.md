@@ -10,6 +10,11 @@ description: "Use when 収集済み競合サムネイルだけを再生数上位
 - `後工程`: `/thumbnail`
 - `委譲先`: `なし`
 
+## 成果物
+
+- `書き込む`: `docs/benchmarks/thumbnail-analysis.md`, `data/thumbnail_compare/benchmark/*_<video-id>.jpg`
+- `読み込む`: `data/benchmark_*.json`, `docs/benchmarks/thumbnails/*.jpg`
+
 ## Hard Gates
 
 - `data/benchmark_*.json` と、次のいずれかの視覚情報が必要:

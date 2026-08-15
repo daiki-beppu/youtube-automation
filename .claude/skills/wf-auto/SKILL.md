@@ -10,6 +10,11 @@ description: "Use when 正規入口から collection の有無を問わず、企
 - `後工程`: `/post-publish`, `/analytics`
 - `委譲先`: `/wf-new`, `/lyria`, `/suno-helper`, `/masterup`, `/wf-next`, `/post-publish`
 
+## 成果物
+
+- `書き込む`: `.automation-run/history.json`
+- `読み込む`: `collections/<id>/workflow-state.json`, `collections/<id>/20-documentation/post_publish_history.json`
+
 ## Overview
 
 `workflow-state.json` と実成果物を毎段再評価し、新規企画または active collection の未完了地点から公開後処理まで継続する統合入口。判断・lease・履歴は `references/wf-auto-state.py` を使い、実作業は既存 `/wf-new`、`/lyria`、`/suno-helper`、`/masterup`、`/wf-next`、`/post-publish` に委譲する。子 skill の処理は本文へ複製しない。`thumbnail::textless.enabled` も独自解釈せず、`/wf-new` と `/wf-next` の契約をそのまま貫通させる。

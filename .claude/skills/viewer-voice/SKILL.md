@@ -10,6 +10,11 @@ description: "Use when 競合コメントの収集・分析で視聴者インサ
 - `後工程`: `/audience-persona-design`
 - `委譲先`: `なし`
 
+## 成果物
+
+- `書き込む`: `data/comments_<YYYYMMDD>.json`, `docs/plans/viewer-voice-analysis.md`
+- `読み込む`: `config/channel/analytics.json`, `data/benchmark_*.json`, `data/video_analysis/<channel>/<video-id>.json`
+
 ## 修飾フラグ
 
 | modifier | 効果 |

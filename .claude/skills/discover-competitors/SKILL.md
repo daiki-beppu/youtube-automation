@@ -10,6 +10,11 @@ description: "Use when YouTube Data API で追加競合候補を自動発掘・�
 - `後工程`: `/viewer-voice`, `/benchmark`
 - `委譲先`: `なし`
 
+## 成果物
+
+- `書き込む`: `research/<niche>-discovery.md`, `research/<niche>-discovery.csv`, `.cache/youtube-automation/discover-competitors-search.json`
+- `読み込む`: `config/channel/analytics.json`, `config/channel/content.json`, `config/skills/discover-competitors.yaml`
+
 ## Overview
 
 ニッチキーワード（複数可）を渡すと、登録者数レンジ・最終投稿日でフィルタしたうえで

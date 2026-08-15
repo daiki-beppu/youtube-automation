@@ -10,6 +10,11 @@ description: "Use when YouTube 概要欄を Complete Collection 形式で自動�
 - `後工程`: `/video-upload`, `/metadata-audit`
 - `委譲先`: `なし`
 
+## 成果物
+
+- `書き込む`: `collections/<id>/20-documentation/descriptions.md`, `collections/<id>/workflow-state.json`
+- `読み込む`: `collections/<id>/20-documentation/suno-prompts.md`, `data/benchmark_*.json`, `docs/benchmarks/*.md`, `config/channel/*.json`, `config/skills/video-description.yaml`
+
 ## Overview
 
 コレクション用の YouTube 概要欄を自動生成します。ファーストビューに情景フックとタイムスタンプ（チャプター）を配置し、シーン描写・Perfect for セクション・Usage & Attribution・ハッシュタグで構成します。

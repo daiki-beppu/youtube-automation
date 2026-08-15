@@ -10,6 +10,11 @@ description: "Use when Suno ボーカル曲の歌詞を生成するとき。「�
 - `後工程`: `/suno`
 - `委譲先`: `なし`
 
+## 成果物
+
+- `書き込む`: `collections/<id>/20-documentation/suno-lyrics.md`, `collections/<id>/20-documentation/suno-lyrics.json`
+- `読み込む`: `collections/<id>/20-documentation/suno-patterns.yaml`, `docs/channel/personas/persona-definition.md`, `config/skills/suno-lyric.yaml`, `config/skills/suno.yaml`
+
 ## Overview
 
 `/suno-lyric` は Suno ボーカル曲の **Lyrics 専任**。`/suno` は orchestration + Style / title / scene / JSON merge を担当し、本 skill は歌詞本文だけを作る。

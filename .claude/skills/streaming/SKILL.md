@@ -10,6 +10,11 @@ description: "Use when ライブ配信用 Vultr VPS・動画配信本体を Terr
 - `後工程`: `なし`
 - `委譲先`: `なし`
 
+## 成果物
+
+- `書き込む`: `infra/terraform/streaming/terraform.tfvars`, `/var/lib/youtube-broadcast-recovery/last-result.json`
+- `読み込む`: `infra/terraform/streaming/.terraform/terraform.tfstate`, `infra/terraform/streaming/README.md`
+
 ## Overview
 
 `infra/terraform/streaming/` の Terraform モジュールを使った YouTube ライブ配信 VPS の運用ガイド。`terraform apply` 一発で **VPS 作成 → cloud-init → 動画アップロード → 配信開始** が完結する。デフォルトは `stream_hours=0` / `break_hours=0` の **24/7 連続配信**。YouTube アーカイブ生成を優先する場合は `stream_hours=11` / `break_hours=1` で従来の **11h 配信 + 1h 休止** に切り替える。

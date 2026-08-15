@@ -10,6 +10,11 @@ description: "Use when 公開済み YouTube 動画のコメントへ自動返信
 - `後工程`: `なし`
 - `委譲先`: `なし`
 
+## 成果物
+
+- `書き込む`: `comment_reply_history.json`
+- `読み込む`: `config/channel/comments.json`, `auth/token.json`
+
 ## Overview
 
 YouTube Data API v3 の `commentThreads.list` / `comments.insert` を使い、

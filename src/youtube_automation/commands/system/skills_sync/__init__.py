@@ -11,6 +11,7 @@ Subcommands:
     diff   : 同梱版と target の差分を表示
     lint   : SKILL.md frontmatter を検証 (strict YAML / name・description 非空 / double-quote)
     catalog: purpose 別の skill catalog を生成・検証
+    artifacts: skill が宣言した成果物 writer を一覧表示
 
 Asset 種別 (`--asset`):
     all                 : デフォルト。下記すべての asset を一括処理する
@@ -235,6 +236,7 @@ from youtube_automation.commands.system.skills_sync._ops import _has_diff as _ha
 from youtube_automation.commands.system.skills_sync._ops import _prune_orphans as _prune_orphans  # noqa: E402
 from youtube_automation.commands.system.skills_sync._ops import _symlink_entry as _symlink_entry  # noqa: E402
 from youtube_automation.commands.system.skills_sync._catalog import cmd_catalog as cmd_catalog  # noqa: E402
+from youtube_automation.commands.system.skills_sync._artifacts import cmd_artifacts as cmd_artifacts  # noqa: E402
 from youtube_automation.commands.system.skills_sync._sync import cmd_sync as cmd_sync  # noqa: E402
 from youtube_automation.commands.system.skills_sync._diff import cmd_diff as cmd_diff  # noqa: E402
 from youtube_automation.commands.system.skills_sync._delegation import cmd_delegation as cmd_delegation  # noqa: E402

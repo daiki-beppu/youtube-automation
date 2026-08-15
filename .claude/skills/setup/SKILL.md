@@ -10,6 +10,11 @@ description: "Use when ツール導入と GCP / OAuth の API 設定をセット
 - `後工程`: `*`（共通基盤としてほぼ全スキル）
 - `委譲先`: `/benchmark`, `/discover-competitors`, `/viewer-voice`, `/audience-persona-design`, `/viewing-scene`
 
+## 成果物
+
+- `書き込む`: `auth/client_secrets.json`, `auth/token.json`, `config/channel/*.json`, `config/localizations.json`, `docs/channel/*.md`
+- `読み込む`: `pyproject.toml`, `config/channel/*.json`
+
 ## モード判定
 
 `$ARGUMENTS` から mode flag（`--tool` / `--channel`）の出現数を、reference の Read や成果物確認・変更より先に次の read-only guard で数える。

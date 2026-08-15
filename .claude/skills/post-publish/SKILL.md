@@ -10,6 +10,11 @@ description: "Use when 動画公開直後の community-post → pinned-comment �
 - `後工程`: `なし`
 - `委譲先`: `/community-post`, `/pinned-comment`, `/metadata-audit`
 
+## 成果物
+
+- `書き込む`: `collections/<id>/20-documentation/post_publish_history.json`
+- `読み込む`: `collections/<id>/workflow-state.json`, `collections/<id>/20-documentation/pinned_comment_history.json`
+
 ## Hard Gates
 
 - `config/channel/` と対象 `collections/live/<collection>/workflow-state.json` が存在し、`load_config()` でロード可能であること。満たさなければ `/video-upload` を案内して停止する。

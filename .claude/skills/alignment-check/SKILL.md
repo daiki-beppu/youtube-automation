@@ -10,6 +10,11 @@ description: "Use when 音楽ムード × サムネ × タイトルの整合性�
 - `後工程`: `/flop-analysis`
 - `委譲先`: `なし`
 
+## 成果物
+
+- `書き込む`: `docs/plans/alignment-audit.md`
+- `読み込む`: `collections/<id>/10-assets/thumbnail.jpg`, `collections/<id>/20-documentation/suno-prompts.md`, `collections/<id>/workflow-state.json`
+
 ## Overview
 
 公開済み全コレクションの音楽プロンプト・サムネイル・タイトルを横断的に監査し、

@@ -10,6 +10,11 @@ description: "Use when live コレクションの大容量メディアを削除�
 - `後工程`: `なし`
 - `委譲先`: `なし`
 
+## 成果物
+
+- `書き込む`: `なし`
+- `読み込む`: `collections/live/<id>/workflow-state.json`, `config/skills/live-clean.yaml`
+
 ## Overview
 
 `collections/live/` 配下の公開済みコレクションから、YouTube にアップロード済み or 再生成可能な大容量メディアファイルを安全に削除し、ディスク容量を回復する。あわせて、`collections/` 配下（live に限らず planning 等も含む）に残った `tmp/` ディレクトリ残骸の掃除モードを持つ。

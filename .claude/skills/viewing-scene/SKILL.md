@@ -10,6 +10,11 @@ description: "Use when 視聴シーン（いつ・どこで・なぜ聴くか）
 - `後工程`: `/collection-ideate`
 - `委譲先`: `なし`
 
+## 成果物
+
+- `書き込む`: `docs/plans/viewing-scene-matrix.md`
+- `読み込む`: `docs/channel/personas/persona-definition.md`, `docs/plans/viewer-voice-analysis.md`, `data/benchmark_*.json`, `reports/analysis_*.md`
+
 ## Overview
 
 自チャンネル既存データのシーン別パフォーマンス + ベンチマーク競合の活動タグ分析 +

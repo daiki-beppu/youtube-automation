@@ -153,6 +153,21 @@ mode と modifier は次のように分けて記載する。
 
 - 抽出: ``rg -n '^- `前工程`:|^- `後工程`:|^- `委譲先`:' .claude/skills/*/SKILL.md`` で各 SKILL.md から 3 行ずつ取得できること。
 
+### 成果物
+
+skill が作成・更新するファイルと、処理の前提として読むファイルを機械抽出できるようにする。frontmatter 直後の宣言領域に `## 成果物` を置き、成果物がなくても省略しない。
+
+```markdown
+## 成果物
+
+- `書き込む`: `collections/<id>/thumbnail.jpg`, `collections/<id>/main.png`
+- `読み込む`: `config/channel/identity.json`, `collections/<id>/concept.md`
+```
+
+`書き込む` は skill が作成または更新するパス、`読み込む` は入力や判断材料として参照するパスを表す。対象がない側は `` `なし` `` と書く。collection 名や channel 名のように実行時に決まる部分は `<id>` / `<channel>` などの placeholder で表し、同じ論理成果物が skill 間で同じ文字列になるように揃える。
+
+writer の重複は直ちに違反とは限らない。`uv run yt-skills artifacts` は `書き込む` だけを集計して writer 一覧と重複数を表示し、`--duplicates-only` では複数 skill が書くパスだけを表示する。どちらも設計判断の材料を報告するコマンドで、重複自体を lint エラーにはしない。`uv run yt-skills lint` は `## 成果物` と `書き込む` 行の欠落を拒否する。
+
 ### 実行系のインターフェース（CLI / スクリプト）
 
 呼び出し例を並べる前に、**引数そのものを読んで意図が分かる形**にする。取りうる値・既定値・`--dry-run` の有無は、それ自体が使い方の指示として働く。

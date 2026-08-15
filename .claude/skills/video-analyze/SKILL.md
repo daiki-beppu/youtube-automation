@@ -10,6 +10,11 @@ description: "Use when 動画本体の中身（フック構造・シーン・BGM
 - `後工程`: `/collection-ideate`, `/suno`, `/alignment-check`
 - `委譲先`: `なし`
 
+## 成果物
+
+- `書き込む`: `data/video_analysis/<channel>/<video-id>.json`, `reports/video_analysis/<channel>.md`
+- `読み込む`: `collections/<id>/20-documentation/upload_tracking.json`, `data/benchmark_*.json`, `config/skills/video-analyze.yaml`
+
 ## Overview
 
 `yt-video-analyze` で YouTube 動画を Gemini に直接渡し、以下の構造化データを抽出する。

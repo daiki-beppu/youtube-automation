@@ -6,6 +6,7 @@ import argparse
 import sys
 
 from youtube_automation.commands.system.skills_sync import _ASSET_SPECS, _guard_target_with_all, cmd_list
+from youtube_automation.commands.system.skills_sync._artifacts import cmd_artifacts
 from youtube_automation.commands.system.skills_sync._catalog import cmd_catalog
 from youtube_automation.commands.system.skills_sync._delegation import cmd_delegation
 from youtube_automation.commands.system.skills_sync._diff import cmd_diff
@@ -136,5 +137,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="docs/skill-catalog.md が最新か検証し、差分があれば非 0 で終了する",
     )
     p_catalog.set_defaults(func=cmd_catalog, asset="skills")
+
+    p_artifacts = sub.add_parser("artifacts", help="skill が宣言した成果物 writer を一覧表示")
+    p_artifacts.add_argument(
+        "--duplicates-only",
+        action="store_true",
+        help="writer が2つ以上ある成果物だけを表示する",
+    )
+    p_artifacts.set_defaults(func=cmd_artifacts, asset="skills")
 
     return parser

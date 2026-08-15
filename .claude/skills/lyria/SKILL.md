@@ -10,6 +10,11 @@ description: "Use when Vertex AI Lyria 3 でマスター音源を自動生成す
 - `後工程`: `/videoup`
 - `委譲先`: `なし`
 
+## 成果物
+
+- `書き込む`: `collections/<id>/20-documentation/lyria-prompt.md`, `collections/<id>/01-master/master.mp3`, `collections/<id>/workflow-state.json`
+- `読み込む`: `config/skills/lyria.yaml`, `config/channel/audio.json`, `config/channel/youtube.json`
+
 ## Overview
 
 Vertex AI Lyria 3 REST API (`interactions` エンドポイント) を使い、`config/skills/lyria.yaml` のスタイル定義とユーザー指定テーマからプロンプトを組み立て、Lyria 3 API を呼んでマスター音源を生成する。

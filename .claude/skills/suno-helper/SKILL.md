@@ -10,6 +10,11 @@ description: "Use when Suno UI に投入する曲をブラウザで連続生成 
 - `後工程`: `/masterup`
 - `委譲先`: `なし`
 
+## 成果物
+
+- `書き込む`: `collections/<id>/02-Individual-music/*.mp3`, `collections/<id>/workflow-state.json`
+- `読み込む`: `collections/<id>/20-documentation/suno-prompts.json`, `config/skills/suno-helper.yaml`, `config/skills/suno.yaml`
+
 ## Overview
 
 `<CHANNEL_DIR>/collections/planning/<theme>-collection/` の `suno-prompts.json` を `uv run yt-collection-serve` で配信し、Chrome 拡張 **suno-helper** が Suno (suno.com/create) タブ上で各 pattern の Style/Lyrics 注入 → Generate → 完了待ち → 次の pattern、を自動反復する。全件完了後に clip を一括選択 → Cmd+P → Add to Playlist dialog → 自動 playlist 化 → ZIP 一括ダウンロードまで進める。

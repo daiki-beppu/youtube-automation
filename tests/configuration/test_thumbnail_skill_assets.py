@@ -790,7 +790,7 @@ def test_thumbnail_skill_frontmatter_names_thumbnail_as_primary_output() -> None
 def test_thumbnail_skill_documents_full_auto_selection_gate_contract() -> None:
     """#2167: full は 4 ゲートを省略し、selection_only の既存範囲を変えない。"""
     skill = _read_thumbnail_skill()
-    opening_gate = "\n".join(skill.splitlines()[:60])
+    opening_gate = "\n".join(skill.splitlines()[:65])
     auto_selection = _slice_between(skill, "## 自動選択", "## 品質チェック")
 
     for gate in ("テーマ確認", "生成可否", "textless 背景承認", "テキスト付き候補承認"):

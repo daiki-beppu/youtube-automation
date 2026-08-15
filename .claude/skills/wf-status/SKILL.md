@@ -10,6 +10,11 @@ description: "Use when コレクション制作の進捗を読むだけで確認
 - `後工程`: `/wf-auto`, `/wf-next`
 - `委譲先`: `なし`
 
+## 成果物
+
+- `書き込む`: `なし`
+- `読み込む`: `collections/<id>/workflow-state.json`
+
 ## Overview
 
 アクティブなコレクションの進捗一覧・詳細を表示する。新旧スキーマ両対応。

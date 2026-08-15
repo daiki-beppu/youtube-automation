@@ -10,6 +10,11 @@ description: "Use when Chrome 拡張（suno-helper / distrokid-helper / communit
 - `後工程`: `/suno-helper`, `/distrokid-helper`
 - `委譲先`: `なし`
 
+## 成果物
+
+- `書き込む`: `なし`
+- `読み込む`: `extensions/<name>/*`
+
 ## Overview
 
 automation リポジトリの GitHub Release (`ext-v*` タグ) に添付された Chrome 拡張 zip をダウンロードし、Chrome にインストール（または更新）する operator ガイドスキル。
