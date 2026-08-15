@@ -1,11 +1,11 @@
 # Suno Generator-Reviewer Review Rubric
 
-このルーブリックは `/suno-lyric` と `/suno` の generator-reviewer 分離で使う意味的品質検証の単一ソース。reviewer は生成時の会話やメモを読まず、対象成果物 JSON とこのファイルだけを読む。
+このルーブリックは `/suno-lyric` と `/music --prompt` の generator-reviewer 分離で使う意味的品質検証の単一ソース。reviewer は生成時の会話やメモを読まず、対象成果物 JSON とこのファイルだけを読む。
 
 ## 対象成果物
 
 - `/suno-lyric`: `20-documentation/suno-lyrics.json`
-- `/suno`: `20-documentation/suno-prompts.json`
+- `/music --prompt`: `20-documentation/suno-prompts.json`
 
 ## JSON-only 入力契約
 
@@ -13,7 +13,7 @@ reviewer は対象成果物 JSON とこのルーブリックだけを読む。�
 
 `/suno-lyric` の `suno-lyrics.json` は各 entry に `review_context` を持ち、少なくとも `collection_theme`, `scene`, `mood`, `persona_target`, `persona_vocabulary`, `quote_essence` を含む。reviewer は theme / scene / mood / persona vocabulary / 名言 essence の判定をこの `review_context` と `lyrics` だけで行う。`review_context` が欠落している、空、または判定観点に必要なフィールドが足りない `/suno-lyric` entry は、外部資料で補完せず `FAIL` とする。
 
-`/suno` の `suno-prompts.json` は既存 consumer 互換のため、entry の必須 field を `name`, `style`, `lyrics` のまま維持する。reviewer は `name`, `style`, `lyrics` と、存在する場合のみ More Options の補助 field（例: `style_influence`, `weirdness`, `vocal_gender`, `exclude_styles`）だけで判定する。`/suno` entry に `review_context` は要求しない。不足する theme / scene / quote 情報を外部資料で補完してはならず、JSON 内に証拠がない観点は「判定不能な外部文脈」として理由に明記し、`review_context` 欠落だけを理由に `FAIL` しない。
+`/music --prompt` の `suno-prompts.json` は既存 consumer 互換のため、entry の必須 field を `name`, `style`, `lyrics` のまま維持する。reviewer は `name`, `style`, `lyrics` と、存在する場合のみ More Options の補助 field（例: `style_influence`, `weirdness`, `vocal_gender`, `exclude_styles`）だけで判定する。`/music --prompt` entry に `review_context` は要求しない。不足する theme / scene / quote 情報を外部資料で補完してはならず、JSON 内に証拠がない観点は「判定不能な外部文脈」として理由に明記し、`review_context` 欠落だけを理由に `FAIL` しない。
 
 ## 判定形式
 
@@ -32,7 +32,7 @@ reason: <PASS または FAIL の根拠を 1-3 文で記述>
 ### 1. テーマ・名言エッセンスの反映度
 
 - `/suno-lyric` `PASS`: collection theme、scene、mood、persona vocabulary、名言 essence が entry 固有の表現として反映されている
-- `/suno` `PASS`: `name`, `style`, `lyrics` に存在する theme / scene / mood / quote evidence が entry 固有の Style 方針として矛盾なく反映されている
+- `/music --prompt` `PASS`: `name`, `style`, `lyrics` に存在する theme / scene / mood / quote evidence が entry 固有の Style 方針として矛盾なく反映されている
 - `FAIL`: JSON 内 evidence と無関係な一般論、名言原文の表層コピー、scene と矛盾する語彙、entry name と本文の不一致がある
 
 ### 2. 曲間の同質化
@@ -43,7 +43,7 @@ reason: <PASS または FAIL の根拠を 1-3 文で記述>
 ### 3. Section tag 構成の妥当性
 
 - `/suno-lyric` `PASS`: Suno V5.5 が解釈しやすい section tags があり、entry の展開に対応している
-- `/suno` `PASS`: `lyrics` に section tags がある場合は展開と対応している。インスト entry では `[Instrumental]` と終端 tag があり、Style と Lyrics の責務が混ざっていない
+- `/music --prompt` `PASS`: `lyrics` に section tags がある場合は展開と対応している。インスト entry では `[Instrumental]` と終端 tag があり、Style と Lyrics の責務が混ざっていない
 - `FAIL`: tag が不足している、tag だけが並ぶ、section の順序が破綻している、Lyrics と Style の責務が混ざっている
 
 ### 4. 不自然な表現・禁止表現

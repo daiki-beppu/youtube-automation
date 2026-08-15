@@ -105,7 +105,7 @@ def test_reference_owns_setup_gate_check_classification() -> None:
     for detail in (
         "playlist_create_dry_run",
         "initial_setup_readiness",
-        "config/skills/suno.yaml` 未転記由来",
+        "config/skills/music.yaml::prompt` 未転記由来",
         "既存チャンネルの token コピー",
     ):
         assert reference.count(detail) == 1
@@ -423,6 +423,8 @@ def test_moved_opening_assets_preserve_pre_move_bytes_or_owner_only_semantics() 
                 "/channel-new` 分析モードを使う。".encode(),
                 1,
             )
+        payload = payload.replace(b"/music --prompt", b"/suno")
+        payload = payload.replace(b"config/skills/music.yaml::prompt", b"config/skills/suno.yaml")
         assert sha256(payload).hexdigest() == expected
 
 

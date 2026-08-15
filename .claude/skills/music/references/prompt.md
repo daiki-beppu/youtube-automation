@@ -1,26 +1,11 @@
----
-name: suno
-purpose: 作る
-description: "Use when Suno UI 投入用の音楽プロンプトを生成するとき。「Suno プロンプト」「Style 文」で発動。歌詞生成は /suno-lyric、UI 投入は /suno-helper、マスター化は /masterup。Lyria チャンネルは /lyria"
----
-
-## 前後工程
-
-- `前工程`: `/channel-strategy --constraints`, `/suno-lyric`
-- `後工程`: `/suno-helper`, `/masterup`
-- `委譲先`: `なし`
-
-## 成果物
-
-- `書き込む`: `collections/<id>/20-documentation/suno-patterns.yaml`, `collections/<id>/20-documentation/suno-prompts.md`, `collections/<id>/20-documentation/suno-prompts.json`, `collections/<id>/20-documentation/suno-lyrics.md`, `collections/<id>/20-documentation/suno-lyrics.json`, `collections/<id>/workflow-state.json`
-- `読み込む`: `docs/channel/creative-constraints.md`, `data/video_analysis/<channel>/*.json`, `data/insights.jsonl`, `config/skills/suno.yaml`
+# Prompt mode
 
 ## Overview
 
-コレクション用の SunoAI V5.5 音楽プロンプトを YAML で定義し、スクリプトで最終プロンプトを生成する。**インストゥルメンタル / ボーカル（歌詞あり）両モード対応**。歌詞ありの場合、`/suno` は orchestration として pattern draft 保存 → `/suno-lyric` → Style / Lyrics の `suno-prompts.json` 結合までを進める。
+コレクション用の SunoAI V5.5 音楽プロンプトを YAML で定義し、スクリプトで最終プロンプトを生成する。**インストゥルメンタル / ボーカル（歌詞あり）両モード対応**。歌詞ありの場合、`/music --prompt` は orchestration として pattern draft 保存 → `/suno-lyric` → Style / Lyrics の `suno-prompts.json` 結合までを進める。
 
 - **インストモード**: 曲数 (`tracks_per_collection`) を指定し、ceil(N/2) 個の独立 entry をフラットに並べる（pattern 概念は廃止）。`/suno-helper` が各 entry を Suno に順次投入し、Suno 仕様で 1 Generate = 2 clip 生成されるため両 clip 採用で N clip となる
-- **ボーカルモード**: 先に `/suno` で `suno-patterns.yaml` の pattern draft を保存し、続けて `/suno-lyric` で同じ entry name の歌詞を作成してから、再度 `/suno` で Style / 情景 / タイトルと `suno-lyrics.json` を `suno-prompts.json` へ結合する。**1 pattern = 1 prompt entry = 1 採用曲**のため、必要 pattern 数 ≈ track_count（数%の試聴落選バッファを上乗せ）。インストの `ceil(N/2)` を類推適用しない（詳細は「パターンベース設計（ボーカルモード）」の計算式）
+- **ボーカルモード**: 先に `/music --prompt` で `suno-patterns.yaml` の pattern draft を保存し、続けて `/suno-lyric` で同じ entry name の歌詞を作成してから、再度 `/music --prompt` で Style / 情景 / タイトルと `suno-lyrics.json` を `suno-prompts.json` へ結合する。**1 pattern = 1 prompt entry = 1 採用曲**のため、必要 pattern 数 ≈ track_count（数%の試聴落選バッファを上乗せ）。インストの `ceil(N/2)` を類推適用しない（詳細は「パターンベース設計（ボーカルモード）」の計算式）
 
 ## チャンネル制約入力（非停止）
 
@@ -50,14 +35,14 @@ subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実�
 
 以下を deep-merge した値を設定として使う。
 
-1. `.claude/skills/suno/config.default.yaml`
-2. `config/skills/suno.yaml`（存在する場合）
+1. `.claude/skills/music/config.default.yaml`
+2. `config/skills/music.yaml::prompt`（存在する場合）
 
-合成規則は `youtube_automation.configuration.skills.load_skill_config("suno")` と同じで、チャンネル上書きが優先される。存在しない override は未設定として扱い、勝手に作成しない。このスキルが別 skill の skill-config を直接参照する段階では、その skill の `config.default.yaml` と `config/skills/<skill>.yaml` も同じ手順で読む。
+合成規則は `youtube_automation.configuration.skills.load_skill_config("music.prompt")` と同じで、チャンネル上書きが優先される。存在しない override は未設定として扱い、勝手に作成しない。このスキルが別 skill の skill-config を直接参照する段階では、その skill の `config.default.yaml` と `config/skills/<skill>.yaml` も同じ手順で読む。
 
 ### モード判定
 
-`suno-patterns.yaml::genre_line` があればそれを、無ければ `config/skills/suno.yaml::genre_line` または `suno_preset` fallback を読み取り、以下の 4 段の決定木で上から順に判定する（先に該当した段で確定し、以降は評価しない）。
+`suno-patterns.yaml::genre_line` があればそれを、無ければ `config/skills/music.yaml::prompt.genre_line` または `suno_preset` fallback を読み取り、以下の 4 段の決定木で上から順に判定する（先に該当した段で確定し、以降は評価しない）。
 
 1. **否定表現が先**: `instrumental` / `no vocals` / `without vocals` / `vocal-free` などの否定表現が含まれていれば、他の語より優先して**インストゥルメンタルモード**に確定する
 2. **ボーカル語の完全一致**: 1 に該当せず、`vocals` / `vocal` / `singing` / `singer` / `rap` / `choir` / `humming` / `male vocals` / `female vocals` のいずれかが完全一致で含まれていれば**ボーカルモード**
@@ -73,9 +58,9 @@ subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実�
 
 ### 歌詞ありの前工程
 
-歌詞あり（ボーカルモード）と判定した場合、最初に `/suno` で `20-documentation/suno-patterns.yaml` の pattern draft を保存する。その後 `/suno-lyric` を実行して `20-documentation/suno-lyrics.json` を作り、最後に `/suno` を再実行して Style と Lyrics を `suno-prompts.json` にマージする。
+歌詞あり（ボーカルモード）と判定した場合、最初に `/music --prompt` で `20-documentation/suno-patterns.yaml` の pattern draft を保存する。その後 `/suno-lyric` を実行して `20-documentation/suno-lyrics.json` を作り、最後に `/music --prompt` を再実行して Style と Lyrics を `suno-prompts.json` にマージする。
 
-`/suno-lyric` の実行は Suno クレジットを消費しない前工程なので、現実のお金のコストが発生しない限りユーザー確認は不要。`/suno-lyric` が失敗した場合は `/suno` の merge を止め、歌詞成果物を作れる状態にしてから再開する。
+`/suno-lyric` の実行は Suno クレジットを消費しない前工程なので、現実のお金のコストが発生しない限りユーザー確認は不要。`/suno-lyric` が失敗した場合は `/music --prompt` の merge を止め、歌詞成果物を作れる状態にしてから再開する。
 
 ### Generator-Reviewer Quality Gate
 
@@ -100,7 +85,7 @@ benchmark の Markdown analysis、他 lever の insight、`config/channel/` 全�
 
 #### Reviewer context budget
 
-reviewer は生成時のメモや会話を読まず、成果物 `20-documentation/suno-prompts.json` と `/suno-lyric` の `references/review-rubric.md` のみを読んで検証する。`suno-prompts.json` の reviewer 入力は既存 consumer 互換の `name`, `style`, `lyrics` と、存在する場合のみ More Options 補助 field に限定する。`/suno` reviewer は `review_context` を要求せず、不足する theme / scene / quote 情報を外部資料で補完しない。
+reviewer は生成時のメモや会話を読まず、成果物 `20-documentation/suno-prompts.json` と `/suno-lyric` の `references/review-rubric.md` のみを読んで検証する。`suno-prompts.json` の reviewer 入力は既存 consumer 互換の `name`, `style`, `lyrics` と、存在する場合のみ More Options 補助 field に限定する。`/music --prompt` reviewer は `review_context` を要求せず、不足する theme / scene / quote 情報を外部資料で補完しない。
 
 LLM semantic review はファイル単位で実行する。各 review round では `suno-prompts.json` 全体を 1 回の reviewer 呼び出しへ渡し、その 1 回で全 entry の判定を返させる。entry ごと・チャンクごとに reviewer を起動しない。複数 reviewer への分割や並列化もしない。`FAIL` entry を再生成した次の round でも、更新済みファイル全体を同じ 1 回の呼び出しで再検証する。
 
@@ -114,7 +99,7 @@ LLM semantic review はファイル単位で実行する。各 review round で�
 
 ### スタイルバリアント（A/B テスト対応）
 
-`config/skills/suno.yaml` に `style_variants` が定義されている場合、各 entry / パターンに `style` キーで variant を指定できる。`style_strategy: mixed` なら 1 コレクション内で複数 variant を混合、`single` なら全 entry 同一 variant で統一。
+`config/skills/music.yaml::prompt` に `style_variants` が定義されている場合、各 entry / パターンに `style` キーで variant を指定できる。`style_strategy: mixed` なら 1 コレクション内で複数 variant を混合、`single` なら全 entry 同一 variant で統一。
 
 ### Style 自動バリエーション（entry ごとの微差付与）
 
@@ -126,7 +111,7 @@ LLM semantic review はファイル単位で実行する。各 review round で�
 - **決定的ローテーション**: 乱数ではなく entry の通し番号（YAML 上の scene 順、0-based）で pool から割り当てる。同じ YAML から再生成しても常に同じ結果になる
 - **先頭 entry は base のまま**: 通し番号 0 の entry には descriptor を付けず、コレクションの基準スタイルとして保存する（単一 entry の既存コレクションは出力不変 = 後方互換）
 - **明示 override 優先**: pattern に `style: <variant-key>` がある entry は `style_variants` の genre_line をそのまま使い、自動バリエーションは付与しない（通し番号は消費する）
-- **プール定義**: `config.default.yaml::style_variation.pools` に axis 名（`texture` / `rhythm` 等）→ descriptor 配列で定義する。axis 名の辞書順で round-robin に interleave した列を循環割り当てる。チャンネル側 `config/skills/suno.yaml` では axis 単位で丸ごと置換（deep-merge のリスト置換）・axis 追加・空リスト上書きによる axis 無効化ができる
+- **プール定義**: `config.default.yaml::style_variation.pools` に axis 名（`texture` / `rhythm` 等）→ descriptor 配列で定義する。axis 名の辞書順で round-robin に interleave した列を循環割り当てる。チャンネル側 `config/skills/music.yaml::prompt` では axis 単位で丸ごと置換（deep-merge のリスト置換）・axis 追加・空リスト上書きによる axis 無効化ができる
 - **設定契約**: `style_variation` は mapping、`enabled` は bool、`pools` は mapping、各 axis は `list[str]`。descriptor は非空文字列のみ有効で、契約外 shape は `uv run yt-generate-suno` が `ConfigError` で停止する
 - **語彙の制約**: descriptor に禁止形容詞（`references/suno-examples.md`）・雨音／環境音 NG ワード・楽器名の裸置き・アーティスト名を入れない。descriptor と情景行を含む完成形 Style は `full_style_char_limit`（既定 256）の soft quality budget で検証される
 - **重複検証**: 生成時に全 entry の Style 文（第 1 行 + 情景行）が完全一致する組があれば `uv run yt-generate-suno` が警告する
@@ -136,10 +121,10 @@ LLM semantic review はファイル単位で実行する。各 review round で�
 
 以下を確認し、満たさなければ前工程を案内して停止する:
 
-- `config/channel/` が存在すること（`load_config()` でロード可能）。存在しない場合は `/setup --import` を案内して停止する
+- `config/channel/` は `SKILL.md` の共通前提で検証済みであること
 - チャンネルの音楽エンジンが Suno であること。Lyria チャンネルでは本スキルを使わず `/lyria` を案内する
 - 対象コレクション（`collections/planning/` 配下の `workflow-state.json`）が `/wf-new` で作成済みであること。無ければ `/wf-new` を案内して停止する
-- collection 固有 Style を直接指定する場合は `20-documentation/suno-patterns.yaml::genre_line`、指定しない場合は `config/skills/suno.yaml::genre_line` または `data/video_analysis/<slug>/*.json`（`suno_preset`）を fallback として利用できること。解決順は「Style 入力の解決（collection 優先、preset 推奨）」に従う
+- collection 固有 Style を直接指定する場合は `20-documentation/suno-patterns.yaml::genre_line`、指定しない場合は `config/skills/music.yaml::prompt.genre_line` または `data/video_analysis/<slug>/*.json`（`suno_preset`）を fallback として利用できること。解決順は「Style 入力の解決（collection 優先、preset 推奨）」に従う
 - ボーカルモードの merge 段階では `20-documentation/suno-lyrics.json` が必要。無ければ先に `/suno-lyric` を実行する
 
 ## Instructions
@@ -149,13 +134,13 @@ LLM semantic review はファイル単位で実行する。各 review round で�
 Style は collection 境界で一度だけ解決し、次の優先順を使う。
 
 1. `20-documentation/suno-patterns.yaml` の root `genre_line` を collection の effective Style とする。同じ collection だけに効かせる `exclude_styles`、`style_variants`、`vocal_gender` も root に直接書ける
-2. root に無い値は `config/skills/suno.yaml` の channel 共通値へ fallback する
+2. root に無い値は `config/skills/music.yaml::prompt` の channel 共通値へ fallback する
 3. `genre_line` が両方で空なら、`data/video_analysis/<slug>/*.json` の集約済み `suno_preset.genre_line` を fallback として使う
 4. `suno_preset` も無い場合は、確定企画、creative constraints、benchmark 分析を根拠に generator が collection 固有の `genre_line` を設計し、`suno-patterns.yaml` に保存してよい
 
 `suno_preset` は推奨入力であり hard gate ではない。利用可能なら TTP 根拠として優先的に参照し、無ければ必要に応じて `/channel-research --benchmark` と `uv run yt-video-analyze --source benchmark --competitor <slug> --top 5` で準備する。ただし取得不能だけを理由に collection-local Style の設計を停止しない。
 
-`/suno` の generator と呼び出し元は、collection 固有値のために共有 config を書き換えない。別 collection の実行時はその collection 自身の `suno-patterns.yaml` を読み直し、前の collection の root 値を再利用・転記しない。これにより同一 process や連続する subagent 委譲でも collection 間の Style 混線を防ぐ。channel 全体の既定を意図的に変更するときだけ、別途ユーザーが `config/skills/suno.yaml` を更新する。
+`/music --prompt` の generator と呼び出し元は、collection 固有値のために共有 config を書き換えない。別 collection の実行時はその collection 自身の `suno-patterns.yaml` を読み直し、前の collection の root 値を再利用・転記しない。これにより同一 process や連続する subagent 委譲でも collection 間の Style 混線を防ぐ。channel 全体の既定を意図的に変更するときだけ、別途ユーザーが `config/skills/music.yaml::prompt` を更新する。
 
 `benchmark.channels[].slug` を自動準備へ使う場合は、列挙直後に `^[A-Za-z0-9][A-Za-z0-9_-]*$` で検証する。不一致があれば自動準備だけを停止し、該当 slug を修正してから再実行する。実行時は `["uv", "run", "yt-video-analyze", "--source", "benchmark", "--competitor", slug, "--top", "5"]` のような argv 配列で渡し、shell 文字列へ直埋めしない。
 
@@ -186,9 +171,9 @@ jq -c 'select(.status == "open" and .lever == "bgm")' data/insights.jsonl
 
 ### Suno プリセット推奨（suno_preset fallback）
 
-`20-documentation/suno-patterns.yaml` の root 値があれば collection-local override として最優先する。root に無いキーは `config/skills/suno.yaml` の channel 共通値へ fallback する。`genre_line` は対応キーも空のときだけ `data/video_analysis/<slug>/*.json` の `suno_preset.genre_line` を `uv run yt-generate-suno` が全 slug 横断で集約して採用する。`exclude_styles` は video_analysis から継承せず、config が空なら空のまま扱う。
+`20-documentation/suno-patterns.yaml` の root 値があれば collection-local override として最優先する。root に無いキーは `config/skills/music.yaml::prompt` の channel 共通値へ fallback する。`genre_line` は対応キーも空のときだけ `data/video_analysis/<slug>/*.json` の `suno_preset.genre_line` を `uv run yt-generate-suno` が全 slug 横断で集約して採用する。`exclude_styles` は video_analysis から継承せず、config が空なら空のまま扱う。
 
-> **推奨であり必須ではない**: collection 固有の方向性が確定している場合は、generator が根拠を示して `suno-patterns.yaml::genre_line` へ直接書く。共有 `config/skills/suno.yaml` へ collection 固有値を転記しない。
+> **推奨であり必須ではない**: collection 固有の方向性が確定している場合は、generator が根拠を示して `suno-patterns.yaml::genre_line` へ直接書く。共有 `config/skills/music.yaml::prompt` へ collection 固有値を転記しない。
 
 ### 対象テーマ
 
@@ -210,13 +195,13 @@ Style テキストは以下の順序で構成する。順序を守ることで S
 
 ### Configurable Character Limit
 
-`config/skills/suno.yaml::style_char_limit`（既定 **120 文字**）は effective `genre_line` の hard guard であり、`uv run yt-suno-verify` は root と使用中の `style_variants.*.genre_line` の超過をエラーにする。第 1 行、descriptor、情景行を結合した完成形 Style は別の `full_style_char_limit`（既定 **256 文字**）を soft quality budget として使い、`uv run yt-generate-suno` が超過を警告する。256 は [Suno v4.5 公式 Help の詳細 Style 例](https://help.suno.com/en/articles/5782849)を収容する保守的な推奨値であり、Suno platform の hard limit を表さない。
+`config/skills/music.yaml::prompt.style_char_limit`（既定 **120 文字**）は effective `genre_line` の hard guard であり、`uv run yt-suno-verify` は root と使用中の `style_variants.*.genre_line` の超過をエラーにする。第 1 行、descriptor、情景行を結合した完成形 Style は別の `full_style_char_limit`（既定 **256 文字**）を soft quality budget として使い、`uv run yt-generate-suno` が超過を警告する。256 は [Suno v4.5 公式 Help の詳細 Style 例](https://help.suno.com/en/articles/5782849)を収容する保守的な推奨値であり、Suno platform の hard limit を表さない。
 
 チャンネル側で `full_style_char_limit` を明示した場合はその値を使う。未指定で既存の `style_char_limit` だけが明示されているチャンネルでは、従来どおり同じ値を完成形 Style の警告にも使う。両方とも未指定なら完成形 Style には既定 256 を使う。
 
 ### Artist Name Prohibition
 
-**Style テキストにアーティスト名を含めてはならない。** Suno ポリシーにより生成がブロックされるか品質が低下する。禁止リストは `config/skills/suno.yaml::banned_artists` に定義されており、`uv run yt-generate-suno` が検出するとエラーで停止する。
+**Style テキストにアーティスト名を含めてはならない。** Suno ポリシーにより生成がブロックされるか品質が低下する。禁止リストは `config/skills/music.yaml::prompt.banned_artists` に定義されており、`uv run yt-generate-suno` が検出するとエラーで停止する。
 
 ### Instrument Adjective Requirements
 
@@ -224,13 +209,13 @@ Style テキストは以下の順序で構成する。順序を守ることで S
 
 ### Vocal Lyrics Boundary
 
-ボーカル曲の歌詞本文は `/suno-lyric` が生成する。`/suno` は `suno-lyrics.json` と `suno-patterns.yaml` の entry name を照合し、Style / 情景 / タイトルとマージするだけに限定する。
+ボーカル曲の歌詞本文は `/suno-lyric` が生成する。`/music --prompt` は `suno-lyrics.json` と `suno-patterns.yaml` の entry name を照合し、Style / 情景 / タイトルとマージするだけに限定する。
 
 ### Collection vocal gender の整合
 
 ボーカル collection で `suno-patterns.yaml::vocal_gender` を指定した場合、その値は Suno UI の歌声だけでなく `/suno-lyric` へ渡す語り手の性別入力にも使う。`/suno-lyric` 委譲前に `config/skills/suno-lyric.yaml::vocal_gender` と比較し、異なる場合は collection 値を今回の生成入力として明示する。共有 config は書き換えない。
 
-`male` / `female` では歌詞本文の一人称・相手への呼びかけ・人称代名詞が意図した語り手と矛盾しないことを reviewer が確認する。`neutral` / `auto` では根拠なく性別を固定せず、collection の persona と scene に沿う中立表現を使う。`/suno-lyric` 完了後に `/suno` へ戻り、同じ `vocal_gender` を含む `suno-prompts.json` と歌詞の語り手が一致していることを semantic review で確認する。
+`male` / `female` では歌詞本文の一人称・相手への呼びかけ・人称代名詞が意図した語り手と矛盾しないことを reviewer が確認する。`neutral` / `auto` では根拠なく性別を固定せず、collection の persona と scene に沿う中立表現を使う。`/suno-lyric` 完了後に `/music --prompt` へ戻り、同じ `vocal_gender` を含む `suno-prompts.json` と歌詞の語り手が一致していることを semantic review で確認する。
 
 ### Lyrics Structure Auto-Reinforcement
 
@@ -274,7 +259,7 @@ Instrument Notes: lead with felt piano, background with soft pad
 
 まず YAML を書く前に、内部メモとして entry ごとの `role / energy / tempo feel / key center / progression / texture / title` を並べる。これは設計用メモであり、最終 YAML には既存スキーマの `name_jp` / `name_en` / `tempo` / `style` / `scenes` だけを書く。
 
-通常は設定不要。未指定なら推奨の TTP 準拠で設計する。TTP から意図的に外したい場合だけ、チャンネル側の `config/skills/suno.yaml::tracklist_strategy` でカスタマイズできる:
+通常は設定不要。未指定なら推奨の TTP 準拠で設計する。TTP から意図的に外したい場合だけ、チャンネル側の `config/skills/music.yaml::prompt.tracklist_strategy` でカスタマイズできる:
 
 | 値 | 用途 | 使い方 |
 |---|---|---|
@@ -390,14 +375,14 @@ patterns:
 
 1. ベンチマーク `bgm_arc` と `scene_timeline[].summary` から多様な情景素材を集める
 2. 構成方針は未指定なら推奨の TTP 準拠で決める。チャンネル側に任意の `tracklist_strategy` がある場合だけ、そのカスタマイズを考慮する
-3. `config/skills/suno.yaml::tracks_per_collection` を読み曲数を確定（上書き時は yaml の `tracks:` キー）
+3. `config/skills/music.yaml::prompt.tracks_per_collection` を読み曲数を確定（上書き時は yaml の `tracks:` キー）
 4. `ceil(tracks / 2)` 個の entry を順序付き tracklist として設計。**各 entry は固有の `name_jp` / `name_en` を持ち、`scenes` は 1 行のみ**
 5. style variant を割り当て（`single` なら全 entry 同一、`mixed` なら entry ごとに切替）
 6. `uv run yt-generate-suno` 実行で検証（entry 数不一致・name 重複は fail-loud）
 
 ## パターンベース設計（ボーカルモード）
 
-**ボーカルモードは pattern draft を先に保存する。** 本スキル内で歌詞を直接作らない。`suno-lyrics.json` が未生成なら、まず `suno-patterns.yaml` を保存してから `/suno-lyric` を実行し、その後 `/suno` に戻って Style / 情景 / タイトルと Lyrics をマージする。
+**ボーカルモードは pattern draft を先に保存する。** 本スキル内で歌詞を直接作らない。`suno-lyrics.json` が未生成なら、まず `suno-patterns.yaml` を保存してから `/suno-lyric` を実行し、その後 `/music --prompt` に戻って Style / 情景 / タイトルと Lyrics をマージする。
 
 ボーカルモードは pattern 単位で設計する。
 
@@ -443,7 +428,7 @@ Suno V5.5 では Styles 経由で実楽曲長を制御できない。望む長�
 
 **雨音や環境音は楽曲に含めない。** NG ワード: rain, dripping, drops, puddles, splashing, pouring 等。OK ワード: misty, melancholic, nocturnal, bittersweet, foggy 等。全プロンプトに `no rain sound effects, no white noise, no ambient noise` を追加する。
 
-同梱 `exclude_styles` は空であり、既定では Suno の **Exclude Styles** 欄を使わない。チャンネルまたは collection で追加の抑止が必要な場合だけ、`config/skills/suno.yaml` または `suno-patterns.yaml` に `sudden drops, risers, drum fills, hard transitions, dramatic buildups` などの短い除外語を明示する。これらは Styles 本文へ連結しないため `style_char_limit` / `full_style_char_limit` の文字数には算入しない。
+同梱 `exclude_styles` は空であり、既定では Suno の **Exclude Styles** 欄を使わない。チャンネルまたは collection で追加の抑止が必要な場合だけ、`config/skills/music.yaml::prompt` または `suno-patterns.yaml` に `sudden drops, risers, drum fills, hard transitions, dramatic buildups` などの短い除外語を明示する。これらは Styles 本文へ連結しないため `style_char_limit` / `full_style_char_limit` の文字数には算入しない。
 
 #### genre_line と exclude_styles の整合性
 
@@ -501,7 +486,7 @@ patterns:
       - condensation tracing slow lines down a warm kitchen window, a kettle just finished steaming
 ```
 
-上記の `genre_line` / `exclude_styles` はこの collection だけの値であり、`config/skills/suno.yaml` へコピーしない。ボーカル collection で歌声も固定する場合は同じ root に `vocal_gender: male | female | neutral | auto` を追加し、「Collection vocal gender の整合」に従って `/suno-lyric` へ引き渡す。root 値を省略したキーだけが channel config へ fallback する。
+上記の `genre_line` / `exclude_styles` はこの collection だけの値であり、`config/skills/music.yaml::prompt` へコピーしない。ボーカル collection で歌声も固定する場合は同じ root に `vocal_gender: male | female | neutral | auto` を追加し、「Collection vocal gender の整合」に従って `/suno-lyric` へ引き渡す。root 値を省略したキーだけが channel config へ fallback する。
 
 ### Step 2: スクリプトで suno-prompts.md を生成
 
@@ -511,9 +496,9 @@ uv run yt-generate-suno <collection-path>
 
 `suno-patterns.yaml` の collection-local `genre_line` / `exclude_styles` / `style_variants` / `vocal_gender` を優先し、省略した値だけを channel config から fallback して `suno-prompts.md` と `suno-prompts.json` を生成する。ボーカルモードでは entry `name` を使い、同階層の `suno-lyrics.json` から同名 lyrics を Style とマージする。
 
-Suno helper の Custom Duration を collection 共通で指定する場合は、チャンネル側 `config/skills/suno.yaml` に秒単位の正の整数 `duration_sec` を設定する。明示した場合だけ同じ数値を `suno-prompts.json` の全 entry へ出力し、未設定時はキー自体を省略する。`duration_sec` は生成前の目標尺であり、生成後 clip の採用範囲を表す `duration_filter` から推定・同期しない。
+Suno helper の Custom Duration を collection 共通で指定する場合は、チャンネル側 `config/skills/music.yaml::prompt` に秒単位の正の整数 `duration_sec` を設定する。明示した場合だけ同じ数値を `suno-prompts.json` の全 entry へ出力し、未設定時はキー自体を省略する。`duration_sec` は生成前の目標尺であり、生成後 clip の採用範囲を表す `duration_filter` から推定・同期しない。
 
-`suno-prompts.json` には suno-helper 拡張が playlist 採用判定に使う `duration_filter`（既定 `min_sec: 60` / `max_sec: 300`）も書き出される。1 曲 5 分超が常態の長尺 BGM チャンネルでは既定 `max_sec: 300` で大半の clip が duration guard NG になり Queue モード + 一括 DL が完走しないため、チャンネル側 `config/skills/suno.yaml` で override する（部分指定可。未指定キーは既定値と deep-merge）:
+`suno-prompts.json` には suno-helper 拡張が playlist 採用判定に使う `duration_filter`（既定 `min_sec: 60` / `max_sec: 300`）も書き出される。1 曲 5 分超が常態の長尺 BGM チャンネルでは既定 `max_sec: 300` で大半の clip が duration guard NG になり Queue モード + 一括 DL が完走しないため、チャンネル側 `config/skills/music.yaml::prompt` で override する（部分指定可。未指定キーは既定値と deep-merge）:
 
 ```yaml
 duration_filter:
@@ -528,9 +513,9 @@ override 後は `uv run yt-generate-suno` を再実行して `suno-prompts.json`
 uv run yt-suno-verify <collection-path>
 ```
 
-`suno-prompts.json` / `suno-lyrics.json` の展開後 entry 数、entry name、歌詞構造に加え、patterns root と使用中 variant、channel fallback を解決した effective Style の `genre_line` 文字数を検証し、exit 0 を確認する。その後、別コンテキスト reviewer が `suno-prompts.json` 全体をファイル単位の 1 回の呼び出しで読み、`.claude/skills/suno-lyric/references/review-rubric.md` に従って LLM semantic review を実行し、全 entry の `PASS` / `FAIL` + 理由をまとめて出す。reviewer は `name`, `style`, `lyrics` と、存在する場合のみ More Options 補助 field だけを判定材料にし、`review_context` 欠落を `/suno` entry の failure reason にしない。`FAIL` entry のみ最大 2 周まで generator subagent（Codex では別コンテキスト実行）に再生成させ、各 round は更新済み JSON 全体を reviewer 1 回で再検証する。全 entry が `PASS` した後にだけ Suno UI へ投入する。上限到達時に `FAIL` が残る場合は Step 3 へ進まず、残課題をユーザーに提示する。
+`suno-prompts.json` / `suno-lyrics.json` の展開後 entry 数、entry name、歌詞構造に加え、patterns root と使用中 variant、channel fallback を解決した effective Style の `genre_line` 文字数を検証し、exit 0 を確認する。その後、別コンテキスト reviewer が `suno-prompts.json` 全体をファイル単位の 1 回の呼び出しで読み、`.claude/skills/suno-lyric/references/review-rubric.md` に従って LLM semantic review を実行し、全 entry の `PASS` / `FAIL` + 理由をまとめて出す。reviewer は `name`, `style`, `lyrics` と、存在する場合のみ More Options 補助 field だけを判定材料にし、`review_context` 欠落を `/music --prompt` entry の failure reason にしない。`FAIL` entry のみ最大 2 周まで generator subagent（Codex では別コンテキスト実行）に再生成させ、各 round は更新済み JSON 全体を reviewer 1 回で再検証する。全 entry が `PASS` した後にだけ Suno UI へ投入する。上限到達時に `FAIL` が残る場合は Step 3 へ進まず、残課題をユーザーに提示する。
 
-`yt-generate-suno` 自体は `workflow-state.json` を更新しない。`/suno` を呼び出したメインエージェント（`/wf-new` / `/wf-next` からの呼び出しと、`/suno` の直接実行を含む）が、生成された成果物、`yt-suno-verify` の成功、semantic review の全 entry `PASS` を確認した後にだけ、`assets.music_prompts = true`、`planning.music`、`updated_at` を更新する。subagent は state を書き込まない。
+`yt-generate-suno` 自体は `workflow-state.json` を更新しない。`/music --prompt` を呼び出したメインエージェント（`/wf-new` / `/wf-next` からの呼び出しと、`/music --prompt` の直接実行を含む）が、生成された成果物、`yt-suno-verify` の成功、semantic review の全 entry `PASS` を確認した後にだけ、`assets.music_prompts = true`、`planning.music`、`updated_at` を更新する。subagent は state を書き込まない。
 
 ### Step 3: `/suno-helper` で自動投入（推奨）
 
@@ -577,9 +562,9 @@ UI 変更で注入先セレクタが外れた場合は `extensions/shared/dom.ts
 - `/masterup <playlist-url>` でダウンロード + マスター音源生成
 
 ### ボーカル（歌詞あり）
-- `/suno` で `suno-patterns.yaml` の pattern draft を保存
+- `/music --prompt` で `suno-patterns.yaml` の pattern draft を保存
 - `/suno-lyric` で同じ entry name の歌詞を生成・レビュー
-- `/suno` を再実行して Style + Lyrics の `suno-prompts.json` を生成
+- `/music --prompt` を再実行して Style + Lyrics の `suno-prompts.json` を生成
 - `/suno-helper` で SunoAI の Advanced タブ（Lyrics mode = **Write**）に Style + Lyrics を自動投入して連続生成 + playlist 一括追加
 - 歌唱の発音・ピッチが破綻していないか必ず試聴チェック
 - `/masterup <playlist-url>` でダウンロード + マスター音源生成

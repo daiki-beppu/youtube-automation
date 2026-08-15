@@ -53,7 +53,7 @@
 
 - **足りないもの**
   - retention curve × シーン照合の自動化: `audienceWatchRatio`（elapsedVideoTimeRatio 単位）と `/video-analyze` のシーンタイムライン・BGM 展開は別々に存在し、「drop 地点 = どのシーン/曲か」の突合が手動 → **新規開発**（G2）
-  - 維持率からの逆フィードバック: drop 分析の結果を次コレクションの BGM 構成（`/suno` / `/lyria` プロンプト）へ反映する定型経路がない → **運用改善**（`/flop-analysis` → `/collection-ideate` のバトンに含める）
+  - 維持率からの逆フィードバック: drop 分析の結果を次コレクションの BGM 構成（`/music --prompt` / `/lyria` プロンプト）へ反映する定型経路がない → **運用改善**（`/flop-analysis` → `/collection-ideate` のバトンに含める）
 
 ### L4: 回遊・セッション
 

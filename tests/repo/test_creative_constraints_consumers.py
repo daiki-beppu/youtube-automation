@@ -4,16 +4,18 @@ from tests.helpers.paths import REPO_ROOT
 
 ROOT = REPO_ROOT
 SKILLS = {
-    "suno": ("## 音", "BPM", "Style"),
-    "thumbnail": ("## サムネ", "色温度", "被写体"),
-    "loop-video": ("## 映像", "動きの種類数上限", "禁止要素"),
-    "alignment-check": ("## 音", "## サムネ", "整合性マトリクス"),
+    "music/references/prompt.md": ("## 音", "BPM", "Style"),
+    "thumbnail/SKILL.md": ("## サムネ", "色温度", "被写体"),
+    "loop-video/SKILL.md": ("## 映像", "動きの種類数上限", "禁止要素"),
+    "alignment-check/SKILL.md": ("## 音", "## サムネ", "整合性マトリクス"),
 }
 
 
 def test_generation_and_audit_skills_consume_creative_constraints_non_blocking() -> None:
-    for skill, required_terms in SKILLS.items():
-        text = (ROOT / ".claude" / "skills" / skill / "SKILL.md").read_text(encoding="utf-8")
+    for relative, required_terms in SKILLS.items():
+        text = (ROOT / ".claude" / "skills" / relative).read_text(encoding="utf-8")
+        if relative == "music/references/prompt.md":
+            text = (ROOT / ".claude" / "skills" / "music" / "SKILL.md").read_text(encoding="utf-8") + text
 
         assert "`前工程`" in text
         assert "/channel-strategy --constraints" in text

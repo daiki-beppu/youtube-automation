@@ -31,7 +31,7 @@ TARGET_SKILLS = (
     "metadata-audit",
     "playlist",
     "short",
-    "suno",
+    "music",
     "thumbnail",
     "thumbnail-compare",
     "value-loop-audit",
@@ -96,7 +96,8 @@ INITIAL_OCCURRENCE_LEDGER = (
     _entry("playlist", "SKILL.md", "playlist-definition", "regenerate"),
     _entry("short", "SKILL.md", "missing-config-existing", "import"),
     _entry("short-thumbnail", "SKILL.md", "missing-config-existing", "import"),
-    _entry("suno", "SKILL.md", "missing-config-existing", "import"),
+    _entry("music", "SKILL.md", "missing-config-new", "opening"),
+    _entry("music", "SKILL.md", "missing-config-existing", "import"),
     _entry("thumbnail", "SKILL.md", "missing-config-new", "opening"),
     _entry("thumbnail", "SKILL.md", "missing-config-existing", "import"),
     _entry("thumbnail", "SKILL.md", "text-profile-analysis", "analysis"),
@@ -108,14 +109,14 @@ INITIAL_OCCURRENCE_LEDGER = (
     _entry("value-loop-audit", "SKILL.md", "missing-config-existing", "import"),
 )
 INITIAL_CONTEXT_COUNTS = {
-    "opening": 7,
+    "opening": 8,
     "import": 12,
     "regenerate": 3,
     "analysis": 5,
     "direction": 7,
     "shared-reference": 3,
 }
-OPENINGLESS_SKILLS = frozenset({"metadata-audit", "playlist", "short", "short-thumbnail", "suno", "thumbnail-compare"})
+OPENINGLESS_SKILLS = frozenset({"metadata-audit", "playlist", "short", "short-thumbnail", "thumbnail-compare"})
 
 
 def _section_identity(section: str, occurrence: int = 1) -> str:
@@ -240,10 +241,14 @@ _RAW_EXPECTED_ACTIVE_ROUTES = (
         "- `config/channel/` がロード可能（`load_config()`）。存在しない場合は `/setup --import` を案内して停止する",
     ),
     _route(
-        "suno/SKILL.md",
-        "## 前提",
-        "- `config/channel/` が存在すること（`load_config()` でロード可能）。存在しない場合は "
-        "`/setup --import` を案内して停止する",
+        "music/SKILL.md",
+        "## 共通前提",
+        "- **新規チャンネル** → `/setup --channel` を案内",
+    ),
+    _route(
+        "music/SKILL.md",
+        "## 共通前提",
+        "- **既存チャンネル**（設定不整合）→ `/setup --import` を案内",
     ),
     _route("thumbnail/SKILL.md", "## 前提", "- **新規チャンネル** → `/setup --channel` を案内"),
     _route(

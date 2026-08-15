@@ -136,7 +136,7 @@ NON_TARGET_SKILLS: dict[str, str] = {
         "本リポジトリのリリース作業のみ。yt-upload-collection への言及は"
         "リリースノート内の例示参照で、手順として実行しない"
     ),
-    "suno": (
+    "music": (
         "Suno プロンプトのローカル生成のみ。yt-video-analyze への言及は"
         "/video-analyze 出力 JSON の読込参照で、手順として実行しない"
     ),

@@ -32,8 +32,8 @@ PDCA 対応: 準備 = 準備する / Plan = 調べる → 決める / Do = 進�
 - `/loop-video` — Use when テキストなし main.png/jpg から Veo または Gemini Omni Flash でループ動画背景を生成するとき。
 - `/lyria` — Use when Vertex AI Lyria 3 でマスター音源を自動生成するとき。
 - `/masterup` — Use when Suno UI で生成した曲のプレイリストを一括 DL + マスター化するとき。
+- `/music` — Use when 音楽制作を状態判定付きで一括実行または一段だけ実行するとき。
 - `/short` — Use when collection 型（BGM テイスター）または release 型（楽曲リリース）のチャンネルでショートを生成するとき。
-- `/suno` — Use when Suno UI 投入用の音楽プロンプトを生成するとき。
 - `/suno-helper` — Use when Suno UI に投入する曲をブラウザで連続生成 + playlist 追加 + 一括ダウンロードしたいとき。
 - `/suno-lyric` — Use when Suno ボーカル曲の歌詞を生成するとき。
 - `/thumbnail` — Use when コレクションの YouTube サムネイル（thumbnail.jpg）を CTR 最適化し、textless main.png/jpg を先行生成して実フォント合成するとき。

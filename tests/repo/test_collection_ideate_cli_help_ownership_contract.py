@@ -27,6 +27,7 @@ def test_skill_keeps_mode_commands_and_delegates_flag_help() -> None:
 def test_skill_prose_does_not_redefine_normal_generate_image_flags() -> None:
     distributed_text = f"{SKILL_TEXT}\n{GENERATION_TEXT}"
     prose = re.sub(r"```.*?```", "", distributed_text, flags=re.DOTALL)
+    prose = prose.replace("/music --prompt", "/music")
 
     for option in ("prompt", "output", "model", "reference-index", "max-attempts", "yes"):
         assert re.search(rf"--{option}\b", prose) is None

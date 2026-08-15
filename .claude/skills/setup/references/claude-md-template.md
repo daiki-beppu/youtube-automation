@@ -76,7 +76,7 @@ youtube-automation パッケージの構造は GitHub リポジトリ（`daiki-b
 ```
 /wf-new  企画選択 → サムネ生成 → サムネ承認 → 音楽生成 → 動画 → 概要欄 → アップロード
 ```
-`/wf-new` 1コマンドで企画から公開まで一気通貫。ミキシング工程なし。音楽生成は `config/channel/youtube.json` の `music_engine` に応じたスキル（`/suno` or `/lyria`）が使われる。
+`/wf-new` 1コマンドで企画から公開まで一気通貫。ミキシング工程なし。音楽生成は `config/channel/youtube.json` の `music_engine` に応じたスキル（`/music --prompt` or `/lyria`）が使われる。
 
 ### ステージ管理
 ```
@@ -110,7 +110,7 @@ Complete Collection アップロード + live 移動を実行:
 
 ## 音楽制作ルール
 - **音楽エンジンは `config/channel/youtube.json` の `music_engine` で切替**
-  - `suno` → `/suno` スキル
+  - `suno` → `/music --prompt` スキル
   - `lyria` → `/lyria` スキル
 - ミキシング・マスタリング工程なし（エンジン出力をそのまま使用）
 - 音源スタイルは `config/channel/content.json` の `genre.style` で管理

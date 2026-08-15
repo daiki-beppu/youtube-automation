@@ -12,7 +12,7 @@
 - `docs/channel/competitor-branding-snapshot.json` に、承認済み TTP 対象の `snippet` / `brandingSettings` / `localizations` snapshot が保存されている
 - `docs/channel/personas/persona-definition.md` が存在する
 - thumbnail TTP の参照元として `config/skills/thumbnail.yaml::image_generation.gemini.reference_images.default` が設定済み、またはスキップ理由が `ユーザー承認済み例外: thumbnail ...` として `ttp-seed-confirmation.md` に残っている
-- `music_engine: suno` の場合、`config/skills/suno.yaml::genre_line` または `data/video_analysis/<slug>/*.json::suno_preset.genre_line` が準備済み、または曲構造 TTP 未反映が `ユーザー承認済み例外: music ...` / `ユーザー承認済み例外: 曲構造 ...` として `ttp-seed-confirmation.md` に残っている
+- `music_engine: suno` の場合、`config/skills/music.yaml::prompt.genre_line` または `data/video_analysis/<slug>/*.json::suno_preset.genre_line` が準備済み、または曲構造 TTP 未反映が `ユーザー承認済み例外: music ...` / `ユーザー承認済み例外: 曲構造 ...` として `ttp-seed-confirmation.md` に残っている
 - 承認済み TTP ごとの上位 5 Long VOD から算出した duration 根拠・推奨 min/max・ユーザー承認結果が `ttp-seed-confirmation.md` に残っている、または手入力値・理由・後続 `/channel-research --benchmark` が `ユーザー承認済み例外: duration ...` として記録されている
 - `uv run yt-doctor --json` の `ttp_wf_new_readiness` が `ok` である。`warn` の場合は不足項目を解消するか、ユーザー承認済み例外を明記してから再確認する
 ## TTP 原則
@@ -291,5 +291,5 @@ guard が `secret-like file staged; unstaged before commit` を出した場合�
 保存未完了として終了した場合は、以下の成功案内は出さない。作業ツリーが最初から clean、または初回 commit が成功した場合だけ最後に案内する:
 
 ```text
-チャンネル初期化が完了しました。初回保存も完了しているため、色味・構図・ムード・テンポの方向性を先に確認したい場合は、仮コレクションで任意のパイロット検証（/thumbnail → /thumbnail-compare、music_engine が suno なら /suno → /suno-helper、lyria なら /lyria）を実施してから /wf-new に進めます。検証を省略する場合は、そのまま /wf-new で初回コレクション制作に進めます。初投稿前のプレイリスト未作成状態は、公開フロー内の /playlist 初期化で解消します。公開後の分析は /analytics --collect、ライブ配信を使う場合は YouTube Studio の Live streaming 有効化と /streaming の準備確認へ進んでください。
+チャンネル初期化が完了しました。初回保存も完了しているため、色味・構図・ムード・テンポの方向性を先に確認したい場合は、仮コレクションで任意のパイロット検証（/thumbnail → /thumbnail-compare、music_engine が suno なら /music --prompt → /suno-helper、lyria なら /lyria）を実施してから /wf-new に進めます。検証を省略する場合は、そのまま /wf-new で初回コレクション制作に進めます。初投稿前のプレイリスト未作成状態は、公開フロー内の /playlist 初期化で解消します。公開後の分析は /analytics --collect、ライブ配信を使う場合は YouTube Studio の Live streaming 有効化と /streaming の準備確認へ進んでください。
 ```

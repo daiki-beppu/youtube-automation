@@ -104,7 +104,7 @@ self-check が pass したら提案をユーザーに見せ、承認 or 修正�
 
 | 対象 skill | 雛形 | 書き込む内容 |
 |---|---|---|
-| suno（`music_engine: suno` のとき）| `.claude/skills/setup/references/config-template/skills/suno.yaml` | `workspace_name` / `genre_line`（ジャンル＋スタイル決定の直訳）/ `exclude_styles` |
+| suno（`music_engine: suno` のとき）| `.claude/skills/setup/references/config-template/skills/music.yaml` | `workspace_name` / `genre_line`（ジャンル＋スタイル決定の直訳）/ `exclude_styles` |
 | thumbnail | `.claude/skills/setup/references/config-template/skills/thumbnail.yaml` | `image_generation.provider`（GCP 課金なしなら `codex` を優先案内）/ `image_generation.gemini.brand_background` / `composition_rules.*` / `reference_images.default`（TTP サムネ）/ `reference_images.channel_branding`（snapshot / icon・banner reference / output path）/ `diff_prompt_template` |
 | lyria（`music_engine: lyria` のとき）| `.claude/skills/lyria/config.default.yaml` を参照 | プロンプト系・尺・track 戦略 |
 
@@ -126,7 +126,7 @@ self-check が pass したら提案をユーザーに見せ、承認 or 修正�
 `config/skills/thumbnail.yaml::image_generation.gemini.reference_images.default` と
 `config/skills/thumbnail.yaml::image_generation.gemini.reference_images.channel_branding` の欠落を解消してから次へ進む。
 
-**fail-fast 動作**: `/thumbnail` `/suno` `/lyria` 等の下流 skill は、関連 config が空のまま
+**fail-fast 動作**: `/thumbnail` `/music --prompt` `/lyria` 等の下流 skill は、関連 config が空のまま
 呼ばれた場合「`/setup --regenerate` 未完了」を案内して停止する責務を持つ（CLAUDE.md
 Fail Fast 原則）。再生成モード側で空欄を残さないことで、この案内が
 発火しない状態を担保する。
@@ -163,5 +163,5 @@ JSON 構文検証・config ロードテスト・channel_id 自動取得コマン
 2. **OAuth 認証と channel_id 取得**: 手順は `.claude/skills/setup/references/verification.md`（「OAuth 認証」「channel_id の自動取得」）を参照
 3. **ブランディング素材**: 生成手順は `.claude/skills/setup/references/verification.md`（「ブランディング素材生成」）を参照
 4. **YouTube 側に設定を反映**: 初回反映は `/setup --channel` Step 8 で実施済み。再反映や運用中の更新は設定 push モードを参照
-5. **任意のパイロット検証**: 色味・構図・ムード・テンポを先に確認したい場合は、仮コレクションで `/thumbnail` → `/thumbnail-compare`、および `music_engine` が `suno` なら `/suno` → `/suno-helper`、`lyria` なら `/lyria` を実行し、OK/NG を判断する。NG なら `config/skills/thumbnail.yaml` / `config/skills/suno.yaml` / `config/skills/lyria.yaml` を調整して再試作する。OK なら仮コレクションを削除するか、既存 `collections/planning/` として `/wf-next` で継続する
+5. **任意のパイロット検証**: 色味・構図・ムード・テンポを先に確認したい場合は、仮コレクションで `/thumbnail` → `/thumbnail-compare`、および `music_engine` が `suno` なら `/music --prompt` → `/suno-helper`、`lyria` なら `/lyria` を実行し、OK/NG を判断する。NG なら `config/skills/thumbnail.yaml` / `config/skills/music.yaml::prompt` / `config/skills/lyria.yaml` を調整して再試作する。OK なら仮コレクションを削除するか、既存 `collections/planning/` として `/wf-next` で継続する
 6. **初回コレクション制作**: パイロットを省略する、またはパイロット OK 後に新規本制作を始める場合は `/wf-new` を実行

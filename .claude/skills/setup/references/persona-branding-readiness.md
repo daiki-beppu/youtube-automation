@@ -68,7 +68,7 @@ banner.save('branding/banner.png', optimize=True)
 | Analytics データがまだ無い | 初回は TTP メモと seed fetch 結果を企画根拠として使う。 |
 | `config/skills/thumbnail.yaml` の reference images が空 | default へ存在する参照画像を設定する。意図的に後続へ回す場合は `docs/channel/ttp-seed-confirmation.md` に `ユーザー承認済み例外: thumbnail ... /thumbnail ...` として未反映内容・理由・後続 skill を残す。本格収集は `/channel-research --benchmark` に委譲する。 |
 | channel branding の icon / banner references が空 | `docs/channel/competitor-branding-snapshot.json::channel_image_references` の URL 参照を転記する。取得できない場合は TTP メモ由来の fallback 根拠を reference notes に残して画像を生成する。 |
-| `config/skills/suno.yaml` が placeholder | Step 4 の初期ジャンル情報を `genre_line` に反映する。 |
+| `config/skills/music.yaml::prompt` が placeholder | Step 4 の初期ジャンル情報を `genre_line` に反映する。 |
 | `config/channel/playlists.json` に `playlist_id` 未設定がある | 初投稿前に `/playlist` が status → init dry-run → init の順で初期化する。初回動画の追加は `/video-upload` の自動 assign に任せる。 |
 | `auth/token.json` が無い | `/setup` を再実行し、OAuth 完了後に YouTube API 操作へ戻る。 |
 | Analytics / Reporting 設定が未確認 | 初回制作は止めず、`/analytics --collect` で収集前提と Reporting API job 作成状態を確認する。不足する GCP / OAuth / API 設定は `/setup` に戻す。 |

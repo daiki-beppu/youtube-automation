@@ -4,7 +4,7 @@
 
 ## 完了条件
 
-企画候補をコレクションの `20-documentation/plan_proposals.md` に保存し、`workflow-state.json` の `planning.generated = true` へ更新（企画確定時は `planning.final_title` も記録）し、採用画像がある場合は最終 `thumbnail.jpg` の正規入力として後段へ引き渡し、無い場合は `/thumbnail <theme>` フォールバックを案内してから `/suno <theme>` へ進む Next Step を示した時点で完了。open insights を企画入力にした場合は、「open insights の消費と status 反映」に従う企画確定時の status 更新（adopted / dismissed）まで完了扱いにしない。画像生成を実施した場合は、採用企画の参照画像を `20-documentation/thumbnail-prompts.md` の `Reference Assignments` へ保存できるまで完了扱いにせず、保存失敗時は停止する。
+企画候補をコレクションの `20-documentation/plan_proposals.md` に保存し、`workflow-state.json` の `planning.generated = true` へ更新（企画確定時は `planning.final_title` も記録）し、採用画像がある場合は最終 `thumbnail.jpg` の正規入力として後段へ引き渡し、無い場合は `/thumbnail <theme>` フォールバックを案内してから `/music --prompt <theme>` へ進む Next Step を示した時点で完了。open insights を企画入力にした場合は、「open insights の消費と status 反映」に従う企画確定時の status 更新（adopted / dismissed）まで完了扱いにしない。画像生成を実施した場合は、採用企画の参照画像を `20-documentation/thumbnail-prompts.md` の `Reference Assignments` へ保存できるまで完了扱いにせず、保存失敗時は停止する。
 
 **JSON ペア検証 Hard Gate**: `references/freshness-rules.md` の鮮度判定へ進む前に、ファイル名日付が最新の `reports/analysis_*.md` と同日付の `.json` の存在を確認し、`.claude/skills/analytics/references/analysis-json-validator.md` の validator を同日付 JSON に実行する。exit 0 の場合だけ analytics mode の入力として使用する。Markdown だけが存在する、または validator が失敗した場合は必須入力不足として中断し、`/analytics --analyze` 再実行を案内する。
 
@@ -517,4 +517,4 @@ rm -rf collections/planning/_plan-previews/<session-dir>/
 - `planning-preview.png` がある場合は、後段がその画像を最終 `thumbnail.jpg` に確定する正規入力として使い、`/thumbnail` フォールバックへは進まない
 - `planning-preview.png` が無い場合だけ `/thumbnail <theme>` フォールバックで `thumbnail.jpg` を生成・確定する
 - どちらの場合も採用プレビューを `main.png/jpg` へ直接コピーしない。textless `main.png/jpg` は後段の生成契約に従い別成果物として確定する
-- サムネイル確定後に `/suno <theme>` で SunoAI 音楽プロンプト生成（テーマ確定後に初めて実行）
+- サムネイル確定後に `/music --prompt <theme>` で SunoAI 音楽プロンプト生成（テーマ確定後に初めて実行）

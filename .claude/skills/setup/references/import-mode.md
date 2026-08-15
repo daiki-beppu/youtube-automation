@@ -69,7 +69,7 @@ JSON 結果から以下をユーザーに提示する:
    - `descriptions.opening`: `{style} {primary} music inspired by ...` 形式
    - `descriptions.perfect_for`: 4 項目（例: Study & Focus, Relaxation, Creative Work, Sleep）
    - `descriptions.hashtags`: 5 個程度
-7. **Suno 設定**（音楽エンジンが Suno の場合）: `config/skills/suno.yaml` で `workspace_name` / `genre_line` / `exclude_styles` を上書き（ない場合は skill default を使用）
+7. **Suno 設定**（音楽エンジンが Suno の場合）: `config/skills/music.yaml::prompt` で `workspace_name` / `genre_line` / `exclude_styles` を上書き（ない場合は skill default を使用）
 
 ## 取り込み Step 4: config 生成
 

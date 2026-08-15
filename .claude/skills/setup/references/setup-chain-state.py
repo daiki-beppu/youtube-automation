@@ -57,7 +57,7 @@ CHANNEL_OUTPUT_ARTIFACTS = (
     "config/channel/audio.json",
     "config/localizations.json",
     "config/schedule_config.json",
-    "config/skills/suno.yaml",
+    "config/skills/music.yaml",
     "config/skills/thumbnail.yaml",
     "doctor:channel_config",
     "docs/channel/ttp-seed-confirmation.md",

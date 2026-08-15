@@ -15,13 +15,13 @@ REFERENCES = SKILL_DIR / "references"
 SETUP_REFERENCES = REPO_ROOT / ".claude" / "skills" / "setup" / "references"
 
 SETUP_ASSET_SHA256 = {
-    "claude-md-template.md": "b3612bdf964132e1093f877d9774cfaec65fd3ab13dfe0ab1f0ab2a9e57ab556",
-    "config-generation-rules.md": "5b336c56a31e4f4d46e44bc1cb6923c8b8af7fd1f41b67d4576f33535ef07e50",
+    "claude-md-template.md": "b0e0c7ffbff811107fe85aff425fa1f2afd87cfc2acebe2f99816e3d1a6b9f52",
+    "config-generation-rules.md": "e3f2dd2befc21b8cc163a891a57d92cc2f5e025dcb901939c25d882dc8d3184d",
     "config-template/analytics.json": "4344ad8d4c9a1c81958b721eb3d999172f14f71f17d863a1708492ce687b68d2",
     "config-template/audio.json": "c55033dc448cb91fe3cdb47e20f220c5879c05f95855d918a8e72297a5f20a43",
     "config-template/content.json": "5a60fc3327bb2cca1daa5da3744dc218495f3f0f304aebdad41fd2ba32d1bed0",
     "config-template/meta.json": "324194e12d576604b3751af469bd7e965efb28db088b4671d76bb80b499d9da4",
-    "config-template/skills/suno.yaml": "8557bb9858665d4c109e280fbcb93b26e72e2bd28e7dc4915a94a1f6fb189b61",
+    "config-template/skills/music.yaml": "5e626dc43b3ba208729d0d338683bcc014e302149d0e917e30d9877efff707be",
     "config-template/skills/thumbnail.yaml": "9b284e8ec42a52fecee9c813fd0ca042009623ce0923c30d50f1b3ad7ec7a14e",
     "config-template/youtube.json": "849f4b0912cb7be3d1cc92b7607d355e856b5af3e9e85db0449fabdf1713bb6c",
     "directory-structure.md": "d8590189cf8929b968b4f1169b723cc0ed71e0be06dbd57cc3ed405967bc4e14",
@@ -32,13 +32,13 @@ SETUP_ASSET_SHA256 = {
 }
 STRATEGY_ASSET_SHA256 = {
     "desire-vocabulary.md": "d6a2a6eda7597b9aa66f0b140a42834807374cc80a313c9b8edb8114f3126388",
-    "direction.md": "6241292d6ae63a666f7fa66e7786348f74ed94e0ccd075903e7ed92bcf9a6010",
+    "direction.md": "db0d2ad7d343e834f4d63f9aeff14edb2c5f0b28f8ebded04932f76a6159a161",
 }
 MOVED_ASSET_SHA256 = {
-    "import-mode.md": "a4752e751f0f53f38ab869faa5fd3365570d93b4a3a04e9ba5ac53f08cabde9f",
+    "import-mode.md": "2e7a69d0e45994d4ce267a7852c475b8db86bd6971e64311bf53021f337d060b",
     "localizations-template.json": "d0267074151af61f27856d0e67e8f0c3d56cf327b2255e00a8035e2851cde558",
     "push-mode.md": "be122ecbe19c803cfe09465f68ab364636f46f92f0ec842fb803566337eb57ee",
-    "regeneration-mode.md": "ddec449da3df12c8a2f52a17174bf15317819a7d568c49ce2ab096842bcbbbde",
+    "regeneration-mode.md": "d8b1b24487f8932be088b92eedf5a55a347f738be18944efecce763726843120",
     "save-push-troubleshooting.md": "89a7cab34a96ddf7f10636293621c8b39e6cdf9f17e033a0469d5b14c0fc9a45",
 }
 

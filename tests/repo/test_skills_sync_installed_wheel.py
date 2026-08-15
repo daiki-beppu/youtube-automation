@@ -28,7 +28,7 @@ _CHANNEL_NEW_SHARED_ASSETS = frozenset(
         "config-template/audio.json",
         "config-template/content.json",
         "config-template/meta.json",
-        "config-template/skills/suno.yaml",
+        "config-template/skills/music.yaml",
         "config-template/skills/thumbnail.yaml",
         "config-template/youtube.json",
         "desire-vocabulary.md",

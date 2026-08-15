@@ -304,7 +304,7 @@ runtime mask helper は script 内から `uv run python -m youtube_automation.in
 
 「Suno のデータ取り込み時にビジュアライザーを付けて」とユーザーが指示しても、Suno / Lyria / masterup の工程ではビジュアライザーは付かない。理由:
 
-- `/suno` / `/lyria` / `/masterup` は**音源（mp3 / wav / m4a）を作る工程**であり、映像オーバーレイは扱わない
+- `/music --prompt` / `/lyria` / `/masterup` は**音源（mp3 / wav / m4a）を作る工程**であり、映像オーバーレイは扱わない
 - ビジュアライザーは本質的に**動画生成（`generate_videos.sh`）側の合成処理**で、`ffmpeg` の `filter_complex` に `showfreqs` 等を組む
 - 反映したい場合は `config/channel/youtube.json::overlays.enabled: true` と必要な overlay 設定を用意してから `/videoup` を実行する
 

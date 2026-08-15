@@ -3724,7 +3724,10 @@ class TestCheckTtpWfNewReadinessChannelNew:
                     "- branding 方針: competitor-branding-snapshot.json を参照し、description を転写",
                     "- 画像承認: channel branding 画像 branding/icon.png と branding/banner.png をユーザー承認済み",
                     *_duration_ttp_seed_lines(),
-                    "- 未反映項目: ユーザー承認済み例外: music / 曲構造 TTP は後続 /suno で補完するためスキップ",
+                    (
+                        "- 未反映項目: ユーザー承認済み例外: music / 曲構造 TTP は"
+                        "後続 /music --prompt で補完するためスキップ"
+                    ),
                     "",
                 ]
             ),

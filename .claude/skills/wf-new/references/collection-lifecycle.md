@@ -34,7 +34,7 @@ collections/live/XXX-name/        → 投稿済み・公開中（Step 5 完了�
 7. 承認済み `main.png/jpg` からテキスト付き `10-assets/thumbnail.jpg` を生成し、サムネイルと動画背景を別成果物として確定
 
 ### 2. 制作段階（planning/ 継続）
-1. `/suno <theme>` または `/lyria <theme>` でプロンプト生成・楽曲制作・個別音声整理（公開ワークフローの共通契約は MP3。WAV は Lyria / DAW の中間成果物）
+1. `/music --prompt <theme>` または `/lyria <theme>` でプロンプト生成・楽曲制作・個別音声整理（公開ワークフローの共通契約は MP3。WAV は Lyria / DAW の中間成果物）
 
 ### 3. 仕上げ・公開（live/）
 1. `/videoup <path>` で動画生成

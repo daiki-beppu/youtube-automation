@@ -42,7 +42,7 @@ def main() -> int:
 
     try:
         collection_dir = _resolve_collection_argument(args.collection)
-        suno_cfg = resolve_suno_config(load_skill_config("suno"))
+        suno_cfg = resolve_suno_config(load_skill_config("music.prompt"))
         issues, summary = verify_suno_collection(collection_dir, suno_cfg, infer_suno_mode)
     except (ConfigError, ValidationError, OSError) as exc:
         print(f"ERROR: {exc}")

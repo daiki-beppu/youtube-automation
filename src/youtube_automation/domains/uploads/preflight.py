@@ -116,7 +116,7 @@ def check_descriptions_md_parseability(desc_md: Path, *, allowed_root: Path | No
 
 
 def check_suno_genre_line_char_limit(suno_cfg: Mapping[str, object]) -> str | None:
-    """``config/skills/suno.yaml::genre_line`` が Suno Style 欄制限内か検証する."""
+    """``config/skills/music.yaml::prompt.genre_line`` が Suno Style 欄制限内か検証する."""
     genre_line = str(suno_cfg.get("genre_line") or "").strip()
     if not genre_line:
         return None
@@ -127,7 +127,7 @@ def check_suno_genre_line_char_limit(suno_cfg: Mapping[str, object]) -> str | No
     if len(genre_line) <= limit:
         return None
     return (
-        "config/skills/suno.yaml::genre_line が Suno Style 欄の文字数上限を超過: "
+        "config/skills/music.yaml::prompt.genre_line が Suno Style 欄の文字数上限を超過: "
         f"{len(genre_line)} / {limit}。5-Element Order に沿って要素を絞ってください"
     )
 

@@ -1069,7 +1069,7 @@ def test_apply_sync_only_is_allowlist_and_forces_selected_assets(
 ) -> None:
     repo = _write_repo(tmp_path, INLINE_TABLE_PYPROJECT)
 
-    assert main(["apply", "--target", str(repo), "--tag", "v5.6.0", "--sync-only", "lyria", "suno"]) == 0
+    assert main(["apply", "--target", str(repo), "--tag", "v5.6.0", "--sync-only", "lyria", "music"]) == 0
     assert [
         "uv",
         "run",
@@ -1079,7 +1079,7 @@ def test_apply_sync_only_is_allowlist_and_forces_selected_assets(
         "skills",
         "--only",
         "lyria",
-        "suno",
+        "music",
         "--force",
     ] in recorded_commands
     assert ["uv", "run", "yt-skills", "sync", "--asset", "claude-md", "--force"] in recorded_commands
@@ -1095,7 +1095,7 @@ def test_apply_sync_only_rejects_local_fix_diff_before_side_effects(
     repo = _write_repo(tmp_path, INLINE_TABLE_PYPROJECT)
     monkeypatch.setattr(automation_update, "_skills_diff_has_changes", lambda root: True)
 
-    assert main(["apply", "--target", str(repo), "--tag", "v5.6.0", "--sync-only", "suno"]) == 1
+    assert main(["apply", "--target", str(repo), "--tag", "v5.6.0", "--sync-only", "music"]) == 1
 
     err = capsys.readouterr().err
     assert "yt-skills diff" in err

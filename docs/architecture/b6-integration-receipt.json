@@ -934,14 +934,14 @@
     },
     {
       "old_owner": "legacy..claude.skills.suno.SKILL.md",
-      "exact_new_owner": ".claude/skills/suno/SKILL.md",
+      "exact_new_owner": ".claude/skills/music/references/prompt.md",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"
     },
     {
       "old_owner": "legacy..claude.skills.suno.references.suno-examples.md",
-      "exact_new_owner": ".claude/skills/suno/references/suno-examples.md",
+      "exact_new_owner": ".claude/skills/music/references/suno-examples.md",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"

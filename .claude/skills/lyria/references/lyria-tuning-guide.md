@@ -54,7 +54,7 @@ Phase 4: All + Rest     → quiet afterglow
 音階やキー（`A minor`, `D dorian`, `C major pentatonic` など）はプロンプト本文に含めると
 Lyria が反映する。`config.default.yaml` の旧 `scale` enum は RealTime 専用なので無視してよい。
 
-## 禁止形容詞（/suno と共通）
+## 禁止形容詞（/music --prompt と共通）
 
 > thundering, blazing, crushing, soaring, screaming, devastating, explosive, ferocious, towering, surging, crystalline, shimmering, lush, sweeping, majestic, glorious, echoing
 

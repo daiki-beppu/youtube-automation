@@ -93,7 +93,7 @@
 | スキル | 設定ファイル |
 |---|---|
 | thumbnail / Gemini 画像生成 | `config/skills/thumbnail.yaml` |
-| suno | `config/skills/suno.yaml` |
+| music.prompt | `config/skills/music.yaml::prompt` |
 | suno-lyric | `config/skills/suno-lyric.yaml` |
 | lyria | `config/skills/lyria.yaml` |
 | collection-ideate | `config/skills/collection-ideate.yaml` |
