@@ -5,7 +5,7 @@
 - CC 動画が YouTube にアップ済みで、`20-documentation/upload_tracking.json::complete_collection.video_url` が記録済み
 - `10-assets/short-loop.mp4`、`10-assets/short.png`、`10-assets/loop.mp4` のいずれかと `01-master/*Master*.mp3` が存在する
 
-映像ソースの優先順位は `short-loop.mp4` → `short.png` → `loop.mp4`。無ければ `/short-thumbnail` で `short.png` を作り、必要に応じて `uv run yt-generate-shorts-loop` で動画化する。
+映像ソースの優先順位は `short-loop.mp4` → `short.png` → `loop.mp4`。無ければ `/short --thumbnail` で `short.png` を作り、必要に応じて `uv run yt-generate-shorts-loop` で動画化する。
 
 ## ハイライトとクロップを決める
 

@@ -1,1 +1,0 @@
-../../../../src/youtube_automation/commands/media/generate_short_loop.py

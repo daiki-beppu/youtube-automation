@@ -31,7 +31,6 @@ TARGET_SKILLS = (
     "metadata-audit",
     "playlist",
     "short",
-    "short-thumbnail",
     "suno",
     "thumbnail",
     "thumbnail-compare",
@@ -236,7 +235,7 @@ _RAW_EXPECTED_ACTIVE_ROUTES = (
         "（`/setup --import` / `/setup` / `/video-upload`）。",
     ),
     _route(
-        "short-thumbnail/SKILL.md",
+        "short/references/thumbnail.md",
         "## 前提",
         "- `config/channel/` がロード可能（`load_config()`）。存在しない場合は `/setup --import` を案内して停止する",
     ),
@@ -839,7 +838,11 @@ def _implementation_changed_paths(issue: int) -> frozenset[str]:
 
 def test_initial_occurrences_have_a_complete_context_ledger() -> None:
     historical_skills = {entry[0] for entry in INITIAL_OCCURRENCE_LEDGER}
-    assert {"wf-new" if skill == "collection-ideate" else skill for skill in historical_skills} == set(TARGET_SKILLS)
+    current_owners = {
+        "collection-ideate": "wf-new",
+        "short-thumbnail": "short",
+    }
+    assert {current_owners.get(skill, skill) for skill in historical_skills} == set(TARGET_SKILLS)
     assert {entry[3] for entry in INITIAL_OCCURRENCE_LEDGER} <= set(CONTEXTS)
     assert len({(skill, path, occurrence) for skill, path, occurrence, _ in INITIAL_OCCURRENCE_LEDGER}) == len(
         INITIAL_OCCURRENCE_LEDGER

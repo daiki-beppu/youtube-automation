@@ -1,5 +1,7 @@
 # Changelog
 
+- `feat(skills)`: `/short --thumbnail` が 9:16 画像生成と Veo ループ動画化を担い、`/short-thumbnail` の手順・prompt・script 導線を統合した（#3834）
+
 - `feat(skills)`: `/short` が `content_model.type` から collection / release の手順を自動分岐し、`/short-release` の生成契約・設定・参照スクリプトを統合した（#3833）
 
 All notable changes to this project will be documented in this file.
