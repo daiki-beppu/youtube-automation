@@ -151,7 +151,7 @@ def test_wf_auto_is_the_integrated_entrypoint_without_copying_child_workflows() 
     wf_status = _read(".claude/skills/wf-status/SKILL.md")
     schema = _read(".claude/skills/wf-new/references/schema.md")
 
-    for child in ("wf-new", "music --generate", "masterup", "wf-next", "post-publish"):
+    for child in ("wf-new", "music --generate", "music --master", "wf-next", "post-publish"):
         assert f"`/{child}`" in wf_auto
     assert "no_active_collection" in wf_auto
     assert "同じ run 内" in wf_auto
@@ -1249,8 +1249,8 @@ def test_skill_config_defaults_have_read_gate_in_skill_docs() -> None:
             )
 
 
-def test_masterup_generate_master_examples_only_use_cli_help_options() -> None:
-    skill = _read(".claude/skills/masterup/SKILL.md")
+def test_music_master_generate_master_examples_only_use_cli_help_options() -> None:
+    skill = _read(".claude/skills/music/references/master.md")
     result = subprocess.run(
         [sys.executable, "-m", "youtube_automation.commands.media.generate_master", "--help"],
         cwd=ROOT,

@@ -237,7 +237,7 @@ Instrument Notes: lead with felt piano, background with soft pad
 
 ## Track Title Generation (#899)
 
-各 entry には **`name_en`**（2-4 word の英語シーン/ムードタイトル）と **`name_jp`**（5-15 文字の日本語訳）を付ける。Suno UI の Song Title 欄に `{name_jp} — {name_en}` として注入され、Library / playlist / `/masterup` のリネームで識別子となる。
+各 entry には **`name_en`**（2-4 word の英語シーン/ムードタイトル）と **`name_jp`**（5-15 文字の日本語訳）を付ける。Suno UI の Song Title 欄に `{name_jp} — {name_en}` として注入され、Library / playlist / `/music --master` のリネームで識別子となる。
 
 ### 命名ルール
 
@@ -559,7 +559,7 @@ UI 変更で注入先セレクタが外れた場合は `extensions/shared/dom.ts
 
 ### インストゥルメンタル
 - `/music --generate` で SunoAI の Advanced タブ（Lyrics mode = **Instrumental**）に自動投入して連続生成 + playlist 一括追加
-- `/masterup <playlist-url>` でダウンロード + マスター音源生成
+- `/music --master <playlist-url>` でダウンロード + マスター音源生成
 
 ### ボーカル（歌詞あり）
 - `/music --prompt` で `suno-patterns.yaml` の pattern draft を保存
@@ -567,13 +567,13 @@ UI 変更で注入先セレクタが外れた場合は `extensions/shared/dom.ts
 - `/music --prompt` を再実行して Style + Lyrics の `suno-prompts.json` を生成
 - `/music --generate` で SunoAI の Advanced タブ（Lyrics mode = **Write**）に Style + Lyrics を自動投入して連続生成 + playlist 一括追加
 - 歌唱の発音・ピッチが破綻していないか必ず試聴チェック
-- `/masterup <playlist-url>` でダウンロード + マスター音源生成
+- `/music --master <playlist-url>` でダウンロード + マスター音源生成
 
 ## Cross References
 
 - テーマ確定 + 制作開始: `/wf-new`
 - 歌詞生成（ボーカルのみ）: `/music --lyric`
 - ブラウザ自動生成 + playlist 一括追加: `/music --generate`
-- DL + マスター化: `/masterup`
+- DL + マスター化: `/music --master`
 - 拡張本体のコード: `extensions/suno-helper/` / `extensions/shared/`
 - サーバー CLI: `src/youtube_automation/commands/collections/collection_serve.py`

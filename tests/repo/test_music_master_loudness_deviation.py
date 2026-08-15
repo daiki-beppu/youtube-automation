@@ -1,4 +1,4 @@
-"""Contract tests for the masterup per-track loudness deviation gate."""
+"""Contract tests for the music master per-track loudness deviation gate."""
 
 from __future__ import annotations
 
@@ -14,8 +14,8 @@ import pytest
 
 from tests.helpers.paths import REPO_ROOT
 
-SCRIPT = REPO_ROOT / ".claude" / "skills" / "masterup" / "references" / "check_loudness_deviation.py"
-SKILL = REPO_ROOT / ".claude" / "skills" / "masterup" / "SKILL.md"
+SCRIPT = REPO_ROOT / ".claude" / "skills" / "music" / "references" / "check_loudness_deviation.py"
+SKILL = REPO_ROOT / ".claude" / "skills" / "music" / "references" / "master.md"
 
 
 def _load_module():
@@ -50,7 +50,7 @@ def test_documented_invocation_resolves_script_from_channel_cwd(tmp_path: Path, 
     channel = workspace / "channels" / "focus" if nested_channel else workspace
     collection = channel / "collections" / "planning" / "demo"
     collection.mkdir(parents=True)
-    distributed_script = workspace / ".claude" / "skills" / "masterup" / "references" / SCRIPT.name
+    distributed_script = workspace / ".claude" / "skills" / "music" / "references" / SCRIPT.name
     distributed_script.parent.mkdir(parents=True)
     distributed_script.write_text(
         """from pathlib import Path

@@ -19,7 +19,7 @@ Suno 経路の server lifecycle は `.claude/skills/extension/references/serve.m
 ## 前後工程
 
 - `前工程`: `/wf-new`, `/music --prompt`, `/wf-new`
-- `後工程`: `/masterup`
+- `後工程`: `/music --master`
 - `委譲先`: `なし`
 
 ## 成果物
@@ -31,7 +31,7 @@ Suno 経路の server lifecycle は `.claude/skills/extension/references/serve.m
 
 `<CHANNEL_DIR>/collections/planning/<theme>-collection/` の `suno-prompts.json` を `uv run yt-collection-serve` で配信し、Chrome 拡張 **suno-helper** が Suno (suno.com/create) タブ上で各 pattern の Style/Lyrics 注入 → Generate → 完了待ち → 次の pattern、を自動反復する。全件完了後に clip を一括選択 → Cmd+P → Add to Playlist dialog → 自動 playlist 化 → ZIP 一括ダウンロードまで進める。
 
-suno-helper は生成 → playlist 追加 → 一括ダウンロードまでを 1 タブで完結させるため、`/masterup` の DL ステップ（Step 2-3）は原則スキップされる。
+suno-helper は生成 → playlist 追加 → 一括ダウンロードまでを 1 タブで完結させるため、`/music --master` の DL ステップ（Step 2-3）は原則スキップされる。
 新規 collection を `/wf-new` から開始した直後は、`/wf-new` が `uv run yt-collection-serve` の起動と疎通確認まで完了している場合がある。その場合、本スキルは既存 server を再利用し、browser use で Suno タブ上の suno-helper overlay を操作する。
 
 ## 完了条件
@@ -111,7 +111,7 @@ uv run yt-suno-unattended-request \
 
 必要な場合だけ `--entry-index`（0-based、複数可）、`--download-format mp3|m4a|wav`、`--max-entries`、`--max-concurrent-generations`、`--max-retries` を上書きする。同じ collection の resume state があれば未完了 entry / playlist / download から再開し、1 run の上限を超えた entry は次回へ繰り越す。既存 playlist の clip ID が失われている場合は新規生成しない。
 
-ログイン、CAPTCHA、料金・credit 確認、Suno UI 非互換では `manual-intervention` を保存して停止する。Suno ページ root の `data-suno-unattended-collection-id` が対象と一致することを確認し、`data-suno-unattended-status` / `data-suno-unattended-checkpoint` / `data-suno-unattended-stop-reason` / `data-suno-unattended-required-action` を監視する。`manual-intervention` を検知した agent は自動クリックや追加購入で突破せず、人へ handoff する。完了判定は手動 flow と同じ Step 6 の 6 点であり、extension storage の `completed` だけでは `/masterup` へ進めない。
+ログイン、CAPTCHA、料金・credit 確認、Suno UI 非互換では `manual-intervention` を保存して停止する。Suno ページ root の `data-suno-unattended-collection-id` が対象と一致することを確認し、`data-suno-unattended-status` / `data-suno-unattended-checkpoint` / `data-suno-unattended-stop-reason` / `data-suno-unattended-required-action` を監視する。`manual-intervention` を検知した agent は自動クリックや追加購入で突破せず、人へ handoff する。完了判定は手動 flow と同じ Step 6 の 6 点であり、extension storage の `completed` だけでは `/music --master` へ進めない。
 
 ### Step 2. overlay / popup を開く
 
@@ -222,7 +222,7 @@ handoff 条件（agent は自動突破しない）:
 5. `workflow-state.json` の `planning.music.suno_playlist_url` に playlist URL が記録されている
 6. `workflow-state.json` の `assets.music_downloaded` が `true` になっている（DL 完了時）
 
-`placed_count > 0` かつ `missing_file_count > 0` の partial FINISHED は download 通知としては成功だが、strict 完了ではない。`status = downloaded` や `assets.music_downloaded = true` だけを根拠に `/masterup` へ進めない。不足分の再実行または手動解決を行い、上記 6 点と `missing_file_count = 0` が揃ってから後工程へ進む。
+`placed_count > 0` かつ `missing_file_count > 0` の partial FINISHED は download 通知としては成功だが、strict 完了ではない。`status = downloaded` や `assets.music_downloaded = true` だけを根拠に `/music --master` へ進めない。不足分の再実行または手動解決を行い、上記 6 点と `missing_file_count = 0` が揃ってから後工程へ進む。
 
 **異常値の曲を再生成する** を OFF にした場合は、上記に加えて status / console warning で記録された duration guard NG の clip を playlist 上で試聴し、手動採否を確認する。NG clip も意図どおり ZIP に含まれていることを確認してから完了とする。
 
@@ -274,7 +274,7 @@ DL が止まる・形式が違う・`workflow-state.json` へ反映されない�
 ## Cross References
 
 - プロンプト生成: `/music --prompt`
-- マスター化: `/masterup`（DL は本スキルが完了済みのため Step 2-3 スキップ）
+- マスター化: `/music --master`（DL は本スキルが完了済みのため Step 2-3 スキップ）
 - 拡張本体のコード: `extensions/suno-helper/` / `extensions/shared/`
 - サーバー CLI: `src/youtube_automation/commands/collections/collection_serve.py`
 - POST downloaded エンドポイント: `src/youtube_automation/commands/collections/collection_serve.py`
@@ -341,7 +341,7 @@ subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実�
 ## When to Use
 
 - 新コレクションのテーマが確定し、音楽を生成するとき
-- `/music --prompt` + `/masterup` の代替として、API 完全自動の音楽生成を行いたいとき
+- `/music --prompt` + `/music --master` の代替として、API 完全自動の音楽生成を行いたいとき
 - Lyria 3 API（最大 ~184 秒/リクエスト）でセグメントを複数取得して結合し、長尺マスター音源を作りたいとき
 
 ### 選択タイミング（どこで lyria が選ばれるか）

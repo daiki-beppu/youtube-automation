@@ -195,7 +195,7 @@ uv run yt-init-collection "Pilot Direction Check" "pilot-direction-check" --trac
 ```
 /wf-new                          → コレクション初期化
   ↓
-/music --generate  または  /music --prompt → /music --generate → /masterup → 音源生成 / マスター化
+/music --generate  または  /music --prompt → /music --generate → /music --master → 音源生成 / マスター化
   ↓
 /thumbnail → /thumbnail --compare  → サムネ生成 + モバイル視認性検証
   ↓

@@ -92,7 +92,7 @@ Phase 3: 公開             /wf-next    動画→概要欄→アップロード�
 | `loop_video` | boolean / `"failed"` | ループ動画生成済み（`10-assets/loop.mp4`） |
 | `music_prompts` | boolean | 音楽プロンプト/composition 生成済み |
 | `music_downloaded` | boolean | Suno パスで `/music --generate` の一括 DL 完了を示すフラグ（`02-Individual-music/` に音源が揃った状態）。`raw_master` 生成前段の DL 完了を独立追跡する。判定は primary: `02-Individual-music/` のファイル実在、secondary: 本フラグ。`yt-init-collection` の初期状態には含まれず、DL 完了時に遅延追加される |
-| `raw_master` | string / null | 自動生成された raw master のファイル名（/masterup or /music --generate 出力） |
+| `raw_master` | string / null | 自動生成された raw master のファイル名（/music --master or /music --generate 出力） |
 | `master_audio` | string / null | ユーザーがミキシング+マスタリングした最終マスターのファイル名。`workflow.wf_next.skip_manual_mastering: true`（raw=final 運用）のチャンネルでは `/wf-next` が `raw_master` と同じファイル名を自動設定する。`workflow.wf_next.skip_audio_approval: false`（`wf_next` の boolean は全て true=手動工程を省く向き）のチャンネルでは確定前に `/wf-next` が承認を取る |
 | `master_video` | string / null | 生成されたマスター動画のファイル名 |
 | `description` | boolean | YouTube 概要欄生成済み（`20-documentation/descriptions.md`） |
@@ -105,7 +105,7 @@ Phase 3: 公開             /wf-next    動画→概要欄→アップロード�
 
 #### Suno 定期実行 checkpoint の責務
 
-生成途中の entry index、観測済み clip ID、playlist/download 再試行情報は suno-helper の Chrome local storage（`sunoResumeState` / `sunoUnattendedRunState`）が所有し、`workflow-state.json` へ二重保存しない。workflow-state の正規成果物は従来どおり `planning.music.suno_playlist_url`、`assets.music_downloaded`、`02-Individual-music/` の実ファイルである。定期実行 state が `completed` でもこれらが揃わなければ完了ではなく、`checkpoint` / `manual-intervention` なら `/masterup` へ進めない。
+生成途中の entry index、観測済み clip ID、playlist/download 再試行情報は suno-helper の Chrome local storage（`sunoResumeState` / `sunoUnattendedRunState`）が所有し、`workflow-state.json` へ二重保存しない。workflow-state の正規成果物は従来どおり `planning.music.suno_playlist_url`、`assets.music_downloaded`、`02-Individual-music/` の実ファイルである。定期実行 state が `completed` でもこれらが揃わなければ完了ではなく、`checkpoint` / `manual-intervention` なら `/music --master` へ進めない。
 
 ### scene_phrases フィールド
 

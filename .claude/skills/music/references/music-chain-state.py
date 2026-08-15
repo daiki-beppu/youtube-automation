@@ -45,10 +45,15 @@ def _validate_manifest() -> None:
     if manifest.get("chainId") != "music":
         raise ManifestError("chainId must be music")
     steps = manifest.get("steps")
-    if not isinstance(steps, list) or len(steps) != 3 or not all(isinstance(step, dict) for step in steps):
-        raise ManifestError("steps must contain prompt, lyric, and generate")
+    if not isinstance(steps, list) or len(steps) != 4 or not all(isinstance(step, dict) for step in steps):
+        raise ManifestError("steps must contain prompt, lyric, generate, and master")
     identities = [(step.get("id"), step.get("skill")) for step in steps]
-    if identities != [("prompt", "music"), ("lyric", "music"), ("generate", "music")]:
+    if identities != [
+        ("prompt", "music"),
+        ("lyric", "music"),
+        ("generate", "music"),
+        ("master", "music"),
+    ]:
         raise ManifestError("step order or owner is inconsistent")
 
 
@@ -238,6 +243,45 @@ def _evaluate_generate(collection_path: Path) -> tuple[int, dict[str, object]]:
     }
 
 
+def _evaluate_master(collection_path: Path) -> tuple[int, dict[str, object]]:
+    engine = _music_engine(collection_path)
+    if engine == "lyria":
+        return EXIT_SKIP, {
+            "step": "master",
+            "engine": "lyria",
+            "decision": "skip",
+            "reason": "lyria_master_not_required",
+        }
+
+    output = Path("01-master/master.mp3")
+    if _artifact_exists(collection_path, output):
+        return EXIT_SKIP, {
+            "step": "master",
+            "engine": "suno",
+            "decision": "skip",
+            "reason": "master_complete",
+            "outputs": [output.as_posix()],
+        }
+
+    generate_exit, generate_state = _evaluate_suno_generate(collection_path)
+    if generate_exit != EXIT_SKIP:
+        return EXIT_BLOCKED, {
+            "step": "master",
+            "engine": "suno",
+            "decision": "blocked",
+            "reason": "generate_prerequisite_missing",
+            "generate": generate_state,
+            "next": "music --generate",
+        }
+    return EXIT_RUN, {
+        "step": "master",
+        "engine": "suno",
+        "decision": "run",
+        "reason": "master_missing",
+        "missing": [output.as_posix()],
+    }
+
+
 def evaluate(collection_path: Path, step: str) -> tuple[int, dict[str, object]]:
     if not collection_path.is_dir():
         raise ManifestError(f"collection path is not a directory: {collection_path}")
@@ -247,13 +291,15 @@ def evaluate(collection_path: Path, step: str) -> tuple[int, dict[str, object]]:
         return _evaluate_lyric(collection_path)
     if step == "generate":
         return _evaluate_generate(collection_path)
+    if step == "master":
+        return _evaluate_master(collection_path)
     raise ManifestError(f"unknown step: {step}")
 
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--collection-path", type=Path, required=True)
-    parser.add_argument("--step", choices=("prompt", "lyric", "generate"), required=True)
+    parser.add_argument("--step", choices=("prompt", "lyric", "generate", "master"), required=True)
     return parser
 
 

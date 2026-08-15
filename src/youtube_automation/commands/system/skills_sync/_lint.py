@@ -43,7 +43,6 @@ _ALLOWLISTED_SKILL_MD_LINE_COUNTS: Final[dict[str, int]] = {
     "automation-release": 638,
     "automation-update": 571,
     "loop-video": 410,
-    "masterup": 566,
     "suno": 594,
 }
 

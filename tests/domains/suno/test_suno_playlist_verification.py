@@ -948,7 +948,7 @@ def test_masterup_primary_verification_uses_music_directory_without_playlist_res
     When primary path の title 解決手順を読む
     Then music directory が第一手段で URL WebFetch・title list 確認を要求しない。
     """
-    skill = Path(".claude/skills/masterup/SKILL.md").read_text(encoding="utf-8")
+    skill = Path(".claude/skills/music/references/master.md").read_text(encoding="utf-8")
     step = skill.split("### Step 1.6:", 1)[1].split("### Step 2:", 1)[0]
     primary = step.split("primary path では", 1)[1].split("fallback path", 1)[0]
 

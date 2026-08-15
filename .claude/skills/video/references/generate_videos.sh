@@ -3,7 +3,7 @@
 # Static image + master audio → MP4 (macOS optimized)
 # v12.1: ループモードの高ビットレート入力を上限付き正規化に退避
 # v12.2: 短尺 master を音声側 stream_loop で動画尺に伸ばす opt-in 経路を追加 (#545)
-# v12.3: master-mix.* に加えて lyria/masterup 出力の master.* も検出 (#507)
+# v12.3: master-mix.* に加えて lyria/music --master 出力の master.* も検出 (#507)
 # v12.4: 映像エフェクト (光の粒子 / ボケ / グラデーション流れ) のオプション追加 (#648)
 # v13:   config-driven overlay 合成 (audio_visualizer + subscribe_popup, #511)
 #        - `overlays.enabled: true` のときのみ x264 再エンコード経路で
@@ -359,7 +359,7 @@ PY
 # 検出順:
 #   1. `workflow-state.json::assets.master_audio` — `/wf-next` が確定した最終マスター
 #   2. `master-mix.{wav,m4a,aac,mp3,flac}` — DAW バウンス・手動配置
-#   3. `master.{wav,m4a,aac,mp3,flac}` — `/music --generate` / `/masterup` (`yt-generate-master`) の自動生成出力 (#507)
+#   3. `master.{wav,m4a,aac,mp3,flac}` — `/music --generate` / `/music --master` (`yt-generate-master`) の自動生成出力 (#507)
 # 拡張子は wav 優先、なければ m4a / aac / mp3 / flac の順
 MASTER_AUDIO=""
 STATE_MASTER_AUDIO=""

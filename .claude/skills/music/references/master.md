@@ -1,8 +1,8 @@
----
-name: masterup
-purpose: 作る
-description: "Use when Suno UI で生成した曲のプレイリストを一括 DL + マスター化するとき。Lyria チャンネルでは不要"
----
+# Music master mode
+
+## エンジン判定
+
+対象 collection を確定したら `config/channel/youtube.json::music_engine` を一度だけ解決する。`lyria` は `--generate` が `01-master/master.mp3` を直接生成するため、この mode は完了済みとして skip する。`suno` の場合だけ以下の手順を実行する。未設定または `suno` / `lyria` 以外なら設定不整合として停止する。
 
 ## 前後工程
 
@@ -41,7 +41,7 @@ subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実�
 
 以下を deep-merge した値を設定として使う。
 
-1. `.claude/skills/masterup/config.default.yaml`
+1. `.claude/skills/music/config.default.yaml::master`
 2. `config/skills/masterup.json`（存在する場合）
 3. `config/skills/masterup.yaml`（JSON が存在しない場合の fallback）
 
@@ -58,7 +58,7 @@ subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実�
 
 ## 設定
 
-Python の `/masterup` 経路は skill-config (`.claude/skills/masterup/config.default.yaml`) とチャンネル上書きを deep-merge して読む。
+Python の `/music --master` 経路は skill-config (`.claude/skills/music/config.default.yaml::master`) とチャンネル上書きを deep-merge して読む。
 TS CLI `uv run yt-generate-master` は `audio` の実行時既定値を組み込み default として持ち、同梱 `config.default.yaml` の `audio.bitrate` / `audio.crossfade_duration` と同期テストで固定する。チャンネル側で上書きする場合は `config/skills/masterup.json` を優先する。既存チャンネル互換として `config/skills/masterup.yaml` もサポートするが、両方ある場合は JSON が優先される。TS CLI が読む `audio` section は optional で、`post_processing` / `pair_selection` だけの override は有効。`audio` が存在する場合は object でなければならず、未対応 YAML 行や空 scalar は config error として停止する。
 
 | 項目 | 既定 | 説明 |
@@ -102,8 +102,8 @@ Lyria で音源を生成するチャンネルでは `/music --generate` が `01-
 
 | コマンド | 説明 | 例 |
 |---------|------|-----|
-| `/masterup` | DL 済み音源（`02-Individual-music/`）からマスター生成。URL 省略可（ローカルファイル名の突合は Step 1.6） | `/masterup` |
-| `/masterup <playlist-url>` | プレイリスト内の全曲をDL + マスター生成 | `/masterup https://music --prompt.com/playlist/xxx` |
+| `/music --master` | DL 済み音源（`02-Individual-music/`）からマスター生成。URL 省略可（ローカルファイル名の突合は Step 1.6） | `/music --master` |
+| `/music --master <playlist-url>` | プレイリスト内の全曲をDL + マスター生成 | `/music --master https://suno.com/playlist/xxx` |
 | `uv run yt-generate-master --loop N` | マスター生成時に全トラックを N 回繰り返して結合 | `uv run yt-generate-master --loop 3` |
 | `uv run yt-generate-master --target-duration MIN` | 目標尺 (分) 以上になる最小ループ回数を自動算出 | `uv run yt-generate-master --target-duration 150` |
 | `uv run yt-generate-master --no-loop` | skill-config の目標尺を無視して 1 パスで生成 | `uv run yt-generate-master --no-loop` |
@@ -125,7 +125,7 @@ Lyria で音源を生成するチャンネルでは `/music --generate` が `01-
 ## Suno fallback 経路
 
 suno-helper の一括ダウンロードが完了していれば、この経路は通らない。DL が途中で壊れた場合
-（プレイリスト HTML が読めない / CDN が 403・404 を返す）だけ [references/suno-fallback.md](references/suno-fallback.md)
+（プレイリスト HTML が読めない / CDN が 403・404 を返す）だけ [suno-fallback.md](suno-fallback.md)
 を読む。同ファイルに Step 2 / Step 3 の手動代替と、手動 DL からの復旧手順がある。
 
 **silent な続行は禁止**。不完全な master.mp3 を作らず、Suno 経路が壊れた可能性を報告して停止する。
@@ -225,7 +225,7 @@ fallback path（Step 2-3 で DL する場合）は従来どおり Step 2 の Web
 ### Step 2-3: MP3 の取得（suno-helper 済みなら不要）
 
 `02-Individual-music/` に MP3 が揃っていれば Step 4 へ進む。揃っていない場合は
-[references/suno-fallback.md](references/suno-fallback.md) の fallback 手順を使う。
+[suno-fallback.md](suno-fallback.md) の fallback 手順を使う。
 
 ### Step 4: 結果レポート
 
@@ -362,7 +362,7 @@ uv run yt-suno-audio-cleanup apply <collection-path> --jobs 1  # 明示的な直
 cleanup の有効・無効にかかわらず、マスター結合前に次の単一スクリプトを1回だけ実行する。計測・閾値判定・逸脱曲の特定はスクリプトを正とし、本文で再計算しない。receipt は対象 collection、全入力ファイルの basename / size / SHA-256、実測 LUFS、適用閾値、判定、全曲走査回数を保持する。
 
 ```bash
-LOUDNESS_SCRIPT="$(git rev-parse --show-toplevel 2>/dev/null)/.claude/skills/masterup/references/check_loudness_deviation.py"; if [ ! -f "$LOUDNESS_SCRIPT" ]; then printf 'ERROR: loudness gate script not found: %s\n' "$LOUDNESS_SCRIPT" >&2; exit 1; fi; uv run python3 "$LOUDNESS_SCRIPT" <collection-path> --receipt <collection-path>/01-master/.loudness-receipt.json
+LOUDNESS_SCRIPT="$(git rev-parse --show-toplevel 2>/dev/null)/.claude/skills/music/references/check_loudness_deviation.py"; if [ ! -f "$LOUDNESS_SCRIPT" ]; then printf 'ERROR: loudness gate script not found: %s\n' "$LOUDNESS_SCRIPT" >&2; exit 1; fi; uv run python3 "$LOUDNESS_SCRIPT" <collection-path> --receipt <collection-path>/01-master/.loudness-receipt.json
 ```
 
 `git rev-parse` は同期済み skill が置かれた workspace root だけを解決し、実行 CWD は変更しない。したがって `channels/<channel>` を CWD にするマルチチャンネル workspace でも、そのチャンネルの `config/channel/` を読みながら同梱スクリプトを起動できる。
@@ -551,15 +551,15 @@ fi
 
 `uv run yt-generate-master`（ffmpeg クロスフェード結合）は **30 秒〜2 分**。Step 3 の `curl` による MP3 一括ダウンロードも曲数が多いと数十秒〜分単位かかる。
 
-ログを `/tmp/masterup-$(date +%s).log` へ redirect し、完了後は末尾から `master.mp3` のパスとダウンロード成功曲数を報告する。background 実行フラグを持たない環境（Codex 等）では `nohup ... > <log> 2>&1 &` を使い、完了はログ末尾で確認する。
+ログを `/tmp/music-master-$(date +%s).log` へ redirect し、完了後は末尾から `master.mp3` のパスとダウンロード成功曲数を報告する。background 実行フラグを持たない環境（Codex 等）では `nohup ... > <log> 2>&1 &` を使い、完了はログ末尾で確認する。
 
 ## オーディオビジュアライザー / オーバーレイ
 
-`/masterup` は**音源（mp3 / wav）を作る工程**で、映像オーバーレイ（ビジュアライザー・波形・購読ボタンポップアップ等）は扱わない。
-ユーザーから「ビジュアライザー付きで」「波形を出して」等の指示があっても、`/masterup` 段階では何も合成できない。
+`/music --master` は**音源（mp3 / wav）を作る工程**で、映像オーバーレイ（ビジュアライザー・波形・購読ボタンポップアップ等）は扱わない。
+ユーザーから「ビジュアライザー付きで」「波形を出して」等の指示があっても、`/music --master` 段階では何も合成できない。
 
 ビジュアライザー周りの現行仕様は `/video --generate` の「オーディオビジュアライザー / オーバーレイについて」節を参照。必要な場合は `/video --generate` 実行前に `config/channel/youtube.json::overlays.enabled: true` と overlay 詳細設定を用意する。
-誤指示の事故防止のため、masterup 着手前に動画にオーバーレイが必要かをユーザーへ確認すること（#646 feedback）。
+誤指示の事故防止のため、`/music --master` 着手前に動画にオーバーレイが必要かをユーザーへ確認すること（#646 feedback）。
 
 ## Next Step
 

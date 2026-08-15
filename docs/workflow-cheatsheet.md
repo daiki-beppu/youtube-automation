@@ -58,7 +58,7 @@ Phase 1 ─ 企画 + 素材準備           /wf-new
    └─ /thumbnail --loop               (背景ループ動画)
                           ↓ phase: "prepared"
 Phase 2 ─ 制作                      /wf-next
-   ├─ Suno パス: /masterup           (Suno UI で人手生成 → DL + クロスフェード)
+   ├─ Suno パス: /music --master           (Suno UI で人手生成 → DL + クロスフェード)
    └─ Lyria パス: /music --generate             (Lyria 3 API でセグメント生成)
                           ↓ raw_master 配置 → ユーザーが mixing+mastering
                           ↓ 最終マスターを 01-master/ に配置

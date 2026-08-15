@@ -93,7 +93,7 @@ def test_collection_server_consumers_reference_shared_contract() -> None:
     consumers = (
         SKILLS / "music" / "references" / "generate.md",
         SKILLS / "distrokid-helper" / "SKILL.md",
-        SKILLS / "masterup" / "SKILL.md",
+        SKILLS / "music" / "references" / "master.md",
         SKILLS / "music" / "references" / "prompt.md",
         SKILLS / "wf-new" / "SKILL.md",
         SKILLS / "wf-new" / "references" / "phase2.md",
