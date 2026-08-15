@@ -7,6 +7,8 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import TypeAlias
 
+from youtube_automation.infrastructure.file_lock import file_lock as file_lock
+
 JSONValue: TypeAlias = str | int | float | bool | None | list["JSONValue"] | dict[str, "JSONValue"]
 
 
