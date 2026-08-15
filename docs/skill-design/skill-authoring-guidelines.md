@@ -123,7 +123,7 @@ mode と modifier は次のように分けて記載する。
 - 値を伴う variant も名前付き引数として表現する
 
 - mode の実例: [analytics の `--collect`](../../.claude/skills/analytics/SKILL.md)
-- modifier の実例: 複数の対象を選べる `--suno`、`--distrokid`、`--community`
+- modifier の実例: [publish の `--batch`](../../.claude/skills/publish/SKILL.md)（`--community` mode の生成方法を修飾）
 - 値を伴う variant の実例: [flop-analysis の `--since <N>`](../../.claude/skills/flop-analysis/SKILL.md)
 
 ### description（スキル選択の API）

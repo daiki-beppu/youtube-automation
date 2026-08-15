@@ -434,7 +434,7 @@ def compute_vote_log_weights(
 
 _POLL_DEPRECATION_MESSAGE = (
     "community-draft type='poll' は DEPRECATED です。"
-    "新規投稿は /community-draft --batch、既存 poll 結果の記録は "
+    "新規投稿は /publish --community --batch、既存 poll 結果の記録は "
     "yt-vote-log append を使用してください."
 )
 

@@ -1173,7 +1173,7 @@ def test_suno_helper_docs_use_the_visible_server_source_picker_contract() -> Non
 
 
 def test_community_draft_documents_typed_batch_generator_contract() -> None:
-    text = _read(".claude/skills/community-draft/SKILL.md")
+    text = _read(".claude/skills/publish/references/community.md")
 
     assert "load_config().community_draft.posts" in text
     assert re.search(r"単一ソースは\s+`references/generate_batch\.py`\s+とし", text)
@@ -1187,7 +1187,7 @@ def test_community_draft_documents_typed_batch_generator_contract() -> None:
 
 
 def test_community_draft_does_not_require_upstream_adr() -> None:
-    text = _read(".claude/skills/community-draft/SKILL.md")
+    text = _read(".claude/skills/publish/references/community.md")
 
     assert "docs/adr/0019-community-helper-extension.md" not in text
 

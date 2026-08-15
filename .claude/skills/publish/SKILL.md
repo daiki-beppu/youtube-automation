@@ -1,7 +1,7 @@
 ---
 name: publish
 purpose: 公開する
-description: "Use when 完成した動画を公開工程へ進めるとき。--playlist はプレイリストの作成・割り当て・確認、--upload は YouTube アップロード、--community はコミュニティ投稿テキスト生成から Studio 起動までを実行する。「プレイリスト作って」「初投稿」「初回投稿」「初回公開前にプレイリスト初期化」「コミュニティ投稿」「投稿準備」「アップロード」「公開する」で発動。動画生成は /video の generate mode、概要欄生成は /video-description、JSON バッチ生成は /community-draft"
+description: "Use when 完成した動画を公開工程へ進めるとき。--playlist はプレイリストの作成・割り当て・確認、--upload は YouTube アップロード、--community はコミュニティ投稿を準備し、--batch で JSON バッチ生成へ切り替える。「プレイリスト作って」「初投稿」「初回投稿」「初回公開前にプレイリスト初期化」「コミュニティ投稿」「投稿バッチ」「投稿準備」「アップロード」「公開する」で発動。動画生成は /video の generate mode、概要欄生成は /video-description"
 ---
 
 ## 前後工程
@@ -35,6 +35,14 @@ description: "Use when 完成した動画を公開工程へ進めるとき。--p
 
 未知 mode や複数 mode は利用可能な mode を表示して停止する。
 
+## 修飾フラグ
+
+| modifier | 効果 |
+|---|---|
+| `--batch` | `--community` の config テンプレートから投稿バッチ JSON を生成する |
+
+`--batch` は明示した `--community` と組み合わせた場合だけ有効。`--playlist` / `--upload` との併用、または mode なしの `--batch` はエラーとして停止し、無視や chain 実行への fallback をしない。
+
 ## 設定読み込みゲート
 
 `youtube_automation.configuration.skills.load_skill_config("publish")` で次を deep-merge し、チャンネル上書きを優先する。upload mode は `config["upload"]` を使う。
@@ -65,7 +73,7 @@ description: "Use when 完成した動画を公開工程へ進めるとき。--p
 
 `--upload` では `references/upload.md` を読み、`content_model.type` に応じて collection は `uv run yt-upload-collection`、release は `uv run yt-upload-auto` を使う。plan や status は read-only として先に実行できるが、実 upload は上記承認ゲートを通過してから行う。
 
-`--community` では `references/community.md` を読み、固定テンプレを保存・クリップボードへコピーして Studio を開く。動画添付と投稿はユーザーが Studio 上で手動実行する。`--batch` は後続 issue のため、現段では `/community-draft` を案内する。
+`--community` では `references/community.md` を読む。`--batch` なしは固定テンプレを保存・クリップボードへコピーして Studio を開き、動画添付と投稿はユーザーが手動実行する。`--community --batch` は同 reference の batch 分岐だけを実行し、単発投稿の保存・`pbcopy`・Studio 起動を行わない。
 
 `/post-publish` が構成済みなら upload 完了後にその chain へ委譲する。community-post、pinned-comment、metadata-audit の承認・履歴・再開契約をここへ複製しない。
 
