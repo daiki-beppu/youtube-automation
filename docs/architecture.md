@@ -98,7 +98,7 @@ CLAUDE.md の「アーキテクチャ」節の詳細版。要点は CLAUDE.md �
 
 **軽量レジーム / 重量レジーム**: メディア工程（動画生成）の負荷 2 分類。分岐の正体は `config/channel/youtube.json::overlays.enabled` で、軽量は映像 stream copy（2 時間尺でも数分・クラウド実行対象）、重量はオーディオスペクトラム visualizer 等を全尺 filter_complex + libx264 再エンコード（当面 local 実行の暫定例外）。実行基盤の適性はこの 2 レジームで別々に評価する（ADR-0025）。
 
-**正常完了**: ローカル音源・成果物の削除可能条件。Git 正本 state の 3 条件（`stage: "live"` / `phase: "complete"` / `upload.video_id` 非空）に加え、`upload.publish_at` が存在すればその経過、distrokid 有効チャンネルでは DistroKid 提出完了の記録を要する。判定は pull 成功後の state で行い、pull 失敗は fail-closed で削除しない。削除は live-clean の手動承認フローに一本化する（ADR-0027）。
+**正常完了**: ローカル音源・成果物の削除可能条件。Git 正本 state の 3 条件（`stage: "live"` / `phase: "complete"` / `upload.video_id` 非空）に加え、`upload.publish_at` が存在すればその経過、distrokid 有効チャンネルでは DistroKid 提出完了の記録を要する。判定は pull 成功後の state で行い、pull 失敗は fail-closed で削除しない。削除は `/publish --clean` の手動承認フローに一本化する（ADR-0027）。
 
 ## 自リポジトリ
 

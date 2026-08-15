@@ -46,6 +46,7 @@ class MigrationPlan:
 # apply は利用者の明示実行だけで行い、旧 loader key は互換入口として維持する。
 SKILL_CONFIG_MIGRATIONS: Final[Mapping[str, SkillConfigMigration]] = {
     "community-post": SkillConfigMigration("publish", "community"),
+    "live-clean": SkillConfigMigration("publish", "clean"),
     "suno": SkillConfigMigration("music", "prompt"),
     "suno-lyric": SkillConfigMigration("music", "lyric"),
     "video-upload": SkillConfigMigration("publish", "upload"),

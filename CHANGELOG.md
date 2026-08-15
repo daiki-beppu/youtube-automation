@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(skills)`: `/publish --clean` に旧 `/live-clean` の公開完了ガード、不可逆削除の dry-run・明示承認、大容量メディアと `tmp/` 残骸の掃除を統合する。clean は任意 mode として publish chain へ追加せず、旧 config を `publish.yaml::clean` へ移行できる互換入口と利用者導線・site 契約を更新する（#3846）。
+
 - `feat(skills)`: `/publish --pinned` に旧 `/pinned-comment` の dry-run → apply、投稿履歴、preflight、手動ピン留め契約を統合する。publish chain を `playlist` → `upload` → `community` → `pinned` へ拡張し、post-publish の承認・予約再開契約を維持したまま、旧 skill directory と利用者導線・site 契約を更新する（#3845）。
 
 - `feat(skills)`: `/publish --community --batch` modifier に旧 `/community-draft` の決定的 JSON 投稿バッチ生成を統合する。`--batch` は community mode 専用として fail-closed に検証し、generator・利用者導線・配布・site 契約を新 owner へ移す（#3844）。

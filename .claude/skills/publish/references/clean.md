@@ -1,8 +1,4 @@
----
-name: live-clean
-purpose: 公開する
-description: "Use when live コレクションの大容量メディアを削除して容量回復するとき、または collections 配下の tmp/ 残骸を掃除するとき。「容量」「クリーンアップ」「live 整理」「でかいファイル」「tmp 掃除」「残骸」で発動"
----
+# Clean mode
 
 ## 前後工程
 
@@ -13,7 +9,7 @@ description: "Use when live コレクションの大容量メディアを削除�
 ## 成果物
 
 - `書き込む`: `なし`
-- `読み込む`: `collections/live/<id>/workflow-state.json`, `config/skills/live-clean.yaml`
+- `読み込む`: `collections/live/<id>/workflow-state.json`, `config/skills/publish.yaml`, `config/skills/live-clean.yaml`
 
 ## Overview
 
@@ -25,10 +21,10 @@ description: "Use when live コレクションの大容量メディアを削除�
 
 以下を deep-merge した値を設定として使う。削除対象と保護パターンはここで読んだ値を正とする。
 
-1. `.claude/skills/live-clean/config.default.yaml`
-2. `config/skills/live-clean.yaml`（存在する場合）
+1. `.claude/skills/publish/config.default.yaml::clean`
+2. `config/skills/publish.yaml::clean`（存在する場合）
 
-合成規則は `youtube_automation.configuration.skills.load_skill_config("live-clean")` と同じで、チャンネル上書きが優先される（リストは丸ごと置換）。存在しない override は未設定として扱い、勝手に作成しない。
+合成規則は `youtube_automation.configuration.skills.load_skill_config("publish")["clean"]` と同じで、チャンネル上書きが優先される（リストは丸ごと置換）。存在しない override は未設定として扱い、勝手に作成しない。旧 `config/skills/live-clean.yaml` は `uv run yt-skills migrate-config` で `publish.yaml::clean` へ移行でき、移行前も `load_skill_config("live-clean")` が互換入口として機能する。
 
 ## 前提
 
@@ -42,9 +38,9 @@ description: "Use when live コレクションの大容量メディアを削除�
 
 | 引数 | 説明 | 例 |
 |------|------|-----|
-| なし | 全 live コレクションをスキャン | `/live-clean` |
-| テーマ名 | 部分一致でフィルタ | `/live-clean harbor` |
-| `tmp` | collections 配下の tmp/ 残骸を掃除（後述の tmp/ 残骸クリーンアップモード） | `/live-clean tmp` |
+| なし | 全 live コレクションをスキャン | `/publish --clean` |
+| テーマ名 | 部分一致でフィルタ | `/publish --clean harbor` |
+| `tmp` | collections 配下の tmp/ 残骸を掃除（後述の tmp/ 残骸クリーンアップモード） | `/publish --clean tmp` |
 
 `$ARGUMENTS` が `tmp` の場合は Step 1〜5 を実行せず、「tmp/ 残骸クリーンアップモード」セクションへ分岐する。
 
@@ -102,7 +98,7 @@ Live Collection クリーンアップ — ドライラン
 安全条件未達（スキップ）: N コレクション
 ```
 
-表示後、AskUserQuestion で確認を取る。質問文には削除対象の実数(「削除対象: N コレクション / M ファイル / X.X GB」)と「削除は取り消せません（rm -f による物理削除）」を含め、選択肢は「削除を実行する」「キャンセル」の明示 2 択とする(デフォルトを実行側にしない)。「削除を実行する」が明示的に選ばれた場合のみ Step 4 へ進む。それ以外の応答（自由文・別話題・無回答）はすべてキャンセル扱いとし、絶対に削除を実行しない。AskUserQuestion 非対応環境(Codex 等)では同内容をテキストで提示し、ユーザーからの明示的な承認発言を待つ。無応答・曖昧な返答のまま Step 4 に進んではならない。
+表示後、AskUserQuestion で確認を取る。質問文には削除対象の実数(「削除対象: N コレクション / M ファイル / X.X GB」)と「削除は取り消せません（rm -f による物理削除）」を含め、選択肢は「削除を実行する」「キャンセル」の明示 2 択とする(デフォルトを実行側にしない)。承認されるまで Step 4 へ進まない。「削除を実行する」が明示的に選ばれた場合のみ Step 4 へ進む。それ以外の応答（自由文・別話題・無回答）はすべてキャンセル扱いとし、絶対に削除を実行しない。AskUserQuestion 非対応環境(Codex 等)では同内容をテキストで提示し、ユーザーからの明示的な承認発言を待つ。無応答・曖昧な返答のまま Step 4 に進んではならない。
 
 ### Step 4: 削除実行
 
@@ -143,7 +139,7 @@ rm -f "collections/live/<dir>/10-assets/loop_normalized.mp4"
 du -sh collections/live/
 ```
 
-## tmp/ 残骸クリーンアップモード（`/live-clean tmp`）
+## tmp/ 残骸クリーンアップモード（`/publish --clean tmp`）
 
 `collections/` 配下の各コレクションディレクトリに残った `tmp/` ディレクトリ（中間生成物・作業ファイルの残骸）を、一覧提示 → 明示承認のうえで除去する。live に限らず `collections/planning/` 等の全ステージが対象。
 
@@ -212,7 +208,7 @@ tmp/ 残骸クリーンアップ完了
 | 責務 | 担当 |
 |------|------|
 | live コレクションの大容量メディア削除（容量回復の本丸） | 本 skill の Step 1〜5 |
-| collections 配下の tmp/ 残骸掃除（衛生維持） | 本 skill の tmp/ モード（`/live-clean tmp`） |
+| collections 配下の tmp/ 残骸掃除（衛生維持） | clean mode の tmp/ 分岐（`/publish --clean tmp`） |
 | `<CHANNEL_DIR>/tmp/veo-operations/` の resume state | /thumbnail --loop（不要時の手動削除手順は同 skill 参照） |
 | `<CHANNEL_DIR>/tmp/lyria-recovered/` の退避音源 | /music --generate |
 

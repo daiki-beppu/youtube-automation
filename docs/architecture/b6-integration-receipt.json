@@ -661,7 +661,7 @@
     },
     {
       "old_owner": "legacy..claude.skills.live-clean.SKILL.md",
-      "exact_new_owner": ".claude/skills/live-clean/SKILL.md",
+      "exact_new_owner": ".claude/skills/publish/references/clean.md",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"

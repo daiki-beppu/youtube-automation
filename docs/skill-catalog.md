@@ -40,7 +40,6 @@ PDCA 対応: 準備 = 準備する / Plan = 調べる → 決める / Do = 進�
 - `/comments-reply` — Use when 公開済み YouTube 動画のコメントへ自動返信するとき。
 - `/distrokid-helper` — Use when コレクションの楽曲を DistroKid 配信用に準備し、distrokid-helper Chrome 拡張へ渡すローカルサーバーを起動したいとき（30-distrokid 生成 / disc 分割 / metadata.md / ジャケット 3000×3000 新規生成 / uv run yt-collection-serve 起動）。
 - `/live-chat-reply` — Use when 配信中の YouTube ライブチャットへ常駐 daemon で自動返信するとき。
-- `/live-clean` — Use when live コレクションの大容量メディアを削除して容量回復するとき、または collections 配下の tmp/ 残骸を掃除するとき。
 - `/post-publish` — Use when 動画公開直後の community-post → pinned-comment → metadata-audit を承認ゲート付きで一括実行・途中再開するとき。
 - `/publish` — Use when 完成した動画を公開工程へ進めるとき。
 

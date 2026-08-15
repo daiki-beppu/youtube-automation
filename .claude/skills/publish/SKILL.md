@@ -1,13 +1,13 @@
 ---
 name: publish
 purpose: 公開する
-description: "Use when 完成した動画を公開工程へ進めるとき。--playlist はプレイリスト管理、--upload は YouTube アップロード、--community はコミュニティ投稿準備、--batch は JSON バッチ生成、--pinned はオーナー固定コメント投稿を実行する。「プレイリスト作って」「初投稿」「初回投稿」「初回公開前にプレイリスト初期化」「コミュニティ投稿」「投稿バッチ」「固定コメント」「ピンコメント」「アップロード」「公開する」で発動。動画生成は /video の generate mode、概要欄生成は /video-description"
+description: "Use when 完成した動画を公開工程へ進めるとき。--playlist はプレイリスト管理、--upload は YouTube アップロード、--community はコミュニティ投稿準備、--batch は JSON バッチ生成、--pinned はオーナー固定コメント投稿、--clean は公開済みメディアや tmp 残骸の削除を実行する。「プレイリスト作って」「初投稿」「初回投稿」「初回公開前にプレイリスト初期化」「コミュニティ投稿」「投稿バッチ」「投稿準備」「固定コメント」「ピンコメント」「容量」「クリーンアップ」「live 整理」「でかいファイル」「tmp 掃除」「残骸」「アップロード」「公開する」で発動。動画生成は /video の generate mode、概要欄生成は /video-description"
 ---
 
 ## 前後工程
 
 - `前工程`: `/wf-new`, `/video --generate`, `/video-description`, `/thumbnail`
-- `後工程`: `/post-publish`, `/metadata-audit`, `/live-clean`
+- `後工程`: `/post-publish`, `/metadata-audit`
 - `委譲先`: `/post-publish`
 
 ## 成果物
@@ -21,7 +21,7 @@ description: "Use when 完成した動画を公開工程へ進めるとき。--p
 
 ## モード判定
 
-`$ARGUMENTS` から `--playlist` / `--upload` / `--community` / `--pinned` の個数を最初に数える。
+`$ARGUMENTS` から `--playlist` / `--upload` / `--community` / `--pinned` / `--clean` の個数を最初に数える。
 
 - 2 個以上なら排他違反として停止し、1 つだけ指定するよう促す
 - 1 個なら対応する reference を読み、その一段だけを実行する。残りの引数はその mode の引数として扱う
@@ -33,6 +33,7 @@ description: "Use when 完成した動画を公開工程へ進めるとき。--p
 | `--upload` | `references/upload.md` |
 | `--community` | `references/community.md` |
 | `--pinned` | `references/pinned.md` |
+| `--clean` | `references/clean.md` |
 
 未知 mode や複数 mode は利用可能な mode を表示して停止する。
 
@@ -42,18 +43,18 @@ description: "Use when 完成した動画を公開工程へ進めるとき。--p
 |---|---|
 | `--batch` | `--community` の config テンプレートから投稿バッチ JSON を生成する |
 
-`--batch` は明示した `--community` と組み合わせた場合だけ有効。`--playlist` / `--upload` / `--pinned` との併用、または mode なしの `--batch` はエラーとして停止し、無視や chain 実行への fallback をしない。
+`--batch` は明示した `--community` と組み合わせた場合だけ有効。`--playlist` / `--upload` / `--pinned` / `--clean` との併用、または mode なしの `--batch` はエラーとして停止し、無視や chain 実行への fallback をしない。
 
 ## 設定読み込みゲート
 
-`youtube_automation.configuration.skills.load_skill_config("publish")` で次を deep-merge し、チャンネル上書きを優先する。upload mode は `config["upload"]` を使う。
+`youtube_automation.configuration.skills.load_skill_config("publish")` で次を deep-merge し、チャンネル上書きを優先する。upload mode は `config["upload"]`、clean mode は `config["clean"]` を使う。
 
 1. `.claude/skills/publish/config.default.yaml`
 2. `config/skills/publish.yaml`（存在する場合）
 
 存在しない override は未設定として扱い、勝手に作成しない。
 
-旧 `config/skills/video-upload.yaml` と `config/skills/community-post.yaml` は `uv run yt-skills migrate-config` でそれぞれ `publish.yaml::upload` と `publish.yaml::community` へ移行する。移行前も `load_skill_config("video-upload")` と `load_skill_config("community-post")` が各節の互換入口として機能する。
+旧 `config/skills/video-upload.yaml`、`config/skills/community-post.yaml`、`config/skills/live-clean.yaml` は `uv run yt-skills migrate-config` でそれぞれ `publish.yaml::upload`、`publish.yaml::community`、`publish.yaml::clean` へ移行する。移行前も `load_skill_config("video-upload")`、`load_skill_config("community-post")`、`load_skill_config("live-clean")` が各節の互換入口として機能する。
 
 ## Chain Contract
 
@@ -78,6 +79,8 @@ description: "Use when 完成した動画を公開工程へ進めるとき。--p
 `--community` では `references/community.md` を読む。`--batch` なしは固定テンプレを保存・クリップボードへコピーして Studio を開き、動画添付と投稿はユーザーが手動実行する。`--community --batch` は同 reference の batch 分岐だけを実行し、単発投稿の保存・`pbcopy`・Studio 起動を行わない。
 
 `--pinned` では `references/pinned.md` を読み、`yt-pinned-comment` の `--dry-run` で PASS 条件を確認してから、承認ゲート後に `--apply` で投稿する。ピン留め自体は Studio UI で手動実行する。
+
+`--clean` では `references/clean.md` を読み、公開完了の 3 条件を同一 skill 内で検証する。対象と容量を dry-run 表示し、不可逆な物理削除への明示承認を得た場合だけ削除する。clean は任意操作のため chain manifest へ追加しない。
 
 `/post-publish` が構成済みなら upload 完了後にその chain へ委譲する。community-post、pinned-comment、metadata-audit の承認・履歴・再開契約をここへ複製しない。
 

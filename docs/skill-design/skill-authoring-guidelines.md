@@ -39,7 +39,7 @@
 4. 承認されるまで実行しない
 
 - **悪い例**: 「確認のうえ削除する」とだけ書き、確認手段も承認前の停止も明記しない。
-- **良い実例**: [.claude/skills/live-clean/SKILL.md](../../.claude/skills/live-clean/SKILL.md) — 削除対象一覧を表示後に `AskUserQuestion` で確認し、承認まで削除しない（直後の Step で `rm -f` に限定）。
+- **良い実例**: [publish clean mode](../../.claude/skills/publish/references/clean.md) — 削除対象一覧を表示後に `AskUserQuestion` で確認し、承認まで削除しない（直後の Step で `rm -f` に限定）。
 
 ### 2. 前提の存在ガード
 
