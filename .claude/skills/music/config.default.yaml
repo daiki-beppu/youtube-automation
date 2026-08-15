@@ -380,3 +380,80 @@ lyric:
     require_sections: ["Verse", "Chorus"]
     # 1 セクションあたりの最大行数を超えたら警告
     warn_section_overflow: true
+
+generate:
+  # music_engine=suno の生成既定値。旧 config/skills/suno-helper.yaml override と互換。
+  suno:
+    unattended:
+      # 1 回の定期実行で新たに生成する entry 数。残りは resume checkpoint へ繰り越す。
+      max_entries: 10
+      # Suno に同時投入する Generate request 数（1 request = 2 clips）。
+      max_concurrent_generations: 3
+      # entry 単位の一時失敗を再試行する回数。
+      max_retries: 2
+      # ZIP 内の音声形式: mp3 / m4a / wav
+      download_format: mp3
+
+  # music_engine=lyria の生成既定値。旧 config/skills/lyria.yaml override と互換。
+  lyria:
+    # lyria skill default config
+    #
+    # Vertex AI Lyria 3 (`interactions` endpoint) を呼んで音源を生成する設定。
+    # チャンネル側で config/skills/lyria.yaml に上書き。
+    #
+    # Lyria 3 API は text / reference image / BPM / intensity / vocal-instrumental mode / lyrics
+    # を受け取れる。reference_image は構造化入力、その他はプロンプトに自動合成される。
+    # 1 リクエスト = 1 セグメント (~184 秒上限) で返るため、長尺は複数リクエストを連結する。
+    # 下記 default_* はチャンネル共通値で、generate_music() 呼び出し時に個別上書き可能。
+
+    # スキル無効化フラグ (true の場合 lyria スキルは /music --prompt を案内して終了)
+    _disabled: false
+
+    # 生成前のプロンプト・API パラメータ承認を省略する opt-in。
+    # true でも採用値の文書保存と 60 segment hard cap は維持する。
+    skip_generation_approval: false
+
+    # Lyria モデル
+    #   lyria-3-pro-preview  : 1 リクエストあたり最大約 184 秒（~3 分）生成。本生成用
+    #   lyria-3-clip-preview : 30 秒固定。プレビュー用 (--preview で自動使用)
+    model: lyria-3-pro-preview
+
+    # プロンプト先頭に入れる共通ジャンル句 (最小限、楽器名・ムード語は入れない)
+    # 推奨: "{genre} only, clean dry recording, no pads"
+    prompt_prefix: ""
+
+    # プロンプトに付与する補足スタイル句 (optional)
+    # ジャンル・雰囲気の補足用。prompt 本体と一緒にモデルに送られる。
+    style_hints: ""
+
+    # セグメント間クロスフェード秒数（複数リクエストを連結する場合に使う）
+    crossfade_sec: 5
+
+    # プロンプトに使わない禁止語 (Claude がプロンプト設計時にチェック)
+    ng_words:
+      - ambient pads
+      - ethereal choir
+      - cinematic
+      - orchestral
+      - epic
+      - synthesizer
+
+    # タイミング余裕 (分) — total_duration_min = audio.target_duration_min + duration_padding_min
+    duration_padding_min: 3
+
+    # チャンネル共通の BPM / intensity / mode / 参照画像のデフォルト。
+    # generate_music() 呼び出し時にチャンネル共通値として渡し、呼び出しごとに個別上書き可能。
+    # null の場合は呼び出し側で個別指定する（または未指定）。
+
+    # 目安 60-180。例: 90
+    default_bpm: null
+
+    # "low" | "medium" | "high" | null
+    default_intensity: null
+
+    # "instrumental" | "vocal" | null
+    default_mode: null
+
+    # コレクションルートからの相対パス文字列、または絶対パス。
+    # 例: "10-assets/main.png" — textless 動画背景 / ビジュアル参照画像を自動採用
+    default_reference_image: null

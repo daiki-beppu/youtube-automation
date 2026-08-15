@@ -997,6 +997,6 @@ def test_masterup_skill_documents_under_min_confirmation_gate():
     assert "min_song_sec=<sec>s" in text
     assert "続行する" in text
     assert "続行しない" in text
-    assert "/suno-helper" in text
+    assert "/music --generate" in text
     assert "Step 5 へ進まない" in text
     assert "`pair_selection.max_song_sec` 超過だけの候補では、この確認プロンプトを出さない" in text

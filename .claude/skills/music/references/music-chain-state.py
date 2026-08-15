@@ -13,6 +13,8 @@ import yaml
 from youtube_automation.configuration.skills import load_skill_config
 from youtube_automation.core.errors import ConfigError
 from youtube_automation.domains.suno.config import infer_suno_mode
+from youtube_automation.domains.suno.downloaded.archive import count_audio_files
+from youtube_automation.domains.suno.prompts import read_suno_prompt_entries
 
 EXIT_SKIP = 0
 EXIT_ERROR = 1
@@ -43,10 +45,10 @@ def _validate_manifest() -> None:
     if manifest.get("chainId") != "music":
         raise ManifestError("chainId must be music")
     steps = manifest.get("steps")
-    if not isinstance(steps, list) or len(steps) != 2 or not all(isinstance(step, dict) for step in steps):
-        raise ManifestError("steps must contain prompt and lyric")
+    if not isinstance(steps, list) or len(steps) != 3 or not all(isinstance(step, dict) for step in steps):
+        raise ManifestError("steps must contain prompt, lyric, and generate")
     identities = [(step.get("id"), step.get("skill")) for step in steps]
-    if identities != [("prompt", "music"), ("lyric", "music")]:
+    if identities != [("prompt", "music"), ("lyric", "music"), ("generate", "music")]:
         raise ManifestError("step order or owner is inconsistent")
 
 
@@ -137,6 +139,105 @@ def _evaluate_lyric(collection_path: Path) -> tuple[int, dict[str, object]]:
     }
 
 
+def _music_engine(collection_path: Path) -> str:
+    channel_dir = _channel_dir(collection_path)
+    youtube_config = _load_mapping(channel_dir / "config" / "channel" / "youtube.json")
+    engine = youtube_config.get("music_engine")
+    if engine not in {"suno", "lyria"}:
+        raise ManifestError("config/channel/youtube.json::music_engine must be suno or lyria")
+    return engine
+
+
+def _workflow_state(collection_path: Path) -> dict[str, object]:
+    state_path = collection_path / "workflow-state.json"
+    if not state_path.is_file():
+        return {}
+    try:
+        loaded = json.loads(state_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ManifestError(f"invalid workflow-state.json: {state_path}") from exc
+    if not isinstance(loaded, dict):
+        raise ManifestError(f"mapping required: {state_path}")
+    return loaded
+
+
+def _evaluate_suno_generate(collection_path: Path) -> tuple[int, dict[str, object]]:
+    missing_prerequisites = [
+        relative.as_posix() for relative in _PROMPT_OUTPUTS if not _artifact_exists(collection_path, relative)
+    ]
+    if missing_prerequisites:
+        return EXIT_BLOCKED, {
+            "step": "generate",
+            "engine": "suno",
+            "decision": "blocked",
+            "reason": "prompt_prerequisites_missing",
+            "missing": missing_prerequisites,
+            "next": "music --prompt",
+        }
+
+    try:
+        entry_count = len(read_suno_prompt_entries(collection_path))
+    except ValueError as exc:
+        raise ManifestError(str(exc)) from exc
+    if entry_count < 1:
+        raise ManifestError("suno-prompts.json must contain at least one entry")
+    expected_count = entry_count * 2
+    actual_count = count_audio_files(collection_path / "02-Individual-music")
+    state = _workflow_state(collection_path)
+    planning = state.get("planning")
+    music = planning.get("music") if isinstance(planning, dict) else None
+    assets = state.get("assets")
+    strict_complete = (
+        isinstance(music, dict)
+        and isinstance(music.get("suno_playlist_url"), str)
+        and bool(music["suno_playlist_url"])
+        and music.get("expected_file_count") == expected_count
+        and music.get("actual_file_count") == actual_count
+        and music.get("missing_file_count") == 0
+        and actual_count >= expected_count
+        and isinstance(assets, dict)
+        and assets.get("music_downloaded") is True
+    )
+    if not strict_complete:
+        return EXIT_RUN, {
+            "step": "generate",
+            "engine": "suno",
+            "decision": "run",
+            "reason": "suno_strict_completion_missing",
+            "expected_file_count": expected_count,
+            "actual_file_count": actual_count,
+        }
+    return EXIT_SKIP, {
+        "step": "generate",
+        "engine": "suno",
+        "decision": "skip",
+        "reason": "suno_generate_complete",
+        "outputs": ["02-Individual-music/"],
+    }
+
+
+def _evaluate_generate(collection_path: Path) -> tuple[int, dict[str, object]]:
+    engine = _music_engine(collection_path)
+    if engine == "suno":
+        return _evaluate_suno_generate(collection_path)
+    output = Path("01-master/master.mp3")
+    if not _artifact_exists(collection_path, output):
+        return EXIT_RUN, {
+            "step": "generate",
+            "engine": "lyria",
+            "decision": "run",
+            "reason": "lyria_master_missing",
+            "missing": [output.as_posix()],
+        }
+    return EXIT_SKIP, {
+        "step": "generate",
+        "engine": "lyria",
+        "decision": "skip",
+        "reason": "lyria_generate_complete",
+        "outputs": [output.as_posix()],
+    }
+
+
 def evaluate(collection_path: Path, step: str) -> tuple[int, dict[str, object]]:
     if not collection_path.is_dir():
         raise ManifestError(f"collection path is not a directory: {collection_path}")
@@ -144,13 +245,15 @@ def evaluate(collection_path: Path, step: str) -> tuple[int, dict[str, object]]:
         return _evaluate_prompt(collection_path)
     if step == "lyric":
         return _evaluate_lyric(collection_path)
+    if step == "generate":
+        return _evaluate_generate(collection_path)
     raise ManifestError(f"unknown step: {step}")
 
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--collection-path", type=Path, required=True)
-    parser.add_argument("--step", choices=("prompt", "lyric"), required=True)
+    parser.add_argument("--step", choices=("prompt", "lyric", "generate"), required=True)
     return parser
 
 

@@ -62,7 +62,7 @@ def test_music_exposes_lyric_mode_and_replaces_suno_lyric() -> None:
 def test_music_chain_adds_lyric_after_prompt() -> None:
     manifest = json.loads((SKILL_DIR / "references/music-chain-manifest.json").read_text(encoding="utf-8"))
 
-    assert [step["id"] for step in manifest["steps"]] == ["prompt", "lyric"]
+    assert [step["id"] for step in manifest["steps"]][:2] == ["prompt", "lyric"]
     lyric = manifest["steps"][1]
     assert lyric["skill"] == "music"
     assert lyric["prerequisiteArtifacts"] == manifest["steps"][0]["outputArtifacts"]
@@ -75,7 +75,7 @@ def test_music_chain_adds_lyric_after_prompt() -> None:
 def test_music_lyric_config_is_namespaced_and_keeps_legacy_loader() -> None:
     defaults = yaml.safe_load((SKILL_DIR / "config.default.yaml").read_text(encoding="utf-8"))
 
-    assert set(defaults) == {"prompt", "lyric"}
+    assert {"prompt", "lyric"} <= set(defaults)
     assert isinstance(defaults["lyric"], dict)
     assert "music.lyric" in skill_config.SKILL_ONLY_CONFIG_KEYS
     assert skill_config.skill_config_default_relative_path("suno-lyric") == Path("music/config.default.yaml")

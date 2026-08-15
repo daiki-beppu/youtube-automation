@@ -85,7 +85,7 @@ def test_worktree_sync_copies_overwrites_and_cleans_preview(tmp_path: Path) -> N
     env = _fake_git_env(tmp_path, worktree, main)
 
     result = _run(
-        SKILLS / "lyria" / "references" / "worktree_sync.sh",
+        SKILLS / "music" / "references" / "worktree_sync.sh",
         cwd=source,
         env=env,
     )
@@ -108,7 +108,7 @@ def test_worktree_sync_dry_run_preserves_files_and_git_failure_propagates(tmp_pa
     (source / "01-master" / "master.mp3").write_bytes(b"master")
     env = _fake_git_env(tmp_path, worktree, main)
     dry = _run(
-        SKILLS / "lyria" / "references" / "worktree_sync.sh",
+        SKILLS / "music" / "references" / "worktree_sync.sh",
         "--dry-run",
         cwd=source,
         env=env,
@@ -120,7 +120,7 @@ def test_worktree_sync_dry_run_preserves_files_and_git_failure_propagates(tmp_pa
 
     failed_env = _fake_git_env(tmp_path / "failure", worktree, main, fail=True)
     failed = _run(
-        SKILLS / "lyria" / "references" / "worktree_sync.sh",
+        SKILLS / "music" / "references" / "worktree_sync.sh",
         cwd=source,
         env=failed_env,
     )

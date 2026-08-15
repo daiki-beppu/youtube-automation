@@ -40,8 +40,8 @@ Claude はこのリポジトリ上で **「BGM チャンネルを運営して収
 
 | エンジン | プロンプト作成 | 楽曲生成 | マスター化 |
 |---|---|---|---|
-| `lyria` | `/lyria` | Vertex AI API で自動生成 | API が WAV を直接出力（`/masterup` 不要） |
-| `suno` | `/music --prompt`（ボーカルは `/music --lyric`） | Suno UI で人手生成 | `/masterup` で DL + クロスフェード |
+| `lyria` | `/music --generate` 内で設計 | `/music --generate` が Vertex AI API で自動生成 | API が master を直接出力（`/masterup` 不要） |
+| `suno` | `/music --prompt`（ボーカルは `/music --lyric`） | `/music --generate` が Suno UI を連続操作 | `/masterup` でクロスフェード |
 
 ---
 

@@ -24,7 +24,7 @@ from youtube_automation.domains.skills.inventory import SkillInventory
 _REPO_ROOT = REPO_ROOT
 _SKILL_INVENTORY = SkillInventory(_REPO_ROOT)
 SKILL_MD = _SKILL_INVENTORY.resolve_reference("music", "references/prompt.md")
-SUNO_HELPER_SKILL_MD = _SKILL_INVENTORY.skill_directory("suno-helper") / "SKILL.md"
+SUNO_HELPER_SKILL_MD = _SKILL_INVENTORY.skill_directory("music") / "references" / "generate.md"
 SUNO_HELPER_README_MD = _REPO_ROOT / "extensions" / "suno-helper" / "README.md"
 WF_NEW_SKILL_MD = _SKILL_INVENTORY.skill_directory("wf-new") / "SKILL.md"
 WF_NEW_PHASE2_MD = _SKILL_INVENTORY.resolve_reference("wf-new", "references/phase2.md")
@@ -110,7 +110,7 @@ def test_skill_md_documents_auto_inject_flow() -> None:
 
     PR #1574: `--allow-extension` は Python の `yt-collection-serve` に実装されているため、
     起動コマンド契約（machine-coupled）は実在 CLI を固定する。
-    PR #886: 旧 `Step 2.5` 表記は整数並びへ採番し直し、Step 3 タイトルに `/suno-helper` を露出。
+    PR #886: 旧 `Step 2.5` 表記は整数並びへ採番し直し、Step 3 タイトルに `/music --generate` を露出。
     """
     text = "\n".join((_read(), _read(EXTENSION_SERVE_MD)))
     for token in ("Step 3", "collection-serve", "suno-helper", "連続実行"):
@@ -207,7 +207,7 @@ def test_skill_md_documents_tracks_per_collection_for_instrumental() -> None:
     When 本文を読む
     Then インストモードが pattern モデルから `tracks_per_collection` ベースに刷新されたことが記載されている。
 
-    本 PR: `/suno-helper` の登場で連続生成 + playlist 一括化が自動化されたため、`/music --prompt` 側の
+    本 PR: `/music --generate` の登場で連続生成 + playlist 一括化が自動化されたため、`/music --prompt` 側の
     インストモードをフラットな `tracks_per_collection` 指定 → `ceil(N/2)` 個の独立 entry に
     切り替えた。読み手 (AI / operator) が旧モデルで yaml を書き始めないよう、新節タイトルと
     算出式の存在をここで機械的に担保する。
@@ -231,7 +231,7 @@ def test_suno_helper_documents_browser_use_primary_flow() -> None:
     for token in (
         "Agent primary flow: browser use",
         "yt-collection-serve",
-        "https://music --prompt.com/create",
+        "https://suno.com/create",
         '[data-suno-helper="control-panel"]',
         '[data-suno-control="server-source-trigger"]',
         'role="option"',
@@ -335,14 +335,14 @@ def test_suno_helper_documents_partial_finished_operator_contract() -> None:
 def test_wf_new_hands_off_to_suno_helper_browser_use_flow() -> None:
     """Given wf-new SKILL.md
     When Suno 後続案内を読む
-    Then user 操作前提ではなく /suno-helper の browser use 主経路へ接続している。
+    Then user 操作前提ではなく /music --generate の browser use 主経路へ接続している。
     """
     text = _read_wf_new()
     for token in (
-        "`/suno-helper` が browser use",
-        "次工程として `/suno-helper` の browser use 主導フロー",
+        "`/music --generate` が browser use",
+        "次工程として `/music --generate` の browser use 主導フロー",
         "suno-helper overlay / popup",
-        "handoff 条件は `/suno-helper` 側",
+        "handoff 条件は `/music --generate` 側",
     ):
         assert token in text, f"wf-new SKILL.md が suno-helper browser use 導線へ追従していない（`{token}` 不在）"
     for legacy in (
@@ -372,7 +372,7 @@ def test_wf_auto_runs_suno_helper_browser_flow_instead_of_handing_it_off() -> No
         "返された `masterup` 以降",
     ):
         assert token in section
-    assert "ユーザーへ `/suno-helper` の実行" in section
+    assert "ユーザーへ `/music --generate` の実行" in section
     assert "一括して依頼してはならない" in section
     assert "本人操作が不可欠な場合だけ" in section
 

@@ -37,6 +37,26 @@
       "idempotency": {
         "script": "references/music-chain-state.py"
       }
+    },
+    {
+      "id": "generate",
+      "skill": "music",
+      "prerequisiteArtifacts": [
+        "20-documentation/suno-patterns.yaml",
+        "20-documentation/suno-prompts.md",
+        "20-documentation/suno-prompts.json"
+      ],
+      "outputArtifacts": [
+        "02-Individual-music/",
+        "01-master/master.mp3"
+      ],
+      "approvalGate": {
+        "skip": false,
+        "configPath": "workflow.music.skip_approvals.generate"
+      },
+      "idempotency": {
+        "script": "references/music-chain-state.py"
+      }
     }
   ]
 }

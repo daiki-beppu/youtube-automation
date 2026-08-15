@@ -7,8 +7,8 @@ description: "Use when 新規コレクション制作を立ち上げるとき、
 ## 前後工程
 
 - `前工程`: `/setup --channel`, `/setup`
-- `後工程`: `/wf-next`, `/suno-helper`, `/post-publish`, `/analytics`
-- `委譲先`: `/analytics`, `/thumbnail`, `/music --prompt`, `/lyria`, `/thumbnail --loop`, `/suno-helper`, `/masterup`, `/wf-next`, `/post-publish`
+- `後工程`: `/wf-next`, `/music --generate`, `/post-publish`, `/analytics`
+- `委譲先`: `/analytics`, `/thumbnail`, `/music --prompt`, `/music --generate`, `/thumbnail --loop`, `/music --generate`, `/masterup`, `/wf-next`, `/post-publish`
 
 ## 成果物
 
@@ -41,7 +41,7 @@ description: "Use when 新規コレクション制作を立ち上げるとき、
 新コレクション開始オーケストレーター。フラグなしの通常入口は [`references/ideate.md`](references/ideate.md) の企画工程を読んでから立ち上げを続け、通常は企画選択 + サムネイル承認の2箇所で一時停止する。`workflow.wf_new.skip_plan_selection: true` の analytics mode / benchmark fallback mode では企画選択だけを自動化する。
 `/wf-new --auto` から同一 SKILL.md の通常入口へ入った場合も既存 gate と完了条件を維持し、auto mode 側で工程を再実装しない。新規初期化後は作成した collection 名を返し、同じ run 内の再評価へ接続する。
 `image_generation.auto_selection.enabled: true` かつ `mode: full` のチャンネルでは、サムネイル工程のテーマ確認・生成可否・textless 背景承認・候補承認を省略する。`planning-preview.png` があればそれを無人で最終サムネイルへ確定し、無ければ企画で確定した theme を `/thumbnail` へ渡して無人で確定する。
-Suno チャンネルではプロンプト生成後、`.claude/skills/extension/references/serve.md` の `--suno` 契約を直接読んで server の再利用または起動と疎通確認まで行い、続きは `/suno-helper` が browser use で Suno タブ上の拡張 overlay を操作できる状態にする。
+Suno チャンネルではプロンプト生成後、`.claude/skills/extension/references/serve.md` の `--suno` 契約を直接読んで server の再利用または起動と疎通確認まで行い、続きは `/music --generate` が browser use で Suno タブ上の拡張 overlay を操作できる状態にする。
 minimal mode では企画候補生成前にテーマ / ジャンル / 雰囲気の直接入力確認が追加される既存挙動を、`ttp_mode: false` の場合だけ適用する。`true` の場合は `/channel-research --benchmark` を案内して停止する。
 アナリティクス未収集の新チャンネルでも、ベンチマークから初回企画を開始する。`ttp_mode: false` の場合だけ、ベンチマークも無ければユーザー直接入力を使う。
 新規チャンネルの初回制作では、本制作 state を作る前に任意のパイロット検証を実施済みか確認し、未実施でもユーザーがスキップを選べば通常フローへ進める。
@@ -64,7 +64,7 @@ minimal mode では企画候補生成前にテーマ / ジャンル / 雰囲気�
 1. **channel config gate**: `config/channel/` が存在し、`load_config()` でロードできること。
    - 存在しない場合は `/setup --channel` を案内して停止する。
    - `load_config()` が失敗する場合は `/setup --import` を案内して停止する。
-   この状態では `/wf-new`、`/thumbnail`、`/music --prompt`、`/lyria` を呼ばない。
+   この状態では `/wf-new`、`/thumbnail`、`/music --prompt`、`/music --generate` を呼ばない。
 2. **前提未達時の state 変更禁止**: channel config gate で停止した場合、`uv run yt-init-collection` を実行しない。`collections/planning/`、`workflow-state.json`、`assets.*` を新規作成・更新しない。
 3. **Suno collection Style boundary**: Suno チャンネルで `/music --prompt` を呼ぶときは、対象 collection の絶対 path、確定企画、theme、書き込み先 `20-documentation/suno-patterns.yaml` を subagent へ渡す。collection 固有の `genre_line` / `exclude_styles` / `style_variants` / `vocal_gender` は同ファイルの root に書き、共有 `config/skills/music.yaml::prompt` を書き換えない。root に無い値だけが channel config へ fallback する。`suno_preset` は推奨入力であり、不在だけを理由に停止しない。利用可能なら TTP 根拠として渡し、無ければ `/music --prompt` が確定企画と制約から collection-local Style を設計する。`assets.music_prompts = true` は subagent 報告だけで更新せず、成果物、`yt-suno-verify`、semantic review をメインが検証した後に限る。
 4. **analytics input gate**: 入力モード判定、同日付 JSON、validator、stale 判定、自動更新、再検証は `/wf-new` の `references/freshness-rules.md::stale report の自動更新` に一元化する。`/wf-new` は判定ロジックを再定義せず、stale 判定や AskUserQuestion を先行実行しない。subagent が stale を検出した場合は、同 SSOT が返す自動更新シーケンスを同じ subagent 作業内で順次実行し、全呼び出し成功後に入力モード判定を先頭からやり直す。`yt-doctor` の `analytics_report` は予備確認にだけ使い、analytics mode の最終判定には使わない。
@@ -129,7 +129,7 @@ uv run yt-init-collection "Pilot Direction Check" "pilot-direction-check" --trac
 1. コマンド出力の `collections/planning/YYYYMMDD-<short>-pilot-direction-check-collection/` を控える。
 2. `/thumbnail pilot-direction-check` を実行し、`10-assets/main.png` / `10-assets/main.jpg` と `10-assets/thumbnail.jpg` で色味・構図を確認する。
 3. `/thumbnail --compare` を実行し、ベンチマーク競合との 320px 表示を確認する。現行の `yt-thumbnail-compare` は `collections/live/*/10-assets/thumbnail.jpg` を収集するため、仮コレクションの `thumbnail.jpg` を比較へ含める場合は一時的に `collections/live/_pilot-thumbnail-compare/10-assets/thumbnail.jpg` へコピーし、比較後に `collections/live/_pilot-thumbnail-compare/` を削除する。
-4. `workflow-state.json::music_engine` が `suno` なら `/music --prompt pilot-direction-check` でプロンプトを生成し、続けて `/suno-helper` で Suno UI へ投入・音源生成して試聴する。`lyria` なら `/lyria pilot-direction-check` を実行して生成音源を試聴し、ムード・テンポを確認する。
+4. `workflow-state.json::music_engine` が `suno` なら `/music --prompt pilot-direction-check` でプロンプトを生成し、続けて `/music --generate` で Suno UI へ投入・音源生成して試聴する。`lyria` なら `/music --generate pilot-direction-check` を実行して生成音源を試聴し、ムード・テンポを確認する。
 5. NG の場合は試作物を破棄し、サムネは `config/skills/thumbnail.yaml` の `image_generation.gemini.reference_images.default` / `composition_rules.*` / `diff_prompt_template`、Suno は `config/skills/music.yaml::prompt` の `genre_line` / `exclude_styles` / `style_influence` / `style_variation.*`、Lyria は `config/skills/lyria.yaml` の `prompt_prefix` / `style_hints` / `default_bpm` / `default_intensity` を調整して再試作する。
 6. OK の場合は、仮コレクションを削除して `/wf-new` を再実行する。仮コレクションを本制作へ昇格する場合は削除せず、既存 `collections/planning/` の続きとして `/wf-next` を使う。
 
@@ -151,7 +151,7 @@ uv run yt-init-collection "Pilot Direction Check" "pilot-direction-check" --trac
 | 直接実行 CLI（yt-init-collection / yt-populate-scene-phrases / yt-collection-preflight / yt-collection-serve） | 0 call（ローカル処理のみ） | — |
 | 内部企画工程（YouTube Data 数 units + Analytics、任意で Gemini） | 1 回分 | 企画プレビュー画像の実施有無 |
 | 委譲先 /thumbnail（Gemini 画像生成 + Vision） | 1 回分 | 候補枚数 / 再生成回数 |
-| 委譲先 /thumbnail --loop（Veo 3.1） | 1 call | `enabled: true` のチャンネルのみ。/lyria は本スキルでは設計のみで実行は /wf-next |
+| 委譲先 /thumbnail --loop（Veo 3.1） | 1 call | `enabled: true` のチャンネルのみ。/music --generate は本スキルでは設計のみで実行は /wf-next |
 
 - 上限 / 承認: 課金はすべて subagent 委譲先で発生するため、各委譲先 skill の「想定 API call 数」と承認ゲートに従う。各 skill-config で明示 opt-in された skip は承認済み設定として扱い、call 数・生成条件を成果物へ残す。
 
@@ -206,12 +206,12 @@ success を記録した後は同じ fixed collection を `plan --collection <fix
 | 1 | subagent: `/wf-new` | 入力モード候補を渡し、成果物検証後にメインが企画選択で停止 | 選択企画、プレビュー画像 |
 | 2 | `uv run yt-init-collection` | 選択企画から collection dir と初期 state を作る | `workflow-state.json` |
 | 3 | `uv run yt-populate-scene-phrases` | 多言語チャンネルの scene phrases を初期化 | `scene_phrases` |
-| 4 | Phase 2c initial dispatch: thumbnail + music | preview status を固定し、両方未完了なら thumbnail branch と `/music --prompt` または `/lyria` branch の exactly two Agent calls を同時起動する | `10-assets/thumbnail.jpg` または候補、Suno prompts または Lyria 設計 |
+| 4 | Phase 2c initial dispatch: thumbnail + music | preview status を固定し、両方未完了なら thumbnail branch と `/music --prompt` または `/music --generate` branch の exactly two Agent calls を同時起動する | `10-assets/thumbnail.jpg` または候補、Suno prompts または Lyria 設計 |
 | 5 | Phase 2c join + quality gate + textless subagent | 両初期 Agent を join し、メインが thumbnail の承認・QA・textless 確定と両 branch の成果物検証、直列 state 適用を行う。片側再開では未完了側だけを委譲する | `10-assets/thumbnail.jpg`, `10-assets/main.png/jpg`, music prompts |
 | 6 | subagent: `/thumbnail --loop` または静止背景運用 | `loop-video.enabled=true` なら生成を委譲しメインが検証。`enabled=false` なら Veo を呼ばず、メインが既存 textless `main.png/jpg` を静止背景として使う | `10-assets/loop.mp4` または textless `10-assets/main.png/jpg` |
 | 7 | `extension/references/serve.md`（Suno のみ） | 共有契約を直接読み、server 再利用または起動と疎通確認を行う | `http://localhost:<PORT>` |
 
-`/suno-helper` の Chrome 操作と `/wf-next` は `/wf-new` 内では実行しない。`/wf-new` は Suno 用 server 起動までを担い、次工程として `/suno-helper` の browser use 主導フローを案内する。
+`/music --generate` の Chrome 操作と `/wf-next` は `/wf-new` 内では実行しない。`/wf-new` は Suno 用 server 起動までを担い、次工程として `/music --generate` の browser use 主導フローを案内する。
 
 ### Phase 1: 企画（自動実行 + 入力モードに応じた一時停止）
 
@@ -278,7 +278,7 @@ Step 1（企画）を自動実行中...
 - サムネイル生成: `/thumbnail` スキル
 - ループ動画生成: `/thumbnail --loop` スキル
 - 音楽プロンプト生成: `/music --prompt` スキル
-- Suno UI への連続注入 + playlist 一括追加: `/suno-helper` スキル
-- 音楽プロンプト設計 + Lyria 3 API 呼び出し: `/lyria` スキル
+- Suno UI への連続注入 + playlist 一括追加: `/music --generate` スキル
+- 音楽プロンプト設計 + Lyria 3 API 呼び出し: `/music --generate` スキル
 - 後続ステップ管理: `/wf-next`
 - 進捗確認: `/wf-status`

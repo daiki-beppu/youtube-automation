@@ -91,8 +91,8 @@ Phase 3: 公開             /wf-next    動画→概要欄→アップロード�
 | `thumbnail` | boolean | サムネイル生成+承認済み（`10-assets/thumbnail.jpg`） |
 | `loop_video` | boolean / `"failed"` | ループ動画生成済み（`10-assets/loop.mp4`） |
 | `music_prompts` | boolean | 音楽プロンプト/composition 生成済み |
-| `music_downloaded` | boolean | Suno パスで `/suno-helper` の一括 DL 完了を示すフラグ（`02-Individual-music/` に音源が揃った状態）。`raw_master` 生成前段の DL 完了を独立追跡する。判定は primary: `02-Individual-music/` のファイル実在、secondary: 本フラグ。`yt-init-collection` の初期状態には含まれず、DL 完了時に遅延追加される |
-| `raw_master` | string / null | 自動生成された raw master のファイル名（/masterup or /lyria 出力） |
+| `music_downloaded` | boolean | Suno パスで `/music --generate` の一括 DL 完了を示すフラグ（`02-Individual-music/` に音源が揃った状態）。`raw_master` 生成前段の DL 完了を独立追跡する。判定は primary: `02-Individual-music/` のファイル実在、secondary: 本フラグ。`yt-init-collection` の初期状態には含まれず、DL 完了時に遅延追加される |
+| `raw_master` | string / null | 自動生成された raw master のファイル名（/masterup or /music --generate 出力） |
 | `master_audio` | string / null | ユーザーがミキシング+マスタリングした最終マスターのファイル名。`workflow.wf_next.skip_manual_mastering: true`（raw=final 運用）のチャンネルでは `/wf-next` が `raw_master` と同じファイル名を自動設定する。`workflow.wf_next.skip_audio_approval: false`（`wf_next` の boolean は全て true=手動工程を省く向き）のチャンネルでは確定前に `/wf-next` が承認を取る |
 | `master_video` | string / null | 生成されたマスター動画のファイル名 |
 | `description` | boolean | YouTube 概要欄生成済み（`20-documentation/descriptions.md`） |
@@ -146,7 +146,7 @@ Phase 3: 公開             /wf-next    動画→概要欄→アップロード�
 
 #### planning.music
 
-`/music --prompt` または `/lyria` 実行時に populate する。新規コレクションのみ必須化（既存コレクションは未マイグレーション、`/alignment-check` 側でフォールバック実装済み）。
+`/music --prompt` または `/music --generate` 実行時に populate する。新規コレクションのみ必須化（既存コレクションは未マイグレーション、`/alignment-check` 側でフォールバック実装済み）。
 
 | フィールド | 型 | 必須 | 説明 |
 |-----------|-----|---|------|
@@ -156,7 +156,7 @@ Phase 3: 公開             /wf-next    動画→概要欄→アップロード�
 | `planning.music.tempo` | string | Yes | `"very slow"` / `"slow"` / `"gentle"` / `"moderate"` / `"lively"` のいずれか |
 | `planning.music.instruments` | string[] | Yes | 主要楽器のリスト |
 | `planning.music.exclude` | string[] | No | 除外楽器（任意）|
-| `planning.music.suno_playlist_url` | string / null | No | Suno playlist URL（`/suno-helper` が DL 完了時に記録。Suno エンジンのみ。Lyria エンジンでは使用しない）|
+| `planning.music.suno_playlist_url` | string / null | No | Suno playlist URL（`/music --generate` が DL 完了時に記録。Suno エンジンのみ。Lyria エンジンでは使用しない）|
 
 **冪等性**: スキル再実行時は `planning.music` 全体を上書きする（merge しない）。
 

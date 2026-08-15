@@ -1,19 +1,19 @@
 ---
 name: music
 purpose: 作る
-description: "Use when 音楽制作を状態判定付きで一括実行または一段だけ実行するとき。Suno UI 投入用の Style / プロンプト生成は --prompt、ボーカル曲の歌詞生成は --lyric を使う。「音楽制作」「Suno プロンプト」「歌詞生成」「vocal」「rap」で発動。Suno UI 投入・マスター化は後続 mode で統合予定。Lyria チャンネルは /lyria を使う"
+description: "Use when 音楽制作を状態判定付きで一括実行または一段だけ実行するとき。Suno UI 投入用の Style / プロンプト生成は --prompt、ボーカル曲の歌詞生成は --lyric、music_engine に応じた Suno / Lyria 音源生成は --generate を使う。「音楽制作」「Suno プロンプト」「歌詞生成」「Suno 連続生成」「Lyria」「vocal」「rap」で発動。マスター化は後続 mode で統合予定"
 ---
 
 ## 前後工程
 
 - `前工程`: `/channel-strategy --constraints`
-- `後工程`: `/suno-helper`, `/masterup`
+- `後工程`: `/masterup`, `/video --generate`
 - `委譲先`: `なし`
 
 ## 成果物
 
-- `書き込む`: `collections/<id>/20-documentation/suno-patterns.yaml`, `collections/<id>/20-documentation/suno-prompts.md`, `collections/<id>/20-documentation/suno-prompts.json`, `collections/<id>/20-documentation/suno-lyrics.md`, `collections/<id>/20-documentation/suno-lyrics.json`, `collections/<id>/workflow-state.json`
-- `読み込む`: `docs/channel/creative-constraints.md`, `docs/channel/personas/persona-definition.md`, `data/video_analysis/<channel>/*.json`, `data/insights.jsonl`, `config/skills/music.yaml::prompt`, `config/skills/music.yaml::lyric`
+- `書き込む`: `collections/<id>/20-documentation/suno-patterns.yaml`, `collections/<id>/20-documentation/suno-prompts.md`, `collections/<id>/20-documentation/suno-prompts.json`, `collections/<id>/20-documentation/suno-lyrics.md`, `collections/<id>/20-documentation/suno-lyrics.json`, `collections/<id>/20-documentation/lyria-prompt.md`, `collections/<id>/02-Individual-music/*`, `collections/<id>/01-master/master.mp3`, `collections/<id>/workflow-state.json`
+- `読み込む`: `docs/channel/creative-constraints.md`, `docs/channel/personas/persona-definition.md`, `data/video_analysis/<channel>/*.json`, `data/insights.jsonl`, `config/channel/youtube.json::music_engine`, `config/skills/music.yaml::prompt`, `config/skills/music.yaml::lyric`, `config/skills/suno-helper.yaml`, `config/skills/lyria.yaml`
 
 ## モード判定
 
@@ -22,13 +22,14 @@ description: "Use when 音楽制作を状態判定付きで一括実行または
 - 2 個以上なら排他違反として停止し、1 つだけ指定するよう促す
 - 1 個なら対応する reference を読み、その一段だけを実行する。残りの引数はその mode の引数として扱う
 - 0 個なら chain manifest に従い状態判定付きで進める
-- 現段で実装済みの mode は `--prompt` / `--lyric`。`--generate` / `--master` は後続段で追加する予約名であり、現段では未知の mode として停止する
+- 現段で実装済みの mode は `--prompt` / `--lyric` / `--generate`。`--master` は後続段で追加する予約名であり、現段では未知の mode として停止する
 - mode は最大 5 件とし、判定規則を複製しない
 
 | mode | 読む reference |
 |---|---|
 | `--prompt` | `references/prompt.md` |
 | `--lyric` | `references/lyric.md` |
+| `--generate` | `references/generate.md` |
 
 ## 共通前提
 
@@ -48,13 +49,17 @@ loader は `load_skill_config("music.prompt")` を使う。存在しない overr
 
 `--lyric` は `.claude/skills/music/config.default.yaml::lyric` と `config/skills/music.yaml::lyric` を同様に deep-merge し、`load_skill_config("music.lyric")` を使う。旧 `config/skills/suno-lyric.yaml` と `load_skill_config("suno-lyric")` は互換入口として維持し、明示 migration 時だけ `config/skills/music.yaml::lyric` へ移す。
 
+`--generate` は `music_engine` を先に一度だけ解決し、Suno なら `.claude/skills/music/config.default.yaml::generate.suno` と旧 `config/skills/suno-helper.yaml`、Lyria なら `::generate.lyria` と旧 `config/skills/lyria.yaml` を deep-merge する。互換入口 `load_skill_config("suno-helper")` / `load_skill_config("lyria")` を維持し、存在しない override は勝手に作成しない。
+
+Suno 経路の server lifecycle は `extension/references/serve.md` を直接読み、起動済み server の再利用を含む `--suno` 契約を実行する。`/extension` への委譲や手順の複製は行わない。
+
 ## 一括実行
 
-`references/music-chain-manifest.json` と `references/music-chain-state.py` を検証する。本段の chain は `prompt` → `lyric` の 2 step で、後続段が `generate` / `master` を追加する。
+`references/music-chain-manifest.json` と `references/music-chain-state.py` を検証する。本段の chain は `prompt` → `lyric` → `generate` の 3 step で、後続段が `master` を追加する。Suno の instrumental collection では不要な `lyric` の blocked 判定を完了済みとして扱い、`generate` へ進む。Lyria は `music_engine` により `generate` へ直接分岐する。
 
 ```bash
 uv run python .claude/skills/music/references/music-chain-state.py \
-  --collection-path <collection-path> --step <prompt|lyric>
+  --collection-path <collection-path> --step <prompt|lyric|generate>
 ```
 
 | exit | `decision` | 処理 |
@@ -68,8 +73,18 @@ uv run python .claude/skills/music/references/music-chain-state.py \
 
 ## 完了条件
 
-- フラグなし: `prompt` と、必要な場合の `lyric` が `skip` または実行後 `skip` になっている
+- フラグなし: `prompt`、必要な場合の `lyric`、`generate` が `skip` または実行後 `skip` になっている
 - `--prompt`: `references/prompt.md` の完了条件を満たし、他の mode を実行していない
 - `--lyric`: `references/lyric.md` の完了条件を満たし、他の mode を実行していない
+- `--generate`: `references/generate.md` の engine 別完了条件を満たし、他の mode を実行していない
 
 実行段、skip 段、対象 collection、更新成果物を短く報告する。
+
+## 想定 API call 数
+
+| API | call 数 / 実行 | 変動要因 |
+|---|---|---|
+| Suno UI | entry 数分の Generate（1 Generate = 2 clips） | 選択 entry 数、duration guard 再生成、resume 状態 |
+| Vertex AI Lyria 3（yt-generate-lyria-master） | N call、N = ceil((audio.target_duration_min + duration_padding_min) × 60 / 184)（上限 60） | 目標尺、padding、retry。既存 segment は resume で skip |
+
+- 上限 / 承認: Suno はログイン・CAPTCHA・credit 確認を自動突破しない。Lyria は `skip_generation_approval: false` で生成条件を明示承認し、常に 60 segment hard cap を維持する。

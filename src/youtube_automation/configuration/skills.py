@@ -79,20 +79,24 @@ _MOVED_SKILL_CONFIG_DEFAULTS: Final[dict[str, Path]] = {
     "collection-ideate": Path("wf-new", "references", "collection-ideate.config.default.yaml"),
     "discover-competitors": Path("channel-research", "config.default.yaml"),
     "loop-video": Path("thumbnail", "config.default.yaml"),
+    "lyria": Path("music", "config.default.yaml"),
     "suno": Path("music", "config.default.yaml"),
+    "suno-helper": Path("music", "config.default.yaml"),
     "suno-lyric": Path("music", "config.default.yaml"),
     "video-upload": Path("publish", "config.default.yaml"),
     "videoup": Path("video", "config.default.yaml"),
 }
 
-_MOVED_SKILL_CONFIG_SECTIONS: Final[dict[str, str]] = {
-    "benchmark": "benchmark",
-    "discover-competitors": "discover",
-    "loop-video": "loop",
-    "suno": "prompt",
-    "suno-lyric": "lyric",
-    "video-upload": "upload",
-    "videoup": "generate",
+_MOVED_SKILL_CONFIG_SECTIONS: Final[dict[str, tuple[str, ...]]] = {
+    "benchmark": ("benchmark",),
+    "discover-competitors": ("discover",),
+    "loop-video": ("loop",),
+    "lyria": ("generate", "lyria"),
+    "suno": ("prompt",),
+    "suno-helper": ("generate", "suno"),
+    "suno-lyric": ("lyric",),
+    "video-upload": ("upload",),
+    "videoup": ("generate",),
 }
 
 # 名前空間移行後も、明示 migration 前の下流 override を同じ実行経路で読む。
@@ -389,6 +393,21 @@ def _split_skill_config_key(skill: str) -> tuple[str, str | None]:
     return owner, section
 
 
+def _select_moved_default_section(owner: str, defaults: dict[str, object]) -> dict[str, object]:
+    section_path = _MOVED_SKILL_CONFIG_SECTIONS.get(owner)
+    if section_path is None:
+        return defaults
+    selected: object = defaults
+    for section in section_path:
+        if not isinstance(selected, dict):
+            break
+        selected = selected.get(section)
+    if not isinstance(selected, dict):
+        dotted = ".".join(section_path)
+        raise ConfigError(f"skill-config {owner} は同梱 default の mapping 節 {dotted!r} として存在する必要があります")
+    return dict(selected)
+
+
 def load_skill_config(
     skill: str,
     *,
@@ -418,14 +437,7 @@ def load_skill_config(
 
     owner, section = _split_skill_config_key(skill)
     defaults = _load_yaml(_default_path(owner))
-    moved_section = _MOVED_SKILL_CONFIG_SECTIONS.get(owner)
-    if moved_section is not None:
-        selected_defaults = defaults.get(moved_section)
-        if not isinstance(selected_defaults, dict):
-            raise ConfigError(
-                f"skill-config {owner} は同梱 default の mapping 節 {moved_section!r} として存在する必要があります"
-            )
-        defaults = dict(selected_defaults)
+    defaults = _select_moved_default_section(owner, defaults)
 
     override_path = _resolve_channel_override(owner, channel_dir)
     legacy_override_owner: str | None = None

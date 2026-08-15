@@ -1,7 +1,7 @@
 ## 前後工程
 
 - `前工程`: `/setup --channel`, `/setup`
-- `後工程`: `/wf-next`, `/suno-helper`
+- `後工程`: `/wf-next`, `/music --generate`
 - `委譲先`: `/wf-new`, `/wf-new`
 
 ## 成果物

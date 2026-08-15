@@ -4,7 +4,7 @@
 master 化される事故（前コレクション曲の紛れ込み・最新セット未完）を
 fail-loud で検出する。
 
-照合キーは `/suno-helper` が Suno UI の Song Title 欄へ注入する
+照合キーは `/music --generate` が Suno UI の Song Title 欄へ注入する
 `entry.title ?? entry.name`。Suno 側でタイトルは保持される前提だが、
 空白ゆれ・Unicode 正規化差・大文字小文字は吸収する。
 """

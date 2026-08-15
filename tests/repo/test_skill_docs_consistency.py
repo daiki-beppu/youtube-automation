@@ -151,7 +151,7 @@ def test_wf_auto_is_the_integrated_entrypoint_without_copying_child_workflows() 
     wf_status = _read(".claude/skills/wf-status/SKILL.md")
     schema = _read(".claude/skills/wf-new/references/schema.md")
 
-    for child in ("wf-new", "lyria", "suno-helper", "masterup", "wf-next", "post-publish"):
+    for child in ("wf-new", "music --generate", "masterup", "wf-next", "post-publish"):
         assert f"`/{child}`" in wf_auto
     assert "no_active_collection" in wf_auto
     assert "同じ run 内" in wf_auto
@@ -918,7 +918,7 @@ def test_channel_strategy_followup_skill_routing_uses_new_contract() -> None:
     followup_direction_files = [
         ".claude/skills/alignment-check/SKILL.md",
         ".claude/skills/wf-new/references/ideate.md",
-        ".claude/skills/lyria/SKILL.md",
+        ".claude/skills/music/references/generate.md",
         ".claude/skills/flop-analysis/SKILL.md",
         ".claude/skills/video-analyze/SKILL.md",
     ]
@@ -1163,7 +1163,7 @@ def test_distrokid_helper_docs_describe_dynamic_selector_fetch_contract() -> Non
 
 
 def test_suno_helper_docs_use_the_visible_server_source_picker_contract() -> None:
-    skill = _read(".claude/skills/suno-helper/SKILL.md")
+    skill = _read(".claude/skills/music/references/generate.md")
     readme = _read("extensions/suno-helper/README.md")
 
     for text in (skill, readme):

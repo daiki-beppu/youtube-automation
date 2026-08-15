@@ -359,7 +359,7 @@ PY
 # 検出順:
 #   1. `workflow-state.json::assets.master_audio` — `/wf-next` が確定した最終マスター
 #   2. `master-mix.{wav,m4a,aac,mp3,flac}` — DAW バウンス・手動配置
-#   3. `master.{wav,m4a,aac,mp3,flac}` — `/lyria` / `/masterup` (`yt-generate-master`) の自動生成出力 (#507)
+#   3. `master.{wav,m4a,aac,mp3,flac}` — `/music --generate` / `/masterup` (`yt-generate-master`) の自動生成出力 (#507)
 # 拡張子は wav 優先、なければ m4a / aac / mp3 / flac の順
 MASTER_AUDIO=""
 STATE_MASTER_AUDIO=""

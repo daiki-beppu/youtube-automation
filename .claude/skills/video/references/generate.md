@@ -3,7 +3,7 @@
 `.claude/skills/` 配下の共有スクリプト（`yt-skills sync` で配布）を使ってマスター音源と動画を生成します。
 スクリプトは毎回生成せず、既存の汎用スクリプトを実行します。
 
-Suno 系チャンネルは `/music --master`、Lyria 系チャンネルは `/music --generate` でマスター音源を生成してから実行する。
+Suno 系チャンネルは `/masterup`、Lyria 系チャンネルは `/music --generate`（`/masterup` 不要）でマスター音源を生成してから実行する。
 
 背景構成は `config/skills/video.yaml::generate.video_type`（`loop` / `static`、既定 `loop`）で明示する。新しいタイプを追加する実装箇所は `references/video-type-extension.md` を参照する。
 
@@ -24,7 +24,7 @@ subagent は `workflow-state.json` へ書き込まない。完了報告は `stat
 以下を確認し、満たさなければ前工程を案内して停止する:
 
 - 対象コレクション（`collections/planning/` 配下）に `workflow-state.json` が存在すること。無ければ `/wf-new` を案内して停止する
-- マスター音源が存在すること（`workflow-state.json::assets.master_audio` が指すファイル、または `01-master/master-mix.*` / `master.*`）。無ければ `/music --master` または `/music --generate` を案内して停止する（DAW バウンス済みなら `master-mix.m4a` の手動配置でも可）
+- マスター音源が存在すること（`workflow-state.json::assets.master_audio` が指すファイル、または `01-master/master-mix.*` / `master.*`）。無ければ `/masterup`（Suno）または `/music --generate`（Lyria）を案内して停止する（DAW バウンス済みなら `master-mix.m4a` の手動配置でも可）
 - 動画背景素材が存在すること: `10-assets/main.png` / `main.jpg`（無ければ `/thumbnail` を案内）。`thumbnail::textless.enabled: false` では文字入り `main.jpg` を正規入力として受け入れ、未設定または `true` では textless main を要求する。ループ動画運用チャンネルで `10-assets/loop.mp4` が無ければ `/thumbnail --loop` を案内する
 - `ffmpeg` / `ffprobe` が利用可能であること（`generate_videos.sh` が使用）。無ければ `/setup` を案内する
 
@@ -62,7 +62,7 @@ $ARGUMENTS
 ### ステップ
 
 1. **対象コレクション確認**: `workflow-state.json` で状態確認
-2. **マスター音源**: `workflow-state.json::assets.master_audio` にファイル名が記録されていればそれを最優先で使用し、`01-master/` 内に存在することを確認する。未設定の場合のみ `master-mix.{wav,m4a,aac,mp3,flac}` → `master.{wav,m4a,aac,mp3,flac}` の順で探す。`assets.master_audio` が不正 JSON / 非 string / パス付き / 存在しないファイルを指す場合、`generate_videos.sh` は固定名探索へ fallback せずエラー停止する。なければ `/music --master` または `/music --generate` を案内する
+2. **マスター音源**: `workflow-state.json::assets.master_audio` にファイル名が記録されていればそれを最優先で使用し、`01-master/` 内に存在することを確認する。未設定の場合のみ `master-mix.{wav,m4a,aac,mp3,flac}` → `master.{wav,m4a,aac,mp3,flac}` の順で探す。`assets.master_audio` が不正 JSON / 非 string / パス付き / 存在しないファイルを指す場合、`generate_videos.sh` は固定名探索へ fallback せずエラー停止する。なければ `/masterup` または `/music --generate` でのマスター音源生成を案内する
 3. **ループ動画背景**: `10-assets/loop.mp4` が既にあればスキップ。
    loop 無効のチャンネルでは `/thumbnail --loop` を案内せず `10-assets/main.png` または `main.jpg` を静止背景として使用する。`thumbnail::textless.enabled: false` の共有 `main.jpg` は文字入りでも正規入力として扱い、textless 再生成へ戻さない。
    この場合、既存の `10-assets/loop.mp4` が残っていても `generate_videos.sh` は無視し、静止背景に切り替える。
@@ -77,7 +77,7 @@ $ARGUMENTS
 スクリプトはコレクションのディレクトリ構造から以下を自動検出します:
 
 - **コレクション名**: ディレクトリ名から（`YYYYMMDD-xxx-theme-collection` → `Theme-Name`）
-- **マスター音声**: `workflow-state.json::assets.master_audio` が最優先。未設定の場合のみ `master-mix.{wav,m4a,aac,mp3,flac}` → `master.{wav,m4a,aac,mp3,flac}` の順に検出（m4a/aac は `-c:a copy` で再エンコード回避）。明示された `assets.master_audio` が壊れている場合は fail-closed し、別音源で動画生成を続行しない
+- **マスター音声**: `workflow-state.json::assets.master_audio` が最優先。未設定の場合のみ `master-mix.{wav,m4a,aac,mp3,flac}` → `master.{wav,m4a,aac,mp3,flac}` の順に検出（m4a/aac は `-c:a copy` で再エンコード回避）。`master-mix.*` は DAW バウンス・手動配置、`master.*` は `/music --generate` / `/masterup` の自動生成出力。明示された `assets.master_audio` が壊れている場合は fail-closed し、別音源で動画生成を続行しない
 - **動画背景**: `10-assets/main.png` 優先、`main.jpg` フォールバック。`thumbnail.jpg/png` は YouTube アップロード用のテキスト付きサムネイルなので動画背景には使わない
 - **個別音楽**: `02-Individual-music/*.mp3`（アルファベット順）
 
@@ -277,7 +277,7 @@ runtime mask helper は script 内から `uv run python -m youtube_automation.in
 
 「音源生成時にビジュアライザーを付けて」と指示しても、音源生成・master 化ではビジュアライザーは付かない。理由:
 
-- `/music --generate` / `/music --master` は**音源（mp3 / wav / m4a）を作る工程**であり、映像オーバーレイは扱わない
+- `/music --prompt` / `/music --generate` / `/masterup` は**音源（mp3 / wav / m4a）を作る工程**であり、映像オーバーレイは扱わない
 - ビジュアライザーは本質的に**動画生成（`generate_videos.sh`）側の合成処理**で、`ffmpeg` の `filter_complex` に `showfreqs` 等を組む
 - 反映したい場合は `config/channel/youtube.json::overlays.enabled: true` と必要な overlay 設定を用意してから `/video --generate` を実行する
 

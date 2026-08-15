@@ -95,7 +95,7 @@ def test_contract_resumes_only_the_failed_branch() -> None:
     assert "検証成功済み branch は再生成・再承認しない" in resume
     assert "thumbnail branch だけ" in resume
     assert "`/music --prompt <theme>`" in resume
-    assert "`/lyria <theme>`" in resume
+    assert "`/music --generate <theme>`" in resume
     assert "同じ collection" in resume
     assert "失敗理由" in resume
 
