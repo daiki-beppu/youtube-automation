@@ -96,11 +96,11 @@ Vertex 画像 CLI は成功時 14--19 秒、429 を含む再試行区間は最�
 
 次のローカル工程では video subagent 133.6 秒（うち ffmpeg 82 秒）、description subagent 281.2 秒だった。両者は並列起動され、単純合計約 414 秒に対して wall-clock 区間は約 321 秒だった。この比較は「長い処理はすべて直列」という仮説を反証し、既に並列化された箇所より、masterup 内の重複直列検査を優先すべき根拠になる。
 
-### `/wf-next` upload と post-publish
+### `/wf-next` upload と publish
 
 upload preflight subagent は 137.8--188.0 秒、実 upload API 呼び出しは失敗を含め 7--15 秒、YouTube 確認は 2--5 秒だった。一方、OAuth token の削除・再発行を伴う実セッションの中断は 9,043 秒、別セッションの upload 承認待ちは 1,231 秒だった。前者は異常時の人間/認証待ちで、通常 upload latency とは合算しない。
 
-現行 6 チャンネルはすべて `workflow.post_publish.configured == false` で、canonical `/post-publish` は子処理開始前に停止する。設定判定を含む cold process は direct 73.61 ms（69.08--83.86 ms）、uv 経由 87.35 ms（85.16--95.26 ms）だった。`community-post`、`pinned-comment`、`metadata-audit` の完走セッションは現行ログにない。006 の履歴には community 完了と翌日の pin 予定があるが runtime はないため、外部 API や人間待ちを推測値で補っていない。
+現行 6 チャンネルはすべて `workflow.post_publish.configured == false` で、canonical `/publish` は子処理開始前に停止する。設定判定を含む cold process は direct 73.61 ms（69.08--83.86 ms）、uv 経由 87.35 ms（85.16--95.26 ms）だった。`community-post`、`pinned-comment`、`metadata-audit` の完走セッションは現行ログにない。006 の履歴には community 完了と翌日の pin 予定があるが runtime はないため、外部 API や人間待ちを推測値で補っていない。
 
 ### skill/reference 読み込みと plan 再評価
 
@@ -138,5 +138,5 @@ upload preflight subagent は 137.8--188.0 秒、実 upload API 呼び出しは�
 - 後続: [#3777 masterup のラウドネス検査を receipt 化し、同一 collection の二重走査をなくす](https://github.com/daiki-beppu/youtube-automation/issues/3777)
 - #3301（review 粒度）と #3302（Suno context 肥大）は既に close 済みのため、同じ改善を再起票しなかった
 - 外部 extension は内部 stage timestamp を残さないため、Suno は実セッションの境界幅である
-- post-publish は現行設定で無効、Lyria は現行 provider でない。実行されなかった外部処理を fixture や推定で Done 扱いしていない
+- publish は現行設定で無効、Lyria は現行 provider でない。実行されなかった外部処理を fixture や推定で Done 扱いしていない
 - 調査用 instrumentation、temporary script、flake 変更はリポジトリへ追加していない

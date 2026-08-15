@@ -2,7 +2,7 @@
 
 ## 前後工程
 
-- `前工程`: `/publish --upload`, `/post-publish`
+- `前工程`: `/publish --upload`, `/publish`
 - `後工程`: `なし`
 - `委譲先`: `なし`
 
@@ -32,7 +32,7 @@ Phase 2 の apply が exit 0 で終了し、Studio UI での手動ピン留め�
 
 ## チェーンからの呼出
 
-単独発動では従来どおり Phase 1 後の承認ゲートを必須とする。`/publish` chain または `/post-publish` から同じ video ID・対象件数を明示して承認済みで呼ばれた場合、その承認を Phase 2 の承認として引き継ぎ、重複確認せず apply へ進める。チェーン gate が承認を省略した場合、または対象が一致しない場合は、単独発動と同じ承認を省略しない。apply が exit 0 の場合だけチェーンへ完了を返す。
+単独発動では従来どおり Phase 1 後の承認ゲートを必須とする。フラグなし `/publish` chain から同じ video ID・対象件数を明示して承認済みで呼ばれた場合、その承認を Phase 2 の承認として引き継ぎ、重複確認せず apply へ進める。チェーン gate が承認を省略した場合、または対象が一致しない場合は、単独発動と同じ承認を省略しない。apply が exit 0 の場合だけチェーンへ完了を返す。
 
 ## 設定 (`config/channel/pinned-comment.json`)
 
@@ -121,14 +121,14 @@ uv run yt-pinned-comment --collection collections/live/<latest-dir> --apply --la
 4. Studio UI でピン留め
 5. `pinned_comment_history.json` に記録され、同一 video_id への二重投稿は防止される
 
-公開後 3 処理を一括実行する場合は `/post-publish <collection>` を使う。`/publish --pinned` の単独発動も従来どおり利用できる。
+公開工程を一括実行する場合は `/publish <collection>` を使う。`/publish --pinned` の単独発動も従来どおり利用できる。
 
 ## トラブルシュート
 
 - `pinned_comment.enabled=false です` → `config/channel/pinned-comment.json` で `enabled: true` に変更
 - `SKIP ... already_posted` ばかり → 対象動画は既に投稿済み。`pinned_comment_history.json` を確認
 - `SKIP ... video_not_found` → 削除済み / 存在しない video_id。collection の状態ファイルを確認
-- `SKIP ... video_private` → `/post-publish` 経由で `publishAt` が未来なら `pending_until_publish` として記録して公開後に再開する。`publishAt` 超過後も private なら予定外状態なので apply せず、Studio の公開状態・時刻・timezone を確認
+- `SKIP ... video_private` → `publishAt` が未来なら公開後に `/publish` を再実行する。`publishAt` 超過後も private なら予定外状態なので apply せず、Studio の公開状態・時刻・timezone を確認
 - `ERR ... status=403` → OAuth スコープが `youtube.force-ssl` を含むか確認（含まなければ `auth/token.json` を削除して再認証）
 - `ERR ... status=400`（commentsDisabled）→ 動画のコメント許可が無効になっている
 

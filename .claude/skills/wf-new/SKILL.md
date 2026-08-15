@@ -7,13 +7,13 @@ description: "Use when 新規コレクション制作を立ち上げるとき、
 ## 前後工程
 
 - `前工程`: `/setup --channel`, `/setup`
-- `後工程`: `/wf-next`, `/music --generate`, `/post-publish`, `/analytics`
-- `委譲先`: `/analytics`, `/thumbnail`, `/music --prompt`, `/music --generate`, `/thumbnail --loop`, `/music --generate`, `/music --master`, `/wf-next`, `/post-publish`
+- `後工程`: `/wf-next`, `/music --generate`, `/publish`, `/analytics`
+- `委譲先`: `/analytics`, `/thumbnail`, `/music --prompt`, `/music --generate`, `/thumbnail --loop`, `/music --generate`, `/music --master`, `/wf-next`, `/publish`
 
 ## 成果物
 
 - `書き込む`: `.automation-run/history.json`, `config/channel/workflow.json`, `reports/wf-new-batches/<batch-id>/plan-manifest.json`, `reports/wf-new-batches/<batch-id>/batch-ledger.json`, `collections/<id>/workflow-state.json`, `collections/<id>/20-documentation/plan_proposals.md`, `collections/<id>/20-documentation/thumbnail-prompts.md`, `collections/<id>/20-documentation/suno-patterns.yaml`, `collections/<id>/20-documentation/suno-prompts.json`, `collections/<id>/10-assets/thumbnail.jpg`, `collections/<id>/10-assets/main.png`, `collections/<id>/10-assets/main.jpg`, `collections/<id>/10-assets/loop.mp4`
-- `読み込む`: `config/channel/*.json`, `config/localizations.json`, `data/benchmark_*.json`, `reports/analysis_*.md`, `data/insights.jsonl`, `collections/<id>/workflow-state.json`, `collections/<id>/20-documentation/post_publish_history.json`
+- `読み込む`: `config/channel/*.json`, `config/localizations.json`, `data/benchmark_*.json`, `reports/analysis_*.md`, `data/insights.jsonl`, `collections/<id>/workflow-state.json`, `collections/<id>/20-documentation/community-post.txt`, `pinned_comment_history.json`
 
 ## モード判定
 

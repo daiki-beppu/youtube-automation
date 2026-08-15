@@ -94,7 +94,7 @@ class ScheduledAutomation:
 
 @dataclass(frozen=True)
 class PostPublishApprovalGates:
-    """`/post-publish` の旧 `approval_gates` consumer 向け derived view."""
+    """`/publish` の旧 `approval_gates` consumer 向け derived view."""
 
     community_post: bool = False
     pinned_comment: bool = False
@@ -103,7 +103,7 @@ class PostPublishApprovalGates:
 
 @dataclass(frozen=True)
 class PostPublishSkipApprovals:
-    """`/post-publish` の承認省略設定（`True` = 承認なし）."""
+    """`/publish` の承認省略設定（`True` = 承認なし）."""
 
     community_post: bool = True
     pinned_comment: bool = True
@@ -114,7 +114,7 @@ class PostPublishSkipApprovals:
 class PostPublish:
     """公開後チェーン設定.
 
-    `configured` は `workflow.json` に `workflow.post-publish` が明示されたかを示す。
+    `configured` は `workflow.json` に公開後 gate 設定が明示されたかを示す。
     未設定時は従来相当の `/publish --community` 案内だけを維持する。
     """
 

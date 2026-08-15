@@ -40,12 +40,12 @@ def test_publish_chain_appends_community_with_existing_approval_resolution() -> 
         "outputArtifacts": ["collections/<id>/20-documentation/community-post.txt"],
         "approvalGate": {
             "skip": True,
-            "configPath": "workflow.post-publish.skip_approvals.community-post",
+            "configPath": "workflow.post_publish.skip_approvals.community_post",
         },
         "idempotency": {"script": "references/publish-chain-state.py"},
     }
-    assert "workflow.json::post_publish.approval_gates.community_post" in skill
-    assert "workflow.json::post_publish.skip_approvals.community_post" in skill
+    assert "workflow.post_publish.skip_approvals.community_post" in skill
+    assert "approval_gates.community_post" in skill
     assert "承認されるまで" in skill
 
 

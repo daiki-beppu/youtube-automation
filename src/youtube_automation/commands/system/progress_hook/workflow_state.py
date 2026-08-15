@@ -13,7 +13,6 @@ STAGES = ("企画", "音源生成", "マスター化", "動画化", "サムネ�
 
 # /wf-status が定義する v2 phase 語彙を正規の段判定にも使う。
 WF_STATUS_PHASES = frozenset({"planning", "prepared", "mastered", "publishing", "complete"})
-_POST_PUBLISH_STEPS = frozenset({"community-post", "pinned-comment", "metadata-audit"})
 _ANALYSIS_REPORT = re.compile(r"analysis_(\d{8})\.md\Z")
 
 
@@ -90,25 +89,28 @@ def _video_id(state: Mapping[object, object]) -> str | None:
     return value if isinstance(value, str) and value else None
 
 
-def _post_publish_complete(root: Path, video_id: str | None) -> bool:
+def _publish_followup_complete(root: Path, collection: Path, video_id: str | None) -> bool:
     if video_id is None:
         return False
-    path = root / "post_publish_history.json"
-    if not path.is_file():
+    community_path = collection / "20-documentation" / "community-post.txt"
+    if not community_path.is_file() or not community_path.read_text(encoding="utf-8").strip():
+        return False
+    config_path = root / "config" / "channel" / "pinned-comment.json"
+    if not config_path.is_file():
+        return False
+    config = _read_object(config_path)
+    pinned = config.get("pinned_comment")
+    if not isinstance(pinned, Mapping):
+        return False
+    history_file = pinned.get("history_file")
+    if not isinstance(history_file, str) or not history_file:
+        return False
+    path = (root / history_file).resolve()
+    if not path.is_relative_to(root.resolve()) or not path.is_file():
         return False
     history = _read_object(path)
-    videos = history.get("videos")
-    if not isinstance(videos, Mapping):
-        return False
-    video = videos.get(video_id)
-    if not isinstance(video, Mapping):
-        return False
-    completed = video.get("completed")
-    return (
-        isinstance(completed, Mapping)
-        and _POST_PUBLISH_STEPS.issubset(completed)
-        and all(isinstance(completed[step], str) and completed[step] for step in _POST_PUBLISH_STEPS)
-    )
+    posted = history.get("posted")
+    return history.get("schema_version") == 1 and isinstance(posted, Mapping) and video_id in posted
 
 
 def _publish_date(state: Mapping[object, object]) -> date | None:
@@ -139,7 +141,7 @@ def _analysis_complete(root: Path, published_on: date | None) -> bool:
     return False
 
 
-def _completed_stages(root: Path, state: Mapping[object, object]) -> frozenset[str]:
+def _completed_stages(root: Path, collection: Path, state: Mapping[object, object]) -> frozenset[str]:
     phase = state.get("phase")
     if phase not in WF_STATUS_PHASES:
         raise ValueError(f"unsupported workflow phase: {phase!r}")
@@ -164,7 +166,7 @@ def _completed_stages(root: Path, state: Mapping[object, object]) -> frozenset[s
         completed.add("アップロード")
 
     video_id = _video_id(state)
-    if _post_publish_complete(root, video_id):
+    if _publish_followup_complete(root, collection, video_id):
         completed.add("公開後処理")
     if _analysis_complete(root, _publish_date(state)):
         completed.add("分析")
@@ -184,6 +186,6 @@ def load_progress_snapshot(cwd: str | None, command: str | None) -> ProgressSnap
         if state_path is None:
             return None
         state = _read_object(state_path)
-        return ProgressSnapshot(_completed_stages(root, state))
+        return ProgressSnapshot(_completed_stages(root, state_path.parent, state))
     except (OSError, UnicodeError, json.JSONDecodeError, TypeError, ValueError):
         return None

@@ -11,7 +11,7 @@ accepted (2026-08-13, #3943)
 前提となる事実は次のとおり。
 
 - 現行 `/publish --clean` の削除条件は `stage: "live"` / `phase: "complete"` / `upload.video_id` 非空の 3 条件で、ローカル FS の `workflow-state.json` を判定に使う。ADR-0024 決定 2 により state の正本は Git 管理へ移る。
-- `phase: "complete"` は post-publish 完了後（= 公開後）に到達するが、`post_publish_configured` が偽のチャンネルではアップロード直後（publishAt が未来 = 未公開）でも complete になりうる。`upload.publish_at` は state に記録されている。
+- `phase: "complete"` は publish 完了後（= 公開後）に到達するが、`post_publish_configured` が偽のチャンネルではアップロード直後（publishAt が未来 = 未公開）でも complete になりうる。`upload.publish_at` は state に記録されている。
 - `02-Individual-music/*.mp3` は DistroKid prep（`30-distrokid/` 生成）の入力でもある。DistroKid の Web 操作は自動化せず human-task として残す方針が確定済み。
 - ADR-0025 決定 3 により、重量チャンネル（002ch 型）はアップロードまで local 所有、軽量チャンネル（003ch 型）は cloud 完結する。「完了」を state に書く主体がチャンネル型で異なる。
 

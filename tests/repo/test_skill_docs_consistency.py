@@ -151,7 +151,7 @@ def test_wf_auto_is_the_integrated_entrypoint_without_copying_child_workflows() 
     wf_status = _read(".claude/skills/wf-status/SKILL.md")
     schema = _read(".claude/skills/wf-new/references/schema.md")
 
-    for child in ("wf-new", "music --generate", "music --master", "wf-next", "post-publish"):
+    for child in ("wf-new", "music --generate", "music --master", "wf-next", "publish"):
         assert f"`/{child}`" in wf_auto
     assert "no_active_collection" in wf_auto
     assert "同じ run 内" in wf_auto
@@ -1070,8 +1070,8 @@ def test_wf_next_example_uses_skip_approval_keys() -> None:
     assert "approval_gates" not in wf_next_example
 
 
-def test_post_publish_skip_approvals_are_documented_consistently() -> None:
-    post_publish = _read(".claude/skills/post-publish/SKILL.md")
+def test_publish_skip_approvals_are_documented_consistently() -> None:
+    publish = _read(".claude/skills/publish/SKILL.md")
     setup = _read(".claude/skills/setup/SKILL.md")
     readme = _read("README.md")
     example = json.loads(_read("examples/channel_config.example/workflow.json"))
@@ -1082,17 +1082,16 @@ def test_post_publish_skip_approvals_are_documented_consistently() -> None:
         "community-post": True,
         "pinned-comment": True,
     }
-    for text in (post_publish, setup, readme):
+    for text in (publish, setup, readme):
         assert "skip_approvals" in text
-    assert "`false` の step だけ承認対象" in post_publish
-    assert "後方互換 alias" in post_publish
-    assert "同一 step" in post_publish and "ConfigError" in post_publish
-    assert "metadata-audit" in readme and "非推奨" in readme
+    assert "resolved skip が `false`" in publish
+    assert "逆向き alias" in publish
+    assert "同一 step" in publish
 
 
 def test_chain_manifest_approval_gate_uses_true_equals_skip() -> None:
     schema = _read("docs/skill-design/chain-manifest-schema.md")
-    post_publish = _read(".claude/skills/post-publish/SKILL.md")
+    publish = _read(".claude/skills/publish/SKILL.md")
     analytics_run = _read(".claude/skills/analytics/SKILL.md")
 
     assert '"required": ["skip"]' in schema
@@ -1100,7 +1099,7 @@ def test_chain_manifest_approval_gate_uses_true_equals_skip() -> None:
     assert '"oneOf"' in schema
     assert "skip = not enabled" in schema
     assert "semantic validation" in schema
-    for skill in (post_publish, analytics_run):
+    for skill in (publish, analytics_run):
         assert "approvalGate.skip" in skill
         assert "skip = not enabled" in skill
         assert "同時指定" in skill

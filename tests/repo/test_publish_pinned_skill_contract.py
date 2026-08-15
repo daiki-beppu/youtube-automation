@@ -42,21 +42,19 @@ def test_publish_chain_appends_pinned_with_existing_approval_resolution() -> Non
         "outputArtifacts": ["pinned_comment_history.json"],
         "approvalGate": {
             "skip": True,
-            "configPath": "workflow.post-publish.skip_approvals.pinned-comment",
+            "configPath": "workflow.post_publish.skip_approvals.pinned_comment",
         },
         "idempotency": {"script": "references/publish-chain-state.py"},
     }
-    assert "workflow.json::post_publish.approval_gates.pinned_comment" in skill
-    assert "workflow.json::post_publish.skip_approvals.pinned_comment" in skill
+    assert "workflow.post_publish.skip_approvals.pinned_comment" in skill
+    assert "approval_gates.pinned_comment" in skill
     assert "承認されるまで" in skill
 
 
-def test_post_publish_delegates_pinned_step_to_publish() -> None:
+def test_publish_manifest_owns_pinned_step() -> None:
     manifest = json.loads(
-        (REPO_ROOT / ".claude/skills/post-publish/references/post-publish-chain-manifest.json").read_text(
-            encoding="utf-8"
-        )
+        (REPO_ROOT / ".claude/skills/publish/references/publish-chain-manifest.json").read_text(encoding="utf-8")
     )
 
-    assert manifest["steps"][1]["id"] == "pinned-comment"
-    assert manifest["steps"][1]["skill"] == "publish"
+    pinned = next(step for step in manifest["steps"] if step["id"] == "pinned")
+    assert pinned["skill"] == "publish"

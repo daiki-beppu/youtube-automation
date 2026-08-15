@@ -144,7 +144,7 @@ mode と modifier は次のように分けて記載する。
 
 - `前工程`: `/analytics --collect`
 - `後工程`: `/collection-ideate`, `/analytics --report`, `/flop-analysis`
-- `委譲先`: `/wf-new`, `/post-publish`
+- `委譲先`: `/wf-new`, `/publish`
 ```
 
 `前工程` / `後工程` はユーザーが前後に実行する skill、`委譲先` は実行中に直接呼び出す skill を表し、両者を混同しない。委譲しない場合も `委譲先` 行を省略せず `` `なし` `` と書く。深さの上限は規定せず、`uv run yt-skills delegation` で各 skill の深さ・最長経路と全体集計を確認する。

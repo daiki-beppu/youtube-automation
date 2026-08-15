@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 - `feat(skills)`: フラグなしの `/audit` に alignment → video → metadata → value-loop の読み取り専用 chain manifest と再開可能な状態判定を追加する。公開済み動画がない場合は理由付きで停止し、永続化しない metadata / value-loop は実行後も runnable として扱う（#3856）。
+- `feat(skills)`: 旧 `/post-publish` の公開後チェーンをフラグなし `/publish` の `playlist` → `upload` → `community` → `pinned` へ統合し、成果物ベースの途中再開へ移行する。metadata 監査を chain から外し、旧 skill と全利用者導線を削除する（#3847）。
 
 - `feat(skills)`: `/publish --clean` に旧 `/live-clean` の公開完了ガード、不可逆削除の dry-run・明示承認、大容量メディアと `tmp/` 残骸の掃除を統合する。clean は任意 mode として publish chain へ追加せず、旧 config を `publish.yaml::clean` へ移行できる互換入口と利用者導線・site 契約を更新する（#3846）。
 

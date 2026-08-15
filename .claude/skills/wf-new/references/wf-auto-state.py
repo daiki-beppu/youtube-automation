@@ -26,7 +26,6 @@ LEASE_FILE_NAME = "lease.json"
 LEASE_MUTEX_NAME = "lease.mutex"
 HISTORY_FILE_NAME = "history.json"
 AUDIO_SUFFIXES = {".mp3", ".m4a", ".wav", ".flac", ".aac"}
-POST_PUBLISH_STEPS = ("community-post", "pinned-comment", "metadata-audit")
 PHASES = {"planning", "prepared", "mastered", "publishing", "complete"}
 ENGINES = {"suno", "lyria"}
 ACTIONS = {
@@ -36,7 +35,7 @@ ACTIONS = {
     "masterup",
     "wf-next-local",
     "wf-next",
-    "post-publish",
+    "publish",
     "blocked",
     "complete",
 }
@@ -568,19 +567,21 @@ def _local_publish_artifacts_complete(collection: Path, assets: dict) -> bool:
     )
 
 
-def _post_publish_complete(root: Path, video_id: str) -> bool:
-    history_path = root / "post_publish_history.json"
-    if not history_path.is_file():
+def _publish_followup_complete(root: Path, collection: Path, video_id: str) -> bool:
+    community_path = collection / "20-documentation" / "community-post.txt"
+    try:
+        if not community_path.is_file() or not community_path.read_text(encoding="utf-8").strip():
+            return False
+        config = _read_object(root / "config" / "channel" / "pinned-comment.json")
+        pinned = config.get("pinned_comment")
+        if not isinstance(pinned, dict) or not isinstance(pinned.get("history_file"), str):
+            return False
+        history_path = _confined_path(root, root / pinned["history_file"], "pinned_comment.history_file")
+        history = _read_object(history_path)
+    except (OSError, ValueError):
         return False
-    history = _read_object(history_path)
-    if history.get("schema_version") != 1:
-        raise ValueError(f"未対応 post-publish history schema です: {history_path}")
-    videos = history.get("videos")
-    video = videos.get(video_id) if isinstance(videos, dict) else None
-    completed = video.get("completed") if isinstance(video, dict) else None
-    return isinstance(completed, dict) and all(
-        isinstance(completed.get(step), str) and completed[step] for step in POST_PUBLISH_STEPS
-    )
+    posted = history.get("posted")
+    return history.get("schema_version") == 1 and isinstance(posted, dict) and video_id in posted
 
 
 def evaluate_collection(root: Path, collection: Path, config: RunnerConfig) -> Decision:
@@ -749,7 +750,7 @@ def evaluate_collection(root: Path, collection: Path, config: RunnerConfig) -> D
             resume_action="wf-next",
             config=config,
         )
-    if config.post_publish_configured and not _post_publish_complete(root, video_id):
+    if config.post_publish_configured and not _publish_followup_complete(root, collection, video_id):
         if not config.allow_external_publish:
             return _decision(
                 collection=collection,
@@ -757,16 +758,16 @@ def evaluate_collection(root: Path, collection: Path, config: RunnerConfig) -> D
                 engine=engine,
                 action="blocked",
                 reason="external_publish_disabled",
-                resume_action="post-publish",
+                resume_action="publish",
                 config=config,
             )
         return _decision(
             collection=collection,
             phase=phase,
             engine=engine,
-            action="post-publish",
-            reason="post_publish_incomplete",
-            resume_action="post-publish",
+            action="publish",
+            reason="publish_followup_incomplete",
+            resume_action="publish",
             config=config,
         )
     return _decision(

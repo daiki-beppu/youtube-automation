@@ -48,8 +48,7 @@ YouTube への公開、視聴者対応、容量整理、コミュニティ投稿
 
 | Skill | なにができるか |
 |---|---|
-| /publish | `--playlist` でプレイリスト管理、`--upload` で YouTube アップロード + live 移行、`--community` で投稿文準備 + Studio 起動、`--community --batch` で JSON 投稿バッチ生成、`--pinned` で固定コメント投稿、`--clean` で公開済みメディアと tmp 残骸を承認付き削除 |
-| /post-publish | 公開後の community-post → pinned-comment → audit --metadata を承認ゲート・実行履歴付きで一括実行 |
+| /publish | フラグなしで playlist → upload → community → pinned を状態判定付きで一括実行。各 mode の単独実行と `--clean` にも対応 |
 | /comments-reply | ルール駆動コメント自動返信（dry-run → apply、二重返信防止） |
 | /live-chat-reply | 配信中ライブチャットの Codex 自動返信 daemon を設定・VPS 配備・運用 |
 | /short | collection 型の生成・ローカライズ投稿と release 型の JP+EN クリップ生成を設定から自動分岐 |

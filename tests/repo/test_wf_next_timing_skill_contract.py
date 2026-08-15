@@ -51,7 +51,7 @@ def test_direct_entry_plans_the_fixed_collection_before_starting_work() -> None:
         "masterup",
         "wf-next-local",
         "wf-next",
-        "post-publish",
+        "publish",
         "blocked",
         "complete",
     ):

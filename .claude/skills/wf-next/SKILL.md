@@ -116,7 +116,7 @@ resolver action と直接入口の既存責務は次の対応を正とする。
 | `wf-new` | planning が未完了であることを報告し、`/wf-new` を再開 action として blocked で閉じる |
 | `lyria` / `suno-helper` / `masterup` | prepared の既存のフェーズ別処理をそのまま実行し、同じ action ID で記録する |
 | `wf-next-local` / `wf-next` | mastered / publishing の既存のフェーズ別処理を実行する。`wf-next-local` は resolver が許可したローカル成果物までに限定し、YouTube write を行わない |
-| `post-publish` | production 完了を検証して `/post-publish` を再開 action として blocked で閉じ、公開後処理を本 skill へ複製しない |
+| `publish` | production 完了を検証して `/publish` を再開 action として blocked で閉じ、公開後処理を本 skill へ複製しない |
 | `blocked` | resolver の reason / resume action を変更せず blocked で閉じる |
 | `complete` | 下記 complete の既存検証を通過した場合だけ success で閉じる |
 

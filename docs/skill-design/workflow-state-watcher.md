@@ -239,7 +239,7 @@ Phase 0 では既存 `/wf-next` を大規模に書き換えず、headless 実行
 
 - #1667 `yt-wf-batch` は人間が開始する直列 batch。本設計は state / artifact event を
   起点に再開するため、入口が異なる。将来は batch runner を adapter として再利用できる。
-- #1824 の post-publish chain は `phase = complete` 後の consumer になり得るが、本設計の
+- #1824 の publish chain は `phase = complete` 後の consumer になり得るが、本設計の
   初期 scope は `/wf-next` 完了までとする。
 - #1826 は orchestration 改善の tracking。本書の Phase 0〜5 を個別 issue として紐付ける。
 - #1893 の Suno 定期無人実行は、本設計の `waiting_artifact` と artifact watcher を利用できる。
