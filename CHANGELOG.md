@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `feat(skills)`: 旧 `/thumbnail-compare` の 320px 視認性比較を `/thumbnail --compare` の排他 mode へ統合し、比較手順・helper・成果物 owner と全利用者導線を `/thumbnail` 配下へ移す（#3829）。
 
 - `refactor(skills)`: `/thumbnail` の詳細な参照選定・insights 還元・channel adaptation を `references/` へ分離し、通常入口の Hard Gate とコマンド契約を維持したまま SKILL.md を 400 行以下へ短縮する。後続 mode を受ける排他判定の骨格も追加する（#3828）。
+- `feat(skills)`: `/ext-install` を `/extension` へ改名し、状態判定付き install / update と対象 modifier、拡張向け collection server の起動・再利用・停止を排他 mode にする。共有 `extension/references/serve.md` を追加し、Suno / DistroKid の consumer から重複した server lifecycle 手順を除去する（#3747）。
 
 - `feat(skills)`: `/channel-strategy --direction` に旧方向性検討 Step D1〜D5 を統合し、初回 chain から独立した 4 番目の mode として公開する。旧 `/channel-new` skill を削除し、方向性資産は `channel-strategy`、config・branding 共有資産は `setup` へ移して利用者導線・配布・site 契約を更新する（#3823）。
 

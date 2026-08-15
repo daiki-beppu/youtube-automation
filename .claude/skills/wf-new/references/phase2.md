@@ -159,49 +159,9 @@ initial dispatch を行った場合は両 Agent の完了を待つ。片方の�
 
 #### 2f. Suno helper server 起動（Suno のみ）
 
-`/music --prompt` が生成した `20-documentation/suno-prompts.json` を Chrome 拡張へ配信するため、`uv run yt-collection-serve` を **dir mode + 拡張 origin lock** で起動する。これは `/wf-new` の責務に含める。Suno UI での連続生成、playlist 追加、ZIP 一括 DL は `/suno-helper` の browser use 主導フローで実行する。
+`/music --prompt` が生成した `20-documentation/suno-prompts.json` を Chrome 拡張へ配信するため、`.claude/skills/extension/references/serve.md` を読み、`--suno` の既存 server 再利用・起動・疎通確認契約を直接実行する。`/extension` skill へ委譲せず、server lifecycle のコマンドや判定を本 reference に複製しない。
 
-1. **拡張 ID 自動検出を前提にする**:
-   - 通常は `--allow-extension suno-helper` を使い、Chrome profile preferences から unpacked 拡張 ID を検出する
-   - 検出 0 件・複数 ID 競合・Preferences 読み取り不可・Preferences JSON parse failure で失敗した場合のみ、エラーに表示された候補を確認して `--allow-origin "chrome-extension://<EXTENSION_ID>"` を手動 fallback として完了ガイダンスに出す
-   - 自動検出も fallback 指示も出せない場合はサーバー起動をスキップし、後で `/suno-helper` の Step 1 から起動し直せることを完了ガイダンスに出して停止しない
-
-2. **port を決める**:
-   - 既定は `7873`
-   - 既に `7873` が使われている場合、既存サーバーの出力にある detected extension の origin で下記の疎通確認 3 点が通るなら既存サーバーを再利用する
-   - 既存サーバーが別用途または疎通確認に失敗する場合は `7874`, `7875`... の空き port を選ぶ
-
-3. **subagent でバックグラウンド起動**:
-
-   ```bash
-   PORT=7873
-   mkdir -p .tmp/logs
-   nohup uv run yt-collection-serve "$CHANNEL_DIR/collections/planning" \
-     --allow-extension suno-helper \
-     --port "${PORT}" \
-     > ".tmp/logs/collection-serve-${PORT}.log" 2>&1 &
-   ```
-
-   - 必ず `"$CHANNEL_DIR/collections/planning"` を渡す（dir mode）。collection 単体パスや `suno-prompts.json` 直指定は playlist phase がスキップされるため使わない
-   - 起動ログに `detected extension: suno-helper -> <id> (chrome-extension://<id>)` が出ることを確認し、その origin を疎通確認に使う
-   - `--allow-extension` または fallback の `--allow-origin` は必須。未指定だと `GET /auth/token` と `POST /collections/<id>/downloaded` が 403 になる
-
-4. **subagent の起動後、メインが行う疎通確認（3 点すべて必須）**:
-
-   ```bash
-   curl -s "http://<channel>.localhost:${PORT}/collections" | python3 -m json.tool | head -20
-   curl -s -H "Origin: chrome-extension://<detected-id>" \
-     "http://<channel>.localhost:${PORT}/auth/token" | python3 -m json.tool
-   ```
-
-   - `/collections` が JSON array を返す
-   - 対象 collection が `"status": "ready"` と `"pattern_count"` を持つ
-   - `/auth/token` が `{ "token": "..." }` を返す
-
-5. **失敗時**:
-   - server は state を更新しない独立した補助工程のため、起動または疎通確認に失敗しても既に検証・更新済みの `phase = "prepared"` は維持し、`/wf-new` は完了扱いにする
-   - 失敗内容、log path、再実行コマンドを完了ガイダンスに出す
-   - user は後で `/suno-helper` の Step 1 から起動し直せる
+起動または疎通確認に失敗しても、server は state を更新しない独立した補助工程なので、検証・更新済みの `phase = "prepared"` は維持する。失敗内容、共有契約が返した log path と再開方法を完了ガイダンスに出す。Suno UI での連続生成、playlist 追加、ZIP 一括 DL は `/suno-helper` の browser use 主導フローで実行する。
 
 #### 2g. 完了ガイダンス
 

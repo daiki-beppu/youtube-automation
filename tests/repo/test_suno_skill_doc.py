@@ -32,6 +32,7 @@ WF_AUTO_SKILL_MD = _SKILL_INVENTORY.resolve_reference("wf-new", "references/auto
 SUNO_HELPER_PHASE_CONSTANTS_TS = _REPO_ROOT / "extensions" / "shared" / "constants.ts"
 SUNO_LYRIC_SKILL_MD = _SKILL_INVENTORY.resolve_reference("music", "references/lyric.md")
 REVIEW_RUBRIC_MD = _SKILL_INVENTORY.resolve_reference("music", "references/review-rubric.md")
+EXTENSION_SERVE_MD = _SKILL_INVENTORY.resolve_reference("extension", "references/serve.md")
 
 
 def _read(path: Path = SKILL_MD) -> str:
@@ -111,7 +112,7 @@ def test_skill_md_documents_auto_inject_flow() -> None:
     起動コマンド契約（machine-coupled）は実在 CLI を固定する。
     PR #886: 旧 `Step 2.5` 表記は整数並びへ採番し直し、Step 3 タイトルに `/suno-helper` を露出。
     """
-    text = _read()
+    text = "\n".join((_read(), _read(EXTENSION_SERVE_MD)))
     for token in ("Step 3", "collection-serve", "suno-helper", "連続実行"):
         assert token in text, f"SKILL.md に新フローの記載がない（`{token}` 不在）"
     assert "uv run yt-collection-serve" in text, "SKILL.md の Step 3 が実在する collection-serve CLI を使っていない"
@@ -171,7 +172,7 @@ def test_skill_md_documents_serve_url_contract() -> None:
     #816: dir mode は `/collections` と `/collections/<id>/suno/prompts.json` を配信し、
     `/suno/prompts.json` は single file mode 専用で 404 になる。
     """
-    text = _read()
+    text = "\n".join((_read(), _read(EXTENSION_SERVE_MD)))
     assert "suno-prompts.json" in text, "SKILL.md に配信元 `suno-prompts.json` の言及がない"
     assert "/collections/<id>/suno/prompts.json" in text, (
         "SKILL.md に dir mode の collection-scoped prompts endpoint がない"

@@ -171,7 +171,7 @@ uv run yt-raw-master-check <コレクションディレクトリ>
 
 `02-Individual-music/` の実ファイル数を期待曲数と突合する。**`assets.music_downloaded` が `true` でも本チェックはスキップしない**（フラグと実ファイル数が食い違う部分ダウンロード — 例: 10 曲中 5 曲失敗 — を見逃さないため）。
 
-期待曲数・実ファイル数は `/suno-helper` の DL 完了判定・`yt-collection-serve` の `status` 判定と同じロジック（既存ユーティリティ）で算出し、算式を二重管理しない:
+期待曲数・実ファイル数は `/suno-helper` の DL 完了判定・collection server の `status` 判定と同じロジック（既存ユーティリティ）で算出し、算式を二重管理しない。server lifecycle が必要な fallback 経路では `.claude/skills/extension/references/serve.md` を直接読み、起動・再利用・停止を本 skill に複製しない:
 
 ```bash
 python3 -c "

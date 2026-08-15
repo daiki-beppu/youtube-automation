@@ -147,5 +147,5 @@ merge 後の公開 URL: https://youtube-automation-release-notes.pages.dev/ext-v
 
 次のステップ:
 - 利用者への告知はチャットで Release URL を共有（ADR 0011。自動アップデート通知は無し）
-- 手元 Chrome の拡張更新は `/ext-install`
+- 手元 Chrome の拡張更新は `/extension --update`
 ```
