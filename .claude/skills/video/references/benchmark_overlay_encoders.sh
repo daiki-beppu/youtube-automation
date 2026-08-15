@@ -4,7 +4,7 @@ set -eu
 
 DURATION="${VIDEOUP_BENCH_DURATION:-60}"
 RUNS="${VIDEOUP_BENCH_RUNS:-3}"
-OUTPUT_DIR="${VIDEOUP_BENCH_OUTPUT_DIR:-$(mktemp -d "${TMPDIR:-/tmp}/videoup-overlay-bench.XXXXXX")}"
+OUTPUT_DIR="${VIDEOUP_BENCH_OUTPUT_DIR:-$(mktemp -d "${TMPDIR:-/tmp}/video --generate-overlay-bench.XXXXXX")}"
 mkdir -p "$OUTPUT_DIR"
 
 FILTER='[1:a]asplit=2[avis_in][aout];[avis_in]showfreqs=mode=bar:s=1280x180:rate=24:fscale=log:win_size=2048:win_func=hann:colors=white,format=rgba,colorchannelmixer=aa=0.85[avis];[0:v]format=yuv420p[bg];[bg][avis]overlay=(W-w)/2:H-h-40:format=auto,format=yuv420p[vout]'

@@ -41,7 +41,7 @@ _OLD_GENERATE_VIDEOS = _SCRIPTS_DIR / "generate_videos.sh"
 _OLD_WORKTREE_SYNC = _SCRIPTS_DIR / "worktree_sync.sh"
 
 # 整理対象: skill 配下に実ファイルとして配置されるべきパス
-_NEW_GENERATE_VIDEOS = _SKILLS_DIR / "videoup" / "references" / "generate_videos.sh"
+_NEW_GENERATE_VIDEOS = _SKILLS_DIR / "video" / "references" / "generate_videos.sh"
 _NEW_WORKTREE_SYNC = _SKILLS_DIR / "lyria" / "references" / "worktree_sync.sh"
 
 # Issue #388 で削除済み: scripts/ は現在空。共通スクリプトは存在しない
@@ -81,7 +81,7 @@ def test_root_scripts_generate_videos_is_removed() -> None:
     assert not os.path.lexists(_OLD_GENERATE_VIDEOS), (
         f"{_OLD_GENERATE_VIDEOS.relative_to(_REPO_ROOT)} が残存している。"
         " skill 固有スクリプトはルート scripts/ から削除し、"
-        " .claude/skills/videoup/references/ 配下に置くこと (Issue #140)"
+        " .claude/skills/video/references/ 配下に置くこと (Issue #140)"
     )
 
 
@@ -206,7 +206,7 @@ def test_setup_reference_gcp_script_is_executable(path: Path) -> None:
     "path",
     [_NEW_GENERATE_VIDEOS, _NEW_WORKTREE_SYNC],
     ids=[
-        ".claude/skills/videoup/references/generate_videos.sh",
+        ".claude/skills/video/references/generate_videos.sh",
         ".claude/skills/lyria/references/worktree_sync.sh",
     ],
 )
@@ -222,7 +222,7 @@ def test_skill_reference_script_exists(path: Path) -> None:
     "path",
     [_NEW_GENERATE_VIDEOS, _NEW_WORKTREE_SYNC],
     ids=[
-        ".claude/skills/videoup/references/generate_videos.sh",
+        ".claude/skills/video/references/generate_videos.sh",
         ".claude/skills/lyria/references/worktree_sync.sh",
     ],
 )
@@ -243,7 +243,7 @@ def test_skill_reference_script_is_real_file_not_symlink(path: Path) -> None:
     "path",
     [_NEW_GENERATE_VIDEOS, _NEW_WORKTREE_SYNC],
     ids=[
-        ".claude/skills/videoup/references/generate_videos.sh",
+        ".claude/skills/video/references/generate_videos.sh",
         ".claude/skills/lyria/references/worktree_sync.sh",
     ],
 )
@@ -267,7 +267,7 @@ def test_skill_reference_script_is_executable(path: Path) -> None:
     "path",
     [_NEW_GENERATE_VIDEOS, _NEW_WORKTREE_SYNC, _CANONICAL_GCP_BOOTSTRAP, _CANONICAL_GCP_TERRAFORM_APPLY],
     ids=[
-        ".claude/skills/videoup/references/generate_videos.sh",
+        ".claude/skills/video/references/generate_videos.sh",
         ".claude/skills/lyria/references/worktree_sync.sh",
         ".claude/skills/setup/references/gcp-bootstrap.sh",
         ".claude/skills/setup/references/gcp-terraform-apply.sh",

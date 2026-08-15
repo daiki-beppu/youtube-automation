@@ -54,7 +54,7 @@ CLAUDE.md の「アーキテクチャ」節の詳細版。要点は CLAUDE.md �
 
 **collection lifecycle**: collection 固有の制作フロー。分析 → 企画 → GO/NO-GO → サムネ生成 → GO/NO-GO → 音源生成 → MIX/マスタリング → 動画生成 → upload → 公開後運用の順で進み、3 本の workflow tool に対応する。
 
-**master**: collection 内の個別トラックをクロスフェード結合した最終音声ファイル（`master.mp3` / `master.wav`）。結合後に正規化し、videoup の音声トラックにする。
+**master**: collection 内の個別トラックをクロスフェード結合した最終音声ファイル（`master.mp3` / `master.wav`）。結合後に正規化し、動画生成の音声トラックにする。
 
 ### Chrome 拡張
 

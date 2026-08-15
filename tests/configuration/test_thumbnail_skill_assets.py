@@ -617,7 +617,7 @@ def test_thumbnail_textless_shared_main_default_and_contract() -> None:
 def test_shared_main_contract_reaches_loop_video_and_videoup() -> None:
     """Issue #2458: opt-in の共有 main を動画背景 skill が正規入力として扱う。"""
     loop_video = _read_loop_video_skill()
-    videoup = (_repo_root() / ".claude" / "skills" / "videoup" / "SKILL.md").read_text(encoding="utf-8")
+    videoup = (_repo_root() / ".claude" / "skills" / "video" / "references" / "generate.md").read_text(encoding="utf-8")
 
     for text in (loop_video, videoup):
         assert "`thumbnail::textless.enabled: false`" in text

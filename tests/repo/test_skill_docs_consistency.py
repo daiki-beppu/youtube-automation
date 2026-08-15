@@ -947,7 +947,7 @@ def test_channel_strategy_followup_skill_routing_uses_new_contract() -> None:
 def test_skill_frontmatter_descriptions_disambiguate_sibling_routes() -> None:
     benchmark_desc = _skill_frontmatter("channel-research")["description"]
     channel_strategy_desc = _skill_frontmatter("channel-strategy")["description"]
-    videoup_desc = _skill_frontmatter("videoup")["description"]
+    video_desc = _skill_frontmatter("video")["description"]
     publish_desc = _skill_frontmatter("publish")["description"]
 
     assert "「競合分析」" in benchmark_desc
@@ -958,8 +958,8 @@ def test_skill_frontmatter_descriptions_disambiguate_sibling_routes() -> None:
     assert "方向性" in channel_strategy_desc
     assert "channel-research の voice mode、市場比較は market mode" in channel_strategy_desc
 
-    assert "YouTube への投稿は /publish の upload mode" in videoup_desc
-    assert "動画生成は /videoup" in publish_desc
+    assert "YouTube へのアップロードは公開系 skill の責務" in video_desc
+    assert "動画生成は /video" in publish_desc
 
 
 def test_thumbnail_search_order_is_documented() -> None:

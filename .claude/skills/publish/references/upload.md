@@ -2,7 +2,7 @@
 
 ## 前後工程
 
-- `前工程`: `/wf-new`, `/videoup`, `/video-description`, `/publish --playlist`, `/thumbnail`
+- `前工程`: `/wf-new`, `/video --generate`, `/video-description`, `/publish --playlist`, `/thumbnail`
 - `後工程`: `/post-publish`, `/community-post`, `/metadata-audit`, `/pinned-comment`, `/live-clean`
 - `委譲先`: `/post-publish`
 

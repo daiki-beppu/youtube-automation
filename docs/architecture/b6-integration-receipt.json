@@ -1102,21 +1102,21 @@
     },
     {
       "old_owner": "legacy..claude.skills.videoup.SKILL.md",
-      "exact_new_owner": ".claude/skills/videoup/SKILL.md",
+      "exact_new_owner": ".claude/skills/video/references/generate.md",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"
     },
     {
       "old_owner": "legacy..claude.skills.videoup.references.ring-migration.md",
-      "exact_new_owner": ".claude/skills/videoup/references/ring-migration.md",
+      "exact_new_owner": ".claude/skills/video/references/ring-migration.md",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"
     },
     {
       "old_owner": "legacy..claude.skills.videoup.references.video-type-extension.md",
-      "exact_new_owner": ".claude/skills/videoup/references/video-type-extension.md",
+      "exact_new_owner": ".claude/skills/video/references/video-type-extension.md",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"

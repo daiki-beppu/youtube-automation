@@ -44,7 +44,7 @@ def test_help_explains_max_workers_resolution_without_false_choices(
 
     assert "1 以上" in help_text
     assert "CLI > YT_VIDEOUP_MAX_WORKERS > channel skill-config > CPU 検出 > 3" in help_text
-    assert "config/skills/videoup.yaml::batch.max_workers" in help_text
+    assert "config/skills/video.yaml::generate.batch.max_workers" in help_text
     assert re.search(r"--max-workers MAX_WORKERS\b", help_text)
     assert "--max-workers {" not in help_text
 
@@ -99,8 +99,8 @@ def test_find_batch_targets_does_not_use_legacy_state_shape(tmp_path: Path) -> N
     assert batch.find_batch_targets(tmp_path) == []
 
 
-def test_videoup_skill_auto_detection_matches_implementation_contract() -> None:
-    skill = (REPO_ROOT / ".claude/skills/videoup/SKILL.md").read_text(encoding="utf-8")
+def test_video_generate_auto_detection_matches_implementation_contract() -> None:
+    skill = (REPO_ROOT / ".claude/skills/video/references/generate.md").read_text(encoding="utf-8")
     expected = "`assets.master_audio` が設定済み（`null` 以外）かつ `assets.master_video` が `null` のコレクション"
     assert expected in skill
 
@@ -175,7 +175,7 @@ def test_main_state_write_partial_failure_leaves_only_failed_target_for_retry(
     second = _collection(tmp_path, "planning", "second", audio="master.mp3", video=None)
     (first / "01-master" / "First-Master.mp4").touch()
     (second / "01-master" / "Second-Master.mp4").touch()
-    script = tmp_path / ".claude" / "skills" / "videoup" / "references" / "generate_videos.sh"
+    script = tmp_path / ".claude" / "skills" / "video" / "references" / "generate_videos.sh"
     script.parent.mkdir(parents=True)
     script.touch()
     results = [batch.BatchResult(first, 0), batch.BatchResult(second, 0)]

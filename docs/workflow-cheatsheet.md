@@ -64,7 +64,7 @@ Phase 2 ─ 制作                      /wf-next
                           ↓ 最終マスターを 01-master/ に配置
                           ↓ phase: "mastered"
 Phase 3 ─ 公開（全自動）             /wf-next
-   ├─ /videoup           (動画生成)
+   ├─ /video --generate           (動画生成)
    ├─ /video-description (概要欄)
    └─ /publish --upload  (YouTube アップロード + planning/ → live/ 移行)
                           ↓ phase: "complete"

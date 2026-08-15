@@ -37,7 +37,7 @@ collections/live/XXX-name/        → 投稿済み・公開中（Step 5 完了�
 1. `/music --prompt <theme>` または `/lyria <theme>` でプロンプト生成・楽曲制作・個別音声整理（公開ワークフローの共通契約は MP3。WAV は Lyria / DAW の中間成果物）
 
 ### 3. 仕上げ・公開（live/）
-1. `/videoup <path>` で動画生成
+1. `/video --generate <path>` で動画生成
 2. `/video-description <path>` で概要欄作成
 3. `/publish --upload <path>` で YouTube アップロード実行
 4. `planning/` → `live/` に移行（Step 5 完了時）

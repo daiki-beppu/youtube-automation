@@ -16,7 +16,7 @@
 #        - effect ON は「1 周期だけ fx_baked.mp4 に焼く → -stream_loop -1 -c:v copy」へ刷新し
 #          モード C/D の全尺再エンコード(8-15分)を ~1-2分へ短縮。継ぎ目は closed GOP の stream copy で無損失
 #        - 周期固定: particles=36s / bokeh=60s(整数周期化) / gradient=72s(speed=0 で静的化)
-#        - 静止画/ループのエンコード値・effect・shrink を config/skills/videoup.yaml から取得
+#        - 静止画/ループのエンコード値・effect・shrink を config/skills/video.yaml::generate から取得
 #          (新規 env override は追加しない。キー欠落時は現行の固定値へフォールバック=無回帰)
 #        - shrink.enabled で生成後の容量最適化 re-encode を opt-in 追加
 # v14.1: workflow-state.json::assets.master_audio があれば固定名探索より優先 (#1449)
@@ -27,13 +27,13 @@
 # v15.2: overlay H.264 hardware encoder の opt-in 選択と libx264 fallback (#2372)
 #
 # Usage:
-#   uv run bash .claude/skills/videoup/references/generate_videos.sh [--preview [15-30]] <collection-path>
-#   cd <collection-dir> && uv run bash <repo-root>/.claude/skills/videoup/references/generate_videos.sh [--preview [15-30]]
+#   uv run bash .claude/skills/video/references/generate_videos.sh [--preview [15-30]] <collection-path>
+#   cd <collection-dir> && uv run bash <repo-root>/.claude/skills/video/references/generate_videos.sh [--preview [15-30]]
 #
 # Opt-in env vars (#545):
 #   VIDEOUP_AUDIO_TARGET_VIDEO_DURATION_MIN
 #     動画側ターゲット尺 (分)。設定時は音声入力にも -stream_loop -1 を適用し
-#     -t で動画長を強制する。チャンネル側で config/skills/videoup.yaml に
+#     -t で動画長を強制する。チャンネル側で config/skills/video.yaml::generate に
 #     audio.target_video_duration_min を置いても同等 (env が優先)。
 #     master 尺 ≥ target のときは従来動作 (master 尺が支配)。
 #
@@ -47,7 +47,7 @@
 #       透明度・密度をコントロール。基本は subtle 推奨（BGM 視聴の邪魔をしない）
 #
 # エフェクト有効時は 1 周期だけ libx264 でベイクし、通常はその短尺ソースを stream copy する。
-# 詳細は .claude/skills/videoup/SKILL.md を参照。
+# 詳細は .claude/skills/video/SKILL.md を参照。
 #
 # Env (#511):
 #   OVERLAYS_CONFIG  config/channel/youtube.json への絶対パス (省略時は
@@ -134,21 +134,21 @@ COLLECTION_DIR="$(cd "$COLLECTION_DIR" && pwd)"
 MASTER_DIR="${COLLECTION_DIR}/01-master"
 ASSETS_DIR="${COLLECTION_DIR}/10-assets"
 
-# ─── Config (config/skills/videoup.yaml) reader ──────────
+# ─── Config (config/skills/video.yaml::generate) reader ──────────
 # 設定は env override ではなく config ファイル駆動（既存 audio.target_video_duration_min と同流儀）。
-# 2-level flat YAML を awk で読む（jq 非依存）。キー欠落時は fallback（=現行固定値）へ落ちる。
-resolve_videoup_yaml() {
+# video.yaml の generate 節を awk で読む（jq 非依存）。キー欠落時は fallback へ落ちる。
+resolve_video_yaml() {
     local dir="$COLLECTION_DIR"
     for _ in 1 2 3 4 5 6; do
-        if [[ -f "$dir/config/skills/videoup.yaml" ]]; then
-            echo "$dir/config/skills/videoup.yaml"; return
+        if [[ -f "$dir/config/skills/video.yaml" ]]; then
+            echo "$dir/config/skills/video.yaml"; return
         fi
         local parent; parent="$(dirname "$dir")"
         [[ "$parent" == "$dir" ]] && break
         dir="$parent"
     done
 }
-VIDEOUP_YAML="$(resolve_videoup_yaml)"
+VIDEO_YAML="$(resolve_video_yaml)"
 
 resolve_loop_video_yaml() {
     local dir="$COLLECTION_DIR"
@@ -164,14 +164,17 @@ resolve_loop_video_yaml() {
 LOOP_VIDEO_YAML="$(resolve_loop_video_yaml)"
 
 yaml_get() {
-    # $1=section $2=key $3=fallback  （`section:` 配下の `  key: value` を拾う）
+    # $1=section $2=key $3=fallback（`generate.<section>.<key>` を拾う）
     local section="$1" key="$2" fallback="$3" val
-    if [[ -z "$VIDEOUP_YAML" || ! -f "$VIDEOUP_YAML" ]]; then
+    if [[ -z "$VIDEO_YAML" || ! -f "$VIDEO_YAML" ]]; then
         echo "$fallback"; return
     fi
     val="$(awk -v section="$section" -v key="$key" '
-        /^[^[:space:]#]/ { in_section = ($0 ~ ("^" section ":[[:space:]]*$")) ? 1 : 0; next }
-        in_section && $0 ~ ("^[[:space:]]+" key ":") {
+        /^generate:[[:space:]]*$/ { in_generate = 1; in_section = 0; next }
+        /^[^[:space:]#]/ { in_generate = 0; in_section = 0 }
+        in_generate && $0 ~ ("^  " section ":[[:space:]]*$") { in_section = 1; next }
+        in_generate && /^  [^[:space:]#][^:]*:/ { in_section = 0 }
+        in_section && $0 ~ ("^    " key ":") {
             line = $0
             sub(/^[[:space:]]+[^:]+:[[:space:]]*/, "", line)
             sub(/[[:space:]]*#.*$/, "", line)
@@ -179,8 +182,31 @@ yaml_get() {
             print line
             exit
         }
-    ' "$VIDEOUP_YAML")"
+    ' "$VIDEO_YAML")"
     # 周囲のクォートを除去
+    val="${val%\"}"; val="${val#\"}"
+    val="${val%\'}"; val="${val#\'}"
+    if [[ -z "$val" ]]; then echo "$fallback"; else echo "$val"; fi
+}
+
+yaml_generate_get() {
+    # $1=key $2=fallback（`generate.<key>` を拾う）
+    local key="$1" fallback="$2" val
+    if [[ -z "$VIDEO_YAML" || ! -f "$VIDEO_YAML" ]]; then
+        echo "$fallback"; return
+    fi
+    val="$(awk -v key="$key" '
+        /^generate:[[:space:]]*$/ { in_generate = 1; next }
+        /^[^[:space:]#]/ { in_generate = 0 }
+        in_generate && $0 ~ ("^  " key ":[[:space:]]*") {
+            line = $0
+            sub(/^[[:space:]]+[^:]+:[[:space:]]*/, "", line)
+            sub(/[[:space:]]*#.*$/, "", line)
+            sub(/[[:space:]]+$/, "", line)
+            print line
+            exit
+        }
+    ' "$VIDEO_YAML")"
     val="${val%\"}"; val="${val#\"}"
     val="${val%\'}"; val="${val#\'}"
     if [[ -z "$val" ]]; then echo "$fallback"; else echo "$val"; fi
@@ -241,11 +267,11 @@ COLLECTION_NAME="$(echo "$dir_basename" \
 
 # ─── Auto-detect Assets ─────────────────────────────────
 LOOP_VIDEO_ENABLED="$(yaml_top_get "$LOOP_VIDEO_YAML" enabled true)"
-VIDEO_TYPE="$(yaml_top_get "$VIDEOUP_YAML" video_type loop)"
+VIDEO_TYPE="$(yaml_generate_get video_type loop)"
 case "$VIDEO_TYPE" in
     loop|static) ;;
     *)
-        echo "ERROR: Unknown video_type='$VIDEO_TYPE' in config/skills/videoup.yaml (allowed: loop, static)"
+        echo "ERROR: Unknown video_type='$VIDEO_TYPE' in config/skills/video.yaml::generate (allowed: loop, static)"
         exit 1
         ;;
 esac
@@ -693,7 +719,7 @@ duration="$(get_duration "$MASTER_AUDIO")"
 
 # ─── target_video_duration_min 解決 (#545) ──────────────
 # env (VIDEOUP_AUDIO_TARGET_VIDEO_DURATION_MIN, 既存) >
-#   config/skills/videoup.yaml::audio.target_video_duration_min > 未設定
+#   config/skills/video.yaml::generate.audio.target_video_duration_min > 未設定
 # 未設定なら従来動作 (音声尺 = 動画尺)。設定時は音声側にも -stream_loop -1 を
 # 適用し -t target_video_duration_sec で動画長を強制する。
 # master 尺 ≥ target のときは現状動作維持 (master 尺が支配)。

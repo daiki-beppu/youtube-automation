@@ -6,7 +6,7 @@ description: "Use when live コレクションの大容量メディアを削除�
 
 ## 前後工程
 
-- `前工程`: `/publish --upload`, `/videoup`
+- `前工程`: `/publish --upload`, `/video --generate`
 - `後工程`: `なし`
 - `委譲先`: `なし`
 

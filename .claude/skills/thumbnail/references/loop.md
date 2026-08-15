@@ -18,7 +18,7 @@ Veo 3.1（既定）または Gemini Omni Flash を使い、コレクションの
 
 `thumbnail.jpg` は YouTube アップロード用のテキスト付きサムネイルであり、`/thumbnail --loop` の入力には使わない。`/thumbnail` で先に生成・承認したテキストなし `main.png` または `main.jpg` を入力にする。
 
-動画構成は skill-config の `video_type` で明示し、現行 generator は `loop` を実装する。新しいタイプの追加箇所と hook 契約は `.claude/skills/videoup/references/video-type-extension.md` を参照する。
+動画構成は skill-config の `video_type` で明示し、現行 generator は `loop` を実装する。新しいタイプの追加箇所と hook 契約は `.claude/skills/video/references/video-type-extension.md` を参照する。
 
 ## チャンネル制約入力（非停止）
 

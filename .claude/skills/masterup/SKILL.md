@@ -7,7 +7,7 @@ description: "Use when Suno UI で生成した曲のプレイリストを一括 
 ## 前後工程
 
 - `前工程`: `/wf-new`, `/music --prompt`, `/suno-helper`
-- `後工程`: `/videoup`
+- `後工程`: `/video --generate`
 - `委譲先`: `なし`
 
 ## 成果物
@@ -558,9 +558,9 @@ fi
 `/masterup` は**音源（mp3 / wav）を作る工程**で、映像オーバーレイ（ビジュアライザー・波形・購読ボタンポップアップ等）は扱わない。
 ユーザーから「ビジュアライザー付きで」「波形を出して」等の指示があっても、`/masterup` 段階では何も合成できない。
 
-ビジュアライザー周りの現行仕様は `videoup` SKILL.md の「オーディオビジュアライザー / オーバーレイについて」節を参照。必要な場合は `/videoup` 実行前に `config/channel/youtube.json::overlays.enabled: true` と overlay 詳細設定を用意する。
+ビジュアライザー周りの現行仕様は `/video --generate` の「オーディオビジュアライザー / オーバーレイについて」節を参照。必要な場合は `/video --generate` 実行前に `config/channel/youtube.json::overlays.enabled: true` と overlay 詳細設定を用意する。
 誤指示の事故防止のため、masterup 着手前に動画にオーバーレイが必要かをユーザーへ確認すること（#646 feedback）。
 
 ## Next Step
 
-- `/videoup` で動画生成を実行
+- `/video --generate` で動画生成を実行

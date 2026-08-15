@@ -44,7 +44,7 @@
 | /music | `--prompt` で Suno Style、`--lyric` でボーカル曲の歌詞と構成メモを生成 |
 | /suno-helper | suno-helper Chrome 拡張で Suno UI への連続生成 + playlist 一括追加を運用 |
 | /masterup | Suno で生成した楽曲を DL + クロスフェードマスター化 |
-| /videoup | マスター音源 + 背景画像 / 動画から最終 MP4 を合成 |
+| /video | `--generate` でマスター音源 + 背景画像 / 動画から最終 MP4 を合成 |
 
 ## 公開・運用
 

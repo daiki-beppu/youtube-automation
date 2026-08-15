@@ -1,0 +1,15 @@
+# video skill default config
+
+generate:
+  # 背景として優先する動画タイプ。loop は loop.mp4 を使い、不在時は static fallback。
+  video_type: loop
+
+  audio:
+    # 動画長を音声尺と分離するときの動画側ターゲット尺（分）。
+    # target_video_duration_min: 120
+
+  video:
+    # effect=none の静止画を短尺ベイクして stream copy で繰り返す設定。
+    still_fps: 1
+    still_crf: 28
+    still_gop: 300

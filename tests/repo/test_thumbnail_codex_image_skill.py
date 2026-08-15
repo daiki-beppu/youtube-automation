@@ -962,7 +962,7 @@ def test_project_dependent_uv_calls_allow_dependency_sync() -> None:
     """project import / entry point に --no-sync を使わず、stdlib-only 呼び出しだけ残す。"""
     codex_image = _read(_CODEX_IMAGE_SH)
     batch = _read(_REPO_ROOT / ".claude/skills/thumbnail/references/codex-image-batch.sh")
-    videoup = _read(_REPO_ROOT / ".claude/skills/videoup/references/generate_videos.sh")
+    videoup = _read(_REPO_ROOT / ".claude/skills/video/references/generate_videos.sh")
 
     assert "uv run --no-sync python" not in codex_image
     assert batch.count("uv run --no-sync python") == 1

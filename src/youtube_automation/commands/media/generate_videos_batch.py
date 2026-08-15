@@ -110,13 +110,14 @@ def resolve_max_workers(
     if env_value is not None:
         return _positive_int(env_value, MAX_WORKERS_ENV)
 
-    config = load_channel_override("videoup") if skill_config is None else skill_config
+    config = load_channel_override("video") if skill_config is None else skill_config
+    config = config.get("generate", {}) if skill_config is None else config
     batch = config.get("batch")
     if batch is not None and not isinstance(batch, Mapping):
-        raise ConfigError("config/skills/videoup.yaml::batch は object で指定してください")
+        raise ConfigError("config/skills/video.yaml::generate.batch は object で指定してください")
     config_value = batch.get("max_workers") if isinstance(batch, Mapping) else None
     if config_value is not None:
-        return _positive_int(config_value, "config/skills/videoup.yaml::batch.max_workers")
+        return _positive_int(config_value, "config/skills/video.yaml::generate.batch.max_workers")
 
     cpu_count = os.cpu_count() if detected_cpu_count is None else detected_cpu_count
     if isinstance(cpu_count, int) and cpu_count > 0:
@@ -209,7 +210,7 @@ def update_workflow_states(results: Sequence[BatchResult | Path | str]) -> dict[
 
 
 def _script_path(root: Path) -> Path:
-    script = root / ".claude" / "skills" / "videoup" / "references" / "generate_videos.sh"
+    script = root / ".claude" / "skills" / "video" / "references" / "generate_videos.sh"
     if not script.is_file():
         raise ValidationError(f"generate_videos.sh が見つかりません: {script}")
     return script
@@ -234,7 +235,7 @@ def main() -> int:
         help=(
             "最大並列数（1 以上）。未指定時は CLI > YT_VIDEOUP_MAX_WORKERS > channel skill-config > "
             "CPU 検出 > 3 の優先順で解決。channel skill-config は "
-            "config/skills/videoup.yaml::batch.max_workers"
+            "config/skills/video.yaml::generate.batch.max_workers"
         ),
     )
     args = parser.parse_args()

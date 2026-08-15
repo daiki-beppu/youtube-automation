@@ -1,0 +1,21 @@
+{
+  "chainId": "video",
+  "steps": [
+    {
+      "id": "generate",
+      "skill": "video",
+      "prerequisiteArtifacts": [
+        "collections/<id>/01-master/<master-audio>",
+        "collections/<id>/10-assets/main.png|main.jpg|loop.mp4"
+      ],
+      "outputArtifacts": ["collections/<id>/01-master/*.mp4"],
+      "approvalGate": {
+        "skip": true,
+        "configPath": "workflow.video.skip_approvals.generate"
+      },
+      "idempotency": {
+        "script": "references/video-chain-state.py"
+      }
+    }
+  ]
+}

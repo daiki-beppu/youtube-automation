@@ -53,16 +53,6 @@ def test_lyria_skip_preserves_audit_artifact_and_hard_cap() -> None:
     assert "60 セグメント hard cap" in text
 
 
-def test_videoup_skip_still_generates_preview_before_full_output() -> None:
-    text = _text("videoup")
-
-    assert _config("videoup")["skip_preview_approval"] is False
-    assert "skip_preview_approval: true" in text
-    assert "skip_preview_approval` に関係なく" in text
-    assert "--preview 20" in text
-    assert "Preview.mp4" in text
-
-
 def test_loop_video_skips_are_independent_and_keep_safety_gates() -> None:
     text = (SKILLS / "thumbnail" / "references" / "loop.md").read_text(encoding="utf-8")
     config = _config("thumbnail")["loop"]

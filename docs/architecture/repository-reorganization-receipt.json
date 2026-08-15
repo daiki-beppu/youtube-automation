@@ -27,8 +27,8 @@
         "Updated consumer: tests/infrastructure/media/test_audio_visualizer_mask.py",
         "Updated consumer: tests/test_generate_videos_script.py",
         "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py",
-        "Updated consumer: .claude/skills/videoup/SKILL.md",
-        "Updated consumer: .claude/skills/videoup/references/generate_videos.sh"
+        "Updated consumer: .claude/skills/video/SKILL.md",
+        "Updated consumer: .claude/skills/video/references/generate_videos.sh"
       ]
     },
     {
@@ -806,7 +806,7 @@
         "Updated consumer: .claude/skills/suno-helper/SKILL.md",
         "Updated consumer: .claude/skills/thumbnail/SKILL.md",
         "Updated consumer: .claude/skills/masterup/SKILL.md",
-        "Updated consumer: .claude/skills/videoup/SKILL.md",
+        "Updated consumer: .claude/skills/video/SKILL.md",
         "Updated consumer: .claude/skills/thumbnail/references/loop.md",
         "Updated consumer: .claude/skills/community-post/SKILL.md",
         "Updated consumer: .claude/skills/flop-analysis/SKILL.md",
@@ -1021,7 +1021,7 @@
         "Updated consumer: .claude/skills/short-thumbnail/references/generate_short_loop.py",
         "Updated consumer: .claude/skills/short/references/generate_short_loop.py",
         "Updated consumer: .claude/skills/thumbnail/references/generate_loop_video.py",
-        "Updated consumer: .claude/skills/videoup/references/video-type-extension.md"
+        "Updated consumer: .claude/skills/video/references/video-type-extension.md"
       ]
     },
     {

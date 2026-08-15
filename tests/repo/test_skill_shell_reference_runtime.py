@@ -512,7 +512,7 @@ fi
 def test_overlay_benchmark_runs_available_candidates_and_aggregates_results(tmp_path: Path) -> None:
     env, output_dir, calls = _overlay_benchmark_env(tmp_path)
     result = _run(
-        SKILLS / "videoup" / "references" / "benchmark_overlay_encoders.sh",
+        SKILLS / "video" / "references" / "benchmark_overlay_encoders.sh",
         cwd=tmp_path,
         env=env,
     )
@@ -542,7 +542,7 @@ def test_overlay_benchmark_propagates_candidate_failure_without_complete_results
         fail_pattern="software-veryfast-1.mp4",
     )
     result = _run(
-        SKILLS / "videoup" / "references" / "benchmark_overlay_encoders.sh",
+        SKILLS / "video" / "references" / "benchmark_overlay_encoders.sh",
         cwd=tmp_path,
         env=env,
     )

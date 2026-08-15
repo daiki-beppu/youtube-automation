@@ -1,67 +1,40 @@
----
-name: videoup
-purpose: 作る
-description: "Use when 音声ファイルが揃い動画生成が必要なとき。「動画変換」「MP3→MP4」「generate_videos」「videoup」で発動。マスター音源・マスター動画生成を案内。YouTube への投稿は /publish の upload mode"
----
-
-## 前後工程
-
-- `前工程`: `/wf-new`, `/masterup`, `/lyria`, `/thumbnail --loop`
-- `後工程`: `/publish --upload`, `/video-description`
-- `委譲先`: `なし`
-
-## 成果物
-
-- `書き込む`: `collections/<id>/01-master/*.mp4`, `collections/<id>/workflow-state.json`
-- `読み込む`: `collections/<id>/01-master/<master-audio>`, `collections/<id>/10-assets/main.png`, `collections/<id>/10-assets/main.jpg`, `collections/<id>/10-assets/loop.mp4`, `config/skills/videoup.yaml`
-
-## Overview
+# 動画生成
 
 `.claude/skills/` 配下の共有スクリプト（`yt-skills sync` で配布）を使ってマスター音源と動画を生成します。
 スクリプトは毎回生成せず、既存の汎用スクリプトを実行します。
 
-Suno 系チャンネルは `/masterup`、Lyria 系チャンネルは `/lyria`（`/masterup` 不要）でマスター音源を生成してから本スキルを実行する。
+Suno 系チャンネルは `/music --master`、Lyria 系チャンネルは `/music --generate` でマスター音源を生成してから実行する。
 
-背景構成は `config/skills/videoup.yaml::video_type`（`loop` / `static`、既定 `loop`）で明示する。新しいタイプを追加する実装箇所は `references/video-type-extension.md` を参照する。
+背景構成は `config/skills/video.yaml::generate.video_type`（`loop` / `static`、既定 `loop`）で明示する。新しいタイプを追加する実装箇所は `references/video-type-extension.md` を参照する。
 
 ## 完了条件
 
-`01-master/` にマスター動画（例: `Theme-Name-Master.mp4`）が生成され、`workflow-state.json` の `assets.master_video` に動画ファイル名が記録されたとき完了とする（詳細は「ステップ」4-7 が正）。
+`01-master/` にマスター動画（例: `Theme-Name-Master.mp4`）が生成され、`workflow-state.json` の `assets.master_video` に動画ファイル名が記録されたとき完了とする。
 
 ## Subagent Contract
 
 - **入力**: 対象コレクション、採用するマスター音源、背景素材
 - **成果物**: `01-master/*.mp4`、probe 検証結果
-- **委譲しない処理**: `skip_preview_approval: false` のときのプレビュー承認。メインが確定してから全尺生成を委譲する（`true` ならプレビュー生成・保存と全尺生成を同じ委譲で続行できる）
 - **例外**: `generate_videos.sh` の実行に必要な範囲で `workflow-state.json` を読み取ってよい（書き込みは不可）
 
-subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実行しない。承認が要る処理は、メインが承認を得るまで委譲しない。完了報告は `status: success | failure`、成果物の絶対パス一覧、エラー。成果物の存在検証と state 更新はメインが行う。
-
-## 設定読み込みゲート
-
-以下を deep-merge した値を設定として使う。
-
-1. `.claude/skills/videoup/config.default.yaml`
-2. `config/skills/videoup.yaml`（存在する場合）
-
-合成規則は `youtube_automation.configuration.skills.load_skill_config("videoup")` と同じで、チャンネル上書きが優先される。存在しない override は未設定として扱い、勝手に作成しない。このスキルが `masterup` や `loop-video` の skill-config を直接参照する段階では、それぞれの `config.default.yaml` と `config/skills/<skill>.yaml` も同じ手順で読む。
+subagent は `workflow-state.json` へ書き込まない。完了報告は `status: success | failure`、成果物の絶対パス一覧、エラー。成果物の存在検証と state 更新はメインが行う。
 
 ## 前提
 
 以下を確認し、満たさなければ前工程を案内して停止する:
 
 - 対象コレクション（`collections/planning/` 配下）に `workflow-state.json` が存在すること。無ければ `/wf-new` を案内して停止する
-- マスター音源が存在すること（`workflow-state.json::assets.master_audio` が指すファイル、または `01-master/master-mix.*` / `master.*`）。無ければ `/masterup`（Suno）または `/lyria`（Lyria）を案内して停止する（DAW バウンス済みなら `master-mix.m4a` の手動配置でも可）
-- 動画背景素材が存在すること: `10-assets/main.png` / `main.jpg`（無ければ `/thumbnail` を案内）。`thumbnail::textless.enabled: false` では承認済み thumbnail と同一内容の文字入り `main.jpg` を正規入力として受け入れ、未設定または `true` では textless main を要求する。ループ動画運用チャンネル（`loop-video.enabled` が `false` でない）で `10-assets/loop.mp4` が無ければ `/thumbnail --loop` を案内する
+- マスター音源が存在すること（`workflow-state.json::assets.master_audio` が指すファイル、または `01-master/master-mix.*` / `master.*`）。無ければ `/music --master` または `/music --generate` を案内して停止する（DAW バウンス済みなら `master-mix.m4a` の手動配置でも可）
+- 動画背景素材が存在すること: `10-assets/main.png` / `main.jpg`（無ければ `/thumbnail` を案内）。`thumbnail::textless.enabled: false` では文字入り `main.jpg` を正規入力として受け入れ、未設定または `true` では textless main を要求する。ループ動画運用チャンネルで `10-assets/loop.mp4` が無ければ `/thumbnail --loop` を案内する
 - `ffmpeg` / `ffprobe` が利用可能であること（`generate_videos.sh` が使用）。無ければ `/setup` を案内する
 
 ## Scripts
 
 | スクリプト | 役割 | 場所 |
 |-----------|------|------|
-| `yt-generate-master` | 個別 MP3 → クロスフェード結合 → マスター MP3 | Python CLI (skill-config `masterup` 参照) |
-| `yt-generate-videos-batch` | マスター音源確定済み・未動画化のコレクションを並列動画化 | Python CLI (skill-config `videoup.batch.max_workers` 参照) |
-| `generate_videos.sh` | 音声 + テキストなし動画背景 (`main.png/jpg` or `loop.mp4`) → MP4 動画 | `.claude/skills/videoup/references/generate_videos.sh` |
+| `yt-generate-master` | 個別 MP3 → クロスフェード結合 → マスター MP3 | Python CLI（`music.master` 設定参照） |
+| `yt-generate-videos-batch` | マスター音源確定済み・未動画化のコレクションを並列動画化 | Python CLI (skill-config `video.generate.batch.max_workers` 参照) |
+| `generate_videos.sh` | 音声 + テキストなし動画背景 (`main.png/jpg` or `loop.mp4`) → MP4 動画 | `.claude/skills/video/references/generate_videos.sh` |
 
 ## Quick Reference
 
@@ -70,7 +43,7 @@ subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実�
 | `yt-generate-master` | CWD のコレクションでマスター音源生成 |
 | `yt-generate-master <path>` | 指定コレクションでマスター音源生成 |
 | `yt-generate-videos-batch` | マスター音源確定済み・未動画化のコレクションを並列動画化 |
-| `uv run bash "$(git rev-parse --show-toplevel)/.claude/skills/videoup/references/generate_videos.sh" <collection-path>` | 1 コレクションの動画を生成 |
+| `uv run bash "$(git rev-parse --show-toplevel)/.claude/skills/video/references/generate_videos.sh" <collection-path>` | 1 コレクションの動画を生成 |
 
 対象 stage・並列度・通常 option は `yt-generate-videos-batch --help`、collection path・preview・overlay option は `generate_videos.sh --help` を正とする。
 
@@ -89,23 +62,22 @@ $ARGUMENTS
 ### ステップ
 
 1. **対象コレクション確認**: `workflow-state.json` で状態確認
-2. **マスター音源**: `workflow-state.json::assets.master_audio` にファイル名が記録されていればそれを最優先で使用し、`01-master/` 内に存在することを確認する。未設定の場合のみ `master-mix.{wav,m4a,aac,mp3,flac}` → `master.{wav,m4a,aac,mp3,flac}` の順で探す。`assets.master_audio` が不正 JSON / 非 string / パス付き / 存在しないファイルを指す場合、`generate_videos.sh` は固定名探索へ fallback せずエラー停止する。なければ `/masterup` または `/lyria` でのマスター音源生成を案内（DAW バウンス済みの場合は `master-mix.m4a` をそのまま配置可、`/lyria` / `/masterup` の自動生成出力は `master.{wav,mp3}` で配置される）
+2. **マスター音源**: `workflow-state.json::assets.master_audio` にファイル名が記録されていればそれを最優先で使用し、`01-master/` 内に存在することを確認する。未設定の場合のみ `master-mix.{wav,m4a,aac,mp3,flac}` → `master.{wav,m4a,aac,mp3,flac}` の順で探す。`assets.master_audio` が不正 JSON / 非 string / パス付き / 存在しないファイルを指す場合、`generate_videos.sh` は固定名探索へ fallback せずエラー停止する。なければ `/music --master` または `/music --generate` を案内する
 3. **ループ動画背景**: `10-assets/loop.mp4` が既にあればスキップ。
-   `config/skills/loop-video.yaml::enabled: false` のチャンネルではループ動画化が無効化されているため、`/thumbnail --loop` を案内せず `10-assets/main.png` または `main.jpg` を静止背景として使用する。`thumbnail::textless.enabled: false` の共有 `main.jpg` は文字入りでも正規入力として扱い、textless 再生成へ戻さない。
+   loop 無効のチャンネルでは `/thumbnail --loop` を案内せず `10-assets/main.png` または `main.jpg` を静止背景として使用する。`thumbnail::textless.enabled: false` の共有 `main.jpg` は文字入りでも正規入力として扱い、textless 再生成へ戻さない。
    この場合、既存の `10-assets/loop.mp4` が残っていても `generate_videos.sh` は無視し、静止背景に切り替える。
-   それ以外（`enabled` 未指定 or `true`）で `loop.mp4` が無ければ `/thumbnail --loop` でのループ動画生成を案内。
+   それ以外で `loop.mp4` が無ければ `/thumbnail --loop` でのループ動画生成を案内。
    `loop.mp4` があると `generate_videos.sh` が自動的に動画背景を使用（静止画の代わり）
-4. **プレビュー確認ゲート**: `config/skills/videoup.yaml::effect.type != none` または `config/channel/youtube.json::overlays.enabled: true` の場合、`skip_preview_approval` に関係なく全尺生成の前に必ず `generate_videos.sh --preview 20 <collection-path>` を実行する（所要時間とログの扱いは「所要時間と完了報告」を参照）。`01-master/<Collection>-Preview.mp4` とスクリプト出力の `Full output outlook`（経路種別・時間見通し）を残す。プレビューは `*-Master.mp4` と `workflow-state.json` を変更しない
-5. **承認分岐**: `skip_preview_approval: false`（既定）はプレビューを提示し、ユーザーが受理した場合のみ全尺生成へ進む。受理しない場合は設定調整へ戻り、全尺エンコードと `assets.master_video` の更新を開始しない。選択 UI では「全尺生成へ進む」「設定を調整する」の 2 択、非対応環境ではテキスト承認を待つ。`true` はプレビューファイルの存在を確認して承認だけを省略し、そのまま全尺生成へ進む
-6. **動画生成**: effect / overlays が無効、Step 5 で明示承認済み、または `skip_preview_approval: true` でプレビュー保存確認済みの場合に、`generate_videos.sh` を実行する（所要時間とログの扱いは「所要時間と完了報告」を参照）
-7. **workflow-state.json 更新**: 全尺生成の成功後だけ `assets.master_video` に生成された動画ファイル名（例: `01-master/Theme-Name-Master.mp4`）を記録する。プレビューのみでは更新しない
+4. **任意プレビュー**: effect / overlays の短尺確認が必要な場合は `generate_videos.sh --preview 20 <collection-path>` を実行する。プレビューは `*-Master.mp4` と `workflow-state.json` を変更しない
+5. **動画生成**: `generate_videos.sh` を実行する（所要時間とログの扱いは「所要時間と完了報告」を参照）
+6. **workflow-state.json 更新**: 全尺生成の成功後だけ `assets.master_video` に生成された動画ファイル名（例: `01-master/Theme-Name-Master.mp4`）を記録する。プレビューのみでは更新しない
 
 ### 自動検出される要素
 
 スクリプトはコレクションのディレクトリ構造から以下を自動検出します:
 
 - **コレクション名**: ディレクトリ名から（`YYYYMMDD-xxx-theme-collection` → `Theme-Name`）
-- **マスター音声**: `workflow-state.json::assets.master_audio` が最優先。未設定の場合のみ `master-mix.{wav,m4a,aac,mp3,flac}` → `master.{wav,m4a,aac,mp3,flac}` の順に検出（m4a/aac は `-c:a copy` で再エンコード回避）。`master-mix.*` は DAW バウンス・手動配置、`master.*` は `/lyria` / `/masterup`（`yt-generate-master`）の自動生成出力（#507）。明示された `assets.master_audio` が壊れている場合は fail-closed し、別音源で動画生成を続行しない
+- **マスター音声**: `workflow-state.json::assets.master_audio` が最優先。未設定の場合のみ `master-mix.{wav,m4a,aac,mp3,flac}` → `master.{wav,m4a,aac,mp3,flac}` の順に検出（m4a/aac は `-c:a copy` で再エンコード回避）。明示された `assets.master_audio` が壊れている場合は fail-closed し、別音源で動画生成を続行しない
 - **動画背景**: `10-assets/main.png` 優先、`main.jpg` フォールバック。`thumbnail.jpg/png` は YouTube アップロード用のテキスト付きサムネイルなので動画背景には使わない
 - **個別音楽**: `02-Individual-music/*.mp3`（アルファベット順）
 
@@ -122,33 +94,34 @@ $ARGUMENTS
 | 設定方法 | 例 | 優先 |
 |---|---|---|
 | 環境変数 | `VIDEOUP_AUDIO_TARGET_VIDEO_DURATION_MIN=120 uv run bash .../generate_videos.sh ...` | 高 |
-| チャンネル override | `config/skills/videoup.yaml` に `audio: { target_video_duration_min: 120 }` | 中 |
+| チャンネル override | `config/skills/video.yaml::generate` に `audio: { target_video_duration_min: 120 }` | 中 |
 | 未設定 | (既定) | 従来動作 |
 
 - master 尺 ≥ `target_video_duration_min × 60` のときは無視され従来動作になる (master 尺が支配)
 - 音声 loop seam の crossfade は本機能のスコープ外 (将来拡張)
 
-## 設定: config/skills/videoup.yaml (v14)
+## 設定: config/skills/video.yaml::generate (v14)
 
-`generate_videos.sh` のチューニング値は **すべて下流チャンネルの `config/skills/videoup.yaml` から取得**する（新規 env override は追加しない config 駆動）。**全キー省略可**で、省略時は現行の固定値にフォールバックする（=無回帰）。
+`generate_videos.sh` のチューニング値は **すべて下流チャンネルの `config/skills/video.yaml::generate` から取得**する（新規 env override は追加しない config 駆動）。**全キー省略可**で、省略時は現行の固定値にフォールバックする（=無回帰）。
 
 ```yaml
-skip_preview_approval: false  # true: 20 秒 preview は保存し、確認だけ省略して全尺へ進む
-audio:
-  target_video_duration_min: 120   # 短尺 master を動画尺へ loop 伸長（#545, 既存 env 優先）
-video:
-  still_fps: 1            # 静止画(effect 無し)の短尺ベイク fps（既定 1）
-  still_crf: 28           # 静止画(effect 無し)の短尺ベイク CRF（既定 28、高画質寄りは 26）
-  still_gop: 300          # 静止画ベイクの 1 周期（既定 300 frames = 1fps で 5 分）
-  loop_maxrate: "6000k"   # loop 正規化 / effect ベイクの maxrate（既定 6000k、容量重視は 4000-4500k）
-  loop_bufsize: "12000k"  # 同上 bufsize（既定 12000k）
-effect:
-  type: none             # none | particles | bokeh | gradient（旧 VIDEOUP_EFFECT の config 版）
-  intensity: subtle       # subtle | medium | strong
-shrink:
-  enabled: false         # 生成後の容量最適化 re-encode（下記）
-  maxrate: ""            # 例 "2500k"。enabled かつ maxrate or crf 指定で発火
-  crf: ""               # maxrate と排他（どちらか一方）
+generate:
+  video_type: loop
+  audio:
+    target_video_duration_min: 120
+  video:
+    still_fps: 1
+    still_crf: 28
+    still_gop: 300
+    loop_maxrate: "6000k"
+    loop_bufsize: "12000k"
+  effect:
+    type: none
+    intensity: subtle
+  shrink:
+    enabled: false
+    maxrate: ""
+    crf: ""
 ```
 
 - **最終ファイルサイズ ≒ ベイク/正規化ビットレート × 尺**。容量を絞りたいときは `loop_maxrate` を下げるのが最も効く（YouTube 側で再トランスコードされるため、source を 4000-4500k へ下げても最終画質はほぼ不変）。
@@ -179,10 +152,10 @@ shrink:
 
 ### 使い方
 
-`config/skills/videoup.yaml` に書くだけ（env 指定は不要）:
+`config/skills/video.yaml::generate` に書くだけ（env 指定は不要）:
 
 ```yaml
-# config/skills/videoup.yaml
+# config/skills/video.yaml::generate
 effect:
   type: particles      # particles | bokeh | gradient
   intensity: subtle    # subtle | medium | strong
@@ -208,7 +181,7 @@ effect:
 
 `config/channel/youtube.json::overlays` で audio visualizer + subscribe popup の合成を有効化できる。`overlays.enabled: true` のときだけ `generate_videos.sh` は **x264 再エンコード経路** に分岐し、`filter_complex` で背景の上に visualizer / popup を重ねる。`overlays.enabled: false`（既定）または `overlays` キー欠落時は、ループ動画または静止画の短尺ベイクを使う **stream copy 経路**を維持する。
 
-overlay 合成は動画生成工程だけが担当し、Suno / Lyria / masterup では適用しない。一回限りの切替入口と config に対する override 契約は `generate_videos.sh --help` を正とし、設定ファイルを一時編集しない。
+overlay 合成は動画生成工程だけが担当し、音源生成・master 化では適用しない。一回限りの切替入口と config に対する override 契約は `generate_videos.sh --help` を正とし、設定ファイルを一時編集しない。
 
 runtime mask helper は script 内から `uv run python -m youtube_automation.infrastructure.media.audio_visualizer_mask` で起動する。script 自体も `uv run bash` で実行し、system Python に package が無い環境でも venv の依存を使う。
 
@@ -266,7 +239,7 @@ runtime mask helper は script 内から `uv run python -m youtube_automation.in
 - **再エンコード固定**: overlays 経路は `-c:v copy` 不可。`encoder.crf` / `maxrate` / `bufsize` で品質とサイズを制御する（DeepFocus365 で 70 分マスター = 約 1.0 GB / 2 Mbps 実績）。
 - **hardware encode は明示 opt-in**: `encoder.codec: "hardware"` で macOS は `h264_videotoolbox`、対応 NVIDIA 環境は `h264_nvenc` を選ぶ。特定 codec の明示指定も可能。利用不能または 1-frame 起動 probe 失敗時は `libx264` へ戻り、requested / selected と理由をログへ出す。既定は引き続き `libx264`。
 - **codec 固有引数**: `libx264` は preset / CRF、VideoToolbox は bitrate、NVENC は `p5` / CQ を使う。H.264 / yuv420p / profile / maxrate / bufsize / fps の出力契約は共通。
-- **性能を実測してから opt-in**: `VIDEOUP_BENCH_DURATION=60 VIDEOUP_BENCH_RUNS=3 bash .claude/skills/videoup/references/benchmark_overlay_encoders.sh` で同一入力を比較し、H.264 / yuv420p / profile / maxrate / bufsize / fps / AAC / duration の共通出力契約と visualizer の位置・形状・opacity の一致を検証する。median wall-clock が `libx264 medium` baseline より 20% 以上短い候補だけを opt-in の採用候補とし、未達なら既定経路を維持する。
+- **性能を実測してから opt-in**: `VIDEOUP_BENCH_DURATION=60 VIDEOUP_BENCH_RUNS=3 bash .claude/skills/video/references/benchmark_overlay_encoders.sh` で同一入力を比較し、H.264 / yuv420p / profile / maxrate / bufsize / fps / AAC / duration の共通出力契約と visualizer の位置・形状・opacity の一致を検証する。median wall-clock が `libx264 medium` baseline より 20% 以上短い候補だけを opt-in の採用候補とし、未達なら既定経路を維持する。
 
 ### Audio visualizer style（#1684）
 
@@ -294,7 +267,7 @@ runtime mask helper は script 内から `uv run python -m youtube_automation.in
 
 `generate_videos.sh` の目安（2 時間尺）: **エフェクト無し（ループ / 静止画短尺ベイクの stream copy）= 約 1〜2 分** / **エフェクト有り（v14 ループ・ベイク）= 約 1〜2 分**（初回はベイク 10〜40 秒 + 連結 約 1 分、2 回目以降はベイク cache hit）。`shrink.enabled` の容量最適化や短尺フォールバックの全尺再エンコードを使うときは尺なりに数分〜十数分かかる。
 
-ログを `/tmp/videoup-$(date +%s).log` へ redirect し、完了後は末尾から生成された `.mp4` のパスを報告する。失敗時は ffmpeg のエラー行を抜き出す。background 実行フラグを持たない環境（Codex 等）では `nohup ... > <log> 2>&1 &` を使い、完了はログ末尾で確認する。
+ログを `/tmp/video-generate-$(date +%s).log` へ redirect し、完了後は末尾から生成された `.mp4` のパスを報告する。失敗時は ffmpeg のエラー行を抜き出す。background 実行フラグを持たない環境（Codex 等）では `nohup ... > <log> 2>&1 &` を使い、完了はログ末尾で確認する。
 
 ## オーディオビジュアライザー / オーバーレイについて
 
@@ -302,21 +275,21 @@ runtime mask helper は script 内から `uv run python -m youtube_automation.in
 
 ### よくある誤解 (#646 feedback)
 
-「Suno のデータ取り込み時にビジュアライザーを付けて」とユーザーが指示しても、Suno / Lyria / masterup の工程ではビジュアライザーは付かない。理由:
+「音源生成時にビジュアライザーを付けて」と指示しても、音源生成・master 化ではビジュアライザーは付かない。理由:
 
-- `/music --prompt` / `/lyria` / `/masterup` は**音源（mp3 / wav / m4a）を作る工程**であり、映像オーバーレイは扱わない
+- `/music --generate` / `/music --master` は**音源（mp3 / wav / m4a）を作る工程**であり、映像オーバーレイは扱わない
 - ビジュアライザーは本質的に**動画生成（`generate_videos.sh`）側の合成処理**で、`ffmpeg` の `filter_complex` に `showfreqs` 等を組む
-- 反映したい場合は `config/channel/youtube.json::overlays.enabled: true` と必要な overlay 設定を用意してから `/videoup` を実行する
+- 反映したい場合は `config/channel/youtube.json::overlays.enabled: true` と必要な overlay 設定を用意してから `/video --generate` を実行する
 
 ### 正しい運用
 
-- ビジュアライザーが必要な動画は、`config/channel/youtube.json::overlays.enabled: true` にしたうえで `overlays.audio_visualizer.enabled: true` を設定して `/videoup` を実行する
+- ビジュアライザーが必要な動画は、`config/channel/youtube.json::overlays.enabled: true` にしたうえで `overlays.audio_visualizer.enabled: true` を設定して `/video --generate` を実行する
 - popup も必要なら `overlays.subscribe_popup.enabled: true` と画像パスを設定する。画像が見つからない場合は popup だけスキップし、visualizer は継続する
 - overlays 無効チャンネルでは従来どおり textless `main.png/jpg` または `loop.mp4` のみで生成する
 
 ### Claude への指示時の注意
 
-オペレーターから「ビジュアライザー付きで」「波形表示で」等の指示があった場合は、**Suno 側ではなく `/videoup` の overlays 設定で反映する**ことを明示してから作業を進めること。その上で、
+オペレーターから「ビジュアライザー付きで」「波形表示で」等の指示があった場合は、**Suno 側ではなく `/video --generate` の overlays 設定で反映する**ことを明示してから作業を進めること。その上で、
 
 - overlays を有効にして生成するか
 - 静止画 / ループ動画のみで進めるか
