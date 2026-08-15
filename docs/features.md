@@ -30,7 +30,7 @@
 | Skill | なにができるか |
 |---|---|
 | /channel-strategy | チャンネル戦略を状態判定付きで実行し、`--persona` で第一ペルソナ、`--scene` で視聴シーン、`--constraints` で制作制約、`--direction` で方向性・ポジショニング・差別化を設計・見直し |
-| /audit | `--alignment` で音楽ムード × サムネ × タイトル訴求の整合性、`--value-loop` でシーン定義 → 制約翻訳 → 公開前ゲート → 指標還流を読み取り専用で監査 |
+| /audit | `--alignment` で音楽ムード × サムネ × タイトル訴求の整合性、`--value-loop` で価値ループ、`--video` で動画本体のフック・BGM・シーン・サムネ整合性を監査・解析 |
 
 ## 企画・コンテンツ生成
 
@@ -65,7 +65,6 @@ YouTube Analytics と動画本体の解析。
 |---|---|
 | /analytics | 収集・分析・レポート表示を一括実行。`--collect` / `--analyze` / `--report` で各段だけを実行 |
 | /flop-analysis | 伸びなかった動画の原因を仮説 → 検証で切り分け |
-| /video-analyze | Gemini で YouTube 動画本体を直接解析（フック・BGM・シーン・サムネ整合性） |
 
 ## ベンチマーク
 

@@ -146,6 +146,12 @@ _RAW_EXPECTED_ACTIVE_ROUTES = (
         "## Hard Gates",
         "  - 既存チャンネルでは `/setup --import` を案内して停止する。",
     ),
+    _route(
+        "audit/references/video.md",
+        "## 呼び出し側スキル",
+        "- `/channel-strategy --direction`（方向性検討モード） — Step D1 の分析サマリーで "
+        "`bgm_arc` 平均（intro / peak / outro 秒）を提示し、",
+    ),
     _route("wf-new/references/ideate.md", "## 前提", "- **新規チャンネル** → `/setup --channel` を案内"),
     _route(
         "wf-new/references/ideate.md",

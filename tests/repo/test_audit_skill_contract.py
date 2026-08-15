@@ -2,7 +2,15 @@
 
 from __future__ import annotations
 
+import os
+from pathlib import Path
+
+import yaml
+
 from tests.helpers.paths import REPO_ROOT
+from youtube_automation.commands.analytics import video_analyze
+from youtube_automation.commands.system.skills_sync import _migrate_config
+from youtube_automation.configuration import skills as skill_config
 from youtube_automation.domains.skills.inventory import SkillInventory
 
 INVENTORY = SkillInventory(REPO_ROOT)
@@ -17,6 +25,7 @@ def test_audit_exposes_alignment_as_an_exclusive_mode() -> None:
     assert "audit" in skill_names
     assert "alignment-check" not in skill_names
     assert "value-loop-audit" not in skill_names
+    assert "video-analyze" not in skill_names
     assert isinstance(frontmatter, dict)
     assert frontmatter["name"] == "audit"
     assert frontmatter["purpose"] == "振り返る"
@@ -26,8 +35,10 @@ def test_audit_exposes_alignment_as_an_exclusive_mode() -> None:
     assert "0 個なら" in mode
     assert "| `--alignment` | `references/alignment.md` |" in mode
     assert "| `--value-loop` | `references/value-loop.md` |" in mode
+    assert "| `--video` | `references/video.md` |" in mode
     assert INVENTORY.reference_exists("audit", "references/alignment.md")
     assert INVENTORY.reference_exists("audit", "references/value-loop.md")
+    assert INVENTORY.reference_exists("audit", "references/video.md")
 
 
 def test_alignment_mode_keeps_the_audit_inputs_and_external_read_only_boundary() -> None:
@@ -89,3 +100,57 @@ def test_value_loop_mode_diagnoses_all_four_integrated_stages_without_writes() -
         assert route in value_loop
     assert "ファイルの作成・変更・削除" in value_loop
     assert "結果はチャット内にだけ表示" in value_loop
+
+
+def test_video_mode_keeps_gemini_analysis_outputs_and_external_read_only_boundary() -> None:
+    video = (AUDIT_DIR / "references" / "video.md").read_text(encoding="utf-8")
+
+    assert "yt-video-analyze" in video
+    assert "Vertex AI" in video
+    assert "ADC" in video
+    assert "外部サービスの状態は変更しない" in video
+    for output_path in (
+        "data/video_analysis/<slug>/<video_id>.json",
+        "reports/video_analysis/<slug>.md",
+    ):
+        assert output_path in video
+    for forbidden_command in (
+        "videos().update",
+        "thumbnails().set",
+        "channels().update",
+        "playlists().insert",
+        "playlistItems().insert",
+    ):
+        assert forbidden_command not in video
+
+
+def test_video_config_is_namespaced_and_keeps_legacy_override(tmp_path: Path) -> None:
+    defaults = yaml.safe_load((AUDIT_DIR / "config.default.yaml").read_text(encoding="utf-8"))
+
+    assert isinstance(defaults["video"], dict)
+    assert defaults["video"]["model"] == "gemini-3.5-flash"
+    assert "audit.video" in skill_config.SKILL_CONFIG_KEYS
+    assert video_analyze.SKILL_CONFIG_KEY == "audit.video"
+    assert skill_config.skill_config_default_relative_path("video-analyze") == Path("audit/config.default.yaml")
+    assert _migrate_config.SKILL_CONFIG_MIGRATIONS["video-analyze"] == _migrate_config.SkillConfigMigration(
+        "audit", "video"
+    )
+
+    config_dir = tmp_path / "config" / "skills"
+    config_dir.mkdir(parents=True)
+    (config_dir / "video-analyze.yaml").write_text("analysis_window_sec: 300\n", encoding="utf-8")
+
+    loaded = skill_config.load_skill_config("audit.video", use_cache=False, channel_dir=tmp_path)
+
+    assert loaded["analysis_window_sec"] == 300
+    assert not os.path.lexists(AUDIT_DIR.parent / "video-analyze")
+
+
+def test_video_config_reads_canonical_audit_section(tmp_path: Path) -> None:
+    config_dir = tmp_path / "config" / "skills"
+    config_dir.mkdir(parents=True)
+    (config_dir / "audit.yaml").write_text("video:\n  analysis_window_sec: 450\n", encoding="utf-8")
+
+    loaded = skill_config.load_skill_config("audit.video", use_cache=False, channel_dir=tmp_path)
+
+    assert loaded["analysis_window_sec"] == 450

@@ -1060,7 +1060,7 @@
     },
     {
       "old_owner": "legacy..claude.skills.video-analyze.SKILL.md",
-      "exact_new_owner": ".claude/skills/video-analyze/SKILL.md",
+      "exact_new_owner": ".claude/skills/audit/references/video.md",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"

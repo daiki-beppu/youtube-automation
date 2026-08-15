@@ -8,7 +8,7 @@ from tests.helpers.paths import REPO_ROOT
 
 ROOT = REPO_ROOT
 SKILL_MD = ROOT / ".claude" / "skills" / "flop-analysis" / "SKILL.md"
-VIDEO_ANALYZE_CONFIG = ROOT / ".claude" / "skills" / "video-analyze" / "config.default.yaml"
+VIDEO_ANALYZE_CONFIG = ROOT / ".claude" / "skills" / "audit" / "config.default.yaml"
 
 
 def _skill_text() -> str:
@@ -249,7 +249,7 @@ def test_flop_analysis_references_retention_timeline_report() -> None:
 
     assert "yt-retention-timeline --video <video_id>" in phase_4
     assert "reports/retention_analysis/<video_id>.md" in phase_4
-    assert "/video-analyze 未実行" in phase_4
+    assert "/audit --video 未実行" in phase_4
     assert "outside_analysis_window" in phase_4
 
 

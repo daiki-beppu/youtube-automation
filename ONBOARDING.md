@@ -258,7 +258,7 @@ uv run yt-init-collection "Pilot Direction Check" "pilot-direction-check" --trac
 | このコレクション CTR 弱くない？ | `/audit --alignment` → `/thumbnail --compare` |
 | シリーズ広げるべき？ | `/analytics --analyze`（テーマ別パフォーマンス） |
 | 視聴者は誰？何を求めてる？ | `/channel-research --voice` → `/channel-strategy --persona` → `/channel-strategy --scene` |
-| 競合は今どんな動画出してる？ | `/channel-research --benchmark` → `/video-analyze` |
+| 競合は今どんな動画出してる？ | `/channel-research --benchmark` → `/audit --video` |
 
 ### 5.3 共通運営方針の更新
 

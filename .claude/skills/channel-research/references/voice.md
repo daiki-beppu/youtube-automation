@@ -134,5 +134,5 @@ subagent へは次を具体値で渡す:
 - `yt-benchmark-comments` (`youtube_automation.commands.analytics.fetch_benchmark_comments`) — コメント収集スクリプト
 - `data/comments_YYYYMMDD.json` — コメント生データ
 - `data/benchmark_YYYYMMDD.json` — ベンチマーク動画データ（自動更新）
-- `data/video_analysis/<slug>/<video_id>.json` — `/video-analyze` の `scene_timeline` 出力（コメント言及シーンを動画タイムスタンプにマッピング）
+- `data/video_analysis/<slug>/<video_id>.json` — `/audit --video` の `scene_timeline` 出力（コメント言及シーンを動画タイムスタンプにマッピング）
   - 冒頭クリップ窓（既定 900 秒、JSON の `analysis_window_sec`）内の分析結果。窓外シーンへの言及は `scene_timeline` 不足ではなくスコープ外として扱う。

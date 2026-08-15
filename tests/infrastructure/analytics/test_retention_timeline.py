@@ -238,7 +238,7 @@ def test_cli_skips_with_video_analyze_guidance(tmp_path: Path, monkeypatch, caps
 
     output = json.loads(capsys.readouterr().out)
     assert output["status"] == "skipped"
-    assert "/video-analyze 未実行" in output["reason"]
+    assert "/audit --video 未実行" in output["reason"]
     assert not (tmp_path / "reports").exists()
 
 

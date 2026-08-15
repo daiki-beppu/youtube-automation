@@ -1,8 +1,4 @@
----
-name: video-analyze
-purpose: 振り返る
-description: "Use when 動画本体の中身（フック構造・シーン・BGM 展開）を Gemini で解析するとき。「冒頭 30 秒解析」「retention drop」「BGM のピーク位置」で発動"
----
+# video mode
 
 ## 前後工程
 
@@ -13,7 +9,7 @@ description: "Use when 動画本体の中身（フック構造・シーン・BGM
 ## 成果物
 
 - `書き込む`: `data/video_analysis/<channel>/<video-id>.json`, `reports/video_analysis/<channel>.md`
-- `読み込む`: `collections/<id>/20-documentation/upload_tracking.json`, `data/benchmark_*.json`, `config/skills/video-analyze.yaml`
+- `読み込む`: `collections/<id>/20-documentation/upload_tracking.json`, `data/benchmark_*.json`, `config/skills/audit.yaml`
 
 ## Overview
 
@@ -37,16 +33,17 @@ Step 1 のスクリプトが exit 0 で終了して `data/video_analysis/<slug>/
 
 以下を deep-merge した値を設定として使う。
 
-1. `.claude/skills/video-analyze/config.default.yaml`
-2. `config/skills/video-analyze.yaml`（存在する場合）
+1. `.claude/skills/audit/config.default.yaml` の `video:` 節
+2. `config/skills/audit.yaml` の `video:` 節（存在する場合）
 
-合成規則は `youtube_automation.configuration.skills.load_skill_config("video-analyze")` と同じで、チャンネル上書きが優先される。存在しない override は未設定として扱い、勝手に作成しない。
+合成規則は `youtube_automation.configuration.skills.load_skill_config("audit.video")` と同じで、チャンネル上書きが優先される。移行前の `config/skills/video-analyze.yaml` も互換読み込みする。存在しない override は未設定として扱い、勝手に作成しない。
 
 ## 前提
 
 - `config/channel/` がロード可能であること (`load_config()`)
 - Vertex AI ADC 初期化済み (`gcloud auth application-default login` + `set-quota-project`)。project_id は ADC quota project から自動解決（`GOOGLE_CLOUD_PROJECT` は任意で上書き可）
 - 解析対象動画が **Public または Unlisted** であること (Gemini API は Private 動画を取得できない)
+- Vertex AI への解析リクエストとローカル成果物の保存だけを行い、YouTube やその他の外部サービスの状態は変更しない
 
 ## 想定 API call 数
 
@@ -115,21 +112,21 @@ subagent にはスキーマ・型・タイムスタンプ・不自然値だけ�
 
 ## 設定
 
-skill-config (`.claude/skills/video-analyze/config.default.yaml`):
+skill-config (`.claude/skills/audit/config.default.yaml::video`):
 
 | 項目 | 既定 | 説明 |
 |---|---|---|
 | `model` | `gemini-3.5-flash` | Vertex AI global endpoint の動画入力対応 GA Gemini モデル |
 | `delay_sec` | 10 | 動画間の API レート対策ウェイト (秒) |
 | `analysis_window_sec` | 900 | 解析するクリップ窓 (秒)。動画冒頭からこの秒数のみ Gemini に渡す。bool ではない正の整数のみ有効 |
-| `prompt` | 汎用プロンプト | ジャンル/世界観に合わせて `config/skills/video-analyze.yaml` で上書き推奨 |
+| `prompt` | 汎用プロンプト | ジャンル/世界観に合わせて `config/skills/audit.yaml::video` で上書き推奨 |
 
 ## 注意事項
 
 - Gemini API には YouTube URL を直接渡す (動画ダウンロードしない)
 - **全尺は解析しない**: `video_metadata` の offset 指定で動画冒頭 `analysis_window_sec` 秒
   （既定 900 秒 = 15 分、冒頭 2〜3 曲相当）のみを解析する。Gemini の動画入力コストは再生尺に
-  比例するため、長尺 BGM 動画の全尺解析を避ける。窓幅は `config/skills/video-analyze.yaml` の
+  比例するため、長尺 BGM 動画の全尺解析を避ける。窓幅は `config/skills/audit.yaml::video` の
   `analysis_window_sec` で上書きできる（deep-merge、曲数が多い・イントロが長いチャンネル向け）
 - Public/Unlisted のみ対応 (Private 動画は API 側で拒否される)
 - Shorts は Gemini の 1fps サンプリング制約により短尺フック構造の解析精度が落ちる。`/short` で生成・投稿した自チャンネル Shorts は本 skill の対象外として扱い、リテンション / CTR 分析は `/analytics --analyze` に任せる
@@ -139,7 +136,7 @@ skill-config (`.claude/skills/video-analyze/config.default.yaml`):
 
 以下の skill は `data/video_analysis/<slug>/*.json` の `hook_structure` / `bgm_arc` /
 `scene_timeline` / `thumbnail_alignment` / `editing_metrics` を入力として参照する。
-`/video-analyze` が未実行のときは警告で続行するが、ベンチマークデータがあれば自動実行を提案する。
+`/audit --video` が未実行のときは警告で続行するが、ベンチマークデータがあれば自動実行を提案する。
 
 **注意**: これらのデータは動画冒頭のクリップ窓（既定 900 秒 = 15 分）のみの分析結果。
 `bgm_arc.outro` は「動画全体のアウトロ」ではなく「窓内終盤」を指すため、下流での平均計算や

@@ -43,7 +43,7 @@ from youtube_automation.infrastructure.media.video_analyzer import (
 
 logger = logging.getLogger(__name__)
 
-SKILL_NAME = "video-analyze"
+SKILL_CONFIG_KEY = "audit.video"
 SOURCE_BENCHMARK = "benchmark"
 SOURCE_OWN = "own"
 SOURCE_CHOICES = (SOURCE_BENCHMARK, SOURCE_OWN)
@@ -270,7 +270,7 @@ def _analysis_window_sec_from_config(cfg: dict) -> int:
     value = cfg.get("analysis_window_sec")
     if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
         raise ConfigError(
-            f"video-analyze.analysis_window_sec は bool ではない正の整数秒である必要があります (received: {value!r})"
+            f"audit.video.analysis_window_sec は bool ではない正の整数秒である必要があります (received: {value!r})"
         )
     return value
 
@@ -321,7 +321,7 @@ def main():
     )
 
     # 境界での解決: skill-config / channel_dir / data_dir / Gemini Client は一度だけ
-    cfg = load_skill_config(SKILL_NAME)
+    cfg = load_skill_config(SKILL_CONFIG_KEY)
     channel_dir = _channel_dir()
     data_dir = channel_dir / "data"
     reports_dir = channel_dir / "reports"

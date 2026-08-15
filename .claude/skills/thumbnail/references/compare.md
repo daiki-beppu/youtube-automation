@@ -106,5 +106,5 @@ open data/thumbnail_compare/
 - `collections/live/*/10-assets/thumbnail.jpg` — 公開済み自チャンネルサムネイル
 - `collections/planning/*/10-assets/thumbnail.jpg` — 企画中の確定済み自チャンネルサムネイル
 - `docs/benchmarks/common-patterns.md` — サムネイルチェックリスト v4
-- `data/video_analysis/<slug>/<video_id>.json` — `/video-analyze` の `signature_elements` / `hook_structure` 出力（競合のサムネ実装パターン抽出を補強）
+- `data/video_analysis/<slug>/<video_id>.json` — `/audit --video` の `signature_elements` / `hook_structure` 出力（競合のサムネ実装パターン抽出を補強）
   - 冒頭クリップ窓（既定 900 秒、JSON の `analysis_window_sec`）内の実装パターン。動画全尺で出る signature 要素を網羅したものとは扱わない。
