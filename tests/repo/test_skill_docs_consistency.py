@@ -349,7 +349,7 @@ def test_setup_channel_ttp_hearing_routes_direction_to_residual_mode() -> None:
     assert "config を再生成・再反映する場合は `/setup --regenerate`" in direction_mode
     assert "制作に進む場合は `/wf-new`" in direction_mode
 
-    assert "/channel-research --voice` → `/channel-strategy --persona` → `/viewing-scene" in step7
+    assert "/channel-research --voice` → `/channel-strategy --persona` → `/channel-strategy --scene" in step7
     assert "必須" in step7
     assert "docs/channel/personas/persona-definition.md" in step7
     assert "Step 8 へ進まない" in step7
@@ -415,10 +415,10 @@ def test_channel_new_docs_distinguish_required_initial_persona_from_optional_rea
     features = _read("docs/features.md")
     onboarding = _read("ONBOARDING.md")
 
-    assert "/channel-research --voice` → `/channel-strategy --persona` → `/viewing-scene`" in features
+    assert "/channel-research --voice` → `/channel-strategy --persona` → `/channel-strategy --scene`" in features
     assert "`/channel-research --voice` は公開後の再分析では任意" in features
     assert "公開前のペルソナチェーンは既存の競合 / TTP / viewer-voice 成果物を入力に完走" in features
-    assert "公開後の `/viewing-scene` は従来どおり Analytics report を要求する" in features
+    assert "公開後の `/channel-strategy --scene` は従来どおり Analytics report を要求する" in features
     assert "/channel-research --voice  → 公開後のコメント再分析" in onboarding
     assert "公開前チェーンは競合 / TTP / viewer-voice 成果物を入力" in onboarding
     assert "自チャンネル Analytics report や任意の本格 benchmark 収集を要求しない" in onboarding
@@ -428,13 +428,14 @@ def test_channel_new_docs_distinguish_required_initial_persona_from_optional_rea
 def test_setup_channel_prelaunch_persona_chain_propagates_context_without_analytics() -> None:
     setup_channel = _read(".claude/skills/setup/references/channel-mode.md")
     audience_persona = _read(".claude/skills/channel-strategy/references/persona.md")
+    viewing_scene = _read(".claude/skills/channel-strategy/references/scene.md")
 
     step7 = setup_channel.split("### Step 7: 本格ペルソナ作成チェーン", 1)[1].split(
         "### Step 8: branding 初回反映",
         1,
     )[0]
     assert "実行コンテキスト: 新規開設（公開前）" in step7
-    assert "`/channel-strategy --persona` から同じ実行コンテキストを引き継いで `/viewing-scene`" in step7
+    assert ("`/channel-strategy --persona` から同じ実行コンテキストを引き継いで `/channel-strategy --scene`") in step7
     for path in (
         "docs/plans/viewer-voice-analysis.md",
         "docs/channel/ttp-seed-confirmation.md",
@@ -475,11 +476,11 @@ def test_setup_channel_prelaunch_persona_chain_propagates_context_without_analyt
     assert "全ベンチマーク動画のタグを集計（頻度順）" not in audience_prelaunch
     assert "全ベンチマーク動画のタグを集計（頻度順）" in audience_postlaunch
 
-    viewing_overview = SKILL_INVENTORY.section("viewing-scene", "## Overview")
+    viewing_overview = _markdown_section(viewing_scene, "## Overview")
     assert "新規開設（公開前）" in viewing_overview
     assert "公開後" in viewing_overview
     assert "実行コンテキストが明示されない場合もこちら" in viewing_overview
-    guard = SKILL_INVENTORY.section("viewing-scene", "### 停止する fail")
+    guard = _markdown_section(viewing_scene, "### 停止する fail")
     assert "新規開設（公開前）" in guard
     assert "公開後に `reports/analysis_*.md` が無い" in guard
     assert "`reports/analysis_*.md` が無い" not in guard.replace(
@@ -495,7 +496,8 @@ def test_setup_channel_prelaunch_persona_chain_propagates_context_without_analyt
 
 
 def test_viewing_scene_keeps_post_publish_inputs_and_analysis_phases() -> None:
-    flow = SKILL_INVENTORY.section("viewing-scene", "## 実行フロー")
+    viewing_scene = _read(".claude/skills/channel-strategy/references/scene.md")
+    flow = viewing_scene.split("## 実行フロー", 1)[1].split("## 障害時ガイダンス", 1)[0]
 
     assert "**公開後**:" in flow
     assert "`reports/` の最新分析レポートを読み込む" in flow
@@ -941,7 +943,7 @@ def test_channel_new_followup_skill_routing_uses_new_contract() -> None:
     assert "新規チャンネル開設 → 競合発掘 → 方向性決定 → セットアップ" not in features
     assert (
         "`/setup` → `/channel-new`（`/channel-research --voice` → `/channel-strategy --persona` → "
-        "`/viewing-scene` を含む）→ `/wf-new`"
+        "`/channel-strategy --scene` を含む）→ `/wf-new`"
     ) in features
 
 

@@ -180,7 +180,7 @@ def test_flop_analysis_uses_noninteractive_analysis_boundaries() -> None:
         "/alignment-check",
         "/channel-research --voice",
         "/channel-strategy --persona",
-        "/viewing-scene",
+        "/channel-strategy --scene",
         "/channel-new",
         "/channel-research --discover",
     )
@@ -189,7 +189,7 @@ def test_flop_analysis_uses_noninteractive_analysis_boundaries() -> None:
 
     interactive_skill_texts = (
         (ROOT / ".claude/skills/alignment-check/SKILL.md").read_text(encoding="utf-8"),
-        (ROOT / ".claude/skills/viewing-scene/SKILL.md").read_text(encoding="utf-8"),
+        (ROOT / ".claude/skills/channel-strategy/references/scene.md").read_text(encoding="utf-8"),
         (ROOT / ".claude/skills/channel-new/SKILL.md").read_text(encoding="utf-8")
         + (ROOT / ".claude/skills/channel-new/references/direction-mode.md").read_text(encoding="utf-8"),
     )

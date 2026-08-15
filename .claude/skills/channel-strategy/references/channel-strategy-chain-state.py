@@ -15,6 +15,7 @@ EXIT_BLOCKED = 20
 
 _VIEWER_VOICE = "docs/plans/viewer-voice-analysis.md"
 _PERSONA = "docs/channel/personas/persona-definition.md"
+_SCENE = "docs/plans/viewing-scene-matrix.md"
 
 
 class ManifestError(ValueError):
@@ -30,11 +31,11 @@ def _validate_manifest() -> None:
     if manifest.get("chainId") != "channel-strategy":
         raise ManifestError("chainId must be channel-strategy")
     steps = manifest.get("steps")
-    if not isinstance(steps, list) or len(steps) != 1 or not isinstance(steps[0], dict):
-        raise ManifestError("steps must contain only the persona step")
-    step = steps[0]
-    if step.get("id") != "persona" or step.get("skill") != "channel-strategy":
-        raise ManifestError("persona step owner is inconsistent")
+    if not isinstance(steps, list) or len(steps) != 2 or not all(isinstance(step, dict) for step in steps):
+        raise ManifestError("steps must contain persona followed by scene")
+    identities = [(step.get("id"), step.get("skill")) for step in steps]
+    if identities != [("persona", "channel-strategy"), ("scene", "channel-strategy")]:
+        raise ManifestError("step order or owner is inconsistent")
 
 
 def _artifact_exists(channel_dir: Path, relative: str) -> bool:
@@ -42,7 +43,7 @@ def _artifact_exists(channel_dir: Path, relative: str) -> bool:
     return path.is_file() and path.stat().st_size > 0
 
 
-def evaluate(channel_dir: Path) -> tuple[int, dict[str, object]]:
+def _evaluate_persona(channel_dir: Path) -> tuple[int, dict[str, object]]:
     if not _artifact_exists(channel_dir, _VIEWER_VOICE):
         return EXIT_BLOCKED, {
             "step": "persona",
@@ -66,10 +67,42 @@ def evaluate(channel_dir: Path) -> tuple[int, dict[str, object]]:
     }
 
 
+def _evaluate_scene(channel_dir: Path) -> tuple[int, dict[str, object]]:
+    if not _artifact_exists(channel_dir, _PERSONA):
+        return EXIT_BLOCKED, {
+            "step": "scene",
+            "decision": "blocked",
+            "reason": "persona_missing",
+            "missing": [_PERSONA],
+            "next": "channel-strategy --persona",
+        }
+    if not _artifact_exists(channel_dir, _SCENE):
+        return EXIT_RUN, {
+            "step": "scene",
+            "decision": "run",
+            "reason": "scene_missing",
+            "missing": [_SCENE],
+        }
+    return EXIT_SKIP, {
+        "step": "scene",
+        "decision": "skip",
+        "reason": "scene_complete",
+        "outputs": [_SCENE],
+    }
+
+
+def evaluate(channel_dir: Path, step: str) -> tuple[int, dict[str, object]]:
+    if step == "persona":
+        return _evaluate_persona(channel_dir)
+    if step == "scene":
+        return _evaluate_scene(channel_dir)
+    raise ManifestError(f"unknown step: {step}")
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--channel-dir", type=Path, required=True)
-    parser.add_argument("--step", choices=("persona",), required=True)
+    parser.add_argument("--step", choices=("persona", "scene"), required=True)
     return parser
 
 
@@ -77,7 +110,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
         _validate_manifest()
-        exit_code, result = evaluate(args.channel_dir)
+        exit_code, result = evaluate(args.channel_dir, args.step)
     except (OSError, json.JSONDecodeError, ManifestError) as exc:
         print(json.dumps({"step": args.step, "decision": "error", "reason": str(exc)}, ensure_ascii=False))
         return EXIT_ERROR

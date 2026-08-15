@@ -48,7 +48,7 @@ def test_flow_advances_to_one_draft_then_viewing_scene_then_finalization(tmp_pat
     _touch(tmp_path, "docs/plans/viewer-voice-analysis.md")
     assert flow.flow_status(tmp_path)["next"] == "draft-persona"
     _touch(tmp_path, "docs/channel/personas/persona-definition.md")
-    assert flow.flow_status(tmp_path)["next"] == "viewing-scene"
+    assert flow.flow_status(tmp_path)["next"] == "channel-strategy --scene"
     _touch(tmp_path, "docs/plans/viewing-scene-matrix.md")
     assert flow.flow_status(tmp_path) == {
         "status": "ready",
