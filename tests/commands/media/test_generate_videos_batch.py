@@ -63,7 +63,7 @@ def _collection(root: Path, stage: str, slug: str, *, audio: object, video: obje
     collection = root / "collections" / stage / slug
     (collection / "01-master").mkdir(parents=True)
     (collection / "workflow-state.json").write_text(
-        json.dumps({"assets": {"master_audio": audio, "master_video": video}}),
+        json.dumps({"assets": {"master_audio": audio, "master_video": video}, "future_section": {"keep": True}}),
         encoding="utf-8",
     )
     return collection
@@ -155,6 +155,7 @@ def test_update_workflow_states_records_generated_video_for_success_only(tmp_pat
     failed_state = json.loads((failed / "workflow-state.json").read_text(encoding="utf-8"))
     assert updated == {success: "Success-Master.mp4"}
     assert success_state["assets"]["master_video"] == "Success-Master.mp4"
+    assert success_state["future_section"] == {"keep": True}
     assert "updated_at" in success_state
     assert failed_state["assets"]["master_video"] is None
     assert (success / "workflow-state.json.lock").is_file()
@@ -182,17 +183,17 @@ def test_main_state_write_partial_failure_leaves_only_failed_target_for_retry(
     monkeypatch.setattr("sys.argv", ["yt-generate-videos-batch"])
     monkeypatch.setattr(batch, "channel_dir", lambda: tmp_path)
     monkeypatch.setattr(batch, "run_batch_parallel", lambda *_args, **_kwargs: results)
-    original_write = batch._write_state_atomic
+    original_update = batch.update_workflow_state
     writes = 0
 
-    def fail_second(path, state):
+    def fail_second(path, updater):
         nonlocal writes
         writes += 1
         if writes == 2:
             raise OSError("disk full")
-        original_write(path, state)
+        return original_update(path, updater)
 
-    monkeypatch.setattr(batch, "_write_state_atomic", fail_second)
+    monkeypatch.setattr(batch, "update_workflow_state", fail_second)
 
     assert batch.main() == 1
 

@@ -8,13 +8,10 @@ clips. In both modes, filter obviously broken durations before selection.
 
 from __future__ import annotations
 
-import json
-import os
 import random
 import re
 import shutil
 import string
-import tempfile
 import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -22,7 +19,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from youtube_automation.core.adapters.media import CollectionPaths, probe_duration
-from youtube_automation.core.errors import ValidationError
+from youtube_automation.core.errors import ValidationError, WorkflowStateError
+from youtube_automation.domains.collections.workflow_state import WorkflowState
+from youtube_automation.domains.collections.workflow_state import read_or_none as read_workflow_state_or_none
+from youtube_automation.domains.collections.workflow_state import update as update_workflow_state
 from youtube_automation.domains.suno.name_matching import (
     AmbiguousSunoNameError,
     SunoNameIndex,
@@ -128,7 +128,6 @@ class SelectionResult:
 @dataclass(frozen=True)
 class WorkflowStateSnapshot:
     path: Path
-    data: dict[str, object]
 
 
 @dataclass(frozen=True)
@@ -824,49 +823,42 @@ def _exception_payload(exception: OverLimitException) -> dict[str, object]:
     }
 
 
-def _atomic_json_write(target: Path, data: dict) -> None:
-    if target.is_symlink():
-        raise ValidationError(f"workflow-state.json must not be a symlink: {target}")
-    target.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp_name = tempfile.mkstemp(dir=str(target.parent), prefix=".workflow-state-", suffix=".json")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            json.dump(data, fh, ensure_ascii=False, indent=2)
-        os.replace(tmp_name, target)
-    except BaseException:
-        if os.path.exists(tmp_name):
-            os.unlink(tmp_name)
-        raise
-
-
 def _read_workflow_state(workflow_state_path: Path) -> WorkflowStateSnapshot:
-    if workflow_state_path.is_symlink():
-        raise ValidationError(f"workflow-state.json must not be a symlink: {workflow_state_path}")
-    if workflow_state_path.is_file():
-        try:
-            data = json.loads(workflow_state_path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError) as exc:
-            raise ValidationError(f"workflow-state.json を読み取れませんでした: {workflow_state_path}") from exc
-        if not isinstance(data, dict):
-            raise ValidationError(f"workflow-state.json の root は object である必要があります: {workflow_state_path}")
-        return WorkflowStateSnapshot(path=workflow_state_path, data=data)
-    if workflow_state_path.exists():
-        raise ValidationError(f"workflow-state.json は file である必要があります: {workflow_state_path}")
-    return WorkflowStateSnapshot(path=workflow_state_path, data={})
+    try:
+        read_workflow_state_or_none(workflow_state_path)
+    except WorkflowStateError as error:
+        message = str(error)
+        if "must not be a symlink" in message:
+            raise ValidationError(f"workflow-state.json must not be a symlink: {workflow_state_path}") from error
+        if "root must be an object" in message:
+            raise ValidationError(
+                f"workflow-state.json の root は object である必要があります: {workflow_state_path}"
+            ) from error
+        if "is not a regular file" in message:
+            raise ValidationError(f"workflow-state.json は file である必要があります: {workflow_state_path}") from error
+        raise ValidationError(f"workflow-state.json を読み取れませんでした: {workflow_state_path}") from error
+    return WorkflowStateSnapshot(path=workflow_state_path)
 
 
 def _sync_workflow_state_music_pair_selection(snapshot: WorkflowStateSnapshot, result: SelectionResult) -> None:
     if not result.exceptions_over_limit:
         return
-    data = dict(snapshot.data)
     updated_at = datetime.now(timezone.utc).isoformat()
-    data["updated_at"] = updated_at
-    data["music_pair_selection"] = {
-        "updated_at": updated_at,
-        "exceptions_over_limit_count": len(result.exceptions_over_limit),
-        "exceptions_over_limit": [_exception_payload(exception) for exception in result.exceptions_over_limit],
-    }
-    _atomic_json_write(snapshot.path, data)
+
+    def record_selection(state: WorkflowState) -> None:
+        state["updated_at"] = updated_at
+        state["music_pair_selection"] = {
+            "updated_at": updated_at,
+            "exceptions_over_limit_count": len(result.exceptions_over_limit),
+            "exceptions_over_limit": [_exception_payload(exception) for exception in result.exceptions_over_limit],
+        }
+
+    try:
+        update_workflow_state(snapshot.path, record_selection)
+    except WorkflowStateError as error:
+        if isinstance(error.__cause__, OSError) and "could not be written" in str(error):
+            raise error.__cause__ from error
+        raise ValidationError(f"workflow-state.json を読み取れませんでした: {snapshot.path}") from error
 
 
 def select_suno_tracks(

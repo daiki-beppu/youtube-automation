@@ -15,9 +15,7 @@ from __future__ import annotations
 
 import json
 import math
-import os
 import re
-import tempfile
 from collections import Counter
 from datetime import date
 from pathlib import Path
@@ -25,7 +23,9 @@ from pathlib import Path
 from PIL import Image, UnidentifiedImageError
 
 from youtube_automation.core.adapters.runtime import format_duration_mss
-from youtube_automation.core.errors import ConfigError, ValidationError
+from youtube_automation.core.errors import ConfigError, ValidationError, WorkflowStateError
+from youtube_automation.domains.collections.workflow_state import WorkflowState
+from youtube_automation.domains.collections.workflow_state import update as update_workflow_state
 from youtube_automation.domains.distrokid.metadata import (
     parse_album_metadata,
     parse_track_table,
@@ -719,7 +719,7 @@ def write_release_date(workflow_state_path: Path, date_str: str) -> None:
 
     既存キーを保持した上で atomic 書き込みを行う。
     workflow-state.json が無い場合は新規作成する。
-    tempfile.mkstemp → os.replace パターン（collection_serve.write_distrokid_release と同方針）。
+    workflow-state owner の lock + atomic update で同時更新と既存キーを保持する。
 
     Args:
         workflow_state_path: workflow-state.json のパス
@@ -731,41 +731,28 @@ def write_release_date(workflow_state_path: Path, date_str: str) -> None:
     except ValueError as exc:
         raise ConfigError(f"リリース日の形式が不正です（YYYY-MM-DD が必要）: {date_str!r}") from exc
 
-    # 既存データ読み込み（不在は空 dict）。壊れた JSON を黙って空 dict に
-    # 置き換えると「既存キー保持」の保証が破れデータ消失するため fail-loud にする（#936）。
-    if workflow_state_path.is_file():
-        try:
-            data = json.loads(workflow_state_path.read_text(encoding="utf-8"))
-        except json.JSONDecodeError as exc:
+    workflow_state_path.parent.mkdir(parents=True, exist_ok=True)
+
+    def record_release_date(state: WorkflowState) -> None:
+        planning = state.get("planning") or {}
+        if not isinstance(planning, dict):
+            planning = {}
+        planning["publish_target_at"] = date_str
+        state["planning"] = planning
+
+    try:
+        update_workflow_state(workflow_state_path, record_release_date)
+    except WorkflowStateError as error:
+        cause = error.__cause__
+        if isinstance(cause, OSError) and "could not be written" in str(error):
+            raise cause from error
+        if isinstance(cause, json.JSONDecodeError):
             raise ConfigError(
                 f"workflow-state.json が不正な JSON です: {workflow_state_path}\n"
                 "上書きすると既存データが失われるため中断しました。手動で修復してください。"
-            ) from exc
-        except OSError as exc:
-            raise ConfigError(f"workflow-state.json を読み取れませんでした: {workflow_state_path}") from exc
-        if not isinstance(data, dict):
-            raise ConfigError(f"workflow-state.json のトップレベルが object ではありません: {workflow_state_path}")
-    else:
-        data = {}
-
-    # planning セクションを既存キー保持で更新
-    if "planning" not in data or not isinstance(data["planning"], dict):
-        data["planning"] = {}
-    data["planning"]["publish_target_at"] = date_str
-
-    # atomic 書き込み
-    workflow_state_path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp_name = tempfile.mkstemp(
-        dir=str(workflow_state_path.parent),
-        prefix=".workflow-state-",
-        suffix=".json",
-    )
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            json.dump(data, fh, ensure_ascii=False, indent=2)
-        os.replace(tmp_name, workflow_state_path)
-    except BaseException:
-        # 書き込み失敗時に temp を残さない（atomic write の後始末）
-        if os.path.exists(tmp_name):
-            os.unlink(tmp_name)
-        raise
+            ) from error
+        if "root must be an object" in str(error):
+            raise ConfigError(
+                f"workflow-state.json のトップレベルが object ではありません: {workflow_state_path}"
+            ) from error
+        raise ConfigError(f"workflow-state.json を読み取れませんでした: {workflow_state_path}") from error

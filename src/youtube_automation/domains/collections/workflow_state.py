@@ -469,11 +469,23 @@ def _write_atomically(path: Path, state: WorkflowState) -> None:
         if path.is_symlink():
             raise WorkflowStateError(f"workflow-state.json must not be a symlink: {path}")
         os.replace(temporary, path)
-    except WorkflowStateError:
-        temporary.unlink(missing_ok=True)
+    except WorkflowStateError as exc:
+        try:
+            temporary.unlink(missing_ok=True)
+        except OSError as cleanup_exc:
+            raise WorkflowStateError(
+                f"workflow-state.json update failed and temporary file could not be removed: {path}: "
+                f"{exc}; {cleanup_exc}"
+            ) from cleanup_exc
         raise
     except (OSError, TypeError, ValueError) as exc:
-        temporary.unlink(missing_ok=True)
+        try:
+            temporary.unlink(missing_ok=True)
+        except OSError as cleanup_exc:
+            raise WorkflowStateError(
+                f"workflow-state.json could not be written and temporary file could not be removed: {path}: "
+                f"{exc}; {cleanup_exc}"
+            ) from cleanup_exc
         raise WorkflowStateError(f"workflow-state.json could not be written: {path}") from exc
 
 
