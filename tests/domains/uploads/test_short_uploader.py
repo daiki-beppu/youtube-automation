@@ -6,11 +6,11 @@ plan §171 / test-design.md §44-50 §86 §117-122 §146-147 を満たすケー�
 委譲設計（`YouTubeAutoUploader` を所有）を検証し、継承禁止の規約を回帰させる。
 
 主要シナリオ:
-- `_calculate_short_publish_at`: CC publish_at + 1day + config.shorts.publish_time の計算と TZ 適用
+- `PublishedDatesScheduler.calculate_short_publish_at`: CC publish_at + 1day + Shorts 公開時刻の計算
 - `_check_upload_interval`: config.shorts.min_hours_between_shorts_per_collection の境界
 - `_find_short_video`: `shorts/short-NN-*.mp4` 優先・`short.mp4` fallback・両方無で FileNotFoundError
 - `upload_short`: 委譲先 `YouTubeAutoUploader.upload_video` の呼出・結果分岐
-- `_update_workflow_state`: `post_upload.shorts: list[dict]` で upsert by short_num
+- `TrackingStore.record_short_upload`: `post_upload.shorts: list[dict]` で upsert by short_num
 - `__init__`: `config.shorts.enabled=false` で UploadError
 """
 
@@ -112,12 +112,13 @@ def _make_short_uploader(
     """
     from youtube_automation.domains.uploads import shorts as su_mod
 
-    with patch.object(su_mod, "YouTubeAutoUploader") as mock_cls:
+    with (
+        patch.object(su_mod, "YouTubeAutoUploader") as mock_cls,
+        patch.object(su_mod.ShortUploader, "_load_schedule_config", return_value=schedule_config or {}),
+    ):
         mock_uploader = MagicMock()
         mock_cls.return_value = mock_uploader
         uploader = su_mod.ShortUploader()
-        # schedule_config を差し替え（デフォルトは {}）
-        uploader.schedule_config = schedule_config or {}
         yield uploader, mock_uploader
 
 
@@ -131,6 +132,18 @@ def _freeze_short_uploader_now(monkeypatch, frozen: datetime) -> None:
             return frozen if tz is None else frozen.astimezone(tz)
 
     monkeypatch.setattr(su_mod, "datetime", _Fake)
+    monkeypatch.setattr("youtube_automation.domains.uploads._published_dates.datetime", _Fake)
+
+
+def _calculate_shared_short_publish_at(uploader, collection_path: Path) -> str | None:
+    tracking = uploader.tracking_store.load(collection_path)
+    if tracking is None:
+        return None
+    return uploader.published_dates.calculate_short_publish_at(
+        tracking,
+        tracking_path=uploader.tracking_store.tracking_path(collection_path),
+        publish_time=uploader.config.shorts.publish_time,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -160,6 +173,23 @@ class TestInit:
             # Then: `uploader.uploader` 属性が YouTubeAutoUploader モックを指す
             assert uploader.uploader is mock_inner
 
+    def test_short_uploader_accepts_shared_tracking_and_published_date_collaborators(self):
+        """Collection uploader と同じ collaborator を明示注入できる。"""
+        from youtube_automation.domains.uploads import shorts as su_mod
+        from youtube_automation.domains.uploads.collection import PublishedDatesScheduler, TrackingStore
+
+        tracking_store = MagicMock(spec=TrackingStore)
+        published_dates = MagicMock(spec=PublishedDatesScheduler)
+
+        with patch.object(su_mod, "YouTubeAutoUploader"):
+            uploader = su_mod.ShortUploader(
+                tracking_store=tracking_store,
+                published_dates=published_dates,
+            )
+
+        assert uploader.tracking_store is tracking_store
+        assert uploader.published_dates is published_dates
+
     def test_init_raises_when_shorts_disabled(self, tmp_path, monkeypatch):
         """`config.shorts.enabled=False` の channel では `__init__` が `UploadError` を投げる."""
         import shutil
@@ -187,7 +217,7 @@ class TestInit:
 
 
 class TestCalculateShortPublishAt:
-    """`_calculate_short_publish_at`: CC publish_at + 1day + short_publish_time."""
+    """共有 scheduler による CC publish_at + 1day + short_publish_time。"""
 
     def _freeze_now(self, monkeypatch, frozen: datetime):
         _freeze_short_uploader_now(monkeypatch, frozen)
@@ -201,7 +231,7 @@ class TestCalculateShortPublishAt:
             self._freeze_now(monkeypatch, datetime(2099, 1, 1, 9, 0, tzinfo=ZoneInfo("Asia/Tokyo")))
 
             # When
-            publish_at = uploader._calculate_short_publish_at(col)
+            publish_at = _calculate_shared_short_publish_at(uploader, col)
 
         # Then: CC の翌日 (2099-01-03) 08:00 JST
         assert publish_at is not None
@@ -217,7 +247,7 @@ class TestCalculateShortPublishAt:
             self._freeze_now(monkeypatch, datetime(2099, 1, 10, 9, 0, tzinfo=ZoneInfo("Asia/Tokyo")))
 
             # When
-            publish_at = uploader._calculate_short_publish_at(col)
+            publish_at = _calculate_shared_short_publish_at(uploader, col)
 
         # Then: 過去のため None
         assert publish_at is None
@@ -236,7 +266,7 @@ class TestCalculateShortPublishAt:
             self._freeze_now(monkeypatch, datetime(2099, 1, 1, 9, 0, tzinfo=ZoneInfo("Asia/Tokyo")))
 
             # When
-            publish_at = uploader._calculate_short_publish_at(col)
+            publish_at = _calculate_shared_short_publish_at(uploader, col)
 
         # Then: upload_time の翌日 08:00 JST
         assert publish_at is not None
@@ -256,7 +286,7 @@ class TestCalculateShortPublishAt:
             self._freeze_now(monkeypatch, datetime(2099, 1, 1, 9, 0, tzinfo=ZoneInfo("Asia/Tokyo")))
 
             # When
-            publish_at = uploader._calculate_short_publish_at(col)
+            publish_at = _calculate_shared_short_publish_at(uploader, col)
 
         # Then: 翌日 08:00 JST（TZ が JST で組み立てられる）
         assert publish_at is not None
@@ -278,8 +308,8 @@ class TestCalculateShortPublishAt:
             self._freeze_now(monkeypatch, datetime(2099, 1, 1, 9, 0, tzinfo=ZoneInfo("Asia/Tokyo")))
 
             # When
-            with caplog.at_level(logging.WARNING, logger="youtube_automation.domains.uploads.shorts"):
-                uploader._calculate_short_publish_at(col)
+            with caplog.at_level(logging.WARNING, logger="youtube_automation.domains.uploads._published_dates"):
+                _calculate_shared_short_publish_at(uploader, col)
 
         # Then: warning にファイル名・フィールド名・naive 検知が含まれる
         warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
@@ -296,8 +326,8 @@ class TestCalculateShortPublishAt:
             self._freeze_now(monkeypatch, datetime(2099, 1, 1, 9, 0, tzinfo=ZoneInfo("Asia/Tokyo")))
 
             # When
-        with caplog.at_level(logging.WARNING, logger="youtube_automation.domains.uploads.shorts"):
-            uploader._calculate_short_publish_at(col)
+        with caplog.at_level(logging.WARNING, logger="youtube_automation.domains.uploads._published_dates"):
+            _calculate_shared_short_publish_at(uploader, col)
 
         # Then: TZ-naive warning は出ない
         assert not any("TZ-naive" in r.getMessage() for r in caplog.records)
@@ -308,7 +338,7 @@ class TestCalculateShortPublishAt:
         col = _setup_collection(tmp_path, has_tracking=False)
         with _make_short_uploader(schedule_config={"schedule": {"timezone": "Asia/Tokyo"}}) as (uploader, _):
             # When
-            publish_at = uploader._calculate_short_publish_at(col)
+            publish_at = _calculate_shared_short_publish_at(uploader, col)
 
         # Then
         assert publish_at is None
@@ -614,14 +644,49 @@ class TestUploadShort:
         assert result["action"] == "short_uploaded"
         assert result["details"]["video_id"] == "VIDEO_NEW"
 
+    def test_upload_uses_injected_shared_collaborators(self, tmp_path):
+        from youtube_automation.domains.uploads import shorts as su_mod
+        from youtube_automation.domains.uploads.collection import PublishedDatesScheduler, TrackingStore
+
+        col = _setup_collection(tmp_path)
+        tracking_path = col / "20-documentation" / "upload_tracking.json"
+        tracking = json.loads(tracking_path.read_text(encoding="utf-8"))
+        tracking_store = MagicMock(spec=TrackingStore)
+        tracking_store.read.return_value = tracking
+        tracking_store.read_short_resume_uri.return_value = None
+        published_dates = MagicMock(spec=PublishedDatesScheduler)
+        published_dates.calculate_short_publish_at.return_value = "2099-01-03T08:00:00+09:00"
+
+        with patch.object(su_mod, "YouTubeAutoUploader") as uploader_class:
+            uploader_class.return_value.upload_video.return_value = "VIDEO_NEW"
+            uploader = su_mod.ShortUploader(
+                tracking_store=tracking_store,
+                published_dates=published_dates,
+            )
+            uploader._check_upload_interval = lambda: (True, "ok")
+
+            result = uploader.upload_short(col)
+
+        assert result["action"] == "short_uploaded"
+        published_dates.calculate_short_publish_at.assert_called_once_with(
+            tracking,
+            tracking_path=tracking_path,
+            publish_time=uploader.config.shorts.publish_time,
+        )
+        tracking_store.record_short_upload.assert_called_once_with(
+            col,
+            short_num=None,
+            video_id="VIDEO_NEW",
+            publish_at="2099-01-03T08:00:00+09:00",
+        )
+
     def test_publish_at_future_passed_into_metadata(self, tmp_path, monkeypatch):
         """publish_at が未来日なら metadata に反映される."""
         # Given
         col = _setup_collection(tmp_path)
         with _make_short_uploader(schedule_config={"schedule": {"timezone": "Asia/Tokyo"}}) as (uploader, mock_inner):
             self._patch_interval_ok(uploader)
-            # _calculate_short_publish_at を未来日に差し替え
-            uploader._calculate_short_publish_at = lambda _col: "2099-01-03T08:00:00+09:00"
+            uploader.published_dates.calculate_short_publish_at = MagicMock(return_value="2099-01-03T08:00:00+09:00")
             mock_inner.upload_video.return_value = "VIDEO_X"
 
             # When
@@ -802,7 +867,7 @@ class TestUploadShort:
 
 
 class TestUpdateWorkflowState:
-    """`_update_workflow_state` のスキーマ: `post_upload.shorts: list[dict]` で `short_num` をキーに upsert.
+    """共有 store のスキーマ: `post_upload.shorts: list[dict]` で `short_num` をキーに upsert.
 
     `bulk_update_short_localizations.collect_short_videos` と同スキーマで対称検証する。
     """
@@ -817,7 +882,7 @@ class TestUpdateWorkflowState:
         ws_path.write_text(json.dumps(state), encoding="utf-8")
         with _make_short_uploader() as (uploader, _):
             # When
-            uploader._update_workflow_state(
+            uploader.tracking_store.record_short_upload(
                 col,
                 short_num=1,
                 video_id="V1",
@@ -837,7 +902,7 @@ class TestUpdateWorkflowState:
         """uploaded_at は schedule timezone 付き ISO 8601 で書かれる."""
         col = _setup_collection(tmp_path)
         with _make_short_uploader(schedule_config={"schedule": {"timezone": "UTC"}}) as (uploader, _):
-            uploader._update_workflow_state(col, short_num=1, video_id="V1", publish_at=None)
+            uploader.tracking_store.record_short_upload(col, short_num=1, video_id="V1", publish_at=None)
 
         ws = json.loads((col / "workflow-state.json").read_text(encoding="utf-8"))
         uploaded_at = ws["post_upload"]["shorts"][0]["uploaded_at"]
@@ -850,10 +915,10 @@ class TestUpdateWorkflowState:
         # Given: 既に short_num=1 で V1 を書いた状態
         col = _setup_collection(tmp_path)
         with _make_short_uploader() as (uploader, _):
-            uploader._update_workflow_state(col, short_num=1, video_id="V1", publish_at=None)
+            uploader.tracking_store.record_short_upload(col, short_num=1, video_id="V1", publish_at=None)
 
             # When: 同じ short_num=1 を別 video_id で再 upsert
-            uploader._update_workflow_state(col, short_num=1, video_id="V1_NEW", publish_at=None)
+            uploader.tracking_store.record_short_upload(col, short_num=1, video_id="V1_NEW", publish_at=None)
 
         # Then: list の長さは 1 のままで V1_NEW に置換
         ws = json.loads((col / "workflow-state.json").read_text(encoding="utf-8"))
@@ -866,10 +931,10 @@ class TestUpdateWorkflowState:
         # Given: short_num=1 を書く
         col = _setup_collection(tmp_path)
         with _make_short_uploader() as (uploader, _):
-            uploader._update_workflow_state(col, short_num=1, video_id="V1", publish_at=None)
+            uploader.tracking_store.record_short_upload(col, short_num=1, video_id="V1", publish_at=None)
 
             # When: short_num=2 を書く
-            uploader._update_workflow_state(col, short_num=2, video_id="V2", publish_at=None)
+            uploader.tracking_store.record_short_upload(col, short_num=2, video_id="V2", publish_at=None)
 
         # Then: list の長さは 2
         ws = json.loads((col / "workflow-state.json").read_text(encoding="utf-8"))
@@ -885,7 +950,7 @@ class TestUpdateWorkflowState:
         col.mkdir(parents=True)
         with _make_short_uploader() as (uploader, _):
             # When: 例外を投げず処理が終わる
-            uploader._update_workflow_state(col, short_num=1, video_id="V1", publish_at=None)
+            uploader.tracking_store.record_short_upload(col, short_num=1, video_id="V1", publish_at=None)
 
         # Then: ファイルは作成されない
         assert not (col / "workflow-state.json").exists()
@@ -949,7 +1014,7 @@ class TestShortResumableUri:
 
         ws = json.loads((col / "workflow-state.json").read_text(encoding="utf-8"))
         entry = next(s for s in ws["post_upload"]["shorts"] if s["short_num"] == 3)
-        # 最終記録（_update_workflow_state）で video_id が載り、URI は除去される
+        # 最終記録で video_id が載り、URI は除去される
         assert entry["video_id"] == "V"
         assert "resume_session_uri" not in entry
 
@@ -991,13 +1056,13 @@ class TestShortResumableUri:
         assert entry["resume_session_uri"] == "https://resume/MID"
 
     def test_read_resume_uri_helper(self, tmp_path):
-        """_read_short_resume_uri: entry 無→None / 保存済→値."""
+        """共有 store の resume URI 読み取りは entry 無→None / 保存済→値。"""
         col = _setup_collection(tmp_path)
         ws_path = col / "workflow-state.json"
         with _make_short_uploader() as (uploader, _):
-            assert uploader._read_short_resume_uri(ws_path, 1) is None
+            assert uploader.tracking_store.read_short_resume_uri(ws_path, 1) is None
             self._write_shorts_state(col, [{"short_num": 1, "resume_session_uri": "https://resume/X"}])
-            assert uploader._read_short_resume_uri(ws_path, 1) == "https://resume/X"
+            assert uploader.tracking_store.read_short_resume_uri(ws_path, 1) == "https://resume/X"
 
     def test_persist_resume_uri_skips_when_state_missing(self, tmp_path):
         """workflow-state.json が無ければ resume URI 永続化を skip（致命的にしない）."""
@@ -1005,5 +1070,5 @@ class TestShortResumableUri:
         col.mkdir(parents=True)
         ws_path = col / "workflow-state.json"
         with _make_short_uploader() as (uploader, _):
-            uploader._persist_short_resume_uri(ws_path, 1, "https://resume/X")
+            uploader.tracking_store.persist_short_resume_uri(ws_path, 1, "https://resume/X")
         assert not ws_path.exists()

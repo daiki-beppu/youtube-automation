@@ -4,24 +4,22 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
 from youtube_automation.configuration import channel_dir, load_config
 from youtube_automation.core.adapters.media import CollectionPaths
-from youtube_automation.core.adapters.runtime import get_schedule_timezone, now_in_schedule_tz
+from youtube_automation.core.adapters.runtime import get_schedule_timezone
 from youtube_automation.core.errors import (
     AutomationError,
     QuotaExhaustedError,
     UploadError,
     ValidationError,
-    WorkflowStateError,
 )
-from youtube_automation.domains.collections.workflow_state import WorkflowState
-from youtube_automation.domains.collections.workflow_state import read_or_none as read_workflow_state_or_none
-from youtube_automation.domains.collections.workflow_state import update as update_workflow_state
 from youtube_automation.domains.metadata import BAHMetadataGenerator
+from youtube_automation.domains.uploads._published_dates import PublishedDatesScheduler
+from youtube_automation.domains.uploads._tracking_io import TrackingStore
 from youtube_automation.domains.uploads.youtube import YouTubeAutoUploader
 from youtube_automation.infrastructure.filesystem import list_directory, path_exists, read_json
 from youtube_automation.infrastructure.google.youtube import YouTubeClients
@@ -39,45 +37,23 @@ ACTION_BLOCKED = "short_upload_blocked"
 ACTION_FAILED = "short_upload_failed"
 
 
-def _backfill_naive_datetime(dt: datetime, tz, *, source: Path, field: str, raw: str) -> datetime:
-    """TZ-naive な datetime を schedule timezone で backfill する（レガシーデータ救済）.
-
-    #359 で書き込み側は `datetime.now(tz).isoformat()` の TZ-aware ISO 8601 に統一済みのため、
-    ここを踏むのは既存 live/ 配下に永続化されたレガシーデータのみ。将来 backfill 補正を
-    撤去するタイミングを判断するシグナルとして、どのファイル・どのフィールドが TZ-naive
-    だったかを warning で記録する（#532）。
-
-    Args:
-        dt: 判定対象の datetime
-        tz: backfill に使う schedule timezone
-        source: 値の出所ファイルパス（ログ用）
-        field: TZ-naive だったフィールド名（ログ用）
-        raw: パース前の生文字列（ログ用）
-
-    Returns:
-        TZ-aware な datetime（元から aware ならそのまま返す）。
-    """
-    if dt.tzinfo is not None:
-        return dt
-    logger.warning(
-        "%s に TZ-naive な %s=%r が含まれます; schedule timezone %s で backfill します（レガシーデータ救済 / #532）",
-        source,
-        field,
-        raw,
-        tz,
-    )
-    return dt.replace(tzinfo=tz)
-
-
 class ShortUploader:
     """Shorts 投稿エージェント — `YouTubeAutoUploader` 委譲版.
 
     継承禁止（plan 要件 6.6）。`self.uploader = YouTubeAutoUploader(...)` で
     アップロード I/O を委譲し、本クラスは Shorts 固有のロジック
-    （interval check / publish_at 算出 / video 探索 / state 更新）だけ持つ。
+    （interval check / video 探索 / upload orchestration）だけ持つ。
+    公開日計算と tracking / workflow-state I/O は Collection upload と同じ
+    ``PublishedDatesScheduler`` / ``TrackingStore`` を利用する。
     """
 
-    def __init__(self, collections_root: Optional[str] = None, youtube_clients: YouTubeClients | None = None):
+    def __init__(
+        self,
+        collections_root: Optional[str] = None,
+        youtube_clients: YouTubeClients | None = None,
+        tracking_store: TrackingStore | None = None,
+        published_dates: PublishedDatesScheduler | None = None,
+    ):
         self.config = load_config()
         if not self.config.shorts.enabled:
             raise UploadError(
@@ -89,6 +65,14 @@ class ShortUploader:
         self.uploader = YouTubeAutoUploader(collections_root, youtube_clients)
         self.channel_dir = channel_dir()
         self.schedule_config = self._load_schedule_config()
+        self.tracking_store = (
+            tracking_store if tracking_store is not None else TrackingStore(self.collections_root, self.schedule_config)
+        )
+        self.published_dates = (
+            published_dates
+            if published_dates is not None
+            else PublishedDatesScheduler(self.schedule_config, lambda: self.uploader.youtube)
+        )
 
     # ─── 設定読み込み ────────────────────────────────
 
@@ -129,7 +113,7 @@ class ShortUploader:
             ws_path = CollectionPaths(col_dir).workflow_state_path
             if not path_exists(ws_path):
                 continue
-            state = self._load_workflow_state(ws_path)
+            state = self.tracking_store.load_workflow_state(ws_path)
             if state is None:
                 continue
             shorts = (state.get("post_upload") or {}).get("shorts") or []
@@ -137,13 +121,13 @@ class ShortUploader:
                 uploaded_at = entry.get("uploaded_at")
                 if not uploaded_at:
                     continue
-                try:
-                    dt = datetime.fromisoformat(uploaded_at)
-                except ValueError:
-                    continue
-                dt = _backfill_naive_datetime(
-                    dt, tz, source=ws_path, field="post_upload.shorts[].uploaded_at", raw=uploaded_at
+                dt = self.published_dates.parse_persisted_datetime(
+                    uploaded_at,
+                    source=ws_path,
+                    field="post_upload.shorts[].uploaded_at",
                 )
+                if dt is None:
+                    continue
                 if latest_dt is None or dt > latest_dt:
                     latest_dt = dt
 
@@ -154,55 +138,6 @@ class ShortUploader:
         if elapsed_hours < min_hours:
             return False, f"前回 short 投稿から {elapsed_hours:.1f}h（min {min_hours}h）"
         return True, "ok"
-
-    # ─── publish_at 算出 (plan 要件 6.2) ─────────────
-
-    def _calculate_short_publish_at(self, collection_path: Path) -> Optional[str]:
-        """Shorts のスケジュール公開日時を算出.
-
-        CC `publish_at` （無ければ `upload_time`）の翌日 `short_publish_time` 時刻.
-        結果が現在より過去なら None（即時公開扱い）.
-
-        Returns:
-            ISO 8601 文字列 or None
-        """
-        tracking_path = CollectionPaths(collection_path).tracking_path
-        if not path_exists(tracking_path):
-            return None
-        try:
-            tracking = read_json(tracking_path)
-        except (json.JSONDecodeError, OSError):
-            return None
-
-        cc = tracking.get("complete_collection") or {}
-        base_str = cc.get("publish_at")
-        base_field = "complete_collection.publish_at"
-        if not base_str:
-            base_str = cc.get("upload_time")
-            base_field = "complete_collection.upload_time"
-        if not base_str:
-            return None
-
-        tz = get_schedule_timezone(self.schedule_config)
-        short_publish_time = self.config.shorts.publish_time
-        try:
-            hour, minute = (int(x) for x in short_publish_time.split(":"))
-        except ValueError:
-            logger.warning(f"short_publish_time のパース失敗: {short_publish_time}（HH:MM 形式が必要）")
-            return None
-
-        try:
-            base_dt = datetime.fromisoformat(base_str)
-        except ValueError:
-            return None
-        base_dt = _backfill_naive_datetime(base_dt, tz, source=tracking_path, field=base_field, raw=base_str)
-
-        publish_dt = base_dt.astimezone(tz) + timedelta(days=1)
-        publish_dt = publish_dt.replace(hour=hour, minute=minute, second=0, microsecond=0)
-
-        if publish_dt <= datetime.now(tz):
-            return None
-        return publish_dt.isoformat()
 
     # ─── 動画ファイル探索 (plan 要件 6.3) ─────────────
 
@@ -250,7 +185,7 @@ class ShortUploader:
             logger.error(f"❌ upload_tracking.json が無いため Shorts 投稿不可: {tracking_path}")
             return {"action": ACTION_FAILED, "details": {"error": f"tracking missing: {tracking_path}"}}
         try:
-            tracking = read_json(tracking_path)
+            tracking = self.tracking_store.read(collection_path)
         except (json.JSONDecodeError, OSError):
             logger.error("❌ upload_tracking.json 読み込み失敗")
             return {"action": ACTION_FAILED, "details": {"error": _TRACKING_READ_ERROR}}
@@ -274,7 +209,11 @@ class ShortUploader:
             return {"action": ACTION_FAILED, "details": {"error": "short metadata generation failed"}}
 
         # 5. publish_at 算出
-        publish_at = self._calculate_short_publish_at(collection_path)
+        publish_at = self.published_dates.calculate_short_publish_at(
+            tracking,
+            tracking_path=tracking_path,
+            publish_time=self.config.shorts.publish_time,
+        )
         if publish_at:
             metadata["publish_at"] = publish_at
 
@@ -286,11 +225,11 @@ class ShortUploader:
         #    中断→再実行時に同一 session を再開し video_id 重複を防ぐ。tracking 媒体は
         #    CC の upload_tracking.json ではなく workflow-state.json.post_upload.shorts[]。
         ws_path = CollectionPaths(collection_path).workflow_state_path
-        resume_session_uri = self._read_short_resume_uri(ws_path, short_num)
+        resume_session_uri = self.tracking_store.read_short_resume_uri(ws_path, short_num)
 
         def _on_session_uri_changed(uri: Optional[str]) -> None:
             """upload 中の session URI 変化を該当 short entry に永続化する。"""
-            self._persist_short_resume_uri(ws_path, short_num, uri)
+            self.tracking_store.persist_short_resume_uri(ws_path, short_num, uri)
 
         def _on_upload_complete() -> None:
             """upload 成功通知。後続の最終記録と整合させるため URI を消す。"""
@@ -322,7 +261,7 @@ class ShortUploader:
             return {"action": ACTION_FAILED, "details": {"error": "upload_video returned None"}}
 
         # 8. workflow-state 更新（list 形式 upsert by short_num）
-        self._update_workflow_state(
+        self.tracking_store.record_short_upload(
             collection_path,
             short_num=short_num,
             video_id=video_id,
@@ -349,129 +288,21 @@ class ShortUploader:
         logger.warning(f"short-thumbnail.{{jpg,png}} が見つかりません — サムネ未設定で upload します: {assets}")
         return None
 
-    # ─── workflow-state I/O ──────────────────────────
-
-    def _load_workflow_state(self, ws_path: Path) -> Optional[dict]:
-        """workflow-state.json を読み込む。ファイル無 / パース失敗時は None（warning）。"""
-        if not path_exists(ws_path):
-            return None
-        try:
-            state = read_workflow_state_or_none(ws_path)
-            return state.to_dict() if state is not None else None
-        except WorkflowStateError as e:
-            logger.warning(f"workflow-state.json 読み込み失敗: {e}")
-            return None
-
-    @staticmethod
-    def _find_short_entry(shorts: list, short_num: Optional[int]) -> Optional[dict]:
-        """`post_upload.shorts` から short_num 一致の entry を返す（無ければ None）。"""
-        for entry in shorts:
-            if isinstance(entry, dict) and entry.get("short_num") == short_num:
-                return entry
-        return None
-
-    def _read_short_resume_uri(self, ws_path: Path, short_num: Optional[int]) -> Optional[str]:
-        """該当 short entry に永続化済みの resumable upload session URI を読む (#466)。
-
-        ファイル無 / entry 無 / 未保存なら None（＝フレッシュ実行）。
-        """
-        state = self._load_workflow_state(ws_path)
-        if not state:
-            return None
-        shorts = (state.get("post_upload") or {}).get("shorts") or []
-        entry = self._find_short_entry(shorts, short_num)
-        return entry.get("resume_session_uri") if entry else None
-
-    def _persist_short_resume_uri(self, ws_path: Path, short_num: Optional[int], uri: Optional[str]) -> None:
-        """該当 short entry の `resume_session_uri` を upsert / 削除する (#466)。
-
-        並行更新に備え毎回 disk から再ロードしてから書き戻す（CC の
-        `_on_session_uri_changed` と同思想）。`uri=None` で削除。entry が未作成なら
-        short_num のみの entry を append して URI を載せる。ファイル無 → warning skip。
-        """
-        if not path_exists(ws_path):
-            logger.warning(f"workflow-state.json が無いため resume URI 永続化を skip: {ws_path}")
-            return
-
-        def persist_resume_uri(state: WorkflowState) -> None:
-            post_upload = state.get("post_upload") or {}
-            if not isinstance(post_upload, dict):
-                post_upload = {}
-            shorts = post_upload.get("shorts")
-            if not isinstance(shorts, list):
-                shorts = []
-                post_upload["shorts"] = shorts
-
-            entry = self._find_short_entry(shorts, short_num)
-            if entry is None:
-                entry = {"short_num": short_num}
-                shorts.append(entry)
-            if uri is None:
-                entry.pop("resume_session_uri", None)
-            else:
-                entry["resume_session_uri"] = uri
-            state["post_upload"] = post_upload
-
-        try:
-            update_workflow_state(ws_path, persist_resume_uri)
-        except WorkflowStateError as error:
-            logger.warning(f"workflow-state.json 読み込み/書き込み失敗: {error}")
-
-    # ─── workflow-state 更新 (plan アンチパターン #10) ─
-
-    def _update_workflow_state(
-        self,
-        collection_path: Path,
-        *,
-        short_num: Optional[int],
-        video_id: str,
-        publish_at: Optional[str],
-    ) -> None:
-        """`post_upload.shorts: list[dict]` に short_num をキーに upsert.
-
-        ファイル無 → warning ログのみで skip（致命的にしない）.
-        書き手（本メソッド）と読み手（`bulk_update_short_localizations.collect_short_videos`）が
-        同 PR 内で対称検証されるスキーマ.
-        """
-        ws_path = CollectionPaths(collection_path).workflow_state_path
-        if not path_exists(ws_path):
-            logger.warning(f"workflow-state.json が無いため short upload 記録を skip: {ws_path}")
-            return
-
-        entry = {
-            "short_num": short_num,
-            "video_id": video_id,
-            "uploaded_at": now_in_schedule_tz(self.schedule_config).isoformat(),
-            "publish_at": publish_at,
-        }
-
-        def record_uploaded_short(state: WorkflowState) -> None:
-            post_upload = state.get("post_upload") or {}
-            if not isinstance(post_upload, dict):
-                post_upload = {}
-            shorts = post_upload.get("shorts")
-            if not isinstance(shorts, list):
-                shorts = []
-                post_upload["shorts"] = shorts
-            for index, existing in enumerate(shorts):
-                if existing.get("short_num") == short_num:
-                    shorts[index] = entry
-                    break
-            else:
-                shorts.append(entry)
-            state["post_upload"] = post_upload
-
-        try:
-            update_workflow_state(ws_path, record_uploaded_short)
-        except WorkflowStateError as error:
-            logger.warning(f"workflow-state.json 読み込み/書き込み失敗: {error}")
-
     # ─── ドライラン ──────────────────────────────────
 
     def show_plan(self, collection_path: Path, short_num: Optional[int] = None) -> None:
         """ドライラン: 投稿予定の計算結果のみ表示."""
         ok, msg = self._check_upload_interval()
-        publish_at = self._calculate_short_publish_at(collection_path)
+        tracking = self.tracking_store.load(collection_path)
+        publish_at = (
+            self.published_dates.calculate_short_publish_at(
+                tracking,
+                tracking_path=self.tracking_store.tracking_path(collection_path),
+                publish_time=self.config.shorts.publish_time,
+            )
+            if tracking is not None
+            else None
+        )
         paths = CollectionPaths(collection_path)
         target_path = paths.short_video_search_paths(short_num)[0]
         display_target = Path(target_path).relative_to(paths.root)
