@@ -46,6 +46,7 @@ class MigrationPlan:
 # apply は利用者の明示実行だけで行い、旧 loader key は互換入口として維持する。
 SKILL_CONFIG_MIGRATIONS: Final[Mapping[str, SkillConfigMigration]] = {
     "suno": SkillConfigMigration("music", "prompt"),
+    "suno-lyric": SkillConfigMigration("music", "lyric"),
 }
 
 _COMPATIBLE_CONFIG_NAMES: Final[frozenset[str]] = frozenset({"postmortem"})

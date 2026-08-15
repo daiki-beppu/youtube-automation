@@ -19,7 +19,7 @@ from youtube_automation.infrastructure import filesystem
 
 # `_skills/<skill>/config.default.yaml` の解決元になる editable install のソースツリー
 _DEFAULT_YAML = REPO_ROOT / ".claude" / "skills" / "music" / "config.default.yaml"
-_SUNO_LYRIC_DEFAULT_YAML = REPO_ROOT / ".claude" / "skills" / "suno-lyric" / "config.default.yaml"
+_SUNO_LYRIC_DEFAULT_YAML = REPO_ROOT / ".claude" / "skills" / "music" / "config.default.yaml"
 _SKILL_MD = REPO_ROOT / ".claude" / "skills" / "music" / "references" / "prompt.md"
 _CONFIG_RULES_MD = REPO_ROOT / ".claude" / "skills" / "setup" / "references" / "config-generation-rules.md"
 _STYLE_VARIANTS_UNSET = object()
@@ -381,7 +381,7 @@ def test_suno_skill_reads_only_open_bgm_insights_before_prompt_generation():
 def test_suno_default_yaml_does_not_own_lyric_authoring_config():
     """`/suno` は Style / merge 専任で、歌詞生成 config を持たない."""
     suno_data = yaml.safe_load(_DEFAULT_YAML.read_text(encoding="utf-8"))["prompt"]
-    suno_lyric_data = yaml.safe_load(_SUNO_LYRIC_DEFAULT_YAML.read_text(encoding="utf-8"))
+    suno_lyric_data = yaml.safe_load(_SUNO_LYRIC_DEFAULT_YAML.read_text(encoding="utf-8"))["lyric"]
 
     assert "lyrics_guidelines" not in suno_data
     assert "lyrics_generation" not in suno_data
@@ -390,7 +390,7 @@ def test_suno_default_yaml_does_not_own_lyric_authoring_config():
 
 def test_suno_lyric_default_yaml_defines_cta_and_safe_quote_source_contract():
     """suno-lyric の SKILL.md が参照する config path を default YAML に持つ."""
-    data = yaml.safe_load(_SUNO_LYRIC_DEFAULT_YAML.read_text(encoding="utf-8"))
+    data = yaml.safe_load(_SUNO_LYRIC_DEFAULT_YAML.read_text(encoding="utf-8"))["lyric"]
 
     assert data["cta"]["positions"] == []
     assert data["source"]["base_url"] == "https://iyashitour.com"
@@ -400,8 +400,8 @@ def test_suno_lyric_default_yaml_defines_cta_and_safe_quote_source_contract():
 def test_setup_rules_list_suno_lyrics_override_keys():
     text = _CONFIG_RULES_MD.read_text(encoding="utf-8")
 
-    assert "config/skills/suno-lyric.yaml" in text
-    assert "| suno-lyric | `config/skills/suno-lyric.yaml` |" in text
+    assert "config/skills/music.yaml::lyric" in text
+    assert "| music.lyric | `config/skills/music.yaml::lyric` |" in text
     assert "lyrics_guidelines.style_reference" not in text
     assert "lyrics_generation.provider" not in text
 
@@ -793,7 +793,7 @@ def test_build_prompt_entries_vocal_includes_rstripped_external_lyrics(channel_d
 
 
 def test_build_prompt_entries_vocal_requires_suno_lyrics_json(channel_dir, tmp_path):
-    """vocal mode は `/suno-lyric` が出す suno-lyrics.json を必須にする."""
+    """vocal mode は `/music --lyric` が出す suno-lyrics.json を必須にする."""
     from youtube_automation.core.errors import ConfigError
 
     _write_suno_override(channel_dir, genre_line="dream pop vocals")
@@ -804,7 +804,7 @@ def test_build_prompt_entries_vocal_requires_suno_lyrics_json(channel_dir, tmp_p
 
     message = str(exc_info.value)
     assert "suno-lyrics.json is required for vocal mode" in message
-    assert "Run /suno-lyric first" in message
+    assert "Run /music --lyric first" in message
 
 
 def test_build_prompt_entries_vocal_prefers_suno_lyrics_json(channel_dir, tmp_path):

@@ -407,7 +407,7 @@ def test_default_yaml_has_quality_rule_keys():
 # ---------------------------------------------------------------------------
 
 _SKILL_MD = REPO_ROOT / ".claude" / "skills" / "music" / "references" / "prompt.md"
-_SUNO_LYRIC_SKILL_MD = REPO_ROOT / ".claude" / "skills" / "suno-lyric" / "SKILL.md"
+_SUNO_LYRIC_SKILL_MD = REPO_ROOT / ".claude" / "skills" / "music" / "references" / "lyric.md"
 
 
 def test_skill_md_has_quality_rules_section():
@@ -442,15 +442,15 @@ def test_skill_md_has_instrument_adjectives():
 
 
 def test_skill_md_has_hiragana_guide():
-    """/suno-lyric の SKILL.md にひらがな歌詞ガイドの記述があること."""
+    """/music --lyric の reference にひらがな歌詞ガイドの記述があること."""
     text = _SUNO_LYRIC_SKILL_MD.read_text(encoding="utf-8")
     assert "hiragana" in text.lower() or "ひらがな" in text
 
 
 def test_suno_lyric_output_contract_uses_config_language():
-    """/suno-lyric の出力契約は English 固定ではなく config の lyric.language に従う."""
+    """/music --lyric の出力契約は English 固定ではなく config の lyric.language に従う."""
     text = _SUNO_LYRIC_SKILL_MD.read_text(encoding="utf-8")
-    assert "config/skills/suno-lyric.yaml::lyric.language" in text
+    assert "config/skills/music.yaml::lyric.lyric.language" in text
     assert "Lyrics (English)" not in text
     assert "英語歌詞" not in text
 

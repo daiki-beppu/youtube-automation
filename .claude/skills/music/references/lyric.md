@@ -1,26 +1,9 @@
----
-name: suno-lyric
-purpose: 作る
-description: "Use when Suno ボーカル曲の歌詞を生成するとき。「歌詞生成」「vocal」「rap」「suno-lyric」で発動。Style は music の prompt mode、UI 投入は /suno-helper の責務"
----
-
-## 前後工程
-
-- `前工程`: `なし`
-- `後工程`: `/music --prompt`
-- `委譲先`: `なし`
-
-## 成果物
-
-- `書き込む`: `collections/<id>/20-documentation/suno-lyrics.md`, `collections/<id>/20-documentation/suno-lyrics.json`
-- `読み込む`: `collections/<id>/20-documentation/suno-patterns.yaml`, `docs/channel/personas/persona-definition.md`, `config/skills/suno-lyric.yaml`, `config/skills/music.yaml::prompt`
-
 ## Overview
 
-`/suno-lyric` は Suno ボーカル曲の **Lyrics 専任**。`/music --prompt` は orchestration + Style / title / scene / JSON merge を担当し、本 skill は歌詞本文だけを作る。
+`/music --lyric` は Suno ボーカル曲の **Lyrics 専任**。`/music --prompt` は orchestration + Style / title / scene / JSON merge を担当し、本 skill は歌詞本文だけを作る。
 
 ```
-/suno-lyric  ->  20-documentation/suno-lyrics.{md,json}
+/music --lyric  ->  20-documentation/suno-lyrics.{md,json}
                        |
 /music --prompt        ->  20-documentation/suno-prompts.{md,json}
                        |
@@ -49,10 +32,10 @@ subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実�
 
 以下を deep-merge した値を設定として使う。
 
-1. `.claude/skills/suno-lyric/config.default.yaml`
-2. `config/skills/suno-lyric.yaml`（存在する場合）
+1. `.claude/skills/music/config.default.yaml::lyric`
+2. `config/skills/music.yaml::lyric`（存在する場合）
 
-合成規則は `youtube_automation.configuration.skills.load_skill_config("suno-lyric")` と同じで、チャンネル上書きが優先される。存在しない override は未設定として扱い、勝手に作成しない。このスキルが `/music --prompt` の skill-config を直接参照する段階では、`suno` 側の `config.default.yaml` と `config/skills/music.yaml::prompt` も同じ手順で読む。
+合成規則は `youtube_automation.configuration.skills.load_skill_config("music.lyric")` と同じで、チャンネル上書きが優先される。存在しない override は未設定として扱い、勝手に作成しない。このスキルが `/music --prompt` の skill-config を直接参照する段階では、`suno` 側の `config.default.yaml` と `config/skills/music.yaml::prompt` も同じ手順で読む。
 
 ## 前提
 
@@ -71,12 +54,12 @@ subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実�
 - `20-documentation/suno-patterns.yaml`: 曲名、scene、mood tag
 - `workflow-state.json::planning.music`: mood / atmosphere / tempo / instruments
 - `config/skills/music.yaml::prompt.genre_line`: ボーカルモード判定
-- `config/skills/suno-lyric.yaml`: 任意のチャンネル上書き
+- `config/skills/music.yaml::lyric`: 任意のチャンネル上書き
 - `docs/channel/personas/persona-definition.md`: persona vocabulary と避ける語彙。無い場合のみ旧 `docs/audience-persona.md` を legacy fallback として参照可
 
 ## Quote Source Safety
 
-名言取得元は `https://iyashitour.com` に限定する。`config/skills/suno-lyric.yaml::source.base_url` を上書きする場合も、scheme は `https`、host は `iyashitour.com` のみ許可する。
+名言取得元は `https://iyashitour.com` に限定する。`config/skills/music.yaml::lyric.source.base_url` を上書きする場合も、scheme は `https`、host は `iyashitour.com` のみ許可する。
 
 許可する path は次の 2 種のみ:
 
@@ -87,7 +70,7 @@ subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実�
 
 ## Hiragana Lyrics Guide
 
-`config/skills/suno-lyric.yaml::lyric.language: ja` の場合、歌詞は**ひらがなで書く**。Suno は漢字の読みを頻繁に誤るため、ひらがな表記で発音精度を確保する。カタカナは外来語にのみ使用可。
+`config/skills/music.yaml::lyric.lyric.language: ja` の場合、歌詞は**ひらがなで書く**。Suno は漢字の読みを頻繁に誤るため、ひらがな表記で発音精度を確保する。カタカナは外来語にのみ使用可。
 
 ## Hard Gates
 
@@ -130,7 +113,7 @@ generator は `suno-patterns.yaml`、persona reference、設定、必要な Refe
 1. 歌詞生成を generator subagent（Codex では別コンテキスト実行）に委譲する
 2. `suno-patterns.yaml` から最終 entry name を作る。`/music --prompt` と同じく `{name_jp} — {name_en}`、複数 scene の場合は ` (Variation N)` を付ける
 3. 各 entry に mood tag を割り当てる。明示 `mood` が無ければ scene / title / planning.music から推定する
-4. `config/skills/suno-lyric.yaml::affinity_weights` と persona reference から、曲ごとに名言カテゴリまたは偉人候補を選ぶ
+4. `config/skills/music.yaml::lyric.affinity_weights` と persona reference から、曲ごとに名言カテゴリまたは偉人候補を選ぶ
 5. 名言を使う場合は、英語原文をそのまま歌詞にしない。中核メッセージを 1 文の essence に抽出してから、曲の scene と persona vocabulary に合わせて再構築する
 6. Lyrics は V5.5 向けに section tags を明示する。基本形は `[Intro]`, `[Verse 1]`, `[Pre-Chorus]`, `[Chorus]`, `[Verse 2]`, `[Instrumental]`, `[Bridge]`, `[Final Chorus]`, `[Extended Outro]`, `[Outro]`。`[Verse]` / `[Chorus]` だけでなく `[Intro]` `[Pre-Chorus]` `[Bridge]` `[Extended Outro]` `[Outro]` も曲ごとの scene / persona に合わせて書き分け、他の曲から本文を流用しない（Suno は歌詞テキストに強く追従するため、これらが同一だと全曲の入り・終わりが似通う）
 7. `suno-lyrics.md` と `suno-lyrics.json` を `20-documentation/` に出力する。`preserve_existing: true` の場合、既存 entry は上書きしない
@@ -162,7 +145,7 @@ JSON root は配列。各 entry は `/music --prompt` が `name` でマージで
 ```
 
 - `name` は `/music --prompt` の最終 prompt entry name と完全一致させる
-- `lyrics` は Suno Lyrics 欄へ入れる歌詞。言語は `config/skills/suno-lyric.yaml::lyric.language` に従う
+- `lyrics` は Suno Lyrics 欄へ入れる歌詞。言語は `config/skills/music.yaml::lyric.lyric.language` に従う
 - `style` は `null` のままにする。Style は `/music --prompt` が埋める
 - `review_context` は reviewer 専用の補助情報。`collection_theme`, `scene`, `mood`, `persona_target`, `persona_vocabulary`, `quote_essence` を含め、`references/review-rubric.md` の判定観点を JSON だけで検証できるようにする。`/music --prompt` の merge loader は `name` / `lyrics` だけを使用し、この補助フィールドを無視してよい
 
@@ -173,7 +156,7 @@ JSON root は配列。各 entry は `/music --prompt` が `name` でマージで
 - entry name
 - mood / persona target
 - 使用した名言または essence
-- Lyrics (`config/skills/suno-lyric.yaml::lyric.language` に従う)
+- Lyrics (`config/skills/music.yaml::lyric.lyric.language` に従う)
 - Lyrics (Japanese / 意訳) は任意。ただし生成した場合は Suno UI には投入しない
 
 ## Validation
@@ -187,7 +170,7 @@ JSON root は配列。各 entry は `/music --prompt` が `name` でマージで
 - section tag が欠けていない
 - CTA を入れる場合は `config.cta.positions` の対象曲だけに入れる
 - `[Intro]` `[Pre-Chorus]` `[Bridge]` `[Extended Outro]` `[Outro]` の section 本文が、曲間で一言一句同一になっていない（同一曲内での `[Chorus]` / `[Final Chorus]` の反復は正常な曲構成なので対象外）
-- 機械チェックを実行して exit 0 を確認する: `python .claude/skills/suno-lyric/references/check_lyric_duplication.py <collection>/20-documentation/suno-lyrics.json`
+- 機械チェックを実行して exit 0 を確認する: `python .claude/skills/music/references/check_lyric_duplication.py <collection>/20-documentation/suno-lyrics.json`
 - 成果物チェックを実行して exit 0 を確認する: `uv run yt-suno-verify <collection-path>`
 - 曲間重複が検出された場合は出力を完了扱いにせず、該当 section を曲ごとの scene / persona に合わせて書き分け直してから再チェックする（Suno 生成後に発覚すると手戻りできず、クレジットと生成時間が無駄になる）
 

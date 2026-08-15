@@ -94,7 +94,7 @@
 |---|---|
 | thumbnail / Gemini 画像生成 | `config/skills/thumbnail.yaml` |
 | music.prompt | `config/skills/music.yaml::prompt` |
-| suno-lyric | `config/skills/suno-lyric.yaml` |
+| music.lyric | `config/skills/music.yaml::lyric` |
 | lyria | `config/skills/lyria.yaml` |
 | collection-ideate | `config/skills/collection-ideate.yaml` |
 | benchmark | `config/skills/benchmark.yaml` |
@@ -116,7 +116,7 @@
 | `genre_line` | 「ジャンル & スタイル」決定の直訳（Suno Styles 欄にそのまま入る） |
 | `exclude_styles` | 「ジャンル & スタイル」で排除すると決めた要素（白音 / 雨音 / EDM 等） |
 
-ボーカル歌詞本文の persona / quote / lyric structure は `/suno-lyric` 側の `config/skills/suno-lyric.yaml` で任意上書き。
+ボーカル歌詞本文の persona / quote / lyric structure は `/music --lyric` 側の `config/skills/music.yaml::lyric` で任意上書き。
 
 **Thumbnail**:
 

@@ -63,14 +63,14 @@ _ONBOARDING = _REPO_ROOT / "ONBOARDING.md"
 _CHANNEL_STRATEGY = _SKILLS_DIR / "channel-strategy" / "SKILL.md"
 _VIEWER_VOICE = _SKILLS_DIR / "viewer-voice" / "SKILL.md"
 _FLOP_ANALYSIS = _SKILLS_DIR / "flop-analysis" / "SKILL.md"
-_SUNO_LYRIC = _SKILLS_DIR / "suno-lyric" / "SKILL.md"
+_SUNO_LYRIC = _SKILLS_DIR / "music" / "references" / "lyric.md"
 _LEGACY_FEEDBACK_DIR = _SKILLS_DIR / "feedback"
 _SKILL_FEEDBACK = _SKILLS_DIR / "skill-feedback" / "SKILL.md"
 _SUNO_LYRIC_PERSONA_DOCS = (
     _SUNO_LYRIC,
-    _SKILLS_DIR / "suno-lyric" / "config.default.yaml",
-    _SKILLS_DIR / "suno-lyric" / "references" / "persona-quote-affinity.md",
-    _SKILLS_DIR / "suno-lyric" / "references" / "lyric-templates.md",
+    _SKILLS_DIR / "music" / "config.default.yaml",
+    _SKILLS_DIR / "music" / "references" / "persona-quote-affinity.md",
+    _SKILLS_DIR / "music" / "references" / "lyric-templates.md",
 )
 
 # rename マッピング (order.md §5)

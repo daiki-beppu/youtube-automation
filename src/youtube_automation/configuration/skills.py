@@ -56,6 +56,7 @@ SKILL_ONLY_CONFIG_KEYS: Final[frozenset[str]] = frozenset(
         "flop-analysis",
         "live-clean",
         "lyria",
+        "music.lyric",
         "short",
         "suno-lyric",
         "video-analyze",
@@ -76,17 +77,20 @@ _MOVED_SKILL_CONFIG_DEFAULTS: Final[dict[str, Path]] = {
     "collection-ideate": Path("wf-new", "references", "collection-ideate.config.default.yaml"),
     "discover-competitors": Path("channel-research", "config.default.yaml"),
     "suno": Path("music", "config.default.yaml"),
+    "suno-lyric": Path("music", "config.default.yaml"),
 }
 
 _MOVED_SKILL_CONFIG_SECTIONS: Final[dict[str, str]] = {
     "benchmark": "benchmark",
     "discover-competitors": "discover",
     "suno": "prompt",
+    "suno-lyric": "lyric",
 }
 
 # 名前空間移行後も、明示 migration 前の下流 override を同じ実行経路で読む。
 _NAMESPACED_LEGACY_OVERRIDE_OWNERS: Final[dict[str, str]] = {
     "music.prompt": "suno",
+    "music.lyric": "suno-lyric",
 }
 
 _THUMBNAIL_TEXT_RENDER_MODES = frozenset({"ai_burn_in", "deterministic"})

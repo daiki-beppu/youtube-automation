@@ -164,7 +164,7 @@ def test_vocal_lyrics_can_be_verified_before_prompts_are_generated(
     monkeypatch,
     capsys,
 ):
-    """Given /suno-lyric 直後で prompts は未生成だが lyrics が patterns と一致する
+    """Given /music --lyric 直後で prompts は未生成だが lyrics が patterns と一致する
     When yt-suno-verify を実行する
     Then pattern-derived name を期待値として検証し exit 0 にする。
     """

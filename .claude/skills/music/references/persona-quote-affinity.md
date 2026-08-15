@@ -1,7 +1,7 @@
 # Persona × Quote Affinity（ペルソナ別偉人マッピング）
 
-`/suno-lyric` がコレクションの各曲に偉人を割り当てるための参照表。
-このファイルは **参考資料** であり、実際の重み付けは `config/skills/suno-lyric.yaml::affinity_weights`（無ければ `config.default.yaml`）で行う。
+`/music --lyric` がコレクションの各曲に偉人を割り当てるための参照表。
+このファイルは **参考資料** であり、実際の重み付けは `config/skills/music.yaml::lyric.affinity_weights`（無ければ `config.default.yaml`）で行う。
 
 ## フォールバックペルソナ例
 
@@ -148,6 +148,6 @@
 
 ## 拡張・更新方針
 
-- 新しい偉人を追加するときは、`config/skills/suno-lyric.yaml::affinity_weights` に追記
+- 新しい偉人を追加するときは、`config/skills/music.yaml::lyric.affinity_weights` に追記
 - `iyashitour.com` 側で URL 構造が変わった場合は、本マッピングのスラグを更新する。別 host への自動取得は行わない
 - A/B テストとして「偉人カテゴリ縛り」の曲を作って `/analytics --analyze` のテーマ別パフォーマンスで効果検証
