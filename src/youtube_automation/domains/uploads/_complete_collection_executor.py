@@ -1,9 +1,8 @@
 """Complete Collection アップロード実行ループ。
 
 責務分割（Issue #465）の一環で ``collection_uploader.py`` から分離した。
-``self.uploader`` / ``self._load_tracking`` / ``self._save_tracking`` /
-``self._completed_tracking_record`` / ``self.config`` /
-``self._move_collection_to_live`` / ``self._update_workflow_upload`` /
+``self.uploader`` / ``self.tracking_store`` / ``self.config`` /
+``self._move_collection_to_live`` /
 ``self._assign_to_playlists`` は合成先クラス（``CollectionUploader`` 本体および
 他 mixin）が提供する。
 """
@@ -34,11 +33,11 @@ class CompleteCollectionExecutorMixin:
     """Complete Collection アップロード実行ループを提供する mixin。"""
 
     def _failed_complete_collection(self, collection_path: Path, tracking: dict, error: AutomationError) -> dict:
-        current = self._load_tracking(collection_path) or tracking
+        current = self.tracking_store.load(collection_path) or tracking
         cc_current = current.setdefault("complete_collection", {})
         cc_current["status"] = "failed"
         cc_current["error"] = _COMPLETE_COLLECTION_ERROR
-        self._save_tracking(collection_path, current)
+        self.tracking_store.save(collection_path, current)
         logger.error("❌ Complete Collection エラー: %s", redact_sensitive_data(str(error), collection_path))
         return {"action": "complete_collection_failed", "details": {"error": _COMPLETE_COLLECTION_ERROR}}
 
@@ -54,11 +53,11 @@ class CompleteCollectionExecutorMixin:
 
         tracking = {
             **tracking,
-            "complete_collection": self._completed_tracking_record(complete_video, publish_at),
+            "complete_collection": self.tracking_store.completed_record(complete_video, publish_at),
             "status": TRACKING_STATUS_COMPLETED,
         }
         # YouTube 側の成功直後に正規状態を保存し、後処理失敗で video_id を失わない。
-        self._save_tracking(collection_path, tracking)
+        self.tracking_store.save(collection_path, tracking)
 
         post_processing_errors: list[str] = []
         if self.config["collections_management"].get("auto_move_to_live", True):
@@ -72,7 +71,7 @@ class CompleteCollectionExecutorMixin:
                 )
 
         try:
-            self._update_workflow_upload(collection_path, complete_video, publish_at)
+            self.tracking_store.update_workflow_upload(collection_path, complete_video, publish_at)
         except AutomationError as error:
             post_processing_errors.append("workflow_upload")
             logger.error(
@@ -86,7 +85,7 @@ class CompleteCollectionExecutorMixin:
                 "post_processing_status": "partial",
                 "post_processing_errors": post_processing_errors,
             }
-        self._save_tracking(collection_path, tracking)
+        self.tracking_store.save(collection_path, tracking)
 
         if complete_video.get("upload_source") == UPLOAD_SOURCE_EXISTING:
             logger.info("⏭️  Complete Collection は既存動画を流用")
@@ -128,13 +127,13 @@ class CompleteCollectionExecutorMixin:
             並行更新（プレイリスト追加等が tracking を書く可能性）に備え、
             毎回 disk から再ロードしてから書き戻す。
             """
-            current = self._load_tracking(collection_path) or {}
+            current = self.tracking_store.load(collection_path) or {}
             cc_current = current.setdefault("complete_collection", {})
             if uri is None:
                 cc_current.pop("resume_session_uri", None)
             else:
                 cc_current["resume_session_uri"] = uri
-            self._save_tracking(collection_path, current)
+            self.tracking_store.save(collection_path, current)
 
         def _on_upload_complete() -> None:
             """upload 成功通知。後続の status="completed" 書き込みと整合させるため URI を消す。"""
@@ -167,11 +166,11 @@ class CompleteCollectionExecutorMixin:
         error_msg = _COMPLETE_COLLECTION_ERROR
         # callback が disk に書いた URI 状態（session 失効クリア等）を保ったまま
         # status 更新を載せるため、disk から再ロードしてから書き戻す。
-        current = self._load_tracking(collection_path) or tracking
+        current = self.tracking_store.load(collection_path) or tracking
         cc_current = current.setdefault("complete_collection", {})
         cc_current["status"] = "failed"
         cc_current["error"] = error_msg
-        self._save_tracking(collection_path, current)
+        self.tracking_store.save(collection_path, current)
         logger.error(f"❌ Complete Collection 失敗: {error_msg}")
         return {"action": "complete_collection_failed", "details": {"error": error_msg}}
 

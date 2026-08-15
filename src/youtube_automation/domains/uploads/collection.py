@@ -19,7 +19,7 @@ from youtube_automation.core.errors import ValidationError
 from youtube_automation.domains.uploads._complete_collection_executor import CompleteCollectionExecutorMixin
 from youtube_automation.domains.uploads._playlist_assignment import PlaylistAssignmentMixin
 from youtube_automation.domains.uploads._published_dates import PublishedDatesMixin
-from youtube_automation.domains.uploads._tracking_io import TrackingIOMixin
+from youtube_automation.domains.uploads._tracking_io import TrackingStore
 from youtube_automation.domains.uploads.preflight import ensure_collection_preflight
 from youtube_automation.domains.uploads.youtube import YouTubeAutoUploader
 from youtube_automation.infrastructure.filesystem import (
@@ -42,7 +42,6 @@ class CollectionUploader(
     CompleteCollectionExecutorMixin,
     PlaylistAssignmentMixin,
     PublishedDatesMixin,
-    TrackingIOMixin,
 ):
     """Collection Uploader — CC アップロード専用
 
@@ -50,7 +49,7 @@ class CollectionUploader(
     publishAt によるスケジュール公開を管理する。
 
     責務別の挙動は mixin に分離されている（Issue #465）:
-    - tracking I/O           : ``TrackingIOMixin``
+    - tracking I/O           : ``TrackingStore`` への委譲
     - 公開日 / publishAt 計算: ``PublishedDatesMixin``
     - プレイリスト割り当て    : ``PlaylistAssignmentMixin``
     - CC 実行ループ           : ``CompleteCollectionExecutorMixin``
@@ -61,6 +60,7 @@ class CollectionUploader(
         collections_root: str | None = None,
         config_path: str | None = None,
         youtube_clients: YouTubeClients | None = None,
+        tracking_store: TrackingStore | None = None,
     ):
         if collections_root is None:
             collections_root = channel_dir() / "collections"
@@ -72,6 +72,7 @@ class CollectionUploader(
         self.config_path = Path(config_path)
         self.uploader = YouTubeAutoUploader(str(collections_root), youtube_clients)
         self.config = self._load_config()
+        self.tracking_store = tracking_store or TrackingStore(self.collections_root, self.config)
         self.youtube_service = None
         self.youtube_clients = youtube_clients
 
@@ -179,9 +180,9 @@ class CollectionUploader(
             dict: {"action": str, "details": dict}
         """
         # tracking 読み込み or 初期化
-        tracking = self._load_tracking(collection_path)
+        tracking = self.tracking_store.load(collection_path)
         if tracking is None:
-            tracking = self._initialize_tracking(collection_path)
+            tracking = self.tracking_store.initialize(collection_path)
             logger.info("📋 tracking 初期化完了")
 
         # 既に完了
@@ -204,7 +205,7 @@ class CollectionUploader(
 
         # 全完了
         tracking["status"] = "completed"
-        self._save_tracking(collection_path, tracking)
+        self.tracking_store.save(collection_path, tracking)
         logger.info("✅ 全ステップ完了")
         return {"action": "all_completed", "details": {}}
 
@@ -217,7 +218,7 @@ class CollectionUploader(
 
     def show_status(self, collection_path: Path):
         """進捗表示"""
-        tracking = self._load_tracking(collection_path)
+        tracking = self.tracking_store.load(collection_path)
         if tracking is None:
             print(f"📋 {collection_path.name}")
             print("   tracking 未初期化 — 実行するとアップロードを開始します")

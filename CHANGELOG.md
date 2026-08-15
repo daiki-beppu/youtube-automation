@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `refactor(cli)`: argparse 互換の共通 CLI harness を追加し、uploads 3 コマンドの引数解析・期待済みエラー・中断処理を共通境界へ集約する。各 `main(argv)` は exit code を返し、AutomationError は機密情報を除去して stderr へ出力する（#3924）。
 - `refactor(cli)`: analytics 読み取り系 7 CLI を共通 CLI harness と `main(argv)` 境界へ移行し、既存の JSON / text 出力・exit code・設定解決順を維持する（#3926）。
 - `refactor(uploads)`: `DescriptionsMdMixin` を公開純関数 module へ置換し、uploader の公開interfaceを維持したまま多重継承とテストのprivate host依存を縮小する（#3928）。
+- `refactor(uploads)`: `TrackingIOMixin` を設定・collection rootを明示注入するtracking storeへ置換し、tracking / workflow-stateの書式を維持したままexecutorを委譲へ移行する（#3929）。
 
 - `refactor(doctor)`: 30 件の診断を実行順・category・apply 種別・cwd 意味論を持つ宣言 registry へ集約し、診断・表示・JSON・自動修復の重複判定を単一化する（#3918）。
 - `feat(skills)`: `/reply --live` に旧 `/live-chat-reply` の streaming 前提ガード、認証、常駐 daemon の配備・停止・障害復旧契約を統合し、旧 skill と利用者導線を削除する（#3849）。
