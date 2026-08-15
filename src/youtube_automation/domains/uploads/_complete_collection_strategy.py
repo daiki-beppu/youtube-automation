@@ -1,8 +1,7 @@
 """Complete Collection 動画アップロード経路。
 
 ``YouTubeAutoUploader`` から分離した mixin。挙動は分割前と同一で、
-``self.upload_video`` / ``self._load_descriptions_md`` /
-``self._extract_body_for_localizations`` / ``self._find_existing_video_by_title``
+``self.upload_video`` / ``self._find_existing_video_by_title``
 は合成先クラス（本体 + 他 mixin）が提供する。
 """
 
@@ -19,6 +18,10 @@ from youtube_automation.domains.metadata import BAHMetadataGenerator
 from youtube_automation.domains.uploads._uploader_constants import (
     UPLOAD_SOURCE_EXISTING,
     UPLOAD_SOURCE_NEW,
+)
+from youtube_automation.domains.uploads.descriptions_md import (
+    extract_body_for_localizations,
+    load_descriptions_md,
 )
 from youtube_automation.infrastructure.filesystem import glob_files, path_exists, path_is_file, read_json
 
@@ -99,7 +102,7 @@ class CompleteCollectionMixin:
         # 中間タイトル生成（_generate_title）を title_override でスキップする。
         # これにより title.template が未知プレースホルダ（例 {adjective}）を含んでも
         # 本来捨てられる中間タイトル生成で upload 全体がクラッシュしない（#574）。
-        prebuilt = self._load_descriptions_md(collection_dir)
+        prebuilt = load_descriptions_md(collection_dir)
 
         # メタデータ生成（BAHMetadataGenerator — localizations 等）
         metadata = metadata_gen.generate_complete_collection_metadata(
@@ -116,7 +119,7 @@ class CompleteCollectionMixin:
                 metadata["tags"] = prebuilt["tags"]
 
             # ローカライゼーションにもキュレーション済みのタイムスタンプを使用
-            curated_timestamps = self._extract_body_for_localizations(prebuilt["description"])
+            curated_timestamps = extract_body_for_localizations(prebuilt["description"])
             scene_phrases = getattr(metadata_gen, "_last_scene_phrases", {})
             scene_emoji = metadata_gen._load_scene_emoji()
             if curated_timestamps:

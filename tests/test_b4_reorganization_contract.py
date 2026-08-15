@@ -52,7 +52,6 @@ LEGACY_AGENT_OWNERS = {
         "CompleteCollectionMixin",
     ),
     "_dedup_search": ("youtube_automation.domains.uploads._dedup_search", "DedupSearchMixin"),
-    "_descriptions_md": ("youtube_automation.domains.uploads._descriptions_md", "DescriptionsMdMixin"),
     "_playlist_assignment": ("youtube_automation.domains.uploads._playlist_assignment", "PlaylistAssignmentMixin"),
     "_preflight": ("youtube_automation.domains.uploads._preflight", "PreflightMixin"),
     "_published_dates": ("youtube_automation.domains.uploads._published_dates", "PublishedDatesMixin"),
@@ -206,6 +205,17 @@ def test_legacy_agent_owners_have_canonical_domain_implementations() -> None:
 
         assert not legacy_path.exists(), legacy_path
         assert hasattr(owner, symbol_name), f"{owner_name}.{symbol_name}"
+
+
+def test_descriptions_md_is_a_public_pure_function_owner() -> None:
+    owner = importlib.import_module("youtube_automation.domains.uploads.descriptions_md")
+
+    assert not (SRC / "domains" / "uploads" / "_descriptions_md.py").exists()
+    assert {
+        "load_descriptions_md",
+        "extract_body_for_localizations",
+        "extract_md_section",
+    }.issubset(vars(owner))
 
 
 @pytest.mark.parametrize("filename", UPLOADER_ENTRYPOINTS)

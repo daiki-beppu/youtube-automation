@@ -19,12 +19,6 @@ class _PreflightHarness(PreflightMixin):
     def __init__(self, collections_root: Path) -> None:
         self.collections_root = collections_root
 
-    @staticmethod
-    def _extract_md_section(text: str, header: str) -> str | None:
-        pattern = rf"^## {re.escape(header)}\n```(?:\w+)?\n(.*?)\n```"
-        match = re.search(pattern, text, re.MULTILINE | re.DOTALL)
-        return match.group(1) if match else None
-
 
 def _write_json(path: Path, data: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)

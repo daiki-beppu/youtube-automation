@@ -1,4 +1,4 @@
-"""_descriptions_md.py のタグ quote 除去テスト (#1096).
+"""descriptions_md.py のタグ quote 除去テスト (#1096).
 
 descriptions.md 経由のタグパーサーでダブルクォートが自動除去されることを担保する。
 """
@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from youtube_automation.core.errors import ValidationError
-from youtube_automation.domains.uploads._descriptions_md import DescriptionsMdMixin
+from youtube_automation.domains.uploads.descriptions_md import load_descriptions_md
 
 
 def _write_descriptions_md(collection_dir: Path, tags_line: str) -> None:
@@ -27,37 +27,33 @@ def _write_descriptions_md(collection_dir: Path, tags_line: str) -> None:
 
 
 class TestDescriptionsMdQuoteStrip:
-    """_load_descriptions_md がタグのダブルクォートを除去する."""
+    """load_descriptions_md がタグのダブルクォートを除去する."""
 
     def test_strips_double_quotes_from_comma_separated_tags(self, tmp_path: Path) -> None:
         """カンマ区切りのクォート付きタグから引用符を除去する."""
         _write_descriptions_md(tmp_path, '"lofi beats", "jazz", "study music"')
-        mixin = DescriptionsMdMixin()
-        result = mixin._load_descriptions_md(tmp_path)
+        result = load_descriptions_md(tmp_path)
         assert result is not None
         assert result["tags"] == ["lofi beats", "jazz", "study music"]
 
     def test_strips_double_quotes_from_newline_separated_tags(self, tmp_path: Path) -> None:
         """改行区切りのクォート付きタグから引用符を除去する."""
         _write_descriptions_md(tmp_path, '"lofi beats"\n"jazz"\n"study music"')
-        mixin = DescriptionsMdMixin()
-        result = mixin._load_descriptions_md(tmp_path)
+        result = load_descriptions_md(tmp_path)
         assert result is not None
         assert result["tags"] == ["lofi beats", "jazz", "study music"]
 
     def test_handles_mixed_quoted_and_unquoted_tags(self, tmp_path: Path) -> None:
         """クォート有無が混在するタグでも正しく処理する."""
         _write_descriptions_md(tmp_path, '"lofi beats", jazz, "study music"')
-        mixin = DescriptionsMdMixin()
-        result = mixin._load_descriptions_md(tmp_path)
+        result = load_descriptions_md(tmp_path)
         assert result is not None
         assert result["tags"] == ["lofi beats", "jazz", "study music"]
 
     def test_handles_unquoted_tags_unchanged(self, tmp_path: Path) -> None:
         """クォートなしタグはそのまま通過する."""
         _write_descriptions_md(tmp_path, "lofi beats, jazz, study music")
-        mixin = DescriptionsMdMixin()
-        result = mixin._load_descriptions_md(tmp_path)
+        result = load_descriptions_md(tmp_path)
         assert result is not None
         assert result["tags"] == ["lofi beats", "jazz", "study music"]
 
@@ -67,9 +63,8 @@ class TestDescriptionsMdQuoteStrip:
         doc_dir.mkdir(parents=True)
         (doc_dir / "descriptions.md").write_text("手書きの説明文だけ", encoding="utf-8")
 
-        mixin = DescriptionsMdMixin()
         with caplog.at_level(logging.WARNING):
-            result = mixin._load_descriptions_md(tmp_path)
+            result = load_descriptions_md(tmp_path)
 
         messages = "\n".join(record.getMessage() for record in caplog.records)
         assert result is None
@@ -90,9 +85,8 @@ class TestDescriptionsMdQuoteStrip:
             encoding="utf-8",
         )
 
-        mixin = DescriptionsMdMixin()
         with caplog.at_level(logging.WARNING):
-            result = mixin._load_descriptions_md(tmp_path)
+            result = load_descriptions_md(tmp_path)
 
         messages = "\n".join(record.getMessage() for record in caplog.records)
         assert result is None
@@ -116,9 +110,8 @@ class TestDescriptionsMdQuoteStrip:
             encoding="utf-8",
         )
 
-        mixin = DescriptionsMdMixin()
         with caplog.at_level(logging.WARNING):
-            result = mixin._load_descriptions_md(tmp_path)
+            result = load_descriptions_md(tmp_path)
 
         messages = "\n".join(record.getMessage() for record in caplog.records)
         assert result is None
@@ -131,9 +124,8 @@ class TestDescriptionsMdQuoteStrip:
         doc_dir.mkdir(parents=True)
         (doc_dir / "description.txt").write_text("手書きの説明文", encoding="utf-8")
 
-        mixin = DescriptionsMdMixin()
         with pytest.raises(ValidationError) as excinfo:
-            mixin._load_descriptions_md(tmp_path)
+            load_descriptions_md(tmp_path)
 
         message = str(excinfo.value)
         assert "descriptions.md" in message

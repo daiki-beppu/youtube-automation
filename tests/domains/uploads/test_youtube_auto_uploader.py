@@ -703,7 +703,6 @@ class TestUploadCollectionForwarding:
         mock_gen.generate_complete_collection_metadata.return_value = _make_metadata()
 
         with (
-            patch.object(uploader, "_load_descriptions_md", return_value=None),
             patch.object(uploader, "_find_existing_video_by_title", return_value=None),
             patch.object(uploader, "upload_video", return_value="VID_INNER") as mock_upload_video,
         ):
@@ -1113,7 +1112,6 @@ class TestUploadCompleteCollectionDedup:
         existing = {"video_id": "v9", "video_url": "https://www.youtube.com/watch?v=v9"}
 
         with (
-            patch.object(uploader, "_load_descriptions_md", return_value=None),
             patch.object(uploader, "_find_existing_video_by_title", return_value=existing),
             patch.object(uploader, "upload_video", return_value="SHOULD_NOT_BE_CALLED") as mock_upload_video,
         ):
@@ -1135,7 +1133,6 @@ class TestUploadCompleteCollectionDedup:
         uploader, col_dir, mock_gen = self._setup(tmp_path)
 
         with (
-            patch.object(uploader, "_load_descriptions_md", return_value=None),
             patch.object(uploader, "_find_existing_video_by_title", return_value=None),
             patch.object(uploader, "upload_video", return_value="VID_NEW") as mock_upload_video,
         ):
@@ -1158,7 +1155,6 @@ class TestUploadCompleteCollectionDedup:
         )
 
         with (
-            patch.object(uploader, "_load_descriptions_md", return_value=None),
             patch.object(uploader, "_find_existing_video_by_title", return_value=None),
             patch.object(uploader, "upload_video", return_value="VID") as upload,
         ):
@@ -1174,7 +1170,6 @@ class TestUploadCompleteCollectionDedup:
         master.write_bytes(b"master")
 
         with (
-            patch.object(uploader, "_load_descriptions_md", return_value=None),
             patch.object(uploader, "_find_existing_video_by_title", return_value=None),
             patch.object(uploader, "upload_video", return_value="VID") as upload,
         ):
@@ -1267,7 +1262,6 @@ class TestUploadCompleteCollectionDedup:
         (col_dir / "10-assets" / "main.png").write_bytes(b"textless-background")
 
         with (
-            patch.object(uploader, "_load_descriptions_md", return_value=None),
             patch.object(uploader, "_find_existing_video_by_title", return_value=None),
             patch.object(uploader, "upload_video", return_value="SHOULD_NOT_BE_CALLED") as mock_upload_video,
             pytest.raises(ValidationError, match="アップロード用サムネイルが見つかりません"),
@@ -1286,7 +1280,6 @@ class TestUploadCompleteCollectionDedup:
         existing = {"video_id": "v9", "video_url": "https://www.youtube.com/watch?v=v9"}
 
         with (
-            patch.object(uploader, "_load_descriptions_md", return_value=None),
             patch.object(uploader, "_find_existing_video_by_title", return_value=existing) as mock_find_existing,
             patch.object(uploader, "upload_video", return_value="SHOULD_NOT_BE_CALLED") as mock_upload_video,
             pytest.raises(ValidationError, match="アップロード用サムネイルが見つかりません"),
@@ -1308,7 +1301,6 @@ class TestUploadCompleteCollectionDedup:
         uploader.youtube = mock_youtube
 
         with (
-            patch.object(uploader, "_load_descriptions_md", return_value=None),
             patch.object(uploader, "upload_video", return_value="VID_AFTER_FAILOPEN") as mock_upload_video,
             caplog.at_level(logging.WARNING),
         ):
