@@ -21,6 +21,7 @@ _PROJECT_COPY_ENTRIES = (
     "docs/workflow-cheatsheet.md",
     "flake.nix",
     "flake.lock",
+    "hatch_build.py",
     "pyproject.toml",
     "uv.lock",
     "src",

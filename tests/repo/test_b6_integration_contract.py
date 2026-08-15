@@ -361,6 +361,7 @@ def test_built_sdist_contains_only_approved_members(tmp_path: Path) -> None:
         "README.md",
         "PKG-INFO",
         ".gitignore",
+        "hatch_build.py",
         "pyproject.toml",
         ".claude/CLAUDE.template.md",
         ".claude/settings.template.json",

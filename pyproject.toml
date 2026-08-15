@@ -127,9 +127,6 @@ yt-setup-dirs = "youtube_automation.entrypoints:yt_setup_dirs"
 packages = ["src/youtube_automation"]
 
 [tool.hatch.build.targets.wheel.force-include]
-# Claude Code スキルファイルをパッケージ内 _skills/ として同梱
-# (yt-skills sync --asset skills が importlib.resources で参照する)
-".claude/skills" = "youtube_automation/_skills"
 # BGM チャンネル運営方針テンプレ (CLAUDE.md) を _claude_md/ として同梱
 # (yt-skills sync --asset claude-md が importlib.resources で参照する)
 ".claude/CLAUDE.template.md" = "youtube_automation/_claude_md/CLAUDE.template.md"
@@ -161,12 +158,17 @@ only-include = [
     "infra/terraform/gcp/README.md",
     "README.md",
     "LICENSE",
+    "hatch_build.py",
     "pyproject.toml",
 ]
 
 [tool.hatch.build.targets.sdist.force-include]
-".claude/skills" = ".claude/skills"
 "src/youtube_automation/dashboard_dist" = "src/youtube_automation/dashboard_dist"
+
+[tool.hatch.build.hooks.custom]
+path = "hatch_build.py"
+# runtime fallback の _DEV_ONLY_SKILL_NAMES と契約テストで一致を担保する。
+dev-only-skills = ["automation-release", "shadcn"]
 
 [tool.ruff]
 target-version = "py311"
