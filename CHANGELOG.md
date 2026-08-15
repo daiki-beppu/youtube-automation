@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(skills)`: `yt-skills lint` で SKILL.md 本体の 400 行上限を検証し、既存の上限超過は現行行数までの allowlist として報告しながら新規超過・肥大化を拒否する（#3793）。
+
 - `feat(skills)`: 全 55 skill に 7 語 enum の `purpose` を付与し、`yt-skills lint` で欠落・enum 外・複数値を拒否する（#3788）。
 
 - `feat(skills)`: 全 SKILL.md に機械抽出可能な `委譲先` 宣言を追加し、`yt-skills delegation` で委譲深さ・最長経路・循環を計測、lint で宣言欠落と循環を拒否する（#3751）。
