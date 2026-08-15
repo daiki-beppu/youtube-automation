@@ -1,19 +1,4 @@
----
-name: comments-reply
-purpose: 公開する
-description: "Use when 公開済み YouTube 動画のコメントへ自動返信するとき。「動画コメント返信」「コメント返信」「リプライ」で発動。配信中のライブチャット返信は /live-chat-reply を使う"
----
-
-## 前後工程
-
-- `前工程`: `なし`
-- `後工程`: `なし`
-- `委譲先`: `なし`
-
-## 成果物
-
-- `書き込む`: `comment_reply_history.json`
-- `読み込む`: `config/channel/comments.json`, `auth/token.json`
+# 公開済み動画コメントへの返信
 
 ## Overview
 

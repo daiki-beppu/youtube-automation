@@ -92,7 +92,7 @@
 | 2.30 | channel-new | `.claude/skills/channel-new/SKILL.md:175` | `uv run yt-benchmark-comments --min-views 5000` | 中 | benchmark.yaml `min_views` と矛盾しないか確認。固定 5000 は別パラ |
 | 2.31 | lyria | `.claude/skills/lyria/SKILL.md:194` | `--max-retries N （default: 3）` | 低 | CLI デフォルト |
 | 2.32 | lyria | `.claude/skills/lyria/SKILL.md:10,76,168` | `1 リクエストあたり最大約 184 秒` | 低 | Vertex AI API 仕様（変更があれば追従） |
-| 2.33 | comments-reply | `.claude/skills/comments-reply/SKILL.md:58` | `--per-video-limit N（default: 100）` | 中 | examples/channel_config.example/comments.json では `max_replies_per_run: 20` 等あり |
+| 2.33 | reply | `.claude/skills/reply/references/comments.md` | `--per-video-limit N（default: 100）` | 中 | examples/channel_config.example/comments.json では `max_replies_per_run: 20` 等あり |
 | 2.34 | streaming | `.claude/skills/streaming/SKILL.md:8` | `RuntimeMaxSec=11h + RestartSec=1h` | 低 | Terraform 側に集約済（SKILL は documentation） |
 | 2.35 | streaming | `.claude/skills/streaming/SKILL.md:38,109` | `80% 閾値アラート` / `帯域 80% 超アラート` | 低 | `src/youtube_automation/utils/streaming/threshold.py` の定数。SKILL は documentation |
 | 2.36 | streaming | `.claude/skills/streaming/SKILL.md:99` | `月間 1.16 TB（2 TB プランの 58%）` / `4 Mbps → 3 Mbps 化` | 低 | Vultr プラン依存 |

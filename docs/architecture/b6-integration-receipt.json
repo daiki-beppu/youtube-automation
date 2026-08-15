@@ -556,14 +556,14 @@
     },
     {
       "old_owner": "legacy..claude.skills.comments-reply.SKILL.md",
-      "exact_new_owner": ".claude/skills/comments-reply/SKILL.md",
+      "exact_new_owner": ".claude/skills/reply/references/comments.md",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"
     },
     {
       "old_owner": "legacy..claude.skills.comments-reply.references.review-rubric.md",
-      "exact_new_owner": ".claude/skills/comments-reply/references/review-rubric.md",
+      "exact_new_owner": ".claude/skills/reply/references/review-rubric.md",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"

@@ -49,7 +49,7 @@ YouTube への公開、視聴者対応、容量整理、コミュニティ投稿
 | Skill | なにができるか |
 |---|---|
 | /publish | フラグなしで playlist → upload → community → pinned を状態判定付きで一括実行。各 mode の単独実行と `--clean` にも対応 |
-| /comments-reply | ルール駆動コメント自動返信（dry-run → apply、二重返信防止） |
+| /reply | ルール駆動コメント自動返信（dry-run → apply、二重返信防止） |
 | /live-chat-reply | 配信中ライブチャットの Codex 自動返信 daemon を設定・VPS 配備・運用 |
 | /short | collection 型の生成・ローカライズ投稿と release 型の JP+EN クリップ生成を設定から自動分岐 |
 | /distrokid-helper | コレクション楽曲を DistroKid 配信用に整備し、Chrome 拡張向けサーバー起動まで実行 |
