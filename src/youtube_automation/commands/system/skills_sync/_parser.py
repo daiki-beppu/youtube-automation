@@ -6,6 +6,7 @@ import argparse
 import sys
 
 from youtube_automation.commands.system.skills_sync import _ASSET_SPECS, _guard_target_with_all, cmd_list
+from youtube_automation.commands.system.skills_sync._catalog import cmd_catalog
 from youtube_automation.commands.system.skills_sync._delegation import cmd_delegation
 from youtube_automation.commands.system.skills_sync._diff import cmd_diff
 from youtube_automation.commands.system.skills_sync._lint import cmd_lint
@@ -127,5 +128,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_delegation = sub.add_parser("delegation", help="SKILL.md の委譲深さと最長経路を表示")
     p_delegation.set_defaults(func=cmd_delegation, asset="skills")
+
+    p_catalog = sub.add_parser("catalog", help="purpose 別の skill catalog を生成・検証")
+    p_catalog.add_argument(
+        "--check",
+        action="store_true",
+        help="docs/skill-catalog.md が最新か検証し、差分があれば非 0 で終了する",
+    )
+    p_catalog.set_defaults(func=cmd_catalog, asset="skills")
 
     return parser
