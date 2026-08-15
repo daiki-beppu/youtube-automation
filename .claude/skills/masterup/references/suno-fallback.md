@@ -74,14 +74,14 @@ Suno の公式 API ではなく UI の HTML と CDN URL パターンに依存し
 > **suno-helper DL 済みの場合はスキップ**: Step 2 と同様、`02-Individual-music/` にファイルが存在すれば本ステップはスキップ。
 
 各曲について:
-1. Song ID または Suno ショート URL（`https://music --prompt.com/s/<slug>`）を UUID に正規化
+1. Song ID または Suno ショート URL（`https://suno.com/s/<slug>`）を UUID に正規化
 2. UUID から CDN URL を生成: `https://cdn1.suno.ai/{song_id}.mp3`
 3. `curl` でダウンロードし `02-Individual-music/` に保存
 4. ファイル名: 連番 + タイトルから生成（例: `01-pattern-a-arrival.mp3`）
 
 **Suno ショート URL の UUID 解決**:
 
-`song_id` 欄に `https://music --prompt.com/s/<slug>` が入っている場合は、リダイレクト先 URL から UUID を抽出してから CDN URL を組み立てる。解決できない場合は当該曲をスキップせず、原因を表示して処理を停止する（silent な欠落禁止）。
+`song_id` 欄に `https://suno.com/s/<slug>` が入っている場合は、リダイレクト先 URL から UUID を抽出してから CDN URL を組み立てる。解決できない場合は当該曲をスキップせず、原因を表示して処理を停止する（silent な欠落禁止）。
 
 ```bash
 resolve_suno_song_id() {
@@ -93,7 +93,7 @@ resolve_suno_song_id() {
     return 0
   fi
 
-  if echo "$input" | rg -qi '^https://music --prompt\.com/s/[^[:space:]]+$'; then
+  if echo "$input" | rg -qi '^https://suno\.com/s/[^[:space:]]+$'; then
     local final_url
     final_url="$(curl -sI -L -o /dev/null -w '%{url_effective}' "$input")"
     if echo "$final_url" | rg -qio "$uuid_re"; then
@@ -104,7 +104,7 @@ resolve_suno_song_id() {
     return 1
   fi
 
-  echo "ERROR: Song ID は UUID または https://music --prompt.com/s/<slug> で指定してください: $input" >&2
+  echo "ERROR: Song ID は UUID または https://suno.com/s/<slug> で指定してください: $input" >&2
   return 1
 }
 ```
@@ -189,4 +189,3 @@ fi
 **検証が失敗した場合**: 該当ファイルを削除し、curl を再実行する。3 回リトライしても失敗する場合は CDN 障害の可能性が高いため、手動で Suno UI からダウンロードして `02-Individual-music/` に配置するフォールバックに切り替える。
 
 **注意**: CDN URL は public だが永続性は不明。生成後なるべく早めにダウンロードすること。1ファイル約2-3MB。
-

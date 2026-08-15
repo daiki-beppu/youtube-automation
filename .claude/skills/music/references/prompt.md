@@ -4,7 +4,7 @@
 
 コレクション用の SunoAI V5.5 音楽プロンプトを YAML で定義し、スクリプトで最終プロンプトを生成する。**インストゥルメンタル / ボーカル（歌詞あり）両モード対応**。歌詞ありの場合、`/music --prompt` は orchestration として pattern draft 保存 → `/music --lyric` → Style / Lyrics の `suno-prompts.json` 結合までを進める。
 
-- **インストモード**: 曲数 (`tracks_per_collection`) を指定し、ceil(N/2) 個の独立 entry をフラットに並べる（pattern 概念は廃止）。`/suno-helper` が各 entry を Suno に順次投入し、Suno 仕様で 1 Generate = 2 clip 生成されるため両 clip 採用で N clip となる
+- **インストモード**: 曲数 (`tracks_per_collection`) を指定し、ceil(N/2) 個の独立 entry をフラットに並べる（pattern 概念は廃止）。`/music --generate` が各 entry を Suno に順次投入し、Suno 仕様で 1 Generate = 2 clip 生成されるため両 clip 採用で N clip となる
 - **ボーカルモード**: 先に `/music --prompt` で `suno-patterns.yaml` の pattern draft を保存し、続けて `/music --lyric` で同じ entry name の歌詞を作成してから、再度 `/music --prompt` で Style / 情景 / タイトルと `suno-lyrics.json` を `suno-prompts.json` へ結合する。**1 pattern = 1 prompt entry = 1 採用曲**のため、必要 pattern 数 ≈ track_count（数%の試聴落選バッファを上乗せ）。インストの `ceil(N/2)` を類推適用しない（詳細は「パターンベース設計（ボーカルモード）」の計算式）
 
 ## チャンネル制約入力（非停止）
@@ -122,7 +122,7 @@ LLM semantic review はファイル単位で実行する。各 review round で�
 以下を確認し、満たさなければ前工程を案内して停止する:
 
 - `config/channel/` は `SKILL.md` の共通前提で検証済みであること
-- チャンネルの音楽エンジンが Suno であること。Lyria チャンネルでは本スキルを使わず `/lyria` を案内する
+- チャンネルの音楽エンジンが Suno であること。Lyria チャンネルでは本スキルを使わず `/music --generate` を案内する
 - 対象コレクション（`collections/planning/` 配下の `workflow-state.json`）が `/wf-new` で作成済みであること。無ければ `/wf-new` を案内して停止する
 - collection 固有 Style を直接指定する場合は `20-documentation/suno-patterns.yaml::genre_line`、指定しない場合は `config/skills/music.yaml::prompt.genre_line` または `data/video_analysis/<slug>/*.json`（`suno_preset`）を fallback として利用できること。解決順は「Style 入力の解決（collection 優先、preset 推奨）」に従う
 - ボーカルモードの merge 段階では `20-documentation/suno-lyrics.json` が必要。無ければ先に `/music --lyric` を実行する
@@ -517,7 +517,7 @@ uv run yt-suno-verify <collection-path>
 
 `yt-generate-suno` 自体は `workflow-state.json` を更新しない。`/music --prompt` を呼び出したメインエージェント（`/wf-new` / `/wf-next` からの呼び出しと、`/music --prompt` の直接実行を含む）が、生成された成果物、`yt-suno-verify` の成功、semantic review の全 entry `PASS` を確認した後にだけ、`assets.music_prompts = true`、`planning.music`、`updated_at` を更新する。subagent は state を書き込まない。
 
-### Step 3: `/suno-helper` で自動投入（推奨）
+### Step 3: `/music --generate` で自動投入（推奨）
 
 `suno-prompts.json` を Chrome 拡張（`extensions/suno-helper/`）が読み取り、連続実行する。
 
@@ -526,7 +526,7 @@ uv run yt-suno-verify <collection-path>
 3. **Suno を開く**: Chrome で Advanced タブを選択（ボーカルは Lyrics mode = **Write**）
 4. **自動取得 → 連続実行**: 拡張ポップアップで配信元と collection を選ぶと prompts と配信元 URL が自動取得・保存される。最新データを取り直す場合はページを再読み込みし、取得完了後に全パターンを連続実行する。スキップされた entry は再実行ボタンで再投入可能
 
-定期 `/wf-next` からは `/suno-helper` の定期実行 flow を使い、`yt-suno-unattended-request` の URL を既ログイン Chrome で開く。entry / concurrency / retry 上限を超えた残りは checkpoint へ繰り越し、ログイン・CAPTCHA・課金確認・UI 非互換は自動突破せず handoff する。
+定期 `/wf-next` からは `/music --generate` の定期実行 flow を使い、`yt-suno-unattended-request` の URL を既ログイン Chrome で開く。entry / concurrency / retry 上限を超えた残りは checkpoint へ繰り越し、ログイン・CAPTCHA・課金確認・UI 非互換は自動突破せず handoff する。
 
 origin lock、fallback、再利用判定、停止は `extension/references/serve.md` を唯一の正とし、本 skill に複製しない。
 
@@ -558,14 +558,14 @@ UI 変更で注入先セレクタが外れた場合は `extensions/shared/dom.ts
 ## Next Step
 
 ### インストゥルメンタル
-- `/suno-helper` で SunoAI の Advanced タブ（Lyrics mode = **Instrumental**）に自動投入して連続生成 + playlist 一括追加
+- `/music --generate` で SunoAI の Advanced タブ（Lyrics mode = **Instrumental**）に自動投入して連続生成 + playlist 一括追加
 - `/masterup <playlist-url>` でダウンロード + マスター音源生成
 
 ### ボーカル（歌詞あり）
 - `/music --prompt` で `suno-patterns.yaml` の pattern draft を保存
 - `/music --lyric` で同じ entry name の歌詞を生成・レビュー
 - `/music --prompt` を再実行して Style + Lyrics の `suno-prompts.json` を生成
-- `/suno-helper` で SunoAI の Advanced タブ（Lyrics mode = **Write**）に Style + Lyrics を自動投入して連続生成 + playlist 一括追加
+- `/music --generate` で SunoAI の Advanced タブ（Lyrics mode = **Write**）に Style + Lyrics を自動投入して連続生成 + playlist 一括追加
 - 歌唱の発音・ピッチが破綻していないか必ず試聴チェック
 - `/masterup <playlist-url>` でダウンロード + マスター音源生成
 
@@ -573,7 +573,7 @@ UI 変更で注入先セレクタが外れた場合は `extensions/shared/dom.ts
 
 - テーマ確定 + 制作開始: `/wf-new`
 - 歌詞生成（ボーカルのみ）: `/music --lyric`
-- ブラウザ自動生成 + playlist 一括追加: `/suno-helper`
+- ブラウザ自動生成 + playlist 一括追加: `/music --generate`
 - DL + マスター化: `/masterup`
 - 拡張本体のコード: `extensions/suno-helper/` / `extensions/shared/`
 - サーバー CLI: `src/youtube_automation/commands/collections/collection_serve.py`

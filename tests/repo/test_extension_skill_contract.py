@@ -91,7 +91,7 @@ def test_extension_references_own_install_update_and_server_contracts() -> None:
 
 def test_collection_server_consumers_reference_shared_contract() -> None:
     consumers = (
-        SKILLS / "suno-helper" / "SKILL.md",
+        SKILLS / "music" / "references" / "generate.md",
         SKILLS / "distrokid-helper" / "SKILL.md",
         SKILLS / "masterup" / "SKILL.md",
         SKILLS / "music" / "references" / "prompt.md",

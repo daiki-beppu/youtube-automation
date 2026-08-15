@@ -6,7 +6,7 @@ description: "Use when Suno UI で生成した曲のプレイリストを一括 
 
 ## 前後工程
 
-- `前工程`: `/wf-new`, `/music --prompt`, `/suno-helper`
+- `前工程`: `/wf-new`, `/music --prompt`, `/music --generate`
 - `後工程`: `/video --generate`
 - `委譲先`: `なし`
 
@@ -19,7 +19,7 @@ description: "Use when Suno UI で生成した曲のプレイリストを一括 
 
 SunoAI 楽曲のクロスフェード結合でマスター音源を自動生成するまでの一連フローを実行します。
 
-**ダウンロードの責務分離**: 楽曲のダウンロードは `/suno-helper` が一括ダウンロード機能で自動実行するのが primary path。本スキルの Step 2-3（WebFetch + CDN curl）は `/suno-helper` でダウンロード済みの場合はスキップされる。本スキルの主責務は **マスター音源生成 + workflow-state 更新** である。
+**ダウンロードの責務分離**: 楽曲のダウンロードは `/music --generate` が一括ダウンロード機能で自動実行するのが primary path。本スキルの Step 2-3（WebFetch + CDN curl）は `/music --generate` でダウンロード済みの場合はスキップされる。本スキルの主責務は **マスター音源生成 + workflow-state 更新** である。
 
 ## 完了条件
 
@@ -51,9 +51,9 @@ subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実�
 
 以下を確認し、満たさなければ前工程を案内して停止する:
 
-- チャンネルの音楽エンジンが Suno であること。Lyria チャンネルでは `/lyria` が `01-master/master.mp3` を直接出力するため本スキルは不要
+- チャンネルの音楽エンジンが Suno であること。Lyria チャンネルでは `/music --generate` が `01-master/master.mp3` を直接出力するため本スキルは不要
 - 対象コレクションが `/music --prompt` 完了済みであること（`collections/planning/` 配下に `workflow-state.json` があり `assets.music_prompts = true`、かつ `20-documentation/suno-prompts.json` が存在）。無ければ `/wf-new` → `/music --prompt` を案内して停止する
-- `02-Individual-music/` にダウンロード済み音源が揃っていること（primary path は `/suno-helper` の一括ダウンロード）。未ダウンロードの場合は `/suno-helper` を案内するか、fallback としてプレイリスト URL を引数に受け取り Step 2-3 で DL する。**音源が揃っていれば playlist URL は不要**（URL 未指定を理由に停止しない。突合は Step 1.6 のローカルファイル名を第一手段にする）
+- `02-Individual-music/` にダウンロード済み音源が揃っていること（primary path は `/music --generate` の一括ダウンロード）。未ダウンロードの場合は `/music --generate` を案内するか、fallback としてプレイリスト URL を引数に受け取り Step 2-3 で DL する。**音源が揃っていれば playlist URL は不要**（URL 未指定を理由に停止しない。突合は Step 1.6 のローカルファイル名を第一手段にする）
 - `ffmpeg` / `ffprobe` が利用可能であること（`uv run yt-generate-master` が使用）。無ければ `/setup` を案内する
 
 ## 設定
@@ -92,11 +92,11 @@ TS CLI `uv run yt-generate-master` は `audio` の実行時既定値を組み込
 
 ## When to Use
 
-- `/suno-helper` で楽曲生成・ダウンロードが完了し、マスター音源を生成したいとき
+- `/music --generate` で楽曲生成・ダウンロードが完了し、マスター音源を生成したいとき
 - `02-Individual-music/` に MP3 / M4A / WAV ファイルが揃っている状態でマスター結合を実行したいとき
-- `/suno-helper` のダウンロードが使えない場合のフォールバックとして、プレイリスト URL 経由で DL + マスター生成を一貫実行したいとき
+- `/music --generate` のダウンロードが使えない場合のフォールバックとして、プレイリスト URL 経由で DL + マスター生成を一貫実行したいとき
 
-Lyria で音源を生成するチャンネルでは `/lyria` が `01-master/master.mp3` を直接出力するため本スキルは不要。
+Lyria で音源を生成するチャンネルでは `/music --generate` が `01-master/master.mp3` を直接出力するため本スキルは不要。
 
 ## Quick Reference
 
@@ -171,7 +171,7 @@ uv run yt-raw-master-check <コレクションディレクトリ>
 
 `02-Individual-music/` の実ファイル数を期待曲数と突合する。**`assets.music_downloaded` が `true` でも本チェックはスキップしない**（フラグと実ファイル数が食い違う部分ダウンロード — 例: 10 曲中 5 曲失敗 — を見逃さないため）。
 
-期待曲数・実ファイル数は `/suno-helper` の DL 完了判定・collection server の `status` 判定と同じロジック（既存ユーティリティ）で算出し、算式を二重管理しない。server lifecycle が必要な fallback 経路では `.claude/skills/extension/references/serve.md` を直接読み、起動・再利用・停止を本 skill に複製しない:
+期待曲数・実ファイル数は `/music --generate` の DL 完了判定・collection server の `status` 判定と同じロジック（既存ユーティリティ）で算出し、算式を二重管理しない。server lifecycle が必要な fallback 経路では `.claude/skills/extension/references/serve.md` を直接読み、起動・再利用・停止を本 skill に複製しない:
 
 ```bash
 python3 -c "
@@ -194,8 +194,8 @@ print(f'pattern_count={pattern_count} expected={expected} actual={actual}')
 - `actual`（実ファイル数）: `02-Individual-music/` 内の `.mp3` / `.m4a` / `.wav` ファイル数
 
 判定:
-- **`actual == 0`**: `/suno-helper` 未実行として「`/suno-helper` を実行してダウンロードを完了してください」を案内して停止
-- **`0 < actual < expected`**: 部分ダウンロードとして扱う。`assets.music_downloaded` が `true` であっても揃っているとはみなさない。不足曲数（`expected - actual`）を提示し、「`/suno-helper` を再実行して不足分を DL するか、Suno UI から手動で不足曲をダウンロードして `02-Individual-music/` に配置してください」を案内して停止
+- **`actual == 0`**: `/music --generate` 未実行として「`/music --generate` を実行してダウンロードを完了してください」を案内して停止
+- **`0 < actual < expected`**: 部分ダウンロードとして扱う。`assets.music_downloaded` が `true` であっても揃っているとはみなさない。不足曲数（`expected - actual`）を提示し、「`/music --generate` を再実行して不足分を DL するか、Suno UI から手動で不足曲をダウンロードして `02-Individual-music/` に配置してください」を案内して停止
 - 定期実行の extension state が `checkpoint` / `manual-intervention` / `running` の場合も、実ファイル数・`planning.music.suno_playlist_url`・`assets.music_downloaded` が揃うまでは停止する。extension state の `completed` は補助情報であり、この実ファイル突合を代替しない
 - **`actual >= expected`**: チェック OK として Step 1.6 へ進む
 
@@ -216,11 +216,11 @@ fallback path（Step 2-3 で DL する場合）は従来どおり Step 2 の Web
 
 判定:
 - **unknown（どの entry にも一致しない曲）**: 別コレクション由来の混入。playlist から除外するまで Step 5 に進まない
-- **missing（playlist に存在しない entry）**: 生成漏れ。`/suno-helper` で追補生成するまで Step 5 に進まない
+- **missing（playlist に存在しない entry）**: 生成漏れ。`/music --generate` で追補生成するまで Step 5 に進まない
 - **underfilled（clip 数が期待未満の entry）**: 生成が途中で止まった疑い。既定は 2 clip/entry（`--expected-clips-per-entry` で調整、`0` で無効化）
 - 非 0 終了時はレポートをそのままユーザーへ提示して停止する。**ユーザーが混入込みでの続行を明示指示した場合のみ**、混入内容と影響（世界観不整合・メタデータずれ）を報告した上で続行できる
 
-> **背景**: playlist には「最新セットの生成が未完のまま、前後コレクションの曲が混入する」事故が繰り返し起きている（実例: 深夜コレクションに昼テーマ 2 ペアが混入 + 深夜 2 entry 未生成のまま master 化）。曲名は `/suno-helper` が Song Title 欄へ注入する `entry.title ?? entry.name` で一意なため、機械突合で確実に検出できる。silent な続行は禁止。
+> **背景**: playlist には「最新セットの生成が未完のまま、前後コレクションの曲が混入する」事故が繰り返し起きている（実例: 深夜コレクションに昼テーマ 2 ペアが混入 + 深夜 2 entry 未生成のまま master 化）。曲名は `/music --generate` が Song Title 欄へ注入する `entry.title ?? entry.name` で一意なため、機械突合で確実に検出できる。silent な続行は禁止。
 
 ### Step 2-3: MP3 の取得（suno-helper 済みなら不要）
 
@@ -257,7 +257,7 @@ uv run yt-suno-select-tracks --dry-run <collection-path>
 dry-run stdout の `[dropped_under_min]` セクションに 1 件以上ある場合は、各行の `source=<filename>` / `duration=<sec>s` / `min_song_sec=<sec>s` をユーザーへ提示し、続行可否を確認する。Claude Code では AskUserQuestion で「続行する」「続行しない」の 2 択を出す。AskUserQuestion 非対応環境（Codex 等）では、同じ情報をテキストで提示し、ユーザーの明示的な承認発言を待つ。
 
 - **続行する**: 下記の本実行へ進み、既存の `pair_selection.out_of_range_action` に従って除外する。その後 Step 5 へ進む
-- **続行しない**: 本実行を行わず、`/suno-helper` での追補生成または該当曲の手動確認を案内して停止する。Step 5 へ進まない
+- **続行しない**: 本実行を行わず、`/music --generate` での追補生成または該当曲の手動確認を案内して停止する。Step 5 へ進まない
 - `[dropped_under_min]` に候補が無い場合: 確認プロンプトを出さず、下記の本実行へ進む。`pair_selection.max_song_sec` 超過だけの候補では、この確認プロンプトを出さない
 
 ```bash
@@ -272,7 +272,7 @@ uv run yt-suno-select-tracks <collection-path>
    - 既定は `45 <= duration <= 300` 秒
    - `max_song_sec: 300` は 5 分超の崩れた Suno 生成を混ぜないための既定値。チャンネル側の `config/skills/masterup.json` 優先、既存 `masterup.yaml` fallback で `pair_selection.max_song_sec` を明示的に上書きできる
    - 除外曲は `pair_selection.out_of_range_action` に従い、既定では `assets/stock/music/b-side/` へ退避する
-   - 除外後にある prompt の採用候補が 0 件になった場合は fail-loud。基本は `/suno-helper` で追補生成してから再実行する
+   - 除外後にある prompt の採用候補が 0 件になった場合は fail-loud。基本は `/music --generate` で追補生成してから再実行する
 2. **歌詞あり（vocal / lyrics あり）**:
    - `suno-prompts.json` の `lyrics` に実歌詞がある entry は、同じ prompt から生成された clip 群のうち 1 曲だけを winner として採用
    - winner は `02-Individual-music/<NN>-<title>.<ext>` に rename
@@ -320,7 +320,7 @@ uv run yt-suno-select-tracks <collection-path> --dry-run
 - Step 1.6 の `uv run yt-suno-verify-playlist` が未実行、検証不能、または非 0 終了している（混入 / 生成漏れ / clip 不足。ユーザーが混入込み続行を明示指示した場合を除く）
 - Step 4.5 の `uv run yt-suno-select-tracks` が非 0 終了している（尺フィルタ後の採用候補 0 件、stock 移動失敗など）
 
-検証失敗時は Step 4 / 4.5 のレポートを提示し、ユーザーに手動修正（再ダウンロード / Suno UI からの手動取得 / `/suno-helper` 追補生成）を促してから再実行する。
+検証失敗時は Step 4 / 4.5 のレポートを提示し、ユーザーに手動修正（再ダウンロード / Suno UI からの手動取得 / `/music --generate` 追補生成）を促してから再実行する。
 
 #### Step 5.0: Suno 個別音源の音質補正（既定 ON / config opt-out）
 

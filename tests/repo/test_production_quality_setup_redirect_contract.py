@@ -26,7 +26,6 @@ TARGET_SKILLS = (
     "alignment-check",
     "wf-new",
     "flop-analysis",
-    "lyria",
     "metadata-audit",
     "publish",
     "short",
@@ -193,22 +192,6 @@ _RAW_EXPECTED_ACTIVE_ROUTES = (
         "`/channel-strategy --direction`（方向性検討モード）でチャンネル全体の方向性を見直す。",
     ),
     _route(
-        "lyria/SKILL.md",
-        "## 前提",
-        "- **`config/channel/` が無い新規チャンネル** → `/setup --channel` を案内",
-    ),
-    _route(
-        "lyria/SKILL.md",
-        "## 前提",
-        "- **`config/channel/` が無い既存チャンネル** → `/setup --import` を案内",
-    ),
-    _route(
-        "lyria/SKILL.md",
-        "### 選択タイミング（どこで lyria が選ばれるか）",
-        "1. **チャンネルのデフォルト** — `/channel-strategy --direction`（方向性検討モード）で suno/lyria を検討 → "
-        "`/setup --regenerate` が `config/channel/youtube.json` の `music_engine` に書き込む",
-    ),
-    _route(
         "metadata-audit/SKILL.md",
         "## 前提",
         "- `config/channel/` が存在すること（`load_config()` でロード可能）。存在しない場合は "
@@ -245,6 +228,23 @@ _RAW_EXPECTED_ACTIVE_ROUTES = (
         "music/SKILL.md",
         "## 共通前提",
         "- **既存チャンネル**（設定不整合）→ `/setup --import` を案内",
+    ),
+    _route(
+        "music/references/generate.md",
+        "## Lyria 前提",
+        "- **`config/channel/` が無い新規チャンネル** → `/setup --channel` を案内",
+    ),
+    _route(
+        "music/references/generate.md",
+        "## Lyria 前提",
+        "- **`config/channel/` が無い既存チャンネル** → `/setup --import` を案内",
+    ),
+    _route(
+        "music/references/generate.md",
+        "### 選択タイミング（どこで lyria が選ばれるか）",
+        "1. **チャンネルのデフォルト** — `/channel-strategy --direction`（方向性検討モード）で "
+        "`suno` / `lyria` を検討 → "
+        "`/setup --regenerate` が `config/channel/youtube.json` の `music_engine` に書き込む",
     ),
     _route("thumbnail/SKILL.md", "## 前提", "- **新規チャンネル** → `/setup --channel` を案内"),
     _route(
@@ -851,6 +851,7 @@ def test_initial_occurrences_have_a_complete_context_ledger() -> None:
     historical_skills = {entry[0] for entry in INITIAL_OCCURRENCE_LEDGER}
     current_owners = {
         "collection-ideate": "wf-new",
+        "lyria": "music",
         "playlist": "publish",
         "short-thumbnail": "short",
     }

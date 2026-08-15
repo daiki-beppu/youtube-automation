@@ -136,10 +136,6 @@ NON_TARGET_SKILLS: dict[str, str] = {
         "本リポジトリのリリース作業のみ。yt-upload-collection への言及は"
         "リリースノート内の例示参照で、手順として実行しない"
     ),
-    "music": (
-        "Suno プロンプトのローカル生成のみ。yt-video-analyze への言及は"
-        "/video-analyze 出力 JSON の読込参照で、手順として実行しない"
-    ),
     "video": (
         "ffmpeg によるローカル動画生成のみ。yt-generate-loop-video への言及は"
         "generate_videos.sh のエラー時案内メッセージで、手順として実行しない"
@@ -164,7 +160,7 @@ TARGET_SKILLS: frozenset[str] = frozenset(
         "distrokid-helper",
         "flop-analysis",
         "live-chat-reply",
-        "lyria",
+        "music",
         "metadata-audit",
         "pinned-comment",
         "setup",

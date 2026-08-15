@@ -76,7 +76,7 @@ def test_music_call_selects_suno_or_prompt_only_lyria() -> None:
     assert "`music_engine: suno`" in initial_dispatch
     assert "`/music --prompt <theme>`" in initial_dispatch
     assert "`music_engine: lyria`" in initial_dispatch
-    assert "`/lyria <theme>`" in initial_dispatch
+    assert "`/music --generate <theme>`" in initial_dispatch
     assert "プロンプト設計だけ" in initial_dispatch
     assert "Lyria 3 API" in initial_dispatch
     assert "実行しない" in initial_dispatch

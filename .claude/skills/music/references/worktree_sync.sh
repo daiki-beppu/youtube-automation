@@ -3,7 +3,7 @@
 #
 # Usage:
 #   cd collections/planning/xxx-collection/
-#   bash <repo-root>/.claude/skills/lyria/references/worktree_sync.sh [--dry-run]
+#   bash <repo-root>/.claude/skills/music/references/worktree_sync.sh [--dry-run]
 #
 # コピー対象:
 #   01-master/master.mp3       → main の 01-master/

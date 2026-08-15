@@ -7,7 +7,7 @@
                        |
 /music --prompt        ->  20-documentation/suno-prompts.{md,json}
                        |
-/suno-helper ->  Suno UI
+/music --generate ->  Suno UI
 ```
 
 ## Subagent Contract

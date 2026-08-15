@@ -1069,7 +1069,7 @@ def test_apply_sync_only_is_allowlist_and_forces_selected_assets(
 ) -> None:
     repo = _write_repo(tmp_path, INLINE_TABLE_PYPROJECT)
 
-    assert main(["apply", "--target", str(repo), "--tag", "v5.6.0", "--sync-only", "lyria", "music"]) == 0
+    assert main(["apply", "--target", str(repo), "--tag", "v5.6.0", "--sync-only", "masterup", "music"]) == 0
     assert [
         "uv",
         "run",
@@ -1078,7 +1078,7 @@ def test_apply_sync_only_is_allowlist_and_forces_selected_assets(
         "--asset",
         "skills",
         "--only",
-        "lyria",
+        "masterup",
         "music",
         "--force",
     ] in recorded_commands

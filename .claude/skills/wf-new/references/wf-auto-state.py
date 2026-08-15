@@ -523,7 +523,7 @@ def _suno_download_complete(collection: Path, state: dict) -> bool:
         or minimum_expected <= 0
         or expected < minimum_expected
         or not isinstance(playlist_url, str)
-        or not playlist_url.startswith("https://music --prompt.com/playlist/")
+        or not playlist_url.startswith("https://suno.com/playlist/")
     ):
         return False
     music_dir = collection / "02-Individual-music"

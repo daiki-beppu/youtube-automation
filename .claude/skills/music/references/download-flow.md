@@ -56,4 +56,3 @@ popup UI からも設定可能。設定は `chrome.storage.local` に永続化�
 | `suno-playlists.json` | 新規コレクションでも使用 | 使用しない（新規・レガシー互換とも廃止） |
 
 `suno-playlists.json` は新規・レガシー互換のどちらでも参照されない。playlist URL は `POST /collections/<id>/downloaded` 経由で `workflow-state.json` の `planning.music.suno_playlist_url` に一元管理される。
-

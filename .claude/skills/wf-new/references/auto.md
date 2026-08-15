@@ -3,7 +3,7 @@
 
 - `前工程`: `/wf-new`
 - `後工程`: `/post-publish`, `/analytics`
-- `委譲先`: `/wf-new`, `/lyria`, `/suno-helper`, `/masterup`, `/wf-next`, `/post-publish`
+- `委譲先`: `/wf-new`, `/music --generate`, `/music --generate`, `/masterup`, `/wf-next`, `/post-publish`
 
 ## 成果物
 
@@ -12,7 +12,7 @@
 
 ## Overview
 
-`workflow-state.json` と実成果物を毎段再評価し、新規企画または active collection の未完了地点から公開後処理まで継続する正規入口。判断・lease・履歴は `references/wf-auto-state.py` を使い、実作業は同一 SKILL.md の通常入口、`/lyria`、`/suno-helper`、`/masterup`、`/wf-next`、`/post-publish` に委譲する。子 skill の処理は本文へ複製しない。`thumbnail::textless.enabled` も独自解釈せず、通常入口と `/wf-next` の契約をそのまま貫通させる。
+`workflow-state.json` と実成果物を毎段再評価し、新規企画または active collection の未完了地点から公開後処理まで継続する正規入口。判断・lease・履歴は `references/wf-auto-state.py` を使い、実作業は同一 SKILL.md の通常入口、`/music --generate`、`/music --generate`、`/masterup`、`/wf-next`、`/post-publish` に委譲する。子 skill の処理は本文へ複製しない。`thumbnail::textless.enabled` も独自解釈せず、通常入口と `/wf-next` の契約をそのまま貫通させる。
 
 ## Hard Gates
 
@@ -65,8 +65,8 @@ uv run python "$STATE_SCRIPT" release --channel-dir . --token <token>
 | action | 委譲先 / 処理 |
 |---|---|
 | `wf-new` | 同一 SKILL.md の通常入口。不在時は新規開始、固定済み planning では未完了工程から再開 |
-| `lyria` | `/lyria` |
-| `suno-helper` | `/suno-helper` の browser use 主導フロー。人間への handoff は login / CAPTCHA の該当操作だけ |
+| `lyria` | `/music --generate` |
+| `suno-helper` | `/music --generate` の browser use 主導フロー。人間への handoff は login / CAPTCHA の該当操作だけ |
 | `masterup` | strict Suno 成果物を入力に `/masterup` |
 | `wf-next-local` | `/wf-next` のローカル動画・metadata 生成まで。YouTube write は行わない |
 | `wf-next` | `/wf-next`。config が許可した場合だけ upload を含める |
@@ -116,17 +116,17 @@ uv run python "$STATE_SCRIPT" record --channel-dir . --token <token> \
 
 ### `suno-helper` action の自律実行契約
 
-resolver が `action: suno-helper` を返したら、agent 自身が `/suno-helper` の **Agent primary flow: browser use** を実行する。Codex は browser use、Claude Code は browser use または Claude in Chrome を使い、固定 collection について次を完走する。
+resolver が `action: suno-helper` を返したら、agent 自身が `/music --generate` の **Agent primary flow: browser use** を実行する。Codex は browser use、Claude Code は browser use または Claude in Chrome を使い、固定 collection について次を完走する。
 
 1. collection server を AI または setup script が起動し、agent が Suno Create を開く
 2. suno-helper overlay / popup で server と固定 collection を選択する
 3. 既定の連続生成を開始し、全 pattern の生成完了を監視する
 4. 生成曲を対象 playlist へ追加し、複数曲の ZIP download を実行する
-5. `/suno-helper` の strict 成果物数・manifest・音源ファイル検証を実行する
+5. `/music --generate` の strict 成果物数・manifest・音源ファイル検証を実行する
 
-ユーザーへ `/suno-helper` の実行、overlay 選択、曲生成、playlist 追加、ZIP download、成果物検証を一括して依頼してはならない。Suno が login または CAPTCHA を表示し本人操作が不可欠な場合だけ、現在の画面と必要な1操作を限定して依頼し、`record --action suno-helper --status blocked --reason suno_login_required|suno_captcha_required --resume-action suno-helper --ai-started-at <current-attempt-ai-started-at>` を残す。認証のコマンド実行や CAPTCHA 回避は行わない。
+ユーザーへ `/music --generate` の実行、overlay 選択、曲生成、playlist 追加、ZIP download、成果物検証を一括して依頼してはならない。Suno が login または CAPTCHA を表示し本人操作が不可欠な場合だけ、現在の画面と必要な1操作を限定して依頼し、`record --action suno-helper --status blocked --reason suno_login_required|suno_captcha_required --resume-action suno-helper --ai-started-at <current-attempt-ai-started-at>` を残す。認証のコマンド実行や CAPTCHA 回避は行わない。
 
-本人操作の完了後は agent が同じ固定 collection の `suno-helper` action から再開する。UI 非互換、拡張未ロード、server 接続、生成、playlist、download の失敗を login / CAPTCHA と束ねず、`/suno-helper` の診断・再試行契約に従う。strict 完了条件が揃ったら成功を記録して同一 collection を再度 `plan` し、返された `masterup` 以降へ同じ run 内で継続する。
+本人操作の完了後は agent が同じ固定 collection の `suno-helper` action から再開する。UI 非互換、拡張未ロード、server 接続、生成、playlist、download の失敗を login / CAPTCHA と束ねず、`/music --generate` の診断・再試行契約に従う。strict 完了条件が揃ったら成功を記録して同一 collection を再度 `plan` し、返された `masterup` 以降へ同じ run 内で継続する。
 
 ## 実行手順
 

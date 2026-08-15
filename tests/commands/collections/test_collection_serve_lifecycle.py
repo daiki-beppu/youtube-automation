@@ -929,9 +929,15 @@ def test_idle_timeout_rejects_non_finite_and_non_positive_values(value):
         collection_serve._positive_float(value)
 
 
-@pytest.mark.parametrize("skill", ["suno-helper", "distrokid-helper"])
-def test_helper_skill_stops_collection_server_after_user_workflow(skill):
-    text = (Path(".claude/skills") / skill / "SKILL.md").read_text(encoding="utf-8")
+@pytest.mark.parametrize(
+    ("skill", "document"),
+    [
+        ("music", "references/generate.md"),
+        ("distrokid-helper", "SKILL.md"),
+    ],
+)
+def test_helper_skill_stops_collection_server_after_user_workflow(skill, document):
+    text = (Path(".claude/skills") / skill / document).read_text(encoding="utf-8")
     lifecycle = (Path(".claude/skills/extension/references/serve.md")).read_text(encoding="utf-8")
     hard_gates = "\n".join(text.splitlines()[:60])
 

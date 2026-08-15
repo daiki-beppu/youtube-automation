@@ -26,7 +26,6 @@ _LIFECYCLE_SKILL_NAMES: Final[tuple[str, ...]] = (
     "wf-new",
     "wf-next",
     "music",
-    "suno-helper",
     "masterup",
     "video",
     "publish",

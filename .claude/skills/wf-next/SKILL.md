@@ -8,7 +8,7 @@ description: "Use when 既存コレクション（collections/planning/）を一
 
 - `前工程`: `/wf-new`, `/wf-new`
 - `後工程`: `/analytics`, `/flop-analysis`
-- `委譲先`: `/masterup`, `/lyria`, `/video --generate`, `/video-description`, `/publish --playlist`, `/publish --upload`
+- `委譲先`: `/masterup`, `/music --generate`, `/video --generate`, `/video-description`, `/publish --playlist`, `/publish --upload`
 
 ## 成果物
 
@@ -89,7 +89,7 @@ description: "Use when 既存コレクション（collections/planning/）を一
 |---|---|---|
 | videos.insert（1,600 units / 本、mastered フェーズの yt-upload-collection / yt-upload-auto） | アップロード本数 | collection / release 型・進行フェーズ |
 | playlists.insert / playlistItems.insert（各 50 units、yt-playlist-manager --init） | 新規プレイリスト数 + 割当本数 | プレイリスト構成 |
-| Vertex AI Lyria（subagent /lyria 委譲時） | /lyria の「想定 API call 数」を参照 | Lyria パス採否 |
+| Vertex AI Lyria（subagent `/music --generate` 委譲時） | `/music --generate` の「想定 API call 数」を参照 | Lyria パス採否 |
 
 - 上限 / 承認: upload 前に `--plan` で事前確認し、playlist 系は `--dry-run` を使う。/video --generate /masterup /video-description はローカル処理で API 0。委譲先 skill の見積もりは各 skill の「想定 API call 数」を参照。
 
@@ -158,7 +158,7 @@ status を記録した後は、成功時だけでなく blocked / failed の停�
      - ガイダンス: 「raw master をミキシング+マスタリングし、最終マスターを 01-master/ に配置後、`/wf-next` を再実行してください」
      - **ここでフロー停止**
    - **URL 記録済みだが `02-Individual-music/` に音声ファイルが無い**:
-     - URL 再入力は要求せず、「ダウンロードが完了していない可能性があります。`/suno-helper` を再開するか手動でダウンロードしてから `/wf-next` を再実行してください」を表示
+     - URL 再入力は要求せず、「ダウンロードが完了していない可能性があります。`/music --generate` を再開するか手動でダウンロードしてから `/wf-next` を再実行してください」を表示
      - **ここでフロー停止**（`/masterup` は自動実行しない）
    - **URL 未記録（キー自体が無い、または `null`）かつ `02-Individual-music/` に音声ファイルも無い**:
      - 従来通りユーザーにプレイリスト URL を AskUserQuestion で取得
@@ -169,7 +169,7 @@ status を記録した後は、成功時だけでなく blocked / failed の停�
 
 **Lyria パス:**
 1. `assets.music_prompts = true` + `assets.raw_master = null`:
-   - Agent ツールで subagent を起動し、対象 collection と theme を入力に `/lyria <theme>` の Lyria 3 API セグメント生成だけを実行させる（最大 ~184 秒/リクエスト）。state 書き込みと承認取得は禁止する
+   - Agent ツールで subagent を起動し、対象 collection と theme を入力に `/music --generate <theme>` の Lyria 3 API セグメント生成だけを実行させる（最大 ~184 秒/リクエスト）。state 書き込みと承認取得は禁止する
    - 委譲前に期待する `02-Individual-music/` の音声ファイルと `01-master/` の raw master パスを列挙する。メインが実在を確認し、成功時だけ `assets.raw_master` と `updated_at` を更新する
    - ガイダンス: 「生成されたセグメントをミキシング+マスタリングし、最終マスターを 01-master/ に配置後、`/wf-next` を再実行してください」
    - **ここでフロー停止**

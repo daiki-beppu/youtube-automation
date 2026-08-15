@@ -81,7 +81,7 @@ suno_download:
   retry_delay_seconds: 2
 
 # Suno 1 Generate = 2 clip の採用整理。
-# /suno-helper が全 clip を 02-Individual-music/ に配置した後、/masterup が
+# /music --generate が全 clip を 02-Individual-music/ に配置した後、/masterup が
 # uv run yt-generate-master の直前に実行する。
 pair_selection:
   # auto: suno-prompts.json の lyrics から歌詞あり/なしを判定する。

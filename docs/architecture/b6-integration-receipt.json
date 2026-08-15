@@ -675,14 +675,14 @@
     },
     {
       "old_owner": "legacy..claude.skills.lyria.SKILL.md",
-      "exact_new_owner": ".claude/skills/lyria/SKILL.md",
+      "exact_new_owner": ".claude/skills/music/references/generate.md",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"
     },
     {
       "old_owner": "legacy..claude.skills.lyria.references.lyria-tuning-guide.md",
-      "exact_new_owner": ".claude/skills/lyria/references/lyria-tuning-guide.md",
+      "exact_new_owner": ".claude/skills/music/references/lyria-tuning-guide.md",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"
@@ -885,14 +885,14 @@
     },
     {
       "old_owner": "legacy..claude.skills.suno-helper.SKILL.md",
-      "exact_new_owner": ".claude/skills/suno-helper/SKILL.md",
+      "exact_new_owner": ".claude/skills/music/references/generate.md",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"
     },
     {
       "old_owner": "legacy..claude.skills.suno-helper.references.download-flow.md",
-      "exact_new_owner": ".claude/skills/suno-helper/references/download-flow.md",
+      "exact_new_owner": ".claude/skills/music/references/download-flow.md",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"

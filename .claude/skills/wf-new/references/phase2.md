@@ -88,7 +88,7 @@ uv run yt-populate-scene-phrases <collection-dir-name> \
 3. **両 branch が未完了なら exactly two calls を同時起動**:
    - 1 回の Agent tool dispatch に次の独立した 2 call だけを含め、同じ message で同時起動する。順次 2 回に分けず、3 call 目や `/thumbnail --loop` を混ぜない
    - Agent 1: thumbnail branch。`status: FINALIZED` なら AI 生成を行わない（候補生成も再選択もしない）。既存 preview の品質検証・確定経路のうち、承認を伴わない `thumbnail.jpg` の実在・可読性確認だけを行い evidence を返す。`status: MISSING` なら `single_step` / provider を問わず `/thumbnail <theme>` の Subagent Contract でテキスト付き候補と `20-documentation/thumbnail-prompts.md` を候補生成する。承認、確定コピー、state 更新は行わない
-   - Agent 2: music branch。`music_engine: suno` なら `/music --prompt <theme>` で `20-documentation/suno-patterns.yaml` と `suno-prompts.json` を生成する。`music_engine: lyria` なら `/lyria <theme>` のプロンプト設計だけを行い `lyria-prompt.md` を生成する。この Phase では Lyria 3 API を実行しない
+   - Agent 2: music branch。`music_engine: suno` なら `/music --prompt <theme>` で `20-documentation/suno-patterns.yaml` と `suno-prompts.json` を生成する。`music_engine: lyria` なら `/music --generate <theme>` のプロンプト設計だけを行い `lyria-prompt.md` を生成する。この Phase では Lyria 3 API を実行しない
    - 両 Agent へ、固定した対象 collection の絶対 path、確定企画、theme、engine / effective config という具体的な入力、期待成果物の絶対 path、禁止事項、完了報告形式を渡す。両 Agent は `workflow-state.json` を更新しない、AskUserQuestion を実行しない、共有 config を変更しない
    - 片側再開では上記の該当 Agent だけへ同じ具体的な契約を渡す。両方未完了のときだけ exactly-two 同時 dispatch とする
 
@@ -161,7 +161,7 @@ initial dispatch を行った場合は両 Agent の完了を待つ。片方の�
 
 `/music --prompt` が生成した `20-documentation/suno-prompts.json` を Chrome 拡張へ配信するため、`.claude/skills/extension/references/serve.md` を読み、`--suno` の既存 server 再利用・起動・疎通確認契約を直接実行する。`/extension` skill へ委譲せず、server lifecycle のコマンドや判定を本 reference に複製しない。
 
-起動または疎通確認に失敗しても、server は state を更新しない独立した補助工程なので、検証・更新済みの `phase = "prepared"` は維持する。失敗内容、共有契約が返した log path と再開方法を完了ガイダンスに出す。Suno UI での連続生成、playlist 追加、ZIP 一括 DL は `/suno-helper` の browser use 主導フローで実行する。
+起動または疎通確認に失敗しても、server は state を更新しない独立した補助工程なので、検証・更新済みの `phase = "prepared"` は維持する。失敗内容、共有契約が返した log path と再開方法を完了ガイダンスに出す。Suno UI での連続生成、playlist 追加、ZIP 一括 DL は `/music --generate` の browser use 主導フローで実行する。
 
 #### 2g. 完了ガイダンス
 
@@ -179,7 +179,7 @@ Suno-helper server: ✅ http://<channel>.localhost:<PORT> 起動済み / ⚠️ 
 ```
 
 音楽エンジンに応じた次ステップ案内:
-- **Suno**: 「suno-helper server は `http://<channel>.localhost:<PORT>` で起動済みです。次は `/suno-helper` を実行し、browser use で Suno Custom Mode を開いて、suno-helper overlay / popup のローカル配信元からこのチャンネルを選び、対象 collection を選んで連続実行してください。全件完了で playlist 一括追加 + ZIP 一括 DL まで自動。完了後に `/wf-next` を実行（plain Suno UI への手動投入は非推奨）」
+- **Suno**: 「suno-helper server は `http://<channel>.localhost:<PORT>` で起動済みです。次は `/music --generate` を実行し、browser use で Suno Custom Mode を開いて、suno-helper overlay / popup のローカル配信元からこのチャンネルを選び、対象 collection を選んで連続実行してください。全件完了で playlist 一括追加 + ZIP 一括 DL まで自動。完了後に `/wf-next` を実行（plain Suno UI への手動投入は非推奨）」
 - **Lyria**: 「`/wf-next` を実行すると Lyria 3 API が呼ばれ、コレクション尺に応じてセグメントが生成されます → ミキシング+マスタリング後に再度 `/wf-next`」
 
-**重要**: `/wf-new` が自動で行うのは Suno 用ローカル server の起動と疎通確認まで。`/suno-helper` のブラウザ実行（Chrome + Suno ログイン確認 + 拡張 overlay / popup 操作 + 連続実行開始）は、次工程の `/suno-helper` が browser use 主経路で進める。ログイン、CAPTCHA、拡張未ロードなどの handoff 条件は `/suno-helper` 側の判断基準に従う。
+**重要**: `/wf-new` が自動で行うのは Suno 用ローカル server の起動と疎通確認まで。`/music --generate` のブラウザ実行（Chrome + Suno ログイン確認 + 拡張 overlay / popup 操作 + 連続実行開始）は、次工程の `/music --generate` が browser use 主経路で進める。ログイン、CAPTCHA、拡張未ロードなどの handoff 条件は `/music --generate` 側の判断基準に従う。

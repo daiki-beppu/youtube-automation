@@ -50,6 +50,6 @@ Phase 2c の開始時は flag だけで完了を判断せず、flag と実成果
 - flag が `false` で実成果物が未完成または検証失敗: その branch だけを再実行する
 - flag が `true` なのに対応成果物が欠落・破損・不整合: 完了扱いせず fail-closed に停止し、正常な別 branch の state と成果物は変更しない
 
-thumbnail branch だけが未完了なら、`finalize_planning_preview.py` の決定結果に従って preview の品質検証・確定または `/thumbnail <theme>` から再開する。music branch だけが未完了なら、固定済み engine に従い `/music --prompt <theme>` または `/lyria <theme>` から再開する。
+thumbnail branch だけが未完了なら、`finalize_planning_preview.py` の決定結果に従って preview の品質検証・確定または `/thumbnail <theme>` から再開する。music branch だけが未完了なら、固定済み engine に従い `/music --prompt <theme>` または `/music --generate <theme>` から再開する。
 
 停止報告には collection path、失敗 branch、失敗理由、保持した成功 branch、次の action を含める。別 collection や別 theme へ切り替えず、同じ collection の未完了 branch だけを対象にする。

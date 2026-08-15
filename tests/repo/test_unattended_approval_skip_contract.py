@@ -45,9 +45,9 @@ def test_wf_auto_recognizes_explicit_skip_settings() -> None:
 
 
 def test_lyria_skip_preserves_audit_artifact_and_hard_cap() -> None:
-    text = _text("lyria")
+    text = (SKILLS / "music" / "references" / "generate.md").read_text(encoding="utf-8")
 
-    assert _config("lyria")["skip_generation_approval"] is False
+    assert _config("music")["generate"]["lyria"]["skip_generation_approval"] is False
     assert "skip_generation_approval: true" in text
     assert "lyria-prompt.md" in text
     assert "60 セグメント hard cap" in text

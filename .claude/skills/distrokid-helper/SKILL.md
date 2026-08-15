@@ -6,7 +6,7 @@ description: "Use when コレクションの楽曲を DistroKid 配信用に準�
 
 ## 前後工程
 
-- `前工程`: `/masterup`, `/lyria`, `/thumbnail`, `/extension`
+- `前工程`: `/masterup`, `/music --generate`, `/thumbnail`, `/extension`
 - `後工程`: `なし`
 - `委譲先`: `なし`
 
@@ -36,7 +36,7 @@ verify が green で、Chrome 拡張へのハンドオフ後にユーザーが�
 
 以下の 1〜3 を確認し、満たさなければ案内して停止する。4 は停止条件ではなく、未設定時に 2 択の分岐を提示する:
 
-1. 対象コレクションの `02-Individual-music/*.mp3` が 1 件以上存在すること。無ければ前工程（`/suno-helper` → `/masterup`、または `/lyria`）を案内して停止する
+1. 対象コレクションの `02-Individual-music/*.mp3` が 1 件以上存在すること。無ければ前工程（`/music --generate` → `/masterup`、または `/music --generate`）を案内して停止する
 2. `config/channel/distrokid.json` の `distrokid.enabled` が `true` で、`distrokid.profile.artist` が配信アーティスト名になっていること。`false` / 未設定のチャンネルでは本スキルを使わず、設定方法はユーザーに確認する
 3. ジャケット生成に使用する `config/skills/thumbnail.yaml` が存在すること（`provider` / `brand_background` / `style_lock_clause` を参照する）。無ければ `/thumbnail` の設定整備を案内する
 4. `config/channel/distrokid.json` の `distrokid.profile.songwriter`（作曲者の本名。`{ "first": "...", "last": "..." }` の nested 構造、`middle` は任意）が設定されているか確認する。schema 上は任意のため未設定でも停止しないが、未設定のまま進めると Chrome 拡張のフォーム一括入力で songwriter（本名）欄だけが空になり、DistroKid Web で曲ごとの手入力が必要になる。未設定の場合は **plan / build（ステップ 1 / 4）に進む前に** AskUserQuestion で以下の 2 択を提示し、選択に従う:

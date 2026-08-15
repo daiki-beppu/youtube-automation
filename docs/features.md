@@ -35,14 +35,12 @@
 
 ## 企画・コンテンツ生成
 
-サムネ・音源・動画など制作物の生成。`config/channel/youtube.json::music_engine` により `/lyria` 経路と `/music --prompt` + `/masterup` 経路を切り替える。
+サムネ・音源・動画など制作物の生成。`/music --generate` が `config/channel/youtube.json::music_engine` を読み、Suno UI 経路と Lyria API 経路を自動分岐する。
 
 | Skill | なにができるか |
 |---|---|
 | /thumbnail | CTR 最適化サムネを生成。`--compare` で 320px 視認性検証、`--test` で Studio A/B テスト、`--iterate` で champion 還元、`--loop` で textless main から Veo / Omni ループ動画を生成 |
-| /lyria | Vertex AI Lyria 3 で長尺マスター音源を自動生成（API 完結） |
-| /music | `--prompt` で Suno Style、`--lyric` でボーカル曲の歌詞と構成メモを生成 |
-| /suno-helper | suno-helper Chrome 拡張で Suno UI への連続生成 + playlist 一括追加を運用 |
+| /music | `--prompt` で Suno Style、`--lyric` でボーカル曲の歌詞と構成メモ、`--generate` で engine に応じた Suno UI 連続生成または Lyria 3 長尺マスター生成を実行 |
 | /masterup | Suno で生成した楽曲を DL + クロスフェードマスター化 |
 | /video | `--generate` でマスター音源 + 背景画像 / 動画から最終 MP4 を合成 |
 

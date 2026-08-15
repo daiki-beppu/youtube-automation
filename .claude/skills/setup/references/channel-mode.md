@@ -291,5 +291,5 @@ guard が `secret-like file staged; unstaged before commit` を出した場合�
 保存未完了として終了した場合は、以下の成功案内は出さない。作業ツリーが最初から clean、または初回 commit が成功した場合だけ最後に案内する:
 
 ```text
-チャンネル初期化が完了しました。初回保存も完了しているため、色味・構図・ムード・テンポの方向性を先に確認したい場合は、仮コレクションで任意のパイロット検証（/thumbnail → /thumbnail --compare、music_engine が suno なら /music --prompt → /suno-helper、lyria なら /lyria）を実施してから /wf-new に進めます。検証を省略する場合は、そのまま /wf-new で初回コレクション制作に進めます。初投稿前のプレイリスト未作成状態は、公開フロー内の /publish --playlist 初期化で解消します。公開後の分析は /analytics --collect、ライブ配信を使う場合は YouTube Studio の Live streaming 有効化と /streaming の準備確認へ進んでください。
+チャンネル初期化が完了しました。初回保存も完了しているため、色味・構図・ムード・テンポの方向性を先に確認したい場合は、仮コレクションで任意のパイロット検証（/thumbnail → /thumbnail --compare、music_engine が suno なら /music --prompt → /music --generate、lyria なら /music --generate）を実施してから /wf-new に進めます。検証を省略する場合は、そのまま /wf-new で初回コレクション制作に進めます。初投稿前のプレイリスト未作成状態は、公開フロー内の /publish --playlist 初期化で解消します。公開後の分析は /analytics --collect、ライブ配信を使う場合は YouTube Studio の Live streaming 有効化と /streaming の準備確認へ進んでください。
 ```

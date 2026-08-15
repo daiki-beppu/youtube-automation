@@ -6,7 +6,7 @@ description: "Use when 音楽ムード × サムネ × タイトルの整合性�
 
 ## 前後工程
 
-- `前工程`: `/channel-strategy --constraints`, `/thumbnail`, `/music --prompt`, `/lyria`
+- `前工程`: `/channel-strategy --constraints`, `/thumbnail`, `/music --prompt`, `/music --generate`
 - `後工程`: `/flop-analysis`
 - `委譲先`: `なし`
 
@@ -118,7 +118,7 @@ AskUserQuestion で新フォーマットが承認された場合のみ `config/c
 | 不整合カテゴリ | 症状 | 再実行スキル |
 |---------------|------|-------------|
 | **サムネ不一致** | 音楽ムードとサムネ雰囲気がズレ（例: lofi なのに派手な色調） | `/thumbnail <collection>` — 対象コレクションのサムネイル再生成 |
-| **音楽ミスマッチ** | テーマ・タイトルと音楽プロンプトがズレ（例: 「rain」テーマなのに upbeat） | `/wf-new` の企画工程で見直し、その後 `/music --prompt` または `/lyria` で再生成 |
+| **音楽ミスマッチ** | テーマ・タイトルと音楽プロンプトがズレ（例: 「rain」テーマなのに upbeat） | `/wf-new` の企画工程で見直し、その後 `/music --prompt` または `/music --generate` で再生成 |
 | **タイトル改善のみ** | サムネ・音楽は OK だがタイトルの訴求/語彙が弱い | YouTube Studio で手動変更 + `config/channel/content.json` の `title.template` を更新 |
 | **横断的な方向性ズレ** | 複数コレクションで同じ不整合パターン | `/channel-strategy --direction`（方向性検討モード）でチャンネル全体の方向性を再検討 |
 
