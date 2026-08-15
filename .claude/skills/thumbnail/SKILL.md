@@ -1,7 +1,7 @@
 ---
 name: thumbnail
 purpose: 作る
-description: "Use when コレクションの YouTube サムネイル（thumbnail.jpg）を CTR 最適化し、textless main.png/jpg を先行生成して実フォント合成するとき。「サムネイル生成」「画像生成」「アイキャッチ」で発動。伸びた動画起点の改善ループは /thumbnail-iterate、競合の勝ちパターン分析は /thumbnail-research、320px 視認性比較は /thumbnail-compare、単独の Studio A/B 設計・結果記録は /thumbnail-test、SVG・汎用画像生成には使わない"
+description: "Use when コレクションの YouTube サムネイル（thumbnail.jpg）を CTR 最適化し、textless main.png/jpg を先行生成して実フォント合成するとき。「サムネイル生成」「画像生成」「アイキャッチ」で発動。伸びた動画起点の改善ループは /thumbnail-iterate、競合の勝ちパターン分析は channel-research の thumbnail mode、320px 視認性比較は /thumbnail-compare、単独の Studio A/B 設計・結果記録は /thumbnail-test、SVG・汎用画像生成には使わない"
 ---
 
 ## 前後工程
@@ -309,7 +309,7 @@ uv run python .claude/skills/thumbnail/references/share_thumbnail_as_main.py <co
 
 スクリプトは `thumbnail.jpg` を一時ファイルへ `shutil.copyfile()` でコピーし、SHA-256 一致後に `10-assets/main.jpg` へ置換する。既存 `main.jpg` は更新し、競合する `main.png` は削除する。exit 0 と JSON の `status: SHARED`、同一 SHA-256、`main.png` 不在を確認するまで `thumbnail.approved = true` にしない。`thumbnail-prompts.md` には textless 生成プロンプトを捏造せず、`textless.enabled=false`、`source=10-assets/thumbnail.jpg`、`destination=10-assets/main.jpg`、検証済み SHA-256 を記録する。
 
-`docs/benchmarks/thumbnail-analysis.md` が存在する場合は、生成前に Read（Codex では同等のファイル閲覧）で開き、`## /thumbnail への TTP 推奨事項` の「維持する構造」「テーマに合わせて差し替える要素」「避ける要素」「参照候補」を、参照画像選定と差分プロンプトの入力にする。存在せず競合サムネイルの勝ちパターンを先に深掘りする場合は `/thumbnail-research` を実行する。
+`docs/benchmarks/thumbnail-analysis.md` が存在する場合は、生成前に Read（Codex では同等のファイル閲覧）で開き、`## /thumbnail への TTP 推奨事項` の「維持する構造」「テーマに合わせて差し替える要素」「避ける要素」「参照候補」を、参照画像選定と差分プロンプトの入力にする。存在せず競合サムネイルの勝ちパターンを先に深掘りする場合は `/channel-research --thumbnail` を実行する。
 
 1. 「thumbnail-text-profile 適用」節の手順で、フォント選定・コピー生成制約・配置を確定する（profile 不在なら実効デフォルト値のまま進む。エラーにしない）。
 2. ベンチマーク先サムネを参照画像にして、`thumbnail-analysis.md` がある場合はその勝ちパターンも使い、構図・色温度・主役スケール・背景テクスチャを踏襲した textless 背景候補 `main-v*.png/jpg` を生成する。差分プロンプトには `single_step.text_strip_clause` 相当の除去指示を展開し、タイトル文字・字幕・ロゴ・透かしを焼き込ませない（参照画像の選定・プロンプト構築・CLI 引数は「Single-Step / TTP モード」章の機構を流用する）。

@@ -88,7 +88,7 @@ subagent へは次を具体値で渡す:
 - 入力パス: 分析本文の対象、CLI が選択する `data/analytics_data_*.json` と `data/analytics/daily_per_video/*.json`、`config/channel/content.json`、存在する場合は `data/video_analysis/<slug>/<video_id>.json`
 - 実行する作業: 「分析項目」の全項目をカバーする分析と、必須の `yt-launch-curve --latest` / `yt-channel-trend` / `yt-theme-compare` / `yt-traffic-trend` / `yt-vpd-rank` / `yt-win-pattern` / `yt-ttp-health`
 - VPD 中間成果物: `reports/analysis_YYYYMMDD.vpd-ranking.json` / `.visual-annotations.json` / `.win-pattern.json`。最初の JSON は `yt-vpd-rank` stdout、最後は `yt-win-pattern` stdout を直接 capture する
-- 目視分類: captured ranking の top / bottom 全動画を `/thumbnail-research` と同じ構図 / 配色 / テキスト配置 / 視線誘導 / キャラ・被写体の 5 軸で分類する。同じ captured JSON の `video_id` だけを使い、観測不能は推測せず JSON `null` にする
+- 目視分類: captured ranking の top / bottom 全動画を `/channel-research --thumbnail` と同じ構図 / 配色 / テキスト配置 / 視線誘導 / キャラ・被写体の 5 軸で分類する。同じ captured JSON の `video_id` だけを使い、観測不能は推測せず JSON `null` にする
 - 期待成果物: 同じ日付の `reports/analysis_YYYYMMDD.md` と `reports/analysis_YYYYMMDD.json`
 - 完了報告: `status: success | failure`、`inputs`、`commands`、`artifacts`、`summary`、`errors`
 

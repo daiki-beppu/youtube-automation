@@ -1,18 +1,18 @@
 ---
 name: channel-research
 purpose: 調べる
-description: "Use when チャンネル調査を状態判定付きで一括実行または一段だけ実行するとき。競合データ収集は --benchmark、追加競合候補の発掘は --discover、TTP・ニッチ仮説の比較または収集済みデータ分析は --market、競合コメントからの視聴者インサイト抽出は --voice を使う。「競合データ収集」「ベンチマーク更新」「競合候補」「競合発掘」「市場調査」「競合分析」「チャンネルリサーチ」「TTP 対象抽出」「視聴者の声」「コメント分析」「ユーザーリサーチ」で発動。方向性の決定は /channel-new を使う"
+description: "Use when チャンネル調査を状態判定付きで一括実行または一段だけ実行するとき。競合データ収集は --benchmark、追加競合候補の発掘は --discover、TTP・ニッチ仮説の比較または収集済みデータ分析は --market、競合コメントからの視聴者インサイト抽出は --voice、競合サムネイルの上位群・下位群比較は --thumbnail を使う。「競合データ収集」「ベンチマーク更新」「競合候補」「競合発掘」「市場調査」「競合分析」「チャンネルリサーチ」「TTP 対象抽出」「視聴者の声」「コメント分析」「ユーザーリサーチ」「サムネイル徹底分析」「競合サムネ分析」「サムネ勝ちパターン」で発動。方向性の決定は /channel-new、サムネイル生成は /thumbnail を使う"
 ---
 
 ## 前後工程
 
 - `前工程`: `/setup --channel`, `/setup --import`
-- `後工程`: `/channel-new`, `/audience-persona-design`, `/wf-new`, `/thumbnail-research`
+- `後工程`: `/channel-new`, `/audience-persona-design`, `/wf-new`, `/thumbnail`
 - `委譲先`: `なし`
 
 ## 成果物
 
-- `書き込む`: `docs/benchmarks/<channel>.md`, `docs/benchmarks/thumbnails/<channel>_<video-id>.jpg`, `data/benchmark_<YYYYMMDD>.json`, `research/<niche>-discovery.md`, `research/<niche>-discovery.csv`, `.cache/youtube-automation/discover-competitors-search.json`, `docs/research/market-<YYYY-MM-DD>.md`, `docs/channel-research.md`, `docs/benchmarks/thumbnail-text-profile.md`, `data/comments_<YYYYMMDD>.json`, `docs/plans/viewer-voice-analysis.md`
+- `書き込む`: `docs/benchmarks/<channel>.md`, `docs/benchmarks/thumbnails/<channel>_<video-id>.jpg`, `data/benchmark_<YYYYMMDD>.json`, `research/<niche>-discovery.md`, `research/<niche>-discovery.csv`, `.cache/youtube-automation/discover-competitors-search.json`, `docs/research/market-<YYYY-MM-DD>.md`, `docs/channel-research.md`, `docs/benchmarks/thumbnail-text-profile.md`, `data/comments_<YYYYMMDD>.json`, `docs/plans/viewer-voice-analysis.md`, `docs/benchmarks/thumbnail-analysis.md`, `data/thumbnail_compare/benchmark/*_<video-id>.jpg`
 - `読み込む`: `config/channel/analytics.json`, `config/channel/content.json`, `config/skills/benchmark.yaml`, `config/skills/discover-competitors.yaml`, `data/benchmark_*.json`, `data/comments_*.json`, `docs/benchmarks/*.md`, `data/video_analysis/<channel>/<video-id>.json`
 
 ## モード判定
@@ -22,7 +22,7 @@ description: "Use when チャンネル調査を状態判定付きで一括実行
 - 2 個以上なら排他違反として停止し、1 つだけ指定するよう促す
 - 1 個なら対応する reference を読み、その一段だけを実行する。残りの引数はその mode の引数として扱う
 - 0 個なら chain manifest に従い状態判定付きで進める
-- `--thumbnail` は後続段で登録する予約名であり、現段では未知の mode として停止する。mode はこの表へ最大 5 件まで追加でき、判定規則を複製しない
+- mode は上限 5 件であり、下表の 5 mode 以外は未知の mode として停止する。判定規則を複製しない
 
 | mode | 読む reference |
 |---|---|
@@ -30,6 +30,7 @@ description: "Use when チャンネル調査を状態判定付きで一括実行
 | `--discover` | `references/discover.md` |
 | `--market` | `references/market.md` |
 | `--voice` | `references/voice.md` |
+| `--thumbnail` | `references/thumbnail.md` |
 
 ## 共通前提
 
@@ -46,11 +47,13 @@ description: "Use when チャンネル調査を状態判定付きで一括実行
 
 各行の default とチャンネル上書きを deep-merge し、上書きを優先する。`config/skills/channel-research.yaml` は先行作成しない。名前空間キーへの実移行が提供された段階で `uv run yt-skills migrate-config --channel-dir . --dry-run` で計画を確認し、明示 apply する。現段では旧キーを改名せず、下流 override を勝手に作成しない・変更しない。
 
-`--market` の旧 2 owner と `--voice` の旧 owner は `config.default.yaml` / `config/skills/*.yaml` を持たなかったため、新しい設定キーや override を先行作成しない。
+`--market` の旧 2 owner、`--voice` と `--thumbnail` の旧 owner は `config.default.yaml` / `config/skills/*.yaml` を持たなかったため、新しい設定キーや override を先行作成しない。
 
 ## 一括実行
 
 `references/channel-research-chain-manifest.json` と `references/channel-research-chain-state.py` を検証し、manifest 順に `benchmark` → `discover` → `voice` → `market` を進める。`voice` を `market` より先に置くことで、collected-analysis branch が必要とするコメント成果物を同じ chain 内で準備する。
+
+`--thumbnail` は任意の深掘りであり chain manifest には含めない。フラグなし実行では起動せず、明示指定された場合だけ `references/thumbnail.md` を読む。
 
 ```bash
 uv run python .claude/skills/channel-research/references/channel-research-chain-state.py \
@@ -73,6 +76,7 @@ uv run python .claude/skills/channel-research/references/channel-research-chain-
 - `--discover`: `references/discover.md` の完了条件を満たしている
 - `--market`: `references/market.md` が自動選択した branch の完了条件を満たしている
 - `--voice`: `references/voice.md` の完了条件を満たしている
+- `--thumbnail`: `references/thumbnail.md` の完了条件を満たしている
 
 実行段、skip 段、使用した `freshness_days` と設定 source、更新成果物を短く報告する。
 
@@ -88,5 +92,6 @@ uv run python .claude/skills/channel-research/references/channel-research-chain-
 | YouTube Data API v3 channels.list / videos.list | `--discover` の候補数に応じて約 1 + 2 × 候補数 units | pre-filter 通過数 |
 | Web 検索 / 接続済み一次情報 | `--market` の `market-comparison` branch で根拠数に応じる | 比較対象数、評価軸数。`collected-analysis` は 0 call |
 | YouTube Data API v3 commentThreads.list | `--voice` の対象動画数 × 1 call | 1 万再生以上の動画数、`--min-views`、`--max-comments` |
+| 外部 API | `--thumbnail` は 0 call | 既存のローカル benchmark JSON・画像・分析だけを使用 |
 
 - 上限 / 承認: `freshness_days` 内は skip し、収集実行は `-y` / `--force` がない限り事前確認する

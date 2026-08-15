@@ -1,6 +1,6 @@
 # 欲求語彙の選択規則
 
-`/channel-research --market`、`/thumbnail-research`、`/wf-new` の欲求分析は、この規則を共通で使う。
+`/channel-research --market`、同 skill の thumbnail mode、`/wf-new` の欲求分析は、この規則を共通で使う。
 
 ## ソース選択
 

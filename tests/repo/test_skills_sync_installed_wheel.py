@@ -328,7 +328,9 @@ assert "wheel-identity-check" not in legacy._cache
     assert (channel_research / "references" / "market.md").is_file()
     assert (channel_research / "references" / "market_research_contract.py").is_file()
     assert (channel_research / "references" / "report-contract.md").is_file()
+    assert (channel_research / "references" / "thumbnail.md").is_file()
     assert not (downstream / ".claude" / "skills" / "market-research").exists()
+    assert not (downstream / ".claude" / "skills" / "thumbnail-research").exists()
 
     bootstrap_guide = distributed_references / "gcp-bootstrap.md"
     assert bootstrap_guide.is_file()

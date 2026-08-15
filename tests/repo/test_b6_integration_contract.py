@@ -254,6 +254,7 @@ def test_b6_receipt_points_every_mapping_to_an_existing_owner() -> None:
         ".claude/skills/channel-new/references/fetch_benchmark_comments.py": (
             ".claude/skills/channel-research/references/fetch_benchmark_comments.py"
         ),
+        ".claude/skills/thumbnail-research/SKILL.md": ".claude/skills/channel-research/references/thumbnail.md",
     }
     assert all(
         (ROOT / moved_owner_aliases.get(mapping["exact_new_owner"], mapping["exact_new_owner"])).exists()

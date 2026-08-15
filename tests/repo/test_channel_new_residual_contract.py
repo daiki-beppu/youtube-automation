@@ -25,7 +25,7 @@ SHARED_ASSET_SHA256 = {
     "config-template/skills/suno.yaml": "2500c62eb81531b722d4ddabddc223c8e4ec9bb9441637b1d5cc2df435145765",
     "config-template/skills/thumbnail.yaml": "3e5b6d35963ab1313bc691d0e7cd9f2ec4f118abf1a66d689d4813511e785231",
     "config-template/youtube.json": "849f4b0912cb7be3d1cc92b7607d355e856b5af3e9e85db0449fabdf1713bb6c",
-    "desire-vocabulary.md": "05b3cf85f3bc4a44dc83e43e5a3cba3525973521ec1964d2e8573bb2046f9865",
+    "desire-vocabulary.md": "d6a2a6eda7597b9aa66f0b140a42834807374cc80a313c9b8edb8114f3126388",
     "direction-mode.md": "47efcc813fd99ccbf7736a8d122b407c00fd2e2bb1b6bf6056dbc68e439b7e3a",
     "directory-structure.md": "d8590189cf8929b968b4f1169b723cc0ed71e0be06dbd57cc3ed405967bc4e14",
     "fetch_branding_snapshot.py": "9735fa8d2af47b932c2c5318d0f4a4efa2bfdbd95e2bb33dece0752994bf7fef",
