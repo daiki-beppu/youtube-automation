@@ -17,7 +17,7 @@ BOOTSTRAP_REFERENCE_MD = SKILL_DIR / "references" / "new-channel-bootstrap.md"
 TTP_SEED_DURATION_REFERENCE_MD = SKILL_DIR / "references" / "ttp-seed-and-duration.md"
 PERSONA_BRANDING_READINESS_REFERENCE_MD = SKILL_DIR / "references" / "persona-branding-readiness.md"
 CHANNEL_NEW_SKILL_MD = REPO_ROOT / ".claude" / "skills" / "channel-new" / "SKILL.md"
-CHANNEL_NEW_RESIDUAL_SKILL_SHA256 = "0080440979d32d893d7c7fe55383fb91dd8c4d936971cfbb2c6cdcf620939b62"
+CHANNEL_NEW_RESIDUAL_SKILL_SHA256 = "2e60240ca17eabf844b47b14342b2ee93ee438905c3c3b0d070c31da32eb81e7"
 CHANNEL_NEW_DESCRIPTION_SHA256 = "d473454ede296799118ddbf00a9b5bb3b57544cd873fc6b5ce99d34071cb7716"
 CHANNEL_NEW_ROUTING_SHA256 = "cdbbaee2613c951cc2bf34b3100410494aee268ce4f9351903538fdcce6a9305"
 OPENING_ASSETS = {
@@ -334,7 +334,7 @@ def test_persona_branding_readiness_detail_sections_have_one_reference_owner() -
 def test_persona_branding_readiness_and_wf_new_handoff_keep_order() -> None:
     skill = SKILL_MD.read_text(encoding="utf-8")
 
-    persona = skill.index("/viewer-voice` → `/audience-persona-design` → `/viewing-scene`")
+    persona = skill.index("/channel-research --voice` → `/audience-persona-design` → `/viewing-scene`")
     branding = skill.index("### Step 8:", persona)
     image_approval = skill.index("ユーザーに提示して承認", branding)
     branding_apply = skill.index("yt-channel-settings push --apply", image_approval)
@@ -546,6 +546,7 @@ def test_moved_opening_assets_preserve_pre_move_bytes_or_owner_only_semantics() 
             payload = payload.replace(b".claude/skills/setup/references/", b".claude/skills/channel-new/references/")
         if asset in {"ttp-seed-and-duration.md", "persona-branding-readiness.md"}:
             payload = payload.replace(b"/channel-research --discover", b"/discover-competitors")
+            payload = payload.replace(b"/channel-research --voice", b"/viewer-voice")
         if asset == "ttp-seed-and-duration.md":
             payload = payload.replace(
                 "/channel-research --market` の".encode(),

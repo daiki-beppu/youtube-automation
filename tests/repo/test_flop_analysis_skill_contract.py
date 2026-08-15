@@ -178,7 +178,7 @@ def test_flop_analysis_uses_noninteractive_analysis_boundaries() -> None:
     assert "config 更新は行わない" in phase_4
     prohibited_routes = (
         "/alignment-check",
-        "/viewer-voice",
+        "/channel-research --voice",
         "/audience-persona-design",
         "/viewing-scene",
         "/channel-new",

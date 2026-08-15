@@ -339,7 +339,7 @@ def test_setup_channel_ttp_hearing_routes_direction_to_residual_mode() -> None:
     assert "config を再生成・再反映する場合は `/setup --regenerate`" in direction_mode
     assert "制作に進む場合は `/wf-new`" in direction_mode
 
-    assert "/viewer-voice` → `/audience-persona-design` → `/viewing-scene" in step7
+    assert "/channel-research --voice` → `/audience-persona-design` → `/viewing-scene" in step7
     assert "必須" in step7
     assert "docs/channel/personas/persona-definition.md" in step7
     assert "Step 8 へ進まない" in step7
@@ -351,12 +351,12 @@ def test_setup_channel_ttp_hearing_routes_direction_to_residual_mode() -> None:
     assert "公開前" in audience_persona
     assert "channel-new-persona.md" not in audience_persona
 
-    viewer_voice = _read(".claude/skills/viewer-voice/SKILL.md")
-    assert "新規開設モードでは Step 7 の必須前工程" in viewer_voice
-    assert "その互換入口である `/channel-new` の新規開設モード" not in viewer_voice
-    assert ".claude/skills/setup/references/persona-branding-readiness.md" in viewer_voice
-    assert "公開後の再分析では" in viewer_voice
-    assert "標準フローでは実行せず" not in viewer_voice
+    voice = _read(".claude/skills/channel-research/references/voice.md")
+    assert "新規開設モードでは Step 7 の必須前工程" in voice
+    assert "その互換入口である `/channel-new` の新規開設モード" not in voice
+    assert ".claude/skills/setup/references/persona-branding-readiness.md" in voice
+    assert "公開後の再分析では" in voice
+    assert "標準フローでは実行せず" not in voice
 
     assert "旧 `/channel-direction`" not in cross_references
 
@@ -405,11 +405,11 @@ def test_channel_new_docs_distinguish_required_initial_persona_from_optional_rea
     features = _read("docs/features.md")
     onboarding = _read("ONBOARDING.md")
 
-    assert "/viewer-voice` → `/audience-persona-design` → `/viewing-scene`" in features
-    assert "`/viewer-voice` は公開後の再分析では任意" in features
+    assert "/channel-research --voice` → `/audience-persona-design` → `/viewing-scene`" in features
+    assert "`/channel-research --voice` は公開後の再分析では任意" in features
     assert "公開前のペルソナチェーンは既存の競合 / TTP / viewer-voice 成果物を入力に完走" in features
     assert "公開後の `/viewing-scene` は従来どおり Analytics report を要求する" in features
-    assert "/viewer-voice         → 公開後のコメント再分析" in onboarding
+    assert "/channel-research --voice  → 公開後のコメント再分析" in onboarding
     assert "公開前チェーンは競合 / TTP / viewer-voice 成果物を入力" in onboarding
     assert "自チャンネル Analytics report や任意の本格 benchmark 収集を要求しない" in onboarding
     assert "公開後の見直しでは従来どおりそれらを入力にする" in onboarding
@@ -862,7 +862,7 @@ def test_setup_channel_initial_save_success_path_commits_and_cleans_worktree(tmp
 def test_channel_new_followup_skill_routing_uses_new_contract() -> None:
     discover = _read(".claude/skills/channel-research/references/discover.md")
     research = _read(".claude/skills/channel-research/references/market.md")
-    viewer_voice = _read(".claude/skills/viewer-voice/SKILL.md")
+    viewer_voice = _read(".claude/skills/channel-research/references/voice.md")
     setup = _read(".claude/skills/setup/SKILL.md")
     channel_new = _read(".claude/skills/channel-new/SKILL.md")
     channel_regeneration_mode = _read(".claude/skills/setup/references/regeneration-mode.md")
@@ -883,13 +883,13 @@ def test_channel_new_followup_skill_routing_uses_new_contract() -> None:
     assert "data/benchmark_*.json" in research
     assert "data/comments_*.json" in research
     assert "docs/channel-research.md" in research
-    assert "/viewer-voice` → 前提" in research
+    assert "/channel-research --voice` → 前提" in research
 
     assert "チャンネル立ち上げ・方向性見直し時に必ず使用" not in viewer_voice
     assert "`/setup --channel` の新規開設モードでは Step 7 の必須前工程として実行する" in viewer_voice
     assert "公開後の再分析では" in viewer_voice
     assert "任意後続スキル" not in viewer_voice
-    assert "/audience-persona-design の必須入力（viewer-voice-analysis.md）" in viewer_voice
+    assert "`docs/plans/viewer-voice-analysis.md` は後続 `/audience-persona-design` の必須入力" in viewer_voice
 
     for path_text in (setup, channel_new, channel_regeneration_mode, channel_direction_mode, onboarding):
         assert "TTP benchmark" not in path_text
@@ -932,7 +932,8 @@ def test_channel_new_followup_skill_routing_uses_new_contract() -> None:
 
     assert "新規チャンネル開設 → 競合発掘 → 方向性決定 → セットアップ" not in features
     assert (
-        "`/setup` → `/channel-new`（`/viewer-voice` → `/audience-persona-design` → `/viewing-scene` を含む）→ `/wf-new`"
+        "`/setup` → `/channel-new`（`/channel-research --voice` → `/audience-persona-design` → "
+        "`/viewing-scene` を含む）→ `/wf-new`"
     ) in features
 
 

@@ -64,7 +64,7 @@ Step 2〜5 の分析結果を `docs/channel-research.md` に保存し、Step 4 �
 
 - `data/benchmark_*.json` が無い → 前工程 `/channel-research --benchmark` を案内して停止する
 - `docs/benchmarks/*.md` から `thumbnail-text-profile.md` を除外した個別レポートが 0 件 → 前工程 `/channel-research --benchmark` を案内して停止する
-- `data/comments_*.json` が無い → 前工程 `/viewer-voice` を案内して停止する
+- `data/comments_*.json` が無い → 前工程 `/channel-research --voice` を案内して停止する
 
 ### 許容する fail
 
@@ -117,7 +117,7 @@ test -n "$benchmark_json" &&
 
 - `data/benchmark_*.json` が無い → 先に `/channel-research --benchmark` を実行するよう案内
 - `thumbnail-text-profile.md` を除く `docs/benchmarks/*.md` が無い → 先に `/channel-research --benchmark` を実行するよう案内
-- `data/comments_*.json` が無い → 先に `/viewer-voice` を実行するよう案内
+- `data/comments_*.json` が無い → 先に `/channel-research --voice` を実行するよう案内
 
 全種別が揃っている場合のみ Step 1 へ進む。
 
@@ -282,6 +282,6 @@ subagent は全分析結果を `docs/channel-research.md` に保存:
 ## Cross References
 
 - `/channel-research --benchmark` → 前提: 承認済み TTP 対象の動画データ収集
-- `/viewer-voice` → 前提: コメント収集と視聴者インサイト分析
+- `/channel-research --voice` → 前提: コメント収集と視聴者インサイト分析
 - `/channel-new`（方向性検討モード） → 任意: 方向性の再検討
 - `/wf-new` → 初回コレクション制作

@@ -1,30 +1,10 @@
----
-name: viewer-voice
-purpose: 調べる
-description: "Use when 競合コメントの収集・分析で視聴者インサイトを抽出するとき。「視聴者の声」「コメント分析」「ユーザーリサーチ」で発動。/audience-persona-design の必須入力（viewer-voice-analysis.md）を作る。新規開設では /setup --channel Step 7 で必須、公開後の再分析では任意"
----
-
-## 前後工程
-
-- `前工程`: `/channel-research --benchmark`, `/channel-research --discover`
-- `後工程`: `/audience-persona-design`
-- `委譲先`: `なし`
-
-## 成果物
-
-- `書き込む`: `data/comments_<YYYYMMDD>.json`, `docs/plans/viewer-voice-analysis.md`
-- `読み込む`: `config/channel/analytics.json`, `data/benchmark_*.json`, `data/video_analysis/<channel>/<video-id>.json`
-
-## 修飾フラグ
-
-| modifier | 効果 |
-|---|---|
-| `--channel` | 新規開設時は `/setup` の Step 7 へ委譲する |
+# Voice mode
 
 ## Overview
 
 承認済みベンチマークチャンネルの1万再生以上の動画から YouTube Data API でコメントを取得し、
 感情・利用シーン・リクエスト・キャラ愛着の4軸で分析する。
+`docs/plans/viewer-voice-analysis.md` は後続 `/audience-persona-design` の必須入力として渡す。
 `/setup --channel` の新規開設モードでは Step 7 の必須前工程として実行する（`.claude/skills/setup/references/persona-branding-readiness.md`）。公開後の再分析では、コメントを含む視聴者インサイトが必要になった時点で明示的に実行する。
 
 ## 完了条件

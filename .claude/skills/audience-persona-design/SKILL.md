@@ -1,12 +1,12 @@
 ---
 name: audience-persona-design
 purpose: 決める
-description: "Use when ターゲット視聴者を第一ペルソナとして設計・見直しするとき。「ペルソナ設定」「視聴者像」「ターゲット層」で発動。/viewer-voice の viewer-voice-analysis.md を必須入力に persona-definition.md を確定"
+description: "Use when ターゲット視聴者を第一ペルソナとして設計・見直しするとき。「ペルソナ設定」「視聴者像」「ターゲット層」で発動。channel-research の voice mode が作る viewer-voice-analysis.md を必須入力に persona-definition.md を確定"
 ---
 
 ## 前後工程
 
-- `前工程`: `/viewer-voice`
+- `前工程`: `/channel-research --voice`
 - `後工程`: `/viewing-scene`, `/wf-new`
 - `委譲先`: `/viewing-scene`
 
@@ -17,9 +17,9 @@ description: "Use when ターゲット視聴者を第一ペルソナとして設
 
 ## Overview
 
-`/viewer-voice` のコメント分析、ベンチマークタグ分析、Web 調査、`/viewing-scene` の視聴シーン検証を束ね、チャンネル判断軸になる **1 人の第一ペルソナ** を設計する。
+`/channel-research --voice` のコメント分析、ベンチマークタグ分析、Web 調査、`/viewing-scene` の視聴シーン検証を束ね、チャンネル判断軸になる **1 人の第一ペルソナ** を設計する。
 
-新規開設時は、公開前でも競合チャンネルのコメントを `/viewer-voice` で分析し、その結果を入力に本スキルで本格ペルソナを作成する。公開後は自チャンネルの実コメント分析を加えて見直し、方向性検討や `/wf-new` 企画工程の判断軸として更新する。
+新規開設時は、公開前でも競合チャンネルのコメントを `/channel-research --voice` で分析し、その結果を入力に本スキルで本格ペルソナを作成する。公開後は自チャンネルの実コメント分析を加えて見直し、方向性検討や `/wf-new` 企画工程の判断軸として更新する。
 
 入口で実行コンテキストを次のどちらかに確定し、Phase 5 の `/viewing-scene` まで同じ値を引き継ぐ。
 
@@ -40,7 +40,7 @@ description: "Use when ターゲット視聴者を第一ペルソナとして設
 
 必ず次の順で進める:
 
-1. `/viewer-voice` の成果物を確認する。未実施なら案内して停止する。
+1. `/channel-research --voice` の成果物を確認する。未実施なら案内して停止する。
 2. コメント由来の語彙・不満・利用シーン・感情トリガーを入力にする。
 3. ベンチマークタグ分析と Web 調査を加え、複数の人物候補や仮説を比較材料として作る。
 4. 候補を 1 人の第一ペルソナへ統合し、暫定 `persona-definition.md` を保存する。
@@ -61,7 +61,7 @@ description: "Use when ターゲット視聴者を第一ペルソナとして設
 ### 停止する fail
 
 - `config/channel/` が存在しない、または `load_config()` でロードできない → 新規チャンネルは `/setup --channel` Step 4、既存チャンネルは `/setup --import` を案内して停止する
-- `docs/plans/viewer-voice-analysis.md` が無い → 前工程 `/viewer-voice` を案内して停止する
+- `docs/plans/viewer-voice-analysis.md` が無い → 前工程 `/channel-research --voice` を案内して停止する
 
 ## 実行フロー
 
@@ -170,7 +170,7 @@ options:
 | 状況 | 兆候 | 対処 |
 |---|---|---|
 | WebSearch 不可 | 検索結果が取得できない | 手動入力で代替するか、当該分析をスキップする |
-| viewer-voice 未実施 | `docs/plans/viewer-voice-analysis.md` が無い | `/viewer-voice` を先に実行するよう案内して停止する |
+| voice 分析未実施 | `docs/plans/viewer-voice-analysis.md` が無い | `/channel-research --voice` を先に実行するよう案内して停止する |
 | viewing-scene 未反映 | `docs/plans/viewing-scene-matrix.md` が無い | 暫定 `persona-definition.md` 保存後に `/viewing-scene` を実行し、結果を反映して最終化する |
 | 公開前入力不在 | 新規開設（公開前）で競合 / TTP / viewer-voice 成果物が不足 | `/setup --channel` Step 5 または Step 7 の該当前工程へ戻る |
 | 公開後入力不在 | 公開後に `data/` のベンチマーク/Analytics スナップショットが無い | 先に `/channel-research --benchmark`・`/analytics --collect` 等を実行して入力を用意 |

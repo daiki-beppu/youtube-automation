@@ -39,7 +39,7 @@ def _fields() -> dict[str, list[str]]:
 def test_flow_blocks_until_viewer_voice_exists(tmp_path: Path) -> None:
     assert flow.flow_status(tmp_path) == {
         "status": "blocked",
-        "next": "viewer-voice",
+        "next": "channel-research --voice",
         "reason": "viewer_voice_missing",
     }
 

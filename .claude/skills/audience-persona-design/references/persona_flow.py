@@ -31,7 +31,7 @@ def flow_status(channel_dir: Path, *, allow_viewing_scene_skip: bool = False) ->
     persona = channel_dir / "docs" / "channel" / "personas" / "persona-definition.md"
     viewing_scene = channel_dir / "docs" / "plans" / "viewing-scene-matrix.md"
     if not viewer_voice.is_file():
-        return {"status": "blocked", "next": "viewer-voice", "reason": "viewer_voice_missing"}
+        return {"status": "blocked", "next": "channel-research --voice", "reason": "viewer_voice_missing"}
     if not persona.is_file():
         return {"status": "ready", "next": "draft-persona", "reason": "viewer_voice_ready"}
     if not viewing_scene.is_file() and not allow_viewing_scene_skip:

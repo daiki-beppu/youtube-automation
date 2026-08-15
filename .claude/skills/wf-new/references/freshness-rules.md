@@ -20,7 +20,7 @@ skill 呼び出し失敗または再検証失敗時は、失敗した skill ま�
 analytics mode の前提スキルは **(analyze ∥ benchmark) → audience-persona-design finalization** の構造:
 
 - `/analytics --analyze` と `/channel-research --benchmark` は**独立・並列**（両者とも生データの分析で上下関係なし）
-- `/audience-persona-design` は最新ベンチマークのタグデータと `/viewer-voice` を入力に暫定 `persona-definition.md` を作る
+- `/audience-persona-design` は最新ベンチマークのタグデータと `/channel-research --voice` を入力に暫定 `persona-definition.md` を作る
 - `/audience-persona-design` は暫定 persona から `/viewing-scene` を実行し、その結果を反映して最終 `persona-definition.md` を更新する
 
 **analyze / benchmark は並列判定。その後 `/audience-persona-design` の最終 persona chain を判定する。** `persona-definition.md` / `viewing-scene-matrix.md` は存在チェックのみ（mtime 比較なし。更新タイミングは戦略判断のため人間が決める）。analytics mode でこれらが未生成の場合、`ttp_mode: false` は Phase 1 を中断し、`true` は共通の欲求語彙選択規則による fallback で続行する。stale report は `ttp_mode` にかかわらず、自動更新と再検証の成功時だけ続行する。

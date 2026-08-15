@@ -28,6 +28,24 @@
       }
     },
     {
+      "id": "voice",
+      "skill": "channel-research",
+      "prerequisiteArtifacts": [
+        "data/benchmark_*.json",
+        "docs/benchmarks/*.md",
+        "research/*-discovery.md",
+        "research/*-discovery.csv"
+      ],
+      "outputArtifacts": ["data/comments_*.json", "docs/plans/viewer-voice-analysis.md"],
+      "approvalGate": {
+        "skip": true,
+        "configPath": "workflow.channel-research.skip_approvals.voice"
+      },
+      "idempotency": {
+        "script": "references/channel-research-chain-state.py"
+      }
+    },
+    {
       "id": "market",
       "skill": "channel-research",
       "prerequisiteArtifacts": [],

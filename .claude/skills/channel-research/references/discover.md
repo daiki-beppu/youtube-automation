@@ -188,7 +188,7 @@ subagent へは次を具体値で渡す:
 ## スコープ外（他スキルへバトン）
 
 - 競合の動画詳細分析 → `/channel-research --benchmark`
-- 視聴者コメント分析 → `/viewer-voice`
+- 視聴者コメント分析 → `/channel-research --voice`
 - 方向性決定・config 生成 → `/channel-new`（方向性検討モード）/ `/setup --regenerate`
 - ベンチマーク再収集 → `/channel-research --benchmark`
 

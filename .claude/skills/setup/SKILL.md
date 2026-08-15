@@ -8,7 +8,7 @@ description: "Use when ツール導入と GCP / OAuth の設定、新規 YouTube
 
 - `前工程`: `なし`
 - `後工程`: `*`（共通基盤としてほぼ全スキル）
-- `委譲先`: `/channel-research --benchmark`, `/channel-research --discover`, `/viewer-voice`, `/audience-persona-design`, `/viewing-scene`
+- `委譲先`: `/channel-research --benchmark`, `/channel-research --discover`, `/channel-research --voice`, `/audience-persona-design`, `/viewing-scene`
 
 ## 成果物
 
