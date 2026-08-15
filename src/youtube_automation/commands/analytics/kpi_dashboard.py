@@ -20,6 +20,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List
 
+from youtube_automation.commands._shared.cli_harness import run_cli
 from youtube_automation.configuration import channel_dir as _channel_dir
 from youtube_automation.core.errors import ConfigError
 from youtube_automation.infrastructure.analytics.kpi_dashboard import analyze_kpi_dashboard, render_markdown
@@ -54,9 +55,7 @@ def _save_reports(channel_dir: Path, analysis: Dict, markdown: str) -> List[Path
     return [json_path, md_path]
 
 
-def main() -> int:
-    logging.basicConfig(level=logging.WARNING, format="%(levelname)s: %(message)s")
-
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="成長 KPI 定点ビュー（スナップショット横断のレバー別週次推移）")
     parser.add_argument("--markdown", action="store_true", help="Markdown レポートを stdout へ出力")
     parser.add_argument(
@@ -64,8 +63,10 @@ def main() -> int:
         action="store_true",
         help="reports/kpi_weekly_YYYYMMDD.json と .md を保存する",
     )
-    args = parser.parse_args()
+    return parser
 
+
+def run(args: argparse.Namespace) -> int:
     try:
         channel_dir = _channel_dir()
         snapshots = _load_snapshots(channel_dir)
@@ -88,6 +89,11 @@ def main() -> int:
     except Exception as e:
         logger.exception(f"エラー: {e}")
         return 1
+
+
+def main(argv: list[str] | None = None) -> int:
+    logging.basicConfig(level=logging.WARNING, format="%(levelname)s: %(message)s")
+    return run_cli(build_parser, run, argv, handled_errors=())
 
 
 if __name__ == "__main__":

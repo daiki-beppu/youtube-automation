@@ -1,14 +1,12 @@
 from __future__ import annotations
 
 import json
-import sys
 import tomllib
 from pathlib import Path
 
 import pytest
 
 from tests.helpers.paths import REPO_ROOT
-from youtube_automation import entrypoints
 from youtube_automation.commands.analytics import ad_coverage
 from youtube_automation.core.errors import ConfigError
 
@@ -158,7 +156,7 @@ def test_analyze_rejects_unhashable_revenue_status_as_config_error(status: objec
         ad_coverage.analyze_ad_coverage(revenue, threshold=0.5, min_playbacks=100)
 
 
-def test_entrypoint_reads_latest_snapshot_and_prints_json(tmp_path: Path, monkeypatch, capsys) -> None:
+def test_cli_reads_latest_snapshot_and_prints_json(tmp_path: Path, monkeypatch, capsys) -> None:
     _write_snapshot(tmp_path, "20260801", _available_revenue({"old": _video(200, 0.1)}))
     _write_snapshot(
         tmp_path,
@@ -172,9 +170,7 @@ def test_entrypoint_reads_latest_snapshot_and_prints_json(tmp_path: Path, monkey
         ),
     )
     monkeypatch.setattr(ad_coverage, "_channel_dir", lambda: tmp_path)
-    monkeypatch.setattr(sys, "argv", ["yt-ad-coverage", "--threshold", "0.7"])
-
-    assert entrypoints.yt_ad_coverage() == 0
+    assert ad_coverage.main(["--threshold", "0.7"]) == 0
 
     output = json.loads(capsys.readouterr().out)
     assert output["threshold"] == 0.7
@@ -183,9 +179,7 @@ def test_entrypoint_reads_latest_snapshot_and_prints_json(tmp_path: Path, monkey
     assert output["warnings"][0]["median_ratio"] == pytest.approx(0.6)
 
 
-def test_entrypoint_degrades_empty_partial_video_data_without_breaking_pipeline(
-    tmp_path: Path, monkeypatch, capsys
-) -> None:
+def test_cli_degrades_empty_partial_video_data_without_breaking_pipeline(tmp_path: Path, monkeypatch, capsys) -> None:
     _write_snapshot(
         tmp_path,
         "20260802",
@@ -197,9 +191,7 @@ def test_entrypoint_degrades_empty_partial_video_data_without_breaking_pipeline(
         },
     )
     monkeypatch.setattr(ad_coverage, "_channel_dir", lambda: tmp_path)
-    monkeypatch.setattr(sys, "argv", ["yt-ad-coverage"])
-
-    assert entrypoints.yt_ad_coverage() == 0
+    assert ad_coverage.main([]) == 0
 
     assert json.loads(capsys.readouterr().out) == {
         "status": "unavailable",
@@ -216,9 +208,7 @@ def test_cli_text_reports_zero_warnings(tmp_path: Path, monkeypatch, capsys) -> 
         _available_revenue({"video-a": _video(300, 2.0), "video-b": _video(300, 2.0)}),
     )
     monkeypatch.setattr(ad_coverage, "_channel_dir", lambda: tmp_path)
-    monkeypatch.setattr(sys, "argv", ["yt-ad-coverage", "--text"])
-
-    assert ad_coverage.main() == 0
+    assert ad_coverage.main(["--text"]) == 0
 
     assert "警告: 0 件" in capsys.readouterr().out
 
@@ -230,9 +220,7 @@ def test_cli_text_reports_unavailable_reason(tmp_path: Path, monkeypatch, capsys
         {"status": "unavailable", "reason": "monetary data forbidden", "by_video": {}},
     )
     monkeypatch.setattr(ad_coverage, "_channel_dir", lambda: tmp_path)
-    monkeypatch.setattr(sys, "argv", ["yt-ad-coverage", "--text"])
-
-    assert ad_coverage.main() == 0
+    assert ad_coverage.main(["--text"]) == 0
 
     output = capsys.readouterr().out
     assert "収益データを取得できません" in output
@@ -245,9 +233,7 @@ def test_cli_returns_two_for_invalid_snapshot_shape(tmp_path: Path, monkeypatch,
     data_dir.mkdir()
     (data_dir / "analytics_data_20260802.json").write_text("[]", encoding="utf-8")
     monkeypatch.setattr(ad_coverage, "_channel_dir", lambda: tmp_path)
-    monkeypatch.setattr(sys, "argv", ["yt-ad-coverage"])
-
-    assert ad_coverage.main() == 2
+    assert ad_coverage.main([]) == 2
 
     assert "JSON object" in caplog.text
 
@@ -258,9 +244,7 @@ def test_cli_returns_two_without_traceback_for_unhashable_revenue_status(
 ) -> None:
     _write_snapshot(tmp_path, "20260802", {"status": status, "by_video": {}})
     monkeypatch.setattr(ad_coverage, "_channel_dir", lambda: tmp_path)
-    monkeypatch.setattr(sys, "argv", ["yt-ad-coverage"])
-
-    assert ad_coverage.main() == 2
+    assert ad_coverage.main([]) == 2
 
     captured = capsys.readouterr()
     assert "available、partial、unavailable" in caplog.text
@@ -277,11 +261,9 @@ def test_cli_returns_two_without_traceback_for_unhashable_revenue_status(
         ["--min-playbacks", "1.5"],
     ],
 )
-def test_cli_rejects_invalid_detection_options(arguments: list[str], monkeypatch) -> None:
-    monkeypatch.setattr(sys, "argv", ["yt-ad-coverage", *arguments])
-
+def test_cli_rejects_invalid_detection_options(arguments: list[str]) -> None:
     with pytest.raises(SystemExit) as exited:
-        ad_coverage.main()
+        ad_coverage.main(arguments)
 
     assert exited.value.code == 2
 

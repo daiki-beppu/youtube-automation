@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 
 from youtube_automation.application.analytics.benchmark_query import find_latest_benchmark_json
+from youtube_automation.commands._shared.cli_harness import run_cli
 from youtube_automation.configuration import channel_dir, load_config
 from youtube_automation.infrastructure.analytics.ttp_health import evaluate_ttp_health
 
@@ -48,14 +49,16 @@ def build_report(
     )
 
 
-def main(argv: list[str] | None = None) -> int:
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="benchmark.channels の TTP 健全性を JSON で出力")
     parser.add_argument("--stale-days", type=int, default=60)
     parser.add_argument("--decline-ratio", type=float, default=0.5)
     parser.add_argument("--window-days", type=int, default=90)
     parser.add_argument("--pretty", action="store_true")
-    args = parser.parse_args(argv)
+    return parser
 
+
+def run(args: argparse.Namespace) -> int:
     report = build_report(
         data_dir=channel_dir() / "data",
         stale_days=args.stale_days,
@@ -71,6 +74,10 @@ def main(argv: list[str] | None = None) -> int:
         )
     )
     return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    return run_cli(build_parser, run, argv, handled_errors=())
 
 
 if __name__ == "__main__":

@@ -17,6 +17,7 @@ from typing import Dict, List, Optional
 
 import pandas as pd
 
+from youtube_automation.commands._shared.cli_harness import run_cli
 from youtube_automation.configuration import channel_dir as _channel_dir
 from youtube_automation.core.errors import ConfigError
 from youtube_automation.domains.analytics.analysis.launch_curve_analyzer import (
@@ -161,9 +162,7 @@ def _print_text_summary(analysis: Dict) -> None:
         )
 
 
-def main() -> int:
-    logging.basicConfig(level=logging.WARNING, format="%(levelname)s: %(message)s")
-
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="動画の launch curve を過去ベンチマークと比較")
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--video", help="対象動画 ID")
@@ -180,9 +179,10 @@ def main() -> int:
         action="store_true",
         help="可視化 PNG も出力（デフォルトは出力しない）",
     )
+    return parser
 
-    args = parser.parse_args()
 
+def run(args: argparse.Namespace) -> int:
     try:
         channel_dir = _channel_dir()
         daily = load_latest_daily_snapshot(channel_dir / "data")
@@ -233,6 +233,11 @@ def main() -> int:
     except Exception as e:
         logger.exception(f"エラー: {e}")
         return 1
+
+
+def main(argv: list[str] | None = None) -> int:
+    logging.basicConfig(level=logging.WARNING, format="%(levelname)s: %(message)s")
+    return run_cli(build_parser, run, argv, handled_errors=())
 
 
 if __name__ == "__main__":

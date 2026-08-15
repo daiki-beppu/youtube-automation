@@ -225,9 +225,7 @@ class TestCli:
 
         self._write_snapshots(tmp_path)
         monkeypatch.setattr(cli, "_channel_dir", lambda: tmp_path)
-        monkeypatch.setattr("sys.argv", ["yt-kpi-dashboard", "--save"])
-
-        assert cli.main() == 0
+        assert cli.main(["--save"]) == 0
         analysis = json.loads(capsys.readouterr().out)
         assert analysis["snapshot_count"] == 2
         assert len(analysis["weekly_kpi"]) == 2
@@ -241,9 +239,7 @@ class TestCli:
 
         self._write_snapshots(tmp_path)
         monkeypatch.setattr(cli, "_channel_dir", lambda: tmp_path)
-        monkeypatch.setattr("sys.argv", ["yt-kpi-dashboard", "--markdown"])
-
-        assert cli.main() == 0
+        assert cli.main(["--markdown"]) == 0
         assert "| 週 (月曜開始) |" in capsys.readouterr().out
 
     def test_cli_skips_broken_snapshot(self, tmp_path, monkeypatch, capsys):
@@ -252,7 +248,5 @@ class TestCli:
         self._write_snapshots(tmp_path)
         (tmp_path / "data" / "analytics_data_20260120.json").write_text("{broken", encoding="utf-8")
         monkeypatch.setattr(cli, "_channel_dir", lambda: tmp_path)
-        monkeypatch.setattr("sys.argv", ["yt-kpi-dashboard"])
-
-        assert cli.main() == 0
+        assert cli.main([]) == 0
         assert json.loads(capsys.readouterr().out)["snapshot_count"] == 2
