@@ -244,7 +244,7 @@ def _build(channel_dir_path: Path) -> ChannelConfig:
     if legacy_path.exists():
         raise ConfigError(
             f"旧 channel_config.json が残っています: {legacy_path}\n"
-            "/channel-new の既存チャンネル取り込みモードで "
+            "/setup --import で "
             "config/channel/*.json を再生成してください"
         )
 

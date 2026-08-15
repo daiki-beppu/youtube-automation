@@ -44,7 +44,7 @@ description: "Use when ローカル descriptions.md と YouTube メタデータ�
 
 以下を確認し、満たさなければ前工程を案内して停止する:
 
-- `config/channel/` が存在すること（`load_config()` でロード可能）。存在しない場合は `/channel-new`（既存チャンネルは取り込みモード）を案内して停止する
+- `config/channel/` が存在すること（`load_config()` でロード可能）。存在しない場合は `/setup --import` を案内して停止する
 - `collections/live/` 配下に監査対象のコレクション（`20-documentation/descriptions.md` + `workflow-state.json`）が 1 件以上存在すること。存在しない場合は監査対象なしとして終了し、先に `/video-upload` での公開を案内する
 - remote 監査（既定および `--remote`）は `auth/token.json` の OAuth 認証が必要。未認証なら `/setup` を案内するか、API 不要の `--local` に切り替える
 

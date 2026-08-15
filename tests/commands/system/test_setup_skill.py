@@ -27,6 +27,9 @@ _SETUP_CHAIN_STATE = _SKILLS_DIR / "setup" / "references" / "setup-chain-state.p
 _SETUP_MODE_GUARD = _SKILLS_DIR / "setup" / "references" / "setup-mode-guard.py"
 _SETUP_GCP_GUIDE = _SKILLS_DIR / "setup" / "references" / "gcp-bootstrap.md"
 _SETUP_CHANNEL_MODE = _SKILLS_DIR / "setup" / "references" / "channel-mode.md"
+_SETUP_IMPORT_MODE = _SKILLS_DIR / "setup" / "references" / "import-mode.md"
+_SETUP_REGENERATE_MODE = _SKILLS_DIR / "setup" / "references" / "regeneration-mode.md"
+_SETUP_PUSH_MODE = _SKILLS_DIR / "setup" / "references" / "push-mode.md"
 _FRESHNESS_RULES = _SKILLS_DIR / "wf-new" / "references" / "freshness-rules.md"
 _CHANNEL_NEW_SKILL = _SKILLS_DIR / "channel-new" / "SKILL.md"
 _ONBOARD_DIR = _SKILLS_DIR / "onboard"
@@ -80,30 +83,40 @@ def test_setup_skill_frontmatter_matches_directory_name() -> None:
     assert frontmatter["name"] == "setup"
 
 
-def test_setup_skill_declares_exclusive_tool_channel_modes_and_default_chain() -> None:
+def test_setup_skill_declares_all_exclusive_modes_and_default_chain() -> None:
     text = _SETUP_SKILL.read_text(encoding="utf-8")
     description = _frontmatter(_SETUP_SKILL)["description"]
 
     assert "--tool" in description
-    assert "mode flag（`--tool` / `--channel`）の出現数" in text
+    assert "--import" in description
+    assert "--regenerate" in description
+    assert "--push" in description
     assert "2 個以上なら、同じ flag の重複を含めて排他違反として停止" in text
     assert "1 個なら対応する reference を読み、その一段だけを実行する" in text
     assert "0 個なら chain manifest に従い `tool` → `channel` を状態判定付きで進める" in text
     assert "| `--tool` | `references/tool.md` |" in text
     assert "| `--channel` | `references/channel-mode.md` |" in text
+    assert "| `--import` | `references/import-mode.md` |" in text
+    assert "| `--regenerate` | `references/regeneration-mode.md` |" in text
+    assert "| `--push` | `references/push-mode.md` |" in text
 
 
 def test_setup_explicit_modes_never_enter_the_default_chain() -> None:
     text = _SETUP_SKILL.read_text(encoding="utf-8")
 
-    assert "明示 `--tool` / `--channel` はこの一括実行へ入らない" in text
+    assert "明示 mode はこの一括実行へ入らない" in text
     assert "もう一段を暗黙実行しない" in text
     assert "各 reference 内の不可逆操作・外部反映の承認 gate" in text
 
 
 @pytest.mark.parametrize(
     "arguments",
-    [("--tool", "--channel"), ("--tool", "--tool"), ("--channel", "--channel")],
+    [
+        ("--tool", "--channel"),
+        ("--import", "--regenerate"),
+        ("--push", "--push"),
+        ("--channel", "--push"),
+    ],
 )
 def test_setup_mode_guard_rejects_multiple_modes_without_artifact_mutation(
     tmp_path: Path,
@@ -130,7 +143,14 @@ def test_setup_mode_guard_rejects_multiple_modes_without_artifact_mutation(
 
 @pytest.mark.parametrize(
     ("arguments", "mode"),
-    [((), "default"), (("--tool",), "--tool"), (("--channel",), "--channel")],
+    [
+        ((), "default"),
+        (("--tool",), "--tool"),
+        (("--channel",), "--channel"),
+        (("--import",), "--import"),
+        (("--regenerate",), "--regenerate"),
+        (("--push",), "--push"),
+    ],
 )
 def test_setup_mode_guard_resolves_each_exclusive_mode(arguments: tuple[str, ...], mode: str) -> None:
     result = subprocess.run(
@@ -165,12 +185,13 @@ def test_setup_tool_is_the_canonical_gcp_oauth_adc_bootstrap_entrypoint() -> Non
         assert contract in tool
 
 
-def test_setup_chain_manifest_declares_tool_then_channel_with_machine_detectable_artifacts() -> None:
+def test_setup_chain_manifest_declares_default_chain_and_mode_only_steps() -> None:
     manifest = json.loads(_SETUP_CHAIN_MANIFEST.read_text(encoding="utf-8"))
 
     assert manifest["chainId"] == "setup"
-    assert [step["id"] for step in manifest["steps"]] == ["tool", "channel"]
-    tool, channel = manifest["steps"]
+    assert [step["id"] for step in manifest["steps"]] == ["tool", "channel", "import", "regenerate", "push"]
+    assert [step["id"] for step in manifest["steps"] if step["defaultChain"]] == ["tool", "channel"]
+    tool, channel, imported, regenerated, pushed = manifest["steps"]
     assert tool["prerequisiteArtifacts"] == []
     assert channel["prerequisiteArtifacts"] == tool["outputArtifacts"]
     assert {
@@ -195,6 +216,22 @@ def test_setup_chain_manifest_declares_tool_then_channel_with_machine_detectable
     }.issubset(channel["outputArtifacts"])
     assert all(step["approvalGate"]["skip"] is True for step in manifest["steps"])
     assert {step["idempotency"]["script"] for step in manifest["steps"]} == {"references/setup-chain-state.py"}
+    assert imported["reference"] == "references/import-mode.md"
+    assert regenerated["reference"] == "references/regeneration-mode.md"
+    assert pushed["reference"] == "references/push-mode.md"
+
+
+def test_setup_owns_import_regenerate_and_push_execution_contracts() -> None:
+    setup = _SETUP_SKILL.read_text(encoding="utf-8")
+    imported = _SETUP_IMPORT_MODE.read_text(encoding="utf-8")
+    regenerated = _SETUP_REGENERATE_MODE.read_text(encoding="utf-8")
+    pushed = _SETUP_PUSH_MODE.read_text(encoding="utf-8")
+
+    assert "取り込み Step 1 前段" in imported and "取り込み Step 8" in imported
+    assert "Step R1" in regenerated and "Step R8" in regenerated
+    assert "yt-channel-settings push --apply" in pushed
+    assert "ユーザー承認後だけ実反映" in pushed
+    assert "分析モードと方向性検討モードは `/channel-new`" in setup
 
 
 def test_setup_chain_state_runs_unresolved_tool_and_skips_ready_tool(tmp_path: Path) -> None:
@@ -406,7 +443,7 @@ def test_setup_skill_drives_youtube_oauth_in_background() -> None:
 def test_setup_skill_delegates_minimum_directory_generation_to_setup() -> None:
     text = _setup_text()
     assert "`/setup` は `uv run yt-setup-dirs`" in text
-    assert "`/setup` では `config/channel/*.json` を生成しない" in text
+    assert "`/setup --tool` では `config/channel/*.json` を生成しない" in text
     assert "OAuth クライアント JSON の配置先 `auth/`" in text
 
 
@@ -532,8 +569,8 @@ def test_setup_skill_handles_ttp_wf_new_readiness_next_check() -> None:
         "（analytics_report / benchmark_data / ttp_wf_new_readiness / wf_new_readiness / "
         "initial_setup_readiness）" in text
     )
-    assert "#### `ttp_wf_new_readiness` — 承認済み TTP の `/channel-new` benchmark 反映状態" in text
-    assert "/channel-new benchmark 反映未完了" in text
+    assert "#### `ttp_wf_new_readiness` — 承認済み TTP の `/setup --regenerate` benchmark 反映状態" in text
+    assert "/setup --regenerate benchmark 反映未完了" in text
     assert "`config/skills/thumbnail.yaml::image_generation.gemini.reference_images.default`" in text
     assert "`data/thumbnail_compare/benchmark/`" in text
     assert "uv run yt-doctor --apply --json" in text

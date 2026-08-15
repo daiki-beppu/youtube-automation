@@ -22,6 +22,7 @@ EXIT_RUN = 10
 EXIT_BLOCKED = 20
 EXIT_ERROR = 2
 STEPS = ("tool", "channel")
+MODE_ONLY_STEPS = ("import", "regenerate", "push")
 TOOL_CHECK_IDS = (
     "ffmpeg",
     "ffprobe",
@@ -70,6 +71,23 @@ CHANNEL_OUTPUT_ARTIFACTS = (
     "doctor:initial_setup_readiness",
     "git:clean",
 )
+MODE_ONLY_CONTRACTS = {
+    "import": (
+        ("auth/client_secrets.json", "auth/token.json"),
+        ("config/channel/meta.json", "doctor:channel_config", "auth/token.json"),
+        "references/import-mode.md",
+    ),
+    "regenerate": (
+        ("docs/channel/channel-direction.md",),
+        ("config/channel/meta.json", "doctor:channel_config", "doctor:ttp_wf_new_readiness"),
+        "references/regeneration-mode.md",
+    ),
+    "push": (
+        ("auth/token.json", "config/channel/meta.json"),
+        ("youtube:brandingSettings", "youtube:status", "youtube:localizations"),
+        "references/push-mode.md",
+    ),
+}
 _ALLOWED_CHECK_STATUSES = frozenset({"ok", "info", "warn", "fail", "unknown"})
 _FILE_CHECK_IDS = {
     "auth/client_secrets.json": "client_secrets",
@@ -79,7 +97,18 @@ _BRANDING_ARTIFACTS = {
     "branding/icon.*": ({".png": "PNG"}, (1, 1), 4 * 1024 * 1024),
     "branding/banner.*": ({".png": "PNG", ".jpg": "JPEG", ".jpeg": "JPEG"}, (16, 9), 6 * 1024 * 1024),
 }
-_STEP_KEYS = frozenset({"id", "skill", "prerequisiteArtifacts", "outputArtifacts", "approvalGate", "idempotency"})
+_STEP_KEYS = frozenset(
+    {
+        "id",
+        "skill",
+        "defaultChain",
+        "reference",
+        "prerequisiteArtifacts",
+        "outputArtifacts",
+        "approvalGate",
+        "idempotency",
+    }
+)
 
 
 class ManifestError(ValueError):
@@ -89,6 +118,8 @@ class ManifestError(ValueError):
 class SetupStep(TypedDict):
     id: str
     skill: str
+    defaultChain: bool
+    reference: str
     prerequisiteArtifacts: list[str]
     outputArtifacts: list[str]
     approvalGate: dict[str, object]
@@ -134,11 +165,21 @@ def _approval_skip(gate: object) -> bool:
     return not cast(bool, gate["enabled"])
 
 
-def _validate_step(step: object, expected_id: str, prerequisites: tuple[str, ...], outputs: tuple[str, ...]) -> None:
+def _validate_step(
+    step: object,
+    expected_id: str,
+    prerequisites: tuple[str, ...],
+    outputs: tuple[str, ...],
+    *,
+    default_chain: bool,
+    reference: str,
+) -> None:
     _require(isinstance(step, dict), "step must be an object")
     _require(set(step) == _STEP_KEYS, f"{expected_id} step schema is invalid")
     _require(step["id"] == expected_id, f"expected {expected_id} step")
     _require(step["skill"] == "setup", f"{expected_id} step skill must be setup")
+    _require(step["defaultChain"] is default_chain, f"{expected_id} default chain membership drifted")
+    _require(step["reference"] == reference, f"{expected_id} reference drifted")
     _require(step["prerequisiteArtifacts"] == list(prerequisites), f"{expected_id} prerequisites drifted")
     _require(step["outputArtifacts"] == list(outputs), f"{expected_id} outputs drifted")
     gate = step["approvalGate"]
@@ -163,11 +204,28 @@ def load_manifest(path: Path) -> SetupManifest:
     steps = raw["steps"]
     _require(isinstance(steps, list), "steps must be an array")
     _require(
-        [step.get("id") if isinstance(step, dict) else None for step in steps] == list(STEPS),
-        "steps must be tool then channel",
+        [step.get("id") if isinstance(step, dict) else None for step in steps] == [*STEPS, *MODE_ONLY_STEPS],
+        "steps must be tool, channel, import, regenerate, push",
     )
-    _validate_step(steps[0], "tool", (), TOOL_OUTPUT_ARTIFACTS)
-    _validate_step(steps[1], "channel", TOOL_OUTPUT_ARTIFACTS, CHANNEL_OUTPUT_ARTIFACTS)
+    _validate_step(steps[0], "tool", (), TOOL_OUTPUT_ARTIFACTS, default_chain=True, reference="references/tool.md")
+    _validate_step(
+        steps[1],
+        "channel",
+        TOOL_OUTPUT_ARTIFACTS,
+        CHANNEL_OUTPUT_ARTIFACTS,
+        default_chain=True,
+        reference="references/channel-mode.md",
+    )
+    for step, expected_id in zip(steps[2:], MODE_ONLY_STEPS, strict=True):
+        prerequisites, outputs, reference = MODE_ONLY_CONTRACTS[expected_id]
+        _validate_step(
+            step,
+            expected_id,
+            prerequisites,
+            outputs,
+            default_chain=False,
+            reference=reference,
+        )
     return cast(SetupManifest, raw)
 
 

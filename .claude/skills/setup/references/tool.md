@@ -4,7 +4,7 @@
 
 このスキルは **AI が指揮を取るツール・API 設定 wizard** である。automation CLI 導入後は `uv run yt-doctor --apply --json` に診断と安全な `ai-exec` の連続実行を委ね、`apply.stop_reason` が示す human 操作・利用者の決定・コマンド失敗だけを対話的に解決する。
 
-責務は「automation ツールが動き、API 認証とアップロード前提が通る状態」まで。新規チャンネルの TTP 対象確認、config 生成、ペルソナ、branding は `/channel-new` が担当する。
+責務は「automation ツールが動き、API 認証とアップロード前提が通る状態」まで。新規チャンネルの TTP 対象確認、config 生成、ペルソナ、branding は `/setup --channel` が担当する。
 
 利用者は GCP / OAuth に不慣れな前提。**すべてのコマンドの起動・実行・再診断は AI または setup スクリプトが担当する。** 利用者には、ブラウザ上のログイン・アカウント選択・OAuth 同意・秘密情報入力など、認証本人にしか行えない操作だけを `[HUMAN STEP]` として依頼する。
 
@@ -26,13 +26,13 @@
 |---------|------|
 | `bootstrap` | ffmpeg / ffprobe / uv / pyproject.toml / automation パッケージ / `yt-skills sync` / 番号付き重複ファイル検知（7 check） |
 | `api` | gcloud CLI・GCP プロジェクト・Billing・APIs・ADC・IAM・OAuth 認証・Reporting API ジョブ |
-| `channel` | config/channel/ のロード可能性・playlists.json の妥当性・playlist 作成 dry-run（3 check: `channel_config` / `playlist_config` / `playlist_create_dry_run`）。fail 時は `/channel-new`（新規開設 / 既存チャンネル取り込み / 再生成モード）を案内するだけ |
-| `data` | `/wf-new` の入力モード判定データ + 到達可否 + 初期セットアップ事前検査（analytics_report / benchmark_data / ttp_wf_new_readiness / wf_new_readiness / initial_setup_readiness）。`ttp_mode: false` の minimal mode と benchmark fallback mode は setup のブロッカーにしない。analytics report は最新 `data/analytics_data_*.json` との相対比較に加え、`collection-ideate` の解決済み `freshness_days` を超えた絶対鮮度 stale も検出する。承認済み TTP がある場合だけ `/channel-new`（再生成モード） benchmark 反映完了を確認し、`ttp_mode: true` の minimal mode は転写元不足として警告する |
+| `channel` | config/channel/ のロード可能性・playlists.json の妥当性・playlist 作成 dry-run（3 check: `channel_config` / `playlist_config` / `playlist_create_dry_run`）。fail 時は `/setup --channel` / `--import` / `--regenerate`を案内するだけ |
+| `data` | `/wf-new` の入力モード判定データ + 到達可否 + 初期セットアップ事前検査（analytics_report / benchmark_data / ttp_wf_new_readiness / wf_new_readiness / initial_setup_readiness）。`ttp_mode: false` の minimal mode と benchmark fallback mode は setup のブロッカーにしない。analytics report は最新 `data/analytics_data_*.json` との相対比較に加え、`collection-ideate` の解決済み `freshness_days` を超えた絶対鮮度 stale も検出する。承認済み TTP がある場合だけ `/setup --regenerate` benchmark 反映完了を確認し、`ttp_mode: true` の minimal mode は転写元不足として警告する |
 | `upload` | upload 必須 scope 充足・channel_id 設定済み（1 check） |
 
 ### 完了条件
 
-`uv run yt-doctor --apply --json` の `apply.stop_reason` が `completed`（全 check 緑）になり、ツール、API 認証、アップロード前提が揃った状態が完了（報告文面は「完了時」セクションを参照）。例外として `analytics_report` の stale fail だけは後続スキルが自動解消するため setup のブロッカーにせず、`checks` 配列のほかの check がすべて `ok` なら `human_required` で停止しても同じ完了状態として扱う。`data` カテゴリは `/wf-new` の入力モード確認用で、stale analytics report、`ttp_mode: false` の minimal mode、benchmark fallback mode は新規チャンネル初回制作を止めない。`wf_new_readiness` が `ttp_mode: true` × minimal mode を警告した場合は転写元を準備するまで完了扱いにしない。新規チャンネル作成は次に `/channel-new` を実行する。
+`uv run yt-doctor --apply --json` の `apply.stop_reason` が `completed`（全 check 緑）になり、ツール、API 認証、アップロード前提が揃った状態が完了（報告文面は「完了時」セクションを参照）。例外として `analytics_report` の stale fail だけは後続スキルが自動解消するため setup のブロッカーにせず、`checks` 配列のほかの check がすべて `ok` なら `human_required` で停止しても同じ完了状態として扱う。`data` カテゴリは `/wf-new` の入力モード確認用で、stale analytics report、`ttp_mode: false` の minimal mode、benchmark fallback mode は新規チャンネル初回制作を止めない。`wf_new_readiness` が `ttp_mode: true` × minimal mode を警告した場合は転写元を準備するまで完了扱いにしない。新規チャンネル作成は次に `/setup --channel` を実行する。
 
 ## 想定 API call 数
 
@@ -85,7 +85,7 @@ project ID が解決済み、または `apply_flags` へ `--project-id` / `--bil
 
 表示後、「これらは project `<project-id>` の外部 GCP 状態を変更する」と警告し、AskUserQuestion で「表示した GCP 変更を実行」/「中止」の 2 択を提示する。承認されるまで flag 付き `--apply` を実行しない。値の追加・変更は前回の承認を無効にし、必ず plan を再表示して承認を取り直す。
 
-`/setup` は `uv run yt-setup-dirs` で `auth/`, `branding/`, `collections/`, `data/`, `docs/channel/personas/`, `docs/benchmarks/`, `research/` を冪等に作成する。`/setup` では `config/channel/*.json` を生成しない。新規チャンネルの config、TTP メモ、ペルソナ、branding は引き続き `/channel-new` の責務。
+`/setup` は `uv run yt-setup-dirs` で `auth/`, `branding/`, `collections/`, `data/`, `docs/channel/personas/`, `docs/benchmarks/`, `research/` を冪等に作成する。`/setup --tool` では `config/channel/*.json` を生成しない。新規チャンネルの config、TTP メモ、ペルソナ、branding は `/setup --channel` の責務。
 
 ## 認証コマンドと人間操作の責務
 
@@ -157,15 +157,15 @@ project ID が解決済み、または `apply_flags` へ `--project-id` / `--bil
   - automation ツールと同期済みスキルが利用できます
   - GCP / OAuth / ADC の API 認証が通ります
   - 動画アップロードに必要な OAuth scope と channel_id が揃っています
-  新規チャンネルを作る場合は、次に /channel-new を実行してください。
+  新規チャンネルを作る場合は、次に /setup --channel を実行してください。
 ```
 
 を表示して終了。
 
 ## 関連スキル
 
-- `/channel-new`: 新規チャンネルの TTP 対象確認、config 生成、ペルソナ、branding (`channel_config` fail・新規チャンネルの場合)
-- `/channel-new`（既存チャンネル取り込みモード）: 既存チャンネル設定の取り込み (`channel_config` fail・既存 config ありの場合)
+- `/setup --channel`: 新規チャンネルの TTP 対象確認、config 生成、ペルソナ、branding (`channel_config` fail・新規チャンネルの場合)
+- `/setup --import` : 既存チャンネル設定の取り込み (`channel_config` fail・既存 config ありの場合)
 - `/channel-status`: OAuth token 生成とチャンネル ID 確認
 - `/wf-new`: config 作成後の新規コレクション制作開始
 

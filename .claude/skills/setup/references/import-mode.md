@@ -1,7 +1,7 @@
 # 既存チャンネル取り込みモード（取り込み Step 1〜8）
 
-`/channel-new` 既存チャンネル取り込みモードの手順詳細。SKILL.md の「モード判別」で本モードと判定された場合に、このファイルの手順どおりに実行する。
-本ファイル内の `references/...` は `.claude/skills/channel-new/references/...`（本ファイルと同じディレクトリ配下）を指す。
+`/setup --import` 既存チャンネル取り込みモードの手順詳細。SKILL.md の「モード判別」で本モードと判定された場合に、このファイルの手順どおりに実行する。
+共有する config 資産の `references/...` は `.claude/skills/channel-new/references/...` を指す。
 
 既に YouTube で運営中のチャンネルの情報をヒアリングし、`config/channel/*.json`（責務別分割、v2.0.0 以降）を生成して自動化システムに取り込む。
 
@@ -73,24 +73,24 @@ JSON 結果から以下をユーザーに提示する:
 
 ## 取り込み Step 4: config 生成
 
-`references/config-template/*.json`（責務別 5 ファイル: meta / content / youtube / analytics / audio）をベースに、ヒアリング結果で各ファイルの全フィールドを埋めて `config/channel/*.json` を生成する。動画尺は `references/config-template/audio.json` に反映する。
+`.claude/skills/channel-new/references/config-template/*.json`（責務別 5 ファイル: meta / content / youtube / analytics / audio）をベースに、ヒアリング結果で各ファイルの全フィールドを埋めて `config/channel/*.json` を生成する。動画尺は `.claude/skills/channel-new/references/config-template/audio.json` に反映する。
 
-含めるべきセクション（必須・skill-config 管理・オプション）は **`references/config-generation-rules.md`** を参照。
+含めるべきセクション（必須・skill-config 管理・オプション）は **`.claude/skills/channel-new/references/config-generation-rules.md`** を参照。
 
 ## 取り込み Step 5: ディレクトリ構造の確認・補完
 
-正準ディレクトリ構造は **`references/directory-structure.md`** を参照。
+正準ディレクトリ構造は **`.claude/skills/channel-new/references/directory-structure.md`** を参照。
 既存リポジトリに不足しているディレクトリがあれば作成する。
 
 ## 取り込み Step 6: 検証
 
-JSON 構文検証・config ロードテスト（`uv run yt-doctor --json` の `channel_config.status` 判定）は **`references/verification.md`** を参照。
+JSON 構文検証・config ロードテスト（`uv run yt-doctor --json` の `channel_config.status` 判定）は **`.claude/skills/channel-new/references/verification.md`** を参照。
 
 ## 取り込み Step 7: OAuth 認証と channel_id 取得
 
 `auth/token.json` がない場合、OAuth 認証と channel_id 自動取得を実行。
 `config/channel/meta.json::channel.channel_id` が未設定の場合は、認証済みチャンネル ID を必ず取得して保存する。
-手順は **`references/verification.md`**（「OAuth 認証」「channel_id の自動取得」）を参照。
+手順は **`.claude/skills/channel-new/references/verification.md`**（「OAuth 認証」「channel_id の自動取得」）を参照。
 
 ## 取り込み Step 8: 次ステップ案内
 
@@ -106,7 +106,7 @@ JSON の `checks` から `id: wf_new_readiness` の結果を 1 件選び、次�
 
 - **`/wf-new` 到達に必須**: 追加作業なし。`message` を提示し、そこに示された確定した入力モードで今すぐ `/wf-new` を開始できると案内する
 - **品質を上げる任意項目**:
-  - **ブランディング素材**: 未作成の場合は `references/verification.md`（「ブランディング素材生成」）を参照
+  - **ブランディング素材**: 未作成の場合は `.claude/skills/channel-new/references/verification.md`（「ブランディング素材生成」）を参照
   - **ペルソナ定義**: `/viewer-voice` → `/audience-persona-design` → `/viewing-scene` の順で実行
   - **追加ベンチマーク**: 競合チャンネルを広げたい場合は `config/channel/analytics.json` の `benchmark.channels` を追加し `/benchmark` で収集
   - **データ収集・分析**: `/analytics --collect` → `/analytics --analyze` で現状のパフォーマンスを把握

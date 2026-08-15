@@ -8,9 +8,9 @@ PDCA 対応: 準備 = 準備する / Plan = 調べる → 決める / Do = 進�
 
 - `/automation-release` — Use when 本リポジトリの新規リリースを作成するとき。
 - `/automation-update` — Use when 下流リポジトリで automation を最新リリースへ追従させるとき。
-- `/channel-new` — Use when 既存 YouTube チャンネルを取り込むとき、収集済み benchmark/comments からチャンネル全体を分析するとき、方向性を再検討するとき、config を再生成するとき、または YouTube 側設定を同期するとき。
+- `/channel-new` — Use when 収集済み benchmark/comments からチャンネル全体を分析するとき、または方向性を再検討するとき。
 - `/ext-install` — Use when Chrome 拡張（suno-helper / distrokid-helper / community-helper）のインストール・更新をするとき。
-- `/setup` — Use when ツール導入と GCP / OAuth の API 設定をセットアップ・再診断するとき、または新規 YouTube チャンネルを Step 1〜10 で開設するとき。
+- `/setup` — Use when ツール導入と GCP / OAuth の設定、新規 YouTube チャンネル開設、既存チャンネル取り込み、config 再生成、または YouTube 側設定同期を行うとき。
 - `/shadcn` — Manages shadcn components and projects — adding, searching, fixing, debugging, styling, and composing UI, including chat interfaces. Provides project context, component docs, and usage examples. Applies when working with shadcn/ui, component registries, presets, --preset codes, or any project with a components.json file. Also triggers for 'shadcn init', 'create an app with --preset', or 'switch to --preset'.
 
 ## 調べる

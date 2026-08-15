@@ -104,14 +104,14 @@ OCCURRENCE_LEDGER = (
 # SHA-256 of ordered ``section heading + active route line`` records. This binds
 # every route to its exact active Markdown context without duplicating long prose.
 ROUTE_CONTEXT_SHA256 = {
-    "audience-persona-design": "07abb23816cc3c7de0497ab7b4906d756c48009c416eae84afd755ae11ac1d3c",
-    "benchmark": "d295ee646b98344dabd96a6136dc43fc2a2f66723e20b5a308971457e724d2d6",
-    "discover-competitors": "5674e18a4fb70b2eef85cbc72e64b35000666230ee71e6ec957f1e306ba08edb",
+    "audience-persona-design": "950bfb445df84ba0a48282a57111208fe16b33755c4629b5c7f42493784cb298",
+    "benchmark": "656994321cc145397dfa7899e494527d3e62f35356a34d4cf0eaec3584e7fd5f",
+    "discover-competitors": "310ad921849dd489cf09cc9cb48d51b09f303af804ee423e2ca974e7863ad455",
     "market-research": "b54b28a9d6cddd9d91e49002b787b38a7b5381546a6fa643532d34aef451bfef",
     "thumbnail-research": "ea3a96bf784d4d510491d9c2ac5f516dfaa6984f0e6acfbc0754c8b753662609",
     "video-analyze": "f28ee9c9b0a18c3ecae15b631f970d780b18bda72185a25935b56f0a66ba6552",
-    "viewer-voice": "d805ae103e78d460505834402d19333151c2a7a5b09e87ac394bceabe8436373",
-    "viewing-scene": "c11dca52ed69e846b14fc51bcd46859a6bb4ac937844cc9f472ad8c81ddde393",
+    "viewer-voice": "a93cc57011974813712992610bc39cc223a162e6c1ff7ead1aa4b58e373961a2",
+    "viewing-scene": "03df44376f9ef446067801d083cbeeceec339a2c24b1e248b4443b4c51914f83",
 }
 SETUP_ASSET_OWNERS = {
     "audience-persona-design": "persona-branding-readiness.md",
@@ -141,7 +141,7 @@ RESIDUAL_LINE_MARKERS = {
 }
 RESIDUAL_SHA256 = {
     "benchmark": "52064fb2db0e90530134e33823a3125bf1282da339bfc89e91d3c062dba330d5",
-    "discover-competitors": "91325074ff74f89681a6972f3c56c5c093dfd4aa779f0ca4425e66d348a3a891",
+    "discover-competitors": "c1434d5d91f521e1023aebfce6d56c09960faf1a5a6d97996df508cb19b2aed1",
     "market-research": "a6350cc0f44adf9895aefb0b98fc177415b5bebb55e17b3fb056d3df8d111448",
 }
 
@@ -161,7 +161,9 @@ def _active_route_snapshot(text: str) -> tuple[bytes, bool]:
         if stripped.startswith(("```", "~~~")):
             in_fence = not in_fence
             continue
-        has_route = "/channel-new" in line or "/setup --channel" in line
+        has_route = any(
+            route in line for route in ("/channel-new", "/setup --channel", "/setup --import", "/setup --regenerate")
+        )
         starts_comment = "<!--" in line
         ends_comment = "-->" in line
         if in_fence or in_html_comment or starts_comment or "~~" in line:
@@ -224,8 +226,8 @@ def test_route_validator_rejects_inactive_mixed_swapped_and_relocated_routes() -
     }
 
     swapped = audience.replace(
-        "新規チャンネルは `/setup --channel` Step 4、既存チャンネルは `/channel-new`",
-        "新規チャンネルは `/channel-new` Step 4、既存チャンネルは `/setup --channel`",
+        "新規チャンネルは `/setup --channel` Step 4、既存チャンネルは `/setup --import`",
+        "新規チャンネルは `/setup --import` Step 4、既存チャンネルは `/setup --channel`",
     )
     assert "active route context ledger" in _route_violations("audience-persona-design", swapped)
 

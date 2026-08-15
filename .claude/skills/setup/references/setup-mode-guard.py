@@ -7,14 +7,16 @@ import json
 import sys
 from collections.abc import Sequence
 
-MODE_FLAGS = ("--tool", "--channel")
+MODE_FLAGS = ("--tool", "--channel", "--import", "--regenerate", "--push")
 EXIT_EXCLUSIVE_MODE = 2
 
 
 def resolve_mode(arguments: Sequence[str]) -> str | None:
     selected = [argument for argument in arguments if argument in MODE_FLAGS]
     if len(selected) > 1:
-        raise ValueError("setup mode は --tool / --channel のどちらか 1 つだけ指定してください")
+        raise ValueError(
+            "setup mode は --tool / --channel / --import / --regenerate / --push のどれか 1 つだけ指定してください"
+        )
     return selected[0] if selected else None
 
 

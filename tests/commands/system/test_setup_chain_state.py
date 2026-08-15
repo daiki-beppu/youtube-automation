@@ -88,7 +88,7 @@ def test_channel_is_blocked_until_tool_prerequisites_are_complete(tmp_path: Path
 
 def test_channel_runs_after_tool_and_skips_after_outputs_are_saved(tmp_path: Path, state: ModuleType) -> None:
     manifest = state.load_manifest(MANIFEST)
-    tool, channel = manifest["steps"]
+    tool, channel = manifest["steps"][:2]
     _write_file_artifacts(tmp_path, tool["outputArtifacts"])
     checks = _checks(state)
 
@@ -111,7 +111,7 @@ def test_channel_runs_after_tool_and_skips_after_outputs_are_saved(tmp_path: Pat
 
 def test_channel_stays_run_when_initial_save_is_dirty(tmp_path: Path, state: ModuleType) -> None:
     manifest = state.load_manifest(MANIFEST)
-    tool, channel = manifest["steps"]
+    tool, channel = manifest["steps"][:2]
     _write_file_artifacts(tmp_path, tool["outputArtifacts"] + channel["outputArtifacts"])
     _commit_workspace(tmp_path)
     (tmp_path / "config" / "channel" / "meta.json").write_text("changed\n", encoding="utf-8")
@@ -137,7 +137,7 @@ def test_channel_does_not_inherit_clean_ancestor_repository(tmp_path: Path, stat
         cwd=parent,
         check=True,
     )
-    tool, channel = manifest["steps"]
+    tool, channel = manifest["steps"][:2]
     _write_file_artifacts(channel_root, tool["outputArtifacts"] + channel["outputArtifacts"])
 
     code, result = state.evaluate(channel_root, _checks(state), manifest, "channel")
@@ -151,7 +151,7 @@ def test_channel_does_not_inherit_clean_ancestor_repository(tmp_path: Path, stat
 
 def test_channel_does_not_treat_unborn_repository_as_saved(tmp_path: Path, state: ModuleType) -> None:
     manifest = state.load_manifest(MANIFEST)
-    tool, channel = manifest["steps"]
+    tool, channel = manifest["steps"][:2]
     _write_file_artifacts(tmp_path, tool["outputArtifacts"] + channel["outputArtifacts"])
     subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
 
@@ -170,7 +170,7 @@ def test_channel_does_not_accept_nested_directory_inside_committed_repository(
     manifest = state.load_manifest(MANIFEST)
     repo = tmp_path / "repo"
     channel_root = repo / "nested-channel"
-    tool, channel = manifest["steps"]
+    tool, channel = manifest["steps"][:2]
     _write_file_artifacts(channel_root, tool["outputArtifacts"] + channel["outputArtifacts"])
     _commit_workspace(repo)
 
@@ -185,7 +185,7 @@ def test_channel_does_not_accept_nested_directory_inside_committed_repository(
 
 def test_channel_does_not_accept_ignored_setup_output_as_saved(tmp_path: Path, state: ModuleType) -> None:
     manifest = state.load_manifest(MANIFEST)
-    tool, channel = manifest["steps"]
+    tool, channel = manifest["steps"][:2]
     _write_file_artifacts(tmp_path, tool["outputArtifacts"] + channel["outputArtifacts"])
     ignored_output = "config/channel/meta.json"
     (tmp_path / ".gitignore").write_text(f"/{ignored_output}\n", encoding="utf-8")
@@ -202,7 +202,7 @@ def test_channel_does_not_accept_ignored_setup_output_as_saved(tmp_path: Path, s
 
 def test_channel_does_not_accept_untracked_file_after_initial_save(tmp_path: Path, state: ModuleType) -> None:
     manifest = state.load_manifest(MANIFEST)
-    tool, channel = manifest["steps"]
+    tool, channel = manifest["steps"][:2]
     _write_file_artifacts(tmp_path, tool["outputArtifacts"] + channel["outputArtifacts"])
     _commit_workspace(tmp_path)
     (tmp_path / "untracked.txt").write_text("not saved\n", encoding="utf-8")
@@ -221,7 +221,7 @@ def test_channel_does_not_skip_when_channel_config_is_unresolved(
     tmp_path: Path, state: ModuleType, channel_config_status: str
 ) -> None:
     manifest = state.load_manifest(MANIFEST)
-    tool, channel = manifest["steps"]
+    tool, channel = manifest["steps"][:2]
     _write_file_artifacts(tmp_path, tool["outputArtifacts"] + channel["outputArtifacts"])
     _commit_workspace(tmp_path)
 
@@ -244,7 +244,7 @@ def test_channel_does_not_skip_when_channel_config_is_unresolved(
 
 def test_channel_does_not_skip_when_channel_config_check_is_missing(tmp_path: Path, state: ModuleType) -> None:
     manifest = state.load_manifest(MANIFEST)
-    tool, channel = manifest["steps"]
+    tool, channel = manifest["steps"][:2]
     _write_file_artifacts(tmp_path, tool["outputArtifacts"] + channel["outputArtifacts"])
     _commit_workspace(tmp_path)
     checks = [check for check in _checks(state) if check.id != "channel_config"]
@@ -260,7 +260,7 @@ def test_channel_does_not_skip_when_channel_config_check_is_missing(tmp_path: Pa
 
 def test_present_but_invalid_channel_config_does_not_skip(tmp_path: Path, state: ModuleType) -> None:
     manifest = state.load_manifest(MANIFEST)
-    tool, channel = manifest["steps"]
+    tool, channel = manifest["steps"][:2]
     _write_file_artifacts(tmp_path, tool["outputArtifacts"] + channel["outputArtifacts"])
     (tmp_path / "config" / "channel" / "meta.json").write_text("not-json\n", encoding="utf-8")
     _commit_workspace(tmp_path)
@@ -309,7 +309,7 @@ def test_channel_branding_glob_rejects_invalid_matches(
     tmp_path: Path, state: ModuleType, kind: str, suffix: str, mutation: str
 ) -> None:
     manifest = state.load_manifest(MANIFEST)
-    tool, channel = manifest["steps"]
+    tool, channel = manifest["steps"][:2]
     _write_file_artifacts(tmp_path, tool["outputArtifacts"] + channel["outputArtifacts"])
     valid = tmp_path / "branding" / f"{kind}.png"
     valid.unlink()
@@ -366,7 +366,7 @@ def test_channel_branding_glob_rejects_unsupported_valid_image_formats(
     size: tuple[int, int],
 ) -> None:
     manifest = state.load_manifest(MANIFEST)
-    tool, channel = manifest["steps"]
+    tool, channel = manifest["steps"][:2]
     _write_file_artifacts(tmp_path, tool["outputArtifacts"] + channel["outputArtifacts"])
     (tmp_path / "branding" / f"{kind}.png").unlink()
     PILImage.new("RGB", size, color=(40, 80, 120)).save(tmp_path / "branding" / f"{kind}{suffix}", format=image_format)
@@ -382,7 +382,7 @@ def test_channel_branding_glob_rejects_unsupported_valid_image_formats(
 
 def test_channel_branding_globs_accept_valid_png_and_jpeg(tmp_path: Path, state: ModuleType) -> None:
     manifest = state.load_manifest(MANIFEST)
-    tool, channel = manifest["steps"]
+    tool, channel = manifest["steps"][:2]
     _write_file_artifacts(tmp_path, tool["outputArtifacts"] + channel["outputArtifacts"])
     (tmp_path / "branding" / "banner.png").unlink()
     _write_valid_branding(tmp_path, banner_format="JPEG", banner_suffix=".jpg")
@@ -412,7 +412,7 @@ def test_channel_branding_rejects_near_ratio_misses(
     tmp_path: Path, state: ModuleType, kind: str, size: tuple[int, int]
 ) -> None:
     manifest = state.load_manifest(MANIFEST)
-    tool, channel = manifest["steps"]
+    tool, channel = manifest["steps"][:2]
     _write_file_artifacts(tmp_path, tool["outputArtifacts"] + channel["outputArtifacts"])
     PILImage.new("RGB", size, color=(40, 80, 120)).save(tmp_path / "branding" / f"{kind}.png", format="PNG")
     _commit_workspace(tmp_path)
@@ -440,7 +440,7 @@ def test_channel_branding_accepts_exact_ratio_at_multiple_resolutions(
     banner_size: tuple[int, int],
 ) -> None:
     manifest = state.load_manifest(MANIFEST)
-    tool, channel = manifest["steps"]
+    tool, channel = manifest["steps"][:2]
     _write_file_artifacts(tmp_path, tool["outputArtifacts"] + channel["outputArtifacts"])
     PILImage.new("RGB", icon_size, color=(40, 80, 120)).save(tmp_path / "branding" / "icon.png", format="PNG")
     PILImage.new("RGB", banner_size, color=(120, 80, 40)).save(tmp_path / "branding" / "banner.png", format="PNG")

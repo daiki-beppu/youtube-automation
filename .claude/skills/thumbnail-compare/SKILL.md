@@ -29,7 +29,7 @@ description: "Use when 自チャンネルの生成済みサムネイルを競合
 
 以下を確認し、満たさなければ前工程を案内して停止する:
 
-- `config/channel/` が存在すること（`load_config()` でロード可能）。存在しない場合は `/channel-new`（既存チャンネルは取り込みモード）を案内して停止する
+- `config/channel/` が存在すること（`load_config()` でロード可能）。存在しない場合は `/setup --import` を案内して停止する
 - `config/channel/analytics.json::benchmark.channels` に承認済みベンチマークチャンネルが設定済みであること。未設定なら `/channel-new` / `/discover-competitors` を案内して停止する
 - `data/benchmark_*.json` が存在すること（鮮度が古い場合はスクリプトが自動更新する）。一度も収集していなければ先に `/benchmark` を案内する
 - 自チャンネルの確定済みサムネイル `collections/live/*/10-assets/thumbnail.jpg` または `collections/planning/*/10-assets/thumbnail.jpg` が 1 件以上存在すること。どちらにも無ければ比較対象なしとして `/thumbnail` を案内する

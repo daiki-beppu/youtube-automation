@@ -4,6 +4,8 @@
     {
       "id": "tool",
       "skill": "setup",
+      "defaultChain": true,
+      "reference": "references/tool.md",
       "prerequisiteArtifacts": [],
       "outputArtifacts": [
         "doctor:ffmpeg",
@@ -34,6 +36,8 @@
     {
       "id": "channel",
       "skill": "setup",
+      "defaultChain": true,
+      "reference": "references/channel-mode.md",
       "prerequisiteArtifacts": [
         "doctor:ffmpeg",
         "doctor:ffprobe",
@@ -83,6 +87,36 @@
       "idempotency": {
         "script": "references/setup-chain-state.py"
       }
+    },
+    {
+      "id": "import",
+      "skill": "setup",
+      "defaultChain": false,
+      "reference": "references/import-mode.md",
+      "prerequisiteArtifacts": ["auth/client_secrets.json", "auth/token.json"],
+      "outputArtifacts": ["config/channel/meta.json", "doctor:channel_config", "auth/token.json"],
+      "approvalGate": {"skip": true, "configPath": "workflow.setup.skip_approvals.import"},
+      "idempotency": {"script": "references/setup-chain-state.py"}
+    },
+    {
+      "id": "regenerate",
+      "skill": "setup",
+      "defaultChain": false,
+      "reference": "references/regeneration-mode.md",
+      "prerequisiteArtifacts": ["docs/channel/channel-direction.md"],
+      "outputArtifacts": ["config/channel/meta.json", "doctor:channel_config", "doctor:ttp_wf_new_readiness"],
+      "approvalGate": {"skip": true, "configPath": "workflow.setup.skip_approvals.regenerate"},
+      "idempotency": {"script": "references/setup-chain-state.py"}
+    },
+    {
+      "id": "push",
+      "skill": "setup",
+      "defaultChain": false,
+      "reference": "references/push-mode.md",
+      "prerequisiteArtifacts": ["auth/token.json", "config/channel/meta.json"],
+      "outputArtifacts": ["youtube:brandingSettings", "youtube:status", "youtube:localizations"],
+      "approvalGate": {"skip": true, "configPath": "workflow.setup.skip_approvals.push"},
+      "idempotency": {"script": "references/setup-chain-state.py"}
     }
   ]
 }

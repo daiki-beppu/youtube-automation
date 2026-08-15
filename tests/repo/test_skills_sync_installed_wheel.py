@@ -39,12 +39,17 @@ _CHANNEL_NEW_SHARED_ASSETS = frozenset(
         "fetch_benchmark_comments.py",
         "fetch_branding_snapshot.py",
         "generate_image.py",
-        "import-mode.md",
-        "localizations-template.json",
-        "regeneration-mode.md",
-        "save-push-troubleshooting.md",
         "schedule-template.json",
         "verification.md",
+    }
+)
+_SETUP_MIGRATED_ASSETS = frozenset(
+    {
+        "import-mode.md",
+        "localizations-template.json",
+        "push-mode.md",
+        "regeneration-mode.md",
+        "save-push-troubleshooting.md",
     }
 )
 
@@ -286,6 +291,9 @@ assert "wheel-identity-check" not in legacy._cache
     for asset in opening_assets | {"setup-mode-guard.py"}:
         assert (distributed_references / asset).is_file()
         assert not (downstream / ".claude" / "skills" / "channel-new" / "references" / asset).exists()
+    for asset in _SETUP_MIGRATED_ASSETS:
+        assert (distributed_references / asset).is_file()
+        assert not (downstream / ".claude" / "skills" / "channel-new" / "references" / asset).exists()
     for markdown in (channel_mode, *(distributed_references / name for name in opening_assets if name.endswith(".md"))):
         local_links = [
             link
@@ -307,13 +315,9 @@ assert "wheel-identity-check" not in legacy._cache
         if path.is_file() or path.is_symlink()
     }
     assert installed_shared_assets == _CHANNEL_NEW_SHARED_ASSETS
-    local_links = [
-        link
-        for link in re.findall(r"\[[^]]+\]\(([^)]+)\)", channel_new_text)
-        if not link.startswith(("http://", "https://", "#"))
-    ]
-    assert local_links
-    assert all((channel_new.parent / link).is_file() for link in local_links)
+    for residual_reference in ("analysis-mode.md", "direction-mode.md"):
+        assert f"references/{residual_reference}" in channel_new_text
+        assert (channel_new_references / residual_reference).is_file()
 
     bootstrap_guide = distributed_references / "gcp-bootstrap.md"
     assert bootstrap_guide.is_file()
@@ -395,6 +399,15 @@ def test_candidate_sdist_contains_setup_channel_owner_once(tmp_path: Path) -> No
             member for member in members if member.name.endswith(f"/.claude/skills/channel-new/references/{relative}")
         ]
         assert len(matches) == 1
+    for relative in _SETUP_MIGRATED_ASSETS:
+        setup_matches = [
+            member for member in members if member.name.endswith(f"/.claude/skills/setup/references/{relative}")
+        ]
+        channel_new_matches = [
+            member for member in members if member.name.endswith(f"/.claude/skills/channel-new/references/{relative}")
+        ]
+        assert len(setup_matches) == 1
+        assert channel_new_matches == []
 
     expected_links = {
         "benchmark_collector.py": "../../../../src/youtube_automation/commands/analytics/benchmark_collector.py",

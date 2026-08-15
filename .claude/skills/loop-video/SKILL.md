@@ -65,7 +65,7 @@ subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実�
 
 存在しない場合、ユーザーに確認:
 - **新規チャンネル** → `/setup --channel` を案内
-- **既存チャンネル**（YouTube で既に運営中）→ `/channel-new`（既存チャンネル取り込みモード）を案内
+- **既存チャンネル**（YouTube で既に運営中）→ `/setup --import` を案内
 
 **ループ動画化の有効/無効**: skill-config の `enabled`（default `true`）で制御する。`config/skills/loop-video.yaml::enabled: false` のチャンネルでは本スキルは実行不可で、`yt-generate-loop-video` は fail-loud で停止する（Veo 課金を防ぐ）。この場合は `/thumbnail` で作成したテキストなし `main.png/jpg` を静止画背景として使う。サムネが完成済みでループ動画のリターンが Veo コストに見合わないチャンネルは `false` にする。
 

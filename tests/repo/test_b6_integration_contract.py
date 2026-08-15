@@ -233,7 +233,17 @@ def test_b6_receipt_points_every_mapping_to_an_existing_owner() -> None:
     mappings = _read_receipt().get("mappings")
     assert isinstance(mappings, list)
 
-    assert all((ROOT / mapping["exact_new_owner"]).exists() for mapping in mappings if isinstance(mapping, dict))
+    moved_owner_aliases = {
+        ".claude/skills/channel-new/references/import-mode.md": ".claude/skills/setup/references/import-mode.md",
+        ".claude/skills/channel-new/references/regeneration-mode.md": (
+            ".claude/skills/setup/references/regeneration-mode.md"
+        ),
+    }
+    assert all(
+        (ROOT / moved_owner_aliases.get(mapping["exact_new_owner"], mapping["exact_new_owner"])).exists()
+        for mapping in mappings
+        if isinstance(mapping, dict)
+    )
 
 
 def test_b6_current_cli_contract_uses_yt_entrypoints() -> None:

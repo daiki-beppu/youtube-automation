@@ -17,9 +17,9 @@ BOOTSTRAP_REFERENCE_MD = SKILL_DIR / "references" / "new-channel-bootstrap.md"
 TTP_SEED_DURATION_REFERENCE_MD = SKILL_DIR / "references" / "ttp-seed-and-duration.md"
 PERSONA_BRANDING_READINESS_REFERENCE_MD = SKILL_DIR / "references" / "persona-branding-readiness.md"
 CHANNEL_NEW_SKILL_MD = REPO_ROOT / ".claude" / "skills" / "channel-new" / "SKILL.md"
-CHANNEL_NEW_RESIDUAL_SKILL_SHA256 = "c780775dcd926e0c040b46fcb880a7740da06dd2c76a77556145830716694220"
-CHANNEL_NEW_DESCRIPTION_SHA256 = "f6723ead03cbeaa889a3a10a4ef7195468841b049f256289c5795469cd752a9d"
-CHANNEL_NEW_ROUTING_SHA256 = "9e66e6cb0b6818436cf215be521fcd67576ed2668927017f05e1af6aebd3adf1"
+CHANNEL_NEW_RESIDUAL_SKILL_SHA256 = "af6963300d021298153b0bd20797818d0aad7a3e186460170f86f443470e4959"
+CHANNEL_NEW_DESCRIPTION_SHA256 = "6ac621c1d796be7943c9ba2a0e0ff42a17c9ee2baa621770e2b9cb2236da7faa"
+CHANNEL_NEW_ROUTING_SHA256 = "1eef9878b5fa93a85a5985308a1be484b95e071157c355bd584e4f898b63cc60"
 OPENING_ASSETS = {
     "new-channel-bootstrap.md",
     "ttp-seed-and-duration.md",
@@ -410,8 +410,8 @@ def test_channel_new_opening_rejection_detects_trigger_route_write_and_execution
     source = CHANNEL_NEW_SKILL_MD.read_text(encoding="utf-8")
     mutations = {
         "description trigger:チャンネル追加": source.replace(
-            "未作成 channel の初回 bootstrap",
-            "チャンネル追加の初回 bootstrap",
+            "環境・チャンネル設定を整える操作",
+            "チャンネル追加の操作",
             1,
         ),
         "positive setup route": source.replace("`/setup --channel` を案内して停止する", "停止する", 1),
