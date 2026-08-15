@@ -14,7 +14,6 @@ DIRECT_IO_ALLOWLIST = frozenset(
     {
         "src/youtube_automation/commands/analytics/experiment_judge.py",
         "src/youtube_automation/commands/collections/collection_serve.py",
-        "src/youtube_automation/commands/collections/init_collection.py",
         "src/youtube_automation/commands/distrokid/distrokid_prepare.py",
         "src/youtube_automation/commands/media/apply_rain_layers.py",
         "src/youtube_automation/commands/media/check_raw_master.py",
@@ -24,7 +23,6 @@ DIRECT_IO_ALLOWLIST = frozenset(
         "src/youtube_automation/commands/metadata/metadata_audit.py",
         "src/youtube_automation/commands/system/progress_hook/workflow_state.py",
         "src/youtube_automation/commands/thumbnail/auto_select_thumbnail.py",
-        "src/youtube_automation/commands/uploads/wf_batch.py",
         "src/youtube_automation/commands/youtube/pinned_comment.py",
         "src/youtube_automation/domains/distrokid/preparation.py",
         "src/youtube_automation/domains/distrokid/release.py",
@@ -36,7 +34,6 @@ DIRECT_IO_ALLOWLIST = frozenset(
         "src/youtube_automation/domains/uploads/_complete_collection_strategy.py",
         "src/youtube_automation/domains/uploads/_playlist_assignment.py",
         "src/youtube_automation/domains/uploads/_preflight.py",
-        "src/youtube_automation/domains/uploads/_tracking_io.py",
         "src/youtube_automation/domains/uploads/collection.py",
         "src/youtube_automation/domains/uploads/playlists.py",
         "src/youtube_automation/domains/uploads/preflight.py",

@@ -1338,3 +1338,27 @@ class TestTrackingStoreAtomicity:
         assert corrupt_path.exists()
         assert corrupt_path.read_text(encoding="utf-8") == "{truncated"
         assert not tracking_path.exists()
+
+    def test_workflow_upload_preserves_update_committed_before_owner_callback(self, tmp_path, monkeypatch):
+        from youtube_automation.domains.collections.workflow_state import update as owner_update
+        from youtube_automation.domains.uploads import _tracking_io
+
+        col, _ = _make_tracking_collection(tmp_path, resume_uri=None)
+        state_path = col / "workflow-state.json"
+        store = TrackingStore(tmp_path / "collections", {"schedule": {"timezone": "UTC"}})
+
+        def update_after_concurrent_writer(path, updater):
+            owner_update(path, lambda state: state.__setitem__("concurrent_marker", "preserved"))
+            return owner_update(path, updater)
+
+        monkeypatch.setattr(_tracking_io, "update_workflow_state", update_after_concurrent_writer)
+
+        store.update_workflow_upload(
+            col,
+            {"video_id": "video-1", "video_url": "https://youtu.be/video-1"},
+            "2099-01-01T00:00:00Z",
+        )
+
+        persisted = json.loads(state_path.read_text(encoding="utf-8"))
+        assert persisted["concurrent_marker"] == "preserved"
+        assert persisted["upload"]["video_id"] == "video-1"
