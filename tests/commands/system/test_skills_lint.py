@@ -37,6 +37,11 @@ def _write_skill(skills_dir: Path, name: str, content: str) -> None:
     (skills_dir / name / "SKILL.md").write_text(content, encoding="utf-8")
 
 
+def _skill_md_with_line_count(line_count: int, *, name: str = "good-skill") -> str:
+    lines = _VALID_SKILL_MD.replace("good-skill", name).splitlines()
+    return "\n".join([*lines, *(["本文"] * (line_count - len(lines)))])
+
+
 @pytest.fixture
 def fake_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """tmp_path にダミーの skills ツリーを仕込み editable fallback を向ける。"""
@@ -226,6 +231,60 @@ purpose: 振り返る
     out = capsys.readouterr().out
     assert "--since" in out
     assert "未登録" in out
+
+
+def test_cli_lint_skill_md_over_400_lines_reports_count_and_exits_nonzero(
+    fake_repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    skills_dir = fake_repo / ".claude" / "skills"
+    _write_skill(skills_dir, "long-skill", _skill_md_with_line_count(401, name="long-skill"))
+
+    assert main(["lint", "long-skill"]) == 1
+    out = capsys.readouterr().out
+    assert "long-skill: SKILL.md が 401 行です (上限 400 行 — references/ へ切り出してください)" in out
+
+
+def test_cli_lint_skill_md_at_400_lines_exits_zero(fake_repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    skills_dir = fake_repo / ".claude" / "skills"
+    _write_skill(skills_dir, "limit-skill", _skill_md_with_line_count(400, name="limit-skill"))
+
+    assert main(["lint", "limit-skill"]) == 0
+    out = capsys.readouterr().out
+    assert "limit-skill: SKILL.md" not in out
+
+
+def test_cli_lint_allowlisted_skill_md_line_violation_is_reported_without_failing(
+    fake_repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    skills_dir = fake_repo / ".claude" / "skills"
+    _write_skill(skills_dir, "thumbnail", _skill_md_with_line_count(401, name="thumbnail"))
+
+    assert main(["lint", "thumbnail"]) == 0
+    out = capsys.readouterr().out
+    assert "thumbnail: SKILL.md が 401 行です" in out
+    assert "[allowlist]" in out
+
+
+def test_cli_lint_allowlisted_skill_md_growth_exits_nonzero(
+    fake_repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    skills_dir = fake_repo / ".claude" / "skills"
+    _write_skill(skills_dir, "thumbnail", _skill_md_with_line_count(744, name="thumbnail"))
+
+    assert main(["lint", "thumbnail"]) == 1
+    out = capsys.readouterr().out
+    assert "thumbnail: SKILL.md が 744 行です" in out
+    assert "[allowlist]" not in out
+
+
+def test_cli_lint_does_not_count_reference_lines(fake_repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    skills_dir = fake_repo / ".claude" / "skills"
+    reference = skills_dir / "good-skill" / "references" / "details.md"
+    reference.parent.mkdir()
+    reference.write_text("\n".join(["詳細"] * 500), encoding="utf-8")
+
+    assert main(["lint", "good-skill"]) == 0
+    assert "SKILL.md が" not in capsys.readouterr().out
 
 
 def test_cli_lint_missing_mode_reference_reports_skill_flag_and_path(
