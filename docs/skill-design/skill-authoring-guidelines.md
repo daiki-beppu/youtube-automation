@@ -80,11 +80,27 @@
 
 ### mode・variant の表記
 
-skill に新しい mode・variant を設ける場合は、呼び出しを `--<mode>` 形式の引数で表す。`mode=<name>` 形式や自然言語の mode 名を新規に導入しない。値を伴う variant も、名前付き引数として表現する。
+既存 skill と**目的**（利用者が何のために呼ぶか）を共有する新しい利用形態は、skill を新設する前に、既存 skill へ mode を追加できないかを先に検討する。完了条件が mode ごとに異なる場合は、それぞれの完了条件を `references/<flag>.md` に書く。完了条件の相違は skill を分ける理由にしない。目的が異なる場合の skill 新設は禁止しない。
 
-既存 skill と責務・完了条件を共有する新しい利用形態は、skill を新設する前に、既存 skill へ `--<mode>` 引数を追加できないかを先に検討する。新しい責務または独立した完了条件を持つ場合の skill 新設は禁止しない。また、この原則を既存の skill family へ遡及適用して統合することは要求しない。
+新しい分岐は、次の優先順位で表現する。
 
-- mode の実例: [community-draft の `--batch`](../../.claude/skills/community-draft/SKILL.md)
+| 順 | 手段 | 条件 |
+|---:|---|---|
+| 1 | 自動判定 | `config`、`workflow-state.json`、ファイルの実在から判定できる分岐。フラグを要求せず、自動判定を既定にする |
+| 2 | 排他 mode | 利用者の意図でしか決まらない分岐。`--<flag>` 形式で表し、同時指定は 0〜1 個、1 skill あたり 5 個までとする |
+| 3 | modifier | mode と直交する調整。`--<flag>` 形式で表し、複数指定を認め、個数の上限は設けない |
+
+自動判定できる分岐をフラグ指定必須の設計にしない。mode は、通常の自動実行とは別に一段だけを明示実行するための上書き入口として置く。[analytics](../../.claude/skills/analytics/SKILL.md) は、フラグなしでは chain 全体を実行し、`--collect`、`--analyze`、`--report` では一段だけを実行する。[video-upload](../../.claude/skills/video-upload/SKILL.md) は、`content_model.type` から内部で自動分岐する。
+
+mode と modifier は次のように分けて記載する。
+
+- mode は `## モード判定` 節の `| mode | 読む reference |` 表に載せる
+- modifier は `## 修飾フラグ` 節の別表に載せ、mode 表には載せない
+- 両者とも `--` 前置を必須とし、`mode=<name>` 形式や bare word の名前を新規に導入しない。本リポジトリの skill は日本語の自然言語引数を取るため、bare word は通常の引数と衝突し、静的に判別できない
+- 値を伴う variant も名前付き引数として表現する
+
+- mode の実例: [analytics の `--collect`](../../.claude/skills/analytics/SKILL.md)
+- modifier の実例: 複数の対象を選べる `--suno`、`--distrokid`、`--community`
 - 値を伴う variant の実例: [flop-analysis の `--since <N>`](../../.claude/skills/flop-analysis/SKILL.md)
 
 ### description（スキル選択の API）
