@@ -65,3 +65,23 @@ def test_current_working_directory_reflects_process_directory(tmp_path: Path, mo
     monkeypatch.chdir(tmp_path)
 
     assert filesystem.current_working_directory() == tmp_path
+
+
+def test_verified_transaction_rolls_back_all_targets_when_verification_fails(tmp_path: Path) -> None:
+    first = tmp_path / "first.txt"
+    second = tmp_path / "second.txt"
+    first.write_bytes(b"old-first")
+    second.write_bytes(b"old-second")
+
+    def reject_publication() -> None:
+        assert first.read_bytes() == b"new-first"
+        assert second.read_bytes() == b"new-second"
+        raise ValueError("verification failed")
+
+    with pytest.raises(ValueError, match="verification failed"):
+        filesystem.write_verified_text_files_transactionally(
+            {first: "new-first", second: "new-second"}, reject_publication
+        )
+
+    assert first.read_bytes() == b"old-first"
+    assert second.read_bytes() == b"old-second"
