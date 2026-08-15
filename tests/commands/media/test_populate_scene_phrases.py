@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import re
 from pathlib import Path
 
 import pytest
@@ -12,18 +11,7 @@ from youtube_automation.commands.media import populate_scene_phrases
 from youtube_automation.configuration import load_config, reset
 from youtube_automation.core.errors import ConfigError, ValidationError
 from youtube_automation.domains.metadata import BAHMetadataGenerator
-from youtube_automation.domains.uploads._preflight import PreflightMixin
-
-
-class _PreflightHarness(PreflightMixin):
-    def __init__(self, collections_root: Path) -> None:
-        self.collections_root = collections_root
-
-    @staticmethod
-    def _extract_md_section(text: str, header: str) -> str | None:
-        pattern = rf"^## {re.escape(header)}\n```(?:\w+)?\n(.*?)\n```"
-        match = re.search(pattern, text, re.MULTILINE | re.DOTALL)
-        return match.group(1) if match else None
+from youtube_automation.domains.uploads._preflight import PreflightChecker
 
 
 def _write_json(path: Path, data: dict) -> None:
@@ -260,8 +248,7 @@ class TestMainCLI:
         master_dir = collection_dir / "01-master"
         master_dir.mkdir()
         (master_dir / "master.mp4").write_bytes(b"probe is mocked")
-        monkeypatch.setattr("youtube_automation.domains.uploads._preflight.probe_duration", lambda _: 3600)
-        _PreflightHarness(ch / "collections")._preflight_check(collection_dir)
+        PreflightChecker(ch / "collections", duration_probe=lambda _: 3600).check(collection_dir)
 
         gen = object.__new__(BAHMetadataGenerator)
         gen.config = load_config()

@@ -19,7 +19,7 @@ from youtube_automation.core.errors import (
 from youtube_automation.domains.metadata import BAHMetadataGenerator
 from youtube_automation.domains.uploads._complete_collection_strategy import CompleteCollectionMixin
 from youtube_automation.domains.uploads._dedup_search import DedupSearch
-from youtube_automation.domains.uploads._preflight import PreflightMixin
+from youtube_automation.domains.uploads._preflight import PreflightChecker
 from youtube_automation.domains.uploads._uploader_constants import (
     UPLOAD_SOURCE_EXISTING,
     UPLOAD_SOURCE_NEW,
@@ -236,7 +236,6 @@ __all__ = [
 
 class YouTubeAutoUploader(
     CompleteCollectionMixin,
-    PreflightMixin,
     ResumableUploader,
 ):
     """YouTube自動アップロードメインクラス
@@ -251,6 +250,7 @@ class YouTubeAutoUploader(
         collections_root: Optional[str] = None,
         youtube_clients: YouTubeClients | None = None,
         dedup_search: DedupSearch | None = None,
+        preflight_checker: PreflightChecker | None = None,
     ) -> None:
         """
         初期化
@@ -265,6 +265,9 @@ class YouTubeAutoUploader(
 
         self.collections_root = Path(collections_root)
         self._dedup_search = dedup_search
+        self.preflight_checker = (
+            preflight_checker if preflight_checker is not None else PreflightChecker(self.collections_root)
+        )
         self._verified_authenticated_channel_id: str | None = None
 
     @property
@@ -287,7 +290,7 @@ class YouTubeAutoUploader(
     def preflight_check(self, collection_dir: Path) -> None:
         """チャンネル本人性を確認してからメタデータ品質を検証する。"""
         self._verify_authenticated_upload_channel()
-        super().preflight_check(collection_dir)
+        self.preflight_checker.check(collection_dir)
 
     def upload_video(
         self,
