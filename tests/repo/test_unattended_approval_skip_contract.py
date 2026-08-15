@@ -32,7 +32,7 @@ def test_wf_new_auto_selection_is_rank_one_and_excludes_minimal_mode() -> None:
 
 
 def test_wf_auto_recognizes_explicit_skip_settings() -> None:
-    text = _text("wf-auto")
+    text = (SKILLS / "wf-new" / "references" / "auto.md").read_text(encoding="utf-8")
 
     assert "workflow.wf_new.skip_plan_selection" in text
     assert "skip_*_approval" in text

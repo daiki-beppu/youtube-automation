@@ -136,7 +136,7 @@ exit 0
 def _config(**overrides: object) -> dict[str, object]:
     value: dict[str, object] = {
         "enabled": True,
-        "target_workflow": "wf-auto",
+        "target_workflow": "wf-new --auto",
         "max_retries": 0,
         "retry_delay_seconds": 3,
         "prevent_concurrent_runs": True,
@@ -294,7 +294,7 @@ def test_schedule_config_generate_show_dry_run_shape_and_exclusive_flags(
         enable=True,
         run_time="08:45",
         cadence="mon,fri",
-        target_workflow="wf-auto",
+        target_workflow="wf-new --auto",
         max_retries=2,
         retry_delay_seconds=10,
         notification="none",

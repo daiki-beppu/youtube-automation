@@ -32,8 +32,7 @@ PDCA 対応: 準備 = 準備する / Plan = 調べる → 決める / Do = 進�
 - `/automation-schedule` — Use when チャンネルの定期制作スケジュール（workflow.json の scheduled_automation）を設定し、Codex / Claude のネイティブ Scheduled Task を作成・更新・確認・停止するとき。
 - `/collection-ideate` — Use when 新コレクションの企画・テーマ選定をデータドリブンに行うとき。
 - `/streaming` — Use when ライブ配信用 Vultr VPS・動画配信本体を Terraform で構築・運用・トラブルシュートするとき。
-- `/wf-auto` — Use when 正規入口から collection の有無を問わず、企画開始または未完了地点から制作・公開・post-publish まで状態駆動で継続・再開するとき。
-- `/wf-new` — Use when 新規コレクション制作を立ち上げるとき（ディレクトリ未作成）。
+- `/wf-new` — Use when 新規コレクション制作を立ち上げるとき、または --auto で collection の有無を問わず公開後処理まで状態駆動で継続・再開するとき。
 - `/wf-new-batch` — Use when 複数の新規コレクションを相互差別化して一括企画し、正規 /wf-new を順次実行・再開するとき。
 - `/wf-next` — Use when 既存コレクション（collections/planning/）を一段進めるとき。
 - `/wf-status` — Use when コレクション制作の進捗を読むだけで確認するとき（実行しない）。

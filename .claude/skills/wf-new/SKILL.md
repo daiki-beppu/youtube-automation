@@ -1,24 +1,36 @@
 ---
 name: wf-new
 purpose: 進める
-description: "Use when 新規コレクション制作を立ち上げるとき（ディレクトリ未作成）。「新しいコレクション始めたい」「制作開始」で発動。既存の進行は /wf-next"
+description: "Use when 新規コレクション制作を立ち上げるとき、または --auto で collection の有無を問わず公開後処理まで状態駆動で継続・再開するとき。「新しいコレクション始めたい」「制作開始」「制作を最初から最後まで」で発動。一段だけ進める場合は /wf-next"
 ---
 
 ## 前後工程
 
-- `前工程`: `/setup --channel`, `/setup`, `/collection-ideate`
-- `後工程`: `/wf-auto`, `/wf-next`, `/suno-helper`
-- `委譲先`: `/collection-ideate`, `/thumbnail`, `/suno`, `/lyria`, `/loop-video`
+- `前工程`: `/setup --channel`, `/setup`, `/collection-ideate`, `/automation-schedule`
+- `後工程`: `/wf-next`, `/suno-helper`, `/post-publish`, `/analytics`
+- `委譲先`: `/collection-ideate`, `/thumbnail`, `/suno`, `/lyria`, `/loop-video`, `/suno-helper`, `/masterup`, `/wf-next`, `/post-publish`
 
 ## 成果物
 
-- `書き込む`: `collections/<id>/workflow-state.json`, `collections/<id>/20-documentation/plan_proposals.md`, `collections/<id>/20-documentation/thumbnail-prompts.md`, `collections/<id>/20-documentation/suno-patterns.yaml`, `collections/<id>/20-documentation/suno-prompts.json`, `collections/<id>/10-assets/thumbnail.jpg`, `collections/<id>/10-assets/main.png`, `collections/<id>/10-assets/main.jpg`, `collections/<id>/10-assets/loop.mp4`
-- `読み込む`: `config/channel/*.json`, `config/localizations.json`, `data/benchmark_*.json`, `reports/analysis_*.md`, `data/insights.jsonl`
+- `書き込む`: `.automation-run/history.json`, `collections/<id>/workflow-state.json`, `collections/<id>/20-documentation/plan_proposals.md`, `collections/<id>/20-documentation/thumbnail-prompts.md`, `collections/<id>/20-documentation/suno-patterns.yaml`, `collections/<id>/20-documentation/suno-prompts.json`, `collections/<id>/10-assets/thumbnail.jpg`, `collections/<id>/10-assets/main.png`, `collections/<id>/10-assets/main.jpg`, `collections/<id>/10-assets/loop.mp4`
+- `読み込む`: `config/channel/*.json`, `config/localizations.json`, `data/benchmark_*.json`, `reports/analysis_*.md`, `data/insights.jsonl`, `collections/<id>/workflow-state.json`, `collections/<id>/20-documentation/post_publish_history.json`
+
+## モード判定
+
+`$ARGUMENTS` から `--auto` の個数を最初に数える。
+
+- 2 個以上なら排他違反として停止し、1 つだけ指定するよう促す。state・lease・成果物は一切変更しない
+- 1 個なら対応する reference を読み、その mode だけを実行する。残りの引数はその mode の引数として扱う
+- 0 個なら従来の通常入口（新規コレクション立ち上げ）をそのまま実行する
+
+| mode | 読む reference |
+|---|---|
+| `--auto` | `references/auto.md` |
 
 ## Overview
 
 新コレクション開始オーケストレーター。子スキルを順番に呼び、通常は企画選択 + サムネイル承認の2箇所で一時停止する。`workflow.wf_new.skip_plan_selection: true` の analytics mode / benchmark fallback mode では企画選択だけを自動化する。
-`/wf-auto` から新規開始または対象 collection 固定で委譲された場合も本スキルの既存 gate と完了条件を維持し、統合 runner 側で工程を再実装しない。新規初期化後は作成した collection 名を返し、同じ run 内の再評価へ接続する。
+`/wf-new --auto` から同一 SKILL.md の通常入口へ入った場合も既存 gate と完了条件を維持し、auto mode 側で工程を再実装しない。新規初期化後は作成した collection 名を返し、同じ run 内の再評価へ接続する。
 `image_generation.auto_selection.enabled: true` かつ `mode: full` のチャンネルでは、サムネイル工程のテーマ確認・生成可否・textless 背景承認・候補承認を省略する。`planning-preview.png` があればそれを無人で最終サムネイルへ確定し、無ければ企画で確定した theme を `/thumbnail` へ渡して無人で確定する。
 Suno チャンネルではプロンプト生成後、`suno-helper` 用の `uv run yt-collection-serve` 起動と疎通確認まで行い、続きは `/suno-helper` が browser use で Suno タブ上の拡張 overlay を操作できる状態にする。
 minimal mode では企画候補生成前にテーマ / ジャンル / 雰囲気の直接入力確認が追加される既存挙動を、`ttp_mode: false` の場合だけ適用する。`true` の場合は `/benchmark` を案内して停止する。
@@ -142,17 +154,17 @@ uv run yt-init-collection "Pilot Direction Check" "pilot-direction-check" --trac
 
 ### 直接実行の canonical timing 契約
 
-`/wf-new` を直接呼んだ場合も、state 判定・lease・history/timing の正は `/wf-auto` と同じ state script とする。独自の action ID、collection ID、timing 保存処理を作らない。channel config gate を通過したら、子 skill や collection 初期化を始める前に、チャンネルルートで次の順序を守る。
+`/wf-new` をフラグなしで直接呼んだ場合も、state 判定・lease・history/timing の正は `references/auto.md` と同じ state script とする。独自の action ID、collection ID、timing 保存処理を作らない。channel config gate を通過したら、子 skill や collection 初期化を始める前に、チャンネルルートで次の順序を守る。
 
 ```bash
-STATE_SCRIPT=.claude/skills/wf-auto/references/wf-auto-state.py
+STATE_SCRIPT=.claude/skills/wf-new/references/wf-auto-state.py
 uv run python "$STATE_SCRIPT" acquire --channel-dir .
 uv run python "$STATE_SCRIPT" plan --channel-dir .
 uv run python "$STATE_SCRIPT" heartbeat --channel-dir . --token <token>
 uv run python -c 'from datetime import UTC, datetime; print(datetime.now(UTC).isoformat())'
 ```
 
-`acquire` の `busy` / exit 20 では作業を開始しない。`plan` 後は `heartbeat` の JSON 応答が `status: refreshed` の場合だけ lease owner の確認成功として AI 開始時刻を取得し、stdout を同じ attempt 専用の `<current-attempt-ai-started-at>` として保持する。`status: not-owner` も exit 0 で返るため、exit 0 だけでは owner と判定しない。`status: not-owner` では開始時刻を取得せず停止する。resolver が返した `action: wf-new` と resolver が返した collection（未作成なら `null`）だけを使い、別 action や別 collection に置き換えない。`wf-new` 以外が返った場合は本 skill で工程を推測せず、返された action を報告して `/wf-auto` からの再開を案内する。
+`acquire` の `busy` / exit 20 では作業を開始しない。`plan` 後は `heartbeat` の JSON 応答が `status: refreshed` の場合だけ lease owner の確認成功として AI 開始時刻を取得し、stdout を同じ attempt 専用の `<current-attempt-ai-started-at>` として保持する。`status: not-owner` も exit 0 で返るため、exit 0 だけでは owner と判定しない。`status: not-owner` では開始時刻を取得せず停止する。resolver が返した `action: wf-new` と resolver が返した collection（未作成なら `null`）だけを使い、別 action や別 collection に置き換えない。`wf-new` 以外が返った場合は本 skill で工程を推測せず、返された action を報告して `/wf-new --auto` からの再開を案内する。
 
 collection がまだ無い段階で blocked / failed になった場合は、canonical action `wf-new` の bootstrap attempt を次の形で閉じる。同じ run ですでに閉じた human interval があれば、省略・統合せず発生順にすべて渡す。
 
@@ -160,7 +172,7 @@ collection がまだ無い段階で blocked / failed になった場合は、can
 uv run python "$STATE_SCRIPT" record-bootstrap --channel-dir . --token <token> --status blocked|failed --reason <reason> --ai-started-at <current-attempt-ai-started-at> [--human-interval <human-start> <human-end>]...
 ```
 
-resolver が collection を返した場合、または `yt-init-collection` の出力 path と `workflow-state.json` の実在を検証して作成済み collection の名前を固定した後は、success / blocked / failed のすべてを同じ fixed collection、canonical action `wf-new`、同じ attempt の AI 開始時刻で閉じる。成功は既存の成果物・state 検証をすべて通過した場合だけとし、手動介入は blocked、検証失敗を含むその他は failed とする。対話 gate の時間分類と `--human-interval` は `/wf-auto` の canonical timing 契約をそのまま使う。
+resolver が collection を返した場合、または `yt-init-collection` の出力 path と `workflow-state.json` の実在を検証して作成済み collection の名前を固定した後は、success / blocked / failed のすべてを同じ fixed collection、canonical action `wf-new`、同じ attempt の AI 開始時刻で閉じる。成功は既存の成果物・state 検証をすべて通過した場合だけとし、手動介入は blocked、検証失敗を含むその他は failed とする。対話 gate の時間分類と `--human-interval` は `references/auto.md` の canonical timing 契約をそのまま使う。
 
 ```bash
 uv run python "$STATE_SCRIPT" record --channel-dir . --token <token> --collection <fixed-name> --action wf-new --status success|blocked|failed --reason <reason> --ai-started-at <current-attempt-ai-started-at> [--human-interval <human-start> <human-end>]...
@@ -168,7 +180,7 @@ uv run python "$STATE_SCRIPT" record --channel-dir . --token <token> --collectio
 
 success を記録した後は同じ fixed collection を `plan --collection <fixed-name>` で再評価する。全終了経路の `finally` 相当で `release --channel-dir . --token <token>` を実行し、他 token の lease は変更しない。
 
-`/wf-auto` が token、resolver の action / collection、attempt の開始時刻を固定して本 skill へ委譲した場合は、その実行文脈を再利用する。nested `acquire` や独自 attempt の作成・記録・release は行わず、成果物と state の検証結果を呼び出し元へ返し、canonical history の記録と lease 解放は `/wf-auto` に一度だけ行わせる。
+`/wf-new --auto` が token、resolver の action / collection、attempt の開始時刻を固定して同一 SKILL.md の通常入口へ入った場合は、その実行文脈を再利用する。nested `acquire` や独自 attempt の作成・記録・release は行わず、成果物と state の検証結果を auto mode へ返し、canonical history の記録と lease 解放は `/wf-new --auto` に一度だけ行わせる。
 
 ### 呼び出しルール
 

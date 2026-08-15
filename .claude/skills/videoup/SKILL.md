@@ -6,7 +6,7 @@ description: "Use when 音声ファイルが揃い動画生成が必要なとき
 
 ## 前後工程
 
-- `前工程`: `/wf-auto`, `/masterup`, `/lyria`, `/loop-video`
+- `前工程`: `/wf-new`, `/masterup`, `/lyria`, `/loop-video`
 - `後工程`: `/video-upload`, `/video-description`
 - `委譲先`: `なし`
 

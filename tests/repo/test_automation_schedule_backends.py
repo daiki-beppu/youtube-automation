@@ -43,7 +43,7 @@ def test_native_backend_selection(product, dependency_mode, os_fallback, expecte
 
 def test_plan_is_dry_run_and_preserves_external_publish_gate(tmp_path, monkeypatch):
     scheduled = SimpleNamespace(
-        target_workflow="wf-auto",
+        target_workflow="wf-new --auto",
         allow_external_publish=False,
         timezone="Asia/Tokyo",
         run_time="09:05",
@@ -75,15 +75,16 @@ def test_plan_is_dry_run_and_preserves_external_publish_gate(tmp_path, monkeypat
     assert plan["retry_delay_seconds"] == 300
     assert "最大 4 回再試行" in plan["prompt"]
     assert plan["prevent_concurrent_runs"] is True
-    assert plan["target_workflow"] == "wf-auto"
-    assert plan["prompt"].startswith("/wf-auto")
+    assert plan["target_workflow"] == "wf-new --auto"
+    assert plan["prompt"].startswith("/wf-new --auto")
     assert plan["dependency_mode"] == "local"
     assert "local dependencies require desktop local project" in plan["management"]
 
 
-def test_plan_rejects_removed_automation_run_override(tmp_path, monkeypatch):
+@pytest.mark.parametrize("removed_target", ["automation-run", "wf-auto"])
+def test_plan_rejects_removed_target_override(tmp_path, monkeypatch, removed_target):
     scheduled = SimpleNamespace(
-        target_workflow="wf-auto",
+        target_workflow="wf-new --auto",
         allow_external_publish=False,
         timezone="Asia/Tokyo",
         run_time="09:05",
@@ -100,11 +101,11 @@ def test_plan_rejects_removed_automation_run_override(tmp_path, monkeypatch):
     )
     monkeypatch.setattr(backend, "channel_dir", lambda: tmp_path)
 
-    with pytest.raises(backend.BackendError, match=r"automation-run.*wf-auto"):
+    with pytest.raises(backend.BackendError, match=rf"{removed_target}.*wf-new --auto"):
         backend.build_plan(
             product="codex",
             dependency_mode="local",
-            overrides={"target_workflow": "automation-run"},
+            overrides={"target_workflow": removed_target},
         )
 
 

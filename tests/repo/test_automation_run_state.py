@@ -1,4 +1,4 @@
-"""Canonical wf-auto state resolver contracts after the automation-run migration."""
+"""Canonical wf-new --auto state resolver contracts after the automation-run migration."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from types import ModuleType
 from tests.helpers.paths import REPO_ROOT
 
 ROOT = REPO_ROOT
-SCRIPT = ROOT / ".claude" / "skills" / "wf-auto" / "references" / "wf-auto-state.py"
+SCRIPT = ROOT / ".claude" / "skills" / "wf-new" / "references" / "wf-auto-state.py"
 
 
 def _load_state_module() -> ModuleType:

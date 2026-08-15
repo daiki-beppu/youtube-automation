@@ -1,4 +1,4 @@
-"""`/wf-auto` の同一 run 人間介入 gate timing 契約を検証する。"""
+"""`/wf-new --auto` の同一 run 人間介入 gate timing 契約を検証する。"""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import re
 
 from tests.helpers.paths import REPO_ROOT
 
-SKILL_MD = REPO_ROOT / ".claude" / "skills" / "wf-auto" / "SKILL.md"
+SKILL_MD = REPO_ROOT / ".claude" / "skills" / "wf-new" / "references" / "auto.md"
 
 
 def _section(text: str, heading: str) -> str:

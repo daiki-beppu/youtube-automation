@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Resolve canonical `/wf-auto` actions and maintain its lease/history state."""
+"""Resolve canonical `/wf-new --auto` actions and maintain its lease/history state."""
 
 from __future__ import annotations
 
@@ -827,7 +827,7 @@ def acquire_lease(root: Path, *, now: float, ttl_seconds: int) -> str:
                 shutil.rmtree(lock_dir)
             else:
                 if not isinstance(expires_at, (int, float)) or isinstance(expires_at, bool) or expires_at > now:
-                    raise LeaseBusyError("別の wf-auto が実行中です")
+                    raise LeaseBusyError("別の wf-new --auto が実行中です")
                 shutil.rmtree(lock_dir)
         temporary = Path(tempfile.mkdtemp(prefix=".lease.", dir=state_dir))
         try:

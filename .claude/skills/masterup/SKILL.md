@@ -6,7 +6,7 @@ description: "Use when Suno UI で生成した曲のプレイリストを一括 
 
 ## 前後工程
 
-- `前工程`: `/wf-auto`, `/suno`, `/suno-helper`
+- `前工程`: `/wf-new`, `/suno`, `/suno-helper`
 - `後工程`: `/videoup`
 - `委譲先`: `なし`
 

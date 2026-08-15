@@ -796,10 +796,10 @@ def _build_scheduled_automation(wf: dict) -> ScheduledAutomation:
     prefix = "workflow.scheduled_automation"
     defaults = ScheduledAutomation()
     target_workflow = _scheduled_str(raw, "target_workflow", prefix, defaults.target_workflow)
-    if target_workflow == "automation-run":
+    if target_workflow in {"automation-run", "wf-auto"}:
         raise ConfigError(
-            f"{prefix}.target_workflow: automation-run は廃止されました。"
-            "config/channel/workflow.json の値を wf-auto へ更新してください"
+            f"{prefix}.target_workflow: {target_workflow} は廃止されました。"
+            "config/channel/workflow.json の値を wf-new --auto へ更新してください"
         )
     return ScheduledAutomation(
         enabled=_scheduled_bool(raw, "enabled", prefix, defaults.enabled),

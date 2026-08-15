@@ -7,7 +7,7 @@ import re
 from tests.helpers.paths import REPO_ROOT
 
 WF_NEXT_SKILL = REPO_ROOT / ".claude" / "skills" / "wf-next" / "SKILL.md"
-WF_AUTO_SKILL = REPO_ROOT / ".claude" / "skills" / "wf-auto" / "SKILL.md"
+WF_AUTO_SKILL = REPO_ROOT / ".claude" / "skills" / "wf-new" / "references" / "auto.md"
 
 
 def _section(text: str, heading: str) -> str:
@@ -99,6 +99,6 @@ def test_delegation_reuses_one_lease_attempt_and_history_record() -> None:
 
     assert "実行文脈を再利用" in direct
     assert "nested `acquire`" in direct
-    assert "canonical history の記録と lease 解放は `/wf-auto` に一度だけ" in direct
+    assert "canonical history の記録と lease 解放は `/wf-new --auto` に一度だけ" in direct
     assert "release --channel-dir . --token <token>" in direct
     assert "他 token" in direct

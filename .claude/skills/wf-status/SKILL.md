@@ -7,7 +7,7 @@ description: "Use when コレクション制作の進捗を読むだけで確認
 ## 前後工程
 
 - `前工程`: `/wf-new`
-- `後工程`: `/wf-auto`, `/wf-next`
+- `後工程`: `/wf-new`, `/wf-next`
 - `委譲先`: `なし`
 
 ## 成果物
@@ -27,7 +27,7 @@ description: "Use when コレクション制作の進捗を読むだけで確認
 |---|---|
 | 「どこまで進んだ？」「読むだけ」 | ✅ 使う |
 | 「次のステップ実行して」 | ❌ `/wf-next` を使う（`/wf-status` は **実行系を一切呼ばない**） |
-| 「企画から公開後処理まで継続して」 | ❌ `/wf-auto` を使う（`/wf-status` は **実行系を一切呼ばない**） |
+| 「企画から公開後処理まで継続して」 | ❌ `/wf-new --auto` を使う（`/wf-status` は **実行系を一切呼ばない**） |
 | 「workflow-state.json を見せて」 | ✅ 使う（生 JSON ではなく phase / assets を整形表示する） |
 | 「YouTube 側の登録者数・再生数を見せて」 | ❌ `/channel-status` を使う |
 
@@ -122,5 +122,5 @@ phase 値と日本語ラベル:
 ## Cross References
 
 - 新規開始: `/wf-new`
-- 一気通貫の開始・再開: `/wf-auto`
+- 一気通貫の開始・再開: `/wf-new --auto`
 - 次ステップ実行: `/wf-next`

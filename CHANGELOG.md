@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(skills)`: `/wf-auto` を `/wf-new --auto` へ統合し、排他 mode 判定、既存 state/lease/timing 契約の移設、scheduled automation の新既定と旧値拒否を追加する（#3740）。
+
 - `refactor(skills)`: `/wf-new` の Phase 2 を `references/phase2.md` へ移し、実行契約を維持したまま SKILL.md 本体を 400 行以下にする（#3870）。
 
 - `feat(skills)`: 下流 skill-config を名前空間節へ集約する `yt-skills migrate-config` を追加し、dry-run、冪等適用、同一ディレクトリ一時ファイルからの atomic replace、失敗時復元、孤児・未移行警告を提供する。現行ツリーには統合先 skill が未導入のため、移行対応表は安全のため空で提供する（#3804）。

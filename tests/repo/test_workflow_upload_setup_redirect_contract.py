@@ -164,21 +164,9 @@ EXPECTED_ACTIVE_ROUTES = (
         )
     ),
     _route(
-        "wf-auto/SKILL.md",
-        "## 実行手順",
-        "1. `config/channel/` が無ければ `/setup --channel` を案内して停止する。",
-    ),
-    _route(
-        "wf-auto/SKILL.md",
-        "## 実行手順",
-        "   `load_config()` が失敗した場合は既存チャンネル取り込みモードの `/channel-new` を案内して停止する。"
-        "state resolver または上記子 skill が無ければ `/automation-update`（本リポジトリ内では "
-        "`yt-skills sync`）を案内して停止する。すべて満たすまで lease と子 skill を開始しない。",
-    ),
-    _route(
         "wf-new/SKILL.md",
         "## 前後工程",
-        "- `前工程`: `/setup --channel`, `/setup`, `/collection-ideate`",
+        "- `前工程`: `/setup --channel`, `/setup`, `/collection-ideate`, `/automation-schedule`",
     ),
     _route(
         "wf-new/SKILL.md",
@@ -200,6 +188,18 @@ EXPECTED_ACTIVE_ROUTES = (
         "wf-new/SKILL.md",
         "## Hard Gates",
         "   - `load_config()` が失敗する場合は `/channel-new`（既存チャンネル取り込みモード）を案内して停止する。",
+    ),
+    _route(
+        "wf-new/references/auto.md",
+        "## 実行手順",
+        "1. `config/channel/` が無ければ `/setup --channel` を案内して停止する。",
+    ),
+    _route(
+        "wf-new/references/auto.md",
+        "## 実行手順",
+        "   `load_config()` が失敗した場合は既存チャンネル取り込みモードの `/channel-new` を案内して停止する。"
+        "state resolver または上記子 skill が無ければ `/automation-update`（本リポジトリ内では "
+        "`yt-skills sync`）を案内して停止する。すべて満たすまで lease と子 skill を開始しない。",
     ),
     *(
         _route(f"{skill}/SKILL.md", "## 前提", line)
@@ -229,6 +229,8 @@ EXPECTED_ACTIVE_ROUTES = (
 MUTABLE_FILES = frozenset(path for path, _, _ in EXPECTED_ACTIVE_ROUTES if path != "automation-update/SKILL.md") | {
     "wf-new/references/phase-2c-artifact-contract.md",
     "wf-new/references/phase2.md",
+    "wf-new/references/auto.md",
+    "wf-new/references/wf-auto-state.py",
 }
 EXPECTED_ISSUE_3986_CHANGED_PATHS = frozenset(
     {
@@ -251,7 +253,7 @@ EXPECTED_ISSUE_3986_CHANGED_PATHS = frozenset(
         "tests/repo/test_workflow_upload_setup_redirect_contract.py",
     }
 )
-IMMUTABLE_TARGET_FILES_SHA256 = "3586bfd3687e8f72ba28e1f5bcd795c79c0059901abeffe5c6bcdd6f2a37d6b5"
+IMMUTABLE_TARGET_FILES_SHA256 = "371f61933a99d5557e05dc9c50fd201d9df8f3422600a7014458db8112b85a12"
 AUTOMATION_SCHEDULE_REGENERATE_SHA256 = "3df1c507167b2fc71dcae7acaa0a6011fb3ee89fabbb95f6ffc2b5d2b803e617"
 AUTOMATION_UPDATE_PUSH_SHA256 = "5be1d31198da13ab6929edb13c9b713fbb9bc364d413b778d79f4e624e30d2cc"
 ALLOWED_FENCED_ROUTES = {
