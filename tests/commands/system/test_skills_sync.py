@@ -19,6 +19,7 @@ from youtube_automation.commands.system.skills_sync import (
     _ASSET_SPECS,
     _asset_root,
     _list_entries,
+    _migrate_config,
     build_parser,
     bundled_skill_names,
 )
@@ -260,6 +261,32 @@ def test_cmd_sync_skills_reports_orphan_skill_config(
     assert rc == 0
     out = capsys.readouterr().out
     assert "対応する skill が同梱されていません: analytics" in out
+    assert config.exists()
+
+
+def test_cmd_sync_skills_reports_migration_source_separately_from_orphans(
+    fake_repo: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    channel_dir = tmp_path / "out"
+    target = channel_dir / ".claude" / "skills"
+    config = channel_dir / "config" / "skills" / "suno.yaml"
+    config.parent.mkdir(parents=True)
+    config.write_text("model: v5\n", encoding="utf-8")
+    monkeypatch.setattr(
+        _migrate_config,
+        "SKILL_CONFIG_MIGRATIONS",
+        {"suno": _migrate_config.SkillConfigMigration("music", "prompt")},
+    )
+
+    args = build_parser().parse_args(["sync", "--asset", "skills", "--target", str(target), "--force"])
+    assert args.func(args) == 0
+
+    output = capsys.readouterr().out
+    assert "未移行の skill-config です: suno" in output
+    assert "対応する skill が同梱されていません: suno" not in output
     assert config.exists()
 
 

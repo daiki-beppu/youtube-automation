@@ -13,7 +13,7 @@ import pytest
 
 from tests.helpers.paths import REPO_ROOT
 from youtube_automation.commands.system import skills_sync
-from youtube_automation.commands.system.skills_sync import build_parser, main
+from youtube_automation.commands.system.skills_sync import _migrate_config, build_parser, main
 from youtube_automation.configuration import skills as skill_config
 from youtube_automation.domains.skills.inventory import lint_frontmatter_text, lint_skill
 
@@ -329,6 +329,39 @@ def test_cli_lint_rejects_skill_config_registered_in_both_key_sets(
 
     assert main(["lint"]) == 1
     assert "good-skill が SKILL_CONFIG_KEYS と SKILL_ONLY_CONFIG_KEYS の両方" in capsys.readouterr().out
+
+
+def test_cli_lint_resolves_namespaced_key_to_owning_skill_default(
+    fake_repo: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    skills_dir = fake_repo / ".claude" / "skills"
+    _write_skill(skills_dir, "music", _VALID_SKILL_MD.replace("good-skill", "music"))
+    (skills_dir / "music" / "config.default.yaml").write_text("prompt: {}\n", encoding="utf-8")
+    monkeypatch.setattr(skill_config, "SKILL_CONFIG_KEYS", frozenset({"music.prompt"}))
+
+    assert main(["lint"]) == 0
+    assert "lint 合格" in capsys.readouterr().out
+
+
+def test_cli_lint_guides_unmigrated_downstream_skill_config(
+    fake_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    config = fake_repo / "config" / "skills" / "suno.yaml"
+    config.parent.mkdir(parents=True)
+    config.write_text("model: v5\n", encoding="utf-8")
+    monkeypatch.chdir(fake_repo)
+    monkeypatch.setattr(
+        _migrate_config,
+        "SKILL_CONFIG_MIGRATIONS",
+        {"suno": _migrate_config.SkillConfigMigration("music", "prompt")},
+    )
+
+    assert main(["lint"]) == 1
+    output = capsys.readouterr().out
+    assert "config/skills/suno.yaml は未移行" in output
+    assert "yt-skills migrate-config" in output
 
 
 def test_cli_lint_missing_mode_reference_reports_skill_flag_and_path(

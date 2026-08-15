@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from pathlib import Path
 
 from youtube_automation.commands.system.skills_sync import _ASSET_SPECS, _guard_target_with_all, cmd_list
 from youtube_automation.commands.system.skills_sync._artifacts import cmd_artifacts
@@ -11,6 +12,7 @@ from youtube_automation.commands.system.skills_sync._catalog import cmd_catalog
 from youtube_automation.commands.system.skills_sync._delegation import cmd_delegation
 from youtube_automation.commands.system.skills_sync._diff import cmd_diff
 from youtube_automation.commands.system.skills_sync._lint import cmd_lint
+from youtube_automation.commands.system.skills_sync._migrate_config import cmd_migrate_config
 from youtube_automation.commands.system.skills_sync._sync import cmd_sync
 
 
@@ -145,5 +147,22 @@ def build_parser() -> argparse.ArgumentParser:
         help="writer が2つ以上ある成果物だけを表示する",
     )
     p_artifacts.set_defaults(func=cmd_artifacts, asset="skills")
+
+    p_migrate_config = sub.add_parser(
+        "migrate-config",
+        help="下流の skill-config を統合後の名前空間節へ移行",
+    )
+    p_migrate_config.add_argument(
+        "--channel-dir",
+        type=Path,
+        required=True,
+        help="移行対象のチャンネルリポジトリ root",
+    )
+    p_migrate_config.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="移行差分だけを表示し、ファイルを変更しない",
+    )
+    p_migrate_config.set_defaults(func=cmd_migrate_config, asset="skills")
 
     return parser

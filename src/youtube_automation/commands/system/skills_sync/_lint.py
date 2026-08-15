@@ -1,6 +1,6 @@
 """yt-skills lint — SKILL.md の軽量契約検証。
 
-Issues #2096, #3749, #3750, #3751, #3793, #3802, #3803。
+Issues #2096, #3749, #3750, #3751, #3793, #3802, #3803, #3804。
 
 skill 編集後の検証を pytest 全体実行 (約 4 分) に律速されず秒単位で回すための
 サブコマンド。frontmatter / flag の検証ロジックは domains.skills.inventory を
@@ -20,6 +20,7 @@ skill 編集後の検証を pytest 全体実行 (約 4 分) に律速されず�
     10. SKILL.md 本体が 400 行以下である
     11. 成果物ブロックと `書き込む` 宣言行が存在する
     12. skill-config の登録キーと config.default.yaml が双方向に一致する
+    13. 下流に移行対応表の旧 skill-config が残っていない
 """
 
 from __future__ import annotations
@@ -28,6 +29,7 @@ import argparse
 from pathlib import Path
 from typing import Final
 
+from youtube_automation.commands.system.skills_sync import _migrate_config
 from youtube_automation.commands.system.skills_sync._delegation import DelegationGraph, format_path
 from youtube_automation.configuration import skills as skill_config
 from youtube_automation.domains.skills.inventory import SkillInventory, SkillLintViolation, lint_skill_contract
@@ -86,19 +88,35 @@ def _lint_skill_config_contract(inventory: SkillInventory) -> list[str]:
     python_keys = skill_config.SKILL_CONFIG_KEYS
     skill_only_keys = skill_config.SKILL_ONLY_CONFIG_KEYS
     registered = python_keys | skill_only_keys
+    registered_owners = {key.partition(".")[0] for key in registered}
     defaults = {
         skill_dir.name for skill_dir in inventory.skill_directories() if (skill_dir / "config.default.yaml").is_file()
     }
 
-    violations = [f"{key}/config.default.yaml がありません" for key in sorted(registered - defaults)]
+    violations = [
+        f"{key.partition('.')[0]}/config.default.yaml がありません（登録キー: {key}）"
+        for key in sorted(registered)
+        if key.partition(".")[0] not in defaults
+    ]
     violations.extend(
-        f"{key}/config.default.yaml がどちらのキー集合にも登録されていません" for key in sorted(defaults - registered)
+        f"{key}/config.default.yaml がどちらのキー集合にも登録されていません"
+        for key in sorted(defaults - registered_owners)
     )
     violations.extend(
         f"{key} が SKILL_CONFIG_KEYS と SKILL_ONLY_CONFIG_KEYS の両方に登録されています"
         for key in sorted(python_keys & skill_only_keys)
     )
     return violations
+
+
+def _lint_unmigrated_skill_configs(channel_dir: Path) -> list[str]:
+    config_dir = channel_dir / "config" / "skills"
+    return [
+        f"config/skills/{source}.yaml は未移行です: "
+        f"yt-skills migrate-config --channel-dir {channel_dir} --dry-run を実行してください"
+        for source in sorted(_migrate_config.SKILL_CONFIG_MIGRATIONS)
+        if (config_dir / f"{source}.yaml").is_file()
+    ]
 
 
 def cmd_lint(args: argparse.Namespace) -> int:
@@ -119,7 +137,9 @@ def cmd_lint(args: argparse.Namespace) -> int:
     else:
         targets = available
 
-    skill_config_violations = [] if requested else _lint_skill_config_contract(inventory)
+    skill_config_violations = (
+        [] if requested else [*_lint_skill_config_contract(inventory), *_lint_unmigrated_skill_configs(Path.cwd())]
+    )
     for violation in skill_config_violations:
         print(f"skill-config: {violation}")
 
