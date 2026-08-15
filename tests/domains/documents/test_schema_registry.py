@@ -1,0 +1,80 @@
+from __future__ import annotations
+
+import copy
+import json
+from pathlib import Path
+
+import pytest
+
+from tests.helpers.paths import REPO_ROOT
+from youtube_automation.core.errors import DocumentValidationError
+from youtube_automation.domains.documents.schema_registry import (
+    RepositorySchema,
+    compile_repository_schemas,
+    load_repository_schema,
+    repository_schema_names,
+    validate_repository_document,
+)
+
+
+def _valid_insight() -> dict[str, object]:
+    return {
+        "schema_version": 1,
+        "id": "20260816-analysis-thumbnail",
+        "date": "2026-08-16",
+        "source": "analysis",
+        "lever": "thumbnail",
+        "finding": "CTR improved",
+        "recommended_action": "Keep the layout",
+        "evidence": "ctr=8.2",
+        "status": "open",
+    }
+
+
+def test_registry_covers_and_compiles_every_repository_schema() -> None:
+    files = {path.name for path in REPO_ROOT.rglob("*.schema.json") if ".venv" not in path.parts}
+
+    assert set(repository_schema_names()) == files
+    compile_repository_schemas()
+    assert all(load_repository_schema(schema)["$schema"].endswith("draft-07/schema#") for schema in RepositorySchema)
+
+
+def test_validation_does_not_apply_schema_defaults_or_mutate_input() -> None:
+    payload = {
+        "schema_version": 1,
+        "entries": [
+            {
+                "week_start": "2026-08-16",
+                "axes": [{"key": "rain", "label": "Rain", "votes": 3}],
+                "top_axis": "rain",
+            }
+        ],
+    }
+    original = copy.deepcopy(payload)
+
+    validate_repository_document(RepositorySchema.WEEKLY_VOTE_LOG, payload)
+
+    assert payload == original
+    assert "notes" not in payload["entries"][0]
+
+
+def test_invalid_document_raises_sanitized_domain_error_with_json_pointer() -> None:
+    payload = _valid_insight()
+    payload["finding"] = ""
+    payload["evidence"] = "sk-live-secret-must-not-leak"
+
+    with pytest.raises(DocumentValidationError) as captured:
+        validate_repository_document(RepositorySchema.INSIGHTS_ENTRY, payload)
+
+    message = str(captured.value)
+    assert "schema keyword=minLength" in message
+    assert "pointer=/finding" in message
+    assert "sk-live-secret-must-not-leak" not in message
+
+
+def test_registry_rejects_unknown_schema_name_without_reading_external_file(tmp_path: Path) -> None:
+    untrusted = tmp_path / "external.schema.json"
+    untrusted.write_text(json.dumps({"type": "object"}), encoding="utf-8")
+
+    with pytest.raises((TypeError, ValueError, KeyError)):
+        validate_repository_document(str(untrusted), {})  # type: ignore[arg-type]

@@ -512,7 +512,7 @@ def test_weekly_vote_domain_roundtrips_schema_and_saved_entry(tmp_path: Path) ->
     """The reader and its packaged schema form one persistence boundary."""
     module = importlib.import_module("youtube_automation.domains.collections.weekly_vote_log")
     schema = module.load_weekly_vote_log_schema()
-    assert schema["$schema"] == "https://json-schema.org/draft/2020-12/schema"
+    assert schema["$schema"] == "http://json-schema.org/draft-07/schema#"
 
     log = module.append_weekly_vote_entry(
         channel_dir=tmp_path,

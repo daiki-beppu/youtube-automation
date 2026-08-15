@@ -219,6 +219,7 @@ assets/stock/           # ボツ画像ストック (#364)。<theme-slug>/ 配下
 | `domains.media` | 音声、字幕、画像、動画の provider-neutral model / policy |
 | `domains.distrokid` | DistroKid naming、metadata、specification、preparation、release policy |
 | `domains.collections.weekly_vote_log` | 週次投票ログ reader、initializer、schema、保存・検証 |
+| `domains.documents.schema_registry` | リポジトリ所有 JSON Schema の固定 inventory、Draft 7 compile cache、値非表示の検証エラー変換。外部 schema path は受け取らない |
 | `infrastructure.media.image_provider` | 画像生成プロバイダー抽象化（Gemini / OpenAI 切り替え） |
 | `infrastructure.media.stock` | ボツ画像ストック化（`assets/stock/<theme>/` への退避・列挙・整理、隣接 `.meta.json` 管理） |
 | `infrastructure.auth` | OAuth 2.0 token の読み込み・refresh・atomic 永続化、scope と YouTube service 生成 |

@@ -42,6 +42,7 @@ from pathlib import Path
 from typing import Iterable
 
 from youtube_automation.core.errors import ConfigError, ValidationError
+from youtube_automation.domains.documents.schema_registry import RepositorySchema, validate_repository_document
 
 logger = logging.getLogger(__name__)
 
@@ -188,6 +189,12 @@ def _validate_entry(payload: object, *, context: str) -> WeeklyVoteEntry:
 
 def validate_weekly_vote_log(payload: object) -> WeeklyVoteLog:
     """``payload`` (dict) を ``WeeklyVoteLog`` へ変換しつつバリデーションする."""
+    schema_error: ValidationError | None = None
+    try:
+        validate_repository_document(RepositorySchema.WEEKLY_VOTE_LOG, payload)
+    except ValidationError as error:
+        # 移行期間は既存 validator の詳細な domain 診断を優先する。
+        schema_error = error
     if not isinstance(payload, dict):
         raise ValidationError(f"weekly-vote-log: トップは dict を期待 (got {type(payload).__name__})")
 
@@ -212,6 +219,9 @@ def validate_weekly_vote_log(payload: object) -> WeeklyVoteLog:
     week_starts = [entry.week_start for entry in entries]
     if len(set(week_starts)) != len(week_starts):
         raise ValidationError(f"weekly-vote-log.entries: 重複した week_start が存在 ({week_starts})")
+
+    if schema_error is not None:
+        raise schema_error
 
     return WeeklyVoteLog(schema_version=schema_version, entries=entries)
 
@@ -268,10 +278,12 @@ def save_weekly_vote_log(
     path: Path | str | None = None,
 ) -> Path:
     """``WeeklyVoteLog`` を JSON として書き出す (親ディレクトリは自動作成)."""
+    payload = log.to_dict()
+    validate_repository_document(RepositorySchema.WEEKLY_VOTE_LOG, payload)
     target = _resolve_path(channel_dir, path)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(
-        json.dumps(log.to_dict(), ensure_ascii=False, indent=2) + "\n",
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
     return target

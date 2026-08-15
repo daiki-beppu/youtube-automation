@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
+import sys
 
 import pytest
 
@@ -9,6 +11,7 @@ from tests.helpers.paths import REPO_ROOT
 
 _SKILL_PATH = REPO_ROOT / ".claude/skills/skill-feedback/SKILL.md"
 _SCHEMA_PATH = REPO_ROOT / ".claude/skills/skill-feedback/references/feedback-entry.schema.json"
+_VALIDATOR_PATH = REPO_ROOT / ".claude/skills/skill-feedback/references/validate_feedback.py"
 
 
 def _schema() -> dict[str, object]:
@@ -215,3 +218,34 @@ def test_schema_invalid_warning_excludes_secret_like_instance_data() -> None:
     assert expected_warning in skill
     assert "error class、schema keyword、JSON pointer、line、column" in skill
     assert "invalid raw bytes、instance value、validator の raw message" in skill
+
+
+def test_feedback_validator_uses_sanitized_common_schema_error(tmp_path) -> None:
+    secret = "sk-live-contract-secret-value"
+    target = tmp_path / "feedback-log.jsonl"
+    target.write_text(
+        json.dumps(
+            {
+                "date": "2026-08-16T00:00:00Z",
+                "skill": "thumbnail",
+                "category": "bug",
+                "summary": "",
+                "context": secret,
+                "status": "recorded",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [sys.executable, str(_VALIDATOR_PATH), str(target)],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 1
+    assert "line 1:" in result.stderr
+    assert "schema keyword=minLength pointer=/summary" in result.stderr
+    assert secret not in result.stderr

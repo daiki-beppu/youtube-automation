@@ -395,6 +395,15 @@ wheels = [
 ]
 
 [[package]]
+name = "fastjsonschema"
+version = "2.22.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/33/a4/9473c7c3b87009d9c1d74034e4a0f6a35ff0d42dd0f9866d0c3ec4e9217b/fastjsonschema-2.22.2.tar.gz", hash = "sha256:72064e12356a7d6ef02165be2946b9abadbdf238536e07eb587e3dbaa33099cf", size = 385171, upload-time = "2026-08-15T19:47:08.853Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/49/82/2755c7c982086f00d4dab85bc120ec35045a9fc2191893a6ce79afe94443/fastjsonschema-2.22.2-py3-none-any.whl", hash = "sha256:0fb3915616adac85ccfdd737d26be1089845d2019819505b42d39888458f74d4", size = 27413, upload-time = "2026-08-15T19:47:04.406Z" },
+]
+
+[[package]]
 name = "fonttools"
 version = "4.63.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1773,6 +1782,7 @@ name = "youtube-channels-automation"
 version = "5.6.0"
 source = { editable = "." }
 dependencies = [
+    { name = "fastjsonschema" },
     { name = "google-api-python-client" },
     { name = "google-auth-httplib2" },
     { name = "google-auth-oauthlib" },
@@ -1798,6 +1808,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "fastjsonschema", specifier = ">=2.21,<3" },
     { name = "google-api-python-client", specifier = ">=2,<3" },
     { name = "google-auth-httplib2", specifier = ">=0.3,<1" },
     { name = "google-auth-oauthlib", specifier = ">=1,<2" },

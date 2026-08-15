@@ -156,6 +156,7 @@ pretty print した複数行 JSON は使わない。
 
 ### Step 4: 追記後チェック
 
+- `uv run python3 .claude/skills/skill-feedback/references/validate_feedback.py data/feedback/feedback-log.jsonl` が exit 0 である
 - 追加されたのは末尾 1 行だけである
 - 追加行は `references/feedback-entry.schema.json` のフィールド要件に合っている
 - `status` は `"recorded"` で、`issue_url` は含まない
@@ -172,6 +173,7 @@ pretty print した複数行 JSON は使わない。
 feedback を記録するよう案内して停止する。ファイル全体を bytes の snapshot として読み、
 各 physical line の元の bytes と line terminator を行番号に対応づけて保持する。全行を先に走査し、
 JSON parse と `references/feedback-entry.schema.json` の検証結果から各行を上の contract に分類する。
+検証には `references/validate_feedback.py`（共通 schema registry 接続済み）を使う。
 schema-invalid 行ごとに `line <行番号>: <簡潔な理由>` を警告し、候補から除外して処理を続ける。
 
 走査後、元 snapshot と同一内容を一時ファイルへ書き、同じディレクトリで atomic replace できる

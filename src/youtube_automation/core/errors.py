@@ -80,6 +80,10 @@ class ValidationError(AutomationError):
     """
 
 
+class DocumentValidationError(ValidationError):
+    """リポジトリ所有 JSON Schema に対する文書検証エラー。"""
+
+
 class UploadError(AutomationError):
     """動画・サムネイルアップロードの失敗
 

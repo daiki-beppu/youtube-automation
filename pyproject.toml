@@ -27,6 +27,7 @@ dependencies = [
     "setuptools>=83,<84",
     "pyyaml>=6,<7",
     "requests>=2,<3",
+    "fastjsonschema>=2.21,<3",
 ]
 
 [project.urls]
