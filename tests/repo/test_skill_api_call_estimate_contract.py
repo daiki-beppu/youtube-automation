@@ -171,7 +171,6 @@ TARGET_SKILLS: frozenset[str] = frozenset(
         "playlist",
         "setup",
         "short",
-        "short-thumbnail",
         "streaming",
         "thumbnail",
         "thumbnail-compare",

@@ -33,7 +33,6 @@ PDCA 対応: 準備 = 準備する / Plan = 調べる → 決める / Do = 進�
 - `/lyria` — Use when Vertex AI Lyria 3 でマスター音源を自動生成するとき。
 - `/masterup` — Use when Suno UI で生成した曲のプレイリストを一括 DL + マスター化するとき。
 - `/short` — Use when collection 型（BGM テイスター）または release 型（楽曲リリース）のチャンネルでショートを生成するとき。
-- `/short-thumbnail` — Use when ショート用 9:16 サムネ作成、または short.png のループ動画化をするとき。
 - `/suno` — Use when Suno UI 投入用の音楽プロンプトを生成するとき。
 - `/suno-helper` — Use when Suno UI に投入する曲をブラウザで連続生成 + playlist 追加 + 一括ダウンロードしたいとき。
 - `/suno-lyric` — Use when Suno ボーカル曲の歌詞を生成するとき。

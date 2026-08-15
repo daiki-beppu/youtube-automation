@@ -1,10 +1,10 @@
-# /short-thumbnail プロンプトテンプレート
+# `/short --thumbnail` プロンプトテンプレート
 
-`/short-thumbnail` Step 2 で参照する 9:16 縦型サムネ生成プロンプトのテンプレートと例。
+`/short --thumbnail` の画像生成で使う 9:16 縦型プロンプトのテンプレートと例。
 
 ## 構造（4 ブロック）
 
-```
+```text
 [縦型構図の指定]
 [シーン・キャラクター描写（既存サムネを参考に、9:16 構図でゼロから再描写）]
 [テキスト指示（3 層）]
@@ -13,7 +13,7 @@
 
 ## 1. 縦型構図の指定
 
-```
+```text
 Tall vertical portrait composition.
 ```
 
@@ -28,29 +28,27 @@ Tall vertical portrait composition.
 ## 3. テキスト指示（3 層）
 
 | 層 | 内容 | 位置 | フォントスタイル |
-|---|------|------|----------------|
+|---|---|---|---|
 | タイトル | コレクション名 | 上部エリア | 大きめ、暖色アイボリー中世風 |
 | チャンネル名 | `config/channel/meta.json` の `channel.name` | タイトル下 | やや小さめ、同スタイル |
 | CTA | `Full {duration}-hour collection on channel` | 下部エリア | 小さめ、クリーン白 |
 
 `{duration}` は `config/channel/audio.json` の `audio.target_duration_min` を 60 で割る。
 
-テキスト装飾は控えめに（スパークル・葉・Celtic knot 等、`/thumbnail` の装飾ルールに準拠）。
+テキスト装飾は控えめにし、`/thumbnail` の装飾ルールに準拠する。
 
 ## 4. スタイル句（末尾固定文）
 
-以下をそのまま末尾に貼る:
-
-```
+```text
 Hyper-detailed digital matte painting blending photorealism with subtle painterly
 illustration touches, slightly stylized proportions and soft edges that hint at
 hand-painted artwork, natural cinematic lighting with warm lens diffusion, rich
 saturated colors pushed slightly beyond reality for emotional impact.
 ```
 
-## 完成プロンプト例（Rapunzel テーマ、120 分コレクション）
+## 完成プロンプト例
 
-```
+```text
 Tall vertical portrait composition. Inside a cozy medieval stone tower room,
 a young woman with impossibly long golden hair sits on a wide stone windowsill
 with her back to the viewer, painting on a canvas propped against the window
@@ -69,21 +67,17 @@ painterly illustration touches, natural cinematic lighting with warm lens
 diffusion, rich saturated colors.
 ```
 
-## ループ動画（Veo 3.1）の動作プロンプト例
+## ループ動画の動作プロンプト
 
-`/short-thumbnail` Step 5 で `--prompt` に渡す動作プロンプト。
+汎用形:
 
-**汎用テンプレ**:
-```
+```text
 Gentle character animation: the [subject] slowly [action], [hair/clothes/leaves]
 sway in the breeze. Keep all text completely static and unchanged.
 ```
 
-**例**:
-- 室内 (Rapunzel): `Gentle character animation: the woman slowly turns her head from the canvas to look out the window, golden hair sways in the breeze. Keep all text static.`
+- 室内: `Gentle character animation: the woman slowly turns her head from the canvas to look out the window, golden hair sways in the breeze. Keep all text static.`
 - 屋外: `Subtle environmental animation: leaves drift slowly in the foreground, light shafts shift gradually. Keep all text completely unchanged.`
 - 水辺: `Calm water ripples gently, character's clothes flutter softly. Keep all text static and unchanged.`
 
-**避けるべき表現**:
-- `magical effects` / `particles` / `smoke` / `dramatic` — 原画にない要素が生成される
-- `falling leaves` / `butterflies` — 描画品質が低く不自然
+`magical effects`、`particles`、`smoke`、`dramatic`、`falling leaves`、`butterflies` は原画にない要素や低品質な描画を誘発するため避ける。

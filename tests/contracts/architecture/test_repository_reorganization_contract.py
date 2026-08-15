@@ -1574,6 +1574,10 @@ def test_reorganization_receipt_names_existing_non_contract_consumers() -> None:
         ".claude/skills/viewing-scene/SKILL.md": ".claude/skills/channel-strategy/references/scene.md",
         ".claude/skills/creative-constraints/SKILL.md": (".claude/skills/channel-strategy/references/constraints.md"),
         ".claude/skills/short-release/SKILL.md": ".claude/skills/short/SKILL.md",
+        ".claude/skills/short-thumbnail/SKILL.md": ".claude/skills/short/references/thumbnail.md",
+        ".claude/skills/short-thumbnail/references/generate_short_loop.py": (
+            ".claude/skills/short/references/generate_short_loop.py"
+        ),
         ".claude/skills/collection-ideate/references/generate_image.py": (
             ".claude/skills/wf-new/references/generate_image.py"
         ),

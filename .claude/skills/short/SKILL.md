@@ -1,18 +1,18 @@
 ---
 name: short
 purpose: 作る
-description: "Use when collection 型（BGM テイスター）または release 型（楽曲リリース）のチャンネルでショートを生成するとき。「ショート作って」「shorts」「BGM 切り抜き」「リリースショート」「サビ抽出」で発動。content_model.type から手順を自動判定する"
+description: "Use when collection 型（BGM テイスター）または release 型（楽曲リリース）のチャンネルでショートを生成するとき。「ショート作って」「shorts」「BGM 切り抜き」「リリースショート」「サビ抽出」「ショートサムネ」で発動。content_model.type から手順を自動判定し、--thumbnail で 9:16 素材を生成する"
 ---
 
 ## 前後工程
 
 - `前工程`: `/setup`
-- `後工程`: `/short-thumbnail`, `/video-upload`
+- `後工程`: `/video-upload`
 - `委譲先`: `なし`
 
 ## 成果物
 
-- `書き込む`: collection 型は `collections/<id>/01-master/shorts/short-*.mp4` と `workflow-state.json`、release 型は `releases/<id>/video/short-{jp,en}.mp4`
+- `書き込む`: collection 型は `collections/<id>/01-master/shorts/short-*.mp4` と `workflow-state.json`、release 型は `releases/<id>/video/short-{jp,en}.mp4`、`--thumbnail` は `10-assets/short.png` と `short-loop.mp4`
 - `読み込む`: `config/channel/youtube.json`, `config/channel/shorts.json` と対象 collection / release の映像・音声素材
 
 ## Overview
@@ -26,10 +26,25 @@ description: "Use when collection 型（BGM テイスター）または release 
 
 `collection` / `release` 以外は設定エラーとして停止する。これは config から自動判定できる分岐であり、手動 mode や選択フラグは設けない。
 
+## モード判定
+
+`$ARGUMENTS` から `--thumbnail` の個数を最初に数える。
+
+- 2 個以上なら重複指定として停止し、1 つだけ指定するよう促す
+- 1 個なら対応する reference を読み、その一段だけを実行する
+- 0 個なら `content_model.type` で collection / release の通常手順を自動分岐する
+
+| mode | 読む reference |
+|---|---|
+| `--thumbnail` | `references/thumbnail.md` |
+
+`--thumbnail` は型を選ぶフラグではない。release 型では対象外として停止し、collection 型の素材生成だけを明示実行する。
+
 ## 完了条件
 
 - collection 型: 生成物のプレビュー後に `uv run yt-upload-shorts` の実投稿が完了し、`workflow-state.json::post_upload.shorts` に記録されている
 - release 型: `shorts.release.languages` の対象言語ぶん `video/short-<lang>.mp4` が生成され、プレビュー確認済み。アップロードは現時点ではスコープ外
+- `--thumbnail`: `10-assets/short.png` が生成・承認され、ループ動画化する場合は `short-loop.mp4` も確認済み
 
 ## Subagent Contract
 
@@ -76,12 +91,16 @@ generation = load_skill_config("short")[content_type]
 | `uv run yt-upload-shorts <collection-path> --plan` | collection 型の投稿内容を API なしで確認 |
 | `uv run yt-upload-shorts <collection-path>` | collection 型の全ショートを順次投稿 |
 | `uv run yt-shorts-bulk-update-loc --dry-run` | 投稿済み collection Shorts の localization 更新を確認 |
+| `uv run yt-generate-image --aspect-ratio "9:16" --prompt "<text>" --output <collection>/10-assets/short.png -y` | `--thumbnail` の 9:16 画像生成 |
+| `uv run yt-generate-shorts-loop <collection-path> -y` | `short.png` の 9:16 ループ動画化 |
 
 ## Instructions
 
 ### Step 1: 型を判定する
 
 設定読み込みゲートを実行し、`content_type` を一度だけ確定する。型をユーザーへ質問せず、フラグでも上書きしない。
+
+`--thumbnail` が指定された場合は `content_type == "collection"` を確認し、[references/thumbnail.md](references/thumbnail.md) だけを実行して終了する。
 
 ### Step 2: 型別手順を実行する
 
@@ -97,8 +116,10 @@ generation = load_skill_config("short")[content_type]
 | videos.insert（1,600 units / 本） | collection 型の投稿本数 | `shorts.collection.default_count`。release 型は 0 |
 | thumbnails.set（50 units / 本） | collection 型の投稿本数 | release 型は 0 |
 | videos.update（50 units） | `yt-shorts-bulk-update-loc` の対象 Shorts 数 | `--dry-run` は 0 |
+| Vertex AI Gemini | `--thumbnail` の `short.png` 生成で 1 call | 再生成回数 |
+| Vertex AI Veo 3.1 | `--thumbnail` のループ動画化で 1 call | ループ不要なら 0 |
 
-- 上限 / 承認: collection 型は `--plan` と `--short-num` で小出しに確認できる。release 型はローカル ffmpeg 生成だけで、投稿 API は呼ばない。
+- 上限 / 承認: collection 型は `--plan` と `--short-num` で小出しに確認できる。`--thumbnail` の画像・動画生成は各 1 call ごとに承認する。release 型はローカル ffmpeg 生成だけで、投稿 API は呼ばない。
 
 ## 設定
 
