@@ -8,6 +8,12 @@ description: "Use when 下流チャンネルリポジトリでスキル実行中
 - `前工程`: `なし`
 - `後工程`: `なし`
 
+## 修飾フラグ
+
+| modifier | 効果 |
+|---|---|
+| `--analyze` | 運営上の学びは `/analytics` の分析へ委譲する |
+
 ## Overview
 
 下流チャンネルリポジトリの `data/feedback/feedback-log.jsonl` に、不具合・摩擦・

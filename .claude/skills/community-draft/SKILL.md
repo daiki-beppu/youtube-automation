@@ -8,6 +8,12 @@ description: "Use when コレクションの YouTube コミュニティ投稿を
 - `前工程`: `/collection-ideate`
 - `後工程`: `なし`
 
+## 修飾フラグ
+
+| modifier | 効果 |
+|---|---|
+| `--batch` | collection の投稿バッチを JSON として生成する |
+
 ## Hard Gates
 
 - `CLAUDE.md` を読む。

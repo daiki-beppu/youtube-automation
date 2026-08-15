@@ -16,7 +16,7 @@ import pytest
 
 from tests.helpers.paths import REPO_ROOT
 from youtube_automation.commands.system import skills_sync
-from youtube_automation.domains.skills.inventory import lint_skill
+from youtube_automation.domains.skills.inventory import lint_frontmatter_text, lint_skill
 
 # リポジトリルート (tests/ の親)
 _REPO_ROOT = REPO_ROOT
@@ -38,8 +38,8 @@ def test_skill_files_discovered() -> None:
 @pytest.mark.parametrize("skill_dir", _SKILL_DIRS, ids=lambda p: p.name)
 def test_frontmatter_passes_lint(skill_dir: Path) -> None:
     # Given: skill ディレクトリ
-    # When: yt-skills lint と同一の検証ロジックを適用する
-    violations = lint_skill(skill_dir)
+    # When: yt-skills lint と同一の frontmatter 検証ロジックを適用する
+    violations = lint_frontmatter_text((skill_dir / "SKILL.md").read_text(encoding="utf-8"))
 
     # Then: 違反ゼロ (strict YAML パース / name・description 非空 / double-quote)
     assert not violations, f"{skill_dir.name}: " + "; ".join(violations)

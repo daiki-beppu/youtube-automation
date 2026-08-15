@@ -8,6 +8,12 @@ description: "Use when 競合コメントの収集・分析で視聴者インサ
 - `前工程`: `/benchmark`, `/discover-competitors`
 - `後工程`: `/audience-persona-design`
 
+## 修飾フラグ
+
+| modifier | 効果 |
+|---|---|
+| `--channel` | 新規開設時は `/setup` の Step 7 へ委譲する |
+
 ## Overview
 
 承認済みベンチマークチャンネルの1万再生以上の動画から YouTube Data API でコメントを取得し、
