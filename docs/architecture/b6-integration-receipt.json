@@ -1053,7 +1053,7 @@
     },
     {
       "old_owner": "legacy..claude.skills.value-loop-audit.SKILL.md",
-      "exact_new_owner": ".claude/skills/value-loop-audit/SKILL.md",
+      "exact_new_owner": ".claude/skills/audit/references/value-loop.md",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"
