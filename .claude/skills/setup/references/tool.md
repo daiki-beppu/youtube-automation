@@ -165,7 +165,7 @@ project ID が解決済み、または `apply_flags` へ `--project-id` / `--bil
 
 - `/setup --channel`: 新規チャンネルの TTP 対象確認、config 生成、ペルソナ、branding (`channel_config` fail・新規チャンネルの場合)
 - `/setup --import` : 既存チャンネル設定の取り込み (`channel_config` fail・既存 config ありの場合)
-- `/channel-status`: OAuth token 生成とチャンネル ID 確認
+- `/analytics --status`: OAuth token 生成とチャンネル ID 確認
 - `/wf-new`: config 作成後の新規コレクション制作開始
 
 ## 上級者向け: terraform ルート

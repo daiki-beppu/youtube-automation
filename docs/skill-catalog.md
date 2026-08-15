@@ -44,5 +44,4 @@ PDCA 対応: 準備 = 準備する / Plan = 調べる → 決める / Do = 進�
 
 - `/analytics` — Use when YouTube Analytics の収集・分析・レポート表示を一括実行または一段だけ実行するとき。
 - `/audit` — Use when 整合性・動画本体・公開後メタデータ・価値ループの監査を一括実行または一段だけ実行するとき。
-- `/channel-status` — Use when チャンネルの YouTube 統計（登録者・再生回数）を取得するとき。
 - `/skill-feedback` — Use when 下流チャンネルリポジトリでスキル実行中の不具合・摩擦・改善案を構造化記録するとき、または記録済み feedback を上流 issue に還流するとき。

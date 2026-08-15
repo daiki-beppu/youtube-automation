@@ -708,7 +708,7 @@
         "Updated consumer: tests/infrastructure/youtube/test_reporting_api.py",
         "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py",
         "Updated consumer: .claude/skills/analytics/references/flop.md",
-        "Updated consumer: .claude/skills/channel-status/references/get_channel_status.py",
+        "Updated consumer: .claude/skills/analytics/references/get_channel_status.py",
         "Updated consumer: .claude/skills/analytics/references/analytics_system.py",
         "Updated consumer: bench/bench_video_daily.py"
       ]
@@ -1335,7 +1335,7 @@
         "Updated consumer: .claude/skills/channel-new/references/fetch_branding_snapshot.py",
         "Updated consumer: .claude/skills/channel-new/references/fetch_benchmark_comments.py",
         "Updated consumer: .claude/skills/viewer-voice/references/fetch_benchmark_comments.py",
-        "Updated consumer: .claude/skills/channel-status/references/get_channel_status.py",
+        "Updated consumer: .claude/skills/analytics/references/get_channel_status.py",
         "Updated consumer: .claude/skills/short/references/generate_short_loop.py",
         "Updated consumer: .claude/skills/music/references/check_lyric_duplication.py",
         "Updated consumer: .claude/skills/analytics/references/analytics_system.py",

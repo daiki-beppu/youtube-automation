@@ -21,7 +21,6 @@
 | Skill | なにができるか |
 |---|---|
 | /setup | ツール導入と GCP / OAuth 設定を wizard 形式で診断・セットアップ |
-| /channel-status | 登録者数・総再生回数・動画別パフォーマンスを YouTube API から取得 |
 
 ## オーディエンス・ポジショニング検証
 
@@ -59,7 +58,7 @@ YouTube Analytics と動画本体の解析。
 
 | Skill | なにができるか |
 |---|---|
-| /analytics | 収集・分析・レポート表示を一括実行。`--collect` / `--analyze` / `--report` で各段だけを実行し、`--flop` で伸びなかった動画の原因を切り分け |
+| /analytics | 収集・分析・レポート表示を一括実行。`--collect` / `--analyze` / `--report` で各段だけを実行し、`--flop` で失速原因、`--status` で登録者数・総再生回数・動画別パフォーマンスを確認 |
 
 ## ベンチマーク
 

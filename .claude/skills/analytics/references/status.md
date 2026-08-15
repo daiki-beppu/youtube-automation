@@ -1,8 +1,4 @@
----
-name: channel-status
-purpose: 振り返る
-description: "Use when チャンネルの YouTube 統計（登録者・再生回数）を取得するとき。「登録者数は？」「YouTube の数字」で発動。制作進捗は /wf-status"
----
+# Analytics status mode
 
 ## 前後工程
 
@@ -52,7 +48,7 @@ uv run yt-channel-status
 - チャンネル統計: 登録者数、総再生回数、動画数
 - コレクション一覧: タイトル、公開日、再生数、総視聴時間、平均視聴時間
 
-制作中コレクションの進捗（`collections/planning/` の workflow-state.json）は本スキルでは扱わない — `/wf-status` を使う。
+制作中コレクションの進捗（`collections/planning/` の workflow-state.json）は本 mode では扱わない — `/wf-status` を使う。
 
 `--json` オプションで JSON 出力、`--summary` でサマリーのみ表示も可能。
 

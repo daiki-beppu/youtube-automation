@@ -53,6 +53,7 @@ def test_analytics_exposes_full_chain_and_exclusive_modes() -> None:
     assert frontmatter["name"] == "analytics"
     assert all(f"--{mode}" in frontmatter["description"] for mode in LEGACY_MODES[:3])
     assert "--flop" in frontmatter["description"]
+    assert "--status" in frontmatter["description"]
     assert "--since <N>" in frontmatter["description"]
     assert "排他" in skill
     assert "collect → analyze → report" in skill
@@ -63,6 +64,7 @@ def test_analytics_exposes_full_chain_and_exclusive_modes() -> None:
         "| `--analyze` | `references/analyze.md` |",
         "| `--report` | `references/report.md` |",
         "| `--flop` | `references/flop.md` |",
+        "| `--status` | `references/status.md` |",
     ]
     assert "| `--since <N>` |" in skill
     assert "- `後工程`: `/wf-new`" in skill
@@ -82,6 +84,15 @@ def test_analytics_owns_flop_runtime_assets() -> None:
     assert (SKILL_DIR / "references" / "flop.md").is_file()
     assert (SKILL_DIR / "references" / "verification.py").is_file()
     assert not os.path.lexists(REPO_ROOT / ".claude" / "skills" / "flop-analysis")
+
+
+def test_analytics_owns_status_runtime_assets_without_adding_it_to_the_chain() -> None:
+    assert (SKILL_DIR / "references" / "status.md").is_file()
+    assert (SKILL_DIR / "references" / "get_channel_status.py").is_file()
+    assert not os.path.lexists(REPO_ROOT / ".claude" / "skills" / "channel-status")
+
+    manifest = (SKILL_DIR / "references" / "analytics-chain-manifest.json").read_text(encoding="utf-8")
+    assert '"id": "status"' not in manifest
 
 
 def test_legacy_analytics_entrypoints_and_paths_are_removed() -> None:

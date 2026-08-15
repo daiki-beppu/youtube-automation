@@ -36,7 +36,7 @@ scope 定義の単一ソースは `src/youtube_automation/infrastructure/auth/yo
 | skill | 主な CLI / モジュール | 実効 scope | token |
 |---|---|---|---|
 | /analytics --collect, /analytics --analyze | `yt-analytics`（analytics_system / analytics_collector / reporting_analytics） | read-only | readonly 優先 |
-| /channel-status | `yt-channel-status` | read-only | readonly 優先 |
+| /analytics --status | `yt-channel-status` | read-only | readonly 優先 |
 | /channel-research --benchmark（動画収集） | `yt-benchmark-collect` | read-only | readonly 優先 |
 | /channel-research --voice（コメント収集） | `yt-benchmark-comments` | `youtube.force-ssl`（`commentThreads.list` の API 要件） | `token.json` |
 | /channel-research --discover | `yt-discover-competitors` | read-only | readonly 優先 |
