@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate and atomically update `/wf-new-batch` ledger state."""
+"""Validate and atomically update `/wf-new --batch` ledger state."""
 
 from __future__ import annotations
 

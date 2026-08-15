@@ -1,9 +1,3 @@
----
-name: wf-new-batch
-purpose: 進める
-description: "Use when 複数の新規コレクションを相互差別化して一括企画し、正規 /wf-new を順次実行・再開するとき。「複数コレクション制作」「一括制作」「batch 制作」で発動"
----
-
 ## 前後工程
 
 - `前工程`: `/setup --channel`, `/setup`
@@ -32,8 +26,8 @@ manifest の全 plan が `completed` で、各 collection を実ファイルか�
 
 ## Entry contract
 
-- 初回: `/wf-new-batch --count <N>`。`N` は 2 以上の整数でなければ停止する
-- 再開: `/wf-new-batch --resume <batch-id>`。`batch-id` は `[a-z0-9][a-z0-9-]*` に一致しなければ停止する
+- 初回: `/wf-new --batch --count <N>`。`N` は 2 以上の整数でなければ停止する
+- 再開: `/wf-new --batch --resume <batch-id>`。`batch-id` は `[a-z0-9][a-z0-9-]*` に一致しなければ停止する
 - `--count` と `--resume` は同時指定不可。どちらもない、または両方ある場合は state を変更せず使い方を表示する
 
 通常の `/wf-new` を batch と推測して起動しない。batch-id から組み立てる canonical directory は `reports/wf-new-batches/<batch-id>/` だけとし、外部 path や `..` を受け入れない。
@@ -78,7 +72,7 @@ manifest 順に各 plan を実ファイルと照合する。`completed` は再�
 `pending` / `in_progress` / `blocked` / `failed` も、canonical child を呼ぶ前に same-provenance collection の actual state を必ず照合する。`phase == "prepared"` かつ構成に応じた hard artifacts がすべて有効なら、child 完了後・ledger completed 更新前に crash した window と判定する。検証した `batch_id`、`plan_id`、`phase`、`hard_artifacts_valid`、`collection_dir` だけを一時 actual JSON に書き、次を実行する。
 
 ```bash
-uv run python3 .claude/skills/wf-new-batch/references/batch-ledger.py reconcile \
+uv run python3 .claude/skills/wf-new/references/batch-ledger.py reconcile \
   "reports/wf-new-batches/<batch-id>/batch-ledger.json" \
   --plan-id "<plan-id>" --actual "<verified-actual.json>" --updated-at "<ISO-8601>"
 ```
@@ -90,7 +84,7 @@ uv run python3 .claude/skills/wf-new-batch/references/batch-ledger.py reconcile 
 plan は manifest 順に 1 件ずつ処理し、複数の `/wf-new` を並列に起動しない。
 
 1. 対象 plan を `batch-ledger.py transition` で `in_progress`、batch の `current_plan_id` を対象 ID として atomic 更新する
-2. `/wf-new --batch-id <batch-id> --plan-id <plan-id>` を呼び、preselected batch plan entry に検証・初期化・再開を委譲する
+2. `/wf-new --batch-id <batch-id> --plan-id <plan-id>` を呼ぶ。これは別 skill ではなく同一 SKILL.md の通常入口（排他 mode 0 個 + preselected 引数の経路）であり、preselected batch plan entry に検証・初期化・再開を自己委譲する
 3. child が停止した場合は原因を分類する
    - ユーザー承認、認証、必要仕様、外部サービス待ち: plan と batch を `blocked`
    - 実行・成果物検証の失敗: plan と batch を `failed`
@@ -104,11 +98,11 @@ plan は manifest 順に 1 件ずつ処理し、複数の `/wf-new` を並列に
 
 全 plan が `completed` になったら、manifest 件数と ledger 件数、plan-id/order、collection provenance をもう一度照合し、各 collection の通常 `/wf-new` 完了条件と hard artifacts を再検証する。全件成功後だけ batch status を `completed`、`current_plan_id` を `null` に atomic 更新する。
 
-1 件でも不一致なら該当 plan と batch を `blocked` に戻し、証拠と `resume_action` を残す。完了済みの他 plan は変更せず、修復後に `/wf-new-batch --resume <batch-id>` で再検証する。
+1 件でも不一致なら該当 plan と batch を `blocked` に戻し、証拠と `resume_action` を残す。完了済みの他 plan は変更せず、修復後に `/wf-new --batch --resume <batch-id>` で再検証する。
 
 ## 想定 API call 数
 
-この skill 自体は外部 API を呼ばない。初回の `/collection-ideate` 1 回と、plan ごとの `/wf-new` が各 child skill の API call を行う。見積もり、上限、承認は各 child の契約をそのまま適用し、batch 件数を理由に省略しない。
+この mode 自体は外部 API を呼ばない。初回の `/collection-ideate` 1 回と、plan ごとの同一 SKILL.md の通常入口が各 child skill の API call を行う。見積もり、上限、承認は各 child の契約をそのまま適用し、batch 件数を理由に省略しない。
 
 ## 完了報告
 

@@ -11,6 +11,8 @@ from tests.helpers.paths import REPO_ROOT
 from youtube_automation.domains.skills.inventory import SkillInventory
 
 _SKILL_INVENTORY = SkillInventory(REPO_ROOT)
+BATCH_REFERENCE = REPO_ROOT / ".claude" / "skills" / "wf-new" / "references" / "batch.md"
+BATCH_LEDGER = REPO_ROOT / ".claude" / "skills" / "wf-new" / "references" / "batch-ledger.py"
 
 
 def _read_skill(name: str) -> str:
@@ -19,6 +21,10 @@ def _read_skill(name: str) -> str:
     if name == "wf-new":
         paths.append(_SKILL_INVENTORY.resolve_reference(name, "references/phase2.md"))
     return "\n".join(path.read_text(encoding="utf-8") for path in paths)
+
+
+def _read_batch_reference() -> str:
+    return BATCH_REFERENCE.read_text(encoding="utf-8")
 
 
 def _load_reference(name: str, path: Path) -> ModuleType:
@@ -196,7 +202,7 @@ def test_batch_manifest_validator_rejects_structural_mismatches(case: str, mutat
 def test_batch_ledger_allows_only_declared_transitions() -> None:
     state = _load_reference(
         "batch_ledger_transitions",
-        REPO_ROOT / ".claude" / "skills" / "wf-new-batch" / "references" / "batch-ledger.py",
+        BATCH_LEDGER,
     )
     ledger = state.transition_plan(
         _valid_ledger(),
@@ -226,7 +232,7 @@ def test_batch_ledger_allows_only_declared_transitions() -> None:
 def test_batch_ledger_guardedly_blocks_completed_plan_after_revalidation_drift() -> None:
     state = _load_reference(
         "batch_ledger_guarded_downgrade",
-        REPO_ROOT / ".claude" / "skills" / "wf-new-batch" / "references" / "batch-ledger.py",
+        BATCH_LEDGER,
     )
     ledger = _valid_ledger()
     for index, plan_id in enumerate(("plan-a", "plan-b"), start=1):
@@ -273,7 +279,7 @@ def test_batch_ledger_guardedly_blocks_completed_plan_after_revalidation_drift()
 def test_batch_ledger_rejects_second_active_plan() -> None:
     state = _load_reference(
         "batch_ledger_single_active",
-        REPO_ROOT / ".claude" / "skills" / "wf-new-batch" / "references" / "batch-ledger.py",
+        BATCH_LEDGER,
     )
     ledger = state.transition_plan(
         _valid_ledger(),
@@ -294,7 +300,7 @@ def test_batch_ledger_rejects_second_active_plan() -> None:
 def test_batch_ledger_rejects_current_plan_status_mismatch() -> None:
     state = _load_reference(
         "batch_ledger_current_coherence",
-        REPO_ROOT / ".claude" / "skills" / "wf-new-batch" / "references" / "batch-ledger.py",
+        BATCH_LEDGER,
     )
     ledger = _valid_ledger()
     ledger["current_plan_id"] = "plan-a"
@@ -313,7 +319,7 @@ def test_batch_ledger_rejects_current_plan_status_mismatch() -> None:
 def test_batch_ledger_atomic_failure_preserves_previous_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     state = _load_reference(
         "batch_ledger_atomic",
-        REPO_ROOT / ".claude" / "skills" / "wf-new-batch" / "references" / "batch-ledger.py",
+        BATCH_LEDGER,
     )
     path = tmp_path / "batch-ledger.json"
     original = _valid_ledger()
@@ -338,7 +344,7 @@ def test_batch_ledger_atomic_failure_preserves_previous_file(tmp_path: Path, mon
 def test_batch_ledger_reconciles_child_complete_crash_without_changing_actual_state() -> None:
     state = _load_reference(
         "batch_ledger_reconcile",
-        REPO_ROOT / ".claude" / "skills" / "wf-new-batch" / "references" / "batch-ledger.py",
+        BATCH_LEDGER,
     )
     ledger = state.transition_plan(
         _valid_ledger(),
@@ -370,7 +376,7 @@ def test_batch_ledger_reconciles_child_complete_crash_without_changing_actual_st
 def test_batch_ledger_does_not_reconcile_incomplete_or_mismatched_actual_state() -> None:
     state = _load_reference(
         "batch_ledger_reconcile_negative",
-        REPO_ROOT / ".claude" / "skills" / "wf-new-batch" / "references" / "batch-ledger.py",
+        BATCH_LEDGER,
     )
     ledger = state.transition_plan(
         _valid_ledger(),
@@ -431,7 +437,7 @@ def test_wf_new_normal_entry_does_not_infer_preselected_mode() -> None:
 
 
 def test_wf_new_batch_is_sequential_resumable_and_delegates_to_wf_new() -> None:
-    text = _read_skill("wf-new-batch")
+    text = _read_batch_reference()
 
     assert "reports/wf-new-batches/<batch-id>/batch-ledger.json" in text
     assert "`/collection-ideate` を 1 回だけ" in text
@@ -448,10 +454,18 @@ def test_wf_new_batch_is_sequential_resumable_and_delegates_to_wf_new() -> None:
 
 
 def test_wf_new_batch_done_requires_every_canonical_wf_new_completion() -> None:
-    text = _read_skill("wf-new-batch")
+    text = _read_batch_reference()
 
     assert "全 plan が `completed`" in text
     assert '`phase == "prepared"`' in text
     assert "hard artifacts" in text
     assert "approval gate" in text
     assert "batch ledger だけを根拠に Done としない" in text
+
+
+def test_wf_new_batch_assets_are_owned_by_wf_new() -> None:
+    skill = _read_skill("wf-new")
+
+    assert "reports/wf-new-batches/<batch-id>/plan-manifest.json" in skill
+    assert "reports/wf-new-batches/<batch-id>/batch-ledger.json" in skill
+    assert not (REPO_ROOT / ".claude" / "skills" / "wf-new-batch").exists()

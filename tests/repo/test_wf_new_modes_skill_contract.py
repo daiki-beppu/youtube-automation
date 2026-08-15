@@ -1,4 +1,4 @@
-"""`/wf-new` の排他 mode と `--auto` 統合契約を検証する。"""
+"""`/wf-new` の排他 mode と統合契約を検証する。"""
 
 from __future__ import annotations
 
@@ -33,8 +33,18 @@ def test_mode_dispatch_is_exclusive_before_any_mutation() -> None:
     assert "1 個なら" in mode
     assert "0 個なら従来の通常入口" in mode
     assert "| `--auto` | `references/auto.md` |" in mode
-    assert "--batch" not in mode
+    assert "| `--batch` | `references/batch.md` |" in mode
+    assert "完全一致" in mode
+    assert "`--batch-id`" in mode
     assert "--schedule" not in mode
+
+
+def test_batch_modifiers_are_not_modes() -> None:
+    skill = SKILL_MD.read_text(encoding="utf-8")
+    modifiers = _section(skill, "## 修飾フラグ")
+
+    assert "| `--count <N>` | `--batch` |" in modifiers
+    assert "| `--resume <batch-id>` | `--batch` |" in modifiers
 
 
 def test_auto_mode_reuses_the_normal_entry_for_wf_new_action() -> None:

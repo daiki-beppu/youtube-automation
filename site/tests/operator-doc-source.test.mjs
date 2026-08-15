@@ -159,11 +159,11 @@ test("anchor、絶対 URL、非 Markdown link は変更しない", () => {
 });
 
 test("features の skill 行は個別ページへの導線にする", () => {
-  const markdown = "| /thumbnail | CTR 最適化 |\n| /wf-new-batch | 一括企画 |\n";
+  const markdown = "| /thumbnail | CTR 最適化 |\n| /wf-new | 新規・一括企画 |\n";
 
   assert.equal(
     rewriteFeatureSkillLinks(markdown),
     "| [/thumbnail](/skills/thumbnail) | CTR 最適化 |\n" +
-      "| [/wf-new-batch](/skills/wf-new-batch) | 一括企画 |\n"
+      "| [/wf-new](/skills/wf-new) | 新規・一括企画 |\n"
   );
 });
