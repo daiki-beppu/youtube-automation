@@ -19,7 +19,7 @@ PDCA 対応: 準備 = 準備する / Plan = 調べる → 決める / Do = 進�
 
 ## 決める
 
-- `/audience-persona-design` — Use when ターゲット視聴者を第一ペルソナとして設計・見直しするとき。
+- `/channel-strategy` — Use when チャンネル戦略を状態判定付きで一括実行または一段だけ実行するとき。
 - `/creative-constraints` — Use when ペルソナと視聴シーンを、音・映像・サムネ・タイトル・測定の機械検証可能なチャンネル制約へ翻訳するとき。
 - `/viewing-scene` — Use when 視聴シーン（いつ・どこで・なぜ聴くか）を検証・定義するとき。
 

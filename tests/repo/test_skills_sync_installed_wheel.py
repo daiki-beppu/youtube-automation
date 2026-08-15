@@ -332,6 +332,14 @@ assert "wheel-identity-check" not in legacy._cache
     assert not (downstream / ".claude" / "skills" / "market-research").exists()
     assert not (downstream / ".claude" / "skills" / "thumbnail-research").exists()
 
+    channel_strategy = downstream / ".claude" / "skills" / "channel-strategy"
+    assert (channel_strategy / "SKILL.md").is_file()
+    assert (channel_strategy / "references" / "persona.md").is_file()
+    assert (channel_strategy / "references" / "persona_flow.py").is_file()
+    assert (channel_strategy / "references" / "channel-strategy-chain-manifest.json").is_file()
+    assert (channel_strategy / "references" / "channel-strategy-chain-state.py").is_file()
+    assert not (downstream / ".claude" / "skills" / "audience-persona-design").exists()
+
     bootstrap_guide = distributed_references / "gcp-bootstrap.md"
     assert bootstrap_guide.is_file()
     guide_text = bootstrap_guide.read_text(encoding="utf-8")

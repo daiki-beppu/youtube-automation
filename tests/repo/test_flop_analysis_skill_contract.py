@@ -179,7 +179,7 @@ def test_flop_analysis_uses_noninteractive_analysis_boundaries() -> None:
     prohibited_routes = (
         "/alignment-check",
         "/channel-research --voice",
-        "/audience-persona-design",
+        "/channel-strategy --persona",
         "/viewing-scene",
         "/channel-new",
         "/channel-research --discover",

@@ -81,6 +81,16 @@ def _read(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
 
 
+def _markdown_section(text: str, heading: str) -> str:
+    match = re.search(
+        rf"^{re.escape(heading)}\n(?P<body>.*?)(?=^#{{2,4}}\s|\Z)",
+        text,
+        flags=re.DOTALL | re.MULTILINE,
+    )
+    assert match is not None, f"section not found: {heading}"
+    return match.group("body")
+
+
 def _read_wf_new() -> str:
     return "\n".join(
         _read(path)
@@ -339,13 +349,13 @@ def test_setup_channel_ttp_hearing_routes_direction_to_residual_mode() -> None:
     assert "config を再生成・再反映する場合は `/setup --regenerate`" in direction_mode
     assert "制作に進む場合は `/wf-new`" in direction_mode
 
-    assert "/channel-research --voice` → `/audience-persona-design` → `/viewing-scene" in step7
+    assert "/channel-research --voice` → `/channel-strategy --persona` → `/viewing-scene" in step7
     assert "必須" in step7
     assert "docs/channel/personas/persona-definition.md" in step7
     assert "Step 8 へ進まない" in step7
     assert "channel-new-persona.md" not in setup_channel
 
-    audience_persona = _read(".claude/skills/audience-persona-design/SKILL.md")
+    audience_persona = _read(".claude/skills/channel-strategy/references/persona.md")
     assert "新規開設時" in audience_persona
     assert "競合チャンネルのコメント" in audience_persona
     assert "公開前" in audience_persona
@@ -405,7 +415,7 @@ def test_channel_new_docs_distinguish_required_initial_persona_from_optional_rea
     features = _read("docs/features.md")
     onboarding = _read("ONBOARDING.md")
 
-    assert "/channel-research --voice` → `/audience-persona-design` → `/viewing-scene`" in features
+    assert "/channel-research --voice` → `/channel-strategy --persona` → `/viewing-scene`" in features
     assert "`/channel-research --voice` は公開後の再分析では任意" in features
     assert "公開前のペルソナチェーンは既存の競合 / TTP / viewer-voice 成果物を入力に完走" in features
     assert "公開後の `/viewing-scene` は従来どおり Analytics report を要求する" in features
@@ -417,14 +427,14 @@ def test_channel_new_docs_distinguish_required_initial_persona_from_optional_rea
 
 def test_setup_channel_prelaunch_persona_chain_propagates_context_without_analytics() -> None:
     setup_channel = _read(".claude/skills/setup/references/channel-mode.md")
-    audience_persona = _read(".claude/skills/audience-persona-design/SKILL.md")
+    audience_persona = _read(".claude/skills/channel-strategy/references/persona.md")
 
     step7 = setup_channel.split("### Step 7: 本格ペルソナ作成チェーン", 1)[1].split(
         "### Step 8: branding 初回反映",
         1,
     )[0]
     assert "実行コンテキスト: 新規開設（公開前）" in step7
-    assert "`/audience-persona-design` から同じ実行コンテキストを引き継いで `/viewing-scene`" in step7
+    assert "`/channel-strategy --persona` から同じ実行コンテキストを引き継いで `/viewing-scene`" in step7
     for path in (
         "docs/plans/viewer-voice-analysis.md",
         "docs/channel/ttp-seed-confirmation.md",
@@ -434,9 +444,7 @@ def test_setup_channel_prelaunch_persona_chain_propagates_context_without_analyt
     assert "任意の `/channel-research --benchmark`" in step7
     assert "`reports/analysis_*.md` は要求しない" in step7
 
-    entry_contract = SKILL_INVENTORY.section("audience-persona-design", "## Overview").split(
-        "入口で実行コンテキスト", 1
-    )[1]
+    entry_contract = _markdown_section(audience_persona, "## Overview").split("入口で実行コンテキスト", 1)[1]
     assert "新規開設（公開前）" in entry_contract
     assert "公開後" in entry_contract
     assert "任意の `/channel-research --benchmark` 成果物" in entry_contract
@@ -446,11 +454,11 @@ def test_setup_channel_prelaunch_persona_chain_propagates_context_without_analyt
         "docs/channel/competitor-branding-snapshot.json",
     ):
         assert path in entry_contract
-    phase5 = SKILL_INVENTORY.section("audience-persona-design", "### Phase 5: viewing-scene 検証")
+    phase5 = _markdown_section(audience_persona, "### Phase 5: viewing-scene 検証")
     assert "新規開設（公開前）" in phase5
     assert "公開後" in phase5
     assert "実行コンテキストを明示して渡し" in phase5
-    audience_guidance = SKILL_INVENTORY.section("audience-persona-design", "## 障害時ガイダンス")
+    audience_guidance = _markdown_section(audience_persona, "## 障害時ガイダンス")
     assert "公開前入力不在" in audience_guidance
     assert "公開後入力不在" in audience_guidance
     assert "新規開設（公開前）で競合 / TTP / viewer-voice 成果物が不足" in audience_guidance
@@ -889,7 +897,7 @@ def test_channel_new_followup_skill_routing_uses_new_contract() -> None:
     assert "`/setup --channel` の新規開設モードでは Step 7 の必須前工程として実行する" in viewer_voice
     assert "公開後の再分析では" in viewer_voice
     assert "任意後続スキル" not in viewer_voice
-    assert "`docs/plans/viewer-voice-analysis.md` は後続 `/audience-persona-design` の必須入力" in viewer_voice
+    assert "`docs/plans/viewer-voice-analysis.md` は後続 `/channel-strategy --persona` の必須入力" in viewer_voice
 
     for path_text in (setup, channel_new, channel_regeneration_mode, channel_direction_mode, onboarding):
         assert "TTP benchmark" not in path_text
@@ -932,7 +940,7 @@ def test_channel_new_followup_skill_routing_uses_new_contract() -> None:
 
     assert "新規チャンネル開設 → 競合発掘 → 方向性決定 → セットアップ" not in features
     assert (
-        "`/setup` → `/channel-new`（`/channel-research --voice` → `/audience-persona-design` → "
+        "`/setup` → `/channel-new`（`/channel-research --voice` → `/channel-strategy --persona` → "
         "`/viewing-scene` を含む）→ `/wf-new`"
     ) in features
 

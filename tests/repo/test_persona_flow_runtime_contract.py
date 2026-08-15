@@ -11,7 +11,7 @@ import pytest
 from tests.helpers.paths import REPO_ROOT
 
 ROOT = REPO_ROOT
-SCRIPT = ROOT / ".claude" / "skills" / "audience-persona-design" / "references" / "persona_flow.py"
+SCRIPT = ROOT / ".claude" / "skills" / "channel-strategy" / "references" / "persona_flow.py"
 
 
 def _load():
@@ -88,7 +88,7 @@ def test_missing_persona_artifact_is_a_failure_not_an_empty_fallback(tmp_path: P
 
 
 def test_canonical_routes_dispatch_and_legacy_aliases_fail_closed() -> None:
-    assert flow.route_skill("persona") == "audience-persona-design"
+    assert flow.route_skill("persona") == "channel-strategy --persona"
     assert flow.route_skill("flop") == "flop-analysis"
     for legacy in ("audience-persona", "postmortem"):
         with pytest.raises(flow.PersonaContractError, match="legacy route"):

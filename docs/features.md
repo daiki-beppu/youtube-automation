@@ -16,7 +16,7 @@
 
 ## チャンネル立ち上げ
 
-標準フローは `/setup` → `/channel-new`（`/channel-research --voice` → `/audience-persona-design` → `/viewing-scene` を含む）→ `/wf-new`。公開前のペルソナチェーンは既存の競合 / TTP / viewer-voice 成果物を入力に完走し、自チャンネル Analytics report や任意の本格 benchmark 収集を要求しない。追加競合発掘、benchmark、方向性再検討、branding 再反映は必要なときだけ任意後続として実行する。`/channel-research --voice` は公開後の再分析では任意で、公開後の `/viewing-scene` は従来どおり Analytics report を要求する。
+標準フローは `/setup` → `/channel-new`（`/channel-research --voice` → `/channel-strategy --persona` → `/viewing-scene` を含む）→ `/wf-new`。公開前のペルソナチェーンは既存の競合 / TTP / viewer-voice 成果物を入力に完走し、自チャンネル Analytics report や任意の本格 benchmark 収集を要求しない。追加競合発掘、benchmark、方向性再検討、branding 再反映は必要なときだけ任意後続として実行する。`/channel-research --voice` は公開後の再分析では任意で、公開後の `/viewing-scene` は従来どおり Analytics report を要求する。
 
 | Skill | なにができるか |
 |---|---|
@@ -30,7 +30,7 @@
 
 | Skill | なにができるか |
 |---|---|
-| /audience-persona-design | ターゲット視聴者のペルソナを定義 |
+| /channel-strategy | チャンネル戦略を状態判定付きで実行し、`--persona` でターゲット視聴者の第一ペルソナを定義 |
 | /viewing-scene | 視聴シーン（いつ・どこで・なぜ聴くか）を検証・定義 |
 | /creative-constraints | ペルソナと視聴シーンを、音・映像・サムネ・タイトル・測定の機械検証可能な制約へ翻訳 |
 | /value-loop-audit | シーン定義・制約翻訳・公開前ゲート・指標還流の価値ループを読み取り専用で横断診断 |

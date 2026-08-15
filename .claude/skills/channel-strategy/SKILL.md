@@ -1,0 +1,65 @@
+---
+name: channel-strategy
+purpose: 決める
+description: "Use when チャンネル戦略を状態判定付きで一括実行または一段だけ実行するとき。第一ペルソナの設計・見直しは --persona を使う。「ペルソナ設定」「視聴者像」「ターゲット層」「チャンネル戦略」で発動。前提となる視聴者インサイト抽出は channel-research の voice mode を使う"
+---
+
+## 前後工程
+
+- `前工程`: `/channel-research --voice`
+- `後工程`: `/viewing-scene`, `/creative-constraints`, `/channel-new`, `/wf-new`
+- `委譲先`: `/viewing-scene`
+
+## 成果物
+
+- `書き込む`: `docs/channel/personas/persona-definition.md`
+- `読み込む`: `docs/plans/viewer-voice-analysis.md`, `docs/plans/viewing-scene-matrix.md`, `data/benchmark_*.json`
+
+## モード判定
+
+`$ARGUMENTS` から strategy mode flag の個数を最初に数える。同じ flag の重複も別々に数える。
+
+- 2 個以上なら排他違反として停止し、1 つだけ指定するよう促す
+- 1 個が `--persona` なら `references/persona.md` を読み、その一段だけを実行する。残りの引数は persona mode の引数として扱う
+- 0 個なら chain manifest に従い状態判定付きで進める
+- `--scene`、`--constraints`、`--direction` は後続段で登録する予約名であり、現段では未知の mode として停止する
+- mode はこの表へ最大 4 件まで追加でき、判定規則を複製しない。予約名以外の未知の mode flag も停止する
+
+| mode | 読む reference |
+|---|---|
+| `--persona` | `references/persona.md` |
+
+## 共通前提
+
+`config/channel/` が存在し、`load_config()` でロード可能であること。満たさない場合は、新規チャンネルなら `/setup --channel`、既存チャンネルなら `/setup --import` を案内して停止する。
+
+旧 persona owner は `config.default.yaml` / `config/skills/*.yaml` を持たなかったため、`channel-strategy` の新しい設定キーや下流 override を先行作成しない。
+
+## 一括実行
+
+`references/channel-strategy-chain-manifest.json` と `references/channel-strategy-chain-state.py` を検証し、現段では manifest に登録された `persona` だけを進める。`scene` と `constraints` は後続段で chain に追加し、方向性検討は立ち上げ後の見直し工程なので `direction` を chain に含めない。
+
+```bash
+uv run python .claude/skills/channel-strategy/references/channel-strategy-chain-state.py \
+  --channel-dir . --step persona
+```
+
+| exit | `decision` | 処理 |
+|---:|---|---|
+| 0 | `skip` | persona 成果物が揃っているため完了として終了する |
+| 10 | `run` | `references/persona.md` を読み、同じ一段を実行する |
+| 20 | `blocked` | 不足している前提と解消方法を表示して停止する |
+| その他 | `error` | manifest / script のエラーとして停止する |
+
+実行後は状態判定を再実行し、exit 0 にならなければ完了扱いにしない。途中失敗時はその段で止め、再発動時は同じ判定から安全に再開する。
+
+## 完了条件
+
+- フラグなし: `persona` が `skip` または実行後 `skip` になっている
+- `--persona`: `references/persona.md` の完了条件を満たしている
+
+実行段、skip 段、前提不足、更新成果物を短く報告する。
+
+## 想定 API call 数
+
+persona mode の詳細は `references/persona.md` を正とする。ローカル成果物の状態判定は外部 API を呼ばない。Web 調査を行う場合は検索前に対象と目的を示し、接続済み一次情報を優先する。
