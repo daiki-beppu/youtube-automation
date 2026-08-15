@@ -117,7 +117,7 @@
 
 四半期 or 方向性見直し時:
       /audience-persona-design（+ viewing-scene）… ペルソナ・視聴シーン再設計
-      /discover-competitors                  … 競合プールの入れ替え
+      /channel-research --discover                  … 競合プールの入れ替え
       /alignment-check                       … チャンネル全体の整合性監査
 ```
 

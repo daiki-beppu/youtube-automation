@@ -60,7 +60,7 @@ _CSV_COLUMNS: tuple[str, ...] = (
     "channel_url",
 )
 
-# skill-config (.claude/skills/discover-competitors/config.default.yaml) が
+# skill-config (.claude/skills/channel-research/config.default.yaml::discover) が
 # 読めない場合の最終フォールバック（plan §7.5 の値と同一）
 _DEFAULT_MIN_SUBSCRIBERS = 0
 _DEFAULT_MAX_SUBSCRIBERS = 10_000_000
@@ -76,7 +76,7 @@ _DEFAULTED_OPTIONS = ("min_subscribers", "max_subscribers", "posted_within_days"
 def _search_defaults() -> dict[str, int]:
     """CLI フラグ未指定時の既定値を skill-config から解決する。
 
-    `.claude/skills/discover-competitors/config.default.yaml::search.*` が default、
+    `.claude/skills/channel-research/config.default.yaml::discover::search.*` が default、
     `config/skills/discover-competitors.yaml` のチャンネル上書きが優先される
     （優先順位: CLI フラグ明示指定 > チャンネル上書き > default）。
     """

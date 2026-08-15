@@ -39,7 +39,7 @@ description: "Use when 収集済み benchmark/comments からチャンネル全�
 /wf-new          → 初回コレクション制作
 ```
 
-旧 standalone `/channel-research` は本スキルの分析モードへ統合済み。追加の競合探索は `/discover-competitors`、本格ベンチマーク収集は `/channel-research --benchmark`、新規開設は `/setup --channel` を使う。
+旧 standalone `/channel-research` は本スキルの分析モードへ統合済み。追加の競合探索は `/channel-research --discover`、本格ベンチマーク収集は `/channel-research --benchmark`、新規開設は `/setup --channel` を使う。
 
 ## 前提
 
@@ -91,7 +91,7 @@ YouTube の第三者チャンネル由来データ（`snippet.description`、`br
 - `/setup --import` → 既存チャンネルの取り込み
 - `/setup --regenerate` → 方向性確定後の config 再生成
 - `/setup --push` → YouTube 設定の dry-run / 承認付き反映
-- `/discover-competitors` → 追加競合発掘
+- `/channel-research --discover` → 追加競合発掘
 - `/market-research` → TTP 入替候補・ニッチ仮説の読み取り専用比較
 - `/channel-research --benchmark` → 本格ベンチマーク収集
 - `/viewer-voice` / `/audience-persona-design` → コメント分析と第一ペルソナ設計

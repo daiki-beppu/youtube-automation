@@ -6,7 +6,7 @@ description: "Use when 競合コメントの収集・分析で視聴者インサ
 
 ## 前後工程
 
-- `前工程`: `/channel-research --benchmark`, `/discover-competitors`
+- `前工程`: `/channel-research --benchmark`, `/channel-research --discover`
 - `後工程`: `/audience-persona-design`
 - `委譲先`: `なし`
 
@@ -44,7 +44,7 @@ description: "Use when 競合コメントの収集・分析で視聴者インサ
 ### 停止する fail
 
 - `config/channel/` が存在しない、または `load_config()` でロードできない → 新規チャンネルは `/setup --channel` Step 4、既存チャンネルは `/setup --import` を案内して停止する
-- `config/channel/analytics.json::benchmark.channels` に承認済みベンチマークチャンネルが設定されていない → `/setup --channel` Step 5 / `/discover-competitors` を案内して停止する
+- `config/channel/analytics.json::benchmark.channels` に承認済みベンチマークチャンネルが設定されていない → `/setup --channel` Step 5 / `/channel-research --discover` を案内して停止する
 - `auth/token.json` が存在しない、または OAuth 認証が無効 → `/setup` を案内して停止する
 
 ### 許容する fail

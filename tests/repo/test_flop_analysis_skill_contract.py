@@ -182,7 +182,7 @@ def test_flop_analysis_uses_noninteractive_analysis_boundaries() -> None:
         "/audience-persona-design",
         "/viewing-scene",
         "/channel-new",
-        "/discover-competitors",
+        "/channel-research --discover",
     )
     for mapping in mappings:
         assert not any(route in mapping["read-only 入力"] for route in prohibited_routes)

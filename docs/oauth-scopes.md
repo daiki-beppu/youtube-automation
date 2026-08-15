@@ -39,7 +39,7 @@ scope 定義の単一ソースは `src/youtube_automation/infrastructure/auth/yo
 | /channel-status | `yt-channel-status` | read-only | readonly 優先 |
 | /channel-research --benchmark（動画収集） | `yt-benchmark-collect` | read-only | readonly 優先 |
 | /viewer-voice（コメント収集） | `yt-benchmark-comments` | `youtube.force-ssl`（`commentThreads.list` の API 要件） | `token.json` |
-| /discover-competitors | `yt-discover-competitors` | read-only | readonly 優先 |
+| /channel-research --discover | `yt-discover-competitors` | read-only | readonly 優先 |
 | /metadata-audit | `yt-metadata-audit`（監査のみ） | read-only | readonly 優先 |
 | /playlist（状態確認） | `yt-playlist-status` | read-only | readonly 優先 |
 | /streaming（帯域集計） | `yt-stream-bandwidth` / `yt-stream-archive-check` | read-only | readonly 優先 |

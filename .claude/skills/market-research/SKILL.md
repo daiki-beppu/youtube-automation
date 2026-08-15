@@ -1,13 +1,13 @@
 ---
 name: market-research
 purpose: 調べる
-description: "Use when 既存チャンネルから任意に市場を調べ、TTP 入替候補やニッチ仮説を根拠付きで比較するとき。「市場調査」「market research」「TTP 入替候補」「ニッチ仮説を調べて」で発動。未発見チャンネルを API でランキング化するだけなら /discover-competitors、収集済み benchmark / comments の徹底分析なら /channel-new 分析モードを使う"
+description: "Use when 既存チャンネルから任意に市場を調べ、TTP 入替候補やニッチ仮説を根拠付きで比較するとき。「市場調査」「market research」「TTP 入替候補」「ニッチ仮説を調べて」で発動。未発見チャンネルを API でランキング化するだけなら channel-research の discover mode、収集済み benchmark / comments の徹底分析なら /channel-new 分析モードを使う"
 ---
 
 ## 前後工程
 
 - `前工程`: `なし`
-- `後工程`: `/channel-research --benchmark`, `/discover-competitors`
+- `後工程`: `/channel-research --benchmark`, `/channel-research --discover`
 - `委譲先`: `なし`
 
 ## 成果物
@@ -21,7 +21,7 @@ description: "Use when 既存チャンネルから任意に市場を調べ、TTP
 - 既定の成果物は会話内レポートだけ。ユーザーがこの実行について明示的に「保存して」と依頼した場合だけ `docs/research/market-<YYYY-MM-DD>.md` を生成する。依頼がなければディレクトリもファイルも作らない。
 - 保存先に同日ファイルがすでに存在する場合は、上書き前に既存ファイルが置換されることを示し、「上書きする / 会話内だけにする」の明示 2 択で確認する。承認されるまで書き込まない。
 - 根拠は URL またはローカルパス、確認日、対応する主張を必ず記録する。`references/report-contract.md` の採用閾値を満たさない候補は「根拠不足」とし、TTP 入替候補や有望ニッチとして推奨しない。
-- 調査結果から `/discover-competitors`、`/channel-research --benchmark`、config 更新を自動実行しない。次アクションとして提案するだけに留める。
+- 調査結果から `/channel-research --discover`、`/channel-research --benchmark`、config 更新を自動実行しない。次アクションとして提案するだけに留める。
 
 ## 完了条件
 
@@ -36,7 +36,7 @@ description: "Use when 既存チャンネルから任意に市場を調べ、TTP
 | skill | 主目的 | 既定成果物 |
 |---|---|---|
 | `/market-research` | 調査問いに対する横断比較、TTP 入替候補・ニッチ仮説の提示 | 会話内レポート |
-| `/discover-competitors` | YouTube Data API による未登録チャンネルの検索・スコアリング | ranking Markdown + CSV |
+| `/channel-research --discover` | YouTube Data API による未登録チャンネルの検索・スコアリング | ranking Markdown + CSV |
 | `/channel-new` 分析モード | 収集済み benchmark / comments の詳細分析 | `docs/channel-research.md` ほか |
 
 ## Instructions
@@ -98,7 +98,7 @@ TTP 入替候補は、現行 TTP より優れると観測できた軸と劣る�
 ## Cross References
 
 - `references/report-contract.md` — レポート見出し、根拠閾値、分類の単一ソース
-- `/discover-competitors` — 追加競合を API で広く発掘・ランキング化する場合
+- `/channel-research --discover` — 追加競合を API で広く発掘・ランキング化する場合
 - `/channel-research --benchmark` — 承認済み候補の動画・サムネイルデータを収集する場合
 - `/channel-new` 分析モード — 収集済み benchmark / comments を詳細分析する場合
 - `/setup --channel` Step 1/4/5（`.claude/skills/setup/references/new-channel-bootstrap.md` / `ttp-seed-and-duration.md`）— 初回 TTP 確認と channel config 生成を行う場合

@@ -860,7 +860,7 @@ def test_setup_channel_initial_save_success_path_commits_and_cleans_worktree(tmp
 
 
 def test_channel_new_followup_skill_routing_uses_new_contract() -> None:
-    discover = _read(".claude/skills/discover-competitors/SKILL.md")
+    discover = _read(".claude/skills/channel-research/references/discover.md")
     research = _read(".claude/skills/channel-new/references/analysis-mode.md")
     viewer_voice = _read(".claude/skills/viewer-voice/SKILL.md")
     setup = _read(".claude/skills/setup/SKILL.md")
@@ -1197,8 +1197,9 @@ def test_skill_config_defaults_have_read_gate_in_skill_docs() -> None:
             for key in registered
             if skill_config.skill_config_default_relative_path(key.partition(".")[0]).parts[0] == skill
         ]
-        loader_key = "postmortem" if skill == "flop-analysis" else loader_keys[0]
-        assert f'load_skill_config("{loader_key}")' in text
+        expected_loader_keys = ["postmortem"] if skill == "flop-analysis" else loader_keys
+        for loader_key in expected_loader_keys:
+            assert f'load_skill_config("{loader_key}")' in text
         assert "存在する場合" in text
         assert "勝手に作成しない" in text
 

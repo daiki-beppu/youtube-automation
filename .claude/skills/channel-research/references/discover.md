@@ -1,20 +1,3 @@
----
-name: discover-competitors
-purpose: 調べる
-description: "Use when YouTube Data API で追加競合候補を自動発掘・ランキング化するとき。「競合候補」「競合発掘」「discover-competitors」で発動。収集済み benchmark / comments のチャンネル全体分析は /channel-new 分析モード、TTP 入替候補やニッチ仮説を複数根拠で横断比較する調査は /market-research を使う"
----
-
-## 前後工程
-
-- `前工程`: `/channel-research --benchmark`, `/setup --channel`
-- `後工程`: `/viewer-voice`, `/channel-research --benchmark`
-- `委譲先`: `なし`
-
-## 成果物
-
-- `書き込む`: `research/<niche>-discovery.md`, `research/<niche>-discovery.csv`, `.cache/youtube-automation/discover-competitors-search.json`
-- `読み込む`: `config/channel/analytics.json`, `config/channel/content.json`, `config/skills/discover-competitors.yaml`
-
 ## Overview
 
 ニッチキーワード（複数可）を渡すと、登録者数レンジ・最終投稿日でフィルタしたうえで
@@ -42,7 +25,7 @@ Step 3 の実行で出力ペア（Markdown ランキング + 同名 CSV）を生
 
 以下を deep-merge した値を設定として使う。
 
-1. `.claude/skills/discover-competitors/config.default.yaml`
+1. `.claude/skills/channel-research/config.default.yaml::discover`
 2. `config/skills/discover-competitors.yaml`（存在する場合）
 
 合成規則は `youtube_automation.configuration.skills.load_skill_config("discover-competitors")` と同じで、チャンネル上書きが優先される。存在しない override は未設定として扱い、勝手に作成しない。`yt-discover-competitors` CLI も同じ skill-config をフラグ既定値として読む（CLI フラグ明示指定 > チャンネル上書き > default の優先順位）。
@@ -179,7 +162,7 @@ channel ID は候補から除外される。
 
 subagent へは次を具体値で渡す:
 
-- 入力パス: `.claude/skills/discover-competitors/config.default.yaml`、存在する場合は `config/skills/discover-competitors.yaml`、キーワード抽出に使う `config/channel/content.json` / `config/channel/analytics.json`（存在する場合）
+- 入力パス: `.claude/skills/channel-research/config.default.yaml::discover`、存在する場合は `config/skills/discover-competitors.yaml`、キーワード抽出に使う `config/channel/content.json` / `config/channel/analytics.json`（存在する場合）
 - 実行する作業: `uv run yt-discover-competitors ... --output research/{niche}-discovery.md`
 - 期待成果物: `research/{niche}-discovery.md` と同名の `research/{niche}-discovery.csv`
 - 完了報告: `status: success | failure`、`command`、`artifacts`、`candidate_count`、`top_candidates_summary`、`errors`

@@ -1,39 +1,40 @@
-# benchmark skill default config
+# channel-research skill default config
 #
-# 競合チャンネルベンチマーク収集の動作パラメータ。
-# チャンネル側では config/skills/benchmark.yaml に上書き値を置く。
-#
-# 注意: 競合チャンネルリスト (benchmark.channels[]) は戦略情報として
-# config/channel/analytics.json 側で管理する。この YAML では走査・分析の動作パラメータのみ扱う。
+# 公開 skill の mode ごとに節を分ける。下流 override は移行完了まで
+# config/skills/benchmark.yaml / discover-competitors.yaml の旧キーを維持する。
 
-# チャンネルあたりの走査プール本数（直近 N 投稿）
-scan_recent: 150
+benchmark:
+  # チャンネルあたりの走査プール本数（直近 N 投稿）
+  scan_recent: 150
+  # ベンチマーク対象とする視聴数しきい値
+  min_views: 10000
+  # レポート鮮度（日）
+  freshness_days: 3
+  # Gemini API によるサムネイル分析（既定 OFF）
+  gemini_thumbnail_analysis: false
+  thumbnail_analysis:
+    model: gemini-3.5-flash
+    delay_sec: 5
+    prompt: |
+      Analyze this YouTube thumbnail for a music channel.
+      Return ONLY valid JSON (no markdown, no code fences):
+      {
+        "composition": "brief description of layout, focal points, and character positioning",
+        "color_palette": "dominant colors and overall mood/tone",
+        "text_placement": "how title text is positioned and styled",
+        "character_activity": "what the character is doing (or 'none' if no character)",
+        "atmosphere": "overall mood, lighting, and environmental effects",
+        "strengths": ["list", "of", "effective", "elements"]
+      }
 
-# ベンチマーク対象とする視聴数しきい値（これ未満の動画は分析対象外）
-min_views: 10000
-
-# レポート鮮度（この日数を超えたら更新対象）
-freshness_days: 3
-
-# Gemini API によるサムネイル分析（Vertex AI 課金あり）。
-# 既定 false — エージェントが Read ツールで分析するため Gemini は不要。
-# 明示的に true にすると Gemini でも分析する（エージェント分析と併用）。
-gemini_thumbnail_analysis: false
-
-# Gemini サムネイル分析の詳細設定（gemini_thumbnail_analysis: true 時のみ使用）
-thumbnail_analysis:
-  model: gemini-3.5-flash
-  delay_sec: 5  # API レート制限対策の待機秒数
-  # Gemini に渡すプロンプト。チャンネルのジャンル/世界観に合わせて
-  # config/skills/benchmark.yaml で上書きを推奨。
-  prompt: |
-    Analyze this YouTube thumbnail for a music channel.
-    Return ONLY valid JSON (no markdown, no code fences):
-    {
-      "composition": "brief description of layout, focal points, and character positioning",
-      "color_palette": "dominant colors and overall mood/tone",
-      "text_placement": "how title text is positioned and styled",
-      "character_activity": "what the character is doing (or 'none' if no character)",
-      "atmosphere": "overall mood, lighting, and environmental effects",
-      "strengths": ["list", "of", "effective", "elements"]
-    }
+discover:
+  search:
+    min_subscribers: 0
+    max_subscribers: 10000000
+    posted_within_days: 30
+    top: 20
+    per_keyword: 20
+  keywords:
+    recommended_min: 3
+    recommended_max: 5
+    hard_max: 8

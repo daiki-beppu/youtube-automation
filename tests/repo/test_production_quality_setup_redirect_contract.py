@@ -199,14 +199,14 @@ _RAW_EXPECTED_ACTIVE_ROUTES = (
     _route(
         "flop-analysis/SKILL.md",
         "### Phase 4: 検証の自律実行",
-        "- 差別化・市場性は `/discover-competitors` や `/channel-new` を起動せず、"
+        "- 差別化・市場性は `/channel-research --discover` や `/channel-new` を起動せず、"
         "最新の既存 `data/benchmark_*.json` と `yt-theme-compare` の標準出力だけを使う。"
         "競合の追加、方向性決定、config 更新は行わない",
     ),
     _route(
         "flop-analysis/SKILL.md",
         "## Next Step",
-        "| テーマ自体の市場性不足 | `/discover-competitors` → `/channel-new`（方向性検討モード） |",
+        "| テーマ自体の市場性不足 | `/channel-research --discover` → `/channel-new`（方向性検討モード） |",
     ),
     _route(
         "flop-analysis/SKILL.md",
@@ -294,7 +294,7 @@ _RAW_EXPECTED_ACTIVE_ROUTES = (
         "thumbnail-compare/SKILL.md",
         "## 前提",
         "- `config/channel/analytics.json::benchmark.channels` に承認済みベンチマークチャンネルが設定済みであること。"
-        "未設定なら `/channel-new` / `/discover-competitors` を案内して停止する",
+        "未設定なら `/channel-new` / `/channel-research --discover` を案内して停止する",
     ),
     _route(
         "value-loop-audit/SKILL.md",

@@ -138,6 +138,21 @@ def test_load_namespaced_skill_config_rejects_missing_section(tmp_path: Path, mo
         skill_config.load_skill_config("music.prompt", use_cache=False, channel_dir=channel_dir)
 
 
+def test_moved_channel_research_modes_keep_legacy_loader_and_override_keys(tmp_path: Path) -> None:
+    overrides = tmp_path / "config" / "skills"
+    overrides.mkdir(parents=True)
+    (overrides / "benchmark.yaml").write_text("freshness_days: 7\n", encoding="utf-8")
+    (overrides / "discover-competitors.yaml").write_text("search:\n  top: 12\n", encoding="utf-8")
+
+    benchmark = skill_config.load_skill_config("benchmark", use_cache=False, channel_dir=tmp_path)
+    discover = skill_config.load_skill_config("discover-competitors", use_cache=False, channel_dir=tmp_path)
+
+    assert benchmark["freshness_days"] == 7
+    assert "benchmark" not in benchmark and "discover" not in benchmark
+    assert discover["search"]["top"] == 12
+    assert "benchmark" not in discover and "discover" not in discover
+
+
 def test_channel_override_merged(tmp_path, monkeypatch):
     """channel override が default とマージされること"""
     channel_dir = tmp_path / "ch"

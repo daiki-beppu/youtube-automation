@@ -233,7 +233,7 @@ def test_analytics_json_has_default_benchmark_parameters(tmp_path):
     default_config = yaml.safe_load(
         (REPO_ROOT / ".claude/skills/channel-research/config.default.yaml").read_text(encoding="utf-8")
     )
-    assert default_config["scan_recent"] == bm["scan_recent"]
+    assert default_config["benchmark"]["scan_recent"] == bm["scan_recent"]
     assert "min_views" in bm
     assert "freshness_days" in bm
     assert "gemini_thumbnail_analysis" in bm

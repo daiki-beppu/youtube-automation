@@ -22,7 +22,6 @@
 |---|---|
 | /setup | ツール導入と GCP / OAuth 設定を wizard 形式で診断・セットアップ |
 | /channel-new | TTP 対象確認、seed confirmation artifacts、config、本格ペルソナ作成チェーン、初回 branding まで進める。収集済みデータの分析モード、方向性検討、既存チャンネル取り込み、再生成、設定 push も担当 |
-| /discover-competitors | 任意: ニッチキーワードから追加競合候補を YouTube Data API で自動発掘 |
 | /market-research | 任意: TTP 入替候補とニッチ仮説を複数根拠で横断比較し、既定は会話内だけに提示 |
 | /channel-status | 登録者数・総再生回数・動画別パフォーマンスを YouTube API から取得 |
 
@@ -95,7 +94,7 @@ YouTube Analytics と動画本体の解析。
 
 | Skill | なにができるか |
 |---|---|
-| /channel-research | チャンネル調査を状態判定付きで実行。`--benchmark` で競合の最新動画データを取得し `docs/benchmarks/*.md` を更新 |
+| /channel-research | チャンネル調査を状態判定付きで実行。`--benchmark` で競合の最新動画データを収集し、`--discover` で追加競合候補を発掘・ランキング化 |
 | /thumbnail-research | 収集済み競合サムネイルの再生数上位群 / 下位群を比較し、勝ちパターンと `/thumbnail` 向け TTP 推奨事項を生成 |
 
 ## 配信インフラ
