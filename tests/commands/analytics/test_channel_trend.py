@@ -193,9 +193,7 @@ def test_cli_uses_latest_snapshot_and_prints_json(tmp_path, monkeypatch, capsys)
     _write_snapshot(data_dir / "analytics_data_20260401.json", 10)
     _write_snapshot(data_dir / "analytics_data_20260402.json", 25)
     monkeypatch.setattr(channel_trend_cli, "_channel_dir", lambda: tmp_path)
-    monkeypatch.setattr("sys.argv", ["yt-channel-trend"])
-
-    assert channel_trend_cli.main() == 0
+    assert channel_trend_cli.main([]) == 0
 
     output = json.loads(capsys.readouterr().out)
     assert output["summary"]["total_views"] == 25
@@ -207,9 +205,7 @@ def test_cli_prints_human_readable_text(tmp_path, monkeypatch, capsys):
     data_dir.mkdir()
     _write_snapshot(data_dir / "analytics_data_20260401.json", 25)
     monkeypatch.setattr(channel_trend_cli, "_channel_dir", lambda: tmp_path)
-    monkeypatch.setattr("sys.argv", ["yt-channel-trend", "--text"])
-
-    assert channel_trend_cli.main() == 0
+    assert channel_trend_cli.main(["--text"]) == 0
 
     output = capsys.readouterr().out
     assert "チャンネルトレンド分析" in output
@@ -219,7 +215,5 @@ def test_cli_prints_human_readable_text(tmp_path, monkeypatch, capsys):
 
 def test_cli_returns_two_when_snapshot_is_missing(tmp_path, monkeypatch, caplog):
     monkeypatch.setattr(channel_trend_cli, "_channel_dir", lambda: tmp_path)
-    monkeypatch.setattr("sys.argv", ["yt-channel-trend"])
-
-    assert channel_trend_cli.main() == 2
+    assert channel_trend_cli.main([]) == 2
     assert "analytics_data_*.json が見つかりません" in caplog.text

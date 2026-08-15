@@ -1,6 +1,5 @@
 import json
 import logging
-import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -137,12 +136,10 @@ def _install_cli_inputs(monkeypatch, *, frame=None, themes=None, daily=_DAILY_PR
 @pytest.mark.parametrize("text_mode", [False, True])
 def test_theme_compare_main_emits_json_and_text(monkeypatch, capsys, text_mode):
     _install_cli_inputs(monkeypatch)
-    argv = ["yt-theme-compare", "--peak-days", "3,6"]
+    argv = ["--peak-days", "3,6"]
     if text_mode:
         argv.append("--text")
-    monkeypatch.setattr(sys, "argv", argv)
-
-    assert theme_compare.main() == 0
+    assert theme_compare.main(argv) == 0
 
     output = capsys.readouterr().out
     if text_mode:
@@ -164,20 +161,17 @@ def test_theme_compare_main_emits_json_and_text(monkeypatch, capsys, text_mode):
 )
 def test_theme_compare_main_returns_config_error(monkeypatch, caplog, overrides, message):
     _install_cli_inputs(monkeypatch, **overrides)
-    monkeypatch.setattr(sys, "argv", ["yt-theme-compare"])
-
     with caplog.at_level(logging.ERROR):
-        assert theme_compare.main() == 2
+        assert theme_compare.main([]) == 2
 
     assert message in caplog.text
 
 
 def test_theme_compare_main_returns_one_for_unexpected_error(monkeypatch, caplog):
-    monkeypatch.setattr(sys, "argv", ["yt-theme-compare"])
     monkeypatch.setattr(theme_compare, "_channel_dir", lambda: (_ for _ in ()).throw(RuntimeError("boom")))
 
     with caplog.at_level(logging.ERROR):
-        assert theme_compare.main() == 1
+        assert theme_compare.main([]) == 1
 
     assert "boom" in caplog.text
 

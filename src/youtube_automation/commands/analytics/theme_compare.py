@@ -13,6 +13,7 @@ import logging
 import sys
 from pathlib import Path
 
+from youtube_automation.commands._shared.cli_harness import run_cli
 from youtube_automation.configuration import channel_dir as _channel_dir
 from youtube_automation.configuration import load_config
 from youtube_automation.core.errors import ConfigError
@@ -57,9 +58,7 @@ def _print_text_summary(analysis: dict) -> None:
         print(f"   {t['theme']:<15} (n={t['video_count']}): {peaks_str}")
 
 
-def main() -> int:
-    logging.basicConfig(level=logging.WARNING, format="%(levelname)s: %(message)s")
-
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="テーマ別 launch curve 比較")
     parser.add_argument(
         "--peak-days",
@@ -67,8 +66,10 @@ def main() -> int:
         help="比較する日齢 (カンマ区切り, default: 3,7,30)",
     )
     parser.add_argument("--text", action="store_true", help="人間向けテキスト出力")
+    return parser
 
-    args = parser.parse_args()
+
+def run(args: argparse.Namespace) -> int:
     peak_days = tuple(int(d) for d in args.peak_days.split(","))
 
     try:
@@ -104,6 +105,11 @@ def main() -> int:
     except Exception as e:
         logger.exception(f"エラー: {e}")
         return 1
+
+
+def main(argv: list[str] | None = None) -> int:
+    logging.basicConfig(level=logging.WARNING, format="%(levelname)s: %(message)s")
+    return run_cli(build_parser, run, argv, handled_errors=())
 
 
 if __name__ == "__main__":

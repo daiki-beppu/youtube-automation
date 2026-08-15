@@ -13,6 +13,7 @@ import logging
 import sys
 from pathlib import Path
 
+from youtube_automation.commands._shared.cli_harness import run_cli
 from youtube_automation.configuration import channel_dir as _channel_dir
 from youtube_automation.core.errors import ConfigError
 from youtube_automation.domains.analytics.series.channel_trend import analyze_channel_trend
@@ -61,9 +62,7 @@ def _print_text_summary(analysis: dict) -> None:
             print(f"   {w['week_starting']}: {w['views']:>6,} views  ({delta})")
 
 
-def main() -> int:
-    logging.basicConfig(level=logging.WARNING, format="%(levelname)s: %(message)s")
-
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="チャンネル全体の日次トレンドと異常検知")
     parser.add_argument(
         "--z-threshold",
@@ -72,9 +71,10 @@ def main() -> int:
         help="異常検知の z-score 閾値 (default: 2.0)",
     )
     parser.add_argument("--text", action="store_true", help="人間向けテキスト出力")
+    return parser
 
-    args = parser.parse_args()
 
+def run(args: argparse.Namespace) -> int:
     try:
         channel_dir = _channel_dir()
         daily_metrics = _load_daily_metrics(channel_dir)
@@ -92,6 +92,11 @@ def main() -> int:
     except Exception as e:
         logger.exception(f"エラー: {e}")
         return 1
+
+
+def main(argv: list[str] | None = None) -> int:
+    logging.basicConfig(level=logging.WARNING, format="%(levelname)s: %(message)s")
+    return run_cli(build_parser, run, argv, handled_errors=())
 
 
 if __name__ == "__main__":

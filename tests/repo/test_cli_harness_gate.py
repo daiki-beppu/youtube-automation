@@ -9,26 +9,19 @@ from tests.helpers.paths import REPO_ROOT
 
 COMMANDS_ROOT = REPO_ROOT / "src/youtube_automation/commands"
 HARNESS_MODULE = "youtube_automation.commands._shared.cli_harness"
-LEGACY_CLI_LIMIT = 78
+LEGACY_CLI_LIMIT = 71
 
 # #3925 導入時点の未移行 CLI。既存互換のため凍結し、移行した module は削除する。
 LEGACY_CLI_ALLOWLIST: frozenset[str] = frozenset(
     {
-        "youtube_automation.commands.analytics.ad_coverage",
         "youtube_automation.commands.analytics.analytics_system",
         "youtube_automation.commands.analytics.benchmark_collector",
-        "youtube_automation.commands.analytics.channel_trend",
         "youtube_automation.commands.analytics.cost_report",
         "youtube_automation.commands.analytics.dashboard",
         "youtube_automation.commands.analytics.discover_competitors",
         "youtube_automation.commands.analytics.experiment",
         "youtube_automation.commands.analytics.fetch_benchmark_comments",
-        "youtube_automation.commands.analytics.kpi_dashboard",
-        "youtube_automation.commands.analytics.launch_curve",
         "youtube_automation.commands.analytics.retention_timeline",
-        "youtube_automation.commands.analytics.theme_compare",
-        "youtube_automation.commands.analytics.traffic_trend",
-        "youtube_automation.commands.analytics.ttp_health",
         "youtube_automation.commands.analytics.video_analyze",
         "youtube_automation.commands.analytics.video_validator",
         "youtube_automation.commands.analytics.vpd_rank",

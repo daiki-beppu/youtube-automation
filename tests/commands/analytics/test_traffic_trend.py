@@ -131,9 +131,7 @@ class TestTrafficTrendCli:
                 search_terms=[{"detail": "lofi music", "views": 30, "watch_time_minutes": 90}],
             ),
         )
-        monkeypatch.setattr("sys.argv", ["yt-traffic-trend"])
-
-        assert traffic_trend.main() == 0
+        assert traffic_trend.main([]) == 0
         payload = json.loads(capsys.readouterr().out)
         assert payload["summary"]["top_source"] == "YT_SEARCH"
         assert payload["latest"]["search_terms"][0]["detail"] == "lofi music"
@@ -141,9 +139,7 @@ class TestTrafficTrendCli:
     def test_main_without_data_returns_2(self, channel_with_data, monkeypatch, capsys):
         from youtube_automation.commands.analytics import traffic_trend
 
-        monkeypatch.setattr("sys.argv", ["yt-traffic-trend"])
-
-        assert traffic_trend.main() == 2
+        assert traffic_trend.main([]) == 2
 
     def test_main_without_traffic_sources_returns_2(self, channel_with_data, monkeypatch):
         from youtube_automation.commands.analytics import traffic_trend
@@ -153,9 +149,7 @@ class TestTrafficTrendCli:
             "analytics_data_20260701_120000.json",
             {"collection_period": {"end_date": "2026-07-01"}, "collection_depth": "basic"},
         )
-        monkeypatch.setattr("sys.argv", ["yt-traffic-trend"])
-
-        assert traffic_trend.main() == 2
+        assert traffic_trend.main([]) == 2
 
     def test_main_text_output(self, channel_with_data, monkeypatch, capsys):
         from youtube_automation.commands.analytics import traffic_trend
@@ -165,9 +159,7 @@ class TestTrafficTrendCli:
             "analytics_data_20260701_120000.json",
             _snapshot("2026-07-01", sources={"BROWSE": {"views": 40, "view_share_percent": 100.0}}),
         )
-        monkeypatch.setattr("sys.argv", ["yt-traffic-trend", "--text"])
-
-        assert traffic_trend.main() == 0
+        assert traffic_trend.main(["--text"]) == 0
         out = capsys.readouterr().out
         assert "流入源・デバイス分析" in out
         assert "BROWSE" in out

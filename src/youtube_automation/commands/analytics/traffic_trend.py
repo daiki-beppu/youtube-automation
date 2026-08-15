@@ -14,6 +14,7 @@ import logging
 import sys
 from pathlib import Path
 
+from youtube_automation.commands._shared.cli_harness import run_cli
 from youtube_automation.configuration import channel_dir as _channel_dir
 from youtube_automation.core.errors import ConfigError
 from youtube_automation.infrastructure.analytics.traffic_trend import analyze_traffic_trend
@@ -59,9 +60,7 @@ def _print_text_summary(analysis: dict) -> None:
         print("\n🔍 YT_SEARCH 検索語: データなし（`yt-analytics` の再収集で取得）")
 
 
-def main() -> int:
-    logging.basicConfig(level=logging.WARNING, format="%(levelname)s: %(message)s")
-
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="流入源シェア推移とデバイス別集計")
     parser.add_argument(
         "--top-search",
@@ -70,9 +69,10 @@ def main() -> int:
         help="YT_SEARCH 検索語トップ N の件数 (default: 10)",
     )
     parser.add_argument("--text", action="store_true", help="人間向けテキスト出力")
+    return parser
 
-    args = parser.parse_args()
 
+def run(args: argparse.Namespace) -> int:
     try:
         channel_dir = _channel_dir()
         snapshots = _load_snapshots(channel_dir)
@@ -96,6 +96,11 @@ def main() -> int:
     except Exception as e:
         logger.exception(f"エラー: {e}")
         return 1
+
+
+def main(argv: list[str] | None = None) -> int:
+    logging.basicConfig(level=logging.WARNING, format="%(levelname)s: %(message)s")
+    return run_cli(build_parser, run, argv, handled_errors=())
 
 
 if __name__ == "__main__":

@@ -1711,7 +1711,6 @@ def test_theme_compare_missing_themes_error_uses_current_config_path(monkeypatch
     config = SimpleNamespace(content=SimpleNamespace(tags=SimpleNamespace(themes={})))
 
     caplog.set_level(logging.ERROR, logger="youtube_automation.commands.analytics.theme_compare")
-    monkeypatch.setattr(sys, "argv", ["yt-theme-compare"])
     monkeypatch.setattr(theme_compare, "_channel_dir", lambda: ROOT)
     monkeypatch.setattr(theme_compare, "load_config", lambda: config)
     monkeypatch.setattr(theme_compare, "load_latest_daily_snapshot", lambda _path: {"daily": []})
@@ -1722,7 +1721,7 @@ def test_theme_compare_missing_themes_error_uses_current_config_path(monkeypatch
         lambda **_kwargs: pd.DataFrame([{"video_id": "video", "days_since_publish": 0}]),
     )
 
-    assert theme_compare.main() == 2
+    assert theme_compare.main([]) == 2
     assert "config/channel/content.json::tags.themes" in caplog.text
 
 

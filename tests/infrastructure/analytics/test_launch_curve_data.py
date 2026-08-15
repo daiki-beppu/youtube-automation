@@ -1,5 +1,4 @@
 import json
-import sys
 from pathlib import Path
 
 import pandas as pd
@@ -123,10 +122,9 @@ def test_launch_curve_latest_png_handles_mixed_missing_impressions_and_ctr(tmp_p
         )
 
     monkeypatch.setattr(launch_curve, "_channel_dir", lambda: tmp_path)
-    monkeypatch.setattr(sys, "argv", ["yt-launch-curve", "--latest", "--png"])
     monkeypatch.setenv("MPLCONFIGDIR", str(tmp_path / "matplotlib"))
 
-    assert launch_curve.main() == 0
+    assert launch_curve.main(["--latest", "--png"]) == 0
     payload = json.loads(capsys.readouterr().out)
 
     assert payload["target"]["video_id"] == "v2"

@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from statistics import median
 
+from youtube_automation.commands._shared.cli_harness import run_cli
 from youtube_automation.configuration import channel_dir as _channel_dir
 from youtube_automation.core.errors import ConfigError
 
@@ -173,7 +174,7 @@ def _min_playbacks(value: str) -> int:
     return parsed
 
 
-def _build_parser() -> argparse.ArgumentParser:
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="動画別 ads-per-playback の中央値から広告カバレッジ低下を検出")
     parser.add_argument(
         "--threshold",
@@ -215,9 +216,7 @@ def _print_text(analysis: Mapping[str, object]) -> None:
         )
 
 
-def main() -> int:
-    logging.basicConfig(level=logging.WARNING, format="%(levelname)s: %(message)s")
-    args = _build_parser().parse_args()
+def run(args: argparse.Namespace) -> int:
     try:
         revenue = load_latest_revenue(_channel_dir())
         analysis = analyze_ad_coverage(revenue, threshold=args.threshold, min_playbacks=args.min_playbacks)
@@ -229,6 +228,11 @@ def main() -> int:
     except ConfigError as error:
         logger.error(str(error))
         return 2
+
+
+def main(argv: list[str] | None = None) -> int:
+    logging.basicConfig(level=logging.WARNING, format="%(levelname)s: %(message)s")
+    return run_cli(build_parser, run, argv, handled_errors=())
 
 
 if __name__ == "__main__":
