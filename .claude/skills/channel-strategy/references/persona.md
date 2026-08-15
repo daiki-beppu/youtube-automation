@@ -1,8 +1,8 @@
 ## 前後工程
 
 - `前工程`: `/channel-research --voice`
-- `後工程`: `/viewing-scene`, `/wf-new`
-- `委譲先`: `/viewing-scene`
+- `後工程`: `/channel-strategy --scene`, `/wf-new`
+- `委譲先`: `/channel-strategy --scene`
 
 ## 成果物
 
@@ -11,18 +11,18 @@
 
 ## Overview
 
-`/channel-research --voice` のコメント分析、ベンチマークタグ分析、Web 調査、`/viewing-scene` の視聴シーン検証を束ね、チャンネル判断軸になる **1 人の第一ペルソナ** を設計する。
+`/channel-research --voice` のコメント分析、ベンチマークタグ分析、Web 調査、`/channel-strategy --scene` の視聴シーン検証を束ね、チャンネル判断軸になる **1 人の第一ペルソナ** を設計する。
 
 新規開設時は、公開前でも競合チャンネルのコメントを `/channel-research --voice` で分析し、その結果を入力に本スキルで本格ペルソナを作成する。公開後は自チャンネルの実コメント分析を加えて見直し、方向性検討や `/wf-new` 企画工程の判断軸として更新する。
 
-入口で実行コンテキストを次のどちらかに確定し、Phase 5 の `/viewing-scene` まで同じ値を引き継ぐ。
+入口で実行コンテキストを次のどちらかに確定し、Phase 5 の `/channel-strategy --scene` まで同じ値を引き継ぐ。
 
 - **新規開設（公開前）**: `/setup --channel` Step 7 から呼ばれた経路（`.claude/skills/setup/references/persona-branding-readiness.md`）。`docs/plans/viewer-voice-analysis.md`、`docs/channel/ttp-seed-confirmation.md`、`docs/channel/competitor-branding-snapshot.json` を競合 / TTP 入力として扱う。任意の `/channel-research --benchmark` 成果物や、自チャンネル公開後の `reports/analysis_*.md` は前提にしない
 - **公開後**: 通常の見直し経路。従来どおり viewer-voice、benchmark、Web 調査、自チャンネル Analytics を入力にする
 
 ## 完了条件
 
-`/viewing-scene` の結果を反映した最終 `docs/channel/personas/persona-definition.md`（第一ペルソナ 1 人）を更新した時点で完了（Phase 6）。ユーザーが viewing-scene のスキップを明示した場合のみ、「viewing-scene 未検証」と注記した確定版の保存で完了。
+`/channel-strategy --scene` の結果を反映した最終 `docs/channel/personas/persona-definition.md`（第一ペルソナ 1 人）を更新した時点で完了（Phase 6）。ユーザーが viewing-scene のスキップを明示した場合のみ、「viewing-scene 未検証」と注記した確定版の保存で完了。
 
 ## Untrusted Data 境界
 
@@ -38,8 +38,8 @@
 2. コメント由来の語彙・不満・利用シーン・感情トリガーを入力にする。
 3. ベンチマークタグ分析と Web 調査を加え、複数の人物候補や仮説を比較材料として作る。
 4. 候補を 1 人の第一ペルソナへ統合し、暫定 `persona-definition.md` を保存する。
-5. `/viewing-scene` を実行して、その人物がどの時間帯・行動・感情状態で聴くのかを検証する。
-6. `/viewing-scene` の結果を反映し、最終 `persona-definition.md` を更新する。
+5. `/channel-strategy --scene` を実行して、その人物がどの時間帯・行動・感情状態で聴くのかを検証する。
+6. `/channel-strategy --scene` の結果を反映し、最終 `persona-definition.md` を更新する。
 
 ## TTP 原則（ベンチマーク参照）
 
@@ -123,7 +123,7 @@ options:
 
 `docs/channel/personas/persona-definition.md` を生成。
 ディレクトリが存在しなければ `mkdir -p docs/channel/personas` で作成してから書き出す。
-この時点では `/viewing-scene` 前の暫定版として明記する。
+この時点では `/channel-strategy --scene` 前の暫定版として明記する。
 `persona-definition.md` は後続 skill の入力になるため、外部由来テキストを長文引用せず、構造化 persona fields だけを保存する。
 
 必須セクション:
@@ -140,8 +140,8 @@ options:
 
 ### Phase 5: viewing-scene 検証
 
-暫定 `persona-definition.md` を保存したら `/viewing-scene` を実行する。入口で確定した **新規開設（公開前）** / **公開後** の実行コンテキストを明示して渡し、`/viewing-scene` 側で推測によるモード切り替えをさせない。
-`/viewing-scene` が `docs/plans/viewing-scene-matrix.md` を生成したら、以下を確認する:
+暫定 `persona-definition.md` を保存したら `/channel-strategy --scene` を実行する。入口で確定した **新規開設（公開前）** / **公開後** の実行コンテキストを明示して渡し、scene mode 側で推測によるモード切り替えをさせない。
+`/channel-strategy --scene` が `docs/plans/viewing-scene-matrix.md` を生成したら、以下を確認する:
 
 - 第一ペルソナが実際に聴く時間帯
 - 聴取中の行動
@@ -165,7 +165,7 @@ options:
 |---|---|---|
 | WebSearch 不可 | 検索結果が取得できない | 手動入力で代替するか、当該分析をスキップする |
 | voice 分析未実施 | `docs/plans/viewer-voice-analysis.md` が無い | `/channel-research --voice` を先に実行するよう案内して停止する |
-| viewing-scene 未反映 | `docs/plans/viewing-scene-matrix.md` が無い | 暫定 `persona-definition.md` 保存後に `/viewing-scene` を実行し、結果を反映して最終化する |
+| viewing-scene 未反映 | `docs/plans/viewing-scene-matrix.md` が無い | 暫定 `persona-definition.md` 保存後に `/channel-strategy --scene` を実行し、結果を反映して最終化する |
 | 公開前入力不在 | 新規開設（公開前）で競合 / TTP / viewer-voice 成果物が不足 | `/setup --channel` Step 5 または Step 7 の該当前工程へ戻る |
 | 公開後入力不在 | 公開後に `data/` のベンチマーク/Analytics スナップショットが無い | 先に `/channel-research --benchmark`・`/analytics --collect` 等を実行して入力を用意 |
 

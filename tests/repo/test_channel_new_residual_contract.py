@@ -34,7 +34,7 @@ SHARED_ASSET_SHA256 = {
     "verification.md": "4ce440663e0faf0f1e5916920486f9e62c3ed0a3ab86624c189ebbe19cd5d8f1",
 }
 MOVED_ASSET_SHA256 = {
-    "import-mode.md": "673c4e5bc99ea739fe2decf76856a34f9c468c64f7b83a9664624e51996431c9",
+    "import-mode.md": "3f3c14d19df27e9fcde6b799230e958a4d3459ba6bfbd1ba5939b2e5d350bb37",
     "localizations-template.json": "d0267074151af61f27856d0e67e8f0c3d56cf327b2255e00a8035e2851cde558",
     "push-mode.md": "be122ecbe19c803cfe09465f68ab364636f46f92f0ec842fb803566337eb57ee",
     "regeneration-mode.md": "152a4e233862da2abc84cc7fa229c6ac630a2830d4ac7297828f8ab6bef39347",

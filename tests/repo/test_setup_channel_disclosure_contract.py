@@ -334,7 +334,7 @@ def test_persona_branding_readiness_detail_sections_have_one_reference_owner() -
 def test_persona_branding_readiness_and_wf_new_handoff_keep_order() -> None:
     skill = SKILL_MD.read_text(encoding="utf-8")
 
-    persona = skill.index("/channel-research --voice` → `/channel-strategy --persona` → `/viewing-scene`")
+    persona = skill.index("/channel-research --voice` → `/channel-strategy --persona` → `/channel-strategy --scene`")
     branding = skill.index("### Step 8:", persona)
     image_approval = skill.index("ユーザーに提示して承認", branding)
     branding_apply = skill.index("yt-channel-settings push --apply", image_approval)
@@ -554,6 +554,7 @@ def test_moved_opening_assets_preserve_pre_move_bytes_or_owner_only_semantics() 
             )
         if asset == "persona-branding-readiness.md":
             payload = payload.replace(b"/channel-strategy --persona", b"/audience-persona-design")
+            payload = payload.replace(b"/channel-strategy --scene", b"/viewing-scene")
             payload = payload.replace(
                 "/channel-research --market` を使う。既定は".encode(),
                 "/market-research` を使う。既定は".encode(),

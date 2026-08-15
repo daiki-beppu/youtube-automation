@@ -9,6 +9,15 @@
       "idempotency": {
         "script": "references/channel-strategy-chain-state.py"
       }
+    },
+    {
+      "id": "scene",
+      "skill": "channel-strategy",
+      "prerequisiteArtifacts": ["docs/channel/personas/persona-definition.md"],
+      "outputArtifacts": ["docs/plans/viewing-scene-matrix.md"],
+      "idempotency": {
+        "script": "references/channel-strategy-chain-state.py"
+      }
     }
   ]
 }

@@ -1,4 +1,4 @@
-"""Executable contracts for ``/channel-strategy --persona`` (#3820)."""
+"""Executable contracts for ``/channel-strategy`` modes (#3820, #3821)."""
 
 from __future__ import annotations
 
@@ -13,14 +13,15 @@ ROOT = REPO_ROOT
 SKILL_DIR = ROOT / ".claude" / "skills" / "channel-strategy"
 SKILL = SKILL_DIR / "SKILL.md"
 PERSONA = SKILL_DIR / "references" / "persona.md"
+SCENE = SKILL_DIR / "references" / "scene.md"
 MANIFEST = SKILL_DIR / "references" / "channel-strategy-chain-manifest.json"
 STATE = SKILL_DIR / "references" / "channel-strategy-chain-state.py"
 INVENTORY = SkillInventory(ROOT)
 
 
-def _run_state(channel_dir: Path) -> tuple[int, dict[str, object]]:
+def _run_state(channel_dir: Path, step: str) -> tuple[int, dict[str, object]]:
     result = subprocess.run(
-        ["uv", "run", "python", str(STATE), "--channel-dir", str(channel_dir), "--step", "persona"],
+        ["uv", "run", "python", str(STATE), "--channel-dir", str(channel_dir), "--step", step],
         cwd=ROOT,
         capture_output=True,
         text=True,
@@ -35,15 +36,17 @@ def _touch(root: Path, relative: str) -> None:
     path.write_text("# artifact\n", encoding="utf-8")
 
 
-def test_channel_strategy_distributes_persona_mode_as_the_canonical_owner() -> None:
+def test_channel_strategy_distributes_persona_and_scene_as_the_canonical_owner() -> None:
     names = {path.name for path in INVENTORY.skill_directories()}
 
     assert "channel-strategy" in names
     assert "audience-persona-design" not in names
+    assert "viewing-scene" not in names
     assert PERSONA.is_file()
+    assert SCENE.is_file()
 
 
-def test_channel_strategy_registers_only_persona_and_reserves_later_modes() -> None:
+def test_channel_strategy_registers_persona_and_scene_and_reserves_later_modes() -> None:
     text = SKILL.read_text(encoding="utf-8")
     frontmatter = INVENTORY.frontmatter("channel-strategy")
     mode_table = text.split("| mode | 読む reference |", 1)[1].split("## 共通前提", 1)[0]
@@ -52,11 +55,11 @@ def test_channel_strategy_registers_only_persona_and_reserves_later_modes() -> N
     assert frontmatter["name"] == "channel-strategy"
     assert frontmatter["purpose"] == "決める"
     assert "--persona" in frontmatter["description"]
-    assert modes == ["`--persona`"]
-    assert all(flag in text for flag in ("--scene", "--constraints", "--direction"))
+    assert modes == ["`--persona`", "`--scene`"]
+    assert all(flag in text for flag in ("--constraints", "--direction"))
 
 
-def test_channel_strategy_manifest_contains_only_persona_step() -> None:
+def test_channel_strategy_manifest_orders_persona_before_scene() -> None:
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
 
     assert manifest == {
@@ -68,13 +71,20 @@ def test_channel_strategy_manifest_contains_only_persona_step() -> None:
                 "prerequisiteArtifacts": ["docs/plans/viewer-voice-analysis.md"],
                 "outputArtifacts": ["docs/channel/personas/persona-definition.md"],
                 "idempotency": {"script": "references/channel-strategy-chain-state.py"},
-            }
+            },
+            {
+                "id": "scene",
+                "skill": "channel-strategy",
+                "prerequisiteArtifacts": ["docs/channel/personas/persona-definition.md"],
+                "outputArtifacts": ["docs/plans/viewing-scene-matrix.md"],
+                "idempotency": {"script": "references/channel-strategy-chain-state.py"},
+            },
         ],
     }
 
 
 def test_persona_state_blocks_until_viewer_voice_exists(tmp_path: Path) -> None:
-    exit_code, result = _run_state(tmp_path)
+    exit_code, result = _run_state(tmp_path, "persona")
 
     assert exit_code == 20
     assert result == {
@@ -88,13 +98,40 @@ def test_persona_state_blocks_until_viewer_voice_exists(tmp_path: Path) -> None:
 
 def test_persona_state_runs_then_skips_after_output_exists(tmp_path: Path) -> None:
     _touch(tmp_path, "docs/plans/viewer-voice-analysis.md")
-    exit_code, result = _run_state(tmp_path)
+    exit_code, result = _run_state(tmp_path, "persona")
     assert exit_code == 10
     assert result["decision"] == "run"
     assert result["reason"] == "persona_missing"
 
     _touch(tmp_path, "docs/channel/personas/persona-definition.md")
-    exit_code, result = _run_state(tmp_path)
+    exit_code, result = _run_state(tmp_path, "persona")
     assert exit_code == 0
     assert result["decision"] == "skip"
     assert result["reason"] == "persona_complete"
+
+
+def test_scene_state_blocks_until_persona_exists(tmp_path: Path) -> None:
+    exit_code, result = _run_state(tmp_path, "scene")
+
+    assert exit_code == 20
+    assert result == {
+        "step": "scene",
+        "decision": "blocked",
+        "reason": "persona_missing",
+        "missing": ["docs/channel/personas/persona-definition.md"],
+        "next": "channel-strategy --persona",
+    }
+
+
+def test_scene_state_runs_then_skips_after_output_exists(tmp_path: Path) -> None:
+    _touch(tmp_path, "docs/channel/personas/persona-definition.md")
+    exit_code, result = _run_state(tmp_path, "scene")
+    assert exit_code == 10
+    assert result["decision"] == "run"
+    assert result["reason"] == "scene_missing"
+
+    _touch(tmp_path, "docs/plans/viewing-scene-matrix.md")
+    exit_code, result = _run_state(tmp_path, "scene")
+    assert exit_code == 0
+    assert result["decision"] == "skip"
+    assert result["reason"] == "scene_complete"

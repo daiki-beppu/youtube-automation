@@ -1,18 +1,18 @@
 ---
 name: channel-strategy
 purpose: 決める
-description: "Use when チャンネル戦略を状態判定付きで一括実行または一段だけ実行するとき。第一ペルソナの設計・見直しは --persona を使う。「ペルソナ設定」「視聴者像」「ターゲット層」「チャンネル戦略」で発動。前提となる視聴者インサイト抽出は channel-research の voice mode を使う"
+description: "Use when チャンネル戦略を状態判定付きで一括実行または一段だけ実行するとき。第一ペルソナは --persona、視聴シーン（いつ・どこで・なぜ聴くか）の検証・定義は --scene を使う。「ペルソナ設定」「視聴者像」「ターゲット層」「視聴シーン」「利用シーン」「シーン分析」「チャンネル戦略」で発動。前提となる視聴者インサイト抽出は channel-research の voice mode を使う"
 ---
 
 ## 前後工程
 
 - `前工程`: `/channel-research --voice`
-- `後工程`: `/viewing-scene`, `/creative-constraints`, `/channel-new`, `/wf-new`
-- `委譲先`: `/viewing-scene`
+- `後工程`: `/creative-constraints`, `/channel-new`, `/wf-new`
+- `委譲先`: `なし`
 
 ## 成果物
 
-- `書き込む`: `docs/channel/personas/persona-definition.md`
+- `書き込む`: `docs/channel/personas/persona-definition.md`, `docs/plans/viewing-scene-matrix.md`
 - `読み込む`: `docs/plans/viewer-voice-analysis.md`, `docs/plans/viewing-scene-matrix.md`, `data/benchmark_*.json`
 
 ## モード判定
@@ -21,13 +21,15 @@ description: "Use when チャンネル戦略を状態判定付きで一括実行
 
 - 2 個以上なら排他違反として停止し、1 つだけ指定するよう促す
 - 1 個が `--persona` なら `references/persona.md` を読み、その一段だけを実行する。残りの引数は persona mode の引数として扱う
+- 1 個が `--scene` なら `references/scene.md` を読み、その一段だけを実行する。残りの引数は scene mode の引数として扱う
 - 0 個なら chain manifest に従い状態判定付きで進める
-- `--scene`、`--constraints`、`--direction` は後続段で登録する予約名であり、現段では未知の mode として停止する
+- `--constraints`、`--direction` は後続段で登録する予約名であり、現段では未知の mode として停止する
 - mode はこの表へ最大 4 件まで追加でき、判定規則を複製しない。予約名以外の未知の mode flag も停止する
 
 | mode | 読む reference |
 |---|---|
 | `--persona` | `references/persona.md` |
+| `--scene` | `references/scene.md` |
 
 ## 共通前提
 
@@ -37,17 +39,19 @@ description: "Use when チャンネル戦略を状態判定付きで一括実行
 
 ## 一括実行
 
-`references/channel-strategy-chain-manifest.json` と `references/channel-strategy-chain-state.py` を検証し、現段では manifest に登録された `persona` だけを進める。`scene` と `constraints` は後続段で chain に追加し、方向性検討は立ち上げ後の見直し工程なので `direction` を chain に含めない。
+`references/channel-strategy-chain-manifest.json` と `references/channel-strategy-chain-state.py` を検証し、manifest の順序どおり `persona` → `scene` を進める。`constraints` は後続段で chain に追加し、方向性検討は立ち上げ後の見直し工程なので `direction` を chain に含めない。
 
 ```bash
 uv run python .claude/skills/channel-strategy/references/channel-strategy-chain-state.py \
   --channel-dir . --step persona
 ```
 
+`persona` が完了したら同じコマンドの `--step` を `scene` に替えて判定する。
+
 | exit | `decision` | 処理 |
 |---:|---|---|
-| 0 | `skip` | persona 成果物が揃っているため完了として終了する |
-| 10 | `run` | `references/persona.md` を読み、同じ一段を実行する |
+| 0 | `skip` | その段の成果物が揃っているため次の段へ進む |
+| 10 | `run` | 対応する reference を読み、同じ一段を実行する |
 | 20 | `blocked` | 不足している前提と解消方法を表示して停止する |
 | その他 | `error` | manifest / script のエラーとして停止する |
 
@@ -55,11 +59,12 @@ uv run python .claude/skills/channel-strategy/references/channel-strategy-chain-
 
 ## 完了条件
 
-- フラグなし: `persona` が `skip` または実行後 `skip` になっている
+- フラグなし: `persona` → `scene` がそれぞれ `skip` または実行後 `skip` になっている
 - `--persona`: `references/persona.md` の完了条件を満たしている
+- `--scene`: `references/scene.md` の完了条件を満たしている
 
 実行段、skip 段、前提不足、更新成果物を短く報告する。
 
 ## 想定 API call 数
 
-persona mode の詳細は `references/persona.md` を正とする。ローカル成果物の状態判定は外部 API を呼ばない。Web 調査を行う場合は検索前に対象と目的を示し、接続済み一次情報を優先する。
+各 mode の詳細は対応する reference を正とする。ローカル成果物の状態判定は外部 API を呼ばない。Web 調査を行う場合は検索前に対象と目的を示し、接続済み一次情報を優先する。

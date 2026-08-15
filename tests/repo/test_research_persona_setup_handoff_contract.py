@@ -11,7 +11,6 @@ TARGET_SKILLS = (
     "channel-strategy",
     "channel-research",
     "video-analyze",
-    "viewing-scene",
 )
 
 
@@ -86,7 +85,7 @@ OCCURRENCE_LEDGER = (
         (("missing-config-existing", "existing-import"),),
     ),
     *_occurrences(
-        "viewing-scene",
+        "channel-strategy",
         (
             ("prelaunch-entry", "new-opening"),
             ("missing-config-new", "new-opening"),
@@ -100,10 +99,9 @@ OCCURRENCE_LEDGER = (
 # SHA-256 of ordered ``section heading + active route line`` records. This binds
 # every route to its exact active Markdown context without duplicating long prose.
 ROUTE_CONTEXT_SHA256 = {
-    "channel-strategy": "b0464dca8a95039f9d20220ff3fa8ff75237249b75a024a91562e12983b614e7",
+    "channel-strategy": "6ffe3799d52297a6b98bad83b6871e796c09a3be8beae084f412f66682e13902",
     "channel-research": "626835fe7b37f18bdbf3e233dcc070b533415a4538133ffbb0e02a448fe59b5b",
     "video-analyze": "f28ee9c9b0a18c3ecae15b631f970d780b18bda72185a25935b56f0a66ba6552",
-    "viewing-scene": "33bbac06ed3fd6008ce21b9e9da4c488ad4c6855c9484c7ef4f106e2149aa05f",
 }
 SETUP_ASSET_OWNERS = {
     "channel-strategy": ("persona-branding-readiness.md",),
@@ -112,7 +110,6 @@ SETUP_ASSET_OWNERS = {
         "persona-branding-readiness.md",
         "new-channel-bootstrap.md",
     ),
-    "viewing-scene": ("persona-branding-readiness.md",),
 }
 UNCHANGED_SKILL_SHA256 = {
     "video-analyze": "45032757ba0366fa467160d1cde67f8bc28033cc24c1a7b9d8a8cb436af2e666",
@@ -137,6 +134,7 @@ def _skill_text(skill: str) -> str:
     text = (SKILLS_DIR / skill / "SKILL.md").read_text(encoding="utf-8")
     if skill == "channel-strategy":
         text += (SKILLS_DIR / skill / "references" / "persona.md").read_text(encoding="utf-8")
+        text += (SKILLS_DIR / skill / "references" / "scene.md").read_text(encoding="utf-8")
     if skill == "channel-research":
         text += (SKILLS_DIR / skill / "references" / "discover.md").read_text(encoding="utf-8")
         text += (SKILLS_DIR / skill / "references" / "market.md").read_text(encoding="utf-8")
@@ -188,7 +186,7 @@ def _route_violations(skill: str, text: str) -> set[str]:
     return violations
 
 
-def test_all_four_skills_match_the_context_classified_occurrence_ledger() -> None:
+def test_all_three_skills_match_the_context_classified_occurrence_ledger() -> None:
     assert {entry[0] for entry in OCCURRENCE_LEDGER} == set(TARGET_SKILLS)
     assert len(OCCURRENCE_LEDGER) == 35
     assert sum(entry[3] == "redirected" for entry in OCCURRENCE_LEDGER) == 17

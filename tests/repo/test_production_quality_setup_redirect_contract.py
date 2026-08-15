@@ -185,7 +185,8 @@ _RAW_EXPECTED_ACTIVE_ROUTES = (
     _route(
         "flop-analysis/SKILL.md",
         "### Phase 4: 検証の自律実行",
-        "- `/alignment-check`、`/channel-research --voice`、`/channel-strategy --persona`、`/viewing-scene`、"
+        "- `/alignment-check`、`/channel-research --voice`、`/channel-strategy --persona`、"
+        "`/channel-strategy --scene`、"
         "`/channel-new` はスキルとして起動しない。これらは AskUserQuestion、設定更新、または別成果物の保存を"
         "完了条件に含むため、既存の `docs/plans/alignment-audit.md`、`docs/plans/viewer-voice-analysis.md`、"
         "`docs/channel/personas/persona-definition.md`、`docs/plans/viewing-scene-matrix.md` がある場合だけ "
