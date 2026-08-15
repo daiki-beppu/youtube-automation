@@ -259,9 +259,9 @@ class TestRemoteChapterMaxSkillConfig:
     def _reset_skill_config_cache(self):
         from youtube_automation.configuration import skills as skill_config
 
-        skill_config.reset("metadata-audit")
+        skill_config.reset("audit.metadata")
         yield
-        skill_config.reset("metadata-audit")
+        skill_config.reset("audit.metadata")
 
     def test_default_remote_chapter_max_is_12(self) -> None:
         from youtube_automation.commands.metadata.metadata_audit import _remote_chapter_max

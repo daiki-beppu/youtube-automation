@@ -141,10 +141,9 @@ project ID が解決済み、または `apply_flags` へ `--project-id` / `--bil
 | 3 | `config/channel/workflow.json` | `workflow.wf_next.skip_manual_mastering` | `false` | 「手動マスタリング検出をスキップしますか？ 現在値: `<current>`。推奨: 現在値を維持（既存のマスタリングフローを変えないため）」 |
 | 4 | `config/channel/workflow.json` | `workflow.post-publish.skip_approvals.community-post` | `true` | 「コミュニティ投稿前の承認をスキップしますか？ 現在値: `<current>`。推奨: 現在値を維持」 |
 | 5 | `config/channel/workflow.json` | `workflow.post-publish.skip_approvals.pinned-comment` | `true` | 「固定コメント前の承認をスキップしますか？ 現在値: `<current>`。推奨: 現在値を維持」 |
-| 6 | `config/channel/workflow.json` | `workflow.post-publish.skip_approvals.metadata-audit` | `true` | 「メタデータ監査前の承認をスキップしますか？ 現在値: `<current>`。推奨: 現在値を維持」 |
-| 7 | `config/skills/loop-video.yaml` | `enabled` | `true` | 「ループ動画生成を有効にしますか？ 現在値: `<current>`。Veo API の利用には課金が発生します。推奨: 現在値を維持（既存の Veo 利用方針を変えないため）」 |
+| 6 | `config/skills/loop-video.yaml` | `enabled` | `true` | 「ループ動画生成を有効にしますか？ 現在値: `<current>`。Veo API の利用には課金が発生します。推奨: 現在値を維持（既存の Veo 利用方針を変えないため）」 |
 
-`workflow.wf_next.skip_*_approval` と `workflow.post-publish.skip_approvals.*` はすべて `true = 承認省略`。`workflow.wf_next.skip_manual_mastering` を `true` にすると、最終マスター候補がなくても raw master を最終音源として採用する。
+`workflow.wf_next.skip_*_approval` と `workflow.post-publish.skip_approvals.*` はすべて `true = 承認省略`。非推奨の `metadata-audit` 承認キーは新規生成しない。`workflow.wf_next.skip_manual_mastering` を `true` にすると、最終マスター候補がなくても raw master を最終音源として採用する。
 
 `config/skills/loop-video.yaml` が存在しない場合は、解決した現在値と異なる回答のときだけ、回答値を `enabled` に持つ override ファイルを新規作成する。現在値のままなら override ファイルを作成してはならない。
 

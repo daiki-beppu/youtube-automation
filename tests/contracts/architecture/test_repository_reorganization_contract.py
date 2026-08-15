@@ -1527,6 +1527,7 @@ def test_reorganization_receipt_names_existing_non_contract_consumers() -> None:
         consumer_paths.extend(consumers)
 
     historical_consumer_moves = {
+        ".claude/skills/metadata-audit/SKILL.md": ".claude/skills/audit/references/metadata.md",
         ".claude/skills/video-analyze/SKILL.md": ".claude/skills/audit/references/video.md",
         ".claude/skills/channel-new/SKILL.md": ".claude/skills/channel-strategy/SKILL.md",
         ".claude/skills/channel-new/references/analysis-mode.md": ".claude/skills/channel-research/references/market.md",

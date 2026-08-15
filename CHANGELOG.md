@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `feat(skills)`: `/publish --community` に旧 `/community-post` の固定テンプレ保存・クリップボードコピー・Studio 起動契約を統合する。chain を `playlist` → `upload` → `community` へ拡張し、post-publish の承認設定と旧 override 互換を維持したまま、旧 skill directory と利用者導線・配布・site 契約を更新する（#3843）。
 - `feat(skills)`: 旧 `/masterup` の Suno DL・選曲・ラウドネス検証・クロスフェードマスター化を `/music --master` へ統合し、Lyria の自動 skip、4-step chain、旧 config override 互換を追加した（#3827）。
+- `feat(skills)`: `/audit --metadata` に旧 `/metadata-audit` のローカル・YouTube メタデータ整合監査を読み取り専用のまま統合する。`audit.metadata` 設定節、旧 override 互換・移行 CLI、`/video --describe` への修正導線を追加し、旧 post-publish 承認キーは警告付きの非推奨とする（#3855）。
 
 - `feat(skills)`: `/publish --playlist` に旧 `/playlist` の状態確認・初期化・割り当て・cleanup 契約を統合する。chain を `playlist` → `upload` へ拡張し、playlist 作成の dry-run・明示承認を維持したまま、旧 skill directory と利用者導線・配布・site 契約を更新する（#3842）。
 

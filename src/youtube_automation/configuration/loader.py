@@ -6,6 +6,7 @@ import json
 import logging
 import math
 import os
+import warnings
 from pathlib import Path
 
 from youtube_automation.configuration.analytics import Analytics, Benchmark
@@ -696,6 +697,17 @@ def _build_workflow(merged: dict) -> Workflow:
             "workflow.post-publish.approval_gates は object でなければなりません"
             f"（got {type(post_publish_gates_raw).__name__}）"
         )
+    for key, values in (
+        ("skip_approvals", post_publish_skip_raw),
+        ("approval_gates", post_publish_gates_raw),
+    ):
+        if "metadata-audit" in values:
+            warnings.warn(
+                f"workflow.post-publish.{key}.metadata-audit は非推奨です。"
+                "メタデータ監査は読み取り専用の /audit --metadata へ移行しました",
+                DeprecationWarning,
+                stacklevel=2,
+            )
     post_publish_steps = {"community-post", "pinned-comment", "metadata-audit"}
     for key, values in (
         ("skip_approvals", post_publish_skip_raw),

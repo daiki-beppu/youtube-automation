@@ -1,13 +1,9 @@
----
-name: metadata-audit
-purpose: 振り返る
-description: "Use when ローカル descriptions.md と YouTube メタデータの整合を監査するとき。「メタデータ監査」「説明欄ずれてない？」で発動。修正は /video-description の責務"
----
+# Metadata mode
 
 ## 前後工程
 
-- `前工程`: `/publish --upload`, `/post-publish`
-- `後工程`: `/video-description`
+- `前工程`: `/publish --upload`, `/publish`
+- `後工程`: `/video --describe`
 - `委譲先`: `なし`
 
 ## 成果物
@@ -19,26 +15,26 @@ description: "Use when ローカル descriptions.md と YouTube メタデータ�
 
 `yt-metadata-audit` のラッパー。`collections/live/<col>/20-documentation/descriptions.md` と `workflow-state.json` の整合性、および YouTube API 側 snippet/localizations の整合性を読み取り専用で監査する。
 
-**修正は範囲外**。差分検出後の更新は `/video-description` で descriptions.md を再生成し、必要に応じて `yt-bulk-update-desc` 経由で push する。
+**修正は範囲外**。自身では修正しない。差分検出後の更新は `/video --describe` で descriptions.md を再生成し、必要に応じて運用者が別経路で YouTube 側へ反映する。
 
 ## 完了条件
 
 - `uv run yt-metadata-audit`（または `--local` / `--remote`）が完走し、監査結果が表示されている
 - 検出された issue それぞれに、Step 2 の対応表に基づく次アクションを案内している（issue 0 件ならその旨を報告して終了）
-- 本スキル内では修正を行っていない（読み取り専用。修正は `/video-description` へ委譲）
+- 本 mode 内では修正を行っていない（読み取り専用。修正は `/video --describe` へ委譲）
 
 ## チェーンからの呼出
 
-`/post-publish <collection>` から呼ばれた場合も既定の local + remote 監査と完了条件は同じで、単独発動を無効化しない。監査が完走した場合だけチェーンへ完了を返し、認証・API・監査処理の失敗時は履歴更新を行わせない。
+`/post-publish <collection>` の互換 chain から内部 step `metadata-audit` として呼ばれた場合も、既定の local + remote 監査と完了条件は同じ。単独発動では `/audit --metadata` を使う。監査が完走した場合だけ chain へ完了を返し、認証・API・監査処理の失敗時は履歴更新を行わせない。
 
 ## 設定読み込みゲート
 
 以下を deep-merge した値を設定として使う。
 
-1. `.claude/skills/metadata-audit/config.default.yaml`
-2. `config/skills/metadata-audit.yaml`（存在する場合）
+1. `.claude/skills/audit/config.default.yaml` の `metadata:` 節
+2. `config/skills/audit.yaml` の `metadata:` 節（存在する場合）
 
-合成規則は `youtube_automation.configuration.skills.load_skill_config("metadata-audit")` と同じで、チャンネル上書きが優先される。存在しない override は未設定として扱い、勝手に作成しない。REMOTE チェックのチャプター上限は `chapters.remote_max` を参照する（実装 `metadata_audit.py` も同じ経路で読む）。
+合成規則は `youtube_automation.configuration.skills.load_skill_config("audit.metadata")` と同じで、チャンネル上書きが優先される。移行前の `config/skills/metadata-audit.yaml` は互換入口として同じ設定に読み込むが、存在しない override は勝手に作成しない。REMOTE チェックのチャプター上限は `chapters.remote_max` を参照する。
 
 ## 前提
 
@@ -70,7 +66,7 @@ description: "Use when ローカル descriptions.md と YouTube メタデータ�
 |---|---|---|
 | YouTube Data API v3 videos.list（1 unit/call） | remote 監査（既定および `--remote`）で 1 call = 1 unit | `--local` 指定時は 0 |
 
-- 上限 / 承認: 読み取り専用の監査で書き込みは範囲外（修正は `/video-description` の責務）。API を使いたくない場合は `--local` で API call 0 の監査に切り替えられる。
+- 上限 / 承認: 読み取り専用の監査で書き込みは範囲外（修正は `/video --describe` の責務）。API を使いたくない場合は `--local` で API call 0 の監査に切り替えられる。
 
 ## Instructions
 
@@ -92,7 +88,7 @@ description: "Use when ローカル descriptions.md と YouTube メタデータ�
 - video_id が YouTube 上に存在するか
 - YouTube 側 title 100 文字超過
 - `🎧  🌧` のように scene_phrase が脱落して空白だけ残った title
-- description のタイムスタンプ数 > skill-config `chapters.remote_max`（既定 12。`.claude/skills/metadata-audit/config.default.yaml` を `config/skills/metadata-audit.yaml` で上書き可能。実装は `load_skill_config("metadata-audit")` 経由で読む）
+- description のタイムスタンプ数 > skill-config `chapters.remote_max`（既定 12。`.claude/skills/audit/config.default.yaml::metadata` を `config/skills/audit.yaml::metadata` で上書き可能。実装は `load_skill_config("audit.metadata")` 経由で読む）
 - ja localized title に日本語文字が含まれていない
 - zh コードが `['zh-CN', 'zh-TW']` 以外の組合せ（旧 `zh-Hans` / `zh-Hant` 残骸検出）
 
@@ -100,8 +96,8 @@ description: "Use when ローカル descriptions.md と YouTube メタデータ�
 
 監査出力に基づき、ユーザーに次のアクションを案内する:
 
-- **`descriptions.md` 側の問題**（タイトル長すぎ、timestamp 過多など） → `/video-description` で再生成
-- **YouTube 側との差分**（local と remote がずれている） → `/video-description` で descriptions.md を最新化したあと、運用者が `yt-bulk-update-desc` で push（一括更新スクリプトは現状チャンネル固有のため別途運用）
+- **`descriptions.md` 側の問題**（タイトル長すぎ、timestamp 過多など） → `/video --describe` で再生成
+- **YouTube 側との差分**（local と remote がずれている） → `/video --describe` で descriptions.md を最新化したあと、YouTube 側への反映は別途運用判断
 - **`workflow-state.json` 不在・JSON 破損** → `/wf-new` から作られた正規 state を復旧し、手編集で辻褄合わせしない
 - **多言語チャンネルの scene_phrases 言語抜け** → 該当コレクションで `yt-populate-scene-phrases` を再実行、または `workflow-state.json` を正規形式で補完（単一言語チャンネルでは `scene_phrases` 不在は正常）
 
@@ -122,8 +118,8 @@ GitHub Actions や cron で常時監視する場合は `--strict` を付ける�
 ## Cross References
 
 - `/publish --upload` — 前工程。YouTube へのアップロード + live 移行（本スキルはその後の反映確認に使う）
-- `/post-publish` — 公開後チェーンから本スキルを呼び出す。単独監査は従来どおり本スキルを直接使う
-- `/video-description` — descriptions.md の生成・更新（修正の入口）
+- `/publish` — 前工程。公開後に本 mode で反映状態を監査する
+- `/video --describe` — descriptions.md の生成・更新（修正の入口）
 - `yt-bulk-update-synthetic-media` — 公開済み動画の `status.containsSyntheticMedia` が `false` のまま残っている場合に `True` へ一括是正する（#606、#603 是正前のアップロード分の遡及）
 - `pyproject.toml` の `yt-metadata-audit` entry point
 - `src/youtube_automation/commands/metadata/metadata_audit.py` — 実装本体

@@ -18,8 +18,7 @@
     "post-publish": {
       "skip_approvals": {
         "community-post": true,
-        "pinned-comment": true,
-        "metadata-audit": true
+        "pinned-comment": true
       }
     },
     "scheduled_automation": {

@@ -16,13 +16,13 @@ from youtube_automation.core.errors import ConfigError
 EXPECTED_PYTHON_SKILL_CONFIG_KEYS = frozenset(
     {
         "analytics",
+        "audit.metadata",
         "audit.video",
         "benchmark",
         "collection-ideate",
         "discover-competitors",
         "loop-video",
         "masterup",
-        "metadata-audit",
         "music.prompt",
         "suno",
         "suno-helper",
@@ -36,6 +36,7 @@ EXPECTED_SKILL_ONLY_CONFIG_KEYS = frozenset(
         "live-clean",
         "lyria",
         "music.lyric",
+        "metadata-audit",
         "publish",
         "short",
         "suno-lyric",

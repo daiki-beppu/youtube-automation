@@ -201,7 +201,7 @@ def test_child_skills_support_chain_and_standalone_invocation() -> None:
 
     paths = (
         ROOT / ".claude/skills/publish/references/pinned.md",
-        ROOT / ".claude/skills/metadata-audit/SKILL.md",
+        ROOT / ".claude/skills/audit/references/metadata.md",
     )
     for path in paths:
         text = path.read_text(encoding="utf-8")

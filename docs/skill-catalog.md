@@ -40,14 +40,13 @@ PDCA 対応: 準備 = 準備する / Plan = 調べる → 決める / Do = 進�
 - `/comments-reply` — Use when 公開済み YouTube 動画のコメントへ自動返信するとき。
 - `/distrokid-helper` — Use when コレクションの楽曲を DistroKid 配信用に準備し、distrokid-helper Chrome 拡張へ渡すローカルサーバーを起動したいとき（30-distrokid 生成 / disc 分割 / metadata.md / ジャケット 3000×3000 新規生成 / uv run yt-collection-serve 起動）。
 - `/live-chat-reply` — Use when 配信中の YouTube ライブチャットへ常駐 daemon で自動返信するとき。
-- `/post-publish` — Use when 動画公開直後の community-post → pinned-comment → metadata-audit を承認ゲート付きで一括実行・途中再開するとき。
+- `/post-publish` — Use when 動画公開直後の community-post → pinned-comment → audit の metadata mode を承認ゲート付きで一括実行・途中再開するとき。
 - `/publish` — Use when 完成した動画を公開工程へ進めるとき。
 
 ## 振り返る
 
 - `/analytics` — Use when YouTube Analytics の収集・分析・レポート表示を一括実行または一段だけ実行するとき。
-- `/audit` — Use when 整合性・価値ループ・動画本体を監査するとき。
+- `/audit` — Use when 整合性・価値ループ・動画本体・公開後メタデータを監査するとき。
 - `/channel-status` — Use when チャンネルの YouTube 統計（登録者・再生回数）を取得するとき。
 - `/flop-analysis` — Use when 公開済み動画が伸びなかった原因を video_id、collection、または --since で切り分け、postmortem.md に出力するとき。
-- `/metadata-audit` — Use when ローカル descriptions.md と YouTube メタデータの整合を監査するとき。
 - `/skill-feedback` — Use when 下流チャンネルリポジトリでスキル実行中の不具合・摩擦・改善案を構造化記録するとき、または記録済み feedback を上流 issue に還流するとき。
