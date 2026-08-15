@@ -4,9 +4,8 @@ description 値内の `: ` (コロン+スペース) は strict YAML ではマッ
 誤解釈されパースが破綻する。全 skill の frontmatter を double-quoted string に統一し、
 将来 strict YAML パーサで読む経路が追加されても壊れないことを保証する。
 
-検証ロジックの単一ソースは `yt-skills lint` 側
-(youtube_automation.commands.system.skills_sync._lint) にあり、本テストはそれを全 skill に
-適用する回帰テスト (Issue #2096)。判定基準を変える場合は _lint 側を修正すること。
+検証ロジックの単一ソースは `domains.skills.inventory` にあり、本テストはそれを全
+skill に適用する回帰テスト (Issue #2096)。判定基準を変える場合は domain 側を修正すること。
 """
 
 from __future__ import annotations
@@ -16,13 +15,18 @@ from pathlib import Path
 import pytest
 
 from tests.helpers.paths import REPO_ROOT
-from youtube_automation.commands.system.skills_sync._lint import lint_skill
+from youtube_automation.commands.system import skills_sync
+from youtube_automation.domains.skills.inventory import lint_skill
 
 # リポジトリルート (tests/ の親)
 _REPO_ROOT = REPO_ROOT
 _SKILLS_DIR = _REPO_ROOT / ".claude" / "skills"
 
 _SKILL_DIRS = sorted(p.parent for p in _SKILLS_DIR.glob("*/SKILL.md"))
+
+
+def test_command_adapter_reexports_domain_lint() -> None:
+    assert skills_sync.lint_skill is lint_skill
 
 
 def test_skill_files_discovered() -> None:
