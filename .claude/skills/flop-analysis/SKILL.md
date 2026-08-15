@@ -1,5 +1,6 @@
 ---
 name: flop-analysis
+purpose: 振り返る
 description: "Use when 公開済み動画が伸びなかった原因を video_id、collection、または --since で切り分け、postmortem.md に出力するとき。「伸びなかった」「flop 分析」で発動。横断戦略は /analytics --analyze、事前監査は /alignment-check"
 ---
 

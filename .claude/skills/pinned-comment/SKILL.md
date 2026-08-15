@@ -1,5 +1,6 @@
 ---
 name: pinned-comment
+purpose: 公開する
 description: "Use when 新規動画へオーナー固定コメントを自動投稿するとき。「固定コメント」「ピンコメント」で発動。dry-run 後 apply、ピン留めは Studio で手動"
 ---
 

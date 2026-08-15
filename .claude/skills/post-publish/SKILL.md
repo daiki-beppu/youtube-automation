@@ -1,5 +1,6 @@
 ---
 name: post-publish
+purpose: 公開する
 description: "Use when 動画公開直後の community-post → pinned-comment → metadata-audit を承認ゲート付きで一括実行・途中再開するとき。「公開後処理」「post publish」「アップロード後を続けて」で発動。各処理を単独実行する場合は対応する子スキルを使う"
 ---
 

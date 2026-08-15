@@ -1,5 +1,6 @@
 ---
 name: channel-new
+purpose: 準備する
 description: "Use when 既存 YouTube チャンネルを取り込むとき、収集済み benchmark/comments からチャンネル全体を分析するとき、方向性を再検討するとき、config を再生成するとき、または YouTube 側設定を同期するとき。「既存チャンネル」「チャンネル取り込み」「config 生成」「channel-import」「競合分析」「チャンネルリサーチ」「TTP 対象抽出」「方向性決めたい」「ポジショニング」「差別化」「ブレスト」「config 再生成」「詳細セットアップ」「設定反映」「チャンネル設定更新」「branding push」「ローカライゼーション同期」「meta.json を YouTube に反映」で発動。未作成 channel の初回 bootstrap は /setup --channel、データ収集・更新だけなら /benchmark、サムネイルだけの深掘りは /thumbnail-research、追加競合の発掘だけなら /discover-competitors を使う。"
 ---
 

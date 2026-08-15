@@ -1,5 +1,6 @@
 ---
 name: metadata-audit
+purpose: 振り返る
 description: "Use when ローカル descriptions.md と YouTube メタデータの整合を監査するとき。「メタデータ監査」「説明欄ずれてない？」で発動。修正は /video-description の責務"
 ---
 

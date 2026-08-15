@@ -1,5 +1,6 @@
 ---
 name: benchmark
+purpose: 調べる
 description: "Use when 競合チャンネルのベンチマークデータを最新化するとき。「競合データ収集」「ベンチマーク更新」で発動。docs/benchmarks/*.md を更新。収集済みデータのチャンネル全体分析は /channel-new 分析モード、サムネイルだけの深掘りは /thumbnail-research"
 ---
 

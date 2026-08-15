@@ -1,5 +1,6 @@
 ---
 name: automation-schedule
+purpose: 進める
 description: "Use when チャンネルの定期制作スケジュール（workflow.json の scheduled_automation）を設定し、Codex / Claude のネイティブ Scheduled Task を作成・更新・確認・停止するとき。「定期実行」「スケジュール設定」「自動で回して」「automation-schedule」で発動。automation のリリース追従は /automation-update、本体リリースは /automation-release、制作を手動で一段進めるのは /wf-next"
 ---
 

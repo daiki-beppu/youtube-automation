@@ -1,5 +1,6 @@
 ---
 name: automation-release
+purpose: 準備する
 description: "Use when 本リポジトリの新規リリースを作成するとき。「リリースして」「/automation-release」「suno-helper をリリースしたい」「ext-v0.2.2 を出したい」で発動。Python 本体（vX.Y.Z）と Chrome 拡張（ext-vX.Y.Z）を判定し prepare / publish に自動分岐。グローバル /release は使わない。下流追従は /automation-update、拡張のインストールは /ext-install"
 ---
 

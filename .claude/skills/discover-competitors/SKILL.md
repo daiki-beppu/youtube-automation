@@ -1,5 +1,6 @@
 ---
 name: discover-competitors
+purpose: 調べる
 description: "Use when YouTube Data API で追加競合候補を自動発掘・ランキング化するとき。「競合候補」「競合発掘」「discover-competitors」で発動。収集済み benchmark / comments のチャンネル全体分析は /channel-new 分析モード、TTP 入替候補やニッチ仮説を複数根拠で横断比較する調査は /market-research を使う"
 ---
 

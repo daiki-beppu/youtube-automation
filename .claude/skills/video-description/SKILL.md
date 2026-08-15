@@ -1,5 +1,6 @@
 ---
 name: video-description
+purpose: 作る
 description: "Use when YouTube 概要欄を Complete Collection 形式で自動生成するとき。「概要欄」「説明文」「SEO最適化」「メタデータ生成」で発動"
 ---
 

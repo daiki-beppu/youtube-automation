@@ -1,5 +1,6 @@
 ---
 name: alignment-check
+purpose: 振り返る
 description: "Use when 音楽ムード × サムネ × タイトルの整合性を監査するとき。「整合性チェック」「タイトル見直し」「CTR改善」で発動。方向性見直し時に必須"
 ---
 

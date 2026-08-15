@@ -1,5 +1,6 @@
 ---
 name: community-draft
+purpose: 公開する
 description: "Use when コレクションの YouTube コミュニティ投稿を JSON バッチ生成するとき。『投稿バッチ』『community-draft --batch』で発動。Studio を開いて単発投稿を手動準備する場合は /community-post を使う"
 ---
 

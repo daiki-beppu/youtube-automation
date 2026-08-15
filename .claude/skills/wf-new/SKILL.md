@@ -1,5 +1,6 @@
 ---
 name: wf-new
+purpose: 進める
 description: "Use when 新規コレクション制作を立ち上げるとき（ディレクトリ未作成）。「新しいコレクション始めたい」「制作開始」で発動。既存の進行は /wf-next"
 ---
 

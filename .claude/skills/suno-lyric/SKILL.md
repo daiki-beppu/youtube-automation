@@ -1,5 +1,6 @@
 ---
 name: suno-lyric
+purpose: 作る
 description: "Use when Suno ボーカル曲の歌詞を生成するとき。「歌詞生成」「vocal」「rap」「suno-lyric」で発動。Style / UI 投入は /suno と /suno-helper の責務"
 ---
 

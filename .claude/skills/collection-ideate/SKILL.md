@@ -1,5 +1,6 @@
 ---
 name: collection-ideate
+purpose: 進める
 description: "Use when 新コレクションの企画・テーマ選定をデータドリブンに行うとき。「次何作る？」「テーマ選び」「企画提案」で発動"
 ---
 

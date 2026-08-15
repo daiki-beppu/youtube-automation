@@ -1,5 +1,6 @@
 ---
 name: viewing-scene
+purpose: 決める
 description: "Use when 視聴シーン（いつ・どこで・なぜ聴くか）を検証・定義するとき。「視聴シーン」「利用シーン」「シーン分析」で発動。/audience-persona-design の結果を踏まえる"
 ---
 

@@ -1,5 +1,6 @@
 ---
 name: masterup
+purpose: 作る
 description: "Use when Suno UI で生成した曲のプレイリストを一括 DL + マスター化するとき。Lyria チャンネルでは不要"
 ---
 

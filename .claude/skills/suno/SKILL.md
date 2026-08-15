@@ -1,5 +1,6 @@
 ---
 name: suno
+purpose: 作る
 description: "Use when Suno UI 投入用の音楽プロンプトを生成するとき。「Suno プロンプト」「Style 文」で発動。歌詞生成は /suno-lyric、UI 投入は /suno-helper、マスター化は /masterup。Lyria チャンネルは /lyria"
 ---
 

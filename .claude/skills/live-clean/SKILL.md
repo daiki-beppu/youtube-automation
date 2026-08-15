@@ -1,5 +1,6 @@
 ---
 name: live-clean
+purpose: 公開する
 description: "Use when live コレクションの大容量メディアを削除して容量回復するとき、または collections 配下の tmp/ 残骸を掃除するとき。「容量」「クリーンアップ」「live 整理」「でかいファイル」「tmp 掃除」「残骸」で発動"
 ---
 

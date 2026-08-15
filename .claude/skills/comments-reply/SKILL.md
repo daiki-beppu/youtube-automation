@@ -1,5 +1,6 @@
 ---
 name: comments-reply
+purpose: 公開する
 description: "Use when 公開済み YouTube 動画のコメントへ自動返信するとき。「動画コメント返信」「コメント返信」「リプライ」で発動。配信中のライブチャット返信は /live-chat-reply を使う"
 ---
 

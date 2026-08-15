@@ -1,5 +1,6 @@
 ---
 name: skill-feedback
+purpose: 振り返る
 description: "Use when 下流チャンネルリポジトリでスキル実行中の不具合・摩擦・改善案を構造化記録するとき、または記録済み feedback を上流 issue に還流するとき。「/skill-feedback」「摩擦を記録」「改善案を残す」「feedback を上流に還流して」「今週の feedback 還流して」で発動。分析の学びは /analytics --analyze や /flop-analysis を使う"
 ---
 

@@ -1,5 +1,6 @@
 ---
 name: short
+purpose: 作る
 description: "Use when collection 型（BGM テイスター）チャンネルでショートを生成・投稿するとき。「ショート作って」「shorts」「BGM 切り抜き」で発動。release 型は /short-release"
 ---
 

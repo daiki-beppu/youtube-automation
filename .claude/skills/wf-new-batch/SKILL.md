@@ -1,5 +1,6 @@
 ---
 name: wf-new-batch
+purpose: 進める
 description: "Use when 複数の新規コレクションを相互差別化して一括企画し、正規 /wf-new を順次実行・再開するとき。「複数コレクション制作」「一括制作」「batch 制作」で発動"
 ---
 
