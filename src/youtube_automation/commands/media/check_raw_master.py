@@ -23,16 +23,16 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import json
-import os
 import sys
-import tempfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
 from youtube_automation.configuration.skills import load_skill_config
-from youtube_automation.core.errors import ValidationError
+from youtube_automation.core.errors import ValidationError, WorkflowStateError
+from youtube_automation.domains.collections.workflow_state import WorkflowState
+from youtube_automation.domains.collections.workflow_state import read as read_workflow_state
+from youtube_automation.domains.collections.workflow_state import update as update_workflow_state
 from youtube_automation.domains.media.loudness_receipt import resolve_max_deviation_lu, validate_loudness_receipt
 from youtube_automation.infrastructure.media.collection_paths import (
     CollectionPaths,
@@ -75,13 +75,11 @@ def _load_state(workflow_state_path: Path) -> dict:
         raise ValidationError(f"workflow-state.json が見つかりません: {workflow_state_path}")
 
     try:
-        state = json.loads(workflow_state_path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as e:
-        raise ValidationError(f"workflow-state.json のパースに失敗: {e}") from e
-
-    if not isinstance(state, dict):
-        raise ValidationError("workflow-state.json の root は object である必要があります")
-    return state
+        return read_workflow_state(workflow_state_path).to_dict()
+    except WorkflowStateError as error:
+        if "root must be an object" in str(error):
+            raise ValidationError("workflow-state.json の root は object である必要があります") from error
+        raise ValidationError(f"workflow-state.json のパースに失敗: {error}") from error
 
 
 def _recorded_raw_master(state: dict) -> str | None:
@@ -170,27 +168,29 @@ def apply_raw_master(collection_dir: Path, new_name: str, *, loudness_receipt: P
         if receipt["raw_master_output"] != new_name:
             raise ValidationError("loudness receipt の raw master 出力が更新候補と一致しません")
 
-    state = _load_state(paths.workflow_state_path)
-    assets = state.setdefault("assets", {})
-    if not isinstance(assets, dict):
-        raise ValidationError("workflow-state.json::assets は object である必要があります")
+    if not paths.workflow_state_path.is_file():
+        raise ValidationError(f"workflow-state.json が見つかりません: {paths.workflow_state_path}")
 
-    assets["raw_master"] = new_name
-    state["updated_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+    def record_raw_master(state: WorkflowState) -> None:
+        assets = state.assets
+        if assets is None:
+            state["assets"] = {}
+            assets = state.assets
+        if assets is None:
+            raise ValidationError("workflow-state.json::assets は object である必要があります")
+        assets.raw_master = new_name
+        state["updated_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
 
-    payload = json.dumps(state, ensure_ascii=False, indent=2) + "\n"
-    fd, tmp_name = tempfile.mkstemp(
-        dir=paths.workflow_state_path.parent,
-        prefix=".workflow-state.",
-        suffix=".tmp",
-    )
     try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            f.write(payload)
-        os.replace(tmp_name, paths.workflow_state_path)
-    except BaseException:
-        Path(tmp_name).unlink(missing_ok=True)
-        raise
+        update_workflow_state(paths.workflow_state_path, record_raw_master)
+    except WorkflowStateError as error:
+        if isinstance(error.__cause__, OSError) and "could not be written" in str(error):
+            raise error.__cause__ from error
+        if "root must be an object" in str(error):
+            raise ValidationError("workflow-state.json の root は object である必要があります") from error
+        if "workflow-state.json::assets must be an object" in str(error):
+            raise ValidationError("workflow-state.json::assets は object である必要があります") from error
+        raise ValidationError(f"workflow-state.json のパースに失敗: {error}") from error
 
 
 def main() -> int:

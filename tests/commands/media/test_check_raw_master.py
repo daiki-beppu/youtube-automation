@@ -29,6 +29,7 @@ def _make_collection(
         "collection_name": "test-collection",
         "updated_at": "2026-01-01T00:00:00.000Z",
         "phase": "prepared",
+        "future_section": {"keep": True},
         "assets": {
             "raw_master": raw_master,
             "master_audio": None,
@@ -185,6 +186,7 @@ class TestApplyRawMaster:
         assert state["updated_at"] != "2026-01-01T00:00:00.000Z"
         # 他のフィールドは保持される
         assert state["phase"] == "prepared"
+        assert state["future_section"] == {"keep": True}
         assert state["assets"]["master_audio"] is None
         # 更新後は整合と判定される
         assert check_raw_master.check_raw_master(coll).is_consistent

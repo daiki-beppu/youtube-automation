@@ -5,10 +5,8 @@ from __future__ import annotations
 
 import argparse
 import concurrent.futures
-import json
 import os
 import subprocess
-import tempfile
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -16,8 +14,10 @@ from pathlib import Path
 
 from youtube_automation.configuration import channel_dir
 from youtube_automation.configuration.skills import load_channel_override
-from youtube_automation.core.errors import ConfigError, ValidationError
-from youtube_automation.infrastructure.cost_tracker import _file_lock
+from youtube_automation.core.errors import ConfigError, ValidationError, WorkflowStateError
+from youtube_automation.domains.collections.workflow_state import WorkflowState
+from youtube_automation.domains.collections.workflow_state import read as read_workflow_state
+from youtube_automation.domains.collections.workflow_state import update as update_workflow_state
 from youtube_automation.infrastructure.media.collection_paths import CollectionPaths
 
 DEFAULT_MAX_WORKERS = 3
@@ -40,12 +40,11 @@ class BatchResult:
 
 def _read_state(path: Path) -> dict:
     try:
-        state = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise ValidationError(f"workflow-state.json を読めません: {path}: {exc}") from exc
-    if not isinstance(state, dict):
-        raise ValidationError(f"workflow-state.json の root は object である必要があります: {path}")
-    return state
+        return read_workflow_state(path).to_dict()
+    except WorkflowStateError as error:
+        if "root must be an object" in str(error):
+            raise ValidationError(f"workflow-state.json の root は object である必要があります: {path}") from error
+        raise ValidationError(f"workflow-state.json を読めません: {path}: {error}") from error
 
 
 def _is_batch_target(collection: Path) -> bool:
@@ -166,31 +165,29 @@ def run_batch_parallel(
     return [result for result in results if result is not None]
 
 
-def _write_state_atomic(path: Path, state: dict) -> None:
-    fd, tmp_name = tempfile.mkstemp(dir=path.parent, prefix=".workflow-state.", suffix=".tmp")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as file:
-            json.dump(state, file, ensure_ascii=False, indent=2)
-            file.write("\n")
-        os.replace(tmp_name, path)
-    except BaseException:
-        Path(tmp_name).unlink(missing_ok=True)
-        raise
-
-
 def _update_workflow_state(collection: Path) -> str:
     paths = CollectionPaths(collection)
     video = paths.find_master_video()
     if video is None:
         raise ValidationError(f"生成成功後も 01-master/*.mp4 が見つかりません: {collection}")
-    with _file_lock(paths.workflow_state_path):
-        state = _read_state(paths.workflow_state_path)
-        assets = state.get("assets")
-        if not isinstance(assets, dict):
+
+    def record_master_video(state: WorkflowState) -> None:
+        assets = state.assets
+        if assets is None:
             raise ValidationError(f"workflow-state.json::assets は object である必要があります: {collection}")
-        assets["master_video"] = video.name
+        assets.master_video = video.name
         state["updated_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
-        _write_state_atomic(paths.workflow_state_path, state)
+
+    try:
+        update_workflow_state(paths.workflow_state_path, record_master_video)
+    except WorkflowStateError as error:
+        if isinstance(error.__cause__, OSError) and "could not be written" in str(error):
+            raise error.__cause__ from error
+        if "workflow-state.json::assets must be an object" in str(error):
+            raise ValidationError(
+                f"workflow-state.json::assets は object である必要があります: {collection}"
+            ) from error
+        raise ValidationError(f"workflow-state.json を読めません: {paths.workflow_state_path}: {error}") from error
     return video.name
 
 

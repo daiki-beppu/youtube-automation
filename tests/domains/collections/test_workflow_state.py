@@ -158,6 +158,34 @@ def test_update_keeps_existing_file_and_cleans_temp_when_replace_fails(tmp_path:
     assert list(tmp_path.glob(".workflow-state.*.tmp")) == []
 
 
+def test_update_reports_replace_and_temp_cleanup_failures(tmp_path: Path, monkeypatch) -> None:
+    state_path = tmp_path / "workflow-state.json"
+    original = '{"phase":"planning"}'
+    state_path.write_text(original, encoding="utf-8")
+    real_unlink = Path.unlink
+    temporary: Path | None = None
+
+    def fail_replace(source: str | os.PathLike[str], destination: str | os.PathLike[str]) -> None:
+        raise OSError("replace failed")
+
+    def fail_temporary_cleanup(path: Path, *, missing_ok: bool = False) -> None:
+        nonlocal temporary
+        if path.name.startswith(".workflow-state."):
+            temporary = path
+            raise OSError("cleanup failed")
+        real_unlink(path, missing_ok=missing_ok)
+
+    monkeypatch.setattr(os, "replace", fail_replace)
+    monkeypatch.setattr(Path, "unlink", fail_temporary_cleanup)
+
+    with pytest.raises(WorkflowStateError, match="replace failed.*cleanup failed"):
+        update(state_path, lambda state: setattr(state, "phase", "prepared"))
+
+    assert state_path.read_text(encoding="utf-8") == original
+    assert temporary is not None
+    real_unlink(temporary)
+
+
 def test_update_serializes_processes_without_losing_changes(tmp_path: Path) -> None:
     state_path = tmp_path / "workflow-state.json"
     _write(state_path, {"counter": 0})

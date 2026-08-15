@@ -237,6 +237,7 @@ def test_all_candidates_over_max_can_keep_shortest_with_explicit_recovery(tmp_pa
             {
                 "updated_at": "2000-01-01T00:00:00Z",
                 "assets": {"raw_master": "master.mp3"},
+                "future_section": {"keep": True},
             }
         ),
         encoding="utf-8",
@@ -266,6 +267,7 @@ def test_all_candidates_over_max_can_keep_shortest_with_explicit_recovery(tmp_pa
 
     workflow_state = json.loads((collection / "workflow-state.json").read_text(encoding="utf-8"))
     assert workflow_state["assets"] == {"raw_master": "master.mp3"}
+    assert workflow_state["future_section"] == {"keep": True}
     selection_state = workflow_state["music_pair_selection"]
     assert workflow_state["updated_at"] != "2000-01-01T00:00:00Z"
     assert workflow_state["updated_at"] == selection_state["updated_at"]
@@ -772,14 +774,14 @@ def test_apply_rollback_restores_files_log_and_state_when_workflow_write_fails(t
     first = _write_audio(collection, "01a-Red Pressure.mp3", b"first")
     second = _write_audio(collection, "01b-Red Pressure.mp3", b"second")
     workflow_state_path = collection / "workflow-state.json"
-    original_state = {"assets": {"raw_master": "master.mp3"}}
+    original_state = {"assets": {"raw_master": "master.mp3"}, "future_section": {"keep": True}}
     workflow_state_path.write_text(json.dumps(original_state), encoding="utf-8")
     monkeypatch.setattr(suno_track_selection, "probe_duration", lambda _: 479.4)
 
-    def fail_atomic_json_write(target: Path, data: dict) -> None:
+    def fail_workflow_state_update(_path: Path, _updater) -> None:
         raise OSError("injected workflow-state write failure")
 
-    monkeypatch.setattr(suno_track_selection, "_atomic_json_write", fail_atomic_json_write)
+    monkeypatch.setattr(suno_track_selection, "update_workflow_state", fail_workflow_state_update)
 
     with pytest.raises(OSError, match="injected workflow-state write failure"):
         suno_track_selection.select_suno_tracks(collection, _cfg(), allow_best_effort_over_max=True)

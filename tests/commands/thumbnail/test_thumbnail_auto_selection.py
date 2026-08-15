@@ -14,6 +14,7 @@ import yaml
 from PIL import Image
 
 import youtube_automation.commands.thumbnail.auto_select_thumbnail as auto_select_thumbnail
+import youtube_automation.domains.collections.workflow_state as workflow_state_owner
 from youtube_automation.commands.thumbnail.auto_select_thumbnail import main, validate_audit_record
 from youtube_automation.configuration import skills as skill_config
 from youtube_automation.core.errors import ConfigError, ValidationError
@@ -478,7 +479,16 @@ def test_apply_creates_thumbnail_and_records_workflow_state(tmp_path, monkeypatc
     _solid_image(assets / "thumbnail-v1.jpg", _NEAR_COLOR)
     _solid_image(assets / "thumbnail-v2.jpg", _FAR_COLOR)
     ws_path = collection / "workflow-state.json"
-    ws_path.write_text(json.dumps({"stage": "planning", "thumbnail": {"approved": False}}), encoding="utf-8")
+    ws_path.write_text(
+        json.dumps(
+            {
+                "stage": "planning",
+                "thumbnail": {"approved": False},
+                "future_section": {"keep": True},
+            }
+        ),
+        encoding="utf-8",
+    )
 
     code, captured = _run_json([str(collection), "--apply", "--json"], capsys)
 
@@ -495,6 +505,7 @@ def test_apply_creates_thumbnail_and_records_workflow_state(tmp_path, monkeypatc
 
     state = json.loads(ws_path.read_text(encoding="utf-8"))
     assert state["stage"] == "planning"  # 既存キーを壊さない
+    assert state["future_section"] == {"keep": True}
     audit = state["thumbnail_auto_selection"]
     assert audit["selected"] == "thumbnail-v1.jpg"
     assert isinstance(audit["distance"], float)
@@ -957,7 +968,7 @@ def test_gallery_rollback_failure_still_restores_old_archive_thumbnail_and_state
     assert ws_path.read_text(encoding="utf-8") == original_state
 
 
-def test_state_temp_cleanup_failure_is_domain_error_and_restores_all_states(tmp_path, monkeypatch, capsys):
+def test_owner_temp_cleanup_failure_is_domain_error_and_restores_all_states(tmp_path, monkeypatch, capsys):
     channel_dir = _setup_channel(tmp_path, monkeypatch, archive_config=_ARCHIVE_ENABLED)
     collection = channel_dir / "collections" / "planning" / "20260701-tst-state-temp-cleanup"
     assets = collection / "10-assets"
@@ -971,7 +982,8 @@ def test_state_temp_cleanup_failure_is_domain_error_and_restores_all_states(tmp_
     _archive(collection, channel_dir)
     old_archive = channel_dir / "assets" / "thumbnail-gallery" / f"{collection.name}.png"
     original_archive = old_archive.read_bytes()
-    real_replace = auto_select_thumbnail.os.replace
+
+    real_replace = workflow_state_owner.os.replace
     real_unlink = Path.unlink
     state_temporary = None
 
@@ -982,12 +994,12 @@ def test_state_temp_cleanup_failure_is_domain_error_and_restores_all_states(tmp_
 
     def fail_state_temporary_unlink(path, **kwargs):
         nonlocal state_temporary
-        if path.name.startswith(".workflow-state-"):
+        if path.name.startswith(".workflow-state."):
             state_temporary = path
             raise OSError("forced state temporary cleanup failure")
         return real_unlink(path, **kwargs)
 
-    monkeypatch.setattr(auto_select_thumbnail.os, "replace", fail_state_replace)
+    monkeypatch.setattr(workflow_state_owner.os, "replace", fail_state_replace)
     monkeypatch.setattr(Path, "unlink", fail_state_temporary_unlink)
 
     code, captured = _run_json([str(collection), "--apply", "--force"], capsys)

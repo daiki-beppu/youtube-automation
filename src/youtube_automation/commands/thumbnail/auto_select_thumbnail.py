@@ -40,7 +40,10 @@ from typing import Any
 from PIL import Image, UnidentifiedImageError
 
 from youtube_automation.configuration.skills import load_skill_config
-from youtube_automation.core.errors import ConfigError, ValidationError
+from youtube_automation.core.errors import ConfigError, ValidationError, WorkflowStateError
+from youtube_automation.domains.collections.workflow_state import WorkflowState
+from youtube_automation.domains.collections.workflow_state import read_or_none as read_workflow_state_or_none
+from youtube_automation.domains.collections.workflow_state import update as update_workflow_state
 from youtube_automation.domains.thumbnail.archive import archive_approved_thumbnail_transaction
 from youtube_automation.domains.thumbnail.references import resolve_configured_benchmark_references
 from youtube_automation.domains.thumbnail.selection import (
@@ -180,22 +183,20 @@ def load_workflow_state(ws_path: Path) -> dict[str, Any] | None:
     ファイルが無い場合は None (コレクション初期化前の運用を許容)。
     壊れた JSON は明示エラー。apply の副作用前に呼び、部分適用状態を防ぐ。
     """
-    if ws_path.is_symlink():
-        raise ValidationError(f"workflow-state.json にシンボリックリンクは指定できません: {ws_path}")
-    if not ws_path.exists():
-        return None
     try:
-        state = json.loads(ws_path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
-        raise ValidationError(f"workflow-state.json が JSON としてパースできません: {ws_path}: {exc}") from exc
-    if not isinstance(state, dict):
-        raise ValidationError(f"workflow-state.json の root は object である必要があります: {ws_path}")
-    return state
+        state = read_workflow_state_or_none(ws_path)
+    except WorkflowStateError as error:
+        message = str(error)
+        if "must not be a symlink" in message:
+            raise ValidationError(f"workflow-state.json にシンボリックリンクは指定できません: {ws_path}") from error
+        if "root must be an object" in message:
+            raise ValidationError(f"workflow-state.json の root は object である必要があります: {ws_path}") from error
+        raise ValidationError(f"workflow-state.json が JSON としてパースできません: {ws_path}: {error}") from error
+    return state.to_dict() if state is not None else None
 
 
 def record_workflow_state(
     ws_path: Path,
-    state: dict[str, Any],
     *,
     best: CandidateScore,
     scores: list[CandidateScore],
@@ -217,22 +218,14 @@ def record_workflow_state(
         "executed_at": executed_at,
     }
     validate_audit_record(record)
-    state[_WORKFLOW_STATE_KEY] = record
-    fd, tmp_name = tempfile.mkstemp(prefix=".workflow-state-", suffix=".json", dir=ws_path.parent)
-    tmp_path = Path(tmp_name)
+
+    def record_selection(state: WorkflowState) -> None:
+        state[_WORKFLOW_STATE_KEY] = record
+
     try:
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            json.dump(state, fh, indent=2, ensure_ascii=False)
-            fh.write("\n")
-        os.replace(tmp_path, ws_path)
-    except OSError as exc:
-        try:
-            tmp_path.unlink(missing_ok=True)
-        except OSError as cleanup_exc:
-            raise ValidationError(
-                f"workflow-state.json を更新できず、一時ファイルも削除できません: {ws_path}: {exc}; {cleanup_exc}"
-            ) from cleanup_exc
-        raise ValidationError(f"workflow-state.json を更新できません: {ws_path}: {exc}") from exc
+        update_workflow_state(ws_path, record_selection)
+    except WorkflowStateError as error:
+        raise ValidationError(f"workflow-state.json を更新できません: {ws_path}: {error}") from error
 
 
 def validate_audit_record(record: dict[str, object]) -> None:
@@ -512,7 +505,6 @@ def main(argv: list[str] | None = None) -> int:
             # 壊れた workflow-state はコピー前に検出し、部分適用状態を残さない
             state = load_workflow_state(paths.workflow_state_path)
             target_snapshot = _capture_file(target)
-            state_snapshot = _capture_file(paths.workflow_state_path) if state is not None else None
             archive_update = None
             try:
                 target = apply_selection(best, paths, force=args.force)
@@ -524,7 +516,6 @@ def main(argv: list[str] | None = None) -> int:
                 if state is not None:
                     record_workflow_state(
                         paths.workflow_state_path,
-                        state,
                         best=best,
                         scores=scores,
                         reference_images=reference_images,
@@ -544,11 +535,6 @@ def main(argv: list[str] | None = None) -> int:
                     _restore_file(target, target_snapshot)
                 except ValidationError as rollback_exc:
                     rollback_errors.append(rollback_exc)
-                if state_snapshot is not None:
-                    try:
-                        _restore_file(paths.workflow_state_path, state_snapshot)
-                    except ValidationError as rollback_exc:
-                        rollback_errors.append(rollback_exc)
                 if rollback_errors:
                     rollback_detail = "; ".join(str(error) for error in rollback_errors)
                     raise ValidationError(
