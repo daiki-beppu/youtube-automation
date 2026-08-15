@@ -186,6 +186,7 @@ PUBLIC_CONFIGURATION_SYMBOLS = {
     "PinnedComment",
     "Shorts",
     "channel_dir",
+    "explicit_channel_selection",
     "find_workspace_root",
     "load_config",
     "reset",

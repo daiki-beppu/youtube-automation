@@ -1757,6 +1757,14 @@ def test_explicit_channel_selects_workspace_slug(tmp_path, monkeypatch):
     assert channel_dir() == (workspace / "channels" / "beta").resolve()
 
 
+def test_explicit_channel_selection_is_available_through_public_configuration_api() -> None:
+    import youtube_automation.configuration as configuration
+
+    configuration.select_channel("alpha")
+
+    assert configuration.explicit_channel_selection() == "alpha"
+
+
 def test_config_reset_can_preserve_explicit_channel_selection(tmp_path, monkeypatch):
     workspace = _setup_workspace(tmp_path, "alpha", "beta")
     monkeypatch.chdir(workspace)

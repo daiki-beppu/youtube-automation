@@ -3,6 +3,7 @@
 公開 API:
     load_config() -> ChannelConfig   # シングルトン取得（初回に glob ロード + .env ロード）
     channel_dir() -> Path            # config/channel/ を含むプロジェクトルート解決
+    explicit_channel_selection()     # CLI の明示 channel slug を参照
     find_workspace_root()            # cwd 祖先から workspace root を検出
     workspace_channels()             # workspace の slug と channel dir を列挙
     select_channel()                 # CLI の明示 channel slug を初回解決へ渡す
@@ -18,6 +19,7 @@ from youtube_automation.configuration.community_draft import CommunityDraft
 from youtube_automation.configuration.distrokid import Distrokid
 from youtube_automation.configuration.loader import (
     channel_dir,
+    explicit_channel_selection,
     find_workspace_root,
     load_config,
     reset,
@@ -35,6 +37,7 @@ __all__ = [
     "PinnedComment",
     "Shorts",
     "channel_dir",
+    "explicit_channel_selection",
     "find_workspace_root",
     "load_config",
     "reset",
