@@ -133,7 +133,7 @@ _RAW_EXPECTED_ACTIVE_ROUTES = (
     _route(
         "alignment-check/SKILL.md",
         "## 前提",
-        "- **既存チャンネル**（YouTube で既に運営中）→ `/channel-new`（既存チャンネル取り込みモード）を案内",
+        "- **既存チャンネル**（YouTube で既に運営中）→ `/setup --import` を案内",
     ),
     _route(
         "alignment-check/SKILL.md",
@@ -151,7 +151,7 @@ _RAW_EXPECTED_ACTIVE_ROUTES = (
     _route(
         "wf-new/references/ideate.md",
         "## 前提",
-        "- **既存チャンネル**（YouTube で既に運営中）→ `/channel-new`（既存チャンネル取り込みモード）を案内",
+        "- **既存チャンネル**（YouTube で既に運営中）→ `/setup --import` を案内",
     ),
     _route(
         "wf-new/references/ideate.md",
@@ -186,7 +186,7 @@ _RAW_EXPECTED_ACTIVE_ROUTES = (
     _route(
         "flop-analysis/SKILL.md",
         "## 前提",
-        "- **既存チャンネル**（YouTube で既に運営中）→ `/channel-new`（既存チャンネル取り込みモード）を案内",
+        "- **既存チャンネル**（YouTube で既に運営中）→ `/setup --import` を案内",
     ),
     _route(
         "flop-analysis/SKILL.md",
@@ -219,7 +219,7 @@ _RAW_EXPECTED_ACTIVE_ROUTES = (
     _route(
         "loop-video/SKILL.md",
         "## 前提",
-        "- **既存チャンネル**（YouTube で既に運営中）→ `/channel-new`（既存チャンネル取り込みモード）を案内",
+        "- **既存チャンネル**（YouTube で既に運営中）→ `/setup --import` を案内",
     ),
     _route(
         "lyria/SKILL.md",
@@ -229,52 +229,49 @@ _RAW_EXPECTED_ACTIVE_ROUTES = (
     _route(
         "lyria/SKILL.md",
         "## 前提",
-        "- **`config/channel/` が無い既存チャンネル** → `/channel-new`（既存チャンネル取り込みモード）を案内",
+        "- **`config/channel/` が無い既存チャンネル** → `/setup --import` を案内",
     ),
     _route(
         "lyria/SKILL.md",
         "### 選択タイミング（どこで lyria が選ばれるか）",
         "1. **チャンネルのデフォルト** — `/channel-new`（方向性検討モード）で suno/lyria を検討 → "
-        "`/channel-new`（再生成モード）が `config/channel/youtube.json` の `music_engine` に書き込む",
+        "`/setup --regenerate` が `config/channel/youtube.json` の `music_engine` に書き込む",
     ),
     _route(
         "metadata-audit/SKILL.md",
         "## 前提",
         "- `config/channel/` が存在すること（`load_config()` でロード可能）。存在しない場合は "
-        "`/channel-new`（既存チャンネルは取り込みモード）を案内して停止する",
+        "`/setup --import` を案内して停止する",
     ),
     _route(
         "playlist/SKILL.md",
         "## 前提",
         "`config/channel/playlists.json` が存在し、`playlists` セクションが定義されていること。"
-        "未定義の場合は `/channel-new`（再生成モード）を案内する。",
+        "未定義の場合は `/setup --regenerate` を案内する。",
     ),
-    _route(
-        "playlist/SKILL.md", "## Cross References", "- `/channel-new`（再生成モード） — `playlists.json` の初期定義"
-    ),
+    _route("playlist/SKILL.md", "## Cross References", "- `/setup --regenerate` — `playlists.json` の初期定義"),
     _route(
         "short/SKILL.md",
         "## 前提",
         "いずれか欠ける場合は早期に止めて該当 skill / config 更新を案内する"
-        "（`/channel-new` 既存チャンネル取り込みモード / `/setup` / `/video-upload`）。",
+        "（`/setup --import` / `/setup` / `/video-upload`）。",
     ),
     _route(
         "short-thumbnail/SKILL.md",
         "## 前提",
-        "- `config/channel/` がロード可能（`load_config()`）。存在しない場合は "
-        "`/channel-new`（既存チャンネルは取り込みモード）を案内して停止する",
+        "- `config/channel/` がロード可能（`load_config()`）。存在しない場合は `/setup --import` を案内して停止する",
     ),
     _route(
         "suno/SKILL.md",
         "## 前提",
         "- `config/channel/` が存在すること（`load_config()` でロード可能）。存在しない場合は "
-        "`/channel-new`（既存チャンネルは取り込みモード）を案内して停止する",
+        "`/setup --import` を案内して停止する",
     ),
     _route("thumbnail/SKILL.md", "## 前提", "- **新規チャンネル** → `/setup --channel` を案内"),
     _route(
         "thumbnail/SKILL.md",
         "## 前提",
-        "- **既存チャンネル**（YouTube で既に運営中）→ `/channel-new`（既存チャンネル取り込みモード）を案内",
+        "- **既存チャンネル**（YouTube で既に運営中）→ `/setup --import` を案内",
     ),
     _route(
         "thumbnail/SKILL.md",
@@ -292,7 +289,7 @@ _RAW_EXPECTED_ACTIVE_ROUTES = (
         "thumbnail-compare/SKILL.md",
         "## 前提",
         "- `config/channel/` が存在すること（`load_config()` でロード可能）。存在しない場合は "
-        "`/channel-new`（既存チャンネルは取り込みモード）を案内して停止する",
+        "`/setup --import` を案内して停止する",
     ),
     _route(
         "thumbnail-compare/SKILL.md",
@@ -308,7 +305,7 @@ _RAW_EXPECTED_ACTIVE_ROUTES = (
     _route(
         "value-loop-audit/SKILL.md",
         "## Hard Gates",
-        "  - 既存チャンネルでは `/channel-new` の取り込みモードを案内して停止する。",
+        "  - 既存チャンネルでは `/setup --import` を案内して停止する。",
     ),
 )
 
@@ -348,7 +345,8 @@ ISSUE_3986_OWNED_PATHS = frozenset(
 )
 
 
-_ROUTE_TOKEN = re.compile(r"/channel-\s*new|/setup\s+--channel")
+_ROUTES = ("/channel-new", "/setup --channel", "/setup --import", "/setup --regenerate", "/setup --push")
+_ROUTE_TOKEN = re.compile(r"/channel-\s*new|/setup\s+--(?:channel|import|regenerate|push)")
 _TAG_NAME = re.compile(r"^<\s*(/?)\s*([A-Za-z][A-Za-z0-9:-]*)")
 _VOID_TAGS = frozenset(
     {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"}
@@ -758,7 +756,7 @@ def _route_records_for_members(members: dict[str, bytes]) -> tuple[tuple[str, st
         if text is None:
             continue
         for token in _ROUTE_TOKEN.finditer(text):
-            if token.group() not in {"/channel-new", "/setup --channel"}:
+            if token.group() not in _ROUTES:
                 records.append((relative, "malformed-token", token.group()))
 
         suffix = Path(relative).suffix
@@ -773,20 +771,18 @@ def _route_records_for_members(members: dict[str, bytes]) -> tuple[tuple[str, st
             section_identities = [_section_identity(section)] * len(raw_lines)
         exact_visible_tokens: Counter[str] = Counter()
         for line, visible_line, section_identity in zip(raw_lines, visible_lines, section_identities, strict=True):
-            raw_has_route = "/channel-new" in line or "/setup --channel" in line
-            has_route = "/channel-new" in visible_line or "/setup --channel" in visible_line
+            raw_has_route = any(route in line for route in _ROUTES)
+            has_route = any(route in visible_line for route in _ROUTES)
             if raw_has_route and not has_route:
                 records.append((relative, "inactive", line))
             if has_route:
                 records.append((relative, section_identity, line))
-                exact_visible_tokens.update(
-                    {token: visible_line.count(token) for token in ("/channel-new", "/setup --channel")}
-                )
+                exact_visible_tokens.update({token: visible_line.count(token) for token in _ROUTES})
         rendered_tokens = Counter(match.group() for match in _ROUTE_TOKEN.finditer(rendered))
         syntax_tokens = Counter(match.group() for match in _ROUTE_TOKEN.finditer(_normalized_route_syntax(text)))
         rendered_tokens |= syntax_tokens
         for token, count in rendered_tokens.items():
-            if token not in {"/channel-new", "/setup --channel"} or count > exact_visible_tokens[token]:
+            if token not in _ROUTES or count > exact_visible_tokens[token]:
                 records.append((relative, "rendered-token", token))
     return tuple(records)
 
@@ -887,7 +883,7 @@ def test_route_contract_rejects_inactive_swap_mixed_and_relocated_mutations() ->
     relative = "alignment-check/SKILL.md"
     source = (SKILLS_DIR / relative).read_text(encoding="utf-8")
     opening = "- **新規チャンネル** → `/setup --channel` を案内"
-    existing = "- **既存チャンネル**（YouTube で既に運営中）→ `/channel-new`（既存チャンネル取り込みモード）を案内"
+    existing = "- **既存チャンネル**（YouTube で既に運営中）→ `/setup --import` を案内"
     premise_block = source[source.index("## 前提\n") : source.index("## 実行フロー\n")]
     mutations = (
         source.replace(opening, f"~~{opening}~~", 1),
@@ -912,11 +908,11 @@ def test_route_contract_rejects_inactive_swap_mixed_and_relocated_mutations() ->
         source.replace(opening, f"<details hidden>\n{opening}\n</details>", 1),
         source.replace(opening, f"{opening} {existing}", 1),
         source.replace(opening, opening.replace("/setup --channel", "/channel-new"), 1).replace(
-            existing, existing.replace("/channel-new", "/setup --channel"), 1
+            existing, existing.replace("/setup --import", "/setup --channel"), 1
         ),
         source.replace(opening + "\n", "", 1).replace("## Next Step", f"## Next Step\n\n{opening}", 1),
         source.replace(opening + "\n", "", 1).replace("## Next Step", f"## 前提\n\n{opening}\n\n## Next Step", 1),
-        source.replace("`/channel-new`（既存", "`/channel-\nnew`（既存", 1),
+        source.replace("`/setup --import`", "`/setup --\nimport`", 1),
         source.replace(premise_block, "", 1).replace("## Next Step", premise_block + "## Next Step", 1),
         source + "\nrendered split: `/channel-<!-- hidden -->new`\n",
         source + "\nrendered split: `/channel-<wbr>new`\n",

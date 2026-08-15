@@ -33,6 +33,7 @@ CONTEXTS = (
     "direction",
     "shared-reference",
 )
+ROUTES = ("/channel-new", "/setup --channel", "/setup --import", "/setup --regenerate", "/setup --push")
 
 
 def _entry(skill: str, path: str, occurrence: str, context: str) -> tuple[str, str, str, str]:
@@ -114,14 +115,14 @@ EXPECTED_ACTIVE_ROUTES = (
     _route(
         "analytics/SKILL.md",
         "## 共通前提",
-        "- **既存チャンネル（load_config() 失敗）** → `/channel-new`（既存チャンネル取り込みモード）を案内して停止する",
+        "- **既存チャンネル（load_config() 失敗）** → `/setup --import` を案内して停止する",
     ),
     *(
         _route(f"analytics/references/{mode}.md", "## 前提", line)
         for mode in ("analyze", "collect", "report")
         for line in (
             "- **新規チャンネル** → `/setup --channel` を案内",
-            "- **既存チャンネル**（YouTube で既に運営中）→ `/channel-new`（既存チャンネル取り込みモード）を案内",
+            "- **既存チャンネル**（YouTube で既に運営中）→ `/setup --import` を案内",
         )
     ),
     _route(
@@ -133,14 +134,14 @@ EXPECTED_ACTIVE_ROUTES = (
         _route("channel-status/SKILL.md", "## 前提", line)
         for line in (
             "- **新規チャンネル** → `/setup --channel` を案内",
-            "- **既存チャンネル**（YouTube で既に運営中）→ `/channel-new`（既存チャンネル取り込みモード）を案内",
+            "- **既存チャンネル**（YouTube で既に運営中）→ `/setup --import` を案内",
         )
     ),
     *(
         _route("video-description/SKILL.md", "## 前提", line)
         for line in (
             "- **新規チャンネル** → `/setup --channel` を案内",
-            "- **既存チャンネル**（YouTube で既に運営中）→ `/channel-new`（既存チャンネル取り込みモード）を案内",
+            "- **既存チャンネル**（YouTube で既に運営中）→ `/setup --import` を案内",
         )
     ),
     _route(
@@ -155,7 +156,7 @@ EXPECTED_ACTIVE_ROUTES = (
         _route("video-upload/SKILL.md", "## 前提", line)
         for line in (
             "- **新規チャンネル** → `/setup --channel` を案内",
-            "- **既存チャンネル**（YouTube で既に運営中）→ `/channel-new`（既存チャンネル取り込みモード）を案内",
+            "- **既存チャンネル**（YouTube で既に運営中）→ `/setup --import` を案内",
         )
     ),
     _route(
@@ -171,8 +172,7 @@ EXPECTED_ACTIVE_ROUTES = (
     _route(
         "wf-new/SKILL.md",
         "## 前提",
-        "- `config/channel/` が存在しても `load_config()` が失敗する場合は "
-        "`/channel-new`（既存チャンネル取り込みモード）を案内して停止する",
+        "- `config/channel/` が存在しても `load_config()` が失敗する場合は `/setup --import` を案内して停止する",
     ),
     _route(
         "wf-new/SKILL.md",
@@ -182,7 +182,7 @@ EXPECTED_ACTIVE_ROUTES = (
     _route(
         "wf-new/SKILL.md",
         "## Hard Gates",
-        "   - `load_config()` が失敗する場合は `/channel-new`（既存チャンネル取り込みモード）を案内して停止する。",
+        "   - `load_config()` が失敗する場合は `/setup --import` を案内して停止する。",
     ),
     _route(
         "wf-new/references/auto.md",
@@ -192,7 +192,7 @@ EXPECTED_ACTIVE_ROUTES = (
     _route(
         "wf-new/references/auto.md",
         "## 実行手順",
-        "   `load_config()` が失敗した場合は既存チャンネル取り込みモードの `/channel-new` を案内して停止する。"
+        "   `load_config()` が失敗した場合は`/setup --import` を案内して停止する。"
         "state resolver または上記子 skill が無ければ `/automation-update`（本リポジトリ内では "
         "`yt-skills sync`）を案内して停止する。すべて満たすまで lease と子 skill を開始しない。",
     ),
@@ -209,7 +209,7 @@ EXPECTED_ACTIVE_ROUTES = (
     _route(
         "wf-new/references/batch.md",
         "## Hard Gates",
-        "   - `load_config()` が失敗する場合は `/channel-new`（既存チャンネル取り込みモード）を案内して停止する。",
+        "   - `load_config()` が失敗する場合は `/setup --import` を案内して停止する。",
     ),
     _route(
         "wf-new/references/freshness-rules.md",
@@ -234,7 +234,7 @@ EXPECTED_ACTIVE_ROUTES = (
     _route(
         "wf-new/references/ideate.md",
         "## 前提",
-        "- **既存チャンネル**（YouTube で既に運営中）→ `/channel-new`（既存チャンネル取り込みモード）を案内",
+        "- **既存チャンネル**（YouTube で既に運営中）→ `/setup --import` を案内",
     ),
     _route(
         "wf-new/references/ideate.md",
@@ -262,7 +262,7 @@ EXPECTED_ACTIVE_ROUTES = (
         for skill in ("wf-next", "wf-status")
         for line in (
             "- **新規チャンネル** → `/setup --channel` を案内",
-            "- **既存チャンネル**（YouTube で既に運営中）→ `/channel-new`（既存チャンネル取り込みモード）を案内",
+            "- **既存チャンネル**（YouTube で既に運営中）→ `/setup --import` を案内",
         )
     ),
 )
@@ -318,13 +318,13 @@ EXPECTED_ISSUE_3986_CHANGED_PATHS = frozenset(
         "tests/repo/test_workflow_upload_setup_redirect_contract.py",
     }
 )
-IMMUTABLE_TARGET_FILES_SHA256 = "029b64b1ba041ac7733d9b947132e5d97611381d9165832a34985300819086fd"
+IMMUTABLE_TARGET_FILES_SHA256 = "09d69b0f229163a62a63b3d187523d7f9c0378c33b540e4382483190be0de516"
 AUTOMATION_SCHEDULE_REGENERATE_SHA256 = "0e53b0be09de5049104b16034dd8122ca434adbfafdd0c835cb4fac943e7878e"
-AUTOMATION_UPDATE_PUSH_SHA256 = "5be1d31198da13ab6929edb13c9b713fbb9bc364d413b778d79f4e624e30d2cc"
+AUTOMATION_UPDATE_PUSH_SHA256 = "d2e903b505ace3035da345f9f89ba1c0875e93b5633c1ddc31550db2433771eb"
 ALLOWED_FENCED_ROUTES = {
     (
         "automation-update/SKILL.md",
-        "> /channel-new 直後の初回保存が未完了なら、まず初回 commit を作成してください。",
+        "> /setup --import 直後の初回保存が未完了なら、まず初回 commit を作成してください。",
     )
 }
 RAW_HTML_STRIKE_TAG = re.compile(
@@ -373,7 +373,7 @@ def _advance_raw_html_strike_state(
             tag_quote = None
             cursor = tag_start + 1
             continue
-        if line.startswith(("/channel-new", "/setup --channel"), cursor):
+        if line.startswith(ROUTES, cursor):
             route_is_inside_tag = True
         char = line[cursor]
         if char == "<":
@@ -429,13 +429,13 @@ def _active_route_records(overrides: dict[str, str] | None = None) -> tuple[tupl
                 if stripped.startswith(("```", "~~~")):
                     in_fence = not in_fence
                     continue
-                original_has_route = "/channel-new" in line or "/setup --channel" in line
+                original_has_route = any(route in line for route in ROUTES)
                 if in_fence:
                     if original_has_route and (relative, line) not in ALLOWED_FENCED_ROUTES:
                         records.append((relative, "inactive", line))
                     continue
                 visible_line, in_comment = _without_html_comments(line, in_comment)
-                has_route = "/channel-new" in visible_line or "/setup --channel" in visible_line
+                has_route = any(route in visible_line for route in ROUTES)
                 if original_has_route and not has_route:
                     records.append((relative, "inactive", line))
                 if has_route and "~~" in visible_line:
@@ -505,13 +505,13 @@ def test_active_markdown_routes_match_the_section_and_complete_line_contract() -
     actual = _active_route_records()
     assert actual == EXPECTED_ACTIVE_ROUTES
     for _, _, line in actual:
-        assert ("/channel-new" in line) != ("/setup --channel" in line)
+        assert sum(route in line for route in ROUTES) == 1
 
 
 def test_route_contract_rejects_inactive_swap_mixed_and_relocated_mutations() -> None:
     relative, _, opening = next(record for record in EXPECTED_ACTIVE_ROUTES if "/setup --channel" in record[2])
     source = (SKILLS_DIR / relative).read_text(encoding="utf-8")
-    residual = next(line for path, _, line in EXPECTED_ACTIVE_ROUTES if path == relative and "/channel-new" in line)
+    residual = next(line for path, _, line in EXPECTED_ACTIVE_ROUTES if path == relative and "/setup --import" in line)
 
     mutations = (
         source.replace(opening, f"~~{opening}~~", 1),

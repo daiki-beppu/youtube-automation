@@ -60,7 +60,7 @@ description: "Use when ターゲット視聴者を第一ペルソナとして設
 
 ### 停止する fail
 
-- `config/channel/` が存在しない、または `load_config()` でロードできない → 新規チャンネルは `/setup --channel` Step 4、既存チャンネルは `/channel-new`（既存チャンネル取り込みモード）を案内して停止する
+- `config/channel/` が存在しない、または `load_config()` でロードできない → 新規チャンネルは `/setup --channel` Step 4、既存チャンネルは `/setup --import` を案内して停止する
 - `docs/plans/viewer-voice-analysis.md` が無い → 前工程 `/viewer-voice` を案内して停止する
 
 ## 実行フロー

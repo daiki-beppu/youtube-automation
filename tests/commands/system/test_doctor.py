@@ -1451,8 +1451,7 @@ class TestCheckChannelConfig:
         assert r.status == "fail"
         assert r.next_action is not None
         action_str = json.dumps(r.next_action, ensure_ascii=False)
-        assert "/channel-new" in action_str
-        assert "既存チャンネル取り込みモード" in action_str
+        assert "/setup --import" in action_str
 
     def test_config_dir_exists_but_missing_required_keys_is_fail_with_channel_new_import_mode(self, tmp_path):
         """config/channel/ 存在・必須キー不足: fail + /channel-new 取り込みモード案内."""
@@ -1463,8 +1462,7 @@ class TestCheckChannelConfig:
         r = doctor.check_channel_config(tmp_path)
         assert r.status == "fail"
         action_str = json.dumps(r.next_action, ensure_ascii=False)
-        assert "/channel-new" in action_str
-        assert "既存チャンネル取り込みモード" in action_str
+        assert "/setup --import" in action_str
 
     def test_valid_config_is_ok(self, tmp_path):
         """load_config() が成功する設定: ok."""
@@ -1596,8 +1594,7 @@ class TestCheckPlaylistConfig:
         assert "playlists.json が存在しない" in r.message
         assert r.next_action is not None
         assert r.next_action["kind"] == "human"
-        assert "/channel-new" in r.next_action["instructions"]
-        assert "再生成モード" in r.next_action["instructions"]
+        assert "/setup --regenerate" in r.next_action["instructions"]
 
     def test_broken_json_is_fail_with_human_action(self, tmp_path):
         config_dir = tmp_path / "config" / "channel"
@@ -1921,7 +1918,7 @@ class TestCheckInitialSetupReadiness:
         assert "genre_line" in r.message
         assert "descriptions.md parse failed" in r.message
         assert r.next_action is not None
-        assert "/channel-new" in r.next_action["instructions"]
+        assert "/setup --regenerate" in r.next_action["instructions"]
         assert "/video-description" in r.next_action["instructions"]
 
     def test_valid_initial_setup_is_ok(self, tmp_path):
@@ -2939,14 +2936,14 @@ class TestCheckTtpWfNewReadinessChannelSetup:
         r = doctor.check_ttp_wf_new_readiness(tmp_path)
 
         assert r.status == "warn"
-        assert "/setup --channel または /channel-new 再生成モードの TTP 完了条件が未充足" in r.message
+        assert "/setup --channel または /setup --regenerate の TTP 完了条件が未充足" in r.message
         assert "data/benchmark_*.json が無い" in r.message
         assert "docs/benchmarks/*.md が無い" in r.message
         assert "data/thumbnail_compare/benchmark/" in r.message
         assert "reference_images.default" in r.message
         assert r.next_action is not None
         payload = json.dumps(r.next_action, ensure_ascii=False)
-        assert "/channel-new" in payload
+        assert "/setup --regenerate" in payload
         assert "yt-doctor" in payload
         assert "channel-new Step 9" not in payload
 
@@ -2996,7 +2993,7 @@ class TestCheckTtpWfNewReadinessChannelSetup:
         r = doctor.check_ttp_wf_new_readiness(tmp_path)
 
         assert r.status == "ok"
-        assert "/channel-new 再生成モード完了相当" in r.message
+        assert "/setup --regenerate 完了相当" in r.message
         assert r.next_action is None
 
     def test_scalar_thumbnail_ref_is_ok(self, tmp_path):
@@ -3007,7 +3004,7 @@ class TestCheckTtpWfNewReadinessChannelSetup:
         r = doctor.check_ttp_wf_new_readiness(tmp_path)
 
         assert r.status == "ok"
-        assert "/channel-new 再生成モード完了相当" in r.message
+        assert "/setup --regenerate 完了相当" in r.message
 
     def test_mixed_real_thumbnail_ref_and_placeholder_warns(self, tmp_path):
         """実パスと未解決 placeholder が混在していたら未転記として warn する."""

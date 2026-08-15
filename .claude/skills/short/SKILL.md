@@ -50,7 +50,7 @@ subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実�
 - `config.youtube.content_model.type == "collection"`
 - CC 動画が YouTube にアップ済みで、`20-documentation/upload_tracking.json::complete_collection.video_url` が記録されている
 
-いずれか欠ける場合は早期に止めて該当 skill / config 更新を案内する（`/channel-new` 既存チャンネル取り込みモード / `/setup` / `/video-upload`）。
+いずれか欠ける場合は早期に止めて該当 skill / config 更新を案内する（`/setup --import` / `/setup` / `/video-upload`）。
 
 ## Quick Reference
 

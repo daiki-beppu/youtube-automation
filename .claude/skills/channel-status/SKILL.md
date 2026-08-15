@@ -29,7 +29,7 @@ description: "Use when チャンネルの YouTube 統計（登録者・再生回
 
 存在しない場合、ユーザーに確認:
 - **新規チャンネル** → `/setup --channel` を案内
-- **既存チャンネル**（YouTube で既に運営中）→ `/channel-new`（既存チャンネル取り込みモード）を案内
+- **既存チャンネル**（YouTube で既に運営中）→ `/setup --import` を案内
 
 ## 想定 API call 数
 

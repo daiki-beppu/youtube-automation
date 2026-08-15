@@ -53,7 +53,7 @@ Step 3 の実行で出力ペア（Markdown ランキング + 同名 CSV）を生
 
 ### 停止する fail
 
-- 実行場所がチャンネルリポジトリ（`CHANNEL_DIR`）配下ではない → 新規・未作成チャンネルは `/setup --channel`、既存チャンネルの取り込みは `/channel-new`（既存チャンネル取り込みモード）を案内して停止する
+- 実行場所がチャンネルリポジトリ（`CHANNEL_DIR`）配下ではない → 新規・未作成チャンネルは `/setup --channel`、既存チャンネルの取り込みは `/setup --import` を案内して停止する
 - `auth/token.json` が存在しない、または OAuth 認証が無効 → `/setup` の OAuth 認証を案内して停止する
 
 ### 許容する fail
@@ -206,7 +206,7 @@ subagent へは次を具体値で渡す:
 
 - 競合の動画詳細分析 → `/benchmark`
 - 視聴者コメント分析 → `/viewer-voice`
-- 方向性決定・config 生成 → `/channel-new`（方向性検討モード）/ `/channel-new`（再生成モード）
+- 方向性決定・config 生成 → `/channel-new`（方向性検討モード）/ `/setup --regenerate`
 - ベンチマーク再収集 → `/benchmark`
 
 このスキルは **発掘**だけに責任を持つ。深堀分析は専用スキルにバトンを渡す。

@@ -264,13 +264,13 @@ uv run yt-analytics --reporting-create-job
 `yt-doctor` の `next_action.instructions` を確認:
 
 - **`/setup --channel` 案内** (config/channel/ ディレクトリ未存在): 新規チャンネルの場合は `/setup --channel` を実行して設定を作成する。この経路では対象 config が未生成のため「運用設定インタビュー」はスキップし、「運用設定は `/setup --channel` 完了後に `/setup --tool` を再実行して設定できます」と案内する
-- **`/channel-new` 取り込みモード案内** (ディレクトリ存在・ロード失敗): 既存チャンネルの config を持ち込む場合は `/channel-new`（既存チャンネル取り込みモード）を実行して設定を修復する
+- **`/setup --import` 案内** (ディレクトリ存在・ロード失敗): 既存チャンネルの config を持ち込む場合は `/setup --import` を実行して設定を修復する
 
 AI は config をここで生成しない。`yt-setup-dirs` で setup 用ディレクトリが作成済みでも `config/channel/*.json` は未生成で正常な中間状態として扱う。`yt-doctor` の `message` に含まれるエラー詳細をそのまま利用者に示し、どちらのルートかを確認してから案内する。
 
 #### `playlist_config` — `config/channel/playlists.json` の妥当性
 
-`config/channel/playlists.json` が未存在（warn）または JSON 不正 / `playlists` 定義不備（fail）の状態。`/channel-new`（再生成モード）で `playlists.json` を修復するよう案内する。config 未生成の新規チャンネルでは `/setup --channel` 完了までの正常な中間状態として扱う。
+`config/channel/playlists.json` が未存在（warn）または JSON 不正 / `playlists` 定義不備（fail）の状態。`/setup --regenerate` で `playlists.json` を修復するよう案内する。config 未生成の新規チャンネルでは `/setup --channel` 完了までの正常な中間状態として扱う。
 
 #### `playlist_create_dry_run` — playlist 作成 dry-run
 
@@ -305,11 +305,11 @@ benchmark の有無は analytics report の有無より優先しない:
 
 minimal mode / benchmark fallback mode は新規チャンネル初回制作を始めるための許容状態であり、setup の完了を止めない。
 
-#### `ttp_wf_new_readiness` — 承認済み TTP の `/channel-new` benchmark 反映状態
+#### `ttp_wf_new_readiness` — 承認済み TTP の `/setup --regenerate` benchmark 反映状態
 
-`benchmark.channels` に承認済み TTP 対象がある場合だけ、初回 `/wf-new` 前に `/channel-new`（再生成モード）の benchmark 反映が完了しているか確認する。`yt-doctor` の `message` に `/channel-new benchmark 反映未完了` が含まれる場合は、以下を案内する:
+`benchmark.channels` に承認済み TTP 対象がある場合だけ、初回 `/wf-new` 前に `/setup --regenerate` の benchmark 反映が完了しているか確認する。`yt-doctor` の `message` に `/setup --regenerate benchmark 反映未完了` が含まれる場合は、以下を案内する:
 
-- `/channel-new`（再生成モード）の benchmark 反映ステップ（Step R3.5）を再実行する
+- `/setup --regenerate` の benchmark 反映ステップ（Step R3.5）を再実行する
 - `data/benchmark_*.json`、`docs/benchmarks/*.md`、`data/thumbnail_compare/benchmark/` の参照画像を揃える
 - `config/skills/thumbnail.yaml::image_generation.gemini.reference_images.default` に `data/thumbnail_compare/benchmark/...` の相対パスを転記する
 - 完了後に `uv run yt-doctor --apply --json <apply_flags>` を再実行し、`ttp_wf_new_readiness` が ok になることを確認する
@@ -330,7 +330,7 @@ minimal mode / benchmark fallback mode は新規チャンネル初回制作を�
 
 #### `initial_setup_readiness` — 初期セットアップ事前検査
 
-`config/skills/thumbnail.yaml` / `config/skills/suno.yaml` の空欄・不備（reference_images / composition_rules の未設定、`genre_line` の文字数超過など）と、planning 中コレクションの `descriptions.md` parse 失敗を warn として一括検出する。`yt-doctor` の `next_action` に従い、開設時の初期転記は `/setup --channel`、開設後の再転記は `/channel-new`（再生成モード）、descriptions.md の再生成は `/video-description` を案内する。config 未転記の新規チャンネルでは `/setup --channel` 完了までの正常な中間状態として扱う。
+`config/skills/thumbnail.yaml` / `config/skills/suno.yaml` の空欄・不備（reference_images / composition_rules の未設定、`genre_line` の文字数超過など）と、planning 中コレクションの `descriptions.md` parse 失敗を warn として一括検出する。`yt-doctor` の `next_action` に従い、開設時の初期転記は `/setup --channel`、開設後の再転記は `/setup --regenerate` 、descriptions.md の再生成は `/video-description` を案内する。config 未転記の新規チャンネルでは `/setup --channel` 完了までの正常な中間状態として扱う。
 
 ### upload カテゴリ
 

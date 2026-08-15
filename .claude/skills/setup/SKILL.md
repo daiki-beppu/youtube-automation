@@ -1,7 +1,7 @@
 ---
 name: setup
 purpose: 準備する
-description: "Use when ツール導入と GCP / OAuth の API 設定をセットアップ・再診断するとき、または新規 YouTube チャンネルを Step 1〜10 で開設するとき。「セットアップして」「環境構築」「新チャンネル」「チャンネル追加」「チャンネル開設」「/setup」「旧 /onboard」で発動。フラグなしは状態判定付きで進め、排他的な --tool / --channel mode を使える"
+description: "Use when ツール導入と GCP / OAuth の設定、新規 YouTube チャンネル開設、既存チャンネル取り込み、config 再生成、または YouTube 側設定同期を行うとき。「セットアップして」「環境構築」「新チャンネル」「既存チャンネル」「チャンネル取り込み」「config 再生成」「設定反映」「チャンネル設定更新」「branding push」「ローカライゼーション同期」「meta.json を YouTube に反映」「/setup」「旧 /onboard」で発動。排他的な --tool / --channel / --import / --regenerate / --push mode を使える"
 ---
 
 ## 前後工程
@@ -17,7 +17,7 @@ description: "Use when ツール導入と GCP / OAuth の API 設定をセット
 
 ## モード判定
 
-`$ARGUMENTS` から mode flag（`--tool` / `--channel`）の出現数を、reference の Read や成果物確認・変更より先に次の read-only guard で数える。
+`$ARGUMENTS` から mode flag（`--tool` / `--channel` / `--import` / `--regenerate` / `--push`）の出現数を、reference の Read や成果物確認・変更より先に次の read-only guard で数える。
 
 ```bash
 uv run python .claude/skills/setup/references/setup-mode-guard.py $ARGUMENTS
@@ -33,10 +33,15 @@ guard が exit 2 を返したら、その出力だけを提示して即時停止
 |---|---|
 | `--tool` | `references/tool.md` |
 | `--channel` | `references/channel-mode.md` |
+| `--import` | `references/import-mode.md` |
+| `--regenerate` | `references/regeneration-mode.md` |
+| `--push` | `references/push-mode.md` |
 
 `--tool` は `uv run yt-setup-dirs` を含む現行 doctor wizard をそのまま実行し、GCP / OAuth / ADC bootstrap の唯一の正規入口とする。Google Auth Platform の Branding / Audience / Clients 設定と `client_secrets.json` の既存契約も `references/tool.md` で維持する。手動 script / Terraform を明示的に選ぶ上級者向け資産は同じ owner の `references/gcp-bootstrap.md` に置く。`--tool` では `config/channel/*.json` を生成しない。運用設定の `workflow.post-publish.skip_approvals` も `references/tool.md` の既存インタビューで扱う。
 
-`--channel` は `references/channel-mode.md` を唯一の正として読み、旧 `/channel-new` 新規開設モードと同じ Step 1〜10 を実行する。TTP hearing、seed confirmation、config、duration、persona、branding、readiness、initial save の順序、success / failure / blocked / resume / idempotency、不可逆操作前の承認 gate と成果物契約を変えない。既存チャンネル取り込み、分析、方向性検討、再生成、設定 push は residual `/channel-new` の責務であり、`--channel` に吸収しない。
+`--channel` は `references/channel-mode.md` を唯一の正として読み、旧 `/channel-new` 新規開設モードと同じ Step 1〜10 を実行する。TTP hearing、seed confirmation、config、duration、persona、branding、readiness、initial save の順序、success / failure / blocked / resume / idempotency、不可逆操作前の承認 gate と成果物契約を変えない。
+
+`--import` / `--regenerate` / `--push` はそれぞれ対応 reference を唯一の正として読み、旧 `/channel-new` の取り込み Step 1 前段〜Step 8、Step R1〜R8、設定同期の dry-run・承認・反映・失敗停止契約を変えずに実行する。分析モードと方向性検討モードは `/channel-new` に残し、ここへ吸収しない。
 
 ## 一括実行
 
@@ -58,7 +63,7 @@ uv run python .claude/skills/setup/references/setup-chain-state.py \
 
 各 step の実行後は同じ状態判定を再実行し、exit 0 にならなければ停止する。`tool` 完了済みなら `channel` から再開し、`channel` 完了済みならどの副作用も再実行しない。既存の stale analytics 完了例外も `tool` の exit 0 とする。途中失敗時はその段で止め、後段を実行せず、再発動時は状態判定から再開する。
 
-明示 `--tool` / `--channel` はこの一括実行へ入らない。選択した reference の完了条件だけを実行・判定し、もう一段を暗黙実行しない。各 reference 内の不可逆操作・外部反映の承認 gate は chain の `approvalGate.skip` では省略されない。
+明示 mode はこの一括実行へ入らない。選択した reference の完了条件だけを実行・判定し、もう一段を暗黙実行しない。各 reference 内の不可逆操作・外部反映の承認 gate は chain の `approvalGate.skip` では省略されない。
 
 ## 想定 API call 数
 
@@ -75,5 +80,8 @@ uv run python .claude/skills/setup/references/setup-chain-state.py \
 - フラグなし: `tool` と `channel` が manifest 順にどちらも `skip` になっている
 - `--tool`: `references/tool.md` の完了条件だけを満たしている
 - `--channel`: `references/channel-mode.md` の Step 1〜10 と完了条件をすべて満たしている
+- `--import`: `references/import-mode.md` の取り込み Step 1 前段〜Step 8 を満たしている
+- `--regenerate`: `references/regeneration-mode.md` の Step R1〜R8 を満たしている
+- `--push`: `references/push-mode.md` の dry-run、承認、反映後確認を満たしている
 
 実行または skip と、状態判定の `reason` を短く報告する。

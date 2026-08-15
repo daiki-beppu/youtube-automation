@@ -212,7 +212,7 @@ def test_wf_new_theme_scenes_fallback_uses_agent_generated_en_phrase() -> None:
 
 def test_upload_settings_contract_is_nested_in_schedule_config() -> None:
     setup_channel = _read(".claude/skills/setup/references/channel-mode.md")
-    regeneration_mode = _read(".claude/skills/channel-new/references/regeneration-mode.md")
+    regeneration_mode = _read(".claude/skills/setup/references/regeneration-mode.md")
     channel_init = _read("src/youtube_automation/commands/channel/channel_init_templates.py")
     channel_init_test = _read("tests/commands/channel/test_channel_init.py")
     schedule_template = _read(".claude/skills/channel-new/references/schedule-template.json")
@@ -316,7 +316,7 @@ def test_setup_channel_ttp_hearing_routes_direction_to_residual_mode() -> None:
     assert "検討が必要なら `/setup --channel` 完了後の方向性検討モードに委譲" in step1
     assert "Step 1 の TTP ヒアリングとは別に、config 生成に必要な初期値だけをここで確認する" in step4
 
-    assert "新規開設の Step 1〜10 は `/setup --channel`" in overview
+    assert "新規開設は `/setup --channel`" in overview
     assert "fallback しない" in overview
     assert "方向性検討モード" in mode_routing
     assert "Step D1〜D5" in mode_routing
@@ -335,7 +335,7 @@ def test_setup_channel_ttp_hearing_routes_direction_to_residual_mode() -> None:
         assert heading in direction_mode
     assert "決定事項を `docs/channel/channel-direction.md` に保存" in direction_mode
     assert "`mkdir -p docs/channel`" in direction_mode
-    assert "config を再生成・再反映する場合は `/channel-new`（再生成モード）" in direction_mode
+    assert "config を再生成・再反映する場合は `/setup --regenerate`" in direction_mode
     assert "制作に進む場合は `/wf-new`" in direction_mode
 
     assert "/viewer-voice` → `/audience-persona-design` → `/viewing-scene" in step7
@@ -377,21 +377,14 @@ def test_branding_missing_report_requires_existing_file_check_before_generation(
         assert "リネーム/変換" in text
 
 
-def test_channel_new_frontmatter_keeps_import_dispatch_keywords() -> None:
+def test_channel_new_frontmatter_keeps_only_residual_dispatch_keywords() -> None:
     frontmatter = _skill_frontmatter("channel-new")
     assert frontmatter["name"] == "channel-new"
     description = frontmatter["description"]
-    for keyword in (
-        "既存チャンネル",
-        "チャンネル取り込み",
-        "config 生成",
-        "channel-import",
-        "方向性決めたい",
-        "ポジショニング",
-        "差別化",
-        "ブレスト",
-    ):
+    for keyword in ("方向性決めたい", "ポジショニング", "差別化", "ブレスト"):
         assert keyword in description
+    for keyword in ("チャンネル取り込み", "channel-import", "設定反映", "branding push"):
+        assert keyword not in description
 
 
 def test_setup_channel_ttp_completion_condition_is_an_early_hard_gate() -> None:
@@ -534,17 +527,17 @@ def test_viewing_scene_keeps_post_publish_inputs_and_analysis_phases() -> None:
         assert heading in flow
 
 
-def test_channel_new_import_mode_contract_is_separate_from_ttp_completion() -> None:
+def test_setup_import_mode_contract_is_separate_from_ttp_completion() -> None:
     setup_channel = _read(".claude/skills/setup/references/channel-mode.md")
-    channel_new = _read(".claude/skills/channel-new/SKILL.md")
-    import_mode = _read(".claude/skills/channel-new/references/import-mode.md")
+    setup = _read(".claude/skills/setup/SKILL.md")
+    import_mode = _read(".claude/skills/setup/references/import-mode.md")
     config_rules = _read(".claude/skills/channel-new/references/config-generation-rules.md")
 
     assert "完了条件（--channel）" in setup_channel
     assert "docs/channel/personas/persona-definition.md" in setup_channel
     assert "既存チャンネル取り込みモードにはこの TTP 完了条件を適用しない" in setup_channel
     assert "取り込み Step 8: 次ステップ案内" in setup_channel
-    assert "references/import-mode.md" in channel_new
+    assert "references/import-mode.md" in setup
     assert "`music_engine` に入れる値は `suno` / `lyria` のどちらか" in import_mode
     assert "both` は config 契約外" in import_mode
     assert "audio.target_duration_min" in import_mode
@@ -558,7 +551,7 @@ def test_channel_new_import_mode_contract_is_separate_from_ttp_completion() -> N
         in import_mode
     )
     assert "`channel_id` の `config/channel/meta.json::channel.channel_id` 保存" in import_mode
-    for text in (channel_new, import_mode):
+    for text in (setup, import_mode):
         assert "channel_id` 取得またはユーザー承認済み" not in text
         assert "ユーザー承認済みの未完了項目明記" not in text
     assert (
@@ -569,8 +562,8 @@ def test_channel_new_import_mode_contract_is_separate_from_ttp_completion() -> N
     assert "config-template/*.json" in config_rules
 
 
-def test_channel_new_import_step_8_presents_reachable_wf_new_guidance() -> None:
-    import_mode = _read(".claude/skills/channel-new/references/import-mode.md")
+def test_setup_import_step_8_presents_reachable_wf_new_guidance() -> None:
+    import_mode = _read(".claude/skills/setup/references/import-mode.md")
     step_8 = import_mode.split("## 取り込み Step 8:", 1)[1]
 
     assert "uv run yt-doctor --json" in step_8
@@ -584,9 +577,8 @@ def test_channel_new_import_step_8_presents_reachable_wf_new_guidance() -> None:
         assert optional_item in ok_guidance
 
 
-def test_channel_new_import_step_8_preserves_warn_recovery_without_blocking_import() -> None:
-    channel_new = _read(".claude/skills/channel-new/SKILL.md")
-    import_mode = _read(".claude/skills/channel-new/references/import-mode.md")
+def test_setup_import_step_8_preserves_warn_recovery_without_blocking_import() -> None:
+    import_mode = _read(".claude/skills/setup/references/import-mode.md")
     step_8 = import_mode.split("## 取り込み Step 8:", 1)[1]
     warn_guidance = step_8.split("### `status: warn`", 1)[1].split("### 共通の完了契約", 1)[0]
     completion = step_8.split("### 共通の完了契約", 1)[1]
@@ -597,12 +589,12 @@ def test_channel_new_import_step_8_preserves_warn_recovery_without_blocking_impo
     assert "品質を上げる任意項目" in warn_guidance
     assert "`warn` でも取り込みモード自体は完了" in completion
     assert "`wf_new_readiness` を `ok` にすることは取り込みモードの完了条件に加えない" in completion
-    assert "`wf_new_readiness` の判定結果に基づく必須／任意の次ステップ案内" in channel_new
+    assert "`wf_new_readiness` の判定結果に基づく必須／任意の次ステップ案内" in import_mode
     assert "ttp_mode" not in import_mode
 
 
-def test_channel_new_localizations_priority_matches_generation_rules() -> None:
-    regeneration_mode = _read(".claude/skills/channel-new/references/regeneration-mode.md")
+def test_setup_localizations_priority_matches_generation_rules() -> None:
+    regeneration_mode = _read(".claude/skills/setup/references/regeneration-mode.md")
     rules = _read(".claude/skills/channel-new/references/config-generation-rules.md")
 
     step_r5 = regeneration_mode.split("## Step R5:", 1)[1].split("## Step R6:", 1)[0]
@@ -635,7 +627,7 @@ def test_channel_new_requires_initial_save_before_followup_update() -> None:
     assert "初回保存も完了しているため" in setup_channel
 
     assert "`git status --porcelain` が **非空** の場合" in automation_update
-    assert "/channel-new 直後の初回保存が未完了なら" in automation_update
+    assert "/setup --import 直後の初回保存が未完了なら" in automation_update
 
 
 def test_channel_new_pre_wf_new_checks_include_analytics_reporting_and_live_streaming() -> None:
@@ -674,14 +666,13 @@ def test_wf_new_fail_fast_contract_points_to_setup_import_and_collection_local_s
 
     assert "config/channel/` が存在し、`load_config()` でロードできること" in hard_gates
     assert "存在しない場合は `/setup --channel`" in hard_gates
-    assert "`load_config()` が失敗する場合は `/channel-new`（既存チャンネル取り込みモード）" in hard_gates
+    assert "`load_config()` が失敗する場合は `/setup --import`" in hard_gates
     assert "Suno collection Style boundary" in hard_gates
     assert "`20-documentation/suno-patterns.yaml`" in hard_gates
     assert "共有 `config/skills/suno.yaml` を書き換えない" in hard_gates
     assert "`suno_preset` は推奨入力" in hard_gates
 
-    assert "既存チャンネル取り込みモード" in channel_new
-    assert "ttp_wf_new_readiness" in channel_new
+    assert "取り込みモード" not in channel_new
     assert "def check_channel_config" in doctor
     assert 'id="channel_config"' in doctor
     assert "def check_ttp_wf_new_readiness" in doctor
@@ -873,7 +864,7 @@ def test_channel_new_followup_skill_routing_uses_new_contract() -> None:
     viewer_voice = _read(".claude/skills/viewer-voice/SKILL.md")
     setup = _read(".claude/skills/setup/SKILL.md")
     channel_new = _read(".claude/skills/channel-new/SKILL.md")
-    channel_regeneration_mode = _read(".claude/skills/channel-new/references/regeneration-mode.md")
+    channel_regeneration_mode = _read(".claude/skills/setup/references/regeneration-mode.md")
     channel_direction_mode = _read(".claude/skills/channel-new/references/direction-mode.md")
     onboarding = _read("ONBOARDING.md")
     features = _read("docs/features.md")
@@ -951,8 +942,7 @@ def test_skill_frontmatter_descriptions_disambiguate_sibling_routes() -> None:
     assert "「競合データ収集」" in benchmark_desc
     assert "収集済みデータのチャンネル全体分析は /channel-new 分析モード" in benchmark_desc
     assert "「競合分析」" in channel_new_desc
-    assert "データ収集・更新だけなら /benchmark" in channel_new_desc
-    assert "サムネイルだけの深掘りは /thumbnail-research" in channel_new_desc
+    assert "収集済み benchmark/comments" in channel_new_desc
 
     assert "YouTube への投稿は /video-upload" in videoup_desc
     assert "動画ファイルの生成（MP3→MP4）は /videoup" in video_upload_desc
@@ -1307,7 +1297,7 @@ def test_collection_localization_docs_use_root_localizations_contract() -> None:
     for path in (
         ".claude/skills/video-upload/SKILL.md",
         ".claude/skills/setup/references/channel-mode.md",
-        ".claude/skills/channel-new/SKILL.md",
+        ".claude/skills/setup/references/regeneration-mode.md",
         ".claude/skills/channel-new/references/config-generation-rules.md",
     ):
         text = _read(path)
@@ -1379,13 +1369,13 @@ def test_oauth_module_and_setup_guide_distinguish_automatic_and_manual_routes() 
 
 
 def test_channel_new_regeneration_documents_ttp_wf_new_readiness_gate() -> None:
-    regeneration_mode = _read(".claude/skills/channel-new/references/regeneration-mode.md")
+    regeneration_mode = _read(".claude/skills/setup/references/regeneration-mode.md")
     rules = _read(".claude/skills/channel-new/references/config-generation-rules.md")
 
     for text in (regeneration_mode, rules):
         assert "uv run yt-doctor --json" in text
         assert "ttp_wf_new_readiness" in text
-        assert "/channel-new benchmark 反映未完了" in text
+        assert "/setup --regenerate benchmark 反映未完了" in text
         assert "data/benchmark_*.json" in text
         assert "docs/benchmarks/*.md" in text
         assert "data/thumbnail_compare/benchmark/" in text
@@ -1430,8 +1420,9 @@ def test_thumbnail_background_generation_is_noninteractive_and_observed_to_compl
     assert completion.index("exit 0") < completion.index("status: success")
 
 
-def test_channel_new_setting_push_mode_contract_is_documented() -> None:
+def test_setup_owns_setting_push_mode_and_channel_new_keeps_residual_modes() -> None:
     description = _skill_frontmatter("channel-new")["description"]
+    setup_description = _skill_frontmatter("setup")["description"]
 
     for trigger in (
         "設定反映",
@@ -1440,13 +1431,17 @@ def test_channel_new_setting_push_mode_contract_is_documented() -> None:
         "ローカライゼーション同期",
         "meta.json を YouTube に反映",
     ):
-        assert trigger in description
+        assert trigger in setup_description
+        assert trigger not in description
 
     overview = SKILL_INVENTORY.section("channel-new", "## Overview")
-    assert "設定 push モード" in overview
-    assert "本モードへ直行し、他モードの Step はスキップする" in overview
+    assert "方向性検討モード" in overview
+    assert "分析モード" in overview
+    assert "/setup --import" in overview
+    assert "/setup --regenerate" in overview
+    assert "/setup --push" in overview
 
-    mode = SKILL_INVENTORY.section("channel-new", "## 設定 push モード（運用中チャンネルの設定同期）")
+    mode = _read(".claude/skills/setup/references/push-mode.md")
     for command in (
         "uv run yt-channel-settings diff",
         "uv run yt-channel-settings push",
@@ -1469,7 +1464,7 @@ def test_channel_new_setting_push_mode_contract_is_documented() -> None:
 
 
 def test_channel_new_regeneration_snapshot_collects_all_benchmark_channels() -> None:
-    regeneration_mode = _read(".claude/skills/channel-new/references/regeneration-mode.md")
+    regeneration_mode = _read(".claude/skills/setup/references/regeneration-mode.md")
     step = regeneration_mode.split("### Step R2.1:", 1)[1].split("### Step R2.2:", 1)[0]
 
     assert "benchmark.channels[0]" + "` が指定" not in step
@@ -1482,7 +1477,7 @@ def test_channel_new_regeneration_snapshot_collects_all_benchmark_channels() -> 
 
 
 def test_channel_new_regeneration_config_templates_include_audio_json() -> None:
-    regeneration_mode = _read(".claude/skills/channel-new/references/regeneration-mode.md")
+    regeneration_mode = _read(".claude/skills/setup/references/regeneration-mode.md")
     step = regeneration_mode.split("### Step R2.2:", 1)[1].split("### Step R2.3:", 1)[0]
 
     assert "責務別 5 ファイル" in step
@@ -1491,7 +1486,7 @@ def test_channel_new_regeneration_config_templates_include_audio_json() -> None:
 
 
 def test_channel_new_regeneration_uses_real_channel_research_output_path() -> None:
-    mode = _read(".claude/skills/channel-new/references/regeneration-mode.md")
+    mode = _read(".claude/skills/setup/references/regeneration-mode.md")
 
     assert "docs/channel-research.md" in mode
     assert "docs/channel/channel-research.md" not in mode
@@ -1521,7 +1516,7 @@ def test_config_generation_rules_reference_existing_templates_and_step_ids() -> 
 
 
 def test_channel_new_regeneration_does_not_recopy_youtube_json_after_config_completion() -> None:
-    regeneration_mode = _read(".claude/skills/channel-new/references/regeneration-mode.md")
+    regeneration_mode = _read(".claude/skills/setup/references/regeneration-mode.md")
 
     assert "`config/channel/youtube.json::youtube.{category_id,privacy_status}`" in regeneration_mode
 

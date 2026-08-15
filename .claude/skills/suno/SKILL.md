@@ -136,7 +136,7 @@ LLM semantic review はファイル単位で実行する。各 review round で�
 
 以下を確認し、満たさなければ前工程を案内して停止する:
 
-- `config/channel/` が存在すること（`load_config()` でロード可能）。存在しない場合は `/channel-new`（既存チャンネルは取り込みモード）を案内して停止する
+- `config/channel/` が存在すること（`load_config()` でロード可能）。存在しない場合は `/setup --import` を案内して停止する
 - チャンネルの音楽エンジンが Suno であること。Lyria チャンネルでは本スキルを使わず `/lyria` を案内する
 - 対象コレクション（`collections/planning/` 配下の `workflow-state.json`）が `/wf-new` で作成済みであること。無ければ `/wf-new` を案内して停止する
 - collection 固有 Style を直接指定する場合は `20-documentation/suno-patterns.yaml::genre_line`、指定しない場合は `config/skills/suno.yaml::genre_line` または `data/video_analysis/<slug>/*.json`（`suno_preset`）を fallback として利用できること。解決順は「Style 入力の解決（collection 優先、preset 推奨）」に従う

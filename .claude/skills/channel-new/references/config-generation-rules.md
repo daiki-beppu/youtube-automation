@@ -1,13 +1,13 @@
 # config/channel/*.json 生成ルール
 
-`/channel-new`（再生成モード / 既存チャンネル取り込みモード）から共通参照するルール集。
+`/setup --regenerate` / `/setup --import` から共通参照するルール集。
 テンプレートは同ディレクトリの `config-template/` 配下（`config-template/*.json` と `config-template/skills/*.yaml`）。
 
 ## TTP（徹底的にパクる）路線時の優先順位
 
 `docs/channel/channel-direction.md` で「TTP 完全コピー路線」が選ばれている場合、各フィールド生成ルール（後述）は **競合スナップショットの転写を最優先** し、独自設計はあとから差分として乗せる。
 
-1. **`/channel-new` 再生成モード Step R2.1 で取得した競合の `channels().list(part='snippet,brandingSettings,localizations')` レスポンス**を Claude のコンテキストに必ず載せる
+1. **`/setup --regenerate` Step R2.1 で取得した競合の `channels().list(part='snippet,brandingSettings,localizations')` レスポンス**を Claude のコンテキストに必ず載せる
 2. 競合の構造（章立て・段落順・箇条書きの数・絵文字の有無）をそのままコピーし、`competitor → my-channel` の固有名詞置換だけを行う
 3. `brandingSettings.channel.keywords` は数・順序・スペース入りクォート形式（`"chill beats"` 等）まで踏襲する
 4. 競合が多言語化している場合は `localizations` のエントリ言語セットを `config/localizations.json::supported_languages` にそのまま転写する（独自の追加・削除は禁止）
@@ -69,7 +69,7 @@
 `activities` に複数の値を書く場合はカンマ区切り（例: `"Focus, Study, Writing"`）を使う。
 プレイリスト自動割り当ては既存 config の中黒区切り（`"Focus · Study · Writing"`）も受理する。
 
-`theme_scenes` / `theme_activities` をどちらも空のまま `/channel-new`（再生成モード）を抜けると
+`theme_scenes` / `theme_activities` をどちらも空のまま `/setup --regenerate` を抜けると
 下流 `yt-populate-scene-phrases` が手動 `--en` 指定を要求する。channel-direction.md で
 テーマ群が確定しているなら空のまま終了しないこと（issue #567）。
 
@@ -81,7 +81,7 @@
 | `target_duration_max` | 最大目標尺（分）。固定尺戦略のチャンネルでは `target_duration_min` と同値にする |
 | `chapter_max` | チャプター数の上限（デフォルト 100） |
 
-固定尺戦略を取るチャンネルでも、`target_duration_min` を空のまま `/channel-new`（再生成モード）を
+固定尺戦略を取るチャンネルでも、`target_duration_min` を空のまま `/setup --regenerate` を
 抜けてはならない（issue #567）。
 
 ## skill-config で管理するセクション
@@ -105,7 +105,7 @@
 ### channel-direction.md の決定を必ず転記する skill-config（issue #567）
 
 下記は「チャンネル固有の上書きが必要」ではなく **方向性が決まっていれば必ず書く**
-セクション。空のまま `/channel-new`（再生成モード）を抜けてはならない。雛形は
+セクション。空のまま `/setup --regenerate` を抜けてはならない。雛形は
 `references/config-template/skills/<skill>.yaml`。
 
 **Suno**（`music_engine: suno` のチャンネル）:
@@ -133,7 +133,7 @@
 **手動 download はしない**（issue #567）。
 
 `benchmark.channels` が設定済みのチャンネルでは、`uv run yt-doctor --json` の
-`ttp_wf_new_readiness` で `/channel-new benchmark 反映未完了` が出ないことを完了条件にする。
+`ttp_wf_new_readiness` で `/setup --regenerate benchmark 反映未完了` が出ないことを完了条件にする。
 この check は `data/benchmark_*.json`、`docs/benchmarks/*.md`、
 `data/thumbnail_compare/benchmark/`、`config/skills/thumbnail.yaml::image_generation.gemini.reference_images.default`、
 `config/skills/thumbnail.yaml::image_generation.gemini.reference_images.channel_branding`
@@ -155,5 +155,5 @@ Style 欄 120 文字超過、planning 中 `descriptions.md` の parser 不一致
 
 - `config-template/*.json` — `config/channel/*.json` の責務別雛形
 - `config-template/skills/*.yaml` — `config/skills/*.yaml` のチャンネル固有上書き雛形
-- `/channel-new`（再生成モード） — 方向性ドキュメントから config 完成までの手順
-- `/channel-new`（既存チャンネル取り込みモード） — 既存チャンネル取り込みの手順
+- `/setup --regenerate` — 方向性ドキュメントから config 完成までの手順
+- `/setup --import` — 既存チャンネル取り込みの手順

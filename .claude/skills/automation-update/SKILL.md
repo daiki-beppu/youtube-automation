@@ -155,7 +155,7 @@ command -v gh >/dev/null 2>&1 && gh auth status 2>&1 | head -3
 > 作業ツリーに未コミットの変更があります:
 >   <git status --porcelain の出力>
 >
-> /channel-new 直後の初回保存が未完了なら、まず初回 commit を作成してください。
+> /setup --import 直後の初回保存が未完了なら、まず初回 commit を作成してください。
 > それ以外の差分は stash / commit / 破棄 のいずれかで clean にしてから "done" と返してください。
 ```
 

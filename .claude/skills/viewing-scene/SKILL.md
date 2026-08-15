@@ -48,7 +48,7 @@ Phase 3 で AskUserQuestion によりメインシーンと動画尺の方針を�
 
 ### 停止する fail
 
-- `config/channel/` が存在しない、または `load_config()` でロードできない → 新規チャンネルは `/setup --channel` Step 4、既存チャンネルは `/channel-new`（既存チャンネル取り込みモード）を案内して停止する
+- `config/channel/` が存在しない、または `load_config()` でロードできない → 新規チャンネルは `/setup --channel` Step 4、既存チャンネルは `/setup --import` を案内して停止する
 - `docs/channel/personas/persona-definition.md` が無い → 前工程 `/audience-persona-design` を案内して停止する
 - 新規開設（公開前）で `docs/plans/viewer-voice-analysis.md`、`docs/channel/ttp-seed-confirmation.md`、`docs/channel/competitor-branding-snapshot.json` のいずれかが無い → `/setup --channel` Step 5 または Step 7 の該当前工程へ戻るよう案内して停止する
 - 公開後に `reports/analysis_*.md` が無い → 前工程 `/analytics --collect` → `/analytics --analyze` を案内して停止する

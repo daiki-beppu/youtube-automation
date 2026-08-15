@@ -16,9 +16,7 @@ from youtube_automation.domains.metadata import validate_localizations_title_tem
 
 _REPO_ROOT = REPO_ROOT
 _EXAMPLE_LOCALIZATIONS = _REPO_ROOT / "examples" / "localizations.example.json"
-_CHANNEL_SETUP_TEMPLATE = (
-    _REPO_ROOT / ".claude" / "skills" / "channel-new" / "references" / "localizations-template.json"
-)
+_CHANNEL_SETUP_TEMPLATE = _REPO_ROOT / ".claude" / "skills" / "setup" / "references" / "localizations-template.json"
 
 _EXPECTED_LANGUAGES = ["ja", "en", "de"]
 _CHANNEL_NEW_TEMPLATE_LANGUAGES = ["ja", "en"]
@@ -68,7 +66,7 @@ def test_example_localizations_languages_define_required_metadata_fields(languag
         _assert_non_empty_string(description[key], field_name=f"{language}.description.{key}")
 
 
-def test_channel_new_template_omits_de_from_the_generation_default() -> None:
+def test_setup_template_omits_de_from_the_generation_default() -> None:
     data = _read_json(_CHANNEL_SETUP_TEMPLATE)
 
     assert data["supported_languages"] == _CHANNEL_NEW_TEMPLATE_LANGUAGES
@@ -80,7 +78,7 @@ def test_channel_new_template_omits_de_from_the_generation_default() -> None:
     _CHANNEL_NEW_TEMPLATE_LANGUAGES,
     ids=_CHANNEL_NEW_TEMPLATE_LANGUAGES,
 )
-def test_channel_new_template_languages_define_minimum_fields(language: str) -> None:
+def test_setup_template_languages_define_minimum_fields(language: str) -> None:
     data = _read_json(_CHANNEL_SETUP_TEMPLATE)
 
     lang_data = data["languages"][language]

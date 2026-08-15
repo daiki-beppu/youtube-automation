@@ -1312,9 +1312,7 @@ def check_channel_config(channel_dir: Path) -> CheckResult:
                     message="config/localizations.json 検証失敗: " + "\n".join(localization_errors),
                     next_action={
                         "kind": "human",
-                        "instructions": (
-                            "/channel-new（既存チャンネル取り込みモード）を実行して設定を修復してください"
-                        ),
+                        "instructions": ("/setup --import を実行して設定を修復してください"),
                     },
                 )
             return CheckResult(
@@ -1331,7 +1329,7 @@ def check_channel_config(channel_dir: Path) -> CheckResult:
                 message=f"config/channel/ ロード失敗: {e}",
                 next_action={
                     "kind": "human",
-                    "instructions": ("/channel-new（既存チャンネル取り込みモード）を実行して設定を修復してください"),
+                    "instructions": ("/setup --import を実行して設定を修復してください"),
                 },
             )
 
@@ -1347,7 +1345,7 @@ def check_playlist_config(channel_dir: Path) -> CheckResult:
             next_action={
                 "kind": "human",
                 "instructions": (
-                    "/channel-new（再生成モード）で config/channel/playlists.json を作成し、"
+                    "/setup --regenerate で config/channel/playlists.json を作成し、"
                     "playlist スキルが使う playlists 定義を追加してください"
                 ),
             },
@@ -1804,14 +1802,14 @@ def check_ttp_wf_new_readiness(channel_dir: Path) -> CheckResult:
             id="ttp_wf_new_readiness",
             status="warn",
             category=DATA_CATEGORY,
-            message="/setup --channel または /channel-new 再生成モードの TTP 完了条件が未充足: "
+            message="/setup --channel または /setup --regenerate の TTP 完了条件が未充足: "
             + "; ".join(missing)
             + note_suffix,
             next_action={
                 "kind": "human",
                 "instructions": (
                     "/setup --channel Step 5-9 または "
-                    "/channel-new 再生成モード Step R3.5 の不足項目を解消してください。"
+                    "/setup --regenerate Step R3.5 の不足項目を解消してください。"
                     "意図的にスキップする場合は docs/channel/ttp-seed-confirmation.md に "
                     "ユーザー承認済み例外として未反映項目を明記し、最後に `uv run yt-doctor --json` で "
                     "`ttp_wf_new_readiness` が ok になることを確認してください"
@@ -1825,7 +1823,7 @@ def check_ttp_wf_new_readiness(channel_dir: Path) -> CheckResult:
         category=DATA_CATEGORY,
         message=(
             "TTP 対象承認・branding snapshot・benchmark docs・thumbnail / music readiness が "
-            "/wf-new 接続可能（/channel-new 再生成モード完了相当）" + note_suffix
+            "/wf-new 接続可能（/setup --regenerate 完了相当）" + note_suffix
         ),
     )
 
@@ -3010,7 +3008,7 @@ def check_initial_setup_readiness(channel_dir: Path) -> CheckResult:
         next_action={
             "kind": "human",
             "instructions": (
-                "/channel-new（再生成モード）で config/skills/thumbnail.yaml と config/skills/suno.yaml を再確認し、"
+                "/setup --regenerate で config/skills/thumbnail.yaml と config/skills/suno.yaml を再確認し、"
                 "descriptions.md の parse 失敗は /video-description で再生成してください"
             ),
         },

@@ -37,7 +37,7 @@ subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実�
 
 以下を確認し、満たさなければ対応する前工程を案内して停止する:
 
-- `config/channel/` がロード可能（`load_config()`）。存在しない場合は `/channel-new`（既存チャンネルは取り込みモード）を案内して停止する
+- `config/channel/` がロード可能（`load_config()`）。存在しない場合は `/setup --import` を案内して停止する
 - Vertex AI ADC 初期化済み (`gcloud auth application-default login` + `set-quota-project`)。project_id は ADC quota project から自動解決（`GOOGLE_CLOUD_PROJECT` は任意で上書き可）。未初期化ならこのコマンドを案内して停止する
 - `10-assets/main.png` または `main.jpg`（16:9 textless 動画背景 / 参考ビジュアル）が既存。無ければ `/thumbnail` でテキスト付き thumbnail を確定し、承認済み thumbnail から textless 背景を生成するよう案内して停止する
 

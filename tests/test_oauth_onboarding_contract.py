@@ -12,7 +12,7 @@ REPO_ROOT = REPO_ROOT
 SETUP_SKILL = REPO_ROOT / ".claude" / "skills" / "setup" / "SKILL.md"
 CHANNEL_NEW_SKILL = REPO_ROOT / ".claude" / "skills" / "channel-new" / "SKILL.md"
 GCP_BOOTSTRAP_MD = REPO_ROOT / ".claude" / "skills" / "setup" / "references" / "gcp-bootstrap.md"
-REGENERATION_MODE_MD = REPO_ROOT / ".claude" / "skills" / "channel-new" / "references" / "regeneration-mode.md"
+REGENERATION_MODE_MD = REPO_ROOT / ".claude" / "skills" / "setup" / "references" / "regeneration-mode.md"
 
 GOOGLE_AUTH_PLATFORM_KEYWORDS = (
     "Google Auth Platform",
