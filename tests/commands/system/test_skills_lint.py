@@ -11,10 +11,10 @@ from pathlib import Path
 
 import pytest
 
+from tests.helpers.paths import REPO_ROOT
 from youtube_automation.commands.system import skills_sync
 from youtube_automation.commands.system.skills_sync import build_parser, main
 from youtube_automation.domains.skills.inventory import lint_frontmatter_text, lint_skill
-from tests.helpers.paths import REPO_ROOT
 
 _VALID_SKILL_MD = '---\nname: good-skill\ndescription: "Use when: 良い skill のとき"\n---\n\n# good\n'
 
