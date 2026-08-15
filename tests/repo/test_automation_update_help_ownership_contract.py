@@ -6,7 +6,7 @@ import re
 
 from tests.helpers.paths import REPO_ROOT
 
-SKILL_TEXT = (REPO_ROOT / ".claude/skills/automation-update/SKILL.md").read_text(encoding="utf-8")
+SKILL_TEXT = (REPO_ROOT / ".claude/skills/automation/references/update.md").read_text(encoding="utf-8")
 
 
 def _apply_commands() -> list[str]:

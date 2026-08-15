@@ -1,4 +1,4 @@
-# automation-update の落とし穴
+# automation --update の落とし穴
 
 手順どおり進めて詰まったとき、または該当する兆候が出たときに読む。
 
@@ -7,7 +7,7 @@
 - **`### Migration` セクション欠落**: フォーマット契約は v5.6.0 以降で強制されるため、それ以前のリリース本文には Migration セクションが無いケースがある。Step 2-3 の fallback で CHANGELOG / Release 本文全体を AI 累積要約する。`所要時間` / `local fix 衝突注意` が抽出できないため Step 3-1 で必ず `[HUMAN STEP]` で確認
 - **`uv.lock` 添付忘れ**: `git add` で uv.lock を含めないと追従が永続化されない。Phase 4-1 で `git status` を必ず確認
 - **同一 tag の再発行**: 稀に upstream が同 tag を force push し直す。`publishedAt` の差分や `gh release view <target_tag>` で差分有無を確認して人間に判断を仰ぐ
-- **自スキルの self-overwrite**: 本スキル自身が `yt-skills diff` の差分対象に含まれる場合がある（v5.5.x → v5.5.y で本スキルが更新された等）。`yt-skills sync` は file 単位の順次上書き（atomicity なし、`--force` で削除→再作成）だが、Claude Code は SKILL.md をセッション開始時にメモリへロードするため、**同セッションでは旧版の手順で完走**し、**次回 /automation-update 起動以降で新版が適用**される。Step 3-1 の特例 prompt で利用者に明示すること。手書き改造（local fix）を残したい場合は `"manual"` 応答で自スキルは手動マージへ回し、他に安全に上書きできる skill がある場合だけ、local fix を解消した後に `--sync-only <safe-skill...>` で skills asset を allowlist 同期する（claude-md も同期されるため差分が残っている場合は停止する）
+- **自スキルの self-overwrite**: 本スキル自身が `yt-skills diff` の差分対象に含まれる場合がある（v5.5.x → v5.5.y で本スキルが更新された等）。`yt-skills sync` は file 単位の順次上書き（atomicity なし、`--force` で削除→再作成）だが、Claude Code は SKILL.md をセッション開始時にメモリへロードするため、**同セッションでは旧版の手順で完走**し、**次回 /automation --update 起動以降で新版が適用**される。Step 3-1 の特例 prompt で利用者に明示すること。手書き改造（local fix）を残したい場合は `"manual"` 応答で自スキルは手動マージへ回し、他に安全に上書きできる skill がある場合だけ、local fix を解消した後に `--sync-only <safe-skill...>` で skills asset を allowlist 同期する（claude-md も同期されるため差分が残っている場合は停止する）
 - **sync 中の部分破損**: `yt-skills sync` のループに atomicity はない。途中失敗すると部分的に壊れた `.claude/skills/` が残る。Step 3-3 で自スキル frontmatter 健全性チェックを必ず実行し、壊れていれば `git checkout` でロールバック
 - **番号付き重複ファイルの commit 混入**: sync 先に `<名前> <数字>` 形式の重複（iCloud bounce）があると Step 4-1 の `git add .claude/skills/` で commit に紛れ込む。Step 3-3 の検知（`yt-doctor` の `numbered_duplicates` / `yt-skills sync` の warning）で見つけたら、Phase 4 前に配布内の [post-apply checks](post-apply-checks.md#番号付き重複ファイルの検知と再発防止) に従い、対象を列挙して承認された範囲だけを除去する
 - **sync が触る範囲**: `yt-skills sync` の default (`--asset all`) は `.claude/skills/`、`.claude/CLAUDE.md`、`.claude/settings.json`（既存キー保持の allow / deny / 承認済み hook merge）、`docs/{workflow-cheatsheet,features}.md`、`auth/client_secrets.template.json` を同期する。`auth/client_secrets.template.json` はテンプレートだけで、実 secret の `auth/client_secrets.json` / `auth/token*.json`、`settings.local.json`、`config/channel/*.json`、`.env`、`collections/` は **絶対に上書きされない**。`pyproject.toml` と `uv.lock` は `apply` が明示的に書き換える

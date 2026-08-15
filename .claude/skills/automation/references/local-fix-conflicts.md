@@ -2,19 +2,19 @@
 
 `yt-skills diff` に差分が出たとき、通常の (a)/(b)/(c) 判断へ進む**前に**割り込ませる 2 つの特例。SKILL.md の Step 3-1 から参照される。
 
-## 自スキル (automation-update) が差分対象に含まれる場合
+## 自スキル (automation) が差分対象に含まれる場合
 
-`yt-skills diff` の出力に **`automation-update` 自身** が含まれる場合、(a)/(b)/(c) prompt の **前に** 自スキル更新の特例 prompt を出して、変更内容を構造的に提示してから確認を取る:
+`yt-skills diff` の出力に **`automation` 自身** が含まれる場合、(a)/(b)/(c) prompt の **前に** 自スキル更新の特例 prompt を出して、変更内容を構造的に提示してから確認を取る:
 
 ```bash
 # 自スキル分の同梱版を取得し、unified diff として表示
 # youtube_automation を import するため uv 管理の venv 経由で実行する
-uv run python - <<'PY' > /tmp/automation-update-bundled.SKILL.md
+uv run python - <<'PY' > /tmp/automation-bundled.SKILL.md
 from youtube_automation.commands.system.skills_sync import _asset_root
 
-print((_asset_root("skills") / "automation-update" / "SKILL.md").read_text(encoding="utf-8"), end="")
+print((_asset_root("skills") / "automation" / "SKILL.md").read_text(encoding="utf-8"), end="")
 PY
-diff -u .claude/skills/automation-update/SKILL.md /tmp/automation-update-bundled.SKILL.md || true
+diff -u .claude/skills/automation/SKILL.md /tmp/automation-bundled.SKILL.md || true
 ```
 
 `yt-skills` には export コマンドは無い。wheel 同梱 asset は `youtube_automation.commands.system.skills_sync._asset_root("skills")` から取得する。
@@ -23,7 +23,7 @@ AI は取得した unified diff を **H2 セクション境界（`## `）で集�
 
 ```
 > [HUMAN STEP]
-> ⚠ このスキル自身 (automation-update) が更新対象に含まれています。
+> ⚠ このスキル自身 (automation) が更新対象に含まれています。
 >
 > 変更内容（セクション単位の要約）:
 >   - Phase 3-1: <要約>
@@ -32,7 +32,7 @@ AI は取得した unified diff を **H2 セクション境界（`## `）で集�
 > 仕様:
 >   - sync 実行後も、本セッションは旧版 SKILL.md の手順で完走します
 >     （Claude Code はセッション開始時に SKILL.md をロードしてメモリ保持するため）
->   - 次回 /automation-update を起動した時点から新版が適用されます
+>   - 次回 /automation --update を起動した時点から新版が適用されます
 >   - 手書き改造（local fix）がある場合は破棄されます
 >
 > 続行してよければ "yes"、自スキルだけ手動マージしたければ "manual" と返してください。

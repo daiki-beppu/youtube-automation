@@ -18,7 +18,7 @@ EXPECTED_NOTES = {
         "main",
         "youtube-automation v5.5.17",
         -2026071002,
-        "/automation-update",
+        "/automation --update",
     ),
     "v5.6.0.md": (
         "v5.6.0",
@@ -26,7 +26,7 @@ EXPECTED_NOTES = {
         "main",
         "youtube-automation v5.6.0",
         -2026073102,
-        "/automation-update",
+        "/automation --update",
     ),
     "ext-v0.2.5.md": (
         "ext-v0.2.5",

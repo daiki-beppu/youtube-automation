@@ -94,7 +94,7 @@ git diff --check
 
 前回 tag から PR が一切無い場合（手動で tag だけ動かしたケース等）に発生。
 
-**対応**: 下流の `/automation-update` 側が CHANGELOG.md fallback で抽出するので publish 時点では問題視しない。本文を手で補完したい場合は `gh release edit` で CHANGELOG.md::[VER] セクションを貼り付ける。
+**対応**: 下流の `/automation --update` 側が CHANGELOG.md fallback で抽出するので publish 時点では問題視しない。本文を手で補完したい場合は `gh release edit` で CHANGELOG.md::[VER] セクションを貼り付ける。
 
 ### ケース C: リリースブランチが既に削除されている
 
@@ -140,5 +140,5 @@ site は PR pending: Cloudflare Pages preview と required checks の確認待�
 merge 後の公開 URL: https://youtube-automation-release-notes.pages.dev/v${VER}/
 
 次のステップ:
-- 各チャンネルリポジトリで `/automation-update` を実行すれば CHANGELOG.md / Release 本文から累積影響を要約して追従可能
+- 各チャンネルリポジトリで `/automation --update` を実行すれば CHANGELOG.md / Release 本文から累積影響を要約して追従可能
 ```

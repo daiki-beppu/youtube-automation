@@ -149,7 +149,7 @@ EXTRA_BILLED_SKILLS: dict[str, str] = {}
 TARGET_SKILLS: frozenset[str] = frozenset(
     {
         "analytics",
-        "automation-update",
+        "automation",
         "channel-research",
         "reply",
         "distrokid-helper",

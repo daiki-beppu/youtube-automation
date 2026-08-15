@@ -1,8 +1,4 @@
----
-name: automation-update
-purpose: 準備する
-description: "Use when 下流リポジトリで automation を最新リリースへ追従させるとき。「追従」「アップグレード」「automation-update」で発動。pin bump から yt-skills sync・コミットまで一括の wizard"
----
+# automation --update
 
 ## 前後工程
 
@@ -357,9 +353,9 @@ uv run yt-skills diff
 > a / b / c を返してください。
 ```
 
-**差分に次のどちらかが含まれる場合は、上記 (a)/(b)/(c) prompt の前に特例ハンドリングを挟む。**手順は [references/local-fix-conflicts.md](references/local-fix-conflicts.md) を読む:
+**差分に次のどちらかが含まれる場合は、上記 (a)/(b)/(c) prompt の前に特例ハンドリングを挟む。**手順は [local-fix-conflicts.md](local-fix-conflicts.md) を読む:
 
-- `automation-update` 自身 — 自スキル更新の同意取得（同セッションは旧版で完走する旨の明示を含む）
+- `automation` 自身 — 自スキル更新の同意取得（同セッションは旧版で完走する旨の明示を含む）
 - `.claude/skills/<skill>/config.default.yaml` — `config/skills/<skill>.yaml` への移行案内
 
 ### Step 3-2. 追従の一括実行（CLI）
@@ -510,7 +506,7 @@ uv sync
 `channel_config` 以外の `yt-doctor` check が `warn` / `fail` / `unknown` の場合は、安全化して表示された `message` / `next_action` を省略せず利用者へ示し、`/setup` を起動して再診断するよう案内。`channel_config` 自体が `ok` 以外、check の重複・欠落・型不正、JSON 破損、またはコマンドを起動できない場合は `yt-channel-status` へ進まず停止する。
 ただし `branding/icon.png` / `branding/banner.png` の「未生成」が報告された場合は、新規生成の前に必ず `branding/` 配下の既存ファイルを確認する。同名 stem の別拡張子（例: `icon.jpg` / `banner.webp`）と別サフィックス（例: `banner-v2.jpg` / `banner-v3.png`）も候補に含め、複数候補がある場合はどれが最終版か人間に確認してからリネーム/変換する。
 
-sync 直後に、次の 2 点を Phase 4 へ進む前に判定する。手順は [references/post-apply-checks.md](references/post-apply-checks.md) を読む:
+sync 直後に、次の 2 点を Phase 4 へ進む前に判定する。手順は [post-apply-checks.md](post-apply-checks.md) を読む:
 
 - `numbered_duplicates`（`yt-doctor` / `yt-skills sync` の warning）— commit へ混入する前に除去する
 - 自スキルの frontmatter 健全性 — 壊れていると次回スキルが発動しない
@@ -554,7 +550,7 @@ git commit -m "chore: youtube-automation <target_ref> への追従 (#N)"
 
 ## Gotchas
 
-手順どおりに進まない兆候（CLI が command not found / Release 本文が空 / sync 後に skill が壊れた / 重複ファイル）が出たら [references/gotchas.md](references/gotchas.md) を読む。`yt-skills sync` が上書きする範囲と、**実 secret・`config/channel/*.json`・`collections/` は上書きされない**保証も同ファイルにある。
+手順どおりに進まない兆候（CLI が command not found / Release 本文が空 / sync 後に skill が壊れた / 重複ファイル）が出たら [gotchas.md](gotchas.md) を読む。`yt-skills sync` が上書きする範囲と、**実 secret・`config/channel/*.json`・`collections/` は上書きされない**保証も同ファイルにある。
 
 ## Rules
 

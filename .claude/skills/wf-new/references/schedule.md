@@ -13,7 +13,7 @@
 
 `config/channel/workflow.json::workflow.scheduled_automation` を製品非依存の単一ソースとして、実行中製品のネイティブ scheduler に登録する。Codex は Scheduled Task、Claude は依存性に応じて `/schedule` Cloud Job または Cowork local Scheduled Task を使う。launchd / cron は明示承認された fallback に限る。
 
-automation のリリース追従は `/automation-update`、本体リリースは `/automation-release`、制作を手動で一段進めるのは `/wf-next` の責務とし、この mode では代行しない。
+automation のリリース追従は `/automation --update`、本体リリースは `/automation-release`、制作を手動で一段進めるのは `/wf-next` の責務とし、この mode では代行しない。
 
 ## Hard Gates
 

@@ -20,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `refactor(suno)`: Suno prompt の設定・patterns・歌詞解決を CLI 実行ごとに1回へ集約し、生成側へ解決済みの品質設定と duration filter を渡して、生成内容を維持したまま重複警告を解消する（#3908）。
 
 - `feat(skills)`: 旧 `/channel-status` の登録者数・総再生回数・動画別パフォーマンス表示を `/analytics --status` へ統合する。status は分析 chain に含めず、`/wf-status` との YouTube 統計 / 制作進捗の責務境界と利用者導線を新 owner へ更新する（#3851）。
+- `refactor(skills)`: 下流追従 wizard を `/automation --update` へ統合し、mode 未指定では破壊的処理を開始せず停止する。公開 CLI `yt-automation-update` は維持し、旧 skill directory を prune 対象へ追加する（#3752）。
+
 - `feat(skills)`: フラグなしの `/audit` に alignment → video → metadata → value-loop の読み取り専用 chain manifest と再開可能な状態判定を追加する。公開済み動画がない場合は理由付きで停止し、永続化しない metadata / value-loop は実行後も runnable として扱う（#3856）。
 - `feat(skills)`: `/reply` を新設し、旧 `/comments-reply` の公開済み動画コメント返信、別コンテキスト Reviewer、dry-run 後の明示承認、二重返信防止をフラグなし mode と references へ移設する（#3848）。
 
@@ -678,7 +680,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `fix(collection-preflight)`: 単一言語チャンネルでは共有 `requires_scene_phrases()` 判定に従って `scene_phrases` を要求せず、多言語時だけ検証するよう修正した（#2270）。
 - `docs(auth)`: doctor の YouTube OAuth next_action と `/setup` を、AI/setup が `uv run yt-oauth` を background 起動して stdout の同意 URL を中継・exit待機・doctor再検証し、人間はブラウザ同意だけを担う契約へ統一した（#2279）。
 - `feat(videoup)`: ring visualizer が `fill.type: conical` の角度→色相フルスペクトル充填を振幅・円弧 mask 内へ合成できるようにし、旧 channel-local ring patch の設定移行表を追加した（#2278）。
-- `fix(doctor/automation-update)`: OAuth token の失効時に `upload_ready` が `RefreshError` でクラッシュせず再認証用の構造化 fail を返すようにし、`channel_config=ok` なら他 doctor check の非ゼロ終了で apply を失敗扱いにしないよう修正した（#2277）。
+- `fix(doctor/automation --update)`: OAuth token の失効時に `upload_ready` が `RefreshError` でクラッシュせず再認証用の構造化 fail を返すようにし、`channel_config=ok` なら他 doctor check の非ゼロ終了で apply を失敗扱いにしないよう修正した（#2277）。
 - `fix(automation-update)`: tag pin の check/apply が GitHub release 一覧から本体の stable `vX.Y.Z` だけを publish 日時順で選ぶようにし、より新しい `ext-vX.Y.Z` 拡張 release を追従先と誤認して exit 2 になる問題を修正した（#2276）。
 - `test(pytest)`: repository / docs / CI / packaging の静的契約を `repo_contract`、実 tool・process・待機を伴うテストを `slow` marker へ分類し、製品 behavior 用 fast lane と変更種別別の最小コマンドを追加した。CI の無選別 full suite は維持する（#2268）。
 - `test(packaging)`: candidate wheelを隔離venvへinstallし、空の擬似下流への全asset sync、sourceとの完全一致、`.agents/skills` symlink、installed `yt-skills diff`の差分なしをCIとローカルで同じpytest targetから検証できるrelease前E2E smokeを追加した（#2266）。
@@ -1018,7 +1020,7 @@ local fix 衝突注意:
 - `docs(extensions)`: Chrome 拡張のローカル検証を npm の現行 pnpm 11.11.0 に固定した。`suno-helper` / `distrokid-helper` 共通の pinned install / build / zip、期待 zip、lockfile 無差分の確認手順を共通・各拡張 README、開発 docs、`/suno`、`/automation-release` へ明記した（#1682）
 - `fix(distrokid-helper)`: `yt-distrokid-prepare plan` が 35 曲以下の単一 disc には `{coll_slug}` / `{Theme}` を、35 曲超の複数 disc にのみ `disc{N}-{coll_slug}-vol{N}` / `{Theme} Vol.{N}` を生成するよう修正した。build の slug 検証も単一 disc の kebab-case slug を受理する（#1734）
 - `docs(wf-new)`: Phase 2c の codex / single_step 分岐に残っていた textless 背景先行の旧フロー記述を、#1611 のテキスト付き thumbnail 先行フロー（テキスト付き `thumbnail.jpg` を先に生成・承認 → 承認済み `thumbnail.jpg` から textless `main.png/jpg` を再生成）へ更新した（#1854）。契約テスト `test_wf_new_routes_codex_and_single_step_through_thumbnail_contract` も新フロー表記をロックするよう追従
-- `refactor(repo)`: GitHub owner `daiki-beppu` のハードコード残存（fork 運営者に生成物のズレを生む固定参照）を整理した（#1653）。`yt-doctor` の `automation_package` fail 時の `next_action.cmd` を `automation_update_refs.UPSTREAM_REPO` 定数（official upstream 検証と同じ単一ソース）から組み立てるよう変更し、リテラル重複を削減。`/automation-update` に Step 1-0、`/ext-install` に Step 0 を新設し、両スキルの `gh` / `curl` コマンドの upstream 参照を導入済みパッケージの `UPSTREAM_REPO` から実行時導出する形へ置換。定数から導出できない箇所（`/setup` の bootstrap 用 `uv add`（パッケージ導入前に実行）、prose・doc リンク等）は固定のまま、`.claude/CLAUDE.template.md` に新設した「fork 運用者向け」節（§9）に残存ファイル一覧と `rg` ポインタを明記した。サプライチェーン保護の `_require_official_upstream` / `UPSTREAM_REPO` 自体は変更していない
+- `refactor(repo)`: GitHub owner `daiki-beppu` のハードコード残存（fork 運営者に生成物のズレを生む固定参照）を整理した（#1653）。`yt-doctor` の `automation_package` fail 時の `next_action.cmd` を `automation_update_refs.UPSTREAM_REPO` 定数（official upstream 検証と同じ単一ソース）から組み立てるよう変更し、リテラル重複を削減。`/automation --update` に Step 1-0、`/ext-install` に Step 0 を新設し、両スキルの `gh` / `curl` コマンドの upstream 参照を導入済みパッケージの `UPSTREAM_REPO` から実行時導出する形へ置換。定数から導出できない箇所（`/setup` の bootstrap 用 `uv add`（パッケージ導入前に実行）、prose・doc リンク等）は固定のまま、`.claude/CLAUDE.template.md` に新設した「fork 運用者向け」節（§9）に残存ファイル一覧と `rg` ポインタを明記した。サプライチェーン保護の `_require_official_upstream` / `UPSTREAM_REPO` 自体は変更していない
 - `docs(skills)`: `content_model.type` の docs 表記を実装（`ContentModel.type = "release" / "collection"`、`src/youtube_automation/utils/config/youtube.py`）の正に合わせ、`single_release` を `release` に統一した（#1772）。対象は `video-upload/SKILL.md`（完了条件 / Channel Adaptation 表 / release アップロードフロー / コマンドリファレンス）、`video-upload/references/posting-checklist.md`、`channel-new/references/claude-md-template.md`。型名の初出箇所には「release 型（単曲リリース）」の補足を付与し、doc-contract テスト（`tests/test_skill_docs_consistency.py`）の見出し担保も新表記へ追従。無関係な GitHub release 集約テスト名 `test_attaches_both_zips_to_single_release` は誤検知回避のため `test_attaches_both_zips_to_one_gh_release` にリネーム
 - `fix(thumbnail)`: `.claude/skills/thumbnail/config.default.yaml` の `image_generation.codex.default_prompt_template` を #1611 のテキスト付き thumbnail 先行フローへ更新し、SKILL.md「既定テンプレート」ブロックと完全一致させた（#1680）。#1502 の textless 背景先行テンプレートが出荷 default に残っており、Phase 2 のテキスト付き候補生成で「タイトルテキストを入れるな」と指示する矛盾があった。channel-new の config-template（`references/config-template/skills/thumbnail.yaml`）も同一テンプレートへ追従。`{title}` の意味論（サムネに焼く見出し + 短いサブタイトルのみ。動画タイトル全文を渡さない — 全文焼き込み事故の再発防止）を thumbnail / collection-ideate の codex 例と config コメントに明文化し、collection-ideate SKILL.md の「textless 背景先行」コメント（parallel / sequential 両分岐）と Next Step / コスト拒否時の旧フロー記述を現行の thumbnail 先行フローへ修正。SKILL.md 記載テンプレートと config.default.yaml の完全一致は `tests/test_thumbnail_skill_assets.py::test_thumbnail_default_config_codex_template_matches_skill_md_block` で機械担保する
 - `docs(distrokid-helper)`: SKILL.md の前提チェックに `config/channel/distrokid.json::profile.songwriter` の設定確認を追加した（#1745）。schema 上は任意のまま（CLI バリデーション追加なし）、未設定時は plan / build 前に「設定して進める / フォーム手入力を了承して進める」の 2 択を AskUserQuestion で提示する。ステップ 7 のリリース日提案を「申請日から 4 営業日後の最短日をデフォルト提案（営業日 = 土日除外、祝日は考慮しない）」と明文化し、agent ごとの提案ぶれを排除。あわせて `distrokid.json` に PII（songwriter の本名）が入りうる旨・記入例・`.gitignore` 運用（public リポジトリでは untrack、コミット済みなら `git rm --cached`、履歴残存時は filter-repo 検討）を `references/pii-gitignore.md` に単一ソース化し、SKILL.md の Overview と前提チェックから Read 誘導で接続した
@@ -1136,7 +1138,7 @@ local fix 衝突注意:
 - `docs(distrokid)`: `/distrokid-prep` スキルを `/distrokid-helper` に改名し、参照スクリプトと docs/features の表記を同期（#1350）
 - `feat(video-analyze)`: `yt-video-analyze` を全尺解析から動画冒頭のクリップ窓解析（既定 900 秒 = 15 分、skill-config `analysis_window_sec` で上書き可）に変更。Gemini へ渡す Part に `video_metadata`（`start_offset` / `end_offset`）を付与して冒頭 2〜3 曲相当のみを解析し、長尺 Complete Collection の API コストを削減する。プロンプトをクリップ窓前提（`bgm_arc.outro` は窓内終盤、`scene_timeline` / `editing_metrics` は窓内対象）に整合させ、SKILL.md に解析後のレポート検証ステップ（窓超過タイムスタンプ・スキーマ欠落・不自然値の subagent レビュー）を追加。下流 `/suno` にも冒頭クリップ窓データである旨を注記した（#1495）
 - **BREAKING** `refactor(skills)`: `/channel-setup` スキルを削除し、`/channel-new` に統合した。詳細セットアップ/再生成（旧 Step 1〜8）は再生成モード（Step R1〜R8）、設定 push（旧 Step 9: `yt-channel-settings` diff / push / pull）は設定 push モードとして `/channel-new` が文脈から自動判別して受ける。共通テンプレート・スクリプト置き場は `.claude/skills/channel-setup/references/` から `.claude/skills/channel-new/references/` へ移設し、競合 branding snapshot 取得はインライン Python を廃止して `references/fetch_branding_snapshot.py` に一本化。`yt-doctor` / preflight の `/channel-setup` 案内文言と CLAUDE.md / AGENTS.md のスクリプト配置規約も `/channel-new` 系へ更新した。下流リポジトリは `yt-skills sync` の prune で追従する（#1461）
-- `refactor(automation-update)`: `/automation-update` スキルの機械的ステップ（実行場所判定 / pin 形式判定 / 差分判定 / pin 書き換え / `uv lock` / sync / smoke check）を `yt-automation-update` CLI 呼び出しに置き換え、スキルは判断ポイント（リリース要約 / local fix 衝突 / 同意取得 / コミット）専任に薄型化（#1473）
+- `refactor(automation-update)`: `/automation --update` スキルの機械的ステップ（実行場所判定 / pin 形式判定 / 差分判定 / pin 書き換え / `uv lock` / sync / smoke check）を `yt-automation-update` CLI 呼び出しに置き換え、スキルは判断ポイント（リリース要約 / local fix 衝突 / 同意取得 / コミット）専任に薄型化（#1473）
 - `feat(hooks)`: review 頻出パターンのうち機械検出可能なテスト差分ゼロと広すぎる Any / any 型注釈を lefthook pre-push で検出するゲートを追加。`SKIP_TEST_DIFF=1` でテスト差分警告のみ明示 skip できるようにし、Python 未使用コード検出は既存 Ruff `F` 系継続、TS 未使用 export / dead code は既存 `ts-knip` 継続として docs に採否根拠を記録した（#1510）。その後の review-takt-default 指摘を受け、(1) any-usage-gate のスコープを `src/` / `tests/` / `extensions/` / `packages/` 限定からディレクトリ非依存の全 `*.py` / `*.ts` / `*.tsx` に拡大（`.claude/skills/*/references/*.py` 等も対象化）、(2) Python 側で `from typing import Any` 直接 import 経由の裸 `Any` 使用も検出、(3) test-diff-gate の `extensions/*/lib/*.test.ts` が lib 判定に先取りされテスト差分ありなのに誤警告するバグを修正、(4) test-diff-gate に対応テスト差分ありなら警告しない成功パスの契約テストを追加、(5) lefthook の「同一 hook で use_stdin を持てるコマンドは 1 つ」制約に対応するため test-diff-gate / any-usage-gate を独立コマンドから外し changelog-gate.sh 1 本のエントリポイントに統合、ブランチ削除 push のスキップを 3 ゲート共通にした（#1510、PR #1525 review-takt-default 指摘対応）。再レビューでの追加指摘を受け、(6) Python 側の Any import 検出を 1 行正規表現から `python3`/`ast` ベースに置き換え、複数行の括弧 import と `as` alias も解決できるようにし、(7) TypeScript 側は `: any` 直書きに加え `Array<any>` / `Record<string, any>` 等のジェネリック引数・union / intersection・tuple 要素の型位置 `any` も検出し、英語コメント・文字列リテラル中の "any" は誤検知しないよう型導入記号の直後という制約を追加、(8) `SKIP_CHANGELOG=1` が CHANGELOG チェックのみを省略し test-diff-gate / any-usage-gate は継続する契約テストを追加した（PR #1525 2 回目の review-takt-default 指摘対応）。3 回目の review-takt-default 指摘を受け、any-usage-gate の検出方式を正規表現の継ぎ足しから構造的な解析へ刷新した: Python 側は `.lefthook/pre-push/any_usage_python_resolver.py`（新設）が `ast` でファイルを解析し、`typing.Any` 修飾アクセスと直接 import 経由の裸 `Any`（alias 含む）の両方を実際の参照行番号として解決するため、コメント・docstring・文字列リテラル中の "Any" は AST 上に現れず誤検知しない。TypeScript 側は型エイリアス代入（`type X = any;`）・型アサーション（`value as any`）も検出対象に加え、正規表現で候補行を検出したのち `.lefthook/pre-push/any_usage_ts_line_cleaner.py`（新設）で行コメント・文字列リテラルの中身を除去してから再判定することでコメント・文字列内の "any" 誤検知を防ぐ。あわせて diff の基準点（`origin/main` との merge-base）を changelog-gate.sh で一度だけ解決し `PRE_PUSH_DIFF_BASE` として子ゲートへ export することで、3 スクリプトが個別に基準を再計算する重複を解消した（PR #1525 3 回目の review-takt-default 指摘対応）
 - `docs(channel-new)`: `/channel-new`（新規開設モード）の Step 7「簡易ペルソナ導出」冒頭に入口ゲートを追加し、承認済み TTP 対象（`config/channel/analytics.json::benchmark.channels`）が 0 件のままペルソナ生成へ進めないようにした。従来は 0 件検出が Step 9 の最終ゲートに集中しており、空のまま生成 → 差し戻しの手戻り（AI 生成コストの無駄）が発生し得た。判定基準は冒頭「TTP 完了条件（新規開設モード）」を単一ソースとして参照し、完了条件本体はコピーしない（#1517）
 - `feat(skills)`: comments-reply / pinned-comment に apply 実行前の承認ゲートを追加した（#1513）。両スキルの dry-run 確認ポイントを「全項目 PASS の場合のみ次フェーズへ進む」形式に統一し、1 項目でも FAIL なら dry-run を修正・再実行するまで apply へ進んではならない旨を明記した。comments-reply は Phase 4→5、pinned-comment は Phase 1→2 の間に承認ゲートを新設し、Claude Code では AskUserQuestion で dry-run 結果の要約を提示したうえで「投稿する」「キャンセル」の明示 2 択、AskUserQuestion 非対応環境（Codex 等）ではテキスト提示 + 明示的な承認発言待ちに統一した
@@ -1189,7 +1191,7 @@ local fix 衝突注意:
 - `fix(suno)`: ボーカルモードの `tracks_per_pattern` を prompt entry name 契約に反映し、`/suno` が `suno-prompts.json` を展開後 entry 数で生成、`/suno-lyric` / `yt-suno-verify` が同じ `Take N` 付き name と件数を検証するよう修正（#1484）
 - `fix(suno)`: `yt-suno-verify` と `/suno` の final entry name 生成を共有化し、`suno-patterns.yaml` / `suno-prompts.json` / `suno-lyrics.json` の `name` に外側 whitespace がある場合は暗黙正規化せず fail-loud するよう修正（#1484）
 - `fix(suno-helper)`: duration NG clip を playlist 対象から除外する処理を origin/main の run 完了時リロード・stale selection guard と統合し、全 clip が NG の場合に raw ID を resume state へ残さないようにした。`playlistExpectedClipCount` は OK clip 数として保存しつつ、resume / failed-only rerun の raw 観測期待数は保存済み OK IDs + 今回実行 entry 数から別計算し、Download 再開可否は full collection 完走状態で判定するよう分離。active feed poll は duration を取得できる feed v3 POST に揃え、bridge 由来 duration は finite non-negative number のみ受け入れる。`retryPlaylist` / failed-only rerun でも正規化済み OK clip ID 契約を維持し、duration 未観測 ID を新規 playlist 対象にしないようにした。manual adoption は未検証 ID として保持して retryPlaylist 側の duration filter に通し、`duration_filter` は snapshot / resume state に保存して popup 再 open 後も custom 閾値を維持する。download 完了 POST の `expected_file_count` は duration-filtered 採用数としてサーバー側 workflow-state / collection index / artifact 展開の完了判定にも反映する。`suno-prompts.json` 生成も collection-level `duration_filter` envelope へ対応し、bool / NaN / Infinity / 非 mapping を fail-loud にする（#1269）
-- `fix(doctor)`: `yt-doctor` の `ttp_wf_new_readiness` が `branding/icon.png` / `branding/banner.png` 不在時に、同名 stem の別拡張子や `-vN` 付き候補を `branding/` から列挙してリネーム/変換を促すようにした。複数候補がある場合は最終版の人間確認を促し、自動判定しない旨を明示する。あわせて `/channel-new` と `/automation-update` に、新規生成前の既存 branding ファイル確認手順を追記した（#1550）
+- `fix(doctor)`: `yt-doctor` の `ttp_wf_new_readiness` が `branding/icon.png` / `branding/banner.png` 不在時に、同名 stem の別拡張子や `-vN` 付き候補を `branding/` から列挙してリネーム/変換を促すようにした。複数候補がある場合は最終版の人間確認を促し、自動判定しない旨を明示する。あわせて `/channel-new` と `/automation --update` に、新規生成前の既存 branding ファイル確認手順を追記した（#1550）
 - `fix(masterup)`: `/masterup` Step 4.5 の本実行前に `yt-suno-select-tracks --dry-run` で `pair_selection.min_song_sec` 未満候補を確認する手順を追加し、該当候補がある場合はファイル名・duration・設定中の `min_song_sec` を提示して続行可否を確認するようにした。あわせて dry-run stdout に短尺候補専用の `[dropped_under_min]` セクションと `dropped_under_min` 件数を追加した（#1526）
 - `fix(masterup)`: `.claude/skills/masterup/SKILL.md` の Step 1(コレクション特定条件)と「完了時の更新」セクションが workflow-state.json 旧スキーマ(v1、`music.generated` / `music.approved` / `mp3_count` / `phase: "music-approved"`)のまま残っており、現行スキーマ(v2、`.claude/skills/wf-new/references/schema.md`)の `assets.music_prompts` / `assets.raw_master` / `phase` 定義と食い違っていた。`/wf-next` 側の既存検出ロジック(`assets.music_prompts = true` かつ `assets.raw_master = null` を対象とする)、および実装(`apply_rain_layers.py` が書き込むフィールドは `assets.raw_master`)と突き合わせて記述を修正し、`/masterup` は raw master 生成 + `assets.raw_master` 記録までを担い `phase` は遷移させない(`raw_master` → `master_audio` 確定後の `"mastered"` 遷移は `/wf-next` の責務)旨を明記した。現行スキーマに対応フィールドが存在しない `mp3_count` は削除した(#1521 の実装中に副次的に発見。ドキュメントのみの変更でコード変更なし)
 - `fix(video-analyze)`: `analysis_window_sec` を API 呼び出し前に bool ではない正の整数として検証し、不正な channel override（0 / 負数 / 文字列 / bool / null）が Gemini `VideoMetadata.end_offset` へ流れないよう fail-fast にした。解析に使った窓幅は JSON の `analysis_window_sec` / `analysis_scope` と Markdown レポートに保存し、レポート検証 Step 3 には Gemini 生成物を untrusted data として扱う境界指示を追加。`data/video_analysis` を読む下流 skill には冒頭クリップ窓データである旨を明記した（#1495）
@@ -1242,7 +1244,7 @@ local fix 衝突注意:
 ### Added
 
 - `feat(channel-new)`: `/channel-new` にチャンネル画像初期化導線を追加。TTP 対象の `snippet.thumbnails` / `brandingSettings.image` を reference-only として snapshot に保存し、`yt-channel-init` が `thumbnail.yaml` の channel branding 参照枠を生成、`yt-setup-dirs` が `branding/` を作成するようにした（#1367）
-- `feat(doctor)`: `yt-doctor` に `numbered_duplicates` チェックを追加し、`.venv/bin/` と `.claude/skills/` の番号付き重複ファイル（iCloud Drive 同期コンフリクトの bounced file name、原因調査 #1409）を検知・警告できるようにした。`yt-skills sync` も sync 先の重複を warning で報告する。クリーンアップ手順は `docs/migration/numbered-duplicate-files-cleanup.md` を新設し、`/automation-update` に検知確認と再発防止ガイダンス（同期対象外への移設が根本対策、`--frozen` は効果なし）を追記（#1410）
+- `feat(doctor)`: `yt-doctor` に `numbered_duplicates` チェックを追加し、`.venv/bin/` と `.claude/skills/` の番号付き重複ファイル（iCloud Drive 同期コンフリクトの bounced file name、原因調査 #1409）を検知・警告できるようにした。`yt-skills sync` も sync 先の重複を warning で報告する。クリーンアップ手順は `docs/migration/numbered-duplicate-files-cleanup.md` を新設し、`/automation --update` に検知確認と再発防止ガイダンス（同期対象外への移設が根本対策、`--frozen` は効果なし）を追記（#1410）
 - `docs(migration)`: TS 移行告知 + 移行ガイド `docs/migration/python-to-tayk.md` を公開し、README / ONBOARDING 冒頭に告知バナーを追加。Python 版は 2026-08 中に提供終了し `tayk`（npm）へ切り替わる（ADR-0015 の 2026-07 頭告知義務、#1416）
 - `feat(channel-new)`: 承認済み TTP 対象だけを使う初回 `/wf-new` readiness を追加し、`yt-doctor` で thumbnail reference / video-analysis partial / Suno style variants / 旧 video-analyze model を検出できるようにした（#1357）
 
@@ -1258,7 +1260,7 @@ local fix 衝突注意:
 - `feat(doctor)`: `yt-doctor` に `initial_setup_readiness` を追加し、thumbnail 参照画像・composition rules・Suno `genre_line` 文字数・planning 中 `descriptions.md` の parser 不一致を事前検知できるようにした（#1403）
 - `docs(distrokid)`: `/distrokid-prep` スキルを `/distrokid-helper` に改名し、参照スクリプトと docs/features の表記を同期（#1350）
 - `docs(channel-new)`: `/channel-new` の `/wf-new` 接続前チェックに Analytics / Reporting レポート取得設定と YouTube Live streaming 早期有効化の案内を追加し、Reporting API job 初期化導線を `/analytics --collect` / `/setup` / `yt-doctor` に接続（#1365）
-- `docs(channel-new)`: `/channel-new` 完了時に `git status --porcelain` で未コミット変更を確認し、初回 commit 作成または明確な保存手順を案内する完了ゲートを追加。`/automation-update` の dirty worktree 停止時にも `/channel-new` 直後の初回保存未完了を案内するよう更新（#1329）
+- `docs(channel-new)`: `/channel-new` 完了時に `git status --porcelain` で未コミット変更を確認し、初回 commit 作成または明確な保存手順を案内する完了ゲートを追加。`/automation --update` の dirty worktree 停止時にも `/channel-new` 直後の初回保存未完了を案内するよう更新（#1329）
 
 ### Fixed
 
@@ -1276,7 +1278,7 @@ local fix 衝突注意:
 - `fix(launch-curve)`: `yt-launch-curve` で日次データに `impressions` / `impression_ctr` が無い場合も `daily_impressions=0` / `ctr` unavailable として扱い、初期チャンネルの欠損データで落ちないようにした（#1327）
 - `fix(skills)`: `config.default.yaml` を持つ skill の SKILL.md に設定読み込みゲートを追加し、チャンネル override の読み飛ばしを防ぐ契約テストを追加（#1243）
 - `fix(distrokid)`: `distrokid.profile.artist` を release payload に含め、distrokid-helper が `bandname` と Apple Music credits の performer / producer 名へ反映できるようにした（#1211）
-- `fix(automation-update)`: `/automation-update` をチャンネルリポジトリ外で実行した場合に、現在地が不適切な理由と移動先候補または探し方を案内するようにした（#1328）
+- `fix(automation-update)`: `/automation --update` をチャンネルリポジトリ外で実行した場合に、現在地が不適切な理由と移動先候補または探し方を案内するようにした（#1328）
 
 ### Migration
 
@@ -1288,7 +1290,7 @@ local fix 衝突注意:
 
 サマリ:
 
-- 新規チャンネルセットアップ完了時に未コミット変更を残したまま後続の `/automation-update` へ進まないよう、初回保存手順を skill に明記した。
+- 新規チャンネルセットアップ完了時に未コミット変更を残したまま後続の `/automation --update` へ進まないよう、初回保存手順を skill に明記した。
 - `/channel-new` が TTP 準拠前に成功案内を出さないよう、`yt-doctor` の readiness check と skill contract を追加した。
 
 ## [5.5.14] - 2026-06-30
@@ -1803,8 +1805,8 @@ local fix 衝突注意: 下流で `youtube_automation.utils.daily_archive` を�
 ### Added
 
 - `/automation-release` スキル新設とバージョン 1 ソース化（#435）。`pyproject.toml::version` を唯一のソースとし、prepare（リリース PR 作成）→ publish（tag + GitHub Release）の 2 フェーズを 1 コマンドで実行
-- `/automation-update` スキル新設で下流チャンネルリポジトリの upstream 追従を 1 コマンド化（#430）。CHANGELOG.md / GitHub Release 本文を入力源として累積影響を要約
-- `/automation-update` に self-overwrite ハンドリングと `config.default.yaml` 直接編集検出時の移行案内を追加（#430 系）
+- `/automation --update` スキル新設で下流チャンネルリポジトリの upstream 追従を 1 コマンド化（#430）。CHANGELOG.md / GitHub Release 本文を入力源として累積影響を要約
+- `/automation --update` に self-overwrite ハンドリングと `config.default.yaml` 直接編集検出時の移行案内を追加（#430 系）
 - Codex CLI 向け `AGENTS.md` と `.agents/skills` symlink を追加（#477）。`.claude/skills/` を Codex 規約パスから探索可能に
 - `assets/stock/<theme>/` へボツ画像を自動退避する仕組み（#364）。隣接 `.meta.json` で由来を管理
 - `reference_images` プールへの自動合成機構（#364）。退避済み画像を参照プールへ流用可能に
@@ -1818,7 +1820,7 @@ local fix 衝突注意: 下流で `youtube_automation.utils.daily_archive` を�
 
 ### Changed
 
-- `/release-notes` を廃止し、`/automation-update` を CHANGELOG.md / Release 本文ベースに刷新（#434）
+- `/release-notes` を廃止し、`/automation --update` を CHANGELOG.md / Release 本文ベースに刷新（#434）
 - `scripts/gcp-{bootstrap,terraform-apply}.sh` を `scripts/gcp/` 配下の canonical path に一本化（#388）
 - `pyproject.toml` 全 16 依存に major upper bound を付与（#407）。互換性予防
 - `refactor(suno)`: `suno_preset` fallback collector の self-review 整理（#360）
@@ -1852,7 +1854,7 @@ contract を確定させた。dict 形式の既存運用は後方互換性を保
 
 ### Removed
 
-- `/release-notes` スキル廃止（#434）。後継は `/automation-update`（下流追従）と `/automation-release`（リリース実施）
+- `/release-notes` スキル廃止（#434）。後継は `/automation --update`（下流追従）と `/automation-release`（リリース実施）
 - `scripts/gcp-bootstrap.sh` / `scripts/gcp-terraform-apply.sh` の旧パスを削除（#388、`scripts/gcp/` 配下に移行済み）
 
 ### Migration
@@ -1863,7 +1865,7 @@ local fix 衝突注意: 無し（下流が独自に skill を改変していな�
 
 サマリ:
 
-- 新 skill: `/automation-release`（本リポジトリ運用）と `/automation-update`（下流追従）
+- 新 skill: `/automation-release`（本リポジトリ運用）と `/automation --update`（下流追従）
 - `/release-notes` スキル廃止（後継は上記 2 スキル）
 - `upload-core` が resumable session URI を永続化し、失敗後の再実行で二重 publish を防止（#381）
 - `lyria-client` / `upload-policy` / `yt-config-migrate` の安定性修正
@@ -1871,8 +1873,8 @@ local fix 衝突注意: 無し（下流が独自に skill を改変していな�
 
 主要な追従ポイント:
 
-1. `uv run yt-skills sync` で新 skill `/automation-release` / `/automation-update` を取り込み
-2. `/release-notes` をローカルで叩いていた場合は `/automation-update` に置き換え
+1. `uv run yt-skills sync` で新 skill `/automation-release` / `/automation --update` を取り込み
+2. `/release-notes` をローカルで叩いていた場合は `/automation --update` に置き換え
 3. `scripts/gcp-bootstrap.sh` / `scripts/gcp-terraform-apply.sh` を参照する自前スクリプトがあれば `scripts/gcp/` 配下のパスに書き換え
 
 ## [5.5.1] - 2026-05-19

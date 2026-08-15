@@ -11,7 +11,7 @@ import pytest
 
 from tests.helpers.paths import REPO_ROOT
 
-SKILL_PATH = REPO_ROOT / ".claude/skills/automation-update/SKILL.md"
+SKILL_PATH = REPO_ROOT / ".claude/skills/automation/references/update.md"
 LEGACY_EXIT_CODE_ONLY_PROCEDURE = "uv run yt-doctor\nuv run yt-channel-status"
 
 
