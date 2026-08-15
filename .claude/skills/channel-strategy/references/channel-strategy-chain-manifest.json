@@ -1,0 +1,14 @@
+{
+  "chainId": "channel-strategy",
+  "steps": [
+    {
+      "id": "persona",
+      "skill": "channel-strategy",
+      "prerequisiteArtifacts": ["docs/plans/viewer-voice-analysis.md"],
+      "outputArtifacts": ["docs/channel/personas/persona-definition.md"],
+      "idempotency": {
+        "script": "references/channel-strategy-chain-state.py"
+      }
+    }
+  ]
+}

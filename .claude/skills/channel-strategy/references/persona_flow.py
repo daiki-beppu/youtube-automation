@@ -17,7 +17,7 @@ PERSONA_FIELDS = (
     "channel_implications",
 )
 _CANONICAL_ROUTES = {
-    "persona": "audience-persona-design",
+    "persona": "channel-strategy --persona",
     "flop": "flop-analysis",
 }
 

@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(skills)`: `/channel-strategy` を新設し、旧 `/audience-persona-design` の第一ペルソナ設計契約を排他 `--persona` mode と 1-step chain manifest/state へ移設する。旧 skill directory を削除し、後続 strategy mode の予約骨格を追加する（#3820）。
+
 - `feat(skills)`: `/channel-research --thumbnail` を追加し、旧 `/thumbnail-research` の上位群 / 下位群比較と TTP 推奨事項生成を単独 mode へ統合する。任意の深掘りのためフラグなし chain には追加せず、旧 skill directory を削除する（#3819）。
 
 - `feat(skills)`: `/channel-research --voice` を追加し、旧 `/viewer-voice` の競合コメント収集・分析契約と helper を統合する。フラグなし chain は `benchmark` → `discover` → `voice` → `market` の順で状態判定し、旧 skill directory を削除する（#3818）。

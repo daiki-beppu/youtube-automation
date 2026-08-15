@@ -33,7 +33,7 @@ description: "Use when チャンネルの価値ループ（シーン定義→制
 
 | 工程 | `○` の条件（すべて必須） | `×` の条件（1つでも該当） | `×` の次アクション |
 |---|---|---|---|
-| 1. シーン定義 | `docs/channel/personas/persona-definition.md` と `docs/plans/viewing-scene-matrix.md` が存在し、persona に `viewing-scene 未検証` がない | 2ファイルのいずれかがない、または未検証注記がある | `/audience-persona-design` |
+| 1. シーン定義 | `docs/channel/personas/persona-definition.md` と `docs/plans/viewing-scene-matrix.md` が存在し、persona に `viewing-scene 未検証` がない | 2ファイルのいずれかがない、または未検証注記がある | `/channel-strategy --persona` |
 | 2. 制約翻訳 | `docs/channel/creative-constraints.md` が存在し、レベル2見出し `音` `映像` `サムネ` `タイトル` `測定` が各1件ある | ファイルがない、または必須見出しが1つでもない | `/creative-constraints` |
 | 3. 公開前ゲート | 直近公開コレクションを一意に特定でき、`docs/plans/alignment-audit.md` にそのコレクション名が1回以上ある | 公開コレクションを特定できない、レポートがない、またはレポートに対象名がない | `/alignment-check` |
 | 4. 指標還流 | `data/insights.jsonl` に有効な analysis または postmortem 由来エントリが1件以上あり、うち1件以上が `status: adopted` かつ `status_note` に `creative-constraints.md` または既存 config の JSON Pointer がある | レポート/postmortemがない、insightsがない、該当エントリがない、または採用先の痕跡がない | `/flop-analysis` または `/analytics --analyze` |
@@ -85,7 +85,7 @@ description: "Use when チャンネルの価値ループ（シーン定義→制
 ```markdown
 | 工程 | 判定 | 確認したパス | 根拠 | 次アクション |
 |---|---|---|---|---|
-| シーン定義 | ○/× | ... | PASS/FAIL 条件との一致 | なし または /audience-persona-design |
+| シーン定義 | ○/× | ... | PASS/FAIL 条件との一致 | なし または /channel-strategy --persona |
 | 制約翻訳 | ○/× | ... | PASS/FAIL 条件との一致 | なし または /creative-constraints |
 | 公開前ゲート | ○/× | ... | PASS/FAIL 条件との一致 | なし または /alignment-check |
 | 指標還流 | ○/× | ... | PASS/FAIL 条件との一致 | なし または /flop-analysis, /analytics --analyze |

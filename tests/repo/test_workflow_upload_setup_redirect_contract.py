@@ -214,9 +214,9 @@ EXPECTED_ACTIVE_ROUTES = (
     _route(
         "wf-new/references/freshness-rules.md",
         "## 鮮度判定表",
-        "| 2 | `/audience-persona-design` | `docs/channel/personas/persona-definition.md` | "
+        "| 2 | `/channel-strategy --persona` | `docs/channel/personas/persona-definition.md` | "
         "存在すれば OK（mtime 比較なし。更新タイミングは戦略判断のため人間が決める） | "
-        "analytics mode かつ `ttp_mode: false` ではユーザーに `/audience-persona-design` 実行を案内して中断。"
+        "analytics mode かつ `ttp_mode: false` ではユーザーに `/channel-strategy --persona` 実行を案内して中断。"
         "analytics mode かつ `true` では "
         "`.claude/skills/channel-new/references/desire-vocabulary.md` の fallback に従い、"
         "利用可能な競合コメント / タイトルから初回仮説の視聴者像を作ってソースと根拠を記録する。"

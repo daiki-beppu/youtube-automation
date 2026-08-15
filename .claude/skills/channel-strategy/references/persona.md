@@ -1,9 +1,3 @@
----
-name: audience-persona-design
-purpose: 決める
-description: "Use when ターゲット視聴者を第一ペルソナとして設計・見直しするとき。「ペルソナ設定」「視聴者像」「ターゲット層」で発動。channel-research の voice mode が作る viewer-voice-analysis.md を必須入力に persona-definition.md を確定"
----
-
 ## 前後工程
 
 - `前工程`: `/channel-research --voice`

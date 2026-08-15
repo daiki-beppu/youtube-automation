@@ -18,14 +18,14 @@
 チェーン全体へ **実行コンテキスト: 新規開設（公開前）** を渡し、公開後の自チャンネル Analytics を前提に切り替えない。
 
 1. `/channel-research --voice` で承認済み TTP 対象を含む競合チャンネルのコメントを収集・分析し、`docs/plans/viewer-voice-analysis.md` を生成する。
-2. `/audience-persona-design` に実行コンテキストと次の入力を渡し、暫定 `docs/channel/personas/persona-definition.md` を生成する。
+2. `/channel-strategy --persona` に実行コンテキストと次の入力を渡し、暫定 `docs/channel/personas/persona-definition.md` を生成する。
    - `docs/plans/viewer-voice-analysis.md`
    - `docs/channel/ttp-seed-confirmation.md`
    - `docs/channel/competitor-branding-snapshot.json`
    - 任意の `/channel-research --benchmark` 成果物
 3. 公開後にしか得られない `reports/analysis_*.md` は要求しない。コメント分析を必須入力として第一ペルソナを設計する。
-4. `/audience-persona-design` から同じ実行コンテキストを引き継いで `/viewing-scene` を実行する。暫定ペルソナと既存の競合 / TTP / viewer-voice 成果物から視聴時間帯・行動・感情状態を検証し、`docs/plans/viewing-scene-matrix.md` を生成する。
-5. `/audience-persona-design` の Phase 6 に戻り、視聴シーン検証結果を反映した最終 `docs/channel/personas/persona-definition.md` に更新する。
+4. `/channel-strategy --persona` から同じ実行コンテキストを引き継いで `/viewing-scene` を実行する。暫定ペルソナと既存の競合 / TTP / viewer-voice 成果物から視聴時間帯・行動・感情状態を検証し、`docs/plans/viewing-scene-matrix.md` を生成する。
+5. `/channel-strategy --persona` の Phase 6 に戻り、視聴シーン検証結果を反映した最終 `docs/channel/personas/persona-definition.md` に更新する。
 
 ## Branding generation and review details
 

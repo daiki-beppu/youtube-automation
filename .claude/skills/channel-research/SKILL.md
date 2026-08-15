@@ -7,7 +7,7 @@ description: "Use when チャンネル調査を状態判定付きで一括実行
 ## 前後工程
 
 - `前工程`: `/setup --channel`, `/setup --import`
-- `後工程`: `/channel-new`, `/audience-persona-design`, `/wf-new`, `/thumbnail`
+- `後工程`: `/channel-new`, `/channel-strategy --persona`, `/wf-new`, `/thumbnail`
 - `委譲先`: `なし`
 
 ## 成果物

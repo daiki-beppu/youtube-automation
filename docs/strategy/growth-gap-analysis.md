@@ -29,7 +29,7 @@
 | L6 | SEO・メタデータ | `/video-description`（SEO 最適化概要欄）、`/metadata-audit`、`yt-title-duplicate-check`、localizations 同期（`/channel-new` 設定 push、`yt-shorts-bulk-update-loc`） | ローカル config / Data API v3 | ◯ 生成◎、検索流入との突合なし |
 | L7 | 投稿頻度・タイミング | `/channel-research --benchmark`（競合の投稿間隔）、`yt-launch-curve`（投稿後 N 日の初速比較）、`yt-theme-compare`（テーマ別初速・ロングテール） | Data API v3 / 自チャンネル履歴 | △ 頻度の観測のみ、時刻・曜日分析なし |
 
-横断（レバー非依存）の既存資産: `/analytics --analyze`（全レバーの統合分析・戦略提案）、`/channel-research --voice` + `/audience-persona-design`（誰に何を作るかの上流）、`/collection-ideate`（企画への落とし込み）、`/flop-analysis`（不振動画の切り分け）。
+横断（レバー非依存）の既存資産: `/analytics --analyze`（全レバーの統合分析・戦略提案）、`/channel-research --voice` + `/channel-strategy --persona`（誰に何を作るかの上流）、`/collection-ideate`（企画への落とし込み）、`/flop-analysis`（不振動画の切り分け）。
 
 ## 2. レバー別ギャップ分析
 
@@ -116,7 +116,7 @@
       /channel-research --voice              … コメントから視聴者インサイト更新
 
 四半期 or 方向性見直し時:
-      /audience-persona-design（+ viewing-scene）… ペルソナ・視聴シーン再設計
+      /channel-strategy --persona（+ viewing-scene）… ペルソナ・視聴シーン再設計
       /channel-research --discover                  … 競合プールの入れ替え
       /alignment-check                       … チャンネル全体の整合性監査
 ```
@@ -125,7 +125,7 @@
 
 1. **週次ループを止めない**ことが最優先。`/collection-ideate` は analytics 鮮度切れで停止する設計（`freshness_days` 既定 7 日）なので、収集→分析を週 1 で回すこと自体が制作パイプラインの前提になる
 2. CTR 判断は **D+2 ラグ**を踏まえ、公開後 3 日未満の動画では下さない（`/flop-analysis` のルーブリックに従う）
-3. ペルソナ系（viewer-voice → audience-persona-design → viewing-scene）は硬い依存チェーン。未整備だと `/collection-ideate` が fallback/minimal mode に劣化するため、新チャンネルでは最初の四半期内に一巡させる
+3. ペルソナ系（viewer-voice → channel-strategy --persona → viewing-scene）は硬い依存チェーン。未整備だと `/collection-ideate` が fallback/minimal mode に劣化するため、新チャンネルでは最初の四半期内に一巡させる
 
 ## 4. ギャップ優先度（効果 × 実装コスト）
 

@@ -107,7 +107,7 @@ JSON の `checks` から `id: wf_new_readiness` の結果を 1 件選び、次�
 - **`/wf-new` 到達に必須**: 追加作業なし。`message` を提示し、そこに示された確定した入力モードで今すぐ `/wf-new` を開始できると案内する
 - **品質を上げる任意項目**:
   - **ブランディング素材**: 未作成の場合は `.claude/skills/channel-new/references/verification.md`（「ブランディング素材生成」）を参照
-  - **ペルソナ定義**: `/channel-research --voice` → `/audience-persona-design` → `/viewing-scene` の順で実行
+  - **ペルソナ定義**: `/channel-research --voice` → `/channel-strategy --persona` → `/viewing-scene` の順で実行
   - **追加ベンチマーク**: 競合チャンネルを広げたい場合は `config/channel/analytics.json` の `benchmark.channels` を追加し `/channel-research --benchmark` で収集
   - **データ収集・分析**: `/analytics --collect` → `/analytics --analyze` で現状のパフォーマンスを把握
 

@@ -11,7 +11,7 @@ rename マッピング:
 | `description` | `video-description` |
 | `upload` | `video-upload` |
 | `ideate` | `wf-new` |
-| `persona` | `audience-persona-design` |
+| `persona` | `channel-strategy` |
 
 検証する不変条件:
 
@@ -60,7 +60,7 @@ _AUDIT_DOC = _REPO_ROOT / "docs" / "audits" / "2026-05-skill-md-audit.md"
 _CLAUDE_TEMPLATE = _REPO_ROOT / ".claude" / "CLAUDE.template.md"
 _FEATURES = _REPO_ROOT / "docs" / "features.md"
 _ONBOARDING = _REPO_ROOT / "ONBOARDING.md"
-_AUDIENCE_PERSONA_DESIGN = _SKILLS_DIR / "audience-persona-design" / "SKILL.md"
+_CHANNEL_STRATEGY = _SKILLS_DIR / "channel-strategy" / "SKILL.md"
 _VIEWER_VOICE = _SKILLS_DIR / "viewer-voice" / "SKILL.md"
 _VIEWING_SCENE = _SKILLS_DIR / "viewing-scene" / "SKILL.md"
 _FLOP_ANALYSIS = _SKILLS_DIR / "flop-analysis" / "SKILL.md"
@@ -83,7 +83,7 @@ RENAME_MAP: dict[str, str] = {
     "description": "video-description",
     "upload": "video-upload",
     "ideate": "wf-new",
-    "persona": "audience-persona-design",
+    "persona": "channel-strategy",
 }
 
 # 旧名 / 新名のフラットリスト (parametrize 用)
@@ -269,12 +269,13 @@ def test_all_skill_md_name_matches_parent_dir() -> None:
     assert mismatches == [], "front-matter `name:` が親ディレクトリ名と不一致:\n  " + "\n  ".join(mismatches)
 
 
-def test_audience_persona_design_replaces_legacy_audience_persona_dir() -> None:
-    """Issue #1371: `/audience-persona` を単一ペルソナ設計スキルへ rename した契約。"""
+def test_channel_strategy_replaces_legacy_audience_persona_dirs() -> None:
+    """Current strategy entrypoint retains the persona rename contract."""
     legacy_path = _SKILLS_DIR / "audience-persona"
     assert not os.path.lexists(legacy_path), "旧スキルディレクトリ .claude/skills/audience-persona が残存している"
-    assert _AUDIENCE_PERSONA_DESIGN.exists()
-    assert _front_matter_name(_AUDIENCE_PERSONA_DESIGN) == "audience-persona-design"
+    assert not os.path.lexists(_SKILLS_DIR / "audience-persona-design")
+    assert _CHANNEL_STRATEGY.exists()
+    assert _front_matter_name(_CHANNEL_STRATEGY) == "channel-strategy"
 
 
 def test_no_legacy_audience_persona_slash_command_in_skill_docs() -> None:
@@ -288,7 +289,7 @@ def test_no_legacy_audience_persona_slash_command_in_skill_docs() -> None:
                 offenders.append(f"{path.relative_to(_REPO_ROOT)}:{lineno}: {line.strip()}")
     assert offenders == [], (
         "旧スラッシュコマンド `/audience-persona` が skill docs または配布テンプレートに残存。"
-        " `/audience-persona-design` に書き換えること:\n  " + "\n  ".join(offenders)
+        " `/channel-strategy --persona` に書き換えること:\n  " + "\n  ".join(offenders)
     )
 
 
