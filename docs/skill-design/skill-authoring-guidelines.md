@@ -116,6 +116,8 @@ frontmatter の `purpose:` は必須であり、次の 7 語のいずれか 1 �
 mode と modifier は次のように分けて記載する。
 
 - mode は `## モード判定` 節の `| mode | 読む reference |` 表に載せる
+- mode ごとの手順は skill ディレクトリからの相対パス `references/<flag>.md` に 1 mode 1 ファイルで置く。`<flag>` は `--` を除いたフラグ名と一致させ、複数 mode で共有しない
+- SKILL.md 本体には mode 判定と全 mode 共通の前提・完了条件を残し、mode 固有の手順と完了条件は対応する reference を必要になった時点で読む
 - modifier は `## 修飾フラグ` 節の別表に載せ、mode 表には載せない
 - 両者とも `--` 前置を必須とし、`mode=<name>` 形式や bare word の名前を新規に導入しない。本リポジトリの skill は日本語の自然言語引数を取るため、bare word は通常の引数と衝突し、静的に判別できない
 - 値を伴う variant も名前付き引数として表現する

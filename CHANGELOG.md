@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(skills)`: `yt-skills lint` で mode 表の reference が skill 相対の `references/<flag>.md` として実在し、mode 間で共有されていないことを検証する（#3750）。
+
 - `feat(skills)`: `yt-skills lint` で description の値なしフラグが mode / modifier 表のどちらか一方に定義され、排他 mode が 5 個以下かつ同時指定停止を明記する契約を検証し、既存違反を種別単位で猶予できる allowlist を追加する（#3749）。
 
 - `refactor(skills)`: skill 列挙・frontmatter 検証・Markdown セクション・reference 解決を `domains.skills` の inventory へ集約し、repo と wheel の両 root で同じ判定を使えるようにする（#3902）。

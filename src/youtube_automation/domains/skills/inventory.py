@@ -14,6 +14,7 @@ _MARKDOWN_HEADING = re.compile(r"^(?P<marks>#{1,6})\s+\S")
 _DESCRIPTION_FLAG = re.compile(r"(?<![\w-])--[a-z0-9]+(?:-[a-z0-9]+)*(?![a-z0-9-])")
 _VALUE_PLACEHOLDER = re.compile(r"\s*<[^>\n]+>")
 _TABLE_FLAG = re.compile(r"^`(?P<flag>--[a-z0-9]+(?:-[a-z0-9]+)*)`$")
+_TABLE_REFERENCE = re.compile(r"^`(?P<reference>[^`]+)`$")
 _MODE_HEADING = "## モード判定"
 _MODIFIER_HEADING = "## 修飾フラグ"
 _MAX_MODES = 5
@@ -95,10 +96,10 @@ def lint_skill_contract(skill_dir: Path) -> list[SkillLintViolation]:
     parsed = parse_frontmatter(text)
     if not isinstance(parsed, dict) or not isinstance(parsed["description"], str):
         raise AssertionError("lint_frontmatter_text accepted an invalid frontmatter shape")
-    return _lint_flag_contract(text, parsed["description"])
+    return _lint_flag_contract(skill_dir, text, parsed["description"])
 
 
-def _lint_flag_contract(text: str, description: str) -> list[SkillLintViolation]:
+def _lint_flag_contract(skill_dir: Path, text: str, description: str) -> list[SkillLintViolation]:
     description_flags = _extract_description_flags(description)
     mode_section = _optional_markdown_section(text, _MODE_HEADING)
     modifier_section = _optional_markdown_section(text, _MODIFIER_HEADING)
@@ -111,7 +112,8 @@ def _lint_flag_contract(text: str, description: str) -> list[SkillLintViolation]
             )
         ]
 
-    mode_rows = _extract_table_flags(mode_section, ("mode", "読む reference"))
+    mode_entries = _extract_mode_entries(mode_section)
+    mode_rows = tuple(flag for flag, _reference in mode_entries)
     modifier_rows = _extract_table_flags(modifier_section, ("modifier", "効果"))
     mode_flags = set(mode_rows)
     modifier_flags = set(modifier_rows)
@@ -145,6 +147,7 @@ def _lint_flag_contract(text: str, description: str) -> list[SkillLintViolation]
                 "## モード判定に、2 個以上の同時指定を停止する旨がありません",
             )
         )
+    violations.extend(_lint_mode_references(skill_dir, mode_entries))
     return violations
 
 
@@ -164,6 +167,18 @@ def _optional_markdown_section(text: str, heading: str) -> str | None:
 
 
 def _extract_table_flags(section: str | None, expected_header: tuple[str, str]) -> tuple[str, ...]:
+    return tuple(flag for flag, _value in _extract_table_rows(section, expected_header))
+
+
+def _extract_mode_entries(section: str | None) -> tuple[tuple[str, str], ...]:
+    entries: list[tuple[str, str]] = []
+    for flag, value in _extract_table_rows(section, ("mode", "読む reference")):
+        match = _TABLE_REFERENCE.fullmatch(value)
+        entries.append((flag, match.group("reference") if match is not None else value))
+    return tuple(entries)
+
+
+def _extract_table_rows(section: str | None, expected_header: tuple[str, str]) -> tuple[tuple[str, str], ...]:
     if section is None:
         return ()
     lines = [line.strip() for line in section.splitlines()]
@@ -173,10 +188,10 @@ def _extract_table_flags(section: str | None, expected_header: tuple[str, str]) 
     except ValueError:
         return ()
 
-    flags: list[str] = []
+    rows: list[tuple[str, str]] = []
     for line in lines[header_index + 2 :]:
         if not line.startswith("|"):
-            if flags:
+            if rows:
                 break
             continue
         cells = [cell.strip() for cell in line.strip("|").split("|")]
@@ -184,8 +199,48 @@ def _extract_table_flags(section: str | None, expected_header: tuple[str, str]) 
             continue
         match = _TABLE_FLAG.fullmatch(cells[0])
         if match is not None:
-            flags.append(match.group("flag"))
-    return tuple(flags)
+            rows.append((match.group("flag"), cells[1]))
+    return tuple(rows)
+
+
+def _lint_mode_references(skill_dir: Path, mode_entries: tuple[tuple[str, str], ...]) -> list[SkillLintViolation]:
+    violations: list[SkillLintViolation] = []
+    modes_by_reference: dict[str, list[str]] = {}
+
+    for flag, reference in mode_entries:
+        modes_by_reference.setdefault(reference, []).append(flag)
+        expected = f"references/{flag.removeprefix('--')}.md"
+        if Path(reference).is_absolute():
+            violations.append(
+                SkillLintViolation(
+                    "mode_reference_not_relative",
+                    f"{flag} の reference は skill ディレクトリからの相対パスで書いてください: {reference}",
+                )
+            )
+        elif not (skill_dir / reference).is_file():
+            violations.append(
+                SkillLintViolation(
+                    "mode_reference_missing",
+                    f"{flag} の reference が見つかりません: {reference}",
+                )
+            )
+        if reference != expected:
+            violations.append(
+                SkillLintViolation(
+                    "mode_reference_name_mismatch",
+                    f"{flag} の reference がフラグ名と一致しません: {reference} (期待: {expected})",
+                )
+            )
+
+    for reference, flags in modes_by_reference.items():
+        if len(flags) > 1:
+            violations.append(
+                SkillLintViolation(
+                    "mode_reference_shared",
+                    f"mode ごとに別の reference が必要です: {', '.join(flags)} が {reference} を共有しています",
+                )
+            )
+    return violations
 
 
 def _states_exclusive_stop(section: str) -> bool:

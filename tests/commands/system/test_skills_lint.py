@@ -14,6 +14,7 @@ import pytest
 from youtube_automation.commands.system import skills_sync
 from youtube_automation.commands.system.skills_sync import build_parser, main
 from youtube_automation.domains.skills.inventory import lint_frontmatter_text, lint_skill
+from tests.helpers.paths import REPO_ROOT
 
 _VALID_SKILL_MD = '---\nname: good-skill\ndescription: "Use when: 良い skill のとき"\n---\n\n# good\n'
 
@@ -148,6 +149,44 @@ description: "Use --since"
     out = capsys.readouterr().out
     assert "--since" in out
     assert "未登録" in out
+
+
+def test_cli_lint_missing_mode_reference_reports_skill_flag_and_path(
+    fake_repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    skills_dir = fake_repo / ".claude" / "skills"
+    _write_skill(
+        skills_dir,
+        "mode-skill",
+        """---
+name: mode-skill
+description: "Use --fast"
+---
+
+## モード判定
+
+2 個以上の同時指定なら停止する。
+
+| mode | 読む reference |
+|---|---|
+| `--fast` | `references/fast.md` |
+""",
+    )
+
+    assert main(["lint", "mode-skill"]) == 1
+    out = capsys.readouterr().out
+    assert "mode-skill: --fast の reference が見つかりません: references/fast.md" in out
+
+
+def test_cli_lint_analytics_mode_references_are_valid(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(skills_sync, "_editable_root", lambda: REPO_ROOT)
+
+    assert main(["lint", "analytics"]) == 0
+    out = capsys.readouterr().out
+    assert "lint 合格: 1 skill" in out
+    assert "analytics:" not in out
 
 
 def test_cli_lint_single_skill_filters_targets(fake_repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
