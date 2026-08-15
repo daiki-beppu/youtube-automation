@@ -6,7 +6,7 @@
 
 ## 成果物
 
-- `書き込む`: `docs/benchmarks/thumbnail-analysis.md`, `data/thumbnail_compare/benchmark/*_<video-id>.jpg`
+- `書き込む`: `docs/benchmarks/thumbnail-analysis.json`, `docs/benchmarks/thumbnail-analysis.html`, `data/thumbnail_compare/benchmark/*_<video-id>.jpg`
 - `読み込む`: `data/benchmark_*.json`, `docs/benchmarks/thumbnails/*.jpg`
 
 ## Hard Gates
@@ -25,7 +25,7 @@
 - 構図・配色・テキスト配置・視線誘導・キャラ / 被写体の比較を、件数と割合を添えて記録している
 - 上位群と下位群の視覚特徴に加え、各特徴が刺激している欲求とその語彙ソースを記録している
 - 上位群と下位群の差から、勝ちパターン・負けパターン・判定保留を分離している
-- `/thumbnail` が参照画像選定と差分プロンプト作成に使える推奨事項を含む `docs/benchmarks/thumbnail-analysis.md` を生成している
+- `/thumbnail` が参照画像選定と差分プロンプト作成に使える推奨事項を含む `docs/benchmarks/thumbnail-analysis.json` + `.html` を共通 workflow で生成している
 - 使用した入力パス、対象件数、生成先、主要な勝ちパターンをユーザーへ報告している
 
 ## Overview
@@ -100,9 +100,11 @@ find docs/benchmarks/thumbnails data/thumbnail_compare/benchmark \
 
 ### Step 5: レポート生成
 
-`docs/benchmarks/thumbnail-analysis.md` を次の構造で生成する:
+`references/structured-report.md` に従い、`report_type=thumbnail` の candidate JSON を生成する。`competitor_comparison` に上位群 / 下位群の比較表、`winning_patterns` に勝ち型、`evidence` に件数・割合・代表例、`application_candidates` に `/thumbnail` への TTP 推奨事項を保存する。
 
-```markdown
+HTML は同 schema の表示契約により比較表・勝ちパターン・根拠・適用候補を優先表示する。旧 Markdown の移行承認を得るために必要な対応関係は次のとおり:
+
+```text
 # ベンチマークサムネイル分析
 生成日: YYYY-MM-DD
 
@@ -146,7 +148,7 @@ find docs/benchmarks/thumbnails data/thumbnail_compare/benchmark \
 
 - 使用した benchmark JSON と画像ディレクトリ
 - 対応付け済み件数、上位群 / 下位群件数、除外件数
-- `docs/benchmarks/thumbnail-analysis.md` の生成
+- `docs/benchmarks/thumbnail-analysis.json` + `.html` の生成
 - 主要な勝ちパターンと、`/thumbnail` で参照する次アクション
 
 ## 障害時ガイダンス
@@ -161,6 +163,6 @@ find docs/benchmarks/thumbnails data/thumbnail_compare/benchmark \
 ## Cross References
 
 - `/channel-research --benchmark`: 競合動画データとサムネイル画像の収集・更新
-- `/thumbnail`: `docs/benchmarks/thumbnail-analysis.md` の勝ちパターンと参照候補を TTP 入力として生成
+- `/thumbnail`: 検証済み `docs/benchmarks/thumbnail-analysis.json` の勝ちパターンと参照候補を TTP 入力として生成
 - `/thumbnail --compare` → 生成候補と競合を並べた 320px 視認性比較
 - `/channel-research --market` → タイトル・動画尺・投稿・コメントを含むチャンネル全体の TTP 分析

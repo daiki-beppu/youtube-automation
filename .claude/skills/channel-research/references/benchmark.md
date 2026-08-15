@@ -1,18 +1,18 @@
 ## Overview
 
-`benchmark_collector.py` で競合チャンネルの**直近投稿のうち再生数しきい値（既定 10,000）以上**の動画だけを収集し、`docs/benchmarks/*.md` を自動更新する。
+`benchmark_collector.py` で競合チャンネルの**直近投稿のうち再生数しきい値（既定 10,000）以上**の動画だけを収集し、収集 JSON から検証済み benchmark report JSON+HTML を更新する。
 チャンネル単位ではなく**動画単位**でベンチマーク対象を抽出する（伸びていない動画は分析から除外）。
 `/wf-new` 企画工程の Phase 1-2 から自動呼び出しされるが、単独実行も可能。
 
 ## 完了条件
 
-Step 1 のスクリプトが exit 0 で終了して `docs/benchmarks/*.md` と `data/benchmark_YYYYMMDD.json` が更新され、Step 2 のサムネイル分析セクション追記と Step 3 の結果サマリー報告を終えた時点で完了。
+Step 1 のスクリプトが exit 0 で終了して `data/benchmark_YYYYMMDD.json` が更新され、Step 2 の分析を `docs/benchmarks/benchmark-report.json` + `.html` へ共通 workflow で公開し、Step 3 の結果サマリー報告を終えた時点で完了。
 
 ## Subagent 委譲ゲート
 
-メインエージェントは設定読み込み、前提確認、必要なユーザー承認、成果物存在確認、結果サマリー報告だけを担当する。YouTube Data API 呼び出し、`data/benchmark_YYYYMMDD.json` 生成、`docs/benchmarks/*.md` 生成、サムネイル画像の読み込みと分析追記は subagent へ委譲する。
+メインエージェントは設定読み込み、前提確認、必要なユーザー承認、成果物 pair 確認、結果サマリー報告だけを担当する。YouTube Data API 呼び出し、`data/benchmark_YYYYMMDD.json` 生成、サムネイル画像の読み込み、candidate JSON の生成と共通 migration workflow の実行は subagent へ委譲する。
 
-メインエージェントは `data/benchmark_*.json`、`docs/benchmarks/*.md`、`docs/benchmarks/thumbnails/*` の中身を直接 Read しない。subagent は成果物パス、更新件数、主要パターンの要約だけを返し、生 JSON、Markdown 全文、画像分析の中間メモをメイン会話へ貼らない。メインエージェントは `ls` / `test` などで期待成果物の存在を機械的に確認してから完了を報告する。
+メインエージェントは `data/benchmark_*.json`、検証済み benchmark report JSON、`docs/benchmarks/thumbnails/*` の中身を直接 Read しない。subagent は成果物パス、更新件数、主要パターンの要約だけを返し、生 JSON や画像分析の中間メモをメイン会話へ貼らない。下流入力は `references/structured-report.md` の pair 検証を通した JSON に限る。
 
 ## 設定読み込みゲート
 
@@ -36,7 +36,7 @@ Step 1 のスクリプトが exit 0 で終了して `docs/benchmarks/*.md` と `
 ### 許容する fail
 
 - `config/skills/benchmark.yaml` が無い → `.claude/skills/channel-research/config.default.yaml` を使うため停止しない
-- `data/benchmark_*.json` / `docs/benchmarks/*.md` が無い → 本スキルの Step 1 で生成するため停止しない
+- `data/benchmark_*.json` / `docs/benchmarks/benchmark-report.json` が無い → 本スキルで生成するため停止しない
 
 ## 取得データ（拡充版）
 
@@ -61,14 +61,14 @@ Step 1 のスクリプトが exit 0 で終了して `docs/benchmarks/*.md` と `
 
 ### Step 1: データ収集
 
-以下のコマンド実行は subagent へ委譲する。subagent は CLI の実行結果、更新された `data/benchmark_YYYYMMDD.json`、更新された `docs/benchmarks/*.md` のパスを完了報告に含める。
+以下のコマンド実行は subagent へ委譲する。subagent は CLI の実行結果、更新された `data/benchmark_YYYYMMDD.json`、公開した benchmark report pair のパスを完了報告に含める。
 
 ```bash
 # チャンネルディレクトリから実行（鮮度チェック → 古いもののみ更新）
-uv run yt-benchmark-collect -y
+uv run yt-benchmark-collect --json-only -y
 
 # オプション
-uv run yt-benchmark-collect --force -y       # 全チャンネル強制更新
+uv run yt-benchmark-collect --json-only --force -y # 全チャンネル強制更新
 uv run yt-benchmark-collect --no-thumbnails  # サムネイルDLスキップ（高速）
 uv run yt-benchmark-collect --json-only      # JSON のみ（Markdown スキップ）
 uv run yt-benchmark-collect --competitor <slug> # 単一競合指定
@@ -77,15 +77,15 @@ uv run yt-benchmark-collect -v               # 詳細ログ
 
 スクリプトが自動で以下を実行:
 1. `config/channel/analytics.json` の `benchmark.channels` から対象チャンネルを読み込み
-2. `docs/benchmarks/*.md` の更新日時で鮮度チェック（`freshness_days` 日以上前なら更新）
+2. 検証済み `docs/benchmarks/benchmark-report.json` + `.html` の古い方の更新日時で鮮度チェック（`freshness_days` 日以上前なら更新）
 3. YouTube Data API で**直近 `scan_recent` 本（既定 150）** を走査し、**`min_views` 以上（既定 10,000）** の動画だけを抽出
 4. 派生指標算出（日次再生数・ER%・投稿間隔トレンド）
 5. サムネイル画像を `docs/benchmarks/thumbnails/` にダウンロード
 6. `data/benchmark_YYYYMMDD.json` に中間データ保存
-7. `docs/benchmarks/*.md`（個別 + common-patterns + README）を自動生成
-   - 個別レポートは `benchmark:generated:start/end` 間だけを再生成し、`benchmark:user:start/end` 間の手書き分析を保持する
-   - marker が欠損・重複・順序不正なら、手書き内容を失わないよう全 Markdown の更新前に停止する
-   - 該当動画が 0 件のチャンネルは「該当動画なし」注記付きの空レポートになる
+7. subagent が収集 JSON と画像分析から `channel-research-report.schema.json` 準拠の candidate を作り、`references/structured-report.md` の共通 workflow で `docs/benchmarks/benchmark-report.json` + `.html` を公開する
+   - 競合比較、共通パターン、個別根拠を一つの構造化レポートへ統合する
+   - 既存 `docs/benchmarks/benchmark-report.md` がある場合は明示 yes/no gate を通し、pair 再読込成功後だけ削除する
+   - 該当動画が 0 件のチャンネルも比較行に残し、0 件である根拠を記録する
 
 ### Step 2: サムネイル分析（subagent）
 
@@ -100,15 +100,12 @@ uv run yt-benchmark-collect -v               # 詳細ログ
    - **キャラ活動**: キャラクターの動作（いなければ 'none'）
    - **雰囲気**: 全体のムード・ライティング・環境効果
    - **強み**: 効果的な要素のリスト
-4. 分析結果を `docs/benchmarks/{slug}.md` の `<!-- benchmark:user:start -->` と
-   `<!-- benchmark:user:end -->` の間に `## サムネイル分析` セクションとして記録する
-   - marker の外側やファイル末尾には追記しない
-   - 旧形式に末尾の `## サムネイル分析` がある場合、次回収集時に user 領域へ自動移行される
+4. 分析結果を benchmark report candidate の `evidence`、`winning_patterns`、`application_candidates` へ evidence ID で接続する
 
 ### Step 3: 結果確認・戦略的評価
 
-1. メインエージェントは `docs/benchmarks/*.md` と `data/benchmark_YYYYMMDD.json` の存在を確認
-2. subagent から受け取った高パフォーマンス動画パターン、`common-patterns.md` の戦略的示唆、自チャンネル向け再評価の要約を確認
+1. メインエージェントは `docs/benchmarks/benchmark-report.json` + `.html` と `data/benchmark_YYYYMMDD.json` の存在を確認
+2. subagent から受け取った高パフォーマンス動画パターン、勝ちパターン、自チャンネル向け適用候補の要約を確認
 3. 結果サマリーをユーザーに報告
 
 ### 委譲プロンプト要件
@@ -117,7 +114,7 @@ subagent へは次を具体値で渡す:
 
 - 入力パス: `.claude/skills/channel-research/config.default.yaml`、存在する場合は `config/skills/benchmark.yaml`、`config/channel/analytics.json`
 - 実行する作業: `uv run yt-benchmark-collect -y` と、必要なサムネイル分析追記
-- 期待成果物: `data/benchmark_YYYYMMDD.json`、`docs/benchmarks/*.md`、必要に応じて `docs/benchmarks/thumbnails/{slug}_{video_id}.jpg`
+- 期待成果物: `data/benchmark_YYYYMMDD.json`、`docs/benchmarks/benchmark-report.json` + `.html`、必要に応じて `docs/benchmarks/thumbnails/{slug}_{video_id}.jpg`
 - 完了報告: `status: success | failure`、`commands`、`artifacts`、`updated_reports`、`summary`、`errors`
 
 ## 新規競合チャンネル追加
@@ -167,7 +164,7 @@ subagent へは次を具体値で渡す:
 ## 注意事項
 
 - OAuth 認証は `auth/token.json` を使用
-- `common-patterns.md` の手書きパターン分析は「運用ベンチマーク」セクションより上に維持される
+- 旧 `docs/benchmarks/*.md` は直接更新しない。移行対象は同 basename の `benchmark-report.md` に集約したうえで明示承認 gate を通す
 
 ## 関連ファイル
 

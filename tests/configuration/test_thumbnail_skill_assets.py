@@ -706,7 +706,8 @@ def test_thumbnail_skill_applies_thumbnail_text_profile_with_default_fallback() 
     )
 
     for required in (
-        "docs/benchmarks/thumbnail-text-profile.md",
+        "docs/channel-research.json",
+        "read_published_json_document",
         "`schema_version: 1`",
         ".claude/skills/channel-research/references/market.md",
     ):

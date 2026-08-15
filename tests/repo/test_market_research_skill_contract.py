@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 from datetime import date
 from pathlib import Path
 
@@ -77,16 +78,30 @@ def test_dry_run_with_save_request_uses_dated_path_only(tmp_path: Path) -> None:
         save=True,
         today=date(2026, 7, 31),
     )
-    assert target == tmp_path / "docs" / "research" / "market-2026-07-31.md"
-    assert target.read_text(encoding="utf-8") == _report()
-    with pytest.raises(FileExistsError, match="overwrite approval"):
-        contract.deliver_report(
-            "replacement",
-            channel_dir=tmp_path,
-            save=True,
-            today=date(2026, 7, 31),
-        )
-    assert target.read_text(encoding="utf-8") == _report()
+    assert target == tmp_path / "docs" / "research" / "market-2026-07-31.json"
+    document = json.loads(target.read_text(encoding="utf-8"))
+    assert document["report_type"] == "market"
+    assert target.with_suffix(".html").is_file()
+
+
+def test_existing_markdown_requires_explicit_migration_and_is_removed_after_pair_verification(tmp_path: Path) -> None:
+    legacy = tmp_path / "docs/research/market-2026-07-31.md"
+    legacy.parent.mkdir(parents=True)
+    legacy.write_text("legacy", encoding="utf-8")
+
+    with pytest.raises(FileExistsError, match="migration approval"):
+        contract.deliver_report(_report(), channel_dir=tmp_path, save=True, today=date(2026, 7, 31))
+
+    target = contract.deliver_report(
+        _report(),
+        channel_dir=tmp_path,
+        save=True,
+        today=date(2026, 7, 31),
+        overwrite=True,
+    )
+    assert target.is_file()
+    assert target.with_suffix(".html").is_file()
+    assert not legacy.exists()
 
 
 def test_dry_run_with_insufficient_evidence_is_fail_closed() -> None:

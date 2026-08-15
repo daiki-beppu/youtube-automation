@@ -11,7 +11,9 @@ from pathlib import Path
 from typing import NotRequired, TypedDict
 
 from youtube_automation.configuration.skills import load_skill_config
-from youtube_automation.core.errors import ConfigError
+from youtube_automation.core.errors import ConfigError, DocumentRenderError
+from youtube_automation.domains.documents.schema_registry import RepositorySchema
+from youtube_automation.infrastructure.documents.publishing import read_published_json_document
 
 EXIT_SKIP = 0
 EXIT_RUN = 10
@@ -43,12 +45,17 @@ def _freshness(root: Path) -> tuple[float, str]:
     return float(value), source
 
 
+def _validated_report(path: Path, report_type: str) -> list[Path]:
+    if not path.is_file() or not path.with_suffix(".html").is_file():
+        return []
+    document = read_published_json_document(path, RepositorySchema.CHANNEL_RESEARCH_REPORT)
+    if not isinstance(document, dict) or document.get("report_type") != report_type:
+        raise DocumentRenderError(f"channel research report_type が一致しません: {path}")
+    return [path, path.with_suffix(".html")]
+
+
 def _benchmark_reports(root: Path) -> list[Path]:
-    return [
-        path
-        for path in (root / "docs" / "benchmarks").glob("*.md")
-        if path.name not in {"README.md", "common-patterns.md", "thumbnail-analysis.md", "thumbnail-text-profile.md"}
-    ]
+    return _validated_report(root / "docs" / "benchmarks" / "benchmark-report.json", "benchmark")
 
 
 def _result(
@@ -82,7 +89,11 @@ def _evaluate_market(
 ) -> tuple[int, StateResult]:
     inputs = [*data, *reports, *comments]
     if not inputs:
-        saved_reports = list((root / "docs" / "research").glob("market-*.md"))
+        saved_reports = [
+            artifact
+            for report in (root / "docs" / "research").glob("market-*.json")
+            for artifact in _validated_report(report, "market")
+        ]
         if saved_reports:
             return EXIT_SKIP, _result(
                 "market",
@@ -117,16 +128,15 @@ def _evaluate_market(
             "collected-analysis",
         )
 
-    outputs = [root / "docs" / "channel-research.md", root / "docs" / "benchmarks" / "thumbnail-text-profile.md"]
-    existing_outputs = [path for path in outputs if path.is_file()]
-    if len(existing_outputs) != len(outputs):
+    outputs = _validated_report(root / "docs" / "channel-research.json", "market")
+    if not outputs:
         return EXIT_RUN, _result(
             "market",
             "run",
             "collected_analysis_outputs_missing",
             0.0,
             "",
-            [*inputs, *existing_outputs],
+            inputs,
             root,
             "collected-analysis",
         )
@@ -136,7 +146,7 @@ def _evaluate_market(
         "collected_analysis_outputs_complete",
         0.0,
         "",
-        [*inputs, *existing_outputs],
+        [*inputs, *outputs],
         root,
         "collected-analysis",
     )
@@ -160,11 +170,12 @@ def _evaluate_voice(root: Path, data: list[Path], reports: list[Path]) -> tuple[
         )
 
     comments = list((root / "data").glob("comments_*.json"))
-    report = root / "docs" / "plans" / "viewer-voice-analysis.md"
-    outputs = [*comments, *([report] if report.is_file() else [])]
+    report = root / "docs" / "plans" / "viewer-voice-analysis.json"
+    report_pair = _validated_report(report, "viewer_voice")
+    outputs = [*comments, *report_pair]
     if not outputs:
         return EXIT_RUN, _result("voice", "run", "voice_outputs_missing", 0.0, "", prerequisites, root)
-    if not comments or not report.is_file():
+    if not comments or not report_pair:
         return EXIT_RUN, _result(
             "voice",
             "run",
@@ -298,7 +309,7 @@ def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
         code, result = evaluate(args.channel_dir, args.step, time.time() if args.now is None else args.now)
-    except (ConfigError, OSError, ValueError) as exc:
+    except (ConfigError, DocumentRenderError, OSError, ValueError) as exc:
         code = EXIT_ERROR
         result = {
             "step": args.step,

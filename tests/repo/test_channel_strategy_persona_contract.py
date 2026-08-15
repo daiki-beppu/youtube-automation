@@ -7,7 +7,9 @@ import subprocess
 from pathlib import Path
 
 from tests.helpers.paths import REPO_ROOT
+from youtube_automation.domains.documents.schema_registry import RepositorySchema
 from youtube_automation.domains.skills.inventory import SkillInventory
+from youtube_automation.infrastructure.documents.publishing import publish_json_document
 
 ROOT = REPO_ROOT
 SKILL_DIR = ROOT / ".claude" / "skills" / "channel-strategy"
@@ -37,6 +39,24 @@ def _touch(root: Path, relative: str) -> None:
     path = root / relative
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("# artifact\n", encoding="utf-8")
+
+
+def _viewer_voice(root: Path) -> None:
+    path = root / "docs/plans/viewer-voice-analysis.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    document = {
+        "schema_version": 1,
+        "generated_at": "2026-08-16T00:00:00Z",
+        "report_type": "viewer_voice",
+        "summary": "voice",
+        "source_provenance": [{"path": "data/comments.json", "collected_at": "2026-08-16", "claim": "voice"}],
+        "competitor_comparison": [],
+        "winning_patterns": [],
+        "evidence": [{"id": "ev-1", "source_path": "data/comments.json", "observation": "fact"}],
+        "application_candidates": [],
+    }
+    path.write_text(json.dumps(document), encoding="utf-8")
+    publish_json_document(path, RepositorySchema.CHANNEL_RESEARCH_REPORT)
 
 
 def test_channel_strategy_distributes_all_registered_modes_as_the_canonical_owner() -> None:
@@ -87,7 +107,10 @@ def test_channel_strategy_manifest_orders_persona_scene_constraints() -> None:
             {
                 "id": "persona",
                 "skill": "channel-strategy",
-                "prerequisiteArtifacts": ["docs/plans/viewer-voice-analysis.md"],
+                "prerequisiteArtifacts": [
+                    "docs/plans/viewer-voice-analysis.json",
+                    "docs/plans/viewer-voice-analysis.html",
+                ],
                 "outputArtifacts": ["docs/channel/personas/persona-definition.md"],
                 "idempotency": {"script": "references/channel-strategy-chain-state.py"},
             },
@@ -120,13 +143,13 @@ def test_persona_state_blocks_until_viewer_voice_exists(tmp_path: Path) -> None:
         "step": "persona",
         "decision": "blocked",
         "reason": "viewer_voice_missing",
-        "missing": ["docs/plans/viewer-voice-analysis.md"],
+        "missing": ["docs/plans/viewer-voice-analysis.json"],
         "next": "channel-research --voice",
     }
 
 
 def test_persona_state_runs_then_skips_after_output_exists(tmp_path: Path) -> None:
-    _touch(tmp_path, "docs/plans/viewer-voice-analysis.md")
+    _viewer_voice(tmp_path)
     exit_code, result = _run_state(tmp_path, "persona")
     assert exit_code == 10
     assert result["decision"] == "run"

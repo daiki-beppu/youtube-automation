@@ -300,7 +300,7 @@ def test_skill_keeps_persona_branding_readiness_artifacts_and_stop_contracts() -
     skill = SKILL_MD.read_text(encoding="utf-8")
 
     for artifact in (
-        "docs/plans/viewer-voice-analysis.md",
+        "docs/plans/viewer-voice-analysis.json",
         "docs/channel/personas/persona-definition.md",
         "docs/plans/viewing-scene-matrix.md",
         "branding/icon.png",

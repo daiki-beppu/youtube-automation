@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 import sys
 from pathlib import Path
@@ -11,6 +12,9 @@ from types import ModuleType
 import pytest
 
 from tests.helpers.paths import REPO_ROOT
+from youtube_automation.core.errors import DocumentRenderError
+from youtube_automation.domains.documents.schema_registry import RepositorySchema
+from youtube_automation.infrastructure.documents.publishing import publish_json_document
 
 SCRIPT = REPO_ROOT / ".claude" / "skills" / "channel-research" / "references" / "channel-research-chain-state.py"
 
@@ -31,6 +35,25 @@ def _touch(path: Path, timestamp: float) -> None:
     os.utime(path, (timestamp, timestamp))
 
 
+def _publish_report(path: Path, report_type: str, timestamp: float) -> None:
+    document = {
+        "schema_version": 1,
+        "generated_at": "2026-08-16T00:00:00Z",
+        "report_type": report_type,
+        "summary": "summary",
+        "source_provenance": [{"path": "data/source.json", "collected_at": "2026-08-16", "claim": "claim"}],
+        "competitor_comparison": [],
+        "winning_patterns": [],
+        "evidence": [{"id": "ev-1", "source_path": "data/source.json", "observation": "fact"}],
+        "application_candidates": [],
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(document), encoding="utf-8")
+    html = publish_json_document(path, RepositorySchema.CHANNEL_RESEARCH_REPORT)
+    os.utime(path, (timestamp, timestamp))
+    os.utime(html, (timestamp, timestamp))
+
+
 def test_missing_channel_config_blocks_before_collection(tmp_path: Path, state: ModuleType) -> None:
     code, result = state.evaluate(tmp_path, "benchmark", 2_000_000_000.0)
 
@@ -47,7 +70,7 @@ def test_missing_outputs_run_and_fresh_outputs_skip(tmp_path: Path, state: Modul
     assert result["reason"] == "benchmark_outputs_missing"
 
     _touch(tmp_path / "data/benchmark_20260815.json", now - 60)
-    _touch(tmp_path / "docs/benchmarks/rival.md", now - 60)
+    _publish_report(tmp_path / "docs/benchmarks/benchmark-report.json", "benchmark", now - 60)
     code, result = state.evaluate(tmp_path, "benchmark", now)
     assert code == state.EXIT_SKIP
     assert result["freshness_days"] == 3
@@ -61,7 +84,7 @@ def test_legacy_override_controls_stale_decision(tmp_path: Path, state: ModuleTy
     override.parent.mkdir(parents=True, exist_ok=True)
     override.write_text("freshness_days: 1\n", encoding="utf-8")
     _touch(tmp_path / "data/benchmark_20260815.json", now - 86_401)
-    _touch(tmp_path / "docs/benchmarks/rival.md", now - 86_401)
+    _publish_report(tmp_path / "docs/benchmarks/benchmark-report.json", "benchmark", now - 86_401)
 
     code, result = state.evaluate(tmp_path, "benchmark", now)
 
@@ -74,7 +97,7 @@ def test_discover_blocks_without_benchmark_and_runs_without_output(tmp_path: Pat
     now = 2_000_000_000.0
 
     blocked_code, blocked = state.evaluate(tmp_path, "discover", now)
-    _touch(tmp_path / "docs/benchmarks/rival.md", now)
+    _publish_report(tmp_path / "docs/benchmarks/benchmark-report.json", "benchmark", now)
     run_code, run = state.evaluate(tmp_path, "discover", now)
 
     assert blocked_code == state.EXIT_BLOCKED
@@ -85,7 +108,7 @@ def test_discover_blocks_without_benchmark_and_runs_without_output(tmp_path: Pat
 
 def test_discover_skips_only_for_complete_output_pair(tmp_path: Path, state: ModuleType) -> None:
     now = 2_000_000_000.0
-    _touch(tmp_path / "docs/benchmarks/rival.md", now)
+    _publish_report(tmp_path / "docs/benchmarks/benchmark-report.json", "benchmark", now)
     _touch(tmp_path / "research/lofi-discovery.md", now)
 
     run_code, run = state.evaluate(tmp_path, "discover", now)
@@ -101,7 +124,7 @@ def test_discover_skips_only_for_complete_output_pair(tmp_path: Path, state: Mod
 def test_voice_blocks_until_benchmark_and_discover_outputs_exist(tmp_path: Path, state: ModuleType) -> None:
     now = 2_000_000_000.0
     _touch(tmp_path / "data/benchmark_20260815.json", now)
-    _touch(tmp_path / "docs/benchmarks/rival.md", now)
+    _publish_report(tmp_path / "docs/benchmarks/benchmark-report.json", "benchmark", now)
 
     code, result = state.evaluate(tmp_path, "voice", now)
 
@@ -113,16 +136,16 @@ def test_voice_runs_and_skips_only_after_both_outputs_exist(tmp_path: Path, stat
     now = 2_000_000_000.0
     for relative in (
         "data/benchmark_20260815.json",
-        "docs/benchmarks/rival.md",
         "research/lofi-discovery.md",
         "research/lofi-discovery.csv",
     ):
         _touch(tmp_path / relative, now)
+    _publish_report(tmp_path / "docs/benchmarks/benchmark-report.json", "benchmark", now)
 
     run_code, run = state.evaluate(tmp_path, "voice", now)
     _touch(tmp_path / "data/comments_20260815.json", now)
     partial_code, partial = state.evaluate(tmp_path, "voice", now)
-    _touch(tmp_path / "docs/plans/viewer-voice-analysis.md", now)
+    _publish_report(tmp_path / "docs/plans/viewer-voice-analysis.json", "viewer_voice", now)
     skip_code, skip = state.evaluate(tmp_path, "voice", now)
 
     assert run_code == state.EXIT_RUN
@@ -156,11 +179,10 @@ def test_market_skips_only_after_both_collected_analysis_outputs_exist(tmp_path:
     now = 2_000_000_000.0
     _touch(tmp_path / "data/benchmark_20260815.json", now)
     _touch(tmp_path / "data/comments_20260815.json", now)
-    _touch(tmp_path / "docs/benchmarks/rival.md", now)
+    _publish_report(tmp_path / "docs/benchmarks/benchmark-report.json", "benchmark", now)
 
     run_code, run = state.evaluate(tmp_path, "market", now)
-    _touch(tmp_path / "docs/channel-research.md", now)
-    _touch(tmp_path / "docs/benchmarks/thumbnail-text-profile.md", now)
+    _publish_report(tmp_path / "docs/channel-research.json", "market", now)
     skip_code, skip = state.evaluate(tmp_path, "market", now)
 
     assert run_code == state.EXIT_RUN
@@ -168,3 +190,15 @@ def test_market_skips_only_after_both_collected_analysis_outputs_exist(tmp_path:
     assert run["reason"] == "collected_analysis_outputs_missing"
     assert skip_code == state.EXIT_SKIP
     assert skip["reason"] == "collected_analysis_outputs_complete"
+
+
+def test_mismatched_html_pair_is_fail_closed(tmp_path: Path, state: ModuleType) -> None:
+    now = 2_000_000_000.0
+    _touch(tmp_path / "config/channel/analytics.json", now)
+    _touch(tmp_path / "data/benchmark_20260815.json", now)
+    report = tmp_path / "docs/benchmarks/benchmark-report.json"
+    _publish_report(report, "benchmark", now)
+    report.with_suffix(".html").write_text("tampered", encoding="utf-8")
+
+    with pytest.raises(DocumentRenderError, match="JSON と HTML が対応していません"):
+        state.evaluate(tmp_path, "benchmark", now)

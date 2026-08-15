@@ -99,7 +99,7 @@ OCCURRENCE_LEDGER = (
 # SHA-256 of ordered ``section heading + active route line`` records. This binds
 # every route to its exact active Markdown context without duplicating long prose.
 ROUTE_CONTEXT_SHA256 = {
-    "channel-strategy": "b3a1ffa6b21191d5dabed4e68fa9f0ee639202b46a267d67fc63602615e3946b",
+    "channel-strategy": "0255542756340600308958e0b09206c0921d52f2e4a7998ba7b32cdbb259c286",
     "channel-research": "0e2fa9b5d7a880898d41f421614aa8f6d61af3683494e551161c67701b6cf6bb",
     "audit": "4741c7bf870c47151ce99877201e4ca590d52159013b0a82dbaaea43ea253d01",
 }
@@ -124,7 +124,7 @@ RESIDUAL_LINE_MARKERS = {
     ),
 }
 RESIDUAL_SHA256 = {
-    "channel-research": "d4c181aeb49c0d1c2913733fd317e629c29ac221e075d1b1349f6a40891a864b",
+    "channel-research": "4f6922be67b975ef98e0a93478d9aa7ebca384f9b1f62b887a07ea11d5f40f83",
 }
 
 

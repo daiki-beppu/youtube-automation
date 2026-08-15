@@ -32,7 +32,7 @@ SETUP_ASSET_SHA256 = {
 }
 STRATEGY_ASSET_SHA256 = {
     "desire-vocabulary.md": "d6a2a6eda7597b9aa66f0b140a42834807374cc80a313c9b8edb8114f3126388",
-    "direction.md": "5adaaffd2b85286f9742acd3ea638936a38666a29759ef21df0a4a17ad6d2f76",
+    "direction.md": "0bb0ffc8c47f83adbdc48cb6882ff90c30844ea1a2deff5ca26638216514776f",
 }
 MOVED_ASSET_SHA256 = {
     "import-mode.md": "2e7a69d0e45994d4ce267a7852c475b8db86bd6971e64311bf53021f337d060b",

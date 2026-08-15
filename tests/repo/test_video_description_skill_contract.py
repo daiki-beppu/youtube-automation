@@ -8,8 +8,8 @@ def test_video_describe_mode_reads_benchmark_descriptions_before_template_fallba
     text = _VIDEO_DESCRIPTION_SKILL_MD.read_text(encoding="utf-8")
 
     assert "### Benchmark 概要欄 TTP" in text
-    assert "docs/benchmarks/*.md" in text
-    assert "概要欄TTPサンプル" in text
+    assert "docs/benchmarks/benchmark-report.json" in text
+    assert "read_published_json_document" in text
     assert "data/benchmark_*.json" in text
     assert "channels[].videos[].description" in text
     assert "冒頭ハッシュタグの有無と位置" in text

@@ -7,7 +7,7 @@
 ## 成果物
 
 - `書き込む`: `docs/plans/viewing-scene-matrix.md`
-- `読み込む`: `docs/channel/personas/persona-definition.md`, `docs/plans/viewer-voice-analysis.md`, `data/benchmark_*.json`, 検証済み `reports/analysis_*.json`
+- `読み込む`: `docs/channel/personas/persona-definition.md`, 検証済み `docs/plans/viewer-voice-analysis.json`, `data/benchmark_*.json`, 検証済み `reports/analysis_*.json`
 
 ## Overview
 
@@ -44,7 +44,7 @@ Phase 3 で AskUserQuestion によりメインシーンと動画尺の方針を�
 
 - `config/channel/` が存在しない、または `load_config()` でロードできない → 新規チャンネルは `/setup --channel` Step 4、既存チャンネルは `/setup --import` を案内して停止する
 - `docs/channel/personas/persona-definition.md` が無い → 前工程 `/channel-strategy --persona` を案内して停止する
-- 新規開設（公開前）で `docs/plans/viewer-voice-analysis.md`、`docs/channel/ttp-seed-confirmation.md`、`docs/channel/competitor-branding-snapshot.json` のいずれかが無い → `/setup --channel` Step 5 または Step 7 の該当前工程へ戻るよう案内して停止する
+- 新規開設（公開前）で `docs/plans/viewer-voice-analysis.json` + `.html` pair を検証できない、または `docs/channel/ttp-seed-confirmation.md`、`docs/channel/competitor-branding-snapshot.json` のいずれかが無い → `/setup --channel` Step 5 または Step 7 の該当前工程へ戻るよう案内して停止する
 - 公開後に検証済み `reports/analysis_*.json` + `.html` pair が無い → 前工程 `/analytics --collect` → `/analytics --analyze` を案内して停止する
 
 ### 許容する fail
@@ -60,7 +60,7 @@ Phase 3 で AskUserQuestion によりメインシーンと動画尺の方針を�
 **Agent 1: 自チャンネルシーン別パフォーマンス**
 
 **新規開設（公開前）**:
-- `docs/plans/viewer-voice-analysis.md` の利用シーン、`docs/channel/ttp-seed-confirmation.md` の relationship、`docs/channel/competitor-branding-snapshot.json` の description / keywords に記録済みの時間帯・行動・感情状態・尺だけを読み込む
+- 検証済み viewer voice JSON の利用シーン、`docs/channel/ttp-seed-confirmation.md` の relationship、`docs/channel/competitor-branding-snapshot.json` の description / keywords に記録済みの時間帯・行動・感情状態・尺だけを読み込む
 - 根拠と出典ファイルを付けた定性シーン仮説として整理し、自チャンネル実績・ランキング・相関とは表記しない
 - 再生数、平均視聴時間、動画尺など入力に無い定量値は推測で補わず「公開前のため未検証」と記録する
 

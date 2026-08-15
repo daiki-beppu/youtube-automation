@@ -105,6 +105,28 @@ def test_analysis_and_audit_reports_have_fixed_owner_contracts() -> None:
         validate_repository_document(RepositorySchema.AUDIT_REPORT, audit)
 
 
+def test_channel_research_report_requires_traceable_comparison_evidence() -> None:
+    report = {
+        "schema_version": 1,
+        "generated_at": "2026-08-16T00:00:00Z",
+        "report_type": "benchmark",
+        "summary": "競合比較",
+        "source_provenance": [
+            {"path": "data/benchmark_20260816.json", "collected_at": "2026-08-16", "claim": "再生数"}
+        ],
+        "competitor_comparison": [{"subject": "rival", "metric": "views", "value": 12000, "evidence_ids": ["ev-1"]}],
+        "winning_patterns": [{"statement": "暗い配色", "evidence_ids": ["ev-1"], "confidence": "medium"}],
+        "evidence": [{"id": "ev-1", "source_path": "data/benchmark_20260816.json", "observation": "12,000 views"}],
+        "application_candidates": [{"statement": "暗い背景を比較する", "evidence_ids": ["ev-1"], "confidence": "low"}],
+    }
+
+    validate_repository_document(RepositorySchema.CHANNEL_RESEARCH_REPORT, report)
+
+    report["competitor_comparison"] = [{"subject": "rival", "metric": "views", "value": 12000}]
+    with pytest.raises(DocumentValidationError, match="pointer=/competitor_comparison/0"):
+        validate_repository_document(RepositorySchema.CHANNEL_RESEARCH_REPORT, report)
+
+
 def test_registry_rejects_unknown_schema_name_without_reading_external_file(tmp_path: Path) -> None:
     untrusted = tmp_path / "external.schema.json"
     untrusted.write_text(json.dumps({"type": "object"}), encoding="utf-8")
