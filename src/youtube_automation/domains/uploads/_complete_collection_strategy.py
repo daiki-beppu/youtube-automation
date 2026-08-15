@@ -1,8 +1,4 @@
-"""Complete Collection 動画アップロード経路。
-
-``YouTubeAutoUploader`` から分離した mixin。挙動は分割前と同一で、
-``self.upload_video`` / ``self.dedup_search`` は合成先クラスが提供する。
-"""
+"""Complete Collection 動画アップロード strategy。"""
 
 from __future__ import annotations
 
@@ -71,10 +67,14 @@ def resolve_master_video(collection_dir: Path) -> Path:
     return candidates[0]
 
 
-class CompleteCollectionMixin:
-    """Complete Collection 動画のアップロード経路を提供する mixin。"""
+class CompleteCollectionStrategy:
+    """明示された upload 操作と dedup collaborator で動画を公開する。"""
 
-    def _upload_complete_collection(
+    def __init__(self, upload_video, dedup_search) -> None:
+        self.upload_video = upload_video
+        self.dedup_search = dedup_search
+
+    def upload(
         self,
         collection_dir: Path,
         metadata_gen: BAHMetadataGenerator,
@@ -179,3 +179,6 @@ class CompleteCollectionMixin:
             }
         else:
             return {"error": "Complete Collection アップロード失敗"}
+
+
+__all__ = ["CompleteCollectionStrategy", "resolve_master_video"]

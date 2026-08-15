@@ -17,7 +17,7 @@ from youtube_automation.core.errors import (
     YouTubeAPIError,
 )
 from youtube_automation.domains.metadata import BAHMetadataGenerator
-from youtube_automation.domains.uploads._complete_collection_strategy import CompleteCollectionMixin
+from youtube_automation.domains.uploads._complete_collection_strategy import CompleteCollectionStrategy
 from youtube_automation.domains.uploads._dedup_search import DedupSearch
 from youtube_automation.domains.uploads._preflight import PreflightChecker
 from youtube_automation.domains.uploads._uploader_constants import (
@@ -229,15 +229,15 @@ __all__ = [
     "UPLOAD_SOURCE_EXISTING",
     "UPLOAD_SOURCE_NEW",
     "YOUTUBE_VIDEO_URL_PREFIX",
+    "CompleteCollectionStrategy",
+    "DedupSearch",
+    "PreflightChecker",
     "ResumableUploader",
     "YouTubeAutoUploader",
 ]
 
 
-class YouTubeAutoUploader(
-    CompleteCollectionMixin,
-    ResumableUploader,
-):
+class YouTubeAutoUploader(ResumableUploader):
     """YouTube自動アップロードメインクラス
 
     YouTubeUploadCore を継承し、コレクション単位のアップロード機能を提供する。
@@ -251,6 +251,7 @@ class YouTubeAutoUploader(
         youtube_clients: YouTubeClients | None = None,
         dedup_search: DedupSearch | None = None,
         preflight_checker: PreflightChecker | None = None,
+        complete_collection_strategy: CompleteCollectionStrategy | None = None,
     ) -> None:
         """
         初期化
@@ -268,6 +269,7 @@ class YouTubeAutoUploader(
         self.preflight_checker = (
             preflight_checker if preflight_checker is not None else PreflightChecker(self.collections_root)
         )
+        self._complete_collection_strategy = complete_collection_strategy
         self._verified_authenticated_channel_id: str | None = None
 
     @property
@@ -291,6 +293,31 @@ class YouTubeAutoUploader(
         """チャンネル本人性を確認してからメタデータ品質を検証する。"""
         self._verify_authenticated_upload_channel()
         self.preflight_checker.check(collection_dir)
+
+    def _upload_complete_collection(
+        self,
+        collection_dir: Path,
+        metadata_gen: BAHMetadataGenerator,
+        publish_at: Optional[str] = None,
+        *,
+        resume_session_uri: Optional[str] = None,
+        on_session_uri_changed: Optional[Callable[[Optional[str]], None]] = None,
+        on_upload_complete: Optional[Callable[[], None]] = None,
+    ) -> Optional[Dict]:
+        """Complete Collection strategy へ明示的に委譲する。"""
+        strategy = (
+            self._complete_collection_strategy
+            if self._complete_collection_strategy is not None
+            else CompleteCollectionStrategy(self.upload_video, self.dedup_search)
+        )
+        return strategy.upload(
+            collection_dir,
+            metadata_gen,
+            publish_at,
+            resume_session_uri=resume_session_uri,
+            on_session_uri_changed=on_session_uri_changed,
+            on_upload_complete=on_upload_complete,
+        )
 
     def upload_video(
         self,

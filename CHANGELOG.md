@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `refactor(collections)`: rain layer・scene phrase・track 表示名・Short upload の4 writerを `workflow-state` owner の lock + atomic update 経由へ移し、同時更新と未知 field を保持する（#3878）。
 - `refactor(collections)`: collection 初期化、batch 動画遷移、upload 完了の3 writerを `workflow-state` owner の lock + atomic update 経由へ移し、同時更新の消失を防ぐ（#3877）。
 - `test(collections)`: `workflow-state.json` の owner 外 direct I/O 30 ファイルを縮小専用 allowlist として固定し、新規越境を file・line・operation 付きで診断する契約を追加する（#3876）。
+- `refactor(uploads)`: uploads domain の残存 mixin 継承を全廃し、Complete Collection の strategy / executor を `YouTubeAutoUploader` / `CollectionUploader` から明示委譲する構成へ置換する（#3934）。
 - `refactor(uploads)`: `PreflightMixin` の MRO hook を、認証チャンネル照合後に明示注入した preflight checker を呼ぶ合成へ置換し、既存の判定・エラー契約を維持する（#3933）。
 - `refactor(uploads)`: `DedupSearchMixin` を YouTube service を明示注入する重複検索 helper へ置換し、完全一致・ghost 除外・quota 記録・fail-open 契約を維持する（#3932）。
 - `refactor(uploads)`: `PlaylistAssignmentMixin` を YouTube clients を明示注入する playlist 割り当てコラボレータへ置換し、割り当て失敗を状態確定前に伝播する契約を維持する（#3931）。

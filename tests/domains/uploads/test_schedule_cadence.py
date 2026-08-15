@@ -5,7 +5,7 @@ from typing import ClassVar
 from unittest.mock import MagicMock, patch
 from zoneinfo import ZoneInfo
 
-from youtube_automation.domains.uploads._published_dates import PublishedDatesScheduler
+from youtube_automation.domains.uploads.collection import PublishedDatesScheduler
 
 TZ = ZoneInfo("Asia/Tokyo")
 

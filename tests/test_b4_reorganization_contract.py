@@ -43,14 +43,6 @@ LEGACY_AGENT_OWNERS = {
         "youtube_automation.domains.uploads._collection_uploader_constants",
         "ACTION_COMPLETE_COLLECTION_UPLOADED",
     ),
-    "_complete_collection_executor": (
-        "youtube_automation.domains.uploads._complete_collection_executor",
-        "CompleteCollectionExecutorMixin",
-    ),
-    "_complete_collection_strategy": (
-        "youtube_automation.domains.uploads._complete_collection_strategy",
-        "CompleteCollectionMixin",
-    ),
     "_dedup_search": ("youtube_automation.domains.uploads._dedup_search", "DedupSearch"),
     "_playlist_assignment": ("youtube_automation.domains.uploads._playlist_assignment", "PlaylistAssignment"),
     "_preflight": ("youtube_automation.domains.uploads._preflight", "PreflightChecker"),
@@ -223,6 +215,41 @@ def test_upload_preflight_uses_explicit_checker_without_mro_hook() -> None:
 
     assert "super().preflight_check" not in source
     assert "self.preflight_checker.check(collection_dir)" in source
+
+
+def test_upload_domain_has_no_mixin_classes_or_test_private_imports() -> None:
+    mixins: list[str] = []
+    for path in (SRC / "domains" / "uploads").glob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        mixins.extend(
+            node.name for node in ast.walk(tree) if isinstance(node, ast.ClassDef) and node.name.endswith("Mixin")
+        )
+
+    private_imports: list[str] = []
+    for path in (ROOT / "tests").rglob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.ImportFrom)
+                and node.module is not None
+                and node.module.startswith("youtube_automation.domains.uploads._")
+            ):
+                private_imports.append(node.module)
+            elif isinstance(node, ast.Import):
+                private_imports.extend(
+                    alias.name for alias in node.names if alias.name.startswith("youtube_automation.domains.uploads._")
+                )
+
+    assert mixins == []
+    assert private_imports == []
+
+
+def test_upload_hosts_keep_only_the_real_resumable_base() -> None:
+    from youtube_automation.domains.uploads.collection import CollectionUploader
+    from youtube_automation.domains.uploads.youtube import ResumableUploader, YouTubeAutoUploader
+
+    assert YouTubeAutoUploader.__bases__ == (ResumableUploader,)
+    assert CollectionUploader.__bases__ == (object,)
 
 
 @pytest.mark.parametrize("filename", UPLOADER_ENTRYPOINTS)
