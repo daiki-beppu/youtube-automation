@@ -230,3 +230,115 @@ def test_lint_skill_requires_exclusive_mode_instruction(tmp_path: Path) -> None:
     violations = lint_skill(skill_dir)
 
     assert any("2 個以上" in violation and "停止" in violation for violation in violations)
+
+
+def test_lint_skill_reports_missing_mode_reference(tmp_path: Path) -> None:
+    skill_dir = _write_flag_skill(
+        tmp_path,
+        "sample",
+        "Use --fast",
+        """## モード判定
+
+2 個以上の同時指定なら停止する。
+
+| mode | 読む reference |
+|---|---|
+| `--fast` | `references/fast.md` |
+""",
+    )
+
+    violations = lint_skill(skill_dir)
+
+    assert "--fast の reference が見つかりません: references/fast.md" in violations
+
+
+def test_lint_skill_reports_absolute_mode_reference(tmp_path: Path) -> None:
+    skill_dir = _write_flag_skill(
+        tmp_path,
+        "sample",
+        "Use --fast",
+        """## モード判定
+
+2 個以上の同時指定なら停止する。
+
+| mode | 読む reference |
+|---|---|
+| `--fast` | `/tmp/fast.md` |
+""",
+    )
+
+    violations = lint_skill(skill_dir)
+
+    assert any("--fast" in violation and "相対パス" in violation for violation in violations)
+
+
+def test_lint_skill_reports_mode_reference_name_mismatch(tmp_path: Path) -> None:
+    skill_dir = _write_flag_skill(
+        tmp_path,
+        "sample",
+        "Use --fast",
+        """## モード判定
+
+2 個以上の同時指定なら停止する。
+
+| mode | 読む reference |
+|---|---|
+| `--fast` | `references/details.md` |
+""",
+    )
+    reference = skill_dir / "references" / "details.md"
+    reference.parent.mkdir()
+    reference.write_text("details", encoding="utf-8")
+
+    violations = lint_skill(skill_dir)
+
+    assert any(
+        "--fast" in violation and "references/fast.md" in violation and "一致" in violation for violation in violations
+    )
+
+
+def test_lint_skill_reports_shared_mode_reference(tmp_path: Path) -> None:
+    skill_dir = _write_flag_skill(
+        tmp_path,
+        "sample",
+        "Use --fast / --safe",
+        """## モード判定
+
+2 個以上の同時指定なら停止する。
+
+| mode | 読む reference |
+|---|---|
+| `--fast` | `references/fast.md` |
+| `--safe` | `references/fast.md` |
+""",
+    )
+    reference = skill_dir / "references" / "fast.md"
+    reference.parent.mkdir()
+    reference.write_text("details", encoding="utf-8")
+
+    violations = lint_skill(skill_dir)
+
+    assert any("--fast" in violation and "--safe" in violation and "共有" in violation for violation in violations)
+
+
+def test_lint_skill_accepts_one_existing_named_reference_per_mode(tmp_path: Path) -> None:
+    skill_dir = _write_flag_skill(
+        tmp_path,
+        "sample",
+        "Use --fast / --safe",
+        """## モード判定
+
+2 個以上の同時指定なら停止する。
+
+| mode | 読む reference |
+|---|---|
+| `--fast` | `references/fast.md` |
+| `--safe` | `references/safe.md` |
+""",
+    )
+    references = skill_dir / "references"
+    references.mkdir()
+    (references / "fast.md").write_text("fast", encoding="utf-8")
+    (references / "safe.md").write_text("safe", encoding="utf-8")
+
+    assert lint_skill(skill_dir) == []
