@@ -8,7 +8,9 @@ from pathlib import Path
 
 from youtube_automation.core.adapters.media import CollectionPaths
 from youtube_automation.core.adapters.runtime import now_in_schedule_tz
-from youtube_automation.core.errors import ValidationError
+from youtube_automation.core.errors import ValidationError, WorkflowStateError
+from youtube_automation.domains.collections.workflow_state import WorkflowState
+from youtube_automation.domains.collections.workflow_state import update as update_workflow_state
 from youtube_automation.domains.uploads._collection_uploader_constants import (
     TRACKING_STATUS_COMPLETED,
     WORKFLOW_PHASE_COMPLETE,
@@ -81,29 +83,29 @@ class TrackingStore:
         if not path_exists(ws_path):
             return
 
-        state = json.loads(read_file_text(ws_path))
-        upload = state.get("upload", {})
-        if not isinstance(upload, dict):
-            raise ValidationError(f"workflow-state.json upload must be object: {ws_path}")
+        def record_upload(state: WorkflowState) -> None:
+            upload = state.upload
+            if upload is None:
+                state["upload"] = {}
+                upload = state.upload
+            if upload is None:
+                raise ValidationError(f"workflow-state.json upload must be object: {ws_path}")
+            upload.video_id = complete_video["video_id"]
+            upload.video_url = complete_video["video_url"]
+            upload.publish_at = publish_at
+            state["updated_at"] = now_in_schedule_tz(self.config).isoformat()
+            if collection_path.parent.name == WORKFLOW_STAGE_LIVE:
+                state.stage = WORKFLOW_STAGE_LIVE
+                state.phase = WORKFLOW_PHASE_COMPLETE
 
-        updated_upload = {
-            **upload,
-            "video_id": complete_video["video_id"],
-            "video_url": complete_video["video_url"],
-            "publish_at": publish_at,
-        }
-        updated_state = {
-            **state,
-            "upload": updated_upload,
-            "updated_at": now_in_schedule_tz(self.config).isoformat(),
-        }
-        if collection_path.parent.name == WORKFLOW_STAGE_LIVE:
-            updated_state = {
-                **updated_state,
-                "stage": WORKFLOW_STAGE_LIVE,
-                "phase": WORKFLOW_PHASE_COMPLETE,
-            }
-        write_file_text(ws_path, json.dumps(updated_state, indent=2, ensure_ascii=False))
+        try:
+            update_workflow_state(ws_path, record_upload)
+        except WorkflowStateError as error:
+            if isinstance(error.__cause__, json.JSONDecodeError):
+                raise error.__cause__ from error
+            if "workflow-state.json::upload must be an object" in str(error):
+                raise ValidationError(f"workflow-state.json upload must be object: {ws_path}") from error
+            raise ValidationError(str(error)) from error
 
     def initialize(self, collection_path: Path) -> dict:
         """tracking を初期化"""

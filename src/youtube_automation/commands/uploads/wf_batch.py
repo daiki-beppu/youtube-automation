@@ -43,17 +43,24 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import subprocess
 import sys
-import tempfile
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
 from youtube_automation.configuration import channel_dir, load_config
-from youtube_automation.core.errors import ConfigError, ValidationError
+from youtube_automation.core.errors import ConfigError, ValidationError, WorkflowStateError
+from youtube_automation.domains.collections.workflow_state import (
+    WorkflowState,
+)
+from youtube_automation.domains.collections.workflow_state import (
+    read as read_workflow_state,
+)
+from youtube_automation.domains.collections.workflow_state import (
+    update as update_workflow_state,
+)
 from youtube_automation.infrastructure.media.collection_paths import CollectionPaths
 
 # 02-Individual-music/ のダウンロード済み判定に使う音声拡張子（/wf-next Suno パスと同一）。
@@ -119,30 +126,13 @@ def _load_state(workflow_state_path: Path) -> dict:
         raise ValidationError(f"workflow-state.json が見つかりません: {workflow_state_path}")
 
     try:
-        state = json.loads(workflow_state_path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as e:
-        raise ValidationError(f"workflow-state.json のパースに失敗: {e}") from e
-
-    if not isinstance(state, dict):
-        raise ValidationError("workflow-state.json の root は object である必要があります")
-    return state
-
-
-def _write_state(workflow_state_path: Path, state: dict) -> None:
-    """workflow-state.json を同一ディレクトリの一時ファイル + os.replace で原子的に更新する。"""
-    payload = json.dumps(state, ensure_ascii=False, indent=2) + "\n"
-    fd, tmp_name = tempfile.mkstemp(
-        dir=workflow_state_path.parent,
-        prefix=".workflow-state.",
-        suffix=".tmp",
-    )
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            f.write(payload)
-        os.replace(tmp_name, workflow_state_path)
-    except BaseException:
-        Path(tmp_name).unlink(missing_ok=True)
-        raise
+        return read_workflow_state(workflow_state_path).to_dict()
+    except WorkflowStateError as error:
+        if "root must be an object" in str(error):
+            raise ValidationError("workflow-state.json の root は object である必要があります") from error
+        if isinstance(error.__cause__, json.JSONDecodeError):
+            raise ValidationError(f"workflow-state.json のパースに失敗: {error.__cause__}") from error
+        raise ValidationError(str(error)) from error
 
 
 def _utc_now() -> str:
@@ -306,15 +296,26 @@ def _record_master_video(collection_dir: Path) -> str:
     video = paths.find_master_video()
     if video is None:
         raise ValidationError("01-master/ にマスター動画 (*.mp4) が生成されていません")
+    if not paths.workflow_state_path.is_file():
+        raise ValidationError(f"workflow-state.json が見つかりません: {paths.workflow_state_path}")
 
-    state = _load_state(paths.workflow_state_path)
-    assets = state.setdefault("assets", {})
-    if not isinstance(assets, dict):
-        raise ValidationError("workflow-state.json::assets は object である必要があります")
-    assets["master_video"] = video.name
-    state["phase"] = "publishing"
-    state["updated_at"] = _utc_now()
-    _write_state(paths.workflow_state_path, state)
+    def record_master_video(state: WorkflowState) -> None:
+        assets = state.assets
+        if assets is None:
+            state["assets"] = {}
+            assets = state.assets
+        if assets is None:
+            raise ValidationError("workflow-state.json::assets は object である必要があります")
+        assets.master_video = video.name
+        state.phase = "publishing"
+        state["updated_at"] = _utc_now()
+
+    try:
+        update_workflow_state(paths.workflow_state_path, record_master_video)
+    except WorkflowStateError as error:
+        if "workflow-state.json::assets must be an object" in str(error):
+            raise ValidationError("workflow-state.json::assets は object である必要があります") from error
+        raise ValidationError(str(error)) from error
     return video.name
 
 

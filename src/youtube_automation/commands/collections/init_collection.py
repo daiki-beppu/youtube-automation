@@ -16,12 +16,13 @@ Example:
 """
 
 import argparse
-import json
 import shlex
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+from youtube_automation.domains.collections.workflow_state import WorkflowState
+from youtube_automation.domains.collections.workflow_state import update as update_workflow_state
 from youtube_automation.infrastructure.media.collection_paths import CollectionPaths
 
 # --- パス解決 ---
@@ -101,9 +102,7 @@ def main():
     # workflow-state.json 生成
     state = build_state(args.collection_name, args.theme, args.track_count, args.selected_plan, music_engine)
     state_path = base_path / "workflow-state.json"
-    with open(state_path, "w") as f:
-        json.dump(state, f, indent=2, ensure_ascii=False)
-        f.write("\n")
+    update_workflow_state(state_path, lambda _current: WorkflowState(state))
 
     print(f"[OK] コレクション作成完了: {base_path}")
     print(f"  テーマ: {args.theme}")
