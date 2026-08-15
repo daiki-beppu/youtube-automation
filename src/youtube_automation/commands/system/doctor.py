@@ -22,8 +22,9 @@ from contextlib import contextmanager, redirect_stdout
 from contextvars import ContextVar
 from dataclasses import asdict, dataclass
 from datetime import date, datetime
+from enum import Enum
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 import yaml
 from google.auth.exceptions import RefreshError, TransportError
@@ -124,6 +125,33 @@ class CheckResult:
     category: str = API_CATEGORY  # bootstrap / api / channel / data / upload
     next_action: Optional[dict] = None
     data: Optional[dict] = None
+
+
+class ApplyKind(Enum):
+    """診断の apply 可否と特別な入力契約。"""
+
+    NONE = "none"
+    AI_EXEC = "ai-exec"
+    PROJECT = "project"
+    BILLING = "billing"
+
+
+class CwdSemantics(Enum):
+    """apply command を実行する基準ディレクトリ。"""
+
+    CHANNEL = "channel"
+    BOOTSTRAP_ROOT = "bootstrap-root"
+
+
+@dataclass(frozen=True)
+class CheckDefinition:
+    """1 件の doctor check を構成する宣言。"""
+
+    id: str
+    category: str
+    run: Callable[[Path], CheckResult]
+    apply_kind: ApplyKind
+    cwd_semantics: CwdSemantics
 
 
 def _ai_exec_action(
@@ -3234,39 +3262,111 @@ def check_upload_ready(channel_dir: Path) -> CheckResult:
     )
 
 
+def _without_channel_dir(check: Callable[[], CheckResult]) -> Callable[[Path], CheckResult]:
+    def run(_channel_dir: Path) -> CheckResult:
+        return check()
+
+    return run
+
+
+CHECK_REGISTRY = (
+    CheckDefinition(
+        "ffmpeg", BOOTSTRAP_CATEGORY, _without_channel_dir(check_ffmpeg), ApplyKind.NONE, CwdSemantics.BOOTSTRAP_ROOT
+    ),
+    CheckDefinition(
+        "ffprobe", BOOTSTRAP_CATEGORY, _without_channel_dir(check_ffprobe), ApplyKind.NONE, CwdSemantics.BOOTSTRAP_ROOT
+    ),
+    CheckDefinition(
+        "uv", BOOTSTRAP_CATEGORY, _without_channel_dir(check_uv), ApplyKind.NONE, CwdSemantics.BOOTSTRAP_ROOT
+    ),
+    CheckDefinition("uv_project", BOOTSTRAP_CATEGORY, check_uv_project, ApplyKind.NONE, CwdSemantics.BOOTSTRAP_ROOT),
+    CheckDefinition(
+        "automation_package",
+        BOOTSTRAP_CATEGORY,
+        check_automation_package,
+        ApplyKind.NONE,
+        CwdSemantics.BOOTSTRAP_ROOT,
+    ),
+    CheckDefinition(
+        "skills_synced",
+        BOOTSTRAP_CATEGORY,
+        check_skills_synced,
+        ApplyKind.AI_EXEC,
+        CwdSemantics.BOOTSTRAP_ROOT,
+    ),
+    CheckDefinition(
+        "numbered_duplicates",
+        BOOTSTRAP_CATEGORY,
+        check_numbered_duplicates,
+        ApplyKind.NONE,
+        CwdSemantics.BOOTSTRAP_ROOT,
+    ),
+    CheckDefinition("gcloud", API_CATEGORY, _without_channel_dir(check_gcloud), ApplyKind.NONE, CwdSemantics.CHANNEL),
+    CheckDefinition(
+        "gcloud_account", API_CATEGORY, _without_channel_dir(check_gcloud_account), ApplyKind.NONE, CwdSemantics.CHANNEL
+    ),
+    CheckDefinition("gcp_project", API_CATEGORY, check_gcp_project, ApplyKind.PROJECT, CwdSemantics.CHANNEL),
+    CheckDefinition("billing_linked", API_CATEGORY, check_billing, ApplyKind.BILLING, CwdSemantics.CHANNEL),
+    CheckDefinition("apis_enabled", API_CATEGORY, check_apis_enabled, ApplyKind.AI_EXEC, CwdSemantics.CHANNEL),
+    CheckDefinition("adc", API_CATEGORY, _without_channel_dir(check_adc), ApplyKind.NONE, CwdSemantics.CHANNEL),
+    CheckDefinition(
+        "adc_quota_project", API_CATEGORY, check_adc_quota_project, ApplyKind.AI_EXEC, CwdSemantics.CHANNEL
+    ),
+    CheckDefinition(
+        "iam_aiplatform_user", API_CATEGORY, check_iam_aiplatform_user, ApplyKind.AI_EXEC, CwdSemantics.CHANNEL
+    ),
+    CheckDefinition("client_secrets", API_CATEGORY, check_client_secrets, ApplyKind.NONE, CwdSemantics.CHANNEL),
+    CheckDefinition(
+        "oauth_client_sharing", API_CATEGORY, check_oauth_client_sharing, ApplyKind.NONE, CwdSemantics.CHANNEL
+    ),
+    CheckDefinition("oauth_token", API_CATEGORY, check_oauth_token, ApplyKind.NONE, CwdSemantics.CHANNEL),
+    CheckDefinition(
+        "oauth_token_readonly", API_CATEGORY, check_oauth_token_readonly, ApplyKind.NONE, CwdSemantics.CHANNEL
+    ),
+    CheckDefinition("reporting_job", API_CATEGORY, check_reporting_job, ApplyKind.AI_EXEC, CwdSemantics.CHANNEL),
+    CheckDefinition(
+        "streaming_vps_state", API_CATEGORY, check_streaming_vps_state, ApplyKind.NONE, CwdSemantics.CHANNEL
+    ),
+    CheckDefinition("channel_config", CHANNEL_CATEGORY, check_channel_config, ApplyKind.NONE, CwdSemantics.CHANNEL),
+    CheckDefinition("playlist_config", CHANNEL_CATEGORY, check_playlist_config, ApplyKind.NONE, CwdSemantics.CHANNEL),
+    CheckDefinition(
+        "playlist_create_dry_run",
+        CHANNEL_CATEGORY,
+        check_playlist_create_dry_run,
+        ApplyKind.NONE,
+        CwdSemantics.CHANNEL,
+    ),
+    CheckDefinition("analytics_report", DATA_CATEGORY, check_analytics_report, ApplyKind.NONE, CwdSemantics.CHANNEL),
+    CheckDefinition("benchmark_data", DATA_CATEGORY, check_benchmark_data, ApplyKind.NONE, CwdSemantics.CHANNEL),
+    CheckDefinition(
+        "ttp_wf_new_readiness", DATA_CATEGORY, check_ttp_wf_new_readiness, ApplyKind.NONE, CwdSemantics.CHANNEL
+    ),
+    CheckDefinition("wf_new_readiness", DATA_CATEGORY, check_wf_new_readiness, ApplyKind.NONE, CwdSemantics.CHANNEL),
+    CheckDefinition(
+        "initial_setup_readiness", DATA_CATEGORY, check_initial_setup_readiness, ApplyKind.NONE, CwdSemantics.CHANNEL
+    ),
+    CheckDefinition("upload_ready", UPLOAD_CATEGORY, check_upload_ready, ApplyKind.NONE, CwdSemantics.CHANNEL),
+)
+
+
+def _check_definition(check_id: str) -> CheckDefinition | None:
+    return next((definition for definition in CHECK_REGISTRY if definition.id == check_id), None)
+
+
+def _declared_category(result: CheckResult) -> str:
+    definition = _check_definition(result.id)
+    return definition.category if definition is not None else result.category
+
+
 def run_all_checks(channel_dir: Path) -> list[CheckResult]:
-    return [
-        check_ffmpeg(),
-        check_ffprobe(),
-        check_uv(),
-        check_uv_project(channel_dir),
-        check_automation_package(channel_dir),
-        check_skills_synced(channel_dir),
-        check_numbered_duplicates(channel_dir),
-        check_gcloud(),
-        check_gcloud_account(),
-        check_gcp_project(channel_dir),
-        check_billing(channel_dir),
-        check_apis_enabled(channel_dir),
-        check_adc(),
-        check_adc_quota_project(channel_dir),
-        check_iam_aiplatform_user(channel_dir),
-        check_client_secrets(channel_dir),
-        check_oauth_client_sharing(channel_dir),
-        check_oauth_token(channel_dir),
-        check_oauth_token_readonly(channel_dir),
-        check_reporting_job(channel_dir),
-        check_streaming_vps_state(channel_dir),
-        check_channel_config(channel_dir),
-        check_playlist_config(channel_dir),
-        check_playlist_create_dry_run(channel_dir),
-        check_analytics_report(channel_dir),
-        check_benchmark_data(channel_dir),
-        check_ttp_wf_new_readiness(channel_dir),
-        check_wf_new_readiness(channel_dir),
-        check_initial_setup_readiness(channel_dir),
-        check_upload_ready(channel_dir),
-    ]
+    results: list[CheckResult] = []
+    for definition in CHECK_REGISTRY:
+        result = definition.run(channel_dir)
+        if result.id != definition.id:
+            raise RuntimeError(f"doctor check id mismatch: declared={definition.id}, returned={result.id}")
+        result.category = definition.category
+        results.append(result)
+    return results
 
 
 def summarize(results: list[CheckResult]) -> dict:
@@ -3328,6 +3428,7 @@ def _public_next_action(action: dict | None) -> dict | None:
 
 def _check_result_to_dict(result: CheckResult) -> dict:
     payload = asdict(result)
+    payload["category"] = _declared_category(result)
     payload["next_action"] = _public_next_action(result.next_action)
     return payload
 
@@ -3396,6 +3497,28 @@ def _forced_project_check(
     return CheckResult(id="gcp_project", status="fail", message=f"project {project_id} を選択")
 
 
+def _apply_kind_for(result: CheckResult) -> ApplyKind:
+    definition = _check_definition(result.id)
+    if definition is not None:
+        return definition.apply_kind
+    if result.id == "gcp_project":
+        return ApplyKind.PROJECT
+    if result.id == "billing_linked":
+        return ApplyKind.BILLING
+    return ApplyKind.AI_EXEC
+
+
+def _apply_cwd_for(result: CheckResult, channel_dir: Path) -> Path:
+    definition = _check_definition(result.id)
+    if definition is not None:
+        semantics = definition.cwd_semantics
+    elif result.category == BOOTSTRAP_CATEGORY:
+        semantics = CwdSemantics.BOOTSTRAP_ROOT
+    else:
+        semantics = CwdSemantics.CHANNEL
+    return _bootstrap_root(channel_dir) if semantics is CwdSemantics.BOOTSTRAP_ROOT else channel_dir
+
+
 def _run_apply_loop(
     channel_dir: Path,
     project_id: str | None,
@@ -3409,7 +3532,8 @@ def _run_apply_loop(
         unresolved = _forced_project_check(results, project_id, current_project_id) or _first_unresolved_check(results)
         if unresolved is None:
             return _apply_outcome(results, "completed", executed)
-        if unresolved.id == "gcp_project" and project_id is None:
+        apply_kind = _apply_kind_for(unresolved)
+        if apply_kind is ApplyKind.PROJECT and project_id is None:
             return _apply_outcome(
                 results,
                 "decision_required",
@@ -3418,7 +3542,7 @@ def _run_apply_loop(
                 next_action={"kind": "decision", "flag": "--project-id"},
             )
         if (
-            unresolved.id == "billing_linked"
+            apply_kind is ApplyKind.BILLING
             and billing_account is None
             and unresolved.next_action
             and unresolved.next_action.get("kind") == "ai-exec"
@@ -3431,9 +3555,9 @@ def _run_apply_loop(
                 next_action={"kind": "decision", "flag": "--billing-account"},
             )
         action = unresolved.next_action
-        if unresolved.id == "gcp_project" and project_id is not None:
+        if apply_kind is ApplyKind.PROJECT and project_id is not None:
             action = _ai_exec_action(["gcloud", "config", "set", "project", project_id])
-        elif unresolved.id == "billing_linked" and billing_account is not None:
+        elif apply_kind is ApplyKind.BILLING and billing_account is not None:
             active_project_id = _project_id_for(channel_dir)
             if not active_project_id:
                 return _apply_outcome(
@@ -3454,7 +3578,12 @@ def _run_apply_loop(
                     f"--billing-account={billing_account}",
                 ]
             )
-        if not action or action.get("kind") != "ai-exec" or action.get("auto_apply") is False:
+        if (
+            apply_kind is ApplyKind.NONE
+            or not action
+            or action.get("kind") != "ai-exec"
+            or action.get("auto_apply") is False
+        ):
             return _apply_outcome(
                 results,
                 "human_required",
@@ -3493,7 +3622,7 @@ def _run_apply_loop(
                 exit_code=1,
             )
         attempted_steps.add(step_key)
-        command_cwd = _bootstrap_root(channel_dir) if unresolved.category == BOOTSTRAP_CATEGORY else channel_dir
+        command_cwd = _apply_cwd_for(unresolved, channel_dir)
         returncode, _stdout, stderr = _run_apply_command(argv, command_cwd)
         executed.append(ExecutedStep(unresolved.id, command, returncode))
         if returncode != 0:
@@ -3507,7 +3636,7 @@ def _run_apply_loop(
                 stderr=stderr,
                 exit_code=1,
             )
-        if unresolved.id == "gcp_project" and project_id is not None:
+        if apply_kind is ApplyKind.PROJECT and project_id is not None:
             _APPLY_PROJECT_ID.set(project_id)
             os.environ["GOOGLE_CLOUD_PROJECT"] = project_id
 
@@ -3786,8 +3915,9 @@ def render_table(results: list[CheckResult], summary: dict, channel_dir: Path) -
 
     current_category: Optional[str] = None
     for r in results:
-        if r.category != current_category:
-            current_category = r.category
+        category = _declared_category(r)
+        if category != current_category:
+            current_category = category
             lines.append("")
             lines.append(f"=== {current_category} ===")
             lines.append(f"{'STATUS':<8} {'CHECK':<22} MESSAGE")
