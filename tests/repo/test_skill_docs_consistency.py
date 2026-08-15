@@ -13,12 +13,14 @@ import pytest
 import yaml
 
 from tests.helpers.paths import REPO_ROOT
+from youtube_automation.domains.skills.inventory import SkillInventory
 
 ROOT = REPO_ROOT
+SKILL_INVENTORY = SkillInventory(ROOT)
 
 
 def test_all_skills_use_machine_readable_chain_block() -> None:
-    skill_paths = sorted((ROOT / ".claude" / "skills").glob("*/SKILL.md"))
+    skill_paths = [path / "SKILL.md" for path in SKILL_INVENTORY.skill_directories()]
     chain_block = re.compile(
         r"\A---\n.*?\n---\n\n## 前後工程\n\n"
         r"- `前工程`: (?P<upstream>[^\n]+)\n"
@@ -52,7 +54,8 @@ def test_skill_chain_legacy_summary_formats_are_absent() -> None:
         re.MULTILINE,
     )
 
-    for path in sorted((ROOT / ".claude" / "skills").glob("*/SKILL.md")):
+    for skill_dir in SKILL_INVENTORY.skill_directories():
+        path = skill_dir / "SKILL.md"
         text = path.read_text(encoding="utf-8")
         assert legacy_summary.search(text) is None, f"{path}: 旧形式の前後工程一覧が残存"
 
@@ -85,14 +88,8 @@ def _assert_appears_before(text: str, earlier: str, later: str) -> None:
     assert earlier_idx < later_idx
 
 
-def _frontmatter(path: str) -> dict:
-    text = _read(path)
-    if not text.startswith("---\n"):
-        raise AssertionError(f"{path} does not start with frontmatter")
-    end = text.find("\n---", 4)
-    if end == -1:
-        raise AssertionError(f"{path} frontmatter is not closed")
-    parsed = yaml.safe_load(text[4:end])
+def _skill_frontmatter(skill: str) -> dict:
+    parsed = SKILL_INVENTORY.frontmatter(skill)
     assert isinstance(parsed, dict)
     return parsed
 
@@ -261,11 +258,10 @@ def test_setup_channel_ttp_confirmation_contract_is_documented() -> None:
 def test_setup_channel_ttp_hearing_routes_direction_to_residual_mode() -> None:
     setup_channel = _read(".claude/skills/setup/references/channel-mode.md")
     seed_details = _read(".claude/skills/setup/references/ttp-seed-and-duration.md")
-    channel_new = _read(".claude/skills/channel-new/SKILL.md")
-    overview = channel_new.split("## Overview", 1)[1].split("## モード判別", 1)[0]
-    mode_routing = channel_new.split("## モード判別", 1)[1].split("## 外部データの扱い", 1)[0]
+    overview = SKILL_INVENTORY.section("channel-new", "## Overview")
+    mode_routing = SKILL_INVENTORY.section("channel-new", "## モード判別")
     direction_mode_row = next(line for line in mode_routing.splitlines() if line.startswith("| 方向性検討モード |"))
-    direction_mode_stub = channel_new.split("## 方向性検討モード", 1)[1].split("\n## 再生成モード", 1)[0]
+    direction_mode_stub = SKILL_INVENTORY.section("channel-new", "## 方向性検討モード（Step D1〜D5）")
     direction_mode = _read(".claude/skills/channel-new/references/direction-mode.md")
     ttp_principles = setup_channel.split("## TTP 原則", 1)[1].split("## 外部データの扱い", 1)[0]
     step1 = setup_channel.split("### Step 1: TTP ヒアリング", 1)[1].split(
@@ -280,7 +276,7 @@ def test_setup_channel_ttp_hearing_routes_direction_to_residual_mode() -> None:
         "### Step 8: branding 初回反映",
         1,
     )[0]
-    cross_references = channel_new.split("## Cross References", 1)[1]
+    cross_references = SKILL_INVENTORY.section("channel-new", "## Cross References")
 
     assert "「どんなチャンネルにしたいか」より先に" not in ttp_principles
     assert "`/channel-new` では方向性・差別化・ポジショニングを聞かず" in ttp_principles
@@ -372,7 +368,7 @@ def test_branding_missing_report_requires_existing_file_check_before_generation(
 
 
 def test_channel_new_frontmatter_keeps_import_dispatch_keywords() -> None:
-    frontmatter = _frontmatter(".claude/skills/channel-new/SKILL.md")
+    frontmatter = _skill_frontmatter("channel-new")
     assert frontmatter["name"] == "channel-new"
     description = frontmatter["description"]
     for keyword in (
@@ -418,7 +414,6 @@ def test_channel_new_docs_distinguish_required_initial_persona_from_optional_rea
 def test_setup_channel_prelaunch_persona_chain_propagates_context_without_analytics() -> None:
     setup_channel = _read(".claude/skills/setup/references/channel-mode.md")
     audience_persona = _read(".claude/skills/audience-persona-design/SKILL.md")
-    viewing_scene = _read(".claude/skills/viewing-scene/SKILL.md")
 
     step7 = setup_channel.split("### Step 7: 本格ペルソナ作成チェーン", 1)[1].split(
         "### Step 8: branding 初回反映",
@@ -435,7 +430,9 @@ def test_setup_channel_prelaunch_persona_chain_propagates_context_without_analyt
     assert "任意の `/benchmark`" in step7
     assert "`reports/analysis_*.md` は要求しない" in step7
 
-    entry_contract = audience_persona.split("入口で実行コンテキスト", 1)[1].split("## 完了条件", 1)[0]
+    entry_contract = SKILL_INVENTORY.section("audience-persona-design", "## Overview").split(
+        "入口で実行コンテキスト", 1
+    )[1]
     assert "新規開設（公開前）" in entry_contract
     assert "公開後" in entry_contract
     assert "任意の `/benchmark` 成果物" in entry_contract
@@ -445,14 +442,11 @@ def test_setup_channel_prelaunch_persona_chain_propagates_context_without_analyt
         "docs/channel/competitor-branding-snapshot.json",
     ):
         assert path in entry_contract
-    phase5 = audience_persona.split("### Phase 5: viewing-scene 検証", 1)[1].split(
-        "### Phase 6: 最終 persona-definition.md 更新",
-        1,
-    )[0]
+    phase5 = SKILL_INVENTORY.section("audience-persona-design", "### Phase 5: viewing-scene 検証")
     assert "新規開設（公開前）" in phase5
     assert "公開後" in phase5
     assert "実行コンテキストを明示して渡し" in phase5
-    audience_guidance = audience_persona.split("## 障害時ガイダンス", 1)[1].split("## 関連ファイル", 1)[0]
+    audience_guidance = SKILL_INVENTORY.section("audience-persona-design", "## 障害時ガイダンス")
     assert "公開前入力不在" in audience_guidance
     assert "公開後入力不在" in audience_guidance
     assert "新規開設（公開前）で競合 / TTP / viewer-voice 成果物が不足" in audience_guidance
@@ -469,11 +463,11 @@ def test_setup_channel_prelaunch_persona_chain_propagates_context_without_analyt
     assert "全ベンチマーク動画のタグを集計（頻度順）" not in audience_prelaunch
     assert "全ベンチマーク動画のタグを集計（頻度順）" in audience_postlaunch
 
-    viewing_overview = viewing_scene.split("## Overview", 1)[1].split("## 完了条件", 1)[0]
+    viewing_overview = SKILL_INVENTORY.section("viewing-scene", "## Overview")
     assert "新規開設（公開前）" in viewing_overview
     assert "公開後" in viewing_overview
     assert "実行コンテキストが明示されない場合もこちら" in viewing_overview
-    guard = viewing_scene.split("### 停止する fail", 1)[1].split("### 許容する fail", 1)[0]
+    guard = SKILL_INVENTORY.section("viewing-scene", "### 停止する fail")
     assert "新規開設（公開前）" in guard
     assert "公開後に `reports/analysis_*.md` が無い" in guard
     assert "`reports/analysis_*.md` が無い" not in guard.replace(
@@ -489,8 +483,7 @@ def test_setup_channel_prelaunch_persona_chain_propagates_context_without_analyt
 
 
 def test_viewing_scene_keeps_post_publish_inputs_and_analysis_phases() -> None:
-    viewing_scene = _read(".claude/skills/viewing-scene/SKILL.md")
-    flow = viewing_scene.split("## 実行フロー", 1)[1].split("## 障害時ガイダンス", 1)[0]
+    flow = SKILL_INVENTORY.section("viewing-scene", "## 実行フロー")
 
     assert "**公開後**:" in flow
     assert "`reports/` の最新分析レポートを読み込む" in flow
@@ -664,11 +657,10 @@ def test_channel_new_pre_wf_new_checks_include_analytics_reporting_and_live_stre
 
 
 def test_wf_new_fail_fast_contract_points_to_setup_import_and_collection_local_suno_style() -> None:
-    wf_new = _read(".claude/skills/wf-new/SKILL.md")
     channel_new = _read(".claude/skills/channel-new/SKILL.md")
     doctor = _read("src/youtube_automation/commands/system/doctor.py")
 
-    hard_gates = wf_new.split("## Hard Gates", 1)[1].split("## When to Use", 1)[0]
+    hard_gates = SKILL_INVENTORY.section("wf-new", "## Hard Gates")
 
     assert "config/channel/` が存在し、`load_config()` でロードできること" in hard_gates
     assert "存在しない場合は `/setup --channel`" in hard_gates
@@ -723,8 +715,7 @@ def test_analytics_analyze_requires_numeric_retention_evidence_for_full_data() -
     [".claude/skills/analytics/SKILL.md"],
 )
 def test_revised_analytics_skills_stop_when_channel_config_is_invalid(skill_path: str) -> None:
-    skill = _read(skill_path)
-    prerequisite = skill.split("## 共通前提", 1)[1].split("\n## ", 1)[0]
+    prerequisite = SKILL_INVENTORY.section(Path(skill_path).parent.name, "## 共通前提")
 
     assert "`load_config()` でロード可能" in prerequisite
     assert "停止" in prerequisite
@@ -941,10 +932,10 @@ def test_channel_new_followup_skill_routing_uses_new_contract() -> None:
 
 
 def test_skill_frontmatter_descriptions_disambiguate_sibling_routes() -> None:
-    benchmark_desc = _frontmatter(".claude/skills/benchmark/SKILL.md")["description"]
-    channel_new_desc = _frontmatter(".claude/skills/channel-new/SKILL.md")["description"]
-    videoup_desc = _frontmatter(".claude/skills/videoup/SKILL.md")["description"]
-    video_upload_desc = _frontmatter(".claude/skills/video-upload/SKILL.md")["description"]
+    benchmark_desc = _skill_frontmatter("benchmark")["description"]
+    channel_new_desc = _skill_frontmatter("channel-new")["description"]
+    videoup_desc = _skill_frontmatter("videoup")["description"]
+    video_upload_desc = _skill_frontmatter("video-upload")["description"]
 
     assert "「競合分析」" not in benchmark_desc
     assert "「競合データ収集」" in benchmark_desc
@@ -1019,7 +1010,7 @@ def test_first_post_playlist_initialization_contract_is_documented() -> None:
     setup_channel = _read(".claude/skills/setup/references/channel-mode.md")
     checklist = _read(".claude/skills/video-upload/references/posting-checklist.md")
 
-    description = _frontmatter(".claude/skills/playlist/SKILL.md")["description"]
+    description = _skill_frontmatter("playlist")["description"]
     for trigger in ("初投稿", "初回投稿", "初回公開前にプレイリスト初期化"):
         assert trigger in description
 
@@ -1114,7 +1105,7 @@ def test_distrokid_skill_uses_helper_name() -> None:
     skill_path = ROOT / ".claude" / "skills" / "distrokid-helper" / "SKILL.md"
     assert skill_path.exists()
 
-    frontmatter = _frontmatter(".claude/skills/distrokid-helper/SKILL.md")
+    frontmatter = _skill_frontmatter("distrokid-helper")
     assert frontmatter["name"] == "distrokid-helper"
     assert (skill_path.parent / "references" / "distrokid_prepare.py").is_file()
     assert (skill_path.parent / "references" / "spec-example.json").is_file()
@@ -1188,7 +1179,7 @@ def test_community_draft_does_not_require_upstream_adr() -> None:
 
 
 def test_skill_config_defaults_have_read_gate_in_skill_docs() -> None:
-    skill_dirs = sorted(path.parent for path in (ROOT / ".claude" / "skills").glob("*/config.default.yaml"))
+    skill_dirs = [path for path in SKILL_INVENTORY.skill_directories() if (path / "config.default.yaml").is_file()]
     assert skill_dirs
 
     for skill_dir in skill_dirs:
@@ -1393,11 +1384,10 @@ def test_channel_new_regeneration_documents_ttp_wf_new_readiness_gate() -> None:
 
 
 def test_thumbnail_compare_documents_planning_thumbnail_runtime_contract() -> None:
-    skill = _read(".claude/skills/thumbnail-compare/SKILL.md")
-    prerequisites = skill.split("## 前提", 1)[1].split("## 想定 API call 数", 1)[0]
-    phase_one = skill.split("### Phase 1: サムネイル収集", 1)[1].split("### Phase 2:", 1)[0]
-    troubleshooting = skill.split("## 障害時ガイダンス", 1)[1].split("## 関連ファイル", 1)[0]
-    related_files = skill.split("## 関連ファイル", 1)[1]
+    prerequisites = SKILL_INVENTORY.section("thumbnail-compare", "## 前提")
+    phase_one = SKILL_INVENTORY.section("thumbnail-compare", "### Phase 1: サムネイル収集（スクリプト実行）")
+    troubleshooting = SKILL_INVENTORY.section("thumbnail-compare", "## 障害時ガイダンス")
+    related_files = SKILL_INVENTORY.section("thumbnail-compare", "## 関連ファイル")
 
     for section in (prerequisites, phase_one, related_files):
         assert "collections/live/*/10-assets/thumbnail.jpg" in section
@@ -1414,8 +1404,7 @@ def test_thumbnail_compare_documents_planning_thumbnail_runtime_contract() -> No
 
 
 def test_thumbnail_background_generation_is_noninteractive_and_observed_to_completion() -> None:
-    skill = _read(".claude/skills/thumbnail/SKILL.md")
-    completion = skill.split("## 所要時間と完了報告", 1)[1].split("## 障害時ガイダンス", 1)[0]
+    completion = SKILL_INVENTORY.section("thumbnail", "## 所要時間と完了報告")
 
     for expected in (
         "-y < /dev/null",
@@ -1432,8 +1421,7 @@ def test_thumbnail_background_generation_is_noninteractive_and_observed_to_compl
 
 
 def test_channel_new_setting_push_mode_contract_is_documented() -> None:
-    channel_new = _read(".claude/skills/channel-new/SKILL.md")
-    description = _frontmatter(".claude/skills/channel-new/SKILL.md")["description"]
+    description = _skill_frontmatter("channel-new")["description"]
 
     for trigger in (
         "設定反映",
@@ -1444,11 +1432,11 @@ def test_channel_new_setting_push_mode_contract_is_documented() -> None:
     ):
         assert trigger in description
 
-    overview = channel_new.split("## Overview", 1)[1].split("## モード判別", 1)[0]
+    overview = SKILL_INVENTORY.section("channel-new", "## Overview")
     assert "設定 push モード" in overview
     assert "本モードへ直行し、他モードの Step はスキップする" in overview
 
-    mode = channel_new.split("## 設定 push モード", 1)[1].split("## 障害時ガイダンス", 1)[0]
+    mode = SKILL_INVENTORY.section("channel-new", "## 設定 push モード（運用中チャンネルの設定同期）")
     for command in (
         "uv run yt-channel-settings diff",
         "uv run yt-channel-settings push",
@@ -1738,7 +1726,7 @@ def test_automation_schedule_skill_contract() -> None:
     assert "allow_external_publish" in head
 
     # 兄弟スキルとの相互排他（ルール①）
-    fm = _frontmatter(skill_path)
+    fm = _skill_frontmatter("automation-schedule")
     assert "/automation-update" in fm["description"]
     assert "/wf-next" in fm["description"]
 
