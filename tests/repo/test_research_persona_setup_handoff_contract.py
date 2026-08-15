@@ -10,7 +10,6 @@ SKILLS_DIR = REPO_ROOT / ".claude" / "skills"
 TARGET_SKILLS = (
     "audience-persona-design",
     "channel-research",
-    "discover-competitors",
     "market-research",
     "thumbnail-research",
     "video-analyze",
@@ -46,7 +45,7 @@ OCCURRENCE_LEDGER = (
         ),
     ),
     *_occurrences(
-        "discover-competitors",
+        "channel-research",
         (
             ("upstream-setup", "new-opening"),
             ("new-channel-seed", "new-opening"),
@@ -105,30 +104,28 @@ OCCURRENCE_LEDGER = (
 # every route to its exact active Markdown context without duplicating long prose.
 ROUTE_CONTEXT_SHA256 = {
     "audience-persona-design": "689f9b8c157450a8881ab51852d4d896ffff9bfbfbcb2ed5f3f9975f88903512",
-    "channel-research": "b48a5b4a26e1a8901161f85faa26bb5ecbee228035c9c4366ee453d0e6af8491",
-    "discover-competitors": "4c87873652b5c3ca7bf32227e8622a883bddae8aea26942af509ac9f97a29b85",
-    "market-research": "b54b28a9d6cddd9d91e49002b787b38a7b5381546a6fa643532d34aef451bfef",
+    "channel-research": "244decfc9a6f23f871815ca5814c38e36bb65c8c6374e5dc9051f73989bb5e66",
+    "market-research": "b9073a5389dcf13bd85ea83b99f69ab4306806118c1ad1433947b6a281bf4937",
     "thumbnail-research": "6b32a4225ab8e86a8d6772515672ddc57413a24f13351d441ebf479191dcf527",
     "video-analyze": "f28ee9c9b0a18c3ecae15b631f970d780b18bda72185a25935b56f0a66ba6552",
-    "viewer-voice": "a93cc57011974813712992610bc39cc223a162e6c1ff7ead1aa4b58e373961a2",
+    "viewer-voice": "976755019cfee0ccecb602d26ba86f4cc8701fbb8ea66ec500477317d40d682f",
     "viewing-scene": "03df44376f9ef446067801d083cbeeceec339a2c24b1e248b4443b4c51914f83",
 }
 SETUP_ASSET_OWNERS = {
-    "audience-persona-design": "persona-branding-readiness.md",
-    "channel-research": "ttp-seed-and-duration.md",
-    "discover-competitors": "persona-branding-readiness.md",
-    "market-research": "new-channel-bootstrap.md",
-    "viewer-voice": "persona-branding-readiness.md",
-    "viewing-scene": "persona-branding-readiness.md",
+    "audience-persona-design": ("persona-branding-readiness.md",),
+    "channel-research": ("ttp-seed-and-duration.md", "persona-branding-readiness.md"),
+    "market-research": ("new-channel-bootstrap.md",),
+    "viewer-voice": ("persona-branding-readiness.md",),
+    "viewing-scene": ("persona-branding-readiness.md",),
 }
 UNCHANGED_SKILL_SHA256 = {
     "thumbnail-research": "e3b769a72ebeec411244ed6358e9ffc3f44a4817bac60e6e972ff86081e4a723",
     "video-analyze": "721d555b7bbca0f35e2391961781c71d7af639e89ef4de0fdbf2fed2e6945d9b",
 }
 RESIDUAL_LINE_MARKERS = {
-    "channel-research": ("description:", "- `後工程`:"),
-    "discover-competitors": (
+    "channel-research": (
         "description:",
+        "- `後工程`:",
         "- 実行場所がチャンネルリポジトリ",
         "- 方向性決定・config 生成",
         "- `/channel-new` 分析モード:",
@@ -140,14 +137,16 @@ RESIDUAL_LINE_MARKERS = {
     ),
 }
 RESIDUAL_SHA256 = {
-    "channel-research": "e000a60f21eff7d119bbffd11252eeb8247e29e25354e55caf0c4fcd08327600",
-    "discover-competitors": "c1434d5d91f521e1023aebfce6d56c09960faf1a5a6d97996df508cb19b2aed1",
-    "market-research": "a6350cc0f44adf9895aefb0b98fc177415b5bebb55e17b3fb056d3df8d111448",
+    "channel-research": "c29ef43d244dfde2fa85f870d28fcfa2e77a6e997299cf98c6368da31d297b5d",
+    "market-research": "b2534f8d5828c5d5d5c67138ac2d4d616f12b25793337f82a67f15bbad90d0fe",
 }
 
 
 def _skill_text(skill: str) -> str:
-    return (SKILLS_DIR / skill / "SKILL.md").read_text(encoding="utf-8")
+    text = (SKILLS_DIR / skill / "SKILL.md").read_text(encoding="utf-8")
+    if skill == "channel-research":
+        text += (SKILLS_DIR / skill / "references" / "discover.md").read_text(encoding="utf-8")
+    return text
 
 
 def _active_route_snapshot(text: str) -> tuple[bytes, bool]:
@@ -187,13 +186,13 @@ def _route_violations(skill: str, text: str) -> set[str]:
         violations.add("active route context ledger")
     if inactive_route:
         violations.add("inactive Markdown route")
-    asset = SETUP_ASSET_OWNERS.get(skill)
-    if asset is not None and f".claude/skills/setup/references/{asset}" not in text:
-        violations.add(f"setup asset:{asset}")
+    for asset in SETUP_ASSET_OWNERS.get(skill, ()):
+        if f".claude/skills/setup/references/{asset}" not in text:
+            violations.add(f"setup asset:{asset}")
     return violations
 
 
-def test_all_eight_skills_match_the_context_classified_occurrence_ledger() -> None:
+def test_all_seven_skills_match_the_context_classified_occurrence_ledger() -> None:
     assert {entry[0] for entry in OCCURRENCE_LEDGER} == set(TARGET_SKILLS)
     assert len(OCCURRENCE_LEDGER) == 35
     assert sum(entry[3] == "redirected" for entry in OCCURRENCE_LEDGER) == 17
@@ -208,9 +207,9 @@ def test_opening_route_validator_detects_wrong_redirect_and_residual_overwrite()
     wrong_redirect = audience.replace("`/setup --channel` Step 7", "`/channel-new` Step 7", 1)
     assert "active route context ledger" in _route_violations("audience-persona-design", wrong_redirect)
 
-    discover = _skill_text("discover-competitors")
-    residual_overwrite = discover.replace("/channel-new 分析モード", "/setup --channel", 1)
-    assert "active route context ledger" in _route_violations("discover-competitors", residual_overwrite)
+    research = _skill_text("channel-research")
+    residual_overwrite = research.replace("/channel-new 分析モード", "/setup --channel", 1)
+    assert "active route context ledger" in _route_violations("channel-research", residual_overwrite)
 
 
 def test_route_validator_rejects_inactive_mixed_swapped_and_relocated_routes() -> None:
@@ -257,7 +256,7 @@ def test_skills_without_opening_occurrences_remain_byte_identical() -> None:
 
 def test_analysis_and_direction_residual_routes_remain_byte_identical() -> None:
     for skill, markers in RESIDUAL_LINE_MARKERS.items():
-        lines = (SKILLS_DIR / skill / "SKILL.md").read_bytes().splitlines(keepends=True)
+        lines = _skill_text(skill).encode().splitlines(keepends=True)
         selected = [next(line for line in lines if line.decode().startswith(marker)) for marker in markers]
         payload = b"".join(selected)
         assert sha256(payload).hexdigest() == RESIDUAL_SHA256[skill]

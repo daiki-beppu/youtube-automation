@@ -42,11 +42,38 @@ def _freshness(root: Path) -> tuple[float, str]:
     return float(value), source
 
 
+def _benchmark_reports(root: Path) -> list[Path]:
+    return [
+        path
+        for path in (root / "docs" / "benchmarks").glob("*.md")
+        if path.name not in {"README.md", "common-patterns.md", "thumbnail-analysis.md", "thumbnail-text-profile.md"}
+    ]
+
+
+def _result(
+    step: str,
+    decision: str,
+    reason: str,
+    freshness_days: float,
+    source: str,
+    artifacts: list[Path],
+    root: Path,
+) -> StateResult:
+    return {
+        "step": step,
+        "decision": decision,
+        "reason": reason,
+        "freshness_days": freshness_days,
+        "freshness_source": source,
+        "artifacts": sorted(path.relative_to(root).as_posix() for path in artifacts),
+    }
+
+
 def evaluate(root: Path, step: str, now: float) -> tuple[int, StateResult]:
     root = root.resolve()
     freshness_days, source = _freshness(root)
     analytics = root / "config" / "channel" / "analytics.json"
-    if not analytics.is_file():
+    if step == "benchmark" and not analytics.is_file():
         return EXIT_BLOCKED, {
             "step": step,
             "decision": "blocked",
@@ -57,11 +84,54 @@ def evaluate(root: Path, step: str, now: float) -> tuple[int, StateResult]:
         }
 
     data = list((root / "data").glob("benchmark_*.json"))
-    reports = [
-        path
-        for path in (root / "docs" / "benchmarks").glob("*.md")
-        if path.name not in {"README.md", "common-patterns.md", "thumbnail-analysis.md", "thumbnail-text-profile.md"}
-    ]
+    reports = _benchmark_reports(root)
+
+    if step == "discover":
+        if not reports:
+            return EXIT_BLOCKED, _result(
+                step,
+                "blocked",
+                "benchmark_reports_missing",
+                freshness_days,
+                source,
+                [],
+                root,
+            )
+        markdown = list((root / "research").glob("*-discovery.md"))
+        csv = list((root / "research").glob("*-discovery.csv"))
+        artifacts = [*markdown, *csv]
+        if not artifacts:
+            return EXIT_RUN, _result(
+                step,
+                "run",
+                "discover_outputs_missing",
+                freshness_days,
+                source,
+                artifacts,
+                root,
+            )
+        markdown_stems = {path.with_suffix("") for path in markdown}
+        csv_stems = {path.with_suffix("") for path in csv}
+        if markdown_stems != csv_stems:
+            return EXIT_RUN, _result(
+                step,
+                "run",
+                "discover_output_pair_incomplete",
+                freshness_days,
+                source,
+                artifacts,
+                root,
+            )
+        return EXIT_SKIP, _result(
+            step,
+            "skip",
+            "discover_output_pair_complete",
+            freshness_days,
+            source,
+            artifacts,
+            root,
+        )
+
     artifacts = sorted(path.relative_to(root).as_posix() for path in (*data, *reports))
     if not data or not reports:
         return EXIT_RUN, {
@@ -97,7 +167,7 @@ def evaluate(root: Path, step: str, now: float) -> tuple[int, StateResult]:
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--channel-dir", type=Path, default=Path.cwd())
-    parser.add_argument("--step", choices=("benchmark",), required=True)
+    parser.add_argument("--step", choices=("benchmark", "discover"), required=True)
     parser.add_argument("--now", type=float, default=None)
     parser.add_argument("--pretty", action="store_true")
     return parser

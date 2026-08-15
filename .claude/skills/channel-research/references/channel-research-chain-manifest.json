@@ -13,6 +13,19 @@
       "idempotency": {
         "script": "references/channel-research-chain-state.py"
       }
+    },
+    {
+      "id": "discover",
+      "skill": "channel-research",
+      "prerequisiteArtifacts": ["docs/benchmarks/*.md"],
+      "outputArtifacts": ["research/*-discovery.md", "research/*-discovery.csv"],
+      "approvalGate": {
+        "skip": true,
+        "configPath": "workflow.channel-research.skip_approvals.discover"
+      },
+      "idempotency": {
+        "script": "references/channel-research-chain-state.py"
+      }
     }
   ]
 }

@@ -74,6 +74,12 @@ _LEGACY_SKILL_CONFIG_ALIASES: Final[frozenset[str]] = frozenset({"postmortem"})
 _MOVED_SKILL_CONFIG_DEFAULTS: Final[dict[str, Path]] = {
     "benchmark": Path("channel-research", "config.default.yaml"),
     "collection-ideate": Path("wf-new", "references", "collection-ideate.config.default.yaml"),
+    "discover-competitors": Path("channel-research", "config.default.yaml"),
+}
+
+_MOVED_SKILL_CONFIG_SECTIONS: Final[dict[str, str]] = {
+    "benchmark": "benchmark",
+    "discover-competitors": "discover",
 }
 
 _THUMBNAIL_TEXT_RENDER_MODES = frozenset({"ai_burn_in", "deterministic"})
@@ -392,6 +398,14 @@ def load_skill_config(
 
     owner, section = _split_skill_config_key(skill)
     defaults = _load_yaml(_default_path(owner))
+    moved_section = _MOVED_SKILL_CONFIG_SECTIONS.get(owner)
+    if moved_section is not None:
+        selected_defaults = defaults.get(moved_section)
+        if not isinstance(selected_defaults, dict):
+            raise ConfigError(
+                f"skill-config {owner} は同梱 default の mapping 節 {moved_section!r} として存在する必要があります"
+            )
+        defaults = dict(selected_defaults)
 
     override_path = _resolve_channel_override(owner, channel_dir)
     if override_path is not None:

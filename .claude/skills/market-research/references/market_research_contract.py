@@ -84,6 +84,6 @@ def route_for(intent: Literal["market-comparison", "discover", "analyze-collecte
     """Keep market comparison, discovery, and collected-data analysis distinct."""
     return {
         "market-comparison": "market-research",
-        "discover": "discover-competitors",
+        "discover": "channel-research --discover",
         "analyze-collected": "channel-new",
     }[intent]

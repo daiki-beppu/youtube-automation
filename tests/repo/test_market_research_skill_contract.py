@@ -120,5 +120,5 @@ def test_dry_run_with_insufficient_evidence_is_fail_closed() -> None:
 
 def test_channel_new_and_discovery_keep_distinct_routes() -> None:
     assert contract.route_for("market-comparison") == "market-research"
-    assert contract.route_for("discover") == "discover-competitors"
+    assert contract.route_for("discover") == "channel-research --discover"
     assert contract.route_for("analyze-collected") == "channel-new"

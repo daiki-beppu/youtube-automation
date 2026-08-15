@@ -68,7 +68,7 @@ def test_sibling_routes_point_to_channel_new_analysis_mode() -> None:
     paths = (
         ".claude/skills/channel-research/SKILL.md",
         ".claude/skills/thumbnail-research/SKILL.md",
-        ".claude/skills/discover-competitors/SKILL.md",
+        ".claude/skills/channel-research/references/discover.md",
         ".claude/skills/market-research/SKILL.md",
     )
     for relative in paths:

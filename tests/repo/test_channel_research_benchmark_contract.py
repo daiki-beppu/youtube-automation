@@ -7,6 +7,8 @@ import os
 import re
 from pathlib import Path
 
+import yaml
+
 from tests.helpers.paths import REPO_ROOT
 from youtube_automation.configuration.skills import skill_config_default_relative_path
 from youtube_automation.domains.skills.inventory import SkillInventory
@@ -15,9 +17,10 @@ INVENTORY = SkillInventory(REPO_ROOT)
 SKILL_DIR = INVENTORY.skill_directory("channel-research")
 
 
-def test_channel_research_replaces_benchmark_and_exposes_benchmark_mode() -> None:
+def test_channel_research_replaces_legacy_skills_and_exposes_two_modes() -> None:
     assert SKILL_DIR.is_dir()
     assert not os.path.lexists(INVENTORY.skills_root / "benchmark")
+    assert not os.path.lexists(INVENTORY.skills_root / "discover-competitors")
 
     skill = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
     frontmatter = INVENTORY.frontmatter("channel-research")
@@ -28,12 +31,13 @@ def test_channel_research_replaces_benchmark_and_exposes_benchmark_mode() -> Non
     assert "2 個以上" in skill
     assert "0 個" in skill and "chain manifest" in skill
     assert "references/benchmark.md" in skill
+    assert "references/discover.md" in skill
 
 
 def test_chain_manifest_has_only_benchmark_step_and_complete_schema() -> None:
     manifest = json.loads((SKILL_DIR / "references/channel-research-chain-manifest.json").read_text())
     assert manifest["chainId"] == "channel-research"
-    assert [step["id"] for step in manifest["steps"]] == ["benchmark"]
+    assert [step["id"] for step in manifest["steps"]] == ["benchmark", "discover"]
     step = manifest["steps"][0]
     assert set(step) == {
         "id",
@@ -47,6 +51,10 @@ def test_chain_manifest_has_only_benchmark_step_and_complete_schema() -> None:
     assert step["outputArtifacts"] == ["data/benchmark_*.json", "docs/benchmarks/*.md"]
     assert step["approvalGate"]["skip"] is True
     assert step["idempotency"]["script"] == "references/channel-research-chain-state.py"
+    discover = manifest["steps"][1]
+    assert discover["skill"] == "channel-research"
+    assert discover["prerequisiteArtifacts"] == ["docs/benchmarks/*.md"]
+    assert discover["outputArtifacts"] == ["research/*-discovery.md", "research/*-discovery.csv"]
 
 
 def test_benchmark_collector_has_one_skill_reference_owner() -> None:
@@ -68,6 +76,17 @@ def test_benchmark_config_key_keeps_legacy_override_and_uses_moved_default() -> 
     assert "config/skills/benchmark.yaml" in skill
     assert "`config/skills/channel-research.yaml` は先行作成しない" in skill
     assert "yt-skills migrate-config" in skill
+
+
+def test_discover_config_key_keeps_legacy_override_and_uses_namespaced_default() -> None:
+    assert skill_config_default_relative_path("discover-competitors") == Path("channel-research/config.default.yaml")
+    skill = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
+    assert 'load_skill_config("discover-competitors")' in skill
+    assert "config/skills/discover-competitors.yaml" in skill
+    defaults = yaml.safe_load((SKILL_DIR / "config.default.yaml").read_text(encoding="utf-8"))
+    assert set(defaults) == {"benchmark", "discover"}
+    assert defaults["benchmark"]["freshness_days"] == 3
+    assert defaults["discover"]["search"]["top"] == 20
 
 
 def test_active_skills_no_longer_route_to_legacy_benchmark_command() -> None:

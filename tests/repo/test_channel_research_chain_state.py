@@ -68,3 +68,31 @@ def test_legacy_override_controls_stale_decision(tmp_path: Path, state: ModuleTy
     assert code == state.EXIT_RUN
     assert result["reason"] == "benchmark_outputs_stale"
     assert result["freshness_source"] == "config/skills/benchmark.yaml"
+
+
+def test_discover_blocks_without_benchmark_and_runs_without_output(tmp_path: Path, state: ModuleType) -> None:
+    now = 2_000_000_000.0
+
+    blocked_code, blocked = state.evaluate(tmp_path, "discover", now)
+    _touch(tmp_path / "docs/benchmarks/rival.md", now)
+    run_code, run = state.evaluate(tmp_path, "discover", now)
+
+    assert blocked_code == state.EXIT_BLOCKED
+    assert blocked["reason"] == "benchmark_reports_missing"
+    assert run_code == state.EXIT_RUN
+    assert run["reason"] == "discover_outputs_missing"
+
+
+def test_discover_skips_only_for_complete_output_pair(tmp_path: Path, state: ModuleType) -> None:
+    now = 2_000_000_000.0
+    _touch(tmp_path / "docs/benchmarks/rival.md", now)
+    _touch(tmp_path / "research/lofi-discovery.md", now)
+
+    run_code, run = state.evaluate(tmp_path, "discover", now)
+    _touch(tmp_path / "research/lofi-discovery.csv", now)
+    skip_code, skip = state.evaluate(tmp_path, "discover", now)
+
+    assert run_code == state.EXIT_RUN
+    assert run["reason"] == "discover_output_pair_incomplete"
+    assert skip_code == state.EXIT_SKIP
+    assert skip["reason"] == "discover_output_pair_complete"

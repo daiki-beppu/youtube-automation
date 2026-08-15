@@ -17,7 +17,7 @@ BOOTSTRAP_REFERENCE_MD = SKILL_DIR / "references" / "new-channel-bootstrap.md"
 TTP_SEED_DURATION_REFERENCE_MD = SKILL_DIR / "references" / "ttp-seed-and-duration.md"
 PERSONA_BRANDING_READINESS_REFERENCE_MD = SKILL_DIR / "references" / "persona-branding-readiness.md"
 CHANNEL_NEW_SKILL_MD = REPO_ROOT / ".claude" / "skills" / "channel-new" / "SKILL.md"
-CHANNEL_NEW_RESIDUAL_SKILL_SHA256 = "6582a155ed94b3432fa1d6a01df58147bbb0e87e8c85fb76b9ca028dd1ef0602"
+CHANNEL_NEW_RESIDUAL_SKILL_SHA256 = "0c925fc957a6ee2aa3676b6a8dc179df80e9f1ef4616ee879272924400a557d5"
 CHANNEL_NEW_DESCRIPTION_SHA256 = "6ac621c1d796be7943c9ba2a0e0ff42a17c9ee2baa621770e2b9cb2236da7faa"
 CHANNEL_NEW_ROUTING_SHA256 = "1eef9878b5fa93a85a5985308a1be484b95e071157c355bd584e4f898b63cc60"
 OPENING_ASSETS = {
@@ -317,7 +317,7 @@ def test_skill_dispatches_persona_branding_readiness_reference_before_step_6_act
 
     step_6 = skill.index("### Step 6:")
     dispatch = skill.index(f"]({relative_reference})", step_6)
-    first_delegation = skill.index("/discover-competitors", dispatch)
+    first_delegation = skill.index("/channel-research --discover", dispatch)
 
     assert PERSONA_BRANDING_READINESS_REFERENCE_MD.is_file()
     assert step_6 < dispatch < first_delegation
@@ -544,6 +544,8 @@ def test_moved_opening_assets_preserve_pre_move_bytes_or_owner_only_semantics() 
             payload = payload.replace(b"/wf-new --schedule", b"/automation-schedule", 1)
         if asset == "ttp-seed-and-duration.md":
             payload = payload.replace(b".claude/skills/setup/references/", b".claude/skills/channel-new/references/")
+        if asset in {"ttp-seed-and-duration.md", "persona-branding-readiness.md"}:
+            payload = payload.replace(b"/channel-research --discover", b"/discover-competitors")
         assert sha256(payload).hexdigest() == expected
 
 

@@ -107,7 +107,7 @@ uv run yt-doctor --json
 /wf-new            → Phase 2: 初回コレクション制作
 
 # 任意後続: 追加調査や方向性再検討が必要なときだけ実行
-/discover-competitors → 追加競合候補の発掘
+/channel-research --discover → 追加競合候補の発掘
 /channel-research --benchmark → 承認済み TTP 対象の動画データ収集
 /viewer-voice         → 公開後のコメント再分析
 /channel-new 分析モード → /channel-research --benchmark / /viewer-voice 後の詳細分析
