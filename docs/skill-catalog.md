@@ -37,9 +37,8 @@ PDCA 対応: 準備 = 準備する / Plan = 調べる → 決める / Do = 進�
 ## 公開する
 
 - `/distrokid-helper` — Use when コレクションの楽曲を DistroKid 配信用に準備し、distrokid-helper Chrome 拡張へ渡すローカルサーバーを起動したいとき（30-distrokid 生成 / disc 分割 / metadata.md / ジャケット 3000×3000 新規生成 / uv run yt-collection-serve 起動）。
-- `/live-chat-reply` — Use when 配信中の YouTube ライブチャットへ常駐 daemon で自動返信するとき。
 - `/publish` — Use when 完成した動画を公開工程へ進めるとき。
-- `/reply` — Use when 公開済み YouTube 動画のコメントへ自動返信するとき。
+- `/reply` — Use when 公開済み YouTube 動画のコメントへ返信するとき、または --live で配信中のライブチャットへ常駐 daemon で自動返信するとき。
 
 ## 振り返る
 

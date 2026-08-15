@@ -1,19 +1,6 @@
----
-name: live-chat-reply
-purpose: 公開する
-description: "Use when 配信中の YouTube ライブチャットへ常駐 daemon で自動返信するとき。「ライブチャット返信」「チャット自動返信」「live-chat-reply」で発動。公開済み動画コメントは /reply、VPS・動画配信本体は /streaming を使う"
----
+# live mode — 配信中ライブチャットへの常駐返信
 
-## 前後工程
-
-- `前工程`: `/streaming`
-- `後工程`: `なし`
-- `委譲先`: `なし`
-
-## 成果物
-
-- `書き込む`: `/var/lib/live-chat-reply/<channel>/live_chat_reply_history.json`
-- `読み込む`: `config/channel/comments.json`, `auth/token.json`, `<CODEX_HOME>/auth.json`
+`/reply --live` からのみ実行する。前工程は `/streaming`、後工程と委譲先はない。`/var/lib/live-chat-reply/<channel>/live_chat_reply_history.json` を書き込み、`config/channel/comments.json`、`auth/token.json`、`<CODEX_HOME>/auth.json` を読み込む。
 
 ## Hard Gates
 
@@ -21,6 +8,7 @@ description: "Use when 配信中の YouTube ライブチャットへ常駐 daemo
 
 - `config/channel/comments.json` が存在し、`comments.live_chat.enabled` が `true`。無ければ `examples/channel_config.example/comments.json` から作成する
 - `terraform version` が 1.10 以上で、`infra/terraform/streaming/` と `.claude/skills/streaming/references/deploy_live_chat.sh` が存在する。無ければ automation を更新して `/streaming` を実行する
+- `terraform -chdir=infra/terraform/streaming output -raw instance_ip` で配信 VPS を解決し、`ssh root@$INSTANCE_IP 'systemctl is-active youtube-stream'` が `active` を返す。VPS 未構築、接続失敗、service 非 active は前提未達として停止し、`/streaming` の構築・復旧を案内する。active broadcast がまだ無いだけなら daemon の待機契約を維持して続行する
 - `auth/client_secrets.json` と `auth/token.json`、`${CODEX_HOME:-$HOME/.codex}/auth.json` が存在する。認証が必要なら AI が `uv run yt-oauth` / `codex login` を起動して完了まで待ち、人間はブラウザ上のログイン・アカウント選択・同意だけを行う
 - 1Password CLI `op` が利用でき、session が有効。未認証なら AI が `op signin` を起動し、人間が 1Password app 上で承認する。JSON 本文をチャット、argv、tfvars、リポジトリへ出さない
 

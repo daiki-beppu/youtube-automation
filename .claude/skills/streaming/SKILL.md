@@ -1,7 +1,7 @@
 ---
 name: streaming
 purpose: 進める
-description: "Use when ライブ配信用 Vultr VPS・動画配信本体を Terraform で構築・運用・トラブルシュートするとき。「ライブ配信」「24/7 配信」「配信止まった」で発動。ライブチャット自動返信は /live-chat-reply を使う"
+description: "Use when ライブ配信用 Vultr VPS・動画配信本体を Terraform で構築・運用・トラブルシュートするとき。「ライブ配信」「24/7 配信」「配信止まった」で発動。ライブチャット自動返信は /reply の live mode を使う"
 ---
 
 ## 前後工程
@@ -45,7 +45,7 @@ description: "Use when ライブ配信用 Vultr VPS・動画配信本体を Terr
 | workspace 切替 | `terraform -chdir=infra/terraform/streaming workspace select <workspace>` |
 | 選択 workspace の GCS state | `workspace=$(terraform -chdir=infra/terraform/streaming workspace show); bucket=$(jq -r '.backend.config.bucket' infra/terraform/streaming/.terraform/terraform.tfstate); gcloud storage ls "gs://${bucket}/streaming/${workspace}.tfstate"` |
 | VPS / state 突合診断 | `VULTR_API_KEY="$(op read 'op://Personal/Vultr/api_key')" uv run yt-doctor --json` (`streaming_vps_state` を確認) |
-| ライブチャット自動返信 | `/live-chat-reply` |
+| ライブチャット自動返信 | `/reply --live` |
 | 動画差し替え | `$(git rev-parse --show-toplevel)/.claude/skills/streaming/references/swap_video.sh ./new_video.mp4` |
 | 帯域チェック | `uv run yt-stream-bandwidth --check-threshold --terraform-dir infra/terraform/streaming` |
 | 月間帯域見積もり用の MP4 実測 | `uv run yt-stream-bandwidth --probe-bitrate ./stream.mp4` |
