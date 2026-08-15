@@ -14,7 +14,7 @@
     },
     {
       "id": "pinned-comment",
-      "skill": "pinned-comment",
+      "skill": "publish",
       "prerequisiteArtifacts": ["collections/live/*/workflow-state.json"],
       "outputArtifacts": ["post_publish_history.json"],
       "approvalGate": {

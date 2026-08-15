@@ -3,7 +3,7 @@
 ## 前後工程
 
 - `前工程`: `/wf-new`, `/video --generate`, `/video-description`, `/publish --playlist`, `/thumbnail`
-- `後工程`: `/post-publish`, `/publish --community`, `/metadata-audit`, `/pinned-comment`, `/live-clean`
+- `後工程`: `/post-publish`, `/publish --community`, `/publish --pinned`, `/metadata-audit`, `/live-clean`
 - `委譲先`: `/post-publish`
 
 ## 成果物
@@ -121,7 +121,7 @@ $ARGUMENTS
    - この turn でユーザーが即時公開を指定しても、アップローダーは即時公開しない。予約設定を追加して再 plan するか、非公開でアップロード後に YouTube Studio で手動公開するかを人間に選んでもらう。会話を黙って durable config で上書きしない
 1. **Complete Collection アップロード** — マスター動画、メタデータ（descriptions.md から読み込み）、サムネイル設定
 2. **live 移動** — `collections/planning/` → `collections/live/`
-3. **公開後処理** — `load_config().workflow.post_publish.configured` が `true` なら、live 移動後のコレクションパスを `/post-publish` に引き継ぎ、manifest 順の `community-post → pinned-comment → metadata-audit` を実行する。チェーン側の承認・履歴・再開契約に委ね、ここで子スキルを個別に再実装しない。未設定（`false`）なら後方互換として、`config/channel/community.json` が存在する場合だけ従来どおり `/publish --community` を案内し、後続 2 スキルは手動実行のままとする
+3. **公開後処理** — `load_config().workflow.post_publish.configured` が `true` なら、live 移動後のコレクションパスを `/post-publish` に引き継ぎ、manifest 順の `community-post → pinned-comment → metadata-audit` を実行する。チェーン側の承認・履歴・再開契約に委ね、ここで委譲先を個別に再実装しない。未設定（`false`）なら後方互換として、`config/channel/community.json` が存在する場合だけ従来どおり `/publish --community` を案内し、`/publish --pinned` と `/metadata-audit` は手動実行のままとする
 
 メタデータは `descriptions.md` から title / description / tags を優先使用。存在しない場合は `BAHMetadataGenerator` で自動生成にフォールバック。
 

@@ -731,7 +731,7 @@
     },
     {
       "old_owner": "legacy..claude.skills.pinned-comment.SKILL.md",
-      "exact_new_owner": ".claude/skills/pinned-comment/SKILL.md",
+      "exact_new_owner": ".claude/skills/publish/references/pinned.md",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"
