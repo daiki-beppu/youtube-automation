@@ -1,6 +1,6 @@
-# Suno V5.5 歌詞テンプレート集（`/suno-lyric` 用）
+# Suno V5.5 歌詞テンプレート集（`/music --lyric` 用）
 
-`/suno-lyric` が **名言エッセンス → Suno V5.5 歌詞** に再構築するときの構造テンプレ。
+`/music --lyric` が **名言エッセンス → Suno V5.5 歌詞** に再構築するときの構造テンプレ。
 Suno UI の Lyrics 入力欄プレースホルダ（公式案内）の形式に準拠。
 
 ## Suno V5.5 セクションタグ

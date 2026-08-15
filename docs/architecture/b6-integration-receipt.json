@@ -899,35 +899,35 @@
     },
     {
       "old_owner": "legacy..claude.skills.suno-lyric.SKILL.md",
-      "exact_new_owner": ".claude/skills/suno-lyric/SKILL.md",
+      "exact_new_owner": ".claude/skills/music/references/lyric.md",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"
     },
     {
       "old_owner": "legacy..claude.skills.suno-lyric.references.check_lyric_duplication",
-      "exact_new_owner": ".claude/skills/suno-lyric/references/check_lyric_duplication.py",
+      "exact_new_owner": ".claude/skills/music/references/check_lyric_duplication.py",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"
     },
     {
       "old_owner": "legacy..claude.skills.suno-lyric.references.lyric-templates.md",
-      "exact_new_owner": ".claude/skills/suno-lyric/references/lyric-templates.md",
+      "exact_new_owner": ".claude/skills/music/references/lyric-templates.md",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"
     },
     {
       "old_owner": "legacy..claude.skills.suno-lyric.references.persona-quote-affinity.md",
-      "exact_new_owner": ".claude/skills/suno-lyric/references/persona-quote-affinity.md",
+      "exact_new_owner": ".claude/skills/music/references/persona-quote-affinity.md",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"
     },
     {
       "old_owner": "legacy..claude.skills.suno-lyric.references.review-rubric.md",
-      "exact_new_owner": ".claude/skills/suno-lyric/references/review-rubric.md",
+      "exact_new_owner": ".claude/skills/music/references/review-rubric.md",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"

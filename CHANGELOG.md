@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(skills)`: `/music --lyric` に旧 `/suno-lyric` の歌詞生成・hard gate・generator/reviewer 契約を統合する。chain を `prompt` → `lyric` へ拡張し、mode 別 config、旧 override 互換と `suno-lyric.yaml` → `music.yaml::lyric` の明示 migration を追加して、旧 skill directory と利用者導線・配布・site 契約を更新する（#3825）。
+
 - `feat(skills)`: `/music` を新設し、`--prompt` に旧 `/suno` の Style / プロンプト生成契約を統合する。1-step chain、mode 別 config、旧 override 互換と `suno.yaml` → `music.yaml::prompt` の明示 migration を追加し、旧 skill directory と利用者導線・配布・site 契約を更新する（#3824）。
 
 - `feat(skills)`: `/channel-strategy --direction` に旧方向性検討 Step D1〜D5 を統合し、初回 chain から独立した 4 番目の mode として公開する。旧 `/channel-new` skill を削除し、方向性資産は `channel-strategy`、config・branding 共有資産は `setup` へ移して利用者導線・配布・site 契約を更新する（#3823）。

@@ -30,8 +30,8 @@ WF_NEW_SKILL_MD = _SKILL_INVENTORY.skill_directory("wf-new") / "SKILL.md"
 WF_NEW_PHASE2_MD = _SKILL_INVENTORY.resolve_reference("wf-new", "references/phase2.md")
 WF_AUTO_SKILL_MD = _SKILL_INVENTORY.resolve_reference("wf-new", "references/auto.md")
 SUNO_HELPER_PHASE_CONSTANTS_TS = _REPO_ROOT / "extensions" / "shared" / "constants.ts"
-SUNO_LYRIC_SKILL_MD = _SKILL_INVENTORY.skill_directory("suno-lyric") / "SKILL.md"
-REVIEW_RUBRIC_MD = _SKILL_INVENTORY.resolve_reference("suno-lyric", "references/review-rubric.md")
+SUNO_LYRIC_SKILL_MD = _SKILL_INVENTORY.resolve_reference("music", "references/lyric.md")
+REVIEW_RUBRIC_MD = _SKILL_INVENTORY.resolve_reference("music", "references/review-rubric.md")
 
 
 def _read(path: Path = SKILL_MD) -> str:
@@ -377,7 +377,7 @@ def test_wf_auto_runs_suno_helper_browser_flow_instead_of_handing_it_off() -> No
 
 
 def test_suno_lyric_documents_generator_reviewer_contract() -> None:
-    """Issue #1485: /suno-lyric の生成と意味的品質検証は別コンテキストで行う。"""
+    """Issue #1485: /music --lyric の生成と意味的品質検証は別コンテキストで行う。"""
     text = _read(SUNO_LYRIC_SKILL_MD)
     for token in (
         "Generator-Reviewer Quality Gate",
@@ -389,7 +389,7 @@ def test_suno_lyric_documents_generator_reviewer_contract() -> None:
         "suno-lyrics.json",
         "suno-lyrics.json` と `references/review-rubric.md` のみ",
     ):
-        assert token in text, f"/suno-lyric SKILL.md に generator-reviewer 契約がない（`{token}` 不在）"
+        assert token in text, f"/music --lyric SKILL.md に generator-reviewer 契約がない（`{token}` 不在）"
 
 
 def test_suno_lyric_json_contract_supplies_reviewer_context() -> None:
@@ -406,20 +406,20 @@ def test_suno_lyric_json_contract_supplies_reviewer_context() -> None:
         "quote_essence",
         "`/music --prompt` の merge loader は `name` / `lyrics` だけを使用",
     ):
-        assert token in text, f"/suno-lyric の JSON contract に reviewer context 契約がない（`{token}` 不在）"
+        assert token in text, f"/music --lyric の JSON contract に reviewer context 契約がない（`{token}` 不在）"
 
 
 def test_suno_lyric_documents_verify_before_semantic_review() -> None:
-    """Issue #1485: /suno-lyric は uv run yt-suno-verify 通過後に LLM semantic review へ進む。"""
+    """Issue #1485: /music --lyric は uv run yt-suno-verify 通過後に LLM semantic review へ進む。"""
     text = _read(SUNO_LYRIC_SKILL_MD)
     _assert_before(text, "uv run yt-suno-verify <collection-path>", "LLM semantic review")
 
 
 def test_suno_lyric_documents_pass_fail_loop_contract() -> None:
-    """Issue #1485: /suno-lyric は entry ごとの PASS / FAIL と上限 2 周の再生成を固定する。"""
+    """Issue #1485: /music --lyric は entry ごとの PASS / FAIL と上限 2 周の再生成を固定する。"""
     text = _read(SUNO_LYRIC_SKILL_MD)
     for token in ("entry ごと", "PASS", "FAIL", "理由", "FAIL` entry のみ", "最大 2 周", "残課題", "ユーザー"):
-        assert token in text, f"/suno-lyric SKILL.md に PASS/FAIL ループ契約がない（`{token}` 不在）"
+        assert token in text, f"/music --lyric SKILL.md に PASS/FAIL ループ契約がない（`{token}` 不在）"
 
 
 def test_suno_documents_generator_reviewer_contract_for_style_prompts() -> None:
@@ -433,7 +433,7 @@ def test_suno_documents_generator_reviewer_contract_for_style_prompts() -> None:
         "Codex",
         "別コンテキスト",
         "suno-prompts.json",
-        "suno-prompts.json` と `/suno-lyric` の `references/review-rubric.md` のみ",
+        "suno-prompts.json` と `/music --lyric` の `references/review-rubric.md` のみ",
     ):
         assert token in text, f"/music --prompt SKILL.md に Style prompt review 契約がない（`{token}` 不在）"
 
@@ -522,8 +522,8 @@ def test_suno_documents_collection_vocal_gender_handoff_to_lyric() -> None:
 
     for token in (
         "`suno-patterns.yaml::vocal_gender`",
-        "`config/skills/suno-lyric.yaml::vocal_gender`",
-        "`/suno-lyric`",
+        "`config/skills/music.yaml::lyric.vocal_gender`",
+        "`/music --lyric`",
         "語り手",
         "人称代名詞",
         "共有 config は書き換えない",

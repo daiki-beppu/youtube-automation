@@ -17,6 +17,26 @@
       "idempotency": {
         "script": "references/music-chain-state.py"
       }
+    },
+    {
+      "id": "lyric",
+      "skill": "music",
+      "prerequisiteArtifacts": [
+        "20-documentation/suno-patterns.yaml",
+        "20-documentation/suno-prompts.md",
+        "20-documentation/suno-prompts.json"
+      ],
+      "outputArtifacts": [
+        "20-documentation/suno-lyrics.md",
+        "20-documentation/suno-lyrics.json"
+      ],
+      "approvalGate": {
+        "skip": true,
+        "configPath": "workflow.music.skip_approvals.lyric"
+      },
+      "idempotency": {
+        "script": "references/music-chain-state.py"
+      }
     }
   ]
 }

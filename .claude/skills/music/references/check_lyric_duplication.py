@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""suno-lyrics.json の曲間セクション重複を検出する（/suno-lyric の Validation 用）。
+"""suno-lyrics.json の曲間セクション重複を検出する（/music --lyric の Validation 用）。
 
 複数曲の vocal collection で `[Intro]` `[Pre-Chorus]` `[Bridge]` `[Extended Outro]` `[Outro]`
 などのセクション本文が曲間で一言一句同一になっていないかを機械的に確認する。

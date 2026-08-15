@@ -35,7 +35,6 @@ PDCA 対応: 準備 = 準備する / Plan = 調べる → 決める / Do = 進�
 - `/music` — Use when 音楽制作を状態判定付きで一括実行または一段だけ実行するとき。
 - `/short` — Use when collection 型（BGM テイスター）または release 型（楽曲リリース）のチャンネルでショートを生成するとき。
 - `/suno-helper` — Use when Suno UI に投入する曲をブラウザで連続生成 + playlist 追加 + 一括ダウンロードしたいとき。
-- `/suno-lyric` — Use when Suno ボーカル曲の歌詞を生成するとき。
 - `/thumbnail` — Use when コレクションの YouTube サムネイル（thumbnail.jpg）を CTR 最適化し、textless main.png/jpg を先行生成して実フォント合成するとき。
 - `/thumbnail-compare` — Use when 自チャンネルの生成済みサムネイルを競合と並べて 320px 視認性を比較検証するとき。
 - `/thumbnail-iterate` — Use when 伸びた動画を起点にサムネの勝因を分解し、統制した A/B 比較で次の勝ちサムネへ更新するとき。

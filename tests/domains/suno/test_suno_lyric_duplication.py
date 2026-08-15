@@ -12,7 +12,7 @@ from youtube_automation.core.errors import ConfigError
 from youtube_automation.domains.suno.lyrics import load_suno_lyrics_entries
 
 ROOT = REPO_ROOT
-SCRIPT = ROOT / ".claude/skills/suno-lyric/references/check_lyric_duplication.py"
+SCRIPT = ROOT / ".claude/skills/music/references/check_lyric_duplication.py"
 
 
 def _write_lyrics(path: Path, entries: object) -> Path:

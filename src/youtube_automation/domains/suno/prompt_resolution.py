@@ -455,7 +455,7 @@ def _finalize(
     if base.is_vocal and lyrics is None:
         raise ConfigError(
             f"{SUNO_LYRICS_JSON_FILENAME} is required for vocal mode. "
-            f"Run /suno-lyric first and write: {external_lyrics_path}"
+            f"Run /music --lyric first and write: {external_lyrics_path}"
         )
     frozen_output_names = tuple(existing_output_names)
     if stale_output_inventory_loader is None:

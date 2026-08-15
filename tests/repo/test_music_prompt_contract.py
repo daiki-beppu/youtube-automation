@@ -35,11 +35,11 @@ def test_music_replaces_suno_and_exposes_prompt_mode() -> None:
     assert "references/prompt.md" in skill
 
 
-def test_music_chain_manifest_contains_only_prompt() -> None:
+def test_music_chain_manifest_keeps_prompt_as_first_step() -> None:
     manifest = json.loads((SKILL_DIR / "references/music-chain-manifest.json").read_text(encoding="utf-8"))
 
     assert manifest["chainId"] == "music"
-    assert [step["id"] for step in manifest["steps"]] == ["prompt"]
+    assert [step["id"] for step in manifest["steps"]][:1] == ["prompt"]
     step = manifest["steps"][0]
     assert step["skill"] == "music"
     assert step["idempotency"]["script"] == "references/music-chain-state.py"
@@ -49,7 +49,7 @@ def test_music_chain_manifest_contains_only_prompt() -> None:
 def test_music_prompt_config_uses_namespaced_default_and_keeps_legacy_loader() -> None:
     defaults = yaml.safe_load((SKILL_DIR / "config.default.yaml").read_text(encoding="utf-8"))
 
-    assert set(defaults) == {"prompt"}
+    assert "prompt" in defaults
     assert isinstance(defaults["prompt"], dict)
     assert "music.prompt" in skill_config.SKILL_CONFIG_KEYS
     assert skill_config.skill_config_default_relative_path("suno") == Path("music/config.default.yaml")

@@ -34,6 +34,7 @@ EXPECTED_SKILL_ONLY_CONFIG_KEYS = frozenset(
         "flop-analysis",
         "live-clean",
         "lyria",
+        "music.lyric",
         "short",
         "suno-lyric",
         "video-analyze",
