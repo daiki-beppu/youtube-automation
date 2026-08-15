@@ -1,7 +1,4 @@
-"""アップロード前メタデータ品質チェック（fail-loud preflight）。
-
-``YouTubeAutoUploader`` から分離した mixin。挙動は分割前と同一。
-"""
+"""アップロード前メタデータ品質チェック（fail-loud preflight）。"""
 
 from __future__ import annotations
 
@@ -42,8 +39,29 @@ from youtube_automation.infrastructure.filesystem import (
 logger = logging.getLogger(__name__)
 
 
-class PreflightMixin:
-    """アップロード前メタデータ検証を提供する mixin。"""
+class PreflightChecker:
+    """明示された collection root と依存でメタデータを検証する。"""
+
+    def __init__(
+        self,
+        collections_root: Path,
+        *,
+        config_loader=None,
+        duration_probe=None,
+        metadata_generator_factory=None,
+        master_video_resolver=None,
+        allow_duration_outside_target: bool = False,
+    ) -> None:
+        self.collections_root = collections_root
+        self.config_loader = config_loader if config_loader is not None else load_config
+        self.duration_probe = duration_probe if duration_probe is not None else probe_duration
+        self.metadata_generator_factory = (
+            metadata_generator_factory if metadata_generator_factory is not None else BAHMetadataGenerator
+        )
+        self.master_video_resolver = (
+            master_video_resolver if master_video_resolver is not None else resolve_master_video
+        )
+        self.allow_duration_outside_target = allow_duration_outside_target
 
     def _collect_live_titles(self, exclude_dir: Path | None = None) -> list[str]:
         """既存 live コレクションの公開タイトル（`## タイトル案`）を収集する (#602).
@@ -70,11 +88,7 @@ class PreflightMixin:
                 titles.append(title.strip())
         return titles
 
-    def preflight_check(self, collection_dir: Path) -> None:
-        """公開されたアップロード前検証操作。"""
-        self._preflight_check(collection_dir)
-
-    def _preflight_check(self, collection_dir: Path) -> None:
+    def check(self, collection_dir: Path) -> None:
         """アップロード前メタデータ品質チェック (fail-loud)。
 
         過去事例の再発防止:
@@ -113,7 +127,7 @@ class PreflightMixin:
         if msg := check_title_codepoint_limit(title):
             raise ValidationError(f"❌ {msg}")
 
-        config = load_config()
+        config = self.config_loader()
 
         # workflow-state.json 自体は全チャンネルで必須。scene_phrases 完全性だけを
         # 単一言語チャンネルでは不要扱いにする（populate 側と同じ判定を共有 #1470）。
@@ -166,14 +180,14 @@ class PreflightMixin:
 
         # 実 upload と同じ generator で全 locale の title を構築し、API 呼び出し前の
         # --plan preflight でも YouTube の 100 codepoint 制限を検証する。
-        master_video = resolve_master_video(collection_dir)
-        duration_sec = probe_duration(master_video)
+        master_video = self.master_video_resolver(collection_dir)
+        duration_sec = self.duration_probe(master_video)
         if duration_sec is None:
             raise ValidationError(
                 f"❌ 実マスター尺を取得できません: {master_video.name}。"
                 "ffprobe で読み取れる完成済みマスター動画を指定してください"
             )
-        generator = BAHMetadataGenerator(str(collection_dir))
+        generator = self.metadata_generator_factory(str(collection_dir))
         # 同じ invocation で読み込んだ config を使い、plan と upload の設定 snapshot を揃える。
         # 最小 stub を使う既存 unit test では localization data が無いため生成を省略する。
         generator.config = config
@@ -226,7 +240,7 @@ class PreflightMixin:
                 target_min * 60 if target_min is not None else None,
                 target_max * 60 if target_max is not None else None,
             )
-            if duration_issue and not getattr(self, "allow_duration_outside_target", False):
+            if duration_issue and not self.allow_duration_outside_target:
                 issues.append(
                     f"{duration_issue}; config/channel/audio.json の target を満たす動画を再生成するか、"
                     "operator 判断で --allow-duration-outside-target を明示してください"

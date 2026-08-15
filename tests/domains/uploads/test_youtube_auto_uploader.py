@@ -124,9 +124,11 @@ class TestUploadChannelIdentityPreflight:
         from youtube_automation.infrastructure.google.youtube import YouTubeClients
 
         youtube = _youtube_service_with_authenticated_channel("UC_TOKEN_OWNER")
+        preflight_checker = MagicMock()
         uploader = YouTubeAutoUploader(
             collections_root=str(tmp_path),
             youtube_clients=YouTubeClients(full_handler=SimpleNamespace(get_youtube_service=lambda: youtube)),
+            preflight_checker=preflight_checker,
         )
 
         with (
@@ -134,13 +136,12 @@ class TestUploadChannelIdentityPreflight:
                 "youtube_automation.domains.uploads.youtube.load_config",
                 return_value=SimpleNamespace(meta=SimpleNamespace(channel_id="UC_CONFIGURED")),
             ),
-            patch.object(uploader, "_preflight_check") as metadata_preflight,
             pytest.raises(ConfigError, match="channel_id mismatch"),
         ):
             uploader.preflight_check(tmp_path / "collection")
 
         youtube.channels.return_value.list.assert_called_once_with(part="id", mine=True)
-        metadata_preflight.assert_not_called()
+        preflight_checker.check.assert_not_called()
         youtube.videos.return_value.insert.assert_not_called()
 
     def test_matching_authenticated_channel_continues_metadata_preflight(self, tmp_path):
@@ -148,9 +149,11 @@ class TestUploadChannelIdentityPreflight:
         from youtube_automation.infrastructure.google.youtube import YouTubeClients
 
         youtube = _youtube_service_with_authenticated_channel("UC_CONFIGURED")
+        preflight_checker = MagicMock()
         uploader = YouTubeAutoUploader(
             collections_root=str(tmp_path),
             youtube_clients=YouTubeClients(full_handler=SimpleNamespace(get_youtube_service=lambda: youtube)),
+            preflight_checker=preflight_checker,
         )
         collection = tmp_path / "collection"
 
@@ -159,11 +162,10 @@ class TestUploadChannelIdentityPreflight:
                 "youtube_automation.domains.uploads.youtube.load_config",
                 return_value=SimpleNamespace(meta=SimpleNamespace(channel_id="UC_CONFIGURED")),
             ),
-            patch.object(uploader, "_preflight_check") as metadata_preflight,
         ):
             uploader.preflight_check(collection)
 
-        metadata_preflight.assert_called_once_with(collection)
+        preflight_checker.check.assert_called_once_with(collection)
 
     def test_rejects_empty_authenticated_channel_response(self, tmp_path):
         from youtube_automation.core.errors import YouTubeAPIError
@@ -171,9 +173,11 @@ class TestUploadChannelIdentityPreflight:
         from youtube_automation.infrastructure.google.youtube import YouTubeClients
 
         youtube = _youtube_service_with_authenticated_channel(None)
+        preflight_checker = MagicMock()
         uploader = YouTubeAutoUploader(
             collections_root=str(tmp_path),
             youtube_clients=YouTubeClients(full_handler=SimpleNamespace(get_youtube_service=lambda: youtube)),
+            preflight_checker=preflight_checker,
         )
 
         with (
@@ -181,12 +185,11 @@ class TestUploadChannelIdentityPreflight:
                 "youtube_automation.domains.uploads.youtube.load_config",
                 return_value=SimpleNamespace(meta=SimpleNamespace(channel_id="UC_CONFIGURED")),
             ),
-            patch.object(uploader, "_preflight_check") as metadata_preflight,
             pytest.raises(YouTubeAPIError, match="authenticated user has no YouTube channel"),
         ):
             uploader.preflight_check(tmp_path / "collection")
 
-        metadata_preflight.assert_not_called()
+        preflight_checker.check.assert_not_called()
 
 
 def _make_preflight_config(supported_languages: list[str]) -> SimpleNamespace:
@@ -250,55 +253,44 @@ def _write_preflight_collection(tmp_path: Path, scene_languages: list[str]) -> P
 
 
 # ---------------------------------------------------------------------------
-# Issue #587: `_preflight_check` localization quality gates
+# Issue #587: preflight localization quality gates
 # ---------------------------------------------------------------------------
 
 
 class TestPreflightLocalizationLanguages:
     def test_should_pass_when_supported_scene_languages_are_present(self, tmp_path):
-        from youtube_automation.domains.uploads.youtube import YouTubeAutoUploader
+        from youtube_automation.domains.uploads._preflight import PreflightChecker
 
         col_dir = _write_preflight_collection(tmp_path, ["en", "ja"])
-        uploader = YouTubeAutoUploader(collections_root=str(tmp_path))
+        checker = PreflightChecker(tmp_path, config_loader=lambda: _make_preflight_config(["ja", "en"]))
 
-        with patch(
-            "youtube_automation.domains.uploads._preflight.load_config",
-            return_value=_make_preflight_config(["ja", "en"]),
-        ):
-            uploader._preflight_check(col_dir)
+        checker.check(col_dir)
 
     def test_should_pass_when_required_high_cpm_languages_are_present(self, tmp_path):
-        from youtube_automation.domains.uploads.youtube import YouTubeAutoUploader
+        from youtube_automation.domains.uploads._preflight import PreflightChecker
 
         col_dir = _write_preflight_collection(tmp_path, ["en", "ja", "de"])
-        uploader = YouTubeAutoUploader(collections_root=str(tmp_path))
+        checker = PreflightChecker(tmp_path, config_loader=lambda: _make_preflight_config(["ja", "en", "de"]))
 
-        with patch(
-            "youtube_automation.domains.uploads._preflight.load_config",
-            return_value=_make_preflight_config(["ja", "en", "de"]),
-        ):
-            uploader._preflight_check(col_dir)
+        checker.check(col_dir)
 
     def test_should_warn_and_continue_when_low_cpm_language_is_present(self, tmp_path, caplog):
-        from youtube_automation.domains.uploads.youtube import YouTubeAutoUploader
+        from youtube_automation.domains.uploads._preflight import PreflightChecker
 
         col_dir = _write_preflight_collection(tmp_path, ["en", "ja", "de", "ko"])
-        uploader = YouTubeAutoUploader(collections_root=str(tmp_path))
+        checker = PreflightChecker(
+            tmp_path,
+            config_loader=lambda: _make_preflight_config(["ja", "en", "de", "ko"]),
+        )
 
-        with (
-            patch(
-                "youtube_automation.domains.uploads._preflight.load_config",
-                return_value=_make_preflight_config(["ja", "en", "de", "ko"]),
-            ),
-            caplog.at_level(logging.WARNING),
-        ):
-            uploader._preflight_check(col_dir)
+        with caplog.at_level(logging.WARNING):
+            checker.check(col_dir)
 
         assert any("ko" in rec.message for rec in caplog.records)
 
 
 # ---------------------------------------------------------------------------
-# Issue #602: `_preflight_check` タイトル鋳型準拠ゲート
+# Issue #602: preflight タイトル鋳型準拠ゲート
 # ---------------------------------------------------------------------------
 
 
@@ -372,7 +364,7 @@ class TestPreflightTitleTemplateCompliance:
     """#602: 鋳型逸脱・巻数表記・RHS 重複を preflight で block する."""
 
     def test_should_fail_on_volume_and_rhs_duplicate(self, tmp_path):
-        from youtube_automation.domains.uploads.youtube import YouTubeAutoUploader
+        from youtube_automation.domains.uploads._preflight import PreflightChecker
 
         _write_live_title(
             tmp_path,
@@ -383,17 +375,16 @@ class TestPreflightTitleTemplateCompliance:
             tmp_path,
             "Funky Spirit Vol.2 | 3 Hours of Soulful Retro Funk Grooves",
         )
-        uploader = YouTubeAutoUploader(collections_root=str(tmp_path))
+        checker = PreflightChecker(
+            tmp_path,
+            config_loader=lambda: _make_title_template_config(["ja", "en", "de"]),
+        )
 
-        with patch(
-            "youtube_automation.domains.uploads._preflight.load_config",
-            return_value=_make_title_template_config(["ja", "en", "de"]),
-        ):
-            with pytest.raises(ValidationError, match="タイトル鋳型違反"):
-                uploader._preflight_check(col_dir)
+        with pytest.raises(ValidationError, match="タイトル鋳型違反"):
+            checker.check(col_dir)
 
     def test_should_pass_on_compliant_title(self, tmp_path):
-        from youtube_automation.domains.uploads.youtube import YouTubeAutoUploader
+        from youtube_automation.domains.uploads._preflight import PreflightChecker
 
         _write_live_title(
             tmp_path,
@@ -404,16 +395,15 @@ class TestPreflightTitleTemplateCompliance:
             tmp_path,
             "Bright Funk & Soul Spirit | 3 Hours of Feel-Good Retro Grooves",
         )
-        uploader = YouTubeAutoUploader(collections_root=str(tmp_path))
+        checker = PreflightChecker(
+            tmp_path,
+            config_loader=lambda: _make_title_template_config(["ja", "en", "de"]),
+        )
 
-        with patch(
-            "youtube_automation.domains.uploads._preflight.load_config",
-            return_value=_make_title_template_config(["ja", "en", "de"]),
-        ):
-            uploader._preflight_check(col_dir)
+        checker.check(col_dir)
 
     def test_should_allow_opted_in_volume_without_disabling_default_detection(self, tmp_path):
-        from youtube_automation.domains.uploads.youtube import YouTubeAutoUploader
+        from youtube_automation.domains.uploads._preflight import PreflightChecker
 
         opted_in_collection = _write_title_collection(
             tmp_path,
@@ -432,19 +422,19 @@ class TestPreflightTitleTemplateCompliance:
             status="false",
             title_template_check={"allow_volume_patterns": False},
         )
-        uploader = YouTubeAutoUploader(collections_root=str(tmp_path))
+        checker = PreflightChecker(
+            tmp_path,
+            config_loader=lambda: _make_title_template_config(["ja", "en", "de"]),
+        )
 
-        with patch(
-            "youtube_automation.domains.uploads._preflight.load_config",
-            return_value=_make_title_template_config(["ja", "en", "de"]),
-        ):
-            uploader._preflight_check(opted_in_collection)
-            with pytest.raises(ValidationError, match="巻数表記を検出"):
-                uploader._preflight_check(default_collection)
-            with pytest.raises(ValidationError, match="巻数表記を検出"):
-                uploader._preflight_check(false_collection)
+        checker.check(opted_in_collection)
+        with pytest.raises(ValidationError, match="巻数表記を検出"):
+            checker.check(default_collection)
+        with pytest.raises(ValidationError, match="巻数表記を検出"):
+            checker.check(false_collection)
 
     def test_upload_collection_reaches_post_preflight_for_opted_in_volume(self, tmp_path):
+        from youtube_automation.domains.uploads._preflight import PreflightChecker
         from youtube_automation.domains.uploads.youtube import YouTubeAutoUploader
 
         class PostPreflightReached(Exception):
@@ -455,14 +445,14 @@ class TestPreflightTitleTemplateCompliance:
             "Funky Soul Spirit Vol.2 | 3 Hours of Feel-Good Retro Grooves",
             title_template_check={"allow_volume_patterns": True},
         )
-        uploader = YouTubeAutoUploader(collections_root=str(tmp_path))
+        checker = PreflightChecker(
+            tmp_path,
+            config_loader=lambda: _make_title_template_config(["ja", "en", "de"]),
+        )
+        uploader = YouTubeAutoUploader(collections_root=str(tmp_path), preflight_checker=checker)
 
         with (
             patch.object(uploader, "_verify_authenticated_upload_channel"),
-            patch(
-                "youtube_automation.domains.uploads._preflight.load_config",
-                return_value=_make_title_template_config(["ja", "en", "de"]),
-            ),
             patch(
                 "youtube_automation.domains.uploads.youtube.BAHMetadataGenerator",
                 side_effect=PostPreflightReached,
@@ -472,20 +462,21 @@ class TestPreflightTitleTemplateCompliance:
             uploader.upload_collection(collection)
 
     def test_upload_collection_rejects_default_volume_before_metadata_generation(self, tmp_path):
+        from youtube_automation.domains.uploads._preflight import PreflightChecker
         from youtube_automation.domains.uploads.youtube import YouTubeAutoUploader
 
         collection = _write_title_collection(
             tmp_path,
             "Funky Soul Spirit Vol.2 | 3 Hours of Feel-Good Retro Grooves",
         )
-        uploader = YouTubeAutoUploader(collections_root=str(tmp_path))
+        checker = PreflightChecker(
+            tmp_path,
+            config_loader=lambda: _make_title_template_config(["ja", "en", "de"]),
+        )
+        uploader = YouTubeAutoUploader(collections_root=str(tmp_path), preflight_checker=checker)
 
         with (
             patch.object(uploader, "_verify_authenticated_upload_channel"),
-            patch(
-                "youtube_automation.domains.uploads._preflight.load_config",
-                return_value=_make_title_template_config(["ja", "en", "de"]),
-            ),
             patch(
                 "youtube_automation.domains.uploads.youtube.BAHMetadataGenerator",
                 side_effect=AssertionError("metadata generation must not run"),
@@ -657,7 +648,7 @@ class TestUploadCollectionForwarding:
 
         with (
             patch.object(uploader, "_verify_authenticated_upload_channel"),
-            patch.object(uploader, "_preflight_check"),
+            patch.object(uploader.preflight_checker, "check"),
             patch.object(
                 uploader,
                 "_upload_complete_collection",
@@ -1592,7 +1583,7 @@ class TestDefaultPublishAt:
 
         with (
             patch.object(uploader, "_verify_authenticated_upload_channel"),
-            patch.object(uploader, "_preflight_check"),
+            patch.object(uploader.preflight_checker, "check"),
             patch.object(
                 uploader,
                 "_upload_complete_collection",
@@ -1623,7 +1614,7 @@ class TestDefaultPublishAt:
 
         with (
             patch.object(uploader, "_verify_authenticated_upload_channel"),
-            patch.object(uploader, "_preflight_check"),
+            patch.object(uploader.preflight_checker, "check"),
             patch.object(
                 uploader,
                 "_upload_complete_collection",
@@ -1647,7 +1638,7 @@ class TestDefaultPublishAt:
 
         with (
             patch.object(uploader, "_verify_authenticated_upload_channel"),
-            patch.object(uploader, "_preflight_check"),
+            patch.object(uploader.preflight_checker, "check"),
             patch.object(
                 uploader,
                 "_upload_complete_collection",

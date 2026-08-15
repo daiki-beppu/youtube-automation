@@ -53,7 +53,7 @@ LEGACY_AGENT_OWNERS = {
     ),
     "_dedup_search": ("youtube_automation.domains.uploads._dedup_search", "DedupSearch"),
     "_playlist_assignment": ("youtube_automation.domains.uploads._playlist_assignment", "PlaylistAssignment"),
-    "_preflight": ("youtube_automation.domains.uploads._preflight", "PreflightMixin"),
+    "_preflight": ("youtube_automation.domains.uploads._preflight", "PreflightChecker"),
     "_published_dates": ("youtube_automation.domains.uploads._published_dates", "PublishedDatesScheduler"),
     "_tracking_io": ("youtube_automation.domains.uploads._tracking_io", "TrackingStore"),
     "_uploader_constants": (
@@ -216,6 +216,13 @@ def test_descriptions_md_is_a_public_pure_function_owner() -> None:
         "extract_body_for_localizations",
         "extract_md_section",
     }.issubset(vars(owner))
+
+
+def test_upload_preflight_uses_explicit_checker_without_mro_hook() -> None:
+    source = (SRC / "domains" / "uploads" / "youtube.py").read_text(encoding="utf-8")
+
+    assert "super().preflight_check" not in source
+    assert "self.preflight_checker.check(collection_dir)" in source
 
 
 @pytest.mark.parametrize("filename", UPLOADER_ENTRYPOINTS)

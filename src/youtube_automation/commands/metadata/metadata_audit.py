@@ -2,7 +2,7 @@
 """Audit metadata across all live videos.
 
 Checks each video published from collections/live/ against the same
-quality bar enforced by youtube_auto_uploader._preflight_check, plus
+quality bar enforced by the upload PreflightChecker, plus
 remote-side checks against YouTube API.
 
 Run periodically (or after upload) to detect drift between local

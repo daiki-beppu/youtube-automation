@@ -120,7 +120,6 @@ def test_collection_preflight_uses_public_inner_uploader_operation(monkeypatch, 
 
     outer_preflight.assert_called_once_with(target)
     uploader.uploader.preflight_check.assert_called_once_with(target)
-    uploader.uploader._preflight_check.assert_not_called()
 
 
 def _write_cli_title_collection(channel_dir: Path, *, title_template_check: dict[str, object] | None) -> Path:

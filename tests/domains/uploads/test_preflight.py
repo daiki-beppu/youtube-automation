@@ -1,4 +1,4 @@
-"""PreflightMixin の collection upload 前チェックの回帰テスト."""
+"""PreflightChecker の collection upload 前チェックの回帰テスト."""
 
 from __future__ import annotations
 
@@ -11,13 +11,8 @@ import pytest
 
 from youtube_automation.configuration import load_config
 from youtube_automation.core.errors import ValidationError
-from youtube_automation.domains.uploads._preflight import PreflightMixin
+from youtube_automation.domains.uploads._preflight import PreflightChecker
 from youtube_automation.domains.uploads.youtube import YouTubeAutoUploader
-
-
-class _PreflightHarness(PreflightMixin):
-    def __init__(self, collections_root: Path) -> None:
-        self.collections_root = collections_root
 
 
 def _write_json(path: Path, data: dict) -> None:
@@ -126,15 +121,17 @@ def _run_preflight(
     *,
     allow_duration_outside_target: bool = False,
     duration_seconds: float = 3600,
+    metadata_generator_factory=None,
 ) -> None:
     monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
-    monkeypatch.setattr(
-        "youtube_automation.domains.uploads._preflight.probe_duration",
-        lambda _: duration_seconds,
-    )
-    harness = _PreflightHarness(channel_dir / "collections")
-    harness.allow_duration_outside_target = allow_duration_outside_target
-    harness._preflight_check(collection_dir)
+    checker_kwargs = {
+        "duration_probe": lambda _: duration_seconds,
+        "allow_duration_outside_target": allow_duration_outside_target,
+    }
+    if metadata_generator_factory is not None:
+        checker_kwargs["metadata_generator_factory"] = metadata_generator_factory
+    checker = PreflightChecker(channel_dir / "collections", **checker_kwargs)
+    checker.check(collection_dir)
 
 
 def test_heading_mismatch_reports_expected_missing_detected_and_fix_example(tmp_path: Path) -> None:
@@ -156,7 +153,7 @@ A continuous BGM mix without chapter markers.
     )
 
     with pytest.raises(ValidationError) as excinfo:
-        _PreflightHarness(tmp_path / "collections")._preflight_check(collection_dir)
+        PreflightChecker(tmp_path / "collections").check(collection_dir)
 
     message = str(excinfo.value)
     assert "期待する見出し（完全一致）" in message
@@ -186,7 +183,7 @@ A continuous BGM mix without chapter markers.
     )
 
     with pytest.raises(ValidationError) as excinfo:
-        _PreflightHarness(tmp_path / "collections")._preflight_check(collection_dir)
+        PreflightChecker(tmp_path / "collections").check(collection_dir)
 
     message = str(excinfo.value)
     assert "タイトル案 / Complete Collection 概要欄 が空" in message
@@ -436,9 +433,13 @@ def test_plan_preflight_passes_actual_master_duration_to_localizations(
         scene_phrases={"en": "focus", "de": "ruhiger Fokus"},
         description="A continuous BGM mix without chapter markers.",
     )
-    monkeypatch.setattr("youtube_automation.domains.uploads._preflight.BAHMetadataGenerator", _Generator)
-
-    _run_preflight(channel_dir, collection_dir, monkeypatch, duration_seconds=10 * 3600 + 32 * 60)
+    _run_preflight(
+        channel_dir,
+        collection_dir,
+        monkeypatch,
+        duration_seconds=10 * 3600 + 32 * 60,
+        metadata_generator_factory=_Generator,
+    )
 
     assert captured == {"duration_seconds": 10 * 3600 + 32 * 60}
 
@@ -549,13 +550,10 @@ def test_upload_collection_reports_unreachable_tags_min_count_from_channel_confi
         tags=["a" * 17] * 26 + ["b" * 27],
     )
     monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
-    monkeypatch.setattr(
-        "youtube_automation.domains.uploads._preflight.probe_duration",
-        lambda _: 3600,
-    )
 
     assert load_config().content.tags.min_count == 30
-    uploader = YouTubeAutoUploader(str(channel_dir / "collections"))
+    checker = PreflightChecker(channel_dir / "collections", duration_probe=lambda _: 3600)
+    uploader = YouTubeAutoUploader(str(channel_dir / "collections"), preflight_checker=checker)
     monkeypatch.setattr(uploader, "_verify_authenticated_upload_channel", lambda: None)
 
     with pytest.raises(ValidationError) as excinfo:
