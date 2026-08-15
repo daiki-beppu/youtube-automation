@@ -3,7 +3,7 @@ CollectionUploader のユニットテスト
 
 テスト対象: agents/collection_uploader.py
 
-#77 回帰テスト: `_assign_to_playlists()` の import パス誤りで
+#77 回帰テスト: playlist assignment の import パス誤りで
 プレイリスト自動追加が常時失敗していたバグを検出するためのテスト。
 """
 
@@ -21,6 +21,7 @@ from googleapiclient.errors import HttpError
 from httplib2 import Response
 
 from tests.helpers.paths import FIXTURES_DIR, REPO_ROOT
+from youtube_automation.domains.uploads._playlist_assignment import PlaylistAssignment
 from youtube_automation.domains.uploads._published_dates import PublishedDatesScheduler
 from youtube_automation.domains.uploads._tracking_io import TrackingStore
 
@@ -218,7 +219,7 @@ def test_main_title_preflight_honors_collection_opt_in_for_each_cli_entry(
 
 
 # ---------------------------------------------------------------------------
-# _assign_to_playlists
+# PlaylistAssignment.assign
 # ---------------------------------------------------------------------------
 
 
@@ -231,12 +232,11 @@ def workflow_state_file(tmp_path):
 
 
 def test_assign_to_playlists_calls_playlist_manager(workflow_state_file):
-    """`_assign_to_playlists` が PlaylistManager.assign_video を theme 付きで呼ぶ。
+    """`PlaylistAssignment.assign` が PlaylistManager.assign_video を theme 付きで呼ぶ。
 
     #77 の回帰防止: import パスが正しくなければ以前は ImportError が warning に
     握り潰されて何も呼ばれなかった。
     """
-    from youtube_automation.domains.uploads.collection import CollectionUploader
     from youtube_automation.infrastructure.google.youtube import YouTubeClients
 
     mock_config = MagicMock()
@@ -245,18 +245,11 @@ def test_assign_to_playlists_calls_playlist_manager(workflow_state_file):
     mock_pm_instance = MagicMock()
     mock_pm_instance.assign_video.return_value = ["all"]
 
-    with (
-        patch("youtube_automation.domains.uploads._playlist_assignment.load_config", return_value=mock_config),
-        patch(
-            "youtube_automation.domains.uploads._playlist_assignment.PlaylistManager",
-            return_value=mock_pm_instance,
-        ) as mock_pm_class,
-    ):
-        clients = YouTubeClients(full_handler=MagicMock())
-        fake_self = SimpleNamespace(youtube_clients=clients)
-        CollectionUploader._assign_to_playlists(fake_self, "VIDEO_ID_123", workflow_state_file)
+    clients = YouTubeClients(full_handler=MagicMock())
+    assignment = PlaylistAssignment(clients, config=mock_config, playlist_manager=mock_pm_instance)
 
-    mock_pm_class.assert_called_once_with(clients=clients)
+    assignment.assign("VIDEO_ID_123", workflow_state_file)
+
     mock_pm_instance.assign_video.assert_called_once_with(
         "VIDEO_ID_123", "Rainy Jazz", collection_path=workflow_state_file
     )
@@ -265,56 +258,42 @@ def test_assign_to_playlists_calls_playlist_manager(workflow_state_file):
 def test_assign_to_playlists_propagates_playlist_api_failure(workflow_state_file):
     """post-upload の playlist API 失敗を workflow 呼び出し元へ伝播する。"""
     from youtube_automation.core.errors import YouTubeAPIError
-    from youtube_automation.domains.uploads.collection import CollectionUploader
 
     mock_config = MagicMock()
     mock_config.playlists.items = {"all": {"title": "All", "playlist_id": "PL_ALL"}}
     failure = YouTubeAPIError("playlistItems.insert failed", status_code=403)
 
-    with (
-        patch("youtube_automation.domains.uploads._playlist_assignment.load_config", return_value=mock_config),
-        patch("youtube_automation.domains.uploads._playlist_assignment.PlaylistManager") as manager_class,
-        pytest.raises(YouTubeAPIError, match="playlistItems.insert failed"),
-    ):
-        manager_class.return_value.assign_video.side_effect = failure
-        CollectionUploader._assign_to_playlists(
-            SimpleNamespace(youtube_clients=MagicMock()),
-            "VIDEO_ID_123",
-            workflow_state_file,
-        )
+    playlist_manager = MagicMock()
+    playlist_manager.assign_video.side_effect = failure
+    assignment = PlaylistAssignment(MagicMock(), config=mock_config, playlist_manager=playlist_manager)
+
+    with pytest.raises(YouTubeAPIError, match="playlistItems.insert failed"):
+        assignment.assign("VIDEO_ID_123", workflow_state_file)
 
 
 def test_assign_to_playlists_skips_when_no_theme(tmp_path):
     """theme が空なら PlaylistManager を呼ばずに return する"""
-    from youtube_automation.domains.uploads.collection import CollectionUploader
-
     ws_path = tmp_path / "workflow-state.json"
     ws_path.write_text(json.dumps({"theme": ""}), encoding="utf-8")
 
-    with (
-        patch("youtube_automation.domains.uploads._playlist_assignment.load_config") as mock_load,
-        patch("youtube_automation.domains.uploads._playlist_assignment.PlaylistManager") as mock_pm_class,
-    ):
-        fake_self = MagicMock()
-        CollectionUploader._assign_to_playlists(fake_self, "VIDEO_ID_123", tmp_path)
+    mock_config = MagicMock()
+    playlist_manager = MagicMock()
+    assignment = PlaylistAssignment(MagicMock(), config=mock_config, playlist_manager=playlist_manager)
 
-    mock_load.assert_not_called()
-    mock_pm_class.assert_not_called()
+    assignment.assign("VIDEO_ID_123", tmp_path)
+
+    playlist_manager.assign_video.assert_not_called()
 
 
 def test_assign_to_playlists_skips_when_no_workflow_state(tmp_path):
     """workflow-state.json がなければ何もしない"""
-    from youtube_automation.domains.uploads.collection import CollectionUploader
+    mock_config = MagicMock()
+    playlist_manager = MagicMock()
+    assignment = PlaylistAssignment(MagicMock(), config=mock_config, playlist_manager=playlist_manager)
 
-    with (
-        patch("youtube_automation.domains.uploads._playlist_assignment.load_config") as mock_load,
-        patch("youtube_automation.domains.uploads._playlist_assignment.PlaylistManager") as mock_pm_class,
-    ):
-        fake_self = MagicMock()
-        CollectionUploader._assign_to_playlists(fake_self, "VIDEO_ID_123", tmp_path)
+    assignment.assign("VIDEO_ID_123", tmp_path)
 
-    mock_load.assert_not_called()
-    mock_pm_class.assert_not_called()
+    playlist_manager.assign_video.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -412,6 +391,21 @@ def test_collection_uploader_accepts_injected_published_dates(tmp_path: Path) ->
         )
 
     assert uploader.published_dates is published_dates
+
+
+def test_collection_uploader_accepts_injected_playlist_assignment(tmp_path: Path) -> None:
+    from youtube_automation.domains.uploads.collection import CollectionUploader
+
+    playlist_assignment = MagicMock(spec=PlaylistAssignment)
+
+    with patch("youtube_automation.domains.uploads.collection.YouTubeAutoUploader"):
+        uploader = CollectionUploader(
+            collections_root=str(tmp_path / "collections"),
+            config_path=str(tmp_path / "schedule_config.json"),
+            playlist_assignment=playlist_assignment,
+        )
+
+    assert uploader.playlist_assignment is playlist_assignment
 
 
 def test_collection_uploader_delegates_publish_date_calculation(tmp_path: Path) -> None:
@@ -954,7 +948,7 @@ class TestExecuteCompleteCollectionResume:
         failure = YouTubeAPIError("playlistItems.insert failed", status_code=403)
 
         with (
-            patch.object(uploader, "_assign_to_playlists", side_effect=failure),
+            patch.object(uploader.playlist_assignment, "assign", side_effect=failure),
             pytest.raises(YouTubeAPIError, match="playlistItems.insert failed"),
         ):
             uploader._execute_complete_collection(col, uploader.tracking_store.load(col), publish_at=None)

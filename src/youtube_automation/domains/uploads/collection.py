@@ -17,7 +17,7 @@ from youtube_automation.core.adapters.youtube import (
 )
 from youtube_automation.core.errors import ValidationError
 from youtube_automation.domains.uploads._complete_collection_executor import CompleteCollectionExecutorMixin
-from youtube_automation.domains.uploads._playlist_assignment import PlaylistAssignmentMixin
+from youtube_automation.domains.uploads._playlist_assignment import PlaylistAssignment
 from youtube_automation.domains.uploads._published_dates import PublishedDatesScheduler
 from youtube_automation.domains.uploads._tracking_io import TrackingStore
 from youtube_automation.domains.uploads.preflight import ensure_collection_preflight
@@ -40,7 +40,6 @@ __all__ = ["CollectionUploader"]
 
 class CollectionUploader(
     CompleteCollectionExecutorMixin,
-    PlaylistAssignmentMixin,
 ):
     """Collection Uploader — CC アップロード専用
 
@@ -50,7 +49,7 @@ class CollectionUploader(
     責務別の挙動は mixin に分離されている（Issue #465）:
     - tracking I/O           : ``TrackingStore`` への委譲
     - 公開日 / publishAt 計算: ``PublishedDatesScheduler`` への委譲
-    - プレイリスト割り当て    : ``PlaylistAssignmentMixin``
+    - プレイリスト割り当て    : ``PlaylistAssignment`` への委譲
     - CC 実行ループ           : ``CompleteCollectionExecutorMixin``
     """
 
@@ -61,6 +60,7 @@ class CollectionUploader(
         youtube_clients: YouTubeClients | None = None,
         tracking_store: TrackingStore | None = None,
         published_dates: PublishedDatesScheduler | None = None,
+        playlist_assignment: PlaylistAssignment | None = None,
     ):
         if collections_root is None:
             collections_root = channel_dir() / "collections"
@@ -76,6 +76,9 @@ class CollectionUploader(
         self.youtube_service = None
         self.youtube_clients = youtube_clients
         self.published_dates = published_dates or PublishedDatesScheduler(self.config, self._provide_youtube_service)
+        self.playlist_assignment = (
+            playlist_assignment if playlist_assignment is not None else PlaylistAssignment(youtube_clients)
+        )
 
     # ─── 設定・初期化 ───────────────────────────────
 
