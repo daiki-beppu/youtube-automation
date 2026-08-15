@@ -1,4 +1,4 @@
-"""State decisions for the one-step ``/video`` chain (#3835)."""
+"""State decisions for the resumable ``/video`` chain (#3835, #3836)."""
 
 from __future__ import annotations
 
@@ -62,3 +62,45 @@ def test_generate_blocks_on_unsafe_recorded_master_video_path(tmp_path: Path) ->
     assert code == module.EXIT_BLOCKED
     assert result["decision"] == "blocked"
     assert result["reason"] == "master_video_path_invalid"
+
+
+def test_describe_blocks_until_generated_master_video_exists(tmp_path: Path) -> None:
+    module = _module()
+    collection = _collection(tmp_path, None)
+
+    code, result = module.evaluate(collection, "describe")
+
+    assert code == module.EXIT_BLOCKED
+    assert result["decision"] == "blocked"
+    assert result["reason"] == "master_video_missing"
+
+
+def test_describe_runs_when_master_exists_and_description_is_incomplete(tmp_path: Path) -> None:
+    module = _module()
+    collection = _collection(tmp_path, "01-master/master.mp4")
+    (collection / "01-master" / "master.mp4").touch()
+
+    code, result = module.evaluate(collection, "describe")
+
+    assert code == module.EXIT_RUN
+    assert result["decision"] == "run"
+    assert result["reason"] == "description_incomplete"
+
+
+def test_describe_skips_only_when_state_and_description_file_are_complete(tmp_path: Path) -> None:
+    module = _module()
+    collection = _collection(tmp_path, "01-master/master.mp4")
+    (collection / "01-master" / "master.mp4").touch()
+    docs = collection / "20-documentation"
+    docs.mkdir()
+    (docs / "descriptions.md").write_text("# description\n", encoding="utf-8")
+    state_path = collection / "workflow-state.json"
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    state["description"] = {"generated": True}
+    state_path.write_text(json.dumps(state), encoding="utf-8")
+
+    code, result = module.evaluate(collection, "describe")
+
+    assert code == module.EXIT_SKIP
+    assert result["decision"] == "skip"
+    assert result["artifacts"] == ["20-documentation/descriptions.md"]

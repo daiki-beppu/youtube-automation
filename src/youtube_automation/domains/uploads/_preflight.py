@@ -94,7 +94,7 @@ class PreflightMixin:
         paths = CollectionPaths(collection_dir)
         desc_path = paths.descriptions_md_path
         if not path_exists(desc_path):
-            raise ValidationError(f"❌ {desc_path} が存在しません。/video-description を実行してください。")
+            raise ValidationError(f"❌ {desc_path} が存在しません。/video --describe を実行してください。")
 
         text = read_file_text(desc_path)
         title_raw = extract_descriptions_md_section(text, "タイトル案")
@@ -120,7 +120,7 @@ class PreflightMixin:
         ws_path = paths.workflow_state_path
         if not path_exists(ws_path):
             raise ValidationError(
-                f"❌ {ws_path} が存在しません。/wf-new または /video-description の前提を確認してください。"
+                f"❌ {ws_path} が存在しません。/wf-new または /video --describe の前提を確認してください。"
             )
         state = read_json(ws_path)
         title_template_check = state.get("title_template_check")
@@ -137,7 +137,7 @@ class PreflightMixin:
             raise ValidationError(
                 f"❌ タイトル鋳型違反: {msg}\n"
                 f"  title={title!r}\n"
-                f"  → コレクション名の流用ではなく鋳型に沿った公開タイトルを /video-description で再生成してください。"
+                f"  → コレクション名の流用ではなく鋳型に沿った公開タイトルを /video --describe で再生成してください。"
             )
 
         msg = check_low_cpm_localization_languages(config.localizations.supported_languages)
@@ -160,7 +160,7 @@ class PreflightMixin:
             if missing:
                 raise ValidationError(
                     f"❌ workflow-state.json.scene_phrases に翻訳が不足: {missing}\n"
-                    f"→ /video-description で多言語翻訳を含めて再生成してください。\n"
+                    f"→ /video --describe で多言語翻訳を含めて再生成してください。\n"
                     f"→ 既存例: collections/live/20260322-rjn-city-collection/workflow-state.json"
                 )
 

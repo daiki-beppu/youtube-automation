@@ -65,7 +65,7 @@ Phase 2 ─ 制作                      /wf-next
                           ↓ phase: "mastered"
 Phase 3 ─ 公開（全自動）             /wf-next
    ├─ /video --generate           (動画生成)
-   ├─ /video-description (概要欄)
+   ├─ /video --describe (概要欄)
    └─ /publish --upload  (YouTube アップロード + planning/ → live/ 移行)
                           ↓ phase: "complete"
 振り返り（T+7 日後推奨）             /analytics --analyze

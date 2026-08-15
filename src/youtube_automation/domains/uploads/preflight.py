@@ -104,7 +104,7 @@ def check_descriptions_md_parseability(desc_md: Path, *, allowed_root: Path | No
     if not path_exists(desc_md):
         return None
     if not path_is_file(desc_md):
-        return f"{desc_md}: descriptions.md が通常ファイルではありません。/video-description で再生成してください"
+        return f"{desc_md}: descriptions.md が通常ファイルではありません。/video --describe で再生成してください"
     try:
         text = read_file_text(desc_md)
     except (OSError, UnicodeError) as exc:

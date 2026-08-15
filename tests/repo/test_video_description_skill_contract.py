@@ -1,10 +1,10 @@
 from tests.helpers.paths import REPO_ROOT
 
 _REPO_ROOT = REPO_ROOT
-_VIDEO_DESCRIPTION_SKILL_MD = _REPO_ROOT / ".claude" / "skills" / "video-description" / "SKILL.md"
+_VIDEO_DESCRIPTION_SKILL_MD = _REPO_ROOT / ".claude" / "skills" / "video" / "references" / "describe.md"
 
 
-def test_video_description_skill_reads_benchmark_descriptions_before_template_fallback():
+def test_video_describe_mode_reads_benchmark_descriptions_before_template_fallback():
     text = _VIDEO_DESCRIPTION_SKILL_MD.read_text(encoding="utf-8")
 
     assert "### Benchmark 概要欄 TTP" in text

@@ -55,7 +55,7 @@ def _make_generator(
     gen.config = load_config()
     gen._masterup_config = load_skill_config("masterup")
     gen._crossfade_sec = float(gen._masterup_config.get("audio", {}).get("crossfade_duration", 1.0))
-    gen._video_description_config = load_skill_config("video-description")
+    gen._video_description_config = load_skill_config("video")["describe"]
     gen.collection_path = collection_path or Path(f"/tmp/fake-collections/{dir_name}")
     gen.collection_name = gen._extract_collection_name()
     gen.bit_depth = gen.config.content.genre.style

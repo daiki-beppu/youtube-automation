@@ -60,7 +60,7 @@ def _make_generator(dir_name: str = "20250907-live-8bit-adventure-music") -> BAH
     gen.config = load_config()
     gen._masterup_config = load_skill_config("masterup")
     gen._crossfade_sec = float(gen._masterup_config.get("audio", {}).get("crossfade_duration", 1.0))
-    gen._video_description_config = load_skill_config("video-description")
+    gen._video_description_config = load_skill_config("video")["describe"]
     gen.collection_path = Path(f"/tmp/fake-collections/{dir_name}")
     gen.collection_name = gen._extract_collection_name()
     gen.bit_depth = gen.config.content.genre.style
@@ -686,8 +686,8 @@ class TestGenerateCompleteCollectionMetadata:
             "• Custom license line for this channel",
             "• Contact us for commercial licensing",
         ]
-        (skills_dir / "video-description.yaml").write_text(
-            yaml.safe_dump({"usage_attribution_lines": custom_lines}, allow_unicode=True),
+        (skills_dir / "video.yaml").write_text(
+            yaml.safe_dump({"describe": {"usage_attribution_lines": custom_lines}}, allow_unicode=True),
             encoding="utf-8",
         )
         monkeypatch.setenv("CHANNEL_DIR", str(channel))
@@ -716,7 +716,7 @@ class TestGenerateCompleteCollectionMetadata:
         meta = gen_with_tracks.generate_complete_collection_metadata()
         main_body = self._extract_usage_body(meta["description"])
 
-        expected = "\n".join(load_skill_config("video-description").get("usage_attribution_lines", []))
+        expected = "\n".join(load_skill_config("video")["describe"].get("usage_attribution_lines", []))
         assert expected  # デフォルト config に本文行が存在すること
         assert main_body == expected
 

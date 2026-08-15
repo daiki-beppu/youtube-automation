@@ -2,7 +2,7 @@
 
 ## 前後工程
 
-- `前工程`: `/wf-new`, `/video --generate`, `/video-description`, `/publish --playlist`, `/thumbnail`
+- `前工程`: `/wf-new`, `/video --generate`, `/video --describe`, `/publish --playlist`, `/thumbnail`
 - `後工程`: `/post-publish`, `/publish --community`, `/publish --pinned`, `/publish --clean`, `/audit --metadata`
 - `委譲先`: `/post-publish`
 
@@ -13,7 +13,7 @@
 
 ## Overview
 
-Complete Collection を YouTube にアップロードし、`planning/` → `live/` へ自動移行します。`/video-description` スキルで事前生成した概要欄・タイトル・タグを使用します。
+Complete Collection を YouTube にアップロードし、`planning/` → `live/` へ自動移行します。`/video --describe` で事前生成した概要欄・タイトル・タグを使用します。
 
 ## 完了条件
 
@@ -110,7 +110,7 @@ $ARGUMENTS
 
 1. **マスター動画**: skill-config `preflight.master_video_globs`（既定 `01-master/*.mp4` → `03-Individual-movie/*master*.mp4`）の順に探索 — 存在しなければエラー終了
 2. **サムネイル**: skill-config `preflight.thumbnail_candidates`（既定 `10-assets/thumbnail.jpg` → `10-assets/thumbnail.png`）の候補順で探索 — いずれも存在しなければエラー終了。`main.png/jpg` は textless 動画背景なので upload thumbnail には使わない
-3. **概要欄**: `20-documentation/descriptions.md` — **存在しない場合は `/video-description` スキルを実行して自動生成する**（対象コレクションパスを引き継ぐ）。生成完了後にアップロードフローへ進む
+3. **概要欄**: `20-documentation/descriptions.md` — **存在しない場合は `/video --describe` を実行して自動生成する**（対象コレクションパスを引き継ぐ）。生成完了後にアップロードフローへ進む
 4. **初投稿時のプレイリスト初期化**: `config/channel/playlists.json` が存在する場合は `/publish --playlist` で `uv run yt-playlist-status` を実行する。`(未作成)` があるときは、初投稿前に `uv run yt-playlist-manager --init --dry-run` → ユーザー確認 → `uv run yt-playlist-manager --init` で playlist ID を作成・書き戻してからアップロードへ進む
 
 ### collection アップロードフロー
@@ -211,7 +211,7 @@ uv run yt-upload-collection --plan -c <NAME>
 
 ## Cross References
 
-- `/video-description` — アップロード前に descriptions.md を生成
+- `/video --describe` — アップロード前に descriptions.md を生成
 - `/publish --playlist` — 初投稿前のプレイリスト初期化、状態確認、手動 assign、クリーンアップ（アップロード時の自動 assign は本スキル内で実行される）
 - `/audit --metadata` — アップロード後のローカル ↔ YouTube 整合性監査
 - `/post-publish` — `workflow.post-publish` 設定時、アップロード完了後の 3 段チェーンを承認・履歴付きで実行

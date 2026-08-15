@@ -203,7 +203,7 @@ uv run yt-init-collection "Pilot Direction Check" "pilot-direction-check" --trac
   ↓
 /video --generate                         → マスター音源 + 背景動画から最終 MP4 生成
   ↓
-/video-description → /audit --alignment → 概要欄生成 + 整合性監査
+/video --describe → /audit --alignment → 概要欄生成 + 整合性監査
   ↓
 /publish --upload                → YouTube アップロード + live 移行
 ```

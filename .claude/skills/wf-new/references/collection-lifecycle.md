@@ -38,7 +38,7 @@ collections/live/XXX-name/        → 投稿済み・公開中（Step 5 完了�
 
 ### 3. 仕上げ・公開（live/）
 1. `/video --generate <path>` で動画生成
-2. `/video-description <path>` で概要欄作成
+2. `/video --describe <path>` で概要欄作成
 3. `/publish --upload <path>` で YouTube アップロード実行
 4. `planning/` → `live/` に移行（Step 5 完了時）
 3. YouTube URL を記録

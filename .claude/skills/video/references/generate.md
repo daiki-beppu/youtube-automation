@@ -308,4 +308,4 @@ runtime mask helper は script 内から `uv run python -m youtube_automation.in
 ## Next Step
 
 動画生成後:
-- `/video-description <collection-path>` でYouTube概要欄を生成
+- `/video --describe <collection-path>` で YouTube 概要欄を生成

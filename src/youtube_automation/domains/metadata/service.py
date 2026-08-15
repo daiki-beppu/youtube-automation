@@ -87,10 +87,7 @@ class BAHMetadataGenerator:
         current_channel_dir = channel_dir()
         self._masterup_config = load_skill_config("masterup", channel_dir=current_channel_dir)
         self._crossfade_sec = float(self._masterup_config.get("audio", {}).get("crossfade_duration", 1.0))
-        self._video_description_config = load_skill_config(
-            "video-description",
-            channel_dir=current_channel_dir,
-        )
+        self._video_description_config = load_skill_config("video", channel_dir=current_channel_dir)["describe"]
         self.collection_path = Path(collection_path)
         self.collection_name = self._extract_collection_name()
         self.bit_depth = self.config.content.genre.style

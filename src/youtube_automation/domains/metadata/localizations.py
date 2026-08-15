@@ -177,7 +177,7 @@ def validate_scene_phrases(
 ) -> List[SceneTitleViolation]:
     """scene_phrases を localizations の全言語で試算し、100 codepoint 超過を一括検出する.
 
-    `/video-description` など `workflow-state.json` への書き込み前に呼ぶことで、
+    `/video --describe` など `workflow-state.json` への書き込み前に呼ぶことで、
     アップロード時 preflight まで超過発覚を遅らせず、全言語分をまとめて検査できる.
     単一言語チャンネルでは localizations 用の scene_phrases を生成しないため、
     空の scene_phrases を許容して空リストを返す.

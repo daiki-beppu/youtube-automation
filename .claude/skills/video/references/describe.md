@@ -1,19 +1,4 @@
----
-name: video-description
-purpose: 作る
-description: "Use when YouTube 概要欄を Complete Collection 形式で自動生成するとき。「概要欄」「説明文」「SEO最適化」「メタデータ生成」で発動"
----
-
-## 前後工程
-
-- `前工程`: `/video --generate`
-- `後工程`: `/publish --upload`, `/audit --metadata`
-- `委譲先`: `なし`
-
-## 成果物
-
-- `書き込む`: `collections/<id>/20-documentation/descriptions.md`, `collections/<id>/workflow-state.json`
-- `読み込む`: `collections/<id>/20-documentation/suno-prompts.md`, `data/benchmark_*.json`, `docs/benchmarks/*.md`, `config/channel/*.json`, `config/skills/video-description.yaml`
+# Describe mode
 
 ## Overview
 
@@ -29,10 +14,10 @@ description: "Use when YouTube 概要欄を Complete Collection 形式で自動�
 
 以下を deep-merge した値を設定として使う。
 
-1. `.claude/skills/video-description/config.default.yaml`
-2. `config/skills/video-description.yaml`（存在する場合）
+1. `.claude/skills/video/config.default.yaml` の `describe:` 節
+2. `config/skills/video.yaml` の `describe:` 節（存在する場合）
 
-合成規則は `youtube_automation.configuration.skills.load_skill_config("video-description")` と同じで、チャンネル上書きが優先される。存在しない override は未設定として扱い、勝手に作成しない。
+合成規則は `youtube_automation.configuration.skills.load_skill_config("video")["describe"]` と同じで、チャンネル上書きが優先される。存在しない override は未設定として扱い、勝手に作成しない。
 
 ## 前提
 
@@ -47,14 +32,14 @@ description: "Use when YouTube 概要欄を Complete Collection 形式で自動�
 - コレクションの動画が完成し、YouTube 概要欄が必要なとき
 - Complete Collection の概要欄を作成するとき
 
-`/wf-next` の公開フローでは `/video --generate` と並列に起動される。
+フラグなしの `/video` chain では、`--generate` の完了後にこの mode を実行する。
 
 ## Quick Reference
 
 | 引数 | 説明 | 例 |
 |------|------|-----|
-| `$ARGUMENTS` | コレクションディレクトリパス（省略可） | `/video-description collections/planning/20260303-clm-merlin-study-collection/` |
-| 未指定 | アクティブなコレクションを自動検出 | `/video-description` |
+| `$ARGUMENTS` | コレクションディレクトリパス（省略可） | `/video --describe collections/planning/20260303-clm-merlin-study-collection/` |
+| 未指定 | アクティブなコレクションを自動検出 | `/video --describe` |
 
 ## Channel Adaptation
 
@@ -109,8 +94,8 @@ $ARGUMENTS
 ### Complete Collection テンプレート
 
 情景フック＋タイムスタンプ＋Perfect for 構成のテンプレート。装飾ヘッダー・Usage & Attribution 本文は
-`config.default.yaml` の `section_headers` / `usage_attribution_lines` に集約されており、
-チャンネル特性に応じて `config/skills/video-description.yaml` で上書きできる（BGM 系・ゲーム音楽系・ASMR 系などへ展開可能）。
+`config.default.yaml::describe` の `section_headers` / `usage_attribution_lines` に集約されており、
+チャンネル特性に応じて `config/skills/video.yaml::describe` で上書きできる（BGM 系・ゲーム音楽系・ASMR 系などへ展開可能）。
 
 テンプレート本文・ポイント解説は `references/description-templates.md` の「Complete Collection 概要欄テンプレート」セクションを参照すること（記載値はデフォルトのサンプル）。
 
@@ -151,7 +136,7 @@ $ARGUMENTS
 
 ### Perfect for テーマ別カスタマイズ
 
-skill-config (`.claude/skills/video-description/config.default.yaml` / 上書き `config/skills/video-description.yaml`)
+skill-config (`.claude/skills/video/config.default.yaml::describe` / 上書き `config/skills/video.yaml::describe`)
 の `perfect_for_themes` からコレクションのテーマにマッチするキーを選択:
 
 - テーマが辞書にない場合は `config/channel/content.json` の `descriptions.perfect_for`（デフォルト）を使用
@@ -233,3 +218,4 @@ uv run yt-title-duplicate-check "$COLLECTION_DIR" --title "$PROPOSED_TITLE"
 
 概要欄生成後:
 - `/publish --upload <collection-path>` で YouTube へアップロード
+- `/audit --metadata <collection-path>` で公開後のメタデータ整合を監査

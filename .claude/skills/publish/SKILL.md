@@ -1,12 +1,12 @@
 ---
 name: publish
 purpose: 公開する
-description: "Use when 完成した動画を公開工程へ進めるとき。--playlist はプレイリスト管理、--upload は YouTube アップロード、--community はコミュニティ投稿準備、--batch は JSON バッチ生成、--pinned はオーナー固定コメント投稿、--clean は公開済みメディアや tmp 残骸の削除を実行する。「プレイリスト作って」「初投稿」「初回投稿」「初回公開前にプレイリスト初期化」「コミュニティ投稿」「投稿バッチ」「投稿準備」「固定コメント」「ピンコメント」「容量」「クリーンアップ」「live 整理」「でかいファイル」「tmp 掃除」「残骸」「アップロード」「公開する」で発動。動画生成は /video の generate mode、概要欄生成は /video-description"
+description: "Use when 完成した動画を公開工程へ進めるとき。--playlist はプレイリスト管理、--upload は YouTube アップロード、--community はコミュニティ投稿準備、--batch は JSON バッチ生成、--pinned はオーナー固定コメント投稿、--clean は公開済みメディアや tmp 残骸の削除を実行する。「プレイリスト作って」「初投稿」「初回投稿」「初回公開前にプレイリスト初期化」「コミュニティ投稿」「投稿バッチ」「投稿準備」「固定コメント」「ピンコメント」「容量」「クリーンアップ」「live 整理」「でかいファイル」「tmp 掃除」「残骸」「アップロード」「公開する」で発動。動画生成は /video、概要欄生成も /video"
 ---
 
 ## 前後工程
 
-- `前工程`: `/wf-new`, `/video --generate`, `/video-description`, `/thumbnail`
+- `前工程`: `/wf-new`, `/video --generate`, `/video --describe`, `/thumbnail`
 - `後工程`: `/post-publish`, `/audit --metadata`
 - `委譲先`: `/post-publish`
 

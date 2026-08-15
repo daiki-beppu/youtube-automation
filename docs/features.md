@@ -40,7 +40,7 @@
 |---|---|
 | /thumbnail | CTR 最適化サムネを生成。`--compare` で 320px 視認性検証、`--test` で Studio A/B テスト、`--iterate` で champion 還元、`--loop` で textless main から Veo / Omni ループ動画を生成 |
 | /music | `--prompt` で Suno Style、`--lyric` でボーカル曲の歌詞と構成メモ、`--generate` で engine に応じた Suno UI 連続生成または Lyria 3 長尺マスター生成、`--master` で Suno 音源の DL + クロスフェードマスター化を実行 |
-| /video | `--generate` でマスター音源 + 背景画像 / 動画から最終 MP4 を合成 |
+| /video | `--generate` で最終 MP4、`--describe` で Complete Collection 概要欄を生成 |
 
 ## 公開・運用
 
@@ -48,7 +48,6 @@ YouTube への公開、視聴者対応、容量整理、コミュニティ投稿
 
 | Skill | なにができるか |
 |---|---|
-| /video-description | YouTube 概要欄を自動生成（情景フック + タイムスタンプ + Perfect for） |
 | /publish | `--playlist` でプレイリスト管理、`--upload` で YouTube アップロード + live 移行、`--community` で投稿文準備 + Studio 起動、`--community --batch` で JSON 投稿バッチ生成、`--pinned` で固定コメント投稿、`--clean` で公開済みメディアと tmp 残骸を承認付き削除 |
 | /post-publish | 公開後の community-post → pinned-comment → audit --metadata を承認ゲート・実行履歴付きで一括実行 |
 | /comments-reply | ルール駆動コメント自動返信（dry-run → apply、二重返信防止） |
