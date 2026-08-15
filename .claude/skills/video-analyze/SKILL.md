@@ -1,5 +1,6 @@
 ---
 name: video-analyze
+purpose: 振り返る
 description: "Use when 動画本体の中身（フック構造・シーン・BGM 展開）を Gemini で解析するとき。「冒頭 30 秒解析」「retention drop」「BGM のピーク位置」で発動"
 ---
 

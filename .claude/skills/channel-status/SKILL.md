@@ -1,5 +1,6 @@
 ---
 name: channel-status
+purpose: 振り返る
 description: "Use when チャンネルの YouTube 統計（登録者・再生回数）を取得するとき。「登録者数は？」「YouTube の数字」で発動。制作進捗は /wf-status"
 ---
 

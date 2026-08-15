@@ -1,5 +1,6 @@
 ---
 name: setup
+purpose: 準備する
 description: "Use when ツール導入と GCP / OAuth の API 設定をセットアップ・再診断するとき、または新規 YouTube チャンネルを Step 1〜10 で開設するとき。「セットアップして」「環境構築」「新チャンネル」「チャンネル追加」「チャンネル開設」「/setup」「旧 /onboard」で発動。フラグなしは状態判定付きで進め、排他的な --tool / --channel mode を使える"
 ---
 

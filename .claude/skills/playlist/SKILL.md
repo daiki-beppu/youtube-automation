@@ -1,5 +1,6 @@
 ---
 name: playlist
+purpose: 公開する
 description: "Use when プレイリストの作成・割り当て・確認をするとき。「プレイリスト作って」「初投稿」「初回投稿」「初回公開前にプレイリスト初期化」「/playlist」で発動"
 ---
 

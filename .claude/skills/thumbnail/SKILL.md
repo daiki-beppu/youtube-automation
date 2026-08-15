@@ -1,5 +1,6 @@
 ---
 name: thumbnail
+purpose: 作る
 description: "Use when コレクションの YouTube サムネイル（thumbnail.jpg）を CTR 最適化し、textless main.png/jpg を先行生成して実フォント合成するとき。「サムネイル生成」「画像生成」「アイキャッチ」で発動。伸びた動画起点の改善ループは /thumbnail-iterate、競合の勝ちパターン分析は /thumbnail-research、320px 視認性比較は /thumbnail-compare、単独の Studio A/B 設計・結果記録は /thumbnail-test、SVG・汎用画像生成には使わない"
 ---
 

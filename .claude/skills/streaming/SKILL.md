@@ -1,5 +1,6 @@
 ---
 name: streaming
+purpose: 進める
 description: "Use when ライブ配信用 Vultr VPS・動画配信本体を Terraform で構築・運用・トラブルシュートするとき。「ライブ配信」「24/7 配信」「配信止まった」で発動。ライブチャット自動返信は /live-chat-reply を使う"
 ---
 

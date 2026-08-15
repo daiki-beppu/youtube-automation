@@ -1,5 +1,6 @@
 ---
 name: loop-video
+purpose: 作る
 description: "Use when テキストなし main.png/jpg から Veo または Gemini Omni Flash でループ動画背景を生成するとき。「ループ動画」「背景動画」「loop.mp4」で発動"
 ---
 

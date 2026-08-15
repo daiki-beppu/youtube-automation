@@ -1,5 +1,6 @@
 ---
 name: short-thumbnail
+purpose: 作る
 description: "Use when ショート用 9:16 サムネ作成、または short.png のループ動画化をするとき。「ショートサムネ」「short.png」「short-loop」「9:16 画像」で発動"
 ---
 

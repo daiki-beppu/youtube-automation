@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Final
 
 import yaml
 
@@ -18,6 +19,9 @@ _TABLE_REFERENCE = re.compile(r"^`(?P<reference>[^`]+)`$")
 _MODE_HEADING = "## モード判定"
 _MODIFIER_HEADING = "## 修飾フラグ"
 _MAX_MODES = 5
+_PURPOSE_VALUES: Final[frozenset[str]] = frozenset(
+    {"準備する", "調べる", "決める", "進める", "作る", "公開する", "振り返る"}
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,6 +78,14 @@ def lint_frontmatter_text(text: str) -> list[str]:
         violations.append(
             'description が double-quoted string ではありません (CLAUDE.md 規約: description: "..." で書く)'
         )
+
+    if "purpose" not in parsed:
+        violations.append("frontmatter に 'purpose' がありません")
+    elif not isinstance(parsed["purpose"], str):
+        violations.append("'purpose' は単一の文字列で指定してください")
+    elif parsed["purpose"] not in _PURPOSE_VALUES:
+        allowed = ", ".join(sorted(_PURPOSE_VALUES))
+        violations.append(f"'purpose' が許容値ではありません: {parsed['purpose']} (許容値: {allowed})")
     return violations
 
 

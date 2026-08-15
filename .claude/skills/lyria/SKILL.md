@@ -1,5 +1,6 @@
 ---
 name: lyria
+purpose: 作る
 description: "Use when Vertex AI Lyria 3 でマスター音源を自動生成するとき。/masterup は不要。Suno 人手生成チャンネルは /suno を使う"
 ---
 

@@ -1,5 +1,6 @@
 ---
 name: live-chat-reply
+purpose: 公開する
 description: "Use when 配信中の YouTube ライブチャットへ常駐 daemon で自動返信するとき。「ライブチャット返信」「チャット自動返信」「live-chat-reply」で発動。公開済み動画コメントは /comments-reply、VPS・動画配信本体は /streaming を使う"
 ---
 

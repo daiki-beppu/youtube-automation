@@ -1,5 +1,6 @@
 ---
 name: automation-update
+purpose: 準備する
 description: "Use when 下流リポジトリで automation を最新リリースへ追従させるとき。「追従」「アップグレード」「automation-update」で発動。pin bump から yt-skills sync・コミットまで一括の wizard"
 ---
 

@@ -1,5 +1,6 @@
 ---
 name: ext-install
+purpose: 準備する
 description: "Use when Chrome 拡張（suno-helper / distrokid-helper / community-helper）のインストール・更新をするとき。「拡張入れて」「extension インストール」で発動"
 ---
 

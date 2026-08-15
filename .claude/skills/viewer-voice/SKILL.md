@@ -1,5 +1,6 @@
 ---
 name: viewer-voice
+purpose: 調べる
 description: "Use when 競合コメントの収集・分析で視聴者インサイトを抽出するとき。「視聴者の声」「コメント分析」「ユーザーリサーチ」で発動。/audience-persona-design の必須入力（viewer-voice-analysis.md）を作る。新規開設では /setup --channel Step 7 で必須、公開後の再分析では任意"
 ---
 

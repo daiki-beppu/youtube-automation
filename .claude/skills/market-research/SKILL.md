@@ -1,5 +1,6 @@
 ---
 name: market-research
+purpose: 調べる
 description: "Use when 既存チャンネルから任意に市場を調べ、TTP 入替候補やニッチ仮説を根拠付きで比較するとき。「市場調査」「market research」「TTP 入替候補」「ニッチ仮説を調べて」で発動。未発見チャンネルを API でランキング化するだけなら /discover-competitors、収集済み benchmark / comments の徹底分析なら /channel-new 分析モードを使う"
 ---
 

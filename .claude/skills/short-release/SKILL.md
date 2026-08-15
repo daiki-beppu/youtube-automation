@@ -1,5 +1,6 @@
 ---
 name: short-release
+purpose: 作る
 description: "Use when release 型（楽曲リリース）チャンネルで JP+EN の 9:16 クリップを生成するとき。「リリースショート」「サビ抽出」で発動。collection 型は /short"
 ---
 

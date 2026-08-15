@@ -19,6 +19,7 @@ from youtube_automation.domains.skills.inventory import lint_frontmatter_text, l
 _VALID_SKILL_MD = """---
 name: good-skill
 description: "Use when: 良い skill のとき"
+purpose: 作る
 ---
 
 ## 前後工程
@@ -75,7 +76,7 @@ def test_lint_unquoted_description_with_colon_breaks_strict_yaml() -> None:
 
 def test_lint_unquoted_description_without_colon_violates_quote_rule() -> None:
     # パースは通るが double-quote 規約に違反するケース
-    text = "---\nname: x\ndescription: 発動条件の説明\n---\n"
+    text = "---\nname: x\ndescription: 発動条件の説明\npurpose: 作る\n---\n"
     violations = lint_frontmatter_text(text)
     assert any("double-quoted" in v for v in violations)
 
@@ -87,7 +88,7 @@ def test_lint_missing_keys_reported_individually() -> None:
 
 
 def test_lint_empty_description_violates() -> None:
-    violations = lint_frontmatter_text('---\nname: x\ndescription: "  "\n---\n')
+    violations = lint_frontmatter_text('---\nname: x\ndescription: "  "\npurpose: 作る\n---\n')
     assert any("'description' が空です" in v for v in violations)
 
 
@@ -120,6 +121,60 @@ def test_cli_lint_violation_exits_nonzero(fake_repo: Path, capsys: pytest.Captur
     assert "lint 失敗: 1/2 skill" in out
 
 
+def test_cli_lint_missing_purpose_reports_skill_and_exits_nonzero(
+    fake_repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    skills_dir = fake_repo / ".claude" / "skills"
+    _write_skill(
+        skills_dir,
+        "missing-purpose",
+        '---\nname: missing-purpose\ndescription: "Use when missing"\n---\n\n- `委譲先`: `なし`\n',
+    )
+
+    assert main(["lint", "missing-purpose"]) == 1
+    out = capsys.readouterr().out
+    assert "missing-purpose: frontmatter に 'purpose' がありません" in out
+
+
+def test_cli_lint_unknown_purpose_reports_allowed_values_and_exits_nonzero(
+    fake_repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    skills_dir = fake_repo / ".claude" / "skills"
+    _write_skill(
+        skills_dir,
+        "unknown-purpose",
+        '---\nname: unknown-purpose\ndescription: "Use when unknown"\npurpose: 測る\n---\n\n- `委譲先`: `なし`\n',
+    )
+
+    assert main(["lint", "unknown-purpose"]) == 1
+    out = capsys.readouterr().out
+    assert "unknown-purpose: 'purpose' が許容値ではありません" in out
+    for purpose in ("準備する", "調べる", "決める", "進める", "作る", "公開する", "振り返る"):
+        assert purpose in out
+
+
+def test_cli_lint_list_purpose_reports_single_value_requirement_and_exits_nonzero(
+    fake_repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    skills_dir = fake_repo / ".claude" / "skills"
+    _write_skill(
+        skills_dir,
+        "multiple-purposes",
+        """---
+name: multiple-purposes
+description: "Use when multiple"
+purpose: [作る, 公開する]
+---
+
+- `委譲先`: `なし`
+""",
+    )
+
+    assert main(["lint", "multiple-purposes"]) == 1
+    out = capsys.readouterr().out
+    assert "multiple-purposes: 'purpose' は単一の文字列で指定してください" in out
+
+
 def test_cli_lint_allowlisted_violation_is_reported_without_failing(
     fake_repo: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -127,7 +182,16 @@ def test_cli_lint_allowlisted_violation_is_reported_without_failing(
     _write_skill(
         skills_dir,
         "flop-analysis",
-        '---\nname: flop-analysis\ndescription: "Use --since"\n---\n\n- `委譲先`: `なし`\n\n## 本文\n',
+        """---
+name: flop-analysis
+description: "Use --since"
+purpose: 振り返る
+---
+
+- `委譲先`: `なし`
+
+## 本文
+""",
     )
 
     assert main(["lint", "flop-analysis"]) == 0
@@ -147,6 +211,7 @@ def test_cli_lint_allowlist_does_not_hide_another_violation(
         """---
 name: flop-analysis
 description: "Use --since"
+purpose: 振り返る
 ---
 
 ## 修飾フラグ
@@ -173,6 +238,7 @@ def test_cli_lint_missing_mode_reference_reports_skill_flag_and_path(
         """---
 name: mode-skill
 description: "Use --fast"
+purpose: 作る
 ---
 
 ## モード判定
@@ -230,7 +296,7 @@ def test_cli_lint_missing_delegation_line_exits_nonzero(fake_repo: Path, capsys:
     _write_skill(
         skills_dir,
         "missing-delegation",
-        '---\nname: missing-delegation\ndescription: "Use when missing"\n---\n',
+        '---\nname: missing-delegation\ndescription: "Use when missing"\npurpose: 作る\n---\n',
     )
 
     assert main(["lint", "missing-delegation"]) == 1

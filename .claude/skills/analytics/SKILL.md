@@ -1,5 +1,6 @@
 ---
 name: analytics
+purpose: 振り返る
 description: "Use when YouTube Analytics の収集・分析・レポート表示を一括実行または一段だけ実行するとき。フラグなしは収集→分析→表示を状態判定付きで進める。「Analytics 一括実行」「データ更新」「パフォーマンス分析」「レポート見せて」で発動。一段だけは排他的な --collect / --analyze / --report を使う"
 ---
 

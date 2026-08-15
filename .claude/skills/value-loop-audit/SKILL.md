@@ -1,5 +1,6 @@
 ---
 name: value-loop-audit
+purpose: 振り返る
 description: "Use when チャンネルの価値ループ（シーン定義→制約翻訳→公開前ゲート→指標還流）の整備状況を読み取り専用で横断診断するとき。「価値ループ監査」「value loop audit」「制作基盤診断」で発動。動画単位の整合監査は /alignment-check、説明欄監査は /metadata-audit、制作進捗は /wf-status、YouTube 統計は /channel-status を使う"
 ---
 

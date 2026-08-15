@@ -1,5 +1,6 @@
 ---
 name: wf-next
+purpose: 進める
 description: "Use when 既存コレクション（collections/planning/）を一段進めるとき。「次どうする？」「続き進めて」で発動。進捗閲覧のみは /wf-status、新規は /wf-new"
 ---
 
