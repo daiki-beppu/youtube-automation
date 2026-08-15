@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `refactor(uploads)`: `ShortUploader` が複製していた公開日計算と tracking / workflow-state I/O を `PublishedDatesScheduler` / `TrackingStore` の共通コラボレータへ統合する（#3935）。
 - `refactor(collections)`: raw master・batch video・thumbnail auto selection・DistroKid release date・Suno selection の5 writerを `workflow-state` owner の lock + atomic update へ移行する（#3880）。
 - `refactor(collections)`: collection server と Suno downloaded の `workflow-state` 読み書きを owner API へ移し、downloaded 更新を lock + atomic update に統一する（#3879）。
 - `refactor(collections)`: rain layer・scene phrase・track 表示名・Short upload の4 writerを `workflow-state` owner の lock + atomic update 経由へ移し、同時更新と未知 field を保持する（#3878）。

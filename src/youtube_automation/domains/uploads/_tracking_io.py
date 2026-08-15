@@ -10,6 +10,7 @@ from youtube_automation.core.adapters.media import CollectionPaths
 from youtube_automation.core.adapters.runtime import now_in_schedule_tz
 from youtube_automation.core.errors import ValidationError, WorkflowStateError
 from youtube_automation.domains.collections.workflow_state import WorkflowState
+from youtube_automation.domains.collections.workflow_state import read_or_none as read_workflow_state_or_none
 from youtube_automation.domains.collections.workflow_state import update as update_workflow_state
 from youtube_automation.domains.uploads._collection_uploader_constants import (
     TRACKING_STATUS_COMPLETED,
@@ -44,7 +45,7 @@ class TrackingStore:
             return None
 
         try:
-            return json.loads(read_file_text(tracking_file))
+            return self.read(collection_path)
         except (json.JSONDecodeError, UnicodeDecodeError) as e:
             # 破損ファイルを退避してから None を返す（無言で消さず証拠を保全）。
             # 呼び出し側は None を「tracking なし」として扱い dedup 探索が働く。
@@ -52,6 +53,10 @@ class TrackingStore:
             replace_file(tracking_file, corrupt_path)
             logger.error(f"❌ tracking 破損を検出、{corrupt_path} へ退避しました（原因: {e}）")
             return None
+
+    def read(self, collection_path: Path) -> dict:
+        """tracking を読み、欠落・破損時の例外を呼び出し側へ伝える。"""
+        return json.loads(read_file_text(self.tracking_path(collection_path)))
 
     def save(self, collection_path: Path, tracking: dict) -> None:
         """tracking 保存"""
@@ -106,6 +111,107 @@ class TrackingStore:
             if "workflow-state.json::upload must be an object" in str(error):
                 raise ValidationError(f"workflow-state.json upload must be object: {ws_path}") from error
             raise ValidationError(str(error)) from error
+
+    def load_workflow_state(self, workflow_state_path: Path) -> dict | None:
+        """workflow-state を読み、欠落・破損は Shorts の既存 fail-safe に合わせる。"""
+        if not path_exists(workflow_state_path):
+            return None
+        try:
+            state = read_workflow_state_or_none(workflow_state_path)
+            return state.to_dict() if state is not None else None
+        except WorkflowStateError as error:
+            logger.warning(f"workflow-state.json 読み込み失敗: {error}")
+            return None
+
+    @staticmethod
+    def _find_short_entry(shorts: list, short_num: int | None) -> dict | None:
+        for entry in shorts:
+            if isinstance(entry, dict) and entry.get("short_num") == short_num:
+                return entry
+        return None
+
+    def read_short_resume_uri(self, workflow_state_path: Path, short_num: int | None) -> str | None:
+        state = self.load_workflow_state(workflow_state_path)
+        if not state:
+            return None
+        shorts = (state.get("post_upload") or {}).get("shorts") or []
+        entry = self._find_short_entry(shorts, short_num)
+        return entry.get("resume_session_uri") if entry else None
+
+    def persist_short_resume_uri(
+        self,
+        workflow_state_path: Path,
+        short_num: int | None,
+        uri: str | None,
+    ) -> None:
+        if not path_exists(workflow_state_path):
+            logger.warning(f"workflow-state.json が無いため resume URI 永続化を skip: {workflow_state_path}")
+            return
+
+        def persist_resume_uri(state: WorkflowState) -> None:
+            post_upload = state.get("post_upload") or {}
+            if not isinstance(post_upload, dict):
+                post_upload = {}
+            shorts = post_upload.get("shorts")
+            if not isinstance(shorts, list):
+                shorts = []
+                post_upload["shorts"] = shorts
+
+            entry = self._find_short_entry(shorts, short_num)
+            if entry is None:
+                entry = {"short_num": short_num}
+                shorts.append(entry)
+            if uri is None:
+                entry.pop("resume_session_uri", None)
+            else:
+                entry["resume_session_uri"] = uri
+            state["post_upload"] = post_upload
+
+        try:
+            update_workflow_state(workflow_state_path, persist_resume_uri)
+        except WorkflowStateError as error:
+            logger.warning(f"workflow-state.json 読み込み/書き込み失敗: {error}")
+
+    def record_short_upload(
+        self,
+        collection_path: Path,
+        *,
+        short_num: int | None,
+        video_id: str,
+        publish_at: str | None,
+    ) -> None:
+        workflow_state_path = CollectionPaths(collection_path).workflow_state_path
+        if not path_exists(workflow_state_path):
+            logger.warning(f"workflow-state.json が無いため short upload 記録を skip: {workflow_state_path}")
+            return
+
+        entry = {
+            "short_num": short_num,
+            "video_id": video_id,
+            "uploaded_at": now_in_schedule_tz(self.config).isoformat(),
+            "publish_at": publish_at,
+        }
+
+        def record_uploaded_short(state: WorkflowState) -> None:
+            post_upload = state.get("post_upload") or {}
+            if not isinstance(post_upload, dict):
+                post_upload = {}
+            shorts = post_upload.get("shorts")
+            if not isinstance(shorts, list):
+                shorts = []
+                post_upload["shorts"] = shorts
+            for index, existing in enumerate(shorts):
+                if existing.get("short_num") == short_num:
+                    shorts[index] = entry
+                    break
+            else:
+                shorts.append(entry)
+            state["post_upload"] = post_upload
+
+        try:
+            update_workflow_state(workflow_state_path, record_uploaded_short)
+        except WorkflowStateError as error:
+            logger.warning(f"workflow-state.json 読み込み/書き込み失敗: {error}")
 
     def initialize(self, collection_path: Path) -> dict:
         """tracking を初期化"""

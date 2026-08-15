@@ -40,7 +40,7 @@ VIDEOS_UPDATE_QUOTA_UNITS = 50
 def collect_short_videos() -> list[dict]:
     """`collections/live/*/workflow-state.json` から Shorts video_id を集める.
 
-    スキーマ: `post_upload.shorts: list[dict]`（`ShortUploader._update_workflow_state` と対称）.
+    スキーマ: `post_upload.shorts: list[dict]`（`TrackingStore.record_short_upload` と対称）.
     `20-documentation/upload_tracking.json` が無いコレクションは skip（CC URL が無いと
     description テンプレ展開が空になるため）.
 

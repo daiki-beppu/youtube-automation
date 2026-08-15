@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, tzinfo
+from pathlib import Path
 from typing import ClassVar
 
 from youtube_automation.configuration import load_config
@@ -89,9 +90,69 @@ class PublishedDatesScheduler:
         "sun": 7,
     }
 
-    def __init__(self, config: dict, youtube_service_provider: Callable[[], object]) -> None:
+    def __init__(
+        self,
+        config: dict,
+        youtube_service_provider: Callable[[], object],
+        now_provider: Callable[[tzinfo | None], datetime] | None = None,
+    ) -> None:
         self.config = config
         self.youtube_service_provider = youtube_service_provider
+        self.now_provider = now_provider if now_provider is not None else lambda timezone: datetime.now(timezone)
+
+    def parse_persisted_datetime(self, raw: str, *, source: Path, field: str) -> datetime | None:
+        """永続化日時を読み、legacy の TZ-naive 値を schedule timezone で補正する。"""
+        try:
+            parsed = datetime.fromisoformat(raw)
+        except ValueError:
+            return None
+        if parsed.tzinfo is not None:
+            return parsed
+
+        timezone = get_schedule_timezone(self.config)
+        logger.warning(
+            "%s に TZ-naive な %s=%r が含まれます; schedule timezone %s で backfill します"
+            "（レガシーデータ救済 / #532）",
+            source,
+            field,
+            raw,
+            timezone,
+        )
+        return parsed.replace(tzinfo=timezone)
+
+    def calculate_short_publish_at(
+        self,
+        tracking: dict,
+        *,
+        tracking_path: Path,
+        publish_time: str,
+    ) -> str | None:
+        """Complete Collection 公開日時の翌日に Short の公開日時を置く。"""
+        complete_collection = tracking.get("complete_collection") or {}
+        base = complete_collection.get("publish_at")
+        base_field = "complete_collection.publish_at"
+        if not base:
+            base = complete_collection.get("upload_time")
+            base_field = "complete_collection.upload_time"
+        if not base:
+            return None
+
+        try:
+            hour, minute = (int(value) for value in publish_time.split(":"))
+        except ValueError:
+            logger.warning(f"short_publish_time のパース失敗: {publish_time}（HH:MM 形式が必要）")
+            return None
+
+        base_datetime = self.parse_persisted_datetime(base, source=tracking_path, field=base_field)
+        if base_datetime is None:
+            return None
+
+        timezone = get_schedule_timezone(self.config)
+        publish_datetime = base_datetime.astimezone(timezone) + timedelta(days=1)
+        publish_datetime = publish_datetime.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        if publish_datetime <= self.now_provider(timezone):
+            return None
+        return publish_datetime.isoformat()
 
     def calculate_publish_at(self) -> str | None:
         """CC のスケジュール公開日時を計算
@@ -134,7 +195,7 @@ class PublishedDatesScheduler:
         cadence = schedule_cfg.get("cadence", [])
         allowed_weekdays = {self._WEEKDAY_MAP[d.lower()] for d in cadence} if cadence else set(range(1, 8))
 
-        now = datetime.now(tz)
+        now = self.now_provider(tz)
         publish_dt = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
 
         # 既に今日の公開時刻を過ぎていたら翌日から開始
