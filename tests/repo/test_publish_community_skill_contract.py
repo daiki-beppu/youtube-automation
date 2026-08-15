@@ -53,7 +53,7 @@ def test_community_default_config_is_namespaced_and_migratable(tmp_path) -> None
     config = yaml.safe_load((PUBLISH / "config.default.yaml").read_text(encoding="utf-8"))
     migration = _migrate_config.SKILL_CONFIG_MIGRATIONS["community-post"]
 
-    assert set(config) == {"upload", "community"}
+    assert set(config) == {"upload", "community", "clean"}
     assert "template" in config["community"]
     assert "studio_url" in config["community"]
     assert migration.target_skill == "publish"

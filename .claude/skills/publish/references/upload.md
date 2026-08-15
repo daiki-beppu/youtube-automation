@@ -3,7 +3,7 @@
 ## 前後工程
 
 - `前工程`: `/wf-new`, `/video --generate`, `/video-description`, `/publish --playlist`, `/thumbnail`
-- `後工程`: `/post-publish`, `/publish --community`, `/publish --pinned`, `/metadata-audit`, `/live-clean`
+- `後工程`: `/post-publish`, `/publish --community`, `/publish --pinned`, `/publish --clean`, `/metadata-audit`
 - `委譲先`: `/post-publish`
 
 ## 成果物

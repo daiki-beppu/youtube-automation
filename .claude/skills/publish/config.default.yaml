@@ -1,7 +1,7 @@
 # publish skill default config
 #
-# アップロード前チェックとメタデータ基準の設定。
-# チャンネル側では `config/skills/publish.yaml::upload` に上書き値を置く。
+# 公開工程の mode 別設定。
+# チャンネル側では `config/skills/publish.yaml::<mode>` に上書き値を置く。
 #
 # 注意: `status.selfDeclaredMadeForKids` / `status.containsSyntheticMedia` は
 # `config/channel/youtube.json` の `self_declared_made_for_kids` / `contains_synthetic_media`
@@ -69,3 +69,26 @@ community:
   # 動画添付のリマインド表示（自動添付は API 制約で不可）
   # --------------------------------------------------------------------
   attach_video: true
+
+# clean mode デフォルト設定
+#
+# `collections/live/<id>/` からの相対 glob。チャンネル側では
+# `config/skills/publish.yaml::clean` に上書きし、リストは丸ごと置換する。
+clean:
+  # YouTube に存在する、または再生成可能な削除対象
+  delete_patterns:
+    - "01-master/master.mp3"
+    - "01-master/master-mix.wav"
+    - "01-master/*-Master.mp4"
+    - "02-Individual-music/*.mp3"
+    - "10-assets/loop_normalized.mp4"
+
+  # delete_patterns と重なった場合も必ず保護する成果物
+  protect_patterns:
+    - "workflow-state.json"
+    - "10-assets/main.png"
+    - "10-assets/main.jpg"
+    - "10-assets/thumbnail.jpg"
+    - "10-assets/thumbnail.png"
+    - "10-assets/loop.mp4"
+    - "20-documentation/*"

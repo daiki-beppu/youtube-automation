@@ -161,7 +161,7 @@ def audit_local(col: Path, config: ChannelConfig) -> list[str]:
             issues.append(msg)
 
     # 動画尺チェック（master mp4 がローカルに残っている場合のみ。
-    # /live-clean 後のコレクションでは skip して偽陽性を防ぐ）
+    # /publish --clean 後のコレクションでは skip して偽陽性を防ぐ）
     if config.audio.target_duration_min is not None or config.audio.target_duration_max is not None:
         master_video = paths.find_master_video()
         if master_video:

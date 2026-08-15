@@ -25,7 +25,7 @@ rename マッピング:
     `src/youtube_automation/domains/metadata/service.py`)
    のコメント・エラーメッセージ中の旧スラッシュ参照 `/description` が
    新名 `/video-description` に追従している。
-7. 全 SKILL.md 31 件で `name:` 欄が親ディレクトリ名と一致する（rename 漏れ防止）。
+7. 全 SKILL.md 30 件で `name:` 欄が親ディレクトリ名と一致する（rename 漏れ防止）。
 8. 監査ドキュメント `docs/audits/2026-05-skill-md-audit.md` が生成されている。
 
 スラッシュコマンド検出には、パス参照との誤検出を避けるため
@@ -252,7 +252,7 @@ def test_renamed_skill_md_front_matter_name_matches_new(old_name: str, new_name:
 
 
 def test_all_skill_md_name_matches_parent_dir() -> None:
-    """Given `.claude/skills/<dir>/SKILL.md` 全件 (31 件)
+    """Given `.claude/skills/<dir>/SKILL.md` 全件 (30 件)
     When 各 SKILL.md の YAML front-matter `name:` を読む
     Then 値が親ディレクトリ名と完全一致する。
 
