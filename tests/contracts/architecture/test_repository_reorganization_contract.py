@@ -1590,6 +1590,9 @@ def test_reorganization_receipt_names_existing_non_contract_consumers() -> None:
         ".claude/skills/collection-ideate/references/select-ttp-references.py": (
             ".claude/skills/wf-new/references/select-ttp-references.py"
         ),
+        "src/youtube_automation/commands/uploads/_upload_cli_error_boundary.py": (
+            "src/youtube_automation/commands/_shared/cli_harness.py"
+        ),
     }
     resolved_paths = [historical_consumer_moves.get(path, path) for path in consumer_paths]
 
