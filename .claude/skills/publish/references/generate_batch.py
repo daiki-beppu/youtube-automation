@@ -148,14 +148,14 @@ def generate_batch(collection: Path) -> Path:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="community-draft JSON batch generator")
+    parser = argparse.ArgumentParser(description="publish community JSON batch generator")
     parser.add_argument("--batch", action="store_true", required=True, help="deterministic batch generation mode")
     parser.add_argument("--collection", type=Path, required=True, help="target collection directory")
     args = parser.parse_args()
     try:
         output_path = generate_batch(args.collection)
     except (ConfigError, OSError, ValueError) as exc:
-        print(f"community-draft: {exc}", file=sys.stderr)
+        print(f"publish community batch: {exc}", file=sys.stderr)
         return 1
     print(output_path)
     return 0

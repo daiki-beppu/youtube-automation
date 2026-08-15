@@ -570,14 +570,14 @@
     },
     {
       "old_owner": "legacy..claude.skills.community-draft.SKILL.md",
-      "exact_new_owner": ".claude/skills/community-draft/SKILL.md",
+      "exact_new_owner": ".claude/skills/publish/references/community.md",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"
     },
     {
       "old_owner": "legacy..claude.skills.community-draft.references.generate_batch",
-      "exact_new_owner": ".claude/skills/community-draft/references/generate_batch.py",
+      "exact_new_owner": ".claude/skills/publish/references/generate_batch.py",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"

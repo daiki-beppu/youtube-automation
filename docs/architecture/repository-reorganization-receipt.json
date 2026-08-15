@@ -1323,7 +1323,7 @@
         "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py",
         "Updated consumer: .claude/skills/short-thumbnail/references/generate_short_loop.py",
         "Updated consumer: .claude/skills/analytics/references/analytics-chain-state.py",
-        "Updated consumer: .claude/skills/community-draft/references/generate_batch.py",
+        "Updated consumer: .claude/skills/publish/references/generate_batch.py",
         "Updated consumer: .claude/skills/publish/references/playlist_manager.py",
         "Updated consumer: .claude/skills/music/references/generate_suno_prompts.py",
         "Updated consumer: .claude/skills/distrokid-helper/references/distrokid_prepare.py",

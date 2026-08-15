@@ -268,6 +268,7 @@ MUTABLE_FILES = frozenset(path for path, _, _ in EXPECTED_ACTIVE_ROUTES if path 
     "publish/config.default.yaml",
     "publish/references/posting-checklist.md",
     "publish/references/community.md",
+    "publish/references/generate_batch.py",
     "publish/references/publish-chain-manifest.json",
     "publish/references/publish-chain-state.py",
     "publish/references/scheduled-publish.md",

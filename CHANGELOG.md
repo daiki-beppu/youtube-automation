@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(skills)`: `/publish --community --batch` modifier に旧 `/community-draft` の決定的 JSON 投稿バッチ生成を統合する。`--batch` は community mode 専用として fail-closed に検証し、generator・利用者導線・配布・site 契約を新 owner へ移す（#3844）。
+
 - `feat(skills)`: `/publish --community` に旧 `/community-post` の固定テンプレ保存・クリップボードコピー・Studio 起動契約を統合する。chain を `playlist` → `upload` → `community` へ拡張し、post-publish の承認設定と旧 override 互換を維持したまま、旧 skill directory と利用者導線・配布・site 契約を更新する（#3843）。
 
 - `feat(skills)`: `/publish --playlist` に旧 `/playlist` の状態確認・初期化・割り当て・cleanup 契約を統合する。chain を `playlist` → `upload` へ拡張し、playlist 作成の dry-run・明示承認を維持したまま、旧 skill directory と利用者導線・配布・site 契約を更新する（#3842）。

@@ -10,8 +10,8 @@ from pathlib import Path
 from tests.helpers.paths import REPO_ROOT
 
 REPO_ROOT = REPO_ROOT
-SCRIPT = REPO_ROOT / ".claude/skills/community-draft/references/generate_batch.py"
-SKILL = REPO_ROOT / ".claude/skills/community-draft/SKILL.md"
+SCRIPT = REPO_ROOT / ".claude/skills/publish/references/generate_batch.py"
+SKILL = REPO_ROOT / ".claude/skills/publish/references/community.md"
 
 
 def _write_json(path: Path, value: object) -> None:
@@ -87,14 +87,14 @@ def test_generate_batch_fails_loudly_without_publish_target(tmp_path: Path) -> N
 
 
 def test_active_community_docs_have_no_legacy_type_markdown_or_clipboard_flow() -> None:
+    batch_docs = SKILL.read_text(encoding="utf-8").split("## Batch modifier", 1)[1].split("## Single-post flow", 1)[0]
     active_paths = (
-        SKILL,
         REPO_ROOT / ".claude/skills/wf-new/references/ideate.md",
         REPO_ROOT / "src/youtube_automation/commands/collections/vote_log.py",
         REPO_ROOT / "src/youtube_automation/domains/collections/weekly_vote_log.py",
         REPO_ROOT / "src/youtube_automation/domains/collections/schemas/weekly_vote_log.schema.json",
     )
-    text = "\n".join(path.read_text(encoding="utf-8") for path in active_paths)
+    text = batch_docs + "\n" + "\n".join(path.read_text(encoding="utf-8") for path in active_paths)
 
     for legacy in ("--type", "community-post-draft.md", "pbcopy"):
         assert legacy not in text

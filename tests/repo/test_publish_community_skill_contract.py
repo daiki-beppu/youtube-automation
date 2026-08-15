@@ -24,7 +24,7 @@ def test_publish_owns_community_mode() -> None:
     assert "community-post.txt" in community
     assert "pbcopy" in community
     assert 'open "$STUDIO_URL"' in community
-    assert "/community-draft" in community
+    assert "--community --batch" in community
 
 
 def test_publish_chain_appends_community_with_existing_approval_resolution() -> None:

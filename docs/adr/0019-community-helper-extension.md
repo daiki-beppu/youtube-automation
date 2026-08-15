@@ -12,7 +12,7 @@ accepted (2026-06-25)。#1712 で拡張の scaffold / messaging 基盤、#1713 �
 
 ## Context
 
-YouTube コミュニティ投稿のスケジュール投稿は、`/community-draft` スキルでテキスト生成 → `pbcopy` → YouTube Studio を手動で開いてペースト → 日時設定という手作業フローだった。1 コレクションあたり 3 件の投稿を繰り返すため、テキスト入力・画像添付・スケジュール日時設定を自動化する Chrome 拡張 `community-helper` を新設する。
+YouTube コミュニティ投稿のスケジュール投稿は、現 `/publish --community --batch` の前身スキルでテキスト生成 → `pbcopy` → YouTube Studio を手動で開いてペースト → 日時設定という手作業フローだった。1 コレクションあたり 3 件の投稿を繰り返すため、テキスト入力・画像添付・スケジュール日時設定を自動化する Chrome 拡張 `community-helper` を新設する。
 
 ## Decision
 
@@ -20,7 +20,7 @@ YouTube コミュニティ投稿のスケジュール投稿は、`/community-dra
 2. **type-safe messaging (`@webext-core/messaging`) と `/version` 互換チェックを品質ベースラインとして維持する。** messaging は Popup → background → content の制御・進捗に加え、background が取得した投稿 JSON・画像を content へ渡す境界にも使う
 3. **UI は Popup のみ (オーバーレイなし)。** 3 件の処理に React Shadow DOM オーバーレイは過剰。WXT 標準の Popup でサーバー URL 入力 + Start + 進捗表示を収める
 4. **サーバールートは `GET /community/posts.json` + `GET /community/posts/{index}/image`。** dir モード (コレクション一覧選択) は初期スコープ外
-5. **投稿データは `/community-draft` スキルが `<collection>/30-promo/community-posts.json` に生成する。** 既存の markdown 出力は廃止し JSON 一本化。LLM 生成もやめ、チャンネル config のテンプレート + 変数展開で決定的な出力を得る
+5. **投稿データは `/publish --community --batch` が `<collection>/30-promo/community-posts.json` に生成する。** 既存の markdown 出力は廃止し JSON 一本化。LLM 生成もやめ、チャンネル config のテンプレート + 変数展開で決定的な出力を得る
 6. **投稿テンプレートと schedule offset はチャンネル config (`config/channel/community-draft.json`) で宣言する。** `schedule_offset_days` の基準は `workflow-state.json` の `publish_target_at`。チャンネルごとに投稿タイプ・件数・内容を自由に設定できる
 7. **DOM セレクタは `extensions/shared/community-dom.ts` に集約する。** YouTube の Polymer/ShadyDOM 構造は Chrome DevTools で実地調査し、locale-independent なクエリで変更耐性を持たせる
 8. **対象 UI は YouTube 本体のチャンネル投稿ページ (`https://www.youtube.com/channel/*/posts*`) のみ。** Studio の投稿導線はこのページへ遷移し、`studio.youtube.com/channel/*/posts` には作成 UI が存在しないことを #1708 で確認した。content script の match は投稿ページに限定する
@@ -29,7 +29,7 @@ YouTube コミュニティ投稿のスケジュール投稿は、`/community-dra
 ## Considered Options
 
 - **Popup vs オーバーレイ**: suno-helper と同じ React オーバーレイは UX の一貫性を保てるが、3 件の処理に React + Shadow DOM + position persistence は開発・保守コストが見合わない
-- **LLM テキスト生成 vs テンプレート展開**: `/community-draft` の既存 LLM 生成は柔軟だが、出力が非決定的で毎回確認が必要。テンプレート方式は再現可能で、チャンネルオーナーが config だけで投稿内容を完全にコントロールできる
+- **LLM テキスト生成 vs テンプレート展開**: 前身スキルの既存 LLM 生成は柔軟だが、出力が非決定的で毎回確認が必要。テンプレート方式は再現可能で、チャンネルオーナーが config だけで投稿内容を完全にコントロールできる
 - **markdown + pbcopy 併存 vs JSON 一本化**: 併存は移行期に有用だが、2 つの出力形式を保守する負担がある。拡張機能の導入で手動ペーストフローは不要になるため一本化
 
 ## Consequences
@@ -37,7 +37,7 @@ YouTube コミュニティ投稿のスケジュール投稿は、`/community-dra
 - `extensions/community-helper/` を WXT + React + TypeScript で新設する
 - `extensions/shared/` に `community-dom.ts` (DOM セレクタ) と API 型 (`CommunityPost`) を追加する
 - `yt-collection-serve` に `/community/posts.json` と `/community/posts/{index}/image` を追加する
-- `/community-draft` スキルを改修: markdown 廃止、JSON バッチ出力、テンプレート + 変数方式への移行
+- `/publish --community --batch` へ統合: markdown 廃止、JSON バッチ出力、テンプレート + 変数方式への移行
 - `release-extensions.yml` に community-helper の zip 化ステップを追加する (ADR-0011 の統一タグ `ext-v*` に従う)
 - YouTube 本体の投稿 UI の DOM 構造変更に追従するコストが発生する (suno-helper の Suno DOM 追従と同種のリスク)
 - localhost の community route は YouTube page origin へ CORS 公開せず、extension context からのみ取得する
@@ -46,7 +46,7 @@ YouTube コミュニティ投稿のスケジュール投稿は、`/community-dra
 ## `community-draft.json` schema contract
 
 `config/channel/community-draft.json` is optional for channels that do not use the
-community batch workflow. When `/community-draft --batch` is explicitly requested,
+community batch workflow. When `/publish --community --batch` is explicitly requested,
 however, a missing file is an error: the command must stop before producing
 `community-posts.json` and identify the missing config path. It must not silently
 fall back to the legacy markdown templates.
