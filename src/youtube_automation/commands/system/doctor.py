@@ -35,10 +35,10 @@ from youtube_automation.commands.system.automation_update_refs import UPSTREAM_R
 from youtube_automation.commands.system.skills_sync import bundled_skill_names
 from youtube_automation.configuration import (
     channel_dir,
+    explicit_channel_selection,
     find_workspace_root,
     workspace_channels,
 )
-from youtube_automation.configuration.loader import _explicit_channel_selection
 from youtube_automation.configuration.skills import load_skill_config
 from youtube_automation.core.errors import AutomationError, ConfigError, YouTubeAPIError
 from youtube_automation.domains.channel_readiness import (
@@ -2289,7 +2289,7 @@ def resolve_channel_dir(target: Optional[str]) -> Path:
         return channel_dir().resolve()
     except ConfigError:
         selection_requested = (
-            _explicit_channel_selection() is not None
+            explicit_channel_selection() is not None
             or bool(os.environ.get("CHANNEL"))
             or bool(os.environ.get("CHANNEL_DIR"))
             or find_workspace_root(cwd) is not None

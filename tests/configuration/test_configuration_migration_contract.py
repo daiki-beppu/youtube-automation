@@ -102,6 +102,7 @@ def test_configuration_public_api_preserves_the_specified_exports():
         "PinnedComment",
         "Shorts",
         "channel_dir",
+        "explicit_channel_selection",
         "find_workspace_root",
         "load_config",
         "reset",
