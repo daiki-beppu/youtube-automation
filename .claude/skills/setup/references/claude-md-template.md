@@ -143,4 +143,4 @@ Complete Collection アップロード + live 移動を実行:
 
 ---
 
-*v1.0 - /channel-new で自動生成*
+*v1.0 - /setup で自動生成*

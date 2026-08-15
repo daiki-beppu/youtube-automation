@@ -65,7 +65,7 @@ subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実�
 
 ### 選択タイミング（どこで lyria が選ばれるか）
 
-1. **チャンネルのデフォルト** — `/channel-new`（方向性検討モード）で suno/lyria を検討 → `/setup --regenerate` が `config/channel/youtube.json` の `music_engine` に書き込む
+1. **チャンネルのデフォルト** — `/channel-strategy --direction`（方向性検討モード）で suno/lyria を検討 → `/setup --regenerate` が `config/channel/youtube.json` の `music_engine` に書き込む
 2. **コレクション単位の上書き** — `/wf-new` の `yt-init-collection --music-engine lyria` でコレクション毎に上書き可能（省略時はチャンネル設定を継承）
 3. **このスキルが呼ばれるとき** — `/wf-new` が `workflow-state.json` の `music_engine = "lyria"` を判定して `/lyria` を自動実行する。手動で `/lyria <theme>` を叩いた場合もこのスキルに入る
 

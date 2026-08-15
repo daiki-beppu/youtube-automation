@@ -13,7 +13,7 @@ ROOT = REPO_ROOT
     "path",
     [
         "examples/channel_config.example/content.json",
-        ".claude/skills/channel-new/references/config-template/content.json",
+        ".claude/skills/setup/references/config-template/content.json",
     ],
 )
 def test_content_templates_use_base_only_tags_min_count(path: str) -> None:

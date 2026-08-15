@@ -181,7 +181,7 @@ def test_flop_analysis_uses_noninteractive_analysis_boundaries() -> None:
         "/channel-research --voice",
         "/channel-strategy --persona",
         "/channel-strategy --scene",
-        "/channel-new",
+        "/channel-strategy --direction",
         "/channel-research --discover",
     )
     for mapping in mappings:
@@ -190,8 +190,8 @@ def test_flop_analysis_uses_noninteractive_analysis_boundaries() -> None:
     interactive_skill_texts = (
         (ROOT / ".claude/skills/alignment-check/SKILL.md").read_text(encoding="utf-8"),
         (ROOT / ".claude/skills/channel-strategy/references/scene.md").read_text(encoding="utf-8"),
-        (ROOT / ".claude/skills/channel-new/SKILL.md").read_text(encoding="utf-8")
-        + (ROOT / ".claude/skills/channel-new/references/direction-mode.md").read_text(encoding="utf-8"),
+        (ROOT / ".claude/skills/channel-strategy/SKILL.md").read_text(encoding="utf-8")
+        + (ROOT / ".claude/skills/channel-strategy/references/direction.md").read_text(encoding="utf-8"),
     )
     for skill_text in interactive_skill_texts:
         assert "AskUserQuestion" in skill_text

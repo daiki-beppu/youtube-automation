@@ -189,7 +189,7 @@ subagent へは次を具体値で渡す:
 
 - 競合の動画詳細分析 → `/channel-research --benchmark`
 - 視聴者コメント分析 → `/channel-research --voice`
-- 方向性決定・config 生成 → `/channel-new`（方向性検討モード）/ `/setup --regenerate`
+- 方向性決定・config 生成 → `/channel-strategy --direction`（方向性検討モード）/ `/setup --regenerate`
 - ベンチマーク再収集 → `/channel-research --benchmark`
 
 このスキルは **発掘**だけに責任を持つ。深堀分析は専用スキルにバトンを渡す。

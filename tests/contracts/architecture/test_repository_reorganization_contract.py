@@ -1527,6 +1527,18 @@ def test_reorganization_receipt_names_existing_non_contract_consumers() -> None:
         consumer_paths.extend(consumers)
 
     historical_consumer_moves = {
+        ".claude/skills/channel-new/SKILL.md": ".claude/skills/channel-strategy/SKILL.md",
+        ".claude/skills/channel-new/references/analysis-mode.md": ".claude/skills/channel-research/references/market.md",
+        ".claude/skills/channel-new/references/claude-md-template.md": ".claude/skills/setup/references/claude-md-template.md",
+        ".claude/skills/channel-new/references/config-generation-rules.md": ".claude/skills/setup/references/config-generation-rules.md",
+        ".claude/skills/channel-new/references/desire-vocabulary.md": ".claude/skills/channel-strategy/references/desire-vocabulary.md",
+        ".claude/skills/channel-new/references/direction-mode.md": ".claude/skills/channel-strategy/references/direction.md",
+        ".claude/skills/channel-new/references/directory-structure.md": ".claude/skills/setup/references/directory-structure.md",
+        ".claude/skills/channel-new/references/fetch_branding_snapshot.py": ".claude/skills/setup/references/fetch_branding_snapshot.py",
+        ".claude/skills/channel-new/references/generate_image.py": ".claude/skills/setup/references/generate_image.py",
+        ".claude/skills/channel-new/references/benchmark_collector.py": ".claude/skills/channel-research/references/benchmark_collector.py",
+        ".claude/skills/channel-new/references/fetch_benchmark_comments.py": ".claude/skills/channel-research/references/fetch_benchmark_comments.py",
+        ".claude/skills/channel-new/references/verification.md": ".claude/skills/setup/references/verification.md",
         ".claude/skills/automation-schedule/references/schedule_config.py": (
             ".claude/skills/wf-new/references/schedule_config.py"
         ),
@@ -1537,7 +1549,7 @@ def test_reorganization_receipt_names_existing_non_contract_consumers() -> None:
         ".claude/skills/wf-new/references/benchmark_collector.py": (
             ".claude/skills/channel-research/references/benchmark_collector.py"
         ),
-        ".claude/skills/channel-new/references/benchmark_collector.py": (
+        ".claude/skills/setup/references/benchmark_collector.py": (
             ".claude/skills/channel-research/references/benchmark_collector.py"
         ),
         ".claude/skills/benchmark/references/benchmark_collector.py": (
@@ -1545,9 +1557,7 @@ def test_reorganization_receipt_names_existing_non_contract_consumers() -> None:
         ),
         ".claude/skills/benchmark/SKILL.md": ".claude/skills/channel-research/references/benchmark.md",
         ".claude/skills/discover-competitors/SKILL.md": (".claude/skills/channel-research/references/discover.md"),
-        ".claude/skills/channel-new/references/analysis-mode.md": (
-            ".claude/skills/channel-research/references/market.md"
-        ),
+        ".claude/skills/setup/references/analysis-mode.md": (".claude/skills/channel-research/references/market.md"),
         ".claude/skills/market-research/SKILL.md": ".claude/skills/channel-research/references/market.md",
         ".claude/skills/market-research/references/report-contract.md": (
             ".claude/skills/channel-research/references/report-contract.md"
@@ -1556,7 +1566,7 @@ def test_reorganization_receipt_names_existing_non_contract_consumers() -> None:
         ".claude/skills/viewer-voice/references/fetch_benchmark_comments.py": (
             ".claude/skills/channel-research/references/fetch_benchmark_comments.py"
         ),
-        ".claude/skills/channel-new/references/fetch_benchmark_comments.py": (
+        ".claude/skills/setup/references/fetch_benchmark_comments.py": (
             ".claude/skills/channel-research/references/fetch_benchmark_comments.py"
         ),
         ".claude/skills/thumbnail-research/SKILL.md": ".claude/skills/channel-research/references/thumbnail.md",

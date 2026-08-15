@@ -75,7 +75,7 @@ find docs/benchmarks/thumbnails data/thumbnail_compare/benchmark \
 
 上位群と下位群の全動画を、次のカテゴリで同じ粒度に分類する。観察できない項目を推測せず `判定不能` とする。
 
-欲求語彙の選択、欠落時の継続条件、`推定` と根拠の記録は `.claude/skills/channel-new/references/desire-vocabulary.md` をそのまま適用する。
+欲求語彙の選択、欠落時の継続条件、`推定` と根拠の記録は `.claude/skills/channel-strategy/references/desire-vocabulary.md` をそのまま適用する。
 
 | カテゴリ | 記録する項目 |
 |---|---|

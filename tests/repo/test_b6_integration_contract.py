@@ -233,16 +233,36 @@ def test_b6_receipt_points_every_mapping_to_an_existing_owner() -> None:
     mappings = _read_receipt().get("mappings")
     assert isinstance(mappings, list)
 
+    legacy = ".claude/skills/channel-new/references/"
+    setup = ".claude/skills/setup/references/"
+    research = ".claude/skills/channel-research/references/"
+    strategy = ".claude/skills/channel-strategy/references/"
     moved_owner_aliases = {
-        ".claude/skills/channel-new/references/import-mode.md": ".claude/skills/setup/references/import-mode.md",
-        ".claude/skills/channel-new/references/regeneration-mode.md": (
+        ".claude/skills/channel-new/SKILL.md": ".claude/skills/channel-strategy/SKILL.md",
+        f"{legacy}analysis-mode.md": f"{research}market.md",
+        f"{legacy}claude-md-template.md": f"{setup}claude-md-template.md",
+        f"{legacy}config-generation-rules.md": f"{setup}config-generation-rules.md",
+        f"{legacy}derive_ttp_duration": f"{setup}derive_ttp_duration.py",
+        f"{legacy}desire-vocabulary.md": f"{strategy}desire-vocabulary.md",
+        f"{legacy}direction-mode.md": f"{strategy}direction.md",
+        f"{legacy}directory-structure.md": f"{setup}directory-structure.md",
+        f"{legacy}fetch_branding_snapshot": f"{setup}fetch_branding_snapshot.py",
+        f"{legacy}fetch_branding_snapshot.py": f"{setup}fetch_branding_snapshot.py",
+        f"{legacy}benchmark_collector.py": f"{research}benchmark_collector.py",
+        f"{legacy}fetch_benchmark_comments.py": f"{research}fetch_benchmark_comments.py",
+        f"{legacy}generate_image.py": f"{setup}generate_image.py",
+        f"{legacy}gcp-bootstrap.md": f"{setup}gcp-bootstrap.md",
+        f"{legacy}import-mode.md": f"{setup}import-mode.md",
+        f"{legacy}regeneration-mode.md": f"{setup}regeneration-mode.md",
+        f"{legacy}terraform-gcp/README.md": f"{setup}terraform-gcp/README.md",
+        f"{legacy}verification.md": f"{setup}verification.md",
+        ".claude/skills/setup/references/import-mode.md": ".claude/skills/setup/references/import-mode.md",
+        ".claude/skills/setup/references/regeneration-mode.md": (
             ".claude/skills/setup/references/regeneration-mode.md"
         ),
         ".claude/skills/benchmark/SKILL.md": ".claude/skills/channel-research/references/benchmark.md",
         ".claude/skills/discover-competitors/SKILL.md": (".claude/skills/channel-research/references/discover.md"),
-        ".claude/skills/channel-new/references/analysis-mode.md": (
-            ".claude/skills/channel-research/references/market.md"
-        ),
+        ".claude/skills/setup/references/analysis-mode.md": (".claude/skills/channel-research/references/market.md"),
         ".claude/skills/market-research/SKILL.md": ".claude/skills/channel-research/references/market.md",
         ".claude/skills/market-research/references/report-contract.md": (
             ".claude/skills/channel-research/references/report-contract.md"
@@ -251,7 +271,7 @@ def test_b6_receipt_points_every_mapping_to_an_existing_owner() -> None:
         ".claude/skills/viewer-voice/references/fetch_benchmark_comments.py": (
             ".claude/skills/channel-research/references/fetch_benchmark_comments.py"
         ),
-        ".claude/skills/channel-new/references/fetch_benchmark_comments.py": (
+        ".claude/skills/setup/references/fetch_benchmark_comments.py": (
             ".claude/skills/channel-research/references/fetch_benchmark_comments.py"
         ),
         ".claude/skills/thumbnail-research/SKILL.md": ".claude/skills/channel-research/references/thumbnail.md",

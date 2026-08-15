@@ -40,6 +40,7 @@ _CHANNEL_NEW_SHARED_ASSETS = frozenset(
         "verification.md",
     }
 )
+_SETUP_SHARED_ASSETS = _CHANNEL_NEW_SHARED_ASSETS - {"direction-mode.md", "desire-vocabulary.md"}
 _SETUP_MIGRATED_ASSETS = frozenset(
     {
         "import-mode.md",
@@ -300,21 +301,12 @@ assert "wheel-identity-check" not in legacy._cache
         assert local_links
         assert all((markdown.parent / link).is_file() for link in local_links)
 
-    channel_new = downstream / ".claude" / "skills" / "channel-new" / "SKILL.md"
-    channel_new_text = channel_new.read_text(encoding="utf-8")
-    assert "`/setup --channel` を案内して停止する" in channel_new_text
-    assert "ファイルやディレクトリの作成・更新を行わない" in channel_new_text
-    assert "## Instructions（新規開設モード）" not in channel_new_text
-    channel_new_references = channel_new.parent / "references"
-    installed_shared_assets = {
-        path.relative_to(channel_new_references).as_posix()
-        for path in channel_new_references.rglob("*")
-        if path.is_file() or path.is_symlink()
-    }
-    assert installed_shared_assets == _CHANNEL_NEW_SHARED_ASSETS
-    for residual_reference in ("direction-mode.md",):
-        assert f"references/{residual_reference}" in channel_new_text
-        assert (channel_new_references / residual_reference).is_file()
+    assert not (downstream / ".claude" / "skills" / "channel-new").exists()
+    strategy_references = downstream / ".claude" / "skills" / "channel-strategy" / "references"
+    assert (strategy_references / "direction.md").is_file()
+    assert (strategy_references / "desire-vocabulary.md").is_file()
+    for shared_asset in _SETUP_SHARED_ASSETS:
+        assert (distributed_references / shared_asset).is_file()
 
     channel_research = downstream / ".claude" / "skills" / "channel-research"
     collector = channel_research / "references" / "benchmark_collector.py"
@@ -419,10 +411,8 @@ def test_candidate_sdist_contains_setup_channel_owner_once(tmp_path: Path) -> No
     assert len(manifest_members) == 1
     assert len(state_members) == 1
     assert state_members[0].mode & 0o111
-    for relative in _CHANNEL_NEW_SHARED_ASSETS:
-        matches = [
-            member for member in members if member.name.endswith(f"/.claude/skills/channel-new/references/{relative}")
-        ]
+    for relative in _SETUP_SHARED_ASSETS:
+        matches = [member for member in members if member.name.endswith(f"/.claude/skills/setup/references/{relative}")]
         assert len(matches) == 1
     for relative in _SETUP_MIGRATED_ASSETS:
         setup_matches = [
@@ -439,7 +429,7 @@ def test_candidate_sdist_contains_setup_channel_owner_once(tmp_path: Path) -> No
     }
     for relative, linkname in expected_links.items():
         member = next(
-            member for member in members if member.name.endswith(f"/.claude/skills/channel-new/references/{relative}")
+            member for member in members if member.name.endswith(f"/.claude/skills/setup/references/{relative}")
         )
         assert member.issym()
         assert member.linkname == linkname

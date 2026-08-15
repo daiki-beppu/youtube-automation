@@ -1,4 +1,4 @@
-"""Executable contracts for ``/channel-strategy`` modes (#3820-#3822)."""
+"""Executable contracts for ``/channel-strategy`` modes (#3820-#3823)."""
 
 from __future__ import annotations
 
@@ -15,6 +15,8 @@ SKILL = SKILL_DIR / "SKILL.md"
 PERSONA = SKILL_DIR / "references" / "persona.md"
 SCENE = SKILL_DIR / "references" / "scene.md"
 CONSTRAINTS = SKILL_DIR / "references" / "constraints.md"
+DIRECTION = SKILL_DIR / "references" / "direction.md"
+DESIRE_VOCABULARY = SKILL_DIR / "references" / "desire-vocabulary.md"
 MANIFEST = SKILL_DIR / "references" / "channel-strategy-chain-manifest.json"
 STATE = SKILL_DIR / "references" / "channel-strategy-chain-state.py"
 INVENTORY = SkillInventory(ROOT)
@@ -44,12 +46,15 @@ def test_channel_strategy_distributes_all_registered_modes_as_the_canonical_owne
     assert "audience-persona-design" not in names
     assert "viewing-scene" not in names
     assert "creative-constraints" not in names
+    assert "channel-new" not in names
     assert PERSONA.is_file()
     assert SCENE.is_file()
     assert CONSTRAINTS.is_file()
+    assert DIRECTION.is_file()
+    assert DESIRE_VOCABULARY.is_file()
 
 
-def test_channel_strategy_registers_three_modes_and_reserves_direction() -> None:
+def test_channel_strategy_registers_all_four_modes() -> None:
     text = SKILL.read_text(encoding="utf-8")
     frontmatter = INVENTORY.frontmatter("channel-strategy")
     mode_table = text.split("| mode | 読む reference |", 1)[1].split("## 共通前提", 1)[0]
@@ -58,8 +63,19 @@ def test_channel_strategy_registers_three_modes_and_reserves_direction() -> None
     assert frontmatter["name"] == "channel-strategy"
     assert frontmatter["purpose"] == "決める"
     assert "--persona" in frontmatter["description"]
-    assert modes == ["`--persona`", "`--scene`", "`--constraints`"]
-    assert "--direction" in text
+    assert modes == ["`--persona`", "`--scene`", "`--constraints`", "`--direction`"]
+
+
+def test_direction_preserves_step_order_without_joining_initial_chain() -> None:
+    direction = DIRECTION.read_text(encoding="utf-8")
+    manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
+
+    assert [
+        line.split(":", 1)[0].removeprefix("## Step D")
+        for line in direction.splitlines()
+        if line.startswith("## Step D")
+    ] == ["1", "2", "3", "4", "5"]
+    assert [step["id"] for step in manifest["steps"]] == ["persona", "scene", "constraints"]
 
 
 def test_channel_strategy_manifest_orders_persona_scene_constraints() -> None:

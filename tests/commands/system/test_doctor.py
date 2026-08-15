@@ -1443,7 +1443,7 @@ class TestCheckChannelConfig:
         assert "setup 用ディレクトリ生成は完了していても config は未作成" in instructions
 
     def test_config_dir_exists_but_invalid_json_is_fail_with_channel_new_import_mode(self, tmp_path):
-        """config/channel/ 存在・JSON 破損: fail + /channel-new 取り込みモード案内 (既存チャンネル)."""
+        """config/channel/ 存在・JSON 破損: fail + /channel-strategy --direction 取り込みモード案内 (既存チャンネル)."""
         config_dir = tmp_path / "config" / "channel"
         config_dir.mkdir(parents=True)
         (config_dir / "meta.json").write_text("{broken json", encoding="utf-8")
@@ -1454,7 +1454,7 @@ class TestCheckChannelConfig:
         assert "/setup --import" in action_str
 
     def test_config_dir_exists_but_missing_required_keys_is_fail_with_channel_new_import_mode(self, tmp_path):
-        """config/channel/ 存在・必須キー不足: fail + /channel-new 取り込みモード案内."""
+        """config/channel/ 存在・必須キー不足: fail + /channel-strategy --direction 取り込みモード案内."""
         config_dir = tmp_path / "config" / "channel"
         config_dir.mkdir(parents=True)
         # meta.json のみ（必須キーも不足）
@@ -2355,7 +2355,7 @@ class TestBootstrapChecks:
         assert r.next_action["cmd"] == "uv run yt-skills sync --asset skills --force"
 
     def test_skills_synced_requires_all_bundled_skills(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(doctor, "bundled_skill_names", lambda: ["channel-new", "setup"])
+        monkeypatch.setattr(doctor, "bundled_skill_names", lambda: ["channel-strategy", "setup"])
         setup_dir = tmp_path / ".claude" / "skills" / "setup"
         setup_dir.mkdir(parents=True)
         (setup_dir / "SKILL.md").write_text("# setup", encoding="utf-8")
@@ -2366,7 +2366,7 @@ class TestBootstrapChecks:
         r = doctor.check_skills_synced(tmp_path)
         assert r.status == "fail"
         assert r.category == "bootstrap"
-        assert ".claude/skills/channel-new/SKILL.md" in r.message
+        assert ".claude/skills/channel-strategy/SKILL.md" in r.message
         assert r.next_action["cmd"] == "uv run yt-skills sync --asset skills --force"
 
     def test_skills_synced_present_is_ok(self, tmp_path, monkeypatch):
@@ -2912,7 +2912,7 @@ class TestCheckWfNewReadiness:
 
 class TestCheckTtpWfNewReadinessChannelSetup:
     def test_no_benchmark_channels_keeps_minimal_mode_ok(self, tmp_path):
-        """benchmark.channels 未設定なら /channel-new final gate として warn する."""
+        """benchmark.channels 未設定なら /channel-strategy --direction final gate として warn する."""
         r = doctor.check_ttp_wf_new_readiness(tmp_path)
         assert r.id == "ttp_wf_new_readiness"
         assert r.status == "warn"
@@ -3072,7 +3072,7 @@ class TestCheckTtpWfNewReadinessChannelSetup:
         assert "data/thumbnail_compare/benchmark/ 配下ではない" in r.message
 
     def test_missing_benchmark_docs_are_checked(self, tmp_path):
-        """docs/benchmarks/*.md も /channel-new benchmark 反映の完了条件に含める."""
+        """docs/benchmarks/*.md も /channel-strategy --direction benchmark 反映の完了条件に含める."""
         _write_benchmark_channels(tmp_path)
         data_dir = tmp_path / "data"
         data_dir.mkdir(parents=True)

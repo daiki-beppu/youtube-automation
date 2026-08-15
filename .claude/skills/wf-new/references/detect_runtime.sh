@@ -15,7 +15,7 @@ report() { # $1=level $2=name $3=detail
 if [ -f config/channel/workflow.json ]; then
   report ok config-workflow "config/channel/workflow.json あり"
 else
-  report fail config-workflow "config/channel/workflow.json が無い（チャンネルリポジトリ直下で実行し、/channel-new で config を生成する）"
+  report fail config-workflow "config/channel/workflow.json が無い（チャンネルリポジトリ直下で実行し、/setup --channel または /setup --regenerate で config を生成する）"
 fi
 
 if command -v uv >/dev/null 2>&1; then

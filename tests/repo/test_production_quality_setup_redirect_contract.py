@@ -68,7 +68,7 @@ def _entry(skill: str, path: str, occurrence: str, context: str) -> tuple[str, s
     return skill, path, occurrence, context
 
 
-# Every literal /channel-new occurrence on main before #3987, classified by context.
+# Every literal /channel-strategy --direction occurrence on main before #3987, classified by context.
 INITIAL_OCCURRENCE_LEDGER = (
     _entry("alignment-check", "SKILL.md", "missing-config-new", "opening"),
     _entry("alignment-check", "SKILL.md", "missing-config-existing", "import"),
@@ -138,13 +138,7 @@ _RAW_EXPECTED_ACTIVE_ROUTES = (
         "alignment-check/SKILL.md",
         "## Next Step",
         "| **横断的な方向性ズレ** | 複数コレクションで同じ不整合パターン | "
-        "`/channel-new`（方向性検討モード）でチャンネル全体の方向性を再検討 |",
-    ),
-    _route(
-        "wf-new/references/ideate.md",
-        "### 欲求語彙のソース",
-        "`ttp_mode: true` の欲求整合チェックでは、欲求語彙の選択、欠落時の継続条件、"
-        "`推定` と根拠の記録に `.claude/skills/channel-new/references/desire-vocabulary.md` をそのまま適用する。",
+        "`/channel-strategy --direction`（方向性検討モード）でチャンネル全体の方向性を再検討 |",
     ),
     _route("wf-new/references/ideate.md", "## 前提", "- **新規チャンネル** → `/setup --channel` を案内"),
     _route(
@@ -155,26 +149,14 @@ _RAW_EXPECTED_ACTIVE_ROUTES = (
     _route(
         "wf-new/references/ideate.md",
         "#### Phase 1-1: チャンネル現状 + 戦略ドキュメント",
-        "- `docs/channel/` 配下の方向性決定記録 — `/channel-new`（方向性検討モード）Step D5 が保存する決定事項",
+        "- `docs/channel/` 配下の方向性決定記録 — `/channel-strategy --direction`"
+        "（方向性検討モード）Step D5 が保存する決定事項",
     ),
     _route(
         "wf-new/references/ideate.md",
         "#### Phase 1-1: チャンネル現状 + 戦略ドキュメント",
         "どちらも任意扱い。存在しない場合は warning を表示して進行する"
-        "（方向性決定記録は `/channel-new` の方向性検討モードで生成できる旨を案内）。",
-    ),
-    _route(
-        "wf-new/references/freshness-rules.md",
-        "## 鮮度判定表",
-        "| 2 | `/channel-strategy --persona` | `docs/channel/personas/persona-definition.md` | "
-        "存在すれば OK（mtime 比較なし。更新タイミングは戦略判断のため人間が決める） | "
-        "analytics mode かつ `ttp_mode: false` ではユーザーに `/channel-strategy --persona` 実行を案内して中断。"
-        "analytics mode かつ `true` では "
-        "`.claude/skills/channel-new/references/desire-vocabulary.md` の fallback に従い、"
-        "利用可能な競合コメント / タイトルから初回仮説の視聴者像を作ってソースと根拠を記録する。"
-        "benchmark fallback mode / `ttp_mode: false` の minimal mode では "
-        "config と入力データから初回仮説の視聴者像を作る。"
-        "`ttp_mode: true` の minimal mode はこの判定前に停止する |",
+        "（方向性決定記録は `/channel-strategy --direction` の方向性検討モードで生成できる旨を案内）。",
     ),
     _route("flop-analysis/SKILL.md", "## 前提", "- **新規チャンネル** → `/setup --channel` を案内"),
     _route(
@@ -187,7 +169,8 @@ _RAW_EXPECTED_ACTIVE_ROUTES = (
         "### Phase 4: 検証の自律実行",
         "- `/alignment-check`、`/channel-research --voice`、`/channel-strategy --persona`、"
         "`/channel-strategy --scene`、"
-        "`/channel-new` はスキルとして起動しない。これらは AskUserQuestion、設定更新、または別成果物の保存を"
+        "`/channel-strategy --direction` はスキルとして起動しない。これらは AskUserQuestion、"
+        "設定更新、または別成果物の保存を"
         "完了条件に含むため、既存の `docs/plans/alignment-audit.md`、`docs/plans/viewer-voice-analysis.md`、"
         "`docs/channel/personas/persona-definition.md`、`docs/plans/viewing-scene-matrix.md` がある場合だけ "
         "read-only 入力として読む。必要な成果物がなければ、その仮説を理由付きの `未検証` とする",
@@ -195,20 +178,21 @@ _RAW_EXPECTED_ACTIVE_ROUTES = (
     _route(
         "flop-analysis/SKILL.md",
         "### Phase 4: 検証の自律実行",
-        "- 差別化・市場性は `/channel-research --discover` や `/channel-new` を起動せず、"
+        "- 差別化・市場性は `/channel-research --discover` や `/channel-strategy --direction` を起動せず、"
         "最新の既存 `data/benchmark_*.json` と `yt-theme-compare` の標準出力だけを使う。"
         "競合の追加、方向性決定、config 更新は行わない",
     ),
     _route(
         "flop-analysis/SKILL.md",
         "## Next Step",
-        "| テーマ自体の市場性不足 | `/channel-research --discover` → `/channel-new`（方向性検討モード） |",
+        "| テーマ自体の市場性不足 | `/channel-research --discover` → "
+        "`/channel-strategy --direction`（方向性検討モード） |",
     ),
     _route(
         "flop-analysis/SKILL.md",
         "## Next Step",
         "改善策の実行は本スキルの完了条件に含めない。必要なら "
-        "`/channel-new`（方向性検討モード）でチャンネル全体の方向性を見直す。",
+        "`/channel-strategy --direction`（方向性検討モード）でチャンネル全体の方向性を見直す。",
     ),
     _route("loop-video/SKILL.md", "## 前提", "- **新規チャンネル** → `/setup --channel` を案内"),
     _route(
@@ -229,7 +213,7 @@ _RAW_EXPECTED_ACTIVE_ROUTES = (
     _route(
         "lyria/SKILL.md",
         "### 選択タイミング（どこで lyria が選ばれるか）",
-        "1. **チャンネルのデフォルト** — `/channel-new`（方向性検討モード）で suno/lyria を検討 → "
+        "1. **チャンネルのデフォルト** — `/channel-strategy --direction`（方向性検討モード）で suno/lyria を検討 → "
         "`/setup --regenerate` が `config/channel/youtube.json` の `music_engine` に書き込む",
     ),
     _route(
@@ -278,7 +262,7 @@ _RAW_EXPECTED_ACTIVE_ROUTES = (
         "thumbnail-compare/SKILL.md",
         "## 前提",
         "- `config/channel/analytics.json::benchmark.channels` に承認済みベンチマークチャンネルが設定済みであること。"
-        "未設定なら `/channel-new` / `/channel-research --discover` を案内して停止する",
+        "未設定なら `/channel-strategy --direction` / `/channel-research --discover` を案内して停止する",
     ),
     _route(
         "value-loop-audit/SKILL.md",
@@ -328,7 +312,13 @@ ISSUE_3986_OWNED_PATHS = frozenset(
 )
 
 
-_ROUTES = ("/channel-new", "/setup --channel", "/setup --import", "/setup --regenerate", "/setup --push")
+_ROUTES = (
+    "/channel-strategy --direction",
+    "/setup --channel",
+    "/setup --import",
+    "/setup --regenerate",
+    "/setup --push",
+)
 _ROUTE_TOKEN = re.compile(r"/channel-\s*new|/setup\s+--(?:channel|import|regenerate|push)")
 _TAG_NAME = re.compile(r"^<\s*(/?)\s*([A-Za-z][A-Za-z0-9:-]*)")
 _VOID_TAGS = frozenset(
@@ -890,7 +880,7 @@ def test_route_contract_rejects_inactive_swap_mixed_and_relocated_mutations() ->
         source.replace(opening, f"<details><summary>why</summary>\n{opening}\n</details>", 1),
         source.replace(opening, f"<details hidden>\n{opening}\n</details>", 1),
         source.replace(opening, f"{opening} {existing}", 1),
-        source.replace(opening, opening.replace("/setup --channel", "/channel-new"), 1).replace(
+        source.replace(opening, opening.replace("/setup --channel", "/channel-strategy --direction"), 1).replace(
             existing, existing.replace("/setup --import", "/setup --channel"), 1
         ),
         source.replace(opening + "\n", "", 1).replace("## Next Step", f"## Next Step\n\n{opening}", 1),
@@ -917,7 +907,7 @@ def test_route_contract_rejects_arbitrary_extension_members(tmp_path: Path) -> N
     relative = "alignment-check/references/reintroduced.txt"
     reintroduced = tmp_path / relative
     reintroduced.parent.mkdir(parents=True)
-    reintroduced.write_text("opening fallback: `/channel-new`\n", encoding="utf-8")
+    reintroduced.write_text("opening fallback: `/channel-strategy --direction`\n", encoding="utf-8")
     assert _active_route_records({relative: reintroduced.read_bytes()}) != EXPECTED_ACTIVE_ROUTES
 
 
@@ -966,7 +956,7 @@ def test_route_contract_allows_supported_distributed_binary_images() -> None:
 
 def test_route_contract_fails_closed_for_undecodable_text_or_route_bearing_binary() -> None:
     text_like = b"opening fallback: \xff\n"
-    route_bearing_png = b"\x89PNG\r\n\x1a\n/channel-new\xff"
+    route_bearing_png = b"\x89PNG\r\n\x1a\n/channel-strategy --direction\xff"
     with pytest.raises(UnicodeDecodeError):
         _active_route_records({"alignment-check/references/broken.txt": text_like})
     with pytest.raises(UnicodeDecodeError):

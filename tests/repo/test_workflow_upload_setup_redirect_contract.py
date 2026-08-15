@@ -33,14 +33,20 @@ CONTEXTS = (
     "direction",
     "shared-reference",
 )
-ROUTES = ("/channel-new", "/setup --channel", "/setup --import", "/setup --regenerate", "/setup --push")
+ROUTES = (
+    "/channel-strategy --direction",
+    "/setup --channel",
+    "/setup --import",
+    "/setup --regenerate",
+    "/setup --push",
+)
 
 
 def _entry(skill: str, path: str, occurrence: str, context: str) -> tuple[str, str, str, str]:
     return skill, path, occurrence, context
 
 
-# Every literal /channel-new occurrence on main before #3986, classified by context.
+# Every literal /channel-strategy --direction occurrence on main before #3986, classified by context.
 INITIAL_OCCURRENCE_LEDGER = (
     _entry("analytics", "SKILL.md", "common-missing-config", "opening"),
     _entry("analytics", "references/analyze.md", "missing-config-new", "opening"),
@@ -149,7 +155,7 @@ EXPECTED_ACTIVE_ROUTES = (
         "### 必須要素",
         "4. **ハッシュタグ**: `config/channel/content.json::descriptions.hashtags` が単一ソース"
         "（実装 `domains/metadata/service.py` は設定値をそのまま出力する。個数の目安は "
-        "`/channel-new` の config-generation-rules と同じ **5 個程度**）— YouTube は概要欄の最初の"
+        "`/setup --regenerate` の config-generation-rules と同じ **5 個程度**）— YouTube は概要欄の最初の"
         "3ハッシュタグをタイトル下に表示するため、順序が重要",
     ),
     *(
@@ -211,25 +217,6 @@ EXPECTED_ACTIVE_ROUTES = (
         "## Hard Gates",
         "   - `load_config()` が失敗する場合は `/setup --import` を案内して停止する。",
     ),
-    _route(
-        "wf-new/references/freshness-rules.md",
-        "## 鮮度判定表",
-        "| 2 | `/channel-strategy --persona` | `docs/channel/personas/persona-definition.md` | "
-        "存在すれば OK（mtime 比較なし。更新タイミングは戦略判断のため人間が決める） | "
-        "analytics mode かつ `ttp_mode: false` ではユーザーに `/channel-strategy --persona` 実行を案内して中断。"
-        "analytics mode かつ `true` では "
-        "`.claude/skills/channel-new/references/desire-vocabulary.md` の fallback に従い、"
-        "利用可能な競合コメント / タイトルから初回仮説の視聴者像を作ってソースと根拠を記録する。"
-        "benchmark fallback mode / `ttp_mode: false` の minimal mode では "
-        "config と入力データから初回仮説の視聴者像を作る。"
-        "`ttp_mode: true` の minimal mode はこの判定前に停止する |",
-    ),
-    _route(
-        "wf-new/references/ideate.md",
-        "### 欲求語彙のソース",
-        "`ttp_mode: true` の欲求整合チェックでは、欲求語彙の選択、欠落時の継続条件、"
-        "`推定` と根拠の記録に `.claude/skills/channel-new/references/desire-vocabulary.md` をそのまま適用する。",
-    ),
     _route("wf-new/references/ideate.md", "## 前提", "- **新規チャンネル** → `/setup --channel` を案内"),
     _route(
         "wf-new/references/ideate.md",
@@ -239,13 +226,14 @@ EXPECTED_ACTIVE_ROUTES = (
     _route(
         "wf-new/references/ideate.md",
         "#### Phase 1-1: チャンネル現状 + 戦略ドキュメント",
-        "- `docs/channel/` 配下の方向性決定記録 — `/channel-new`（方向性検討モード）Step D5 が保存する決定事項",
+        "- `docs/channel/` 配下の方向性決定記録 — `/channel-strategy --direction`"
+        "（方向性検討モード）Step D5 が保存する決定事項",
     ),
     _route(
         "wf-new/references/ideate.md",
         "#### Phase 1-1: チャンネル現状 + 戦略ドキュメント",
         "どちらも任意扱い。存在しない場合は warning を表示して進行する"
-        "（方向性決定記録は `/channel-new` の方向性検討モードで生成できる旨を案内）。",
+        "（方向性決定記録は `/channel-strategy --direction` の方向性検討モードで生成できる旨を案内）。",
     ),
     _route(
         "wf-new/references/schedule.md",
@@ -312,8 +300,8 @@ EXPECTED_ISSUE_3986_CHANGED_PATHS = frozenset(
         "tests/repo/test_workflow_upload_setup_redirect_contract.py",
     }
 )
-IMMUTABLE_TARGET_FILES_SHA256 = "09d69b0f229163a62a63b3d187523d7f9c0378c33b540e4382483190be0de516"
-AUTOMATION_SCHEDULE_REGENERATE_SHA256 = "0e53b0be09de5049104b16034dd8122ca434adbfafdd0c835cb4fac943e7878e"
+IMMUTABLE_TARGET_FILES_SHA256 = "bbaa4f4d458fb51ee60536c16cd0ce73f4cfc231f2fdbb2695e02628a3fe5085"
+AUTOMATION_SCHEDULE_REGENERATE_SHA256 = "11d460f727fe50c41f00571b416a1486cb07d0b1548524bc650a7161c16f6c42"
 AUTOMATION_UPDATE_PUSH_SHA256 = "d2e903b505ace3035da345f9f89ba1c0875e93b5633c1ddc31550db2433771eb"
 ALLOWED_FENCED_ROUTES = {
     (
@@ -528,7 +516,7 @@ def test_route_contract_rejects_inactive_swap_mixed_and_relocated_mutations() ->
         source.replace(opening, f'<notatag\n<DEL class="x">\n{opening}\n</DEL>', 1),
         source.replace(opening, f'<div data-note="\n{opening}\n">visible</div>', 1),
         source.replace(opening, f'<div data-note="before <s>\n{opening}\n</s>">', 1),
-        source.replace(opening, opening.replace("/setup --channel", "/channel-new"), 1),
+        source.replace(opening, opening.replace("/setup --channel", "/channel-strategy --direction"), 1),
         source.replace(opening, f"{opening} {residual}", 1),
         source.replace(opening + "\n", "", 1).replace(
             "## 設定読み込みゲート", f"## 設定読み込みゲート\n\n{opening}", 1

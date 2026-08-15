@@ -45,7 +45,7 @@ scope 定義の単一ソースは `src/youtube_automation/infrastructure/auth/yo
 | /streaming（帯域集計） | `yt-stream-bandwidth` / `yt-stream-archive-check` | read-only | readonly 優先 |
 | /video-upload | `domains/uploads/youtube.py` | write（`youtube`） | `token.json` |
 | /playlist（作成・割り当て） | `yt-playlist-manager` | write（`youtube`） | `token.json` |
-| /channel-new（seed / 設定 push） | `yt-channel-seed` / `yt-channel-settings` | write（`youtube`） | `token.json` |
+| /setup（seed / 設定 push） | `yt-channel-seed` / `yt-channel-settings` | write（`youtube`） | `token.json` |
 | /video-description ほか一括更新 | `yt-bulk-update-desc` / `yt-bulk-update-synthetic-media` | write（`youtube`） | `token.json` |
 | /comments-reply | `yt-comments-reply` | write（`youtube.force-ssl`） | `token.json` |
 | /pinned-comment | `yt-pinned-comment` | write（`youtube.force-ssl`） | `token.json` |

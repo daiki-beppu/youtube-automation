@@ -1,7 +1,7 @@
 # 既存チャンネル取り込みモード（取り込み Step 1〜8）
 
 `/setup --import` 既存チャンネル取り込みモードの手順詳細。SKILL.md の「モード判別」で本モードと判定された場合に、このファイルの手順どおりに実行する。
-共有する config 資産の `references/...` は `.claude/skills/channel-new/references/...` を指す。
+共有する config 資産の `references/...` は `.claude/skills/setup/references/...` を指す。
 
 既に YouTube で運営中のチャンネルの情報をヒアリングし、`config/channel/*.json`（責務別分割、v2.0.0 以降）を生成して自動化システムに取り込む。
 
@@ -73,24 +73,24 @@ JSON 結果から以下をユーザーに提示する:
 
 ## 取り込み Step 4: config 生成
 
-`.claude/skills/channel-new/references/config-template/*.json`（責務別 5 ファイル: meta / content / youtube / analytics / audio）をベースに、ヒアリング結果で各ファイルの全フィールドを埋めて `config/channel/*.json` を生成する。動画尺は `.claude/skills/channel-new/references/config-template/audio.json` に反映する。
+`.claude/skills/setup/references/config-template/*.json`（責務別 5 ファイル: meta / content / youtube / analytics / audio）をベースに、ヒアリング結果で各ファイルの全フィールドを埋めて `config/channel/*.json` を生成する。動画尺は `.claude/skills/setup/references/config-template/audio.json` に反映する。
 
-含めるべきセクション（必須・skill-config 管理・オプション）は **`.claude/skills/channel-new/references/config-generation-rules.md`** を参照。
+含めるべきセクション（必須・skill-config 管理・オプション）は **`.claude/skills/setup/references/config-generation-rules.md`** を参照。
 
 ## 取り込み Step 5: ディレクトリ構造の確認・補完
 
-正準ディレクトリ構造は **`.claude/skills/channel-new/references/directory-structure.md`** を参照。
+正準ディレクトリ構造は **`.claude/skills/setup/references/directory-structure.md`** を参照。
 既存リポジトリに不足しているディレクトリがあれば作成する。
 
 ## 取り込み Step 6: 検証
 
-JSON 構文検証・config ロードテスト（`uv run yt-doctor --json` の `channel_config.status` 判定）は **`.claude/skills/channel-new/references/verification.md`** を参照。
+JSON 構文検証・config ロードテスト（`uv run yt-doctor --json` の `channel_config.status` 判定）は **`.claude/skills/setup/references/verification.md`** を参照。
 
 ## 取り込み Step 7: OAuth 認証と channel_id 取得
 
 `auth/token.json` がない場合、OAuth 認証と channel_id 自動取得を実行。
 `config/channel/meta.json::channel.channel_id` が未設定の場合は、認証済みチャンネル ID を必ず取得して保存する。
-手順は **`.claude/skills/channel-new/references/verification.md`**（「OAuth 認証」「channel_id の自動取得」）を参照。
+手順は **`.claude/skills/setup/references/verification.md`**（「OAuth 認証」「channel_id の自動取得」）を参照。
 
 ## 取り込み Step 8: 次ステップ案内
 
@@ -106,7 +106,7 @@ JSON の `checks` から `id: wf_new_readiness` の結果を 1 件選び、次�
 
 - **`/wf-new` 到達に必須**: 追加作業なし。`message` を提示し、そこに示された確定した入力モードで今すぐ `/wf-new` を開始できると案内する
 - **品質を上げる任意項目**:
-  - **ブランディング素材**: 未作成の場合は `.claude/skills/channel-new/references/verification.md`（「ブランディング素材生成」）を参照
+  - **ブランディング素材**: 未作成の場合は `.claude/skills/setup/references/verification.md`（「ブランディング素材生成」）を参照
   - **ペルソナ定義**: `/channel-research --voice` → `/channel-strategy --persona` → `/channel-strategy --scene` の順で実行
   - **追加ベンチマーク**: 競合チャンネルを広げたい場合は `config/channel/analytics.json` の `benchmark.channels` を追加し `/channel-research --benchmark` で収集
   - **データ収集・分析**: `/analytics --collect` → `/analytics --analyze` で現状のパフォーマンスを把握
@@ -120,6 +120,6 @@ JSON の `checks` から `id: wf_new_readiness` の結果を 1 件選び、次�
 
 `wf_new_readiness` の結果提示は Step 8 の必須手順だが、`warn` でも取り込みモード自体は完了する。`wf_new_readiness` を `ok` にすることは取り込みモードの完了条件に加えない。警告された不足項目は取り込み完了後の最短手順として引き継ぐ。
 
-Step 1 前段で「方向性見直し」が選ばれていた場合は、上記に加えて `/channel-new` の方向性検討モードへの接続を案内する。ただし、`references/direction-mode.md` の前提は `/setup --channel` の完了であり、既存チャンネル取り込みモードの完了だけでは満たさないため、方向性検討モードへ直行する案内はしない。`/setup --channel` を完了して前提を満たしたうえで、TTP メモ（`docs/channel/ttp-seed-confirmation.md` と `docs/channel/competitor-branding-snapshot.json`）または分析レポート（`docs/channel-research.md`）を入力として準備してから方向性検討モードを実行するよう案内する。入力がなければ、`references/direction-mode.md` の Step D1 に従い、`/setup --channel` で TTP メモを作成するか、必要に応じて `/channel-research --benchmark` / `/channel-research --voice` / `/channel-research --market` を先に実行し、入力を準備するまで方向性検討を停止する旨も明記する。
+Step 1 前段で「方向性見直し」が選ばれていた場合は、上記に加えて `/channel-strategy --direction` への接続を案内する。ただし、`.claude/skills/channel-strategy/references/direction.md` の前提は `/setup --channel` の完了であり、既存チャンネル取り込みモードの完了だけでは満たさないため、方向性検討へ直行する案内はしない。`/setup --channel` を完了して前提を満たしたうえで、TTP メモ（`docs/channel/ttp-seed-confirmation.md` と `docs/channel/competitor-branding-snapshot.json`）または分析レポート（`docs/channel-research.md`）を入力として準備してから実行するよう案内する。入力がなければ direction reference の Step D1 に従い、`/setup --channel` で TTP メモを作成するか、必要に応じて `/channel-research --benchmark` / `/channel-research --voice` / `/channel-research --market` を先に実行し、入力を準備するまで方向性検討を停止する旨も明記する。
 
 取り込みモードは、`config/channel/*.json` の生成、`uv run yt-doctor --json` の `channel_config.status` が `ok`、OAuth 認証、`channel_id` の `config/channel/meta.json::channel.channel_id` 保存、`wf_new_readiness` の判定結果に基づく必須／任意の次ステップ案内まで到達した時点で完了扱いにできる。`/setup --channel` の `benchmark.channels`、`ttp-seed-confirmation.md`、branding snapshot、`ttp_wf_new_readiness` は取り込みモードの必須完了条件ではない。

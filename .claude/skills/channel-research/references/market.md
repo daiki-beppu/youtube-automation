@@ -40,7 +40,7 @@ TTP 入替候補・ニッチ仮説の横断比較と、収集済みベンチマ�
 ### Cross References
 
 - 新規チャンネルの TTP seed と branding 初期値は `/setup --channel` Step 1 / 4 / 5 が所有する。詳細は `.claude/skills/setup/references/new-channel-bootstrap.md` と `.claude/skills/setup/references/ttp-seed-and-duration.md` を参照する
-- 調査後に方向性を決める場合は `/channel-new` へ委譲する。market mode 自身は config や方向性を更新しない
+- 調査後に方向性を決める場合は `/channel-strategy --direction` へ委譲する。market mode 自身は config や方向性を更新しない
 
 ## Collected analysis branch
 
@@ -91,7 +91,7 @@ Step 2〜5 の分析結果を `docs/channel-research.md` に保存し、Step 4 �
 
 ### 欲求語彙のソース
 
-欲求語彙の選択、欠落時の継続条件、`推定` と根拠の記録は `.claude/skills/channel-new/references/desire-vocabulary.md` をそのまま適用する。
+欲求語彙の選択、欠落時の継続条件、`推定` と根拠の記録は `.claude/skills/channel-strategy/references/desire-vocabulary.md` をそのまま適用する。
 
 既存実装の参照: `.claude/skills/thumbnail/SKILL.md` の `single_step` モード（TTP 推奨実装）、
 `src/youtube_automation/domains/metadata/service.py` の TTP 形式タイトル生成。
@@ -151,7 +151,7 @@ subagent への完了条件は `docs/channel-research.md` と `docs/benchmarks/t
 - **投稿トレンド**: 加速/減速/安定
 - **勝ちパターン**: 高再生数動画の共通点
 - **欲求との紐付け**: 勝ちパターンごとに、刺激している欲求と根拠（コメント / タイトル語彙）を `勝ちパターン X ← 欲求 Y（根拠: ...）` の形式で明示
-- **TTP 対象**: 上記から自チャンネルに転写すべき構造・パターン・型を明示（後段 `/channel-new` 方向性検討モードの入力になる）
+- **TTP 対象**: 上記から自チャンネルに転写すべき構造・パターン・型を明示（後段 `/channel-strategy --direction` 方向性検討モードの入力になる）
 
 ### Step 3: コンテンツ戦略分析
 
@@ -226,7 +226,7 @@ generated_at: YYYY-MM-DD
 **言語分布**: コメントの言語割合（国際性の指標）
 **エンゲージメント**: 深いコメント vs 浅いコメントの比率
 
-抽出したコメント由来の欲求を Step 2〜4 の勝ちパターンへ接続する。タイトル・サムネイル・楽曲 / 音楽性の各要素について `勝ちパターン X ← 欲求 Y（根拠: コメント / タイトル語彙）` を作り、欲求、`推定` / `判定不能`、根拠には `.claude/skills/channel-new/references/desire-vocabulary.md` の適用結果をそのまま記録する。
+抽出したコメント由来の欲求を Step 2〜4 の勝ちパターンへ接続する。タイトル・サムネイル・楽曲 / 音楽性の各要素について `勝ちパターン X ← 欲求 Y（根拠: コメント / タイトル語彙）` を作り、欲求、`推定` / `判定不能`、根拠には `.claude/skills/channel-strategy/references/desire-vocabulary.md` の適用結果をそのまま記録する。
 
 ### Step 6: 成果物生成
 
@@ -269,7 +269,7 @@ subagent は全分析結果を `docs/channel-research.md` に保存:
 
 メインエージェントは `docs/channel-research.md` と `docs/benchmarks/thumbnail-text-profile.md` の存在を確認し、subagent の要約をもとに次を案内する:
 
-「分析レポートが完成しました。方向性を見直す場合は `/channel-new`（方向性検討モード）、現在の方針で制作に進む場合は `/wf-new` に進めます。」
+「分析レポートが完成しました。方向性を見直す場合は `/channel-strategy --direction`（方向性検討モード）、現在の方針で制作に進む場合は `/wf-new` に進めます。」
 
 ## 障害時ガイダンス
 
@@ -283,5 +283,5 @@ subagent は全分析結果を `docs/channel-research.md` に保存:
 
 - `/channel-research --benchmark` → 前提: 承認済み TTP 対象の動画データ収集
 - `/channel-research --voice` → 前提: コメント収集と視聴者インサイト分析
-- `/channel-new`（方向性検討モード） → 任意: 方向性の再検討
+- `/channel-strategy --direction`（方向性検討モード） → 任意: 方向性の再検討
 - `/wf-new` → 初回コレクション制作

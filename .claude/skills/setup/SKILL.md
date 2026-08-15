@@ -39,9 +39,9 @@ guard が exit 2 を返したら、その出力だけを提示して即時停止
 
 `--tool` は `uv run yt-setup-dirs` を含む現行 doctor wizard をそのまま実行し、GCP / OAuth / ADC bootstrap の唯一の正規入口とする。Google Auth Platform の Branding / Audience / Clients 設定と `client_secrets.json` の既存契約も `references/tool.md` で維持する。手動 script / Terraform を明示的に選ぶ上級者向け資産は同じ owner の `references/gcp-bootstrap.md` に置く。`--tool` では `config/channel/*.json` を生成しない。運用設定の `workflow.post-publish.skip_approvals` も `references/tool.md` の既存インタビューで扱う。
 
-`--channel` は `references/channel-mode.md` を唯一の正として読み、旧 `/channel-new` 新規開設モードと同じ Step 1〜10 を実行する。TTP hearing、seed confirmation、config、duration、persona、branding、readiness、initial save の順序、success / failure / blocked / resume / idempotency、不可逆操作前の承認 gate と成果物契約を変えない。
+`--channel` は `references/channel-mode.md` を唯一の正として読み、移設前の新規開設 Step 1〜10 と同じ契約を実行する。TTP hearing、seed confirmation、config、duration、persona、branding、readiness、initial save の順序、success / failure / blocked / resume / idempotency、不可逆操作前の承認 gate と成果物契約を変えない。
 
-`--import` / `--regenerate` / `--push` はそれぞれ対応 reference を唯一の正として読み、旧 `/channel-new` の取り込み Step 1 前段〜Step 8、Step R1〜R8、設定同期の dry-run・承認・反映・失敗停止契約を変えずに実行する。市場・収集済みデータ分析は `/channel-research --market`、方向性検討は `/channel-new` に残し、ここへ吸収しない。
+`--import` / `--regenerate` / `--push` はそれぞれ対応 reference を唯一の正として読み、移設前の取り込み Step 1 前段〜Step 8、Step R1〜R8、設定同期の dry-run・承認・反映・失敗停止契約を変えずに実行する。市場・収集済みデータ分析は `/channel-research --market`、方向性検討は `/channel-strategy --direction` が所有し、ここへ吸収しない。
 
 ## 一括実行
 
