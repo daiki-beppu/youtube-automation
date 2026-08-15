@@ -214,6 +214,7 @@ assets/stock/           # ボツ画像ストック (#364)。<theme-slug>/ 配下
 | `domains.skills` | skill 列挙、frontmatter、Markdown セクション、reference 解決の provider-neutral inventory |
 | `domains.metadata` | `service` の状態付き orchestration と titles / descriptions / tags / localizations leaf |
 | `domains.analytics` | Analytics の Protocol、収集、分析、レポート、時系列 policy。SDK/client は adapter 境界で解決 |
+| `domains.channel_readiness` | TTP 対象・branding・benchmark・制作設定の provider-neutral なチャンネル準備判定 |
 | `domains.thumbnail` | サムネ特徴量、相関、参照、archive、選択 policy（Pillow） |
 | `domains.media` | 音声、字幕、画像、動画の provider-neutral model / policy |
 | `domains.distrokid` | DistroKid naming、metadata、specification、preparation、release policy |
