@@ -7,6 +7,7 @@ description: "Use when 伸びた動画を起点にサムネの勝因を分解し
 
 - `前工程`: `/analytics`, `/thumbnail-test`
 - `後工程`: `/thumbnail`, `/thumbnail-test`, `/flop-analysis`
+- `委譲先`: `/flop-analysis`, `/thumbnail`, `/thumbnail-test`
 
 ## Hard Gates
 

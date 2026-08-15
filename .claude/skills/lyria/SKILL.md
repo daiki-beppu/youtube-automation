@@ -7,6 +7,7 @@ description: "Use when Vertex AI Lyria 3 でマスター音源を自動生成す
 
 - `前工程`: `/wf-auto`, `/wf-next`
 - `後工程`: `/videoup`
+- `委譲先`: `なし`
 
 ## Overview
 

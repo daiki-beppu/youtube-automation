@@ -7,6 +7,7 @@ description: "Use when ツール導入と GCP / OAuth の API 設定をセット
 
 - `前工程`: `なし`
 - `後工程`: `*`（共通基盤としてほぼ全スキル）
+- `委譲先`: `/benchmark`, `/discover-competitors`, `/viewer-voice`, `/audience-persona-design`, `/viewing-scene`
 
 ## モード判定
 

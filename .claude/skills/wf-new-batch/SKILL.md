@@ -7,6 +7,7 @@ description: "Use when 複数の新規コレクションを相互差別化して
 
 - `前工程`: `/setup --channel`, `/setup`
 - `後工程`: `/wf-next`, `/suno-helper`
+- `委譲先`: `/collection-ideate`, `/wf-new`
 
 ## Overview
 

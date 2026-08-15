@@ -7,6 +7,7 @@ description: "Use when テキストなし main.png/jpg から Veo または Gemi
 
 - `前工程`: `/creative-constraints`, `/thumbnail`
 - `後工程`: `/videoup`
+- `委譲先`: `なし`
 
 ## Overview
 

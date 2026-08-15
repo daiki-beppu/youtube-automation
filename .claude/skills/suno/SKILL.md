@@ -7,6 +7,7 @@ description: "Use when Suno UI 投入用の音楽プロンプトを生成する�
 
 - `前工程`: `/creative-constraints`, `/suno-lyric`
 - `後工程`: `/suno-helper`, `/masterup`
+- `委譲先`: `なし`
 
 ## Overview
 

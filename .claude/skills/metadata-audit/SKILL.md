@@ -7,6 +7,7 @@ description: "Use when ローカル descriptions.md と YouTube メタデータ�
 
 - `前工程`: `/video-upload`, `/post-publish`
 - `後工程`: `/video-description`
+- `委譲先`: `なし`
 
 ## Overview
 

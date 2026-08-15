@@ -7,6 +7,7 @@ description: "Use when ターゲット視聴者を第一ペルソナとして設
 
 - `前工程`: `/viewer-voice`
 - `後工程`: `/viewing-scene`, `/collection-ideate`
+- `委譲先`: `/viewing-scene`
 
 ## Overview
 

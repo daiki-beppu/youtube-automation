@@ -7,6 +7,7 @@ description: "Use when YouTube 概要欄を Complete Collection 形式で自動�
 
 - `前工程`: `/videoup`
 - `後工程`: `/video-upload`, `/metadata-audit`
+- `委譲先`: `なし`
 
 ## Overview
 

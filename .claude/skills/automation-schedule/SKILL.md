@@ -7,6 +7,7 @@ description: "Use when チャンネルの定期制作スケジュール（workfl
 
 - `前工程`: `/setup --channel`, `/setup`
 - `後工程`: `/wf-auto`, `/wf-next`
+- `委譲先`: `なし`
 
 ## Overview
 

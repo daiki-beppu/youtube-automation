@@ -7,6 +7,7 @@ description: "Use when チャンネルの YouTube 統計（登録者・再生回
 
 - `前工程`: `/setup --channel`
 - `後工程`: `なし`
+- `委譲先`: `なし`
 
 ## Overview
 

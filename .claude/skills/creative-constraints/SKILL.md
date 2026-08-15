@@ -7,6 +7,7 @@ description: "Use when ペルソナと視聴シーンを、音・映像・サム
 
 - `前工程`: `/audience-persona-design`
 - `後工程`: `なし`
+- `委譲先`: `なし`
 
 ## Hard Gates
 

@@ -7,6 +7,7 @@ description: "Use when 音楽ムード × サムネ × タイトルの整合性�
 
 - `前工程`: `/creative-constraints`, `/thumbnail`, `/suno`, `/lyria`
 - `後工程`: `/flop-analysis`
+- `委譲先`: `なし`
 
 ## Overview
 

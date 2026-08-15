@@ -6,6 +6,7 @@ import argparse
 import sys
 
 from youtube_automation.commands.system.skills_sync import _ASSET_SPECS, _guard_target_with_all, cmd_list
+from youtube_automation.commands.system.skills_sync._delegation import cmd_delegation
 from youtube_automation.commands.system.skills_sync._diff import cmd_diff
 from youtube_automation.commands.system.skills_sync._lint import cmd_lint
 from youtube_automation.commands.system.skills_sync._sync import cmd_sync
@@ -123,5 +124,8 @@ def build_parser() -> argparse.ArgumentParser:
     # lint は skills asset 固定 (--asset/--target は取らない)。
     # _resolve_default_target が args.asset を参照するため default を埋めておく。
     p_lint.set_defaults(func=cmd_lint, asset="skills")
+
+    p_delegation = sub.add_parser("delegation", help="SKILL.md の委譲深さと最長経路を表示")
+    p_delegation.set_defaults(func=cmd_delegation, asset="skills")
 
     return parser

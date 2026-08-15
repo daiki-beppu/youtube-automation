@@ -7,6 +7,7 @@ description: "Use when コレクションの YouTube サムネイル（thumbnail
 
 - `前工程`: `/creative-constraints`, `/collection-ideate`, `/wf-new`, `/thumbnail-iterate`
 - `後工程`: `/loop-video`, `/thumbnail-compare`, `/alignment-check`, `/thumbnail-test`
+- `委譲先`: `なし`
 
 ## Overview
 

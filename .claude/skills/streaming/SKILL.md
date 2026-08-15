@@ -7,6 +7,7 @@ description: "Use when ライブ配信用 Vultr VPS・動画配信本体を Terr
 
 - `前工程`: `なし`
 - `後工程`: `なし`
+- `委譲先`: `なし`
 
 ## Overview
 

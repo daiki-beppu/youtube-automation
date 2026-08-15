@@ -16,7 +16,19 @@ from youtube_automation.commands.system import skills_sync
 from youtube_automation.commands.system.skills_sync import build_parser, main
 from youtube_automation.domains.skills.inventory import lint_frontmatter_text, lint_skill
 
-_VALID_SKILL_MD = '---\nname: good-skill\ndescription: "Use when: 良い skill のとき"\n---\n\n# good\n'
+_VALID_SKILL_MD = """---
+name: good-skill
+description: "Use when: 良い skill のとき"
+---
+
+## 前後工程
+
+- `前工程`: `なし`
+- `後工程`: `なし`
+- `委譲先`: `なし`
+
+# good
+"""
 
 
 def _write_skill(skills_dir: Path, name: str, content: str) -> None:
@@ -115,7 +127,7 @@ def test_cli_lint_allowlisted_violation_is_reported_without_failing(
     _write_skill(
         skills_dir,
         "flop-analysis",
-        '---\nname: flop-analysis\ndescription: "Use --since"\n---\n\n## 本文\n',
+        '---\nname: flop-analysis\ndescription: "Use --since"\n---\n\n- `委譲先`: `なし`\n\n## 本文\n',
     )
 
     assert main(["lint", "flop-analysis"]) == 0
@@ -211,3 +223,113 @@ def test_lint_parser_registered() -> None:
     args = parser.parse_args(["lint", "a", "b"])
     assert args.skills == ["a", "b"]
     assert args.asset == "skills"
+
+
+def test_cli_lint_missing_delegation_line_exits_nonzero(fake_repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    skills_dir = fake_repo / ".claude" / "skills"
+    _write_skill(
+        skills_dir,
+        "missing-delegation",
+        '---\nname: missing-delegation\ndescription: "Use when missing"\n---\n',
+    )
+
+    assert main(["lint", "missing-delegation"]) == 1
+    out = capsys.readouterr().out
+    assert "missing-delegation: `委譲先` 行がありません" in out
+
+
+def test_cli_lint_delegation_cycle_reports_path_and_exits_nonzero(
+    fake_repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    skills_dir = fake_repo / ".claude" / "skills"
+    _write_skill(
+        skills_dir,
+        "alpha",
+        _VALID_SKILL_MD.replace("good-skill", "alpha").replace("`なし`\n\n# good", "`/beta`\n\n# good"),
+    )
+    _write_skill(
+        skills_dir,
+        "beta",
+        _VALID_SKILL_MD.replace("good-skill", "beta").replace("`なし`\n\n# good", "`/alpha`\n\n# good"),
+    )
+
+    assert main(["lint"]) == 1
+    out = capsys.readouterr().out
+    assert "循環があります: /alpha -> /beta -> /alpha" in out
+
+
+def test_cli_lint_self_delegation_reports_cycle_and_exits_nonzero(
+    fake_repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    skills_dir = fake_repo / ".claude" / "skills"
+    _write_skill(
+        skills_dir,
+        "recursive",
+        _VALID_SKILL_MD.replace("good-skill", "recursive").replace("`なし`\n\n# good", "`/recursive`\n\n# good"),
+    )
+
+    assert main(["lint", "recursive"]) == 1
+    assert "循環があります: /recursive -> /recursive" in capsys.readouterr().out
+
+
+def test_cli_lint_does_not_reject_delegation_depth_two(fake_repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    skills_dir = fake_repo / ".claude" / "skills"
+    _write_skill(
+        skills_dir,
+        "alpha",
+        _VALID_SKILL_MD.replace("good-skill", "alpha").replace("`なし`\n\n# good", "`/beta`\n\n# good"),
+    )
+    _write_skill(
+        skills_dir,
+        "beta",
+        _VALID_SKILL_MD.replace("good-skill", "beta").replace("`なし`\n\n# good", "`/gamma`\n\n# good"),
+    )
+    _write_skill(skills_dir, "gamma", _VALID_SKILL_MD.replace("good-skill", "gamma"))
+
+    assert main(["lint"]) == 0
+    assert "lint 合格: 4 skill" in capsys.readouterr().out
+
+
+def test_cli_delegation_reports_each_depth_longest_path_and_summary(
+    fake_repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    skills_dir = fake_repo / ".claude" / "skills"
+    _write_skill(
+        skills_dir,
+        "alpha",
+        _VALID_SKILL_MD.replace("good-skill", "alpha").replace("`なし`\n\n# good", "`/beta`, `/leaf`\n\n# good"),
+    )
+    _write_skill(
+        skills_dir,
+        "beta",
+        _VALID_SKILL_MD.replace("good-skill", "beta").replace("`なし`\n\n# good", "`/leaf`\n\n# good"),
+    )
+    _write_skill(skills_dir, "leaf", _VALID_SKILL_MD.replace("good-skill", "leaf"))
+
+    assert main(["delegation"]) == 0
+    out = capsys.readouterr().out
+    assert "alpha" in out
+    assert "2" in out
+    assert "/alpha -> /beta -> /leaf" in out
+    assert "最大深さ: 2 / 委譲を持つ skill: 2 件 / 循環: 0 件" in out
+
+
+def test_cli_delegation_without_edges_reports_zero_depth(fake_repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["delegation"]) == 0
+    out = capsys.readouterr().out
+    assert "/good-skill" in out
+    assert "最大深さ: 0 / 委譲を持つ skill: 0 件 / 循環: 0 件" in out
+
+
+def test_cli_delegation_with_cycle_reports_it_and_exits_zero(
+    fake_repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    skills_dir = fake_repo / ".claude" / "skills"
+    _write_skill(
+        skills_dir,
+        "recursive",
+        _VALID_SKILL_MD.replace("good-skill", "recursive").replace("`なし`\n\n# good", "`/recursive`\n\n# good"),
+    )
+
+    assert main(["delegation"]) == 0
+    assert "循環: 1 件" in capsys.readouterr().out

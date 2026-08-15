@@ -7,6 +7,7 @@ description: "Use when 長尺動画で YouTube Studio のサムネイル A/B テ
 
 - `前工程`: `/thumbnail`, `/video-upload`, `/thumbnail-iterate`
 - `後工程`: `/thumbnail`, `/thumbnail-iterate`, `/flop-analysis`
+- `委譲先`: `なし`
 
 ## Overview
 

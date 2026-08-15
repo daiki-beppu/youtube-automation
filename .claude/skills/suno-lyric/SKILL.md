@@ -7,6 +7,7 @@ description: "Use when Suno ボーカル曲の歌詞を生成するとき。「�
 
 - `前工程`: `なし`
 - `後工程`: `/suno`
+- `委譲先`: `なし`
 
 ## Overview
 

@@ -7,6 +7,7 @@ description: "Use when コレクション制作の進捗を読むだけで確認
 
 - `前工程`: `/wf-new`
 - `後工程`: `/wf-auto`, `/wf-next`
+- `委譲先`: `なし`
 
 ## Overview
 

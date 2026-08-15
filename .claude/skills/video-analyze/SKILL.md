@@ -7,6 +7,7 @@ description: "Use when 動画本体の中身（フック構造・シーン・BGM
 
 - `前工程`: `なし`
 - `後工程`: `/collection-ideate`, `/suno`, `/alignment-check`
+- `委譲先`: `なし`
 
 ## Overview
 

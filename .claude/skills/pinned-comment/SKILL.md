@@ -7,6 +7,7 @@ description: "Use when 新規動画へオーナー固定コメントを自動投
 
 - `前工程`: `/video-upload`, `/post-publish`
 - `後工程`: `なし`
+- `委譲先`: `なし`
 
 ## Overview
 

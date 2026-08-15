@@ -7,6 +7,7 @@ description: "Use when 競合コメントの収集・分析で視聴者インサ
 
 - `前工程`: `/benchmark`, `/discover-competitors`
 - `後工程`: `/audience-persona-design`
+- `委譲先`: `なし`
 
 ## 修飾フラグ
 
