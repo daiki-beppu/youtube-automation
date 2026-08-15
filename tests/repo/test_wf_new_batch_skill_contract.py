@@ -8,10 +8,17 @@ from types import ModuleType
 import pytest
 
 from tests.helpers.paths import REPO_ROOT
+from youtube_automation.domains.skills.inventory import SkillInventory
+
+_SKILL_INVENTORY = SkillInventory(REPO_ROOT)
 
 
 def _read_skill(name: str) -> str:
-    return (REPO_ROOT / ".claude" / "skills" / name / "SKILL.md").read_text(encoding="utf-8")
+    skill_dir = _SKILL_INVENTORY.skill_directory(name)
+    paths = [skill_dir / "SKILL.md"]
+    if name == "wf-new":
+        paths.append(_SKILL_INVENTORY.resolve_reference(name, "references/phase2.md"))
+    return "\n".join(path.read_text(encoding="utf-8") for path in paths)
 
 
 def _load_reference(name: str, path: Path) -> ModuleType:

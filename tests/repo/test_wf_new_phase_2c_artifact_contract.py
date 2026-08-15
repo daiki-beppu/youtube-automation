@@ -8,6 +8,7 @@ from tests.helpers.paths import REPO_ROOT
 
 SKILL_DIR = REPO_ROOT / ".claude" / "skills" / "wf-new"
 SKILL_MD = SKILL_DIR / "SKILL.md"
+PHASE2_MD = SKILL_DIR / "references" / "phase2.md"
 CONTRACT_MD = SKILL_DIR / "references" / "phase-2c-artifact-contract.md"
 WORKFLOW_CHEATSHEET = REPO_ROOT / "docs" / "workflow-cheatsheet.md"
 
@@ -24,8 +25,8 @@ def _section(markdown: str, heading: str) -> str:
 
 
 def test_skill_dispatches_phase_2c_artifact_contract_before_result_handling() -> None:
-    skill = SKILL_MD.read_text(encoding="utf-8")
-    relative_reference = CONTRACT_MD.relative_to(SKILL_DIR).as_posix()
+    skill = "\n".join(path.read_text(encoding="utf-8") for path in (SKILL_MD, PHASE2_MD))
+    relative_reference = CONTRACT_MD.relative_to(PHASE2_MD.parent).as_posix()
 
     phase_2c = skill.index("#### 2c. サムネイル確定 + 音楽素材生成")
     dispatch = skill.index(f"]({relative_reference})", phase_2c)

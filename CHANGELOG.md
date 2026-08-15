@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `refactor(skills)`: `/wf-new` の Phase 2 を `references/phase2.md` へ移し、実行契約を維持したまま SKILL.md 本体を 400 行以下にする（#3870）。
+
 - `feat(skills)`: 下流 skill-config を名前空間節へ集約する `yt-skills migrate-config` を追加し、dry-run、冪等適用、同一ディレクトリ一時ファイルからの atomic replace、失敗時復元、孤児・未移行警告を提供する。現行ツリーには統合先 skill が未導入のため、移行対応表は安全のため空で提供する（#3804）。
 
 - `feat(skills)`: skill-config の正規キーを現行 Python 利用 10 件（#4083 で直接参照が加わった `analytics` を含む）と SKILL.md 専用 11 件の集合へ集約し、未登録キーの読み込み拒否と `config.default.yaml` の双方向一致を `yt-skills lint` で検証する（#3803）。

@@ -13,6 +13,11 @@ from youtube_automation.commands.system import doctor
 _REPO_ROOT = REPO_ROOT
 _FRESHNESS_RULES = _REPO_ROOT / ".claude" / "skills" / "collection-ideate" / "references" / "freshness-rules.md"
 _WF_NEW_SKILL = _REPO_ROOT / ".claude" / "skills" / "wf-new" / "SKILL.md"
+_WF_NEW_PHASE2 = _REPO_ROOT / ".claude" / "skills" / "wf-new" / "references" / "phase2.md"
+
+
+def _wf_new_text() -> str:
+    return "\n".join(path.read_text(encoding="utf-8") for path in (_WF_NEW_SKILL, _WF_NEW_PHASE2))
 
 
 def _freshness_script() -> str:
@@ -135,7 +140,7 @@ def test_freshness_script_returns_refresh_contract_for_stale_analytics(
 
 
 def test_wf_new_routes_preview_finalization_before_thumbnail_fallback() -> None:
-    skill = _WF_NEW_SKILL.read_text(encoding="utf-8")
+    skill = _wf_new_text()
     thumbnail_step = skill.split("##### 2c-1. サムネイル候補生成", 1)[1].split(
         "##### 2c-2. サムネイル承認・確定 + 音楽素材生成", 1
     )[0]
@@ -150,7 +155,7 @@ def test_wf_new_routes_preview_finalization_before_thumbnail_fallback() -> None:
 
 
 def test_wf_new_preview_path_keeps_quality_state_and_textless_contracts() -> None:
-    skill = _WF_NEW_SKILL.read_text(encoding="utf-8")
+    skill = _wf_new_text()
     approval_step = skill.split("##### 2c-2. サムネイル承認・確定 + 音楽素材生成", 1)[1].split(
         "#### 2e. ループ動画生成", 1
     )[0]
@@ -166,7 +171,7 @@ def test_wf_new_preview_path_keeps_quality_state_and_textless_contracts() -> Non
 
 
 def test_wf_new_records_thumbnail_approval_in_canonical_asset_state_only() -> None:
-    skill = _WF_NEW_SKILL.read_text(encoding="utf-8")
+    skill = _wf_new_text()
     approval_step = skill.split("##### 2c-2. サムネイル承認・確定 + 音楽素材生成", 1)[1].split(
         "#### 2e. ループ動画生成", 1
     )[0]
