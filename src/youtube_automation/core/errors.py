@@ -84,6 +84,10 @@ class DocumentValidationError(ValidationError):
     """リポジトリ所有 JSON Schema に対する文書検証エラー。"""
 
 
+class DocumentRenderError(ValidationError):
+    """検証済み構造化文書の HTML 生成・検証エラー。"""
+
+
 class UploadError(AutomationError):
     """動画・サムネイルアップロードの失敗
 

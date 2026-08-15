@@ -38,6 +38,7 @@ EXPECTED_ENTRYPOINT_MODULES = {
     "yt-discover-competitors": "youtube_automation.commands.analytics.discover_competitors",
     "yt-dashboard": "youtube_automation.commands.analytics.dashboard",
     "yt-distrokid-prepare": "youtube_automation.commands.distrokid.distrokid_prepare",
+    "yt-document-render": "youtube_automation.commands.documents.render",
     "yt-doctor": "youtube_automation.commands.system.doctor",
     "yt-fetch-stream-key": "youtube_automation.commands.youtube.fetch_stream_key",
     "yt-finalize-master": "youtube_automation.commands.media.finalize_master",
