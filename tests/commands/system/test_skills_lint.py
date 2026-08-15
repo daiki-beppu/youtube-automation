@@ -270,11 +270,11 @@ def test_cli_lint_allowlisted_skill_md_line_violation_is_reported_without_failin
     fake_repo: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     skills_dir = fake_repo / ".claude" / "skills"
-    _write_skill(skills_dir, "thumbnail", _skill_md_with_line_count(401, name="thumbnail"))
+    _write_skill(skills_dir, "automation-release", _skill_md_with_line_count(401, name="automation-release"))
 
-    assert main(["lint", "thumbnail"]) == 0
+    assert main(["lint", "automation-release"]) == 0
     out = capsys.readouterr().out
-    assert "thumbnail: SKILL.md が 401 行です" in out
+    assert "automation-release: SKILL.md が 401 行です" in out
     assert "[allowlist]" in out
 
 
@@ -282,11 +282,23 @@ def test_cli_lint_allowlisted_skill_md_growth_exits_nonzero(
     fake_repo: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     skills_dir = fake_repo / ".claude" / "skills"
-    _write_skill(skills_dir, "thumbnail", _skill_md_with_line_count(749, name="thumbnail"))
+    _write_skill(skills_dir, "automation-release", _skill_md_with_line_count(639, name="automation-release"))
+
+    assert main(["lint", "automation-release"]) == 1
+    out = capsys.readouterr().out
+    assert "automation-release: SKILL.md が 639 行です" in out
+    assert "[allowlist]" not in out
+
+
+def test_cli_lint_resolved_thumbnail_line_violation_is_not_allowlisted(
+    fake_repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    skills_dir = fake_repo / ".claude" / "skills"
+    _write_skill(skills_dir, "thumbnail", _skill_md_with_line_count(401, name="thumbnail"))
 
     assert main(["lint", "thumbnail"]) == 1
     out = capsys.readouterr().out
-    assert "thumbnail: SKILL.md が 749 行です" in out
+    assert "thumbnail: SKILL.md が 401 行です" in out
     assert "[allowlist]" not in out
 
 
