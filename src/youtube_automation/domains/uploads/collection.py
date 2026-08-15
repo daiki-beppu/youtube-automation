@@ -18,7 +18,7 @@ from youtube_automation.core.adapters.youtube import (
 from youtube_automation.core.errors import ValidationError
 from youtube_automation.domains.uploads._complete_collection_executor import CompleteCollectionExecutorMixin
 from youtube_automation.domains.uploads._playlist_assignment import PlaylistAssignmentMixin
-from youtube_automation.domains.uploads._published_dates import PublishedDatesMixin
+from youtube_automation.domains.uploads._published_dates import PublishedDatesScheduler
 from youtube_automation.domains.uploads._tracking_io import TrackingStore
 from youtube_automation.domains.uploads.preflight import ensure_collection_preflight
 from youtube_automation.domains.uploads.youtube import YouTubeAutoUploader
@@ -41,7 +41,6 @@ __all__ = ["CollectionUploader"]
 class CollectionUploader(
     CompleteCollectionExecutorMixin,
     PlaylistAssignmentMixin,
-    PublishedDatesMixin,
 ):
     """Collection Uploader — CC アップロード専用
 
@@ -50,7 +49,7 @@ class CollectionUploader(
 
     責務別の挙動は mixin に分離されている（Issue #465）:
     - tracking I/O           : ``TrackingStore`` への委譲
-    - 公開日 / publishAt 計算: ``PublishedDatesMixin``
+    - 公開日 / publishAt 計算: ``PublishedDatesScheduler`` への委譲
     - プレイリスト割り当て    : ``PlaylistAssignmentMixin``
     - CC 実行ループ           : ``CompleteCollectionExecutorMixin``
     """
@@ -61,6 +60,7 @@ class CollectionUploader(
         config_path: str | None = None,
         youtube_clients: YouTubeClients | None = None,
         tracking_store: TrackingStore | None = None,
+        published_dates: PublishedDatesScheduler | None = None,
     ):
         if collections_root is None:
             collections_root = channel_dir() / "collections"
@@ -75,6 +75,7 @@ class CollectionUploader(
         self.tracking_store = tracking_store or TrackingStore(self.collections_root, self.config)
         self.youtube_service = None
         self.youtube_clients = youtube_clients
+        self.published_dates = published_dates or PublishedDatesScheduler(self.config, self._provide_youtube_service)
 
     # ─── 設定・初期化 ───────────────────────────────
 
@@ -114,6 +115,10 @@ class CollectionUploader(
             raise TypeError("youtube_clients is required")
         if not self.youtube_service:
             self.youtube_service = self.youtube_clients.youtube
+
+    def _provide_youtube_service(self) -> object:
+        self.initialize_youtube_service()
+        return self.youtube_service
 
     # ─── コレクション検索 ───────────────────────────
 
@@ -200,7 +205,7 @@ class CollectionUploader(
         # Complete Collection アップロード
         cc = tracking.get("complete_collection", {})
         if cc.get("status") != "completed":
-            publish_at = self._calculate_publish_at()
+            publish_at = self.published_dates.calculate_publish_at()
             return self._execute_complete_collection(collection_path, tracking, publish_at=publish_at)
 
         # 全完了
@@ -244,7 +249,7 @@ class CollectionUploader(
 
     def show_plan(self, collection_path: Path):
         """ドライラン — スケジュール計算のみ表示"""
-        publish_at = self._calculate_publish_at()
+        publish_at = self.published_dates.calculate_publish_at()
         schedule_cfg = self.config.get("schedule", {})
 
         print(f"📋 アップロード計画: {collection_path.name}")

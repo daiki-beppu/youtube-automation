@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `refactor(collections)`: collection 初期化、batch 動画遷移、upload 完了の3 writerを `workflow-state` owner の lock + atomic update 経由へ移し、同時更新の消失を防ぐ（#3877）。
 - `test(collections)`: `workflow-state.json` の owner 外 direct I/O 30 ファイルを縮小専用 allowlist として固定し、新規越境を file・line・operation 付きで診断する契約を追加する（#3876）。
 - `feat(doctor)`: registry の check ID を `--check <id>` で複数選択し、宣言順・対象集合内 summary を保って部分診断できるようにし、automation update の channel config 確認を単一 check 実行へ切り替える（#3922）。
+- `refactor(uploads)`: `PublishedDatesMixin` を設定と YouTube service provider を明示注入する公開日計算コラボレータへ置換し、cadence・週次マップと uploader の公開 interface を維持する（#3930）。
 - `refactor(configuration)`: CLI の明示 channel 選択を公開 API として提供し、doctor から loader の private symbol への越境 import を解消する（#3921）。
 - `refactor(doctor)`: OAuth token の読み込み・refresh・0o600 atomic 永続化、upload 必須 scope、YouTube service 生成を `infrastructure.auth` に集約し、doctor は診断結果への変換だけを担う（#3920）。
 - `refactor(doctor)`: TTP と初期セットアップの readiness 判定を provider-neutral な `domains.channel_readiness` へ移し、doctor を診断結果へ変換する薄い adapter にする（#3919）。

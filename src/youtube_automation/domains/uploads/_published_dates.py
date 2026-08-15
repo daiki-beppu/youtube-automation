@@ -1,13 +1,9 @@
-"""公開日一覧取得とスケジュール公開日時の計算ロジック。
-
-責務分割（Issue #465）の一環で ``collection_uploader.py`` から分離した。
-``self.config`` / ``self.youtube_service`` / ``self.initialize_youtube_service``
-は合成先クラス（``CollectionUploader`` 本体）が提供する。
-"""
+"""公開日一覧取得とスケジュール公開日時の計算コラボレータ。"""
 
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from datetime import datetime, timedelta
 from typing import ClassVar
 
@@ -79,8 +75,8 @@ def _scheduling_enabled(schedule_cfg: dict) -> bool:
     return has_cadence or has_publish_time
 
 
-class PublishedDatesMixin:
-    """公開済み/予約済み動画の取得とスケジュール公開日時計算を提供する mixin。"""
+class PublishedDatesScheduler:
+    """設定と YouTube service provider から公開日時を計算する。"""
 
     # 曜日名 → isoweekday() マッピング（月=1, 日=7）
     _WEEKDAY_MAP: ClassVar[dict[str, int]] = {
@@ -93,7 +89,11 @@ class PublishedDatesMixin:
         "sun": 7,
     }
 
-    def _calculate_publish_at(self) -> str | None:
+    def __init__(self, config: dict, youtube_service_provider: Callable[[], object]) -> None:
+        self.config = config
+        self.youtube_service_provider = youtube_service_provider
+
+    def calculate_publish_at(self) -> str | None:
         """CC のスケジュール公開日時を計算
 
         スケジュール公開（YouTube ``status.publishAt``）を有効化する条件:
@@ -142,7 +142,7 @@ class PublishedDatesMixin:
             publish_dt += timedelta(days=1)
 
         # cadence 曜日かつ既存公開日と重複しない日を探す
-        existing_dates = self._get_published_dates()
+        existing_dates = self.get_published_dates()
         max_slide = 30  # 無限ループ防止
         for _ in range(max_slide):
             if publish_dt.isoweekday() in allowed_weekdays and publish_dt.date() not in existing_dates:
@@ -155,21 +155,20 @@ class PublishedDatesMixin:
         logger.info(f"📅 CC 公開予定: {publish_dt.isoformat()}")
         return publish_dt.isoformat()
 
-    def _get_published_dates(self) -> set:
+    def get_published_dates(self) -> set:
         """YouTube API でチャンネルの公開済み/予約済み動画の公開日セットを取得
 
         search().list() で動画IDを取得し、videos().list(part='status,snippet') で
         公開予約日時（status.publishAt）と公開日時（snippet.publishedAt）の両方を収集する。
         """
-        if not self.youtube_service:
-            self.initialize_youtube_service()
+        youtube_service = self.youtube_service_provider()
 
         tz = get_schedule_timezone(self.config)
         dates = set()
 
         try:
             # 動画IDを取得（part='id' でクォータ節約）
-            search_request = self.youtube_service.search().list(
+            search_request = youtube_service.search().list(
                 forMine=True, type="video", order="date", maxResults=50, part="id"
             )
             # 失敗 request も quota を消費するため、成否によらず記録してから既存の fail-safe に委ねる
@@ -186,7 +185,7 @@ class PublishedDatesMixin:
                 return dates
 
             # status.publishAt（公開予約）と snippet.publishedAt（公開済み）を取得
-            videos_request = self.youtube_service.videos().list(id=",".join(video_ids), part="status,snippet")
+            videos_request = youtube_service.videos().list(id=",".join(video_ids), part="status,snippet")
             videos_response = execute_youtube_request(
                 videos_request,
                 "published dates videos.list failed",
@@ -205,4 +204,4 @@ class PublishedDatesMixin:
         return dates
 
 
-__all__ = ["PublishedDatesMixin"]
+__all__ = ["PublishedDatesScheduler"]

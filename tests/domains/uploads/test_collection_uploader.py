@@ -21,6 +21,7 @@ from googleapiclient.errors import HttpError
 from httplib2 import Response
 
 from tests.helpers.paths import FIXTURES_DIR, REPO_ROOT
+from youtube_automation.domains.uploads._published_dates import PublishedDatesScheduler
 from youtube_automation.domains.uploads._tracking_io import TrackingStore
 
 sys.path.insert(0, str(REPO_ROOT))
@@ -398,6 +399,39 @@ def test_collection_uploader_accepts_injected_tracking_store(tmp_path: Path) -> 
     assert uploader.tracking_store is store
 
 
+def test_collection_uploader_accepts_injected_published_dates(tmp_path: Path) -> None:
+    from youtube_automation.domains.uploads.collection import CollectionUploader
+
+    published_dates = MagicMock(spec=PublishedDatesScheduler)
+
+    with patch("youtube_automation.domains.uploads.collection.YouTubeAutoUploader"):
+        uploader = CollectionUploader(
+            collections_root=str(tmp_path / "collections"),
+            config_path=str(tmp_path / "schedule_config.json"),
+            published_dates=published_dates,
+        )
+
+    assert uploader.published_dates is published_dates
+
+
+def test_collection_uploader_delegates_publish_date_calculation(tmp_path: Path) -> None:
+    from youtube_automation.domains.uploads.collection import CollectionUploader
+
+    published_dates = MagicMock(spec=PublishedDatesScheduler)
+    published_dates.calculate_publish_at.return_value = "2099-01-01T20:00:00+09:00"
+
+    with patch("youtube_automation.domains.uploads.collection.YouTubeAutoUploader"):
+        uploader = CollectionUploader(
+            collections_root=str(tmp_path / "collections"),
+            config_path=str(tmp_path / "schedule_config.json"),
+            published_dates=published_dates,
+        )
+
+    uploader.show_plan(tmp_path / "collection")
+
+    published_dates.calculate_publish_at.assert_called_once_with()
+
+
 def _make_uploader_with_schedule_config(tmp_path: Path, schedule_config: dict):
     """schedule_config.json を指定して CollectionUploader を構築する."""
     from youtube_automation.domains.uploads.collection import CollectionUploader
@@ -598,7 +632,7 @@ class TestDefaultPublishTimeFallback:
                 return_value="2099-01-01T20:00:00+09:00",
             ) as mock_resolve,
         ):
-            result = uploader._calculate_publish_at()
+            result = uploader.published_dates.calculate_publish_at()
 
         assert result == "2099-01-01T20:00:00+09:00"
         assert mock_resolve.called
@@ -610,7 +644,7 @@ class TestDefaultPublishTimeFallback:
         )
 
         with patch("youtube_automation.domains.uploads._published_dates.resolve_default_publish_at") as mock_resolve:
-            result = uploader._calculate_publish_at()
+            result = uploader.published_dates.calculate_publish_at()
 
         assert result is None
         assert not mock_resolve.called
@@ -619,28 +653,27 @@ class TestDefaultPublishTimeFallback:
 class TestPublishedDatesQuotaRecording:
     """Issue #2057: `_get_published_dates` が batch 回数と一致する quota を記録すること."""
 
-    def _make_uploader_with_mock_service(self, tmp_path: Path):
-        uploader, _ = _make_uploader_with_schedule_config(
-            tmp_path,
-            {"schedule": {"timezone": "Asia/Tokyo"}},
-        )
+    def _make_scheduler_with_mock_service(self):
         mock_service = MagicMock()
-        uploader.youtube_service = mock_service
-        return uploader, mock_service
+        scheduler = PublishedDatesScheduler(
+            {"schedule": {"timezone": "Asia/Tokyo"}},
+            lambda: mock_service,
+        )
+        return scheduler, mock_service
 
     def _quota_calls(self, mock_log_quota) -> list[tuple[str, str, float]]:
         return [(c.args[0], c.args[1], c.args[2]) for c in mock_log_quota.call_args_list]
 
     def test_should_record_one_quota_entry_per_batch_request(self, tmp_path):
         """要件 2: batch 回数（search 1 + videos 1）と記録件数が一致する."""
-        uploader, mock_service = self._make_uploader_with_mock_service(tmp_path)
+        scheduler, mock_service = self._make_scheduler_with_mock_service()
         mock_service.search.return_value.list.return_value.execute.return_value = {"items": [{"id": {"videoId": "v1"}}]}
         mock_service.videos.return_value.list.return_value.execute.return_value = {
             "items": [{"id": "v1", "snippet": {"publishedAt": "2025-01-01T10:00:00Z"}, "status": {}}]
         }
 
         with patch("youtube_automation.infrastructure.quota.log_quota") as mock_log_quota:
-            dates = uploader._get_published_dates()
+            dates = scheduler.get_published_dates()
 
         assert len(dates) == 1
         assert self._quota_calls(mock_log_quota) == [
@@ -650,11 +683,11 @@ class TestPublishedDatesQuotaRecording:
 
     def test_should_record_only_search_quota_when_channel_has_no_videos(self, tmp_path):
         """要件 4 相当: videos.list を実行しない場合はその quota を記録しない."""
-        uploader, mock_service = self._make_uploader_with_mock_service(tmp_path)
+        scheduler, mock_service = self._make_scheduler_with_mock_service()
         mock_service.search.return_value.list.return_value.execute.return_value = {"items": []}
 
         with patch("youtube_automation.infrastructure.quota.log_quota") as mock_log_quota:
-            dates = uploader._get_published_dates()
+            dates = scheduler.get_published_dates()
 
         assert dates == set()
         assert self._quota_calls(mock_log_quota) == [("youtube-data-api", "search.list", 1)]
@@ -662,37 +695,37 @@ class TestPublishedDatesQuotaRecording:
 
     @pytest.mark.parametrize("search_response", [None, {"items": None}, {"items": {}}, {"items": [None]}])
     def test_should_fail_safe_on_invalid_search_response_shapes(self, tmp_path, search_response):
-        uploader, mock_service = self._make_uploader_with_mock_service(tmp_path)
+        scheduler, mock_service = self._make_scheduler_with_mock_service()
         mock_service.search.return_value.list.return_value.execute.return_value = search_response
 
-        assert uploader._get_published_dates() == set()
+        assert scheduler.get_published_dates() == set()
         mock_service.videos.return_value.list.assert_not_called()
 
     @pytest.mark.parametrize("videos_response", [None, {"items": None}, {"items": {}}, {"items": [None]}])
     def test_should_fail_safe_on_invalid_videos_response_shapes(self, tmp_path, videos_response):
-        uploader, mock_service = self._make_uploader_with_mock_service(tmp_path)
+        scheduler, mock_service = self._make_scheduler_with_mock_service()
         mock_service.search.return_value.list.return_value.execute.return_value = {"items": [{"id": {"videoId": "v1"}}]}
         mock_service.videos.return_value.list.return_value.execute.return_value = videos_response
 
-        assert uploader._get_published_dates() == set()
+        assert scheduler.get_published_dates() == set()
 
     def test_should_record_quota_and_keep_fail_safe_on_api_error(self, tmp_path, caplog):
         """要件 3: API failure でも quota 記録後に既存 fail-safe（空 set + warning）を維持する."""
-        uploader, mock_service = self._make_uploader_with_mock_service(tmp_path)
+        scheduler, mock_service = self._make_scheduler_with_mock_service()
         mock_service.search.return_value.list.return_value.execute.side_effect = RuntimeError("boom")
 
         with (
             patch("youtube_automation.infrastructure.quota.log_quota") as mock_log_quota,
             caplog.at_level(logging.WARNING),
         ):
-            dates = uploader._get_published_dates()
+            dates = scheduler.get_published_dates()
 
         assert dates == set()
         assert self._quota_calls(mock_log_quota) == [("youtube-data-api", "search.list", 1)]
         assert any(rec.levelno == logging.WARNING for rec in caplog.records)
 
     def test_should_record_quota_for_each_retry_attempt(self, tmp_path, monkeypatch):
-        uploader, mock_service = self._make_uploader_with_mock_service(tmp_path)
+        scheduler, mock_service = self._make_scheduler_with_mock_service()
         monkeypatch.setattr("youtube_automation.infrastructure.retry.time.sleep", lambda _: None)
         request = mock_service.search.return_value.list.return_value
         request.execute.side_effect = [
@@ -701,7 +734,7 @@ class TestPublishedDatesQuotaRecording:
         ]
 
         with patch("youtube_automation.infrastructure.quota.log_quota") as mock_log_quota:
-            assert uploader._get_published_dates() == set()
+            assert scheduler.get_published_dates() == set()
 
         assert request.execute.call_count == 2
         assert self._quota_calls(mock_log_quota) == [
@@ -710,7 +743,7 @@ class TestPublishedDatesQuotaRecording:
         ]
 
     def test_should_retry_videos_request_and_keep_published_date(self, tmp_path, monkeypatch):
-        uploader, mock_service = self._make_uploader_with_mock_service(tmp_path)
+        scheduler, mock_service = self._make_scheduler_with_mock_service()
         monkeypatch.setattr("youtube_automation.infrastructure.retry.time.sleep", lambda _: None)
         mock_service.search.return_value.list.return_value.execute.return_value = {"items": [{"id": {"videoId": "v1"}}]}
         videos_request = mock_service.videos.return_value.list.return_value
@@ -720,7 +753,7 @@ class TestPublishedDatesQuotaRecording:
         ]
 
         with patch("youtube_automation.infrastructure.quota.log_quota") as mock_log_quota:
-            assert uploader._get_published_dates() == {datetime(2025, 1, 1).date()}
+            assert scheduler.get_published_dates() == {datetime(2025, 1, 1).date()}
 
         assert videos_request.execute.call_count == 2
         assert self._quota_calls(mock_log_quota) == [
@@ -731,11 +764,11 @@ class TestPublishedDatesQuotaRecording:
 
     @pytest.mark.parametrize("item", [{"status": {}}, {"status": {}, "snippet": {}}])
     def test_should_fail_safe_on_missing_published_date_fields(self, tmp_path, item):
-        uploader, mock_service = self._make_uploader_with_mock_service(tmp_path)
+        scheduler, mock_service = self._make_scheduler_with_mock_service()
         mock_service.search.return_value.list.return_value.execute.return_value = {"items": [{"id": {"videoId": "v1"}}]}
         mock_service.videos.return_value.list.return_value.execute.return_value = {"items": [item]}
 
-        assert uploader._get_published_dates() == set()
+        assert scheduler.get_published_dates() == set()
 
 
 class TestExecuteCompleteCollectionResume:
