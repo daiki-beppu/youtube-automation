@@ -166,10 +166,10 @@ Phase 3: 公開             /wf-next    動画→概要欄→アップロード�
 
 | キー | populate するスキル | 用途 |
 |-----|-------------------|-----|
-| `planning.activities` | `/collection-ideate` 等 | プレイリストアクティビティの override (`scripts/playlist_manager.py`) |
-| `planning.target_persona` | `/collection-ideate` | 企画選択時のターゲットペルソナ記録 |
-| `planning.final_title` | `/collection-ideate` | 確定タイトル |
-| `planning.generated` | `/collection-ideate` | 企画完了フラグ |
+| `planning.activities` | `/wf-new` 等 | プレイリストアクティビティの override (`scripts/playlist_manager.py`) |
+| `planning.target_persona` | `/wf-new` | 企画選択時のターゲットペルソナ記録 |
+| `planning.final_title` | `/wf-new` | 確定タイトル |
+| `planning.generated` | `/wf-new` | 企画完了フラグ |
 
 ## ステージ移行
 

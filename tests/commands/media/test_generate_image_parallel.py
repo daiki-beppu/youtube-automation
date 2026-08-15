@@ -393,7 +393,7 @@ class TestPlanReferenceAssignments:
             "## Reference Assignments\n"
             "| attempt | output | reference_image | benchmark_channel |\n"
             "|---:|---|---|---|\n"
-            "| 1 | collection-ideate preview | `data/thumbnail_compare/benchmark/jazzgak/ref-1.jpg` | jazzgak |\n",
+            "| 1 | wf-new planning preview | `data/thumbnail_compare/benchmark/jazzgak/ref-1.jpg` | jazzgak |\n",
             encoding="utf-8",
         )
 

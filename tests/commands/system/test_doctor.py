@@ -2881,7 +2881,7 @@ class TestCheckWfNewReadiness:
         assert "minimal mode" in result.message
         assert "ttp_mode: true" in result.message
         assert "転写元ベンチマークが必須" in result.message
-        assert "/wf-new へ到達不可" in result.message
+        assert "制作開始へ到達不可" in result.message
         assert result.next_action is not None
         assert result.next_action["kind"] == "human"
         instructions = result.next_action["instructions"]

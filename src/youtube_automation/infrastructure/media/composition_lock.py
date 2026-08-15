@@ -1,6 +1,6 @@
 """composition_lock ヘルパー (#489)
 
-`/collection-ideate` の Phase 4 でサムネ構図が `differentiation_axes`
+`/wf-new` の Phase 4 でサムネ構図が `differentiation_axes`
 (location / time_of_day / weather / activity / mood ...) を字義通り受け
 入れると TTP 参照画像のスタイルアンカーが効かなくなる問題への対処。
 

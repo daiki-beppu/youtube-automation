@@ -1,6 +1,6 @@
 """ボツ画像のストック化 (assets/stock/) コアユーティリティ。
 
-`/thumbnail` / `/collection-ideate` で生成された不採用画像を
+`/thumbnail` / `/wf-new` で生成された不採用画像を
 ``<channel_dir>/assets/stock/<theme-slug>/`` 配下に隣接メタデータ付きで
 退避し、将来別コレクションで再利用できるようにする。
 
@@ -258,7 +258,7 @@ def resolve_stock_refs(
 ) -> list[Path]:
     """skill-config の ``reference_images.stock`` 設定に従い stock から参照画像を解決する。
 
-    PR-B (#364): ``/thumbnail`` / ``/collection-ideate`` の生成時に、過去退避された
+    PR-B (#364): ``/thumbnail`` / ``/wf-new`` の生成時に、過去退避された
     ボツ画像 (``assets/stock/<theme>/``) を ``reference_images.default`` の末尾に
     自動合成するための解決関数。
 

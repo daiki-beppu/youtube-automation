@@ -69,6 +69,12 @@ SKILL_ONLY_CONFIG_KEYS: Final[frozenset[str]] = frozenset(
 # 正規キーではない。正規キー集合へ混ぜると実在ファイルとの双方向契約を壊す。
 _LEGACY_SKILL_CONFIG_ALIASES: Final[frozenset[str]] = frozenset({"postmortem"})
 
+# 公開 skill directory の統合後も、下流 override の旧キーと同梱 default の対応を
+# 維持する。キー名の移行は migrate-config の責務であり、loader は先行変更しない。
+_MOVED_SKILL_CONFIG_DEFAULTS: Final[dict[str, Path]] = {
+    "collection-ideate": Path("wf-new", "references", "collection-ideate.config.default.yaml"),
+}
+
 _THUMBNAIL_TEXT_RENDER_MODES = frozenset({"ai_burn_in", "deterministic"})
 _ACKNOWLEDGED_UNKNOWN_KEYS = "acknowledged_unknown_keys"
 
@@ -201,6 +207,11 @@ def _split_acknowledged_unknown_keys(
     return cleaned, set(raw)
 
 
+def skill_config_default_relative_path(skill: str) -> Path:
+    """Return one config key's canonical path below the distributed skills root."""
+    return _MOVED_SKILL_CONFIG_DEFAULTS.get(skill, Path(skill, "config.default.yaml"))
+
+
 def _default_path(skill: str) -> Path:
     """パッケージ同梱の default.yaml を解決する。
 
@@ -208,8 +219,9 @@ def _default_path(skill: str) -> Path:
     editable install 時はソースツリーの .claude/skills/<skill>/config.default.yaml。
     """
     default_skill = "flop-analysis" if skill == "postmortem" else skill
+    relative_path = skill_config_default_relative_path(default_skill)
     try:
-        resource = files("youtube_automation").joinpath("_skills", default_skill, "config.default.yaml")
+        resource = files("youtube_automation").joinpath("_skills", *relative_path.parts)
         with as_file(resource) as p:
             path = Path(p)
             if path.exists():
@@ -217,7 +229,7 @@ def _default_path(skill: str) -> Path:
     except (ModuleNotFoundError, FileNotFoundError):
         pass
 
-    src_fallback = Path(__file__).resolve().parents[3] / ".claude" / "skills" / default_skill / "config.default.yaml"
+    src_fallback = Path(__file__).resolve().parents[3] / ".claude" / "skills" / relative_path
     if src_fallback.exists():
         return src_fallback
 

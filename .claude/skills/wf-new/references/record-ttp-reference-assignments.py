@@ -1,4 +1,4 @@
-"""Persist collection-ideate TTP assignments for future rotation decisions."""
+"""Persist wf-new TTP assignments for future rotation decisions."""
 
 from __future__ import annotations
 

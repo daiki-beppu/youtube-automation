@@ -507,49 +507,49 @@
     },
     {
       "old_owner": "legacy..claude.skills.collection-ideate.SKILL.md",
-      "exact_new_owner": ".claude/skills/collection-ideate/SKILL.md",
+      "exact_new_owner": ".claude/skills/wf-new/references/ideate.md",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"
     },
     {
       "old_owner": "legacy..claude.skills.collection-ideate.references.collection-lifecycle.md",
-      "exact_new_owner": ".claude/skills/collection-ideate/references/collection-lifecycle.md",
+      "exact_new_owner": ".claude/skills/wf-new/references/collection-lifecycle.md",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"
     },
     {
       "old_owner": "legacy..claude.skills.collection-ideate.references.freshness-rules.md",
-      "exact_new_owner": ".claude/skills/collection-ideate/references/freshness-rules.md",
+      "exact_new_owner": ".claude/skills/wf-new/references/freshness-rules.md",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"
     },
     {
       "old_owner": "legacy..claude.skills.collection-ideate.references.freshness_action",
-      "exact_new_owner": ".claude/skills/collection-ideate/references/freshness_action.py",
+      "exact_new_owner": ".claude/skills/wf-new/references/freshness_action.py",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"
     },
     {
       "old_owner": "legacy..claude.skills.collection-ideate.references.object-design-examples.md",
-      "exact_new_owner": ".claude/skills/collection-ideate/references/object-design-examples.md",
+      "exact_new_owner": ".claude/skills/wf-new/references/object-design-examples.md",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"
     },
     {
       "old_owner": "legacy..claude.skills.collection-ideate.references.record-ttp-reference-assignments",
-      "exact_new_owner": ".claude/skills/collection-ideate/references/record-ttp-reference-assignments.py",
+      "exact_new_owner": ".claude/skills/wf-new/references/record-ttp-reference-assignments.py",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"
     },
     {
       "old_owner": "legacy..claude.skills.collection-ideate.references.select-ttp-references",
-      "exact_new_owner": ".claude/skills/collection-ideate/references/select-ttp-references.py",
+      "exact_new_owner": ".claude/skills/wf-new/references/select-ttp-references.py",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"

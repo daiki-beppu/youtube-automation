@@ -36,12 +36,14 @@ def test_public_workflow_skill_directories_are_fixed_to_three_routes() -> None:
     assert workflow_skills == {"wf-new", "wf-next", "wf-status"}
 
 
-def test_collection_ideate_description_declares_internal_delegation_only() -> None:
-    description = _description("collection-ideate")
+def test_wf_new_owns_absorbed_ideation_contract() -> None:
+    skill_names = {path.name for path in INVENTORY.skill_directories()}
+    ideate_reference = INVENTORY.resolve_reference("wf-new", "references/ideate.md")
+    wf_new = (INVENTORY.skill_directory("wf-new") / "SKILL.md").read_text(encoding="utf-8")
 
-    assert "/wf-new" in description
-    assert "委譲" in description
-    assert "直接呼び出さない" in description
+    assert "collection-ideate" not in skill_names
+    assert ideate_reference.is_file()
+    assert "references/ideate.md" in wf_new
 
 
 def test_public_route_guidance_exposes_only_workflow_surface() -> None:
@@ -63,10 +65,7 @@ def test_public_route_guidance_exposes_only_workflow_surface() -> None:
         assert route in trigger_list
 
     features = (REPO_ROOT / "docs" / "features.md").read_text(encoding="utf-8")
-    collection_row = next(line for line in features.splitlines() if line.startswith("| /collection-ideate |"))
-    assert "/wf-new" in collection_row
-    assert "内部 skill" in collection_row
-    assert "直接起動しない" in collection_row
+    assert "| /collection-ideate |" not in features
 
 
 def test_wf_new_description_exposes_all_exclusive_modes() -> None:
@@ -74,3 +73,4 @@ def test_wf_new_description_exposes_all_exclusive_modes() -> None:
 
     for mode in ("--auto", "--batch", "--schedule"):
         assert mode in description
+    assert "--ideate" not in description

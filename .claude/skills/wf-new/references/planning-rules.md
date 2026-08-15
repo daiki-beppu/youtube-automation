@@ -1,4 +1,4 @@
-# collection-ideate 企画規則
+# wf-new 企画規則
 
 Phase 2〜3 で候補を設計するときにだけ本書を読む。入力モード、鮮度判定、停止条件、Phase 順、承認、保存と state 更新は `../SKILL.md` を正とし、本書では再定義しない。
 

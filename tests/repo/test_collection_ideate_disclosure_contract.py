@@ -1,4 +1,4 @@
-"""段階開示後の collection-ideate 企画規則の所有契約。"""
+"""段階開示後の wf-new 企画規則の所有契約。"""
 
 from __future__ import annotations
 
@@ -6,12 +6,12 @@ import re
 
 from tests.helpers.paths import REPO_ROOT
 
-SKILL_DIR = REPO_ROOT / ".claude" / "skills" / "collection-ideate"
-SKILL_MD = SKILL_DIR / "SKILL.md"
-PLANNING_RULES_MD = SKILL_DIR / "references" / "planning-rules.md"
-PREVIEW_CONTRACT_MD = SKILL_DIR / "references" / "preview-contract.md"
-PREVIEW_GENERATION_MD = SKILL_DIR / "references" / "preview-generation.md"
-SELECTION_HANDOFF_MD = SKILL_DIR / "references" / "selection-handoff.md"
+SKILL_DIR = REPO_ROOT / ".claude" / "skills" / "wf-new" / "references"
+SKILL_MD = SKILL_DIR / "ideate.md"
+PLANNING_RULES_MD = SKILL_DIR / "planning-rules.md"
+PREVIEW_CONTRACT_MD = SKILL_DIR / "preview-contract.md"
+PREVIEW_GENERATION_MD = SKILL_DIR / "preview-generation.md"
+SELECTION_HANDOFF_MD = SKILL_DIR / "selection-handoff.md"
 
 PLANNING_RULE_HEADINGS = {
     "現在のチャンネル規定",
@@ -71,7 +71,7 @@ def test_planning_rule_sections_have_one_reference_owner() -> None:
 def test_skill_keeps_phase_order_and_approval_boundary() -> None:
     skill = SKILL_MD.read_text(encoding="utf-8")
 
-    dispatch = skill.index("](references/planning-rules.md)")
+    dispatch = skill.index("](planning-rules.md)")
     phase_2 = skill.index("### Phase 2:")
     phase_3 = skill.index("### Phase 3:")
     phase_4 = skill.index("### Phase 4:")
@@ -80,12 +80,12 @@ def test_skill_keeps_phase_order_and_approval_boundary() -> None:
     assert dispatch < phase_2 < phase_3 < phase_4 < approval
 
 
-def test_collection_ideate_loads_current_channel_constraints_before_analysis() -> None:
+def test_wf_new_ideation_loads_current_channel_constraints_before_analysis() -> None:
     skill = SKILL_MD.read_text(encoding="utf-8")
 
     constraint_resolution = skill.index("固定制約の解決")
     phase_1_4 = skill.index("#### Phase 1-4:")
-    planning_dispatch = skill.index("](references/planning-rules.md)")
+    planning_dispatch = skill.index("](planning-rules.md)")
 
     assert constraint_resolution < planning_dispatch < phase_1_4
     for path in (
@@ -127,7 +127,7 @@ def test_wf_new_accepts_only_verified_constraint_compliant_plans() -> None:
     wf_new = "\n".join(
         path.read_text(encoding="utf-8") for path in (skill_dir / "SKILL.md", skill_dir / "references" / "phase2.md")
     )
-    delegation = wf_new.split("2. **Agent ツールで `/collection-ideate` を委譲**", 1)[1].split("\n### Phase 2:", 1)[0]
+    delegation = wf_new.split("2. **Agent ツールで内部企画工程を委譲**", 1)[1].split("\n### Phase 2:", 1)[0]
 
     assert "固定制約" in delegation
     assert "候補ごとの適合結果" in delegation
@@ -213,7 +213,7 @@ def test_skill_keeps_generation_routing_commands_and_hard_gates() -> None:
     mode_decision = skill.index("`preview.thumbnail_mode`", phase_4)
     approval = skill.index("confirm_cost", phase_4)
     session_creation = skill.index("mkdir -p", phase_4)
-    dispatch = skill.index("](references/preview-generation.md)", phase_4)
+    dispatch = skill.index("](preview-generation.md)", phase_4)
     parallel_generation = skill.index("**4-4: プロンプト構築 + 一括生成（parallel デフォルト）**")
     validation = skill.index("yt-thumbnail-check", parallel_generation)
     user_selection = skill.index("**4-5: 全枚を比較提示 → ユーザー選択**", validation)

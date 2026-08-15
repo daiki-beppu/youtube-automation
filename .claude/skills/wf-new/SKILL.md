@@ -8,7 +8,7 @@ description: "Use when 新規コレクション制作を立ち上げるとき、
 
 - `前工程`: `/setup --channel`, `/setup`
 - `後工程`: `/wf-next`, `/suno-helper`, `/post-publish`, `/analytics`
-- `委譲先`: `/collection-ideate`, `/thumbnail`, `/suno`, `/lyria`, `/loop-video`, `/suno-helper`, `/masterup`, `/wf-next`, `/post-publish`
+- `委譲先`: `/analytics`, `/thumbnail`, `/suno`, `/lyria`, `/loop-video`, `/suno-helper`, `/masterup`, `/wf-next`, `/post-publish`
 
 ## 成果物
 
@@ -38,7 +38,7 @@ description: "Use when 新規コレクション制作を立ち上げるとき、
 
 ## Overview
 
-新コレクション開始オーケストレーター。子スキルを順番に呼び、通常は企画選択 + サムネイル承認の2箇所で一時停止する。`workflow.wf_new.skip_plan_selection: true` の analytics mode / benchmark fallback mode では企画選択だけを自動化する。
+新コレクション開始オーケストレーター。フラグなしの通常入口は [`references/ideate.md`](references/ideate.md) の企画工程を読んでから立ち上げを続け、通常は企画選択 + サムネイル承認の2箇所で一時停止する。`workflow.wf_new.skip_plan_selection: true` の analytics mode / benchmark fallback mode では企画選択だけを自動化する。
 `/wf-new --auto` から同一 SKILL.md の通常入口へ入った場合も既存 gate と完了条件を維持し、auto mode 側で工程を再実装しない。新規初期化後は作成した collection 名を返し、同じ run 内の再評価へ接続する。
 `image_generation.auto_selection.enabled: true` かつ `mode: full` のチャンネルでは、サムネイル工程のテーマ確認・生成可否・textless 背景承認・候補承認を省略する。`planning-preview.png` があればそれを無人で最終サムネイルへ確定し、無ければ企画で確定した theme を `/thumbnail` へ渡して無人で確定する。
 Suno チャンネルではプロンプト生成後、`suno-helper` 用の `uv run yt-collection-serve` 起動と疎通確認まで行い、続きは `/suno-helper` が browser use で Suno タブ上の拡張 overlay を操作できる状態にする。
@@ -64,22 +64,22 @@ minimal mode では企画候補生成前にテーマ / ジャンル / 雰囲気�
 1. **channel config gate**: `config/channel/` が存在し、`load_config()` でロードできること。
    - 存在しない場合は `/setup --channel` を案内して停止する。
    - `load_config()` が失敗する場合は `/channel-new`（既存チャンネル取り込みモード）を案内して停止する。
-   この状態では `/collection-ideate`、`/thumbnail`、`/suno`、`/lyria` を呼ばない。
+   この状態では `/wf-new`、`/thumbnail`、`/suno`、`/lyria` を呼ばない。
 2. **前提未達時の state 変更禁止**: channel config gate で停止した場合、`uv run yt-init-collection` を実行しない。`collections/planning/`、`workflow-state.json`、`assets.*` を新規作成・更新しない。
 3. **Suno collection Style boundary**: Suno チャンネルで `/suno` を呼ぶときは、対象 collection の絶対 path、確定企画、theme、書き込み先 `20-documentation/suno-patterns.yaml` を subagent へ渡す。collection 固有の `genre_line` / `exclude_styles` / `style_variants` / `vocal_gender` は同ファイルの root に書き、共有 `config/skills/suno.yaml` を書き換えない。root に無い値だけが channel config へ fallback する。`suno_preset` は推奨入力であり、不在だけを理由に停止しない。利用可能なら TTP 根拠として渡し、無ければ `/suno` が確定企画と制約から collection-local Style を設計する。`assets.music_prompts = true` は subagent 報告だけで更新せず、成果物、`yt-suno-verify`、semantic review をメインが検証した後に限る。
-4. **analytics input gate**: 入力モード判定、同日付 JSON、validator、stale 判定、自動更新、再検証は `/collection-ideate` の `references/freshness-rules.md::stale report の自動更新` に一元化する。`/wf-new` は判定ロジックを再定義せず、stale 判定や AskUserQuestion を先行実行しない。subagent が stale を検出した場合は、同 SSOT が返す自動更新シーケンスを同じ subagent 作業内で順次実行し、全呼び出し成功後に入力モード判定を先頭からやり直す。`yt-doctor` の `analytics_report` は予備確認にだけ使い、analytics mode の最終判定には使わない。
+4. **analytics input gate**: 入力モード判定、同日付 JSON、validator、stale 判定、自動更新、再検証は `/wf-new` の `references/freshness-rules.md::stale report の自動更新` に一元化する。`/wf-new` は判定ロジックを再定義せず、stale 判定や AskUserQuestion を先行実行しない。subagent が stale を検出した場合は、同 SSOT が返す自動更新シーケンスを同じ subagent 作業内で順次実行し、全呼び出し成功後に入力モード判定を先頭からやり直す。`yt-doctor` の `analytics_report` は予備確認にだけ使い、analytics mode の最終判定には使わない。
 5. **subagent state boundary**: 各フェーズの生成処理は Agent ツールで subagent へ一作業ずつ委譲する。Phase 2c の thumbnail / music が両方未完了の場合だけは、独立した 2 call を同じ message で同時起動する。Phase 2c それ以外と他 phase は一作業ずつ順次委譲する。subagent は `workflow-state.json` を書き込まず AskUserQuestion を実行しない。メインエージェントだけが承認、成果物検証、`assets` / `phase` / `updated_at` 更新を行う。
 6. **failure boundary**: subagent の失敗、期待成果物欠落、現在の phase との不整合時は state を更新しない。同じ未完了ステップから再実行できる状態で停止する。Phase 2c の thumbnail / music だけは独立 branch とし、[`references/phase-2c-artifact-contract.md`](references/phase-2c-artifact-contract.md) の実成果物検証に成功した側だけを反映して、失敗側だけを再開する。
 7. **thumbnail full-mode gate**: `.claude/skills/thumbnail/config.default.yaml` と、存在する場合は `config/skills/thumbnail.yaml` を読み、deep-merge 後の `image_generation.auto_selection.enabled` / `mode` を Phase 2c より前に確定する。`enabled: true` かつ `mode: full` のときだけ Phase 2c のサムネイル AskUserQuestion をすべて省略する。mode 未設定は `selection_only` として扱い、従来の候補承認だけを省略する。full で生成・QA・自動選択に失敗した場合は state を更新せず `/thumbnail` の「full モード失敗時の手動切替」を表示して停止する。
-8. **企画選択 skip gate**: `load_config()` の `config.workflow.wf_new.skip_plan_selection` を Phase 1 より前に確定する。`true` かつ analytics mode / benchmark fallback mode のときだけ、`/collection-ideate` が返した推奨順 1 位を自動採用できる。minimal mode のテーマ / ジャンル / 雰囲気入力は省略せず、無人実行では `blocked` とする。
+8. **企画選択 skip gate**: `load_config()` の `config.workflow.wf_new.skip_plan_selection` を Phase 1 より前に確定する。`true` かつ analytics mode / benchmark fallback mode のときだけ、`/wf-new` が返した推奨順 1 位を自動採用できる。minimal mode のテーマ / ジャンル / 雰囲気入力は省略せず、無人実行では `blocked` とする。
 9. **preselected manifest gate**: `--batch-id` / `--plan-id` を受け取った場合は直下の opt-in 契約を state mutation 前に通す。不正な manifest を通常の Phase 1 へ fallback させない。
-10. **channel constraint verification gate**: 通常入口では `/collection-ideate` が現在のチャンネル規定を固定制約として解決し、候補ごとの適合結果を返すこと。未検証、FAIL、または適合結果を含む期待成果物欠落時は候補を提示・自動採用せず、state を更新せず停止する。規定の解決・候補検証ロジックは `/collection-ideate` の planning rules に一元化し、`/wf-new` で再定義しない。
+10. **channel constraint verification gate**: 通常入口では `/wf-new` が現在のチャンネル規定を固定制約として解決し、候補ごとの適合結果を返すこと。未検証、FAIL、または適合結果を含む期待成果物欠落時は候補を提示・自動採用せず、state を更新せず停止する。規定の解決・候補検証ロジックは `/wf-new` の planning rules に一元化し、`/wf-new` で再定義しない。
 
 委譲時は入力パス、実行作業、期待成果物、禁止事項、完了報告形式をすべて具体値で埋める。成果物は絶対パスで受け取る。
 
 ### Preselected batch plan entry（opt-in）
 
-`/wf-new --batch-id <batch-id> --plan-id <plan-id>` の両引数が明示された場合だけ、`/collection-ideate` の承認済み batch manifest から 1 collection を開始する。両引数がない場合は従来の通常入口をそのまま使い、通常入口から manifest を自動探索しない。片方だけなら停止し、不足値を推測しない。
+`/wf-new --batch-id <batch-id> --plan-id <plan-id>` の両引数が明示された場合だけ、`/wf-new` の承認済み batch manifest から 1 collection を開始する。両引数がない場合は従来の通常入口をそのまま使い、通常入口から manifest を自動探索しない。片方だけなら停止し、不足値を推測しない。
 
 まず通常の channel config gate を通し、`batch-id` と `plan-id` が空でなく `[a-z0-9][a-z0-9-]*` に一致することを確認する。入力 path は引数から `reports/wf-new-batches/<batch-id>/plan-manifest.json` として組み立て、別 path や `..` を受け入れない。field を読む前に canonical validator を実行する。
 
@@ -138,7 +138,7 @@ uv run yt-init-collection "Pilot Direction Check" "pilot-direction-check" --trac
 | 状況 | 使う？ |
 |---|---|
 | 制作中コレクションが無い + 新しく始めたい | ✅ 使う |
-| 「次なに作る？」とだけ聞かれた（企画候補が未確定） | ✅ 通常入口で内部の `/collection-ideate` に委譲して候補を出す |
+| 「次なに作る？」とだけ聞かれた（企画候補が未確定） | ✅ 通常入口で内部の `/wf-new` に委譲して候補を出す |
 | 既存コレクションを次工程へ進めたい | ❌ `/wf-next` を使う |
 | 進捗だけ知りたい | ❌ `/wf-status` を使う |
 
@@ -149,7 +149,7 @@ uv run yt-init-collection "Pilot Direction Check" "pilot-direction-check" --trac
 | API | call 数 / 実行 | 変動要因 |
 |---|---|---|
 | 直接実行 CLI（yt-init-collection / yt-populate-scene-phrases / yt-collection-preflight / yt-collection-serve） | 0 call（ローカル処理のみ） | — |
-| 委譲先 /collection-ideate（YouTube Data 数 units + Analytics、任意で Gemini） | 1 回分 | 企画プレビュー画像の実施有無 |
+| 内部企画工程（YouTube Data 数 units + Analytics、任意で Gemini） | 1 回分 | 企画プレビュー画像の実施有無 |
 | 委譲先 /thumbnail（Gemini 画像生成 + Vision） | 1 回分 | 候補枚数 / 再生成回数 |
 | 委譲先 /loop-video（Veo 3.1） | 1 call | `enabled: true` のチャンネルのみ。/lyria は本スキルでは設計のみで実行は /wf-next |
 
@@ -159,7 +159,7 @@ uv run yt-init-collection "Pilot Direction Check" "pilot-direction-check" --trac
 
 `/wf-new` は「順番にスキルを呼ぶ」ための薄いオーケストレーターである。各工程の詳細ロジックは子スキルへ寄せ、ここでは呼び出し順、停止点、成果物確認、`workflow-state.json` 更新だけを持つ。
 
-定期的なデータ収集は `/analytics --collect`（`uv run yt-analytics` のラッパー）が担当し、通常時は workflow から呼び出さない。stale report の自動更新時だけは `/collection-ideate` の freshness SSOT が指定するシーケンスに従って subagent が呼び出す。必要に応じた cron / launchd 登録はユーザー側の運用とする。テーマは企画の結果で決定されるため、最初に手入力しない。
+定期的なデータ収集は `/analytics --collect`（`uv run yt-analytics` のラッパー）が担当し、通常時は workflow から呼び出さない。stale report の自動更新時だけは `/wf-new` の freshness SSOT が指定するシーケンスに従って subagent が呼び出す。必要に応じた cron / launchd 登録はユーザー側の運用とする。テーマは企画の結果で決定されるため、最初に手入力しない。
 
 ### 直接実行の canonical timing 契約
 
@@ -203,7 +203,7 @@ success を記録した後は同じ fixed collection を `plan --collection <fix
 
 | 順番 | 呼び出し先 | `/wf-new` の責務 | 主な成果物 |
 |---|---|---|---|
-| 1 | subagent: `/collection-ideate` | 入力モード候補を渡し、成果物検証後にメインが企画選択で停止 | 選択企画、プレビュー画像 |
+| 1 | subagent: `/wf-new` | 入力モード候補を渡し、成果物検証後にメインが企画選択で停止 | 選択企画、プレビュー画像 |
 | 2 | `uv run yt-init-collection` | 選択企画から collection dir と初期 state を作る | `workflow-state.json` |
 | 3 | `uv run yt-populate-scene-phrases` | 多言語チャンネルの scene phrases を初期化 | `scene_phrases` |
 | 4 | Phase 2c initial dispatch: thumbnail + music | preview status を固定し、両方未完了なら thumbnail branch と `/suno` または `/lyria` branch の exactly two Agent calls を同時起動する | `10-assets/thumbnail.jpg` または候補、Suno prompts または Lyria 設計 |
@@ -221,27 +221,27 @@ preselected batch plan entry では上記 manifest gate と 1 案への投影が
 Step 1（企画）を自動実行中...
 ```
 
-1. **入力ファイルの予備確認** — メインは以下の候補だけを確認する。入力モード、JSON ペア、validator、stale 判定、自動更新、再検証は `/collection-ideate` が一貫して確定する
+1. **入力ファイルの予備確認** — メインは以下の候補だけを確認する。入力モード、JSON ペア、validator、stale 判定、自動更新、再検証は `/wf-new` が一貫して確定する
 
-| モード | 判定条件 | `/collection-ideate` の入力 |
+| モード | 判定条件 | `/wf-new` の入力 |
 |---|---|---|
 | analytics mode | 同日付 report ペアの validator と鮮度判定が成功する | 日次収集データ + 構造化分析 JSON + ベンチマーク + config |
 | benchmark fallback mode | `reports/analysis_*.md` が存在せず、`data/benchmark_*.json` が存在する | ベンチマークデータ + config |
 | minimal mode | `reports/analysis_*.md` と `data/benchmark_*.json` がどちらも存在しない | `ttp_mode: false` はユーザー直接入力（テーマ / ジャンル / 雰囲気）+ config。`true` は `/benchmark` を案内して停止 |
 
-1-b. **蓄積 insights の収集（open エントリ、gate ではない）** — 入力モードの予備確認と合わせて、メインは `data/insights.jsonl` の存在を確認する。存在する場合は `uv run python3 .claude/skills/analytics/references/validate_insights.py data/insights.jsonl` が exit 0 であることを確認し、`jq -c 'select(.status == "open")' data/insights.jsonl` で open エントリだけを選別して Step 2 の `/collection-ideate` 委譲プロンプトへ企画入力として渡す。`/wf-new` が担うのは蓄積済み insights の選別と受け渡しだけで、学びの生成・検証（`/flop-analysis` の分析ロジック）や企画生成（`/collection-ideate` のロジック）を再実装しない。
+1-b. **蓄積 insights の収集（open エントリ、gate ではない）** — 入力モードの予備確認と合わせて、メインは `data/insights.jsonl` の存在を確認する。存在する場合は `uv run python3 .claude/skills/analytics/references/validate_insights.py data/insights.jsonl` が exit 0 であることを確認し、`jq -c 'select(.status == "open")' data/insights.jsonl` で open エントリだけを選別して Step 2 の `/wf-new` 委譲プロンプトへ企画入力として渡す。`/wf-new` が担うのは蓄積済み insights の選別と受け渡しだけで、学びの生成・検証（`/flop-analysis` の分析ロジック）や企画生成（`/wf-new` のロジック）を再実装しない。
 
    - `data/insights.jsonl` が存在しない、validator が失敗する、または open エントリが 0 件の場合は、insights なしとして既存の analytics / benchmark fallback / minimal mode のフローを阻害せず継続する（前提ガードにしない。validator 失敗時は失敗内容を警告表示だけする）
    - `/wf-new` は `/flop-analysis`（postmortem 生成・検証）を自動実行しない。公開済み動画の分析・検証は `/flop-analysis` の既存責務に残り、ここでは還元済みエントリを読むだけとする
 
-入力モード、JSON ペア検証、stale 判定、自動更新、再検証の完全な定義は `/collection-ideate` の `references/freshness-rules.md::stale report の自動更新` を正とする。`.claude/skills/collection-ideate/config.default.yaml` + `config/skills/collection-ideate.yaml` の deep-merge も同 skill に委譲し、ここでは判定ロジックや更新シーケンスを再定義しない。subagent が stale を検出した場合は SSOT の自動更新シーケンスを完了してから同日付ペア、validator、鮮度、入力モードを再判定し、成功時は中断せず同じ企画フローを続ける。skill 呼び出しまたは再検証に失敗した場合は、失敗した skill / 検証項目、理由、`/wf-new` を再実行できる再開条件を表示し、古い report を採用せず停止する。fresh / benchmark fallback mode / minimal mode では stale 更新用の Analytics skill を追加で呼ばない。`ttp_mode: false` の minimal mode ではテーマ / ジャンル / 雰囲気と、プレビューを生成する場合の候補・枚数・コスト承認を subagent が選択肢を返した後にメインが確定する。`true` の minimal mode では直接入力を確認せず、`/benchmark` を案内して停止する。
+入力モード、JSON ペア検証、stale 判定、自動更新、再検証の完全な定義は `/wf-new` の `references/freshness-rules.md::stale report の自動更新` を正とする。`.claude/skills/wf-new/references/collection-ideate.config.default.yaml` + `config/skills/collection-ideate.yaml` の deep-merge も同 skill に委譲し、ここでは判定ロジックや更新シーケンスを再定義しない。subagent が stale を検出した場合は SSOT の自動更新シーケンスを完了してから同日付ペア、validator、鮮度、入力モードを再判定し、成功時は中断せず同じ企画フローを続ける。skill 呼び出しまたは再検証に失敗した場合は、失敗した skill / 検証項目、理由、`/wf-new` を再実行できる再開条件を表示し、古い report を採用せず停止する。fresh / benchmark fallback mode / minimal mode では stale 更新用の Analytics skill を追加で呼ばない。`ttp_mode: false` の minimal mode ではテーマ / ジャンル / 雰囲気と、プレビューを生成する場合の候補・枚数・コスト承認を subagent が選択肢を返した後にメインが確定する。`true` の minimal mode では直接入力を確認せず、`/benchmark` を案内して停止する。
 
-2. **Agent ツールで `/collection-ideate` を委譲** — 入力候補パス、`ttp_mode`、プレビュー生成条件、deep-merge 後の `preview.skip_cost_confirm`、1-b で選別した open insights（存在する場合）、現在の固定制約の入力候補（`config/channel/*.json` と規定文書の path）を列挙し、入力モード判定、SSOT に従う stale 自動更新、再検証、固定制約の解決、企画候補とプレビュー生成を同じ subagent 作業に実行させる。入力モードはメインが事前確定せず、subagent が再検証後の値を返す。`ttp_mode: false` の minimal mode だけで使う直接入力は、subagent が同 mode を返した後にメインが確認し、再開入力として渡す。AskUserQuestion と state 書き込みは禁止する。返却契約には、解決した規定一覧、候補ごとの適合結果・適用規定・適合根拠、候補文書の絶対 path を含める。`preview.skip_cost_confirm: false` でコスト承認が必要になった場合は生成せずメインへ返し、`true` なら生成条件と call 数を記録して確認なしで進める
+2. **Agent ツールで内部企画工程を委譲** — [企画工程の契約](references/ideate.md) に従い、入力候補パス、`ttp_mode`、プレビュー生成条件、deep-merge 後の `preview.skip_cost_confirm`、1-b で選別した open insights（存在する場合）、現在の固定制約の入力候補（`config/channel/*.json` と規定文書の path）を列挙し、入力モード判定、SSOT に従う stale 自動更新、再検証、固定制約の解決、企画候補とプレビュー生成を同じ subagent 作業に実行させる。入力モードはメインが事前確定せず、subagent が再検証後の値を返す。`ttp_mode: false` の minimal mode だけで使う直接入力は、subagent が同 mode を返した後にメインが確認し、再開入力として渡す。AskUserQuestion と state 書き込みは禁止する。返却契約には、解決した規定一覧、候補ごとの適合結果・適用規定・適合根拠、候補文書の絶対 path を含める。`preview.skip_cost_confirm: false` でコスト承認が必要になった場合は生成せずメインへ返し、`true` なら生成条件と call 数を記録して確認なしで進める
    - analytics mode: 日次収集データ + 構造化分析 JSON + ベンチマークを基に分析 + ペルソナ別候補を生成
    - benchmark fallback mode: 自チャンネル分析をスキップし、ベンチマークデータ + config から初回候補を生成
    - minimal mode: テーマ / ジャンル / 雰囲気をユーザーに確認し、その直接入力 + config から初回候補を生成する既存挙動は `ttp_mode: false` の場合だけ適用。`true` は候補生成せず `/benchmark` を案内して停止
 
-メインが候補文書と、画像生成を実施した場合はプレビュー画像の存在を検証する。さらに、返された解決済み規定の全件に対して、必要数の全候補が PASS し、各候補に適用規定と適合根拠が保存されていることを確認する。未検証、FAIL、または候補文書・適合結果の期待成果物欠落時は理由と `/collection-ideate` の再開条件を表示し、候補を提示せず state を更新せず停止する。検証成功後だけ、入力モードと `config.workflow.wf_new.skip_plan_selection` で分岐する:
+メインが候補文書と、画像生成を実施した場合はプレビュー画像の存在を検証する。さらに、返された解決済み規定の全件に対して、必要数の全候補が PASS し、各候補に適用規定と適合根拠が保存されていることを確認する。未検証、FAIL、または候補文書・適合結果の期待成果物欠落時は理由と `/wf-new` の再開条件を表示し、候補を提示せず state を更新せず停止する。検証成功後だけ、入力モードと `config.workflow.wf_new.skip_plan_selection` で分岐する:
 
 - `skip_plan_selection: true` かつ analytics mode / benchmark fallback mode: 候補の**推奨順 1 位**を機械的に採用し、確認なしで Phase 2 へ進む。`20-documentation/plan_proposals.md` に「自動選択」、採用候補、選定根拠「推奨順 1 位」を追記する
 - 未設定または `false`: 提示された候補を選択肢としてユーザーに企画選択のみ求め、入力まで一時停止する
@@ -250,8 +250,8 @@ Step 1（企画）を自動実行中...
 いずれの分岐でもトラック数・音楽エンジンは確認せず、`config/channel/*.json` の設定に従う。
 
 **エラーハンドリング:**
-- analytics mode で `/collection-ideate` がエラー → エラー内容を表示して中断。分析データの確認を案内
-- benchmark fallback mode / minimal mode で `/collection-ideate` がエラー → エラー内容を表示して中断。入力モード、`ttp_mode`、不足データを明示する。`ttp_mode: true` の minimal mode は再入力へ進めず `/benchmark` を案内
+- analytics mode で `/wf-new` がエラー → エラー内容を表示して中断。分析データの確認を案内
+- benchmark fallback mode / minimal mode で `/wf-new` がエラー → エラー内容を表示して中断。入力モード、`ttp_mode`、不足データを明示する。`ttp_mode: true` の minimal mode は再入力へ進めず `/benchmark` を案内
 
 ### Phase 2: 選択後の順次オーケストレーション
 
@@ -270,7 +270,7 @@ Step 1（企画）を自動実行中...
 
 ## Cross References
 
-- 企画生成: `/collection-ideate` スキル
+- 企画生成: `/wf-new` スキル
   - 蓄積 insights: `data/insights.jsonl` の open エントリ（書き手は `/analytics --analyze`、`/flop-analysis`、`yt-experiment judge`、schema は `.claude/skills/analytics/references/insights-entry.schema.json` が単一ソース）を `source` にかかわらず Phase 1 で選別して渡す。無ければ渡さずに続行
   - analytics mode: validator 成功済みの同日付 `reports/analysis_*.md` / `.json` ペア + ベンチマーク + config を使用
   - benchmark fallback mode: `data/benchmark_*.json` + config のみで初回企画を生成

@@ -1,7 +1,7 @@
 """``data/community/weekly-vote-log.json`` の loader / validator / append utility。
 
 YouTube Studio の Sunday Vote 結果を ``yt-vote-log append`` で
-週次で記録するログファイルを扱う。``/collection-ideate`` の theme weight 計算では
+週次で記録するログファイルを扱う。``/wf-new`` の theme weight 計算では
 直近 N 週の ``top_axis`` を hook 経由で取り込み、
 
 - 連続 2 週以上 1 位の軸を **強制採用** (theme weight を最大化)
@@ -344,13 +344,13 @@ def append_weekly_vote_entry(
 
 
 # ---------------------------------------------------------------------------
-# Hook for /collection-ideate
+# Hook for /wf-new ideation
 # ---------------------------------------------------------------------------
 
 
 @dataclass(frozen=True)
 class VoteLogHookResult:
-    """``/collection-ideate`` 向け hook の出力.
+    """``/wf-new`` 向け hook の出力.
 
     Attributes:
         weights: 軸 key → weight (重みづけ平均から得た 0.0 以上の浮動小数点)

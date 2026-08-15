@@ -10,7 +10,7 @@ rename マッピング:
 | `status` | `channel-status` |
 | `description` | `video-description` |
 | `upload` | `video-upload` |
-| `ideate` | `collection-ideate` |
+| `ideate` | `wf-new` |
 | `persona` | `audience-persona-design` |
 
 検証する不変条件:
@@ -63,7 +63,6 @@ _ONBOARDING = _REPO_ROOT / "ONBOARDING.md"
 _AUDIENCE_PERSONA_DESIGN = _SKILLS_DIR / "audience-persona-design" / "SKILL.md"
 _VIEWER_VOICE = _SKILLS_DIR / "viewer-voice" / "SKILL.md"
 _VIEWING_SCENE = _SKILLS_DIR / "viewing-scene" / "SKILL.md"
-_COLLECTION_IDEATE = _SKILLS_DIR / "collection-ideate" / "SKILL.md"
 _FLOP_ANALYSIS = _SKILLS_DIR / "flop-analysis" / "SKILL.md"
 _SUNO_LYRIC = _SKILLS_DIR / "suno-lyric" / "SKILL.md"
 _LEGACY_FEEDBACK_DIR = _SKILLS_DIR / "feedback"
@@ -83,7 +82,7 @@ RENAME_MAP: dict[str, str] = {
     "status": "channel-status",
     "description": "video-description",
     "upload": "video-upload",
-    "ideate": "collection-ideate",
+    "ideate": "wf-new",
     "persona": "audience-persona-design",
 }
 

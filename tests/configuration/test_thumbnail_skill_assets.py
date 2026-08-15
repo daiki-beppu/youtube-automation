@@ -112,13 +112,11 @@ def _slice_between(text: str, start_marker: str, end_marker: str) -> str:
 
 
 def _collection_ideate_reference_validation_script() -> Path:
-    return _repo_root() / ".claude" / "skills" / "collection-ideate" / "references" / "select-ttp-references.py"
+    return _repo_root() / ".claude" / "skills" / "wf-new" / "references" / "select-ttp-references.py"
 
 
 def _collection_ideate_reference_history_script() -> Path:
-    return (
-        _repo_root() / ".claude" / "skills" / "collection-ideate" / "references" / "record-ttp-reference-assignments.py"
-    )
+    return _repo_root() / ".claude" / "skills" / "wf-new" / "references" / "record-ttp-reference-assignments.py"
 
 
 def _run_collection_ideate_generation_block(
@@ -128,7 +126,9 @@ def _run_collection_ideate_generation_block(
     *,
     provider: str = "gemini",
 ) -> subprocess.CompletedProcess[str]:
-    ideate_skill = (_repo_root() / ".claude" / "skills" / "collection-ideate" / "SKILL.md").read_text(encoding="utf-8")
+    ideate_skill = (_repo_root() / ".claude" / "skills" / "wf-new" / "references" / "ideate.md").read_text(
+        encoding="utf-8"
+    )
     if mode == "parallel":
         section = _slice_between(
             ideate_skill,
@@ -1183,16 +1183,20 @@ def test_thumbnail_skill_requires_reference_per_ttp_attempt_and_drops_prompt_onl
 def test_ttp_reference_dedup_is_documented_and_collection_ideate_passes_it() -> None:
     skill = _read_thumbnail_skill()
     config = _load_thumbnail_default_config()
-    ideate_skill = (_repo_root() / ".claude" / "skills" / "collection-ideate" / "SKILL.md").read_text(encoding="utf-8")
+    ideate_skill = (_repo_root() / ".claude" / "skills" / "wf-new" / "references" / "ideate.md").read_text(
+        encoding="utf-8"
+    )
 
     assert "reference_images.dedup_recent_collections" in skill
     assert config["image_generation"]["gemini"]["reference_images"]["dedup_recent_collections"] == 5
-    assert ".claude/skills/collection-ideate/references/select-ttp-references.py" in ideate_skill
-    assert ".claude/skills/collection-ideate/references/record-ttp-reference-assignments.py" in ideate_skill
+    assert ".claude/skills/wf-new/references/select-ttp-references.py" in ideate_skill
+    assert ".claude/skills/wf-new/references/record-ttp-reference-assignments.py" in ideate_skill
 
 
 def test_collection_ideate_persists_only_the_adopted_reference_after_selection() -> None:
-    ideate_skill = (_repo_root() / ".claude" / "skills" / "collection-ideate" / "SKILL.md").read_text(encoding="utf-8")
+    ideate_skill = (_repo_root() / ".claude" / "skills" / "wf-new" / "references" / "ideate.md").read_text(
+        encoding="utf-8"
+    )
     parallel = _slice_between(
         ideate_skill,
         "**4-4: プロンプト構築 + 一括生成（parallel デフォルト）**",
@@ -1212,9 +1216,9 @@ def test_collection_ideate_persists_only_the_adopted_reference_after_selection()
 
 
 def test_collection_ideate_hands_adopted_preview_to_final_thumbnail_contract() -> None:
-    ideate_dir = _repo_root() / ".claude" / "skills" / "collection-ideate"
-    skill = (ideate_dir / "SKILL.md").read_text(encoding="utf-8")
-    config = (ideate_dir / "config.default.yaml").read_text(encoding="utf-8")
+    ideate_dir = _repo_root() / ".claude" / "skills" / "wf-new" / "references"
+    skill = (ideate_dir / "ideate.md").read_text(encoding="utf-8")
+    config = (ideate_dir / "collection-ideate.config.default.yaml").read_text(encoding="utf-8")
 
     next_step = _slice_between(skill, "## Next Step", "### コスト拒否 / 生成失敗で企画参照画像が無い場合")
 
@@ -1227,7 +1231,7 @@ def test_collection_ideate_hands_adopted_preview_to_final_thumbnail_contract() -
 
 
 def test_collection_ideate_routes_missing_preview_to_thumbnail_fallback() -> None:
-    skill = (_repo_root() / ".claude" / "skills" / "collection-ideate" / "SKILL.md").read_text(encoding="utf-8")
+    skill = (_repo_root() / ".claude" / "skills" / "wf-new" / "references" / "ideate.md").read_text(encoding="utf-8")
 
     no_image = _slice_between(
         skill,

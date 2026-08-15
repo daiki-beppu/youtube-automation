@@ -1530,6 +1530,19 @@ def test_reorganization_receipt_names_existing_non_contract_consumers() -> None:
         ".claude/skills/automation-schedule/references/schedule_config.py": (
             ".claude/skills/wf-new/references/schedule_config.py"
         ),
+        ".claude/skills/collection-ideate/SKILL.md": ".claude/skills/wf-new/references/ideate.md",
+        ".claude/skills/collection-ideate/references/benchmark_collector.py": (
+            ".claude/skills/wf-new/references/benchmark_collector.py"
+        ),
+        ".claude/skills/collection-ideate/references/generate_image.py": (
+            ".claude/skills/wf-new/references/generate_image.py"
+        ),
+        ".claude/skills/collection-ideate/references/object-design-examples.md": (
+            ".claude/skills/wf-new/references/object-design-examples.md"
+        ),
+        ".claude/skills/collection-ideate/references/select-ttp-references.py": (
+            ".claude/skills/wf-new/references/select-ttp-references.py"
+        ),
     }
     resolved_paths = [historical_consumer_moves.get(path, path) for path in consumer_paths]
 

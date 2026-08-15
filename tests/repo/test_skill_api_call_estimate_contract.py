@@ -165,7 +165,6 @@ TARGET_SKILLS: frozenset[str] = frozenset(
         "benchmark",
         "channel-new",
         "channel-status",
-        "collection-ideate",
         "comments-reply",
         "discover-competitors",
         "distrokid-helper",

@@ -11,7 +11,7 @@ Issue #132 で `cost_tracker.PRICING` / `estimate_cost` を撤廃したため、
 
 対象ファイル:
 - .claude/skills/thumbnail/SKILL.md (ttp_swap モードのコスト記述)
-- .claude/skills/collection-ideate/SKILL.md (Phase 4-2 のコスト一括確認)
+- .claude/skills/wf-new/references/ideate.md (Phase 4-2 のコスト一括確認)
 - .claude/skills/thumbnail/config.default.yaml (cost_per_image_usd コメント例)
 """
 
@@ -28,7 +28,7 @@ _SKILLS_DIR = _REPO_ROOT / ".claude" / "skills"
 
 THUMBNAIL_SKILL_MD = _SKILLS_DIR / "thumbnail" / "SKILL.md"
 THUMBNAIL_CONFIG_YAML = _SKILLS_DIR / "thumbnail" / "config.default.yaml"
-IDEATE_SKILL_MD = _SKILLS_DIR / "collection-ideate" / "SKILL.md"
+IDEATE_SKILL_MD = _SKILLS_DIR / "wf-new" / "references" / "ideate.md"
 
 
 # ---------- 共通ヘルパー ----------

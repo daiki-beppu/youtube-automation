@@ -27,6 +27,10 @@ def _read_batch_reference() -> str:
     return BATCH_REFERENCE.read_text(encoding="utf-8")
 
 
+def _read_ideation_reference() -> str:
+    return (REPO_ROOT / ".claude" / "skills" / "wf-new" / "references" / "ideate.md").read_text(encoding="utf-8")
+
+
 def _load_reference(name: str, path: Path) -> ModuleType:
     spec = importlib.util.spec_from_file_location(name, path)
     assert spec is not None and spec.loader is not None
@@ -67,7 +71,7 @@ def _valid_manifest() -> dict:
         "requested_count": 2,
         "approved_at": "2026-08-06T00:00:00+00:00",
         "provenance": {
-            "producer": "collection-ideate",
+            "producer": "wf-new",
             "mode": "batch-plan",
             "input_mode": "analytics",
             "ttp_mode": False,
@@ -131,8 +135,8 @@ def _valid_ledger() -> dict:
     }
 
 
-def test_collection_ideate_batch_plan_is_explicit_and_fail_closed() -> None:
-    text = _read_skill("collection-ideate")
+def test_wf_new_ideation_batch_plan_is_explicit_and_fail_closed() -> None:
+    text = _read_ideation_reference()
 
     assert "### Batch plan mode（opt-in）" in text
     assert "reports/wf-new-batches/<batch-id>/plan-manifest.json" in text
@@ -147,8 +151,8 @@ def test_collection_ideate_batch_plan_is_explicit_and_fail_closed() -> None:
     assert "全 `N` 件を同じ承認画面" in text
 
 
-def test_collection_ideate_single_collection_completion_contract_remains() -> None:
-    text = _read_skill("collection-ideate")
+def test_wf_new_single_collection_completion_contract_remains() -> None:
+    text = _read_ideation_reference()
 
     assert "20-documentation/plan_proposals.md" in text
     assert "`planning.generated = true`" in text
@@ -440,7 +444,7 @@ def test_wf_new_batch_is_sequential_resumable_and_delegates_to_wf_new() -> None:
     text = _read_batch_reference()
 
     assert "reports/wf-new-batches/<batch-id>/batch-ledger.json" in text
-    assert "`/collection-ideate` を 1 回だけ" in text
+    assert "`/wf-new` を 1 回だけ" in text
     assert "`/wf-new --batch-id <batch-id> --plan-id <plan-id>`" in text
     assert "並列に起動しない" in text
     assert "`completed` は再実行しない" in text

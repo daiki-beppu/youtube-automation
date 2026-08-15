@@ -1,4 +1,4 @@
-"""Select collection-ideate TTP references from config and collection history."""
+"""Select wf-new TTP references from config and collection history."""
 
 from __future__ import annotations
 
