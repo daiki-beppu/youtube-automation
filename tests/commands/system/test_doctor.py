@@ -1919,7 +1919,7 @@ class TestCheckInitialSetupReadiness:
         assert "descriptions.md parse failed" in r.message
         assert r.next_action is not None
         assert "/setup --regenerate" in r.next_action["instructions"]
-        assert "/video-description" in r.next_action["instructions"]
+        assert "/video --describe" in r.next_action["instructions"]
 
     def test_valid_initial_setup_is_ok(self, tmp_path):
         ref = tmp_path / "data" / "thumbnail_compare" / "benchmark" / "alpha" / "alpha.jpg"

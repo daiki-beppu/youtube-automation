@@ -58,7 +58,7 @@ A continuous BGM mix without chapter markers.
     assert "検出した ## 見出し" in message
     assert "## タイトル" in message
     assert "修正例" in message
-    assert "/video-description を再実行" in message
+    assert "/video --describe を再実行" in message
 
 
 def test_read_descriptions_title_rejects_level3_heading(tmp_path: Path) -> None:

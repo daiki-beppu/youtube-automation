@@ -51,6 +51,7 @@ SKILL_CONFIG_MIGRATIONS: Final[Mapping[str, SkillConfigMigration]] = {
     "suno-lyric": SkillConfigMigration("music", "lyric"),
     "metadata-audit": SkillConfigMigration("audit", "metadata"),
     "video-upload": SkillConfigMigration("publish", "upload"),
+    "video-description": SkillConfigMigration("video", "describe"),
     "videoup": SkillConfigMigration("video", "generate"),
     "video-analyze": SkillConfigMigration("audit", "video"),
 }

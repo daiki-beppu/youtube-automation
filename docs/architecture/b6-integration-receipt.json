@@ -1067,14 +1067,14 @@
     },
     {
       "old_owner": "legacy..claude.skills.video-description.SKILL.md",
-      "exact_new_owner": ".claude/skills/video-description/SKILL.md",
+      "exact_new_owner": ".claude/skills/video/references/describe.md",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"
     },
     {
       "old_owner": "legacy..claude.skills.video-description.references.description-templates.md",
-      "exact_new_owner": ".claude/skills/video-description/references/description-templates.md",
+      "exact_new_owner": ".claude/skills/video/references/description-templates.md",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"

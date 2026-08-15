@@ -90,6 +90,7 @@ _MOVED_SKILL_CONFIG_DEFAULTS: Final[dict[str, Path]] = {
     "suno-helper": Path("music", "config.default.yaml"),
     "suno-lyric": Path("music", "config.default.yaml"),
     "video-upload": Path("publish", "config.default.yaml"),
+    "video-description": Path("video", "config.default.yaml"),
     "videoup": Path("video", "config.default.yaml"),
     "video-analyze": Path("audit", "config.default.yaml"),
 }
@@ -107,6 +108,7 @@ _MOVED_SKILL_CONFIG_SECTIONS: Final[dict[str, tuple[str, ...]]] = {
     "suno-helper": ("generate", "suno"),
     "suno-lyric": ("lyric",),
     "video-upload": ("upload",),
+    "video-description": ("describe",),
     "videoup": ("generate",),
     "video-analyze": ("video",),
 }

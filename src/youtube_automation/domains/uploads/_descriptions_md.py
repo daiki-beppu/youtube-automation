@@ -1,4 +1,4 @@
-"""descriptions.md（/video-description 生成物）の読み込み・抽出ロジック。
+"""descriptions.md（/video --describe 生成物）の読み込み・抽出ロジック。
 
 ``YouTubeAutoUploader`` から分離した mixin。挙動は分割前と同一。
 """
@@ -28,7 +28,7 @@ class DescriptionsMdMixin:
     def _load_descriptions_md(self, collection_dir: Path) -> dict | None:
         """descriptions.md から事前生成メタデータを読み込み
 
-        /video-description スキルが生成した descriptions.md が存在する場合、
+        /video --describe が生成した descriptions.md が存在する場合、
         title / description / tags を抽出して返す。
         ファイルが存在しない or パース失敗時は None（BAHMetadataGenerator にフォールバック）。
         """

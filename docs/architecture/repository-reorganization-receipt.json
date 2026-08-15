@@ -824,7 +824,7 @@
         "Updated consumer: .claude/skills/music/references/generate.md",
         "Updated consumer: .claude/skills/music/references/prompt.md",
         "Updated consumer: .claude/skills/publish/references/upload.md",
-        "Updated consumer: .claude/skills/video-description/SKILL.md",
+        "Updated consumer: .claude/skills/video/references/describe.md",
         "Updated consumer: .claude/skills/short-thumbnail/references/generate_short_loop.py",
         "Updated consumer: .claude/skills/analytics/references/analytics-chain-state.py",
         "Updated consumer: .claude/skills/music/references/generate_suno_prompts.py",

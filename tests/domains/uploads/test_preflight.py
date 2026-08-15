@@ -170,7 +170,7 @@ A continuous BGM mix without chapter markers.
     assert "検出した ## 見出し" in message
     assert "## タイトル" in message
     assert "修正例" in message
-    assert "/video-description を再実行" in message
+    assert "/video --describe を再実行" in message
 
 
 def test_empty_sections_keep_empty_section_error(tmp_path: Path) -> None:

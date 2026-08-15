@@ -3010,7 +3010,7 @@ def check_initial_setup_readiness(channel_dir: Path) -> CheckResult:
             "kind": "human",
             "instructions": (
                 "/setup --regenerate で config/skills/thumbnail.yaml と config/skills/music.yaml::prompt を再確認し、"
-                "descriptions.md の parse 失敗は /video-description で再生成してください"
+                "descriptions.md の parse 失敗は /video --describe で再生成してください"
             ),
         },
     )

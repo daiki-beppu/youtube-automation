@@ -27,7 +27,18 @@ def test_video_owns_generate_mode_and_local_generation_assets() -> None:
     assert (VIDEO / "references" / "generate_videos.sh").is_file()
 
 
-def test_video_chain_manifest_starts_with_generate_without_approval_gate() -> None:
+def test_video_owns_describe_mode_and_description_assets() -> None:
+    skill = (VIDEO / "SKILL.md").read_text(encoding="utf-8")
+
+    assert "video-description" not in {path.name for path in INVENTORY.skill_directories()}
+    assert "| `--describe` | `references/describe.md` |" in skill
+    assert "/publish --upload" in skill
+    assert "/audit --metadata" in skill
+    assert (VIDEO / "references" / "describe.md").is_file()
+    assert (VIDEO / "references" / "description-templates.md").is_file()
+
+
+def test_video_chain_manifest_runs_generate_then_describe_without_approval_gates() -> None:
     manifest = json.loads((VIDEO / "references" / "video-chain-manifest.json").read_text(encoding="utf-8"))
 
     assert manifest["chainId"] == "video"
@@ -45,15 +56,27 @@ def test_video_chain_manifest_starts_with_generate_without_approval_gate() -> No
                 "configPath": "workflow.video.skip_approvals.generate",
             },
             "idempotency": {"script": "references/video-chain-state.py"},
-        }
+        },
+        {
+            "id": "describe",
+            "skill": "video",
+            "prerequisiteArtifacts": ["collections/<id>/01-master/master.mp4"],
+            "outputArtifacts": ["collections/<id>/20-documentation/descriptions.md"],
+            "approvalGate": {
+                "skip": True,
+                "configPath": "workflow.video.skip_approvals.describe",
+            },
+            "idempotency": {"script": "references/video-chain-state.py"},
+        },
     ]
 
 
-def test_video_default_config_namespaces_generate_mode() -> None:
+def test_video_default_config_namespaces_generate_and_describe_modes() -> None:
     config = yaml.safe_load((VIDEO / "config.default.yaml").read_text(encoding="utf-8"))
 
-    assert set(config) == {"generate"}
+    assert set(config) == {"generate", "describe"}
     assert config["generate"]["video_type"] == "loop"
+    assert config["describe"]["chapters_enabled"] is True
 
 
 def test_video_config_loader_and_migration_share_generate_namespace(tmp_path) -> None:
@@ -63,3 +86,12 @@ def test_video_config_loader_and_migration_share_generate_namespace(tmp_path) ->
     assert migration.target_skill == "video"
     assert migration.section == "generate"
     assert load_skill_config("video", use_cache=False, channel_dir=tmp_path) == default
+
+
+def test_video_description_config_migrates_to_describe_namespace(tmp_path) -> None:
+    migration = _migrate_config.SKILL_CONFIG_MIGRATIONS["video-description"]
+    default = yaml.safe_load((VIDEO / "config.default.yaml").read_text(encoding="utf-8"))
+
+    assert migration.target_skill == "video"
+    assert migration.section == "describe"
+    assert load_skill_config("video-description", use_cache=False, channel_dir=tmp_path) == default["describe"]

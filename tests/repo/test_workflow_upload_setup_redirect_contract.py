@@ -16,7 +16,7 @@ TARGET_SKILLS = (
     "automation-schedule",
     "automation-update",
     "channel-status",
-    "video-description",
+    "video",
     "publish",
     "wf-auto",
     "wf-new",
@@ -66,9 +66,9 @@ INITIAL_OCCURRENCE_LEDGER = (
     _entry("channel-status", "SKILL.md", "upstream-new-channel", "opening"),
     _entry("channel-status", "SKILL.md", "missing-config-new", "opening"),
     _entry("channel-status", "SKILL.md", "missing-config-existing", "import"),
-    _entry("video-description", "SKILL.md", "missing-config-new", "opening"),
-    _entry("video-description", "SKILL.md", "missing-config-existing", "import"),
-    _entry("video-description", "SKILL.md", "config-generation-rules", "shared-reference"),
+    _entry("video", "references/describe.md", "missing-config-new", "opening"),
+    _entry("video", "references/describe.md", "missing-config-existing", "import"),
+    _entry("video", "references/describe.md", "config-generation-rules", "shared-reference"),
     _entry("publish", "references/upload.md", "missing-config-new", "opening"),
     _entry("publish", "references/upload.md", "missing-config-existing", "import"),
     _entry("wf-auto", "SKILL.md", "missing-config-new", "opening"),
@@ -144,14 +144,14 @@ EXPECTED_ACTIVE_ROUTES = (
         )
     ),
     *(
-        _route("video-description/SKILL.md", "## 前提", line)
+        _route("video/references/describe.md", "## 前提", line)
         for line in (
             "- **新規チャンネル** → `/setup --channel` を案内",
             "- **既存チャンネル**（YouTube で既に運営中）→ `/setup --import` を案内",
         )
     ),
     _route(
-        "video-description/SKILL.md",
+        "video/references/describe.md",
         "### 必須要素",
         "4. **ハッシュタグ**: `config/channel/content.json::descriptions.hashtags` が単一ソース"
         "（実装 `domains/metadata/service.py` は設定値をそのまま出力する。個数の目安は "
@@ -321,7 +321,7 @@ EXPECTED_ISSUE_3986_CHANGED_PATHS = frozenset(
         "tests/repo/test_workflow_upload_setup_redirect_contract.py",
     }
 )
-IMMUTABLE_TARGET_FILES_SHA256 = "c82023c8c401eee6fd3e8775ebce37a8418a780b7b473169bfe70d12c3003af1"
+IMMUTABLE_TARGET_FILES_SHA256 = "e4ef4e13d6c9fac08fbd3277e0a56c1af97e0da950dfcf02ae420c70ae46813a"
 AUTOMATION_SCHEDULE_REGENERATE_SHA256 = "11d460f727fe50c41f00571b416a1486cb07d0b1548524bc650a7161c16f6c42"
 AUTOMATION_UPDATE_PUSH_SHA256 = "d2e903b505ace3035da345f9f89ba1c0875e93b5633c1ddc31550db2433771eb"
 ALLOWED_FENCED_ROUTES = {

@@ -73,7 +73,7 @@ class TestDescriptionsMdQuoteStrip:
 
         messages = "\n".join(record.getMessage() for record in caplog.records)
         assert result is None
-        assert "/video-description を再実行" in messages
+        assert "/video --describe を再実行" in messages
         assert "必須セクション" in messages
         assert "## Complete Collection 概要欄" in messages
 
@@ -103,7 +103,7 @@ class TestDescriptionsMdQuoteStrip:
         assert "検出した ## 見出し" in messages
         assert "## タイトル" in messages
         assert "修正例" in messages
-        assert "/video-description を再実行" in messages
+        assert "/video --describe を再実行" in messages
 
     def test_rejects_level3_heading_for_required_section(self, tmp_path: Path, caplog) -> None:
         """`### タイトル案` は `## タイトル案` の完全一致として扱わない."""
@@ -138,4 +138,4 @@ class TestDescriptionsMdQuoteStrip:
         message = str(excinfo.value)
         assert "descriptions.md" in message
         assert "固定" in message
-        assert "/video-description を再実行" in message
+        assert "/video --describe を再実行" in message

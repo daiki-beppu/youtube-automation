@@ -29,7 +29,6 @@ _LIFECYCLE_SKILL_NAMES: Final[tuple[str, ...]] = (
     "video",
     "publish",
     "thumbnail",
-    "video-description",
     "analytics",
     "distrokid-helper",
 )

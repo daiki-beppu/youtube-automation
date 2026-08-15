@@ -46,7 +46,7 @@ scope 定義の単一ソースは `src/youtube_automation/infrastructure/auth/yo
 | /publish --upload | `domains/uploads/youtube.py` | write（`youtube`） | `token.json` |
 | /publish --playlist（作成・割り当て） | `yt-playlist-manager` | write（`youtube`） | `token.json` |
 | /setup（seed / 設定 push） | `yt-channel-seed` / `yt-channel-settings` | write（`youtube`） | `token.json` |
-| /video-description ほか一括更新 | `yt-bulk-update-desc` / `yt-bulk-update-synthetic-media` | write（`youtube`） | `token.json` |
+| /video --describe ほか一括更新 | `yt-bulk-update-desc` / `yt-bulk-update-synthetic-media` | write（`youtube`） | `token.json` |
 | /comments-reply | `yt-comments-reply` | write（`youtube.force-ssl`） | `token.json` |
 | /publish --pinned | `yt-pinned-comment` | write（`youtube.force-ssl`） | `token.json` |
 | 字幕アップロード | `yt-captions-upload` | write（`youtube.force-ssl`） | `token.json` |

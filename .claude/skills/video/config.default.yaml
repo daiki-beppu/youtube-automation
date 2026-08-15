@@ -13,3 +13,44 @@ generate:
     still_fps: 1
     still_crf: 28
     still_gop: 300
+
+describe:
+  # チャプター（タイムスタンプ列）生成の有効 / 無効。
+  # false ではタイムスタンプ列、重複トラック名の LLM リネーム、
+  # workflow-state.json への track_display_names 永続化を skip する。
+  chapters_enabled: true
+
+  # 概要欄セクションの装飾ヘッダー。
+  section_headers:
+    track_list: "⎯⎯⎯⎯ ✦ Track List ✦ ⎯⎯⎯⎯"
+    usage_attribution: "📝 Usage & Attribution:"
+    perfect_for: "🎮 Perfect for:"
+    channel_link_template: "🔗 {channel_name}:"
+    theme_inline:
+      prefix: "── "
+      suffix: " ──"
+
+  usage_attribution_lines:
+    - "• This music is original AI composition"
+    - "• Free to use for personal & commercial projects"
+    - "• Attribution appreciated but not required"
+    - "• Redistribution as-is prohibited"
+
+  # テーマ→Perfect for 用途マッピング。未マッチ時は
+  # config/channel/content.json の descriptions.perfect_for を使う。
+  perfect_for_themes: {}
+
+  theme_emoji:
+    study: "📚"
+    sleep: "🌙"
+    tavern: "🍺"
+    ocean: "🌊"
+    forest: "🌿"
+    druid: "🔮"
+    rain: "🌧️"
+    hearth: "🔥"
+
+  cards:
+    enabled: true
+    timing: "12:00"
+    text_template: "Up next from {channel_name}"

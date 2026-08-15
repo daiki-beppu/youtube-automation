@@ -60,7 +60,7 @@ def build_descriptions_md_parse_diagnostics(text: str, missing_headings: Sequenc
 
 DESCRIPTIONS_MD_RECREATE_GUIDE = (
     "→ 手書きファイルを直接直すのではなく、正規フローで作り直してください:\n"
-    "  1. /video-description を再実行する\n"
+    "  1. /video --describe を再実行する\n"
     "  2. 生成された 20-documentation/descriptions.md を確認する\n"
     "  3. 必要なら生成後の本文だけを調整してから再アップロードする\n"
     "  必須セクション: `## タイトル案` / `## Complete Collection 概要欄` / `## タグ（YouTube タグ欄）`"

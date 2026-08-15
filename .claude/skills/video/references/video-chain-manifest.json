@@ -16,6 +16,19 @@
       "idempotency": {
         "script": "references/video-chain-state.py"
       }
+    },
+    {
+      "id": "describe",
+      "skill": "video",
+      "prerequisiteArtifacts": ["collections/<id>/01-master/master.mp4"],
+      "outputArtifacts": ["collections/<id>/20-documentation/descriptions.md"],
+      "approvalGate": {
+        "skip": true,
+        "configPath": "workflow.video.skip_approvals.describe"
+      },
+      "idempotency": {
+        "script": "references/video-chain-state.py"
+      }
     }
   ]
 }

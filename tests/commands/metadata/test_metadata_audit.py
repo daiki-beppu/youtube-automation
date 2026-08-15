@@ -187,7 +187,7 @@ class TestAuditLocalPreflightContract:
         assert "検出した ## 見出し" in message
         assert "## タイトル" in message
         assert "修正例" in message
-        assert "/video-description を再実行" in message
+        assert "/video --describe を再実行" in message
 
     def test_parse_failure_keeps_independent_local_audits(self, tmp_path: Path) -> None:
         collection_dir = _write_local_collection(

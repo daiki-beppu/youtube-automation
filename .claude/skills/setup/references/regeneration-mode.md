@@ -52,7 +52,7 @@ uv run python .claude/skills/setup/references/fetch_branding_snapshot.py \
 - `localizations` で多言語化されているなら、その言語セットを追加・削除せず踏襲する。多言語化していなければローカライズ先を `en` のみにする
 - 独自設計の文言は **転写後の差分** として後出しで提案する（先に独自文言を書いてしまうのは TTP 違反）
 
-保存された `docs/channel/competitor-branding-snapshot.json` は、再生成モードの再実行や `/video-description` での再参照にそのまま使える。
+保存された `docs/channel/competitor-branding-snapshot.json` は、再生成モードの再実行や `/video --describe` での再参照にそのまま使える。
 
 ### Step R2.2: config 案の生成と承認
 
