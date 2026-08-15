@@ -10,6 +10,11 @@ description: "Use when 下流チャンネルリポジトリでスキル実行中
 - `後工程`: `なし`
 - `委譲先`: `なし`
 
+## 成果物
+
+- `書き込む`: `data/feedback/feedback-log.jsonl`
+- `読み込む`: `data/feedback/feedback-log.jsonl`
+
 ## 修飾フラグ
 
 | modifier | 効果 |

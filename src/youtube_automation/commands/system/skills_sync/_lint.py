@@ -1,4 +1,4 @@
-"""yt-skills lint — SKILL.md の軽量契約検証 (Issues #2096, #3749, #3750, #3751, #3793)。
+"""yt-skills lint — SKILL.md の軽量契約検証 (Issues #2096, #3749, #3750, #3751, #3793, #3802)。
 
 skill 編集後の検証を pytest 全体実行 (約 4 分) に律速されず秒単位で回すための
 サブコマンド。frontmatter / flag の検証ロジックは domains.skills.inventory を
@@ -16,6 +16,7 @@ skill 編集後の検証を pytest 全体実行 (約 4 分) に律速されず�
     8. mode ごとにフラグ名と対応する実在 reference を 1 ファイル持つ
     9. 委譲先の宣言行が存在し、有向グラフに循環がない
     10. SKILL.md 本体が 400 行以下である
+    11. 成果物ブロックと `書き込む` 宣言行が存在する
 """
 
 from __future__ import annotations
@@ -33,14 +34,14 @@ _SKILL_MD_LINE_LIMIT_VIOLATION: Final[str] = "skill_md_line_limit_exceeded"
 # 統合前から上限を超えている skill は、現状より悪化させない範囲で段階的に是正する。
 # channel-new は当初 450 行だったが既に上限内へ短縮されたため、猶予から除外済み。
 _ALLOWLISTED_SKILL_MD_LINE_COUNTS: Final[dict[str, int]] = {
-    "automation-release": 633,
-    "automation-update": 566,
-    "collection-ideate": 532,
-    "loop-video": 405,
-    "masterup": 561,
-    "suno": 589,
-    "thumbnail": 743,
-    "wf-new": 478,
+    "automation-release": 638,
+    "automation-update": 571,
+    "collection-ideate": 537,
+    "loop-video": 410,
+    "masterup": 566,
+    "suno": 594,
+    "thumbnail": 748,
+    "wf-new": 483,
 }
 
 _ALLOWLISTED_VIOLATIONS = frozenset(

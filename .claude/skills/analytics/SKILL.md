@@ -10,6 +10,11 @@ description: "Use when YouTube Analytics の収集・分析・レポート表示
 - `後工程`: `/collection-ideate`, `/flop-analysis`
 - `委譲先`: `なし`
 
+## 成果物
+
+- `書き込む`: `data/analytics_data_*.json`, `reports/analysis_*.md`, `reports/analysis_*.json`, `data/insights.jsonl`
+- `読み込む`: `config/skills/analytics.yaml`, `config/channel/analytics.json`, `collections/<id>/workflow-state.json`
+
 ## モード判定
 
 `$ARGUMENTS` から `--collect` / `--analyze` / `--report` の個数を最初に数える。

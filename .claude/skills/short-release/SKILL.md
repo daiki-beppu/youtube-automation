@@ -10,6 +10,11 @@ description: "Use when release 型（楽曲リリース）チャンネルで JP+
 - `後工程`: `/short-thumbnail`
 - `委譲先`: `なし`
 
+## 成果物
+
+- `書き込む`: `releases/<id>/video/short-jp.mp4`, `releases/<id>/video/short-en.mp4`
+- `読み込む`: `releases/<id>/video/<motif>-jp.mp4`, `releases/<id>/video/<motif>-en.mp4`, `config/channel/shorts.json`
+
 ## Overview
 
 `config.youtube.content_model.type == "release"` のチャンネル向けに、本編リリース動画

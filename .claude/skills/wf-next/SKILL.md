@@ -10,6 +10,11 @@ description: "Use when 既存コレクション（collections/planning/）を一
 - `後工程`: `/analytics`, `/flop-analysis`
 - `委譲先`: `/masterup`, `/lyria`, `/videoup`, `/video-description`, `/playlist`, `/video-upload`
 
+## 成果物
+
+- `書き込む`: `collections/<id>/workflow-state.json`, `collections/<id>/20-documentation/descriptions.md`, `collections/<id>/20-documentation/upload_tracking.json`
+- `読み込む`: `collections/<id>/workflow-state.json`, `collections/<id>/01-master/*`, `collections/<id>/10-assets/*`, `config/channel/workflow.json`
+
 ## Overview
 
 既存コレクションを次工程へ進めるオーケストレーター。完了済みの素材を自動検出し、未完了のステップから再開する。

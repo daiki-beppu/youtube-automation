@@ -10,6 +10,11 @@ description: "Use when チャンネルの価値ループ（シーン定義→制
 - `後工程`: `なし`
 - `委譲先`: `なし`
 
+## 成果物
+
+- `書き込む`: `なし`
+- `読み込む`: `docs/channel/personas/persona-definition.md`, `docs/plans/viewing-scene-matrix.md`, `docs/channel/creative-constraints.md`, `reports/analysis_*.json`, `data/insights.jsonl`
+
 ## Hard Gates
 
 - 本スキルは**読み取り専用**。ファイルの作成・変更・削除、config 更新、外部サービスへの反映、修復スキルの自動実行を禁止する。結果はチャット内にだけ表示する。

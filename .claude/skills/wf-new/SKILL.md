@@ -10,6 +10,11 @@ description: "Use when 新規コレクション制作を立ち上げるとき（
 - `後工程`: `/wf-auto`, `/wf-next`, `/suno-helper`
 - `委譲先`: `/collection-ideate`, `/thumbnail`, `/suno`, `/lyria`, `/loop-video`
 
+## 成果物
+
+- `書き込む`: `collections/<id>/workflow-state.json`, `collections/<id>/20-documentation/plan_proposals.md`, `collections/<id>/20-documentation/thumbnail-prompts.md`, `collections/<id>/20-documentation/suno-patterns.yaml`, `collections/<id>/20-documentation/suno-prompts.json`, `collections/<id>/10-assets/thumbnail.jpg`, `collections/<id>/10-assets/main.png`, `collections/<id>/10-assets/main.jpg`, `collections/<id>/10-assets/loop.mp4`
+- `読み込む`: `config/channel/*.json`, `config/localizations.json`, `data/benchmark_*.json`, `reports/analysis_*.md`, `data/insights.jsonl`
+
 ## Overview
 
 新コレクション開始オーケストレーター。子スキルを順番に呼び、通常は企画選択 + サムネイル承認の2箇所で一時停止する。`workflow.wf_new.skip_plan_selection: true` の analytics mode / benchmark fallback mode では企画選択だけを自動化する。

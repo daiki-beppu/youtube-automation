@@ -10,6 +10,11 @@ description: "Use when Suno UI で生成した曲のプレイリストを一括 
 - `後工程`: `/videoup`
 - `委譲先`: `なし`
 
+## 成果物
+
+- `書き込む`: `collections/<id>/01-master/master.mp3`, `collections/<id>/01-master/.selection.log`, `collections/<id>/01-master/.loudness-receipt.json`, `collections/<id>/workflow-state.json`
+- `読み込む`: `collections/<id>/02-Individual-music/*.mp3`, `collections/<id>/20-documentation/suno-prompts.json`, `config/channel/audio.json`, `config/skills/masterup.yaml`
+
 ## Overview
 
 SunoAI 楽曲のクロスフェード結合でマスター音源を自動生成するまでの一連フローを実行します。

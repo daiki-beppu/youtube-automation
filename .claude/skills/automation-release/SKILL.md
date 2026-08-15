@@ -10,6 +10,11 @@ description: "Use when 本リポジトリの新規リリースを作成すると
 - `後工程`: `/automation-update`
 - `委譲先`: `なし`
 
+## 成果物
+
+- `書き込む`: `pyproject.toml`, `uv.lock`, `CHANGELOG.md`, `docs/release-notes/v<version>.md`, `docs/release-notes/ext-v<version>.md`, `extensions/<name>/package.json`
+- `読み込む`: `CHANGELOG.md`, `pyproject.toml`, `.github/workflows/release-extensions.yml`
+
 ## Hard Gates / 完了条件
 
 - Phase R / Phase 0 / Phase E0 の状態判定を表示し、`AskUserQuestion` の「進行 / 中止」2択で承認されるまで branch作成・version変更・tag pushへ進まない。

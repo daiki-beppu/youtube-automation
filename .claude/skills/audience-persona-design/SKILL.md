@@ -10,6 +10,11 @@ description: "Use when ターゲット視聴者を第一ペルソナとして設
 - `後工程`: `/viewing-scene`, `/collection-ideate`
 - `委譲先`: `/viewing-scene`
 
+## 成果物
+
+- `書き込む`: `docs/channel/personas/persona-definition.md`
+- `読み込む`: `docs/plans/viewer-voice-analysis.md`, `docs/plans/viewing-scene-matrix.md`, `data/benchmark_*.json`
+
 ## Overview
 
 `/viewer-voice` のコメント分析、ベンチマークタグ分析、Web 調査、`/viewing-scene` の視聴シーン検証を束ね、チャンネル判断軸になる **1 人の第一ペルソナ** を設計する。

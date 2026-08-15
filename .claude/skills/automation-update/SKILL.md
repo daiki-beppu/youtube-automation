@@ -10,6 +10,11 @@ description: "Use when 下流リポジトリで automation を最新リリース
 - `後工程`: `なし`
 - `委譲先`: `なし`
 
+## 成果物
+
+- `書き込む`: `pyproject.toml`, `uv.lock`, `.claude/skills/*`, `.claude/CLAUDE.md`
+- `読み込む`: `CHANGELOG.md`, `pyproject.toml`, `config/channel/*.json`, `config/skills/*`
+
 ## Overview
 
 このスキルは **AI 主導の追従 wizard** である。下流チャンネルリポジトリ（bobble / deepfocus365 / rjn 等）で発動し、自リポの `pyproject.toml` を official upstream（`automation_update_refs.UPSTREAM_REPO` が単一ソース。既定: `daiki-beppu/youtube-automation`）の最新 tag まで bump して、`.claude/skills/` の同期、動作確認、コミットまでを 1 コマンドで回す。

@@ -18,6 +18,7 @@ _TABLE_FLAG = re.compile(r"^`(?P<flag>--[a-z0-9]+(?:-[a-z0-9]+)*)`$")
 _TABLE_REFERENCE = re.compile(r"^`(?P<reference>[^`]+)`$")
 _MODE_HEADING = "## モード判定"
 _MODIFIER_HEADING = "## 修飾フラグ"
+_ARTIFACTS_HEADING = "## 成果物"
 _MAX_MODES = 5
 _PURPOSE_VALUES: Final[frozenset[str]] = frozenset(
     {"準備する", "調べる", "決める", "進める", "作る", "公開する", "振り返る"}
@@ -30,6 +31,14 @@ class SkillLintViolation:
 
     identifier: str
     message: str
+
+
+@dataclass(frozen=True, slots=True)
+class ArtifactDeclaration:
+    """Files one skill declares as written and read."""
+
+    writes: tuple[str, ...]
+    reads: tuple[str, ...]
 
 
 def extract_frontmatter(text: str) -> str:
@@ -108,7 +117,36 @@ def lint_skill_contract(skill_dir: Path) -> list[SkillLintViolation]:
     parsed = parse_frontmatter(text)
     if not isinstance(parsed, dict) or not isinstance(parsed["description"], str):
         raise AssertionError("lint_frontmatter_text accepted an invalid frontmatter shape")
-    return _lint_flag_contract(skill_dir, text, parsed["description"])
+    violations = _lint_artifact_contract(text)
+    violations.extend(_lint_flag_contract(skill_dir, text, parsed["description"]))
+    return violations
+
+
+def _lint_artifact_contract(text: str) -> list[SkillLintViolation]:
+    section = _optional_markdown_section(text, _ARTIFACTS_HEADING)
+    if section is None:
+        return [SkillLintViolation("artifacts_section_missing", "`## 成果物` ブロックがありません")]
+    if _artifact_line(section, "書き込む") is None:
+        return [SkillLintViolation("artifact_writes_missing", "`## 成果物` に `書き込む` 行がありません")]
+    return []
+
+
+def _artifact_line(section: str, label: str) -> str | None:
+    prefix = f"- `{label}`:"
+    for line in section.splitlines():
+        if line.startswith(prefix):
+            return line.removeprefix(prefix).strip()
+    return None
+
+
+def _artifact_paths(section: str, label: str, *, required: bool = True) -> tuple[str, ...]:
+    value = _artifact_line(section, label)
+    if value is None:
+        if required:
+            raise ValueError(f"`## 成果物` に `{label}` 行がありません")
+        return ()
+    paths = tuple(re.findall(r"`([^`]+)`", value))
+    return () if paths == ("なし",) else paths
 
 
 def _lint_flag_contract(skill_dir: Path, text: str, description: str) -> list[SkillLintViolation]:
@@ -331,6 +369,14 @@ class SkillInventory:
     def reference_exists(self, skill: str, reference: str) -> bool:
         """Return whether a resolved skill reference points to a file."""
         return self.resolve_reference(skill, reference).is_file()
+
+    def artifacts(self, skill: str) -> ArtifactDeclaration:
+        """Read one skill's declared artifact writes and reads."""
+        section = self.section(skill, _ARTIFACTS_HEADING)
+        return ArtifactDeclaration(
+            writes=_artifact_paths(section, "書き込む"),
+            reads=_artifact_paths(section, "読み込む", required=False),
+        )
 
     def _is_worktree_store_entry(self, path: Path) -> bool:
         relative = path.relative_to(self.skills_root)

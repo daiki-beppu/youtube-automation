@@ -12,6 +12,11 @@ allowed-tools: Bash(npx shadcn@latest *), Bash(pnpm dlx shadcn@latest *), Bash(b
 - `後工程`: `なし`
 - `委譲先`: `なし`
 
+## 成果物
+
+- `書き込む`: `なし`
+- `読み込む`: `components.json`
+
 # shadcn/ui
 
 A framework for building ui, components and design systems. Components are added as source code to the user's project via the CLI.

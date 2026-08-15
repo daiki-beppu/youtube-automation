@@ -10,6 +10,11 @@ description: "Use when 新コレクションの企画・テーマ選定をデー
 - `後工程`: `/wf-new`, `/community-draft`
 - `委譲先`: `/analytics`
 
+## 成果物
+
+- `書き込む`: `collections/<id>/20-documentation/plan_proposals.md`, `collections/<id>/20-documentation/thumbnail-prompts.md`, `collections/<id>/workflow-state.json`, `data/insights.jsonl`
+- `読み込む`: `reports/analysis_*.md`, `reports/analysis_*.json`, `data/benchmark_*.json`, `docs/channel/creative-constraints.md`, `docs/channel/personas/persona-definition.md`, `docs/plans/viewing-scene-matrix.md`
+
 ## Overview
 
 最新の分析データ + 競合ベンチマークを基に、第一ペルソナ向けの企画提案を自動生成する。

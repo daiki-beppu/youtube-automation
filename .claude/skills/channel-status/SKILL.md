@@ -10,6 +10,11 @@ description: "Use when チャンネルの YouTube 統計（登録者・再生回
 - `後工程`: `なし`
 - `委譲先`: `なし`
 
+## 成果物
+
+- `書き込む`: `なし`
+- `読み込む`: `config/channel/*.json`, `auth/token.json`
+
 ## Overview
 
 チャンネルの最新統計 + 個別動画パフォーマンスを YouTube API から取得する。

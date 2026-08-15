@@ -10,6 +10,11 @@ description: "Use when 自チャンネルの生成済みサムネイルを競合
 - `後工程`: `なし`
 - `委譲先`: `なし`
 
+## 成果物
+
+- `書き込む`: `docs/plans/thumbnail-comparison.md`, `data/thumbnail_compare/*`
+- `読み込む`: `collections/<id>/10-assets/thumbnail.jpg`, `data/benchmark_*.json`, `docs/benchmarks/thumbnails/*.jpg`
+
 ## Overview
 
 自チャンネルの全サムネイルとベンチマーク3チャンネルの1万再生以上の動画サムネイルを

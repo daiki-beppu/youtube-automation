@@ -10,6 +10,11 @@ description: "Use when 既存 YouTube チャンネルを取り込むとき、収
 - `後工程`: `*`（共通基盤としてほぼ全スキル）
 - `委譲先`: `/setup`
 
+## 成果物
+
+- `書き込む`: `config/channel/*.json`, `config/localizations.json`, `docs/channel-research.md`, `docs/channel/channel-direction.md`, `docs/channel/ttp-seed-confirmation.md`, `docs/channel/competitor-branding-snapshot.json`
+- `読み込む`: `config/channel/*.json`, `data/benchmark_*.json`, `data/comments_*.json`
+
 ## 修飾フラグ
 
 | modifier | 効果 |

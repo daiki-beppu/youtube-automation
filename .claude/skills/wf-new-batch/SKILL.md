@@ -10,6 +10,11 @@ description: "Use when 複数の新規コレクションを相互差別化して
 - `後工程`: `/wf-next`, `/suno-helper`
 - `委譲先`: `/collection-ideate`, `/wf-new`
 
+## 成果物
+
+- `書き込む`: `reports/wf-new-batches/<batch-id>/plan-manifest.json`, `reports/wf-new-batches/<batch-id>/batch-ledger.json`
+- `読み込む`: `collections/<id>/20-documentation/plan_proposals.md`, `collections/<id>/workflow-state.json`
+
 ## Overview
 
 複数 collection の企画を一度に確定し、各 plan を canonical owner の `/wf-new` へ順番に渡す薄いオーケストレーター。企画、初期化、thumbnail、music、loop、server の処理を再実装せず、batch ledger と停止・再開だけを管理する。

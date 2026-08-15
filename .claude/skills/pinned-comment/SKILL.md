@@ -10,6 +10,11 @@ description: "Use when 新規動画へオーナー固定コメントを自動投
 - `後工程`: `なし`
 - `委譲先`: `なし`
 
+## 成果物
+
+- `書き込む`: `collections/<id>/20-documentation/pinned_comment_history.json`
+- `読み込む`: `collections/<id>/20-documentation/upload_tracking.json`, `config/channel/pinned-comment.json`, `auth/token.json`
+
 ## Overview
 
 YouTube Data API v3 の `commentThreads.insert` で、自チャンネルの動画にトップレベルコメント（オーナーコメント）を自動投稿する。`comments-reply` と同じ dry-run / apply / history パターンを踏襲し、`yt-pinned-comment` CLI から実行する。

@@ -10,6 +10,11 @@ description: "Use when 長尺動画で YouTube Studio のサムネイル A/B テ
 - `後工程`: `/thumbnail`, `/thumbnail-iterate`, `/flop-analysis`
 - `委譲先`: `なし`
 
+## 成果物
+
+- `書き込む`: `collections/<id>/20-documentation/thumbnail-test-active.json`, `collections/<id>/20-documentation/thumbnail-test-history.json`
+- `読み込む`: `collections/<id>/workflow-state.json`, `config/skills/thumbnail.yaml`
+
 ## Overview
 
 テキスト付きサムネイル候補を 2〜3 案に絞り、YouTube Studio で operator が行う A/B テストを設計する。完了後は watch time share と結果をコレクションの履歴 JSON に記録し、次回 `/thumbnail` が参照できる勝ちパターンを残す。

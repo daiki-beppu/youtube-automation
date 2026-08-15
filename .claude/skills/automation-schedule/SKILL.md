@@ -10,6 +10,11 @@ description: "Use when チャンネルの定期制作スケジュール（workfl
 - `後工程`: `/wf-auto`, `/wf-next`
 - `委譲先`: `なし`
 
+## 成果物
+
+- `書き込む`: `config/channel/workflow.json`
+- `読み込む`: `config/channel/workflow.json`
+
 ## Overview
 
 `config/channel/workflow.json::workflow.scheduled_automation` を製品非依存の単一ソースとして、実行中製品のネイティブ scheduler に登録する。Codex は Scheduled Task、Claude は依存性に応じて `/schedule` Cloud Job または Cowork local Scheduled Task を使う。launchd / cron は明示承認された fallback に限る。

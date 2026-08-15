@@ -10,6 +10,11 @@ description: "Use when コレクションの YouTube サムネイル（thumbnail
 - `後工程`: `/loop-video`, `/thumbnail-compare`, `/alignment-check`, `/thumbnail-test`
 - `委譲先`: `なし`
 
+## 成果物
+
+- `書き込む`: `collections/<id>/10-assets/thumbnail.jpg`, `collections/<id>/10-assets/main.png`, `collections/<id>/10-assets/main.jpg`, `collections/<id>/20-documentation/thumbnail-prompts.md`, `collections/<id>/20-documentation/thumbnail-test-history.json`, `collections/<id>/workflow-state.json`, `assets/thumbnail-gallery/<id>.<ext>`
+- `読み込む`: `docs/channel/creative-constraints.md`, `docs/benchmarks/thumbnail-analysis.md`, `data/thumbnail-iterate/champion.json`, `collections/<id>/20-documentation/thumbnail-test-history.json`, `config/skills/thumbnail.yaml`
+
 ## Overview
 
 コレクション用サムネイルを `config/skills/thumbnail.yaml`（skill-config）に基づいて生成する。

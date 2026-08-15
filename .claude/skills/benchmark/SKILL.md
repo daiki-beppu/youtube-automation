@@ -10,6 +10,11 @@ description: "Use when 競合チャンネルのベンチマークデータを最
 - `後工程`: `/channel-new`, `/viewer-voice`, `/collection-ideate`, `/thumbnail-research`
 - `委譲先`: `なし`
 
+## 成果物
+
+- `書き込む`: `docs/benchmarks/<channel>.md`, `docs/benchmarks/thumbnails/<channel>_<video-id>.jpg`, `data/benchmark_<YYYYMMDD>.json`
+- `読み込む`: `config/channel/analytics.json`, `config/skills/benchmark.yaml`
+
 ## Overview
 
 `benchmark_collector.py` で競合チャンネルの**直近投稿のうち再生数しきい値（既定 10,000）以上**の動画だけを収集し、`docs/benchmarks/*.md` を自動更新する。

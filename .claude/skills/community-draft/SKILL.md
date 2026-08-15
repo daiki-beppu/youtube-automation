@@ -10,6 +10,11 @@ description: "Use when コレクションの YouTube コミュニティ投稿を
 - `後工程`: `なし`
 - `委譲先`: `なし`
 
+## 成果物
+
+- `書き込む`: `collections/<id>/30-promo/community-posts.json`
+- `読み込む`: `config/channel/community-draft.json`, `collections/<id>/workflow-state.json`
+
 ## 修飾フラグ
 
 | modifier | 効果 |

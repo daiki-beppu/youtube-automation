@@ -10,6 +10,11 @@ description: "Use when 既存チャンネルから任意に市場を調べ、TTP
 - `後工程`: `/benchmark`, `/discover-competitors`
 - `委譲先`: `なし`
 
+## 成果物
+
+- `書き込む`: `docs/research/market-<YYYY-MM-DD>.md`
+- `読み込む`: `docs/channel-research.md`, `config/channel/analytics.json`
+
 ## Hard Gates
 
 - このスキルは **状態を持たない読み取り専用の調査**である。`config/channel/analytics.json::benchmark.channels` を含む config schema、既存 TTP、調査入力を変更しない。TTP の自動入替は行わない。

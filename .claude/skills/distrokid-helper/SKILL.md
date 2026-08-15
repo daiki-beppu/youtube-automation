@@ -10,6 +10,11 @@ description: "Use when コレクションの楽曲を DistroKid 配信用に準�
 - `後工程`: `なし`
 - `委譲先`: `なし`
 
+## 成果物
+
+- `書き込む`: `collections/<id>/30-distrokid/spec.json`, `collections/<id>/30-distrokid/cover_art_3000.jpg`, `collections/<id>/30-distrokid/<disc>/release.json`, `collections/<id>/30-distrokid/README.md`
+- `読み込む`: `collections/<id>/02-Individual-music/*.mp3`, `collections/<id>/10-assets/main.png`, `config/channel/distrokid.json`
+
 ## Overview
 
 コレクションの楽曲（`02-Individual-music/*.mp3`）を DistroKid 配信向けに整備し、`30-distrokid/` 以下に成果物一式を生成します。

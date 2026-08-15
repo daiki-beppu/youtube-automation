@@ -10,6 +10,11 @@ description: "Use when Suno UI 投入用の音楽プロンプトを生成する�
 - `後工程`: `/suno-helper`, `/masterup`
 - `委譲先`: `なし`
 
+## 成果物
+
+- `書き込む`: `collections/<id>/20-documentation/suno-patterns.yaml`, `collections/<id>/20-documentation/suno-prompts.md`, `collections/<id>/20-documentation/suno-prompts.json`, `collections/<id>/20-documentation/suno-lyrics.md`, `collections/<id>/20-documentation/suno-lyrics.json`, `collections/<id>/workflow-state.json`
+- `読み込む`: `docs/channel/creative-constraints.md`, `data/video_analysis/<channel>/*.json`, `data/insights.jsonl`, `config/skills/suno.yaml`
+
 ## Overview
 
 コレクション用の SunoAI V5.5 音楽プロンプトを YAML で定義し、スクリプトで最終プロンプトを生成する。**インストゥルメンタル / ボーカル（歌詞あり）両モード対応**。歌詞ありの場合、`/suno` は orchestration として pattern draft 保存 → `/suno-lyric` → Style / Lyrics の `suno-prompts.json` 結合までを進める。

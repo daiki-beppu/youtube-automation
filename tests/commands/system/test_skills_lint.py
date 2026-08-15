@@ -28,6 +28,11 @@ purpose: 作る
 - `後工程`: `なし`
 - `委譲先`: `なし`
 
+## 成果物
+
+- `書き込む`: `なし`
+- `読み込む`: `なし`
+
 # good
 """
 
@@ -193,6 +198,11 @@ description: "Use --since"
 purpose: 振り返る
 ---
 
+## 成果物
+
+- `書き込む`: `なし`
+- `読み込む`: `なし`
+
 - `委譲先`: `なし`
 
 ## 本文
@@ -269,11 +279,11 @@ def test_cli_lint_allowlisted_skill_md_growth_exits_nonzero(
     fake_repo: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     skills_dir = fake_repo / ".claude" / "skills"
-    _write_skill(skills_dir, "thumbnail", _skill_md_with_line_count(744, name="thumbnail"))
+    _write_skill(skills_dir, "thumbnail", _skill_md_with_line_count(749, name="thumbnail"))
 
     assert main(["lint", "thumbnail"]) == 1
     out = capsys.readouterr().out
-    assert "thumbnail: SKILL.md が 744 行です" in out
+    assert "thumbnail: SKILL.md が 749 行です" in out
     assert "[allowlist]" not in out
 
 
@@ -370,12 +380,12 @@ def test_cli_lint_delegation_cycle_reports_path_and_exits_nonzero(
     _write_skill(
         skills_dir,
         "alpha",
-        _VALID_SKILL_MD.replace("good-skill", "alpha").replace("`なし`\n\n# good", "`/beta`\n\n# good"),
+        _VALID_SKILL_MD.replace("good-skill", "alpha").replace("- `委譲先`: `なし`", "- `委譲先`: `/beta`"),
     )
     _write_skill(
         skills_dir,
         "beta",
-        _VALID_SKILL_MD.replace("good-skill", "beta").replace("`なし`\n\n# good", "`/alpha`\n\n# good"),
+        _VALID_SKILL_MD.replace("good-skill", "beta").replace("- `委譲先`: `なし`", "- `委譲先`: `/alpha`"),
     )
 
     assert main(["lint"]) == 1
@@ -390,7 +400,7 @@ def test_cli_lint_self_delegation_reports_cycle_and_exits_nonzero(
     _write_skill(
         skills_dir,
         "recursive",
-        _VALID_SKILL_MD.replace("good-skill", "recursive").replace("`なし`\n\n# good", "`/recursive`\n\n# good"),
+        _VALID_SKILL_MD.replace("good-skill", "recursive").replace("- `委譲先`: `なし`", "- `委譲先`: `/recursive`"),
     )
 
     assert main(["lint", "recursive"]) == 1
@@ -402,12 +412,12 @@ def test_cli_lint_does_not_reject_delegation_depth_two(fake_repo: Path, capsys: 
     _write_skill(
         skills_dir,
         "alpha",
-        _VALID_SKILL_MD.replace("good-skill", "alpha").replace("`なし`\n\n# good", "`/beta`\n\n# good"),
+        _VALID_SKILL_MD.replace("good-skill", "alpha").replace("- `委譲先`: `なし`", "- `委譲先`: `/beta`"),
     )
     _write_skill(
         skills_dir,
         "beta",
-        _VALID_SKILL_MD.replace("good-skill", "beta").replace("`なし`\n\n# good", "`/gamma`\n\n# good"),
+        _VALID_SKILL_MD.replace("good-skill", "beta").replace("- `委譲先`: `なし`", "- `委譲先`: `/gamma`"),
     )
     _write_skill(skills_dir, "gamma", _VALID_SKILL_MD.replace("good-skill", "gamma"))
 
@@ -422,12 +432,12 @@ def test_cli_delegation_reports_each_depth_longest_path_and_summary(
     _write_skill(
         skills_dir,
         "alpha",
-        _VALID_SKILL_MD.replace("good-skill", "alpha").replace("`なし`\n\n# good", "`/beta`, `/leaf`\n\n# good"),
+        _VALID_SKILL_MD.replace("good-skill", "alpha").replace("- `委譲先`: `なし`", "- `委譲先`: `/beta`, `/leaf`"),
     )
     _write_skill(
         skills_dir,
         "beta",
-        _VALID_SKILL_MD.replace("good-skill", "beta").replace("`なし`\n\n# good", "`/leaf`\n\n# good"),
+        _VALID_SKILL_MD.replace("good-skill", "beta").replace("- `委譲先`: `なし`", "- `委譲先`: `/leaf`"),
     )
     _write_skill(skills_dir, "leaf", _VALID_SKILL_MD.replace("good-skill", "leaf"))
 
@@ -453,7 +463,7 @@ def test_cli_delegation_with_cycle_reports_it_and_exits_zero(
     _write_skill(
         skills_dir,
         "recursive",
-        _VALID_SKILL_MD.replace("good-skill", "recursive").replace("`なし`\n\n# good", "`/recursive`\n\n# good"),
+        _VALID_SKILL_MD.replace("good-skill", "recursive").replace("- `委譲先`: `なし`", "- `委譲先`: `/recursive`"),
     )
 
     assert main(["delegation"]) == 0

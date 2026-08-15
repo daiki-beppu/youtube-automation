@@ -10,6 +10,11 @@ description: "Use when ローカル descriptions.md と YouTube メタデータ�
 - `後工程`: `/video-description`
 - `委譲先`: `なし`
 
+## 成果物
+
+- `書き込む`: `なし`
+- `読み込む`: `collections/<id>/20-documentation/descriptions.md`, `collections/<id>/workflow-state.json`, `config/channel/*.json`
+
 ## Overview
 
 `yt-metadata-audit` のラッパー。`collections/live/<col>/20-documentation/descriptions.md` と `workflow-state.json` の整合性、および YouTube API 側 snippet/localizations の整合性を読み取り専用で監査する。

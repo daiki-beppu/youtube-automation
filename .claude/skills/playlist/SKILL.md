@@ -10,6 +10,11 @@ description: "Use when プレイリストの作成・割り当て・確認をす
 - `後工程`: `/video-upload`
 - `委譲先`: `なし`
 
+## 成果物
+
+- `書き込む`: `config/channel/playlists.json`
+- `読み込む`: `config/channel/playlists.json`, `config/channel/content.json`, `auth/token.json`
+
 ## Overview
 
 `uv run yt-playlist-status` と `uv run yt-playlist-manager` を 1 スキルに統合し、プレイリストの状態確認・作成・動画割り当て・クリーンアップを案内する。

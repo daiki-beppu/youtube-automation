@@ -10,6 +10,11 @@ description: "Use when 伸びた動画を起点にサムネの勝因を分解し
 - `後工程`: `/thumbnail`, `/thumbnail-test`, `/flop-analysis`
 - `委譲先`: `/flop-analysis`, `/thumbnail`, `/thumbnail-test`
 
+## 成果物
+
+- `書き込む`: `data/thumbnail-iterate/runs/<video-id>.json`, `data/thumbnail-iterate/champion.json`, `data/thumbnail-iterate/synthesis-required.json`, `collections/<id>/20-documentation/thumbnail-test-history.json`
+- `読み込む`: `collections/<id>/20-documentation/thumbnail-test-history.json`, `collections/<id>/workflow-state.json`
+
 ## Hard Gates
 
 - 対象動画とチャンネル平均の同一期間・同一定義の impressions CTR、および対象動画の Browse features + Suggested videos 構成比が揃うまで停止する。公開後 D+2 未満など Analytics の確定待ちは推測で補わない。

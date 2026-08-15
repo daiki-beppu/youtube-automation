@@ -16,7 +16,8 @@ def _write_skill(root: Path, name: str, *, description: str = "説明") -> Path:
     skill_dir = root / name
     skill_dir.mkdir(parents=True)
     (skill_dir / "SKILL.md").write_text(
-        f'---\nname: {name}\ndescription: "{description}"\npurpose: 作る\n---\n\n## 本文\n\n{name}\n',
+        f'---\nname: {name}\ndescription: "{description}"\npurpose: 作る\n---\n\n'
+        f"## 成果物\n\n- `書き込む`: `なし`\n- `読み込む`: `なし`\n\n## 本文\n\n{name}\n",
         encoding="utf-8",
     )
     return skill_dir
@@ -26,7 +27,8 @@ def _write_flag_skill(root: Path, name: str, description: str, body: str) -> Pat
     skill_dir = root / name
     skill_dir.mkdir(parents=True)
     (skill_dir / "SKILL.md").write_text(
-        f'---\nname: {name}\ndescription: "{description}"\npurpose: 作る\n---\n\n{body}',
+        f'---\nname: {name}\ndescription: "{description}"\npurpose: 作る\n---\n\n'
+        f"## 成果物\n\n- `書き込む`: `なし`\n- `読み込む`: `なし`\n\n{body}",
         encoding="utf-8",
     )
     return skill_dir

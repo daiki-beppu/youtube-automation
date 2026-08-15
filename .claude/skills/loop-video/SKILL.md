@@ -10,6 +10,11 @@ description: "Use when テキストなし main.png/jpg から Veo または Gemi
 - `後工程`: `/videoup`
 - `委譲先`: `なし`
 
+## 成果物
+
+- `書き込む`: `collections/<id>/10-assets/loop.mp4`, `collections/<id>/workflow-state.json`
+- `読み込む`: `collections/<id>/10-assets/main.png`, `collections/<id>/10-assets/main.jpg`, `docs/channel/creative-constraints.md`, `config/skills/loop-video.yaml`
+
 ## Overview
 
 Veo 3.1（既定）または Gemini Omni Flash を使い、コレクションのテキストなし `main.png/jpg` からシームレスループ動画を生成します。

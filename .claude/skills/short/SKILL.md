@@ -10,6 +10,11 @@ description: "Use when collection 型（BGM テイスター）チャンネルで
 - `後工程`: `/short-thumbnail`, `/video-upload`
 - `委譲先`: `なし`
 
+## 成果物
+
+- `書き込む`: `collections/<id>/01-master/shorts/short-*.mp4`, `collections/<id>/workflow-state.json`
+- `読み込む`: `collections/<id>/10-assets/short.png`, `collections/<id>/10-assets/short-loop.mp4`, `collections/<id>/20-documentation/descriptions.md`, `config/channel/shorts.json`
+
 ## Overview
 
 `config.youtube.content_model.type == "collection"` のチャンネル向けに、CC（Complete Collection）動画の公開後にショート動画を 3 本前後生成し、`localizations.json` の全 supported language にローカライズして投稿する。

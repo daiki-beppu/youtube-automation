@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(skills)`: 全 55 skill に成果物の読み書き宣言を追加し、`yt-skills artifacts` で writer 一覧と重複を可視化する（#3802）。
+
 - `feat(skills)`: frontmatter の `purpose` から PDCA 順の `docs/skill-catalog.md` を生成し、`yt-skills catalog --check` と CI で最新性を検証する（#3801）。
 
 - `feat(skills)`: `yt-skills lint` で SKILL.md 本体の 400 行上限を検証し、既存の上限超過は現行行数までの allowlist として報告しながら新規超過・肥大化を拒否する（#3793）。

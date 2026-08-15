@@ -10,6 +10,11 @@ description: "Use when 音声ファイルが揃い動画生成が必要なとき
 - `後工程`: `/video-upload`, `/video-description`
 - `委譲先`: `なし`
 
+## 成果物
+
+- `書き込む`: `collections/<id>/01-master/*.mp4`, `collections/<id>/workflow-state.json`
+- `読み込む`: `collections/<id>/01-master/<master-audio>`, `collections/<id>/10-assets/main.png`, `collections/<id>/10-assets/main.jpg`, `collections/<id>/10-assets/loop.mp4`, `config/skills/videoup.yaml`
+
 ## Overview
 
 `.claude/skills/` 配下の共有スクリプト（`yt-skills sync` で配布）を使ってマスター音源と動画を生成します。

@@ -10,6 +10,11 @@ description: "Use when コレクションの動画または release 型（単曲
 - `後工程`: `/post-publish`, `/community-post`, `/metadata-audit`, `/pinned-comment`, `/live-clean`
 - `委譲先`: `/post-publish`
 
+## 成果物
+
+- `書き込む`: `collections/<id>/20-documentation/descriptions.md`, `collections/<id>/20-documentation/upload_tracking.json`, `collections/<id>/workflow-state.json`
+- `読み込む`: `collections/<id>/01-master/*.mp4`, `collections/<id>/10-assets/thumbnail.jpg`, `collections/<id>/20-documentation/descriptions.md`, `config/channel/*.json`, `config/schedule_config.json`
+
 ## Overview
 
 Complete Collection を YouTube にアップロードし、`planning/` → `live/` へ自動移行します。`/video-description` スキルで事前生成した概要欄・タイトル・タグを使用します。

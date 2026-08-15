@@ -10,6 +10,11 @@ description: "Use when 公開済み動画が伸びなかった原因を video_id
 - `後工程`: `/collection-ideate`
 - `委譲先`: `/video-analyze`
 
+## 成果物
+
+- `書き込む`: `collections/<id>/20-documentation/postmortem.md`, `data/insights.jsonl`, `docs/channel/creative-constraints.md`
+- `読み込む`: `data/analytics_data_*.json`, `data/benchmark_*.json`, `collections/<id>/workflow-state.json`, `collections/<id>/20-documentation/upload_tracking.json`, `collections/<id>/20-documentation/thumbnail-test-history.json`
+
 ## Overview
 
 公開後「思ったより伸びなかった」動画について、Analytics（CTR / 平均視聴時間 / インプレッション）を

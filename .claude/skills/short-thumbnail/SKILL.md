@@ -10,6 +10,11 @@ description: "Use when ショート用 9:16 サムネ作成、または short.pn
 - `後工程`: `なし`
 - `委譲先`: `なし`
 
+## 成果物
+
+- `書き込む`: `collections/<id>/10-assets/short.png`, `collections/<id>/10-assets/short-loop.mp4`
+- `読み込む`: `collections/<id>/10-assets/main.png`, `collections/<id>/10-assets/main.jpg`, `config/skills/short.yaml`, `config/skills/thumbnail.yaml`
+
 ## Overview
 
 `/short` Mode A の素材として `10-assets/short.png`（9:16 縦型サムネ）と
