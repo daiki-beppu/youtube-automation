@@ -1715,8 +1715,8 @@ def test_theme_compare_missing_themes_error_uses_current_config_path(monkeypatch
 
 
 def test_automation_schedule_skill_contract() -> None:
-    """#1892: /automation-schedule の SKILL.md と references が整合している."""
-    skill_path = ".claude/skills/automation-schedule/SKILL.md"
+    """#1892: `/wf-new --schedule` の reference 群が整合している."""
+    skill_path = ".claude/skills/wf-new/references/schedule.md"
     skill = _read(skill_path)
 
     # references 単一ソース化: 本文で参照するスクリプトが実在する
@@ -1728,17 +1728,17 @@ def test_automation_schedule_skill_contract() -> None:
         "run_scheduled.sh",
     ):
         assert ref in skill
-        assert (ROOT / ".claude/skills/automation-schedule/references" / ref).exists()
+        assert (ROOT / ".claude/skills/wf-new/references" / ref).exists()
 
     # Hard Gates は冒頭 60 行以内（automation-schedule 固有の契約）
     head = "\n".join(skill.splitlines()[:60])
     assert "## Hard Gates" in head
     assert "allow_external_publish" in head
 
-    # 兄弟スキルとの相互排他（ルール①）
-    fm = _skill_frontmatter("automation-schedule")
-    assert "/automation-update" in fm["description"]
-    assert "/wf-next" in fm["description"]
+    # 統合後も兄弟スキルとの責務境界を保つ
+    assert "/automation-update" in skill
+    assert "/automation-release" in skill
+    assert "/wf-next" in skill
 
     # 設定スキーマの正へのポインタ
     assert "ScheduledAutomation" in skill
@@ -1746,8 +1746,8 @@ def test_automation_schedule_skill_contract() -> None:
     assert "--confirm-os-fallback" in skill
 
 
-def test_setup_channel_points_scheduled_automation_to_automation_schedule() -> None:
+def test_setup_channel_points_scheduled_automation_to_wf_new_schedule() -> None:
     """#1892: setup --channel は scheduled_automation を生成せず後続 skill へ誘導する."""
     setup_channel = _read(".claude/skills/setup/references/channel-mode.md")
     assert "`scheduled_automation`" in setup_channel
-    assert "/automation-schedule" in setup_channel
+    assert "/wf-new --schedule" in setup_channel

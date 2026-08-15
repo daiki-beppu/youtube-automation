@@ -1,6 +1,6 @@
 # workflow チートシート
 
-`/wf-new --auto` `/wf-new --batch` `/wf-new` `/wf-next` `/wf-status` `/collection-ideate` と `workflow-state.json` の使い分けを 1 枚で。**迷ったらまずこのファイル**。
+`/wf-new --auto` `/wf-new --batch` `/wf-new --schedule` `/wf-new` `/wf-next` `/wf-status` `/collection-ideate` と `workflow-state.json` の使い分けを 1 枚で。**迷ったらまずこのファイル**。
 
 > Skill 全体のカタログは [`docs/features.md`](features.md) を参照。
 
@@ -12,6 +12,7 @@
 「次なに作る？」「テーマ候補が欲しい」  → /collection-ideate   （企画候補を提案する）
 「企画から公開後処理まで全部進めて」      → /wf-new --auto             （新規開始または未完了地点から完走）
 「複数コレクションを一括企画したい」      → /wf-new --batch            （相互差別化して順次準備）
+「定期制作を設定・確認・停止したい」        → /wf-new --schedule         （native Scheduled Task を管理）
 「新しいコレクション始めたい」          → /wf-new              （企画選択 → ディレクトリ作成 → 素材準備）
 「制作中のやつ、次のステップやって」    → /wf-next             （phase に応じて次工程を 1 段実行）
 「どこまで進んだ？読むだけ」           → /wf-status           （実行はしない・読み取り表示のみ）
@@ -23,6 +24,7 @@
 |---|---|
 | collection の有無を問わず **企画から公開後処理まで進めたい** | `/wf-new --auto`（正規入口） |
 | 2 件以上を **相互差別化して一括企画・順次準備したい** | `/wf-new --batch --count <N>` |
+| **定期制作を設定・確認・停止したい** | `/wf-new --schedule`（確認は `status`、停止は `disable`） |
 | 制作中コレクションが **無い** + 企画候補も **無い** | `/collection-ideate` → 候補が決まったら `/wf-new` |
 | 制作中コレクションが **無い** + 企画候補は **頭にある** | `/wf-new`（その中で `/collection-ideate` が走る） |
 | 制作中コレクションが **ある** + 進める意思がある | `/wf-next` |
@@ -34,6 +36,7 @@
 |---|---|---|---|
 | `/wf-new --auto` | collection 不在なら `/wf-new` から開始し、存在すれば未完了地点から制作・公開・post-publish まで状態駆動で再評価する | 子 skill の実装を複製しない | 認証、CAPTCHA、承認待ち、公開未許可など人間の介入が必要な場面 |
 | `/wf-new --batch` | 複数企画を一括承認し、同一 `/wf-new` の通常入口へ 1 件ずつ渡して準備する | child gate を省略せず、並列実行しない | child の失敗、承認待ち、外部前提待ち、成果物不整合 |
+| `/wf-new --schedule` | `workflow.scheduled_automation` と native Scheduled Task を設定・確認・停止する | 明示承認なしに外部公開や OS fallback を有効化しない | dry-run 適用承認、backend 切替、外部公開・OS fallback の明示承認 |
 | `/collection-ideate` | analytics mode / benchmark fallback mode、または `ttp_mode: false` の minimal mode の入力でペルソナ別 3 企画候補を生成 | コレクションディレクトリは作らない | 提案表示のみ（選択は `/wf-new` 側で）。`ttp_mode: true` の minimal mode は `/benchmark` を案内して停止 |
 | `/wf-new` | 企画選択 → `yt-init-collection` でディレクトリ + `workflow-state.json` 作成 → サムネ・音楽素材生成 | 楽曲の最終マスタリングや動画化はしない | 通常は (1) 企画選択 (2) サムネ承認。`ttp_mode: false` の minimal mode は企画候補生成前にテーマ / ジャンル / 雰囲気の直接入力確認を追加し、`true` は `/benchmark` の案内で停止 |
 | `/wf-next` | `workflow-state.json::phase` に応じて次工程を 1 段実行（Suno DL / Lyria 生成 / 動画化 / アップロード） | 新規コレクションは作らない | マスター音源が無い phase = "prepared" 状態（ユーザーがミキシング+マスタリングを行う） |

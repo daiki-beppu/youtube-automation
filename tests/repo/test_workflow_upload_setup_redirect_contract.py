@@ -125,11 +125,6 @@ EXPECTED_ACTIVE_ROUTES = (
         )
     ),
     _route(
-        "automation-schedule/SKILL.md",
-        "## 前後工程",
-        "- `前工程`: `/setup --channel`, `/setup`",
-    ),
-    _route(
         "channel-status/SKILL.md",
         "## 前後工程",
         "- `前工程`: `/setup --channel`",
@@ -166,7 +161,7 @@ EXPECTED_ACTIVE_ROUTES = (
     _route(
         "wf-new/SKILL.md",
         "## 前後工程",
-        "- `前工程`: `/setup --channel`, `/setup`, `/collection-ideate`, `/automation-schedule`",
+        "- `前工程`: `/setup --channel`, `/setup`, `/collection-ideate`",
     ),
     _route(
         "wf-new/SKILL.md",
@@ -216,6 +211,11 @@ EXPECTED_ACTIVE_ROUTES = (
         "## Hard Gates",
         "   - `load_config()` が失敗する場合は `/channel-new`（既存チャンネル取り込みモード）を案内して停止する。",
     ),
+    _route(
+        "wf-new/references/schedule.md",
+        "## 前後工程",
+        "- `前工程`: `/setup --channel`, `/setup`",
+    ),
     *(
         _route(f"{skill}/SKILL.md", "## 前提", line)
         for skill in ("wf-next", "wf-status")
@@ -232,6 +232,12 @@ MUTABLE_FILES = frozenset(path for path, _, _ in EXPECTED_ACTIVE_ROUTES if path 
     "wf-new/references/auto.md",
     "wf-new/references/batch.md",
     "wf-new/references/batch-ledger.py",
+    "wf-new/references/schedule.md",
+    "wf-new/references/detect_runtime.sh",
+    "wf-new/references/run_scheduled.sh",
+    "wf-new/references/schedule_backend.py",
+    "wf-new/references/schedule_config.py",
+    "wf-new/references/scheduler_job.sh",
     "wf-new/references/wf-auto-state.py",
 }
 EXPECTED_ISSUE_3986_CHANGED_PATHS = frozenset(
@@ -255,8 +261,8 @@ EXPECTED_ISSUE_3986_CHANGED_PATHS = frozenset(
         "tests/repo/test_workflow_upload_setup_redirect_contract.py",
     }
 )
-IMMUTABLE_TARGET_FILES_SHA256 = "7d1308ff8dcb273ebeb12946791e7113b2b1366dcebfeb1802eaa0c8fc8c2924"
-AUTOMATION_SCHEDULE_REGENERATE_SHA256 = "3df1c507167b2fc71dcae7acaa0a6011fb3ee89fabbb95f6ffc2b5d2b803e617"
+IMMUTABLE_TARGET_FILES_SHA256 = "4e89fed82d50f7812e091c716d502ea70b6eecb8316fd84562b388c0cf97e05f"
+AUTOMATION_SCHEDULE_REGENERATE_SHA256 = "0e53b0be09de5049104b16034dd8122ca434adbfafdd0c835cb4fac943e7878e"
 AUTOMATION_UPDATE_PUSH_SHA256 = "5be1d31198da13ab6929edb13c9b713fbb9bc364d413b778d79f4e624e30d2cc"
 ALLOWED_FENCED_ROUTES = {
     (
@@ -506,7 +512,7 @@ def test_residual_target_assets_and_sections_remain_byte_identical() -> None:
     ]
     assert _aggregate_hash(immutable_target) == IMMUTABLE_TARGET_FILES_SHA256
     assert (
-        sha256((SKILLS_DIR / "automation-schedule/references/detect_runtime.sh").read_bytes()).hexdigest()
+        sha256((SKILLS_DIR / "wf-new/references/detect_runtime.sh").read_bytes()).hexdigest()
         == AUTOMATION_SCHEDULE_REGENERATE_SHA256
     )
     assert sha256((SKILLS_DIR / "automation-update/SKILL.md").read_bytes()).hexdigest() == AUTOMATION_UPDATE_PUSH_SHA256

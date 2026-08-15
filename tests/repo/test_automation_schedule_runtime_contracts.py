@@ -1,4 +1,4 @@
-"""Executable contracts for automation-schedule distributed references."""
+"""Executable contracts for `/wf-new --schedule` distributed references."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ import pytest
 from tests.helpers.paths import REPO_ROOT
 
 ROOT = REPO_ROOT
-REFERENCES = ROOT / ".claude" / "skills" / "automation-schedule" / "references"
+REFERENCES = ROOT / ".claude" / "skills" / "wf-new" / "references"
 
 
 def _write_executable(path: Path, body: str) -> None:

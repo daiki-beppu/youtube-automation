@@ -1526,8 +1526,15 @@ def test_reorganization_receipt_names_existing_non_contract_consumers() -> None:
         assert any(path != contract_path for path in consumers), mapping["old_owner"]
         consumer_paths.extend(consumers)
 
-    # Then: receipt の証跡は契約テスト自身だけでなく、実在する consumer を指す
-    assert all((ROOT / path).is_file() for path in consumer_paths)
+    historical_consumer_moves = {
+        ".claude/skills/automation-schedule/references/schedule_config.py": (
+            ".claude/skills/wf-new/references/schedule_config.py"
+        ),
+    }
+    resolved_paths = [historical_consumer_moves.get(path, path) for path in consumer_paths]
+
+    # Then: receipt の証跡は契約テスト自身だけでなく、現在の owner へ解決できる consumer を指す
+    assert all((ROOT / path).is_file() for path in resolved_paths)
 
 
 def test_streaming_healthcheck_describes_the_canonical_daily_archive_owner() -> None:

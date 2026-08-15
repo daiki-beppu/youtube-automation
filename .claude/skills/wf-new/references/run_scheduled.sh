@@ -34,7 +34,7 @@ LOG_FILE="$LOG_DIR/run-$(date +%Y%m%d-%H%M%S).log"
 log() { printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >>"$LOG_FILE"; }
 
 # --- config 読み出し（loader 検証済みの effective 設定を単一ソースにする） ---
-CONFIG_JSON="$(uv run python .claude/skills/automation-schedule/references/schedule_config.py show 2>>"$LOG_FILE")" || {
+CONFIG_JSON="$(uv run python .claude/skills/wf-new/references/schedule_config.py show 2>>"$LOG_FILE")" || {
   log "config の読み出しに失敗（schedule_config.py show が非 0）"
   exit 1
 }

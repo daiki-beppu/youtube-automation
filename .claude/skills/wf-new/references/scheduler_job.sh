@@ -43,14 +43,14 @@ esac
 
 CHANNEL_DIR="$(pwd)"
 LABEL="com.youtube-automation.$(basename "$CHANNEL_DIR").schedule"
-RUN_SCRIPT="$CHANNEL_DIR/.claude/skills/automation-schedule/references/run_scheduled.sh"
-BACKEND_SCRIPT="$CHANNEL_DIR/.claude/skills/automation-schedule/references/schedule_backend.py"
+RUN_SCRIPT="$CHANNEL_DIR/.claude/skills/wf-new/references/run_scheduled.sh"
+BACKEND_SCRIPT="$CHANNEL_DIR/.claude/skills/wf-new/references/schedule_backend.py"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 IS_DARWIN=0
 [ "$(uname -s)" = "Darwin" ] && IS_DARWIN=1
 
 read_config() { # effective 設定（loader 検証済み）を単一ソースとして読む
-  uv run python .claude/skills/automation-schedule/references/schedule_config.py show
+  uv run python .claude/skills/wf-new/references/schedule_config.py show
 }
 
 weekday_num() { # launchd/cron 共通: 0=sun .. 6=sat
@@ -153,7 +153,7 @@ disable_job() {
     echo "crontab entry を削除しました: $LABEL"
   fi
   uv run python "$BACKEND_SCRIPT" --channel-dir "$CHANNEL_DIR" disable --backend os-fallback >/dev/null || true
-  echo "config 側も無効化する場合: uv run python .claude/skills/automation-schedule/references/schedule_config.py generate --disable"
+  echo "config 側も無効化する場合: uv run python .claude/skills/wf-new/references/schedule_config.py generate --disable"
 }
 
 case "$COMMAND" in
