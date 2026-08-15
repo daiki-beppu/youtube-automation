@@ -159,7 +159,6 @@ TARGET_SKILLS: frozenset[str] = frozenset(
         "reply",
         "distrokid-helper",
         "flop-analysis",
-        "live-chat-reply",
         "music",
         "setup",
         "short",

@@ -110,7 +110,7 @@ def test_reply_replaces_comments_reply_with_flagless_comments_mode() -> None:
     assert frontmatter["name"] == "reply"
     assert frontmatter["purpose"] == "公開する"
     assert "0 個なら" in skill and "references/comments.md" in skill
-    assert "--live" in skill and "未実装" in skill
+    assert "--live" in skill and "references/live.md" in skill
     assert len(skill.splitlines()) <= 400
 
 

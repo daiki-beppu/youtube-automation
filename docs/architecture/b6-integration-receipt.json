@@ -654,7 +654,7 @@
     },
     {
       "old_owner": "legacy..claude.skills.live-chat-reply.SKILL.md",
-      "exact_new_owner": ".claude/skills/live-chat-reply/SKILL.md",
+      "exact_new_owner": ".claude/skills/reply/references/live.md",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"
