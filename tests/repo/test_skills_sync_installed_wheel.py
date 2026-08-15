@@ -164,6 +164,13 @@ assert set(schema_registry.repository_schema_names()) == {
     "insights-entry.schema.json",
     "weekly_vote_log.schema.json",
 }
+rendering = importlib.import_module("youtube_automation.domains.documents.rendering")
+rendered = rendering.render_repository_document(
+    schema_registry.RepositorySchema.WEEKLY_VOTE_LOG,
+    {"schema_version": 1, "entries": []},
+)
+assert "Content-Security-Policy" in rendered
+assert ".view-card, .view-table-section, .view-media" in rendered
 
 legacy_modules = (
     "youtube_automation.infrastructure.errors",

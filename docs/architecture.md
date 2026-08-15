@@ -165,7 +165,7 @@ Python 版 skill-config の正規キーは `configuration/skills.py` が所有�
 
 - `src/youtube_automation/configuration/` — 設定 loader / dataclass owner
 - `src/youtube_automation/infrastructure/legacy_utils/` — 再配置後も下流公開 import を維持する compatibility adapter 群
-- `src/youtube_automation/commands/` — `yt-*` CLI の thin adapter。`analytics` / `channel` / `collections` / `distrokid` / `media` / `metadata` / `suno` / `system` / `thumbnail` / `uploads` / `youtube` の 11 domain に分割し、argparse・stdio・exit・composition を所有する。アップロード CLI（Auto / Collection / Shorts）は `commands/uploads/` が入口で、実装は `domains/uploads/` が持つ
+- `src/youtube_automation/commands/` — `yt-*` CLI の thin adapter。`analytics` / `channel` / `collections` / `distrokid` / `documents` / `media` / `metadata` / `suno` / `system` / `thumbnail` / `uploads` / `youtube` の 12 domain に分割し、argparse・stdio・exit・composition を所有する。アップロード CLI（Auto / Collection / Shorts）は `commands/uploads/` が入口で、実装は `domains/uploads/` が持つ
 - `src/youtube_automation/entrypoints.py` — console script wrapper。`pyproject.toml [project.scripts]` の全 `yt-*` がここを経由し、**例外なく** `commands/` 配下の module を `import_module` して `main` を呼ぶ
 - `src/youtube_automation/commands/channel/channel_init_templates.py` — channel-init が生成する設定テンプレート
 - `.claude/skills/` — 自動化スキル群（Claude Code / Codex 共用）。wheel に `_skills/` として `force-include` され、`yt-skills sync` で各チャンネルへ展開される
@@ -220,6 +220,9 @@ assets/stock/           # ボツ画像ストック (#364)。<theme-slug>/ 配下
 | `domains.distrokid` | DistroKid naming、metadata、specification、preparation、release policy |
 | `domains.collections.weekly_vote_log` | 週次投票ログ reader、initializer、schema、保存・検証 |
 | `domains.documents.schema_registry` | リポジトリ所有 JSON Schema の固定 inventory、Draft 7 compile cache、値非表示の検証エラー変換。外部 schema path は受け取らない |
+| `domains.documents.rendering` | schema annotation / `x-view` による card・table・media の自己完結 HTML 化と escape / CSP / embedded JSON 検証 |
+| `infrastructure.documents.publishing` | 構造化 JSON と同 basename の HTML を temp・fsync・再読込検証・replace で原子的に公開 |
+| `commands.documents.render` | 固定 schema registry から選択して HTML を生成する `yt-document-render` adapter |
 | `infrastructure.media.image_provider` | 画像生成プロバイダー抽象化（Gemini / OpenAI 切り替え） |
 | `infrastructure.media.stock` | ボツ画像ストック化（`assets/stock/<theme>/` への退避・列挙・整理、隣接 `.meta.json` 管理） |
 | `infrastructure.auth` | OAuth 2.0 token の読み込み・refresh・atomic 永続化、scope と YouTube service 生成 |

@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `refactor(configuration)`: CLI の明示 channel 選択を公開 API として提供し、doctor から loader の private symbol への越境 import を解消する（#3921）。
 - `refactor(doctor)`: OAuth token の読み込み・refresh・0o600 atomic 永続化、upload 必須 scope、YouTube service 生成を `infrastructure.auth` に集約し、doctor は診断結果への変換だけを担う（#3920）。
 - `refactor(doctor)`: TTP と初期セットアップの readiness 判定を provider-neutral な `domains.channel_readiness` へ移し、doctor を診断結果へ変換する薄い adapter にする（#3919）。
+- `feat(documents)`: 固定 JSON Schema registry の検証済み文書から、card・table・local media を CSP 付き自己完結 HTML へ決定的かつ原子的に生成する `yt-document-render` を追加する（#4023）。
 - `docs(collections)`: `workflow-state.json` の schema 正本を owner module の型定義へ移し、追従文書との field 差分を名前付きで検出する契約を追加する（#3875）。
 
 - `feat(collections)`: `workflow-state.json` の型付き document object、未知キー保持、明示的な厳格/不在許容 read、process lock 下の atomic update を共通 owner として追加する（#3874）。
