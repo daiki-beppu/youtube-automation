@@ -2,7 +2,7 @@
 
 YouTube Data API v3 の ``commentThreads().insert`` で、自チャンネルの動画に
 オーナーとしてトップレベルコメントを投稿する。ピン留めは Data API v3 非対応のため
-投稿後に Studio UI で手動。`comments-reply` と同じ dry-run / apply / history パターン。
+投稿後に Studio UI で手動。`reply` と同じ dry-run / apply / history パターン。
 
 Examples:
     # 最新コレクションを対象にプレビュー（API 書き込みなし）

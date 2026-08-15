@@ -21,11 +21,11 @@ def _description(name: str) -> str:
 
 def test_sibling_skill_descriptions_are_mutually_exclusive() -> None:
     live_chat = _description("live-chat-reply")
-    comments = _description("comments-reply")
+    comments = _description("reply")
     streaming = _description("streaming")
 
     assert "ライブチャット返信" in live_chat
-    assert "/comments-reply" in live_chat
+    assert "/reply" in live_chat
     assert "/streaming" in live_chat
     assert "/live-chat-reply" in comments
     assert "/live-chat-reply" in streaming

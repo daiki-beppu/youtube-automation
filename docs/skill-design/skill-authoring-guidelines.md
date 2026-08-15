@@ -183,7 +183,7 @@ writer の重複は直ちに違反とは限らない。`uv run yt-skills artifac
 | 形 | 使いどころ | 実例 |
 |---|---|---|
 | スクリプト | 合否を機械判定できる | [music/references/check_lyric_duplication.py](../../.claude/skills/music/references/check_lyric_duplication.py) — 連続一致で歌詞重複を判定 |
-| rubric | 質的判断だが評価観点は固定したい | [comments-reply/references/review-rubric.md](../../.claude/skills/comments-reply/references/review-rubric.md) — reviewer の入力境界と必須フィールドを規定 |
+| rubric | 質的判断だが評価観点は固定したい | [reply/references/review-rubric.md](../../.claude/skills/reply/references/review-rubric.md) — reviewer の入力境界と必須フィールドを規定 |
 | checklist | 人間が完了を確認する不可逆手順 | [automation-release/references/publish-checklist.md](../../.claude/skills/automation-release/references/publish-checklist.md) |
 | テスト | 契約が壊れたら CI で落としたい | production-importing test は鏡像規則、repository-only 契約は `tests/repo/` |
 

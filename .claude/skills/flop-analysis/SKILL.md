@@ -361,6 +361,6 @@ postmortem.md 保存後、支持された主仮説と「学び」に基づく改
 | 中身の弱さ | `/audit --video --source own --collection <name>` |
 | ターゲット層ミスマッチ | `/channel-research --voice` → `/channel-strategy --persona` → `/channel-strategy --scene` |
 | テーマ自体の市場性不足 | `/channel-research --discover` → `/channel-strategy --direction`（方向性検討モード） |
-| 初動エンゲージメント低 | 公開直後のコメント・日次視聴を確認後、必要なら `/comments-reply` をそのスキル固有の明示承認ゲート付きで実行 |
+| 初動エンゲージメント低 | 公開直後のコメント・日次視聴を確認後、必要なら `/reply` をそのスキル固有の明示承認ゲート付きで実行 |
 
 改善策の実行は本スキルの完了条件に含めない。必要なら `/channel-strategy --direction`（方向性検討モード）でチャンネル全体の方向性を見直す。

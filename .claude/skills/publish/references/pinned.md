@@ -13,7 +13,7 @@
 
 ## Overview
 
-YouTube Data API v3 の `commentThreads.insert` で、自チャンネルの動画にトップレベルコメント（オーナーコメント）を自動投稿する。`comments-reply` と同じ dry-run / apply / history パターンを踏襲し、`yt-pinned-comment` CLI から実行する。
+YouTube Data API v3 の `commentThreads.insert` で、自チャンネルの動画にトップレベルコメント（オーナーコメント）を自動投稿する。`reply` と同じ dry-run / apply / history パターンを踏襲し、`yt-pinned-comment` CLI から実行する。
 
 - **dry-run**: 生成コメント文字列のプレビューのみ（API 書き込みなし）
 - **apply**: 実投稿 + 履歴 JSON (`pinned_comment_history.json`) を更新
@@ -23,7 +23,7 @@ YouTube Data API v3 の `commentThreads.insert` で、自チャンネルの動�
 ## 前提
 
 - `config/channel/pinned-comment.json` を作成済み（`pinned_comment.enabled: true` に設定）
-- `auth/token.json` が `youtube.force-ssl` スコープで発行済み（`comments-reply` が動いていれば同スコープで動作）
+- `auth/token.json` が `youtube.force-ssl` スコープで発行済み（`reply` が動いていれば同スコープで動作）
 - 投稿対象動画がアップロード完了済み（`upload_tracking.json` の `complete_collection.video_id` または `workflow-state.json` の `upload.video_id` に video_id が記録されている）
 
 ## 完了条件
@@ -136,4 +136,4 @@ uv run yt-pinned-comment --collection collections/live/<latest-dir> --apply --la
 
 - ピン留めの API 自動化（Data API v3 が非対応 → Studio UI 手動）
 - 既存コメントの編集・削除
-- リプライへの返信（それは `/comments-reply` の責務）
+- リプライへの返信（それは `/reply` の責務）

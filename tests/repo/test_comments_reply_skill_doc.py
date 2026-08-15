@@ -1,14 +1,18 @@
-"""`comments-reply` の Generator-Reviewer 品質ゲート契約を検証する。"""
+"""`reply` の公開コメント Generator-Reviewer 品質ゲート契約を検証する。"""
 
 from __future__ import annotations
 
 from pathlib import Path
 
 from tests.helpers.paths import REPO_ROOT
+from youtube_automation.domains.skills.inventory import SkillInventory, parse_frontmatter
 
 _REPO_ROOT = REPO_ROOT
-SKILL_MD = _REPO_ROOT / ".claude" / "skills" / "comments-reply" / "SKILL.md"
-REVIEW_RUBRIC_MD = SKILL_MD.parent / "references" / "review-rubric.md"
+_INVENTORY = SkillInventory(_REPO_ROOT)
+SKILL_DIR = _REPO_ROOT / ".claude" / "skills" / "reply"
+SKILL_MD = SKILL_DIR / "SKILL.md"
+COMMENTS_MD = SKILL_DIR / "references" / "comments.md"
+REVIEW_RUBRIC_MD = SKILL_DIR / "references" / "review-rubric.md"
 
 
 def _read(path: Path) -> str:
@@ -25,7 +29,7 @@ def _assert_tokens_in_order(text: str, tokens: tuple[str, ...]) -> None:
 
 
 def test_reviewer_phase_is_between_author_and_dry_run() -> None:
-    text = _read(SKILL_MD)
+    text = _read(COMMENTS_MD)
 
     _assert_tokens_in_order(
         text,
@@ -42,7 +46,7 @@ def test_reviewer_phase_is_between_author_and_dry_run() -> None:
 
 
 def test_review_contract_covers_all_four_criteria_and_counts() -> None:
-    skill = _read(SKILL_MD)
+    skill = _read(COMMENTS_MD)
     rubric = _read(REVIEW_RUBRIC_MD)
 
     assert "候補 JSON と `config/channel/comments.json` の正規値から `review_context` を付加" in skill
@@ -60,7 +64,7 @@ def test_review_contract_covers_all_four_criteria_and_counts() -> None:
 
 
 def test_language_review_is_not_replaced_by_static_detection() -> None:
-    skill = _read(SKILL_MD)
+    skill = _read(COMMENTS_MD)
     rubric = _read(REVIEW_RUBRIC_MD)
     out_of_scope = skill.split("## 非スコープ", 1)[1]
 
@@ -71,7 +75,7 @@ def test_language_review_is_not_replaced_by_static_detection() -> None:
 
 
 def test_failed_replies_are_retried_twice_then_excluded_with_reasons() -> None:
-    text = _read(SKILL_MD)
+    text = _read(COMMENTS_MD)
     reviewer_phase = text.split("### Phase 4:", 1)[1].split("### Phase 5:", 1)[0]
 
     assert "`FAIL` の `comment_id` だけ" in reviewer_phase
@@ -87,7 +91,7 @@ def test_failed_replies_are_retried_twice_then_excluded_with_reasons() -> None:
 
 
 def test_dry_run_approval_summary_identifies_reviewer_exclusions() -> None:
-    text = _read(SKILL_MD)
+    text = _read(COMMENTS_MD)
     dry_run_phase = text.split("### Phase 5:", 1)[1].split("### 承認ゲート:", 1)[0]
     approval_gate = text.split("### 承認ゲート:", 1)[1].split("### Phase 6:", 1)[0]
 
@@ -95,3 +99,26 @@ def test_dry_run_approval_summary_identifies_reviewer_exclusions() -> None:
     assert "Reviewer 起因の除外件数と理由一覧" in approval_gate
     assert "一次品質フィルタを通過済み" in approval_gate
     assert "承認されるまで Phase 6 を絶対に実行しない" in approval_gate
+
+
+def test_reply_replaces_comments_reply_with_flagless_comments_mode() -> None:
+    skill = _read(SKILL_MD)
+    frontmatter = parse_frontmatter(skill)
+
+    assert "comments-reply" not in {path.name for path in _INVENTORY.skill_directories()}
+    assert isinstance(frontmatter, dict)
+    assert frontmatter["name"] == "reply"
+    assert frontmatter["purpose"] == "公開する"
+    assert "0 個なら" in skill and "references/comments.md" in skill
+    assert "--live" in skill and "未実装" in skill
+    assert len(skill.splitlines()) <= 400
+
+
+def test_removed_comments_reply_is_not_guided_from_skills() -> None:
+    matches = []
+    for skill_dir in _INVENTORY.skill_directories():
+        for path in skill_dir.rglob("*.md"):
+            if "/comments-reply" in _read(path):
+                matches.append(path.relative_to(_REPO_ROOT))
+
+    assert matches == []

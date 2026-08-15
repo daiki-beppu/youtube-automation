@@ -242,7 +242,7 @@ uv run yt-init-collection "Pilot Direction Check" "pilot-direction-check" --trac
 |---|---|---|
 | 週次 | `/analytics --collect` | YouTube Analytics データ最新化 |
 | 週次 | `/analytics --analyze` | CTR / 視聴維持率の戦略分析と改善提案 |
-| 隔週 | `/comments-reply` | ルール駆動コメント返信（dry-run → apply の 2 段） |
+| 隔週 | `/reply` | ルール駆動コメント返信（dry-run → apply の 2 段） |
 | 月次 | `/channel-research --benchmark` | 競合チャンネル最新データ取得 |
 | 月次 | `/channel-status` | チャンネル全体統計（登録者数・総再生回数）取得 |
 | 月次 | `/audit --alignment` | 過去動画のタイトル × サムネ × 音楽整合性監査 |

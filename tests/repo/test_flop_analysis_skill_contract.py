@@ -390,4 +390,4 @@ def test_flop_analysis_completion_requires_verification_and_written_conclusion()
     assert "検証の再実行手順ではなく" in next_step
     assert "改善策の実行は本スキルの完了条件に含めない" in next_step
 
-    assert "`/comments-reply` をそのスキル固有の明示承認ゲート付きで実行" in next_step
+    assert "`/reply` をそのスキル固有の明示承認ゲート付きで実行" in next_step

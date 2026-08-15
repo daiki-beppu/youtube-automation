@@ -43,7 +43,7 @@
 | A1-12 | `.claude/skills/videoup/references/generate_videos.sh:73,148-149,174-175,189,202,212` | **1920×1080 / 384k / 48000 / CRF 18/23 / framerate 1** | ffmpeg コマンドの固定値（解像度・ビットレート・CRF） | `config/skills/videoup.yaml`（新規）に `video.{width,height,audio_bitrate,sample_rate,crf}` セクション。**P2**（チャンネル独自のフォーマットを許容したい場合のみ） |
 | A1-13 | `.claude/skills/collection-ideate/config.default.yaml:18,37` | **2 / 0.5** | `session_id_bytes: 2`, `originality.max_similarity: 0.5` | **既に skill-config 化済み**（OK） |
 | A1-14 | `.claude/skills/benchmark/config.default.yaml:10,13,16,24` | **50 / 10000 / 3 / 5** | `scan_recent / min_views / freshness_days / delay_sec` | **既に skill-config 化済み**（OK） |
-| A1-15 | `.claude/skills/comments-reply/SKILL.md:58` | **100** | `--per-video-limit N` default: 100 | CLI default。`config/channel/comments.json` 側に `per_video_limit` を足すと整合性 ↑（**要確認**） |
+| A1-15 | `.claude/skills/reply/references/comments.md` | **100** | `--per-video-limit N` default: 100 | CLI default。`config/channel/comments.json` 側に `per_video_limit` を足すと整合性 ↑（**要確認**） |
 | A1-16 | `.claude/skills/discover-competitors/SKILL.md:85-90,116` | **10K / 1M / 30日 / 20 / 660 units** | CLI フラグ既定値の引用 | CLI 側に集約済み。SKILL.md は **ドキュメンテーション** なので **正当**（ただし数値変更時の同期コストあり） |
 | A1-17 | `.claude/skills/video-analyze/config.default.yaml:10` | **10** | `delay_sec: 10`（API レート対策） | **既に skill-config 化済み**（OK） |
 | A1-18 | `.claude/skills/masterup/config.default.yaml:10,13` | **1.0 / "192k"** | `audio.crossfade_duration / bitrate` | **既に skill-config 化済み**（OK） |
@@ -101,7 +101,7 @@
 | A3-13 | `.claude/skills/analytics/SKILL.md:109` | `reports/{channel_slug}_analytics_YYYYMMDD.html` | HTML レポート保存先 | `channel_slug` は `config/channel/meta.json::channel.short` 由来と明記 → 外出し不要。**正当** |
 | A3-14 | `.claude/skills/streaming/references/swap_video.sh:20` | `infra/terraform/streaming` | Terraform モジュールパス | CLI 引数で上書き可能。**正当** |
 | A3-15 | `.claude/skills/lyria/SKILL.md:169,210` | `02-Individual-music/{NN}_{name}.wav` / `worktree_sync.sh` パス | コレクション内ファイル命名規約 | CollectionPaths 想定。**正当** |
-| A3-16 | `.claude/skills/comments-reply/SKILL.md:24,64` | `config/channel/comments.json` / `comment_reply_history.json` | 設定・履歴ファイル | `config/channel/comments.json` 自体は `examples/channel_config.example/comments.json` と一致。**正当** |
+| A3-16 | `.claude/skills/reply/references/comments.md` | `config/channel/comments.json` / `comment_reply_history.json` | 設定・履歴ファイル | `config/channel/comments.json` 自体は `examples/channel_config.example/comments.json` と一致。**正当** |
 | A3-17 | `.claude/skills/discover-competitors/SKILL.md:101,105-106` | `auth/token.json` / `research/lo-fi-discovery.{md,csv}` | OAuth トークン / 出力先 | **正当** |
 | A3-18 | `.claude/skills/channel-setup/references/claude-md-template.md:101` | `collections/planning/` → `collections/live/` 自動移動 | CLAUDE.md テンプレ内の説明 | **正当** |
 | A3-19 | `.claude/skills/video-analyze/SKILL.md:49,87` | `data/video_analysis/<slug>/<video_id>.json` / `reports/video_analysis/<slug>.md` | CLI 出力先 | CLI 内定義。**正当** |

@@ -70,7 +70,7 @@ C-1 で**特に問題ない**例（参考、35 件中の代表）: `/streaming`�
 | 23 | `/channel-new` | `/discover-competitors` | Step 5 が MANDATORY で `yt-discover-competitors` を呼ぶ + 「詳細は /discover-competitors skill 参照」 | Cross References「/channel-new Step 5: 新チャンネル開設フロー内での前段呼び出し」 | ✓ 双方向 |
 | 24 | `/channel-new` | `/benchmark` | Step 6「ベンチマークデータは /benchmark スキルに委譲」 | Overview「/collection-ideate の Phase 1-2 から自動呼び出しされる」（/channel-new 名指しなし） | △ 片方向（要追記検討） |
 | 25 | `/collection-ideate` | `/benchmark` | Phase 1-3「Skill ツールで /benchmark を実行」 | Overview「/collection-ideate の Phase 1-2 から自動呼び出しされる」 | ✓ 双方向 |
-| 26 | `/postmortem` | `/thumbnail-compare` ほか 6 | Phase 4 検証ステップ表に `/thumbnail-compare` `/alignment-check` `/viewer-voice` `/audience-persona` `/discover-competitors` `/video-analyze` `/channel-direction` `/comments-reply` を列挙 | いずれも /postmortem 言及なし | △ 片方向（意図あり: fan-out 案内、許容範囲） |
+| 26 | `/postmortem` | `/thumbnail-compare` ほか 6 | Phase 4 検証ステップ表に `/thumbnail-compare` `/alignment-check` `/viewer-voice` `/audience-persona` `/discover-competitors` `/video-analyze` `/channel-direction` `/reply` を列挙 | いずれも /postmortem 言及なし | △ 片方向（意図あり: fan-out 案内、許容範囲） |
 | 27 | `/lyria` | `/suno` | description「Suno で人手生成するチャンネルでは /suno を使う」+ `_disabled: true` 時の案内 | description「Lyria チャンネルでは /lyria を使う」 | ✓ 双方向（排他的選択を相互明示） |
 | 28 | `/masterup` | `/lyria` | description「Lyria チャンネルでは /lyria が自動で音源を出力するため本スキルは不要」 | description「/masterup 不要」 | ✓ 双方向 |
 | 29 | `/wf-status` | `/wf-next` | Cross Refs | Cross Refs | ✓ 双方向 |
