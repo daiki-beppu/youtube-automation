@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `refactor(skills)`: skill 列挙・frontmatter 検証・Markdown セクション・reference 解決を `domains.skills` の inventory へ集約し、repo と wheel の両 root で同じ判定を使えるようにする（#3902）。
+
 - `fix(collection-serve)`: Chrome 拡張の自動検出パスとプロセス生存確認を OS ごとに切り替え、Windows で `yt-collection-serve --allow-extension` がクラッシュする問題を修正する（#4106）。
 
 - `feat(setup)`: `yt-oauth --refresh-only` で既存 refresh token を非対話更新し、ブラウザ認証や YouTube API 接続テストなしで token を延命できるようにする（#3936）。

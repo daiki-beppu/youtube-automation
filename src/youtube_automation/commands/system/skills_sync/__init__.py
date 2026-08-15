@@ -236,10 +236,10 @@ from youtube_automation.commands.system.skills_sync._ops import _symlink_entry a
 from youtube_automation.commands.system.skills_sync._sync import cmd_sync as cmd_sync  # noqa: E402
 from youtube_automation.commands.system.skills_sync._diff import cmd_diff as cmd_diff  # noqa: E402
 from youtube_automation.commands.system.skills_sync._lint import cmd_lint as cmd_lint  # noqa: E402
-from youtube_automation.commands.system.skills_sync._lint import lint_frontmatter_text as lint_frontmatter_text  # noqa: E402
-from youtube_automation.commands.system.skills_sync._lint import lint_skill as lint_skill  # noqa: E402
 from youtube_automation.commands.system.skills_sync._parser import _resolve_default_target as _resolve_default_target  # noqa: E402
 from youtube_automation.commands.system.skills_sync._parser import build_parser as build_parser  # noqa: E402
+from youtube_automation.domains.skills.inventory import lint_frontmatter_text as lint_frontmatter_text  # noqa: E402
+from youtube_automation.domains.skills.inventory import lint_skill as lint_skill  # noqa: E402
 
 
 def main(argv: Iterable[str] | None = None) -> int:

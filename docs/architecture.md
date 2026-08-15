@@ -205,6 +205,7 @@ assets/stock/           # ボツ画像ストック (#364)。<theme-slug>/ 配下
 | `domains.suno` | Suno 設定、歌詞、プロンプト、プレイリスト、選曲の生成・検証 |
 | `domains.suno.downloaded` | downloaded payload、workflow、検証、archive、apply transaction |
 | `domains.suno.name_matching` | prompt・playlist・downloaded filename 共通の名前正規化と曖昧性検出 |
+| `domains.skills` | skill 列挙、frontmatter、Markdown セクション、reference 解決の provider-neutral inventory |
 | `domains.metadata` | `service` の状態付き orchestration と titles / descriptions / tags / localizations leaf |
 | `domains.analytics` | Analytics の Protocol、収集、分析、レポート、時系列 policy。SDK/client は adapter 境界で解決 |
 | `domains.thumbnail` | サムネ特徴量、相関、参照、archive、選択 policy（Pillow） |
