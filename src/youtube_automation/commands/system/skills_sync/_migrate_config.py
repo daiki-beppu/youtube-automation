@@ -42,10 +42,11 @@ class MigrationPlan:
     orphans: tuple[Path, ...]
 
 
-# 候補の suno -> music.prompt 等は、吸収先 skill と名前空間 loader key がまだ
-# 現行ツリーに存在しない。統合前に有効化すると下流 config だけを孤児化するため、
-# 各統合 PR が成立した時点でこの表へ追加する。
-SKILL_CONFIG_MIGRATIONS: Final[Mapping[str, SkillConfigMigration]] = {}
+# 統合先 skill と名前空間 loader key が成立した段から移行を有効化する。
+# apply は利用者の明示実行だけで行い、旧 loader key は互換入口として維持する。
+SKILL_CONFIG_MIGRATIONS: Final[Mapping[str, SkillConfigMigration]] = {
+    "suno": SkillConfigMigration("music", "prompt"),
+}
 
 _COMPATIBLE_CONFIG_NAMES: Final[frozenset[str]] = frozenset({"postmortem"})
 

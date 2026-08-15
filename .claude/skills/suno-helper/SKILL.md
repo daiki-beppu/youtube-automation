@@ -1,19 +1,19 @@
 ---
 name: suno-helper
 purpose: 作る
-description: "Use when Suno UI に投入する曲をブラウザで連続生成 + playlist 追加 + 一括ダウンロードしたいとき。uv run yt-collection-serve で suno-prompts.json を配信し、suno-helper Chrome 拡張で 1 タブ完結の自動実行（pattern 注入 → Generate → 完了待機 → 次へ → 全件完了で playlist 一括追加 → ZIP 一括 DL）を回す operator 手順。`/suno` でプロンプトが揃った後、または既存 collection の途中再開で使用する"
+description: "Use when Suno UI に投入する曲をブラウザで連続生成 + playlist 追加 + 一括ダウンロードしたいとき。uv run yt-collection-serve で suno-prompts.json を配信し、suno-helper Chrome 拡張で 1 タブ完結の自動実行（pattern 注入 → Generate → 完了待機 → 次へ → 全件完了で playlist 一括追加 → ZIP 一括 DL）を回す operator 手順。music の prompt mode でプロンプトが揃った後、または既存 collection の途中再開で使用する"
 ---
 
 ## 前後工程
 
-- `前工程`: `/wf-new`, `/suno`, `/wf-new`
+- `前工程`: `/wf-new`, `/music --prompt`, `/wf-new`
 - `後工程`: `/masterup`
 - `委譲先`: `なし`
 
 ## 成果物
 
 - `書き込む`: `collections/<id>/02-Individual-music/*.mp3`, `collections/<id>/workflow-state.json`
-- `読み込む`: `collections/<id>/20-documentation/suno-prompts.json`, `config/skills/suno-helper.yaml`, `config/skills/suno.yaml`
+- `読み込む`: `collections/<id>/20-documentation/suno-prompts.json`, `config/skills/suno-helper.yaml`, `config/skills/music.yaml::prompt`
 
 ## Overview
 
@@ -37,11 +37,11 @@ overlay の phase が `finished` に到達し、Step 6 の 6 点（playlist 紐�
 
 ## When to Use
 
-- `/suno` でプロンプトが揃い、Suno で実際に曲を生成したいとき
+- `/music --prompt` でプロンプトが揃い、Suno で実際に曲を生成したいとき
 - ERROR で停止した collection を途中の entry から再開したいとき
 - 「Suno で連続生成回して」「suno-helper で流して」「Suno に追加で N 曲生成して」と user が言ったとき
 
-`/suno` がプロンプト設計（YAML → suno-prompts.json）だけを担当し、本スキルが **ブラウザ実行** を担当する役割分担。
+`/music --prompt` がプロンプト設計（YAML → suno-prompts.json）だけを担当し、本スキルが **ブラウザ実行** を担当する役割分担。
 
 ## 前提
 
@@ -62,7 +62,7 @@ Chrome DevTools MCP は必須ではない。通常運用は browser use を prim
 | 拡張 ID 手動指定（検出失敗時のみ） | `--allow-origin "chrome-extension://<EXTENSION_ID>"` |
 | ポート変更（並走時） | 末尾に `--port 7874` |
 | 拡張をリロード | chrome://extensions → suno-helper の再読み込みアイコン |
-| Suno タブ | https://suno.com/create にアクセス、Advanced タブを選択 |
+| Suno タブ | https://music --prompt.com/create にアクセス、Advanced タブを選択 |
 | agent 主経路 | browser use で Suno タブを開き、ページ内 overlay の `data-suno-*` signal と表示文言を観測 |
 | 定期実行 URL | `uv run yt-suno-unattended-request --base-url <URL> --collection-id <ID>` |
 
@@ -101,7 +101,7 @@ collection 単体パスを直接渡す single file mode は playlist phase が�
 
 ### Agent primary flow: browser use で操作する
 
-1. browser use で `https://suno.com/create` を開く。
+1. browser use で `https://music --prompt.com/create` を開く。
 2. ログイン済みで **Advanced → More options を開く → Lyrics mode → Write** の順に選び、Style / Lyrics 入力欄が見えることを確認する。prompt entry の `lyrics` が非空なら、`[Instrumental]` だけでも suno-helper が Lyrics 欄へ注入するため Write が必須。`lyrics` が真に空の entry だけは Lyrics mode = Instrumental と Style 入力欄を使える。ログイン画面、CAPTCHA、Advanced タブ不在なら下記 handoff 条件に従い停止する。
 3. 拡張アイコンをクリックして suno-helper overlay を Suno タブ内に表示する。overlay が最小化されている場合はヘッダーの展開ボタンを押す。
 4. overlay ルート `[data-suno-helper="control-panel"]` を観測する。`data-suno-phase`、`data-suno-running`、`data-suno-error`、`data-suno-collection-id`、`data-suno-entry-count`、`data-suno-selected-entry-count` が browser use から読める。
@@ -170,7 +170,7 @@ agent が優先して使う DOM signal:
 - 全 checkbox OFF では実行できない。少なくとも 1 件を選ぶ
 - entry phase の ERROR / STOPPED から再開する場合は resume バナーの "再開" を押す。playlist / download phase の中断は **Playlist から再開** / **Download から再開** を使う
 - prompts の自動取得後に **異常値の曲を再生成する** を選ぶ。通常は既定 ON（duration guard NG の entry を最大 2 回再生成）。追加生成を避ける運用では OFF にし、NG を含む生成済み全 clip が playlist / download 候補に残ることを了承して進む
-- duration guard の閾値は `suno-prompts.json` の `duration_filter`（既定 60〜300 秒）を使う。長尺 BGM チャンネル等で範囲を変える場合はチャンネル側 `config/skills/suno.yaml::duration_filter` を override して `uv run yt-generate-suno` で再生成する（`/suno` SKILL.md Step 2 参照）。resume は run 開始時点の閾値を保持するため、閾値変更を効かせるには再開ではなく新規 run で実行する
+- duration guard の閾値は `suno-prompts.json` の `duration_filter`（既定 60〜300 秒）を使う。長尺 BGM チャンネル等で範囲を変える場合はチャンネル側 `config/skills/music.yaml::prompt.duration_filter` を override して `uv run yt-generate-suno` で再生成する（`/music --prompt` SKILL.md Step 2 参照）。resume は run 開始時点の閾値を保持するため、閾値変更を効かせるには再開ではなく新規 run で実行する
 
 ### Step 4. "連続実行" を押す
 
@@ -295,7 +295,7 @@ DL が止まる・形式が違う・`workflow-state.json` へ反映されない�
 
 ## Cross References
 
-- プロンプト生成: `/suno`
+- プロンプト生成: `/music --prompt`
 - マスター化: `/masterup`（DL は本スキルが完了済みのため Step 2-3 スキップ）
 - 拡張本体のコード: `extensions/suno-helper/` / `extensions/shared/`
 - サーバー CLI: `src/youtube_automation/commands/collections/collection_serve.py`

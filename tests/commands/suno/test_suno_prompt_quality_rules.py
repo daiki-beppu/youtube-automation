@@ -21,7 +21,7 @@ from youtube_automation.commands.suno.generate_suno_prompts import (
 )
 from youtube_automation.configuration import skills as skill_config
 
-_DEFAULT_YAML = REPO_ROOT / ".claude" / "skills" / "suno" / "config.default.yaml"
+_DEFAULT_YAML = REPO_ROOT / ".claude" / "skills" / "music" / "config.default.yaml"
 
 
 @pytest.fixture
@@ -390,7 +390,7 @@ def test_build_prompt_entries_no_banned_artists_passes(channel_dir, tmp_path):
 
 def test_default_yaml_has_quality_rule_keys():
     """config.default.yaml に #904 で追加した品質ルール関連キーが存在すること."""
-    data = yaml.safe_load(_DEFAULT_YAML.read_text(encoding="utf-8"))
+    data = yaml.safe_load(_DEFAULT_YAML.read_text(encoding="utf-8"))["prompt"]
 
     assert data["style_influence"] == 50, "style_influence の既定値は 50"
     assert data["weirdness"] == 50, "weirdness の既定値は 50"
@@ -406,7 +406,7 @@ def test_default_yaml_has_quality_rule_keys():
 # SKILL.md: 品質ルールセクションの存在検証
 # ---------------------------------------------------------------------------
 
-_SKILL_MD = REPO_ROOT / ".claude" / "skills" / "suno" / "SKILL.md"
+_SKILL_MD = REPO_ROOT / ".claude" / "skills" / "music" / "references" / "prompt.md"
 _SUNO_LYRIC_SKILL_MD = REPO_ROOT / ".claude" / "skills" / "suno-lyric" / "SKILL.md"
 
 

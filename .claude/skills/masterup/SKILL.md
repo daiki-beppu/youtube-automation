@@ -6,7 +6,7 @@ description: "Use when Suno UI で生成した曲のプレイリストを一括 
 
 ## 前後工程
 
-- `前工程`: `/wf-new`, `/suno`, `/suno-helper`
+- `前工程`: `/wf-new`, `/music --prompt`, `/suno-helper`
 - `後工程`: `/videoup`
 - `委譲先`: `なし`
 
@@ -52,7 +52,7 @@ subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実�
 以下を確認し、満たさなければ前工程を案内して停止する:
 
 - チャンネルの音楽エンジンが Suno であること。Lyria チャンネルでは `/lyria` が `01-master/master.mp3` を直接出力するため本スキルは不要
-- 対象コレクションが `/suno` 完了済みであること（`collections/planning/` 配下に `workflow-state.json` があり `assets.music_prompts = true`、かつ `20-documentation/suno-prompts.json` が存在）。無ければ `/wf-new` → `/suno` を案内して停止する
+- 対象コレクションが `/music --prompt` 完了済みであること（`collections/planning/` 配下に `workflow-state.json` があり `assets.music_prompts = true`、かつ `20-documentation/suno-prompts.json` が存在）。無ければ `/wf-new` → `/music --prompt` を案内して停止する
 - `02-Individual-music/` にダウンロード済み音源が揃っていること（primary path は `/suno-helper` の一括ダウンロード）。未ダウンロードの場合は `/suno-helper` を案内するか、fallback としてプレイリスト URL を引数に受け取り Step 2-3 で DL する。**音源が揃っていれば playlist URL は不要**（URL 未指定を理由に停止しない。突合は Step 1.6 のローカルファイル名を第一手段にする）
 - `ffmpeg` / `ffprobe` が利用可能であること（`uv run yt-generate-master` が使用）。無ければ `/setup` を案内する
 
@@ -103,7 +103,7 @@ Lyria で音源を生成するチャンネルでは `/lyria` が `01-master/mast
 | コマンド | 説明 | 例 |
 |---------|------|-----|
 | `/masterup` | DL 済み音源（`02-Individual-music/`）からマスター生成。URL 省略可（ローカルファイル名の突合は Step 1.6） | `/masterup` |
-| `/masterup <playlist-url>` | プレイリスト内の全曲をDL + マスター生成 | `/masterup https://suno.com/playlist/xxx` |
+| `/masterup <playlist-url>` | プレイリスト内の全曲をDL + マスター生成 | `/masterup https://music --prompt.com/playlist/xxx` |
 | `uv run yt-generate-master --loop N` | マスター生成時に全トラックを N 回繰り返して結合 | `uv run yt-generate-master --loop 3` |
 | `uv run yt-generate-master --target-duration MIN` | 目標尺 (分) 以上になる最小ループ回数を自動算出 | `uv run yt-generate-master --target-duration 150` |
 | `uv run yt-generate-master --no-loop` | skill-config の目標尺を無視して 1 パスで生成 | `uv run yt-generate-master --no-loop` |

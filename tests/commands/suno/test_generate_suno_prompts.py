@@ -18,9 +18,9 @@ from youtube_automation.domains.suno.config import infer_suno_mode
 from youtube_automation.infrastructure import filesystem
 
 # `_skills/<skill>/config.default.yaml` の解決元になる editable install のソースツリー
-_DEFAULT_YAML = REPO_ROOT / ".claude" / "skills" / "suno" / "config.default.yaml"
+_DEFAULT_YAML = REPO_ROOT / ".claude" / "skills" / "music" / "config.default.yaml"
 _SUNO_LYRIC_DEFAULT_YAML = REPO_ROOT / ".claude" / "skills" / "suno-lyric" / "config.default.yaml"
-_SKILL_MD = REPO_ROOT / ".claude" / "skills" / "suno" / "SKILL.md"
+_SKILL_MD = REPO_ROOT / ".claude" / "skills" / "music" / "references" / "prompt.md"
 _CONFIG_RULES_MD = REPO_ROOT / ".claude" / "skills" / "setup" / "references" / "config-generation-rules.md"
 _STYLE_VARIANTS_UNSET = object()
 _EXCLUDE_STYLES_UNSET = object()
@@ -71,8 +71,8 @@ def _write_minimal_patterns(
 
 
 def _write_suno_override(channel: Path, **overrides) -> None:
-    """channel 側の config/skills/suno.yaml を生成する."""
-    (channel / "config" / "skills" / "suno.yaml").write_text(yaml.safe_dump(overrides), encoding="utf-8")
+    """channel 側の config/skills/music.yaml::prompt を生成する."""
+    (channel / "config" / "skills" / "music.yaml").write_text(yaml.safe_dump({"prompt": overrides}), encoding="utf-8")
 
 
 def _write_workflow_state(collection_dir: Path, track_count: int) -> None:
@@ -193,7 +193,7 @@ def test_explicit_instrumental_mode_overrides_vocal_genre_line(channel_dir, tmp_
 
 def test_default_yaml_does_not_define_duration_prompt():
     """同梱の config.default.yaml に duration_prompt キーが存在しないこと."""
-    data = yaml.safe_load(_DEFAULT_YAML.read_text(encoding="utf-8"))
+    data = yaml.safe_load(_DEFAULT_YAML.read_text(encoding="utf-8"))["prompt"]
     assert "duration_prompt" not in data, (
         "duration_prompt は issue #128 で完全削除された。default.yaml から該当行を削除すること。"
     )
@@ -380,7 +380,7 @@ def test_suno_skill_reads_only_open_bgm_insights_before_prompt_generation():
 
 def test_suno_default_yaml_does_not_own_lyric_authoring_config():
     """`/suno` は Style / merge 専任で、歌詞生成 config を持たない."""
-    suno_data = yaml.safe_load(_DEFAULT_YAML.read_text(encoding="utf-8"))
+    suno_data = yaml.safe_load(_DEFAULT_YAML.read_text(encoding="utf-8"))["prompt"]
     suno_lyric_data = yaml.safe_load(_SUNO_LYRIC_DEFAULT_YAML.read_text(encoding="utf-8"))
 
     assert "lyrics_guidelines" not in suno_data
@@ -2274,7 +2274,7 @@ def test_patterns_style_variants_reject_invalid_shapes(channel_dir, tmp_path, st
 
 def test_default_yaml_enables_style_variation_with_pools():
     """default.yaml が style_variation を有効化し、非空の pools を持つこと (#1456 の既定動作を pin)."""
-    data = yaml.safe_load(_DEFAULT_YAML.read_text(encoding="utf-8"))
+    data = yaml.safe_load(_DEFAULT_YAML.read_text(encoding="utf-8"))["prompt"]
 
     variation = data["style_variation"]
     assert variation["enabled"] is True

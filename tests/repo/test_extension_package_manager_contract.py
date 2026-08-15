@@ -22,7 +22,7 @@ _CURRENT_CONTRACT_DOCS = (
     "extensions/suno-helper/README.md",
     "extensions/distrokid-helper/README.md",
     "docs/development.md",
-    ".claude/skills/suno/SKILL.md",
+    ".claude/skills/music/references/prompt.md",
     ".claude/skills/automation-release/SKILL.md",
     ".claude/skills/automation-release/references/extension-release-checklist.md",
 )
@@ -192,7 +192,7 @@ def test_shared_extension_readme_spells_out_the_nix_command_flow() -> None:
 
 
 def test_suno_skill_uses_the_nix_extensions_shell() -> None:
-    suno_skill = _read(".claude/skills/suno/SKILL.md")
+    suno_skill = _read(".claude/skills/music/references/prompt.md")
 
     assert "Nix extensions shell（Node 24 / pnpm 11.15.1）" in suno_skill
     assert f"{_NIX_COMMAND} -C extensions/suno-helper install --frozen-lockfile" in suno_skill

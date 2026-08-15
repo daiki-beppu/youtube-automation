@@ -181,7 +181,7 @@ def _resolve_full_style_char_limit(config: Mapping[str, object], override: Mappi
         value = config.get("full_style_char_limit", DEFAULT_FULL_STYLE_CHAR_LIMIT)
         source = "full_style_char_limit"
     if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
-        raise ConfigError(f"config/skills/suno.yaml::{source} must be a positive integer")
+        raise ConfigError(f"config/skills/music.yaml::prompt.{source} must be a positive integer")
     return value
 
 
@@ -190,7 +190,7 @@ def _validate_duration_sec_override(override: Mapping[str, object]) -> None:
         return
     value = override[_DURATION_SEC_KEY]
     if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
-        raise ConfigError("config/skills/suno.yaml::duration_sec must be a positive integer")
+        raise ConfigError("config/skills/music.yaml::prompt.duration_sec must be a positive integer")
 
 
 def _build_advanced_json_fields(override: Mapping[str, object]) -> dict[str, object]:
@@ -525,8 +525,8 @@ def resolve_from_path(
     lyrics_loader: _LyricsLoader | None = None,
 ) -> ResolvedPrompts:
     """Load config and prompt artifacts, then delegate mapping resolution."""
-    config = (load_skill_config if skill_config_loader is None else skill_config_loader)("suno")
-    override = (load_channel_override if channel_override_loader is None else channel_override_loader)("suno")
+    config = (load_skill_config if skill_config_loader is None else skill_config_loader)("music.prompt")
+    override = (load_channel_override if channel_override_loader is None else channel_override_loader)("music.prompt")
     config_head = _resolve_config_head(config, override)
     with open(patterns_path) as file:
         patterns = cast(Mapping[str, object], yaml.safe_load(file))
@@ -583,7 +583,7 @@ def resolve_style_variant(resolved: ResolvedPrompts, style_key: object) -> Mappi
 
     message = (
         base_message + "patterns root に style_variants がない legacy collection のため、"
-        "channel fallback drift（config/skills/suno.yaml 側で key が変更・削除された可能性）があります。"
+        "channel fallback drift（config/skills/music.yaml::prompt 側で key が変更・削除された可能性）があります。"
         "channel 共有設定には依存せず、必要な定義を collection-local "
         "suno-patterns.yaml::style_variants へ移してください。"
     )

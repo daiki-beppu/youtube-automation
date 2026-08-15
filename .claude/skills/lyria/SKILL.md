@@ -1,7 +1,7 @@
 ---
 name: lyria
 purpose: 作る
-description: "Use when Vertex AI Lyria 3 でマスター音源を自動生成するとき。/masterup は不要。Suno 人手生成チャンネルは /suno を使う"
+description: "Use when Vertex AI Lyria 3 でマスター音源を自動生成するとき。/masterup は不要。Suno 人手生成チャンネルは music の prompt mode を使う"
 ---
 
 ## 前後工程
@@ -55,12 +55,12 @@ subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実�
 不足する場合、ユーザーに確認:
 - **`config/channel/` が無い新規チャンネル** → `/setup --channel` を案内
 - **`config/channel/` が無い既存チャンネル** → `/setup --import` を案内
-- **`_disabled: true` のチャンネル** → `/suno` を案内して終了する（Lyria を使わない方針）
+- **`_disabled: true` のチャンネル** → `/music --prompt` を案内して終了する（Lyria を使わない方針）
 
 ## When to Use
 
 - 新コレクションのテーマが確定し、音楽を生成するとき
-- `/suno` + `/masterup` の代替として、API 完全自動の音楽生成を行いたいとき
+- `/music --prompt` + `/masterup` の代替として、API 完全自動の音楽生成を行いたいとき
 - Lyria 3 API（最大 ~184 秒/リクエスト）でセグメントを複数取得して結合し、長尺マスター音源を作りたいとき
 
 ### 選択タイミング（どこで lyria が選ばれるか）
@@ -89,7 +89,7 @@ $ARGUMENTS → コレクションのテーマ指定
 
 | skill-config キー | 用途 |
 |------------|------|
-| `_disabled` | true なら /suno を案内して終了 |
+| `_disabled` | true なら /music --prompt を案内して終了 |
 | `skip_generation_approval` | true なら保存済みプロンプト・パラメータの生成前承認だけを省略（既定 false） |
 | `model` | 本生成モデル (`lyria-3-pro-preview`) |
 | `prompt_prefix` | プロンプト先頭の共通ジャンル句 |
@@ -141,7 +141,7 @@ uv run python -c "from youtube_automation.configuration.skills import load_skill
 `config/skills/lyria.yaml` の値からプロンプトと API 入力パラメータを組み立て、`yt-generate-lyria-master` CLI に委譲して N セグメント生成 + クロスフェード結合を実行します。
 
 `_disabled: true` の場合、以下を出力して終了:
-> Lyria はこのチャンネルで無効化されています (`config/skills/lyria.yaml` の `_disabled: true`)。音楽生成は `/suno <theme>` を使用してください。
+> Lyria はこのチャンネルで無効化されています (`config/skills/lyria.yaml` の `_disabled: true`)。音楽生成は `/music --prompt <theme>` を使用してください。
 
 ### 対象テーマ
 
@@ -164,7 +164,7 @@ $ARGUMENTS
 1. **prompt_prefix は最小限に**: `config/skills/lyria.yaml` の `prompt_prefix` をそのまま使用。楽器名・ムード語を追加しない
 2. **プロンプトは「動作指示」で書く**: 状態描写ではなく、メロディの動き（wandering freely, phrases rising and falling）を指示する
 3. **簡潔な修飾**: 形容詞は 1-2 個で十分
-4. **禁止形容詞チェック**: `config/skills/lyria.yaml` の `ng_words` と `/suno` 側 `references/suno-examples.md` の禁止形容詞リストに準拠
+4. **禁止形容詞チェック**: `config/skills/lyria.yaml` の `ng_words` と `/music --prompt` 側 `references/suno-examples.md` の禁止形容詞リストに準拠
 
 詳しい推奨値・NG パターンは `references/lyria-tuning-guide.md` を参照。
 

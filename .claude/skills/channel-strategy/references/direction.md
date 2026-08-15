@@ -108,8 +108,8 @@ YouTube の第三者チャンネル由来データ（description、keywords、lo
 
 | 項目 | 決定内容 | 転記先 |
 |---|---|---|
-| Suno `genre_line`（音楽方向性の英語直訳） | | `config/skills/suno.yaml::genre_line` |
-| Suno `exclude_styles`（排除する音楽要素）| | `config/skills/suno.yaml::exclude_styles` |
+| Suno `genre_line`（音楽方向性の英語直訳） | | `config/skills/music.yaml::prompt.genre_line` |
+| Suno `exclude_styles`（排除する音楽要素）| | `config/skills/music.yaml::prompt.exclude_styles` |
 | TTP 対象サムネ（manual note、または `/channel-research --benchmark` 実行済みなら competitor 名 + 代表 video_id ×3）| | `config/skills/thumbnail.yaml::image_generation.gemini.reference_images.default` |
 | ブランド背景色 | | `config/skills/thumbnail.yaml::image_generation.gemini.brand_background` |
 | サムネ構図ルール（キャラサイズ / NG ポーズ 等）| | `config/skills/thumbnail.yaml::image_generation.gemini.composition_rules.*` |

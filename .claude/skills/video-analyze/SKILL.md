@@ -7,7 +7,7 @@ description: "Use when 動画本体の中身（フック構造・シーン・BGM
 ## 前後工程
 
 - `前工程`: `なし`
-- `後工程`: `/wf-new`, `/suno`, `/alignment-check`
+- `後工程`: `/wf-new`, `/music --prompt`, `/alignment-check`
 - `委譲先`: `なし`
 
 ## 成果物
@@ -147,7 +147,7 @@ skill-config (`.claude/skills/video-analyze/config.default.yaml`):
 
 - `/channel-strategy --direction`（方向性検討モード） — Step D1 の分析サマリーで `bgm_arc` 平均（intro / peak / outro 秒）を提示し、
   Step 2 の議論ポイント「6. 競合の BGM 構造」と Step 3 決定事項「BGM 構造方針」の根拠データとして使う
-- `/suno` — Instructions 冒頭で `bgm_arc` 平均を読み込み、4 パターンの起伏配置の初期値とする。
+- `/music --prompt` — Instructions 冒頭で `bgm_arc` 平均を読み込み、4 パターンの起伏配置の初期値とする。
   `scene_timeline[].summary` は情景フレーズ設計ルール 5 の素材として利用（コピペ禁止、世界観翻訳）
 
 ## 関連ファイル

@@ -246,9 +246,10 @@ def _canonical_auth_template(_ctx: ChannelInitContext) -> str:
 
 def _render_suno_skill(ctx: ChannelInitContext) -> str:
     return (
-        f"workspace_name: {_yaml_scalar(ctx.name)}\n"
-        f"genre_line: {_yaml_scalar(f'{ctx.style} {ctx.genre} music for {ctx.context}')}\n"
-        'exclude_styles: ""\n'
+        "prompt:\n"
+        f"  workspace_name: {_yaml_scalar(ctx.name)}\n"
+        f"  genre_line: {_yaml_scalar(f'{ctx.style} {ctx.genre} music for {ctx.context}')}\n"
+        '  exclude_styles: ""\n'
     )
 
 
@@ -280,6 +281,6 @@ def _render_thumbnail_skill(ctx: ChannelInitContext) -> str:
 ROOT_TEXT_TEMPLATES: dict[Path, Callable[[ChannelInitContext], str]] = {
     Path(".gitignore"): _render_gitignore,
     Path("auth") / "client_secrets.template.json": _canonical_auth_template,
-    SKILLS_SUBDIR / "suno.yaml": _render_suno_skill,
+    SKILLS_SUBDIR / "music.yaml": _render_suno_skill,
     SKILLS_SUBDIR / "thumbnail.yaml": _render_thumbnail_skill,
 }

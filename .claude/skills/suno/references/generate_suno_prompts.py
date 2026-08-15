@@ -1,1 +1,0 @@
-../../../../src/youtube_automation/commands/suno/generate_suno_prompts.py

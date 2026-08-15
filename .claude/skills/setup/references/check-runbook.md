@@ -330,7 +330,7 @@ minimal mode / benchmark fallback mode は新規チャンネル初回制作を�
 
 #### `initial_setup_readiness` — 初期セットアップ事前検査
 
-`config/skills/thumbnail.yaml` / `config/skills/suno.yaml` の空欄・不備（reference_images / composition_rules の未設定、`genre_line` の文字数超過など）と、planning 中コレクションの `descriptions.md` parse 失敗を warn として一括検出する。`yt-doctor` の `next_action` に従い、開設時の初期転記は `/setup --channel`、開設後の再転記は `/setup --regenerate` 、descriptions.md の再生成は `/video-description` を案内する。config 未転記の新規チャンネルでは `/setup --channel` 完了までの正常な中間状態として扱う。
+`config/skills/thumbnail.yaml` / `config/skills/music.yaml::prompt` の空欄・不備（reference_images / composition_rules の未設定、`genre_line` の文字数超過など）と、planning 中コレクションの `descriptions.md` parse 失敗を warn として一括検出する。`yt-doctor` の `next_action` に従い、開設時の初期転記は `/setup --channel`、開設後の再転記は `/setup --regenerate` 、descriptions.md の再生成は `/video-description` を案内する。config 未転記の新規チャンネルでは `/setup --channel` 完了までの正常な中間状態として扱う。
 
 ### upload カテゴリ
 

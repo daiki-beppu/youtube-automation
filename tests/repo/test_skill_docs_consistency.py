@@ -677,7 +677,7 @@ def test_wf_new_fail_fast_contract_points_to_setup_import_and_collection_local_s
     assert "`load_config()` が失敗する場合は `/setup --import`" in hard_gates
     assert "Suno collection Style boundary" in hard_gates
     assert "`20-documentation/suno-patterns.yaml`" in hard_gates
-    assert "共有 `config/skills/suno.yaml` を書き換えない" in hard_gates
+    assert "共有 `config/skills/music.yaml::prompt` を書き換えない" in hard_gates
     assert "`suno_preset` は推奨入力" in hard_gates
 
     assert "取り込みモード" not in channel_new
@@ -1526,7 +1526,7 @@ def test_config_generation_rules_reference_existing_templates_and_step_ids() -> 
         ".claude/skills/setup/references/config-template/youtube.json",
         ".claude/skills/setup/references/config-template/analytics.json",
         ".claude/skills/setup/references/config-template/audio.json",
-        ".claude/skills/setup/references/config-template/skills/suno.yaml",
+        ".claude/skills/setup/references/config-template/skills/music.yaml",
         ".claude/skills/setup/references/config-template/skills/thumbnail.yaml",
     ):
         assert (ROOT / path).is_file(), f"{path} が存在しない"

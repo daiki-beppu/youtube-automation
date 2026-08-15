@@ -223,7 +223,7 @@ class TestInitialSetupChecks:
 
         assert msg is not None
         assert "121 / 120" in msg
-        assert "config/skills/suno.yaml::genre_line" in msg
+        assert "config/skills/music.yaml::prompt.genre_line" in msg
 
     def test_suno_genre_line_at_configured_style_limit_passes(self) -> None:
         assert check_suno_genre_line_char_limit({"genre_line": "x" * 373, "style_char_limit": 373}) is None

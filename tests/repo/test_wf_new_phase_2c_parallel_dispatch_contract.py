@@ -74,7 +74,7 @@ def test_music_call_selects_suno_or_prompt_only_lyria() -> None:
     initial_dispatch = _between(skill, "##### 2c-1.", "##### 2c-2.")
 
     assert "`music_engine: suno`" in initial_dispatch
-    assert "`/suno <theme>`" in initial_dispatch
+    assert "`/music --prompt <theme>`" in initial_dispatch
     assert "`music_engine: lyria`" in initial_dispatch
     assert "`/lyria <theme>`" in initial_dispatch
     assert "プロンプト設計だけ" in initial_dispatch

@@ -35,4 +35,4 @@ cleanupは必要な保存とarchiveがすべて成功した後にだけ実行す
 
 完了条件は、企画レポート保存、`planning.generated` と `planning.final_title` の更新、画像がある場合の採用画像とreference assignmentの保存、mode別cleanupの完了である。失敗した必須操作があればhandoffせず、同じ段階から再開する。
 
-完了後は `/thumbnail <theme>` へ渡し、ベンチマーク参照からテキスト付き `thumbnail.jpg` を生成・承認してから、その承認済み画像を入力にtextless `main.png/jpg`を別成果物として確定する。企画プレビューを動画背景に流用しない。サムネイル確定後にだけ `/suno <theme>` へ進む。
+完了後は `/thumbnail <theme>` へ渡し、ベンチマーク参照からテキスト付き `thumbnail.jpg` を生成・承認してから、その承認済み画像を入力にtextless `main.png/jpg`を別成果物として確定する。企画プレビューを動画背景に流用しない。サムネイル確定後にだけ `/music --prompt <theme>` へ進む。

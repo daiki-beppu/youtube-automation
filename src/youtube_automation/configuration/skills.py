@@ -44,6 +44,7 @@ SKILL_CONFIG_KEYS: Final[frozenset[str]] = frozenset(
         "loop-video",
         "masterup",
         "metadata-audit",
+        "music.prompt",
         "suno",
         "suno-helper",
         "thumbnail",
@@ -74,11 +75,18 @@ _MOVED_SKILL_CONFIG_DEFAULTS: Final[dict[str, Path]] = {
     "benchmark": Path("channel-research", "config.default.yaml"),
     "collection-ideate": Path("wf-new", "references", "collection-ideate.config.default.yaml"),
     "discover-competitors": Path("channel-research", "config.default.yaml"),
+    "suno": Path("music", "config.default.yaml"),
 }
 
 _MOVED_SKILL_CONFIG_SECTIONS: Final[dict[str, str]] = {
     "benchmark": "benchmark",
     "discover-competitors": "discover",
+    "suno": "prompt",
+}
+
+# 名前空間移行後も、明示 migration 前の下流 override を同じ実行経路で読む。
+_NAMESPACED_LEGACY_OVERRIDE_OWNERS: Final[dict[str, str]] = {
+    "music.prompt": "suno",
 }
 
 _THUMBNAIL_TEXT_RENDER_MODES = frozenset({"ai_burn_in", "deterministic"})
@@ -407,11 +415,22 @@ def load_skill_config(
         defaults = dict(selected_defaults)
 
     override_path = _resolve_channel_override(owner, channel_dir)
+    legacy_override_owner: str | None = None
+    if override_path is None and (legacy_owner := _NAMESPACED_LEGACY_OVERRIDE_OWNERS.get(skill)) is not None:
+        override_path = _resolve_channel_override(legacy_owner, channel_dir)
+        legacy_override_owner = legacy_owner if override_path is not None else None
     if override_path is not None:
         override, acknowledged = _split_acknowledged_unknown_keys(_load_override(override_path), override_path)
+        if legacy_override_owner is not None and section is not None:
+            override = {section: override}
         merged = _deep_merge(defaults, override)
-        _warn_deprecated_override_keys(owner, override, override_path, merged)
-        _warn_unknown_top_level_override_keys(owner, override, defaults, override_path, acknowledged)
+        warning_owner = legacy_override_owner or owner
+        warning_override = override[section] if legacy_override_owner is not None and section is not None else override
+        warning_defaults = defaults[section] if legacy_override_owner is not None and section is not None else defaults
+        _warn_deprecated_override_keys(warning_owner, warning_override, override_path, merged)
+        _warn_unknown_top_level_override_keys(
+            warning_owner, warning_override, warning_defaults, override_path, acknowledged
+        )
     else:
         merged = defaults
 
@@ -434,10 +453,24 @@ def load_channel_override(skill: str) -> dict[str, Any]:
     skill-config の旧 namespace 移行など、ユーザーが明示的に設定したキーだけを
     検出したいケースで使う。override ファイルが無ければ空 dict。
     """
-    path = _resolve_channel_override(skill)
+    owner, section = _split_skill_config_key(skill)
+    path = _resolve_channel_override(owner)
+    legacy_override = False
+    if path is None and (legacy_owner := _NAMESPACED_LEGACY_OVERRIDE_OWNERS.get(skill)) is not None:
+        path = _resolve_channel_override(legacy_owner)
+        legacy_override = path is not None
     if path is None:
         return {}
     override, _ = _split_acknowledged_unknown_keys(_load_override(path), path)
+    if legacy_override:
+        return override
+    if section is not None:
+        selected = override.get(section)
+        if selected is None:
+            return {}
+        if not isinstance(selected, dict):
+            raise ConfigError(f"skill-config {skill} の channel override は mapping の節である必要があります")
+        return dict(selected)
     return override
 
 

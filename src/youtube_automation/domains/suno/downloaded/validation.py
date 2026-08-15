@@ -427,7 +427,7 @@ def _resolve_tracks_per_collection(
         return None, []
     return _positive_int(
         suno_cfg.raw.get("tracks_per_collection"),
-        "config/skills/suno.yaml::tracks_per_collection",
+        "config/skills/music.yaml::prompt.tracks_per_collection",
     )
 
 
@@ -579,7 +579,7 @@ def _effective_style_char_limit_issues(
         genre_line_source = f"{SUNO_PATTERNS_FILENAME}::genre_line"
     else:
         genre_line = suno_cfg.genre_line
-        genre_line_source = "config/skills/suno.yaml::genre_line"
+        genre_line_source = "config/skills/music.yaml::prompt.genre_line"
 
     issues = _style_char_limit_issues(suno_cfg, genre_line, genre_line_source)
 
@@ -588,7 +588,7 @@ def _effective_style_char_limit_issues(
         variants_source = f"{SUNO_PATTERNS_FILENAME}::style_variants"
     else:
         variants = suno_cfg.raw.get("style_variants")
-        variants_source = "config/skills/suno.yaml::style_variants"
+        variants_source = "config/skills/music.yaml::prompt.style_variants"
     if not isinstance(variants, Mapping):
         return issues
 
@@ -613,7 +613,7 @@ def _style_char_limit_issues(suno_cfg: SunoConfig, genre_line: str, source: str)
     issue = check_suno_genre_line_char_limit({**suno_cfg.raw, "genre_line": genre_line})
     if issue is None:
         return []
-    return [issue.replace("config/skills/suno.yaml::genre_line", source)]
+    return [issue.replace("config/skills/music.yaml::prompt.genre_line", source)]
 
 
 def _validate_prompts(prompts_path: Path, contract: PatternContract) -> tuple[ArtifactEntries, list[str]]:

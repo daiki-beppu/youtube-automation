@@ -1,7 +1,7 @@
 # SunoAI プロンプト例（参考資料）
 
 品質が高い情景フレーズ + スタイルプロンプトの参考例。
-**これは例示のみ** — 各チャンネルの `config/skills/suno.yaml` の `genre_line` + `style_variants` に合わせて調整すること。
+**これは例示のみ** — 各チャンネルの `config/skills/music.yaml::prompt` の `genre_line` + `style_variants` に合わせて調整すること。
 
 ## 例 1: jazzhop / lo-fi 系
 

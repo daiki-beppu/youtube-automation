@@ -62,7 +62,7 @@ uv run yt-populate-scene-phrases <collection-dir-name> \
 
 #### 2c. サムネイル確定 + 音楽素材生成
 
-サムネイル候補生成と音楽素材生成は initial dispatch で重ね、承認・確定・成果物検証は join 後に進める。Suno チャンネルでは、メインが対象 collection と確定企画を固定し、`config/skills/suno.yaml` と利用可能な `data/video_analysis/<slug>/*.json` を fallback / 推奨入力として `/suno` へ渡す。subagent は共有 config を変更せず、その collection の `20-documentation/suno-patterns.yaml` に effective Style 系の root 値を保存する。`suno_preset` が無くても確定企画と制約から collection-local Style を設計して続行し、検証前に `assets.music_prompts = true` へ更新しない。
+サムネイル候補生成と音楽素材生成は initial dispatch で重ね、承認・確定・成果物検証は join 後に進める。Suno チャンネルでは、メインが対象 collection と確定企画を固定し、`config/skills/music.yaml::prompt` と利用可能な `data/video_analysis/<slug>/*.json` を fallback / 推奨入力として `/music --prompt` へ渡す。subagent は共有 config を変更せず、その collection の `20-documentation/suno-patterns.yaml` に effective Style 系の root 値を保存する。`suno_preset` が無くても確定企画と制約から collection-local Style を設計して続行し、検証前に `assets.music_prompts = true` へ更新しない。
 
 各 branch の成果物検証、state 適用、partial failure、再開判定は、最初に [`Phase 2c 成果物・再開契約`](phase-2c-artifact-contract.md) を読み、その契約だけを正とする。
 
@@ -88,7 +88,7 @@ uv run yt-populate-scene-phrases <collection-dir-name> \
 3. **両 branch が未完了なら exactly two calls を同時起動**:
    - 1 回の Agent tool dispatch に次の独立した 2 call だけを含め、同じ message で同時起動する。順次 2 回に分けず、3 call 目や `/loop-video` を混ぜない
    - Agent 1: thumbnail branch。`status: FINALIZED` なら AI 生成を行わない（候補生成も再選択もしない）。既存 preview の品質検証・確定経路のうち、承認を伴わない `thumbnail.jpg` の実在・可読性確認だけを行い evidence を返す。`status: MISSING` なら `single_step` / provider を問わず `/thumbnail <theme>` の Subagent Contract でテキスト付き候補と `20-documentation/thumbnail-prompts.md` を候補生成する。承認、確定コピー、state 更新は行わない
-   - Agent 2: music branch。`music_engine: suno` なら `/suno <theme>` で `20-documentation/suno-patterns.yaml` と `suno-prompts.json` を生成する。`music_engine: lyria` なら `/lyria <theme>` のプロンプト設計だけを行い `lyria-prompt.md` を生成する。この Phase では Lyria 3 API を実行しない
+   - Agent 2: music branch。`music_engine: suno` なら `/music --prompt <theme>` で `20-documentation/suno-patterns.yaml` と `suno-prompts.json` を生成する。`music_engine: lyria` なら `/lyria <theme>` のプロンプト設計だけを行い `lyria-prompt.md` を生成する。この Phase では Lyria 3 API を実行しない
    - 両 Agent へ、固定した対象 collection の絶対 path、確定企画、theme、engine / effective config という具体的な入力、期待成果物の絶対 path、禁止事項、完了報告形式を渡す。両 Agent は `workflow-state.json` を更新しない、AskUserQuestion を実行しない、共有 config を変更しない
    - 片側再開では上記の該当 Agent だけへ同じ具体的な契約を渡す。両方未完了のときだけ exactly-two 同時 dispatch とする
 
@@ -159,7 +159,7 @@ initial dispatch を行った場合は両 Agent の完了を待つ。片方の�
 
 #### 2f. Suno helper server 起動（Suno のみ）
 
-`/suno` が生成した `20-documentation/suno-prompts.json` を Chrome 拡張へ配信するため、`uv run yt-collection-serve` を **dir mode + 拡張 origin lock** で起動する。これは `/wf-new` の責務に含める。Suno UI での連続生成、playlist 追加、ZIP 一括 DL は `/suno-helper` の browser use 主導フローで実行する。
+`/music --prompt` が生成した `20-documentation/suno-prompts.json` を Chrome 拡張へ配信するため、`uv run yt-collection-serve` を **dir mode + 拡張 origin lock** で起動する。これは `/wf-new` の責務に含める。Suno UI での連続生成、playlist 追加、ZIP 一括 DL は `/suno-helper` の browser use 主導フローで実行する。
 
 1. **拡張 ID 自動検出を前提にする**:
    - 通常は `--allow-extension suno-helper` を使い、Chrome profile preferences から unpacked 拡張 ID を検出する

@@ -1,0 +1,22 @@
+{
+  "chainId": "music",
+  "steps": [
+    {
+      "id": "prompt",
+      "skill": "music",
+      "prerequisiteArtifacts": [],
+      "outputArtifacts": [
+        "20-documentation/suno-patterns.yaml",
+        "20-documentation/suno-prompts.md",
+        "20-documentation/suno-prompts.json"
+      ],
+      "approvalGate": {
+        "skip": true,
+        "configPath": "workflow.music.skip_approvals.prompt"
+      },
+      "idempotency": {
+        "script": "references/music-chain-state.py"
+      }
+    }
+  ]
+}

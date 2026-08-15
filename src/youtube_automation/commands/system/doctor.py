@@ -2277,8 +2277,8 @@ def _validate_approved_ttp_exception_blocks(
         if "thumbnail" in categories and "/thumbnail" not in lower_block:
             missing.append("thumbnail のユーザー承認済み例外に後続 /thumbnail が未記録")
             continue
-        if "music" in categories and "/suno" not in lower_block:
-            missing.append("music のユーザー承認済み例外に後続 /suno が未記録")
+        if "music" in categories and "/music --prompt" not in lower_block:
+            missing.append("music のユーザー承認済み例外に後続 /music --prompt が未記録")
             continue
         if "duration" in categories and not any(
             command in lower_block for command in ("/benchmark", "/channel-research --benchmark")
@@ -2899,10 +2899,9 @@ class _MusicReadiness:
 
 def _suno_music_readiness(channel_dir: Path, channels: list[dict[str, object]]) -> _MusicReadiness:
     errors: list[str] = []
-    suno_read = _skill_config_mapping(channel_dir, "suno")
-    if suno_read.error:
-        errors.append(suno_read.error)
-    suno = suno_read.data
+    suno, suno_error = _load_skill_config_for_channel("music.prompt", channel_dir)
+    if suno_error:
+        errors.append(suno_error)
     genre_line = str(suno.get("genre_line") or "")
     style_char_limit = suno.get("style_char_limit", 120)
     try:
@@ -2981,7 +2980,7 @@ def check_initial_setup_readiness(channel_dir: Path) -> CheckResult:
             )
         )
 
-    suno_cfg, suno_error = _load_skill_config_for_channel("suno", channel_dir)
+    suno_cfg, suno_error = _load_skill_config_for_channel("music.prompt", channel_dir)
     if suno_error:
         issues.append(suno_error)
     else:
@@ -3010,7 +3009,7 @@ def check_initial_setup_readiness(channel_dir: Path) -> CheckResult:
         next_action={
             "kind": "human",
             "instructions": (
-                "/setup --regenerate で config/skills/thumbnail.yaml と config/skills/suno.yaml を再確認し、"
+                "/setup --regenerate で config/skills/thumbnail.yaml と config/skills/music.yaml::prompt を再確認し、"
                 "descriptions.md の parse 失敗は /video-description で再生成してください"
             ),
         },

@@ -161,16 +161,14 @@ def test_migrate_config_refuses_to_overwrite_different_existing_section(
     assert destination.read_bytes() == destination_before
 
 
-def test_production_cli_does_not_migrate_before_target_skill_exists(
+def test_production_cli_exposes_suno_to_music_prompt_migration(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     channel_dir = tmp_path / "channel"
     (channel_dir / "config" / "skills").mkdir(parents=True)
     source = _write_config(channel_dir, "suno", {"model": "v5"})
-    original = source.read_bytes()
+    assert main(["migrate-config", "--channel-dir", str(channel_dir), "--dry-run"]) == 0
 
-    assert main(["migrate-config", "--channel-dir", str(channel_dir)]) == 0
-
-    assert "移行対象はありません" in capsys.readouterr().out
-    assert source.read_bytes() == original
+    assert "suno.yaml -> music.yaml::prompt" in capsys.readouterr().out
+    assert source.is_file()
     assert not (channel_dir / "config" / "skills" / "music.yaml").exists()

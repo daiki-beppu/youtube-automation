@@ -744,5 +744,5 @@ exit 0 の後も期待する `thumbnail-vN.jpg/png` または `main-vN.png/jpg` 
 ## Next Step
 
 サムネイル確定後:
-- Suno チャンネル: `/suno <theme>` で音楽プロンプト生成
-- Lyria チャンネル: `/lyria <theme>` でマスター音源生成（`/suno` 系工程は不要）
+- Suno チャンネル: `/music --prompt <theme>` で音楽プロンプト生成
+- Lyria チャンネル: `/lyria <theme>` でマスター音源生成（`/music --prompt` 系工程は不要）

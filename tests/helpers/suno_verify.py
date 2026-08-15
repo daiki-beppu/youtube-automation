@@ -13,8 +13,8 @@ from youtube_automation.domains.suno.downloaded.validation import suno_prompt_en
 
 
 def write_suno_override(channel: Path, **overrides) -> None:
-    (channel / "config" / "skills" / "suno.yaml").write_text(
-        yaml.safe_dump(overrides, allow_unicode=True),
+    (channel / "config" / "skills" / "music.yaml").write_text(
+        yaml.safe_dump({"prompt": overrides}, allow_unicode=True),
         encoding="utf-8",
     )
 

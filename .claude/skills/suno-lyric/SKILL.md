@@ -1,28 +1,28 @@
 ---
 name: suno-lyric
 purpose: 作る
-description: "Use when Suno ボーカル曲の歌詞を生成するとき。「歌詞生成」「vocal」「rap」「suno-lyric」で発動。Style / UI 投入は /suno と /suno-helper の責務"
+description: "Use when Suno ボーカル曲の歌詞を生成するとき。「歌詞生成」「vocal」「rap」「suno-lyric」で発動。Style は music の prompt mode、UI 投入は /suno-helper の責務"
 ---
 
 ## 前後工程
 
 - `前工程`: `なし`
-- `後工程`: `/suno`
+- `後工程`: `/music --prompt`
 - `委譲先`: `なし`
 
 ## 成果物
 
 - `書き込む`: `collections/<id>/20-documentation/suno-lyrics.md`, `collections/<id>/20-documentation/suno-lyrics.json`
-- `読み込む`: `collections/<id>/20-documentation/suno-patterns.yaml`, `docs/channel/personas/persona-definition.md`, `config/skills/suno-lyric.yaml`, `config/skills/suno.yaml`
+- `読み込む`: `collections/<id>/20-documentation/suno-patterns.yaml`, `docs/channel/personas/persona-definition.md`, `config/skills/suno-lyric.yaml`, `config/skills/music.yaml::prompt`
 
 ## Overview
 
-`/suno-lyric` は Suno ボーカル曲の **Lyrics 専任**。`/suno` は orchestration + Style / title / scene / JSON merge を担当し、本 skill は歌詞本文だけを作る。
+`/suno-lyric` は Suno ボーカル曲の **Lyrics 専任**。`/music --prompt` は orchestration + Style / title / scene / JSON merge を担当し、本 skill は歌詞本文だけを作る。
 
 ```
 /suno-lyric  ->  20-documentation/suno-lyrics.{md,json}
                        |
-/suno        ->  20-documentation/suno-prompts.{md,json}
+/music --prompt        ->  20-documentation/suno-prompts.{md,json}
                        |
 /suno-helper ->  Suno UI
 ```
@@ -41,7 +41,7 @@ subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実�
 - 曲ごとの title / scene / mood を読み、1 曲 1 歌詞を作る
 - 必要に応じて名言やテーマのエッセンスを抽出し、原文を直接コピーせず歌詞へ再構築する
 - Suno V5.5 が読みやすい section tag 付き Lyrics を出力する
-- レビュー用 Markdown と `/suno` が機械的にマージできる JSON を出力する
+- レビュー用 Markdown と `/music --prompt` が機械的にマージできる JSON を出力する
 
 この skill は Style、genre_line、Exclude Styles、Suno More Options、Suno UI 操作を扱わない。
 
@@ -52,14 +52,14 @@ subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実�
 1. `.claude/skills/suno-lyric/config.default.yaml`
 2. `config/skills/suno-lyric.yaml`（存在する場合）
 
-合成規則は `youtube_automation.configuration.skills.load_skill_config("suno-lyric")` と同じで、チャンネル上書きが優先される。存在しない override は未設定として扱い、勝手に作成しない。このスキルが `/suno` の skill-config を直接参照する段階では、`suno` 側の `config.default.yaml` と `config/skills/suno.yaml` も同じ手順で読む。
+合成規則は `youtube_automation.configuration.skills.load_skill_config("suno-lyric")` と同じで、チャンネル上書きが優先される。存在しない override は未設定として扱い、勝手に作成しない。このスキルが `/music --prompt` の skill-config を直接参照する段階では、`suno` 側の `config.default.yaml` と `config/skills/music.yaml::prompt` も同じ手順で読む。
 
 ## 前提
 
 以下を確認し、満たさなければ前工程を案内して停止する（機械的な停止条件は後述の Hard Gates が正）:
 
 - チャンネルの `music_engine` が `suno` で、`genre_line` または `suno-patterns.yaml::mode` がボーカルを示すこと。インストゥルメンタルのみのチャンネル / コレクションでは歌詞生成不要として停止する
-- 対象コレクションの `20-documentation/suno-patterns.yaml` が存在すること。無ければ先に `/suno` の pattern draft 作成を案内して停止する
+- 対象コレクションの `20-documentation/suno-patterns.yaml` が存在すること。無ければ先に `/music --prompt` の pattern draft 作成を案内して停止する
 - persona reference として `docs/channel/personas/persona-definition.md` を読む。無い場合のみ旧 `docs/audience-persona.md` を legacy fallback として参照する
 
 ## Inputs
@@ -70,7 +70,7 @@ subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実�
 
 - `20-documentation/suno-patterns.yaml`: 曲名、scene、mood tag
 - `workflow-state.json::planning.music`: mood / atmosphere / tempo / instruments
-- `config/skills/suno.yaml::genre_line`: ボーカルモード判定
+- `config/skills/music.yaml::prompt.genre_line`: ボーカルモード判定
 - `config/skills/suno-lyric.yaml`: 任意のチャンネル上書き
 - `docs/channel/personas/persona-definition.md`: persona vocabulary と避ける語彙。無い場合のみ旧 `docs/audience-persona.md` を legacy fallback として参照可
 
@@ -93,7 +93,7 @@ subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実�
 
 1. `music_engine` が `suno` でない場合は停止する
 2. `genre_line` または `suno-patterns.yaml::mode` がボーカルを示さない場合は、歌詞生成不要として停止する
-3. `20-documentation/suno-patterns.yaml` が無い場合は停止し、先に `/suno` の pattern draft を作るよう案内する
+3. `20-documentation/suno-patterns.yaml` が無い場合は停止し、先に `/music --prompt` の pattern draft を作るよう案内する
 4. `workflow-state.json::planning.music` が空でも完全停止はしないが、曲ごとの scene と persona reference を優先して進める
 
 ## 完了条件
@@ -128,20 +128,20 @@ generator は `suno-patterns.yaml`、persona reference、設定、必要な Refe
 ## Workflow
 
 1. 歌詞生成を generator subagent（Codex では別コンテキスト実行）に委譲する
-2. `suno-patterns.yaml` から最終 entry name を作る。`/suno` と同じく `{name_jp} — {name_en}`、複数 scene の場合は ` (Variation N)` を付ける
+2. `suno-patterns.yaml` から最終 entry name を作る。`/music --prompt` と同じく `{name_jp} — {name_en}`、複数 scene の場合は ` (Variation N)` を付ける
 3. 各 entry に mood tag を割り当てる。明示 `mood` が無ければ scene / title / planning.music から推定する
 4. `config/skills/suno-lyric.yaml::affinity_weights` と persona reference から、曲ごとに名言カテゴリまたは偉人候補を選ぶ
 5. 名言を使う場合は、英語原文をそのまま歌詞にしない。中核メッセージを 1 文の essence に抽出してから、曲の scene と persona vocabulary に合わせて再構築する
 6. Lyrics は V5.5 向けに section tags を明示する。基本形は `[Intro]`, `[Verse 1]`, `[Pre-Chorus]`, `[Chorus]`, `[Verse 2]`, `[Instrumental]`, `[Bridge]`, `[Final Chorus]`, `[Extended Outro]`, `[Outro]`。`[Verse]` / `[Chorus]` だけでなく `[Intro]` `[Pre-Chorus]` `[Bridge]` `[Extended Outro]` `[Outro]` も曲ごとの scene / persona に合わせて書き分け、他の曲から本文を流用しない（Suno は歌詞テキストに強く追従するため、これらが同一だと全曲の入り・終わりが似通う）
 7. `suno-lyrics.md` と `suno-lyrics.json` を `20-documentation/` に出力する。`preserve_existing: true` の場合、既存 entry は上書きしない
 8. `uv run yt-suno-verify <collection-path>` 通過後、別コンテキスト reviewer が `suno-lyrics.json` のみを読み、entry ごとに `PASS` / `FAIL` + 理由を出す。`FAIL` entry のみ最大 2 周まで再生成し、上限到達時は残課題をユーザーに提示する
-9. 出力後、`/suno` に戻って Style と Lyrics をマージする
+9. 出力後、`/music --prompt` に戻って Style と Lyrics をマージする
 
 ## Output Contract
 
 ### `20-documentation/suno-lyrics.json`
 
-JSON root は配列。各 entry は `/suno` が `name` でマージできる形にする:
+JSON root は配列。各 entry は `/music --prompt` が `name` でマージできる形にする:
 
 ```json
 [
@@ -161,10 +161,10 @@ JSON root は配列。各 entry は `/suno` が `name` でマージできる形�
 ]
 ```
 
-- `name` は `/suno` の最終 prompt entry name と完全一致させる
+- `name` は `/music --prompt` の最終 prompt entry name と完全一致させる
 - `lyrics` は Suno Lyrics 欄へ入れる歌詞。言語は `config/skills/suno-lyric.yaml::lyric.language` に従う
-- `style` は `null` のままにする。Style は `/suno` が埋める
-- `review_context` は reviewer 専用の補助情報。`collection_theme`, `scene`, `mood`, `persona_target`, `persona_vocabulary`, `quote_essence` を含め、`references/review-rubric.md` の判定観点を JSON だけで検証できるようにする。`/suno` の merge loader は `name` / `lyrics` だけを使用し、この補助フィールドを無視してよい
+- `style` は `null` のままにする。Style は `/music --prompt` が埋める
+- `review_context` は reviewer 専用の補助情報。`collection_theme`, `scene`, `mood`, `persona_target`, `persona_vocabulary`, `quote_essence` を含め、`references/review-rubric.md` の判定観点を JSON だけで検証できるようにする。`/music --prompt` の merge loader は `name` / `lyrics` だけを使用し、この補助フィールドを無視してよい
 
 ### `20-documentation/suno-lyrics.md`
 
@@ -193,4 +193,4 @@ JSON root は配列。各 entry は `/suno` が `name` でマージできる形�
 
 ## Next Step
 
-完了後は `/suno` を実行する。`/suno` は `suno-lyrics.json` を優先して読み、Style と Lyrics を `suno-prompts.json` にマージする。
+完了後は `/music --prompt` を実行する。`/music --prompt` は `suno-lyrics.json` を優先して読み、Style と Lyrics を `suno-prompts.json` にマージする。

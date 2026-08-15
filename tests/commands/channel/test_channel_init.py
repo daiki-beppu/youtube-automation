@@ -55,7 +55,7 @@ PACKAGE_FILES: tuple[str, ...] = (
     "auth/client_secrets.template.json",
     "config/localizations.json",
     "config/schedule_config.json",
-    "config/skills/suno.yaml",
+    "config/skills/music.yaml",
     "config/skills/thumbnail.yaml",
 )
 
@@ -610,9 +610,9 @@ def test_localizations_and_skill_configs_reflect_channel_init_args(tmp_path):
     body = build_update_body(meta["youtube_channel"], localizations, channel_id="UCabc")
     assert body["localizations"]["en_US"]["title"] == "Focus Atlas"
 
-    suno = yaml.safe_load((tmp_path / "config" / "skills" / "suno.yaml").read_text(encoding="utf-8"))
-    assert suno["workspace_name"] == "Focus Atlas"
-    assert suno["genre_line"] == "warm lo-fi ambient music for late-night study"
+    music = yaml.safe_load((tmp_path / "config" / "skills" / "music.yaml").read_text(encoding="utf-8"))
+    assert music["prompt"]["workspace_name"] == "Focus Atlas"
+    assert music["prompt"]["genre_line"] == "warm lo-fi ambient music for late-night study"
 
     # Issue #1471: 生成された localizations.json がアップローダー許可プレースホルダ検証を通る
     errors = validate_localizations_title_templates(localizations)

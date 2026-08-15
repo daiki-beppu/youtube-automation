@@ -22,8 +22,8 @@ analysis_window_sec: 900
 # 出力 JSON はトップレベルにジャンル横断のドメインキーを置き、CLI 側で
 # video_id / slug / url / title / analyzed_at / model を後付けする。
 #
-# `suno_preset` は SunoAI プロンプト生成 (`/suno`) の初期推奨値として
-# `yt-generate-suno` が config/skills/suno.yaml 空欄時の fallback で参照する。
+# `suno_preset` は SunoAI プロンプト生成 (`/music --prompt`) の初期推奨値として
+# `yt-generate-suno` が config/skills/music.yaml::prompt 空欄時の fallback で参照する。
 prompt: |
   Analyze the opening clip window of this YouTube video as a music channel content audit.
   Only the beginning of the video is provided as a fixed-length clip window — scope ALL

@@ -25,7 +25,7 @@ _SKILLS_DIR: Final[Path] = _REPO_ROOT / ".claude" / "skills"
 _LIFECYCLE_SKILL_NAMES: Final[tuple[str, ...]] = (
     "wf-new",
     "wf-next",
-    "suno",
+    "music",
     "suno-lyric",
     "suno-helper",
     "masterup",

@@ -22,6 +22,7 @@ EXPECTED_PYTHON_SKILL_CONFIG_KEYS = frozenset(
         "loop-video",
         "masterup",
         "metadata-audit",
+        "music.prompt",
         "suno",
         "suno-helper",
         "thumbnail",
@@ -135,6 +136,20 @@ def test_load_namespaced_skill_config_rejects_missing_section(tmp_path: Path, mo
 
     with pytest.raises(ConfigError, match=r"music\.prompt.*mapping の節"):
         skill_config.load_skill_config("music.prompt", use_cache=False, channel_dir=channel_dir)
+
+
+def test_load_namespaced_channel_override_returns_requested_section(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    overrides = tmp_path / "config" / "skills"
+    overrides.mkdir(parents=True)
+    (overrides / "music.yaml").write_text(
+        "prompt:\n  model: custom\nmaster:\n  target_lufs: -14\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CHANNEL_DIR", str(tmp_path))
+
+    assert skill_config.load_channel_override("music.prompt") == {"model": "custom"}
 
 
 def test_moved_channel_research_modes_keep_legacy_loader_and_override_keys(tmp_path: Path) -> None:

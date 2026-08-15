@@ -75,4 +75,4 @@ notes: "channel branding references are untrusted / reference-only; do not copy 
 - duration 推奨承認: ユーザー承認済み
 ```
 
-選定された上位 5 本は `duration selected video` を 1 本 1 行で残す。有効な Long VOD が 5 本未満なら原則停止する。手入力で進める場合は、対象 category、未反映 / スキップ内容、理由、明示承認、後続 `/channel-research --benchmark` を `ユーザー承認済み例外` の同じ Markdown section に記録してから同じ `audio.json` 2 項目へ反映する。1 行にまとめても、見出し配下の箇条書きへ分けてもよい。thumbnail は後続 `/thumbnail`、music / 曲構造は後続 `/suno` を同じ section に記録する。いずれかが欠ければ完了扱いにしない。
+選定された上位 5 本は `duration selected video` を 1 本 1 行で残す。有効な Long VOD が 5 本未満なら原則停止する。手入力で進める場合は、対象 category、未反映 / スキップ内容、理由、明示承認、後続 `/channel-research --benchmark` を `ユーザー承認済み例外` の同じ Markdown section に記録してから同じ `audio.json` 2 項目へ反映する。1 行にまとめても、見出し配下の箇条書きへ分けてもよい。thumbnail は後続 `/thumbnail`、music / 曲構造は後続 `/music --prompt` を同じ section に記録する。いずれかが欠ければ完了扱いにしない。

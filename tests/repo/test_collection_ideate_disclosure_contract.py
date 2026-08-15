@@ -279,7 +279,7 @@ def test_skill_keeps_selection_commands_hard_gates_and_handoff_order() -> None:
     stock_archive = skill.index("uv run yt-stock-archive", adopted_copy)
     parallel_cleanup = skill.index("rm -rf collections/planning/_plan-previews", stock_archive)
     downstream_thumbnail = skill.index("`/thumbnail <theme>`", parallel_cleanup)
-    downstream_suno = skill.index("`/suno <theme>`", downstream_thumbnail)
+    downstream_suno = skill.index("`/music --prompt <theme>`", downstream_thumbnail)
 
     assert report_save < planning_generated < final_title < assignment
     assert assignment < adopted_copy < stock_archive < parallel_cleanup

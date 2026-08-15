@@ -18,7 +18,7 @@ Step 4 の config 生成で解消する次の fail / warn だけは許容する�
 - `playlist_config`: `config/channel/playlists.json` 未生成
 - `playlist_create_dry_run`: config 未生成による設定ロード失敗
 - `ttp_wf_new_readiness`: `config/channel/analytics.json` 未生成
-- `initial_setup_readiness`: `config/skills/thumbnail.yaml` / `config/skills/suno.yaml` 未転記由来
+- `initial_setup_readiness`: `config/skills/thumbnail.yaml` / `config/skills/music.yaml::prompt` 未転記由来
 
 その他の fail / warn / unknown は `next_action` を完了するまで先へ進まない。seed fetch の認証を既存チャンネルの token コピーで代替しない。
 
