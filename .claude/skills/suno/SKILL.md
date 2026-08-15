@@ -176,7 +176,7 @@ jq -c 'select(.status == "open" and .lever == "bgm")' data/insights.jsonl
 - 反映する場合は、どの entry `id` を Style 文または Exclude Styles のどちらへ反映したかを生成結果と一緒に報告する。既存 `genre_line` と矛盾する場合は自動で上書きせず、矛盾する語と entry `id` を提示してユーザー判断を待つ
 - `data/insights.jsonl` が存在しない、または該当 entry が0件の場合は「bgm insights なし」と表示し、既存フローを続行する
 - `lever=thumbnail` など bgm 以外の entry と、`adopted` / `dismissed` entry は提示・反映しない
-- 本スキルは insights を読み取るだけで、`status` を含む既存行の変更・追記は行わない。status 反映は `/collection-ideate`、追記は `/analytics --analyze` と `/flop-analysis` の責務
+- 本スキルは insights を読み取るだけで、`status` を含む既存行の変更・追記は行わない。status 反映は `/wf-new`、追記は `/analytics --analyze` と `/flop-analysis` の責務
 
 ### ベンチマーク BGM 構造の参照
 

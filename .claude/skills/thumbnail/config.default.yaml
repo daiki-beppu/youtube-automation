@@ -43,7 +43,7 @@ image_generation:
   # 実コストは provider の課金画面で確認する。codex は GCP 課金なし、ChatGPT
   # サブスクの fair-use 対象。
 
-  # ボツ画像ストック化 (#364): /thumbnail と /collection-ideate で不採用となった
+  # ボツ画像ストック化 (#364): /thumbnail と /wf-new の企画工程で不採用となった
   # 画像を <channel_dir>/assets/stock/<theme>/ に隣接 .meta.json 付きで退避する。
   # 別コレクションで参照画像として再利用できる。
   stock:

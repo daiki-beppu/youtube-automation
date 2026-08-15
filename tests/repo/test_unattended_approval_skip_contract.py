@@ -17,6 +17,10 @@ def _text(skill: str) -> str:
 
 
 def _config(skill: str) -> dict:
+    if skill == "collection-ideate":
+        return yaml.safe_load(
+            (SKILLS / "wf-new" / "references" / "collection-ideate.config.default.yaml").read_text(encoding="utf-8")
+        )
     return yaml.safe_load((SKILLS / skill / "config.default.yaml").read_text(encoding="utf-8"))
 
 
@@ -71,8 +75,8 @@ def test_loop_video_skips_are_independent_and_keep_safety_gates() -> None:
     assert "自動再生成" in text
 
 
-def test_collection_ideate_skip_records_generation_conditions_and_calls() -> None:
-    text = _text("collection-ideate")
+def test_wf_new_ideation_skip_records_generation_conditions_and_calls() -> None:
+    text = (SKILLS / "wf-new" / "references" / "ideate.md").read_text(encoding="utf-8")
 
     assert _config("collection-ideate")["preview"]["skip_cost_confirm"] is False
     assert "preview.skip_cost_confirm" in text

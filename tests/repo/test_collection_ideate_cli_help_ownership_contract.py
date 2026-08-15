@@ -1,4 +1,4 @@
-"""collection-ideate skill と yt-generate-image help の ownership 境界。"""
+"""wf-new 企画工程と yt-generate-image help の ownership 境界。"""
 
 from __future__ import annotations
 
@@ -6,9 +6,9 @@ import re
 
 from tests.helpers.paths import REPO_ROOT
 
-SKILL_DIR = REPO_ROOT / ".claude" / "skills" / "collection-ideate"
-SKILL_TEXT = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
-GENERATION_TEXT = (SKILL_DIR / "references" / "preview-generation.md").read_text(encoding="utf-8")
+SKILL_DIR = REPO_ROOT / ".claude" / "skills" / "wf-new" / "references"
+SKILL_TEXT = (SKILL_DIR / "ideate.md").read_text(encoding="utf-8")
+GENERATION_TEXT = (SKILL_DIR / "preview-generation.md").read_text(encoding="utf-8")
 
 
 def _generate_image_invocations(markdown: str) -> list[str]:
@@ -37,7 +37,7 @@ def test_skill_keeps_mode_dispatch_and_generation_order() -> None:
     mode_dispatch = SKILL_TEXT.index("`preview.thumbnail_mode`", phase_4)
     cost_approval = SKILL_TEXT.index("confirm_cost", mode_dispatch)
     session_creation = SKILL_TEXT.index("mkdir -p", cost_approval)
-    generation_dispatch = SKILL_TEXT.index("](references/preview-generation.md)", session_creation)
+    generation_dispatch = SKILL_TEXT.index("](preview-generation.md)", session_creation)
     parallel_command = SKILL_TEXT.index("uv run yt-generate-image", generation_dispatch)
     validation = SKILL_TEXT.index("yt-thumbnail-check", parallel_command)
     sequential = SKILL_TEXT.index("### Phase 4 補足: sequential", validation)

@@ -2,11 +2,11 @@
 
 ユーザー選択または設定による自動選択で企画が確定したら、以下を上から順に実行する。途中で失敗したら、失敗したステップの次アクションを表示して停止する。
 
-Phase 1 で open insights を渡していた場合は、企画選択の直後にメインが `/collection-ideate` の「open insights の消費と status 反映」の規則に従って `data/insights.jsonl` の該当エントリの `status` を更新する（採用企画の根拠に引用 → `adopted`、検討の上見送り → `dismissed`、未検討は `open` のまま）。判定規則を `/wf-new` 側で再定義しない。
+Phase 1 で open insights を渡していた場合は、企画選択の直後にメインが `/wf-new` の「open insights の消費と status 反映」の規則に従って `data/insights.jsonl` の該当エントリの `status` を更新する（採用企画の根拠に引用 → `adopted`、検討の上見送り → `dismissed`、未検討は `open` のまま）。判定規則を `/wf-new` 側で再定義しない。
 
 #### 2a. コレクション初期化（ディレクトリ + workflow-state.json）
 
-`/collection-ideate` の選択結果を入力にして、コレクションディレクトリと workflow-state.json を自動生成する:
+`/wf-new` の選択結果を入力にして、コレクションディレクトリと workflow-state.json を自動生成する:
 
 ```bash
 uv run yt-init-collection "<Collection Name>" "<theme-slug>" --track-count <N> --selected-plan <A-E> --music-engine <suno|lyria>
@@ -134,13 +134,13 @@ initial dispatch を行った場合は両 Agent の完了を待つ。片方の�
    question: "サムネイルを承認しますか？"
    options:
      - 承認する → `10-assets/thumbnail.jpg` に確定コピー → textless 候補生成へ
-     - 再生成 → `/collection-ideate` のプレビュー段階で調整済みのため、diff_prompt を修正して `generate_image.py` で再生成
+     - 再生成 → `/wf-new` のプレビュー段階で調整済みのため、diff_prompt を修正して `generate_image.py` で再生成
      - 中断 → ここで一旦停止（後で `/wf-next` で再開可能）
    ```
 
 3. `textless.enabled` が未設定または `true` なら、承認済み `thumbnail.jpg` を入力に、生成対象 `main` を指定して別の subagent へ委譲する。メインが報告された textless 候補の存在と生成対象を検証し、候補をプレビューしてユーザー承認後に `10-assets/main.png/jpg` へ確定コピーする。`false` なら textless 候補生成・プレビュー・承認を省略し、`share_thumbnail_as_main.py <collection-path>` を実行して同一内容の通常ファイル `main.jpg` を確定する。
    - `thumbnail.jpg` と `main.png/jpg` を同一画像で代用しない。`main.png` を `thumbnail.jpg` にコピーする旧運用は禁止
-   - QA が NG、再生成、または中断の場合は `/collection-ideate` または `/thumbnail` の該当生成ステップへ戻し、state を更新せず停止する
+   - QA が NG、再生成、または中断の場合は `/wf-new` または `/thumbnail` の該当生成ステップへ戻し、state を更新せず停止する
 
 4. `thumbnail.jpg` と `main.png/jpg` の確定検証結果を Phase 2c 成果物・再開契約へ thumbnail branch の結果として渡し、成功時だけメインが `assets.thumbnail = true` と `updated_at` を更新する。このゲートで承認済みの `thumbnail.jpg` を再度 AskUserQuestion にかけない。
 

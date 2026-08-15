@@ -1,6 +1,6 @@
 # Analysis JSON validator
 
-`/analytics --analyze` が生成し、`/collection-ideate` が読む `reports/analysis_YYYYMMDD.json` の機械検証はこのファイルを単一ソースとする。
+`/analytics --analyze` が生成し、`/wf-new` が読む `reports/analysis_YYYYMMDD.json` の機械検証はこのファイルを単一ソースとする。
 
 ## 構造化 JSON 契約
 

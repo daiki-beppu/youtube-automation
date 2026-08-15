@@ -136,7 +136,7 @@ def record_ttp_reference_assignments(
         except ValueError:
             documented_reference = resolved_reference
         rows.append(
-            f"| {index} | collection-ideate preview | `{documented_reference}` | "
+            f"| {index} | wf-new planning preview | `{documented_reference}` | "
             f"{infer_benchmark_channel(resolved_reference, benchmark_root)} |"
         )
 

@@ -1686,7 +1686,7 @@ def check_benchmark_data(channel_dir: Path) -> CheckResult:
             category=DATA_CATEGORY,
             message=(
                 "data/benchmark_*.json 未生成。analytics mode では "
-                "/collection-ideate が /benchmark の鮮度確認・必要時更新を扱う"
+                "/wf-new の企画工程が /benchmark の鮮度確認・必要時更新を扱う"
             ),
         )
 
@@ -1711,7 +1711,7 @@ def check_wf_new_readiness(channel_dir: Path) -> CheckResult:
             category=DATA_CATEGORY,
             message=(
                 "minimal mode / ttp_mode: true では転写元ベンチマークが必須のため、"
-                "/collection-ideate が停止し /wf-new へ到達不可"
+                "/wf-new の企画工程が停止し、制作開始へ到達不可"
             ),
             next_action={
                 "kind": "human",

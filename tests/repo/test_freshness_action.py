@@ -7,7 +7,7 @@ from pathlib import Path
 
 from tests.helpers.paths import REPO_ROOT
 
-_RUNNER = REPO_ROOT / ".claude/skills/collection-ideate/references/freshness_action.py"
+_RUNNER = REPO_ROOT / ".claude/skills/wf-new/references/freshness_action.py"
 
 
 def _run(tmp_path: Path, *args: str) -> tuple[subprocess.CompletedProcess[str], dict[str, object]]:

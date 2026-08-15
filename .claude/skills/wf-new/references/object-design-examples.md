@@ -121,5 +121,5 @@ objects:
 未知キーはキー名のアンダースコアをスペース化して passthrough する。
 
 生成後セルフチェック（`yt-thumbnail-check`）も同じ `objects.fixed` を読んで
-Gemini Vision に YES/NO 検査させる。詳細は `collection-ideate` SKILL.md の
+Gemini Vision に YES/NO 検査させる。詳細は `ideate.md` の
 「4-4-check: 生成後セルフチェック」節を参照。

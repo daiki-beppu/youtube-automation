@@ -24,7 +24,7 @@ pytestmark = pytest.mark.repo_contract
 SKILLS_DIR = REPO_ROOT / ".claude" / "skills"
 TARGET_SKILLS = (
     "alignment-check",
-    "collection-ideate",
+    "wf-new",
     "flop-analysis",
     "loop-video",
     "lyria",
@@ -36,6 +36,24 @@ TARGET_SKILLS = (
     "thumbnail",
     "thumbnail-compare",
     "value-loop-audit",
+)
+WF_NEW_IDEATION_MEMBERS = frozenset(
+    {
+        "references/benchmark_collector.py",
+        "references/collection-ideate.config.default.yaml",
+        "references/collection-lifecycle.md",
+        "references/freshness-rules.md",
+        "references/freshness_action.py",
+        "references/generate_image.py",
+        "references/ideate.md",
+        "references/object-design-examples.md",
+        "references/planning-rules.md",
+        "references/preview-contract.md",
+        "references/preview-generation.md",
+        "references/record-ttp-reference-assignments.py",
+        "references/select-ttp-references.py",
+        "references/selection-handoff.md",
+    }
 )
 CONTEXTS = (
     "opening",
@@ -124,35 +142,35 @@ _RAW_EXPECTED_ACTIVE_ROUTES = (
         "`/channel-new`（方向性検討モード）でチャンネル全体の方向性を再検討 |",
     ),
     _route(
-        "collection-ideate/SKILL.md",
+        "wf-new/references/ideate.md",
         "### 欲求語彙のソース",
         "`ttp_mode: true` の欲求整合チェックでは、欲求語彙の選択、欠落時の継続条件、"
         "`推定` と根拠の記録に `.claude/skills/channel-new/references/desire-vocabulary.md` をそのまま適用する。",
     ),
-    _route("collection-ideate/SKILL.md", "## 前提", "- **新規チャンネル** → `/setup --channel` を案内"),
+    _route("wf-new/references/ideate.md", "## 前提", "- **新規チャンネル** → `/setup --channel` を案内"),
     _route(
-        "collection-ideate/SKILL.md",
+        "wf-new/references/ideate.md",
         "## 前提",
         "- **既存チャンネル**（YouTube で既に運営中）→ `/channel-new`（既存チャンネル取り込みモード）を案内",
     ),
     _route(
-        "collection-ideate/SKILL.md",
+        "wf-new/references/ideate.md",
         "#### Phase 1-1: チャンネル現状 + 戦略ドキュメント",
         "- `docs/channel/` 配下の方向性決定記録 — `/channel-new`（方向性検討モード）Step D5 が保存する決定事項",
     ),
     _route(
-        "collection-ideate/SKILL.md",
+        "wf-new/references/ideate.md",
         "#### Phase 1-1: チャンネル現状 + 戦略ドキュメント",
         "- `docs/channel-research.md` — `/channel-new` 分析モードの分析レポート",
     ),
     _route(
-        "collection-ideate/SKILL.md",
+        "wf-new/references/ideate.md",
         "#### Phase 1-1: チャンネル現状 + 戦略ドキュメント",
         "どちらも任意扱い。存在しない場合は warning を表示して進行する"
         "（方向性決定記録は `/channel-new` の方向性検討モードで生成できる旨を案内）。",
     ),
     _route(
-        "collection-ideate/references/freshness-rules.md",
+        "wf-new/references/freshness-rules.md",
         "## 鮮度判定表",
         "| 2 | `/audience-persona-design` | `docs/channel/personas/persona-definition.md` | "
         "存在すれば OK（mtime 比較なし。更新タイミングは戦略判断のため人間が決める） | "
@@ -618,8 +636,16 @@ def _tracked_target_members() -> dict[str, bytes]:
             continue
         path = REPO_ROOT / raw_path.decode("utf-8")
         relative = path.relative_to(SKILLS_DIR).as_posix()
-        members[relative] = path.read_bytes()
+        if _is_target_member(relative):
+            members[relative] = path.read_bytes()
     return members
+
+
+def _is_target_member(relative: str) -> bool:
+    skill, separator, child = relative.partition("/")
+    if skill not in TARGET_SKILLS:
+        return False
+    return skill != "wf-new" or (separator == "/" and child in WF_NEW_IDEATION_MEMBERS)
 
 
 def _active_route_records(overrides: dict[str, str | bytes] | None = None) -> tuple[tuple[str, str, str], ...]:
@@ -721,7 +747,11 @@ def _route_records_for_members(members: dict[str, bytes]) -> tuple[tuple[str, st
     skill_order = {skill: index for index, skill in enumerate(TARGET_SKILLS)}
     ordered_members = sorted(
         members.items(),
-        key=lambda item: (skill_order.get(item[0].split("/", 1)[0], len(skill_order)), item[0]),
+        key=lambda item: (
+            skill_order.get(item[0].split("/", 1)[0], len(skill_order)),
+            item[0] != "wf-new/references/ideate.md",
+            item[0],
+        ),
     )
     for relative, payload in ordered_members:
         text = _contract_text(payload)
@@ -782,7 +812,7 @@ def _archive_target_members(wheel: Path, sdist: Path) -> tuple[dict[str, bytes],
             if not name.startswith(wheel_prefix) or name.endswith("/"):
                 continue
             relative = name.removeprefix(wheel_prefix)
-            if relative.split("/", 1)[0] in TARGET_SKILLS:
+            if _is_target_member(relative):
                 wheel_members[relative] = archive.read(name)
 
     sdist_members: dict[str, bytes] = {}
@@ -804,7 +834,7 @@ def _archive_target_members(wheel: Path, sdist: Path) -> tuple[dict[str, bytes],
             if not (member.isfile() or member.islnk() or member.issym()) or marker not in member.name:
                 continue
             relative = member.name.split(marker, 1)[1]
-            if relative.split("/", 1)[0] not in TARGET_SKILLS:
+            if not _is_target_member(relative):
                 continue
             sdist_members[relative] = member_bytes(member)
     return wheel_members, sdist_members
@@ -815,7 +845,7 @@ def _tree_target_members(root: Path) -> dict[str, bytes]:
         path.relative_to(root).as_posix(): path.read_bytes()
         for skill in TARGET_SKILLS
         for path in sorted((root / skill).rglob("*"))
-        if path.is_file()
+        if path.is_file() and _is_target_member(path.relative_to(root).as_posix())
     }
 
 
@@ -839,7 +869,8 @@ def _implementation_changed_paths(issue: int) -> frozenset[str]:
 
 
 def test_initial_occurrences_have_a_complete_context_ledger() -> None:
-    assert {entry[0] for entry in INITIAL_OCCURRENCE_LEDGER} == set(TARGET_SKILLS)
+    historical_skills = {entry[0] for entry in INITIAL_OCCURRENCE_LEDGER}
+    assert {"wf-new" if skill == "collection-ideate" else skill for skill in historical_skills} == set(TARGET_SKILLS)
     assert {entry[3] for entry in INITIAL_OCCURRENCE_LEDGER} <= set(CONTEXTS)
     assert len({(skill, path, occurrence) for skill, path, occurrence, _ in INITIAL_OCCURRENCE_LEDGER}) == len(
         INITIAL_OCCURRENCE_LEDGER

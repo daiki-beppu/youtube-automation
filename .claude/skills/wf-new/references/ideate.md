@@ -1,21 +1,4 @@
----
-name: collection-ideate
-purpose: 進める
-description: "Use when /wf-new から企画・テーマ選定を委譲されて実行する内部 skill。利用者は直接呼び出さない。新規制作の開始は /wf-new"
----
-
-## 前後工程
-
-- `前工程`: `/analytics`, `/benchmark`, `/audience-persona-design`
-- `後工程`: `/wf-new`, `/community-draft`
-- `委譲先`: `/analytics`
-
-## 成果物
-
-- `書き込む`: `collections/<id>/20-documentation/plan_proposals.md`, `collections/<id>/20-documentation/thumbnail-prompts.md`, `collections/<id>/workflow-state.json`, `data/insights.jsonl`
-- `読み込む`: `reports/analysis_*.md`, `reports/analysis_*.json`, `data/benchmark_*.json`, `docs/channel/creative-constraints.md`, `docs/channel/personas/persona-definition.md`, `docs/plans/viewing-scene-matrix.md`
-
-## Overview
+## 企画工程
 
 最新の分析データ + 競合ベンチマークを基に、第一ペルソナ向けの企画提案を自動生成する。
 
@@ -38,7 +21,7 @@ description: "Use when /wf-new から企画・テーマ選定を委譲されて�
 
 以下を deep-merge した値を設定として使う。
 
-1. `.claude/skills/collection-ideate/config.default.yaml`
+1. `.claude/skills/wf-new/references/collection-ideate.config.default.yaml`
 2. `config/skills/collection-ideate.yaml`（存在する場合）
 
 合成規則は `youtube_automation.configuration.skills.load_skill_config("collection-ideate")` と同じで、チャンネル上書きが優先される。存在しない override は未設定として扱い、勝手に作成しない。このスキルが別 skill の skill-config を直接参照する段階では、その skill の `config.default.yaml` と `config/skills/<skill>.yaml` も同じ手順で読む。
@@ -82,7 +65,7 @@ Phase 3 では単なる候補 `N` 件ではなく、制作へ渡せる確定 pla
 全 `N` 件を同じ承認画面でユーザーへ提示し、一括承認または修正対象を受け取る。部分承認を complete とせず、修正後も全件を再提示する。承認済み plan だけを次の schema version 1 manifest として `reports/wf-new-batches/<batch-id>/plan-manifest.json` へ保存する。
 
 - root 必須 field: `schema_version`（整数 `1`）、`batch_id`、`requested_count`、`approved_at`、`provenance`、`existing_collection_slugs`、`plans`、`differentiation_matrix`
-- `provenance` 必須 field: `producer`（`collection-ideate`）、`mode`（`batch-plan`）、確定済み `input_mode`、`ttp_mode`
+- `provenance` 必須 field: `producer`（`wf-new`）、`mode`（`batch-plan`）、確定済み `input_mode`、`ttp_mode`
 - plan 必須 field: `plan_id`、`collection_name`、`theme_slug`、`track_count`、`music_engine`、`final_title`、`target_persona`、`viewing_scene`、`proposal_markdown`
 - `existing_collection_slugs` は比較時点の既存 collection slug を重複なしで全件保持する
 - `differentiation_matrix` の batch 内比較 row は `kind: batch_pair`、`left_plan_id`、`right_plan_id`、非空の `differences` を持つ。各 unordered pair は plan 順に小さい側を left として一度だけ含める
@@ -121,7 +104,7 @@ Phase 1 の分析前に、現在のチャンネル規定を 1 回だけ読み、
 - `docs/plans/viewing-scene-matrix.md`
 - `docs/channel/creative-constraints.md`
 
-Phase 2〜3 では [planning rules](references/planning-rules.md) の「現在のチャンネル規定（固定制約）」を適用する。Analytics、benchmark、open insights、minimal mode のユーザー直接入力は企画材料であり、固定制約を上書きしない。
+Phase 2〜3 では [planning rules](planning-rules.md) の「現在のチャンネル規定（固定制約）」を適用する。Analytics、benchmark、open insights、minimal mode のユーザー直接入力は企画材料であり、固定制約を上書きしない。
 
 ## 想定 API call 数
 
@@ -155,7 +138,7 @@ uv run yt-channel-status
 #### Phase 1-2: 自チャンネル Analytics 分析
 
 analytics mode では `references/freshness-rules.md::latest_by_filename_date` と同じ規則でファイル名日付が最新の `reports/analysis_*.md` を選び、ファイル名の日付部分が同じ `reports/analysis_*.json` を Read（Codex では同等のファイル閲覧）で読み込み、自チャンネルのパフォーマンス示唆を取り込む。
-以下のセクションが `/collection-ideate` 企画立案の直接入力:
+以下のセクションが本企画工程の直接入力:
 
 - **§ 5 戦略的改善提案** — CTR 改善・コンテンツ最適化の方向性
 - **§ 6 推奨される次期コレクション候補** — データから導出されたテーマ候補
@@ -217,7 +200,7 @@ minimal mode では `ttp_mode: false` の場合だけ、ユーザー直接入力
 
 ## 企画規則の段階開示
 
-Phase 2〜3 の候補設計へ進むときは、[planning rules](references/planning-rules.md) を読み、確定済みの入力モードと `ttp_mode` 分岐へ適用する。企画規則の正本は同 reference とし、SKILL 本体では Phase 順、停止条件、承認点、実行コマンド、成果物契約だけを扱う。
+Phase 2〜3 の候補設計へ進むときは、[planning rules](planning-rules.md) を読み、確定済みの入力モードと `ttp_mode` 分岐へ適用する。企画規則の正本は同 reference とし、SKILL 本体では Phase 順、停止条件、承認点、実行コマンド、成果物契約だけを扱う。
 
 ### Phase 2: 戦略的企画立案
 **youtube-video-planner** サブエージェント（Task ツール。Codex では同等のエージェント機能に読み替え）で入力モードごとの材料からテーマ戦略を構築。
@@ -236,7 +219,7 @@ benchmark fallback mode または `ttp_mode: false` の minimal mode でペル�
 
 ### Phase 4: プレビューサムネイル生成
 
-設定、候補 schema、コスト計算、セルフチェックは [preview contract](references/preview-contract.md) を先に読み、その解決結果を Phase 4 全体で共有する。
+設定、候補 schema、コスト計算、セルフチェックは [preview contract](preview-contract.md) を先に読み、その解決結果を Phase 4 全体で共有する。
 
 `preview.thumbnail_mode` が `parallel` ならテキスト候補への合意後に全候補を一括生成して比較し、`sequential` ならテキスト候補から選んだ1案だけを生成する。
 
@@ -297,7 +280,7 @@ mkdir -p collections/planning/_plan-previews/${PREVIEW_DIR}
 
 `_` プレフィックスで通常コレクションと区別。セッション ID 付きディレクトリで並列実行時の競合を回避する。
 
-4-4以降へ進む前に [preview generation](references/preview-generation.md) を読み、確定済みmodeへprovider / prompt / 生成物 / retry / failure handlingの詳細を適用する。SKILL本体のcommandと順序を変更せず実行する。
+4-4以降へ進む前に [preview generation](preview-generation.md) を読み、確定済みmodeへprovider / prompt / 生成物 / retry / failure handlingの詳細を適用する。SKILL本体のcommandと順序を変更せず実行する。
 
 **4-4: プロンプト構築 + 一括生成（parallel デフォルト）**
 
@@ -335,7 +318,7 @@ while IFS= read -r p; do
 done <<< "$REFS"
 
 VALIDATED_REFS=$(printf '%s\n' "${REF_PATHS[@]}" | uv run python3 \
-  .claude/skills/collection-ideate/references/select-ttp-references.py "$CANDIDATE_COUNT")
+  .claude/skills/wf-new/references/select-ttp-references.py "$CANDIDATE_COUNT")
 mapfile -t REF_PATHS <<< "$VALIDATED_REFS"
 
 # 順次実行。candidate_count の数だけ plan-{a,b,c,...} を生成する。
@@ -452,7 +435,7 @@ sequential モードでは Next Step で stock 退避は走らない（不採用
 
 コレクション作成の詳細ライフサイクル（ディレクトリ構造、段階別手順、チェックリスト）は `references/collection-lifecycle.md` を参照。入力モード・鮮度判定の正本は `references/freshness-rules.md` とする。
 
-ユーザーが企画を選択したら、保存・参照割当・stock・cleanup・後工程の判断詳細を [selection / handoff](references/selection-handoff.md) から読み、以下の分岐とコマンドへ適用する。
+ユーザーが企画を選択したら、保存・参照割当・stock・cleanup・後工程の判断詳細を [selection / handoff](selection-handoff.md) から読み、以下の分岐とコマンドへ適用する。
 
 ## 企画レポート保存
 
@@ -471,7 +454,7 @@ sequential モードでは Next Step で stock 退避は走らない（不採用
 ```bash
 REF_INDEX="<選択された企画の0-based index>"
 COLLECTION_PATH="<collection-path>"
-uv run python3 .claude/skills/collection-ideate/references/record-ttp-reference-assignments.py \
+uv run python3 .claude/skills/wf-new/references/record-ttp-reference-assignments.py \
   "$COLLECTION_PATH" "${REF_PATHS[$REF_INDEX]}"
 ```
 

@@ -212,6 +212,47 @@ EXPECTED_ACTIVE_ROUTES = (
         "   - `load_config()` が失敗する場合は `/channel-new`（既存チャンネル取り込みモード）を案内して停止する。",
     ),
     _route(
+        "wf-new/references/freshness-rules.md",
+        "## 鮮度判定表",
+        "| 2 | `/audience-persona-design` | `docs/channel/personas/persona-definition.md` | "
+        "存在すれば OK（mtime 比較なし。更新タイミングは戦略判断のため人間が決める） | "
+        "analytics mode かつ `ttp_mode: false` ではユーザーに `/audience-persona-design` 実行を案内して中断。"
+        "analytics mode かつ `true` では "
+        "`.claude/skills/channel-new/references/desire-vocabulary.md` の fallback に従い、"
+        "利用可能な競合コメント / タイトルから初回仮説の視聴者像を作ってソースと根拠を記録する。"
+        "benchmark fallback mode / `ttp_mode: false` の minimal mode では "
+        "config と入力データから初回仮説の視聴者像を作る。"
+        "`ttp_mode: true` の minimal mode はこの判定前に停止する |",
+    ),
+    _route(
+        "wf-new/references/ideate.md",
+        "### 欲求語彙のソース",
+        "`ttp_mode: true` の欲求整合チェックでは、欲求語彙の選択、欠落時の継続条件、"
+        "`推定` と根拠の記録に `.claude/skills/channel-new/references/desire-vocabulary.md` をそのまま適用する。",
+    ),
+    _route("wf-new/references/ideate.md", "## 前提", "- **新規チャンネル** → `/setup --channel` を案内"),
+    _route(
+        "wf-new/references/ideate.md",
+        "## 前提",
+        "- **既存チャンネル**（YouTube で既に運営中）→ `/channel-new`（既存チャンネル取り込みモード）を案内",
+    ),
+    _route(
+        "wf-new/references/ideate.md",
+        "#### Phase 1-1: チャンネル現状 + 戦略ドキュメント",
+        "- `docs/channel/` 配下の方向性決定記録 — `/channel-new`（方向性検討モード）Step D5 が保存する決定事項",
+    ),
+    _route(
+        "wf-new/references/ideate.md",
+        "#### Phase 1-1: チャンネル現状 + 戦略ドキュメント",
+        "- `docs/channel-research.md` — `/channel-new` 分析モードの分析レポート",
+    ),
+    _route(
+        "wf-new/references/ideate.md",
+        "#### Phase 1-1: チャンネル現状 + 戦略ドキュメント",
+        "どちらも任意扱い。存在しない場合は warning を表示して進行する"
+        "（方向性決定記録は `/channel-new` の方向性検討モードで生成できる旨を案内）。",
+    ),
+    _route(
         "wf-new/references/schedule.md",
         "## 前後工程",
         "- `前工程`: `/setup --channel`, `/setup`",
@@ -227,6 +268,8 @@ EXPECTED_ACTIVE_ROUTES = (
 )
 
 MUTABLE_FILES = frozenset(path for path, _, _ in EXPECTED_ACTIVE_ROUTES if path != "automation-update/SKILL.md") | {
+    "analytics/references/analysis-json-validator.md",
+    "analytics/references/insights-entry.schema.json",
     "wf-new/references/phase-2c-artifact-contract.md",
     "wf-new/references/phase2.md",
     "wf-new/references/auto.md",
@@ -238,7 +281,21 @@ MUTABLE_FILES = frozenset(path for path, _, _ in EXPECTED_ACTIVE_ROUTES if path 
     "wf-new/references/schedule_backend.py",
     "wf-new/references/schedule_config.py",
     "wf-new/references/scheduler_job.sh",
+    "wf-new/references/schema.md",
+    "wf-new/references/validate-batch-manifest.py",
     "wf-new/references/wf-auto-state.py",
+    "wf-new/references/benchmark_collector.py",
+    "wf-new/references/collection-ideate.config.default.yaml",
+    "wf-new/references/collection-lifecycle.md",
+    "wf-new/references/freshness_action.py",
+    "wf-new/references/generate_image.py",
+    "wf-new/references/object-design-examples.md",
+    "wf-new/references/planning-rules.md",
+    "wf-new/references/preview-contract.md",
+    "wf-new/references/preview-generation.md",
+    "wf-new/references/record-ttp-reference-assignments.py",
+    "wf-new/references/select-ttp-references.py",
+    "wf-new/references/selection-handoff.md",
 }
 EXPECTED_ISSUE_3986_CHANGED_PATHS = frozenset(
     {
@@ -261,7 +318,7 @@ EXPECTED_ISSUE_3986_CHANGED_PATHS = frozenset(
         "tests/repo/test_workflow_upload_setup_redirect_contract.py",
     }
 )
-IMMUTABLE_TARGET_FILES_SHA256 = "4e89fed82d50f7812e091c716d502ea70b6eecb8316fd84562b388c0cf97e05f"
+IMMUTABLE_TARGET_FILES_SHA256 = "029b64b1ba041ac7733d9b947132e5d97611381d9165832a34985300819086fd"
 AUTOMATION_SCHEDULE_REGENERATE_SHA256 = "0e53b0be09de5049104b16034dd8122ca434adbfafdd0c835cb4fac943e7878e"
 AUTOMATION_UPDATE_PUSH_SHA256 = "5be1d31198da13ab6929edb13c9b713fbb9bc364d413b778d79f4e624e30d2cc"
 ALLOWED_FENCED_ROUTES = {

@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `refactor(skills)`: `collection-ideate` の企画契約と補助資産を `/wf-new` の通常入口へ吸収し、旧 skill directory と直接起動導線を削除する。下流互換の `config/skills/collection-ideate.yaml` キーは維持する（#3858）。
+
 - `feat(skills)`: `collection-ideate` を `/wf-new` から委譲される内部 skill へ降格し、利用者向け workflow 入口を `/wf-new` `/wf-next` `/wf-status` の 3 種に固定する（#3743）。
 
 - `feat(skills)`: `/automation-schedule` を `/wf-new --schedule` へ統合し、dry-run・承認・backend 選択・native task・OS fallback 契約を同一 skill へ移設する（#3742）。

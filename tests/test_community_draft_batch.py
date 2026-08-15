@@ -89,7 +89,7 @@ def test_generate_batch_fails_loudly_without_publish_target(tmp_path: Path) -> N
 def test_active_community_docs_have_no_legacy_type_markdown_or_clipboard_flow() -> None:
     active_paths = (
         SKILL,
-        REPO_ROOT / ".claude/skills/collection-ideate/SKILL.md",
+        REPO_ROOT / ".claude/skills/wf-new/references/ideate.md",
         REPO_ROOT / "src/youtube_automation/commands/collections/vote_log.py",
         REPO_ROOT / "src/youtube_automation/domains/collections/weekly_vote_log.py",
         REPO_ROOT / "src/youtube_automation/domains/collections/schemas/weekly_vote_log.schema.json",

@@ -292,7 +292,7 @@ Phase 5 で保存した postmortem.md の「結論 / 反証 / 学び」から、
 - `source: "postmortem"`、`source_path` に対象 `collections/live/<collection>/20-documentation/postmortem.md`、`status: "open"` で追記する
 - `lever` は支持された主仮説カテゴリから対応付ける: サムネ訴求弱 → `thumbnail` / タイトル訴求弱 → `title` / テーマ自体の市場性不足・競合過密ジャンル → `topic` / 中身の弱さ（音源 / 編集 / テーマ） → `bgm` / タイトル・タグ SEO 弱 → `metadata` / それ以外 → `other`
 - `evidence` には検証ステップ欄の `target_value` / `baseline_value` / `threshold` など数値根拠を含める
-- 追記は append-only とする。既存行の削除・並べ替え・書き換えをしない（`status` / `status_note` の更新は `/collection-ideate` の責務）
+- 追記は append-only とする。既存行の削除・並べ替え・書き換えをしない（`status` / `status_note` の更新は `/wf-new` の責務）
 - 既存エントリと同旨の `finding` は重複追記しない（同じ postmortem を再実行しても二重還元しない）
 
 追記後（追記 0 件の場合も含め）、次の検証が exit 0 になることを確認してから完了を報告する:
@@ -301,7 +301,7 @@ Phase 5 で保存した postmortem.md の「結論 / 反証 / 学び」から、
 uv run python3 .claude/skills/analytics/references/validate_insights.py data/insights.jsonl
 ```
 
-還元された学びは次サイクルで `/wf-new` が open エントリとして収集し、`/collection-ideate` の企画入力・`/thumbnail`（lever=thumbnail）の制作前参照に使われる。本スキルを `/wf-new` から自動実行することはない（公開済み動画の分析・検証は本スキルの既存責務に残る）。
+還元された学びは次サイクルで `/wf-new` が open エントリとして収集し、`/wf-new` の企画入力・`/thumbnail`（lever=thumbnail）の制作前参照に使われる。本スキルを `/wf-new` から自動実行することはない（公開済み動画の分析・検証は本スキルの既存責務に残る）。
 
 ### Phase 7: creative-constraints への制約還流
 

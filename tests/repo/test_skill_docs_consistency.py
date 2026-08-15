@@ -915,7 +915,7 @@ def test_channel_new_followup_skill_routing_uses_new_contract() -> None:
 
     followup_direction_files = [
         ".claude/skills/alignment-check/SKILL.md",
-        ".claude/skills/collection-ideate/SKILL.md",
+        ".claude/skills/wf-new/references/ideate.md",
         ".claude/skills/lyria/SKILL.md",
         ".claude/skills/flop-analysis/SKILL.md",
         ".claude/skills/video-analyze/SKILL.md",
@@ -1296,7 +1296,7 @@ def test_analytics_report_theme_colors_are_config_driven() -> None:
 
 
 def test_collection_lifecycle_uses_mp3_as_public_audio_contract() -> None:
-    text = _read(".claude/skills/collection-ideate/references/collection-lifecycle.md")
+    text = _read(".claude/skills/wf-new/references/collection-lifecycle.md")
 
     assert "01-master/           # マスター音声・動画（*.mp3, *.mp4）" in text
     assert "02-Individual-music/ # 個別音声ファイル（*.mp3）" in text
@@ -1582,7 +1582,7 @@ def test_insights_entry_schema_is_single_source_for_writers_and_readers() -> Non
     analytics_analyze = _read(".claude/skills/analytics/references/analyze.md")
     flop_analysis = _read(".claude/skills/flop-analysis/SKILL.md")
     wf_new = _read_wf_new()
-    collection_ideate = _read(".claude/skills/collection-ideate/SKILL.md")
+    collection_ideate = _read(".claude/skills/wf-new/references/ideate.md")
     thumbnail = _read(".claude/skills/thumbnail/SKILL.md")
 
     assert "references/insights-entry.schema.json" in analytics_analyze

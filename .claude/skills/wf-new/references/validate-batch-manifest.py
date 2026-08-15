@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate a `/collection-ideate` batch plan manifest without mutating it."""
+"""Validate a `/wf-new` batch plan manifest without mutating it."""
 
 from __future__ import annotations
 
@@ -51,7 +51,7 @@ def validate_manifest(manifest: object) -> dict:
     provenance = manifest.get("provenance")
     if not isinstance(provenance, dict):
         raise ValueError("provenance は object でなければなりません")
-    if provenance.get("producer") != "collection-ideate" or provenance.get("mode") != "batch-plan":
+    if provenance.get("producer") != "wf-new" or provenance.get("mode") != "batch-plan":
         raise ValueError("provenance producer/mode が batch plan 契約と一致しません")
     if not _nonempty(provenance.get("input_mode")) or not isinstance(provenance.get("ttp_mode"), bool):
         raise ValueError("provenance input_mode/ttp_mode が不正です")

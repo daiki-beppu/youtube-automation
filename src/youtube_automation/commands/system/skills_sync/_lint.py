@@ -42,7 +42,6 @@ _SKILL_MD_LINE_LIMIT_VIOLATION: Final[str] = "skill_md_line_limit_exceeded"
 _ALLOWLISTED_SKILL_MD_LINE_COUNTS: Final[dict[str, int]] = {
     "automation-release": 638,
     "automation-update": 571,
-    "collection-ideate": 537,
     "loop-video": 410,
     "masterup": 566,
     "suno": 594,
@@ -93,9 +92,11 @@ def _lint_skill_config_contract(inventory: SkillInventory) -> list[str]:
     }
 
     violations = [
-        f"{key.partition('.')[0]}/config.default.yaml がありません（登録キー: {key}）"
+        f"{skill_config.skill_config_default_relative_path(key.partition('.')[0])} がありません（登録キー: {key}）"
         for key in sorted(registered)
-        if key.partition(".")[0] not in defaults
+        if not (
+            inventory.skills_root / skill_config.skill_config_default_relative_path(key.partition(".")[0])
+        ).is_file()
     ]
     violations.extend(
         f"{key}/config.default.yaml がどちらのキー集合にも登録されていません"

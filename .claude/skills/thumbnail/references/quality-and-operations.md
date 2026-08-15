@@ -52,7 +52,7 @@ textless main 候補生成後:
 - [ ] 新しい文字や記号が追加されていない
 - [ ] `/loop-video` 入力や `/videoup` 静止背景として使える
 
-手指の破綻が出るチャンネルは `image_generation.gemini.single_step.anatomy_clause` を opt-in で展開する。`/collection-ideate` の single_step プレビューは企画参照素材であり、最終 thumbnail に流用しない。
+手指の破綻が出るチャンネルは `image_generation.gemini.single_step.anatomy_clause` を opt-in で展開する。`/wf-new` の single_step プレビューは企画参照素材であり、最終 thumbnail に流用しない。
 
 ## プロンプト保存テンプレート
 

@@ -27,7 +27,7 @@ _SETUP_CHAIN_STATE = _SKILLS_DIR / "setup" / "references" / "setup-chain-state.p
 _SETUP_MODE_GUARD = _SKILLS_DIR / "setup" / "references" / "setup-mode-guard.py"
 _SETUP_GCP_GUIDE = _SKILLS_DIR / "setup" / "references" / "gcp-bootstrap.md"
 _SETUP_CHANNEL_MODE = _SKILLS_DIR / "setup" / "references" / "channel-mode.md"
-_FRESHNESS_RULES = _SKILLS_DIR / "collection-ideate" / "references" / "freshness-rules.md"
+_FRESHNESS_RULES = _SKILLS_DIR / "wf-new" / "references" / "freshness-rules.md"
 _CHANNEL_NEW_SKILL = _SKILLS_DIR / "channel-new" / "SKILL.md"
 _ONBOARD_DIR = _SKILLS_DIR / "onboard"
 _CURRENT_SETUP_DOCS = [
@@ -551,15 +551,13 @@ def test_setup_skill_handles_wf_new_readiness_next_check() -> None:
     assert "`benchmark_data` / `analytics_report` / `ttp_wf_new_readiness` の意味を変更せず" in section
 
 
-def test_setup_stale_report_guidance_delegates_to_collection_ideate_contract() -> None:
+def test_setup_stale_report_guidance_delegates_to_wf_new_ideation_contract() -> None:
     setup = _setup_text()
     freshness_rules = _FRESHNESS_RULES.read_text(encoding="utf-8")
     analytics_report_section = setup.split("#### `analytics_report`", 1)[1].split("\n#### `benchmark_data`", 1)[0]
 
-    assert ".claude/skills/collection-ideate/references/freshness-rules.md" in analytics_report_section
-    assert "後続の `/wf-new` から委譲される `collection-ideate` が同じセッションで自動更新する" in (
-        analytics_report_section
-    )
+    assert ".claude/skills/wf-new/references/freshness-rules.md" in analytics_report_section
+    assert "後続の `/wf-new` 企画工程が同じセッションで自動更新する" in analytics_report_section
     assert "`[HUMAN STEP]` として `/analytics --analyze` の実行を利用者へ依頼せず" in analytics_report_section
     assert "freshness.stale_action" not in setup
     assert "refresh / API 失敗時の停止・再開条件は上書きしない" in analytics_report_section
