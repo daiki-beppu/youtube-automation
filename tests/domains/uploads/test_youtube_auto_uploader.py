@@ -7,7 +7,7 @@ issue #381 (P0-5) で追加される以下の振る舞いを検証する:
 1. resume kwargs (`resume_session_uri`, `on_session_uri_changed`, `on_upload_complete`)
    が `upload_video` / `upload_collection` / `_upload_complete_collection` を透過して
    `YouTubeUploadCore.upload_video` まで届くこと
-2. `_find_existing_video_by_title` が own channel 内の同タイトル動画を検出すること
+2. `DedupSearch` が own channel 内の同タイトル動画を検出すること
    （fail-open: HttpError 時は None を返して upload 続行を許す）
 3. `_upload_complete_collection` が publish 直前に dedup 検索を実行し、hit 時は
    `upload_video` を呼ばずに既存 video_id / video_url を採用すること
@@ -695,7 +695,7 @@ class TestUploadCollectionForwarding:
         assets_dir.mkdir()
         (assets_dir / "thumbnail.jpg").write_bytes(b"\x00")
 
-        uploader = YouTubeAutoUploader(collections_root=str(tmp_path))
+        uploader = YouTubeAutoUploader(collections_root=str(tmp_path), dedup_search=MagicMock())
         on_session = MagicMock()
         on_complete = MagicMock()
 
@@ -703,7 +703,7 @@ class TestUploadCollectionForwarding:
         mock_gen.generate_complete_collection_metadata.return_value = _make_metadata()
 
         with (
-            patch.object(uploader, "_find_existing_video_by_title", return_value=None),
+            patch.object(uploader.dedup_search, "find_existing_video_by_title", return_value=None),
             patch.object(uploader, "upload_video", return_value="VID_INNER") as mock_upload_video,
         ):
             # When
@@ -724,7 +724,7 @@ class TestUploadCollectionForwarding:
 
 
 # ---------------------------------------------------------------------------
-# L3b: `_find_existing_video_by_title` 単体検証
+# L3b: `DedupSearch.find_existing_video_by_title` 単体検証
 # ---------------------------------------------------------------------------
 
 
@@ -732,13 +732,10 @@ class TestFindExistingVideoByTitle:
     """publish 直前の同タイトル検索（dedup 安全網）の振る舞い."""
 
     def _make_uploader_with_mock_youtube(self, tmp_path):
-        from youtube_automation.domains.uploads.youtube import YouTubeAutoUploader
+        from youtube_automation.domains.uploads._dedup_search import DedupSearch
 
-        uploader = YouTubeAutoUploader(collections_root=str(tmp_path))
         mock_youtube = MagicMock()
-        # _ensure_service / initialize を bypass
-        uploader.youtube = mock_youtube
-        return uploader, mock_youtube
+        return DedupSearch(mock_youtube), mock_youtube
 
     def test_should_return_video_info_when_exact_title_match_exists(self, tmp_path):
         """plan 要件 #8 + #9: 完全一致 hit で video_id / video_url を返す."""
@@ -756,7 +753,7 @@ class TestFindExistingVideoByTitle:
         }
 
         # When
-        result = uploader._find_existing_video_by_title("Rainy Jazz")
+        result = uploader.find_existing_video_by_title("Rainy Jazz")
 
         # Then
         assert result == {
@@ -780,7 +777,7 @@ class TestFindExistingVideoByTitle:
         }
 
         # When
-        uploader._find_existing_video_by_title("Rainy Jazz")
+        uploader.find_existing_video_by_title("Rainy Jazz")
 
         # Then
         mock_youtube.videos.return_value.list.assert_called_once_with(id="v9", part="status,snippet")
@@ -797,7 +794,7 @@ class TestFindExistingVideoByTitle:
         mock_youtube.videos.return_value.list.return_value.execute.return_value = {"items": []}
 
         # When
-        result = uploader._find_existing_video_by_title("Rainy Jazz")
+        result = uploader.find_existing_video_by_title("Rainy Jazz")
 
         # Then
         assert result is None
@@ -818,7 +815,7 @@ class TestFindExistingVideoByTitle:
         }
 
         # When
-        result = uploader._find_existing_video_by_title("Rainy Jazz")
+        result = uploader.find_existing_video_by_title("Rainy Jazz")
 
         # Then
         assert result is None
@@ -839,7 +836,7 @@ class TestFindExistingVideoByTitle:
         }
 
         # When
-        result = uploader._find_existing_video_by_title("Rainy Jazz")
+        result = uploader.find_existing_video_by_title("Rainy Jazz")
 
         # Then
         assert result is None
@@ -851,7 +848,7 @@ class TestFindExistingVideoByTitle:
         mock_youtube.search.return_value.list.return_value.execute.return_value = {"items": []}
 
         # When
-        uploader._find_existing_video_by_title("Rainy Jazz")
+        uploader.find_existing_video_by_title("Rainy Jazz")
 
         # Then
         mock_youtube.search.return_value.list.assert_called_once()
@@ -873,7 +870,7 @@ class TestFindExistingVideoByTitle:
         }
 
         # When
-        result = uploader._find_existing_video_by_title("Rainy Jazz")
+        result = uploader.find_existing_video_by_title("Rainy Jazz")
 
         # Then
         assert result is None
@@ -895,7 +892,7 @@ class TestFindExistingVideoByTitle:
             ]
         }
 
-        result = uploader._find_existing_video_by_title("Rainy Jazz")
+        result = uploader.find_existing_video_by_title("Rainy Jazz")
 
         assert result == {
             "video_id": "v9",
@@ -912,7 +909,7 @@ class TestFindExistingVideoByTitle:
             ]
         }
 
-        result = uploader._find_existing_video_by_title("Rainy Jazz")
+        result = uploader.find_existing_video_by_title("Rainy Jazz")
 
         assert result is None
         mock_youtube.videos.return_value.list.assert_not_called()
@@ -924,7 +921,7 @@ class TestFindExistingVideoByTitle:
         mock_youtube.search.return_value.list.return_value.execute.return_value = {"items": []}
 
         # When
-        result = uploader._find_existing_video_by_title("Rainy Jazz")
+        result = uploader.find_existing_video_by_title("Rainy Jazz")
 
         # Then
         assert result is None
@@ -937,7 +934,7 @@ class TestFindExistingVideoByTitle:
 
         # When
         with caplog.at_level(logging.WARNING):
-            result = uploader._find_existing_video_by_title("Rainy Jazz")
+            result = uploader.find_existing_video_by_title("Rainy Jazz")
 
         # Then
         assert result is None
@@ -951,15 +948,13 @@ class TestFindExistingVideoByTitle:
 
 
 class TestDedupSearchQuotaRecording:
-    """`_find_existing_video_by_title` が実 request ごとに quota を記録すること."""
+    """重複検索 helper が実 request ごとに quota を記録すること."""
 
     def _make_uploader_with_mock_youtube(self, tmp_path):
-        from youtube_automation.domains.uploads.youtube import YouTubeAutoUploader
+        from youtube_automation.domains.uploads._dedup_search import DedupSearch
 
-        uploader = YouTubeAutoUploader(collections_root=str(tmp_path))
         mock_youtube = MagicMock()
-        uploader.youtube = mock_youtube
-        return uploader, mock_youtube
+        return DedupSearch(mock_youtube), mock_youtube
 
     def _quota_calls(self, mock_log_quota) -> list[tuple[str, str, float]]:
         return [(c.args[0], c.args[1], c.args[2]) for c in mock_log_quota.call_args_list]
@@ -975,7 +970,7 @@ class TestDedupSearchQuotaRecording:
         }
 
         with patch("youtube_automation.infrastructure.quota.log_quota") as mock_log_quota:
-            result = uploader._find_existing_video_by_title("Rainy Jazz")
+            result = uploader.find_existing_video_by_title("Rainy Jazz")
 
         assert result is not None
         assert self._quota_calls(mock_log_quota) == [
@@ -989,7 +984,7 @@ class TestDedupSearchQuotaRecording:
         mock_youtube.search.return_value.list.return_value.execute.return_value = {"items": []}
 
         with patch("youtube_automation.infrastructure.quota.log_quota") as mock_log_quota:
-            result = uploader._find_existing_video_by_title("Rainy Jazz")
+            result = uploader.find_existing_video_by_title("Rainy Jazz")
 
         assert result is None
         assert self._quota_calls(mock_log_quota) == [("youtube-data-api", "search.list", 1)]
@@ -1004,7 +999,7 @@ class TestDedupSearchQuotaRecording:
             patch("youtube_automation.infrastructure.quota.log_quota") as mock_log_quota,
             caplog.at_level(logging.WARNING),
         ):
-            result = uploader._find_existing_video_by_title("Rainy Jazz")
+            result = uploader.find_existing_video_by_title("Rainy Jazz")
 
         assert result is None
         assert self._quota_calls(mock_log_quota) == [
@@ -1026,7 +1021,7 @@ class TestDedupSearchQuotaRecording:
             patch("youtube_automation.infrastructure.quota.log_quota") as mock_log_quota,
             caplog.at_level(logging.WARNING),
         ):
-            result = uploader._find_existing_video_by_title("Rainy Jazz")
+            result = uploader.find_existing_video_by_title("Rainy Jazz")
 
         assert result is None
         assert self._quota_calls(mock_log_quota) == [
@@ -1047,7 +1042,7 @@ class TestDedupSearchQuotaRecording:
         ]
 
         with patch("youtube_automation.infrastructure.quota.log_quota") as mock_log_quota:
-            assert uploader._find_existing_video_by_title("Rainy Jazz") is None
+            assert uploader.find_existing_video_by_title("Rainy Jazz") is None
 
         assert request.execute.call_count == 2
         assert self._quota_calls(mock_log_quota) == [
@@ -1068,7 +1063,7 @@ class TestDedupSearchQuotaRecording:
         ]
 
         with patch("youtube_automation.infrastructure.quota.log_quota") as mock_log_quota:
-            assert uploader._find_existing_video_by_title("Rainy Jazz") == {
+            assert uploader.find_existing_video_by_title("Rainy Jazz") == {
                 "video_id": "v9",
                 "video_url": "https://www.youtube.com/watch?v=v9",
             }
@@ -1100,7 +1095,7 @@ class TestUploadCompleteCollectionDedup:
         assets_dir.mkdir()
         (assets_dir / "thumbnail.jpg").write_bytes(b"\x00")
 
-        uploader = YouTubeAutoUploader(collections_root=str(tmp_path))
+        uploader = YouTubeAutoUploader(collections_root=str(tmp_path), dedup_search=MagicMock())
         mock_gen = MagicMock()
         mock_gen.generate_complete_collection_metadata.return_value = _make_metadata("Rainy Jazz")
         return uploader, col_dir, mock_gen
@@ -1112,7 +1107,7 @@ class TestUploadCompleteCollectionDedup:
         existing = {"video_id": "v9", "video_url": "https://www.youtube.com/watch?v=v9"}
 
         with (
-            patch.object(uploader, "_find_existing_video_by_title", return_value=existing),
+            patch.object(uploader.dedup_search, "find_existing_video_by_title", return_value=existing),
             patch.object(uploader, "upload_video", return_value="SHOULD_NOT_BE_CALLED") as mock_upload_video,
         ):
             # When
@@ -1133,7 +1128,7 @@ class TestUploadCompleteCollectionDedup:
         uploader, col_dir, mock_gen = self._setup(tmp_path)
 
         with (
-            patch.object(uploader, "_find_existing_video_by_title", return_value=None),
+            patch.object(uploader.dedup_search, "find_existing_video_by_title", return_value=None),
             patch.object(uploader, "upload_video", return_value="VID_NEW") as mock_upload_video,
         ):
             # When
@@ -1155,7 +1150,7 @@ class TestUploadCompleteCollectionDedup:
         )
 
         with (
-            patch.object(uploader, "_find_existing_video_by_title", return_value=None),
+            patch.object(uploader.dedup_search, "find_existing_video_by_title", return_value=None),
             patch.object(uploader, "upload_video", return_value="VID") as upload,
         ):
             uploader._upload_complete_collection(col_dir, mock_gen)
@@ -1170,7 +1165,7 @@ class TestUploadCompleteCollectionDedup:
         master.write_bytes(b"master")
 
         with (
-            patch.object(uploader, "_find_existing_video_by_title", return_value=None),
+            patch.object(uploader.dedup_search, "find_existing_video_by_title", return_value=None),
             patch.object(uploader, "upload_video", return_value="VID") as upload,
         ):
             uploader._upload_complete_collection(col_dir, mock_gen)
@@ -1236,10 +1231,10 @@ class TestUploadCompleteCollectionDedup:
         monkeypatch.setattr(_subprocess, "run", mock_subprocess_run)
         monkeypatch.setattr(metadata_generator_module, "probe_duration", fake_probe_duration)
 
-        uploader = YouTubeAutoUploader(collections_root=str(tmp_path))
+        uploader = YouTubeAutoUploader(collections_root=str(tmp_path), dedup_search=MagicMock())
         metadata_gen = BAHMetadataGenerator(str(col_dir))
         with (
-            patch.object(uploader, "_find_existing_video_by_title", return_value=None),
+            patch.object(uploader.dedup_search, "find_existing_video_by_title", return_value=None),
             patch.object(uploader, "upload_video", return_value="VID_NEW") as mock_upload_video,
         ):
             result = uploader._upload_complete_collection(col_dir, metadata_gen, publish_at=None)
@@ -1262,7 +1257,7 @@ class TestUploadCompleteCollectionDedup:
         (col_dir / "10-assets" / "main.png").write_bytes(b"textless-background")
 
         with (
-            patch.object(uploader, "_find_existing_video_by_title", return_value=None),
+            patch.object(uploader.dedup_search, "find_existing_video_by_title", return_value=None),
             patch.object(uploader, "upload_video", return_value="SHOULD_NOT_BE_CALLED") as mock_upload_video,
             pytest.raises(ValidationError, match="アップロード用サムネイルが見つかりません"),
         ):
@@ -1280,7 +1275,9 @@ class TestUploadCompleteCollectionDedup:
         existing = {"video_id": "v9", "video_url": "https://www.youtube.com/watch?v=v9"}
 
         with (
-            patch.object(uploader, "_find_existing_video_by_title", return_value=existing) as mock_find_existing,
+            patch.object(
+                uploader.dedup_search, "find_existing_video_by_title", return_value=existing
+            ) as mock_find_existing,
             patch.object(uploader, "upload_video", return_value="SHOULD_NOT_BE_CALLED") as mock_upload_video,
             pytest.raises(ValidationError, match="アップロード用サムネイルが見つかりません"),
         ):
@@ -1294,11 +1291,14 @@ class TestUploadCompleteCollectionDedup:
         # Given
         uploader, col_dir, mock_gen = self._setup(tmp_path)
 
-        # 実 youtube.search を HttpError で失敗させ、`_find_existing_video_by_title`
+        # 実 youtube.search を HttpError で失敗させ、helper の重複検索
         # の fail-open 経路（HttpError → warning + None 返却）を実コードで通す
         mock_youtube = MagicMock()
         mock_youtube.search.return_value.list.return_value.execute.side_effect = _make_http_error(500)
         uploader.youtube = mock_youtube
+        from youtube_automation.domains.uploads._dedup_search import DedupSearch
+
+        uploader._dedup_search = DedupSearch(mock_youtube)
 
         with (
             patch.object(uploader, "upload_video", return_value="VID_AFTER_FAILOPEN") as mock_upload_video,
@@ -1694,24 +1694,22 @@ class TestNormalizePublishAt:
     [{"snippet": {"title": "Rainy Jazz"}}, {"id": {"videoId": "v9"}}],
 )
 def test_dedup_fails_open_for_invalid_search_response_shape(tmp_path, search_item):
-    from youtube_automation.domains.uploads.youtube import YouTubeAutoUploader
+    from youtube_automation.domains.uploads._dedup_search import DedupSearch
 
-    uploader = YouTubeAutoUploader(collections_root=str(tmp_path))
-    uploader.youtube = MagicMock()
+    uploader = DedupSearch(MagicMock())
     uploader.youtube.search.return_value.list.return_value.execute.return_value = {"items": [search_item]}
 
-    assert uploader._find_existing_video_by_title("Rainy Jazz") is None
+    assert uploader.find_existing_video_by_title("Rainy Jazz") is None
 
 
 @pytest.mark.parametrize("response", [None, {"items": None}, {"items": {}}])
 def test_dedup_fails_open_for_invalid_search_response_container(tmp_path, response):
-    from youtube_automation.domains.uploads.youtube import YouTubeAutoUploader
+    from youtube_automation.domains.uploads._dedup_search import DedupSearch
 
-    uploader = YouTubeAutoUploader(collections_root=str(tmp_path))
-    uploader.youtube = MagicMock()
+    uploader = DedupSearch(MagicMock())
     uploader.youtube.search.return_value.list.return_value.execute.return_value = response
 
-    assert uploader._find_existing_video_by_title("Rainy Jazz") is None
+    assert uploader.find_existing_video_by_title("Rainy Jazz") is None
 
 
 @pytest.mark.parametrize(
@@ -1723,27 +1721,25 @@ def test_dedup_fails_open_for_invalid_search_response_container(tmp_path, respon
     ],
 )
 def test_dedup_fails_open_for_invalid_video_response_shape(tmp_path, video_item):
-    from youtube_automation.domains.uploads.youtube import YouTubeAutoUploader
+    from youtube_automation.domains.uploads._dedup_search import DedupSearch
 
-    uploader = YouTubeAutoUploader(collections_root=str(tmp_path))
-    uploader.youtube = MagicMock()
+    uploader = DedupSearch(MagicMock())
     uploader.youtube.search.return_value.list.return_value.execute.return_value = {
         "items": [{"id": {"videoId": "v9"}, "snippet": {"title": "Rainy Jazz"}}]
     }
     uploader.youtube.videos.return_value.list.return_value.execute.return_value = {"items": [video_item]}
 
-    assert uploader._find_existing_video_by_title("Rainy Jazz") is None
+    assert uploader.find_existing_video_by_title("Rainy Jazz") is None
 
 
 @pytest.mark.parametrize("response", [None, {"items": None}, {"items": {}}])
 def test_dedup_fails_open_for_invalid_video_response_container(tmp_path, response):
-    from youtube_automation.domains.uploads.youtube import YouTubeAutoUploader
+    from youtube_automation.domains.uploads._dedup_search import DedupSearch
 
-    uploader = YouTubeAutoUploader(collections_root=str(tmp_path))
-    uploader.youtube = MagicMock()
+    uploader = DedupSearch(MagicMock())
     uploader.youtube.search.return_value.list.return_value.execute.return_value = {
         "items": [{"id": {"videoId": "v9"}, "snippet": {"title": "Rainy Jazz"}}]
     }
     uploader.youtube.videos.return_value.list.return_value.execute.return_value = response
 
-    assert uploader._find_existing_video_by_title("Rainy Jazz") is None
+    assert uploader.find_existing_video_by_title("Rainy Jazz") is None
