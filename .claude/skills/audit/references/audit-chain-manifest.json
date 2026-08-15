@@ -1,0 +1,71 @@
+{
+  "chainId": "audit",
+  "steps": [
+    {
+      "id": "alignment",
+      "skill": "audit",
+      "prerequisiteArtifacts": [
+        "collections/live/*/workflow-state.json",
+        "collections/live/*/10-assets/thumbnail.jpg",
+        "collections/live/*/20-documentation/suno-prompts.md|lyria-prompt.md"
+      ],
+      "outputArtifacts": ["docs/plans/alignment-audit.md"],
+      "approvalGate": {
+        "skip": true,
+        "configPath": "workflow.audit.skip_approvals.alignment"
+      },
+      "idempotency": {
+        "script": "references/audit-chain-state.py"
+      }
+    },
+    {
+      "id": "video",
+      "skill": "audit",
+      "prerequisiteArtifacts": ["collections/live/*/workflow-state.json::upload.video_id"],
+      "outputArtifacts": [
+        "data/video_analysis/<channel>/<video-id>.json",
+        "reports/video_analysis/<channel>.md"
+      ],
+      "approvalGate": {
+        "skip": true,
+        "configPath": "workflow.audit.skip_approvals.video"
+      },
+      "idempotency": {
+        "script": "references/audit-chain-state.py"
+      }
+    },
+    {
+      "id": "metadata",
+      "skill": "audit",
+      "prerequisiteArtifacts": [
+        "collections/live/*/workflow-state.json::upload.video_id",
+        "collections/live/*/20-documentation/descriptions.md"
+      ],
+      "outputArtifacts": [],
+      "approvalGate": {
+        "skip": true,
+        "configPath": "workflow.audit.skip_approvals.metadata"
+      },
+      "idempotency": {
+        "script": "references/audit-chain-state.py"
+      }
+    },
+    {
+      "id": "value-loop",
+      "skill": "audit",
+      "prerequisiteArtifacts": [
+        "docs/plans/alignment-audit.md",
+        "data/video_analysis/<channel>/<video-id>.json",
+        "reports/video_analysis/<channel>.md"
+      ],
+      "outputArtifacts": [],
+      "approvalGate": {
+        "skip": true,
+        "configPath": "workflow.audit.skip_approvals.value-loop"
+      },
+      "idempotency": {
+        "script": "references/audit-chain-state.py"
+      }
+    }
+  ]
+}

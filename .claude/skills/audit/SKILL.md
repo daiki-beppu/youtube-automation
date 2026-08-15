@@ -1,7 +1,7 @@
 ---
 name: audit
 purpose: 振り返る
-description: "Use when 整合性・価値ループ・動画本体・公開後メタデータを監査するとき。音楽ムード × サムネ × タイトルは --alignment、価値ループは --value-loop、動画解析は --video、ローカルと YouTube のメタデータ整合は --metadata を使う。「整合性チェック」「価値ループ監査」「動画解析」「メタデータ監査」で発動"
+description: "Use when 整合性・動画本体・公開後メタデータ・価値ループの監査を一括実行または一段だけ実行するとき。フラグなしは4監査を状態判定付きで進め、音楽ムード × サムネ × タイトルは --alignment、動画解析は --video、ローカルと YouTube のメタデータ整合は --metadata、価値ループは --value-loop を使う。「監査一括実行」「整合性チェック」「価値ループ監査」「動画解析」「メタデータ監査」で発動"
 ---
 
 ## 前後工程
@@ -39,7 +39,7 @@ video / metadata mode は次を deep-merge し、チャンネル上書きを優�
 
 - 2 個以上なら排他違反として停止し、1 つだけ指定するよう促す
 - 1 個なら対応する reference を読み、その一段だけを実行する。残りの引数はその mode の引数として扱う
-- 0 個なら互換入口として `--alignment` を実行する。chain manifest による状態判定は後続段で追加する
+- 0 個なら chain manifest に従い alignment → video → metadata → value-loop を状態判定付きで進める
 - 現段で実装済みの mode は `--alignment` / `--value-loop` / `--video` / `--metadata`
 - mode は最大 5 件とし、判定規則を複製しない
 
@@ -50,9 +50,30 @@ video / metadata mode は次を deep-merge し、チャンネル上書きを優�
 | `--video` | `references/video.md` |
 | `--metadata` | `references/metadata.md` |
 
+## 一括実行
+
+`references/audit-chain-manifest.json` と `references/audit-chain-state.py` が存在し、manifest の `chainId`、step 順、step mode、approval gate、状態判定 script が妥当であることを確認する。欠損、未知・重複 step、複数 mode、`approvalGate.skip != true` があれば停止する。全 mode は読み取り専用監査またはローカル監査レポート生成だけを行うため、chain の承認ゲートを省略する。
+
+チャンネルルートで manifest 順に次を実行する。
+
+```bash
+uv run python .claude/skills/audit/references/audit-chain-state.py \
+  --channel-dir . --step <alignment|video|metadata|value-loop>
+```
+
+| exit | `decision` | 処理 |
+|---:|---|---|
+| 0 | `skip` | 完了済みとして次段へ進む |
+| 10 | `run` | step の mode reference を読み、その一段を実行する |
+| 20 | `blocked` | `reason` と不足成果物を提示して停止する |
+| その他 | `error` | manifest / script / 入力 JSON のエラーとして停止する |
+
+実行後は同じ状態判定を再実行する。alignment / video が exit 0 にならなければ停止する。metadata / value-loop は診断結果を永続化しないため、実行後も exit 10 が正常である。metadata の表示結果は同じ会話内で value-loop の横断診断へ渡す。途中失敗時はその段で止め、再発動時は先頭から状態判定して完了済み段を skip する。
+
 ## 完了条件
 
-- フラグなし / `--alignment`: `references/alignment.md` の完了条件を満たしている
+- フラグなし: alignment と video が `skip` または実行後 `skip`、metadata と value-loop が `run` となり、4 mode の監査結果を表示している
+- `--alignment`: `references/alignment.md` の完了条件を満たしている
 - `--value-loop`: `references/value-loop.md` の完了条件を満たしている
 - `--video`: `references/video.md` の完了条件を満たしている
 - `--metadata`: `references/metadata.md` の完了条件を満たし、自身では修正していない
