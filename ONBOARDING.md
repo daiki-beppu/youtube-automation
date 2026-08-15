@@ -187,7 +187,7 @@ uv run yt-init-collection "Pilot Direction Check" "pilot-direction-check" --trac
 
 | シーン | スキル |
 |---|---|
-| データドリブンで次企画を決めたい | `/collection-ideate` |
+| データドリブンで次企画を決めたい | `/wf-new`（内部で企画 skill を実行） |
 | 既存テーマの横展開を判断したい | `/analytics --analyze`（テーマ別パフォーマンス） |
 
 ### 4.2 制作工程の典型フロー
@@ -254,7 +254,7 @@ uv run yt-init-collection "Pilot Direction Check" "pilot-direction-check" --trac
 | 困りごと | 使うスキル |
 |---|---|
 | いまどこまで進んでる？ | `/wf-status`（制作） / `/channel-status`（YouTube 統計） |
-| 次に何やる？ | `/wf-next`（既存コレクション継続） / `/collection-ideate`（新規企画） |
+| 次に何やる？ | `/wf-next`（既存コレクション継続） / `/wf-new`（新規企画） |
 | このコレクション CTR 弱くない？ | `/alignment-check` → `/thumbnail-compare` |
 | シリーズ広げるべき？ | `/analytics --analyze`（テーマ別パフォーマンス） |
 | 視聴者は誰？何を求めてる？ | `/viewer-voice` → `/audience-persona-design` → `/viewing-scene` |

@@ -6,7 +6,7 @@ description: "Use when 新規コレクション制作を立ち上げるとき、
 
 ## 前後工程
 
-- `前工程`: `/setup --channel`, `/setup`, `/collection-ideate`
+- `前工程`: `/setup --channel`, `/setup`
 - `後工程`: `/wf-next`, `/suno-helper`, `/post-publish`, `/analytics`
 - `委譲先`: `/collection-ideate`, `/thumbnail`, `/suno`, `/lyria`, `/loop-video`, `/suno-helper`, `/masterup`, `/wf-next`, `/post-publish`
 
@@ -138,7 +138,7 @@ uv run yt-init-collection "Pilot Direction Check" "pilot-direction-check" --trac
 | 状況 | 使う？ |
 |---|---|
 | 制作中コレクションが無い + 新しく始めたい | ✅ 使う |
-| 「次なに作る？」とだけ聞かれた（企画候補が未確定） | ❌ 先に `/collection-ideate` で候補を出す（`/wf-new` 内部でも呼ぶが、単独で候補だけ見たいなら直接 `/collection-ideate`）|
+| 「次なに作る？」とだけ聞かれた（企画候補が未確定） | ✅ 通常入口で内部の `/collection-ideate` に委譲して候補を出す |
 | 既存コレクションを次工程へ進めたい | ❌ `/wf-next` を使う |
 | 進捗だけ知りたい | ❌ `/wf-status` を使う |
 

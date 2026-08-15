@@ -147,4 +147,4 @@
 
 レポート生成後:
 - `/analytics --analyze` で詳細な戦略分析を実行
-- `/collection-ideate` でデータに基づくコレクション企画を生成
+- `/wf-new` 経由で内部の `collection-ideate` がデータに基づくコレクション企画を生成

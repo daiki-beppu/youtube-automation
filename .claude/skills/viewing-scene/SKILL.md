@@ -7,7 +7,7 @@ description: "Use when 視聴シーン（いつ・どこで・なぜ聴くか）
 ## 前後工程
 
 - `前工程`: `/audience-persona-design`
-- `後工程`: `/collection-ideate`
+- `後工程`: `/wf-new`
 - `委譲先`: `なし`
 
 ## 成果物

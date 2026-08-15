@@ -36,7 +36,7 @@ description: "Use when 既存コレクション（collections/planning/）を一
 | 状況 | 使う？ |
 |---|---|
 | 制作中コレクションがあり、次工程へ進める意思がある | ✅ 使う |
-| 制作中コレクションがそもそも無い | ❌ `/wf-new` を使う（または `/collection-ideate` で候補から） |
+| 制作中コレクションがそもそも無い | ❌ `/wf-new` を使う（企画候補が未確定でも同じ入口） |
 | 「進んでる？」と読み取りだけ求められた | ❌ `/wf-status` を使う |
 | 公開済み動画の振り返り | ❌ `/analytics --analyze` または `/flop-analysis` |
 

@@ -6,7 +6,7 @@ description: "Use when コレクションの YouTube コミュニティ投稿を
 
 ## 前後工程
 
-- `前工程`: `/collection-ideate`
+- `前工程`: `/wf-new`
 - `後工程`: `なし`
 - `委譲先`: `なし`
 
@@ -30,7 +30,7 @@ description: "Use when コレクションの YouTube コミュニティ投稿を
   書き換えるよう案内し、設定が完了するまで停止する。
 - 対象 collection の `workflow-state.json::planning.final_title` と
   `planning.publish_target_at` が非空であること。`final_title` 欠落時は
-  `/collection-ideate` で企画を確定するよう案内して停止する。`publish_target_at` 欠落時は
+  `/wf-new` 経由で企画を確定するよう案内して停止する。`publish_target_at` 欠落時は
   planned YouTube publish datetime を ISO 8601（例 `2026-06-25T18:00:00+09:00`）で
   同フィールドへ記録するよう案内し、記録されるまで停止する。
 - 対象 collection は `CHANNEL_DIR` 配下の実在パスを指定する。

@@ -105,7 +105,7 @@ OCCURRENCE_LEDGER = (
 # every route to its exact active Markdown context without duplicating long prose.
 ROUTE_CONTEXT_SHA256 = {
     "audience-persona-design": "07abb23816cc3c7de0497ab7b4906d756c48009c416eae84afd755ae11ac1d3c",
-    "benchmark": "477ff4325d535455a107b86cd091d539e119267dc63f800525527a2f38baf1ca",
+    "benchmark": "d295ee646b98344dabd96a6136dc43fc2a2f66723e20b5a308971457e724d2d6",
     "discover-competitors": "5674e18a4fb70b2eef85cbc72e64b35000666230ee71e6ec957f1e306ba08edb",
     "market-research": "b54b28a9d6cddd9d91e49002b787b38a7b5381546a6fa643532d34aef451bfef",
     "thumbnail-research": "ea3a96bf784d4d510491d9c2ac5f516dfaa6984f0e6acfbc0754c8b753662609",
@@ -123,7 +123,7 @@ SETUP_ASSET_OWNERS = {
 }
 UNCHANGED_SKILL_SHA256 = {
     "thumbnail-research": "552d8563ac152a4219ad2c66ddeb66fd910cc72b743ca7e2c6982227bde3d6ed",
-    "video-analyze": "25e4dc7ade96dbb87ffaefa3569f737c46f3d3c8584f44431bc4d432687f8f3e",
+    "video-analyze": "453977e832dc9b2c649b54f20f55b8187b60c60b6e180c4e6a0b4ade5878d26d",
 }
 RESIDUAL_LINE_MARKERS = {
     "benchmark": ("description:", "- `後工程`:"),
@@ -140,7 +140,7 @@ RESIDUAL_LINE_MARKERS = {
     ),
 }
 RESIDUAL_SHA256 = {
-    "benchmark": "2fb95bb4e810ba0ca2bf7ece521a8aac529fb461c7d970540ea32ede584f9b03",
+    "benchmark": "52064fb2db0e90530134e33823a3125bf1282da339bfc89e91d3c062dba330d5",
     "discover-competitors": "91325074ff74f89681a6972f3c56c5c093dfd4aa779f0ca4425e66d348a3a891",
     "market-research": "a6350cc0f44adf9895aefb0b98fc177415b5bebb55e17b3fb056d3df8d111448",
 }
