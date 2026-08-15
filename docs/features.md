@@ -53,9 +53,8 @@ YouTube への公開、視聴者対応、容量整理、コミュニティ投稿
 | Skill | なにができるか |
 |---|---|
 | /video-description | YouTube 概要欄を自動生成（情景フック + タイムスタンプ + Perfect for） |
-| /publish | `--upload` で Complete Collection を YouTube へアップロード + live 移行 |
+| /publish | `--playlist` でプレイリスト管理、`--upload` で YouTube アップロード + live 移行 |
 | /post-publish | 公開後の community-post → pinned-comment → metadata-audit を承認ゲート・実行履歴付きで一括実行 |
-| /playlist | プレイリストの作成・動画割当・状態確認（`playlists.json` 駆動） |
 | /comments-reply | ルール駆動コメント自動返信（dry-run → apply、二重返信防止） |
 | /live-chat-reply | 配信中ライブチャットの Codex 自動返信 daemon を設定・VPS 配備・運用 |
 | /pinned-comment | オーナー固定コメント自動投稿（preflight で削除済み/private を skip、dry-run → apply、二重投稿防止） |

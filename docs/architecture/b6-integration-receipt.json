@@ -738,7 +738,7 @@
     },
     {
       "old_owner": "legacy..claude.skills.playlist.SKILL.md",
-      "exact_new_owner": ".claude/skills/playlist/SKILL.md",
+      "exact_new_owner": ".claude/skills/publish/references/playlist.md",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"

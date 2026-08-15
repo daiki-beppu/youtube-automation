@@ -28,7 +28,7 @@ TARGET_SKILLS = (
     "flop-analysis",
     "lyria",
     "metadata-audit",
-    "playlist",
+    "publish",
     "short",
     "music",
     "thumbnail",
@@ -215,12 +215,16 @@ _RAW_EXPECTED_ACTIVE_ROUTES = (
         "`/setup --import` を案内して停止する",
     ),
     _route(
-        "playlist/SKILL.md",
+        "publish/references/playlist.md",
         "## 前提",
         "`config/channel/playlists.json` が存在し、`playlists` セクションが定義されていること。"
         "未定義の場合は `/setup --regenerate` を案内する。",
     ),
-    _route("playlist/SKILL.md", "## Cross References", "- `/setup --regenerate` — `playlists.json` の初期定義"),
+    _route(
+        "publish/references/playlist.md",
+        "## Cross References",
+        "- `/setup --regenerate` — `playlists.json` の初期定義",
+    ),
     _route(
         "short/SKILL.md",
         "## 前提",
@@ -618,7 +622,11 @@ def _is_target_member(relative: str) -> bool:
     skill, separator, child = relative.partition("/")
     if skill not in TARGET_SKILLS:
         return False
-    return skill != "wf-new" or (separator == "/" and child in WF_NEW_IDEATION_MEMBERS)
+    if skill == "wf-new":
+        return separator == "/" and child in WF_NEW_IDEATION_MEMBERS
+    if skill == "publish":
+        return separator == "/" and child == "references/playlist.md"
+    return True
 
 
 def _active_route_records(overrides: dict[str, str | bytes] | None = None) -> tuple[tuple[str, str, str], ...]:
@@ -843,6 +851,7 @@ def test_initial_occurrences_have_a_complete_context_ledger() -> None:
     historical_skills = {entry[0] for entry in INITIAL_OCCURRENCE_LEDGER}
     current_owners = {
         "collection-ideate": "wf-new",
+        "playlist": "publish",
         "short-thumbnail": "short",
     }
     assert {current_owners.get(skill, skill) for skill in historical_skills} == set(TARGET_SKILLS)

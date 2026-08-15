@@ -47,7 +47,6 @@ PDCA 対応: 準備 = 準備する / Plan = 調べる → 決める / Do = 進�
 - `/live-chat-reply` — Use when 配信中の YouTube ライブチャットへ常駐 daemon で自動返信するとき。
 - `/live-clean` — Use when live コレクションの大容量メディアを削除して容量回復するとき、または collections 配下の tmp/ 残骸を掃除するとき。
 - `/pinned-comment` — Use when 新規動画へオーナー固定コメントを自動投稿するとき。
-- `/playlist` — Use when プレイリストの作成・割り当て・確認をするとき。
 - `/post-publish` — Use when 動画公開直後の community-post → pinned-comment → metadata-audit を承認ゲート付きで一括実行・途中再開するとき。
 - `/publish` — Use when 完成した動画を公開工程へ進めるとき。
 

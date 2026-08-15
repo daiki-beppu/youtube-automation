@@ -2,7 +2,7 @@
 
 ## 前後工程
 
-- `前工程`: `/wf-new`, `/videoup`, `/video-description`, `/playlist`, `/thumbnail`
+- `前工程`: `/wf-new`, `/videoup`, `/video-description`, `/publish --playlist`, `/thumbnail`
 - `後工程`: `/post-publish`, `/community-post`, `/metadata-audit`, `/pinned-comment`, `/live-clean`
 - `委譲先`: `/post-publish`
 
@@ -111,7 +111,7 @@ $ARGUMENTS
 1. **マスター動画**: skill-config `preflight.master_video_globs`（既定 `01-master/*.mp4` → `03-Individual-movie/*master*.mp4`）の順に探索 — 存在しなければエラー終了
 2. **サムネイル**: skill-config `preflight.thumbnail_candidates`（既定 `10-assets/thumbnail.jpg` → `10-assets/thumbnail.png`）の候補順で探索 — いずれも存在しなければエラー終了。`main.png/jpg` は textless 動画背景なので upload thumbnail には使わない
 3. **概要欄**: `20-documentation/descriptions.md` — **存在しない場合は `/video-description` スキルを実行して自動生成する**（対象コレクションパスを引き継ぐ）。生成完了後にアップロードフローへ進む
-4. **初投稿時のプレイリスト初期化**: `config/channel/playlists.json` が存在する場合は `/playlist` スキルで `uv run yt-playlist-status` を実行する。`(未作成)` があるときは、初投稿前に `uv run yt-playlist-manager --init --dry-run` → ユーザー確認 → `uv run yt-playlist-manager --init` で playlist ID を作成・書き戻してからアップロードへ進む
+4. **初投稿時のプレイリスト初期化**: `config/channel/playlists.json` が存在する場合は `/publish --playlist` で `uv run yt-playlist-status` を実行する。`(未作成)` があるときは、初投稿前に `uv run yt-playlist-manager --init --dry-run` → ユーザー確認 → `uv run yt-playlist-manager --init` で playlist ID を作成・書き戻してからアップロードへ進む
 
 ### collection アップロードフロー
 
@@ -127,7 +127,7 @@ $ARGUMENTS
 
 承認済みタイトルを 100 codepoint 以下へ短縮する必要が生じた場合は、旧版と短縮案を codepoint 数付き diff として提示し、ユーザーの再承認を得るまで `descriptions.md` の更新や upload を行わない。`--plan` は primary title だけでなく生成済み全 locale title を検証し、超過 locale を言語・文字数・実タイトル付きで fail-loud にする。
 
-プレイリストへの動画追加は後続のアップロード経路が担う。`collection` 型では `collection_uploader` 内部の `assign_video()` に任せる。初投稿時に `/playlist` で行うのは未作成プレイリストの作成と `playlist_id` 書き戻しであり、個別動画の手動 assign ではない。
+プレイリストへの動画追加は後続のアップロード経路が担う。`collection` 型では `collection_uploader` 内部の `assign_video()` に任せる。初投稿時に `/publish --playlist` で行うのは未作成プレイリストの作成と `playlist_id` 書き戻しであり、個別動画の手動 assign ではない。
 
 ### release アップロードフロー
 
@@ -212,7 +212,7 @@ uv run yt-upload-collection --plan -c <NAME>
 ## Cross References
 
 - `/video-description` — アップロード前に descriptions.md を生成
-- `/playlist` — 初投稿前のプレイリスト初期化、状態確認、手動 assign、クリーンアップ（アップロード時の自動 assign は本スキル内で実行される）
+- `/publish --playlist` — 初投稿前のプレイリスト初期化、状態確認、手動 assign、クリーンアップ（アップロード時の自動 assign は本スキル内で実行される）
 - `/metadata-audit` — アップロード後のローカル ↔ YouTube 整合性監査
 - `/post-publish` — `workflow.post-publish` 設定時、アップロード完了後の 3 段チェーンを承認・履歴付きで実行
 - `/community-post` — `workflow.post-publish` 未設定時の後方互換。コミュニティ投稿テンプレを展開して Studio を起動（`config/channel/community.json` がある場合のみ）

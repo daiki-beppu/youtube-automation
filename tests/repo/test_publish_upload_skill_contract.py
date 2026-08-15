@@ -32,27 +32,24 @@ def test_publish_owns_upload_mode_and_legacy_assets() -> None:
 def test_publish_chain_manifest_keeps_upload_approval_gate() -> None:
     manifest = json.loads((PUBLISH / "references" / "publish-chain-manifest.json").read_text(encoding="utf-8"))
 
-    assert manifest == {
-        "chainId": "publish",
-        "steps": [
-            {
-                "id": "upload",
-                "skill": "publish",
-                "prerequisiteArtifacts": [
-                    "collections/<id>/01-master/*.mp4",
-                    "collections/<id>/20-documentation/descriptions.md",
-                ],
-                "outputArtifacts": [
-                    "collections/<id>/20-documentation/upload_tracking.json",
-                    "collections/<id>/workflow-state.json::upload.video_id",
-                ],
-                "approvalGate": {
-                    "skip": False,
-                    "configPath": "workflow.wf_next.skip_upload_approval",
-                },
-                "idempotency": {"script": "references/publish-chain-state.py"},
-            }
+    assert manifest["chainId"] == "publish"
+    upload = next(step for step in manifest["steps"] if step["id"] == "upload")
+    assert upload == {
+        "id": "upload",
+        "skill": "publish",
+        "prerequisiteArtifacts": [
+            "collections/<id>/01-master/*.mp4",
+            "collections/<id>/20-documentation/descriptions.md",
         ],
+        "outputArtifacts": [
+            "collections/<id>/20-documentation/upload_tracking.json",
+            "collections/<id>/workflow-state.json::upload.video_id",
+        ],
+        "approvalGate": {
+            "skip": False,
+            "configPath": "workflow.wf_next.skip_upload_approval",
+        },
+        "idempotency": {"script": "references/publish-chain-state.py"},
     }
 
 
