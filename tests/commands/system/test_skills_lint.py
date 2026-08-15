@@ -14,6 +14,7 @@ import pytest
 from tests.helpers.paths import REPO_ROOT
 from youtube_automation.commands.system import skills_sync
 from youtube_automation.commands.system.skills_sync import build_parser, main
+from youtube_automation.configuration import skills as skill_config
 from youtube_automation.domains.skills.inventory import lint_frontmatter_text, lint_skill
 
 _VALID_SKILL_MD = """---
@@ -54,6 +55,8 @@ def fake_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     skills_dir.mkdir(parents=True)
     _write_skill(skills_dir, "good-skill", _VALID_SKILL_MD)
     monkeypatch.setattr(skills_sync, "_editable_root", lambda: tmp_path)
+    monkeypatch.setattr(skill_config, "SKILL_CONFIG_KEYS", frozenset())
+    monkeypatch.setattr(skill_config, "SKILL_ONLY_CONFIG_KEYS", frozenset())
     return tmp_path
 
 
@@ -295,6 +298,37 @@ def test_cli_lint_does_not_count_reference_lines(fake_repo: Path, capsys: pytest
 
     assert main(["lint", "good-skill"]) == 0
     assert "SKILL.md が" not in capsys.readouterr().out
+
+
+def test_cli_lint_rejects_registered_skill_config_without_default(
+    fake_repo: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(skill_config, "SKILL_CONFIG_KEYS", frozenset({"missing-config"}))
+
+    assert main(["lint"]) == 1
+    assert "missing-config/config.default.yaml がありません" in capsys.readouterr().out
+
+
+def test_cli_lint_rejects_unregistered_skill_config_default(
+    fake_repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    default_config = fake_repo / ".claude" / "skills" / "good-skill" / "config.default.yaml"
+    default_config.write_text("{}\n", encoding="utf-8")
+
+    assert main(["lint"]) == 1
+    assert "good-skill/config.default.yaml がどちらのキー集合にも登録されていません" in capsys.readouterr().out
+
+
+def test_cli_lint_rejects_skill_config_registered_in_both_key_sets(
+    fake_repo: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    default_config = fake_repo / ".claude" / "skills" / "good-skill" / "config.default.yaml"
+    default_config.write_text("{}\n", encoding="utf-8")
+    monkeypatch.setattr(skill_config, "SKILL_CONFIG_KEYS", frozenset({"good-skill"}))
+    monkeypatch.setattr(skill_config, "SKILL_ONLY_CONFIG_KEYS", frozenset({"good-skill"}))
+
+    assert main(["lint"]) == 1
+    assert "good-skill が SKILL_CONFIG_KEYS と SKILL_ONLY_CONFIG_KEYS の両方" in capsys.readouterr().out
 
 
 def test_cli_lint_missing_mode_reference_reports_skill_flag_and_path(

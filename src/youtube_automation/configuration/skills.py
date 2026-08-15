@@ -26,7 +26,7 @@ import warnings
 from collections.abc import Mapping
 from importlib.resources import as_file, files
 from pathlib import Path
-from typing import Any
+from typing import Any, Final
 
 import yaml
 
@@ -34,6 +34,40 @@ from youtube_automation.configuration import channel_dir as configured_channel_d
 from youtube_automation.core.errors import ConfigError
 
 _cache: dict[str, dict[str, Any]] = {}
+
+SKILL_CONFIG_KEYS: Final[frozenset[str]] = frozenset(
+    {
+        "analytics",
+        "benchmark",
+        "collection-ideate",
+        "discover-competitors",
+        "loop-video",
+        "masterup",
+        "metadata-audit",
+        "suno",
+        "suno-helper",
+        "thumbnail",
+    }
+)
+SKILL_ONLY_CONFIG_KEYS: Final[frozenset[str]] = frozenset(
+    {
+        "community-post",
+        "flop-analysis",
+        "live-clean",
+        "lyria",
+        "short",
+        "short-release",
+        "suno-lyric",
+        "video-analyze",
+        "video-description",
+        "video-upload",
+        "videoup",
+    }
+)
+
+# `postmortem` は `flop-analysis` への既存の読み替え入口であり、配布 config の
+# 正規キーではない。正規キー集合へ混ぜると実在ファイルとの双方向契約を壊す。
+_LEGACY_SKILL_CONFIG_ALIASES: Final[frozenset[str]] = frozenset({"postmortem"})
 
 _THUMBNAIL_TEXT_RENDER_MODES = frozenset({"ai_burn_in", "deterministic"})
 _ACKNOWLEDGED_UNKNOWN_KEYS = "acknowledged_unknown_keys"
@@ -327,6 +361,9 @@ def load_skill_config(
     Raises:
         ConfigError: default.yaml が見つからない、YAML パース失敗など
     """
+    if skill not in SKILL_CONFIG_KEYS | SKILL_ONLY_CONFIG_KEYS | _LEGACY_SKILL_CONFIG_ALIASES:
+        raise ConfigError(f"未登録の skill-config キーです: {skill}")
+
     use_shared_cache = use_cache and channel_dir is None
     if use_shared_cache and skill in _cache:
         return _cache[skill]

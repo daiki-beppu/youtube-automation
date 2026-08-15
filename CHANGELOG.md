@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(skills)`: skill-config の正規キーを現行 Python 利用 10 件（#4083 で直接参照が加わった `analytics` を含む）と SKILL.md 専用 11 件の集合へ集約し、未登録キーの読み込み拒否と `config.default.yaml` の双方向一致を `yt-skills lint` で検証する（#3803）。
+
 - `feat(skills)`: 全 55 skill に成果物の読み書き宣言を追加し、`yt-skills artifacts` で writer 一覧と重複を可視化する（#3802）。
 
 - `feat(skills)`: frontmatter の `purpose` から PDCA 順の `docs/skill-catalog.md` を生成し、`yt-skills catalog --check` と CI で最新性を検証する（#3801）。

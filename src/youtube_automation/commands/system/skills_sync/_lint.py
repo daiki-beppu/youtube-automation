@@ -1,4 +1,6 @@
-"""yt-skills lint — SKILL.md の軽量契約検証 (Issues #2096, #3749, #3750, #3751, #3793, #3802)。
+"""yt-skills lint — SKILL.md の軽量契約検証。
+
+Issues #2096, #3749, #3750, #3751, #3793, #3802, #3803。
 
 skill 編集後の検証を pytest 全体実行 (約 4 分) に律速されず秒単位で回すための
 サブコマンド。frontmatter / flag の検証ロジックは domains.skills.inventory を
@@ -17,6 +19,7 @@ skill 編集後の検証を pytest 全体実行 (約 4 分) に律速されず�
     9. 委譲先の宣言行が存在し、有向グラフに循環がない
     10. SKILL.md 本体が 400 行以下である
     11. 成果物ブロックと `書き込む` 宣言行が存在する
+    12. skill-config の登録キーと config.default.yaml が双方向に一致する
 """
 
 from __future__ import annotations
@@ -26,6 +29,7 @@ from pathlib import Path
 from typing import Final
 
 from youtube_automation.commands.system.skills_sync._delegation import DelegationGraph, format_path
+from youtube_automation.configuration import skills as skill_config
 from youtube_automation.domains.skills.inventory import SkillInventory, SkillLintViolation, lint_skill_contract
 
 _SKILL_MD_MAX_LINES: Final[int] = 400
@@ -78,6 +82,25 @@ def _is_allowlisted(name: str, violation: SkillLintViolation, line_count: int) -
     return allowed_line_count is not None and line_count <= allowed_line_count
 
 
+def _lint_skill_config_contract(inventory: SkillInventory) -> list[str]:
+    python_keys = skill_config.SKILL_CONFIG_KEYS
+    skill_only_keys = skill_config.SKILL_ONLY_CONFIG_KEYS
+    registered = python_keys | skill_only_keys
+    defaults = {
+        skill_dir.name for skill_dir in inventory.skill_directories() if (skill_dir / "config.default.yaml").is_file()
+    }
+
+    violations = [f"{key}/config.default.yaml がありません" for key in sorted(registered - defaults)]
+    violations.extend(
+        f"{key}/config.default.yaml がどちらのキー集合にも登録されていません" for key in sorted(defaults - registered)
+    )
+    violations.extend(
+        f"{key} が SKILL_CONFIG_KEYS と SKILL_ONLY_CONFIG_KEYS の両方に登録されています"
+        for key in sorted(python_keys & skill_only_keys)
+    )
+    return violations
+
+
 def cmd_lint(args: argparse.Namespace) -> int:
     """`yt-skills lint [<skill>...]` — skill 契約を検証し違反があれば非ゼロ exit。"""
     from youtube_automation.commands.system.skills_sync import _asset_root
@@ -95,6 +118,10 @@ def cmd_lint(args: argparse.Namespace) -> int:
         targets = requested
     else:
         targets = available
+
+    skill_config_violations = [] if requested else _lint_skill_config_contract(inventory)
+    for violation in skill_config_violations:
+        print(f"skill-config: {violation}")
 
     graph = DelegationGraph.load(inventory)
 
@@ -124,6 +151,9 @@ def cmd_lint(args: argparse.Namespace) -> int:
 
     if failed_skills:
         print(f"lint 失敗: {len(failed_skills)}/{len(targets)} skill に違反があります (source: {root})")
+        return 1
+    if skill_config_violations:
+        print(f"lint 失敗: skill-config 契約に {len(skill_config_violations)} 件の違反があります (source: {root})")
         return 1
     print(f"lint 合格: {len(targets)} skill (source: {root})")
     return 0
