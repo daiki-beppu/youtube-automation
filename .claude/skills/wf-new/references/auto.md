@@ -131,7 +131,7 @@ resolver が `action: suno-helper` を返したら、agent 自身が `/music --g
 ## 実行手順
 
 1. `config/channel/` が無ければ `/setup --channel` を案内して停止する。
-   `load_config()` が失敗した場合は`/setup --import` を案内して停止する。state resolver または上記子 skill が無ければ `/automation-update`（本リポジトリ内では `yt-skills sync`）を案内して停止する。すべて満たすまで lease と子 skill を開始しない。
+   `load_config()` が失敗した場合は`/setup --import` を案内して停止する。state resolver または上記子 skill が無ければ `/automation --update`（本リポジトリ内では `yt-skills sync`）を案内して停止する。すべて満たすまで lease と子 skill を開始しない。
 2. `acquire` で token を保持する。exit 20 / `busy` なら子 skill を開始せず終了する。
 3. 初回 `plan` を実行する。
    - `reason: no_active_collection`: resolver が `action: wf-new` を返したら別 skill を呼ばず、同一 SKILL.md の通常入口を canonical action として選ぶ。step 4 の heartbeat と AI 開始時刻取得後に通常入口を読み、企画選択、thumbnail 承認、preselected manifest、channel constraint verification を含む既存 gate と明示 opt-in の skip 分岐を保って新規開始する。`skip_plan_selection: true` の analytics / benchmark fallback mode は推奨順 1 位で続行し、minimal mode など設定で省略されていない入力が必要なら `record-bootstrap --status blocked --reason user_input_required --ai-started-at <current-attempt-ai-started-at>` で停止する。

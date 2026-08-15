@@ -9,7 +9,7 @@
 | 読者 | 用途 |
 |---|---|
 | `/automation-release` prepare（upstream） | `[Unreleased]` 配下に `### Migration` セクションがあるか warning レベルで検証 |
-| `/automation-update` Phase 2（下流チャンネルリポジトリ） | `gh release view --json body` で Release 本文を取得、空なら CHANGELOG.md 該当バージョンセクションへ fallback。Top 3 / Fixed / Migration 全文を抽出 |
+| `/automation --update` Phase 2（下流チャンネルリポジトリ） | `gh release view --json body` で Release 本文を取得、空なら CHANGELOG.md 該当バージョンセクションへ fallback。Top 3 / Fixed / Migration 全文を抽出 |
 | libecity `release-notes-chat`（private） | リベシティ「リリースノートチャット」向け digest（プレーンテキスト投稿）の生成 |
 
 ## CHANGELOG.md 全体構造
@@ -53,7 +53,7 @@ local fix 衝突注意:
 
 ## `### Migration` セクション必須要素
 
-下流の `/automation-update` が決定論的に抽出できるよう、以下を **必須要素** とする。
+下流の `/automation --update` が決定論的に抽出できるよう、以下を **必須要素** とする。
 
 ### 1. 所要時間の目安（1 行目）
 
@@ -92,7 +92,7 @@ local fix 衝突注意:
 - v<VER> リリースに含まれる主要な変更を 3〜5 行で箇条書き
 ```
 
-`/automation-update` が Top 3 を AI 抽出する際の参考情報として使う。
+`/automation --update` が Top 3 を AI 抽出する際の参考情報として使う。
 
 ## Migration の import path 対応表
 
@@ -143,7 +143,7 @@ Python module 移動: なし
 | 検出側 | 違反内容 | 反応 |
 |---|---|---|
 | `/automation-release` prepare 1-4 | `[Unreleased]` 配下に `### Migration` セクション無し | warning + `AskUserQuestion` で続行確認 |
-| `/automation-update` Phase 2-3 | `所要時間の目安` / `local fix 衝突注意` の抽出失敗 | fallback で CHANGELOG / Release 本文全体を AI 累積要約 + Phase 3-3 で `[HUMAN STEP]` 確認 |
+| `/automation --update` Phase 2-3 | `所要時間の目安` / `local fix 衝突注意` の抽出失敗 | fallback で CHANGELOG / Release 本文全体を AI 累積要約 + Phase 3-3 で `[HUMAN STEP]` 確認 |
 
 ## 例（v5.5.1 リリースの Migration セクション）
 
@@ -169,4 +169,4 @@ local fix 衝突注意:
 
 - `.claude/skills/automation-release/references/changelog-promotion.md` — Unreleased → [VER] 昇格手順
 - `.claude/skills/automation-release/SKILL.md` — リリース実施フロー（prepare + publish）
-- 下流 `.claude/skills/automation-update/SKILL.md` — 各チャンネルリポジトリで CHANGELOG / Release 本文を読み取って追従するスキル
+- 下流 `.claude/skills/automation/SKILL.md` — 各チャンネルリポジトリで CHANGELOG / Release 本文を読み取って追従するスキル

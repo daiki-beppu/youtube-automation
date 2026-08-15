@@ -44,6 +44,7 @@ _KNOWN_REMOVED_SKILL_NAMES = frozenset(
         "analytics-analyze",
         "analytics-report",
         "analytics-run",
+        "automation-update",
     }
 )
 

@@ -568,7 +568,7 @@ test("アップデートコマンドをコピー可能なコードブロック�
   const main = await readRelease("v5.6.0");
   const extension = await readRelease("ext-v0.3.0");
 
-  assert.match(main, /<code>\/automation-update\n?<\/code>/);
+  assert.match(main, /<code>\/automation --update\n?<\/code>/);
   assert.match(extension, /<code>\/ext-install\n?<\/code>/);
   assert.match(main, /data-blume-copy/);
   assert.match(extension, /data-blume-copy/);

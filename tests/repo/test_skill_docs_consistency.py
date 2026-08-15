@@ -368,7 +368,7 @@ def test_setup_channel_ttp_hearing_routes_direction_to_strategy_mode() -> None:
 def test_branding_missing_report_requires_existing_file_check_before_generation() -> None:
     skill_docs = {
         "setup-channel": _read(".claude/skills/setup/references/channel-mode.md"),
-        "automation-update": _read(".claude/skills/automation-update/SKILL.md"),
+        "automation": _read(".claude/skills/automation/references/update.md"),
     }
 
     for text in skill_docs.values():
@@ -619,18 +619,18 @@ def test_setup_localizations_priority_matches_generation_rules() -> None:
 
 def test_channel_new_requires_initial_save_before_followup_update() -> None:
     setup_channel = _read(".claude/skills/setup/references/channel-mode.md")
-    automation_update = _read(".claude/skills/automation-update/SKILL.md")
+    automation_update = _read(".claude/skills/automation/references/update.md")
 
-    assert "初回保存と automation-update 前の整理" in setup_channel
+    assert "初回保存と automation --update 前の整理" in setup_channel
     assert "git status --porcelain" in setup_channel
-    assert "後続の `/automation-update` は dirty worktree で停止する" in setup_channel
+    assert "後続の `/automation --update` は dirty worktree で停止する" in setup_channel
     assert "git add -A" in setup_channel
     assert "`git add -A` 後の guard を唯一の安全境界にする" in setup_channel
     assert "bash .claude/skills/setup/references/initial_save_guard.sh || exit 1" in setup_channel
     assert 'git commit -m "chore: 初回チャンネル設定を保存"' in setup_channel
     assert "secret-like file staged; unstaged before commit" in setup_channel
     assert "staged secret を自動で外して停止" in setup_channel
-    assert "未コミット変更が残っています。/automation-update の前に以下を完了してください" in setup_channel
+    assert "未コミット変更が残っています。/automation --update の前に以下を完了してください" in setup_channel
     assert "保存未完了として終了した場合は、以下の成功案内は出さない" in setup_channel
     assert "初回保存も完了しているため" in setup_channel
 
@@ -641,7 +641,7 @@ def test_channel_new_requires_initial_save_before_followup_update() -> None:
 def test_channel_new_pre_wf_new_checks_include_analytics_reporting_and_live_streaming() -> None:
     setup_channel = _read(".claude/skills/setup/references/channel-mode.md")
     step9 = setup_channel.split("### Step 9: wf-new 接続前チェック", 1)[1].split(
-        "### Step 10: 初回保存と automation-update 前の整理",
+        "### Step 10: 初回保存と automation --update 前の整理",
         1,
     )[0]
     success_message = setup_channel.split(
@@ -1748,7 +1748,7 @@ def test_automation_schedule_skill_contract() -> None:
     assert "allow_external_publish" in head
 
     # 統合後も兄弟スキルとの責務境界を保つ
-    assert "/automation-update" in skill
+    assert "/automation --update" in skill
     assert "/automation-release" in skill
     assert "/wf-next" in skill
 

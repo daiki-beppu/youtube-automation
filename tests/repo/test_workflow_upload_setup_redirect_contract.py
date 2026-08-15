@@ -14,7 +14,7 @@ SKILLS_DIR = REPO_ROOT / ".claude" / "skills"
 TARGET_SKILLS = (
     "analytics",
     "automation-schedule",
-    "automation-update",
+    "automation",
     "video",
     "publish",
     "wf-auto",
@@ -61,7 +61,7 @@ INITIAL_OCCURRENCE_LEDGER = (
         "workflow-config-regeneration",
         "regenerate",
     ),
-    _entry("automation-update", "SKILL.md", "initial-save-commit", "push"),
+    _entry("automation", "references/update.md", "initial-save-commit", "push"),
     _entry("analytics", "references/status.md", "upstream-new-channel", "opening"),
     _entry("analytics", "references/status.md", "missing-config-new", "opening"),
     _entry("analytics", "references/status.md", "missing-config-existing", "import"),
@@ -245,7 +245,7 @@ EXPECTED_ACTIVE_ROUTES = (
         "wf-new/references/auto.md",
         "## 実行手順",
         "   `load_config()` が失敗した場合は`/setup --import` を案内して停止する。"
-        "state resolver または上記子 skill が無ければ `/automation-update`（本リポジトリ内では "
+        "state resolver または上記子 skill が無ければ `/automation --update`（本リポジトリ内では "
         "`yt-skills sync`）を案内して停止する。すべて満たすまで lease と子 skill を開始しない。",
     ),
     _route(
@@ -296,7 +296,9 @@ EXPECTED_ACTIVE_ROUTES = (
     ),
 )
 
-MUTABLE_FILES = frozenset(path for path, _, _ in EXPECTED_ACTIVE_ROUTES if path != "automation-update/SKILL.md") | {
+MUTABLE_FILES = frozenset(
+    path for path, _, _ in EXPECTED_ACTIVE_ROUTES if path != "automation/references/update.md"
+) | {
     "analytics/references/analysis-json-validator.md",
     "analytics/config.default.yaml",
     "analytics/references/flop.md",
@@ -359,12 +361,12 @@ EXPECTED_ISSUE_3986_CHANGED_PATHS = frozenset(
         "tests/repo/test_workflow_upload_setup_redirect_contract.py",
     }
 )
-IMMUTABLE_TARGET_FILES_SHA256 = "a6c0a8dc9b73b31f25fa327453f72e20a98c76d8a744c2557e7d5fde1891e4af"
+IMMUTABLE_TARGET_FILES_SHA256 = "628787d0df34c6d40a0867a6c50e766cd743bf8898178da01d70ca36704d1782"
 AUTOMATION_SCHEDULE_REGENERATE_SHA256 = "11d460f727fe50c41f00571b416a1486cb07d0b1548524bc650a7161c16f6c42"
-AUTOMATION_UPDATE_PUSH_SHA256 = "d2e903b505ace3035da345f9f89ba1c0875e93b5633c1ddc31550db2433771eb"
+AUTOMATION_UPDATE_PUSH_SHA256 = "ced3211760d9ff0abd20ec3cdc402501b424f48581ef3a618d51c0d9ee12840c"
 ALLOWED_FENCED_ROUTES = {
     (
-        "automation-update/SKILL.md",
+        "automation/references/update.md",
         "> /setup --import 直後の初回保存が未完了なら、まず初回 commit を作成してください。",
     )
 }
@@ -613,4 +615,7 @@ def test_residual_target_assets_and_sections_remain_byte_identical() -> None:
         sha256((SKILLS_DIR / "wf-new/references/detect_runtime.sh").read_bytes()).hexdigest()
         == AUTOMATION_SCHEDULE_REGENERATE_SHA256
     )
-    assert sha256((SKILLS_DIR / "automation-update/SKILL.md").read_bytes()).hexdigest() == AUTOMATION_UPDATE_PUSH_SHA256
+    assert (
+        sha256((SKILLS_DIR / "automation/references/update.md").read_bytes()).hexdigest()
+        == AUTOMATION_UPDATE_PUSH_SHA256
+    )

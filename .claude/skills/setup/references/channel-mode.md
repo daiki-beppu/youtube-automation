@@ -267,15 +267,15 @@ uv run yt-doctor --json
 `ttp_wf_new_readiness` が `warn` の場合は成功案内を出さない。表示された不足項目を解消し、意図的にスキップする項目だけ `docs/channel/ttp-seed-confirmation.md` にユーザー承認済み例外として残してから再確認する。
 承認済み TTP 対象が 0 件の場合は `/wf-new` 接続へ進まず、Step 1/5 に戻って候補を再確認するか、ユーザーに停止を確認して終了する。
 
-### Step 10: 初回保存と automation-update 前の整理
+### Step 10: 初回保存と automation --update 前の整理
 
-初回保存・cleanup の詳細は本 Step を正本として実行する。後続の `/automation-update` は dirty worktree で停止するため、最後に必ず git 状態を確認する。
+初回保存・cleanup の詳細は本 Step を正本として実行する。後続の `/automation --update` は dirty worktree で停止するため、最後に必ず git 状態を確認する。
 
 ```bash
 git status --porcelain
 ```
 
-出力が空なら、作業ツリーが整理済みで `/automation-update` に進める状態だと案内する。非空なら差分をユーザーに見せ、`git add -A` 後の guard を唯一の安全境界にする。次を順に実行し、guard が失敗した場合は staged secret を自動で外して停止して `git commit` へ進まない。
+出力が空なら、作業ツリーが整理済みで `/automation --update` に進める状態だと案内する。非空なら差分をユーザーに見せ、`git add -A` 後の guard を唯一の安全境界にする。次を順に実行し、guard が失敗した場合は staged secret を自動で外して停止して `git commit` へ進まない。
 
 ```bash
 git status --short
@@ -286,7 +286,7 @@ git commit -m "chore: 初回チャンネル設定を保存"
 git status --porcelain
 ```
 
-guard が `secret-like file staged; unstaged before commit` を出した場合は commit しない。remote 作成保留、git user identity 未設定、またはユーザーが今 commit しない場合は、reference の「未コミット変更が残っています。/automation-update の前に以下を完了してください」案内を提示して保存未完了として終了する。
+guard が `secret-like file staged; unstaged before commit` を出した場合は commit しない。remote 作成保留、git user identity 未設定、またはユーザーが今 commit しない場合は、reference の「未コミット変更が残っています。/automation --update の前に以下を完了してください」案内を提示して保存未完了として終了する。
 
 保存未完了として終了した場合は、以下の成功案内は出さない。作業ツリーが最初から clean、または初回 commit が成功した場合だけ最後に案内する:
 

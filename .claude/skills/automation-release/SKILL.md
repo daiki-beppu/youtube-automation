@@ -1,13 +1,13 @@
 ---
 name: automation-release
 purpose: 準備する
-description: "Use when 本リポジトリの新規リリースを作成するとき。「リリースして」「/automation-release」「suno-helper をリリースしたい」「ext-v0.2.2 を出したい」で発動。Python 本体（vX.Y.Z）と Chrome 拡張（ext-vX.Y.Z）を判定し prepare / publish に自動分岐。グローバル /release は使わない。下流追従は /automation-update、拡張のインストールは /extension"
+description: "Use when 本リポジトリの新規リリースを作成するとき。「リリースして」「/automation-release」「suno-helper をリリースしたい」「ext-v0.2.2 を出したい」で発動。Python 本体（vX.Y.Z）と Chrome 拡張（ext-vX.Y.Z）を判定し prepare / publish に自動分岐。グローバル /release は使わない。下流追従は /automation の update mode、拡張のインストールは /extension"
 ---
 
 ## 前後工程
 
 - `前工程`: `なし`
-- `後工程`: `/automation-update`
+- `後工程`: `/automation --update`
 - `委譲先`: `なし`
 
 ## 成果物
@@ -40,7 +40,7 @@ description: "Use when 本リポジトリの新規リリースを作成すると
 
 **責務分離**:
 - 本スキル = リリース実施（prepare + publish、Python 本体 / 拡張の両系列）
-- 下流追従 = 各チャンネルリポジトリで `/automation-update` スキル（本リポジトリで配布）が CHANGELOG.md / GitHub Release 本文を読み取って実施
+- 下流追従 = 各チャンネルリポジトリで `/automation --update` スキル（本リポジトリで配布）が CHANGELOG.md / GitHub Release 本文を読み取って実施
 - 拡張の配布・インストール側は `/extension`（Release asset を読む消費側。tag `ext-v*` / asset `<name>-<version>-chrome.zip` の命名契約を本スキルから変えない）
 - グローバル `/release` スキルは廃止済みで存在しない。本リポジトリのリリースは常に本スキルを使う
 
@@ -48,7 +48,7 @@ description: "Use when 本リポジトリの新規リリースを作成すると
 
 以下を確認し、満たさなければ案内して停止する:
 
-- 実行場所が youtube-automation リポジトリ本体（`pyproject.toml::[project].name` が `youtube-channels-automation`）であること。下流チャンネルリポジトリでの追従は `/automation-update` を使う
+- 実行場所が youtube-automation リポジトリ本体（`pyproject.toml::[project].name` が `youtube-channels-automation`）であること。下流チャンネルリポジトリでの追従は `/automation --update` を使う
 - `gh` CLI がインストール済みで認証済み（`gh auth status` が green）であること。未認証なら `gh auth login` を依頼して停止する
 - prepare（Python 本体）の場合、`CHANGELOG.md` の `[Unreleased]` セクションに内容が書き溜められていること。空の場合は prepare を中止する（各 PR 時点で書き溜める運用が前提）
 - Python 本体のバージョン管理は `pyproject.toml::version` を **唯一のソース** とする（`src/youtube_automation/__init__.py` は `importlib.metadata` 経由で自動追従）。配布は git+https + tag pin（PyPI 公開しない）
@@ -156,7 +156,7 @@ git checkout -b "release/v${VER}"
 `references/changelog-promotion.md` の 3 段階手順をそのまま実行する。
 日付は `date +%Y-%m-%d` で取得して `[VER] - YYYY-MM-DD` のフォーマットに埋める。
 
-**Migration セクション存在チェック**: `[Unreleased]` 配下に `### Migration` セクションが無い場合は warning を出し、`AskUserQuestion` で「Migration セクション無しで続行するか」を確認する。Migration セクションは下流の `/automation-update` が `所要時間の目安` / `local fix 衝突注意` を抽出する契約上の入力源（詳細: `references/release-contracts.md`）。
+**Migration セクション存在チェック**: `[Unreleased]` 配下に `### Migration` セクションが無い場合は warning を出し、`AskUserQuestion` で「Migration セクション無しで続行するか」を確認する。Migration セクションは下流の `/automation --update` が `所要時間の目安` / `local fix 衝突注意` を抽出する契約上の入力源（詳細: `references/release-contracts.md`）。
 
 ```bash
 # Unreleased セクション配下に "### Migration" があるか
@@ -226,7 +226,7 @@ v${VER} のリリース PR。
 
 1. このリリース PR をレビュー → マージ
 2. マージ後、`/automation-release` を再実行して publish フェーズに進む（tag + GitHub Release 自動作成）
-3. publish 後、各チャンネルリポジトリで `/automation-update` を実行すると CHANGELOG.md / Release 本文を読み取って追従できる
+3. publish 後、各チャンネルリポジトリで `/automation --update` を実行すると CHANGELOG.md / Release 本文を読み取って追従できる
 EOF
 )"
 ```
@@ -269,7 +269,7 @@ fi
 gh release create "v${VER}" --generate-notes --title "v${VER}"
 ```
 
-`--generate-notes` で PR 一覧が自動生成される。これだけで運用上は問題ない（下流の `/automation-update` 側が CHANGELOG.md fallback で `### Migration` を抽出するため）。
+`--generate-notes` で PR 一覧が自動生成される。これだけで運用上は問題ない（下流の `/automation --update` 側が CHANGELOG.md fallback で `### Migration` を抽出するため）。
 
 リリース本文の先頭に CHANGELOG.md::[VER] セクションも含めたい場合は publish 後に `gh release edit` で追記する:
 
@@ -372,7 +372,7 @@ site は PR pending: Cloudflare Pages preview と required checks の確認待�
 merge 後の公開 URL: https://youtube-automation-release-notes.pages.dev/v${VER}/
 
 次の選択肢:
-- 各チャンネルリポジトリで `/automation-update` を実行すれば CHANGELOG.md / Release 本文から累積影響を要約して追従可能
+- 各チャンネルリポジトリで `/automation --update` を実行すれば CHANGELOG.md / Release 本文から累積影響を要約して追従可能
 ```
 
 非承認 / skip、生成失敗、local gate 失敗、既存 branch 検出でも GitHub Release publish 自体は完了として同じ URL を報告する。PR が無い場合は理由と手動作成手順を、PR 作成途中の失敗では重複作成しない retry 手順を併記する。
@@ -596,7 +596,7 @@ merge 後の公開 URL: https://youtube-automation-release-notes.pages.dev/ext-v
 - **`__init__.py` の独立 bump**: バージョンは `importlib.metadata` 経由で `pyproject.toml` を読むので `__init__.py` を編集してはいけない。`grep '__version__' src/youtube_automation/__init__.py` で `importlib.metadata` ベースのままであることを確認
 - **main が prepare 中に進む**: 他者が並行で main にマージしてもリリース PR は固定 SHA から枝分かれしているので影響なし。後乗せ機能は次回リリースに自動で乗る。ただし PR mergeable conflict が出たら rebase が必要
 - **tag だけ先に push してしまった場合**: GitHub Release 作成（2-3）を再実行すれば idempotent（gh release create が既存 tag を拾う）
-- **`--generate-notes` が空**: 前回 tag から PR が無い場合、自動生成本文が空になる。下流の `/automation-update` 側が CHANGELOG.md fallback で抽出するため publish 時点では問題視しない
+- **`--generate-notes` が空**: 前回 tag から PR が無い場合、自動生成本文が空になる。下流の `/automation --update` 側が CHANGELOG.md fallback で抽出するため publish 時点では問題視しない
 - **`uv.lock` の version 乖離**: `pyproject.toml` だけ bump して `uv.lock` を同期し忘れると、別 PR で `uv sync` を叩いた瞬間に機械的な 1 行差分が無関係な PR に混入する（#515 の既往）。prepare Phase 1-5 で **必ず** `uv lock` を実行し、bump コミットに `uv.lock` も含めること。`uv` が未導入なら `nix develop --command uv lock` で囲む
 - **extension 依頼を Python 本体と誤判定**: 依頼に `suno-helper` / `distrokid-helper` / `community-helper` / `ext-v` が含まれるのに Phase 0 に進むと `pyproject.toml` が誤 bump される。Phase R の判定表に従い、迷ったら `AskUserQuestion`
 - **`gh pr merge --delete-branch` の non-zero（worktree footgun）**: worktree 環境では remote merge 成功後の local checkout 後処理が `fatal: 'main' is already used by worktree ...` で失敗し non-zero になる。remote merge 失敗と誤認して merge を再実行しない。E2-1 の通り `gh pr view <N> --json state,mergeCommit` で remote state を確認し、`MERGED` なら tag push へ進む
@@ -612,7 +612,7 @@ merge 後の公開 URL: https://youtube-automation-release-notes.pages.dev/ext-v
 - `src/youtube_automation/__init__.py` は **直接編集禁止**（`importlib.metadata` 経由の動的読み込みのため、版数は `pyproject.toml` を bump するだけで追従する）
 - リリース PR の commit メッセージは `chore(release): v<VER> リリース PR` 固定（日本語 Conventional Commits 準拠 + 検索容易性）
 - `release/v<VER>` ブランチ命名は固定（state detection と publish クリーンアップが依存）
-- prepare 1-4 で `Migration` セクション欠落を warning する（下流の `/automation-update` が `所要時間` / `local fix 衝突注意` を抽出する契約上の入力源）
+- prepare 1-4 で `Migration` セクション欠落を warning する（下流の `/automation --update` が `所要時間` / `local fix 衝突注意` を抽出する契約上の入力源）
 - prepare 1-5 で **必ず** `uv lock` を実行し、`uv.lock` の version を `pyproject.toml::version` と同期させる（#515 再発防止）。bump コミットに `uv.lock` を含めず main にマージするのは禁止
 - 状態判定（Phase R / Phase 0 / Phase E0）の結果は `AskUserQuestion` でユーザー確認してから次に進む（誤判定時の脱出口）
 - extension release は `extensions/<name>/package.json::version` のみを変更する。`pyproject.toml` / `uv.lock` / `CHANGELOG.md` 昇格には触らない（バージョン系列は完全独立。`references/release-contracts.md`）
@@ -633,6 +633,6 @@ merge 後の公開 URL: https://youtube-automation-release-notes.pages.dev/ext-v
 - `references/release-contracts.md` — Python Migration producer と extension GitHub Release 配布の実行契約
 - `.github/workflows/release-extensions.yml` — extension の install / build / zip 契約（local verify はこれと同一コマンド列で実行する）
 - `extensions/README.md` — 拡張の開発フローと release 添付方針
-- `/automation-update`（下流チャンネルリポジトリ）— publish 後の追従スキル
+- `/automation --update`（下流チャンネルリポジトリ）— publish 後の追従スキル
 - `/extension` — Release asset を読む消費側スキル（tag / asset 命名契約の依存先）
 - CLAUDE.md「開発ワークフロー」— commit メッセージ規約（日本語 Conventional Commits）

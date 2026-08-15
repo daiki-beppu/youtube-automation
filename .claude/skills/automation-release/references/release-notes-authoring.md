@@ -34,7 +34,7 @@ frontmatter は `title` / `version` / `released_at` / `kind` / `summary` / `side
 
 ## アップデート方法
 
-Python 本体は `/automation-update`、Chrome 拡張は `/extension` を単独の `text` code block で示す。必要な移行作業があれば省略しない。
+Python 本体は `/automation --update`、Chrome 拡張は `/extension` を単独の `text` code block で示す。必要な移行作業があれば省略しない。
 
 ## 新機能
 

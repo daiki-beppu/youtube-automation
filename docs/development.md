@@ -179,7 +179,7 @@ uv run pytest tests/repo/test_skills_sync_installed_wheel.py -q
 - **下流（チャンネルリポジトリ）**: pin されたリリース版 wheel に焼き込まれた `_skills/` を読む。**upstream で編集しただけでは下流の `yt-skills diff/sync` には一切反映されない**
 - release前の packaged-resource 経路は `uv run pytest tests/repo/test_skills_sync_installed_wheel.py -q` で再現できる。testはcandidate wheelをrepository外の一時directoryへbuildし、隔離venvへ非editable installしてから、空の擬似下流へ全assetをsyncする。同期後のtreeをsourceとbyte単位で比較し、`.agents/skills` symlinkとinstalled `yt-skills diff` の差分なしも確認する
 - CI `build-smoke` も同じpytest targetへbuild済みwheelを `YTA_CANDIDATE_WHEEL` で渡すため、ローカルとCIで判定ロジックを二重管理しない。環境変数未指定のローカル実行ではtest自身が一時領域へwheelをbuildする
-- このsmokeが保証するのは、candidate wheelから資格情報を持たない標準layoutの擬似下流への配布内容と冪等性まで。実チャンネル固有差分、release作成、pin更新、認証を含む `/automation-update` の運用確認は引き続きリリース後に行う
+- このsmokeが保証するのは、candidate wheelから資格情報を持たない標準layoutの擬似下流への配布内容と冪等性まで。実チャンネル固有差分、release作成、pin更新、認証を含む `/automation --update` の運用確認は引き続きリリース後に行う
 
 ### 4. 配布（下流反映はリリース一巡に律速される）
 
@@ -188,7 +188,7 @@ uv run pytest tests/repo/test_skills_sync_installed_wheel.py -q
 1. `CHANGELOG.md` の `[Unreleased]` に追記（`.claude/skills/` は**実コード扱い**。CI の changelog ジョブでゲート）
 2. PR 作成 → CI green → merge
 3. upstream で `/automation-release`（prepare → リリース PR → tag push → Release publish）
-4. 下流リポジトリで `/automation-update`（pin bump → `uv lock` → `yt-skills sync` → コミット）
+4. 下流リポジトリで `/automation --update`（pin bump → `uv lock` → `yt-skills sync` → コミット）
 
 ### `.agents/skills` symlink の failure mode（`--target` 非標準パス）
 
@@ -206,7 +206,7 @@ uv run pytest tests/repo/test_skills_sync_installed_wheel.py -q
 
 本リポジトリは `daiki-beppu/youtube-automation` を official upstream として前提にしている。fork して独自運用する場合、GitHub owner の固定参照が fork とズレて生成物・案内コマンドに齟齬を生むため、以下を書き換える。
 
-**単一ソース（コード）**: `src/youtube_automation/commands/system/automation_update_refs.py` の `UPSTREAM_REPO` 定数。`yt-automation-update` の official upstream 検証（サプライチェーン保護の意図的ガード）と `yt-doctor` の suggested command、`/automation-update` / `/extension` の `gh` / `curl` コマンドはすべて実行時にここから導出される。fork ではまずこの定数を変更する。
+**単一ソース（コード）**: `src/youtube_automation/commands/system/automation_update_refs.py` の `UPSTREAM_REPO` 定数。`yt-automation-update` の official upstream 検証（サプライチェーン保護の意図的ガード）と `yt-doctor` の suggested command、`/automation --update` / `/extension` の `gh` / `curl` コマンドはすべて実行時にここから導出される。fork ではまずこの定数を変更する。
 
 **`UPSTREAM_REPO` から導出されず、手で書き換えが要るファイル**:
 
@@ -214,7 +214,7 @@ uv run pytest tests/repo/test_skills_sync_installed_wheel.py -q
 |---|---|
 | `.claude/CLAUDE.template.md` | 冒頭と「このリポジトリの規約」の upstream 表記 |
 | `.claude/skills/setup/SKILL.md` | bootstrap 用 `uv add git+...`（パッケージ導入前に実行するため定数から導出できない） |
-| `.claude/skills/automation-update/SKILL.md` | 冒頭 prose と Step 1-0 の既定値表記、cleanup guide への doc リンク |
+| `.claude/skills/automation/SKILL.md` | 冒頭 prose と Step 1-0 の既定値表記、cleanup guide への doc リンク |
 | `.claude/skills/extension/SKILL.md` | `gh` 未導入時の手動ダウンロード fallback 用 Release ページ URL、install reference の既定値表記 |
 | `.claude/skills/automation-release/references/*.md` | リリースチェックリスト / CHANGELOG 昇格手順内の URL 例 |
 | `.claude/skills/setup/references/claude-md-template.md` / `.claude/skills/setup/references/gcp-bootstrap.md` | upstream リポジトリ名の説明 |

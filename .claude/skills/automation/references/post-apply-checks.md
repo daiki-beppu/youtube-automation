@@ -105,10 +105,10 @@ uv run yt-skills list
 
 ## 自スキルの frontmatter 健全性チェック
 
-`yt-skills sync` で `.claude/skills/automation-update/SKILL.md` 自身が上書きされた場合、新版の frontmatter が壊れていると **次回起動でスキル発動できなくなる**（YAML パース失敗）。sync 直後に必ず確認:
+`yt-skills sync` で `.claude/skills/automation/SKILL.md` 自身が上書きされた場合、新版の frontmatter が壊れていると **次回起動でスキル発動できなくなる**（YAML パース失敗）。sync 直後に必ず確認:
 
 ```bash
-head -5 .claude/skills/automation-update/SKILL.md
+head -5 .claude/skills/automation/SKILL.md
 ```
 
 `---` で囲まれた YAML が `name:` と `description:` を含み、2 つ目の `---` で閉じていれば OK。
@@ -116,7 +116,7 @@ head -5 .claude/skills/automation-update/SKILL.md
 壊れていた場合（YAML パース不能 / frontmatter 不完全）は git でロールバック:
 
 ```bash
-git checkout .claude/skills/automation-update/SKILL.md
+git checkout .claude/skills/automation/SKILL.md
 ```
 
-その後、本スキルを利用者の手元で再走するのではなく、上流の issue として報告するよう案内する（automation-update 自身に問題があるため再帰的に追従できない状況）。
+その後、本スキルを利用者の手元で再走するのではなく、上流の issue として報告するよう案内する（automation 自身に問題があるため再帰的に追従できない状況）。

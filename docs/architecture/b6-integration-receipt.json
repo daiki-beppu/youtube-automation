@@ -367,28 +367,28 @@
     },
     {
       "old_owner": "legacy..claude.skills.automation-update.SKILL.md",
-      "exact_new_owner": ".claude/skills/automation-update/SKILL.md",
+      "exact_new_owner": ".claude/skills/automation/SKILL.md",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"
     },
     {
       "old_owner": "legacy..claude.skills.automation-update.references.gotchas.md",
-      "exact_new_owner": ".claude/skills/automation-update/references/gotchas.md",
+      "exact_new_owner": ".claude/skills/automation/references/gotchas.md",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"
     },
     {
       "old_owner": "legacy..claude.skills.automation-update.references.local-fix-conflicts.md",
-      "exact_new_owner": ".claude/skills/automation-update/references/local-fix-conflicts.md",
+      "exact_new_owner": ".claude/skills/automation/references/local-fix-conflicts.md",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"
     },
     {
       "old_owner": "legacy..claude.skills.automation-update.references.post-apply-checks.md",
-      "exact_new_owner": ".claude/skills/automation-update/references/post-apply-checks.md",
+      "exact_new_owner": ".claude/skills/automation/references/post-apply-checks.md",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"

@@ -4,7 +4,7 @@
 
 ## Python Migration producer contract
 
-Python release の prepare では、`[Unreleased]` 配下の `### Migration` を下流 `/automation-update` が読み取る入力として扱う。セクションを置く場合は、次の3要素を保持する。
+Python release の prepare では、`[Unreleased]` 配下の `### Migration` を下流 `/automation --update` が読み取る入力として扱う。セクションを置く場合は、次の3要素を保持する。
 
 1. 1行目の `所要時間の目安: X〜Y 分`
 2. `local fix 衝突注意:` と対象skillの箇条書き（該当なしは `- 無し`）

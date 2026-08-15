@@ -41,7 +41,6 @@ _SKILL_MD_LINE_LIMIT_VIOLATION: Final[str] = "skill_md_line_limit_exceeded"
 # channel-new は当初 450 行だったが既に上限内へ短縮されたため、猶予から除外済み。
 _ALLOWLISTED_SKILL_MD_LINE_COUNTS: Final[dict[str, int]] = {
     "automation-release": 638,
-    "automation-update": 571,
     "loop-video": 410,
     "suno": 594,
 }

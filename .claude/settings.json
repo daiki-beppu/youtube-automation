@@ -44,7 +44,7 @@
           },
           {
             "type": "command",
-            "command": "for f in $CLAUDE_FILE_PATHS; do case \"$f\" in *.claude/skills/*) echo \"NOTE: .claude/skills/ を編集しました。下流配布対象なのでマージ後は下流リポジトリ側で /automation-update での追従を忘れずに\" >&2; break;; esac; done; exit 0"
+            "command": "for f in $CLAUDE_FILE_PATHS; do case \"$f\" in *.claude/skills/*) echo \"NOTE: .claude/skills/ を編集しました。下流配布対象なのでマージ後は下流リポジトリ側で /automation --update での追従を忘れずに\" >&2; break;; esac; done; exit 0"
           }
         ]
       }
