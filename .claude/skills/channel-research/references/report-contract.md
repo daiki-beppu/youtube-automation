@@ -1,4 +1,4 @@
-# Market research report contract
+# Channel research market report contract
 
 ## 必須セクション
 

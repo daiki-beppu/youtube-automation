@@ -383,7 +383,7 @@ uv run yt-generate-image \
 
 ### thumbnail-text-profile 適用（#1907）
 
-`/channel-new` 分析モードが生成する `docs/benchmarks/thumbnail-text-profile.md`（`schema_version: 1`。見出し・キーの単一ソースは `.claude/skills/channel-new/references/analysis-mode.md` の Step 4）を読み、決定的合成の入力へ変換する。
+`/channel-research --market` が生成する `docs/benchmarks/thumbnail-text-profile.md`（`schema_version: 1`。見出し・キーの単一ソースは `.claude/skills/channel-research/references/market.md` の Step 4）を読み、決定的合成の入力へ変換する。
 
 これは前提ガードではない。ファイルが存在しない、またはスキーマの見出し・必須キーを満たさない場合は「thumbnail-text-profile なし」と表示し、`config.default.yaml` の現行デフォルト値（チャンネル上書きがあれば deep-merge 後の実効値)のまま標準フローを続行する。エラーで停止しない。
 

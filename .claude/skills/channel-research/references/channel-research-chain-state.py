@@ -8,7 +8,7 @@ import json
 import sys
 import time
 from pathlib import Path
-from typing import TypedDict
+from typing import NotRequired, TypedDict
 
 from youtube_automation.configuration.skills import load_skill_config
 from youtube_automation.core.errors import ConfigError
@@ -26,6 +26,7 @@ class StateResult(TypedDict):
     freshness_days: float
     freshness_source: str
     artifacts: list[str]
+    branch: NotRequired[str]
 
 
 def _freshness(root: Path) -> tuple[float, str]:
@@ -58,8 +59,9 @@ def _result(
     source: str,
     artifacts: list[Path],
     root: Path,
+    branch: str | None = None,
 ) -> StateResult:
-    return {
+    result: StateResult = {
         "step": step,
         "decision": decision,
         "reason": reason,
@@ -67,11 +69,82 @@ def _result(
         "freshness_source": source,
         "artifacts": sorted(path.relative_to(root).as_posix() for path in artifacts),
     }
+    if branch is not None:
+        result["branch"] = branch
+    return result
+
+
+def _evaluate_market(
+    root: Path,
+    data: list[Path],
+    reports: list[Path],
+    comments: list[Path],
+) -> tuple[int, StateResult]:
+    inputs = [*data, *reports, *comments]
+    if not inputs:
+        saved_reports = list((root / "docs" / "research").glob("market-*.md"))
+        if saved_reports:
+            return EXIT_SKIP, _result(
+                "market",
+                "skip",
+                "market_comparison_report_exists",
+                0.0,
+                "",
+                saved_reports,
+                root,
+                "market-comparison",
+            )
+        return EXIT_RUN, _result(
+            "market",
+            "run",
+            "market_comparison_required",
+            0.0,
+            "",
+            [],
+            root,
+            "market-comparison",
+        )
+
+    if not data or not reports or not comments:
+        return EXIT_BLOCKED, _result(
+            "market",
+            "blocked",
+            "collected_analysis_inputs_incomplete",
+            0.0,
+            "",
+            inputs,
+            root,
+            "collected-analysis",
+        )
+
+    outputs = [root / "docs" / "channel-research.md", root / "docs" / "benchmarks" / "thumbnail-text-profile.md"]
+    existing_outputs = [path for path in outputs if path.is_file()]
+    if len(existing_outputs) != len(outputs):
+        return EXIT_RUN, _result(
+            "market",
+            "run",
+            "collected_analysis_outputs_missing",
+            0.0,
+            "",
+            [*inputs, *existing_outputs],
+            root,
+            "collected-analysis",
+        )
+    return EXIT_SKIP, _result(
+        "market",
+        "skip",
+        "collected_analysis_outputs_complete",
+        0.0,
+        "",
+        [*inputs, *existing_outputs],
+        root,
+        "collected-analysis",
+    )
 
 
 def evaluate(root: Path, step: str, now: float) -> tuple[int, StateResult]:
     root = root.resolve()
-    freshness_days, source = _freshness(root)
+    freshness_days, source = (0.0, "") if step == "market" else _freshness(root)
     analytics = root / "config" / "channel" / "analytics.json"
     if step == "benchmark" and not analytics.is_file():
         return EXIT_BLOCKED, {
@@ -85,6 +158,9 @@ def evaluate(root: Path, step: str, now: float) -> tuple[int, StateResult]:
 
     data = list((root / "data").glob("benchmark_*.json"))
     reports = _benchmark_reports(root)
+    if step == "market":
+        comments = list((root / "data").glob("comments_*.json"))
+        return _evaluate_market(root, data, reports, comments)
 
     if step == "discover":
         if not reports:
@@ -167,7 +243,7 @@ def evaluate(root: Path, step: str, now: float) -> tuple[int, StateResult]:
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--channel-dir", type=Path, default=Path.cwd())
-    parser.add_argument("--step", choices=("benchmark", "discover"), required=True)
+    parser.add_argument("--step", choices=("benchmark", "discover", "market"), required=True)
     parser.add_argument("--now", type=float, default=None)
     parser.add_argument("--pretty", action="store_true")
     return parser

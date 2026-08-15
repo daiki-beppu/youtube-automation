@@ -1,6 +1,6 @@
 # 全 skill カタログ
 
-`yt-skills sync` で各チャンネルリポジトリに配布される Claude Code skill の一覧（全 **51 個**）。各行は「なにができるか」（what）の 1 行要約。発動トリガー・前提・前後工程はサイトの [skill ガイド](/skills)、詳細手順は `.claude/skills/<name>/SKILL.md` を参照。
+`yt-skills sync` で各チャンネルリポジトリに配布される Claude Code skill の一覧（全 **49 個**）。各行は「なにができるか」（what）の 1 行要約。発動トリガー・前提・前後工程はサイトの [skill ガイド](/skills)、詳細手順は `.claude/skills/<name>/SKILL.md` を参照。
 
 > 個別の使い分けは各カテゴリの冒頭リンクや [`docs/workflow-cheatsheet.md`](workflow-cheatsheet.md)（workflow 系）も併せて参照。
 
@@ -21,8 +21,7 @@
 | Skill | なにができるか |
 |---|---|
 | /setup | ツール導入と GCP / OAuth 設定を wizard 形式で診断・セットアップ |
-| /channel-new | TTP 対象確認、seed confirmation artifacts、config、本格ペルソナ作成チェーン、初回 branding まで進める。収集済みデータの分析モード、方向性検討、既存チャンネル取り込み、再生成、設定 push も担当 |
-| /market-research | 任意: TTP 入替候補とニッチ仮説を複数根拠で横断比較し、既定は会話内だけに提示 |
+| /channel-new | TTP メモまたは分析レポートを入力に、チャンネルの方向性・ポジショニング・差別化を対話で決定 |
 | /channel-status | 登録者数・総再生回数・動画別パフォーマンスを YouTube API から取得 |
 
 ## オーディエンス・ポジショニング検証
@@ -94,7 +93,7 @@ YouTube Analytics と動画本体の解析。
 
 | Skill | なにができるか |
 |---|---|
-| /channel-research | チャンネル調査を状態判定付きで実行。`--benchmark` で競合の最新動画データを収集し、`--discover` で追加競合候補を発掘・ランキング化 |
+| /channel-research | チャンネル調査を状態判定付きで実行。`--benchmark` で競合データを収集、`--discover` で追加候補を発掘、`--market` で市場比較または収集済みデータ分析へ自動分岐 |
 | /thumbnail-research | 収集済み競合サムネイルの再生数上位群 / 下位群を比較し、勝ちパターンと `/thumbnail` 向け TTP 推奨事項を生成 |
 
 ## 配信インフラ

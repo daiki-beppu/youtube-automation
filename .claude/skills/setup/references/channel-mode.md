@@ -205,9 +205,9 @@ Step 6〜9 を始める前に [persona / branding / readiness の実施詳細](p
 `/setup --channel` の標準フローでは、次の追加調査を必要になった時点でユーザーに目的を確認し、後続スキルへ委譲する。`/viewer-voice` はこの任意の追加調査には含めず、Step 7 の必須前工程として実行する:
 
 - 追加の競合候補を広げたい → `/channel-research --discover`
-- 現行 TTP の入替候補やニッチ仮説を、外部根拠と同じ評価軸で比較したい → `/market-research`（会話内レポートが既定。TTP / config は変更しない）
+- 現行 TTP の入替候補やニッチ仮説を、外部根拠と同じ評価軸で比較したい → `/channel-research --market`（会話内レポートが既定。TTP / config は変更しない）
 - 承認済み TTP 対象の追加動画データやサムネイルを再収集したい → `/channel-research --benchmark`（Step 5.5 の初回 duration 算出では必須）
-- 収集済みデータから方向性を深掘りしたい → `/channel-new` 分析モード
+- 収集済みデータから方向性を深掘りしたい → `/channel-research --market`
 
 ### Step 7: 本格ペルソナ作成チェーン
 

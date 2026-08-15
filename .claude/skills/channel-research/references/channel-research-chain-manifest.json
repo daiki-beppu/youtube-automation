@@ -26,6 +26,23 @@
       "idempotency": {
         "script": "references/channel-research-chain-state.py"
       }
+    },
+    {
+      "id": "market",
+      "skill": "channel-research",
+      "prerequisiteArtifacts": [],
+      "outputArtifacts": [
+        "docs/research/market-*.md",
+        "docs/channel-research.md",
+        "docs/benchmarks/thumbnail-text-profile.md"
+      ],
+      "approvalGate": {
+        "skip": true,
+        "configPath": "workflow.channel-research.skip_approvals.market"
+      },
+      "idempotency": {
+        "script": "references/channel-research-chain-state.py"
+      }
     }
   ]
 }

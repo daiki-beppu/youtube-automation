@@ -240,6 +240,13 @@ def test_b6_receipt_points_every_mapping_to_an_existing_owner() -> None:
         ),
         ".claude/skills/benchmark/SKILL.md": ".claude/skills/channel-research/references/benchmark.md",
         ".claude/skills/discover-competitors/SKILL.md": (".claude/skills/channel-research/references/discover.md"),
+        ".claude/skills/channel-new/references/analysis-mode.md": (
+            ".claude/skills/channel-research/references/market.md"
+        ),
+        ".claude/skills/market-research/SKILL.md": ".claude/skills/channel-research/references/market.md",
+        ".claude/skills/market-research/references/report-contract.md": (
+            ".claude/skills/channel-research/references/report-contract.md"
+        ),
     }
     assert all(
         (ROOT / moved_owner_aliases.get(mapping["exact_new_owner"], mapping["exact_new_owner"])).exists()

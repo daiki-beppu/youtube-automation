@@ -1,4 +1,4 @@
-"""`/channel-research` の benchmark 成果物判定契約。"""
+"""`/channel-research` chain の成果物判定契約。"""
 
 from __future__ import annotations
 
@@ -96,3 +96,40 @@ def test_discover_skips_only_for_complete_output_pair(tmp_path: Path, state: Mod
     assert run["reason"] == "discover_output_pair_incomplete"
     assert skip_code == state.EXIT_SKIP
     assert skip["reason"] == "discover_output_pair_complete"
+
+
+def test_market_uses_comparison_branch_when_collected_inputs_are_absent(tmp_path: Path, state: ModuleType) -> None:
+    code, result = state.evaluate(tmp_path, "market", 2_000_000_000.0)
+
+    assert code == state.EXIT_RUN
+    assert result["branch"] == "market-comparison"
+    assert result["reason"] == "market_comparison_required"
+
+
+def test_market_blocks_partial_collected_analysis_inputs(tmp_path: Path, state: ModuleType) -> None:
+    now = 2_000_000_000.0
+    _touch(tmp_path / "data/benchmark_20260815.json", now)
+
+    code, result = state.evaluate(tmp_path, "market", now)
+
+    assert code == state.EXIT_BLOCKED
+    assert result["branch"] == "collected-analysis"
+    assert result["reason"] == "collected_analysis_inputs_incomplete"
+
+
+def test_market_skips_only_after_both_collected_analysis_outputs_exist(tmp_path: Path, state: ModuleType) -> None:
+    now = 2_000_000_000.0
+    _touch(tmp_path / "data/benchmark_20260815.json", now)
+    _touch(tmp_path / "data/comments_20260815.json", now)
+    _touch(tmp_path / "docs/benchmarks/rival.md", now)
+
+    run_code, run = state.evaluate(tmp_path, "market", now)
+    _touch(tmp_path / "docs/channel-research.md", now)
+    _touch(tmp_path / "docs/benchmarks/thumbnail-text-profile.md", now)
+    skip_code, skip = state.evaluate(tmp_path, "market", now)
+
+    assert run_code == state.EXIT_RUN
+    assert run["branch"] == "collected-analysis"
+    assert run["reason"] == "collected_analysis_outputs_missing"
+    assert skip_code == state.EXIT_SKIP
+    assert skip["reason"] == "collected_analysis_outputs_complete"

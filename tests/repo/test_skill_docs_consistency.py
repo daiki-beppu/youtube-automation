@@ -271,7 +271,7 @@ def test_setup_channel_ttp_hearing_routes_direction_to_residual_mode() -> None:
     seed_details = _read(".claude/skills/setup/references/ttp-seed-and-duration.md")
     overview = SKILL_INVENTORY.section("channel-new", "## Overview")
     mode_routing = SKILL_INVENTORY.section("channel-new", "## モード判別")
-    direction_mode_row = next(line for line in mode_routing.splitlines() if line.startswith("| 方向性検討モード |"))
+    channel_new_description = _skill_frontmatter("channel-new")["description"]
     direction_mode_stub = SKILL_INVENTORY.section("channel-new", "## 方向性検討モード（Step D1〜D5）")
     direction_mode = _read(".claude/skills/channel-new/references/direction-mode.md")
     ttp_principles = setup_channel.split("## TTP 原則", 1)[1].split("## 外部データの扱い", 1)[0]
@@ -319,11 +319,11 @@ def test_setup_channel_ttp_hearing_routes_direction_to_residual_mode() -> None:
 
     assert "新規開設は `/setup --channel`" in overview
     assert "fallback しない" in overview
-    assert "方向性検討モード" in mode_routing
-    assert "Step D1〜D5" in mode_routing
+    assert "方向性検討" in mode_routing
     assert "新チャンネル" in mode_routing and "`/setup --channel`" in mode_routing
+    assert "上記の除外文脈でなければ方向性検討として Step D1〜D5 を進める" in mode_routing
     for trigger in ("方向性決めたい", "ポジショニング", "差別化", "ブレスト"):
-        assert trigger in direction_mode_row
+        assert trigger in channel_new_description
 
     assert "references/direction-mode.md" in direction_mode_stub
     for heading in (
@@ -861,7 +861,7 @@ def test_setup_channel_initial_save_success_path_commits_and_cleans_worktree(tmp
 
 def test_channel_new_followup_skill_routing_uses_new_contract() -> None:
     discover = _read(".claude/skills/channel-research/references/discover.md")
-    research = _read(".claude/skills/channel-new/references/analysis-mode.md")
+    research = _read(".claude/skills/channel-research/references/market.md")
     viewer_voice = _read(".claude/skills/viewer-voice/SKILL.md")
     setup = _read(".claude/skills/setup/SKILL.md")
     channel_new = _read(".claude/skills/channel-new/SKILL.md")
@@ -878,7 +878,10 @@ def test_channel_new_followup_skill_routing_uses_new_contract() -> None:
     assert "target_scene" not in discover
     assert "config/channel/content.json::genre.{primary,style,context}" in discover
 
-    assert "/channel-research --benchmark` と `/viewer-voice` で収集した" in research
+    assert "`market-comparison`" in research
+    assert "`collected-analysis`" in research
+    assert "data/benchmark_*.json" in research
+    assert "data/comments_*.json" in research
     assert "docs/channel-research.md" in research
     assert "/viewer-voice` → 前提" in research
 
@@ -939,11 +942,13 @@ def test_skill_frontmatter_descriptions_disambiguate_sibling_routes() -> None:
     videoup_desc = _skill_frontmatter("videoup")["description"]
     video_upload_desc = _skill_frontmatter("video-upload")["description"]
 
-    assert "「競合分析」" not in benchmark_desc
+    assert "「競合分析」" in benchmark_desc
     assert "「競合データ収集」" in benchmark_desc
     assert "--benchmark" in benchmark_desc
-    assert "「競合分析」" in channel_new_desc
-    assert "収集済み benchmark/comments" in channel_new_desc
+    assert "「市場調査」" in benchmark_desc
+    assert "「競合分析」" not in channel_new_desc
+    assert "方向性" in channel_new_desc
+    assert "channel-research の market mode" in channel_new_desc
 
     assert "YouTube への投稿は /video-upload" in videoup_desc
     assert "動画ファイルの生成（MP3→MP4）は /videoup" in video_upload_desc
@@ -1444,7 +1449,7 @@ def test_setup_owns_setting_push_mode_and_channel_new_keeps_residual_modes() -> 
 
     overview = SKILL_INVENTORY.section("channel-new", "## Overview")
     assert "方向性検討モード" in overview
-    assert "分析モード" in overview
+    assert "/channel-research --market" in overview
     assert "/setup --import" in overview
     assert "/setup --regenerate" in overview
     assert "/setup --push" in overview

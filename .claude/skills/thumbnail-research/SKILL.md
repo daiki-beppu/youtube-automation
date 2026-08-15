@@ -1,7 +1,7 @@
 ---
 name: thumbnail-research
 purpose: 調べる
-description: "Use when 収集済み競合サムネイルだけを再生数上位群 vs 下位群で深掘りし、勝ちパターンを抽出するとき。「サムネイル徹底分析」「競合サムネ分析」「サムネ勝ちパターン」で発動。データ収集は channel-research のベンチマーク mode、チャンネル全体の TTP 分析は /channel-new 分析モード、生成は /thumbnail、320px 視認性比較は /thumbnail-compare"
+description: "Use when 収集済み競合サムネイルだけを再生数上位群 vs 下位群で深掘りし、勝ちパターンを抽出するとき。「サムネイル徹底分析」「競合サムネ分析」「サムネ勝ちパターン」で発動。データ収集は channel-research のベンチマーク mode、チャンネル全体の TTP 分析は同 skill の market mode、生成は /thumbnail、320px 視認性比較は /thumbnail-compare"
 ---
 
 ## 前後工程
@@ -169,4 +169,4 @@ find docs/benchmarks/thumbnails data/thumbnail_compare/benchmark \
 - `/channel-research --benchmark`: 競合動画データとサムネイル画像の収集・更新
 - `/thumbnail`: `docs/benchmarks/thumbnail-analysis.md` の勝ちパターンと参照候補を TTP 入力として生成
 - `/thumbnail-compare` → 生成候補と競合を並べた 320px 視認性比較
-- `/channel-new` 分析モード → タイトル・動画尺・投稿・コメントを含むチャンネル全体の TTP 分析
+- `/channel-research --market` → タイトル・動画尺・投稿・コメントを含むチャンネル全体の TTP 分析

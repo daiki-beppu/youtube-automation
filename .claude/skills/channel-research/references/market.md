@@ -1,11 +1,50 @@
-# 分析モード
+# Market mode
 
 ## Overview
 
-`/channel-research --benchmark` と `/viewer-voice` で収集したベンチマークデータ + コメントデータを読み込み、徹底的に分析してレポートを生成する。
-初回チャンネル開設フローは TTP 対象確認まで完結するため、分析モードは深掘り分析や方向性の再検討が必要なときに追加で実行する。
+TTP 入替候補・ニッチ仮説の横断比較と、収集済みベンチマーク + コメントの詳細分析を 1 つの入口で扱う。前者は会話内レポート、後者はチャンネル全体の TTP 分析成果物を生成する。
 
-## 完了条件
+## 自動分岐
+
+`--market` は実行前にローカル成果物を調べ、深さをフラグで増やさず次の 2 branch へ自動分岐する。
+
+| branch | 判定 | 既定成果物 |
+|---|---|---|
+| `market-comparison` | `data/benchmark_*.json`、個別 `docs/benchmarks/*.md`、`data/comments_*.json` がすべて 0 件 | 会話内の 7 セクションレポート。明示保存時だけ `docs/research/market-<YYYY-MM-DD>.md` |
+| `collected-analysis` | 上記 3 種のどれか 1 件以上が存在 | `docs/channel-research.md` と `docs/benchmarks/thumbnail-text-profile.md` |
+
+`collected-analysis` で 3 種の一部しか存在しない場合は `market-comparison` へ fallback せず、「前提成果物ガード」に従って不足を案内し停止する。
+
+## Market comparison branch
+
+### Hard Gates
+
+- この branch は **状態を持たない読み取り専用の調査**である。`config/channel/analytics.json::benchmark.channels` を含む config schema、既存 TTP、調査入力を変更しない。TTP の自動入替は行わない。
+- 既定の成果物は会話内レポートだけ。ユーザーがこの実行について明示的に「保存して」と依頼した場合だけ `docs/research/market-<YYYY-MM-DD>.md` を生成する。依頼がなければディレクトリもファイルも作らない。
+- 保存先に同日ファイルがすでに存在する場合は、上書き前に既存ファイルが置換されることを示し、「上書きする / 会話内だけにする」の明示 2 択で確認する。承認されるまで書き込まない。
+- 根拠は URL またはローカルパス、確認日、対応する主張を必ず記録する。`references/report-contract.md` の採用閾値を満たさない候補は「根拠不足」とし、TTP 入替候補や有望ニッチとして推奨しない。
+- 調査結果から `/channel-research --discover`、`/channel-research --benchmark`、config 更新を自動実行しない。次アクションとして提案するだけに留める。
+
+### Instructions
+
+1. 会話から調査問い、合計 2 件以上の比較対象、3〜5 個の評価軸、対象市場と観測期間を抽出する。欠けている項目だけを確認し、揃うまで調査を始めない。
+2. 現在値を Web 検索または接続済みの一次情報で確認する。ユーザーが Web 検索を禁止した場合はローカル成果物だけを使い、その制約を不確実性へ記録する。根拠ごとに ID、URL またはローカルパス、確認日、観測事実、支える主張を記録し、検索結果の要約や一般知識で補完しない。
+3. 比較対象 × 評価軸を `強い` / `中立` / `弱い` / `判定不能` と根拠 ID で比較する。TTP 候補は優位点と劣位点、ニッチ仮説は対象視聴者 / 視聴シーン / 満たす欲求 / 競合との差 / 最小の検証方法を記録する。
+4. 分類、根拠数、根拠不足時の扱いは `references/report-contract.md` を適用し、7 セクションを会話内に提示する。
+5. 保存依頼がない場合はファイル未生成で終了する。明示依頼がある場合だけ同内容を `docs/research/market-<YYYY-MM-DD>.md` に保存し、既存ファイルには Hard Gates の承認を適用する。
+
+### 完了条件
+
+`references/report-contract.md` の 7 セクションを会話内に提示し、各候補を `候補` / `保留（根拠不足）` / `非推奨` のいずれかに分類し、保存依頼の有無に応じた分岐を完了する。保存ありの場合は同じ内容が `docs/research/market-<YYYY-MM-DD>.md` に存在することも確認する。
+
+### Cross References
+
+- 新規チャンネルの TTP seed と branding 初期値は `/setup --channel` Step 1 / 4 / 5 が所有する。詳細は `.claude/skills/setup/references/new-channel-bootstrap.md` と `.claude/skills/setup/references/ttp-seed-and-duration.md` を参照する
+- 調査後に方向性を決める場合は `/channel-new` へ委譲する。market mode 自身は config や方向性を更新しない
+
+## Collected analysis branch
+
+### 完了条件
 
 Step 2〜5 の分析結果を `docs/channel-research.md` に保存し、Step 4 のテキスト分析を `docs/benchmarks/thumbnail-text-profile.md` に保存し（Step 6）、Step 7 の次アクション案内を提示した時点で完了。
 
@@ -72,7 +111,7 @@ test -n "$benchmark_json" &&
   test -n "$benchmark_report"
 ```
 
-`benchmark_json`、`comments_json`、`benchmark_report` がすべて空でないことを確認する。`thumbnail-text-profile.md` は前回の分析モード成果物であり、個別レポートの存在判定には数えない。
+`benchmark_json`、`comments_json`、`benchmark_report` がすべて空でないことを確認する。`thumbnail-text-profile.md` は前回の collected-analysis 成果物であり、個別レポートの存在判定には数えない。
 
 欠けているデータ種別ごとに以下を案内して停止する:
 

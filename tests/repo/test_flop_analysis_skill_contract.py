@@ -187,13 +187,14 @@ def test_flop_analysis_uses_noninteractive_analysis_boundaries() -> None:
     for mapping in mappings:
         assert not any(route in mapping["read-only 入力"] for route in prohibited_routes)
 
-    interactive_skill_paths = (
-        ROOT / ".claude/skills/alignment-check/SKILL.md",
-        ROOT / ".claude/skills/viewing-scene/SKILL.md",
-        ROOT / ".claude/skills/channel-new/SKILL.md",
+    interactive_skill_texts = (
+        (ROOT / ".claude/skills/alignment-check/SKILL.md").read_text(encoding="utf-8"),
+        (ROOT / ".claude/skills/viewing-scene/SKILL.md").read_text(encoding="utf-8"),
+        (ROOT / ".claude/skills/channel-new/SKILL.md").read_text(encoding="utf-8")
+        + (ROOT / ".claude/skills/channel-new/references/direction-mode.md").read_text(encoding="utf-8"),
     )
-    for skill_path in interactive_skill_paths:
-        assert "AskUserQuestion" in skill_path.read_text(encoding="utf-8")
+    for skill_text in interactive_skill_texts:
+        assert "AskUserQuestion" in skill_text
 
 
 def test_flop_analysis_fixes_period_baseline_threshold_and_result_fields() -> None:

@@ -131,7 +131,7 @@ uv run yt-channel-status
 続いて戦略ドキュメントを Read で読み込み、チャンネル方向性を把握する:
 
 - `docs/channel/` 配下の方向性決定記録 — `/channel-new`（方向性検討モード）Step D5 が保存する決定事項
-- `docs/channel-research.md` — `/channel-new` 分析モードの分析レポート
+- `docs/channel-research.md` — `/channel-research --market` の分析レポート
 
 どちらも任意扱い。存在しない場合は warning を表示して進行する（方向性決定記録は `/channel-new` の方向性検討モードで生成できる旨を案内）。
 

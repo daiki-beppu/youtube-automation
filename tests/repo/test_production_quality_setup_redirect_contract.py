@@ -160,11 +160,6 @@ _RAW_EXPECTED_ACTIVE_ROUTES = (
     _route(
         "wf-new/references/ideate.md",
         "#### Phase 1-1: チャンネル現状 + 戦略ドキュメント",
-        "- `docs/channel-research.md` — `/channel-new` 分析モードの分析レポート",
-    ),
-    _route(
-        "wf-new/references/ideate.md",
-        "#### Phase 1-1: チャンネル現状 + 戦略ドキュメント",
         "どちらも任意扱い。存在しない場合は warning を表示して進行する"
         "（方向性決定記録は `/channel-new` の方向性検討モードで生成できる旨を案内）。",
     ),
@@ -271,18 +266,6 @@ _RAW_EXPECTED_ACTIVE_ROUTES = (
         "thumbnail/SKILL.md",
         "## 前提",
         "- **既存チャンネル**（YouTube で既に運営中）→ `/setup --import` を案内",
-    ),
-    _route(
-        "thumbnail/SKILL.md",
-        "### thumbnail-text-profile 適用（#1907）",
-        "`/channel-new` 分析モードが生成する `docs/benchmarks/thumbnail-text-profile.md`（`schema_version: 1`。"
-        "見出し・キーの単一ソースは `.claude/skills/channel-new/references/analysis-mode.md` の Step 4）を読み、"
-        "決定的合成の入力へ変換する。",
-    ),
-    _route(
-        "thumbnail/config.default.yaml",
-        "yaml",
-        "      # /channel-new 分析モードの docs/benchmarks/thumbnail-text-profile.md がある場合、",
     ),
     _route(
         "thumbnail-compare/SKILL.md",

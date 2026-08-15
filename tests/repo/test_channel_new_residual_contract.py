@@ -16,7 +16,6 @@ REFERENCES = SKILL_DIR / "references"
 SETUP_REFERENCES = REPO_ROOT / ".claude" / "skills" / "setup" / "references"
 
 SHARED_ASSET_SHA256 = {
-    "analysis-mode.md": "5429e00c0c1a673d3b2f40e820ad3c1b23bf76f50ab2b14c01454c98884ab3e2",
     "claude-md-template.md": "c63c2e6411b4103183a9d228ef36265ca098574468f2a28f7fce039b32d138fe",
     "config-generation-rules.md": "5b336c56a31e4f4d46e44bc1cb6923c8b8af7fd1f41b67d4576f33535ef07e50",
     "config-template/analytics.json": "4344ad8d4c9a1c81958b721eb3d999172f14f71f17d863a1708492ce687b68d2",
@@ -26,8 +25,8 @@ SHARED_ASSET_SHA256 = {
     "config-template/skills/suno.yaml": "2500c62eb81531b722d4ddabddc223c8e4ec9bb9441637b1d5cc2df435145765",
     "config-template/skills/thumbnail.yaml": "3e5b6d35963ab1313bc691d0e7cd9f2ec4f118abf1a66d689d4813511e785231",
     "config-template/youtube.json": "849f4b0912cb7be3d1cc92b7607d355e856b5af3e9e85db0449fabdf1713bb6c",
-    "desire-vocabulary.md": "b166b310ccac37333070cd548d66857582d3551bc942c4618363713111c8ccb8",
-    "direction-mode.md": "3d6bb7824941eabcdf05dade6c2886fa45ba4ab6e32ac68671c52626ddc2fc67",
+    "desire-vocabulary.md": "05b3cf85f3bc4a44dc83e43e5a3cba3525973521ec1964d2e8573bb2046f9865",
+    "direction-mode.md": "5e676e6ad573911813b6d0ae4a1bc4580eec31d2faf91432a88a0569f7048f72",
     "directory-structure.md": "d8590189cf8929b968b4f1169b723cc0ed71e0be06dbd57cc3ed405967bc4e14",
     "fetch_benchmark_comments.py": "d69ee100c7f3655394a6fb50b0aa9c4a1ae8b8b733d8243c0600ec9acfc2b93e",
     "fetch_branding_snapshot.py": "9735fa8d2af47b932c2c5318d0f4a4efa2bfdbd95e2bb33dece0752994bf7fef",
@@ -36,10 +35,10 @@ SHARED_ASSET_SHA256 = {
     "verification.md": "4ce440663e0faf0f1e5916920486f9e62c3ed0a3ab86624c189ebbe19cd5d8f1",
 }
 MOVED_ASSET_SHA256 = {
-    "import-mode.md": "be1a3878d34e1ed75cb93774ff7f301c8db8573dca398896d144f52dac0bd9e7",
+    "import-mode.md": "be3be013876d84bd21fdc341885a1a6f988e0829b290b4a0e038133e8291f0b5",
     "localizations-template.json": "d0267074151af61f27856d0e67e8f0c3d56cf327b2255e00a8035e2851cde558",
     "push-mode.md": "be122ecbe19c803cfe09465f68ab364636f46f92f0ec842fb803566337eb57ee",
-    "regeneration-mode.md": "510151e90b9d7ef19714ec73eace7c8990d62312da1627430bf3979756ea68d3",
+    "regeneration-mode.md": "152a4e233862da2abc84cc7fa229c6ac630a2830d4ac7297828f8ab6bef39347",
     "save-push-troubleshooting.md": "89a7cab34a96ddf7f10636293621c8b39e6cdf9f17e033a0469d5b14c0fc9a45",
 }
 
@@ -66,18 +65,17 @@ def _numbered_steps(markdown: str, pattern: str) -> list[str]:
     return re.findall(pattern, markdown, re.MULTILINE)
 
 
-def test_residual_mode_order_is_exact() -> None:
+def test_residual_owner_routes_market_analysis_and_keeps_direction_mode() -> None:
     skill = SKILL_MD.read_text(encoding="utf-8")
-    expected = [
-        "1. **方向性検討モード**（Step D1〜D5）",
-        "2. **分析モード**（Step 0〜7）",
-    ]
 
-    assert [line for line in skill.splitlines() if re.match(r"^[1-2]\. \*\*", line)] == expected
+    assert "## 方向性検討モード（Step D1〜D5）" in skill
+    assert "/channel-research --market" in skill
 
 
 def test_analysis_direction_import_and_regeneration_step_order_is_exact() -> None:
-    analysis = (REFERENCES / "analysis-mode.md").read_text(encoding="utf-8")
+    analysis = (REPO_ROOT / ".claude" / "skills" / "channel-research" / "references" / "market.md").read_text(
+        encoding="utf-8"
+    )
     direction = (REFERENCES / "direction-mode.md").read_text(encoding="utf-8")
     imported = (SETUP_REFERENCES / "import-mode.md").read_text(encoding="utf-8")
     regeneration = (SETUP_REFERENCES / "regeneration-mode.md").read_text(encoding="utf-8")

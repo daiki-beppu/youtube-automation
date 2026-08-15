@@ -22,7 +22,6 @@ _FILE_ASSETS = {
 }
 _CHANNEL_NEW_SHARED_ASSETS = frozenset(
     {
-        "analysis-mode.md",
         "claude-md-template.md",
         "config-generation-rules.md",
         "config-template/analytics.json",
@@ -314,7 +313,7 @@ assert "wheel-identity-check" not in legacy._cache
         if path.is_file() or path.is_symlink()
     }
     assert installed_shared_assets == _CHANNEL_NEW_SHARED_ASSETS
-    for residual_reference in ("analysis-mode.md", "direction-mode.md"):
+    for residual_reference in ("direction-mode.md",):
         assert f"references/{residual_reference}" in channel_new_text
         assert (channel_new_references / residual_reference).is_file()
 
@@ -327,6 +326,10 @@ assert "wheel-identity-check" not in legacy._cache
         == (REPO_ROOT / "src/youtube_automation/commands/analytics/benchmark_collector.py").read_bytes()
     )
     assert not (downstream / ".claude" / "skills" / "benchmark").exists()
+    assert (channel_research / "references" / "market.md").is_file()
+    assert (channel_research / "references" / "market_research_contract.py").is_file()
+    assert (channel_research / "references" / "report-contract.md").is_file()
+    assert not (downstream / ".claude" / "skills" / "market-research").exists()
 
     bootstrap_guide = distributed_references / "gcp-bootstrap.md"
     assert bootstrap_guide.is_file()
