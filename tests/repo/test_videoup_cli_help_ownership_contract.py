@@ -1,4 +1,4 @@
-"""videoup skill と CLI / script help の ownership 境界。"""
+"""video generate mode と CLI / script help の ownership 境界。"""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import re
 
 from tests.helpers.paths import REPO_ROOT
 
-SKILL_TEXT = (REPO_ROOT / ".claude" / "skills" / "videoup" / "SKILL.md").read_text(encoding="utf-8")
+SKILL_TEXT = (REPO_ROOT / ".claude" / "skills" / "video" / "references" / "generate.md").read_text(encoding="utf-8")
 
 
 def _section(start: str, end: str) -> str:
@@ -29,24 +29,22 @@ def test_skill_keeps_one_representative_command_per_video_entrypoint() -> None:
     assert "`generate_videos.sh --help`" in SKILL_TEXT
 
 
-def test_skill_keeps_master_preview_approval_full_generation_and_state_order() -> None:
+def test_skill_keeps_master_preview_full_generation_and_state_order() -> None:
     steps = _section("### ステップ", "### 自動検出される要素")
 
     master = steps.index("2. **マスター音源**")
-    preview = steps.index("4. **プレビュー確認ゲート**", master)
-    approval = steps.index("5. **承認分岐**", preview)
-    full_generation = steps.index("6. **動画生成**", approval)
-    state_update = steps.index("7. **workflow-state.json 更新**", full_generation)
+    preview = steps.index("4. **任意プレビュー**", master)
+    full_generation = steps.index("5. **動画生成**", preview)
+    state_update = steps.index("6. **workflow-state.json 更新**", full_generation)
 
-    assert master < preview < approval < full_generation < state_update
+    assert master < preview < full_generation < state_update
 
 
-def test_skill_keeps_preview_and_state_safety_contracts() -> None:
+def test_skill_keeps_local_generation_and_state_safety_contracts() -> None:
     steps = _section("### ステップ", "### 自動検出される要素")
 
-    assert "skip_preview_approval: false" in steps
-    assert "ユーザーが受理した場合のみ全尺生成" in steps
-    assert "プレビューファイルの存在を確認して承認だけを省略" in steps
+    assert "AskUserQuestion" not in steps
+    assert "承認分岐" not in steps
     assert "全尺生成の成功後だけ" in steps
     assert "プレビューのみでは更新しない" in steps
 

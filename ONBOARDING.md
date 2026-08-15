@@ -201,7 +201,7 @@ uv run yt-init-collection "Pilot Direction Check" "pilot-direction-check" --trac
   ↓
 /loop-video                      → サムネを 8 秒ループ動画化（Veo 3.1）
   ↓
-/videoup                         → マスター音源 + 背景動画から最終 MP4 生成
+/video --generate                         → マスター音源 + 背景動画から最終 MP4 生成
   ↓
 /video-description → /alignment-check → 概要欄生成 + 整合性監査
   ↓

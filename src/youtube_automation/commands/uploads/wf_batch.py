@@ -346,7 +346,7 @@ def process_collection(
 ) -> CollectionOutcome:
     """1 collection を prepared → complete まで非対話で進める。失敗時は途中で打ち切る。"""
     transition_script = _skill_reference("wf-next/references/master_audio_transition.py")
-    videos_script = _skill_reference("videoup/references/generate_videos.sh")
+    videos_script = _skill_reference("video/references/generate_videos.sh")
     collection = str(target.path)
 
     def _failed(step: str, detail: str) -> CollectionOutcome:

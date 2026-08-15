@@ -41,6 +41,7 @@ EXPECTED_SKILL_ONLY_CONFIG_KEYS = frozenset(
         "video-analyze",
         "video-description",
         "video-upload",
+        "video",
         "videoup",
     }
 )
@@ -856,7 +857,6 @@ def test_thumbnail_owns_loop_video_defaults(tmp_path):
     [
         ("collection-ideate", ("preview", "skip_cost_confirm")),
         ("lyria", ("skip_generation_approval",)),
-        ("videoup", ("skip_preview_approval",)),
         ("loop-video", ("skip_billing_approval",)),
         ("loop-video", ("skip_preview_approval",)),
     ],

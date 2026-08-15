@@ -23,7 +23,7 @@ accepted (2026-06-16)。renderer 切替の実装は cutover (#790) 後の別 epi
 具体的な構成:
 
 1. **`packages/remotion/`** を独立パッケージとして新設。React コンポーネントで映像を定義し、`renderMedia()` でレンダリングする
-2. **`config/skills/videoup.json`** に `renderer: "remotion" | "ffmpeg"` 設定を追加。デフォルトは `"ffmpeg"`（移行期間中の安全側）。将来 `"auto"` に移行し、エフェクト/オーバーレイがあれば Remotion、なければ ffmpeg を自動選択する
+2. **`config/skills/video.yaml::generate`** に `renderer: "remotion" | "ffmpeg"` 設定を追加。デフォルトは `"ffmpeg"`（移行期間中の安全側）。将来 `"auto"` に移行し、エフェクト/オーバーレイがあれば Remotion、なければ ffmpeg を自動選択する
 3. **core からは dynamic import** (`await import("@youtube-automation/remotion/render")`) で疎結合にし、Remotion がインストールされていない環境でも core/cli は動作する
 4. **エフェクトは Canvas 2D API / CSS** で実装。react-three-fiber (WebGL/3D) は全エフェクトが 2D で完結するため不採用
 5. **Remotion Studio** (`remotionb studio`) でインタラクティブプレビューを提供
@@ -56,4 +56,4 @@ accepted (2026-06-16)。renderer 切替の実装は cutover (#790) 後の別 epi
 - ADR-0001: Python → TypeScript(bun) big-bang 移行（前提）
 - ADR-0002: Service-first architecture（`packages/remotion` の位置づけ）
 - ADR-0003: Service-boundary contracts（videoup service の設計）
-- ADR-0009: JSON-only config（`config/skills/videoup.json` の renderer 設定）
+- ADR-0009: JSON-only config（`config/skills/video.yaml::generate` の renderer 設定）

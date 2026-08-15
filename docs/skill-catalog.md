@@ -35,8 +35,8 @@ PDCA 対応: 準備 = 準備する / Plan = 調べる → 決める / Do = 進�
 - `/short` — Use when collection 型（BGM テイスター）または release 型（楽曲リリース）のチャンネルでショートを生成するとき。
 - `/suno-helper` — Use when Suno UI に投入する曲をブラウザで連続生成 + playlist 追加 + 一括ダウンロードしたいとき。
 - `/thumbnail` — Use when コレクションの YouTube サムネイル（thumbnail.jpg）を CTR 最適化し、textless main.png/jpg を先行生成して実フォント合成するとき、`--compare` で生成済み候補を競合と 320px 比較するとき、`--test` で Studio の A/B テストを設計・記録するとき、`--iterate` で伸びた動画の勝因を次のサムネへ還元するとき、または `--loop` で textless main.png/jpg から Veo / Gemini Omni Flash のループ動画背景を生成するとき。
+- `/video` — Use when 音源と画像からマスター動画を生成するとき。
 - `/video-description` — Use when YouTube 概要欄を Complete Collection 形式で自動生成するとき。
-- `/videoup` — Use when 音声ファイルが揃い動画生成が必要なとき。
 
 ## 公開する
 

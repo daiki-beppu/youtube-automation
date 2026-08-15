@@ -190,7 +190,7 @@ def channel(tmp_path, monkeypatch):
     (root / "collections" / "planning").mkdir(parents=True)
     for rel in (
         "wf-next/references/master_audio_transition.py",
-        "videoup/references/generate_videos.sh",
+        "video/references/generate_videos.sh",
     ):
         script = root / ".claude" / "skills" / rel
         script.parent.mkdir(parents=True, exist_ok=True)

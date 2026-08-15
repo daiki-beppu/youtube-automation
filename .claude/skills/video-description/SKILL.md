@@ -6,7 +6,7 @@ description: "Use when YouTube 概要欄を Complete Collection 形式で自動�
 
 ## 前後工程
 
-- `前工程`: `/videoup`
+- `前工程`: `/video --generate`
 - `後工程`: `/publish --upload`, `/metadata-audit`
 - `委譲先`: `なし`
 
@@ -47,7 +47,7 @@ description: "Use when YouTube 概要欄を Complete Collection 形式で自動�
 - コレクションの動画が完成し、YouTube 概要欄が必要なとき
 - Complete Collection の概要欄を作成するとき
 
-`/wf-next` の公開フローでは `/videoup` と並列に起動される。
+`/wf-next` の公開フローでは `/video --generate` と並列に起動される。
 
 ## Quick Reference
 

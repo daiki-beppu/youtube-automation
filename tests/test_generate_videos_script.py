@@ -14,8 +14,8 @@ import pytest
 from tests.helpers.paths import REPO_ROOT
 
 _REPO_ROOT = REPO_ROOT
-_SCRIPT_PATH = _REPO_ROOT / ".claude" / "skills" / "videoup" / "references" / "generate_videos.sh"
-_VIDEOUP_SKILL_PATH = _REPO_ROOT / ".claude" / "skills" / "videoup" / "SKILL.md"
+_SCRIPT_PATH = _REPO_ROOT / ".claude" / "skills" / "video" / "references" / "generate_videos.sh"
+_VIDEOUP_SKILL_PATH = _REPO_ROOT / ".claude" / "skills" / "video" / "references" / "generate.md"
 
 
 def _help_text() -> str:
@@ -442,7 +442,7 @@ def test_loop_video_background_does_not_require_main_image(tmp_path: Path) -> No
 
 
 def test_workflow_state_master_audio_takes_priority_over_fixed_names(tmp_path: Path) -> None:
-    """#1449: raw=final の任意ファイル名を `/videoup` でも使える."""
+    """#1449: raw=final の任意ファイル名を `/video --generate` でも使える."""
     collection = _create_collection(tmp_path, master_filename="master-mix.wav")
     (collection / "01-master" / "master-rain.wav").write_bytes(b"fake-raw-final-audio")
     (collection / "workflow-state.json").write_text(
@@ -684,7 +684,7 @@ def test_explicit_static_video_type_ignores_existing_loop(tmp_path: Path) -> Non
     collection = _create_collection(tmp_path)
     config_dir = tmp_path / "config" / "skills"
     config_dir.mkdir(parents=True)
-    (config_dir / "videoup.yaml").write_text("video_type: static\n", encoding="utf-8")
+    (config_dir / "video.yaml").write_text("generate:\n  video_type: static\n", encoding="utf-8")
 
     result, ffmpeg_log = _run_generate_videos(
         tmp_path,
@@ -705,7 +705,7 @@ def test_unknown_video_type_fails_before_ffmpeg(tmp_path: Path) -> None:
     collection = _create_collection(tmp_path)
     config_dir = tmp_path / "config" / "skills"
     config_dir.mkdir(parents=True)
-    (config_dir / "videoup.yaml").write_text("video_type: multi_scene\n", encoding="utf-8")
+    (config_dir / "video.yaml").write_text("generate:\n  video_type: multi_scene\n", encoding="utf-8")
 
     result, ffmpeg_log = _run_generate_videos(
         tmp_path,
@@ -760,8 +760,8 @@ def test_static_bake_channel_config_reaches_ffmpeg_and_cache_stamp(tmp_path: Pat
     (assets_dir / "loop.mp4").write_bytes(b"fake-video")
     skill_config_dir = channel_root / "config" / "skills"
     skill_config_dir.mkdir(parents=True)
-    (skill_config_dir / "videoup.yaml").write_text(
-        "video:\n  still_fps: 2\n  still_crf: 26\n  still_gop: 10\n",
+    (skill_config_dir / "video.yaml").write_text(
+        "generate:\n  video:\n    still_fps: 2\n    still_crf: 26\n    still_gop: 10\n",
         encoding="utf-8",
     )
 
@@ -812,8 +812,8 @@ def test_invalid_static_bake_period_fails_loud(tmp_path: Path) -> None:
     collection = _create_collection(tmp_path)
     skill_config_dir = tmp_path / "config" / "skills"
     skill_config_dir.mkdir(parents=True)
-    (skill_config_dir / "videoup.yaml").write_text(
-        "video:\n  still_fps: 0\n  still_gop: 300\n",
+    (skill_config_dir / "video.yaml").write_text(
+        "generate:\n  video:\n    still_fps: 0\n    still_gop: 300\n",
         encoding="utf-8",
     )
 
@@ -1284,7 +1284,7 @@ def test_videoup_skill_documents_current_overlay_support() -> None:
 
     assert "`generate_videos.sh` は `config/channel/youtube.json::overlays.enabled: true`" in skill
     assert "filter_complex" in skill
-    assert "Suno 側ではなく `/videoup` の overlays 設定で反映する" in skill
+    assert "Suno 側ではなく `/video --generate` の overlays 設定で反映する" in skill
     assert "未実装" not in skill
     assert "v12.x にはこの filter 経路が無い" not in skill
     assert "#511 の実装を待つ" not in skill
@@ -1788,8 +1788,8 @@ def test_target_video_duration_ignored_when_master_longer(tmp_path: Path) -> Non
 
 
 def test_target_video_duration_channel_override_enables_audio_loop(tmp_path: Path) -> None:
-    """env が無くても channel-side `config/skills/videoup.yaml` の audio.target_video_duration_min を拾える."""
-    # channel root 直下に config/skills/videoup.yaml を置く
+    """env が無くても channel-side `config/skills/video.yaml` の audio.target_video_duration_min を拾える."""
+    # channel root 直下に config/skills/video.yaml を置く
     channel_root = tmp_path / "channel"
     collection = channel_root / "collections" / "planning" / "001-test-ambient-collection"
     master_dir = collection / "01-master"
@@ -1802,8 +1802,8 @@ def test_target_video_duration_channel_override_enables_audio_loop(tmp_path: Pat
 
     skill_config_dir = channel_root / "config" / "skills"
     skill_config_dir.mkdir(parents=True)
-    (skill_config_dir / "videoup.yaml").write_text(
-        "audio:\n  target_video_duration_min: 90\n",
+    (skill_config_dir / "video.yaml").write_text(
+        "generate:\n  audio:\n    target_video_duration_min: 90\n",
         encoding="utf-8",
     )
 
@@ -1836,8 +1836,8 @@ def test_target_video_duration_env_overrides_channel_override(tmp_path: Path) ->
 
     skill_config_dir = channel_root / "config" / "skills"
     skill_config_dir.mkdir(parents=True)
-    (skill_config_dir / "videoup.yaml").write_text(
-        "audio:\n  target_video_duration_min: 90\n",
+    (skill_config_dir / "video.yaml").write_text(
+        "generate:\n  audio:\n    target_video_duration_min: 90\n",
         encoding="utf-8",
     )
 
@@ -2156,8 +2156,8 @@ def test_preview_skips_final_only_shrink_pass(tmp_path: Path) -> None:
     """#1749: 確認用サンプルでは全尺専用の shrink 再エンコードを実行しない。"""
     config_dir = tmp_path / "config" / "skills"
     config_dir.mkdir(parents=True)
-    (config_dir / "videoup.yaml").write_text(
-        "shrink:\n  enabled: true\n  crf: 23\n",
+    (config_dir / "video.yaml").write_text(
+        "generate:\n  shrink:\n    enabled: true\n    crf: 23\n",
         encoding="utf-8",
     )
 
@@ -2326,13 +2326,14 @@ def test_unknown_option_fails_before_ffmpeg(tmp_path: Path) -> None:
     assert not ffmpeg_log.exists()
 
 
-def test_videoup_skill_requires_preview_acceptance_before_full_generation() -> None:
-    """#1749: skill は visual 設定時の preview と明示承認ゲートを文書化する。"""
+def test_video_generate_keeps_preview_local_and_updates_state_only_after_full_generation() -> None:
+    """#3835: preview は任意のローカル生成で、全尺成功前に state を更新しない。"""
     skill = _VIDEOUP_SKILL_PATH.read_text(encoding="utf-8")
 
     assert "generate_videos.sh --preview 20 <collection-path>" in skill
-    assert "明示承認" in skill
-    assert "全尺エンコードと `assets.master_video` の更新を開始しない" in skill
+    assert "AskUserQuestion" not in skill
+    assert "承認分岐" not in skill
+    assert "全尺生成の成功後だけ" in skill
     assert "プレビューのみでは更新しない" in skill
 
 

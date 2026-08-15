@@ -8,7 +8,7 @@ Veo などの生成エンジン選択とは別の軸として扱う。
 - `loop`: `main.png/jpg` から `loop.mp4` を生成し、マスター動画の背景として反復する。
 - `static`: `main.png/jpg` を直接マスター動画の背景として使う。生成 hook は持たない。
 
-`video_type` 未設定時は後方互換のため `loop`。`videoup` で `loop.mp4` が無い場合は
+`video_type` 未設定時は後方互換のため `loop`。`video --generate` で `loop.mp4` が無い場合は
 従来どおり `static` にフォールバックする。
 
 ## 新規タイプを追加する
@@ -20,10 +20,10 @@ Veo などの生成エンジン選択とは別の軸として扱う。
 3. `src/youtube_automation/commands/media/` の CLI で `VideoTypeConfig.from_mapping()` を使い、
    選択タイプをログへ出す。タイプ固有の入出力名はその CLI に閉じ込める。
 4. `.claude/skills/thumbnail/config.default.yaml::loop` と
-   `.claude/skills/videoup/config.default.yaml`、必要な下流テンプレートへ既定値を追加する。
-5. `.claude/skills/videoup/references/generate_videos.sh` の `VIDEO_TYPE` validation と
+   `.claude/skills/video/config.default.yaml`、必要な下流テンプレートへ既定値を追加する。
+5. `.claude/skills/video/references/generate_videos.sh` の `VIDEO_TYPE` validation と
    background selection に分岐を追加する。ファイルの有無だけでタイプを決めない。
-6. enum/config validation、generator dispatch、CLI の観測可能ログ、`videoup` の背景選択を
+6. enum/config validation、generator dispatch、CLI の観測可能ログ、`video --generate` の背景選択を
    unit test で固定し、既存 `loop` / fallback の regression test も実行する。
 7. `CHANGELOG.md` の `[Unreleased]` を更新する。
 

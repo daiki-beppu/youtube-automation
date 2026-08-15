@@ -8,7 +8,7 @@ description: "Use when 既存コレクション（collections/planning/）を一
 
 - `前工程`: `/wf-new`, `/wf-new`
 - `後工程`: `/analytics`, `/flop-analysis`
-- `委譲先`: `/masterup`, `/lyria`, `/videoup`, `/video-description`, `/publish --playlist`, `/publish --upload`
+- `委譲先`: `/masterup`, `/lyria`, `/video --generate`, `/video-description`, `/publish --playlist`, `/publish --upload`
 
 ## 成果物
 
@@ -91,7 +91,7 @@ description: "Use when 既存コレクション（collections/planning/）を一
 | playlists.insert / playlistItems.insert（各 50 units、yt-playlist-manager --init） | 新規プレイリスト数 + 割当本数 | プレイリスト構成 |
 | Vertex AI Lyria（subagent /lyria 委譲時） | /lyria の「想定 API call 数」を参照 | Lyria パス採否 |
 
-- 上限 / 承認: upload 前に `--plan` で事前確認し、playlist 系は `--dry-run` を使う。/videoup /masterup /video-description はローカル処理で API 0。委譲先 skill の見積もりは各 skill の「想定 API call 数」を参照。
+- 上限 / 承認: upload 前に `--plan` で事前確認し、playlist 系は `--dry-run` を使う。/video --generate /masterup /video-description はローカル処理で API 0。委譲先 skill の見積もりは各 skill の「想定 API call 数」を参照。
 
 ## Instructions
 
@@ -140,7 +140,7 @@ status を記録した後は、成功時だけでなく blocked / failed の停�
   uv run yt-collection-preflight <collection-dir-name>
   ```
 
-  `[NG]`（`01-master/` 等の欠落）が報告されたら `uv run yt-collection-preflight <collection-dir-name> --fix` で補完してから続行する。欠落したまま後工程へ進むと `/masterup` / `/videoup` がマスター音源の置き場を見失う
+  `[NG]`（`01-master/` 等の欠落）が報告されたら `uv run yt-collection-preflight <collection-dir-name> --fix` で補完してから続行する。欠落したまま後工程へ進むと `/masterup` / `/video --generate` がマスター音源の置き場を見失う
 
 ### 2. フェーズ別処理
 
@@ -206,7 +206,7 @@ status を記録した後は、成功時だけでなく blocked / failed の停�
 以下を一気通貫実行する。実作業は subagent、成果物検証と各ステップ完了時の `workflow-state.json` 更新はメインが担当し、途中で中断しても同じ状態から再開できる。
 
 1. **並列 A**（2 Agent 同時起動）:
-   - Agent 1: 対象 collection、`01-master/<assets.master_audio>`、`10-assets/main.png/jpg` または `loop.mp4` を入力に Skill `/videoup` の Subagent Contract を実行。thumbnail skill-config も渡し、`textless.enabled: false` の共有 `main.jpg` を textless 再生成へ戻さない。期待成果物は `01-master/*.mp4`
+   - Agent 1: 対象 collection、`01-master/<assets.master_audio>`、`10-assets/main.png/jpg` または `loop.mp4` を入力に Skill `/video --generate` の Subagent Contract を実行。thumbnail skill-config も渡し、`textless.enabled: false` の共有 `main.jpg` を textless 再生成へ戻さない。期待成果物は `01-master/*.mp4`
    - Agent 2 の起動前に、メインが `/video-description` の重複トラック名を検出し、必要な表示名 mapping を確定するが、まだ `apply_track_display_names()` は呼ばない。その mapping、planning / localization、skill-config、benchmark 入力を列挙し、Agent 2 には `/video-description` の Step 1 から品質チェック、`yt-title-duplicate-check`、`20-documentation/descriptions.md` 保存までを実行させる。`apply_track_display_names()` と `workflow-state.json` の `description.generated` 更新は実行させない
    - 両 Agent とも state は入力確認に必要な範囲だけ読み、書き込まず、AskUserQuestion を実行しない。片方でも失敗または成果物欠落なら state を更新せず停止する
 2. 並列 A 完了後:

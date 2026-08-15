@@ -140,7 +140,7 @@ NON_TARGET_SKILLS: dict[str, str] = {
         "Suno プロンプトのローカル生成のみ。yt-video-analyze への言及は"
         "/video-analyze 出力 JSON の読込参照で、手順として実行しない"
     ),
-    "videoup": (
+    "video": (
         "ffmpeg によるローカル動画生成のみ。yt-generate-loop-video への言及は"
         "generate_videos.sh のエラー時案内メッセージで、手順として実行しない"
     ),

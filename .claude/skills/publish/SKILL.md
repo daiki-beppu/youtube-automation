@@ -1,12 +1,12 @@
 ---
 name: publish
 purpose: 公開する
-description: "Use when 完成した動画を公開工程へ進めるとき。--playlist はプレイリストの作成・割り当て・確認、--upload は YouTube アップロードを実行する。「プレイリスト作って」「初投稿」「初回投稿」「初回公開前にプレイリスト初期化」「アップロード」「公開する」で発動。動画生成は /videoup、概要欄生成は /video-description"
+description: "Use when 完成した動画を公開工程へ進めるとき。--playlist はプレイリストの作成・割り当て・確認、--upload は YouTube アップロードを実行する。「プレイリスト作って」「初投稿」「初回投稿」「初回公開前にプレイリスト初期化」「アップロード」「公開する」で発動。動画生成は /video --generate、概要欄生成は /video-description"
 ---
 
 ## 前後工程
 
-- `前工程`: `/wf-new`, `/videoup`, `/video-description`, `/thumbnail`
+- `前工程`: `/wf-new`, `/video --generate`, `/video-description`, `/thumbnail`
 - `後工程`: `/post-publish`, `/community-post`, `/metadata-audit`, `/pinned-comment`, `/live-clean`
 - `委譲先`: `/post-publish`
 
