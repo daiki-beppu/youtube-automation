@@ -1405,10 +1405,11 @@ def test_channel_new_regeneration_documents_ttp_wf_new_readiness_gate() -> None:
 
 
 def test_thumbnail_compare_documents_planning_thumbnail_runtime_contract() -> None:
-    prerequisites = SKILL_INVENTORY.section("thumbnail-compare", "## 前提")
-    phase_one = SKILL_INVENTORY.section("thumbnail-compare", "### Phase 1: サムネイル収集（スクリプト実行）")
-    troubleshooting = SKILL_INVENTORY.section("thumbnail-compare", "## 障害時ガイダンス")
-    related_files = SKILL_INVENTORY.section("thumbnail-compare", "## 関連ファイル")
+    compare = _read(".claude/skills/thumbnail/references/compare.md")
+    prerequisites = _markdown_section(compare, "## 前提")
+    phase_one = _markdown_section(compare, "### Phase 1: サムネイル収集（スクリプト実行）")
+    troubleshooting = _markdown_section(compare, "## 障害時ガイダンス")
+    related_files = _markdown_section(compare, "## 関連ファイル")
 
     for section in (prerequisites, phase_one, related_files):
         assert "collections/live/*/10-assets/thumbnail.jpg" in section

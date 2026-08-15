@@ -9,7 +9,7 @@ subagent の完了報告は成功根拠にしない。メインエージェン�
 ### thumbnail
 
 - mode 別の承認または自動確定と既存 QA が完了している
-- `/thumbnail-compare` の 320px 視認性検証に合格している
+- `/thumbnail --compare` の 320px 視認性検証に合格している
 - `10-assets/thumbnail.jpg` が存在し、画像として読み取れる
 - `textless.enabled` が `true` の場合は、確定済みの `10-assets/main.png` または `10-assets/main.jpg` が存在し、既存 check に合格している
 - `textless.enabled` が `false` の場合は `share_thumbnail_as_main.py` の `status: SHARED`、`thumbnail.jpg` と `main.jpg` の同一 SHA-256、`main.png` 不在を確認している

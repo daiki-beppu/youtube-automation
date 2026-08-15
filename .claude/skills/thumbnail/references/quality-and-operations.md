@@ -37,7 +37,7 @@ single_step の初回 `diff_prompt_template` はテキスト付き `thumbnail-v*
 テキスト付き thumbnail 候補生成後:
 
 - [ ] ベンチマーク参照の構図・主役スケール・光・色温度・背景テクスチャが維持されている
-- [ ] `/thumbnail-compare` で 320px 縮小時のタイトル可読性・コントラスト・主役認識を確認した
+- [ ] `/thumbnail --compare` で 320px 縮小時のタイトル可読性・コントラスト・主役認識を確認した
 - [ ] タイトルテキストが `composition_rules.text_lines` の制約内である
 - [ ] `thumbnail_text.channel_name` が表示され、署名・ロゴ・透かしが焼き込まれていない
 - [ ] `image_generation.gemini.style` に記載されたスタイルが維持されている

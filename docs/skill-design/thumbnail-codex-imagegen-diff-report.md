@@ -207,7 +207,7 @@
 | 汎用化できるか | imagegen の「edit（inpainting / compositing）」と概念は近いが、2 フェーズに分けた YouTube 専用フロー |
 | 削っても運用が回るか | △ **Single-Step が安定していれば代替可**。ただしフォールバックとして残す価値あり |
 
-### 3-9. 視認性検証（`/thumbnail-compare`）/ 整合性監査（`/alignment-check`）
+### 3-9. 視認性検証（`/thumbnail --compare`）/ 整合性監査（`/alignment-check`）
 
 | 観点 | 詳細 |
 |------|------|

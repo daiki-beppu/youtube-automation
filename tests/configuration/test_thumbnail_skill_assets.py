@@ -24,6 +24,11 @@ def _read_thumbnail_skill() -> str:
     return path.read_text(encoding="utf-8")
 
 
+def _read_thumbnail_compare_reference() -> str:
+    path = _repo_root() / ".claude" / "skills" / "thumbnail" / "references" / "compare.md"
+    return path.read_text(encoding="utf-8")
+
+
 def _read_thumbnail_provider_guidance() -> str:
     path = _repo_root() / ".claude" / "skills" / "thumbnail" / "references" / "provider-guidance.md"
     return path.read_text(encoding="utf-8")
@@ -214,6 +219,24 @@ def _run_codex_prompt_cli(tmp_path: Path, thumbnail_yaml: str, title: str) -> su
     )
 
 
+def test_thumbnail_compare_is_disclosed_as_a_thumbnail_mode() -> None:
+    root = _repo_root()
+    skill = _read_thumbnail_skill()
+    compare = _read_thumbnail_compare_reference()
+
+    assert not (root / ".claude" / "skills" / "thumbnail-compare").exists()
+    assert "| `--compare` | `references/compare.md` |" in skill
+    assert "2 個以上の mode" in skill
+    assert "`/channel-research --benchmark` を案内して停止" in compare
+    assert "320px 縮小表示テスト" in compare
+
+    compare_script = root / ".claude" / "skills" / "thumbnail" / "references" / "compare_thumbnails.py"
+    assert compare_script.is_symlink()
+    assert compare_script.resolve() == (
+        root / "src" / "youtube_automation" / "commands" / "thumbnail" / "compare_thumbnails.py"
+    )
+
+
 def test_thumbnail_skill_adds_ttp_preflight_checklist_before_two_phase_section() -> None:
     skill = _read_thumbnail_skill()
 
@@ -242,7 +265,7 @@ def test_ttp_preflight_checklist_covers_required_operational_checks() -> None:
     assert "--max-attempts" in checklist_block
     assert "参照不足" in checklist_block
     assert "--no-rotate" in checklist_block
-    assert "/thumbnail-compare" in checklist_block
+    assert "/thumbnail --compare" in checklist_block
     assert "承認**前**" in checklist_block
 
 
@@ -276,7 +299,7 @@ def test_thumbnail_skill_documents_thumbnail_compare_and_alignment_check_roles()
     assert prompt_idx != -1
     assert quality_idx < role_idx < prompt_idx
 
-    assert "/thumbnail-compare" in role_block
+    assert "/thumbnail --compare" in role_block
     assert "/alignment-check" in role_block
     assert "視認性検証" in role_block
     assert "整合性監査" in role_block
@@ -352,7 +375,7 @@ def test_thumbnail_skill_documents_ai_burn_in_default_and_deterministic_opt_in()
         "uv run yt-thumbnail-check <collection-path>/10-assets/main-v1.png --json",
         "cp main-v1.png main.png",
         "cp thumbnail-v1.jpg thumbnail.jpg",
-        "/thumbnail-compare",
+        "/thumbnail --compare",
         "config/skills/loop-video.yaml::enabled: true",
         "config/skills/loop-video.yaml::enabled: false",
         "静止画背景",
@@ -373,7 +396,7 @@ def test_thumbnail_skill_documents_ai_burn_in_default_and_deterministic_opt_in()
     # AI 焼き込み経路（Single-Step 章）が未設定 / ai_burn_in の標準手順
     assert "未設定 / `text_render.mode: ai_burn_in` の標準手順" in single_step_block
     for required in (
-        "/thumbnail-compare",
+        "/thumbnail --compare",
         "cp thumbnail-v1.jpg thumbnail.jpg",
         "TEXTLESS_PROMPT=\"$(cat <<'PROMPT'",
         '--reference "${COLLECTION_PATH}/10-assets/thumbnail.jpg"',
@@ -418,7 +441,9 @@ def test_thumbnail_skill_requires_manual_comparison_before_selecting_multiple_ca
     ):
         assert required in comparison_contract
 
-    assert comparison_contract.find("`/thumbnail-compare`") < comparison_contract.find("候補番号（`v1` / `v2` / `v3`）")
+    assert comparison_contract.find("`/thumbnail --compare`") < comparison_contract.find(
+        "候補番号（`v1` / `v2` / `v3`）"
+    )
     assert comparison_contract.find("候補番号（`v1` / `v2` / `v3`）") < comparison_contract.find(
         "cp thumbnail-v<選択番号>.jpg thumbnail.jpg"
     )
@@ -762,7 +787,7 @@ def test_thumbnail_archive_is_opt_in_and_wired_after_every_approval_path() -> No
     assert "uv run yt-thumbnail-auto-select <collection-path> --apply" in auto_selection_block
     assert "--apply &&" not in auto_selection_block
     assert "候補生成後のユーザー承認を省略" in auto_selection_block
-    assert auto_selection_block.find("--apply") < auto_selection_block.find("自動確定後も `/thumbnail-compare`")
+    assert auto_selection_block.find("--apply") < auto_selection_block.find("自動確定後も `/thumbnail --compare`")
     assert "内部で実行" in approval_block
 
 
@@ -876,7 +901,7 @@ def test_thumbnail_skill_quality_check_separates_thumbnail_and_textless_main_qa(
     for required in (
         "テキスト付き thumbnail 候補生成後",
         "ベンチマーク参照の構図",
-        "/thumbnail-compare",
+        "/thumbnail --compare",
         "タイトル可読性",
         "`composition_rules.text_lines`",
         "`thumbnail_text.channel_name` が表示され",
@@ -1884,7 +1909,7 @@ def test_thumbnail_skill_routes_generation_details_without_moving_runtime_contra
     assert skill.count("archive-approved-thumbnail.py") == 5
     assert '### Single-Step / TTP モード（`generation_mode: "single_step"`、デフォルト・推奨）' in skill
     assert "### Two-Phase モード（従来方式・フォールバック）" in skill
-    assert "/thumbnail-compare" in skill
+    assert "/thumbnail --compare" in skill
     assert "ユーザー承認" in skill
     assert "## 完了条件" in skill
 
@@ -1917,7 +1942,7 @@ def test_thumbnail_skill_routes_quality_details_without_moving_hard_gates() -> N
     assert skill.count("uv run yt-stock-archive") == 1
     assert "## 完了条件" in skill
     assert "**Hard Gate**" in "\n".join(skill.splitlines()[:60])
-    assert "/thumbnail-compare" in skill
+    assert "/thumbnail --compare" in skill
     assert "ユーザー承認" in skill
     assert "thumbnail.approved = true" in skill
 

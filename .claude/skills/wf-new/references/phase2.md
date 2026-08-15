@@ -94,13 +94,13 @@ uv run yt-populate-scene-phrases <collection-dir-name> \
 
 ##### 2c-2. サムネイル承認・確定 + 音楽素材生成
 
-initial dispatch を行った場合は両 Agent の完了を待つ。片方の失敗で他方を cancel せず、両方の完了報告と実成果物を回収してから join する。メインが thumbnail の承認、auto-selection、textless 確定、`/thumbnail-compare`、両 branch の成果物検証と state 適用を所有し、music branch の完了を理由に thumbnail gate を省略しない。
+initial dispatch を行った場合は両 Agent の完了を待つ。片方の失敗で他方を cancel せず、両方の完了報告と実成果物を回収してから join する。メインが thumbnail の承認、auto-selection、textless 確定、`/thumbnail --compare`、両 branch の成果物検証と state 適用を所有し、music branch の完了を理由に thumbnail gate を省略しない。
 
 このステップにテキスト付き候補の承認ゲートと `mode: full` の自動確定分岐を一元化する。最初に thumbnail の `config.default.yaml` と `config/skills/thumbnail.yaml` を deep-merge し、`textless.enabled` を確定する。未設定は既定の `true` として扱う。以下の 1〜4 は mode 別に実行する。
 
 **`planning-preview.png` から確定済み**:
 
-1. 企画選択時に承認済みの同じ画像なので、文字入り候補の生成・再選択・thumbnail の AskUserQuestion は行わない。`10-assets/thumbnail.jpg` を `/thumbnail-compare` で 320px 視認性検証し、署名・透かし・ロゴ・手指破綻の既存目視 QA を通す。失敗時は state を更新せず停止する
+1. 企画選択時に承認済みの同じ画像なので、文字入り候補の生成・再選択・thumbnail の AskUserQuestion は行わない。`10-assets/thumbnail.jpg` を `/thumbnail --compare` で 320px 視認性検証し、署名・透かし・ロゴ・手指破綻の既存目視 QA を通す。失敗時は state を更新せず停止する
 2. QA 成功後に `uv run python .claude/skills/thumbnail/references/archive-approved-thumbnail.py <collection-path>` を実行する。archive の Hard Gate は既存契約どおり維持する
 3. `textless.enabled` が未設定または `true` なら、確定した `thumbnail.jpg` を入力、生成対象 `main` を指定して別 subagent へ委譲する。`mode: full` は生成可否と textless 背景承認を質問せず既存の check 成功後に確定し、それ以外は既存どおり textless 候補だけをプレビュー・承認して `main.png/jpg` へ確定する。`false` なら textless 生成・承認を省略し、`share_thumbnail_as_main.py <collection-path>` を実行して `status: SHARED`、同一 SHA-256、`main.png` 不在を検証する
 4. `thumbnail.jpg` と `main.png/jpg` の確定検証結果を Phase 2c 成果物・再開契約へ thumbnail branch の結果として渡し、成功時だけメインが `assets.thumbnail = true` と `updated_at` を更新する。この `thumbnail.jpg` を再度 AskUserQuestion にかけない
@@ -111,7 +111,7 @@ initial dispatch を行った場合は両 Agent の完了を待つ。片方の�
 
 1. AskUserQuestion と `open` を実行せず、`uv run yt-thumbnail-auto-select <collection-path> --dry-run` が exit 0 であることを確認してから `uv run yt-thumbnail-auto-select <collection-path> --apply` を実行する。`10-assets/thumbnail.jpg` と `workflow-state.json::thumbnail_auto_selection.mode == "full"` を検証する
 2. `textless.enabled` が未設定または `true` なら、確定した `thumbnail.jpg` を入力、生成対象 `main` を指定して別 subagent へ委譲する。生成可否と textless 背景承認は質問せず、`yt-thumbnail-check` が exit 0 かつ候補が存在するときだけ `10-assets/main.png/jpg` へ確定コピーする。`false` なら textless 委譲・生成・承認を再要求せず、`share_thumbnail_as_main.py <collection-path>` を実行し、`status: SHARED`、`thumbnail.jpg` と `main.jpg` の同一 SHA-256、`main.png` 不在を検証する
-3. `/thumbnail-compare` の 320px 視認性検証はスコープ外のまま省略せず、自動確定後に別途実行する。失敗しても不適格候補を強制採用せず、`/thumbnail` の「full モード失敗時の手動切替」を表示して state を更新せず停止する
+3. `/thumbnail --compare` の 320px 視認性検証はスコープ外のまま省略せず、自動確定後に別途実行する。失敗しても不適格候補を強制採用せず、`/thumbnail` の「full モード失敗時の手動切替」を表示して state を更新せず停止する
 4. `thumbnail.jpg` と `main.png/jpg` の確定検証結果を Phase 2c 成果物・再開契約へ thumbnail branch の結果として渡し、成功時だけメインが `assets.thumbnail = true` と `updated_at` を更新して、music branch の成果物検証へ進む
 
 **`selection_only` または auto-selection 無効**（従来フロー）:
@@ -129,7 +129,7 @@ initial dispatch を行った場合は両 Agent の完了を待つ。片方の�
    open <collection-path>/10-assets/thumbnail-vN.jpg
    ```
 
-2. `/thumbnail-compare` の 320px 視認性検証後、auto-selection 無効かつ `approval_gates.thumbnail: true` なら AskUserQuestion でテキスト付き候補の承認を求める。`selection_only` はこの質問だけを省略し、dry-run 成功後に `yt-thumbnail-auto-select --apply` で確定する。auto-selection 無効かつ approval gate も無効なら上表の決定的順序で確定する:
+2. `/thumbnail --compare` の 320px 視認性検証後、auto-selection 無効かつ `approval_gates.thumbnail: true` なら AskUserQuestion でテキスト付き候補の承認を求める。`selection_only` はこの質問だけを省略し、dry-run 成功後に `yt-thumbnail-auto-select --apply` で確定する。auto-selection 無効かつ approval gate も無効なら上表の決定的順序で確定する:
    ```
    question: "サムネイルを承認しますか？"
    options:

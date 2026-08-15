@@ -43,7 +43,7 @@ def test_contract_requires_independent_real_artifact_validation() -> None:
     for thumbnail_evidence in (
         "`10-assets/thumbnail.jpg`",
         "`10-assets/main.png` または `10-assets/main.jpg`",
-        "`/thumbnail-compare`",
+        "`/thumbnail --compare`",
     ):
         assert thumbnail_evidence in validation
     for suno_evidence in (

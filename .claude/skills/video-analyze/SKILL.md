@@ -27,7 +27,7 @@ description: "Use when 動画本体の中身（フック構造・シーン・BGM
 - `thumbnail_alignment` — サムネで提示した要素が本編（窓内）に映っているかの整合性
 - `editing_metrics` — 平均カット長・テキスト出現頻度（窓内平均）
 
-既存スキルが扱えていなかった「動画の中身」というドメインを埋め、`/channel-research --benchmark`・`/analytics --analyze`・`/alignment-check`・`/thumbnail-compare`・`/channel-research --voice` の精度を底上げする。
+既存スキルが扱えていなかった「動画の中身」というドメインを埋め、`/channel-research --benchmark`・`/analytics --analyze`・`/alignment-check`・`/thumbnail --compare`・`/channel-research --voice` の精度を底上げする。
 
 ## 完了条件
 

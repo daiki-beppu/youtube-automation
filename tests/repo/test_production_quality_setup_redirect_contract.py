@@ -33,7 +33,6 @@ TARGET_SKILLS = (
     "short",
     "music",
     "thumbnail",
-    "thumbnail-compare",
     "value-loop-audit",
 )
 WF_NEW_IDEATION_MEMBERS = frozenset(
@@ -103,8 +102,8 @@ INITIAL_OCCURRENCE_LEDGER = (
     _entry("thumbnail", "SKILL.md", "text-profile-analysis", "analysis"),
     _entry("thumbnail", "SKILL.md", "analysis-mode-reference", "shared-reference"),
     _entry("thumbnail", "config.default.yaml", "text-profile-analysis", "analysis"),
-    _entry("thumbnail-compare", "SKILL.md", "missing-config-existing", "import"),
-    _entry("thumbnail-compare", "SKILL.md", "missing-benchmark-direction", "direction"),
+    _entry("thumbnail", "references/compare.md", "missing-config-existing", "import"),
+    _entry("thumbnail", "references/compare.md", "missing-benchmark-direction", "direction"),
     _entry("value-loop-audit", "SKILL.md", "missing-config-new", "opening"),
     _entry("value-loop-audit", "SKILL.md", "missing-config-existing", "import"),
 )
@@ -116,7 +115,7 @@ INITIAL_CONTEXT_COUNTS = {
     "direction": 7,
     "shared-reference": 3,
 }
-OPENINGLESS_SKILLS = frozenset({"metadata-audit", "playlist", "short", "short-thumbnail", "thumbnail-compare"})
+OPENINGLESS_SKILLS = frozenset({"metadata-audit", "playlist", "short"})
 
 
 def _section_identity(section: str, occurrence: int = 1) -> str:
@@ -257,13 +256,13 @@ _RAW_EXPECTED_ACTIVE_ROUTES = (
         "- **既存チャンネル**（YouTube で既に運営中）→ `/setup --import` を案内",
     ),
     _route(
-        "thumbnail-compare/SKILL.md",
+        "thumbnail/references/compare.md",
         "## 前提",
         "- `config/channel/` が存在すること（`load_config()` でロード可能）。存在しない場合は "
         "`/setup --import` を案内して停止する",
     ),
     _route(
-        "thumbnail-compare/SKILL.md",
+        "thumbnail/references/compare.md",
         "## 前提",
         "- `config/channel/analytics.json::benchmark.channels` に承認済みベンチマークチャンネルが設定済みであること。"
         "未設定なら `/channel-strategy --direction` / `/channel-research --discover` を案内して停止する",

@@ -1,19 +1,4 @@
----
-name: thumbnail-compare
-purpose: 作る
-description: "Use when 自チャンネルの生成済みサムネイルを競合と並べて 320px 視認性を比較検証するとき。「サムネ比較」「目立ってるか確認」「モバイル表示テスト」「320px」で発動。競合だけの勝ちパターン分析は channel-research の thumbnail mode、生成は /thumbnail、Studio の A/B テスト設計・結果記録は /thumbnail-test"
----
-
-## 前後工程
-
-- `前工程`: `/thumbnail`, `/channel-research --benchmark`
-- `後工程`: `なし`
-- `委譲先`: `なし`
-
-## 成果物
-
-- `書き込む`: `docs/plans/thumbnail-comparison.md`, `data/thumbnail_compare/*`
-- `読み込む`: `collections/<id>/10-assets/thumbnail.jpg`, `data/benchmark_*.json`, `docs/benchmarks/thumbnails/*.jpg`
+# `--compare`: 320px サムネイル比較
 
 ## Overview
 
@@ -31,7 +16,7 @@ description: "Use when 自チャンネルの生成済みサムネイルを競合
 
 - `config/channel/` が存在すること（`load_config()` でロード可能）。存在しない場合は `/setup --import` を案内して停止する
 - `config/channel/analytics.json::benchmark.channels` に承認済みベンチマークチャンネルが設定済みであること。未設定なら `/channel-strategy --direction` / `/channel-research --discover` を案内して停止する
-- `data/benchmark_*.json` が存在すること（鮮度が古い場合はスクリプトが自動更新する）。一度も収集していなければ先に `/channel-research --benchmark` を案内する
+- `data/benchmark_*.json` が存在すること（鮮度が古い場合はスクリプトが自動更新する）。一度も収集していなければ `/channel-research --benchmark` を案内して停止する
 - 自チャンネルの確定済みサムネイル `collections/live/*/10-assets/thumbnail.jpg` または `collections/planning/*/10-assets/thumbnail.jpg` が 1 件以上存在すること。どちらにも無ければ比較対象なしとして `/thumbnail` を案内する
 - ベンチマーク更新は YouTube Data API を使うため `auth/token.json` の OAuth 認証が必要。未認証なら `/setup` を案内する
 

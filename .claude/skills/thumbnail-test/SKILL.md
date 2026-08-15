@@ -1,7 +1,7 @@
 ---
 name: thumbnail-test
 purpose: 作る
-description: "Use when 長尺動画で YouTube Studio のサムネイル A/B テストを単独で設計し、結果を記録するとき。「サムネ A/B テスト」「Test & Compare」「サムネテスト結果」で発動。伸びた動画起点の勝因検証ループは /thumbnail-iterate、公開前の競合・320px 視認性比較は /thumbnail-compare、候補生成は /thumbnail を使う"
+description: "Use when 長尺動画で YouTube Studio のサムネイル A/B テストを単独で設計し、結果を記録するとき。「サムネ A/B テスト」「Test & Compare」「サムネテスト結果」で発動。伸びた動画起点の勝因検証ループは /thumbnail-iterate、公開前の競合・320px 視認性比較は thumbnail の比較 mode、候補生成は /thumbnail を使う"
 ---
 
 ## 前後工程
@@ -98,7 +98,7 @@ description: "Use when 長尺動画で YouTube Studio のサムネイル A/B テ
    sips -z 180 320 <candidate> --out /tmp/<candidate-name>-320.jpg
    ```
 
-6. `/thumbnail-compare` と同じ 320px 観点で確認する。次の 3 条件がすべて PASS の候補だけを残す。
+6. `/thumbnail --compare` と同じ 320px 観点で確認する。次の 3 条件がすべて PASS の候補だけを残す。
    - 文字: 画面内タイトルの全字を拡大なしで読み取れる。
    - 主役: 人物・動物・楽器・主役物体の種別を拡大なしで答えられる。
    - シーン: 屋内 / 屋外と活動を 3 秒以内に答えられる。
