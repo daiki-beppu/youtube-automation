@@ -13,6 +13,36 @@ from youtube_automation.configuration import reset as reset_config
 from youtube_automation.configuration import skills as skill_config
 from youtube_automation.core.errors import ConfigError
 
+EXPECTED_PYTHON_SKILL_CONFIG_KEYS = frozenset(
+    {
+        "analytics",
+        "benchmark",
+        "collection-ideate",
+        "discover-competitors",
+        "loop-video",
+        "masterup",
+        "metadata-audit",
+        "suno",
+        "suno-helper",
+        "thumbnail",
+    }
+)
+EXPECTED_SKILL_ONLY_CONFIG_KEYS = frozenset(
+    {
+        "community-post",
+        "flop-analysis",
+        "live-clean",
+        "lyria",
+        "short",
+        "short-release",
+        "suno-lyric",
+        "video-analyze",
+        "video-description",
+        "video-upload",
+        "videoup",
+    }
+)
+
 
 @pytest.fixture(autouse=True)
 def reset_caches():
@@ -51,6 +81,24 @@ def test_missing_default_raises():
     """default.yaml が存在しないスキルは ConfigError"""
     with pytest.raises(ConfigError):
         skill_config.load_skill_config("__nonexistent_skill__")
+
+
+def test_skill_config_keys_classify_python_and_skill_only_consumers() -> None:
+    assert skill_config.SKILL_CONFIG_KEYS == EXPECTED_PYTHON_SKILL_CONFIG_KEYS
+    assert skill_config.SKILL_ONLY_CONFIG_KEYS == EXPECTED_SKILL_ONLY_CONFIG_KEYS
+
+
+def test_unregistered_skill_config_key_raises_config_error_before_path_resolution(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        skill_config,
+        "_default_path",
+        lambda _skill: pytest.fail("未登録キーで default path を解決してはいけません"),
+    )
+
+    with pytest.raises(ConfigError, match="未登録の skill-config キー"):
+        skill_config.load_skill_config("unregistered", use_cache=False)
 
 
 def test_channel_override_merged(tmp_path, monkeypatch):
