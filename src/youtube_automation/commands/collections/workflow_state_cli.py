@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 from collections.abc import Mapping
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import cast
 
@@ -40,6 +41,7 @@ def build_parser() -> argparse.ArgumentParser:
     upload_parser.add_argument("--video-id", required=True)
     upload_parser.add_argument("--video-url")
     upload_parser.add_argument("--publish-at")
+    subparsers.add_parser("touch", help="updated_at を現在時刻へ更新")
     return parser
 
 
@@ -66,6 +68,21 @@ def _set_upload(state: WorkflowState, args: argparse.Namespace) -> None:
         upload.video_url = args.video_url
     if args.publish_at is not None:
         upload.publish_at = args.publish_at
+    _touch(state)
+
+
+def _touch(state: WorkflowState) -> None:
+    state["updated_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
+
+def _set_phase(state: WorkflowState, phase: Phase) -> None:
+    state.phase = phase
+    _touch(state)
+
+
+def _set_stage(state: WorkflowState, stage: Stage) -> None:
+    state.stage = stage
+    _touch(state)
 
 
 def run(args: argparse.Namespace) -> int:
@@ -75,12 +92,14 @@ def run(args: argparse.Namespace) -> int:
         print(json.dumps(value, ensure_ascii=False))
     elif args.command == "set-phase":
         phase = cast(Phase, args.phase)
-        update_workflow_state(state_path, lambda state: setattr(state, "phase", phase))
+        update_workflow_state(state_path, lambda state: _set_phase(state, phase))
     elif args.command == "set-stage":
         stage = cast(Stage, args.stage)
-        update_workflow_state(state_path, lambda state: setattr(state, "stage", stage))
+        update_workflow_state(state_path, lambda state: _set_stage(state, stage))
     elif args.command == "set-upload":
         update_workflow_state(state_path, lambda state: _set_upload(state, args))
+    elif args.command == "touch":
+        update_workflow_state(state_path, _touch)
     return 0
 
 
