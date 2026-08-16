@@ -20,6 +20,7 @@ class ReviewCandidate:
     id: str
     label: str
     digest: str
+    details: tuple[tuple[str, str], ...] = ()
 
     def __post_init__(self) -> None:
         if not _CANDIDATE_ID.fullmatch(self.id):
@@ -28,6 +29,8 @@ class ReviewCandidate:
             raise ReviewSelectionError("候補labelは1〜256文字で指定してください")
         if not _DIGEST.fullmatch(self.digest):
             raise ReviewSelectionError("候補digestはSHA-256で指定してください")
+        if any(not key or not value for key, value in self.details):
+            raise ReviewSelectionError("候補detailは非空のlabel/value pairで指定してください")
 
 
 @dataclass(frozen=True)

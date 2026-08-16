@@ -8,6 +8,10 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Literal
 
+from youtube_automation.application.documents.collection_plan import (
+    collection_plan_artifact_digest,
+    collection_plan_candidate_digest,
+)
 from youtube_automation.core.errors import ReviewError
 from youtube_automation.domains.documents.review import ReviewArtifact, ReviewCandidate, SelectionManifest
 from youtube_automation.domains.documents.review_rendering import render_review_html, validate_review_html
@@ -131,9 +135,10 @@ def _build_snapshot(collection_dir: Path, artifact: ReviewArtifact, *, now: date
     if artifact == "plan":
         source = collection_dir / "20-documentation" / "plan_proposals.json"
         document = read_published_json_document(source, RepositorySchema.COLLECTION_PLAN)
-        candidates = _plan_candidates(document, _sha256_file(source))
+        candidates = _plan_candidates(source, document)
+        media = _plan_media(collection_dir, document)
         persistent_html = source.with_suffix(".html").resolve()
-        artifact_digest = _sha256_file(source)
+        artifact_digest = collection_plan_artifact_digest(source)
     elif artifact == "music-prompt":
         sources = [
             path
@@ -196,16 +201,80 @@ def _media_candidates(collection_dir: Path, artifact: ReviewArtifact) -> tuple[P
     return paths
 
 
-def _plan_candidates(document: object, digest: str) -> tuple[ReviewCandidate, ...]:
+def _plan_candidates(source: Path, document: object) -> tuple[ReviewCandidate, ...]:
     if not isinstance(document, dict) or not isinstance(document.get("candidates"), list):
         raise ReviewError("collection plan candidatesを解決できません")
     result: list[ReviewCandidate] = []
     for item in document["candidates"]:
         if not isinstance(item, dict) or not isinstance(item.get("plan_id"), str):
             raise ReviewError("collection plan candidate IDが不正です")
-        label = item.get("collection_name")
-        result.append(ReviewCandidate(item["plan_id"], label if isinstance(label, str) else item["plan_id"], digest))
+        label = item.get("final_title")
+        result.append(
+            ReviewCandidate(
+                item["plan_id"],
+                label if isinstance(label, str) else item["plan_id"],
+                collection_plan_candidate_digest(source, item),
+                details=_plan_details(item),
+            )
+        )
     return tuple(result)
+
+
+def _plan_details(candidate: dict[str, object]) -> tuple[tuple[str, str], ...]:
+    evidence = candidate.get("evidence")
+    constraints = candidate.get("constraint_compliance")
+    return (
+        ("対象視聴者", _display_text(candidate.get("target_persona"))),
+        ("視聴シーン", _display_text(candidate.get("viewing_scene"))),
+        ("音楽方針", _display_text(candidate.get("music_direction"))),
+        ("映像方針", _display_text(candidate.get("video_direction"))),
+        ("サムネ方針", _display_text(candidate.get("thumbnail_direction"))),
+        ("根拠", _list_summary(evidence, "observation")),
+        ("制約適合", _list_summary(constraints, "constraint_id")),
+    )
+
+
+def _plan_media(collection_dir: Path, document: object) -> tuple[tuple[str, Path], ...]:
+    if not isinstance(document, dict) or not isinstance(document.get("candidates"), list):
+        raise ReviewError("collection plan candidatesを解決できません")
+    root = collection_dir.resolve()
+    result: list[tuple[str, Path]] = []
+    for candidate in document["candidates"]:
+        if not isinstance(candidate, dict) or not isinstance(candidate.get("plan_id"), str):
+            raise ReviewError("collection plan candidate IDが不正です")
+        assets = candidate.get("preview_assets")
+        if not isinstance(assets, list):
+            raise ReviewError("collection plan preview_assetsが不正です")
+        if not assets:
+            continue
+        reference = assets[0]
+        if not isinstance(reference, str):
+            raise ReviewError("collection plan preview assetが不正です")
+        relative = Path(reference)
+        unresolved = root / relative
+        preview = unresolved.resolve()
+        if (
+            relative.is_absolute()
+            or ".." in relative.parts
+            or not preview.is_relative_to(root)
+            or unresolved.is_symlink()
+            or not preview.is_file()
+            or preview.suffix.lower() not in _MEDIA_SUFFIXES["thumbnail"]
+        ):
+            raise ReviewError(f"collection plan preview assetを安全に表示できません: {reference}")
+        result.append((candidate["plan_id"], preview))
+    return tuple(result)
+
+
+def _display_text(value: object) -> str:
+    return value if isinstance(value, str) and value else "未設定"
+
+
+def _list_summary(value: object, key: str) -> str:
+    if not isinstance(value, list):
+        return "未設定"
+    parts = [item[key] for item in value if isinstance(item, dict) and isinstance(item.get(key), str)]
+    return " / ".join(parts) if parts else "未設定"
 
 
 def _candidate_set_digest(candidates: tuple[ReviewCandidate, ...]) -> str:

@@ -43,6 +43,7 @@ EXPECTED_ENTRYPOINT_MODULES = {
     "yt-distrokid-prepare": "youtube_automation.commands.distrokid.distrokid_prepare",
     "yt-document-migrate": "youtube_automation.commands.documents.migrate",
     "yt-document-review": "youtube_automation.commands.documents.review",
+    "yt-collection-plan-select": "youtube_automation.commands.documents.collection_plan_select",
     "yt-document-render": "youtube_automation.commands.documents.render",
     "yt-doctor": "youtube_automation.commands.system.doctor",
     "yt-fetch-stream-key": "youtube_automation.commands.youtube.fetch_stream_key",

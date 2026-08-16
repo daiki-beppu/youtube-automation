@@ -145,6 +145,9 @@ def _ordered_properties(
 
 def _render_value(value: object, schema: Mapping[str, object], root_schema: Mapping[str, object]) -> str:
     schema = _resolve_local_reference(schema, root_schema)
+    view = _view(schema)
+    if _presentation(view, value) == "media":
+        return _render_media(_annotation(schema, "title", "Media"), "", value, view)
     if isinstance(value, dict):
         children = _ordered_properties(schema, root_schema)
         known = {name for name, _ in children}
@@ -205,11 +208,14 @@ def _render_media(heading: str, description: str, value: object, view: Mapping[s
     if not isinstance(media_type, str) or media_type not in _MEDIA_TYPES:
         raise DocumentRenderError("x-view.mediaType は image/audio/video/link のいずれかにしてください")
     references: Sequence[object] = value if isinstance(value, list) else [value]
+    prefix = view.get("pathPrefix", "")
+    if prefix not in {"", "../"}:
+        raise DocumentRenderError("x-view.pathPrefixは空または../だけを許可します")
     rendered: list[str] = []
     for reference in references:
         if not isinstance(reference, str) or not _is_local_asset(reference):
             raise DocumentRenderError(f"media は local asset reference だけを使用できます: {heading}")
-        safe_reference = escape(reference, quote=True)
+        safe_reference = escape(f"{prefix}{reference}", quote=True)
         if media_type == "image":
             rendered.append(f'<img src="{safe_reference}" alt="{escape(heading, quote=True)}" loading="lazy">')
         elif media_type == "audio":
@@ -222,12 +228,16 @@ def _render_media(heading: str, description: str, value: object, view: Mapping[s
     return f'<section class="view-media"><h2>{escape(heading)}</h2>{description_html}{"".join(rendered)}</section>'
 
 
-def _is_local_asset(reference: str) -> bool:
+def _is_local_asset(reference: str, *, allow_plan_preview: bool = False) -> bool:
     if not reference or "\\" in reference or any(ord(character) < 32 for character in reference):
         return False
     parsed = urlsplit(reference)
     segments = unquote(parsed.path).split("/")
-    return not parsed.scheme and not parsed.netloc and not parsed.path.startswith("/") and ".." not in segments
+    if parsed.scheme or parsed.netloc or parsed.path.startswith("/"):
+        return False
+    if ".." not in segments:
+        return True
+    return allow_plan_preview and segments[:2] == ["..", "10-assets"] and segments.count("..") == 1
 
 
 def _embedded_json(document: object) -> str:
@@ -265,7 +275,7 @@ class _GeneratedHTMLParser(HTMLParser):
             raise DocumentRenderError("生成 HTML に event handler attribute があります")
         for attribute in ("src", "href", "poster"):
             reference = attributes.get(attribute)
-            if reference is not None and not _is_local_asset(reference):
+            if reference is not None and not _is_local_asset(reference, allow_plan_preview=True):
                 raise DocumentRenderError("生成 HTML に external asset reference があります")
         if "srcset" in attributes:
             raise DocumentRenderError("生成 HTML に srcset reference があります")

@@ -25,7 +25,7 @@ def render_review_html(
         raise DocumentRenderError("review mediaは候補allowlistに含まれる必要があります")
     action = endpoint or ""
     cards = "".join(
-        _candidate_card(candidate.id, candidate.label, media.get(candidate.id), manifest, action)
+        _candidate_card(candidate.id, candidate.label, candidate.details, media.get(candidate.id), manifest, action)
         for candidate in manifest.candidates
     )
     package = "youtube_automation.domains.documents.resources"
@@ -45,11 +45,16 @@ def render_review_html(
 def _candidate_card(
     candidate_id: str,
     label: str,
+    details: tuple[tuple[str, str], ...],
     media_path: Path | None,
     manifest: SelectionManifest,
     action: str,
 ) -> str:
     preview = _preview(media_path, label) if media_path is not None else ""
+    comparison = ""
+    if details:
+        rows = "".join(f"<dt>{escape(key)}</dt><dd>{escape(value)}</dd>" for key, value in details)
+        comparison = f'<dl class="review-comparison">{rows}</dl>'
     form = ""
     if action:
         form = (
@@ -60,7 +65,7 @@ def _candidate_card(
         )
     return (
         f'<section class="view-card" data-candidate-id="{escape(candidate_id, quote=True)}">'
-        f"<h2>{escape(label)}</h2>{preview}{form}</section>"
+        f"<h2>{escape(label)}</h2>{comparison}{preview}{form}</section>"
     )
 
 

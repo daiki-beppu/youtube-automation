@@ -46,3 +46,29 @@ def test_display_only_review_has_no_form_or_action(tmp_path: Path) -> None:
 
     assert "<form" not in html
     assert "<button" not in html
+
+
+def test_plan_review_card_shows_comparison_details_and_preview(tmp_path: Path) -> None:
+    preview = tmp_path / "preview.png"
+    preview.write_bytes(b"preview")
+    manifest = SelectionManifest.create(
+        artifact="plan",
+        artifact_digest="a" * 64,
+        candidates=(
+            ReviewCandidate(
+                "plan-a",
+                "静かな雨の夜",
+                "b" * 64,
+                details=(("対象視聴者", "夜に集中したい人"), ("映像方針", "固定構図")),
+            ),
+        ),
+        now=datetime(2026, 8, 16, tzinfo=UTC),
+        lifetime=timedelta(minutes=5),
+    )
+    endpoint = f"http://127.0.0.1:43123/select/{manifest.token}"
+
+    html = render_review_html(manifest, endpoint=endpoint, media={"plan-a": preview})
+
+    assert "夜に集中したい人" in html
+    assert "映像方針" in html
+    assert preview.resolve().as_uri() in html
