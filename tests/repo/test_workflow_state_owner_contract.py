@@ -11,6 +11,12 @@ from tests.helpers.paths import REPO_ROOT
 
 OWNER = "src/youtube_automation/domains/collections/workflow_state.py"
 DIRECT_IO_ALLOWLIST = frozenset()
+SKILL_REFERENCE_READERS = (
+    ".claude/skills/publish/references/generate_batch.py",
+    ".claude/skills/publish/references/publish-chain-state.py",
+    ".claude/skills/wf-new/references/wf-auto-state.py",
+    ".claude/skills/wf-next/references/master_audio_transition.py",
+)
 
 _PATH_NAME = re.compile(r"(?:workflow_state|workflow|ws)_(?:file|path)$")
 _CONTEXTUAL_PATH_NAME = re.compile(r"state_(?:file|path)$")
@@ -250,3 +256,15 @@ def test_removed_direct_io_requires_allowlist_entry_removal(tmp_path: Path) -> N
     assert _ratchet_diagnostics(findings, frozenset({"src/youtube_automation/commands/migrated.py"})) == [
         "stale workflow-state allowlist entry: src/youtube_automation/commands/migrated.py (remove this entry)"
     ]
+
+
+def test_distributed_skill_reference_readers_use_workflow_state_owner() -> None:
+    for relative in SKILL_REFERENCE_READERS:
+        source = (REPO_ROOT / relative).read_text(encoding="utf-8")
+        assert "youtube_automation.domains.collections.workflow_state" in source, relative
+        assert "json.loads(state_path.read_text" not in source, relative
+        assert "_read_object(state_path)" not in source, relative
+
+    transition = (REPO_ROOT / SKILL_REFERENCE_READERS[-1]).read_text(encoding="utf-8")
+    assert "update as update_workflow_state" in transition
+    assert "_write_state" not in transition

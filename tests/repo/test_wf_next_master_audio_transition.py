@@ -21,9 +21,11 @@ def _collection(tmp_path: Path) -> Path:
             {
                 "phase": "prepared",
                 "updated_at": "2000-01-01T00:00:00Z",
+                "future_root": {"kept": True},
                 "assets": {
                     "raw_master": "raw-master.wav",
                     "master_audio": None,
+                    "future_asset": "kept",
                 },
             }
         ),
@@ -86,6 +88,8 @@ def test_raw_final_adopts_raw_master_when_skip_manual_mastering_is_true(tmp_path
     assert state["phase"] == "mastered"
     assert state["updated_at"] != "2000-01-01T00:00:00Z"
     assert state["updated_at"].endswith("Z")
+    assert state["future_root"] == {"kept": True}
+    assert state["assets"]["future_asset"] == "kept"
 
 
 def test_raw_final_disabled_waits_without_state_update(tmp_path: Path) -> None:

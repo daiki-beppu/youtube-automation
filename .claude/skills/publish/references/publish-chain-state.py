@@ -8,6 +8,9 @@ import json
 from pathlib import Path
 from typing import NotRequired, TypedDict
 
+from youtube_automation.core.errors import WorkflowStateError
+from youtube_automation.domains.collections.workflow_state import read as read_workflow_state
+
 EXIT_SKIP = 0
 EXIT_RUN = 10
 EXIT_BLOCKED = 20
@@ -122,21 +125,21 @@ def evaluate(
 
     state_path = collection_dir / "workflow-state.json"
     try:
-        state = json.loads(state_path.read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        return EXIT_RUN, _result("run", "workflow_state_missing")
-    except (OSError, json.JSONDecodeError):
+        state = read_workflow_state(state_path)
+    except WorkflowStateError as exc:
+        if not state_path.exists():
+            return EXIT_RUN, _result("run", "workflow_state_missing")
+        if "::upload must be an object" in str(exc):
+            return EXIT_BLOCKED, _result("blocked", "upload_state_invalid")
         return EXIT_BLOCKED, _result("blocked", "workflow_state_invalid")
-
-    if not isinstance(state, dict):
-        return EXIT_BLOCKED, _result("blocked", "workflow_state_invalid")
-    upload = state.get("upload")
+    upload = state.upload
     if upload is None:
         return EXIT_RUN, _result("run", "video_id_missing")
-    if not isinstance(upload, dict):
-        return EXIT_BLOCKED, _result("blocked", "upload_state_invalid")
 
-    video_id = upload.get("video_id")
+    try:
+        video_id = upload.video_id
+    except WorkflowStateError:
+        return EXIT_BLOCKED, _result("blocked", "video_id_invalid")
     if step in {"community", "pinned"}:
         if video_id is None:
             return EXIT_BLOCKED, _result("blocked", "video_id_missing")
