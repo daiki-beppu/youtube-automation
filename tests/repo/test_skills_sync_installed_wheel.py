@@ -139,6 +139,32 @@ def test_candidate_wheel_syncs_all_assets_into_clean_downstream(tmp_path: Path) 
     assert package_location.returncode == 0, package_location.stderr
     assert Path(package_location.stdout.strip()).is_relative_to(venv.resolve())
 
+    cli_collection = downstream / "cli-collection"
+    (cli_collection / "01-master").mkdir(parents=True)
+    (cli_collection / "02-Individual-music").mkdir()
+    yt_workflow_state = venv / "bin" / "yt-workflow-state"
+    phase_updated = _run(
+        yt_workflow_state,
+        "--collection",
+        cli_collection,
+        "set-phase",
+        "prepared",
+        cwd=downstream,
+        env=clean_env,
+    )
+    assert phase_updated.returncode == 0, phase_updated.stderr
+    phase_read = _run(
+        yt_workflow_state,
+        "--collection",
+        cli_collection,
+        "get",
+        "phase",
+        cwd=downstream,
+        env=clean_env,
+    )
+    assert phase_read.returncode == 0, phase_read.stderr
+    assert phase_read.stdout == '"prepared"\n'
+
     compatibility_imports = _run(
         python,
         "-c",
