@@ -48,6 +48,22 @@ def test_display_only_review_has_no_form_or_action(tmp_path: Path) -> None:
     assert "<button" not in html
 
 
+def test_review_renderer_embeds_aac_with_browser_audio_player(tmp_path: Path) -> None:
+    media = tmp_path / "final.aac"
+    media.write_bytes(b"audio")
+    manifest = SelectionManifest.create(
+        artifact="audio",
+        artifact_digest="a" * 64,
+        candidates=(ReviewCandidate("worktree:final.aac", "final.aac", "b" * 64),),
+        now=datetime(2026, 8, 16, tzinfo=UTC),
+        lifetime=timedelta(minutes=5),
+    )
+
+    html = render_review_html(manifest, endpoint=None, media={"worktree:final.aac": media})
+
+    assert f'<audio src="{media.resolve().as_uri()}" controls preload="metadata"></audio>' in html
+
+
 def test_plan_review_card_shows_comparison_details_and_preview(tmp_path: Path) -> None:
     preview = tmp_path / "preview.png"
     preview.write_bytes(b"preview")

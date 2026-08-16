@@ -103,7 +103,7 @@ def _preview(path: Path, label: str, *, compact_image: bool) -> str:
             f'<div class="review-images"><figure><figcaption>原寸</figcaption>{original}</figure>'
             f"<figure><figcaption>320px表示</figcaption>{compact}</figure></div>"
         )
-    if suffix in {".mp3", ".wav", ".flac", ".m4a"}:
+    if suffix in {".mp3", ".wav", ".flac", ".m4a", ".aac"}:
         return f'<audio src="{uri}" controls preload="metadata"></audio>'
     if suffix in {".mp4", ".mov", ".webm"}:
         return f'<video src="{uri}" controls preload="metadata"></video>'

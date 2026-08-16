@@ -9,6 +9,7 @@ _CONSUMERS = (
     (".claude/skills/music/references/music-prompt-documents.md", "yt-music-prompt-select"),
     (".claude/skills/thumbnail/references/operator-guide.md", "yt-thumbnail-review"),
     (".claude/skills/video/references/generate.md", "yt-document-review"),
+    (".claude/skills/music/references/master-audio-review.md", "yt-master-audio-review"),
 )
 
 
