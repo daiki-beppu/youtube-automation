@@ -92,6 +92,14 @@ class BrowserOpenError(AutomationError):
     """生成済みローカル文書を既定ブラウザで開けない。"""
 
 
+class ReviewError(AutomationError):
+    """成果物review lifecycleの再実行可能な失敗。"""
+
+
+class ReviewSelectionError(ReviewError):
+    """loopback brokerへ送られたselectionが契約を満たさない。"""
+
+
 class DocumentMigrationError(ValidationError):
     """skill 生成 Markdown から構造化文書への状態遷移エラー。"""
 

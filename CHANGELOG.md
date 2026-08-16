@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `refactor(workflow-state)`: collection の音楽エンジンを `planning.music.engine` へ統合し、旧 top-level `music_engine` は一致検証付きの読み取り互換だけに限定する（#3891）。
 - `refactor(workflow-state)`: 概要欄生成状態を `assets.description` へ統合し、旧 `description.generated` は owner accessor の読み取り互換だけに限定する（#3890）。
 - `refactor(workflow-state)`: サムネイル承認状態を boolean の `assets.thumbnail` へ統合し、旧 `thumbnail.approved` は owner accessor の読み取り互換だけに限定する（#3889）。
+- `feat(documents)`: 固定名atomic review HTMLと永続HTML表示、product-neutralなsingle-use loopback候補選択broker、明示terminal fallbackを共通化する（#4015）。
 - `fix(wf-new)`: 定期実行の開始時に write OAuth token を API quota 消費なしで1回更新し、失効・更新失敗時は workflow を開始せず、機密情報を除去した再認証手順を報告する（#3937）。
 - `feat(workspace)`: workspace 全チャンネルの登録者数・総再生回数・動画数を YouTube `channels.list` 1 request で取得する `yt-workspace-status` を追加する（#4116）。
 - `feat(music)`: `music_engine: minimax` と長尺 instrumental master生成CLIを追加し、`/music --generate` の第3経路へ統合する（#4120）。

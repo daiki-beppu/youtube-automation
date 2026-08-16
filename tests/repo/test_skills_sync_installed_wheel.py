@@ -166,6 +166,8 @@ def test_candidate_wheel_syncs_all_assets_into_clean_downstream(tmp_path: Path) 
     assert phase_read.stdout == '"prepared"\n'
     workflow_status_help = _run(venv / "bin" / "yt-workflow-status", "--help", cwd=downstream, env=clean_env)
     assert workflow_status_help.returncode == 0, workflow_status_help.stderr
+    review_help = _run(venv / "bin" / "yt-document-review", "--help", cwd=downstream, env=clean_env)
+    assert review_help.returncode == 0, review_help.stderr
 
     compatibility_imports = _run(
         python,
@@ -218,6 +220,8 @@ workflow_snapshot = workflow_status_application.WorkflowStatusSnapshot(
 workflow_html = workflow_status_rendering.render_workflow_status(workflow_snapshot)
 assert "コレクションはありません" in workflow_html
 assert "#filter-planning:checked" in workflow_html
+review_rendering = importlib.import_module("youtube_automation.domains.documents.review_rendering")
+assert review_rendering.__name__.endswith("review_rendering")
 document_migration = importlib.import_module("youtube_automation.application.documents.migration")
 with tempfile.TemporaryDirectory() as directory:
     target = Path(directory) / "weekly.json"

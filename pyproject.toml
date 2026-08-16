@@ -64,6 +64,7 @@ yt-discover-competitors = "youtube_automation.entrypoints:yt_discover_competitor
 yt-dashboard = "youtube_automation.entrypoints:yt_dashboard"
 yt-distrokid-prepare = "youtube_automation.entrypoints:yt_distrokid_prepare"
 yt-document-migrate = "youtube_automation.entrypoints:yt_document_migrate"
+yt-document-review = "youtube_automation.entrypoints:yt_document_review"
 yt-document-render = "youtube_automation.entrypoints:yt_document_render"
 yt-doctor = "youtube_automation.entrypoints:yt_doctor"
 yt-fetch-stream-key = "youtube_automation.entrypoints:yt_fetch_stream_key"

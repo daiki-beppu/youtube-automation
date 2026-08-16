@@ -1,5 +1,13 @@
 # 動画生成
 
+## 共通Web review lifecycle
+
+動画の手動確認は生成成功後、成果物確定やstate更新前に `uv run yt-document-review --collection <collection-path> --artifact video --select` を実行する。
+single-use loopback brokerが返すallowlist候補IDとartifact digestを実fileに対して再検証し、既存の確定処理だけを呼ぶ。
+HTMLやbrokerから任意path、command、state patchを受け取らない。renderer・browser・timeout失敗はfail-closedで停止する。
+Web失敗から会話へ黙って切り替えず、browserのない環境だけ `--transport terminal` を明示する。
+自動承認経路はCLIを呼ばずHTML・待機を作らない。Codex / Claude固有session APIは使用しない。
+
 `.claude/skills/` 配下の共有スクリプト（`yt-skills sync` で配布）を使ってマスター音源と動画を生成します。
 スクリプトは毎回生成せず、既存の汎用スクリプトを実行します。
 
