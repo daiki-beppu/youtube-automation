@@ -20,6 +20,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal, TypedDict
 
+from youtube_automation.core.errors import WorkflowStateError
+from youtube_automation.domains.collections.workflow_state import WorkflowState
+from youtube_automation.domains.collections.workflow_state import read as read_workflow_state
+
 STATE_DIR_NAME = ".automation-run"
 LEASE_DIR_NAME = "lease"
 LEASE_FILE_NAME = "lease.json"
@@ -388,25 +392,34 @@ def _inside(root: Path, path: Path, field: str) -> Path:
     return path
 
 
-def _state(collection: Path) -> dict:
+def _state(collection: Path) -> WorkflowState:
     state_path = collection / "workflow-state.json"
     if state_path.is_symlink() or not state_path.is_file():
         raise ValueError(f"workflow-state.json は通常ファイルでなければなりません: {state_path}")
-    state = _read_object(state_path)
-    phase = state.get("phase")
+    try:
+        state = read_workflow_state(state_path)
+    except WorkflowStateError as exc:
+        cause = exc.__cause__
+        if isinstance(cause, (OSError, json.JSONDecodeError)):
+            raise ValueError(f"JSON を読めません: {state_path}: {cause}") from exc
+        if "root must be an object" in str(exc):
+            raise ValueError(f"JSON root は object でなければなりません: {state_path}") from exc
+        raise ValueError(str(exc)) from exc
+    try:
+        phase = state.phase
+    except WorkflowStateError as exc:
+        raw_phase = state.get("phase")
+        raise ValueError(f"未対応 phase です: {raw_phase!r}") from exc
     if phase not in PHASES:
         raise ValueError(f"未対応 phase です: {phase!r}")
     return state
 
 
-def _engine(state: dict) -> str:
-    top_level = state.get("music_engine")
-    planning = state.get("planning")
-    planning_music = planning.get("music") if isinstance(planning, dict) else None
-    nested = planning_music.get("engine") if isinstance(planning_music, dict) else None
-    if top_level in ENGINES and nested in ENGINES and top_level != nested:
-        raise ValueError(f"music engine が不一致です: top-level={top_level}, planning.music={nested}")
-    engine = nested or top_level
+def _engine(state: WorkflowState) -> str:
+    try:
+        engine = state.music_engine
+    except WorkflowStateError as exc:
+        raise ValueError(str(exc)) from exc
     if engine not in ENGINES:
         raise ValueError(f"未対応 music engine です: {engine!r}")
     return engine
@@ -414,8 +427,11 @@ def _engine(state: dict) -> str:
 
 def _collection_sort_key(collection: Path) -> tuple[str, str]:
     state = _state(collection)
-    created_at = state.get("created_at")
-    return (created_at if isinstance(created_at, str) else "9999", collection.name)
+    try:
+        created_at = state.created_at
+    except WorkflowStateError as exc:
+        raise ValueError(str(exc)) from exc
+    return (created_at or "9999", collection.name)
 
 
 def select_collection(root: Path, requested: str | None = None) -> Path:
@@ -438,7 +454,7 @@ def select_collection(root: Path, requested: str | None = None) -> Path:
     if planning_root.is_dir():
         for state_path in planning_root.glob("*/workflow-state.json"):
             collection = state_path.parent
-            if _state(collection).get("phase") != "complete":
+            if _state(collection).phase != "complete":
                 candidates.append(collection.resolve())
     if not candidates:
         raise NoActiveCollectionError("未完了の planning collection がありません")

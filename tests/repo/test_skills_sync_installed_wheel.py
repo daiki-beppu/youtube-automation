@@ -293,6 +293,16 @@ assert "wheel-identity-check" not in legacy._cache
         source = SkillInventory(repo_root).skills_root / relative
         assert target.read_bytes() == source.read_bytes()
 
+    workflow_state_scripts = (
+        target_skills / "publish" / "references" / "generate_batch.py",
+        target_skills / "publish" / "references" / "publish-chain-state.py",
+        target_skills / "wf-new" / "references" / "wf-auto-state.py",
+        target_skills / "wf-next" / "references" / "master_audio_transition.py",
+    )
+    for script in workflow_state_scripts:
+        help_result = _run(python, script, "--help", cwd=downstream, env=clean_env)
+        assert help_result.returncode == 0, help_result.stderr
+
     for target_relative, source_relative in _FILE_ASSETS.items():
         assert (downstream / target_relative).read_bytes() == (repo_root / source_relative).read_bytes()
 

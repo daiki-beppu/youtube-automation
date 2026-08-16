@@ -14,7 +14,9 @@ from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from youtube_automation.configuration import channel_dir, load_config
-from youtube_automation.core.errors import ConfigError
+from youtube_automation.core.errors import ConfigError, WorkflowStateError
+from youtube_automation.domains.collections.workflow_state import WorkflowState
+from youtube_automation.domains.collections.workflow_state import read as read_workflow_state
 
 _ALLOWED_VARIABLES = frozenset({"title", "date", "custom_message"})
 
@@ -37,24 +39,28 @@ class CommunityPost:
     visibility: str = "public"
 
 
-def _read_state(collection: Path) -> dict[str, object]:
+def _read_state(collection: Path) -> WorkflowState:
     state_path = collection / "workflow-state.json"
+    if not state_path.exists():
+        raise ConfigError(f"workflow-state.json が見つかりません: {state_path}")
     try:
-        state = json.loads(state_path.read_text(encoding="utf-8"))
-    except FileNotFoundError as exc:
-        raise ConfigError(f"workflow-state.json が見つかりません: {state_path}") from exc
-    except json.JSONDecodeError as exc:
+        return read_workflow_state(state_path)
+    except WorkflowStateError as exc:
+        if "root must be an object" in str(exc):
+            raise ConfigError("workflow-state.json の root は object でなければなりません") from exc
+        if "::planning must be an object" in str(exc):
+            raise ConfigError("workflow-state.json::planning が未設定です") from exc
         raise ConfigError(f"workflow-state.json が不正な JSON です: {state_path}: {exc}") from exc
-    if not isinstance(state, dict):
-        raise ConfigError("workflow-state.json の root は object でなければなりません")
-    return state
 
 
-def _planning_value(state: dict[str, object], key: str) -> str:
-    planning = state.get("planning")
-    if not isinstance(planning, dict):
+def _planning_value(state: WorkflowState, key: str) -> str:
+    planning = state.planning
+    if planning is None:
         raise ConfigError("workflow-state.json::planning が未設定です")
-    value = planning.get(key)
+    try:
+        value = planning.final_title if key == "final_title" else planning.publish_target_at
+    except WorkflowStateError as exc:
+        raise ConfigError(f"workflow-state.json::planning.{key} が未設定です") from exc
     if not isinstance(value, str) or not value.strip():
         raise ConfigError(f"workflow-state.json::planning.{key} が未設定です")
     return value

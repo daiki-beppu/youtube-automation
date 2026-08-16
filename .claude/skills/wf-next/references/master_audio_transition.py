@@ -11,7 +11,11 @@ import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import cast
+
+from youtube_automation.core.errors import WorkflowStateError
+from youtube_automation.domains.collections.workflow_state import AssetsState, WorkflowState
+from youtube_automation.domains.collections.workflow_state import read as read_workflow_state
+from youtube_automation.domains.collections.workflow_state import update as update_workflow_state
 
 AUDIO_EXTENSIONS = (".m4a", ".wav", ".flac", ".aac", ".mp3")
 JsonValue = None | bool | int | float | str | list["JsonValue"] | dict[str, "JsonValue"]
@@ -45,27 +49,22 @@ def _approval_arg(value: str) -> bool:
     raise argparse.ArgumentTypeError("must be yes or no")
 
 
-def _load_state(path: Path) -> JsonObject:
+def _load_state(path: Path) -> WorkflowState:
     _validate_state_path(path)
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
-        raise ValueError(f"invalid workflow-state.json: {exc}") from exc
-    except OSError as exc:
-        raise ValueError(f"workflow-state.json could not be read: {exc}") from exc
-    if not isinstance(data, dict):
-        raise ValueError("workflow-state.json root must be an object")
-    assets = data.get("assets")
-    if not isinstance(assets, dict):
+        state = read_workflow_state(path)
+    except WorkflowStateError as exc:
+        cause = exc.__cause__
+        if isinstance(cause, json.JSONDecodeError):
+            raise ValueError(f"invalid workflow-state.json: {cause}") from exc
+        if "root must be an object" in str(exc):
+            raise ValueError("workflow-state.json root must be an object") from exc
+        if "::assets must be an object" in str(exc):
+            raise ValueError("workflow-state.json::assets must be an object") from exc
+        raise ValueError(f"workflow-state.json could not be read: {cause or exc}") from exc
+    if state.assets is None:
         raise ValueError("workflow-state.json::assets must be an object")
-    return cast(JsonObject, data)
-
-
-def _write_state(path: Path, state: JsonObject) -> None:
-    _validate_state_path(path)
-    tmp_path = path.with_name(f".{path.name}.tmp")
-    tmp_path.write_text(json.dumps(state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    tmp_path.replace(path)
+    return state
 
 
 def _validate_state_path(path: Path) -> None:
@@ -167,15 +166,11 @@ def _copy_to_worktree(candidate: MasterCandidate, master_dir: Path) -> Path:
     return target
 
 
-def _json_assets(state: JsonObject) -> JsonObject:
-    assets = state["assets"]
-    if not isinstance(assets, dict):
+def _json_assets(state: WorkflowState) -> AssetsState:
+    assets = state.assets
+    if assets is None:
         raise ValueError("workflow-state.json::assets must be an object")
-    return cast(JsonObject, assets)
-
-
-def _json_string(value: JsonValue) -> str | None:
-    return value if isinstance(value, str) else None
+    return assets
 
 
 def _utc_now() -> str:
@@ -274,20 +269,28 @@ def _master_dirs(collection: Path, master_dir: Path, main_repo_root: Path | None
     return dirs
 
 
-def _adopt(state_path: Path, state: JsonObject, assets: JsonObject, selected: str, reason: str) -> None:
-    assets["master_audio"] = selected
-    state["phase"] = "mastered"
-    state["updated_at"] = _utc_now()
-    _write_state(state_path, state)
-    _emit(
-        "adopted", master_audio=selected, phase="mastered", reason=reason, updated_at=_json_string(state["updated_at"])
-    )
+def _adopt(state_path: Path, selected: str, reason: str) -> None:
+    updated_at = _utc_now()
+
+    def apply_transition(state: WorkflowState) -> None:
+        assets = state.assets
+        if assets is None:
+            raise WorkflowStateError("workflow-state.json::assets must be an object")
+        assets.master_audio = selected
+        state.phase = "mastered"
+        state["updated_at"] = updated_at
+
+    try:
+        update_workflow_state(state_path, apply_transition)
+    except WorkflowStateError as exc:
+        raise ValueError(str(exc)) from exc
+    _emit("adopted", master_audio=selected, phase="mastered", reason=reason, updated_at=updated_at)
 
 
-def _validate_phase_and_pending(state: JsonObject, assets: JsonObject) -> bool:
+def _validate_phase_and_pending(state: WorkflowState, assets: AssetsState) -> bool:
     raw_master = _validate_filename(assets.get("raw_master"), "assets.raw_master")
     current_master = _validate_filename(assets.get("master_audio"), "assets.master_audio")
-    if state.get("phase") != "prepared":
+    if state.phase != "prepared":
         _emit("noop", reason="phase is not prepared")
         return False
     if raw_master is None or current_master is not None:
@@ -296,7 +299,7 @@ def _validate_phase_and_pending(state: JsonObject, assets: JsonObject) -> bool:
     return True
 
 
-def _raw_master(assets: JsonObject) -> str:
+def _raw_master(assets: AssetsState) -> str:
     raw_master = _validate_filename(assets.get("raw_master"), "assets.raw_master")
     if raw_master is None:
         raise ValueError("workflow-state.json::assets.raw_master must be set")
@@ -311,8 +314,8 @@ def _resolve_transition(
     args: argparse.Namespace,
     collection: Path,
     state_path: Path,
-    state: JsonObject,
-    assets: JsonObject,
+    state: WorkflowState,
+    assets: AssetsState,
     master_dir: Path,
 ) -> int:
     if not _validate_phase_and_pending(state, assets):
@@ -338,7 +341,7 @@ def _resolve_transition(
         return 0
 
     _prepare_selected_file(selected_candidate, master_dir, selected)
-    _adopt(state_path, state, assets, selected, reason)
+    _adopt(state_path, selected, reason)
     return 0
 
 

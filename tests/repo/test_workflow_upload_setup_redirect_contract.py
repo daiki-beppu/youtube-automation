@@ -328,6 +328,7 @@ MUTABLE_FILES = frozenset(
     "wf-new/references/schema.md",
     "wf-new/references/validate-batch-manifest.py",
     "wf-new/references/wf-auto-state.py",
+    "wf-next/references/master_audio_transition.py",
     "wf-new/references/collection-ideate.config.default.yaml",
     "wf-new/references/collection-lifecycle.md",
     "wf-new/references/freshness_action.py",
@@ -361,7 +362,7 @@ EXPECTED_ISSUE_3986_CHANGED_PATHS = frozenset(
         "tests/repo/test_workflow_upload_setup_redirect_contract.py",
     }
 )
-IMMUTABLE_TARGET_FILES_SHA256 = "11600a59d0b573771be55cf4614c594cd4f88a4e00cd08d9ea7c3bb5186765ac"
+IMMUTABLE_TARGET_FILES_SHA256 = "2d4e28a4974f1e7500303a3d50a0e1ca386fb17cb9bfea2c7abad16fee24835f"
 AUTOMATION_SCHEDULE_REGENERATE_SHA256 = "11d460f727fe50c41f00571b416a1486cb07d0b1548524bc650a7161c16f6c42"
 AUTOMATION_UPDATE_PUSH_SHA256 = "ced3211760d9ff0abd20ec3cdc402501b424f48581ef3a618d51c0d9ee12840c"
 ALLOWED_FENCED_ROUTES = {
