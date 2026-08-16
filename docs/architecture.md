@@ -100,7 +100,7 @@ CLAUDE.md の「アーキテクチャ」節の詳細版。要点は CLAUDE.md �
 
 **サンドイッチ実行モデル**: クラウドジョブが Git clone + マニフェスト検証つき R2 pull でローカル FS を再構成し、既存のローカル前提コードを無改造で動かし、終了時に成果物 push + state commit する実行方式。MediaStore 抽象は pull / push を行う転送層としてのみ導入する（ADR-0024）。
 
-**受け渡しマニフェスト**: 境界を越えるメディア受け渡しの完了マーカー。ファイル一覧 + サイズ + SHA-256 checksum を持ち、全ファイル PUT + 検証後に最後に PUT する。後工程はマニフェスト経由でのみオブジェクトを読み、マニフェストが無ければ「存在しない」扱いとする。正本は R2 で、Git state にはキー + ルート checksum のみ記録する（ADR-0024）。
+**受け渡しマニフェスト**: 境界を越えるメディア受け渡しの完了マーカー。v1 は `<channel>/<collection>/<handoff>/manifest.json` に、path 昇順の正準ファイル一覧（相対 POSIX path・size・SHA-256）と、その一覧の canonical compact JSON に対する SHA-256 `root_sha256` を保持する。全 object の remote metadata と pull 後 content を検証した後、manifest を最後に atomic PUT する。R2 の強い read-after-write 整合性を completion marker 成立の必須前提とし、この保証を持たない MediaStore adapter は利用しない。後工程は bucket listing を行わず manifest 記載 key だけを検証付きで読み、manifest が無ければ「存在しない」扱いとする。正本は R2 で、Git state にはキー + root checksum のみ記録する（ADR-0024）。
 
 **MediaStore**: 境界を越えるメディアの pull / push を行う転送層の抽象。第一実装は R2 で、将来のストレージ交換点をここに限定する。工程や resolver へのストレージ抽象の注入は行わない（ADR-0024）。
 
@@ -225,6 +225,7 @@ assets/stock/           # ボツ画像ストック (#364)。<theme-slug>/ 配下
 | `domains.thumbnail` | サムネ特徴量、相関、参照、archive、選択 policy（Pillow） |
 | `domains.media` | 音声、字幕、画像、動画の provider-neutral model / policy |
 | `domains.media_store` | 工程境界の `<channel>/<collection>/<handoff>/` key、checksum metadata、push / pull / exists port |
+| `domains.media_handoff_manifest` | versioned handoff manifest schema、正準 file list、root checksum の typed owner |
 | `domains.distrokid` | DistroKid naming、metadata、specification、preparation、release policy |
 | `domains.collections.weekly_vote_log` | 週次投票ログ reader、initializer、schema、保存・検証 |
 | `domains.documents.schema_registry` | リポジトリ所有 JSON Schema の固定 inventory、Draft 7 compile cache、値非表示の検証エラー変換。外部 schema path は受け取らない |
@@ -233,6 +234,7 @@ assets/stock/           # ボツ画像ストック (#364)。<theme-slug>/ 配下
 | `application.documents.migration` | skill 生成運用文書の new / Markdown 明示移行 / JSON+HTML 再更新を判定し、pair の検証付き transaction と旧 Markdown 削除を一操作として調停 |
 | `application.documents.channel_strategy` | direction / persona / scene / constraints の schema と文書間 ID 参照を検証し、共通 migration workflow による原子的保存を調停 |
 | `application.documents.collection_plan` | collection plan の schema・候補/evidence ID・選択状態を検証し、JSON+HTML pair 公開成功後の planning state 投影を調停 |
+| `application.media_handoff` | 全 object の remote metadata/content 検証、manifest-last push、manifest-only pull、local rollback を調停 |
 | `application.analytics.video_report` | 動画解析結果を audit report schema へ写像し、共通運用文書 migration による JSON+HTML 公開を調停 |
 | `.claude/skills/channel-research/references/channel-research-report.schema.json` | benchmark / market / viewer voice / thumbnail 調査の比較表・勝ちパターン・根拠・適用候補を共通定義し、skill writer と全 downstream reader の正本になる |
 | `infrastructure.filesystem` | provider-neutral な filesystem I/O と、複数 text file の fsync・rollback・公開後 verifier 付き transaction |
