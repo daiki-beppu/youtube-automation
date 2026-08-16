@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from tests.helpers.paths import REPO_ROOT
-from youtube_automation.application.hybrid_runner import SandwichRequest, run_sandwich
+from youtube_automation.application.hybrid_runner import SandwichRequest, SandwichResult, run_sandwich
 from youtube_automation.application.media_handoff import HandoffSource, pull_handoff, push_handoff
 from youtube_automation.core.errors import ResourceLimitError, StateSyncError
 from youtube_automation.domains.hybrid_resource_guard import GIB, HybridResourceSnapshot
@@ -20,6 +20,10 @@ from youtube_automation.infrastructure.media_store.local import LocalMediaStore
 
 def _git(path: Path, *args: str) -> None:
     subprocess.run(["git", *args], cwd=path, check=True, capture_output=True, text=True)
+
+
+def _git_output(path: Path, *args: str) -> str:
+    return subprocess.run(["git", *args], cwd=path, check=True, capture_output=True, text=True).stdout.strip()
 
 
 def _repositories(tmp_path: Path, manifest_key: str, root_sha256: str) -> tuple[Path, Path, Path]:
@@ -69,6 +73,119 @@ class PassingResourceProbe:
             monthly_run_count=0,
             estimated_run_minutes=60,
         )
+
+
+def _planning_repository(tmp_path: Path, *, phase: str = "planning") -> tuple[Path, Path]:
+    remote = tmp_path / "planning-remote.git"
+    seed = tmp_path / "planning-seed"
+    worker = tmp_path / "planning-worker"
+    _git(tmp_path, "init", "--bare", str(remote))
+    _git(tmp_path, "init", "-b", "main", str(seed))
+    _git(seed, "config", "user.name", "Test")
+    _git(seed, "config", "user.email", "test@example.com")
+    collection = seed / "collections" / "planning" / "demo"
+    collection.mkdir(parents=True)
+    (seed / ".gitignore").write_text("media/\noutputs/\n", encoding="utf-8")
+    (collection / "workflow-state.json").write_text(
+        json.dumps(
+            {
+                "phase": phase,
+                "created_at": "2026-01-01T00:00:00Z",
+                "planning": {"generated": phase == "prepared", "music": {"engine": "suno"}},
+                "assets": {"music_prompts": phase == "prepared"},
+                "upload": {},
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    if phase == "prepared":
+        docs = collection / "20-documentation"
+        docs.mkdir()
+        (docs / "suno-prompts.json").write_text("{}\n", encoding="utf-8")
+        (docs / "suno-prompts.html").write_text("<!doctype html>\n", encoding="utf-8")
+    _git(seed, "add", ".")
+    _git(seed, "commit", "-m", "initial")
+    _git(seed, "remote", "add", "origin", str(remote))
+    _git(seed, "push", "-u", "origin", "main")
+    subprocess.run(["git", "clone", "--branch", "main", str(remote), str(worker)], check=True, capture_output=True)
+    _git(worker, "config", "user.name", "Test")
+    _git(worker, "config", "user.email", "test@example.com")
+    return remote, worker
+
+
+def test_cloud_planning_commits_prompt_artifacts_and_prepared_state_as_single_writer(tmp_path: Path) -> None:
+    remote, worker = _planning_repository(tmp_path)
+
+    def agent(agent: str, prompt: str, cwd: Path) -> None:
+        assert (agent, prompt) == ("claude", "/wf-new --auto")
+        collection = cwd / "collections" / "planning" / "demo"
+        docs = collection / "20-documentation"
+        docs.mkdir()
+        (docs / "plan_proposals.json").write_text("{}\n", encoding="utf-8")
+        (docs / "plan_proposals.html").write_text("<!doctype html>\n", encoding="utf-8")
+        (docs / "suno-prompts.json").write_text("{}\n", encoding="utf-8")
+        (docs / "suno-prompts.html").write_text("<!doctype html>\n", encoding="utf-8")
+        state_path = collection / "workflow-state.json"
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        state["phase"] = "prepared"
+        state["planning"]["generated"] = True
+        state["assets"]["music_prompts"] = True
+        state_path.write_text(json.dumps(state) + "\n", encoding="utf-8")
+
+    result = run_sandwich(
+        SandwichRequest(
+            channel_dir=worker,
+            collection_dir="",
+            channel="003ch",
+            collection="",
+            agent="claude",
+            prompt="/wf-new --auto",
+            commit_message="chore: cloud planning",
+            stage="planning",
+        ),
+        LocalMediaStore(tmp_path / "store"),
+        resource_probe=PassingResourceProbe(),
+        agent_runner=agent,
+    )
+
+    assert result == SandwichResult("completed", "demo")
+    verify = tmp_path / "planning-verify"
+    subprocess.run(["git", "clone", "--branch", "main", str(remote), str(verify)], check=True, capture_output=True)
+    collection = verify / "collections" / "planning" / "demo"
+    assert (collection / "20-documentation" / "plan_proposals.json").is_file()
+    assert json.loads((collection / "workflow-state.json").read_text(encoding="utf-8"))["phase"] == "prepared"
+
+
+def test_cloud_planning_waits_without_agent_or_commit_after_planning_phase(tmp_path: Path) -> None:
+    remote, worker = _planning_repository(tmp_path, phase="prepared")
+    called = False
+
+    def agent(_agent: str, _prompt: str, _cwd: Path) -> None:
+        nonlocal called
+        called = True
+
+    result = run_sandwich(
+        SandwichRequest(
+            channel_dir=worker,
+            collection_dir="",
+            channel="003ch",
+            collection="",
+            agent="claude",
+            prompt="/wf-new --auto",
+            commit_message="chore: cloud planning",
+            stage="planning",
+        ),
+        LocalMediaStore(tmp_path / "store"),
+        resource_probe=PassingResourceProbe(),
+        agent_runner=agent,
+    )
+
+    assert result == SandwichResult("waiting", "demo")
+    assert called is False
+    assert _git_output(worker, "rev-parse", "HEAD") == _git_output(
+        tmp_path, "--git-dir", str(remote), "rev-parse", "refs/heads/main"
+    )
 
 
 def test_runner_completes_manifest_pull_agent_push_and_state_commit(tmp_path: Path) -> None:

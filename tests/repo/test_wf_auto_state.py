@@ -129,6 +129,28 @@ def test_cloud_executor_is_noop_before_handoff_without_mutating_state(tmp_path: 
     assert state_path.read_bytes() == before
 
 
+def test_cloud_executor_owns_planning_phase(tmp_path: Path, runner: ModuleType) -> None:
+    collection = _collection(tmp_path, "20260721-cloud-planning", phase="planning")
+
+    cloud = runner.resolve_action(
+        tmp_path,
+        collection.name,
+        config=_config(runner),
+        executor="cloud",
+    )
+    local = runner.resolve_action(
+        tmp_path,
+        collection.name,
+        config=_config(runner),
+        executor="local",
+    )
+
+    assert cloud["action"] == "wf-new"
+    assert cloud["reason"] == "planning_incomplete"
+    assert local["action"] == "no-op"
+    assert local["reason"] == "cloud_ownership"
+
+
 def test_cloud_executor_resumes_suno_after_manifest_handoff(tmp_path: Path, runner: ModuleType) -> None:
     collection = _collection(
         tmp_path,

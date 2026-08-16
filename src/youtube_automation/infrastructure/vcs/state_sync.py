@@ -36,6 +36,7 @@ class StateSyncEvent:
 
 
 EventSink = Callable[[StateSyncEvent], None]
+ChangeValidator = Callable[[Path, set[str]], None]
 
 
 def _run_git(repository: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -101,11 +102,13 @@ def pull_update_commit_push(
     *,
     commit_message: str,
     on_event: EventSink | None = None,
+    change_validator: ChangeValidator | None = None,
 ) -> T:
     """pull → state更新 → commit → pushをfail-closedで実行する。
 
-    writer が変更できるのは ``StateGitContext`` が所有する既知の制御面JSONだけ。
-    push競合は自動merge/rebaseせず、通知eventを発火して停止する。
+    既定ではwriterが変更できるのは ``StateGitContext`` が所有する既知の制御面JSONだけ。
+    明示validatorを渡したcallerは同じcommit境界の追加成果物を検証する。push競合は
+    自動merge/rebaseせず、通知eventを発火して停止する。
     """
 
     if not commit_message.strip() or "\n" in commit_message:
@@ -116,10 +119,13 @@ def pull_update_commit_push(
     result = writer()
     after = build_context(context.channel_dir)
     changed = _changed_paths(context.repository)
-    allowed = _relative_control_paths(before, after)
-    unexpected = changed - allowed
-    if unexpected:
-        raise StateSyncError("writerがGit制御面state以外を変更したため停止しました")
+    if change_validator is None:
+        allowed = _relative_control_paths(before, after)
+        unexpected = changed - allowed
+        if unexpected:
+            raise StateSyncError("writerがGit制御面state以外を変更したため停止しました")
+    else:
+        change_validator(context.repository, changed)
     if not changed:
         return result
 
