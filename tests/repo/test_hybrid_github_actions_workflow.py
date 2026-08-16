@@ -17,19 +17,9 @@ def _document() -> dict[str, object]:
     return document
 
 
-def test_workflow_polls_daily_and_serializes_runs_without_cancelling() -> None:
+def test_workflow_stays_unscheduled_until_configured_and_serializes_runs_without_cancelling() -> None:
     document = _document()
-    triggers = document["on"]
-    assert isinstance(triggers, dict)
-    schedules = triggers["schedule"]
-    assert isinstance(schedules, list) and len(schedules) == 1
-    schedule = schedules[0]
-    assert isinstance(schedule, dict)
-    cron = schedule["cron"]
-    assert isinstance(cron, str)
-    fields = cron.split()
-    assert len(fields) == 5
-    assert fields[2:] == ["*", "*", "*"]
+    assert document["on"] in (None, "")
 
     concurrency = document["concurrency"]
     assert isinstance(concurrency, dict)

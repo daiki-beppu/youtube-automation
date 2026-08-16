@@ -79,9 +79,9 @@ def test_skill_self_describes_capability_boundary_without_removed_dependency_lis
 @pytest.mark.parametrize(
     ("product", "dependency_mode", "os_fallback", "expected"),
     [
-        ("codex", "cloud", False, "codex-automation"),
+        ("codex", "cloud", False, "github-actions"),
         ("codex", "local", False, "codex-automation"),
-        ("claude", "cloud", False, "claude-code-cloud"),
+        ("claude", "cloud", False, "github-actions"),
         ("claude", "local", False, "claude-cowork-local"),
         ("codex", "local", True, "os-fallback"),
     ],
@@ -163,6 +163,55 @@ def test_cloud_plan_does_not_require_local_write_token_maintenance(tmp_path, mon
 
     assert plan["prompt"].startswith("/wf-new --auto")
     assert "yt-oauth" not in plan["prompt"]
+    assert plan["backend"] == "github-actions"
+    assert plan["cron"] == "5 0 * * 1"
+    assert plan["management"] == "GitHub Actions workflow schedule trigger"
+
+
+def test_github_actions_cron_shifts_weekday_across_utc_boundary():
+    assert (
+        backend.github_actions_cron(
+            run_time="00:30",
+            cadence=["mon", "wed"],
+            timezone_name="Asia/Tokyo",
+        )
+        == "30 15 * * 0,2"
+    )
+
+
+def test_github_actions_cron_rejects_timezone_with_variable_utc_offset():
+    with pytest.raises(backend.BackendError, match="UTC offset"):
+        backend.github_actions_cron(
+            run_time="09:00",
+            cadence=["mon"],
+            timezone_name="America/New_York",
+        )
+
+
+def test_cloud_plan_rejects_disabled_concurrency_guard(tmp_path, monkeypatch):
+    scheduled = SimpleNamespace(
+        target_workflow="wf-new --auto",
+        allow_external_publish=False,
+        timezone="Asia/Tokyo",
+        run_time="09:05",
+        cadence=("mon",),
+        max_retries=0,
+        retry_delay_seconds=300,
+        prevent_concurrent_runs=False,
+        notification="none",
+    )
+    monkeypatch.setattr(
+        backend,
+        "load_config",
+        lambda: SimpleNamespace(
+            workflow=SimpleNamespace(scheduled_automation=scheduled),
+            youtube=SimpleNamespace(overlays=SimpleNamespace(enabled=False)),
+        ),
+    )
+    monkeypatch.setattr(backend, "channel_dir", lambda: tmp_path)
+
+    with pytest.raises(backend.BackendError, match="prevent_concurrent_runs"):
+        backend.build_plan(product="claude", stage="planning")
 
 
 def test_plan_derives_dependency_mode_from_stage_and_overlay_regime(tmp_path, monkeypatch):
@@ -237,6 +286,20 @@ def test_backend_identity_is_idempotent_and_blocks_duplicates(tmp_path):
         backend.ensure_backend_available(state_path, backend="os-fallback")
     with pytest.raises(backend.BackendError, match="disable it before"):
         backend.record_state(state_path, backend="claude-code-cloud", external_id="job-2")
+
+
+def test_github_actions_backend_identity_uses_distributed_workflow_id(tmp_path):
+    state_path = tmp_path / "state.json"
+
+    recorded = backend.record_state(
+        state_path,
+        backend="github-actions",
+        external_id=".github/workflows/youtube-automation.yml",
+    )
+
+    assert recorded["backend"] == "github-actions"
+    assert recorded["status"] == "active"
+    assert backend.disable_state(state_path, backend="github-actions")["status"] == "disabled"
 
 
 def test_disable_must_target_recorded_backend(tmp_path):

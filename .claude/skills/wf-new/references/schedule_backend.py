@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Native scheduler plan and backend identity state for /wf-new --schedule (#2369)."""
+"""Scheduler plan and backend identity state for /wf-new --schedule."""
 
 from __future__ import annotations
 
@@ -8,8 +8,9 @@ import hashlib
 import json
 import os
 import subprocess
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from youtube_automation.configuration import channel_dir, load_config
 
@@ -18,6 +19,7 @@ BACKENDS = (
     "claude-code-cloud",
     "claude-cowork-local",
     "os-fallback",
+    "github-actions",
 )
 PRODUCTS = ("codex", "claude")
 EXECUTION_STAGES = ("planning", "prompt", "suno", "media", "publish")
@@ -43,16 +45,55 @@ def classify_dependency_mode(*, stage: str, overlays_enabled: bool) -> tuple[str
 
 
 def select_backend(*, product: str, dependency_mode: str, os_fallback: bool = False) -> str:
-    """Select the native backend; OS fallback is never selected implicitly."""
+    """Select the capability-compatible backend; OS fallback is never implicit."""
+    if product not in PRODUCTS or dependency_mode not in {"cloud", "local"}:
+        raise BackendError(f"unsupported product/dependency mode: {product}/{dependency_mode}")
     if os_fallback:
         return "os-fallback"
+    if dependency_mode == "cloud":
+        return "github-actions"
     if product == "codex":
         return "codex-automation"
-    if product == "claude" and dependency_mode == "cloud":
-        return "claude-code-cloud"
-    if product == "claude" and dependency_mode == "local":
+    if product == "claude":
         return "claude-cowork-local"
     raise BackendError(f"unsupported product/dependency mode: {product}/{dependency_mode}")
+
+
+def _fixed_utc_offset(timezone_name: str) -> timedelta:
+    try:
+        timezone = ZoneInfo(timezone_name)
+    except ZoneInfoNotFoundError as exc:
+        raise BackendError(f"unknown timezone: {timezone_name}") from exc
+    start_year = datetime.now(UTC).year
+    offsets = {
+        datetime(year, month, day, 12, tzinfo=timezone).utcoffset()
+        for year in (start_year, start_year + 1)
+        for month in range(1, 13)
+        for day in (1, 15)
+    }
+    if None in offsets or len(offsets) != 1:
+        raise BackendError(f"GitHub Actions cron cannot preserve a variable UTC offset timezone: {timezone_name}")
+    return offsets.pop()
+
+
+def github_actions_cron(*, run_time: str, cadence: list[str], timezone_name: str) -> str:
+    """Convert a fixed-offset local weekly schedule to GitHub's UTC cron."""
+    day_indexes = {day: index for index, day in enumerate(("mon", "tue", "wed", "thu", "fri", "sat", "sun"))}
+    try:
+        hour_text, minute_text = run_time.split(":", maxsplit=1)
+        hour, minute = int(hour_text), int(minute_text)
+        local_days = [day_indexes[day] for day in cadence]
+    except (ValueError, KeyError) as exc:
+        raise BackendError("run_time or cadence is invalid for GitHub Actions cron") from exc
+    if not 0 <= hour <= 23 or not 0 <= minute <= 59 or not local_days:
+        raise BackendError("run_time or cadence is invalid for GitHub Actions cron")
+    offset = _fixed_utc_offset(timezone_name)
+    offset_minutes = int(offset.total_seconds() // 60)
+    day_delta, utc_minutes = divmod(hour * 60 + minute - offset_minutes, 24 * 60)
+    utc_hour, utc_minute = divmod(utc_minutes, 60)
+    cron_days = sorted({(day + day_delta + 1) % 7 for day in local_days})
+    day_field = "*" if len(cron_days) == 7 else ",".join(str(day) for day in cron_days)
+    return f"{utc_minute} {utc_hour} * * {day_field}"
 
 
 def _rrule(run_time: str, cadence: list[str]) -> str:
@@ -136,7 +177,16 @@ def build_plan(
         "allow_external_publish": allow_external_publish,
     }
     plan["execution_stage"] = stage
-    if backend == "codex-automation":
+    if backend == "github-actions":
+        if not scheduled.prevent_concurrent_runs:
+            raise BackendError("github-actions backend requires prevent_concurrent_runs: true")
+        plan["cron"] = github_actions_cron(
+            run_time=run_time,
+            cadence=cadence,
+            timezone_name=str(plan["timezone"]),
+        )
+        plan["management"] = "GitHub Actions workflow schedule trigger"
+    elif backend == "codex-automation":
         plan["management"] = "ChatGPT desktop/web Scheduled; local dependencies require desktop local project"
     elif backend == "claude-code-cloud":
         plan["management"] = "Claude Code /schedule Cloud Job"

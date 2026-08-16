@@ -11,7 +11,7 @@
 
 ## Overview
 
-`config/channel/workflow.json::workflow.scheduled_automation` を製品非依存の単一ソースとして、実行中製品のネイティブ scheduler に登録する。Codex は Scheduled Task、Claude は依存性に応じて `/schedule` Cloud Job または Cowork local Scheduled Task を使う。launchd / cron は明示承認された fallback に限る。
+`config/channel/workflow.json::workflow.scheduled_automation` を製品非依存の単一ソースとして scheduler backend へ登録する。cloud 工程は GitHub Actions、local 工程は Codex Scheduled Task または Claude Cowork local Scheduled Task を使う。launchd / cron は明示承認された fallback に限る。
 
 automation のリリース追従は `/automation --update`、本体リリースは `/automation-release`、制作を手動で一段進めるのは `/wf-next` の責務とし、この mode では代行しない。
 
@@ -29,9 +29,10 @@ automation のリリース追従は `/automation --update`、本体リリース�
 
 | 実行製品 / 依存 | backend | 登録・管理 |
 |---|---|---|
-| Codex（cloud / local） | `codex-automation` | ChatGPT desktop/web の Scheduled。local は desktop の local project を必須にする |
-| Claude + cloud 完結 | `claude-code-cloud` | Claude Code `/schedule` Cloud Job |
+| cloud 完結（Codex / Claude） | `github-actions` | 配布済み workflow の UTC `schedule:` cron。`concurrency:` が直列化する |
+| Codex + local 依存 | `codex-automation` | ChatGPT desktop/web の Scheduled。desktop local project を必須にする |
 | Claude + local 依存 | `claude-cowork-local` | Cowork Scheduled で対象 folder を選ぶ。local 実行可否を登録前に確認する |
+| 既存 Claude cloud task の管理 | `claude-code-cloud` | 新規選択はせず、記録済み task の status / disable だけを従来どおり行う |
 | ネイティブ利用不能 + 明示承認 | `os-fallback` | `scheduler_job.sh` の launchd / cron |
 
 Claude Code `/loop` は最長 3 日の一時反復専用で、永続スケジュールには使わない。
@@ -42,7 +43,8 @@ Claude Code `/loop` は最長 3 日の一時反復専用で、永続スケジュ
 |---|---|
 | `references/detect_runtime.sh` | config / uv / 実行中製品 / native 管理面 / OS fallback 可否の診断 |
 | `references/schedule_config.py` | `scheduled_automation` の show / generate / dry-run |
-| `references/schedule_backend.py` | 4 backend の plan、重複防止、外部 ID のローカル記録 |
+| `references/schedule_backend.py` | 5 backend の plan、重複防止、外部 ID のローカル記録 |
+| `references/github_actions_schedule.py` | 配布 workflow の管理区間だけを configure / status / disable |
 | `references/scheduler_job.sh` | 明示選択された OS fallback 専用の install / status / disable |
 | `references/run_scheduled.sh` | OS fallback 専用ラッパー。外部公開ゲート・lock・retry・通知を維持 |
 | `references/run-sandwich.sh` | 基盤非依存の clone → manifest pull → agent/既存CLI → manifest push + state commit runner |
@@ -92,7 +94,7 @@ uv run python .claude/skills/wf-new/references/schedule_backend.py show
    したがって 002ch 型の重量チャンネルは企画・prompt が cloud、Suno・media・publish が local、003ch 型の軽量チャンネルは Suno だけが local で他は cloud になる。
 3. active な別 backend があれば、旧 backend の disable が承認・成功するまで停止する。
 
-### Step 1. config と native task の dry-run
+### Step 1. config と scheduler task の dry-run
 
 ```bash
 uv run python .claude/skills/wf-new/references/schedule_config.py show
@@ -107,7 +109,7 @@ uv run python .claude/skills/wf-new/references/schedule_backend.py plan \
   [--retry-delay-seconds <N>] [--notification terminal|none]
 ```
 
-時刻・曜日が未指定なら確認し、勝手に決めない。config dry-run と `plan` へ同じ候補値を渡す。`plan` は JSON を表示するだけで config / OS / 外部状態を変更しない。外部公開承認前は `--allow-external-publish` を付けない。
+時刻・曜日が未指定なら確認し、勝手に決めない。config dry-run と `plan` へ同じ候補値を渡す。`plan` は JSON を表示するだけで config / OS / 外部状態を変更しない。`github-actions` の plan は IANA timezone を UTC cron へ変換する。UTC offset が季節で変わり固定 cron に写像できない timezone は停止する。外部公開承認前は `--allow-external-publish` を付けない。
 
 ### Step 2. 承認後に config を書く
 
@@ -122,9 +124,15 @@ uv run python .claude/skills/wf-new/references/schedule_backend.py guard --backe
 ```
 
 - `codex-automation`: Codex/ChatGPT の Scheduled Task 管理 capability を使う。CLI の `codex exec` や launchd / cron は使わない。local 依存では desktop local project と cwd を指定する。同じ external ID があれば更新する。
-- `claude-code-cloud`: `plan` の prompt と schedule で `/schedule` Cloud Job を作成/更新する。local 依存が判明したら中止する。
+- `github-actions`: `plan` の `cron` を使い、次で配布 workflow の管理区間だけを更新する。workflow が未配布、symlink、管理 marker 不整合なら停止する。
 - `claude-cowork-local`: Cowork Scheduled Task に local folder を指定して作成/更新する。製品側で local folder 実行を選べない場合は中止する。
+- `claude-code-cloud`: 既存の記録済み task を status / disable するときだけ従来の `/schedule` 管理面を使う。新規作成先には選ばない。
 - `os-fallback`: ネイティブが使えない理由と制約を提示して別途承認を取り、次だけを実行する。
+
+```bash
+uv run python .claude/skills/wf-new/references/github_actions_schedule.py \
+  configure --cron '<plan.cron>'
+```
 
 統合前の絶対 script path を登録済みの OS fallback job は自動更新しない。ユーザーへ再インストールが必要な理由を案内し、承認後に現在の `scheduler_job.sh disable`、続けて `scheduler_job.sh install` の順で実行する。
 
@@ -140,27 +148,30 @@ uv run python .claude/skills/wf-new/references/schedule_backend.py record \
   --backend <backend> --external-id <product-task-id>
 ```
 
+`github-actions` の不変 external ID は `.github/workflows/youtube-automation.yml` とする。
+
 ### Step 4. 検証
 
-`schedule_backend.py show` で backend / external ID を確認し、**同じ backend の製品管理面**で status・次回実行・cadence を確認する。config が `enabled=true` で、別 backend に同名 task がないことまで確認して完了。
+`schedule_backend.py show` で backend / external ID を確認し、**同じ backend の管理面**で status・次回実行・cadence を確認する。`github-actions` は `github_actions_schedule.py status` の cron と plan が一致することを確認する。config が `enabled=true` で、別 backend に同名 task がないことまで確認して完了。
 
 ## status
 
 1. `schedule_backend.py show` と `schedule_config.py show` を実行する。
 2. active backend と external ID を使い、その製品の Scheduled 管理面で状態・次回実行・直近結果を取得する。
 3. state が `unconfigured` なら、製品側を job key `youtube-automation:<channel-dir>` で検索する。見つけても勝手に再作成せず、record の承認を取る。
-4. `os-fallback` の場合だけ `scheduler_job.sh status --backend os-fallback` を使う。
+4. `github-actions` は `github_actions_schedule.py status`、`os-fallback` は `scheduler_job.sh status --backend os-fallback` を使う。
 
 ## disable
 
 1. status を提示して停止確認を取る。
 2. active backend の external ID を指定し、製品の Scheduled 管理面で pause/delete する。別 backend は触らない。
-3. 外部停止成功後に `schedule_backend.py disable --backend <backend>` を実行する。OS の場合だけ `scheduler_job.sh disable --backend os-fallback` が外部停止と state 更新を担う。
-4. 希望された場合のみ `schedule_config.py generate --disable` で config も無効化する。
+3. `github-actions` は `github_actions_schedule.py disable` で schedule trigger を除去する。他 backend は製品管理面で外部停止する。
+4. 停止成功後に `schedule_backend.py disable --backend <backend>` を実行する。OS の場合だけ `scheduler_job.sh disable --backend os-fallback` が外部停止と state 更新を担う。
+5. 希望された場合のみ `schedule_config.py generate --disable` で config も無効化する。
 
 ## Safety contract
 
-- native task の prompt にも `allow_external_publish: false` の外部反映禁止を含める。`wf-new --auto` の `.automation-run/` lease、状態再評価、重複 upload 防止は変更しない。
+- scheduler task の prompt にも `allow_external_publish: false` の外部反映禁止を含める。`wf-new --auto` の `.automation-run/` lease、状態再評価、重複 upload 防止は変更しない。
 - retry は backend の再実行機能が契約を満たす場合のみ native 側へ写像する。満たさない場合は prompt 内で `max_retries` / `retry_delay_seconds` を適用する。
 - local native task の prompt と OS fallback は、workflow retry の外側で `uv run yt-oauth --refresh-only` を1回だけ実行する。既存 local native task は `/wf-new --schedule` の update で新しい prompt へ更新する。
 - OS fallback のログは `.automation-schedule/logs/`。ネイティブの履歴は各製品の Scheduled 管理面を正とする。

@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(hybrid)`: cloud 工程の定期実行先に `github-actions` backend を追加し、配布 workflow の UTC cron を管理区間限定で設定・確認・停止できるようにする（#4055）。
 - `feat(hybrid)`: サンドイッチrunnerだけを呼ぶ日次cron・直列concurrency付きGitHub Actions workflowを追加し、`yt-skills sync` で下流チャンネルへ配布する（#4054）。
 - `feat(hybrid)`: Git clone、検証済みMediaStore pull、単一agent境界、成果物push、state commit/pushをuv直行で束ねる基盤非依存サンドイッチrunnerを追加する（#4053）。
 - `refactor(hybrid)`: `/wf-new --schedule` の実行場所判定を能力ベースへ置き換え、Suno UIだけを本来のlocal条件、重量overlayのmedia〜publishを暫定local例外として固定する（#4052）。
