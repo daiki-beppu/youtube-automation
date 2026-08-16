@@ -22,7 +22,7 @@ from youtube_automation.domains.media_handoff_manifest import MANIFEST_NAME, Han
 from youtube_automation.domains.media_store import MediaStore, validate_media_relative_path
 from youtube_automation.infrastructure.auth.redaction import redact_sensitive_data
 from youtube_automation.infrastructure.vcs.state_git import build_context
-from youtube_automation.infrastructure.vcs.state_sync import pull_update_commit_push
+from youtube_automation.infrastructure.vcs.state_sync import EventSink, pull_update_commit_push
 
 Agent = Literal["claude", "codex"]
 AgentRunner = Callable[[Agent, str, Path], None]
@@ -180,6 +180,7 @@ def run_sandwich(
     resource_probe: HybridResourceProbe,
     agent_runner: AgentRunner = run_agent,
     on_resource_event: HybridResourceEventSink | None = None,
+    on_state_sync_event: EventSink | None = None,
 ) -> None:
     """Run the existing local-first workflow between verified MediaStore boundaries."""
     _guard_resources(request, resource_probe, on_resource_event)
@@ -198,4 +199,9 @@ def run_sandwich(
             sources = tuple(HandoffSource(_inside(root, path), path) for path in request.output_files)
             push_handoff(store, HandoffIdentity(request.channel, request.collection, request.output_handoff), sources)
 
-    pull_update_commit_push(context, writer, commit_message=request.commit_message)
+    pull_update_commit_push(
+        context,
+        writer,
+        commit_message=request.commit_message,
+        on_event=on_state_sync_event,
+    )

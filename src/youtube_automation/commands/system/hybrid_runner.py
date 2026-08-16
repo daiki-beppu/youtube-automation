@@ -5,14 +5,17 @@ from __future__ import annotations
 import argparse
 import sys
 from decimal import Decimal
+from functools import partial
 from pathlib import Path
 
 from youtube_automation.application.hybrid_runner import HybridResourceEvent, SandwichRequest, run_sandwich
+from youtube_automation.application.pipeline_notifications import PipelineNotificationBridge
 from youtube_automation.commands._shared.cli_harness import run_cli
 from youtube_automation.core.errors import ConfigError
 from youtube_automation.infrastructure.hybrid_resources import SystemHybridResourceProbe
 from youtube_automation.infrastructure.media_store.local import LocalMediaStore
 from youtube_automation.infrastructure.media_store.r2 import R2MediaStore, R2MediaStoreConfig
+from youtube_automation.infrastructure.notifications.discord import create_discord_notification_sink
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -59,6 +62,11 @@ def _report_resource_event(event: HybridResourceEvent) -> None:
     )
 
 
+def _handle_resource_event(event: HybridResourceEvent, *, notifications: PipelineNotificationBridge) -> None:
+    _report_resource_event(event)
+    notifications.hybrid_resources(event)
+
+
 def run(args: argparse.Namespace) -> int:
     if args.media_store == "local":
         if args.local_store_root is None:
@@ -89,7 +97,18 @@ def run(args: argparse.Namespace) -> int:
         monthly_run_count=args.monthly_run_count,
         estimated_run_minutes=args.estimated_run_minutes,
     )
-    run_sandwich(request, store, resource_probe=resource_probe, on_resource_event=_report_resource_event)
+    notifications = PipelineNotificationBridge(create_discord_notification_sink())
+    run_sandwich(
+        request,
+        store,
+        resource_probe=resource_probe,
+        on_resource_event=partial(_handle_resource_event, notifications=notifications),
+        on_state_sync_event=partial(
+            notifications.state_sync,
+            channel=request.channel,
+            collection=request.collection,
+        ),
+    )
     return 0
 
 

@@ -46,6 +46,7 @@ from pathlib import Path
 
 from youtube_automation import __version__
 from youtube_automation.application.distrokid.disc_query import find_distrokid_discs
+from youtube_automation.application.pipeline_notifications import PipelineNotificationBridge
 from youtube_automation.application.suno_download_handoff import SunoDownloadHandoff
 from youtube_automation.commands.collections.collection_serve_discovery import (
     DISCOVERY_PORT,
@@ -98,6 +99,7 @@ from youtube_automation.infrastructure.collections.chrome_extensions import (
 from youtube_automation.infrastructure.file_lock import file_lock
 from youtube_automation.infrastructure.media.collection_paths import CollectionPaths
 from youtube_automation.infrastructure.media_store import R2MediaStore, R2MediaStoreConfig
+from youtube_automation.infrastructure.notifications.discord import create_discord_notification_sink
 
 DEFAULT_PORT = 7873
 DEFAULT_IDLE_TIMEOUT_SECONDS = 60 * 60
@@ -1657,7 +1659,12 @@ def _build_downloaded_handoff(channel_short: str) -> SunoDownloadHandoff | None:
     if not channel:
         raise ConfigError("R2 handoff の channel identifier を channel_short から解決できません")
     config = R2MediaStoreConfig.from_environment()
-    return SunoDownloadHandoff(store=R2MediaStore(config), channel=channel)
+    notifications = PipelineNotificationBridge(create_discord_notification_sink())
+    return SunoDownloadHandoff(
+        store=R2MediaStore(config),
+        channel=channel,
+        on_event=notifications.suno_handoff,
+    )
 
 
 def _resolve_allow_origin(

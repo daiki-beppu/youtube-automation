@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import Protocol
 
 
 class NotificationEventCategory(StrEnum):
@@ -36,6 +37,10 @@ class NotificationEvent:
     channel: str
     collection: str
     stage: str
+
+
+class NotificationSink(Protocol):
+    def send(self, event: NotificationEvent) -> bool: ...
 
 
 def category_for(kind: NotificationEventKind) -> NotificationEventCategory:

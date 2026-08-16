@@ -17,7 +17,10 @@ from youtube_automation.core.adapters.youtube import (
 )
 from youtube_automation.core.errors import ValidationError, WorkflowStateError
 from youtube_automation.domains.collections.workflow_state import read as read_workflow_state
-from youtube_automation.domains.uploads._collection_uploader_constants import ACTION_COMPLETE_COLLECTION_QUOTA_EXHAUSTED
+from youtube_automation.domains.uploads._collection_uploader_constants import (
+    ACTION_COMPLETE_COLLECTION_QUOTA_EXHAUSTED,
+    ACTION_COMPLETE_COLLECTION_UPLOADED,
+)
 from youtube_automation.domains.uploads._complete_collection_executor import CompleteCollectionExecutor
 from youtube_automation.domains.uploads._playlist_assignment import PlaylistAssignment
 from youtube_automation.domains.uploads._published_dates import PublishedDatesScheduler
@@ -38,6 +41,7 @@ logger = logging.getLogger(__name__)
 
 __all__ = [
     "ACTION_COMPLETE_COLLECTION_QUOTA_EXHAUSTED",
+    "ACTION_COMPLETE_COLLECTION_UPLOADED",
     "CollectionUploader",
     "CompleteCollectionExecutor",
     "PlaylistAssignment",
