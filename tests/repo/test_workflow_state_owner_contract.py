@@ -10,14 +10,7 @@ from pathlib import Path
 from tests.helpers.paths import REPO_ROOT
 
 OWNER = "src/youtube_automation/domains/collections/workflow_state.py"
-DIRECT_IO_ALLOWLIST = frozenset(
-    {
-        "src/youtube_automation/commands/analytics/experiment_judge.py",
-        "src/youtube_automation/commands/system/progress_hook/workflow_state.py",
-        "src/youtube_automation/commands/youtube/pinned_comment.py",
-        "src/youtube_automation/infrastructure/analytics/workflow_timing.py",
-    }
-)
+DIRECT_IO_ALLOWLIST = frozenset()
 
 _PATH_NAME = re.compile(r"(?:workflow_state|workflow|ws)_(?:file|path)$")
 _CONTEXTUAL_PATH_NAME = re.compile(r"state_(?:file|path)$")

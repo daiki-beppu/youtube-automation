@@ -127,12 +127,17 @@ def test_upload_read_accessors_return_typed_values_and_keep_unknown_fields(tmp_p
             "collection_name": "Rainy Jazz Collection",
             "title_activity": "focus",
             "track_count": 12,
+            "created_at": "2026-08-16T09:00:00+09:00",
+            "video_id": "legacy-video",
             "planning": {
                 "activities": "focus",
                 "scene_emoji": "🌧️",
                 "publish_target_at": "2026-09-01T08:00:00+09:00",
+                "final_title_en": "Rainy Focus",
+                "final_title": "雨の集中時間",
                 "music": {"patterns": {"a": {"display_name": "Rain Window"}}},
             },
+            "assets": {"video": "master.mp4"},
             "scene_phrases": {"en": "continuous focus mix"},
             "title_template_check": {"allow_volume_patterns": True},
             "track_display_names": {"01-rain.wav": "Rain Window"},
@@ -154,7 +159,13 @@ def test_upload_read_accessors_return_typed_values_and_keep_unknown_fields(tmp_p
     assert state.collection_name == "Rainy Jazz Collection"
     assert state.title_activity == "focus"
     assert state.track_count == 12
+    assert state.created_at == "2026-08-16T09:00:00+09:00"
+    assert state.video_id == "legacy-video"
     assert state.planning.publish_target_at == "2026-09-01T08:00:00+09:00"
+    assert state.planning.final_title_en == "Rainy Focus"
+    assert state.planning.final_title == "雨の集中時間"
+    assert state.assets is not None
+    assert state.assets.video == "master.mp4"
     assert state.track_display_names == {"01-rain.wav": "Rain Window"}
     assert state.post_upload is not None
     assert state.post_upload.shorts == [{"short_num": 1, "video_id": "short-1"}]

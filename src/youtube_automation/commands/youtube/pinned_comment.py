@@ -27,13 +27,15 @@ import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, cast
 
 from googleapiclient.errors import HttpError
 
 from youtube_automation.configuration import channel_dir as _channel_dir
 from youtube_automation.configuration import load_config
 from youtube_automation.core.errors import AutomationError, ValidationError, YouTubeAPIError
+from youtube_automation.domains.collections.workflow_state import WorkflowState
+from youtube_automation.domains.collections.workflow_state import read as read_workflow_state
 from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
 from youtube_automation.infrastructure.cost_tracker import log_quota
 from youtube_automation.infrastructure.google.youtube import YouTubeClients
@@ -87,7 +89,7 @@ def render_template(
     )
 
 
-def resolve_targets_from_collection(collection_path: Path) -> list[tuple[str, dict | None]]:
+def resolve_targets_from_collection(collection_path: Path) -> list[tuple[str, WorkflowState | None]]:
     """コレクションから ``(video_id, workflow_state)`` のペアを解決する.
 
     video_id 解決の fallback chain（upstream の書き込み先差異を吸収）:
@@ -100,10 +102,9 @@ def resolve_targets_from_collection(collection_path: Path) -> list[tuple[str, di
     """
     paths = CollectionPaths(collection_path)
 
-    state: dict | None = None
+    state: WorkflowState | None = None
     if paths.workflow_state_path.exists():
-        with open(paths.workflow_state_path, "r", encoding="utf-8") as f:
-            state = json.load(f)
+        state = read_workflow_state(paths.workflow_state_path)
 
     video_id: str | None = None
     if paths.tracking_path.exists():
@@ -112,7 +113,8 @@ def resolve_targets_from_collection(collection_path: Path) -> list[tuple[str, di
         video_id = (tracking.get("complete_collection") or {}).get("video_id")
 
     if not video_id and state:
-        video_id = (state.get("upload") or {}).get("video_id") or state.get("video_id")
+        upload = state.upload
+        video_id = (upload.video_id if upload is not None else None) or state.video_id
 
     if not video_id:
         raise ValidationError(
@@ -210,23 +212,30 @@ def post_top_level_comment(youtube, video_id: str, text: str) -> str:
     return resp["snippet"]["topLevelComment"]["id"]
 
 
-def _resolve_scene(state: dict | None, lang: str) -> dict[str, str]:
+def _resolve_scene(state: WorkflowState | dict | None, lang: str) -> dict[str, str]:
     """workflow-state からテンプレート展開用の値を取り出す."""
-    state = state or {}
-    planning = state.get("planning") or {}
-    scene_phrases = state.get("scene_phrases") or {}
-    video_title = planning.get("final_title_en") or planning.get("final_title") or state.get("collection_name", "")
+    if state is None:
+        return {"video_title": "", "scene_phrase": "", "theme": "", "scene_emoji": ""}
+    if isinstance(state, dict):
+        state = WorkflowState(state)
+    planning = state.planning
+    scene_phrases = state.scene_phrases or {}
+    video_title = (
+        ((planning.final_title_en or planning.final_title) if planning is not None else None)
+        or state.collection_name
+        or ""
+    )
     scene_phrase = scene_phrases.get(lang) or scene_phrases.get("en", "")
     return {
         "video_title": video_title,
-        "scene_phrase": scene_phrase,
-        "theme": state.get("theme", ""),
-        "scene_emoji": planning.get("scene_emoji", ""),
+        "scene_phrase": cast(str, scene_phrase),
+        "theme": state.theme or "",
+        "scene_emoji": (planning.scene_emoji if planning is not None else None) or "",
     }
 
 
 def build_plan(
-    targets: list[tuple[str, dict | None]],
+    targets: list[tuple[str, WorkflowState | dict | None]],
     *,
     history: dict,
     status_map: dict[str, dict | None],

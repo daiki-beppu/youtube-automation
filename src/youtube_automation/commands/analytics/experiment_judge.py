@@ -13,7 +13,8 @@ from pathlib import Path
 
 from youtube_automation.commands.analytics import experiment_transaction as transaction
 from youtube_automation.commands.analytics.analytics_system import AnalyticsSystem
-from youtube_automation.core.errors import AuthError, ValidationError
+from youtube_automation.core.errors import AuthError, ValidationError, WorkflowStateError
+from youtube_automation.domains.collections.workflow_state import read as read_workflow_state
 from youtube_automation.infrastructure.analytics.vpd_metrics import _parse_view_count, _published_utc
 
 _VERDICTS = frozenset({"improved", "no_change", "worse"})
@@ -124,6 +125,22 @@ def _nested_video_id(value: object, *keys: str) -> str | None:
     return current.strip()
 
 
+def _workflow_video_id(path: Path) -> str | None:
+    try:
+        state = read_workflow_state(path)
+        upload = state.upload
+        upload_value = upload.video_id if upload is not None else None
+        value = upload_value if upload_value is not None else state.video_id
+        context = "upload.video_id" if upload_value is not None else "video_id"
+    except WorkflowStateError as error:
+        raise ValidationError(f"collection state JSON を読めません: {path}") from error
+    if value is None:
+        return None
+    if not value.strip():
+        raise ValidationError(f"{context} は空でない video_id にしてください")
+    return value.strip()
+
+
 def resolve_target(channel_root: Path, target: str) -> TargetResolution:
     if Path(target).name != target or target in {".", ".."}:
         return TargetResolution(target, None)
@@ -133,11 +150,9 @@ def resolve_target(channel_root: Path, target: str) -> TargetResolution:
         tracking_path = live / "20-documentation" / "upload_tracking.json"
         workflow_path = live / "workflow-state.json"
         tracking = _json_object(tracking_path) if tracking_path.exists() else {}
-        workflow = _json_object(workflow_path) if workflow_path.exists() else {}
         video_id = (
             _nested_video_id(tracking, "complete_collection", "video_id")
-            or _nested_video_id(workflow, "upload", "video_id")
-            or _nested_video_id(workflow, "video_id")
+            or (_workflow_video_id(workflow_path) if workflow_path.exists() else None)
             or _nested_video_id(tracking, "video_id")
         )
         return TargetResolution(video_id, None if video_id is not None else "unpublished")

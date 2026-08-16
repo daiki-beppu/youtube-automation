@@ -13,6 +13,9 @@ from pathlib import Path
 from types import ModuleType
 from typing import Protocol, cast
 
+from youtube_automation.core.errors import WorkflowStateError
+from youtube_automation.domains.collections.workflow_state import read as read_workflow_state
+
 
 class _TimingUnavailableError(ValueError):
     def __init__(self, reason: str) -> None:
@@ -85,11 +88,10 @@ def _collection_sort_key(collection: Path) -> tuple[str, str]:
     """完全検証せず created_at だけを読んで latest live を選ぶ。"""
     state_path = collection / "workflow-state.json"
     try:
-        state = json.loads(state_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        state = None
-    created_at = state.get("created_at") if isinstance(state, dict) else None
-    return (created_at if isinstance(created_at, str) else "9999", collection.name)
+        created_at = read_workflow_state(state_path).created_at
+    except WorkflowStateError:
+        created_at = None
+    return (created_at or "9999", collection.name)
 
 
 def _collection_history(history: dict[str, object], channel: Path, collection: Path) -> dict[str, object]:

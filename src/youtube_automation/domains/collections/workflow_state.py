@@ -254,6 +254,10 @@ class AssetsState(_ObjectSection):
     def master_video(self, value: str | None) -> None:
         self._data["master_video"] = value
 
+    @property
+    def video(self) -> str | None:
+        return _optional_string(self._data, "video", "workflow-state.json::assets.video")
+
 
 class MusicPlanningState(_ObjectSection):
     """planning.music の型付き view。"""
@@ -304,6 +308,14 @@ class PlanningState(_ObjectSection):
     @property
     def publish_target_at(self) -> str | None:
         return _optional_string(self._data, "publish_target_at", "workflow-state.json::planning.publish_target_at")
+
+    @property
+    def final_title_en(self) -> str | None:
+        return _optional_string(self._data, "final_title_en", "workflow-state.json::planning.final_title_en")
+
+    @property
+    def final_title(self) -> str | None:
+        return _optional_string(self._data, "final_title", "workflow-state.json::planning.final_title")
 
 
 class PostUploadState(_ObjectSection):
@@ -432,6 +444,14 @@ class WorkflowState(MutableMapping[str, JSONValue]):
     @property
     def theme(self) -> str | None:
         return _optional_string(self._data, "theme", "workflow-state.json::theme")
+
+    @property
+    def created_at(self) -> str | None:
+        return _optional_string(self._data, "created_at", "workflow-state.json::created_at")
+
+    @property
+    def video_id(self) -> str | None:
+        return _optional_string(self._data, "video_id", "workflow-state.json::video_id")
 
     @property
     def collection_name(self) -> str | None:
