@@ -104,6 +104,8 @@ def test_value_loop_mode_diagnoses_all_four_integrated_stages_without_writes() -
         assert route in value_loop
     assert "ファイルの作成・変更・削除" in value_loop
     assert "結果はチャット内にだけ表示" in value_loop
+    assert "yt-doctor --json --check ttp_wf_new_readiness" in value_loop
+    assert "persona の見出しや出典を本 mode で再実装しない" in value_loop
 
 
 def test_video_mode_keeps_gemini_analysis_outputs_and_external_read_only_boundary() -> None:

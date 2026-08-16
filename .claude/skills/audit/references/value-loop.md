@@ -20,7 +20,7 @@
 
 | 工程 | `○` の条件（すべて必須） | `×` の条件（1つでも該当） | `×` の次アクション |
 |---|---|---|---|
-| 1. シーン定義 | `docs/channel/personas/persona-definition.md` と `docs/plans/viewing-scene-matrix.md` が存在し、persona に `viewing-scene 未検証` がない | 2ファイルのいずれかがない、または未検証注記がある | `/channel-strategy --scene` |
+| 1. シーン定義 | `ttp_wf_new_readiness` の `message` に `persona-definition.md` の不足診断がなく、`docs/plans/viewing-scene-matrix.md` が存在し、persona に `viewing-scene 未検証` がない | doctor に persona 不足診断がある、scene ファイルがない、または未検証注記がある | doctor の `next_action` または `/channel-strategy --scene` |
 | 2. 制約翻訳 | `docs/channel/creative-constraints.md` が存在し、レベル2見出し `音` `映像` `サムネ` `タイトル` `測定` が各1件ある | ファイルがない、または必須見出しが1つでもない | `/channel-strategy --constraints` |
 | 3. 公開前ゲート | 直近公開コレクションを一意に特定でき、`docs/plans/alignment-audit.md` にそのコレクション名が1回以上ある | 公開コレクションを特定できない、レポートがない、またはレポートに対象名がない | `/audit --alignment` |
 | 4. 指標還流 | `data/insights.jsonl` に有効な analysis または postmortem 由来エントリが1件以上あり、うち1件以上が `status: adopted` かつ `status_note` に `creative-constraints.md` または既存 config の JSON Pointer がある | レポート/postmortemがない、insightsがない、該当エントリがない、または採用先の痕跡がない | `/analytics --flop` または `/analytics --analyze` |
@@ -35,7 +35,7 @@
 
 ### 2. シーン定義を判定
 
-判定表の工程1をそのまま適用する。存在するファイルはパスを根拠欄へ記載し、不在パスも省略しない。
+`uv run yt-doctor --json --check ttp_wf_new_readiness --target "$CHANNEL_DIR"` を読み取り専用で実行し、`message` に `persona-definition.md` の不足があれば、その診断と `next_action` をそのまま根拠へ引用する。TTP 側だけの `warn` を persona 不足とは扱わず、persona の見出しや出典を本 mode で再実装しない。その結果と判定表の工程1を適用し、存在するファイルはパスを根拠欄へ記載し、不在パスも省略しない。`viewing-scene 未検証` は従来どおり本工程で判定する。
 
 ### 3. 制約翻訳を判定
 
