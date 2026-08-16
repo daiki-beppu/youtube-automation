@@ -214,9 +214,9 @@ def test_legacy_completion_and_post_upload_sections_have_typed_commands(tmp_path
     assert workflow_state_cli.main(["--collection", str(collection), "set-post-upload-shorts", shorts]) == 0
 
     state = _read_state(collection)
-    assert state["assets"] == {"thumbnail": True}
+    assert state["assets"] == {"thumbnail": True, "description": True}
     assert "thumbnail" not in state
-    assert state["description"] == {"generated": True}
+    assert "description" not in state
     assert state["post_upload"] == {
         "shorts": [{"short_num": 1, "video_id": "short-1", "uploaded_at": "2026-08-16T00:00:00Z"}]
     }
