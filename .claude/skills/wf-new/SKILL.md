@@ -110,7 +110,7 @@ uv run yt-init-collection "<collection_name>" "<theme_slug>" \
   --track-count <track_count> --selected-plan A --music-engine <music_engine>
 ```
 
-単一 record の state 投影には `--selected-plan A` を固定で使う。新規時は初期化と preflight 成功後に batch record の共通 field を `20-documentation/plan_proposals.json` の candidate 1件へ投影し、`batch_id`、`plan_id`、manifest path を provenance として記録する。`references/collection-plan-documents.md` の owner CLI が JSON+HTML pair の検証と再読込を完了した後だけ、`workflow-state.json::planning.generated = true`、`planning.final_title`、`planning.target_persona` を更新する。
+単一 record の state 投影には `--selected-plan A` を固定で使う。新規時は初期化と preflight 成功後に batch record の共通 field を `20-documentation/plan_proposals.json` の proposed candidate 1件へ投影し、`batch_id`、`plan_id`、manifest path を provenance として記録する。`references/collection-plan-documents.md` の owner CLI でdraft pairを公開してから `yt-collection-plan-select --automatic` へ渡し、proposal ID、JSON/preview digest、確定pairの検証と再読込を完了した後だけ、`workflow-state.json::planning.generated = true`、`planning.final_title`、`planning.target_persona` を更新する。
 
 同じ provenance の未完了 collection が既にある再開時は `yt-init-collection` と企画文書の再作成を行わず、その directory の preflight、企画文書 provenance、workflow-state を再検証する。整合すれば Phase 2b 以降で最初の未完了 step から通常の再開性契約に従い、整合しなければ既存 state を変更せず停止する。保存・検証・state 更新のいずれかに失敗した場合も Phase 2b へ進まず、同じ collection の未完了手順から再開する。
 
@@ -275,8 +275,8 @@ Step 1（企画）を自動実行中...
 
 メインが候補文書と、画像生成を実施した場合はプレビュー画像の存在を検証する。さらに、返された解決済み規定の全件に対して、必要数の全候補が PASS し、各候補に適用規定と適合根拠が保存されていることを確認する。未検証、FAIL、または候補文書・適合結果の期待成果物欠落時は理由と `/wf-new` の再開条件を表示し、候補を提示せず state を更新せず停止する。検証成功後だけ、入力モードと `config.workflow.wf_new.skip_plan_selection` で分岐する:
 
-- `skip_plan_selection: true` かつ analytics mode / benchmark fallback mode: 候補の**推奨順 1 位**を機械的に採用し、確認なしで Phase 2 へ進む。`plan_proposals.json` の該当候補を `selection_status: auto_selected`、`selection_reason: 推奨順 1 位` とする
-- 未設定または `false`: 提示された候補を選択肢としてユーザーに企画選択のみ求め、入力まで一時停止する
+- `skip_plan_selection: true` かつ analytics mode / benchmark fallback mode: [collection plan documents](references/collection-plan-documents.md) のdraft pairを保存し、`yt-collection-plan-select --automatic` で推奨順1位を同じ確定ownerへ渡してから Phase 2 へ進む
+- 未設定または `false`: 同referenceのdraft pairを保存し、通常入口・統合modeとも `yt-collection-plan-select --collection <collection-path>` で永続HTMLを開いて企画選択だけを求める。Web失敗からterminalへ自動fallbackしない
 - minimal mode: `skip_plan_selection` の値に関係なく従来の直接入力確認を維持し、無人実行では `blocked` を記録する
 
 いずれの分岐でもトラック数・音楽エンジンは確認せず、`config/channel/*.json` の設定に従う。

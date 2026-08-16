@@ -4,7 +4,7 @@
 
 ## 採用候補の保存
 
-採用企画は `collection-plan-documents.md` に従い `20-documentation/plan_proposals.json` + `.html` pair に保存する。候補、制約適合、evidence、insight ID、preview asset、選択 status を構造化し、pair の検証成功後だけ owner CLI が `workflow-state.json` の `planning.generated = true`、`planning.final_title`、`planning.target_persona` を更新する。`preview.skip_cost_confirm: true` なら Phase 4-2 の生成条件と想定 API call 数も candidate に残す。
+採用企画は `collection-plan-documents.md` に従い、全件proposedの `20-documentation/plan_proposals.json` + `.html` draft pairから `yt-collection-plan-select` で確定する。候補、制約適合、evidence、insight ID、preview asset、選択 status/source を構造化し、proposal IDとJSON/preview digestを再検証した確定pairの成功後だけ owner CLI が `workflow-state.json` の `planning.generated = true`、`planning.final_title`、`planning.target_persona` を更新する。`preview.skip_cost_confirm: true` なら Phase 4-2 の生成条件と想定 API call 数も candidate に残す。
 
 採用画像がある場合だけ `10-assets/planning-preview.png` として保存する。この画像は企画参照素材であり、textless 動画背景の `main.png/jpg` へコピーしない。採用画像が無い経路では空ファイルや代替画像を作らない。
 
