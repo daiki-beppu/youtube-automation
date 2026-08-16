@@ -89,6 +89,14 @@ class _S3Client(Protocol):
 
     def abort_multipart_upload(self, *, Bucket: str, Key: str, UploadId: str) -> None: ...
 
+    def list_objects_v2(
+        self,
+        *,
+        Bucket: str,
+        Prefix: str,
+        ContinuationToken: str | None = None,
+    ) -> dict[str, object]: ...
+
 
 @dataclass(frozen=True)
 class MultipartTransferConfig:
@@ -557,3 +565,45 @@ class R2MediaStore:
             sha256=checksum,
             etag=etag.strip('"') if isinstance(etag, str) else None,
         )
+
+    def retained_bytes(self) -> int:
+        prefix = f"{self._config.prefix}/" if self._config.prefix else ""
+        total = 0
+        continuation: str | None = None
+        try:
+            while True:
+                if continuation is None:
+                    response = self._client.list_objects_v2(Bucket=self._config.bucket, Prefix=prefix)
+                else:
+                    response = self._client.list_objects_v2(
+                        Bucket=self._config.bucket,
+                        Prefix=prefix,
+                        ContinuationToken=continuation,
+                    )
+                contents = response.get("Contents", [])
+                if not isinstance(contents, list):
+                    raise MediaStoreError("R2 retained capacity 応答が不正です")
+                for item in contents:
+                    if not isinstance(item, dict):
+                        raise MediaStoreError("R2 retained capacity object が不正です")
+                    key = item.get("Key")
+                    size = item.get("Size")
+                    if (
+                        not isinstance(key, str)
+                        or not key.startswith(prefix)
+                        or not isinstance(size, int)
+                        or isinstance(size, bool)
+                        or size < 0
+                    ):
+                        raise MediaStoreError("R2 retained capacity object が不正です")
+                    total += size
+                if response.get("IsTruncated") is not True:
+                    return total
+                next_continuation = response.get("NextContinuationToken")
+                if not isinstance(next_continuation, str) or not next_continuation or next_continuation == continuation:
+                    raise MediaStoreError("R2 retained capacity pagination が不正です")
+                continuation = next_continuation
+        except MediaStoreError:
+            raise
+        except Exception as exc:
+            raise self._error("retained capacity", exc) from exc

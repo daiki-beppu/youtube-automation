@@ -5,12 +5,19 @@ from __future__ import annotations
 import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Protocol
 
 from youtube_automation.application.media_handoff import HandoffSource, pull_handoff, push_handoff
-from youtube_automation.core.errors import StateSyncError, ValidationError
+from youtube_automation.core.errors import AutomationError, ResourceLimitError, StateSyncError, ValidationError
 from youtube_automation.domains.collections.workflow_state import read
+from youtube_automation.domains.hybrid_resource_guard import (
+    HybridResourcePolicy,
+    HybridResourceReport,
+    HybridResourceSnapshot,
+    evaluate_hybrid_resources,
+)
 from youtube_automation.domains.media_handoff_manifest import MANIFEST_NAME, HandoffIdentity, HandoffManifest
 from youtube_automation.domains.media_store import MediaStore, validate_media_relative_path
 from youtube_automation.infrastructure.auth.redaction import redact_sensitive_data
@@ -19,6 +26,27 @@ from youtube_automation.infrastructure.vcs.state_sync import pull_update_commit_
 
 Agent = Literal["claude", "codex"]
 AgentRunner = Callable[[Agent, str, Path], None]
+
+
+class HybridResourceProbe(Protocol):
+    def inspect(self) -> HybridResourceSnapshot: ...
+
+
+class HybridResourceEventKind(StrEnum):
+    OBSERVED = "observed"
+    REJECTED = "rejected"
+
+
+@dataclass(frozen=True, slots=True)
+class HybridResourceEvent:
+    kind: HybridResourceEventKind
+    channel: str
+    collection: str
+    issue_codes: tuple[str, ...]
+    detail: str
+
+
+HybridResourceEventSink = Callable[[HybridResourceEvent], None]
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,13 +112,77 @@ def _verify_input_reference(request: SandwichRequest, manifest: HandoffManifest)
         raise StateSyncError("workflow-state handoff参照とpull済みmanifestが一致しません")
 
 
+def _resource_detail(report: HybridResourceReport) -> str:
+    snapshot = report.snapshot
+    policy = report.policy
+    return (
+        f"disk_free={snapshot.disk_free_bytes}/{policy.minimum_free_disk_bytes} bytes, "
+        f"r2_retained={snapshot.r2_retained_bytes}/{policy.maximum_r2_retained_bytes} bytes, "
+        f"generation_cost=${snapshot.generation_cost_usd}/${policy.maximum_generation_cost_usd}, "
+        f"monthly_runs={snapshot.monthly_run_count + 1}, "
+        f"projected_actions_minutes={report.projected_monthly_actions_minutes}/"
+        f"{policy.maximum_monthly_actions_minutes}"
+    )
+
+
+def _guard_resources(
+    request: SandwichRequest,
+    resource_probe: HybridResourceProbe,
+    on_event: HybridResourceEventSink | None,
+) -> None:
+    try:
+        snapshot = resource_probe.inspect()
+    except AutomationError as error:
+        if on_event is not None:
+            on_event(
+                HybridResourceEvent(
+                    HybridResourceEventKind.REJECTED,
+                    request.channel,
+                    request.collection,
+                    ("probe",),
+                    str(error),
+                )
+            )
+        raise
+    report = evaluate_hybrid_resources(snapshot, HybridResourcePolicy.zero_cost())
+    detail = _resource_detail(report)
+    if report.passed:
+        if on_event is not None:
+            on_event(
+                HybridResourceEvent(
+                    HybridResourceEventKind.OBSERVED,
+                    request.channel,
+                    request.collection,
+                    (),
+                    detail,
+                )
+            )
+        return
+    issue_codes = tuple(issue.code for issue in report.issues)
+    rejection_detail = f"{detail}; " + "; ".join(issue.message for issue in report.issues)
+    if on_event is not None:
+        on_event(
+            HybridResourceEvent(
+                HybridResourceEventKind.REJECTED,
+                request.channel,
+                request.collection,
+                issue_codes,
+                rejection_detail,
+            )
+        )
+    raise ResourceLimitError(f"hybrid resource guard rejected: {rejection_detail}")
+
+
 def run_sandwich(
     request: SandwichRequest,
     store: MediaStore,
     *,
+    resource_probe: HybridResourceProbe,
     agent_runner: AgentRunner = run_agent,
+    on_resource_event: HybridResourceEventSink | None = None,
 ) -> None:
     """Run the existing local-first workflow between verified MediaStore boundaries."""
+    _guard_resources(request, resource_probe, on_resource_event)
     context = build_context(request.channel_dir)
 
     def writer() -> None:

@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import argparse
+import sys
+from decimal import Decimal
 from pathlib import Path
 
-from youtube_automation.application.hybrid_runner import SandwichRequest, run_sandwich
+from youtube_automation.application.hybrid_runner import HybridResourceEvent, SandwichRequest, run_sandwich
 from youtube_automation.commands._shared.cli_harness import run_cli
 from youtube_automation.core.errors import ConfigError
+from youtube_automation.infrastructure.hybrid_resources import SystemHybridResourceProbe
 from youtube_automation.infrastructure.media_store.local import LocalMediaStore
 from youtube_automation.infrastructure.media_store.r2 import R2MediaStore, R2MediaStoreConfig
 
@@ -28,7 +31,32 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output-file", action="append", default=[])
     parser.add_argument("--media-store", choices=("r2", "local"), default="r2")
     parser.add_argument("--local-store-root", type=Path)
+    parser.add_argument(
+        "--generation-cost-usd",
+        type=Decimal,
+        default=Decimal("0"),
+        help="このrunで新たに発生する生成従量費 (default: 0; 0円原則では正数を拒否)",
+    )
+    parser.add_argument(
+        "--monthly-run-count",
+        type=int,
+        default=0,
+        help="今月完了済みrun数の自己申告値 (default: 0)",
+    )
+    parser.add_argument(
+        "--estimated-run-minutes",
+        type=int,
+        default=60,
+        help="1 runの保守的なActions分数見積り (default: 60)",
+    )
     return parser
+
+
+def _report_resource_event(event: HybridResourceEvent) -> None:
+    print(
+        f"hybrid_resource_{event.kind.value}: channel={event.channel}, collection={event.collection}, {event.detail}",
+        file=sys.stderr,
+    )
 
 
 def run(args: argparse.Namespace) -> int:
@@ -54,7 +82,14 @@ def run(args: argparse.Namespace) -> int:
         output_root=args.output_root,
         output_files=tuple(args.output_file),
     )
-    run_sandwich(request, store)
+    resource_probe = SystemHybridResourceProbe(
+        channel_dir=request.channel_dir,
+        store=store,
+        generation_cost_usd=args.generation_cost_usd,
+        monthly_run_count=args.monthly_run_count,
+        estimated_run_minutes=args.estimated_run_minutes,
+    )
+    run_sandwich(request, store, resource_probe=resource_probe, on_resource_event=_report_resource_event)
     return 0
 
 

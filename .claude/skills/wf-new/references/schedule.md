@@ -53,7 +53,7 @@ Claude Code `/loop` は最長 3 日の一時反復専用で、永続スケジュ
 
 ### サンドイッチ runner
 
-cloud / local とも同じ `references/run-sandwich.sh` を使う。runner は空の workspace へ channel repository をcloneし、`uv run --frozen yt-hybrid-runner` へ直行する。Nix devShell、GitHub Actions の環境変数、workflow構文は使わない。入力handoffを指定した場合はGit管理stateのmanifest key/root checksumとMediaStoreからpull・再検証したmanifestが一致した後だけagentを1回起動し、出力handoffは全成果物のpush・検証後にmanifestを最後にpublishする。最後に既存state sync ownerが制御面JSONだけをcommit + pushし、non-fast-forwardやagent失敗では自動merge/rebaseせず停止する。
+cloud / local とも同じ `references/run-sandwich.sh` を使う。runner は空の workspace へ channel repository をcloneし、`uv run --frozen yt-hybrid-runner` へ直行する。Nix devShell、GitHub Actions の環境変数、workflow構文は使わない。開始時にdisk空き2.5GiB以上、MediaStore滞留10GiB以下、追加生成費$0、自己申告run数から算出した月間Actions 2,000分以下を検査し、超過時は通知eventを出してGit pull・MediaStore転送・agent起動前に停止する。入力handoffを指定した場合はGit管理stateのmanifest key/root checksumとMediaStoreからpull・再検証したmanifestが一致した後だけagentを1回起動し、出力handoffは全成果物のpush・検証後にmanifestを最後にpublishする。最後に既存state sync ownerが制御面JSONだけをcommit + pushし、non-fast-forwardやagent失敗では自動merge/rebaseせず停止する。
 
 ```bash
 bash .claude/skills/wf-new/references/run-sandwich.sh \
@@ -61,12 +61,14 @@ bash .claude/skills/wf-new/references/run-sandwich.sh \
   --channel-slug <channel> --collection <collection> \
   --collection-dir collections/<planning|live>/<collection> \
   --agent <claude|codex> --prompt "/wf-new --auto" \
+  --generation-cost-usd 0 --monthly-run-count <今月完了済みrun数> \
+  --estimated-run-minutes 60 \
   --input-handoff suno-download --input-destination <relative-directory> \
   --output-handoff <handoff> --output-root <relative-directory> \
   --output-file <relative-file>
 ```
 
-R2接続は既存 `R2MediaStoreConfig` の環境変数/secret ownerを使う。`--media-store local --local-store-root <path>` は同一runnerをローカルadapterで検証・運用する場合だけ指定する。入力または出力がない工程は対応するhandoff引数一式を省略する。
+R2接続は既存 `R2MediaStoreConfig` の環境変数/secret ownerを使う。容量観測のbucket listingは滞留量の合算だけに使い、handoff pullの正本は引き続きmanifest記載keyに限定する。`--media-store local --local-store-root <path>` は同一runnerをローカルadapterで検証・運用する場合だけ指定する。入力または出力がない工程は対応するhandoff引数一式を省略する。`--monthly-run-count` は今月完了済みrun数を指定し、今回runを加えた概算値が標準エラーの `hybrid_resource_observed` に記録される。
 
 GitHub Actions の日次ポーリング定義は `uv run yt-skills sync --asset channel-workflow --force` で `.github/workflows/youtube-automation.yml` へ配布する。workflow は同じ `run-sandwich.sh` を1回呼ぶだけで、`YTA_CHANNEL_SLUG` / `YTA_COLLECTION` / `YTA_COLLECTION_DIR` / `YTA_AGENT` / `YTA_AUTOMATION_PROMPT` を repository variables、R2 と Claude の credential を repository secrets から注入する。`concurrency.cancel-in-progress: false` により先行実行を中断せず、後続の日次起動を同一repository内で直列化する。
 

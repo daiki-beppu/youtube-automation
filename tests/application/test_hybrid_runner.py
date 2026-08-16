@@ -4,6 +4,7 @@ import json
 import os
 import subprocess
 import sys
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -11,7 +12,8 @@ import pytest
 from tests.helpers.paths import REPO_ROOT
 from youtube_automation.application.hybrid_runner import SandwichRequest, run_sandwich
 from youtube_automation.application.media_handoff import HandoffSource, pull_handoff, push_handoff
-from youtube_automation.core.errors import StateSyncError
+from youtube_automation.core.errors import ResourceLimitError, StateSyncError
+from youtube_automation.domains.hybrid_resource_guard import GIB, HybridResourceSnapshot
 from youtube_automation.domains.media_handoff_manifest import HandoffIdentity
 from youtube_automation.infrastructure.media_store.local import LocalMediaStore
 
@@ -58,6 +60,17 @@ def _repositories(tmp_path: Path, manifest_key: str, root_sha256: str) -> tuple[
     return remote, seed, worker
 
 
+class PassingResourceProbe:
+    def inspect(self) -> HybridResourceSnapshot:
+        return HybridResourceSnapshot(
+            disk_free_bytes=3 * GIB,
+            r2_retained_bytes=0,
+            generation_cost_usd=Decimal("0"),
+            monthly_run_count=0,
+            estimated_run_minutes=60,
+        )
+
+
 def test_runner_completes_manifest_pull_agent_push_and_state_commit(tmp_path: Path) -> None:
     store = LocalMediaStore(tmp_path / "store")
     source = tmp_path / "song.mp3"
@@ -94,7 +107,7 @@ def test_runner_completes_manifest_pull_agent_push_and_state_commit(tmp_path: Pa
         output_files=("Master.mp4",),
     )
 
-    run_sandwich(request, store, agent_runner=agent)
+    run_sandwich(request, store, resource_probe=PassingResourceProbe(), agent_runner=agent)
 
     assert calls == [("claude", "/wf-new --auto")]
     checkout = tmp_path / "verify"
@@ -153,9 +166,90 @@ def test_runner_rejects_manifest_that_does_not_match_git_state_before_agent(tmp_
     )
 
     with pytest.raises(StateSyncError, match="manifestが一致しません"):
-        run_sandwich(request, store, agent_runner=agent)
+        run_sandwich(request, store, resource_probe=PassingResourceProbe(), agent_runner=agent)
 
     assert called is False
+
+
+def test_runner_emits_rejection_and_has_no_git_media_or_agent_side_effect_when_resource_limit_exceeded(
+    tmp_path: Path,
+) -> None:
+    store = LocalMediaStore(tmp_path / "store")
+    manifest_key = "003ch/demo/suno-download/manifest.json"
+    _, _, worker = _repositories(tmp_path, manifest_key, "0" * 64)
+    head_before = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=worker, check=True, capture_output=True, text=True
+    ).stdout.strip()
+    calls: list[str] = []
+    events = []
+
+    class RejectedResourceProbe:
+        def inspect(self) -> HybridResourceSnapshot:
+            return HybridResourceSnapshot(
+                disk_free_bytes=int(2.5 * GIB) - 1,
+                r2_retained_bytes=0,
+                generation_cost_usd=Decimal("0"),
+                monthly_run_count=0,
+                estimated_run_minutes=60,
+            )
+
+    request = SandwichRequest(
+        channel_dir=worker,
+        collection_dir="collections/planning/demo",
+        channel="003ch",
+        collection="demo",
+        agent="claude",
+        prompt="/wf-new --auto",
+        commit_message="chore: runner state",
+        input_handoff="suno-download",
+        input_destination="media",
+    )
+
+    with pytest.raises(ResourceLimitError, match="resource guard rejected"):
+        run_sandwich(
+            request,
+            store,
+            resource_probe=RejectedResourceProbe(),
+            agent_runner=lambda *_args: calls.append("agent"),
+            on_resource_event=events.append,
+        )
+
+    assert calls == []
+    assert not (worker / "media").exists()
+    assert (
+        subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=worker, check=True, capture_output=True, text=True
+        ).stdout.strip()
+        == head_before
+    )
+    assert len(events) == 1
+    assert events[0].issue_codes == ("disk_free",)
+
+
+def test_runner_emits_rejection_and_stops_when_resource_inspection_fails(tmp_path: Path) -> None:
+    store = LocalMediaStore(tmp_path / "store")
+    _, _, worker = _repositories(tmp_path, "unused/manifest.json", "0" * 64)
+    events = []
+
+    class FailingResourceProbe:
+        def inspect(self) -> HybridResourceSnapshot:
+            raise ResourceLimitError("capacity probe unavailable")
+
+    request = SandwichRequest(
+        channel_dir=worker,
+        collection_dir="collections/planning/demo",
+        channel="003ch",
+        collection="demo",
+        agent="claude",
+        prompt="/wf-new --auto",
+        commit_message="chore: runner state",
+    )
+
+    with pytest.raises(ResourceLimitError, match="probe unavailable"):
+        run_sandwich(request, store, resource_probe=FailingResourceProbe(), on_resource_event=events.append)
+
+    assert len(events) == 1
+    assert events[0].issue_codes == ("probe",)
 
 
 def test_posix_script_completes_local_pull_run_push(tmp_path: Path) -> None:
@@ -259,6 +353,8 @@ exec "$YTA_TEST_PYTHON" "$YTA_AGENT_SCRIPT"
     )
 
     assert result.returncode == 0, result.stderr
+    assert "hybrid_resource_observed" in result.stderr
+    assert "monthly_runs=1" in result.stderr
     verify = tmp_path / "script-verify"
     subprocess.run(["git", "clone", "--branch", "main", str(remote), str(verify)], check=True, capture_output=True)
     state = json.loads((verify / "collections/planning/demo/workflow-state.json").read_text(encoding="utf-8"))

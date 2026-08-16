@@ -31,6 +31,17 @@ def test_push_pull_round_trip_preserves_checksum(tmp_path: Path) -> None:
     assert store.metadata(_key()) == pushed
 
 
+def test_retained_bytes_counts_regular_objects_below_store_root(tmp_path: Path) -> None:
+    root = tmp_path / "store"
+    store = LocalMediaStore(root)
+    (root / "one.bin").write_bytes(b"one")
+    nested = root / "nested"
+    nested.mkdir()
+    (nested / "two.bin").write_bytes(b"twenty")
+
+    assert store.retained_bytes() == 9
+
+
 def test_missing_object_is_reported_without_creating_destination(tmp_path: Path) -> None:
     store = LocalMediaStore(tmp_path / "store")
     destination = tmp_path / "download.bin"
