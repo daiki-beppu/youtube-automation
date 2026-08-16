@@ -101,6 +101,39 @@ export type TrendsResponse = {
     error: { code: string; message: string } | null
   }>
 }
+export type PipelineCollection = {
+  collection_id: string
+  stage: "planning" | "live" | null
+  phase:
+    | "planning"
+    | "prepared"
+    | "cloud_owned"
+    | "mastered"
+    | "publishing"
+    | "complete"
+    | null
+  execution_owner: "local" | "cloud" | null
+  handoff_status:
+    | "not_started"
+    | "pending"
+    | "completed"
+    | "not_recorded"
+    | "not_applicable"
+    | "invalid"
+  latest_event: {
+    kind: "workflow_state_updated"
+    occurred_at: string
+  } | null
+  error: { code: string; message: string } | null
+}
+export type PipelineResponse = {
+  channels: Array<{
+    id: string
+    name: string
+    collections: PipelineCollection[]
+    error: { code: string; message: string } | null
+  }>
+}
 export type PublicationActivityState =
   | { status: "loading" }
   | { status: "ready"; data: PublicationActivityResponse }

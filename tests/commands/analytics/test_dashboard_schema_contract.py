@@ -16,10 +16,12 @@ from youtube_automation.infrastructure.analytics.dashboard_read_model import (
     ErrorResponse,
     OverviewResponse,
     PeriodResponse,
+    PipelineResponse,
     SummaryResponse,
 )
 
 GOLDEN_PATH = REPO_ROOT / "dashboard" / "src" / "lib" / "__fixtures__" / "overview.golden.json"
+PIPELINE_GOLDEN_PATH = REPO_ROOT / "dashboard" / "src" / "lib" / "__fixtures__" / "pipeline.golden.json"
 UPDATE_ENV = "UPDATE_DASHBOARD_SCHEMA_GOLDEN"
 REGEN_COMMAND = (
     f"{UPDATE_ENV}=1 uv run pytest "
@@ -52,6 +54,26 @@ def _write_ready_channel(channel: Path) -> None:
                 },
                 "scheduled_videos": {"count": 2},
                 "video_analytics": {"video-1": {"title": "Contract Video", "views": 900}},
+            }
+        ),
+        encoding="utf-8",
+    )
+    state = channel / "collections" / "planning" / "contract-collection" / "workflow-state.json"
+    state.parent.mkdir(parents=True)
+    state.write_text(
+        json.dumps(
+            {
+                "collection_name": "contract-collection",
+                "stage": "planning",
+                "phase": "cloud_owned",
+                "updated_at": "2026-08-12T01:00:00+00:00",
+                "planning": {"music": {"engine": "suno"}},
+                "handoff": {
+                    "point": "suno_download",
+                    "owner": "cloud",
+                    "manifest_key": "ready/contract-collection/suno-download/manifest.json",
+                    "root_sha256": "a" * 64,
+                },
             }
         ),
         encoding="utf-8",
@@ -113,6 +135,21 @@ def test_python_overview_matches_dashboard_golden(tmp_path: Path) -> None:
         pytest.fail(f"dashboard overview golden is missing. Generate it with: {REGEN_COMMAND}")
 
     committed = GOLDEN_PATH.read_text(encoding="utf-8")
+
+    _assert_golden_matches(generated, committed)
+
+
+def test_python_pipeline_matches_dashboard_golden(tmp_path: Path) -> None:
+    channel = tmp_path / "ready"
+    _write_ready_channel(channel)
+    server = create_server(port=0, channel_paths=[channel])
+    try:
+        pipeline: PipelineResponse = server.api.pipeline()
+    finally:
+        server.server_close()
+    pipeline["channels"][0]["id"] = "channel-ready"
+    generated = json.dumps(pipeline, ensure_ascii=False, indent=2) + "\n"
+    committed = PIPELINE_GOLDEN_PATH.read_text(encoding="utf-8")
 
     _assert_golden_matches(generated, committed)
 

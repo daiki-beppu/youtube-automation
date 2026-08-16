@@ -56,6 +56,7 @@ import {
   type PublicationActivityError,
   type PublicationActivityResponse,
 } from "@/features/publication-activity/publication-heatmap"
+import { PipelineStatusTable } from "@/features/pipeline-status/pipeline-status-table"
 import {
   WorkflowTimingFormulaGuide,
   WorkflowTimingMetricsList,
@@ -66,6 +67,7 @@ import type {
   ChannelOverview,
   OverviewResponse,
   PublicationActivityState,
+  PipelineResponse,
   Summary,
   TrendsResponse,
   WorkflowTiming,
@@ -134,6 +136,66 @@ function isTrendsResponse(value: unknown): value is TrendsResponse {
     Array.isArray(value.channels) &&
     value.channels.every(
       (channel) => isRecord(channel) && Array.isArray(channel.points)
+    )
+  )
+}
+
+function isPipelineEvent(value: unknown): boolean {
+  return (
+    value === null ||
+    (isRecord(value) &&
+      value.kind === "workflow_state_updated" &&
+      typeof value.occurred_at === "string" &&
+      !Number.isNaN(Date.parse(value.occurred_at)))
+  )
+}
+
+function isPipelineError(value: unknown): boolean {
+  return (
+    value === null ||
+    (isRecord(value) &&
+      typeof value.code === "string" &&
+      typeof value.message === "string")
+  )
+}
+
+function isPipelineResponse(value: unknown): value is PipelineResponse {
+  return (
+    isRecord(value) &&
+    Array.isArray(value.channels) &&
+    value.channels.every(
+      (channel) =>
+        isRecord(channel) &&
+        typeof channel.id === "string" &&
+        typeof channel.name === "string" &&
+        isPipelineError(channel.error) &&
+        Array.isArray(channel.collections) &&
+        channel.collections.every(
+          (collection) =>
+            isRecord(collection) &&
+            typeof collection.collection_id === "string" &&
+            (collection.stage === "planning" ||
+              collection.stage === "live" ||
+              collection.stage === null) &&
+            (collection.phase === "planning" ||
+              collection.phase === "prepared" ||
+              collection.phase === "cloud_owned" ||
+              collection.phase === "mastered" ||
+              collection.phase === "publishing" ||
+              collection.phase === "complete" ||
+              collection.phase === null) &&
+            (collection.execution_owner === "local" ||
+              collection.execution_owner === "cloud" ||
+              collection.execution_owner === null) &&
+            (collection.handoff_status === "not_started" ||
+              collection.handoff_status === "pending" ||
+              collection.handoff_status === "completed" ||
+              collection.handoff_status === "not_recorded" ||
+              collection.handoff_status === "not_applicable" ||
+              collection.handoff_status === "invalid") &&
+            isPipelineEvent(collection.latest_event) &&
+            isPipelineError(collection.error)
+        )
     )
   )
 }
@@ -733,6 +795,8 @@ export function App() {
   const [refreshing, setRefreshing] = useState(false)
   const [selectedDays, setSelectedDays] = useState(30)
   const [trends, setTrends] = useState<TrendsResponse | null>(null)
+  const [pipeline, setPipeline] = useState<PipelineResponse | null>(null)
+  const [pipelineError, setPipelineError] = useState<string | null>(null)
   const detailRequestId = useRef(0)
 
   useEffect(() => {
@@ -770,6 +834,18 @@ export function App() {
       .catch((reason: unknown) => {
         setError(reason instanceof Error ? reason.message : String(reason))
       })
+    void requestJson<unknown>("/api/pipeline")
+      .then((response) => {
+        if (!isPipelineResponse(response)) {
+          throw new Error("応答形式が不正です")
+        }
+        setPipeline(response)
+      })
+      .catch((reason: unknown) => {
+        setPipelineError(
+          reason instanceof Error ? reason.message : String(reason)
+        )
+      })
   }, [])
 
   async function refreshDashboard(days = selectedDays) {
@@ -798,6 +874,18 @@ export function App() {
       setChannels(overviewResponse.channels)
       if (isTrendsResponse(trendsResponse)) setTrends(trendsResponse)
       setDetail(detailResponse)
+      try {
+        const pipelineResponse = await requestJson<unknown>("/api/pipeline")
+        if (!isPipelineResponse(pipelineResponse)) {
+          throw new Error("pipeline 応答形式が不正です")
+        }
+        setPipeline(pipelineResponse)
+        setPipelineError(null)
+      } catch (reason) {
+        setPipelineError(
+          reason instanceof Error ? reason.message : String(reason)
+        )
+      }
       const publicationCount = Object.values(publicationsResponse.days).reduce(
         (total, count) => total + count,
         0
@@ -938,6 +1026,15 @@ export function App() {
 
         <PublicationActivityPanel state={publicationActivity} />
         {trends ? <ChannelTrendChart data={trends} /> : null}
+        {pipeline ? <PipelineStatusTable data={pipeline} /> : null}
+        {pipelineError && channels !== null ? (
+          <Card role="status">
+            <CardHeader>
+              <CardTitle>パイプライン状況を読み込めませんでした</CardTitle>
+              <CardDescription>{pipelineError}</CardDescription>
+            </CardHeader>
+          </Card>
+        ) : null}
 
         {error ? (
           <Alert variant="destructive">

@@ -114,7 +114,9 @@ def test_trends_extract_daily_views_without_changing_channel_response(tmp_path: 
     assert is_typeddict(ChannelDetailResponse)
     assert is_typeddict(PublicationsResponse)
     assert is_typeddict(PublicationChannelResponse)
-    assert DashboardReadModel.__required_keys__ == frozenset({"schema_version", "channels", "publications", "trends"})
+    assert DashboardReadModel.__required_keys__ == frozenset(
+        {"schema_version", "channels", "publications", "trends", "pipeline"}
+    )
     assert OverviewResponse.__required_keys__ == frozenset({"schema_version", "channels"})
     assert ChannelOverviewResponse.__required_keys__ == frozenset(
         {

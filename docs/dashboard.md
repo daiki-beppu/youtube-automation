@@ -45,12 +45,15 @@ uv run yt-dashboard --skip-refresh
 
 `GET /api/publications` は、起動時に保存済み cache から構築した公開履歴 read model を読み取り専用で返します。同じ response の `days` に全チャンネルの日別合計、`channels` に登録順のチャンネル別内訳を含みます。各内訳は `status`、`fetched_at`、`timezone`、`days`、構造化された `error` を持ち、endpoint で公開日を再推測したり外部 API を呼んだりはしません。
 
+`GET /api/pipeline` は登録チャンネルの `collections/{planning,live}/*/workflow-state.json` を canonical owner 経由で読み、phase、local / cloud の工程所有側、Suno 引き渡し状態、直近 state 更新時刻を返します。外部 API や R2 を照会せず、state が破損した collection は他のチャンネルを隠さず構造化エラーとして表示します。
+
 ## 表示内容
 
 - チャンネルごとの最新 snapshot、収集日時、動画数、主要指標
 - `status.publishAt` が現在より未来の YouTube 動画数（`公開予約 N本`）
 - 選択チャンネルの再生数上位 chart と動画別 Table
 - registry、meta、snapshot の欠損・破損状態と更新エラー
+- 全チャンネルの collection phase、工程所有側、引き渡し状態、直近 state 更新
 
 操作は pointer のほか、Tab でチャンネルへ移動し Enter / Space で詳細を開けます。配色は system theme に追従し、`d` キーで light / dark を切り替えられます。
 

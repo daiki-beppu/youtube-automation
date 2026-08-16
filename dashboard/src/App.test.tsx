@@ -171,6 +171,61 @@ function renderDashboard() {
 }
 
 describe("dashboard", () => {
+  it("loads the same-origin pipeline API and shows every registered channel", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const path = String(input)
+      if (path === "/api/pipeline") {
+        return new Response(
+          JSON.stringify({
+            channels: [
+              {
+                id: "channel-a",
+                name: "Night Drive",
+                error: null,
+                collections: [
+                  {
+                    collection_id: "rain",
+                    stage: "planning",
+                    phase: "prepared",
+                    execution_owner: "local",
+                    handoff_status: "pending",
+                    latest_event: null,
+                    error: null,
+                  },
+                ],
+              },
+              {
+                id: "channel-b",
+                name: "Quiet Piano",
+                collections: [],
+                error: null,
+              },
+            ],
+          })
+        )
+      }
+      if (path === "/api/publications") {
+        return new Response(JSON.stringify(publicationActivity))
+      }
+      if (path === "/api/trends") {
+        return new Response(JSON.stringify({ channels: [] }))
+      }
+      return new Response(JSON.stringify(overview))
+    })
+
+    renderDashboard()
+
+    const pipeline = await screen.findByRole("region", {
+      name: "パイプライン状況",
+    })
+    expect(within(pipeline).getByText("Night Drive")).toBeInTheDocument()
+    expect(within(pipeline).getByText("Quiet Piano")).toBeInTheDocument()
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "/api/pipeline",
+      expect.any(Object)
+    )
+  })
+
   it("refreshes every dashboard read model and disables the button while running", async () => {
     const refreshResponse = deferred<Response>()
     const updatedOverview = {
