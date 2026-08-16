@@ -312,7 +312,7 @@ Lyria 3 Pro は **1 リクエストあたり最大約 184 秒（~3 分）** ま�
 - **成果物**: `01-master/master.mp3`、音楽プロンプト成果物
 - **委譲しない処理**: `skip_generation_approval: false` のときの課金承認と候補選択。メインが確定してから起動する（`true` なら保存済み生成条件を渡して起動できる）
 
-subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実行しない。承認が要る処理は、メインが承認を得るまで委譲しない。完了報告は `status: success | failure`、成果物の絶対パス一覧、エラー。成果物の存在検証と state 更新はメインが行う。
+subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実行しない。承認が要る処理は、メインが承認を得るまで委譲しない。完了報告は `status: success | failure`、成果物の絶対パス一覧、エラー。成果物の存在検証と owner CLI 実行はメインが行う。
 
 ## 設定読み込みゲート
 
@@ -534,17 +534,17 @@ bash "$(git rev-parse --show-toplevel)/.claude/skills/music/references/worktree_
 
 事前確認には `--dry-run` を付ける。
 
-## Step 5: 完了時の更新
+## Step 5: owner CLI による完了時の更新
 
-- `workflow-state.json` の `planning.music` セクションを populate（下記参照）
-- `assets.music_prompts = true` に更新
-- `assets.raw_master` に生成されたマスター音源ファイル名（例: `master.mp3`）を記録
+- 下記 `planning.music` object を JSON として `uv run yt-workflow-state --collection <collection-path> set-planning music <json-value>` へ渡す
+- `uv run yt-workflow-state --collection <collection-path> set-asset music_prompts true` を実行する
+- 生成されたマスター音源ファイル名（例: `master.mp3`）を JSON string として `set-asset raw_master <json-value>` へ渡す
 
 最終マスター確定（`assets.master_audio`）と `phase: "mastered"` への遷移は、ユーザーがミキシング+マスタリングした最終ファイルを `01-master/` に配置した後に `/wf-next` が検出して更新する（本スキルの責務外）。
 
 ### planning.music スキーマ
 
-`/alignment-check` がコレクション横断で音楽 mood × サムネ × タイトルの整合を機械的に判定できるよう、`workflow-state.json` の `planning.music` セクションを populate する。新規制作分は必須。
+`/audit --alignment` がコレクション横断で音楽 mood × サムネ × タイトルの整合を機械的に判定できるよう、上記 owner CLI に渡す `planning.music` object を組み立てる。新規制作分は必須。
 
 ```json
 {

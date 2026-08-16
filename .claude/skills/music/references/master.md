@@ -35,7 +35,7 @@ SunoAI 楽曲のクロスフェード結合でマスター音源を自動生成�
 - **成果物**: `01-master/master.*`、`01-master/.selection.log`、`01-master/.loudness-receipt.json`
 - **委譲しない処理**: 選曲・混入許容・over-max 例外採用の承認。Step 5.6 の雨レイヤー後処理は成果物生成時に `workflow-state.json` を更新するためメインが実行する
 
-subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実行しない。承認が要る処理は、メインが承認を得るまで委譲しない。Step 5.1 の全曲走査は subagent が1回だけ実行して receipt を返し、メインは FFmpeg を再実行せず receipt を検証する。完了報告は `status: success | failure`、成果物の絶対パス一覧、エラー。成果物の存在検証、receipt 検証、state 更新はメインが行う。
+subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実行しない。承認が要る処理は、メインが承認を得るまで委譲しない。Step 5.1 の全曲走査は subagent が1回だけ実行して receipt を返し、メインは FFmpeg を再実行せず receipt を検証する。完了報告は `status: success | failure`、成果物の絶対パス一覧、エラー。成果物の存在検証、receipt 検証、owner CLI 実行はメインが行う。
 
 ## 設定読み込みゲート
 
@@ -485,7 +485,7 @@ audio:
 
 `uv run yt-finalize-master` が master.mp3 を **loudnorm 二段で in-place 上書き**するのに対し、`uv run yt-apply-rain-layers` は raw master と `branding/rain_layers/*.wav` を **amix のみ**で合成し**別ファイル**（既定 `01-master/master-rain.wav`）に書き出す軽い後処理 CLI。後段で外部 DAW のミキシング+マスタリングを挟む運用（raw master を保持したまま雨レイヤー付きバージョンを並行管理したい場合）向け。
 
-この CLI は出力成功時に `workflow-state.json::assets.raw_master` を更新し、成果物生成だけを行うオプションを持たない。subagent 実行時はこの Step を実行せず、subagent の成果物をメインエージェントが検証して state を更新した後、メインエージェントが次のコマンドを実行する。
+この CLI は出力成功時に `workflow-state.json::assets.raw_master` を owner 経由で更新し、成果物生成だけを行うオプションを持たない。subagent 実行時はこの Step を実行せず、subagent の成果物をメインエージェントが検証して `yt-workflow-state` を実行した後、メインエージェントが次のコマンドを実行する。
 
 ```bash
 uv run yt-apply-rain-layers                       # CWD がコレクションディレクトリ
@@ -534,8 +534,7 @@ fi
 
 ### 完了時の更新
 
-- `workflow-state.json` の `assets.raw_master` に生成したマスターファイル名（例: `"master.mp3"`）を記録
-- `updated_at` を現在時刻に更新
+生成したマスターファイル名（例: `master.mp3`）を JSON string として `uv run yt-workflow-state --collection <collection-path> set-asset raw_master <json-value>` へ渡す。owner CLI が同じ lock 内で `updated_at` も更新する。
 
 `phase` は `"prepared"` のまま変更しない。`raw_master` → `master_audio` 確定後の `"mastered"` フェーズ遷移は `/wf-next` の責務（本スキルはユーザーのミキシング+マスタリング前の raw master 生成までを担う）。
 

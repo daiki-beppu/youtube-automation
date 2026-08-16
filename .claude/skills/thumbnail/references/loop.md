@@ -44,7 +44,7 @@ Veo 3.1（既定）または Gemini Omni Flash を使い、コレクションの
 - **成果物**: 生成または補正した `10-assets/loop.mp4`、使用 mode
 - **委譲しない処理**: 対応する skip が `false` のときの Veo 課金・再生成・品質確認の承認（`true` の gate は設定による opt-in として委譲できる）。skip されていない品質確認はメインが担当する
 
-subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実行しない。承認が要る処理は、メインが承認を得るまで委譲しない。完了報告は `status: success | failure`、成果物の絶対パス一覧、エラー。成果物の存在検証と state 更新はメインが行う。
+subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実行しない。承認が要る処理は、メインが承認を得るまで委譲しない。完了報告は `status: success | failure`、成果物の絶対パス一覧、エラー。成果物の存在検証と owner CLI 実行はメインが行う。
 
 ## 設定読み込みゲート
 

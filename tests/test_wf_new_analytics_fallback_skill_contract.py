@@ -206,9 +206,9 @@ def test_wf_new_records_thumbnail_approval_in_canonical_asset_state_only() -> No
     )[0]
 
     state_assignments = re.findall(r"(?:`)?([a-z_]+(?:\.[a-z_]+)+)\s*=\s*true", approval_step)
-    thumbnail_state_updates = [line for line in approval_step.splitlines() if "assets.thumbnail = true" in line]
+    thumbnail_state_updates = [line for line in approval_step.splitlines() if "set-asset thumbnail true" in line]
 
-    assert state_assignments.count("assets.thumbnail") == 3
+    assert "assets.thumbnail" not in state_assignments
     assert "thumbnail.approved" not in state_assignments
     assert len(thumbnail_state_updates) == 3
     for update in thumbnail_state_updates:

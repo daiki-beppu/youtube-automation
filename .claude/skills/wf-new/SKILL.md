@@ -81,7 +81,7 @@ minimal mode では企画候補生成前にテーマ / ジャンル / 雰囲気�
 
 対象 collection を確定したら、その絶対 path を `COLLECTION_DIR` として固定する。メインも制御面キー (`phase` / `stage` / `upload` / `updated_at`) を Edit / Write で直接変更しない。`phase` / `stage` / `upload` は必ず `uv run yt-workflow-state --collection "$COLLECTION_DIR" ...` を使い、各更新と同じ owner lock 内で `updated_at` も更新させる。制御面を変えず時刻だけ更新する必要がある場合は `uv run yt-workflow-state --collection "$COLLECTION_DIR" touch` を使う。CLI が非 0 の場合は state 更新失敗として停止し、後続へ進まない。
 
-資産系キー (`assets.*` / `planning.*`) はこの段では直接更新のままとし、CLI 移行は #3888 に残す。資産系だけを更新した直後は上記 `touch` を実行する。
+資産系キー (`assets.*` / `planning.*`) も直接変更せず、`set-asset` / `set-planning` を使う。共通の文書 writer や owner reference script が state を更新済みの場合は、同じ変更を CLI で重ねない。
 
 ### Preselected batch plan entry（opt-in）
 

@@ -27,7 +27,7 @@ Complete Collection を YouTube にアップロードし、`planning/` → `live
 - **成果物**: plan では検証した動画とメタデータ成果物
 - **委譲しない処理**: 実アップロード、公開時刻とメタデータの承認。state や tracking を更新する実アップロード CLI は承認後にメインが実行し、`20-documentation/upload_tracking.json` と対象動画の存在を検証する
 
-subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実行しない。承認が要る処理は、メインが承認を得るまで委譲しない。完了報告は `status: success | failure`、成果物の絶対パス一覧、エラー。成果物の存在検証と state 更新はメインが行う。
+subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実行しない。承認が要る処理は、メインが承認を得るまで委譲しない。完了報告は `status: success | failure`、成果物の絶対パス一覧、エラー。成果物の存在検証と state を owner 経由で更新する実 upload CLI の実行はメインが行う。
 
 ## 設定読み込みゲート
 

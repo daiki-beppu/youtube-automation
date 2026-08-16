@@ -8,7 +8,7 @@
 
 - 品質チェック（後述チェックリスト）の全項目を満たした概要欄・タイトル案・タグが `20-documentation/descriptions.md` に保存されている
 - `uv run yt-title-duplicate-check` を実行し、100 codepoint 超過が無く、重複 warning はこの段階で見直し済み
-- `workflow-state.json` の `description.generated = true` に更新済み
+- `uv run yt-workflow-state --collection <collection-path> set-description-generated true` が成功済み
 
 ## 設定読み込みゲート
 
@@ -204,7 +204,7 @@ uv run yt-title-duplicate-check "$COLLECTION_DIR" --title "$PROPOSED_TITLE"
 保存フォーマット（ヘッダー、概要欄本文、タイトル案、タグ、Cards、品質チェック）は
 `references/description-templates.md` の「descriptions.md 保存フォーマット」セクションを参照すること。
 
-保存後、`workflow-state.json` の `description.generated = true` に更新する。
+保存後、`uv run yt-workflow-state --collection <collection-path> set-description-generated true` を実行する。
 
 ## 障害時ガイダンス
 

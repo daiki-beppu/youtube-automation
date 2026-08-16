@@ -46,7 +46,9 @@ def test_skill_keeps_local_generation_and_state_safety_contracts() -> None:
     assert "AskUserQuestion" not in steps
     assert "承認分岐" not in steps
     assert "全尺生成の成功後だけ" in steps
-    assert "プレビューのみでは更新しない" in steps
+    assert "プレビューのみでは実行しない" in steps
+    assert "yt-workflow-state" in steps
+    assert "set-asset master_video" in steps
 
 
 def test_skill_keeps_input_overlay_and_long_running_safety_contracts() -> None:

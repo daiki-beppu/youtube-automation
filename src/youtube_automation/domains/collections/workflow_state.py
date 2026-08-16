@@ -17,6 +17,17 @@ Phase = Literal["planning", "prepared", "mastered", "publishing", "complete"]
 Stage = Literal["planning", "live"]
 MusicEngine = Literal["suno", "lyria"]
 WorkflowStateUpdater = Callable[["WorkflowState"], "WorkflowState | None"]
+AssetKey = Literal[
+    "thumbnail",
+    "loop_video",
+    "music_prompts",
+    "music_downloaded",
+    "raw_master",
+    "master_audio",
+    "master_video",
+    "description",
+]
+PlanningKey = Literal["generated", "final_title", "target_persona", "publish_target_at", "music"]
 
 
 class MusicPlanningDocument(TypedDict, total=False):
@@ -154,6 +165,7 @@ class WorkflowStateDocument(TypedDict, total=False):
 _PHASES = frozenset({"planning", "prepared", "mastered", "publishing", "complete"})
 _STAGES = frozenset({"planning", "live"})
 _MUSIC_ENGINES = frozenset({"suno", "lyria"})
+_MUSIC_TEMPOS = frozenset({"very slow", "slow", "gentle", "moderate", "lively"})
 _KNOWN_OBJECT_SECTIONS = frozenset(
     {
         "assets",
@@ -258,6 +270,21 @@ class AssetsState(_ObjectSection):
     def video(self) -> str | None:
         return _optional_string(self._data, "video", "workflow-state.json::assets.video")
 
+    def set_known(self, key: AssetKey, value: JSONValue) -> None:
+        """CLI が公開する asset key を schema 検証して更新する。"""
+        if key == "thumbnail":
+            if value is not None and not isinstance(value, bool | str):
+                raise WorkflowStateError("workflow-state.json::assets.thumbnail must be a boolean, string, or null")
+        elif key == "loop_video":
+            if not isinstance(value, bool) and value != "failed":
+                raise WorkflowStateError("workflow-state.json::assets.loop_video must be a boolean or 'failed'")
+        elif key in {"music_prompts", "music_downloaded", "description"}:
+            if not isinstance(value, bool):
+                raise WorkflowStateError(f"workflow-state.json::assets.{key} must be a boolean")
+        elif value is not None and not isinstance(value, str):
+            raise WorkflowStateError(f"workflow-state.json::assets.{key} must be a string or null")
+        self._data[key] = deepcopy(value)
+
 
 class MusicPlanningState(_ObjectSection):
     """planning.music の型付き view。"""
@@ -283,6 +310,19 @@ class MusicPlanningState(_ObjectSection):
         if not isinstance(value, dict):
             raise WorkflowStateError("workflow-state.json::planning.music.patterns must be an object")
         return deepcopy(value)
+
+    def validate_known(self) -> None:
+        """CLI から受け取る既知 field の型を検証する。"""
+        _engine = self.engine
+        for key in ("mood", "instruments", "exclude"):
+            value = self._data.get(key)
+            if value is not None and (not isinstance(value, list) or not all(isinstance(item, str) for item in value)):
+                raise WorkflowStateError(f"workflow-state.json::planning.music.{key} must be an array of strings")
+        for key in ("atmosphere", "suno_playlist_url"):
+            _optional_string(self._data, key, f"workflow-state.json::planning.music.{key}")
+        tempo = _optional_string(self._data, "tempo", "workflow-state.json::planning.music.tempo")
+        if tempo is not None and tempo not in _MUSIC_TEMPOS:
+            raise WorkflowStateError(f"unsupported workflow-state music tempo: {tempo}")
 
 
 class PlanningState(_ObjectSection):
@@ -317,6 +357,20 @@ class PlanningState(_ObjectSection):
     def final_title(self) -> str | None:
         return _optional_string(self._data, "final_title", "workflow-state.json::planning.final_title")
 
+    def set_known(self, key: PlanningKey, value: JSONValue) -> None:
+        """CLI が公開する planning key を schema 検証して更新する。"""
+        if key == "generated":
+            if not isinstance(value, bool):
+                raise WorkflowStateError("workflow-state.json::planning.generated must be a boolean")
+        elif key == "music":
+            if not isinstance(value, dict):
+                raise WorkflowStateError("workflow-state.json::planning.music must be an object")
+            music = MusicPlanningState(value)
+            music.validate_known()
+        elif not isinstance(value, str):
+            raise WorkflowStateError(f"workflow-state.json::planning.{key} must be a string")
+        self._data[key] = deepcopy(value)
+
 
 class PostUploadState(_ObjectSection):
     """公開後処理の型付き view。"""
@@ -329,6 +383,20 @@ class PostUploadState(_ObjectSection):
         if not isinstance(value, list) or not all(isinstance(item, dict) for item in value):
             raise WorkflowStateError("workflow-state.json::post_upload.shorts must be an array of objects")
         return deepcopy(value)
+
+    @shorts.setter
+    def shorts(self, value: list[dict[str, JSONValue]]) -> None:
+        if not all(isinstance(item, dict) for item in value):
+            raise WorkflowStateError("workflow-state.json::post_upload.shorts must be an array of objects")
+        for index, item in enumerate(value):
+            short_num = item.get("short_num")
+            if short_num is not None and (isinstance(short_num, bool) or not isinstance(short_num, int)):
+                raise WorkflowStateError(
+                    f"workflow-state.json::post_upload.shorts[{index}].short_num must be an integer or null"
+                )
+            for key in ("video_id", "uploaded_at", "publish_at", "resume_session_uri"):
+                _optional_string(item, key, f"workflow-state.json::post_upload.shorts[{index}].{key}")
+        self._data["shorts"] = deepcopy(value)
 
 
 class UploadState(_ObjectSection):
@@ -440,6 +508,16 @@ class WorkflowState(MutableMapping[str, JSONValue]):
     def post_upload(self) -> PostUploadState | None:
         value = self._data.get("post_upload")
         return PostUploadState(value) if isinstance(value, dict) else None
+
+    def set_thumbnail_approved(self, approved: bool) -> None:
+        section = self._data.setdefault("thumbnail", {})
+        assert isinstance(section, dict)
+        section["approved"] = approved
+
+    def set_description_generated(self, generated: bool) -> None:
+        section = self._data.setdefault("description", {})
+        assert isinstance(section, dict)
+        section["generated"] = generated
 
     @property
     def theme(self) -> str | None:
