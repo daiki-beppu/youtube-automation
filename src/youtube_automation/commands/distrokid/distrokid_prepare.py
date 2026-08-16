@@ -27,7 +27,8 @@ from PIL import Image, UnidentifiedImageError
 
 from youtube_automation.application.distrokid.disc_query import find_distrokid_discs
 from youtube_automation.configuration import load_config
-from youtube_automation.core.errors import ConfigError, ValidationError
+from youtube_automation.core.errors import ConfigError, ValidationError, WorkflowStateError
+from youtube_automation.domains.collections.workflow_state import read as read_workflow_state
 from youtube_automation.domains.distrokid.preparation import (
     _MAX_TRACKS_PER_DISC,
     COVER_ART_FILENAME,
@@ -355,14 +356,15 @@ def _cmd_verify(args: argparse.Namespace) -> None:
     paths = CollectionPaths(collection_dir)
     if paths.workflow_state_path.is_file():
         try:
-            state = json.loads(paths.workflow_state_path.read_text(encoding="utf-8"))
-            publish_at = (state.get("planning") or {}).get("publish_target_at")
+            state = read_workflow_state(paths.workflow_state_path)
+            planning = state.planning
+            publish_at = planning.publish_target_at if planning is not None else None
             if not publish_at:
                 warnings.append(
                     "workflow-state.json の planning.publish_target_at が未設定です。"
                     "\n  yt-distrokid-prepare build --release-date YYYY-MM-DD で設定できます。"
                 )
-        except (json.JSONDecodeError, OSError):
+        except WorkflowStateError:
             warnings.append("workflow-state.json の読み取りに失敗しました。")
     else:
         warnings.append("workflow-state.json が存在しません（publish_target_at 未設定）。")

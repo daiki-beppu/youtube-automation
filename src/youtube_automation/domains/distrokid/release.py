@@ -15,7 +15,8 @@ from pathlib import Path
 
 from youtube_automation.configuration.distrokid import Distrokid
 from youtube_automation.core.adapters.media import CollectionPaths
-from youtube_automation.core.errors import ConfigError
+from youtube_automation.core.errors import ConfigError, WorkflowStateError
+from youtube_automation.domains.collections.workflow_state import read as read_workflow_state
 from youtube_automation.domains.distrokid.metadata import (
     parse_album_metadata,
     parse_track_table,
@@ -38,10 +39,6 @@ DISTROKID_ASSETS_PREFIX = "/distrokid/assets/"
 #   → COLLECTIONS_ROUTE + "/<id>" + DISTROKID_COLLECTION_ASSETS_PREFIX
 DISTROKID_COLLECTION_RELEASE_SUFFIX = "/distrokid/{disc}/release.json"
 DISTROKID_COLLECTION_ASSETS_PREFIX = "/distrokid/assets/"
-
-# workflow-state.json 内のリリース予定日のキー。
-_PLANNING_KEY = "planning"
-_PUBLISH_TARGET_KEY = "publish_target_at"
 
 # 30-distrokid disc-source の固定ファイル名。
 _METADATA_FILENAME = "metadata.md"
@@ -86,21 +83,22 @@ def _read_release_date(paths: CollectionPaths) -> str | None:
     if not state_path.is_file():
         return None
     try:
-        raw_state = state_path.read_text(encoding="utf-8")
-    except OSError as exc:
-        raise ConfigError(f"workflow-state.json を読み取れませんでした: {state_path}: {exc}") from exc
+        state = read_workflow_state(state_path)
+    except WorkflowStateError as exc:
+        cause = exc.__cause__
+        if isinstance(cause, json.JSONDecodeError):
+            raise ConfigError(f"workflow-state.json が不正な JSON です: {state_path}") from exc
+        if "root must be an object" in str(exc):
+            raise ConfigError(f"workflow-state.json のトップレベルが object ではありません: {state_path}") from exc
+        if "::planning must be an object" in str(exc):
+            raise ConfigError(f"workflow-state.json の planning が object ではありません: {state_path}") from exc
+        detail = f": {cause}" if isinstance(cause, OSError) else ""
+        raise ConfigError(f"workflow-state.json を読み取れませんでした: {state_path}{detail}") from exc
+    planning = state.planning
     try:
-        data = json.loads(raw_state)
-    except json.JSONDecodeError as exc:
-        raise ConfigError(f"workflow-state.json が不正な JSON です: {state_path}") from exc
-    if not isinstance(data, dict):
-        raise ConfigError(f"workflow-state.json のトップレベルが object ではありません: {state_path}")
-    planning = data.get(_PLANNING_KEY)
-    if planning is None:
-        planning = {}
-    elif not isinstance(planning, dict):
-        raise ConfigError(f"workflow-state.json の planning が object ではありません: {state_path}")
-    raw = planning.get(_PUBLISH_TARGET_KEY)
+        raw = planning.publish_target_at if planning is not None else None
+    except WorkflowStateError as exc:
+        raise ConfigError("planning.publish_target_at を ISO 8601 形式で指定してください") from exc
     return _normalize_release_date(raw)
 
 

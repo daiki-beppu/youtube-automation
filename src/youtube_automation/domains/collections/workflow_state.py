@@ -301,6 +301,10 @@ class PlanningState(_ObjectSection):
     def scene_emoji(self) -> str | None:
         return _optional_string(self._data, "scene_emoji", "workflow-state.json::planning.scene_emoji")
 
+    @property
+    def publish_target_at(self) -> str | None:
+        return _optional_string(self._data, "publish_target_at", "workflow-state.json::planning.publish_target_at")
+
 
 class PostUploadState(_ObjectSection):
     """公開後処理の型付き view。"""
@@ -436,6 +440,15 @@ class WorkflowState(MutableMapping[str, JSONValue]):
     @property
     def title_activity(self) -> str | None:
         return _optional_string(self._data, "title_activity", "workflow-state.json::title_activity")
+
+    @property
+    def track_count(self) -> int | None:
+        value = self._data.get("track_count")
+        if value is None:
+            return None
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise WorkflowStateError("workflow-state.json::track_count must be an integer or null")
+        return value
 
     @property
     def track_display_names(self) -> dict[str, JSONValue] | None:

@@ -126,9 +126,11 @@ def test_upload_read_accessors_return_typed_values_and_keep_unknown_fields(tmp_p
             "theme": "Rainy Jazz",
             "collection_name": "Rainy Jazz Collection",
             "title_activity": "focus",
+            "track_count": 12,
             "planning": {
                 "activities": "focus",
                 "scene_emoji": "🌧️",
+                "publish_target_at": "2026-09-01T08:00:00+09:00",
                 "music": {"patterns": {"a": {"display_name": "Rain Window"}}},
             },
             "scene_phrases": {"en": "continuous focus mix"},
@@ -151,10 +153,35 @@ def test_upload_read_accessors_return_typed_values_and_keep_unknown_fields(tmp_p
     assert state.allow_volume_patterns is True
     assert state.collection_name == "Rainy Jazz Collection"
     assert state.title_activity == "focus"
+    assert state.track_count == 12
+    assert state.planning.publish_target_at == "2026-09-01T08:00:00+09:00"
     assert state.track_display_names == {"01-rain.wav": "Rain Window"}
     assert state.post_upload is not None
     assert state.post_upload.shorts == [{"short_num": 1, "video_id": "short-1"}]
     assert state["future_section"] == {"enabled": True}
+
+
+@pytest.mark.parametrize(
+    "payload, access",
+    [
+        ({"track_count": "12"}, lambda state: state.track_count),
+        ({"track_count": True}, lambda state: state.track_count),
+        (
+            {"planning": {"publish_target_at": 20260901}},
+            lambda state: state.planning.publish_target_at,
+        ),
+    ],
+)
+def test_domain_reader_accessors_reject_wrong_types(
+    tmp_path: Path,
+    payload: dict[str, object],
+    access,
+) -> None:
+    state_path = tmp_path / "workflow-state.json"
+    _write(state_path, payload)
+
+    with pytest.raises(WorkflowStateError):
+        access(read(state_path))
 
 
 def test_compatible_music_engine_accessor_rejects_conflicting_values(tmp_path: Path) -> None:
