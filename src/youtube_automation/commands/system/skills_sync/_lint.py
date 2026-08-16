@@ -1,6 +1,6 @@
 """yt-skills lint — SKILL.md の軽量契約検証。
 
-Issues #2096, #3749, #3750, #3751, #3793, #3799, #3802, #3803, #3804。
+Issues #2096, #3749, #3750, #3751, #3793, #3799, #3802, #3803, #3804, #3805。
 
 skill 編集後の検証を pytest 全体実行 (約 4 分) に律速されず秒単位で回すための
 サブコマンド。frontmatter / flag の検証ロジックは domains.skills.inventory を
@@ -22,6 +22,7 @@ skill 編集後の検証を pytest 全体実行 (約 4 分) に律速されず�
     12. 成果物ブロックと `書き込む` 宣言行が存在する
     13. skill-config の登録キーと config.default.yaml が双方向に一致する
     14. 下流に移行対応表の旧 skill-config が残っていない
+    15. downstream 配布対象の skill が総数上限以下である
 """
 
 from __future__ import annotations
@@ -30,12 +31,13 @@ import argparse
 from pathlib import Path
 from typing import Final
 
-from youtube_automation.commands.system.skills_sync import _migrate_config
+from youtube_automation.commands.system.skills_sync import _DEV_ONLY_SKILL_NAMES, _migrate_config
 from youtube_automation.commands.system.skills_sync._delegation import DelegationGraph, format_path
 from youtube_automation.configuration import skills as skill_config
 from youtube_automation.domains.skills.inventory import SkillInventory, SkillLintViolation, lint_skill_contract
 
 _SKILL_MD_MAX_LINES: Final[int] = 400
+_MAX_SKILL_COUNT: Final[int] = 19
 _SKILL_MD_LINE_LIMIT_VIOLATION: Final[str] = "skill_md_line_limit_exceeded"
 _DELEGATION_DEPTH_VIOLATION: Final[str] = "delegation_depth_exceeded"
 
@@ -134,13 +136,32 @@ def _lint_unmigrated_skill_configs(channel_dir: Path) -> list[str]:
     ]
 
 
+def _distributed_skill_names(inventory: SkillInventory) -> tuple[str, ...]:
+    """Return real sync candidates, excluding dev-only and non-skill residue."""
+    return tuple(
+        skill_dir.name
+        for skill_dir in inventory.skill_directories()
+        if (skill_dir / "SKILL.md").is_file() and skill_dir.name not in _DEV_ONLY_SKILL_NAMES
+    )
+
+
+def _skill_count_violation(inventory: SkillInventory) -> str | None:
+    count = len(_distributed_skill_names(inventory))
+    if count <= _MAX_SKILL_COUNT:
+        return None
+    return (
+        f"配布対象の skill が {count} 件です (上限 {_MAX_SKILL_COUNT} 件 — "
+        "新しい skill を足すなら既存 skill の mode として畳めないかを先に検討してください)"
+    )
+
+
 def cmd_lint(args: argparse.Namespace) -> int:
     """`yt-skills lint [<skill>...]` — skill 契約を検証し違反があれば非ゼロ exit。"""
     from youtube_automation.commands.system.skills_sync import _asset_root
 
     root = _asset_root("skills")
     inventory = SkillInventory(root)
-    available = [path.name for path in inventory.skill_directories()]
+    available = [path.name for path in inventory.skill_directories() if (path / "SKILL.md").is_file()]
 
     requested: list[str] = getattr(args, "skills", None) or []
     if requested:
@@ -155,8 +176,11 @@ def cmd_lint(args: argparse.Namespace) -> int:
     skill_config_violations = (
         [] if requested else [*_lint_skill_config_contract(inventory), *_lint_unmigrated_skill_configs(Path.cwd())]
     )
+    skill_count_violation = None if requested else _skill_count_violation(inventory)
     for violation in skill_config_violations:
         print(f"skill-config: {violation}")
+    if skill_count_violation is not None:
+        print(skill_count_violation)
 
     graph = DelegationGraph.load(inventory)
 
@@ -192,6 +216,9 @@ def cmd_lint(args: argparse.Namespace) -> int:
         return 1
     if skill_config_violations:
         print(f"lint 失敗: skill-config 契約に {len(skill_config_violations)} 件の違反があります (source: {root})")
+        return 1
+    if skill_count_violation is not None:
+        print(f"lint 失敗: 配布対象 skill の総数上限を超えています (source: {root})")
         return 1
     print(f"lint 合格: {len(targets)} skill (source: {root})")
     return 0
