@@ -13,7 +13,7 @@ description: "Use when 音楽制作を状態判定付きで一括実行または
 ## 成果物
 
 - `書き込む`: `collections/<id>/20-documentation/suno-patterns.yaml`, `collections/<id>/20-documentation/suno-prompts.json`, `collections/<id>/20-documentation/suno-prompts.html`, `collections/<id>/20-documentation/suno-lyrics.md`, `collections/<id>/20-documentation/suno-lyrics.json`, `collections/<id>/20-documentation/lyria-prompt.json`, `collections/<id>/20-documentation/lyria-prompt.html`, `collections/<id>/02-Individual-music/*`, `collections/<id>/01-master/master.mp3`, `collections/<id>/workflow-state.json`
-- `読み込む`: `docs/channel/creative-constraints.md`, `docs/channel/personas/persona-definition.md`, `data/video_analysis/<channel>/*.json`, `data/insights.jsonl`, `config/channel/youtube.json::music_engine`, `config/skills/music.yaml::prompt`, `config/skills/music.yaml::lyric`, `config/skills/music.yaml::generate`, `config/skills/suno-helper.yaml`, `config/skills/lyria.yaml`
+- `読み込む`: 検証済み `docs/channel/creative-constraints.json`, `docs/channel/personas/persona-definition.json`, `data/video_analysis/<channel>/*.json`, `data/insights.jsonl`, `config/channel/youtube.json::music_engine`, `config/skills/music.yaml::prompt`, `config/skills/music.yaml::lyric`, `config/skills/music.yaml::generate`, `config/skills/suno-helper.yaml`, `config/skills/lyria.yaml`
 
 ## モード判定
 

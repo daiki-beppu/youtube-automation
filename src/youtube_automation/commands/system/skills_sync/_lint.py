@@ -23,6 +23,7 @@ skill 編集後の検証を pytest 全体実行 (約 4 分) に律速されず�
     13. skill-config の登録キーと config.default.yaml が双方向に一致する
     14. 下流に移行対応表の旧 skill-config が残っていない
     15. downstream 配布対象の skill が総数上限以下である
+    16. 運用成果物 inventory の owner / schema / consumer / JSON+HTML pair が一致する
 """
 
 from __future__ import annotations
@@ -34,6 +35,7 @@ from typing import Final
 from youtube_automation.commands.system.skills_sync import _DEV_ONLY_SKILL_NAMES, _migrate_config
 from youtube_automation.commands.system.skills_sync._delegation import DelegationGraph, format_path
 from youtube_automation.configuration import skills as skill_config
+from youtube_automation.domains.documents.operational_artifacts import lint_operational_artifacts
 from youtube_automation.domains.skills.inventory import SkillInventory, SkillLintViolation, lint_skill_contract
 
 _SKILL_MD_MAX_LINES: Final[int] = 400
@@ -155,6 +157,16 @@ def _skill_count_violation(inventory: SkillInventory) -> str | None:
     )
 
 
+def _operational_artifact_violations(root: Path, inventory: SkillInventory) -> list[str]:
+    """Run the repository/wheel artifact ratchet, excluding minimal CLI fixtures."""
+    repository_root = root.parents[1] if root.name == "skills" and root.parent.name == ".claude" else root
+    is_repository = (repository_root / "pyproject.toml").is_file()
+    is_wheel_assets = root.name == "_skills"
+    if not is_repository and not is_wheel_assets:
+        return []
+    return lint_operational_artifacts(repository_root, inventory)
+
+
 def cmd_lint(args: argparse.Namespace) -> int:
     """`yt-skills lint [<skill>...]` — skill 契約を検証し違反があれば非ゼロ exit。"""
     from youtube_automation.commands.system.skills_sync import _asset_root
@@ -177,10 +189,13 @@ def cmd_lint(args: argparse.Namespace) -> int:
         [] if requested else [*_lint_skill_config_contract(inventory), *_lint_unmigrated_skill_configs(Path.cwd())]
     )
     skill_count_violation = None if requested else _skill_count_violation(inventory)
+    artifact_violations = [] if requested else _operational_artifact_violations(root, inventory)
     for violation in skill_config_violations:
         print(f"skill-config: {violation}")
     if skill_count_violation is not None:
         print(skill_count_violation)
+    for violation in artifact_violations:
+        print(f"operational-artifacts: {violation}")
 
     graph = DelegationGraph.load(inventory)
 
@@ -219,6 +234,9 @@ def cmd_lint(args: argparse.Namespace) -> int:
         return 1
     if skill_count_violation is not None:
         print(f"lint 失敗: 配布対象 skill の総数上限を超えています (source: {root})")
+        return 1
+    if artifact_violations:
+        print(f"lint 失敗: 運用成果物契約に {len(artifact_violations)} 件の違反があります (source: {root})")
         return 1
     print(f"lint 合格: {len(targets)} skill (source: {root})")
     return 0
