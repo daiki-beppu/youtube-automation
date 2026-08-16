@@ -178,6 +178,7 @@ Python 版 skill-config の正規キーは `configuration/skills.py` が所有�
 - `src/youtube_automation/commands/channel/channel_init_templates.py` — channel-init が生成する設定テンプレート
 - `.claude/skills/` — 自動化スキル群（Claude Code / Codex 共用）。wheel に `_skills/` として `force-include` され、`yt-skills sync` で各チャンネルへ展開される
 - `.claude/CLAUDE.template.md` — BGM チャンネル運営方針テンプレ（共通骨格）。wheel に `_claude_md/CLAUDE.template.md` として `force-include` され、`yt-skills sync --asset claude-md` で各チャンネルの `.claude/CLAUDE.md` として展開される
+- `src/youtube_automation/infrastructure/resources/channel/youtube-automation.yml` — 下流チャンネルの日次 GitHub Actions workflow 正本。`yt-skills sync --asset channel-workflow` で `.github/workflows/youtube-automation.yml` へ配布し、基盤非依存のサンドイッチrunnerだけを呼び出す
 - `.agents/skills` — `.claude/skills` への symlink。Codex CLI 用の探索パス（Codex 規約 `$REPO_ROOT/.agents/skills`）
 - `AGENTS.md` — Codex CLI 向けエージェント指示。CLAUDE.md と並立し、Codex 視点のドキュメント補足を含む
 - `site/` — Blume ベースの運用者向け公開ドキュメントサイト。release notes と明示 allowlist の原本を読み、Python 配布物とは独立して build・deploy する

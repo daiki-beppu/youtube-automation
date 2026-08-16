@@ -66,6 +66,8 @@ bash .claude/skills/wf-new/references/run-sandwich.sh \
 
 R2接続は既存 `R2MediaStoreConfig` の環境変数/secret ownerを使う。`--media-store local --local-store-root <path>` は同一runnerをローカルadapterで検証・運用する場合だけ指定する。入力または出力がない工程は対応するhandoff引数一式を省略する。
 
+GitHub Actions の日次ポーリング定義は `uv run yt-skills sync --asset channel-workflow --force` で `.github/workflows/youtube-automation.yml` へ配布する。workflow は同じ `run-sandwich.sh` を1回呼ぶだけで、`YTA_CHANNEL_SLUG` / `YTA_COLLECTION` / `YTA_COLLECTION_DIR` / `YTA_AGENT` / `YTA_AUTOMATION_PROMPT` を repository variables、R2 と Claude の credential を repository secrets から注入する。`concurrency.cancel-in-progress: false` により先行実行を中断せず、後続の日次起動を同一repository内で直列化する。
+
 ## Task: setup / update
 
 すべてチャンネルリポジトリ直下で実行する。

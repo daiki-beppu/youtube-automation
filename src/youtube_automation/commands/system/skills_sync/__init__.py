@@ -22,6 +22,7 @@ Asset 種別 (`--asset`):
     features            : 全 skill カタログ (`docs/features.md`、単一ファイル)
     auth-template       : OAuth client secrets テンプレート (`auth/client_secrets.template.json`、単一ファイル)
     channel-gitignore   : channel Git ignore テンプレート (`.gitignore`、単一ファイル・既存は上書きしない)
+    channel-workflow    : channel GHA 日次 automation workflow (`.github/workflows/youtube-automation.yml`)
     settings            : Claude Code 設定 (`.claude/settings.json`、JSON merge)
 
 `yt-skills sync` (asset 未指定) は `--asset all` と同等で、配布物が `docs/`
@@ -95,6 +96,14 @@ _ASSET_SPECS: dict[str, dict[str, str]] = {
         "source_filename": "gitignore.template",
         "default_target": ".gitignore",
         "label": "channel Git ignore テンプレ",
+    },
+    "channel-workflow": {
+        "kind": "file",
+        "resource_name": "infrastructure/resources/channel",
+        "source_subdir": "src/youtube_automation/infrastructure/resources/channel",
+        "source_filename": "youtube-automation.yml",
+        "default_target": ".github/workflows/youtube-automation.yml",
+        "label": "channel GitHub Actions workflow",
     },
     "settings": {
         "kind": "json-merge",
