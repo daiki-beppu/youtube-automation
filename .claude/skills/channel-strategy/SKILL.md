@@ -12,7 +12,7 @@ description: "Use when チャンネル戦略を状態判定付きで一括実行
 
 ## 成果物
 
-- `書き込む`: 検証済み JSON+HTML pair `docs/channel/personas/persona-definition.json`, `docs/plans/viewing-scene-matrix.json`, `docs/channel/creative-constraints.json`, `docs/channel/channel-direction.json`
+- `書き込む`: 検証済み JSON+HTML pair `docs/channel/personas/persona-definition.{json,html}`, `docs/plans/viewing-scene-matrix.{json,html}`, `docs/channel/creative-constraints.{json,html}`, `docs/channel/channel-direction.{json,html}`
 - `読み込む`: 検証済み `docs/plans/viewer-voice-analysis.json`, `docs/plans/viewing-scene-matrix.json`, `docs/channel-research.json`, `docs/channel/personas/persona-definition.json`, `docs/channel/creative-constraints.json`, `docs/channel/ttp-seed-confirmation.md`, `docs/channel/competitor-branding-snapshot.json`, `data/benchmark_*.json`
 
 ## モード判定

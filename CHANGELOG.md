@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `refactor(workflow-state)`: 旧 top-level `video_id` fallback と typed accessor を削除し、公開済み動画の正準 read を `upload.video_id` に限定する（#3893）。
 - `refactor(workflow-state)`: writer のない `assets.video` typed accessor を削除し、動画化進捗を正準の `assets.master_video` だけで判定する（#3892）。
+- `feat(documents)`: 生成運用成果物の owner・schema・consumer inventory を正本化し、`yt-skills lint` で Markdown writer、JSON/HTML pair 欠落、orphan、未検証 consumer、stale allowlist を具体 path 付きで拒否する（#4031）。
 - `feat(wf-status)`: canonical workflow state と実成果物からread-only viewを作り、client filter付き固定HTML snapshotをatomic overwriteして既定browserで開く（#4032）。
 - `refactor(workflow-state)`: collection の音楽エンジンを `planning.music.engine` へ統合し、旧 top-level `music_engine` は一致検証付きの読み取り互換だけに限定する（#3891）。
 - `refactor(workflow-state)`: 概要欄生成状態を `assets.description` へ統合し、旧 `description.generated` は owner accessor の読み取り互換だけに限定する（#3890）。

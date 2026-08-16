@@ -102,9 +102,10 @@ def test_flop_analysis_returns_postmortem_learning_to_creative_constraints() -> 
         assert verdict in phase_7
     assert "作成日" in phase_7
     assert "video_id" in phase_7
-    assert "`creative-constraints.md に追記する`" in phase_7
+    assert "`channel-strategy へ反映を委譲する`" in phase_7
     assert "`追記しない`" in phase_7
     assert "1 が明示された場合だけ" in phase_7
+    assert "analytics 自身は JSON・HTML・旧 Markdown のいずれにも直接書き込まない" in phase_7
     assert "`制約還流対象なし`" in phase_7
     assert "`/channel-strategy --constraints` の実行を案内" in phase_7
     assert "ファイルやディレクトリを本 Phase で新規作成しない" in phase_7

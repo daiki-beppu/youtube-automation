@@ -486,7 +486,8 @@ def test_suno_generator_uses_a_bounded_context_manifest() -> None:
     for token in (
         "`20-documentation/suno-patterns.yaml`",
         "effective key",
-        "`## 音`",
+        "「音」制約 projection",
+        "検証済み pair",
         "`suno_preset` / `bgm_arc` / `scene_timeline[].summary`",
         "`lever=bgm`",
         "全文を読まない",

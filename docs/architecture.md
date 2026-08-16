@@ -226,6 +226,7 @@ assets/stock/           # ボツ画像ストック (#364)。<theme-slug>/ 配下
 | `domains.distrokid` | DistroKid naming、metadata、specification、preparation、release policy |
 | `domains.collections.weekly_vote_log` | 週次投票ログ reader、initializer、schema、保存・検証 |
 | `domains.documents.schema_registry` | リポジトリ所有 JSON Schema の固定 inventory、Draft 7 compile cache、値非表示の検証エラー変換。外部 schema path は受け取らない |
+| `domains.documents.operational_artifacts` / `operational-artifacts.json` | `reports/`、`docs/channel/`、`docs/plans/`、`docs/benchmarks/`、`20-documentation/` の生成成果物について owner skill・schema・consumer を一意に列挙する正本。`yt-skills lint` は全配布 skill の本体/reference、writer script、schema registry を走査し、Markdown writer、JSON/HTML pair 欠落、orphan、未検証 consumer、stale allowlist を具体 path 付きで拒否する。手書き入力・repository docs・machine-only は理由付き allowlist だけを許可する |
 | `domains.documents.rendering` | schema annotation / `x-view` による card・table・media の自己完結 HTML 化と escape / CSP / embedded JSON 検証 |
 | `application.documents.migration` | skill 生成運用文書の new / Markdown 明示移行 / JSON+HTML 再更新を判定し、pair の検証付き transaction と旧 Markdown 削除を一操作として調停 |
 | `application.documents.channel_strategy` | direction / persona / scene / constraints の schema と文書間 ID 参照を検証し、共通 migration workflow による原子的保存を調停 |

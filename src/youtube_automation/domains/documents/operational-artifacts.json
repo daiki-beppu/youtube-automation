@@ -1,0 +1,125 @@
+{
+  "version": 1,
+  "artifacts": [
+    {
+      "path": "reports/analysis_*.json",
+      "owner": "analytics",
+      "schema": "analysis-report.schema.json",
+      "consumers": ["audit", "channel-strategy", "wf-new"]
+    },
+    {
+      "path": "docs/plans/alignment-audit.json",
+      "owner": "audit",
+      "schema": "audit-report.schema.json",
+      "consumers": []
+    },
+    {
+      "path": "reports/video_analysis/<channel>.json",
+      "owner": "audit",
+      "schema": "audit-report.schema.json",
+      "consumers": []
+    },
+    {
+      "path": "docs/benchmarks/benchmark-report.json",
+      "owner": "channel-research",
+      "schema": "channel-research-report.schema.json",
+      "consumers": ["video"]
+    },
+    {
+      "path": "docs/plans/viewer-voice-analysis.json",
+      "owner": "channel-research",
+      "schema": "channel-research-report.schema.json",
+      "consumers": ["channel-strategy"]
+    },
+    {
+      "path": "docs/benchmarks/thumbnail-analysis.json",
+      "owner": "channel-research",
+      "schema": "channel-research-report.schema.json",
+      "consumers": ["thumbnail"]
+    },
+    {
+      "path": "docs/channel/personas/persona-definition.json",
+      "owner": "channel-strategy",
+      "schema": "channel-strategy.schema.json",
+      "consumers": ["audit", "music"]
+    },
+    {
+      "path": "docs/plans/viewing-scene-matrix.json",
+      "owner": "channel-strategy",
+      "schema": "channel-strategy.schema.json",
+      "consumers": ["audit"]
+    },
+    {
+      "path": "docs/channel/creative-constraints.json",
+      "owner": "channel-strategy",
+      "schema": "channel-strategy.schema.json",
+      "consumers": ["audit", "music", "thumbnail"]
+    },
+    {
+      "path": "docs/channel/channel-direction.json",
+      "owner": "channel-strategy",
+      "schema": "channel-strategy.schema.json",
+      "consumers": []
+    },
+    {
+      "path": "collections/<id>/20-documentation/suno-prompts.json",
+      "owner": "music",
+      "schema": "music-prompt.schema.json",
+      "consumers": ["audit", "video", "wf-new"]
+    },
+    {
+      "path": "collections/<id>/20-documentation/lyria-prompt.json",
+      "owner": "music",
+      "schema": "music-prompt.schema.json",
+      "consumers": []
+    },
+    {
+      "path": "collections/<id>/20-documentation/plan_proposals.json",
+      "owner": "wf-new",
+      "schema": "collection-plan.schema.json",
+      "consumers": []
+    },
+    {
+      "path": "collections/<id>/20-documentation/descriptions.json",
+      "owner": "video",
+      "schema": "video-description.schema.json",
+      "consumers": ["audit", "publish"]
+    }
+  ],
+  "allowlists": {
+    "hand_written_inputs": [
+      {"path": "collections/<id>/20-documentation/suno-lyrics.md", "owner": "music", "reason": "Suno UI へ貼る手書き歌詞入力"},
+      {"path": "docs/channel/*.md", "owner": "setup", "reason": "チャンネル設定の手書き入力テンプレート"},
+      {"path": "collections/<id>/20-documentation/thumbnail-prompts.md", "owner": "thumbnail", "reason": "画像生成へ渡す手書き prompt"},
+      {"path": "docs/plans/thumbnail-comparison.md", "owner": "thumbnail", "reason": "人が比較判断を追記する作業メモ"},
+      {"path": "collections/live/<id>/20-documentation/postmortem.md", "owner": "wf-new", "reason": "運用者が記入する postmortem 入力"},
+      {"path": "collections/<id>/20-documentation/postmortem.md", "owner": "analytics", "reason": "公開後レビューの手書き所見"},
+      {"path": "collections/<id>/20-documentation/thumbnail-prompts.md", "owner": "wf-new", "reason": "企画時の画像生成 prompt 入力"}
+    ],
+    "repository_docs": [
+      {"path": "docs/architecture.md", "owner": "repository", "reason": "設計説明であり下流運用成果物ではない"},
+      {"path": "docs/development.md", "owner": "repository", "reason": "開発手順であり下流運用成果物ではない"}
+    ],
+    "machine_only": [
+      {"path": "collections/<id>/20-documentation/suno-lyrics.json", "owner": "music", "reason": "Suno helper machine payload"},
+      {"path": "collections/<id>/20-documentation/upload_tracking.json", "owner": "publish", "reason": "YouTube upload state"},
+      {"path": "collections/<id>/20-documentation/thumbnail-test-active.json", "owner": "thumbnail", "reason": "A/B test state"},
+      {"path": "collections/<id>/20-documentation/thumbnail-test-history.json", "owner": "thumbnail", "reason": "A/B test append-only state"},
+      {"path": "reports/wf-new-batches/<batch-id>/plan-manifest.json", "owner": "wf-new", "reason": "batch orchestration state"},
+      {"path": "reports/wf-new-batches/<batch-id>/batch-ledger.json", "owner": "wf-new", "reason": "batch orchestration ledger"},
+      {"path": "collections/<id>/20-documentation/upload_tracking.json", "owner": "wf-next", "reason": "publish handoff state"}
+    ],
+    "other_writes": [
+      {"path": "docs/benchmarks/thumbnails/<channel>_<video-id>.jpg", "owner": "channel-research", "reason": "binary thumbnail evidence"},
+      {"path": "collections/<id>/20-documentation/suno-patterns.yaml", "owner": "music", "reason": "Suno helper machine configuration"},
+      {"path": "collections/<id>/20-documentation/community-post.txt", "owner": "publish", "reason": "community UI paste input"},
+      {"path": "collections/<id>/20-documentation/suno-patterns.yaml", "owner": "wf-new", "reason": "music handoff configuration"}
+    ],
+    "schemas": [
+      "experiment-entry.schema.json",
+      "feedback-entry.schema.json",
+      "insights-entry.schema.json",
+      "weekly_vote_log.schema.json"
+    ]
+  }
+}
