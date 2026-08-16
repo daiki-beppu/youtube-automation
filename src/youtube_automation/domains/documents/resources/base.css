@@ -14,7 +14,7 @@ body { margin: 0; padding: 2rem; }
 h1 { margin: .25rem 0; font-size: clamp(1.75rem, 4vw, 2.75rem); letter-spacing: -.03em; }
 .document-description, .view-description { color: #52617a; }
 main { display: grid; gap: 1rem; }
-.view-card, .view-table-section, .view-media { overflow: hidden; border: 1px solid #dce2ec; border-radius: .9rem; background: #fff; box-shadow: 0 8px 24px rgb(31 45 70 / 7%); }
+.view-card, .view-table-section, .view-media, .view-cards-section { overflow: hidden; border: 1px solid #dce2ec; border-radius: .9rem; background: #fff; box-shadow: 0 8px 24px rgb(31 45 70 / 7%); }
 .view-card, .view-media { padding: 1.25rem; }
 .view-table-section > h2, .view-table-section > .view-description { margin-inline: 1.25rem; }
 h2 { margin-block: 0 1rem; font-size: 1.15rem; }
@@ -30,6 +30,12 @@ ul { margin: 0; padding-left: 1.25rem; }
 .view-media audio { width: min(100%, 36rem); }
 .view-media a { color: #1859b7; overflow-wrap: anywhere; }
 .empty { color: #7b879c; font-style: italic; }
+.view-cards-section { padding: 1.25rem; }
+.card-flow { display: flex; flex-wrap: wrap; gap: .5rem 1.5rem; margin-bottom: 1.25rem; color: #52617a; }
+.entry-card-grid { display: grid; gap: 1rem; }
+.entry-card { border: 1px solid #e1e6ef; border-radius: .75rem; padding: 1rem; background: #fbfcfe; }
+.entry-card h3 { margin: 0 0 1rem; }
+.entry-card dd { white-space: pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; user-select: text; }
 
 @media (max-width: 40rem) {
   body { padding: 1rem; }

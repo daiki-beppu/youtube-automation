@@ -18,7 +18,11 @@ from youtube_automation.domains.documents.review_rendering import render_review_
 from youtube_automation.domains.documents.schema_registry import RepositorySchema
 from youtube_automation.infrastructure.browser import open_local_file
 from youtube_automation.infrastructure.browser.selection_broker import SelectionBroker
-from youtube_automation.infrastructure.documents.publishing import publish_html_snapshot, read_published_json_document
+from youtube_automation.infrastructure.documents.publishing import (
+    publish_html_snapshot,
+    publish_json_document,
+    read_published_json_document,
+)
 
 ReviewTransport = Literal["web", "terminal"]
 ReviewStatus = Literal["skipped", "displayed", "terminal_required", "selected"]
@@ -142,13 +146,15 @@ def _build_snapshot(collection_dir: Path, artifact: ReviewArtifact, *, now: date
     elif artifact == "music-prompt":
         sources = [
             path
-            for name in ("suno-prompts.json", "lyria-prompt.json")
+            for name in ("suno-prompts.json", "lyria-prompt.json", "minimax-prompt.json")
             if (path := collection_dir / "20-documentation" / name).is_file()
         ]
         if len(sources) != 1:
             raise ReviewError("music promptの永続JSON+HTML pairを一意に解決できません")
         source = sources[0]
         read_published_json_document(source, RepositorySchema.MUSIC_PROMPT)
+        # 正本 pair の整合性を確認した後、現在の x-view で同 basename HTML を更新する。
+        publish_json_document(source, RepositorySchema.MUSIC_PROMPT)
         artifact_digest = _sha256_file(source)
         candidates = (
             ReviewCandidate("approve", "承認", artifact_digest),

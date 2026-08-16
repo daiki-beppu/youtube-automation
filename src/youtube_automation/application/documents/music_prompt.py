@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
+import secrets
 from collections.abc import Callable, Mapping
 from pathlib import Path
+from typing import Literal
 
 from youtube_automation.application.documents.migration import (
     DocumentWriteResult,
@@ -16,7 +19,13 @@ from youtube_automation.domains.documents.schema_registry import RepositorySchem
 from youtube_automation.infrastructure.documents.publishing import read_published_json_document
 
 MachineVerifier = Callable[[object], None]
-_FILENAMES = {"suno": "suno-prompts.json", "lyria": "lyria-prompt.json"}
+ReviewDecision = Literal["approve", "reject"]
+ReviewSource = Literal["web", "terminal", "automatic"]
+_FILENAMES = {
+    "suno": "suno-prompts.json",
+    "lyria": "lyria-prompt.json",
+    "minimax": "minimax-prompt.json",
+}
 
 
 def require_recorded_machine_verification(document: object) -> None:
@@ -36,7 +45,7 @@ def write_music_prompt_document(
     *,
     machine_verify: MachineVerifier,
 ) -> DocumentWriteResult:
-    """verify と semantic review が通った prompt pair だけを成功状態へ進める。"""
+    """verify と semantic review が通った未承認 prompt pair を公開する。"""
 
     def build_and_validate() -> object:
         document = build_document()
@@ -61,6 +70,41 @@ def write_music_prompt_document(
     persisted = read_published_json_document(json_path, RepositorySchema.MUSIC_PROMPT)
     _engine, entries = _reviewed_entries(persisted)
     _require_semantic_pass(entries)
+    return result
+
+
+def music_prompt_artifact_digest(json_path: Path) -> str:
+    """検証済み prompt pair の正本 JSON digest を返す。"""
+    read_published_json_document(json_path, RepositorySchema.MUSIC_PROMPT)
+    digest = hashlib.sha256()
+    with json_path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def finalize_music_prompt_review(
+    json_path: Path,
+    workflow_state_path: Path,
+    *,
+    decision: ReviewDecision,
+    source: ReviewSource,
+    expected_artifact_digest: str,
+) -> None:
+    """review 済み digest を再検証し、承認時だけ既存 state owner を実行する。"""
+    if decision not in {"approve", "reject"}:
+        raise DocumentMigrationError(f"music prompt review decisionが不正です: {decision}")
+    if source not in {"web", "terminal", "automatic"}:
+        raise DocumentMigrationError(f"music prompt review sourceが不正です: {source}")
+    current_digest = music_prompt_artifact_digest(json_path)
+    if not secrets.compare_digest(current_digest, expected_artifact_digest):
+        raise DocumentMigrationError("music prompt JSON digestがreview時点から変わりました")
+    document = read_published_json_document(json_path, RepositorySchema.MUSIC_PROMPT)
+    _engine, entries = _reviewed_entries(document)
+    require_recorded_machine_verification(document)
+    _require_semantic_pass(entries)
+    if decision == "reject":
+        return
 
     def project(state):
         assets = state.assets
@@ -73,7 +117,6 @@ def write_music_prompt_document(
         return state
 
     update_workflow_state(workflow_state_path, project)
-    return result
 
 
 def _reviewed_entries(document: object) -> tuple[str, list[object]]:

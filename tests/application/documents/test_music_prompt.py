@@ -6,7 +6,11 @@ from pathlib import Path
 import pytest
 
 from youtube_automation.application.documents.migration import MarkdownMigrationDecision
-from youtube_automation.application.documents.music_prompt import write_music_prompt_document
+from youtube_automation.application.documents.music_prompt import (
+    finalize_music_prompt_review,
+    music_prompt_artifact_digest,
+    write_music_prompt_document,
+)
 from youtube_automation.core.errors import DocumentMigrationError
 from youtube_automation.domains.suno.prompts import read_suno_prompt_entries
 
@@ -51,9 +55,13 @@ def _state(path: Path) -> None:
 
 @pytest.mark.parametrize(
     ("engine", "filename"),
-    [("suno", "suno-prompts.json"), ("lyria", "lyria-prompt.json")],
+    [
+        ("suno", "suno-prompts.json"),
+        ("lyria", "lyria-prompt.json"),
+        ("minimax", "minimax-prompt.json"),
+    ],
 )
-def test_verified_music_prompt_pair_updates_state_after_reread(tmp_path: Path, engine: str, filename: str) -> None:
+def test_verified_music_prompt_pair_waits_for_finalized_review(tmp_path: Path, engine: str, filename: str) -> None:
     target = tmp_path / "20-documentation" / filename
     target.parent.mkdir()
     state = tmp_path / "workflow-state.json"
@@ -72,8 +80,45 @@ def test_verified_music_prompt_pair_updates_state_after_reread(tmp_path: Path, e
     assert verified == [engine]
     assert target.with_suffix(".html").is_file()
     persisted = json.loads(state.read_text())
-    assert persisted["assets"] == {"thumbnail": False, "music_prompts": True}
+    assert persisted["assets"] == {"thumbnail": False}
     assert persisted["unknown"] == {"keep": True}
+
+    finalize_music_prompt_review(
+        target,
+        state,
+        decision="approve",
+        source="web",
+        expected_artifact_digest=music_prompt_artifact_digest(target),
+    )
+
+    persisted = json.loads(state.read_text())
+    assert persisted["assets"] == {"thumbnail": False, "music_prompts": True}
+
+
+def test_stale_review_digest_does_not_update_state(tmp_path: Path) -> None:
+    target = tmp_path / "20-documentation/suno-prompts.json"
+    target.parent.mkdir()
+    state = tmp_path / "workflow-state.json"
+    _state(state)
+    write_music_prompt_document(
+        target,
+        state,
+        _document,
+        MarkdownMigrationDecision.NOT_REQUIRED,
+        machine_verify=lambda _document: None,
+    )
+    before = state.read_bytes()
+
+    with pytest.raises(DocumentMigrationError, match="digest"):
+        finalize_music_prompt_review(
+            target,
+            state,
+            decision="approve",
+            source="web",
+            expected_artifact_digest="0" * 64,
+        )
+
+    assert state.read_bytes() == before
 
 
 @pytest.mark.parametrize("failure", ["verify", "semantic"])

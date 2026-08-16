@@ -21,7 +21,7 @@ _CSP = (
     "default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'; "
     "script-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
 )
-_PRESENTATIONS = frozenset({"card", "table", "media"})
+_PRESENTATIONS = frozenset({"card", "cards", "table", "media"})
 _MEDIA_TYPES = frozenset({"image", "audio", "video", "link"})
 
 
@@ -74,6 +74,8 @@ def _render_root(document: object, schema: Mapping[str, object], root_schema: Ma
         description = _annotation(property_schema, "description", "")
         if presentation == "table":
             rendered = _render_table(heading, description, document[name], property_schema, root_schema)
+        elif presentation == "cards":
+            rendered = _render_cards(heading, description, document[name], property_schema, root_schema)
         elif presentation == "media":
             rendered = _render_media(heading, description, document[name], view)
         else:
@@ -94,7 +96,7 @@ def _presentation(view: Mapping[str, object], value: object) -> str:
     if candidate is None:
         return "table" if isinstance(value, list) and all(isinstance(item, dict) for item in value) else "card"
     if not isinstance(candidate, str) or candidate not in _PRESENTATIONS:
-        raise DocumentRenderError("x-view.presentation は card/table/media のいずれかにしてください")
+        raise DocumentRenderError("x-view.presentation は card/cards/table/media のいずれかにしてください")
     return candidate
 
 
@@ -200,6 +202,30 @@ def _render_table(
         f'<section class="view-table-section"><h2>{escape(heading)}</h2>{description_html}'
         f'<div class="table-scroll"><table class="view-table"><thead><tr>{header}</tr></thead>'
         f"<tbody>{body}</tbody></table></div></section>"
+    )
+
+
+def _render_cards(
+    heading: str,
+    description: str,
+    value: object,
+    schema: Mapping[str, object],
+    root_schema: Mapping[str, object],
+) -> str:
+    if not isinstance(value, list) or not all(isinstance(item, dict) for item in value):
+        raise DocumentRenderError(f"cards 表示には object の array が必要です: {heading}")
+    item_schema_value = schema.get("items")
+    item_schema = item_schema_value if isinstance(item_schema_value, dict) else {}
+    labels = [str(item.get("title") or item.get("name") or f"Entry {index}") for index, item in enumerate(value, 1)]
+    flow = "".join(f"<li>{escape(label)}</li>" for label in labels)
+    cards = "".join(
+        f'<article class="entry-card"><h3>{escape(label)}</h3>{_render_value(item, item_schema, root_schema)}</article>'
+        for label, item in zip(labels, value, strict=True)
+    )
+    description_html = f'<p class="view-description">{escape(description)}</p>' if description else ""
+    return (
+        f'<section class="view-cards-section"><h2>{escape(heading)}</h2>{description_html}'
+        f'<ol class="card-flow">{flow}</ol><div class="entry-card-grid">{cards}</div></section>'
     )
 
 

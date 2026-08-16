@@ -74,6 +74,12 @@
       "consumers": []
     },
     {
+      "path": "collections/<id>/20-documentation/minimax-prompt.json",
+      "owner": "music",
+      "schema": "music-prompt.schema.json",
+      "consumers": []
+    },
+    {
       "path": "collections/<id>/20-documentation/plan_proposals.json",
       "owner": "wf-new",
       "schema": "collection-plan.schema.json",

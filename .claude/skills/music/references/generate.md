@@ -14,7 +14,9 @@
 
 ## MiniMax 経路
 
-`music_engine: minimax` では `.claude/skills/music/config.default.yaml::generate.minimax` と `config/skills/music.yaml::generate.minimax` を deep-merge する。対象 collection のテーマ、creative constraints、採用済み方向性から style prompt と filename slug を決める。`suno-patterns.yaml` が vocal を示す場合は、`/music --lyric` の機械検証と semantic review が成功した1曲分の `20-documentation/suno-lyrics.json` を必須とする。生成回数と model を提示して generation approval を得た後に実行する。
+`music_engine: minimax` では `.claude/skills/music/config.default.yaml::generate.minimax` と `config/skills/music.yaml::generate.minimax` を deep-merge する。対象 collection のテーマ、creative constraints、採用済み方向性から style prompt と filename slug を決める。`suno-patterns.yaml` が vocal を示す場合は、`/music --lyric` の機械検証と semantic review が成功した1曲分の `20-documentation/suno-lyrics.json` を必須とする。最終prompt、model、segment数、track role、provenance、機械verifyとsemantic reviewを `music-prompt.schema.json` のcandidateへ保存し、writerで `20-documentation/minimax-prompt.json` と同basename HTMLを公開する。
+
+`skip_generation_approval: false` は `uv run yt-music-prompt-select --collection <collection-path>` の永続card表示とbroker承認後だけ生成へ進む。`true` は `--automatic` でHTML/brokerを省略する。どちらも同じdigest再検証finalizerを通し、失敗・差し戻し・stale pairではstateを更新しない。承認後、検証済みJSONの `style` / `name` / `options` だけを次のCLI引数へ写像する。
 
 ```bash
 uv run yt-generate-minimax-master \
@@ -55,7 +57,7 @@ Suno 経路の server lifecycle は `.claude/skills/extension/references/serve.m
 suno-helper は生成 → playlist 追加 → 一括ダウンロードまでを 1 タブで完結させるため、`/music --master` の DL ステップ（Step 2-3）は原則スキップされる。
 新規 collection を `/wf-new` から開始した直後は、`/wf-new` が `uv run yt-collection-serve` の起動と疎通確認まで完了している場合がある。その場合、本スキルは既存 server を再利用し、browser use で Suno タブ上の suno-helper overlay を操作する。
 
-## 完了条件
+## 完了条件（server プロセス停止を含む）
 
 overlay の phase が `finished` に到達し、Step 6 の 6 点（playlist 紐付け / clip 数 = entry 数 × 2 / `02-Individual-music/` への音声配置 / `status = downloaded` / `suno_playlist_url` 記録 / `assets.music_downloaded = true`）を確認後、collection server を停止してプロセスが残っていないとき strict 完了とする（詳細は Step 6 が正）。`finished` は download 通知の終端成功を示し、1 件以上配置できた部分成功も含むため、それだけで strict 完了とは判定しない。異常値再生成を OFF にした run は、さらに duration guard NG の clip を試聴し、NG clip が ZIP に含まれることを確認してから完了とする。`entry-failed`、clip 数不足、server プロセス残留のいずれかがある場合は完了扱いにしない。
 
@@ -504,9 +506,9 @@ celtic folk only, clean dry recording, no pads, gentle melodic phrases rising an
    - 品質チェックリスト
 
 2. deep-merge 後の `skip_generation_approval` で分岐する:
-   - `false`（既定）: ユーザーにプロンプト・パラメータの確認を求める。Claude Code では AskUserQuestion で「この内容で生成する」「修正する」の明示 2 択を出す。AskUserQuestion 非対応環境（Codex 等）では同じ情報をテキストで提示し、明示承認まで Step 4 を実行しない
-   - `true`: candidate保存と機械verify・semantic reviewを確認し、`music-prompt-documents.md` のwriterで `lyria-prompt.json` / `.html` を公開してから、同じ検証済みJSONのプロンプト・パラメータで確認なしに Step 4 へ進む。60 セグメント hard cap と warning は省略しない
-3. `skip_generation_approval: false` で修正があればcandidateを編集し、機械verify→semantic review→pair公開を再実行する。Markdown/HTMLを入力にしない
+   - `false`（既定）: candidate保存と機械verify・semantic review後にpairを公開し、`uv run yt-music-prompt-select --collection <collection-path>` で永続HTMLの比較cardを開く。single-use brokerの承認をdigest再検証して確定するまで Step 4 を実行しない。browserなしは `--transport terminal` を明示し、会話確認後のIDを同じfinalizerへ渡す
+   - `true`: candidate保存と機械verify・semantic reviewを確認し、writerで `lyria-prompt.json` / `.html` を公開してから `uv run yt-music-prompt-select --collection <collection-path> --automatic` でHTML/brokerを省略して同じfinalizerを通し、同じ検証済みJSONのプロンプト・パラメータで確認なしに Step 4 へ進む。60 セグメント hard cap と warning は省略しない
+3. 手動reviewで `reject` または修正があればcandidateを編集し、機械verify→semantic review→pair公開→reviewを再実行する。Markdown/HTMLを入力にしない
 
 ## Step 4: 音楽生成 + マスター結合
 

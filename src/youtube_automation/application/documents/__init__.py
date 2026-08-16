@@ -8,6 +8,8 @@ from youtube_automation.application.documents.migration import (
     write_operational_document,
 )
 from youtube_automation.application.documents.music_prompt import (
+    finalize_music_prompt_review,
+    music_prompt_artifact_digest,
     require_recorded_machine_verification,
     write_music_prompt_document,
 )
@@ -19,6 +21,8 @@ from youtube_automation.application.documents.video_description import (
 __all__ = [
     "DocumentWriteResult",
     "MarkdownMigrationDecision",
+    "finalize_music_prompt_review",
+    "music_prompt_artifact_digest",
     "read_video_description_metadata",
     "require_recorded_machine_verification",
     "write_channel_strategy_document",

@@ -36,7 +36,7 @@ description: "Use when 音楽制作を状態判定付きで一括実行または
 
 対象 collection を 1 件に確定する。確定できない場合は候補を示して停止する。`config/channel/` が存在し `load_config()` でロード可能であること。
 
-prompt文書の保存・表示・既存Markdown移行・state更新は `references/music-prompt-documents.md` を正本とする。Suno/Lyriaとも verify と semantic review の成功前にHTMLまたは `assets.music_prompts` を成功扱いで更新しない。
+prompt文書の保存・表示・既存Markdown移行・state更新は `references/music-prompt-documents.md` を正本とする。Suno/Lyria/MiniMaxとも verify と semantic review の成功前にHTMLを公開せず、review finalizerのdigest再検証前に `assets.music_prompts` を成功扱いで更新しない。
 
 - **新規チャンネル** → `/setup --channel` を案内
 - **既存チャンネル**（設定不整合）→ `/setup --import` を案内
