@@ -82,3 +82,49 @@ def test_collection_plan_requires_workflow_state_gate(tmp_path: Path, capsys) ->
 
     assert result == 1
     assert "--workflow-state" in capsys.readouterr().err
+
+
+def test_music_prompt_cli_requires_reviewed_candidate_and_updates_state(tmp_path: Path, capsys) -> None:
+    candidate = tmp_path / "candidate.json"
+    target = tmp_path / "20-documentation/suno-prompts.json"
+    target.parent.mkdir()
+    state = tmp_path / "workflow-state.json"
+    state.write_text(json.dumps({"phase": "planning", "assets": {}}), encoding="utf-8")
+    candidate.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "generated_at": "2026-08-16T00:00:00Z",
+                "engine": "suno",
+                "collection_id": "rain",
+                "provenance": {"producer": "music", "source_paths": ["suno-patterns.yaml"]},
+                "entries": [
+                    {
+                        "name": "Rain",
+                        "style": "soft piano",
+                        "lyrics": "",
+                        "options": {},
+                        "track_role": "core",
+                        "review": {"verify_status": "pass", "semantic_status": "pass", "notes": []},
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = migrate.main(
+        [
+            str(candidate),
+            "--target",
+            str(target),
+            "--schema",
+            "music-prompt.schema.json",
+            "--workflow-state",
+            str(state),
+        ]
+    )
+
+    assert result == 0
+    assert json.loads(state.read_text())["assets"]["music_prompts"] is True
+    assert "created:" in capsys.readouterr().out

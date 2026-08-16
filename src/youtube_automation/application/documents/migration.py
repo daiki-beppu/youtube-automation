@@ -41,6 +41,8 @@ def write_operational_document(
     schema: RepositorySchema,
     build_document: Callable[[], object],
     migration_decision: MarkdownMigrationDecision,
+    *,
+    allow_legacy_json_markdown: bool = False,
 ) -> DocumentWriteResult:
     """新規作成・明示移行・移行済み更新を rollback 可能な一操作で行う。"""
     if json_path.suffix != ".json":
@@ -51,7 +53,12 @@ def write_operational_document(
     if any(path.is_symlink() for path in paths):
         raise DocumentMigrationError("運用文書 path に symlink は使用できません")
 
-    state = _resolve_state(json_path, html_path, markdown_path)
+    state = _resolve_state(
+        json_path,
+        html_path,
+        markdown_path,
+        allow_legacy_json_markdown=allow_legacy_json_markdown,
+    )
     if state is DocumentWriteResult.MIGRATED:
         if migration_decision is MarkdownMigrationDecision.NO:
             return DocumentWriteResult.DECLINED
@@ -79,11 +86,19 @@ def write_operational_document(
     return state
 
 
-def _resolve_state(json_path: Path, html_path: Path, markdown_path: Path) -> DocumentWriteResult:
+def _resolve_state(
+    json_path: Path,
+    html_path: Path,
+    markdown_path: Path,
+    *,
+    allow_legacy_json_markdown: bool,
+) -> DocumentWriteResult:
     existing = (json_path.exists(), html_path.exists(), markdown_path.exists())
     if existing == (False, False, False):
         return DocumentWriteResult.CREATED
     if existing == (False, False, True):
+        return DocumentWriteResult.MIGRATED
+    if allow_legacy_json_markdown and existing == (True, False, True):
         return DocumentWriteResult.MIGRATED
     if existing == (True, True, False):
         return DocumentWriteResult.UPDATED

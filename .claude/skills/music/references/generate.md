@@ -293,7 +293,7 @@ DL が止まる・形式が違う・`workflow-state.json` へ反映されない�
 
 ## 成果物
 
-- `書き込む`: `collections/<id>/20-documentation/lyria-prompt.md`, `collections/<id>/01-master/master.mp3`, `collections/<id>/workflow-state.json`
+- `書き込む`: `collections/<id>/20-documentation/lyria-prompt.json`, `collections/<id>/20-documentation/lyria-prompt.html`, `collections/<id>/01-master/master.mp3`, `collections/<id>/workflow-state.json`
 - `読み込む`: `config/skills/lyria.yaml`, `config/channel/audio.json`, `config/channel/youtube.json`
 
 ## Overview
@@ -474,7 +474,7 @@ celtic folk only, clean dry recording, no pads, gentle melodic phrases rising an
 
 ## Step 3: 設定の書き出しとユーザー確認
 
-1. 設計したプロンプトと API 入力パラメータを `20-documentation/lyria-prompt.md` に書き出す:
+1. 設計したプロンプトと API 入力パラメータを `music-prompt.schema.json` 準拠の未公開candidateに書き出す。`style` に最終prompt、`options` に model / reference_image / bpm / intensity / mode / duration / segment count、`track_role`、review結果、provenanceを保存する:
    - ヘッダー（Engine, Channel, Model）
    - 最終プロンプト本文
    - API 入力パラメータ（`reference_image` / `bpm` / `intensity` / `mode`）
@@ -484,12 +484,12 @@ celtic folk only, clean dry recording, no pads, gentle melodic phrases rising an
 
 2. deep-merge 後の `skip_generation_approval` で分岐する:
    - `false`（既定）: ユーザーにプロンプト・パラメータの確認を求める。Claude Code では AskUserQuestion で「この内容で生成する」「修正する」の明示 2 択を出す。AskUserQuestion 非対応環境（Codex 等）では同じ情報をテキストで提示し、明示承認まで Step 4 を実行しない
-   - `true`: `lyria-prompt.md` の保存成功を確認し、同文書のプロンプト・パラメータで確認なしに Step 4 へ進む。60 セグメント hard cap と warning は省略しない
-3. `skip_generation_approval: false` で修正があれば `lyria-prompt.md` を編集して再確認
+   - `true`: candidate保存と機械verify・semantic reviewを確認し、`music-prompt-documents.md` のwriterで `lyria-prompt.json` / `.html` を公開してから、同じ検証済みJSONのプロンプト・パラメータで確認なしに Step 4 へ進む。60 セグメント hard cap と warning は省略しない
+3. `skip_generation_approval: false` で修正があればcandidateを編集し、機械verify→semantic review→pair公開を再実行する。Markdown/HTMLを入力にしない
 
 ## Step 4: 音楽生成 + マスター結合
 
-ユーザー承認後、または `skip_generation_approval: true` で生成条件の保存を確認後、`yt-generate-lyria-master` CLI を呼ぶ。CLI が以下を一気通貫で実行する:
+ユーザー承認後、または `skip_generation_approval: true` で検証済み `lyria-prompt.json` / `.html` pairを確認後、JSONの `style` / `options` だけを `yt-generate-lyria-master` CLIへ渡す。MarkdownやHTMLをparseしない。CLI が以下を一気通貫で実行する:
 
 1. `audio.target_duration_min` + skill-config `duration_padding_min` から必要セグメント数 N を自動算出（`ceil((target + padding) * 60 / 184)`）。上限は 60 セグメント（= Lyria API リクエスト数の hard cap）で、超過時は 60 に clamp して warning を stderr に出力する
 2. `lyria_client.generate_music()` を N 回呼び、レスポンスを `02-Individual-music/{NN}_{name}.wav` に PCM s16le 48 kHz stereo で保存（既存ファイルは skip = resume 可能）
@@ -498,27 +498,19 @@ celtic folk only, clean dry recording, no pads, gentle melodic phrases rising an
 
 ```bash
 uv run yt-generate-lyria-master \
-  --prompt "celtic folk only, clean dry recording, no pads, gentle melodic phrases rising and falling, solo fingerpicked acoustic guitar" \
-  --name rain-against-glass \
-  --bpm 72 \
-  --intensity low \
-  --mode instrumental \
-  --reference-image 10-assets/main.png
+  --prompt-document 20-documentation/lyria-prompt.json \
+  --collection <collection-path>
 ```
 
 主要フラグ:
 
 | フラグ | 用途 |
 |------|------|
-| `--prompt` (必須) | Step 2 で設計したプロンプト本文 |
-| `--name` (必須) | セグメントファイル名スラグ。`02-Individual-music/01_<name>.wav` 〜 `NN_<name>.wav` |
-| `--bpm` / `--intensity` / `--mode` / `--lyrics` | `generate_music()` にそのまま転送 |
-| `--reference-image` | コレクション相対 or 絶対パス。例: `10-assets/main.png` |
-| `--target-duration MIN` | 目標尺を CLI で上書き（省略時は `config/channel/audio.json` の `audio.target_duration_min`） |
-| `--padding-min MIN` | 余裕分を CLI で上書き（省略時は skill-config `duration_padding_min`） |
-| `--model` | Lyria モデル名（省略時は skill-config `model`） |
+| `--prompt-document` (必須) | 同 basename HTMLと対応する検証済み `lyria-prompt.json`。prompt/name/optionsをここから読む |
 | `--max-retries N` | 1 セグメントあたりの失敗時リトライ回数（default: 3） |
 | `--collection PATH` | コレクションディレクトリ（省略時は CWD） |
+
+低水準の互換入口 `--prompt` / `--name` と個別option flagは既存呼出しのため残るが、skillの正規経路では使わない。新規実行は必ず `--prompt-document` を使い、JSONとCLI flagの二重正本を作らない。
 
 > **認証**: Vertex AI は ADC を使う。project ID は ADC quota project（必要時のみ `GOOGLE_CLOUD_PROJECT` process env override）、location は Lyria 用にアプリが決定する。
 

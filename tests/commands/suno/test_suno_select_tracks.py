@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from tests.helpers.music_prompt import write_suno_prompt_pair
 from youtube_automation.commands.suno import suno_select_tracks
 from youtube_automation.core.errors import ValidationError
 from youtube_automation.domains.suno import selection as suno_track_selection
@@ -17,10 +18,9 @@ def _make_collection(tmp_path: Path, prompts: object) -> Path:
     (collection / "20-documentation").mkdir(parents=True)
     (collection / "02-Individual-music").mkdir()
     (collection / "01-master").mkdir()
-    (collection / "20-documentation" / "suno-prompts.json").write_text(
-        json.dumps(prompts),
-        encoding="utf-8",
-    )
+    entries = prompts.get("entries", []) if isinstance(prompts, dict) else prompts
+    duration_filter = prompts.get("duration_filter") if isinstance(prompts, dict) else None
+    write_suno_prompt_pair(collection / "20-documentation", entries, duration_filter=duration_filter)
     return collection
 
 

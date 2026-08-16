@@ -10,6 +10,7 @@ from pathlib import Path
 
 import yaml
 
+from tests.helpers.music_prompt import write_suno_prompt_pair
 from tests.helpers.paths import REPO_ROOT
 from youtube_automation.commands.system.skills_sync import _migrate_config
 from youtube_automation.configuration import skills as skill_config
@@ -34,8 +35,7 @@ def _write_channel(tmp_path: Path, *, music_engine: str, genre_line: str, mode: 
     documentation = collection / "20-documentation"
     documentation.mkdir(parents=True)
     (documentation / "suno-patterns.yaml").write_text(yaml.safe_dump({"mode": mode}), encoding="utf-8")
-    (documentation / "suno-prompts.md").write_text("# Prompts\n", encoding="utf-8")
-    (documentation / "suno-prompts.json").write_text("[]\n", encoding="utf-8")
+    write_suno_prompt_pair(documentation, [{"name": "fixture"}])
     return collection
 
 

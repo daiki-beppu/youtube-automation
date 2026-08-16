@@ -23,7 +23,7 @@ EXIT_BLOCKED = 20
 
 _PROMPT_OUTPUTS = (
     Path("20-documentation/suno-patterns.yaml"),
-    Path("20-documentation/suno-prompts.md"),
+    Path("20-documentation/suno-prompts.html"),
     Path("20-documentation/suno-prompts.json"),
 )
 _LYRIC_OUTPUTS = (

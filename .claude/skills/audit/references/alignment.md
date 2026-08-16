@@ -36,7 +36,7 @@ Phase 3 の整合性マトリクスと Phase 4 の改善候補を `audit-report.
 - `collections/live/` の全コレクションを列挙
 - 各コレクションから以下を読み込む:
   - `workflow-state.json` — タイトル、テーマ、活動タグ。`planning.music`（mood / atmosphere / tempo / instruments）があれば優先採用
-  - `20-documentation/suno-prompts.md` or `lyria-prompt.md` — 音楽ムード・楽器・テンポの補助資料
+  - 対応HTMLを持つ検証済み `20-documentation/suno-prompts.json` or `lyria-prompt.json` — `entries[].style/options` の音楽ムード・楽器・テンポ。HTML/Markdownはparseしない
 - コレクションごとの [タイトル / 音楽ムード / テーマ] を一覧表にまとめる
 
 **Agent 2: ベンチマークタイトル構造分析**

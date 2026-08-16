@@ -56,7 +56,7 @@ Complete Collection 形式（情景フック＋タイムスタンプ＋Perfect f
 $ARGUMENTS
 ```
 
-対象コレクションの `workflow-state.json` と `20-documentation/suno-prompts.md` を読み込み、コレクションのテーマ・雰囲気を把握してから概要欄を生成してください。
+対象コレクションの `workflow-state.json` と、対応HTMLを持つ検証済み `20-documentation/suno-prompts.json` を共通reader経由で読み込み、コレクションのテーマ・雰囲気を把握してから概要欄を生成してください。HTMLやlegacy Markdownはparseしません。
 
 ### Benchmark 概要欄 TTP（徹底的にパクる）
 
@@ -89,7 +89,7 @@ $ARGUMENTS
 - ベンチマーク先の文章をそのままコピペする（構造を転写し、文言はコレクションの世界観に合わせて書き直す）
 - 抽象的な説明だけで具体的情景がない冒頭（Flow365 top 動画は各回で異なる具体的シーンから書き出している）
 
-冒頭フックは `workflow-state.json` の `planning.music.atmosphere` と `suno-prompts.md` のシーン描写を素材にし、コレクション固有の情景を毎回ゼロから書く。
+冒頭フックは `workflow-state.json` の `planning.music.atmosphere` と検証済み `suno-prompts.json::entries[].style` のシーン描写を素材にし、コレクション固有の情景を毎回ゼロから書く。
 
 ### Complete Collection テンプレート
 
@@ -122,7 +122,7 @@ $ARGUMENTS
    - 戻り値が空ならこの手順をスキップ
    - 重複があれば、本 skill を実行している LLM 自身が以下の情報を読み、コレクションのテーマ・シーン展開（時系列／空間／情緒のいずれか）を把握してから固有名に書き換える:
      - `workflow-state.json` の `planning.music.patterns[<letter>]`（pattern ごとの mood / instruments / tempo 等）
-     - `20-documentation/suno-prompts.md`（pattern 別の Style / Lyrics 文脈）
+     - 検証済み `20-documentation/suno-prompts.json`（pattern 別の Style / Lyrics 文脈）
      - 当該トラックの `pattern_key`（テーマ群が同じか別か判定）
    - 命名方針:
      - 元曲名のコア語彙は保つ（同一テーマ群であることを視聴者に示すため）

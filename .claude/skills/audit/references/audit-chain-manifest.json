@@ -7,7 +7,7 @@
       "prerequisiteArtifacts": [
         "collections/live/*/workflow-state.json",
         "collections/live/*/10-assets/thumbnail.jpg",
-        "collections/live/*/20-documentation/suno-prompts.md|lyria-prompt.md"
+        "collections/live/*/20-documentation/suno-prompts.json|lyria-prompt.json"
       ],
       "outputArtifacts": ["docs/plans/alignment-audit.json", "docs/plans/alignment-audit.html"],
       "approvalGate": {

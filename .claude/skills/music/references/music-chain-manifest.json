@@ -7,7 +7,7 @@
       "prerequisiteArtifacts": [],
       "outputArtifacts": [
         "20-documentation/suno-patterns.yaml",
-        "20-documentation/suno-prompts.md",
+        "20-documentation/suno-prompts.html",
         "20-documentation/suno-prompts.json"
       ],
       "approvalGate": {
@@ -23,7 +23,7 @@
       "skill": "music",
       "prerequisiteArtifacts": [
         "20-documentation/suno-patterns.yaml",
-        "20-documentation/suno-prompts.md",
+        "20-documentation/suno-prompts.html",
         "20-documentation/suno-prompts.json"
       ],
       "outputArtifacts": [
@@ -43,7 +43,7 @@
       "skill": "music",
       "prerequisiteArtifacts": [
         "20-documentation/suno-patterns.yaml",
-        "20-documentation/suno-prompts.md",
+        "20-documentation/suno-prompts.html",
         "20-documentation/suno-prompts.json"
       ],
       "outputArtifacts": [

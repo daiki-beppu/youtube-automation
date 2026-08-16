@@ -57,7 +57,7 @@ def test_alignment_mode_keeps_the_audit_inputs_and_external_read_only_boundary()
     assert "docs/plans/alignment-audit.{json,html}" in skill
     for input_path in (
         "collections/<id>/10-assets/thumbnail.jpg",
-        "collections/<id>/20-documentation/suno-prompts.md",
+        "collections/<id>/20-documentation/suno-prompts.json",
         "collections/<id>/workflow-state.json",
     ):
         assert input_path in skill

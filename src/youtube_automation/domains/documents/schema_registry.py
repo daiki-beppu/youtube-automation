@@ -28,6 +28,7 @@ class RepositorySchema(str, Enum):
     EXPERIMENT_ENTRY = "experiment-entry.schema.json"
     FEEDBACK_ENTRY = "feedback-entry.schema.json"
     INSIGHTS_ENTRY = "insights-entry.schema.json"
+    MUSIC_PROMPT = "music-prompt.schema.json"
     WEEKLY_VOTE_LOG = "weekly_vote_log.schema.json"
 
 
@@ -44,6 +45,7 @@ _SKILL_RESOURCES = {
     RepositorySchema.EXPERIMENT_ENTRY: ("analytics", "references", "experiment-entry.schema.json"),
     RepositorySchema.FEEDBACK_ENTRY: ("skill-feedback", "references", "feedback-entry.schema.json"),
     RepositorySchema.INSIGHTS_ENTRY: ("analytics", "references", "insights-entry.schema.json"),
+    RepositorySchema.MUSIC_PROMPT: ("music", "references", "music-prompt.schema.json"),
 }
 _SOURCE_SKILLS = Path(__file__).resolve().parents[4] / ".claude" / "skills"
 

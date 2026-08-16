@@ -33,6 +33,8 @@ import math
 import subprocess
 import sys
 import time
+from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
@@ -40,6 +42,8 @@ from youtube_automation.commands.media import generate_master
 from youtube_automation.configuration import load_config
 from youtube_automation.configuration.skills import load_skill_config
 from youtube_automation.core.errors import ConfigError, ValidationError
+from youtube_automation.domains.documents.published import read_published_json_document
+from youtube_automation.domains.documents.schema_registry import RepositorySchema
 from youtube_automation.domains.media.audio_units import unit_for_audio
 from youtube_automation.infrastructure import cost_tracker
 from youtube_automation.infrastructure.media import lyria_client
@@ -68,6 +72,58 @@ _KEY_DURATION_PADDING_MIN = "duration_padding_min"
 _KEY_MODEL = "model"
 _KEY_CROSSFADE_DURATION = "crossfade_duration"
 _KEY_BITRATE = "bitrate"
+
+
+@dataclass(frozen=True)
+class _LyriaPromptInput:
+    prompt: str
+    name: str
+    model: str | None
+    target_duration: float | None
+    padding_min: float | None
+    bpm: int | None
+    intensity: str | None
+    mode: str | None
+    reference_image: str | None
+    lyrics: str | None
+
+
+def _load_lyria_prompt_input(path: Path) -> _LyriaPromptInput:
+    """検証済み Lyria JSON+HTML pair を API 引数へ投影する。"""
+    document = read_published_json_document(path, RepositorySchema.MUSIC_PROMPT)
+    if not isinstance(document, Mapping) or document.get("engine") != "lyria":
+        raise ValidationError("Lyria prompt document の engine は lyria である必要があります")
+    entries = document.get("entries")
+    if not isinstance(entries, list) or len(entries) != 1 or not isinstance(entries[0], Mapping):
+        raise ValidationError("Lyria prompt document は entry を1件だけ必要とします")
+    entry = entries[0]
+    options = entry.get("options")
+    if not isinstance(options, Mapping):
+        raise ValidationError("Lyria prompt document の options は object である必要があります")
+
+    def optional(key: str, expected: type):
+        value = options.get(key)
+        if value is not None and not isinstance(value, expected):
+            raise ValidationError(f"Lyria prompt document options.{key} の型が不正です")
+        return value
+
+    prompt = entry.get("style")
+    name = entry.get("name")
+    lyrics = entry.get("lyrics")
+    if not isinstance(prompt, str) or not isinstance(name, str) or not isinstance(lyrics, str):
+        raise ValidationError("Lyria prompt document の name / style / lyrics が不正です")
+    return _LyriaPromptInput(
+        prompt=prompt,
+        name=name,
+        model=optional("model", str),
+        target_duration=optional("target_duration_min", int | float),
+        padding_min=optional("duration_padding_min", int | float),
+        bpm=optional("bpm", int),
+        intensity=optional("intensity", str),
+        mode=optional("mode", str),
+        reference_image=optional("reference_image", str),
+        lyrics=lyrics or None,
+    )
 
 
 def _resolve_segment_count(target_min: float, padding_min: float) -> int:
@@ -228,10 +284,12 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Lyria 3 で N セグメント生成 → クロスフェード結合してマスター音源を作る",
     )
-    parser.add_argument("--prompt", required=True, help="Lyria 3 に渡すプロンプト本文 (必須)")
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument("--prompt", help="legacy: Lyria 3 に渡すプロンプト本文")
+    source.add_argument("--prompt-document", type=Path, help="検証済み lyria-prompt.json")
     parser.add_argument(
         "--name",
-        required=True,
+        required=False,
         help="セグメントファイル名スラグ (例: rain-against-glass → 02-Individual-music/01_rain-against-glass.wav)",
     )
     parser.add_argument(
@@ -351,14 +409,42 @@ def main() -> int:
         music_dir = paths.music_dir
         music_dir.mkdir(parents=True, exist_ok=True)
 
+        prompt = args.prompt
+        name = args.name
+        model_arg = args.model
+        target_duration_arg = args.target_duration
+        padding_min_arg = args.padding_min
+        bpm = args.bpm
+        intensity = args.intensity
+        mode = args.mode
+        reference_image_arg = args.reference_image
+        lyrics = args.lyrics
+        if args.prompt_document is not None:
+            document_path = args.prompt_document
+            if not document_path.is_absolute():
+                document_path = collection_dir / document_path
+            prompt_input = _load_lyria_prompt_input(document_path)
+            prompt = prompt_input.prompt
+            name = prompt_input.name
+            model_arg = prompt_input.model
+            target_duration_arg = prompt_input.target_duration
+            padding_min_arg = prompt_input.padding_min
+            bpm = prompt_input.bpm
+            intensity = prompt_input.intensity
+            mode = prompt_input.mode
+            reference_image_arg = prompt_input.reference_image
+            lyrics = prompt_input.lyrics
+        if not prompt or not name:
+            raise ValidationError("legacy --prompt では --name も指定してください")
+
         lyria_cfg = load_skill_config(_SKILL_LYRIA)
         masterup_cfg = load_skill_config(_SKILL_MASTERUP).get("audio", {})
 
-        target_min = _resolve_target_duration(args.target_duration)
-        padding_min = _resolve_padding_min(args.padding_min, lyria_cfg)
+        target_min = _resolve_target_duration(target_duration_arg)
+        padding_min = _resolve_padding_min(padding_min_arg, lyria_cfg)
         n = _resolve_segment_count(target_min, padding_min)
-        model = _resolve_model(args.model, lyria_cfg)
-        reference_image = _resolve_reference_image(args.reference_image, collection_dir)
+        model = _resolve_model(model_arg, lyria_cfg)
+        reference_image = _resolve_reference_image(reference_image_arg, collection_dir)
 
         crossfade, bitrate = _resolve_masterup_audio(masterup_cfg)
 
@@ -370,28 +456,28 @@ def main() -> int:
             f"  Segments   : {n}  (target {target_min:g}min + padding {padding_min:g}min @ {_LYRIA_SEGMENT_SEC}s/seg)"
         )
         print(f"  Model      : {model}")
-        if args.bpm is not None:
-            print(f"  BPM        : {args.bpm}")
-        if args.intensity:
-            print(f"  Intensity  : {args.intensity}")
-        if args.mode:
-            print(f"  Mode       : {args.mode}")
+        if bpm is not None:
+            print(f"  BPM        : {bpm}")
+        if intensity:
+            print(f"  Intensity  : {intensity}")
+        if mode:
+            print(f"  Mode       : {mode}")
         if reference_image is not None:
             print(f"  Reference  : {reference_image}")
         print()
 
         for i in range(1, n + 1):
-            seg_path = _segment_path(music_dir, i, args.name)
+            seg_path = _segment_path(music_dir, i, name)
             ok = _generate_one_segment(
                 index=i,
                 seg_path=seg_path,
-                prompt=args.prompt,
+                prompt=prompt,
                 model=model,
                 reference_image=reference_image,
-                bpm=args.bpm,
-                intensity=args.intensity,
-                mode=args.mode,
-                lyrics=args.lyrics,
+                bpm=bpm,
+                intensity=intensity,
+                mode=mode,
+                lyrics=lyrics,
                 max_retries=args.max_retries,
             )
             if not ok:

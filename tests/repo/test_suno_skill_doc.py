@@ -199,7 +199,7 @@ def test_skill_md_documents_manual_fallback() -> None:
     assert match, "SKILL.md に `### Step 3 の fallback` 節が見つからない"
     fallback_section = match.group(0)
     assert "手コピペ" in fallback_section, "fallback 節に手コピペ手順の記載がない"
-    assert "suno-prompts.md" in fallback_section, "fallback 節が手動投入元 `suno-prompts.md` を参照していない"
+    assert "suno-prompts.html" in fallback_section, "fallback 節が承認表示 `suno-prompts.html` を参照していない"
 
 
 def test_skill_md_documents_tracks_per_collection_for_instrumental() -> None:
@@ -536,14 +536,14 @@ def test_suno_blocks_step_3_until_semantic_review_passes() -> None:
     """Issue #1485: /music --prompt は semantic review 全 PASS 後だけ Suno UI 投入へ進む。"""
     text = _read()
     step_2_match = re.search(
-        r"### Step 2: スクリプトで suno-prompts\.md を生成\b.*?(?=^### Step 3:)",
+        r"### Step 2: スクリプトで未公開candidateを生成\b.*?(?=^### Step 3:)",
         text,
         flags=re.DOTALL | re.MULTILINE,
     )
     assert step_2_match, "SKILL.md に `/music --prompt` Step 2 節が見つからない"
     step_2 = step_2_match.group(0)
 
-    for token in ("全 entry が `PASS` した後にだけ Suno UI へ投入する", "Step 3 へ進まず"):
+    for token in ("全 entry が `PASS` した後", "その後だけ Suno UI へ投入する", "公開せず"):
         assert token in step_2, f"/music --prompt Step 2 に semantic review gate 契約がない（`{token}` 不在）"
 
     _assert_before(step_2, "LLM semantic review", "Suno UI へ投入する")
@@ -553,7 +553,7 @@ def test_suno_documents_workflow_state_writer_boundary() -> None:
     """Issue #2559: CLI/subagent ではなく呼び出し元のメインが検証後に state を更新する."""
     text = _read()
     step_2_match = re.search(
-        r"### Step 2: スクリプトで suno-prompts\.md を生成\b.*?(?=^### Step 3:)",
+        r"### Step 2: スクリプトで未公開candidateを生成\b.*?(?=^### Step 3:)",
         text,
         flags=re.DOTALL | re.MULTILINE,
     )
@@ -562,9 +562,7 @@ def test_suno_documents_workflow_state_writer_boundary() -> None:
 
     for token in (
         "`yt-generate-suno` 自体は `workflow-state.json` を更新しない",
-        "`/music --prompt` を呼び出したメインエージェント",
-        "`/wf-new` / `/wf-next` からの呼び出し",
-        "`/music --prompt` の直接実行",
+        "共通writer",
         "`yt-suno-verify` の成功",
         "semantic review の全 entry `PASS`",
         "`assets.music_prompts = true`",
@@ -617,10 +615,10 @@ def test_review_rubric_scopes_suno_to_existing_prompt_fields() -> None:
     """Issue #1485: /music --prompt rubric は suno-prompts.json に実在する field だけで判定する。"""
     text = _read(REVIEW_RUBRIC_MD)
     for token in (
-        "`/music --prompt` の `suno-prompts.json` は既存 consumer 互換",
-        "`name`, `style`, `lyrics`",
+        "`/music --prompt` の `suno-prompts.json` entry",
+        "`name`, `style`, `lyrics`, `options`, `track_role`, `review`",
         "More Options",
-        "`/music --prompt` entry に `review_context` は要求しない",
+        "`review_context` は要求せず",
         "`review_context` 欠落だけを理由に `FAIL` しない",
         "`/music --prompt` `PASS`",
     ):
