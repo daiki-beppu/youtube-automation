@@ -57,6 +57,18 @@ def test_default_all_assets_include_auth_template_target() -> None:
     all_targets = {spec["default_target"] for spec in _ASSET_SPECS.values()}
     assert "auth/client_secrets.template.json" in all_targets
     assert ".claude/settings.json" in all_targets
+    assert ".gitignore" in all_targets
+
+
+def test_channel_gitignore_asset_is_packaged_with_state_git_policy() -> None:
+    from youtube_automation.commands.system.skills_sync import _ASSET_SPECS, _asset_root
+
+    spec = _ASSET_SPECS["channel-gitignore"]
+    template = _asset_root("channel-gitignore") / spec["source_filename"]
+    text = template.read_text(encoding="utf-8")
+    assert spec["default_target"] == ".gitignore"
+    assert "# yt-state-git control plane (ADR-0024)" in text
+    assert "auth/token*.json" in text
 
 
 def test_auth_template_is_included_in_wheel_and_sdist_manifests() -> None:

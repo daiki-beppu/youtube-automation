@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `feat(hybrid)`: versioned 受け渡し manifest を completion marker として追加し、正準 file list・root checksum・manifest-last push・listing 非依存 pull・既存local成果物のrollbackをfail-closedに固定する（#4045）。
 - `feat(hybrid)`: 工程境界専用の `MediaStore` port と checksum 検証付き Local / Cloudflare R2 adapterを追加し、bucket・prefix・path・symlink 境界と secret 解決を fail-closed に固定する（#4044）。
 - `feat(thumbnail)`: `/thumbnail --loop` の既存 engine 選択へ MiniMax H3 を追加し、検証・再開・課金記録を備えた `--engine h3` 経路を提供する（#4122）。
+- `feat(hybrid)`: `workflow-state.json` と upload / post-publish / pinned-comment tracking を下流Git管理対象にし、新規channel/sync用 `.gitignore` と、既存channelをsecret・symlink・作業ツリー状態のfail-closed検査付きで明示移行する `yt-skills migrate-state-git` を追加する（#4049）。
 - `refactor(workflow-state)`: 旧 top-level `video_id` fallback と typed accessor を削除し、公開済み動画の正準 read を `upload.video_id` に限定する（#3893）。
 - `refactor(workflow-state)`: writer のない `assets.video` typed accessor を削除し、動画化進捗を正準の `assets.master_video` だけで判定する（#3892）。
 - `feat(documents)`: 生成運用成果物の owner・schema・consumer inventory を正本化し、`yt-skills lint` で Markdown writer、JSON/HTML pair 欠落、orphan、未検証 consumer、stale allowlist を具体 path 付きで拒否する（#4031）。

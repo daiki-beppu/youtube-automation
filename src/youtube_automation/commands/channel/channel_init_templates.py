@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from youtube_automation.infrastructure.auth.client_secrets import template_bytes
+from youtube_automation.infrastructure.vcs.state_git import channel_gitignore_template
 
 CONFIG_DIR = Path("config")
 CONFIG_SUBDIR = CONFIG_DIR / "channel"
@@ -221,23 +222,7 @@ def _yaml_scalar(value: str) -> str:
 
 
 def _render_gitignore(_ctx: ChannelInitContext) -> str:
-    return "\n".join(
-        [
-            "# Local environment",
-            ".env",
-            ".direnv/",
-            ".venv/",
-            "",
-            "# Python",
-            "__pycache__/",
-            "*.pyc",
-            "",
-            "# OAuth credentials",
-            "auth/client_secrets.json",
-            "auth/token*.json",
-            "",
-        ]
-    )
+    return channel_gitignore_template()
 
 
 def _canonical_auth_template(_ctx: ChannelInitContext) -> str:

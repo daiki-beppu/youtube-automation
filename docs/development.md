@@ -31,6 +31,8 @@ uv run yt-skills list                                # 同梱スキル一覧
 uv run yt-skills list --asset claude-md              # 同梱 CLAUDE.md テンプレ一覧
 uv run yt-skills diff                                # 同梱版と target の差分確認
 uv run yt-skills diff --asset claude-md              # CLAUDE.md テンプレの差分確認
+uv run yt-skills migrate-state-git --channel-dir <path> --dry-run  # 既存channelの制御面Git移行を確認
+uv run yt-skills migrate-state-git --channel-dir <path> --check    # 制御面JSONがcommit済みか検査
 ```
 
 ## テスト実行（pytest-xdist による並列化）
