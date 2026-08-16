@@ -180,6 +180,29 @@ def test_typed_asset_and_planning_updates_preserve_unknown_fields(
     assert state["unknown"] == {"keep": True}
 
 
+def test_set_planning_music_writes_canonical_engine_and_removes_legacy_key(tmp_path: Path) -> None:
+    collection = _collection(
+        tmp_path,
+        {
+            "music_engine": "suno",
+            "planning": {"future": "keep"},
+            "unknown": {"keep": True},
+        },
+    )
+
+    assert (
+        workflow_state_cli.main(
+            ["--collection", str(collection), "set-planning", "music", '{"engine":"lyria","mood":["mellow"]}']
+        )
+        == 0
+    )
+
+    state = _read_state(collection)
+    assert state["planning"] == {"future": "keep", "music": {"engine": "lyria", "mood": ["mellow"]}}
+    assert "music_engine" not in state
+    assert state["unknown"] == {"keep": True}
+
+
 @pytest.mark.parametrize(
     "command",
     [

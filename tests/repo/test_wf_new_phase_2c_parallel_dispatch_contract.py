@@ -44,7 +44,7 @@ def test_phase_2c_freezes_shared_inputs_before_one_exactly_two_call_dispatch() -
         "対象 collection の絶対 path",
         "確定企画",
         "theme",
-        "music_engine",
+        "planning.music.engine",
         "auto-selection",
         "textless",
     )

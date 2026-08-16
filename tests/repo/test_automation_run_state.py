@@ -32,7 +32,6 @@ def _write_collection(root: Path, name: str, created_at: str, *, phase: str = "p
                 "created_at": created_at,
                 "phase": phase,
                 "stage": "planning",
-                "music_engine": "lyria",
                 "assets": {"raw_master": None},
                 "upload": {"video_id": None},
                 "planning": {"music": {"engine": "lyria"}},

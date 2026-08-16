@@ -159,7 +159,7 @@ uv run yt-init-collection "Pilot Direction Check" "pilot-direction-check" --trac
 1. コマンド出力の `collections/planning/YYYYMMDD-<short>-pilot-direction-check-collection/` を控える。
 2. `/thumbnail pilot-direction-check` を実行し、`10-assets/main.png` / `10-assets/main.jpg` と `10-assets/thumbnail.jpg` で色味・構図を確認する。
 3. `/thumbnail --compare` を実行し、ベンチマーク競合との 320px 表示を確認する。現行の `yt-thumbnail-compare` は `collections/live/*/10-assets/thumbnail.jpg` を収集するため、仮コレクションの `thumbnail.jpg` を比較へ含める場合は一時的に `collections/live/_pilot-thumbnail-compare/10-assets/thumbnail.jpg` へコピーし、比較後に `collections/live/_pilot-thumbnail-compare/` を削除する。
-4. `workflow-state.json::music_engine` が `suno` なら `/music --prompt pilot-direction-check` でプロンプトを生成し、続けて `/music --generate` で Suno UI へ投入・音源生成して試聴する。`lyria` / `minimax` なら `/music --generate pilot-direction-check` を実行して生成音源を試聴し、ムード・テンポを確認する。
+4. `workflow-state.json::planning.music.engine` が `suno` なら `/music --prompt pilot-direction-check` でプロンプトを生成し、続けて `/music --generate` で Suno UI へ投入・音源生成して試聴する。`lyria` / `minimax` なら `/music --generate pilot-direction-check` を実行して生成音源を試聴し、ムード・テンポを確認する。
 5. NG の場合は試作物を破棄し、サムネは `config/skills/thumbnail.yaml` の `image_generation.gemini.reference_images.default` / `composition_rules.*` / `diff_prompt_template`、Suno は `config/skills/music.yaml::prompt` の `genre_line` / `exclude_styles` / `style_influence` / `style_variation.*`、Lyria は `config/skills/lyria.yaml` の `prompt_prefix` / `style_hints` / `default_bpm` / `default_intensity` を調整して再試作する。
 6. OK の場合は、仮コレクションを削除して `/wf-new` を再実行する。仮コレクションを本制作へ昇格する場合は削除せず、既存 `collections/planning/` の続きとして `/wf-next` を使う。
 

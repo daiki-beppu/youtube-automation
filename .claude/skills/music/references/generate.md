@@ -367,7 +367,7 @@ subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実�
 
 1. **チャンネルのデフォルト** — `/channel-strategy --direction`（方向性検討モード）で `suno` / `lyria` / `minimax` を検討 → `/setup --regenerate` が `config/channel/youtube.json` の `music_engine` に書き込む
 2. **コレクション単位の上書き** — `/wf-new` の `yt-init-collection --music-engine lyria` でコレクション毎に上書き可能（省略時はチャンネル設定を継承）
-3. **このスキルが呼ばれるとき** — `/wf-new` が `workflow-state.json` の `music_engine = "lyria"` を判定して `/music --generate` を自動実行する。手動で `/music --generate <theme>` を叩いた場合もこのスキルに入る
+3. **このスキルが呼ばれるとき** — `/wf-new` が `workflow-state.json` の `planning.music.engine = "lyria"` を判定して `/music --generate` を自動実行する。手動で `/music --generate <theme>` を叩いた場合もこのスキルに入る
 
 ## Quick Reference
 

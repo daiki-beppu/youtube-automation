@@ -41,8 +41,7 @@ def build_state(collection_name: str, theme: str, track_count: int, selected_pla
         "phase": "planning",
         "selected_plan": selected_plan,
         "track_count": track_count,
-        "music_engine": music_engine,
-        "planning": {},
+        "planning": {"music": {"engine": music_engine}},
         "assets": {
             "thumbnail": False,
             "loop_video": False,

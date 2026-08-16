@@ -32,7 +32,6 @@ Phase 3: 公開             /wf-next    動画→概要欄→アップロード�
   "phase": "planning | prepared | mastered | publishing | complete",
   "selected_plan": "A | B | C | D | E",
   "track_count": 12,
-  "music_engine": "suno | lyria | minimax",
   "planning": {
     "activities": "Working",
     "target_persona": "deep-work listener",
@@ -183,6 +182,8 @@ Phase 3: 公開             /wf-next    動画→概要欄→アップロード�
 
 `thumbnail.approved` と `description.generated` は既存 state の読み取り専用互換 field であり、workflow-state owner の `thumbnail_approved` / `description_generated` accessor だけが解釈する。新規 write はそれぞれ `assets.thumbnail` / `assets.description` だけを更新し、互換 field を出力しない。
 
+top-level `music_engine` は既存 state の読み取り専用互換 field であり、workflow-state owner の `music_engine` accessor だけが解釈する。`planning.music.engine` と併存する場合は値の一致を必須とし、不一致なら停止する。新規 write は `planning.music.engine` だけを更新し、互換 field を出力しない。
+
 #### wf-new --auto の判定責務
 
 `/wf-new --auto` は active collection が無ければ state を事前作成せず `/wf-new` へ委譲し、初期化後は返された collection を固定する。active collection があれば本 state と実成果物を一段ごとに再評価し、Lyria / Suno / masterup / 制作 / 公開 / publish の委譲先を選ぶ。統合 runner 自身は本ファイルを更新せず、各既存 skill の検証済み更新契約を使う。`workflow.scheduled_automation.allow_external_publish` が `false` の場合はローカル動画・metadata 生成後、YouTube 書き込み前で停止する。`.automation-run/history.json` は停止理由と再開地点の監査記録であり、本 state や成果物の代替 source of truth ではない。
@@ -226,7 +227,7 @@ Phase 3: 公開             /wf-next    動画→概要欄→アップロード�
 
 ### planning フィールド詳細
 
-`planning` は各企画フェーズスキルが populate する正規化メタデータ。`init_collection.py` は空オブジェクト `{}` で初期化する。
+`planning` は各企画フェーズスキルが populate する正規化メタデータ。`init_collection.py` は正準の音楽エンジンを `{"music": {"engine": "..."}}` に初期化する。
 
 #### planning.music
 
@@ -234,7 +235,7 @@ Phase 3: 公開             /wf-next    動画→概要欄→アップロード�
 
 | フィールド | 型 | 必須 | 説明 |
 |-----------|-----|---|------|
-| `planning.music.engine` | `"suno" \| "lyria" \| "minimax"` | Yes | 音楽エンジン（top-level `music_engine` と一致）|
+| `planning.music.engine` | `"suno" \| "lyria" \| "minimax"` | Yes | 音楽エンジンの正準キー |
 | `planning.music.mood` | string[] | Yes | 感情語 1-3 個（例: `["mellow", "introspective"]`）|
 | `planning.music.atmosphere` | string | Yes | コレクション全体の世界観 1 文（英語）|
 | `planning.music.tempo` | string | Yes | `"very slow"` / `"slow"` / `"gentle"` / `"moderate"` / `"lively"` のいずれか |
