@@ -325,6 +325,7 @@ MUTABLE_FILES = frozenset(
     "wf-new/references/schedule.md",
     "wf-new/references/detect_runtime.sh",
     "wf-new/references/run_scheduled.sh",
+    "wf-new/references/run-sandwich.sh",
     "wf-new/references/schedule_backend.py",
     "wf-new/references/schedule_config.py",
     "wf-new/references/scheduler_job.sh",

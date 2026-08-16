@@ -45,8 +45,26 @@ Claude Code `/loop` は最長 3 日の一時反復専用で、永続スケジュ
 | `references/schedule_backend.py` | 4 backend の plan、重複防止、外部 ID のローカル記録 |
 | `references/scheduler_job.sh` | 明示選択された OS fallback 専用の install / status / disable |
 | `references/run_scheduled.sh` | OS fallback 専用ラッパー。外部公開ゲート・lock・retry・通知を維持 |
+| `references/run-sandwich.sh` | 基盤非依存の clone → manifest pull → agent/既存CLI → manifest push + state commit runner |
 
 設定スキーマの正は `src/youtube_automation/configuration/workflow.py::ScheduledAutomation`。
+
+### サンドイッチ runner
+
+cloud / local とも同じ `references/run-sandwich.sh` を使う。runner は空の workspace へ channel repository をcloneし、`uv run --frozen yt-hybrid-runner` へ直行する。Nix devShell、GitHub Actions の環境変数、workflow構文は使わない。入力handoffを指定した場合はGit管理stateのmanifest key/root checksumとMediaStoreからpull・再検証したmanifestが一致した後だけagentを1回起動し、出力handoffは全成果物のpush・検証後にmanifestを最後にpublishする。最後に既存state sync ownerが制御面JSONだけをcommit + pushし、non-fast-forwardやagent失敗では自動merge/rebaseせず停止する。
+
+```bash
+bash .claude/skills/wf-new/references/run-sandwich.sh \
+  --repository-url <channel-repository> --ref <branch> --workspace <empty-directory> -- \
+  --channel-slug <channel> --collection <collection> \
+  --collection-dir collections/<planning|live>/<collection> \
+  --agent <claude|codex> --prompt "/wf-new --auto" \
+  --input-handoff suno-download --input-destination <relative-directory> \
+  --output-handoff <handoff> --output-root <relative-directory> \
+  --output-file <relative-file>
+```
+
+R2接続は既存 `R2MediaStoreConfig` の環境変数/secret ownerを使う。`--media-store local --local-store-root <path>` は同一runnerをローカルadapterで検証・運用する場合だけ指定する。入力または出力がない工程は対応するhandoff引数一式を省略する。
 
 ## Task: setup / update
 

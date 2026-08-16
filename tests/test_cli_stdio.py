@@ -55,6 +55,7 @@ EXPECTED_ENTRYPOINT_MODULES = {
     "yt-generate-master": "youtube_automation.commands.media.generate_master",
     "yt-generate-videos-batch": "youtube_automation.commands.media.generate_videos_batch",
     "yt-generate-suno": "youtube_automation.commands.suno.generate_suno_prompts",
+    "yt-hybrid-runner": "youtube_automation.commands.system.hybrid_runner",
     "yt-init-collection": "youtube_automation.commands.collections.init_collection",
     "yt-kpi-dashboard": "youtube_automation.commands.analytics.kpi_dashboard",
     "yt-launch-curve": "youtube_automation.commands.analytics.launch_curve",
