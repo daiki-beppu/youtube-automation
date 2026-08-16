@@ -144,7 +144,7 @@ def test_should_leave_source_and_later_stages_incomplete_without_raw_master(
         "new-collection",
         {
             "phase": "prepared",
-            "assets": {"raw_master": None, "master_audio": None, "video": None, "thumbnail": False},
+            "assets": {"raw_master": None, "master_audio": None, "master_video": None, "thumbnail": False},
         },
     )
 
@@ -154,6 +154,44 @@ def test_should_leave_source_and_later_stages_incomplete_without_raw_master(
     assert "  ○  音源生成" in message
     assert "  ▸  マスター化" in message
     assert "  ○  動画化" in message
+
+
+def test_should_not_mark_video_stage_from_unknown_legacy_video_asset(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _write_collection(
+        tmp_path,
+        "planning",
+        "legacy-video",
+        {
+            "phase": "prepared",
+            "assets": {"raw_master": "raw.wav", "master_audio": "master.wav", "video": "legacy.mp4"},
+        },
+    )
+
+    message = _progress_message(tmp_path, capsys, command="uv run yt-thumbnail-text")
+
+    assert "  ○  動画化" in message
+
+
+def test_should_mark_video_stage_from_canonical_master_video_asset(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _write_collection(
+        tmp_path,
+        "planning",
+        "canonical-video",
+        {
+            "phase": "prepared",
+            "assets": {"raw_master": "raw.wav", "master_audio": "master.wav", "master_video": "master.mp4"},
+        },
+    )
+
+    message = _progress_message(tmp_path, capsys, command="uv run yt-thumbnail-text")
+
+    assert "  ✓  動画化" in message
 
 
 def test_should_read_legacy_thumbnail_approval_through_owner_accessor(
@@ -218,7 +256,7 @@ def test_should_prefer_named_collection_across_planning_and_live(
         "selected-live",
         {
             "phase": "complete",
-            "assets": {"raw_master": "raw.wav", "master_audio": "master.wav", "video": "video.mp4"},
+            "assets": {"raw_master": "raw.wav", "master_audio": "master.wav", "master_video": "video.mp4"},
         },
         modified_at=100,
     )
@@ -268,7 +306,7 @@ def test_should_mark_post_publish_and_analysis_from_channel_artifacts(
         "published",
         {
             "phase": "complete",
-            "assets": {"raw_master": "raw.wav", "master_audio": "master.wav", "video": "video.mp4"},
+            "assets": {"raw_master": "raw.wav", "master_audio": "master.wav", "master_video": "video.mp4"},
             "upload": {"video_id": "video-123", "publish_at": "2026-07-20T12:00:00+09:00"},
         },
     )

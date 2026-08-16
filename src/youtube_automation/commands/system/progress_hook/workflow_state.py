@@ -157,7 +157,7 @@ def _completed_stages(root: Path, collection: Path, state: WorkflowState) -> fro
         _skip_manual_mastering(root) and _file_asset_present(assets.raw_master)
     ):
         completed.add("マスター化")
-    if _file_asset_present(assets.video) or _file_asset_present(assets.master_video):
+    if _file_asset_present(assets.master_video):
         completed.add("動画化")
     if state.thumbnail_approved:
         completed.add("サムネイル")

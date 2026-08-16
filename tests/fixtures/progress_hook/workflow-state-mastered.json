@@ -5,7 +5,7 @@
   "assets": {
     "raw_master": "raw.wav",
     "master_audio": "master.wav",
-    "video": null,
+    "master_video": null,
     "thumbnail": true
   },
   "upload": {
