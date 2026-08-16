@@ -124,10 +124,6 @@ class ThumbnailAutoSelectionDocument(TypedDict, total=False):
     executed_at: str
 
 
-class DescriptionDocument(TypedDict, total=False):
-    generated: bool
-
-
 class TitleTemplateCheckDocument(TypedDict, total=False):
     allow_volume_patterns: bool
 
@@ -154,7 +150,6 @@ class WorkflowStateDocument(TypedDict, total=False):
     track_display_names: dict[str, str]
     title_activity: str
     thumbnail_auto_selection: ThumbnailAutoSelectionDocument
-    description: DescriptionDocument
 
 
 _PHASES = frozenset({"planning", "prepared", "mastered", "publishing", "complete"})
@@ -522,9 +517,17 @@ class WorkflowState(MutableMapping[str, JSONValue]):
                 del self._data["thumbnail"]
 
     def set_description_generated(self, generated: bool) -> None:
-        section = self._data.setdefault("description", {})
-        assert isinstance(section, dict)
-        section["generated"] = generated
+        if not isinstance(generated, bool):
+            raise WorkflowStateError("workflow-state.json::assets.description must be a boolean")
+        assets = self._data.setdefault("assets", {})
+        assert isinstance(assets, dict)
+        AssetsState(assets).description = generated
+
+        legacy = self._data.get("description")
+        if isinstance(legacy, dict):
+            legacy.pop("generated", None)
+            if not legacy:
+                del self._data["description"]
 
     @property
     def theme(self) -> str | None:

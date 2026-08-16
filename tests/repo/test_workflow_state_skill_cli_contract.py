@@ -73,3 +73,16 @@ def test_thumbnail_approval_routes_use_only_the_canonical_asset_key() -> None:
     assert "thumbnail.approved = true" not in thumbnail_skill
     assert "assets.thumbnail = true" in loop_reference
     assert "owner の `thumbnail_approved` accessor" in loop_reference
+
+
+def test_description_completion_routes_use_only_the_canonical_asset_key() -> None:
+    video_description = (REPO_ROOT / ".claude" / "skills" / "video" / "references" / "describe.md").read_text(
+        encoding="utf-8"
+    )
+    wf_next = _text("wf-next")
+
+    assert "assets.description" in video_description
+    assert "description.generated" not in video_description
+    assert "assets.description" in wf_next
+    assert "description.generated" not in wf_next
+    assert wf_next.count("set-description-generated true") == 1

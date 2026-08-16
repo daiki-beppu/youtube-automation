@@ -89,6 +89,44 @@ def test_thumbnail_approval_write_creates_assets_and_drops_empty_legacy_section(
     assert json.loads(state_path.read_text(encoding="utf-8")) == {"assets": {"thumbnail": True}}
 
 
+def test_description_completion_write_uses_canonical_asset_and_removes_legacy_field(tmp_path: Path) -> None:
+    state_path = tmp_path / "workflow-state.json"
+    _write(
+        state_path,
+        {
+            "assets": {"description": False, "future_asset": "keep"},
+            "description": {"generated": True, "future_field": "keep"},
+            "future_section": {"keep": True},
+        },
+    )
+
+    update(state_path, lambda state: state.set_description_generated(False))
+
+    persisted = json.loads(state_path.read_text(encoding="utf-8"))
+    assert persisted["assets"] == {"description": False, "future_asset": "keep"}
+    assert persisted["description"] == {"future_field": "keep"}
+    assert persisted["future_section"] == {"keep": True}
+    assert read(state_path).description_generated is False
+
+
+def test_description_completion_write_creates_assets_and_drops_empty_legacy_section(tmp_path: Path) -> None:
+    state_path = tmp_path / "workflow-state.json"
+    _write(state_path, {"description": {"generated": False}})
+
+    update(state_path, lambda state: state.set_description_generated(True))
+
+    assert json.loads(state_path.read_text(encoding="utf-8")) == {"assets": {"description": True}}
+
+
+def test_description_completion_reads_legacy_state_through_compatibility_accessor(tmp_path: Path) -> None:
+    state_path = tmp_path / "workflow-state.json"
+    _write(state_path, {"assets": {"description": False}, "description": {"generated": True}})
+
+    state = read(state_path)
+
+    assert state.description_generated is True
+
+
 @pytest.mark.parametrize("value", [None, "10-assets/thumbnail.jpg", 1])
 def test_assets_thumbnail_rejects_non_boolean_values(value: JSONValue) -> None:
     payload: dict[str, JSONValue] = {"assets": {"thumbnail": value}}
