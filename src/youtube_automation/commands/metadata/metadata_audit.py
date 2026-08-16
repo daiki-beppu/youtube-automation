@@ -27,6 +27,8 @@ from pathlib import Path
 from youtube_automation.configuration import channel_dir, load_config
 from youtube_automation.configuration.model import ChannelConfig
 from youtube_automation.configuration.skills import load_skill_config
+from youtube_automation.core.errors import WorkflowStateError
+from youtube_automation.domains.collections.workflow_state import read as read_workflow_state
 from youtube_automation.domains.metadata.descriptions import (
     build_descriptions_md_parse_diagnostics,
     extract_descriptions_md_section,
@@ -139,15 +141,19 @@ def audit_local(col: Path, config: ChannelConfig) -> list[str]:
     # 単一言語チャンネルでは scene_phrases の完全性チェックだけを不要扱いにする (#1470)。
     ws = paths.workflow_state_path
     if ws.exists():
-        state = json.loads(ws.read_text(encoding="utf-8"))
-        if requires_scene_phrases(supported_langs):
-            sp = state.get("scene_phrases") or {}
-            required = list(dict.fromkeys(supported_langs))
-            missing = [lang for lang in required if not sp.get(lang)]
-            if missing:
-                issues.append(
-                    f"workflow-state.scene_phrases missing langs: {missing[:6]}{'…' if len(missing) > 6 else ''}"
-                )
+        try:
+            state = read_workflow_state(ws)
+            scene_phrases = state.scene_phrases or {}
+        except WorkflowStateError as error:
+            issues.append(f"workflow-state.json invalid: {error}")
+        else:
+            if requires_scene_phrases(supported_langs):
+                required = list(dict.fromkeys(supported_langs))
+                missing = [lang for lang in required if not scene_phrases.get(lang)]
+                if missing:
+                    issues.append(
+                        f"workflow-state.scene_phrases missing langs: {missing[:6]}{'…' if len(missing) > 6 else ''}"
+                    )
     else:
         issues.append("workflow-state.json missing")
 

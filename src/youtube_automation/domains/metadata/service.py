@@ -57,13 +57,12 @@ from youtube_automation.domains.uploads.preflight import requires_scene_phrases
 logger = logging.getLogger(__name__)
 
 
-def _read_workflow_state_lenient(workflow_state_path: Path) -> dict:
+def _read_workflow_state_lenient(workflow_state_path: Path) -> WorkflowState | None:
     """既存の best-effort reader 用に owner の失敗を空 state へ変換する。"""
     try:
-        state = read_workflow_state_or_none(workflow_state_path)
+        return read_workflow_state_or_none(workflow_state_path)
     except WorkflowStateError:
-        return {}
-    return state.to_dict() if state is not None else {}
+        return None
 
 
 class BAHMetadataGenerator:
@@ -366,7 +365,13 @@ class BAHMetadataGenerator:
         ws_path = paths.workflow_state_path
         result: Dict[str, str] = {}
         state = _read_workflow_state_lenient(ws_path)
-        patterns = ((state.get("planning") or {}).get("music") or {}).get("patterns") or {}
+        try:
+            planning = state.planning if state is not None else None
+            music = planning.music if planning is not None else None
+            patterns = music.patterns if music is not None else None
+        except WorkflowStateError:
+            return result
+        patterns = patterns or {}
         for letter, data in patterns.items():
             key = str(letter).lower()
             if not isinstance(data, dict):
@@ -474,8 +479,11 @@ class BAHMetadataGenerator:
         paths = CollectionPaths(self.collection_path)
         ws_path = paths.workflow_state_path
         state = _read_workflow_state_lenient(ws_path)
-        name_map = state.get("track_display_names") or {}
-        if not isinstance(name_map, dict) or not name_map:
+        try:
+            name_map = state.track_display_names if state is not None else None
+        except WorkflowStateError:
+            return
+        if not name_map:
             return
         for track in self.tracks:
             persisted = name_map.get(track.get("filename"))
@@ -544,8 +552,12 @@ class BAHMetadataGenerator:
         paths = CollectionPaths(self.collection_path)
         workflow_state_path = paths.workflow_state_path
         state = _read_workflow_state_lenient(workflow_state_path)
-        if state.get("collection_name"):
-            name = state["collection_name"]
+        try:
+            configured_name = state.collection_name if state is not None else None
+        except WorkflowStateError:
+            configured_name = None
+        if configured_name:
+            name = configured_name
             name = re.sub(r"\s+Collection$", "", name, flags=re.IGNORECASE)
             return name
 
@@ -561,8 +573,12 @@ class BAHMetadataGenerator:
         paths = CollectionPaths(self.collection_path)
         workflow_state_path = paths.workflow_state_path
         state = _read_workflow_state_lenient(workflow_state_path)
-        if state.get("title_activity"):
-            return state["title_activity"]
+        try:
+            title_activity = state.title_activity if state is not None else None
+        except WorkflowStateError:
+            title_activity = None
+        if title_activity:
+            return title_activity
 
         theme = self._extract_theme_name()
         return self.config.content.title.activity_for_theme(theme)
@@ -611,13 +627,10 @@ class BAHMetadataGenerator:
     def _load_scene_phrases(self) -> Dict[str, str]:
         """workflow-state.json から scene_phrases を読み込み"""
         state = self._load_workflow_state()
-        scene_phrases = state.get("scene_phrases", {})
-        if not isinstance(scene_phrases, dict):
-            raise ValidationError("workflow-state.json::scene_phrases は object である必要があります")
-        return scene_phrases
+        return state.scene_phrases or {}
 
-    def _load_workflow_state(self) -> dict:
-        """workflow-state.json を読み込む。存在しない場合は空 dict を返す。"""
+    def _load_workflow_state(self) -> WorkflowState:
+        """workflow-state.json を読み込む。存在しない場合は空 document を返す。"""
         paths = CollectionPaths(self.collection_path)
         ws_path = paths.workflow_state_path
         try:
@@ -632,18 +645,18 @@ class BAHMetadataGenerator:
                 if f"workflow-state.json::{section} must be an object" in message:
                     raise ValidationError(f"workflow-state.json::{section} は object である必要があります") from error
             raise ValidationError(f"workflow-state.json を読み込めません: {ws_path}: {error}") from error
-        return state.to_dict() if state is not None else {}
+        return state if state is not None else WorkflowState({})
 
     def _load_scene_emoji(self) -> str:
         """workflow-state.json から planning.scene_emoji を読み込み"""
         state = self._load_workflow_state()
-        planning = state.get("planning", {})
-        if not isinstance(planning, dict):
-            raise ValidationError("workflow-state.json::planning は object である必要があります")
-        scene_emoji = planning.get("scene_emoji", "")
-        if not isinstance(scene_emoji, str):
-            raise ValidationError("workflow-state.json::planning.scene_emoji は string である必要があります")
-        return scene_emoji
+        planning = state.planning
+        if planning is None:
+            return ""
+        try:
+            return planning.scene_emoji or ""
+        except WorkflowStateError as error:
+            raise ValidationError("workflow-state.json::planning.scene_emoji は string である必要があります") from error
 
     def generate_localizations(
         self,
@@ -857,7 +870,10 @@ class BAHMetadataGenerator:
         paths = CollectionPaths(self.collection_path)
         ws_path = paths.workflow_state_path
         state = _read_workflow_state_lenient(ws_path)
-        return state.get("theme", "") or ""
+        try:
+            return (state.theme if state is not None else None) or ""
+        except WorkflowStateError:
+            return ""
 
     def generate_shorts_metadata(self, cc_video_url: str) -> Dict:
         """Shorts 用メタデータを生成する.

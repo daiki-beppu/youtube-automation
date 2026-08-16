@@ -19,6 +19,8 @@ import sys
 import time
 
 from youtube_automation.configuration import channel_dir, load_config
+from youtube_automation.core.errors import WorkflowStateError
+from youtube_automation.domains.collections.workflow_state import read_or_none as read_workflow_state_or_none
 from youtube_automation.domains.metadata import build_short_localizations
 from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
 from youtube_automation.infrastructure.cost_tracker import log_quota
@@ -57,27 +59,27 @@ def collect_short_videos() -> list[dict]:
     for col_dir in sorted(live_dir.iterdir()):
         paths = CollectionPaths(col_dir)
         ws_path = paths.workflow_state_path
-        if not ws_path.exists():
-            continue
         tracking_path = paths.tracking_path
         if not tracking_path.exists():
             # tracking 無は CC URL を引けないので Shorts も skip
             continue
         try:
-            with open(ws_path, "r", encoding="utf-8") as f:
-                state = json.load(f)
+            state = read_workflow_state_or_none(ws_path)
+            if state is None:
+                continue
             with open(tracking_path, "r", encoding="utf-8") as f:
                 tracking = json.load(f)
-        except (json.JSONDecodeError, OSError) as e:
+            collection_name = state.collection_name or col_dir.name
+            theme = state.theme or ""
+            post_upload = state.post_upload
+            shorts = post_upload.shorts if post_upload is not None else []
+        except (WorkflowStateError, json.JSONDecodeError, OSError) as e:
             logger.warning(f"⚠️  {col_dir.name} 読み込み失敗: {e}")
             continue
 
         cc = tracking.get("complete_collection") or {}
         cc_video_url = cc.get("video_url", "")
-        collection_name = state.get("collection_name") or col_dir.name
-        theme = state.get("theme", "") or ""
-
-        for entry in (state.get("post_upload") or {}).get("shorts") or []:
+        for entry in shorts:
             video_id = entry.get("video_id")
             if not video_id:
                 continue

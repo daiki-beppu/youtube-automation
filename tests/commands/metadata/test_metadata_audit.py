@@ -157,8 +157,8 @@ class TestAuditLocalPreflightContract:
 
         assert audit_local(collection_dir, _audit_config(["en"])) == []
 
-    def test_single_language_channel_malformed_workflow_state_fails(self, tmp_path: Path) -> None:
-        """単一言語でも workflow-state.json 自体の破損は audit で見逃さない (#1470)."""
+    def test_single_language_channel_malformed_workflow_state_is_reported(self, tmp_path: Path) -> None:
+        """破損した workflow-state.json は素の JSONDecodeError を漏らさず監査結果へ載せる."""
         collection_dir = _write_local_collection(
             tmp_path,
             scene_phrases={},
@@ -166,8 +166,9 @@ class TestAuditLocalPreflightContract:
         )
         (collection_dir / "workflow-state.json").write_text("{not json", encoding="utf-8")
 
-        with pytest.raises(json.JSONDecodeError):
-            audit_local(collection_dir, _audit_config(["en"]))
+        issues = audit_local(collection_dir, _audit_config(["en"]))
+
+        assert any("workflow-state.json invalid" in issue for issue in issues)
 
     def test_heading_mismatch_reports_descriptions_md_diagnostics(self, tmp_path: Path) -> None:
         collection_dir = _write_local_collection(

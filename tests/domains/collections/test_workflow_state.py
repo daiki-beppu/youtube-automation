@@ -124,9 +124,17 @@ def test_upload_read_accessors_return_typed_values_and_keep_unknown_fields(tmp_p
         state_path,
         {
             "theme": "Rainy Jazz",
-            "planning": {"activities": "focus"},
+            "collection_name": "Rainy Jazz Collection",
+            "title_activity": "focus",
+            "planning": {
+                "activities": "focus",
+                "scene_emoji": "🌧️",
+                "music": {"patterns": {"a": {"display_name": "Rain Window"}}},
+            },
             "scene_phrases": {"en": "continuous focus mix"},
             "title_template_check": {"allow_volume_patterns": True},
+            "track_display_names": {"01-rain.wav": "Rain Window"},
+            "post_upload": {"shorts": [{"short_num": 1, "video_id": "short-1"}]},
             "future_section": {"enabled": True},
         },
     )
@@ -136,8 +144,16 @@ def test_upload_read_accessors_return_typed_values_and_keep_unknown_fields(tmp_p
     assert state.theme == "Rainy Jazz"
     assert state.planning is not None
     assert state.planning.activities == "focus"
+    assert state.planning.scene_emoji == "🌧️"
+    assert state.planning.music is not None
+    assert state.planning.music.patterns == {"a": {"display_name": "Rain Window"}}
     assert state.scene_phrases == {"en": "continuous focus mix"}
     assert state.allow_volume_patterns is True
+    assert state.collection_name == "Rainy Jazz Collection"
+    assert state.title_activity == "focus"
+    assert state.track_display_names == {"01-rain.wav": "Rain Window"}
+    assert state.post_upload is not None
+    assert state.post_upload.shorts == [{"short_num": 1, "video_id": "short-1"}]
     assert state["future_section"] == {"enabled": True}
 
 

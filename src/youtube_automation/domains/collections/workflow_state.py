@@ -271,6 +271,15 @@ class MusicPlanningState(_ObjectSection):
     def engine(self, value: MusicEngine) -> None:
         self._data["engine"] = value
 
+    @property
+    def patterns(self) -> dict[str, JSONValue] | None:
+        value = self._data.get("patterns")
+        if value is None:
+            return None
+        if not isinstance(value, dict):
+            raise WorkflowStateError("workflow-state.json::planning.music.patterns must be an object")
+        return deepcopy(value)
+
 
 class PlanningState(_ObjectSection):
     """planning metadata の型付き view。"""
@@ -287,6 +296,23 @@ class PlanningState(_ObjectSection):
     @property
     def activities(self) -> str | None:
         return _optional_string(self._data, "activities", "workflow-state.json::planning.activities")
+
+    @property
+    def scene_emoji(self) -> str | None:
+        return _optional_string(self._data, "scene_emoji", "workflow-state.json::planning.scene_emoji")
+
+
+class PostUploadState(_ObjectSection):
+    """公開後処理の型付き view。"""
+
+    @property
+    def shorts(self) -> list[dict[str, JSONValue]]:
+        value = self._data.get("shorts")
+        if value is None:
+            return []
+        if not isinstance(value, list) or not all(isinstance(item, dict) for item in value):
+            raise WorkflowStateError("workflow-state.json::post_upload.shorts must be an array of objects")
+        return deepcopy(value)
 
 
 class UploadState(_ObjectSection):
@@ -395,8 +421,30 @@ class WorkflowState(MutableMapping[str, JSONValue]):
         return UploadState(value) if isinstance(value, dict) else None
 
     @property
+    def post_upload(self) -> PostUploadState | None:
+        value = self._data.get("post_upload")
+        return PostUploadState(value) if isinstance(value, dict) else None
+
+    @property
     def theme(self) -> str | None:
         return _optional_string(self._data, "theme", "workflow-state.json::theme")
+
+    @property
+    def collection_name(self) -> str | None:
+        return _optional_string(self._data, "collection_name", "workflow-state.json::collection_name")
+
+    @property
+    def title_activity(self) -> str | None:
+        return _optional_string(self._data, "title_activity", "workflow-state.json::title_activity")
+
+    @property
+    def track_display_names(self) -> dict[str, JSONValue] | None:
+        value = self._data.get("track_display_names")
+        if value is None:
+            return None
+        if not isinstance(value, dict):
+            raise WorkflowStateError("workflow-state.json::track_display_names must be an object")
+        return deepcopy(value)
 
     @property
     def scene_phrases(self) -> dict[str, JSONValue] | None:
