@@ -33,7 +33,7 @@ def _touch(root: Path, relative: str) -> Path:
 
 
 def _fields() -> dict[str, list[str]]:
-    return {field: [field.replace("_", " ")] for field in flow.PERSONA_FIELDS}
+    return {field: [f"{field.replace('_', ' ')}（出典: viewer-voice-analysis.md）"] for field in flow.PERSONA_FIELDS}
 
 
 def test_flow_blocks_until_viewer_voice_exists(tmp_path: Path) -> None:
@@ -71,8 +71,37 @@ def test_untrusted_raw_text_and_instructions_are_rejected() -> None:
 
 def test_structured_persona_fields_are_normalized_without_external_commands() -> None:
     payload = _fields()
-    payload["vocabulary"] = ["  calm focus  "]
-    assert flow.sanitize_persona_fields(payload)["vocabulary"] == ["calm focus"]
+    payload["vocabulary"] = ["  calm focus（出典: viewer-voice-analysis.md）  "]
+    assert flow.sanitize_persona_fields(payload)["vocabulary"] == ["calm focus（出典: viewer-voice-analysis.md）"]
+
+
+@pytest.mark.parametrize("field", flow.PERSONA_FIELDS)
+def test_each_structured_persona_field_rejects_items_without_source(field: str) -> None:
+    payload = _fields()
+    payload[field] = ["根拠を区別できない項目"]
+
+    with pytest.raises(flow.PersonaContractError, match=rf"{field}.*出典"):
+        flow.sanitize_persona_fields(payload)
+
+
+def test_persona_source_accepts_inference_and_input_file_names() -> None:
+    payload = _fields()
+    payload["emotional_triggers"] = ["安心したい（出典: 推測）"]
+    payload["search_keywords"] = [
+        "deep focus music（出典: benchmark_20260816.json）",
+        "作業用BGM（出典: analysis_audience.md）",
+    ]
+
+    assert flow.sanitize_persona_fields(payload) == payload
+
+
+@pytest.mark.parametrize("source", ["", "Web 調査", "reports/analysis_audience.md", "notes.txt"])
+def test_persona_source_rejects_values_outside_the_canonical_annotation_format(source: str) -> None:
+    payload = _fields()
+    payload["channel_implications"] = [f"静かな訴求（出典: {source}）"]
+
+    with pytest.raises(flow.PersonaContractError, match="channel_implications.*出典"):
+        flow.sanitize_persona_fields(payload)
 
 
 def test_persona_resolution_prefers_current_artifact_over_legacy(tmp_path: Path) -> None:

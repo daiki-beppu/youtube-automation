@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
@@ -20,6 +21,7 @@ _CANONICAL_ROUTES = {
     "persona": "channel-strategy --persona",
     "flop": "analytics --flop",
 }
+_SOURCE_ANNOTATION = re.compile(r"出典:\s*(?:推測|[A-Za-z0-9_.-]+\.(?:md|json))(?=[）)\]}、,;；\s]*$)")
 
 
 class PersonaContractError(ValueError):
@@ -58,7 +60,10 @@ def sanitize_persona_fields(payload: object) -> dict[str, list[str]]:
         values = payload[field]
         if not isinstance(values, list) or not all(isinstance(value, str) and value.strip() for value in values):
             raise PersonaContractError(f"{field} must be a list of non-empty strings")
-        result[field] = [value.strip() for value in values]
+        normalized = [value.strip() for value in values]
+        if not all(_SOURCE_ANNOTATION.search(value) for value in normalized):
+            raise PersonaContractError(f"{field} の各項目には出典: <入力ファイル名> または 出典: 推測が必要です")
+        result[field] = normalized
     return result
 
 
