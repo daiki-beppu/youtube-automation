@@ -70,6 +70,7 @@ def apply_downloaded_artifacts_detailed(
     payload: DownloadedPayload,
     *,
     prompt_entries_reader: PromptEntriesReader,
+    defer_archive_cleanup: bool = False,
 ) -> DownloadedApplyResult:
     pattern_count = read_pattern_count(coll_dir, prompt_entries_reader=prompt_entries_reader, default=0)
     expected_count = cast(int, expected_download_count(pattern_count, payload.expected_file_count))
@@ -123,12 +124,17 @@ def apply_downloaded_artifacts_detailed(
     finally:
         if music_backup_dir is not None:
             shutil.rmtree(music_backup_dir, ignore_errors=True)
+    if not defer_archive_cleanup:
+        cleanup_downloaded_archive(payload)
+    return result
+
+
+def cleanup_downloaded_archive(payload: DownloadedPayload) -> None:
     if payload.download_path:
         try:
             Path(payload.download_path).unlink()
         except OSError as exc:
             logger.warning("Suno download ZIP cleanup failed for %s: %s", payload.download_path, exc)
-    return result
 
 
 def apply_downloaded_artifacts(

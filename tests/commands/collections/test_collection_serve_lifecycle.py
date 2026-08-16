@@ -284,6 +284,7 @@ def test_main_reuses_live_server_without_creating_another_process(monkeypatch, c
         capture_root=None,
         distrokid_source=None,
         idle_timeout_seconds=collection_serve.DEFAULT_IDLE_TIMEOUT_SECONDS,
+        downloaded_handoff_enabled=False,
     )
     record = collection_serve._LifecycleRecord(os.getpid(), "reuse-token", configuration)
     server = collection_serve.create_server(
@@ -382,6 +383,7 @@ def test_main_does_not_reuse_server_with_incompatible_configuration(monkeypatch,
         capture_root=None,
         distrokid_source=None,
         idle_timeout_seconds=collection_serve.DEFAULT_IDLE_TIMEOUT_SECONDS,
+        downloaded_handoff_enabled=False,
     )
     record = collection_serve._LifecycleRecord(os.getpid(), "configuration-token", configuration)
     server = collection_serve.create_server(
@@ -432,6 +434,7 @@ def test_main_does_not_reuse_dir_server_for_single_file_mode(monkeypatch, tmp_pa
         capture_root=None,
         distrokid_source=None,
         idle_timeout_seconds=collection_serve.DEFAULT_IDLE_TIMEOUT_SECONDS,
+        downloaded_handoff_enabled=False,
     )
     record = collection_serve._LifecycleRecord(os.getpid(), "mode-token", configuration)
     server = collection_serve.create_server(

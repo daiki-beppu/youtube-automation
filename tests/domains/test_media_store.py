@@ -17,6 +17,17 @@ def test_media_key_builds_the_canonical_handoff_path() -> None:
     assert key.as_posix() == "ambient-lab/rain-night/video-upload/media/Master.mp4"
 
 
+def test_media_key_preserves_safe_suno_filenames_with_spaces_and_unicode() -> None:
+    key = MediaKey(
+        channel="002ch",
+        collection="rain-night",
+        handoff="suno-download",
+        name="02-Individual-music/01a-Rainy Jazz 夜.mp3",
+    )
+
+    assert key.as_posix() == "002ch/rain-night/suno-download/02-Individual-music/01a-Rainy Jazz 夜.mp3"
+
+
 @pytest.mark.parametrize(
     ("field", "value"),
     [
