@@ -12,12 +12,12 @@ description: "Use when コレクション制作の進捗を読むだけで確認
 
 ## 成果物
 
-- `書き込む`: `なし`
-- `読み込む`: `collections/<id>/workflow-state.json`
+- `書き込む`: `tmp/reviews/workflow-status.html`（表示専用snapshot。毎回atomic overwrite）
+- `読み込む`: `collections/{planning,live}/<id>/workflow-state.json` と実成果物
 
 ## Overview
 
-アクティブなコレクションの進捗一覧・詳細を表示する。新旧スキーマ両対応。
+アクティブなコレクションの進捗一覧・詳細を、固定pathのread-only HTML snapshotで表示する。
 
 > **このセッションで初めて `/wf-*` を呼ぶ場合は、先に [`docs/workflow-cheatsheet.md`](../../../docs/workflow-cheatsheet.md) の判定フローを 1 回だけユーザーに提示すること**。
 
@@ -31,9 +31,7 @@ description: "Use when コレクション制作の進捗を読むだけで確認
 | 「workflow-state.json を見せて」 | ✅ 使う（生 JSON ではなく phase / assets を整形表示する） |
 | 「YouTube 側の登録者数・再生数を見せて」 | ❌ `/analytics --status` を使う |
 
-`/wf-status` は読み取り専用で `workflow-state.json` を一切更新しない。`/wf-next` を呼んだら何が起きるか **事前に確認するための skill**。
-
-**唯一の例外**: raw_master 突合チェック（後述）が不整合を検知し、**ユーザーが明示承認した場合のみ** `yt-raw-master-check --apply` で `assets.raw_master` / `updated_at` を修復する（#1668）。承認なしの書き込みは一切行わない。
+`/wf-status` は読み取り専用で、`workflow-state.json` と成果物を一切更新しない。HTMLは一時的なviewであり、workflowの正本・入力・再開判定には絶対に使わない。
 
 ## 前提
 
@@ -47,74 +45,23 @@ description: "Use when コレクション制作の進捗を読むだけで確認
 
 ### 手順
 
-1. `collections/planning/` を Glob で探索
-2. 各コレクションの `workflow-state.json` を読み込み
-3. スキーマ判別: `steps` キーがあれば旧スキーマ（v1）、なければ新スキーマ（v2）
-4. 新スキーマ（v2）のコレクションには `uv run yt-raw-master-check <dir>` で `assets.raw_master` と `01-master/` 実ファイルの突合チェックを実行（読み取り専用 / #1668）
-   - **exit 2（不整合）**: 進捗表示に ⚠️ を添えて CLI の警告（例:「assets.raw_master が実ファイルと一致しません。更新しますか」）を提示し、AskUserQuestion で更新可否を確認する
-     - 承認 → `uv run yt-raw-master-check <dir> --apply` で修復し、修復後の状態で進捗を表示する
-     - 非承認 → 何も書き込まず、不整合が残っている旨を表示に含める（次回起動時も同じ警告が再表示される）。**警告を出さずに silent 続行するのは禁止**
-   - **exit 1（エラー）**: workflow-state.json 破損等として「障害時ガイダンス」に従う
+1. チャンネルrootで `uv run yt-workflow-status` を実行する。
+2. CLIが `collections/planning/` と `collections/live/` のcanonical `workflow-state.json`、および企画・thumbnail・音楽prompt・master音源・master動画・publishの実成果物を突合する。
+3. `tmp/reviews/workflow-status.html` を検証後にatomic overwriteし、既定browserで開く。
+4. HTML上の「すべて / 企画中 / 公開工程 / 完了」はclient-sideの表示filterだけで、stateや成果物を変更しない。
+5. browserを開けない場合はnon-zero終了し、表示された絶対pathをユーザーへ案内する。生成済みsnapshotは保持する。
 
-### 新スキーマ（v2）の表示
-
-```
-アクティブなコレクション
-
-| # | コレクション名 | フェーズ | 状態 |
-|---|---------------|---------|------|
-| 1 | Late Night Jazz | prepared | 制作中（Suno 作成待ち） |
-| 2 | Forest Walk     | mastered | 公開準備完了 |
-```
-
-phase 値と日本語ラベル:
-- `planning` → 企画中
-- `prepared` → 制作中
-- `mastered` → 公開準備完了
-- `publishing` → 公開中
-- `complete` → 完了
-
-`prepared` の場合は `assets` フラグで詳細表示:
-- `assets.raw_master = null` + `music_engine = suno` → 「Suno 作成待ち」
-- `assets.raw_master = null` + `music_engine = lyria` → 「Lyria 生成待ち（/wf-next で開始）」
-- `assets.raw_master = null` + `music_engine = minimax` → 「MiniMax 生成待ち（/wf-next で開始）」
-- `assets.raw_master != null` + `assets.master_audio = null` + `load_config().workflow.wf_next.skip_manual_mastering = true` → 「raw master 直採用待ち（/wf-next で mastered へ進行）」
-- `assets.raw_master != null` + `assets.master_audio = null` + `load_config().workflow.wf_next.skip_manual_mastering = false` → 「ミキシング+マスタリング待ち」
-- `workflow.wf_next` の boolean は全て「`true` = 手動工程（承認）を省いて自動進行」の向き（#1744）。`skip_audio_approval = false` のチャンネルは音源確定前、`skip_upload_approval = false` のチャンネルはアップロード前に `/wf-next` が承認を取るため、該当フェーズは承認待ちで停止していることがある
-
-詳細表示（コレクション1つの場合 or ユーザーが指定した場合）:
-```
-コレクション: Late Night Jazz
-テーマ: late-night-jazz
-音楽エンジン: suno
-フェーズ: prepared（制作中）
-ディレクトリ骨格: ✅ OK
-                （欠落時: ⚠️ 01-master 欠落 — `uv run yt-collection-preflight <dir名> --fix` で補完）
-
-素材状況:
-  サムネイル:      ✅
-  ループ動画:      ✅
-  音楽プロンプト:   ✅
-  raw マスター:    ❌
-  最終マスター:    ❌
-  動画:           ❌
-  概要欄:         ❌
-```
-
-ディレクトリ骨格行は `uv run yt-collection-preflight <dir名>`（`--fix` なし = 読み取り専用）の結果で判定する（#1494）。欠落があっても `/wf-status` からは補完しない — `--fix` 実行はユーザーまたは `/wf-next` に委ねる。
-
-### 旧スキーマ（v1）の表示
-
-従来通り `steps` の `approved = true` のステップ数で進捗計算（分母4）。
+HTMLには実行buttonやstate更新導線を置かない。表示内容は毎回canonical stateと実成果物から作り直し、過去HTMLを読み込まない。
 
 ### 補足
 
-- `workflow-state.json` が存在しないコレクションは「未トラッキング」として表示する
-- スキーマ詳細は `.claude/skills/wf-new/references/schema.md` を参照
+- `workflow-state.json` が不在・破損したコレクションも、他のコレクションを隠さず不整合cardとして表示する
+- stateと実成果物の食い違いはblockerとして表示し、このskillから修復しない
+- スキーマ詳細はcanonical owner `youtube_automation.domains.collections.workflow_state` と `.claude/skills/wf-new/references/schema.md` を参照
 
 ## 障害時ガイダンス
 
-進捗表示は `collections/planning/` の JSON を読むだけで外部サービスを呼ばない。
+進捗表示はローカルのcanonical stateと成果物を読むだけで外部サービスを呼ばない。
 
 | 状況 | 兆候 | 対処 |
 |---|---|---|

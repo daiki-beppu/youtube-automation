@@ -126,3 +126,19 @@ def test_publisher_fsyncs_temporary_before_replace(tmp_path: Path, monkeypatch: 
     publishing.publish_json_document(source, RepositorySchema.WEEKLY_VOTE_LOG)
 
     assert len(fsynced) == 1
+
+
+def test_html_snapshot_validation_failure_preserves_previous_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    destination = tmp_path / "workflow-status.html"
+    destination.write_text("previous", encoding="utf-8")
+
+    def reject(_html: str) -> None:
+        raise DocumentRenderError("invalid snapshot")
+
+    with pytest.raises(DocumentRenderError, match="invalid snapshot"):
+        publishing.publish_html_snapshot(destination, "replacement", reject)
+
+    assert destination.read_text(encoding="utf-8") == "previous"
+    assert not list(tmp_path.glob(".workflow-status.html.*.tmp"))

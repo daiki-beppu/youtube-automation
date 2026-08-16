@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'none'; img-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'">
+  <title>制作状況 snapshot</title>
+  <style>$css</style>
+</head>
+<body>
+  <main>
+    <header class="page-header">
+      <p class="eyebrow">READ-ONLY SNAPSHOT</p>
+      <h1>制作状況</h1>
+      <p>生成日時: $generated_at</p>
+    </header>
+    <section class="status-browser" aria-label="コレクション制作状況">
+      $filters
+      <div class="collection-grid">$collections</div>
+    </section>
+  </main>
+</body>
+</html>

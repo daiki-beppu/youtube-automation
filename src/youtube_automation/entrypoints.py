@@ -95,6 +95,7 @@ yt_channel_status = _make_entrypoint("youtube_automation.commands.channel.channe
 yt_workspace_status = _make_entrypoint("youtube_automation.commands.channel.workspace_status")
 yt_workspace_guard = _make_entrypoint("youtube_automation.commands.channel.workspace_guard")
 yt_workflow_state = _make_entrypoint("youtube_automation.commands.collections.workflow_state_cli")
+yt_workflow_status = _make_entrypoint("youtube_automation.commands.collections.workflow_status")
 yt_channel_trend = _make_entrypoint("youtube_automation.commands.analytics.channel_trend")
 yt_collection_preflight = _make_entrypoint("youtube_automation.commands.collections.collection_preflight")
 yt_collection_serve = _make_entrypoint("youtube_automation.commands.collections.collection_serve")

@@ -1,12 +1,22 @@
 """Browser and HTTP integration boundary."""
 
+import webbrowser
 from collections.abc import Callable
+from pathlib import Path
 from urllib import error, request
 from urllib.parse import urlparse as _urlparse
 
 
 class RedirectRejectedError(Exception):
     """Raised when an HTTP fetch attempts to follow a redirect."""
+
+
+def open_local_file(path: Path) -> bool:
+    """Request the platform browser to open an absolute local file URI."""
+    try:
+        return webbrowser.open(path.resolve().as_uri())
+    except webbrowser.Error:
+        return False
 
 
 def parse_url(value: str):

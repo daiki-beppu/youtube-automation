@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+from collections.abc import Callable
 from pathlib import Path
 
 from youtube_automation.core.errors import DocumentRenderError
@@ -12,7 +13,7 @@ from youtube_automation.domains.documents.published import read_published_json_d
 from youtube_automation.domains.documents.rendering import render_repository_document, validate_generated_html
 from youtube_automation.domains.documents.schema_registry import RepositorySchema
 
-__all__ = ["publish_json_document", "read_published_json_document"]
+__all__ = ["publish_html_snapshot", "publish_json_document", "read_published_json_document"]
 
 
 def publish_json_document(source: Path, schema: RepositorySchema) -> Path:
@@ -23,11 +24,19 @@ def publish_json_document(source: Path, schema: RepositorySchema) -> Path:
         raise DocumentRenderError(f"structured document JSON を読めません: {source}") from error
     html = render_repository_document(schema, document)
     destination = source.with_suffix(".html")
-    _write_html_atomically(destination, html)
+    _write_html_atomically(destination, html, validate_generated_html)
     return destination
 
 
-def _write_html_atomically(destination: Path, html: str) -> None:
+def publish_html_snapshot(destination: Path, html: str, validator: Callable[[str], None]) -> Path:
+    """Validate and atomically replace a standalone HTML snapshot."""
+    validator(html)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    _write_html_atomically(destination, html, validator)
+    return destination
+
+
+def _write_html_atomically(destination: Path, html: str, validator: Callable[[str], None]) -> None:
     descriptor, temporary_name = tempfile.mkstemp(
         dir=destination.parent,
         prefix=f".{destination.name}.",
@@ -42,7 +51,7 @@ def _write_html_atomically(destination: Path, html: str) -> None:
         persisted = temporary.read_text(encoding="utf-8")
         if persisted != html:
             raise DocumentRenderError("temporary HTML の再読込結果が一致しません")
-        validate_generated_html(persisted)
+        validator(persisted)
         os.replace(temporary, destination)
     finally:
         temporary.unlink(missing_ok=True)
