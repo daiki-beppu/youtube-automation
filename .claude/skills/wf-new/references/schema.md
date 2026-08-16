@@ -128,9 +128,6 @@ Phase 3: 公開             /wf-next    動画→概要欄→アップロード�
     },
     "executed_at": "ISO 8601"
   },
-  "thumbnail": {
-    "approved": true
-  },
   "description": {
     "generated": true
   }
@@ -187,7 +184,7 @@ Phase 3: 公開             /wf-next    動画→概要欄→アップロード�
 
 ### 互換フィールド
 
-`thumbnail.approved` と `description.generated` は既存 state を読めるよう owner が保持する互換 field。正規の生成済み判定はそれぞれ `assets.thumbnail` と `assets.description` であり、新規の状態統合は個別 issue の責務とする。
+`thumbnail.approved` は既存 state の読み取り専用互換 field であり、workflow-state owner の `thumbnail_approved` accessor だけが解釈する。新規 write は `assets.thumbnail` だけを更新し、互換 field を出力しない。`description.generated` は既存 state を読めるよう owner が保持する互換 field で、正規の生成済み判定は `assets.description` とする。
 
 #### wf-new --auto の判定責務
 

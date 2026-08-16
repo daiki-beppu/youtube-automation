@@ -11,6 +11,7 @@ import pytest
 
 from youtube_automation.core.errors import AutomationError, WorkflowStateError
 from youtube_automation.domains.collections.workflow_state import WorkflowState, read, read_or_none, update
+from youtube_automation.infrastructure.filesystem import JSONValue
 
 
 def _write(path: Path, payload: object) -> None:
@@ -57,6 +58,44 @@ def test_read_returns_typed_sections_and_compatible_accessors(tmp_path: Path) ->
     assert state.thumbnail_approved is True
     assert state.description_generated is True
     assert state.music_engine == "suno"
+
+
+def test_thumbnail_approval_write_uses_canonical_asset_and_removes_legacy_field(tmp_path: Path) -> None:
+    state_path = tmp_path / "workflow-state.json"
+    _write(
+        state_path,
+        {
+            "assets": {"thumbnail": False, "future_asset": "keep"},
+            "thumbnail": {"approved": True, "future_field": "keep"},
+            "future_section": {"keep": True},
+        },
+    )
+
+    update(state_path, lambda state: state.set_thumbnail_approved(False))
+
+    persisted = json.loads(state_path.read_text(encoding="utf-8"))
+    assert persisted["assets"] == {"thumbnail": False, "future_asset": "keep"}
+    assert persisted["thumbnail"] == {"future_field": "keep"}
+    assert persisted["future_section"] == {"keep": True}
+    assert read(state_path).thumbnail_approved is False
+
+
+def test_thumbnail_approval_write_creates_assets_and_drops_empty_legacy_section(tmp_path: Path) -> None:
+    state_path = tmp_path / "workflow-state.json"
+    _write(state_path, {"thumbnail": {"approved": False}})
+
+    update(state_path, lambda state: state.set_thumbnail_approved(True))
+
+    assert json.loads(state_path.read_text(encoding="utf-8")) == {"assets": {"thumbnail": True}}
+
+
+@pytest.mark.parametrize("value", [None, "10-assets/thumbnail.jpg", 1])
+def test_assets_thumbnail_rejects_non_boolean_values(value: JSONValue) -> None:
+    payload: dict[str, JSONValue] = {"assets": {"thumbnail": value}}
+    state = WorkflowState(payload)
+
+    with pytest.raises(WorkflowStateError, match=r"assets\.thumbnail must be a boolean"):
+        assert state.assets is not None and state.assets.thumbnail
 
 
 def test_update_preserves_unknown_keys_during_round_trip(tmp_path: Path) -> None:

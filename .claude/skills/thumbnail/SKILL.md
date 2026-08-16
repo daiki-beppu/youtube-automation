@@ -21,7 +21,7 @@ description: "Use when コレクションの YouTube サムネイル（thumbnail
 以下を deep-merge した値を設定として使う。
 1. `.claude/skills/thumbnail/config.default.yaml`
 2. `config/skills/thumbnail.yaml`（存在する場合）
-合成規則は `youtube_automation.configuration.skills.load_skill_config("thumbnail")` と同じで、チャンネル上書きが優先される。`loop` default は互換入口 `load_skill_config("loop-video")` が旧 `config/skills/loop-video.yaml` と deep-merge する。存在しない override は未設定として扱い、勝手に作成しない。 **Hard Gate**: `archive.enabled: true` の場合、確定直後のアーカイブが設定不正・確定サムネ欠落・シンボリックリンク・コピー失敗で失敗したら後工程へ進まず停止する。ギャラリー保存を成功したように扱わない。`textless.enabled` は boolean だけを許可し、`false` の共用処理が失敗した場合も `thumbnail.approved` を更新せず停止する。
+合成規則は `youtube_automation.configuration.skills.load_skill_config("thumbnail")` と同じで、チャンネル上書きが優先される。`loop` default は互換入口 `load_skill_config("loop-video")` が旧 `config/skills/loop-video.yaml` と deep-merge する。存在しない override は未設定として扱い、勝手に作成しない。 **Hard Gate**: `archive.enabled: true` の場合、確定直後のアーカイブが設定不正・確定サムネ欠落・シンボリックリンク・コピー失敗で失敗したら後工程へ進まず停止する。ギャラリー保存を成功したように扱わない。`textless.enabled` は boolean だけを許可し、`false` の共用処理が失敗した場合も `assets.thumbnail` を更新せず停止する。
 ## 前提
 `config/channel/` が存在すること（`load_config()` でロード可能）。 `config/skills/thumbnail.yaml` はオプション。`yt-skills sync` で配布される `config.default.yaml` がそのまま使われるため、default 動作で問題なければ作成不要。カスタマイズしたい場合のみ `config.default.yaml` をコピーして `config/skills/thumbnail.yaml` に置き、必要な値だけ上書きする（deep-merge される）。 `config/channel/` が存在しない場合、ユーザーに確認:
 - **新規チャンネル** → `/setup --channel` を案内
@@ -137,7 +137,7 @@ uv run python .claude/skills/thumbnail/references/finalize_planning_preview.py <
 ```bash
 uv run python .claude/skills/thumbnail/references/share_thumbnail_as_main.py <collection-path>
 ```
-スクリプトは `thumbnail.jpg` を一時ファイルへ `shutil.copyfile()` でコピーし、SHA-256 一致後に `10-assets/main.jpg` へ置換する。既存 `main.jpg` は更新し、競合する `main.png` は削除する。exit 0 と JSON の `status: SHARED`、同一 SHA-256、`main.png` 不在を確認するまで `thumbnail.approved = true` にしない。`thumbnail-prompts.md` には textless 生成プロンプトを捏造せず、`textless.enabled=false`、`source=10-assets/thumbnail.jpg`、`destination=10-assets/main.jpg`、検証済み SHA-256 を記録する。 thumbnail analysis JSON+HTML pair が存在する場合は、`read_published_json_document(..., RepositorySchema.CHANNEL_RESEARCH_REPORT)` が返す JSON の `winning_patterns` と `application_candidates` だけを、参照画像選定と差分プロンプトの入力にする。pair を検証できず競合サムネイルの勝ちパターンを先に深掘りする場合は `/channel-research --thumbnail` を実行する。
+スクリプトは `thumbnail.jpg` を一時ファイルへ `shutil.copyfile()` でコピーし、SHA-256 一致後に `10-assets/main.jpg` へ置換する。既存 `main.jpg` は更新し、競合する `main.png` は削除する。exit 0 と JSON の `status: SHARED`、同一 SHA-256、`main.png` 不在を確認するまで `assets.thumbnail = true` にしない。`thumbnail-prompts.md` には textless 生成プロンプトを捏造せず、`textless.enabled=false`、`source=10-assets/thumbnail.jpg`、`destination=10-assets/main.jpg`、検証済み SHA-256 を記録する。 thumbnail analysis JSON+HTML pair が存在する場合は、`read_published_json_document(..., RepositorySchema.CHANNEL_RESEARCH_REPORT)` が返す JSON の `winning_patterns` と `application_candidates` だけを、参照画像選定と差分プロンプトの入力にする。pair を検証できず競合サムネイルの勝ちパターンを先に深掘りする場合は `/channel-research --thumbnail` を実行する。
 1. 「thumbnail-text-profile 適用」節の手順で、フォント選定・コピー生成制約・配置を確定する（profile 不在なら実効デフォルト値のまま進む。エラーにしない）。
 2. ベンチマーク先サムネを参照画像にして、検証済み thumbnail analysis JSON がある場合はその勝ちパターンも使い、構図・色温度・主役スケール・背景テクスチャを踏襲した textless 背景候補 `main-v*.png/jpg` を生成する。差分プロンプトには `single_step.text_strip_clause` 相当の除去指示を展開し、タイトル文字・字幕・ロゴ・透かしを焼き込ませない（参照画像の選定・プロンプト構築・CLI 引数は「Single-Step / TTP モード」章の機構を流用する）。
 3. 背景候補は「手動候補の比較選択 Hard Gate」に従い、各候補を thumbnail check CLI で検証してから比較・選択する。候補が 1 枚なら `uv run yt-thumbnail-check <collection-path>/10-assets/main-v1.png --json` の成功とユーザー承認後に `cp main-v1.png main.png` で確定する。`mode: full` では `open` と AskUserQuestion を省略し、check が exit 0 かつ期待した画像ファイルが存在するときに既存の自動経路で確定する。
@@ -174,7 +174,7 @@ uv run yt-generate-image \
   --ab-pattern a --output <collection-path>/10-assets/thumbnail-a-v1.jpg -y
 ```
    決定的合成経路では `variation` の構図・配色を textless 背景候補の生成へ反映し、コピー差分は pattern ごとの `yt-thumbnail-text --title ... --output thumbnail-<name>-v1.jpg` に反映する。`mode: full` 以外では各 pattern で `/thumbnail --compare` と目視確認を行い、個別にユーザー承認を得る。`full` では AskUserQuestion を省略し、期待候補が存在することを検証して自動確定した後、全 pattern を `/thumbnail --compare` へ回す。
-3. `full` 以外では承認済み候補だけを、`full` では存在検証に成功した候補だけを `10-assets/thumbnail-<name>.jpg` へ確定する。全 pattern の承認が揃うまでは `thumbnail.approved` を `true` にしない（`full` では全 pattern の自動確定完了を承認完了として扱う）。
+3. `full` 以外では承認済み候補だけを、`full` では存在検証に成功した候補だけを `10-assets/thumbnail-<name>.jpg` へ確定する。全 pattern の承認が揃うまでは `assets.thumbnail` を `true` にしない（`full` では全 pattern の自動確定完了を承認完了として扱う）。
 4. 全 pattern 確定後、先頭 pattern を互換出力へコピーする（例: `cmp thumbnail-a.jpg thumbnail.jpg` が成功する内容にする）。`/publish --upload` は従来どおり `thumbnail.jpg` を使うため変更不要。
 5. `20-documentation/thumbnail-prompts.md` の `A/B Test Pattern Prompts` に、全 pattern の name / final output / variation / API へ渡した最終プロンプトを保存する。
 6. YouTube Studio で対象動画のサムネイル編集を開き、**Test & compare** から最大 3 枚の `thumbnail-<name>.jpg` を手動登録する。公式 API はないため、このスキルから自動登録しない。

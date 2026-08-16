@@ -144,7 +144,7 @@ def test_should_leave_source_and_later_stages_incomplete_without_raw_master(
         "new-collection",
         {
             "phase": "prepared",
-            "assets": {"raw_master": None, "master_audio": None, "video": None, "thumbnail": None},
+            "assets": {"raw_master": None, "master_audio": None, "video": None, "thumbnail": False},
         },
     )
 
@@ -154,6 +154,26 @@ def test_should_leave_source_and_later_stages_incomplete_without_raw_master(
     assert "  ○  音源生成" in message
     assert "  ▸  マスター化" in message
     assert "  ○  動画化" in message
+
+
+def test_should_read_legacy_thumbnail_approval_through_owner_accessor(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _write_collection(
+        tmp_path,
+        "planning",
+        "legacy-thumbnail",
+        {
+            "phase": "prepared",
+            "assets": {"thumbnail": False},
+            "thumbnail": {"approved": True},
+        },
+    )
+
+    message = _progress_message(tmp_path, capsys)
+
+    assert "  ✓  サムネイル" in message
 
 
 def test_should_use_raw_master_for_mastering_when_manual_mastering_is_skipped(

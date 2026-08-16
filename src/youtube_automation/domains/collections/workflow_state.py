@@ -49,7 +49,7 @@ class PlanningDocument(TypedDict, total=False):
 
 
 class AssetsDocument(TypedDict, total=False):
-    thumbnail: bool | str
+    thumbnail: bool
     loop_video: bool | Literal["failed"]
     music_prompts: bool
     music_downloaded: bool
@@ -124,10 +124,6 @@ class ThumbnailAutoSelectionDocument(TypedDict, total=False):
     executed_at: str
 
 
-class ThumbnailDocument(TypedDict, total=False):
-    approved: bool
-
-
 class DescriptionDocument(TypedDict, total=False):
     generated: bool
 
@@ -158,7 +154,6 @@ class WorkflowStateDocument(TypedDict, total=False):
     track_display_names: dict[str, str]
     title_activity: str
     thumbnail_auto_selection: ThumbnailAutoSelectionDocument
-    thumbnail: ThumbnailDocument
     description: DescriptionDocument
 
 
@@ -224,14 +219,18 @@ class AssetsState(_ObjectSection):
     """生成済み collection assets の型付き view。"""
 
     @property
-    def thumbnail(self) -> bool | str | None:
-        value = self._data.get("thumbnail")
-        if value is None or isinstance(value, bool | str):
+    def thumbnail(self) -> bool | None:
+        if "thumbnail" not in self._data:
+            return None
+        value = self._data["thumbnail"]
+        if isinstance(value, bool):
             return value
-        raise WorkflowStateError("workflow-state.json::assets.thumbnail must be a boolean, string, or null")
+        raise WorkflowStateError("workflow-state.json::assets.thumbnail must be a boolean")
 
     @thumbnail.setter
-    def thumbnail(self, value: bool | str | None) -> None:
+    def thumbnail(self, value: bool) -> None:
+        if not isinstance(value, bool):
+            raise WorkflowStateError("workflow-state.json::assets.thumbnail must be a boolean")
         self._data["thumbnail"] = value
 
     @property
@@ -273,8 +272,8 @@ class AssetsState(_ObjectSection):
     def set_known(self, key: AssetKey, value: JSONValue) -> None:
         """CLI が公開する asset key を schema 検証して更新する。"""
         if key == "thumbnail":
-            if value is not None and not isinstance(value, bool | str):
-                raise WorkflowStateError("workflow-state.json::assets.thumbnail must be a boolean, string, or null")
+            if not isinstance(value, bool):
+                raise WorkflowStateError("workflow-state.json::assets.thumbnail must be a boolean")
         elif key == "loop_video":
             if not isinstance(value, bool) and value != "failed":
                 raise WorkflowStateError("workflow-state.json::assets.loop_video must be a boolean or 'failed'")
@@ -510,9 +509,17 @@ class WorkflowState(MutableMapping[str, JSONValue]):
         return PostUploadState(value) if isinstance(value, dict) else None
 
     def set_thumbnail_approved(self, approved: bool) -> None:
-        section = self._data.setdefault("thumbnail", {})
-        assert isinstance(section, dict)
-        section["approved"] = approved
+        if not isinstance(approved, bool):
+            raise WorkflowStateError("workflow-state.json::assets.thumbnail must be a boolean")
+        assets = self._data.setdefault("assets", {})
+        assert isinstance(assets, dict)
+        AssetsState(assets).thumbnail = approved
+
+        legacy = self._data.get("thumbnail")
+        if isinstance(legacy, dict):
+            legacy.pop("approved", None)
+            if not legacy:
+                del self._data["thumbnail"]
 
     def set_description_generated(self, generated: bool) -> None:
         section = self._data.setdefault("description", {})

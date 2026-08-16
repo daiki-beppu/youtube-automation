@@ -1110,7 +1110,7 @@ def test_thumbnail_skill_documents_ab_test_outputs_prompts_and_approval_contract
         "先頭 pattern",
         "thumbnail.jpg",
         "A/B Test Pattern Prompts",
-        "全 pattern の承認が揃うまでは `thumbnail.approved` を `true` にしない",
+        "全 pattern の承認が揃うまでは `assets.thumbnail` を `true` にしない",
         "Test & compare",
         "公式 API はない",
     ):
@@ -1946,7 +1946,8 @@ def test_thumbnail_skill_routes_quality_details_without_moving_hard_gates() -> N
     assert "**Hard Gate**" in "\n".join(skill.splitlines()[:60])
     assert "/thumbnail --compare" in skill
     assert "ユーザー承認" in skill
-    assert "thumbnail.approved = true" in skill
+    assert "assets.thumbnail = true" in skill
+    assert "thumbnail.approved = true" not in skill
 
 
 def test_thumbnail_quality_and_operations_owns_details_once() -> None:

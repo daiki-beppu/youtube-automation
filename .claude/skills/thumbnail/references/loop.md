@@ -124,7 +124,7 @@ $ARGUMENTS
 ```
 
 引数が指定されている場合、そのコレクションを対象とします。
-未指定の場合、`collections/planning/` から `thumbnail.approved = true` かつ `loop.mp4` が未生成のコレクションを自動検出します。
+未指定の場合、`collections/planning/` から `assets.thumbnail = true` かつ `loop.mp4` が未生成のコレクションを自動検出します。判定は workflow-state owner の `thumbnail_approved` accessor を使うため、既存 state の `thumbnail.approved = true` も読み取り互換として扱います。
 
 ### 前提条件
 
