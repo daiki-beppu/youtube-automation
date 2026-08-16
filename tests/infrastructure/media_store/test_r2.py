@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import stat
 from pathlib import Path
 from unittest.mock import patch
 
@@ -9,12 +10,16 @@ import pytest
 
 from youtube_automation.core.errors import ConfigError, MediaStoreError
 from youtube_automation.domains.media_store import MediaKey
-from youtube_automation.infrastructure.media_store.r2 import R2MediaStore, R2MediaStoreConfig
+from youtube_automation.infrastructure.media_store.r2 import MultipartTransferConfig, R2MediaStore, R2MediaStoreConfig
 
 
 class FakeS3Client:
     def __init__(self) -> None:
         self.objects: dict[tuple[str, str], tuple[bytes, dict[str, str]]] = {}
+        self.multipart_uploads: dict[str, dict[str, object]] = {}
+        self.create_calls = 0
+        self.uploaded_parts: list[int] = []
+        self.interrupt_part: int | None = None
 
     def upload_fileobj(
         self,
@@ -47,6 +52,88 @@ class FakeS3Client:
         except KeyError as exc:
             raise FakeClientError(404, "missing") from exc
         return {"ContentLength": len(payload), "Metadata": metadata, "ETag": '"fixture-etag"'}
+
+    def create_multipart_upload(self, *, Bucket: str, Key: str, Metadata: dict[str, str]) -> dict[str, object]:
+        self.create_calls += 1
+        upload_id = f"upload-{self.create_calls}"
+        self.multipart_uploads[upload_id] = {
+            "bucket": Bucket,
+            "key": Key,
+            "metadata": Metadata,
+            "parts": {},
+        }
+        return {"UploadId": upload_id}
+
+    def upload_part(
+        self,
+        *,
+        Bucket: str,
+        Key: str,
+        PartNumber: int,
+        UploadId: str,
+        Body: bytes,
+    ) -> dict[str, object]:
+        upload = self.multipart_uploads[UploadId]
+        assert upload["bucket"] == Bucket
+        assert upload["key"] == Key
+        if self.interrupt_part == PartNumber:
+            self.interrupt_part = None
+            raise RuntimeError("connection interrupted")
+        parts = upload["parts"]
+        assert isinstance(parts, dict)
+        parts[PartNumber] = Body
+        self.uploaded_parts.append(PartNumber)
+        return {"ETag": f'"etag-{PartNumber}"'}
+
+    def list_parts(
+        self,
+        *,
+        Bucket: str,
+        Key: str,
+        UploadId: str,
+        PartNumberMarker: int | None = None,
+    ) -> dict[str, object]:
+        del PartNumberMarker
+        try:
+            upload = self.multipart_uploads[UploadId]
+        except KeyError as exc:
+            raise FakeClientError(404, "NoSuchUpload") from exc
+        assert upload["bucket"] == Bucket
+        assert upload["key"] == Key
+        parts = upload["parts"]
+        assert isinstance(parts, dict)
+        return {
+            "Parts": [
+                {"PartNumber": part_number, "ETag": f'"etag-{part_number}"', "Size": len(payload)}
+                for part_number, payload in sorted(parts.items())
+            ],
+            "IsTruncated": False,
+        }
+
+    def complete_multipart_upload(
+        self,
+        *,
+        Bucket: str,
+        Key: str,
+        UploadId: str,
+        MultipartUpload: dict[str, object],
+    ) -> dict[str, object]:
+        upload = self.multipart_uploads.pop(UploadId)
+        assert upload["bucket"] == Bucket
+        assert upload["key"] == Key
+        parts = upload["parts"]
+        metadata = upload["metadata"]
+        assert isinstance(parts, dict)
+        assert isinstance(metadata, dict)
+        requested = MultipartUpload["Parts"]
+        assert isinstance(requested, list)
+        payload = b"".join(parts[part["PartNumber"]] for part in requested)
+        self.objects[(Bucket, Key)] = (payload, metadata)
+        return {"ETag": '"completed-etag"'}
+
+    def abort_multipart_upload(self, *, Bucket: str, Key: str, UploadId: str) -> None:
+        del Bucket, Key
+        self.multipart_uploads.pop(UploadId, None)
 
 
 class FakeClientError(Exception):
@@ -207,3 +294,69 @@ def test_r2_metadata_without_checksum_is_rejected(tmp_path: Path) -> None:
 
     with pytest.raises(MediaStoreError, match="metadata が不正"):
         store.metadata(_key())
+
+
+def test_r2_multipart_resumes_remote_parts_after_process_interruption(tmp_path: Path) -> None:
+    part_size = 5 * 1024 * 1024
+    payload = b"a" * part_size + b"b" * part_size + b"tail"
+    source = tmp_path / "Master.mp4"
+    source.write_bytes(payload)
+    client = FakeS3Client()
+    client.interrupt_part = 2
+    transfer = MultipartTransferConfig(threshold=part_size, part_size=part_size)
+    first_store = R2MediaStore(_config(), client=client, transfer_config=object(), multipart_transfer_config=transfer)
+
+    with pytest.raises(MediaStoreError, match="connection interrupted"):
+        first_store.push(source, _key())
+
+    checkpoint = next((tmp_path / ".yt-r2-multipart").glob("*.json"))
+    assert stat.S_IMODE(checkpoint.stat().st_mode) == 0o600
+    assert client.uploaded_parts == [1]
+
+    resumed_store = R2MediaStore(_config(), client=client, transfer_config=object(), multipart_transfer_config=transfer)
+    remote = resumed_store.push(source, _key())
+
+    assert client.create_calls == 1
+    assert client.uploaded_parts == [1, 2, 3]
+    object_key = "automation/v1/ambient-lab/rain-night/video-upload/Master.mp4"
+    assert client.objects[("media-handoffs", object_key)][0] == payload
+    assert remote.sha256 == hashlib.sha256(payload).hexdigest()
+    assert not checkpoint.exists()
+
+
+def test_r2_multipart_push_is_idempotent_after_completion(tmp_path: Path) -> None:
+    part_size = 5 * 1024 * 1024
+    source = tmp_path / "Master.mp4"
+    source.write_bytes(b"x" * (part_size + 1))
+    client = FakeS3Client()
+    store = R2MediaStore(
+        _config(),
+        client=client,
+        transfer_config=object(),
+        multipart_transfer_config=MultipartTransferConfig(threshold=part_size, part_size=part_size),
+    )
+
+    first = store.push(source, _key())
+    uploads_after_first_push = list(client.uploaded_parts)
+    second = store.push(source, _key())
+
+    assert second == first
+    assert client.create_calls == 1
+    assert client.uploaded_parts == uploads_after_first_push
+
+
+def test_r2_small_push_keeps_the_managed_transfer_path(tmp_path: Path) -> None:
+    source = tmp_path / "small.bin"
+    source.write_bytes(b"small")
+    client = FakeS3Client()
+    store = R2MediaStore(
+        _config(),
+        client=client,
+        transfer_config=object(),
+        multipart_transfer_config=MultipartTransferConfig(threshold=5 * 1024 * 1024, part_size=5 * 1024 * 1024),
+    )
+
+    store.push(source, _key())
+
+    assert client.create_calls == 0
+    assert client.uploaded_parts == []
