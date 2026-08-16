@@ -154,7 +154,7 @@ def test_wf_new_ideation_batch_plan_is_explicit_and_fail_closed() -> None:
 def test_wf_new_single_collection_completion_contract_remains() -> None:
     text = _read_ideation_reference()
 
-    assert "20-documentation/plan_proposals.md" in text
+    assert "20-documentation/plan_proposals.json" in text
     assert "`planning.generated = true`" in text
     assert "`planning.final_title`" in text
 

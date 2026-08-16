@@ -24,6 +24,7 @@ class RepositorySchema(str, Enum):
     AUDIT_REPORT = "audit-report.schema.json"
     CHANNEL_RESEARCH_REPORT = "channel-research-report.schema.json"
     CHANNEL_STRATEGY = "channel-strategy.schema.json"
+    COLLECTION_PLAN = "collection-plan.schema.json"
     EXPERIMENT_ENTRY = "experiment-entry.schema.json"
     FEEDBACK_ENTRY = "feedback-entry.schema.json"
     INSIGHTS_ENTRY = "insights-entry.schema.json"
@@ -39,6 +40,7 @@ _SKILL_RESOURCES = {
         "channel-research-report.schema.json",
     ),
     RepositorySchema.CHANNEL_STRATEGY: ("channel-strategy", "references", "channel-strategy.schema.json"),
+    RepositorySchema.COLLECTION_PLAN: ("wf-new", "references", "collection-plan.schema.json"),
     RepositorySchema.EXPERIMENT_ENTRY: ("analytics", "references", "experiment-entry.schema.json"),
     RepositorySchema.FEEDBACK_ENTRY: ("skill-feedback", "references", "feedback-entry.schema.json"),
     RepositorySchema.INSIGHTS_ENTRY: ("analytics", "references", "insights-entry.schema.json"),

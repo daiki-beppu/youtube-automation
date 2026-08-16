@@ -38,7 +38,7 @@ Codex provider では `image_generation.codex.default_prompt_template` と `thum
 
 見積もりは解決済み provider、model / quality、画像サイズと `config/skills/thumbnail.yaml` の `cost_per_image_usd` を使う。Codex provider は GCP 課金なしとして表示する。単価未設定時は金額を推測せず「不明」と表示し、実コストは GCP Cloud Console の Billing を正とする。
 
-`skip_cost_confirm: false` は見積もりを表示して `confirm_cost` の y/N を待つ。拒否時は画像生成を完全にスキップし、テキスト候補だけで続行する。`true` は確認を省略できるが、生成枚数、provider、model / quality、画像サイズ、単価または単価未設定、想定 call 数を実行ログと `20-documentation/plan_proposals.md` の `Preview generation` 節へ保存する。保存失敗時は生成せず停止する。
+`skip_cost_confirm: false` は見積もりを表示して `confirm_cost` の y/N を待つ。拒否時は画像生成を完全にスキップし、テキスト候補だけで続行する。`true` は確認を省略できるが、生成枚数、provider、model / quality、画像サイズ、単価または単価未設定、想定 call 数を実行ログと `20-documentation/plan_proposals.json` candidate へ保存する。保存失敗時は生成せず停止する。
 
 例: 単価 `$0.101`、`parallel`、候補3件なら生成見積もりは `3 枚 × $0.101 = $0.303`。同じ候補数の `sequential` は `1 枚 × $0.101 = $0.101`。
 

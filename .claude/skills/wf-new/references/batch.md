@@ -7,7 +7,7 @@
 ## 成果物
 
 - `書き込む`: `reports/wf-new-batches/<batch-id>/plan-manifest.json`, `reports/wf-new-batches/<batch-id>/batch-ledger.json`
-- `読み込む`: `collections/<id>/20-documentation/plan_proposals.md`, `collections/<id>/workflow-state.json`
+- `読み込む`: 検証済み `collections/<id>/20-documentation/plan_proposals.json` + `.html`, `collections/<id>/workflow-state.json`
 
 ## Overview
 
@@ -89,7 +89,7 @@ plan は manifest 順に 1 件ずつ処理し、複数の `/wf-new` を並列に
    - ユーザー承認、認証、必要仕様、外部サービス待ち: plan と batch を `blocked`
    - 実行・成果物検証の失敗: plan と batch を `failed`
    - どちらも `reason` と正確な `resume_action` を保存し、後続 plan を開始しない
-4. child が完了を返しても、collection の `plan_proposals.md` provenance、`workflow-state.json` の `phase == "prepared"`、thumbnail / main、music engine に応じた prompt 設計、loop-video 設定に応じた背景成果物を実ファイルで検証する
+4. child が完了を返しても、collection の `plan_proposals.json` pair を `RepositorySchema.COLLECTION_PLAN` で検証し、その provenance、`workflow-state.json` の `phase == "prepared"`、thumbnail / main、music engine に応じた prompt 設計、loop-video 設定に応じた背景成果物を実ファイルで検証する。HTML/旧 Markdown を parse しない
 5. 検証成功後だけ `batch-ledger.py transition --status completed` で plan を atomic 更新し、次の `pending` plan へ進む
 
 `/wf-new` の approval gate で対話が必要なら、その回答を batch layer が代行・推測しない。承認後の再開でも child が未完了なら canonical child を呼ぶ。上記 crash-window reconciliation は、既に canonical child の完了条件を実ファイル検証できた場合だけ ledger を追従させる例外であり、batch layer から `workflow-state.json` や hard artifacts を作成・変更して完成扱いにしない。

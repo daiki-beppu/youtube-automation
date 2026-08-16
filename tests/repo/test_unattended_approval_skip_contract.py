@@ -30,7 +30,7 @@ def test_wf_new_auto_selection_is_rank_one_and_excludes_minimal_mode() -> None:
     assert "workflow.wf_new.skip_plan_selection" in text
     assert "推奨順 1 位" in text
     assert "自動選択" in text
-    assert "plan_proposals.md" in text
+    assert "plan_proposals.json" in text
     assert "minimal mode" in text
     assert "blocked" in text
 
@@ -71,5 +71,5 @@ def test_wf_new_ideation_skip_records_generation_conditions_and_calls() -> None:
     assert _config("collection-ideate")["preview"]["skip_cost_confirm"] is False
     assert "preview.skip_cost_confirm" in text
     assert "想定 call 数" in text
-    assert "plan_proposals.md" in text
+    assert "plan_proposals.json" in text
     assert "記録に失敗した場合は画像生成せず停止" in text

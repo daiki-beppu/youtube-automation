@@ -70,3 +70,15 @@ def test_cli_no_decision_stops_markdown_update_successfully(tmp_path: Path, caps
     assert result == 0
     assert capsys.readouterr().out.strip() == f"declined: {target.resolve()}"
     assert markdown.read_bytes() == b"legacy"
+
+
+def test_collection_plan_requires_workflow_state_gate(tmp_path: Path, capsys) -> None:
+    candidate = tmp_path / "candidate.json"
+    target = tmp_path / "20-documentation/plan_proposals.json"
+    target.parent.mkdir()
+    candidate.write_text("{}", encoding="utf-8")
+
+    result = migrate.main([str(candidate), "--target", str(target), "--schema", "collection-plan.schema.json"])
+
+    assert result == 1
+    assert "--workflow-state" in capsys.readouterr().err
