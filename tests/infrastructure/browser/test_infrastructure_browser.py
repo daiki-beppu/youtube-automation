@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from contextlib import nullcontext
+from pathlib import Path
 from unittest.mock import MagicMock
 from urllib import error
 
@@ -59,3 +60,18 @@ def test_fetch_html_propagates_network_failures(monkeypatch: pytest.MonkeyPatch,
 
     with pytest.raises(type(failure), match=str(failure)):
         browser.fetch_html("https://allowed.example", timeout=1)
+
+
+def test_open_local_file_uses_absolute_file_uri(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    target = tmp_path / "workflow status.html"
+    opened = MagicMock(return_value=True)
+    monkeypatch.setattr(browser.webbrowser, "open", opened)
+
+    assert browser.open_local_file(target) is True
+    opened.assert_called_once_with(target.resolve().as_uri())
+
+
+def test_open_local_file_reports_browser_rejection(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(browser.webbrowser, "open", lambda _uri: False)
+
+    assert browser.open_local_file(tmp_path / "workflow-status.html") is False

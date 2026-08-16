@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(wf-status)`: canonical workflow state と実成果物からread-only viewを作り、client filter付き固定HTML snapshotをatomic overwriteして既定browserで開く（#4032）。
 - `fix(wf-new)`: 定期実行の開始時に write OAuth token を API quota 消費なしで1回更新し、失効・更新失敗時は workflow を開始せず、機密情報を除去した再認証手順を報告する（#3937）。
 - `feat(workspace)`: workspace 全チャンネルの登録者数・総再生回数・動画数を YouTube `channels.list` 1 request で取得する `yt-workspace-status` を追加する（#4116）。
 - `feat(music)`: `music_engine: minimax` と長尺 instrumental master生成CLIを追加し、`/music --generate` の第3経路へ統合する（#4120）。
