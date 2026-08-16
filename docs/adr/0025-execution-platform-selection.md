@@ -48,10 +48,12 @@ AI 工程（企画・プロンプト作成）と軽量レジームのメディ�
 
 Claude 経路が塞がれた場合の切替先を 2 段で定義する。
 
-- **第一 escape: Codex Cloud**（0 円・ChatGPT サブスク消費）。起動は GHA cron からの `@codex` メンションによる間接トリガ。この経路は未文書化パターンであり、bot コメントでメンションが発火するかは実装ツリーの検証 issue で実測確定する。否なら第一・第二を入れ替える。
-- **第二 escape: `openai/codex-action@v1`**（API キー従量・公式文書化済み）。決定 5 のスクリプト境界で CLI を差し替えるだけで移行できる。
+- **第一 escape: `openai/codex-action@v1`**（API キー従量・公式文書化済み）。決定 5 のスクリプト境界で CLI を差し替えるだけで移行できる。GHA cron から自動起動できる経路はこれを正本とする。
+- **第二 escape: Codex Cloud**（0 円・ChatGPT サブスク消費）。人間 actor の `@codex` メンションでは受付を確認できるが、GHA の `github-actions[bot]` actor が投稿した同内容のメンションでは受付されなかった（#4059）。そのため自動 cron には使わず、人間が開始する復旧経路として保持する。
 
 「日常的な両対応」の担保として、第一 escape 経路を**月次 canary** で実際に実行し、生存確認する。
+
+bot / human actor の比較条件と観測結果は `docs/investigations/2026-08-16-codex-cloud-bot-trigger.md` に固定する。
 
 ### 8. 撤退・切替条件
 
