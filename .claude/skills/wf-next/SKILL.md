@@ -198,18 +198,18 @@ status を記録した後は、成功時だけでなく blocked / failed の停�
 
 **マスター音源検出（音源承認ゲート 2-B）:**
 2. `assets.raw_master != null` + `assets.master_audio = null`:
-   - **判定・state 更新は reference script を使う**。worktree 外（main repo 側）で採用する最終マスター候補を見つけた場合は、先に worktree 側 `01-master/` へコピーしてから script を実行する。script は worktree 側 `01-master/` と `workflow-state.json` を唯一の書き込み対象にする。
+   - **判定・state 更新は共通 review lifecycle の `yt-master-audio-review` を使う**。このCLIは worktree/main の候補へ `source:filename` IDを付け、固定名 `tmp/reviews/master-audio.html` に標準audio playerと検査情報をatomic生成する。HTMLは表示専用で、任意path・command・state patchを受け付けない。
 
      ```bash
      SKIP_MANUAL_MASTERING="$(python3 -c 'from youtube_automation.configuration import load_config; print(str(load_config().workflow.wf_next.skip_manual_mastering).lower())')"
      SKIP_AUDIO_APPROVAL="$(python3 -c 'from youtube_automation.configuration import load_config; print(str(load_config().workflow.wf_next.skip_audio_approval).lower())')"
-     python3 "$(git rev-parse --show-toplevel)/.claude/skills/wf-next/references/master_audio_transition.py" \
-       "$COLLECTION_DIR" \
+     uv run yt-master-audio-review \
+       --collection "$COLLECTION_DIR" \
        --skip-manual-mastering "$SKIP_MANUAL_MASTERING" \
        --skip-audio-approval "$SKIP_AUDIO_APPROVAL"
      ```
 
-     `action: "needs_selection"` が返った場合は、`candidate_sources[].id`（例: `main:final.wav` / `worktree:final.wav`）から採用候補を AskUserQuestion で確認し、`--selected-master-audio <id>` を付けて同じコマンドを再実行する。候補ファイル名が一意なら従来通り `<filename>` でもよいが、worktree と main repo 側で同名候補がある場合は `<id>` が必須。`action: "needs_approval"` が返った場合だけ AskUserQuestion で承認を取り、承認なら `--approved yes --approved-master-audio <master_audio>`、却下なら `--approved no --approved-master-audio <master_audio>` を付けて同じコマンドを再実行する。複数候補かつ承認ゲートありの場合は、選択後の再実行で `needs_approval` が返るため、承認時も `--selected-master-audio <id> --approved yes --approved-master-audio <filename>` を付ける。承認対象と再実行時の採用予定ファイルが一致しない場合、script は state を更新せず再承認を要求する。この script の出力と `workflow-state.json` 更新結果を 2-B の実行契約とする。
+     web reviewを利用できないときは黙って自動承認せず、Codex / Claude の同じsessionで `--transport terminal` を付け、返された候補から `--candidate-id <source:filename>` を明示して再実行する。terminal fallbackも同じdigest再検証とstate確定ownerを通る。`skip_audio_approval = true` はHTMLとbrokerを起動せず、一意な候補だけ自動確定する。
    - **走査対象**:
      - worktree 内 `01-master/` を必ず走査
      - **worktree 検知**: `git rev-parse --git-common-dir` がカレント `.git` と異なる絶対パスを返したら worktree 内とみなし、メインリポルート（`git-common-dir` の親ディレクトリ）の `collections/planning/<collection-name>/01-master/` も確認する。採用するファイルが main repo 側にある場合は、state 更新前に worktree 側 `01-master/` へコピーする（state 更新後の動画化が worktree 内で完結するように）

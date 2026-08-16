@@ -176,6 +176,8 @@ def test_candidate_wheel_syncs_all_assets_into_clean_downstream(tmp_path: Path) 
     assert plan_review_help.returncode == 0, plan_review_help.stderr
     music_review_help = _run(venv / "bin" / "yt-music-prompt-select", "--help", cwd=downstream, env=clean_env)
     assert music_review_help.returncode == 0, music_review_help.stderr
+    master_audio_review_help = _run(venv / "bin" / "yt-master-audio-review", "--help", cwd=downstream, env=clean_env)
+    assert master_audio_review_help.returncode == 0, master_audio_review_help.stderr
 
     compatibility_imports = _run(
         python,
@@ -234,6 +236,8 @@ plan_selection = importlib.import_module("youtube_automation.commands.documents.
 assert plan_selection.__name__.endswith("collection_plan_select")
 music_prompt_selection = importlib.import_module("youtube_automation.commands.documents.music_prompt_select")
 assert music_prompt_selection.__name__.endswith("music_prompt_select")
+master_audio_review = importlib.import_module("youtube_automation.commands.media.master_audio_review")
+assert master_audio_review.__name__.endswith("master_audio_review")
 document_migration = importlib.import_module("youtube_automation.application.documents.migration")
 with tempfile.TemporaryDirectory() as directory:
     target = Path(directory) / "weekly.json"

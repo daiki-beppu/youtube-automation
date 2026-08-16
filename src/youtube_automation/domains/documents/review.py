@@ -11,7 +11,7 @@ from typing import Literal
 from youtube_automation.core.errors import ReviewSelectionError
 
 ReviewArtifact = Literal["plan", "music-prompt", "thumbnail", "audio", "video"]
-_CANDIDATE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+_CANDIDATE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 _DIGEST = re.compile(r"^[a-f0-9]{64}$")
 
 
