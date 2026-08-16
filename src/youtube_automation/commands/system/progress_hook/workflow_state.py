@@ -9,6 +9,10 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
 
+from youtube_automation.core.errors import WorkflowStateError
+from youtube_automation.domains.collections.workflow_state import WorkflowState
+from youtube_automation.domains.collections.workflow_state import read as read_workflow_state
+
 STAGES = ("企画", "音源生成", "マスター化", "動画化", "サムネイル", "アップロード", "公開後処理", "分析")
 
 # /wf-status が定義する v2 phase 語彙を正規の段判定にも使う。
@@ -37,23 +41,23 @@ def _find_channel_root(cwd: Path) -> Path | None:
     return None
 
 
-def _state_paths(root: Path) -> list[Path]:
+def _collection_paths(root: Path) -> list[Path]:
     paths: list[Path] = []
     for location in ("planning", "live"):
         base = root / "collections" / location
         if base.is_dir():
-            paths.extend(path for path in base.glob("*/workflow-state.json") if path.is_file())
+            paths.extend(path.parent for path in base.glob("*/workflow-state.json") if path.is_file())
     return paths
 
 
-def _select_state(paths: list[Path], command: str | None) -> Path | None:
+def _select_collection(paths: list[Path], command: str | None) -> Path | None:
     if not paths:
         return None
     if command is not None:
-        named = [path for path in paths if path.parent.name in command]
+        named = [path for path in paths if path.name in command]
         if named:
-            return max(named, key=lambda path: len(path.parent.name))
-    return max(paths, key=lambda path: path.stat().st_mtime_ns)
+            return max(named, key=lambda path: len(path.name))
+    return max(paths, key=lambda path: (path / "workflow-state.json").stat().st_mtime_ns)
 
 
 def _skip_manual_mastering(root: Path) -> bool:
@@ -81,12 +85,10 @@ def _thumbnail_present(value: object) -> bool:
     return value is True or _file_asset_present(value)
 
 
-def _video_id(state: Mapping[object, object]) -> str | None:
-    upload = state.get("upload", {})
-    if not isinstance(upload, Mapping):
-        return None
-    value = upload.get("video_id")
-    return value if isinstance(value, str) and value else None
+def _video_id(state: WorkflowState) -> str | None:
+    upload = state.upload
+    value = upload.video_id if upload is not None else None
+    return value if value else None
 
 
 def _publish_followup_complete(root: Path, collection: Path, video_id: str | None) -> bool:
@@ -113,12 +115,10 @@ def _publish_followup_complete(root: Path, collection: Path, video_id: str | Non
     return history.get("schema_version") == 1 and isinstance(posted, Mapping) and video_id in posted
 
 
-def _publish_date(state: Mapping[object, object]) -> date | None:
-    upload = state.get("upload", {})
-    if not isinstance(upload, Mapping):
-        return None
-    value = upload.get("publish_at")
-    if not isinstance(value, str) or not value:
+def _publish_date(state: WorkflowState) -> date | None:
+    upload = state.upload
+    value = upload.publish_at if upload is not None else None
+    if not value:
         return None
     return datetime.fromisoformat(value.replace("Z", "+00:00")).date()
 
@@ -141,26 +141,26 @@ def _analysis_complete(root: Path, published_on: date | None) -> bool:
     return False
 
 
-def _completed_stages(root: Path, collection: Path, state: Mapping[object, object]) -> frozenset[str]:
-    phase = state.get("phase")
+def _completed_stages(root: Path, collection: Path, state: WorkflowState) -> frozenset[str]:
+    phase = state.phase
     if phase not in WF_STATUS_PHASES:
         raise ValueError(f"unsupported workflow phase: {phase!r}")
-    assets = state.get("assets")
-    if not isinstance(assets, Mapping):
+    assets = state.assets
+    if assets is None:
         raise ValueError("assets must be an object")
 
     completed: set[str] = set()
     if phase != "planning":
         completed.add("企画")
-    if _file_asset_present(assets.get("raw_master")):
+    if _file_asset_present(assets.raw_master):
         completed.add("音源生成")
-    if _file_asset_present(assets.get("master_audio")) or (
-        _skip_manual_mastering(root) and _file_asset_present(assets.get("raw_master"))
+    if _file_asset_present(assets.master_audio) or (
+        _skip_manual_mastering(root) and _file_asset_present(assets.raw_master)
     ):
         completed.add("マスター化")
-    if _file_asset_present(assets.get("video")) or _file_asset_present(assets.get("master_video")):
+    if _file_asset_present(assets.video) or _file_asset_present(assets.master_video):
         completed.add("動画化")
-    if _thumbnail_present(assets.get("thumbnail")):
+    if _thumbnail_present(assets.thumbnail):
         completed.add("サムネイル")
     if phase == "complete":
         completed.add("アップロード")
@@ -182,10 +182,11 @@ def load_progress_snapshot(cwd: str | None, command: str | None) -> ProgressSnap
         root = _find_channel_root(Path(cwd).resolve())
         if root is None:
             return None
-        state_path = _select_state(_state_paths(root), command)
-        if state_path is None:
+        collection = _select_collection(_collection_paths(root), command)
+        if collection is None:
             return None
-        state = _read_object(state_path)
-        return ProgressSnapshot(_completed_stages(root, state_path.parent, state))
-    except (OSError, UnicodeError, json.JSONDecodeError, TypeError, ValueError):
+        state_path = collection / "workflow-state.json"
+        state = read_workflow_state(state_path)
+        return ProgressSnapshot(_completed_stages(root, collection, state))
+    except (OSError, UnicodeError, json.JSONDecodeError, TypeError, ValueError, WorkflowStateError):
         return None
