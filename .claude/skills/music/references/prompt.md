@@ -66,7 +66,7 @@ subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実�
 
 Style プロンプト生成は generator に委譲し、品質検証は生成とは別コンテキストの reviewer が行う。Claude Code では subagent 起動として扱い、Codex では同等の別エージェント / 別コンテキスト実行に読み替える。
 
-generator は下記の bounded context だけを読み、未公開candidateを作る。verifyとreview完了後の公開は `music-prompt-documents.md` の共通writerだけが行う。
+generator は下記の bounded context だけを読み、未公開candidateを作る。verifyとsemantic review完了後のpair公開は `music-prompt-documents.md` の共通writer、利用者review後のstate確定は共通finalizerだけが行う。
 
 #### Generator context budget
 
@@ -513,9 +513,9 @@ override 後は `uv run yt-generate-suno` を再実行して `suno-prompts.json`
 uv run yt-suno-verify <collection-path>
 ```
 
-candidate / `suno-lyrics.json` の展開後 entry 数、entry name、歌詞構造に加え、patterns root と使用中 variant、channel fallback を解決した effective Style の `genre_line` 文字数を検証し、exit 0 を確認する。その後、別コンテキスト reviewer がcandidate全体をファイル単位の 1 回の呼び出しで読み、`.claude/skills/music/references/review-rubric.md` に従って LLM semantic review を実行し、全 entry の `PASS` / `FAIL` + 理由をまとめて出す。reviewer は `name`, `style`, `lyrics` と `options` だけを判定材料にし、`review_context` 欠落を `/music --prompt` entry の failure reason にしない。`FAIL` entry のみ最大 2 周まで generator subagent（Codex では別コンテキスト実行）に再生成させ、各 round は更新済みcandidate全体を reviewer 1 回で再検証する。全 entry が `PASS` した後に `music-prompt-documents.md` のwriterでJSON+HTML pairを公開し、その後だけ Suno UI へ投入する。上限到達時に `FAIL` が残る場合は公開せず、残課題をユーザーに提示する。
+candidate / `suno-lyrics.json` の展開後 entry 数、entry name、歌詞構造に加え、patterns root と使用中 variant、channel fallback を解決した effective Style の `genre_line` 文字数を検証し、exit 0 を確認する。その後、別コンテキスト reviewer がcandidate全体をファイル単位の 1 回の呼び出しで読み、`.claude/skills/music/references/review-rubric.md` に従って LLM semantic review を実行し、全 entry の `PASS` / `FAIL` + 理由をまとめて出す。reviewer は `name`, `style`, `lyrics` と `options` だけを判定材料にし、`review_context` 欠落を `/music --prompt` entry の failure reason にしない。`FAIL` entry のみ最大 2 周まで generator subagent（Codex では別コンテキスト実行）に再生成させ、各 round は更新済みcandidate全体を reviewer 1 回で再検証する。全 entry が `PASS` した後に `music-prompt-documents.md` の共通writerでJSON+HTML pairを公開し、`yt-music-prompt-select` の手動承認（自動経路は `--automatic`）を同じfinalizerで確定する。その後だけ Suno UI へ投入する。上限到達時に `FAIL` が残る場合は公開せず、残課題をユーザーに提示する。
 
-`yt-generate-suno` 自体は `workflow-state.json` を更新しない。共通writerが、`yt-suno-verify` の成功、semantic review の全 entry `PASS`、JSON+HTML再読込を確認した後にだけ owner API で `assets.music_prompts = true` を更新する。`planning.music` と `updated_at` の既存投影も同じ成功境界より前に行わない。subagent は state を書き込まない。
+`yt-generate-suno` 自体は `workflow-state.json` を更新しない。共通writerがpair公開までを担い、共通finalizerが、`yt-suno-verify` の成功、semantic review の全 entry `PASS`、JSON+HTML再読込、review digest一致を確認した後にだけ owner API で `assets.music_prompts = true` を更新する。`planning.music` と `updated_at` の既存投影も同じ成功境界より前に行わない。subagent は state を書き込まない。
 
 ### Step 3: `/music --generate` で自動投入（推奨）
 

@@ -85,7 +85,7 @@ def test_collection_plan_requires_workflow_state_gate(tmp_path: Path, capsys) ->
     assert "--workflow-state" in capsys.readouterr().err
 
 
-def test_music_prompt_cli_requires_reviewed_candidate_and_updates_state(tmp_path: Path, capsys) -> None:
+def test_music_prompt_cli_publishes_reviewed_candidate_without_approving_state(tmp_path: Path, capsys) -> None:
     candidate = tmp_path / "candidate.json"
     target = tmp_path / "20-documentation/suno-prompts.json"
     target.parent.mkdir()
@@ -127,7 +127,7 @@ def test_music_prompt_cli_requires_reviewed_candidate_and_updates_state(tmp_path
     )
 
     assert result == 0
-    assert json.loads(state.read_text())["assets"]["music_prompts"] is True
+    assert json.loads(state.read_text())["assets"] == {}
     assert "created:" in capsys.readouterr().out
 
 

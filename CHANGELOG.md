@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `feat(hybrid)`: Git制御面stateを読む前のfast-forward pullと、更新後の即時commit + pushを共通化し、non-fast-forward競合では自動merge/rebaseせず通知eventを発火して停止する（#4050）。
 - `feat(hybrid)`: MediaStore の R2 bucket・bucket-scoped runtime token・object / multipart lifecycle を Cloudflare provider v5 の独立 Terraform stack で管理し、GCS backend・secret 非永続化・無料枠 retention guardrail・offline mock plan 契約を追加する（#4047）。
 - `feat(hybrid)`: R2 の大容量 push を固定 part の multipart 転送へ切り替え、atomic checkpoint と remote `ListParts` を正本にプロセス中断後の再開・完了済み part のskip・再実行冪等性を追加する（#4046）。
+- `feat(music)`: Suno / MiniMax / Lyria の構造化promptをalbum flow付き永続card HTMLで確認し、共通brokerまたは明示terminal/automatic経路のdigest再検証後だけ音楽prompt stateを確定する（#4018）。
 - `feat(thumbnail)`: 候補画像と固定QAを原寸/320pxで比較する安全なWeb reviewを追加し、検証済みcandidate IDだけをthumbnail/main/ABの既存確定ownerへ渡す（#4017）。
 - `feat(hybrid)`: versioned 受け渡し manifest を completion marker として追加し、正準 file list・root checksum・manifest-last push・listing 非依存 pull・既存local成果物のrollbackをfail-closedに固定する（#4045）。
 - `feat(hybrid)`: 工程境界専用の `MediaStore` port と checksum 検証付き Local / Cloudflare R2 adapterを追加し、bucket・prefix・path・symlink 境界と secret 解決を fail-closed に固定する（#4044）。

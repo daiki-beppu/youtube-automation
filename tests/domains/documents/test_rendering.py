@@ -76,6 +76,37 @@ def test_render_escapes_markup_and_embedded_json_script_boundary() -> None:
     assert json.loads(embedded)["summary"] == malicious
 
 
+def test_music_prompt_entries_render_as_readable_cards_with_album_flow() -> None:
+    document = {
+        "schema_version": 1,
+        "generated_at": "2026-08-16T00:00:00Z",
+        "engine": "minimax",
+        "collection_id": "night-drive",
+        "provenance": {"producer": "music", "source_paths": ["plan.json"]},
+        "entries": [
+            {
+                "name": "01-opening",
+                "title": "Neon <Drive>",
+                "style": "synthwave\nslow build",
+                "lyrics": "[Instrumental]",
+                "sections": ["intro", "build", "outro"],
+                "quality": {"score": 92, "summary": "cohesive"},
+                "options": {"model": "music-2.0"},
+                "track_role": "opening",
+                "review": {"verify_status": "pass", "semantic_status": "pass", "notes": []},
+            }
+        ],
+    }
+
+    html = render_repository_document(RepositorySchema.MUSIC_PROMPT, document)
+
+    assert 'class="card-flow"' in html
+    assert 'class="entry-card"' in html
+    assert "Neon &lt;Drive&gt;" in html
+    assert "synthwave\nslow build" in html
+    assert html.index("Song title") < html.index("Style / prompt") < html.index("Lyrics")
+
+
 @pytest.mark.parametrize(
     "asset",
     [
