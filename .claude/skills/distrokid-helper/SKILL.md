@@ -12,7 +12,7 @@ description: "Use when コレクションの楽曲を DistroKid 配信用に準�
 
 ## 成果物
 
-- `書き込む`: `collections/<id>/30-distrokid/spec.json`, `collections/<id>/30-distrokid/cover_art_3000.jpg`, `collections/<id>/30-distrokid/<disc>/release.json`, `collections/<id>/30-distrokid/README.md`
+- `書き込む`: `collections/<id>/30-distrokid/spec.json`, `collections/<id>/30-distrokid/cover_art_3000.jpg`, `collections/<id>/30-distrokid/<disc>/release.json`, `collections/<id>/30-distrokid/README.md`, `collections/<id>/workflow-state.json::human_tasks.distrokid_submission.completed_at`
 - `読み込む`: `collections/<id>/02-Individual-music/*.mp3`, `collections/<id>/10-assets/main.png`, `config/channel/distrokid.json`
 
 ## Overview
@@ -288,6 +288,13 @@ verify が green になったら `.claude/skills/extension/references/serve.md` 
 
 1. distrokid-helper popup の **ローカル配信元** selector を開き、候補更新後に表示された対象を選択する
 2. Chrome 拡張 **distrokid-helper** を使って `30-distrokid/README.md` の手順に従い DistroKid Web フォームへ転記・アップロードを行う
-3. ユーザーが転記・アップロード完了を確認したら `.claude/skills/extension/references/serve.md` の停止契約を実 port へ適用し、対象 process が残っていないことを確認する
+3. ユーザーが転記・アップロード完了を確認した後、提出時点の human-task 完了を次の 1 コマンドで記録する。対象チャンネルの `config/channel/distrokid.json` が通常ファイルとして存在しない場合は state を変更せず停止する
+
+   ```bash
+   uv run yt-workflow-state --collection <collection> record-distrokid-submission
+   ```
+
+   `workflow-state.json` の `human_tasks.distrokid_submission.completed_at` が記録されたことを確認する。再実行時は初回の完了時刻を維持する
+4. `.claude/skills/extension/references/serve.md` の停止契約を実 port へ適用し、対象 process が残っていないことを確認する
 
 DistroKid 申請後の DSP リンク（Spotify / Apple Music）到着は通常 1〜2 週間かかる。

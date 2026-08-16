@@ -76,6 +76,10 @@ def build_parser() -> argparse.ArgumentParser:
     handoff_parser.add_argument("--point", choices=("suno_download",), required=True)
     handoff_parser.add_argument("--manifest-key", required=True, help="R2上のmanifest.json相対key")
     handoff_parser.add_argument("--root-sha256", required=True, help="manifestのroot SHA-256")
+    subparsers.add_parser(
+        "record-distrokid-submission",
+        help="確認済みDistroKid提出をhuman-task完了として記録",
+    )
     for command, help_text in (
         ("set-thumbnail-approved", "thumbnail 承認状態を更新"),
         ("set-description-generated", "概要欄生成状態を更新"),
@@ -86,10 +90,6 @@ def build_parser() -> argparse.ArgumentParser:
     shorts_parser.add_argument("value", help="short record の JSON 配列")
     subparsers.add_parser("touch", help="updated_at を現在時刻へ更新")
     return parser
-
-
-def _state_path(collection: str | None) -> Path:
-    return resolve_collection_dir(collection) / "workflow-state.json"
 
 
 def _get_keypath(document: Mapping[str, JSONValue], keypath: str) -> JSONValue:
@@ -171,6 +171,23 @@ def _record_handoff(state: WorkflowState, args: argparse.Namespace) -> None:
         _touch(state)
 
 
+def _channel_root_for_collection(collection_dir: Path) -> Path:
+    for candidate in (collection_dir, *collection_dir.parents):
+        if (candidate / "config" / "channel").is_dir():
+            return candidate
+    raise WorkflowStateError(
+        f"collection と同じチャンネルに config/channel/distrokid.json の通常ファイルが必要です: {collection_dir}"
+    )
+
+
+def _record_distrokid_submission(state: WorkflowState) -> None:
+    before = state.to_dict()
+    completed_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+    state.record_distrokid_submission(completed_at)
+    if state.to_dict() != before:
+        _touch(state)
+
+
 def _set_completion_flag(
     state: WorkflowState,
     *,
@@ -185,7 +202,8 @@ def _set_completion_flag(
 
 
 def run(args: argparse.Namespace) -> int:
-    state_path = _state_path(args.collection)
+    collection_dir = resolve_collection_dir(args.collection)
+    state_path = collection_dir / "workflow-state.json"
     if args.command == "get":
         value = _get_keypath(read_workflow_state(state_path).to_dict(), args.keypath)
         print(json.dumps(value, ensure_ascii=False))
@@ -211,6 +229,13 @@ def run(args: argparse.Namespace) -> int:
         update_workflow_state(state_path, lambda state: _set_post_upload_shorts(state, _json_value(args.value)))
     elif args.command == "record-handoff":
         update_workflow_state(state_path, lambda state: _record_handoff(state, args))
+    elif args.command == "record-distrokid-submission":
+        config_path = _channel_root_for_collection(collection_dir) / "config" / "channel" / "distrokid.json"
+        if config_path.is_symlink() or not config_path.is_file():
+            raise WorkflowStateError(
+                f"DistroKid提出記録には config/channel/distrokid.json の通常ファイルが必要です: {config_path}"
+            )
+        update_workflow_state(state_path, _record_distrokid_submission)
     elif args.command == "touch":
         update_workflow_state(state_path, _touch)
     return 0

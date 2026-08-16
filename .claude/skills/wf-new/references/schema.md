@@ -71,6 +71,11 @@ Phase 3: 公開             /wf-next    動画→概要欄→アップロード�
     "manifest_key": "002ch/sample/suno-download/manifest.json",
     "root_sha256": "64 lowercase hex characters"
   },
+  "human_tasks": {
+    "distrokid_submission": {
+      "completed_at": "ISO 8601"
+    }
+  },
   "music_pair_selection": {
     "updated_at": "ISO 8601",
     "exceptions_over_limit_count": 1,
@@ -164,6 +169,10 @@ Phase 3: 公開             /wf-next    動画→概要欄→アップロード�
 | `handoff.root_sha256` | string | manifest正準file一覧のroot SHA-256（lowercase 64 hex） |
 
 stateにはmanifest全文やfile一覧を複製しない。正本はMediaStore上のmanifestであり、Git制御面はkeyとroot checksumだけを保持する。
+
+### human_tasks フィールド詳細
+
+`human_tasks.distrokid_submission.completed_at` は DistroKid Web への転記・アップロードを人間が確認した提出時点を記録する。`config/channel/distrokid.json` が通常ファイルとして存在するチャンネルだけが対象で、`yt-workflow-state record-distrokid-submission` が初回時刻を lock + atomic update する。再実行では初回時刻を上書きせず、human-tasks 生成と live-clean は owner の `distrokid_submission_completed_at` accessor を参照する。
 
 ### stage フィールド詳細
 
