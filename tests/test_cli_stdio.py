@@ -58,6 +58,7 @@ EXPECTED_ENTRYPOINT_MODULES = {
     "yt-pinned-comment": "youtube_automation.commands.youtube.pinned_comment",
     "yt-playlist-manager": "youtube_automation.commands.youtube.playlist_manager",
     "yt-playlist-status": "youtube_automation.commands.youtube.playlist_status",
+    "yt-postmortem-pending": "youtube_automation.commands.analytics.postmortem_pending",
     "yt-populate-scene-phrases": "youtube_automation.commands.media.populate_scene_phrases",
     "yt-preflight": "youtube_automation.commands.system.preflight",
     "yt-progress-hook": "youtube_automation.commands.system.progress_hook",
