@@ -338,7 +338,7 @@ def test_setup_channel_ttp_hearing_routes_direction_to_strategy_mode() -> None:
         "## Step D5: 次フェーズへの案内",
     ):
         assert heading in direction_mode
-    assert "決定事項を `docs/channel/channel-direction.md` に保存" in direction_mode
+    assert "決定事項を検証済み `docs/channel/channel-direction.json` + `.html` pair に保存" in direction_mode
     assert "`mkdir -p docs/channel`" in direction_mode
     assert "config を再生成・再反映する場合は `/setup --regenerate`" in direction_mode
     assert "制作に進む場合は `/wf-new`" in direction_mode

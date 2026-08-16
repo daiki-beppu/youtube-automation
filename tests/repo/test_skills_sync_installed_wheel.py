@@ -163,6 +163,7 @@ assert set(schema_registry.repository_schema_names()) == {
     "analysis-report.schema.json",
     "audit-report.schema.json",
     "channel-research-report.schema.json",
+    "channel-strategy.schema.json",
     "experiment-entry.schema.json",
     "feedback-entry.schema.json",
     "insights-entry.schema.json",

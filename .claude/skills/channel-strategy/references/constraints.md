@@ -6,17 +6,17 @@
 
 ## 成果物
 
-- `書き込む`: `docs/channel/creative-constraints.md`
-- `読み込む`: `docs/channel/personas/persona-definition.md`, `docs/plans/viewing-scene-matrix.md`, `config/channel/*.json`
+- `書き込む`: 検証済み `docs/channel/creative-constraints.json` + `.html`
+- `読み込む`: 検証済み `docs/channel/personas/persona-definition.json`, 検証済み `docs/plans/viewing-scene-matrix.json`, `config/channel/*.json`
 
 ## Hard Gates
 
 後続 Step に入る前に、次をこの順で確認する。
 
 1. `CHANNEL_DIR` が特定でき、`config/channel/` が存在すること。
-2. `CHANNEL_DIR/docs/channel/personas/persona-definition.md` が存在すること。
-3. `CHANNEL_DIR/docs/plans/viewing-scene-matrix.md` が存在すること。
-4. `persona-definition.md` に `viewing-scene 未検証` が残っていないこと。
+2. `CHANNEL_DIR/docs/channel/personas/persona-definition.json` + `.html` pair を検証できること。
+3. `CHANNEL_DIR/docs/plans/viewing-scene-matrix.json` + `.html` pair を検証できること。
+4. persona の `status` が `confirmed` で、`scene_ids` が scene 正本を参照すること。
 
 1〜4 のいずれかが FAIL なら、前工程 `/channel-strategy --persona` を案内して停止する。すべて PASS になるまで制約の生成、ディレクトリ作成、config 更新へ進まない。
 
@@ -26,7 +26,7 @@
 
 以下をすべて満たした時点で完了する。
 
-- `CHANNEL_DIR/docs/channel/creative-constraints.md` に「音」「映像」「サムネ」「タイトル」「測定」の5セクションが1つずつ存在する。
+- `CHANNEL_DIR/docs/channel/creative-constraints.json` の `constraints[].category` に `audio`, `video`, `thumbnail`, `title`, `measurement` が1件以上ずつ存在する。
 - 全制約行に `ID`、`制約`、`PASS`、`FAIL`、`根拠` があり、PASS/FAIL が数値、有限列挙、文字列一致、または真偽値で一意に判定できる。
 - `根拠` に入力ファイルのパスと見出し名がある。根拠のない値はユーザー確認結果を記録する。
 - `適切に`、`必要なら`、`いい感じに`、`自然に` を判定条件に使っていない。
@@ -40,8 +40,8 @@
 
 次の2ファイルを読み、根拠の見出し名を保持したまま表へ整理する。
 
-- `docs/channel/personas/persona-definition.md`: 第一ペルソナ、語彙、感情トリガー、避けるべき訴求、音楽・サムネ・タイトルへの影響
-- `docs/plans/viewing-scene-matrix.md`: メインシーン、時間帯、行動、直前の感情状態、動画尺、避けるべきシーン
+- `docs/channel/personas/persona-definition.json`: 第一ペルソナ、語彙、感情トリガー、避けるべき訴求、音楽・サムネ・タイトルへの影響
+- `docs/plans/viewing-scene-matrix.json`: メインシーン、時間帯、行動、直前の感情状態、動画尺、避けるべきシーン
 
 外部調査や一般論で値を補完しない。次の必須値が入力に明記されていない場合は、候補と根拠を表示してユーザーへ確認し、回答を得るまで Step 2 に進まない。
 
@@ -55,7 +55,7 @@
 
 ## Step 2: 制約文書を生成する
 
-`docs/channel/creative-constraints.md` を次の固定構造で生成する。既存ファイルがある場合は全置換せず、既存IDを維持した差分案を先に表示する。
+`references/structured-documents.md` に従い `docs/channel/creative-constraints.json` + `.html` pair を生成する。既存 pair がある場合は全置換せず、既存 constraint ID を維持した差分案を先に表示する。以下の表は JSON `constraints` 候補を組み立てるための表示案であり、Markdown を保存しない。
 
 ```markdown
 # Creative Constraints
@@ -64,8 +64,8 @@
 
 | 入力 | 参照見出し |
 |---|---|
-| docs/channel/personas/persona-definition.md | ... |
-| docs/plans/viewing-scene-matrix.md | ... |
+| docs/channel/personas/persona-definition.json | ... |
+| docs/plans/viewing-scene-matrix.json | ... |
 
 ## 音
 
@@ -120,7 +120,7 @@
 候補が0件なら「反映可能な既存キーなし」と報告し、config を変更せず完了する。候補が1件以上なら、差分をすべて表示した後、AskUserQuestion で次の明示2択を提示する（AskUserQuestion 非対応環境では同じ2択をテキストで提示して回答を待つ）。
 
 1. `提案した既存キーを更新する`
-2. `更新せず creative-constraints.md のみ保存する`
+2. `config を更新せず creative-constraints.json pair のみ保存する`
 
 「更新する」が明示されるまで config を書き換えない。更新すると下流のタイトル・説明文生成結果が変わること、誤った更新を外部公開後に取り消しても既公開メタデータは自動では戻らないことを警告する。承認後は表示済みの JSON Pointer だけを更新し、新規キーが0件であることを差分で確認する。
 
@@ -134,7 +134,7 @@
 
 ## 関連ファイル
 
-- `docs/channel/personas/persona-definition.md` — 第一ペルソナ定義（入力）
-- `docs/plans/viewing-scene-matrix.md` — 視聴シーン検証（入力）
-- `docs/channel/creative-constraints.md` — チャンネル制作制約（出力）
+- `docs/channel/personas/persona-definition.json` — 第一ペルソナ JSON 正本（入力）
+- `docs/plans/viewing-scene-matrix.json` — 視聴シーン JSON 正本（入力）
+- `docs/channel/creative-constraints.json` — チャンネル制作制約 JSON 正本（出力）
 - `config/channel/content.json` — 承認時のみ既存キーを更新する反映先

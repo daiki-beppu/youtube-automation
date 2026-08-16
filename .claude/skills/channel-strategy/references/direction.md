@@ -5,7 +5,7 @@
 `/channel-research --market` の分析レポート、または `/setup --channel` が保存した
 `docs/channel/ttp-seed-confirmation.md` と `docs/channel/competitor-branding-snapshot.json` をもとに、
 ユーザーと対話で新チャンネルの方向性を再検討する。データに基づいた議論を行い、
-決定事項を `docs/channel/channel-direction.md` に保存する。
+決定事項を検証済み `docs/channel/channel-direction.json` + `.html` pair に保存する。
 
 **前提**: `/setup --channel` が完了していること。詳細分析済みなら検証済み `docs/channel-research.json` を優先して使う。
 
@@ -119,7 +119,7 @@ YouTube の第三者チャンネル由来データ（description、keywords、lo
 
 ## Step D4: 方向性ドキュメント保存
 
-決定事項を `docs/channel/channel-direction.md` に保存。
+`references/structured-documents.md` に従い、決定事項を `document_type: direction`、`direction.summary` / `positioning` / `differentiation`、`evidence`、`status` を持つ `docs/channel/channel-direction.json` + `.html` pair に保存する。
 ディレクトリが存在しなければ `mkdir -p docs/channel` で作成してから書き出す。
 
 雛形:

@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `refactor(uploads)`: `ShortUploader` が複製していた公開日計算と tracking / workflow-state I/O を `PublishedDatesScheduler` / `TrackingStore` の共通コラボレータへ統合する（#3935）。
 - `refactor(metadata)`: metadata service・metadata audit・Shorts localization の `workflow-state` 読み取りを owner の型付き accessor 経由へ移し、破損 JSON をドメイン診断へ変換する（#3882）。
 - `refactor(uploads)`: uploads ドメインの `workflow-state` 読み取り6ファイルを owner の型付き accessor 経由へ移行し、破損時の既存 fail-open / fail-loud 契約を維持する（#3881）。
+- `feat(documents)`: チャンネル方向性・第一ペルソナ・視聴シーン・制作制約を相互参照検証付き JSON 正本と同 basename HTML へ移し、Markdown 明示移行 gate と downstream の validated JSON-only 読み取りを統一する（#4027）。
 - `refactor(collections)`: raw master・batch video・thumbnail auto selection・DistroKid release date・Suno selection の5 writerを `workflow-state` owner の lock + atomic update へ移行する（#3880）。
 - `refactor(collections)`: collection server と Suno downloaded の `workflow-state` 読み書きを owner API へ移し、downloaded 更新を lock + atomic update に統一する（#3879）。
 - `refactor(collections)`: rain layer・scene phrase・track 表示名・Short upload の4 writerを `workflow-state` owner の lock + atomic update 経由へ移し、同時更新と未知 field を保持する（#3878）。

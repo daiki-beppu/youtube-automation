@@ -4,7 +4,7 @@ Phase 2〜3 で候補を設計するときにだけ本書を読む。入力モ�
 
 ## 現在のチャンネル規定（固定制約）
 
-`../SKILL.md` の「固定制約の解決」で存在確認済みの channel config と規定文書を、候補生成中に変更できない境界として扱う。対象は `config/channel/*.json` の世界観・コンテンツ・音声等の明示設定、`docs/channel/channel-direction.md`、`docs/channel/personas/persona-definition.md`、`docs/plans/viewing-scene-matrix.md`、`docs/channel/creative-constraints.md` のうち存在するものだけとする。欠落文書から規定を推測せず、既存の fallback / 非停止契約を維持する。
+`../SKILL.md` の「固定制約の解決」で存在確認済みの channel config と規定文書を、候補生成中に変更できない境界として扱う。対象は `config/channel/*.json` の世界観・コンテンツ・音声等の明示設定と、検証済み JSON+HTML pair の `docs/channel/channel-direction.json`、`docs/channel/personas/persona-definition.json`、`docs/plans/viewing-scene-matrix.json`、`docs/channel/creative-constraints.json` のうち存在するものだけとする。各 pair は `RepositorySchema.CHANNEL_STRATEGY` で検証し、JSON だけを読む。片方だけ・HTML 不一致・schema/参照不正は fail-closed とし、旧 Markdown/HTML を parse しない。欠落文書から規定を推測せず、既存の fallback / 非停止契約を維持する。
 
 Analytics、benchmark、open insights、ユーザー直接入力は候補を発見・順位付けする材料であり、現在の規定より優先しない。明示的な上流の方向性再設計で正本自体が更新されていない限り、これらの材料と規定が衝突した場合は規定を維持する。
 

@@ -8,7 +8,7 @@
         "docs/plans/viewer-voice-analysis.json",
         "docs/plans/viewer-voice-analysis.html"
       ],
-      "outputArtifacts": ["docs/channel/personas/persona-definition.md"],
+      "outputArtifacts": ["docs/channel/personas/persona-definition.json", "docs/channel/personas/persona-definition.html"],
       "idempotency": {
         "script": "references/channel-strategy-chain-state.py"
       }
@@ -16,8 +16,8 @@
     {
       "id": "scene",
       "skill": "channel-strategy",
-      "prerequisiteArtifacts": ["docs/channel/personas/persona-definition.md"],
-      "outputArtifacts": ["docs/plans/viewing-scene-matrix.md"],
+      "prerequisiteArtifacts": ["docs/channel/personas/persona-definition.json", "docs/channel/personas/persona-definition.html"],
+      "outputArtifacts": ["docs/plans/viewing-scene-matrix.json", "docs/plans/viewing-scene-matrix.html"],
       "idempotency": {
         "script": "references/channel-strategy-chain-state.py"
       }
@@ -26,10 +26,12 @@
       "id": "constraints",
       "skill": "channel-strategy",
       "prerequisiteArtifacts": [
-        "docs/channel/personas/persona-definition.md",
-        "docs/plans/viewing-scene-matrix.md"
+        "docs/channel/personas/persona-definition.json",
+        "docs/channel/personas/persona-definition.html",
+        "docs/plans/viewing-scene-matrix.json",
+        "docs/plans/viewing-scene-matrix.html"
       ],
-      "outputArtifacts": ["docs/channel/creative-constraints.md"],
+      "outputArtifacts": ["docs/channel/creative-constraints.json", "docs/channel/creative-constraints.html"],
       "idempotency": {
         "script": "references/channel-strategy-chain-state.py"
       }
