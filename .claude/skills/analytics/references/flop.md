@@ -297,7 +297,7 @@ Phase 5 で保存した postmortem.md の「結論 / 反証 / 学び」から、
 uv run python3 .claude/skills/analytics/references/validate_insights.py data/insights.jsonl
 ```
 
-還元された学びは次サイクルで `/wf-new` が open エントリとして収集し、`/wf-new` の企画入力・`/thumbnail`（lever=thumbnail）の制作前参照に使われる。本スキルを `/wf-new` から自動実行することはない（公開済み動画の分析・検証は本スキルの既存責務に残る）。
+還元された学びは次サイクルで `/wf-new` が open エントリとして収集し、`/wf-new` の企画入力・`/thumbnail`（lever=thumbnail）の制作前参照に使われる。`/wf-new` Phase 0 は `yt-postmortem-pending` が列挙した対象を承認後に本 mode へ順次委譲するが、公開済み動画の分析・検証ロジックは本 mode の既存責務に残る。
 
 ### Phase 7: creative-constraints への制約還流
 
