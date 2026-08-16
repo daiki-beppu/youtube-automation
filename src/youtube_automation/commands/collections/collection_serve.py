@@ -46,6 +46,7 @@ from pathlib import Path
 
 from youtube_automation import __version__
 from youtube_automation.application.distrokid.disc_query import find_distrokid_discs
+from youtube_automation.application.suno_download_handoff import SunoDownloadHandoff
 from youtube_automation.commands.collections.collection_serve_discovery import (
     DISCOVERY_PORT,
     RegistryState,
@@ -53,7 +54,7 @@ from youtube_automation.commands.collections.collection_serve_discovery import (
     handle_registry_request,
 )
 from youtube_automation.configuration import Distrokid, channel_dir, load_config
-from youtube_automation.core.errors import ConfigError, WorkflowStateError
+from youtube_automation.core.errors import ConfigError, MediaStoreError, WorkflowStateError
 from youtube_automation.domains.collections.workflow_state import read_or_none as read_workflow_state_or_none
 from youtube_automation.domains.distrokid.metadata import parse_album_metadata
 from youtube_automation.domains.distrokid.release import (
@@ -73,7 +74,10 @@ from youtube_automation.domains.suno.downloaded import (
     parse_downloaded_payload,
     read_pattern_count,
 )
-from youtube_automation.domains.suno.downloaded.apply import apply_downloaded_artifacts_detailed
+from youtube_automation.domains.suno.downloaded.apply import (
+    apply_downloaded_artifacts_detailed,
+    cleanup_downloaded_archive,
+)
 from youtube_automation.domains.suno.downloaded.models import (
     COLLECTIONS_ROUTE,
     DOCUMENTATION_DIRNAME,
@@ -93,6 +97,7 @@ from youtube_automation.infrastructure.collections.chrome_extensions import (
 )
 from youtube_automation.infrastructure.file_lock import file_lock
 from youtube_automation.infrastructure.media.collection_paths import CollectionPaths
+from youtube_automation.infrastructure.media_store import R2MediaStore, R2MediaStoreConfig
 
 DEFAULT_PORT = 7873
 DEFAULT_IDLE_TIMEOUT_SECONDS = 60 * 60
@@ -117,6 +122,7 @@ _COLLECTION_DIR_SUFFIX = "-collection"
 # DistroKid dir mode: リリース記録の出力先 JSON（`<root>/config/distrokid-releases.json`）（#934）。
 _DISTROKID_RELEASES_OUTPUT_RELPATH = Path("config") / "distrokid-releases.json"
 _DISTROKID_CAPTURE_ROOT_ENV = "DISTROKID_CAPTURE_ROOT"
+_R2_HANDOFF_ENVIRONMENT = frozenset({"R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_API_TOKEN", "R2_BUCKET", "R2_PREFIX"})
 
 # 30-distrokid サブディレクトリ名（#934）。コレクション配下のこのサブディレクトリが disc を含む。
 _DISTROKID_DIRNAME = "30-distrokid"
@@ -947,6 +953,7 @@ def _configuration_fingerprint(
     capture_root: Path | None,
     distrokid_source: str | None,
     idle_timeout_seconds: float,
+    downloaded_handoff_enabled: bool,
 ) -> str:
     payload = json.dumps(
         {
@@ -956,6 +963,7 @@ def _configuration_fingerprint(
             "capture_root": str(capture_root.resolve()) if capture_root is not None else None,
             "distrokid_source": distrokid_source,
             "idle_timeout_seconds": idle_timeout_seconds,
+            "downloaded_handoff_enabled": downloaded_handoff_enabled,
         },
         sort_keys=True,
         separators=(",", ":"),
@@ -1037,6 +1045,7 @@ def create_server(
     idle_timeout_seconds: float = DEFAULT_IDLE_TIMEOUT_SECONDS,
     lifecycle_record: _LifecycleRecord | None = None,
     lifecycle_root: Path | None = None,
+    downloaded_handoff: SunoDownloadHandoff | None = None,
 ) -> ThreadingHTTPServer:
     """サブパス分離した GET / POST / CORS preflight を返すサーバーを生成する.
 
@@ -1168,6 +1177,7 @@ def create_server(
                     coll_dir,
                     downloaded,
                     prompt_entries_reader=read_suno_prompt_entries,
+                    defer_archive_cleanup=True,
                 )
             except DownloadedPayloadError:
                 self.send_error(400, "Bad Request")
@@ -1175,6 +1185,13 @@ def create_server(
             except DownloadedArtifactError as exc:
                 self._send_json_error(500, str(exc))
                 return
+            if downloaded.download_path and downloaded_handoff is not None:
+                try:
+                    downloaded_handoff.complete(coll_dir)
+                except (MediaStoreError, WorkflowStateError) as exc:
+                    self._send_json_error(500, str(exc))
+                    return
+            cleanup_downloaded_archive(downloaded)
             resp: dict = {"ok": True, "collection_id": cid, "placed_count": apply_result.placed_count}
             # playlist URL だけを記録する先行 POST は legacy 応答を維持し、実 ZIP 適用後だけ summary を返す。
             if downloaded.download_path:
@@ -1628,6 +1645,21 @@ def _resolve_distrokid_capture_root(root_arg: str | None) -> Path | None:
     return Path(root).expanduser() if root is not None else None
 
 
+def _r2_handoff_requested() -> bool:
+    return any(name in os.environ for name in _R2_HANDOFF_ENVIRONMENT)
+
+
+def _build_downloaded_handoff(channel_short: str) -> SunoDownloadHandoff | None:
+    """明示された R2 設定だけを download 完了 handoff に配線する。"""
+    if not _r2_handoff_requested():
+        return None
+    channel = re.sub(r"[^a-z0-9]+", "-", channel_short.strip().lower()).strip("-")
+    if not channel:
+        raise ConfigError("R2 handoff の channel identifier を channel_short から解決できません")
+    config = R2MediaStoreConfig.from_environment()
+    return SunoDownloadHandoff(store=R2MediaStore(config), channel=channel)
+
+
 def _resolve_allow_origin(
     allow_origin: str | None, allow_extension: str | None
 ) -> tuple[str | None, ChromeExtensionOrigin | None]:
@@ -1724,6 +1756,7 @@ def main() -> None:
     capture_root = _resolve_distrokid_capture_root(args.distrokid_capture_root)
     allow_origin, detected_extension = _resolve_allow_origin(args.allow_origin, args.allow_extension)
     embedded_registry_state = RegistryState() if args.port == DISCOVERY_PORT else None
+    r2_handoff_requested = _r2_handoff_requested()
 
     # path が `*-collection/` を並べたディレクトリなら dir mode（#816）。
     collection_dirs = find_collection_dirs(args.path)
@@ -1735,6 +1768,7 @@ def main() -> None:
         capture_root=capture_root,
         distrokid_source=args.distrokid_source,
         idle_timeout_seconds=args.idle_timeout,
+        downloaded_handoff_enabled=r2_handoff_requested,
     )
     requested_pid_path = _pid_file_path(lifecycle_root, args.port)
     lifecycle_record = _LifecycleRecord(
@@ -1752,10 +1786,13 @@ def main() -> None:
             channel_name = config.meta.channel_name
             channel_short = config.meta.channel_short
         except ConfigError:
+            if r2_handoff_requested:
+                raise
             distrokid_cfg = None
             channel_name = "YouTube Automation"
             channel_short = "YA"
         distrokid_capture_active = distrokid_cfg is not None and distrokid_cfg.enabled
+        downloaded_handoff = _build_downloaded_handoff(channel_short)
     else:
         # community-draft だけを使う collection は suno-prompts.json を持たなくても起動可能。
         prompts_path = _resolve_single_mode_prompts_path(args.path)
@@ -1790,6 +1827,7 @@ def main() -> None:
                 idle_timeout_seconds=args.idle_timeout,
                 lifecycle_record=lifecycle_record,
                 lifecycle_root=lifecycle_root,
+                downloaded_handoff=downloaded_handoff,
             )
         else:
             server = create_server(

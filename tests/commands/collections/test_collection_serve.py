@@ -55,7 +55,7 @@ from youtube_automation.commands.collections.collection_serve import (
     resolve_prompts_path,
 )
 from youtube_automation.commands.collections.collection_serve_discovery import DISCOVERY_PATH, RegistryState
-from youtube_automation.core.errors import ConfigError
+from youtube_automation.core.errors import ConfigError, MediaStoreError
 from youtube_automation.domains.documents.rendering import render_repository_document
 from youtube_automation.domains.documents.schema_registry import RepositorySchema
 from youtube_automation.domains.suno.downloaded.apply import apply_downloaded_artifacts
@@ -1164,6 +1164,51 @@ def test_main_resolves_allow_extension_to_allow_origin(monkeypatch, capsys, tmp_
     assert "serve token: GET http://test-channel.localhost:7873/auth/token" in stdout
 
 
+def test_build_downloaded_handoff_is_disabled_when_r2_is_not_configured(monkeypatch):
+    for name in ("R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_API_TOKEN", "R2_BUCKET", "R2_PREFIX"):
+        monkeypatch.delenv(name, raising=False)
+
+    assert collection_serve_module._build_downloaded_handoff("TC") is None
+
+
+def test_build_downloaded_handoff_rejects_partial_r2_configuration(monkeypatch):
+    for name in ("R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_API_TOKEN", "R2_PREFIX"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("R2_BUCKET", "media-handoffs")
+    monkeypatch.setenv("YOUTUBE_AUTOMATION_DISABLE_OP_READ", "1")
+
+    with pytest.raises(ConfigError, match="R2_ACCOUNT_ID"):
+        collection_serve_module._build_downloaded_handoff("TC")
+
+
+def test_build_downloaded_handoff_wires_configured_r2_store(monkeypatch):
+    sentinel_config = object()
+    sentinel_store = object()
+    sentinel_handoff = object()
+    recorded: dict[str, object] = {}
+
+    class FakeConfig:
+        @classmethod
+        def from_environment(cls):
+            return sentinel_config
+
+    def fake_store(config):
+        assert config is sentinel_config
+        return sentinel_store
+
+    def fake_handoff(*, store, channel):
+        recorded.update(store=store, channel=channel)
+        return sentinel_handoff
+
+    monkeypatch.setenv("R2_BUCKET", "media-handoffs")
+    monkeypatch.setattr(collection_serve_module, "R2MediaStoreConfig", FakeConfig)
+    monkeypatch.setattr(collection_serve_module, "R2MediaStore", fake_store)
+    monkeypatch.setattr(collection_serve_module, "SunoDownloadHandoff", fake_handoff)
+
+    assert collection_serve_module._build_downloaded_handoff("Test Channel") is sentinel_handoff
+    assert recorded == {"store": sentinel_store, "channel": "test-channel"}
+
+
 def test_main_turns_sigterm_into_traceable_exception_and_restores_handler(monkeypatch, tmp_path):
     """SIGTERM は理由を持つ例外として伝播し、終了後に handler を復元する。"""
 
@@ -2101,7 +2146,7 @@ def serve_dir(tmp_path):
     """
     started = []
 
-    def _start(planning: Path, allow_origin=None, capture_root=None):
+    def _start(planning: Path, allow_origin=None, capture_root=None, downloaded_handoff=None):
         server = create_server(
             0,
             allow_origin,
@@ -2110,6 +2155,7 @@ def serve_dir(tmp_path):
             distrokid=None,
             collections_root=planning,
             capture_root=capture_root,
+            downloaded_handoff=downloaded_handoff,
         )
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
@@ -3449,6 +3495,85 @@ def test_post_downloaded_success_removes_download_archive(serve_dir, tmp_path):
     ]
     workflow_state = json.loads((coll / "workflow-state.json").read_text(encoding="utf-8"))
     assert workflow_state["assets"]["music_downloaded"] is True
+
+
+def test_post_downloaded_runs_handoff_after_atomic_music_placement(serve_dir, tmp_path):
+    planning = tmp_path / "planning"
+    coll = _make_collection(
+        planning,
+        "20260601-clm-aaa-collection",
+        entries=[{"name": "曲A — Song A", "style": "s", "lyrics": ""}],
+    )
+    zip_path = _make_zip(tmp_path / "handoff.zip", {"Song A.mp3": b"a", "Song A_1.mp3": b"b"})
+    observations = []
+
+    class Handoff:
+        def complete(self, collection_dir: Path) -> None:
+            state = json.loads((collection_dir / "workflow-state.json").read_text(encoding="utf-8"))
+            observations.append(
+                (
+                    collection_dir,
+                    sorted(path.name for path in (collection_dir / "02-Individual-music").iterdir()),
+                    state["assets"]["music_downloaded"],
+                )
+            )
+
+    base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN, downloaded_handoff=Handoff())
+    token = _fetch_token(base)
+
+    with _post(
+        f"{base}{_COLLECTIONS_ROUTE}/{coll.name}/downloaded",
+        {
+            "file_count": 2,
+            "expected_file_count": 2,
+            "format": "mp3",
+            "download_path": str(zip_path),
+        },
+        headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
+    ) as response:
+        assert response.status == 200
+
+    assert observations == [(coll, ["01a-Song A.mp3", "01b-Song A.mp3"], True)]
+    assert not zip_path.exists()
+
+
+def test_post_downloaded_handoff_failure_keeps_archive_for_safe_retry(serve_dir, tmp_path):
+    planning = tmp_path / "planning"
+    coll = _make_collection(
+        planning,
+        "20260601-clm-aaa-collection",
+        entries=[{"name": "曲A — Song A", "style": "s", "lyrics": ""}],
+    )
+    zip_path = _make_zip(tmp_path / "retry.zip", {"Song A.mp3": b"a", "Song A_1.mp3": b"b"})
+
+    class Handoff:
+        fail = True
+
+        def complete(self, _collection_dir: Path) -> None:
+            if self.fail:
+                self.fail = False
+                raise MediaStoreError("fixture R2 unavailable")
+
+    handoff = Handoff()
+    base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN, downloaded_handoff=handoff)
+    token = _fetch_token(base)
+    url = f"{base}{_COLLECTIONS_ROUTE}/{coll.name}/downloaded"
+    payload = {
+        "file_count": 2,
+        "expected_file_count": 2,
+        "format": "mp3",
+        "download_path": str(zip_path),
+    }
+    headers = {"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token}
+
+    with pytest.raises(urllib.error.HTTPError) as raised:
+        _post(url, payload, headers=headers)
+
+    assert raised.value.code == 500
+    assert zip_path.exists()
+    with _post(url, payload, headers=headers) as response:
+        assert response.status == 200
+    assert not zip_path.exists()
 
 
 def test_post_downloaded_archive_cleanup_failure_warns_and_keeps_artifacts(serve_dir, tmp_path, monkeypatch, caplog):

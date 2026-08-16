@@ -35,9 +35,15 @@ class DownloadedArchiveResult:
 
 
 def count_audio_files(music_dir: Path) -> int:
+    return len(list_audio_files(music_dir))
+
+
+def list_audio_files(music_dir: Path) -> tuple[Path, ...]:
     if not music_dir.is_dir():
-        return 0
-    return sum(1 for f in music_dir.iterdir() if f.is_file() and f.suffix.lower() in _AUDIO_EXTENSIONS)
+        return ()
+    return tuple(
+        sorted(path for path in music_dir.iterdir() if path.is_file() and path.suffix.lower() in _AUDIO_EXTENSIONS)
+    )
 
 
 def commit_staged_music_files(coll_dir: Path, staging_dir: Path) -> None:

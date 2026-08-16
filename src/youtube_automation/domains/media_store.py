@@ -10,6 +10,7 @@ from typing import Protocol, runtime_checkable
 from youtube_automation.core.errors import ValidationError
 
 _KEY_SEGMENT_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*\Z")
+_CONTROL_CHARACTER_RE = re.compile(r"[\x00-\x1f\x7f]")
 
 
 def validate_media_segment(field: str, value: str) -> None:
@@ -24,7 +25,8 @@ def validate_media_relative_path(field: str, value: str) -> None:
     if path.as_posix() != value:
         raise ValidationError(f"MediaKey.{field} は正規化済み path である必要があります: {value!r}")
     for segment in path.parts:
-        validate_media_segment(field, segment)
+        if segment in {"", ".", ".."} or _CONTROL_CHARACTER_RE.search(segment):
+            raise ValidationError(f"MediaKey.{field} は安全な相対 POSIX path である必要があります: {value!r}")
 
 
 @dataclass(frozen=True)

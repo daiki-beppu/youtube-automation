@@ -57,7 +57,7 @@ def _assert_metadata(
         )
 
 
-def _assert_file(expected: HandoffFile, path: Path, *, operation: str) -> None:
+def _assert_file(expected: HandoffFile | MediaObjectMetadata, path: Path, *, operation: str) -> None:
     size, checksum = sha256_file(path)
     if size != expected.size or checksum != expected.sha256:
         raise MediaStoreError(f"受け渡し object {operation} content checksum が一致しません: {expected.path}")
@@ -88,8 +88,10 @@ def push_handoff(
         verification_root = Path(verification_directory)
         for entry in manifest.files:
             key = _key(identity, entry.path)
-            pushed = store.push(sources_by_path[entry.path], key)
-            _assert_metadata(entry, pushed, object_path=entry.path, operation="push")
+            remote = store.metadata(key)
+            if remote is None or remote.size != entry.size or remote.sha256 != entry.sha256:
+                pushed = store.push(sources_by_path[entry.path], key)
+                _assert_metadata(entry, pushed, object_path=entry.path, operation="push")
             _assert_metadata(entry, store.metadata(key), object_path=entry.path, operation="remote")
             verification_path = verification_root.joinpath(*entry.path.split("/"))
             pulled = store.pull(key, verification_path)
@@ -100,8 +102,14 @@ def push_handoff(
         manifest_path.write_bytes(manifest.to_json_bytes())
         expected_manifest = _manifest_file(manifest_path)
         manifest_key = _key(identity, MANIFEST_NAME)
-        pushed_manifest = store.push(manifest_path, manifest_key)
-        _assert_metadata(expected_manifest, pushed_manifest, object_path=MANIFEST_NAME, operation="manifest push")
+        remote_manifest = store.metadata(manifest_key)
+        if (
+            remote_manifest is None
+            or remote_manifest.size != expected_manifest.size
+            or remote_manifest.sha256 != expected_manifest.sha256
+        ):
+            pushed_manifest = store.push(manifest_path, manifest_key)
+            _assert_metadata(expected_manifest, pushed_manifest, object_path=MANIFEST_NAME, operation="manifest push")
         _assert_metadata(
             expected_manifest,
             store.metadata(manifest_key),
@@ -122,18 +130,15 @@ def push_handoff(
     return manifest
 
 
-def pull_handoff(store: MediaStore, identity: HandoffIdentity, destination: Path) -> HandoffManifest:
+def read_handoff_manifest(store: MediaStore, identity: HandoffIdentity) -> HandoffManifest:
     manifest_key = _key(identity, MANIFEST_NAME)
     manifest_metadata = store.metadata(manifest_key)
     if manifest_metadata is None:
         raise MediaHandoffNotFoundError(
             f"受け渡し manifest が見つかりません: {identity.channel}/{identity.collection}/{identity.handoff}"
         )
-
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix="yt-handoff-pull-", dir=destination.parent) as staging_directory:
-        staging_root = Path(staging_directory)
-        manifest_path = staging_root / MANIFEST_NAME
+    with tempfile.TemporaryDirectory(prefix="yt-handoff-manifest-") as staging_directory:
+        manifest_path = Path(staging_directory) / MANIFEST_NAME
         pulled_manifest = store.pull(manifest_key, manifest_path)
         if pulled_manifest != manifest_metadata:
             raise MediaStoreError("受け渡し manifest metadata が読み取り中に変化しました")
@@ -143,7 +148,15 @@ def pull_handoff(store: MediaStore, identity: HandoffIdentity, destination: Path
         manifest = HandoffManifest.from_json_bytes(manifest_path.read_bytes())
         if manifest.identity != identity:
             raise MediaStoreError("受け渡し manifest key と identity が一致しません")
+        return manifest
 
+
+def pull_handoff(store: MediaStore, identity: HandoffIdentity, destination: Path) -> HandoffManifest:
+    manifest = read_handoff_manifest(store, identity)
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="yt-handoff-pull-", dir=destination.parent) as staging_directory:
+        staging_root = Path(staging_directory)
         for entry in manifest.files:
             staging_path = staging_root.joinpath(*entry.path.split("/"))
             pulled = store.pull(_key(identity, entry.path), staging_path)
