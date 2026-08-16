@@ -17,6 +17,9 @@ _FILE_ASSETS = {
     Path(".github/workflows/youtube-automation.yml"): Path(
         "src/youtube_automation/infrastructure/resources/channel/youtube-automation.yml"
     ),
+    Path(".github/workflows/codex-canary.yml"): Path(
+        "src/youtube_automation/infrastructure/resources/channel/codex-canary.yml"
+    ),
     Path(".claude/CLAUDE.md"): Path(".claude/CLAUDE.template.md"),
     Path("docs/workflow-cheatsheet.md"): Path("docs/workflow-cheatsheet.md"),
     Path("docs/features.md"): Path("docs/features.md"),

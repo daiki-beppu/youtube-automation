@@ -98,6 +98,7 @@ yt_workflow_state = _make_entrypoint("youtube_automation.commands.collections.wo
 yt_workflow_status = _make_entrypoint("youtube_automation.commands.collections.workflow_status")
 yt_hybrid_runner = _make_entrypoint("youtube_automation.commands.system.hybrid_runner")
 yt_human_tasks = _make_entrypoint("youtube_automation.commands.system.human_tasks")
+yt_codex_canary_notify = _make_entrypoint("youtube_automation.commands.system.codex_canary_notify")
 yt_post_publish_state = _make_entrypoint("youtube_automation.commands.system.post_publish_state")
 yt_media_acceptance = _make_entrypoint("youtube_automation.commands.media.media_acceptance")
 yt_channel_trend = _make_entrypoint("youtube_automation.commands.analytics.channel_trend")

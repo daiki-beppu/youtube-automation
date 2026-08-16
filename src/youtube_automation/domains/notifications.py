@@ -18,6 +18,7 @@ class NotificationEventKind(StrEnum):
     NON_FAST_FORWARD_STOPPED = "non_fast_forward_stopped"
     FAIL_CLOSED_ABORTED = "fail_closed_aborted"
     GUARD_EXCEEDED = "guard_exceeded"
+    CANARY_COMPLETED = "canary_completed"
     CANARY_FAILED = "canary_failed"
 
 
@@ -27,6 +28,7 @@ _CATEGORY_BY_KIND = {
     NotificationEventKind.NON_FAST_FORWARD_STOPPED: NotificationEventCategory.ABNORMAL,
     NotificationEventKind.FAIL_CLOSED_ABORTED: NotificationEventCategory.ABNORMAL,
     NotificationEventKind.GUARD_EXCEEDED: NotificationEventCategory.ABNORMAL,
+    NotificationEventKind.CANARY_COMPLETED: NotificationEventCategory.NORMAL,
     NotificationEventKind.CANARY_FAILED: NotificationEventCategory.ABNORMAL,
 }
 

@@ -1,0 +1,48 @@
+name: Monthly Codex escape canary
+
+on:
+  schedule:
+    - cron: "17 3 1 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codex-escape-canary-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  codex-canary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Run read-only Codex escape canary
+        id: codex
+        uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          permission-profile: ":read-only"
+          allow-bots: "true"
+          allow-bot-users: "github-actions"
+          prompt: Reply with exactly CODEX_ESCAPE_CANARY_OK. Do not inspect or modify repository files.
+
+  notify:
+    needs: codex-canary
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+      - name: Report typed canary result
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          YTA_CANARY_RESULT: ${{ needs.codex-canary.result }}
+          YTA_CHANNEL_SLUG: ${{ vars.YTA_CHANNEL_SLUG }}
+        run: uv run --frozen yt-codex-canary-notify --result "$YTA_CANARY_RESULT" --channel "${YTA_CHANNEL_SLUG:-unknown-channel}"
