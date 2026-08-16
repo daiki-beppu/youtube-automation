@@ -22,4 +22,8 @@ uv run yt-skills migrate-state-git --channel-dir /absolute/path/to/channel --che
 
 移行コマンドはリポジトリ全域を再帰走査せず、指定した channel root の既知の配置だけを検査します。対象 JSON の symlink、壊れた JSON、secret 候補、移行対象外の staged / dirty / untracked 変更を検出した場合は `.gitignore` や Git index を変更せず停止します。`upload_tracking.json` に resumable upload session URI が残っている場合は、外部 write の再開状態を解消してから再実行してください。
 
-`--check` はポリシーと対象 JSON が commit 済みで、未追跡・staged・dirty でないことを検査します。対象ファイルがまだ生成されていない新規チャンネルでは、ポリシーが commit 済みなら合格します。pull / commit / push の実行時強制と non-fast-forward 停止は後続の Git state owner が担当します。
+`--check` はポリシーと対象 JSON が commit 済みで、未追跡・staged・dirty でないことを検査します。対象ファイルがまだ生成されていない新規チャンネルでは、ポリシーが commit 済みなら合格します。
+
+実行時は `infrastructure.vcs.state_sync` が ADR-0024 の同期境界を所有します。reader は `pull_then_read()`、writer は `pull_update_commit_push()` を使い、後者には state owner の更新 callback と1行の commit messageを渡します。writer が変更できるのは既知の制御面 JSON だけです。開始時に worktree が clean でない場合、pull が fast-forward できない場合、または対象外ファイルが変更された場合は停止します。
+
+push が non-fast-forward で拒否された場合は自動 merge / rebase / retryを行いません。`StateSyncEventKind.NON_FAST_FORWARD` を `on_event` callbackへ1回渡して `StateSyncError` で停止するため、呼び出し側はこのeventをDiscord等の通知adapterへ接続できます。event payloadはrepository pathと固定診断だけを持ち、remote URLや認証情報を含みません。競合解消は工程所有者が明示的に行ってください。

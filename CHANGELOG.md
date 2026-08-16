@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(hybrid)`: Git制御面stateを読む前のfast-forward pullと、更新後の即時commit + pushを共通化し、non-fast-forward競合では自動merge/rebaseせず通知eventを発火して停止する（#4050）。
 - `feat(thumbnail)`: 候補画像と固定QAを原寸/320pxで比較する安全なWeb reviewを追加し、検証済みcandidate IDだけをthumbnail/main/ABの既存確定ownerへ渡す（#4017）。
 - `feat(hybrid)`: versioned 受け渡し manifest を completion marker として追加し、正準 file list・root checksum・manifest-last push・listing 非依存 pull・既存local成果物のrollbackをfail-closedに固定する（#4045）。
 - `feat(hybrid)`: 工程境界専用の `MediaStore` port と checksum 検証付き Local / Cloudflare R2 adapterを追加し、bucket・prefix・path・symlink 境界と secret 解決を fail-closed に固定する（#4044）。
