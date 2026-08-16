@@ -331,6 +331,8 @@ MUTABLE_FILES = frozenset(
     "wf-new/references/wf-auto-state.py",
     "wf-next/references/master_audio_transition.py",
     "wf-new/references/collection-ideate.config.default.yaml",
+    "wf-new/references/collection-plan-documents.md",
+    "wf-new/references/collection-plan.schema.json",
     "wf-new/references/collection-lifecycle.md",
     "wf-new/references/freshness_action.py",
     "wf-new/references/generate_image.py",

@@ -270,7 +270,7 @@ def test_skill_keeps_selection_commands_hard_gates_and_handoff_order() -> None:
     skill = SKILL_MD.read_text(encoding="utf-8")
     next_step = skill.index("## Next Step")
 
-    report_save = skill.index("plan_proposals.md")
+    report_save = skill.index("plan_proposals.json")
     planning_generated = skill.index("planning.generated = true", report_save)
     final_title = skill.index("planning.final_title", next_step)
     assignment = skill.index("record-ttp-reference-assignments.py", next_step)

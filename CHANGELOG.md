@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `refactor(workflow-state)`: wf-new・wf-next・publish の配布 reference script 4本を package owner 経由へ移し、master audio 遷移を lock + atomic update に統一する（#3885）。
 - `refactor(workflow-state)`: analytics・progress hook・pinned comment に残る `workflow-state` readerを owner の型付き accessor 経由へ移し、direct I/O allowlist を空にする（#3884）。
 - `refactor(workflow-state)`: Suno prompt と DistroKid prepare / release の残存3 readerを owner の型付き accessor 経由へ移し、破損時の既存診断と未知 field を維持する（#3883）。
+- `feat(documents)`: `/wf-new` の通常・batch企画を制約適合・根拠・insight・preview・選択status付き JSON 正本と承認表示HTMLへ移し、pair検証成功後だけ planning state を更新する（#4028）。
 - `refactor(uploads)`: `ShortUploader` が複製していた公開日計算と tracking / workflow-state I/O を `PublishedDatesScheduler` / `TrackingStore` の共通コラボレータへ統合する（#3935）。
 - `refactor(metadata)`: metadata service・metadata audit・Shorts localization の `workflow-state` 読み取りを owner の型付き accessor 経由へ移し、破損 JSON をドメイン診断へ変換する（#3882）。
 - `refactor(uploads)`: uploads ドメインの `workflow-state` 読み取り6ファイルを owner の型付き accessor 経由へ移行し、破損時の既存 fail-open / fail-loud 契約を維持する（#3881）。

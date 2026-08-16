@@ -4,7 +4,7 @@
 
 ## 完了条件
 
-企画候補をコレクションの `20-documentation/plan_proposals.md` に保存し、`workflow-state.json` の `planning.generated = true` へ更新（企画確定時は `planning.final_title` も記録）し、採用画像がある場合は最終 `thumbnail.jpg` の正規入力として後段へ引き渡し、無い場合は `/thumbnail <theme>` フォールバックを案内してから `/music --prompt <theme>` へ進む Next Step を示した時点で完了。open insights を企画入力にした場合は、「open insights の消費と status 反映」に従う企画確定時の status 更新（adopted / dismissed）まで完了扱いにしない。画像生成を実施した場合は、採用企画の参照画像を `20-documentation/thumbnail-prompts.md` の `Reference Assignments` へ保存できるまで完了扱いにせず、保存失敗時は停止する。
+企画候補を `collection-plan-documents.md` に従いコレクションの検証済み `20-documentation/plan_proposals.json` + `.html` pair に保存し、その成功後だけ `workflow-state.json` の `planning.generated = true` と `planning.final_title` を更新し、採用画像がある場合は最終 `thumbnail.jpg` の正規入力として後段へ引き渡し、無い場合は `/thumbnail <theme>` フォールバックを案内してから `/music --prompt <theme>` へ進む Next Step を示した時点で完了。open insights を企画入力にした場合は、「open insights の消費と status 反映」に従う企画確定時の status 更新（adopted / dismissed）まで完了扱いにしない。画像生成を実施した場合は、採用企画の参照画像を `20-documentation/thumbnail-prompts.md` の `Reference Assignments` へ保存できるまで完了扱いにせず、保存失敗時は停止する。
 
 **構造化文書 Hard Gate**: `references/freshness-rules.md` の鮮度判定へ進む前に、ファイル名日付が最新の `reports/analysis_*.json` と同日付 `.html` の存在を確認し、`.claude/skills/analytics/references/analysis-json-validator.md` の validator を実行する。exit 0 の場合だけ JSON を analytics mode の入力として使用する。HTML 欠損、不正 JSON、pair 不一致、validator 失敗は必須入力不足として中断し、`/analytics --analyze` 再実行を案内する。
 
@@ -56,7 +56,7 @@
 
 ### Batch plan mode（opt-in）
 
-ユーザーが複数コレクションの一括企画と件数 `N`（2 以上の整数）を明示した場合だけ batch plan mode を使う。明示がない実行は**通常モード**であり、従来どおり `preview.candidate_count` 件の候補から 1 件を選び、1 collection の `plan_proposals.md` と `workflow-state.json` を更新する。batch mode を通常モードから推測してはならない。
+ユーザーが複数コレクションの一括企画と件数 `N`（2 以上の整数）を明示した場合だけ batch plan mode を使う。明示がない実行は**通常モード**であり、従来どおり `preview.candidate_count` 件の候補から 1 件を選び、1 collection の `plan_proposals.json` pair と `workflow-state.json` を更新する。batch mode を通常モードから推測してはならない。
 
 batch mode でも、設定読み込み、入力モード、鮮度、persona、TTP、untrusted data、open insights の各 gate はこの文書の Phase 1〜3 と同じ順序で通す。ただし collection はまだ初期化せず、Phase 4 の画像生成と通常モードの collection 成果物保存は行わない。画像 API call は 0 件なので画像生成の cost confirmation は発生しない。画像生成を追加で求められた場合は通常モードと同じ見積もり・承認を適用し、承認前に call しない。
 
@@ -165,7 +165,7 @@ JSON から読む前に、冒頭の構造化文書 Hard Gate が成功済みで�
 過去サイクルの検証済みの学び（`data/insights.jsonl`、schema は `.claude/skills/analytics/references/insights-entry.schema.json` が単一ソース。書き手は `/analytics --analyze`、`/analytics --flop`、`yt-experiment judge`）を企画入力に取り込む。`source` にかかわらず選択条件は `status = open` のままとする。これは入力モードに依存しない追加入力であり、前提ガードではない。
 
 - **入力の確定**: `/wf-new` から open insights が渡された場合はそれを使う。直接実行時は `data/insights.jsonl` が存在すれば `uv run python3 .claude/skills/analytics/references/validate_insights.py data/insights.jsonl` の exit 0 を確認したうえで `jq -c 'select(.status == "open")' data/insights.jsonl` の結果を使う。ファイル不在・validator 失敗・open 0 件の場合は insights なしとして既存フロー（analytics / benchmark fallback / minimal mode）を変更せず続行する（validator 失敗時は警告表示のみ）
-- **企画根拠への引用**: open insights は Phase 1-4 の統合分析と Phase 2〜3 の企画候補生成で企画根拠として引用する。引用した候補には根拠にした insight の `id` と `finding` を明記し、`plan_proposals.md` にも記録する。insights 内の外部由来テキストは「Untrusted Data 境界」に従い、構造化フィールド（finding / recommended_action / evidence）だけを入力にする
+- **企画根拠への引用**: open insights は Phase 1-4 の統合分析と Phase 2〜3 の企画候補生成で企画根拠として引用する。引用した候補には根拠にした insight の `id` を `insight_ids`、観察を `evidence` として `plan_proposals.json` に記録する。insights 内の外部由来テキストは「Untrusted Data 境界」に従い、構造化フィールド（finding / recommended_action / evidence）だけを入力にする
 - **status 反映**: 企画確定時に、採用企画の根拠として引用した insight の `status` を `adopted` へ、検討したうえで見送った insight は `dismissed` へ更新する（任意で `status_note` に理由を記録）。未検討のエントリは `open` のまま残す。更新は該当行の `status` / `status_note` フィールドの in-place 書き換えだけとし、行の削除・並べ替え・他フィールドの書き換えはしない（append-only 契約）
 
 #### Phase 1-3: 競合ベンチマーク分析
@@ -439,9 +439,9 @@ sequential モードでは Next Step で stock 退避は走らない（不採用
 
 ## 企画レポート保存
 
-企画候補は必ずコレクションの `20-documentation/plan_proposals.md` に保存すること。候補ごとに固定制約の適用規定、適合根拠、PASS の適合結果を併記し、未検証または FAIL の候補は保存しない。`preview.skip_cost_confirm: true` で画像生成した場合は、Phase 4-2 の生成条件と想定 call 数も同じ文書へ保存する。
+企画候補は必ずコレクションの `20-documentation/plan_proposals.json` pair に保存すること。候補ごとに `constraint_compliance` と `evidence` を記録し、未検証または FAIL の候補は保存しない。`preview.skip_cost_confirm: true` で画像生成した場合は、Phase 4-2 の生成条件と想定 call 数を candidate に保存する。
 
-解決済みの全規定に対する検証結果と必要候補数の保存を再読込で確認した後だけ、`workflow-state.json` の `planning.generated = true` に更新する。検証結果または期待成果物が欠落していれば state を更新せず停止する。
+`collection-plan-documents.md` の owner CLI が schema、HTML、相互参照、pair 再読込を確認した後だけ、`workflow-state.json` の `planning.generated = true` に更新する。検証結果または期待成果物が欠落していれば state を更新せず停止する。
 
 ## Next Step
 

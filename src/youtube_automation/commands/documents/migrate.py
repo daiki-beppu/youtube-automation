@@ -9,6 +9,7 @@ from pathlib import Path
 from youtube_automation.application.documents import (
     MarkdownMigrationDecision,
     write_channel_strategy_document,
+    write_collection_plan_document,
     write_operational_document,
 )
 from youtube_automation.commands._shared.cli_harness import run_cli
@@ -24,6 +25,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("candidate", type=Path, nargs="?", help="承認後に skill writer が生成した未公開 JSON")
     parser.add_argument("--target", type=Path, required=True, help="公開先 .json path")
     parser.add_argument("--schema", required=True, choices=repository_schema_names(), help="固定 registry の schema 名")
+    parser.add_argument("--workflow-state", type=Path, help="collection plan 公開後に更新する workflow-state.json")
     parser.add_argument(
         "--migration-decision",
         choices=(MarkdownMigrationDecision.YES.value, MarkdownMigrationDecision.NO.value),
@@ -49,7 +51,13 @@ def run(args: argparse.Namespace) -> int:
     schema = RepositorySchema(args.schema)
     if schema is RepositorySchema.CHANNEL_STRATEGY:
         result = write_channel_strategy_document(args.target, load_candidate, decision)
+    elif schema is RepositorySchema.COLLECTION_PLAN:
+        if args.workflow_state is None:
+            raise ValidationError("collection plan の公開には --workflow-state が必要です")
+        result = write_collection_plan_document(args.target, args.workflow_state, load_candidate, decision)
     else:
+        if args.workflow_state is not None:
+            raise ValidationError("--workflow-state は collection-plan.schema.json 専用です")
         result = write_operational_document(args.target, schema, load_candidate, decision)
     print(f"{result.value}: {args.target.resolve()}")
     return 0

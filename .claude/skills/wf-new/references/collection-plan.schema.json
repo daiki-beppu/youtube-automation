@@ -1,0 +1,55 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "collection-plan.schema.json",
+  "title": "コレクション企画",
+  "description": "wf-new の企画候補・採用根拠・制約適合の JSON 正本。HTML は企画承認 gate の表示に使う。",
+  "type": "object",
+  "required": ["schema_version", "generated_at", "mode", "collection_id", "provenance", "candidates"],
+  "properties": {
+    "schema_version": {"title": "Schema version", "const": 1, "x-view": {"order": 0}},
+    "generated_at": {"title": "生成日時", "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$", "x-view": {"order": 1}},
+    "mode": {"title": "企画 mode", "enum": ["normal", "batch"], "x-view": {"order": 2}},
+    "collection_id": {"title": "Collection", "type": "string", "minLength": 1, "x-view": {"order": 3}},
+    "provenance": {"title": "Provenance", "$ref": "#/definitions/provenance", "x-view": {"order": 10}},
+    "candidates": {"title": "企画候補と承認状況", "type": "array", "minItems": 1, "items": {"$ref": "#/definitions/candidate"}, "x-view": {"order": 20, "presentation": "table"}}
+  },
+  "additionalProperties": true,
+  "definitions": {
+    "provenance": {
+      "type": "object", "required": ["producer", "batch_id"],
+      "properties": {"producer": {"const": "wf-new"}, "batch_id": {"type": ["string", "null"]}, "plan_id": {"type": ["string", "null"]}, "manifest_path": {"type": ["string", "null"]}},
+      "additionalProperties": true
+    },
+    "evidence": {
+      "type": "object", "required": ["id", "source_path", "observation"],
+      "properties": {"id": {"type": "string", "minLength": 1}, "source_path": {"type": "string", "minLength": 1}, "observation": {"type": "string", "minLength": 1}},
+      "additionalProperties": true
+    },
+    "constraint": {
+      "type": "object", "required": ["constraint_id", "status", "evidence_ids"],
+      "properties": {"constraint_id": {"type": "string", "minLength": 1}, "status": {"const": "pass"}, "evidence_ids": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}},
+      "additionalProperties": true
+    },
+    "candidate": {
+      "type": "object",
+      "required": ["plan_id", "collection_name", "theme_slug", "track_count", "music_engine", "final_title", "target_persona", "viewing_scene", "constraint_compliance", "evidence", "insight_ids", "preview_assets", "selection_status", "selection_reason"],
+      "properties": {
+        "plan_id": {"title": "Plan ID", "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
+        "collection_name": {"title": "Collection name", "type": "string", "minLength": 1},
+        "theme_slug": {"title": "Theme slug", "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
+        "track_count": {"title": "Track count", "type": "integer", "minimum": 1},
+        "music_engine": {"title": "Music engine", "enum": ["suno", "lyria"]},
+        "final_title": {"title": "最終タイトル", "type": "string", "minLength": 1},
+        "target_persona": {"title": "対象 persona", "type": "string", "minLength": 1},
+        "viewing_scene": {"title": "視聴シーン", "type": "string", "minLength": 1},
+        "constraint_compliance": {"title": "制約適合", "type": "array", "minItems": 1, "items": {"$ref": "#/definitions/constraint"}},
+        "evidence": {"title": "根拠", "type": "array", "minItems": 1, "items": {"$ref": "#/definitions/evidence"}},
+        "insight_ids": {"title": "Insight IDs", "type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "preview_assets": {"title": "Preview assets", "type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "selection_status": {"title": "選択 status", "enum": ["proposed", "selected", "auto_selected", "rejected"]},
+        "selection_reason": {"title": "選択根拠", "type": "string", "minLength": 1}
+      },
+      "additionalProperties": true
+    }
+  }
+}
