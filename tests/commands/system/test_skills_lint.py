@@ -13,9 +13,10 @@ import pytest
 
 from tests.helpers.paths import REPO_ROOT
 from youtube_automation.commands.system import skills_sync
-from youtube_automation.commands.system.skills_sync import _migrate_config, build_parser, main
+from youtube_automation.commands.system.skills_sync import _lint, _migrate_config, build_parser, main
+from youtube_automation.commands.system.skills_sync._delegation import DelegationGraph
 from youtube_automation.configuration import skills as skill_config
-from youtube_automation.domains.skills.inventory import lint_frontmatter_text, lint_skill
+from youtube_automation.domains.skills.inventory import SkillInventory, lint_frontmatter_text, lint_skill
 
 _VALID_SKILL_MD = """---
 name: good-skill
@@ -504,7 +505,7 @@ def test_cli_lint_self_delegation_reports_cycle_and_exits_nonzero(
     assert "循環があります: /recursive -> /recursive" in capsys.readouterr().out
 
 
-def test_cli_lint_does_not_reject_delegation_depth_two(fake_repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_cli_lint_rejects_delegation_depth_two_with_path(fake_repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
     skills_dir = fake_repo / ".claude" / "skills"
     _write_skill(
         skills_dir,
@@ -518,8 +519,70 @@ def test_cli_lint_does_not_reject_delegation_depth_two(fake_repo: Path, capsys: 
     )
     _write_skill(skills_dir, "gamma", _VALID_SKILL_MD.replace("good-skill", "gamma"))
 
+    assert main(["lint"]) == 1
+    out = capsys.readouterr().out
+    assert "alpha: 委譲深さ 2 以上: /alpha -> /beta -> /gamma" in out
+    assert "lint 失敗: 1/4 skill" in out
+
+
+def test_cli_lint_accepts_delegation_depth_one_boundary(fake_repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    skills_dir = fake_repo / ".claude" / "skills"
+    _write_skill(
+        skills_dir,
+        "alpha",
+        _VALID_SKILL_MD.replace("good-skill", "alpha").replace("- `委譲先`: `なし`", "- `委譲先`: `/leaf`"),
+    )
+    _write_skill(skills_dir, "leaf", _VALID_SKILL_MD.replace("good-skill", "leaf"))
+
     assert main(["lint"]) == 0
-    assert "lint 合格: 4 skill" in capsys.readouterr().out
+    assert "委譲深さ 2 以上" not in capsys.readouterr().out
+
+
+def test_cli_lint_reports_allowlisted_depth_without_failing(
+    fake_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    skills_dir = fake_repo / ".claude" / "skills"
+    _write_skill(
+        skills_dir,
+        "alpha",
+        _VALID_SKILL_MD.replace("good-skill", "alpha").replace("- `委譲先`: `なし`", "- `委譲先`: `/beta`"),
+    )
+    _write_skill(
+        skills_dir,
+        "beta",
+        _VALID_SKILL_MD.replace("good-skill", "beta").replace("- `委譲先`: `なし`", "- `委譲先`: `/gamma`"),
+    )
+    _write_skill(skills_dir, "gamma", _VALID_SKILL_MD.replace("good-skill", "gamma"))
+    monkeypatch.setattr(
+        _lint,
+        "_ALLOWLISTED_DELEGATION_DEPTH_VIOLATIONS",
+        frozenset({("alpha", "delegation_depth_exceeded")}),
+    )
+
+    assert main(["lint"]) == 0
+    out = capsys.readouterr().out
+    assert "alpha: 委譲深さ 2 以上: /alpha -> /beta -> /gamma [allowlist]" in out
+    assert "lint 合格: 4 skill" in out
+
+
+def test_real_delegation_depth_allowlist_matches_current_delegation_output() -> None:
+    graph = DelegationGraph.load(SkillInventory(REPO_ROOT / ".claude" / "skills"))
+    violations = {
+        (skill, "delegation_depth_exceeded") for skill in graph.edges if len(graph.longest_path(skill)) - 1 >= 2
+    }
+
+    assert violations == set(_lint._ALLOWLISTED_DELEGATION_DEPTH_VIOLATIONS)
+
+
+def test_authoring_guidelines_require_shallow_delegation_or_chain_manifest() -> None:
+    guidelines = (REPO_ROOT / "docs" / "skill-design" / "skill-authoring-guidelines.md").read_text(encoding="utf-8")
+
+    assert "委譲深さは 1 以下" in guidelines
+    assert "委譲先を持つ skill の委譲先がさらに別 skill へ委譲してはいけない" in guidelines
+    assert "[chain-manifest-schema.md](chain-manifest-schema.md)" in guidelines
+    assert "薄いインタープリタ方式" in guidelines
 
 
 def test_cli_delegation_reports_each_depth_longest_path_and_summary(

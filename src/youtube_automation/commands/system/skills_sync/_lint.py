@@ -1,6 +1,6 @@
 """yt-skills lint — SKILL.md の軽量契約検証。
 
-Issues #2096, #3749, #3750, #3751, #3793, #3802, #3803, #3804。
+Issues #2096, #3749, #3750, #3751, #3793, #3799, #3802, #3803, #3804。
 
 skill 編集後の検証を pytest 全体実行 (約 4 分) に律速されず秒単位で回すための
 サブコマンド。frontmatter / flag の検証ロジックは domains.skills.inventory を
@@ -17,10 +17,11 @@ skill 編集後の検証を pytest 全体実行 (約 4 分) に律速されず�
     7. mode は 5 個以下で、2 個以上の同時指定を停止する旨がある
     8. mode ごとにフラグ名と対応する実在 reference を 1 ファイル持つ
     9. 委譲先の宣言行が存在し、有向グラフに循環がない
-    10. SKILL.md 本体が 400 行以下である
-    11. 成果物ブロックと `書き込む` 宣言行が存在する
-    12. skill-config の登録キーと config.default.yaml が双方向に一致する
-    13. 下流に移行対応表の旧 skill-config が残っていない
+    10. 委譲深さが 1 以下である
+    11. SKILL.md 本体が 400 行以下である
+    12. 成果物ブロックと `書き込む` 宣言行が存在する
+    13. skill-config の登録キーと config.default.yaml が双方向に一致する
+    14. 下流に移行対応表の旧 skill-config が残っていない
 """
 
 from __future__ import annotations
@@ -36,6 +37,11 @@ from youtube_automation.domains.skills.inventory import SkillInventory, SkillLin
 
 _SKILL_MD_MAX_LINES: Final[int] = 400
 _SKILL_MD_LINE_LIMIT_VIOLATION: Final[str] = "skill_md_line_limit_exceeded"
+_DELEGATION_DEPTH_VIOLATION: Final[str] = "delegation_depth_exceeded"
+
+# 2026-08-16 の `yt-skills delegation` は最大深さ 1 のため初期登録は 0 件。
+# 深さ違反を段階的に解消する場合だけ (skill, violation type) を追加する。
+_ALLOWLISTED_DELEGATION_DEPTH_VIOLATIONS: Final[frozenset[tuple[str, str]]] = frozenset()
 
 # 統合前から上限を超えている skill は、現状より悪化させない範囲で段階的に是正する。
 # channel-new は当初 450 行だったが既に上限内へ短縮されたため、猶予から除外済み。
@@ -70,12 +76,23 @@ def _lint_skill_md_line_count(skill_dir: Path) -> tuple[SkillLintViolation | Non
 
 
 def _is_allowlisted(name: str, violation: SkillLintViolation, line_count: int) -> bool:
-    if (name, violation.identifier) in _ALLOWLISTED_VIOLATIONS:
+    key = (name, violation.identifier)
+    if key in _ALLOWLISTED_VIOLATIONS or key in _ALLOWLISTED_DELEGATION_DEPTH_VIOLATIONS:
         return True
     if violation.identifier != _SKILL_MD_LINE_LIMIT_VIOLATION:
         return False
     allowed_line_count = _ALLOWLISTED_SKILL_MD_LINE_COUNTS.get(name)
     return allowed_line_count is not None and line_count <= allowed_line_count
+
+
+def _lint_delegation_depth(graph: DelegationGraph, name: str) -> SkillLintViolation | None:
+    path = graph.longest_path(name)
+    if len(path) - 1 < 2:
+        return None
+    return SkillLintViolation(
+        _DELEGATION_DEPTH_VIOLATION,
+        f"委譲深さ 2 以上: {format_path(path)}",
+    )
 
 
 def _lint_skill_config_contract(inventory: SkillInventory) -> list[str]:
@@ -150,6 +167,9 @@ def cmd_lint(args: argparse.Namespace) -> int:
         line_violation, line_count = _lint_skill_md_line_count(skill_dir)
         if line_violation is not None:
             violations.append(line_violation)
+        delegation_depth_violation = _lint_delegation_depth(graph, name)
+        if delegation_depth_violation is not None:
+            violations.append(delegation_depth_violation)
         if name in graph.missing:
             print(f"{name}: `委譲先` 行がありません")
             failed_skills.add(name)
