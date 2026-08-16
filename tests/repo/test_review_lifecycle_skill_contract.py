@@ -7,7 +7,7 @@ from tests.helpers.paths import REPO_ROOT
 _CONSUMERS = (
     (".claude/skills/wf-new/references/collection-plan-documents.md", "yt-collection-plan-select"),
     (".claude/skills/music/references/music-prompt-documents.md", "yt-document-review"),
-    (".claude/skills/thumbnail/references/operator-guide.md", "yt-document-review"),
+    (".claude/skills/thumbnail/references/operator-guide.md", "yt-thumbnail-review"),
     (".claude/skills/video/references/generate.md", "yt-document-review"),
 )
 
