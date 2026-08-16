@@ -28,3 +28,4 @@ cd "$checkout"
 
 # Cloud and local use the same uv-direct path. Provider-specific workflow syntax belongs outside this script.
 uv run --frozen yt-hybrid-runner --channel-dir . "$@"
+uv run --frozen yt-human-tasks
