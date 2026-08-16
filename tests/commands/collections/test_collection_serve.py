@@ -56,6 +56,8 @@ from youtube_automation.commands.collections.collection_serve import (
 )
 from youtube_automation.commands.collections.collection_serve_discovery import DISCOVERY_PATH, RegistryState
 from youtube_automation.core.errors import ConfigError
+from youtube_automation.domains.documents.rendering import render_repository_document
+from youtube_automation.domains.documents.schema_registry import RepositorySchema
 from youtube_automation.domains.suno.downloaded.apply import apply_downloaded_artifacts
 from youtube_automation.domains.suno.downloaded.archive import commit_staged_music_files
 from youtube_automation.domains.suno.downloaded.archive import extract_and_rename_music as _extract_and_rename_music
@@ -305,7 +307,45 @@ def serve(tmp_path):
 
     def _start(entries, allow_origin=None, capture_root=None):
         json_path = tmp_path / "suno-prompts.json"
-        json_path.write_text(json.dumps(entries), encoding="utf-8")
+        extras = {key: value for key, value in entries.items() if key != "entries"} if isinstance(entries, dict) else {}
+        prompt_entries = entries.get("entries", []) if isinstance(entries, dict) else entries
+        normalized = [
+            {
+                **entry,
+                "options": entry.get("options", {}),
+                "track_role": entry.get("track_role", "core"),
+                "review": entry.get(
+                    "review",
+                    {"verify_status": "pass", "semantic_status": "pass", "notes": []},
+                ),
+            }
+            for entry in prompt_entries
+        ]
+        if not normalized:
+            normalized = [
+                {
+                    "name": "fixture",
+                    "style": "fixture",
+                    "lyrics": "",
+                    "options": {},
+                    "track_role": "core",
+                    "review": {"verify_status": "pass", "semantic_status": "pass", "notes": []},
+                }
+            ]
+        document = {
+            "schema_version": 1,
+            "generated_at": "2026-08-16T00:00:00Z",
+            "engine": "suno",
+            "collection_id": "test",
+            "provenance": {"producer": "music", "source_paths": ["suno-patterns.yaml"]},
+            "entries": normalized,
+            **extras,
+        }
+        json_path.write_text(json.dumps(document), encoding="utf-8")
+        json_path.with_suffix(".html").write_text(
+            render_repository_document(RepositorySchema.MUSIC_PROMPT, document),
+            encoding="utf-8",
+        )
         server = create_server(
             0,
             allow_origin,
@@ -1609,7 +1649,36 @@ def _make_collection(planning: Path, dir_name: str, entries=None, *, theme: str 
     docs = coll / "20-documentation"
     docs.mkdir(parents=True)
     if entries is not None:
-        (docs / "suno-prompts.json").write_text(json.dumps(entries), encoding="utf-8")
+        extras = {key: value for key, value in entries.items() if key != "entries"} if isinstance(entries, dict) else {}
+        prompt_entries = entries.get("entries", []) if isinstance(entries, dict) else entries
+        normalized = [
+            {
+                **entry,
+                "options": entry.get("options", {}),
+                "track_role": entry.get("track_role", "core"),
+                "review": entry.get(
+                    "review",
+                    {"verify_status": "pass", "semantic_status": "pass", "notes": []},
+                ),
+            }
+            for entry in prompt_entries
+        ]
+        if normalized:
+            document = {
+                "schema_version": 1,
+                "generated_at": "2026-08-16T00:00:00Z",
+                "engine": "suno",
+                "collection_id": dir_name,
+                "provenance": {"producer": "music", "source_paths": ["suno-patterns.yaml"]},
+                "entries": normalized,
+                **extras,
+            }
+            target = docs / "suno-prompts.json"
+            target.write_text(json.dumps(document), encoding="utf-8")
+            target.with_suffix(".html").write_text(
+                render_repository_document(RepositorySchema.MUSIC_PROMPT, document),
+                encoding="utf-8",
+            )
     if theme is not None:
         (coll / "workflow-state.json").write_text(json.dumps({"theme": theme}), encoding="utf-8")
     return coll

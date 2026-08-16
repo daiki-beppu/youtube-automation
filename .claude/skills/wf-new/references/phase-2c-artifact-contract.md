@@ -24,7 +24,7 @@ Suno は次をすべて満たす場合だけ成功とする。
 - `uv run yt-suno-verify <collection-path>` が exit 0 になる
 - semantic review が成功する
 
-Lyria は対象 collection の `20-documentation/lyria-prompt.md` が存在し、Engine、Channel、Model、最終プロンプト、API 入力パラメータ、目標尺とセグメント数、品質チェックを持ち、固定済み theme と `music_engine: lyria` に整合する場合だけ成功とする。この Phase では Lyria API の音源生成を成功条件に含めない。
+Lyria は対象 collection の `20-documentation/lyria-prompt.json` / `.html` pairが共通readerで再読込でき、schemaのengine、provenance、entry style/options/track role、verify・semantic review結果が固定済み theme と `music_engine: lyria` に整合する場合だけ成功とする。この Phase では Lyria API の音源生成を成功条件に含めない。
 
 ## State 適用
 

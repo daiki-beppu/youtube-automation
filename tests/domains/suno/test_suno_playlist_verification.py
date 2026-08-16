@@ -13,6 +13,8 @@ import pytest
 
 from youtube_automation.commands.suno import suno_verify_playlist
 from youtube_automation.core.errors import ValidationError
+from youtube_automation.domains.documents.rendering import render_repository_document
+from youtube_automation.domains.documents.schema_registry import RepositorySchema
 from youtube_automation.domains.suno.downloaded.archive import extract_and_rename_music as _extract_and_rename_music
 from youtube_automation.domains.suno.playlist import (
     format_display_text,
@@ -33,6 +35,39 @@ ENTRIES = [
     "深呼吸ひとつ — One Deep Breath",
     "休んでいい — You're Allowed to Rest",
 ]
+
+
+def _prompt_document(entries):
+    normalized = []
+    for entry in entries:
+        normalized.append(
+            {
+                **entry,
+                "options": entry.get("options", {}),
+                "track_role": entry.get("track_role", "core"),
+                "review": entry.get(
+                    "review",
+                    {"verify_status": "pass", "semantic_status": "pass", "notes": []},
+                ),
+            }
+        )
+    return {
+        "schema_version": 1,
+        "generated_at": "2026-08-16T00:00:00Z",
+        "engine": "suno",
+        "collection_id": "test",
+        "provenance": {"producer": "music", "source_paths": ["suno-patterns.yaml"]},
+        "entries": normalized,
+    }
+
+
+def _write_published_prompts(path, entries):
+    document = _prompt_document(entries)
+    path.write_text(json.dumps(document, ensure_ascii=False), encoding="utf-8")
+    path.with_suffix(".html").write_text(
+        render_repository_document(RepositorySchema.MUSIC_PROMPT, document),
+        encoding="utf-8",
+    )
 
 
 def test_all_matched_two_clips_each_is_ok():
@@ -177,10 +212,7 @@ def test_load_entry_names_reads_prompts_json(tmp_path):
     """
     doc = tmp_path / "20-documentation"
     doc.mkdir()
-    (doc / "suno-prompts.json").write_text(
-        json.dumps([{"name": n, "style": "s", "lyrics": "l"} for n in ENTRIES], ensure_ascii=False),
-        encoding="utf-8",
-    )
+    _write_published_prompts(doc / "suno-prompts.json", [{"name": n, "style": "s", "lyrics": "l"} for n in ENTRIES])
     assert load_entry_names(tmp_path) == ENTRIES
 
 
@@ -191,19 +223,9 @@ def test_load_entry_names_prefers_title_when_present(tmp_path):
     """
     doc = tmp_path / "20-documentation"
     doc.mkdir()
-    (doc / "suno-prompts.json").write_text(
-        json.dumps(
-            [
-                {
-                    "name": "internal-slug",
-                    "title": ENTRIES[0],
-                    "style": "s",
-                    "lyrics": "l",
-                }
-            ],
-            ensure_ascii=False,
-        ),
-        encoding="utf-8",
+    _write_published_prompts(
+        doc / "suno-prompts.json",
+        [{"name": "internal-slug", "title": ENTRIES[0], "style": "s", "lyrics": "l"}],
     )
 
     assert load_entry_names(tmp_path) == [ENTRIES[0]]
@@ -217,11 +239,11 @@ def test_load_entry_names_rejects_non_string_title(tmp_path):
     """
     doc = tmp_path / "20-documentation"
     doc.mkdir()
-    (doc / "suno-prompts.json").write_text(
-        json.dumps([{"name": "Song A", "title": ["Song A"], "style": "s"}]),
-        encoding="utf-8",
-    )
-    with pytest.raises(ValidationError, match="title must be a string"):
+    _write_published_prompts(doc / "suno-prompts.json", [{"name": "Song A", "style": "s", "lyrics": ""}])
+    payload = json.loads((doc / "suno-prompts.json").read_text())
+    payload["entries"][0]["title"] = ["Song A"]
+    (doc / "suno-prompts.json").write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ValidationError, match="validated JSON\\+HTML pair"):
         load_entry_names(tmp_path)
 
 
@@ -232,27 +254,24 @@ def test_load_entry_names_fails_on_missing_name(tmp_path):
     """
     doc = tmp_path / "20-documentation"
     doc.mkdir()
-    (doc / "suno-prompts.json").write_text(json.dumps([{"style": "s"}]), encoding="utf-8")
-    with pytest.raises(ValidationError):
+    _write_published_prompts(doc / "suno-prompts.json", [{"name": "Song A", "style": "s", "lyrics": ""}])
+    payload = json.loads((doc / "suno-prompts.json").read_text())
+    del payload["entries"][0]["name"]
+    (doc / "suno-prompts.json").write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ValidationError, match="validated JSON\\+HTML pair"):
         load_entry_names(tmp_path)
 
 
 def _write_prompts_json(collection_dir, names=ENTRIES):
     doc = collection_dir / "20-documentation"
     doc.mkdir()
-    (doc / "suno-prompts.json").write_text(
-        json.dumps([{"name": n, "style": "s", "lyrics": "l"} for n in names], ensure_ascii=False),
-        encoding="utf-8",
-    )
+    _write_published_prompts(doc / "suno-prompts.json", [{"name": n, "style": "s", "lyrics": "l"} for n in names])
 
 
 def _write_prompt_entries(collection_dir, entries):
     doc = collection_dir / "20-documentation"
     doc.mkdir()
-    (doc / "suno-prompts.json").write_text(
-        json.dumps(entries, ensure_ascii=False),
-        encoding="utf-8",
-    )
+    _write_published_prompts(doc / "suno-prompts.json", entries)
 
 
 def _run_cli(monkeypatch, capsys, argv, stdin=""):

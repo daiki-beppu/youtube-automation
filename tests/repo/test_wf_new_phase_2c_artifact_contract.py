@@ -53,7 +53,7 @@ def test_contract_requires_independent_real_artifact_validation() -> None:
         "semantic review",
     ):
         assert suno_evidence in validation
-    assert "`20-documentation/lyria-prompt.md`" in validation
+    assert "`20-documentation/lyria-prompt.json` / `.html` pair" in validation
     assert "subagent の完了報告" in validation
     assert "成功根拠にしない" in validation
 

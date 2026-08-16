@@ -82,7 +82,11 @@ from youtube_automation.domains.suno.downloaded.models import (
     SUNO_PROMPTS_ROUTE,
     collection_downloaded_route,
 )
-from youtube_automation.domains.suno.prompts import read_suno_prompt_entries
+from youtube_automation.domains.suno.prompts import (
+    read_suno_prompt_delivery_payload,
+    read_suno_prompt_delivery_payload_from_path,
+    read_suno_prompt_entries,
+)
 from youtube_automation.infrastructure.collections.chrome_extensions import (
     ChromeExtensionOrigin,
     resolve_unpacked_extension_origin,
@@ -1436,7 +1440,14 @@ def create_server(
                 if prompts_path is None:
                     self.send_error(404, "Not Found")
                     return
-                self._send_bytes(prompts_path.read_bytes(), "application/json; charset=utf-8")
+                try:
+                    payload = read_suno_prompt_delivery_payload_from_path(prompts_path)
+                except ValueError as exc:
+                    self._send_json_error(500, str(exc))
+                    return
+                self._send_bytes(
+                    json.dumps(payload, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8"
+                )
                 return
             if self.path == DISTROKID_RELEASE_ROUTE:
                 self._serve_distrokid_release()
@@ -1467,7 +1478,14 @@ def create_server(
                 if resolved is None or not resolved.is_file():
                     self._send_json_error(404, "Not Found")
                     return
-                self._send_bytes(resolved.read_bytes(), "application/json; charset=utf-8")
+                try:
+                    payload = read_suno_prompt_delivery_payload(resolved.parent.parent)
+                except ValueError as exc:
+                    self._send_json_error(500, str(exc))
+                    return
+                self._send_bytes(
+                    json.dumps(payload, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8"
+                )
                 return
 
             if self.path == SUNO_PROMPTS_ROUTE:

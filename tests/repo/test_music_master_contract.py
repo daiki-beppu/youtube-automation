@@ -10,6 +10,7 @@ from pathlib import Path
 
 import yaml
 
+from tests.helpers.music_prompt import write_suno_prompt_pair
 from tests.helpers.paths import REPO_ROOT
 from youtube_automation.configuration import skills as skill_config
 from youtube_automation.domains.skills.inventory import SkillInventory
@@ -48,8 +49,7 @@ def _collection(tmp_path: Path, music_engine: str) -> Path:
     documentation = collection / "20-documentation"
     documentation.mkdir()
     (documentation / "suno-patterns.yaml").write_text("mode: instrumental\n", encoding="utf-8")
-    (documentation / "suno-prompts.md").write_text("# Prompts\n", encoding="utf-8")
-    (documentation / "suno-prompts.json").write_text('[{"title": "a"}]\n', encoding="utf-8")
+    write_suno_prompt_pair(documentation, [{"name": "a"}])
     return collection
 
 

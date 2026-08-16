@@ -26,6 +26,7 @@ import urllib.request
 
 import pytest
 
+from tests.helpers.music_prompt import write_suno_prompt_pair
 from youtube_automation.commands.collections.collection_serve import create_server
 from youtube_automation.configuration.distrokid import (
     AiDisclosure,
@@ -260,8 +261,13 @@ def serve(tmp_path):
     started = []
 
     def _start(*, collection_dir, distrokid, allow_origin=None, prompts=None, distrokid_source=None):
-        prompts_path = tmp_path / "suno-prompts.json"
-        prompts_path.write_text(json.dumps(prompts or []), encoding="utf-8")
+        documentation = collection_dir / "20-documentation"
+        documentation.mkdir(exist_ok=True)
+        write_suno_prompt_pair(
+            documentation,
+            prompts or [{"name": "fixture", "style": "fixture", "lyrics": ""}],
+        )
+        prompts_path = documentation / "suno-prompts.json"
         server = create_server(
             0,
             allow_origin,

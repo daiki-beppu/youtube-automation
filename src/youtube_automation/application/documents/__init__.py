@@ -7,11 +7,17 @@ from youtube_automation.application.documents.migration import (
     MarkdownMigrationDecision,
     write_operational_document,
 )
+from youtube_automation.application.documents.music_prompt import (
+    require_recorded_machine_verification,
+    write_music_prompt_document,
+)
 
 __all__ = [
     "DocumentWriteResult",
     "MarkdownMigrationDecision",
+    "require_recorded_machine_verification",
     "write_channel_strategy_document",
     "write_collection_plan_document",
+    "write_music_prompt_document",
     "write_operational_document",
 ]

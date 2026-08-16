@@ -13,7 +13,7 @@ reviewer は対象成果物 JSON とこのルーブリックだけを読む。�
 
 `/music --lyric` の `suno-lyrics.json` は各 entry に `review_context` を持ち、少なくとも `collection_theme`, `scene`, `mood`, `persona_target`, `persona_vocabulary`, `quote_essence` を含む。reviewer は theme / scene / mood / persona vocabulary / 名言 essence の判定をこの `review_context` と `lyrics` だけで行う。`review_context` が欠落している、空、または判定観点に必要なフィールドが足りない `/music --lyric` entry は、外部資料で補完せず `FAIL` とする。
 
-`/music --prompt` の `suno-prompts.json` は既存 consumer 互換のため、entry の必須 field を `name`, `style`, `lyrics` のまま維持する。reviewer は `name`, `style`, `lyrics` と、存在する場合のみ More Options の補助 field（例: `style_influence`, `weirdness`, `vocal_gender`, `exclude_styles`）だけで判定する。`/music --prompt` entry に `review_context` は要求しない。不足する theme / scene / quote 情報を外部資料で補完してはならず、JSON 内に証拠がない観点は「判定不能な外部文脈」として理由に明記し、`review_context` 欠落だけを理由に `FAIL` しない。
+`/music --prompt` の `suno-prompts.json` entry は `name`, `style`, `lyrics`, `options`, `track_role`, `review` を持つ。reviewer は `name`, `style`, `lyrics` と `options` の More Options 補助 field（例: `style_influence`, `weirdness`, `vocal_gender`, `exclude_styles`）だけで判定する。`review` は判定の出力先であり入力根拠にしない。`review_context` は要求せず、不足する theme / scene / quote 情報を外部資料で補完してはならない。JSON 内に証拠がない観点は「判定不能な外部文脈」として理由に明記し、`review_context` 欠落だけを理由に `FAIL` しない。
 
 ## 判定形式
 

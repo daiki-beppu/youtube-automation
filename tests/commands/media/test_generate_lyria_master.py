@@ -12,11 +12,14 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from youtube_automation.application.documents.migration import MarkdownMigrationDecision
+from youtube_automation.application.documents.music_prompt import write_music_prompt_document
 from youtube_automation.commands.media import generate_lyria_master
 from youtube_automation.commands.media.generate_lyria_master import (
     _LYRIA_SEGMENT_SEC,
     _MAX_SEGMENT_COUNT,
     _generate_one_segment,
+    _load_lyria_prompt_input,
     _resolve_segment_count,
 )
 from youtube_automation.core.errors import ValidationError
@@ -33,6 +36,44 @@ def _make_collection(root: Path) -> Path:
     (root / "01-master").mkdir(parents=True, exist_ok=True)
     (root / "02-Individual-music").mkdir(parents=True, exist_ok=True)
     return root
+
+
+def test_load_lyria_prompt_input_uses_only_validated_pair(tmp_path: Path) -> None:
+    collection = _make_collection(tmp_path)
+    target = collection / "20-documentation/lyria-prompt.json"
+    target.parent.mkdir()
+    state = collection / "workflow-state.json"
+    state.write_text('{"assets": {}}', encoding="utf-8")
+    document = {
+        "schema_version": 1,
+        "generated_at": "2026-08-16T00:00:00Z",
+        "engine": "lyria",
+        "collection_id": "rain",
+        "provenance": {"producer": "music", "source_paths": ["config/skills/lyria.yaml"]},
+        "entries": [
+            {
+                "name": "rain",
+                "style": "soft fingerpicked guitar",
+                "lyrics": "",
+                "options": {"model": "lyria-3-pro-preview", "bpm": 72, "mode": "instrumental"},
+                "track_role": "core",
+                "review": {"verify_status": "pass", "semantic_status": "pass", "notes": []},
+            }
+        ],
+    }
+    write_music_prompt_document(
+        target,
+        state,
+        lambda: document,
+        MarkdownMigrationDecision.NOT_REQUIRED,
+        machine_verify=lambda _document: None,
+    )
+
+    prompt = _load_lyria_prompt_input(target)
+
+    assert prompt.prompt == "soft fingerpicked guitar"
+    assert prompt.name == "rain"
+    assert prompt.bpm == 72
 
 
 class TestResolveSegmentCount:
