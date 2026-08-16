@@ -2,6 +2,12 @@
 
 `/music` の prompt 正本は `references/music-prompt.schema.json` に準拠する JSON と、同 basename の HTML pair とする。
 
+手動承認では永続HTMLを `uv run yt-document-review --collection <collection-path> --artifact music-prompt --select` で表示し、product-neutralなsingle-use loopback brokerから `approve` / `reject` の候補IDだけを受け取る。
+返却後もartifact digestと検証済みJSONを再確認し、HTML・brokerから任意path、command、state patchを受け取らない。
+Web失敗は未承認のまま停止し、会話選択へ黙ってfallbackしない。browserなしは `--transport terminal` を明示する。
+`skip_generation_approval: true` など既存の自動承認経路ではreview CLIを呼ばずHTMLを生成しない。
+Codex / Claudeとも同じCLI契約を使い、製品固有session APIへmessageを注入しない。
+
 | engine | JSON 正本 | 承認表示 |
 |---|---|---|
 | Suno | `20-documentation/suno-prompts.json` | `20-documentation/suno-prompts.html` |

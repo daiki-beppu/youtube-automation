@@ -1,5 +1,13 @@
 # YouTube Studio A/B test operator guide
 
+## 共通Web review lifecycle
+
+手動候補選択は生成・機械検証後、確定copyやstate更新前に `uv run yt-document-review --collection <collection-path> --artifact thumbnail --select` を実行する。
+受け取るのはallowlist済みのopaqueな `candidate_id` とartifact digestだけで、対応する現在の候補fileを再hashしてから既存確定処理を呼ぶ。
+HTML・brokerから任意path、command、state patchは受理しない。失敗は未選択のまま停止し、terminal会話へ黙ってfallbackしない。
+browserなしは `--transport terminal` を明示する。auto-selectionの `selection_only` / `full` ではCLIを呼ばずreview HTMLを生成しない。
+Codex / Claudeとも同じproduct-neutral CLIを使い、製品固有session APIへmessageを注入しない。
+
 ## Eligibility
 
 - コンピュータ版 YouTube Studio で操作する。

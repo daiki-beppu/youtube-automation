@@ -105,6 +105,7 @@ yt_discover_competitors = _make_entrypoint("youtube_automation.commands.analytic
 yt_dashboard = _make_entrypoint("youtube_automation.commands.analytics.dashboard")
 yt_distrokid_prepare = _make_entrypoint("youtube_automation.commands.distrokid.distrokid_prepare")
 yt_document_migrate = _make_entrypoint("youtube_automation.commands.documents.migrate")
+yt_document_review = _make_entrypoint("youtube_automation.commands.documents.review")
 yt_document_render = _make_entrypoint("youtube_automation.commands.documents.render")
 yt_doctor = _make_entrypoint("youtube_automation.commands.system.doctor")
 yt_fetch_stream_key = _make_entrypoint("youtube_automation.commands.youtube.fetch_stream_key")
