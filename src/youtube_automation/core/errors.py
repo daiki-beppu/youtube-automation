@@ -125,6 +125,10 @@ class WorkflowStateError(AutomationError):
     """workflow-state.json の読み取り・検証・永続化エラー。"""
 
 
+class MediaStoreError(AutomationError):
+    """境界メディアの転送・完全性検証エラー。"""
+
+
 def _http_error_reason(error) -> str | None:
     content = getattr(error, "content", b"")
     if isinstance(content, bytes):

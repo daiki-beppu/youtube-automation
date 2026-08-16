@@ -214,6 +214,7 @@ assets/stock/           # ボツ画像ストック (#364)。<theme-slug>/ 配下
 | `domains.uploads.youtube` | 再開可能アップロード・サムネイル圧縮の共通コア |
 | `core.errors` | ドメイン例外（`AutomationError` 基底、`ConfigError` / `YouTubeAPIError` / `ValidationError` / `UploadError`） |
 | `infrastructure.media.collection_paths` | コレクションディレクトリ構造の解決 |
+| `infrastructure.media_store` | 境界転送専用の fail-closed Local / Cloudflare R2 adapter（工程内部へは注入しない） |
 | `domains.suno` | Suno 設定、歌詞、プロンプト、プレイリスト、選曲の生成・検証 |
 | `domains.suno.downloaded` | downloaded payload、workflow、検証、archive、apply transaction |
 | `domains.suno.name_matching` | prompt・playlist・downloaded filename 共通の名前正規化と曖昧性検出 |
@@ -223,6 +224,7 @@ assets/stock/           # ボツ画像ストック (#364)。<theme-slug>/ 配下
 | `domains.channel_readiness` | TTP 対象・branding・benchmark・制作設定の provider-neutral なチャンネル準備判定 |
 | `domains.thumbnail` | サムネ特徴量、相関、参照、archive、選択 policy（Pillow） |
 | `domains.media` | 音声、字幕、画像、動画の provider-neutral model / policy |
+| `domains.media_store` | 工程境界の `<channel>/<collection>/<handoff>/` key、checksum metadata、push / pull / exists port |
 | `domains.distrokid` | DistroKid naming、metadata、specification、preparation、release policy |
 | `domains.collections.weekly_vote_log` | 週次投票ログ reader、initializer、schema、保存・検証 |
 | `domains.documents.schema_registry` | リポジトリ所有 JSON Schema の固定 inventory、Draft 7 compile cache、値非表示の検証エラー変換。外部 schema path は受け取らない |

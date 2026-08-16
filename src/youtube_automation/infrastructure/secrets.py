@@ -27,6 +27,7 @@ _SECRET_REFS: dict[str, str] = {
     "OPENAI_API_KEY": "op://Personal/OpenAI_API_Key/credential",
     "GEMINI_API_KEY": "op://Personal/Gemini_API_Key/credential",
     "MINIMAX_API_KEY": "op://Personal/MiniMax_API_Key/credential",
+    "R2_API_TOKEN": "op://Personal/Cloudflare_R2_API_Token/credential",
     "YOUTUBE_STREAM_KEY": "op://Personal/YouTube/stream_key",
     "VULTR_API_KEY": "op://Personal/Vultr/api_key",
     "STREAM_WEBHOOK_URL": "op://Personal/Stream_Notification_Webhook/url",

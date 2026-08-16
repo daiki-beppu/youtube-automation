@@ -29,7 +29,13 @@ from youtube_automation.infrastructure.secrets import (
 )
 
 _TEST_SECRET = "CLIENT_SECRETS_JSON"
-_MANAGED_SECRETS = ("CLIENT_SECRETS_JSON", "OPENAI_API_KEY", "GEMINI_API_KEY", "MINIMAX_API_KEY")
+_MANAGED_SECRETS = (
+    "CLIENT_SECRETS_JSON",
+    "OPENAI_API_KEY",
+    "GEMINI_API_KEY",
+    "MINIMAX_API_KEY",
+    "R2_API_TOKEN",
+)
 _OP_READ_DISABLED_ENV = secrets_module._OP_READ_DISABLED_ENV
 
 
@@ -199,6 +205,10 @@ class TestOpenAIApiKeyRegistered:
         ):
             with pytest.raises(ConfigError, match="OPENAI_API_KEY"):
                 get_secret("OPENAI_API_KEY")
+
+
+def test_r2_api_token_is_registered_without_embedding_its_value() -> None:
+    assert _SECRET_REFS["R2_API_TOKEN"].startswith("op://")
 
 
 class TestGeminiApiKeyRegistered:
