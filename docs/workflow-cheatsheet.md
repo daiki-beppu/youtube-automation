@@ -37,7 +37,7 @@
 | `/wf-new --auto` | collection 不在なら `/wf-new` から開始し、存在すれば未完了地点から制作・公開・publish まで状態駆動で再評価する | 子 skill の実装を複製しない | 認証、CAPTCHA、承認待ち、公開未許可など人間の介入が必要な場面 |
 | `/wf-new --batch` | 複数企画を一括承認し、同一 `/wf-new` の通常入口へ 1 件ずつ渡して準備する | child gate を省略せず、並列実行しない | child の失敗、承認待ち、外部前提待ち、成果物不整合 |
 | `/wf-new --schedule` | `workflow.scheduled_automation` と native Scheduled Task を設定・確認・停止する | 明示承認なしに外部公開や OS fallback を有効化しない | dry-run 適用承認、backend 切替、外部公開・OS fallback の明示承認 |
-| `/wf-new` | 企画選択 → `yt-init-collection` でディレクトリ + `workflow-state.json` 作成 → サムネ・音楽素材生成 | 楽曲の最終マスタリングや動画化はしない | 通常は (1) 企画選択 (2) サムネ承認。`ttp_mode: false` の minimal mode は企画候補生成前にテーマ / ジャンル / 雰囲気の直接入力確認を追加し、`true` は `/channel-research --benchmark` の案内で停止 |
+| `/wf-new` | Phase 0 で前サイクルを振り返り、企画選択 → `yt-init-collection` でディレクトリ + `workflow-state.json` 作成 → サムネ・音楽素材生成 | `/analytics --flop` の分析ロジックを複製せず、楽曲の最終マスタリングや動画化もしない | 未 postmortem があれば分析実行確認、その後は通常 (1) 企画選択 (2) サムネ承認。`ttp_mode: false` の minimal mode は企画候補生成前にテーマ / ジャンル / 雰囲気の直接入力確認を追加し、`true` は `/channel-research --benchmark` の案内で停止 |
 | `/wf-next` | `workflow-state.json::phase` に応じて次工程を 1 段実行（Suno DL / Lyria 生成 / 動画化 / アップロード） | 新規コレクションは作らない | マスター音源が無い phase = "prepared" 状態（ユーザーがミキシング+マスタリングを行う） |
 | `/wf-status` | `collections/planning/*/workflow-state.json` の現在地を一覧・詳細表示 | **実行系は一切呼ばない** | なし |
 
@@ -50,6 +50,10 @@ subagent が失敗した、期待成果物が無い、または現在の phase �
 例外として `/wf-new` Phase 2c の thumbnail / music は独立 branch である。メインは実成果物を branch ごとに検証し、成功した branch の `assets` flag だけを更新して保持する。片側が失敗した場合は、次回も成功側を再生成・再承認せず、失敗した branch だけを同じ collection で再開する。flag と成果物が不整合なら完了扱いせず停止する。Phase 2c 以外は従来どおり、失敗した作業について state を更新しない。
 
 ```
+Phase 0 ─ 直近サイクルの振り返り   /wf-new
+   ├─ yt-postmortem-pending          (未 postmortem と分析不能理由を read-only 列挙)
+   └─ /analytics --flop              (承認後、pending 全件を順次分析して insights 還元)
+                          ↓ 全成果物と insights validator を確認
 Phase 1 ─ 企画 + 素材準備           /wf-new
    ├─ wf-new 内部企画工程            (analytics mode / benchmark fallback mode、または ttp_mode=false の minimal mode で 3 候補生成)
    ├─ yt-init-collection             (ディレクトリ + workflow-state.json 作成)

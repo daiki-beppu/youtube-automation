@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(wf-new)`: 企画前の Phase 0 で未 postmortem を列挙し、コスト承認後に `/analytics --flop` へ全件を順次委譲して insights を最新化する再開可能な振り返り gate を追加する（#3791）。
 - `feat(analytics)`: 最新 analytics と upload tracking を読み取り専用で照合し、postmortem 未作成 collection を human / JSON で列挙する `yt-postmortem-pending` を追加する（#3790）。
 - `refactor(uploads)`: `ShortUploader` が複製していた公開日計算と tracking / workflow-state I/O を `PublishedDatesScheduler` / `TrackingStore` の共通コラボレータへ統合する（#3935）。
 - `refactor(collections)`: raw master・batch video・thumbnail auto selection・DistroKid release date・Suno selection の5 writerを `workflow-state` owner の lock + atomic update へ移行する（#3880）。
