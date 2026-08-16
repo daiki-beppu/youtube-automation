@@ -62,6 +62,13 @@ def test_live_clean_config_migrates_to_publish_clean_namespace(tmp_path) -> None
     assert set(config) == {"upload", "community", "clean"}
     assert "delete_patterns" in config["clean"]
     assert "protect_patterns" in config["clean"]
+    assert config["clean"]["distrokid_audio_patterns"] == ["30-distrokid/*/*.mp3"]
+    assert {
+        "30-distrokid/spec.json",
+        "30-distrokid/*/metadata.md",
+        "30-distrokid/cover_art_3000.jpg",
+        "30-distrokid/README.md",
+    } <= set(config["clean"]["protect_patterns"])
     assert migration == _migrate_config.SkillConfigMigration("publish", "clean")
     assert load_skill_config("live-clean", use_cache=False, channel_dir=tmp_path) == config["clean"]
     assert load_skill_config("publish", use_cache=False, channel_dir=tmp_path) == config

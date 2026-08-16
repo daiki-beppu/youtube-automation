@@ -56,7 +56,7 @@ uv run python .claude/skills/publish/references/clean-scan.py --channel-dir "$CH
 
 exit 20 または pull に失敗した場合は、表示された理由を報告して直ちに終了する。古いローカル state を読まず、削除対象の特定やドライラン表示へ進まないため、承認・削除も行わない。自動 merge / rebase や `--no-ff` への切り替えは行わない。
 
-exit 0 の JSON にある `eligible` だけをクリーンアップ候補とし、`skipped` は理由とともに「安全条件未達（スキップ）」へ分類する。以下の **4条件すべて** を満たすコレクションだけが `eligible` になる:
+exit 0 の JSON にある `eligible` だけをクリーンアップ候補とし、`skipped` は理由とともに「安全条件未達（スキップ）」へ分類する。以下の **4条件すべて** を満たすコレクションだけが `eligible` になる。各候補の `distrokid` は、pull 後の `config/channel/distrokid.json` と typed state から `disabled` / `pending` / `submitted` のいずれかに確定済みである:
 
 1. `stage` が `"live"`
 2. `phase` が `"complete"`
@@ -69,16 +69,20 @@ exit 0 の JSON にある `eligible` だけをクリーンアップ候補とし�
 
 ### Step 2: 削除対象ファイルの特定
 
-安全性検証を通過したコレクションについて、skill-config `delete_patterns`（既定値と各パターンの理由コメントは `config.default.yaml` 参照）に一致するファイルの存在とサイズを確認する。
+安全性検証を通過したコレクションについて、Step 1 が各候補へ返した `delete_patterns` に一致するファイルの存在とサイズを確認する。このリストは skill-config（既定値と各パターンの理由コメントは `config.default.yaml` 参照）と pull 後の DistroKid 分類から確定済みである:
+
+- `disabled`: 基底の `delete_patterns` をそのまま返し、`30-distrokid/` は削除候補へ加えない
+- `pending`: `02-Individual-music/` と `30-distrokid/` 配下の pattern を除いて返す
+- `submitted`: 基底 pattern に `distrokid_audio_patterns` を追加して返す
 
 ```bash
 # 各コレクションディレクトリで実行（delete_patterns の内容に合わせて展開する。以下は既定値の例）
-du -sh 01-master/master.mp3 01-master/master-mix.wav 01-master/*-Master.mp4 02-Individual-music/*.mp3 10-assets/loop_normalized.mp4 2>/dev/null
+du -sh 01-master/master.mp3 01-master/master-mix.wav 01-master/*-Master.mp4 02-Individual-music/*.mp3 10-assets/loop_normalized.mp4 30-distrokid/*/*.mp3 2>/dev/null
 ```
 
-**削除対象**: Step 1 の `eligible` に含まれるコレクションに限り、skill-config `delete_patterns`（YouTube に存在 or 再生成可能なもののみ。既定: raw マスター / ミックスダウン wav / YouTube マスター動画 / 個別ソーストラック / 正規化キャッシュ）
+**削除対象**: Step 1 の `eligible` に含まれるコレクションに限り、その候補に返された `delete_patterns`（YouTube に存在、再生成可能、または DistroKid 提出済みの音声コピーのみ）
 
-**絶対に削除しないファイル**: skill-config `protect_patterns`（既定: `workflow-state.json` / `10-assets/main.png|jpg` / `10-assets/thumbnail.jpg|png` / 再生成不可のオリジナル `10-assets/loop.mp4` / `20-documentation/*`）。`delete_patterns` と重なった場合は `protect_patterns` が優先。
+**絶対に削除しないファイル**: skill-config `protect_patterns`（既定: `workflow-state.json` / `10-assets/main.png|jpg` / `10-assets/thumbnail.jpg|png` / 再生成不可のオリジナル `10-assets/loop.mp4` / `20-documentation/*` / `30-distrokid/spec.json` / `30-distrokid/*/metadata.md` / `30-distrokid/cover_art_3000.jpg` / `30-distrokid/README.md`）。`delete_patterns` や `distrokid_audio_patterns` と重なった場合は `protect_patterns` が優先。
 
 削除対象ファイルが 1 つもないコレクションは「クリーンアップ済み」として表示する。
 
@@ -109,7 +113,7 @@ Live Collection クリーンアップ — ドライラン
 
 ### Step 4: 削除実行
 
-「削除を実行する」が明示的に選ばれた場合のみ、skill-config `delete_patterns` に一致するファイルをファイル単位で `rm -f` する（以下は既定値の例）。
+「削除を実行する」が明示的に選ばれた場合のみ、Step 1 が候補ごとに返した `delete_patterns` に一致するファイルをファイル単位で `rm -f` する（以下は既定値の例）。
 
 ```bash
 # マスターファイル
@@ -118,7 +122,11 @@ rm -f "collections/live/<dir>/01-master/master-mix.wav"
 rm -f collections/live/<dir>/01-master/*-Master.mp4
 
 # 個別トラック
+# distrokid=pending のコレクションでは実行しない
 rm -f collections/live/<dir>/02-Individual-music/*.mp3
+
+# DistroKid提出済みのdisc音声コピー（distrokid=submitted のときだけ）
+rm -f collections/live/<dir>/30-distrokid/*/*.mp3
 
 # キャッシュ
 rm -f "collections/live/<dir>/10-assets/loop_normalized.mp4"

@@ -83,6 +83,10 @@ clean:
     - "02-Individual-music/*.mp3"
     - "10-assets/loop_normalized.mp4"
 
+  # DistroKid提出完了済みのときだけ追加するdisc音声コピー
+  distrokid_audio_patterns:
+    - "30-distrokid/*/*.mp3"
+
   # delete_patterns と重なった場合も必ず保護する成果物
   protect_patterns:
     - "workflow-state.json"
@@ -92,3 +96,7 @@ clean:
     - "10-assets/thumbnail.png"
     - "10-assets/loop.mp4"
     - "20-documentation/*"
+    - "30-distrokid/spec.json"
+    - "30-distrokid/*/metadata.md"
+    - "30-distrokid/cover_art_3000.jpg"
+    - "30-distrokid/README.md"

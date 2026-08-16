@@ -37,6 +37,67 @@ def _state(*, publish_at: object = None) -> WorkflowState:
     )
 
 
+def _live_collection(channel_dir: Path, *, submitted: bool) -> Path:
+    collection = channel_dir / "collections" / "live" / "sample"
+    collection.mkdir(parents=True)
+    payload: dict[str, object] = {
+        "stage": "live",
+        "phase": "complete",
+        "upload": {"video_id": "video-123"},
+    }
+    if submitted:
+        payload["human_tasks"] = {"distrokid_submission": {"completed_at": "2026-08-16T01:02:03Z"}}
+    (collection / "workflow-state.json").write_text(json.dumps(payload) + "\n", encoding="utf-8")
+    return collection
+
+
+@pytest.mark.parametrize(
+    ("distrokid_enabled", "submitted", "expected"),
+    [
+        (False, False, "disabled"),
+        (True, False, "pending"),
+        (True, True, "submitted"),
+    ],
+)
+def test_scan_classifies_distrokid_audio_cleanup_from_channel_config_and_typed_state(
+    tmp_path: Path,
+    distrokid_enabled: bool,
+    submitted: bool,
+    expected: str,
+) -> None:
+    module = _module()
+    _live_collection(tmp_path, submitted=submitted)
+    if distrokid_enabled:
+        config = tmp_path / "config" / "channel" / "distrokid.json"
+        config.parent.mkdir(parents=True)
+        config.write_text("{}\n", encoding="utf-8")
+
+    report = module.scan(tmp_path, NOW)
+
+    candidate = report["eligible"][0]
+    assert candidate["collection"] == "sample"
+    assert candidate["video_id"] == "video-123"
+    assert candidate["distrokid"] == expected
+    if expected == "pending":
+        assert not any(
+            pattern.startswith(("02-Individual-music/", "30-distrokid/")) for pattern in candidate["delete_patterns"]
+        )
+    else:
+        assert "02-Individual-music/*.mp3" in candidate["delete_patterns"]
+        assert ("30-distrokid/*/*.mp3" in candidate["delete_patterns"]) is (expected == "submitted")
+
+
+def test_scan_fails_closed_when_distrokid_config_is_a_symlink(tmp_path: Path) -> None:
+    module = _module()
+    _live_collection(tmp_path, submitted=True)
+    config = tmp_path / "config" / "channel" / "distrokid.json"
+    config.parent.mkdir(parents=True)
+    config.symlink_to(tmp_path / "missing-distrokid.json")
+
+    with pytest.raises(StateSyncError, match="distrokid.json must be a regular file"):
+        module.scan(tmp_path, NOW)
+
+
 @pytest.mark.parametrize(
     ("payload", "reason"),
     [
@@ -89,23 +150,23 @@ def _git(directory: Path, *args: str) -> str:
     return result.stdout.strip()
 
 
-def _write_state(repository: Path, publish_at: str) -> None:
+def _write_state(repository: Path, publish_at: str, *, submitted: bool = False) -> None:
     state_path = repository / "collections" / "live" / "sample" / "workflow-state.json"
     state_path.parent.mkdir(parents=True, exist_ok=True)
+    payload: dict[str, object] = {
+        "stage": "live",
+        "phase": "complete",
+        "upload": {"video_id": "video-123", "publish_at": publish_at},
+    }
+    if submitted:
+        payload["human_tasks"] = {"distrokid_submission": {"completed_at": "2026-08-16T01:02:03Z"}}
     state_path.write_text(
-        json.dumps(
-            {
-                "stage": "live",
-                "phase": "complete",
-                "upload": {"video_id": "video-123", "publish_at": publish_at},
-            }
-        )
-        + "\n",
+        json.dumps(payload) + "\n",
         encoding="utf-8",
     )
 
 
-def _repositories(tmp_path: Path) -> tuple[Path, Path]:
+def _repositories(tmp_path: Path, *, distrokid_enabled: bool = False) -> tuple[Path, Path]:
     remote = tmp_path / "remote.git"
     subprocess.run(
         ["git", "init", "--bare", "--initial-branch=main", str(remote)],
@@ -119,6 +180,10 @@ def _repositories(tmp_path: Path) -> tuple[Path, Path]:
     _git(seed, "config", "user.email", "test@example.com")
     _git(seed, "config", "user.name", "Test User")
     (seed / ".gitignore").write_text("\n", encoding="utf-8")
+    if distrokid_enabled:
+        config = seed / "config" / "channel" / "distrokid.json"
+        config.parent.mkdir(parents=True)
+        config.write_text("{}\n", encoding="utf-8")
     _write_state(seed, "2099-01-01T00:00:00Z")
     _git(seed, "add", ".")
     _git(seed, "commit", "-m", "initial")
@@ -146,10 +211,27 @@ def test_scan_reads_remote_state_only_after_successful_pull(tmp_path: Path) -> N
 
     report = module.pull_and_scan(local, NOW)
 
-    assert report["eligible"] == [{"collection": "sample", "video_id": "video-123"}]
+    assert report["eligible"][0]["collection"] == "sample"
+    assert report["eligible"][0]["video_id"] == "video-123"
+    assert report["eligible"][0]["distrokid"] == "disabled"
     assert report["skipped"] == []
     pulled = json.loads((local / "collections/live/sample/workflow-state.json").read_text(encoding="utf-8"))
     assert pulled["upload"]["publish_at"] == "2000-01-01T00:00:00Z"
+
+
+def test_scan_reads_distrokid_submission_only_after_successful_pull(tmp_path: Path) -> None:
+    module = _module()
+    seed, local = _repositories(tmp_path, distrokid_enabled=True)
+    _write_state(seed, "2000-01-01T00:00:00Z", submitted=True)
+    _git(seed, "add", "collections")
+    _git(seed, "commit", "-m", "distrokid submitted")
+    _git(seed, "push")
+
+    report = module.pull_and_scan(local, NOW)
+
+    candidate = report["eligible"][0]
+    assert candidate["distrokid"] == "submitted"
+    assert "30-distrokid/*/*.mp3" in candidate["delete_patterns"]
 
 
 def test_scan_stops_before_classification_when_pull_fails(tmp_path: Path) -> None:
