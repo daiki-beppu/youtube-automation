@@ -133,6 +133,10 @@ class MediaHandoffNotFoundError(MediaStoreError):
     """完了マーカーが無く、受け渡し物が未完成または存在しない。"""
 
 
+class StateSyncError(AutomationError):
+    """Git制御面stateのpull / commit / push同期エラー。"""
+
+
 def _http_error_reason(error) -> str | None:
     content = getattr(error, "content", b"")
     if isinstance(content, bytes):
