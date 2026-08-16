@@ -2,7 +2,7 @@
 
 ## エンジン判定
 
-対象 collection を確定したら `config/channel/youtube.json::music_engine` を一度だけ解決する。`lyria` は `--generate` が `01-master/master.mp3` を直接生成するため、この mode は完了済みとして skip する。`suno` の場合だけ以下の手順を実行する。未設定または `suno` / `lyria` 以外なら設定不整合として停止する。
+対象 collection を確定したら `config/channel/youtube.json::music_engine` を一度だけ解決する。`lyria` / `minimax` は `--generate` が `01-master/master.mp3` を直接生成するため、この mode は完了済みとして skip する。`suno` の場合だけ以下の手順を実行する。未設定または `suno` / `lyria` / `minimax` 以外なら設定不整合として停止する。
 
 ## 前後工程
 

@@ -148,8 +148,8 @@ def _music_engine(collection_path: Path) -> str:
     channel_dir = _channel_dir(collection_path)
     youtube_config = _load_mapping(channel_dir / "config" / "channel" / "youtube.json")
     engine = youtube_config.get("music_engine")
-    if engine not in {"suno", "lyria"}:
-        raise ManifestError("config/channel/youtube.json::music_engine must be suno or lyria")
+    if engine not in {"suno", "lyria", "minimax"}:
+        raise ManifestError("config/channel/youtube.json::music_engine must be suno, lyria, or minimax")
     return engine
 
 
@@ -229,28 +229,28 @@ def _evaluate_generate(collection_path: Path) -> tuple[int, dict[str, object]]:
     if not _artifact_exists(collection_path, output):
         return EXIT_RUN, {
             "step": "generate",
-            "engine": "lyria",
+            "engine": engine,
             "decision": "run",
-            "reason": "lyria_master_missing",
+            "reason": f"{engine}_master_missing",
             "missing": [output.as_posix()],
         }
     return EXIT_SKIP, {
         "step": "generate",
-        "engine": "lyria",
+        "engine": engine,
         "decision": "skip",
-        "reason": "lyria_generate_complete",
+        "reason": f"{engine}_generate_complete",
         "outputs": [output.as_posix()],
     }
 
 
 def _evaluate_master(collection_path: Path) -> tuple[int, dict[str, object]]:
     engine = _music_engine(collection_path)
-    if engine == "lyria":
+    if engine in {"lyria", "minimax"}:
         return EXIT_SKIP, {
             "step": "master",
-            "engine": "lyria",
+            "engine": engine,
             "decision": "skip",
-            "reason": "lyria_master_not_required",
+            "reason": f"{engine}_master_not_required",
         }
 
     output = Path("01-master/master.mp3")

@@ -292,7 +292,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--music-engine",
-        choices=("suno", "lyria"),
+        choices=("suno", "lyria", "minimax"),
         default="suno",
         help='チャンネルのデフォルト音楽エンジン (default: "suno")',
     )

@@ -71,7 +71,7 @@ Phase 3 では単なる候補 `N` 件ではなく、制作へ渡せる確定 pla
 - `differentiation_matrix` の batch 内比較 row は `kind: batch_pair`、`left_plan_id`、`right_plan_id`、非空の `differences` を持つ。各 unordered pair は plan 順に小さい側を left として一度だけ含める
 - 既存比較 row は `kind: existing_collection`、`plan_id`、`existing_collection_slug`、非空の `differences` を持ち、plan と `existing_collection_slugs` の直積を一度ずつ含める
 
-保存前 Hard Gate として、`requested_count == N`、`plans` がちょうど `N` 件、`approved_at` と全必須 field が非空、`track_count >= 1`、`music_engine` が `suno` または `lyria`、`plan_id` と `theme_slug` と既存 slug が各集合内で一意であることを検証する。特に `theme_slug` が batch 内で一意かつ既存 collection と衝突しないこと、全比較行が重複・欠落なく揃うことを必須とする。1 件でも失敗したら manifest を更新せず停止する。保存は同一 directory の一時ファイルを完全に書いて検証した後の **atomic rename** とし、失敗時に既存 manifest を保つ。
+保存前 Hard Gate として、`requested_count == N`、`plans` がちょうど `N` 件、`approved_at` と全必須 field が非空、`track_count >= 1`、`music_engine` が `suno` / `lyria` / `minimax` のいずれか、`plan_id` と `theme_slug` と既存 slug が各集合内で一意であることを検証する。特に `theme_slug` が batch 内で一意かつ既存 collection と衝突しないこと、全比較行が重複・欠落なく揃うことを必須とする。1 件でも失敗したら manifest を更新せず停止する。保存は同一 directory の一時ファイルを完全に書いて検証した後の **atomic rename** とし、失敗時に既存 manifest を保つ。
 
 batch mode では collection directory と `workflow-state.json` を作成・更新しない。open insights を使った場合の status 更新は全件承認後に通常契約どおり行い、更新失敗時は manifest を complete として保存しない。manifest の保存と再読込検証が成功した時点だけ batch plan mode の完了とし、次工程 `/wf-new --batch` へ `batch_id` を渡す。
 

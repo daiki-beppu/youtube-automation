@@ -71,7 +71,7 @@ def main():
     parser.add_argument(
         "--music-engine",
         default=None,
-        choices=["suno", "lyria"],
+        choices=["suno", "lyria", "minimax"],
         help="音楽エンジン（デフォルト: channel_config から自動判定）",
     )
     args = parser.parse_args()

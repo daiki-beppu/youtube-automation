@@ -203,6 +203,13 @@ def test_compatible_music_engine_accessor_rejects_conflicting_values(tmp_path: P
         _engine = read(state_path).music_engine
 
 
+def test_music_engine_accepts_minimax_in_owner_schema(tmp_path: Path) -> None:
+    state_path = tmp_path / "workflow-state.json"
+    _write(state_path, {"music_engine": "minimax", "planning": {"music": {"engine": "minimax"}}})
+
+    assert read(state_path).music_engine == "minimax"
+
+
 def test_update_keeps_existing_file_when_callback_fails(tmp_path: Path) -> None:
     state_path = tmp_path / "workflow-state.json"
     original = '{"phase":"planning","counter":0}'

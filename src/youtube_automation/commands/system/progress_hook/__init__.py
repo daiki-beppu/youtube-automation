@@ -15,7 +15,12 @@ from youtube_automation.commands.system.progress_hook.workflow_state import STAG
 from youtube_automation.commands.system.progress_hook.workflow_state import load_progress_snapshot
 
 _STAGE_COMMANDS = {
-    "音源生成": ("yt-generate-lyria-master", "yt-generate-suno", "yt-suno-unattended-request"),
+    "音源生成": (
+        "yt-generate-lyria-master",
+        "yt-generate-minimax-master",
+        "yt-generate-suno",
+        "yt-suno-unattended-request",
+    ),
     "マスター化": ("yt-generate-master", "yt-finalize-master"),
     "動画化": ("yt-generate-videos-batch", "yt-generate-loop-video", "ffmpeg"),
     "サムネイル": ("yt-generate-image", "yt-thumbnail-text"),

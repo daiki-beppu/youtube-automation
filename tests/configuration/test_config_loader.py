@@ -843,6 +843,18 @@ def test_load_all_sections(tmp_path, monkeypatch):
     assert config.shorts.release.duration_sec == 30
 
 
+def test_music_engine_minimax_is_loaded_without_unknown_value_warning(tmp_path, monkeypatch, caplog):
+    sections = _minimal_sections()
+    sections["youtube.json"]["music_engine"] = "minimax"
+    channel = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(channel))
+
+    config = load_config()
+
+    assert config.youtube.music_engine == "minimax"
+    assert "未知の値" not in caplog.text
+
+
 def test_shorts_section_missing_defaults_to_disabled(tmp_path, monkeypatch):
     """shorts.json を 1 ファイルも置かない場合、enabled=False（オプトイン）で全 default が返る."""
     ch = _setup_channel(tmp_path, _minimal_sections())  # shorts.json なし

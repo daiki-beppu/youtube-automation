@@ -185,7 +185,7 @@ nix develop
 |---|---|
 | `meta.json` | `channel` / `youtube_channel` |
 | `content.json` | `genre` / `tags` / `descriptions` / `title` |
-| `youtube.json` | `youtube` / `music_engine` / `content_model` |
+| `youtube.json` | `youtube` / `music_engine`（`suno` / `lyria` / `minimax`）/ `content_model` |
 | `analytics.json` | `analytics` / `benchmark` (optional) |
 | `playlists.json` | `playlists` (optional) |
 | `workflow.json` | `workflow` / `wf_next` / `post-publish` (optional) |
@@ -247,6 +247,7 @@ uv run ruff check .
 | `yt-analytics` | Analytics データ収集 |
 | `yt-generate-image` | Gemini / OpenAI で画像生成（サムネイル兼用） |
 | `yt-generate-lyria-master` | Lyria 3 で N セグメント生成 + クロスフェード結合してマスター音源を作成 |
+| `yt-generate-minimax-master` | MiniMax Musicでinstrumental segmentを生成し、長尺マスター音源へ結合 |
 | `yt-generate-master` | 個別音声 (MP3 / WAV) をクロスフェード結合してマスター音源を作成 |
 | `yt-generate-suno` | Suno プロンプト生成 |
 | `yt-generate-loop-video` | Veo ループ動画生成 |

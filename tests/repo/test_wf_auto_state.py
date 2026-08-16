@@ -101,6 +101,16 @@ def test_created_collection_is_pinned_before_replanning(tmp_path: Path, runner: 
     assert decision["reason"] == "lyria_generation_required"
 
 
+def test_minimax_collection_routes_to_music_generate_without_suno_fallback(tmp_path: Path, runner: ModuleType) -> None:
+    collection = _collection(tmp_path, "20260721-minimax", engine="minimax")
+
+    decision = runner.resolve_action(tmp_path, collection.name, config=_config(runner))
+
+    assert decision["action"] == "minimax"
+    assert decision["reason"] == "minimax_generation_required"
+    assert decision["resume_action"] == "minimax"
+
+
 def test_interactive_approval_replans_same_collection_in_same_run(tmp_path: Path, runner: ModuleType) -> None:
     _collection(tmp_path, "20260720-other")
     created = _collection(tmp_path, "20260721-created", phase="planning")

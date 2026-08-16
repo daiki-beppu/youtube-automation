@@ -38,7 +38,7 @@
         "collection_name": {"title": "Collection name", "type": "string", "minLength": 1},
         "theme_slug": {"title": "Theme slug", "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
         "track_count": {"title": "Track count", "type": "integer", "minimum": 1},
-        "music_engine": {"title": "Music engine", "enum": ["suno", "lyria"]},
+        "music_engine": {"title": "Music engine", "enum": ["suno", "lyria", "minimax"]},
         "final_title": {"title": "最終タイトル", "type": "string", "minLength": 1},
         "target_persona": {"title": "対象 persona", "type": "string", "minLength": 1},
         "viewing_scene": {"title": "視聴シーン", "type": "string", "minLength": 1},

@@ -111,6 +111,7 @@ yt_finalize_master = _make_entrypoint("youtube_automation.commands.media.finaliz
 yt_generate_image = _make_entrypoint("youtube_automation.commands.media.generate_image")
 yt_generate_loop_video = _make_entrypoint("youtube_automation.commands.media.generate_loop_video")
 yt_generate_lyria_master = _make_entrypoint("youtube_automation.commands.media.generate_lyria_master")
+yt_generate_minimax_master = _make_entrypoint("youtube_automation.commands.media.generate_minimax_master")
 yt_generate_master = _make_entrypoint("youtube_automation.commands.media.generate_master")
 yt_generate_videos_batch = _make_entrypoint("youtube_automation.commands.media.generate_videos_batch")
 yt_generate_suno = _make_entrypoint("youtube_automation.commands.suno.generate_suno_prompts")

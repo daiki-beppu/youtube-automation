@@ -57,7 +57,7 @@ def test_generate_reference_routes_by_music_engine_and_keeps_completion_contract
     generate = (SKILL_DIR / "references" / "generate.md").read_text(encoding="utf-8")
 
     assert "music_engine" in generate
-    assert "suno" in generate and "lyria" in generate
+    assert "suno" in generate and "lyria" in generate and "minimax" in generate
     assert "entry 数 × 2" in generate
     assert "assets.music_downloaded = true" in generate
     assert "suno_playlist_url" in generate
@@ -78,7 +78,7 @@ def test_generate_defaults_are_owned_by_music_and_legacy_loaders_remain_compatib
     defaults = yaml.safe_load((SKILL_DIR / "config.default.yaml").read_text(encoding="utf-8"))
 
     assert set(defaults) == {"prompt", "lyric", "generate", "master"}
-    assert set(defaults["generate"]) == {"suno", "lyria"}
+    assert set(defaults["generate"]) == {"suno", "lyria", "minimax"}
     assert skill_config.skill_config_default_relative_path("suno-helper") == Path("music/config.default.yaml")
     assert skill_config.skill_config_default_relative_path("lyria") == Path("music/config.default.yaml")
     assert skill_config.load_skill_config("suno-helper", use_cache=False)["unattended"]["max_entries"] == 10
@@ -124,6 +124,21 @@ def test_generate_state_routes_lyria_and_skips_only_after_master_exists(tmp_path
     before = _run_state(collection)
     assert before.returncode == 10
     assert json.loads(before.stdout)["engine"] == "lyria"
+
+    master = collection / "01-master" / "master.mp3"
+    master.parent.mkdir()
+    master.write_bytes(b"audio")
+    after = _run_state(collection)
+    assert after.returncode == 0
+    assert json.loads(after.stdout)["decision"] == "skip"
+
+
+def test_generate_state_routes_minimax_and_skips_only_after_master_exists(tmp_path: Path) -> None:
+    collection = _collection(tmp_path, "minimax")
+
+    before = _run_state(collection)
+    assert before.returncode == 10
+    assert json.loads(before.stdout)["engine"] == "minimax"
 
     master = collection / "01-master" / "master.mp3"
     master.parent.mkdir()

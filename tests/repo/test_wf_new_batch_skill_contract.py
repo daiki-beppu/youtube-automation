@@ -175,6 +175,17 @@ def test_batch_manifest_validator_accepts_complete_exact_matrix(
     assert json.loads(manifest_path.read_text(encoding="utf-8")) == original
 
 
+def test_batch_manifest_validator_accepts_minimax_engine() -> None:
+    validator = _load_reference(
+        "validate_batch_manifest_minimax",
+        REPO_ROOT / ".claude" / "skills" / "wf-new" / "references" / "validate-batch-manifest.py",
+    )
+    manifest = _valid_manifest()
+    manifest["plans"][0]["music_engine"] = "minimax"
+
+    validator.validate_manifest(manifest)
+
+
 @pytest.mark.parametrize(
     ("case", "mutate"),
     [

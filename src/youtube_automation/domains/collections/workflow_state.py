@@ -15,7 +15,7 @@ from youtube_automation.infrastructure.filesystem import JSONValue, file_lock
 
 Phase = Literal["planning", "prepared", "mastered", "publishing", "complete"]
 Stage = Literal["planning", "live"]
-MusicEngine = Literal["suno", "lyria"]
+MusicEngine = Literal["suno", "lyria", "minimax"]
 WorkflowStateUpdater = Callable[["WorkflowState"], "WorkflowState | None"]
 AssetKey = Literal[
     "thumbnail",
@@ -164,7 +164,7 @@ class WorkflowStateDocument(TypedDict, total=False):
 
 _PHASES = frozenset({"planning", "prepared", "mastered", "publishing", "complete"})
 _STAGES = frozenset({"planning", "live"})
-_MUSIC_ENGINES = frozenset({"suno", "lyria"})
+_MUSIC_ENGINES = frozenset({"suno", "lyria", "minimax"})
 _MUSIC_TEMPOS = frozenset({"very slow", "slow", "gentle", "moderate", "lively"})
 _KNOWN_OBJECT_SECTIONS = frozenset(
     {

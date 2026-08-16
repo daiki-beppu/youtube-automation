@@ -59,6 +59,7 @@ BILLED_CLIS: dict[str, str] = {
     "yt-generate-image": "Vertex AI Gemini / OpenAI Images",
     "yt-generate-loop-video": "Vertex AI Veo",
     "yt-generate-lyria-master": "Vertex AI Lyria",
+    "yt-generate-minimax-master": "MiniMax Music API",
     "yt-generate-shorts-loop": "Vertex AI Veo",
     "yt-metadata-audit": "YouTube Data API (videos.list)",
     "yt-pinned-comment": "YouTube Data API (commentThreads.insert)",
