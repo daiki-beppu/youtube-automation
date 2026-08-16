@@ -227,25 +227,22 @@ class PlaylistManager:
         youtube = self._youtube_service()
         video_ids = set()
 
-        try:
-            request = youtube.playlistItems().list(playlistId=playlist_id, part="contentDetails", maxResults=50)
-            while request:
-                response = execute_youtube_request(
-                    request,
-                    "playlistItems.list failed",
-                    on_attempt=_log_playlist_quota("playlistItems.list", playlist_id=playlist_id),
-                )
-                for item in validate_youtube_response_items(response, "playlistItems.list"):
-                    if not isinstance(item, dict):
-                        raise ValidationError("playlistItems.list response item must be an object")
-                    content_details = item.get("contentDetails")
-                    video_id = content_details.get("videoId") if isinstance(content_details, dict) else None
-                    if not isinstance(video_id, str) or not video_id:
-                        raise ValidationError("playlistItems.list response is missing contentDetails.videoId")
-                    video_ids.add(video_id)
-                request = youtube.playlistItems().list_next(request, response)
-        except (TypeError, ValueError, OSError, ValidationError, YouTubeAPIError) as e:
-            logger.warning(f"プレイリスト {playlist_id} の項目取得エラー: {e}")
+        request = youtube.playlistItems().list(playlistId=playlist_id, part="contentDetails", maxResults=50)
+        while request:
+            response = execute_youtube_request(
+                request,
+                "playlistItems.list failed",
+                on_attempt=_log_playlist_quota("playlistItems.list", playlist_id=playlist_id),
+            )
+            for item in validate_youtube_response_items(response, "playlistItems.list"):
+                if not isinstance(item, dict):
+                    raise ValidationError("playlistItems.list response item must be an object")
+                content_details = item.get("contentDetails")
+                video_id = content_details.get("videoId") if isinstance(content_details, dict) else None
+                if not isinstance(video_id, str) or not video_id:
+                    raise ValidationError("playlistItems.list response is missing contentDetails.videoId")
+                video_ids.add(video_id)
+            request = youtube.playlistItems().list_next(request, response)
 
         return video_ids
 

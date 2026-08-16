@@ -53,7 +53,8 @@ def test_skill_and_docs_do_not_direct_to_removed_entrypoint() -> None:
     for base in (ROOT / ".claude" / "skills", ROOT / "docs"):
         for path in base.rglob("*"):
             is_text = path.is_file() and path.suffix in {".md", ".json", ".py"}
-            if is_text and "post-publish" in path.read_text(encoding="utf-8"):
+            text = path.read_text(encoding="utf-8") if is_text else ""
+            if "/post-publish" in text or ".claude/skills/post-publish" in text:
                 matches.append(path.relative_to(ROOT))
 
     assert matches == []

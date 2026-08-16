@@ -3,6 +3,7 @@
 import argparse
 import logging
 import sys
+from pathlib import Path
 
 from youtube_automation.core.errors import AutomationError
 from youtube_automation.domains.uploads.playlists import PlaylistManager
@@ -17,6 +18,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--status", action="store_true", help="現在の状態表示")
     parser.add_argument("--assign", metavar="VIDEO_ID", help="単一動画をプレイリストに追加")
     parser.add_argument("--theme", help="--assign 用のテーマ名")
+    parser.add_argument("--collection", type=Path, help="--assign 対象の collection path")
     parser.add_argument(
         "--clean-deleted", action="store_true", help="全プレイリストから削除済み/非公開動画のエントリを除去"
     )
@@ -41,7 +43,13 @@ def main(argv: list[str] | None = None) -> int:
             results = manager.clean_deleted_entries(dry_run=args.dry_run)
             print(f"完了: {sum(results.values())} 件除去")
         else:
-            print(f"割り当て: {manager.assign_video(args.assign, args.theme, dry_run=args.dry_run)}")
+            assignments = manager.assign_video(
+                args.assign,
+                args.theme,
+                dry_run=args.dry_run,
+                collection_path=args.collection,
+            )
+            print(f"割り当て: {assignments}")
         return 0
     except AutomationError as error:
         print(f"エラー: {error}", file=sys.stderr)

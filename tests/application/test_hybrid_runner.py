@@ -15,6 +15,7 @@ from youtube_automation.application.media_handoff import HandoffSource, pull_han
 from youtube_automation.core.errors import ResourceLimitError, StateSyncError
 from youtube_automation.domains.hybrid_resource_guard import GIB, HybridResourceSnapshot
 from youtube_automation.domains.media_handoff_manifest import HandoffIdentity
+from youtube_automation.domains.post_publish import mark_complete
 from youtube_automation.infrastructure.media_store.local import LocalMediaStore
 
 
@@ -114,6 +115,43 @@ def _planning_repository(tmp_path: Path, *, phase: str = "planning") -> tuple[Pa
     return remote, worker
 
 
+def _post_publish_repository(tmp_path: Path) -> tuple[Path, Path]:
+    remote = tmp_path / "post-remote.git"
+    seed = tmp_path / "post-seed"
+    worker = tmp_path / "post-worker"
+    _git(tmp_path, "init", "--bare", str(remote))
+    _git(tmp_path, "init", "-b", "main", str(seed))
+    _git(seed, "config", "user.name", "Test")
+    _git(seed, "config", "user.email", "test@example.com")
+    collection = seed / "collections" / "live" / "demo"
+    collection.mkdir(parents=True)
+    (seed / ".gitignore").write_text(
+        "*\n!.gitignore\n!collections/\n!collections/live/\n!collections/live/demo/\n!collections/live/demo/workflow-state.json\n!post_publish_history.json\n!pinned_comment_history.json\n",
+        encoding="utf-8",
+    )
+    (collection / "workflow-state.json").write_text(
+        json.dumps(
+            {
+                "phase": "complete",
+                "stage": "live",
+                "created_at": "2026-01-01T00:00:00Z",
+                "assets": {},
+                "upload": {"video_id": "video-1"},
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    _git(seed, "add", ".")
+    _git(seed, "commit", "-m", "initial")
+    _git(seed, "remote", "add", "origin", str(remote))
+    _git(seed, "push", "-u", "origin", "main")
+    subprocess.run(["git", "clone", "--branch", "main", str(remote), str(worker)], check=True, capture_output=True)
+    _git(worker, "config", "user.name", "Test")
+    _git(worker, "config", "user.email", "test@example.com")
+    return remote, worker
+
+
 def test_cloud_planning_commits_prompt_artifacts_and_prepared_state_as_single_writer(tmp_path: Path) -> None:
     remote, worker = _planning_repository(tmp_path)
 
@@ -186,6 +224,73 @@ def test_cloud_planning_waits_without_agent_or_commit_after_planning_phase(tmp_p
     assert _git_output(worker, "rev-parse", "HEAD") == _git_output(
         tmp_path, "--git-dir", str(remote), "rev-parse", "refs/heads/main"
     )
+
+
+def test_cloud_post_publish_commits_only_verified_tracking(tmp_path: Path) -> None:
+    remote, worker = _post_publish_repository(tmp_path)
+
+    def agent(agent: str, prompt: str, cwd: Path) -> None:
+        assert agent == "claude"
+        assert prompt.startswith("/wf-new --auto\nCloud post-publish target is collection 'demo'.")
+        collection = cwd / "collections" / "live" / "demo"
+        for step in ("playlist-assignment", "pinned-comment", "metadata-audit"):
+            mark_complete(cwd, collection, step)
+        (cwd / "pinned_comment_history.json").write_text(
+            json.dumps({"schema_version": 1, "posted": {"video-1": {"comment_id": "comment-1"}}}) + "\n",
+            encoding="utf-8",
+        )
+
+    result = run_sandwich(
+        SandwichRequest(
+            channel_dir=worker,
+            collection_dir="",
+            channel="003ch",
+            collection="",
+            agent="claude",
+            prompt="/wf-new --auto",
+            commit_message="chore: cloud post publish",
+            stage="post-publish",
+        ),
+        LocalMediaStore(tmp_path / "store"),
+        resource_probe=PassingResourceProbe(),
+        agent_runner=agent,
+    )
+
+    assert result == SandwichResult("completed", "demo")
+    verify = tmp_path / "post-verify"
+    subprocess.run(["git", "clone", "--branch", "main", str(remote), str(verify)], check=True, capture_output=True)
+    history = json.loads((verify / "post_publish_history.json").read_text(encoding="utf-8"))
+    assert set(history["videos"]["video-1"]["completed"]) == {
+        "playlist-assignment",
+        "pinned-comment",
+        "metadata-audit",
+    }
+
+
+def test_cloud_post_publish_rejects_tracking_without_pinned_actual_artifact(tmp_path: Path) -> None:
+    _, worker = _post_publish_repository(tmp_path)
+
+    def agent(_agent: str, _prompt: str, cwd: Path) -> None:
+        collection = cwd / "collections" / "live" / "demo"
+        for step in ("playlist-assignment", "pinned-comment", "metadata-audit"):
+            mark_complete(cwd, collection, step)
+
+    with pytest.raises(StateSyncError, match="pinned comment actual artifact"):
+        run_sandwich(
+            SandwichRequest(
+                channel_dir=worker,
+                collection_dir="",
+                channel="003ch",
+                collection="",
+                agent="claude",
+                prompt="/wf-new --auto",
+                commit_message="chore: cloud post publish",
+                stage="post-publish",
+            ),
+            LocalMediaStore(tmp_path / "store"),
+            resource_probe=PassingResourceProbe(),
+            agent_runner=agent,
+        )
 
 
 def test_runner_completes_manifest_pull_agent_push_and_state_commit(tmp_path: Path) -> None:

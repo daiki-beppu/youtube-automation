@@ -256,6 +256,7 @@ def test_should_prefer_named_collection_across_planning_and_live(
         "selected-live",
         {
             "phase": "complete",
+            "stage": "live",
             "assets": {"raw_master": "raw.wav", "master_audio": "master.wav", "master_video": "video.mp4"},
         },
         modified_at=100,
@@ -333,6 +334,7 @@ def test_should_mark_post_publish_and_analysis_from_channel_artifacts(
         "published",
         {
             "phase": "complete",
+            "stage": "live",
             "assets": {"raw_master": "raw.wav", "master_audio": "master.wav", "master_video": "video.mp4"},
             "upload": {"video_id": "video-123", "publish_at": "2026-07-20T12:00:00+09:00"},
         },
@@ -347,6 +349,23 @@ def test_should_mark_post_publish_and_analysis_from_channel_artifacts(
     )
     (tmp_path / "pinned_comment_history.json").write_text(
         json.dumps({"schema_version": 1, "posted": {"video-123": {"posted_at": "done"}}}), encoding="utf-8"
+    )
+    (tmp_path / "post_publish_history.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "videos": {
+                    "video-123": {
+                        "completed": {
+                            "playlist-assignment": "done",
+                            "pinned-comment": "done",
+                            "metadata-audit": "done",
+                        }
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
     )
     reports = tmp_path / "reports"
     reports.mkdir()

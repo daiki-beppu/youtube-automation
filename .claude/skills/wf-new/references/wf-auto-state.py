@@ -20,10 +20,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal, TypedDict
 
-from youtube_automation.core.errors import ValidationError, WorkflowStateError
+from youtube_automation.core.errors import StateSyncError, ValidationError, WorkflowStateError
 from youtube_automation.domains.collections.workflow_state import WorkflowState
 from youtube_automation.domains.collections.workflow_state import read as read_workflow_state
 from youtube_automation.domains.documents.video_description import read_video_description_metadata
+from youtube_automation.domains.post_publish import verify_post_publish_completion
 
 STATE_DIR_NAME = ".automation-run"
 LEASE_DIR_NAME = "lease"
@@ -42,6 +43,7 @@ ACTIONS = {
     "wf-next-local",
     "wf-next",
     "publish",
+    "post-publish",
     "blocked",
     "complete",
     "no-op",
@@ -589,20 +591,11 @@ def _local_publish_artifacts_complete(collection: Path, assets: dict) -> bool:
 
 
 def _publish_followup_complete(root: Path, collection: Path, video_id: str) -> bool:
-    community_path = collection / "20-documentation" / "community-post.txt"
     try:
-        if not community_path.is_file() or not community_path.read_text(encoding="utf-8").strip():
-            return False
-        config = _read_object(root / "config" / "channel" / "pinned-comment.json")
-        pinned = config.get("pinned_comment")
-        if not isinstance(pinned, dict) or not isinstance(pinned.get("history_file"), str):
-            return False
-        history_path = _confined_path(root, root / pinned["history_file"], "pinned_comment.history_file")
-        history = _read_object(history_path)
-    except (OSError, ValueError):
+        verify_post_publish_completion(root, collection)
+    except (OSError, ValueError, StateSyncError, ValidationError):
         return False
-    posted = history.get("posted")
-    return history.get("schema_version") == 1 and isinstance(posted, dict) and video_id in posted
+    return True
 
 
 def evaluate_collection(
@@ -622,9 +615,10 @@ def evaluate_collection(
     if not isinstance(assets, dict) or not isinstance(upload, dict):
         raise ValueError("workflow-state.json::assets / upload は object でなければなりません")
     video_id = upload.get("video_id")
+    stage = state.get("stage")
 
     handoff = state.handoff
-    owner = "cloud" if phase == "planning" else "local"
+    owner = "cloud" if phase == "planning" or (phase == "complete" and stage == "live") else "local"
     if handoff is not None and handoff.owner is not None:
         owner = handoff.owner
     if phase == "cloud_owned":
@@ -649,7 +643,6 @@ def evaluate_collection(
         )
     routing_phase = "prepared" if phase == "cloud_owned" else phase
 
-    stage = state.get("stage")
     if isinstance(video_id, str) and video_id and (phase != "complete" or stage != "live"):
         if _completed_tracking_matches(collection, video_id):
             return _decision(
@@ -821,16 +814,16 @@ def evaluate_collection(
                 engine=engine,
                 action="blocked",
                 reason="external_publish_disabled",
-                resume_action="publish",
+                resume_action="post-publish",
                 config=config,
             )
         return _decision(
             collection=collection,
             phase=phase,
             engine=engine,
-            action="publish",
+            action="post-publish",
             reason="publish_followup_incomplete",
-            resume_action="publish",
+            resume_action="post-publish",
             config=config,
         )
     return _decision(

@@ -9,7 +9,7 @@ from tests.helpers.paths import REPO_ROOT
 
 COMMANDS_ROOT = REPO_ROOT / "src/youtube_automation/commands"
 HARNESS_MODULE = "youtube_automation.commands._shared.cli_harness"
-LEGACY_CLI_LIMIT = 71
+LEGACY_CLI_LIMIT = 70
 
 # #3925 導入時点の未移行 CLI。既存互換のため凍結し、移行した module は削除する。
 LEGACY_CLI_ALLOWLIST: frozenset[str] = frozenset(
@@ -56,7 +56,6 @@ LEGACY_CLI_ALLOWLIST: frozenset[str] = frozenset(
         "youtube_automation.commands.metadata.bulk_update_descriptions",
         "youtube_automation.commands.metadata.bulk_update_short_localizations",
         "youtube_automation.commands.metadata.bulk_update_synthetic_media",
-        "youtube_automation.commands.metadata.metadata_audit",
         "youtube_automation.commands.metadata.title_duplicate_check",
         "youtube_automation.commands.suno.generate_suno_prompts",
         "youtube_automation.commands.suno.suno_audio_cleanup",
