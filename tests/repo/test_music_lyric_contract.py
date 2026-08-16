@@ -140,13 +140,33 @@ def test_music_lyric_state_runs_then_skips_after_outputs_exist(tmp_path: Path) -
     assert json.loads(after.stdout)["decision"] == "skip"
 
 
+def test_music_lyric_state_runs_for_minimax_vocal_collection(tmp_path: Path) -> None:
+    collection = _write_channel(tmp_path, music_engine="minimax", genre_line="soulful female vocals", mode="vocal")
+
+    result = _run_state(collection)
+
+    assert result.returncode == 10
+    assert json.loads(result.stdout)["decision"] == "run"
+
+
 def test_music_lyric_state_blocks_lyria_engine(tmp_path: Path) -> None:
     collection = _write_channel(tmp_path, music_engine="lyria", genre_line="soulful female vocals", mode="vocal")
 
     result = _run_state(collection)
 
     assert result.returncode == 20
-    assert json.loads(result.stdout)["reason"] == "music_engine_not_suno"
+    assert json.loads(result.stdout)["reason"] == "music_engine_not_lyric_capable"
+
+
+def test_music_lyric_state_keeps_minimax_instrumental_collection_blocked(tmp_path: Path) -> None:
+    collection = _write_channel(
+        tmp_path, music_engine="minimax", genre_line="ambient instrumental", mode="instrumental"
+    )
+
+    result = _run_state(collection)
+
+    assert result.returncode == 20
+    assert json.loads(result.stdout)["reason"] == "lyrics_not_required"
 
 
 def test_music_lyric_state_blocks_instrumental_collection(tmp_path: Path) -> None:
