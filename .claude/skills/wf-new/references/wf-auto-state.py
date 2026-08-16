@@ -624,7 +624,7 @@ def evaluate_collection(
     video_id = upload.get("video_id")
 
     handoff = state.handoff
-    owner = "local"
+    owner = "cloud" if phase == "planning" else "local"
     if handoff is not None and handoff.owner is not None:
         owner = handoff.owner
     if phase == "cloud_owned":
@@ -636,7 +636,7 @@ def evaluate_collection(
             or handoff.root_sha256 is None
         ):
             raise ValueError("cloud_owned phase requires a complete cloud handoff reference")
-    elif owner == "cloud" and phase not in {"mastered", "publishing", "complete"}:
+    elif handoff is not None and handoff.owner == "cloud" and phase not in {"mastered", "publishing", "complete"}:
         raise ValueError("cloud handoff owner is inconsistent with workflow phase")
     if executor is not None and executor != owner:
         return _decision(

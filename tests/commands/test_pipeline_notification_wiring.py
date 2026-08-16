@@ -7,6 +7,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from youtube_automation.application.hybrid_runner import SandwichResult
 from youtube_automation.commands.system import hybrid_runner
 from youtube_automation.commands.uploads import collection_uploader
 from youtube_automation.core.errors import ConfigError
@@ -37,6 +38,7 @@ def test_hybrid_command_connects_non_fast_forward_event_to_notification(monkeypa
         assert resource_probe is not None
         assert on_resource_event is not None
         on_state_sync_event(StateSyncEvent(StateSyncEventKind.NON_FAST_FORWARD, tmp_path, "rejected"))
+        return SandwichResult("completed", request.collection)
 
     monkeypatch.setattr(hybrid_runner, "create_discord_notification_sink", lambda: sink)
     monkeypatch.setattr(hybrid_runner, "run_sandwich", fake_run_sandwich)
@@ -50,6 +52,7 @@ def test_hybrid_command_connects_non_fast_forward_event_to_notification(monkeypa
             channel_slug="ambient-lab",
             collection="night-rain",
             agent="claude",
+            stage="pipeline",
             prompt="/wf-new --auto",
             commit_message="chore: state",
             input_handoff=None,

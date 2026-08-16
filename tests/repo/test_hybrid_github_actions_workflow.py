@@ -80,6 +80,7 @@ def test_workflow_is_a_thin_platform_wrapper_for_sandwich_script() -> None:
             "YTA_COLLECTION",
             "YTA_COLLECTION_DIR",
             "YTA_AGENT",
+            "YTA_STAGE",
             "YTA_AUTOMATION_PROMPT",
         )
     } == {
@@ -87,8 +88,11 @@ def test_workflow_is_a_thin_platform_wrapper_for_sandwich_script() -> None:
         "YTA_COLLECTION": "${{ vars.YTA_COLLECTION }}",
         "YTA_COLLECTION_DIR": "${{ vars.YTA_COLLECTION_DIR }}",
         "YTA_AGENT": "${{ vars.YTA_AGENT }}",
-        "YTA_AUTOMATION_PROMPT": "${{ vars.YTA_AUTOMATION_PROMPT }}",
+        "YTA_STAGE": "${{ vars.YTA_STAGE || 'planning' }}",
+        "YTA_AUTOMATION_PROMPT": "${{ vars.YTA_AUTOMATION_PROMPT || '/wf-new --auto' }}",
     }
+    command = shell_steps[0]["run"]
+    assert '--stage "$YTA_STAGE"' in command
 
 
 def test_workflow_actions_are_immutable_pins() -> None:

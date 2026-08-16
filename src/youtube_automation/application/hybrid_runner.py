@@ -11,6 +11,11 @@ from typing import Literal, Protocol
 
 from youtube_automation.application.media_handoff import HandoffSource, pull_handoff, push_handoff
 from youtube_automation.core.errors import AutomationError, ResourceLimitError, StateSyncError, ValidationError
+from youtube_automation.domains.cloud_planning import (
+    resolve_planning_readiness,
+    validate_planning_changes,
+    verify_planning_completion,
+)
 from youtube_automation.domains.collections.workflow_state import read
 from youtube_automation.domains.hybrid_resource_guard import (
     HybridResourcePolicy,
@@ -25,6 +30,7 @@ from youtube_automation.infrastructure.vcs.state_git import build_context
 from youtube_automation.infrastructure.vcs.state_sync import EventSink, pull_update_commit_push
 
 Agent = Literal["claude", "codex"]
+Stage = Literal["pipeline", "planning"]
 AgentRunner = Callable[[Agent, str, Path], None]
 
 
@@ -58,6 +64,7 @@ class SandwichRequest:
     agent: Agent
     prompt: str
     commit_message: str
+    stage: Stage = "pipeline"
     input_handoff: str | None = None
     input_destination: str | None = None
     output_handoff: str | None = None
@@ -76,6 +83,8 @@ class SandwichRequest:
             raise ValidationError("output files には handoff と root が必要です")
         if self.output_handoff is not None and not self.output_files:
             raise ValidationError("output handoff には1件以上の file が必要です")
+        if self.stage == "planning" and (self.input_handoff is not None or self.output_handoff is not None):
+            raise ValidationError("planning stage は media handoff を受け付けません")
         for field in filter(None, (self.collection_dir, self.input_destination, self.output_root, *self.output_files)):
             validate_media_relative_path("runner path", field)
 
@@ -97,6 +106,12 @@ def run_agent(agent: Agent, prompt: str, cwd: Path) -> None:
     if completed.returncode != 0:
         detail = redact_sensitive_data(completed.stderr.strip() or completed.stdout.strip())
         raise StateSyncError(f"agent CLI が失敗しました ({agent}, exit={completed.returncode}): {detail}")
+
+
+@dataclass(frozen=True, slots=True)
+class SandwichResult:
+    status: Literal["completed", "waiting"]
+    collection: str | None
 
 
 def _verify_input_reference(request: SandwichRequest, manifest: HandoffManifest) -> None:
@@ -181,12 +196,24 @@ def run_sandwich(
     agent_runner: AgentRunner = run_agent,
     on_resource_event: HybridResourceEventSink | None = None,
     on_state_sync_event: EventSink | None = None,
-) -> None:
+) -> SandwichResult:
     """Run the existing local-first workflow between verified MediaStore boundaries."""
     _guard_resources(request, resource_probe, on_resource_event)
     context = build_context(request.channel_dir)
+    result = SandwichResult("completed", request.collection or None)
+    planning_collection: Path | None = None
 
     def writer() -> None:
+        nonlocal planning_collection, result
+        if request.stage == "planning":
+            readiness = resolve_planning_readiness(request.channel_dir)
+            if readiness.status == "waiting":
+                result = SandwichResult("waiting", readiness.collection.name if readiness.collection else None)
+                return
+            agent_runner(request.agent, request.prompt, request.channel_dir)
+            planning_collection = verify_planning_completion(request.channel_dir, readiness.collection)
+            result = SandwichResult("completed", planning_collection.name)
+            return
         if request.input_handoff is not None and request.input_destination is not None:
             identity = HandoffIdentity(request.channel, request.collection, request.input_handoff)
             manifest = pull_handoff(store, identity, _inside(request.channel_dir, request.input_destination))
@@ -199,9 +226,20 @@ def run_sandwich(
             sources = tuple(HandoffSource(_inside(root, path), path) for path in request.output_files)
             push_handoff(store, HandoffIdentity(request.channel, request.collection, request.output_handoff), sources)
 
+    def validate_changes(repository: Path, changed: set[str]) -> None:
+        if result.status == "waiting":
+            if changed:
+                raise StateSyncError("waiting cloud planning run must not change repository state")
+            return
+        if planning_collection is None:
+            raise StateSyncError("cloud planning completion target is missing")
+        validate_planning_changes(repository, planning_collection, changed)
+
     pull_update_commit_push(
         context,
         writer,
         commit_message=request.commit_message,
         on_event=on_state_sync_event,
+        change_validator=validate_changes if request.stage == "planning" else None,
     )
+    return result

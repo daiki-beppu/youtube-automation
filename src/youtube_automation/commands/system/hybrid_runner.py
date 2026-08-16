@@ -25,6 +25,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--collection", required=True)
     parser.add_argument("--collection-dir", required=True)
     parser.add_argument("--agent", choices=("claude", "codex"), default="claude")
+    parser.add_argument("--stage", choices=("pipeline", "planning"), default="pipeline")
     parser.add_argument("--prompt", required=True)
     parser.add_argument("--commit-message", default="chore(hybrid): update workflow state")
     parser.add_argument("--input-handoff")
@@ -84,6 +85,7 @@ def run(args: argparse.Namespace) -> int:
         agent=args.agent,
         prompt=args.prompt,
         commit_message=args.commit_message,
+        stage=args.stage,
         input_handoff=args.input_handoff,
         input_destination=args.input_destination,
         output_handoff=args.output_handoff,
@@ -98,7 +100,7 @@ def run(args: argparse.Namespace) -> int:
         estimated_run_minutes=args.estimated_run_minutes,
     )
     notifications = PipelineNotificationBridge(create_discord_notification_sink())
-    run_sandwich(
+    result = run_sandwich(
         request,
         store,
         resource_probe=resource_probe,
@@ -109,6 +111,7 @@ def run(args: argparse.Namespace) -> int:
             collection=request.collection,
         ),
     )
+    print(f"hybrid runner {result.status}: {result.collection or 'new'}")
     return 0
 
 
