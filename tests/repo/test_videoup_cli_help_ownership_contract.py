@@ -33,9 +33,9 @@ def test_skill_keeps_master_preview_full_generation_and_state_order() -> None:
     steps = _section("### ステップ", "### 自動検出される要素")
 
     master = steps.index("2. **マスター音源**")
-    preview = steps.index("4. **任意プレビュー**", master)
+    preview = steps.index("4. **プレビュー承認**", master)
     full_generation = steps.index("5. **動画生成**", preview)
-    state_update = steps.index("6. **workflow-state.json 更新**", full_generation)
+    state_update = steps.index("6. **完成動画確認とworkflow-state.json更新**", full_generation)
 
     assert master < preview < full_generation < state_update
 
@@ -47,8 +47,8 @@ def test_skill_keeps_local_generation_and_state_safety_contracts() -> None:
     assert "承認分岐" not in steps
     assert "全尺生成の成功後だけ" in steps
     assert "プレビューのみでは実行しない" in steps
-    assert "yt-workflow-state" in steps
-    assert "set-asset master_video" in steps
+    assert "master-video-review.md" in steps
+    assert "assets.master_video" in steps
 
 
 def test_skill_keeps_input_overlay_and_long_running_safety_contracts() -> None:

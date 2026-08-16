@@ -228,12 +228,12 @@ status を記録した後は、成功時だけでなく blocked / failed の停�
 以下を一気通貫実行する。実作業は subagent、成果物検証と各ステップ完了時の `workflow-state.json` 更新はメインが担当し、途中で中断しても同じ状態から再開できる。
 
 1. **並列 A**（2 Agent 同時起動）:
-   - Agent 1: 対象 collection、`01-master/<assets.master_audio>`、`10-assets/main.png/jpg` または `loop.mp4` を入力に Skill `/video --generate` の Subagent Contract を実行。thumbnail skill-config も渡し、`textless.enabled: false` の共有 `main.jpg` を textless 再生成へ戻さない。期待成果物は `01-master/*.mp4`
+   - Agent 1: 対象 collection、`01-master/<assets.master_audio>`、`10-assets/main.png/jpg` または `loop.mp4` を入力に Skill `/video --generate` の Subagent Contract を実行。thumbnail skill-config も渡し、`textless.enabled: false` の共有 `main.jpg` を textless 再生成へ戻さない。期待成果物は `01-master/*.mp4`。返却には同じ生成実行で解決した背景経路、effect、overlay、Full output outlookを含める
    - Agent 2 の起動前に、メインが `/video --describe` の重複トラック名を検出し、必要な表示名 mapping を確定するが、まだ `apply_track_display_names()` は呼ばない。その mapping、planning / localization、skill-config、benchmark 入力を列挙し、Agent 2 には `/video --describe` の Step 1 から品質チェック、`yt-title-duplicate-check`、検証済み `20-documentation/descriptions.json` + 同 basename HTML 保存までを実行させる。`apply_track_display_names()` と `workflow-state.json` の `assets.description` 更新は実行させない
    - 両 Agent とも state は入力確認に必要な範囲だけ読み、書き込まず、AskUserQuestion を実行しない。片方でも失敗または成果物欠落なら state を更新せず停止する
 2. 並列 A 完了後:
    - メインが両成果物の存在と `phase: "mastered"` との整合を確認する
-   - PASS 後だけ、メインが確定済み表示名 mapping を `apply_track_display_names()` で永続化し、動画ファイル名を JSON string として `set-asset master_video <json-value>`、概要欄完了を正準キー `assets.description` へ保存する `set-description-generated true` の各 owner CLI を実行してから、次の owner CLI で phase と `updated_at` を一体更新する
+   - PASS 後だけ、メインが Agent 1 の解決済み表示値を `/video --generate` の `master-video-review.md` に従ってfull reviewへ渡す。probe・digest・承認成功時に同CLIが `assets.master_video` を確定する。次に確定済み表示名 mapping を `apply_track_display_names()` で永続化し、概要欄完了を正準キー `assets.description` へ保存する `set-description-generated true` owner CLI を実行してから、次の owner CLI で phase と `updated_at` を一体更新する
 
      ```bash
      uv run yt-workflow-state --collection "$COLLECTION_DIR" set-phase publishing
