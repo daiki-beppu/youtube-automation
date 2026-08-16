@@ -128,6 +128,7 @@ def test_shell_is_platform_neutral_uv_direct_and_agent_boundary_is_single() -> N
 
     assert "git clone" in script
     assert "uv run --frozen yt-hybrid-runner" in script
+    assert "uv run --frozen yt-human-tasks" in script
     assert "nix" not in script.lower()
     assert "GITHUB_" not in script
     assert owner.count("subprocess.run(command") == 1
@@ -269,7 +270,9 @@ def test_posix_script_completes_local_pull_run_push(tmp_path: Path) -> None:
     uv.write_text(
         """#!/bin/sh
 set -eu
-[ "$1" = run ] && [ "$2" = --frozen ] && [ "$3" = yt-hybrid-runner ]
+[ "$1" = run ] && [ "$2" = --frozen ]
+if [ "$3" = yt-human-tasks ]; then exit 0; fi
+[ "$3" = yt-hybrid-runner ]
 shift 3
 git config user.name Test
 git config user.email test@example.com

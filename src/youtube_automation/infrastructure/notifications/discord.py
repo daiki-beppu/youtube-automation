@@ -6,6 +6,7 @@ import sys
 from typing import Protocol
 
 from youtube_automation.core.errors import ConfigError
+from youtube_automation.domains.human_tasks import HumanTaskReport, render_human_tasks_summary
 from youtube_automation.domains.notifications import NotificationEvent, category_for
 from youtube_automation.infrastructure.secrets import get_secret
 from youtube_automation.infrastructure.youtube.notification import NotificationError, notify
@@ -34,17 +35,29 @@ class DiscordNotificationSink:
         self._webhook_sender = webhook_sender
 
     def send(self, event: NotificationEvent) -> bool:
+        return self._send_content(
+            _render_event(event),
+            failure_context=(
+                f"event={event.kind.value}, channel={event.channel}, collection={event.collection}, stage={event.stage}"
+            ),
+        )
+
+    def send_human_tasks(self, report: HumanTaskReport) -> bool:
+        return self._send_content(
+            render_human_tasks_summary(report),
+            failure_context=f"human_tasks, channel={report.channel}, pending={len(report.tasks)}",
+        )
+
+    def _send_content(self, content: str, *, failure_context: str) -> bool:
         try:
             webhook_url = self._secret_resolver(_WEBHOOK_SECRET_NAME)
             self._webhook_sender(
-                content=_render_event(event),
+                content=content,
                 webhook_url=webhook_url,
             )
         except (ConfigError, NotificationError):
             print(
-                "Discord notification was not delivered "
-                f"(event={event.kind.value}, channel={event.channel}, "
-                f"collection={event.collection}, stage={event.stage})",
+                f"Discord notification was not delivered ({failure_context})",
                 file=sys.stderr,
             )
             return False

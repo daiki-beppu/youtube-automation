@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from youtube_automation.core.errors import ConfigError
+from youtube_automation.domains.human_tasks import CollectionTaskState, build_human_task_report
 from youtube_automation.domains.notifications import NotificationEvent, NotificationEventKind
 from youtube_automation.infrastructure.notifications import discord
 from youtube_automation.infrastructure.notifications.discord import DiscordNotificationSink
@@ -106,6 +107,25 @@ def test_send_does_not_hide_unexpected_programming_errors() -> None:
 
     with pytest.raises(RuntimeError, match="bug"):
         sink.send(_event(NotificationEventKind.HANDOFF_COMPLETED))
+
+
+def test_send_human_tasks_posts_deterministic_action_summary() -> None:
+    posted: list[str] = []
+    sink = DiscordNotificationSink(
+        secret_resolver=lambda _: "https://discord.com/api/webhooks/id/token",
+        webhook_sender=lambda *, content, webhook_url: posted.append(content),
+    )
+    report = build_human_task_report(
+        "soulful-grooves",
+        (CollectionTaskState("volume-one", "complete", None),),
+        distrokid_enabled=True,
+    )
+
+    assert sink.send_human_tasks(report) is True
+    assert len(posted) == 1
+    assert "channel: soulful-grooves" in posted[0]
+    assert "pending: 1" in posted[0]
+    assert "volume-one" in posted[0]
 
 
 def test_factory_wires_canonical_secret_and_webhook_owners(monkeypatch: pytest.MonkeyPatch) -> None:

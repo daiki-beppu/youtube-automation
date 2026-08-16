@@ -233,6 +233,7 @@ assets/stock/           # ボツ画像ストック (#364)。<theme-slug>/ 配下
 | `domains.media_store` | 工程境界の `<channel>/<collection>/<handoff>/` key、checksum metadata、push / pull / exists port |
 | `domains.media_handoff_manifest` | versioned handoff manifest schema、正準 file list、root checksum の typed owner |
 | `domains.notifications` | ハイブリッドpipelineの正常／異常event種別とprovider-neutralな分類 |
+| `domains.human_tasks` | canonical stateからAPI非対応の未完了作業を決定的に抽出し、Markdown／通知要約へ投影する純粋モデル |
 | `domains.distrokid` | DistroKid naming、metadata、specification、preparation、release policy |
 | `domains.collections.weekly_vote_log` | 週次投票ログ reader、initializer、schema、保存・検証 |
 | `domains.documents.schema_registry` | リポジトリ所有 JSON Schema の固定 inventory、Draft 7 compile cache、値非表示の検証エラー変換。外部 schema path は受け取らない |
@@ -243,6 +244,7 @@ assets/stock/           # ボツ画像ストック (#364)。<theme-slug>/ 配下
 | `application.documents.collection_plan` | collection plan の schema・候補/evidence ID・選択状態を検証し、JSON+HTML pair 公開成功後の planning state 投影を調停 |
 | `application.media_handoff` | 全 object の remote metadata/content 検証、manifest-last push、manifest-only pull、local rollback を調停 |
 | `application.pipeline_notifications` | 各pipeline ownerのtyped eventと公開・guard結果をprovider-neutral通知eventへ写像し、配送sinkへ委譲 |
+| `application.human_tasks` | collection stateを列挙し、固定`human-tasks.md`の原子公開後にprovider-neutral notifierへ要約を渡す |
 | `application.analytics.video_report` | 動画解析結果を audit report schema へ写像し、共通運用文書 migration による JSON+HTML 公開を調停 |
 | `.claude/skills/channel-research/references/channel-research-report.schema.json` | benchmark / market / viewer voice / thumbnail 調査の比較表・勝ちパターン・根拠・適用候補を共通定義し、skill writer と全 downstream reader の正本になる |
 | `infrastructure.filesystem` | provider-neutral な filesystem I/O と、複数 text file の fsync・rollback・公開後 verifier 付き transaction |
