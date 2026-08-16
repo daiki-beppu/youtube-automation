@@ -19,7 +19,7 @@ automation のリリース追従は `/automation --update`、本体リリース�
 
 1. **`allow_external_publish: true` は明示承認なしに有効化しない。** 対象・頻度・YouTube 書き込みの影響を表示し、「有効化する / しない（既定）」を確認する。
 2. **config と外部 scheduler は dry-run 提示・承認後だけ変更する。** config diff と `schedule_backend.py plan` の全項目を先に表示する。
-3. **ローカル依存を Cloud Job へ登録しない。** ローカルファイル、OAuth、Chrome、Suno Helper、ffmpeg、ローカル media のいずれかが必要なら `local`。対応する local Scheduled Task が利用不能なら停止する。
+3. **実行場所は必要能力で決める。** local の本来条件は人間のブラウザ工程（Suno UI）だけとし、企画・プロンプト作成は cloud とする。メディア・公開は `overlays.enabled: false` の軽量レジームなら cloud、`overlays.enabled: true` の重量レジームなら基盤制約による暫定例外として publishAt upload まで local とする。OAuth、ffmpeg、media、ローカルファイルの存在自体を local の理由にしない。local と判定した工程に対応する Scheduled Task が利用不能なら停止する。
 4. **OS fallback は自動選択しない。** 理由・常時起動要件・製品側の履歴/停止UIを使えない制約を示し、明示承認後だけ `--confirm-os-fallback` を使う。
 5. **同一チャンネルに複数 backend を作らない。** `schedule_backend.py show/guard` で active backend を確認し、切替時は旧 backend を先に disable する。外部登録成功後だけ ID を `record` する。
 6. Step 0 の `fail` が残る場合は停止する。認証操作だけは人間に依頼し、コマンド実行・設定作成は AI が行う。
@@ -60,7 +60,16 @@ uv run python .claude/skills/wf-new/references/schedule_backend.py show
 ```
 
 1. `product-codex` / `product-claude` を既定候補にする。判定不能時だけユーザーに製品を確認する。
-2. 対象 workflow の依存を `cloud` / `local` に分類し、分類根拠を表示する。既定 `wf-new --auto` は local（Chrome / OAuth / media / ffmpeg を利用）として扱う。
+2. 対象工程を `planning` / `prompt` / `suno` / `media` / `publish` から選び、`schedule_backend.py plan --stage` に分類させる。返された `dependency_mode` と `boundary_reason` を表示する。工程別の正準判定は次のとおり。
+
+   | 工程 | 軽量 (`overlays.enabled: false`) | 重量 (`overlays.enabled: true`) | 根拠 |
+   |---|---|---|---|
+   | 企画 (`planning`) / プロンプト (`prompt`) | cloud | cloud | AI 工程は人間のブラウザを必要としない |
+   | Suno (`suno`) | local | local | 人間のブラウザ工程（Suno UI）が必要 |
+   | メディア (`media`) | cloud | local | 重量だけ実行時間・ディスク制約による暫定例外 |
+   | 公開 (`publish`) | cloud | local | 重量は大容量成果物の往復を避け、upload まで同じ local owner が担う |
+
+   したがって 002ch 型の重量チャンネルは企画・prompt が cloud、Suno・media・publish が local、003ch 型の軽量チャンネルは Suno だけが local で他は cloud になる。
 3. active な別 backend があれば、旧 backend の disable が承認・成功するまで停止する。
 
 ### Step 1. config と native task の dry-run
@@ -72,7 +81,7 @@ uv run python .claude/skills/wf-new/references/schedule_config.py generate --dry
   [--target-workflow "wf-new --auto"] [--max-retries <N>] \
   [--retry-delay-seconds <N>] [--notification terminal|none]
 uv run python .claude/skills/wf-new/references/schedule_backend.py plan \
-  --product <codex|claude> --dependency-mode <cloud|local> \
+  --product <codex|claude> --stage <planning|prompt|suno|media|publish> \
   --run-time <HH:MM> --cadence <mon,wed,fri> [--timezone <IANA>] \
   [--target-workflow "wf-new --auto"] [--max-retries <N>] \
   [--retry-delay-seconds <N>] [--notification terminal|none]

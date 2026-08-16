@@ -20,13 +20,26 @@ BACKENDS = (
     "os-fallback",
 )
 PRODUCTS = ("codex", "claude")
-DEPENDENCY_MODES = ("cloud", "local")
+EXECUTION_STAGES = ("planning", "prompt", "suno", "media", "publish")
 WRITE_TOKEN_REFRESH_COMMAND = "uv run yt-oauth --refresh-only"
 WRITE_TOKEN_REAUTH_COMMAND = "uv run yt-oauth"
 
 
 class BackendError(ValueError):
     """Backend selection or state transition is unsafe."""
+
+
+def classify_dependency_mode(*, stage: str, overlays_enabled: bool) -> tuple[str, str]:
+    """Classify a workflow stage by required capability, plus the heavy-media exception."""
+    if stage not in EXECUTION_STAGES:
+        raise BackendError(f"unsupported execution stage: {stage}")
+    if stage in {"planning", "prompt"}:
+        return "cloud", "ai_stage_cloud"
+    if stage == "suno":
+        return "local", "human_browser_required"
+    if overlays_enabled:
+        return "local", "heavy_overlay_temporary_exception"
+    return "cloud", "lightweight_media_cloud"
 
 
 def select_backend(*, product: str, dependency_mode: str, os_fallback: bool = False) -> str:
@@ -60,13 +73,17 @@ def _rrule(run_time: str, cadence: list[str]) -> str:
 def build_plan(
     *,
     product: str,
-    dependency_mode: str,
+    stage: str,
     os_fallback: bool = False,
     overrides: dict[str, object] | None = None,
 ) -> dict[str, object]:
     """Build a product-neutral dry-run payload from effective workflow config."""
     config = load_config()
     scheduled = config.workflow.scheduled_automation
+    dependency_mode, boundary_reason = classify_dependency_mode(
+        stage=stage,
+        overlays_enabled=config.youtube.overlays.enabled,
+    )
     overrides = overrides or {}
     run_time = str(overrides.get("run_time") or scheduled.run_time)
     raw_cadence = overrides.get("cadence") or list(scheduled.cadence)
@@ -110,6 +127,7 @@ def build_plan(
         "timezone": str(overrides.get("timezone") or scheduled.timezone),
         "recurrence": _rrule(run_time, cadence),
         "dependency_mode": dependency_mode,
+        "boundary_reason": boundary_reason,
         "target_workflow": target_workflow,
         "max_retries": max_retries,
         "retry_delay_seconds": retry_delay_seconds,
@@ -117,6 +135,7 @@ def build_plan(
         "notification": overrides.get("notification", scheduled.notification),
         "allow_external_publish": allow_external_publish,
     }
+    plan["execution_stage"] = stage
     if backend == "codex-automation":
         plan["management"] = "ChatGPT desktop/web Scheduled; local dependencies require desktop local project"
     elif backend == "claude-code-cloud":
@@ -196,7 +215,7 @@ def _parser() -> argparse.ArgumentParser:
 
     plan = sub.add_parser("plan")
     plan.add_argument("--product", choices=PRODUCTS, required=True)
-    plan.add_argument("--dependency-mode", choices=DEPENDENCY_MODES, required=True)
+    plan.add_argument("--stage", choices=EXECUTION_STAGES, required=True)
     plan.add_argument("--os-fallback", action="store_true")
     plan.add_argument("--timezone")
     plan.add_argument("--run-time")
@@ -230,7 +249,7 @@ def main(argv: list[str] | None = None) -> int:
                 os.chdir(root)
                 payload = build_plan(
                     product=args.product,
-                    dependency_mode=args.dependency_mode,
+                    stage=args.stage,
                     os_fallback=args.os_fallback,
                     overrides={
                         key: value
