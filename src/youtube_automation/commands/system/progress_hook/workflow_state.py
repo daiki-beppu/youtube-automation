@@ -83,10 +83,6 @@ def _file_asset_present(value: object) -> bool:
     return isinstance(value, str) and bool(value.strip())
 
 
-def _thumbnail_present(value: object) -> bool:
-    return value is True or _file_asset_present(value)
-
-
 def _video_id(state: WorkflowState) -> str | None:
     upload = state.upload
     value = upload.video_id if upload is not None else None
@@ -163,7 +159,7 @@ def _completed_stages(root: Path, collection: Path, state: WorkflowState) -> fro
         completed.add("マスター化")
     if _file_asset_present(assets.video) or _file_asset_present(assets.master_video):
         completed.add("動画化")
-    if _thumbnail_present(assets.thumbnail):
+    if state.thumbnail_approved:
         completed.add("サムネイル")
     if phase == "complete":
         completed.add("アップロード")

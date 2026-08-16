@@ -61,3 +61,15 @@ def test_asset_mutations_are_routed_through_owner_cli() -> None:
     assert "set-planning" in text
     assert "set-thumbnail-approved" in text
     assert "set-description-generated" in text
+
+
+def test_thumbnail_approval_routes_use_only_the_canonical_asset_key() -> None:
+    thumbnail_skill = (REPO_ROOT / ".claude" / "skills" / "thumbnail" / "SKILL.md").read_text(encoding="utf-8")
+    loop_reference = (REPO_ROOT / ".claude" / "skills" / "thumbnail" / "references" / "loop.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "assets.thumbnail" in thumbnail_skill
+    assert "thumbnail.approved = true" not in thumbnail_skill
+    assert "assets.thumbnail = true" in loop_reference
+    assert "owner の `thumbnail_approved` accessor" in loop_reference
