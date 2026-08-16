@@ -29,7 +29,7 @@ from youtube_automation.infrastructure.secrets import (
 )
 
 _TEST_SECRET = "CLIENT_SECRETS_JSON"
-_MANAGED_SECRETS = ("CLIENT_SECRETS_JSON", "OPENAI_API_KEY", "GEMINI_API_KEY")
+_MANAGED_SECRETS = ("CLIENT_SECRETS_JSON", "OPENAI_API_KEY", "GEMINI_API_KEY", "MINIMAX_API_KEY")
 _OP_READ_DISABLED_ENV = secrets_module._OP_READ_DISABLED_ENV
 
 
@@ -213,6 +213,45 @@ class TestGeminiApiKeyRegistered:
         with patch.dict(os.environ, {_OP_READ_DISABLED_ENV: "1"}):
             with pytest.raises(ConfigError, match="GEMINI_API_KEY"):
                 get_secret("GEMINI_API_KEY")
+
+
+class TestMiniMaxApiKeyRegistered:
+    def test_minimax_api_key_uses_expected_op_reference(self):
+        assert _SECRET_REFS["MINIMAX_API_KEY"] == "op://Personal/MiniMax_API_Key/credential"
+
+    def test_minimax_api_key_returns_from_environ_before_op(self):
+        os.environ["MINIMAX_API_KEY"] = "minimax-from-env"
+        with patch("youtube_automation.infrastructure.secrets.subprocess.run") as mock_run:
+            assert get_secret("MINIMAX_API_KEY") == "minimax-from-env"
+        mock_run.assert_not_called()
+
+    def test_minimax_api_key_falls_back_to_op_read(self):
+        with (
+            patch.dict(os.environ, {_OP_READ_DISABLED_ENV: "0"}),
+            patch("youtube_automation.infrastructure.secrets.shutil.which", return_value="/usr/bin/op"),
+            patch("youtube_automation.infrastructure.secrets.subprocess.run") as mock_run,
+        ):
+            mock_run.return_value = subprocess.CompletedProcess(
+                args=["op", "read", _SECRET_REFS["MINIMAX_API_KEY"]],
+                returncode=0,
+                stdout="minimax-from-op\n",
+                stderr="",
+            )
+
+            assert get_secret("MINIMAX_API_KEY") == "minimax-from-op"
+
+        mock_run.assert_called_once_with(
+            ["op", "read", "op://Personal/MiniMax_API_Key/credential"],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=secrets_module._OP_READ_TIMEOUT_SEC,
+        )
+
+    def test_minimax_api_key_fails_loud_when_unavailable(self):
+        with patch.dict(os.environ, {_OP_READ_DISABLED_ENV: "1"}):
+            with pytest.raises(ConfigError, match="MINIMAX_API_KEY"):
+                get_secret("MINIMAX_API_KEY")
 
 
 # ---------- Issue #110: 帯域モニタリング用シークレット ----------
