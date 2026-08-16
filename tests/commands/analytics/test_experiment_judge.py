@@ -200,7 +200,7 @@ def test_planning_collection_is_unpublished_without_snapshot_and_bytes_stay_same
     assert path.read_bytes() == before
 
 
-@pytest.mark.parametrize("source", ["tracking", "workflow_upload", "workflow_top"])
+@pytest.mark.parametrize("source", ["tracking", "workflow_upload"])
 def test_live_collection_resolves_video_id_in_contract_order(tmp_path, source: str) -> None:
     collection = tmp_path / "collections" / "live" / "next"
     collection.mkdir(parents=True)
@@ -214,10 +214,6 @@ def test_live_collection_resolves_video_id_in_contract_order(tmp_path, source: s
         _write_object(tracking, {"complete_collection": {}})
         _write_object(workflow, {"upload": {"video_id": "FROM_UPLOAD"}, "video_id": "FROM_TOP"})
         expected_id = "FROM_UPLOAD"
-    else:
-        _write_object(tracking, {"complete_collection": {}})
-        _write_object(workflow, {"upload": {}, "video_id": "FROM_TOP"})
-        expected_id = "FROM_TOP"
     _write_jsonl(tmp_path / "data" / "experiments.jsonl", [_experiment(target="next")])
     captured: list[str] = []
 
@@ -227,6 +223,22 @@ def test_live_collection_resolves_video_id_in_contract_order(tmp_path, source: s
 
     _judge(tmp_path, snapshot)
     assert captured == [expected_id]
+
+
+def test_live_collection_rejects_toplevel_only_video_id_with_canonical_repair_guidance(tmp_path) -> None:
+    collection = tmp_path / "collections" / "live" / "next"
+    collection.mkdir(parents=True)
+    _write_object(collection / "workflow-state.json", {"video_id": "FROM_TOP"})
+    _write_jsonl(tmp_path / "data" / "experiments.jsonl", [_experiment(target="next")])
+
+    with pytest.raises(ValidationError) as exc_info:
+        _judge(tmp_path, lambda _ids: pytest.fail("legacy top-level video_id must not be fetched"))
+
+    message = str(exc_info.value)
+    assert "top-level video_id" in message
+    assert "upload.video_id" in message
+    assert "yt-workflow-state" in message
+    assert "set-upload --video-id <video-id>" in message
 
 
 def test_non_collection_target_is_exact_video_id_and_missing_is_structured_skip(tmp_path) -> None:

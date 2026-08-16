@@ -346,15 +346,22 @@ def test_resolve_prefers_tracking_video_id(tmp_path):
 
 
 def test_resolve_falls_back_to_workflow_upload_video_id(tmp_path):
-    col = _make_collection(tmp_path, workflow={"upload": {"video_id": "WF1"}})
+    col = _make_collection(tmp_path, workflow={"upload": {"video_id": "WF1"}, "video_id": "TOP1"})
     targets = resolve_targets_from_collection(col)
     assert targets[0][0] == "WF1"
 
 
-def test_resolve_falls_back_to_toplevel_video_id(tmp_path):
+def test_resolve_rejects_toplevel_only_video_id_with_canonical_repair_guidance(tmp_path):
     col = _make_collection(tmp_path, workflow={"video_id": "TOP1"})
-    targets = resolve_targets_from_collection(col)
-    assert targets[0][0] == "TOP1"
+
+    with pytest.raises(ValidationError) as exc_info:
+        resolve_targets_from_collection(col)
+
+    message = str(exc_info.value)
+    assert "top-level video_id" in message
+    assert "upload.video_id" in message
+    assert "yt-workflow-state" in message
+    assert "set-upload --video-id <video-id>" in message
 
 
 def test_resolve_raises_when_no_video_id(tmp_path):

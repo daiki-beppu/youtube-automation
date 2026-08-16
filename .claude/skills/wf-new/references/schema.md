@@ -273,6 +273,8 @@ top-level `music_engine` は既存 state の読み取り専用互換 field で�
 `/wf-status` は `steps` キーの有無で旧/新スキーマを判別し、旧スキーマの場合は従来の表示を行う。
 旧スキーマの live コレクションは変換不要（読み取り専用）。
 
+旧 top-level `video_id` は公開対象の判定に使用しない。`/publish --pinned` など公開後処理を再開する場合は、`uv run yt-workflow-state --collection <path> set-upload --video-id <video-id>` で正準の `upload.video_id` へ修復する。
+
 ## 更新ルール
 
 - 各操作で `updated_at` を現在時刻（ISO 8601 UTC）に上書き

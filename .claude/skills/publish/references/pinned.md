@@ -125,6 +125,7 @@ uv run yt-pinned-comment --collection collections/live/<latest-dir> --apply --la
 
 ## トラブルシュート
 
+- `workflow-state.json の top-level video_id はサポートされていません` → 旧 top-level `video_id` を値として利用せず、`uv run yt-workflow-state --collection <path> set-upload --video-id <video-id>` で正準の `upload.video_id` へ修復してから再実行
 - `pinned_comment.enabled=false です` → `config/channel/pinned-comment.json` で `enabled: true` に変更
 - `SKIP ... already_posted` ばかり → 対象動画は既に投稿済み。`pinned_comment_history.json` を確認
 - `SKIP ... video_not_found` → 削除済み / 存在しない video_id。collection の状態ファイルを確認

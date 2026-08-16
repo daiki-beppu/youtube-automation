@@ -58,3 +58,11 @@ def test_publish_manifest_owns_pinned_step() -> None:
 
     pinned = next(step for step in manifest["steps"] if step["id"] == "pinned")
     assert pinned["skill"] == "publish"
+
+
+def test_pinned_reference_routes_legacy_video_id_repair_through_owner_cli() -> None:
+    reference = (PUBLISH / "references" / "pinned.md").read_text(encoding="utf-8")
+
+    assert "top-level `video_id`" in reference
+    assert "`upload.video_id`" in reference
+    assert "yt-workflow-state --collection <path> set-upload --video-id <video-id>" in reference
