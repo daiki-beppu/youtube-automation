@@ -1,0 +1,23 @@
+{
+  "channels": [
+    {
+      "id": "channel-ready",
+      "name": "Contract Ready",
+      "collections": [
+        {
+          "collection_id": "contract-collection",
+          "stage": "planning",
+          "phase": "cloud_owned",
+          "execution_owner": "cloud",
+          "handoff_status": "completed",
+          "latest_event": {
+            "kind": "workflow_state_updated",
+            "occurred_at": "2026-08-12T01:00:00+00:00"
+          },
+          "error": null
+        }
+      ],
+      "error": null
+    }
+  ]
+}

@@ -576,6 +576,13 @@ class WorkflowState(MutableMapping[str, JSONValue]):
             raise WorkflowStateError(f"unsupported workflow-state phase: {value}")
         return cast(Phase, value)
 
+    @property
+    def updated_at(self) -> str | None:
+        value = _optional_string(self._data, "updated_at", "workflow-state.json::updated_at")
+        if value is not None:
+            _validate_iso_datetime(value, "workflow-state.json::updated_at")
+        return value
+
     @phase.setter
     def phase(self, value: Phase) -> None:
         if value not in _PHASES:

@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest"
 import ts from "typescript"
 
 import overviewGolden from "@/lib/__fixtures__/overview.golden.json"
+import pipelineGolden from "@/lib/__fixtures__/pipeline.golden.json"
 import {
   DASHBOARD_SCHEMA_VERSION,
   type OverviewResponse,
+  type PipelineResponse,
 } from "@/lib/dashboard-types"
 
 type KeysOfUnion<Value> = Value extends Value ? keyof Value : never
@@ -37,17 +39,20 @@ const overviewTypesMatch: BidirectionallyExact<
   GoldenOverviewShape,
   OverviewResponse
 > = true
+const pipelineFixture = pipelineGolden as PipelineResponse
 
 const apiResponseTypeNames = [
   "Video",
   "ChannelDetail",
   "OverviewResponse",
   "PublicationActivityState",
+  "PipelineResponse",
 ] as const
 const appResponseTypeNames = [
   "ChannelDetail",
   "OverviewResponse",
   "PublicationActivityState",
+  "PipelineResponse",
 ] as const
 const sources = import.meta.glob<string>("/src/**/*.{ts,tsx}", {
   eager: true,
@@ -136,5 +141,11 @@ describe("Python dashboard overview schema contract", () => {
   it("accepts the generated Python response as the exact TypeScript response shape", () => {
     expect(overviewFixture.schema_version).toBe(DASHBOARD_SCHEMA_VERSION)
     expect(overviewTypesMatch).toBe(true)
+  })
+
+  it("accepts the generated Python pipeline response shape", () => {
+    expect(pipelineFixture.channels[0]?.collections[0]?.phase).toBe(
+      "cloud_owned"
+    )
   })
 })

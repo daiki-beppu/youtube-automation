@@ -375,6 +375,14 @@ def test_server_exposes_overview_and_channel_detail(dashboard_server: str):
     )
 
 
+def test_server_exposes_pipeline_state_from_same_origin(dashboard_server: str) -> None:
+    status, pipeline = _json(f"{dashboard_server}/api/pipeline")
+
+    assert status == 200
+    assert pipeline["channels"][0]["name"] == "Night Drive"
+    assert [item["collection_id"] for item in pipeline["channels"][0]["collections"]] == ["active", "latest"]
+
+
 def test_server_exposes_saved_publication_read_model(dashboard_server: str) -> None:
     status, payload = _json(f"{dashboard_server}/api/publications")
 

@@ -8,9 +8,18 @@ import math
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TypeAlias, TypedDict, cast
+from typing import Literal, TypeAlias, TypedDict, cast
 
-from youtube_automation.core.errors import DashboardChannelNotFoundError
+from youtube_automation.core.errors import DashboardChannelNotFoundError, WorkflowStateError
+from youtube_automation.domains.collections.workflow_state import (
+    ExecutionOwner,
+    MusicEngine,
+    Phase,
+    Stage,
+)
+from youtube_automation.domains.collections.workflow_state import (
+    read as read_workflow_state,
+)
 from youtube_automation.infrastructure.analytics.dashboard_publications import (
     DashboardPublicationError,
     load_dashboard_publications,
@@ -105,11 +114,38 @@ class TrendsResponse(TypedDict):
     channels: list[TrendChannelResponse]
 
 
+class PipelineEventResponse(TypedDict):
+    kind: Literal["workflow_state_updated"]
+    occurred_at: str
+
+
+class PipelineCollectionResponse(TypedDict):
+    collection_id: str
+    stage: Stage | None
+    phase: Phase | None
+    execution_owner: ExecutionOwner | None
+    handoff_status: Literal["not_started", "pending", "completed", "not_recorded", "not_applicable", "invalid"]
+    latest_event: PipelineEventResponse | None
+    error: ErrorResponse | None
+
+
+class PipelineChannelResponse(TypedDict):
+    id: str
+    name: str
+    collections: list[PipelineCollectionResponse]
+    error: ErrorResponse | None
+
+
+class PipelineResponse(TypedDict):
+    channels: list[PipelineChannelResponse]
+
+
 class DashboardReadModel(TypedDict):
     schema_version: int
     channels: list[ChannelDetailResponse]
     publications: PublicationsResponse
     trends: TrendsResponse
+    pipeline: PipelineResponse
 
 
 class ChannelOverviewResponse(TypedDict):
@@ -428,6 +464,109 @@ def _trend_channel(channel: Path, item: ChannelDetailResponse) -> TrendChannelRe
     return TrendChannelResponse(id=item["id"], name=item["name"], status="ready", points=points, error=None)
 
 
+def _pipeline_owner(phase: Phase, engine: MusicEngine | None) -> ExecutionOwner:
+    if phase == "prepared" and engine == "suno":
+        return "local"
+    return "cloud"
+
+
+def _handoff_status(
+    phase: Phase,
+    engine: MusicEngine | None,
+    *,
+    handoff_complete: bool,
+) -> Literal["not_started", "pending", "completed", "not_recorded", "not_applicable"]:
+    if engine != "suno":
+        return "not_applicable"
+    if handoff_complete:
+        return "completed"
+    if phase == "planning":
+        return "not_started"
+    return "pending" if phase == "prepared" else "not_recorded"
+
+
+def _invalid_pipeline_collection(collection_id: str, message: str) -> PipelineCollectionResponse:
+    return PipelineCollectionResponse(
+        collection_id=collection_id,
+        stage=None,
+        phase=None,
+        execution_owner=None,
+        handoff_status="invalid",
+        latest_event=None,
+        error=ErrorResponse(code="workflow_state_invalid", message=message),
+    )
+
+
+def _pipeline_collection(collection: Path, state_path: Path) -> PipelineCollectionResponse:
+    try:
+        if collection.is_symlink() or state_path.is_symlink():
+            raise WorkflowStateError(f"workflow-state path に symlink は使えません: {state_path}")
+        state = read_workflow_state(state_path)
+        phase = state.phase
+        stage = state.stage
+        if phase is None:
+            raise WorkflowStateError("workflow-state.json::phase がありません")
+        if stage is None:
+            raise WorkflowStateError("workflow-state.json::stage がありません")
+        engine = state.music_engine
+        handoff = state.handoff
+        complete = (
+            handoff is not None
+            and handoff.point == "suno_download"
+            and handoff.owner == "cloud"
+            and handoff.manifest_key is not None
+            and handoff.root_sha256 is not None
+        )
+        updated_at = state.updated_at
+    except (OSError, WorkflowStateError) as exc:
+        return _invalid_pipeline_collection(collection.name, str(exc))
+    return PipelineCollectionResponse(
+        collection_id=collection.name,
+        stage=stage,
+        phase=phase,
+        execution_owner=(
+            handoff.owner if handoff is not None and handoff.owner is not None else _pipeline_owner(phase, engine)
+        ),
+        handoff_status=_handoff_status(phase, engine, handoff_complete=complete),
+        latest_event=(
+            PipelineEventResponse(kind="workflow_state_updated", occurred_at=updated_at)
+            if updated_at is not None
+            else None
+        ),
+        error=None,
+    )
+
+
+def _pipeline_channels(
+    channel_paths: list[Path],
+    channels: list[ChannelDetailResponse],
+) -> PipelineResponse:
+    result: list[PipelineChannelResponse] = []
+    for channel, item in zip(channel_paths, channels, strict=True):
+        collections: list[PipelineCollectionResponse] = []
+        error: ErrorResponse | None = None
+        collections_root = channel / "collections"
+        try:
+            if collections_root.is_symlink():
+                raise WorkflowStateError(f"collections directory に symlink は使えません: {collections_root}")
+            for stage in ("planning", "live"):
+                area = collections_root / stage
+                if not area.exists():
+                    continue
+                if area.is_symlink() or not area.is_dir():
+                    raise WorkflowStateError(f"collection area が不正です: {area}")
+                for collection in sorted(area.iterdir(), key=lambda path: path.name):
+                    state_path = collection / "workflow-state.json"
+                    if not state_path.exists():
+                        continue
+                    collections.append(_pipeline_collection(collection, state_path))
+        except (OSError, WorkflowStateError) as exc:
+            collections = []
+            error = ErrorResponse(code="workflow_state_discovery_failed", message=str(exc))
+        result.append(PipelineChannelResponse(id=item["id"], name=item["name"], collections=collections, error=error))
+    return PipelineResponse(channels=result)
+
+
 def build_dashboard_read_model(
     channel_paths: list[Path],
     *,
@@ -464,6 +603,7 @@ def build_dashboard_read_model(
         trends=TrendsResponse(
             channels=[_trend_channel(path, item) for path, item in zip(channel_paths, channels, strict=True)]
         ),
+        pipeline=_pipeline_channels(channel_paths, channels),
     )
 
 
@@ -533,3 +673,8 @@ class DashboardAPI:
         """登録順のチャンネル別日次再生数を返す。"""
         trends = self.model.get("trends")
         return trends if isinstance(trends, dict) else TrendsResponse(channels=[])
+
+    def pipeline(self) -> PipelineResponse:
+        """Git管理 workflow state から作った工程所有権の一覧を返す。"""
+        pipeline = self.model.get("pipeline")
+        return pipeline if isinstance(pipeline, dict) else PipelineResponse(channels=[])
