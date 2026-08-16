@@ -308,6 +308,17 @@ class MusicPlanningState(_ObjectSection):
         self._data["engine"] = value
 
     @property
+    def expected_file_count(self) -> int | None:
+        value = self._data.get("expected_file_count")
+        if value is None:
+            return None
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            raise WorkflowStateError(
+                "workflow-state.json::planning.music.expected_file_count must be a non-negative integer"
+            )
+        return value
+
+    @property
     def patterns(self) -> dict[str, JSONValue] | None:
         value = self._data.get("patterns")
         if value is None:
@@ -319,6 +330,7 @@ class MusicPlanningState(_ObjectSection):
     def validate_known(self) -> None:
         """CLI から受け取る既知 field の型を検証する。"""
         _engine = self.engine
+        _expected_file_count = self.expected_file_count
         for key in ("mood", "instruments", "exclude"):
             value = self._data.get(key)
             if value is not None and (not isinstance(value, list) or not all(isinstance(item, str) for item in value)):

@@ -43,16 +43,19 @@ def resolve_max_deviation_lu(config: Mapping[str, object]) -> float:
     return value
 
 
-def collect_audio_files(collection_dir: Path) -> list[Path]:
-    """Return supported top-level source tracks in deterministic order."""
+def list_audio_files(collection_dir: Path) -> list[Path]:
+    """Return supported top-level source track paths without resolving symlinks."""
     music_dir = collection_dir / "02-Individual-music"
     if not music_dir.is_dir():
         raise ValidationError(f"ディレクトリが見つかりません: {music_dir}")
-    files = sorted(
-        path.resolve() for path in music_dir.iterdir() if path.is_file() and path.suffix.lower() in AUDIO_EXTS
-    )
+    return sorted(path for path in music_dir.iterdir() if path.is_file() and path.suffix.lower() in AUDIO_EXTS)
+
+
+def collect_audio_files(collection_dir: Path) -> list[Path]:
+    """Return resolved source tracks and reject an empty collection."""
+    files = [path.resolve() for path in list_audio_files(collection_dir)]
     if not files:
-        raise ValidationError(f"計測対象の音源がありません: {music_dir}")
+        raise ValidationError(f"計測対象の音源がありません: {collection_dir / '02-Individual-music'}")
     return files
 
 

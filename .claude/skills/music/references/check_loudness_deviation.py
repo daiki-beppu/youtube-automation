@@ -5,10 +5,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
-import re
-import shutil
-import subprocess
 import sys
 import time
 from collections.abc import Mapping, Sequence
@@ -23,55 +19,17 @@ from youtube_automation.domains.media.loudness_receipt import (
     validate_loudness_receipt,
     write_loudness_receipt,
 )
+from youtube_automation.infrastructure.media.audio_acceptance import (
+    measure_integrated_lufs,
+    parse_loudnorm_input_i,
+)
 
-_FFMPEG_JSON_OBJECT = re.compile(r"\{[^{}]*\}", re.DOTALL)
+__all__ = ["measure_integrated_lufs", "parse_loudnorm_input_i"]
 
 
 def load_max_deviation_lu() -> float:
     """Resolve the deviation threshold from the merged masterup skill config."""
     return resolve_max_deviation_lu(load_skill_config("masterup"))
-
-
-def parse_loudnorm_input_i(stderr: str) -> float:
-    """Extract the last finite input_i value from FFmpeg loudnorm JSON output."""
-    for match in reversed(list(_FFMPEG_JSON_OBJECT.finditer(stderr))):
-        try:
-            payload = json.loads(match.group(0))
-        except json.JSONDecodeError:
-            continue
-        if "input_i" not in payload:
-            continue
-        try:
-            value = float(payload["input_i"])
-        except (TypeError, ValueError) as error:
-            raise ValidationError(f"FFmpeg input_i を数値へ変換できません: {payload['input_i']!r}") from error
-        if not math.isfinite(value):
-            raise ValidationError(f"FFmpeg input_i が有限値ではありません: {payload['input_i']!r}")
-        return value
-    raise ValidationError("FFmpeg loudnorm 出力に input_i JSON がありません")
-
-
-def measure_integrated_lufs(path: Path) -> float:
-    """Measure one track with FFmpeg's EBU R128 loudnorm filter."""
-    if shutil.which("ffmpeg") is None:
-        raise ValidationError("ffmpeg が PATH にありません。/setup を先に実行してください")
-    command = [
-        "ffmpeg",
-        "-nostdin",
-        "-hide_banner",
-        "-i",
-        str(path),
-        "-af",
-        "loudnorm=I=-14:LRA=11:TP=-1.5:print_format=json",
-        "-f",
-        "null",
-        "-",
-    ]
-    completed = subprocess.run(command, capture_output=True, text=True, check=False)
-    if completed.returncode != 0:
-        detail = completed.stderr.strip().splitlines()[-1] if completed.stderr.strip() else "stderr なし"
-        raise ValidationError(f"FFmpeg 計測失敗 ({path.name}): {detail}")
-    return parse_loudnorm_input_i(completed.stderr)
 
 
 def _print_human(result: Mapping[str, object]) -> None:
