@@ -41,7 +41,9 @@ def test_set_phase_uses_owner_update_and_preserves_unknown_fields(tmp_path: Path
 
     assert workflow_state_cli.main(["--collection", str(collection), "set-phase", "prepared"]) == 0
 
-    assert _read_state(collection) == {"phase": "prepared", "future": {"keep": True}}
+    state = _read_state(collection)
+    assert isinstance(state.pop("updated_at"), str)
+    assert state == {"phase": "prepared", "future": {"keep": True}}
     assert not list(collection.glob(".workflow-state.*.tmp"))
 
 
@@ -85,7 +87,9 @@ def test_set_upload_creates_section_and_only_overwrites_supplied_fields(tmp_path
 
     assert workflow_state_cli.main(["--collection", str(collection), "set-upload", "--video-id", "new-video"]) == 0
 
-    assert _read_state(collection) == {
+    state = _read_state(collection)
+    assert isinstance(state.pop("updated_at"), str)
+    assert state == {
         "upload": {
             "video_id": "new-video",
             "video_url": "https://example.test/old",
@@ -112,7 +116,9 @@ def test_set_upload_creates_section_and_only_overwrites_supplied_fields(tmp_path
         )
         == 0
     )
-    assert _read_state(fresh)["upload"] == {
+    fresh_state = _read_state(fresh)
+    assert isinstance(fresh_state["updated_at"], str)
+    assert fresh_state["upload"] == {
         "video_id": "video-456",
         "video_url": "https://youtu.be/video-456",
         "publish_at": "2026-08-17T00:00:00Z",
@@ -126,3 +132,17 @@ def test_collection_defaults_to_current_collection_directory(tmp_path: Path, mon
     assert workflow_state_cli.main(["set-phase", "complete"]) == 0
 
     assert _read_state(collection)["phase"] == "complete"
+
+
+def test_control_plane_updates_refresh_updated_at_and_touch_is_available(tmp_path: Path) -> None:
+    collection = _collection(tmp_path, {"phase": "planning", "updated_at": "old", "unknown": True})
+
+    assert workflow_state_cli.main(["--collection", str(collection), "set-phase", "prepared"]) == 0
+    phase_updated_at = _read_state(collection)["updated_at"]
+    assert isinstance(phase_updated_at, str)
+    assert phase_updated_at != "old"
+
+    assert workflow_state_cli.main(["--collection", str(collection), "touch"]) == 0
+    state = _read_state(collection)
+    assert isinstance(state["updated_at"], str)
+    assert state["unknown"] is True

@@ -68,7 +68,7 @@ minimal mode では企画候補生成前にテーマ / ジャンル / 雰囲気�
 2. **前提未達時の state 変更禁止**: channel config gate で停止した場合、`uv run yt-init-collection` を実行しない。`collections/planning/`、`workflow-state.json`、`assets.*` を新規作成・更新しない。
 3. **Suno collection Style boundary**: Suno チャンネルで `/music --prompt` を呼ぶときは、対象 collection の絶対 path、確定企画、theme、書き込み先 `20-documentation/suno-patterns.yaml` を subagent へ渡す。collection 固有の `genre_line` / `exclude_styles` / `style_variants` / `vocal_gender` は同ファイルの root に書き、共有 `config/skills/music.yaml::prompt` を書き換えない。root に無い値だけが channel config へ fallback する。`suno_preset` は推奨入力であり、不在だけを理由に停止しない。利用可能なら TTP 根拠として渡し、無ければ `/music --prompt` が確定企画と制約から collection-local Style を設計する。`assets.music_prompts = true` は subagent 報告だけで更新せず、成果物、`yt-suno-verify`、semantic review をメインが検証した後に限る。
 4. **analytics input gate**: 入力モード判定、同日付 JSON、validator、stale 判定、自動更新、再検証は `/wf-new` の `references/freshness-rules.md::stale report の自動更新` に一元化する。`/wf-new` は判定ロジックを再定義せず、stale 判定や AskUserQuestion を先行実行しない。subagent が stale を検出した場合は、同 SSOT が返す自動更新シーケンスを同じ subagent 作業内で順次実行し、全呼び出し成功後に入力モード判定を先頭からやり直す。`yt-doctor` の `analytics_report` は予備確認にだけ使い、analytics mode の最終判定には使わない。
-5. **subagent state boundary**: 各フェーズの生成処理は Agent ツールで subagent へ一作業ずつ委譲する。Phase 2c の thumbnail / music が両方未完了の場合だけは、独立した 2 call を同じ message で同時起動する。Phase 2c それ以外と他 phase は一作業ずつ順次委譲する。subagent は `workflow-state.json` を書き込まず AskUserQuestion を実行しない。メインエージェントだけが承認、成果物検証、`assets` / `phase` / `updated_at` 更新を行う。
+5. **subagent state boundary**: 各フェーズの生成処理は Agent ツールで subagent へ一作業ずつ委譲する。Phase 2c の thumbnail / music が両方未完了の場合だけは、独立した 2 call を同じ message で同時起動する。Phase 2c それ以外と他 phase は一作業ずつ順次委譲する。subagent は `workflow-state.json` を書き込まず AskUserQuestion を実行しない。メインエージェントだけが承認、成果物検証、`assets` 更新と、owner CLI による制御面更新を行う。
 6. **failure boundary**: subagent の失敗、期待成果物欠落、現在の phase との不整合時は state を更新しない。同じ未完了ステップから再実行できる状態で停止する。Phase 2c の thumbnail / music だけは独立 branch とし、[`references/phase-2c-artifact-contract.md`](references/phase-2c-artifact-contract.md) の実成果物検証に成功した側だけを反映して、失敗側だけを再開する。
 7. **thumbnail full-mode gate**: `.claude/skills/thumbnail/config.default.yaml` と、存在する場合は `config/skills/thumbnail.yaml` を読み、deep-merge 後の `image_generation.auto_selection.enabled` / `mode` を Phase 2c より前に確定する。`enabled: true` かつ `mode: full` のときだけ Phase 2c のサムネイル AskUserQuestion をすべて省略する。mode 未設定は `selection_only` として扱い、従来の候補承認だけを省略する。full で生成・QA・自動選択に失敗した場合は state を更新せず `/thumbnail` の「full モード失敗時の手動切替」を表示して停止する。
 8. **企画選択 skip gate**: `load_config()` の `config.workflow.wf_new.skip_plan_selection` を Phase 1 より前に確定する。`true` かつ analytics mode / benchmark fallback mode のときだけ、`/wf-new` が返した推奨順 1 位を自動採用できる。minimal mode のテーマ / ジャンル / 雰囲気入力は省略せず、無人実行では `blocked` とする。
@@ -76,6 +76,12 @@ minimal mode では企画候補生成前にテーマ / ジャンル / 雰囲気�
 10. **channel constraint verification gate**: 通常入口では `/wf-new` が現在のチャンネル規定を固定制約として解決し、候補ごとの適合結果を返すこと。未検証、FAIL、または適合結果を含む期待成果物欠落時は候補を提示・自動採用せず、state を更新せず停止する。規定の解決・候補検証ロジックは `/wf-new` の planning rules に一元化し、`/wf-new` で再定義しない。
 
 委譲時は入力パス、実行作業、期待成果物、禁止事項、完了報告形式をすべて具体値で埋める。成果物は絶対パスで受け取る。
+
+### workflow-state 制御面の更新境界
+
+対象 collection を確定したら、その絶対 path を `COLLECTION_DIR` として固定する。メインも制御面キー (`phase` / `stage` / `upload` / `updated_at`) を Edit / Write で直接変更しない。`phase` / `stage` / `upload` は必ず `uv run yt-workflow-state --collection "$COLLECTION_DIR" ...` を使い、各更新と同じ owner lock 内で `updated_at` も更新させる。制御面を変えず時刻だけ更新する必要がある場合は `uv run yt-workflow-state --collection "$COLLECTION_DIR" touch` を使う。CLI が非 0 の場合は state 更新失敗として停止し、後続へ進まない。
+
+資産系キー (`assets.*` / `planning.*`) はこの段では直接更新のままとし、CLI 移行は #3888 に残す。資産系だけを更新した直後は上記 `touch` を実行する。
 
 ### Preselected batch plan entry（opt-in）
 
@@ -221,7 +227,7 @@ success を記録した後は同じ fixed collection を `plan --collection <fix
 - **順次実行 + Phase 2c 限定例外**: 子スキルは必ず上から順に呼び、Agent ツールで起動する subagent も一作業ずつ呼ぶ。唯一、Phase 2c で thumbnail / music が両方未完了の場合は 2 call を同じ message で同時起動する。それ以外は Phase 2c の片側再開を含め、一作業ずつ順次実行する
 - **責務分離**: 子スキルの内部手順を `/wf-new` で再実装しない。必要な前提チェックだけを行い、失敗時は子スキルの障害時ガイダンスへ誘導する
 - **停止点**: user 入力で止めるのは原則として (1) Phase 0 の pending 分析承認 (2) 企画選択 (3) サムネイル承認。pending 0 件では (1)、`workflow.wf_new.skip_plan_selection: true` の analytics mode / benchmark fallback mode では (2)、thumbnail の `mode: full` では (3) を省略する。minimal mode の直接入力確認は `skip_plan_selection` の対象外で、`ttp_mode: true` なら `/channel-research --benchmark` の案内で停止する
-- **状態更新**: メインが期待成果物を実ファイルで検証した後だけ `workflow-state.json` の該当 `assets` と `updated_at` を更新する。subagent とユーザーには編集させない
+- **状態更新**: メインが期待成果物を実ファイルで検証した後だけ `workflow-state.json` の該当 `assets` を更新し、直後に owner CLI の `touch` で `updated_at` を更新する。subagent とユーザーには編集させない
 - **再開性**: 途中失敗時は完了済み成果物を再生成せず、未完了ステップから再開できるように次に呼ぶ skill / CLI を明示する
 
 ### 実行シーケンス
@@ -283,7 +289,13 @@ Step 1（企画）を自動実行中...
 
 ユーザー選択または設定による自動選択で企画が確定したら、[`references/phase2.md`](references/phase2.md) を読み、記載された 2a / 2b / 2c / 2e / 2f / 2g を上から順に実行する。
 
-完了条件は、成果物を検証したメインが `workflow-state.json` の `phase = "prepared"` まで更新し、2g の完了ガイダンスを表示すること。Suno helper server の起動・疎通確認に失敗しても、検証・更新済みの `phase = "prepared"` は維持し、再実行手順を案内して `/wf-new` 自体は完了扱いにする。
+完了条件は、成果物を検証したメインが次の owner CLI を実行し、再読込で `phase = "prepared"` を確認してから 2g の完了ガイダンスを表示すること。
+
+```bash
+uv run yt-workflow-state --collection "$COLLECTION_DIR" set-phase prepared
+```
+
+Suno helper server の起動・疎通確認に失敗しても、CLI で検証・更新済みの `phase = "prepared"` は維持し、再実行手順を案内して `/wf-new` 自体は完了扱いにする。
 
 ## 障害時ガイダンス
 

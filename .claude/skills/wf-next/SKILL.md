@@ -22,12 +22,25 @@ description: "Use when 既存コレクション（collections/planning/）を一
 
 ## Hard Gates: subagent 委譲境界
 
-1. メインエージェントだけが `workflow-state.json` を読み書きし、`phase` 遷移、`assets` / `upload` / `updated_at` 更新を行う。subagent は委譲先 skill の入力確認に必要な場合だけ state を読み、書き込まない。
+1. メインエージェントだけが `workflow-state.json` の `assets` を更新し、制御面の `phase` / `stage` / `upload` / `updated_at` は owner CLI 経由で更新する。subagent は委譲先 skill の入力確認に必要な場合だけ state を読み、書き込まない。
 2. AskUserQuestion、`skip_*_approval` の承認ゲート、候補選択、playlist 初期化などの承認はメインエージェントが完了させる。未承認の操作を subagent へ委譲しない。
 3. 各フェーズの生成・変換処理は Agent ツールで一作業ずつ subagent へ委譲する。委譲プロンプトには入力パス、実行する skill / CLI、期待成果物、state 書き込み禁止、完了報告形式を明記する。
 4. subagent 終了後、メインエージェントが期待成果物の存在と現在の `phase` / `assets` との整合を実ファイルで検証する。すべて PASS の場合だけ state を更新する。失敗、欠落、不整合時は state を変更せず、同じステップから再実行できる状態で停止する。
 
 委譲プロンプトには上記 3 の要素を具体値で埋め、成果物は絶対パスで受け取る。subagent の `status: success` だけを更新根拠にせず、実ファイルで検証する。
+
+### workflow-state 制御面の更新境界
+
+対象 collection を確定したら、その絶対 path を `COLLECTION_DIR` として固定する。メインも制御面キー (`phase` / `stage` / `upload` / `updated_at`) を Edit / Write で直接変更しない。必要な更新は次の owner CLI だけを使い、各更新と同じ owner lock 内で `updated_at` も更新させる。CLI が非 0 の場合は state を再編集せず、同じ工程から再開できる状態で停止する。
+
+```bash
+uv run yt-workflow-state --collection "$COLLECTION_DIR" set-phase <planning|prepared|mastered|publishing|complete>
+uv run yt-workflow-state --collection "$COLLECTION_DIR" set-stage <planning|live>
+uv run yt-workflow-state --collection "$COLLECTION_DIR" set-upload --video-id <video-id> [--video-url <url>] [--publish-at <timestamp>]
+uv run yt-workflow-state --collection "$COLLECTION_DIR" touch
+```
+
+資産系キー (`assets.*` / `planning.*`) はこの段では直接更新のままとし、CLI 移行は #3888 に残す。資産系だけを更新した直後は上記 `touch` を実行する。`yt-upload-collection` / `yt-upload-auto` や owner reference script が制御面を更新済みの場合は、同じ変更を CLI で重ねない。
 
 > **このセッションで初めて `/wf-*` を呼ぶ場合は、先に [`docs/workflow-cheatsheet.md`](../../../docs/workflow-cheatsheet.md) の判定フローを 1 回だけユーザーに提示すること**。
 
@@ -154,7 +167,7 @@ status を記録した後は、成功時だけでなく blocked / failed の停�
    - **`02-Individual-music/` に音声ファイルが 1 件以上存在（URL 記録の有無は問わない）**:
      - AskUserQuestion による URL 入力はスキップする。title list は `/music --master` Step 1.6 がローカルファイル名から自動復元するため playlist URL は不要。メインが `/music --master` の dry-run / Step 5.1 以外の検証ゲートを実行し、選曲・混入許容・over-max 例外などの承認分岐をすべて解決する。ラウドネス全曲走査は subagent 内の Step 5.1 で1回だけ行う
      - Agent ツールで subagent を起動し、対象 collection、（記録があれば）playlist URL、承認済み選択条件を入力として `/music --master` の Subagent Contract を実行させる。`workflow-state.json` 更新と雨レイヤー後処理は実行させない
-     - 期待成果物 `01-master/master.*`、`01-master/.selection.log`、`01-master/.loudness-receipt.json` の存在をメインが確認する。`yt-raw-master-check --apply --loudness-receipt <receipt>` で receipt と現在の collection / 入力 SHA-256 / 閾値 / PASS 判定を検証し、成功時だけ `assets.raw_master` と `updated_at` を更新する。検証時に FFmpeg の全曲走査を再実行しない。雨レイヤーが有効なら、その後にメインが `/music --master` Step 5.6 を実行し、出力と state を再検証する
+     - 期待成果物 `01-master/master.*`、`01-master/.selection.log`、`01-master/.loudness-receipt.json` の存在をメインが確認する。`yt-raw-master-check --apply --loudness-receipt <receipt>` で receipt と現在の collection / 入力 SHA-256 / 閾値 / PASS 判定を検証し、成功時だけ `assets.raw_master` を更新して owner CLI の `touch` を実行する。検証時に FFmpeg の全曲走査を再実行しない。雨レイヤーが有効なら、その後にメインが `/music --master` Step 5.6 を実行し、出力と state を再検証する
      - ガイダンス: 「raw master をミキシング+マスタリングし、最終マスターを 01-master/ に配置後、`/wf-next` を再実行してください」
      - **ここでフロー停止**
    - **URL 記録済みだが `02-Individual-music/` に音声ファイルが無い**:
@@ -163,14 +176,14 @@ status を記録した後は、成功時だけでなく blocked / failed の停�
    - **URL 未記録（キー自体が無い、または `null`）かつ `02-Individual-music/` に音声ファイルも無い**:
      - 従来通りユーザーにプレイリスト URL を AskUserQuestion で取得
      - URL 取得後、上記と同じくメインが `/music --master` の承認分岐を解決し、Agent ツールで Subagent Contract を委譲する
-     - メインが `01-master/master.*`、`01-master/.selection.log`、`01-master/.loudness-receipt.json` を検証し、上記と同じ receipt 付き `yt-raw-master-check --apply` が成功した場合だけ `assets.raw_master` と `updated_at` を更新する
+     - メインが `01-master/master.*`、`01-master/.selection.log`、`01-master/.loudness-receipt.json` を検証し、上記と同じ receipt 付き `yt-raw-master-check --apply` が成功した場合だけ `assets.raw_master` を更新して owner CLI の `touch` を実行する
      - ガイダンス: 「raw master をミキシング+マスタリングし、最終マスターを 01-master/ に配置後、`/wf-next` を再実行してください」
      - **ここでフロー停止**
 
 **Lyria パス:**
 1. `assets.music_prompts = true` + `assets.raw_master = null`:
    - Agent ツールで subagent を起動し、対象 collection と theme を入力に `/music --generate <theme>` の Lyria 3 API セグメント生成だけを実行させる（最大 ~184 秒/リクエスト）。state 書き込みと承認取得は禁止する
-   - 委譲前に期待する `02-Individual-music/` の音声ファイルと `01-master/` の raw master パスを列挙する。メインが実在を確認し、成功時だけ `assets.raw_master` と `updated_at` を更新する
+   - 委譲前に期待する `02-Individual-music/` の音声ファイルと `01-master/` の raw master パスを列挙する。メインが実在を確認し、成功時だけ `assets.raw_master` を更新して owner CLI の `touch` を実行する
    - ガイダンス: 「生成されたセグメントをミキシング+マスタリングし、最終マスターを 01-master/ に配置後、`/wf-next` を再実行してください」
    - **ここでフロー停止**
 
@@ -211,7 +224,11 @@ status を記録した後は、成功時だけでなく blocked / failed の停�
    - 両 Agent とも state は入力確認に必要な範囲だけ読み、書き込まず、AskUserQuestion を実行しない。片方でも失敗または成果物欠落なら state を更新せず停止する
 2. 並列 A 完了後:
    - メインが両成果物の存在と `phase: "mastered"` との整合を確認する
-   - PASS 後だけ、メインが確定済み表示名 mapping を `apply_track_display_names()` で永続化し、`phase: "publishing"`、`assets.master_video`、`assets.description`、`description.generated`、`updated_at` を更新する
+   - PASS 後だけ、メインが確定済み表示名 mapping を `apply_track_display_names()` で永続化し、`assets.master_video`、`assets.description`、`description.generated` を更新してから、次の owner CLI で phase と `updated_at` を一体更新する
+
+     ```bash
+     uv run yt-workflow-state --collection "$COLLECTION_DIR" set-phase publishing
+     ```
 3. **アップロード承認ゲート 3-B（`skip_upload_approval = false` のとき）**:
    - 並列 A 完了直後、ユーザーに公開方法を提示する前に必ず `uv run yt-upload-collection --plan [-c <collection-name>]` を実行し、`config/schedule_config.json` / `config/channel/youtube.json` を反映した実際の公開タイミングを確定する
    - plan 結果が `📅 公開設定: 非公開でアップロード（即時公開は行いません）` の場合は、予約設定または YouTube Studio での手動公開を案内する。`📅 公開設定: 限定公開 (unlisted)` / `📅 公開設定: 非公開 (private)` が出た場合は、その公開範囲でアップロードされることを AskUserQuestion の文面に含める。`📅 公開予定: <日時>` が出た場合は「今アップロード → `<日時>` に自動で一般公開」と、実際の予約時刻を AskUserQuestion の文面に含める
@@ -235,7 +252,12 @@ status を記録した後は、成功時だけでなく blocked / failed の停�
 メインが `assets` フラグと実ファイルを突合して未完了ステップを特定し、同じ subagent 委譲から再実行する。
 - `assets.master_video = null` → 並列 A から
 - `upload.video_id = null` → 初投稿プレイリスト初期化ゲート（`uv run yt-playlist-status` → 必要なら `--init --dry-run` → 確認後 `--init`）を通してから `/publish --upload` へ進む
-- `upload.video_id != null` かつ phase / stage / live 移動が未完了 → `20-documentation/upload_tracking.json` が schema v3、全体と Complete Collection の status が `completed`、video ID が state と完全一致する場合だけ、remote upload と playlist assign を skip する。planning 側 collection を同名の `collections/live/` へ移動（同名 live が既にあれば停止）し、移動先 state の `stage: "live"`、`phase: "complete"`、`updated_at` だけを atomic write で補完する。tracking 欠落・不一致なら `upload_state_inconsistent` で停止し、upload を再実行しない
+- `upload.video_id != null` かつ phase / stage / live 移動が未完了 → `20-documentation/upload_tracking.json` が schema v3、全体と Complete Collection の status が `completed`、video ID が state と完全一致する場合だけ、remote upload と playlist assign を skip する。planning 側 collection を同名の `collections/live/` へ移動（同名 live が既にあれば停止）し、移動後の絶対 path で `COLLECTION_DIR` を固定し直して次の owner CLI を順に実行する。tracking 欠落・不一致なら `upload_state_inconsistent` で停止し、upload を再実行しない
+
+  ```bash
+  uv run yt-workflow-state --collection "$COLLECTION_DIR" set-stage live
+  uv run yt-workflow-state --collection "$COLLECTION_DIR" set-phase complete
+  ```
 
 #### `complete` → 完了案内
 
@@ -246,7 +268,7 @@ status を記録した後は、成功時だけでなく blocked / failed の停�
 
 ### 3. state ファイルの更新ルール
 
-state を更新するのはメインエージェントだけとし、検証 PASS 後の各操作で `updated_at` を現在時刻に更新する。subagent が state を変更した場合は失敗として扱い、変更内容を確認してから同じステップを再実行する。スキーマ詳細は `.claude/skills/wf-new/references/schema.md` を参照。
+state を更新するのはメインエージェントだけとし、検証 PASS 後の制御面操作は owner CLI で `updated_at` と一体更新する。資産系だけを更新した場合は `touch` を使う。subagent が state を変更した場合は失敗として扱い、変更内容を確認してから同じステップを再実行する。スキーマ詳細は `.claude/skills/wf-new/references/schema.md` を参照。
 
 ## 障害時ガイダンス
 
