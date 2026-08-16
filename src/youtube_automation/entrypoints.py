@@ -152,6 +152,7 @@ yt_traffic_trend = _make_entrypoint("youtube_automation.commands.analytics.traff
 yt_thumbnail_check = _make_entrypoint("youtube_automation.commands.thumbnail.thumbnail_check")
 yt_thumbnail_compare = _make_entrypoint("youtube_automation.commands.thumbnail.compare_thumbnails")
 yt_thumbnail_correlate = _make_entrypoint("youtube_automation.commands.thumbnail.thumbnail_correlate")
+yt_thumbnail_review = _make_entrypoint("youtube_automation.commands.thumbnail.thumbnail_review")
 yt_thumbnail_text = _make_entrypoint("youtube_automation.commands.thumbnail.thumbnail_text")
 yt_title_duplicate_check = _make_entrypoint("youtube_automation.commands.metadata.title_duplicate_check")
 yt_video_analyze = _make_entrypoint("youtube_automation.commands.analytics.video_analyze")

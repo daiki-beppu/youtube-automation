@@ -2,10 +2,10 @@
 
 ## 共通Web review lifecycle
 
-手動候補選択は生成・機械検証後、確定copyやstate更新前に `uv run yt-document-review --collection <collection-path> --artifact thumbnail --select` を実行する。
-受け取るのはallowlist済みのopaqueな `candidate_id` とartifact digestだけで、対応する現在の候補fileを再hashしてから既存確定処理を呼ぶ。
+手動候補選択は生成・機械検証後、確定copyやstate更新前に `uv run yt-thumbnail-review --collection <collection-path> --artifact thumbnail` を実行する。AB patternは `--pattern <name>`、textless背景は `--artifact main` でscopeを固定する。
+受け取るのはallowlist済みのopaqueな `candidate_id` とartifact digestだけで、対応する現在の候補画像と固定QA sidecarを再hashしてから既存確定処理を呼ぶ。
 HTML・brokerから任意path、command、state patchは受理しない。失敗は未選択のまま停止し、terminal会話へ黙ってfallbackしない。
-browserなしは `--transport terminal` を明示する。auto-selectionの `selection_only` / `full` ではCLIを呼ばずreview HTMLを生成しない。
+browserなしは `--transport terminal` を明示し、同じcommandへ会話確認済み `--candidate-id` を渡す。auto-selectionの `selection_only` / `full` ではCLIを呼ばずreview HTMLを生成しない。
 Codex / Claudeとも同じproduct-neutral CLIを使い、製品固有session APIへmessageを注入しない。
 
 ## Eligibility

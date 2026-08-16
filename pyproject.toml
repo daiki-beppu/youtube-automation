@@ -110,6 +110,7 @@ yt-thumbnail-auto-select = "youtube_automation.entrypoints:yt_thumbnail_auto_sel
 yt-thumbnail-check = "youtube_automation.entrypoints:yt_thumbnail_check"
 yt-thumbnail-compare = "youtube_automation.entrypoints:yt_thumbnail_compare"
 yt-thumbnail-correlate = "youtube_automation.entrypoints:yt_thumbnail_correlate"
+yt-thumbnail-review = "youtube_automation.entrypoints:yt_thumbnail_review"
 yt-thumbnail-text = "youtube_automation.entrypoints:yt_thumbnail_text"
 yt-title-duplicate-check = "youtube_automation.entrypoints:yt_title_duplicate_check"
 yt-traffic-trend = "youtube_automation.entrypoints:yt_traffic_trend"

@@ -129,6 +129,7 @@ NON_BILLED_CLIS: dict[str, str] = {
     "yt-ttp-health": "収集済み benchmark_*.json のローカル分析のみ",
     "yt-thumbnail-auto-select": "ローカルのサムネイル採点・選定のみ",
     "yt-thumbnail-correlate": "CDN 画像 DL + ローカル相関計算のみ",
+    "yt-thumbnail-review": "ローカル候補画像とQAの比較・承認のみ",
     "yt-thumbnail-text": "ローカル PIL テキスト描画のみ",
     "yt-title-duplicate-check": "ローカルのタイトル照合のみ",
     "yt-traffic-trend": "収集済み analytics_data_*.json のローカル分析のみ",

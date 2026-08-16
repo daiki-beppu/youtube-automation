@@ -140,23 +140,23 @@ uv run python .claude/skills/thumbnail/references/share_thumbnail_as_main.py <co
 スクリプトは `thumbnail.jpg` を一時ファイルへ `shutil.copyfile()` でコピーし、SHA-256 一致後に `10-assets/main.jpg` へ置換する。既存 `main.jpg` は更新し、競合する `main.png` は削除する。exit 0 と JSON の `status: SHARED`、同一 SHA-256、`main.png` 不在を確認するまで `assets.thumbnail = true` にしない。`thumbnail-prompts.md` には textless 生成プロンプトを捏造せず、`textless.enabled=false`、`source=10-assets/thumbnail.jpg`、`destination=10-assets/main.jpg`、検証済み SHA-256 を記録する。 thumbnail analysis JSON+HTML pair が存在する場合は、`read_published_json_document(..., RepositorySchema.CHANNEL_RESEARCH_REPORT)` が返す JSON の `winning_patterns` と `application_candidates` だけを、参照画像選定と差分プロンプトの入力にする。pair を検証できず競合サムネイルの勝ちパターンを先に深掘りする場合は `/channel-research --thumbnail` を実行する。
 1. 「thumbnail-text-profile 適用」節の手順で、フォント選定・コピー生成制約・配置を確定する（profile 不在なら実効デフォルト値のまま進む。エラーにしない）。
 2. ベンチマーク先サムネを参照画像にして、検証済み thumbnail analysis JSON がある場合はその勝ちパターンも使い、構図・色温度・主役スケール・背景テクスチャを踏襲した textless 背景候補 `main-v*.png/jpg` を生成する。差分プロンプトには `single_step.text_strip_clause` 相当の除去指示を展開し、タイトル文字・字幕・ロゴ・透かしを焼き込ませない（参照画像の選定・プロンプト構築・CLI 引数は「Single-Step / TTP モード」章の機構を流用する）。
-3. 背景候補は「手動候補の比較選択 Hard Gate」に従い、各候補を thumbnail check CLI で検証してから比較・選択する。候補が 1 枚なら `uv run yt-thumbnail-check <collection-path>/10-assets/main-v1.png --json` の成功とユーザー承認後に `cp main-v1.png main.png` で確定する。`mode: full` では `open` と AskUserQuestion を省略し、check が exit 0 かつ期待した画像ファイルが存在するときに既存の自動経路で確定する。
+3. 背景候補は「手動候補の比較選択 Hard Gate」に従い、各候補を thumbnail check CLI で検証してから `yt-thumbnail-review --artifact main` で比較・選択・確定する。候補が1枚でも同じWeb reviewで承認する。`mode: full` ではWeb reviewとAskUserQuestionを省略し、checkがexit 0かつ期待した画像ファイルが存在するときに既存の自動経路で確定する。
 4. 承認済み textless 背景に、profile 適用済みの実効 config で実フォントのタイトルを合成し、テキスト付き候補を作る:
 ```bash
 uv run yt-thumbnail-text --background <collection-path>/10-assets/main.png --title "<Title Line 1>" --title "<Title Line 2>" --channel-name "<channel_name>" --output <collection-path>/10-assets/thumbnail-v1.jpg
 ```
-5. テキスト付き候補は「手動候補の比較選択 Hard Gate」に従い、選択された 1 枚を `10-assets/thumbnail.jpg` として確定する。候補が 1 枚なら `/thumbnail --compare` とユーザー承認後に `cp thumbnail-v1.jpg thumbnail.jpg` で確定する。`auto_selection.enabled: true` では手動比較を行わず「自動選択」章の `yt-thumbnail-auto-select <collection-path> --apply` で確定する。手動・自動とも確定後に `uv run python .claude/skills/thumbnail/references/archive-approved-thumbnail.py <collection-path>` が成功したことを確認する。自動確定後の `/thumbnail --compare` は省略せず別途実行する。
+5. テキスト付き候補は「手動候補の比較選択 Hard Gate」に従い、`yt-thumbnail-review --artifact thumbnail` で選択された1枚だけを `10-assets/thumbnail.jpg` として確定する。候補が1枚でも同じWeb reviewを使う。`auto_selection.enabled: true` では手動比較を行わず「自動選択」章の `yt-thumbnail-auto-select <collection-path> --apply` で確定する。手動Web reviewは確定とarchiveを同じtransactionで行う。自動確定では既存archive処理を維持する。自動確定後の `/thumbnail --compare` は省略せず別途実行する。
 6. `config/skills/loop-video.yaml::enabled: true` ならテキストなし `main.png/jpg` を `/thumbnail --loop` に渡して `loop.mp4` を生成し、`false` なら Veo を実行せず静止画背景として `/video --generate` に渡す。
 `thumbnail.jpg` はアップロード用、`main.png/jpg` は動画背景・loop-video 入力用の成果物とする。`textless.enabled` が未設定または `true` では文字入りと文字なしを分離し、両者を同一画像で代用しない。`false` だけは上記の検証済みコピーを正規契約とする。symlink や拡張子偽装では代用しない。 決定的合成経路は `text_render.mode: deterministic` の場合だけ使う。未設定 / `ai_burn_in` では上記の textless 先行手順へ入らず、AI 焼き込み経路を実行する。
 #### 手動候補の比較選択 Hard Gate
 この契約は `thumbnail-v*.jpg/png` と `main-v*.png/jpg` のどちらにも適用する。`auto_selection.enabled: false` / 未設定で、生成に成功した候補が 2 枚以上ある場合は、次の比較選択が完了するまで `thumbnail.jpg` または `main.png/jpg` を確定してはならない。
-1. 成功した全候補を `open` で同時に開く。3 枚の JPEG サムネ候補なら `open <collection-path>/10-assets/thumbnail-v{1,2,3}.jpg` とし、候補数・拡張子・`main-v*` に応じてブレース展開を調整する。
-2. Read（Codex では同等の画像閲覧機能）でも成功した候補を 1 枚ずつ表示する。期待した attempt のファイルがない場合は候補から黙って除外せず、該当番号を「生成失敗」と明記する。
-3. テキスト付き候補では、ユーザー選択より前に全候補を `/thumbnail --compare` へ渡し、320px 視認性を比較検証する。textless 背景候補では、各候補を thumbnail check CLI で検証する。
-4. 構図・可読性・検証結果を並べて示し、採用する候補番号（`v1` / `v2` / `v3`）をユーザーから受け取る。番号を受け取る前に先頭候補を暗黙採用しない。
-5. 選択後だけ、成果物の種類と実拡張子に合わせて `cp thumbnail-v<選択番号>.jpg thumbnail.jpg` または `cp main-v<選択番号>.png main.png` を実行する。JPEG の textless 背景なら `.jpg` 同士で確定し、拡張子を偽装しない。
-6. 全案 NG の場合は確定せず、別の `--reference-index` で再生成するか、`diff_prompt_template` の差分指示を見直して再生成する経路を示す。
-成功候補が 1 枚だけなら、従来どおりその 1 枚をプレビュー・検証して Yes/No 承認を受け、承認後だけ確定する。`auto_selection.enabled: true` の `selection_only` / `full` ではテキスト付き候補の比較提示・番号選択を行わず、既存の `yt-thumbnail-auto-select` 経路を使う。`full` は既存どおり textless 背景承認も省略し、`selection_only` の textless 背景承認は維持する。
+1. 期待した attempt の欠落を「生成失敗」と報告し、成功候補ごとに既存 `yt-thumbnail-check` と比較 QA を完了する。候補画像の SHA-256、artifact、AB pattern、両 QA を固定 sidecarへ記録する。書式とコマンドは [Web review](references/web-review.md) を正とする。候補または sidecar が欠ける場合は確定せず停止する。
+2. 通常thumbnailは `uv run yt-thumbnail-review --collection <collection-path> --artifact thumbnail`、textless背景は `--artifact main`、ABは `--artifact thumbnail --pattern <name>` を実行する。CLIは全候補を1ページにまとめ、各cardに原寸画像、実幅320px表示、候補ID、filename、dimensions、`yt-thumbnail-check`、比較QAを表示する。thumbnailとmainを同じreviewへ混在させない。
+3. Webでは各cardのbuttonから共通selection brokerへmanifest内のcandidate IDだけを送る。CLIはbroker結果、artifact、pattern、画像/QA digestを再検証してからだけ既存のatomic copy、archive、workflow-state ownerを実行する。HTMLからpath、command、採点値、state patchを受け取らない。
+4. browserを利用できない場合だけ `--transport terminal` を使う。初回に表示されたallowlist IDを会話で選び、同じcommandへ `--candidate-id <ID>` を追加する。terminalも同じdigest検証/finalizerを通り、黙ってfallbackしない。
+5. 全案NGなら選択buttonを押さず、別の `--reference-index` または `diff_prompt_template` で再生成する。表示後の画像/QA変更、token replay、symlink、scope外候補は正規成果物とstateを変更せず停止する。
+
+成功候補が1枚だけでも同じHTML cardでYes/No判断し、直接 `cp` しない。`auto_selection.enabled: true` の `selection_only` / `full` ではテキスト付き候補のWeb reviewを生成せず、既存 `yt-thumbnail-auto-select --apply` ownerを使う。`full` は既存どおりtextless背景承認も省略し、`selection_only` のtextless背景だけは上記Web reviewを維持する。
 ### Test & compare 用 A/B pattern（opt-in）
 `ab_test` 未設定または `enabled: false` では、この節を実行せず標準の `thumbnail.jpg` 1 枚だけを確定する。既存コマンド・ファイル・承認・state 契約は変えない。 有効化はチャンネル側 `config/skills/thumbnail.yaml` で行う。`patterns` は YouTube Studio の上限に合わせて 1〜3 件、`name` は英小文字・数字・ハイフン・アンダースコアの一意な名前、`variation` は空でない pattern 固有 clause とする。0 件・4 件以上・不正 name・重複 name・空 variation は、画像生成 API を呼ぶ前に `ConfigError` で理由付き停止する。
 ```yaml
@@ -182,7 +182,7 @@ uv run yt-generate-image \
 `/channel-research --market` が生成する `docs/channel-research.json` + `.html` pair を `read_published_json_document(..., RepositorySchema.CHANNEL_RESEARCH_REPORT)` で検証し、JSON の `thumbnail_text_profile`（`schema_version: 1`。キーの単一ソースは `.claude/skills/channel-research/references/market.md` の Step 4）を決定的合成の入力へ変換する。これは前提ガードではない。pair が存在しない、検証できない、または必須キーを満たさない場合は「thumbnail-text-profile なし」と表示し、エラーで停止しない。`config.default.yaml` の現行デフォルト値（チャンネル上書きがあれば deep-merge 後の実効値)のまま標準フローを続行する。変換表、ローカルフォント選定、`unknown` の扱いは [quality / operations 詳細](references/quality-and-operations.md) を読む。変換値は設定内容と根拠をユーザーに提示し、**承認を得てから** `config/skills/thumbnail.yaml` へ書き込む。書き込み後は deep-merge 後の実効値を再確認する。
 ### 承認済みサムネイルのアーカイブ
 `archive.enabled: false` が既定で、従来どおりギャラリーを作成しない。過去作サムネを TTP テンプレートとして蓄積するチャンネルだけ、`config/skills/thumbnail.yaml` で opt-in する:
-決定的合成（フォント固定・標準）、AI 焼き込みの手動承認、codex、Two-Phase の各経路では、それぞれの既存の検証・承認順序を変えず、最終 `10-assets/thumbnail.jpg` または `thumbnail.png` の確定直後に次の共通コマンドを 1 回実行する:
+旧互換の手動確定経路では、それぞれの既存の検証・承認順序を変えず、最終 `10-assets/thumbnail.jpg` または `thumbnail.png` の確定直後に次の共通コマンドを1回実行する。新しい `yt-thumbnail-review` 手動経路は同じarchive ownerをtransaction内で呼ぶため重ねて実行しない:
 ```bash
 uv run python .claude/skills/thumbnail/references/archive-approved-thumbnail.py <collection-path>
 ```
@@ -224,7 +224,7 @@ uv run yt-generate-image \
   --output <collection-path>/10-assets/thumbnail-v1.jpg -y
 ```
 stock 画像を別スコープとして混ぜたい場合だけ、`config/skills/thumbnail.yaml` の `image_generation.gemini.reference_images.stock.enabled: true` を明示し、採用ログ stderr の `[INFO] stock 採用: ...` を保存する。stock を混ぜると「同じベンチマークチャンネルの別サムネ」ではなくなるため、生成後の `thumbnail-prompts.md` に attempt ごとの参照元を必ず記録する。
-4. テキスト付き候補は「手動候補の比較選択 Hard Gate」に従い、`/thumbnail --compare` 後にユーザーが指定した候補だけを `thumbnail.jpg` として確定する。成功候補が `thumbnail-v1.jpg` の 1 枚だけなら、単一候補の承認後に `cp thumbnail-v1.jpg thumbnail.jpg` で確定する。確定後に `uv run python .claude/skills/thumbnail/references/archive-approved-thumbnail.py <collection-path>` を実行する。
+4. テキスト付き候補は「手動候補の比較選択 Hard Gate」に従い、QA sidecar作成後に `yt-thumbnail-review --artifact thumbnail` でユーザーが指定した候補だけを `thumbnail.jpg` として確定・archiveする。成功候補が1枚でも同じWeb reviewを使う。
 5. 承認済み `thumbnail.jpg` を参照画像にして、textless 動画背景を AI 再生成:
 ```bash
 COLLECTION_PATH="<collection-path>"
@@ -238,7 +238,7 @@ uv run yt-generate-image \
   --output "${COLLECTION_PATH}/10-assets/main-v1.png" -y
 ```
 textless 再生成プロンプトでは、承認済みサムネの構図・主役スケール・光・色温度・背景テクスチャを維持し、タイトル文字・字幕・ロゴ・透かし・タイポグラフィだけを除去する。新しい文字や主役を追加しないことを明示する。
-6. `open` でプレビュー → `uv run yt-thumbnail-check <collection-path>/10-assets/main-v1.png --json` → ユーザー承認 → `cp main-v1.png main.png`（JPEG で確定する運用では `main-v1.jpg` → `main.jpg` に揃える。拡張子を偽装しない）
+6. `uv run yt-thumbnail-check <collection-path>/10-assets/main-v1.png --json` と比較QAをsidecarへ固定し、`yt-thumbnail-review --artifact main` のWeb reviewで承認・確定する（JPEG候補は`main.jpg`へ揃え、拡張子を偽装しない）
 7. `20-documentation/thumbnail-prompts.md` に、テキストなし背景生成プロンプトとテキスト付き生成プロンプトの両方を保存する
 #### 運用上の注意
 - **リトライ前提**: 画像生成プロバイダーは同一プロンプトでも瞬発的にエラーを返す。各 attempt 内で内蔵リトライ最大 2 回が走る
@@ -279,10 +279,10 @@ Two-Phase は旧チャンネル向けのフォールバック。使う場合も�
 2. テキストオーバーレイプロンプトを構築:
 **`thumbnail_text.text_overlay_prompt` が定義されている場合（推奨）:** テンプレート内の `{title_line1}`, `{title_line2}`, `{channel_name}` をコレクションのタイトルとチャンネル名で置換して使用。 **未定義の場合（フォールバック）:** [generation workflow 詳細](references/generation-workflows.md) から正規の sample prompt へルーティングする。 `text_overlay_prompt` が実質単一の入口。旧個別フィールド（`channel_name_style` / `title_format` / `title_prefix` / `copy_position` / `color` / `decoration`）は deprecated で、位置・色・装飾の意図は `text_overlay_prompt` の本文に直接書く（段階的廃止 #1702）。
 3. 生成: `uv run yt-generate-image --reference <既存参照画像> --prompt <テキスト指示> --output 10-assets/thumbnail-v1.jpg -y`
-4. テキスト付き候補は「手動候補の比較選択 Hard Gate」に従い、`/thumbnail --compare` 後にユーザーが指定した候補だけを `thumbnail.jpg` として確定する。確定後に `uv run python .claude/skills/thumbnail/references/archive-approved-thumbnail.py <collection-path>` を実行する。
+4. テキスト付き候補は「手動候補の比較選択 Hard Gate」に従い、QA sidecar作成後に `yt-thumbnail-review --artifact thumbnail` でユーザーが指定した候補だけを `thumbnail.jpg` として確定・archiveする。
 #### Phase 3: 承認済み thumbnail から textless main を再生成
 1. 承認済み `thumbnail.jpg` を参照して textless `main-v1.png` を AI 再生成する。
-2. `open` でプレビュー → ユーザー承認 → `cp main-v1.png main.png` で動画背景を確定する（JPEG で確定する運用では `main-v1.jpg` → `main.jpg` に揃える）。
+2. QA結果をsidecarへ固定し、`yt-thumbnail-review --artifact main` のWeb reviewで承認して動画背景を確定する（JPEG候補は`main.jpg`へ揃え、拡張子を偽装しない）。
 ## フォント安定化（#1332 / #1907）
 「サムネの文字フォントが毎回バラバラになる」問題への対処。フォントの扱いは 2 経路あり、`text_render.mode` で選択する。
 | 経路 | 仕組み | フォント再現性 |

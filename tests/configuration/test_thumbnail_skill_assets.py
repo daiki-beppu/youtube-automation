@@ -372,9 +372,8 @@ def test_thumbnail_skill_documents_ai_burn_in_default_and_deterministic_opt_in()
         "uv run yt-thumbnail-text",
         "--background <collection-path>/10-assets/main.png",
         "text_strip_clause",
-        "uv run yt-thumbnail-check <collection-path>/10-assets/main-v1.png --json",
-        "cp main-v1.png main.png",
-        "cp thumbnail-v1.jpg thumbnail.jpg",
+        "yt-thumbnail-review --artifact main",
+        "yt-thumbnail-review --artifact thumbnail",
         "/thumbnail --compare",
         "config/skills/loop-video.yaml::enabled: true",
         "/thumbnail --loop",
@@ -387,7 +386,7 @@ def test_thumbnail_skill_documents_ai_burn_in_default_and_deterministic_opt_in()
         assert required in standard_block
 
     # deterministic 経路では textless 背景の確定が実フォント合成より先
-    assert standard_block.find("cp main-v1.png main.png") < standard_block.find("uv run yt-thumbnail-text")
+    assert standard_block.find("yt-thumbnail-review --artifact main") < standard_block.find("uv run yt-thumbnail-text")
     # 既定は文字入り候補を先に生成し、決定的合成だけを明示 opt-in にする
     assert standard_block.find("AI 焼き込み経路（既定）") < standard_block.find(
         "決定的合成経路（`text_render.mode: deterministic`"
@@ -398,13 +397,13 @@ def test_thumbnail_skill_documents_ai_burn_in_default_and_deterministic_opt_in()
     assert "未設定 / `text_render.mode: ai_burn_in` の標準手順" in single_step_block
     for required in (
         "/thumbnail --compare",
-        "cp thumbnail-v1.jpg thumbnail.jpg",
+        "yt-thumbnail-review --artifact thumbnail",
         "TEXTLESS_PROMPT=\"$(cat <<'PROMPT'",
         '--reference "${COLLECTION_PATH}/10-assets/thumbnail.jpg"',
         '--prompt "$TEXTLESS_PROMPT"',
         '--output "${COLLECTION_PATH}/10-assets/main-v1.png"',
         "uv run yt-thumbnail-check <collection-path>/10-assets/main-v1.png --json",
-        "cp main-v1.png main.png",
+        "yt-thumbnail-review --artifact main",
         "テキストなし背景生成プロンプト",
         "テキスト付き生成プロンプト",
         "テキスト付き版の先行確定",
@@ -427,13 +426,17 @@ def test_thumbnail_skill_requires_manual_comparison_before_selecting_multiple_ca
     )
     for required in (
         "候補が 2 枚以上",
-        "open <collection-path>/10-assets/thumbnail-v{1,2,3}.jpg",
-        "Read（Codex では同等の画像閲覧機能）",
         "生成失敗",
-        "v1` / `v2` / `v3",
-        "cp thumbnail-v<選択番号>.jpg thumbnail.jpg",
-        "cp main-v<選択番号>.png main.png",
-        "候補が 1 枚",
+        "yt-thumbnail-review --collection <collection-path> --artifact thumbnail",
+        "--artifact main",
+        "--pattern <name>",
+        "原寸画像",
+        "実幅320px表示",
+        "candidate ID",
+        "--transport terminal",
+        "--candidate-id <ID>",
+        "直接 `cp` しない",
+        "成功候補が1枚",
         "auto_selection.enabled: true",
         "selection_only",
         "full",
@@ -442,11 +445,11 @@ def test_thumbnail_skill_requires_manual_comparison_before_selecting_multiple_ca
     ):
         assert required in comparison_contract
 
-    assert comparison_contract.find("`/thumbnail --compare`") < comparison_contract.find(
-        "候補番号（`v1` / `v2` / `v3`）"
+    assert comparison_contract.find("既存 `yt-thumbnail-check` と比較 QA") < comparison_contract.find(
+        "yt-thumbnail-review --collection"
     )
-    assert comparison_contract.find("候補番号（`v1` / `v2` / `v3`）") < comparison_contract.find(
-        "cp thumbnail-v<選択番号>.jpg thumbnail.jpg"
+    assert comparison_contract.find("共通selection broker") < comparison_contract.find(
+        "atomic copy、archive、workflow-state owner"
     )
 
     standard_block = _slice_between(
@@ -752,11 +755,11 @@ def test_thumbnail_archive_is_opt_in_and_wired_after_every_approval_path() -> No
     assert config["archive"] == {"enabled": False}
     assert "archive.enabled: false" in skill
     assert "assets/thumbnail-gallery/<collection-dir-name>.<ext>" in skill
-    # 標準（決定的合成）/ codex / Single-Step / Two-Phase の確定直後 + アーカイブ節本文 = 5
-    assert skill.count(archive_command) == 5
+    # Web reviewは同じarchive ownerをtransaction内で呼ぶ。文書上の旧互換/auto入口だけを保持する。
+    assert skill.count(archive_command) == 2
 
     approval_block = _slice_between(skill, "### 承認済みサムネイルのアーカイブ", "### Single-Step / TTP モード")
-    for approval_path in ("手動承認", "codex", "Two-Phase", "フォント固定", "自動選択"):
+    for approval_path in ("旧互換", "yt-thumbnail-review", "transaction", "自動選択"):
         assert approval_path in approval_block
     assert "確定直後" in approval_block
     assert "既存の検証・承認順序を変えず" in approval_block
@@ -784,8 +787,9 @@ def test_thumbnail_archive_is_opt_in_and_wired_after_every_approval_path() -> No
     )
     auto_selection_block = _slice_between(skill, "## 自動選択", "## 品質チェック")
 
-    for wired_block in (codex_block, standard_block, single_step_block, two_phase_block):
-        assert wired_block.find("thumbnail.jpg") < wired_block.find(archive_command)
+    assert codex_block.find("thumbnail.jpg") < codex_block.find(archive_command)
+    for wired_block in (standard_block, single_step_block, two_phase_block):
+        assert wired_block.find("thumbnail.jpg") < wired_block.find("yt-thumbnail-review --artifact thumbnail")
     assert "uv run yt-thumbnail-auto-select <collection-path> --apply" in auto_selection_block
     assert "--apply &&" not in auto_selection_block
     assert "候補生成後のユーザー承認を省略" in auto_selection_block
@@ -971,7 +975,7 @@ def test_thumbnail_skill_two_phase_keeps_thumbnail_and_main_separate() -> None:
     assert "--reference 10-assets/draft-background-v1.png" not in two_phase_block
     assert "#### Phase 3: 承認済み thumbnail から textless main を再生成" in two_phase_block
     assert "承認済み `thumbnail.jpg` を参照して textless `main-v1.png` を AI 再生成" in two_phase_block
-    assert "cp main-v1.png main.png" in two_phase_block
+    assert "yt-thumbnail-review --artifact main" in two_phase_block
     assert "参照素材を `main.png/jpg` へコピーしない" in reference_phase_block
     assert "cp main-v1.png main.png" not in reference_phase_block
     assert "#### Phase 1: 背景候補生成（draft main）" not in two_phase_block
@@ -1908,7 +1912,7 @@ def test_thumbnail_skill_routes_generation_details_without_moving_runtime_contra
     # #2950 adds one canonical non-interactive background-session invocation.
     assert skill.count("uv run yt-generate-image") == 12
     assert skill.count("uv run yt-thumbnail-text") == 1
-    assert skill.count("archive-approved-thumbnail.py") == 5
+    assert skill.count("archive-approved-thumbnail.py") == 2
     assert '### Single-Step / TTP モード（`generation_mode: "single_step"`、デフォルト・推奨）' in skill
     assert "### Two-Phase モード（従来方式・フォールバック）" in skill
     assert "/thumbnail --compare" in skill
@@ -1938,9 +1942,9 @@ def test_thumbnail_skill_routes_quality_details_without_moving_hard_gates() -> N
     route = "[quality / operations 詳細](references/quality-and-operations.md)"
 
     assert skill.index("## ワークフロー") < skill.index(route) < skill.index("## フォント安定化")
-    assert skill.count("uv run yt-thumbnail-check") == 5
+    assert skill.count("uv run yt-thumbnail-check") == 4
     assert skill.count("uv run yt-thumbnail-auto-select") == 3
-    assert skill.count("archive-approved-thumbnail.py") == 5
+    assert skill.count("archive-approved-thumbnail.py") == 2
     assert skill.count("uv run yt-stock-archive") == 1
     assert "## 完了条件" in skill
     assert "**Hard Gate**" in "\n".join(skill.splitlines()[:60])

@@ -19,13 +19,24 @@ def render_review_html(
     *,
     endpoint: str | None,
     media: Mapping[str, Path],
+    compact_image_ids: frozenset[str] = frozenset(),
 ) -> str:
     """Render only manifest candidates; no free-form input or executable script."""
     if set(media) - {candidate.id for candidate in manifest.candidates}:
         raise DocumentRenderError("review mediaは候補allowlistに含まれる必要があります")
+    if not compact_image_ids.issubset(media):
+        raise DocumentRenderError("320px表示は画像候補allowlistに含まれる必要があります")
     action = endpoint or ""
     cards = "".join(
-        _candidate_card(candidate.id, candidate.label, candidate.details, media.get(candidate.id), manifest, action)
+        _candidate_card(
+            candidate.id,
+            candidate.label,
+            candidate.details,
+            media.get(candidate.id),
+            manifest,
+            action,
+            compact_image=candidate.id in compact_image_ids,
+        )
         for candidate in manifest.candidates
     )
     package = "youtube_automation.domains.documents.resources"
@@ -38,7 +49,13 @@ def render_review_html(
         CSS=css,
         FORM_ACTION=escape(csp_action, quote=True),
     )
-    validate_review_html(html, manifest=manifest, endpoint=endpoint, media=media)
+    validate_review_html(
+        html,
+        manifest=manifest,
+        endpoint=endpoint,
+        media=media,
+        compact_image_ids=compact_image_ids,
+    )
     return html
 
 
@@ -49,8 +66,10 @@ def _candidate_card(
     media_path: Path | None,
     manifest: SelectionManifest,
     action: str,
+    *,
+    compact_image: bool,
 ) -> str:
-    preview = _preview(media_path, label) if media_path is not None else ""
+    preview = _preview(media_path, label, compact_image=compact_image) if media_path is not None else ""
     comparison = ""
     if details:
         rows = "".join(f"<dt>{escape(key)}</dt><dd>{escape(value)}</dd>" for key, value in details)
@@ -69,11 +88,21 @@ def _candidate_card(
     )
 
 
-def _preview(path: Path, label: str) -> str:
+def _preview(path: Path, label: str, *, compact_image: bool) -> str:
     uri = escape(path.resolve().as_uri(), quote=True)
     suffix = path.suffix.lower()
     if suffix in {".jpg", ".jpeg", ".png", ".webp"}:
-        return f'<img src="{uri}" alt="{escape(label, quote=True)}" loading="lazy">'
+        original = f'<img src="{uri}" alt="{escape(label, quote=True)} 原寸" loading="lazy">'
+        if not compact_image:
+            return original
+        compact = (
+            f'<img class="review-320" src="{uri}" alt="{escape(label, quote=True)} 320px表示" '
+            'width="320" loading="lazy">'
+        )
+        return (
+            f'<div class="review-images"><figure><figcaption>原寸</figcaption>{original}</figure>'
+            f"<figure><figcaption>320px表示</figcaption>{compact}</figure></div>"
+        )
     if suffix in {".mp3", ".wav", ".flac", ".m4a"}:
         return f'<audio src="{uri}" controls preload="metadata"></audio>'
     if suffix in {".mp4", ".mov", ".webm"}:
@@ -123,6 +152,7 @@ def validate_review_html(
     manifest: SelectionManifest,
     endpoint: str | None,
     media: Mapping[str, Path],
+    compact_image_ids: frozenset[str] = frozenset(),
 ) -> None:
     parser = _ReviewHTMLParser()
     parser.feed(html)
@@ -141,7 +171,12 @@ def validate_review_html(
         raise DocumentRenderError("review HTMLのloopback endpointが一致しません")
     if parser.digest_values != ([manifest.artifact_digest] * len(manifest.candidates) if endpoint is not None else []):
         raise DocumentRenderError("review HTMLのartifact digestが一致しません")
-    expected_media = [path.resolve().as_uri() for candidate in manifest.candidates if (path := media.get(candidate.id))]
+    expected_media = [
+        path.resolve().as_uri()
+        for candidate in manifest.candidates
+        if (path := media.get(candidate.id))
+        for _ in range(2 if candidate.id in compact_image_ids else 1)
+    ]
     if parser.media_uris != expected_media:
         raise DocumentRenderError("review HTMLのmedia allowlistが一致しません")
     if endpoint is not None:
