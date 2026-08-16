@@ -10,8 +10,8 @@ TTP 入替候補・ニッチ仮説の横断比較と、収集済みベンチマ�
 
 | branch | 判定 | 既定成果物 |
 |---|---|---|
-| `market-comparison` | `data/benchmark_*.json`、個別 `docs/benchmarks/*.md`、`data/comments_*.json` がすべて 0 件 | 会話内の 7 セクションレポート。明示保存時だけ `docs/research/market-<YYYY-MM-DD>.md` |
-| `collected-analysis` | 上記 3 種のどれか 1 件以上が存在 | `docs/channel-research.md` と `docs/benchmarks/thumbnail-text-profile.md` |
+| `market-comparison` | `data/benchmark_*.json`、検証済み benchmark report、`data/comments_*.json` がすべて 0 件 | 会話内の 7 セクションレポート。明示保存時だけ `docs/research/market-<YYYY-MM-DD>.json` + `.html` |
+| `collected-analysis` | 上記 3 種のどれか 1 件以上が存在 | `docs/channel-research.json` + `.html` |
 
 `collected-analysis` で 3 種の一部しか存在しない場合は `market-comparison` へ fallback せず、「前提成果物ガード」に従って不足を案内し停止する。
 
@@ -20,7 +20,7 @@ TTP 入替候補・ニッチ仮説の横断比較と、収集済みベンチマ�
 ### Hard Gates
 
 - この branch は **状態を持たない読み取り専用の調査**である。`config/channel/analytics.json::benchmark.channels` を含む config schema、既存 TTP、調査入力を変更しない。TTP の自動入替は行わない。
-- 既定の成果物は会話内レポートだけ。ユーザーがこの実行について明示的に「保存して」と依頼した場合だけ `docs/research/market-<YYYY-MM-DD>.md` を生成する。依頼がなければディレクトリもファイルも作らない。
+- 既定の成果物は会話内レポートだけ。ユーザーがこの実行について明示的に「保存して」と依頼した場合だけ `docs/research/market-<YYYY-MM-DD>.json` + `.html` を共通 workflow で生成する。依頼がなければディレクトリもファイルも作らない。
 - 保存先に同日ファイルがすでに存在する場合は、上書き前に既存ファイルが置換されることを示し、「上書きする / 会話内だけにする」の明示 2 択で確認する。承認されるまで書き込まない。
 - 根拠は URL またはローカルパス、確認日、対応する主張を必ず記録する。`references/report-contract.md` の採用閾値を満たさない候補は「根拠不足」とし、TTP 入替候補や有望ニッチとして推奨しない。
 - 調査結果から `/channel-research --discover`、`/channel-research --benchmark`、config 更新を自動実行しない。次アクションとして提案するだけに留める。
@@ -31,11 +31,11 @@ TTP 入替候補・ニッチ仮説の横断比較と、収集済みベンチマ�
 2. 現在値を Web 検索または接続済みの一次情報で確認する。ユーザーが Web 検索を禁止した場合はローカル成果物だけを使い、その制約を不確実性へ記録する。根拠ごとに ID、URL またはローカルパス、確認日、観測事実、支える主張を記録し、検索結果の要約や一般知識で補完しない。
 3. 比較対象 × 評価軸を `強い` / `中立` / `弱い` / `判定不能` と根拠 ID で比較する。TTP 候補は優位点と劣位点、ニッチ仮説は対象視聴者 / 視聴シーン / 満たす欲求 / 競合との差 / 最小の検証方法を記録する。
 4. 分類、根拠数、根拠不足時の扱いは `references/report-contract.md` を適用し、7 セクションを会話内に提示する。
-5. 保存依頼がない場合はファイル未生成で終了する。明示依頼がある場合だけ同内容を `docs/research/market-<YYYY-MM-DD>.md` に保存し、既存ファイルには Hard Gates の承認を適用する。
+5. 保存依頼がない場合はファイル未生成で終了する。明示依頼がある場合だけ同内容を market report candidate に構造化し、`references/structured-report.md` の移行承認と原子的公開を適用する。
 
 ### 完了条件
 
-`references/report-contract.md` の 7 セクションを会話内に提示し、各候補を `候補` / `保留（根拠不足）` / `非推奨` のいずれかに分類し、保存依頼の有無に応じた分岐を完了する。保存ありの場合は同じ内容が `docs/research/market-<YYYY-MM-DD>.md` に存在することも確認する。
+`references/report-contract.md` の 7 セクションを会話内に提示し、各候補を `候補` / `保留（根拠不足）` / `非推奨` のいずれかに分類し、保存依頼の有無に応じた分岐を完了する。保存ありの場合は同じ根拠を持つ JSON+HTML pair が存在することも確認する。
 
 ### Cross References
 
@@ -46,15 +46,15 @@ TTP 入替候補・ニッチ仮説の横断比較と、収集済みベンチマ�
 
 ### 完了条件
 
-Step 2〜5 の分析結果を `docs/channel-research.md` に保存し、Step 4 のテキスト分析を `docs/benchmarks/thumbnail-text-profile.md` に保存し（Step 6）、Step 7 の次アクション案内を提示した時点で完了。
+Step 2〜5 の分析結果と Step 4 のテキスト分析を `docs/channel-research.json` + `.html` に統合保存し（Step 6）、Step 7 の次アクション案内を提示した時点で完了。
 
-`thumbnail-text-profile.md` には競合のチャンネル名、コレクション名、シリーズ名、ロゴ文字列、コピー原文を転写しない。必ず抽象パターンだけを記録する。
+market report の thumbnail profile fields には競合のチャンネル名、コレクション名、シリーズ名、ロゴ文字列、コピー原文を転写しない。必ず抽象パターンだけを記録する。
 
 ## Subagent 委譲ゲート
 
-メインエージェントは Step 0 の入力データ存在確認、成果物存在確認、次アクション案内だけを担当する。`data/benchmark_*.json`、`data/comments_*.json`、`docs/benchmarks/*.md`、`docs/benchmarks/thumbnails/` の読み込みと Step 2〜6 の分析・レポート生成は channel-research subagent へ委譲する。
+メインエージェントは Step 0 の入力データ存在確認、成果物 pair 確認、次アクション案内だけを担当する。`data/benchmark_*.json`、`data/comments_*.json`、検証済み benchmark report、`docs/benchmarks/thumbnails/` の読み込みと Step 2〜6 の分析・レポート生成は channel-research subagent へ委譲する。
 
-メインエージェントは競合データやコメント生データ、ベンチマーク Markdown 全文、サムネイル画像を直接 Read しない。subagent は `docs/channel-research.md` と `docs/benchmarks/thumbnail-text-profile.md` を生成し、完了報告では成果物パス、分析した入力パス、主要な TTP パターンと推奨事項の要約だけを返す。生データ本文やコメント本文の大量引用をメイン会話へ返さない。
+メインエージェントは競合データやコメント生データ、benchmark report 全文、サムネイル画像を直接 Read しない。subagent は `docs/channel-research.json` + `.html` を生成し、完了報告では成果物パス、分析した入力パス、主要な TTP パターンと推奨事項の要約だけを返す。生データ本文やコメント本文の大量引用をメイン会話へ返さない。
 
 ## 前提成果物ガード
 
@@ -63,7 +63,7 @@ Step 2〜5 の分析結果を `docs/channel-research.md` に保存し、Step 4 �
 ### 停止する fail
 
 - `data/benchmark_*.json` が無い → 前工程 `/channel-research --benchmark` を案内して停止する
-- `docs/benchmarks/*.md` から `thumbnail-text-profile.md` を除外した個別レポートが 0 件 → 前工程 `/channel-research --benchmark` を案内して停止する
+- `docs/benchmarks/benchmark-report.json` + `.html` を検証できない → 前工程 `/channel-research --benchmark` を案内して停止する
 - `data/comments_*.json` が無い → 前工程 `/channel-research --voice` を案内して停止する
 
 ### 許容する fail
@@ -87,7 +87,7 @@ Step 2〜5 の分析結果を `docs/channel-research.md` に保存し、Step 4 �
 2. **抽象化する**: 各具体が「癒されたい」「眠りたい」「集中したい」「不安を軽減したい」など、どの欲求をなぜ刺激するかを言語化する
 3. **新しい具体へ翻訳する**: 抽出した欲求を、自チャンネルのタイトル・サムネイル・楽曲 / 音楽性へ別の表面表現で具体化する
 
-1 件の勝ちパターンにつき **具体 ⇄ 抽象の往復を最低 3 回** 行う。1 回を「具体観察 → 欲求への抽象化 → 自チャンネルへの具体化 → 同じ欲求を満たすかの再抽象化」と数え、各回で表面表現を変える。3 回とも同じ欲求を説明できなければ、その抽象化は再現可能な勝ちパターンとして採用しない。`docs/channel-research.md` には各回の「観察した具体 / 抽出した欲求 / 自チャンネルへの翻訳案 / 再抽象化による検証」を記録する。
+1 件の勝ちパターンにつき **具体 ⇄ 抽象の往復を最低 3 回** 行う。1 回を「具体観察 → 欲求への抽象化 → 自チャンネルへの具体化 → 同じ欲求を満たすかの再抽象化」と数え、各回で表面表現を変える。3 回とも同じ欲求を説明できなければ、その抽象化は再現可能な勝ちパターンとして採用しない。market report には各回を evidence と application candidate で対応付ける。
 
 ### 欲求語彙のソース
 
@@ -105,18 +105,17 @@ Step 2〜5 の分析結果を `docs/channel-research.md` に保存し、Step 4 �
 ```bash
 benchmark_json=$(find data -maxdepth 1 -type f -name 'benchmark_*.json' -print -quit 2>/dev/null)
 comments_json=$(find data -maxdepth 1 -type f -name 'comments_*.json' -print -quit 2>/dev/null)
-benchmark_report=$(find docs/benchmarks -maxdepth 1 -type f -name '*.md' ! -name 'thumbnail-text-profile.md' -print -quit 2>/dev/null)
-test -n "$benchmark_json" &&
-  test -n "$comments_json" &&
-  test -n "$benchmark_report"
+benchmark_report=docs/benchmarks/benchmark-report.json
+test -n "$benchmark_json" && test -f "$benchmark_report" && test -f "${benchmark_report%.json}.html" &&
+  test -n "$comments_json"
 ```
 
-`benchmark_json`、`comments_json`、`benchmark_report` がすべて空でないことを確認する。`thumbnail-text-profile.md` は前回の collected-analysis 成果物であり、個別レポートの存在判定には数えない。
+`benchmark_json`、`comments_json` が空でなく、benchmark report の JSON+HTML pair を共通 reader で検証できることを確認する。
 
 欠けているデータ種別ごとに以下を案内して停止する:
 
 - `data/benchmark_*.json` が無い → 先に `/channel-research --benchmark` を実行するよう案内
-- `thumbnail-text-profile.md` を除く `docs/benchmarks/*.md` が無い → 先に `/channel-research --benchmark` を実行するよう案内
+- benchmark report pair を検証できない → 先に `/channel-research --benchmark` を実行するよう案内
 - `data/comments_*.json` が無い → 先に `/channel-research --voice` を実行するよう案内
 
 全種別が揃っている場合のみ Step 1 へ進む。
@@ -127,16 +126,16 @@ test -n "$benchmark_json" &&
 
 1. `data/` 内の更新時刻が最新の `benchmark_*.json`（`ls -t data/benchmark_*.json | head -1` で取得できるもの）
 2. `data/` 内の更新時刻が最新の `comments_*.json`（`ls -t data/comments_*.json | head -1` で取得できるもの）
-3. 次のコマンドが列挙する `docs/benchmarks/` 内の `.md` ファイル。前回成果物の `thumbnail-text-profile.md` は除外し、出力が 0 件なら `/channel-research --benchmark` を案内して停止する
+3. `docs/benchmarks/benchmark-report.json` を共通 reader で検証し、返された JSON だけを読む。pair が無い・不一致なら `/channel-research --benchmark` を案内して停止する
 
    ```bash
-   find docs/benchmarks -maxdepth 1 -type f -name '*.md' ! -name 'thumbnail-text-profile.md' -print | sort
+   # read_published_json_document(..., RepositorySchema.CHANNEL_RESEARCH_REPORT)
    ```
 
 4. 存在する場合は `docs/benchmarks/thumbnails/`
-5. 存在する場合は欲求語彙の優先ソース `docs/plans/viewer-voice-analysis.md` と `docs/channel/personas/persona-definition.md`
+5. 存在する場合は欲求語彙の優先ソースである検証済み `docs/plans/viewer-voice-analysis.json` と `docs/channel/personas/persona-definition.md`
 
-subagent への完了条件は `docs/channel-research.md` と `docs/benchmarks/thumbnail-text-profile.md` の生成に絞る。完了報告形式は `status: success | failure`、`inputs`、`artifacts`、`summary`、`errors` とする。
+subagent への完了条件は `docs/channel-research.json` + `.html` の生成に絞る。完了報告形式は `status: success | failure`、`inputs`、`artifacts`、`summary`、`errors` とする。
 
 ### Step 2: 競合マトリクス作成
 
@@ -188,9 +187,9 @@ subagent が `docs/benchmarks/thumbnails/` のサムネイル画像を Read（Co
 - **刺激している欲求**: 視覚特徴がどの欲求を刺激しているかと、その判断根拠
 - **差別化の余地**: 競合がやっていないスタイル
 
-サムネイル画像がない場合は subagent が Step 1 と同じ `find` コマンドで列挙した個別レポート内の `## サムネイル分析` または `## サムネイル分析（Gemini API）` セクションを参照する。`thumbnail-text-profile.md` は fallback 入力にも含めない。
+サムネイル画像がない場合は subagent が検証済み benchmark report の thumbnail evidence を参照する。HTML や旧 Markdown を fallback 入力にしない。
 
-Step 4 のテキスト分析は、以下のスキーマで `docs/benchmarks/thumbnail-text-profile.md` に保存する。見出し名と必須キーは変更・省略しない。値を判定できないキーは省略せず `unknown` とする。
+Step 4 のテキスト分析は、以下の fields を market report の `thumbnail_text_profile` に保存する。必須キーは変更・省略せず、値を判定できないキーは `unknown` とする。
 
 ```markdown
 # Thumbnail Text Profile
@@ -230,7 +229,7 @@ generated_at: YYYY-MM-DD
 
 ### Step 6: 成果物生成
 
-subagent は全分析結果を `docs/channel-research.md` に保存:
+subagent は全分析結果を `report_type=market` の candidate JSON に構造化し、`docs/channel-research.json` + `.html` へ共通 workflow で保存する:
 
 ```markdown
 # チャンネルリサーチレポート
@@ -263,11 +262,11 @@ subagent は全分析結果を `docs/channel-research.md` に保存:
 - リスクと機会
 ```
 
-加えて、Step 4 のテキスト分析を Step 4 のスキーマどおり `docs/benchmarks/thumbnail-text-profile.md` に保存する。保存後に必須見出し 3 件とすべての必須キーがあること、固有文字列を転写していないことを確認する。
+加えて、Step 4 のテキスト分析を Step 4 の fields どおり同じ market report に保存する。公開前にすべての必須キーがあり、固有文字列を転写していないことを確認する。
 
 ### Step 7: 次アクション案内
 
-メインエージェントは `docs/channel-research.md` と `docs/benchmarks/thumbnail-text-profile.md` の存在を確認し、subagent の要約をもとに次を案内する:
+メインエージェントは `docs/channel-research.json` + `.html` の対応を検証し、subagent の要約をもとに次を案内する:
 
 「分析レポートが完成しました。方向性を見直す場合は `/channel-strategy --direction`（方向性検討モード）、現在の方針で制作に進む場合は `/wf-new` に進めます。」
 

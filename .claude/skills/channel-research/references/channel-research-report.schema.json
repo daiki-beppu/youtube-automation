@@ -1,0 +1,120 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "channel-research-report.schema.json",
+  "title": "チャンネル調査レポート",
+  "description": "ベンチマーク・市場・視聴者の声・サムネイル調査の唯一の正本。HTML はこの JSON から生成する。",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "generated_at",
+    "report_type",
+    "summary",
+    "source_provenance",
+    "competitor_comparison",
+    "winning_patterns",
+    "evidence",
+    "application_candidates"
+  ],
+  "properties": {
+    "schema_version": {"title": "Schema version", "const": 1, "x-view": {"order": 0}},
+    "generated_at": {
+      "title": "Generated at",
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",
+      "x-view": {"order": 1}
+    },
+    "report_type": {
+      "title": "調査種別",
+      "enum": ["benchmark", "market", "viewer_voice", "thumbnail"],
+      "x-view": {"order": 2}
+    },
+    "collection_id": {"title": "Collection", "type": ["string", "null"], "x-view": {"order": 3}},
+    "summary": {"title": "サマリ", "type": "string", "minLength": 1, "x-view": {"order": 10}},
+    "source_provenance": {
+      "title": "入力と出典",
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/definitions/source"},
+      "x-view": {"order": 20, "presentation": "table"}
+    },
+    "competitor_comparison": {
+      "title": "競合比較",
+      "type": "array",
+      "items": {"$ref": "#/definitions/comparison"},
+      "x-view": {"order": 30, "presentation": "table"}
+    },
+    "winning_patterns": {
+      "title": "勝ちパターン",
+      "type": "array",
+      "items": {"$ref": "#/definitions/finding"},
+      "x-view": {"order": 40, "presentation": "table"}
+    },
+    "evidence": {
+      "title": "根拠",
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/definitions/evidence"},
+      "x-view": {"order": 50, "presentation": "table"}
+    },
+    "application_candidates": {
+      "title": "自チャンネルへの適用候補",
+      "type": "array",
+      "items": {"$ref": "#/definitions/finding"},
+      "x-view": {"order": 60, "presentation": "table"}
+    }
+  },
+  "additionalProperties": true,
+  "definitions": {
+    "source": {
+      "type": "object",
+      "required": ["path", "collected_at", "claim"],
+      "properties": {
+        "path": {"title": "Path", "type": "string", "minLength": 1},
+        "collected_at": {"title": "確認日時", "type": "string", "minLength": 1},
+        "claim": {"title": "対応する主張", "type": "string", "minLength": 1}
+      },
+      "additionalProperties": true
+    },
+    "comparison": {
+      "type": "object",
+      "required": ["subject", "metric", "value", "evidence_ids"],
+      "properties": {
+        "subject": {"title": "比較対象", "type": "string", "minLength": 1},
+        "metric": {"title": "指標", "type": "string", "minLength": 1},
+        "value": {"title": "値", "type": ["string", "number", "integer", "boolean", "null"]},
+        "evidence_ids": {
+          "title": "根拠 ID",
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1}
+        }
+      },
+      "additionalProperties": true
+    },
+    "finding": {
+      "type": "object",
+      "required": ["statement", "evidence_ids", "confidence"],
+      "properties": {
+        "statement": {"title": "主張", "type": "string", "minLength": 1},
+        "evidence_ids": {
+          "title": "根拠 ID",
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "confidence": {"title": "確度", "enum": ["high", "medium", "low"]}
+      },
+      "additionalProperties": true
+    },
+    "evidence": {
+      "type": "object",
+      "required": ["id", "source_path", "observation"],
+      "properties": {
+        "id": {"title": "ID", "type": "string", "minLength": 1},
+        "source_path": {"title": "Source", "type": "string", "minLength": 1},
+        "observation": {"title": "観察事実", "type": "string", "minLength": 1}
+      },
+      "additionalProperties": true
+    }
+  }
+}

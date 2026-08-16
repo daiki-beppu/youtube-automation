@@ -37,6 +37,7 @@ from youtube_automation.domains.analytics.benchmark import (
     is_short_benchmark_duration,
     is_short_benchmark_video,
 )
+from youtube_automation.domains.documents.schema_registry import RepositorySchema
 from youtube_automation.infrastructure.analytics.benchmark_analyzer import (
     compute_daily_views,
     compute_engagement_rate,
@@ -46,6 +47,7 @@ from youtube_automation.infrastructure.analytics.benchmark_analyzer import (
 )
 from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
 from youtube_automation.infrastructure.cost_tracker import log_quota
+from youtube_automation.infrastructure.documents.publishing import read_published_json_document
 from youtube_automation.infrastructure.filesystem import write_text_files_transactionally
 from youtube_automation.infrastructure.google.youtube import YouTubeClients
 from youtube_automation.infrastructure.observability.profile import section
@@ -173,15 +175,22 @@ class BenchmarkCollector:
         """
         freshness_days = self.benchmark_config.get("freshness_days", 3)
         stale_channels = []
+        report_path = self.benchmarks_dir / "benchmark-report.json"
+        report_exists = report_path.exists() and report_path.with_suffix(".html").exists()
+        if report_exists:
+            report = read_published_json_document(report_path, RepositorySchema.CHANNEL_RESEARCH_REPORT)
+            if not isinstance(report, dict) or report.get("report_type") != "benchmark":
+                raise ConfigError(f"{report_path}: report_type は benchmark である必要があります")
 
         for ch in self.config.analytics.benchmark.channels:
-            md_path = self.benchmarks_dir / f"{ch['slug']}.md"
-            if not md_path.exists():
+            if not report_exists:
                 logger.info("ファイル未作成: %s → 初回収集対象", ch["slug"])
                 stale_channels.append(ch)
                 continue
 
-            mtime = datetime.fromtimestamp(md_path.stat().st_mtime).date()
+            mtime = datetime.fromtimestamp(
+                min(report_path.stat().st_mtime, report_path.with_suffix(".html").stat().st_mtime)
+            ).date()
             age = (self.today - mtime).days
             if age >= freshness_days:
                 logger.info("%s: %d日前に更新 → 更新対象", ch["slug"], age)

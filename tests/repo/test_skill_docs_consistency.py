@@ -434,7 +434,7 @@ def test_setup_channel_prelaunch_persona_chain_propagates_context_without_analyt
     assert "実行コンテキスト: 新規開設（公開前）" in step7
     assert ("`/channel-strategy --persona` から同じ実行コンテキストを引き継いで `/channel-strategy --scene`") in step7
     for path in (
-        "docs/plans/viewer-voice-analysis.md",
+        "docs/plans/viewer-voice-analysis.json",
         "docs/channel/ttp-seed-confirmation.md",
         "docs/channel/competitor-branding-snapshot.json",
     ):
@@ -447,7 +447,7 @@ def test_setup_channel_prelaunch_persona_chain_propagates_context_without_analyt
     assert "公開後" in entry_contract
     assert "任意の `/channel-research --benchmark` 成果物" in entry_contract
     for path in (
-        "docs/plans/viewer-voice-analysis.md",
+        "docs/plans/viewer-voice-analysis.json",
         "docs/channel/ttp-seed-confirmation.md",
         "docs/channel/competitor-branding-snapshot.json",
     ):
@@ -485,7 +485,7 @@ def test_setup_channel_prelaunch_persona_chain_propagates_context_without_analyt
         "",
     )
     for path in (
-        "docs/plans/viewer-voice-analysis.md",
+        "docs/plans/viewer-voice-analysis.json",
         "docs/channel/ttp-seed-confirmation.md",
         "docs/channel/competitor-branding-snapshot.json",
     ):
@@ -889,14 +889,17 @@ def test_channel_strategy_followup_skill_routing_uses_new_contract() -> None:
     assert "`collected-analysis`" in research
     assert "data/benchmark_*.json" in research
     assert "data/comments_*.json" in research
-    assert "docs/channel-research.md" in research
+    assert "docs/channel-research.json" in research
     assert "/channel-research --voice` → 前提" in research
 
     assert "チャンネル立ち上げ・方向性見直し時に必ず使用" not in viewer_voice
     assert "`/setup --channel` の新規開設モードでは Step 7 の必須前工程として実行する" in viewer_voice
     assert "公開後の再分析では" in viewer_voice
     assert "任意後続スキル" not in viewer_voice
-    assert "`docs/plans/viewer-voice-analysis.md` は後続 `/channel-strategy --persona` の必須入力" in viewer_voice
+    assert (
+        "`docs/plans/viewer-voice-analysis.json` + `.html` は後続 `/channel-strategy --persona` の必須入力"
+        in viewer_voice
+    )
 
     for path_text in (setup, channel_strategy, channel_regeneration_mode, channel_direction_mode, onboarding):
         assert "TTP benchmark" not in path_text

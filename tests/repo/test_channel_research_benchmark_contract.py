@@ -49,27 +49,40 @@ def test_chain_manifest_has_four_steps_and_complete_schema() -> None:
         "idempotency",
     }
     assert step["skill"] == "channel-research"
-    assert step["outputArtifacts"] == ["data/benchmark_*.json", "docs/benchmarks/*.md"]
+    assert step["outputArtifacts"] == [
+        "data/benchmark_*.json",
+        "docs/benchmarks/benchmark-report.json",
+        "docs/benchmarks/benchmark-report.html",
+    ]
     assert step["approvalGate"]["skip"] is True
     assert step["idempotency"]["script"] == "references/channel-research-chain-state.py"
     discover = manifest["steps"][1]
     assert discover["skill"] == "channel-research"
-    assert discover["prerequisiteArtifacts"] == ["docs/benchmarks/*.md"]
+    assert discover["prerequisiteArtifacts"] == [
+        "docs/benchmarks/benchmark-report.json",
+        "docs/benchmarks/benchmark-report.html",
+    ]
     assert discover["outputArtifacts"] == ["research/*-discovery.md", "research/*-discovery.csv"]
     voice = manifest["steps"][2]
     assert voice["prerequisiteArtifacts"] == [
         "data/benchmark_*.json",
-        "docs/benchmarks/*.md",
+        "docs/benchmarks/benchmark-report.json",
+        "docs/benchmarks/benchmark-report.html",
         "research/*-discovery.md",
         "research/*-discovery.csv",
     ]
-    assert voice["outputArtifacts"] == ["data/comments_*.json", "docs/plans/viewer-voice-analysis.md"]
+    assert voice["outputArtifacts"] == [
+        "data/comments_*.json",
+        "docs/plans/viewer-voice-analysis.json",
+        "docs/plans/viewer-voice-analysis.html",
+    ]
     market = manifest["steps"][3]
     assert market["prerequisiteArtifacts"] == []
     assert market["outputArtifacts"] == [
-        "docs/research/market-*.md",
-        "docs/channel-research.md",
-        "docs/benchmarks/thumbnail-text-profile.md",
+        "docs/research/market-*.json",
+        "docs/research/market-*.html",
+        "docs/channel-research.json",
+        "docs/channel-research.html",
     ]
 
 

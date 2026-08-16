@@ -32,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `refactor(uploads)`: `PreflightMixin` の MRO hook を、認証チャンネル照合後に明示注入した preflight checker を呼ぶ合成へ置換し、既存の判定・エラー契約を維持する（#3933）。
 - `refactor(uploads)`: `DedupSearchMixin` を YouTube service を明示注入する重複検索 helper へ置換し、完全一致・ghost 除外・quota 記録・fail-open 契約を維持する（#3932）。
 - `refactor(uploads)`: `PlaylistAssignmentMixin` を YouTube clients を明示注入する playlist 割り当てコラボレータへ置換し、割り当て失敗を状態確定前に伝播する契約を維持する（#3931）。
+- `feat(documents)`: benchmark / market / viewer voice / thumbnail 調査レポートを provenance 付き JSON 正本と比較向け HTML へ統合し、共通 Markdown 移行 gate、pair fail-closed、下流 skill の validated JSON-only 読み取りを適用する（#4026）。
 - `feat(documents)`: analytics / audit の運用レポートを schema 検証済み JSON 正本と同 basename HTML へ移行し、既存 Markdown の明示承認 gate、stale pair 拒否、企画側の JSON-only input を統一する（#4025）。
 - `feat(doctor)`: registry の check ID を `--check <id>` で複数選択し、宣言順・対象集合内 summary を保って部分診断できるようにし、automation update の channel config 確認を単一 check 実行へ切り替える（#3922）。
 - `refactor(uploads)`: `PublishedDatesMixin` を設定と YouTube service provider を明示注入する公開日計算コラボレータへ置換し、cadence・週次マップと uploader の公開 interface を維持する（#3930）。

@@ -12,8 +12,8 @@ description: "Use when チャンネル調査を状態判定付きで一括実行
 
 ## 成果物
 
-- `書き込む`: `docs/benchmarks/<channel>.md`, `docs/benchmarks/thumbnails/<channel>_<video-id>.jpg`, `data/benchmark_<YYYYMMDD>.json`, `research/<niche>-discovery.md`, `research/<niche>-discovery.csv`, `.cache/youtube-automation/discover-competitors-search.json`, `docs/research/market-<YYYY-MM-DD>.md`, `docs/channel-research.md`, `docs/benchmarks/thumbnail-text-profile.md`, `data/comments_<YYYYMMDD>.json`, `docs/plans/viewer-voice-analysis.md`, `docs/benchmarks/thumbnail-analysis.md`, `data/thumbnail_compare/benchmark/*_<video-id>.jpg`
-- `読み込む`: `config/channel/analytics.json`, `config/channel/content.json`, `config/skills/benchmark.yaml`, `config/skills/discover-competitors.yaml`, `data/benchmark_*.json`, `data/comments_*.json`, `docs/benchmarks/*.md`, `data/video_analysis/<channel>/<video-id>.json`
+- `書き込む`: `docs/benchmarks/benchmark-report.json`, `docs/benchmarks/benchmark-report.html`, `docs/benchmarks/thumbnails/<channel>_<video-id>.jpg`, `data/benchmark_<YYYYMMDD>.json`, `research/<niche>-discovery.md`, `research/<niche>-discovery.csv`, `.cache/youtube-automation/discover-competitors-search.json`, `docs/research/market-<YYYY-MM-DD>.json`, `docs/research/market-<YYYY-MM-DD>.html`, `docs/channel-research.json`, `docs/channel-research.html`, `data/comments_<YYYYMMDD>.json`, `docs/plans/viewer-voice-analysis.json`, `docs/plans/viewer-voice-analysis.html`, `docs/benchmarks/thumbnail-analysis.json`, `docs/benchmarks/thumbnail-analysis.html`, `data/thumbnail_compare/benchmark/*_<video-id>.jpg`
+- `読み込む`: `config/channel/analytics.json`, `config/channel/content.json`, `config/skills/benchmark.yaml`, `config/skills/discover-competitors.yaml`, `data/benchmark_*.json`, `data/comments_*.json`, 検証済み channel-research report JSON, `data/video_analysis/<channel>/<video-id>.json`
 
 ## モード判定
 
@@ -33,6 +33,8 @@ description: "Use when チャンネル調査を状態判定付きで一括実行
 | `--thumbnail` | `references/thumbnail.md` |
 
 ## 共通前提
+
+分析レポートの保存・移行・読み取りは `references/structured-report.md` を正本とする。AI と下流 skill は JSON+HTML pair を検証し、JSON だけを入力に使う。
 
 `config/channel/` が存在し、`load_config()` でロード可能であること。満たさない場合は、新規チャンネルなら `/setup --channel`（`.claude/skills/setup/references/ttp-seed-and-duration.md`）、既存チャンネルなら `/setup --import` を案内して停止する。
 

@@ -341,6 +341,32 @@ MUTABLE_FILES = frozenset(
     "wf-new/references/record-ttp-reference-assignments.py",
     "wf-new/references/select-ttp-references.py",
     "wf-new/references/selection-handoff.md",
+    "channel-research/SKILL.md",
+    "channel-research/references/benchmark.md",
+    "channel-research/references/channel-research-chain-manifest.json",
+    "channel-research/references/channel-research-chain-state.py",
+    "channel-research/references/channel-research-report.schema.json",
+    "channel-research/references/market.md",
+    "channel-research/references/market_research_contract.py",
+    "channel-research/references/report-contract.md",
+    "channel-research/references/structured-report.md",
+    "channel-research/references/thumbnail.md",
+    "channel-research/references/voice.md",
+    "channel-strategy/SKILL.md",
+    "channel-strategy/references/channel-strategy-chain-manifest.json",
+    "channel-strategy/references/channel-strategy-chain-state.py",
+    "channel-strategy/references/direction.md",
+    "channel-strategy/references/persona.md",
+    "channel-strategy/references/persona_flow.py",
+    "channel-strategy/references/scene.md",
+    "setup/references/channel-mode.md",
+    "setup/references/setup-chain-manifest.json",
+    "setup/references/setup-chain-state.py",
+    "thumbnail/SKILL.md",
+    "video/SKILL.md",
+    "video/references/describe.md",
+    "wf-new/references/freshness-rules.md",
+    "wf-new/references/ideate.md",
 }
 EXPECTED_ISSUE_3986_CHANGED_PATHS = frozenset(
     {
@@ -363,7 +389,7 @@ EXPECTED_ISSUE_3986_CHANGED_PATHS = frozenset(
         "tests/repo/test_workflow_upload_setup_redirect_contract.py",
     }
 )
-IMMUTABLE_TARGET_FILES_SHA256 = "bce9c882a04617e438e60f1785f49c2b1f2a71c5f313f0ed8f7dacbe36cfa160"
+IMMUTABLE_TARGET_FILES_SHA256 = "2346a57d57872634a407b56c429c2f83ec2ffd6e93f06d40c0d42ff317285b4e"
 AUTOMATION_SCHEDULE_REGENERATE_SHA256 = "11d460f727fe50c41f00571b416a1486cb07d0b1548524bc650a7161c16f6c42"
 AUTOMATION_UPDATE_PUSH_SHA256 = "ced3211760d9ff0abd20ec3cdc402501b424f48581ef3a618d51c0d9ee12840c"
 ALLOWED_FENCED_ROUTES = {

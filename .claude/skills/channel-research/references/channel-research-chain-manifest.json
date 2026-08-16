@@ -5,7 +5,11 @@
       "id": "benchmark",
       "skill": "channel-research",
       "prerequisiteArtifacts": ["config/channel/analytics.json"],
-      "outputArtifacts": ["data/benchmark_*.json", "docs/benchmarks/*.md"],
+      "outputArtifacts": [
+        "data/benchmark_*.json",
+        "docs/benchmarks/benchmark-report.json",
+        "docs/benchmarks/benchmark-report.html"
+      ],
       "approvalGate": {
         "skip": true,
         "configPath": "workflow.channel-research.skip_approvals.benchmark"
@@ -17,7 +21,10 @@
     {
       "id": "discover",
       "skill": "channel-research",
-      "prerequisiteArtifacts": ["docs/benchmarks/*.md"],
+      "prerequisiteArtifacts": [
+        "docs/benchmarks/benchmark-report.json",
+        "docs/benchmarks/benchmark-report.html"
+      ],
       "outputArtifacts": ["research/*-discovery.md", "research/*-discovery.csv"],
       "approvalGate": {
         "skip": true,
@@ -32,11 +39,16 @@
       "skill": "channel-research",
       "prerequisiteArtifacts": [
         "data/benchmark_*.json",
-        "docs/benchmarks/*.md",
+        "docs/benchmarks/benchmark-report.json",
+        "docs/benchmarks/benchmark-report.html",
         "research/*-discovery.md",
         "research/*-discovery.csv"
       ],
-      "outputArtifacts": ["data/comments_*.json", "docs/plans/viewer-voice-analysis.md"],
+      "outputArtifacts": [
+        "data/comments_*.json",
+        "docs/plans/viewer-voice-analysis.json",
+        "docs/plans/viewer-voice-analysis.html"
+      ],
       "approvalGate": {
         "skip": true,
         "configPath": "workflow.channel-research.skip_approvals.voice"
@@ -50,9 +62,10 @@
       "skill": "channel-research",
       "prerequisiteArtifacts": [],
       "outputArtifacts": [
-        "docs/research/market-*.md",
-        "docs/channel-research.md",
-        "docs/benchmarks/thumbnail-text-profile.md"
+        "docs/research/market-*.json",
+        "docs/research/market-*.html",
+        "docs/channel-research.json",
+        "docs/channel-research.html"
       ],
       "approvalGate": {
         "skip": true,

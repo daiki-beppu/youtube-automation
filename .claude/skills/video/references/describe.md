@@ -64,7 +64,7 @@ $ARGUMENTS
 
 #### Step 1: ベンチマーク概要欄を読み込む
 
-1. `docs/benchmarks/*.md` の `概要欄TTPサンプル` セクションを最優先で参照する（再生数 top 3 のサンプルを重点的に）
+1. `read_published_json_document(..., RepositorySchema.CHANNEL_RESEARCH_REPORT)` で検証した `docs/benchmarks/benchmark-report.json` の概要欄 evidence を最優先で参照する（再生数 top 3 のサンプルを重点的に）。HTML や旧 Markdown は入力にしない
 2. Markdown にサンプルがない場合は、最新の `data/benchmark_*.json` の `channels[].videos[].description` を参照する
 3. **両方とも存在しない場合のみ**、下記 Complete Collection テンプレートへフォールバックする
 

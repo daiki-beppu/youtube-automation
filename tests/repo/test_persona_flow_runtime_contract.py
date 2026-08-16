@@ -9,6 +9,8 @@ from pathlib import Path
 import pytest
 
 from tests.helpers.paths import REPO_ROOT
+from youtube_automation.domains.documents.schema_registry import RepositorySchema
+from youtube_automation.infrastructure.documents.publishing import publish_json_document
 
 ROOT = REPO_ROOT
 SCRIPT = ROOT / ".claude" / "skills" / "channel-strategy" / "references" / "persona_flow.py"
@@ -36,6 +38,28 @@ def _fields() -> dict[str, list[str]]:
     return {field: [f"{field.replace('_', ' ')}（出典: viewer-voice-analysis.md）"] for field in flow.PERSONA_FIELDS}
 
 
+def _viewer_voice(root: Path) -> None:
+    path = root / "docs/plans/viewer-voice-analysis.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "generated_at": "2026-08-16T00:00:00Z",
+                "report_type": "viewer_voice",
+                "summary": "voice",
+                "source_provenance": [{"path": "data/comments.json", "collected_at": "2026-08-16", "claim": "voice"}],
+                "competitor_comparison": [],
+                "winning_patterns": [],
+                "evidence": [{"id": "ev-1", "source_path": "data/comments.json", "observation": "fact"}],
+                "application_candidates": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    publish_json_document(path, RepositorySchema.CHANNEL_RESEARCH_REPORT)
+
+
 def test_flow_blocks_until_viewer_voice_exists(tmp_path: Path) -> None:
     assert flow.flow_status(tmp_path) == {
         "status": "blocked",
@@ -45,7 +69,7 @@ def test_flow_blocks_until_viewer_voice_exists(tmp_path: Path) -> None:
 
 
 def test_flow_advances_to_one_draft_then_viewing_scene_then_finalization(tmp_path: Path) -> None:
-    _touch(tmp_path, "docs/plans/viewer-voice-analysis.md")
+    _viewer_voice(tmp_path)
     assert flow.flow_status(tmp_path)["next"] == "draft-persona"
     _touch(tmp_path, "docs/channel/personas/persona-definition.md")
     assert flow.flow_status(tmp_path)["next"] == "channel-strategy --scene"
@@ -58,7 +82,7 @@ def test_flow_advances_to_one_draft_then_viewing_scene_then_finalization(tmp_pat
 
 
 def test_explicit_viewing_scene_skip_is_distinct_and_observable(tmp_path: Path) -> None:
-    _touch(tmp_path, "docs/plans/viewer-voice-analysis.md")
+    _viewer_voice(tmp_path)
     _touch(tmp_path, "docs/channel/personas/persona-definition.md")
     assert flow.flow_status(tmp_path, allow_viewing_scene_skip=True)["reason"] == "viewing_scene_skipped"
 
@@ -125,10 +149,10 @@ def test_canonical_routes_dispatch_and_legacy_aliases_fail_closed() -> None:
 
 
 def test_flop_analysis_consumes_only_existing_read_only_artifacts(tmp_path: Path) -> None:
-    _touch(tmp_path, "docs/plans/viewer-voice-analysis.md")
+    _viewer_voice(tmp_path)
     _touch(tmp_path, "docs/channel/personas/persona-definition.md")
     assert flow.flop_analysis_inputs(tmp_path) == [
-        "docs/plans/viewer-voice-analysis.md",
+        "docs/plans/viewer-voice-analysis.json",
         "docs/channel/personas/persona-definition.md",
     ]
 

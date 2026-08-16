@@ -9,6 +9,10 @@ import re
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
+from youtube_automation.core.errors import DocumentRenderError
+from youtube_automation.domains.documents.schema_registry import RepositorySchema
+from youtube_automation.infrastructure.documents.publishing import read_published_json_document
+
 PERSONA_FIELDS = (
     "vocabulary",
     "emotional_triggers",
@@ -29,11 +33,14 @@ class PersonaContractError(ValueError):
 
 
 def flow_status(channel_dir: Path, *, allow_viewing_scene_skip: bool = False) -> dict[str, str]:
-    viewer_voice = channel_dir / "docs" / "plans" / "viewer-voice-analysis.md"
+    viewer_voice = channel_dir / "docs" / "plans" / "viewer-voice-analysis.json"
     persona = channel_dir / "docs" / "channel" / "personas" / "persona-definition.md"
     viewing_scene = channel_dir / "docs" / "plans" / "viewing-scene-matrix.md"
     if not viewer_voice.is_file():
         return {"status": "blocked", "next": "channel-research --voice", "reason": "viewer_voice_missing"}
+    document = read_published_json_document(viewer_voice, RepositorySchema.CHANNEL_RESEARCH_REPORT)
+    if not isinstance(document, dict) or document.get("report_type") != "viewer_voice":
+        raise PersonaContractError("viewer voice report_type must be viewer_voice")
     if not persona.is_file():
         return {"status": "ready", "next": "draft-persona", "reason": "viewer_voice_ready"}
     if not viewing_scene.is_file() and not allow_viewing_scene_skip:
@@ -89,11 +96,21 @@ def route_skill(intent: str) -> str:
 def flop_analysis_inputs(channel_dir: Path) -> list[str]:
     """Return read-only persona-chain evidence; never launch child skills."""
     relative_paths = (
-        "docs/plans/viewer-voice-analysis.md",
+        "docs/plans/viewer-voice-analysis.json",
         "docs/channel/personas/persona-definition.md",
         "docs/plans/viewing-scene-matrix.md",
     )
-    return [relative for relative in relative_paths if (channel_dir / relative).is_file()]
+    inputs: list[str] = []
+    for relative in relative_paths:
+        path = channel_dir / relative
+        if not path.is_file():
+            continue
+        if relative.endswith("viewer-voice-analysis.json"):
+            document = read_published_json_document(path, RepositorySchema.CHANNEL_RESEARCH_REPORT)
+            if not isinstance(document, dict) or document.get("report_type") != "viewer_voice":
+                raise PersonaContractError("viewer voice report_type must be viewer_voice")
+        inputs.append(relative)
+    return inputs
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -130,7 +147,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             result = sanitize_persona_fields(json.loads(args.input.read_text(encoding="utf-8")))
         else:
             result = {"inputs": flop_analysis_inputs(args.channel_dir)}
-    except (OSError, json.JSONDecodeError, PersonaContractError) as exc:
+    except (DocumentRenderError, OSError, json.JSONDecodeError, PersonaContractError) as exc:
         print(json.dumps({"status": "error", "error": str(exc)}, ensure_ascii=False))
         return 1
     print(json.dumps(result, ensure_ascii=False))

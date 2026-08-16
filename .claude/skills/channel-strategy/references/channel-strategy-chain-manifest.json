@@ -4,7 +4,10 @@
     {
       "id": "persona",
       "skill": "channel-strategy",
-      "prerequisiteArtifacts": ["docs/plans/viewer-voice-analysis.md"],
+      "prerequisiteArtifacts": [
+        "docs/plans/viewer-voice-analysis.json",
+        "docs/plans/viewer-voice-analysis.html"
+      ],
       "outputArtifacts": ["docs/channel/personas/persona-definition.md"],
       "idempotency": {
         "script": "references/channel-strategy-chain-state.py"

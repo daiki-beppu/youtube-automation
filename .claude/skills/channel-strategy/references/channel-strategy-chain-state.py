@@ -8,12 +8,15 @@ import json
 from collections.abc import Sequence
 from pathlib import Path
 
+from youtube_automation.domains.documents.schema_registry import RepositorySchema
+from youtube_automation.infrastructure.documents.publishing import read_published_json_document
+
 EXIT_SKIP = 0
 EXIT_ERROR = 1
 EXIT_RUN = 10
 EXIT_BLOCKED = 20
 
-_VIEWER_VOICE = "docs/plans/viewer-voice-analysis.md"
+_VIEWER_VOICE = "docs/plans/viewer-voice-analysis.json"
 _PERSONA = "docs/channel/personas/persona-definition.md"
 _SCENE = "docs/plans/viewing-scene-matrix.md"
 _CONSTRAINTS = "docs/channel/creative-constraints.md"
@@ -57,6 +60,12 @@ def _evaluate_persona(channel_dir: Path) -> tuple[int, dict[str, object]]:
             "missing": [_VIEWER_VOICE],
             "next": "channel-research --voice",
         }
+    viewer_voice = read_published_json_document(
+        channel_dir / _VIEWER_VOICE,
+        RepositorySchema.CHANNEL_RESEARCH_REPORT,
+    )
+    if not isinstance(viewer_voice, dict) or viewer_voice.get("report_type") != "viewer_voice":
+        raise ManifestError("viewer voice report_type must be viewer_voice")
     if not _artifact_exists(channel_dir, _PERSONA):
         return EXIT_RUN, {
             "step": "persona",

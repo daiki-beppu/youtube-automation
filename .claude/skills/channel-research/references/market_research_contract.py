@@ -6,6 +6,9 @@ from datetime import date
 from pathlib import Path
 from typing import Literal, TypedDict
 
+from youtube_automation.application.documents import MarkdownMigrationDecision, write_operational_document
+from youtube_automation.domains.documents.schema_registry import RepositorySchema
+
 SECTIONS = (
     "調査問い",
     "比較対象と評価軸",
@@ -69,15 +72,62 @@ def deliver_report(
     today: date | None = None,
     overwrite: bool = False,
 ) -> Path | None:
-    """Return in-memory by default and write only after explicit save/overwrite."""
+    """Return in-memory by default and publish a validated pair after explicit save."""
     if not save:
         return None
-    target = channel_dir / "docs" / "research" / f"market-{(today or date.today()).isoformat()}.md"
-    if target.exists() and not overwrite:
-        raise FileExistsError(f"explicit overwrite approval required: {target}")
+    report_date = today or date.today()
+    target = channel_dir / "docs" / "research" / f"market-{report_date.isoformat()}.json"
+    legacy = target.with_suffix(".md")
+    if legacy.exists() and not overwrite:
+        raise FileExistsError(f"explicit migration approval required: {legacy}")
+
+    evidence = [
+        {
+            "id": f"section-{index}",
+            "source_path": "conversation",
+            "observation": body,
+        }
+        for index, body in enumerate(_section_bodies(report), 1)
+    ]
+    document = {
+        "schema_version": 1,
+        "generated_at": f"{report_date.isoformat()}T00:00:00Z",
+        "report_type": "market",
+        "summary": evidence[0]["observation"],
+        "source_provenance": [
+            {
+                "path": "conversation",
+                "collected_at": report_date.isoformat(),
+                "claim": "market comparison report",
+            }
+        ],
+        "competitor_comparison": [],
+        "winning_patterns": [],
+        "evidence": evidence,
+        "application_candidates": [],
+        "sections": dict(zip(SECTIONS, (item["observation"] for item in evidence), strict=True)),
+    }
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(report, encoding="utf-8")
+    write_operational_document(
+        target,
+        RepositorySchema.CHANNEL_RESEARCH_REPORT,
+        lambda: document,
+        MarkdownMigrationDecision.YES if legacy.exists() else MarkdownMigrationDecision.NOT_REQUIRED,
+    )
     return target
+
+
+def _section_bodies(report: str) -> list[str]:
+    bodies: list[str] = []
+    for index, section in enumerate(SECTIONS):
+        marker = f"## {section}\n\n"
+        if marker not in report:
+            raise ValueError(f"missing report section: {section}")
+        body = report.split(marker, 1)[1]
+        if index + 1 < len(SECTIONS):
+            body = body.split(f"\n\n## {SECTIONS[index + 1]}\n\n", 1)[0]
+        bodies.append(body.rstrip())
+    return bodies
 
 
 def route_for(intent: Literal["market-comparison", "discover", "analyze-collected"]) -> str:

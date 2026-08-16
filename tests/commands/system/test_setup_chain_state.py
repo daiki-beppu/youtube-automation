@@ -15,6 +15,8 @@ from PIL import Image as PILImage
 
 from tests.helpers.paths import REPO_ROOT
 from youtube_automation.commands.system import doctor
+from youtube_automation.domains.documents.schema_registry import RepositorySchema
+from youtube_automation.infrastructure.documents.publishing import publish_json_document
 
 SCRIPT = REPO_ROOT / ".claude" / "skills" / "setup" / "references" / "setup-chain-state.py"
 MANIFEST = REPO_ROOT / ".claude" / "skills" / "setup" / "references" / "setup-chain-manifest.json"
@@ -54,6 +56,31 @@ def _write_file_artifacts(root: Path, artifacts: list[str]) -> None:
             path = root / "branding" / "banner.png"
             path.parent.mkdir(parents=True, exist_ok=True)
             PILImage.new("RGB", (2048, 1152), color=(120, 80, 40)).save(path, format="PNG")
+            continue
+        if artifact == "docs/plans/viewer-voice-analysis.json":
+            path = root / artifact
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "generated_at": "2026-08-16T00:00:00Z",
+                        "report_type": "viewer_voice",
+                        "summary": "voice",
+                        "source_provenance": [
+                            {"path": "data/comments.json", "collected_at": "2026-08-16", "claim": "voice"}
+                        ],
+                        "competitor_comparison": [],
+                        "winning_patterns": [],
+                        "evidence": [{"id": "ev-1", "source_path": "data/comments.json", "observation": "fact"}],
+                        "application_candidates": [],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            publish_json_document(path, RepositorySchema.CHANNEL_RESEARCH_REPORT)
+            continue
+        if artifact == "docs/plans/viewer-voice-analysis.html" and (root / artifact).is_file():
             continue
         path = root / artifact.replace("*", "png")
         path.parent.mkdir(parents=True, exist_ok=True)

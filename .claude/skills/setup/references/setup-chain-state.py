@@ -15,7 +15,9 @@ from PIL import Image as PILImage
 from PIL import UnidentifiedImageError
 
 from youtube_automation.commands.system import doctor
-from youtube_automation.core.errors import ConfigError
+from youtube_automation.core.errors import ConfigError, DocumentRenderError
+from youtube_automation.domains.documents.schema_registry import RepositorySchema
+from youtube_automation.infrastructure.documents.publishing import read_published_json_document
 
 EXIT_SKIP = 0
 EXIT_RUN = 10
@@ -62,7 +64,8 @@ CHANNEL_OUTPUT_ARTIFACTS = (
     "doctor:channel_config",
     "docs/channel/ttp-seed-confirmation.md",
     "docs/channel/competitor-branding-snapshot.json",
-    "docs/plans/viewer-voice-analysis.md",
+    "docs/plans/viewer-voice-analysis.json",
+    "docs/plans/viewer-voice-analysis.html",
     "docs/plans/viewing-scene-matrix.md",
     "docs/channel/personas/persona-definition.md",
     "branding/icon.*",
@@ -322,6 +325,20 @@ def _artifact_payload(root: Path, statuses: dict[str, str], artifacts: list[str]
             status = _git_status(root, artifacts)
         elif artifact in _BRANDING_ARTIFACTS:
             status = _branding_status(root, artifact)
+        elif artifact == "docs/plans/viewer-voice-analysis.json":
+            path = root / artifact
+            if not path.is_file() or not path.with_suffix(".html").is_file():
+                status = "missing"
+            else:
+                try:
+                    document = read_published_json_document(path, RepositorySchema.CHANNEL_RESEARCH_REPORT)
+                    status = (
+                        "ready"
+                        if isinstance(document, dict) and document.get("report_type") == "viewer_voice"
+                        else "invalid"
+                    )
+                except DocumentRenderError:
+                    status = "invalid"
         else:
             exists = any(path.is_file() for path in root.glob(artifact))
             check_id = _FILE_CHECK_IDS.get(artifact)

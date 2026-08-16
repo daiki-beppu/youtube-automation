@@ -47,6 +47,6 @@
 ## 保存契約
 
 - 既定: 会話内だけに返し、ファイルを生成しない
-- 明示保存: `docs/research/market-<YYYY-MM-DD>.md` に同じ 7 セクションを保存する
+- 明示保存: `references/structured-report.md` に従い `docs/research/market-<YYYY-MM-DD>.json` + `.html` に同じ根拠を構造化保存する
 - 同日ファイルあり: 明示的な上書き承認まで書き込まない
 - いずれの経路でも config、`Benchmark.channels`、既存 TTP を変更しない
