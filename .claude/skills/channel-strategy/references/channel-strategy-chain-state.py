@@ -8,6 +8,7 @@ import json
 from collections.abc import Sequence
 from pathlib import Path
 
+from youtube_automation.core.errors import DocumentRenderError
 from youtube_automation.domains.documents.schema_registry import RepositorySchema
 from youtube_automation.infrastructure.documents.publishing import read_published_json_document
 
@@ -17,9 +18,9 @@ EXIT_RUN = 10
 EXIT_BLOCKED = 20
 
 _VIEWER_VOICE = "docs/plans/viewer-voice-analysis.json"
-_PERSONA = "docs/channel/personas/persona-definition.md"
-_SCENE = "docs/plans/viewing-scene-matrix.md"
-_CONSTRAINTS = "docs/channel/creative-constraints.md"
+_PERSONA = "docs/channel/personas/persona-definition.json"
+_SCENE = "docs/plans/viewing-scene-matrix.json"
+_CONSTRAINTS = "docs/channel/creative-constraints.json"
 
 
 class ManifestError(ValueError):
@@ -48,7 +49,13 @@ def _validate_manifest() -> None:
 
 def _artifact_exists(channel_dir: Path, relative: str) -> bool:
     path = channel_dir / relative
-    return path.is_file() and path.stat().st_size > 0
+    if not path.is_file() or not path.with_suffix(".html").is_file():
+        return False
+    schema = (
+        RepositorySchema.CHANNEL_RESEARCH_REPORT if relative == _VIEWER_VOICE else RepositorySchema.CHANNEL_STRATEGY
+    )
+    document = read_published_json_document(path, schema)
+    return isinstance(document, dict)
 
 
 def _evaluate_persona(channel_dir: Path) -> tuple[int, dict[str, object]]:
@@ -153,7 +160,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         _validate_manifest()
         exit_code, result = evaluate(args.channel_dir, args.step)
-    except (OSError, json.JSONDecodeError, ManifestError) as exc:
+    except (DocumentRenderError, OSError, json.JSONDecodeError, ManifestError) as exc:
         print(json.dumps({"step": args.step, "decision": "error", "reason": str(exc)}, ensure_ascii=False))
         return EXIT_ERROR
     print(json.dumps(result, ensure_ascii=False))

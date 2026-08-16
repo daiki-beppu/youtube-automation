@@ -90,10 +90,10 @@ def test_wf_new_ideation_loads_current_channel_constraints_before_analysis() -> 
     assert constraint_resolution < planning_dispatch < phase_1_4
     for path in (
         "config/channel/*.json",
-        "docs/channel/channel-direction.md",
-        "docs/channel/personas/persona-definition.md",
-        "docs/plans/viewing-scene-matrix.md",
-        "docs/channel/creative-constraints.md",
+        "docs/channel/channel-direction.json",
+        "docs/channel/personas/persona-definition.json",
+        "docs/plans/viewing-scene-matrix.json",
+        "docs/channel/creative-constraints.json",
     ):
         assert path in skill
     assert "存在するファイルだけ" in skill

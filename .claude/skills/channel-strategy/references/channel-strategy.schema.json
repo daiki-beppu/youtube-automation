@@ -1,0 +1,55 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "channel-strategy.schema.json",
+  "title": "チャンネル戦略",
+  "description": "方向性・第一ペルソナ・視聴シーン・制作制約の JSON 正本。HTML はこの JSON から生成する。",
+  "type": "object",
+  "required": ["schema_version", "document_type", "updated_at", "status", "evidence"],
+  "properties": {
+    "schema_version": {"title": "Schema version", "const": 1, "x-view": {"order": 0}},
+    "document_type": {"title": "文書種別", "enum": ["direction", "persona", "scene", "constraints"], "x-view": {"order": 1}},
+    "updated_at": {"title": "更新日時", "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$", "x-view": {"order": 2}},
+    "status": {"title": "確度", "enum": ["hypothesis", "confirmed"], "x-view": {"order": 3}},
+    "direction": {"title": "チャンネル方向性", "$ref": "#/definitions/direction", "x-view": {"order": 10}},
+    "persona": {"title": "第一ペルソナ", "$ref": "#/definitions/persona", "x-view": {"order": 10}},
+    "persona_id": {"title": "Persona ID", "type": "string", "minLength": 1, "x-view": {"order": 11}},
+    "scenes": {"title": "視聴シーン", "type": "array", "minItems": 1, "items": {"$ref": "#/definitions/scene"}, "x-view": {"order": 20, "presentation": "table"}},
+    "scene_ids": {"title": "Scene IDs", "type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}, "x-view": {"order": 21}},
+    "constraints": {"title": "採用した制作制約", "type": "array", "minItems": 1, "items": {"$ref": "#/definitions/constraint"}, "x-view": {"order": 30, "presentation": "table"}},
+    "evidence": {"title": "根拠", "type": "array", "minItems": 1, "items": {"$ref": "#/definitions/evidence"}, "x-view": {"order": 40, "presentation": "table"}}
+  },
+  "allOf": [
+    {"if": {"properties": {"document_type": {"const": "direction"}}}, "then": {"required": ["direction"]}},
+    {"if": {"properties": {"document_type": {"const": "persona"}}}, "then": {"required": ["persona", "scene_ids"]}},
+    {"if": {"properties": {"document_type": {"const": "scene"}}}, "then": {"required": ["persona_id", "scenes"]}},
+    {"if": {"properties": {"document_type": {"const": "constraints"}}}, "then": {"required": ["persona_id", "scene_ids", "constraints"]}}
+  ],
+  "additionalProperties": true,
+  "definitions": {
+    "direction": {
+      "type": "object", "required": ["summary", "positioning", "differentiation"],
+      "properties": {"summary": {"type": "string", "minLength": 1}, "positioning": {"type": "string", "minLength": 1}, "differentiation": {"type": "string", "minLength": 1}},
+      "additionalProperties": true
+    },
+    "persona": {
+      "type": "object", "required": ["id", "name", "desires"],
+      "properties": {"id": {"type": "string", "minLength": 1}, "name": {"type": "string", "minLength": 1}, "desires": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}, "vocabulary": {"type": "array", "items": {"type": "string"}}, "emotional_triggers": {"type": "array", "items": {"type": "string"}}},
+      "additionalProperties": true
+    },
+    "scene": {
+      "type": "object", "required": ["id", "situation", "desires", "evidence_ids"],
+      "properties": {"id": {"type": "string", "minLength": 1}, "situation": {"type": "string", "minLength": 1}, "desires": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}, "evidence_ids": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}},
+      "additionalProperties": true
+    },
+    "constraint": {
+      "type": "object", "required": ["id", "category", "statement", "evidence_ids"],
+      "properties": {"id": {"type": "string", "minLength": 1}, "category": {"enum": ["audio", "video", "thumbnail", "title", "measurement"]}, "statement": {"type": "string", "minLength": 1}, "evidence_ids": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}},
+      "additionalProperties": true
+    },
+    "evidence": {
+      "type": "object", "required": ["id", "source_path", "observation"],
+      "properties": {"id": {"type": "string", "minLength": 1}, "source_path": {"type": "string", "minLength": 1}, "observation": {"type": "string", "minLength": 1}},
+      "additionalProperties": true
+    }
+  }
+}

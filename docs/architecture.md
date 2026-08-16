@@ -80,6 +80,8 @@ CLAUDE.md の「アーキテクチャ」節の詳細版。要点は CLAUDE.md �
 
 **channel-research report**: `/channel-research --benchmark|--market|--voice|--thumbnail` が生成する分析文書。`.claude/skills/channel-research/references/channel-research-report.schema.json` と `domains.documents.schema_registry` が契約を所有し、JSON が唯一の正本、同 basename HTML は表示用派生物である。skill writer は `application.documents.migration` を通し、下流 reader は `infrastructure.documents.publishing.read_published_json_document()` が返す検証済み JSON だけを使う。API 収集の `data/benchmark_*.json` / `data/comments_*.json` は source provenance 付き入力であり、分析正本ではない。
 
+**channel-strategy document**: `/channel-strategy --direction|--persona|--scene|--constraints` が生成する4文書。`.claude/skills/channel-strategy/references/channel-strategy.schema.json` を共通 schema 正本とし、JSON は唯一の正本、同 basename HTML は表示専用派生物とする。`application.documents.channel_strategy` が persona→scene→constraints と evidence/constraint ID の参照を保存前に検証し、downstream reader は検証済み JSON+HTML pair の JSON だけを読む。旧 Markdown の直接 parse は禁止する。
+
 **データ 4 分類**: SSOT を、① git 管理 JSON の宣言的インテント、② local store のランタイム状態・履歴、③ SSOT を持たない再生成可能な生成成果物、④ YouTube のリモート実状態、に分類するもの。④のローカルデータは reconcile 対象のミラーである。
 
 **local store**: チャンネルごとの `<CHANNEL_DIR>/data/local.db` に置く libSQL (Turso) embedded DB。時系列データと collection 状態を保持し、チャンネル設定の SSOT ではない。
@@ -224,6 +226,7 @@ assets/stock/           # ボツ画像ストック (#364)。<theme-slug>/ 配下
 | `domains.documents.schema_registry` | リポジトリ所有 JSON Schema の固定 inventory、Draft 7 compile cache、値非表示の検証エラー変換。外部 schema path は受け取らない |
 | `domains.documents.rendering` | schema annotation / `x-view` による card・table・media の自己完結 HTML 化と escape / CSP / embedded JSON 検証 |
 | `application.documents.migration` | skill 生成運用文書の new / Markdown 明示移行 / JSON+HTML 再更新を判定し、pair の検証付き transaction と旧 Markdown 削除を一操作として調停 |
+| `application.documents.channel_strategy` | direction / persona / scene / constraints の schema と文書間 ID 参照を検証し、共通 migration workflow による原子的保存を調停 |
 | `application.analytics.video_report` | 動画解析結果を audit report schema へ写像し、共通運用文書 migration による JSON+HTML 公開を調停 |
 | `.claude/skills/channel-research/references/channel-research-report.schema.json` | benchmark / market / viewer voice / thumbnail 調査の比較表・勝ちパターン・根拠・適用候補を共通定義し、skill writer と全 downstream reader の正本になる |
 | `infrastructure.filesystem` | provider-neutral な filesystem I/O と、複数 text file の fsync・rollback・公開後 verifier 付き transaction |

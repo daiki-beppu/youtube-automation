@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from tests.helpers.paths import REPO_ROOT
+from youtube_automation.application.documents import MarkdownMigrationDecision, write_channel_strategy_document
 from youtube_automation.domains.documents.schema_registry import RepositorySchema
 from youtube_automation.infrastructure.documents.publishing import publish_json_document
 
@@ -60,6 +61,27 @@ def _viewer_voice(root: Path) -> None:
     publish_json_document(path, RepositorySchema.CHANNEL_RESEARCH_REPORT)
 
 
+def _strategy(root: Path, relative: str, document_type: str) -> Path:
+    path = root / relative
+    path.parent.mkdir(parents=True, exist_ok=True)
+    document: dict[str, object] = {
+        "schema_version": 1,
+        "document_type": document_type,
+        "updated_at": "2026-08-16T00:00:00Z",
+        "status": "confirmed",
+        "evidence": [{"id": "ev-1", "source_path": "input.json", "observation": "fact"}],
+    }
+    if document_type == "persona":
+        document.update(persona={"id": "persona-primary", "name": "primary", "desires": ["focus"]}, scene_ids=[])
+    else:
+        document.update(
+            persona_id="persona-primary",
+            scenes=[{"id": "scene-1", "situation": "work", "desires": ["focus"], "evidence_ids": ["ev-1"]}],
+        )
+    write_channel_strategy_document(path, lambda: document, MarkdownMigrationDecision.NOT_REQUIRED)
+    return path
+
+
 def test_flow_blocks_until_viewer_voice_exists(tmp_path: Path) -> None:
     assert flow.flow_status(tmp_path) == {
         "status": "blocked",
@@ -71,9 +93,9 @@ def test_flow_blocks_until_viewer_voice_exists(tmp_path: Path) -> None:
 def test_flow_advances_to_one_draft_then_viewing_scene_then_finalization(tmp_path: Path) -> None:
     _viewer_voice(tmp_path)
     assert flow.flow_status(tmp_path)["next"] == "draft-persona"
-    _touch(tmp_path, "docs/channel/personas/persona-definition.md")
+    _strategy(tmp_path, "docs/channel/personas/persona-definition.json", "persona")
     assert flow.flow_status(tmp_path)["next"] == "channel-strategy --scene"
-    _touch(tmp_path, "docs/plans/viewing-scene-matrix.md")
+    _strategy(tmp_path, "docs/plans/viewing-scene-matrix.json", "scene")
     assert flow.flow_status(tmp_path) == {
         "status": "ready",
         "next": "finalize-persona",
@@ -83,7 +105,7 @@ def test_flow_advances_to_one_draft_then_viewing_scene_then_finalization(tmp_pat
 
 def test_explicit_viewing_scene_skip_is_distinct_and_observable(tmp_path: Path) -> None:
     _viewer_voice(tmp_path)
-    _touch(tmp_path, "docs/channel/personas/persona-definition.md")
+    _strategy(tmp_path, "docs/channel/personas/persona-definition.json", "persona")
     assert flow.flow_status(tmp_path, allow_viewing_scene_skip=True)["reason"] == "viewing_scene_skipped"
 
 
@@ -128,10 +150,11 @@ def test_persona_source_rejects_values_outside_the_canonical_annotation_format(s
         flow.sanitize_persona_fields(payload)
 
 
-def test_persona_resolution_prefers_current_artifact_over_legacy(tmp_path: Path) -> None:
-    legacy = _touch(tmp_path, "docs/audience-persona.md")
-    assert flow.resolve_persona_artifact(tmp_path) == (legacy, "legacy-fallback")
-    current = _touch(tmp_path, "docs/channel/personas/persona-definition.md")
+def test_persona_resolution_rejects_legacy_and_reads_validated_current_json(tmp_path: Path) -> None:
+    _touch(tmp_path, "docs/audience-persona.md")
+    with pytest.raises(flow.PersonaContractError, match="missing"):
+        flow.resolve_persona_artifact(tmp_path)
+    current = _strategy(tmp_path, "docs/channel/personas/persona-definition.json", "persona")
     assert flow.resolve_persona_artifact(tmp_path) == (current, "current")
 
 
@@ -150,10 +173,10 @@ def test_canonical_routes_dispatch_and_legacy_aliases_fail_closed() -> None:
 
 def test_flop_analysis_consumes_only_existing_read_only_artifacts(tmp_path: Path) -> None:
     _viewer_voice(tmp_path)
-    _touch(tmp_path, "docs/channel/personas/persona-definition.md")
+    _strategy(tmp_path, "docs/channel/personas/persona-definition.json", "persona")
     assert flow.flop_analysis_inputs(tmp_path) == [
         "docs/plans/viewer-voice-analysis.json",
-        "docs/channel/personas/persona-definition.md",
+        "docs/channel/personas/persona-definition.json",
     ]
 
 

@@ -34,8 +34,8 @@ class PersonaContractError(ValueError):
 
 def flow_status(channel_dir: Path, *, allow_viewing_scene_skip: bool = False) -> dict[str, str]:
     viewer_voice = channel_dir / "docs" / "plans" / "viewer-voice-analysis.json"
-    persona = channel_dir / "docs" / "channel" / "personas" / "persona-definition.md"
-    viewing_scene = channel_dir / "docs" / "plans" / "viewing-scene-matrix.md"
+    persona = channel_dir / "docs" / "channel" / "personas" / "persona-definition.json"
+    viewing_scene = channel_dir / "docs" / "plans" / "viewing-scene-matrix.json"
     if not viewer_voice.is_file():
         return {"status": "blocked", "next": "channel-research --voice", "reason": "viewer_voice_missing"}
     document = read_published_json_document(viewer_voice, RepositorySchema.CHANNEL_RESEARCH_REPORT)
@@ -43,8 +43,11 @@ def flow_status(channel_dir: Path, *, allow_viewing_scene_skip: bool = False) ->
         raise PersonaContractError("viewer voice report_type must be viewer_voice")
     if not persona.is_file():
         return {"status": "ready", "next": "draft-persona", "reason": "viewer_voice_ready"}
+    read_published_json_document(persona, RepositorySchema.CHANNEL_STRATEGY)
     if not viewing_scene.is_file() and not allow_viewing_scene_skip:
         return {"status": "blocked", "next": "channel-strategy --scene", "reason": "viewing_scene_missing"}
+    if viewing_scene.is_file():
+        read_published_json_document(viewing_scene, RepositorySchema.CHANNEL_STRATEGY)
     return {
         "status": "ready",
         "next": "finalize-persona",
@@ -75,12 +78,10 @@ def sanitize_persona_fields(payload: object) -> dict[str, list[str]]:
 
 
 def resolve_persona_artifact(channel_dir: Path) -> tuple[Path, str]:
-    current = channel_dir / "docs" / "channel" / "personas" / "persona-definition.md"
-    legacy = channel_dir / "docs" / "audience-persona.md"
+    current = channel_dir / "docs" / "channel" / "personas" / "persona-definition.json"
     if current.is_file():
+        read_published_json_document(current, RepositorySchema.CHANNEL_STRATEGY)
         return current, "current"
-    if legacy.is_file():
-        return legacy, "legacy-fallback"
     raise PersonaContractError("persona artifact is missing")
 
 
@@ -97,8 +98,8 @@ def flop_analysis_inputs(channel_dir: Path) -> list[str]:
     """Return read-only persona-chain evidence; never launch child skills."""
     relative_paths = (
         "docs/plans/viewer-voice-analysis.json",
-        "docs/channel/personas/persona-definition.md",
-        "docs/plans/viewing-scene-matrix.md",
+        "docs/channel/personas/persona-definition.json",
+        "docs/plans/viewing-scene-matrix.json",
     )
     inputs: list[str] = []
     for relative in relative_paths:
@@ -109,6 +110,8 @@ def flop_analysis_inputs(channel_dir: Path) -> list[str]:
             document = read_published_json_document(path, RepositorySchema.CHANNEL_RESEARCH_REPORT)
             if not isinstance(document, dict) or document.get("report_type") != "viewer_voice":
                 raise PersonaContractError("viewer voice report_type must be viewer_voice")
+        else:
+            read_published_json_document(path, RepositorySchema.CHANNEL_STRATEGY)
         inputs.append(relative)
     return inputs
 

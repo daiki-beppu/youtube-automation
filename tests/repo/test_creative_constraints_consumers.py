@@ -7,7 +7,7 @@ SKILLS = {
     "music/references/prompt.md": ("## 音", "BPM", "Style"),
     "thumbnail/SKILL.md": ("## サムネ", "色温度", "被写体"),
     "thumbnail/references/loop.md": ("## 映像", "動きの種類数上限", "禁止要素"),
-    "audit/references/alignment.md": ("## 音", "## サムネ", "整合性マトリクス"),
+    "audit/references/alignment.md": ("`audio`", "`thumbnail`", "整合性マトリクス"),
 }
 
 
@@ -21,7 +21,12 @@ def test_generation_and_audit_skills_consume_creative_constraints_non_blocking()
 
         assert "`前工程`" in text
         assert "/channel-strategy --constraints" in text
-        assert "CHANNEL_DIR/docs/channel/creative-constraints.md" in text
+        expected = (
+            "CHANNEL_DIR/docs/channel/creative-constraints.json"
+            if relative == "audit/references/alignment.md"
+            else "CHANNEL_DIR/docs/channel/creative-constraints.md"
+        )
+        assert expected in text
         assert "存在しなければ従来フローのまま続行" in text
         assert "不在だけを理由に" in text
         assert all(term in text for term in required_terms)

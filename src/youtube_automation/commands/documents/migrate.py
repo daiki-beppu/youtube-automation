@@ -8,6 +8,7 @@ from pathlib import Path
 
 from youtube_automation.application.documents import (
     MarkdownMigrationDecision,
+    write_channel_strategy_document,
     write_operational_document,
 )
 from youtube_automation.commands._shared.cli_harness import run_cli
@@ -45,12 +46,11 @@ def run(args: argparse.Namespace) -> int:
             raise ValidationError("candidate と公開先 JSON は別 path にしてください")
         return json.loads(args.candidate.read_text(encoding="utf-8"))
 
-    result = write_operational_document(
-        args.target,
-        RepositorySchema(args.schema),
-        load_candidate,
-        decision,
-    )
+    schema = RepositorySchema(args.schema)
+    if schema is RepositorySchema.CHANNEL_STRATEGY:
+        result = write_channel_strategy_document(args.target, load_candidate, decision)
+    else:
+        result = write_operational_document(args.target, schema, load_candidate, decision)
     print(f"{result.value}: {args.target.resolve()}")
     return 0
 

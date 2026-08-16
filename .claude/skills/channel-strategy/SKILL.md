@@ -12,8 +12,8 @@ description: "Use when チャンネル戦略を状態判定付きで一括実行
 
 ## 成果物
 
-- `書き込む`: `docs/channel/personas/persona-definition.md`, `docs/plans/viewing-scene-matrix.md`, `docs/channel/creative-constraints.md`, `docs/channel/channel-direction.md`
-- `読み込む`: 検証済み `docs/plans/viewer-voice-analysis.json`, `docs/plans/viewing-scene-matrix.md`, 検証済み `docs/channel-research.json`, `docs/channel/ttp-seed-confirmation.md`, `docs/channel/competitor-branding-snapshot.json`, `data/benchmark_*.json`
+- `書き込む`: 検証済み JSON+HTML pair `docs/channel/personas/persona-definition.json`, `docs/plans/viewing-scene-matrix.json`, `docs/channel/creative-constraints.json`, `docs/channel/channel-direction.json`
+- `読み込む`: 検証済み `docs/plans/viewer-voice-analysis.json`, `docs/plans/viewing-scene-matrix.json`, `docs/channel-research.json`, `docs/channel/personas/persona-definition.json`, `docs/channel/creative-constraints.json`, `docs/channel/ttp-seed-confirmation.md`, `docs/channel/competitor-branding-snapshot.json`, `data/benchmark_*.json`
 
 ## モード判定
 
@@ -37,6 +37,8 @@ description: "Use when チャンネル戦略を状態判定付きで一括実行
 ## 共通前提
 
 `config/channel/` が存在し、`load_config()` でロード可能であること。満たさない場合は、新規チャンネルなら `/setup --channel`、既存チャンネルなら `/setup --import` を案内して停止する。
+
+戦略文書の保存・再読込は `references/structured-documents.md` を正とする。writer/consumer は検証済み JSON だけを扱い、HTML または旧 Markdown を直接 parse しない。
 
 統合した旧 owner は `config.default.yaml` / `config/skills/*.yaml` を持たなかったため、`channel-strategy` の新しい設定キーや下流 override を先行作成しない。
 
@@ -66,7 +68,7 @@ uv run python .claude/skills/channel-strategy/references/channel-strategy-chain-
 - `--persona`: `references/persona.md` の完了条件を満たしている
 - `--scene`: `references/scene.md` の完了条件を満たしている
 - `--constraints`: `references/constraints.md` の完了条件を満たしている
-- `--direction`: `references/direction.md` の Step D1〜D5 を完了し、`docs/channel/channel-direction.md` を保存している
+- `--direction`: `references/direction.md` の Step D1〜D5 を完了し、検証済み `docs/channel/channel-direction.json` + `.html` pair を保存している
 
 実行段、skip 段、前提不足、更新成果物を短く報告する。
 
