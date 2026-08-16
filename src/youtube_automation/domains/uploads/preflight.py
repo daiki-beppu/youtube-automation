@@ -14,7 +14,8 @@ from pathlib import Path
 from youtube_automation.configuration import load_config
 from youtube_automation.core.adapters.media import CollectionPaths
 from youtube_automation.core.adapters.youtube import parse_youtube_tags, youtube_tag_chars
-from youtube_automation.core.errors import ConfigError, ValidationError
+from youtube_automation.core.errors import ConfigError, ValidationError, WorkflowStateError
+from youtube_automation.domains.collections.workflow_state import read as read_workflow_state
 from youtube_automation.domains.metadata.descriptions import (
     build_descriptions_md_parse_diagnostics,
     extract_descriptions_md_section,
@@ -31,7 +32,6 @@ from youtube_automation.infrastructure.filesystem import (
     path_is_file,
     path_is_symlink,
     read_file_text,
-    read_json,
 )
 
 YT_TAG_CHAR_LIMIT = 500
@@ -533,14 +533,16 @@ def _validate_scene_phrases(paths: CollectionPaths, supported_languages: list[st
     if not path_is_file(paths.workflow_state_path):
         return []
     try:
-        state = read_json(paths.workflow_state_path)
-    except json.JSONDecodeError:
-        return ["workflow-state.json の JSON が不正"]
-    if not isinstance(state, dict):
-        return ["workflow-state.json の root は object である必要があります"]
+        state = read_workflow_state(paths.workflow_state_path)
+    except WorkflowStateError as exc:
+        if isinstance(exc.__cause__, json.JSONDecodeError):
+            return ["workflow-state.json の JSON が不正"]
+        if "root must be an object" in str(exc):
+            return ["workflow-state.json の root は object である必要があります"]
+        raise
     if not requires_scene_phrases(supported_languages):
         return []
-    scene_phrases = state.get("scene_phrases")
+    scene_phrases = state.scene_phrases
     if not isinstance(scene_phrases, dict) or not scene_phrases:
         return ["workflow-state.json.scene_phrases なし（yt-populate-scene-phrases を実行）"]
     missing = [lang for lang in supported_languages if not scene_phrases.get(lang)]

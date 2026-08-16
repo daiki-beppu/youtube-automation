@@ -293,6 +293,17 @@ def test_assign_to_playlists_skips_when_no_workflow_state(tmp_path):
     playlist_manager.assign_video.assert_not_called()
 
 
+def test_assign_to_playlists_skips_when_workflow_state_is_malformed(tmp_path, caplog):
+    (tmp_path / "workflow-state.json").write_text("{broken", encoding="utf-8")
+    playlist_manager = MagicMock()
+    assignment = PlaylistAssignment(MagicMock(), config=MagicMock(), playlist_manager=playlist_manager)
+
+    assignment.assign("VIDEO_ID_123", tmp_path)
+
+    assert "workflow-state.json 読み込み失敗" in caplog.text
+    playlist_manager.assign_video.assert_not_called()
+
+
 # ---------------------------------------------------------------------------
 # _execute_complete_collection: resumable upload session URI 連携 (issue #381)
 # ---------------------------------------------------------------------------

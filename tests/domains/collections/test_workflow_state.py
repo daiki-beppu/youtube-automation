@@ -118,6 +118,29 @@ def test_read_rejects_non_object_known_section(tmp_path: Path) -> None:
         read(state_path)
 
 
+def test_upload_read_accessors_return_typed_values_and_keep_unknown_fields(tmp_path: Path) -> None:
+    state_path = tmp_path / "workflow-state.json"
+    _write(
+        state_path,
+        {
+            "theme": "Rainy Jazz",
+            "planning": {"activities": "focus"},
+            "scene_phrases": {"en": "continuous focus mix"},
+            "title_template_check": {"allow_volume_patterns": True},
+            "future_section": {"enabled": True},
+        },
+    )
+
+    state = read(state_path)
+
+    assert state.theme == "Rainy Jazz"
+    assert state.planning is not None
+    assert state.planning.activities == "focus"
+    assert state.scene_phrases == {"en": "continuous focus mix"}
+    assert state.allow_volume_patterns is True
+    assert state["future_section"] == {"enabled": True}
+
+
 def test_compatible_music_engine_accessor_rejects_conflicting_values(tmp_path: Path) -> None:
     state_path = tmp_path / "workflow-state.json"
     _write(state_path, {"music_engine": "suno", "planning": {"music": {"engine": "lyria"}}})

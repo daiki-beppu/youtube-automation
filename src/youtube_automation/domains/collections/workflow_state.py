@@ -284,6 +284,10 @@ class PlanningState(_ObjectSection):
             raise WorkflowStateError("workflow-state.json::planning.music must be an object")
         return MusicPlanningState(value)
 
+    @property
+    def activities(self) -> str | None:
+        return _optional_string(self._data, "activities", "workflow-state.json::planning.activities")
+
 
 class UploadState(_ObjectSection):
     """YouTube upload state の型付き view。"""
@@ -389,6 +393,19 @@ class WorkflowState(MutableMapping[str, JSONValue]):
     def upload(self) -> UploadState | None:
         value = self._data.get("upload")
         return UploadState(value) if isinstance(value, dict) else None
+
+    @property
+    def theme(self) -> str | None:
+        return _optional_string(self._data, "theme", "workflow-state.json::theme")
+
+    @property
+    def scene_phrases(self) -> dict[str, JSONValue] | None:
+        value = self._data.get("scene_phrases")
+        return deepcopy(value) if isinstance(value, dict) else None
+
+    @property
+    def allow_volume_patterns(self) -> bool:
+        return self._section_bool("title_template_check", "allow_volume_patterns") is True
 
     @property
     def thumbnail_approved(self) -> bool:
