@@ -7,6 +7,7 @@ import os
 import tempfile
 from collections.abc import Callable, Iterator, Mapping, MutableMapping
 from copy import deepcopy
+from datetime import datetime
 from pathlib import Path, PurePosixPath
 from typing import Literal, TypedDict, cast
 
@@ -67,6 +68,14 @@ class HandoffDocument(TypedDict, total=False):
     owner: ExecutionOwner
     manifest_key: str
     root_sha256: str
+
+
+class HumanTaskCompletionDocument(TypedDict, total=False):
+    completed_at: str
+
+
+class HumanTasksDocument(TypedDict, total=False):
+    distrokid_submission: HumanTaskCompletionDocument
 
 
 class MusicPairSelectionExceptionDocument(TypedDict, total=False):
@@ -154,6 +163,7 @@ class WorkflowStateDocument(TypedDict, total=False):
     title_template_check: TitleTemplateCheckDocument
     assets: AssetsDocument
     handoff: HandoffDocument
+    human_tasks: HumanTasksDocument
     music_pair_selection: MusicPairSelectionDocument
     upload: UploadDocument
     post_upload: PostUploadDocument
@@ -171,6 +181,7 @@ _KNOWN_OBJECT_SECTIONS = frozenset(
         "assets",
         "description",
         "handoff",
+        "human_tasks",
         "music_pair_selection",
         "planning",
         "post_upload",
@@ -480,6 +491,41 @@ class HandoffState(_ObjectSection):
         return value
 
 
+class HumanTasksState(_ObjectSection):
+    """API 非対応の人手作業について完了事実を保持する型付き view。"""
+
+    @property
+    def distrokid_submission_completed_at(self) -> str | None:
+        value = self._data.get("distrokid_submission")
+        if value is None:
+            return None
+        if not isinstance(value, dict):
+            raise WorkflowStateError("workflow-state.json::human_tasks.distrokid_submission must be an object")
+        completed_at = _optional_string(
+            value,
+            "completed_at",
+            "workflow-state.json::human_tasks.distrokid_submission.completed_at",
+        )
+        if completed_at is not None:
+            _validate_iso_datetime(
+                completed_at,
+                "workflow-state.json::human_tasks.distrokid_submission.completed_at",
+            )
+        return completed_at
+
+    def record_distrokid_submission(self, completed_at: str) -> None:
+        _validate_iso_datetime(
+            completed_at,
+            "workflow-state.json::human_tasks.distrokid_submission.completed_at",
+        )
+        existing = self.distrokid_submission_completed_at
+        if existing is not None:
+            return
+        task = self._data.setdefault("distrokid_submission", {})
+        assert isinstance(task, dict)
+        task["completed_at"] = completed_at
+
+
 class WorkflowState(MutableMapping[str, JSONValue]):
     """既知 section を型付きで扱い、未知キーも保持する document object。"""
 
@@ -517,6 +563,9 @@ class WorkflowState(MutableMapping[str, JSONValue]):
             _owner = handoff.owner
             _manifest_key = handoff.manifest_key
             _root_sha256 = handoff.root_sha256
+        human_tasks = self.human_tasks
+        if human_tasks is not None:
+            _distrokid_submission_completed_at = human_tasks.distrokid_submission_completed_at
 
     @property
     def phase(self) -> Phase | None:
@@ -572,6 +621,22 @@ class WorkflowState(MutableMapping[str, JSONValue]):
     def handoff(self) -> HandoffState | None:
         value = self._data.get("handoff")
         return HandoffState(value) if isinstance(value, dict) else None
+
+    @property
+    def human_tasks(self) -> HumanTasksState | None:
+        value = self._data.get("human_tasks")
+        return HumanTasksState(value) if isinstance(value, dict) else None
+
+    @property
+    def distrokid_submission_completed_at(self) -> str | None:
+        human_tasks = self.human_tasks
+        return human_tasks.distrokid_submission_completed_at if human_tasks is not None else None
+
+    def record_distrokid_submission(self, completed_at: str) -> None:
+        """DistroKid提出の初回完了時刻を保持し、再実行では上書きしない。"""
+        human_tasks = self._data.setdefault("human_tasks", {})
+        assert isinstance(human_tasks, dict)
+        HumanTasksState(human_tasks).record_distrokid_submission(completed_at)
 
     def record_cloud_handoff(
         self,
@@ -762,6 +827,17 @@ def _validate_manifest_key(manifest_key: str) -> None:
 def _validate_root_sha256(root_sha256: str) -> None:
     if len(root_sha256) != 64 or any(character not in "0123456789abcdef" for character in root_sha256):
         raise WorkflowStateError("workflow-state handoff.root_sha256 must be 64 lowercase hex characters")
+
+
+def _validate_iso_datetime(value: str, label: str) -> None:
+    if not isinstance(value, str):
+        raise WorkflowStateError(f"{label} must be a string or null")
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise WorkflowStateError(f"{label} must be an ISO 8601 datetime") from exc
+    if parsed.tzinfo is None:
+        raise WorkflowStateError(f"{label} must include a timezone")
 
 
 def _read_payload(path: Path) -> dict[str, JSONValue]:

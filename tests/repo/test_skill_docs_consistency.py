@@ -1164,6 +1164,15 @@ def test_distrokid_helper_docs_describe_dynamic_selector_fetch_contract() -> Non
     assert "サーバー URL に `http://localhost:7874` を設定" not in skill
 
 
+def test_distrokid_helper_records_confirmed_submission_through_workflow_state_owner() -> None:
+    skill = _read(".claude/skills/distrokid-helper/SKILL.md")
+
+    command = "uv run yt-workflow-state --collection <collection> record-distrokid-submission"
+    assert skill.count(command) == 1
+    assert "ユーザーが転記・アップロード完了を確認した後" in skill
+    assert "human_tasks.distrokid_submission.completed_at" in skill
+
+
 def test_suno_helper_docs_use_the_visible_server_source_picker_contract() -> None:
     skill = _read(".claude/skills/music/references/generate.md")
     readme = _read("extensions/suno-helper/README.md")

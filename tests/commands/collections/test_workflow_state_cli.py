@@ -26,6 +26,13 @@ def _read_state(collection: Path) -> dict[str, object]:
     return json.loads((collection / "workflow-state.json").read_text(encoding="utf-8"))
 
 
+def _distrokid_collection(tmp_path: Path, state: dict[str, object] | None = None) -> Path:
+    channel = tmp_path / "channel"
+    (channel / "config" / "channel").mkdir(parents=True)
+    (channel / "config" / "channel" / "distrokid.json").write_text("{}\n", encoding="utf-8")
+    return _collection(channel / "collections" / "live", state)
+
+
 def test_get_outputs_json_value_and_missing_key_as_null(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     collection = _collection(tmp_path, {"upload": {"video_id": "video-123"}})
 
@@ -127,6 +134,56 @@ def test_record_handoff_uses_typed_owner_transition(tmp_path: Path) -> None:
         == 0
     )
     assert (collection / "workflow-state.json").read_bytes() == before_retry
+
+
+def test_record_distrokid_submission_is_one_command_idempotent_state_update(tmp_path: Path) -> None:
+    collection = _distrokid_collection(
+        tmp_path,
+        {
+            "human_tasks": {"future": {"keep": True}},
+            "unknown": {"keep": True},
+        },
+    )
+
+    assert workflow_state_cli.main(["--collection", str(collection), "record-distrokid-submission"]) == 0
+
+    state = _read_state(collection)
+    human_tasks = state["human_tasks"]
+    assert isinstance(human_tasks, dict)
+    submission = human_tasks["distrokid_submission"]
+    assert isinstance(submission, dict)
+    assert isinstance(submission["completed_at"], str)
+    assert human_tasks["future"] == {"keep": True}
+    assert state["unknown"] == {"keep": True}
+    assert isinstance(state["updated_at"], str)
+
+    before_retry = (collection / "workflow-state.json").read_bytes()
+    assert workflow_state_cli.main(["--collection", str(collection), "record-distrokid-submission"]) == 0
+    assert (collection / "workflow-state.json").read_bytes() == before_retry
+
+
+@pytest.mark.parametrize("config_kind", ["missing", "directory", "symlink"])
+def test_record_distrokid_submission_requires_regular_channel_config(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    config_kind: str,
+) -> None:
+    collection = _distrokid_collection(tmp_path, {"unknown": {"keep": True}})
+    config_path = tmp_path / "channel" / "config" / "channel" / "distrokid.json"
+    config_path.unlink()
+    if config_kind == "directory":
+        config_path.mkdir()
+    elif config_kind == "symlink":
+        outside = tmp_path / "outside.json"
+        outside.write_text("{}\n", encoding="utf-8")
+        config_path.symlink_to(outside)
+    state_path = collection / "workflow-state.json"
+    before = state_path.read_bytes()
+
+    assert workflow_state_cli.main(["--collection", str(collection), "record-distrokid-submission"]) == 1
+
+    assert "config/channel/distrokid.json の通常ファイルが必要です" in capsys.readouterr().err
+    assert state_path.read_bytes() == before
 
 
 def test_set_upload_creates_section_and_only_overwrites_supplied_fields(tmp_path: Path) -> None:

@@ -269,6 +269,66 @@ def test_record_cloud_handoff_fails_closed_before_mutation(
     assert state.to_dict() == before
 
 
+def test_record_distrokid_submission_preserves_first_completion_and_unknown_fields() -> None:
+    state = WorkflowState(
+        {
+            "human_tasks": {
+                "future": {"keep": True},
+                "distrokid_submission": {"future": "keep"},
+            },
+            "unknown": {"keep": True},
+        }
+    )
+
+    state.record_distrokid_submission("2026-08-16T01:02:03.000Z")
+
+    assert state.distrokid_submission_completed_at == "2026-08-16T01:02:03.000Z"
+    assert state.to_dict() == {
+        "human_tasks": {
+            "future": {"keep": True},
+            "distrokid_submission": {
+                "future": "keep",
+                "completed_at": "2026-08-16T01:02:03.000Z",
+            },
+        },
+        "unknown": {"keep": True},
+    }
+
+    state.record_distrokid_submission("2026-08-17T04:05:06.000Z")
+
+    assert state.distrokid_submission_completed_at == "2026-08-16T01:02:03.000Z"
+
+
+@pytest.mark.parametrize(
+    ("payload", "message"),
+    [
+        ({"human_tasks": []}, "human_tasks must be an object"),
+        (
+            {"human_tasks": {"distrokid_submission": True}},
+            "human_tasks.distrokid_submission must be an object",
+        ),
+        (
+            {"human_tasks": {"distrokid_submission": {"completed_at": True}}},
+            "human_tasks.distrokid_submission.completed_at must be a string",
+        ),
+        (
+            {"human_tasks": {"distrokid_submission": {"completed_at": "not-a-time"}}},
+            "human_tasks.distrokid_submission.completed_at must be an ISO 8601 datetime",
+        ),
+        (
+            {"human_tasks": {"distrokid_submission": {"completed_at": "2026-08-16T01:02:03"}}},
+            "human_tasks.distrokid_submission.completed_at must include a timezone",
+        ),
+    ],
+)
+def test_distrokid_submission_state_fails_closed_on_invalid_known_shape(
+    payload: dict[str, JSONValue],
+    message: str,
+) -> None:
+    with pytest.raises(WorkflowStateError, match=message):
+        WorkflowState(payload)
+
+
 def test_update_creates_missing_document_under_the_same_contract(tmp_path: Path) -> None:
     state_path = tmp_path / "workflow-state.json"
 
