@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import math
+from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +14,12 @@ from youtube_automation.domains.documents.schema_registry import RepositorySchem
 
 DOCUMENTATION_DIRNAME = "20-documentation"
 SUNO_PROMPTS_JSON_FILENAME = "suno-prompts.json"
+
+
+@dataclass(frozen=True, slots=True)
+class SunoDurationFilter:
+    minimum_seconds: float
+    maximum_seconds: float
 
 
 def suno_prompts_path(collection_dir: Path) -> Path:
@@ -37,6 +46,33 @@ def read_suno_prompt_entries(collection_dir: Path) -> list[Any]:
 def read_suno_prompt_delivery_payload(collection_dir: Path) -> object:
     """検証済み正本から Suno helper 公開契約だけを投影する。"""
     return read_suno_prompt_delivery_payload_from_path(suno_prompts_path(collection_dir))
+
+
+def read_suno_duration_filter(collection_dir: Path) -> SunoDurationFilter:
+    path = suno_prompts_path(collection_dir)
+    try:
+        document = read_published_json_document(path, RepositorySchema.MUSIC_PROMPT)
+    except (DocumentRenderError, DocumentValidationError, OSError, ValueError) as exc:
+        raise ValueError(f"invalid {SUNO_PROMPTS_JSON_FILENAME}: expected validated JSON+HTML pair") from exc
+    if not isinstance(document, Mapping):
+        raise ValueError(f"invalid {SUNO_PROMPTS_JSON_FILENAME}: root must be an object")
+    raw = document.get("duration_filter")
+    if not isinstance(raw, Mapping):
+        raise ValueError(f"invalid {SUNO_PROMPTS_JSON_FILENAME}: duration_filter must be an object")
+    minimum = raw.get("min_sec")
+    maximum = raw.get("max_sec")
+    if (
+        isinstance(minimum, bool)
+        or isinstance(maximum, bool)
+        or not isinstance(minimum, int | float)
+        or not isinstance(maximum, int | float)
+        or not math.isfinite(minimum)
+        or not math.isfinite(maximum)
+        or minimum < 0
+        or minimum > maximum
+    ):
+        raise ValueError(f"invalid {SUNO_PROMPTS_JSON_FILENAME}: duration_filter range is invalid")
+    return SunoDurationFilter(float(minimum), float(maximum))
 
 
 def read_suno_prompt_delivery_payload_from_path(path: Path) -> object:

@@ -442,6 +442,29 @@ def test_music_engine_accepts_minimax_in_owner_schema(tmp_path: Path) -> None:
     assert read(state_path).music_engine == "minimax"
 
 
+def test_music_planning_exposes_non_negative_expected_file_count(tmp_path: Path) -> None:
+    state_path = tmp_path / "workflow-state.json"
+    _write(state_path, {"planning": {"music": {"expected_file_count": 4}}})
+
+    state = read(state_path)
+
+    assert state.planning is not None
+    assert state.planning.music is not None
+    assert state.planning.music.expected_file_count == 4
+
+
+@pytest.mark.parametrize("value", [True, -1, "4", 4.5])
+def test_music_planning_rejects_invalid_expected_file_count(tmp_path: Path, value: object) -> None:
+    state_path = tmp_path / "workflow-state.json"
+    _write(state_path, {"planning": {"music": {"expected_file_count": value}}})
+
+    with pytest.raises(WorkflowStateError, match="expected_file_count"):
+        state = read(state_path)
+        assert state.planning is not None
+        assert state.planning.music is not None
+        _expected = state.planning.music.expected_file_count
+
+
 def test_update_keeps_existing_file_when_callback_fails(tmp_path: Path) -> None:
     state_path = tmp_path / "workflow-state.json"
     original = '{"phase":"planning","counter":0}'

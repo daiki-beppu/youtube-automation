@@ -11,7 +11,18 @@
     "engine": {"title": "Music engine", "enum": ["suno", "lyria"], "x-view": {"order": 2}},
     "collection_id": {"title": "Collection", "type": "string", "minLength": 1, "x-view": {"order": 3}},
     "provenance": {"title": "Provenance", "$ref": "#/definitions/provenance", "x-view": {"order": 10}},
-    "entries": {"title": "Prompt entries", "type": "array", "minItems": 1, "items": {"$ref": "#/definitions/entry"}, "x-view": {"order": 20, "presentation": "table"}}
+    "entries": {"title": "Prompt entries", "type": "array", "minItems": 1, "items": {"$ref": "#/definitions/entry"}, "x-view": {"order": 20, "presentation": "table"}},
+    "duration_filter": {
+      "title": "Suno duration guard",
+      "type": "object",
+      "required": ["min_sec", "max_sec"],
+      "properties": {
+        "min_sec": {"type": "number", "minimum": 0},
+        "max_sec": {"type": "number", "minimum": 0}
+      },
+      "additionalProperties": false,
+      "x-view": {"order": 21}
+    }
   },
   "additionalProperties": true,
   "definitions": {
