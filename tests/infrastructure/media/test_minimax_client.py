@@ -122,3 +122,82 @@ def test_request_json_rejects_external_url_before_resolving_secret(
 
     get_api_key.assert_not_called()
     post.assert_not_called()
+
+
+def test_get_json_sends_query_with_bearer_auth(monkeypatch: pytest.MonkeyPatch) -> None:
+    response = Mock(spec=requests.Response)
+    response.json.return_value = {"status": "Processing", "task_id": "task-1"}
+    get = Mock(return_value=response)
+    monkeypatch.setattr(minimax_client, "get_api_key", Mock(return_value="minimax-secret"))
+    monkeypatch.setattr(minimax_client.requests, "get", get)
+
+    result = minimax_client.get_json(
+        "/v1/query/video_generation",
+        {"task_id": "task-1"},
+        timeout=15,
+    )
+
+    assert result == {"status": "Processing", "task_id": "task-1"}
+    get.assert_called_once_with(
+        "https://api.minimax.io/v1/query/video_generation",
+        params={"task_id": "task-1"},
+        headers={"Authorization": "Bearer minimax-secret"},
+        timeout=15,
+    )
+
+
+def test_get_json_redacts_secret_from_http_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    secret = "minimax-secret-that-must-not-leak"
+    response = Mock(spec=requests.Response)
+    response.status_code = 503
+    response.raise_for_status.side_effect = requests.HTTPError(secret, response=response)
+    monkeypatch.setattr(minimax_client, "get_api_key", Mock(return_value=secret))
+    monkeypatch.setattr(minimax_client.requests, "get", Mock(return_value=response))
+
+    with pytest.raises(GeneratorError) as exc_info:
+        minimax_client.get_json("/v1/query/video_generation", {"task_id": secret}, timeout=15)
+
+    assert "status=503" in str(exc_info.value)
+    assert secret not in str(exc_info.value)
+
+
+def test_download_bytes_does_not_send_secret_to_signed_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    response = Mock(spec=requests.Response)
+    response.content = b"video"
+    get = Mock(return_value=response)
+    get_api_key = Mock(side_effect=AssertionError("download must not resolve a secret"))
+    monkeypatch.setattr(minimax_client, "get_api_key", get_api_key)
+    monkeypatch.setattr(minimax_client.requests, "get", get)
+
+    assert minimax_client.download_bytes("https://cdn.example/video.mp4", timeout=30) == b"video"
+
+    get_api_key.assert_not_called()
+    get.assert_called_once_with("https://cdn.example/video.mp4", timeout=30)
+
+
+def test_download_bytes_redacts_signed_url_from_transport_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    signed_secret = "signed-query-secret"
+    monkeypatch.setattr(
+        minimax_client.requests,
+        "get",
+        Mock(side_effect=requests.ConnectionError(f"failed {signed_secret}")),
+    )
+
+    with pytest.raises(GeneratorError) as exc_info:
+        minimax_client.download_bytes(f"https://cdn.example/video.mp4?token={signed_secret}", timeout=30)
+
+    assert signed_secret not in str(exc_info.value)
+
+
+@pytest.mark.parametrize("url", ["http://cdn.example/video.mp4", "file:///tmp/video.mp4", "not-a-url"])
+def test_download_bytes_rejects_non_https_url_before_network(
+    url: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    get = Mock()
+    monkeypatch.setattr(minimax_client.requests, "get", get)
+
+    with pytest.raises(GeneratorError, match="HTTPS"):
+        minimax_client.download_bytes(url, timeout=30)
+
+    get.assert_not_called()

@@ -1,7 +1,7 @@
 ---
 name: thumbnail
 purpose: 作る
-description: "Use when コレクションの YouTube サムネイル（thumbnail.jpg）を CTR 最適化し、textless main.png/jpg を先行生成して実フォント合成するとき、`--compare` で生成済み候補を競合と 320px 比較するとき、`--test` で Studio の A/B テストを設計・記録するとき、`--iterate` で伸びた動画の勝因を次のサムネへ還元するとき、または `--loop` で textless main.png/jpg から Veo / Gemini Omni Flash のループ動画背景を生成するとき。「サムネイル生成」「画像生成」「アイキャッチ」「サムネ比較」「モバイル表示テスト」「サムネ A/B テスト」「Test & Compare」「伸びた動画のサムネ改善」「ループ動画」「背景動画」「loop.mp4」で発動。競合の勝ちパターン分析は channel-research の thumbnail mode、SVG・汎用画像生成には使わない"
+description: "Use when コレクションの YouTube サムネイル（thumbnail.jpg）を CTR 最適化し、textless main.png/jpg を先行生成して実フォント合成するとき、`--compare` で生成済み候補を競合と 320px 比較するとき、`--test` で Studio の A/B テストを設計・記録するとき、`--iterate` で伸びた動画の勝因を次のサムネへ還元するとき、または `--loop` で textless main.png/jpg から Veo / Gemini Omni Flash / MiniMax H3 のループ動画背景を生成するとき。「サムネイル生成」「画像生成」「アイキャッチ」「サムネ比較」「モバイル表示テスト」「サムネ A/B テスト」「Test & Compare」「伸びた動画のサムネ改善」「ループ動画」「Hailuo」「背景動画」「loop.mp4」で発動。競合の勝ちパターン分析は channel-research の thumbnail mode、SVG・汎用画像生成には使わない"
 ---
 
 ## 前後工程
@@ -146,7 +146,7 @@ uv run python .claude/skills/thumbnail/references/share_thumbnail_as_main.py <co
 uv run yt-thumbnail-text --background <collection-path>/10-assets/main.png --title "<Title Line 1>" --title "<Title Line 2>" --channel-name "<channel_name>" --output <collection-path>/10-assets/thumbnail-v1.jpg
 ```
 5. テキスト付き候補は「手動候補の比較選択 Hard Gate」に従い、`yt-thumbnail-review --artifact thumbnail` で選択された1枚だけを `10-assets/thumbnail.jpg` として確定する。候補が1枚でも同じWeb reviewを使う。`auto_selection.enabled: true` では手動比較を行わず「自動選択」章の `yt-thumbnail-auto-select <collection-path> --apply` で確定する。手動Web reviewは確定とarchiveを同じtransactionで行う。自動確定では既存archive処理を維持する。自動確定後の `/thumbnail --compare` は省略せず別途実行する。
-6. `config/skills/loop-video.yaml::enabled: true` ならテキストなし `main.png/jpg` を `/thumbnail --loop` に渡して `loop.mp4` を生成し、`false` なら Veo を実行せず静止画背景として `/video --generate` に渡す。
+6. `config/skills/loop-video.yaml::enabled: true` ならテキストなし `main.png/jpg` を `/thumbnail --loop` に渡し、選択した Veo / Omni / MiniMax H3 engine で `loop.mp4` を生成する。`false` なら生成 API を実行せず静止画背景として `/video --generate` に渡す。
 `thumbnail.jpg` はアップロード用、`main.png/jpg` は動画背景・loop-video 入力用の成果物とする。`textless.enabled` が未設定または `true` では文字入りと文字なしを分離し、両者を同一画像で代用しない。`false` だけは上記の検証済みコピーを正規契約とする。symlink や拡張子偽装では代用しない。 決定的合成経路は `text_render.mode: deterministic` の場合だけ使う。未設定 / `ai_burn_in` では上記の textless 先行手順へ入らず、AI 焼き込み経路を実行する。
 #### 手動候補の比較選択 Hard Gate
 この契約は `thumbnail-v*.jpg/png` と `main-v*.png/jpg` のどちらにも適用する。`auto_selection.enabled: false` / 未設定で、生成に成功した候補が 2 枚以上ある場合は、次の比較選択が完了するまで `thumbnail.jpg` または `main.png/jpg` を確定してはならない。

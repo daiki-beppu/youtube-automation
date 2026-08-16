@@ -103,7 +103,7 @@ class TestBuildParser:
         )
 
         assert result.returncode == 0
-        assert "--engine {veo,omni}" in result.stdout
+        assert "--engine {veo,omni,h3}" in result.stdout
 
     def test_parser_accepts_lite_preview_model(self):
         # Given: Issue #129 のメインケース。preview モデルを CLI から指定可能。
@@ -273,6 +273,9 @@ class TestBuildParser:
 
     def test_parser_accepts_omni_engine(self):
         assert _build_parser().parse_args(["--engine", "omni"]).engine == "omni"
+
+    def test_parser_accepts_h3_engine(self):
+        assert _build_parser().parse_args(["--engine", "h3"]).engine == "h3"
 
 
 # ---------- resolve_prompt (Issue #358) ----------
@@ -1141,6 +1144,74 @@ class TestMainOmniEngine:
 
         assert excinfo.value.code == 0
         assert generate_omni.call_args.args[3] == DEFAULT_OMNI_MODEL
+
+
+class TestMainH3Engine:
+    def test_h3_uses_config_and_cli_model_override(self, tmp_path, monkeypatch):
+        from youtube_automation.commands.media import generate_loop_video as mod
+
+        col = _make_collection(tmp_path)
+        image = _write_image(col, MAIN_PNG)
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            ["yt-generate-loop-video", str(col), "--engine", "h3", "--model", "h3-override", "-y"],
+        )
+        h3_config = {
+            "model": "MiniMax-Hailuo-3",
+            "default_prompt": "h3 prompt",
+            "duration_seconds": 6,
+            "aspect_ratio": "16:9",
+            "resolution": "1080P",
+            "timeout_seconds": 42,
+            "poll_interval_seconds": 0.25,
+            "max_poll_retries": 4,
+        }
+
+        with (
+            _patch_main_boundaries() as mocks,
+            patch.object(mod, "generate_h3_loop_video", return_value=True) as generate_h3,
+        ):
+            _set_default_mocks(mocks)
+            mocks["load_config"].return_value = {"h3": h3_config}
+            with pytest.raises(SystemExit) as excinfo:
+                mod.main()
+
+        assert excinfo.value.code == 0
+        mocks["create_veo_genai_client"].assert_not_called()
+        args = generate_h3.call_args
+        assert args.args[:4] == (image, col / ASSETS_DIR / LOOP_MP4, "h3-override", "h3 prompt")
+        assert args.kwargs == {
+            "duration_seconds": 6,
+            "aspect_ratio": "16:9",
+            "resolution": "1080P",
+            "timeout_sec": 42.0,
+            "poll_interval_sec": 0.25,
+            "max_poll_retries": 4,
+            "compression": {},
+        }
+
+    def test_skip_existing_h3_does_not_call_adapter(self, tmp_path, monkeypatch):
+        from youtube_automation.commands.media import generate_loop_video as mod
+
+        col = _make_collection(tmp_path)
+        _write_loop_mp4(col)
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            ["yt-generate-loop-video", str(col), "--engine", "h3", "--skip-existing", "-y"],
+        )
+
+        with (
+            _patch_main_boundaries() as mocks,
+            patch.object(mod, "generate_h3_loop_video") as generate_h3,
+        ):
+            _set_default_mocks(mocks)
+            with pytest.raises(SystemExit) as excinfo:
+                mod.main()
+
+        assert excinfo.value.code == 0
+        generate_h3.assert_not_called()
 
     def test_omni_uses_configured_model_and_runtime_settings(self, tmp_path, monkeypatch):
         from youtube_automation.commands.media import generate_loop_video as mod

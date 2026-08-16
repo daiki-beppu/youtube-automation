@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""コレクション用ループ動画背景を Veo 3.1 / Gemini Omni Flash で生成する。
+"""コレクション用ループ動画背景を Veo / Omni / MiniMax H3 で生成する。
 
 main.png を開始・終了フレーム両方に指定し、微細なアニメーション付きの
 シームレスなループ動画を生成する。
@@ -27,6 +27,30 @@ from pathlib import Path
 from youtube_automation.core.errors import ConfigError
 from youtube_automation.domains.media.video_type import VideoType, VideoTypeConfig
 from youtube_automation.infrastructure.media.genai_client import create_veo_genai_client
+from youtube_automation.infrastructure.media.minimax_video_generator import (
+    DEFAULT_ASPECT_RATIO as DEFAULT_H3_ASPECT_RATIO,
+)
+from youtube_automation.infrastructure.media.minimax_video_generator import (
+    DEFAULT_DURATION_SECONDS as DEFAULT_H3_DURATION_SECONDS,
+)
+from youtube_automation.infrastructure.media.minimax_video_generator import (
+    DEFAULT_MAX_POLL_RETRIES as DEFAULT_H3_MAX_POLL_RETRIES,
+)
+from youtube_automation.infrastructure.media.minimax_video_generator import (
+    DEFAULT_MODEL as DEFAULT_H3_MODEL,
+)
+from youtube_automation.infrastructure.media.minimax_video_generator import (
+    DEFAULT_POLL_INTERVAL_SEC as DEFAULT_H3_POLL_INTERVAL_SEC,
+)
+from youtube_automation.infrastructure.media.minimax_video_generator import (
+    DEFAULT_RESOLUTION as DEFAULT_H3_RESOLUTION,
+)
+from youtube_automation.infrastructure.media.minimax_video_generator import (
+    DEFAULT_TIMEOUT_SEC as DEFAULT_H3_TIMEOUT_SEC,
+)
+from youtube_automation.infrastructure.media.minimax_video_generator import (
+    generate_loop_video as generate_h3_loop_video,
+)
 from youtube_automation.infrastructure.media.omni_generator import (
     DEFAULT_MODEL as DEFAULT_OMNI_MODEL,
 )
@@ -171,13 +195,13 @@ def _build_parser() -> argparse.ArgumentParser:
     # RawTextHelpFormatter: help 文字列にハイフン入りモデル名が連なるため、
     # 80 桁折り返しで `veo-3.1-lite-` / `generate-preview` のように分断されないようにする。
     parser = argparse.ArgumentParser(
-        description="Veo 3.1 / Gemini Omni Flash コレクションループ動画生成",
+        description="Veo 3.1 / Gemini Omni Flash / MiniMax H3 コレクションループ動画生成",
         formatter_class=argparse.RawTextHelpFormatter,
     )
     parser.add_argument("collection", nargs="?", help="コレクションパス")
     parser.add_argument(
         "--engine",
-        choices=("veo", "omni"),
+        choices=("veo", "omni", "h3"),
         default="veo",
         help="動画生成エンジン (default: veo)",
     )
@@ -205,7 +229,8 @@ def _build_parser() -> argparse.ArgumentParser:
         "--model",
         help=(
             "モデル名 (default: 選択 engine の skill-config model)。"
-            " 例: veo-3.1-fast-generate-001 / veo-3.1-generate-001 / veo-3.1-lite-generate-preview"
+            " 例: veo-3.1-fast-generate-001 / veo-3.1-generate-001 / "
+            "veo-3.1-lite-generate-preview / MiniMax-Hailuo-3"
         ),
     )
     parser.add_argument(
@@ -321,14 +346,28 @@ def _run_generate(
     if output_path.exists():
         _backup_existing_loop(output_path, max_backups=max_backups)
 
-    try:
-        client = create_omni_client() if engine == "omni" else create_veo_genai_client()
-    except ConfigError as e:
-        print(f"[ERROR] {e}")
-        sys.exit(1)
-
     start_time = time.monotonic()
-    if engine == "omni":
+    if engine == "h3":
+        h3_config = engine_config or {}
+        success = generate_h3_loop_video(
+            image_path,
+            output_path,
+            model,
+            prompt,
+            duration_seconds=int(h3_config.get("duration_seconds", DEFAULT_H3_DURATION_SECONDS)),
+            aspect_ratio=str(h3_config.get("aspect_ratio", DEFAULT_H3_ASPECT_RATIO)),
+            resolution=str(h3_config.get("resolution", DEFAULT_H3_RESOLUTION)),
+            timeout_sec=float(h3_config.get("timeout_seconds", DEFAULT_H3_TIMEOUT_SEC)),
+            poll_interval_sec=float(h3_config.get("poll_interval_seconds", DEFAULT_H3_POLL_INTERVAL_SEC)),
+            max_poll_retries=int(h3_config.get("max_poll_retries", DEFAULT_H3_MAX_POLL_RETRIES)),
+            compression=compression,
+        )
+    elif engine == "omni":
+        try:
+            client = create_omni_client()
+        except ConfigError as e:
+            print(f"[ERROR] {e}")
+            sys.exit(1)
         omni_config = engine_config or {}
         success = generate_omni_loop_video(
             client,
@@ -341,6 +380,11 @@ def _run_generate(
             compression=compression,
         )
     else:
+        try:
+            client = create_veo_genai_client()
+        except ConfigError as e:
+            print(f"[ERROR] {e}")
+            sys.exit(1)
         success = generate_loop_video(client, image_path, output_path, model, prompt, compression=compression)
     elapsed = time.monotonic() - start_time
 
@@ -392,7 +436,11 @@ def main():
     engine_config = skill_config.get(args.engine, {})
     compression_config = skill_config.get("compression", {})
     max_backups = int(skill_config.get("max_backups", DEFAULT_MAX_BACKUPS))
-    default_model = DEFAULT_OMNI_MODEL if args.engine == "omni" else DEFAULT_MODEL
+    default_model = {
+        "veo": DEFAULT_MODEL,
+        "omni": DEFAULT_OMNI_MODEL,
+        "h3": DEFAULT_H3_MODEL,
+    }[args.engine]
     model = args.model or engine_config.get("model", default_model)
     prompt = resolve_prompt(args, engine_config)
 
