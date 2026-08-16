@@ -59,6 +59,7 @@ def test_workflow_is_a_thin_platform_wrapper_for_sandwich_script() -> None:
         key: env[key]
         for key in (
             "CLAUDE_CODE_OAUTH_TOKEN",
+            "YOUTUBE_OAUTH_TOKEN_JSON",
             "DISCORD_WEBHOOK_URL",
             "R2_ACCESS_KEY_ID",
             "R2_ACCOUNT_ID",
@@ -67,6 +68,7 @@ def test_workflow_is_a_thin_platform_wrapper_for_sandwich_script() -> None:
         )
     } == {
         "CLAUDE_CODE_OAUTH_TOKEN": "${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}",
+        "YOUTUBE_OAUTH_TOKEN_JSON": "${{ secrets.YOUTUBE_OAUTH_TOKEN_JSON }}",
         "DISCORD_WEBHOOK_URL": "${{ secrets.DISCORD_WEBHOOK_URL }}",
         "R2_ACCESS_KEY_ID": "${{ secrets.R2_ACCESS_KEY_ID }}",
         "R2_ACCOUNT_ID": "${{ secrets.R2_ACCOUNT_ID }}",

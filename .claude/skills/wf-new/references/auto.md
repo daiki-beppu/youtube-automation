@@ -8,7 +8,7 @@
 ## 成果物
 
 - `書き込む`: `.automation-run/history.json`
-- `読み込む`: `collections/<id>/workflow-state.json`, `collections/<id>/20-documentation/community-post.txt`, `pinned_comment_history.json`
+- `読み込む`: `collections/<id>/workflow-state.json`, `post_publish_history.json`, `pinned_comment_history.json`
 
 ## Overview
 
@@ -73,6 +73,7 @@ uv run python "$STATE_SCRIPT" release --channel-dir . --token <token>
 | `wf-next-local` | `/wf-next` のローカル動画・metadata 生成まで。YouTube write は行わない |
 | `wf-next` | `/wf-next`。config が許可した場合だけ upload を含める |
 | `publish` | `/publish`。各成果物の状態判定により完了 step を skip |
+| `post-publish` | 下記の順序付き3処理。cloud executor 専用で、各処理の実成果物確認後だけ owner CLI へ完了記録 |
 | `blocked` | reason / resume_action を記録して停止 |
 | `no-op` | stateの `handoff.owner` が現在executorと一致しないため、state・成果物を変更せず停止 |
 | `complete` | 完了を記録して停止 |
@@ -88,6 +89,16 @@ uv run python -c 'from datetime import UTC, datetime; print(datetime.now(UTC).is
 子 skill の終了報告だけで成功とせず、期待成果物と state を検証してから終了 status を決める。検証に成功した場合だけ `success`、手動介入が必要なら `blocked`、検証失敗を含むその他の失敗は `failed` とする。すべての `record --status success|blocked|failed` と collection 作成前の `record-bootstrap --status blocked|failed` に、同じ attempt で保持した `--ai-started-at <current-attempt-ai-started-at>` を渡して AI 区間を必ず閉じる。`blocked` / `complete` の terminal action も、同じ順序で開始時刻を取得して記録する。
 
 retry・再開時は action を実行するたびに新しい開始時刻を取得し、新しい attempt として追記する。前回の開始時刻を再利用せず、前回の `failed` / `blocked` attempt と実行時間を履歴に残す。
+
+### `post-publish` action の無人実行契約
+
+対象 collection を固定し、`allow_external_publish: true` の resolver 結果を受け取った場合だけ、次の3処理を順番に実行する。各 step の直前に `uv run yt-post-publish-state --channel-dir . --collection <path> --step <step>` を実行し、`skip` は外部 write を再発行しない。`run` の場合だけ既存CLIを実行し、成功と実成果物を確認してから同じコマンドへ `--mark-complete` を加える。判定やCLIが失敗した場合は mark せず fail-closed で停止する。
+
+1. `playlist-assignment`: `workflow-state.json` の `upload.video_id` と `theme` を使い、`uv run yt-playlist-manager --assign <video-id> --theme <theme> --collection <collection-path>` を実行する。既存割当を含む全対象playlistを `playlistItems.list` で外部 write 直前に再検証できた場合だけ完了記録する。遠隔read失敗を空playlistとして扱わない。
+2. `pinned-comment`: `uv run yt-pinned-comment --collection <collection-path> --apply` を実行する。既存 `pinned_comment_history.json` と `comment_id`、未記録時の `videos.list` preflight と投稿結果を確認した場合だけ完了記録する。承認省略が無効なら無人runでは投稿せず blocked とする。
+3. `metadata-audit`: `uv run yt-metadata-audit --collection <collection-path> --strict` を実行し、対象動画の遠隔metadataと正準JSONの一致を確認できた場合だけ完了記録する。監査はread-onlyで、失敗を完了扱いしない。
+
+`post_publish_history.json` と `pinned_comment_history.json` は Git 制御面であり、cloud runner の pull → 単一commit → push 境界だけが更新する。3 step のtrackingと固定コメントの `comment_id` 記録が揃うまで runner completion としない。他collection・設定・成果物を変更しない。
 
 ### 同一 run の人間介入 gate timing 契約
 
@@ -142,7 +153,7 @@ resolver が `action: suno-helper` を返したら、agent 自身が `/music --g
 4. 選ばれた各 action の直前に `heartbeat` を実行する。owner なら直後に「canonical action の AI timing 契約」の開始時刻を取得して保持する。子 skill action は対応する `SKILL.md` を読み、固定 collection、期待成果物、外部公開許可を明示して委譲する。`blocked` / `complete` は同じ開始時刻取得後に terminal action として処理する。`not-owner` なら開始時刻を取得せず、action を開始しない。
 5. `/wf-new` が collection を初期化したら、出力 path と `workflow-state.json` の実在を検証して名前を固定する。step 4 で保持した開始時刻を渡して `record --action wf-new --status success --ai-started-at <current-attempt-ai-started-at>` を実行した後、同じ run 内で `plan --collection <fixed-name>` を実行する。企画選択等で対話が一時停止しても lease を保持した実行文脈へ回答を戻し、完了後に同じ固定処理を行う。
 6. 子 skill の期待成果物と state を検証する。検証成功だけを `record --status success`、手動介入は `blocked`、検証失敗を含むその他は `failed` として reason / resume_action を残し、すべてに同じ attempt の `--ai-started-at` を渡す。成功時だけ固定 collection を再度 `plan` する。
-7. `publish` 後も再評価し、`phase: complete`、`stage: live`、`upload.video_id`、community 投稿文、pinned comment 履歴が揃って `action: complete` になったら、同じ timing 契約で完了記録を残す。
+7. `publish` 後も再評価し、`phase: complete`、`stage: live`、`upload.video_id`、post-publish 3 step 履歴、pinned comment の `comment_id` が揃って `action: complete` になったら、同じ timing 契約で完了記録を残す。
 8. `finally` 相当で必ず自分の token を指定して `release` する。`not-owner` でも他 token の lease は削除しない。
 
 ## 再開と停止報告

@@ -24,10 +24,11 @@ import re
 import sys
 from pathlib import Path
 
+from youtube_automation.commands._shared.cli_harness import run_cli
 from youtube_automation.configuration import channel_dir, load_config
 from youtube_automation.configuration.model import ChannelConfig
 from youtube_automation.configuration.skills import load_skill_config
-from youtube_automation.core.errors import ValidationError, WorkflowStateError
+from youtube_automation.core.errors import ConfigError, ValidationError, WorkflowStateError
 from youtube_automation.domains.collections.workflow_state import read as read_workflow_state
 from youtube_automation.domains.documents.video_description import read_video_description_metadata
 from youtube_automation.domains.metadata.descriptions import (
@@ -224,10 +225,10 @@ def audit_remote(video_ids: dict[str, str]) -> dict[str, list[str]]:
     return issues
 
 
-def collect_video_ids() -> dict[str, str]:
+def collect_video_ids(collections: list[Path] | None = None) -> dict[str, str]:
     """{video_id: collection_name} for all live collections with uploads."""
     result: dict[str, str] = {}
-    for col in sorted(_collections_dir().iterdir()):
+    for col in collections if collections is not None else sorted(_collections_dir().iterdir()):
         if not col.is_dir():
             continue
         tracking = CollectionPaths(col).tracking_path
@@ -244,18 +245,40 @@ def collect_video_ids() -> dict[str, str]:
     return result
 
 
-def main() -> None:
+def _selected_collections(value: Path | None) -> list[Path]:
+    live = _collections_dir().resolve()
+    if value is None:
+        return sorted(live.iterdir())
+    candidate = value if value.is_absolute() else live / value
+    if candidate.is_symlink():
+        raise ConfigError("metadata audit collection に symlink は使えません")
+    candidate = candidate.resolve()
+    try:
+        candidate.relative_to(live)
+    except ValueError as exc:
+        raise ConfigError("metadata audit collection は collections/live 配下でなければなりません") from exc
+    if not candidate.is_dir():
+        raise ConfigError(f"metadata audit collection が見つかりません: {value}")
+    return [candidate]
+
+
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     parser.add_argument("--local", action="store_true", help="local checks only")
     parser.add_argument("--remote", action="store_true", help="remote checks only")
     parser.add_argument("--strict", action="store_true", help="exit 1 on any issue")
-    args = parser.parse_args()
+    parser.add_argument("--collection", type=Path, help="audit one collections/live entry")
+    return parser
+
+
+def run(args: argparse.Namespace) -> int:
 
     do_local = args.local or not args.remote
     do_remote = args.remote or not args.local
 
     config = load_config()
     supported_langs = list(config.localizations.supported_languages)
+    collections = _selected_collections(args.collection)
 
     print(f"📋 Auditing collections in {_collections_dir()}")
     print(f"   supported_languages: {supported_langs}\n")
@@ -264,7 +287,7 @@ def main() -> None:
 
     if do_local:
         print("─── LOCAL (descriptions.json + HTML / workflow-state.json) ───")
-        for col in sorted(_collections_dir().iterdir()):
+        for col in collections:
             if not col.is_dir():
                 continue
             issues = audit_local(col, config)
@@ -279,7 +302,7 @@ def main() -> None:
 
     if do_remote:
         print("─── REMOTE (YouTube API) ───")
-        video_ids = collect_video_ids()
+        video_ids = collect_video_ids(collections)
         if not video_ids:
             print("(no videos found)")
         else:
@@ -297,8 +320,13 @@ def main() -> None:
 
     print(f"━━━ {total_issues} issue(s) found ━━━")
     if args.strict and total_issues:
-        sys.exit(1)
+        return 1
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    return run_cli(build_parser, run, argv, failure_message="metadata audit error")
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

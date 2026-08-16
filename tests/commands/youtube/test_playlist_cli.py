@@ -59,7 +59,7 @@ def test_manager_cli_assign_forwards_video_theme_and_dry_run(monkeypatch, capsys
 
     assert playlist_manager.main(["--assign", "VIDEO123", "--theme", "night cafe", "--dry-run"]) == 0
 
-    manager.assign_video.assert_called_once_with("VIDEO123", "night cafe", dry_run=True)
+    manager.assign_video.assert_called_once_with("VIDEO123", "night cafe", dry_run=True, collection_path=None)
     assert capsys.readouterr().out == "割り当て: ['all', 'focus']\n"
 
 

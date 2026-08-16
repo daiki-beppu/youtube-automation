@@ -13,6 +13,7 @@ from youtube_automation.core.errors import AutomationError
 from youtube_automation.domains.collections.workflow_state import WorkflowState
 from youtube_automation.domains.collections.workflow_state import read as read_workflow_state
 from youtube_automation.domains.documents.schema_registry import RepositorySchema
+from youtube_automation.domains.post_publish import verify_post_publish_completion
 from youtube_automation.infrastructure.documents.publishing import read_published_json_document
 
 STAGES = ("企画", "音源生成", "マスター化", "動画化", "サムネイル", "アップロード", "公開後処理", "分析")
@@ -92,25 +93,11 @@ def _video_id(state: WorkflowState) -> str | None:
 def _publish_followup_complete(root: Path, collection: Path, video_id: str | None) -> bool:
     if video_id is None:
         return False
-    community_path = collection / "20-documentation" / "community-post.txt"
-    if not community_path.is_file() or not community_path.read_text(encoding="utf-8").strip():
+    try:
+        verify_post_publish_completion(root, collection)
+    except AutomationError:
         return False
-    config_path = root / "config" / "channel" / "pinned-comment.json"
-    if not config_path.is_file():
-        return False
-    config = _read_object(config_path)
-    pinned = config.get("pinned_comment")
-    if not isinstance(pinned, Mapping):
-        return False
-    history_file = pinned.get("history_file")
-    if not isinstance(history_file, str) or not history_file:
-        return False
-    path = (root / history_file).resolve()
-    if not path.is_relative_to(root.resolve()) or not path.is_file():
-        return False
-    history = _read_object(path)
-    posted = history.get("posted")
-    return history.get("schema_version") == 1 and isinstance(posted, Mapping) and video_id in posted
+    return True
 
 
 def _publish_date(state: WorkflowState) -> date | None:

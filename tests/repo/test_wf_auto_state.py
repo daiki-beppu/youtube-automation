@@ -970,6 +970,23 @@ def test_completed_live_collection_finishes_after_publish_artifacts(tmp_path: Pa
     (tmp_path / "pinned_comment_history.json").write_text(
         json.dumps({"schema_version": 1, "posted": {"video-123": {"posted_at": "done"}}}), encoding="utf-8"
     )
+    (tmp_path / "post_publish_history.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "videos": {
+                    "video-123": {
+                        "completed": {
+                            "playlist-assignment": "done",
+                            "pinned-comment": "done",
+                            "metadata-audit": "done",
+                        }
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
 
     decision = runner.resolve_action(
         tmp_path,

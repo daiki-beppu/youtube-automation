@@ -39,6 +39,7 @@ UPLOAD_REQUIRED_SCOPES = (
     "https://www.googleapis.com/auth/youtube",
     "https://www.googleapis.com/auth/youtube.force-ssl",
 )
+OAUTH_TOKEN_JSON_ENV = "YOUTUBE_OAUTH_TOKEN_JSON"
 
 
 def build_youtube_service(credentials: Credentials):
@@ -179,6 +180,28 @@ class YouTubeOAuthHandler:
             self.token_file = resolve_token_path(self.auth_dir)
         self.credentials = None
         self._interactive = interactive
+        self._ephemeral_credentials = False
+
+    def _load_secret_credentials(self) -> Credentials | None:
+        """Load an authorized-user token injected by the cloud secret boundary."""
+        raw = os.environ.get(OAUTH_TOKEN_JSON_ENV)
+        if raw is None:
+            return None
+        try:
+            document = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise AuthError(f"{OAUTH_TOKEN_JSON_ENV} は有効な JSON object でなければなりません") from exc
+        required = {"refresh_token", "token_uri", "client_id", "client_secret"}
+        if not isinstance(document, dict) or any(
+            not isinstance(document.get(key), str) or not document[key] for key in required
+        ):
+            raise AuthError(f"{OAUTH_TOKEN_JSON_ENV} に authorized-user OAuth fields が不足しています")
+        try:
+            credentials = Credentials.from_authorized_user_info(document, self._scopes)
+        except ValueError as exc:
+            raise AuthError(f"{OAUTH_TOKEN_JSON_ENV} を OAuth token として読み込めません") from exc
+        self._ephemeral_credentials = True
+        return credentials
 
     @classmethod
     def readonly_token_path(cls) -> Path | None:
@@ -287,8 +310,12 @@ class YouTubeOAuthHandler:
         """
         print("🔐 YouTube Data API OAuth 2.0 認証開始...")
 
+        # cloud secret はファイルより優先し、refresh 後もディスクへ永続化しない。
+        if not force_reauth:
+            self.credentials = self._load_secret_credentials()
+
         # 既存トークンの読み込み
-        if not force_reauth and self.token_file.exists():
+        if not force_reauth and self.credentials is None and self.token_file.exists():
             try:
                 print("📁 既存トークンファイルを確認中...")
                 self.credentials = Credentials.from_authorized_user_file(str(self.token_file), self._scopes)
@@ -305,11 +332,14 @@ class YouTubeOAuthHandler:
                     print("🔄 トークンの更新中...")
                     self.credentials.refresh(Request())
                     print("✅ トークン更新成功")
-                    self._save_credentials()
+                    if not self._ephemeral_credentials:
+                        self._save_credentials()
                 except google.auth.exceptions.GoogleAuthError as e:
                     # AuthError を raise すると新規認証へのフォールスルー recovery が壊れる。
                     # credentials=None に落として下の新規認証ブロックで recovery する。
                     logger.warning("token refresh 失敗: %s", redact_sensitive_data(str(e)))
+                    if self._ephemeral_credentials:
+                        raise AuthError("secret OAuth token の更新に失敗しました") from e
                     self.credentials = None
 
         # 新規認証が必要な場合
@@ -351,12 +381,14 @@ class YouTubeOAuthHandler:
 
     def refresh_existing_credentials(self) -> Credentials:
         """既存 refresh token だけを使い、ブラウザを開かず access token を更新する。"""
-        if not self.token_file.is_file():
-            raise AuthError(f"既存の OAuth token がありません: {self.token_file}")
-        try:
-            credentials = Credentials.from_authorized_user_file(str(self.token_file), self._scopes)
-        except (OSError, ValueError) as exc:
-            raise AuthError("既存の OAuth token を読み込めません") from exc
+        credentials = self._load_secret_credentials()
+        if credentials is None:
+            if not self.token_file.is_file():
+                raise AuthError(f"既存の OAuth token がありません: {self.token_file}")
+            try:
+                credentials = Credentials.from_authorized_user_file(str(self.token_file), self._scopes)
+            except (OSError, ValueError) as exc:
+                raise AuthError("既存の OAuth token を読み込めません") from exc
         if not credentials.refresh_token:
             raise AuthError("既存の OAuth token に refresh token がありません")
         try:
@@ -365,7 +397,8 @@ class YouTubeOAuthHandler:
             logger.warning("token refresh 失敗: %s", redact_sensitive_data(str(exc)))
             raise AuthError("OAuth token の更新に失敗しました。refresh token が失効している可能性があります") from exc
         self.credentials = credentials
-        self._save_credentials()
+        if not self._ephemeral_credentials:
+            self._save_credentials()
         return credentials
 
     def _save_credentials(self):

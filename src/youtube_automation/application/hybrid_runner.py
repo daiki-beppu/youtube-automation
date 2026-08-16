@@ -25,12 +25,17 @@ from youtube_automation.domains.hybrid_resource_guard import (
 )
 from youtube_automation.domains.media_handoff_manifest import MANIFEST_NAME, HandoffIdentity, HandoffManifest
 from youtube_automation.domains.media_store import MediaStore, validate_media_relative_path
+from youtube_automation.domains.post_publish import (
+    resolve_post_publish_readiness,
+    validate_post_publish_changes,
+    verify_post_publish_completion,
+)
 from youtube_automation.infrastructure.auth.redaction import redact_sensitive_data
 from youtube_automation.infrastructure.vcs.state_git import build_context
 from youtube_automation.infrastructure.vcs.state_sync import EventSink, pull_update_commit_push
 
 Agent = Literal["claude", "codex"]
-Stage = Literal["pipeline", "planning"]
+Stage = Literal["pipeline", "planning", "post-publish"]
 AgentRunner = Callable[[Agent, str, Path], None]
 
 
@@ -83,8 +88,10 @@ class SandwichRequest:
             raise ValidationError("output files には handoff と root が必要です")
         if self.output_handoff is not None and not self.output_files:
             raise ValidationError("output handoff には1件以上の file が必要です")
-        if self.stage == "planning" and (self.input_handoff is not None or self.output_handoff is not None):
-            raise ValidationError("planning stage は media handoff を受け付けません")
+        if self.stage in {"planning", "post-publish"} and (
+            self.input_handoff is not None or self.output_handoff is not None
+        ):
+            raise ValidationError(f"{self.stage} stage は media handoff を受け付けません")
         for field in filter(None, (self.collection_dir, self.input_destination, self.output_root, *self.output_files)):
             validate_media_relative_path("runner path", field)
 
@@ -202,9 +209,10 @@ def run_sandwich(
     context = build_context(request.channel_dir)
     result = SandwichResult("completed", request.collection or None)
     planning_collection: Path | None = None
+    post_publish_collection: Path | None = None
 
     def writer() -> None:
-        nonlocal planning_collection, result
+        nonlocal planning_collection, post_publish_collection, result
         if request.stage == "planning":
             readiness = resolve_planning_readiness(request.channel_dir)
             if readiness.status == "waiting":
@@ -213,6 +221,22 @@ def run_sandwich(
             agent_runner(request.agent, request.prompt, request.channel_dir)
             planning_collection = verify_planning_completion(request.channel_dir, readiness.collection)
             result = SandwichResult("completed", planning_collection.name)
+            return
+        if request.stage == "post-publish":
+            readiness = resolve_post_publish_readiness(request.channel_dir, request.collection or None)
+            if readiness.status == "waiting":
+                result = SandwichResult("waiting", None)
+                return
+            if readiness.collection is None:
+                raise StateSyncError("cloud post-publish completion target is missing")
+            targeted_prompt = (
+                f"{request.prompt}\n"
+                f"Cloud post-publish target is collection {readiness.collection.name!r}. "
+                "Use the cloud executor and do not select or modify any other collection."
+            )
+            agent_runner(request.agent, targeted_prompt, request.channel_dir)
+            post_publish_collection = verify_post_publish_completion(request.channel_dir, readiness.collection)
+            result = SandwichResult("completed", post_publish_collection.name)
             return
         if request.input_handoff is not None and request.input_destination is not None:
             identity = HandoffIdentity(request.channel, request.collection, request.input_handoff)
@@ -231,15 +255,20 @@ def run_sandwich(
             if changed:
                 raise StateSyncError("waiting cloud planning run must not change repository state")
             return
-        if planning_collection is None:
-            raise StateSyncError("cloud planning completion target is missing")
-        validate_planning_changes(repository, planning_collection, changed)
+        if request.stage == "planning":
+            if planning_collection is None:
+                raise StateSyncError("cloud planning completion target is missing")
+            validate_planning_changes(repository, planning_collection, changed)
+            return
+        if post_publish_collection is None:
+            raise StateSyncError("cloud post-publish completion target is missing")
+        validate_post_publish_changes(repository, changed)
 
     pull_update_commit_push(
         context,
         writer,
         commit_message=request.commit_message,
         on_event=on_state_sync_event,
-        change_validator=validate_changes if request.stage == "planning" else None,
+        change_validator=validate_changes if request.stage in {"planning", "post-publish"} else None,
     )
     return result

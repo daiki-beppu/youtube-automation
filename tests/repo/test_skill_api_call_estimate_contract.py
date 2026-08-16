@@ -115,6 +115,7 @@ NON_BILLED_CLIS: dict[str, str] = {
     "yt-kpi-dashboard": "収集済みデータのローカル KPI 集計のみ",
     "yt-launch-curve": "収集済み analytics_data_*.json のローカル分析のみ",
     "yt-postmortem-pending": "収集済み analytics と upload tracking の読み取りのみ",
+    "yt-post-publish-state": "ローカルの post-publish tracking 読み書きのみ",
     "yt-populate-scene-phrases": "翻訳 JSON は外部エージェント生成を受け取るのみ",
     "yt-preflight": "ローカルの事前チェックのみ",
     "yt-progress-hook": "ローカルの hook payload 解析と進捗図整形のみ",

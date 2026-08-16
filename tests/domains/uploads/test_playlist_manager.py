@@ -314,12 +314,12 @@ class TestListPlaylistVideoIds:
         result = manager._list_playlist_video_ids("PL_EMPTY")
         assert result == set()
 
-    def test_api_error_returns_empty(self, manager, mock_youtube):
-        """API エラー時は空セットを返す"""
+    def test_api_error_fails_closed_before_external_write(self, manager, mock_youtube):
+        """遠隔の重複確認に失敗した場合は空集合とみなさず停止する。"""
         mock_youtube.playlistItems.return_value.list.return_value.execute.side_effect = OSError("API Error")
 
-        result = manager._list_playlist_video_ids("PL_FAIL")
-        assert result == set()
+        with pytest.raises(YouTubeAPIError, match="API Error"):
+            manager._list_playlist_video_ids("PL_FAIL")
 
     def test_retries_transient_api_failure(self, manager, mock_youtube, monkeypatch, quota_log):
         monkeypatch.setattr("youtube_automation.infrastructure.retry.time.sleep", lambda _: None)
@@ -735,14 +735,15 @@ def test_create_playlist_returns_failure_for_invalid_api_response(manager):
     assert result == {"status": "failed", "error": "playlists.insert response is missing id", "title": "New"}
 
 
-def test_list_playlist_video_ids_returns_partial_result_for_invalid_item(manager):
+def test_list_playlist_video_ids_fails_closed_for_invalid_item(manager):
     request = manager._youtube.playlistItems.return_value.list.return_value
     request.execute.return_value = {"items": [{"contentDetails": {"videoId": "v1"}}, {"contentDetails": {}}]}
 
-    assert manager._list_playlist_video_ids("PL_ALL") == {"v1"}
+    with pytest.raises(ValidationError, match="videoId"):
+        manager._list_playlist_video_ids("PL_ALL")
 
 
-def test_list_playlist_video_ids_keeps_first_page_when_next_page_fails(manager):
+def test_list_playlist_video_ids_fails_closed_when_next_page_fails(manager):
     items = manager._youtube.playlistItems.return_value
     first_request = items.list.return_value
     first_response = {"items": [{"contentDetails": {"videoId": "v1"}}]}
@@ -751,7 +752,8 @@ def test_list_playlist_video_ids_keeps_first_page_when_next_page_fails(manager):
     second_request.execute.side_effect = OSError("page unavailable")
     items.list_next.side_effect = [second_request]
 
-    assert manager._list_playlist_video_ids("PL_ALL") == {"v1"}
+    with pytest.raises(YouTubeAPIError, match="page unavailable"):
+        manager._list_playlist_video_ids("PL_ALL")
 
 
 def test_write_back_playlist_ids_preserves_unrelated_config(manager, monkeypatch):
@@ -781,7 +783,8 @@ def test_write_back_playlist_ids_preserves_unrelated_config(manager, monkeypatch
 
 
 @pytest.mark.parametrize("response", [None, {"items": {"videoId": "v1"}}])
-def test_list_playlist_video_ids_returns_empty_for_invalid_response_shape(manager, response):
+def test_list_playlist_video_ids_fails_closed_for_invalid_response_shape(manager, response):
     manager._youtube.playlistItems.return_value.list.return_value.execute.return_value = response
 
-    assert manager._list_playlist_video_ids("PL_ALL") == set()
+    with pytest.raises(ValidationError, match="response"):
+        manager._list_playlist_video_ids("PL_ALL")
