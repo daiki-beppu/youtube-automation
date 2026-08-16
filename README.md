@@ -110,6 +110,7 @@ yt-skills sync --asset claude-md          # 個別: 運営方針テンプレ (.c
 yt-skills sync --asset workflow-cheatsheet  # 個別: workflow チートシート (docs/workflow-cheatsheet.md)
 yt-skills sync --asset features           # 個別: 全 skill カタログ (docs/features.md)
 yt-skills sync --asset auth-template      # 個別: OAuth client_secrets テンプレ (auth/client_secrets.template.json)
+yt-skills sync --asset channel-workflow   # 個別: 日次 GHA workflow (.github/workflows/youtube-automation.yml)
 yt-skills sync --symlink                  # 開発時はシンボリックリンク
 yt-skills diff                            # 全 asset で同梱版との差分表示
 yt-skills sync --force                    # 既存ファイルを上書き

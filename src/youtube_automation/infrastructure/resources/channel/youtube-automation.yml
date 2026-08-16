@@ -1,0 +1,47 @@
+name: YouTube automation
+
+on:
+  schedule:
+    - cron: "23 0 * * *"
+
+concurrency:
+  group: youtube-automation-${{ github.repository }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  automation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: true
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+      - name: Run platform-neutral sandwich runner
+        env:
+          REPOSITORY_URL: ${{ github.server_url }}/${{ github.repository }}.git
+          REPOSITORY_REF: ${{ github.ref_name }}
+          YTA_CHANNEL_SLUG: ${{ vars.YTA_CHANNEL_SLUG }}
+          YTA_COLLECTION: ${{ vars.YTA_COLLECTION }}
+          YTA_COLLECTION_DIR: ${{ vars.YTA_COLLECTION_DIR }}
+          YTA_AGENT: ${{ vars.YTA_AGENT }}
+          YTA_AUTOMATION_PROMPT: ${{ vars.YTA_AUTOMATION_PROMPT }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_API_TOKEN: ${{ secrets.R2_API_TOKEN }}
+          R2_BUCKET: ${{ vars.R2_BUCKET }}
+        run: >-
+          bash .claude/skills/wf-new/references/run-sandwich.sh
+          --repository-url "$REPOSITORY_URL"
+          --ref "$REPOSITORY_REF"
+          --workspace "${{ runner.temp }}/yta-hybrid"
+          --
+          --channel-slug "$YTA_CHANNEL_SLUG"
+          --collection "$YTA_COLLECTION"
+          --collection-dir "$YTA_COLLECTION_DIR"
+          --agent "$YTA_AGENT"
+          --prompt "$YTA_AUTOMATION_PROMPT"

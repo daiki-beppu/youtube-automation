@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(hybrid)`: サンドイッチrunnerだけを呼ぶ日次cron・直列concurrency付きGitHub Actions workflowを追加し、`yt-skills sync` で下流チャンネルへ配布する（#4054）。
 - `feat(hybrid)`: Git clone、検証済みMediaStore pull、単一agent境界、成果物push、state commit/pushをuv直行で束ねる基盤非依存サンドイッチrunnerを追加する（#4053）。
 - `refactor(hybrid)`: `/wf-new --schedule` の実行場所判定を能力ベースへ置き換え、Suno UIだけを本来のlocal条件、重量overlayのmedia〜publishを暫定local例外として固定する（#4052）。
 - `feat(hybrid)`: suno-helper の一括 DL 完了後に音源を再実行安全な manifest-last R2 handoff へ自動送信し、検証済み manifest key と root SHA-256 の state 記録後に通知 event を発火する（#4048）。

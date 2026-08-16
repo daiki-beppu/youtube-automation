@@ -71,6 +71,16 @@ def test_channel_gitignore_asset_is_packaged_with_state_git_policy() -> None:
     assert "auth/token*.json" in text
 
 
+def test_channel_workflow_asset_is_packaged_for_default_sync() -> None:
+    from youtube_automation.commands.system.skills_sync import _ASSET_SPECS, _asset_root
+
+    spec = _ASSET_SPECS["channel-workflow"]
+    template = _asset_root("channel-workflow") / spec["source_filename"]
+    assert spec["default_target"] == ".github/workflows/youtube-automation.yml"
+    assert template.is_file()
+    assert "run-sandwich.sh" in template.read_text(encoding="utf-8")
+
+
 def test_auth_template_is_included_in_wheel_and_sdist_manifests() -> None:
     pyproject = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
 
