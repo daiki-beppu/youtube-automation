@@ -13,11 +13,8 @@ OWNER = "src/youtube_automation/domains/collections/workflow_state.py"
 DIRECT_IO_ALLOWLIST = frozenset(
     {
         "src/youtube_automation/commands/analytics/experiment_judge.py",
-        "src/youtube_automation/commands/distrokid/distrokid_prepare.py",
         "src/youtube_automation/commands/system/progress_hook/workflow_state.py",
         "src/youtube_automation/commands/youtube/pinned_comment.py",
-        "src/youtube_automation/domains/distrokid/release.py",
-        "src/youtube_automation/domains/suno/prompt_resolution.py",
         "src/youtube_automation/infrastructure/analytics/workflow_timing.py",
     }
 )

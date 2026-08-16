@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `feat(wf-new)`: 企画前の Phase 0 で未 postmortem を列挙し、コスト承認後に `/analytics --flop` へ全件を順次委譲して insights を最新化する再開可能な振り返り gate を追加する（#3791）。
 - `feat(analytics)`: 最新 analytics と upload tracking を読み取り専用で照合し、postmortem 未作成 collection を human / JSON で列挙する `yt-postmortem-pending` を追加する（#3790）。
+- `refactor(workflow-state)`: Suno prompt と DistroKid prepare / release の残存3 readerを owner の型付き accessor 経由へ移し、破損時の既存診断と未知 field を維持する（#3883）。
 - `refactor(uploads)`: `ShortUploader` が複製していた公開日計算と tracking / workflow-state I/O を `PublishedDatesScheduler` / `TrackingStore` の共通コラボレータへ統合する（#3935）。
 - `refactor(metadata)`: metadata service・metadata audit・Shorts localization の `workflow-state` 読み取りを owner の型付き accessor 経由へ移し、破損 JSON をドメイン診断へ変換する（#3882）。
 - `refactor(uploads)`: uploads ドメインの `workflow-state` 読み取り6ファイルを owner の型付き accessor 経由へ移行し、破損時の既存 fail-open / fail-loud 契約を維持する（#3881）。

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import math
 import re
 from collections.abc import Callable, Mapping, Sequence, Set
@@ -14,7 +13,8 @@ from typing import cast
 import yaml
 
 from youtube_automation.configuration.skills import load_channel_override, load_skill_config
-from youtube_automation.core.errors import ConfigError
+from youtube_automation.core.errors import ConfigError, WorkflowStateError
+from youtube_automation.domains.collections.workflow_state import read as read_workflow_state
 from youtube_automation.domains.suno.config import ResolvedSunoConfig, infer_suno_mode, resolve_suno_config
 from youtube_automation.domains.suno.downloaded.models import (
     DOCUMENTATION_DIRNAME,
@@ -457,12 +457,14 @@ def _read_workflow_track_count(workflow_state_path: Path) -> int:
     if not workflow_state_path.is_file():
         raise ConfigError(f"workflow-state.json is required for vocal mode: {workflow_state_path}")
     try:
-        data = json.loads(workflow_state_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+        state = read_workflow_state(workflow_state_path)
+        track_count = state.track_count
+    except WorkflowStateError as exc:
+        if "root must be an object" in str(exc):
+            raise ConfigError(
+                f"workflow-state.json のトップレベルは object である必要があります: {workflow_state_path}"
+            ) from exc
         raise ConfigError(f"workflow-state.json を読み取れませんでした: {workflow_state_path}") from exc
-    if not isinstance(data, Mapping):
-        raise ConfigError(f"workflow-state.json のトップレベルは object である必要があります: {workflow_state_path}")
-    track_count = data.get("track_count")
     issue = positive_integer_issue(track_count, "workflow-state.json::track_count")
     if issue is not None:
         raise ConfigError(f"{issue}: {workflow_state_path}")
