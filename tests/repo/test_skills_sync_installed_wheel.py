@@ -365,6 +365,7 @@ assert "wheel-identity-check" not in legacy._cache
 
     workflow_state_scripts = (
         target_skills / "publish" / "references" / "generate_batch.py",
+        target_skills / "publish" / "references" / "clean-scan.py",
         target_skills / "publish" / "references" / "publish-chain-state.py",
         target_skills / "wf-new" / "references" / "wf-auto-state.py",
         target_skills / "wf-next" / "references" / "master_audio_transition.py",

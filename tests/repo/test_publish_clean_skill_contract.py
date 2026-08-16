@@ -29,9 +29,17 @@ def test_publish_owns_clean_as_the_fifth_exclusive_mode() -> None:
 def test_clean_requires_publish_completion_and_explicit_approval() -> None:
     clean = (PUBLISH / "references" / "clean.md").read_text(encoding="utf-8")
 
-    for condition in ('`stage` が `"live"`', '`phase` が `"complete"`', "`upload.video_id`"):
+    for condition in (
+        '`stage` が `"live"`',
+        '`phase` が `"complete"`',
+        "`upload.video_id`",
+        "`upload.publish_at`",
+    ):
         assert condition in clean
-    assert "3条件すべて" in clean
+    assert "4条件すべて" in clean
+    assert "clean-scan.py" in clean
+    assert "git pull --ff-only" in clean
+    assert "pull に失敗" in clean and "ドライラン表示へ進まない" in clean
     assert "削除を実行する" in clean and "キャンセル" in clean
     assert "承認されるまで" in clean
     assert "削除しない" in clean
