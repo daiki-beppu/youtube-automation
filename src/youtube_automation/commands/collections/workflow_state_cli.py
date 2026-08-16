@@ -134,11 +134,7 @@ def _set_asset(state: WorkflowState, key: AssetKey, value: JSONValue) -> None:
 
 
 def _set_planning(state: WorkflowState, key: PlanningKey, value: JSONValue) -> None:
-    if state.planning is None:
-        state["planning"] = {}
-    planning = state.planning
-    assert planning is not None
-    planning.set_known(key, value)
+    state.set_planning_known(key, value)
     _touch(state)
 
 

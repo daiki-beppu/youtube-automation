@@ -86,3 +86,15 @@ def test_description_completion_routes_use_only_the_canonical_asset_key() -> Non
     assert "assets.description" in wf_next
     assert "description.generated" not in wf_next
     assert wf_next.count("set-description-generated true") == 1
+
+
+def test_workflow_music_engine_routes_use_the_canonical_planning_key() -> None:
+    wf_new = _text("wf-new")
+    music_generate = (REPO_ROOT / ".claude" / "skills" / "music" / "references" / "generate.md").read_text(
+        encoding="utf-8"
+    )
+
+    for text in (wf_new, music_generate):
+        assert "planning.music.engine" in text
+    assert "workflow-state.json::music_engine" not in wf_new
+    assert 'workflow-state.json` の `music_engine = "lyria"' not in music_generate

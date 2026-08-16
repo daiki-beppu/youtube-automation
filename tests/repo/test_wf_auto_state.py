@@ -58,7 +58,6 @@ def _collection(
         "created_at": "2026-07-21T00:00:00+00:00",
         "stage": stage,
         "phase": phase,
-        "music_engine": engine,
         "planning": {"music": {"engine": engine}},
         "assets": {
             "music_prompts": True,
@@ -109,6 +108,29 @@ def test_minimax_collection_routes_to_music_generate_without_suno_fallback(tmp_p
     assert decision["action"] == "minimax"
     assert decision["reason"] == "minimax_generation_required"
     assert decision["resume_action"] == "minimax"
+
+
+def test_legacy_music_engine_only_state_remains_routable(tmp_path: Path, runner: ModuleType) -> None:
+    collection = _collection(tmp_path, "20260721-legacy", engine="lyria")
+    state_path = collection / "workflow-state.json"
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    state["music_engine"] = state["planning"]["music"].pop("engine")
+    state_path.write_text(json.dumps(state), encoding="utf-8")
+
+    decision = runner.resolve_action(tmp_path, collection.name, config=_config(runner))
+
+    assert decision["action"] == "lyria"
+
+
+def test_conflicting_music_engine_state_fails_before_action_selection(tmp_path: Path, runner: ModuleType) -> None:
+    collection = _collection(tmp_path, "20260721-conflict", engine="lyria")
+    state_path = collection / "workflow-state.json"
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    state["music_engine"] = "suno"
+    state_path.write_text(json.dumps(state), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="music engine mismatch"):
+        runner.resolve_action(tmp_path, collection.name, config=_config(runner))
 
 
 def test_interactive_approval_replans_same_collection_in_same_run(tmp_path: Path, runner: ModuleType) -> None:

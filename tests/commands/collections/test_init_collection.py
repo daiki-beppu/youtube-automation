@@ -104,7 +104,8 @@ class TestScaffold:
             assert state["theme"] == "init-scaffold"
             assert state["track_count"] == 7
             assert state["selected_plan"] == "D"
-            assert state["music_engine"] == "lyria"
+            assert state["planning"]["music"]["engine"] == "lyria"
+            assert "music_engine" not in state
         finally:
             import shutil
 
@@ -117,7 +118,8 @@ class TestScaffold:
         collection = _created_collection()
         try:
             state = json.loads((collection / "workflow-state.json").read_text(encoding="utf-8"))
-            assert state["music_engine"] == expected_engine
+            assert state["planning"]["music"]["engine"] == expected_engine
+            assert "music_engine" not in state
             assert state["track_count"] == 12
             assert state["selected_plan"] == "A"
         finally:
@@ -131,7 +133,8 @@ class TestScaffold:
         collection = next(planning.glob("*-minimax-scaffold-collection"))
         try:
             state = json.loads((collection / "workflow-state.json").read_text(encoding="utf-8"))
-            assert state["music_engine"] == "minimax"
+            assert state["planning"]["music"]["engine"] == "minimax"
+            assert "music_engine" not in state
         finally:
             import shutil
 

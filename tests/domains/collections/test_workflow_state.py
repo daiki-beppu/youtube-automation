@@ -37,7 +37,6 @@ def test_read_returns_typed_sections_and_compatible_accessors(tmp_path: Path) ->
         {
             "phase": "prepared",
             "stage": "planning",
-            "music_engine": "suno",
             "planning": {"music": {"engine": "suno"}},
             "assets": {"thumbnail": False, "description": True},
             "thumbnail": {"approved": True},
@@ -280,9 +279,27 @@ def test_compatible_music_engine_accessor_rejects_conflicting_values(tmp_path: P
         _engine = read(state_path).music_engine
 
 
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"music_engine": "lyria"},
+        {"planning": {"music": {"engine": "lyria"}}},
+        {"music_engine": "lyria", "planning": {"music": {"engine": "lyria"}}},
+    ],
+)
+def test_music_engine_accessor_reads_canonical_and_legacy_shapes(
+    tmp_path: Path,
+    payload: dict[str, JSONValue],
+) -> None:
+    state_path = tmp_path / "workflow-state.json"
+    _write(state_path, payload)
+
+    assert read(state_path).music_engine == "lyria"
+
+
 def test_music_engine_accepts_minimax_in_owner_schema(tmp_path: Path) -> None:
     state_path = tmp_path / "workflow-state.json"
-    _write(state_path, {"music_engine": "minimax", "planning": {"music": {"engine": "minimax"}}})
+    _write(state_path, {"planning": {"music": {"engine": "minimax"}}})
 
     assert read(state_path).music_engine == "minimax"
 

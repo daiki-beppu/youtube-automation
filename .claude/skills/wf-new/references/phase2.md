@@ -69,7 +69,7 @@ uv run yt-populate-scene-phrases <collection-dir-name> \
 ##### 2c-1. サムネイル候補生成
 
 1. **メインが共有入力と再開対象を固定**:
-   - 対象 collection の絶対 path、確定企画、`workflow-state.json::theme`、`music_engine`、thumbnail の effective auto-selection / textless 設定を実ファイルから固定する。以後の 2 call に同じ値を渡し、subagent に推測させない
+   - 対象 collection の絶対 path、確定企画、`workflow-state.json::theme`、`planning.music.engine`、thumbnail の effective auto-selection / textless 設定を実ファイルから固定する。以後の 2 call に同じ値を渡し、subagent に推測させない
    - Phase 2c 成果物・再開契約で flag と実成果物を branch ごとに再検証する。flag が `true` なのに成果物が欠落・破損・不整合なら dispatch せず fail-closed に停止する
    - 両 branch が検証成功済みなら initial dispatch を省略する。片側だけが未完了なら、その 1 call だけを起動し、成功済み側を exactly-two の数合わせで再生成・再承認しない
 

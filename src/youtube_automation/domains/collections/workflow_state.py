@@ -139,7 +139,6 @@ class WorkflowStateDocument(TypedDict, total=False):
     phase: Phase
     selected_plan: Literal["A", "B", "C", "D", "E"]
     track_count: int
-    music_engine: MusicEngine
     planning: PlanningDocument
     scene_phrases: dict[str, str]
     title_template_check: TitleTemplateCheckDocument
@@ -528,6 +527,13 @@ class WorkflowState(MutableMapping[str, JSONValue]):
             legacy.pop("generated", None)
             if not legacy:
                 del self._data["description"]
+
+    def set_planning_known(self, key: PlanningKey, value: JSONValue) -> None:
+        planning = self._data.setdefault("planning", {})
+        assert isinstance(planning, dict)
+        PlanningState(planning).set_known(key, value)
+        if key == "music":
+            self._data.pop("music_engine", None)
 
     @property
     def theme(self) -> str | None:
