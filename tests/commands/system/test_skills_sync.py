@@ -148,7 +148,7 @@ def test_cmd_sync_default_all_includes_auth_template(
     assert (downstream / "docs" / "features.md").exists()
     assert (downstream / "auth" / "client_secrets.template.json").exists()
     assert "# yt-state-git control plane (ADR-0024)" in (downstream / ".gitignore").read_text(encoding="utf-8")
-    assert "run-sandwich.sh" in (downstream / ".github" / "workflows" / "youtube-automation.yml").read_text(
+    assert "run-github-actions.sh" in (downstream / ".github" / "workflows" / "youtube-automation.yml").read_text(
         encoding="utf-8"
     )
 

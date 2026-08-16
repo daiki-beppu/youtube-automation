@@ -180,6 +180,8 @@ Python 版 skill-config の正規キーは `configuration/skills.py` が所有�
 - `.claude/CLAUDE.template.md` — BGM チャンネル運営方針テンプレ（共通骨格）。wheel に `_claude_md/CLAUDE.template.md` として `force-include` され、`yt-skills sync --asset claude-md` で各チャンネルの `.claude/CLAUDE.md` として展開される
 - `src/youtube_automation/infrastructure/resources/channel/youtube-automation.yml` — 下流チャンネルの日次 GitHub Actions workflow 正本。`yt-skills sync --asset channel-workflow` で `.github/workflows/youtube-automation.yml` へ配布し、基盤非依存のサンドイッチrunnerだけを呼び出す
 - `.claude/skills/wf-new/references/github_actions_schedule.py` — 配布 workflow 内の schedule 管理 marker だけを原子的に configure / status / disable する GitHub Actions backend adapter
+- `.claude/skills/wf-new/references/run-github-actions.sh` — GHA の Claude subscription token preflight と、credential を含まない failure summary を所有する wrapper
+- `.claude/skills/wf-new/references/github-actions-oauth.md` — 下流へ配布する Claude subscription token の初回配備・検証・rotation runbook
 - `.agents/skills` — `.claude/skills` への symlink。Codex CLI 用の探索パス（Codex 規約 `$REPO_ROOT/.agents/skills`）
 - `AGENTS.md` — Codex CLI 向けエージェント指示。CLAUDE.md と並立し、Codex 視点のドキュメント補足を含む
 - `site/` — Blume ベースの運用者向け公開ドキュメントサイト。release notes と明示 allowlist の原本を読み、Python 配布物とは独立して build・deploy する

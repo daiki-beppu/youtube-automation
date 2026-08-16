@@ -1,6 +1,7 @@
 name: YouTube automation
 
 on:
+  workflow_dispatch:
   # yt-automation-schedule:begin
   # yt-automation-schedule:end
 
@@ -35,7 +36,7 @@ jobs:
           R2_API_TOKEN: ${{ secrets.R2_API_TOKEN }}
           R2_BUCKET: ${{ vars.R2_BUCKET }}
         run: >-
-          bash .claude/skills/wf-new/references/run-sandwich.sh
+          bash .claude/skills/wf-new/references/run-github-actions.sh
           --repository-url "$REPOSITORY_URL"
           --ref "$REPOSITORY_REF"
           --workspace "${{ runner.temp }}/yta-hybrid"
