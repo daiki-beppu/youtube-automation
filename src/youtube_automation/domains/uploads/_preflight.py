@@ -11,13 +11,9 @@ from youtube_automation.configuration import load_config
 from youtube_automation.core.adapters.media import CollectionPaths, probe_duration
 from youtube_automation.core.errors import ValidationError, WorkflowStateError
 from youtube_automation.domains.collections.workflow_state import read as read_workflow_state
+from youtube_automation.domains.documents.video_description import read_video_description_metadata
 from youtube_automation.domains.metadata import BAHMetadataGenerator
-from youtube_automation.domains.metadata.descriptions import (
-    build_descriptions_md_parse_diagnostics,
-    extract_descriptions_md_section,
-)
 from youtube_automation.domains.uploads._complete_collection_strategy import resolve_master_video
-from youtube_automation.domains.uploads.descriptions_md import extract_md_section
 from youtube_automation.domains.uploads.preflight import (
     check_chapter_count,
     check_chapter_variation_suffix,
@@ -27,14 +23,12 @@ from youtube_automation.domains.uploads.preflight import (
     check_tags_yt_chars,
     check_title_codepoint_limit,
     check_title_template_compliance,
-    extract_descriptions_md_tags,
     requires_scene_phrases,
 )
 from youtube_automation.infrastructure.filesystem import (
     list_directory,
     path_exists,
     path_is_directory,
-    read_file_text,
 )
 
 logger = logging.getLogger(__name__)
@@ -81,19 +75,20 @@ class PreflightChecker:
                 continue
             if exclude_resolved and col.resolve() == exclude_resolved:
                 continue
-            desc_path = CollectionPaths(col).descriptions_md_path
+            desc_path = CollectionPaths(col).descriptions_json_path
             if not path_exists(desc_path):
                 continue
-            title = extract_md_section(read_file_text(desc_path), "タイトル案")
-            if title:
-                titles.append(title.strip())
+            metadata = read_video_description_metadata(desc_path)
+            title = metadata["title"]
+            if isinstance(title, str):
+                titles.append(title)
         return titles
 
     def check(self, collection_dir: Path) -> None:
         """アップロード前メタデータ品質チェック (fail-loud)。
 
         過去事例の再発防止:
-        1. descriptions.md が存在すること（Track 01 仮名フォールバックを防ぐ）
+        1. 検証済み descriptions.json + HTML pair が存在すること（Track 01 仮名フォールバックを防ぐ）
         2. workflow-state.json が存在し、有効な JSON であること。多言語チャンネルでは
            workflow-state.json.scene_phrases に supported_languages が揃っていること。
            単一言語チャンネルでは populate が no-op のため scene_phrases は要求しない
@@ -107,23 +102,12 @@ class PreflightChecker:
         7. supported_languages に低 CPM 警告対象言語が含まれる場合は warning を出すこと
         """
         paths = CollectionPaths(collection_dir)
-        desc_path = paths.descriptions_md_path
+        desc_path = paths.descriptions_json_path
         if not path_exists(desc_path):
             raise ValidationError(f"❌ {desc_path} が存在しません。/video --describe を実行してください。")
-
-        text = read_file_text(desc_path)
-        title_raw = extract_descriptions_md_section(text, "タイトル案")
-        description_raw = extract_descriptions_md_section(text, "Complete Collection 概要欄")
-
-        if title_raw is None or description_raw is None:
-            raise ValidationError(
-                f"❌ {desc_path}: descriptions.md のパースに失敗\n{build_descriptions_md_parse_diagnostics(text)}"
-            )
-
-        title = title_raw.strip()
-        description = description_raw.strip()
-        if not title or not description:
-            raise ValidationError(f"❌ {desc_path}: タイトル案 / Complete Collection 概要欄 が空")
+        prebuilt = read_video_description_metadata(desc_path)
+        title = str(prebuilt["title"])
+        description = str(prebuilt["description"])
 
         if msg := check_title_codepoint_limit(title):
             raise ValidationError(f"❌ {msg}")
@@ -183,8 +167,7 @@ class PreflightChecker:
                     f"→ 既存例: collections/live/20260322-rjn-city-collection/workflow-state.json"
                 )
 
-        # 実 upload と同じ generator で全 locale の title を構築し、API 呼び出し前の
-        # --plan preflight でも YouTube の 100 codepoint 制限を検証する。
+        # JSON 正本の全 locale title を API 呼び出し前に再検証する。
         master_video = self.master_video_resolver(collection_dir)
         duration_sec = self.duration_probe(master_video)
         if duration_sec is None:
@@ -192,30 +175,9 @@ class PreflightChecker:
                 f"❌ 実マスター尺を取得できません: {master_video.name}。"
                 "ffprobe で読み取れる完成済みマスター動画を指定してください"
             )
-        generator = self.metadata_generator_factory(str(collection_dir))
-        # 同じ invocation で読み込んだ config を使い、plan と upload の設定 snapshot を揃える。
-        # 最小 stub を使う既存 unit test では localization data が無いため生成を省略する。
-        generator.config = config
-        localization_data = getattr(config.localizations, "data", {})
-        languages = localization_data.get("languages", {}) if isinstance(localization_data, dict) else {}
-        supported = localization_data.get("supported_languages", []) if isinstance(localization_data, dict) else []
-        templates_complete = bool(supported) and all(
-            languages.get(lang, {}).get("title_template") for lang in supported
-        )
-        try:
-            localizations = (
-                generator.generate_localizations(
-                    title,
-                    description,
-                    scene_phrases,
-                    scene_emoji=generator._load_scene_emoji(),
-                    duration_seconds=duration_sec,
-                )
-                if templates_complete
-                else {}
-            )
-        except ValueError as exc:
-            raise ValidationError(f"❌ ローカライズタイトル検証に失敗:\n{exc}") from exc
+        localizations = prebuilt["localizations"]
+        if not isinstance(localizations, dict):
+            raise ValidationError("❌ descriptions.json::localizations は object が必要です")
         over_limit = [
             f"{locale}={len(value.get('title', ''))}c: {value.get('title', '')!r}"
             for locale, value in localizations.items()
@@ -225,10 +187,11 @@ class PreflightChecker:
             raise ValidationError("❌ ローカライズタイトルが 100 codepoint を超過:\n  - " + "\n  - ".join(over_limit))
 
         # タグ件数 / quotation 文字数チェック
-        # descriptions.md の「タグ（YouTube タグ欄）」が _upload_complete_collection で
-        # for_collection() を上書きするため、本番と同じソースを検証する。
-        prebuilt_tags = extract_descriptions_md_tags(desc_path)
-        tags = prebuilt_tags if prebuilt_tags is not None else config.content.tags.for_collection(collection_dir.name)
+        # 本番と同じ validated JSON の tags を検証する。
+        tags_value = prebuilt["tags"]
+        if not isinstance(tags_value, list) or not all(isinstance(tag, str) for tag in tags_value):
+            raise ValidationError("❌ descriptions.json::tags は string array が必要です")
+        tags = tags_value
         issues: list[str] = []
         for msg in (
             check_tags_count(tags, config.content.tags.min_count),

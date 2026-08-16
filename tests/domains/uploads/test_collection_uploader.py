@@ -21,6 +21,7 @@ from googleapiclient.errors import HttpError
 from httplib2 import Response
 
 from tests.helpers.paths import FIXTURES_DIR, REPO_ROOT
+from tests.helpers.video_description import write_video_description_pair
 from youtube_automation.domains.uploads.collection import PlaylistAssignment, PublishedDatesScheduler, TrackingStore
 
 sys.path.insert(0, str(REPO_ROOT))
@@ -126,25 +127,11 @@ def _write_cli_title_collection(channel_dir: Path, *, title_template_check: dict
     for subdir in ("01-master", "02-Individual-music", "03-Individual-movie", "10-assets", "20-documentation"):
         (collection / subdir).mkdir(parents=True, exist_ok=True)
     (collection / "01-master" / "master.mp4").write_bytes(b"probe is mocked")
-    (collection / "20-documentation" / "descriptions.md").write_text(
-        """## タイトル案
-```
-Funky Soul Spirit Vol.2 | 3 Hours of Feel-Good Retro Grooves
-```
-
-## Complete Collection 概要欄
-```
-00:00 Opening Groove
-10:00 Midnight Funk
-20:00 Last Call Soul
-```
-
-## タグ（YouTube タグ欄）
-```
-soul funk, retro groove, study music
-```
-""",
-        encoding="utf-8",
+    write_video_description_pair(
+        collection / "20-documentation",
+        title="Funky Soul Spirit Vol.2 | 3 Hours of Feel-Good Retro Grooves",
+        description="00:00 Opening Groove\n10:00 Midnight Funk\n20:00 Last Call Soul",
+        tags=["soul funk", "retro groove", "study music"],
     )
     state: dict[str, object] = {"scene_phrases": {lang: {"title": f"title-{lang}"} for lang in ("ja", "en", "de")}}
     if title_template_check is not None:

@@ -16,7 +16,7 @@ SETUP_REFERENCES = REPO_ROOT / ".claude" / "skills" / "setup" / "references"
 
 SETUP_ASSET_SHA256 = {
     "claude-md-template.md": "64882d3cbe6c1d69c982f723d2a62bf67a88aa6895dddc79b75ce3c45857bbdd",
-    "config-generation-rules.md": "13797bb024570b0063453a7c3ec7b7b055a702a00231c9df0d4ae4197b915910",
+    "config-generation-rules.md": "73067404592646cc3073f9ca1912c703f57f25fc9a6f597c4843622f8f3f9188",
     "config-template/analytics.json": "4344ad8d4c9a1c81958b721eb3d999172f14f71f17d863a1708492ce687b68d2",
     "config-template/audio.json": "c55033dc448cb91fe3cdb47e20f220c5879c05f95855d918a8e72297a5f20a43",
     "config-template/content.json": "5a60fc3327bb2cca1daa5da3744dc218495f3f0f304aebdad41fd2ba32d1bed0",

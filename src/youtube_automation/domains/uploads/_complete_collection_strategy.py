@@ -14,10 +14,7 @@ from youtube_automation.domains.uploads._uploader_constants import (
     UPLOAD_SOURCE_EXISTING,
     UPLOAD_SOURCE_NEW,
 )
-from youtube_automation.domains.uploads.descriptions_md import (
-    extract_body_for_localizations,
-    load_descriptions_md,
-)
+from youtube_automation.domains.uploads.description_document import load_description_document
 from youtube_automation.infrastructure.filesystem import glob_files, path_is_file
 
 logger = logging.getLogger(__name__)
@@ -98,11 +95,11 @@ class CompleteCollectionStrategy:
                 "ffprobe で読み取れる完成済みマスター動画を指定してください"
             )
 
-        # descriptions.md が最終タイトル/概要/タグを供給するなら先に読み込み、
+        # descriptions.json が最終タイトル/概要/タグを供給するなら先に読み込み、
         # 中間タイトル生成（_generate_title）を title_override でスキップする。
         # これにより title.template が未知プレースホルダ（例 {adjective}）を含んでも
         # 本来捨てられる中間タイトル生成で upload 全体がクラッシュしない（#574）。
-        prebuilt = load_descriptions_md(collection_dir)
+        prebuilt = load_description_document(collection_dir)
 
         # メタデータ生成（BAHMetadataGenerator — localizations 等）
         metadata = metadata_gen.generate_complete_collection_metadata(
@@ -111,25 +108,14 @@ class CompleteCollectionStrategy:
             duration_seconds=duration_seconds,
         )
 
-        # descriptions.md が存在すれば title/description/tags を上書き
+        # validated descriptions.json が存在すれば公開 metadata を上書き
         if prebuilt:
             metadata["title"] = prebuilt["title"]
             metadata["description"] = prebuilt["description"]
             if prebuilt["tags"]:
                 metadata["tags"] = prebuilt["tags"]
 
-            # ローカライゼーションにもキュレーション済みのタイムスタンプを使用
-            curated_timestamps = extract_body_for_localizations(prebuilt["description"])
-            scene_phrases = getattr(metadata_gen, "_last_scene_phrases", {})
-            scene_emoji = metadata_gen._load_scene_emoji()
-            if curated_timestamps:
-                metadata["localizations"] = metadata_gen.generate_localizations(
-                    metadata["title"],
-                    curated_timestamps,
-                    scene_phrases,
-                    scene_emoji=scene_emoji,
-                    duration_seconds=duration_seconds,
-                )
+            metadata["localizations"] = prebuilt["localizations"]
 
         if publish_at:
             metadata["publish_at"] = publish_at

@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from tests.helpers.video_description import write_video_description_pair
 from youtube_automation.commands.media import populate_scene_phrases
 from youtube_automation.configuration import load_config, reset
 from youtube_automation.core.errors import ConfigError, ValidationError
@@ -100,21 +101,14 @@ def _setup_channel(
     return ch
 
 
-def _write_descriptions_md(collection_dir: Path) -> None:
+def _write_descriptions_pair(collection_dir: Path) -> None:
     docs_dir = collection_dir / "20-documentation"
     docs_dir.mkdir(parents=True, exist_ok=True)
-    (docs_dir / "descriptions.md").write_text(
-        """## タイトル案
-```
-Late-night neon city, jazz between rain and streetlights | 3 Hours of Study
-```
-
-## Complete Collection 概要欄
-```
-A continuous BGM mix without chapter markers.
-```
-""",
-        encoding="utf-8",
+    write_video_description_pair(
+        docs_dir,
+        title="Late-night neon city, jazz between rain and streetlights | 3 Hours of Study",
+        description="A continuous BGM mix without chapter markers.",
+        tracks=[],
     )
 
 
@@ -235,7 +229,7 @@ class TestMainCLI:
             collection_name=collection_name,
         )
         collection_dir = ch / "collections" / "planning" / collection_name
-        _write_descriptions_md(collection_dir)
+        _write_descriptions_pair(collection_dir)
         monkeypatch.setenv("CHANNEL_DIR", str(ch))
 
         rc = populate_scene_phrases.main([collection_name])

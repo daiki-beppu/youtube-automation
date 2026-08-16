@@ -13,6 +13,7 @@ from types import ModuleType
 import pytest
 
 from tests.helpers.paths import REPO_ROOT
+from tests.helpers.video_description import write_video_description_pair
 
 ROOT = REPO_ROOT
 SKILL_DIR = ROOT / ".claude" / "skills" / "wf-new"
@@ -164,7 +165,7 @@ def test_existing_collection_resumes_from_verified_artifacts(tmp_path: Path, run
     )
     (collection / "01-master" / "master.wav").touch()
     (collection / "01-master" / "video.mp4").touch()
-    (collection / "20-documentation" / "descriptions.md").touch()
+    write_video_description_pair(collection / "20-documentation")
 
     decision = runner.resolve_action(tmp_path, config=_config(runner, publish=False))
 

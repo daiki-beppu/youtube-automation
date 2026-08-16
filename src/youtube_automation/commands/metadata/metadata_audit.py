@@ -6,11 +6,11 @@ quality bar enforced by the upload PreflightChecker, plus
 remote-side checks against YouTube API.
 
 Run periodically (or after upload) to detect drift between local
-descriptions.md and what's actually live on YouTube.
+validated descriptions.json pairs and what's actually live on YouTube.
 
 Usage:
     python3 automation/metadata_audit.py             # local + remote
-    python3 automation/metadata_audit.py --local     # only descriptions.md
+    python3 automation/metadata_audit.py --local     # only validated descriptions pair
     python3 automation/metadata_audit.py --remote    # only YouTube API
     python3 automation/metadata_audit.py --strict    # exit 1 on any issue
 """
@@ -27,10 +27,10 @@ from pathlib import Path
 from youtube_automation.configuration import channel_dir, load_config
 from youtube_automation.configuration.model import ChannelConfig
 from youtube_automation.configuration.skills import load_skill_config
-from youtube_automation.core.errors import WorkflowStateError
+from youtube_automation.core.errors import ValidationError, WorkflowStateError
 from youtube_automation.domains.collections.workflow_state import read as read_workflow_state
+from youtube_automation.domains.documents.video_description import read_video_description_metadata
 from youtube_automation.domains.metadata.descriptions import (
-    build_descriptions_md_parse_diagnostics,
     extract_descriptions_md_section,
 )
 from youtube_automation.domains.uploads.preflight import (
@@ -40,7 +40,6 @@ from youtube_automation.domains.uploads.preflight import (
     check_tags_count,
     check_tags_yt_chars,
     check_title_codepoint_limit,
-    extract_descriptions_md_tags,
     requires_scene_phrases,
 )
 from youtube_automation.infrastructure import cost_tracker
@@ -98,44 +97,32 @@ def audit_local(col: Path, config: ChannelConfig) -> list[str]:
     supported_langs = list(config.localizations.supported_languages)
     paths = CollectionPaths(col)
 
-    desc_md = paths.descriptions_md_path
+    desc_json = paths.descriptions_json_path
     stray = list(paths.docs_dir.glob("description*"))
-    stray = [p for p in stray if p.name != "descriptions.md"]
+    stray = [p for p in stray if p.name not in {"descriptions.json", "descriptions.html"}]
     if stray:
         issues.append(f"stray description file(s): {[p.name for p in stray]}")
 
-    if not desc_md.exists():
-        issues.append("descriptions.md missing")
+    if not desc_json.exists():
+        issues.append("descriptions.json missing")
         return issues
+    try:
+        metadata = read_video_description_metadata(desc_json)
+    except ValidationError as error:
+        issues.append(f"descriptions.json invalid: {error}")
+        return issues
+    title = str(metadata["title"])
+    description = str(metadata["description"])
 
-    text = desc_md.read_text(encoding="utf-8")
-    title_raw = extract_section(text, "タイトル案")
-    description_raw = extract_section(text, "Complete Collection 概要欄")
-    if title_raw is None or description_raw is None:
-        issues.append("descriptions.md parse failed\n" + build_descriptions_md_parse_diagnostics(text))
-
-    title = title_raw.strip() if title_raw is not None else ""
-    description = description_raw.strip() if description_raw is not None else ""
-
-    if title_raw is None:
-        pass
-    elif not title:
-        issues.append("missing 'タイトル案' section")
-    elif msg := check_title_codepoint_limit(title):
+    if msg := check_title_codepoint_limit(title):
         issues.append(msg)
-
-    if description_raw is None:
-        pass
-    elif not description:
-        issues.append("missing 'Complete Collection 概要欄' section")
-    else:
-        ts_lines = [line for line in description.split("\n") if TS_RE.match(line.strip())]
-        for msg in (
-            check_chapter_count(len(ts_lines), config.audio.chapter_max),
-            check_chapter_variation_suffix(ts_lines),
-        ):
-            if msg:
-                issues.append(msg)
+    ts_lines = [line for line in description.split("\n") if TS_RE.match(line.strip())]
+    for msg in (
+        check_chapter_count(len(ts_lines), config.audio.chapter_max),
+        check_chapter_variation_suffix(ts_lines),
+    ):
+        if msg:
+            issues.append(msg)
 
     # workflow-state.json は upload preflight と同じく常に parse する。
     # 単一言語チャンネルでは scene_phrases の完全性チェックだけを不要扱いにする (#1470)。
@@ -157,9 +144,9 @@ def audit_local(col: Path, config: ChannelConfig) -> list[str]:
     else:
         issues.append("workflow-state.json missing")
 
-    # タグ件数 / quotation 文字数（preflight と同じく descriptions.md 優先）
-    prebuilt_tags = extract_descriptions_md_tags(desc_md)
-    tags = prebuilt_tags if prebuilt_tags is not None else config.content.tags.for_collection(col.name)
+    # タグ件数 / quotation 文字数（preflight と同じ JSON 正本）
+    tags_value = metadata["tags"]
+    tags = list(tags_value) if isinstance(tags_value, list) else []
     for msg in (
         check_tags_count(tags, config.content.tags.min_count),
         check_tags_yt_chars(tags),
@@ -276,7 +263,7 @@ def main() -> None:
     total_issues = 0
 
     if do_local:
-        print("─── LOCAL (descriptions.md / workflow-state.json) ───")
+        print("─── LOCAL (descriptions.json + HTML / workflow-state.json) ───")
         for col in sorted(_collections_dir().iterdir()):
             if not col.is_dir():
                 continue

@@ -315,6 +315,7 @@ MUTABLE_FILES = frozenset(
     "publish/references/pinned.md",
     "publish/references/publish-chain-manifest.json",
     "publish/references/publish-chain-state.py",
+    "publish/references/upload.md",
     "publish/references/scheduled-publish.md",
     "wf-new/references/phase-2c-artifact-contract.md",
     "wf-new/references/phase2.md",
@@ -371,6 +372,11 @@ MUTABLE_FILES = frozenset(
     "video/SKILL.md",
     "video/references/describe.md",
     "video/references/generate.md",
+    "video/references/description-templates.md",
+    "video/references/video-chain-manifest.json",
+    "video/references/video-chain-state.py",
+    "video/references/video-description-documents.md",
+    "video/references/video-description.schema.json",
     "wf-new/references/freshness-rules.md",
     "wf-new/references/ideate.md",
     "wf-next/SKILL.md",
@@ -396,7 +402,7 @@ EXPECTED_ISSUE_3986_CHANGED_PATHS = frozenset(
         "tests/repo/test_workflow_upload_setup_redirect_contract.py",
     }
 )
-IMMUTABLE_TARGET_FILES_SHA256 = "f18ea6a8ace9729a5cc2f01f339c3c3f60bb84a4b1b07927c7720bd4d989f8f0"
+IMMUTABLE_TARGET_FILES_SHA256 = "6b89c6acba681f832ec248468bed8a22d8c92d53f2e787648e8b31dba44a156f"
 AUTOMATION_SCHEDULE_REGENERATE_SHA256 = "11d460f727fe50c41f00571b416a1486cb07d0b1548524bc650a7161c16f6c42"
 AUTOMATION_UPDATE_PUSH_SHA256 = "ced3211760d9ff0abd20ec3cdc402501b424f48581ef3a618d51c0d9ee12840c"
 ALLOWED_FENCED_ROUTES = {

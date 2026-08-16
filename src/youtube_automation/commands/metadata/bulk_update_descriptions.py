@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Push descriptions.md content to YouTube via videos().update(part='snippet').
+"""Push validated descriptions.json content to YouTube via videos().update(part='snippet').
 
 For each collection discovered under ``collections/live/`` that has both
-``20-documentation/descriptions.md`` and ``20-documentation/upload_tracking.json``,
+``20-documentation/descriptions.json`` + same-basename HTML and ``upload_tracking.json``,
 read its 'Complete Collection 概要欄' and 'タイトル案' sections from
-descriptions.md, and update the corresponding YouTube video's snippet
+validated JSON pair, and update the corresponding YouTube video's snippet
 (title, description, tags, categoryId).
 
 The required video_id is read from
@@ -27,13 +27,9 @@ from googleapiclient.errors import HttpError
 
 from youtube_automation.configuration import channel_dir
 from youtube_automation.core.errors import YouTubeAPIError
-from youtube_automation.domains.metadata.descriptions import (
-    build_descriptions_md_parse_diagnostics,
-    extract_descriptions_md_section,
-)
+from youtube_automation.domains.documents.video_description import read_video_description_metadata
 from youtube_automation.infrastructure.cost_tracker import log_quota
 from youtube_automation.infrastructure.google.youtube import create_authenticated_youtube_clients
-from youtube_automation.infrastructure.youtube.youtube_tag import parse_youtube_tags
 
 logger = logging.getLogger(__name__)
 
@@ -77,7 +73,7 @@ def build_snippet_update_body(video_id: str, old_snippet: dict, title: str, desc
 def discover_collections() -> list[str]:
     """``collections/live/*`` から description 更新可能な collection 名を返す.
 
-    `20-documentation/descriptions.md` と `20-documentation/upload_tracking.json`
+    検証済み `20-documentation/descriptions.json` + 同 basename HTML と `upload_tracking.json`
     が **両方** 存在する collection のみを対象とする（silent skip）.
     戻り値は決定論的な `sorted()` 順.
     """
@@ -88,16 +84,12 @@ def discover_collections() -> list[str]:
     results: list[str] = []
     for col_dir in sorted(live_dir.iterdir()):
         doc_dir = col_dir / "20-documentation"
-        if not (doc_dir / "descriptions.md").exists():
+        if not (doc_dir / "descriptions.json").exists():
             continue
         if not (doc_dir / "upload_tracking.json").exists():
             continue
         results.append(col_dir.name)
     return results
-
-
-def extract_md_section(md_text: str, header: str) -> str | None:
-    return extract_descriptions_md_section(md_text, header)
 
 
 def utf16_units(s: str) -> int:
@@ -126,29 +118,19 @@ def _execute_youtube_request(
 
 def load_collection(col: str) -> dict:
     col_dir = channel_dir() / "collections" / "live" / col
-    desc_md = (col_dir / "20-documentation" / "descriptions.md").read_text(encoding="utf-8")
+    metadata = read_video_description_metadata(col_dir / "20-documentation" / "descriptions.json")
     upload_tracking = json.loads((col_dir / "20-documentation" / "upload_tracking.json").read_text(encoding="utf-8"))
     cc = upload_tracking.get("complete_collection") or {}
     video_id = cc.get("video_id")
     if not video_id:
         raise RuntimeError(f"no complete_collection.video_id in {col}")
 
-    description = extract_md_section(desc_md, "Complete Collection 概要欄")
-    title = extract_md_section(desc_md, "タイトル案")
-    tags_raw = extract_md_section(desc_md, "タグ（YouTube タグ欄）")
-    tags = []
-    if tags_raw:
-        tags = parse_youtube_tags(tags_raw)
-
-    if not (description and title):
-        raise RuntimeError(f"descriptions.md parse failed in {col}\n{build_descriptions_md_parse_diagnostics(desc_md)}")
-
     return {
         "collection": col,
         "video_id": video_id,
-        "title": title,
-        "description": description,
-        "tags": tags,
+        "title": metadata["title"],
+        "description": metadata["description"],
+        "tags": metadata["tags"],
     }
 
 
@@ -156,7 +138,8 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     parser = argparse.ArgumentParser(
         description=(
-            "descriptions.md の内容を YouTube 上の公開済み動画の概要欄へ一括書き込みする（通常実行は API write）"
+            "検証済み descriptions.json の内容を YouTube 上の公開済み動画の概要欄へ一括書き込みする"
+            "（通常実行は API write）"
         )
     )
     parser.add_argument(

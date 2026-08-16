@@ -28,6 +28,7 @@ from googleapiclient.errors import HttpError
 from httplib2 import Response
 
 from tests.helpers.paths import REPO_ROOT
+from tests.helpers.video_description import write_video_description_pair
 from youtube_automation.core.errors import ValidationError
 
 sys.path.insert(0, str(REPO_ROOT))
@@ -218,28 +219,11 @@ def _write_preflight_collection(tmp_path: Path, scene_languages: list[str]) -> P
     col_dir = tmp_path / "20990101-foo-collection"
     doc_dir = col_dir / "20-documentation"
     doc_dir.mkdir(parents=True)
-    (doc_dir / "descriptions.md").write_text(
-        "\n".join(
-            [
-                "## タイトル案",
-                "```",
-                "Rainy Jazz for Focus",
-                "```",
-                "",
-                "## Complete Collection 概要欄",
-                "```",
-                "00:00 Opening Rain",
-                "10:00 Warm Desk Light",
-                "20:00 Last Train Home",
-                "```",
-                "",
-                "## タグ（YouTube タグ欄）",
-                "```",
-                "rainy jazz, focus music, night study",
-                "```",
-            ]
-        ),
-        encoding="utf-8",
+    write_video_description_pair(
+        doc_dir,
+        title="Rainy Jazz for Focus",
+        description="00:00 Opening Rain\n10:00 Warm Desk Light\n20:00 Last Train Home",
+        tags=["rainy jazz", "focus music", "night study"],
     )
     scene_phrases = {lang: {"title": f"title-{lang}"} for lang in scene_languages}
     (col_dir / "workflow-state.json").write_text(
@@ -314,28 +298,11 @@ def _write_title_collection(
     col_dir = tmp_path / status / "20990101-foo-collection"
     doc_dir = col_dir / "20-documentation"
     doc_dir.mkdir(parents=True)
-    (doc_dir / "descriptions.md").write_text(
-        "\n".join(
-            [
-                "## タイトル案",
-                "```",
-                title,
-                "```",
-                "",
-                "## Complete Collection 概要欄",
-                "```",
-                "00:00 Opening Groove",
-                "10:00 Midnight Funk",
-                "20:00 Last Call Soul",
-                "```",
-                "",
-                "## タグ（YouTube タグ欄）",
-                "```",
-                "soul funk, retro groove, study music",
-                "```",
-            ]
-        ),
-        encoding="utf-8",
+    write_video_description_pair(
+        doc_dir,
+        title=title,
+        description="00:00 Opening Groove\n10:00 Midnight Funk\n20:00 Last Call Soul",
+        tags=["soul funk", "retro groove", "study music"],
     )
     scene_phrases = {lang: {"title": f"title-{lang}"} for lang in ["en", "ja", "de"]}
     workflow_state: dict[str, object] = {"scene_phrases": scene_phrases}
@@ -354,10 +321,7 @@ def _write_title_collection(
 def _write_live_title(tmp_path: Path, slug: str, title: str) -> None:
     doc_dir = tmp_path / "live" / slug / "20-documentation"
     doc_dir.mkdir(parents=True)
-    (doc_dir / "descriptions.md").write_text(
-        f"## タイトル案\n```\n{title}\n```\n",
-        encoding="utf-8",
-    )
+    write_video_description_pair(doc_dir, title=title)
 
 
 class TestPreflightTitleTemplateCompliance:
@@ -1196,29 +1160,18 @@ class TestUploadCompleteCollectionDedup:
         (col_dir / "10-assets").mkdir()
         (col_dir / "10-assets" / "thumbnail.jpg").write_bytes(b"\x00")
         (col_dir / "20-documentation").mkdir()
-        (col_dir / "20-documentation" / "descriptions.md").write_text(
-            "\n".join(
-                [
-                    "## タイトル案",
-                    "```",
-                    "Circuit Collection",
-                    "```",
-                    "",
-                    "## Complete Collection 概要欄",
-                    "```",
-                    "00:00 Curated Circuit Door",
-                    "```",
-                    "",
-                    "## タグ（YouTube タグ欄）",
-                    "```",
-                    "circuit music, focus music",
-                    "```",
-                ]
-            ),
-            encoding="utf-8",
-        )
         config = load_config()
         scene_phrases = {lang: f"quiet circuit room {lang}" for lang in config.localizations.supported_languages}
+        write_video_description_pair(
+            col_dir / "20-documentation",
+            title="Circuit Collection",
+            description="00:00 Curated Circuit Door",
+            tags=["circuit music", "focus music"],
+            localizations={
+                lang: {"title": f"Circuit Collection {lang}", "description": "00:00 Curated Circuit Door"}
+                for lang in config.localizations.supported_languages
+            },
+        )
         (col_dir / "workflow-state.json").write_text(
             json.dumps({"scene_phrases": scene_phrases}),
             encoding="utf-8",

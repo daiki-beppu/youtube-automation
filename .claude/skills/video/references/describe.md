@@ -6,9 +6,9 @@
 
 ## 完了条件
 
-- 品質チェック（後述チェックリスト）の全項目を満たした概要欄・タイトル案・タグが `20-documentation/descriptions.md` に保存されている
+- 品質チェック（後述チェックリスト）の全項目を満たした概要欄・タイトル案・タグ・localization が、schema準拠の `20-documentation/descriptions.json` と同basename HTML pairに保存されている
 - `uv run yt-title-duplicate-check` を実行し、100 codepoint 超過が無く、重複 warning はこの段階で見直し済み
-- owner CLI の `uv run yt-workflow-state --collection <collection-path> set-description-generated true` が成功し、`assets.description = true` が保存済み
+- pair再読込後に owner CLI の `uv run yt-workflow-state --collection <collection-path> set-description-generated true` が成功し、`assets.description = true` が保存済み
 
 ## 設定読み込みゲート
 
@@ -151,7 +151,7 @@ skill-config (`.claude/skills/video/config.default.yaml::describe` / 上書き `
 
 タイトル案を決めたら、まず **100 codepoint 以内**であることを確認する（YouTube タイトル上限。超過は upload preflight で必ず fail するため、この段階で RHS の修飾語を削って短縮する。用途語・尺表記・テーマ語は残す）。
 
-続けて、`descriptions.md` に保存する前に過去 live タイトルとの重複 warning を確認する（`yt-title-duplicate-check` は 100 codepoint 超過も検出し、超過時は `--strict` に関係なく exit 1 になる）:
+続けて、candidate JSON を公開する前に過去 live タイトルとの重複 warning を確認する（`yt-title-duplicate-check` は 100 codepoint 超過も検出し、超過時は `--strict` に関係なく exit 1 になる）:
 
 ```bash
 uv run yt-title-duplicate-check "$COLLECTION_DIR" --title "$PROPOSED_TITLE"
@@ -179,7 +179,7 @@ uv run yt-title-duplicate-check "$COLLECTION_DIR" --title "$PROPOSED_TITLE"
 
 ### Cards（YouTube Studio で手動設定）
 
-概要欄生成時に、カードセクションも descriptions.md に含める。設定は skill-config の `cards` セクション参照。
+概要欄生成時に、カードセクションも `description_sections` に含める。設定は skill-config の `cards` セクション参照。
 
 - **カード種類**: 動画カード（Video card）のみ
 - **枚数**: **1動画1枚**（最小限運用）
@@ -200,11 +200,13 @@ uv run yt-title-duplicate-check "$COLLECTION_DIR" --title "$PROPOSED_TITLE"
 
 ### 概要欄保存
 
-概要欄は必ずコレクションの `20-documentation/descriptions.md` に保存する。
-保存フォーマット（ヘッダー、概要欄本文、タイトル案、タグ、Cards、品質チェック）は
-`references/description-templates.md` の「descriptions.md 保存フォーマット」セクションを参照すること。
+概要欄candidateは `video-description.schema.json` の title / description / description_sections /
+tracks / tags / localizations / provenance / quality に写像する。表示順とSEO本文は既存生成結果を変えない。
+公開・既存Markdown移行・rollback・state投影は `video-description-documents.md` の共通writer契約に従う。
+upload consumerは検証済みJSONだけを読み、HTMLやlegacy Markdownをparseしない。
 
-保存後、`uv run yt-workflow-state --collection <collection-path> set-description-generated true` を実行し、正準キー `assets.description = true` を保存する。
+pair の再読込検証後、`uv run yt-workflow-state --collection <collection-path> set-description-generated true`
+を実行し、正準キー `assets.description = true` を保存する。検証またはCLI更新が失敗した場合は完了扱いにしない。
 
 ## 障害時ガイダンス
 

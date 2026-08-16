@@ -13,6 +13,7 @@ from youtube_automation.application.documents import (
     write_collection_plan_document,
     write_music_prompt_document,
     write_operational_document,
+    write_video_description_document,
 )
 from youtube_automation.commands._shared.cli_harness import run_cli
 from youtube_automation.core.errors import ValidationError
@@ -67,9 +68,13 @@ def run(args: argparse.Namespace) -> int:
             decision,
             machine_verify=require_recorded_machine_verification,
         )
+    elif schema is RepositorySchema.VIDEO_DESCRIPTION:
+        if args.workflow_state is None:
+            raise ValidationError("video description の公開には --workflow-state が必要です")
+        result = write_video_description_document(args.target, args.workflow_state, load_candidate, decision)
     else:
         if args.workflow_state is not None:
-            raise ValidationError("--workflow-state は collection plan / music prompt 専用です")
+            raise ValidationError("--workflow-state は collection plan / music prompt / video description 専用です")
         result = write_operational_document(args.target, schema, load_candidate, decision)
     print(f"{result.value}: {args.target.resolve()}")
     return 0

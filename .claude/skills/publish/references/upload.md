@@ -8,8 +8,8 @@
 
 ## 成果物
 
-- `書き込む`: `collections/<id>/20-documentation/descriptions.md`, `collections/<id>/20-documentation/upload_tracking.json`, `collections/<id>/workflow-state.json`
-- `読み込む`: `collections/<id>/01-master/*.mp4`, `collections/<id>/10-assets/thumbnail.jpg`, `collections/<id>/20-documentation/descriptions.md`, `config/channel/*.json`, `config/schedule_config.json`
+- `書き込む`: `collections/<id>/20-documentation/upload_tracking.json`, `collections/<id>/workflow-state.json`
+- `読み込む`: `collections/<id>/01-master/*.mp4`, `collections/<id>/10-assets/thumbnail.jpg`, 検証済み `collections/<id>/20-documentation/descriptions.json`, `config/channel/*.json`, `config/schedule_config.json`
 
 ## Overview
 
@@ -110,7 +110,7 @@ $ARGUMENTS
 
 1. **マスター動画**: skill-config `preflight.master_video_globs`（既定 `01-master/*.mp4` → `03-Individual-movie/*master*.mp4`）の順に探索 — 存在しなければエラー終了
 2. **サムネイル**: skill-config `preflight.thumbnail_candidates`（既定 `10-assets/thumbnail.jpg` → `10-assets/thumbnail.png`）の候補順で探索 — いずれも存在しなければエラー終了。`main.png/jpg` は textless 動画背景なので upload thumbnail には使わない
-3. **概要欄**: `20-documentation/descriptions.md` — **存在しない場合は `/video --describe` を実行して自動生成する**（対象コレクションパスを引き継ぐ）。生成完了後にアップロードフローへ進む
+3. **概要欄**: `20-documentation/descriptions.json` + `.html` pair — **存在しない場合は `/video --describe` を実行して自動生成する**（対象コレクションパスを引き継ぐ）。schema・quality・pair照合の完了後だけアップロードフローへ進む
 4. **初投稿時のプレイリスト初期化**: `config/channel/playlists.json` が存在する場合は `/publish --playlist` で `uv run yt-playlist-status` を実行する。`(未作成)` があるときは、初投稿前に `uv run yt-playlist-manager --init --dry-run` → ユーザー確認 → `uv run yt-playlist-manager --init` で playlist ID を作成・書き戻してからアップロードへ進む
 
 ### collection アップロードフロー
@@ -119,13 +119,13 @@ $ARGUMENTS
 
 0. **公開タイミング確定（必須）** — ユーザーに公開方法を案内・確認する前に必ず `uv run yt-upload-collection --plan [-c NAME]` を実行し、実際の公開挙動を確定する。`config/schedule_config.json` の予約設定や `config/channel/youtube.json` の既定時刻により、予約公開または非公開アップロードになるため、plan 結果をそのまま案内する
    - この turn でユーザーが即時公開を指定しても、アップローダーは即時公開しない。予約設定を追加して再 plan するか、非公開でアップロード後に YouTube Studio で手動公開するかを人間に選んでもらう。会話を黙って durable config で上書きしない
-1. **Complete Collection アップロード** — マスター動画、メタデータ（descriptions.md から読み込み）、サムネイル設定
+1. **Complete Collection アップロード** — マスター動画、メタデータ（検証済み descriptions.json から読み込み）、サムネイル設定
 2. **live 移動** — `collections/planning/` → `collections/live/`
 3. **公開後処理** — フラグなし chain では upload 完了後も manifest 順の `community → pinned` を続行する。各段の承認と成果物ベースの再開契約に委ね、ここで個別処理を再実装しない。`/publish --upload` の単独 mode では後段を暗黙実行せず、`/publish --community`、`/publish --pinned`、`/audit --metadata` は必要に応じて独立実行する
 
-メタデータは `descriptions.md` から title / description / tags を優先使用。存在しない場合は `BAHMetadataGenerator` で自動生成にフォールバック。
+メタデータは共通readerで検証した `descriptions.json` の title / description / tags / localizations だけを使用する。HTMLや旧Markdownはparseせず、pair欠損・schema/quality不正時はfallbackせず停止する。
 
-承認済みタイトルを 100 codepoint 以下へ短縮する必要が生じた場合は、旧版と短縮案を codepoint 数付き diff として提示し、ユーザーの再承認を得るまで `descriptions.md` の更新や upload を行わない。`--plan` は primary title だけでなく生成済み全 locale title を検証し、超過 locale を言語・文字数・実タイトル付きで fail-loud にする。
+承認済みタイトルを 100 codepoint 以下へ短縮する必要が生じた場合は、旧版と短縮案を codepoint 数付き diff として提示し、ユーザーの再承認を得るまで `descriptions.json` pair の更新や upload を行わない。`--plan` は primary title だけでなく保存済み全 locale title を検証し、超過 locale を言語・文字数・実タイトル付きで fail-loud にする。
 
 プレイリストへの動画追加は後続のアップロード経路が担う。`collection` 型では `collection_uploader` 内部の `assign_video()` に任せる。初投稿時に `/publish --playlist` で行うのは未作成プレイリストの作成と `playlist_id` 書き戻しであり、個別動画の手動 assign ではない。
 
@@ -211,7 +211,7 @@ uv run yt-upload-collection --plan -c <NAME>
 
 ## Cross References
 
-- `/video --describe` — アップロード前に descriptions.md を生成
+- `/video --describe` — アップロード前に descriptions.json + HTML pair を生成
 - `/publish --playlist` — 初投稿前のプレイリスト初期化、状態確認、手動 assign、クリーンアップ（アップロード時の自動 assign は本スキル内で実行される）
 - `/audit --metadata` — アップロード後のローカル ↔ YouTube 整合性監査
 - `/publish` — playlist → upload → community → pinned を承認・状態判定付きで実行

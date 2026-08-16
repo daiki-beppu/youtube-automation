@@ -80,6 +80,10 @@ class CollectionPaths:
         return self.docs_dir / "descriptions.md"
 
     @property
+    def descriptions_json_path(self) -> Path:
+        return self.docs_dir / "descriptions.json"
+
+    @property
     def thumbnail_prompts_path(self) -> Path:
         return self.docs_dir / "thumbnail-prompts.md"
 

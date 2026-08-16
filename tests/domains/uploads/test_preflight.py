@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import json
-import re
-import unicodedata
 from pathlib import Path
 
 import pytest
 
+from tests.helpers.video_description import write_video_description_pair
 from youtube_automation.configuration import load_config
 from youtube_automation.core.errors import ValidationError
 from youtube_automation.domains.uploads.youtube import PreflightChecker, YouTubeAutoUploader
@@ -79,32 +78,16 @@ def _write_collection(
     scene_phrases: dict[str, str],
     description: str,
     tags: list[str] | None = None,
+    title: str = "Continuous Focus Mix",
 ) -> Path:
     collection_dir = channel_dir / "collections" / "planning" / "20260622-tc-continuous"
     docs_dir = collection_dir / "20-documentation"
     docs_dir.mkdir(parents=True, exist_ok=True)
-    tags_section = (
-        ""
-        if tags is None
-        else f"""\n## タグ（YouTube タグ欄）
-```
-{", ".join(tags)}
-```
-"""
-    )
-    (docs_dir / "descriptions.md").write_text(
-        f"""## タイトル案
-```
-Continuous Focus Mix
-```
-
-## Complete Collection 概要欄
-```
-{description}
-```
-{tags_section}
-""",
-        encoding="utf-8",
+    write_video_description_pair(
+        docs_dir,
+        title=title,
+        description=description,
+        tags=[] if tags is None else tags,
     )
     _write_json(collection_dir / "workflow-state.json", {"scene_phrases": scene_phrases})
     master_dir = collection_dir / "01-master"
@@ -133,7 +116,7 @@ def _run_preflight(
     checker.check(collection_dir)
 
 
-def test_heading_mismatch_reports_expected_missing_detected_and_fix_example(tmp_path: Path) -> None:
+def test_legacy_markdown_is_not_parsed_by_preflight(tmp_path: Path) -> None:
     collection_dir = tmp_path / "collections" / "planning" / "20260630-heading-typo"
     docs_dir = collection_dir / "20-documentation"
     docs_dir.mkdir(parents=True)
@@ -154,39 +137,22 @@ A continuous BGM mix without chapter markers.
     with pytest.raises(ValidationError) as excinfo:
         PreflightChecker(tmp_path / "collections").check(collection_dir)
 
-    message = str(excinfo.value)
-    assert "期待する見出し（完全一致）" in message
-    assert ("不足/不一致の見出し:\n  - ## タイトル案\n  - ## タグ（YouTube タグ欄）") in message
-    assert "検出した ## 見出し" in message
-    assert "## タイトル" in message
-    assert "修正例" in message
-    assert "/video --describe を再実行" in message
+    assert "descriptions.json が存在しません" in str(excinfo.value)
 
 
-def test_empty_sections_keep_empty_section_error(tmp_path: Path) -> None:
+def test_invalid_json_pair_fails_closed(tmp_path: Path) -> None:
     collection_dir = tmp_path / "collections" / "planning" / "20260630-empty-title"
     docs_dir = collection_dir / "20-documentation"
     docs_dir.mkdir(parents=True)
-    (docs_dir / "descriptions.md").write_text(
-        """## タイトル案
-```
-
-```
-
-## Complete Collection 概要欄
-```
-A continuous BGM mix without chapter markers.
-```
-""",
-        encoding="utf-8",
-    )
+    source = write_video_description_pair(docs_dir)
+    document = json.loads(source.read_text(encoding="utf-8"))
+    document["title"] = ""
+    source.write_text(json.dumps(document), encoding="utf-8")
 
     with pytest.raises(ValidationError) as excinfo:
         PreflightChecker(tmp_path / "collections").check(collection_dir)
 
-    message = str(excinfo.value)
-    assert "タイトル案 / Complete Collection 概要欄 が空" in message
-    assert "不足/不一致の見出し" not in message
+    assert "pointer=/title" in str(excinfo.value)
 
 
 def test_en_only_channel_without_timestamps_passes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -210,15 +176,7 @@ def test_three_part_title_template_passes_collection_preflight(tmp_path: Path, m
         channel_dir,
         scene_phrases={"en": "continuous focus mix"},
         description="A continuous BGM mix without chapter markers.",
-    )
-    descriptions_path = collection_dir / "20-documentation" / "descriptions.md"
-    descriptions = descriptions_path.read_text(encoding="utf-8")
-    descriptions_path.write_text(
-        descriptions.replace(
-            "Continuous Focus Mix",
-            "YAKAP NG PAMILYA 💛 | Inspirational Pinoy Reggae Music 2026 | Awit ng Pagmamahal",
-        ),
-        encoding="utf-8",
+        title="YAKAP NG PAMILYA 💛 | Inspirational Pinoy Reggae Music 2026 | Awit ng Pagmamahal",
     )
 
     _run_preflight(channel_dir, collection_dir, monkeypatch)
@@ -304,143 +262,6 @@ def test_low_cpm_localization_warning_still_runs(
     _run_preflight(channel_dir, collection_dir, monkeypatch)
 
     assert "low CPM localization languages included: ko" in caplog.text
-
-
-def test_plan_preflight_rejects_overlong_localized_title(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    channel_dir = _write_minimal_channel(tmp_path, youtube_language="en", supported_languages=["en", "de"])
-    _write_json(
-        channel_dir / "config" / "localizations.json",
-        {
-            "supported_languages": ["en", "de"],
-            "languages": {
-                "en": {"title_template": "{scene_phrase}"},
-                "de": {"title_template": "{scene_phrase} " + "x" * 100},
-            },
-        },
-    )
-    collection_dir = _write_collection(
-        channel_dir,
-        scene_phrases={"en": "focus", "de": "ruhiger Fokus"},
-        description="A continuous BGM mix without chapter markers.",
-    )
-
-    with pytest.raises(ValidationError, match=r"\[de\] 114 codepoints.*ruhiger Fokus") as excinfo:
-        _run_preflight(channel_dir, collection_dir, monkeypatch)
-
-    message = str(excinfo.value)
-    assert "fixed=101c" in message
-    assert "scene_phrase=13c" in message
-
-
-@pytest.mark.parametrize(
-    ("locale", "title_template", "expected_literal"),
-    [
-        ("ja-JP", "3時間の{scene_phrase}", "3時間"),
-        ("FR-fr", "3 Heures de {scene_phrase}", "3 Heures"),
-        ("es-419", "3 Horas de {scene_phrase}", "3 Horas"),
-        ("it-IT", "3 Ore di {scene_phrase}", "3 Ore"),
-    ],
-)
-def test_plan_preflight_rejects_static_localized_duration(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    locale: str,
-    title_template: str,
-    expected_literal: str,
-) -> None:
-    channel_dir = _write_minimal_channel(tmp_path, youtube_language="en", supported_languages=["en", locale])
-    _write_json(
-        channel_dir / "config" / "localizations.json",
-        {
-            "supported_languages": ["en", locale],
-            "languages": {
-                "en": {"title_template": "{scene_phrase} [{duration_display}]"},
-                locale: {"title_template": title_template},
-            },
-        },
-    )
-    collection_dir = _write_collection(
-        channel_dir,
-        scene_phrases={"en": "focus", locale: "localized focus"},
-        description="A continuous BGM mix without chapter markers.",
-    )
-
-    with pytest.raises(ValidationError, match=rf"固定尺 '{re.escape(expected_literal)}'"):
-        _run_preflight(channel_dir, collection_dir, monkeypatch)
-
-
-def test_plan_preflight_accepts_nfd_word_continuation_after_hour_prefix(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    locale = "es-ES"
-    channel_dir = _write_minimal_channel(tmp_path, youtube_language="en", supported_languages=["en", locale])
-    title_template = unicodedata.normalize("NFD", "{scene_phrase} | 3 horário mix")
-    _write_json(
-        channel_dir / "config" / "localizations.json",
-        {
-            "supported_languages": ["en", locale],
-            "languages": {
-                "en": {"title_template": "{scene_phrase} [{duration_display}]"},
-                locale: {"title_template": title_template},
-            },
-        },
-    )
-    collection_dir = _write_collection(
-        channel_dir,
-        scene_phrases={"en": "focus", locale: "enfoque"},
-        description="A continuous BGM mix without chapter markers.",
-    )
-
-    _run_preflight(channel_dir, collection_dir, monkeypatch)
-
-
-def test_plan_preflight_passes_actual_master_duration_to_localizations(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    captured: dict[str, float] = {}
-
-    class _Generator:
-        def __init__(self, _collection_dir: str) -> None:
-            self.config = None
-
-        @staticmethod
-        def _load_scene_emoji() -> str:
-            return ""
-
-        def generate_localizations(self, *_args, duration_seconds: float, **_kwargs):
-            captured["duration_seconds"] = duration_seconds
-            return {"en": {"title": "Focus [10.5 Hours]"}}
-
-    channel_dir = _write_minimal_channel(tmp_path, youtube_language="en", supported_languages=["en", "de"])
-    _write_json(
-        channel_dir / "config" / "localizations.json",
-        {
-            "supported_languages": ["en", "de"],
-            "languages": {
-                "en": {"title_template": "{scene_phrase} [{duration_display}]"},
-                "de": {"title_template": "{scene_phrase} [{duration_display}]"},
-            },
-        },
-    )
-    collection_dir = _write_collection(
-        channel_dir,
-        scene_phrases={"en": "focus", "de": "ruhiger Fokus"},
-        description="A continuous BGM mix without chapter markers.",
-    )
-    _run_preflight(
-        channel_dir,
-        collection_dir,
-        monkeypatch,
-        duration_seconds=10 * 3600 + 32 * 60,
-        metadata_generator_factory=_Generator,
-    )
-
-    assert captured == {"duration_seconds": 10 * 3600 + 32 * 60}
 
 
 def test_target_duration_config_allows_video_inside_target(

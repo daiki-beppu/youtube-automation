@@ -8,6 +8,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from tests.helpers.video_description import write_video_description_pair
 from youtube_automation.commands.youtube import captions_upload
 from youtube_automation.commands.youtube.captions_upload import main
 from youtube_automation.core.errors import YouTubeAPIError
@@ -24,10 +25,13 @@ def test_dry_run_generates_srt_without_youtube_api(tmp_path, monkeypatch):
         ),
         encoding="utf-8",
     )
-    descriptions = tmp_path / "descriptions.md"
-    descriptions.write_text(
-        "## Complete Collection 概要欄\n\n```\n🎵 Album - 2 tracks, 04:00\n00:00 First\n02:00 Second\n```\n",
-        encoding="utf-8",
+    descriptions = write_video_description_pair(
+        tmp_path,
+        description="🎵 Album - 2 tracks, 04:00\n00:00 First\n02:00 Second",
+        tracks=[
+            {"position": 1, "start": "00:00", "title": "First"},
+            {"position": 2, "start": "02:00", "title": "Second"},
+        ],
     )
     output = tmp_path / "out.srt"
 
@@ -55,8 +59,11 @@ def _cli_files(tmp_path, *, include_duration=True):
     lyrics = tmp_path / "lyrics.txt"
     lyrics.write_text("Hello", encoding="utf-8")
     duration = ", 01:00" if include_duration else ""
-    descriptions = tmp_path / "descriptions.md"
-    descriptions.write_text(f"🎵 One track{duration}\n00:00 First\n", encoding="utf-8")
+    descriptions = write_video_description_pair(
+        tmp_path,
+        description=f"🎵 One track{duration}\n00:00 First",
+        tracks=[{"position": 1, "start": "00:00", "title": "First"}],
+    )
     return lyrics, descriptions
 
 

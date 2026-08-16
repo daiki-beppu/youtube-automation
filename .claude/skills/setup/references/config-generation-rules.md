@@ -141,7 +141,7 @@
 
 設定生成後は `uv run yt-doctor` を実行し、`initial_setup_readiness` が OK であることを確認する。
 ここで `reference_images.default` / `composition_rules` の空欄・TBD、Suno `genre_line` の
-Style 欄 120 文字超過、planning 中 `descriptions.md` の parser 不一致を公開前に検出できる。
+Style 欄 120 文字超過、planning 中 `descriptions.json` の schema / localization / quality / HTML pair 不整合と旧 Markdown の未移行を公開前に検出できる。
 
 ## オプションセクション
 

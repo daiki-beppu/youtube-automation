@@ -13,15 +13,15 @@ from PIL import Image as PILImage
 from PIL import UnidentifiedImageError
 
 from youtube_automation.configuration.skills import load_skill_config
-from youtube_automation.core.errors import ConfigError
+from youtube_automation.core.errors import ConfigError, ValidationError
 from youtube_automation.domains.analytics.benchmark import (
     TTP_VIDEO_ANALYZE_TOP_N,
     load_benchmark_videos,
     select_top_vod_benchmark_videos,
 )
+from youtube_automation.domains.documents.video_description import read_video_description_metadata
 from youtube_automation.domains.thumbnail.references import resolve_configured_benchmark_references
 from youtube_automation.domains.uploads.preflight import (
-    check_descriptions_md_parseability,
     check_suno_genre_line_char_limit,
     check_thumbnail_skill_config,
 )
@@ -1408,15 +1408,28 @@ def evaluate_initial_setup_readiness(channel_dir: Path) -> ReadinessResult:
         if msg:
             issues.append(msg)
 
-    for desc_md in _planning_descriptions_md_paths(channel_dir):
-        msg = check_descriptions_md_parseability(desc_md, allowed_root=channel_dir)
-        if msg:
-            issues.append(msg)
+    for legacy_markdown in _planning_legacy_description_paths(channel_dir):
+        if not legacy_markdown.resolve().is_relative_to(channel_dir.resolve()):
+            issues.append(f"{legacy_markdown}: channel_dir 外を参照しています")
+        else:
+            issues.append(
+                f"{legacy_markdown}: 旧 descriptions.md は明示 migration が必要です。"
+                "/video --describe で descriptions.json + descriptions.html pair へ移行してください"
+            )
+
+    for desc_json in _planning_descriptions_json_paths(channel_dir):
+        if not desc_json.resolve().is_relative_to(channel_dir.resolve()):
+            issues.append(f"{desc_json}: channel_dir 外を参照しています")
+            continue
+        try:
+            read_video_description_metadata(desc_json)
+        except ValidationError as exc:
+            issues.append(f"{desc_json}: descriptions.json pair invalid: {exc}")
 
     if not issues:
         return ReadinessResult(
             status="ok",
-            message="初期セットアップの thumbnail / suno / descriptions.md 事前検査 OK",
+            message="初期セットアップの thumbnail / suno / descriptions.json 事前検査 OK",
         )
 
     return ReadinessResult(
@@ -1426,7 +1439,7 @@ def evaluate_initial_setup_readiness(channel_dir: Path) -> ReadinessResult:
             "kind": "human",
             "instructions": (
                 "/setup --regenerate で config/skills/thumbnail.yaml と config/skills/music.yaml::prompt を再確認し、"
-                "descriptions.md の parse 失敗は /video --describe で再生成してください"
+                "descriptions.json pair の検証失敗は /video --describe で再生成してください"
             ),
         },
     )
@@ -1439,7 +1452,14 @@ def _load_skill_config_for_channel(skill: str, channel_dir: Path) -> tuple[dict,
         return {}, f"config/skills/{skill}.yaml 読み込み失敗: {exc}"
 
 
-def _planning_descriptions_md_paths(channel_dir: Path) -> list[Path]:
+def _planning_descriptions_json_paths(channel_dir: Path) -> list[Path]:
+    planning_root = channel_dir / "collections" / "planning"
+    if not planning_root.is_dir():
+        return []
+    return sorted(planning_root.glob("*/20-documentation/descriptions.json"))
+
+
+def _planning_legacy_description_paths(channel_dir: Path) -> list[Path]:
     planning_root = channel_dir / "collections" / "planning"
     if not planning_root.is_dir():
         return []

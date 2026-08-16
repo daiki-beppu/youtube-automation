@@ -40,7 +40,8 @@
       "skill": "audit",
       "prerequisiteArtifacts": [
         "collections/live/*/workflow-state.json::upload.video_id",
-        "collections/live/*/20-documentation/descriptions.md"
+        "collections/live/*/20-documentation/descriptions.json",
+        "collections/live/*/20-documentation/descriptions.html"
       ],
       "outputArtifacts": [],
       "approvalGate": {

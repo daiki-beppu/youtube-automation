@@ -8,6 +8,7 @@ from pathlib import Path
 from types import ModuleType
 
 from tests.helpers.paths import REPO_ROOT
+from tests.helpers.video_description import write_video_description_pair
 
 SCRIPT = REPO_ROOT / ".claude" / "skills" / "video" / "references" / "video-chain-state.py"
 
@@ -93,14 +94,36 @@ def test_describe_skips_only_when_state_and_description_file_are_complete(tmp_pa
     (collection / "01-master" / "master.mp4").touch()
     docs = collection / "20-documentation"
     docs.mkdir()
-    (docs / "descriptions.md").write_text("# description\n", encoding="utf-8")
+    write_video_description_pair(docs)
     state_path = collection / "workflow-state.json"
     state = json.loads(state_path.read_text(encoding="utf-8"))
-    state["description"] = {"generated": True}
+    state["assets"]["description"] = True
     state_path.write_text(json.dumps(state), encoding="utf-8")
 
     code, result = module.evaluate(collection, "describe")
 
     assert code == module.EXIT_SKIP
     assert result["decision"] == "skip"
-    assert result["artifacts"] == ["20-documentation/descriptions.md"]
+    assert result["artifacts"] == [
+        "20-documentation/descriptions.json",
+        "20-documentation/descriptions.html",
+    ]
+
+
+def test_describe_does_not_skip_when_published_pair_is_tampered(tmp_path: Path) -> None:
+    module = _module()
+    collection = _collection(tmp_path, "01-master/master.mp4")
+    (collection / "01-master" / "master.mp4").touch()
+    docs = collection / "20-documentation"
+    docs.mkdir()
+    source = write_video_description_pair(docs)
+    source.with_suffix(".html").write_text("tampered", encoding="utf-8")
+    state_path = collection / "workflow-state.json"
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    state["assets"]["description"] = True
+    state_path.write_text(json.dumps(state), encoding="utf-8")
+
+    code, result = module.evaluate(collection, "describe")
+
+    assert code == module.EXIT_RUN
+    assert result["reason"] == "description_pair_invalid"

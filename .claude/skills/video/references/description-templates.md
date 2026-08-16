@@ -1,6 +1,6 @@
 # description スキル テンプレート集
 
-`description` スキルが出力する YouTube 概要欄のテンプレート本文と、コレクション内 `descriptions.md` の保存フォーマットをまとめる。
+`video --describe` が出力する YouTube 概要欄のテンプレート本文と、コレクション内 `descriptions.json` pair の保存フォーマットをまとめる。
 
 テンプレート更新時はこのファイルのみを編集すれば SKILL.md 本体は差し替え不要。
 
@@ -64,56 +64,18 @@ XX:XX [Track 1 of pattern B]
 
 ---
 
-## descriptions.md 保存フォーマット
+## descriptions.json 保存フォーマット
 
-概要欄生成結果はコレクションの `20-documentation/descriptions.md` に以下の構成で保存する。
+概要欄生成結果は `video-description.schema.json` 準拠の candidate JSON に写像し、
+`video-description-documents.md` の共通writerで `20-documentation/descriptions.json` + `.html` pair として公開する。
 
-````markdown
-# [Collection Name] — YouTube 概要欄
+- `title`: 承認済み公開タイトル
+- `description`: このreferenceで組み立てた最終SEO本文を改変せず保存
+- `description_sections`: 冒頭、track list、Perfect for、CTA、Cards等を最終表示順で保存
+- `tracks`: position / start / title を構造化
+- `tags`: YouTubeタグを文字列arrayで保存
+- `localizations`: localeごとの最終title / description
+- `provenance`: producer=`video` と入力source path
+- `quality`: checklist各項目と総合status。全件pass以外は公開しない
 
-*生成日: YYYY-MM-DD*
-*トラック数: N / 総時間: Xh Xm Xs*
-
----
-
-## Complete Collection 概要欄
-
-```
-[概要欄本文]
-```
-
----
-
-## タイトル案
-
-```
-[タイトル]
-```
-
----
-
-## タグ（YouTube タグ欄）
-
-```
-[タグリスト]
-```
-
----
-
-## Cards (YouTube Studio で手動設定)
-
-```
-Card ([タイミング]): "[ティーザーメッセージ]" → [リンク先動画タイトル]
-```
-
----
-
-## 品質チェック
-
-- [x] 誇張表現なし
-- [x] AI 透明性あり
-- [x] チャンネル CTA 含む
-- [x] ハッシュタグ 13個
-- [x] モバイル読みやすさ
-- [x] カードセクション含む
-````
+HTMLは同じschemaの `x-view` から生成し、最終表示順、文字数、localization差分、quality結果の確認に使う。

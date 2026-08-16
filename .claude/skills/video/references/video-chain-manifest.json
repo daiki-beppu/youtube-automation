@@ -21,7 +21,10 @@
       "id": "describe",
       "skill": "video",
       "prerequisiteArtifacts": ["collections/<id>/01-master/master.mp4"],
-      "outputArtifacts": ["collections/<id>/20-documentation/descriptions.md"],
+      "outputArtifacts": [
+        "collections/<id>/20-documentation/descriptions.json",
+        "collections/<id>/20-documentation/descriptions.html"
+      ],
       "approvalGate": {
         "skip": true,
         "configPath": "workflow.video.skip_approvals.describe"
