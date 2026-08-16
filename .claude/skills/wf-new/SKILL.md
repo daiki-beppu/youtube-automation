@@ -29,6 +29,8 @@ description: "Use when 新規コレクション制作を立ち上げるとき、
 | `--batch` | `references/batch.md` |
 | `--schedule` | `references/schedule.md` |
 
+`--schedule` の実行場所は能力ベースで判定する。local の本来条件は**人間のブラウザ工程（Suno UI）**だけで、企画・プロンプト作成と軽量レジームのメディア・公開工程は cloud とする。基盤制約による暫定例外として、`overlays.enabled: true` の重量レジームだけはメディア工程から publishAt upload まで local とする。OAuth、ffmpeg、ローカルファイルの存在自体は local の理由にしない。詳細と判定 CLI は `references/schedule.md` を正とする。
+
 ## 修飾フラグ
 
 | flag | 対象 mode | 用途 |

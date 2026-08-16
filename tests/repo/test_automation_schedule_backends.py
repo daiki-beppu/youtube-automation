@@ -28,6 +28,55 @@ backend = _load_backend_module()
 
 
 @pytest.mark.parametrize(
+    ("overlays_enabled", "expected"),
+    [
+        (
+            True,
+            {
+                "planning": "cloud",
+                "prompt": "cloud",
+                "suno": "local",
+                "media": "local",
+                "publish": "local",
+            },
+        ),
+        (
+            False,
+            {
+                "planning": "cloud",
+                "prompt": "cloud",
+                "suno": "local",
+                "media": "cloud",
+                "publish": "cloud",
+            },
+        ),
+    ],
+)
+def test_capability_boundary_matches_heavy_and_light_channel_regimes(overlays_enabled, expected):
+    assert {
+        stage: backend.classify_dependency_mode(stage=stage, overlays_enabled=overlays_enabled)[0]
+        for stage in backend.EXECUTION_STAGES
+    } == expected
+
+
+def test_capability_boundary_rejects_unknown_stage():
+    with pytest.raises(backend.BackendError, match="unsupported execution stage"):
+        backend.classify_dependency_mode(stage="oauth", overlays_enabled=False)
+
+
+def test_skill_self_describes_capability_boundary_without_removed_dependency_list():
+    skill = (ROOT / ".claude" / "skills" / "wf-new" / "SKILL.md").read_text(encoding="utf-8")
+    schedule = (REFERENCE_DIR / "schedule.md").read_text(encoding="utf-8")
+    contract = skill + schedule
+
+    assert "人間のブラウザ工程（Suno UI）" in contract
+    assert "overlays.enabled: true" in contract
+    assert "企画・プロンプト" in contract
+    assert "軽量レジーム" in contract
+    assert "ローカルファイル、OAuth、Chrome、Suno Helper、ffmpeg、ローカル media" not in contract
+
+
+@pytest.mark.parametrize(
     ("product", "dependency_mode", "os_fallback", "expected"),
     [
         ("codex", "cloud", False, "codex-automation"),
@@ -56,13 +105,16 @@ def test_plan_is_dry_run_and_preserves_external_publish_gate(tmp_path, monkeypat
     monkeypatch.setattr(
         backend,
         "load_config",
-        lambda: SimpleNamespace(workflow=SimpleNamespace(scheduled_automation=scheduled)),
+        lambda: SimpleNamespace(
+            workflow=SimpleNamespace(scheduled_automation=scheduled),
+            youtube=SimpleNamespace(overlays=SimpleNamespace(enabled=False)),
+        ),
     )
     monkeypatch.setattr(backend, "channel_dir", lambda: tmp_path)
 
     plan = backend.build_plan(
         product="codex",
-        dependency_mode="local",
+        stage="suno",
         overrides={"run_time": "10:15", "cadence": "tue,thu", "max_retries": 4},
     )
 
@@ -100,14 +152,47 @@ def test_cloud_plan_does_not_require_local_write_token_maintenance(tmp_path, mon
     monkeypatch.setattr(
         backend,
         "load_config",
-        lambda: SimpleNamespace(workflow=SimpleNamespace(scheduled_automation=scheduled)),
+        lambda: SimpleNamespace(
+            workflow=SimpleNamespace(scheduled_automation=scheduled),
+            youtube=SimpleNamespace(overlays=SimpleNamespace(enabled=False)),
+        ),
     )
     monkeypatch.setattr(backend, "channel_dir", lambda: tmp_path)
 
-    plan = backend.build_plan(product="claude", dependency_mode="cloud")
+    plan = backend.build_plan(product="claude", stage="planning")
 
     assert plan["prompt"].startswith("/wf-new --auto")
     assert "yt-oauth" not in plan["prompt"]
+
+
+def test_plan_derives_dependency_mode_from_stage_and_overlay_regime(tmp_path, monkeypatch):
+    scheduled = SimpleNamespace(
+        target_workflow="wf-new --auto",
+        allow_external_publish=False,
+        timezone="Asia/Tokyo",
+        run_time="09:05",
+        cadence=("mon",),
+        max_retries=0,
+        retry_delay_seconds=300,
+        prevent_concurrent_runs=True,
+        notification="none",
+    )
+    monkeypatch.setattr(
+        backend,
+        "load_config",
+        lambda: SimpleNamespace(
+            workflow=SimpleNamespace(scheduled_automation=scheduled),
+            youtube=SimpleNamespace(overlays=SimpleNamespace(enabled=True)),
+        ),
+    )
+    monkeypatch.setattr(backend, "channel_dir", lambda: tmp_path)
+
+    plan = backend.build_plan(product="claude", stage="media")
+
+    assert plan["dependency_mode"] == "local"
+    assert plan["execution_stage"] == "media"
+    assert plan["boundary_reason"] == "heavy_overlay_temporary_exception"
+    assert plan["backend"] == "claude-cowork-local"
 
 
 @pytest.mark.parametrize("removed_target", ["automation-run", "wf-auto"])
@@ -126,14 +211,17 @@ def test_plan_rejects_removed_target_override(tmp_path, monkeypatch, removed_tar
     monkeypatch.setattr(
         backend,
         "load_config",
-        lambda: SimpleNamespace(workflow=SimpleNamespace(scheduled_automation=scheduled)),
+        lambda: SimpleNamespace(
+            workflow=SimpleNamespace(scheduled_automation=scheduled),
+            youtube=SimpleNamespace(overlays=SimpleNamespace(enabled=False)),
+        ),
     )
     monkeypatch.setattr(backend, "channel_dir", lambda: tmp_path)
 
     with pytest.raises(backend.BackendError, match=rf"{removed_target}.*wf-new --auto"):
         backend.build_plan(
             product="codex",
-            dependency_mode="local",
+            stage="planning",
             overrides={"target_workflow": removed_target},
         )
 
