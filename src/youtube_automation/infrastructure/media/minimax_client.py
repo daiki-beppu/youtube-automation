@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from urllib.parse import urlsplit
 
 import requests
 
@@ -65,3 +66,57 @@ def request_json(
     if not isinstance(body, dict):
         raise GeneratorError("MiniMax API response は JSON object である必要があります")
     return body
+
+
+def get_json(
+    path: str,
+    params: Mapping[str, object],
+    *,
+    timeout: float,
+) -> dict[str, object]:
+    """MiniMax API に認証付き GET を送り、JSON object response を返す。"""
+    url = _url_for_path(path)
+    api_key = get_api_key()
+    try:
+        response = requests.get(
+            url,
+            params=params,
+            headers={"Authorization": f"Bearer {api_key}"},
+            timeout=timeout,
+        )
+        response.raise_for_status()
+    except requests.Timeout:
+        raise GeneratorError("MiniMax API request が timeout しました") from None
+    except requests.HTTPError as error:
+        status = _http_status(error.response)
+        detail = f" (status={status})" if status is not None else ""
+        raise GeneratorError(f"MiniMax API HTTP error{detail}") from None
+    except requests.RequestException:
+        raise GeneratorError("MiniMax API request に失敗しました") from None
+
+    try:
+        body = response.json()
+    except requests.exceptions.JSONDecodeError:
+        raise GeneratorError("MiniMax API response を JSON として解釈できません") from None
+    if not isinstance(body, dict):
+        raise GeneratorError("MiniMax API response は JSON object である必要があります")
+    return body
+
+
+def download_bytes(url: str, *, timeout: float) -> bytes:
+    """MiniMax が返した HTTPS download URL から認証情報なしで bytes を取得する。"""
+    parsed = urlsplit(url)
+    if parsed.scheme != "https" or not parsed.netloc or parsed.username or parsed.password:
+        raise GeneratorError("MiniMax download URL は認証情報を含まない HTTPS URL である必要があります")
+    try:
+        response = requests.get(url, timeout=timeout)
+        response.raise_for_status()
+    except requests.Timeout:
+        raise GeneratorError("MiniMax file download が timeout しました") from None
+    except requests.HTTPError as error:
+        status = _http_status(error.response)
+        detail = f" (status={status})" if status is not None else ""
+        raise GeneratorError(f"MiniMax file download HTTP error{detail}") from None
+    except requests.RequestException:
+        raise GeneratorError("MiniMax file download に失敗しました") from None
+    return response.content
