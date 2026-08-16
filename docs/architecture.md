@@ -230,6 +230,7 @@ assets/stock/           # ボツ画像ストック (#364)。<theme-slug>/ 配下
 | `domains.media` | 音声、字幕、画像、動画の provider-neutral model / policy |
 | `domains.media_store` | 工程境界の `<channel>/<collection>/<handoff>/` key、checksum metadata、push / pull / exists port |
 | `domains.media_handoff_manifest` | versioned handoff manifest schema、正準 file list、root checksum の typed owner |
+| `domains.notifications` | ハイブリッドpipelineの正常／異常event種別とprovider-neutralな分類 |
 | `domains.distrokid` | DistroKid naming、metadata、specification、preparation、release policy |
 | `domains.collections.weekly_vote_log` | 週次投票ログ reader、initializer、schema、保存・検証 |
 | `domains.documents.schema_registry` | リポジトリ所有 JSON Schema の固定 inventory、Draft 7 compile cache、値非表示の検証エラー変換。外部 schema path は受け取らない |
@@ -249,6 +250,7 @@ assets/stock/           # ボツ画像ストック (#364)。<theme-slug>/ 配下
 | `infrastructure.media.stock` | ボツ画像ストック化（`assets/stock/<theme>/` への退避・列挙・整理、隣接 `.meta.json` 管理） |
 | `infrastructure.auth` | OAuth 2.0 token の読み込み・refresh・atomic 永続化、scope と YouTube service 生成 |
 | `infrastructure.secrets` | シークレット解決（`_SECRET_REFS` で参照定義） |
+| `infrastructure.notifications.discord` | typed pipeline eventを既存secret・webhook owner経由でbest-effort配信するDiscord sink |
 | `application.live_chat.{codex,filters,history,models,runner}` | active broadcast のチャット取得、Codex 構造化判定、入出力フィルタ、PT 日次・時間・連続 user 上限、重複防止履歴、返信投稿 loop |
 | `commands.youtube.live_chat_reply` | `yt-live-chat-reply` 常駐 CLI。`comments.live_chat.enabled` を opt-in とし、VPS では独立した `live-chat-reply.service` から起動 |
 | `commands.system.skills_sync` | `yt-skills` 本体 |
