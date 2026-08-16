@@ -92,11 +92,13 @@ def render_template(
 def resolve_targets_from_collection(collection_path: Path) -> list[tuple[str, WorkflowState | None]]:
     """コレクションから ``(video_id, workflow_state)`` のペアを解決する.
 
-    video_id 解決の fallback chain（upstream の書き込み先差異を吸収）:
+    video_id 解決の優先順:
         1. ``20-documentation/upload_tracking.json`` の ``complete_collection.video_id``
            （`CollectionUploader` が書く正規の場所）
         2. ``workflow-state.json`` の ``upload.video_id``
-        3. ``workflow-state.json`` トップレベルの ``video_id``（後方互換）
+
+    ``workflow-state.json`` トップレベルの旧 ``video_id`` は値として読まず、
+    owner CLI による ``upload.video_id`` への修復を要求する。
 
     scene 情報（scene_phrases / planning.scene_emoji / theme）は workflow-state.json から取る。
     """
@@ -114,7 +116,14 @@ def resolve_targets_from_collection(collection_path: Path) -> list[tuple[str, Wo
 
     if not video_id and state:
         upload = state.upload
-        video_id = (upload.video_id if upload is not None else None) or state.video_id
+        video_id = upload.video_id if upload is not None else None
+        if not video_id and "video_id" in state:
+            raise ValidationError(
+                "workflow-state.json の top-level video_id はサポートされていません。"
+                "正準キー upload.video_id へ修復してください:\n"
+                f'uv run yt-workflow-state --collection "{collection_path}" '
+                "set-upload --video-id <video-id>"
+            )
 
     if not video_id:
         raise ValidationError(

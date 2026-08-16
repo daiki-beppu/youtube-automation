@@ -129,15 +129,20 @@ def _workflow_video_id(path: Path) -> str | None:
     try:
         state = read_workflow_state(path)
         upload = state.upload
-        upload_value = upload.video_id if upload is not None else None
-        value = upload_value if upload_value is not None else state.video_id
-        context = "upload.video_id" if upload_value is not None else "video_id"
+        value = upload.video_id if upload is not None else None
+        if value is None and "video_id" in state:
+            raise ValidationError(
+                "workflow-state.json の top-level video_id はサポートされていません。"
+                "正準キー upload.video_id へ修復してください:\n"
+                f'uv run yt-workflow-state --collection "{path.parent}" '
+                "set-upload --video-id <video-id>"
+            )
     except WorkflowStateError as error:
         raise ValidationError(f"collection state JSON を読めません: {path}") from error
     if value is None:
         return None
     if not value.strip():
-        raise ValidationError(f"{context} は空でない video_id にしてください")
+        raise ValidationError("upload.video_id は空でない video_id にしてください")
     return value.strip()
 
 

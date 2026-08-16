@@ -205,6 +205,7 @@ def test_upload_read_accessors_return_typed_values_and_keep_unknown_fields(tmp_p
             "track_count": 12,
             "created_at": "2026-08-16T09:00:00+09:00",
             "video_id": "legacy-video",
+            "upload": {"video_id": "canonical-video"},
             "planning": {
                 "activities": "focus",
                 "scene_emoji": "🌧️",
@@ -236,7 +237,11 @@ def test_upload_read_accessors_return_typed_values_and_keep_unknown_fields(tmp_p
     assert state.title_activity == "focus"
     assert state.track_count == 12
     assert state.created_at == "2026-08-16T09:00:00+09:00"
-    assert state.video_id == "legacy-video"
+    assert state.upload is not None
+    assert state.upload.video_id == "canonical-video"
+    assert state["video_id"] == "legacy-video"
+    with pytest.raises(AttributeError):
+        _legacy_video_id = state.video_id
     assert state.planning.publish_target_at == "2026-09-01T08:00:00+09:00"
     assert state.planning.final_title_en == "Rainy Focus"
     assert state.planning.final_title == "雨の集中時間"

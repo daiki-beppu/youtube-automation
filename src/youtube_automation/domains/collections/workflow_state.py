@@ -540,10 +540,6 @@ class WorkflowState(MutableMapping[str, JSONValue]):
         return _optional_string(self._data, "created_at", "workflow-state.json::created_at")
 
     @property
-    def video_id(self) -> str | None:
-        return _optional_string(self._data, "video_id", "workflow-state.json::video_id")
-
-    @property
     def collection_name(self) -> str | None:
         return _optional_string(self._data, "collection_name", "workflow-state.json::collection_name")
 
