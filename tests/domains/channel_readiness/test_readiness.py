@@ -13,6 +13,8 @@ def test_ttp_readiness_reports_missing_analytics_config(tmp_path) -> None:
         "kind": "human",
         "instructions": (
             "/setup --channel Step 4 で config を生成し、Step 5 以降で承認済み TTP 対象を "
-            "config/channel/analytics.json::benchmark.channels に保存してください"
+            "config/channel/analytics.json::benchmark.channels に保存してください。"
+            "ペルソナの不足はユーザー承認済み例外にせず、/channel-strategy --persona で最終 "
+            "persona-definition.md を更新してください"
         ),
     }

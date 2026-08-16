@@ -75,4 +75,4 @@ banner.save('branding/banner.png', optimize=True)
 | Analytics / Reporting 設定が未確認 | 初回制作は止めず、`/analytics --collect` で収集前提と Reporting API job 作成状態を確認する。不足する GCP / OAuth / API 設定は `/setup` に戻す。 |
 | ライブ配信を使う可能性がある | 初回制作は止めず、YouTube Studio で早めに有効化する。初回配信へ進む前に `/streaming` で配信側を確認する。 |
 
-`ttp_wf_new_readiness` の不足を意図的にスキップする場合だけ、`docs/channel/ttp-seed-confirmation.md` にユーザー承認済み例外を残す。それ以外は不足を解消してから doctor を再実行する。
+`ttp_wf_new_readiness` の TTP 転写不足を意図的にスキップする場合だけ、`docs/channel/ttp-seed-confirmation.md` にユーザー承認済み例外を残す。`persona-definition.md` の構造不足は例外対象にせず、doctor の `next_action` に従って `/channel-strategy --persona` へ戻る。それ以外は不足を解消してから doctor を再実行する。

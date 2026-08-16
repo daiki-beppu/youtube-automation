@@ -3260,12 +3260,44 @@ def _semantic_duration_ttp_evidence() -> str:
 """
 
 
+def _valid_persona_definition() -> str:
+    return """# ペルソナ定義
+
+## 第一ペルソナ
+深い集中を求める在宅ワーカー。
+
+## コメント由来の語彙
+- calm focus（出典: viewer-voice-analysis.md）
+
+## 感情トリガー
+- 安心感（出典: viewer-voice-analysis.md）
+
+## 利用シーン
+- 平日の深夜作業（出典: viewing-scene-matrix.md）
+
+## 検索キーワード
+- deep focus music（出典: benchmark_20260816.json）
+
+## 避けるべき訴求
+- 強い煽り（出典: 推測）
+
+## 自チャンネルへの示唆
+- 静かな導入を保つ（出典: analysis_audience.md）
+
+## タイトル・タグ・概要欄・サムネ・音楽ムードへの影響
+低彩度の画面と穏やかな語彙を使う。
+
+## 候補の棄却・統合メモ
+通勤中の視聴候補は利用時間が一致しないため統合しない。
+"""
+
+
 def _write_ttp_readiness_files(base: Path) -> None:
     docs_channel = base / "docs" / "channel"
     docs_channel.mkdir(parents=True, exist_ok=True)
     personas_dir = docs_channel / "personas"
     personas_dir.mkdir(parents=True, exist_ok=True)
-    (personas_dir / "persona-definition.md").write_text("# First persona\n", encoding="utf-8")
+    (personas_dir / "persona-definition.md").write_text(_valid_persona_definition(), encoding="utf-8")
     (docs_channel / "ttp-seed-confirmation.md").write_text(
         "\n".join(
             [
@@ -3452,14 +3484,114 @@ class TestCheckTtpWfNewReadinessChannelNew:
         assert r.status == "warn"
         assert "docs/channel/personas/persona-definition.md 未作成" in r.message
 
-    def test_empty_persona_definition_is_accepted_as_existing(self, tmp_path):
+    def test_empty_persona_definition_warns_with_persona_recovery(self, tmp_path):
         _write_ttp_analytics(tmp_path, [_ttp_channel()])
         _write_ttp_readiness_files(tmp_path)
         (tmp_path / "docs" / "channel" / "personas" / "persona-definition.md").write_text("", encoding="utf-8")
 
         r = doctor.check_ttp_wf_new_readiness(tmp_path)
 
-        assert r.status == "ok"
+        assert r.status == "warn"
+        assert "必須セクション欠落" in r.message
+        assert r.next_action is not None
+        assert "/channel-strategy --persona" in r.next_action["instructions"]
+
+    @pytest.mark.parametrize(
+        "section",
+        [
+            "第一ペルソナ",
+            "コメント由来の語彙",
+            "感情トリガー",
+            "利用シーン",
+            "検索キーワード",
+            "避けるべき訴求",
+            "自チャンネルへの示唆",
+            "タイトル・タグ・概要欄・サムネ・音楽ムードへの影響",
+            "候補の棄却・統合メモ",
+        ],
+    )
+    def test_missing_required_persona_section_warns_even_when_named_inside_fence(self, tmp_path, section):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        persona_path = tmp_path / "docs" / "channel" / "personas" / "persona-definition.md"
+        persona = _valid_persona_definition()
+        heading = f"## {section}"
+        start = persona.index(heading)
+        following = persona.find("\n## ", start + len(heading))
+        end = len(persona) if following == -1 else following + 1
+        persona_path.write_text(persona[:start] + f"```markdown\n{heading}\n```\n" + persona[end:], encoding="utf-8")
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert f"必須セクション欠落: {section}" in r.message
+
+    @pytest.mark.parametrize(
+        "section",
+        [
+            "第一ペルソナ",
+            "コメント由来の語彙",
+            "感情トリガー",
+            "利用シーン",
+            "検索キーワード",
+            "避けるべき訴求",
+            "自チャンネルへの示唆",
+            "タイトル・タグ・概要欄・サムネ・音楽ムードへの影響",
+            "候補の棄却・統合メモ",
+        ],
+    )
+    def test_empty_required_persona_section_warns(self, tmp_path, section):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        persona_path = tmp_path / "docs" / "channel" / "personas" / "persona-definition.md"
+        persona = _valid_persona_definition()
+        heading = f"## {section}"
+        start = persona.index(heading) + len(heading)
+        following = persona.find("\n## ", start)
+        end = len(persona) if following == -1 else following
+        persona_path.write_text(persona[:start] + "\n" + persona[end:], encoding="utf-8")
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert f"本文空: {section}" in r.message
+
+    @pytest.mark.parametrize(
+        "section",
+        [
+            "コメント由来の語彙",
+            "感情トリガー",
+            "利用シーン",
+            "検索キーワード",
+            "避けるべき訴求",
+            "自チャンネルへの示唆",
+        ],
+    )
+    def test_structured_persona_section_item_without_source_warns(self, tmp_path, section):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        persona_path = tmp_path / "docs" / "channel" / "personas" / "persona-definition.md"
+        persona = _valid_persona_definition()
+        heading = f"## {section}"
+        item_start = persona.index("- ", persona.index(heading))
+        item_end = persona.index("\n", item_start)
+        persona_path.write_text(persona[:item_start] + "- 根拠不明の項目" + persona[item_end:], encoding="utf-8")
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert f"出典注記不足: {section}" in r.message
+
+    def test_provisional_persona_definition_warns(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        persona_path = tmp_path / "docs" / "channel" / "personas" / "persona-definition.md"
+        persona_path.write_text("暫定版\n" + _valid_persona_definition(), encoding="utf-8")
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "未最終化（「暫定」表記あり）" in r.message
 
     def test_main_json_reports_missing_persona_definition_through_public_cli(self, monkeypatch, tmp_path, capsys):
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))

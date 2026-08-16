@@ -31,6 +31,31 @@ UNSUPPORTED_THUMBNAIL_MODELS = {
     "gemini-3.1-flash-image-preview",
     "gemini-3-pro-image-preview",
 }
+_PERSONA_SECTIONS = (
+    "第一ペルソナ",
+    "コメント由来の語彙",
+    "感情トリガー",
+    "利用シーン",
+    "検索キーワード",
+    "避けるべき訴求",
+    "自チャンネルへの示唆",
+    "タイトル・タグ・概要欄・サムネ・音楽ムードへの影響",
+    "候補の棄却・統合メモ",
+)
+_STRUCTURED_PERSONA_SECTIONS = frozenset(
+    {
+        "コメント由来の語彙",
+        "感情トリガー",
+        "利用シーン",
+        "検索キーワード",
+        "避けるべき訴求",
+        "自チャンネルへの示唆",
+    }
+)
+_MARKDOWN_HEADING = re.compile(r"^\s{0,3}(#{1,6})[ \t]+(.+?)[ \t]*#*[ \t]*$")
+_MARKDOWN_FENCE = re.compile(r"^\s{0,3}(`{3,}|~{3,})")
+_MARKDOWN_LIST_ITEM = re.compile(r"^\s*(?:[-+*]|\d+[.)])[ \t]+")
+_PERSONA_SOURCE_ANNOTATION = re.compile(r"出典:\s*(?:推測|[A-Za-z0-9_.-]+\.(?:md|json))(?=[）)\]}、,;；\s]*$)")
 
 
 @dataclass(frozen=True)
@@ -60,7 +85,7 @@ def _matching_files(directory: Path, pattern: str) -> list[Path]:
 
 def evaluate_ttp_wf_new_readiness(channel_dir: Path) -> ReadinessResult:
     persona_definition = channel_dir / "docs" / "channel" / "personas" / "persona-definition.md"
-    missing_persona = [] if persona_definition.is_file() else ["docs/channel/personas/persona-definition.md 未作成"]
+    missing_persona = _missing_persona_readiness_items(persona_definition)
     missing_persona_suffix = ("; " + "; ".join(missing_persona)) if missing_persona else ""
 
     analytics_path = channel_dir / "config" / "channel" / "analytics.json"
@@ -73,9 +98,10 @@ def evaluate_ttp_wf_new_readiness(channel_dir: Path) -> ReadinessResult:
             ),
             next_action={
                 "kind": "human",
-                "instructions": (
+                "instructions": _with_persona_recovery(
                     "/setup --channel Step 4 で config を生成し、Step 5 以降で承認済み TTP 対象を "
-                    "config/channel/analytics.json::benchmark.channels に保存してください"
+                    "config/channel/analytics.json::benchmark.channels に保存してください",
+                    missing_persona,
                 ),
             },
         )
@@ -87,7 +113,10 @@ def evaluate_ttp_wf_new_readiness(channel_dir: Path) -> ReadinessResult:
             message="TTP 完了条件が未充足: " + analytics_read.error + missing_persona_suffix,
             next_action={
                 "kind": "human",
-                "instructions": "config/channel/analytics.json を修正してから yt-doctor を再実行してください",
+                "instructions": _with_persona_recovery(
+                    "config/channel/analytics.json を修正してから yt-doctor を再実行してください",
+                    missing_persona,
+                ),
             },
         )
 
@@ -103,9 +132,10 @@ def evaluate_ttp_wf_new_readiness(channel_dir: Path) -> ReadinessResult:
             ),
             next_action={
                 "kind": "human",
-                "instructions": (
+                "instructions": _with_persona_recovery(
                     "/setup --channel Step 1/5 に戻り、TTP 対象を確認して "
-                    "config/channel/analytics.json::benchmark.channels に承認済み対象を保存してください"
+                    "config/channel/analytics.json::benchmark.channels に承認済み対象を保存してください",
+                    missing_persona,
                 ),
             },
         )
@@ -129,12 +159,13 @@ def evaluate_ttp_wf_new_readiness(channel_dir: Path) -> ReadinessResult:
             + note_suffix,
             next_action={
                 "kind": "human",
-                "instructions": (
+                "instructions": _with_persona_recovery(
                     "/setup --channel Step 5-9 または "
                     "/setup --regenerate Step R3.5 の不足項目を解消してください。"
                     "意図的にスキップする場合は docs/channel/ttp-seed-confirmation.md に "
                     "ユーザー承認済み例外として未反映項目を明記し、最後に `uv run yt-doctor --json` で "
-                    "`ttp_wf_new_readiness` が ok になることを確認してください"
+                    "`ttp_wf_new_readiness` が ok になることを確認してください",
+                    missing_persona,
                 ),
             },
         )
@@ -145,6 +176,75 @@ def evaluate_ttp_wf_new_readiness(channel_dir: Path) -> ReadinessResult:
             "TTP 対象承認・branding snapshot・benchmark docs・thumbnail / music readiness が "
             "/wf-new 接続可能（/setup --regenerate 完了相当）" + note_suffix
         ),
+    )
+
+
+def _missing_persona_readiness_items(path: Path) -> list[str]:
+    relative = "docs/channel/personas/persona-definition.md"
+    if not path.is_file():
+        return [f"{relative} 未作成"]
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        return [f"{relative} を読み込めません ({exc})"]
+
+    sections = _persona_markdown_sections(text)
+    missing: list[str] = []
+    for name in _PERSONA_SECTIONS:
+        if name not in sections:
+            missing.append(f"{relative} 必須セクション欠落: {name}")
+        elif not any(line.strip() for line in sections[name]):
+            missing.append(f"{relative} 本文空: {name}")
+    if "暫定" in text:
+        missing.append(f"{relative} が未最終化（「暫定」表記あり）")
+    for name in _PERSONA_SECTIONS:
+        if name not in _STRUCTURED_PERSONA_SECTIONS or name not in sections:
+            continue
+        items = [line for line in sections[name] if _MARKDOWN_LIST_ITEM.match(line)]
+        if not items or any(not _PERSONA_SOURCE_ANNOTATION.search(item) for item in items):
+            missing.append(f"{relative} 出典注記不足: {name}")
+    return missing
+
+
+def _persona_markdown_sections(text: str) -> dict[str, list[str]]:
+    sections: dict[str, list[str]] = {}
+    active_name: str | None = None
+    active_level = 0
+    fence_marker: str | None = None
+    for line in text.splitlines():
+        fence = _MARKDOWN_FENCE.match(line)
+        if fence:
+            marker = fence.group(1)
+            if fence_marker is None:
+                fence_marker = marker
+            elif marker[0] == fence_marker[0] and len(marker) >= len(fence_marker):
+                fence_marker = None
+            continue
+        if fence_marker is not None:
+            continue
+
+        heading = _MARKDOWN_HEADING.match(line)
+        if heading:
+            level = len(heading.group(1))
+            name = heading.group(2).strip()
+            if active_name is not None and level <= active_level:
+                active_name = None
+            if name in _PERSONA_SECTIONS:
+                sections.setdefault(name, [])
+                active_name = name
+                active_level = level
+            continue
+        if active_name is not None:
+            sections[active_name].append(line)
+    return sections
+
+
+def _with_persona_recovery(instructions: str, missing_persona: list[str]) -> str:
+    if not missing_persona:
+        return instructions
+    return (
+        instructions + "。ペルソナの不足はユーザー承認済み例外にせず、"
+        "/channel-strategy --persona で最終 persona-definition.md を更新してください"
     )
 
 
