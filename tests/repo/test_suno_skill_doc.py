@@ -565,14 +565,15 @@ def test_suno_documents_workflow_state_writer_boundary() -> None:
         "共通writer",
         "`yt-suno-verify` の成功",
         "semantic review の全 entry `PASS`",
-        "`assets.music_prompts = true`",
+        "owner API で `assets.music_prompts = true`",
+        "`planning.music` と `updated_at` の既存投影",
         "subagent は state を書き込まない",
     ):
         assert token in step_2, f"/music --prompt Step 2 に state writer 境界がない（`{token}` 不在）"
 
     assert "保存後、`workflow-state.json` の `assets.music_prompts = true` に更新する" not in step_2
     assert "`/wf-new` または `/wf-next` のメインエージェント" not in step_2
-    _assert_before(step_2, "全 entry が `PASS`", "`assets.music_prompts = true`")
+    _assert_before(step_2, "全 entry `PASS`", "owner API で `assets.music_prompts = true`")
 
 
 def test_review_rubric_documents_required_semantic_viewpoints() -> None:

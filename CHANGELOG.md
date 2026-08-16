@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `feat(doctor)`: `ttp_wf_new_readiness` が最終ペルソナの必須9セクション、非空本文、最終化、構造化項目の出典注記を検証し、不足時は `/channel-strategy --persona` へ戻す（#4000）。
 - `feat(channel-strategy)`: `--persona` が構造化 persona fields の全項目に実入力ファイルまたは `推測` の出典注記を要求し、暫定版から最終版まで維持する契約を追加する（#3999）。
 - `feat(documents)`: Suno / Lyria の音楽promptをreview・provenance付き JSON 正本と承認表示HTMLへ統一し、verify / semantic review / pair再読込成功後だけ workflow state を更新する（#4029）。
+- `refactor(workflow-state)`: assets / planning / post-upload の型付き更新を `yt-workflow-state` に追加し、全 skill の資産系 state 更新を owner CLI 経由へ移して AI の直接 Edit 指示を廃止する（#3888）。
 - `refactor(workflow-state)`: `wf-new` / `wf-next` の制御面 state 更新を `yt-workflow-state` へ移し、phase / stage / upload / updated_at の AI による直接 Edit 指示を廃止する（#3887）。
 - `feat(workflow-state)`: 制御面の phase / stage / upload を lock + atomic update で更新し、任意 key path を JSON で取得する `yt-workflow-state` CLI を追加する（#3886）。
 - `feat(wf-new)`: 企画前の Phase 0 で未 postmortem を列挙し、コスト承認後に `/analytics --flop` へ全件を順次委譲して insights を最新化する再開可能な振り返り gate を追加する（#3791）。

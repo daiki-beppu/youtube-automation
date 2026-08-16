@@ -370,8 +370,10 @@ MUTABLE_FILES = frozenset(
     "thumbnail/SKILL.md",
     "video/SKILL.md",
     "video/references/describe.md",
+    "video/references/generate.md",
     "wf-new/references/freshness-rules.md",
     "wf-new/references/ideate.md",
+    "wf-next/SKILL.md",
 }
 EXPECTED_ISSUE_3986_CHANGED_PATHS = frozenset(
     {
@@ -394,7 +396,7 @@ EXPECTED_ISSUE_3986_CHANGED_PATHS = frozenset(
         "tests/repo/test_workflow_upload_setup_redirect_contract.py",
     }
 )
-IMMUTABLE_TARGET_FILES_SHA256 = "2346a57d57872634a407b56c429c2f83ec2ffd6e93f06d40c0d42ff317285b4e"
+IMMUTABLE_TARGET_FILES_SHA256 = "f18ea6a8ace9729a5cc2f01f339c3c3f60bb84a4b1b07927c7720bd4d989f8f0"
 AUTOMATION_SCHEDULE_REGENERATE_SHA256 = "11d460f727fe50c41f00571b416a1486cb07d0b1548524bc650a7161c16f6c42"
 AUTOMATION_UPDATE_PUSH_SHA256 = "ced3211760d9ff0abd20ec3cdc402501b424f48581ef3a618d51c0d9ee12840c"
 ALLOWED_FENCED_ROUTES = {

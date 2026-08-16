@@ -103,7 +103,7 @@ initial dispatch を行った場合は両 Agent の完了を待つ。片方の�
 1. 企画選択時に承認済みの同じ画像なので、文字入り候補の生成・再選択・thumbnail の AskUserQuestion は行わない。`10-assets/thumbnail.jpg` を `/thumbnail --compare` で 320px 視認性検証し、署名・透かし・ロゴ・手指破綻の既存目視 QA を通す。失敗時は state を更新せず停止する
 2. QA 成功後に `uv run python .claude/skills/thumbnail/references/archive-approved-thumbnail.py <collection-path>` を実行する。archive の Hard Gate は既存契約どおり維持する
 3. `textless.enabled` が未設定または `true` なら、確定した `thumbnail.jpg` を入力、生成対象 `main` を指定して別 subagent へ委譲する。`mode: full` は生成可否と textless 背景承認を質問せず既存の check 成功後に確定し、それ以外は既存どおり textless 候補だけをプレビュー・承認して `main.png/jpg` へ確定する。`false` なら textless 生成・承認を省略し、`share_thumbnail_as_main.py <collection-path>` を実行して `status: SHARED`、同一 SHA-256、`main.png` 不在を検証する
-4. `thumbnail.jpg` と `main.png/jpg` の確定検証結果を Phase 2c 成果物・再開契約へ thumbnail branch の結果として渡し、成功時だけメインが `assets.thumbnail = true` と `updated_at` を更新する。この `thumbnail.jpg` を再度 AskUserQuestion にかけない
+4. `thumbnail.jpg` と `main.png/jpg` の確定検証結果を Phase 2c 成果物・再開契約へ thumbnail branch の結果として渡し、成功時だけメインが `uv run yt-workflow-state --collection "$COLLECTION_DIR" set-asset thumbnail true` を実行する。この `thumbnail.jpg` を再度 AskUserQuestion にかけない
 
 以下の mode 別分岐は `status: MISSING` から既存 `/thumbnail` フォールバックへ進んだ場合だけ実行する。
 
@@ -112,7 +112,7 @@ initial dispatch を行った場合は両 Agent の完了を待つ。片方の�
 1. AskUserQuestion と `open` を実行せず、`uv run yt-thumbnail-auto-select <collection-path> --dry-run` が exit 0 であることを確認してから `uv run yt-thumbnail-auto-select <collection-path> --apply` を実行する。`10-assets/thumbnail.jpg` と `workflow-state.json::thumbnail_auto_selection.mode == "full"` を検証する
 2. `textless.enabled` が未設定または `true` なら、確定した `thumbnail.jpg` を入力、生成対象 `main` を指定して別 subagent へ委譲する。生成可否と textless 背景承認は質問せず、`yt-thumbnail-check` が exit 0 かつ候補が存在するときだけ `10-assets/main.png/jpg` へ確定コピーする。`false` なら textless 委譲・生成・承認を再要求せず、`share_thumbnail_as_main.py <collection-path>` を実行し、`status: SHARED`、`thumbnail.jpg` と `main.jpg` の同一 SHA-256、`main.png` 不在を検証する
 3. `/thumbnail --compare` の 320px 視認性検証はスコープ外のまま省略せず、自動確定後に別途実行する。失敗しても不適格候補を強制採用せず、`/thumbnail` の「full モード失敗時の手動切替」を表示して state を更新せず停止する
-4. `thumbnail.jpg` と `main.png/jpg` の確定検証結果を Phase 2c 成果物・再開契約へ thumbnail branch の結果として渡し、成功時だけメインが `assets.thumbnail = true` と `updated_at` を更新して、music branch の成果物検証へ進む
+4. `thumbnail.jpg` と `main.png/jpg` の確定検証結果を Phase 2c 成果物・再開契約へ thumbnail branch の結果として渡し、成功時だけメインが `uv run yt-workflow-state --collection "$COLLECTION_DIR" set-asset thumbnail true` を実行して、music branch の成果物検証へ進む
 
 **`selection_only` または auto-selection 無効**（従来フロー）:
 
@@ -142,7 +142,7 @@ initial dispatch を行った場合は両 Agent の完了を待つ。片方の�
    - `thumbnail.jpg` と `main.png/jpg` を同一画像で代用しない。`main.png` を `thumbnail.jpg` にコピーする旧運用は禁止
    - QA が NG、再生成、または中断の場合は `/wf-new` または `/thumbnail` の該当生成ステップへ戻し、state を更新せず停止する
 
-4. `thumbnail.jpg` と `main.png/jpg` の確定検証結果を Phase 2c 成果物・再開契約へ thumbnail branch の結果として渡し、成功時だけメインが `assets.thumbnail = true` と `updated_at` を更新する。このゲートで承認済みの `thumbnail.jpg` を再度 AskUserQuestion にかけない。
+4. `thumbnail.jpg` と `main.png/jpg` の確定検証結果を Phase 2c 成果物・再開契約へ thumbnail branch の結果として渡し、成功時だけメインが `uv run yt-workflow-state --collection "$COLLECTION_DIR" set-asset thumbnail true` を実行する。このゲートで承認済みの `thumbnail.jpg` を再度 AskUserQuestion にかけない。
 
 5. **join 後の branch 適用**:
    - メインが Suno の `suno-patterns.yaml` / `suno-prompts.json` / `yt-suno-verify` / semantic review、または Lyria の設計成果物を検証し、music branch の結果を Phase 2c 成果物・再開契約へ渡す
@@ -152,9 +152,9 @@ initial dispatch を行った場合は両 Agent の完了を待つ。片方の�
 
 サムネイル承認後、`config/skills/loop-video.yaml::enabled` を確認する。
 
-- `enabled: false` の場合: `/thumbnail --loop` は呼ばず、既定では textless `main.png/jpg` の静止画背景運用として続行する。`thumbnail::textless.enabled: false` では例外として文字入りの共有 `main.jpg` が正規入力である。`assets.loop_video = false` を維持し、`phase = "prepared"` に更新する
+- `enabled: false` の場合: `/thumbnail --loop` は呼ばず、既定では textless `main.png/jpg` の静止画背景運用として続行する。`thumbnail::textless.enabled: false` では例外として文字入りの共有 `main.jpg` が正規入力である。owner CLI の `set-asset loop_video false`、続けて `set-phase prepared` を実行する
 - `enabled` 未指定 or `true` の場合: Agent ツールで subagent を起動し、`main.png/jpg` を入力、`10-assets/loop.mp4` を期待成果物として `/thumbnail --loop` の生成だけを委譲する。`thumbnail::textless.enabled: false` の共有 `main.jpg` も正規入力として渡す
-  - 成功: メインが `loop.mp4` の存在を確認後、`assets.loop_video = true`、`phase = "prepared"`、`updated_at` を更新する
+  - 成功: メインが `loop.mp4` の存在を確認後、owner CLI の `set-asset loop_video true`、続けて `set-phase prepared` を実行する
   - 失敗または欠落: state は更新せず、同じ loop-video 委譲から再試行できる状態で停止する
 
 #### 2f. Suno helper server 起動（Suno のみ）

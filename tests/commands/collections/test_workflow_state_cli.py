@@ -146,3 +146,77 @@ def test_control_plane_updates_refresh_updated_at_and_touch_is_available(tmp_pat
     state = _read_state(collection)
     assert isinstance(state["updated_at"], str)
     assert state["unknown"] is True
+
+
+@pytest.mark.parametrize(
+    ("command", "section", "key", "value"),
+    [
+        (("set-asset", "music_prompts", "true"), "assets", "music_prompts", True),
+        (("set-asset", "master_video", '"01-master/video.mp4"'), "assets", "master_video", "01-master/video.mp4"),
+        (("set-planning", "generated", "true"), "planning", "generated", True),
+        (("set-planning", "final_title", '"Rainy Harbor"'), "planning", "final_title", "Rainy Harbor"),
+        (
+            ("set-planning", "music", '{"engine":"suno","mood":["mellow"]}'),
+            "planning",
+            "music",
+            {"engine": "suno", "mood": ["mellow"]},
+        ),
+    ],
+)
+def test_typed_asset_and_planning_updates_preserve_unknown_fields(
+    tmp_path: Path,
+    command: tuple[str, ...],
+    section: str,
+    key: str,
+    value: object,
+) -> None:
+    collection = _collection(tmp_path, {section: {"future": "keep"}, "unknown": {"keep": True}})
+
+    assert workflow_state_cli.main(["--collection", str(collection), *command]) == 0
+
+    state = _read_state(collection)
+    assert isinstance(state.pop("updated_at"), str)
+    assert state[section] == {"future": "keep", key: value}
+    assert state["unknown"] == {"keep": True}
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        ("set-asset", "music_prompts", '"yes"'),
+        ("set-asset", "master_video", "true"),
+        ("set-planning", "generated", '"yes"'),
+        ("set-planning", "music", "[]"),
+        ("set-planning", "music", '{"mood":"mellow"}'),
+        ("set-post-upload-shorts", "{}"),
+        ("set-post-upload-shorts", '[{"video_id":1}]'),
+    ],
+)
+def test_typed_updates_reject_invalid_json_types_without_mutation(
+    tmp_path: Path,
+    command: tuple[str, ...],
+) -> None:
+    collection = _collection(tmp_path, {"unknown": {"keep": True}})
+    state_path = collection / "workflow-state.json"
+    before = state_path.read_bytes()
+
+    assert workflow_state_cli.main(["--collection", str(collection), *command]) == 1
+
+    assert state_path.read_bytes() == before
+
+
+def test_legacy_completion_and_post_upload_sections_have_typed_commands(tmp_path: Path) -> None:
+    collection = _collection(tmp_path, {"future": {"keep": True}})
+
+    assert workflow_state_cli.main(["--collection", str(collection), "set-thumbnail-approved", "true"]) == 0
+    assert workflow_state_cli.main(["--collection", str(collection), "set-description-generated", "true"]) == 0
+    shorts = '[{"short_num":1,"video_id":"short-1","uploaded_at":"2026-08-16T00:00:00Z"}]'
+    assert workflow_state_cli.main(["--collection", str(collection), "set-post-upload-shorts", shorts]) == 0
+
+    state = _read_state(collection)
+    assert state["thumbnail"] == {"approved": True}
+    assert state["description"] == {"generated": True}
+    assert state["post_upload"] == {
+        "shorts": [{"short_num": 1, "video_id": "short-1", "uploaded_at": "2026-08-16T00:00:00Z"}]
+    }
+    assert state["future"] == {"keep": True}

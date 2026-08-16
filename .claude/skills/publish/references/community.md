@@ -74,7 +74,7 @@
 ### Hard Gates
 
 - `config/channel/community-draft.json` が存在し、`load_config().community_draft.posts` が空でないこと。欠落時は `examples/channel_config.example/community-draft.example.json` をコピーしてチャンネル値へ書き換えるよう案内し、設定が完了するまで停止する。
-- 対象 collection の `workflow-state.json::planning.final_title` と `planning.publish_target_at` が非空であること。`final_title` 欠落時は `/wf-new` 経由で企画を確定するよう案内して停止する。`publish_target_at` 欠落時は planned YouTube publish datetime を timezone 付き ISO 8601 で同フィールドへ記録するよう案内し、記録されるまで停止する。
+- 対象 collection の `workflow-state.json::planning.final_title` と `planning.publish_target_at` が非空であること。`final_title` 欠落時は `/wf-new` 経由で企画を確定するよう案内して停止する。`publish_target_at` 欠落時は planned YouTube publish datetime を timezone 付き ISO 8601 の JSON string とし、`uv run yt-workflow-state --collection <collection-path> set-planning publish_target_at <json-value>` で記録してから続行する。
 - 対象 collection は `CHANNEL_DIR` 配下の実在パスを指定する。
 
 変数解決・日時計算・path 検証・JSON schema の単一ソースは `references/generate_batch.py` とし、本文で再実装しない。

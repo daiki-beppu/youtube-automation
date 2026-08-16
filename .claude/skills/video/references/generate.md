@@ -17,7 +17,7 @@ Suno 系チャンネルは `/music --master`、Lyria 系チャンネルは `/mus
 - **成果物**: `01-master/*.mp4`、probe 検証結果
 - **例外**: `generate_videos.sh` の実行に必要な範囲で `workflow-state.json` を読み取ってよい（書き込みは不可）
 
-subagent は `workflow-state.json` へ書き込まない。完了報告は `status: success | failure`、成果物の絶対パス一覧、エラー。成果物の存在検証と state 更新はメインが行う。
+subagent は `workflow-state.json` へ書き込まない。完了報告は `status: success | failure`、成果物の絶対パス一覧、エラー。成果物の存在検証と owner CLI 実行はメインが行う。
 
 ## 前提
 
@@ -70,7 +70,7 @@ $ARGUMENTS
    `loop.mp4` があると `generate_videos.sh` が自動的に動画背景を使用（静止画の代わり）
 4. **任意プレビュー**: effect / overlays の短尺確認が必要な場合は `generate_videos.sh --preview 20 <collection-path>` を実行する。プレビューは `*-Master.mp4` と `workflow-state.json` を変更しない
 5. **動画生成**: `generate_videos.sh` を実行する（所要時間とログの扱いは「所要時間と完了報告」を参照）
-6. **workflow-state.json 更新**: 全尺生成の成功後だけ `assets.master_video` に生成された動画ファイル名（例: `01-master/Theme-Name-Master.mp4`）を記録する。プレビューのみでは更新しない
+6. **workflow-state.json 更新**: 全尺生成の成功後だけ、生成された動画ファイル名を JSON string として `uv run yt-workflow-state --collection <collection-path> set-asset master_video <json-value>` へ渡す。プレビューのみでは実行しない
 
 ### 自動検出される要素
 

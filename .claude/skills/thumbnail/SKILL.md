@@ -30,14 +30,14 @@ description: "Use when コレクションの YouTube サムネイル（thumbnail
 - `textless.enabled` が未設定または `true` なら、`10-assets/thumbnail.jpg`（テキスト付き YouTube サムネ）と `10-assets/main.png`（または `main.jpg`、textless 動画背景）が**別成果物として**確定済み。`false` なら確定済み `thumbnail.jpg` と SHA-256 が一致する `main.jpg` が存在し、`main.png` が存在しない。`auto_selection.mode: full` 以外では必要な候補がユーザー承認済み。`ab_test.enabled: true` の場合は全 `thumbnail-<name>.jpg` も確定済み（`full` 以外では個別承認済み）で、`thumbnail.jpg` が先頭 pattern と同一内容
 - テキスト付きサムネは `mode: full` 以外では承認前に、`full` では自動確定後に `/thumbnail --compare` の 320px 視認性検証を通過している
 - `20-documentation/thumbnail-prompts.md` に textless 背景用プロンプトとテキスト付きサムネの生成記録を保存済み。`textless.enabled: false` では textless プロンプトの代わりに共用設定、コピー元、コピー先、検証済み SHA-256 を保存済み
-- `workflow-state.json` の `thumbnail.approved = true` に更新済み
+- `uv run yt-workflow-state --collection <collection-path> set-thumbnail-approved true` が成功済み
 - `archive.enabled: true` の場合は `assets/thumbnail-gallery/<collection-dir-name>.<ext>` に確定サムネを保存済み
 **全自動 Hard Gate**: deep-merge 後の `image_generation.auto_selection.enabled: true` かつ `mode: full` のときだけ、テーマ確認・生成可否（`confirm_cost()`）・textless 背景承認・テキスト付き候補承認の 4 ゲートをすべて省略する。`enabled: true` でも `mode` が未設定または `selection_only` なら候補承認だけを省略し、残り 3 ゲートは従来どおり実行する。`enabled: false` / 未設定なら全ゲートを維持する。`full` でテーマを一意に解決できない、生成コマンドが非 0、期待成果物がない、または自動選択に失敗した場合は silent fallback せず、後述の「full モード失敗時の手動切替」に従って停止する。
 ## Subagent Contract
 - **入力**: 対象コレクション、生成対象（`thumbnail` / `main`）
 - **成果物**: `10-assets/thumbnail-vN.jpg/png` または `10-assets/main-vN.png/jpg`、`20-documentation/thumbnail-prompts.md`
 - **委譲しない処理**: 候補画像生成前の承認、および候補承認後の確定コピーと state 更新
-subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実行しない。承認が要る処理は、メインが承認を得るまで委譲しない。完了報告は `status: success | failure`、成果物の絶対パス一覧、エラー。成果物の存在検証と state 更新はメインが行う。
+subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実行しない。承認が要る処理は、メインが承認を得るまで委譲しない。完了報告は `status: success | failure`、成果物の絶対パス一覧、エラー。成果物の存在検証と owner CLI 実行はメインが行う。
 ## 勝ちパターン参照ゲート
 プロンプト構築前に [参照画像と検証済み insights](references/reference-and-insights.md) を読み、`data/thumbnail-iterate/champion.json`、完了済み thumbnail test 履歴、`data/insights.jsonl` を検証して反映する。insights schema の単一ソースは `.claude/skills/analytics/references/insights-entry.schema.json`。`jq -c 'select(.status == "open" and .lever == "thumbnail")' data/insights.jsonl` で選別し、`status` を含むエントリの書き換え・追記はしない（status 反映は `/wf-new`、追記は `yt-experiment judge` 等の writer の責務）。検証不能な値は使わず、通常生成 mode から champion JSON・test 履歴・insights を更新しない。 **読み順**: 標準フローは「ワークフロー > 標準生成順序とファイル契約」から読み、実効 `text_render.mode` に対応する経路へ進む。「フォント安定化」章は 2 経路の再現性差を確認するときに読む。「codex 経由の生成」章は `image_generation.provider: codex` のチャンネルのみ、「自動選択」章は該当機能を明示的に使うチャンネルのみ参照すればよい。
 ## When to Use
@@ -375,7 +375,7 @@ JSON
 ```
 `config/skills/thumbnail.yaml` の `image_generation.stock.enabled: false` に設定するとこの CLI は退避せず単純削除（従来挙動）に戻る。
 ### `workflow-state.json` 更新
-画像確認・承認後、`thumbnail.approved = true` を更新する。`textless.enabled: false` では `share_thumbnail_as_main.py` の成功と `thumbnail.jpg` / `main.jpg` の SHA-256 一致、`main.png` 不在を確認した後だけ更新する。`mode: full` では目視確認と AskUserQuestion を省略し、既存の自動確定成功を承認完了として扱う。`ab_test.enabled: true` の場合は、設定された全 pattern の `thumbnail-<name>.jpg` が存在し、各 pattern の承認（`full` では自動確定）が完了し、`thumbnail.jpg` が先頭 pattern と同一内容であることを確認してからだけ更新する。一部 pattern の承認・確定に失敗した状態では `false` のままにする。 `yt-thumbnail-auto-select --apply` で確定した場合は、選択候補・distance・ランキング・参照画像ごとの centroid distance / outlier 判定・実行時刻が `thumbnail_auto_selection` キーに監査ログとして自動記録される（#1370、#2952）。
+画像確認・承認後、`uv run yt-workflow-state --collection <collection-path> set-thumbnail-approved true` を実行する。`textless.enabled: false` では `share_thumbnail_as_main.py` の成功と `thumbnail.jpg` / `main.jpg` の SHA-256 一致、`main.png` 不在を確認した後だけ実行する。`mode: full` では目視確認と AskUserQuestion を省略し、既存の自動確定成功を承認完了として扱う。`ab_test.enabled: true` の場合は、設定された全 pattern の `thumbnail-<name>.jpg` が存在し、各 pattern の承認（`full` では自動確定）が完了し、`thumbnail.jpg` が先頭 pattern と同一内容であることを確認してからだけ実行する。一部 pattern の承認・確定に失敗した状態では `false` のままにする。 `yt-thumbnail-auto-select --apply` で確定した場合は、選択候補・distance・ランキング・参照画像ごとの centroid distance / outlier 判定・実行時刻が `thumbnail_auto_selection` キーに監査ログとして自動記録される（#1370、#2952）。
 ## stock 退避と再利用
 不採用画像は `<channel_dir>/assets/stock/<theme-slug>/` に画像と隣接メタデータを退避する。メタデータの schema、retention、参照プールへの合成条件は [quality / operations 詳細](references/quality-and-operations.md) を読む。 stock の操作 CLI:
 | CLI | 用途 |

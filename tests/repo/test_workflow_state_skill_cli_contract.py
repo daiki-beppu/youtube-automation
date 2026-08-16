@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from tests.helpers.paths import REPO_ROOT
+from youtube_automation.domains.skills.inventory import SkillInventory
 
 SKILLS = {name: REPO_ROOT / ".claude" / "skills" / name / "SKILL.md" for name in ("wf-new", "wf-next")}
+INVENTORY = SkillInventory(REPO_ROOT)
 
 
 def _text(skill: str) -> str:
@@ -40,8 +42,22 @@ def test_known_direct_control_plane_instructions_do_not_return() -> None:
     assert '`stage: "live"`、`phase: "complete"`、`updated_at` だけを atomic write' not in wf_next
 
 
-def test_asset_mutations_remain_explicitly_deferred_to_next_migration() -> None:
-    """本段で assets / planning の直接更新まで移したことにしない。"""
-    for text in map(_text, SKILLS):
-        assert "資産系キー (`assets.*` / `planning.*`) はこの段では直接更新のまま" in text
-        assert "#3888" in text
+def test_asset_mutations_are_routed_through_owner_cli() -> None:
+    """資産系 state を AI の Edit / Write に戻さない。"""
+    documents = (path for directory in INVENTORY.skill_directories() for path in directory.rglob("*.md"))
+    text = "\n".join(path.read_text(encoding="utf-8") for path in documents)
+
+    for phrase in (
+        "資産系キー (`assets.*` / `planning.*`) はこの段では直接更新のまま",
+        "`thumbnail.approved = true` を更新する",
+        "`description.generated = true` に更新する",
+        "成功時だけ `assets.raw_master` を更新して owner CLI の `touch`",
+        "`assets.master_video`、`assets.description`、`description.generated` を更新してから",
+        "`assets.music_prompts = true`、`planning.music`、`updated_at` を更新する",
+    ):
+        assert phrase not in text
+
+    assert "set-asset" in text
+    assert "set-planning" in text
+    assert "set-thumbnail-approved" in text
+    assert "set-description-generated" in text

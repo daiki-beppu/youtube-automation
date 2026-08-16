@@ -445,7 +445,9 @@ sequential モードでは Next Step で stock 退避は走らない（不採用
 
 ## Next Step
 
-企画選択時にタイトルも確定する（`workflow-state.json` の `planning.final_title` に記録）。
+企画選択時にタイトルも確定する。`collection-plan-documents.md` の owner CLI が
+JSON+HTML pair の検証と同じ成功境界で `workflow-state.json` の
+`planning.final_title` へ投影する。
 
 企画確定後は `thumbnail_mode` と画像の有無で分岐する。採用画像は `planning-preview.png` に保存し、最終 `thumbnail.jpg` の正規入力として後段へ引き渡す。**`main.png` にはコピーしない**。不可逆操作は、参照割当の保存 → 採用画像のコピー → 不採用画像の stock 退避 → セッション cleanup の順で実行する。
 

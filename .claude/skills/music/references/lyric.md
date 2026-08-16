@@ -17,7 +17,7 @@
 - **委譲しない処理**: 引用候補と歌詞方針の選択。メインが確定してから起動する
 - **例外**: 入力確認に必要な `workflow-state.json::planning.music` を読み取ってよい（書き込みは不可）
 
-subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実行しない。承認が要る処理は、メインが承認を得るまで委譲しない。完了報告は `status: success | failure`、成果物の絶対パス一覧、エラー。成果物の存在検証と state 更新はメインが行う。
+subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実行しない。承認が要る処理は、メインが承認を得るまで委譲しない。完了報告は `status: success | failure`、成果物の絶対パス一覧、エラー。成果物の存在検証と owner CLI 実行はメインが行う。
 
 ## Responsibilities
 
