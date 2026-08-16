@@ -82,7 +82,7 @@ description: "Use when 完成した動画を公開工程へ進めるとき。--p
 
 `--pinned` では `references/pinned.md` を読み、`yt-pinned-comment` の `--dry-run` で PASS 条件を確認してから、承認ゲート後に `--apply` で投稿する。ピン留め自体は Studio UI で手動実行する。
 
-`--clean` では `references/clean.md` を読み、公開完了の 3 条件を同一 skill 内で検証する。対象と容量を dry-run 表示し、不可逆な物理削除への明示承認を得た場合だけ削除する。clean は任意操作のため chain manifest へ追加しない。
+`--clean` では `references/clean.md` を読み、Git state の pull 成功後に公開完了の 4 条件を read-only preflight で検証する。対象と容量を dry-run 表示し、不可逆な物理削除への明示承認を得た場合だけ削除する。clean は任意操作のため chain manifest へ追加しない。
 
 upload 完了後も同じ chain を続行し、community、pinned を順に状態判定する。metadata 監査はこの chain に含めず、必要な場合は `/audit --metadata` を独立して実行する。
 

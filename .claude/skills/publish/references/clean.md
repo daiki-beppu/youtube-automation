@@ -31,7 +31,7 @@
 以下を確認し、満たさなければ案内して終了する（外部 API・認証には依存しないローカル操作）:
 
 - 実行場所がチャンネルリポジトリ（`CHANNEL_DIR`）配下で、`collections/` ディレクトリが存在すること。無ければ対象なしとして終了する
-- 通常モードでは `collections/live/*/workflow-state.json` を持つ公開済みコレクションが 1 件以上存在すること。無ければ削除対象なしとして終了し、公開前なら `/publish --upload` が前工程であることを案内する（削除可否は Step 1 の 3 条件 — `stage: "live"` / `phase: "complete"` / `upload.video_id` 非空 — で機械判定する）
+- 通常モードでは `collections/live/*/workflow-state.json` を持つ公開済みコレクションが 1 件以上存在すること。無ければ削除対象なしとして終了し、公開前なら `/publish --upload` が前工程であることを案内する（削除可否は Step 1 の 4 条件 — `stage: "live"` / `phase: "complete"` / `upload.video_id` 非空 / 存在する `upload.publish_at` の経過 — で機械判定する）
 - `workflow-state.json` が読めない / JSON 破損のコレクションは安全条件未達としてスキップし、削除しない
 
 ## Quick Reference
@@ -48,15 +48,22 @@
 
 ### Step 1: スキャン & 安全性検証
 
-`collections/live/*/workflow-state.json` を Glob で列挙し、各ファイルを Read で読み込む。
+削除対象ファイルを列挙する前に、次の read-only preflight を 1 回実行する。この script は clean な Git worktree で `git pull --ff-only` を完了した後だけ、owner 経由で `collections/live/*/workflow-state.json` を読み、対象候補と安全条件未達を JSON に分類する。
 
-以下の **3条件すべて** を満たすコレクションのみクリーンアップ対象とする:
+```bash
+uv run python .claude/skills/publish/references/clean-scan.py --channel-dir "$CHANNEL_DIR"
+```
+
+exit 20 または pull に失敗した場合は、表示された理由を報告して直ちに終了する。古いローカル state を読まず、削除対象の特定やドライラン表示へ進まないため、承認・削除も行わない。自動 merge / rebase や `--no-ff` への切り替えは行わない。
+
+exit 0 の JSON にある `eligible` だけをクリーンアップ候補とし、`skipped` は理由とともに「安全条件未達（スキップ）」へ分類する。以下の **4条件すべて** を満たすコレクションだけが `eligible` になる:
 
 1. `stage` が `"live"`
 2. `phase` が `"complete"`
 3. `upload.video_id` が存在し、空文字でない
+4. `upload.publish_at` が存在する場合は、timezone 付き ISO 8601 として解釈でき、現在時刻を経過済みである。field が無い、または `null` の既存コレクションは後方互換としてこの条件を満たす
 
-条件を満たさないコレクションはスキップし、理由を表示する。
+未来の `upload.publish_at` は `publish_at_not_elapsed`、形式不正または timezone 無しは `publish_at_invalid` としてスキップし、削除しない。
 
 `$ARGUMENTS` が指定されている場合は、コレクションのディレクトリ名に対する部分一致でフィルタする。
 
@@ -69,7 +76,7 @@
 du -sh 01-master/master.mp3 01-master/master-mix.wav 01-master/*-Master.mp4 02-Individual-music/*.mp3 10-assets/loop_normalized.mp4 2>/dev/null
 ```
 
-**削除対象**: skill-config `delete_patterns`（YouTube に存在 or 再生成可能なもののみ。既定: raw マスター / ミックスダウン wav / YouTube マスター動画 / 個別ソーストラック / 正規化キャッシュ）
+**削除対象**: Step 1 の `eligible` に含まれるコレクションに限り、skill-config `delete_patterns`（YouTube に存在 or 再生成可能なもののみ。既定: raw マスター / ミックスダウン wav / YouTube マスター動画 / 個別ソーストラック / 正規化キャッシュ）
 
 **絶対に削除しないファイル**: skill-config `protect_patterns`（既定: `workflow-state.json` / `10-assets/main.png|jpg` / `10-assets/thumbnail.jpg|png` / 再生成不可のオリジナル `10-assets/loop.mp4` / `20-documentation/*`）。`delete_patterns` と重なった場合は `protect_patterns` が優先。
 
@@ -212,7 +219,7 @@ tmp/ 残骸クリーンアップ完了
 | `<CHANNEL_DIR>/tmp/veo-operations/` の resume state | /thumbnail --loop（不要時の手動削除手順は同 skill 参照） |
 | `<CHANNEL_DIR>/tmp/lyria-recovered/` の退避音源 | /music --generate |
 
-tmp/ 掃除は「スキャン → ドライラン → 明示承認 → 削除 → レポート」という本 skill の既存安全フローと完全に同型であり、専用 CLI（yt-clean 等）を新設すると承認ゲートを CLI 側に再実装する重複が生じるため、本 skill への統合とした（#1671）。
+tmp/ 掃除は「スキャン → ドライラン → 明示承認 → 削除 → レポート」という本 skill の既存安全フローと完全に同型であり、削除 CLI（yt-clean 等）を新設すると承認ゲートを CLI 側に再実装する重複が生じるため、本 skill への統合とした（#1671）。通常モードの `clean-scan.py` は pull 後の安全条件分類だけを担う read-only preflight で、削除・承認は行わない。
 
 ## 障害時ガイダンス
 

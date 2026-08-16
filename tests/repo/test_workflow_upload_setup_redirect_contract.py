@@ -311,6 +311,7 @@ MUTABLE_FILES = frozenset(
     "publish/references/posting-checklist.md",
     "publish/references/community.md",
     "publish/references/clean.md",
+    "publish/references/clean-scan.py",
     "publish/references/generate_batch.py",
     "publish/references/pinned.md",
     "publish/references/publish-chain-manifest.json",

@@ -159,7 +159,8 @@ def _validate_control_file(path: Path) -> None:
         raise ConfigError(f"secretを含む可能性があるためGit管理へ移行できません: {path}")
 
 
-def build_context(channel_dir: Path) -> StateGitContext:
+def build_pull_context(channel_dir: Path) -> StateGitContext:
+    """Resolve a channel Git boundary without reading control-plane documents."""
     raw = channel_dir.expanduser()
     if raw.is_symlink():
         raise ConfigError(f"channel directory に symlink は使えません: {raw}")
@@ -173,10 +174,15 @@ def build_context(channel_dir: Path) -> StateGitContext:
         raise ConfigError(f"channel directory が Git repository 外です: {channel}")
     gitignore = channel / ".gitignore"
     _regular_file(gitignore, label="channel .gitignore")
-    control_files = _discover_control_files(channel)
+    return StateGitContext(channel, repository, gitignore, ())
+
+
+def build_context(channel_dir: Path) -> StateGitContext:
+    base = build_pull_context(channel_dir)
+    control_files = _discover_control_files(base.channel_dir)
     for path in control_files:
         _validate_control_file(path)
-    return StateGitContext(channel, repository, gitignore, control_files)
+    return StateGitContext(base.channel_dir, base.repository, base.gitignore, control_files)
 
 
 def _repo_relative(context: StateGitContext, path: Path) -> str:
