@@ -137,6 +137,10 @@ class StateSyncError(AutomationError):
     """Git制御面stateのpull / commit / push同期エラー。"""
 
 
+class ResourceLimitError(AutomationError):
+    """runner開始前の容量・費用・実行量上限エラー。"""
+
+
 def _http_error_reason(error) -> str | None:
     content = getattr(error, "content", b"")
     if isinstance(content, bytes):

@@ -135,6 +135,23 @@ class FakeS3Client:
         del Bucket, Key
         self.multipart_uploads.pop(UploadId, None)
 
+    def list_objects_v2(
+        self,
+        *,
+        Bucket: str,
+        Prefix: str,
+        ContinuationToken: str | None = None,
+    ) -> dict[str, object]:
+        del ContinuationToken
+        return {
+            "Contents": [
+                {"Key": key, "Size": len(payload)}
+                for (bucket, key), (payload, _metadata) in self.objects.items()
+                if bucket == Bucket and key.startswith(Prefix)
+            ],
+            "IsTruncated": False,
+        }
+
 
 class FakeClientError(Exception):
     def __init__(self, status: int, message: str) -> None:
@@ -173,6 +190,37 @@ def test_r2_push_pull_round_trip_uses_scoped_bucket_and_prefix(tmp_path: Path) -
     assert pushed.sha256 == pulled.sha256 == hashlib.sha256(payload).hexdigest()
     assert store.exists(_key()) is True
     assert store.metadata(_key()) == pushed
+
+
+def test_r2_retained_bytes_uses_only_configured_bucket_prefix() -> None:
+    client = FakeS3Client()
+    client.objects = {
+        ("media-handoffs", "automation/v1/one.bin"): (b"one", {}),
+        ("media-handoffs", "automation/v1/nested/two.bin"): (b"twenty", {}),
+        ("media-handoffs", "other/outside.bin"): (b"ignored", {}),
+        ("another-bucket", "automation/v1/outside.bin"): (b"ignored", {}),
+    }
+    store = R2MediaStore(_config(), client=client, transfer_config=object())
+
+    assert store.retained_bytes() == 9
+
+
+def test_r2_retained_bytes_rejects_malformed_listing() -> None:
+    class MalformedListingClient(FakeS3Client):
+        def list_objects_v2(
+            self,
+            *,
+            Bucket: str,
+            Prefix: str,
+            ContinuationToken: str | None = None,
+        ) -> dict[str, object]:
+            del Bucket, Prefix, ContinuationToken
+            return {"Contents": {"Key": "not-a-list"}, "IsTruncated": False}
+
+    store = R2MediaStore(_config(), client=MalformedListingClient(), transfer_config=object())
+
+    with pytest.raises(MediaStoreError, match="capacity 応答が不正"):
+        store.retained_bytes()
 
 
 def test_r2_config_resolves_api_token_through_the_secret_owner() -> None:

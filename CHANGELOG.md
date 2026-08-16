@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `docs(hybrid)`: Claude subscription OAuth token の GHA secret 配備・手動検証・失効時の fail-closed 停止・ローテーション手順を追加する（#4056）。
 - `feat(hybrid)`: cloud 工程の定期実行先に `github-actions` backend を追加し、配布 workflow の UTC cron を管理区間限定で設定・確認・停止できるようにする（#4055）。
 - `feat(hybrid)`: 引き渡し・公開完了と異常停止をtyped eventで正常／異常へ分類し、既存secret ownerからDiscord webhookを解決してbest-effort送信するsinkを追加する（#4063）。
+- `feat(hybrid)`: サンドイッチrunner開始前にdisk空き・R2滞留量・生成従量費・月間Actions分数概算を検査し、0円・容量上限超過を通知event付きでfail-closed停止するresource guardを追加する（#4058）。
 - `feat(hybrid)`: サンドイッチrunnerだけを呼ぶ日次cron・直列concurrency付きGitHub Actions workflowを追加し、`yt-skills sync` で下流チャンネルへ配布する（#4054）。
 - `feat(hybrid)`: R2 pull 後の個別音源を企画曲数・Suno duration guard・integrated LUFS で fail-closed 検証し、拒否通知 event を発火する `yt-media-acceptance` を追加する（#4057）。
 - `feat(hybrid)`: Git clone、検証済みMediaStore pull、単一agent境界、成果物push、state commit/pushをuv直行で束ねる基盤非依存サンドイッチrunnerを追加する（#4053）。

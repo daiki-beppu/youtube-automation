@@ -59,3 +59,11 @@ class LocalMediaStore:
             raise MediaStoreError(f"MediaStore object が通常ファイルではありません: {key.as_posix()}")
         size, checksum = sha256_file(path)
         return MediaObjectMetadata(size=size, sha256=checksum)
+
+    def retained_bytes(self) -> int:
+        total = 0
+        for path in self._root.rglob("*"):
+            reject_symlink_components(path, boundary=self._root)
+            if path.is_file():
+                total += path.stat().st_size
+        return total
