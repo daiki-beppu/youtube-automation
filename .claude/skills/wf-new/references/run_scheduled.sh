@@ -92,6 +92,15 @@ notify() { # $1=message
   fi
 }
 
+# access token の更新は OAuth token endpoint だけを使い、YouTube Data API quota を消費しない。
+# workflow retry の外で1回だけ実行し、失敗時は投稿工程を開始しない。
+if ! uv run yt-oauth --refresh-only >>"$LOG_FILE" 2>&1; then
+  log 'write token の非対話更新に失敗。workflow は開始しません。対話可能なターミナルで `uv run yt-oauth` を実行してください'
+  notify "write token の更新に失敗しました。対話ターミナルで OAuth 再認証が必要です"
+  exit 1
+fi
+log "write token の非対話更新に成功"
+
 attempt=0
 max_attempts=$((MAX_RETRIES + 1))
 while [ "$attempt" -lt "$max_attempts" ]; do

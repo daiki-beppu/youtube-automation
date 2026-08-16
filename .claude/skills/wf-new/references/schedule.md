@@ -7,7 +7,7 @@
 ## 成果物
 
 - `書き込む`: `config/channel/workflow.json`
-- `読み込む`: `config/channel/workflow.json`
+- `読み込む`: `config/channel/workflow.json`, `auth/token.json`
 
 ## Overview
 
@@ -23,6 +23,7 @@ automation のリリース追従は `/automation --update`、本体リリース�
 4. **OS fallback は自動選択しない。** 理由・常時起動要件・製品側の履歴/停止UIを使えない制約を示し、明示承認後だけ `--confirm-os-fallback` を使う。
 5. **同一チャンネルに複数 backend を作らない。** `schedule_backend.py show/guard` で active backend を確認し、切替時は旧 backend を先に disable する。外部登録成功後だけ ID を `record` する。
 6. Step 0 の `fail` が残る場合は停止する。認証操作だけは人間に依頼し、コマンド実行・設定作成は AI が行う。
+7. **local 定期実行の開始時に write token を非対話更新する。** `uv run yt-oauth --refresh-only` を1回だけ実行し、失敗時は workflow を開始・再試行せず、対話ターミナルでの `uv run yt-oauth` を案内する。この更新は YouTube Data API quota を消費しない。local token を持たない cloud job には追加しない。
 
 ## Backend selection
 
@@ -132,4 +133,5 @@ uv run python .claude/skills/wf-new/references/schedule_backend.py record \
 
 - native task の prompt にも `allow_external_publish: false` の外部反映禁止を含める。`wf-new --auto` の `.automation-run/` lease、状態再評価、重複 upload 防止は変更しない。
 - retry は backend の再実行機能が契約を満たす場合のみ native 側へ写像する。満たさない場合は prompt 内で `max_retries` / `retry_delay_seconds` を適用する。
+- local native task の prompt と OS fallback は、workflow retry の外側で `uv run yt-oauth --refresh-only` を1回だけ実行する。既存 local native task は `/wf-new --schedule` の update で新しい prompt へ更新する。
 - OS fallback のログは `.automation-schedule/logs/`。ネイティブの履歴は各製品の Scheduled 管理面を正とする。
