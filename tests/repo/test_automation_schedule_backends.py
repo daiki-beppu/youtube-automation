@@ -76,11 +76,38 @@ def test_plan_is_dry_run_and_preserves_external_publish_gate(tmp_path, monkeypat
     assert "最大 4 回再試行" in plan["prompt"]
     assert plan["prevent_concurrent_runs"] is True
     assert plan["target_workflow"] == "wf-new --auto"
-    assert plan["prompt"].startswith("/wf-new --auto")
+    assert plan["prompt"].index("uv run yt-oauth --refresh-only") < plan["prompt"].index("/wf-new --auto")
+    assert "YouTube Data API を呼び出さない" in plan["prompt"]
+    assert "uv run yt-oauth`" in plan["prompt"]
     assert "/automation-schedule" not in plan["prompt"]
     assert "/wf-auto" not in plan["prompt"]
     assert plan["dependency_mode"] == "local"
     assert "local dependencies require desktop local project" in plan["management"]
+
+
+def test_cloud_plan_does_not_require_local_write_token_maintenance(tmp_path, monkeypatch):
+    scheduled = SimpleNamespace(
+        target_workflow="wf-new --auto",
+        allow_external_publish=False,
+        timezone="Asia/Tokyo",
+        run_time="09:05",
+        cadence=("mon",),
+        max_retries=0,
+        retry_delay_seconds=300,
+        prevent_concurrent_runs=True,
+        notification="none",
+    )
+    monkeypatch.setattr(
+        backend,
+        "load_config",
+        lambda: SimpleNamespace(workflow=SimpleNamespace(scheduled_automation=scheduled)),
+    )
+    monkeypatch.setattr(backend, "channel_dir", lambda: tmp_path)
+
+    plan = backend.build_plan(product="claude", dependency_mode="cloud")
+
+    assert plan["prompt"].startswith("/wf-new --auto")
+    assert "yt-oauth" not in plan["prompt"]
 
 
 @pytest.mark.parametrize("removed_target", ["automation-run", "wf-auto"])

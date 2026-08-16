@@ -99,6 +99,10 @@ if [[ "$*" == *"schedule_config.py show"* ]]; then
   printf '%s\n' "$SCHEDULE_JSON"
   exit "${FAKE_CONFIG_RC:-0}"
 fi
+if [[ "$*" == "run yt-oauth --refresh-only" ]]; then
+  printf 'oauth:%s\n' "$*" >> "$RUNTIME_CALLS"
+  exit "${FAKE_OAUTH_RC:-0}"
+fi
 if [[ "$1" == "run" && "$2" == "python" ]]; then
   shift 2
   exec python3 "$@"
@@ -199,13 +203,39 @@ def test_run_scheduled_recovers_stale_lock_retries_and_preserves_publish_gate(tm
     assert result.returncode == 0
     assert counter.read_text(encoding="utf-8") == "2"
     call_text = calls.read_text(encoding="utf-8")
+    assert call_text.count("oauth:run yt-oauth --refresh-only") == 1
     assert call_text.count("codex:exec") == 2
+    assert call_text.index("oauth:") < call_text.index("codex:exec")
     assert "YouTube への書き込み" in call_text
     assert "sleep:3" in call_text
     assert "notify:" in call_text
     assert not lock.exists()
     log = next((tmp_path / ".automation-schedule" / "logs").iterdir()).read_text(encoding="utf-8")
     assert "stale lock" in log
+
+
+def test_run_scheduled_stops_before_workflow_when_write_token_refresh_fails(tmp_path: Path) -> None:
+    env, calls, counter = _scheduled_env(tmp_path, _config(max_retries=2))
+    env["FAKE_OAUTH_RC"] = "1"
+
+    result = _run(
+        "run_scheduled.sh",
+        "--channel-dir",
+        str(tmp_path),
+        "--runtime",
+        "codex",
+        cwd=tmp_path,
+        env=env,
+    )
+
+    assert result.returncode == 1
+    call_lines = calls.read_text(encoding="utf-8").splitlines()
+    assert call_lines[0] == "oauth:run yt-oauth --refresh-only"
+    assert not any(line.startswith(("codex:", "claude:")) for line in call_lines)
+    assert not counter.exists()
+    log = next((tmp_path / ".automation-schedule" / "logs").iterdir()).read_text(encoding="utf-8")
+    assert "write token" in log
+    assert "uv run yt-oauth`" in log
 
 
 def test_run_scheduled_failure_and_unknown_runtime_have_nonzero_exit(tmp_path: Path) -> None:

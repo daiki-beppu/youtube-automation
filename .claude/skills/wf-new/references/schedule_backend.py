@@ -21,6 +21,8 @@ BACKENDS = (
 )
 PRODUCTS = ("codex", "claude")
 DEPENDENCY_MODES = ("cloud", "local")
+WRITE_TOKEN_REFRESH_COMMAND = "uv run yt-oauth --refresh-only"
+WRITE_TOKEN_REAUTH_COMMAND = "uv run yt-oauth"
 
 
 class BackendError(ValueError):
@@ -80,7 +82,17 @@ def build_plan(
     allow_external_publish = bool(overrides.get("allow_external_publish", scheduled.allow_external_publish))
     backend = select_backend(product=product, dependency_mode=dependency_mode, os_fallback=os_fallback)
     cwd = channel_dir().resolve()
-    prompt = f"/{target_workflow}"
+    if dependency_mode == "local":
+        prompt = (
+            "定期実行の開始時に write OAuth token の保守として "
+            f"`{WRITE_TOKEN_REFRESH_COMMAND}` を1回だけ実行する。"
+            "この更新は YouTube Data API を呼び出さない。更新に失敗した場合は workflow を開始せず、"
+            "認証エラーをそのまま再試行せずに停止し、対話可能なターミナルで "
+            f"`{WRITE_TOKEN_REAUTH_COMMAND}` を実行するよう報告する。"
+            f"\n\n更新成功後に /{target_workflow} を実行する。"
+        )
+    else:
+        prompt = f"/{target_workflow}"
     if not allow_external_publish:
         prompt += "\n\n制約: YouTube への書き込みは実行せず、外部反映を伴うステップの直前で停止して報告する。"
     if max_retries:

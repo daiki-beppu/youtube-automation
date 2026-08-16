@@ -291,6 +291,23 @@ class TestMainReadonlyFlag:
         mock_cls.return_value.authenticate.assert_not_called()
         mock_cls.return_value.test_connection.assert_not_called()
 
+    def test_refresh_failure_redacts_secret_and_reports_interactive_reauthentication(self, caplog):
+        from youtube_automation.commands.system import oauth as oauth_cli
+
+        leaked_refresh_token = "1//secret-refresh-token"
+        mock_cls = MagicMock()
+        mock_cls.return_value.refresh_existing_credentials.side_effect = AuthError(
+            f"invalid_grant refresh_token={leaked_refresh_token}"
+        )
+        caplog.set_level("ERROR", logger=oauth_cli.__name__)
+
+        with patch.object(oauth_cli, "YouTubeOAuthHandler", mock_cls), pytest.raises(SystemExit) as error:
+            oauth_cli.main(["--refresh-only"])
+
+        assert error.value.code == 1
+        assert leaked_refresh_token not in caplog.text
+        assert "uv run yt-oauth`" in caplog.text
+
     def test_readonly_flag_uses_create_readonly(self):
         from youtube_automation.commands.system import oauth as oauth_cli
 

@@ -74,7 +74,14 @@ def main(argv: list[str] | None = None) -> None:
         paths = []
         if auth_handler is not None:
             paths.extend([auth_handler.client_secrets_file, auth_handler.token_file])
-        logger.error("CLI 実行失敗: %s", redact_sensitive_data(str(e), *paths))
+        message = redact_sensitive_data(str(e), *paths)
+        if args.refresh_only:
+            logger.error(
+                "CLI 実行失敗: %s。対話可能なターミナルで `uv run yt-oauth` を実行して再認証してください",
+                message,
+            )
+        else:
+            logger.error("CLI 実行失敗: %s", message)
         sys.exit(1)
 
 
