@@ -1,0 +1,8 @@
+# Non-secret values only. Keep cloudflare_api_token in TF_VAR_cloudflare_api_token.
+cloudflare_account_id        = "0123456789abcdef0123456789abcdef"
+name_prefix                  = "youtube-automation"
+environment                  = "production"
+location                     = "apac"
+object_prefix                = "automation/v1"
+retention_days               = 7
+expected_monthly_collections = 4
