@@ -242,6 +242,7 @@ assets/stock/           # ボツ画像ストック (#364)。<theme-slug>/ 配下
 | `application.documents.channel_strategy` | direction / persona / scene / constraints の schema と文書間 ID 参照を検証し、共通 migration workflow による原子的保存を調停 |
 | `application.documents.collection_plan` | collection plan の schema・候補/evidence ID・選択状態を検証し、JSON+HTML pair 公開成功後の planning state 投影を調停 |
 | `application.media_handoff` | 全 object の remote metadata/content 検証、manifest-last push、manifest-only pull、local rollback を調停 |
+| `application.pipeline_notifications` | 各pipeline ownerのtyped eventと公開・guard結果をprovider-neutral通知eventへ写像し、配送sinkへ委譲 |
 | `application.analytics.video_report` | 動画解析結果を audit report schema へ写像し、共通運用文書 migration による JSON+HTML 公開を調停 |
 | `.claude/skills/channel-research/references/channel-research-report.schema.json` | benchmark / market / viewer voice / thumbnail 調査の比較表・勝ちパターン・根拠・適用候補を共通定義し、skill writer と全 downstream reader の正本になる |
 | `infrastructure.filesystem` | provider-neutral な filesystem I/O と、複数 text file の fsync・rollback・公開後 verifier 付き transaction |

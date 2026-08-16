@@ -1196,8 +1196,8 @@ def test_build_downloaded_handoff_wires_configured_r2_store(monkeypatch):
         assert config is sentinel_config
         return sentinel_store
 
-    def fake_handoff(*, store, channel):
-        recorded.update(store=store, channel=channel)
+    def fake_handoff(*, store, channel, on_event):
+        recorded.update(store=store, channel=channel, on_event=on_event)
         return sentinel_handoff
 
     monkeypatch.setenv("R2_BUCKET", "media-handoffs")
@@ -1206,7 +1206,9 @@ def test_build_downloaded_handoff_wires_configured_r2_store(monkeypatch):
     monkeypatch.setattr(collection_serve_module, "SunoDownloadHandoff", fake_handoff)
 
     assert collection_serve_module._build_downloaded_handoff("Test Channel") is sentinel_handoff
-    assert recorded == {"store": sentinel_store, "channel": "test-channel"}
+    assert recorded["store"] is sentinel_store
+    assert recorded["channel"] == "test-channel"
+    assert callable(recorded["on_event"])
 
 
 def test_main_turns_sigterm_into_traceable_exception_and_restores_handler(monkeypatch, tmp_path):
