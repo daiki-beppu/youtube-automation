@@ -18,7 +18,7 @@ from youtube_automation.infrastructure.documents.publishing import read_publishe
 STAGES = ("企画", "音源生成", "マスター化", "動画化", "サムネイル", "アップロード", "公開後処理", "分析")
 
 # /wf-status が定義する v2 phase 語彙を正規の段判定にも使う。
-WF_STATUS_PHASES = frozenset({"planning", "prepared", "mastered", "publishing", "complete"})
+WF_STATUS_PHASES = frozenset({"planning", "prepared", "cloud_owned", "mastered", "publishing", "complete"})
 _ANALYSIS_REPORT = re.compile(r"analysis_(\d{8})\.json\Z")
 
 

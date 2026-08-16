@@ -296,6 +296,33 @@ def test_should_use_latest_workflow_state_when_command_does_not_name_collection(
     assert "  ▸  マスター化" in message
 
 
+def test_should_render_cloud_owned_handoff_phase_without_fallback(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _write_collection(
+        tmp_path,
+        "planning",
+        "cloud-owned",
+        {
+            "phase": "cloud_owned",
+            "planning": {"music": {"engine": "suno"}},
+            "assets": {"music_downloaded": True, "raw_master": None},
+            "handoff": {
+                "point": "suno_download",
+                "owner": "cloud",
+                "manifest_key": "002ch/cloud-owned/suno-download/manifest.json",
+                "root_sha256": "a" * 64,
+            },
+        },
+    )
+
+    message = _progress_message(tmp_path, capsys, command="uv run yt-generate-master")
+
+    assert "  ✓  企画" in message
+    assert "  ▸  マスター化" in message
+
+
 def test_should_mark_post_publish_and_analysis_from_channel_artifacts(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],

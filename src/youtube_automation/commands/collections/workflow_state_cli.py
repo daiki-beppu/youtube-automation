@@ -11,7 +11,14 @@ from typing import cast
 
 from youtube_automation.commands._shared.cli_harness import run_cli
 from youtube_automation.core.errors import WorkflowStateError
-from youtube_automation.domains.collections.workflow_state import AssetKey, Phase, PlanningKey, Stage, WorkflowState
+from youtube_automation.domains.collections.workflow_state import (
+    AssetKey,
+    HandoffPoint,
+    Phase,
+    PlanningKey,
+    Stage,
+    WorkflowState,
+)
 from youtube_automation.domains.collections.workflow_state import read as read_workflow_state
 from youtube_automation.domains.collections.workflow_state import update as update_workflow_state
 from youtube_automation.infrastructure.filesystem import JSONValue
@@ -65,6 +72,10 @@ def build_parser() -> argparse.ArgumentParser:
     planning_parser = subparsers.add_parser("set-planning", help="planning の JSON 値を更新")
     planning_parser.add_argument("key", choices=_PLANNING_CHOICES)
     planning_parser.add_argument("value", help="JSON 値（文字列は JSON の二重引用符を含める）")
+    handoff_parser = subparsers.add_parser("record-handoff", help="検証済みmanifest参照を記録してcloudへ引き渡す")
+    handoff_parser.add_argument("--point", choices=("suno_download",), required=True)
+    handoff_parser.add_argument("--manifest-key", required=True, help="R2上のmanifest.json相対key")
+    handoff_parser.add_argument("--root-sha256", required=True, help="manifestのroot SHA-256")
     for command, help_text in (
         ("set-thumbnail-approved", "thumbnail 承認状態を更新"),
         ("set-description-generated", "概要欄生成状態を更新"),
@@ -149,6 +160,17 @@ def _set_post_upload_shorts(state: WorkflowState, value: JSONValue) -> None:
     _touch(state)
 
 
+def _record_handoff(state: WorkflowState, args: argparse.Namespace) -> None:
+    before = state.to_dict()
+    state.record_cloud_handoff(
+        point=cast(HandoffPoint, args.point),
+        manifest_key=args.manifest_key,
+        root_sha256=args.root_sha256,
+    )
+    if state.to_dict() != before:
+        _touch(state)
+
+
 def _set_completion_flag(
     state: WorkflowState,
     *,
@@ -187,6 +209,8 @@ def run(args: argparse.Namespace) -> int:
         update_workflow_state(state_path, lambda state: _set_completion_flag(state, description=args.value == "true"))
     elif args.command == "set-post-upload-shorts":
         update_workflow_state(state_path, lambda state: _set_post_upload_shorts(state, _json_value(args.value)))
+    elif args.command == "record-handoff":
+        update_workflow_state(state_path, lambda state: _record_handoff(state, args))
     elif args.command == "touch":
         update_workflow_state(state_path, _touch)
     return 0

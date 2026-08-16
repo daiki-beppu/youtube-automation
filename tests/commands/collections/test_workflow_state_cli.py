@@ -71,6 +71,64 @@ def test_set_stage_supports_current_control_plane_vocabulary(tmp_path: Path) -> 
     assert _read_state(collection)["stage"] == "live"
 
 
+def test_record_handoff_uses_typed_owner_transition(tmp_path: Path) -> None:
+    collection = _collection(
+        tmp_path,
+        {
+            "phase": "prepared",
+            "planning": {"music": {"engine": "suno"}},
+            "assets": {"music_downloaded": True},
+            "unknown": {"keep": True},
+        },
+    )
+
+    assert (
+        workflow_state_cli.main(
+            [
+                "--collection",
+                str(collection),
+                "record-handoff",
+                "--point",
+                "suno_download",
+                "--manifest-key",
+                "002ch/sample/suno-download/manifest.json",
+                "--root-sha256",
+                "d" * 64,
+            ]
+        )
+        == 0
+    )
+
+    state = _read_state(collection)
+    assert state["phase"] == "cloud_owned"
+    assert state["handoff"] == {
+        "point": "suno_download",
+        "owner": "cloud",
+        "manifest_key": "002ch/sample/suno-download/manifest.json",
+        "root_sha256": "d" * 64,
+    }
+    assert state["unknown"] == {"keep": True}
+    assert isinstance(state["updated_at"], str)
+    before_retry = (collection / "workflow-state.json").read_bytes()
+    assert (
+        workflow_state_cli.main(
+            [
+                "--collection",
+                str(collection),
+                "record-handoff",
+                "--point",
+                "suno_download",
+                "--manifest-key",
+                "002ch/sample/suno-download/manifest.json",
+                "--root-sha256",
+                "d" * 64,
+            ]
+        )
+        == 0
+    )
+    assert (collection / "workflow-state.json").read_bytes() == before_retry
+
+
 def test_set_upload_creates_section_and_only_overwrites_supplied_fields(tmp_path: Path) -> None:
     collection = _collection(
         tmp_path,

@@ -14,6 +14,7 @@ Phase 3: 公開             /wf-next    動画→概要欄→アップロード�
 |-------|------|--------------|
 | `planning` | 企画提案前 | /wf-new で企画選択 |
 | `prepared` | サムネ承認済み+音楽素材準備完了 | Suno 作成 or Lyria 生成 → ミキシング+マスタリング |
+| `cloud_owned` | Suno DL成果物のmanifest参照を記録し、工程所有権をcloudへ引き渡し済み | cloud executorがmanifest検証済み成果物からミキシング+マスタリングを再開 |
 | `mastered` | 最終マスター音源配置済み | /wf-next で全自動公開 |
 | `publishing` | 公開フロー実行中 | 自動完了待ち（エラー時は /wf-next で再実行） |
 | `complete` | 全工程完了 | /analytics --analyze で初週パフォーマンス確認 |
@@ -29,7 +30,7 @@ Phase 3: 公開             /wf-next    動画→概要欄→アップロード�
   "created_at": "ISO 8601",
   "updated_at": "ISO 8601",
   "stage": "planning | live",
-  "phase": "planning | prepared | mastered | publishing | complete",
+  "phase": "planning | prepared | cloud_owned | mastered | publishing | complete",
   "selected_plan": "A | B | C | D | E",
   "track_count": 12,
   "planning": {
@@ -63,6 +64,12 @@ Phase 3: 公開             /wf-next    動画→概要欄→アップロード�
     "master_audio": null,
     "master_video": null,
     "description": false
+  },
+  "handoff": {
+    "point": "suno_download",
+    "owner": "cloud",
+    "manifest_key": "002ch/sample/suno-download/manifest.json",
+    "root_sha256": "64 lowercase hex characters"
   },
   "music_pair_selection": {
     "updated_at": "ISO 8601",
@@ -144,6 +151,19 @@ Phase 3: 公開             /wf-next    動画→概要欄→アップロード�
 | `description` | boolean | YouTube 概要欄の検証済み JSON+HTML pair 生成済み（`20-documentation/descriptions.{json,html}`） |
 
 `music_downloaded: true` かつ `raw_master: null` は、Suno 楽曲が DL 済みで raw master（クロスフェード結合出力）が未生成の中間状態を表す。
+
+### handoff フィールド詳細
+
+`yt-workflow-state record-handoff` は `phase: prepared`、`planning.music.engine: suno`、`assets.music_downloaded: true` を検証してから、`phase` を `cloud_owned` へ一方向遷移する。同じmanifest参照での再実行は冪等で、別manifestへの上書きや逆遷移は拒否する。
+
+| フィールド | 型 | 説明 |
+|---|---|---|
+| `handoff.point` | `"suno_download"` | local → cloud の引き渡し点 |
+| `handoff.owner` | `"cloud"` | 現在の工程所有者。分散lockの代わりにresolverが参照する |
+| `handoff.manifest_key` | string | R2上の完了marker `manifest.json` の相対key |
+| `handoff.root_sha256` | string | manifest正準file一覧のroot SHA-256（lowercase 64 hex） |
+
+stateにはmanifest全文やfile一覧を複製しない。正本はMediaStore上のmanifestであり、Git制御面はkeyとroot checksumだけを保持する。
 
 ### stage フィールド詳細
 

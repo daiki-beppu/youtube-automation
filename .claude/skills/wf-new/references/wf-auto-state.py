@@ -31,7 +31,7 @@ LEASE_FILE_NAME = "lease.json"
 LEASE_MUTEX_NAME = "lease.mutex"
 HISTORY_FILE_NAME = "history.json"
 AUDIO_SUFFIXES = {".mp3", ".m4a", ".wav", ".flac", ".aac"}
-PHASES = {"planning", "prepared", "mastered", "publishing", "complete"}
+PHASES = {"planning", "prepared", "cloud_owned", "mastered", "publishing", "complete"}
 ENGINES = {"suno", "lyria", "minimax"}
 ACTIONS = {
     "wf-new",
@@ -44,6 +44,7 @@ ACTIONS = {
     "publish",
     "blocked",
     "complete",
+    "no-op",
 }
 
 
@@ -604,7 +605,13 @@ def _publish_followup_complete(root: Path, collection: Path, video_id: str) -> b
     return history.get("schema_version") == 1 and isinstance(posted, dict) and video_id in posted
 
 
-def evaluate_collection(root: Path, collection: Path, config: RunnerConfig) -> Decision:
+def evaluate_collection(
+    root: Path,
+    collection: Path,
+    config: RunnerConfig,
+    *,
+    executor: Literal["local", "cloud"] | None = None,
+) -> Decision:
     root = root.resolve()
     collection = _inside(root, collection, "collection")
     state = _state(collection)
@@ -615,6 +622,32 @@ def evaluate_collection(root: Path, collection: Path, config: RunnerConfig) -> D
     if not isinstance(assets, dict) or not isinstance(upload, dict):
         raise ValueError("workflow-state.json::assets / upload は object でなければなりません")
     video_id = upload.get("video_id")
+
+    handoff = state.handoff
+    owner = "local"
+    if handoff is not None and handoff.owner is not None:
+        owner = handoff.owner
+    if phase == "cloud_owned":
+        if (
+            handoff is None
+            or handoff.point != "suno_download"
+            or handoff.owner != "cloud"
+            or handoff.manifest_key is None
+            or handoff.root_sha256 is None
+        ):
+            raise ValueError("cloud_owned phase requires a complete cloud handoff reference")
+    elif owner == "cloud" and phase not in {"mastered", "publishing", "complete"}:
+        raise ValueError("cloud handoff owner is inconsistent with workflow phase")
+    if executor is not None and executor != owner:
+        return _decision(
+            collection=collection,
+            phase=phase,
+            engine=engine,
+            action="no-op",
+            reason=f"{owner}_ownership",
+            config=config,
+        )
+    routing_phase = "prepared" if phase == "cloud_owned" else phase
 
     stage = state.get("stage")
     if isinstance(video_id, str) and video_id and (phase != "complete" or stage != "live"):
@@ -637,7 +670,7 @@ def evaluate_collection(root: Path, collection: Path, config: RunnerConfig) -> D
             resume_action="wf-next",
             config=config,
         )
-    if phase == "planning":
+    if routing_phase == "planning":
         return _decision(
             collection=collection,
             phase=phase,
@@ -647,7 +680,7 @@ def evaluate_collection(root: Path, collection: Path, config: RunnerConfig) -> D
             resume_action="wf-new",
             config=config,
         )
-    if phase == "prepared":
+    if routing_phase == "prepared":
         raw_master = assets.get("raw_master")
         if raw_master is not None:
             if not _artifact_file(collection, "01-master", raw_master):
@@ -1038,6 +1071,7 @@ def resolve_action(
     requested: str | None = None,
     *,
     config: RunnerConfig | None = None,
+    executor: Literal["local", "cloud"] | None = None,
 ) -> Decision:
     """Return the next delegated action without mutating workflow state."""
     resolved_config = config or _load_runner_config(root)
@@ -1055,7 +1089,7 @@ def resolve_action(
             "resume_action": "wf-new",
             "allow_external_publish": resolved_config.allow_external_publish,
         }
-    return evaluate_collection(root, collection, resolved_config)
+    return evaluate_collection(root, collection, resolved_config, executor=executor)
 
 
 def record_bootstrap_attempt(
@@ -1101,6 +1135,7 @@ def _parser() -> argparse.ArgumentParser:
     plan = sub.add_parser("plan")
     plan.add_argument("--channel-dir", type=Path, default=Path.cwd())
     plan.add_argument("--collection")
+    plan.add_argument("--executor", choices=("local", "cloud"))
     record = sub.add_parser("record")
     record.add_argument("--channel-dir", type=Path, default=Path.cwd())
     record.add_argument("--token", required=True)
@@ -1139,7 +1174,7 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "release":
             result = {"status": "released" if release_lease(root, args.token) else "not-owner"}
         elif args.command == "plan":
-            result = resolve_action(root, args.collection)
+            result = resolve_action(root, args.collection, executor=args.executor)
         elif args.command == "record-bootstrap":
             recorded_at = datetime.now(UTC).isoformat()
             record_bootstrap_attempt(

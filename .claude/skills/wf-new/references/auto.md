@@ -41,7 +41,8 @@ STATE_SCRIPT=.claude/skills/wf-new/references/wf-auto-state.py
 
 uv run python "$STATE_SCRIPT" acquire --channel-dir .
 uv run python "$STATE_SCRIPT" heartbeat --channel-dir . --token <token>
-uv run python "$STATE_SCRIPT" plan --channel-dir . [--collection <fixed-name>]
+uv run python "$STATE_SCRIPT" plan --channel-dir . --executor local [--collection <fixed-name>]
+# cloud runner は同じresolverを --executor cloud で実行する
 uv run python "$STATE_SCRIPT" record --channel-dir . --token <token> \
   --collection <fixed-name> --action <action> --status success|blocked|failed \
   --reason <reason> [--resume-action <action>] \
@@ -73,6 +74,7 @@ uv run python "$STATE_SCRIPT" release --channel-dir . --token <token>
 | `wf-next` | `/wf-next`。config が許可した場合だけ upload を含める |
 | `publish` | `/publish`。各成果物の状態判定により完了 step を skip |
 | `blocked` | reason / resume_action を記録して停止 |
+| `no-op` | stateの `handoff.owner` が現在executorと一致しないため、state・成果物を変更せず停止 |
 | `complete` | 完了を記録して停止 |
 
 ### canonical action の AI timing 契約
