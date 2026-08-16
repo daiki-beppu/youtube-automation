@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(hybrid)`: 月次 `openai/codex-action` canary workflowとtyped Discord結果通知を追加し、Codex escape経路の死亡を無人検知できるようにする（#4060）。
+
 - `feat(hybrid)`: DistroKid有効チャンネルの`/publish --clean`で提出完了前の個別音源を保護し、完了後だけdisc音声コピーを削除候補へ加える（#4069）。
 - `feat(hybrid)`: dashboard が全 first-party チャンネルの Git 管理 workflow state を同一 origin API から読み、collection ごとの phase・工程所有側・引き渡し状態・直近更新を一覧表示する（#4066）。
 - `feat(hybrid)`: `/publish --clean` の削除候補判定をGit stateのfast-forward pull成功後に限定し、未来または不正な`upload.publish_at`を安全条件未達として保護する（#4068）。
