@@ -8,11 +8,12 @@ from collections.abc import Iterable
 from pathlib import Path
 
 from youtube_automation.core.errors import AutomationError, ValidationError
+from youtube_automation.domains.documents.video_description import read_video_description_document
 from youtube_automation.domains.media.captions import (
     generate_srt,
+    parse_document_track_timestamps,
     parse_timestamp,
     parse_total_duration,
-    parse_track_timestamps,
     write_srt,
 )
 from youtube_automation.domains.suno.lyrics import load_suno_lyrics_entries
@@ -31,11 +32,11 @@ def _load_lyrics(path: Path) -> list[str]:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="yt-captions-upload",
-        description="suno-lyrics.json と descriptions.md から SRT を生成し YouTube 字幕へ反映する",
+        description="suno-lyrics.json と検証済み descriptions.json から SRT を生成し YouTube 字幕へ反映する",
     )
     parser.add_argument("--video-id", required=True, help="対象 YouTube video ID")
     parser.add_argument("--lyrics", required=True, type=Path, help="suno-lyrics.json（単曲は plain text も可）")
-    parser.add_argument("--descriptions", required=True, type=Path, help="トラックリストを含む descriptions.md")
+    parser.add_argument("--descriptions", required=True, type=Path, help="トラックリストを含む descriptions.json")
     parser.add_argument("--language", required=True, help="字幕言語（BCP-47。例: en / ja）")
     parser.add_argument("--name", default="Lyrics", help="YouTube 字幕トラック名（既定: Lyrics）")
     parser.add_argument("--output", type=Path, help="SRT 出力先（既定: <lyrics-dir>/captions.<language>.srt）")
@@ -62,9 +63,10 @@ def _confirm_update(item: dict) -> bool:
 def main(argv: Iterable[str] | None = None) -> int:
     args = build_parser().parse_args(list(argv) if argv is not None else None)
     try:
-        descriptions_text = args.descriptions.read_text(encoding="utf-8")
-        tracks = parse_track_timestamps(descriptions_text)
-        total_duration_ms = parse_timestamp(args.end_time) if args.end_time else parse_total_duration(descriptions_text)
+        description_document = read_video_description_document(args.descriptions)
+        tracks = parse_document_track_timestamps(description_document)
+        description_text = str(description_document["description"])
+        total_duration_ms = parse_timestamp(args.end_time) if args.end_time else parse_total_duration(description_text)
         if total_duration_ms is None:
             raise ValidationError("概要欄から総時間を取得できません。--end-time を指定してください")
         lyrics = _load_lyrics(args.lyrics)

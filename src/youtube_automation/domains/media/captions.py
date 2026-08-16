@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -58,6 +58,26 @@ def parse_track_timestamps(descriptions_text: str) -> list[TrackTimestamp]:
             )
     if not tracks:
         raise ValidationError("descriptions.md にタイムスタンプ付きトラック行がありません")
+    starts = [track.start_ms for track in tracks]
+    if starts != sorted(set(starts)):
+        raise ValidationError("トラック開始時刻は昇順かつ重複なしである必要があります")
+    return tracks
+
+
+def parse_document_track_timestamps(document: Mapping[str, object]) -> list[TrackTimestamp]:
+    """動画説明JSONの構造化track listから開始時刻を読む。"""
+    entries = document.get("tracks")
+    if not isinstance(entries, list) or not entries:
+        raise ValidationError("descriptions.json に track list がありません")
+    tracks: list[TrackTimestamp] = []
+    for entry in entries:
+        if (
+            not isinstance(entry, Mapping)
+            or not isinstance(entry.get("start"), str)
+            or not isinstance(entry.get("title"), str)
+        ):
+            raise ValidationError("descriptions.json::tracks の start / title が不正です")
+        tracks.append(TrackTimestamp(start_ms=parse_timestamp(entry["start"]), title=entry["title"]))
     starts = [track.start_ms for track in tracks]
     if starts != sorted(set(starts)):
         raise ValidationError("トラック開始時刻は昇順かつ重複なしである必要があります")

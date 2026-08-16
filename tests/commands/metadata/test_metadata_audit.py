@@ -13,6 +13,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from tests.helpers.video_description import write_video_description_pair
 from youtube_automation.commands.metadata.metadata_audit import audit_local, audit_remote
 
 _ZH_ISSUE_TOKEN = "zh codes"  # `metadata_audit.py` のエラー文言 "YT zh codes are ..." に対応
@@ -70,19 +71,16 @@ def _write_local_collection(
     collection_dir = tmp_path / "20260622-test-collection"
     docs_dir = collection_dir / "20-documentation"
     docs_dir.mkdir(parents=True)
-    (docs_dir / "descriptions.md").write_text(
-        f"""## {title_heading}
-```
-Continuous Focus Mix
-```
-
-## Complete Collection 概要欄
-```
-{description}
-```
-""",
-        encoding="utf-8",
+    source = write_video_description_pair(
+        docs_dir,
+        title="Continuous Focus Mix",
+        description=description,
+        tags=["fallback"],
     )
+    if title_heading != "タイトル案":
+        document = json.loads(source.read_text(encoding="utf-8"))
+        document["title"] = ""
+        source.write_text(json.dumps(document), encoding="utf-8")
     if write_workflow_state:
         (collection_dir / "workflow-state.json").write_text(
             json.dumps({"scene_phrases": scene_phrases}, ensure_ascii=False),
@@ -170,7 +168,7 @@ class TestAuditLocalPreflightContract:
 
         assert any("workflow-state.json invalid" in issue for issue in issues)
 
-    def test_heading_mismatch_reports_descriptions_md_diagnostics(self, tmp_path: Path) -> None:
+    def test_invalid_description_pair_reports_schema_diagnostic(self, tmp_path: Path) -> None:
         collection_dir = _write_local_collection(
             tmp_path,
             scene_phrases={"en": "continuous focus mix"},
@@ -182,15 +180,10 @@ class TestAuditLocalPreflightContract:
 
         assert len(issues) == 1
         message = issues[0]
-        assert "descriptions.md parse failed" in message
-        assert "期待する見出し（完全一致）" in message
-        assert ("不足/不一致の見出し:\n  - ## タイトル案\n  - ## タグ（YouTube タグ欄）") in message
-        assert "検出した ## 見出し" in message
-        assert "## タイトル" in message
-        assert "修正例" in message
-        assert "/video --describe を再実行" in message
+        assert "descriptions.json invalid" in message
+        assert "pointer=/title" in message
 
-    def test_parse_failure_keeps_independent_local_audits(self, tmp_path: Path) -> None:
+    def test_invalid_description_pair_stops_metadata_audit_fail_closed(self, tmp_path: Path) -> None:
         collection_dir = _write_local_collection(
             tmp_path,
             scene_phrases={},
@@ -203,9 +196,8 @@ class TestAuditLocalPreflightContract:
 
         issues = audit_local(collection_dir, cfg)
 
-        assert any("descriptions.md parse failed" in issue for issue in issues)
-        assert any("workflow-state.json missing" in issue for issue in issues)
-        assert any("tags count: 1 (min 2)" in issue for issue in issues)
+        assert len(issues) == 1
+        assert "descriptions.json invalid" in issues[0]
 
 
 class TestAuditRemoteZhCodes:

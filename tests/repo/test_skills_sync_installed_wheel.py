@@ -197,6 +197,7 @@ assert set(schema_registry.repository_schema_names()) == {
     "feedback-entry.schema.json",
     "insights-entry.schema.json",
     "music-prompt.schema.json",
+    "video-description.schema.json",
     "weekly_vote_log.schema.json",
 }
 rendering = importlib.import_module("youtube_automation.domains.documents.rendering")

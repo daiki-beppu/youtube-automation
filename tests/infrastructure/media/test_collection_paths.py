@@ -88,6 +88,7 @@ class TestFilePathProperties:
     def test_descriptions_md_path(self, tmp_path):
         paths = CollectionPaths(tmp_path)
         assert paths.descriptions_md_path == tmp_path / "20-documentation" / "descriptions.md"
+        assert paths.descriptions_json_path == tmp_path / "20-documentation" / "descriptions.json"
 
     def test_thumbnail_prompts_path(self, tmp_path):
         paths = CollectionPaths(tmp_path)

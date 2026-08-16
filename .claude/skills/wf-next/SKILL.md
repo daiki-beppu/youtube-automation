@@ -12,7 +12,9 @@ description: "Use when 既存コレクション（collections/planning/）を一
 
 ## 成果物
 
-- `書き込む`: `collections/<id>/workflow-state.json`, `collections/<id>/20-documentation/descriptions.md`, `collections/<id>/20-documentation/upload_tracking.json`
+- `書き込む`: `collections/<id>/workflow-state.json`, `collections/<id>/20-documentation/upload_tracking.json`
+
+動画説明 JSON+HTML pair の書き込みは `/video --describe` owner へ委譲する。
 - `読み込む`: `collections/<id>/workflow-state.json`, `collections/<id>/01-master/*`, `collections/<id>/10-assets/*`, `config/channel/workflow.json`
 
 ## Overview
@@ -227,7 +229,7 @@ status を記録した後は、成功時だけでなく blocked / failed の停�
 
 1. **並列 A**（2 Agent 同時起動）:
    - Agent 1: 対象 collection、`01-master/<assets.master_audio>`、`10-assets/main.png/jpg` または `loop.mp4` を入力に Skill `/video --generate` の Subagent Contract を実行。thumbnail skill-config も渡し、`textless.enabled: false` の共有 `main.jpg` を textless 再生成へ戻さない。期待成果物は `01-master/*.mp4`
-   - Agent 2 の起動前に、メインが `/video --describe` の重複トラック名を検出し、必要な表示名 mapping を確定するが、まだ `apply_track_display_names()` は呼ばない。その mapping、planning / localization、skill-config、benchmark 入力を列挙し、Agent 2 には `/video --describe` の Step 1 から品質チェック、`yt-title-duplicate-check`、`20-documentation/descriptions.md` 保存までを実行させる。`apply_track_display_names()` と `workflow-state.json` の `assets.description` 更新は実行させない
+   - Agent 2 の起動前に、メインが `/video --describe` の重複トラック名を検出し、必要な表示名 mapping を確定するが、まだ `apply_track_display_names()` は呼ばない。その mapping、planning / localization、skill-config、benchmark 入力を列挙し、Agent 2 には `/video --describe` の Step 1 から品質チェック、`yt-title-duplicate-check`、検証済み `20-documentation/descriptions.json` + 同 basename HTML 保存までを実行させる。`apply_track_display_names()` と `workflow-state.json` の `assets.description` 更新は実行させない
    - 両 Agent とも state は入力確認に必要な範囲だけ読み、書き込まず、AskUserQuestion を実行しない。片方でも失敗または成果物欠落なら state を更新せず停止する
 2. 並列 A 完了後:
    - メインが両成果物の存在と `phase: "mastered"` との整合を確認する

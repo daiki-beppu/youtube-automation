@@ -141,7 +141,7 @@ Phase 3: 公開             /wf-next    動画→概要欄→アップロード�
 | `raw_master` | string / null | 自動生成された raw master のファイル名（/music --master or /music --generate 出力） |
 | `master_audio` | string / null | ユーザーがミキシング+マスタリングした最終マスターのファイル名。`workflow.wf_next.skip_manual_mastering: true`（raw=final 運用）のチャンネルでは `/wf-next` が `raw_master` と同じファイル名を自動設定する。`workflow.wf_next.skip_audio_approval: false`（`wf_next` の boolean は全て true=手動工程を省く向き）のチャンネルでは確定前に `/wf-next` が承認を取る |
 | `master_video` | string / null | 生成されたマスター動画のファイル名 |
-| `description` | boolean | YouTube 概要欄生成済み（`20-documentation/descriptions.md`） |
+| `description` | boolean | YouTube 概要欄の検証済み JSON+HTML pair 生成済み（`20-documentation/descriptions.{json,html}`） |
 
 `music_downloaded: true` かつ `raw_master: null` は、Suno 楽曲が DL 済みで raw master（クロスフェード結合出力）が未生成の中間状態を表す。
 

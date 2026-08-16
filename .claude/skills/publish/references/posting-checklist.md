@@ -4,7 +4,7 @@
 
 - [ ] マスター動画（`01-master/00-master.mp4` または `03-Individual-movie/*master*.mp4`）
 - [ ] サムネイル（候補順: `10-assets/thumbnail.jpg` → `10-assets/thumbnail.png`。`main.png/jpg` は textless 動画背景なので使わない）
-- [ ] 概要欄（`20-documentation/descriptions.md` — `/video --describe` で生成済み）
+- [ ] 概要欄（検証済み `20-documentation/descriptions.json` + `.html` pair — `/video --describe` で生成済み）
 
 ## 初投稿プレイリスト確認
 

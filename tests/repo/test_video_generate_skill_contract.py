@@ -61,7 +61,10 @@ def test_video_chain_manifest_runs_generate_then_describe_without_approval_gates
             "id": "describe",
             "skill": "video",
             "prerequisiteArtifacts": ["collections/<id>/01-master/master.mp4"],
-            "outputArtifacts": ["collections/<id>/20-documentation/descriptions.md"],
+            "outputArtifacts": [
+                "collections/<id>/20-documentation/descriptions.json",
+                "collections/<id>/20-documentation/descriptions.html",
+            ],
             "approvalGate": {
                 "skip": True,
                 "configPath": "workflow.video.skip_approvals.describe",

@@ -20,9 +20,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal, TypedDict
 
-from youtube_automation.core.errors import WorkflowStateError
+from youtube_automation.core.errors import ValidationError, WorkflowStateError
 from youtube_automation.domains.collections.workflow_state import WorkflowState
 from youtube_automation.domains.collections.workflow_state import read as read_workflow_state
+from youtube_automation.domains.documents.video_description import read_video_description_metadata
 
 STATE_DIR_NAME = ".automation-run"
 LEASE_DIR_NAME = "lease"
@@ -577,11 +578,13 @@ def _completed_tracking_matches(collection: Path, video_id: str) -> bool:
 def _local_publish_artifacts_complete(collection: Path, assets: dict) -> bool:
     video = assets.get("master_video")
     description = assets.get("description")
-    return (
-        _artifact_file(collection, "01-master", video)
-        and description is True
-        and (collection / "20-documentation" / "descriptions.md").is_file()
-    )
+    if not (_artifact_file(collection, "01-master", video) and description is True):
+        return False
+    try:
+        read_video_description_metadata(collection / "20-documentation" / "descriptions.json")
+    except ValidationError:
+        return False
+    return True
 
 
 def _publish_followup_complete(root: Path, collection: Path, video_id: str) -> bool:

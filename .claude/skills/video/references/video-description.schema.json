@@ -1,0 +1,81 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "video-description.schema.json",
+  "title": "動画説明・公開準備文書",
+  "description": "video が生成し publish が読む title / description / localization の JSON 正本。",
+  "type": "object",
+  "required": ["schema_version", "generated_at", "collection_id", "title", "description", "description_sections", "tracks", "tags", "localizations", "provenance", "quality"],
+  "properties": {
+    "schema_version": {"title": "Schema version", "const": 1, "x-view": {"order": 0}},
+    "generated_at": {"title": "生成日時", "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$", "x-view": {"order": 1}},
+    "collection_id": {"title": "Collection", "type": "string", "minLength": 1, "x-view": {"order": 2}},
+    "title": {"title": "公開タイトル", "type": "string", "minLength": 1, "maxLength": 100, "x-view": {"order": 10}},
+    "description": {"title": "最終概要欄", "type": "string", "minLength": 1, "x-view": {"order": 20, "presentation": "card"}},
+    "description_sections": {"title": "概要欄セクション", "type": "array", "minItems": 1, "items": {"$ref": "#/definitions/section"}, "x-view": {"order": 30, "presentation": "table"}},
+    "tracks": {"title": "Track list", "type": "array", "items": {"$ref": "#/definitions/track"}, "x-view": {"order": 40, "presentation": "table"}},
+    "tags": {"title": "YouTube tags", "type": "array", "items": {"type": "string", "minLength": 1}, "x-view": {"order": 50}},
+    "localizations": {"title": "Localization diff", "type": "object", "propertyNames": {"pattern": "^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$"}, "additionalProperties": {"$ref": "#/definitions/localization"}, "x-view": {"order": 60, "presentation": "card"}},
+    "provenance": {"title": "Provenance", "$ref": "#/definitions/provenance", "x-view": {"order": 70}},
+    "quality": {"title": "Quality checks", "$ref": "#/definitions/quality", "x-view": {"order": 80, "presentation": "card"}}
+  },
+  "additionalProperties": true,
+  "definitions": {
+    "section": {
+      "type": "object",
+      "required": ["id", "heading", "body"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z][a-z0-9_-]*$"},
+        "heading": {"type": "string", "minLength": 1},
+        "body": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": true
+    },
+    "track": {
+      "type": "object",
+      "required": ["position", "start", "title"],
+      "properties": {
+        "position": {"type": "integer", "minimum": 1},
+        "start": {"type": "string", "pattern": "^[0-9]{1,2}:[0-9]{2}(?::[0-9]{2})?$"},
+        "title": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": true
+    },
+    "localization": {
+      "type": "object",
+      "required": ["title", "description"],
+      "properties": {
+        "title": {"type": "string", "minLength": 1, "maxLength": 100},
+        "description": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": true
+    },
+    "provenance": {
+      "type": "object",
+      "required": ["producer", "source_paths"],
+      "properties": {
+        "producer": {"const": "video"},
+        "source_paths": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}}
+      },
+      "additionalProperties": true
+    },
+    "quality_check": {
+      "type": "object",
+      "required": ["id", "status", "message"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "status": {"enum": ["pass", "fail"]},
+        "message": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": true
+    },
+    "quality": {
+      "type": "object",
+      "required": ["status", "checks"],
+      "properties": {
+        "status": {"enum": ["pass", "fail"]},
+        "checks": {"type": "array", "minItems": 1, "items": {"$ref": "#/definitions/quality_check"}}
+      },
+      "additionalProperties": true
+    }
+  }
+}

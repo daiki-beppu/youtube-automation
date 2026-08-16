@@ -9,6 +9,9 @@ import sys
 from pathlib import Path
 from typing import TypedDict
 
+from youtube_automation.core.errors import ValidationError
+from youtube_automation.domains.documents.video_description import read_video_description_metadata
+
 EXIT_SKIP = 0
 EXIT_RUN = 10
 EXIT_BLOCKED = 20
@@ -79,11 +82,20 @@ def evaluate(collection: Path, step: str) -> tuple[int, StateResult]:
     if step == "generate":
         return EXIT_SKIP, _result(step, "skip", "master_video_exists", [relative.as_posix()])
 
-    description = state.get("description")
-    generated = isinstance(description, dict) and description.get("generated") is True
-    output = collection / "20-documentation" / "descriptions.md"
+    assets = state.get("assets")
+    generated = isinstance(assets, dict) and assets.get("description") is True
+    output = collection / "20-documentation" / "descriptions.json"
     if generated and output.is_file():
-        return EXIT_SKIP, _result(step, "skip", "description_exists", ["20-documentation/descriptions.md"])
+        try:
+            read_video_description_metadata(output)
+        except ValidationError:
+            return EXIT_RUN, _result(step, "run", "description_pair_invalid", [])
+        return EXIT_SKIP, _result(
+            step,
+            "skip",
+            "description_exists",
+            ["20-documentation/descriptions.json", "20-documentation/descriptions.html"],
+        )
     return EXIT_RUN, _result(step, "run", "description_incomplete", [])
 
 
@@ -99,7 +111,7 @@ def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
         code, result = evaluate(args.collection_dir, args.step)
-    except (OSError, ValueError, json.JSONDecodeError) as exc:
+    except (OSError, ValueError, ValidationError, json.JSONDecodeError) as exc:
         code = EXIT_ERROR
         result = _result(args.step, "error", str(exc), [])
     json.dump(result, sys.stdout, ensure_ascii=False, indent=2 if args.pretty else None)

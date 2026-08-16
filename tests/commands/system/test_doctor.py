@@ -20,6 +20,7 @@ from httplib2 import ServerNotFoundError
 from PIL import Image as PILImage
 
 import youtube_automation.infrastructure.secrets as secrets_module
+from tests.helpers.video_description import write_video_description_pair
 from youtube_automation.commands.system import doctor
 from youtube_automation.core.errors import ConfigError
 from youtube_automation.domains.documents.schema_registry import RepositorySchema
@@ -237,23 +238,9 @@ def _write_thumbnail_skill_config(base: Path, references: list[str] | str) -> No
     )
 
 
-def _write_valid_descriptions_md(path: Path) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        "## タイトル案\n"
-        "```\n"
-        "Title\n"
-        "```\n"
-        "## Complete Collection 概要欄\n"
-        "```\n"
-        "Body\n"
-        "```\n"
-        "## タグ（YouTube タグ欄）\n"
-        "```\n"
-        "tag\n"
-        "```\n",
-        encoding="utf-8",
-    )
+def _write_valid_description_pair(documentation: Path) -> None:
+    documentation.mkdir(parents=True, exist_ok=True)
+    write_video_description_pair(documentation, title="Title", description="Body", tags=["tag"])
 
 
 def _write_complete_ttp_artifacts(base: Path) -> Path:
@@ -1896,7 +1883,7 @@ class TestCheckInitialSetupReadiness:
 
         assert os.environ.get("CHANNEL_DIR") == original
 
-    def test_warns_for_thumbnail_suno_and_descriptions_md_issues(self, tmp_path):
+    def test_warns_for_thumbnail_suno_and_legacy_descriptions_issues(self, tmp_path):
         skills_dir = tmp_path / "config" / "skills"
         skills_dir.mkdir(parents=True)
         (skills_dir / "thumbnail.yaml").write_text(
@@ -1944,7 +1931,7 @@ class TestCheckInitialSetupReadiness:
         assert "reference_images.default" in r.message
         assert "composition_rules" in r.message
         assert "genre_line" in r.message
-        assert "descriptions.md parse failed" in r.message
+        assert "旧 descriptions.md は明示 migration が必要" in r.message
         assert r.next_action is not None
         assert "/setup --regenerate" in r.next_action["instructions"]
         assert "/video --describe" in r.next_action["instructions"]
@@ -1975,8 +1962,8 @@ class TestCheckInitialSetupReadiness:
             f'genre_line: "{"x" * 373}"\nstyle_char_limit: 373\n',
             encoding="utf-8",
         )
-        desc = tmp_path / "collections" / "planning" / "alpha" / "20-documentation" / "descriptions.md"
-        _write_valid_descriptions_md(desc)
+        docs = tmp_path / "collections" / "planning" / "alpha" / "20-documentation"
+        _write_valid_description_pair(docs)
 
         r = doctor.check_initial_setup_readiness(tmp_path)
 
@@ -2039,7 +2026,7 @@ class TestCheckInitialSetupReadiness:
         assert "composition_rules" in r.message
         assert "reference_images.default" not in r.message
 
-    def test_descriptions_md_symlink_escape_warns_without_reading_external_heading(self, tmp_path):
+    def test_legacy_descriptions_symlink_escape_warns_without_reading_external_heading(self, tmp_path):
         outside = tmp_path.parent / f"{tmp_path.name}-outside"
         outside_desc = outside / "descriptions.md"
         outside.mkdir()
@@ -2057,15 +2044,16 @@ class TestCheckInitialSetupReadiness:
         assert "channel_dir 外" in r.message
         assert "SECRET_HEADING" not in r.message
 
-    def test_descriptions_md_invalid_utf8_warns_without_exception(self, tmp_path):
-        desc = tmp_path / "collections" / "planning" / "alpha" / "20-documentation" / "descriptions.md"
+    def test_descriptions_json_invalid_utf8_warns_without_exception(self, tmp_path):
+        desc = tmp_path / "collections" / "planning" / "alpha" / "20-documentation" / "descriptions.json"
         desc.parent.mkdir(parents=True)
         desc.write_bytes(b"\xff\xfe\xfa")
 
         r = doctor.check_initial_setup_readiness(tmp_path)
 
         assert r.status == "warn"
-        assert "descriptions.md を読み取れません" in r.message
+        assert "descriptions.json pair invalid" in r.message
+        assert "structured document pair を読めません" in r.message
 
 
 # ---------------------------------------------------------------------------

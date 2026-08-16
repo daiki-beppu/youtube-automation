@@ -9,13 +9,13 @@
 ## 成果物
 
 - `書き込む`: `なし`
-- `読み込む`: `collections/<id>/20-documentation/descriptions.md`, `collections/<id>/workflow-state.json`, `config/channel/*.json`
+- `読み込む`: 検証済み `collections/<id>/20-documentation/descriptions.json` + 同 basename HTML, `collections/<id>/workflow-state.json`, `config/channel/*.json`
 
 ## Overview
 
-`yt-metadata-audit` のラッパー。`collections/live/<col>/20-documentation/descriptions.md` と `workflow-state.json` の整合性、および YouTube API 側 snippet/localizations の整合性を読み取り専用で監査する。
+`yt-metadata-audit` のラッパー。`collections/live/<col>/20-documentation/descriptions.json` + 同 basename HTML と `workflow-state.json` の整合性、および YouTube API 側 snippet/localizations の整合性を読み取り専用で監査する。
 
-**修正は範囲外**。自身では修正しない。差分検出後の更新は `/video --describe` で descriptions.md を再生成し、必要に応じて運用者が別経路で YouTube 側へ反映する。
+**修正は範囲外**。自身では修正しない。差分検出後の更新は `/video --describe` で descriptions JSON+HTML pair を再生成し、必要に応じて運用者が別経路で YouTube 側へ反映する。
 
 ## 完了条件
 
@@ -41,13 +41,13 @@
 以下を確認し、満たさなければ前工程を案内して停止する:
 
 - `config/channel/` が存在すること（`load_config()` でロード可能）。存在しない場合は `/setup --import` を案内して停止する
-- `collections/live/` 配下に監査対象のコレクション（`20-documentation/descriptions.md` + `workflow-state.json`）が 1 件以上存在すること。存在しない場合は監査対象なしとして終了し、先に `/publish --upload` での公開を案内する
+- `collections/live/` 配下に監査対象のコレクション（検証済み `20-documentation/descriptions.json` + 同 basename HTML + `workflow-state.json`）が 1 件以上存在すること。存在しない場合は監査対象なしとして終了し、先に `/publish --upload` での公開を案内する
 - remote 監査（既定および `--remote`）は `auth/token.json` の OAuth 認証が必要。未認証なら `/setup` を案内するか、API 不要の `--local` に切り替える
 
 ## When to Use
 
 - 一括アップロード後に YouTube 側にメタデータが正しく反映されたか確認したいとき
-- descriptions.md を手で編集したあと、live 動画と差分が出ていないか調べたいとき
+- descriptions JSON を更新したあと、検証済み HTML pair と live 動画に差分が出ていないか調べたいとき
 - 多言語ローカライゼーションが期待通り反映されているか確認したいとき
 - 多言語チャンネルで scene_phrases の言語抜けを検出したいとき
 
@@ -56,7 +56,7 @@
 | コマンド | 説明 |
 |---------|------|
 | `uv run yt-metadata-audit` | local + remote の両方を監査 |
-| `uv run yt-metadata-audit --local` | `descriptions.md` / `workflow-state.json` のみ（API call 不要） |
+| `uv run yt-metadata-audit --local` | 検証済み `descriptions.json` + HTML / `workflow-state.json` のみ（API call 不要） |
 | `uv run yt-metadata-audit --remote` | YouTube API 側 snippet/localizations のみ |
 | `uv run yt-metadata-audit --strict` | 1 件でも issue が見つかれば exit 1（CI 用途） |
 
@@ -75,7 +75,7 @@
 引数なしで `uv run yt-metadata-audit` を実行する。`collections/live/` 配下を全件走査し、以下を検出する:
 
 **LOCAL チェック**:
-- `descriptions.md` の `タイトル案` / `Complete Collection 概要欄` セクション欠落
+- `descriptions.json` の schema / localization / quality / HTML pair 不整合
 - タイトル 100 文字超過
 - タイムスタンプ数 > `config/channel/audio.json::chapter_max`（チャンネル config が単一ソース、既定 100。variation expansion regression 検出）
 - chapter 名のローマ数字（pattern I / II / III ... = variation expansion）
@@ -96,8 +96,8 @@
 
 監査出力に基づき、ユーザーに次のアクションを案内する:
 
-- **`descriptions.md` 側の問題**（タイトル長すぎ、timestamp 過多など） → `/video --describe` で再生成
-- **YouTube 側との差分**（local と remote がずれている） → `/video --describe` で descriptions.md を最新化したあと、YouTube 側への反映は別途運用判断
+- **`descriptions.json` 側の問題**（schema、localization、quality、pair 不整合など） → `/video --describe` で再生成
+- **YouTube 側との差分**（local と remote がずれている） → `/video --describe` で descriptions JSON+HTML pair を最新化したあと、YouTube 側への反映は別途運用判断
 - **`workflow-state.json` 不在・JSON 破損** → `/wf-new` から作られた正規 state を復旧し、手編集で辻褄合わせしない
 - **多言語チャンネルの scene_phrases 言語抜け** → 該当コレクションで `yt-populate-scene-phrases` を再実行、または `workflow-state.json` を正規形式で補完（単一言語チャンネルでは `scene_phrases` 不在は正常）
 
@@ -119,7 +119,7 @@ GitHub Actions や cron で常時監視する場合は `--strict` を付ける�
 
 - `/publish --upload` — 前工程。YouTube へのアップロード + live 移行（本スキルはその後の反映確認に使う）
 - `/publish` — 前工程。公開後に本 mode で反映状態を監査する
-- `/video --describe` — descriptions.md の生成・更新（修正の入口）
+- `/video --describe` — descriptions JSON+HTML pair の生成・更新（修正の入口）
 - `yt-bulk-update-synthetic-media` — 公開済み動画の `status.containsSyntheticMedia` が `false` のまま残っている場合に `True` へ一括是正する（#606、#603 是正前のアップロード分の遡及）
 - `pyproject.toml` の `yt-metadata-audit` entry point
 - `src/youtube_automation/commands/metadata/metadata_audit.py` — 実装本体

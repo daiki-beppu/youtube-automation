@@ -27,6 +27,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, call, patch
 
 from tests.helpers.paths import FIXTURES_DIR, REPO_ROOT
+from tests.helpers.video_description import write_video_description_pair
 
 sys.path.insert(0, str(REPO_ROOT))
 
@@ -34,7 +35,7 @@ import pytest
 from googleapiclient.errors import HttpError
 
 from youtube_automation.configuration import reset
-from youtube_automation.core.errors import YouTubeAPIError
+from youtube_automation.core.errors import DocumentRenderError, DocumentValidationError, YouTubeAPIError
 
 # ---------------------------------------------------------------------------
 # ヘルパー
@@ -63,7 +64,7 @@ def _make_collection_with_descriptions(
     omit_video_id: bool = False,
     omit_sections: list[str] | None = None,
 ) -> Path:
-    """`live/<name>/20-documentation/{descriptions.md, upload_tracking.json}` を作成.
+    """`live/<name>/20-documentation/{descriptions.json, upload_tracking.json}` を作成.
 
     欠落系（ケース 6/7/8/21/22/23）は `omit_*` フラグで variant 化する.
     """
@@ -85,15 +86,19 @@ def _make_collection_with_descriptions(
 
     if not omit_descriptions:
         omits = set(omit_sections or [])
-        sections: list[str] = []
-        if "概要欄" not in omits:
-            sections.append(f"## Complete Collection 概要欄\n\n```\n{description}\n```\n")
-        if "タイトル案" not in omits:
-            sections.append(f"## タイトル案\n\n```\n{title}\n```\n")
-        if "タグ" not in omits:
-            tags_str = ", ".join(tags or ["tag1", "tag2"])
-            sections.append(f"## タグ（YouTube タグ欄）\n\n```\n{tags_str}\n```\n")
-        (doc / "descriptions.md").write_text("\n".join(sections), encoding="utf-8")
+        source = write_video_description_pair(
+            doc,
+            title=title,
+            description=description,
+            tags=[] if "タグ" in omits else [tag.strip('"') for tag in (tags or ["tag1", "tag2"])],
+        )
+        if omits:
+            document = json.loads(source.read_text(encoding="utf-8"))
+            if "概要欄" in omits:
+                document.pop("description")
+            if "タイトル案" in omits:
+                document.pop("title")
+            source.write_text(json.dumps(document), encoding="utf-8")
 
     return col
 
@@ -592,48 +597,6 @@ class TestMainExecution:
             for c in sleep_mock.call_args_list:
                 assert c == call(0.4)
 
-    def test_should_keep_old_title_when_new_title_exceeds_100_utf16_units(self, tmp_path, monkeypatch, caplog):
-        """新タイトル UTF-16 > 100 units 時は old title を保持し description のみ更新."""
-        from youtube_automation.commands.metadata import bulk_update_descriptions as mod
-
-        # Given: 101 units の新タイトル（BMP 文字 1 個 = 1 unit）
-        long_title = "x" * 101
-        ch = _setup_channel(tmp_path)
-        _make_collection_with_descriptions(
-            ch,
-            "alpha",
-            video_id="V_ALPHA",
-            title=long_title,
-            description="new desc",
-        )
-        monkeypatch.setenv("CHANNEL_DIR", str(ch))
-        reset()
-        monkeypatch.setattr(sys, "argv", ["yt-bulk-update-desc"])
-        caplog.set_level(logging.INFO, logger=mod.__name__)
-        yt_mock = _build_youtube_mock(
-            [
-                _snippet("V_ALPHA", title="kept old title", description="old desc"),
-            ]
-        )
-
-        with (
-            patch.object(mod, "create_authenticated_youtube_clients", return_value=SimpleNamespace(youtube=yt_mock)),
-            patch.object(mod.time, "sleep"),
-        ):
-            # When
-            mod.main()
-
-            # Then
-            update_call = yt_mock.videos.return_value.update.call_args_list[0]
-            body = update_call.kwargs["body"]
-            assert body["snippet"]["title"] == "kept old title"
-            assert body["snippet"]["description"] == "new desc"
-            assert (
-                "WARNING",
-                "⚠️  V_ALPHA (alpha): new title is 101 UTF-16 units (>100). "
-                "Keeping old title; updating description only.",
-            ) in [(record.levelname, record.message) for record in caplog.records]
-
     def test_should_accept_new_title_at_exactly_100_utf16_units(self, tmp_path, monkeypatch):
         """REQ-2805-01: UTF-16 ちょうど 100 units は新 title を保持する."""
         from youtube_automation.commands.metadata import bulk_update_descriptions as mod
@@ -739,7 +702,7 @@ class TestMainExecution:
 
         ch = _setup_channel(tmp_path)
         col = _make_collection_with_descriptions(ch, "alpha")
-        descriptions_path = col / "20-documentation" / "descriptions.md"
+        descriptions_path = col / "20-documentation" / "descriptions.json"
         original_read_text = Path.read_text
 
         def read_text_with_failure(path: Path, *args, **kwargs):
@@ -754,7 +717,7 @@ class TestMainExecution:
 
         with (
             patch.object(mod, "create_authenticated_youtube_clients") as clients_mock,
-            pytest.raises(OSError, match="metadata unavailable"),
+            pytest.raises(DocumentRenderError, match="structured document pair を読めません"),
         ):
             mod.main()
 
@@ -1007,16 +970,10 @@ class TestLoadCollection:
         reset()
 
         # When/Then
-        with pytest.raises(RuntimeError) as excinfo:
+        with pytest.raises(DocumentValidationError) as excinfo:
             mod.load_collection("alpha")
 
-        message = str(excinfo.value)
-        assert "descriptions.md parse failed in alpha" in message
-        assert "期待する見出し（完全一致）" in message
-        assert ("不足/不一致の見出し:\n  - ## Complete Collection 概要欄") in message
-        assert "検出した ## 見出し" in message
-        assert "修正例" in message
-        assert "/video --describe を再実行" in message
+        assert "schema keyword=required pointer=/" in str(excinfo.value)
 
     def test_should_raise_when_title_section_missing(self, tmp_path, monkeypatch):
         """`タイトル案` セクション欠落で `RuntimeError`."""
@@ -1029,16 +986,10 @@ class TestLoadCollection:
         reset()
 
         # When/Then
-        with pytest.raises(RuntimeError) as excinfo:
+        with pytest.raises(DocumentValidationError) as excinfo:
             mod.load_collection("alpha")
 
-        message = str(excinfo.value)
-        assert "descriptions.md parse failed in alpha" in message
-        assert "期待する見出し（完全一致）" in message
-        assert ("不足/不一致の見出し:\n  - ## タイトル案") in message
-        assert "検出した ## 見出し" in message
-        assert "修正例" in message
-        assert "/video --describe を再実行" in message
+        assert "schema keyword=required pointer=/" in str(excinfo.value)
 
     def test_should_strip_double_quotes_from_tags(self, tmp_path, monkeypatch):
         """ダブルクォートで囲まれたタグから引用符を除去する (#1096)."""
@@ -1157,34 +1108,6 @@ class TestBuildSnippetUpdateBody:
         assert body["snippet"]["title"] == "new title"
         assert body["snippet"]["description"] == "new desc"
         assert body["snippet"]["tags"] == ["new-tag-1", "new-tag-2"]
-
-
-class TestExtractMdSection:
-    """`load_collection` の Error テスト経路の前提となる補助 utility."""
-
-    def test_should_return_fenced_body_when_header_matches(self):
-        from youtube_automation.commands.metadata import bulk_update_descriptions as mod
-
-        # Given
-        md = "## Complete Collection 概要欄\n\n```\nhello world\n```\n"
-
-        # When
-        result = mod.extract_md_section(md, "Complete Collection 概要欄")
-
-        # Then
-        assert result == "hello world"
-
-    def test_should_return_none_when_header_missing(self):
-        from youtube_automation.commands.metadata import bulk_update_descriptions as mod
-
-        # Given
-        md = "## Other Section\n\n```\nbody\n```\n"
-
-        # When
-        result = mod.extract_md_section(md, "Complete Collection 概要欄")
-
-        # Then
-        assert result is None
 
 
 # ---------------------------------------------------------------------------

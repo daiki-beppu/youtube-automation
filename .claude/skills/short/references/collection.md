@@ -9,7 +9,7 @@
 
 ## ハイライトとクロップを決める
 
-`20-documentation/descriptions.md` のチャプターから `config.shorts.collection.default_count` 本を提案する。各チャプター先頭から skill-config の `collection.chapter_offset_sec` 秒後を初期値にし、ユーザーに本数・区間を確認する。
+検証済み `20-documentation/descriptions.json` + 同 basename HTML pair の `tracks` から `config.shorts.collection.default_count` 本を提案する。各チャプター先頭から skill-config の `collection.chapter_offset_sec` 秒後を初期値にし、ユーザーに本数・区間を確認する。
 
 `loop.mp4` の場合は次を実行し、中央 / x=400 / x=350 のテストフレームからクロップ位置を確認する。
 

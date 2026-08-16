@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `feat(workspace)`: workspace 全チャンネルの登録者数・総再生回数・動画数を YouTube `channels.list` 1 request で取得する `yt-workspace-status` を追加する（#4116）。
 - `feat(music)`: `music_engine: minimax` と長尺 instrumental master生成CLIを追加し、`/music --generate` の第3経路へ統合する（#4120）。
 - `feat(media)`: MiniMax の音楽・動画生成で共有する Bearer 認証 JSON client と `MINIMAX_API_KEY` の secret 解決経路を追加する（#4119）。
+- `feat(documents)`: 動画説明・公開準備文書を title / sections / tracks / localization / provenance / quality 付き JSON 正本とHTML表示へ移し、upload・metadata・字幕を validated JSON-only かつ fail-closed に統一する（#4030）。
 - `feat(skills)`: `yt-skills lint` が downstream 配布対象 skill を実 inventory から数え、開発専用と `SKILL.md` のない残骸を除外した総数を上限 19 件で ratchet する（#3805）。
 - `feat(skills)`: `yt-skills lint` が委譲深さ 2 以上を最長経路つきで拒否し、既存違反だけを報告付き allowlist として段階解消できる契約を追加する（#3799）。
 - `feat(doctor)`: `ttp_wf_new_readiness` が最終ペルソナの必須9セクション、非空本文、最終化、構造化項目の出典注記を検証し、不足時は `/channel-strategy --persona` へ戻す（#4000）。

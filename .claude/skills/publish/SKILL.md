@@ -13,7 +13,7 @@ description: "Use when 完成した動画を公開工程へ進めるとき。--p
 ## 成果物
 
 - `書き込む`: `config/channel/playlists.json`, `collections/<id>/20-documentation/upload_tracking.json`, `collections/<id>/20-documentation/community-post.txt`, `collections/<id>/workflow-state.json`, `pinned_comment_history.json`
-- `読み込む`: `config/channel/playlists.json`, `config/channel/content.json`, `auth/token.json`, `collections/<id>/01-master/*.mp4`, `collections/<id>/10-assets/thumbnail.jpg`, `collections/<id>/20-documentation/descriptions.md`, `config/channel/*.json`, `config/schedule_config.json`
+- `読み込む`: `config/channel/playlists.json`, `config/channel/content.json`, `auth/token.json`, `collections/<id>/01-master/*.mp4`, `collections/<id>/10-assets/thumbnail.jpg`, 検証済み `collections/<id>/20-documentation/descriptions.json`, `config/channel/*.json`, `config/schedule_config.json`
 
 ## Overview
 

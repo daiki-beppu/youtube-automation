@@ -39,7 +39,8 @@ def test_publish_chain_manifest_keeps_upload_approval_gate() -> None:
         "skill": "publish",
         "prerequisiteArtifacts": [
             "collections/<id>/01-master/*.mp4",
-            "collections/<id>/20-documentation/descriptions.md",
+            "collections/<id>/20-documentation/descriptions.json",
+            "collections/<id>/20-documentation/descriptions.html",
         ],
         "outputArtifacts": [
             "collections/<id>/20-documentation/upload_tracking.json",

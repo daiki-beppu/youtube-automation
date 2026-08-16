@@ -9,29 +9,16 @@ from pathlib import Path
 
 from youtube_automation.configuration import channel_dir, load_config
 from youtube_automation.core.errors import ConfigError
-from youtube_automation.domains.metadata.descriptions import (
-    build_descriptions_md_parse_diagnostics,
-    extract_descriptions_md_section,
-)
+from youtube_automation.domains.documents.video_description import read_video_description_metadata
 from youtube_automation.domains.uploads.preflight import check_title_codepoint_limit, check_title_duplicate_warnings
 from youtube_automation.infrastructure.media.collection_paths import CollectionPaths
 
 
-def extract_section(text: str, header: str) -> str | None:
-    return extract_descriptions_md_section(text, header)
-
-
 def read_descriptions_title(collection_dir: Path) -> str:
-    desc_path = CollectionPaths(collection_dir).descriptions_md_path
+    desc_path = CollectionPaths(collection_dir).descriptions_json_path
     if not desc_path.exists():
-        raise FileNotFoundError(f"{desc_path} not found. Pass --title to check a title before saving descriptions.md.")
-    text = desc_path.read_text(encoding="utf-8")
-    title = extract_section(text, "タイトル案")
-    if title is None:
-        raise ValueError(f"{desc_path}: descriptions.md parse failed\n{build_descriptions_md_parse_diagnostics(text)}")
-    if not title:
-        raise ValueError(f"{desc_path}: missing 'タイトル案' section")
-    return title.strip()
+        raise FileNotFoundError(f"{desc_path} not found. Pass --title before saving descriptions.json.")
+    return str(read_video_description_metadata(desc_path)["title"])
 
 
 def collect_live_titles(collections_root: Path, *, exclude_dir: Path | None = None) -> list[str]:
@@ -46,12 +33,10 @@ def collect_live_titles(collections_root: Path, *, exclude_dir: Path | None = No
             continue
         if exclude_resolved and collection.resolve() == exclude_resolved:
             continue
-        desc_path = CollectionPaths(collection).descriptions_md_path
+        desc_path = CollectionPaths(collection).descriptions_json_path
         if not desc_path.exists():
             continue
-        title = extract_section(desc_path.read_text(encoding="utf-8"), "タイトル案")
-        if title:
-            titles.append(title.strip())
+        titles.append(str(read_video_description_metadata(desc_path)["title"]))
     return titles
 
 
@@ -60,8 +45,12 @@ def build_parser() -> argparse.ArgumentParser:
         prog="yt-title-duplicate-check",
         description="Warn if a proposed title overlaps titles in collections/live.",
     )
-    parser.add_argument("collection", nargs="?", help="collection dir; used for descriptions.md title and self-exclude")
-    parser.add_argument("--title", help="proposed title to check before writing descriptions.md")
+    parser.add_argument(
+        "collection",
+        nargs="?",
+        help="collection dir; used for descriptions.json title and self-exclude",
+    )
+    parser.add_argument("--title", help="proposed title to check before writing descriptions.json pair")
     parser.add_argument(
         "--collections-root",
         type=Path,

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from tests.helpers.video_description import write_video_description_pair
 from youtube_automation.commands.documents import migrate
 
 
@@ -127,4 +128,33 @@ def test_music_prompt_cli_requires_reviewed_candidate_and_updates_state(tmp_path
 
     assert result == 0
     assert json.loads(state.read_text())["assets"]["music_prompts"] is True
+    assert "created:" in capsys.readouterr().out
+
+
+def test_video_description_cli_publishes_pair_and_updates_state(tmp_path: Path, capsys) -> None:
+    fixture_dir = tmp_path / "fixture"
+    fixture_dir.mkdir()
+    fixture = write_video_description_pair(fixture_dir)
+    candidate = tmp_path / "candidate.json"
+    candidate.write_bytes(fixture.read_bytes())
+    target = tmp_path / "20-documentation/descriptions.json"
+    target.parent.mkdir()
+    state = tmp_path / "workflow-state.json"
+    state.write_text(json.dumps({"phase": "prepared", "assets": {}}), encoding="utf-8")
+
+    result = migrate.main(
+        [
+            str(candidate),
+            "--target",
+            str(target),
+            "--schema",
+            "video-description.schema.json",
+            "--workflow-state",
+            str(state),
+        ]
+    )
+
+    assert result == 0
+    assert target.with_suffix(".html").is_file()
+    assert json.loads(state.read_text())["assets"]["description"] is True
     assert "created:" in capsys.readouterr().out
