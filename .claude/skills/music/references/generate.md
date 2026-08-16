@@ -8,13 +8,13 @@
 |---|---|---|
 | `suno` | 下記 Suno 経路。collection server を起動または再利用し、Chrome 拡張で連続生成・playlist 追加・一括 download を行う | `02-Individual-music/` と strict 6 点 |
 | `lyria` | 下記 Lyria 経路。Vertex AI Lyria 3 でセグメント生成・結合を行う | `01-master/master.mp3` |
-| `minimax` | 下記 MiniMax 経路。MiniMax Music でインスト segment生成・結合を行う | `01-master/master.mp3` |
+| `minimax` | 下記 MiniMax 経路。instrumental は segment生成・結合、vocal は検証済み歌詞から1曲を直接生成する | `01-master/master.mp3` |
 
 値が `suno` / `lyria` / `minimax` 以外、または未設定なら設定不整合として停止する。利用者に別 engine の skill を案内せず、同じ `/music --generate` の入口で自動分岐する。
 
 ## MiniMax 経路
 
-`music_engine: minimax` では `.claude/skills/music/config.default.yaml::generate.minimax` と `config/skills/music.yaml::generate.minimax` を deep-merge する。対象 collection のテーマ、creative constraints、採用済み方向性から instrumental style prompt と filename slug を決め、生成回数と model を提示して generation approval を得た後、次を実行する。
+`music_engine: minimax` では `.claude/skills/music/config.default.yaml::generate.minimax` と `config/skills/music.yaml::generate.minimax` を deep-merge する。対象 collection のテーマ、creative constraints、採用済み方向性から style prompt と filename slug を決める。`suno-patterns.yaml` が vocal を示す場合は、`/music --lyric` の機械検証と semantic review が成功した1曲分の `20-documentation/suno-lyrics.json` を必須とする。生成回数と model を提示して generation approval を得た後に実行する。
 
 ```bash
 uv run yt-generate-minimax-master \
@@ -26,9 +26,11 @@ uv run yt-generate-minimax-master \
   --collection <collection-path>
 ```
 
-CLI は1 segmentを最大300秒として必要数を算出し、MiniMax Musicの `output_format: hex` / `is_instrumental: true` で逐次生成する。成功ごとに `data/audio_costs.json` へ `unit: song` を記録し、`02-Individual-music/<NN>_<slug>.mp3` をresume可能に保存する。全segmentが揃った場合だけ既存 `generate_master.generate_master()` へ渡し、`01-master/master.mp3` を生成する。中断時の支払い済みaudioは `tmp/minimax-recovered/<sha256>.mp3` へ退避する。
+vocal の場合は同じ CLI に `--lyrics 20-documentation/suno-lyrics.json` を追加する。CLI は歌詞ファイルを API 呼び出し前に検証し、section tag を含む本文を変更せず `lyrics` に、`is_instrumental: false` を payload に設定する。1回の生成結果を `01-master/master.mp3` へ直接保存し、segment分割・`generate_master` 結合は行わない。
 
-完了条件は `01-master/master.mp3` が非空で、実行時に新規生成したsegment数と同数の `unit: song` cost entryが残ること。失敗時は既存segmentを保持し、同じcommandの再実行で未生成分から再開する。
+instrumental は従来どおり1 segmentを最大300秒として必要数を算出し、`output_format: hex` / `is_instrumental: true` で逐次生成する。成功ごとに `data/audio_costs.json` へ `unit: song` を記録し、`02-Individual-music/<NN>_<slug>.mp3` をresume可能に保存する。全segmentが揃った場合だけ既存 `generate_master.generate_master()` へ渡し、`01-master/master.mp3` を生成する。vocal / instrumental とも中断時の支払い済みaudioは `tmp/minimax-recovered/<sha256>.mp3` へ退避する。
+
+完了条件は `01-master/master.mp3` が非空で、instrumental は新規segment数、vocal は1件の `unit: song` cost entryが残ること。成功後は owner CLI の `set-asset raw_master '"master.mp3"'` で workflow state を更新する。失敗時は既存segmentを保持し、vocal master は公開せず、同じcommandの再実行で未生成分から再開する。
 
 Suno 経路の server lifecycle は `.claude/skills/extension/references/serve.md` をファイル参照で読み、`--suno` の起動・既存 server 再利用・疎通確認・停止契約をそのまま実行する。`/extension` へ委譲せず、このファイルの手順を複製しない。
 

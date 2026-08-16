@@ -50,6 +50,14 @@ def _response(audio: bytes = b"MINIMAX_MP3") -> dict[str, object]:
     }
 
 
+def _lyrics(path: Path, lyrics: str = "[Intro]\n夜が明ける\n\n[Verse 1]\n静かな朝\n\n[Chorus]\n歩き出そう") -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps([{"name": "夜明け — Dawn", "lyrics": lyrics}], ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+
 def test_extract_audio_accepts_official_completed_hex_response() -> None:
     assert generate_minimax_master._extract_audio(_response(b"audio")) == b"audio"
 
@@ -132,6 +140,209 @@ def test_run_generates_segments_logs_each_song_and_combines_existing_master_path
         assert call.kwargs["quantity"] == 1
         assert call.kwargs["unit"] == "song"
     generate_master.assert_called_once_with(collection, 2.5, "256k")
+
+
+def test_vocal_run_sends_verified_lyrics_once_and_writes_master_without_segment_combination(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    collection = _collection(tmp_path)
+    lyrics_path = collection / "20-documentation/suno-lyrics.json"
+    lyrics = "[Intro]\n夜が明ける\n\n[Verse 1]\n静かな朝\n\n[Chorus]\n歩き出そう"
+    _lyrics(lyrics_path, lyrics)
+    _configs(monkeypatch)
+    request_json = Mock(return_value=_response(b"VOCAL_MP3"))
+    monkeypatch.setattr(generate_minimax_master.minimax_client, "request_json", request_json)
+    log_generation = Mock()
+    monkeypatch.setattr(generate_minimax_master.cost_tracker, "log_generation", log_generation)
+    monkeypatch.setattr(generate_minimax_master.cost_tracker, "print_last_report", Mock())
+    combine = Mock(side_effect=AssertionError("vocal generation must not combine segments"))
+    monkeypatch.setattr(generate_minimax_master.generate_master, "generate_master", combine)
+
+    result = generate_minimax_master.main(
+        [
+            "--prompt",
+            "Japanese indie folk, hopeful dawn",
+            "--lyrics",
+            "20-documentation/suno-lyrics.json",
+            "--name",
+            "dawn",
+            "--collection",
+            str(collection),
+        ]
+    )
+
+    assert result == 0
+    request_json.assert_called_once_with(
+        "/v1/music_generation",
+        {
+            "model": "music-3.0",
+            "prompt": "Japanese indie folk, hopeful dawn",
+            "lyrics": lyrics,
+            "is_instrumental": False,
+            "output_format": "hex",
+            "audio_setting": {"sample_rate": 44100, "bitrate": 256000, "format": "mp3"},
+        },
+        timeout=360.0,
+    )
+    assert (collection / "01-master/master.mp3").read_bytes() == b"VOCAL_MP3"
+    assert list((collection / "02-Individual-music").iterdir()) == []
+    combine.assert_not_called()
+    log_generation.assert_called_once()
+    assert log_generation.call_args.args == ("audio",)
+    assert log_generation.call_args.kwargs["quantity"] == 1
+    assert log_generation.call_args.kwargs["unit"] == "song"
+    assert log_generation.call_args.kwargs["metadata"]["mode"] == "vocal"
+
+
+@pytest.mark.parametrize(
+    "fixture",
+    [
+        "missing",
+        "multiple",
+        "empty",
+        "too_long",
+    ],
+)
+def test_vocal_input_failure_stops_before_paid_api_call(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    fixture: str,
+) -> None:
+    collection = _collection(tmp_path)
+    lyrics_path = collection / "20-documentation/suno-lyrics.json"
+    if fixture == "multiple":
+        lyrics_path.parent.mkdir(parents=True)
+        lyrics_path.write_text(
+            json.dumps(
+                [
+                    {"name": "one", "lyrics": "[Verse]\none"},
+                    {"name": "two", "lyrics": "[Verse]\ntwo"},
+                ]
+            ),
+            encoding="utf-8",
+        )
+    elif fixture == "empty":
+        _lyrics(lyrics_path, "")
+    elif fixture == "too_long":
+        _lyrics(lyrics_path, "[Verse]\n" + "a" * 3493)
+    _configs(monkeypatch)
+    request_json = Mock(side_effect=AssertionError("invalid lyrics must not spend credits"))
+    monkeypatch.setattr(generate_minimax_master.minimax_client, "request_json", request_json)
+
+    result = generate_minimax_master.main(
+        [
+            "--prompt",
+            "vocal song",
+            "--lyrics",
+            "20-documentation/suno-lyrics.json",
+            "--name",
+            "song",
+            "--collection",
+            str(collection),
+        ]
+    )
+
+    assert result != 0
+    request_json.assert_not_called()
+    assert not (collection / "01-master/master.mp3").exists()
+
+
+def test_vocal_resume_skips_api_and_duplicate_cost_when_master_exists(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    collection = _collection(tmp_path)
+    _lyrics(collection / "20-documentation/suno-lyrics.json")
+    master = collection / "01-master/master.mp3"
+    master.write_bytes(b"existing-vocal")
+    _configs(monkeypatch)
+    request_json = Mock(side_effect=AssertionError("completed vocal must not regenerate"))
+    monkeypatch.setattr(generate_minimax_master.minimax_client, "request_json", request_json)
+    log_generation = Mock()
+    monkeypatch.setattr(generate_minimax_master.cost_tracker, "log_generation", log_generation)
+    monkeypatch.setattr(generate_minimax_master.cost_tracker, "print_last_report", Mock())
+
+    assert (
+        generate_minimax_master.main(
+            [
+                "--prompt",
+                "vocal song",
+                "--lyrics",
+                "20-documentation/suno-lyrics.json",
+                "--name",
+                "song",
+                "--collection",
+                str(collection),
+            ]
+        )
+        == 0
+    )
+
+    assert master.read_bytes() == b"existing-vocal"
+    request_json.assert_not_called()
+    log_generation.assert_not_called()
+
+
+def test_vocal_api_failure_keeps_master_absent_and_does_not_log_cost(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    collection = _collection(tmp_path)
+    _lyrics(collection / "20-documentation/suno-lyrics.json")
+    _configs(monkeypatch)
+    request_json = Mock(side_effect=GeneratorError("safe upstream failure"))
+    monkeypatch.setattr(generate_minimax_master.minimax_client, "request_json", request_json)
+    log_generation = Mock()
+    monkeypatch.setattr(generate_minimax_master.cost_tracker, "log_generation", log_generation)
+
+    result = generate_minimax_master.main(
+        [
+            "--prompt",
+            "vocal song",
+            "--lyrics",
+            "20-documentation/suno-lyrics.json",
+            "--name",
+            "song",
+            "--max-retries",
+            "0",
+            "--collection",
+            str(collection),
+        ]
+    )
+
+    assert result != 0
+    request_json.assert_called_once()
+    log_generation.assert_not_called()
+    assert not (collection / "01-master/master.mp3").exists()
+
+
+def test_vocal_prompt_limit_is_checked_before_paid_api_call(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    collection = _collection(tmp_path)
+    _lyrics(collection / "20-documentation/suno-lyrics.json")
+    _configs(monkeypatch)
+    request_json = Mock(side_effect=AssertionError("oversized prompt must not spend credits"))
+    monkeypatch.setattr(generate_minimax_master.minimax_client, "request_json", request_json)
+
+    result = generate_minimax_master.main(
+        [
+            "--prompt",
+            "p" * 2001,
+            "--lyrics",
+            "20-documentation/suno-lyrics.json",
+            "--name",
+            "song",
+            "--collection",
+            str(collection),
+        ]
+    )
+
+    assert result != 0
+    request_json.assert_not_called()
+    assert not (collection / "01-master/master.mp3").exists()
 
 
 def test_resume_skips_existing_segment_without_api_or_duplicate_cost(

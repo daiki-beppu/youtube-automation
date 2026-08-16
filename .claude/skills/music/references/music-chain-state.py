@@ -108,11 +108,11 @@ def _evaluate_lyric(collection_path: Path) -> tuple[int, dict[str, object]]:
 
     channel_dir = _channel_dir(collection_path)
     youtube_config = _load_mapping(channel_dir / "config" / "channel" / "youtube.json")
-    if youtube_config.get("music_engine") != "suno":
+    if youtube_config.get("music_engine") not in {"suno", "minimax"}:
         return EXIT_BLOCKED, {
             "step": "lyric",
             "decision": "blocked",
-            "reason": "music_engine_not_suno",
+            "reason": "music_engine_not_lyric_capable",
         }
 
     patterns_path = collection_path / _PROMPT_OUTPUTS[0]
