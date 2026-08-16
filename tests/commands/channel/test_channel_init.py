@@ -128,6 +128,17 @@ def test_main_does_not_create_setup_owned_directories_when_target_is_empty(tmp_p
     assert not (tmp_path / "auth" / ".gitkeep").exists()
 
 
+def test_new_channel_gitignore_keeps_control_plane_json_in_git(tmp_path):
+    assert main(_required_args(tmp_path)) == 0
+
+    gitignore = (tmp_path / ".gitignore").read_text(encoding="utf-8")
+    assert "# yt-state-git control plane (ADR-0024)" in gitignore
+    assert "!collections/**/workflow-state.json" in gitignore
+    assert "!collections/**/20-documentation/upload_tracking.json" in gitignore
+    assert "!post_publish_history.json" in gitignore
+    assert "!pinned_comment_history.json" in gitignore
+
+
 # ===================== Case 3: --short / --name が meta.json に反映 =====================
 
 

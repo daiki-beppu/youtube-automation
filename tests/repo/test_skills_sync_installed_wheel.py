@@ -13,6 +13,7 @@ from tests.helpers.paths import REPO_ROOT
 from youtube_automation.domains.skills.inventory import SkillInventory
 
 _FILE_ASSETS = {
+    Path(".gitignore"): Path("src/youtube_automation/infrastructure/resources/channel/gitignore.template"),
     Path(".claude/CLAUDE.md"): Path(".claude/CLAUDE.template.md"),
     Path("docs/workflow-cheatsheet.md"): Path("docs/workflow-cheatsheet.md"),
     Path("docs/features.md"): Path("docs/features.md"),
@@ -466,7 +467,7 @@ assert "wheel-identity-check" not in legacy._cache
 
     diffed = _run(yt_skills, "diff", cwd=downstream, env=clean_env)
     assert diffed.returncode == 0, diffed.stdout + diffed.stderr
-    assert diffed.stdout.count("差分なし") == 5
+    assert diffed.stdout.count("差分なし") == 6
     assert "hooks.PreToolUse" in diffed.stdout
 
 

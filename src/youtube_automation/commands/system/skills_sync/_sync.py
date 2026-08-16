@@ -133,6 +133,16 @@ def _sync_file_asset(
     target = _resolve_file_target(args.asset, spec, target)
     _ensure_target_parent(target)
 
+    if args.asset == "channel-gitignore" and (target.exists() or target.is_symlink()):
+        print(f"  {'skipped':>8}: {target.name}")
+        print(
+            "  既存 .gitignore は上書きしません。制御面JSONのGit管理移行は "
+            "`yt-skills migrate-state-git --channel-dir <path> --dry-run` で確認してください。"
+        )
+        print()
+        print("完了: 1 件処理 — {'skipped': 1}")
+        return 0
+
     op = _symlink_entry if args.symlink else _copy_entry
     result = op(src, target, force=args.force, dry_run=args.dry_run)
     prefix = "[dry-run] " if args.dry_run else ""

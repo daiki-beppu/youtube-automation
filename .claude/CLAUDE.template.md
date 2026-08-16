@@ -66,5 +66,6 @@ Claude はこのリポジトリ上で **「BGM チャンネルを運営して収
 
 - **チャンネル固有値のハードコーディング禁止** — `config/channel/*.json` に集約する。コードから読むときは `from youtube_automation.configuration import load_config` を経由し、責務別ネームスペース（`config.meta.channel_name` / `config.content.tags.base` / `config.youtube.api.category_id`）でアクセスする
 - **`auth/client_secrets.json` / `auth/token.json` は絶対にコミットしない**。シークレット解決順序は `os.environ` → `op read`（1Password CLI）→ `ConfigError`
+- **`workflow-state.json` と upload / post-publish / pinned-comment の tracking JSON は Git 管理する**。既存チャンネルは `yt-skills migrate-state-git --channel-dir <path> --dry-run` で secret と差分を検査してから明示移行する
 - **スキル本体をローカルで書き換えない**。次回 `yt-skills sync` で上書きされる。変更は upstream `daiki-beppu/youtube-automation` の `.claude/skills/` に PR を出す
 - 設定ミスや欠損データは `infrastructure/errors.py` のドメイン例外で早期に止める。フォールバックで握りつぶさない

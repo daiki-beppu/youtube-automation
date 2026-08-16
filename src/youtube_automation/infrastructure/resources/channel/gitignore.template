@@ -1,0 +1,20 @@
+# Local environment
+.env
+.direnv/
+.venv/
+
+# Python
+__pycache__/
+*.pyc
+
+# OAuth credentials
+auth/client_secrets.json
+auth/token*.json
+
+# yt-state-git control plane (ADR-0024)
+!collections/
+!collections/**/
+!collections/**/workflow-state.json
+!collections/**/20-documentation/upload_tracking.json
+!post_publish_history.json
+!pinned_comment_history.json

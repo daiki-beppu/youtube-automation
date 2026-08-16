@@ -42,6 +42,9 @@ def fake_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     (tmp_path / ".claude" / "settings.template.json").write_text(
         '{"permissions": {"allow": [], "deny": []}, "hooks": {}}\n', encoding="utf-8"
     )
+    channel_resources = tmp_path / "src" / "youtube_automation" / "infrastructure" / "resources" / "channel"
+    channel_resources.mkdir(parents=True)
+    (channel_resources / "gitignore.template").write_text("# channel gitignore\n", encoding="utf-8")
 
     monkeypatch.setattr(skills_sync, "_editable_root", lambda: tmp_path)
     return tmp_path
@@ -144,6 +147,32 @@ def test_cmd_sync_default_all_includes_auth_template(
     assert (downstream / "docs" / "workflow-cheatsheet.md").exists()
     assert (downstream / "docs" / "features.md").exists()
     assert (downstream / "auth" / "client_secrets.template.json").exists()
+    assert "# yt-state-git control plane (ADR-0024)" in (downstream / ".gitignore").read_text(encoding="utf-8")
+
+
+def test_cmd_sync_never_overwrites_existing_channel_gitignore_even_with_force(
+    fake_repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    downstream = tmp_path / "downstream"
+    downstream.mkdir()
+    gitignore = downstream / ".gitignore"
+    gitignore.write_text("# local policy\n", encoding="utf-8")
+    monkeypatch.chdir(downstream)
+
+    parser = build_parser()
+    args = parser.parse_args(["sync", "--asset", "channel-gitignore", "--force"])
+    skills_sync._resolve_default_target(args)
+    assert args.func(args) == 0
+
+    assert gitignore.read_text(encoding="utf-8") == "# local policy\n"
+    assert "migrate-state-git" in capsys.readouterr().out
+
+
+def test_migrate_state_git_requires_explicit_channel_dir() -> None:
+    parser = build_parser()
+    with pytest.raises(SystemExit) as exc_info:
+        parser.parse_args(["migrate-state-git", "--check"])
+    assert exc_info.value.code == 2
 
 
 def test_cmd_sync_all_keeps_target_unset_after_resolve() -> None:

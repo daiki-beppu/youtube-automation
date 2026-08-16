@@ -21,6 +21,7 @@ Asset 種別 (`--asset`):
     workflow-cheatsheet : workflow 使い分けチートシート (`docs/workflow-cheatsheet.md`、単一ファイル)
     features            : 全 skill カタログ (`docs/features.md`、単一ファイル)
     auth-template       : OAuth client secrets テンプレート (`auth/client_secrets.template.json`、単一ファイル)
+    channel-gitignore   : channel Git ignore テンプレート (`.gitignore`、単一ファイル・既存は上書きしない)
     settings            : Claude Code 設定 (`.claude/settings.json`、JSON merge)
 
 `yt-skills sync` (asset 未指定) は `--asset all` と同等で、配布物が `docs/`
@@ -86,6 +87,14 @@ _ASSET_SPECS: dict[str, dict[str, str]] = {
         "source_filename": "client_secrets.template.json",
         "default_target": "auth/client_secrets.template.json",
         "label": "OAuth client_secrets テンプレ",
+    },
+    "channel-gitignore": {
+        "kind": "file",
+        "resource_name": "infrastructure/resources/channel",
+        "source_subdir": "src/youtube_automation/infrastructure/resources/channel",
+        "source_filename": "gitignore.template",
+        "default_target": ".gitignore",
+        "label": "channel Git ignore テンプレ",
     },
     "settings": {
         "kind": "json-merge",

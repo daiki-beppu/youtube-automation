@@ -13,6 +13,7 @@ from youtube_automation.commands.system.skills_sync._delegation import cmd_deleg
 from youtube_automation.commands.system.skills_sync._diff import cmd_diff
 from youtube_automation.commands.system.skills_sync._lint import cmd_lint
 from youtube_automation.commands.system.skills_sync._migrate_config import cmd_migrate_config
+from youtube_automation.commands.system.skills_sync._state_git import cmd_migrate_state_git
 from youtube_automation.commands.system.skills_sync._sync import cmd_sync
 
 
@@ -164,5 +165,28 @@ def build_parser() -> argparse.ArgumentParser:
         help="移行差分だけを表示し、ファイルを変更しない",
     )
     p_migrate_config.set_defaults(func=cmd_migrate_config, asset="skills")
+
+    p_migrate_state_git = sub.add_parser(
+        "migrate-state-git",
+        help="下流のworkflow state / tracking JSONをGit管理へ明示移行",
+    )
+    p_migrate_state_git.add_argument(
+        "--channel-dir",
+        type=Path,
+        required=True,
+        help="移行対象のチャンネルroot（誤走査防止のため必須）",
+    )
+    modes = p_migrate_state_git.add_mutually_exclusive_group()
+    modes.add_argument(
+        "--check",
+        action="store_true",
+        help="制御面JSONがcommit済みか読み取り専用で検査",
+    )
+    modes.add_argument(
+        "--dry-run",
+        action="store_true",
+        help=".gitignore差分とGit追加対象だけを表示し変更しない",
+    )
+    p_migrate_state_git.set_defaults(func=cmd_migrate_state_git, asset="skills")
 
     return parser
