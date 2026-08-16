@@ -23,9 +23,10 @@
    - `docs/channel/ttp-seed-confirmation.md`
    - `docs/channel/competitor-branding-snapshot.json`
    - 任意の `/channel-research --benchmark` 成果物
+   - 構造化 persona fields の各項目には、`/channel-strategy --persona` の `references/persona.md` が定める出典注記を付ける。形式を本書へ複製せず、persona mode の規定を唯一の正とする。
 3. 公開後にしか得られない `reports/analysis_*.md` は要求しない。コメント分析を必須入力として第一ペルソナを設計する。
 4. `/channel-strategy --persona` から同じ実行コンテキストを引き継いで `/channel-strategy --scene` を実行する。暫定ペルソナと既存の競合 / TTP / viewer-voice 成果物から視聴時間帯・行動・感情状態を検証し、`docs/plans/viewing-scene-matrix.md` を生成する。
-5. `/channel-strategy --persona` の Phase 6 に戻り、視聴シーン検証結果を反映した最終 `docs/channel/personas/persona-definition.md` に更新する。
+5. `/channel-strategy --persona` の Phase 6 に戻り、暫定版の出典注記を維持したまま、視聴シーン検証結果を反映した最終 `docs/channel/personas/persona-definition.md` に更新する。
 
 ## Branding generation and review details
 

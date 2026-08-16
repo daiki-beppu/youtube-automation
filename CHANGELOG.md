@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `feat(skills)`: `yt-skills lint` が downstream 配布対象 skill を実 inventory から数え、開発専用と `SKILL.md` のない残骸を除外した総数を上限 19 件で ratchet する（#3805）。
 - `feat(skills)`: `yt-skills lint` が委譲深さ 2 以上を最長経路つきで拒否し、既存違反だけを報告付き allowlist として段階解消できる契約を追加する（#3799）。
+- `feat(channel-strategy)`: `--persona` が構造化 persona fields の全項目に実入力ファイルまたは `推測` の出典注記を要求し、暫定版から最終版まで維持する契約を追加する（#3999）。
 - `feat(wf-new)`: 企画前の Phase 0 で未 postmortem を列挙し、コスト承認後に `/analytics --flop` へ全件を順次委譲して insights を最新化する再開可能な振り返り gate を追加する（#3791）。
 - `feat(analytics)`: 最新 analytics と upload tracking を読み取り専用で照合し、postmortem 未作成 collection を human / JSON で列挙する `yt-postmortem-pending` を追加する（#3790）。
 - `refactor(workflow-state)`: wf-new・wf-next・publish の配布 reference script 4本を package owner 経由へ移し、master audio 遷移を lock + atomic update に統一する（#3885）。
