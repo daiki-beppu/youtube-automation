@@ -241,11 +241,23 @@ def test_upload_read_accessors_return_typed_values_and_keep_unknown_fields(tmp_p
     assert state.planning.final_title_en == "Rainy Focus"
     assert state.planning.final_title == "雨の集中時間"
     assert state.assets is not None
-    assert state.assets.video == "master.mp4"
+    assert state.assets["video"] == "master.mp4"
+    with pytest.raises(AttributeError):
+        _legacy_video = state.assets.video
     assert state.track_display_names == {"01-rain.wav": "Rain Window"}
     assert state.post_upload is not None
     assert state.post_upload.shorts == [{"short_num": 1, "video_id": "short-1"}]
     assert state["future_section"] == {"enabled": True}
+
+
+def test_update_preserves_unknown_legacy_asset_fields_without_typed_accessors(tmp_path: Path) -> None:
+    state_path = tmp_path / "workflow-state.json"
+    _write(state_path, {"phase": "planning", "assets": {"video": "legacy.mp4", "future": {"keep": True}}})
+
+    update(state_path, lambda state: setattr(state, "phase", "prepared"))
+
+    persisted = json.loads(state_path.read_text(encoding="utf-8"))
+    assert persisted["assets"] == {"video": "legacy.mp4", "future": {"keep": True}}
 
 
 @pytest.mark.parametrize(

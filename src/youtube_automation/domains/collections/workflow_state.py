@@ -259,10 +259,6 @@ class AssetsState(_ObjectSection):
     def master_video(self, value: str | None) -> None:
         self._data["master_video"] = value
 
-    @property
-    def video(self) -> str | None:
-        return _optional_string(self._data, "video", "workflow-state.json::assets.video")
-
     def set_known(self, key: AssetKey, value: JSONValue) -> None:
         """CLI が公開する asset key を schema 検証して更新する。"""
         if key == "thumbnail":
