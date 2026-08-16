@@ -9,15 +9,17 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
 
-from youtube_automation.core.errors import WorkflowStateError
+from youtube_automation.core.errors import AutomationError
 from youtube_automation.domains.collections.workflow_state import WorkflowState
 from youtube_automation.domains.collections.workflow_state import read as read_workflow_state
+from youtube_automation.domains.documents.schema_registry import RepositorySchema
+from youtube_automation.infrastructure.documents.publishing import read_published_json_document
 
 STAGES = ("企画", "音源生成", "マスター化", "動画化", "サムネイル", "アップロード", "公開後処理", "分析")
 
 # /wf-status が定義する v2 phase 語彙を正規の段判定にも使う。
 WF_STATUS_PHASES = frozenset({"planning", "prepared", "mastered", "publishing", "complete"})
-_ANALYSIS_REPORT = re.compile(r"analysis_(\d{8})\.md\Z")
+_ANALYSIS_REPORT = re.compile(r"analysis_(\d{8})\.json\Z")
 
 
 @dataclass(frozen=True)
@@ -129,7 +131,7 @@ def _analysis_complete(root: Path, published_on: date | None) -> bool:
     reports = root / "reports"
     if not reports.is_dir():
         return False
-    for path in reports.glob("analysis_*.md"):
+    for path in reports.glob("analysis_*.json"):
         match = _ANALYSIS_REPORT.fullmatch(path.name)
         if path.is_file() and match is not None:
             try:
@@ -137,6 +139,7 @@ def _analysis_complete(root: Path, published_on: date | None) -> bool:
             except ValueError:
                 continue
             if report_date >= published_on:
+                read_published_json_document(path, RepositorySchema.ANALYSIS_REPORT)
                 return True
     return False
 
@@ -188,5 +191,5 @@ def load_progress_snapshot(cwd: str | None, command: str | None) -> ProgressSnap
         state_path = collection / "workflow-state.json"
         state = read_workflow_state(state_path)
         return ProgressSnapshot(_completed_stages(root, collection, state))
-    except (OSError, UnicodeError, json.JSONDecodeError, TypeError, ValueError, WorkflowStateError):
+    except (AutomationError, OSError, UnicodeError, json.JSONDecodeError, TypeError, ValueError):
         return None

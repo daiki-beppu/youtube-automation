@@ -54,7 +54,7 @@ def test_alignment_mode_keeps_the_audit_inputs_and_external_read_only_boundary()
     assert "/channel-strategy --constraints" in handoff
     assert "/thumbnail" in handoff
     assert "/music" in handoff
-    assert "docs/plans/alignment-audit.md" in skill
+    assert "docs/plans/alignment-audit.{json,html}" in skill
     for input_path in (
         "collections/<id>/10-assets/thumbnail.jpg",
         "collections/<id>/20-documentation/suno-prompts.md",
@@ -117,7 +117,8 @@ def test_video_mode_keeps_gemini_analysis_outputs_and_external_read_only_boundar
     assert "外部サービスの状態は変更しない" in video
     for output_path in (
         "data/video_analysis/<slug>/<video_id>.json",
-        "reports/video_analysis/<slug>.md",
+        "reports/video_analysis/<slug>.json",
+        "reports/video_analysis/<slug>.html",
     ):
         assert output_path in video
     for forbidden_command in (

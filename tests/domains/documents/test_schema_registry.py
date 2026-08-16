@@ -72,6 +72,39 @@ def test_invalid_document_raises_sanitized_domain_error_with_json_pointer() -> N
     assert "sk-live-secret-must-not-leak" not in message
 
 
+def test_analysis_and_audit_reports_have_fixed_owner_contracts() -> None:
+    analysis = {
+        "schema_version": 3,
+        "generated_at": "2026-08-16T00:00:00Z",
+        "summary": "分析サマリ",
+        "inputs": {},
+        "cli_outputs": {},
+        "vpd_ranking": {},
+        "win_pattern": {},
+        "strategic_improvements": [],
+        "next_collection_candidates": [],
+        "action_plan": [],
+        "strategic_discussion": [],
+    }
+    validate_repository_document(RepositorySchema.ANALYSIS_REPORT, analysis)
+
+    audit = {
+        "schema_version": 1,
+        "generated_at": "2026-08-16T00:00:00Z",
+        "audit_type": "alignment",
+        "subject": "channel",
+        "status": "FAIL",
+        "summary": "不整合あり",
+        "matrix": [{"check": "thumbnail", "status": "FAIL", "evidence": ["mismatch"], "next_action": "fix"}],
+        "recommended_actions": ["thumbnail を更新"],
+    }
+    validate_repository_document(RepositorySchema.AUDIT_REPORT, audit)
+
+    audit["matrix"] = [{"check": "thumbnail", "status": "UNKNOWN", "evidence": [], "next_action": None}]
+    with pytest.raises(DocumentValidationError, match="pointer=/matrix/0/status"):
+        validate_repository_document(RepositorySchema.AUDIT_REPORT, audit)
+
+
 def test_registry_rejects_unknown_schema_name_without_reading_external_file(tmp_path: Path) -> None:
     untrusted = tmp_path / "external.schema.json"
     untrusted.write_text(json.dumps({"type": "object"}), encoding="utf-8")

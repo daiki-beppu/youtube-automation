@@ -8,6 +8,7 @@
 {
   "schema_version": 3,
   "generated_at": "2026-07-13T03:34:56Z",
+  "summary": "主要指標・比較・示唆のサマリ",
   "inputs": {
     "analysis_target": "data/analytics_data_YYYYMMDD_HHMMSS.json",
     "cli_selected": [
@@ -121,36 +122,36 @@
 - `vpd_ranking` / `win_pattern` には対応する CLI の stdout JSON object を変更せず保存する。stdout はそれぞれ `inputs.intermediate.vpd_ranking` / `inputs.intermediate.win_pattern` にも capture し、validator が JSON object の等価性を確認する
 - `inputs.intermediate.visual_annotations` は、同じ captured ranking の top / bottom 全動画を目視 5 属性で分類した JSON とする。観測不能値は `null` とし、`yt-win-pattern` の `undetermined` 集計へ渡す
 - `ttp_health` には `uv run yt-ttp-health` の stdout JSON object を変更せず保存する。benchmark 入力がない場合もキーを省略せず、CLI が返す `{"status":"unavailable", ...}` を保存する
-- 戦略提案・次期候補・戦略ディスカッションの正本は `strategic_improvements` / `next_collection_candidates` / `strategic_discussion` とする。Markdown は人間向けの説明と数値引用を担う派生成果物であり、後続スキルはこの 3 固定キーから提案を読む
+- 戦略提案・次期候補・戦略ディスカッションの正本は `strategic_improvements` / `next_collection_candidates` / `strategic_discussion` とする。HTML は schema `x-view` から生成する派生成果物であり、後続スキルはこの 3 固定キーから提案を読む
 - 固定キーの各要素は、空でない `statement`、1 件以上の `evidence`、`high` / `medium` / `low` の `confidence` を持つ
 - `generated_at` は UTC の `YYYY-MM-DDTHH:MM:SSZ` 形式で保存する
 - `inputs.analysis_target` / `inputs.supplemental` には分析本文が実際に読み込んだファイルの相対パスを保存する。既存の意味を変更せず、中間成果物 3 件は `inputs.intermediate` に分離して保存する
 - `inputs.cli_selected` は、必須 4 CLI が直接選択する分析入力 3 件（最新 `data/analytics_data_*.json`、最新 `data/analytics/daily_per_video/*.json`、テーマ定義元 `config/channel/content.json`）だけを保存する。`yt-theme-compare` の `load_config()` が間接的にロードする他の `config/channel/*.json` や `config/localizations.json`、`yt-traffic-trend` がシェア推移のために読む過去の `data/analytics_data_*.json` スナップショット群は含めない
 - `inputs.analysis_target` の `collection_depth` が `full` の場合、`retention_analysis` を必須とする。`source` は `inputs.analysis_target` と一致させ、単位は入力値と同じ `ratio`、仮説評価は `supported` / `not_supported` / `inconclusive` のいずれかとする
 - `retention_analysis.videos[]` は `error` がなく、`data_points > 0` かつ空でない `retention_curve` を持つ実測データだけを対象にする。対象 index、video_id、average / midpoint、curve 低下点の index と値は入力 JSON の実値に一致させる
-- Markdown の「視聴維持率分析」には入力パス、単位、仮説評価、対象動画、動画間比較（有効データが 1 本なら比較不可の明記）、average / midpoint / curve 低下点の数値を JSON path 付きで記載する
-- `inputs.analysis_target` の `collection_depth` が `standard` の場合も Markdown に「視聴維持率分析」見出しを設け、`状態: full 収集が必要` と単独行で明記する
+- `retention_analysis` には入力パス、単位、仮説評価、対象動画、average / midpoint / curve 低下点を構造化して保存し、HTML はその JSON だけから表示する
+- `inputs.analysis_target` の `collection_depth` が `standard` の場合は `retention_analysis` を捏造せず、HTML 表示でも入力不足として扱う
 - `inputs.analysis_target.revenue_analytics.status` が `available` の場合は `revenue_analysis.status` も `available` とし、`themes` / `collections` の各行に `name` / `estimated_revenue` / `views` / `rpm` / `video_count` を保存する。RPM は各グループの `estimated_revenue / views * 1000` で算出し、動画別 RPM の単純平均は使わない
 - 収益データが `unavailable` の場合は `revenue_analysis.status: "unavailable"`、旧スナップショットで収益キーが無い場合は `revenue_analysis.status: "not_collected"` とする。どちらも `themes` / `collections` は空配列にし、推測値を保存しない
-- Markdown には常に「収益・RPM 分析」見出しを設ける。利用可能ならテーマ別・コレクション別集計と入力 JSON path を記載し、利用不可なら状態を明記する
+- `revenue_analysis` は常に状態を持ち、利用可能ならテーマ別・コレクション別集計、利用不可ならその状態を JSON に保存する
 
 ## 実行
 
-`analysis_json` と `analysis_md` に同日付ペアの実在パスを設定し、次を一つの Bash セッションで実行する。全コマンドが exit 0 の場合だけ構造化 JSON 契約を満たす。exit 非 0 の場合は成果物として使用しない。
+`analysis_json` と `analysis_html` に同日付ペアの実在パスを設定し、次を一つの Bash セッションで実行する。全コマンドが exit 0 の場合だけ構造化 JSON 契約を満たす。exit 非 0 の場合は成果物として使用しない。
 
 ```bash
 analysis_json="reports/analysis_YYYYMMDD.json"
-analysis_md="reports/analysis_YYYYMMDD.md"
+analysis_html="reports/analysis_YYYYMMDD.html"
 
 set -euo pipefail
 
 analysis_json_name=$(basename "$analysis_json")
-analysis_md_name=$(basename "$analysis_md")
+analysis_html_name=$(basename "$analysis_html")
 printf '%s\n' "$analysis_json_name" | grep -Eq '^analysis_[0-9]{8}\.json$'
-printf '%s\n' "$analysis_md_name" | grep -Eq '^analysis_[0-9]{8}\.md$'
+printf '%s\n' "$analysis_html_name" | grep -Eq '^analysis_[0-9]{8}\.html$'
 analysis_json_date=$(printf '%s\n' "$analysis_json_name" | grep -oE '[0-9]{8}')
-analysis_md_date=$(printf '%s\n' "$analysis_md_name" | grep -oE '[0-9]{8}')
-test "$analysis_json_date" = "$analysis_md_date"
+analysis_html_date=$(printf '%s\n' "$analysis_html_name" | grep -oE '[0-9]{8}')
+test "$analysis_json_date" = "$analysis_html_date"
 
 jq -e '
   def nonempty_string:
@@ -383,25 +384,8 @@ jq -e \
               == $root.win_pattern.attributes[$attribute].undetermined_count.bottom))
 ' "$analysis_json" >/dev/null
 
-grep -Eq '^#{1,6}[[:space:]]+VPD 上位 / 下位の定量比較' "$analysis_md"
-win_disclaimer=$(jq -er '.win_pattern.disclaimer' "$analysis_json")
-grep -Fqx "相関注記: $win_disclaimer" "$analysis_md"
-
-for attribute in composition color text_placement visual_flow subject; do
-  for group in top bottom; do
-    undetermined_count=$(jq -er --arg attribute "$attribute" --arg group "$group" \
-      '.win_pattern.attributes[$attribute].undetermined_count[$group]' "$analysis_json")
-    if test "$undetermined_count" -gt 0; then
-      grep -Eq '^判定不能: .+' "$analysis_md"
-      grep -Fqx "$(basename "$analysis_json")#$.win_pattern.attributes.$attribute.undetermined_count.$group = $undetermined_count" "$analysis_md"
-    fi
-  done
-done
-
 analysis_target=$(jq -er '.inputs.analysis_target' "$analysis_json")
 if jq -e '.collection_depth == "full"' "$analysis_target" >/dev/null; then
-  grep -Eq '^#{1,6}[[:space:]]+視聴維持率分析' "$analysis_md"
-
   jq -e --arg source "$analysis_target" --slurpfile targets "$analysis_target" '
     def nonempty_string:
       type == "string" and length > 0;
@@ -454,37 +438,8 @@ if jq -e '.collection_depth == "full"' "$analysis_target" >/dev/null; then
       and (.retention_analysis.videos | all(.[]; retention_item_ok($target)))
   ' "$analysis_json" >/dev/null
 
-  retention_unit=$(jq -er '.retention_analysis.unit' "$analysis_json")
-  hypothesis_evaluation=$(jq -er '.retention_analysis.hypothesis_evaluation' "$analysis_json")
-  grep -Fqx "入力: $analysis_target" "$analysis_md"
-  grep -Fqx "単位: $retention_unit" "$analysis_md"
-  grep -Fqx "仮説評価: $hypothesis_evaluation" "$analysis_md"
-  grep -Eq '^動画間比較: .+' "$analysis_md"
-
-  while IFS= read -r evidence_line; do
-    grep -Fqx "$evidence_line" "$analysis_md"
-  done < <(
-    jq -r --arg file "$(basename "$analysis_target")" --slurpfile targets "$analysis_target" '
-      $targets[0] as $target
-      | .retention_analysis.videos[]
-      | . as $item
-      | ($item.retention_index | tostring) as $retention_index
-      | ($item.drop_point_index | tostring) as $drop_point_index
-      | $target.retention[$item.retention_index] as $actual
-      | $actual.retention_curve[$item.drop_point_index] as $point
-      | "対象動画: \($actual.video_id)",
-        "\($file)#$.retention[\($retention_index)].average_retention = \($actual.average_retention)",
-        "\($file)#$.retention[\($retention_index)].midpoint_retention = \($actual.midpoint_retention)",
-        "\($file)#$.retention[\($retention_index)].retention_curve[\($drop_point_index)].elapsed_ratio = \($point.elapsed_ratio)",
-        "\($file)#$.retention[\($retention_index)].retention_curve[\($drop_point_index)].watch_ratio = \($point.watch_ratio)"
-    ' "$analysis_json"
-  )
-else
-  grep -Eq '^#{1,6}[[:space:]]+視聴維持率分析' "$analysis_md"
-  grep -Fqx '状態: full 収集が必要' "$analysis_md"
 fi
 
-grep -Eq '^#{1,6}[[:space:]]+収益・RPM 分析' "$analysis_md"
 jq -e --slurpfile targets "$analysis_target" '
   def revenue_group_ok:
     (type == "object")
@@ -515,24 +470,7 @@ jq -e --slurpfile targets "$analysis_target" '
          end)
 ' "$analysis_json" >/dev/null
 
-for source in launch_curve channel_trend theme_compare traffic_trend vpd_ranking win_pattern; do
-  found=false
-  while IFS= read -r citation; do
-    if grep -Fqx "$citation" "$analysis_md"; then
-      found=true
-      break
-    fi
-  done < <(
-    jq -r --arg source "$source" --arg file "$(basename "$analysis_json")" '
-      [(.strategic_improvements[], .next_collection_candidates[], .strategic_discussion[])
-       | .evidence[]
-       | select(.source == $source)
-       | "\($file)#\(.json_path) = \(.value)"]
-      | .[]
-    ' "$analysis_json"
-  )
-  test "$found" = true
-done
+yt-document-render "$analysis_json" --schema analysis-report.schema.json --check >/dev/null
 ```
 
 ## 検証する evidence 契約
@@ -544,16 +482,4 @@ done
 
 CLI 出力 6 件はそれぞれ非空 object でなければならない。VPD ranking は N / K、unique ID、top / middle / bottom の重複・欠落・順序を検証し、win pattern は同じ N / K と目視 annotation の判定不能件数を検証する。固定キーの配列・要素形状、`confidence`、evidence のいずれかが不正な場合も validator は失敗する。
 
-Markdown の数値引用は `<JSON ファイル名>#<json_path> = <value>` の形式に統一する。上の手順は、検証済み evidence と一致する引用が 6 CLI それぞれについて Markdown に 1 件以上あることも確認する。さらに「VPD 上位 / 下位の定量比較」見出し、win stdout と一致する相関≠因果 disclaimer、目視属性の `undetermined` が 1 件以上なら「判定不能」と top / bottom exact 件数引用を要求する。
-
-各引用は Markdown の単独行に記載する。行全体を固定文字列として照合するため、次の負例のように evidence が `1.42` なのに Markdown が `1.421` の場合は一致しない。
-
-```bash
-expected_citation='analysis_20260713.json#$.cli_outputs.launch_curve.target.ratio_vs_median = 1.42'
-mismatched_citation='analysis_20260713.json#$.cli_outputs.launch_curve.target.ratio_vs_median = 1.421'
-
-if grep -Fqx "$expected_citation" <(printf '%s\n' "$mismatched_citation"); then
-  echo "ERROR: mismatched citation was accepted" >&2
-  exit 1
-fi
-```
+HTML は validated JSON と `analysis-report.schema.json` の `x-view` だけから決定的に生成する。validator は JSON の全 semantic evidence 契約に加え、同 basename HTML が common renderer の期待値と完全一致することを確認する。

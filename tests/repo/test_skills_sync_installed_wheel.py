@@ -160,6 +160,8 @@ assert "setup" in {path.name for path in wheel_inventory.skill_directories()}
 schema_registry = importlib.import_module("youtube_automation.domains.documents.schema_registry")
 schema_registry.compile_repository_schemas()
 assert set(schema_registry.repository_schema_names()) == {
+    "analysis-report.schema.json",
+    "audit-report.schema.json",
     "experiment-entry.schema.json",
     "feedback-entry.schema.json",
     "insights-entry.schema.json",

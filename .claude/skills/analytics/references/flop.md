@@ -153,7 +153,7 @@ Phase 3 で列挙した主仮説（全件）について、次の表から対応
 
 Phase 4 は改善策を適用せず、次の境界を守る:
 
-- `/audit --alignment`、`/channel-research --voice`、`/channel-strategy --persona`、`/channel-strategy --scene`、`/channel-strategy --direction` はスキルとして起動しない。これらは別成果物の保存または設定更新を完了条件に含むため、既存の `docs/plans/alignment-audit.md`、`docs/plans/viewer-voice-analysis.md`、`docs/channel/personas/persona-definition.md`、`docs/plans/viewing-scene-matrix.md` がある場合だけ read-only 入力として読む。必要な成果物がなければ、その仮説を理由付きの `未検証` とする
+- `/audit --alignment`、`/channel-research --voice`、`/channel-strategy --persona`、`/channel-strategy --scene`、`/channel-strategy --direction` はスキルとして起動しない。これらは別成果物の保存または設定更新を完了条件に含むため、既存の検証済み `docs/plans/alignment-audit.json`、`docs/plans/viewer-voice-analysis.md`、`docs/channel/personas/persona-definition.md`、`docs/plans/viewing-scene-matrix.md` がある場合だけ read-only 入力として読む。alignment は HTML ではなく JSON だけを入力とする。必要な成果物がなければ、その仮説を理由付きの `未検証` とする
 - タイトル整合性は `/audit --alignment` を起動せず、対象コレクションの `workflow-state.json`、音楽プロンプト、実動画尺、検証済み A/B 履歴の現在サムネ候補を read-only で照合する。`config/channel/content.json`、タイトル、サムネイル、音源、方向性文書は変更しない
 - 差別化・市場性は `/channel-research --discover` や `/channel-strategy --direction` を起動せず、最新の既存 `data/benchmark_*.json` と `yt-theme-compare` の標準出力だけを使う。競合の追加、方向性決定、config 更新は行わない
 - `/thumbnail --compare` と `/audit --video` は各スキルの分析成果物生成まで実行してよいが、Next Step の再生成・設定更新には進まない

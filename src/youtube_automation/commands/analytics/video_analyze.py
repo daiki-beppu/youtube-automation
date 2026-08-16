@@ -11,7 +11,7 @@ Usage:
 Design:
 - 解釈フェーズ (`main`): argparse → skill-config → channel_dir 解決 → target list 構築
 - 実行フェーズ (`VideoAnalyzer.analyze_url` ループ): Gemini 呼出 + JSON 保存
-- 出力フェーズ (`VideoAnalysisReport`): slug 単位で Markdown 集約
+- 出力フェーズ (`VideoAnalysisReport`): slug 単位で schema 検証済み JSON+HTML 集約
 
 skill-config / Gemini Client / data_dir は **境界 (`main`) で 1 回だけ解決し**、
 ループ内で再解決しない (フェーズ分離)。
@@ -29,6 +29,8 @@ from urllib.parse import parse_qs, urlparse
 from google.genai import errors as genai_errors
 
 from youtube_automation.application.analytics.benchmark_query import load_benchmark_videos
+from youtube_automation.application.analytics.video_report import write_video_analysis_report
+from youtube_automation.application.documents.migration import MarkdownMigrationDecision
 from youtube_automation.commands._shared.arguments import CompetitorArgumentParser
 from youtube_automation.configuration import channel_dir as _channel_dir
 from youtube_automation.configuration.skills import load_skill_config
@@ -36,7 +38,6 @@ from youtube_automation.core.errors import ConfigError, ValidationError
 from youtube_automation.domains.analytics.benchmark import select_top_vod_benchmark_videos
 from youtube_automation.infrastructure.media.genai_client import create_global_genai_client
 from youtube_automation.infrastructure.media.video_analyzer import (
-    VideoAnalysisReport,
     VideoAnalyzer,
     VideoTarget,
 )
@@ -237,6 +238,11 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="既存の解析 JSON があっても Gemini で再解析して上書きする (default: 既存結果を再利用)",
     )
+    parser.add_argument(
+        "--markdown-migration",
+        choices=("yes", "no"),
+        help="既存 reports/video_analysis/<slug>.md を移行する明示判断",
+    )
     parser.add_argument("--verbose", "-v", action="store_true", help="詳細ログ")
     return parser
 
@@ -330,6 +336,18 @@ def main():
     slug, targets = _resolve_targets(args, channel_dir=channel_dir, data_dir=data_dir)
     logger.info("解析対象: slug='%s' 件数=%d", slug, len(targets))
 
+    legacy_markdown = reports_dir / "video_analysis" / f"{slug}.md"
+    migration_decision = MarkdownMigrationDecision.NOT_REQUIRED
+    if legacy_markdown.is_file():
+        if args.markdown_migration is None:
+            raise ValidationError(f"既存 Markdown の移行には --markdown-migration yes/no が必要です: {legacy_markdown}")
+        migration_decision = MarkdownMigrationDecision(args.markdown_migration)
+        if migration_decision is MarkdownMigrationDecision.NO:
+            logger.info("既存 Markdown の移行を行いません: %s", legacy_markdown)
+            return
+    elif args.markdown_migration is not None:
+        raise ValidationError("既存 Markdown がないため --markdown-migration は指定できません")
+
     analyzer = VideoAnalyzer(
         client=create_global_genai_client(),
         model=cfg["model"],
@@ -341,8 +359,13 @@ def main():
 
     results, failures = _run_analysis(analyzer=analyzer, targets=targets, force=args.force)
 
-    md = VideoAnalysisReport.render(slug=slug, results=results, failures=failures)
-    VideoAnalysisReport.write(reports_dir=reports_dir, slug=slug, content=md)
+    write_video_analysis_report(
+        reports_dir=reports_dir,
+        slug=slug,
+        results=results,
+        failures=failures,
+        migration_decision=migration_decision,
+    )
 
     logger.info("動画分析完了: slug='%s' 成功=%d 失敗=%d", slug, len(results), len(failures))
 

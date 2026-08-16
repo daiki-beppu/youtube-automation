@@ -5,6 +5,9 @@ import subprocess
 from pathlib import Path
 
 from tests.helpers.paths import REPO_ROOT
+from youtube_automation.core.errors import AutomationError
+from youtube_automation.domains.documents.schema_registry import RepositorySchema
+from youtube_automation.infrastructure.documents.publishing import publish_json_document
 
 ROOT = REPO_ROOT
 VALIDATOR = ROOT / ".claude/skills/analytics/references/analysis-json-validator.md"
@@ -14,6 +17,15 @@ def _validator_script() -> str:
     text = VALIDATOR.read_text(encoding="utf-8")
     execution = text.split("## 実行", 1)[1]
     return execution.split("```bash\n", 1)[1].split("\n```", 1)[0].replace("analysis_YYYYMMDD", "analysis_20260717")
+
+
+def test_validator_uses_cwd_independent_canonical_cli_boundary() -> None:
+    script = _validator_script()
+
+    assert "yt-document-render" in script
+    assert "--check" in script
+    assert "uv run python" not in script
+    assert "from youtube_automation" not in script
 
 
 def _write_fixture(
@@ -173,6 +185,7 @@ def _write_fixture(
     report = {
         "schema_version": 3,
         "generated_at": "2026-07-17T03:00:00Z",
+        "summary": "主要指標と戦略示唆のサマリ",
         "inputs": {
             "analysis_target": str(analytics_path.relative_to(tmp_path)),
             "cli_selected": [
@@ -387,6 +400,12 @@ def _remove_retention_analysis(tmp_path: Path) -> None:
 
 
 def _run_validator(tmp_path: Path) -> subprocess.CompletedProcess[str]:
+    report = tmp_path / "reports/analysis_20260717.json"
+    report.with_suffix(".html").unlink(missing_ok=True)
+    try:
+        publish_json_document(report, RepositorySchema.ANALYSIS_REPORT)
+    except AutomationError:
+        pass
     return subprocess.run(
         ["bash", "-c", _validator_script()],
         cwd=tmp_path,
@@ -432,6 +451,23 @@ def test_available_revenue_with_weighted_rpm_passes(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
 
 
+def test_stale_html_is_not_a_successful_analysis_pair(tmp_path: Path) -> None:
+    _write_fixture(tmp_path, depth="standard")
+    _append_standard_retention_section(tmp_path)
+    assert _run_validator(tmp_path).returncode == 0
+    (tmp_path / "reports/analysis_20260717.html").write_text("stale", encoding="utf-8")
+
+    result = subprocess.run(
+        ["bash", "-c", _validator_script()],
+        cwd=tmp_path,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode != 0
+
+
 def test_available_revenue_rejects_unweighted_rpm(tmp_path: Path) -> None:
     _write_fixture(tmp_path, depth="standard")
     _append_standard_retention_section(tmp_path)
@@ -440,10 +476,10 @@ def test_available_revenue_rejects_unweighted_rpm(tmp_path: Path) -> None:
     assert _run_validator(tmp_path).returncode != 0
 
 
-def test_full_report_without_numeric_retention_citation_fails(tmp_path: Path) -> None:
+def test_full_report_does_not_require_legacy_markdown_retention_citation(tmp_path: Path) -> None:
     _write_fixture(tmp_path, depth="full")
 
-    assert _run_validator(tmp_path).returncode != 0
+    assert _run_validator(tmp_path).returncode == 0
 
 
 def test_full_report_with_numeric_retention_citation_passes(tmp_path: Path) -> None:
@@ -464,14 +500,14 @@ def test_full_report_with_numeric_retention_citation_passes(tmp_path: Path) -> N
     assert result.returncode == 0, result.stderr
 
 
-def test_full_report_with_citation_but_without_retention_analysis_section_fails(tmp_path: Path) -> None:
+def test_full_report_does_not_read_legacy_markdown_retention_section(tmp_path: Path) -> None:
     _write_fixture(
         tmp_path,
         depth="full",
         extra_citations=("analytics_data_20260717_120000.json#$.retention[0].average_retention = 0.62",),
     )
 
-    assert _run_validator(tmp_path).returncode != 0
+    assert _run_validator(tmp_path).returncode == 0
 
 
 def test_full_report_without_structured_retention_analysis_fails(tmp_path: Path) -> None:
@@ -614,10 +650,10 @@ def test_report_without_traffic_trend_evidence_fails(tmp_path: Path) -> None:
     assert _run_validator(tmp_path).returncode != 0
 
 
-def test_standard_report_without_full_collection_guidance_fails(tmp_path: Path) -> None:
+def test_standard_report_does_not_require_legacy_markdown_guidance(tmp_path: Path) -> None:
     _write_fixture(tmp_path, depth="standard")
 
-    assert _run_validator(tmp_path).returncode != 0
+    assert _run_validator(tmp_path).returncode == 0
 
 
 def test_standard_report_with_full_collection_guidance_passes(tmp_path: Path) -> None:
@@ -753,7 +789,7 @@ def test_missing_vpd_numeric_evidence_fails(tmp_path: Path) -> None:
     assert _run_validator(tmp_path).returncode != 0
 
 
-def test_phrase_only_vpd_section_without_exact_numeric_citation_fails(tmp_path: Path) -> None:
+def test_legacy_markdown_vpd_phrase_is_not_a_consumer_input(tmp_path: Path) -> None:
     _write_fixture(tmp_path, depth="standard")
     _append_standard_retention_section(tmp_path)
     markdown_path = tmp_path / "reports/analysis_20260717.md"
@@ -762,10 +798,10 @@ def test_phrase_only_vpd_section_without_exact_numeric_citation_fails(tmp_path: 
         markdown.replace("analysis_20260717.json#$.vpd_ranking.n = 2", "VPD n は 2"), encoding="utf-8"
     )
 
-    assert _run_validator(tmp_path).returncode != 0
+    assert _run_validator(tmp_path).returncode == 0
 
 
-def test_visual_undetermined_requires_exact_count_citation_and_label(tmp_path: Path) -> None:
+def test_legacy_markdown_undetermined_label_is_not_a_consumer_input(tmp_path: Path) -> None:
     _write_fixture(tmp_path, depth="standard")
     _append_standard_retention_section(tmp_path)
     markdown_path = tmp_path / "reports/analysis_20260717.md"
@@ -776,10 +812,10 @@ def test_visual_undetermined_requires_exact_count_citation_and_label(tmp_path: P
     )
     markdown_path.write_text(markdown, encoding="utf-8")
 
-    assert _run_validator(tmp_path).returncode != 0
+    assert _run_validator(tmp_path).returncode == 0
 
 
-def test_missing_vpd_heading_or_correlation_disclaimer_fails(tmp_path: Path) -> None:
+def test_legacy_markdown_heading_is_not_a_consumer_input(tmp_path: Path) -> None:
     _write_fixture(tmp_path, depth="standard")
     _append_standard_retention_section(tmp_path)
     markdown_path = tmp_path / "reports/analysis_20260717.md"
@@ -788,7 +824,7 @@ def test_missing_vpd_heading_or_correlation_disclaimer_fails(tmp_path: Path) -> 
     markdown = markdown.replace("相関注記: Observed correlation", "note: Observed correlation")
     markdown_path.write_text(markdown, encoding="utf-8")
 
-    assert _run_validator(tmp_path).returncode != 0
+    assert _run_validator(tmp_path).returncode == 0
 
 
 def test_missing_ttp_health_fails(tmp_path: Path) -> None:

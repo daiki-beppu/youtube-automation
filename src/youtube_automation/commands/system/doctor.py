@@ -47,6 +47,7 @@ from youtube_automation.domains.channel_readiness import (
     evaluate_initial_setup_readiness,
     evaluate_ttp_wf_new_readiness,
 )
+from youtube_automation.domains.documents.schema_registry import RepositorySchema
 from youtube_automation.infrastructure.auth import (
     UPLOAD_REQUIRED_SCOPES,
     OAuthCredentialState,
@@ -64,6 +65,7 @@ from youtube_automation.infrastructure.collections.numbered_duplicates import (
     format_scan_error_reason,
     scan_numbered_duplicates,
 )
+from youtube_automation.infrastructure.documents.publishing import read_published_json_document
 from youtube_automation.infrastructure.retry import QUOTA_REASONS
 from youtube_automation.infrastructure.youtube.reporting_api import ReportingAPIClient
 from youtube_automation.infrastructure.youtube.streaming.state_reconciliation import reconcile_streaming_vps
@@ -216,6 +218,7 @@ class _WfNewInputMode:
     benchmark_count: int
     stale_report: bool
     stale_reason: str | None = None
+    invalid_report: bool = False
 
 
 def _run(cmd: list[str], timeout: int = 30, *, cwd: Path | None = None) -> tuple[int, str, str]:
@@ -1482,6 +1485,14 @@ def _temporary_channel_dir(channel_dir: Path) -> Iterator[None]:
 
 def check_analytics_report(channel_dir: Path) -> CheckResult:
     input_mode = _resolve_wf_new_input_mode(channel_dir)
+    if input_mode.invalid_report:
+        return CheckResult(
+            id="analytics_report",
+            status="fail",
+            category=DATA_CATEGORY,
+            message="reports/analysis_*.json が schema 不正、HTML 欠損、または JSON と不一致",
+            next_action={"kind": "human", "instructions": "/analytics --analyze を再実行してください"},
+        )
     if input_mode.stale_report:
         if input_mode.stale_reason == "absolute":
             message = (
@@ -1491,7 +1502,8 @@ def check_analytics_report(channel_dir: Path) -> CheckResult:
             instructions = "/analytics --collect → /analytics --analyze の順で再実行してください"
         else:
             message = (
-                "reports/analysis_*.md が最新 data/analytics_data_*.json より古い。/wf-new は stale report では開始不可"
+                "reports/analysis_*.json が最新 data/analytics_data_*.json より古い。"
+                "/wf-new は stale report では開始不可"
             )
             instructions = "/analytics --analyze を再実行してください（必要なら先に /analytics --collect）"
         return CheckResult(
@@ -1510,21 +1522,30 @@ def check_analytics_report(channel_dir: Path) -> CheckResult:
             id="analytics_report",
             status="ok",
             category=DATA_CATEGORY,
-            message=f"reports/analysis_*.md {input_mode.report_count} 件存在 ({input_mode.mode})",
+            message=f"reports/analysis_*.json {input_mode.report_count} 件存在 ({input_mode.mode})",
         )
 
     return CheckResult(
         id="analytics_report",
         status="ok",
         category=DATA_CATEGORY,
-        message=f"reports/analysis_*.md 未生成。/wf-new は {input_mode.mode} で開始可能",
+        message=f"reports/analysis_*.json 未生成。/wf-new は {input_mode.mode} で開始可能",
     )
 
 
 def _resolve_wf_new_input_mode(channel_dir: Path) -> _WfNewInputMode:
     reports_dir = channel_dir / "reports"
     data_dir = channel_dir / "data"
-    reports = _matching_files(reports_dir, "analysis_*.md")
+    report_candidates = _matching_files(reports_dir, "analysis_*.json")
+    reports: list[Path] = []
+    invalid_report = False
+    for report in report_candidates:
+        try:
+            read_published_json_document(report, RepositorySchema.ANALYSIS_REPORT)
+        except AutomationError:
+            invalid_report = True
+        else:
+            reports.append(report)
     benchmarks = _matching_files(data_dir, "benchmark_*.json")
     data_files = _matching_files(data_dir, "analytics_data_*.json")
 
@@ -1542,6 +1563,15 @@ def _resolve_wf_new_input_mode(channel_dir: Path) -> _WfNewInputMode:
             benchmark_count=len(benchmarks),
             stale_report=stale_reason is not None,
             stale_reason=stale_reason,
+            invalid_report=invalid_report,
+        )
+    if invalid_report:
+        return _WfNewInputMode(
+            mode="invalid analytics report",
+            report_count=len(report_candidates),
+            benchmark_count=len(benchmarks),
+            stale_report=False,
+            invalid_report=True,
         )
     if benchmarks:
         return _WfNewInputMode(

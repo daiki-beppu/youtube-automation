@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import re
 import subprocess
@@ -9,6 +10,8 @@ import pytest
 
 from tests.helpers.paths import REPO_ROOT
 from youtube_automation.commands.system import doctor
+from youtube_automation.domains.documents.schema_registry import RepositorySchema
+from youtube_automation.infrastructure.documents.publishing import publish_json_document
 
 _REPO_ROOT = REPO_ROOT
 _FRESHNESS_RULES = _REPO_ROOT / ".claude" / "skills" / "wf-new" / "references" / "freshness-rules.md"
@@ -33,6 +36,29 @@ def _touch(path: Path, content: str = "{}") -> None:
     path.write_text(content, encoding="utf-8")
 
 
+def _analysis_pair(root: Path, report_date: str = "20260702") -> None:
+    path = root / f"reports/analysis_{report_date}.json"
+    _touch(
+        path,
+        json.dumps(
+            {
+                "schema_version": 3,
+                "generated_at": "2026-07-02T00:00:00Z",
+                "summary": "分析サマリ",
+                "inputs": {},
+                "cli_outputs": {},
+                "vpd_ranking": {},
+                "win_pattern": {},
+                "strategic_improvements": [],
+                "next_collection_candidates": [],
+                "action_plan": [],
+                "strategic_discussion": [],
+            }
+        ),
+    )
+    publish_json_document(path, RepositorySchema.ANALYSIS_REPORT)
+
+
 def _run_mode_fixture(
     tmp_path: Path,
     *,
@@ -44,7 +70,7 @@ def _run_mode_fixture(
     freshness_days: int = 7,
 ) -> subprocess.CompletedProcess[str]:
     if report:
-        _touch(tmp_path / f"reports/analysis_{report_date}.md", "# analysis\n")
+        _touch(tmp_path / f"reports/analysis_{report_date}.json", "{}")
     if benchmark:
         _touch(tmp_path / "data/benchmark_20260701.json")
     if data_date is not None:
@@ -72,14 +98,17 @@ def _run_mode_fixture(
 @pytest.mark.parametrize(
     ("files", "expected_mode"),
     [
-        (("reports/analysis_20260702.md",), "analytics mode"),
+        (("analysis-pair",), "analytics mode"),
         (("data/benchmark_20260701.json",), "benchmark fallback mode"),
         ((), "minimal mode"),
     ],
 )
 def test_doctor_resolves_representative_wf_new_input_modes(tmp_path: Path, files, expected_mode: str) -> None:
     for relative in files:
-        _touch(tmp_path / relative)
+        if relative == "analysis-pair":
+            _analysis_pair(tmp_path)
+        else:
+            _touch(tmp_path / relative)
 
     resolved = doctor._resolve_wf_new_input_mode(tmp_path)
 
@@ -88,7 +117,7 @@ def test_doctor_resolves_representative_wf_new_input_modes(tmp_path: Path, files
 
 
 def test_analytics_mode_has_priority_when_benchmark_also_exists(tmp_path: Path) -> None:
-    _touch(tmp_path / "reports/analysis_20260702.md", "# analysis\n")
+    _analysis_pair(tmp_path)
     _touch(tmp_path / "data/benchmark_20260701.json")
 
     analytics = doctor.check_analytics_report(tmp_path)

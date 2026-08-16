@@ -1,0 +1,51 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "analysis-report.schema.json",
+  "title": "YouTube Analytics 分析レポート",
+  "description": "分析結果の唯一の正本。HTML はこの JSON から生成する。",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "generated_at",
+    "summary",
+    "inputs",
+    "cli_outputs",
+    "vpd_ranking",
+    "win_pattern",
+    "strategic_improvements",
+    "next_collection_candidates",
+    "action_plan",
+    "strategic_discussion"
+  ],
+  "properties": {
+    "schema_version": {"title": "Schema version", "const": 3, "x-view": {"order": 0}},
+    "generated_at": {"title": "Generated at", "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$", "x-view": {"order": 1}},
+    "inputs": {"title": "入力と根拠", "type": "object", "x-view": {"order": 2}},
+    "summary": {"title": "サマリ", "type": "string", "minLength": 1, "x-view": {"order": 5}},
+    "cli_outputs": {"title": "主要指標", "type": "object", "x-view": {"order": 10}},
+    "vpd_ranking": {"title": "VPD 比較", "type": "object", "x-view": {"order": 20}},
+    "win_pattern": {"title": "勝ち型比較", "type": "object", "x-view": {"order": 21}},
+    "retention_analysis": {"title": "視聴維持率", "type": "object", "x-view": {"order": 30}},
+    "revenue_analysis": {"title": "収益・RPM", "type": "object", "x-view": {"order": 31}},
+    "strategic_improvements": {"title": "戦略的な示唆", "$ref": "#/definitions/recommendations", "x-view": {"order": 40, "presentation": "table"}},
+    "next_collection_candidates": {"title": "次期コレクション候補", "$ref": "#/definitions/recommendations", "x-view": {"order": 50, "presentation": "table"}},
+    "action_plan": {"title": "推奨 action", "type": "array", "x-view": {"order": 60, "presentation": "table"}},
+    "strategic_discussion": {"title": "戦略ディスカッション", "$ref": "#/definitions/recommendations", "x-view": {"order": 70, "presentation": "table"}}
+  },
+  "additionalProperties": true,
+  "definitions": {
+    "recommendations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["statement", "evidence", "confidence"],
+        "properties": {
+          "statement": {"type": "string", "minLength": 1},
+          "evidence": {"type": "array", "minItems": 1, "items": {"type": "object"}},
+          "confidence": {"enum": ["high", "medium", "low"]}
+        },
+        "additionalProperties": true
+      }
+    }
+  }
+}

@@ -20,6 +20,8 @@ _DRAFT_7 = "http://json-schema.org/draft-07/schema#"
 class RepositorySchema(str, Enum):
     """実行時にコンパイルを許可するリポジトリ所有 schema。"""
 
+    ANALYSIS_REPORT = "analysis-report.schema.json"
+    AUDIT_REPORT = "audit-report.schema.json"
     EXPERIMENT_ENTRY = "experiment-entry.schema.json"
     FEEDBACK_ENTRY = "feedback-entry.schema.json"
     INSIGHTS_ENTRY = "insights-entry.schema.json"
@@ -27,6 +29,8 @@ class RepositorySchema(str, Enum):
 
 
 _SKILL_RESOURCES = {
+    RepositorySchema.ANALYSIS_REPORT: ("analytics", "references", "analysis-report.schema.json"),
+    RepositorySchema.AUDIT_REPORT: ("audit", "references", "audit-report.schema.json"),
     RepositorySchema.EXPERIMENT_ENTRY: ("analytics", "references", "experiment-entry.schema.json"),
     RepositorySchema.FEEDBACK_ENTRY: ("skill-feedback", "references", "feedback-entry.schema.json"),
     RepositorySchema.INSIGHTS_ENTRY: ("analytics", "references", "insights-entry.schema.json"),

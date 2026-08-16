@@ -209,9 +209,10 @@ _RAW_EXPECTED_ACTIVE_ROUTES = (
         "- `/audit --alignment`、`/channel-research --voice`、`/channel-strategy --persona`、"
         "`/channel-strategy --scene`、"
         "`/channel-strategy --direction` はスキルとして起動しない。これらは別成果物の保存または設定更新を"
-        "完了条件に含むため、既存の `docs/plans/alignment-audit.md`、`docs/plans/viewer-voice-analysis.md`、"
+        "完了条件に含むため、既存の検証済み `docs/plans/alignment-audit.json`、`docs/plans/viewer-voice-analysis.md`、"
         "`docs/channel/personas/persona-definition.md`、`docs/plans/viewing-scene-matrix.md` がある場合だけ "
-        "read-only 入力として読む。必要な成果物がなければ、その仮説を理由付きの `未検証` とする",
+        "read-only 入力として読む。alignment は HTML ではなく JSON だけを入力とする。"
+        "必要な成果物がなければ、その仮説を理由付きの `未検証` とする",
     ),
     _route(
         "analytics/references/flop.md",

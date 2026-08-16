@@ -22,7 +22,7 @@
 |---|---|---|---|
 | 1. シーン定義 | `ttp_wf_new_readiness` の `message` に `persona-definition.md` の不足診断がなく、`docs/plans/viewing-scene-matrix.md` が存在し、persona に `viewing-scene 未検証` がない | doctor に persona 不足診断がある、scene ファイルがない、または未検証注記がある | doctor の `next_action` または `/channel-strategy --scene` |
 | 2. 制約翻訳 | `docs/channel/creative-constraints.md` が存在し、レベル2見出し `音` `映像` `サムネ` `タイトル` `測定` が各1件ある | ファイルがない、または必須見出しが1つでもない | `/channel-strategy --constraints` |
-| 3. 公開前ゲート | 直近公開コレクションを一意に特定でき、`docs/plans/alignment-audit.md` にそのコレクション名が1回以上ある | 公開コレクションを特定できない、レポートがない、またはレポートに対象名がない | `/audit --alignment` |
+| 3. 公開前ゲート | 直近公開コレクションを一意に特定でき、検証済み `docs/plans/alignment-audit.json` の `subject` または matrix evidence にそのコレクション名がある | 公開コレクションを特定できない、レポートがない、不正、または対象名がない | `/audit --alignment` |
 | 4. 指標還流 | `data/insights.jsonl` に有効な analysis または postmortem 由来エントリが1件以上あり、うち1件以上が `status: adopted` かつ `status_note` に `creative-constraints.md` または既存 config の JSON Pointer がある | レポート/postmortemがない、insightsがない、該当エントリがない、または採用先の痕跡がない | `/analytics --flop` または `/analytics --analyze` |
 
 `creative-constraints.md` の不在は工程2の `×` として記録し、工程3・4を続行する。読み取り専用監査から `/channel-strategy --constraints` を自動実行しない。
@@ -51,7 +51,7 @@
 
 候補を `upload.publish_at` の降順で並べ、先頭1件を直近公開コレクションとする。同時刻が複数ならコレクション名の昇順で先頭を採用し、その tie-break を根拠欄へ記載する。候補が0件なら工程3を `×` とし、他工程を続ける。
 
-`docs/plans/alignment-audit.md` が存在する場合は、直近公開コレクションのディレクトリ名が本文に1回以上あるかだけを確認する。ファイル更新時刻や曖昧なタイトル一致を実施痕跡として代用しない。
+`docs/plans/alignment-audit.json` と同 basename HTML が存在する場合は common registry で JSON と対応関係を検証し、直近公開コレクションのディレクトリ名が `subject` または `matrix[].evidence[]` にあるか確認する。HTML、ファイル更新時刻、曖昧なタイトル一致を入力や実施痕跡として代用しない。
 
 ### 5. 指標還流を判定
 
@@ -89,7 +89,7 @@
 - `docs/channel/personas/persona-definition.md`
 - `docs/plans/viewing-scene-matrix.md`
 - `docs/channel/creative-constraints.md`
-- `docs/plans/alignment-audit.md`
+- `docs/plans/alignment-audit.json`
 - `reports/analysis_*.json`
 - `collections/live/*/20-documentation/postmortem.md`
 - `data/insights.jsonl`

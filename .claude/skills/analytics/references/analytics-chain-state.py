@@ -12,7 +12,9 @@ from pathlib import Path
 from typing import TypedDict
 
 from youtube_automation.configuration.skills import load_skill_config
-from youtube_automation.core.errors import ConfigError
+from youtube_automation.core.errors import AutomationError, ConfigError
+from youtube_automation.domains.documents.schema_registry import RepositorySchema
+from youtube_automation.infrastructure.documents.publishing import read_published_json_document
 
 EXIT_SKIP = 0
 EXIT_RUN = 10
@@ -69,13 +71,14 @@ def _latest(paths: list[Path]) -> Artifact | None:
 def _latest_analysis_pair(root: Path) -> tuple[Artifact, Artifact] | None:
     reports = root / "reports"
     pairs: list[tuple[Artifact, Artifact]] = []
-    for md_path in reports.glob("analysis_[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9].md"):
-        json_path = md_path.with_suffix(".json")
-        if json_path.is_file():
+    for json_path in reports.glob("analysis_[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9].json"):
+        html_path = json_path.with_suffix(".html")
+        if html_path.is_file():
+            read_published_json_document(json_path, RepositorySchema.ANALYSIS_REPORT)
             pairs.append(
                 (
-                    Artifact(md_path, md_path.stat().st_mtime),
                     Artifact(json_path, json_path.stat().st_mtime),
+                    Artifact(html_path, html_path.stat().st_mtime),
                 )
             )
     return max(pairs, key=lambda pair: min(pair[0].mtime, pair[1].mtime), default=None)
@@ -178,13 +181,13 @@ def evaluate(root: Path, step: str, now: float) -> tuple[int, StateResult]:
             artifacts=[analytics_json],
         )
 
-    md_artifact, json_artifact = pair
+    json_artifact, html_artifact = pair
     artifacts = [
         analytics_json,
-        _artifact_json(md_artifact, root, now),
         _artifact_json(json_artifact, root, now),
+        _artifact_json(html_artifact, root, now),
     ]
-    pair_mtime = min(md_artifact.mtime, json_artifact.mtime)
+    pair_mtime = min(json_artifact.mtime, html_artifact.mtime)
     if pair_mtime < analytics.mtime:
         decision = "run" if step == "analyze" else "blocked"
         code = EXIT_RUN if step == "analyze" else EXIT_BLOCKED
@@ -241,7 +244,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         code, state_result = evaluate(args.channel_dir, args.step, time.time() if args.now is None else args.now)
         result = state_result
-    except (ConfigError, OSError, ValueError) as exc:
+    except (AutomationError, OSError, ValueError) as exc:
         code = EXIT_ERROR
         result = {"step": args.step, "decision": "error", "reason": str(exc), "artifacts": []}
     json.dump(result, sys.stdout, ensure_ascii=False, indent=2 if args.pretty else None)

@@ -22,7 +22,34 @@ from PIL import Image as PILImage
 import youtube_automation.infrastructure.secrets as secrets_module
 from youtube_automation.commands.system import doctor
 from youtube_automation.core.errors import ConfigError
+from youtube_automation.domains.documents.schema_registry import RepositorySchema
 from youtube_automation.infrastructure.auth import tokens as auth_tokens
+from youtube_automation.infrastructure.documents.publishing import publish_json_document
+
+
+def _write_analysis_pair(root: Path, report_date: str) -> None:
+    reports = root / "reports"
+    reports.mkdir(exist_ok=True)
+    path = reports / f"analysis_{report_date}.json"
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": 3,
+                "generated_at": "2026-07-20T00:00:00Z",
+                "summary": "分析サマリ",
+                "inputs": {},
+                "cli_outputs": {},
+                "vpd_ranking": {},
+                "win_pattern": {},
+                "strategic_improvements": [],
+                "next_collection_candidates": [],
+                "action_plan": [],
+                "strategic_discussion": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    publish_json_document(path, RepositorySchema.ANALYSIS_REPORT)
 
 
 def _mock_running_distribution(
@@ -2599,16 +2626,26 @@ class TestCheckAnalyticsReport:
         """reports/analysis_YYYYMMDD.md が 1 件以上存在: ok."""
         reports_dir = tmp_path / "reports"
         reports_dir.mkdir()
-        (reports_dir / "analysis_20240101.md").write_text("# Analysis", encoding="utf-8")
+        _write_analysis_pair(tmp_path, "20240101")
         r = doctor.check_analytics_report(tmp_path)
         assert r.status == "ok"
+
+    def test_invalid_json_or_missing_html_is_not_a_successful_analysis_input(self, tmp_path):
+        reports = tmp_path / "reports"
+        reports.mkdir()
+        (reports / "analysis_20240101.json").write_text("{}", encoding="utf-8")
+
+        result = doctor.check_analytics_report(tmp_path)
+
+        assert result.status == "fail"
+        assert "HTML 欠損" in result.message
 
     def test_multiple_analysis_files_is_ok(self, tmp_path):
         """analysis_*.md が複数存在しても ok."""
         reports_dir = tmp_path / "reports"
         reports_dir.mkdir()
-        (reports_dir / "analysis_20240101.md").write_text("# A1", encoding="utf-8")
-        (reports_dir / "analysis_20240201.md").write_text("# A2", encoding="utf-8")
+        _write_analysis_pair(tmp_path, "20240101")
+        _write_analysis_pair(tmp_path, "20240201")
         r = doctor.check_analytics_report(tmp_path)
         assert r.status == "ok"
 
@@ -2616,7 +2653,7 @@ class TestCheckAnalyticsReport:
         """latest data より古い analysis report は /wf-new readiness のブロッカー."""
         reports_dir = tmp_path / "reports"
         reports_dir.mkdir()
-        (reports_dir / "analysis_20240101.md").write_text("# Old Analysis", encoding="utf-8")
+        _write_analysis_pair(tmp_path, "20240101")
 
         data_dir = tmp_path / "data"
         data_dir.mkdir()
@@ -2633,7 +2670,7 @@ class TestCheckAnalyticsReport:
         monkeypatch.setattr(doctor, "_today_yyyymmdd", lambda: "20240202")
         reports_dir = tmp_path / "reports"
         reports_dir.mkdir()
-        (reports_dir / "analysis_20240201.md").write_text("# Analysis", encoding="utf-8")
+        _write_analysis_pair(tmp_path, "20240201")
 
         data_dir = tmp_path / "data"
         data_dir.mkdir()
@@ -2648,7 +2685,7 @@ class TestCheckAnalyticsReport:
         monkeypatch.setattr(doctor, "_today_yyyymmdd", lambda: "20260702")
         reports_dir = tmp_path / "reports"
         reports_dir.mkdir()
-        (reports_dir / "analysis_20260622.md").write_text("# Analysis", encoding="utf-8")
+        _write_analysis_pair(tmp_path, "20260622")
 
         data_dir = tmp_path / "data"
         data_dir.mkdir()
@@ -2671,7 +2708,7 @@ class TestCheckAnalyticsReport:
         )
         reports_dir = tmp_path / "reports"
         reports_dir.mkdir()
-        (reports_dir / "analysis_20260622.md").write_text("# Analysis", encoding="utf-8")
+        _write_analysis_pair(tmp_path, "20260622")
 
         data_dir = tmp_path / "data"
         data_dir.mkdir()
@@ -2686,8 +2723,8 @@ class TestCheckAnalyticsReport:
         monkeypatch.setattr(doctor, "_today_yyyymmdd", lambda: "20240203")
         reports_dir = tmp_path / "reports"
         reports_dir.mkdir()
-        (reports_dir / "analysis_20240101.md").write_text("# Old", encoding="utf-8")
-        (reports_dir / "analysis_20240202.md").write_text("# Fresh", encoding="utf-8")
+        _write_analysis_pair(tmp_path, "20240101")
+        _write_analysis_pair(tmp_path, "20240202")
 
         data_dir = tmp_path / "data"
         data_dir.mkdir()
@@ -2710,7 +2747,7 @@ class TestCheckAnalyticsReport:
         """analysis_*.md に一致するディレクトリは report 入力として扱わない."""
         reports_dir = tmp_path / "reports"
         reports_dir.mkdir()
-        (reports_dir / "analysis_20240101.md").mkdir()
+        (reports_dir / "analysis_20240101.json").mkdir()
         r = doctor.check_analytics_report(tmp_path)
         assert r.status == "ok"
         assert "minimal mode" in r.message
@@ -2720,7 +2757,7 @@ class TestCheckAnalyticsReport:
         """analytics_data_*.json に一致するディレクトリは stale 判定に使わない."""
         reports_dir = tmp_path / "reports"
         reports_dir.mkdir()
-        (reports_dir / "analysis_20240101.md").write_text("# Analysis", encoding="utf-8")
+        _write_analysis_pair(tmp_path, "20240101")
 
         data_dir = tmp_path / "data"
         data_dir.mkdir()
@@ -2816,7 +2853,7 @@ class TestCheckBenchmarkData:
         """fresh analysis がある場合、benchmark 不在でも minimal mode とは表示しない."""
         reports_dir = tmp_path / "reports"
         reports_dir.mkdir()
-        (reports_dir / "analysis_20240201.md").write_text("# Analysis", encoding="utf-8")
+        _write_analysis_pair(tmp_path, "20240201")
 
         r = doctor.check_benchmark_data(tmp_path)
         assert r.status == "ok"
@@ -2830,7 +2867,7 @@ class TestCheckWfNewReadiness:
         if input_mode == "analytics mode":
             reports_dir = channel_dir / "reports"
             reports_dir.mkdir()
-            (reports_dir / "analysis_20240101.md").write_text("# Analysis", encoding="utf-8")
+            _write_analysis_pair(channel_dir, "20240101")
         elif input_mode == "benchmark fallback mode":
             data_dir = channel_dir / "data"
             data_dir.mkdir()
@@ -3116,7 +3153,7 @@ class TestDataReadinessSummary:
         """stale analytics report は data カテゴリの次アクションとして扱う."""
         reports_dir = tmp_path / "reports"
         reports_dir.mkdir()
-        (reports_dir / "analysis_20240101.md").write_text("# Old Analysis", encoding="utf-8")
+        _write_analysis_pair(tmp_path, "20240101")
 
         data_dir = tmp_path / "data"
         data_dir.mkdir()
@@ -3132,7 +3169,7 @@ class TestDataReadinessSummary:
         monkeypatch.setattr(doctor, "_today_yyyymmdd", lambda: "20240202")
         reports_dir = tmp_path / "reports"
         reports_dir.mkdir()
-        (reports_dir / "analysis_20240201.md").write_text("# Analysis", encoding="utf-8")
+        _write_analysis_pair(tmp_path, "20240201")
 
         data_dir = tmp_path / "data"
         data_dir.mkdir()

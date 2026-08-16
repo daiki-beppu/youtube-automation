@@ -12,7 +12,7 @@ description: "Use when YouTube Analytics の収集・分析・レポート表示
 
 ## 成果物
 
-- `書き込む`: `data/analytics_data_*.json`, `reports/analysis_*.md`, `reports/analysis_*.json`, `data/insights.jsonl`
+- `書き込む`: `data/analytics_data_*.json`, `reports/analysis_*.json`, `reports/analysis_*.html`, `data/insights.jsonl`
 - `読み込む`: `config/skills/analytics.yaml`, `config/channel/*.json`, `auth/token.json`, `collections/<id>/workflow-state.json`
 
 ## モード判定
@@ -79,7 +79,7 @@ uv run python .claude/skills/analytics/references/analytics-chain-state.py \
 
 ## 完了条件
 
-- フラグなし: collect と analyze が `skip` または実行後 `skip`、report が `run` となり、最新 Markdown を表示している
+- フラグなし: collect と analyze が `skip` または実行後 `skip`、report が `run` となり、検証済み最新 JSON と対応 HTML を表示している
 - mode 指定: 対応する reference の完了条件だけを満たし、他の mode を実行していない
 - `--flop`: `references/flop.md` の完了条件を満たし、collect → analyze → report の chain を実行していない
 - `--status`: `references/status.md` の完了条件を満たし、collect → analyze → report の chain を実行していない

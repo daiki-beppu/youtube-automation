@@ -9,6 +9,10 @@ import sys
 from pathlib import Path
 from typing import TypedDict
 
+from youtube_automation.core.errors import AutomationError
+from youtube_automation.domains.documents.schema_registry import RepositorySchema
+from youtube_automation.infrastructure.documents.publishing import read_published_json_document
+
 EXIT_SKIP = 0
 EXIT_RUN = 10
 EXIT_BLOCKED = 20
@@ -59,23 +63,27 @@ def _video_outputs(root: Path, video_ids: list[str]) -> list[str]:
         if not matches:
             return []
         paths.append(matches[0])
-    reports = sorted((root / "reports" / "video_analysis").glob("*.md"))
-    if not reports:
+    reports = sorted((root / "reports" / "video_analysis").glob("*.json"))
+    if not reports or not reports[0].with_suffix(".html").is_file():
         return []
+    read_published_json_document(reports[0], RepositorySchema.AUDIT_REPORT)
     paths.append(reports[0])
+    paths.append(reports[0].with_suffix(".html"))
     return [_relative(path, root) for path in paths]
 
 
 def evaluate(root: Path, step: str) -> tuple[int, StateResult]:
     root = root.resolve()
     if step == "alignment":
-        report = root / "docs" / "plans" / "alignment-audit.md"
-        if report.is_file():
+        report = root / "docs" / "plans" / "alignment-audit.json"
+        html = report.with_suffix(".html")
+        if report.is_file() and html.is_file():
+            read_published_json_document(report, RepositorySchema.AUDIT_REPORT)
             return EXIT_SKIP, _result(
                 step=step,
                 decision="skip",
                 reason="alignment_report_exists",
-                artifacts=[_relative(report, root)],
+                artifacts=[_relative(report, root), _relative(html, root)],
             )
         return EXIT_RUN, _result(
             step=step,
@@ -117,8 +125,9 @@ def evaluate(root: Path, step: str) -> tuple[int, StateResult]:
             artifacts=[],
         )
 
-    alignment_report = root / "docs" / "plans" / "alignment-audit.md"
-    if not alignment_report.is_file():
+    alignment_report = root / "docs" / "plans" / "alignment-audit.json"
+    alignment_html = alignment_report.with_suffix(".html")
+    if not alignment_report.is_file() or not alignment_html.is_file():
         return EXIT_BLOCKED, _result(
             step=step,
             decision="blocked",
@@ -132,11 +141,12 @@ def evaluate(root: Path, step: str) -> tuple[int, StateResult]:
             reason="video_analysis_missing",
             artifacts=[_relative(alignment_report, root)],
         )
+    read_published_json_document(alignment_report, RepositorySchema.AUDIT_REPORT)
     return EXIT_RUN, _result(
         step=step,
         decision="run",
         reason="value_loop_audit_is_not_persisted",
-        artifacts=[_relative(alignment_report, root), *video_outputs],
+        artifacts=[_relative(alignment_report, root), _relative(alignment_html, root), *video_outputs],
     )
 
 
@@ -152,7 +162,7 @@ def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
         code, result = evaluate(args.channel_dir, args.step)
-    except (OSError, ValueError) as exc:
+    except (AutomationError, OSError, ValueError) as exc:
         code = EXIT_ERROR
         result = _result(step=args.step, decision="error", reason=str(exc), artifacts=[])
     json.dump(result, sys.stdout, ensure_ascii=False, indent=2 if args.pretty else None)

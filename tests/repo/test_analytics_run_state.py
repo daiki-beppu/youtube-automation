@@ -13,6 +13,9 @@ from types import ModuleType
 import pytest
 
 from tests.helpers.paths import REPO_ROOT
+from youtube_automation.core.errors import DocumentRenderError
+from youtube_automation.domains.documents.schema_registry import RepositorySchema
+from youtube_automation.infrastructure.documents.publishing import publish_json_document
 
 ROOT = REPO_ROOT
 SKILL_DIR = ROOT / ".claude" / "skills" / "analytics"
@@ -41,8 +44,29 @@ def _touch(path: Path, timestamp: float) -> None:
 
 
 def _analysis_pair(root: Path, timestamp: float) -> None:
-    _touch(root / "reports" / "analysis_20260718.md", timestamp)
-    _touch(root / "reports" / "analysis_20260718.json", timestamp)
+    path = root / "reports" / "analysis_20260718.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": 3,
+                "generated_at": "2026-07-18T00:00:00Z",
+                "summary": "分析サマリ",
+                "inputs": {},
+                "cli_outputs": {},
+                "vpd_ranking": {},
+                "win_pattern": {},
+                "strategic_improvements": [],
+                "next_collection_candidates": [],
+                "action_plan": [],
+                "strategic_discussion": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    html = publish_json_document(path, RepositorySchema.ANALYSIS_REPORT)
+    os.utime(path, (timestamp, timestamp))
+    os.utime(html, (timestamp, timestamp))
 
 
 def test_manifest_declares_linear_gate_free_chain() -> None:
@@ -122,6 +146,16 @@ def test_report_is_blocked_without_analysis_and_runs_when_ready(tmp_path: Path, 
     assert blocked["reason"] == "analysis_pair_missing"
     assert run_code == state.EXIT_RUN
     assert ready["reason"] == "latest_report_ready_for_display"
+
+
+def test_invalid_or_stale_html_pair_is_not_successful(tmp_path: Path, state: ModuleType) -> None:
+    now = 2_000_000_000.0
+    _touch(tmp_path / "data" / "analytics_data_20260718_120000.json", now - 10 * 60)
+    _analysis_pair(tmp_path, now - 5 * 60)
+    (tmp_path / "reports" / "analysis_20260718.html").write_text("stale", encoding="utf-8")
+
+    with pytest.raises(DocumentRenderError, match="対応していません"):
+        state.evaluate(tmp_path, "report", now)
 
 
 def test_missing_and_stale_artifacts_cover_every_step(tmp_path: Path, state: ModuleType) -> None:

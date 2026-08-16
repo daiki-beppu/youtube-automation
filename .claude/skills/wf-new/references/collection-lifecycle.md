@@ -24,9 +24,9 @@ collections/live/XXX-name/        → 投稿済み・公開中（Step 5 完了�
 ### 1. 企画段階（planning/）
 1. 利用者が `/wf-new` を実行し、内部企画フェーズを開始
 2. 入力モードを判定
-   - analytics mode: 同じファイル名日付の `reports/analysis_*.md` / `.json` ペアが存在し、`.claude/skills/analytics/references/analysis-json-validator.md` の validator が exit 0 で、stale ではない。日次収集データ + 構造化分析 JSON + ベンチマーク + config を使う
-   - benchmark fallback mode: `reports/analysis_*.md` が存在せず、`data/benchmark_*.json` が存在する。ベンチマーク + config を使う
-   - minimal mode: `reports/analysis_*.md` と `data/benchmark_*.json` がどちらも存在しない。`ttp_mode: false` は企画候補生成前にテーマ / ジャンル / 雰囲気を直接確認し、その入力 + config を使う。`true` は `/channel-research --benchmark` を案内して停止し、`data/benchmark_*.json` が生成されるまで企画候補を生成しない
+   - analytics mode: 同じファイル名日付の `reports/analysis_*.json` / `.html` ペアが存在し、`.claude/skills/analytics/references/analysis-json-validator.md` の validator が exit 0 で、stale ではない。AI入力は構造化分析 JSON だけを使う
+   - benchmark fallback mode: 検証済み analysis JSON が存在せず、`data/benchmark_*.json` が存在する。ベンチマーク + config を使う
+   - minimal mode: 検証済み analysis JSON と `data/benchmark_*.json` がどちらも存在しない。`ttp_mode: false` は企画候補生成前にテーマ / ジャンル / 雰囲気を直接確認し、その入力 + config を使う。`true` は `/channel-research --benchmark` を案内して停止し、`data/benchmark_*.json` が生成されるまで企画候補を生成しない
 3. 内部企画工程は analytics report のペア検証、stale 判定、自動更新、再検証、失敗時の停止を `freshness-rules.md::stale report の自動更新` に委譲し、ここでは再定義しない。`/wf-new` の Hard Gates は本 lifecycle で上書きしない
 4. 内部企画工程で企画候補生成（既定: テキスト N 案 → 確認 → N 枚一括生成 → 比較選択、N = `preview.candidate_count`、デフォルト 3）→ ユーザーがテーマを選択
 5. テーマ確定後にディレクトリ作成・`workflow-state.json` 初期化
