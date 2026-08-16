@@ -4,6 +4,10 @@ generate:
   # 背景として優先する動画タイプ。loop は loop.mp4 を使い、不在時は static fallback。
   video_type: loop
 
+  review:
+    # true のとき全尺生成前に20秒previewのWeb承認を必須にする。
+    preview_required: false
+
   audio:
     # 動画長を音声尺と分離するときの動画側ターゲット尺（分）。
     # target_video_duration_min: 120

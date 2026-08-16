@@ -141,6 +141,28 @@ def test_probe_bitrate_returns_none_on_non_finite_stdout(monkeypatch, stdout) ->
     assert probe.probe_bitrate(Path("/fake.mp4")) is None
 
 
+def test_probe_video_reads_duration_resolution_and_codec(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(
+        probe.subprocess,
+        "run",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            stdout=('{"format":{"duration":"20.5"},"streams":[{"codec_name":"h264","width":1920,"height":1080}]}')
+        ),
+    )
+
+    assert probe.probe_video(tmp_path / "video.mp4") == probe.VideoProbe(20.5, 1920, 1080, "h264")
+
+
+def test_probe_video_rejects_invalid_shape(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(
+        probe.subprocess,
+        "run",
+        lambda *_args, **_kwargs: SimpleNamespace(stdout='{"streams":[]}'),
+    )
+
+    assert probe.probe_video(tmp_path / "video.mp4") is None
+
+
 def test_generate_master_rejects_non_finite_track_duration(monkeypatch) -> None:
     monkeypatch.setattr(probe.subprocess, "run", lambda *_args, **_kwargs: SimpleNamespace(stdout="nan\n"))
     monkeypatch.setattr(generate_master, "probe_duration", probe.probe_duration)

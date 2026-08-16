@@ -96,6 +96,7 @@ NON_BILLED_CLIS: dict[str, str] = {
     "yt-collection-plan-select": "ローカル企画pairのHTML review・digest検証・state確定のみ",
     "yt-music-prompt-select": "ローカルmusic prompt pairのHTML review・digest検証・state確定のみ",
     "yt-master-audio-review": "ローカルmaster audioのHTML再生・digest検証・state確定のみ",
+    "yt-master-video-review": "ローカルpreview/full動画のHTML再生・digest検証・state確定のみ",
     "yt-collection-serve": "ローカル HTTP サーバーのみ",
     "yt-cost-report": "ローカル cost_tracker JSON の表示のみ",
     "yt-distrokid-prepare": "ローカルの配信準備（ffprobe / Pillow）のみ",

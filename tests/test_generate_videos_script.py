@@ -2335,8 +2335,8 @@ def test_video_generate_keeps_preview_local_and_updates_state_only_after_full_ge
     assert "承認分岐" not in skill
     assert "全尺生成の成功後だけ" in skill
     assert "プレビューのみでは実行しない" in skill
-    assert "yt-workflow-state" in skill
-    assert "set-asset master_video" in skill
+    assert "yt-master-video-review" in skill
+    assert "assets.master_video" in skill
 
 
 # ─── Loop artifact warning (#868) ────────────────────────

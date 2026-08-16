@@ -372,8 +372,10 @@ MUTABLE_FILES = frozenset(
     "setup/references/setup-chain-state.py",
     "thumbnail/SKILL.md",
     "video/SKILL.md",
+    "video/config.default.yaml",
     "video/references/describe.md",
     "video/references/generate.md",
+    "video/references/master-video-review.md",
     "video/references/description-templates.md",
     "video/references/video-chain-manifest.json",
     "video/references/video-chain-state.py",
@@ -404,7 +406,7 @@ EXPECTED_ISSUE_3986_CHANGED_PATHS = frozenset(
         "tests/repo/test_workflow_upload_setup_redirect_contract.py",
     }
 )
-IMMUTABLE_TARGET_FILES_SHA256 = "6b89c6acba681f832ec248468bed8a22d8c92d53f2e787648e8b31dba44a156f"
+IMMUTABLE_TARGET_FILES_SHA256 = "58a9bec6e2a90aae5fd736da344cea0b6f3f452881f3b0e31cb7b145e174bfb6"
 AUTOMATION_SCHEDULE_REGENERATE_SHA256 = "11d460f727fe50c41f00571b416a1486cb07d0b1548524bc650a7161c16f6c42"
 AUTOMATION_UPDATE_PUSH_SHA256 = "ced3211760d9ff0abd20ec3cdc402501b424f48581ef3a618d51c0d9ee12840c"
 ALLOWED_FENCED_ROUTES = {

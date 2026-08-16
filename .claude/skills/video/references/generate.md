@@ -2,11 +2,11 @@
 
 ## 共通Web review lifecycle
 
-動画の手動確認は生成成功後、成果物確定やstate更新前に `uv run yt-document-review --collection <collection-path> --artifact video --select` を実行する。
-single-use loopback brokerが返すallowlist候補IDとartifact digestを実fileに対して再検証し、既存の確定処理だけを呼ぶ。
+動画の手動確認は [マスター動画 review](master-video-review.md) に従い、preview/full専用の `yt-master-video-review` を実行する。
+single-use loopback brokerが返すallowlist候補IDとartifact digestを実fileとprobe結果に対して再検証し、fullだけ既存の確定処理を呼ぶ。
 HTMLやbrokerから任意path、command、state patchを受け取らない。renderer・browser・timeout失敗はfail-closedで停止する。
 Web失敗から会話へ黙って切り替えず、browserのない環境だけ `--transport terminal` を明示する。
-自動承認経路はCLIを呼ばずHTML・待機を作らない。Codex / Claude固有session APIは使用しない。
+preview不要の自動経路はpreview用CLIを呼ばずHTML・待機を作らない。Codex / Claude固有session APIは使用しない。
 
 `.claude/skills/` 配下の共有スクリプト（`yt-skills sync` で配布）を使ってマスター音源と動画を生成します。
 スクリプトは毎回生成せず、既存の汎用スクリプトを実行します。
@@ -76,9 +76,9 @@ $ARGUMENTS
    この場合、既存の `10-assets/loop.mp4` が残っていても `generate_videos.sh` は無視し、静止背景に切り替える。
    それ以外で `loop.mp4` が無ければ `/thumbnail --loop` でのループ動画生成を案内。
    `loop.mp4` があると `generate_videos.sh` が自動的に動画背景を使用（静止画の代わり）
-4. **任意プレビュー**: effect / overlays の短尺確認が必要な場合は `generate_videos.sh --preview 20 <collection-path>` を実行する。プレビューは `*-Master.mp4` と `workflow-state.json` を変更しない
+4. **プレビュー承認**: `generate.review.preview_required: true` なら `generate_videos.sh --preview 20 <collection-path>` の成功後、`master-video-review.md` のpreview reviewを実行する。承認前・probe失敗・不受理では全尺生成へ進まずstateを変更しない。`false` ならpreview生成・HTML・確認待ちを作らない
 5. **動画生成**: `generate_videos.sh` を実行する（所要時間とログの扱いは「所要時間と完了報告」を参照）
-6. **workflow-state.json 更新**: 全尺生成の成功後だけ、生成された動画ファイル名を JSON string として `uv run yt-workflow-state --collection <collection-path> set-asset master_video <json-value>` へ渡す。プレビューのみでは実行しない
+6. **完成動画確認とworkflow-state.json更新**: 全尺生成の成功後だけ、`master-video-review.md` のfull reviewを実行する。probeとdigest再検証後だけCLIが `assets.master_video` に動画ファイル名を記録する。別のstate更新を重ねず、プレビューのみでは実行しない
 
 ### 自動検出される要素
 

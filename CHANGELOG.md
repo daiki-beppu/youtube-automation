@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `refactor(hybrid)`: `/wf-new --schedule` の実行場所判定を能力ベースへ置き換え、Suno UIだけを本来のlocal条件、重量overlayのmedia〜publishを暫定local例外として固定する（#4052）。
 - `feat(hybrid)`: suno-helper の一括 DL 完了後に音源を再実行安全な manifest-last R2 handoff へ自動送信し、検証済み manifest key と root SHA-256 の state 記録後に通知 event を発火する（#4048）。
 - `feat(hybrid)`: Suno DL後のmanifest key + root SHA-256をworkflow-stateへ記録して`cloud_owned`へ一方向遷移し、resolverが引き渡し前のcloud／引き渡し後のlocalを`no-op`にする工程所有権契約を追加する（#4051）。
+- `feat(video)`: 20秒previewと完成master動画を標準video player付き固定HTMLで確認し、probe・合成条件・digestの再検証後だけmaster video stateを確定する（#4020）。
 - `feat(hybrid)`: Git制御面stateを読む前のfast-forward pullと、更新後の即時commit + pushを共通化し、non-fast-forward競合では自動merge/rebaseせず通知eventを発火して停止する（#4050）。
 - `feat(hybrid)`: MediaStore の R2 bucket・bucket-scoped runtime token・object / multipart lifecycle を Cloudflare provider v5 の独立 Terraform stack で管理し、GCS backend・secret 非永続化・無料枠 retention guardrail・offline mock plan 契約を追加する（#4047）。
 - `feat(hybrid)`: R2 の大容量 push を固定 part の multipart 転送へ切り替え、atomic checkpoint と remote `ListParts` を正本にプロセス中断後の再開・完了済み part のskip・再実行冪等性を追加する（#4046）。

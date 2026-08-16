@@ -46,6 +46,7 @@ EXPECTED_ENTRYPOINT_MODULES = {
     "yt-collection-plan-select": "youtube_automation.commands.documents.collection_plan_select",
     "yt-music-prompt-select": "youtube_automation.commands.documents.music_prompt_select",
     "yt-master-audio-review": "youtube_automation.commands.media.master_audio_review",
+    "yt-master-video-review": "youtube_automation.commands.media.master_video_review",
     "yt-document-render": "youtube_automation.commands.documents.render",
     "yt-doctor": "youtube_automation.commands.system.doctor",
     "yt-fetch-stream-key": "youtube_automation.commands.youtube.fetch_stream_key",
