@@ -102,6 +102,8 @@ CLAUDE.md の「アーキテクチャ」節の詳細版。要点は CLAUDE.md �
 
 **受け渡しマニフェスト**: 境界を越えるメディア受け渡しの完了マーカー。v1 は `<channel>/<collection>/<handoff>/manifest.json` に、path 昇順の正準ファイル一覧（相対 POSIX path・size・SHA-256）と、その一覧の canonical compact JSON に対する SHA-256 `root_sha256` を保持する。全 object の remote metadata と pull 後 content を検証した後、manifest を最後に atomic PUT する。R2 の強い read-after-write 整合性を completion marker 成立の必須前提とし、この保証を持たない MediaStore adapter は利用しない。後工程は bucket listing を行わず manifest 記載 key だけを検証付きで読み、manifest が無ければ「存在しない」扱いとする。正本は R2 で、Git state にはキー + root checksum のみ記録する（ADR-0024）。
 
+**サンドイッチ runner**: cloud/local共通の基盤非依存実行境界。配布済み `wf-new/references/run-sandwich.sh` がchannel repository clone後にNixを介さず `uv run --frozen yt-hybrid-runner` を呼び、Git state参照と一致するmanifest pull → 既存workflowを動かす単一agent CLI境界 → manifest-last成果物push → 制御面state commit/pushを順序固定する。GitHub Actions固有のtrigger/concurrency/secret記述は後続の薄いworkflowだけが所有する（ADR-0024 決定7 / ADR-0025 決定5）。
+
 **MediaStore**: 境界を越えるメディアの pull / push を行う転送層の抽象。第一実装は R2 で、将来のストレージ交換点をここに限定する。工程や resolver へのストレージ抽象の注入は行わない（ADR-0024）。
 
 **軽量レジーム / 重量レジーム**: メディア工程（動画生成）の負荷 2 分類。分岐の正体は `config/channel/youtube.json::overlays.enabled` で、軽量は映像 stream copy（2 時間尺でも数分・クラウド実行対象）、重量はオーディオスペクトラム visualizer 等を全尺 filter_complex + libx264 再エンコード（当面 local 実行の暫定例外）。実行基盤の適性はこの 2 レジームで別々に評価する（ADR-0025）。

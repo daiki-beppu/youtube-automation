@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(hybrid)`: Git clone、検証済みMediaStore pull、単一agent境界、成果物push、state commit/pushをuv直行で束ねる基盤非依存サンドイッチrunnerを追加する（#4053）。
 - `refactor(hybrid)`: `/wf-new --schedule` の実行場所判定を能力ベースへ置き換え、Suno UIだけを本来のlocal条件、重量overlayのmedia〜publishを暫定local例外として固定する（#4052）。
 - `feat(hybrid)`: Suno DL後のmanifest key + root SHA-256をworkflow-stateへ記録して`cloud_owned`へ一方向遷移し、resolverが引き渡し前のcloud／引き渡し後のlocalを`no-op`にする工程所有権契約を追加する（#4051）。
 - `feat(hybrid)`: Git制御面stateを読む前のfast-forward pullと、更新後の即時commit + pushを共通化し、non-fast-forward競合では自動merge/rebaseせず通知eventを発火して停止する（#4050）。
