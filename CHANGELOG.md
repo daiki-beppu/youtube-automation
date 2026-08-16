@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(hybrid)`: DistroKid有効チャンネルの`/publish --clean`で提出完了前の個別音源を保護し、完了後だけdisc音声コピーを削除候補へ加える（#4069）。
 - `feat(hybrid)`: `/publish --clean` の削除候補判定をGit stateのfast-forward pull成功後に限定し、未来または不正な`upload.publish_at`を安全条件未達として保護する（#4068）。
 - `feat(hybrid)`: DistroKid有効チャンネルの完了済みstateから未提出collectionを決定的に抽出し、`human-tasks.md` の原子生成とDiscord要約をsandwich完了後に実行する `yt-human-tasks` を追加する（#4065）。
 - `feat(hybrid)`: GitHub Actions の Claude Code headless 実行で最古の planning collection（なければ新規企画）を選び、企画・音楽promptの検証済みJSON/HTML pairと`prepared` stateを単一commitで確定するcloud planning stageを追加する（#4061）。

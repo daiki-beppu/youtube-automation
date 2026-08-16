@@ -8,9 +8,10 @@ import json
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import NamedTuple, TypedDict
+from typing import Literal, NamedTuple, TypedDict
 
-from youtube_automation.core.errors import AutomationError, StateSyncError, WorkflowStateError
+from youtube_automation.configuration.skills import load_skill_config
+from youtube_automation.core.errors import AutomationError, ConfigError, StateSyncError, WorkflowStateError
 from youtube_automation.domains.collections.workflow_state import WorkflowState
 from youtube_automation.domains.collections.workflow_state import read as read_workflow_state
 from youtube_automation.infrastructure.vcs.state_git import build_pull_context
@@ -33,11 +34,58 @@ class CollectionDecision(TypedDict):
 class EligibleCollection(TypedDict):
     collection: str
     video_id: str
+    distrokid: Literal["disabled", "pending", "submitted"]
+    delete_patterns: list[str]
 
 
 class CleanScanReport(TypedDict):
     eligible: list[EligibleCollection]
     skipped: list[CollectionDecision]
+
+
+def _distrokid_enabled(channel_dir: Path) -> bool:
+    config_path = channel_dir / "config" / "channel" / "distrokid.json"
+    if config_path.is_symlink():
+        raise StateSyncError(f"distrokid.json must be a regular file: {config_path}")
+    if not config_path.exists():
+        return False
+    if not config_path.is_file():
+        raise StateSyncError(f"distrokid.json must be a regular file: {config_path}")
+    return True
+
+
+def _distrokid_cleanup_state(
+    state: WorkflowState,
+    *,
+    enabled: bool,
+) -> Literal["disabled", "pending", "submitted"]:
+    if not enabled:
+        return "disabled"
+    return "submitted" if state.distrokid_submission_completed_at is not None else "pending"
+
+
+def _pattern_list(clean_config: dict[str, object], key: str) -> list[str]:
+    value = clean_config.get(key)
+    if not isinstance(value, list):
+        raise ConfigError(f"publish.clean.{key} must be a string list")
+    patterns = [pattern for pattern in value if isinstance(pattern, str) and pattern]
+    if len(patterns) != len(value):
+        raise ConfigError(f"publish.clean.{key} must be a string list")
+    return patterns
+
+
+def _effective_delete_patterns(
+    clean_config: dict[str, object],
+    distrokid: Literal["disabled", "pending", "submitted"],
+) -> list[str]:
+    base = _pattern_list(clean_config, "delete_patterns")
+    if distrokid == "disabled":
+        return base
+    if distrokid == "pending":
+        protected_roots = ("02-Individual-music/", "30-distrokid/")
+        return [pattern for pattern in base if not pattern.startswith(protected_roots)]
+    distrokid_audio = _pattern_list(clean_config, "distrokid_audio_patterns")
+    return list(dict.fromkeys([*base, *distrokid_audio]))
 
 
 def _publish_at_elapsed(value: str, now: datetime) -> CleanupDecision:
@@ -80,6 +128,11 @@ def scan(channel_dir: Path, now: datetime) -> CleanScanReport:
         raise StateSyncError(f"collections/live must not be a symlink: {live_dir}")
     if not live_dir.is_dir():
         return {"eligible": eligible, "skipped": skipped}
+    distrokid_enabled = _distrokid_enabled(channel_dir)
+    publish_config = load_skill_config("publish", use_cache=False, channel_dir=channel_dir)
+    clean_config = publish_config.get("clean")
+    if not isinstance(clean_config, dict):
+        raise ConfigError("publish.clean must be an object")
 
     for collection in sorted(live_dir.iterdir(), key=lambda path: path.name):
         if collection.is_symlink() or not collection.is_dir():
@@ -98,7 +151,15 @@ def scan(channel_dir: Path, now: datetime) -> CleanScanReport:
             assert upload is not None
             video_id = upload.video_id
             assert video_id is not None
-            eligible.append({"collection": collection.name, "video_id": video_id})
+            distrokid = _distrokid_cleanup_state(state, enabled=distrokid_enabled)
+            eligible.append(
+                {
+                    "collection": collection.name,
+                    "video_id": video_id,
+                    "distrokid": distrokid,
+                    "delete_patterns": _effective_delete_patterns(clean_config, distrokid),
+                }
+            )
         else:
             assert decision.reason is not None
             skipped.append({"collection": collection.name, "reason": decision.reason})
