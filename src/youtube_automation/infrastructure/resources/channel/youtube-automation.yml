@@ -1,8 +1,8 @@
 name: YouTube automation
 
 on:
-  schedule:
-    - cron: "23 0 * * *"
+  # yt-automation-schedule:begin
+  # yt-automation-schedule:end
 
 concurrency:
   group: youtube-automation-${{ github.repository }}
