@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `fix(wf-new)`: 定期実行の開始時に write OAuth token を API quota 消費なしで1回更新し、失効・更新失敗時は workflow を開始せず、機密情報を除去した再認証手順を報告する（#3937）。
 - `feat(workspace)`: workspace 全チャンネルの登録者数・総再生回数・動画数を YouTube `channels.list` 1 request で取得する `yt-workspace-status` を追加する（#4116）。
+- `feat(music)`: `music_engine: minimax` と長尺 instrumental master生成CLIを追加し、`/music --generate` の第3経路へ統合する（#4120）。
 - `feat(media)`: MiniMax の音楽・動画生成で共有する Bearer 認証 JSON client と `MINIMAX_API_KEY` の secret 解決経路を追加する（#4119）。
 - `feat(skills)`: `yt-skills lint` が downstream 配布対象 skill を実 inventory から数え、開発専用と `SKILL.md` のない残骸を除外した総数を上限 19 件で ratchet する（#3805）。
 - `feat(skills)`: `yt-skills lint` が委譲深さ 2 以上を最長経路つきで拒否し、既存違反だけを報告付き allowlist として段階解消できる契約を追加する（#3799）。

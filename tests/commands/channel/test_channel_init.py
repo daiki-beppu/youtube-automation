@@ -204,9 +204,9 @@ def test_youtube_json_has_expected_defaults(tmp_path):
     assert youtube["music_engine"] == "suno"
 
 
-def test_music_engine_arg_is_written_to_youtube_json(tmp_path):
-    # Given: TTP ヒアリングで Lyria をデフォルト音楽エンジンに決めた
-    extra = ["--music-engine", "lyria"]
+@pytest.mark.parametrize("engine", ["lyria", "minimax"])
+def test_music_engine_arg_is_written_to_youtube_json(tmp_path, engine):
+    extra = ["--music-engine", engine]
 
     # When: main を実行
     rc = main(_required_args(tmp_path, extra=extra))
@@ -214,7 +214,7 @@ def test_music_engine_arg_is_written_to_youtube_json(tmp_path):
     # Then: youtube.json の music_engine に反映される
     assert rc == 0
     youtube = _read_json(_channel_dir(tmp_path) / "youtube.json")
-    assert youtube["music_engine"] == "lyria"
+    assert youtube["music_engine"] == engine
 
 
 # ===================== Case 7: analytics.json benchmark セクションの既定 =====================

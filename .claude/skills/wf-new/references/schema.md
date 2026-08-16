@@ -32,14 +32,14 @@ Phase 3: 公開             /wf-next    動画→概要欄→アップロード�
   "phase": "planning | prepared | mastered | publishing | complete",
   "selected_plan": "A | B | C | D | E",
   "track_count": 12,
-  "music_engine": "suno | lyria",
+  "music_engine": "suno | lyria | minimax",
   "planning": {
     "activities": "Working",
     "target_persona": "deep-work listener",
     "final_title": "Rainy Harbor Jazz",
     "generated": true,
     "music": {
-      "engine": "suno | lyria",
+      "engine": "suno | lyria | minimax",
       "mood": ["mellow", "introspective"],
       "atmosphere": "rainy harbor at night, mellow jazz by the docks",
       "tempo": "slow",
@@ -240,7 +240,7 @@ Phase 3: 公開             /wf-next    動画→概要欄→アップロード�
 
 | フィールド | 型 | 必須 | 説明 |
 |-----------|-----|---|------|
-| `planning.music.engine` | `"suno" \| "lyria"` | Yes | 音楽エンジン（top-level `music_engine` と一致）|
+| `planning.music.engine` | `"suno" \| "lyria" \| "minimax"` | Yes | 音楽エンジン（top-level `music_engine` と一致）|
 | `planning.music.mood` | string[] | Yes | 感情語 1-3 個（例: `["mellow", "introspective"]`）|
 | `planning.music.atmosphere` | string | Yes | コレクション全体の世界観 1 文（英語）|
 | `planning.music.tempo` | string | Yes | `"very slow"` / `"slow"` / `"gentle"` / `"moderate"` / `"lively"` のいずれか |

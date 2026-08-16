@@ -73,8 +73,8 @@ def validate_manifest(manifest: object) -> dict:
         track_count = plan.get("track_count")
         if isinstance(track_count, bool) or not isinstance(track_count, int) or track_count < 1:
             raise ValueError(f"plans[{index}].track_count は 1 以上の整数でなければなりません")
-        if plan.get("music_engine") not in {"suno", "lyria"}:
-            raise ValueError(f"plans[{index}].music_engine は suno または lyria が必要です")
+        if plan.get("music_engine") not in {"suno", "lyria", "minimax"}:
+            raise ValueError(f"plans[{index}].music_engine は suno / lyria / minimax のいずれかが必要です")
         plan_ids.append(plan["plan_id"])
         theme_slugs.append(plan["theme_slug"])
     if len(set(plan_ids)) != len(plan_ids):

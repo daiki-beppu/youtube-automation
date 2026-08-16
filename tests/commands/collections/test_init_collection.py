@@ -124,3 +124,15 @@ class TestScaffold:
             import shutil
 
             shutil.rmtree(collection)
+
+    def test_minimax_music_engine_is_persisted_in_workflow_state(self, monkeypatch):
+        _run(monkeypatch, ["MiniMax Scaffold", "minimax-scaffold", "--music-engine", "minimax"])
+        planning = Path(channel_dir()) / "collections" / "planning"
+        collection = next(planning.glob("*-minimax-scaffold-collection"))
+        try:
+            state = json.loads((collection / "workflow-state.json").read_text(encoding="utf-8"))
+            assert state["music_engine"] == "minimax"
+        finally:
+            import shutil
+
+            shutil.rmtree(collection)

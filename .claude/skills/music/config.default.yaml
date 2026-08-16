@@ -394,6 +394,12 @@ generate:
       # ZIP 内の音声形式: mp3 / m4a / wav
       download_format: mp3
 
+  # music_engine=minimax の生成既定値。公式 API の instrumental hex response を使う。
+  minimax:
+    model: music-3.0
+    duration_padding_min: 0
+    request_timeout_sec: 360
+
   # music_engine=lyria の生成既定値。旧 config/skills/lyria.yaml override と互換。
   lyria:
     # lyria skill default config

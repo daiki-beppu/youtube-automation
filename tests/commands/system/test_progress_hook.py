@@ -336,6 +336,7 @@ def test_should_fall_back_to_fixed_pipeline_when_workflow_state_is_invalid(
     ("command", "stage"),
     [
         ("uv run yt-generate-lyria-master", "音源生成"),
+        ("uv run yt-generate-minimax-master", "音源生成"),
         ("uv run yt-generate-suno", "音源生成"),
         ("uv run yt-suno-unattended-request", "音源生成"),
         ("uv run yt-generate-master", "マスター化"),

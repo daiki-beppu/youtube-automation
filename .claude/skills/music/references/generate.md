@@ -8,8 +8,27 @@
 |---|---|---|
 | `suno` | 下記 Suno 経路。collection server を起動または再利用し、Chrome 拡張で連続生成・playlist 追加・一括 download を行う | `02-Individual-music/` と strict 6 点 |
 | `lyria` | 下記 Lyria 経路。Vertex AI Lyria 3 でセグメント生成・結合を行う | `01-master/master.mp3` |
+| `minimax` | 下記 MiniMax 経路。MiniMax Music でインスト segment生成・結合を行う | `01-master/master.mp3` |
 
-値が `suno` / `lyria` 以外、または未設定なら設定不整合として停止する。利用者に別 engine の skill を案内せず、同じ `/music --generate` の入口で自動分岐する。
+値が `suno` / `lyria` / `minimax` 以外、または未設定なら設定不整合として停止する。利用者に別 engine の skill を案内せず、同じ `/music --generate` の入口で自動分岐する。
+
+## MiniMax 経路
+
+`music_engine: minimax` では `.claude/skills/music/config.default.yaml::generate.minimax` と `config/skills/music.yaml::generate.minimax` を deep-merge する。対象 collection のテーマ、creative constraints、採用済み方向性から instrumental style prompt と filename slug を決め、生成回数と model を提示して generation approval を得た後、次を実行する。
+
+```bash
+uv run yt-generate-minimax-master \
+  --prompt "<instrumental style prompt>" \
+  --name "<slug>" \
+  --target-duration <minutes> \
+  --model <music-3.0|music-2.6> \
+  --padding-min <minutes> \
+  --collection <collection-path>
+```
+
+CLI は1 segmentを最大300秒として必要数を算出し、MiniMax Musicの `output_format: hex` / `is_instrumental: true` で逐次生成する。成功ごとに `data/audio_costs.json` へ `unit: song` を記録し、`02-Individual-music/<NN>_<slug>.mp3` をresume可能に保存する。全segmentが揃った場合だけ既存 `generate_master.generate_master()` へ渡し、`01-master/master.mp3` を生成する。中断時の支払い済みaudioは `tmp/minimax-recovered/<sha256>.mp3` へ退避する。
+
+完了条件は `01-master/master.mp3` が非空で、実行時に新規生成したsegment数と同数の `unit: song` cost entryが残ること。失敗時は既存segmentを保持し、同じcommandの再実行で未生成分から再開する。
 
 Suno 経路の server lifecycle は `.claude/skills/extension/references/serve.md` をファイル参照で読み、`--suno` の起動・既存 server 再利用・疎通確認・停止契約をそのまま実行する。`/extension` へ委譲せず、このファイルの手順を複製しない。
 
@@ -346,7 +365,7 @@ subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実�
 
 ### 選択タイミング（どこで lyria が選ばれるか）
 
-1. **チャンネルのデフォルト** — `/channel-strategy --direction`（方向性検討モード）で `suno` / `lyria` を検討 → `/setup --regenerate` が `config/channel/youtube.json` の `music_engine` に書き込む
+1. **チャンネルのデフォルト** — `/channel-strategy --direction`（方向性検討モード）で `suno` / `lyria` / `minimax` を検討 → `/setup --regenerate` が `config/channel/youtube.json` の `music_engine` に書き込む
 2. **コレクション単位の上書き** — `/wf-new` の `yt-init-collection --music-engine lyria` でコレクション毎に上書き可能（省略時はチャンネル設定を継承）
 3. **このスキルが呼ばれるとき** — `/wf-new` が `workflow-state.json` の `music_engine = "lyria"` を判定して `/music --generate` を自動実行する。手動で `/music --generate <theme>` を叩いた場合もこのスキルに入る
 

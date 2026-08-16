@@ -46,6 +46,7 @@ SKILL_CONFIG_KEYS: Final[frozenset[str]] = frozenset(
         "flop-analysis",
         "loop-video",
         "masterup",
+        "music.generate",
         "music.prompt",
         "suno",
         "suno-helper",

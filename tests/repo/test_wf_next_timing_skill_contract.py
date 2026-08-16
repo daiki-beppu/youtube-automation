@@ -47,6 +47,7 @@ def test_direct_entry_plans_the_fixed_collection_before_starting_work() -> None:
     for action in (
         "wf-new",
         "lyria",
+        "minimax",
         "suno-helper",
         "masterup",
         "wf-next-local",
@@ -86,7 +87,7 @@ def test_prepared_phase_actions_keep_their_existing_direct_handlers() -> None:
     text = WF_NEXT_SKILL.read_text(encoding="utf-8")
     direct = _section(text, "### 直接実行の canonical timing 契約")
 
-    for action in ("lyria", "suno-helper", "masterup", "wf-next-local", "wf-next"):
+    for action in ("lyria", "minimax", "suno-helper", "masterup", "wf-next-local", "wf-next"):
         assert f"`{action}`" in direct
     assert "prepared" in direct
     assert "既存のフェーズ別処理" in direct

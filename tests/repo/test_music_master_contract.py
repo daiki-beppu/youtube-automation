@@ -8,6 +8,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
 import yaml
 
 from tests.helpers.music_prompt import write_suno_prompt_pair
@@ -122,17 +123,18 @@ def test_suno_master_blocks_before_generate_completion(tmp_path: Path) -> None:
     assert payload["next"] == "music --generate"
 
 
-def test_lyria_master_is_always_skipped_as_not_required(tmp_path: Path) -> None:
-    collection = _collection(tmp_path, "lyria")
+@pytest.mark.parametrize("engine", ["lyria", "minimax"])
+def test_api_engine_master_is_always_skipped_as_not_required(tmp_path: Path, engine: str) -> None:
+    collection = _collection(tmp_path, engine)
 
     completed = _run_state(collection)
 
     assert completed.returncode == 0
     assert json.loads(completed.stdout) == {
         "step": "master",
-        "engine": "lyria",
+        "engine": engine,
         "decision": "skip",
-        "reason": "lyria_master_not_required",
+        "reason": f"{engine}_master_not_required",
     }
 
 
@@ -144,4 +146,4 @@ def test_master_rejects_unknown_music_engine(tmp_path: Path) -> None:
     assert completed.returncode == 1
     payload = json.loads(completed.stdout)
     assert payload["decision"] == "error"
-    assert "music_engine must be suno or lyria" in payload["reason"]
+    assert "music_engine must be suno, lyria, or minimax" in payload["reason"]

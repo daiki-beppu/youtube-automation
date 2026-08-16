@@ -48,6 +48,7 @@ EXPECTED_ENTRYPOINT_MODULES = {
     "yt-generate-image": "youtube_automation.commands.media.generate_image",
     "yt-generate-loop-video": "youtube_automation.commands.media.generate_loop_video",
     "yt-generate-lyria-master": "youtube_automation.commands.media.generate_lyria_master",
+    "yt-generate-minimax-master": "youtube_automation.commands.media.generate_minimax_master",
     "yt-generate-master": "youtube_automation.commands.media.generate_master",
     "yt-generate-videos-batch": "youtube_automation.commands.media.generate_videos_batch",
     "yt-generate-suno": "youtube_automation.commands.suno.generate_suno_prompts",

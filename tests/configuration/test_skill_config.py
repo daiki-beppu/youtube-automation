@@ -24,6 +24,7 @@ EXPECTED_PYTHON_SKILL_CONFIG_KEYS = frozenset(
         "flop-analysis",
         "loop-video",
         "masterup",
+        "music.generate",
         "music.prompt",
         "suno",
         "suno-helper",
