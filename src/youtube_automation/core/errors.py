@@ -129,6 +129,10 @@ class MediaStoreError(AutomationError):
     """境界メディアの転送・完全性検証エラー。"""
 
 
+class MediaHandoffNotFoundError(MediaStoreError):
+    """完了マーカーが無く、受け渡し物が未完成または存在しない。"""
+
+
 def _http_error_reason(error) -> str | None:
     content = getattr(error, "content", b"")
     if isinstance(content, bytes):

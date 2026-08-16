@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Protocol, runtime_checkable
 
 from youtube_automation.core.errors import ValidationError
@@ -12,9 +12,19 @@ from youtube_automation.core.errors import ValidationError
 _KEY_SEGMENT_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*\Z")
 
 
-def _validate_segment(field: str, value: str) -> None:
+def validate_media_segment(field: str, value: str) -> None:
     if not _KEY_SEGMENT_RE.fullmatch(value) or value in {".", ".."}:
         raise ValidationError(f"MediaKey.{field} は安全な単一 path segment である必要があります: {value!r}")
+
+
+def validate_media_relative_path(field: str, value: str) -> None:
+    if not value or value.startswith("/") or "\\" in value:
+        raise ValidationError(f"MediaKey.{field} は安全な相対 POSIX path である必要があります: {value!r}")
+    path = PurePosixPath(value)
+    if path.as_posix() != value:
+        raise ValidationError(f"MediaKey.{field} は正規化済み path である必要があります: {value!r}")
+    for segment in path.parts:
+        validate_media_segment(field, segment)
 
 
 @dataclass(frozen=True)
@@ -27,8 +37,9 @@ class MediaKey:
     name: str
 
     def __post_init__(self) -> None:
-        for field in ("channel", "collection", "handoff", "name"):
-            _validate_segment(field, getattr(self, field))
+        for field in ("channel", "collection", "handoff"):
+            validate_media_segment(field, getattr(self, field))
+        validate_media_relative_path("name", self.name)
 
     def as_posix(self) -> str:
         return "/".join((self.channel, self.collection, self.handoff, self.name))

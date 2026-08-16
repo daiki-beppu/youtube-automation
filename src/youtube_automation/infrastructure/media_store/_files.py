@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import shutil
 import tempfile
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -66,3 +67,37 @@ def atomic_destination(destination: Path) -> Iterator[Path]:
     except Exception:
         temporary.unlink(missing_ok=True)
         raise
+
+
+def publish_staged_files(staging: Path, destination: Path, relative_paths: tuple[str, ...]) -> None:
+    """検証済み staging files を既存成果物の rollback 付きで公開する。"""
+    if destination.is_symlink():
+        raise MediaStoreError("受け渡し先 root にシンボリックリンクは使えません")
+    destination.mkdir(parents=True, exist_ok=True)
+    backup_root = Path(tempfile.mkdtemp(prefix="yt-handoff-backup-", dir=destination.parent))
+    published: list[Path] = []
+    backed_up: list[tuple[Path, Path]] = []
+    try:
+        for relative_path in relative_paths:
+            source = staging.joinpath(*relative_path.split("/"))
+            target = destination.joinpath(*relative_path.split("/"))
+            reject_symlink_components(target, boundary=destination)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            if target.exists():
+                if not target.is_file():
+                    raise MediaStoreError(f"受け渡し先が通常ファイルではありません: {relative_path}")
+                backup = backup_root.joinpath(*relative_path.split("/"))
+                backup.parent.mkdir(parents=True, exist_ok=True)
+                os.replace(target, backup)
+                backed_up.append((target, backup))
+            os.replace(source, target)
+            published.append(target)
+    except Exception:
+        for target in reversed(published):
+            target.unlink(missing_ok=True)
+        for target, backup in reversed(backed_up):
+            target.parent.mkdir(parents=True, exist_ok=True)
+            os.replace(backup, target)
+        raise
+    finally:
+        shutil.rmtree(backup_root)
