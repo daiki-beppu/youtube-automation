@@ -96,7 +96,7 @@ CLAUDE.md の「アーキテクチャ」節の詳細版。要点は CLAUDE.md �
 
 **制御面 / データ面**: ハイブリッド制作基盤の 2 面。制御面は Git（`workflow-state.json` と冪等性 tracking 群が正本）、データ面は R2（メディアの受け渡し）で、状態をデータ面に置かない（ADR-0024）。
 
-**工程所有権**: 各工程の実行者（local / cloud）が境界規則により常に一意である性質。「いま誰の番か」は Git 上の state の phase が表し、single-writer 原則により state 自体が引き渡しトークンになる。ネットワーク越しの分散ロックを作らない根拠（ADR-0024）。
+**工程所有権**: 各工程の実行者（local / cloud）が境界規則により常に一意である性質。「いま誰の番か」は Git 上の state の phase が表し、single-writer 原則により state 自体が引き渡しトークンになる。Suno DL後はowner APIがmanifest key + root SHA-256だけを `handoff` に記録して `phase: cloud_owned` へ一方向遷移する。resolverは明示executorとownerが一致しなければ`no-op`にし、ネットワーク越しの分散ロックを作らない（ADR-0024）。
 
 **サンドイッチ実行モデル**: クラウドジョブが Git clone + マニフェスト検証つき R2 pull でローカル FS を再構成し、既存のローカル前提コードを無改造で動かし、終了時に成果物 push + state commit する実行方式。MediaStore 抽象は pull / push を行う転送層としてのみ導入する（ADR-0024）。
 

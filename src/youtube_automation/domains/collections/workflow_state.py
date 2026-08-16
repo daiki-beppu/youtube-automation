@@ -7,15 +7,18 @@ import os
 import tempfile
 from collections.abc import Callable, Iterator, Mapping, MutableMapping
 from copy import deepcopy
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Literal, TypedDict, cast
 
-from youtube_automation.core.errors import WorkflowStateError
+from youtube_automation.core.errors import ValidationError, WorkflowStateError
+from youtube_automation.domains.media_store import MediaKey
 from youtube_automation.infrastructure.filesystem import JSONValue, file_lock
 
-Phase = Literal["planning", "prepared", "mastered", "publishing", "complete"]
+Phase = Literal["planning", "prepared", "cloud_owned", "mastered", "publishing", "complete"]
 Stage = Literal["planning", "live"]
 MusicEngine = Literal["suno", "lyria", "minimax"]
+HandoffPoint = Literal["suno_download"]
+ExecutionOwner = Literal["local", "cloud"]
 WorkflowStateUpdater = Callable[["WorkflowState"], "WorkflowState | None"]
 AssetKey = Literal[
     "thumbnail",
@@ -57,6 +60,13 @@ class AssetsDocument(TypedDict, total=False):
     master_audio: str | None
     master_video: str | None
     description: bool
+
+
+class HandoffDocument(TypedDict, total=False):
+    point: HandoffPoint
+    owner: ExecutionOwner
+    manifest_key: str
+    root_sha256: str
 
 
 class MusicPairSelectionExceptionDocument(TypedDict, total=False):
@@ -143,6 +153,7 @@ class WorkflowStateDocument(TypedDict, total=False):
     scene_phrases: dict[str, str]
     title_template_check: TitleTemplateCheckDocument
     assets: AssetsDocument
+    handoff: HandoffDocument
     music_pair_selection: MusicPairSelectionDocument
     upload: UploadDocument
     post_upload: PostUploadDocument
@@ -151,7 +162,7 @@ class WorkflowStateDocument(TypedDict, total=False):
     thumbnail_auto_selection: ThumbnailAutoSelectionDocument
 
 
-_PHASES = frozenset({"planning", "prepared", "mastered", "publishing", "complete"})
+_PHASES = frozenset({"planning", "prepared", "cloud_owned", "mastered", "publishing", "complete"})
 _STAGES = frozenset({"planning", "live"})
 _MUSIC_ENGINES = frozenset({"suno", "lyria", "minimax"})
 _MUSIC_TEMPOS = frozenset({"very slow", "slow", "gentle", "moderate", "lively"})
@@ -159,6 +170,7 @@ _KNOWN_OBJECT_SECTIONS = frozenset(
     {
         "assets",
         "description",
+        "handoff",
         "music_pair_selection",
         "planning",
         "post_upload",
@@ -234,6 +246,10 @@ class AssetsState(_ObjectSection):
     @description.setter
     def description(self, value: bool) -> None:
         self._data["description"] = value
+
+    @property
+    def music_downloaded(self) -> bool | None:
+        return _optional_bool(self._data, "music_downloaded", "workflow-state.json::assets.music_downloaded")
 
     @property
     def raw_master(self) -> str | None:
@@ -416,6 +432,42 @@ class UploadState(_ObjectSection):
         self._data["publish_at"] = value
 
 
+class HandoffState(_ObjectSection):
+    """境界引き渡しの完了marker参照と現在owner。"""
+
+    @property
+    def point(self) -> HandoffPoint | None:
+        value = _optional_string(self._data, "point", "workflow-state.json::handoff.point")
+        if value is None:
+            return None
+        if value != "suno_download":
+            raise WorkflowStateError(f"unsupported workflow-state handoff point: {value}")
+        return "suno_download"
+
+    @property
+    def owner(self) -> ExecutionOwner | None:
+        value = _optional_string(self._data, "owner", "workflow-state.json::handoff.owner")
+        if value is None:
+            return None
+        if value not in {"local", "cloud"}:
+            raise WorkflowStateError(f"unsupported workflow-state handoff owner: {value}")
+        return cast(ExecutionOwner, value)
+
+    @property
+    def manifest_key(self) -> str | None:
+        value = _optional_string(self._data, "manifest_key", "workflow-state.json::handoff.manifest_key")
+        if value is not None:
+            _validate_manifest_key(value)
+        return value
+
+    @property
+    def root_sha256(self) -> str | None:
+        value = _optional_string(self._data, "root_sha256", "workflow-state.json::handoff.root_sha256")
+        if value is not None:
+            _validate_root_sha256(value)
+        return value
+
+
 class WorkflowState(MutableMapping[str, JSONValue]):
     """既知 section を型付きで扱い、未知キーも保持する document object。"""
 
@@ -447,6 +499,12 @@ class WorkflowState(MutableMapping[str, JSONValue]):
         planning = self.planning
         if planning is not None:
             _music = planning.music
+        handoff = self.handoff
+        if handoff is not None:
+            _point = handoff.point
+            _owner = handoff.owner
+            _manifest_key = handoff.manifest_key
+            _root_sha256 = handoff.root_sha256
 
     @property
     def phase(self) -> Phase | None:
@@ -497,6 +555,56 @@ class WorkflowState(MutableMapping[str, JSONValue]):
     def post_upload(self) -> PostUploadState | None:
         value = self._data.get("post_upload")
         return PostUploadState(value) if isinstance(value, dict) else None
+
+    @property
+    def handoff(self) -> HandoffState | None:
+        value = self._data.get("handoff")
+        return HandoffState(value) if isinstance(value, dict) else None
+
+    def record_cloud_handoff(
+        self,
+        *,
+        point: HandoffPoint,
+        manifest_key: str,
+        root_sha256: str,
+    ) -> None:
+        """Suno DL完了markerを記録し、工程所有権をcloudへ一方向遷移する。"""
+
+        _validate_handoff_reference(point, manifest_key, root_sha256)
+        existing = self.handoff
+        if self.phase == "cloud_owned":
+            if (
+                existing is not None
+                and existing.point == point
+                and existing.owner == "cloud"
+                and existing.manifest_key == manifest_key
+                and existing.root_sha256 == root_sha256
+            ):
+                return
+            raise WorkflowStateError("workflow-state handoff already records a different manifest")
+        if self.phase != "prepared":
+            raise WorkflowStateError("workflow-state handoff requires phase prepared")
+        if self.music_engine != "suno":
+            raise WorkflowStateError("workflow-state suno_download handoff requires music engine suno")
+        assets = self.assets
+        if assets is None or assets.music_downloaded is not True:
+            raise WorkflowStateError("workflow-state handoff requires assets.music_downloaded true")
+        if existing is not None:
+            known = (existing.point, existing.owner, existing.manifest_key, existing.root_sha256)
+            if any(value is not None for value in known):
+                raise WorkflowStateError("workflow-state handoff already records a different manifest")
+
+        handoff = self._data.setdefault("handoff", {})
+        assert isinstance(handoff, dict)
+        handoff.update(
+            {
+                "point": point,
+                "owner": "cloud",
+                "manifest_key": manifest_key,
+                "root_sha256": root_sha256,
+            }
+        )
+        self.phase = "cloud_owned"
 
     def set_thumbnail_approved(self, approved: bool) -> None:
         if not isinstance(approved, bool):
@@ -611,6 +719,37 @@ class WorkflowState(MutableMapping[str, JSONValue]):
     def to_dict(self) -> dict[str, JSONValue]:
         """永続化用に document の独立したコピーを返す。"""
         return deepcopy(self._data)
+
+
+def _validate_handoff_reference(point: str, manifest_key: str, root_sha256: str) -> None:
+    if point != "suno_download":
+        raise WorkflowStateError(f"unsupported workflow-state handoff point: {point}")
+    _validate_manifest_key(manifest_key)
+    _validate_root_sha256(root_sha256)
+
+
+def _validate_manifest_key(manifest_key: str) -> None:
+    key = PurePosixPath(manifest_key)
+    if (
+        not manifest_key
+        or manifest_key.startswith("/")
+        or "\\" in manifest_key
+        or any(part in {"", ".", ".."} for part in key.parts)
+        or len(key.parts) != 4
+        or key.name != "manifest.json"
+    ):
+        raise WorkflowStateError("workflow-state handoff.manifest_key must be a relative manifest.json key")
+    try:
+        normalized = MediaKey(key.parts[0], key.parts[1], key.parts[2], key.parts[3]).as_posix()
+    except ValidationError as exc:
+        raise WorkflowStateError("workflow-state handoff.manifest_key must use safe MediaKey segments") from exc
+    if normalized != manifest_key:
+        raise WorkflowStateError("workflow-state handoff.manifest_key must be a canonical MediaKey")
+
+
+def _validate_root_sha256(root_sha256: str) -> None:
+    if len(root_sha256) != 64 or any(character not in "0123456789abcdef" for character in root_sha256):
+        raise WorkflowStateError("workflow-state handoff.root_sha256 must be 64 lowercase hex characters")
 
 
 def _read_payload(path: Path) -> dict[str, JSONValue]:

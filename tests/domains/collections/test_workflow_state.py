@@ -148,6 +148,127 @@ def test_update_preserves_unknown_keys_during_round_trip(tmp_path: Path) -> None
     assert persisted["future_section"] == unknown
 
 
+def test_record_cloud_handoff_changes_phase_and_keeps_only_manifest_reference(tmp_path: Path) -> None:
+    state_path = tmp_path / "workflow-state.json"
+    _write(
+        state_path,
+        {
+            "phase": "prepared",
+            "planning": {"music": {"engine": "suno"}},
+            "assets": {"music_downloaded": True},
+            "handoff": {"future": "keep"},
+            "future_section": {"keep": True},
+        },
+    )
+
+    updated = update(
+        state_path,
+        lambda state: state.record_cloud_handoff(
+            point="suno_download",
+            manifest_key="002ch/sample/suno-download/manifest.json",
+            root_sha256="a" * 64,
+        ),
+    )
+
+    assert updated.phase == "cloud_owned"
+    assert updated.handoff is not None
+    assert updated.handoff.owner == "cloud"
+    assert updated.handoff.manifest_key == "002ch/sample/suno-download/manifest.json"
+    assert updated.handoff.root_sha256 == "a" * 64
+    persisted = json.loads(state_path.read_text(encoding="utf-8"))
+    assert persisted["handoff"] == {
+        "future": "keep",
+        "point": "suno_download",
+        "owner": "cloud",
+        "manifest_key": "002ch/sample/suno-download/manifest.json",
+        "root_sha256": "a" * 64,
+    }
+    assert "files" not in persisted["handoff"]
+    assert persisted["future_section"] == {"keep": True}
+
+
+def test_record_cloud_handoff_is_idempotent_but_rejects_conflicting_reference() -> None:
+    state = WorkflowState(
+        {
+            "phase": "prepared",
+            "planning": {"music": {"engine": "suno"}},
+            "assets": {"music_downloaded": True},
+        }
+    )
+
+    state.record_cloud_handoff(
+        point="suno_download",
+        manifest_key="002ch/sample/suno-download/manifest.json",
+        root_sha256="b" * 64,
+    )
+    state.record_cloud_handoff(
+        point="suno_download",
+        manifest_key="002ch/sample/suno-download/manifest.json",
+        root_sha256="b" * 64,
+    )
+
+    with pytest.raises(WorkflowStateError, match="different manifest"):
+        state.record_cloud_handoff(
+            point="suno_download",
+            manifest_key="002ch/sample/suno-download/manifest.json",
+            root_sha256="c" * 64,
+        )
+
+
+@pytest.mark.parametrize(
+    ("payload", "manifest_key", "root_sha256", "message"),
+    [
+        (
+            {"phase": "planning", "planning": {"music": {"engine": "suno"}}, "assets": {"music_downloaded": True}},
+            "002ch/sample/suno-download/manifest.json",
+            "a" * 64,
+            "prepared",
+        ),
+        (
+            {"phase": "prepared", "planning": {"music": {"engine": "suno"}}, "assets": {"music_downloaded": False}},
+            "002ch/sample/suno-download/manifest.json",
+            "a" * 64,
+            "music_downloaded",
+        ),
+        (
+            {"phase": "prepared", "planning": {"music": {"engine": "suno"}}, "assets": {"music_downloaded": True}},
+            "../manifest.json",
+            "a" * 64,
+            "manifest_key",
+        ),
+        (
+            {"phase": "prepared", "planning": {"music": {"engine": "suno"}}, "assets": {"music_downloaded": True}},
+            "manifest.json",
+            "a" * 64,
+            "manifest_key",
+        ),
+        (
+            {"phase": "prepared", "planning": {"music": {"engine": "suno"}}, "assets": {"music_downloaded": True}},
+            "002ch/sample/suno-download/manifest.json",
+            "not-a-sha",
+            "root_sha256",
+        ),
+    ],
+)
+def test_record_cloud_handoff_fails_closed_before_mutation(
+    payload: dict[str, JSONValue],
+    manifest_key: str,
+    root_sha256: str,
+    message: str,
+) -> None:
+    state = WorkflowState(payload)
+    before = state.to_dict()
+
+    with pytest.raises(WorkflowStateError, match=message):
+        state.record_cloud_handoff(
+            point="suno_download",
+            manifest_key=manifest_key,
+            root_sha256=root_sha256,
+        )
+
+    assert state.to_dict() == before
+
+
 def test_update_creates_missing_document_under_the_same_contract(tmp_path: Path) -> None:
     state_path = tmp_path / "workflow-state.json"
 

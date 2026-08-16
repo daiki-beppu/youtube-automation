@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(hybrid)`: Suno DL後のmanifest key + root SHA-256をworkflow-stateへ記録して`cloud_owned`へ一方向遷移し、resolverが引き渡し前のcloud／引き渡し後のlocalを`no-op`にする工程所有権契約を追加する（#4051）。
 - `feat(hybrid)`: Git制御面stateを読む前のfast-forward pullと、更新後の即時commit + pushを共通化し、non-fast-forward競合では自動merge/rebaseせず通知eventを発火して停止する（#4050）。
 - `feat(thumbnail)`: 候補画像と固定QAを原寸/320pxで比較する安全なWeb reviewを追加し、検証済みcandidate IDだけをthumbnail/main/ABの既存確定ownerへ渡す（#4017）。
 - `feat(hybrid)`: versioned 受け渡し manifest を completion marker として追加し、正準 file list・root checksum・manifest-last push・listing 非依存 pull・既存local成果物のrollbackをfail-closedに固定する（#4045）。

@@ -111,6 +111,74 @@ def test_minimax_collection_routes_to_music_generate_without_suno_fallback(tmp_p
     assert decision["resume_action"] == "minimax"
 
 
+def test_cloud_executor_is_noop_before_handoff_without_mutating_state(tmp_path: Path, runner: ModuleType) -> None:
+    collection = _collection(tmp_path, "20260721-local-owned", engine="suno")
+    state_path = collection / "workflow-state.json"
+    before = state_path.read_bytes()
+
+    decision = runner.resolve_action(
+        tmp_path,
+        collection.name,
+        config=_config(runner),
+        executor="cloud",
+    )
+
+    assert decision["action"] == "no-op"
+    assert decision["reason"] == "local_ownership"
+    assert decision["resume_action"] is None
+    assert state_path.read_bytes() == before
+
+
+def test_cloud_executor_resumes_suno_after_manifest_handoff(tmp_path: Path, runner: ModuleType) -> None:
+    collection = _collection(
+        tmp_path,
+        "20260721-cloud-owned",
+        phase="cloud_owned",
+        engine="suno",
+        assets={"music_downloaded": True},
+    )
+    state_path = collection / "workflow-state.json"
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    state["planning"]["music"].update(
+        {
+            "expected_file_count": 2,
+            "suno_playlist_url": "https://suno.com/playlist/example",
+        }
+    )
+    state["handoff"] = {
+        "point": "suno_download",
+        "owner": "cloud",
+        "manifest_key": "002ch/sample/suno-download/manifest.json",
+        "root_sha256": "e" * 64,
+    }
+    state_path.write_text(json.dumps(state), encoding="utf-8")
+    (collection / "20-documentation" / "suno-prompts.json").write_text(
+        json.dumps({"entries": [{"prompt": "one"}]}),
+        encoding="utf-8",
+    )
+    (collection / "02-Individual-music" / "one.mp3").write_bytes(b"one")
+    (collection / "02-Individual-music" / "two.mp3").write_bytes(b"two")
+
+    cloud = runner.resolve_action(
+        tmp_path,
+        collection.name,
+        config=_config(runner),
+        executor="cloud",
+    )
+    local = runner.resolve_action(
+        tmp_path,
+        collection.name,
+        config=_config(runner),
+        executor="local",
+    )
+
+    assert cloud["phase"] == "cloud_owned"
+    assert cloud["action"] == "masterup"
+    assert cloud["reason"] == "suno_download_complete"
+    assert local["action"] == "no-op"
+    assert local["reason"] == "cloud_ownership"
+
+
 def test_legacy_music_engine_only_state_remains_routable(tmp_path: Path, runner: ModuleType) -> None:
     collection = _collection(tmp_path, "20260721-legacy", engine="lyria")
     state_path = collection / "workflow-state.json"
