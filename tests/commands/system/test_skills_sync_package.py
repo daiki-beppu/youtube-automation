@@ -78,7 +78,7 @@ def test_channel_workflow_asset_is_packaged_for_default_sync() -> None:
     template = _asset_root("channel-workflow") / spec["source_filename"]
     assert spec["default_target"] == ".github/workflows/youtube-automation.yml"
     assert template.is_file()
-    assert "run-sandwich.sh" in template.read_text(encoding="utf-8")
+    assert "run-github-actions.sh" in template.read_text(encoding="utf-8")
 
 
 def test_auth_template_is_included_in_wheel_and_sdist_manifests() -> None:
