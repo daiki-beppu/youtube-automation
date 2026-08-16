@@ -29,6 +29,7 @@ EXPECTED_ENTRYPOINT_MODULES = {
     "yt-channel-seed": "youtube_automation.commands.channel.channel_seed",
     "yt-channel-settings": "youtube_automation.commands.channel.channel_settings",
     "yt-channel-status": "youtube_automation.commands.channel.channel_status",
+    "yt-workspace-status": "youtube_automation.commands.channel.workspace_status",
     "yt-workspace-guard": "youtube_automation.commands.channel.workspace_guard",
     "yt-workflow-state": "youtube_automation.commands.collections.workflow_state_cli",
     "yt-channel-trend": "youtube_automation.commands.analytics.channel_trend",

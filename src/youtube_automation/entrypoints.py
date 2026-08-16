@@ -12,6 +12,7 @@ from youtube_automation.cli_stdio import configure_utf8_stdio
 _CHANNEL_OPTION_CONFLICTS = {
     "youtube_automation.commands.channel.channel",
     "youtube_automation.commands.channel.channel_import",
+    "youtube_automation.commands.channel.workspace_status",
     "youtube_automation.commands.analytics.benchmark_collector",
     "youtube_automation.commands.analytics.fetch_benchmark_comments",
     "youtube_automation.commands.analytics.video_analyze",
@@ -91,6 +92,7 @@ yt_channel_init = _make_entrypoint("youtube_automation.commands.channel.channel_
 yt_channel_seed = _make_entrypoint("youtube_automation.commands.channel.channel_seed")
 yt_channel_settings = _make_entrypoint("youtube_automation.commands.channel.channel_settings")
 yt_channel_status = _make_entrypoint("youtube_automation.commands.channel.channel_status")
+yt_workspace_status = _make_entrypoint("youtube_automation.commands.channel.workspace_status")
 yt_workspace_guard = _make_entrypoint("youtube_automation.commands.channel.workspace_guard")
 yt_workflow_state = _make_entrypoint("youtube_automation.commands.collections.workflow_state_cli")
 yt_channel_trend = _make_entrypoint("youtube_automation.commands.analytics.channel_trend")

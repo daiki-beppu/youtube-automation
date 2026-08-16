@@ -88,6 +88,7 @@ NON_BILLED_CLIS: dict[str, str] = {
     "yt-channel-init": "ローカルの config 雛形生成のみ",
     "yt-workspace-guard": "ローカルの workspace チャンネル境界判定のみ",
     "yt-workflow-state": "ローカルの workflow-state.json 読み書きのみ",
+    "yt-workspace-status": "YouTube Data API 無料枠の channels.list 1 request のみ",
     "yt-channel-trend": "収集済み analytics_data_*.json のローカル分析のみ",
     "yt-collection-preflight": "ローカルの事前チェックのみ",
     "yt-collection-serve": "ローカル HTTP サーバーのみ",
