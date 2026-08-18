@@ -15,7 +15,25 @@
 
 `uv run yt-playlist-status` と `uv run yt-playlist-manager` を 1 スキルに統合し、プレイリストの状態確認・作成・動画割り当て・クリーンアップを案内する。
 
-`config/channel/playlists.json` を Canonical ソースとして読み、定義されたプレイリストを YouTube 上に反映する。テーマ別マッチングルール（`auto_add_activities` / `auto_add_themes`）や全動画自動追加（`auto_add`）に対応。
+`config/channel/playlists.json` を Canonical ソースとして読み、定義されたプレイリストを YouTube 上に反映する。全動画自動追加（`auto_add`）と、レガシーのテーマ別マッチングルール（`auto_add_activities` / `auto_add_themes`）に対応。
+
+## 割り当ての決まり方 (#4330)
+
+| 優先度 | ソース | 挙動 |
+|---|---|---|
+| 1 | `workflow-state.json::planning.playlists` | 明示された key をそのまま採用。`auto_add` は常に追加。`[]` は「`auto_add` のみ」の明示 |
+| 2 | `auto_add_activities` / `auto_add_themes` | 1 が未指定のときだけ照合するレガシー経路 |
+
+`auto_add_themes` は theme slug の**部分一致**であり、新しいテーマを作るたびにキーワードが未登録で漏れる。漏れると分類プレイリストに入らず `auto_add` のプレイリストだけに入るが、アップロードは成功するため気付けない。そのため:
+
+- `yt-init-collection` は分類プレイリスト（`auto_add` 以外）を定義しているチャンネルで `--playlist` / `--no-playlist` を必須にする
+- アップロード preflight は、分類プレイリストに 1 つも割り当たらない状態を fail-loud で弾く（数 GB を送る前に止まる）
+
+既存コレクションの割り当て先を後から決める場合:
+
+```bash
+uv run yt-workflow-state --collection <dir> set-planning playlists '["rain-city-nights"]'
+```
 
 ## 前提
 
@@ -90,6 +108,7 @@ uv run yt-playlist-manager --assign <VIDEO_ID> --theme <THEME>
 ```
 
 - `<THEME>` は `workflow-state.json` の `theme` 値（`content.json` の `theme_scenes` で定義されたキー）
+- `--assign` は collection ディレクトリを知らないため `planning.playlists` を読めず、レガシー照合にフォールバックする。新テーマではまず `yt-workflow-state set-planning playlists` で明示してから `yt-playlist-manager --init` を使う
 - マッチするプレイリストキーが返り値として表示される
 - `"all"` プレイリストには末尾追加、それ以外は先頭追加（YouTube 表示順制御）
 

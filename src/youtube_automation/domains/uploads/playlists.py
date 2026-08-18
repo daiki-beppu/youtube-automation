@@ -8,6 +8,10 @@ from youtube_automation.configuration import channel_dir, load_config, reset
 from youtube_automation.core.adapters.media import CollectionPaths
 from youtube_automation.core.errors import ValidationError, WorkflowStateError, YouTubeAPIError
 from youtube_automation.domains.collections.workflow_state import read_or_none as read_workflow_state_or_none
+from youtube_automation.domains.uploads.playlist_resolution import (
+    check_playlist_assignment,
+    resolve_playlist_keys,
+)
 from youtube_automation.infrastructure.filesystem import (
     list_directory,
     path_exists,
@@ -123,37 +127,30 @@ class PlaylistManager:
 
     # ─── プレイリスト解決 ──────────────────────────────
 
-    def resolve_playlists(self, theme: str, activity: str | None = None) -> list[str]:
+    def resolve_playlists(
+        self,
+        theme: str,
+        activity: str | None = None,
+        explicit: list[str] | None = None,
+    ) -> list[str]:
         """テーマから所属すべきプレイリストキーのリストを返す.
 
-        `activity` 明示指定があればそれを優先し、`None` の場合のみ
-        `activity_for_theme(theme)` で解決する。明示 override は
-        `content.json` 未登録テーマに対する安全弁として使う（#80）。
+        `explicit`（`workflow-state.json::planning.playlists`）があればそれが
+        canonical で、activity / theme 照合は一切行わない（#4330）。
+
+        `explicit` が `None` のときのみレガシー照合へフォールバックする。
+        その場合、`activity` 明示指定があればそれを優先し、`None` の場合のみ
+        `activity_for_theme(theme)` で解決する（#80）。
         """
         playlists_config = self.config.playlists.items
-        if activity is None:
+        if explicit is None and activity is None:
             activity = self.config.content.title.activity_for_theme(theme)
-        theme_lower = theme.lower()
-        matched = []
-
-        for key, pl in playlists_config.items():
-            if pl.get("auto_add"):
-                matched.append(key)
-                continue
-
-            # 中黒は従来形式、カンマは channel-new の生成形式として下流 config に存在する。
-            activities = [a.strip() for a in activity.replace("·", ",").split(",")]
-            if any(a in pl.get("auto_add_activities", []) for a in activities):
-                matched.append(key)
-                continue
-
-            # theme キーワードベースのマッチング
-            for theme_kw in pl.get("auto_add_themes", []):
-                if theme_kw in theme_lower:
-                    matched.append(key)
-                    break
-
-        return matched
+        return resolve_playlist_keys(
+            playlists_config,
+            theme,
+            activity=activity or "",
+            explicit=explicit,
+        )
 
     # ─── プレイリスト作成 ──────────────────────────────
 
@@ -222,6 +219,19 @@ class PlaylistManager:
             return None
         return explicit if isinstance(explicit, str) and explicit else None
 
+    @staticmethod
+    def _planning_playlists(collection_path: Path) -> list[str] | None:
+        """collection_path/workflow-state.json から planning.playlists を読む (#4330).
+
+        `None` は未指定（レガシー照合へフォールバック）、`[]` は「auto_add のみ」
+        の明示。schema 違反（配列でない・空文字を含む）は fail-loud で伝播させる —
+        ここで握りつぶすと「指定したのに入らない」に戻ってしまう。
+        """
+        ws_path = CollectionPaths(collection_path).workflow_state_path
+        state = read_workflow_state_or_none(ws_path)
+        planning = state.planning if state is not None else None
+        return planning.playlists if planning is not None else None
+
     def _list_playlist_video_ids(self, playlist_id: str) -> set[str]:
         """プレイリスト内の動画IDセットを取得（重複防止用）"""
         youtube = self._youtube_service()
@@ -256,17 +266,17 @@ class PlaylistManager:
         """単一動画を該当プレイリストに追加
 
         `collection_path` が与えられた場合、`workflow-state.json` の
-        `planning.activities` があればそれを activity override として
-        `resolve_playlists` に渡す。`content.json` の `theme_scenes` に
-        未登録の新テーマでも、明示的に activity を与えることで正しく
-        プレイリスト判定できる（#80）。
+        `planning.playlists` を最優先で使う（#4330）。未指定のときのみ
+        `planning.activities` を activity override として `resolve_playlists`
+        に渡す（#80）。
 
         Returns:
             追加先のプレイリストキーリスト
         """
-        activity_override = self._planning_activities(collection_path) if collection_path else None
+        explicit = self._planning_playlists(collection_path) if collection_path else None
+        activity_override = self._planning_activities(collection_path) if collection_path and explicit is None else None
         playlists_config = self.config.playlists.items
-        target_keys = self.resolve_playlists(theme, activity=activity_override)
+        target_keys = self.resolve_playlists(theme, activity=activity_override, explicit=explicit)
         assigned = []
 
         for key in target_keys:
@@ -349,15 +359,19 @@ class PlaylistManager:
             planning = steps.get("planning") if isinstance(steps, dict) else None
             title = planning.get("final_title", col_path.name) if isinstance(planning, dict) else col_path.name
 
-            activity_override = self._planning_activities(col_path)
+            explicit = self._planning_playlists(col_path)
+            activity_override = self._planning_activities(col_path) if explicit is None else None
 
             if dry_run:
-                target_keys = self.resolve_playlists(theme, activity=activity_override)
+                target_keys = self.resolve_playlists(theme, activity=activity_override, explicit=explicit)
                 playlists_config = self.config.playlists.items
                 print(f"\n  {title}")
                 print(f"    theme: {theme} | video_id: {video_id}")
                 for key in target_keys:
                     print(f"    -> {playlists_config[key]['title']}")
+                issue = check_playlist_assignment(playlists_config, target_keys, theme=theme, explicit=explicit)
+                if issue:
+                    print(f"    ⚠️  {issue}")
                 results[col_path.name] = target_keys
             else:
                 logger.info(f"\n  {title} ({video_id})")

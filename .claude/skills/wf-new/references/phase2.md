@@ -17,6 +17,9 @@ uv run yt-init-collection "<Collection Name>" "<theme-slug>" --track-count <N> -
 - `--track-count`: 確認済みトラック数（デフォルト 12）
 - `--selected-plan`: 選択された企画（A〜E）
 - `--music-engine`: 音楽エンジン（`suno` / `lyria` / `minimax`）。**省略時は `config/channel/youtube.json` の `music_engine` が使われる**。コレクション単位で上書きしたいときのみ明示する
+- `--playlist <key>`: 所属させるプレイリスト key（`config/channel/playlists.json`）。複数回指定可。**分類プレイリスト（`auto_add` 以外）を定義しているチャンネルでは必須**。分類しないことが意図なら `--no-playlist` を明示する
+
+`--playlist` を必須にしているのは、theme slug のキーワード照合（`auto_add_themes`）が新テーマのたびに漏れ、黙って `auto_add` のプレイリストだけに入る事故を防ぐため (#4330)。候補が分からないときは `uv run yt-playlist-status` で一覧を確認する。
 
 スクリプトが以下を自動実行:
 - `collections/planning/YYYYMMDD-<short>-<theme>-collection/` ディレクトリ作成

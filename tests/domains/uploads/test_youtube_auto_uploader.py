@@ -212,6 +212,8 @@ def _make_preflight_config(supported_languages: list[str]) -> SimpleNamespace:
             ),
         ),
         localizations=SimpleNamespace(supported_languages=supported_languages),
+        # 分類プレイリスト（auto_add 以外）を持たないチャンネル → 未割り当て検出は対象外 (#4330)
+        playlists=SimpleNamespace(items={}),
     )
 
 
@@ -1705,3 +1707,92 @@ def test_dedup_fails_open_for_invalid_video_response_container(tmp_path, respons
     uploader.youtube.videos.return_value.list.return_value.execute.return_value = response
 
     assert uploader.find_existing_video_by_title("Rainy Jazz") is None
+
+
+# ---------------------------------------------------------------------------
+# Issue #4330: preflight プレイリスト割り当てゲート
+# ---------------------------------------------------------------------------
+
+
+_CATEGORIZING_PLAYLISTS = {
+    "all": {"title": "All", "auto_add": True, "playlist_id": "PL_ALL"},
+    "rain": {"title": "Rain", "auto_add_themes": ["rain"], "playlist_id": "PL_RAIN"},
+}
+
+
+def _make_playlist_config(playlists: dict) -> SimpleNamespace:
+    cfg = _make_preflight_config(["ja", "en"])
+    cfg.playlists = SimpleNamespace(items=playlists)
+    cfg.content.title.activity_for_theme = lambda _theme: "Study"
+    return cfg
+
+
+def _write_playlist_collection(tmp_path: Path, planning: dict | None, theme: str) -> Path:
+    col_dir = _write_preflight_collection(tmp_path, ["en", "ja"])
+    state = {"theme": theme, "scene_phrases": {lang: {"title": f"title-{lang}"} for lang in ("en", "ja")}}
+    if planning is not None:
+        state["planning"] = planning
+    (col_dir / "workflow-state.json").write_text(json.dumps(state), encoding="utf-8")
+    return col_dir
+
+
+class TestPreflightPlaylistAssignment:
+    """新テーマが黙って auto_add プレイリストだけに入る状態を、数 GB を送る前に弾く."""
+
+    def test_should_fail_when_theme_matches_no_categorizing_playlist(self, tmp_path):
+        from youtube_automation.domains.uploads.youtube import PreflightChecker
+
+        col_dir = _write_playlist_collection(tmp_path, None, "carriage-six")
+        checker = PreflightChecker(
+            tmp_path,
+            config_loader=lambda: _make_playlist_config(_CATEGORIZING_PLAYLISTS),
+        )
+
+        with pytest.raises(ValidationError, match="プレイリスト未割り当て"):
+            checker.check(col_dir)
+
+    def test_should_pass_with_explicit_planning_playlists(self, tmp_path):
+        from youtube_automation.domains.uploads.youtube import PreflightChecker
+
+        col_dir = _write_playlist_collection(tmp_path, {"playlists": ["rain"]}, "carriage-six")
+        checker = PreflightChecker(
+            tmp_path,
+            config_loader=lambda: _make_playlist_config(_CATEGORIZING_PLAYLISTS),
+        )
+
+        checker.check(col_dir)
+
+    def test_should_pass_with_explicit_empty_playlists(self, tmp_path):
+        """空配列 = operator が「auto_add のみ」を明示した状態は通過させる."""
+        from youtube_automation.domains.uploads.youtube import PreflightChecker
+
+        col_dir = _write_playlist_collection(tmp_path, {"playlists": []}, "carriage-six")
+        checker = PreflightChecker(
+            tmp_path,
+            config_loader=lambda: _make_playlist_config(_CATEGORIZING_PLAYLISTS),
+        )
+
+        checker.check(col_dir)
+
+    def test_should_pass_when_legacy_keyword_still_matches(self, tmp_path):
+        """既存コレクション（キーワードが当たる）は明示指定なしでも通る（後方互換）."""
+        from youtube_automation.domains.uploads.youtube import PreflightChecker
+
+        col_dir = _write_playlist_collection(tmp_path, None, "rain-on-the-bar-window")
+        checker = PreflightChecker(
+            tmp_path,
+            config_loader=lambda: _make_playlist_config(_CATEGORIZING_PLAYLISTS),
+        )
+
+        checker.check(col_dir)
+
+    def test_should_pass_when_channel_has_no_categorizing_playlist(self, tmp_path):
+        from youtube_automation.domains.uploads.youtube import PreflightChecker
+
+        col_dir = _write_playlist_collection(tmp_path, None, "carriage-six")
+        checker = PreflightChecker(
+            tmp_path,
+            config_loader=lambda: _make_playlist_config({"all": {"auto_add": True, "playlist_id": "PL_ALL"}}),
+        )
+
+        checker.check(col_dir)

@@ -151,6 +151,8 @@ def _title_preflight_config() -> SimpleNamespace:
             ),
         ),
         localizations=SimpleNamespace(supported_languages=["ja", "en", "de"]),
+        # 分類プレイリスト（auto_add 以外）を持たないチャンネル → 未割り当て検出は対象外 (#4330)
+        playlists=SimpleNamespace(items={}),
     )
 
 

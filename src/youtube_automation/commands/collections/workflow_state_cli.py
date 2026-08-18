@@ -42,6 +42,7 @@ _PLANNING_CHOICES: tuple[PlanningKey, ...] = (
     "target_persona",
     "publish_target_at",
     "music",
+    "playlists",
 )
 
 
