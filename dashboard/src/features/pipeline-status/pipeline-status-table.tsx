@@ -1,3 +1,5 @@
+import { useState } from "react"
+
 import { Badge } from "@/components/ui/badge"
 import {
   Card,
@@ -14,10 +16,27 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import type {
   PipelineCollection,
   PipelineResponse,
 } from "@/lib/dashboard-types"
+
+type PhaseFilter =
+  "all" | "planning" | "prepared" | "mastered" | "publishing" | "complete"
+
+const phaseFilterOptions: Array<{ value: PhaseFilter; label: string }> = [
+  { value: "all", label: "すべて" },
+  { value: "planning", label: "planning" },
+  { value: "prepared", label: "prepared" },
+  { value: "mastered", label: "mastered" },
+  { value: "publishing", label: "publishing" },
+  { value: "complete", label: "complete" },
+]
+
+function isPhaseFilter(value: string | undefined): value is PhaseFilter {
+  return phaseFilterOptions.some((option) => option.value === value)
+}
 
 const ownerLabels: Record<
   NonNullable<PipelineCollection["execution_owner"]>,
@@ -45,6 +64,17 @@ function eventLabel(collection: PipelineCollection): string {
 }
 
 export function PipelineStatusTable({ data }: { data: PipelineResponse }) {
+  const [phaseFilter, setPhaseFilter] = useState<PhaseFilter>("all")
+  const visibleChannels =
+    phaseFilter === "all"
+      ? data.channels
+      : data.channels.flatMap((channel) => {
+          const collections = channel.collections.filter(
+            (collection) => collection.phase === phaseFilter
+          )
+          return collections.length === 0 ? [] : [{ ...channel, collections }]
+        })
+
   return (
     <Card role="region" aria-labelledby="pipeline-status-title">
       <CardHeader>
@@ -53,7 +83,28 @@ export function PipelineStatusTable({ data }: { data: PipelineResponse }) {
           Git 管理の workflow state から、工程所有側と引き渡し状態を表示します。
         </CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-4">
+        <ToggleGroup
+          aria-label="phase フィルター"
+          value={[phaseFilter]}
+          onValueChange={(values) => {
+            const nextFilter = values[0]
+            if (isPhaseFilter(nextFilter)) setPhaseFilter(nextFilter)
+          }}
+          variant="outline"
+          size="sm"
+          className="flex-wrap justify-start"
+        >
+          {phaseFilterOptions.map((option) => (
+            <ToggleGroupItem
+              key={option.value}
+              value={option.value}
+              aria-label={option.label}
+            >
+              {option.label}
+            </ToggleGroupItem>
+          ))}
+        </ToggleGroup>
         <Table aria-label="パイプライン状況">
           <TableHeader>
             <TableRow>
@@ -66,7 +117,7 @@ export function PipelineStatusTable({ data }: { data: PipelineResponse }) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {data.channels.flatMap((channel) =>
+            {visibleChannels.flatMap((channel) =>
               channel.collections.length === 0 ? (
                 <TableRow key={channel.id}>
                   <TableCell className="font-medium">{channel.name}</TableCell>
