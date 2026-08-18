@@ -78,6 +78,7 @@ import {
   formatDateRange,
   formatInteger,
   formatSignedInteger,
+  formatWatchTime,
 } from "@/lib/dashboard-formatters"
 import { dashboardStatusPresentation } from "@/lib/dashboard-status"
 import {
@@ -497,8 +498,7 @@ function SummaryMetrics({ summary }: { summary: Summary }) {
       <div className="dashboard-metric-surface rounded-lg p-4">
         <dt className="text-xs text-foreground">総再生時間</dt>
         <dd className="text-2xl font-semibold tabular-nums">
-          {formatInteger(summary.watch_time_minutes)}
-          <span className="ml-1 text-sm font-normal text-foreground">分</span>
+          {formatWatchTime(summary.watch_time_minutes)}
         </dd>
       </div>
       <div

@@ -12,6 +12,15 @@ export function formatSignedInteger(value: number): string {
   return value > 0 ? `+${formatInteger(value)}` : formatInteger(value)
 }
 
+export function formatWatchTime(value: number): string {
+  const totalMinutes = Math.round(value)
+  const hours = Math.floor(totalMinutes / 60)
+  const minutes = totalMinutes % 60
+  const hoursText = hours > 0 ? `${formatInteger(hours)}時間` : ""
+  const minutesText = minutes > 0 || hours === 0 ? `${minutes}分` : ""
+  return `${hoursText}${minutesText}`
+}
+
 export function formatSignedDuration(value: number): string {
   if (!Number.isFinite(value)) {
     throw new RangeError("duration must be finite")

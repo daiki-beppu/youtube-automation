@@ -458,7 +458,7 @@ describe("dashboard", () => {
       name: /Night Drive/,
     })
     expect(within(channelRow).getByText("1,200")).toBeInTheDocument()
-    expect(within(channelRow).getByText("450分")).toBeInTheDocument()
+    expect(within(channelRow).getByText("7時間30分")).toBeInTheDocument()
     expect(within(channelRow).getByText("+12")).toBeInTheDocument()
     expect(
       within(channelRow).getByRole("button", {
@@ -515,6 +515,7 @@ describe("dashboard", () => {
     expect(
       within(subscriberMetric as HTMLElement).getByText("+12")
     ).toBeInTheDocument()
+    expect(screen.getAllByText("7時間30分")).toHaveLength(2)
     const comparisonRow = screen.getByRole("row", { name: /Night Drive/ })
     expect(within(comparisonRow).getByText("3本")).toBeInTheDocument()
     expect(screen.queryByText("準備完了")).not.toBeInTheDocument()

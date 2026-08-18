@@ -78,7 +78,7 @@ describe("ChannelStockTable", () => {
     expect(within(row).getByText("正常")).toBeInTheDocument()
     expect(within(row).getByText("1,200")).toBeInTheDocument()
     expect(within(row).getByText("+12")).toBeInTheDocument()
-    expect(within(row).getByText("450分")).toBeInTheDocument()
+    expect(within(row).getByText("7時間30分")).toBeInTheDocument()
   })
 
   it("keeps the sign visible while exposing subscriber change semantics", () => {
