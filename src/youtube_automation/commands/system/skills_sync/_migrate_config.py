@@ -18,19 +18,19 @@ from youtube_automation.core.errors import ConfigError
 
 @dataclass(frozen=True, slots=True)
 class SkillConfigMigration:
-    """One old config filename and its namespaced destination."""
+    """One old config filename and its consolidated destination."""
 
     target_skill: str
-    section: str
+    section: str | None
 
 
 @dataclass(frozen=True, slots=True)
 class MigrationAction:
-    """One source file moved into one destination section."""
+    """One source file moved into a destination root or section."""
 
     source: Path
     destination: Path
-    section: str
+    section: str | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,8 +45,13 @@ class MigrationPlan:
 # 統合先 skill と名前空間 loader key が成立した段から移行を有効化する。
 # apply は利用者の明示実行だけで行い、旧 loader key は互換入口として維持する。
 SKILL_CONFIG_MIGRATIONS: Final[Mapping[str, SkillConfigMigration]] = {
+    "benchmark": SkillConfigMigration("channel-research", "benchmark"),
+    "collection-ideate": SkillConfigMigration("wf-new", None),
     "community-post": SkillConfigMigration("publish", "community"),
     "live-clean": SkillConfigMigration("publish", "clean"),
+    "loop-video": SkillConfigMigration("thumbnail", "loop"),
+    "lyria": SkillConfigMigration("music", "generate"),
+    "masterup": SkillConfigMigration("music", "master"),
     "suno": SkillConfigMigration("music", "prompt"),
     "suno-lyric": SkillConfigMigration("music", "lyric"),
     "metadata-audit": SkillConfigMigration("audit", "metadata"),
@@ -111,6 +116,12 @@ def build_migration_plan(
         if destination not in destinations:
             destinations[destination] = _load_mapping(destination) if destination.is_file() else {}
         destination_data = destinations[destination]
+        if migration.section is None:
+            if destination_data and destination_data != source_data:
+                raise ConfigError(f"移行先に既存内容があります: {destination} (既存内容を上書きしません)")
+            destinations[destination] = source_data
+            actions.append(MigrationAction(source, destination, migration.section))
+            continue
         existing = destination_data.get(migration.section)
         if migration.section in destination_data and existing != source_data:
             raise ConfigError(
@@ -182,7 +193,8 @@ def apply_migration_plan(plan: MigrationPlan) -> None:
 def _print_plan(channel_dir: Path, plan: MigrationPlan, *, dry_run: bool) -> None:
     prefix = "[dry-run] " if dry_run else ""
     for action in plan.actions:
-        print(f"{prefix}{action.source.name} -> {action.destination.name}::{action.section}")
+        section_suffix = f"::{action.section}" if action.section is not None else ""
+        print(f"{prefix}{action.source.name} -> {action.destination.name}{section_suffix}")
     if dry_run:
         for destination, data in plan.destinations.items():
             before = destination.read_text(encoding="utf-8").splitlines(keepends=True) if destination.is_file() else []
