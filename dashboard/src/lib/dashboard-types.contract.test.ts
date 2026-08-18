@@ -3,10 +3,12 @@ import ts from "typescript"
 
 import overviewGolden from "@/lib/__fixtures__/overview.golden.json"
 import pipelineGolden from "@/lib/__fixtures__/pipeline.golden.json"
+import trendsGolden from "@/lib/__fixtures__/trends.golden.json"
 import {
   DASHBOARD_SCHEMA_VERSION,
   type OverviewResponse,
   type PipelineResponse,
+  type TrendsResponse,
 } from "@/lib/dashboard-types"
 
 type KeysOfUnion<Value> = Value extends Value ? keyof Value : never
@@ -33,6 +35,17 @@ type GoldenChannelShape = MergeObjectUnion<GoldenChannel>
 type GoldenOverviewShape = Omit<typeof overviewGolden, "channels"> & {
   channels: GoldenChannelShape[]
 }
+type GoldenTrendChannel = (typeof trendsGolden.channels)[number]
+type GoldenTrendPoint = (typeof trendsGolden.channels)[0]["points"][number]
+type GoldenTrendChannelShape = Omit<
+  MergeObjectUnion<GoldenTrendChannel>,
+  "points"
+> & {
+  points: MergeObjectUnion<GoldenTrendPoint>[]
+}
+type GoldenTrendsShape = Omit<typeof trendsGolden, "channels"> & {
+  channels: GoldenTrendChannelShape[]
+}
 
 const overviewFixture: OverviewResponse = overviewGolden
 const overviewTypesMatch: BidirectionallyExact<
@@ -40,6 +53,11 @@ const overviewTypesMatch: BidirectionallyExact<
   OverviewResponse
 > = true
 const pipelineFixture = pipelineGolden as PipelineResponse
+const trendsFixture: TrendsResponse = trendsGolden
+const trendsTypesMatch: BidirectionallyExact<
+  GoldenTrendsShape,
+  TrendsResponse
+> = true
 
 const apiResponseTypeNames = [
   "Video",
@@ -47,12 +65,15 @@ const apiResponseTypeNames = [
   "OverviewResponse",
   "PublicationActivityState",
   "PipelineResponse",
+  "TrendPoint",
+  "TrendsResponse",
 ] as const
 const appResponseTypeNames = [
   "ChannelDetail",
   "OverviewResponse",
   "PublicationActivityState",
   "PipelineResponse",
+  "TrendsResponse",
 ] as const
 const sources = import.meta.glob<string>("/src/**/*.{ts,tsx}", {
   eager: true,
@@ -147,5 +168,10 @@ describe("Python dashboard overview schema contract", () => {
     expect(pipelineFixture.channels[0]?.collections[0]?.phase).toBe(
       "cloud_owned"
     )
+  })
+
+  it("accepts the generated Python trends response as the exact TypeScript shape", () => {
+    expect(trendsFixture.channels[0]?.points[1]?.impressions).toBe(2400)
+    expect(trendsTypesMatch).toBe(true)
   })
 })

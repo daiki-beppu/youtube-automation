@@ -172,6 +172,43 @@ function renderDashboard() {
 }
 
 describe("dashboard", () => {
+  it("does not render trends when a metric field is missing", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const path = String(input)
+      if (path === "/api/trends") {
+        return new Response(
+          JSON.stringify({
+            channels: [
+              {
+                id: "channel-a",
+                name: "Night Drive",
+                status: "ready",
+                points: [{ date: "2026-07-20", views: 18 }],
+                error: null,
+              },
+            ],
+          })
+        )
+      }
+      if (path === "/api/publications") {
+        return new Response(JSON.stringify(publicationActivity))
+      }
+      if (path === "/api/pipeline") {
+        return new Response(JSON.stringify({ channels: [] }))
+      }
+      return new Response(JSON.stringify(overview))
+    })
+
+    renderDashboard()
+
+    expect(
+      await screen.findByRole("heading", { name: "概況" })
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole("region", { name: "日次再生数の推移" })
+    ).not.toBeInTheDocument()
+  })
+
   it("loads the same-origin pipeline API and shows every registered channel", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const path = String(input)

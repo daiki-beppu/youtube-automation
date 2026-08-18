@@ -132,12 +132,40 @@ function isPublicationDays(value: unknown): value is Record<string, number> {
   )
 }
 
+function isNullableFiniteNumber(value: unknown): value is number | null {
+  return value === null || (typeof value === "number" && Number.isFinite(value))
+}
+
+function isDashboardError(value: unknown): boolean {
+  return (
+    value === null ||
+    (isRecord(value) &&
+      typeof value.code === "string" &&
+      typeof value.message === "string")
+  )
+}
+
 function isTrendsResponse(value: unknown): value is TrendsResponse {
   return (
     isRecord(value) &&
     Array.isArray(value.channels) &&
     value.channels.every(
-      (channel) => isRecord(channel) && Array.isArray(channel.points)
+      (channel) =>
+        isRecord(channel) &&
+        typeof channel.id === "string" &&
+        typeof channel.name === "string" &&
+        typeof channel.status === "string" &&
+        isDashboardError(channel.error) &&
+        Array.isArray(channel.points) &&
+        channel.points.every(
+          (point) =>
+            isRecord(point) &&
+            typeof point.date === "string" &&
+            isNullableFiniteNumber(point.views) &&
+            isNullableFiniteNumber(point.watch_time_minutes) &&
+            isNullableFiniteNumber(point.subscribers_net) &&
+            isNullableFiniteNumber(point.impressions)
+        )
     )
   )
 }
@@ -152,15 +180,6 @@ function isPipelineEvent(value: unknown): boolean {
   )
 }
 
-function isPipelineError(value: unknown): boolean {
-  return (
-    value === null ||
-    (isRecord(value) &&
-      typeof value.code === "string" &&
-      typeof value.message === "string")
-  )
-}
-
 function isPipelineResponse(value: unknown): value is PipelineResponse {
   return (
     isRecord(value) &&
@@ -170,7 +189,7 @@ function isPipelineResponse(value: unknown): value is PipelineResponse {
         isRecord(channel) &&
         typeof channel.id === "string" &&
         typeof channel.name === "string" &&
-        isPipelineError(channel.error) &&
+        isDashboardError(channel.error) &&
         Array.isArray(channel.collections) &&
         channel.collections.every(
           (collection) =>
@@ -196,7 +215,7 @@ function isPipelineResponse(value: unknown): value is PipelineResponse {
               collection.handoff_status === "not_applicable" ||
               collection.handoff_status === "invalid") &&
             isPipelineEvent(collection.latest_event) &&
-            isPipelineError(collection.error)
+            isDashboardError(collection.error)
         )
     )
   )

@@ -18,15 +18,16 @@ from youtube_automation.infrastructure.analytics.dashboard_read_model import (
     PeriodResponse,
     PipelineResponse,
     SummaryResponse,
+    TrendChannelResponse,
+    TrendPointResponse,
+    TrendsResponse,
 )
 
 GOLDEN_PATH = REPO_ROOT / "dashboard" / "src" / "lib" / "__fixtures__" / "overview.golden.json"
 PIPELINE_GOLDEN_PATH = REPO_ROOT / "dashboard" / "src" / "lib" / "__fixtures__" / "pipeline.golden.json"
+TRENDS_GOLDEN_PATH = REPO_ROOT / "dashboard" / "src" / "lib" / "__fixtures__" / "trends.golden.json"
 UPDATE_ENV = "UPDATE_DASHBOARD_SCHEMA_GOLDEN"
-REGEN_COMMAND = (
-    f"{UPDATE_ENV}=1 uv run pytest "
-    "tests/commands/analytics/test_dashboard_schema_contract.py::test_python_overview_matches_dashboard_golden -q"
-)
+REGEN_COMMAND = f"{UPDATE_ENV}=1 uv run pytest tests/commands/analytics/test_dashboard_schema_contract.py -q"
 
 
 def _write_ready_channel(channel: Path) -> None:
@@ -44,16 +45,26 @@ def _write_ready_channel(channel: Path) -> None:
                     "collected_at": "2026-08-12T00:00:00+00:00",
                 },
                 "channel_analytics": {
+                    "daily_metrics": [
+                        {
+                            "date": "2026-08-12",
+                            "views": 120,
+                            "watch_time": 90,
+                            "subscribers_gained": 5,
+                            "subscribers_lost": 2,
+                        }
+                    ],
                     "summary": {
                         "total_views": 1200,
                         "total_watch_time": 420,
                         "net_subscribers": 8,
                         "total_engagement": 31,
                         "avg_view_percentage": 62.5,
-                    }
+                    },
                 },
                 "scheduled_videos": {"count": 2},
                 "video_analytics": {"video-1": {"title": "Contract Video", "views": 900}},
+                "reporting_api": {"impressions_summary": {"per_day": [{"date": "2026-08-13", "impressions": 2400}]}},
             }
         ),
         encoding="utf-8",
@@ -150,6 +161,37 @@ def test_python_pipeline_matches_dashboard_golden(tmp_path: Path) -> None:
     pipeline["channels"][0]["id"] = "channel-ready"
     generated = json.dumps(pipeline, ensure_ascii=False, indent=2) + "\n"
     committed = PIPELINE_GOLDEN_PATH.read_text(encoding="utf-8")
+
+    _assert_golden_matches(generated, committed)
+
+
+def test_python_trends_match_dashboard_golden(tmp_path: Path) -> None:
+    ready = tmp_path / "ready"
+    invalid = tmp_path / "invalid"
+    _write_ready_channel(ready)
+    _write_invalid_channel(invalid)
+    server = create_server(port=0, channel_paths=[ready, invalid])
+    try:
+        trends: TrendsResponse = server.api.trends()
+    finally:
+        server.server_close()
+
+    assert set(trends) == TrendsResponse.__required_keys__
+    assert all(set(channel) == TrendChannelResponse.__required_keys__ for channel in trends["channels"])
+    assert all(
+        set(point) == TrendPointResponse.__required_keys__
+        for channel in trends["channels"]
+        for point in channel["points"]
+    )
+    trends["channels"][0]["id"] = "channel-ready"
+    trends["channels"][1]["id"] = "channel-invalid"
+    generated = json.dumps(trends, ensure_ascii=False, indent=2) + "\n"
+    if os.environ.get(UPDATE_ENV) == "1":
+        TRENDS_GOLDEN_PATH.write_text(generated, encoding="utf-8")
+    if not TRENDS_GOLDEN_PATH.exists():
+        pytest.fail(f"dashboard trends golden is missing. Generate it with: {REGEN_COMMAND}")
+
+    committed = TRENDS_GOLDEN_PATH.read_text(encoding="utf-8")
 
     _assert_golden_matches(generated, committed)
 

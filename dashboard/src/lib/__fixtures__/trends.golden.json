@@ -1,0 +1,36 @@
+{
+  "channels": [
+    {
+      "id": "channel-ready",
+      "name": "Contract Ready",
+      "status": "ready",
+      "points": [
+        {
+          "date": "2026-08-12",
+          "views": 120,
+          "watch_time_minutes": 90,
+          "subscribers_net": 3,
+          "impressions": null
+        },
+        {
+          "date": "2026-08-13",
+          "views": null,
+          "watch_time_minutes": null,
+          "subscribers_net": null,
+          "impressions": 2400
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "channel-invalid",
+      "name": "invalid",
+      "status": "invalid_channel",
+      "points": [],
+      "error": {
+        "code": "meta_invalid",
+        "message": "Expecting value: line 1 column 1 (char 0)"
+      }
+    }
+  ]
+}
