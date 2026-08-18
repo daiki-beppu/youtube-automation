@@ -9,8 +9,10 @@ from pathlib import Path
 from youtube_automation.commands.system.skills_sync import (
     _ASSET_SPECS,
     _DEV_ONLY_SKILL_NAMES,
+    WORKSPACE_GITIGNORE_SKIP_MESSAGE,
     _asset_root,
     _guard_target_with_all,
+    _is_workspace_gitignore_target,
     _list_entries,
     _resolve_file_target,
 )
@@ -132,6 +134,13 @@ def _sync_file_asset(
     src = root / spec["source_filename"]
     target = _resolve_file_target(args.asset, spec, target)
     _ensure_target_parent(target)
+
+    if _is_workspace_gitignore_target(args.asset, target):
+        print(f"  {'skipped':>8}: {target.name}")
+        print(f"  {WORKSPACE_GITIGNORE_SKIP_MESSAGE}")
+        print()
+        print("完了: 1 件処理 — {'skipped': 1}")
+        return 0
 
     if args.asset == "channel-gitignore" and (target.exists() or target.is_symlink()):
         print(f"  {'skipped':>8}: {target.name}")
