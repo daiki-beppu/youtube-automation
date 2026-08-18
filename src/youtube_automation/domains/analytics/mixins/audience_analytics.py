@@ -9,6 +9,10 @@ import logging
 from typing import TYPE_CHECKING, Dict
 
 from youtube_automation.core.errors import YouTubeAPIError
+from youtube_automation.domains.analytics.query_contract import (
+    TARGETED_QUERY_VIEWS_METRIC,
+    TARGETED_QUERY_VIEWS_SORT,
+)
 
 if TYPE_CHECKING:
     from youtube_automation.domains.analytics.ports import AnalyticsBase  # noqa: F401
@@ -29,9 +33,9 @@ class AudienceAnalyticsMixin:
                 ids=f"channel=={self.channel_id}",
                 startDate=start_date,
                 endDate=end_date,
-                metrics="views,estimatedMinutesWatched,averageViewDuration",
+                metrics=f"{TARGETED_QUERY_VIEWS_METRIC},estimatedMinutesWatched,averageViewDuration",
                 dimensions="subscribedStatus",
-                sort="-views",
+                sort=TARGETED_QUERY_VIEWS_SORT,
             )
             response = request
 
@@ -75,9 +79,9 @@ class AudienceAnalyticsMixin:
                 ids=f"channel=={self.channel_id}",
                 startDate=start_date,
                 endDate=end_date,
-                metrics="views,estimatedMinutesWatched,averageViewDuration",
+                metrics=f"{TARGETED_QUERY_VIEWS_METRIC},estimatedMinutesWatched,averageViewDuration",
                 dimensions="deviceType",
-                sort="-views",
+                sort=TARGETED_QUERY_VIEWS_SORT,
             )
             response = request
 
@@ -125,9 +129,9 @@ class AudienceAnalyticsMixin:
                 ids=f"channel=={self.channel_id}",
                 startDate=start_date,
                 endDate=end_date,
-                metrics="views,estimatedMinutesWatched,averageViewDuration,subscribersGained",
+                metrics=f"{TARGETED_QUERY_VIEWS_METRIC},estimatedMinutesWatched,averageViewDuration,subscribersGained",
                 dimensions="country",
-                sort="-views",
+                sort=TARGETED_QUERY_VIEWS_SORT,
                 maxResults=max_countries,
             )
             response = request

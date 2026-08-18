@@ -12,6 +12,10 @@ from datetime import datetime, timedelta
 
 from youtube_automation.configuration import channel_dir, load_config
 from youtube_automation.core.errors import AutomationError, YouTubeAPIError
+from youtube_automation.domains.analytics.query_contract import (
+    TARGETED_QUERY_VIEWS_METRIC,
+    TARGETED_QUERY_VIEWS_SORT,
+)
 from youtube_automation.domains.analytics.service import YouTubeAnalyticsCollector
 from youtube_automation.infrastructure import cost_tracker
 from youtube_automation.infrastructure.analytics_adapter import AnalyticsAdapter, YouTubeDataAdapter
@@ -155,10 +159,10 @@ def get_channel_latest_status():
                     ids=f"channel=={collector.channel_id}",
                     startDate=start_date,
                     endDate=end_date,
-                    metrics="views,estimatedMinutesWatched,averageViewDuration",
+                    metrics=f"{TARGETED_QUERY_VIEWS_METRIC},estimatedMinutesWatched,averageViewDuration",
                     dimensions="video",
                     filters=f"video=={','.join(video_ids)}",
-                    sort="-views",
+                    sort=TARGETED_QUERY_VIEWS_SORT,
                 )
                 for row in response.get("rows", []):
                     stats_map[row[0]] = {

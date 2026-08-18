@@ -4,7 +4,7 @@ YouTubeAnalyticsCollector の CTR 特化分析メソッド群。
 
 `videoThumbnailImpressions` / `videoThumbnailImpressionsClickRate` は
 YouTube Analytics API (channel_reports) の仕様上 `dimensions=video` と組み合わせ不可。
-そのため動画別クエリからはこれらメトリクスを除外し、views/likes/comments/watch_time のみ取得する。
+そのため動画別クエリからはこれらメトリクスを除外し、engagedViews/likes/comments/watch_time のみ取得する。
 (チャンネル全体サマリーは公式ドキュメントでは Traffic Source / Device Type / OS Report で
 取得可能とされているが、実 API では 400 が返るチャンネルが多く、Google 公式の Looker Studio
 Connector でも同症状が報告されている未解決問題のため、本 Mixin では収集しない)
@@ -21,6 +21,10 @@ import logging
 from typing import TYPE_CHECKING, Dict, List
 
 from youtube_automation.core.errors import YouTubeAPIError
+from youtube_automation.domains.analytics.query_contract import (
+    TARGETED_QUERY_VIEWS_METRIC,
+    TARGETED_QUERY_VIEWS_SORT,
+)
 
 if TYPE_CHECKING:
     from youtube_automation.domains.analytics.ports import AnalyticsBase  # noqa: F401
@@ -51,7 +55,7 @@ class CTRAnalyticsMixin:
                 ids=f"channel=={self.channel_id}",
                 startDate=start_date,
                 endDate=end_date,
-                metrics="views,likes,comments,shares,subscribersGained",
+                metrics=f"{TARGETED_QUERY_VIEWS_METRIC},likes,comments,shares,subscribersGained",
             )
             overall_response = request
 
@@ -63,7 +67,7 @@ class CTRAnalyticsMixin:
                 ids=f"channel=={self.channel_id}",
                 startDate=start_date,
                 endDate=end_date,
-                metrics="views,estimatedMinutesWatched",
+                metrics=f"{TARGETED_QUERY_VIEWS_METRIC},estimatedMinutesWatched",
                 dimensions="day",
             )
             traffic_response = request
@@ -91,14 +95,14 @@ class CTRAnalyticsMixin:
             return {"error": str(e)}
 
     def _fetch_video_ctr(self, start_date: str, end_date: str) -> Dict:
-        """動画別パフォーマンスデータを取得する（トップ30本、views 降順）"""
+        """動画別パフォーマンスデータを取得する（トップ30本、engagedViews 降順）"""
         request = self.analytics_service.query(
             ids=f"channel=={self.channel_id}",
             startDate=start_date,
             endDate=end_date,
-            metrics="views,likes,comments,estimatedMinutesWatched",
+            metrics=f"{TARGETED_QUERY_VIEWS_METRIC},likes,comments,estimatedMinutesWatched",
             dimensions="video",
-            sort="-views",
+            sort=TARGETED_QUERY_VIEWS_SORT,
             maxResults=30,
         )
         return request

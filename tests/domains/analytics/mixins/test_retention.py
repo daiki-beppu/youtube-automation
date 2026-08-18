@@ -74,6 +74,9 @@ class TestGetRetentionSummary:
 
         result = collector.get_retention_summary("2026-01-01", "2026-04-01", top_n=2)
 
+        query = collector.analytics_service.query.call_args.kwargs
+        assert query["metrics"] == "engagedViews"
+        assert query["sort"] == "-engagedViews"
         assert result == []
         collector.youtube_service.list_videos.assert_not_called()
 

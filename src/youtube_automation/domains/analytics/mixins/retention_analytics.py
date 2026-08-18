@@ -9,6 +9,10 @@ import logging
 from typing import TYPE_CHECKING, Dict, List
 
 from youtube_automation.core.errors import YouTubeAPIError
+from youtube_automation.domains.analytics.query_contract import (
+    TARGETED_QUERY_VIEWS_METRIC,
+    TARGETED_QUERY_VIEWS_SORT,
+)
 
 if TYPE_CHECKING:
     from youtube_automation.domains.analytics.ports import AnalyticsBase  # noqa: F401
@@ -107,9 +111,9 @@ class RetentionAnalyticsMixin:
                 ids=f"channel=={self.channel_id}",
                 startDate=start_date,
                 endDate=end_date,
-                metrics="views",
+                metrics=TARGETED_QUERY_VIEWS_METRIC,
                 dimensions="video",
-                sort="-views",
+                sort=TARGETED_QUERY_VIEWS_SORT,
                 maxResults=top_n,
             )
             response = request

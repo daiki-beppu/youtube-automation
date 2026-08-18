@@ -68,6 +68,11 @@ class TestGetVideoAnalytics:
 
         result = collector.get_video_analytics("2026-01-01", "2026-04-01")
 
+        query = collector.analytics_service.query.call_args.kwargs
+        assert query["metrics"] == (
+            "engagedViews,estimatedMinutesWatched,averageViewDuration,likes,dislikes,comments,shares,subscribersGained"
+        )
+        assert query["sort"] == "-engagedViews"
         assert len(result) == 1
         video = result[0]
         assert video["video_id"] == "VID_001"
@@ -131,6 +136,9 @@ class TestGetVideoAnalyticsById:
 
         result = collector.get_video_analytics_by_id("VID_001", "2026-01-01", "2026-04-01")
 
+        assert collector.analytics_service.query.call_args.kwargs["metrics"] == (
+            "engagedViews,estimatedMinutesWatched,averageViewDuration,likes,dislikes,comments,shares,subscribersGained"
+        )
         assert result["views"] == 100
         assert result["likes"] == 10
         assert result["comments"] == 3

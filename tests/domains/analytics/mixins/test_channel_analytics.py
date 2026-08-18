@@ -118,6 +118,10 @@ def test_channel_analytics_maps_daily_rows_and_summary_with_optional_columns() -
 
     result = collector.get_channel_analytics("2026-07-01", "2026-07-02")
 
+    assert collector.analytics_service.query.call_args.kwargs["metrics"] == (
+        "engagedViews,estimatedMinutesWatched,averageViewDuration,subscribersGained,subscribersLost,"
+        "likes,dislikes,comments,shares,averageViewPercentage,cardImpressions,cardClicks,cardClickRate"
+    )
     assert result["daily_metrics"][0]["avg_view_percentage"] == 0
     assert result["daily_metrics"][1]["card_click_rate"] == 2.5
     assert result["summary"] == {

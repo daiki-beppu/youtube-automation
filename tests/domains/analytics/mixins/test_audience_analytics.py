@@ -45,6 +45,9 @@ class TestGetDeviceAnalytics:
 
         result = collector.get_device_analytics("2026-01-01", "2026-04-01")
 
+        query = request.call_args.kwargs
+        assert query["metrics"] == "engagedViews,estimatedMinutesWatched,averageViewDuration"
+        assert query["sort"] == "-engagedViews"
         assert result["devices"]["MOBILE"]["views"] == 1
         request.assert_called_once()
 
@@ -103,6 +106,9 @@ class TestGetCountryAnalytics:
 
         result = collector.get_country_analytics("2026-01-01", "2026-04-01")
 
+        query = collector.analytics_service.query.call_args.kwargs
+        assert query["metrics"] == ("engagedViews,estimatedMinutesWatched,averageViewDuration,subscribersGained")
+        assert query["sort"] == "-engagedViews"
         assert result["total_views"] == 350
         assert result["countries"]["JP"]["subscribers_gained"] == 3
         assert result["countries"]["US"]["view_share_percent"] == pytest.approx(57.1, abs=0.1)
@@ -139,7 +145,8 @@ class TestGetSubscribedStatusAnalytics:
         }
         query_kwargs = collector.analytics_service.query.call_args.kwargs
         assert query_kwargs["dimensions"] == "subscribedStatus"
-        assert query_kwargs["metrics"] == "views,estimatedMinutesWatched,averageViewDuration"
+        assert query_kwargs["metrics"] == "engagedViews,estimatedMinutesWatched,averageViewDuration"
+        assert query_kwargs["sort"] == "-engagedViews"
 
     def test_consumes_adapter_response(self, collector):
         request = collector.analytics_service.query
