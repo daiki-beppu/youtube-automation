@@ -6,6 +6,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest"
 
 import App from "./App"
 import { ThemeProvider } from "./components/theme-provider"
+import { formatCollectedAt } from "./lib/dashboard-formatters"
 
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -456,7 +457,11 @@ describe("dashboard", () => {
     expect(
       within(dataContext).getByText("2026/08/02〜2026/08/08")
     ).toBeInTheDocument()
-    expect(within(dataContext).getByText(/21:34/)).toBeInTheDocument()
+    expect(
+      within(dataContext).getByText(
+        formatCollectedAt("2026-08-08T12:34:00Z")
+      )
+    ).toBeInTheDocument()
 
     await act(async () => {
       initialOverviewResponse.resolve(

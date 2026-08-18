@@ -4,7 +4,7 @@ import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
 import { spawn, type ChildProcess } from "node:child_process"
 
-import { expect, test } from "@playwright/test"
+import { expect, test, type Page } from "@playwright/test"
 
 let process: ChildProcess
 let fixtureRoot: string
@@ -69,6 +69,15 @@ function localDateKey(date: Date): string {
   const month = String(date.getMonth() + 1).padStart(2, "0")
   const day = String(date.getDate()).padStart(2, "0")
   return `${year}-${month}-${day}`
+}
+
+async function formatCollectedAt(page: Page, timestamp: string): Promise<string> {
+  return page.evaluate((value) => {
+    return new Intl.DateTimeFormat("ja-JP", {
+      dateStyle: "medium",
+      timeStyle: "short",
+    }).format(new Date(value))
+  }, timestamp)
 }
 
 async function unusedPort(): Promise<number> {
@@ -357,8 +366,12 @@ test("選択期間と手動更新で最新 snapshot を画面全体へ反映す�
     const dataContext = page.getByRole("region", {
       name: "表示データについて",
     })
+    const rangeCollectedAt = await formatCollectedAt(
+      page,
+      "2026-08-08T12:34:00Z"
+    )
     await expect(dataContext).toContainText("2026/08/02〜2026/08/08")
-    await expect(dataContext).toContainText("21:34")
+    await expect(dataContext).toContainText(rangeCollectedAt)
     await expect(
       page
         .getByRole("table", { name: "チャンネル横断ストック一覧" })
@@ -402,9 +415,13 @@ test("選択期間と手動更新で最新 snapshot を画面全体へ反映す�
     const button = page.getByRole("button", { name: "データを更新" })
     await button.click()
 
+    const manualCollectedAt = await formatCollectedAt(
+      page,
+      "2026-08-09T13:45:00Z"
+    )
     await expect(button).toHaveText("データを更新")
     await expect(dataContext).toContainText("2026/08/03〜2026/08/09")
-    await expect(dataContext).toContainText("22:45")
+    await expect(dataContext).toContainText(manualCollectedAt)
     await expect(
       page
         .getByRole("table", { name: "動画パフォーマンス" })
