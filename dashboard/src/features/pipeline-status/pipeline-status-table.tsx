@@ -1,6 +1,7 @@
 import { useState } from "react"
 
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import {
   Card,
   CardContent,
@@ -41,6 +42,8 @@ const phaseFilterOptions: Array<{ value: PhaseFilter; label: string }> = [
   { value: "complete", label: "complete" },
 ]
 
+const collapsedCollectionLimit = 10
+
 function isPhaseFilter(value: string | undefined): value is PhaseFilter {
   return phaseFilterOptions.some((option) => option.value === value)
 }
@@ -67,6 +70,29 @@ function filterChannels(
       (collection) => collection.phase === phaseFilter
     )
     return collections.length === 0 ? [] : [{ ...channel, collections }]
+  })
+}
+
+function countCollections(channels: PipelineResponse["channels"]): number {
+  return channels.reduce(
+    (count, channel) => count + channel.collections.length,
+    0
+  )
+}
+
+function limitCollectionRows(
+  channels: PipelineResponse["channels"],
+  limit: number
+): PipelineResponse["channels"] {
+  let remaining = limit
+
+  return channels.flatMap((channel) => {
+    if (channel.collections.length === 0) return [channel]
+    if (remaining === 0) return []
+
+    const collections = channel.collections.slice(0, remaining)
+    remaining -= collections.length
+    return [{ ...channel, collections }]
   })
 }
 
@@ -97,7 +123,13 @@ function eventLabel(collection: PipelineCollection): string {
 
 export function PipelineStatusTable({ data }: { data: PipelineResponse }) {
   const [phaseFilter, setPhaseFilter] = useState<PhaseFilter>("active")
-  const visibleChannels = filterChannels(data.channels, phaseFilter)
+  const [showAllCollections, setShowAllCollections] = useState(false)
+  const filteredChannels = filterChannels(data.channels, phaseFilter)
+  const collectionCount = countCollections(filteredChannels)
+  const remainingCount = collectionCount - collapsedCollectionLimit
+  const visibleChannels = showAllCollections
+    ? filteredChannels
+    : limitCollectionRows(filteredChannels, collapsedCollectionLimit)
 
   return (
     <Card role="region" aria-labelledby="pipeline-status-title">
@@ -113,7 +145,10 @@ export function PipelineStatusTable({ data }: { data: PipelineResponse }) {
           value={[phaseFilter]}
           onValueChange={(values) => {
             const nextFilter = values[0]
-            if (isPhaseFilter(nextFilter)) setPhaseFilter(nextFilter)
+            if (isPhaseFilter(nextFilter)) {
+              setPhaseFilter(nextFilter)
+              setShowAllCollections(false)
+            }
           }}
           variant="outline"
           size="sm"
@@ -180,6 +215,16 @@ export function PipelineStatusTable({ data }: { data: PipelineResponse }) {
             )}
           </TableBody>
         </Table>
+        {!showAllCollections && remainingCount > 0 ? (
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full"
+            onClick={() => setShowAllCollections(true)}
+          >
+            もっと見る（残り{remainingCount}件）
+          </Button>
+        ) : null}
       </CardContent>
     </Card>
   )

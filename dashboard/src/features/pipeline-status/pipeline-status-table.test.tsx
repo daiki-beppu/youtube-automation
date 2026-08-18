@@ -61,6 +61,29 @@ const phaseFilterData: PipelineResponse = {
   ],
 }
 
+function phaseLimitData(
+  phases: Array<NonNullable<PipelineCollection["phase"]>>
+): PipelineResponse {
+  return {
+    channels: [
+      {
+        id: "channel-limit",
+        name: "Limit Channel",
+        error: null,
+        collections: phases.map((phase, index) => ({
+          collection_id: `item-${phase}-${index + 1}`,
+          stage: "planning",
+          phase,
+          execution_owner: "local",
+          handoff_status: "not_started",
+          latest_event: null,
+          error: null,
+        })),
+      },
+    ],
+  }
+}
+
 describe("pipeline status table", () => {
   it("shows every channel with phase, owner, handoff, and latest event", () => {
     render(
@@ -191,5 +214,84 @@ describe("pipeline status table", () => {
       expect(within(table).getByText(visibleCollection)).toBeInTheDocument()
     }
     expect(within(table).getByText("channel error")).toBeInTheDocument()
+  })
+
+  it("shows no more button when the selected phase has no collections", async () => {
+    // Given
+    const user = userEvent.setup()
+    render(<PipelineStatusTable data={phaseLimitData(["planning"])} />)
+
+    // When
+    await user.click(screen.getByRole("button", { name: "complete" }))
+
+    // Then
+    const table = screen.getByRole("table", { name: "パイプライン状況" })
+    expect(within(table).getAllByRole("row")).toHaveLength(1)
+    expect(
+      screen.queryByRole("button", { name: /もっと見る/ })
+    ).not.toBeInTheDocument()
+  })
+
+  it("shows all ten collections without a more button", async () => {
+    // Given
+    const user = userEvent.setup()
+    const data = phaseLimitData(Array.from({ length: 10 }, () => "prepared"))
+    render(<PipelineStatusTable data={data} />)
+
+    // When
+    await user.click(screen.getByRole("button", { name: "prepared" }))
+
+    // Then
+    const table = screen.getByRole("table", { name: "パイプライン状況" })
+    expect(within(table).getAllByRole("row")).toHaveLength(11)
+    expect(
+      screen.queryByRole("button", { name: /もっと見る/ })
+    ).not.toBeInTheDocument()
+  })
+
+  it("expands all collections when an eleventh matching row remains", async () => {
+    // Given
+    const user = userEvent.setup()
+    const data = phaseLimitData(Array.from({ length: 11 }, () => "prepared"))
+    render(<PipelineStatusTable data={data} />)
+    await user.click(screen.getByRole("button", { name: "prepared" }))
+
+    // When
+    await user.click(
+      screen.getByRole("button", { name: "もっと見る（残り1件）" })
+    )
+
+    // Then
+    const table = screen.getByRole("table", { name: "パイプライン状況" })
+    expect(within(table).getAllByRole("row")).toHaveLength(12)
+    expect(within(table).getByText("item-prepared-11")).toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: /もっと見る/ })
+    ).not.toBeInTheDocument()
+  })
+
+  it("limits each mixed phase independently after switching filters", async () => {
+    // Given
+    const user = userEvent.setup()
+    const data = phaseLimitData([
+      ...Array.from({ length: 11 }, () => "prepared" as const),
+      ...Array.from({ length: 12 }, () => "planning" as const),
+    ])
+    render(<PipelineStatusTable data={data} />)
+    await user.click(screen.getByRole("button", { name: "prepared" }))
+    await user.click(
+      screen.getByRole("button", { name: "もっと見る（残り1件）" })
+    )
+
+    // When
+    await user.click(screen.getByRole("button", { name: "planning" }))
+
+    // Then
+    const table = screen.getByRole("table", { name: "パイプライン状況" })
+    expect(within(table).getAllByRole("row")).toHaveLength(11)
+    expect(
+      screen.getByRole("button", { name: "もっと見る（残り2件）" })
+    ).toBeInTheDocument()
+    expect(within(table).queryByText(/item-prepared/)).not.toBeInTheDocument()
   })
 })
