@@ -195,7 +195,7 @@ print(f'pattern_count={pattern_count} expected={expected} actual={actual}')
 
 判定:
 - **`actual == 0`**: `/music --generate` 未実行として「`/music --generate` を実行してダウンロードを完了してください」を案内して停止
-- **`0 < actual < expected`**: 部分ダウンロードとして扱う。`assets.music_downloaded` が `true` であっても揃っているとはみなさない。不足曲数（`expected - actual`）を提示し、「`/music --generate` を再実行して不足分を DL するか、Suno UI から手動で不足曲をダウンロードして `02-Individual-music/` に配置してください」を案内して停止
+- **`0 < actual < expected`**: 部分ダウンロードとして扱う。`assets.music_downloaded` が `true` であっても揃っているとはみなさない。不足曲数（`expected - actual`）を提示し、「`/music --generate` を再実行して不足分を DL するか、Suno UI から手動で不足曲をダウンロードして `02-Individual-music/` に配置してください」を案内して既定では停止する。ユーザーが欠落込みの続行を明示指示した場合だけ、Step 4.5 の `--allow-incomplete-download` 手順へ進む
 - 定期実行の extension state が `checkpoint` / `manual-intervention` / `running` の場合も、実ファイル数・`planning.music.suno_playlist_url`・`assets.music_downloaded` が揃うまでは停止する。extension state の `completed` は補助情報であり、この実ファイル突合を代替しない
 - **`actual >= expected`**: チェック OK として Step 1.6 へ進む
 
@@ -217,8 +217,8 @@ fallback path（Step 2-3 で DL する場合）は従来どおり Step 2 の Web
 判定:
 - **unknown（どの entry にも一致しない曲）**: 別コレクション由来の混入。playlist から除外するまで Step 5 に進まない
 - **missing（playlist に存在しない entry）**: 生成漏れ。`/music --generate` で追補生成するまで Step 5 に進まない
-- **underfilled（clip 数が期待未満の entry）**: 生成が途中で止まった疑い。既定は 2 clip/entry（`--expected-clips-per-entry` で調整、`0` で無効化）
-- 非 0 終了時はレポートをそのままユーザーへ提示して停止する。**ユーザーが混入込みでの続行を明示指示した場合のみ**、混入内容と影響（世界観不整合・メタデータずれ）を報告した上で続行できる
+- **underfilled（clip 数が期待未満の entry）**: 生成が途中で止まった疑い。既定は 2 clip/entry（`--expected-clips-per-entry` で調整、`0` で無効化）。既定では停止し、Step 1.5 で欠落込みの続行が明示承認済みの場合だけ Step 4.5 の `--allow-incomplete-download` 手順へ進める
+- 非 0 終了時はレポートをそのままユーザーへ提示して既定では停止する。unknown は、ユーザーが混入込みでの続行を明示指示した場合のみ、混入内容と影響（世界観不整合・メタデータずれ）を報告した上で続行できる。underfilled だけの非 0 は前項の明示承認時のみ例外とし、clip が 0 件の missing entry は引き続き停止する
 
 > **背景**: playlist には「最新セットの生成が未完のまま、前後コレクションの曲が混入する」事故が繰り返し起きている（実例: 深夜コレクションに昼テーマ 2 ペアが混入 + 深夜 2 entry 未生成のまま master 化）。曲名は `/music --generate` が Song Title 欄へ注入する `entry.title ?? entry.name` で一意なため、機械突合で確実に検出できる。silent な続行は禁止。
 
@@ -283,6 +283,17 @@ uv run yt-suno-select-tracks <collection-path>
    - 尺フィルタで落ちた clip だけ除外し、残った clip は `01a-...` / `01b-...` のまま `uv run yt-generate-master` に渡す
 
 `lyrics` が `[Instrumental]` / `[Extended Outro]` などタグだけの場合は歌詞なしとして扱う。選別ログは `pair_selection.selection_log_path`（既定 `01-master/.selection.log`）に残す。
+
+**2 clip 未満の prompt を含む場合の例外続行**:
+
+既定では prompt ごとに 2 clip が必要であり、不足分の追補生成を優先する。各 prompt に少なくとも 1 clip は存在するものの、Suno の一部生成失敗などで追補せず続行することをユーザーが明示承認した場合だけ、不足 prompt と `実数/2`、instrumental の収録曲数が減る影響、vocal の代替候補がない影響を提示し、次の順で実行する。
+
+```bash
+uv run yt-suno-select-tracks --dry-run <collection-path> --allow-incomplete-download
+uv run yt-suno-select-tracks <collection-path> --allow-incomplete-download
+```
+
+このフラグが無効化するのは初期の 2 clip 完了検査だけである。`pair_selection.min_song_sec` / `max_song_sec` の尺フィルタ、命名・duration probe、尺フィルタ後に候補 0 件となる prompt の停止は維持する。dry-run で `[dropped_under_min]` が出た場合は、通常どおり本実行前に別途続行確認を取る。
 
 **max_song_sec 超過だけで全落ちした場合の復旧**:
 

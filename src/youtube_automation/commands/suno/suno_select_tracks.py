@@ -35,6 +35,11 @@ def main() -> int:
         action="store_true",
         help="全候補が max_song_sec 超過した prompt は最短候補を警告付きで例外採用する",
     )
+    parser.add_argument(
+        "--allow-incomplete-download",
+        action="store_true",
+        help="2 clip 未満の prompt を許可する（尺フィルタ後に候補 0 件なら停止）",
+    )
     args = parser.parse_args()
 
     try:
@@ -45,6 +50,7 @@ def main() -> int:
             cfg,
             dry_run=args.dry_run,
             allow_best_effort_over_max=args.allow_best_effort_over_max,
+            allow_incomplete_download=args.allow_incomplete_download,
         )
     except (ValidationError, OSError, json.JSONDecodeError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)

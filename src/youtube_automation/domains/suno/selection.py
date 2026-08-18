@@ -867,6 +867,7 @@ def select_suno_tracks(
     *,
     dry_run: bool = False,
     allow_best_effort_over_max: bool = False,
+    allow_incomplete_download: bool = False,
 ) -> SelectionResult:
     parsed_cfg = parse_selection_config(cfg, collection_dir)
     if parsed_cfg.pair.mode == "never":
@@ -877,7 +878,8 @@ def select_suno_tracks(
         candidates = collect_candidates(collection_dir, prompts)
     except AmbiguousSunoNameError as exc:
         raise ValidationError(str(exc)) from exc
-    _validate_download_complete(prompts, candidates)
+    if not allow_incomplete_download:
+        _validate_download_complete(prompts, candidates)
     plan = _plan_suno_selection(
         collection_dir=collection_dir,
         prompts=prompts,
