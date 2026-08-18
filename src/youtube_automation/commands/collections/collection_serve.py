@@ -10,7 +10,7 @@ issue #698: #692 の `yt-suno-serve` を一般化し、エンドポイントを�
 - `GET /community/posts/<index>/image` … 投稿画像の binary 配信
 
 起動中は port 別 PID ファイルを記録し、`--stop --port <PORT>` または HTTP request の
-idle timeout（既定 60 分）で終了する。同一 port かつ同一構成の生存 server は再利用する。
+idle timeout（既定 4 時間）で終了する。同一 port かつ同一構成の生存 server は再利用する。
 
 `distrokid` が None または `enabled == False` のとき `/distrokid/*` は 404。
 CORS はデフォルトで Chrome 拡張オリジン (`chrome-extension://...`) と helper サイト
@@ -102,7 +102,11 @@ from youtube_automation.infrastructure.media_store import R2MediaStore, R2MediaS
 from youtube_automation.infrastructure.notifications.discord import create_discord_notification_sink
 
 DEFAULT_PORT = 7873
-DEFAULT_IDLE_TIMEOUT_SECONDS = 60 * 60
+# suno-helper の「安全モード」（1 件ずつ完了を待つ逐次生成）は collection-serve への
+# HTTP request を伴わずに Suno UI 上だけで進行するため、旧既定の 60 分では 24 曲規模の
+# 生成が完了する前に idle timeout で自動停止し、直後の playlist 追加 POST が失敗する
+# 事故が報告された。安全モードの実測所要時間に余裕を持たせて 4 時間へ延長する。
+DEFAULT_IDLE_TIMEOUT_SECONDS = 4 * 60 * 60
 VERSION_ROUTE = "/version"
 SERVER_INFO_ROUTE = "/server-info"
 _LIFECYCLE_ROUTE_PREFIX = "/.well-known/yt-collection-serve-lifecycle/"

@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `fix(collection-serve)`: Suno の安全モードで長時間生成した後も playlist 追加を継続できるよう、collection server の既定 idle timeout を 60 分から 4 時間へ延長する（#4335）。
+
 - `feat(hybrid)`: 月次 `openai/codex-action` canary workflowとtyped Discord結果通知を追加し、Codex escape経路の死亡を無人検知できるようにする（#4060）。
 
 - `feat(hybrid)`: DistroKid有効チャンネルの`/publish --clean`で提出完了前の個別音源を保護し、完了後だけdisc音声コピーを削除候補へ加える（#4069）。
