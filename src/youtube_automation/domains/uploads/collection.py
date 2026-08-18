@@ -23,6 +23,7 @@ from youtube_automation.domains.uploads._collection_uploader_constants import (
 )
 from youtube_automation.domains.uploads._complete_collection_executor import CompleteCollectionExecutor
 from youtube_automation.domains.uploads._playlist_assignment import PlaylistAssignment
+from youtube_automation.domains.uploads._preflight import PreflightChecker
 from youtube_automation.domains.uploads._published_dates import PublishedDatesScheduler
 from youtube_automation.domains.uploads._tracking_io import TrackingStore
 from youtube_automation.domains.uploads.preflight import ensure_collection_preflight
@@ -72,6 +73,7 @@ class CollectionUploader:
         published_dates: PublishedDatesScheduler | None = None,
         playlist_assignment: PlaylistAssignment | None = None,
         complete_collection_executor: CompleteCollectionExecutor | None = None,
+        allow_duration_outside_target: bool = False,
     ):
         if collections_root is None:
             collections_root = channel_dir() / "collections"
@@ -81,7 +83,14 @@ class CollectionUploader:
 
         self.collections_root = Path(collections_root)
         self.config_path = Path(config_path)
-        self.uploader = YouTubeAutoUploader(str(collections_root), youtube_clients)
+        self.uploader = YouTubeAutoUploader(
+            str(collections_root),
+            youtube_clients,
+            preflight_checker=PreflightChecker(
+                self.collections_root,
+                allow_duration_outside_target=allow_duration_outside_target,
+            ),
+        )
         self.config = self._load_config()
         self.tracking_store = tracking_store or TrackingStore(self.collections_root, self.config)
         self.youtube_service = None

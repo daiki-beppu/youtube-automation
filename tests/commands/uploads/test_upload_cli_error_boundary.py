@@ -159,10 +159,39 @@ def test_collection_cli_dispatches_normal_operation(monkeypatch, option, expecte
 
     assert collection_uploader.main(argv) == 0
 
-    factory.assert_called_once_with(config_path="/config.json", youtube_clients=clients)
+    factory.assert_called_once_with(
+        config_path="/config.json",
+        youtube_clients=clients,
+        allow_duration_outside_target=False,
+    )
     uploader.find_collection.assert_called_once_with("slug")
     assert uploader.ensure_upload_preflight.called is preflight
     getattr(uploader, expected_action).assert_called_once_with(target)
+
+
+def test_collection_cli_forwards_duration_override_to_uploader(monkeypatch):
+    from youtube_automation.commands.uploads import collection_uploader
+
+    # Given: 対象 collection が見つからない副作用なしの uploader
+    uploader = SimpleNamespace(find_collection=MagicMock(return_value=None))
+    factory = MagicMock(return_value=uploader)
+    clients = object()
+    monkeypatch.setattr(collection_uploader, "CollectionUploader", factory)
+    monkeypatch.setattr(
+        collection_uploader,
+        "create_authenticated_youtube_clients",
+        MagicMock(return_value=clients),
+    )
+
+    # When: operator が目標尺外を明示許可する
+    assert collection_uploader.main(["--allow-duration-outside-target"]) == 0
+
+    # Then: CLI の opt-in が domain constructor へ伝わる
+    factory.assert_called_once_with(
+        config_path=None,
+        youtube_clients=clients,
+        allow_duration_outside_target=True,
+    )
 
 
 def test_collection_cli_daemon_skips_collection_lookup(monkeypatch):
