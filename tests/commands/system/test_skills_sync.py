@@ -1242,6 +1242,36 @@ def test_cmd_sync_prune_removes_known_removed_skill_when_yes(fake_repo: Path, tm
     assert not orphan.exists()
 
 
+def test_cmd_sync_prune_replaces_legacy_video_skills_with_video_owner(
+    fake_repo: Path,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    bundled_video = fake_repo / ".claude" / "skills" / "video"
+    bundled_video.mkdir()
+    (bundled_video / "SKILL.md").write_text("# video owner\n", encoding="utf-8")
+    target = tmp_path / "out" / ".claude" / "skills"
+    _seed_bundled_target(target)
+    legacy_skills = (target / "video-description", target / "videoup")
+    for legacy_skill in legacy_skills:
+        legacy_skill.mkdir()
+        (legacy_skill / "SKILL.md").write_text("# legacy\n", encoding="utf-8")
+
+    parser = build_parser()
+    diff_args = parser.parse_args(["diff", "--asset", "skills", "--target", str(target)])
+    assert diff_args.func(diff_args) == 0
+    diff_output = capsys.readouterr().out
+    assert "upstream 管理の既知の旧 skill (prune 候補)" in diff_output
+    assert all(f"  - {legacy_skill.name}" in diff_output for legacy_skill in legacy_skills)
+
+    args = parser.parse_args(["sync", "--asset", "skills", "--target", str(target), "--force", "--prune", "--yes"])
+    rc = args.func(args)
+
+    assert rc == 0
+    assert (target / "video" / "SKILL.md").read_text(encoding="utf-8") == "# video owner\n"
+    assert all(not legacy_skill.exists() for legacy_skill in legacy_skills)
+
+
 def test_cmd_sync_prune_preserves_user_skill(fake_repo: Path, tmp_path: Path) -> None:
     """同梱外の未知 skill はユーザー作成の可能性があるため prune しない。"""
     target = tmp_path / "out" / ".claude" / "skills"
