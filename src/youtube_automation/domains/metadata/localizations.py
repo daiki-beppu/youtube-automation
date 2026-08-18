@@ -172,7 +172,7 @@ class SceneTitleViolation:
 def validate_scene_phrases(
     scene_phrases: Dict[str, str],
     config,
-    duration_seconds: int | float,
+    duration_seconds: int | float | None,
     scene_emoji: str = "",
 ) -> List[SceneTitleViolation]:
     """scene_phrases を localizations の全言語で試算し、100 codepoint 超過を一括検出する.
@@ -185,7 +185,7 @@ def validate_scene_phrases(
     Args:
         scene_phrases: {"en": ..., "ja": ..., ...} コレクション別の感情フレーズ翻訳
         config: `load_config()` の戻り値
-        duration_seconds: primary title と共有する実マスター秒数
+        duration_seconds: primary title と共有する実マスター秒数。生成前検証では予定秒数。
 
     Returns:
         違反のリスト。空なら全言語 100 codepoint 以内.
@@ -240,9 +240,15 @@ def _validate_and_format_scene_titles(
             raise ValueError(f"localizations.json: language '{lang}' に title_template が無い")
         activities = lang_data.get("activities", best_for_line)
         scene = scene_phrases[lang]
+        title_placeholders = _referenced_placeholders(title_tpl)
+        if "duration_display" in title_placeholders and duration_seconds is None:
+            raise ValueError(
+                "localizations の title_template に {duration_display} があるため、"
+                "config/channel/audio.json の audio.target_duration_min が必要です"
+            )
         duration_display = (
             format_localized_duration_display(duration_seconds, lang)
-            if "duration_display" in _referenced_placeholders(title_tpl)
+            if "duration_display" in title_placeholders and duration_seconds is not None
             else ""
         )
         title = format_title_template(

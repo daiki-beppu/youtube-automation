@@ -76,6 +76,8 @@ def _setup_channel(
     workflow_state: dict | None = None,
     collection_stage: str = "planning",
     collection_name: str = "20260322-tc-city-collection",
+    title_template: str = "{scene_phrase}",
+    target_duration_min: float | None = None,
 ) -> Path:
     ch = tmp_path / "channel"
     for filename, data in _sections_with_theme_scenes().items():
@@ -87,12 +89,12 @@ def _setup_channel(
                 "default_language": "en",
                 "supported_languages": supported_languages,
                 "languages": {
-                    lang: {"title_template": "{scene_phrase}", "activities": "x"}
-                    for lang in supported_languages
-                    if lang != "en"
+                    lang: {"title_template": title_template, "activities": "x"} for lang in supported_languages
                 },
             },
         )
+    if target_duration_min is not None:
+        _write_json(ch / "config" / "channel" / "audio.json", {"audio": {"target_duration_min": target_duration_min}})
     if workflow_state is not None:
         _write_json(
             ch / "collections" / collection_stage / collection_name / "workflow-state.json",
@@ -308,6 +310,77 @@ class TestMainCLI:
         assert ws["scene_phrases"]["ja"] == "深夜のネオン街"
         assert ws["scene_phrases"]["ko"] == "심야 네온"
         assert ws["future_section"] == {"keep": True}
+
+    def test_rejects_localized_titles_over_limit_before_writing(self, tmp_path, monkeypatch, capsys):
+        collection_name = "20260322-tc-city-collection"
+        en_phrase = "back at your desk after time away, quiet morning light, settling in again"
+        de_phrase = "zurück am Schreibtisch nach längerer Pause, stilles Morgenlicht, wieder ankommen"
+        ch = _setup_channel(
+            tmp_path,
+            supported_languages=["en", "de"],
+            workflow_state={"theme": "city"},
+            collection_name=collection_name,
+            title_template="{scene_phrase} | lo-fi work playlist [{duration_display}]",
+            target_duration_min=180,
+        )
+        monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+        rc = populate_scene_phrases.main(
+            [collection_name, "--en", en_phrase, "--translations-json", json.dumps({"de": de_phrase})]
+        )
+
+        assert rc == 1
+        error = capsys.readouterr().err
+        assert "[en] 105 codepoints" in error
+        assert "[de] 110 codepoints" in error
+        state = json.loads(
+            (ch / "collections" / "planning" / collection_name / "workflow-state.json").read_text(encoding="utf-8")
+        )
+        assert "scene_phrases" not in state
+
+    def test_writes_when_localized_planned_titles_fit_limit(self, tmp_path, monkeypatch):
+        collection_name = "20260322-tc-city-collection"
+        ch = _setup_channel(
+            tmp_path,
+            supported_languages=["en", "de"],
+            workflow_state={"theme": "city"},
+            collection_name=collection_name,
+            title_template="{scene_phrase} | lo-fi work playlist [{duration_display}]",
+            target_duration_min=180,
+        )
+        monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+        rc = populate_scene_phrases.main(
+            [collection_name, "--en", "quiet desk", "--translations-json", json.dumps({"de": "ruhiger Schreibtisch"})]
+        )
+
+        assert rc == 0
+        state = json.loads(
+            (ch / "collections" / "planning" / collection_name / "workflow-state.json").read_text(encoding="utf-8")
+        )
+        assert state["scene_phrases"] == {"en": "quiet desk", "de": "ruhiger Schreibtisch"}
+
+    def test_rejects_duration_template_without_planned_duration(self, tmp_path, monkeypatch, capsys):
+        collection_name = "20260322-tc-city-collection"
+        ch = _setup_channel(
+            tmp_path,
+            supported_languages=["en", "de"],
+            workflow_state={"theme": "city"},
+            collection_name=collection_name,
+            title_template="{scene_phrase} [{duration_display}]",
+        )
+        monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+        rc = populate_scene_phrases.main(
+            [collection_name, "--en", "quiet desk", "--translations-json", json.dumps({"de": "ruhiger Schreibtisch"})]
+        )
+
+        assert rc == 1
+        assert "audio.target_duration_min" in capsys.readouterr().err
+        state = json.loads(
+            (ch / "collections" / "planning" / collection_name / "workflow-state.json").read_text(encoding="utf-8")
+        )
+        assert "scene_phrases" not in state
 
     def test_writes_translated_phrases_from_file(self, tmp_path, monkeypatch):
         ch = _setup_channel(

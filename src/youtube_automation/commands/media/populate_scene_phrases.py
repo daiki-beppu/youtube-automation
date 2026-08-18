@@ -31,6 +31,7 @@ from youtube_automation.configuration import channel_dir, load_config
 from youtube_automation.core.errors import AutomationError, ConfigError, ValidationError
 from youtube_automation.domains.collections.workflow_state import read as read_workflow_state
 from youtube_automation.domains.collections.workflow_state import update as update_workflow_state
+from youtube_automation.domains.metadata import format_scene_title_violations, validate_scene_phrases
 from youtube_automation.domains.uploads.preflight import requires_scene_phrases
 
 logger = logging.getLogger(__name__)
@@ -177,6 +178,26 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _validate_scene_title_lengths(scene_phrases: dict[str, str], config, *, scene_emoji: str) -> None:
+    target_duration_min = config.audio.target_duration_min
+    duration_seconds = target_duration_min * 60 if target_duration_min is not None else None
+    try:
+        violations = validate_scene_phrases(
+            scene_phrases,
+            config,
+            duration_seconds,
+            scene_emoji=scene_emoji,
+        )
+    except ValueError as exc:
+        raise ValidationError(str(exc)) from exc
+    if violations:
+        raise ValidationError(
+            f"localizations の {len(violations)} 言語で予定タイトルが 100 codepoint を超過:\n"
+            f"{format_scene_title_violations(violations)}\n"
+            "→ scene_phrases を短縮してから再実行してください"
+        )
+
+
 def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     args = _build_arg_parser().parse_args(argv)
@@ -187,7 +208,8 @@ def main(argv: list[str] | None = None) -> int:
         ws_path = col_path / "workflow-state.json"
         if not ws_path.exists():
             raise ConfigError(f"{ws_path} が存在しません")
-        state = read_workflow_state(ws_path).to_dict()
+        workflow_state = read_workflow_state(ws_path)
+        state = workflow_state.to_dict()
 
         supported = list(config.localizations.supported_languages)
         if not requires_scene_phrases(supported):
@@ -222,6 +244,9 @@ def main(argv: list[str] | None = None) -> int:
 
         translations = translate_phrase(en_phrase, supported, translations_json=translations_json)
         scene_phrases: dict[str, str] = {SOURCE_LANG: en_phrase, **translations}
+        planning = workflow_state.planning
+        scene_emoji = planning.scene_emoji if planning is not None else ""
+        _validate_scene_title_lengths(scene_phrases, config, scene_emoji=scene_emoji or "")
 
         if args.dry_run:
             print(json.dumps(scene_phrases, ensure_ascii=False, indent=2))
