@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `fix(skills)`: `yt-skills migrate-config` に統合済み 5 skill の移行先を追加し、孤児 config を `wf-new` / `thumbnail` / `music` / `channel-research` へ安全に移行できるようにする（#4333）。
 - `fix(automation-update)`: multi-channel workspace では単一 channel 用 `channel-gitignore` asset を sync / diff 対象外とし、OAuth secret や channel media を保護する workspace 固有 `.gitignore` を維持する（#4331）。
+- `fix(hybrid)`: `yt-skills migrate-state-git` が workspace root の集約 `.gitignore` を利用し、既追跡の制御面 JSON を移行済みとして検査できるようにする（#4332）。
 
 - `fix(collection-serve)`: Suno の安全モードで長時間生成した後も playlist 追加を継続できるよう、collection server の既定 idle timeout を 60 分から 4 時間へ延長する（#4335）。
 - `fix(uploads)`: プレイリスト割り当ての正本を `workflow-state.json::planning.playlists` に移し、theme slug の部分一致（`auto_add_themes`）だけに依存する構造をやめる。`yt-init-collection --playlist` / `--no-playlist` で init 段階に決め、分類プレイリストへ 1 つも割り当たらない状態はアップロード preflight が fail-loud で弾く（#4346）。**breaking**: 分類プレイリストを定義しているチャンネルでは `yt-init-collection` に `--playlist` か `--no-playlist` が必須。

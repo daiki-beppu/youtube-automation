@@ -49,6 +49,16 @@ def _write_control_files(channel: Path) -> tuple[Path, ...]:
     return state, tracking, post_publish, pinned
 
 
+def _init_workspace(path: Path, *, gitignore: str = "channels/*/collections/**/*.mp3\n") -> tuple[Path, Path]:
+    workspace = _init_repo(path, gitignore=gitignore)
+    channel = workspace / "channels" / "ambient"
+    (channel / "config" / "channel").mkdir(parents=True)
+    (channel / "config" / "channel" / "meta.json").write_text('{"channel": {"name": "ambient"}}\n', encoding="utf-8")
+    assert _git(workspace, "add", "-f", "channels/ambient/config/channel/meta.json").returncode == 0
+    assert _git(workspace, "commit", "-qm", "add channel").returncode == 0
+    return workspace, channel
+
+
 def test_dry_run_lists_only_channel_control_files_without_mutation(tmp_path: Path, capsys) -> None:
     channel = _init_repo(tmp_path / "channel")
     files = _write_control_files(channel)
@@ -82,6 +92,63 @@ def test_apply_stages_policy_and_control_files_then_check_passes_after_commit(tm
 
     assert _git(channel, "commit", "-qm", "manage state").returncode == 0
     assert main(["migrate-state-git", "--channel-dir", str(channel), "--check"]) == 0
+
+
+def test_workspace_check_passes_with_root_gitignore_when_control_files_are_tracked(
+    tmp_path: Path,
+) -> None:
+    workspace, channel = _init_workspace(tmp_path / "workspace")
+    files = _write_control_files(channel)
+    assert _git(workspace, "add", *(path.relative_to(workspace).as_posix() for path in files)).returncode == 0
+    assert _git(workspace, "commit", "-qm", "manage state").returncode == 0
+
+    assert main(["migrate-state-git", "--channel-dir", str(channel), "--check"]) == 0
+
+
+def test_workspace_dry_run_targets_root_gitignore_without_mutation(tmp_path: Path, capsys) -> None:
+    workspace, channel = _init_workspace(tmp_path / "workspace")
+    _write_control_files(channel)
+    before = (workspace / ".gitignore").read_bytes()
+
+    assert main(["migrate-state-git", "--channel-dir", str(channel), "--dry-run"]) == 0
+
+    assert ".gitignore (before)" in capsys.readouterr().out
+    assert (workspace / ".gitignore").read_bytes() == before
+
+
+def test_workspace_apply_stages_root_policy_and_channel_control_files(tmp_path: Path) -> None:
+    workspace, channel = _init_workspace(tmp_path / "workspace")
+    files = _write_control_files(channel)
+
+    assert main(["migrate-state-git", "--channel-dir", str(channel)]) == 0
+
+    assert STATE_GITIGNORE_MARKER in (workspace / ".gitignore").read_text(encoding="utf-8")
+    staged = set(_git(workspace, "diff", "--cached", "--name-only").stdout.splitlines())
+    assert staged == {".gitignore", *(path.relative_to(workspace).as_posix() for path in files)}
+    assert _git(workspace, "commit", "-qm", "migrate state").returncode == 0
+    assert main(["migrate-state-git", "--channel-dir", str(channel), "--check"]) == 0
+
+
+def test_workspace_apply_unignores_control_files_from_root_policy(tmp_path: Path) -> None:
+    workspace, channel = _init_workspace(tmp_path / "workspace", gitignore="*.json\n")
+    files = _write_control_files(channel)
+
+    assert main(["migrate-state-git", "--channel-dir", str(channel)]) == 0
+
+    staged = set(_git(workspace, "diff", "--cached", "--name-only").stdout.splitlines())
+    assert staged == {".gitignore", *(path.relative_to(workspace).as_posix() for path in files)}
+
+
+def test_workspace_rejects_symlinked_root_gitignore(tmp_path: Path, capsys) -> None:
+    workspace, channel = _init_workspace(tmp_path / "workspace")
+    outside = tmp_path / "outside-ignore"
+    outside.write_text("*.json\n", encoding="utf-8")
+    (workspace / ".gitignore").unlink()
+    (workspace / ".gitignore").symlink_to(outside)
+
+    assert main(["migrate-state-git", "--channel-dir", str(channel), "--check"]) == 1
+
+    assert "symlink" in capsys.readouterr().err
 
 
 def test_apply_is_idempotent_while_generated_changes_are_staged(tmp_path: Path) -> None:
