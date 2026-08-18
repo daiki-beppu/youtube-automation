@@ -303,7 +303,12 @@ test.beforeAll(async () => {
   await waitUntilReady(baseURL)
 })
 
-test("保存済み snapshot から画面を更新できる", async ({ page }) => {
+test("選択期間と手動更新で最新 snapshot を画面全体へ反映する", async ({
+  page,
+}) => {
+  const dataDirectory = join(fixtureRoot, "night-drive", "data")
+  const rangeSnapshot = join(dataDirectory, "analytics_data_2026-08-08.json")
+  const manualSnapshot = join(dataDirectory, "analytics_data_2026-08-09.json")
   await page.goto(baseURL)
   await expect(
     page.getByRole("region", { name: "日次再生数の推移" })
@@ -311,13 +316,105 @@ test("保存済み snapshot から画面を更新できる", async ({ page }) =>
   await expect(
     page.getByRole("button", { name: "30 日", pressed: true })
   ).toBeVisible()
-  await page.getByRole("button", { name: "7 日" }).click()
-  await expect(page.getByText("直近 7 日")).toBeVisible()
-  const button = page.getByRole("button", { name: "データを更新" })
-  await expect(button).toBeEnabled()
-  await button.click()
-  await expect(button).toHaveText("データを更新")
-  await expect(page.getByText("3,200").first()).toBeVisible()
+  await page
+    .getByRole("button", { name: "Night Drive の動画詳細を見る" })
+    .click()
+
+  try {
+    await writeFile(
+      rangeSnapshot,
+      JSON.stringify({
+        collection_period: {
+          start_date: "2026-08-02",
+          end_date: "2026-08-08",
+          collected_at: "2026-08-08T12:34:00Z",
+        },
+        channel_analytics: {
+          daily_metrics: [{ date: "2026-08-08", views: 4321 }],
+          summary: {
+            total_views: 4321,
+            total_watch_time: 1200,
+            net_subscribers: 43,
+            total_engagement: 210,
+          },
+        },
+        scheduled_videos: { count: 1 },
+        video_analytics: {
+          "video-1": {
+            title: "Midnight City",
+            views: 4321,
+            likes: 180,
+            comments: 20,
+            shares: 10,
+          },
+        },
+      })
+    )
+
+    await page.getByRole("button", { name: "7 日" }).click()
+
+    await expect(page.getByText("直近 7 日")).toBeVisible()
+    const dataContext = page.getByRole("region", {
+      name: "表示データについて",
+    })
+    await expect(dataContext).toContainText("2026/08/02〜2026/08/08")
+    await expect(dataContext).toContainText("21:34")
+    await expect(
+      page
+        .getByRole("table", { name: "チャンネル横断ストック一覧" })
+        .getByRole("row", { name: /Night Drive/ })
+    ).toContainText("4,321")
+    await expect(
+      page
+        .getByRole("table", { name: "動画パフォーマンス" })
+        .getByRole("cell", { name: "4,321" })
+    ).toBeVisible()
+
+    await writeFile(
+      manualSnapshot,
+      JSON.stringify({
+        collection_period: {
+          start_date: "2026-08-03",
+          end_date: "2026-08-09",
+          collected_at: "2026-08-09T13:45:00Z",
+        },
+        channel_analytics: {
+          daily_metrics: [{ date: "2026-08-09", views: 8765 }],
+          summary: {
+            total_views: 8765,
+            total_watch_time: 2400,
+            net_subscribers: 87,
+            total_engagement: 420,
+          },
+        },
+        scheduled_videos: { count: 1 },
+        video_analytics: {
+          "video-1": {
+            title: "Midnight City",
+            views: 8765,
+            likes: 360,
+            comments: 40,
+            shares: 20,
+          },
+        },
+      })
+    )
+    const button = page.getByRole("button", { name: "データを更新" })
+    await button.click()
+
+    await expect(button).toHaveText("データを更新")
+    await expect(dataContext).toContainText("2026/08/03〜2026/08/09")
+    await expect(dataContext).toContainText("22:45")
+    await expect(
+      page
+        .getByRole("table", { name: "動画パフォーマンス" })
+        .getByRole("cell", { name: "8,765" })
+    ).toBeVisible()
+  } finally {
+    await rm(rangeSnapshot, { force: true })
+    await rm(manualSnapshot, { force: true })
+    await page.request.post(`${baseURL}/api/refresh`, { data: { days: 30 } })
+  }
 })
 
 test.afterAll(async () => {
@@ -346,7 +443,7 @@ test("初期表示で公開活動を概況とチャンネル比較より前に�
       (activity, laterElement) =>
         Boolean(
           activity.compareDocumentPosition(laterElement) &
-            Node.DOCUMENT_POSITION_FOLLOWING
+          Node.DOCUMENT_POSITION_FOLLOWING
         ),
       await overview.elementHandle()
     )
@@ -356,7 +453,7 @@ test("初期表示で公開活動を概況とチャンネル比較より前に�
       (activity, laterElement) =>
         Boolean(
           activity.compareDocumentPosition(laterElement) &
-            Node.DOCUMENT_POSITION_FOLLOWING
+          Node.DOCUMENT_POSITION_FOLLOWING
         ),
       await comparison.elementHandle()
     )

@@ -1,6 +1,6 @@
 import "@testing-library/jest-dom/vitest"
 
-import { render, screen, waitFor, within } from "@testing-library/react"
+import { act, render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest"
 
@@ -400,6 +400,75 @@ describe("dashboard", () => {
       ).toBe(true)
     )
     expect(screen.getByText("直近 7 日")).toBeInTheDocument()
+  })
+
+  it("keeps the refreshed range snapshot when the initial request completes late", async () => {
+    const initialOverviewResponse = deferred<Response>()
+    const refreshedOverview = {
+      ...overview,
+      channels: [
+        {
+          ...overview.channels[0],
+          collected_at: "2026-08-08T12:34:00Z",
+          period: { start_date: "2026-08-02", end_date: "2026-08-08" },
+          summary: { ...overview.channels[0].summary, views: 4321 },
+        },
+      ],
+    }
+    let channelRequestCount = 0
+    vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+      const path = String(input)
+      if (path === "/api/channels") {
+        channelRequestCount += 1
+        if (channelRequestCount === 1) return initialOverviewResponse.promise
+        return Promise.resolve(
+          new Response(JSON.stringify(refreshedOverview), { status: 200 })
+        )
+      }
+      if (path === "/api/refresh" && init?.method === "POST") {
+        return Promise.resolve(
+          new Response(JSON.stringify(refreshedOverview), { status: 200 })
+        )
+      }
+      if (path === "/api/publications") {
+        return Promise.resolve(
+          new Response(JSON.stringify(publicationActivity), { status: 200 })
+        )
+      }
+      if (path === "/api/trends") {
+        return Promise.resolve(
+          new Response(JSON.stringify({ channels: [] }), { status: 200 })
+        )
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify({ channels: [] }), { status: 200 })
+      )
+    })
+    const user = userEvent.setup()
+    renderDashboard()
+
+    await user.click(screen.getByRole("button", { name: "7 日" }))
+
+    expect(await screen.findByText("4,321")).toBeInTheDocument()
+    const dataContext = screen.getByRole("region", {
+      name: "表示データについて",
+    })
+    expect(
+      within(dataContext).getByText("2026/08/02〜2026/08/08")
+    ).toBeInTheDocument()
+    expect(within(dataContext).getByText(/21:34/)).toBeInTheDocument()
+
+    await act(async () => {
+      initialOverviewResponse.resolve(
+        new Response(JSON.stringify(overview), { status: 200 })
+      )
+      await initialOverviewResponse.promise
+    })
+
+    await waitFor(() => {
+      expect(screen.getByText("4,321")).toBeInTheDocument()
+      expect(screen.queryByText("1,200")).not.toBeInTheDocument()
+    })
   })
 
   it("presents overview, data context, metric definitions, and comparison in decision order", async () => {

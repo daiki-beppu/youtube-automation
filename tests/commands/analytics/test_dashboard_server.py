@@ -186,10 +186,24 @@ def test_refresh_endpoint_recollects_and_rebuilds_read_model(tmp_path: Path) -> 
 
     def collect(path: Path, days: int) -> None:
         assert days == 30
-        snapshot = path / "data" / "analytics_data_2026-07-20.json"
-        payload = json.loads(snapshot.read_text(encoding="utf-8"))
-        payload["channel_analytics"]["summary"]["total_views"] = 456
-        snapshot.write_text(json.dumps(payload), encoding="utf-8")
+        snapshot = path / "data" / "analytics_data_2026-08-19.json"
+        snapshot.write_text(
+            json.dumps(
+                {
+                    "collection_period": {
+                        "start_date": "2026-07-21",
+                        "end_date": "2026-08-19",
+                        "collected_at": "2026-08-19T12:34:00Z",
+                    },
+                    "channel_analytics": {
+                        "daily_metrics": [{"date": "2026-08-19", "views": 456}],
+                        "summary": {"total_views": 456},
+                    },
+                    "video_analytics": {"video-1": {"title": "Latest", "views": 456}},
+                }
+            ),
+            encoding="utf-8",
+        )
 
     server = create_server(port=0, channel_paths=[channel], collect_channel=collect)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -200,6 +214,17 @@ def test_refresh_endpoint_recollects_and_rebuilds_read_model(tmp_path: Path) -> 
         assert overview["channels"][0]["summary"]["views"] == 456
         _, current = _json(f"http://127.0.0.1:{server.server_port}/api/channels")
         assert current == overview
+        channel_id = overview["channels"][0]["id"]
+        _, trends = _json(f"http://127.0.0.1:{server.server_port}/api/trends")
+        _, detail = _json(f"http://127.0.0.1:{server.server_port}/api/channels/{channel_id}")
+        assert overview["channels"][0]["period"] == {
+            "start_date": "2026-07-21",
+            "end_date": "2026-08-19",
+        }
+        assert overview["channels"][0]["collected_at"] == "2026-08-19T12:34:00Z"
+        assert trends["channels"][0]["points"] == [{"date": "2026-08-19", "views": 456}]
+        assert detail["snapshot"] == overview["channels"][0]["snapshot"]
+        assert detail["videos"][0]["views"] == 456
     finally:
         server.shutdown()
         thread.join(timeout=5)
