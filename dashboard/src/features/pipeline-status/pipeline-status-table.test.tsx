@@ -107,6 +107,35 @@ describe("pipeline status table", () => {
     expect(within(table).getByText("state なし")).toBeInTheDocument()
   })
 
+  it("shows ongoing pipeline information by default", () => {
+    // Given
+    const data = phaseFilterData
+
+    // When
+    render(<PipelineStatusTable data={data} />)
+
+    // Then
+    expect(screen.getByRole("button", { name: "進行中" })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    )
+    const table = screen.getByRole("table", { name: "パイプライン状況" })
+    for (const visibleCollection of [
+      "collection-planning",
+      "collection-prepared",
+      "collection-mastered",
+      "collection-publishing",
+      "collection-cloud_owned",
+      "collection-invalid",
+    ]) {
+      expect(within(table).getByText(visibleCollection)).toBeInTheDocument()
+    }
+    expect(within(table).getByText("channel error")).toBeInTheDocument()
+    expect(
+      within(table).queryByText("collection-complete")
+    ).not.toBeInTheDocument()
+  })
+
   it.each(["planning", "prepared", "mastered", "publishing", "complete"])(
     "shows only collections whose phase exactly matches %s",
     async (phase) => {

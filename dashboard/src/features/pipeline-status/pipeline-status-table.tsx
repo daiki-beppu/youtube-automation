@@ -23,9 +23,16 @@ import type {
 } from "@/lib/dashboard-types"
 
 type PhaseFilter =
-  "all" | "planning" | "prepared" | "mastered" | "publishing" | "complete"
+  | "active"
+  | "all"
+  | "planning"
+  | "prepared"
+  | "mastered"
+  | "publishing"
+  | "complete"
 
 const phaseFilterOptions: Array<{ value: PhaseFilter; label: string }> = [
+  { value: "active", label: "進行中" },
   { value: "all", label: "すべて" },
   { value: "planning", label: "planning" },
   { value: "prepared", label: "prepared" },
@@ -36,6 +43,31 @@ const phaseFilterOptions: Array<{ value: PhaseFilter; label: string }> = [
 
 function isPhaseFilter(value: string | undefined): value is PhaseFilter {
   return phaseFilterOptions.some((option) => option.value === value)
+}
+
+function filterChannels(
+  channels: PipelineResponse["channels"],
+  phaseFilter: PhaseFilter
+): PipelineResponse["channels"] {
+  if (phaseFilter === "all") return channels
+
+  if (phaseFilter === "active") {
+    return channels.flatMap((channel) => {
+      const collections = channel.collections.filter(
+        (collection) => collection.phase !== "complete"
+      )
+      return channel.collections.length === 0 || collections.length > 0
+        ? [{ ...channel, collections }]
+        : []
+    })
+  }
+
+  return channels.flatMap((channel) => {
+    const collections = channel.collections.filter(
+      (collection) => collection.phase === phaseFilter
+    )
+    return collections.length === 0 ? [] : [{ ...channel, collections }]
+  })
 }
 
 const ownerLabels: Record<
@@ -64,16 +96,8 @@ function eventLabel(collection: PipelineCollection): string {
 }
 
 export function PipelineStatusTable({ data }: { data: PipelineResponse }) {
-  const [phaseFilter, setPhaseFilter] = useState<PhaseFilter>("all")
-  const visibleChannels =
-    phaseFilter === "all"
-      ? data.channels
-      : data.channels.flatMap((channel) => {
-          const collections = channel.collections.filter(
-            (collection) => collection.phase === phaseFilter
-          )
-          return collections.length === 0 ? [] : [{ ...channel, collections }]
-        })
+  const [phaseFilter, setPhaseFilter] = useState<PhaseFilter>("active")
+  const visibleChannels = filterChannels(data.channels, phaseFilter)
 
   return (
     <Card role="region" aria-labelledby="pipeline-status-title">
