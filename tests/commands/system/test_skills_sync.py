@@ -1146,6 +1146,77 @@ def test_cmd_sync_should_list_only_removed_analytics_skills_in_prune_dry_run(
     assert custom_skill.is_dir()
 
 
+def test_cmd_sync_should_list_consolidated_skills_in_prune_dry_run(
+    fake_repo: Path,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # Given: 統廃合済み skill 群と未知の自作 skill が target に残っている
+    retired_skills = {
+        "alignment-check",
+        "audience-persona-design",
+        "automation-schedule",
+        "benchmark",
+        "channel-new",
+        "channel-status",
+        "collection-ideate",
+        "comments-reply",
+        "community-draft",
+        "community-post",
+        "creative-constraints",
+        "discover-competitors",
+        "ext-install",
+        "flop-analysis",
+        "live-chat-reply",
+        "live-clean",
+        "loop-video",
+        "lyria",
+        "market-research",
+        "masterup",
+        "metadata-audit",
+        "pinned-comment",
+        "playlist",
+        "post-publish",
+        "short-release",
+        "short-thumbnail",
+        "suno",
+        "suno-helper",
+        "suno-lyric",
+        "thumbnail-compare",
+        "thumbnail-iterate",
+        "thumbnail-research",
+        "thumbnail-test",
+        "value-loop-audit",
+        "video-analyze",
+        "video-description",
+        "video-upload",
+        "videoup",
+        "viewer-voice",
+        "viewing-scene",
+        "wf-auto",
+        "wf-new-batch",
+    }
+    target = tmp_path / "out" / ".claude" / "skills"
+    _seed_bundled_target(target)
+    for skill_name in retired_skills:
+        (target / skill_name).mkdir()
+    custom_skill = target / "local-channel-helper"
+    custom_skill.mkdir()
+
+    # When: 承認なしの prune で同期する
+    parser = build_parser()
+    args = parser.parse_args(["sync", "--asset", "skills", "--target", str(target), "--force", "--prune"])
+    rc = args.func(args)
+
+    # Then: 統廃合済み skill だけを候補にし、まだ何も削除しない
+    assert rc == 0
+    output_lines = capsys.readouterr().out.splitlines()
+    would_prune_names = {line.split(":", maxsplit=1)[1].strip() for line in output_lines if "would-prune:" in line}
+    assert would_prune_names == retired_skills
+    assert all((target / skill_name).is_dir() for skill_name in retired_skills)
+    assert custom_skill.is_dir()
+
+
 @pytest.mark.parametrize(
     "skill_name",
     ["onboard", "distrokid-prep", "channel-import", "channel-setup", "channel-direction"],
