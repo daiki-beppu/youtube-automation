@@ -212,7 +212,7 @@ def _make_preflight_config(supported_languages: list[str]) -> SimpleNamespace:
             ),
         ),
         localizations=SimpleNamespace(supported_languages=supported_languages),
-        # 分類プレイリスト（auto_add 以外）を持たないチャンネル → 未割り当て検出は対象外 (#4330)
+        # 分類プレイリスト（auto_add 以外）を持たないチャンネル → 未割り当て検出は対象外 (#4346)
         playlists=SimpleNamespace(items={}),
     )
 
@@ -1710,7 +1710,7 @@ def test_dedup_fails_open_for_invalid_video_response_container(tmp_path, respons
 
 
 # ---------------------------------------------------------------------------
-# Issue #4330: preflight プレイリスト割り当てゲート
+# PR #4346: preflight プレイリスト割り当てゲート
 # ---------------------------------------------------------------------------
 
 
@@ -1773,6 +1773,34 @@ class TestPreflightPlaylistAssignment:
         )
 
         checker.check(col_dir)
+
+    def test_should_fail_when_explicit_playlists_only_names_auto_add(self, tmp_path):
+        from youtube_automation.domains.uploads.youtube import PreflightChecker
+
+        col_dir = _write_playlist_collection(tmp_path, {"playlists": ["all"]}, "carriage-six")
+        checker = PreflightChecker(
+            tmp_path,
+            config_loader=lambda: _make_playlist_config(_CATEGORIZING_PLAYLISTS),
+        )
+
+        with pytest.raises(ValidationError, match="プレイリスト未割り当て"):
+            checker.check(col_dir)
+
+    def test_should_fail_when_categorizing_playlist_has_no_youtube_id(self, tmp_path):
+        from youtube_automation.domains.uploads.youtube import PreflightChecker
+
+        playlists = {
+            "all": {"title": "All", "auto_add": True, "playlist_id": "PL_ALL"},
+            "rain": {"title": "Rain", "auto_add_themes": ["rain"]},
+        }
+        col_dir = _write_playlist_collection(tmp_path, {"playlists": ["rain"]}, "carriage-six")
+        checker = PreflightChecker(
+            tmp_path,
+            config_loader=lambda: _make_playlist_config(playlists),
+        )
+
+        with pytest.raises(ValidationError, match="playlist_id 未設定.*rain"):
+            checker.check(col_dir)
 
     def test_should_pass_when_legacy_keyword_still_matches(self, tmp_path):
         """既存コレクション（キーワードが当たる）は明示指定なしでも通る（後方互換）."""

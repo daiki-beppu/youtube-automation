@@ -27,7 +27,7 @@ def _run(monkeypatch, argv: list[str]):
 
 @pytest.fixture
 def categorizing_playlists():
-    """分類プレイリスト（auto_add 以外）を持つチャンネル config に差し替える (#4330)."""
+    """分類プレイリスト（auto_add 以外）を持つチャンネル config に差し替える (#4346)."""
     path = Path(channel_dir()) / "config" / "channel" / "playlists.json"
     original = path.read_text(encoding="utf-8")
     path.write_text(
@@ -177,7 +177,7 @@ class TestScaffold:
 
 
 class TestPlaylistAssignment:
-    """#4330: 割り当て先を init 段階で明示させる。
+    """#4346: 割り当て先を init 段階で明示させる。
 
     theme slug のキーワード照合に任せると、新テーマを作るたびに未登録で漏れ、
     黙って auto_add プレイリストだけに入る。
@@ -234,6 +234,15 @@ class TestPlaylistAssignment:
             _run(monkeypatch, ["Init Scaffold", "init-scaffold", "--playlist", "typo"])
         assert exc.value.code == 1
         assert "typo" in capsys.readouterr().err
+
+    def test_auto_add_key_requires_no_playlist_instead(self, monkeypatch, capsys, categorizing_playlists):
+        with pytest.raises(SystemExit) as exc:
+            _run(monkeypatch, ["Init Scaffold", "init-scaffold", "--playlist", "all"])
+
+        assert exc.value.code == 1
+        err = capsys.readouterr().err
+        assert "分類プレイリスト" in err
+        assert "--no-playlist" in err
 
     def test_conflicting_flags_fail_loud(self, monkeypatch, capsys, categorizing_playlists):
         with pytest.raises(SystemExit) as exc:

@@ -44,7 +44,7 @@ def build_state(
 ) -> dict:
     """workflow-state.json の初期状態を構築する（v2 スキーマ）。
 
-    ``playlists`` は所属させるプレイリスト key の明示指定（#4330）。``None`` は
+    ``playlists`` は所属させるプレイリスト key の明示指定（#4346）。``None`` は
     未決定として key 自体を書かない。``[]`` は「auto_add 以外へは入れない」の明示。
     """
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
@@ -79,7 +79,7 @@ def build_state(
 
 
 def _resolve_playlist_argument(config, args) -> list[str] | None:
-    """`--playlist` / `--no-playlist` を検証して planning.playlists の値を決める (#4330).
+    """`--playlist` / `--no-playlist` を検証して planning.playlists の値を決める (#4346).
 
     分類プレイリスト（`auto_add` 以外）を定義しているチャンネルでは、どちらかの
     明示を必須にする。theme slug のキーワード照合に任せると新テーマで必ず漏れ、
@@ -102,7 +102,15 @@ def _resolve_playlist_argument(config, args) -> list[str] | None:
             sys.exit(1)
         # 重複指定は正規化する（config 定義順）。
         selected = set(args.playlists)
-        return [key for key in playlists_config if key in selected]
+        explicit = [key for key in playlists_config if key in selected]
+        if categorizing and not any(key in categorizing for key in explicit):
+            print(
+                "[ERROR] --playlist には分類プレイリストを1つ以上指定してください。\n"
+                "        分類しないことが意図なら --no-playlist を明示してください",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        return explicit
 
     if categorizing:
         print(

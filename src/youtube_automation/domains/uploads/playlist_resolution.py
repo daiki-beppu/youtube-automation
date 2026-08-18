@@ -3,7 +3,7 @@
 ``PlaylistManager`` と upload preflight の双方がここを共有する。preflight は
 YouTube clients を持たないため、解決は必ず副作用の無い純関数として切り出す。
 
-解決の優先順位 (#4330):
+解決の優先順位 (#4346):
 
 1. ``workflow-state.json::planning.playlists`` の明示指定があればそれを採用する。
    これが canonical。``[]`` は「auto_add 以外へは意図的に追加しない」の明示。
@@ -123,20 +123,32 @@ def check_playlist_assignment(
     categorizing = categorizing_playlist_keys(playlists_config)
     if not categorizing:
         return None
-    if explicit is not None:
-        # 明示的な空配列 = operator が意図して auto_add のみを選んだ。
+    if explicit == []:
+        # 明示的な空配列だけが、operator が意図して auto_add のみを選んだ状態。
         return None
-    if any(key in categorizing for key in resolved):
-        return None
+    resolved_categorizing = [key for key in resolved if key in categorizing]
+    if not resolved_categorizing:
+        auto_only = ", ".join(_auto_add_keys(playlists_config)) or "(なし)"
+        return (
+            f"theme={theme!r} がどの分類プレイリストにも割り当たっていません"
+            f"（auto_add の {auto_only} のみ）。\n"
+            f"    auto_add_themes のキーワード照合は新テーマで必ず漏れます。"
+            f"割り当て先を明示してください:\n"
+            f"      uv run yt-workflow-state set-planning playlists "
+            f"'[\"{categorizing[0]}\"]'\n"
+            f"    分類しないことが意図なら空配列を明示してください: "
+            f"set-planning playlists '[]'"
+        )
 
-    auto_only = ", ".join(_auto_add_keys(playlists_config)) or "(なし)"
-    return (
-        f"theme={theme!r} がどの分類プレイリストにも割り当たっていません"
-        f"（auto_add の {auto_only} のみ）。\n"
-        f"    auto_add_themes のキーワード照合は新テーマで必ず漏れます。"
-        f"割り当て先を明示してください:\n"
-        f"      uv run yt-workflow-state set-planning playlists "
-        f"'[\"{categorizing[0]}\"]'\n"
-        f"    分類しないことが意図なら空配列を明示してください: "
-        f"set-planning playlists '[]'"
-    )
+    missing_playlist_ids = [
+        key
+        for key in resolved_categorizing
+        if not isinstance(playlists_config[key].get("playlist_id"), str)
+        or not playlists_config[key]["playlist_id"].strip()
+    ]
+    if missing_playlist_ids:
+        return (
+            f"分類プレイリストの playlist_id 未設定: {', '.join(missing_playlist_ids)}。"
+            "アップロード前に `uv run yt-playlist-manager --init` を実行してください"
+        )
+    return None

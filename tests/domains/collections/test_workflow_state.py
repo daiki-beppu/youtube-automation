@@ -624,7 +624,7 @@ def test_workflow_state_error_is_an_automation_error() -> None:
 
 
 class TestPlanningPlaylists:
-    """#4330: planning.playlists は「未決定」と「auto_add のみ」を区別する。"""
+    """#4346: planning.playlists は「未決定」と「auto_add のみ」を区別する。"""
 
     def _planning(self, tmp_path: Path, payload: object) -> object:
         state_path = tmp_path / "workflow-state.json"
@@ -642,7 +642,7 @@ class TestPlanningPlaylists:
     def test_keys_are_returned_in_order(self, tmp_path: Path) -> None:
         assert self._planning(tmp_path, {"playlists": ["a", "b"]}).playlists == ["a", "b"]
 
-    @pytest.mark.parametrize("payload", ["rain", {"key": "rain"}, [1], [""]])
+    @pytest.mark.parametrize("payload", [None, "rain", {"key": "rain"}, [1], [""]])
     def test_invalid_shape_fails_loud(self, tmp_path: Path, payload: object) -> None:
         planning = self._planning(tmp_path, {"playlists": payload})
         with pytest.raises(WorkflowStateError, match="planning.playlists"):

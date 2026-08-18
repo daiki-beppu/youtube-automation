@@ -273,7 +273,7 @@ class TestAssignVideo:
         mock_config.content.title.activity_for_theme.assert_called_once_with("ocean waves")
 
     def test_collection_path_planning_playlists_is_canonical(self, manager, mock_config, tmp_path):
-        """#4330: planning.playlists があれば theme / activity 照合は行わない."""
+        """#4346: planning.playlists があれば theme / activity 照合は行わない."""
         ws = tmp_path / "workflow-state.json"
         ws.write_text(
             json.dumps({"theme": "ocean waves", "planning": {"playlists": ["battle"]}}),

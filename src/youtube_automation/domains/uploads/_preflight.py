@@ -90,7 +90,7 @@ class PreflightChecker:
 
     @staticmethod
     def _check_playlist_assignment(state, config) -> None:
-        """分類プレイリストへ 1 つも割り当たらない状態を fail-loud で弾く (#4330).
+        """分類プレイリストへ 1 つも割り当たらない状態を fail-loud で弾く (#4346).
 
         `auto_add_themes` の theme slug 部分一致は、新テーマを作るたびに
         キーワード未登録で漏れ、黙って `auto_add` プレイリストだけに入る。
@@ -189,7 +189,7 @@ class PreflightChecker:
         if msg:
             raise ValidationError(f"❌ {msg}: 1 パターン = 1 chapter で再生成してください。")
 
-        # プレイリスト割り当て（#4330）。アップロード完了後に気付いても手戻りが
+        # プレイリスト割り当て（#4346）。アップロード完了後に気付いても手戻りが
         # 大きいので、数 GB を送る前のこの位置で fail-loud する。
         self._check_playlist_assignment(state, config)
 

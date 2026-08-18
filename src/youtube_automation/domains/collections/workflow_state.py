@@ -372,18 +372,18 @@ class PlanningState(_ObjectSection):
 
     @property
     def playlists(self) -> list[str] | None:
-        """このコレクションを追加するプレイリスト key の明示指定 (#4330).
+        """このコレクションを追加するプレイリスト key の明示指定 (#4346).
 
         `None` は「未決定」、`[]` は「auto_add 以外へは意図的に追加しない」を意味する。
         両者を取り違えると preflight の未割り当て検出が無意味になるため、
         欠落と空配列は区別して返す。
         """
-        value = self._data.get("playlists")
-        if value is None:
+        if "playlists" not in self._data:
             return None
+        value = self._data["playlists"]
         label = "workflow-state.json::planning.playlists"
         if not isinstance(value, list):
-            raise WorkflowStateError(f"{label} must be an array of strings or null")
+            raise WorkflowStateError(f"{label} must be an array of strings")
         keys: list[str] = []
         for item in value:
             if not isinstance(item, str) or not item:

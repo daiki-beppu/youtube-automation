@@ -136,7 +136,7 @@ class PlaylistManager:
         """テーマから所属すべきプレイリストキーのリストを返す.
 
         `explicit`（`workflow-state.json::planning.playlists`）があればそれが
-        canonical で、activity / theme 照合は一切行わない（#4330）。
+        canonical で、activity / theme 照合は一切行わない（#4346）。
 
         `explicit` が `None` のときのみレガシー照合へフォールバックする。
         その場合、`activity` 明示指定があればそれを優先し、`None` の場合のみ
@@ -221,7 +221,7 @@ class PlaylistManager:
 
     @staticmethod
     def _planning_playlists(collection_path: Path) -> list[str] | None:
-        """collection_path/workflow-state.json から planning.playlists を読む (#4330).
+        """collection_path/workflow-state.json から planning.playlists を読む (#4346).
 
         `None` は未指定（レガシー照合へフォールバック）、`[]` は「auto_add のみ」
         の明示。schema 違反（配列でない・空文字を含む）は fail-loud で伝播させる —
@@ -266,7 +266,7 @@ class PlaylistManager:
         """単一動画を該当プレイリストに追加
 
         `collection_path` が与えられた場合、`workflow-state.json` の
-        `planning.playlists` を最優先で使う（#4330）。未指定のときのみ
+        `planning.playlists` を最優先で使う（#4346）。未指定のときのみ
         `planning.activities` を activity override として `resolve_playlists`
         に渡す（#80）。
 

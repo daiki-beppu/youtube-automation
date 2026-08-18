@@ -1,4 +1,4 @@
-"""プレイリスト解決の純関数テスト (#4330).
+"""プレイリスト解決の純関数テスト (#4346).
 
 theme slug の部分一致だけに依存していた頃の事故（新テーマを作るたびに
 auto_add_themes が未登録で、黙って auto_add プレイリストだけに入る）が
@@ -100,3 +100,21 @@ class TestCheckPlaylistAssignment:
 
     def test_explicit_empty_is_an_accepted_operator_decision(self):
         assert check_playlist_assignment(PLAYLISTS, ["all"], theme="anything", explicit=[]) is None
+
+    def test_explicit_auto_add_key_does_not_claim_a_categorizing_assignment(self):
+        issue = check_playlist_assignment(PLAYLISTS, ["all"], theme="anything", explicit=["all"])
+
+        assert issue is not None
+        assert "分類プレイリスト" in issue
+
+    def test_flags_categorizing_playlist_without_youtube_id(self):
+        playlists = {
+            **PLAYLISTS,
+            "rain": {"title": "Rain", "auto_add_themes": ["rain"]},
+        }
+
+        issue = check_playlist_assignment(playlists, ["all", "rain"], theme="rain", explicit=["rain"])
+
+        assert issue is not None
+        assert "playlist_id 未設定" in issue
+        assert "rain" in issue

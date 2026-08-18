@@ -281,7 +281,7 @@ top-level `music_engine` は既存 state の読み取り専用互換 field で�
 
 | キー | populate するスキル | 用途 |
 |-----|-------------------|-----|
-| `planning.playlists` | `yt-init-collection --playlist` | **プレイリスト割り当ての正本** (#4330)。string 配列。`[]` は「`auto_add` のみ」の明示、キー自体の欠落は「未決定」。未決定のままアップロードしようとすると preflight が fail-loud で止める |
+| `planning.playlists` | `yt-init-collection --playlist` | **プレイリスト割り当ての正本** (#4346)。string 配列。`[]` は「`auto_add` のみ」の明示、キー自体の欠落は「未決定」。未決定のままアップロードしようとすると preflight が fail-loud で止める |
 | `planning.activities` | `/wf-new` 等 | プレイリストアクティビティの override（`planning.playlists` 未指定時のみ参照されるレガシー経路） |
 | `planning.target_persona` | `/wf-new` | 企画選択時のターゲットペルソナ記録 |
 | `planning.final_title` | `/wf-new` | 確定タイトル |
