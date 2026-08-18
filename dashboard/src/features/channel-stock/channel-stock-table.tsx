@@ -13,6 +13,8 @@ import {
 import {
   formatCollectedAt,
   formatInteger,
+  formatPeriodViewsLabel,
+  resolveDashboardPeriod,
   formatSignedInteger,
   formatWatchTime,
 } from "@/lib/dashboard-formatters"
@@ -57,22 +59,17 @@ function statusVariant(
 
 function MetricCell({
   channel,
+  label,
   metric,
 }: {
   channel: ChannelOverview
+  label: string
   metric: "views" | "subscribers_net" | "watch_time_minutes"
 }) {
-  const labels = {
-    views: STOCK_TABLE_CONTRACT.columns.views,
-    subscribers_net: STOCK_TABLE_CONTRACT.columns.subscribersNet,
-    watch_time_minutes: STOCK_TABLE_CONTRACT.columns.watchTime,
-  }
   if (!channel.summary) {
     return (
       <TableCell className="flex flex-col gap-1 whitespace-normal lg:table-cell">
-        <span className="text-xs text-muted-foreground lg:hidden">
-          {labels[metric]}
-        </span>
+        <span className="text-xs text-muted-foreground lg:hidden">{label}</span>
         —
       </TableCell>
     )
@@ -88,9 +85,7 @@ function MetricCell({
     value > 0 ? "positive" : value < 0 ? "negative" : "neutral"
   return (
     <TableCell className="flex flex-col gap-1 text-left whitespace-normal tabular-nums lg:table-cell lg:text-right">
-      <span className="text-xs text-muted-foreground lg:hidden">
-        {labels[metric]}
-      </span>
+      <span className="text-xs text-muted-foreground lg:hidden">{label}</span>
       {metric === "subscribers_net" ? (
         <span className="dashboard-signed-value" data-tone={subscriberTone}>
           {formatted}
@@ -125,6 +120,10 @@ export function ChannelStockTable({
   const total = channels
     .filter(isAvailable)
     .reduce((sum, channel) => sum + channel.scheduled_count, 0)
+  const { startDate, endDate } = resolveDashboardPeriod(
+    channels.map((channel) => channel.period)
+  )
+  const viewsLabel = formatPeriodViewsLabel(startDate, endDate)
 
   return (
     <section aria-labelledby="channel-stock-title" className="grid gap-4">
@@ -161,9 +160,7 @@ export function ChannelStockTable({
               <TableHead>{STOCK_TABLE_CONTRACT.columns.status}</TableHead>
               <TableHead>{STOCK_TABLE_CONTRACT.columns.collectedAt}</TableHead>
               <TableHead>{STOCK_TABLE_CONTRACT.columns.stock}</TableHead>
-              <TableHead className="text-right">
-                {STOCK_TABLE_CONTRACT.columns.views}
-              </TableHead>
+              <TableHead className="text-right">{viewsLabel}</TableHead>
               <TableHead className="text-right">
                 {STOCK_TABLE_CONTRACT.columns.subscribersNet}
               </TableHead>
@@ -223,9 +220,21 @@ export function ChannelStockTable({
                         : STOCK_TABLE_CONTRACT.unavailable}
                     </Badge>
                   </TableCell>
-                  <MetricCell channel={channel} metric="views" />
-                  <MetricCell channel={channel} metric="subscribers_net" />
-                  <MetricCell channel={channel} metric="watch_time_minutes" />
+                  <MetricCell
+                    channel={channel}
+                    label={viewsLabel}
+                    metric="views"
+                  />
+                  <MetricCell
+                    channel={channel}
+                    label={STOCK_TABLE_CONTRACT.columns.subscribersNet}
+                    metric="subscribers_net"
+                  />
+                  <MetricCell
+                    channel={channel}
+                    label={STOCK_TABLE_CONTRACT.columns.watchTime}
+                    metric="watch_time_minutes"
+                  />
                   {onSelect ? (
                     <TableCell className="col-span-2 p-0 text-right lg:table-cell lg:p-2">
                       <Button

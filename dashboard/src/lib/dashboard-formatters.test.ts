@@ -4,6 +4,7 @@ import {
   formatCollectedAt,
   formatDateRange,
   formatInteger,
+  formatPeriodViewsLabel,
   formatSignedDuration,
   formatSignedInteger,
   formatWatchTime,
@@ -55,5 +56,15 @@ describe("dashboard formatters", () => {
     expect(formatDateRange(null, null)).toBe("未収集")
     expect(formatDateRange("2026-07-01", null)).toBe("2026/07/01〜未収集")
     expect(formatDateRange(null, "2026-07-20")).toBe("未収集〜2026/07/20")
+  })
+
+  it("formats a compact period views label only for two valid dates", () => {
+    expect(formatPeriodViewsLabel("2026-04-01", "2026-06-30")).toBe(
+      "期間再生数 (04/01 ~ 06/30)"
+    )
+    expect(formatPeriodViewsLabel(null, "2026-06-30")).toBe("期間再生数")
+    expect(formatPeriodViewsLabel("2026-02-30", "2026-06-30")).toBe(
+      "期間再生数"
+    )
   })
 })

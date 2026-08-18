@@ -477,8 +477,22 @@ describe("dashboard", () => {
   })
 
   it("presents overview, data context, metric definitions, and comparison in decision order", async () => {
+    const overviewWithDifferentPeriods = {
+      ...overview,
+      channels: [
+        overview.channels[0],
+        {
+          ...overview.channels[0],
+          id: "channel-b",
+          name: "Quiet Piano",
+          period: { start_date: "2026-05-01", end_date: "2026-08-31" },
+        },
+      ],
+    }
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(JSON.stringify(overview), { status: 200 })
+      new Response(JSON.stringify(overviewWithDifferentPeriods), {
+        status: 200,
+      })
     )
 
     renderDashboard()
@@ -498,7 +512,7 @@ describe("dashboard", () => {
     })
     expect(within(dataContext).getByText("対象期間")).toBeInTheDocument()
     expect(
-      within(dataContext).getByText("2026/06/20〜2026/07/20")
+      within(dataContext).getByText("2026/05/01〜2026/08/31")
     ).toBeInTheDocument()
     expect(within(dataContext).getByText("最終更新")).toBeInTheDocument()
     expect(within(dataContext).getByText(/\d{1,2}:\d{2}/)).toBeInTheDocument()
@@ -515,6 +529,11 @@ describe("dashboard", () => {
     expect(within(metricGuide).getByText("期間再生数")).toBeInTheDocument()
     expect(
       within(metricGuide).getByText("対象期間中に動画が再生された回数")
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole("columnheader", {
+        name: "期間再生数 (05/01 ~ 08/31)",
+      })
     ).toBeInTheDocument()
   })
 

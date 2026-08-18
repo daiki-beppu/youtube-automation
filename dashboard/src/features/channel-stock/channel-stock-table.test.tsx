@@ -70,7 +70,7 @@ describe("ChannelStockTable", () => {
       "状態",
       "収集時刻",
       "ストック",
-      "期間再生数",
+      "期間再生数 (06/20 ~ 07/20)",
       "純増登録者",
       "総再生時間",
     ])
@@ -79,6 +79,54 @@ describe("ChannelStockTable", () => {
     expect(within(row).getByText("1,200")).toBeInTheDocument()
     expect(within(row).getByText("+12")).toBeInTheDocument()
     expect(within(row).getByText("7時間30分")).toBeInTheDocument()
+    expect(
+      within(row).getByText("期間再生数 (06/20 ~ 07/20)")
+    ).toBeInTheDocument()
+  })
+
+  it("shows the earliest start and latest end when channel periods differ", () => {
+    const channels = [
+      {
+        ...channel("Later period", 3),
+        period: { start_date: "2026-05-02", end_date: "2026-05-31" },
+      },
+      {
+        ...channel("Wider period", 4),
+        period: { start_date: "2026-04-01", end_date: "2026-06-30" },
+      },
+      {
+        ...channel("Invalid period", 5),
+        period: { start_date: "not-a-date", end_date: "2026-02-30" },
+      },
+    ]
+
+    render(<ChannelStockTable channels={channels} />)
+
+    expect(
+      screen.getByRole("columnheader", {
+        name: "期間再生数 (04/01 ~ 06/30)",
+      })
+    ).toBeInTheDocument()
+  })
+
+  it("uses the base views label when either period endpoint is unavailable", () => {
+    const channels = [
+      {
+        ...channel("Missing period", 3),
+        period: { start_date: null, end_date: "2026-07-20" },
+      },
+    ]
+
+    render(<ChannelStockTable channels={channels} />)
+
+    expect(
+      screen.getByRole("columnheader", { name: "期間再生数" })
+    ).toBeInTheDocument()
+    expect(
+      within(screen.getByRole("row", { name: /Missing period/ })).getByText(
+        "期間再生数"
+      )
+    ).toBeInTheDocument()
   })
 
   it("keeps the sign visible while exposing subscriber change semantics", () => {
