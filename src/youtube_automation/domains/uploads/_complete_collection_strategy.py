@@ -115,7 +115,10 @@ class CompleteCollectionStrategy:
             if prebuilt["tags"]:
                 metadata["tags"] = prebuilt["tags"]
 
-            metadata["localizations"] = prebuilt["localizations"]
+            # 空 object は「文書側に最終翻訳なし」を表すため、scene_phrases から
+            # metadata generator が組み立てた翻訳を消さない。非空なら承認済み文書を優先する。
+            if prebuilt["localizations"]:
+                metadata["localizations"] = prebuilt["localizations"]
 
         if publish_at:
             metadata["publish_at"] = publish_at

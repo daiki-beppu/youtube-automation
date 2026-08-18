@@ -19,5 +19,9 @@ uv run yt-document-migrate <candidate.json> \
 HTML 再生成照合、JSON/HTML 再読込が成功した後だけ Markdown を削除し、workflow-state owner 経由で
 `assets.description = true` にする。失敗時は旧 Markdown、pair、state を rollback する。
 
+localizations が非空なら、その値を upload 時の最終翻訳として使う。localizations が空 object の場合は
+「文書側に最終翻訳なし」と扱い、workflow-state.json の scene_phrases から metadata generator が生成した
+翻訳を維持する。空 object で生成済み翻訳を消してはならない。
+
 localization の必須値、title 上限、quality status / 各 check のいずれかが不正なら公開しない。
 公開済み pair の片方欠損・改変も state / preflight / upload を成功扱いにしない。
