@@ -302,6 +302,11 @@ _SESS_PREV = "https://upload.googleapis.com/SESS_PREV"
 _SESS_NEW = "https://upload.googleapis.com/SESS_NEW"
 
 
+def _move_then_raise_permission_error(source: Path, destination: Path) -> None:
+    source.rename(destination)
+    raise PermissionError(5, "Access is denied", str(source), str(destination))
+
+
 def _make_tracking_collection(
     tmp_path: Path,
     *,
@@ -450,6 +455,71 @@ def test_collection_uploader_delegates_publish_date_calculation(tmp_path: Path) 
     uploader.show_plan(tmp_path / "collection")
 
     published_dates.calculate_publish_at.assert_called_once_with()
+
+
+def test_should_report_live_path_when_rename_raises_after_move_completed(tmp_path: Path, caplog) -> None:
+    from youtube_automation.domains.uploads.collection import CollectionUploader
+
+    # Given: Windows が rename 完了後にアクセス拒否を返す状態
+    collections_root = tmp_path / "collections"
+    collection = collections_root / "planning" / "20990101-test-collection"
+    collection.mkdir(parents=True)
+    uploader = CollectionUploader(collections_root=str(collections_root))
+
+    # When: live 移動の rename がエラーを返す
+    with (
+        patch(
+            "youtube_automation.domains.uploads.collection.rename_path",
+            side_effect=_move_then_raise_permission_error,
+        ),
+        caplog.at_level(logging.INFO, logger="youtube_automation.domains.uploads.collection"),
+    ):
+        result = uploader._move_collection_to_live(collection)
+
+    # Then: 実ファイル状態を正として移動成功を返し、誤警告を出さない
+    live_collection = collections_root / "live" / collection.name
+    move_warnings = [
+        record
+        for record in caplog.records
+        if record.name == "youtube_automation.domains.uploads.collection"
+        and record.levelno >= logging.WARNING
+        and "コレクション移動エラー" in record.getMessage()
+    ]
+    assert result == live_collection
+    assert live_collection.is_dir()
+    assert not collection.exists()
+    assert move_warnings == []
+
+
+def test_should_report_move_error_when_rename_fails_before_state_changes(tmp_path: Path, caplog) -> None:
+    from youtube_automation.domains.uploads.collection import CollectionUploader
+
+    # Given: planning 側に残ったまま rename が失敗する状態
+    collections_root = tmp_path / "collections"
+    collection = collections_root / "planning" / "20990101-test-collection"
+    collection.mkdir(parents=True)
+    uploader = CollectionUploader(collections_root=str(collections_root))
+
+    # When: live 移動がファイル状態を変えずに失敗する
+    with (
+        patch(
+            "youtube_automation.domains.uploads.collection.rename_path",
+            side_effect=PermissionError(5, "Access is denied", str(collection)),
+        ),
+        caplog.at_level(logging.WARNING, logger="youtube_automation.domains.uploads.collection"),
+    ):
+        result = uploader._move_collection_to_live(collection)
+
+    # Then: planning パスを維持し、実際の失敗だけを警告する
+    assert result == collection
+    assert collection.is_dir()
+    assert not (collections_root / "live" / collection.name).exists()
+    assert any(
+        record.name == "youtube_automation.domains.uploads.collection"
+        and record.levelno == logging.WARNING
+        and "コレクション移動エラー" in record.getMessage()
+        for record in caplog.records
+    )
 
 
 def _make_uploader_with_schedule_config(tmp_path: Path, schedule_config: dict):
@@ -1020,6 +1090,48 @@ class TestExecuteCompleteCollectionResume:
             "video_url": "https://www.youtube.com/watch?v=V_EXISTING",
             "publish_at": "2099-01-01T10:00:00+09:00",
         }
+
+    def test_should_complete_live_workflow_when_rename_raises_after_move_completed(self, tmp_path, caplog):
+        """rename 完了後の Windows access denied でも live 側の後処理を完了する."""
+        col, _ = _make_tracking_collection(tmp_path, resume_uri=None)
+        uploader, mock_inner = _make_uploader_with_collection_mock(tmp_path)
+        uploader.config["collections_management"]["auto_move_to_live"] = True
+        mock_inner.upload_collection.return_value = {
+            "complete_video": {
+                "video_id": "V_MOVED",
+                "video_url": "https://www.youtube.com/watch?v=V_MOVED",
+                "title": "t",
+                "file_path": "p",
+            }
+        }
+
+        with (
+            patch(
+                "youtube_automation.domains.uploads.collection.rename_path",
+                side_effect=_move_then_raise_permission_error,
+            ),
+            caplog.at_level(logging.INFO, logger="youtube_automation.domains.uploads.collection"),
+        ):
+            result = uploader._execute_complete_collection(
+                col,
+                uploader.tracking_store.load(col),
+                publish_at=None,
+            )
+
+        live_col = tmp_path / "collections" / "live" / col.name
+        saved_state = json.loads((live_col / "workflow-state.json").read_text(encoding="utf-8"))
+        move_warnings = [
+            record
+            for record in caplog.records
+            if record.name == "youtube_automation.domains.uploads.collection"
+            and record.levelno >= logging.WARNING
+            and "コレクション移動エラー" in record.getMessage()
+        ]
+        assert result["action"] == "complete_collection_uploaded"
+        assert saved_state["stage"] == "live"
+        assert saved_state["phase"] == "complete"
+        assert saved_state["upload"]["video_id"] == "V_MOVED"
+        assert move_warnings == []
 
     def test_should_persist_uri_to_tracking_when_on_session_uri_changed_is_invoked(self, tmp_path):
         """plan 要件 #1 + #2: コールバック発火直後に URI が tracking JSON に永続化される.
