@@ -14,6 +14,7 @@ import {
   formatCollectedAt,
   formatInteger,
   formatSignedInteger,
+  formatWatchTime,
 } from "@/lib/dashboard-formatters"
 import { dashboardStatusPresentation } from "@/lib/dashboard-status"
 import type { ChannelOverview } from "@/lib/dashboard-types"
@@ -80,7 +81,9 @@ function MetricCell({
   const formatted =
     metric === "subscribers_net"
       ? formatSignedInteger(value)
-      : formatInteger(value)
+      : metric === "watch_time_minutes"
+        ? formatWatchTime(value)
+        : formatInteger(value)
   const subscriberTone =
     value > 0 ? "positive" : value < 0 ? "negative" : "neutral"
   return (
@@ -95,7 +98,6 @@ function MetricCell({
       ) : (
         formatted
       )}
-      {metric === "watch_time_minutes" ? "分" : ""}
     </TableCell>
   )
 }

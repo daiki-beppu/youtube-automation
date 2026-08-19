@@ -6,6 +6,7 @@ import {
   formatInteger,
   formatSignedDuration,
   formatSignedInteger,
+  formatWatchTime,
 } from "./dashboard-formatters"
 
 describe("dashboard formatters", () => {
@@ -20,6 +21,17 @@ describe("dashboard formatters", () => {
     expect(formatSignedDuration(3661)).toBe("+01:01:01")
     expect(formatSignedDuration(0)).toBe("00:00:00")
     expect(formatSignedDuration(-61)).toBe("-00:01:01")
+  })
+
+  it.each([
+    [450, "7時間30分"],
+    [120, "2時間"],
+    [45, "45分"],
+    [0, "0分"],
+    [74100, "1,235時間"],
+    [450.6, "7時間31分"],
+  ])("formats %s watch-time minutes as %s", (minutes, expected) => {
+    expect(formatWatchTime(minutes)).toBe(expected)
   })
 
   it("rounds fractional durations to the nearest second", () => {

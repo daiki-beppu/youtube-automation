@@ -388,7 +388,7 @@ test("概要から動画詳細まで keyboard で確認できる", async ({ page
   await expect(zeroStockRow).toContainText("0本")
   await expect(nightDriveRow).toContainText("1本")
   await expect(nightDriveRow).toContainText("3,200")
-  await expect(nightDriveRow).toContainText("900分")
+  await expect(nightDriveRow).toContainText("15時間")
   await expect(nightDriveRow).toContainText("+32")
   expect(
     await zeroStockRow.evaluate(
