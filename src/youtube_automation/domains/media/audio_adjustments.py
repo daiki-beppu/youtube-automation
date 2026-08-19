@@ -46,6 +46,7 @@ class AudioAdjustments:
     order: list[str] | None
     shuffle_seed: int | None
     pin_first: list[str]
+    master: dict[str, object] | None
     extra: dict[str, object]
 
 
@@ -154,10 +155,49 @@ def validate_cleanup_settings(value: object, *, partial: bool) -> dict[str, obje
     return result
 
 
+def validate_master_settings(value: object) -> dict[str, object]:
+    """Validate the complete EQ / loudnorm / limiter settings for master adjustment."""
+    raw = _mapping(value, "master settings")
+    expected_sections = {"eq", "loudnorm", "limiter"}
+    if set(raw) != expected_sections:
+        missing = expected_sections - set(raw)
+        unknown = set(raw) - expected_sections
+        raise ValidationError(
+            f"master settings の section が不正です: missing={sorted(missing)}, unknown={sorted(unknown)}"
+        )
+    result: dict[str, object] = {}
+    for section in sorted(expected_sections):
+        fields = _NESTED_FIELDS[section]
+        section_raw = _mapping(raw[section], f"master settings.{section}")
+        if set(section_raw) != fields.keys():
+            missing = fields.keys() - set(section_raw)
+            unknown = set(section_raw) - fields.keys()
+            raise ValidationError(
+                f"master settings.{section} の field が不正です: missing={sorted(missing)}, unknown={sorted(unknown)}"
+            )
+        result[section] = {
+            name: _validate_scalar(
+                item,
+                fields[name][0],
+                fields[name][1],
+                fields[name][2],
+                f"master settings.{section}.{name}",
+            )
+            for name, item in section_raw.items()
+        }
+    return result
+
+
+def master_settings_from_cleanup(settings: object) -> dict[str, object]:
+    """Project full cleanup defaults onto the master-adjustable sections."""
+    cleanup = validate_cleanup_settings(settings, partial=False)
+    return validate_master_settings({section: cleanup[section] for section in ("eq", "loudnorm", "limiter")})
+
+
 def read_audio_adjustments(path: Path) -> AudioAdjustments:
     """Read the adjustments document, treating absence as an empty document."""
     if not path.exists():
-        return AudioAdjustments(tracks={}, order=None, shuffle_seed=None, pin_first=[], extra={})
+        return AudioAdjustments(tracks={}, order=None, shuffle_seed=None, pin_first=[], master=None, extra={})
     if path.is_symlink() or not path.is_file():
         raise ValidationError(f"audio-adjustments.json は通常ファイルである必要があります: {path}")
     try:
@@ -175,6 +215,7 @@ def read_audio_adjustments(path: Path) -> AudioAdjustments:
     order = _validate_filename_list(root["order"], "order") if "order" in root else None
     pin_first = _validate_filename_list(root.get("pin_first", []), "pin_first")
     shuffle_seed = _validate_shuffle_seed(root.get("shuffle_seed"))
+    master = validate_master_settings(root["master"]) if "master" in root else None
     if order is not None:
         unknown_pins = set(pin_first) - set(order)
         if unknown_pins:
@@ -186,13 +227,14 @@ def read_audio_adjustments(path: Path) -> AudioAdjustments:
             raise ValidationError("audio-adjustments.json の pin_first は order の先頭と同じ順序である必要があります")
     elif pin_first or shuffle_seed is not None:
         raise ValidationError("audio-adjustments.json の pin_first / shuffle_seed には order が必要です")
-    owned_keys = {"schema_version", "tracks", "order", "shuffle_seed", "pin_first"}
+    owned_keys = {"schema_version", "tracks", "order", "shuffle_seed", "pin_first", "master"}
     extra = {key: value for key, value in root.items() if key not in owned_keys}
     return AudioAdjustments(
         tracks=tracks,
         order=order,
         shuffle_seed=shuffle_seed,
         pin_first=pin_first,
+        master=master,
         extra=extra,
     )
 
@@ -257,6 +299,8 @@ def _write_audio_adjustments(path: Path, document: AudioAdjustments) -> None:
         payload["shuffle_seed"] = document.shuffle_seed
     if document.pin_first:
         payload["pin_first"] = document.pin_first
+    if document.master is not None:
+        payload["master"] = document.master
     payload.update(document.extra)
     existing_mode = stat.S_IMODE(path.stat().st_mode) if path.exists() else 0o644
     temporary_path: Path | None = None
@@ -302,6 +346,7 @@ def replace_track_cleanup_overrides(
         order=document.order,
         shuffle_seed=document.shuffle_seed,
         pin_first=document.pin_first,
+        master=document.master,
         extra=document.extra,
     )
     _write_audio_adjustments(path, updated)
@@ -332,6 +377,22 @@ def replace_track_order(
         order=validated_order,
         shuffle_seed=validated_seed,
         pin_first=validated_pins,
+        master=document.master,
+        extra=document.extra,
+    )
+    _write_audio_adjustments(path, updated)
+    return updated
+
+
+def replace_master_adjustments(path: Path, settings: object) -> AudioAdjustments:
+    """Atomically replace complete master settings while preserving track and order stages."""
+    document = read_audio_adjustments(path)
+    updated = AudioAdjustments(
+        tracks=document.tracks,
+        order=document.order,
+        shuffle_seed=document.shuffle_seed,
+        pin_first=document.pin_first,
+        master=validate_master_settings(settings),
         extra=document.extra,
     )
     _write_audio_adjustments(path, updated)

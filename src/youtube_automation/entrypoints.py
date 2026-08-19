@@ -115,6 +115,7 @@ yt_document_review = _make_entrypoint("youtube_automation.commands.documents.rev
 yt_collection_plan_select = _make_entrypoint("youtube_automation.commands.documents.collection_plan_select")
 yt_music_prompt_select = _make_entrypoint("youtube_automation.commands.documents.music_prompt_select")
 yt_master_audio_review = _make_entrypoint("youtube_automation.commands.media.master_audio_review")
+yt_master_adjust = _make_entrypoint("youtube_automation.commands.media.master_adjust")
 yt_master_video_review = _make_entrypoint("youtube_automation.commands.media.master_video_review")
 yt_document_render = _make_entrypoint("youtube_automation.commands.documents.render")
 yt_doctor = _make_entrypoint("youtube_automation.commands.system.doctor")

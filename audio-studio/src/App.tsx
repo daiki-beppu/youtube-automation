@@ -1,16 +1,9 @@
 import { useEffect, useState } from "react"
-import {
-  AlertCircleIcon,
-  AudioLinesIcon,
-  Disc3Icon,
-} from "lucide-react"
+import { AlertCircleIcon, AudioLinesIcon, Disc3Icon } from "lucide-react"
 
 import { isTrackResponse, type TrackResponse } from "@/audio-settings"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import {
-  Card,
-  CardContent,
-} from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import {
   Empty,
   EmptyDescription,
@@ -19,6 +12,7 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty"
 import { Skeleton } from "@/components/ui/skeleton"
+import { MasterPanel } from "@/MasterPanel"
 import { TrackOrderEditor } from "@/TrackOrderEditor"
 
 export default function App() {
@@ -59,6 +53,8 @@ export default function App() {
           {data?.collection_name ?? "コレクションの音源を読み込んでいます"}
         </p>
       </header>
+
+      <MasterPanel />
 
       {error ? (
         <Alert variant="destructive">

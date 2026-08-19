@@ -12,12 +12,14 @@ from urllib.request import urlopen
 
 import pytest
 
+from youtube_automation.commands.media import audio_studio
 from youtube_automation.commands.media.audio_studio import (
     DEFAULT_HOST,
     build_track_payload,
     create_server,
 )
 from youtube_automation.commands.suno.suno_audio_cleanup import CleanupConfig, cleanup_config_settings
+from youtube_automation.domains.media.audio_adjustments import master_settings_from_cleanup
 
 
 def _collection(tmp_path: Path) -> Path:
@@ -228,6 +230,97 @@ def test_order_api_rejects_file_set_mismatch(tmp_path: Path) -> None:
         response = connection.getresponse()
         assert response.status == 400
         assert "実ファイル" in json.loads(response.read())["error"]
+        connection.close()
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
+def test_master_api_serves_audio_saves_settings_and_applies(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    collection = _collection(tmp_path)
+    master = collection / "01-master/master.mp3"
+    master.write_bytes(b"0123456789")
+    defaults = cleanup_config_settings(CleanupConfig(enabled=True))
+    settings = master_settings_from_cleanup(defaults)
+    settings["eq"] = {**settings["eq"], "muddiness_gain_db": -4.0}
+    applied: list[Path] = []
+
+    def fake_adjust(path: Path, *, quiet: bool) -> Path:
+        assert quiet is True
+        applied.append(path)
+        master.write_bytes(b"adjusted")
+        return master
+
+    monkeypatch.setattr(audio_studio, "adjust_master", fake_adjust)
+    server = create_server(
+        collection,
+        port=0,
+        asset_root=_assets(tmp_path),
+        duration_probe=lambda _path: 5.0,
+        cleanup_defaults=defaults,
+    )
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        connection = http.client.HTTPConnection(DEFAULT_HOST, server.server_port, timeout=2)
+        connection.request("GET", "/api/master/adjustments")
+        response = connection.getresponse()
+        payload = json.loads(response.read())
+        assert response.status == 200
+        assert payload["available"] is True
+        assert payload["settings"] == master_settings_from_cleanup(defaults)
+
+        body = json.dumps({"settings": settings})
+        connection.request("PUT", "/api/master/adjustments", body=body)
+        response = connection.getresponse()
+        assert response.status == 200
+        assert json.loads(response.read())["settings"] == settings
+
+        connection.request("GET", "/api/master/audio", headers={"Range": "bytes=2-5"})
+        response = connection.getresponse()
+        assert response.status == 206
+        assert response.read() == b"2345"
+
+        connection.request("POST", "/api/master/apply")
+        response = connection.getresponse()
+        applied_payload = json.loads(response.read())
+        assert response.status == 200
+        assert applied_payload["applied"] is True
+        assert applied == [collection]
+        connection.close()
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
+def test_master_api_reports_missing_master(tmp_path: Path) -> None:
+    collection = _collection(tmp_path)
+    defaults = cleanup_config_settings(CleanupConfig(enabled=True))
+    server = create_server(
+        collection,
+        port=0,
+        asset_root=_assets(tmp_path),
+        duration_probe=lambda _path: 5.0,
+        cleanup_defaults=defaults,
+    )
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        connection = http.client.HTTPConnection(DEFAULT_HOST, server.server_port, timeout=2)
+        connection.request("GET", "/api/master/adjustments")
+        response = connection.getresponse()
+        assert response.status == 200
+        assert json.loads(response.read())["available"] is False
+
+        connection.request("GET", "/api/master/audio")
+        response = connection.getresponse()
+        assert response.status == 404
+        response.read()
         connection.close()
     finally:
         server.shutdown()

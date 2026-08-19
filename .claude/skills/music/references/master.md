@@ -494,6 +494,17 @@ audio:
       enabled: false             # pass1/pass2 を skip
 ```
 
+#### Audio Studio の master 全体調整
+
+Audio Studio で `master.mp3` 全体の EQ・loudnorm・limiter を保存した場合は、ambient レイヤー整音を含む finalize の完了後に適用する:
+
+```bash
+uv run yt-master-adjust                       # CWD がコレクションディレクトリ
+uv run yt-master-adjust <collection-path>     # 明示指定
+```
+
+設定の正本は `20-documentation/audio-adjustments.json::master`。初回適用前の master は `01-master/originals-pre-adjust/master.mp3` へ退避し、再適用も常にこの原本から行うため調整は累積しない。ffmpeg または置換が失敗した場合は現在の master を維持して non-zero で停止する。master が無い場合も fail-loud。`yt-finalize-master` をやり直す必要がある場合は、退避済み原本と master の対応を確認してから再調整する。
+
 ### Step 5.6: 雨レイヤー後処理（config 駆動 / opt-in）
 
 `uv run yt-finalize-master` が master.mp3 を **loudnorm 二段で in-place 上書き**するのに対し、`uv run yt-apply-rain-layers` は raw master と `branding/rain_layers/*.wav` を **amix のみ**で合成し**別ファイル**（既定 `01-master/master-rain.wav`）に書き出す軽い後処理 CLI。後段で外部 DAW のミキシング+マスタリングを挟む運用（raw master を保持したまま雨レイヤー付きバージョンを並行管理したい場合）向け。

@@ -21,6 +21,7 @@ from typing import cast
 from urllib.parse import unquote, urlsplit
 
 from youtube_automation.commands._shared.cli_harness import run_cli
+from youtube_automation.commands.media.master_adjust import adjust_master
 from youtube_automation.commands.suno.suno_audio_cleanup import (
     cleanup_config_settings,
     resolve_cleanup_config,
@@ -29,8 +30,10 @@ from youtube_automation.configuration.skills import load_skill_config
 from youtube_automation.core.errors import ConfigError, ValidationError
 from youtube_automation.domains.media.audio_adjustments import (
     apply_track_order,
+    master_settings_from_cleanup,
     merge_cleanup_settings,
     read_audio_adjustments,
+    replace_master_adjustments,
     replace_track_cleanup_overrides,
     replace_track_order,
 )
@@ -58,6 +61,9 @@ DEFAULT_PORT = 8766
 SERVER_KIND = "audio-studio"
 TRACKS_ROUTE = "/api/tracks"
 ORDER_ROUTE = "/api/order"
+MASTER_ADJUSTMENTS_ROUTE = "/api/master/adjustments"
+MASTER_APPLY_ROUTE = "/api/master/apply"
+MASTER_AUDIO_ROUTE = "/api/master/audio"
 _TRACK_AUDIO_PATTERN = re.compile(r"^/api/tracks/(?P<track_id>[a-f0-9]{16})/audio$")
 _TRACK_ADJUSTMENTS_PATTERN = re.compile(r"^/api/tracks/(?P<track_id>[a-f0-9]{16})/adjustments$")
 _RANGE_PATTERN = re.compile(r"^bytes=(?P<start>\d*)-(?P<end>\d*)$")
@@ -129,6 +135,8 @@ class AudioStudioServer(ThreadingHTTPServer):
         self.track_files = dict(track_files)
         self.cleanup_defaults = dict(cleanup_defaults) if cleanup_defaults is not None else None
         self.audio_adjustments_path = CollectionPaths(collection_dir).audio_adjustments_path
+        self.master_audio_path = CollectionPaths(collection_dir).master_audio_path
+        self.master_backup_path = CollectionPaths(collection_dir).master_adjustment_backup_path
         self.stop_path = stop_path
 
     def service_actions(self) -> None:
@@ -333,6 +341,26 @@ class AudioStudioRequestHandler(BaseHTTPRequestHandler):
             },
         )
 
+    def _master_payload(self) -> dict[str, object]:
+        defaults = master_settings_from_cleanup(self._defaults())
+        document = read_audio_adjustments(self.server.audio_adjustments_path)
+        return {
+            "available": self.server.master_audio_path.is_file() and not self.server.master_audio_path.is_symlink(),
+            "audio_url": MASTER_AUDIO_ROUTE,
+            "defaults": defaults,
+            "settings": document.master if document.master is not None else defaults,
+            "has_backup": self.server.master_backup_path.is_file() and not self.server.master_backup_path.is_symlink(),
+        }
+
+    def _put_master_adjustments(self) -> None:
+        payload = self._read_json_body()
+        if set(payload) != {"settings"}:
+            raise ValidationError("JSON body は settings だけを含む必要があります")
+        self._validate_adjustments_destination()
+        with file_lock(self.server.audio_adjustments_path):
+            replace_master_adjustments(self.server.audio_adjustments_path, payload["settings"])
+        self._json(HTTPStatus.OK, self._master_payload())
+
     def do_GET(self) -> None:
         path = urlsplit(self.path).path
         if path.startswith("/api/") and not self._cors_allowed():
@@ -346,6 +374,21 @@ class AudioStudioRequestHandler(BaseHTTPRequestHandler):
                 self._json(HTTPStatus.OK, self._order_payload())
             except ValidationError as error:
                 self._json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+            return
+        if path == MASTER_ADJUSTMENTS_ROUTE:
+            try:
+                self._json(HTTPStatus.OK, self._master_payload())
+            except ValidationError as error:
+                self._json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+            except ConfigError as error:
+                self._json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": str(error)})
+            return
+        if path == MASTER_AUDIO_ROUTE:
+            master = self.server.master_audio_path
+            if not master.is_file() or master.is_symlink():
+                self._json(HTTPStatus.NOT_FOUND, {"error": "master not found"})
+                return
+            self._audio(master)
             return
         match = _TRACK_AUDIO_PATTERN.fullmatch(path)
         if match is not None:
@@ -384,6 +427,14 @@ class AudioStudioRequestHandler(BaseHTTPRequestHandler):
             except ValidationError as error:
                 self._json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
             return
+        if path == MASTER_ADJUSTMENTS_ROUTE:
+            try:
+                self._put_master_adjustments()
+            except ValidationError as error:
+                self._json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+            except ConfigError as error:
+                self._json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": str(error)})
+            return
         match = _TRACK_ADJUSTMENTS_PATTERN.fullmatch(path)
         if match is None:
             self._json(HTTPStatus.NOT_FOUND, {"error": "API path not found"})
@@ -399,12 +450,28 @@ class AudioStudioRequestHandler(BaseHTTPRequestHandler):
         except ConfigError as error:
             self._json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": str(error)})
 
+    def do_POST(self) -> None:
+        path = urlsplit(self.path).path
+        if not self._cors_allowed():
+            self._json(HTTPStatus.FORBIDDEN, {"error": "origin not allowed"})
+            return
+        if path != MASTER_APPLY_ROUTE:
+            self._json(HTTPStatus.NOT_FOUND, {"error": "API path not found"})
+            return
+        try:
+            adjust_master(self.server.collection_dir, quiet=True)
+            self._json(HTTPStatus.OK, {**self._master_payload(), "applied": True})
+        except ValidationError as error:
+            self._json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+        except ConfigError as error:
+            self._json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": str(error)})
+
     def do_OPTIONS(self) -> None:
         if not self._cors_allowed():
             self._json(HTTPStatus.FORBIDDEN, {"error": "origin not allowed"})
             return
         self.send_response(HTTPStatus.NO_CONTENT)
-        self.send_header("Access-Control-Allow-Methods", "GET, PUT, OPTIONS")
+        self.send_header("Access-Control-Allow-Methods", "GET, PUT, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type, Range")
         self.send_header("Content-Length", "0")
         self._common_headers()

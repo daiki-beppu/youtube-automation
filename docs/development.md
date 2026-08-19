@@ -126,6 +126,8 @@ nix develop .#extensions --command pnpm -C audio-studio build
 - cleanup 調整 API は skill-config の既定値と `audio-adjustments.json::tracks.<filename>` の差分を分けて返し、PUT は full settings を再検証して差分だけを原子的に保存する。
 - 曲順 API は `order` が実トラックの filename 集合と完全一致する場合だけ、seed と先頭固定順を cleanup 差分と同じ文書へ原子的に保存する。frontend の同一 seed は同じ並びを再現し、手動変更では seed を破棄する。
 - `yt-generate-master` と `BAHMetadataGenerator` は保存済み `order` を共有する。CLI の順序フラグがあれば保存順より優先し、保存順に過不足があれば master / chapter のどちらも fail-loud で停止する。
+- master 調整 API は `audio-adjustments.json::master` の EQ・loudnorm・limiter 完全設定を保存し、POST apply は `yt-master-adjust` と同じ処理を呼ぶ。初回適用時の master.mp3 は `01-master/originals-pre-adjust/master.mp3` へ退避し、以後は必ずその原本から一時ファイルを作って atomic replace するため、調整を累積しない。master.mp3 不在時は明示エラーにする。
+- `yt-finalize-master` と併用する場合は finalize を先に完了し、その出力を調整原本として退避してから master 全体調整を行う。退避後に finalize を再実行すると調整済み master と原本の対応が崩れるため、再 finalize する場合は調整原本の扱いを明示的に見直す。
 - EQ preview は Web Audio の 2 つの peaking `BiquadFilterNode` であり、保存後に適用する ffmpeg `equalizer` と完全一致するものとして扱わない。
 - build は Vite output を `src/youtube_automation/audio_studio_dist/` へ生成する。Python build backend から Node.js を暗黙起動しない。
 - `audio_studio_dist/` は wheel / sdist に同梱し、candidate wheel の非 editable install smoke で CLI と asset 配信を確認する。

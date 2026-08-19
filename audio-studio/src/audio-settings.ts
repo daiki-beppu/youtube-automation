@@ -39,6 +39,20 @@ export type AdjustmentResponse = {
   overrides: Record<string, unknown>
 }
 
+export type MasterSettings = Pick<
+  CleanupSettings,
+  "eq" | "loudnorm" | "limiter"
+>
+
+export type MasterAdjustmentResponse = {
+  available: boolean
+  audio_url: string
+  defaults: MasterSettings
+  settings: MasterSettings
+  has_backup: boolean
+  applied?: boolean
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
 }
@@ -106,6 +120,30 @@ export function isCleanupSettings(value: unknown): value is CleanupSettings {
     typeof tail.enabled === "boolean" &&
     isNumber(tail.fade_sec) &&
     typeof value.volume_smoothing === "boolean"
+  )
+}
+
+export function isMasterSettings(value: unknown): value is MasterSettings {
+  if (!isRecord(value)) return false
+  return isCleanupSettings({
+    ...value,
+    trim_silence: { enabled: false, threshold_db: -50 },
+    tail_fade_guard: { enabled: false, fade_sec: 0 },
+    volume_smoothing: false,
+  })
+}
+
+export function isMasterAdjustmentResponse(
+  value: unknown
+): value is MasterAdjustmentResponse {
+  return (
+    isRecord(value) &&
+    typeof value.available === "boolean" &&
+    typeof value.audio_url === "string" &&
+    isMasterSettings(value.defaults) &&
+    isMasterSettings(value.settings) &&
+    typeof value.has_backup === "boolean" &&
+    (value.applied === undefined || typeof value.applied === "boolean")
   )
 }
 
