@@ -109,10 +109,11 @@ Phase 2a では選択 record を 1 案の企画として投影し、次を実行
 
 ```bash
 uv run yt-init-collection "<collection_name>" "<theme_slug>" \
-  --track-count <track_count> --selected-plan A --music-engine <music_engine>
+  --track-count <track_count> --selected-plan A --music-engine <music_engine> \
+  --playlist <playlist_key>
 ```
 
-単一 record の state 投影には `--selected-plan A` を固定で使う。新規時は初期化と preflight 成功後に batch record の共通 field を `20-documentation/plan_proposals.json` の proposed candidate 1件へ投影し、`batch_id`、`plan_id`、manifest path を provenance として記録する。`references/collection-plan-documents.md` の owner CLI でdraft pairを公開してから `yt-collection-plan-select --automatic` へ渡し、proposal ID、JSON/preview digest、確定pairの検証と再読込を完了した後だけ、`workflow-state.json::planning.generated = true`、`planning.final_title`、`planning.target_persona` を更新する。
+単一 record の state 投影には `--selected-plan A` を固定で使う。`--playlist` は分類プレイリスト（`auto_add` 以外）を定義しているチャンネルで必須で、候補は `uv run yt-playlist-status` で確認する。分類しないことが意図の場合だけ `--no-playlist` を明示する (#4346)。新規時は初期化と preflight 成功後に batch record の共通 field を `20-documentation/plan_proposals.json` の proposed candidate 1件へ投影し、`batch_id`、`plan_id`、manifest path を provenance として記録する。`references/collection-plan-documents.md` の owner CLI でdraft pairを公開してから `yt-collection-plan-select --automatic` へ渡し、proposal ID、JSON/preview digest、確定pairの検証と再読込を完了した後だけ、`workflow-state.json::planning.generated = true`、`planning.final_title`、`planning.target_persona` を更新する。
 
 同じ provenance の未完了 collection が既にある再開時は `yt-init-collection` と企画文書の再作成を行わず、その directory の preflight、企画文書 provenance、workflow-state を再検証する。整合すれば Phase 2b 以降で最初の未完了 step から通常の再開性契約に従い、整合しなければ既存 state を変更せず停止する。保存・検証・state 更新のいずれかに失敗した場合も Phase 2b へ進まず、同じ collection の未完了手順から再開する。
 
@@ -155,8 +156,12 @@ Phase 0 通過後、Phase 1 の企画生成に入る前に、初回制作前の�
 パイロット手順:
 
 ```bash
-uv run yt-init-collection "Pilot Direction Check" "pilot-direction-check" --track-count 2 --selected-plan A --music-engine <suno|lyria|minimax>
+uv run yt-init-collection "Pilot Direction Check" "pilot-direction-check" \
+  --track-count 2 --selected-plan A --music-engine <suno|lyria|minimax> \
+  --playlist <playlist_key>
 ```
+
+分類プレイリストを定義しているチャンネルでは、パイロットを昇格した場合の割り当て先を `--playlist` で指定する。分類しないことが意図なら `--playlist` の代わりに `--no-playlist` を使う。分類プレイリストが無いチャンネルではどちらも省略する。
 
 1. コマンド出力の `collections/planning/YYYYMMDD-<short>-pilot-direction-check-collection/` を控える。
 2. `/thumbnail pilot-direction-check` を実行し、`10-assets/main.png` / `10-assets/main.jpg` と `10-assets/thumbnail.jpg` で色味・構図を確認する。

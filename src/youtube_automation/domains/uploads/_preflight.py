@@ -14,6 +14,10 @@ from youtube_automation.domains.collections.workflow_state import read as read_w
 from youtube_automation.domains.documents.video_description import read_video_description_metadata
 from youtube_automation.domains.metadata import BAHMetadataGenerator
 from youtube_automation.domains.uploads._complete_collection_strategy import resolve_master_video
+from youtube_automation.domains.uploads.playlist_resolution import (
+    check_playlist_assignment,
+    resolve_playlist_keys,
+)
 from youtube_automation.domains.uploads.preflight import (
     check_chapter_count,
     check_chapter_variation_suffix,
@@ -83,6 +87,36 @@ class PreflightChecker:
             if isinstance(title, str):
                 titles.append(title)
         return titles
+
+    @staticmethod
+    def _check_playlist_assignment(state, config) -> None:
+        """分類プレイリストへ 1 つも割り当たらない状態を fail-loud で弾く (#4346).
+
+        `auto_add_themes` の theme slug 部分一致は、新テーマを作るたびに
+        キーワード未登録で漏れ、黙って `auto_add` プレイリストだけに入る。
+        アップロード後の割り当ては非致命的（動画は既に公開済み）なので、
+        気付ける唯一の場所がアップロード前のここになる。
+        """
+        playlists_config = config.playlists.items
+        if not playlists_config:
+            return
+        theme = state.theme or ""
+        planning = state.planning
+        explicit = planning.playlists if planning is not None else None
+        activity = None
+        if explicit is None:
+            activity = planning.activities if planning is not None else None
+            if activity is None:
+                activity = config.content.title.activity_for_theme(theme)
+        resolved = resolve_playlist_keys(
+            playlists_config,
+            theme,
+            activity=activity or "",
+            explicit=explicit,
+        )
+        issue = check_playlist_assignment(playlists_config, resolved, theme=theme, explicit=explicit)
+        if issue:
+            raise ValidationError(f"❌ プレイリスト未割り当て: {issue}")
 
     def check(self, collection_dir: Path) -> None:
         """アップロード前メタデータ品質チェック (fail-loud)。
@@ -154,6 +188,10 @@ class PreflightChecker:
         msg = check_chapter_variation_suffix(ts_lines)
         if msg:
             raise ValidationError(f"❌ {msg}: 1 パターン = 1 chapter で再生成してください。")
+
+        # プレイリスト割り当て（#4346）。アップロード完了後に気付いても手戻りが
+        # 大きいので、数 GB を送る前のこの位置で fail-loud する。
+        self._check_playlist_assignment(state, config)
 
         scene_phrases = state.scene_phrases or {}
 

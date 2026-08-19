@@ -31,7 +31,7 @@ AssetKey = Literal[
     "master_video",
     "description",
 ]
-PlanningKey = Literal["generated", "final_title", "target_persona", "publish_target_at", "music"]
+PlanningKey = Literal["generated", "final_title", "target_persona", "publish_target_at", "music", "playlists"]
 
 
 class MusicPlanningDocument(TypedDict, total=False):
@@ -50,6 +50,7 @@ class PlanningDocument(TypedDict, total=False):
     target_persona: str
     final_title: str
     generated: bool
+    playlists: list[str]
 
 
 class AssetsDocument(TypedDict, total=False):
@@ -370,6 +371,27 @@ class PlanningState(_ObjectSection):
         return _optional_string(self._data, "activities", "workflow-state.json::planning.activities")
 
     @property
+    def playlists(self) -> list[str] | None:
+        """このコレクションを追加するプレイリスト key の明示指定 (#4346).
+
+        `None` は「未決定」、`[]` は「auto_add 以外へは意図的に追加しない」を意味する。
+        両者を取り違えると preflight の未割り当て検出が無意味になるため、
+        欠落と空配列は区別して返す。
+        """
+        if "playlists" not in self._data:
+            return None
+        value = self._data["playlists"]
+        label = "workflow-state.json::planning.playlists"
+        if not isinstance(value, list):
+            raise WorkflowStateError(f"{label} must be an array of strings")
+        keys: list[str] = []
+        for item in value:
+            if not isinstance(item, str) or not item:
+                raise WorkflowStateError(f"{label} must contain only non-empty strings")
+            keys.append(item)
+        return keys
+
+    @property
     def scene_emoji(self) -> str | None:
         return _optional_string(self._data, "scene_emoji", "workflow-state.json::planning.scene_emoji")
 
@@ -395,6 +417,12 @@ class PlanningState(_ObjectSection):
                 raise WorkflowStateError("workflow-state.json::planning.music must be an object")
             music = MusicPlanningState(value)
             music.validate_known()
+        elif key == "playlists":
+            label = "workflow-state.json::planning.playlists"
+            if not isinstance(value, list):
+                raise WorkflowStateError(f"{label} must be an array of strings")
+            if not all(isinstance(item, str) and item for item in value):
+                raise WorkflowStateError(f"{label} must contain only non-empty strings")
         elif not isinstance(value, str):
             raise WorkflowStateError(f"workflow-state.json::planning.{key} must be a string")
         self._data[key] = deepcopy(value)

@@ -621,3 +621,36 @@ def test_update_serializes_processes_without_losing_changes(tmp_path: Path) -> N
 
 def test_workflow_state_error_is_an_automation_error() -> None:
     assert issubclass(WorkflowStateError, AutomationError)
+
+
+class TestPlanningPlaylists:
+    """#4346: planning.playlists は「未決定」と「auto_add のみ」を区別する。"""
+
+    def _planning(self, tmp_path: Path, payload: object) -> object:
+        state_path = tmp_path / "workflow-state.json"
+        _write(state_path, {"planning": payload})
+        state = read(state_path)
+        assert state.planning is not None
+        return state.planning
+
+    def test_missing_key_reads_as_none(self, tmp_path: Path) -> None:
+        assert self._planning(tmp_path, {"music": {"engine": "suno"}}).playlists is None
+
+    def test_empty_array_is_preserved(self, tmp_path: Path) -> None:
+        assert self._planning(tmp_path, {"playlists": []}).playlists == []
+
+    def test_keys_are_returned_in_order(self, tmp_path: Path) -> None:
+        assert self._planning(tmp_path, {"playlists": ["a", "b"]}).playlists == ["a", "b"]
+
+    @pytest.mark.parametrize("payload", [None, "rain", {"key": "rain"}, [1], [""]])
+    def test_invalid_shape_fails_loud(self, tmp_path: Path, payload: object) -> None:
+        planning = self._planning(tmp_path, {"playlists": payload})
+        with pytest.raises(WorkflowStateError, match="planning.playlists"):
+            _ = planning.playlists
+
+    def test_set_known_validates_shape(self, tmp_path: Path) -> None:
+        planning = self._planning(tmp_path, {})
+        planning.set_known("playlists", ["rain"])
+        assert planning.playlists == ["rain"]
+        with pytest.raises(WorkflowStateError, match="planning.playlists"):
+            planning.set_known("playlists", "rain")

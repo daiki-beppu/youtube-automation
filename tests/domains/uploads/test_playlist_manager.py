@@ -19,7 +19,7 @@ import pytest
 from googleapiclient.errors import HttpError
 from httplib2 import Response
 
-from youtube_automation.core.errors import ValidationError, YouTubeAPIError
+from youtube_automation.core.errors import ValidationError, WorkflowStateError, YouTubeAPIError
 from youtube_automation.infrastructure.google.youtube import YouTubeClients
 
 # ---------------------------------------------------------------------------
@@ -271,6 +271,63 @@ class TestAssignVideo:
         manager.assign_video("VID_X", "ocean waves", dry_run=True, collection_path=tmp_path)
 
         mock_config.content.title.activity_for_theme.assert_called_once_with("ocean waves")
+
+    def test_collection_path_planning_playlists_is_canonical(self, manager, mock_config, tmp_path):
+        """#4346: planning.playlists があれば theme / activity 照合は行わない."""
+        ws = tmp_path / "workflow-state.json"
+        ws.write_text(
+            json.dumps({"theme": "ocean waves", "planning": {"playlists": ["battle"]}}),
+            encoding="utf-8",
+        )
+        mock_config.content.title.activity_for_theme.reset_mock()
+
+        result = manager.assign_video("VID_X", "ocean waves", dry_run=True, collection_path=tmp_path)
+
+        mock_config.content.title.activity_for_theme.assert_not_called()
+        # 'ocean' は relaxation の auto_add_themes に hit するが、明示指定が勝つ。
+        assert "relaxation" not in result
+        assert set(result) == {"all", "battle"}
+
+    def test_planning_playlists_beats_planning_activities(self, manager, mock_config, tmp_path):
+        """playlists と activities が両方あれば playlists が優先される."""
+        ws = tmp_path / "workflow-state.json"
+        ws.write_text(
+            json.dumps({"planning": {"activities": "Gaming", "playlists": ["relaxation"]}}),
+            encoding="utf-8",
+        )
+
+        result = manager.assign_video("VID_X", "unknown-theme", dry_run=True, collection_path=tmp_path)
+
+        assert "battle" not in result
+        assert set(result) == {"all", "relaxation"}
+
+    def test_planning_playlists_empty_means_auto_add_only(self, manager, tmp_path):
+        """空配列は「auto_add のみ」の明示指定として尊重される."""
+        ws = tmp_path / "workflow-state.json"
+        ws.write_text(
+            json.dumps({"theme": "ocean waves", "planning": {"playlists": []}}),
+            encoding="utf-8",
+        )
+
+        result = manager.assign_video("VID_X", "ocean waves", dry_run=True, collection_path=tmp_path)
+
+        assert result == ["all"]
+
+    def test_planning_playlists_unknown_key_fails_loud(self, manager, tmp_path):
+        """未知 key を黙って無視すると『指定したのに入らない』に戻るため例外にする."""
+        ws = tmp_path / "workflow-state.json"
+        ws.write_text(json.dumps({"planning": {"playlists": ["typo"]}}), encoding="utf-8")
+
+        with pytest.raises(ValidationError, match="typo"):
+            manager.assign_video("VID_X", "ocean waves", dry_run=True, collection_path=tmp_path)
+
+    def test_planning_playlists_wrong_type_fails_loud(self, manager, tmp_path):
+        """schema 違反は WorkflowStateError として伝播させる."""
+        ws = tmp_path / "workflow-state.json"
+        ws.write_text(json.dumps({"planning": {"playlists": "battle"}}), encoding="utf-8")
+
+        with pytest.raises(WorkflowStateError, match="planning.playlists"):
+            manager.assign_video("VID_X", "ocean waves", dry_run=True, collection_path=tmp_path)
 
     def test_no_collection_path_uses_title_resolver(self, manager, mock_config):
         """collection_path 未指定なら従来どおりの経路（後方互換）."""

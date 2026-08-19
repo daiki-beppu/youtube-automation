@@ -15,7 +15,25 @@
 
 `uv run yt-playlist-status` と `uv run yt-playlist-manager` を 1 スキルに統合し、プレイリストの状態確認・作成・動画割り当て・クリーンアップを案内する。
 
-`config/channel/playlists.json` を Canonical ソースとして読み、定義されたプレイリストを YouTube 上に反映する。テーマ別マッチングルール（`auto_add_activities` / `auto_add_themes`）や全動画自動追加（`auto_add`）に対応。
+`config/channel/playlists.json` を Canonical ソースとして読み、定義されたプレイリストを YouTube 上に反映する。全動画自動追加（`auto_add`）と、レガシーのテーマ別マッチングルール（`auto_add_activities` / `auto_add_themes`）に対応。
+
+## 割り当ての決まり方 (#4346)
+
+| 優先度 | ソース | 挙動 |
+|---|---|---|
+| 1 | `workflow-state.json::planning.playlists` | 明示された key をそのまま採用。`auto_add` は常に追加。`[]` は「`auto_add` のみ」の明示 |
+| 2 | `auto_add_activities` / `auto_add_themes` | 1 が未指定のときだけ照合するレガシー経路 |
+
+`auto_add_themes` は theme slug の**部分一致**であり、新しいテーマを作るたびにキーワードが未登録で漏れる。漏れると分類プレイリストに入らず `auto_add` のプレイリストだけに入るが、アップロードは成功するため気付けない。そのため:
+
+- `yt-init-collection` は分類プレイリスト（`auto_add` 以外）を定義しているチャンネルで `--playlist` / `--no-playlist` を必須にする
+- アップロード preflight は、分類プレイリストに 1 つも割り当たらない状態を fail-loud で弾く（数 GB を送る前に止まる）
+
+既存コレクションの割り当て先を後から決める場合:
+
+```bash
+uv run yt-workflow-state --collection <dir> set-planning playlists '["rain-city-nights"]'
+```
 
 ## 前提
 
@@ -35,7 +53,7 @@
 |--------|---------|------|
 | **status** | `uv run yt-playlist-status` | 全プレイリストの ID・動画数・マッチングルールを表示（読み取り専用） |
 | **init** | `uv run yt-playlist-manager --init [--dry-run]` | `playlists.json` 定義の全プレイリストを作成 + live/ 配下の全動画を割り当て |
-| **assign** | `uv run yt-playlist-manager --assign VIDEO_ID --theme THEME [--dry-run]` | 単一動画を該当プレイリストに追加（テーマからマッチング） |
+| **assign** | `uv run yt-playlist-manager --assign VIDEO_ID --theme THEME [--collection PATH] [--dry-run]` | 単一動画を該当プレイリストに追加（collection 指定時は明示割り当てを優先） |
 | **clean-deleted** | `uv run yt-playlist-manager --clean-deleted [--dry-run]` | 全プレイリストから削除済み/非公開動画のエントリを除去 |
 
 `uv run yt-playlist-manager --status` も同じ `PlaylistStatusViewer` に委譲するため、`uv run yt-playlist-status` と等価。
@@ -86,10 +104,11 @@ uv run yt-playlist-manager --init              # 実反映
 新しい動画を YouTube にアップロードしたあと、該当プレイリストに追加:
 
 ```bash
-uv run yt-playlist-manager --assign <VIDEO_ID> --theme <THEME>
+uv run yt-playlist-manager --assign <VIDEO_ID> --theme <THEME> --collection <COLLECTION_PATH>
 ```
 
 - `<THEME>` は `workflow-state.json` の `theme` 値（`content.json` の `theme_scenes` で定義されたキー）
+- `--collection` を指定すると `planning.playlists` を読み、明示割り当てを優先する。省略時だけレガシー照合へフォールバックする
 - マッチするプレイリストキーが返り値として表示される
 - `"all"` プレイリストには末尾追加、それ以外は先頭追加（YouTube 表示順制御）
 

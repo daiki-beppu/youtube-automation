@@ -9,7 +9,9 @@ Phase 1 で open insights を渡していた場合は、企画選択の直後に
 `/wf-new` の選択結果を入力にして、コレクションディレクトリと workflow-state.json を自動生成する:
 
 ```bash
-uv run yt-init-collection "<Collection Name>" "<theme-slug>" --track-count <N> --selected-plan <A-E> --music-engine <suno|lyria|minimax>
+uv run yt-init-collection "<Collection Name>" "<theme-slug>" \
+  --track-count <N> --selected-plan <A-E> --music-engine <suno|lyria|minimax> \
+  --playlist <playlist-key>
 ```
 
 - `<Collection Name>`: 企画で決定したコレクション表示名
@@ -17,6 +19,9 @@ uv run yt-init-collection "<Collection Name>" "<theme-slug>" --track-count <N> -
 - `--track-count`: 確認済みトラック数（デフォルト 12）
 - `--selected-plan`: 選択された企画（A〜E）
 - `--music-engine`: 音楽エンジン（`suno` / `lyria` / `minimax`）。**省略時は `config/channel/youtube.json` の `music_engine` が使われる**。コレクション単位で上書きしたいときのみ明示する
+- `--playlist <key>`: 所属させるプレイリスト key（`config/channel/playlists.json`）。複数回指定可。**分類プレイリスト（`auto_add` 以外）を定義しているチャンネルでは必須**。分類しないことが意図なら `--no-playlist` を明示する
+
+`--playlist` を必須にしているのは、theme slug のキーワード照合（`auto_add_themes`）が新テーマのたびに漏れ、黙って `auto_add` のプレイリストだけに入る事故を防ぐため (#4346)。候補が分からないときは `uv run yt-playlist-status` で一覧を確認する。
 
 スクリプトが以下を自動実行:
 - `collections/planning/YYYYMMDD-<short>-<theme>-collection/` ディレクトリ作成
