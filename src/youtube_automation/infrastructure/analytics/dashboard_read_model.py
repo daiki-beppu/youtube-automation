@@ -99,7 +99,10 @@ class PublicationsResponse(TypedDict):
 
 class TrendPointResponse(TypedDict):
     date: str
-    views: int | float
+    views: int | float | None
+    watch_time_minutes: int | float | None
+    subscribers_net: int | float | None
+    impressions: int | float | None
 
 
 class TrendChannelResponse(TypedDict):
@@ -192,6 +195,12 @@ def _number(value: object, default: int | float = 0) -> int | float:
 def _non_negative_number(value: object, default: int | float = 0) -> int | float:
     number = _number(value, default)
     return number if number >= 0 else default
+
+
+def _non_negative_number_or_none(value: object) -> int | float | None:
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return None
+    return value if math.isfinite(value) and value >= 0 else None
 
 
 def _text(value: object, default: str = "") -> str:
@@ -453,15 +462,66 @@ def _trend_channel(channel: Path, item: ChannelDetailResponse) -> TrendChannelRe
             points=[],
             error=ErrorResponse(code="snapshot_invalid", message=str(exc)),
         )
-    rows = _object(snapshot.get("channel_analytics")).get("daily_metrics")
-    points: list[TrendPointResponse] = []
-    if isinstance(rows, list):
-        for row in rows:
+    points_by_date = _daily_trend_points(snapshot)
+    _merge_daily_impressions(snapshot, points_by_date)
+    return TrendChannelResponse(
+        id=item["id"],
+        name=item["name"],
+        status="ready",
+        points=[points_by_date[date] for date in sorted(points_by_date)],
+        error=None,
+    )
+
+
+def _daily_trend_points(snapshot: dict[str, object]) -> dict[str, TrendPointResponse]:
+    points_by_date: dict[str, TrendPointResponse] = {}
+    daily_rows = _object(snapshot.get("channel_analytics")).get("daily_metrics")
+    if isinstance(daily_rows, list):
+        for row in daily_rows:
             source = _object(row)
             date = _text(source.get("date"))
             if date:
-                points.append(TrendPointResponse(date=date, views=_non_negative_number(source.get("views"))))
-    return TrendChannelResponse(id=item["id"], name=item["name"], status="ready", points=points, error=None)
+                subscribers_gained = _non_negative_number_or_none(source.get("subscribers_gained"))
+                subscribers_lost = _non_negative_number_or_none(source.get("subscribers_lost"))
+                points_by_date[date] = TrendPointResponse(
+                    date=date,
+                    views=_non_negative_number_or_none(source.get("views")),
+                    watch_time_minutes=_non_negative_number_or_none(source.get("watch_time")),
+                    subscribers_net=(
+                        subscribers_gained - subscribers_lost
+                        if subscribers_gained is not None and subscribers_lost is not None
+                        else None
+                    ),
+                    impressions=None,
+                )
+    return points_by_date
+
+
+def _merge_daily_impressions(snapshot: dict[str, object], points_by_date: dict[str, TrendPointResponse]) -> None:
+    reporting_rows = _object(_object(snapshot.get("reporting_api")).get("impressions_summary")).get("per_day")
+    if isinstance(reporting_rows, list):
+        for row in reporting_rows:
+            source = _object(row)
+            date = _text(source.get("date"))
+            if not date:
+                continue
+            point = points_by_date.get(
+                date,
+                TrendPointResponse(
+                    date=date,
+                    views=None,
+                    watch_time_minutes=None,
+                    subscribers_net=None,
+                    impressions=None,
+                ),
+            )
+            points_by_date[date] = TrendPointResponse(
+                date=point["date"],
+                views=point["views"],
+                watch_time_minutes=point["watch_time_minutes"],
+                subscribers_net=point["subscribers_net"],
+                impressions=_non_negative_number_or_none(source.get("impressions")),
+            )
 
 
 def _pipeline_owner(phase: Phase, engine: MusicEngine | None) -> ExecutionOwner:

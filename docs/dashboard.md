@@ -39,7 +39,7 @@ uv run yt-dashboard --skip-refresh
 
 ## JSON API
 
-`GET /api/trends` は最新 snapshot の `channel_analytics.daily_metrics` から日付と再生数だけを登録チャンネル順に返します。snapshot が利用できないチャンネルは空の系列とエラー状態を返します。
+`GET /api/trends` は最新 snapshot の `channel_analytics.daily_metrics` と `reporting_api.impressions_summary.per_day` から、日次の再生数・再生時間・登録者純増減・インプレッション数を登録チャンネル順に返します。両データの日付和集合を使い、存在しない指標は `null` のまま保持します。snapshot が利用できないチャンネルは空の系列とエラー状態を返します。
 
 `POST /api/refresh` は全登録チャンネルを直列に再収集し、read model を再構築して更新後の overview を返します。JSON body の `days` は `7` / `30` / `90` を指定でき、省略時は `30` です。画面の期間プリセットも同じ endpoint を使うため、短い期間と長い期間を切り替えるたびに全チャンネル分の API quota を消費します。更新は排他的で、実行中の再送は `409 Conflict` です。`--skip-refresh` で起動した server では外部 API を呼ばず、保存済み snapshot から read model だけを再構築します。
 
@@ -52,6 +52,7 @@ uv run yt-dashboard --skip-refresh
 - チャンネルごとの最新 snapshot、収集日時、動画数、主要指標
 - `status.publishAt` が現在より未来の YouTube 動画数（`公開予約 N本`）
 - 選択チャンネルの再生数上位 chart と動画別 Table
+- 全チャンネルの日次推移を再生数・再生時間・登録者純増減・インプレッション数で切り替える chart
 - registry、meta、snapshot の欠損・破損状態と更新エラー
 - 全チャンネルの collection phase、工程所有側、引き渡し状態、直近 state 更新
 

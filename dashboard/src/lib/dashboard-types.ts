@@ -92,12 +92,19 @@ export type OverviewResponse = {
   schema_version: number
   channels: ChannelOverview[]
 }
+export type TrendPoint = {
+  date: string
+  views: number | null
+  watch_time_minutes: number | null
+  subscribers_net: number | null
+  impressions: number | null
+}
 export type TrendsResponse = {
   channels: Array<{
     id: string
     name: string
     status: string
-    points: Array<{ date: string; views: number }>
+    points: TrendPoint[]
     error: { code: string; message: string } | null
   }>
 }

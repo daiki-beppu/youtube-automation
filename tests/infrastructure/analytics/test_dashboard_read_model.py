@@ -40,8 +40,19 @@ def _snapshot(*, collected_at: str, views: int, video_views: int) -> dict:
         },
         "channel_analytics": {
             "daily_metrics": [
-                {"date": "2026-07-19", "views": 12, "watch_time": 30},
-                {"date": "2026-07-20", "views": 18},
+                {
+                    "date": "2026-07-19",
+                    "views": 12,
+                    "watch_time": 30,
+                    "subscribers_gained": 4,
+                    "subscribers_lost": 1,
+                },
+                {
+                    "date": "2026-07-20",
+                    "views": 18,
+                    "subscribers_gained": 1,
+                    "subscribers_lost": 3,
+                },
             ],
             "summary": {
                 "total_views": views,
@@ -65,7 +76,13 @@ def _snapshot(*, collected_at: str, views: int, video_views: int) -> dict:
             }
         },
         "reporting_api": {
-            "impressions_summary": {"per_video": [{"video_id": "video-b", "impressions": 1000, "ctr_percentage": 4.5}]}
+            "impressions_summary": {
+                "per_video": [{"video_id": "video-b", "impressions": 1000, "ctr_percentage": 4.5}],
+                "per_day": [
+                    {"date": "2026-07-20", "impressions": 250},
+                    {"date": "2026-07-21", "impressions": 400},
+                ],
+            }
         },
     }
 
@@ -94,7 +111,7 @@ def test_dashboard_api_response_contracts_are_typed_dicts() -> None:
     assert is_typeddict(OverviewResponse)
 
 
-def test_trends_extract_daily_views_without_changing_channel_response(tmp_path: Path) -> None:
+def test_trends_merge_all_daily_metrics_without_filling_missing_values(tmp_path: Path) -> None:
     channel = tmp_path / "ready"
     _write_channel(
         channel,
@@ -106,8 +123,27 @@ def test_trends_extract_daily_views_without_changing_channel_response(tmp_path: 
     trend = api.trends()["channels"][0]
     assert trend["name"] == "Night Drive"
     assert trend["points"] == [
-        {"date": "2026-07-19", "views": 12},
-        {"date": "2026-07-20", "views": 18},
+        {
+            "date": "2026-07-19",
+            "views": 12,
+            "watch_time_minutes": 30,
+            "subscribers_net": 3,
+            "impressions": None,
+        },
+        {
+            "date": "2026-07-20",
+            "views": 18,
+            "watch_time_minutes": None,
+            "subscribers_net": -2,
+            "impressions": 250,
+        },
+        {
+            "date": "2026-07-21",
+            "views": None,
+            "watch_time_minutes": None,
+            "subscribers_net": None,
+            "impressions": 400,
+        },
     ]
     assert "points" not in api.overview()["channels"][0]
     assert is_typeddict(ChannelOverviewResponse)
