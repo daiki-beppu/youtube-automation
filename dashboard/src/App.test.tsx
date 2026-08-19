@@ -226,6 +226,97 @@ describe("dashboard", () => {
     )
   })
 
+  it("places pipeline status after channel comparison and selected video detail", async () => {
+    // Given
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const path = String(input)
+      if (path === "/api/pipeline") {
+        return new Response(JSON.stringify({ channels: [] }))
+      }
+      if (path === "/api/publications") {
+        return new Response(JSON.stringify(publicationActivity))
+      }
+      if (path === "/api/trends") {
+        return new Response(JSON.stringify({ channels: [] }))
+      }
+      return new Response(
+        JSON.stringify(path.endsWith("channel-a") ? detail : overview)
+      )
+    })
+    const user = userEvent.setup()
+    renderDashboard()
+
+    // When
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Night Drive の動画詳細を見る",
+      })
+    )
+
+    // Then
+    const comparisonHeading = screen.getByRole("heading", {
+      name: "チャンネル比較",
+    })
+    const detailHeading = await screen.findByRole("heading", {
+      name: "Night Drive の動画詳細",
+    })
+    const pipeline = await screen.findByRole("region", {
+      name: "パイプライン状況",
+    })
+    expect(comparisonHeading.compareDocumentPosition(detailHeading)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING
+    )
+    expect(detailHeading.compareDocumentPosition(pipeline)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING
+    )
+  })
+
+  it("places a pipeline error after channel comparison and selected video detail", async () => {
+    // Given
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const path = String(input)
+      if (path === "/api/pipeline") {
+        return new Response(null, { status: 503 })
+      }
+      if (path === "/api/publications") {
+        return new Response(JSON.stringify(publicationActivity))
+      }
+      if (path === "/api/trends") {
+        return new Response(JSON.stringify({ channels: [] }))
+      }
+      return new Response(
+        JSON.stringify(path.endsWith("channel-a") ? detail : overview)
+      )
+    })
+    const user = userEvent.setup()
+    renderDashboard()
+
+    // When
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Night Drive の動画詳細を見る",
+      })
+    )
+
+    // Then
+    const comparisonHeading = screen.getByRole("heading", {
+      name: "チャンネル比較",
+    })
+    const detailHeading = await screen.findByRole("heading", {
+      name: "Night Drive の動画詳細",
+    })
+    const pipelineError = await screen.findByRole("status")
+    expect(
+      within(pipelineError).getByText("パイプライン状況を読み込めませんでした")
+    ).toBeInTheDocument()
+    expect(comparisonHeading.compareDocumentPosition(detailHeading)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING
+    )
+    expect(detailHeading.compareDocumentPosition(pipelineError)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING
+    )
+  })
+
   it("refreshes every dashboard read model and disables the button while running", async () => {
     const refreshResponse = deferred<Response>()
     const updatedOverview = {

@@ -21,6 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `fix(video-upload)`: `descriptions.json::localizations` が空でも `scene_phrases` から生成済みの翻訳を維持し、ja/de 等がアップロード時に消える問題を修正する（#4339）。
 - `fix(wf-new)`: `scene_phrases` の保存前に予定尺込みの多言語タイトルを組み立て、YouTube の 100 codepoint 上限超過を全言語まとめて拒否する（#4340）。
 - `fix(upload)`: Windows で `collections/planning` から `collections/live` への移動完了後に access denied が返っても、実ファイル状態から成功を判定して誤った移動エラーを表示しないようにする（#4341）。
+- `feat(dashboard)`: パイプライン状況と取得エラーを全セクションの最後へ移し、チャンネル比較と動画詳細を先に確認できるようにする（#4349）。
+
 - `feat(dashboard)`: パイプライン状況を phase ごとに先頭10件へ整え、残件数付き「もっと見る」で全件を展開できるようにする（#4347）。
 
 - `feat(dashboard)`: パイプライン状況の初期フィルターを「進行中」とし、完了済み collection だけを除いて対応中・不正 state・channel error を先に確認できるようにする（#4344）。

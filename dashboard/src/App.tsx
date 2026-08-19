@@ -1026,15 +1026,6 @@ export function App() {
 
         <PublicationActivityPanel state={publicationActivity} />
         {trends ? <ChannelTrendChart data={trends} /> : null}
-        {pipeline ? <PipelineStatusTable data={pipeline} /> : null}
-        {pipelineError && channels !== null ? (
-          <Card role="status">
-            <CardHeader>
-              <CardTitle>パイプライン状況を読み込めませんでした</CardTitle>
-              <CardDescription>{pipelineError}</CardDescription>
-            </CardHeader>
-          </Card>
-        ) : null}
 
         {error ? (
           <Alert variant="destructive">
@@ -1096,6 +1087,15 @@ export function App() {
               ) : null}
             </section>
           </div>
+        ) : null}
+        {pipeline ? <PipelineStatusTable data={pipeline} /> : null}
+        {pipelineError && channels !== null ? (
+          <Card role="status">
+            <CardHeader>
+              <CardTitle>パイプライン状況を読み込めませんでした</CardTitle>
+              <CardDescription>{pipelineError}</CardDescription>
+            </CardHeader>
+          </Card>
         ) : null}
       </div>
     </main>
