@@ -827,6 +827,45 @@ def test_missing_initial_second_clip_fails_before_duration_filter(tmp_path, monk
     assert not (collection / "01-master" / ".selection.log").exists()
 
 
+def test_should_keep_single_clip_when_incomplete_download_is_allowed(tmp_path, monkeypatch):
+    collection = _make_collection(
+        tmp_path,
+        [{"name": "夜明け — Dawn Groove", "lyrics": ""}],
+    )
+    source = _write_audio(collection, "01a-Dawn Groove.mp3")
+    monkeypatch.setattr(suno_track_selection, "probe_duration", lambda _: 120.0)
+
+    result = suno_track_selection.select_suno_tracks(
+        collection,
+        _cfg(),
+        dry_run=True,
+        allow_incomplete_download=True,
+    )
+
+    assert result.kept == [source]
+    assert result.dropped == []
+    assert source.exists()
+
+
+def test_should_enforce_duration_filter_when_incomplete_download_is_allowed(tmp_path, monkeypatch):
+    collection = _make_collection(
+        tmp_path,
+        [{"name": "夜明け — Dawn Groove", "lyrics": ""}],
+    )
+    source = _write_audio(collection, "01a-Dawn Groove.mp3")
+    monkeypatch.setattr(suno_track_selection, "probe_duration", lambda _: 20.0)
+
+    with pytest.raises(ValidationError, match="採用候補が 0 件"):
+        suno_track_selection.select_suno_tracks(
+            collection,
+            _cfg(),
+            allow_incomplete_download=True,
+        )
+
+    assert source.exists()
+    assert not (collection / "01-master" / ".selection.log").exists()
+
+
 def test_invalid_audio_filename_fails_loud(tmp_path, monkeypatch):
     collection = _make_collection(
         tmp_path,
@@ -966,6 +1005,25 @@ def test_main_passes_best_effort_over_max_flag(tmp_path, monkeypatch, capsys):
 
     assert suno_select_tracks.main() == 0
     assert "exceptions_over_limit=1" in capsys.readouterr().out
+
+
+def test_main_should_pass_allow_incomplete_download_flag(tmp_path, monkeypatch, capsys):
+    collection = _make_collection(
+        tmp_path,
+        [{"name": "夜明け — Dawn Groove", "lyrics": ""}],
+    )
+    source = _write_audio(collection, "01a-Dawn Groove.mp3")
+    monkeypatch.setattr(suno_track_selection, "probe_duration", lambda _: 120.0)
+    monkeypatch.setattr(suno_select_tracks, "load_skill_config", lambda _: _cfg())
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["yt-suno-select-tracks", "--dry-run", str(collection), "--allow-incomplete-download"],
+    )
+
+    assert suno_select_tracks.main() == 0
+    assert source.exists()
+    assert "kept=1" in capsys.readouterr().out
 
 
 def test_main_returns_1_and_stderr_on_validation_error(tmp_path, monkeypatch, capsys):
