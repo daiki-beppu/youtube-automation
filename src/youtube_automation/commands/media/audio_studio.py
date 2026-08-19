@@ -28,9 +28,11 @@ from youtube_automation.commands.suno.suno_audio_cleanup import (
 from youtube_automation.configuration.skills import load_skill_config
 from youtube_automation.core.errors import ConfigError, ValidationError
 from youtube_automation.domains.media.audio_adjustments import (
+    apply_track_order,
     merge_cleanup_settings,
     read_audio_adjustments,
     replace_track_cleanup_overrides,
+    replace_track_order,
 )
 from youtube_automation.domains.media.audio_formats import AUDIO_EXTS
 from youtube_automation.infrastructure.file_lock import file_lock
@@ -55,6 +57,7 @@ DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8766
 SERVER_KIND = "audio-studio"
 TRACKS_ROUTE = "/api/tracks"
+ORDER_ROUTE = "/api/order"
 _TRACK_AUDIO_PATTERN = re.compile(r"^/api/tracks/(?P<track_id>[a-f0-9]{16})/audio$")
 _TRACK_ADJUSTMENTS_PATTERN = re.compile(r"^/api/tracks/(?P<track_id>[a-f0-9]{16})/adjustments$")
 _RANGE_PATTERN = re.compile(r"^bytes=(?P<start>\d*)-(?P<end>\d*)$")
@@ -264,9 +267,7 @@ class AudioStudioRequestHandler(BaseHTTPRequestHandler):
         payload = self._read_json_body()
         if set(payload) != {"settings"}:
             raise ValidationError("JSON body は settings だけを含む必要があります")
-        collection_root = self.server.collection_dir.resolve()
-        if not self.server.audio_adjustments_path.parent.resolve().is_relative_to(collection_root):
-            raise ValidationError("audio-adjustments.json の保存先が collection 外を指しています")
+        self._validate_adjustments_destination()
         defaults = self._defaults()
         with file_lock(self.server.audio_adjustments_path):
             document = replace_track_cleanup_overrides(
@@ -285,6 +286,53 @@ class AudioStudioRequestHandler(BaseHTTPRequestHandler):
             },
         )
 
+    def _validate_adjustments_destination(self) -> None:
+        collection_root = self.server.collection_dir.resolve()
+        if not self.server.audio_adjustments_path.parent.resolve().is_relative_to(collection_root):
+            raise ValidationError("audio-adjustments.json の保存先が collection 外を指しています")
+
+    def _order_payload(self) -> dict[str, object]:
+        document = read_audio_adjustments(self.server.audio_adjustments_path)
+        default_paths = list(self.server.track_files.values())
+        ordered_paths = apply_track_order(default_paths, document.order)
+        return {
+            "order": [path.name for path in ordered_paths],
+            "shuffle_seed": document.shuffle_seed,
+            "pin_first": document.pin_first,
+            "saved": document.order is not None,
+        }
+
+    def _put_order(self) -> None:
+        payload = self._read_json_body()
+        if set(payload) != {"order", "shuffle_seed", "pin_first"}:
+            raise ValidationError("JSON body は order / shuffle_seed / pin_first だけを含む必要があります")
+        self._validate_adjustments_destination()
+        expected = {path.name for path in self.server.track_files.values()}
+        raw_order = payload["order"]
+        if not isinstance(raw_order, list) or any(not isinstance(item, str) for item in raw_order):
+            raise ValidationError("order は filename の配列である必要があります")
+        actual = set(raw_order)
+        if len(raw_order) != len(actual) or actual != expected:
+            missing = sorted(expected - actual)
+            unknown = sorted(actual - expected)
+            raise ValidationError(f"order と実ファイルが一致しません (missing={missing}, unknown={unknown})")
+        with file_lock(self.server.audio_adjustments_path):
+            document = replace_track_order(
+                self.server.audio_adjustments_path,
+                raw_order,
+                payload["shuffle_seed"],
+                payload["pin_first"],
+            )
+        self._json(
+            HTTPStatus.OK,
+            {
+                "order": document.order or [],
+                "shuffle_seed": document.shuffle_seed,
+                "pin_first": document.pin_first,
+                "saved": True,
+            },
+        )
+
     def do_GET(self) -> None:
         path = urlsplit(self.path).path
         if path.startswith("/api/") and not self._cors_allowed():
@@ -292,6 +340,12 @@ class AudioStudioRequestHandler(BaseHTTPRequestHandler):
             return
         if path == TRACKS_ROUTE:
             self._json(HTTPStatus.OK, self.server.track_payload)
+            return
+        if path == ORDER_ROUTE:
+            try:
+                self._json(HTTPStatus.OK, self._order_payload())
+            except ValidationError as error:
+                self._json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
             return
         match = _TRACK_AUDIO_PATTERN.fullmatch(path)
         if match is not None:
@@ -323,6 +377,12 @@ class AudioStudioRequestHandler(BaseHTTPRequestHandler):
         path = urlsplit(self.path).path
         if not self._cors_allowed():
             self._json(HTTPStatus.FORBIDDEN, {"error": "origin not allowed"})
+            return
+        if path == ORDER_ROUTE:
+            try:
+                self._put_order()
+            except ValidationError as error:
+                self._json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
             return
         match = _TRACK_ADJUSTMENTS_PATTERN.fullmatch(path)
         if match is None:

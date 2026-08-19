@@ -27,6 +27,7 @@ from pathlib import Path
 from youtube_automation.configuration import load_config
 from youtube_automation.configuration.skills import load_skill_config
 from youtube_automation.core.errors import ValidationError
+from youtube_automation.domains.media.audio_adjustments import apply_track_order, read_audio_adjustments
 from youtube_automation.infrastructure.media.collection_paths import (
     CollectionPaths,
     resolve_collection_dir,
@@ -234,6 +235,7 @@ def generate_master(
     shuffle_seed: int | None = None,
     pin_first: list[str] | None = None,
     pin_first_count: int | None = None,
+    order: list[str] | None = None,
     quiet: bool = False,
 ) -> Path:
     paths = CollectionPaths(collection_dir)
@@ -247,6 +249,12 @@ def generate_master(
 
     files = _collect_audio_inputs(music_dir)
     n = len(files)
+
+    if order is not None:
+        if shuffle or pin_first or pin_first_count:
+            raise ValidationError("保存済み order と shuffle / pin_first は同時に指定できません")
+        files = apply_track_order(files, order)
+        print("[Order] audio-adjustments.json の保存順を使用します")
 
     # 先頭固定を解決 (要件 1-4, 10): pin された曲は順序固定、残りを shuffle 対象とする。
     pinned, remaining = _apply_pin_first(
@@ -507,10 +515,13 @@ def main() -> int:
         # CLI で --shuffle または --shuffle-seed のいずれかが指定されていれば CLI 優先。
         # skill-config 側は `audio.shuffle: true` が明示要求 (`shuffle_seed` 単独では有効化しない)。
         cli_shuffle_specified = args.shuffle or args.shuffle_seed is not None
-        shuffle_enabled = cli_shuffle_specified or bool(audio.get(_SHUFFLE_KEY, False))
+        cli_pin_specified = args.pin_first is not None or args.pin_first_count is not None
+        adjustments = read_audio_adjustments(CollectionPaths(collection_dir).audio_adjustments_path)
+        use_saved_order = adjustments.order is not None and not cli_shuffle_specified and not cli_pin_specified
+        shuffle_enabled = False if use_saved_order else cli_shuffle_specified or bool(audio.get(_SHUFFLE_KEY, False))
 
         shuffle_seed: int | None = args.shuffle_seed
-        if shuffle_seed is None:
+        if shuffle_seed is None and not use_saved_order:
             skill_seed = audio.get(_SHUFFLE_SEED_KEY)
             if skill_seed is not None:
                 # bool は int サブクラスのため明示的に除外する。
@@ -527,7 +538,7 @@ def main() -> int:
         if args.pin_first_count is not None and args.pin_first_count < 0:
             raise ValidationError("--pin-first-count は 0 以上を指定してください")
 
-        if pin_first is None and pin_first_count is None:
+        if pin_first is None and pin_first_count is None and not use_saved_order:
             skill_pin_count = audio.get(_PIN_FIRST_COUNT_KEY)
             if skill_pin_count is not None:
                 # bool は int サブクラスのため明示的に除外する。
@@ -558,6 +569,7 @@ def main() -> int:
             shuffle_seed=shuffle_seed,
             pin_first=pin_first,
             pin_first_count=pin_first_count,
+            order=adjustments.order if use_saved_order else None,
             quiet=args.quiet,
         )
     except ValidationError as e:

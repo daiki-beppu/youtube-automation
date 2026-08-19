@@ -31,6 +31,7 @@ from youtube_automation.core.errors import ValidationError, WorkflowStateError
 from youtube_automation.domains.collections.workflow_state import WorkflowState
 from youtube_automation.domains.collections.workflow_state import read_or_none as read_workflow_state_or_none
 from youtube_automation.domains.collections.workflow_state import update as update_workflow_state
+from youtube_automation.domains.media.audio_adjustments import apply_track_order, read_audio_adjustments
 from youtube_automation.domains.media.audio_formats import AUDIO_EXTS
 from youtube_automation.domains.metadata.descriptions import (
     build_complete_collection_description,
@@ -124,6 +125,8 @@ class BAHMetadataGenerator:
 
         # 音声ファイルを取得（AUDIO_EXTS で許容形式を共有、数字順にソート）
         wav_files = sorted([f for f in audio_dir.iterdir() if f.suffix.lower() in AUDIO_EXTS])
+        adjustments = read_audio_adjustments(self.collection_path / "20-documentation/audio-adjustments.json")
+        wav_files = apply_track_order(wav_files, adjustments.order)
 
         for wav_file in wav_files:
             try:

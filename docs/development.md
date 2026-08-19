@@ -124,6 +124,8 @@ nix develop .#extensions --command pnpm -C audio-studio build
 
 - Python server は `127.0.0.1` にだけ bind し、track allowlist、duration probe、HTTP Range、server-kind 別 lifecycle を所有する。
 - cleanup 調整 API は skill-config の既定値と `audio-adjustments.json::tracks.<filename>` の差分を分けて返し、PUT は full settings を再検証して差分だけを原子的に保存する。
+- 曲順 API は `order` が実トラックの filename 集合と完全一致する場合だけ、seed と先頭固定順を cleanup 差分と同じ文書へ原子的に保存する。frontend の同一 seed は同じ並びを再現し、手動変更では seed を破棄する。
+- `yt-generate-master` と `BAHMetadataGenerator` は保存済み `order` を共有する。CLI の順序フラグがあれば保存順より優先し、保存順に過不足があれば master / chapter のどちらも fail-loud で停止する。
 - EQ preview は Web Audio の 2 つの peaking `BiquadFilterNode` であり、保存後に適用する ffmpeg `equalizer` と完全一致するものとして扱わない。
 - build は Vite output を `src/youtube_automation/audio_studio_dist/` へ生成する。Python build backend から Node.js を暗黙起動しない。
 - `audio_studio_dist/` は wheel / sdist に同梱し、candidate wheel の非 editable install smoke で CLI と asset 配信を確認する。

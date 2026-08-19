@@ -120,7 +120,7 @@ Lyria で音源を生成するチャンネルでは `/music --generate` が `01-
 | (skill-config) `audio.shuffle_seed` | `audio.shuffle: true` 時のデフォルト seed（整数） | `shuffle_seed: 42` |
 | (skill-config) `audio.pin_first_count` | CLI フラグ未指定時のデフォルト先頭固定数（`0` = 固定なし） | `pin_first_count: 1` |
 
-出力 MP3 のビットレートとクロスフェード秒数は CLI 引数ではなく、`config/skills/masterup.json`（優先）または `config/skills/masterup.yaml` の `audio.bitrate` / `audio.crossfade_duration` で設定する。未設定時は組み込み default を使い、その値は同梱 `config.default.yaml` と同期テストで固定される。目標尺は CLI フラグ > `config/channel/audio.json` > skill-config の順で、skill-config の `audio.target_duration_min` は channel 側未設定時だけの互換 fallback。その他の CLI 対応オプションは `uv run yt-generate-master --help` を正本とする。
+出力 MP3 のビットレートとクロスフェード秒数は CLI 引数ではなく、`config/skills/masterup.json`（優先）または `config/skills/masterup.yaml` の `audio.bitrate` / `audio.crossfade_duration` で設定する。未設定時は組み込み default を使い、その値は同梱 `config.default.yaml` と同期テストで固定される。目標尺は CLI フラグ > `config/channel/audio.json` > skill-config の順で、skill-config の `audio.target_duration_min` は channel 側未設定時だけの互換 fallback。曲順は CLI の `--shuffle*` / `--pin-first*` > `20-documentation/audio-adjustments.json::order` > skill-config > ファイル名ソートの順で解決する。保存済み `order` と `02-Individual-music/` の実ファイルに過不足があれば、意図しない欠落を避けるため fail-loud で停止する。その他の CLI 対応オプションは `uv run yt-generate-master --help` を正本とする。
 
 ## Suno fallback 経路
 
