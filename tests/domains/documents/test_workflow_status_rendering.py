@@ -57,7 +57,56 @@ def test_renderer_provides_css_only_client_filters_for_all_statuses() -> None:
     for status in ("all", "planning", "live", "complete"):
         assert f'id="filter-{status}"' in html
     assert 'data-status="planning"' in html
+    assert '<span class="filter-selected" aria-hidden="true">選択中 · </span>' in html
+    assert ".filter-control:focus-visible" in html
     assert "#filter-planning:checked ~ .collection-grid [data-status]:not([data-status=planning])" in html
+
+
+def test_attention_collections_and_missing_artifacts_render_before_normal_details() -> None:
+    healthy = CollectionStatusView(
+        name="Healthy collection",
+        slug="healthy",
+        status="complete",
+        phase="complete",
+        blocker="なし",
+        next_action="なし",
+        updated_at="2026-08-16 11:00 UTC",
+        stalled_for="1時間",
+        stale=False,
+        warnings=(),
+        artifacts=(ArtifactStatusView(key="plan", label="企画", status="complete", detail="plan.json"),),
+    )
+    attention = CollectionStatusView(
+        name="Needs attention",
+        slug="attention",
+        status="planning",
+        phase="prepared",
+        blocker="master missing",
+        next_action="/music --master",
+        updated_at="2026-08-10 11:00 UTC",
+        stalled_for="6日",
+        stale=True,
+        warnings=("workflow state が古い",),
+        artifacts=(
+            ArtifactStatusView(key="master", label="Master", status="missing", detail="01-master/master.mp3"),
+            ArtifactStatusView(key="plan", label="企画", status="complete", detail="plan.json"),
+        ),
+    )
+    snapshot = WorkflowStatusSnapshot(
+        generated_at=datetime(2026, 8, 16, 12, 0, tzinfo=UTC),
+        collections=(healthy, attention),
+    )
+
+    html = render_workflow_status(snapshot)
+
+    assert html.index("Needs attention") < html.index("Healthy collection")
+    attention_start = html.index('data-slug="attention"')
+    healthy_start = html.index('data-slug="healthy"')
+    segment = html[attention_start:healthy_start]
+    assert segment.index("phase") < segment.index("要対応") < segment.index("成果物の詳細")
+    assert "停滞: 6日" in segment
+    assert "Master: 未生成" in segment
+    assert "workflow state が古い" in segment
 
 
 def test_empty_snapshot_renders_an_explicit_empty_state() -> None:
