@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(documents)`: schema 文書 View で要点・主要指標を先に表示し、長い根拠や未知の追加データを欠落させず native details へ段階表示する（#4376）。
 - `fix(skills)`: `yt-skills migrate-config` に統合済み 5 skill の移行先を追加し、孤児 config を `wf-new` / `thumbnail` / `music` / `channel-research` へ安全に移行できるようにする（#4333）。
 - `fix(automation-update)`: multi-channel workspace では単一 channel 用 `channel-gitignore` asset を sync / diff 対象外とし、OAuth secret や channel media を保護する workspace 固有 `.gitignore` を維持する（#4331）。
 - `fix(hybrid)`: `yt-skills migrate-state-git` が workspace root の集約 `.gitignore` を利用し、既追跡の制御面 JSON を移行済みとして検査できるようにする（#4332）。

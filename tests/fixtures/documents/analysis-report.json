@@ -1,0 +1,108 @@
+{
+  "schema_version": 3,
+  "generated_at": "2026-08-20T00:00:00Z",
+  "summary": "再生初動は基準を上回る一方、主要流入源への依存が高い。次回は勝ち型を維持しつつ流入源を分散する。",
+  "inputs": {
+    "analysis_target": "data/analytics_data_20260820.json",
+    "cli_selected": [
+      "reports/channel_trend_20260820.json",
+      "reports/traffic_trend_20260820.json"
+    ],
+    "supplemental": [],
+    "intermediate": {
+      "vpd_ranking": "reports/analysis_20260820.vpd-ranking.json",
+      "win_pattern": "reports/analysis_20260820.win-pattern.json"
+    }
+  },
+  "cli_outputs": {
+    "launch_curve": {
+      "target": {
+        "ratio_vs_median": 1.42
+      }
+    },
+    "channel_trend": {
+      "summary": {
+        "wow_growth_rate": 8.5
+      }
+    },
+    "traffic_trend": {
+      "summary": {
+        "top_source_share_percent": 45.2
+      }
+    }
+  },
+  "vpd_ranking": {
+    "n": 12,
+    "top_video_ids": ["VID_TOP_1", "VID_TOP_2"],
+    "bottom_video_ids": ["VID_BOTTOM_1", "VID_BOTTOM_2"]
+  },
+  "win_pattern": {
+    "attributes": {
+      "theme": {
+        "focus": {
+          "top_percentage": 100.0,
+          "bottom_percentage": 25.0,
+          "classification": "win"
+        }
+      }
+    },
+    "disclaimer": "Observed correlation does not imply causation."
+  },
+  "strategic_improvements": [
+    {
+      "statement": "関連動画以外の流入源を増やす",
+      "evidence": [
+        {
+          "source": "traffic_trend",
+          "json_path": "$.cli_outputs.traffic_trend.summary.top_source_share_percent",
+          "value": 45.2
+        }
+      ],
+      "confidence": "high"
+    }
+  ],
+  "next_collection_candidates": [
+    {
+      "statement": "夜の集中作業向けテーマを継続する",
+      "evidence": [
+        {
+          "source": "win_pattern",
+          "json_path": "$.win_pattern.attributes.theme.focus.top_percentage",
+          "value": 100.0
+        }
+      ],
+      "confidence": "medium"
+    }
+  ],
+  "action_plan": [
+    {
+      "priority": 1,
+      "action": "次回企画で流入源仮説を1件追加する",
+      "owner": "wf-new"
+    }
+  ],
+  "strategic_discussion": [
+    {
+      "statement": "勝ち型の再現性は次の2本で再検証する",
+      "evidence": [
+        {
+          "source": "vpd_ranking",
+          "json_path": "$.vpd_ranking.n",
+          "value": 12
+        }
+      ],
+      "confidence": "low"
+    }
+  ],
+  "commands": {
+    "launch_curve": "uv run yt-launch-curve --latest",
+    "channel_trend": "uv run yt-channel-trend",
+    "traffic_trend": "uv run yt-traffic-trend"
+  },
+  "daily_observations": [
+    {"date": "2026-08-17", "views": 1200, "watch_hours": 342.5},
+    {"date": "2026-08-18", "views": 1380, "watch_hours": 391.2},
+    {"date": "2026-08-19", "views": 1460, "watch_hours": 417.8},
+    {"date": "2026-08-20", "views": 1510, "watch_hours": 438.1}
+  ]
+}

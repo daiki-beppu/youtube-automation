@@ -4,6 +4,7 @@ import json
 
 import pytest
 
+from tests.helpers.paths import FIXTURES_DIR
 from youtube_automation.core.errors import DocumentRenderError, DocumentValidationError
 from youtube_automation.domains.documents.rendering import (
     render_repository_document,
@@ -59,6 +60,69 @@ def test_schema_annotations_render_card_table_and_local_media_in_view_order() ->
     assert '<table class="view-table">' in html
     assert html.index("Score") < html.index("Name")
     validate_generated_html(html)
+
+
+def test_table_keeps_additional_row_fields_after_declared_schema_columns() -> None:
+    html = render_schema_document(
+        {
+            "summary": "Ready",
+            "rows": [{"name": "CTR", "score": 8.2, "runtime_metric": "9.1%"}],
+            "asset": "assets/preview.jpg",
+        },
+        _view_schema(),
+    )
+
+    assert html.index("Score") < html.index("Name") < html.index("runtime_metric")
+    assert "9.1%" in html
+
+
+def test_details_presentation_keeps_long_evidence_available_without_expanding_it() -> None:
+    schema = _view_schema()
+    schema["properties"]["evidence"] = {
+        "title": "Evidence and provenance",
+        "description": "Open this only when the source trail is needed.",
+        "type": "object",
+        "x-view": {"presentation": "details", "order": 4},
+    }
+
+    html = render_schema_document(
+        {
+            "summary": "Ready",
+            "rows": [],
+            "asset": "assets/preview.jpg",
+            "evidence": {"source": "reports/source.json", "daily": [1, 2, 3]},
+        },
+        schema,
+    )
+
+    assert '<details class="view-details">' in html
+    assert "<summary>Evidence and provenance</summary>" in html
+    assert "reports/source.json" in html
+    assert "<details open" not in html
+
+
+def test_analysis_report_prioritizes_decisions_and_preserves_additional_root_content() -> None:
+    fixture = FIXTURES_DIR / "documents" / "analysis-report.json"
+    document = json.loads(fixture.read_text(encoding="utf-8"))
+
+    html = render_repository_document(RepositorySchema.ANALYSIS_REPORT, document)
+
+    assert html.index("再生初動は基準を上回る") < html.index("主要指標") < html.index("入力と根拠")
+    assert "uv run yt-channel-trend" in html
+    assert "<summary>入力と根拠</summary>" in html
+    assert "<summary>実行 command</summary>" in html
+    assert "<summary>daily_observations</summary>" in html
+    assert "watch_hours" in html
+
+
+def test_common_view_uses_local_japanese_fonts_and_visible_keyboard_focus() -> None:
+    html = render_schema_document(
+        {"summary": "Ready", "rows": [], "asset": "assets/preview.jpg"},
+        _view_schema(),
+    )
+
+    assert '"Hiragino Kaku Gothic ProN", "Hiragino Sans", "Yu Gothic", Meiryo' in html
+    assert ":focus-visible" in html
 
 
 def test_render_escapes_markup_and_embedded_json_script_boundary() -> None:
