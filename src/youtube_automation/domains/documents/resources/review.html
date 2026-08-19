@@ -6,14 +6,29 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src file:; media-src file:; style-src 'unsafe-inline'; script-src 'none'; base-uri 'none'; form-action $FORM_ACTION; frame-ancestors 'none'">
   <title>$TITLE</title>
   <style>$CSS
-  form { margin-top: 1rem; }
+  .document-header { margin-bottom: .5rem; }
+  .document-header p { color: #52617a; }
+  .review-grid { display: grid; gap: 1.25rem; }
+  .review-candidate { display: grid; gap: 1.25rem; }
+  .review-candidate-header h2 { margin: .25rem 0 0; }
+  .review-preview { min-width: 0; }
+  .review-qa { border-top: 1px solid #e1e6ef; padding-top: 1.25rem; }
+  .review-qa h3 { margin: 0 0 .75rem; font-size: 1rem; }
+  .review-action { display: flex; align-items: center; justify-content: space-between; gap: 1rem; border-top: 1px solid #e1e6ef; padding-top: 1.25rem; }
+  .review-action p, .review-action form { margin: 0; }
   button { background: #0066cc; border: 0; border-radius: .4rem; color: white; cursor: pointer; padding: .7rem 1rem; }
+  button:focus-visible { outline: 3px solid #1557b0; outline-offset: 3px; }
   img, audio, video { display: block; max-height: 70vh; max-width: 100%; }
   .review-images { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr)); }
   .review-images figure { margin: 0; }
   .review-images figcaption { color: #52617a; font-weight: 650; margin-bottom: .5rem; }
   .review-images .review-320 { height: auto; max-width: 100%; width: 320px; }
+  @media (max-width: 40rem) {
+    .review-action { align-items: stretch; flex-direction: column; }
+    .review-action button { width: 100%; }
+    .review-images { grid-template-columns: 1fr; }
+  }
   </style>
 </head>
-<body><main><header class="document-header"><h1>$TITLE</h1><p>表示と候補選択だけを行います。成果物やworkflow stateは変更しません。</p></header>$CONTENT</main></body>
+<body><main><header class="document-header"><p class="eyebrow">候補レビュー</p><h1>$TITLE</h1><p>候補を比較し、選択する候補だけを確定します。</p></header><div class="review-grid">$CONTENT</div></main></body>
 </html>
