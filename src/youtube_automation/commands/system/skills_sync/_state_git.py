@@ -25,8 +25,8 @@ def _print_plan(context: StateGitContext) -> None:
             difflib.unified_diff(
                 before,
                 after,
-                fromfile=f"{context.gitignore.relative_to(context.channel_dir)} (before)",
-                tofile=f"{context.gitignore.relative_to(context.channel_dir)} (after)",
+                fromfile=f"{context.gitignore.relative_to(context.repository)} (before)",
+                tofile=f"{context.gitignore.relative_to(context.repository)} (after)",
             )
         ),
         end="",

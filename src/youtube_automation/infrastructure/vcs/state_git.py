@@ -61,6 +61,17 @@ def state_gitignore_block() -> str:
     return template[marker_at:].rstrip() + "\n"
 
 
+def _workspace_state_gitignore_block() -> str:
+    channel_lines = state_gitignore_block().splitlines()
+    workspace_lines = [channel_lines[0], "!channels/", "!channels/*/"]
+    workspace_lines.extend(f"!channels/*/{line.removeprefix('!')}" for line in channel_lines[1:])
+    return "\n".join(workspace_lines) + "\n"
+
+
+def _uses_workspace_gitignore(context: StateGitContext) -> bool:
+    return context.channel_dir != context.repository and context.gitignore == context.repository / ".gitignore"
+
+
 def _run_git(repository: Path, *args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         ["git", *args],
@@ -172,8 +183,15 @@ def build_pull_context(channel_dir: Path) -> StateGitContext:
     repository = Path(top_level.stdout.strip()).resolve()
     if not channel.is_relative_to(repository):
         raise ConfigError(f"channel directory が Git repository 外です: {channel}")
-    gitignore = channel / ".gitignore"
-    _regular_file(gitignore, label="channel .gitignore")
+    channel_gitignore = channel / ".gitignore"
+    if channel_gitignore.exists() or channel_gitignore.is_symlink():
+        _regular_file(channel_gitignore, label="channel .gitignore")
+        gitignore = channel_gitignore
+    elif channel.parent.name == "channels" and channel.parent.parent == repository:
+        gitignore = repository / ".gitignore"
+        _regular_file(gitignore, label="workspace .gitignore")
+    else:
+        _regular_file(channel_gitignore, label="channel .gitignore")
     return StateGitContext(channel, repository, gitignore, ())
 
 
@@ -255,7 +273,7 @@ def _ignored_policy_paths(context: StateGitContext) -> tuple[str, ...]:
 
 def check_state_git(context: StateGitContext) -> tuple[str, ...]:
     diagnostics: list[str] = []
-    if STATE_GITIGNORE_MARKER not in _read_gitignore(context):
+    if not _uses_workspace_gitignore(context) and STATE_GITIGNORE_MARKER not in _read_gitignore(context):
         diagnostics.append(f"Git管理ポリシーがありません: {_repo_relative(context, context.gitignore)}")
     for relative in _ignored_policy_paths(context):
         diagnostics.append(f"制御面JSONがignoreされています: {relative}")
@@ -281,7 +299,7 @@ def check_state_git(context: StateGitContext) -> tuple[str, ...]:
 
 def planned_gitignore(context: StateGitContext) -> str:
     current = _read_gitignore(context)
-    block = state_gitignore_block()
+    block = _workspace_state_gitignore_block() if _uses_workspace_gitignore(context) else state_gitignore_block()
     if current.endswith(block):
         return current
     if block in current:
