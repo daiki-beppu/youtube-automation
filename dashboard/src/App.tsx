@@ -797,13 +797,21 @@ export function App() {
   const [trends, setTrends] = useState<TrendsResponse | null>(null)
   const [pipeline, setPipeline] = useState<PipelineResponse | null>(null)
   const [pipelineError, setPipelineError] = useState<string | null>(null)
+  const dashboardRequestId = useRef(0)
   const detailRequestId = useRef(0)
 
   useEffect(() => {
+    const requestId = dashboardRequestId.current
     void requestJson<OverviewResponse>("/api/channels")
-      .then((response) => setChannels(response.channels))
+      .then((response) => {
+        if (dashboardRequestId.current === requestId) {
+          setChannels(response.channels)
+        }
+      })
       .catch((reason: unknown) => {
-        setError(reason instanceof Error ? reason.message : String(reason))
+        if (dashboardRequestId.current === requestId) {
+          setError(reason instanceof Error ? reason.message : String(reason))
+        }
       })
 
     void requestJson<unknown>("/api/publications")
@@ -815,40 +823,58 @@ export function App() {
           (total, count) => total + count,
           0
         )
-        setPublicationActivity(
-          publicationCount === 0
-            ? { status: "empty" }
-            : { status: "ready", data: response }
-        )
+        if (dashboardRequestId.current === requestId) {
+          setPublicationActivity(
+            publicationCount === 0
+              ? { status: "empty" }
+              : { status: "ready", data: response }
+          )
+        }
       })
       .catch((reason: unknown) => {
-        setPublicationActivity({
-          status: "error",
-          message: reason instanceof Error ? reason.message : String(reason),
-        })
+        if (dashboardRequestId.current === requestId) {
+          setPublicationActivity({
+            status: "error",
+            message: reason instanceof Error ? reason.message : String(reason),
+          })
+        }
       })
     void requestJson<TrendsResponse>("/api/trends")
       .then((response) => {
-        if (isTrendsResponse(response)) setTrends(response)
+        if (
+          dashboardRequestId.current === requestId &&
+          isTrendsResponse(response)
+        ) {
+          setTrends(response)
+        }
       })
       .catch((reason: unknown) => {
-        setError(reason instanceof Error ? reason.message : String(reason))
+        if (dashboardRequestId.current === requestId) {
+          setError(reason instanceof Error ? reason.message : String(reason))
+        }
       })
     void requestJson<unknown>("/api/pipeline")
       .then((response) => {
         if (!isPipelineResponse(response)) {
           throw new Error("応答形式が不正です")
         }
-        setPipeline(response)
+        if (dashboardRequestId.current === requestId) setPipeline(response)
       })
       .catch((reason: unknown) => {
-        setPipelineError(
-          reason instanceof Error ? reason.message : String(reason)
-        )
+        if (dashboardRequestId.current === requestId) {
+          setPipelineError(
+            reason instanceof Error ? reason.message : String(reason)
+          )
+        }
       })
   }, [])
 
   async function refreshDashboard(days = selectedDays) {
+    const requestId = dashboardRequestId.current + 1
+    dashboardRequestId.current = requestId
+    const refreshedDetailRequestId = detailRequestId.current + 1
+    detailRequestId.current = refreshedDetailRequestId
+    const detailChannelId = selectedId
     setRefreshing(true)
     setError(null)
     try {
@@ -862,30 +888,39 @@ export function App() {
         requestJson<OverviewResponse>("/api/channels"),
         requestJson<unknown>("/api/publications"),
         requestJson<TrendsResponse>("/api/trends"),
-        selectedId
+        detailChannelId
           ? requestJson<ChannelDetail>(
-              `/api/channels/${encodeURIComponent(selectedId)}`
+              `/api/channels/${encodeURIComponent(detailChannelId)}`
             )
           : Promise.resolve(null),
       ])
       if (!isPublicationActivityResponse(publicationsResponse)) {
         throw new Error("応答形式が不正です")
       }
+      if (dashboardRequestId.current !== requestId) return
       setChannels(overviewResponse.channels)
       if (isTrendsResponse(trendsResponse)) setTrends(trendsResponse)
-      setDetail(detailResponse)
+      if (detailRequestId.current === refreshedDetailRequestId) {
+        setDetail(detailResponse)
+        setDetailLoading(false)
+      }
       try {
         const pipelineResponse = await requestJson<unknown>("/api/pipeline")
         if (!isPipelineResponse(pipelineResponse)) {
           throw new Error("pipeline 応答形式が不正です")
         }
-        setPipeline(pipelineResponse)
-        setPipelineError(null)
+        if (dashboardRequestId.current === requestId) {
+          setPipeline(pipelineResponse)
+          setPipelineError(null)
+        }
       } catch (reason) {
-        setPipelineError(
-          reason instanceof Error ? reason.message : String(reason)
-        )
+        if (dashboardRequestId.current === requestId) {
+          setPipelineError(
+            reason instanceof Error ? reason.message : String(reason)
+          )
+        }
       }
+      if (dashboardRequestId.current !== requestId) return
       const publicationCount = Object.values(publicationsResponse.days).reduce(
         (total, count) => total + count,
         0
@@ -896,9 +931,11 @@ export function App() {
           : { status: "ready", data: publicationsResponse }
       )
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason))
+      if (dashboardRequestId.current === requestId) {
+        setError(reason instanceof Error ? reason.message : String(reason))
+      }
     } finally {
-      setRefreshing(false)
+      if (dashboardRequestId.current === requestId) setRefreshing(false)
     }
   }
 
