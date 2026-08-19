@@ -24,6 +24,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--daemon", "-d", action="store_true")
     parser.add_argument("--collection", "-c")
     parser.add_argument("--config")
+    parser.add_argument(
+        "--allow-duration-outside-target",
+        action="store_true",
+        help="operator 判断で config/channel/audio.json の目標尺外を明示許可する",
+    )
     return parser
 
 
@@ -31,6 +36,7 @@ def run(args: argparse.Namespace) -> None:
     uploader = CollectionUploader(
         config_path=args.config,
         youtube_clients=create_authenticated_youtube_clients(),
+        allow_duration_outside_target=getattr(args, "allow_duration_outside_target", False),
     )
     if args.daemon:
         uploader.run_automated_schedule()

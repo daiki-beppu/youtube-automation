@@ -375,6 +375,20 @@ def test_collection_uploader_accepts_injected_tracking_store(tmp_path: Path) -> 
     assert uploader.tracking_store is store
 
 
+def test_collection_uploader_forwards_duration_override_to_preflight_checker(tmp_path: Path) -> None:
+    from youtube_automation.domains.uploads.collection import CollectionUploader
+
+    # Given/When: operator の目標尺外 opt-in 付きで uploader を構築する
+    uploader = CollectionUploader(
+        collections_root=str(tmp_path / "collections"),
+        config_path=str(tmp_path / "schedule_config.json"),
+        allow_duration_outside_target=True,
+    )
+
+    # Then: 実アップロード前に使う checker が同じ opt-in を保持する
+    assert uploader.uploader.preflight_checker.allow_duration_outside_target is True
+
+
 def test_collection_uploader_accepts_injected_published_dates(tmp_path: Path) -> None:
     from youtube_automation.domains.uploads.collection import CollectionUploader
 
