@@ -16,6 +16,7 @@ interface FormatModalFixtureOptions {
   confirm?: boolean;
   formats?: readonly string[];
   hidden?: boolean;
+  legacy?: boolean;
   mp3Disabled?: boolean;
   testId?: string;
 }
@@ -34,7 +35,10 @@ function formatModalFixture(options: FormatModalFixtureOptions = {}): string {
     options.confirm === false
       ? ""
       : '<button class="hxc-btn-variant-primary">Download</button>';
-  return `<div role="dialog" data-open data-base-ui-focusable data-testid="${
+  const modalContract = options.legacy
+    ? 'class="modal-class modal-overlay"'
+    : 'role="dialog" data-open data-base-ui-focusable';
+  return `<div ${modalContract} data-testid="${
     options.testId ?? "format-modal"
   }"${options.hidden ? " hidden" : ""}>${formatButtons}${confirm}</div>`;
 }
@@ -282,6 +286,45 @@ describe("triggerDownloadAll", () => {
     await triggerDownloadAll("mp3");
 
     expect(clicked).toEqual(["more", "download-all", "mp3", "confirm"]);
+  });
+
+  it("DOM fixture: 旧 class 形式モーダルでも MP3 → Download を操作する", async () => {
+    vi.useFakeTimers();
+    const clicked: string[] = [];
+    vi.stubGlobal("PointerEvent", MouseEvent);
+    document.body.innerHTML = `
+      <div class="clip-browser-list-scroller">
+        <article>
+          <img src="clip.jpg" alt="" />
+          <div class="multi-select-button"><button aria-label="Deselect clip">Selected</button></div>
+          <button aria-label="More options">...</button>
+        </article>
+      </div>
+      <div data-context-menu="true">
+        <button aria-label="Download all">Download all</button>
+      </div>
+      ${formatModalFixture({ legacy: true })}
+    `;
+    const formatModal = document.querySelector<HTMLElement>(
+      '[data-testid="format-modal"]'
+    )!;
+    const mp3 = Array.from(
+      formatModal.querySelectorAll<HTMLButtonElement>("button.flex.w-full")
+    ).find((button) => button.textContent?.trim() === "MP3")!;
+    const confirm = formatModal.querySelector<HTMLButtonElement>(
+      "button.hxc-btn-variant-primary"
+    )!;
+    mp3.addEventListener("click", () => clicked.push("mp3"));
+    confirm.addEventListener("click", () => {
+      clicked.push("confirm");
+      formatModal.remove();
+    });
+
+    const result = triggerDownloadAll("mp3");
+    await vi.advanceTimersByTimeAsync(20_000);
+
+    await expect(result).resolves.toBeUndefined();
+    expect(clicked).toEqual(["mp3", "confirm"]);
   });
 
   it("DOM fixture: Download 確定後に 10 秒超で閉じる形式選択モーダルを待てる", async () => {

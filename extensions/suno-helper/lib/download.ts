@@ -9,7 +9,8 @@ const CLIP_ROW_SELECTOR =
   '[data-testid="clip-row"], .clip-row, article, [role="group"]';
 const CONTEXT_MENU_SELECTOR = 'div[data-context-menu="true"]';
 const DOWNLOAD_MENU_ITEM_TEXT = /download\s*all/i;
-const DIALOG_SELECTOR = '[role="dialog"]';
+const FORMAT_MODAL_CANDIDATE_SELECTOR =
+  '[role="dialog"], div.modal-class.modal-overlay';
 const BUTTON_SELECTOR = "button";
 const DOWNLOAD_CONFIRM_LABEL = "Download";
 const FORMAT_OPTION_LABELS = ["M4A", "MP3", "WAV"] as const;
@@ -52,31 +53,31 @@ function findButtonByExactLabel(
   return null;
 }
 
-function isVisibleDialog(dialog: HTMLElement): boolean {
-  if (dialog.hidden || dialog.getAttribute("aria-hidden") === "true") {
+function isVisibleModal(modal: HTMLElement): boolean {
+  if (modal.hidden || modal.getAttribute("aria-hidden") === "true") {
     return false;
   }
-  const style = getComputedStyle(dialog);
+  const style = getComputedStyle(modal);
   return style.display !== "none" && style.visibility !== "hidden";
 }
 
 function resolveFormatModal(): HTMLElement | null {
-  const matchingDialogs = Array.from(
-    document.querySelectorAll<HTMLElement>(DIALOG_SELECTOR)
+  const matchingModals = Array.from(
+    document.querySelectorAll<HTMLElement>(FORMAT_MODAL_CANDIDATE_SELECTOR)
   ).filter(
-    (dialog) =>
-      isVisibleDialog(dialog) &&
+    (modal) =>
+      isVisibleModal(modal) &&
       FORMAT_OPTION_LABELS.every((label) =>
-        findButtonByExactLabel(dialog, label)
+        findButtonByExactLabel(modal, label)
       ) &&
-      findButtonByExactLabel(dialog, DOWNLOAD_CONFIRM_LABEL)
+      findButtonByExactLabel(modal, DOWNLOAD_CONFIRM_LABEL)
   );
-  if (matchingDialogs.length > 1) {
+  if (matchingModals.length > 1) {
     throw new Error(
       "ダウンロード形式モーダルが複数見つかりました。Suno の UI 変更の可能性があります。"
     );
   }
-  return matchingDialogs[0] ?? null;
+  return matchingModals[0] ?? null;
 }
 
 async function waitForFormatModal(
@@ -92,7 +93,7 @@ async function waitForFormatModal(
     await sleep(pollMs);
   }
   throw new Error(
-    `Download 確認ボタンと M4A / MP3 / WAV を持つ可視ダイアログが見つかりませんでした (${timeoutMs}ms)。` +
+    `Download 確認ボタンと M4A / MP3 / WAV を持つ可視モーダルが見つかりませんでした (${timeoutMs}ms)。` +
       "Suno の UI 変更の可能性があります。"
   );
 }
