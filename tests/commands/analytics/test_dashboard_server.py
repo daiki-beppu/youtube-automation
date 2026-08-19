@@ -222,7 +222,15 @@ def test_refresh_endpoint_recollects_and_rebuilds_read_model(tmp_path: Path) -> 
             "end_date": "2026-08-19",
         }
         assert overview["channels"][0]["collected_at"] == "2026-08-19T12:34:00Z"
-        assert trends["channels"][0]["points"] == [{"date": "2026-08-19", "views": 456}]
+        assert trends["channels"][0]["points"] == [
+            {
+                "date": "2026-08-19",
+                "views": 456,
+                "watch_time_minutes": None,
+                "subscribers_net": None,
+                "impressions": None,
+            }
+        ]
         assert detail["snapshot"] == overview["channels"][0]["snapshot"]
         assert detail["videos"][0]["views"] == 456
     finally:
