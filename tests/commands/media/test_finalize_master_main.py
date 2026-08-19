@@ -24,6 +24,8 @@ from youtube_automation.commands.media import finalize_master
 from youtube_automation.commands.media.finalize_master import (
     finalize_master as run_finalize_master,
 )
+from youtube_automation.domains.media.audio_adjustments import replace_finalize_adjustments
+from youtube_automation.infrastructure.media.collection_paths import CollectionPaths
 
 # pass2 失敗時の master 保護検証用 (元 master のバイト列が変更されないことを assert)。
 _ORIGINAL_MASTER_BYTES = b"ORIGINAL_MASTER_BYTES_FOR_TEST"
@@ -137,6 +139,21 @@ def _filter_expr(cmd: list[str]) -> str:
     """ffmpeg cmd から `-filter_complex` 直後の filter 式を取り出す。"""
     idx = cmd.index("-filter_complex")
     return cmd[idx + 1]
+
+
+def _finalize_settings(*, volume_db: float = -19.0, dirname: str = "rain_layers") -> dict[str, object]:
+    return {
+        "ambient_layers": {
+            "dirname": dirname,
+            "glob": "rain_*.wav",
+            "volume_db": volume_db,
+            "fadein_s": 0.5,
+            "fadein_curve": "tri",
+            "layers": {},
+        },
+        "loudnorm": {"enabled": True, "mode": "linear", "I": -14.0, "LRA": 11.0, "TP": -1.5},
+        "mix": {"duration": "first", "normalize": False},
+    }
 
 
 class TestFinalizeMasterPassThrough:
@@ -299,6 +316,57 @@ class TestFinalizeMasterRun:
         out = capsys.readouterr()
         assert out.out == ""
 
+    def test_reapplication_always_reads_pre_finalize_backup(self, tmp_path, monkeypatch):
+        collection = _setup_collection(tmp_path, n_rain=1)
+        paths = CollectionPaths(collection)
+        monkeypatch.setattr(finalize_master.shutil, "which", lambda _: "/usr/bin/ffmpeg")
+        _patch_skill_config(monkeypatch, {})
+        inputs: list[bytes] = []
+        calls = 0
+
+        def fake_run(command, **_kwargs):
+            nonlocal calls
+            source = Path(command[command.index("-i") + 1])
+            if calls % 2 == 0:
+                inputs.append(source.read_bytes())
+                result = SimpleNamespace(returncode=0, stderr=_make_pass1_stderr(), stdout="")
+            else:
+                Path(command[-1]).write_bytes(f"finalized-{calls}".encode())
+                result = SimpleNamespace(returncode=0, stderr="", stdout="")
+            calls += 1
+            return result
+
+        with patch.object(finalize_master.subprocess, "run", side_effect=fake_run):
+            assert run_finalize_master(collection, collection, quiet=True) == 0
+            assert run_finalize_master(collection, collection, quiet=True) == 0
+
+        assert inputs == [_ORIGINAL_MASTER_BYTES, _ORIGINAL_MASTER_BYTES]
+        assert paths.finalize_backup_path.read_bytes() == _ORIGINAL_MASTER_BYTES
+        assert paths.master_audio_path.read_bytes() == b"finalized-3"
+
+    def test_finalize_refreshes_master_adjustment_source_then_preserves_finalize_source(self, tmp_path, monkeypatch):
+        collection = _setup_collection(tmp_path, n_rain=1)
+        paths = CollectionPaths(collection)
+        paths.master_audio_path.write_bytes(b"eq-adjusted-master")
+        paths.master_adjustment_backup_path.parent.mkdir(parents=True)
+        paths.master_adjustment_backup_path.write_bytes(_ORIGINAL_MASTER_BYTES)
+        monkeypatch.setattr(finalize_master.shutil, "which", lambda _: "/usr/bin/ffmpeg")
+        _patch_skill_config(monkeypatch, {})
+        captured: dict = {}
+
+        with patch.object(
+            finalize_master.subprocess,
+            "run",
+            side_effect=_make_fake_run_sequence(captured),
+        ):
+            rc = run_finalize_master(collection, collection, quiet=True)
+
+        assert rc == 0
+        assert Path(captured["cmds"][0][3]) == paths.master_adjustment_backup_path
+        assert paths.finalize_backup_path.read_bytes() == _ORIGINAL_MASTER_BYTES
+        assert paths.master_adjustment_backup_path.read_bytes() == _NEW_MASTER_BYTES
+        assert paths.master_audio_path.read_bytes() == _NEW_MASTER_BYTES
+
 
 class TestFinalizeMasterConfig:
     """defaults と skill-config `audio.finalize.*` namespace 上書きの解決パス。"""
@@ -361,6 +429,52 @@ class TestFinalizeMasterConfig:
         assert "I=-16.5:" in pass2_filter
         assert "LRA=9.5:" in pass2_filter
         assert "TP=-2.5:" in pass2_filter
+
+    def test_saved_finalize_settings_override_skill_config(self, tmp_path, monkeypatch):
+        collection = _setup_collection(tmp_path, n_rain=1)
+        replace_finalize_adjustments(
+            CollectionPaths(collection).audio_adjustments_path,
+            _finalize_settings(volume_db=-31.0),
+        )
+        monkeypatch.setattr(finalize_master.shutil, "which", lambda _: "/usr/bin/ffmpeg")
+        _patch_skill_config(
+            monkeypatch,
+            {"audio": {"finalize": {"ambient_layers": {"volume_db": -12.0}}}},
+        )
+        captured: dict = {}
+
+        with patch.object(
+            finalize_master.subprocess,
+            "run",
+            side_effect=_make_fake_run_sequence(captured),
+        ):
+            rc = run_finalize_master(collection, collection, quiet=True)
+
+        assert rc == 0
+        assert "volume=-31dB" in _filter_expr(captured["cmds"][1])
+
+    def test_saved_custom_layer_target_can_enable_finalize_without_default_rain(self, tmp_path, monkeypatch):
+        collection = _setup_collection(tmp_path, n_rain=0)
+        custom_dir = collection / "branding" / "ambience"
+        custom_dir.mkdir(parents=True)
+        (custom_dir / "rain_custom.wav").write_bytes(b"layer")
+        replace_finalize_adjustments(
+            CollectionPaths(collection).audio_adjustments_path,
+            _finalize_settings(dirname="ambience"),
+        )
+        monkeypatch.setattr(finalize_master.shutil, "which", lambda _: "/usr/bin/ffmpeg")
+        _patch_skill_config(monkeypatch, {})
+        captured: dict = {}
+
+        with patch.object(
+            finalize_master.subprocess,
+            "run",
+            side_effect=_make_fake_run_sequence(captured),
+        ):
+            rc = run_finalize_master(collection, collection, quiet=True)
+
+        assert rc == 0
+        assert str(custom_dir / "rain_custom.wav") in captured["cmds"][1]
 
 
 class TestFinalizeMasterFailure:

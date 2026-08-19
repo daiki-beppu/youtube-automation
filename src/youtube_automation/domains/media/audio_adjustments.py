@@ -36,6 +36,30 @@ _NESTED_FIELDS: dict[str, dict[str, tuple[type[object], float | None, float | No
 }
 _BOOLEAN_FIELDS = frozenset({"volume_smoothing"})
 _ALL_FIELDS = frozenset(_NESTED_FIELDS) | _BOOLEAN_FIELDS
+_FADEIN_CURVES = frozenset(
+    {
+        "tri",
+        "qsin",
+        "esin",
+        "hsin",
+        "log",
+        "ipar",
+        "qua",
+        "cub",
+        "squ",
+        "cbr",
+        "par",
+        "exp",
+        "iqsin",
+        "ihsin",
+        "dese",
+        "desi",
+        "losi",
+        "sinc",
+        "isinc",
+        "nofade",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -47,6 +71,7 @@ class AudioAdjustments:
     shuffle_seed: int | None
     pin_first: list[str]
     master: dict[str, object] | None
+    finalize: dict[str, object] | None
     extra: dict[str, object]
 
 
@@ -194,10 +219,122 @@ def master_settings_from_cleanup(settings: object) -> dict[str, object]:
     return validate_master_settings({section: cleanup[section] for section in ("eq", "loudnorm", "limiter")})
 
 
+def _validate_fadein_curve(value: object, context: str) -> str:
+    if not isinstance(value, str) or value not in _FADEIN_CURVES:
+        raise ValidationError(f"{context} が不正です: {value!r}")
+    return value
+
+
+def validate_finalize_settings(value: object) -> dict[str, object]:
+    """Validate complete collection-level ambient finalize settings."""
+    raw = _mapping(value, "finalize settings")
+    expected_sections = {"ambient_layers", "loudnorm", "mix"}
+    if set(raw) != expected_sections:
+        raise ValidationError(
+            "finalize settings の section が不正です: "
+            f"missing={sorted(expected_sections - set(raw))}, unknown={sorted(set(raw) - expected_sections)}"
+        )
+
+    ambient = _mapping(raw["ambient_layers"], "finalize settings.ambient_layers")
+    ambient_fields = {"dirname", "glob", "volume_db", "fadein_s", "fadein_curve", "layers"}
+    if set(ambient) != ambient_fields:
+        raise ValidationError(
+            "finalize settings.ambient_layers の field が不正です: "
+            f"missing={sorted(ambient_fields - set(ambient))}, unknown={sorted(set(ambient) - ambient_fields)}"
+        )
+    dirname = ambient["dirname"]
+    if (
+        not isinstance(dirname, str)
+        or not dirname
+        or dirname in {".", ".."}
+        or PurePath(dirname).name != dirname
+        or "/" in dirname
+        or "\\" in dirname
+        or "\x00" in dirname
+    ):
+        raise ValidationError("finalize settings.ambient_layers.dirname は単一 directory 名で指定してください")
+    glob_pattern = ambient["glob"]
+    if (
+        not isinstance(glob_pattern, str)
+        or not glob_pattern
+        or "/" in glob_pattern
+        or "\\" in glob_pattern
+        or "\x00" in glob_pattern
+    ):
+        raise ValidationError("finalize settings.ambient_layers.glob は directory を含まない pattern にしてください")
+    raw_layers = _mapping(ambient["layers"], "finalize settings.ambient_layers.layers")
+    layers: dict[str, object] = {}
+    layer_fields = {"volume_db", "fadein_s", "fadein_curve"}
+    for filename, override_value in raw_layers.items():
+        _validate_filename(filename)
+        override = _mapping(override_value, f"finalize settings.ambient_layers.layers.{filename}")
+        if not override or set(override) - layer_fields:
+            raise ValidationError(
+                f"finalize settings.ambient_layers.layers.{filename} は既知 field を1件以上含めてください"
+            )
+        validated_override: dict[str, object] = {}
+        if "volume_db" in override:
+            validated_override["volume_db"] = _validate_scalar(
+                override["volume_db"], float, -60, 12, f"finalize settings layer {filename}.volume_db"
+            )
+        if "fadein_s" in override:
+            validated_override["fadein_s"] = _validate_scalar(
+                override["fadein_s"], float, 0, 60, f"finalize settings layer {filename}.fadein_s"
+            )
+        if "fadein_curve" in override:
+            validated_override["fadein_curve"] = _validate_fadein_curve(
+                override["fadein_curve"], f"finalize settings layer {filename}.fadein_curve"
+            )
+        layers[filename] = validated_override
+
+    loudnorm = _mapping(raw["loudnorm"], "finalize settings.loudnorm")
+    loudnorm_fields = {"enabled", "mode", "I", "LRA", "TP"}
+    if set(loudnorm) != loudnorm_fields:
+        raise ValidationError("finalize settings.loudnorm は enabled / mode / I / LRA / TP が必須です")
+    if loudnorm["mode"] != "linear":
+        raise ValidationError("finalize settings.loudnorm.mode は linear のみ指定できます")
+
+    mix = _mapping(raw["mix"], "finalize settings.mix")
+    if set(mix) != {"duration", "normalize"}:
+        raise ValidationError("finalize settings.mix は duration / normalize が必須です")
+    if mix["duration"] not in {"first", "shortest", "longest"}:
+        raise ValidationError("finalize settings.mix.duration が不正です")
+
+    return {
+        "ambient_layers": {
+            "dirname": dirname,
+            "glob": glob_pattern,
+            "volume_db": _validate_scalar(
+                ambient["volume_db"], float, -60, 12, "finalize settings.ambient_layers.volume_db"
+            ),
+            "fadein_s": _validate_scalar(
+                ambient["fadein_s"], float, 0, 60, "finalize settings.ambient_layers.fadein_s"
+            ),
+            "fadein_curve": _validate_fadein_curve(
+                ambient["fadein_curve"], "finalize settings.ambient_layers.fadein_curve"
+            ),
+            "layers": layers,
+        },
+        "loudnorm": {
+            "enabled": _validate_scalar(loudnorm["enabled"], bool, None, None, "finalize settings.loudnorm.enabled"),
+            "mode": "linear",
+            "I": _validate_scalar(loudnorm["I"], float, -70, -5, "finalize settings.loudnorm.I"),
+            "LRA": _validate_scalar(loudnorm["LRA"], float, 1, 50, "finalize settings.loudnorm.LRA"),
+            "TP": _validate_scalar(loudnorm["TP"], float, -9, 0, "finalize settings.loudnorm.TP"),
+        },
+        "mix": {
+            "duration": mix["duration"],
+            "normalize": _validate_scalar(mix["normalize"], bool, None, None, "finalize settings.mix.normalize"),
+        },
+    }
+
+
 def read_audio_adjustments(path: Path) -> AudioAdjustments:
     """Read the adjustments document, treating absence as an empty document."""
     if not path.exists():
-        return AudioAdjustments(tracks={}, order=None, shuffle_seed=None, pin_first=[], master=None, extra={})
+        return AudioAdjustments(
+            tracks={}, order=None, shuffle_seed=None, pin_first=[], master=None, finalize=None, extra={}
+        )
     if path.is_symlink() or not path.is_file():
         raise ValidationError(f"audio-adjustments.json は通常ファイルである必要があります: {path}")
     try:
@@ -216,6 +353,7 @@ def read_audio_adjustments(path: Path) -> AudioAdjustments:
     pin_first = _validate_filename_list(root.get("pin_first", []), "pin_first")
     shuffle_seed = _validate_shuffle_seed(root.get("shuffle_seed"))
     master = validate_master_settings(root["master"]) if "master" in root else None
+    finalize = validate_finalize_settings(root["finalize"]) if "finalize" in root else None
     if order is not None:
         unknown_pins = set(pin_first) - set(order)
         if unknown_pins:
@@ -227,7 +365,7 @@ def read_audio_adjustments(path: Path) -> AudioAdjustments:
             raise ValidationError("audio-adjustments.json の pin_first は order の先頭と同じ順序である必要があります")
     elif pin_first or shuffle_seed is not None:
         raise ValidationError("audio-adjustments.json の pin_first / shuffle_seed には order が必要です")
-    owned_keys = {"schema_version", "tracks", "order", "shuffle_seed", "pin_first", "master"}
+    owned_keys = {"schema_version", "tracks", "order", "shuffle_seed", "pin_first", "master", "finalize"}
     extra = {key: value for key, value in root.items() if key not in owned_keys}
     return AudioAdjustments(
         tracks=tracks,
@@ -235,6 +373,7 @@ def read_audio_adjustments(path: Path) -> AudioAdjustments:
         shuffle_seed=shuffle_seed,
         pin_first=pin_first,
         master=master,
+        finalize=finalize,
         extra=extra,
     )
 
@@ -301,6 +440,8 @@ def _write_audio_adjustments(path: Path, document: AudioAdjustments) -> None:
         payload["pin_first"] = document.pin_first
     if document.master is not None:
         payload["master"] = document.master
+    if document.finalize is not None:
+        payload["finalize"] = document.finalize
     payload.update(document.extra)
     existing_mode = stat.S_IMODE(path.stat().st_mode) if path.exists() else 0o644
     temporary_path: Path | None = None
@@ -347,6 +488,7 @@ def replace_track_cleanup_overrides(
         shuffle_seed=document.shuffle_seed,
         pin_first=document.pin_first,
         master=document.master,
+        finalize=document.finalize,
         extra=document.extra,
     )
     _write_audio_adjustments(path, updated)
@@ -378,6 +520,7 @@ def replace_track_order(
         shuffle_seed=validated_seed,
         pin_first=validated_pins,
         master=document.master,
+        finalize=document.finalize,
         extra=document.extra,
     )
     _write_audio_adjustments(path, updated)
@@ -393,6 +536,23 @@ def replace_master_adjustments(path: Path, settings: object) -> AudioAdjustments
         shuffle_seed=document.shuffle_seed,
         pin_first=document.pin_first,
         master=validate_master_settings(settings),
+        finalize=document.finalize,
+        extra=document.extra,
+    )
+    _write_audio_adjustments(path, updated)
+    return updated
+
+
+def replace_finalize_adjustments(path: Path, settings: object) -> AudioAdjustments:
+    """Atomically replace finalize settings while preserving all other Audio Studio stages."""
+    document = read_audio_adjustments(path)
+    updated = AudioAdjustments(
+        tracks=document.tracks,
+        order=document.order,
+        shuffle_seed=document.shuffle_seed,
+        pin_first=document.pin_first,
+        master=document.master,
+        finalize=validate_finalize_settings(settings),
         extra=document.extra,
     )
     _write_audio_adjustments(path, updated)

@@ -28,6 +28,7 @@ from youtube_automation.configuration import load_config
 from youtube_automation.configuration.skills import load_skill_config
 from youtube_automation.core.errors import ValidationError
 from youtube_automation.domains.media.audio_adjustments import apply_track_order, read_audio_adjustments
+from youtube_automation.infrastructure.file_lock import file_lock
 from youtube_automation.infrastructure.media.collection_paths import (
     CollectionPaths,
     resolve_collection_dir,
@@ -221,7 +222,27 @@ def _apply_pin_first(
     return [], files
 
 
-def generate_master(
+def _validate_adjustment_backup_targets(paths: CollectionPaths) -> tuple[Path, Path]:
+    backups = (paths.master_adjustment_backup_path, paths.finalize_backup_path)
+    for backup in backups:
+        if not backup.parent.resolve().is_relative_to(paths.root):
+            raise ValidationError(f"調整原本の保存先が collection 外を指しています: {backup}")
+        if backup.exists() and backup.is_dir() and not backup.is_symlink():
+            raise ValidationError(f"調整原本を無効化できません（directory です）: {backup}")
+    return backups
+
+
+def _discard_stale_adjustment_backups(paths: CollectionPaths) -> None:
+    """Invalidate adjustment sources after a newly generated master succeeds."""
+    backups = _validate_adjustment_backup_targets(paths)
+    try:
+        for backup in backups:
+            backup.unlink(missing_ok=True)
+    except OSError as error:
+        raise ValidationError(f"古い master 調整原本を無効化できません: {error}") from error
+
+
+def _generate_master_unlocked(
     collection_dir: Path,
     crossfade: float,
     bitrate: str,
@@ -304,6 +325,7 @@ def generate_master(
     n_effective = len(expanded)
 
     master_dir.mkdir(parents=True, exist_ok=True)
+    _validate_adjustment_backup_targets(paths)
     output = master_dir / "master.mp3"
 
     if not quiet:
@@ -331,6 +353,7 @@ def generate_master(
 
     if n_effective == 1 and expanded[0].suffix.lower() == ".mp3":
         shutil.copyfile(expanded[0], output)
+        _discard_stale_adjustment_backups(paths)
         if not quiet:
             print("  Single file — copied directly.\n")
         return output
@@ -389,6 +412,8 @@ def generate_master(
     if result.returncode != 0:
         raise ValidationError(f"FFmpeg failed with exit code {result.returncode}")
 
+    _discard_stale_adjustment_backups(paths)
+
     if not quiet:
         sys.stderr.write(
             f"\r  ✓ Generated    ({m}m{s:02d}s) [{n_effective} segments, {n_effective - 1} crossfades]      \n"
@@ -409,6 +434,43 @@ def generate_master(
         print()
 
     return output
+
+
+def generate_master(
+    collection_dir: Path,
+    crossfade: float,
+    bitrate: str,
+    *,
+    loops: int | None = None,
+    target_duration_min: int | None = None,
+    target_duration_max: int | None = None,
+    allow_duration_outside_target: bool = False,
+    no_loop: bool = False,
+    shuffle: bool = False,
+    shuffle_seed: int | None = None,
+    pin_first: list[str] | None = None,
+    pin_first_count: int | None = None,
+    order: list[str] | None = None,
+    quiet: bool = False,
+) -> Path:
+    """Generate and invalidate stale adjustment sources under the master lock."""
+    with file_lock(CollectionPaths(collection_dir).master_audio_path):
+        return _generate_master_unlocked(
+            collection_dir,
+            crossfade,
+            bitrate,
+            loops=loops,
+            target_duration_min=target_duration_min,
+            target_duration_max=target_duration_max,
+            allow_duration_outside_target=allow_duration_outside_target,
+            no_loop=no_loop,
+            shuffle=shuffle,
+            shuffle_seed=shuffle_seed,
+            pin_first=pin_first,
+            pin_first_count=pin_first_count,
+            order=order,
+            quiet=quiet,
+        )
 
 
 def main() -> int:

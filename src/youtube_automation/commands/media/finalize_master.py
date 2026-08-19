@@ -10,7 +10,8 @@ atomic rename で in-place 上書きする。
 skill-config の `audio.finalize.*` namespace で、レイヤー対象ディレクトリ・
 glob・per-file 上書き・loudnorm パラメータ・mix の duration / normalize・
 fadein curve・出力 sample_rate / codec / bitrate を全て注入できる。
-設定は `audio.finalize.*` namespace で解決する。
+collection の `audio-adjustments.json::finalize` がある場合は同じ設定項目を
+skill-config より優先し、不在時は従来どおり `audio.finalize.*` だけで解決する。
 
 Usage:
     yt-finalize-master                       # CWD がコレクションディレクトリ
@@ -25,12 +26,18 @@ import os
 import shutil
 import subprocess
 import sys
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from youtube_automation.configuration import channel_dir
 from youtube_automation.configuration.skills import load_skill_config
 from youtube_automation.core.errors import ConfigError, ValidationError
+from youtube_automation.domains.media.audio_adjustments import (
+    read_audio_adjustments,
+    validate_finalize_settings,
+)
+from youtube_automation.infrastructure.file_lock import file_lock
 from youtube_automation.infrastructure.media.collection_paths import (
     CollectionPaths,
     resolve_collection_dir,
@@ -353,7 +360,7 @@ class FinalizeConfig:
         self.layers_overrides = layers_overrides
 
 
-def _resolve_finalize_config(skill_cfg: dict[str, Any]) -> FinalizeConfig:
+def _resolve_finalize_config(skill_cfg: dict[str, object], adjustments: object | None = None) -> FinalizeConfig:
     """skill-config から `audio.finalize.*` を解決する。
 
     `audio.finalize.ambient_layers.*` が組み込み defaults を上書きする。
@@ -424,6 +431,26 @@ def _resolve_finalize_config(skill_cfg: dict[str, Any]) -> FinalizeConfig:
     sample_rate_raw = finalize_cfg.get("sample_rate")
     sample_rate: int | None = int(sample_rate_raw) if sample_rate_raw is not None else _DEFAULT_SAMPLE_RATE
 
+    if adjustments is not None:
+        validated = validate_finalize_settings(adjustments)
+        saved_ambient = cast(Mapping[str, object], validated["ambient_layers"])
+        saved_loudnorm = cast(Mapping[str, object], validated["loudnorm"])
+        saved_mix = cast(Mapping[str, object], validated["mix"])
+        volume_db = float(cast(float, saved_ambient["volume_db"]))
+        fadein_s = float(cast(float, saved_ambient["fadein_s"]))
+        fadein_curve = cast(str, saved_ambient["fadein_curve"])
+        layers_dirname = cast(str, saved_ambient["dirname"])
+        layers_glob = cast(str, saved_ambient["glob"])
+        saved_layers = cast(Mapping[str, object], saved_ambient["layers"])
+        layer_overrides = {
+            filename: dict(cast(Mapping[str, object], override)) for filename, override in saved_layers.items()
+        }
+        loudnorm_enabled = cast(bool, saved_loudnorm["enabled"])
+        loudnorm_mode = cast(str, saved_loudnorm["mode"])
+        loudnorm = {key: float(cast(float, saved_loudnorm[key])) for key in ("I", "LRA", "TP")}
+        mix_duration = cast(str, saved_mix["duration"])
+        mix_normalize = 1 if cast(bool, saved_mix["normalize"]) else 0
+
     return FinalizeConfig(
         volume_db=volume_db,
         fadein_s=fadein_s,
@@ -442,12 +469,82 @@ def _resolve_finalize_config(skill_cfg: dict[str, Any]) -> FinalizeConfig:
     )
 
 
+def finalize_config_settings(skill_cfg: dict[str, object]) -> dict[str, object]:
+    """Return the complete UI-editable finalize settings resolved from skill config."""
+    config = _resolve_finalize_config(skill_cfg)
+    return validate_finalize_settings(
+        {
+            "ambient_layers": {
+                "dirname": config.layers_dirname,
+                "glob": config.layers_glob,
+                "volume_db": config.volume_db,
+                "fadein_s": config.fadein_s,
+                "fadein_curve": config.fadein_curve,
+                "layers": config.layers_overrides,
+            },
+            "loudnorm": {
+                "enabled": config.loudnorm_enabled,
+                "mode": config.loudnorm_mode,
+                **config.loudnorm,
+            },
+            "mix": {
+                "duration": config.mix_duration,
+                "normalize": bool(config.mix_normalize),
+            },
+        }
+    )
+
+
 def _layer_overrides_for(rains: list[Path], overrides: dict[str, dict[str, Any]]) -> list[dict[str, Any] | None]:
     """layer ファイル名 → override dict を `rains` の並びにあわせて展開する。"""
     return [overrides.get(rain.name) for rain in rains]
 
 
-def finalize_master(
+def _atomic_copy(source: Path, destination: Path) -> None:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = destination.with_name(f".{destination.name}.tmp")
+    temporary.unlink(missing_ok=True)
+    try:
+        shutil.copy2(source, temporary)
+        os.replace(temporary, destination)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def _install_finalized_output(
+    temporary: Path,
+    master: Path,
+    source: Path,
+    finalize_backup: Path,
+    master_adjustment_backup: Path,
+) -> None:
+    backup_created = False
+    master_moved = False
+    try:
+        if not finalize_backup.exists():
+            if source == master:
+                finalize_backup.parent.mkdir(parents=True, exist_ok=True)
+                os.replace(master, finalize_backup)
+                master_moved = True
+            else:
+                _atomic_copy(source, finalize_backup)
+            backup_created = True
+        os.replace(temporary, master)
+    except OSError as error:
+        if master_moved and finalize_backup.exists() and not master.exists():
+            os.replace(finalize_backup, master)
+        elif backup_created:
+            finalize_backup.unlink(missing_ok=True)
+        raise ValidationError(f"finalize 結果を置換できません: {error}") from error
+
+    if master_adjustment_backup.exists():
+        try:
+            _atomic_copy(master, master_adjustment_backup)
+        except OSError as error:
+            raise ValidationError(f"master 調整原本を finalize 結果へ更新できません: {error}") from error
+
+
+def _finalize_master_unlocked(
     collection_dir: Path,
     channel: Path,
     *,
@@ -470,11 +567,16 @@ def finalize_master(
     # 場合、ユーザーは既定パスにも 1 つ wav を置くか、または config 上書き後の
     # パスに置いたあとでも legacy デフォルトを通る `rain_*.wav` を 1 つ置く運用とする
     # (gate コストと汎用化の両立)。
-    if not find_ambient_layers(channel):
+    paths = CollectionPaths(collection_dir)
+    default_rains = find_ambient_layers(channel)
+    if not default_rains and not paths.audio_adjustments_path.is_file():
+        return 0
+    document = read_audio_adjustments(paths.audio_adjustments_path)
+    if not default_rains and document.finalize is None:
         return 0
 
-    cfg = load_skill_config(_SKILL_NAME)
-    finalize_cfg = _resolve_finalize_config(cfg)
+    cfg = load_skill_config(_SKILL_NAME, channel_dir=channel)
+    finalize_cfg = _resolve_finalize_config(cfg, document.finalize)
 
     # gate2 (skill-config 反映後): 上書きパスで再判定。上書きにより 0 件になる
     # ケースもここで安全に pass-through する。
@@ -490,11 +592,42 @@ def finalize_master(
         print("ERROR: ffmpeg が見つかりません (brew install ffmpeg など)", file=sys.stderr)
         return 1
 
-    paths = CollectionPaths(collection_dir)
-    master = paths.master_dir / _MASTER_FILENAME
-    if not master.is_file():
+    master = paths.master_audio_path
+    finalize_backup = paths.finalize_backup_path
+    master_adjustment_backup = paths.master_adjustment_backup_path
+    collection_root = collection_dir.resolve()
+    for candidate, label in (
+        (master, "master"),
+        (finalize_backup, "finalize 原本"),
+        (master_adjustment_backup, "master 調整原本"),
+    ):
+        if not candidate.parent.resolve().is_relative_to(collection_root):
+            print(f"ERROR: {label} の保存先が collection 外を指しています: {candidate}", file=sys.stderr)
+            return 1
+    if not master.is_file() or master.is_symlink():
         print(f"ERROR: マスター音源が見つかりません: {master}", file=sys.stderr)
         return 1
+    if finalize_backup.exists() and (not finalize_backup.is_file() or finalize_backup.is_symlink()):
+        print(f"ERROR: finalize 原本は通常ファイルである必要があります: {finalize_backup}", file=sys.stderr)
+        return 1
+    if master_adjustment_backup.exists() and (
+        not master_adjustment_backup.is_file() or master_adjustment_backup.is_symlink()
+    ):
+        print(
+            f"ERROR: master 調整原本は通常ファイルである必要があります: {master_adjustment_backup}",
+            file=sys.stderr,
+        )
+        return 1
+
+    source = (
+        finalize_backup
+        if finalize_backup.exists()
+        else (
+            master_adjustment_backup
+            if master_adjustment_backup.is_file() and not master_adjustment_backup.is_symlink()
+            else master
+        )
+    )
 
     layer_overrides = _layer_overrides_for(rains, finalize_cfg.layers_overrides)
 
@@ -518,7 +651,7 @@ def finalize_master(
                 apply_loudnorm=False,
             )
             single_cmd = _build_single_pass_cmd(
-                master,
+                source,
                 rains,
                 single_filter,
                 tmp,
@@ -535,7 +668,7 @@ def finalize_master(
                 if single.stderr:
                     print(single.stderr, file=sys.stderr)
                 return 1
-            os.replace(tmp, master)
+            _install_finalized_output(tmp, master, source, finalize_backup, master_adjustment_backup)
             if not quiet:
                 print(f"  ✓ Ambient layer applied (loudnorm skipped): {master.name}")
             return 0
@@ -552,7 +685,7 @@ def finalize_master(
             mix_normalize=finalize_cfg.mix_normalize,
             layer_overrides=layer_overrides,
         )
-        pass1_cmd = _build_pass1_cmd(master, rains, pass1_filter)
+        pass1_cmd = _build_pass1_cmd(source, rains, pass1_filter)
         pass1 = subprocess.run(pass1_cmd, capture_output=True, text=True, check=False)
         if pass1.returncode != 0:
             print(
@@ -578,7 +711,7 @@ def finalize_master(
             layer_overrides=layer_overrides,
         )
         pass2_cmd = _build_pass2_cmd(
-            master,
+            source,
             rains,
             pass2_filter,
             tmp,
@@ -597,7 +730,7 @@ def finalize_master(
             return 1
 
         # pass2 成功時のみ atomic rename で master を上書き (失敗時は元 master を保護)
-        os.replace(tmp, master)
+        _install_finalized_output(tmp, master, source, finalize_backup, master_adjustment_backup)
 
         if not quiet:
             print(f"  ✓ Ambient layer applied: {master.name}")
@@ -614,6 +747,17 @@ def finalize_master(
                 # tmp 削除失敗は master 保護の本体には影響しないため握りつぶす
                 # (主目的の master.mp3 はこの時点で無傷)。
                 pass
+
+
+def finalize_master(
+    collection_dir: Path,
+    channel: Path,
+    *,
+    quiet: bool = False,
+) -> int:
+    """Serialize finalize and master-adjust in-place writes to master.mp3."""
+    with file_lock(CollectionPaths(collection_dir).master_audio_path):
+        return _finalize_master_unlocked(collection_dir, channel, quiet=quiet)
 
 
 def main() -> int:

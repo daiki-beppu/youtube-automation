@@ -18,6 +18,19 @@ const cleanupSettings = {
   volume_smoothing: true,
 }
 
+const finalizeSettings = {
+  ambient_layers: {
+    dirname: "rain_layers",
+    glob: "rain_*.wav",
+    volume_db: -19,
+    fadein_s: 0.5,
+    fadein_curve: "tri",
+    layers: {},
+  },
+  loudnorm: { enabled: true, mode: "linear", I: -14, LRA: 11, TP: -1.5 },
+  mix: { duration: "first", normalize: false },
+}
+
 afterEach(() => vi.unstubAllGlobals())
 
 describe("Audio Studio", () => {
@@ -433,5 +446,226 @@ describe("Audio Studio", () => {
           request.init?.method === "POST"
       )
     ).toBe(true)
+  })
+
+  it("saves ambient overrides and reapplies finalize with master settings", async () => {
+    const masterSettings = {
+      eq: cleanupSettings.eq,
+      loudnorm: cleanupSettings.loudnorm,
+      limiter: cleanupSettings.limiter,
+    }
+    const requests: Array<{ input: RequestInfo | URL; init?: RequestInit }> = []
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+          requests.push({ input, init })
+          const url = String(input)
+          if (url === "/api/tracks") {
+            return Promise.resolve(
+              new Response(
+                JSON.stringify({ collection_name: "Ambient test", tracks: [] })
+              )
+            )
+          }
+          if (url === "/api/master/adjustments") {
+            return Promise.resolve(
+              new Response(
+                JSON.stringify({
+                  available: true,
+                  audio_url: "/api/master/audio",
+                  defaults: masterSettings,
+                  settings: masterSettings,
+                  has_backup: true,
+                })
+              )
+            )
+          }
+          if (url === "/api/finalize/adjustments" && init?.method === "PUT") {
+            return Promise.resolve(
+              new Response(
+                JSON.stringify({
+                  available: true,
+                  reason: null,
+                  layers: ["rain_001.wav"],
+                  defaults: finalizeSettings,
+                  settings: JSON.parse(String(init.body)).settings,
+                  has_backup: false,
+                })
+              )
+            )
+          }
+          if (url === "/api/finalize/apply") {
+            const put = requests.find(
+              (request) =>
+                String(request.input) === "/api/finalize/adjustments" &&
+                request.init?.method === "PUT"
+            )
+            return Promise.resolve(
+              new Response(
+                JSON.stringify({
+                  available: true,
+                  reason: null,
+                  layers: ["rain_001.wav"],
+                  defaults: finalizeSettings,
+                  settings: JSON.parse(String(put?.init?.body)).settings,
+                  has_backup: true,
+                  applied: true,
+                  pass_through: false,
+                  master_reapplied: true,
+                })
+              )
+            )
+          }
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                available: true,
+                reason: null,
+                layers: ["rain_001.wav"],
+                defaults: finalizeSettings,
+                settings: finalizeSettings,
+                has_backup: false,
+              })
+            )
+          )
+        })
+    )
+
+    render(<App />)
+    expect(
+      await screen.findByText("Ambient layer finalize")
+    ).toBeInTheDocument()
+    expect(screen.getAllByText("rain_001.wav").length).toBeGreaterThan(0)
+    fireEvent.change(screen.getByLabelText("Ambient volume (dB)"), {
+      target: { value: "-26" },
+    })
+    fireEvent.change(screen.getByLabelText("rain_001.wav volume (dB)"), {
+      target: { value: "-30" },
+    })
+    expect(
+      screen.getByRole("button", {
+        name: "rain_001.wav volume は共通値を使う",
+      })
+    ).toBeEnabled()
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "rain_001.wav volume は共通値を使う",
+      })
+    )
+    expect(
+      screen.getAllByRole("option", { name: "nofade" }).length
+    ).toBeGreaterThan(0)
+    fireEvent.click(
+      screen.getByRole("button", { name: "Ambient を原本から再出力" })
+    )
+
+    await screen.findByText(
+      "ambient と master 全体調整を原本から再出力しました"
+    )
+    const put = requests.find(
+      (request) =>
+        String(request.input) === "/api/finalize/adjustments" &&
+        request.init?.method === "PUT"
+    )
+    const saved = JSON.parse(String(put?.init?.body)).settings
+    expect(saved.ambient_layers.volume_db).toBe(-26)
+    expect(saved.ambient_layers.layers["rain_001.wav"]).toBeUndefined()
+  })
+
+  it("disables ambient controls with the pass-through reason when layers are absent", async () => {
+    const masterSettings = {
+      eq: cleanupSettings.eq,
+      loudnorm: cleanupSettings.loudnorm,
+      limiter: cleanupSettings.limiter,
+    }
+    const unavailableFinalizeSettings = {
+      ...finalizeSettings,
+      ambient_layers: {
+        ...finalizeSettings.ambient_layers,
+        dirname: "rain_layer",
+      },
+    }
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+          const url = String(input)
+          if (url === "/api/tracks") {
+            return Promise.resolve(
+              new Response(
+                JSON.stringify({ collection_name: "No layers", tracks: [] })
+              )
+            )
+          }
+          if (url === "/api/master/adjustments") {
+            return Promise.resolve(
+              new Response(
+                JSON.stringify({
+                  available: true,
+                  audio_url: "/api/master/audio",
+                  defaults: masterSettings,
+                  settings: masterSettings,
+                  has_backup: false,
+                })
+              )
+            )
+          }
+          if (url === "/api/finalize/adjustments" && init?.method === "PUT") {
+            return Promise.resolve(
+              new Response(
+                JSON.stringify({
+                  available: true,
+                  reason: null,
+                  layers: ["rain_001.wav"],
+                  defaults: finalizeSettings,
+                  settings: JSON.parse(String(init.body)).settings,
+                  has_backup: false,
+                })
+              )
+            )
+          }
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                available: false,
+                reason: "ambient layer が見つからないため pass-through します",
+                layers: [],
+                defaults: finalizeSettings,
+                settings: unavailableFinalizeSettings,
+                has_backup: false,
+              })
+            )
+          )
+        })
+    )
+
+    render(<App />)
+    expect(
+      await screen.findByText(
+        "ambient layer が見つからないため pass-through します"
+      )
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText("Layer directory")).toBeEnabled()
+    expect(
+      screen.getByRole("button", { name: "Ambient 設定を保存" })
+    ).toBeEnabled()
+    expect(screen.getByLabelText("Ambient volume (dB)")).toBeDisabled()
+    expect(
+      screen.getByRole("button", { name: "Ambient を原本から再出力" })
+    ).toBeDisabled()
+
+    fireEvent.change(screen.getByLabelText("Layer directory"), {
+      target: { value: "rain_layers" },
+    })
+    fireEvent.click(screen.getByRole("button", { name: "Ambient 設定を保存" }))
+
+    await screen.findByText("ambient 設定を保存しました")
+    expect(screen.getByLabelText("Ambient volume (dB)")).toBeEnabled()
+    expect(
+      screen.getByRole("button", { name: "Ambient を原本から再出力" })
+    ).toBeEnabled()
   })
 })

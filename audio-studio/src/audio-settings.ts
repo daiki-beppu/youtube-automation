@@ -53,6 +53,46 @@ export type MasterAdjustmentResponse = {
   applied?: boolean
 }
 
+export type FinalizeLayerOverride = {
+  volume_db?: number
+  fadein_s?: number
+  fadein_curve?: string
+}
+
+export type FinalizeSettings = {
+  ambient_layers: {
+    dirname: string
+    glob: string
+    volume_db: number
+    fadein_s: number
+    fadein_curve: string
+    layers: Record<string, FinalizeLayerOverride>
+  }
+  loudnorm: {
+    enabled: boolean
+    mode: "linear"
+    I: number
+    LRA: number
+    TP: number
+  }
+  mix: {
+    duration: "first" | "shortest" | "longest"
+    normalize: boolean
+  }
+}
+
+export type FinalizeAdjustmentResponse = {
+  available: boolean
+  reason: string | null
+  layers: string[]
+  defaults: FinalizeSettings
+  settings: FinalizeSettings
+  has_backup: boolean
+  applied?: boolean
+  pass_through?: boolean
+  master_reapplied?: boolean
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
 }
@@ -144,6 +184,68 @@ export function isMasterAdjustmentResponse(
     isMasterSettings(value.settings) &&
     typeof value.has_backup === "boolean" &&
     (value.applied === undefined || typeof value.applied === "boolean")
+  )
+}
+
+function isLayerOverrides(
+  value: unknown
+): value is Record<string, FinalizeLayerOverride> {
+  if (!isRecord(value)) return false
+  return Object.values(value).every(
+    (override) =>
+      isRecord(override) &&
+      Object.keys(override).every((key) =>
+        ["volume_db", "fadein_s", "fadein_curve"].includes(key)
+      ) &&
+      (override.volume_db === undefined || isNumber(override.volume_db)) &&
+      (override.fadein_s === undefined || isNumber(override.fadein_s)) &&
+      (override.fadein_curve === undefined ||
+        typeof override.fadein_curve === "string")
+  )
+}
+
+export function isFinalizeSettings(value: unknown): value is FinalizeSettings {
+  if (!isRecord(value)) return false
+  const ambient = value.ambient_layers
+  const loudnorm = value.loudnorm
+  const mix = value.mix
+  return (
+    isRecord(ambient) &&
+    typeof ambient.dirname === "string" &&
+    typeof ambient.glob === "string" &&
+    isNumber(ambient.volume_db) &&
+    isNumber(ambient.fadein_s) &&
+    typeof ambient.fadein_curve === "string" &&
+    isLayerOverrides(ambient.layers) &&
+    isRecord(loudnorm) &&
+    typeof loudnorm.enabled === "boolean" &&
+    loudnorm.mode === "linear" &&
+    isNumber(loudnorm.I) &&
+    isNumber(loudnorm.LRA) &&
+    isNumber(loudnorm.TP) &&
+    isRecord(mix) &&
+    ["first", "shortest", "longest"].includes(String(mix.duration)) &&
+    typeof mix.normalize === "boolean"
+  )
+}
+
+export function isFinalizeAdjustmentResponse(
+  value: unknown
+): value is FinalizeAdjustmentResponse {
+  return (
+    isRecord(value) &&
+    typeof value.available === "boolean" &&
+    (value.reason === null || typeof value.reason === "string") &&
+    Array.isArray(value.layers) &&
+    value.layers.every((layer) => typeof layer === "string") &&
+    isFinalizeSettings(value.defaults) &&
+    isFinalizeSettings(value.settings) &&
+    typeof value.has_backup === "boolean" &&
+    (value.applied === undefined || typeof value.applied === "boolean") &&
+    (value.pass_through === undefined ||
+      typeof value.pass_through === "boolean") &&
+    (value.master_reapplied === undefined ||
+      typeof value.master_reapplied === "boolean")
   )
 }
 
