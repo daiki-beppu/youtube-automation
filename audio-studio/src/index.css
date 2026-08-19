@@ -1,0 +1,55 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/inter";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-sans: "Inter Variable", "Hiragino Sans", sans-serif;
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+}
+
+:root {
+  --background: oklch(0.985 0.004 250);
+  --foreground: oklch(0.2 0.02 250);
+  --card: oklch(1 0 0);
+  --card-foreground: var(--foreground);
+  --primary: oklch(0.4 0.12 250);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.95 0.008 250);
+  --secondary-foreground: var(--foreground);
+  --muted: oklch(0.95 0.008 250);
+  --muted-foreground: oklch(0.46 0.025 250);
+  --accent: oklch(0.93 0.02 250);
+  --accent-foreground: var(--foreground);
+  --destructive: oklch(0.55 0.2 25);
+  --border: oklch(0.88 0.012 250);
+  --input: var(--border);
+  --ring: oklch(0.5 0.14 250);
+  --radius: 0.75rem;
+}
+
+@layer base {
+  * { @apply border-border outline-ring/50; }
+  body { @apply bg-background text-foreground antialiased; }
+}

@@ -36,6 +36,7 @@ Repository = "https://github.com/daiki-beppu/youtube-automation"
 
 [project.scripts]
 yt-audio-visualizer-fill = "youtube_automation.entrypoints:yt_audio_visualizer_fill"
+yt-audio-studio = "youtube_automation.entrypoints:yt_audio_studio"
 # CLI script entry points (yt-* prefix)
 yt-ad-coverage = "youtube_automation.entrypoints:yt_ad_coverage"
 yt-analytics = "youtube_automation.entrypoints:yt_analytics"
@@ -184,6 +185,7 @@ only-include = [
 
 [tool.hatch.build.targets.sdist.force-include]
 "src/youtube_automation/dashboard_dist" = "src/youtube_automation/dashboard_dist"
+"src/youtube_automation/audio_studio_dist" = "src/youtube_automation/audio_studio_dist"
 
 [tool.hatch.build.hooks.custom]
 path = "hatch_build.py"

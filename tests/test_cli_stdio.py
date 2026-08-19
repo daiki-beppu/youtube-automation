@@ -17,6 +17,7 @@ EXPECTED_ENTRYPOINT_MODULES = {
     "yt-analytics": "youtube_automation.commands.analytics.analytics_system",
     "yt-apply-rain-layers": "youtube_automation.commands.media.apply_rain_layers",
     "yt-audio-visualizer-fill": "youtube_automation.commands.media.audio_visualizer_fill",
+    "yt-audio-studio": "youtube_automation.commands.media.audio_studio",
     "yt-automation-update": "youtube_automation.commands.system.automation_update",
     "yt-benchmark-collect": "youtube_automation.commands.analytics.benchmark_collector",
     "yt-benchmark-comments": "youtube_automation.commands.analytics.fetch_benchmark_comments",

@@ -1,0 +1,42 @@
+name: Audio Studio
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "audio-studio/**"
+      - "src/youtube_automation/audio_studio_dist/**"
+      - "src/youtube_automation/commands/media/audio_studio.py"
+      - "src/youtube_automation/infrastructure/localserver/**"
+      - ".github/workflows/audio-studio.yml"
+      - "flake.nix"
+      - "flake.lock"
+  pull_request:
+    paths:
+      - "audio-studio/**"
+      - "src/youtube_automation/audio_studio_dist/**"
+      - "src/youtube_automation/commands/media/audio_studio.py"
+      - "src/youtube_automation/infrastructure/localserver/**"
+      - ".github/workflows/audio-studio.yml"
+      - "flake.nix"
+      - "flake.lock"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342 # v31.11.0
+      - name: Install dependencies
+        run: nix develop .#extensions --command pnpm -C audio-studio install --frozen-lockfile
+      - name: Frontend checks
+        run: |
+          nix develop .#extensions --command pnpm -C audio-studio lint
+          nix develop .#extensions --command pnpm -C audio-studio typecheck
+          nix develop .#extensions --command pnpm -C audio-studio test
+          nix develop .#extensions --command pnpm -C audio-studio build
+          git diff --exit-code -- src/youtube_automation/audio_studio_dist

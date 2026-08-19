@@ -76,6 +76,8 @@ CLAUDE.md の「アーキテクチャ」節の詳細版。要点は CLAUDE.md �
 
 **dashboard**: 全 first-party チャンネルの analytics スナップショットを起動時に最新化して一覧表示するローカル Web UI。Python HTTP server が registry、全チャンネルの直列収集、read model/API/build asset 配信を担い、`dashboard/` の React + Vite + shadcn/ui 表示層は同一 origin の API だけを読む。SSOT は各チャンネルの `data/analytics_data_*.json`（将来は local store）。channel registry で対象チャンネルを解決し、失敗はチャンネル単位の部分エラーとして隔離する。
 
+**audio studio**: 1 collection の `02-Individual-music/` を loopback 限定で一覧・再生し、後続の非破壊編集操作を載せるローカル Web UI。Python server が filesystem allowlist、probe、Range 配信、lifecycle を所有し、`audio-studio/` の React + Vite + shadcn/ui 表示層は同一 origin API だけを読む。
+
 **operator documentation site**: `docs/release-notes/*.md` と明示的な運用者向け Markdown allowlist を公開用の SSOT とし、`site/` の Blume workspace が目的別入口・詳細ページへ変換する静的 Web サイト。Cloudflare Pages から配信し、site workspace 自体は Python package や下流チャンネルへの asset 配布には含めない。
 
 **channel-research report**: `/channel-research --benchmark|--market|--voice|--thumbnail` が生成する分析文書。`.claude/skills/channel-research/references/channel-research-report.schema.json` と `domains.documents.schema_registry` が契約を所有し、JSON が唯一の正本、同 basename HTML は表示用派生物である。skill writer は `application.documents.migration` を通し、下流 reader は `infrastructure.documents.publishing.read_published_json_document()` が返す検証済み JSON だけを使う。API 収集の `data/benchmark_*.json` / `data/comments_*.json` は source provenance 付き入力であり、分析正本ではない。
@@ -124,7 +126,7 @@ Python 版 skill-config の正規キーは `configuration/skills.py` が所有�
 
 統合で owner が変わる下流 override は `yt-skills migrate-config --channel-dir <path> --dry-run` で差分を確認してから明示適用する。移行対応表は吸収先 skill と名前空間キーが実在してから有効化し、統合前の候補を先行登録しない。`yt-skills sync` はデータ移行を副作用として実行せず、未移行と孤児の警告だけを分けて表示する。
 
-`infrastructure/legacy_utils/` と `utils/` は下流公開 import のための compatibility facade であり、canonical implementation の owner ではない。canonical source、tests、skills、bench から facade へ依存してはならない。`dashboard/` と `extensions/` はそれぞれ独立した表示層・拡張層で、Python domain 実装の owner にはしない。
+`infrastructure/legacy_utils/` と `utils/` は下流公開 import のための compatibility facade であり、canonical implementation の owner ではない。canonical source、tests、skills、bench から facade へ依存してはならない。`dashboard/`、`audio-studio/`、`extensions/` はそれぞれ独立した表示層・編集表示層・拡張層で、Python domain 実装の owner にはしない。
 
 #### `core/adapters` の最終 surface
 
@@ -167,7 +169,7 @@ Python 版 skill-config の正規キーは `configuration/skills.py` が所有�
 | domain workflow・業務ルール | `domains/` または `application/` | domain/application テスト、fixture | `docs/architecture.md` の主要モジュール表 |
 | 外部サービス・adapter | `infrastructure/<area>/` | adapter 契約テスト、認証・secret 設定 | `docs/development.md`、該当 migration 文書 |
 | skill・配布リソース | `.claude/skills/`、`.claude/CLAUDE.template.md` | skill lint、sync / installed-wheel テスト | `CLAUDE.md`、`AGENTS.md`、配布設定 |
-| dashboard・extension | `dashboard/` または `extensions/` | frontend / extension テスト・build | `docs/development.md`、各領域の案内文書 |
+| dashboard・audio studio・extension | `dashboard/`、`audio-studio/` または `extensions/` | frontend / extension テスト・build | `docs/development.md`、各領域の案内文書 |
 
 移動や owner 変更を伴う場合は、`docs/architecture/repository-reorganization-receipt.json`、参照元全体、下流公開 import、CLI、設定パス、package resource を追加で確認する。履歴監査文書の旧 path は履歴証跡として保持するが、active source・tests・skills・案内文書には canonical path だけを記載する。
 
@@ -185,6 +187,7 @@ Python 版 skill-config の正規キーは `configuration/skills.py` が所有�
 - `.agents/skills` — `.claude/skills` への symlink。Codex CLI 用の探索パス（Codex 規約 `$REPO_ROOT/.agents/skills`）
 - `AGENTS.md` — Codex CLI 向けエージェント指示。CLAUDE.md と並立し、Codex 視点のドキュメント補足を含む
 - `site/` — Blume ベースの運用者向け公開ドキュメントサイト。release notes と明示 allowlist の原本を読み、Python 配布物とは独立して build・deploy する
+- `audio-studio/` — collection 音源編集 UI の独立 React / Vite / shadcn workspace。build asset だけを Python package へ同梱する
 
 ## 下流チャンネルリポジトリ（`CHANNEL_DIR` が指す先）
 
@@ -261,6 +264,7 @@ assets/stock/           # ボツ画像ストック (#364)。<theme-slug>/ 配下
 | `commands.youtube.live_chat_reply` | `yt-live-chat-reply` 常駐 CLI。`comments.live_chat.enabled` を opt-in とし、VPS では独立した `live-chat-reply.service` から起動 |
 | `commands.system.skills_sync` | `yt-skills` 本体 |
 | `commands.collections.collection_serve_discovery` | 固定 loopback endpoint の稼働 server registry、heartbeat、TTL、owner takeover |
+| `commands.media.audio_studio` | collection 音源の loopback 限定 API、Range 配信、static asset、server lifecycle |
 | `extensions/shared/server-discovery.ts` | registry schema v1 の検証と `/server-info` probe を両 helper 拡張へ提供 |
 | `extensions/shared/server-source-migration.ts` | 廃止した配信元候補履歴 storage key の共通 migration |
 

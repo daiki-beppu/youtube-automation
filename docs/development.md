@@ -67,6 +67,7 @@ python .github/scripts/run-affected-tests.py                              # work
 | docs / CI / packaging / hook | repository contract lane + 対応 file の直接 test | slow lane（tool 契約を含む場合）+ unit-only full suite |
 | extensions | 対象 workspace の既存 pnpm lint / type / Vitest / Playwright | Extensions CI（pytest marker 対象外） |
 | dashboard | `dashboard/` の lint / typecheck / test | test:e2e / build + Python server・wheel smoke |
+| audio studio | `audio-studio/` の lint / typecheck / test | build + Python server・wheel smoke |
 | release notes site | `site/` の check / test | build + Python 配布境界 test |
 - **CI では `-n auto` を有効化済み**（`.github/workflows/ci.yml` の test ジョブ）
 - **外部 GitHub Actions は full commit SHA で固定**し、追跡する stable version を同じ `uses:` 行のコメントに残す。複数 workflow で同じ action を使う場合も SHA/version を統一し、`tests/repo/test_github_actions_pinning.py` で mutable ref・drift・未棚卸し action を拒否する
@@ -108,6 +109,22 @@ component 追加前は対象 workspace で `shadcn info` と registry/公式 doc
 - 通常の `yt-dashboard` は全登録チャンネルについて YouTube Data API / YouTube Analytics API を使う standard 収集を直列実行してから配信する。失敗はチャンネル単位で隔離する。OAuth のない frontend E2E / wheel smoke は `yt-dashboard --skip-refresh` を使い、保存済み fixture を読む。
 - `dashboard build` は Vite output を `src/youtube_automation/dashboard_dist/` へ生成する。Vite の production build は明示的に実行し、Python build backend から Node.js を暗黙起動しない。
 - `dashboard_dist/` は package data として wheel / sdist に同梱し、runtime は `importlib.resources` で解決する。candidate wheel の非 editable install smoke で `index.html` と hashed asset、API 配信を確認する。
+
+## Audio Studio 開発
+
+Audio Studio は ADR-0028 / ADR-0021 で許可された collection 音源編集 UI。frontend workspace は `audio-studio/`、完成済み Vite asset は `src/youtube_automation/audio_studio_dist/` に置く。`dashboard/` や `extensions/shared-ui` を import しない。
+
+```bash
+nix develop .#extensions --command pnpm -C audio-studio install --frozen-lockfile
+nix develop .#extensions --command pnpm -C audio-studio lint
+nix develop .#extensions --command pnpm -C audio-studio typecheck
+nix develop .#extensions --command pnpm -C audio-studio test
+nix develop .#extensions --command pnpm -C audio-studio build
+```
+
+- Python server は `127.0.0.1` にだけ bind し、track allowlist、duration probe、HTTP Range、server-kind 別 lifecycle を所有する。
+- build は Vite output を `src/youtube_automation/audio_studio_dist/` へ生成する。Python build backend から Node.js を暗黙起動しない。
+- `audio_studio_dist/` は wheel / sdist に同梱し、candidate wheel の非 editable install smoke で CLI と asset 配信を確認する。
 - frontend source を変えた PR は build output の同期差分、frontend 5 gate、Python server test、wheel smoke を通す。
 
 ## リリースノートサイト開発
