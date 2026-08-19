@@ -1114,6 +1114,50 @@ class TestUploadCompleteCollectionDedup:
         assert result["video_id"] == "VID_NEW"
         assert result["upload_source"] == "new_upload"
 
+    @pytest.mark.parametrize(
+        ("document_localizations", "expected_localizations"),
+        [
+            ({}, {"ja": {"title": "生成済みタイトル", "description": "生成済み概要"}}),
+            (
+                {"de": {"title": "Freigegebener Titel", "description": "Freigegebene Beschreibung"}},
+                {"de": {"title": "Freigegebener Titel", "description": "Freigegebene Beschreibung"}},
+            ),
+        ],
+    )
+    def test_prebuilt_localizations_override_generated_only_when_nonempty(
+        self,
+        tmp_path,
+        document_localizations,
+        expected_localizations,
+    ):
+        """空の文書値は生成済み翻訳を維持し、非空の文書値だけを最終値にする。"""
+        # Given
+        uploader, col_dir, mock_gen = self._setup(tmp_path)
+        generated_localizations = {"ja": {"title": "生成済みタイトル", "description": "生成済み概要"}}
+        mock_gen.generate_complete_collection_metadata.return_value = {
+            **_make_metadata("Generated Title"),
+            "localizations": generated_localizations,
+        }
+        documentation = col_dir / "20-documentation"
+        documentation.mkdir()
+        write_video_description_pair(
+            documentation,
+            title="Approved Title",
+            description="Approved description",
+            localizations=document_localizations,
+        )
+
+        with (
+            patch.object(uploader.dedup_search, "find_existing_video_by_title", return_value=None),
+            patch.object(uploader, "upload_video", return_value="VID_NEW") as mock_upload_video,
+        ):
+            # When
+            uploader._upload_complete_collection(col_dir, mock_gen, publish_at=None)
+
+        # Then
+        metadata = mock_upload_video.call_args.args[1]
+        assert metadata["localizations"] == expected_localizations
+
     def test_workflow_state_master_video_wins_over_preview(self, tmp_path):
         uploader, col_dir, mock_gen = self._setup(tmp_path)
         preview = col_dir / "01-master" / "A-Preview.mp4"

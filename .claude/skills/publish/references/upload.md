@@ -123,7 +123,10 @@ $ARGUMENTS
 2. **live 移動** — `collections/planning/` → `collections/live/`
 3. **公開後処理** — フラグなし chain では upload 完了後も manifest 順の `community → pinned` を続行する。各段の承認と成果物ベースの再開契約に委ね、ここで個別処理を再実装しない。`/publish --upload` の単独 mode では後段を暗黙実行せず、`/publish --community`、`/publish --pinned`、`/audit --metadata` は必要に応じて独立実行する
 
-メタデータは共通readerで検証した `descriptions.json` の title / description / tags / localizations だけを使用する。HTMLや旧Markdownはparseせず、pair欠損・schema/quality不正時はfallbackせず停止する。
+メタデータの title / description / tags は共通readerで検証した `descriptions.json` の値を使用する。
+`localizations` が非空なら同文書の値を最終翻訳として使用し、空 object なら `workflow-state.json` の
+`scene_phrases` から metadata generator が生成した翻訳を維持する。HTMLや旧Markdownはparseせず、
+pair欠損・schema/quality不正時はfallbackせず停止する。
 
 承認済みタイトルを 100 codepoint 以下へ短縮する必要が生じた場合は、旧版と短縮案を codepoint 数付き diff として提示し、ユーザーの再承認を得るまで `descriptions.json` pair の更新や upload を行わない。`--plan` は primary title だけでなく保存済み全 locale title を検証し、超過 locale を言語・文字数・実タイトル付きで fail-loud にする。
 
