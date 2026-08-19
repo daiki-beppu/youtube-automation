@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `fix(hybrid)`: `yt-skills migrate-state-git` が workspace root の集約 `.gitignore` を利用し、既追跡の制御面 JSON を移行済みとして検査できるようにする（#4332）。
 - `fix(skills)`: 統廃合で削除した 42 skill を `yt-skills sync --prune` の既知削除対象へ登録し、未知の自作 skill を保護したまま旧配布ディレクトリを明示承認付きで削除できるようにする（#4334）。
 - `fix(masterup)`: `yt-suno-select-tracks` に 2 clip 未満の prompt を明示承認後も尺フィルタ付きで処理できる `--allow-incomplete-download` を追加する（#4336）。
+- `fix(skills)`: `/video` 統合後も下流に残る旧 `/video-description` / `/videoup` を既知の prune 対象として検出し、古い `descriptions.md` 生成契約を明示削除できるようにする（#4337）。
 
 - `fix(collection-serve)`: Suno の安全モードで長時間生成した後も playlist 追加を継続できるよう、collection server の既定 idle timeout を 60 分から 4 時間へ延長する（#4335）。
 - `fix(uploads)`: プレイリスト割り当ての正本を `workflow-state.json::planning.playlists` に移し、theme slug の部分一致（`auto_add_themes`）だけに依存する構造をやめる。`yt-init-collection --playlist` / `--no-playlist` で init 段階に決め、分類プレイリストへ 1 つも割り当たらない状態はアップロード preflight が fail-loud で弾く（#4346）。**breaking**: 分類プレイリストを定義しているチャンネルでは `yt-init-collection` に `--playlist` か `--no-playlist` が必須。
