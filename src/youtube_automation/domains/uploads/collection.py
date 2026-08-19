@@ -335,20 +335,19 @@ class CollectionUploader:
 
     def _move_collection_to_live(self, collection_path: Path) -> Path:
         """コレクションを live に移動。移動後のパスを返す"""
+        live_dir = self.collections_root / "live"
+        new_path = live_dir / collection_path.name
         try:
-            live_dir = self.collections_root / "live"
             make_directory(live_dir, exist_ok=True)
-
-            new_path = live_dir / collection_path.name
-
             rename_path(collection_path, new_path)
-
-            logger.info(f"📁 コレクション移動完了: {collection_path.parent.name}/ → live/")
-            logger.info(f"   移動先: {new_path}")
-            return new_path
         except OSError as e:
-            logger.warning(f"⚠️  コレクション移動エラー: {e}")
-            return collection_path
+            if path_exists(collection_path) or not path_is_directory(new_path):
+                logger.warning(f"⚠️  コレクション移動エラー: {e}")
+                return collection_path
+
+        logger.info(f"📁 コレクション移動完了: {collection_path.parent.name}/ → live/")
+        logger.info(f"   移動先: {new_path}")
+        return new_path
 
     # ─── デーモン ────────────────────────────────────
 
