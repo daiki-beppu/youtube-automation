@@ -77,6 +77,7 @@ import {
   formatCollectedAt,
   formatDateRange,
   formatInteger,
+  resolveDashboardPeriod,
   formatSignedInteger,
   formatWatchTime,
 } from "@/lib/dashboard-formatters"
@@ -321,17 +322,12 @@ function DashboardOverview({
   const attentionCount = channels.filter(
     (channel) => channel.refresh_error !== null || channel.status !== "ready"
   ).length
-  const startDates = channels.flatMap((channel) =>
-    channel.period.start_date ? [channel.period.start_date] : []
-  )
-  const endDates = channels.flatMap((channel) =>
-    channel.period.end_date ? [channel.period.end_date] : []
+  const { startDate, endDate } = resolveDashboardPeriod(
+    channels.map((channel) => channel.period)
   )
   const collectedDates = channels.flatMap((channel) =>
     channel.collected_at ? [channel.collected_at] : []
   )
-  const startDate = startDates.length > 0 ? startDates.sort()[0] : null
-  const endDate = endDates.length > 0 ? (endDates.sort().at(-1) ?? null) : null
   const collectedAt =
     collectedDates.length > 0 ? (collectedDates.sort().at(-1) ?? null) : null
 

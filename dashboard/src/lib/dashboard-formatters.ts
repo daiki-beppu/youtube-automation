@@ -54,3 +54,41 @@ export function formatDateRange(
   if (!startDate && !endDate) return "未収集"
   return `${formatCalendarDate(startDate)}〜${formatCalendarDate(endDate)}`
 }
+
+function isIsoCalendarDate(value: string | null): value is string {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
+  const date = new Date(`${value}T00:00:00Z`)
+  return (
+    !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value
+  )
+}
+
+export function resolveDashboardPeriod(
+  periods: ReadonlyArray<{ start_date: string | null; end_date: string | null }>
+): { startDate: string | null; endDate: string | null } {
+  const startDates = periods
+    .map((period) => period.start_date)
+    .filter(isIsoCalendarDate)
+    .sort()
+  const endDates = periods
+    .map((period) => period.end_date)
+    .filter(isIsoCalendarDate)
+    .sort()
+
+  return {
+    startDate: startDates[0] ?? null,
+    endDate: endDates.at(-1) ?? null,
+  }
+}
+
+export function formatPeriodViewsLabel(
+  startDate: string | null,
+  endDate: string | null
+): string {
+  if (!isIsoCalendarDate(startDate) || !isIsoCalendarDate(endDate)) {
+    return "期間再生数"
+  }
+  return `期間再生数 (${startDate.slice(5).replace("-", "/")} ~ ${endDate
+    .slice(5)
+    .replace("-", "/")})`
+}
