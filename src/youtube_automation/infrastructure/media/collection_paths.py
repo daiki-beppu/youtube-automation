@@ -84,6 +84,10 @@ class CollectionPaths:
         return self.docs_dir / "descriptions.json"
 
     @property
+    def audio_adjustments_path(self) -> Path:
+        return self.docs_dir / "audio-adjustments.json"
+
+    @property
     def thumbnail_prompts_path(self) -> Path:
         return self.docs_dir / "thumbnail-prompts.md"
 

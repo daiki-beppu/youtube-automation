@@ -10,12 +10,16 @@ import shutil
 import subprocess
 import sys
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import cast
 
 from youtube_automation.configuration.skills import load_skill_config
 from youtube_automation.core.errors import ConfigError, ValidationError
+from youtube_automation.domains.media.audio_adjustments import (
+    read_audio_adjustments,
+    validate_cleanup_settings,
+)
 from youtube_automation.domains.media.audio_formats import AUDIO_EXTS
 from youtube_automation.infrastructure.media.collection_paths import CollectionPaths, resolve_collection_dir
 from youtube_automation.infrastructure.media.probe import probe_duration
@@ -90,6 +94,58 @@ def resolve_cleanup_config(skill_cfg: Mapping[str, object]) -> CleanupConfig:
         tail_fade_sec=float(tail.get("fade_sec", 3.0)),
         bitrate=str(raw.get("bitrate") or audio.get("bitrate") or "192k"),
         codec=str(raw.get("codec") or "libmp3lame"),
+    )
+
+
+def cleanup_config_settings(cfg: CleanupConfig) -> dict[str, object]:
+    """Expose the adjustable cleanup subset in the Audio Studio document shape."""
+    return {
+        "eq": {
+            "enabled": cfg.adaptive_eq,
+            "muddiness_freq_hz": cfg.muddiness_freq_hz,
+            "muddiness_gain_db": cfg.muddiness_gain_db,
+            "harshness_freq_hz": cfg.harshness_freq_hz,
+            "harshness_gain_db": cfg.harshness_gain_db,
+        },
+        "loudnorm": {
+            "enabled": cfg.loudnorm,
+            "I": cfg.target_lufs,
+            "LRA": cfg.loudness_range,
+            "TP": cfg.true_peak,
+        },
+        "limiter": {"enabled": cfg.limiter, "limit": cfg.limiter_limit},
+        "trim_silence": {"enabled": cfg.trim_silence, "threshold_db": cfg.silence_threshold_db},
+        "tail_fade_guard": {"enabled": cfg.tail_fade_guard, "fade_sec": cfg.tail_fade_sec},
+        "volume_smoothing": cfg.volume_smoothing,
+    }
+
+
+def apply_cleanup_overrides(cfg: CleanupConfig, overrides: object) -> CleanupConfig:
+    """Overlay one track's validated persisted values on the channel defaults."""
+    validated = validate_cleanup_settings(overrides, partial=True)
+    eq = cast(dict[str, object], validated.get("eq", {}))
+    loudnorm = cast(dict[str, object], validated.get("loudnorm", {}))
+    limiter = cast(dict[str, object], validated.get("limiter", {}))
+    trim = cast(dict[str, object], validated.get("trim_silence", {}))
+    tail = cast(dict[str, object], validated.get("tail_fade_guard", {}))
+    return replace(
+        cfg,
+        adaptive_eq=cast(bool, eq.get("enabled", cfg.adaptive_eq)),
+        muddiness_freq_hz=cast(int, eq.get("muddiness_freq_hz", cfg.muddiness_freq_hz)),
+        muddiness_gain_db=cast(float, eq.get("muddiness_gain_db", cfg.muddiness_gain_db)),
+        harshness_freq_hz=cast(int, eq.get("harshness_freq_hz", cfg.harshness_freq_hz)),
+        harshness_gain_db=cast(float, eq.get("harshness_gain_db", cfg.harshness_gain_db)),
+        loudnorm=cast(bool, loudnorm.get("enabled", cfg.loudnorm)),
+        target_lufs=cast(float, loudnorm.get("I", cfg.target_lufs)),
+        loudness_range=cast(float, loudnorm.get("LRA", cfg.loudness_range)),
+        true_peak=cast(float, loudnorm.get("TP", cfg.true_peak)),
+        limiter=cast(bool, limiter.get("enabled", cfg.limiter)),
+        limiter_limit=cast(float, limiter.get("limit", cfg.limiter_limit)),
+        trim_silence=cast(bool, trim.get("enabled", cfg.trim_silence)),
+        silence_threshold_db=cast(float, trim.get("threshold_db", cfg.silence_threshold_db)),
+        tail_fade_guard=cast(bool, tail.get("enabled", cfg.tail_fade_guard)),
+        tail_fade_sec=cast(float, tail.get("fade_sec", cfg.tail_fade_sec)),
+        volume_smoothing=cast(bool, validated.get("volume_smoothing", cfg.volume_smoothing)),
     )
 
 
@@ -245,7 +301,7 @@ def process_file(path: Path, cfg: CleanupConfig, *, apply: bool, force: bool, qu
 
 def _process_files_parallel(
     files: list[Path],
-    cfg: CleanupConfig,
+    configs: Mapping[Path, CleanupConfig],
     *,
     max_workers: int,
     force: bool,
@@ -260,7 +316,7 @@ def _process_files_parallel(
         nonlocal next_index
         path = files[next_index]
         next_index += 1
-        future = executor.submit(process_file, path, cfg, apply=True, force=force, quiet=True)
+        future = executor.submit(process_file, path, configs[path], apply=True, force=force, quiet=True)
         pending[future] = path
 
     try:
@@ -285,14 +341,14 @@ def _process_files_parallel(
 
 def _process_files_sequential(
     files: list[Path],
-    cfg: CleanupConfig,
+    configs: Mapping[Path, CleanupConfig],
     *,
     force: bool,
     quiet: bool,
 ) -> int:
     changed = 0
     for path in files:
-        if process_file(path, cfg, apply=True, force=force, quiet=quiet):
+        if process_file(path, configs[path], apply=True, force=force, quiet=quiet):
             changed += 1
     return changed
 
@@ -320,20 +376,23 @@ def cleanup_collection(
         supported_exts = ", ".join(_SUPPORTED_EXTS)
         raise ValidationError(f"音声ファイル ({supported_exts}) が見つかりません: {music_dir}")
 
+    adjustment_document = read_audio_adjustments(CollectionPaths(collection_dir).audio_adjustments_path)
+    configs = {path: apply_cleanup_overrides(cfg, adjustment_document.tracks.get(path.name, {})) for path in files}
+
     if not apply:
         for path in files:
-            process_file(path, cfg, apply=False, force=force, quiet=quiet)
+            process_file(path, configs[path], apply=False, force=force, quiet=quiet)
         if not quiet:
             print(f"planned: {len(files)} file(s), changed=0")
         return 0
 
     if max_workers == 1:
-        changed = _process_files_sequential(files, cfg, force=force, quiet=quiet)
+        changed = _process_files_sequential(files, configs, force=force, quiet=quiet)
         if not quiet:
             print(f"processed: {len(files)} file(s), changed={changed}")
         return 0
 
-    results, errors = _process_files_parallel(files, cfg, max_workers=cast(int, max_workers), force=force)
+    results, errors = _process_files_parallel(files, configs, max_workers=cast(int, max_workers), force=force)
     if not quiet:
         for path in files:
             if path not in results:

@@ -17,6 +17,7 @@ from youtube_automation.commands.media.audio_studio import (
     build_track_payload,
     create_server,
 )
+from youtube_automation.commands.suno.suno_audio_cleanup import CleanupConfig, cleanup_config_settings
 
 
 def _collection(tmp_path: Path) -> Path:
@@ -122,6 +123,121 @@ def test_server_rejects_unknown_track_invalid_range_and_web_origin(tmp_path: Pat
         assert response.status == 200
         assert response.getheader("Access-Control-Allow-Origin") == same_origin
         response.read()
+        connection.close()
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
+def test_adjustments_api_returns_defaults_and_saves_only_track_diff(tmp_path: Path) -> None:
+    collection = _collection(tmp_path)
+    audio = collection / "02-Individual-music" / "01 Track.mp3"
+    audio.write_bytes(b"audio")
+    defaults = cleanup_config_settings(CleanupConfig(enabled=True))
+    server = create_server(
+        collection,
+        port=0,
+        asset_root=_assets(tmp_path),
+        duration_probe=lambda _path: 5.0,
+        cleanup_defaults=defaults,
+    )
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        track_id = next(iter(server.track_files))
+        route = f"/api/tracks/{track_id}/adjustments"
+        connection = http.client.HTTPConnection(DEFAULT_HOST, server.server_port, timeout=2)
+        connection.request("GET", route)
+        response = connection.getresponse()
+        payload = json.loads(response.read())
+        assert response.status == 200
+        assert payload == {"defaults": defaults, "settings": defaults, "overrides": {}}
+
+        settings = dict(defaults)
+        settings["eq"] = {**settings["eq"], "muddiness_gain_db": -4.0}
+        body = json.dumps({"settings": settings})
+        connection.request(
+            "PUT",
+            route,
+            body=body,
+            headers={"Content-Type": "application/json", "Content-Length": str(len(body.encode()))},
+        )
+        response = connection.getresponse()
+        saved = json.loads(response.read())
+        assert response.status == 200
+        assert saved["overrides"] == {"eq": {"muddiness_gain_db": -4.0}}
+        assert json.loads((collection / "20-documentation/audio-adjustments.json").read_text())["tracks"] == {
+            "01 Track.mp3": {"eq": {"muddiness_gain_db": -4.0}}
+        }
+        connection.close()
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
+def test_adjustments_api_rejects_unknown_track_and_invalid_settings(tmp_path: Path) -> None:
+    collection = _collection(tmp_path)
+    (collection / "02-Individual-music" / "track.mp3").write_bytes(b"audio")
+    defaults = cleanup_config_settings(CleanupConfig(enabled=True))
+    server = create_server(
+        collection,
+        port=0,
+        asset_root=_assets(tmp_path),
+        duration_probe=lambda _path: 5.0,
+        cleanup_defaults=defaults,
+    )
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        connection = http.client.HTTPConnection(DEFAULT_HOST, server.server_port, timeout=2)
+        invalid_body = json.dumps({"settings": {"eq": {"muddiness_gain_db": "deep"}}})
+        track_id = next(iter(server.track_files))
+        connection.request("PUT", f"/api/tracks/{track_id}/adjustments", body=invalid_body)
+        response = connection.getresponse()
+        assert response.status == 400
+        response.read()
+
+        connection.request("GET", "/api/tracks/0000000000000000/adjustments")
+        response = connection.getresponse()
+        assert response.status == 404
+        response.read()
+        connection.close()
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
+def test_adjustments_api_does_not_follow_documentation_directory_symlink(tmp_path: Path) -> None:
+    collection = _collection(tmp_path)
+    (collection / "02-Individual-music" / "track.mp3").write_bytes(b"audio")
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    try:
+        (collection / "20-documentation").symlink_to(outside, target_is_directory=True)
+    except OSError:
+        pytest.skip("directory symlink is unavailable")
+    defaults = cleanup_config_settings(CleanupConfig(enabled=True))
+    server = create_server(
+        collection,
+        port=0,
+        asset_root=_assets(tmp_path),
+        duration_probe=lambda _path: 5.0,
+        cleanup_defaults=defaults,
+    )
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        track_id = next(iter(server.track_files))
+        body = json.dumps({"settings": defaults})
+        connection = http.client.HTTPConnection(DEFAULT_HOST, server.server_port, timeout=2)
+        connection.request("PUT", f"/api/tracks/{track_id}/adjustments", body=body)
+        response = connection.getresponse()
+        assert response.status == 400
+        response.read()
+        assert not (outside / "audio-adjustments.json").exists()
         connection.close()
     finally:
         server.shutdown()

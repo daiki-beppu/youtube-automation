@@ -1,8 +1,16 @@
-import { useEffect, useState } from "react"
-import { AlertCircleIcon, AudioLinesIcon, Disc3Icon } from "lucide-react"
+import { useEffect, useRef, useState } from "react"
+import {
+  AlertCircleIcon,
+  AudioLinesIcon,
+  Disc3Icon,
+  SlidersHorizontalIcon,
+} from "lucide-react"
 
+import { isTrackResponse, type Track, type TrackResponse } from "@/audio-settings"
+import { CleanupPanel } from "@/CleanupPanel"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import {
   Card,
   CardAction,
@@ -20,41 +28,6 @@ import {
 } from "@/components/ui/empty"
 import { Skeleton } from "@/components/ui/skeleton"
 
-type Track = {
-  id: string
-  file_name: string
-  duration_seconds: number
-  extension: string
-  audio_url: string
-}
-
-type TrackResponse = {
-  collection_name: string
-  tracks: Track[]
-}
-
-function isTrackResponse(value: unknown): value is TrackResponse {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return false
-  }
-  const response = value as Record<string, unknown>
-  return (
-    typeof response.collection_name === "string" &&
-    Array.isArray(response.tracks) &&
-    response.tracks.every(
-      (track) =>
-        typeof track === "object" &&
-        track !== null &&
-        typeof track.id === "string" &&
-        typeof track.file_name === "string" &&
-        typeof track.duration_seconds === "number" &&
-        Number.isFinite(track.duration_seconds) &&
-        typeof track.extension === "string" &&
-        typeof track.audio_url === "string"
-    )
-  )
-}
-
 function formatDuration(seconds: number): string {
   const rounded = Math.max(0, Math.round(seconds))
   const minutes = Math.floor(rounded / 60)
@@ -64,6 +37,9 @@ function formatDuration(seconds: number): string {
 export default function App() {
   const [data, setData] = useState<TrackResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [selectedTrack, setSelectedTrack] = useState<Track | null>(null)
+  const [selectedAudio, setSelectedAudio] = useState<HTMLAudioElement>()
+  const audioElements = useRef(new Map<string, HTMLAudioElement>())
 
   useEffect(() => {
     const controller = new AbortController()
@@ -150,9 +126,24 @@ export default function App() {
                   再生時間 {formatDuration(track.duration_seconds)}
                 </CardDescription>
                 <CardAction>
-                  <Badge variant="secondary">
-                    {track.extension.toUpperCase()}
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="secondary">
+                      {track.extension.toUpperCase()}
+                    </Badge>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={selectedTrack?.id === track.id ? "default" : "outline"}
+                      aria-expanded={selectedTrack?.id === track.id}
+                      onClick={() => {
+                        setSelectedTrack(track)
+                        setSelectedAudio(audioElements.current.get(track.id))
+                      }}
+                    >
+                      <SlidersHorizontalIcon aria-hidden="true" />
+                      調整
+                    </Button>
+                  </div>
                 </CardAction>
               </CardHeader>
               <CardContent>
@@ -162,11 +153,23 @@ export default function App() {
                   preload="metadata"
                   src={track.audio_url}
                   aria-label={`${track.file_name} を再生`}
+                  ref={(element) => {
+                    if (element) audioElements.current.set(track.id, element)
+                    else audioElements.current.delete(track.id)
+                  }}
                 />
               </CardContent>
             </Card>
           ))}
         </section>
+      ) : null}
+
+      {selectedTrack ? (
+        <CleanupPanel
+          key={selectedTrack.id}
+          track={selectedTrack}
+          audio={selectedAudio}
+        />
       ) : null}
     </main>
   )
