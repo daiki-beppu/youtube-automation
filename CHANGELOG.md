@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `fix(skills)`: `/video` 統合後も下流に残る旧 `/video-description` / `/videoup` を既知の prune 対象として検出し、古い `descriptions.md` 生成契約を明示削除できるようにする（#4337）。
 - `fix(upload)`: `yt-upload-collection` に `--allow-duration-outside-target` を追加し、operator の明示判断で目標尺外動画の preflight を通過できるようにする（#4338）。
 - `fix(video-upload)`: `descriptions.json::localizations` が空でも `scene_phrases` から生成済みの翻訳を維持し、ja/de 等がアップロード時に消える問題を修正する（#4339）。
+- `fix(wf-new)`: `scene_phrases` の保存前に予定尺込みの多言語タイトルを組み立て、YouTube の 100 codepoint 上限超過を全言語まとめて拒否する（#4340）。
 
 - `fix(collection-serve)`: Suno の安全モードで長時間生成した後も playlist 追加を継続できるよう、collection server の既定 idle timeout を 60 分から 4 時間へ延長する（#4335）。
 - `fix(uploads)`: プレイリスト割り当ての正本を `workflow-state.json::planning.playlists` に移し、theme slug の部分一致（`auto_add_themes`）だけに依存する構造をやめる。`yt-init-collection --playlist` / `--no-playlist` で init 段階に決め、分類プレイリストへ 1 つも割り当たらない状態はアップロード preflight が fail-loud で弾く（#4346）。**breaking**: 分類プレイリストを定義しているチャンネルでは `yt-init-collection` に `--playlist` か `--no-playlist` が必須。
