@@ -36,7 +36,8 @@ def test_fetch_video_ctr_excludes_thumbnail_impressions_metrics():
     last_call_kwargs = mock_service.query.call_args.kwargs
     assert "videoThumbnailImpressions" not in last_call_kwargs["metrics"]
     assert last_call_kwargs["dimensions"] == "video"
-    assert "views" in last_call_kwargs["metrics"]
+    assert last_call_kwargs["metrics"] == "engagedViews,likes,comments,estimatedMinutesWatched"
+    assert last_call_kwargs["sort"] == "-engagedViews"
 
 
 def test_process_video_ctr_parses_five_column_rows():
@@ -89,8 +90,17 @@ def test_get_ctr_analysis_returns_without_impressions_summary():
     collector = DummyCollector(mock_service)
     result = collector.get_ctr_analysis("2026-04-01", "2026-04-30")
 
+    calls = mock_service.query.call_args_list
+    assert [call.kwargs["metrics"] for call in calls] == [
+        "engagedViews,likes,comments,shares,subscribersGained",
+        "engagedViews,likes,comments,estimatedMinutesWatched",
+        "engagedViews,estimatedMinutesWatched",
+    ]
+    assert calls[1].kwargs["sort"] == "-engagedViews"
     assert "error" not in result
     assert "impressions_summary" not in result
+    assert result["overall_engagement"]["total_views"] == 10000
+    assert result["daily_traffic"][0]["views"] == 300
     assert result["video_performance"][0]["video_id"] == "vid_A"
 
 

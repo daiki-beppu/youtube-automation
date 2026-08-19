@@ -6,14 +6,17 @@ import logging
 from typing import TYPE_CHECKING
 
 from youtube_automation.core.errors import YouTubeAPIError
+from youtube_automation.domains.analytics.query_contract import TARGETED_QUERY_VIEWS_METRIC
 
 if TYPE_CHECKING:
     from youtube_automation.domains.analytics.ports import AnalyticsBase  # noqa: F401
 
 logger = logging.getLogger(__name__)
 
-_DAILY_REVENUE_METRICS = "views,estimatedRevenue,monetizedPlaybacks,adImpressions,cpm,playbackBasedCpm"
-_VIDEO_REVENUE_METRICS = "views,estimatedRevenue,monetizedPlaybacks,cpm,playbackBasedCpm"
+_DAILY_REVENUE_METRICS = (
+    f"{TARGETED_QUERY_VIEWS_METRIC},estimatedRevenue,monetizedPlaybacks,adImpressions,cpm,playbackBasedCpm"
+)
+_VIDEO_REVENUE_METRICS = f"{TARGETED_QUERY_VIEWS_METRIC},estimatedRevenue,monetizedPlaybacks,cpm,playbackBasedCpm"
 _VIDEO_REVENUE_MAX_RESULTS = 200
 
 

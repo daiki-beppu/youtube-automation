@@ -147,17 +147,25 @@ def test_get_status_falls_back_to_uploads_when_collection_playlists_are_empty(mo
             }
         ]
     }
-    collector.analytics_service.query.return_value = {"rows": []}
+    collector.analytics_service.query.return_value = {"rows": [["video-fallback", 321, 42.5, 100]]}
     monkeypatch.setattr(channel_status, "YouTubeAnalyticsCollector", MagicMock(return_value=collector))
 
     result = channel_status.get_channel_latest_status()
 
+    query = collector.analytics_service.query.call_args.kwargs
+    assert query["metrics"] == "engagedViews,estimatedMinutesWatched,averageViewDuration"
+    assert query["sort"] == "-engagedViews"
     assert result["recent_collections"] == [
         {
             "collection_name": "Fallback upload",
             "published_at": "2026-07-30",
             "video_id": "video-fallback",
             "url": "https://youtu.be/video-fallback",
+            "stats": {
+                "views": 321,
+                "watch_time_min": 42.5,
+                "avg_view_duration_sec": 100,
+            },
         }
     ]
     collector.youtube_service.list_playlist_items_for_display.assert_called_once_with("UU_REF", max_results=10)

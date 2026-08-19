@@ -35,7 +35,7 @@ def test_get_video_daily_analytics_parses_views_only_rows():
     assert result[2]["video_id"] == "vid_B"
 
 
-def test_get_video_daily_analytics_query_uses_views_metric_only():
+def test_get_video_daily_analytics_query_uses_engaged_views_metric_only():
     """クエリ送信時に videoThumbnailImpressions* が含まれないことを検証。"""
     mock_service = MagicMock()
     mock_service.query.return_value = {"rows": []}
@@ -44,7 +44,7 @@ def test_get_video_daily_analytics_query_uses_views_metric_only():
 
     # reports().query(...) の最後の呼び出しを取得
     last_call_kwargs = mock_service.query.call_args.kwargs
-    assert last_call_kwargs["metrics"] == "views"
+    assert last_call_kwargs["metrics"] == "engagedViews"
     assert "videoThumbnailImpressions" not in last_call_kwargs["metrics"]
 
 

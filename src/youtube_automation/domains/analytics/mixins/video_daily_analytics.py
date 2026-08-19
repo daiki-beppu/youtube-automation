@@ -6,14 +6,15 @@ import logging
 from typing import Dict, List, Optional
 
 from youtube_automation.core.adapters.observability import section
+from youtube_automation.domains.analytics.query_contract import TARGETED_QUERY_VIEWS_METRIC
 
 logger = logging.getLogger(__name__)
 
 
 class VideoDailyAnalyticsMixin:
-    """動画 × 日次粒度で views を取得する
+    """動画 × 日次粒度で engagedViews を取得して内部 views として返す。
 
-    動画×日次では `videoThumbnailImpressions*` が API 仕様上取得不可のため views のみ。
+    動画×日次では `videoThumbnailImpressions*` が API 仕様上取得不可のため engagedViews のみ。
     impressions/CTR は `ChannelDailyAnalyticsMixin.get_channel_daily_impressions` で代替する。
     """
 
@@ -24,7 +25,7 @@ class VideoDailyAnalyticsMixin:
         video_ids: Optional[List[str]] = None,
     ) -> List[Dict]:
         """
-        dimensions='video,day' で日次 views を取得する。
+        dimensions='video,day' で日次 engagedViews を取得する。
 
         Args:
             start_date: YYYY-MM-DD
@@ -51,7 +52,7 @@ class VideoDailyAnalyticsMixin:
             filtered=bool(video_ids),
         ):
             request = self.analytics_service.query(
-                metrics="views",
+                metrics=TARGETED_QUERY_VIEWS_METRIC,
                 **query_kwargs,
             )
             response = request

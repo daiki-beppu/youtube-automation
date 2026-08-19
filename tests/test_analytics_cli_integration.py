@@ -49,14 +49,14 @@ class _AnalyticsReports:
                     {"rows": [["VIDEO_1", 100, 2.5, 80, 4.0, 5.0]]},
                     error=self.video_revenue_error,
                 )
-            if metrics.startswith("views,estimatedMinutesWatched"):
+            if metrics.startswith("engagedViews,estimatedMinutesWatched"):
                 return _Request({"rows": [["VIDEO_1", 100, 500, 120, 5, 0, 1, 2, 4]]})
             return _Request({"rows": [["VIDEO_1", 100, 5, 1, 500]]})
         if dimensions == "insightTrafficSourceType":
             return _Request({"rows": [["YT_SEARCH", 100, 500, 120]]})
         if dimensions == "deviceType":
             return _Request({"rows": [["MOBILE", 100, 500, 120]]})
-        if dimensions == "day" and metrics.startswith("views,estimatedMinutesWatched,averageViewDuration"):
+        if dimensions == "day" and metrics.startswith("engagedViews,estimatedMinutesWatched,averageViewDuration"):
             return _Request({"rows": [["2026-04-01", 100, 500, 120, 4, 0, 5, 0, 1, 2, 50, 0, 0, 0]]})
         if dimensions == "day" and "estimatedRevenue" in metrics:
             return _Request(
@@ -228,11 +228,14 @@ def test_yt_analytics_collects_and_saves_subscribed_status_via_cli(cli_dependenc
     assert payload["video_analytics"]["VIDEO_1"]["estimated_revenue"] == 2.5
     revenue_queries = [query for query in reports.queries if "estimatedRevenue" in query["metrics"]]
     assert next(query for query in revenue_queries if query["dimensions"] == "day")["metrics"] == (
-        "views,estimatedRevenue,monetizedPlaybacks,adImpressions,cpm,playbackBasedCpm"
+        "engagedViews,estimatedRevenue,monetizedPlaybacks,adImpressions,cpm,playbackBasedCpm"
     )
     video_revenue_query = next(query for query in revenue_queries if query["dimensions"] == "video")
-    assert video_revenue_query["metrics"] == ("views,estimatedRevenue,monetizedPlaybacks,cpm,playbackBasedCpm")
+    assert video_revenue_query["metrics"] == ("engagedViews,estimatedRevenue,monetizedPlaybacks,cpm,playbackBasedCpm")
     assert video_revenue_query["maxResults"] == 200
+    views_queries = [query for query in reports.queries if "engagedViews" in query["metrics"].split(",")]
+    assert views_queries
+    assert all("views" not in query["metrics"].split(",") for query in views_queries)
     assert any(query.get("dimensions") == "subscribedStatus" for query in reports.queries)
 
 

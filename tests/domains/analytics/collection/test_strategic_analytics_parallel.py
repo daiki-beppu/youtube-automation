@@ -190,6 +190,12 @@ class TestSubscriberConversionRanking:
 
         result = collector.get_combined_analytics("2026-01-01", "2026-04-01")
 
+        query = collector.analytics_service.query.call_args.kwargs
+        assert query["metrics"] == (
+            "engagedViews,estimatedMinutesWatched,averageViewDuration,likes,dislikes,comments,shares,subscribersGained"
+        )
+        assert query["sort"] == "-engagedViews"
+        assert result["top_videos"][0]["views"] == 200
         assert result["top_videos"][0]["subscriber_conversion_rate"] == 3.0
 
     def test_top_video_analytics_adds_conversion_rate(self, collector: _StubCollector) -> None:
@@ -198,6 +204,11 @@ class TestSubscriberConversionRanking:
 
         result = collector.get_top_video_analytics("2026-01-01", "2026-04-01")
 
+        query = collector.analytics_service.query.call_args.kwargs
+        assert query["metrics"] == (
+            "engagedViews,estimatedMinutesWatched,averageViewDuration,likes,dislikes,comments,shares,subscribersGained"
+        )
+        assert query["sort"] == "-engagedViews"
         assert result[0]["subscriber_conversion_rate"] == 3.0
 
 

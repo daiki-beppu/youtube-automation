@@ -54,10 +54,10 @@ def test_collects_daily_and_video_revenue_metrics():
         "rpm": 6.2,
     }
     assert service.query.call_args_list[0].kwargs["metrics"] == (
-        "views,estimatedRevenue,monetizedPlaybacks,adImpressions,cpm,playbackBasedCpm"
+        "engagedViews,estimatedRevenue,monetizedPlaybacks,adImpressions,cpm,playbackBasedCpm"
     )
     assert service.query.call_args_list[1].kwargs["metrics"] == (
-        "views,estimatedRevenue,monetizedPlaybacks,cpm,playbackBasedCpm"
+        "engagedViews,estimatedRevenue,monetizedPlaybacks,cpm,playbackBasedCpm"
     )
     assert service.query.call_args_list[1].kwargs["maxResults"] == 200
 

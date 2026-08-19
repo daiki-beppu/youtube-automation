@@ -40,6 +40,9 @@ class TestGetTrafficSourceAnalytics:
 
         result = collector.get_traffic_source_analytics("2026-01-01", "2026-04-01")
 
+        query = collector.analytics_service.query.call_args.kwargs
+        assert query["metrics"] == "engagedViews,estimatedMinutesWatched,averageViewDuration"
+        assert query["sort"] == "-engagedViews"
         assert result["total_views"] == 600
         assert result["sources"]["YT_SEARCH"]["views"] == 300
         assert result["sources"]["YT_SEARCH"]["view_share_percent"] == 50.0
@@ -79,6 +82,9 @@ class TestGetTrafficSourceDetail:
 
         result = collector.get_traffic_source_detail("2026-01-01", "2026-04-01", "YT_SEARCH")
 
+        query = collector.analytics_service.query.call_args.kwargs
+        assert query["metrics"] == "engagedViews,estimatedMinutesWatched"
+        assert query["sort"] == "-engagedViews"
         assert len(result) == 2
         assert result[0]["detail"] == "lofi music"
         assert result[0]["views"] == 100
