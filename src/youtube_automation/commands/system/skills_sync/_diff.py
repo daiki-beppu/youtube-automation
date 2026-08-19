@@ -9,9 +9,11 @@ from pathlib import Path
 
 from youtube_automation.commands.system.skills_sync import (
     _ASSET_SPECS,
+    WORKSPACE_GITIGNORE_SKIP_MESSAGE,
     _asset_root,
     _distribution_entries,
     _guard_target_with_all,
+    _is_workspace_gitignore_target,
     _resolve_file_target,
 )
 from youtube_automation.commands.system.skills_sync._ops import _has_diff, _prunable_orphan_names
@@ -58,6 +60,9 @@ def _diff_all(args: argparse.Namespace) -> int:
 
 def _diff_file_asset(asset: str, spec: dict[str, str], root: Path, target: Path) -> int:
     target = _resolve_file_target(asset, spec, target)
+    if _is_workspace_gitignore_target(asset, target):
+        print(WORKSPACE_GITIGNORE_SKIP_MESSAGE)
+        return 0
     src = root / spec["source_filename"]
     if not target.exists():
         print(f"target が存在しません: {target}", file=sys.stderr)

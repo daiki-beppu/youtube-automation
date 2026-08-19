@@ -40,9 +40,14 @@ from __future__ import annotations
 import argparse
 from importlib.resources import as_file, files
 from pathlib import Path
-from typing import Iterable
+from typing import Final, Iterable
 
 import youtube_automation
+from youtube_automation.configuration import find_workspace_root
+
+WORKSPACE_GITIGNORE_SKIP_MESSAGE: Final[str] = (
+    "workspace レイアウトのため適用対象外です。workspace 用 .gitignore を維持してください。"
+)
 
 # asset ごとの kind / wheel resource 名・開発時 fallback・デフォルト target を集約。
 # (pyproject.toml の force-include で source_subdir 配下が resource_name/ に同梱される)
@@ -183,6 +188,13 @@ def _resolve_file_target(asset: str, spec: dict[str, str], target: Path) -> Path
     if asset == "auth-template" and target.exists() and target.is_dir():
         return target / spec["default_target"]
     return target
+
+
+def _is_workspace_gitignore_target(asset: str, target: Path) -> bool:
+    if asset != "channel-gitignore":
+        return False
+    workspace_root = find_workspace_root(target.parent)
+    return workspace_root is not None and target == workspace_root / ".gitignore"
 
 
 def _guard_target_with_all(args: argparse.Namespace) -> None:
