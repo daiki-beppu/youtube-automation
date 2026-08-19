@@ -161,6 +161,26 @@ def test_migrate_config_refuses_to_overwrite_different_existing_section(
     assert destination.read_bytes() == destination_before
 
 
+def test_migrate_config_refuses_to_overwrite_different_existing_root(
+    channel_dir: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(
+        migrate_config,
+        "SKILL_CONFIG_MIGRATIONS",
+        {"collection-ideate": migrate_config.SkillConfigMigration("wf-new", None)},
+    )
+    source = _write_config(channel_dir, "collection-ideate", {"freshness_days": 7})
+    destination = _write_config(channel_dir, "wf-new", {"freshness_days": 3})
+    source_before = source.read_bytes()
+    destination_before = destination.read_bytes()
+
+    assert main(["migrate-config", "--channel-dir", str(channel_dir)]) == 1
+
+    assert "移行先に既存内容があります" in capsys.readouterr().err
+    assert source.read_bytes() == source_before
+    assert destination.read_bytes() == destination_before
+
+
 def test_production_cli_exposes_suno_to_music_prompt_migration(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -172,3 +192,29 @@ def test_production_cli_exposes_suno_to_music_prompt_migration(
     assert "suno.yaml -> music.yaml::prompt" in capsys.readouterr().out
     assert source.is_file()
     assert not (channel_dir / "config" / "skills" / "music.yaml").exists()
+
+
+def test_production_cli_migrates_consolidated_skill_configs_without_orphans(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    channel_dir = tmp_path / "channel"
+    (channel_dir / "config" / "skills").mkdir(parents=True)
+    sources = {
+        "collection-ideate": {"freshness_days": 7},
+        "loop-video": {"enabled": False},
+        "masterup": {"audio": {"target_duration_min": 60}},
+        "lyria": {"model": "lyria-3"},
+        "benchmark": {"scan_recent": 150},
+    }
+    for name, data in sources.items():
+        _write_config(channel_dir, name, data)
+
+    assert main(["migrate-config", "--channel-dir", str(channel_dir)]) == 0
+
+    assert _read_config(channel_dir, "wf-new") == sources["collection-ideate"]
+    assert _read_config(channel_dir, "thumbnail")["loop"] == sources["loop-video"]
+    assert _read_config(channel_dir, "music")["master"] == sources["masterup"]
+    assert _read_config(channel_dir, "music")["generate"] == sources["lyria"]
+    assert _read_config(channel_dir, "channel-research")["benchmark"] == sources["benchmark"]
+    assert all(not (channel_dir / "config" / "skills" / f"{name}.yaml").exists() for name in sources)
+    assert "孤児 skill-config" not in capsys.readouterr().out
