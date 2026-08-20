@@ -32,7 +32,11 @@ def _valid_insight() -> dict[str, object]:
 
 
 def test_registry_covers_and_compiles_every_repository_schema() -> None:
-    files = {path.name for path in REPO_ROOT.rglob("*.schema.json") if ".venv" not in path.parts}
+    files = {
+        path.name
+        for path in REPO_ROOT.rglob("*.schema.json")
+        if ".venv" not in path.parts and "node_modules" not in path.parts
+    }
 
     assert set(repository_schema_names()) == files
     compile_repository_schemas()

@@ -83,6 +83,7 @@ NON_BILLED_CLIS: dict[str, str] = {
     "yt-ad-coverage": "収集済み analytics_data_*.json のローカル分析のみ",
     "yt-apply-rain-layers": "ローカル ffmpeg 合成のみ",
     "yt-audio-visualizer-fill": "ローカルの Pillow 画像生成のみ",
+    "yt-audio-studio": "ローカル音源の一覧表示・HTTP Range 配信のみ",
     "yt-automation-update": "バージョン pin bump / git 操作のみ",
     "yt-channel": "ローカルの workspace channel 列挙のみ",
     "yt-channel-import": "ローカルの channel repository コピーと config 検証のみ",

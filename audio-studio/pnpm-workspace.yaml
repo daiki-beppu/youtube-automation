@@ -1,0 +1,8 @@
+packages: []
+
+allowBuilds:
+  esbuild: true
+
+overrides:
+  electron-to-chromium: 1.5.409
+  rolldown: 1.2.4

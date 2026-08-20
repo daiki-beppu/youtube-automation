@@ -58,3 +58,7 @@ ADR-0001 以降、TS リライトは同一リポの `feat/ts-rewrite` → main �
 ## Amendment: 公開リリースノートサイト限定 TypeScript 例外（2026-08-01, #3056）
 
 `docs/release-notes/*.md` を公開する静的サイトに限り、`site/` 内の Blume 設定・Astro page・schema・test と Node toolchain を許可する。この例外は Python 製品や tayk core の実装ではなく、生成物は Python wheel / sdist に含めない。Cloudflare Pages への独立配信、許可する責務、品質ゲートの正は ADR-0023 と `docs/development.md::リリースノートサイト開発` とする。
+
+## Amendment: Audio Studio 限定 TypeScript 例外（2026-08-20, #4380）
+
+collection 音源を loopback で編集する Python 製品 UI に限り、`audio-studio/` 内の React + Vite + shadcn/ui source、test、build config と、完成 asset の `src/youtube_automation/audio_studio_dist/` を許可する。Python が filesystem・probe・Range 配信・lifecycle を所有し、frontend は同一 origin API だけを利用する。`dashboard/` と `extensions/shared-ui` を直接 import せず、独立した Base UI / Tailwind CSS v4 workspace とする。責務・配布境界の正は ADR-0028 と `docs/development.md::Audio Studio 開発` とする。
