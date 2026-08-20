@@ -11,6 +11,13 @@ export type TrackResponse = {
   tracks: Track[]
 }
 
+export type OrderResponse = {
+  order: string[]
+  shuffle_seed: number | null
+  pin_first: string[]
+  saved: boolean
+}
+
 export type CleanupSettings = {
   eq: {
     enabled: boolean
@@ -51,6 +58,18 @@ export function isTrackResponse(value: unknown): value is TrackResponse {
         typeof track.extension === "string" &&
         typeof track.audio_url === "string"
     )
+  )
+}
+
+export function isOrderResponse(value: unknown): value is OrderResponse {
+  return (
+    isRecord(value) &&
+    Array.isArray(value.order) &&
+    value.order.every((item) => typeof item === "string") &&
+    (value.shuffle_seed === null || Number.isSafeInteger(value.shuffle_seed)) &&
+    Array.isArray(value.pin_first) &&
+    value.pin_first.every((item) => typeof item === "string") &&
+    typeof value.saved === "boolean"
   )
 }
 

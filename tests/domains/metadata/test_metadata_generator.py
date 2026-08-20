@@ -1449,6 +1449,33 @@ class TestDetectDuplicateTrackTitles:
         ]
         assert gen.detect_duplicate_track_titles() == {"Headphones on at Two": [0, 1]}
 
+    def test_saved_audio_order_controls_chapter_order_and_timestamps(self, tmp_path, monkeypatch):
+        collection = tmp_path / "20260820-live-night-focus"
+        music_dir = collection / "02-Individual-music"
+        documentation = collection / "20-documentation"
+        music_dir.mkdir(parents=True)
+        documentation.mkdir()
+        (music_dir / "01 First.mp3").write_bytes(b"audio")
+        (music_dir / "02 Second.mp3").write_bytes(b"audio")
+        (documentation / "audio-adjustments.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "tracks": {},
+                    "order": ["02 Second.mp3", "01 First.mp3"],
+                }
+            ),
+            encoding="utf-8",
+        )
+        gen = _make_generator("20260820-live-night-focus")
+        gen.collection_path = collection
+        monkeypatch.setattr(gen, "_get_audio_duration", lambda _path: 60)
+
+        tracks = gen.analyze_audio_files()
+
+        assert [track["filename"] for track in tracks] == ["02 Second.mp3", "01 First.mp3"]
+        assert [track["timestamp"] for track in tracks] == ["00:00", "00:59"]
+
 
 # ===========================================================================
 # 16. 同名楽曲リネームの適用と永続化

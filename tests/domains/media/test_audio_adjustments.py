@@ -10,6 +10,7 @@ from youtube_automation.domains.media.audio_adjustments import (
     AudioAdjustments,
     read_audio_adjustments,
     replace_track_cleanup_overrides,
+    replace_track_order,
     validate_cleanup_settings,
 )
 
@@ -34,7 +35,7 @@ def _settings() -> dict[str, object]:
 def test_missing_adjustments_file_is_an_empty_document(tmp_path: Path) -> None:
     document = read_audio_adjustments(tmp_path / "audio-adjustments.json")
 
-    assert document == AudioAdjustments(tracks={}, extra={})
+    assert document == AudioAdjustments(tracks={}, order=None, shuffle_seed=None, pin_first=[], extra={})
 
 
 def test_replace_track_writes_only_values_changed_from_defaults(tmp_path: Path) -> None:
@@ -103,3 +104,48 @@ def test_reader_rejects_path_like_track_names(tmp_path: Path) -> None:
 
     with pytest.raises(ValidationError, match="filename"):
         read_audio_adjustments(path)
+
+
+def test_replace_track_order_preserves_cleanup_and_serializes_owned_keys(tmp_path: Path) -> None:
+    path = tmp_path / "audio-adjustments.json"
+    replace_track_cleanup_overrides(path, "01 First.mp3", _settings(), _settings())
+
+    saved = replace_track_order(
+        path,
+        ["02 Second.wav", "01 First.mp3"],
+        12345,
+        ["02 Second.wav"],
+    )
+
+    assert saved.order == ["02 Second.wav", "01 First.mp3"]
+    assert saved.shuffle_seed == 12345
+    assert saved.pin_first == ["02 Second.wav"]
+    assert json.loads(path.read_text(encoding="utf-8")) == {
+        "schema_version": 1,
+        "tracks": {},
+        "order": ["02 Second.wav", "01 First.mp3"],
+        "shuffle_seed": 12345,
+        "pin_first": ["02 Second.wav"],
+    }
+
+
+@pytest.mark.parametrize(
+    ("order", "seed", "pins"),
+    [
+        (["01.mp3", "01.mp3"], None, []),
+        (["../01.mp3"], None, []),
+        (["01.mp3"], True, []),
+        (["01.mp3"], -1, []),
+        (["01.mp3"], 2**32, []),
+        (["01.mp3", "02.mp3"], None, ["02.mp3"]),
+        (["01.mp3"], None, ["missing.mp3"]),
+    ],
+)
+def test_replace_track_order_rejects_invalid_metadata(
+    tmp_path: Path,
+    order: list[str],
+    seed: object,
+    pins: list[str],
+) -> None:
+    with pytest.raises(ValidationError):
+        replace_track_order(tmp_path / "audio-adjustments.json", order, seed, pins)

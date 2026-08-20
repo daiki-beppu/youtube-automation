@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import random as real_random
 import shutil
 import subprocess
@@ -531,6 +532,36 @@ class TestGenerateMasterShuffle:
         # シャッフルログは出ない
         assert "[Shuffle]" not in capsys.readouterr().out
 
+    def test_explicit_order_controls_ffmpeg_input_order(self, tmp_path, monkeypatch):
+        collection, names = _setup_shuffle_collection(tmp_path, file_count=3)
+        monkeypatch.setattr(generate_master.shutil, "which", lambda _: "/usr/bin/ffmpeg")
+        captured: dict = {}
+
+        def fake_run(cmd, **kwargs):
+            captured["cmd"] = cmd
+            return SimpleNamespace(returncode=0)
+
+        expected = [names[2], names[0], names[1]]
+        with patch.object(generate_master.subprocess, "run", side_effect=fake_run):
+            run_generate_master(collection, 1.0, "192k", order=expected, quiet=True)
+
+        assert [Path(path).name for path in _input_files_in_cmd(captured["cmd"])] == expected
+
+    @pytest.mark.parametrize(
+        "order",
+        [
+            ["01-track.mp3", "02-track.mp3"],
+            ["01-track.mp3", "02-track.mp3", "missing.mp3"],
+            ["01-track.mp3", "01-track.mp3", "03-track.mp3"],
+        ],
+    )
+    def test_explicit_order_rejects_missing_unknown_or_duplicate_files(self, tmp_path, monkeypatch, order):
+        collection, _ = _setup_shuffle_collection(tmp_path, file_count=3)
+        monkeypatch.setattr(generate_master.shutil, "which", lambda _: "/usr/bin/ffmpeg")
+
+        with pytest.raises(ValidationError, match="order と実ファイル"):
+            run_generate_master(collection, 1.0, "192k", order=order, quiet=True)
+
     def test_shuffle_with_seed_is_deterministic(self, tmp_path, monkeypatch):
         # Given: shuffle=True, shuffle_seed=42 — random.Random(42) と同じ並びになる
         collection, names = _setup_shuffle_collection(tmp_path, file_count=5)
@@ -821,6 +852,40 @@ class TestCliShuffle:
         assert rc == 0
         assert captured["kwargs"]["shuffle"] is True
         assert captured["kwargs"]["shuffle_seed"] == 777
+
+    def test_saved_order_overrides_skill_config_when_cli_order_flags_are_absent(self, monkeypatch, tmp_path):
+        captured = self._patch_main_dependencies(
+            monkeypatch,
+            {"audio": {"shuffle": True, "shuffle_seed": 42, "pin_first_count": 1}},
+        )
+        documentation = tmp_path / "20-documentation"
+        documentation.mkdir()
+        (documentation / "audio-adjustments.json").write_text(
+            json.dumps({"schema_version": 1, "tracks": {}, "order": ["02.mp3", "01.mp3"]}),
+            encoding="utf-8",
+        )
+        monkeypatch.setattr("sys.argv", ["yt-generate-master", str(tmp_path)])
+
+        assert generate_master.main() == 0
+        assert captured["kwargs"]["order"] == ["02.mp3", "01.mp3"]
+        assert captured["kwargs"]["shuffle"] is False
+        assert captured["kwargs"]["pin_first"] is None
+        assert captured["kwargs"]["pin_first_count"] is None
+
+    def test_cli_shuffle_overrides_saved_order(self, monkeypatch, tmp_path):
+        captured = self._patch_main_dependencies(monkeypatch, {})
+        documentation = tmp_path / "20-documentation"
+        documentation.mkdir()
+        (documentation / "audio-adjustments.json").write_text(
+            json.dumps({"schema_version": 1, "tracks": {}, "order": ["02.mp3", "01.mp3"]}),
+            encoding="utf-8",
+        )
+        monkeypatch.setattr("sys.argv", ["yt-generate-master", str(tmp_path), "--shuffle-seed", "9"])
+
+        assert generate_master.main() == 0
+        assert captured["kwargs"]["order"] is None
+        assert captured["kwargs"]["shuffle"] is True
+        assert captured["kwargs"]["shuffle_seed"] == 9
 
 
 class TestCliSkillConfigShuffle:

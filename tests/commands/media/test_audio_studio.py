@@ -177,6 +177,64 @@ def test_adjustments_api_returns_defaults_and_saves_only_track_diff(tmp_path: Pa
         thread.join(timeout=2)
 
 
+def test_order_api_returns_default_and_saves_exact_order_seed_and_pins(tmp_path: Path) -> None:
+    collection = _collection(tmp_path)
+    music = collection / "02-Individual-music"
+    (music / "02 Second.wav").write_bytes(b"second")
+    (music / "01 First.mp3").write_bytes(b"first")
+    server = create_server(collection, port=0, asset_root=_assets(tmp_path), duration_probe=lambda _path: 5.0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        connection = http.client.HTTPConnection(DEFAULT_HOST, server.server_port, timeout=2)
+        connection.request("GET", "/api/order")
+        response = connection.getresponse()
+        assert response.status == 200
+        assert json.loads(response.read()) == {
+            "order": ["01 First.mp3", "02 Second.wav"],
+            "shuffle_seed": None,
+            "pin_first": [],
+            "saved": False,
+        }
+
+        payload = {
+            "order": ["02 Second.wav", "01 First.mp3"],
+            "shuffle_seed": 123,
+            "pin_first": ["02 Second.wav"],
+        }
+        connection.request("PUT", "/api/order", body=json.dumps(payload))
+        response = connection.getresponse()
+        assert response.status == 200
+        assert json.loads(response.read()) == {**payload, "saved": True}
+        saved = json.loads((collection / "20-documentation/audio-adjustments.json").read_text())
+        assert {key: saved[key] for key in payload} == payload
+        connection.close()
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
+def test_order_api_rejects_file_set_mismatch(tmp_path: Path) -> None:
+    collection = _collection(tmp_path)
+    (collection / "02-Individual-music" / "01 First.mp3").write_bytes(b"first")
+    server = create_server(collection, port=0, asset_root=_assets(tmp_path), duration_probe=lambda _path: 5.0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        connection = http.client.HTTPConnection(DEFAULT_HOST, server.server_port, timeout=2)
+        payload = {"order": ["missing.mp3"], "shuffle_seed": None, "pin_first": []}
+        connection.request("PUT", "/api/order", body=json.dumps(payload))
+        response = connection.getresponse()
+        assert response.status == 400
+        assert "実ファイル" in json.loads(response.read())["error"]
+        connection.close()
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
 def test_adjustments_api_rejects_unknown_track_and_invalid_settings(tmp_path: Path) -> None:
     collection = _collection(tmp_path)
     (collection / "02-Individual-music" / "track.mp3").write_bytes(b"audio")

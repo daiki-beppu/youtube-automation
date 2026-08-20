@@ -184,4 +184,83 @@ describe("Audio Studio", () => {
       -4
     )
   })
+
+  it("reproduces a seeded shuffle, pins tracks first, and saves the exact order", async () => {
+    const requests: Array<{ input: RequestInfo | URL; init?: RequestInit }> = []
+    const tracks = ["01 First.mp3", "02 Second.mp3", "03 Third.mp3"].map(
+      (file_name, index) => ({
+        id: `track-${index + 1}`,
+        file_name,
+        duration_seconds: 60,
+        extension: "mp3",
+        audio_url: `/api/tracks/track-${index + 1}/audio`,
+      })
+    )
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+        requests.push({ input, init })
+        if (String(input) === "/api/tracks") {
+          return Promise.resolve(
+            new Response(JSON.stringify({ collection_name: "Order test", tracks }))
+          )
+        }
+        if (String(input) === "/api/order" && init?.method === "PUT") {
+          return Promise.resolve(
+            new Response(JSON.stringify({ ...JSON.parse(String(init.body)), saved: true }))
+          )
+        }
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              order: tracks.map((track) => track.file_name),
+              shuffle_seed: null,
+              pin_first: [],
+              saved: false,
+            })
+          )
+        )
+      })
+    )
+
+    const { container } = render(<App />)
+    await screen.findByText("ファイル名順です")
+    const firstHandle = screen.getByRole("button", {
+      name: "01 First.mp3 をドラッグして並べ替え",
+    })
+    const secondHandle = screen.getByRole("button", {
+      name: "02 Second.mp3 をドラッグして並べ替え",
+    })
+    fireEvent.pointerDown(firstHandle)
+    fireEvent.pointerEnter(secondHandle.closest('[data-slot="card"]')!)
+    expect(await screen.findByText("未保存の手動順です")).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText("Shuffle seed"), {
+      target: { value: "42" },
+    })
+    fireEvent.click(screen.getByRole("button", { name: "シャッフル" }))
+    const trackTitles = () =>
+      Array.from(container.querySelectorAll('[data-slot="card-title"]'))
+        .map((element) => element.textContent)
+        .filter((title) => title?.includes(".mp3"))
+    const firstShuffle = trackTitles()
+
+    fireEvent.click(screen.getByRole("button", { name: "シャッフル" }))
+    expect(trackTitles()).toEqual(firstShuffle)
+
+    fireEvent.click(
+      screen.getByRole("switch", { name: "03 Third.mp3 を先頭固定" })
+    )
+    expect(trackTitles()[0]).toContain("03 Third.mp3")
+    fireEvent.click(screen.getByRole("button", { name: "曲順を保存" }))
+    await screen.findByText("曲順を保存しました")
+
+    const put = requests.find(
+      (request) => String(request.input) === "/api/order" && request.init?.method === "PUT"
+    )
+    const body = JSON.parse(String(put?.init?.body))
+    expect(body.order[0]).toBe("03 Third.mp3")
+    expect(body.pin_first).toEqual(["03 Third.mp3"])
+    expect(body.shuffle_seed).toBeNull()
+  })
 })

@@ -14,6 +14,7 @@ from pathlib import Path, PurePath
 from youtube_automation.core.errors import ValidationError
 
 SCHEMA_VERSION = 1
+MAX_SHUFFLE_SEED = 2**32 - 1
 
 _NESTED_FIELDS: dict[str, dict[str, tuple[type[object], float | None, float | None]]] = {
     "eq": {
@@ -42,6 +43,9 @@ class AudioAdjustments:
     """Validated document while preserving keys owned by later Audio Studio stages."""
 
     tracks: dict[str, dict[str, object]]
+    order: list[str] | None
+    shuffle_seed: int | None
+    pin_first: list[str]
     extra: dict[str, object]
 
 
@@ -63,6 +67,26 @@ def _validate_filename(filename: str) -> None:
         or "\x00" in filename
     ):
         raise ValidationError(f"audio-adjustments.json の track filename が不正です: {filename!r}")
+
+
+def _validate_filename_list(value: object, context: str) -> list[str]:
+    if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
+        raise ValidationError(f"audio-adjustments.json の {context} は filename の配列である必要があります")
+    for filename in value:
+        _validate_filename(filename)
+    if len(set(value)) != len(value):
+        raise ValidationError(f"audio-adjustments.json の {context} に重複した filename があります")
+    return list(value)
+
+
+def _validate_shuffle_seed(value: object) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValidationError("audio-adjustments.json の shuffle_seed は integer である必要があります")
+    if not 0 <= value <= MAX_SHUFFLE_SEED:
+        raise ValidationError(f"audio-adjustments.json の shuffle_seed は 0..{MAX_SHUFFLE_SEED} で指定してください")
+    return value
 
 
 def _validate_scalar(
@@ -133,7 +157,7 @@ def validate_cleanup_settings(value: object, *, partial: bool) -> dict[str, obje
 def read_audio_adjustments(path: Path) -> AudioAdjustments:
     """Read the adjustments document, treating absence as an empty document."""
     if not path.exists():
-        return AudioAdjustments(tracks={}, extra={})
+        return AudioAdjustments(tracks={}, order=None, shuffle_seed=None, pin_first=[], extra={})
     if path.is_symlink() or not path.is_file():
         raise ValidationError(f"audio-adjustments.json は通常ファイルである必要があります: {path}")
     try:
@@ -148,8 +172,29 @@ def read_audio_adjustments(path: Path) -> AudioAdjustments:
     for filename, value in raw_tracks.items():
         _validate_filename(filename)
         tracks[filename] = validate_cleanup_settings(value, partial=True)
-    extra = {key: value for key, value in root.items() if key not in {"schema_version", "tracks"}}
-    return AudioAdjustments(tracks=tracks, extra=extra)
+    order = _validate_filename_list(root["order"], "order") if "order" in root else None
+    pin_first = _validate_filename_list(root.get("pin_first", []), "pin_first")
+    shuffle_seed = _validate_shuffle_seed(root.get("shuffle_seed"))
+    if order is not None:
+        unknown_pins = set(pin_first) - set(order)
+        if unknown_pins:
+            raise ValidationError(
+                "audio-adjustments.json の pin_first が order にない filename を含みます: "
+                f"{', '.join(sorted(unknown_pins))}"
+            )
+        if order[: len(pin_first)] != pin_first:
+            raise ValidationError("audio-adjustments.json の pin_first は order の先頭と同じ順序である必要があります")
+    elif pin_first or shuffle_seed is not None:
+        raise ValidationError("audio-adjustments.json の pin_first / shuffle_seed には order が必要です")
+    owned_keys = {"schema_version", "tracks", "order", "shuffle_seed", "pin_first"}
+    extra = {key: value for key, value in root.items() if key not in owned_keys}
+    return AudioAdjustments(
+        tracks=tracks,
+        order=order,
+        shuffle_seed=shuffle_seed,
+        pin_first=pin_first,
+        extra=extra,
+    )
 
 
 def cleanup_settings_diff(settings: object, defaults: object) -> dict[str, object]:
@@ -185,11 +230,34 @@ def merge_cleanup_settings(defaults: object, overrides: object) -> dict[str, obj
     return merged
 
 
+def apply_track_order(files: list[Path], order: list[str] | None) -> list[Path]:
+    """Apply an exact persisted filename order and fail loudly on collection drift."""
+    if order is None:
+        return files
+    by_name = {path.name: path for path in files}
+    requested = set(order)
+    available = set(by_name)
+    if len(order) != len(requested) or requested != available:
+        missing = sorted(available - requested)
+        unknown = sorted(requested - available)
+        raise ValidationError(
+            f"audio-adjustments.json の order と実ファイルが一致しません (missing={missing}, unknown={unknown})"
+        )
+    return [by_name[name] for name in order]
+
+
 def _write_audio_adjustments(path: Path, document: AudioAdjustments) -> None:
     if path.is_symlink():
         raise ValidationError(f"audio-adjustments.json の symlink には書き込めません: {path}")
     path.parent.mkdir(parents=True, exist_ok=True)
-    payload = {"schema_version": SCHEMA_VERSION, "tracks": document.tracks, **document.extra}
+    payload: dict[str, object] = {"schema_version": SCHEMA_VERSION, "tracks": document.tracks}
+    if document.order is not None:
+        payload["order"] = document.order
+    if document.shuffle_seed is not None:
+        payload["shuffle_seed"] = document.shuffle_seed
+    if document.pin_first:
+        payload["pin_first"] = document.pin_first
+    payload.update(document.extra)
     existing_mode = stat.S_IMODE(path.stat().st_mode) if path.exists() else 0o644
     temporary_path: Path | None = None
     try:
@@ -229,6 +297,42 @@ def replace_track_cleanup_overrides(
         tracks[filename] = overrides
     else:
         tracks.pop(filename, None)
-    updated = AudioAdjustments(tracks=tracks, extra=document.extra)
+    updated = AudioAdjustments(
+        tracks=tracks,
+        order=document.order,
+        shuffle_seed=document.shuffle_seed,
+        pin_first=document.pin_first,
+        extra=document.extra,
+    )
+    _write_audio_adjustments(path, updated)
+    return updated
+
+
+def replace_track_order(
+    path: Path,
+    order: object,
+    shuffle_seed: object,
+    pin_first: object,
+) -> AudioAdjustments:
+    """Atomically replace the persisted master order while preserving cleanup data."""
+    validated_order = _validate_filename_list(order, "order")
+    validated_pins = _validate_filename_list(pin_first, "pin_first")
+    validated_seed = _validate_shuffle_seed(shuffle_seed)
+    unknown_pins = set(validated_pins) - set(validated_order)
+    if unknown_pins:
+        raise ValidationError(
+            "audio-adjustments.json の pin_first が order にない filename を含みます: "
+            f"{', '.join(sorted(unknown_pins))}"
+        )
+    if validated_order[: len(validated_pins)] != validated_pins:
+        raise ValidationError("audio-adjustments.json の pin_first は order の先頭と同じ順序である必要があります")
+    document = read_audio_adjustments(path)
+    updated = AudioAdjustments(
+        tracks=document.tracks,
+        order=validated_order,
+        shuffle_seed=validated_seed,
+        pin_first=validated_pins,
+        extra=document.extra,
+    )
     _write_audio_adjustments(path, updated)
     return updated
