@@ -29,6 +29,7 @@ def render_review_html(
     action = endpoint or ""
     cards = "".join(
         _candidate_card(
+            index,
             candidate.id,
             candidate.label,
             candidate.details,
@@ -37,7 +38,7 @@ def render_review_html(
             action,
             compact_image=candidate.id in compact_image_ids,
         )
-        for candidate in manifest.candidates
+        for index, candidate in enumerate(manifest.candidates, start=1)
     )
     package = "youtube_automation.domains.documents.resources"
     template = Template(files(package).joinpath("review.html").read_text(encoding="utf-8"))
@@ -60,6 +61,7 @@ def render_review_html(
 
 
 def _candidate_card(
+    index: int,
     candidate_id: str,
     label: str,
     details: tuple[tuple[str, str], ...],
@@ -69,22 +71,33 @@ def _candidate_card(
     *,
     compact_image: bool,
 ) -> str:
+    title_id = f"candidate-{index}-title"
+    qa_id = f"candidate-{index}-qa"
     preview = _preview(media_path, label, compact_image=compact_image) if media_path is not None else ""
+    if preview:
+        preview = f'<div class="review-preview" aria-label="{escape(label, quote=True)} preview">{preview}</div>'
     comparison = ""
     if details:
         rows = "".join(f"<dt>{escape(key)}</dt><dd>{escape(value)}</dd>" for key, value in details)
-        comparison = f'<dl class="review-comparison">{rows}</dl>'
+        comparison = (
+            f'<section class="review-qa" aria-labelledby="{qa_id}"><h3 id="{qa_id}">確認項目</h3>'
+            f'<dl class="review-comparison">{rows}</dl></section>'
+        )
     form = ""
     if action:
         form = (
+            f'<div class="review-action"><p>この候補で確定します。</p>'
             f'<form method="post" action="{escape(action, quote=True)}">'
             f'<input type="hidden" name="artifact_digest" value="{manifest.artifact_digest}">'
-            f'<button type="submit" name="candidate_id" value="{escape(candidate_id, quote=True)}">'
-            "この候補を選ぶ</button></form>"
+            f'<button type="submit" name="candidate_id" value="{escape(candidate_id, quote=True)}" '
+            f'aria-label="{escape(label, quote=True)} を選ぶ">'
+            "この候補を選ぶ</button></form></div>"
         )
     return (
-        f'<section class="view-card" data-candidate-id="{escape(candidate_id, quote=True)}">'
-        f"<h2>{escape(label)}</h2>{comparison}{preview}{form}</section>"
+        f'<article class="view-card review-candidate" data-candidate-id="{escape(candidate_id, quote=True)}" '
+        f'aria-labelledby="{title_id}"><header class="review-candidate-header">'
+        f'<p class="eyebrow">候補 {index}</p><h2 id="{title_id}">{escape(label)}</h2></header>'
+        f"{preview}{comparison}{form}</article>"
     )
 
 
