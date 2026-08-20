@@ -25,13 +25,15 @@ def render_workflow_status(snapshot: WorkflowStatusSnapshot) -> str:
         )
         + '<nav class="filters" aria-label="表示フィルター">'
         + "".join(
-            f'<label for="filter-{status}">{label}</label>'
+            f'<label for="filter-{status}"><span class="filter-selected" aria-hidden="true">'
+            f"選択中 · </span>{label}</label>"
             for status, label in zip(_FILTERS, ("すべて", "企画中", "公開工程", "完了"), strict=True)
         )
         + "</nav>"
     )
     if snapshot.collections:
-        collections = "".join(_render_collection(item) for item in snapshot.collections)
+        ordered = sorted(snapshot.collections, key=lambda item: not _needs_attention(item))
+        collections = "".join(_render_collection(item) for item in ordered)
     else:
         collections = '<p class="empty">コレクションはありません</p>'
     html = template.substitute(
@@ -45,10 +47,21 @@ def render_workflow_status(snapshot: WorkflowStatusSnapshot) -> str:
 
 
 def _render_collection(item: CollectionStatusView) -> str:
-    warnings = ""
-    if item.warnings:
-        warnings = (
-            '<ul class="warnings">' + "".join(f"<li>{escape(warning)}</li>" for warning in item.warnings) + "</ul>"
+    attention_items: list[str] = []
+    if item.stale:
+        attention_items.append(f"停滞: {escape(item.stalled_for)}（最終更新 {escape(item.updated_at)}）")
+    attention_items.extend(f"警告: {escape(warning)}" for warning in item.warnings)
+    attention_items.extend(
+        f"{escape(artifact.label)}: {_status_label(artifact.status)} — {escape(artifact.detail)}"
+        for artifact in item.artifacts
+        if artifact.status != "complete"
+    )
+    attention = ""
+    if attention_items:
+        attention = (
+            '<section class="attention" aria-label="要対応"><h3>要対応</h3><ul>'
+            + "".join(f"<li>{message}</li>" for message in attention_items)
+            + "</ul></section>"
         )
     artifacts = "".join(
         "<tr>"
@@ -58,19 +71,25 @@ def _render_collection(item: CollectionStatusView) -> str:
         "</tr>"
         for artifact in item.artifacts
     )
-    stale = '<span class="stale">停滞</span>' if item.stale else ""
     return (
-        f'<article class="collection-card" data-status="{item.status}">'
-        f'<header><p class="status">{_collection_label(item.status)}</p><h2>{escape(item.name)}</h2></header>'
+        f'<article class="collection-card" data-status="{item.status}" data-slug="{escape(item.slug, quote=True)}" '
+        f'data-attention="{str(bool(attention_items)).lower()}">'
+        f'<header><p class="status">{_collection_label(item.status)} · phase {escape(item.phase)}</p>'
+        f"<h2>{escape(item.name)}</h2></header>{attention}"
         '<dl class="summary">'
         f"<div><dt>phase</dt><dd>{escape(item.phase)}</dd></div>"
         f"<div><dt>blocker</dt><dd>{escape(item.blocker)}</dd></div>"
         f"<div><dt>next action</dt><dd>{escape(item.next_action)}</dd></div>"
-        f"<div><dt>更新</dt><dd>{escape(item.updated_at)} / {escape(item.stalled_for)} {stale}</dd></div>"
+        f"<div><dt>更新</dt><dd>{escape(item.updated_at)} / {escape(item.stalled_for)}</dd></div>"
         "</dl>"
-        "<table><caption>成果物</caption><thead><tr><th>項目</th><th>状態</th><th>根拠</th></tr></thead>"
-        f"<tbody>{artifacts}</tbody></table>{warnings}</article>"
+        '<div class="table-scroll"><table><caption>成果物の詳細</caption>'
+        "<thead><tr><th>項目</th><th>状態</th><th>根拠</th></tr></thead>"
+        f"<tbody>{artifacts}</tbody></table></div></article>"
     )
+
+
+def _needs_attention(item: CollectionStatusView) -> bool:
+    return item.stale or bool(item.warnings) or any(artifact.status != "complete" for artifact in item.artifacts)
 
 
 def _status_label(status: str) -> str:
