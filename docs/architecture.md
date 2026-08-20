@@ -76,7 +76,9 @@ CLAUDE.md の「アーキテクチャ」節の詳細版。要点は CLAUDE.md �
 
 **dashboard**: 全 first-party チャンネルの analytics スナップショットを起動時に最新化して一覧表示するローカル Web UI。Python HTTP server が registry、全チャンネルの直列収集、read model/API/build asset 配信を担い、`dashboard/` の React + Vite + shadcn/ui 表示層は同一 origin の API だけを読む。SSOT は各チャンネルの `data/analytics_data_*.json`（将来は local store）。channel registry で対象チャンネルを解決し、失敗はチャンネル単位の部分エラーとして隔離する。
 
-**audio studio**: 1 collection の `02-Individual-music/` を loopback 限定で一覧・再生し、後続の非破壊編集操作を載せるローカル Web UI。Python server が filesystem allowlist、probe、Range 配信、lifecycle を所有し、`audio-studio/` の React + Vite + shadcn/ui 表示層は同一 origin API だけを読む。
+**audio studio**: 1 collection の `02-Individual-music/` を loopback 限定で一覧・再生し、後続の非破壊編集操作を載せるローカル Web UI。Python server が filesystem allowlist、probe、Range 配信、編集値の検証・保存、lifecycle を所有し、`audio-studio/` の React + Vite + shadcn/ui 表示層は同一 origin API だけを利用する。
+
+**audio adjustments document**: collection の `20-documentation/audio-adjustments.json` に置く Audio Studio 編集意図の正本。`tracks.<filename>` は skill-config 既定から変えた cleanup 値だけを保持し、後続の曲順・master 仕上げは別トップレベルキーを追加する。原音・生成済み音声そのものは正本にしない。
 
 **operator documentation site**: `docs/release-notes/*.md` と明示的な運用者向け Markdown allowlist を公開用の SSOT とし、`site/` の Blume workspace が目的別入口・詳細ページへ変換する静的 Web サイト。Cloudflare Pages から配信し、site workspace 自体は Python package や下流チャンネルへの asset 配布には含めない。
 
@@ -176,6 +178,7 @@ Python 版 skill-config の正規キーは `configuration/skills.py` が所有�
 - `src/youtube_automation/configuration/` — 設定 loader / dataclass owner
 - `src/youtube_automation/infrastructure/legacy_utils/` — 再配置後も下流公開 import を維持する compatibility adapter 群
 - `src/youtube_automation/commands/` — `yt-*` CLI の thin adapter。`analytics` / `channel` / `collections` / `distrokid` / `documents` / `media` / `metadata` / `suno` / `system` / `thumbnail` / `uploads` / `youtube` の 12 domain に分割し、argparse・stdio・exit・composition を所有する。アップロード CLI（Auto / Collection / Shorts）は `commands/uploads/` が入口で、実装は `domains/uploads/` が持つ
+- `src/youtube_automation/domains/media/audio_adjustments.py` — `audio-adjustments.json::tracks` の検証、既定値との差分化、他段キーを保つ原子的更新を所有する
 - `src/youtube_automation/entrypoints.py` — console script wrapper。`pyproject.toml [project.scripts]` の全 `yt-*` がここを経由し、**例外なく** `commands/` 配下の module を `import_module` して `main` を呼ぶ
 - `src/youtube_automation/commands/channel/channel_init_templates.py` — channel-init が生成する設定テンプレート
 - `.claude/skills/` — 自動化スキル群（Claude Code / Codex 共用）。wheel に `_skills/` として `force-include` され、`yt-skills sync` で各チャンネルへ展開される

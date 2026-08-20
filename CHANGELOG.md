@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `feat(wf-status)`: 制作状況 View で phase・要対応・成果物詳細の順に情報を整理し、停滞・警告・未生成を先頭表示して mobile と keyboard でも絞り込みやすくする（#4378）。
 - `feat(documents)`: review View で候補名・preview・固定 QA・確定操作を一意に関連付け、画像・音声・動画・テキストを mobile と keyboard でも比較しやすくする（#4377）。
 - `feat(documents)`: schema 文書 View で要点・主要指標を先に表示し、長い根拠や未知の追加データを欠落させず native details へ段階表示する（#4376）。
+- `feat(audio-studio)`: 曲ごとの cleanup 値を Web Audio EQ で試聴して差分保存し、`yt-suno-audio-cleanup` が対象曲だけへ適用できるようにする（#4381）。
 - `feat(audio-studio)`: `yt-audio-studio` で collection の個別音源を尺・形式つきで一覧表示し、HTTP Range 対応 player から再生・シークできるようにする（#4380）。
 - `refactor(localserver)`: collection 探索・loopback CORS・PID / stop / startup-lock の規約を server 種別に依存しない共有モジュールへ抽出し、既存 collection server の外部挙動を維持する（#4379）。
 - `fix(skills)`: `yt-skills migrate-config` に統合済み 5 skill の移行先を追加し、孤児 config を `wf-new` / `thumbnail` / `music` / `channel-research` へ安全に移行できるようにする（#4333）。

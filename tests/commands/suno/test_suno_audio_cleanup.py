@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 import threading
 from pathlib import Path
@@ -11,6 +12,7 @@ import pytest
 from youtube_automation.commands.suno import suno_audio_cleanup as mod
 from youtube_automation.commands.suno.suno_audio_cleanup import (
     CleanupConfig,
+    apply_cleanup_overrides,
     build_filter,
     cleanup_collection,
     collect_audio_files,
@@ -56,6 +58,20 @@ def test_resolve_cleanup_config_accepts_overrides() -> None:
     assert cfg.target_lufs == -16.0
     assert cfg.true_peak == -2.0
     assert cfg.muddiness_gain_db == -3.0
+
+
+def test_apply_cleanup_overrides_changes_only_explicit_track_values() -> None:
+    defaults = CleanupConfig(enabled=True, muddiness_gain_db=-2.0, limiter=True)
+
+    resolved = apply_cleanup_overrides(
+        defaults,
+        {"eq": {"muddiness_gain_db": -4.0}, "limiter": {"enabled": False}},
+    )
+
+    assert resolved.muddiness_gain_db == -4.0
+    assert resolved.limiter is False
+    assert resolved.harshness_gain_db == defaults.harshness_gain_db
+    assert resolved.bitrate == defaults.bitrate
 
 
 def test_resolve_cleanup_config_rejects_bad_shape() -> None:
@@ -177,6 +193,55 @@ def test_cleanup_collection_disabled_is_noop(tmp_path: Path, monkeypatch, capsys
     rc = cleanup_collection(collection, apply=False)
     assert rc == 0
     assert "enabled=false" in capsys.readouterr().out
+
+
+def test_cleanup_collection_without_adjustments_preserves_default_config(tmp_path: Path, monkeypatch) -> None:
+    collection = _make_collection(tmp_path, ["01-a.mp3"])
+    observed: list[CleanupConfig] = []
+    monkeypatch.setattr(
+        mod,
+        "load_skill_config",
+        lambda _skill: {"post_processing": {"suno_audio_cleanup": {"enabled": True}}},
+    )
+    monkeypatch.setattr(
+        mod,
+        "process_file",
+        lambda _path, cfg, **_kwargs: observed.append(cfg) or True,
+    )
+
+    assert cleanup_collection(collection, apply=True, jobs=1, quiet=True) == 0
+    assert observed == [resolve_cleanup_config({"post_processing": {"suno_audio_cleanup": {"enabled": True}}})]
+
+
+def test_cleanup_collection_applies_override_only_to_matching_filename(tmp_path: Path, monkeypatch) -> None:
+    collection = _make_collection(tmp_path, ["01-a.mp3", "02-b.mp3"])
+    paths = mod.CollectionPaths(collection)
+    paths.docs_dir.mkdir()
+    paths.audio_adjustments_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "tracks": {"01-a.mp3": {"eq": {"muddiness_gain_db": -5.0}}},
+            }
+        ),
+        encoding="utf-8",
+    )
+    observed: dict[str, CleanupConfig] = {}
+    monkeypatch.setattr(
+        mod,
+        "load_skill_config",
+        lambda _skill: {"post_processing": {"suno_audio_cleanup": {"enabled": True}}},
+    )
+
+    def capture(path, cfg, **_kwargs):
+        observed[path.name] = cfg
+        return True
+
+    monkeypatch.setattr(mod, "process_file", capture)
+
+    assert cleanup_collection(collection, apply=True, jobs=1, quiet=True) == 0
+    assert observed["01-a.mp3"].muddiness_gain_db == -5.0
+    assert observed["02-b.mp3"].muddiness_gain_db == -2.0
 
 
 def test_cleanup_collection_apply_uses_bounded_default_concurrency(tmp_path: Path, monkeypatch) -> None:

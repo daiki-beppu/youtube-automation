@@ -21,7 +21,17 @@ from typing import cast
 from urllib.parse import unquote, urlsplit
 
 from youtube_automation.commands._shared.cli_harness import run_cli
-from youtube_automation.core.errors import ConfigError
+from youtube_automation.commands.suno.suno_audio_cleanup import (
+    cleanup_config_settings,
+    resolve_cleanup_config,
+)
+from youtube_automation.configuration.skills import load_skill_config
+from youtube_automation.core.errors import ConfigError, ValidationError
+from youtube_automation.domains.media.audio_adjustments import (
+    merge_cleanup_settings,
+    read_audio_adjustments,
+    replace_track_cleanup_overrides,
+)
 from youtube_automation.domains.media.audio_formats import AUDIO_EXTS
 from youtube_automation.infrastructure.file_lock import file_lock
 from youtube_automation.infrastructure.localserver.cors import is_origin_allowed
@@ -46,11 +56,20 @@ DEFAULT_PORT = 8766
 SERVER_KIND = "audio-studio"
 TRACKS_ROUTE = "/api/tracks"
 _TRACK_AUDIO_PATTERN = re.compile(r"^/api/tracks/(?P<track_id>[a-f0-9]{16})/audio$")
+_TRACK_ADJUSTMENTS_PATTERN = re.compile(r"^/api/tracks/(?P<track_id>[a-f0-9]{16})/adjustments$")
 _RANGE_PATTERN = re.compile(r"^bytes=(?P<start>\d*)-(?P<end>\d*)$")
+_MAX_JSON_BODY_BYTES = 64 * 1024
 
 
 class _StopRequested(RuntimeError):
     pass
+
+
+def _channel_dir_for_collection(collection_dir: Path) -> Path:
+    for candidate in (collection_dir, *collection_dir.parents):
+        if (candidate / "config/channel").is_dir():
+            return candidate
+    return collection_dir
 
 
 def build_track_payload(
@@ -97,6 +116,7 @@ class AudioStudioServer(ThreadingHTTPServer):
         asset_root: Traversable,
         track_payload: Mapping[str, object],
         track_files: Mapping[str, Path],
+        cleanup_defaults: Mapping[str, object] | None = None,
         stop_path: Path | None = None,
     ) -> None:
         super().__init__(address, AudioStudioRequestHandler)
@@ -104,6 +124,8 @@ class AudioStudioServer(ThreadingHTTPServer):
         self.asset_root = asset_root
         self.track_payload = dict(track_payload)
         self.track_files = dict(track_files)
+        self.cleanup_defaults = dict(cleanup_defaults) if cleanup_defaults is not None else None
+        self.audio_adjustments_path = CollectionPaths(collection_dir).audio_adjustments_path
         self.stop_path = stop_path
 
     def service_actions(self) -> None:
@@ -201,6 +223,68 @@ class AudioStudioRequestHandler(BaseHTTPRequestHandler):
                 self.wfile.write(chunk)
                 remaining -= len(chunk)
 
+    def _defaults(self) -> dict[str, object]:
+        if self.server.cleanup_defaults is None:
+            config = resolve_cleanup_config(
+                load_skill_config(
+                    "masterup",
+                    channel_dir=_channel_dir_for_collection(self.server.collection_dir),
+                )
+            )
+            self.server.cleanup_defaults = cleanup_config_settings(config)
+        return dict(self.server.cleanup_defaults)
+
+    def _adjustments_payload(self, track: Path) -> dict[str, object]:
+        defaults = self._defaults()
+        document = read_audio_adjustments(self.server.audio_adjustments_path)
+        overrides = document.tracks.get(track.name, {})
+        return {
+            "defaults": defaults,
+            "settings": merge_cleanup_settings(defaults, overrides),
+            "overrides": overrides,
+        }
+
+    def _read_json_body(self) -> Mapping[str, object]:
+        raw_length = self.headers.get("Content-Length")
+        try:
+            length = int(raw_length or "0")
+        except ValueError as error:
+            raise ValidationError("Content-Length が不正です") from error
+        if length <= 0 or length > _MAX_JSON_BODY_BYTES:
+            raise ValidationError(f"JSON body は 1..{_MAX_JSON_BODY_BYTES} bytes で指定してください")
+        try:
+            payload = json.loads(self.rfile.read(length))
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise ValidationError(f"JSON body が不正です: {error}") from error
+        if not isinstance(payload, Mapping):
+            raise ValidationError("JSON body は object である必要があります")
+        return payload
+
+    def _put_adjustments(self, track: Path) -> None:
+        payload = self._read_json_body()
+        if set(payload) != {"settings"}:
+            raise ValidationError("JSON body は settings だけを含む必要があります")
+        collection_root = self.server.collection_dir.resolve()
+        if not self.server.audio_adjustments_path.parent.resolve().is_relative_to(collection_root):
+            raise ValidationError("audio-adjustments.json の保存先が collection 外を指しています")
+        defaults = self._defaults()
+        with file_lock(self.server.audio_adjustments_path):
+            document = replace_track_cleanup_overrides(
+                self.server.audio_adjustments_path,
+                track.name,
+                payload["settings"],
+                defaults,
+            )
+        overrides = document.tracks.get(track.name, {})
+        self._json(
+            HTTPStatus.OK,
+            {
+                "defaults": defaults,
+                "settings": merge_cleanup_settings(defaults, overrides),
+                "overrides": overrides,
+            },
+        )
+
     def do_GET(self) -> None:
         path = urlsplit(self.path).path
         if path.startswith("/api/") and not self._cors_allowed():
@@ -217,18 +301,51 @@ class AudioStudioRequestHandler(BaseHTTPRequestHandler):
                 return
             self._audio(track)
             return
+        adjustment_match = _TRACK_ADJUSTMENTS_PATTERN.fullmatch(path)
+        if adjustment_match is not None:
+            track = self.server.track_files.get(adjustment_match.group("track_id"))
+            if track is None or not track.is_file() or track.is_symlink():
+                self._json(HTTPStatus.NOT_FOUND, {"error": "track not found"})
+                return
+            try:
+                self._json(HTTPStatus.OK, self._adjustments_payload(track))
+            except ValidationError as error:
+                self._json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+            except ConfigError as error:
+                self._json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": str(error)})
+            return
         if path.startswith("/api/"):
             self._json(HTTPStatus.NOT_FOUND, {"error": "API path not found"})
             return
         self._static(path)
+
+    def do_PUT(self) -> None:
+        path = urlsplit(self.path).path
+        if not self._cors_allowed():
+            self._json(HTTPStatus.FORBIDDEN, {"error": "origin not allowed"})
+            return
+        match = _TRACK_ADJUSTMENTS_PATTERN.fullmatch(path)
+        if match is None:
+            self._json(HTTPStatus.NOT_FOUND, {"error": "API path not found"})
+            return
+        track = self.server.track_files.get(match.group("track_id"))
+        if track is None or not track.is_file() or track.is_symlink():
+            self._json(HTTPStatus.NOT_FOUND, {"error": "track not found"})
+            return
+        try:
+            self._put_adjustments(track)
+        except ValidationError as error:
+            self._json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+        except ConfigError as error:
+            self._json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": str(error)})
 
     def do_OPTIONS(self) -> None:
         if not self._cors_allowed():
             self._json(HTTPStatus.FORBIDDEN, {"error": "origin not allowed"})
             return
         self.send_response(HTTPStatus.NO_CONTENT)
-        self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Range")
+        self.send_header("Access-Control-Allow-Methods", "GET, PUT, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Range")
         self.send_header("Content-Length", "0")
         self._common_headers()
         self.end_headers()
@@ -263,6 +380,7 @@ def create_server(
     asset_root: Traversable | None = None,
     stop_path: Path | None = None,
     duration_probe: Callable[[Path], float | None] = probe_duration,
+    cleanup_defaults: Mapping[str, object] | None = None,
 ) -> AudioStudioServer:
     payload, track_files = build_track_payload(collection_dir, duration_probe=duration_probe)
     resolved_assets = asset_root or files("youtube_automation").joinpath("audio_studio_dist")
@@ -272,6 +390,7 @@ def create_server(
         asset_root=resolved_assets,
         track_payload=payload,
         track_files=track_files,
+        cleanup_defaults=cleanup_defaults,
         stop_path=stop_path,
     )
 
