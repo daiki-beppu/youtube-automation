@@ -21,6 +21,11 @@ from typing import cast
 from urllib.parse import unquote, urlsplit
 
 from youtube_automation.commands._shared.cli_harness import run_cli
+from youtube_automation.commands.media.finalize_master import (
+    finalize_config_settings,
+    finalize_master,
+    find_ambient_layers,
+)
 from youtube_automation.commands.media.master_adjust import adjust_master
 from youtube_automation.commands.suno.suno_audio_cleanup import (
     cleanup_config_settings,
@@ -33,6 +38,7 @@ from youtube_automation.domains.media.audio_adjustments import (
     master_settings_from_cleanup,
     merge_cleanup_settings,
     read_audio_adjustments,
+    replace_finalize_adjustments,
     replace_master_adjustments,
     replace_track_cleanup_overrides,
     replace_track_order,
@@ -64,6 +70,8 @@ ORDER_ROUTE = "/api/order"
 MASTER_ADJUSTMENTS_ROUTE = "/api/master/adjustments"
 MASTER_APPLY_ROUTE = "/api/master/apply"
 MASTER_AUDIO_ROUTE = "/api/master/audio"
+FINALIZE_ADJUSTMENTS_ROUTE = "/api/finalize/adjustments"
+FINALIZE_APPLY_ROUTE = "/api/finalize/apply"
 _TRACK_AUDIO_PATTERN = re.compile(r"^/api/tracks/(?P<track_id>[a-f0-9]{16})/audio$")
 _TRACK_ADJUSTMENTS_PATTERN = re.compile(r"^/api/tracks/(?P<track_id>[a-f0-9]{16})/adjustments$")
 _RANGE_PATTERN = re.compile(r"^bytes=(?P<start>\d*)-(?P<end>\d*)$")
@@ -130,6 +138,7 @@ class AudioStudioServer(ThreadingHTTPServer):
     ) -> None:
         super().__init__(address, AudioStudioRequestHandler)
         self.collection_dir = collection_dir
+        self.channel_dir = _channel_dir_for_collection(collection_dir)
         self.asset_root = asset_root
         self.track_payload = dict(track_payload)
         self.track_files = dict(track_files)
@@ -137,6 +146,7 @@ class AudioStudioServer(ThreadingHTTPServer):
         self.audio_adjustments_path = CollectionPaths(collection_dir).audio_adjustments_path
         self.master_audio_path = CollectionPaths(collection_dir).master_audio_path
         self.master_backup_path = CollectionPaths(collection_dir).master_adjustment_backup_path
+        self.finalize_backup_path = CollectionPaths(collection_dir).finalize_backup_path
         self.stop_path = stop_path
 
     def service_actions(self) -> None:
@@ -361,6 +371,42 @@ class AudioStudioRequestHandler(BaseHTTPRequestHandler):
             replace_master_adjustments(self.server.audio_adjustments_path, payload["settings"])
         self._json(HTTPStatus.OK, self._master_payload())
 
+    def _finalize_payload(self) -> dict[str, object]:
+        defaults = finalize_config_settings(load_skill_config("masterup", channel_dir=self.server.channel_dir))
+        document = read_audio_adjustments(self.server.audio_adjustments_path)
+        settings = document.finalize if document.finalize is not None else defaults
+        ambient = cast(Mapping[str, object], settings["ambient_layers"])
+        layers = find_ambient_layers(
+            self.server.channel_dir,
+            layers_dirname=cast(str, ambient["dirname"]),
+            glob_pattern=cast(str, ambient["glob"]),
+        )
+        master_available = self.server.master_audio_path.is_file() and not self.server.master_audio_path.is_symlink()
+        if not layers:
+            reason = "ambient layer が見つからないため pass-through します"
+        elif not master_available:
+            reason = "master.mp3 がありません"
+        else:
+            reason = None
+        return {
+            "available": bool(layers) and master_available,
+            "reason": reason,
+            "layers": [layer.name for layer in layers],
+            "defaults": defaults,
+            "settings": settings,
+            "has_backup": self.server.finalize_backup_path.is_file()
+            and not self.server.finalize_backup_path.is_symlink(),
+        }
+
+    def _put_finalize_adjustments(self) -> None:
+        payload = self._read_json_body()
+        if set(payload) != {"settings"}:
+            raise ValidationError("JSON body は settings だけを含む必要があります")
+        self._validate_adjustments_destination()
+        with file_lock(self.server.audio_adjustments_path):
+            replace_finalize_adjustments(self.server.audio_adjustments_path, payload["settings"])
+        self._json(HTTPStatus.OK, self._finalize_payload())
+
     def do_GET(self) -> None:
         path = urlsplit(self.path).path
         if path.startswith("/api/") and not self._cors_allowed():
@@ -389,6 +435,14 @@ class AudioStudioRequestHandler(BaseHTTPRequestHandler):
                 self._json(HTTPStatus.NOT_FOUND, {"error": "master not found"})
                 return
             self._audio(master)
+            return
+        if path == FINALIZE_ADJUSTMENTS_ROUTE:
+            try:
+                self._json(HTTPStatus.OK, self._finalize_payload())
+            except ValidationError as error:
+                self._json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+            except ConfigError as error:
+                self._json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": str(error)})
             return
         match = _TRACK_AUDIO_PATTERN.fullmatch(path)
         if match is not None:
@@ -435,6 +489,14 @@ class AudioStudioRequestHandler(BaseHTTPRequestHandler):
             except ConfigError as error:
                 self._json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": str(error)})
             return
+        if path == FINALIZE_ADJUSTMENTS_ROUTE:
+            try:
+                self._put_finalize_adjustments()
+            except ValidationError as error:
+                self._json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+            except ConfigError as error:
+                self._json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": str(error)})
+            return
         match = _TRACK_ADJUSTMENTS_PATTERN.fullmatch(path)
         if match is None:
             self._json(HTTPStatus.NOT_FOUND, {"error": "API path not found"})
@@ -455,12 +517,39 @@ class AudioStudioRequestHandler(BaseHTTPRequestHandler):
         if not self._cors_allowed():
             self._json(HTTPStatus.FORBIDDEN, {"error": "origin not allowed"})
             return
-        if path != MASTER_APPLY_ROUTE:
+        if path == MASTER_APPLY_ROUTE:
+            try:
+                adjust_master(self.server.collection_dir, quiet=True)
+                self._json(HTTPStatus.OK, {**self._master_payload(), "applied": True})
+            except ValidationError as error:
+                self._json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+            except ConfigError as error:
+                self._json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": str(error)})
+            return
+        if path != FINALIZE_APPLY_ROUTE:
             self._json(HTTPStatus.NOT_FOUND, {"error": "API path not found"})
             return
         try:
-            adjust_master(self.server.collection_dir, quiet=True)
-            self._json(HTTPStatus.OK, {**self._master_payload(), "applied": True})
+            before = self._finalize_payload()
+            if not before["available"]:
+                self._json(HTTPStatus.OK, {**before, "applied": False, "pass_through": True})
+                return
+            result = finalize_master(self.server.collection_dir, self.server.channel_dir, quiet=True)
+            if result != 0:
+                raise ValidationError("ambient finalize に失敗しました")
+            document = read_audio_adjustments(self.server.audio_adjustments_path)
+            master_reapplied = document.master is not None
+            if master_reapplied:
+                adjust_master(self.server.collection_dir, quiet=True)
+            self._json(
+                HTTPStatus.OK,
+                {
+                    **self._finalize_payload(),
+                    "applied": True,
+                    "pass_through": False,
+                    "master_reapplied": master_reapplied,
+                },
+            )
         except ValidationError as error:
             self._json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
         except ConfigError as error:

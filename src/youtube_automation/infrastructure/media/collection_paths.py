@@ -96,6 +96,10 @@ class CollectionPaths:
         return self.master_dir / "originals-pre-adjust" / "master.mp3"
 
     @property
+    def finalize_backup_path(self) -> Path:
+        return self.master_dir / "originals-pre-finalize" / "master.mp3"
+
+    @property
     def thumbnail_prompts_path(self) -> Path:
         return self.docs_dir / "thumbnail-prompts.md"
 

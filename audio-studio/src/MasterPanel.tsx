@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
+import { FinalizePanel } from "@/FinalizePanel"
 
 async function responseError(response: Response): Promise<Error> {
   try {
@@ -319,6 +320,9 @@ export function MasterPanel() {
             }
           />
         </section>
+
+        <Separator />
+        <FinalizePanel onApplied={() => setRevision(Date.now())} />
 
         <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
           <p className="text-sm text-muted-foreground" role="status">

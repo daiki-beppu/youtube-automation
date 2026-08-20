@@ -8,6 +8,7 @@ import sys
 import threading
 import time
 from pathlib import Path
+from unittest.mock import MagicMock
 from urllib.request import urlopen
 
 import pytest
@@ -19,7 +20,11 @@ from youtube_automation.commands.media.audio_studio import (
     create_server,
 )
 from youtube_automation.commands.suno.suno_audio_cleanup import CleanupConfig, cleanup_config_settings
-from youtube_automation.domains.media.audio_adjustments import master_settings_from_cleanup
+from youtube_automation.domains.media.audio_adjustments import (
+    master_settings_from_cleanup,
+    replace_master_adjustments,
+)
+from youtube_automation.infrastructure.media.collection_paths import CollectionPaths
 
 
 def _collection(tmp_path: Path) -> Path:
@@ -321,6 +326,109 @@ def test_master_api_reports_missing_master(tmp_path: Path) -> None:
         response = connection.getresponse()
         assert response.status == 404
         response.read()
+        connection.close()
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
+def test_finalize_api_saves_applies_and_reapplies_master_adjustment(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    collection = _collection(tmp_path)
+    (collection / "01-master/master.mp3").write_bytes(b"master")
+    layer_dir = collection / "branding/rain_layers"
+    layer_dir.mkdir(parents=True)
+    (layer_dir / "rain_001.wav").write_bytes(b"rain")
+    defaults = cleanup_config_settings(CleanupConfig(enabled=True))
+    master_settings = master_settings_from_cleanup(defaults)
+    replace_master_adjustments(CollectionPaths(collection).audio_adjustments_path, master_settings)
+    monkeypatch.setattr(audio_studio, "load_skill_config", lambda *_args, **_kwargs: {})
+    finalized: list[Path] = []
+    adjusted: list[Path] = []
+    monkeypatch.setattr(
+        audio_studio,
+        "finalize_master",
+        lambda path, _channel, *, quiet: finalized.append(path) or 0,
+    )
+    monkeypatch.setattr(
+        audio_studio,
+        "adjust_master",
+        lambda path, *, quiet: adjusted.append(path) or path / "01-master/master.mp3",
+    )
+    server = create_server(
+        collection,
+        port=0,
+        asset_root=_assets(tmp_path),
+        duration_probe=lambda _path: 5.0,
+        cleanup_defaults=defaults,
+    )
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        connection = http.client.HTTPConnection(DEFAULT_HOST, server.server_port, timeout=2)
+        connection.request("GET", "/api/finalize/adjustments")
+        response = connection.getresponse()
+        payload = json.loads(response.read())
+        assert response.status == 200
+        assert payload["available"] is True
+        assert payload["layers"] == ["rain_001.wav"]
+
+        settings = payload["settings"]
+        settings["ambient_layers"]["volume_db"] = -27.0
+        body = json.dumps({"settings": settings})
+        connection.request("PUT", "/api/finalize/adjustments", body=body)
+        response = connection.getresponse()
+        assert response.status == 200
+        assert json.loads(response.read())["settings"]["ambient_layers"]["volume_db"] == -27.0
+
+        connection.request("POST", "/api/finalize/apply")
+        response = connection.getresponse()
+        applied = json.loads(response.read())
+        assert response.status == 200
+        assert applied["applied"] is True
+        assert applied["master_reapplied"] is True
+        assert finalized == [collection]
+        assert adjusted == [collection]
+        connection.close()
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
+def test_finalize_api_disables_and_passes_through_without_layers(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    collection = _collection(tmp_path)
+    (collection / "01-master/master.mp3").write_bytes(b"master")
+    defaults = cleanup_config_settings(CleanupConfig(enabled=True))
+    monkeypatch.setattr(audio_studio, "load_skill_config", lambda *_args, **_kwargs: {})
+    finalize_spy = MagicMock()
+    monkeypatch.setattr(audio_studio, "finalize_master", finalize_spy)
+    server = create_server(
+        collection,
+        port=0,
+        asset_root=_assets(tmp_path),
+        duration_probe=lambda _path: 5.0,
+        cleanup_defaults=defaults,
+    )
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        connection = http.client.HTTPConnection(DEFAULT_HOST, server.server_port, timeout=2)
+        connection.request("POST", "/api/finalize/apply")
+        response = connection.getresponse()
+        payload = json.loads(response.read())
+        assert response.status == 200
+        assert payload["available"] is False
+        assert payload["applied"] is False
+        assert payload["pass_through"] is True
+        assert "pass-through" in payload["reason"]
+        finalize_spy.assert_not_called()
         connection.close()
     finally:
         server.shutdown()

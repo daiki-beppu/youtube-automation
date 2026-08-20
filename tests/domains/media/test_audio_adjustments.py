@@ -9,10 +9,12 @@ from youtube_automation.core.errors import ValidationError
 from youtube_automation.domains.media.audio_adjustments import (
     AudioAdjustments,
     read_audio_adjustments,
+    replace_finalize_adjustments,
     replace_master_adjustments,
     replace_track_cleanup_overrides,
     replace_track_order,
     validate_cleanup_settings,
+    validate_finalize_settings,
     validate_master_settings,
 )
 
@@ -34,10 +36,27 @@ def _settings() -> dict[str, object]:
     }
 
 
+def _finalize_settings() -> dict[str, object]:
+    return {
+        "ambient_layers": {
+            "dirname": "rain_layers",
+            "glob": "rain_*.wav",
+            "volume_db": -19.0,
+            "fadein_s": 0.5,
+            "fadein_curve": "tri",
+            "layers": {"rain_001.wav": {"volume_db": -23.0}},
+        },
+        "loudnorm": {"enabled": True, "mode": "linear", "I": -14.0, "LRA": 11.0, "TP": -1.5},
+        "mix": {"duration": "first", "normalize": False},
+    }
+
+
 def test_missing_adjustments_file_is_an_empty_document(tmp_path: Path) -> None:
     document = read_audio_adjustments(tmp_path / "audio-adjustments.json")
 
-    assert document == AudioAdjustments(tracks={}, order=None, shuffle_seed=None, pin_first=[], master=None, extra={})
+    assert document == AudioAdjustments(
+        tracks={}, order=None, shuffle_seed=None, pin_first=[], master=None, finalize=None, extra={}
+    )
 
 
 def test_replace_track_writes_only_values_changed_from_defaults(tmp_path: Path) -> None:
@@ -157,6 +176,40 @@ def test_replace_master_adjustments_preserves_tracks_and_order(tmp_path: Path) -
 def test_master_settings_reject_incomplete_or_unknown_fields(payload: dict[str, object]) -> None:
     with pytest.raises(ValidationError):
         validate_master_settings(payload)
+
+
+def test_replace_finalize_adjustments_preserves_other_stages(tmp_path: Path) -> None:
+    path = tmp_path / "audio-adjustments.json"
+    replace_track_order(path, ["01 First.mp3"], 123, ["01 First.mp3"])
+    master = {key: _settings()[key] for key in ("eq", "loudnorm", "limiter")}
+    replace_master_adjustments(path, master)
+
+    saved = replace_finalize_adjustments(path, _finalize_settings())
+
+    assert saved.finalize == _finalize_settings()
+    assert saved.master == master
+    assert saved.order == ["01 First.mp3"]
+    assert json.loads(path.read_text(encoding="utf-8"))["finalize"] == _finalize_settings()
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda value: value.update({"unknown": {}}),
+        lambda value: value["ambient_layers"].update({"dirname": "../outside"}),
+        lambda value: value["ambient_layers"].update({"glob": "../*.wav"}),
+        lambda value: value["ambient_layers"].update({"fadein_curve": "mystery"}),
+        lambda value: value["loudnorm"].update({"mode": "dynamic"}),
+        lambda value: value["mix"].update({"duration": "forever"}),
+        lambda value: value["mix"].update({"normalize": 1}),
+    ],
+)
+def test_finalize_settings_reject_invalid_values(mutate) -> None:
+    payload = _finalize_settings()
+    mutate(payload)
+
+    with pytest.raises(ValidationError):
+        validate_finalize_settings(payload)
 
 
 @pytest.mark.parametrize(

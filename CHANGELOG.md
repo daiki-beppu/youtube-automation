@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `feat(wf-status)`: 制作状況 View で phase・要対応・成果物詳細の順に情報を整理し、停滞・警告・未生成を先頭表示して mobile と keyboard でも絞り込みやすくする（#4378）。
 - `feat(documents)`: review View で候補名・preview・固定 QA・確定操作を一意に関連付け、画像・音声・動画・テキストを mobile と keyboard でも比較しやすくする（#4377）。
 - `feat(documents)`: schema 文書 View で要点・主要指標を先に表示し、長い根拠や未知の追加データを欠落させず native details へ段階表示する（#4376）。
+- `feat(audio-studio)`: ambient layer の対象・音量・fade-in・loudnorm・mix を master 調整画面で保存し、per-file 値を共通値へ戻せる UI と全 fade curve を提供する。finalize 専用原本から非累積で再出力して master 全体調整も順に再適用し、master 再生成成功時は古い調整原本を無効化する（#4384）。
 - `feat(audio-studio)`: master.mp3 全体の EQ・loudnorm・limiter を Web Audio で試聴して保存し、退避した調整前原本から非累積・原子的に再出力する `yt-master-adjust` と UI 操作を追加する（#4383）。
 - `feat(audio-studio)`: master の曲順をドラッグ・seed 付きシャッフル・先頭固定で決めて保存し、`yt-generate-master` と概要欄チャプターへ同じ順序を反映できるようにする（#4382）。
 - `feat(audio-studio)`: 曲ごとの cleanup 値を Web Audio EQ で試聴して差分保存し、`yt-suno-audio-cleanup` が対象曲だけへ適用できるようにする（#4381）。

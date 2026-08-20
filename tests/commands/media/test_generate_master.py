@@ -24,6 +24,7 @@ from youtube_automation.commands.media.generate_master import (
     generate_master as run_generate_master,
 )
 from youtube_automation.core.errors import ValidationError
+from youtube_automation.infrastructure.media.collection_paths import CollectionPaths
 
 
 class TestResolveLoopCount:
@@ -1544,6 +1545,60 @@ class TestGenerateMasterAudioInputs:
         for i in range(file_count):
             (music_dir / f"{i + 1:02d}-track.{ext}").write_bytes(b"\x00" * 128)
         return tmp_path
+
+    def test_successful_regeneration_discards_stale_adjustment_backups(self, tmp_path, monkeypatch):
+        collection = self._setup_collection(tmp_path, ext="wav", file_count=2)
+        paths = CollectionPaths(collection)
+        paths.master_audio_path.write_bytes(b"previous-adjusted-master")
+        for backup in (paths.master_adjustment_backup_path, paths.finalize_backup_path):
+            backup.parent.mkdir(parents=True)
+            backup.write_bytes(b"stale-original")
+        monkeypatch.setattr(generate_master.shutil, "which", lambda _: "/usr/bin/ffmpeg")
+
+        def fake_run(cmd, **kwargs):
+            Path(cmd[-3]).write_bytes(b"regenerated-master")
+            return SimpleNamespace(returncode=0)
+
+        with patch.object(generate_master.subprocess, "run", side_effect=fake_run):
+            run_generate_master(collection, crossfade=1.0, bitrate="192k", quiet=True)
+
+        assert paths.master_audio_path.read_bytes() == b"regenerated-master"
+        assert not paths.master_adjustment_backup_path.exists()
+        assert not paths.finalize_backup_path.exists()
+
+    def test_failed_regeneration_preserves_existing_adjustment_backups(self, tmp_path, monkeypatch):
+        collection = self._setup_collection(tmp_path, ext="wav", file_count=2)
+        paths = CollectionPaths(collection)
+        for backup in (paths.master_adjustment_backup_path, paths.finalize_backup_path):
+            backup.parent.mkdir(parents=True)
+            backup.write_bytes(b"current-original")
+        monkeypatch.setattr(generate_master.shutil, "which", lambda _: "/usr/bin/ffmpeg")
+
+        with patch.object(
+            generate_master.subprocess,
+            "run",
+            return_value=SimpleNamespace(returncode=1),
+        ):
+            with pytest.raises(ValidationError, match="FFmpeg failed"):
+                run_generate_master(collection, crossfade=1.0, bitrate="192k", quiet=True)
+
+        assert paths.master_adjustment_backup_path.read_bytes() == b"current-original"
+        assert paths.finalize_backup_path.read_bytes() == b"current-original"
+
+    def test_single_mp3_copy_discards_stale_adjustment_backups(self, tmp_path, monkeypatch):
+        collection = self._setup_collection(tmp_path, ext="mp3", file_count=1)
+        paths = CollectionPaths(collection)
+        paths.master_adjustment_backup_path.parent.mkdir(parents=True)
+        paths.master_adjustment_backup_path.write_bytes(b"stale-original")
+        paths.finalize_backup_path.parent.mkdir(parents=True)
+        paths.finalize_backup_path.write_bytes(b"stale-original")
+        monkeypatch.setattr(generate_master.shutil, "which", lambda _: "/usr/bin/ffmpeg")
+
+        run_generate_master(collection, crossfade=1.0, bitrate="192k", quiet=True)
+
+        assert paths.master_audio_path.read_bytes() == b"\x00" * 128
+        assert not paths.master_adjustment_backup_path.exists()
+        assert not paths.finalize_backup_path.exists()
 
     def test_wav_inputs_produce_master_mp3_with_lame_codec(self, tmp_path, monkeypatch):
         collection = self._setup_collection(tmp_path, ext="wav", file_count=3)

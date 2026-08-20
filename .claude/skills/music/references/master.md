@@ -503,7 +503,9 @@ uv run yt-master-adjust                       # CWD がコレクションディ�
 uv run yt-master-adjust <collection-path>     # 明示指定
 ```
 
-設定の正本は `20-documentation/audio-adjustments.json::master`。初回適用前の master は `01-master/originals-pre-adjust/master.mp3` へ退避し、再適用も常にこの原本から行うため調整は累積しない。ffmpeg または置換が失敗した場合は現在の master を維持して non-zero で停止する。master が無い場合も fail-loud。`yt-finalize-master` をやり直す必要がある場合は、退避済み原本と master の対応を確認してから再調整する。
+設定の正本は `20-documentation/audio-adjustments.json::master`。初回適用前の master は `01-master/originals-pre-adjust/master.mp3` へ退避し、再適用も常にこの原本から行うため調整は累積しない。ffmpeg または置換が失敗した場合は現在の master を維持して non-zero で停止する。master が無い場合も fail-loud。
+
+Audio Studio で ambient layer 設定も保存した場合、`20-documentation/audio-adjustments.json::finalize` が skill-config より優先される。`yt-finalize-master` は初回の入力を `01-master/originals-pre-finalize/master.mp3` へ退避し、再実行も常にこの原本から行う。finalize 成功時は master 全体調整用の原本を新しい ambient 合成結果へ更新し、UI からの適用では保存済み EQ・loudnorm・limiterも続けて再適用する。layer 0 件では CLI は従来どおり pass-through、UI は理由を表示して適用 controls を無効化するが、target の directory / glob と保存操作は復旧用に維持する。`yt-generate-master` が新しい master の生成に成功した場合は両方の退避原本を無効化し、次回調整が古い曲順・音源へ戻らないようにする。
 
 ### Step 5.6: 雨レイヤー後処理（config 駆動 / opt-in）
 
