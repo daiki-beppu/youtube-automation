@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `feat(audio-studio)`: 曲ごとの cleanup 値を Web Audio EQ で試聴して差分保存し、`yt-suno-audio-cleanup` が対象曲だけへ適用できるようにする（#4381）。
 - `feat(audio-studio)`: `yt-audio-studio` で collection の個別音源を尺・形式つきで一覧表示し、HTTP Range 対応 player から再生・シークできるようにする（#4380）。
 - `refactor(localserver)`: collection 探索・loopback CORS・PID / stop / startup-lock の規約を server 種別に依存しない共有モジュールへ抽出し、既存 collection server の外部挙動を維持する（#4379）。
+- `fix(doctor)`: `analytics_report` の入力を日付形式の本体 JSON に限定し、分析 sidecar を不正 report と誤判定する再実行ループを解消する（#4385）。
 - `fix(skills)`: `yt-skills migrate-config` に統合済み 5 skill の移行先を追加し、孤児 config を `wf-new` / `thumbnail` / `music` / `channel-research` へ安全に移行できるようにする（#4333）。
 - `fix(automation-update)`: multi-channel workspace では単一 channel 用 `channel-gitignore` asset を sync / diff 対象外とし、OAuth secret や channel media を保護する workspace 固有 `.gitignore` を維持する（#4331）。
 - `fix(hybrid)`: `yt-skills migrate-state-git` が workspace root の集約 `.gitignore` を利用し、既追跡の制御面 JSON を移行済みとして検査できるようにする（#4332）。

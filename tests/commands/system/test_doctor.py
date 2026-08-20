@@ -2618,6 +2618,18 @@ class TestCheckAnalyticsReport:
         r = doctor.check_analytics_report(tmp_path)
         assert r.status == "ok"
 
+    def test_analysis_sidecars_do_not_count_as_reports(self, tmp_path):
+        reports_dir = tmp_path / "reports"
+        reports_dir.mkdir()
+        _write_analysis_pair(tmp_path, "20240101")
+        for suffix in ("visual-annotations", "vpd-ranking", "win-pattern"):
+            (reports_dir / f"analysis_20240101.{suffix}.json").write_text("{}", encoding="utf-8")
+
+        result = doctor.check_analytics_report(tmp_path)
+
+        assert result.status == "ok"
+        assert "1 件存在" in result.message
+
     def test_invalid_json_or_missing_html_is_not_a_successful_analysis_input(self, tmp_path):
         reports = tmp_path / "reports"
         reports.mkdir()

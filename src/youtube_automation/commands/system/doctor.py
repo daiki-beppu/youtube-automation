@@ -78,6 +78,7 @@ AUTOMATION_PACKAGE_NAME = "youtube-channels-automation"
 SKILLS_SYNC_ARGV = ("uv", "run", "yt-skills", "sync", "--asset", "skills", "--force")
 SKILLS_SYNC_PRUNE_ARGV = (*SKILLS_SYNC_ARGV, "--prune", "--yes")
 SKILLS_SYNC_CMD = shlex.join(SKILLS_SYNC_ARGV)
+ANALYSIS_REPORT_FILENAME_RE = re.compile(r"analysis_\d{8}\.json")
 LEGACY_BUNDLED_SKILLS = (
     "onboard",
     "distrokid-prep",
@@ -1536,7 +1537,11 @@ def check_analytics_report(channel_dir: Path) -> CheckResult:
 def _resolve_wf_new_input_mode(channel_dir: Path) -> _WfNewInputMode:
     reports_dir = channel_dir / "reports"
     data_dir = channel_dir / "data"
-    report_candidates = _matching_files(reports_dir, "analysis_*.json")
+    report_candidates = [
+        path
+        for path in _matching_files(reports_dir, "analysis_*.json")
+        if ANALYSIS_REPORT_FILENAME_RE.fullmatch(path.name)
+    ]
     reports: list[Path] = []
     invalid_report = False
     for report in report_candidates:
