@@ -17,7 +17,6 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   Card,
-  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -57,12 +56,18 @@ function shuffleTracks(tracks: Track[], seed: number): Track[] {
 function pinsFirst(tracks: Track[], pins: string[]): Track[] {
   const pinned = new Set(pins)
   return [
-    ...pins.flatMap((name) => tracks.filter((track) => track.file_name === name)),
+    ...pins.flatMap((name) =>
+      tracks.filter((track) => track.file_name === name)
+    ),
     ...tracks.filter((track) => !pinned.has(track.file_name)),
   ]
 }
 
-export function TrackOrderEditor({ initialTracks }: { initialTracks: Track[] }) {
+export function TrackOrderEditor({
+  initialTracks,
+}: {
+  initialTracks: Track[]
+}) {
   const [tracks, setTracks] = useState(initialTracks)
   const [pins, setPins] = useState<string[]>([])
   const [seed, setSeed] = useState<number | null>(null)
@@ -83,26 +88,36 @@ export function TrackOrderEditor({ initialTracks }: { initialTracks: Track[] }) 
         if (!response.ok) throw new Error(`HTTP ${response.status}`)
         const payload: unknown = await response.json()
         if (!isOrderResponse(payload)) throw new Error("invalid order response")
-        const byName = new Map(initialTracks.map((track) => [track.file_name, track]))
-        if (payload.order.length !== initialTracks.length) throw new Error("order length mismatch")
+        const byName = new Map(
+          initialTracks.map((track) => [track.file_name, track])
+        )
+        if (payload.order.length !== initialTracks.length)
+          throw new Error("order length mismatch")
         const ordered = payload.order.map((name) => byName.get(name))
-        if (ordered.some((track) => track === undefined)) throw new Error("order filename mismatch")
+        if (ordered.some((track) => track === undefined))
+          throw new Error("order filename mismatch")
         setTracks(ordered as Track[])
         setPins(payload.pin_first)
         setSeed(payload.shuffle_seed)
-        setSeedInput(payload.shuffle_seed === null ? "" : String(payload.shuffle_seed))
+        setSeedInput(
+          payload.shuffle_seed === null ? "" : String(payload.shuffle_seed)
+        )
         setStatus(payload.saved ? "保存済みの曲順です" : "ファイル名順です")
       })
       .catch((reason: unknown) => {
         if (!controller.signal.aborted) {
-          setStatus(`曲順を読み込めませんでした: ${reason instanceof Error ? reason.message : "unknown error"}`)
+          setStatus(
+            `曲順を読み込めませんでした: ${reason instanceof Error ? reason.message : "unknown error"}`
+          )
         }
       })
     return () => controller.abort()
   }, [initialTracks])
 
   function updatePins(filename: string, checked: boolean) {
-    const nextPins = checked ? [...pins, filename] : pins.filter((name) => name !== filename)
+    const nextPins = checked
+      ? [...pins, filename]
+      : pins.filter((name) => name !== filename)
     setPins(nextPins)
     setTracks((current) => pinsFirst(current, nextPins))
     setSeed(null)
@@ -111,12 +126,20 @@ export function TrackOrderEditor({ initialTracks }: { initialTracks: Track[] }) 
 
   function applyShuffle() {
     const entered = seedInput === "" ? null : Number(seedInput)
-    const nextSeed = entered !== null && Number.isSafeInteger(entered) && entered >= 0 && entered <= 4294967295
-      ? entered
-      : crypto.getRandomValues(new Uint32Array(1))[0]
+    const nextSeed =
+      entered !== null &&
+      Number.isSafeInteger(entered) &&
+      entered >= 0 &&
+      entered <= 4294967295
+        ? entered
+        : crypto.getRandomValues(new Uint32Array(1))[0]
     const pinned = new Set(pins)
-    const fixed = pinsFirst(initialTracks, pins).filter((track) => pinned.has(track.file_name))
-    const remaining = initialTracks.filter((track) => !pinned.has(track.file_name))
+    const fixed = pinsFirst(initialTracks, pins).filter((track) =>
+      pinned.has(track.file_name)
+    )
+    const remaining = initialTracks.filter(
+      (track) => !pinned.has(track.file_name)
+    )
     setTracks([...fixed, ...shuffleTracks(remaining, nextSeed)])
     setSeed(nextSeed)
     setSeedInput(String(nextSeed))
@@ -154,9 +177,10 @@ export function TrackOrderEditor({ initialTracks }: { initialTracks: Track[] }) 
       })
       const payload: unknown = await response.json()
       if (!response.ok) {
-        const message = typeof payload === "object" && payload !== null && "error" in payload
-          ? String(payload.error)
-          : `HTTP ${response.status}`
+        const message =
+          typeof payload === "object" && payload !== null && "error" in payload
+            ? String(payload.error)
+            : `HTTP ${response.status}`
         throw new Error(message)
       }
       if (!isOrderResponse(payload)) throw new Error("invalid order response")
@@ -165,7 +189,9 @@ export function TrackOrderEditor({ initialTracks }: { initialTracks: Track[] }) 
       setPins(saved.pin_first)
       setStatus("曲順を保存しました")
     } catch (reason) {
-      setStatus(`保存できませんでした: ${reason instanceof Error ? reason.message : "unknown error"}`)
+      setStatus(
+        `保存できませんでした: ${reason instanceof Error ? reason.message : "unknown error"}`
+      )
     }
   }
 
@@ -174,7 +200,9 @@ export function TrackOrderEditor({ initialTracks }: { initialTracks: Track[] }) 
       <Card>
         <CardHeader>
           <CardTitle>Master の曲順</CardTitle>
-          <CardDescription>ドラッグで並べ替えるか、seed を指定してシャッフルします。</CardDescription>
+          <CardDescription>
+            ドラッグで並べ替えるか、seed を指定してシャッフルします。
+          </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-end">
           <div className="grid flex-1 gap-2">
@@ -200,7 +228,9 @@ export function TrackOrderEditor({ initialTracks }: { initialTracks: Track[] }) 
           </Button>
         </CardContent>
         <CardContent>
-          <p className="text-sm text-muted-foreground" role="status">{status}</p>
+          <p className="text-sm text-muted-foreground" role="status">
+            {status}
+          </p>
         </CardContent>
       </Card>
 
@@ -211,18 +241,26 @@ export function TrackOrderEditor({ initialTracks }: { initialTracks: Track[] }) 
           onDragOver={(event) => event.preventDefault()}
           onDrop={() => moveTrack(track.id)}
           onPointerEnter={() => moveTrack(track.id)}
-          onPointerUp={() => { draggedId.current = null }}
+          onPointerUp={() => {
+            draggedId.current = null
+          }}
         >
-          <CardHeader>
+          <CardHeader className="flex flex-col gap-3 sm:flex-row sm:justify-between">
             <div className="flex min-w-0 items-start gap-2">
               <button
                 type="button"
                 draggable
                 className="mt-0.5 shrink-0 cursor-grab rounded p-1 text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 aria-label={`${track.file_name} をドラッグして並べ替え`}
-                onPointerDown={() => { draggedId.current = track.id }}
-                onDragStart={() => { draggedId.current = track.id }}
-                onDragEnd={() => { draggedId.current = null }}
+                onPointerDown={() => {
+                  draggedId.current = track.id
+                }}
+                onDragStart={() => {
+                  draggedId.current = track.id
+                }}
+                onDragEnd={() => {
+                  draggedId.current = null
+                }}
               >
                 <GripVerticalIcon aria-hidden="true" />
               </button>
@@ -230,36 +268,39 @@ export function TrackOrderEditor({ initialTracks }: { initialTracks: Track[] }) 
                 <CardTitle className="break-words">
                   {String(index + 1).padStart(2, "0")} · {track.file_name}
                 </CardTitle>
-                <CardDescription>再生時間 {formatDuration(track.duration_seconds)}</CardDescription>
+                <CardDescription>
+                  再生時間 {formatDuration(track.duration_seconds)}
+                </CardDescription>
               </div>
             </div>
-            <CardAction>
-              <div className="flex items-center gap-2">
-                <Label htmlFor={`pin-${track.id}`} className="gap-2 text-xs">
-                  <LockKeyholeIcon aria-hidden="true" />
-                  <span className="sr-only">{track.file_name} を</span>先頭固定
-                </Label>
-                <Switch
-                  id={`pin-${track.id}`}
-                  size="sm"
-                  checked={pins.includes(track.file_name)}
-                  onCheckedChange={(checked) => updatePins(track.file_name, checked)}
-                />
-                <Badge variant="secondary">{track.extension.toUpperCase()}</Badge>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={selectedTrack?.id === track.id ? "default" : "outline"}
-                  aria-expanded={selectedTrack?.id === track.id}
-                  onClick={() => {
-                    setSelectedTrack(track)
-                    setSelectedAudio(audioElements.current.get(track.id))
-                  }}
-                >
-                  <SlidersHorizontalIcon aria-hidden="true" />調整
-                </Button>
-              </div>
-            </CardAction>
+            <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+              <Label htmlFor={`pin-${track.id}`} className="gap-2 text-xs">
+                <LockKeyholeIcon aria-hidden="true" />
+                <span className="sr-only">{track.file_name} を</span>先頭固定
+              </Label>
+              <Switch
+                id={`pin-${track.id}`}
+                size="sm"
+                checked={pins.includes(track.file_name)}
+                onCheckedChange={(checked) =>
+                  updatePins(track.file_name, checked)
+                }
+              />
+              <Badge variant="secondary">{track.extension.toUpperCase()}</Badge>
+              <Button
+                type="button"
+                size="sm"
+                variant={selectedTrack?.id === track.id ? "default" : "outline"}
+                aria-expanded={selectedTrack?.id === track.id}
+                onClick={() => {
+                  setSelectedTrack(track)
+                  setSelectedAudio(audioElements.current.get(track.id))
+                }}
+              >
+                <SlidersHorizontalIcon aria-hidden="true" />
+                調整
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             <audio
@@ -278,7 +319,11 @@ export function TrackOrderEditor({ initialTracks }: { initialTracks: Track[] }) 
       ))}
 
       {selectedTrack ? (
-        <CleanupPanel key={selectedTrack.id} track={selectedTrack} audio={selectedAudio} />
+        <CleanupPanel
+          key={selectedTrack.id}
+          track={selectedTrack}
+          audio={selectedAudio}
+        />
       ) : null}
     </section>
   )

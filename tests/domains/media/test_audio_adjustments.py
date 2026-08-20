@@ -9,9 +9,11 @@ from youtube_automation.core.errors import ValidationError
 from youtube_automation.domains.media.audio_adjustments import (
     AudioAdjustments,
     read_audio_adjustments,
+    replace_master_adjustments,
     replace_track_cleanup_overrides,
     replace_track_order,
     validate_cleanup_settings,
+    validate_master_settings,
 )
 
 
@@ -35,7 +37,7 @@ def _settings() -> dict[str, object]:
 def test_missing_adjustments_file_is_an_empty_document(tmp_path: Path) -> None:
     document = read_audio_adjustments(tmp_path / "audio-adjustments.json")
 
-    assert document == AudioAdjustments(tracks={}, order=None, shuffle_seed=None, pin_first=[], extra={})
+    assert document == AudioAdjustments(tracks={}, order=None, shuffle_seed=None, pin_first=[], master=None, extra={})
 
 
 def test_replace_track_writes_only_values_changed_from_defaults(tmp_path: Path) -> None:
@@ -127,6 +129,34 @@ def test_replace_track_order_preserves_cleanup_and_serializes_owned_keys(tmp_pat
         "shuffle_seed": 12345,
         "pin_first": ["02 Second.wav"],
     }
+
+
+def test_replace_master_adjustments_preserves_tracks_and_order(tmp_path: Path) -> None:
+    path = tmp_path / "audio-adjustments.json"
+    replace_track_order(path, ["01 First.mp3"], 123, ["01 First.mp3"])
+    replace_track_cleanup_overrides(path, "01 First.mp3", _settings(), _settings())
+    master = {key: _settings()[key] for key in ("eq", "loudnorm", "limiter")}
+
+    saved = replace_master_adjustments(path, master)
+
+    assert saved.master == master
+    assert saved.order == ["01 First.mp3"]
+    assert saved.shuffle_seed == 123
+    assert saved.pin_first == ["01 First.mp3"]
+    assert json.loads(path.read_text(encoding="utf-8"))["master"] == master
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {},
+        {"eq": {}, "loudnorm": {}, "limiter": {}},
+        {**{key: _settings()[key] for key in ("eq", "loudnorm", "limiter")}, "unknown": {}},
+    ],
+)
+def test_master_settings_reject_incomplete_or_unknown_fields(payload: dict[str, object]) -> None:
+    with pytest.raises(ValidationError):
+        validate_master_settings(payload)
 
 
 @pytest.mark.parametrize(

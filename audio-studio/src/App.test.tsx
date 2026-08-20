@@ -24,20 +24,40 @@ describe("Audio Studio", () => {
   it("renders track names, durations, formats, and audio sources", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue(
-        new Response(
-          JSON.stringify({
-            collection_name: "夜明け前のローファイ",
-            tracks: [
-              {
-                id: "track-1",
-                file_name: "01 Morning.mp3",
-                duration_seconds: 185,
-                extension: "mp3",
-                audio_url: "/api/tracks/track-1/audio",
-              },
-            ],
-          })
+      vi.fn().mockImplementation((input: RequestInfo | URL) =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify(
+              String(input) === "/api/tracks"
+                ? {
+                    collection_name: "夜明け前のローファイ",
+                    tracks: [
+                      {
+                        id: "track-1",
+                        file_name: "01 Morning.mp3",
+                        duration_seconds: 185,
+                        extension: "mp3",
+                        audio_url: "/api/tracks/track-1/audio",
+                      },
+                    ],
+                  }
+                : {
+                    available: false,
+                    audio_url: "/api/master/audio",
+                    defaults: {
+                      eq: cleanupSettings.eq,
+                      loudnorm: cleanupSettings.loudnorm,
+                      limiter: cleanupSettings.limiter,
+                    },
+                    settings: {
+                      eq: cleanupSettings.eq,
+                      loudnorm: cleanupSettings.loudnorm,
+                      limiter: cleanupSettings.limiter,
+                    },
+                    has_backup: false,
+                  }
+            )
+          )
         )
       )
     )
@@ -56,13 +76,31 @@ describe("Audio Studio", () => {
   it("renders the shadcn empty state for a collection without tracks", async () => {
     vi.stubGlobal(
       "fetch",
-      vi
-        .fn()
-        .mockResolvedValue(
+      vi.fn().mockImplementation((input: RequestInfo | URL) =>
+        Promise.resolve(
           new Response(
-            JSON.stringify({ collection_name: "Empty collection", tracks: [] })
+            JSON.stringify(
+              String(input) === "/api/tracks"
+                ? { collection_name: "Empty collection", tracks: [] }
+                : {
+                    available: false,
+                    audio_url: "/api/master/audio",
+                    defaults: {
+                      eq: cleanupSettings.eq,
+                      loudnorm: cleanupSettings.loudnorm,
+                      limiter: cleanupSettings.limiter,
+                    },
+                    settings: {
+                      eq: cleanupSettings.eq,
+                      loudnorm: cleanupSettings.loudnorm,
+                      limiter: cleanupSettings.limiter,
+                    },
+                    has_backup: false,
+                  }
+            )
           )
         )
+      )
     )
 
     render(<App />)
@@ -91,36 +129,38 @@ describe("Audio Studio", () => {
     const requests: Array<{ input: RequestInfo | URL; init?: RequestInit }> = []
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
-        requests.push({ input, init })
-        if (String(input) === "/api/tracks") {
+      vi
+        .fn()
+        .mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+          requests.push({ input, init })
+          if (String(input) === "/api/tracks") {
+            return Promise.resolve(
+              new Response(
+                JSON.stringify({
+                  collection_name: "Preview collection",
+                  tracks: [
+                    {
+                      id: "0123456789abcdef",
+                      file_name: "01 Preview.mp3",
+                      duration_seconds: 120,
+                      extension: "mp3",
+                      audio_url: "/api/tracks/0123456789abcdef/audio",
+                    },
+                  ],
+                })
+              )
+            )
+          }
           return Promise.resolve(
             new Response(
               JSON.stringify({
-                collection_name: "Preview collection",
-                tracks: [
-                  {
-                    id: "0123456789abcdef",
-                    file_name: "01 Preview.mp3",
-                    duration_seconds: 120,
-                    extension: "mp3",
-                    audio_url: "/api/tracks/0123456789abcdef/audio",
-                  },
-                ],
+                defaults: cleanupSettings,
+                settings: cleanupSettings,
+                overrides: {},
               })
             )
           )
-        }
-        return Promise.resolve(
-          new Response(
-            JSON.stringify({
-              defaults: cleanupSettings,
-              settings: cleanupSettings,
-              overrides: {},
-            })
-          )
-        )
-      })
+        })
     )
 
     const filters: Array<{
@@ -180,9 +220,9 @@ describe("Audio Studio", () => {
     await screen.findByText("保存しました")
     const put = requests.find((request) => request.init?.method === "PUT")
     expect(put).toBeDefined()
-    expect(JSON.parse(String(put?.init?.body)).settings.eq.muddiness_gain_db).toBe(
-      -4
-    )
+    expect(
+      JSON.parse(String(put?.init?.body)).settings.eq.muddiness_gain_db
+    ).toBe(-4)
   })
 
   it("reproduces a seeded shuffle, pins tracks first, and saves the exact order", async () => {
@@ -198,29 +238,38 @@ describe("Audio Studio", () => {
     )
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
-        requests.push({ input, init })
-        if (String(input) === "/api/tracks") {
+      vi
+        .fn()
+        .mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+          requests.push({ input, init })
+          if (String(input) === "/api/tracks") {
+            return Promise.resolve(
+              new Response(
+                JSON.stringify({ collection_name: "Order test", tracks })
+              )
+            )
+          }
+          if (String(input) === "/api/order" && init?.method === "PUT") {
+            return Promise.resolve(
+              new Response(
+                JSON.stringify({
+                  ...JSON.parse(String(init.body)),
+                  saved: true,
+                })
+              )
+            )
+          }
           return Promise.resolve(
-            new Response(JSON.stringify({ collection_name: "Order test", tracks }))
+            new Response(
+              JSON.stringify({
+                order: tracks.map((track) => track.file_name),
+                shuffle_seed: null,
+                pin_first: [],
+                saved: false,
+              })
+            )
           )
-        }
-        if (String(input) === "/api/order" && init?.method === "PUT") {
-          return Promise.resolve(
-            new Response(JSON.stringify({ ...JSON.parse(String(init.body)), saved: true }))
-          )
-        }
-        return Promise.resolve(
-          new Response(
-            JSON.stringify({
-              order: tracks.map((track) => track.file_name),
-              shuffle_seed: null,
-              pin_first: [],
-              saved: false,
-            })
-          )
-        )
-      })
+        })
     )
 
     const { container } = render(<App />)
@@ -256,11 +305,133 @@ describe("Audio Studio", () => {
     await screen.findByText("曲順を保存しました")
 
     const put = requests.find(
-      (request) => String(request.input) === "/api/order" && request.init?.method === "PUT"
+      (request) =>
+        String(request.input) === "/api/order" && request.init?.method === "PUT"
     )
     const body = JSON.parse(String(put?.init?.body))
     expect(body.order[0]).toBe("03 Third.mp3")
     expect(body.pin_first).toEqual(["03 Third.mp3"])
     expect(body.shuffle_seed).toBeNull()
+  })
+
+  it("previews, saves, and applies master settings from the original", async () => {
+    const masterSettings = {
+      eq: cleanupSettings.eq,
+      loudnorm: cleanupSettings.loudnorm,
+      limiter: cleanupSettings.limiter,
+    }
+    const requests: Array<{ input: RequestInfo | URL; init?: RequestInit }> = []
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+          requests.push({ input, init })
+          if (String(input) === "/api/tracks") {
+            return Promise.resolve(
+              new Response(
+                JSON.stringify({ collection_name: "Master test", tracks: [] })
+              )
+            )
+          }
+          if (
+            String(input) === "/api/master/adjustments" &&
+            init?.method === "PUT"
+          ) {
+            return Promise.resolve(
+              new Response(
+                JSON.stringify({
+                  available: true,
+                  audio_url: "/api/master/audio",
+                  defaults: masterSettings,
+                  settings: JSON.parse(String(init.body)).settings,
+                  has_backup: false,
+                })
+              )
+            )
+          }
+          if (String(input) === "/api/master/apply") {
+            const put = requests.find(
+              (request) =>
+                String(request.input) === "/api/master/adjustments" &&
+                request.init?.method === "PUT"
+            )
+            return Promise.resolve(
+              new Response(
+                JSON.stringify({
+                  available: true,
+                  audio_url: "/api/master/audio",
+                  defaults: masterSettings,
+                  settings: JSON.parse(String(put?.init?.body)).settings,
+                  has_backup: true,
+                  applied: true,
+                })
+              )
+            )
+          }
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                available: true,
+                audio_url: "/api/master/audio",
+                defaults: masterSettings,
+                settings: masterSettings,
+                has_backup: false,
+              })
+            )
+          )
+        })
+    )
+    const filters: Array<{
+      gain: { value: number }
+      frequency: { value: number }
+    }> = []
+    class AudioContextMock {
+      destination = {}
+      createMediaElementSource() {
+        return { connect: (target: object) => target }
+      }
+      createBiquadFilter() {
+        const filter = {
+          frequency: { value: 0 },
+          gain: { value: 0 },
+          connect: (target: object) => target,
+          type: "",
+        }
+        filters.push(filter)
+        return filter
+      }
+      resume() {
+        return Promise.resolve()
+      }
+    }
+    vi.stubGlobal("AudioContext", AudioContextMock)
+
+    render(<App />)
+    expect(
+      await screen.findByRole("region", { name: "master.mp3 全体調整" })
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText("master.mp3 を再生")).toHaveAttribute(
+      "src",
+      "/api/master/audio?revision=0"
+    )
+    fireEvent.change(screen.getByLabelText("Master muddiness gain (dB) 数値"), {
+      target: { value: "-5" },
+    })
+    expect(filters[0]?.gain.value).toBe(-5)
+    fireEvent.click(screen.getByRole("button", { name: "原本から再出力" }))
+
+    await screen.findByText("原本から master.mp3 を再出力しました")
+    const put = requests.find((request) => request.init?.method === "PUT")
+    expect(
+      JSON.parse(String(put?.init?.body)).settings.eq.muddiness_gain_db
+    ).toBe(-5)
+    expect(
+      requests.some(
+        (request) =>
+          String(request.input) === "/api/master/apply" &&
+          request.init?.method === "POST"
+      )
+    ).toBe(true)
   })
 })
