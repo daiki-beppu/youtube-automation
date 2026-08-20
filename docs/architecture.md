@@ -248,6 +248,7 @@ assets/stock/           # ボツ画像ストック (#364)。<theme-slug>/ 配下
 | `application.analytics.video_report` | 動画解析結果を audit report schema へ写像し、共通運用文書 migration による JSON+HTML 公開を調停 |
 | `.claude/skills/channel-research/references/channel-research-report.schema.json` | benchmark / market / viewer voice / thumbnail 調査の比較表・勝ちパターン・根拠・適用候補を共通定義し、skill writer と全 downstream reader の正本になる |
 | `infrastructure.filesystem` | provider-neutral な filesystem I/O と、複数 text file の fsync・rollback・公開後 verifier 付き transaction |
+| `infrastructure.localserver` | loopback server 共通の collection 探索、server-kind 別 PID / stop / startup-lock path と lifecycle record 読取、CORS origin policy |
 | `infrastructure.documents.publishing` | 構造化 JSON と同 basename の HTML を temp・fsync・再読込検証・replace で原子的に公開し、consumer 向けに schema 検証済み JSON+HTML 対応 pair を再読込する |
 | `commands.documents.migrate` | skill writer の未公開 candidate JSON と明示 yes/no を共通移行 workflow へ渡す `yt-document-migrate` adapter |
 | `commands.documents.render` | 固定 schema registry から選択して HTML を生成する `yt-document-render` adapter |

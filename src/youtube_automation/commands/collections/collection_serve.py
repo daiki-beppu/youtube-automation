@@ -39,7 +39,6 @@ import threading
 import time
 import urllib.parse
 import uuid
-from dataclasses import dataclass
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -97,6 +96,58 @@ from youtube_automation.infrastructure.collections.chrome_extensions import (
     resolve_unpacked_extension_origin,
 )
 from youtube_automation.infrastructure.file_lock import file_lock
+from youtube_automation.infrastructure.localserver.collections import (
+    COLLECTION_DIR_SUFFIX as _COLLECTION_DIR_SUFFIX,
+)
+from youtube_automation.infrastructure.localserver.collections import (
+    find_collection_dirs,
+)
+from youtube_automation.infrastructure.localserver.collections import (
+    find_suno_collection_dirs as _find_suno_collection_dirs,
+)
+from youtube_automation.infrastructure.localserver.cors import (
+    EXTENSION_ORIGIN_SCHEME as _EXTENSION_ORIGIN_SCHEME,
+)
+from youtube_automation.infrastructure.localserver.cors import (
+    is_origin_allowed,
+)
+from youtube_automation.infrastructure.localserver.cors import (
+    is_read_origin_allowed as _is_read_origin_allowed,
+)
+from youtube_automation.infrastructure.localserver.lifecycle import (
+    LifecycleRecord as _LifecycleRecord,
+)
+from youtube_automation.infrastructure.localserver.lifecycle import (
+    consume_stop_request as _consume_stop_request,
+)
+from youtube_automation.infrastructure.localserver.lifecycle import (
+    pid_file_path as _pid_file_path,
+)
+from youtube_automation.infrastructure.localserver.lifecycle import (
+    pid_is_running,
+    process_exit_watcher,
+)
+from youtube_automation.infrastructure.localserver.lifecycle import (
+    pid_is_running_windows as _shared_pid_is_running_windows,
+)
+from youtube_automation.infrastructure.localserver.lifecycle import (
+    read_pid_file as _read_pid_file,
+)
+from youtube_automation.infrastructure.localserver.lifecycle import (
+    remove_matching_record as _remove_matching_record,
+)
+from youtube_automation.infrastructure.localserver.lifecycle import (
+    remove_owned_pid_file as _remove_owned_pid_file,
+)
+from youtube_automation.infrastructure.localserver.lifecycle import (
+    startup_lock_path as _startup_lock_path,
+)
+from youtube_automation.infrastructure.localserver.lifecycle import (
+    stop_request_path as _stop_request_path,
+)
+from youtube_automation.infrastructure.localserver.lifecycle import (
+    write_pid_file as _write_pid_file,
+)
 from youtube_automation.infrastructure.media.collection_paths import CollectionPaths
 from youtube_automation.infrastructure.media_store import R2MediaStore, R2MediaStoreConfig
 from youtube_automation.infrastructure.notifications.discord import create_discord_notification_sink
@@ -111,20 +162,6 @@ VERSION_ROUTE = "/version"
 SERVER_INFO_ROUTE = "/server-info"
 _LIFECYCLE_ROUTE_PREFIX = "/.well-known/yt-collection-serve-lifecycle/"
 MIN_EXTENSION_VERSION = "0.2.0"
-_EXTENSION_ORIGIN_SCHEME = "chrome-extension://"
-# overlay 化（#892/#895）で content script の fetch が page origin になったため、
-# helper 拡張がホストされる web origin をデフォルト許可する（#896/#1710）。完全一致のみ。
-_DEFAULT_ALLOWED_WEB_ORIGINS = frozenset(
-    {
-        "https://suno.com",
-        "https://www.suno.com",
-        "https://distrokid.com",
-        "https://www.distrokid.com",
-    }
-)
-# `collections/planning/` 配下で 1 コレクションを示すディレクトリ接尾辞。
-_COLLECTION_DIR_SUFFIX = "-collection"
-
 # DistroKid dir mode: リリース記録の出力先 JSON（`<root>/config/distrokid-releases.json`）（#934）。
 _DISTROKID_RELEASES_OUTPUT_RELPATH = Path("config") / "distrokid-releases.json"
 _DISTROKID_CAPTURE_ROOT_ENV = "DISTROKID_CAPTURE_ROOT"
@@ -168,13 +205,6 @@ class _IdleTimeout(RuntimeError):
     def __init__(self, seconds: float) -> None:
         self.seconds = seconds
         super().__init__(f"no HTTP requests received for {seconds:g} seconds")
-
-
-@dataclass(frozen=True)
-class _LifecycleRecord:
-    pid: int
-    token: str
-    configuration: str
 
 
 class _IdleTrackingHTTPServer(ThreadingHTTPServer):
@@ -377,19 +407,6 @@ def resolve_prompts_path(path: Path) -> Path:
     raise ConfigError(f"path does not exist: {path}")
 
 
-def find_collection_dirs(root: Path) -> list[Path]:
-    """`root` 直下の `*-collection` ディレクトリのみを名前昇順で返す（#816 dir mode）.
-
-    `collections/planning/` 配下には `01-master` 等の非コレクションや雑多なファイルが
-    混在しうるため、接尾辞 `-collection` を持つディレクトリだけをホワイトリスト採用する。
-    `root` が存在しない / ディレクトリでない場合は空リスト。
-    """
-    if not root.is_dir():
-        return []
-    dirs = (p for p in root.iterdir() if p.is_dir() and p.name.endswith(_COLLECTION_DIR_SUFFIX))
-    return sorted(dirs, key=lambda p: p.name)
-
-
 def _read_workflow_state_lenient(path: Path) -> dict:
     """配信一覧の fail-open 契約に合わせ、読めない state を空として扱う。"""
     try:
@@ -397,24 +414,6 @@ def _read_workflow_state_lenient(path: Path) -> dict:
     except WorkflowStateError:
         return {}
     return state.to_dict() if state is not None else {}
-
-
-def _is_live_complete_collection(root: Path, collection_id: str) -> bool:
-    """planning の対応する live collection が完了済みなら True を返す（#2331）。
-
-    Suno の dir mode を ``collections/planning`` で配信する場合だけ sibling の
-    ``collections/live/<collection_id>/workflow-state.json`` を参照する。状態ファイルが
-    不在・破損・非 object の場合は fail-open とし、planning 側を従来どおり表示する。
-    """
-    if root.name != "planning" or root.parent.name != "collections":
-        return False
-    workflow_state = root.parent / "live" / collection_id / "workflow-state.json"
-    return _read_workflow_state_lenient(workflow_state).get("phase") == "complete"
-
-
-def _find_suno_collection_dirs(root: Path) -> list[Path]:
-    """Suno に提示可能な planning collection だけを返す（#2331）。"""
-    return [coll for coll in find_collection_dirs(root) if not _is_live_complete_collection(root, coll.name)]
 
 
 def _determine_status(
@@ -633,32 +632,6 @@ def _resolve_community_image(
     return resolved if resolved.is_file() and content_type is not None and content_type.startswith("image/") else None
 
 
-def is_origin_allowed(origin: str | None, allow_origin: str | None) -> bool:
-    """CORS 判定.
-
-    allow_origin=None なら `chrome-extension://` scheme と helper サイト web origin
-    （suno.com / distrokid.com、完全一致）を許可する（#896）。
-    allow_origin 指定時はその値との完全一致のみ許可する（lock 維持）。
-    """
-    if not origin:
-        return False
-    if allow_origin is not None:
-        return origin == allow_origin
-    if origin.startswith(_EXTENSION_ORIGIN_SCHEME):
-        return True
-    return origin in _DEFAULT_ALLOWED_WEB_ORIGINS
-
-
-def _is_read_origin_allowed(origin: str | None, allow_origin: str | None, _path: str) -> bool:
-    """Read-only GET/OPTIONS CORS 判定.
-
-    `--allow-origin` 指定時は read-only も exact lock に従う。Suno overlay から
-    必要な read API は background script が extension origin で取得する。YouTube の
-    page origin には localhost の下書きや画像を公開しない。
-    """
-    return is_origin_allowed(origin, allow_origin)
-
-
 def _is_locked_extension_request(
     raw_origin: str | None,
     declared_extension_origin: str | None,
@@ -704,20 +677,8 @@ def _lifecycle_root(path: Path) -> Path:
     return collection
 
 
-def _pid_file_path(root: Path, port: int) -> Path:
-    return root / f".collection-serve-{port}.pid"
-
-
-def _stop_request_path(root: Path, port: int) -> Path:
-    return root / f".collection-serve-{port}.stop"
-
-
 def _lifecycle_stop_path(record: _LifecycleRecord, attempt_token: str) -> str:
     return f"{_LIFECYCLE_ROUTE_PREFIX}{record.token}/stop/{attempt_token}"
-
-
-def _startup_lock_path(root: Path, port: int) -> Path:
-    return root / f".collection-serve-{port}"
 
 
 @contextlib.contextmanager
@@ -727,109 +688,23 @@ def _startup_lock(path: Path):
         yield
 
 
-def _read_pid_file(path: Path) -> _LifecycleRecord | None:
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        return None
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise ConfigError(f"PID file を読み取れません: {path}: {exc}") from exc
-    if not isinstance(payload, dict):
-        raise ConfigError(f"PID file が不正です: {path}")
-    pid = payload.get("pid")
-    token = payload.get("token")
-    configuration = payload.get("configuration")
-    if (
-        not isinstance(pid, int)
-        or isinstance(pid, bool)
-        or pid <= 0
-        or not isinstance(token, str)
-        or not token
-        or not isinstance(configuration, str)
-        or not configuration
-    ):
-        raise ConfigError(f"PID file が不正です: {path}")
-    return _LifecycleRecord(pid=pid, token=token, configuration=configuration)
+_pid_is_running_windows = _shared_pid_is_running_windows
 
 
 def _pid_is_running(pid: int) -> bool:
-    if sys.platform == "win32":
-        return _pid_is_running_windows(pid)
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True
-    # kill(pid, 0) also succeeds for an exited child until its parent reaps it.
-    # A zombie has completed server/discovery cleanup and no longer executes.
-    try:
-        status = subprocess.run(
-            ["ps", "-o", "stat=", "-p", str(pid)],
-            capture_output=True,
-            check=False,
-            text=True,
-        )
-    except OSError:
-        return True
-    return not (status.returncode == 0 and status.stdout.lstrip().startswith("Z"))
-
-
-def _pid_is_running_windows(pid: int) -> bool:
-    """Windows は signal 0 での kill() 生存確認に対応しないため WinAPI で判定する。"""
-    import ctypes
-
-    PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
-    STILL_ACTIVE = 259
-    kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
-    handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
-    if not handle:
-        return False
-    try:
-        exit_code = ctypes.c_ulong()
-        if not kernel32.GetExitCodeProcess(handle, ctypes.byref(exit_code)):
-            return False
-        return exit_code.value == STILL_ACTIVE
-    finally:
-        kernel32.CloseHandle(handle)
+    return pid_is_running(
+        pid,
+        platform=sys.platform,
+        os_module=os,
+        subprocess_module=subprocess,
+        windows_checker=_pid_is_running_windows,
+    )
 
 
 @contextlib.contextmanager
 def _process_exit_watcher(pid: int):
-    """元の process instance の終了を待つ callable を返す。"""
-    pidfd_open = getattr(os, "pidfd_open", None)
-    if callable(pidfd_open):
-        try:
-            descriptor = pidfd_open(pid)
-        except OSError:
-            pass
-        else:
-            try:
-                yield lambda timeout: bool(select.select([descriptor], [], [], timeout)[0])
-            finally:
-                os.close(descriptor)
-            return
-
-    if hasattr(select, "kqueue") and hasattr(select, "KQ_NOTE_EXIT"):
-        queue = select.kqueue()
-        try:
-            event = select.kevent(
-                pid,
-                filter=select.KQ_FILTER_PROC,
-                flags=select.KQ_EV_ADD | select.KQ_EV_ENABLE,
-                fflags=select.KQ_NOTE_EXIT,
-            )
-            queue.control([event], 0, 0)
-        except OSError:
-            queue.close()
-        else:
-            try:
-                yield lambda timeout: bool(queue.control(None, 1, timeout))
-            finally:
-                queue.close()
-            return
-
-    yield None
+    with process_exit_watcher(pid, os_module=os, select_module=select) as wait_for_exit:
+        yield wait_for_exit
 
 
 def _server_process_id(port: int, record: _LifecycleRecord, expected_configuration: str | None = None) -> int | None:
@@ -872,34 +747,6 @@ def _request_server_stop(port: int, record: _LifecycleRecord, attempt_token: str
         connection.close()
 
 
-def _remove_owned_pid_file(path: Path, pid: int) -> None:
-    try:
-        record = _read_pid_file(path)
-        if record is not None and record.pid == pid:
-            path.unlink()
-    except FileNotFoundError:
-        return
-
-
-def _remove_matching_record(path: Path, expected: _LifecycleRecord) -> None:
-    try:
-        if _read_pid_file(path) == expected:
-            path.unlink()
-    except FileNotFoundError:
-        return
-
-
-def _consume_stop_request(path: Path, pid: int) -> bool:
-    try:
-        request = _read_pid_file(path)
-    except ConfigError:
-        return False
-    if request is None or request.pid != pid:
-        return False
-    path.unlink(missing_ok=True)
-    return True
-
-
 def _existing_server_pid(path: Path, port: int, expected_configuration: str) -> int | None:
     try:
         record = _read_pid_file(path)
@@ -922,33 +769,6 @@ def _existing_server_pid(path: Path, port: int, expected_configuration: str) -> 
     raise ConfigError(
         f"collection server PID {record.pid} is running, but its identity on port {port} could not be verified"
     )
-
-
-def _write_pid_file(path: Path, record: _LifecycleRecord) -> None:
-    temporary_path: Path | None = None
-    try:
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            encoding="utf-8",
-            dir=path.parent,
-            prefix=f".{path.name}.",
-            delete=False,
-        ) as stream:
-            temporary_path = Path(stream.name)
-            json.dump(
-                {"pid": record.pid, "token": record.token, "configuration": record.configuration},
-                stream,
-            )
-            stream.write("\n")
-            stream.flush()
-            os.fsync(stream.fileno())
-        try:
-            os.link(temporary_path, path)
-        except FileExistsError as exc:
-            raise ConfigError(f"PID file already exists: {path}") from exc
-    finally:
-        if temporary_path is not None:
-            temporary_path.unlink(missing_ok=True)
 
 
 def _configuration_fingerprint(
