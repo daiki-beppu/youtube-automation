@@ -1,0 +1,1 @@
+- domain / application / VCS の collection 列挙を共通 inventory 経由へ移行し、readiness policy を filesystem 探索から分離する（#4427）。
