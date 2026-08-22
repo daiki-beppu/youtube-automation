@@ -3,6 +3,7 @@ import re
 from pathlib import Path
 
 from tests.helpers.paths import FIXTURES_DIR, REPO_ROOT, TESTS_DIR
+from tests.helpers.tests_tree import shared_tests_tree_lock
 
 ROOT_TEST_ALLOWLIST = frozenset(
     {
@@ -148,12 +149,13 @@ def test_tests_do_not_resolve_paths_from_file_location() -> None:
     violations = []
     allowed = TESTS_DIR / "helpers" / "paths.py"
 
-    for path in TESTS_DIR.rglob("*.py"):
-        if path == allowed:
-            continue
-        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        if _uses_path_from_file(tree):
-            violations.append(path.relative_to(REPO_ROOT).as_posix())
+    with shared_tests_tree_lock():
+        for path in TESTS_DIR.rglob("*.py"):
+            if path == allowed:
+                continue
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            if _uses_path_from_file(tree):
+                violations.append(path.relative_to(REPO_ROOT).as_posix())
 
     assert violations == []
 
@@ -271,17 +273,19 @@ def _exact_source_owner_paths(test_path: Path) -> tuple[Path, Path]:
 
 
 def test_root_test_modules_match_allowlist() -> None:
-    actual = frozenset(path.name for path in _pytest_test_modules(TESTS_DIR) if path.parent == TESTS_DIR)
+    with shared_tests_tree_lock():
+        actual = frozenset(path.name for path in _pytest_test_modules(TESTS_DIR) if path.parent == TESTS_DIR)
     assert actual == ROOT_TEST_ALLOWLIST
 
 
 def test_test_layers_match_source_layers() -> None:
     source_layers = frozenset(path.name for path in SOURCE_ROOT.iterdir() if (path / "__init__.py").is_file())
-    test_layers = {
-        path.relative_to(TESTS_DIR).parts[0]
-        for path in TESTS_DIR.iterdir()
-        if path.is_dir() and _pytest_test_modules(path)
-    }
+    with shared_tests_tree_lock():
+        test_layers = {
+            path.relative_to(TESTS_DIR).parts[0]
+            for path in TESTS_DIR.iterdir()
+            if path.is_dir() and _pytest_test_modules(path)
+        }
     mirrored_layers = test_layers - LAYOUT_EXCEPTIONS
     assert mirrored_layers <= source_layers
 
@@ -309,16 +313,17 @@ def test_source_owner_candidates_stay_within_mirror_package() -> None:
 
 def test_mirrored_test_modules_have_source_owner() -> None:
     violations = []
-    for test_path in _mirrored_test_paths():
-        relative = test_path.relative_to(TESTS_DIR)
-        mirror_package = relative.parts[:-1]
-        exact_owner, package_owner = _exact_source_owner_paths(test_path)
-        if exact_owner.is_file() or package_owner.is_file():
-            continue
+    with shared_tests_tree_lock():
+        for test_path in _mirrored_test_paths():
+            relative = test_path.relative_to(TESTS_DIR)
+            mirror_package = relative.parts[:-1]
+            exact_owner, package_owner = _exact_source_owner_paths(test_path)
+            if exact_owner.is_file() or package_owner.is_file():
+                continue
 
-        tree = ast.parse(test_path.read_text(encoding="utf-8"), filename=str(test_path))
-        candidates = _source_owner_candidates(tree, mirror_package)
-        if not candidates:
-            violations.append(relative.as_posix())
+            tree = ast.parse(test_path.read_text(encoding="utf-8"), filename=str(test_path))
+            candidates = _source_owner_candidates(tree, mirror_package)
+            if not candidates:
+                violations.append(relative.as_posix())
 
     assert violations == []

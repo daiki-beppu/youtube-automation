@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from tests.helpers.paths import REPO_ROOT
+from tests.helpers.tests_tree import shared_tests_tree_lock
 
 SCRIPT = REPO_ROOT / ".github/scripts/select-affected-tests.py"
 
@@ -176,22 +177,28 @@ def test_cli_output_is_deterministic_unique_and_existing_subset(tmp_path: Path) 
         encoding="utf-8",
     )
 
-    first = _run_cli(changes)
-    second = _run_cli(changes)
-    json_result = _run_cli(changes, "--format", "json")
+    # CLI も この test 自身も実ツリーを走査する。lane 契約の relocation probe が
+    # `tests/` の実ファイルを動かす窓と重なると、selector は設計どおり `ALL` へ
+    # fail-safe するため決定性の契約が成立しない。観測はすべて read lock の内側で
+    # 済ませ、判定だけ外に出す。
+    with shared_tests_tree_lock():
+        first = _run_cli(changes)
+        second = _run_cli(changes)
+        json_result = _run_cli(changes, "--format", "json")
+        targets = first.stdout.splitlines()
+        all_tests = {
+            path.relative_to(REPO_ROOT).as_posix()
+            for path in (REPO_ROOT / "tests").rglob("*.py")
+            if path.name.startswith("test_") or path.name.endswith("_test.py")
+        }
+        targets_exist = all((REPO_ROOT / target).is_file() for target in targets)
 
     assert first.returncode == second.returncode == json_result.returncode == 0
     assert first.stdout == second.stdout
-    targets = first.stdout.splitlines()
     assert targets == sorted(set(targets))
     assert targets
-    all_tests = {
-        path.relative_to(REPO_ROOT).as_posix()
-        for path in (REPO_ROOT / "tests").rglob("*.py")
-        if path.name.startswith("test_") or path.name.endswith("_test.py")
-    }
     assert set(targets) <= all_tests
-    assert all((REPO_ROOT / target).is_file() for target in targets)
+    assert targets_exist
     assert json.loads(json_result.stdout) == {"mode": "selected", "targets": targets}
 
 
