@@ -16,7 +16,8 @@ from typing import Literal
 
 from PIL import Image, UnidentifiedImageError
 
-from youtube_automation.application.review_lifecycle import ReviewSource, collection_root as _collection_root, review
+from youtube_automation.application.review_lifecycle import ReviewSource, review
+from youtube_automation.application.review_lifecycle import collection_root as _collection_root
 from youtube_automation.application.review_lifecycle import sha256_file as _sha256
 from youtube_automation.core.errors import ConfigError, ReviewError, ValidationError, WorkflowStateError
 from youtube_automation.domains.collections.workflow_state import WorkflowState
