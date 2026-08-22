@@ -107,13 +107,7 @@ def finalize_music_prompt_review(
         return
 
     def project(state):
-        assets = state.assets
-        if assets is None:
-            state["assets"] = {}
-            assets = state.assets
-        if assets is None:
-            raise DocumentMigrationError("workflow-state.json::assets を初期化できません")
-        assets["music_prompts"] = True
+        state.set_asset("music_prompts", True)
         return state
 
     update_workflow_state(workflow_state_path, project)

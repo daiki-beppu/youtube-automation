@@ -416,15 +416,11 @@ def _require_same_selection(
 
 
 def _adopt(state_path: Path, selected: str) -> None:
-    timestamp = datetime.now(UTC).isoformat().replace("+00:00", "Z")
-
     def transition(state: WorkflowState) -> None:
         assets = state.assets
         if state.phase != "prepared" or assets is None or assets.master_audio is not None:
             raise WorkflowStateError("master audio transition is no longer pending")
-        assets.master_audio = selected
-        state.phase = "mastered"
-        state["updated_at"] = timestamp
+        state.record_master_audio(selected)
 
     update_workflow_state(state_path, transition)
 

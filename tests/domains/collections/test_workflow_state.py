@@ -683,6 +683,28 @@ def test_record_upload_preserves_unsupplied_optional_fields() -> None:
     assert state.to_dict()["upload"]["publish_at"] is None
 
 
+def test_document_and_review_mutators_validate_and_stamp_updates() -> None:
+    state = WorkflowState({"phase": "prepared", "assets": {}})
+
+    state.record_collection_plan(final_title="Rain", target_persona="reader")
+    state.record_master_audio("01-master/master.wav")
+    state.record_thumbnail_review_selection({"schema_version": 1, "candidate_id": "candidate-a"})
+
+    document = state.to_dict()
+    assert document["planning"] == {
+        "generated": True,
+        "final_title": "Rain",
+        "target_persona": "reader",
+    }
+    assert document["assets"] == {"master_audio": "01-master/master.wav"}
+    assert document["phase"] == "mastered"
+    assert document["thumbnail_review_selection"] == {"schema_version": 1, "candidate_id": "candidate-a"}
+    assert datetime.strptime(document["updated_at"], "%Y-%m-%dT%H:%M:%S.%fZ").microsecond % 1000 == 0
+
+    with pytest.raises(WorkflowStateError, match="planning.final_title"):
+        state.record_collection_plan(final_title=None, target_persona="reader")
+
+
 class TestPlanningPlaylists:
     """#4346: planning.playlists は「未決定」と「auto_add のみ」を区別する。"""
 

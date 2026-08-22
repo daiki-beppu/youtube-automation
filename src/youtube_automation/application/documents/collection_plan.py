@@ -79,15 +79,10 @@ def _write_collection_plan_document(
         return result
 
     def project(state):
-        planning = state.planning
-        if planning is None:
-            state["planning"] = {}
-            planning = state.planning
-        if planning is None:
-            raise DocumentMigrationError("workflow-state.json::planning を初期化できません")
-        planning["generated"] = True
-        planning["final_title"] = selected["final_title"]
-        planning["target_persona"] = selected["target_persona"]
+        state.record_collection_plan(
+            final_title=selected["final_title"],
+            target_persona=selected["target_persona"],
+        )
         return state
 
     update_workflow_state(workflow_state_path, project)

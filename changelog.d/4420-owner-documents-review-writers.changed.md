@@ -1,0 +1,1 @@
+- documents / review の workflow-state writer を検証付き owner mutator へ移行し、`updated_at` を正準形式に統一する（#4420）。
