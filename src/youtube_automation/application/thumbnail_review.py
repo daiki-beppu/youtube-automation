@@ -16,18 +16,18 @@ from typing import Literal
 
 from PIL import Image, UnidentifiedImageError
 
+from youtube_automation.application.review_lifecycle import ReviewSource, collection_root as _collection_root, review
+from youtube_automation.application.review_lifecycle import sha256_file as _sha256
 from youtube_automation.core.errors import ConfigError, ReviewError, ValidationError, WorkflowStateError
 from youtube_automation.domains.collections.workflow_state import WorkflowState
 from youtube_automation.domains.collections.workflow_state import update as update_workflow_state
 from youtube_automation.domains.documents.review import ReviewCandidate, SelectionManifest
-from youtube_automation.domains.documents.review_rendering import render_review_html, validate_review_html
 from youtube_automation.domains.thumbnail.archive import (
     ThumbnailArchiveUpdate,
     archive_approved_thumbnail_transaction,
 )
 from youtube_automation.infrastructure.browser import open_local_file
 from youtube_automation.infrastructure.browser.selection_broker import SelectionBroker
-from youtube_automation.infrastructure.documents.publishing import publish_html_snapshot
 
 ThumbnailArtifact = Literal["thumbnail", "main"]
 ThumbnailReviewSource = Literal["web", "terminal", "automatic"]
@@ -85,6 +85,40 @@ class _Snapshot:
         return {candidate.candidate_id: candidate.image for candidate in self.candidates}
 
 
+class _ThumbnailSource(ReviewSource):
+    def __init__(self, collection: Path, artifact: ThumbnailArtifact, pattern: str | None) -> None:
+        self.collection, self.kind, self.pattern = collection, artifact, pattern
+        self.snapshot: _Snapshot | None = None
+
+    @property
+    def artifact(self):
+        return "thumbnail"
+
+    @property
+    def html_path(self):
+        return self.collection.resolve() / "tmp/reviews/thumbnail-selection.html"
+
+    @property
+    def compact_image_ids(self):
+        return frozenset(c.id for c in self.snapshot.manifest.candidates) if self.snapshot else frozenset()
+
+    def candidates(self):
+        self.snapshot = build_thumbnail_review_snapshot(
+            self.collection, self.kind, pattern=self.pattern, now=datetime.now(UTC)
+        )
+        return self.snapshot.manifest.candidates
+
+    def media(self):
+        assert self.snapshot is not None
+        return tuple(self.snapshot.media().items())
+
+    def digest(self, candidates):
+        return _artifact_digest(self.snapshot.candidates) if self.snapshot else ""
+
+    def commit(self, candidate):
+        pass
+
+
 def run_thumbnail_review(
     collection: Path,
     artifact: ThumbnailArtifact,
@@ -95,35 +129,19 @@ def run_thumbnail_review(
     timeout: float = 300,
     now: datetime | None = None,
 ) -> ThumbnailReviewResult:
-    """Review fixed local candidates and return only a broker-validated ID."""
+    del now
     if automatic:
         return ThumbnailReviewResult(status="skipped")
-    instant = now or datetime.now(UTC)
-    snapshot = build_thumbnail_review_snapshot(collection, artifact, pattern=pattern, now=instant)
-    candidate_ids = tuple(candidate.candidate_id for candidate in snapshot.candidates)
-    if transport == "terminal":
-        return ThumbnailReviewResult(
-            status="terminal_required",
-            artifact_digest=snapshot.manifest.artifact_digest,
-            candidates=candidate_ids,
-        )
-
-    with SelectionBroker(snapshot.manifest) as broker:
-        destination = _display(collection, snapshot, broker.endpoint)
-        selection = broker.wait(timeout=timeout)
-    current = build_thumbnail_review_snapshot(collection, artifact, pattern=pattern, now=instant)
-    if current.manifest.artifact_digest != selection.artifact_digest:
-        raise ReviewError("review表示後に画像またはQA結果が変わりました。正規成果物は更新していません")
-    selected = next((item for item in current.candidates if item.candidate_id == selection.candidate_id), None)
-    original = next((item for item in snapshot.candidates if item.candidate_id == selection.candidate_id), None)
-    if selected is None or original is None or selected.digest != original.digest:
-        raise ReviewError("review表示後に候補digestが変わりました。正規成果物は更新していません")
+    outcome = review(
+        _ThumbnailSource(collection, artifact, pattern),
+        transport,
+        False,
+        timeout,
+        broker_factory=SelectionBroker,
+        open_file=open_local_file,
+    )
     return ThumbnailReviewResult(
-        status="selected",
-        artifact_digest=current.manifest.artifact_digest,
-        candidate_id=selected.candidate_id,
-        candidates=candidate_ids,
-        html_path=destination,
+        outcome.status, outcome.artifact_digest, outcome.candidate_id, outcome.candidates, outcome.html_path
     )
 
 
@@ -340,27 +358,6 @@ def _string_list_summary(value: object, name: str, path: Path) -> str:
     return " / ".join(item.strip() for item in value)
 
 
-def _display(collection: Path, snapshot: _Snapshot, endpoint: str) -> Path:
-    destination = _collection_root(collection) / "tmp" / "reviews" / "thumbnail-selection.html"
-    media = snapshot.media()
-    compact = frozenset(media)
-    html = render_review_html(snapshot.manifest, endpoint=endpoint, media=media, compact_image_ids=compact)
-    publish_html_snapshot(
-        destination,
-        html,
-        lambda persisted: validate_review_html(
-            persisted,
-            manifest=snapshot.manifest,
-            endpoint=endpoint,
-            media=media,
-            compact_image_ids=compact,
-        ),
-    )
-    if not open_local_file(destination.resolve()):
-        raise ReviewError(f"browserでthumbnail review HTMLを開けません: {destination.resolve()}")
-    return destination.resolve()
-
-
 def _target_path(collection: Path, candidate: ThumbnailReviewCandidate) -> Path:
     assets = collection / "10-assets"
     if candidate.artifact == "thumbnail":
@@ -405,26 +402,9 @@ def _restore_target(target: Path, original: bytes | None) -> None:
         temporary.unlink(missing_ok=True)
 
 
-def _collection_root(collection: Path) -> Path:
-    if collection.is_symlink() or not collection.is_dir():
-        raise ReviewError(f"collection directoryが不正です: {collection}")
-    return collection.resolve()
-
-
 def _artifact_digest(candidates: tuple[ThumbnailReviewCandidate, ...]) -> str:
     value = "\n".join(f"{candidate.candidate_id}:{candidate.digest}" for candidate in candidates)
     return hashlib.sha256(value.encode()).hexdigest()
-
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    try:
-        with path.open("rb") as stream:
-            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-                digest.update(chunk)
-    except OSError as exc:
-        raise ReviewError(f"review fileを読み込めません: {path}: {exc}") from exc
-    return digest.hexdigest()
 
 
 __all__ = [
