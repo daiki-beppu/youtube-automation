@@ -1,14 +1,75 @@
 # Implementation Plans
 
-このリポジトリの規約: 作業は必ず worktree 上で行う（`$REPO_ROOT/.worktrees/<slug>/`）。`src/youtube_automation/` / `.claude/skills/` / `.claude/CLAUDE.template.md` / `pyproject.toml` を触るプランは `CHANGELOG.md` の `[Unreleased]` 追記が必須（lefthook pre-push + CI ゲート）。docs / tests のみの変更はゲート対象外。
+このリポジトリの規約: 作業は必ず worktree 上で行う（`$REPO_ROOT/.claude/worktrees/<slug>/`）。`src/youtube_automation/` / `.claude/skills/` / `.claude/CLAUDE.template.md` / `pyproject.toml` を触るプランは `CHANGELOG.md` の `[Unreleased]` 追記が必須（CI ゲート。lefthook は issue #2534 で廃止済み — ローカル git hook は無い）。docs / tests のみの変更はゲート対象外。
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJECTED (with one-line rationale)
 
-## 第 6 回監査（開発並列性、2026-08-22）
+## 第 6 回監査（未参照ファイル・不要ファイル特化、2026-08-22、基準 commit `0030e636`）
 
-| Plan | Title | Priority | Effort | Depends on | Issue | Status |
-|------|-------|----------|--------|------------|-------|--------|
-| 033 | changelog fragment 基盤を導入し CHANGELOG の並列マージコンフリクトを解消 | P1 | M | — | [#4483](https://github.com/daiki-beppu/youtube-automation/issues/4483) | DONE |
+フォーカス指定 /improve（「いらないファイル、参照されていないファイルがないか監査」）。並列 4 subagent（Python 本体 / skills・.takt / docs・ルート / TypeScript 表示層）→ 全 findings を advisor が実読 vet。Python 側は AST import graph（450 モジュール全数、entrypoints の文字列 dispatch 込み）で機械的に到達可能性を判定。
+総評: **完全孤児ファイルは少数**（.takt / site / .github scripts / evals / dashboard / audio-studio はゼロ）だが、**「契約テストだけが延命させている dead code」が主要パターン**として広範に存在する（video_validator クラスタ、CodexGenerator、B3/B4 facade、skill references の test-only 契約スクリプト群、b6 receipt の 47 doc パス存在ロック）。非対話実行のため、レバレッジ上位 5 件を既定選択として plan 化した（028〜032）。
+
+### Execution order & status
+
+| Plan | Title | Priority | Effort | Depends on | Issue | PR | Status |
+|------|-------|----------|--------|------------|-------|-----|--------|
+| 033 | changelog fragment 基盤（`changelog.d/` + `yt-changelog-compile`）を導入し CHANGELOG の並列マージ conflict を解消 | P1 | M | — | [#4483](https://github.com/daiki-beppu/youtube-automation/issues/4483) | — | DONE |
+| 028 | music skill 内の stale fork `generate_suno_prompts.py`（19KB・95 行乖離・wheel 配布に混入）を削除 | P1 | S | 033 (soft) | [#4460](https://github.com/daiki-beppu/youtube-automation/issues/4460) | — | TODO |
+| 029 | 到達不能な video_validator クラスタ（446 行 + テスト 278 行）と B3 facade `domains/media/{video,audio}.py` を削除 | P1 | S | 033 (soft) | [#4461](https://github.com/daiki-beppu/youtube-automation/issues/4461) | — | TODO |
+| 030 | 構築経路が封鎖済みの CodexGenerator（未監査自動返信の footgun）を削除 | P1 | S | 033 (soft) | [#4462](https://github.com/daiki-beppu/youtube-automation/issues/4462) | — | TODO |
+| 031 | suno-helper の廃止済み popup 残骸（#892 の「後続 PR」約 2000 PR 分未着手）を物理削除し README を実態に合わせる | P1 | S | 033 (soft) | [#4463](https://github.com/daiki-beppu/youtube-automation/issues/4463) | — | TODO |
+| 032 | 参照ゼロの小粒残骸一括掃除（legacy image_provider shim ×5 / 廃止スキーマ fixture / bench_real_apis / .prettierignore ×2 / fallow baseline 亡霊 / commit 済み .lock） | P2 | S | 033 (soft) | [#4464](https://github.com/daiki-beppu/youtube-automation/issues/4464) | — | TODO |
+
+### Dependency notes
+
+- **033 はマージ済み**（オペレーター決定 2026-08-22 の「033 を最初に」を完了）。028〜032 は CHANGELOG.md 直接編集の代わりに `changelog.d/<issue>-<slug>.<type>.md` の fragment を追加する（各 plan の CHANGELOG step に条件分岐を記載済み）ため、**5 本が完全並列でマージ可能**
+- 033 の site（リリースノート静的サイト）/ 下流 `/automation --update` への影響はゼロを確認済み — site は `docs/release-notes/*.md` のみを読み（`git grep CHANGELOG site/` → 0 件）、release notes の生成契約はリリース済み version section を入力とし `[Unreleased]` を混ぜない（release-notes-authoring.md:9）。下流は GitHub Release body → リリース済み section fallback。fragment 化が変えるのは `[Unreleased]` への書き溜め経路だけ
+- 028〜032 は触るファイルが完全に非重複。並列実行可
+- 031 / 032 は extensions 側で `pnpm install` が必要（nix devShell `.#extensions`）
+
+### Findings considered and rejected（再監査不要）
+
+- **shadcn skill の `agents/openai.yml` / `evals.json` / `assets/*.png` が未参照**: by design。upstream verbatim vendoring（`skills-lock.json` の computedHash + `test_official_shadcn_skill_is_copied_without_symlinks` が保護）で、dev-only-skills のため wheel にも載らない
+- **`extensions/shared/origin.ts` の production importer ゼロ**: by design。`collection_serve.py::is_origin_allowed` の契約パリティミラーで、ファイル自身のコメントが「CORS はサーバー担保のためクライアント消費者は存在し得ない」と明記済み
+- **`src/youtube_automation/{dashboard_dist,audio_studio_dist}` の commit 済みビルド成果物**: by design。sdist force-include のための追跡で、CI（dashboard.yml / audio-studio.yml）が `pnpm build` 後の `git diff --exit-code` で鮮度を機械担保。基準 commit 時点で同期確認済み
+- **extensions の oxlint / ultracite devDependencies が 3 重定義**: 正当。各 helper のコピーは PATH 上のバイナリ提供、`extensions/package.json` は `oxlint.config.ts` の resolve 用（package.json の description に明記あり）
+- **test 専用 export ~170 シンボル（shared/dom.ts の SELECTORS 等）**: house style。セレクタ定数は変更検知契約（distrokid-helper README 161-169 行に明文化）
+- **dashboard / audio-studio 間の shadcn 5 ファイル byte 一致重複**: 統合は ADR-0013 / ADR-0028 の shared-ui import 禁止に抵触。~200 行の生成 scaffolding に新共有パッケージ + ADR 改訂は見合わない
+- **`.takt/` / `site/` / `.github/scripts/` / `evals/` の孤児疑い**: 全ファイル到達可能を確認（workflow 7 / steps 11 / facets 42 全参照、site は operatorDocMap と blume.config で全消費、.github scripts 6 本全 CI 接続、evals 12 ファイル全使用）
+- **`skills-lock.json` に first-party skill が無い**: by design。外部 vendored skill（shadcn）専用の lock で、契約テストが `set(lock["skills"]) == {"shadcn"}` を assert 済み
+- **`examples/channel_config.example/` ほか examples 14 ファイル**: 全て README / ONBOARDING / docs / tests から参照あり。孤児は minimax-music-engine.example.json のみ（下記・未選択）
+
+### 監査で plan 化を見送った残課題（ユーザー判断待ち）
+
+**削除系（判断が要るもの）**:
+- **b6 receipt の存在ロック解除 + audits raw/ 7 ファイル削除**（M、MED リスク）— `test_b6_integration_contract.py:287-290` が receipt の全 `exact_new_owner`（doc 47 パス含む）の存在を恒久 assert しており、docs/ の約 45% が削除不能。双子の `skills-operational-risk-audit/raw` は削除済み（同テスト :452 で不在 assert）なのに `skills-generalization-consistency/raw/`（中間 scratch 1,736 行）だけ残存。ロック解除が今後の docs 掃除全部の前提
+- **`docs/release-skill-update-253.md` 削除**（S）— 別リポジトリ（dotfiles）の skill 本文の手渡しコピー。参照ゼロ。dotfiles 側の反映確認後に削除
+- **`.codex/takt-open-issues-execution-notes.md`**（S、要 issue 確認）— 2026-07-14 の作業メモ（マシン固有絶対パス入り）が `test_b6_integration_contract.py:113` の legacy-27 として CI 固定されている。merge disposition の完了確認後に削除
+- **`examples/minimax-music-engine.example.json`**（S）— 参照ゼロ。削除か README/ONBOARDING への掲載 + スキーマ検証テスト追加かの二択
+- **references/ の vestigial symlink 5 本**（M、MED リスク）— `get_channel_status.py`（配布テンプレが「廃止」と明言）/ `fetch_benchmark_comments.py` / `finalize_master.py` / `compare_thumbnails.py` / `setup/generate_image.py`。契約テスト（`test_analytics_consolidation.py:91` 等）が存在を凍結しており、downstream 互換 shim か否かの意図確認が先
+- **`bench/` ディレクトリ全体の去就**（S〜M）— perf #131 時限計測フェーズ産・CI 非接続。`bench_strategic_analytics.py` は `time.sleep` を計測しており実コードを測っていない。032 は孤児 1 本のみ削除、残りは「削除 or CI smoke 接続」の判断待ち
+- **`domains/uploads/descriptions_md.py`**（S-M、MED リスク）— 現役 `load_description_document` と重複する第 2 実装。B4 契約テストが「public owner」と assert しており契約変更を伴う
+- **4 CLI（yt-ad-coverage / yt-document-review / yt-media-acceptance / yt-workspace-status）**— skill / doc / workflow から参照ゼロ。power-user 用か忘れ物かの判断待ち（keeper は SKILL.md へ配線、残りは削除）
+- **legacy_utils の未契約 shim 3 本（cli_arguments / genai_client / setup_directory_contract）**— downstream 契約リスト外。`profile` / `worktree` の削除前例に倣い「契約に載せる or removed へ」の判断待ち
+
+**修正系（stale 参照・誤名）**:
+- **ADR 7 本の stale Status 行**（S）— 0002〜0006 / 0015 / 0017 / 0018 が「`feat/ts-rewrite` で進行中」のまま（ブランチも packages/ も消滅、ADR-0021 が supersede）。`superseded by ADR-0021` へ status 修正（削除はしない）
+- **`docs/strategy/growth-gap-analysis.md:19` の消滅パス `utils/reporting_api.py`**（S）— reorganization の rename 漏れ 1 箇所
+- **popup-compatibility テスト 3 本の誤名 rename**（S）— 計 6,021 行が overlay UI のテストなのに popup 名。suno 側 4,495 行の god-file 分割は別途 L
+- **`docs/roadmap.html`**（S）— 公開向け移行アナウンスが site の配信経路（operatorDocMap / site.yml paths）に未接続。publish or delete の二択
+
+**構造系（再発防止・仕組み）**:
+- **docs/ index（`docs/README.md`）新設**（S）— 106 doc 中 41 本がどこからも到達不能（現行 wf アーキテクチャの設計記録 `2026-08-10-wf-skills-takt-migration.md` 含む）。index + 「全 doc が index に載る」契約テストで将来の orphan 化を構造的に防げる
+- **fallow audit の distrokid / community CI ジョブ展開**（S、初回 triage 必要）— dead code gate が suno の PR 時のみ実行。TS 側残骸（031 の popup 等）が生き延びた根本原因
+- **`yt-skills lint` に未参照 references ファイル検知が無い**— skills 側残骸（028 の fork 等）が蓄積する根本原因。lint への検査追加は S-M
+- **`infra/terraform/r2/` の配線**（M）— ADR-0024 のデータプレーンを provision する module が doc / skill / CI から完全孤立。同梱の `r2.tftest.hcl` は一度も実行されていない。`test_terraform_bootstrap.py` 型の parse 契約 + architecture.md からのリンクを推奨
+- **shared-ui barrel の未使用 export ~10 本 trim**（S）— ScrollBar / SelectLabel / fieldVariants / AlertDialogPortal 等は全 extension で参照ゼロ、`Label` は「export があるから存在するテスト」のみが消費
+- **skills の test-only 契約スクリプト群の配線 or 降格**（S〜M）— `validate_experiments.py`（参照完全ゼロ。双子の validate_insights は 6 箇所でゲート）/ `master-audio-review.md`（どの SKILL.md からも不到達）/ `freshness_action.py` / `persona_flow.py` / `market_research_contract.py`（いずれもテストのみが実行、skill 本文は不参照 — CI は通るが実行時に契約が効いていない）
+- **overlay bootstrap の 3 拡張重複統合**（M）— 5 ファミリ × 3 拡張がブランド定数以外同一で、import パス表記（`wxt/utils/storage` vs `@wxt-dev/storage`）の乖離が既に発生
+- **icon-assets.test.ts 3 本 byte 一致 / overlay.css 2 本 byte 一致の共通化**（S）
+- **extensions/{lint,compile}-bench.sh の docs/investigations/scripts/ への移設**（S）— 完了済み調査の再現スクリプトがツールチェーン最前列に残置
+
+**ローカル残骸（repo 外・オペレーター向けメモ、plan 不要）**: 追跡外で ignore されていないファイルはゼロ（作業ツリー健全）。gitignore/exclude 済みのローカル成果物として `utils/`（空ディレクトリ）、`dist/`、`reports/`（256KB）、`.tmp/`（7.3MB）、`execution-notes.md`、`issue-{2050,2053,2166}-implementation-spec.md` が残っており、不要なら手動削除してよい
 
 ## 第 5 回監査（セキュリティ専門監査、2026-07-21、基準 commit `37b362ce`）
 
