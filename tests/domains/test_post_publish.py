@@ -6,8 +6,12 @@ from pathlib import Path
 import pytest
 
 from youtube_automation.core.errors import StateSyncError
+from youtube_automation.domains.collections.inventory import CollectionRecord
+from youtube_automation.domains.collections.workflow_state import WorkflowState
 from youtube_automation.domains.post_publish import (
     PostPublishDecision,
+    PostPublishReadiness,
+    _post_publish_readiness,
     evaluate,
     mark_complete,
     resolve_post_publish_readiness,
@@ -73,6 +77,39 @@ def test_cloud_readiness_selects_oldest_incomplete_live_collection(tmp_path: Pat
 
     assert readiness.status == "ready"
     assert readiness.collection == older.resolve()
+
+
+def test_readiness_skips_live_collection_whose_phase_is_not_complete(tmp_path: Path) -> None:
+    collection = _collection(tmp_path)
+    state_path = collection / "workflow-state.json"
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    state["phase"] = "publishing"
+    state_path.write_text(json.dumps(state) + "\n", encoding="utf-8")
+
+    assert resolve_post_publish_readiness(tmp_path) == PostPublishReadiness("waiting", None)
+
+
+def test_readiness_reports_invalid_shared_post_publish_history(tmp_path: Path) -> None:
+    _collection(tmp_path)
+    (tmp_path / "post_publish_history.json").write_text('{"schema_version": 999, "videos": {}}\n', encoding="utf-8")
+
+    with pytest.raises(StateSyncError, match="unsupported post-publish history schema"):
+        resolve_post_publish_readiness(tmp_path)
+
+
+def test_post_publish_policy_selects_inventory_record_without_reading_files(tmp_path: Path) -> None:
+    directory = tmp_path / "not-created"
+    state = WorkflowState(
+        {
+            "phase": "complete",
+            "stage": "live",
+            "created_at": "2026-01-01T00:00:00Z",
+            "upload": {"video_id": "video-1"},
+        }
+    )
+    records = (CollectionRecord(directory, "live", state),)
+
+    assert _post_publish_readiness(records, None, lambda _: False) == PostPublishReadiness("ready", directory)
 
 
 def test_completion_requires_all_tracking_and_pinned_actual_artifact(tmp_path: Path) -> None:

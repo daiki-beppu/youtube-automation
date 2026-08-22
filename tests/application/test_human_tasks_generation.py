@@ -80,6 +80,21 @@ def test_invalid_state_does_not_overwrite_existing_human_tasks(tmp_path: Path) -
     assert destination.read_text(encoding="utf-8") == "keep\n"
 
 
+def test_missing_state_is_skipped_without_hiding_valid_human_tasks(tmp_path: Path) -> None:
+    (tmp_path / "collections" / "planning" / "initializing").mkdir(parents=True)
+    _state(tmp_path, "pending", {"phase": "complete"})
+    notifier = RecordingNotifier()
+
+    result = generate_human_tasks(
+        tmp_path,
+        channel="soulful-grooves",
+        distrokid_enabled=True,
+        notifier=notifier,
+    )
+
+    assert [task.collection for task in result.report.tasks] == ["pending"]
+
+
 def test_recording_submission_removes_task_from_file_and_next_discord_summary(tmp_path: Path) -> None:
     collection = _state(tmp_path, "volume-one", {"phase": "complete"})
     notifier = RecordingNotifier()

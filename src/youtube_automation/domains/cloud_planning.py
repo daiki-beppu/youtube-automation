@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Literal
 
 from youtube_automation.core.errors import StateSyncError, WorkflowStateError
+from youtube_automation.domains.collections.inventory import CollectionRecord, UnreadableWorkflowState, iter_collections
 from youtube_automation.domains.collections.workflow_state import WorkflowState, read
 
 _PROMPT_FILES = {
@@ -22,28 +23,15 @@ class PlanningReadiness:
     collection: Path | None
 
 
-def _planning_states(root: Path) -> list[tuple[Path, WorkflowState]]:
-    planning = root.resolve() / "collections" / "planning"
-    if not planning.exists():
-        return []
-    if planning.is_symlink() or not planning.is_dir():
-        raise StateSyncError("collections/planning must be a regular directory")
+def _planning_states(records: tuple[CollectionRecord, ...]) -> list[tuple[Path, WorkflowState]]:
     states: list[tuple[Path, WorkflowState]] = []
-    for collection in sorted(planning.iterdir(), key=lambda path: path.name):
-        if collection.is_symlink():
-            raise StateSyncError(f"planning collection must not be a symlink: {collection.name}")
-        if not collection.is_dir() or collection.name.startswith("_"):
-            continue
-        state_path = collection / "workflow-state.json"
-        if not state_path.exists() and not state_path.is_symlink():
-            continue
-        try:
-            state = read(state_path)
-            phase = state.phase
-        except WorkflowStateError as exc:
-            raise StateSyncError(f"cloud planning state is invalid: {collection.name}") from exc
-        if phase != "complete":
-            states.append((collection.resolve(), state))
+    for record in records:
+        if isinstance(record.state, UnreadableWorkflowState):
+            if not record.state.path.exists() and not record.state.path.is_symlink():
+                continue
+            raise StateSyncError(f"cloud planning state is invalid: {record.directory.name}")
+        if record.state.phase != "complete":
+            states.append((record.directory, record.state))
     return states
 
 
@@ -59,7 +47,10 @@ def _sort_key(item: tuple[Path, WorkflowState]) -> tuple[str, str]:
 def resolve_planning_readiness(root: Path) -> PlanningReadiness:
     """Select the oldest active collection without mutating repository state."""
 
-    active = _planning_states(root)
+    try:
+        active = _planning_states(iter_collections(root.resolve(), ("planning",)))
+    except WorkflowStateError as exc:
+        raise StateSyncError("cloud planning inventory is invalid") from exc
     if not active:
         return PlanningReadiness("ready", None)
     collection, state = min(active, key=_sort_key)
@@ -75,7 +66,10 @@ def verify_planning_completion(root: Path, collection: Path | None) -> Path:
     """Verify artifact and state owners completed the selected planning stage."""
 
     if collection is None:
-        active = _planning_states(root)
+        try:
+            active = _planning_states(iter_collections(root.resolve(), ("planning",)))
+        except WorkflowStateError as exc:
+            raise StateSyncError("cloud planning inventory is invalid") from exc
         if len(active) != 1:
             raise StateSyncError("cloud planning must create exactly one active collection")
         collection, state = active[0]
