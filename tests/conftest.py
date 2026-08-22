@@ -96,7 +96,6 @@ SLOW_MODULES = frozenset(
         "test_distrokid_release_endpoint.py",
         "test_generate_videos_script.py",
         "test_preflight_cli.py",
-        "test_extension_package_manager_runtime.py",
         "test_skills_sync_installed_wheel.py",
         "test_site_repository_contract.py",
         "test_streaming_healthcheck.py",

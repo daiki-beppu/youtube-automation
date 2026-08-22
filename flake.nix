@@ -54,6 +54,7 @@
             python314
             uv
             ffmpeg
+            time
           ];
 
           # ランタイム供給のみ。秘密は youtube_automation.infrastructure.secrets から

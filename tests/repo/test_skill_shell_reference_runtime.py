@@ -495,6 +495,23 @@ fi
 """,
     )
     _write_executable(bin_dir / "ffprobe", "#!/bin/bash\nprintf 'h264\\n'\n")
+    _write_executable(
+        bin_dir / "time",
+        """#!/bin/bash
+time_file=""
+while [[ "$#" -gt 0 ]]; do
+  case "$1" in
+    -p) shift ;;
+    -o) time_file="$2"; shift 2 ;;
+    *) break ;;
+  esac
+done
+"$@"
+rc=$?
+printf 'real 1.25\nuser 0.50\nsys 0.25\n' > "$time_file"
+exit "$rc"
+""",
+    )
     env = os.environ.copy()
     env.update(
         {

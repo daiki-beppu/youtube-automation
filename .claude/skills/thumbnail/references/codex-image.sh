@@ -248,7 +248,7 @@ if [ ! -s "$out" ]; then
   exit 1
 fi
 
-header=$(head -c 8 "$out" | xxd -p)
+header=$(LC_ALL=C od -An -tx1 -N8 "$out" | tr -d '[:space:]')
 if [ "${header:0:16}" != "89504e470d0a1a0a" ]; then
   echo "ERROR: 出力ファイルが PNG ヘッダで始まっていません: $out" >&2
   exit 1
