@@ -29,7 +29,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from youtube_automation.configuration.skills import load_skill_config
-from youtube_automation.core.errors import ValidationError, WorkflowStateError
+from youtube_automation.core.errors import ValidationError, WorkflowStateError, WorkflowStateSectionTypeError
 from youtube_automation.domains.collections.workflow_state import WorkflowState
 from youtube_automation.domains.collections.workflow_state import read as read_workflow_state
 from youtube_automation.domains.collections.workflow_state import update as update_workflow_state
@@ -188,7 +188,7 @@ def apply_raw_master(collection_dir: Path, new_name: str, *, loudness_receipt: P
             raise error.__cause__ from error
         if "root must be an object" in str(error):
             raise ValidationError("workflow-state.json の root は object である必要があります") from error
-        if "workflow-state.json::assets must be an object" in str(error):
+        if isinstance(error, WorkflowStateSectionTypeError) and error.section == "assets":
             raise ValidationError("workflow-state.json::assets は object である必要があります") from error
         raise ValidationError(f"workflow-state.json のパースに失敗: {error}") from error
 

@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from typing import Literal, TypedDict, cast
 
-from youtube_automation.core.errors import ValidationError, WorkflowStateError
+from youtube_automation.core.errors import ValidationError, WorkflowStateError, WorkflowStateSectionTypeError
 from youtube_automation.domains.media_store import MediaKey
 from youtube_automation.infrastructure.filesystem import JSONValue, file_lock
 
@@ -566,7 +566,7 @@ class WorkflowState(MutableMapping[str, JSONValue]):
 
     def __setitem__(self, key: str, value: JSONValue) -> None:
         if key in _KNOWN_OBJECT_SECTIONS and not isinstance(value, dict):
-            raise WorkflowStateError(f"workflow-state.json::{key} must be an object")
+            raise WorkflowStateSectionTypeError(key)
         self._data[key] = deepcopy(value)
 
     def __delitem__(self, key: str) -> None:
@@ -581,7 +581,7 @@ class WorkflowState(MutableMapping[str, JSONValue]):
     def _validate_object_sections(self) -> None:
         for key in _KNOWN_OBJECT_SECTIONS & self._data.keys():
             if not isinstance(self._data[key], dict):
-                raise WorkflowStateError(f"workflow-state.json::{key} must be an object")
+                raise WorkflowStateSectionTypeError(key)
         planning = self.planning
         if planning is not None:
             _music = planning.music

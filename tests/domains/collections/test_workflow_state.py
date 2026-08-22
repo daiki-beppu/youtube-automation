@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from youtube_automation.core.errors import AutomationError, WorkflowStateError
+from youtube_automation.core.errors import AutomationError, WorkflowStateError, WorkflowStateSectionTypeError
 from youtube_automation.domains.collections.workflow_state import WorkflowState, read, read_or_none, update
 from youtube_automation.infrastructure.filesystem import JSONValue
 
@@ -623,6 +623,15 @@ def test_update_serializes_processes_without_losing_changes(tmp_path: Path) -> N
 
 def test_workflow_state_error_is_an_automation_error() -> None:
     assert issubclass(WorkflowStateError, AutomationError)
+
+
+@pytest.mark.parametrize("section", ["assets", "planning", "scene_phrases", "upload"])
+def test_invalid_object_section_raises_typed_error_with_section(section: str) -> None:
+    with pytest.raises(WorkflowStateSectionTypeError) as exc_info:
+        WorkflowState({section: "invalid"})
+
+    assert exc_info.value.section == section
+    assert str(exc_info.value) == f"workflow-state.json::{section} must be an object"
 
 
 def test_named_mutators_create_sections_and_use_canonical_updated_at() -> None:

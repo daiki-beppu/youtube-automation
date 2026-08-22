@@ -125,6 +125,14 @@ class WorkflowStateError(AutomationError):
     """workflow-state.json の読み取り・検証・永続化エラー。"""
 
 
+class WorkflowStateSectionTypeError(WorkflowStateError):
+    """workflow-state.json の section が object でないことを型で識別する例外。"""
+
+    def __init__(self, section: str) -> None:
+        super().__init__(f"workflow-state.json::{section} must be an object")
+        self.section = section
+
+
 class MediaStoreError(AutomationError):
     """境界メディアの転送・完全性検証エラー。"""
 

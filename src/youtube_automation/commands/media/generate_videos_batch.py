@@ -14,7 +14,12 @@ from pathlib import Path
 
 from youtube_automation.configuration import channel_dir
 from youtube_automation.configuration.skills import load_channel_override
-from youtube_automation.core.errors import ConfigError, ValidationError, WorkflowStateError
+from youtube_automation.core.errors import (
+    ConfigError,
+    ValidationError,
+    WorkflowStateError,
+    WorkflowStateSectionTypeError,
+)
 from youtube_automation.domains.collections.workflow_state import WorkflowState
 from youtube_automation.domains.collections.workflow_state import read as read_workflow_state
 from youtube_automation.domains.collections.workflow_state import update as update_workflow_state
@@ -183,7 +188,7 @@ def _update_workflow_state(collection: Path) -> str:
     except WorkflowStateError as error:
         if isinstance(error.__cause__, OSError) and "could not be written" in str(error):
             raise error.__cause__ from error
-        if "workflow-state.json::assets must be an object" in str(error):
+        if isinstance(error, WorkflowStateSectionTypeError) and error.section == "assets":
             raise ValidationError(
                 f"workflow-state.json::assets は object である必要があります: {collection}"
             ) from error

@@ -27,7 +27,7 @@ from youtube_automation.core.adapters.runtime import (
     format_duration_short,
     format_timestamp,
 )
-from youtube_automation.core.errors import ValidationError, WorkflowStateError
+from youtube_automation.core.errors import ValidationError, WorkflowStateError, WorkflowStateSectionTypeError
 from youtube_automation.domains.collections.workflow_state import WorkflowState
 from youtube_automation.domains.collections.workflow_state import read_or_none as read_workflow_state_or_none
 from youtube_automation.domains.collections.workflow_state import update as update_workflow_state
@@ -639,14 +639,12 @@ class BAHMetadataGenerator:
         try:
             state = read_workflow_state_or_none(ws_path)
         except WorkflowStateError as error:
-            message = str(error)
-            if "root must be an object" in message:
+            if "root must be an object" in str(error):
                 raise ValidationError(
                     f"workflow-state.json の root は object である必要があります: {ws_path}"
                 ) from error
-            for section in ("planning", "scene_phrases"):
-                if f"workflow-state.json::{section} must be an object" in message:
-                    raise ValidationError(f"workflow-state.json::{section} は object である必要があります") from error
+            if isinstance(error, WorkflowStateSectionTypeError) and error.section in {"planning", "scene_phrases"}:
+                raise ValidationError(f"workflow-state.json::{error.section} は object である必要があります") from error
             raise ValidationError(f"workflow-state.json を読み込めません: {ws_path}: {error}") from error
         return state if state is not None else WorkflowState({})
 
