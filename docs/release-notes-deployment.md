@@ -28,29 +28,17 @@ branch alias を生成する。fork から作成された pull request には pr
 の build 設定は Cloudflare 側に保持されるため、変更時はこの表と Cloudflare Pages project
 の両方を同じ値へ更新する。既存 project の名前、production URL、custom domain は変更しない。
 
-### onboarding の共有 key gate
+### onboarding の直接配信
 
-`/onboarding`、`/onboarding/`、`/onboarding.md`、`/onboarding.mdx` は root Pages Function が保護する。
-Cloudflare Dashboard の Pages project で **Settings → Variables and Secrets** を開き、Production と
-Preview の両 scope に次の binding を設定する。値を repository、`wrangler.jsonc`、build log に書かない。
+`/onboarding`、`/onboarding/`、`/onboarding.md`、`/onboarding.mdx` は Production / Preview とも
+Cloudflare Pages の静的 asset として直接配信する。クエリパラメータ、Pages Function、環境 binding、
+secret によるアクセス制御は行わない。
 
-| Scope | `SITE_ENVIRONMENT`（plain text） | `ONBOARDING_KEY`（encrypted secret） |
-| --- | --- | --- |
-| Production | `production` | 十分に長いランダムな共有 key |
-| Preview | `preview` | Production と異なる preview 用 key |
+公開導線は従来どおり限定する。onboarding は `robots` の `noindex` を維持し、sidebar、トップページ、
+検索、AI 出力、sitemap には掲載しない。運営者は通常の `/onboarding/` URL を直接開く。
 
-runtime の preview 判定は `SITE_ENVIRONMENT` の値が exact `preview` の場合だけであり、その場合は
-onboarding を key なしで表示する。`production`、binding 未設定、大小文字違い、未知値はすべて
-Production 相当として fail-closed になる。`CF_PAGES_BRANCH` は Pages の build-time system variable で、
-Function の runtime 環境判定には使わない。
-
-Production の共有 URL は `https://youtube-automation-release-notes.pages.dev/onboarding/?key=<key>` とする。
-これは認証ではなく、URL を知る人だけを通す目隠しである。URL は browser history、server log、
-screen capture、転送、外部 link の Referer から漏れる可能性があるため、必要な運営者だけへ安全な経路で共有し、
-公開 channel や issue / pull request へ貼らない。漏えいが疑われたら Dashboard で Production secret を新しい値へ
-rotate し、最新 Production deployment を retry するか新規 deployment を作成して binding を反映する。
-commit は不要だが、再 deployment 前の instance が新しい secret を読むとはみなさない。反映確認後に新 URL を共有し、
-旧 URL が `/` へ 302 redirect されることも確認する。
+Repository 変更の deploy 後、Cloudflare Dashboard に旧 gate 用の変数や secret が残っている場合は削除する。
+静的配信に runtime binding は不要である。
 
 ### repository workflow と Build watch paths
 
@@ -83,7 +71,7 @@ fork からの pull request には preview URL が作られないため、同一
 - トップページと sidebar / tabs に「はじめる」「使う」「リリースノート」の3区分が表示される。
 - 公開 navigation とトップページには次の6ページだけが表示される: `/oauth-setup/`、`/chrome-extension-install-guide/`、`/features/`、`/workflow-cheatsheet/`、`/dashboard/`、`/channel-workspace-migration/`。
 - `/onboarding/` は直接 URL で表示でき、robots noindex を持つ一方、sidebar、トップページ、検索、AI 出力、sitemap には現れない。
-- Preview の `/onboarding/` は `SITE_ENVIRONMENT=preview` により key なしで表示できる。
+- Production / Preview の `/onboarding/` はクエリパラメータなしの直接 URL で表示できる。
 - `/features/` から `/workflow-cheatsheet/`、`/onboarding/` と `/oauth-setup/` の相互リンクは preview 内の route を指す。
 - `/onboarding/` の Python 版から `tayk` への移行リンクは、GitHub の `docs/migration/python-to-tayk.md` 原本へ fallback する。
 - `/audits/` route が生成されず、navigation と検索結果にも内部 audit が現れない。
