@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `chore(skills)`: Hallmarkを再現可能なproject skillとして導入し、HTML表示層の設計支援をwheel・sdist・下流同期から除外する（#4402）。
+
 - `fix(wf-status)`: 制作状況 View の要対応カードから重複した赤い左枠を削除し、通常カードと同じ薄いグレーの外枠で表示する（#4398）。
 - `feat(wf-status)`: 制作状況 View で phase・要対応・成果物詳細の順に情報を整理し、停滞・警告・未生成を先頭表示して mobile と keyboard でも絞り込みやすくする（#4378）。
 - `feat(documents)`: review View で候補名・preview・固定 QA・確定操作を一意に関連付け、画像・音声・動画・テキストを mobile と keyboard でも比較しやすくする（#4377）。

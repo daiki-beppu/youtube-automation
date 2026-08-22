@@ -151,13 +151,13 @@ test("実リポジトリでは9カテゴリと全skillを生成する", async ()
     await readFile(join(repositoryRoot, "docs/features.md"), "utf8")
   ).match(/^\| \/[a-z0-9-]+ /gmu);
 
-  assert.equal(result.entries.length, 22);
-  assert.equal(skillDirectories?.length, 21);
+  assert.equal(result.entries.length, 23);
+  assert.equal(skillDirectories?.length, 22);
   assert.equal(parseSkillCategories(await readFile(join(repositoryRoot, "docs/features.md"), "utf8")).length, 9);
   assert.doesNotMatch(result.entries[0].body.text, /## 未分類/);
 });
 
-test("production build は一覧と21個の個別ページを公開する", async () => {
+test("production build は一覧と22個の個別ページを公開する", async () => {
   const siteRoot = resolve(import.meta.dirname, "..");
   const index = await readFile(join(siteRoot, "dist/skills/index.html"), "utf8");
   const thumbnail = await readFile(
@@ -166,7 +166,7 @@ test("production build は一覧と21個の個別ページを公開する", asyn
   );
   const music = await readFile(join(siteRoot, "dist/skills/music/index.html"), "utf8");
 
-  assert.match(index, /21 個の skill/);
+  assert.match(index, /22 個の skill/);
   assert.match(index, /href="\/skills\/wf-new"/);
   assert.doesNotMatch(index, /href="\/skills\/masterup"/);
   assert.doesNotMatch(index, /href="\/skills\/flop-analysis"/);

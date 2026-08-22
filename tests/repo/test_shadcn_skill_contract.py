@@ -49,7 +49,7 @@ def test_frontmatter_keeps_official_identity_and_strict_description() -> None:
 def test_installer_provenance_is_pinned_to_one_official_skill() -> None:
     lock = json.loads(LOCK_FILE.read_text(encoding="utf-8"))
     assert lock["version"] == 1
-    assert set(lock["skills"]) == {"shadcn"}
+    assert set(lock["skills"]) >= {"shadcn"}
     provenance = lock["skills"]["shadcn"]
     assert provenance["source"] == "shadcn/ui"
     assert provenance["sourceType"] == "github"

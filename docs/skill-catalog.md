@@ -29,6 +29,7 @@ PDCA 対応: 準備 = 準備する / Plan = 調べる → 決める / Do = 進�
 
 ## 作る
 
+- `/hallmark` — Anti-AI-slop design skill for greenfield pages, audits, redesigns, and design extraction from URLs or screenshots. Use when the user asks to build a new app or landing page, wants to redesign something, invokes Hallmark by name, or uses audit/redesign/study.
 - `/music` — Use when 音楽制作を状態判定付きで一括実行または一段だけ実行するとき。
 - `/short` — Use when collection 型（BGM テイスター）または release 型（楽曲リリース）のチャンネルでショートを生成するとき。
 - `/thumbnail` — Use when コレクションの YouTube サムネイル（thumbnail.jpg）を CTR 最適化し、textless main.png/jpg を先行生成して実フォント合成するとき、`--compare` で生成済み候補を競合と 320px 比較するとき、`--test` で Studio の A/B テストを設計・記録するとき、`--iterate` で伸びた動画の勝因を次のサムネへ還元するとき、または `--loop` で textless main.png/jpg から Veo / Gemini Omni Flash / MiniMax H3 のループ動画背景を生成するとき。

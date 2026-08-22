@@ -23,7 +23,7 @@ def test_skill_catalog_matches_all_distributed_skills() -> None:
     skill_names = _skill_names()
     catalog_names = _catalog_names()
 
-    assert len(skill_names) == 21
+    assert len(skill_names) == 22
     assert len(catalog_names) == len(set(catalog_names))
     assert set(catalog_names) == skill_names
 
