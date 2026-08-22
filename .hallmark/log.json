@@ -12,5 +12,19 @@
       "review view",
       "workflow status view"
     ]
+  },
+  {
+    "date": "2026-08-22",
+    "scope": "candidate review view",
+    "target": "src/youtube_automation/domains/documents/resources/review.html",
+    "genre": "editorial",
+    "theme": "Technical Ledger",
+    "macrostructure": "Comparison Ledger",
+    "audience": "YouTube operators",
+    "decision": "Bind numbered identity, preview, QA, and confirmation in one austere comparison row while preserving the fixed POST contract.",
+    "excluded": [
+      "schema document view",
+      "workflow status view"
+    ]
   }
 ]
