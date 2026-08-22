@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "build": "blume build",
-    "check": "tsc --project tsconfig.functions.json && blume check",
+    "check": "blume check",
     "test": "node --test tests/*.test.mjs"
   },
   "dependencies": {

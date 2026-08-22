@@ -15,7 +15,7 @@ GitHub Release の本文だけでは、本体と Chrome 拡張を横断して更
 - lockfile を commit し、Nix の固定 Node.js / pnpm で `install --frozen-lockfile`、`check`、`test`、`build` を行う。
 - `site/.blume/` と `site/dist/` は再生成可能な成果物として git 管理しない。
 - Cloudflare Pages を配信境界とし、pull request は preview、`main` は production とする。品質検証 workflow と deploy workflow は分離する。
-- root `site/functions/_middleware.ts` を静的 asset の前段に置き、onboarding の exact 4 path だけを共有 key で保護する。runtime は明示 binding `SITE_ENVIRONMENT` の exact `preview` だけを bypass し、production・未設定・未知値は fail-closed とする。build-time system variable `CF_PAGES_BRANCH` は runtime 判定に使わない。
+- onboarding の exact 4 path（`/onboarding`、`/onboarding/`、`/onboarding.md`、`/onboarding.mdx`）は Production / Preview とも Pages の静的 asset として直接配信する。Pages Function やクエリパラメータによる gate は設けず、`noindex` と公開導線からの除外で非掲載境界を維持する。
 - Python wheel / sdist は従来の Hatch allowlist を維持し、`site/` の source・依存・生成物を一切同梱しない。実 archive の配布境界を pytest で検証する。
 
 ## Consequences
@@ -23,7 +23,7 @@ GitHub Release の本文だけでは、本体と Chrome 拡張を横断して更
 - 公開ノートの追加時は Markdown 契約とサイト build の両方が CI gate になる。
 - サイト障害や Node dependency は Python CLI と下流チャンネルの install を壊さない。
 - build output を repository から直接配信せず、Cloudflare Pages が commit から再生成する。
-- Production の onboarding は URL 共有型の目隠しであり認証ではない。secret は Pages Dashboard に保持し、漏えい時は commit なしで rotate した後、deployment の retry または新規 deployment で反映する。
+- onboarding は通常 URL から直接閲覧できる一方、トップページ、navigation、検索、AI 出力、sitemap には掲載せず、検索エンジン向け `noindex` を維持する。runtime と secret の運用は不要になる。
 
 ## Considered Options
 
