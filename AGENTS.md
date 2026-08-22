@@ -32,13 +32,14 @@ This file provides guidance to Codex CLI (developers.openai.com/codex) when work
 
 ### Codex Cloud の検証
 
-この節は Codex Cloud にだけ適用し、ローカル開発と GitHub Actions には適用しない。Cloud 環境は Python 3.14、環境変数 `UV_PYTHON=3.14`、setup / maintenance script `uv sync --python 3.14 --frozen` で構成する。依存同期は setup / maintenance に任せ、task 中の検証コマンドは既存環境を変更しない `uv run --no-sync` を使う。
+この節は Codex Cloud の task 実行時だけに適用し、Cloud の setup / maintenance、ローカル開発、GitHub Actions には適用しない。Cloud の既存 setup / maintenance script は Nix closure と依存をキャッシュするためそのまま使い、環境変数 `UV_PYTHON=3.14` を設定する。
 
+- setup 済み checkout では既存 `.venv` を使う。task 中に linked worktree を作った場合は、並列処理を始める前にその worktree で `uv sync --python 3.14 --frozen` を一度だけ完了させる
 - 変更した test file / node ID と、変更に直接必要な repository contract を focused test の対象にする。標準形は `uv run --no-sync pytest <targets>`
 - Python の静的検査は変更した path に限定し、`uv run --no-sync ruff check <paths>` を使う
 - 10,000 件超の full suite は GitHub Actions を正とし、Cloud では PR の CI 完了を確認する
 - CI failure の修正ループでは、失敗した test を Cloud で単独再現してから修正する
-- Cloud では `nix develop`、引数なしの `pytest`、全 test 指定、full collection に対する `pytest -n auto` を実行しない
+- task 中は `nix develop` ではなく準備済みの `uv` 環境を使う。引数なしの `pytest`、全 test 指定、full collection に対する `pytest -n auto` は実行しない
 
 ### devShell と worktree
 
