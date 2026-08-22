@@ -1,0 +1,1 @@
+- workflow-state owner に section 生成・既知値検証・正準 `updated_at` 刻印を担う named mutator を追加する（#4417）。
