@@ -4,7 +4,7 @@ import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
 import { spawn, type ChildProcess } from "node:child_process"
 
-import { expect, test, type Page } from "@playwright/test"
+import { expect, test } from "@playwright/test"
 
 let process: ChildProcess
 let fixtureRoot: string
@@ -69,18 +69,6 @@ function localDateKey(date: Date): string {
   const month = String(date.getMonth() + 1).padStart(2, "0")
   const day = String(date.getDate()).padStart(2, "0")
   return `${year}-${month}-${day}`
-}
-
-async function formatCollectedAt(
-  page: Page,
-  timestamp: string
-): Promise<string> {
-  return page.evaluate((value) => {
-    return new Intl.DateTimeFormat("ja-JP", {
-      dateStyle: "medium",
-      timeStyle: "short",
-    }).format(new Date(value))
-  }, timestamp)
 }
 
 async function unusedPort(): Promise<number> {
@@ -315,125 +303,20 @@ test.beforeAll(async () => {
   await waitUntilReady(baseURL)
 })
 
-test("選択期間と手動更新で最新 snapshot を画面全体へ反映する", async ({
-  page,
-}) => {
-  const dataDirectory = join(fixtureRoot, "night-drive", "data")
-  const rangeSnapshot = join(dataDirectory, "analytics_data_2026-08-08.json")
-  const manualSnapshot = join(dataDirectory, "analytics_data_2026-08-09.json")
+test("起動時 snapshot を表示し手動更新操作を提供しない", async ({ page }) => {
   await page.goto(baseURL)
-  await expect(
-    page.getByRole("region", { name: "日次再生数の推移" })
-  ).toBeVisible()
-  await expect(page.getByRole("group", { name: "集計期間" })).toHaveCount(0)
+
   await expect(page.getByText("直近 30 日")).toBeVisible()
-  await page
-    .getByRole("button", { name: "Night Drive の動画詳細を見る" })
-    .click()
-
-  try {
-    await writeFile(
-      rangeSnapshot,
-      JSON.stringify({
-        collection_period: {
-          start_date: "2026-08-02",
-          end_date: "2026-08-08",
-          collected_at: "2026-08-08T12:34:00Z",
-        },
-        channel_analytics: {
-          daily_metrics: [{ date: "2026-08-08", views: 4321 }],
-          summary: {
-            total_views: 4321,
-            total_watch_time: 1200,
-            net_subscribers: 43,
-            total_engagement: 210,
-          },
-        },
-        scheduled_videos: { count: 1 },
-        video_analytics: {
-          "video-1": {
-            title: "Midnight City",
-            views: 4321,
-            likes: 180,
-            comments: 20,
-            shares: 10,
-          },
-        },
-      })
+  await expect(
+    page.getByText(
+      "起動時に収集した snapshot から、チャンネルと動画のパフォーマンスを確認できます。"
     )
-
-    await page.getByRole("button", { name: "データを更新" }).click()
-
-    await expect(page.getByText("直近 30 日")).toBeVisible()
-    const dataContext = page.getByRole("region", {
-      name: "表示データについて",
-    })
-    const rangeCollectedAt = await formatCollectedAt(
-      page,
-      "2026-08-08T12:34:00Z"
-    )
-    await expect(dataContext).toContainText("2026/08/02〜2026/08/08")
-    await expect(dataContext).toContainText(rangeCollectedAt)
-    await expect(
-      page
-        .getByRole("table", { name: "チャンネル横断ストック一覧" })
-        .getByRole("row", { name: /Night Drive/ })
-    ).toContainText("4,321")
-    await expect(
-      page
-        .getByRole("table", { name: "動画パフォーマンス" })
-        .getByRole("cell", { name: "4,321" })
-    ).toBeVisible()
-
-    await writeFile(
-      manualSnapshot,
-      JSON.stringify({
-        collection_period: {
-          start_date: "2026-08-03",
-          end_date: "2026-08-09",
-          collected_at: "2026-08-09T13:45:00Z",
-        },
-        channel_analytics: {
-          daily_metrics: [{ date: "2026-08-09", views: 8765 }],
-          summary: {
-            total_views: 8765,
-            total_watch_time: 2400,
-            net_subscribers: 87,
-            total_engagement: 420,
-          },
-        },
-        scheduled_videos: { count: 1 },
-        video_analytics: {
-          "video-1": {
-            title: "Midnight City",
-            views: 8765,
-            likes: 360,
-            comments: 40,
-            shares: 20,
-          },
-        },
-      })
-    )
-    const button = page.getByRole("button", { name: "データを更新" })
-    await button.click()
-
-    const manualCollectedAt = await formatCollectedAt(
-      page,
-      "2026-08-09T13:45:00Z"
-    )
-    await expect(button).toHaveText("データを更新")
-    await expect(dataContext).toContainText("2026/08/03〜2026/08/09")
-    await expect(dataContext).toContainText(manualCollectedAt)
-    await expect(
-      page
-        .getByRole("table", { name: "動画パフォーマンス" })
-        .getByRole("cell", { name: "8,765" })
-    ).toBeVisible()
-  } finally {
-    await rm(rangeSnapshot, { force: true })
-    await rm(manualSnapshot, { force: true })
-    await page.request.post(`${baseURL}/api/refresh`, { data: { days: 30 } })
-  }
+  ).toBeVisible()
+  await expect(page.getByRole("button", { name: "データを更新" })).toHaveCount(
+    0
+  )
+  await expect(page.getByText("更新中")).toHaveCount(0)
+  await expect(page.getByText("手動更新対応")).toHaveCount(0)
 })
 
 test.afterAll(async () => {

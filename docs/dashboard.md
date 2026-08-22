@@ -1,6 +1,6 @@
 # Analytics dashboard
 
-`yt-dashboard` は登録済みチャンネルの Analytics を起動時または画面の「データを更新」操作で更新し、ローカルブラウザで横断表示する UI です。frontend は同一 origin の JSON API を操作し、Python server が YouTube Data API と YouTube Analytics API を使用して各チャンネルの snapshot を保存します。
+`yt-dashboard` は登録済みチャンネルの Analytics を起動時に更新し、ローカルブラウザで横断表示する読み取り中心の UI です。frontend は同一 origin の JSON API を読み取り、Python server が YouTube Data API と YouTube Analytics API を使用して各チャンネルの snapshot を保存します。
 
 ## channel registry
 
@@ -41,7 +41,7 @@ uv run yt-dashboard --skip-refresh
 
 `GET /api/trends` は最新 snapshot の `channel_analytics.daily_metrics` と `reporting_api.impressions_summary.per_day` から、日次の再生数・再生時間・登録者純増減・インプレッション数を登録チャンネル順に返します。両データの日付和集合を使い、存在しない指標は `null` のまま保持します。snapshot が利用できないチャンネルは空の系列とエラー状態を返します。
 
-`POST /api/refresh` は全登録チャンネルを直列に再収集し、read model を再構築して更新後の overview を返します。JSON body の `days` は `7` / `30` / `90` を指定でき、省略時は `30` です。画面からの手動更新は常に `30` を指定し、表示上の集計期間も直近30日に固定します。互換入口として API は従来の期間指定を引き続き受理します。更新は排他的で、実行中の再送は `409 Conflict` です。`--skip-refresh` で起動した server では外部 API を呼ばず、保存済み snapshot から read model だけを再構築します。
+`POST /api/refresh` は既存クライアント向けの互換入口です。全登録チャンネルを直列に再収集し、read model を再構築して更新後の overview を返します。JSON body の `days` は `7` / `30` / `90` を指定でき、省略時は `30` です。更新は排他的で、実行中の再送は `409 Conflict` です。`--skip-refresh` で起動した server では外部 API を呼ばず、保存済み snapshot から read model だけを再構築します。
 
 `GET /api/publications` は、起動時に保存済み cache から構築した公開履歴 read model を読み取り専用で返します。同じ response の `days` に全チャンネルの日別合計、`channels` に登録順のチャンネル別内訳を含みます。各内訳は `status`、`fetched_at`、`timezone`、`days`、構造化された `error` を持ち、endpoint で公開日を再推測したり外部 API を呼んだりはしません。
 
