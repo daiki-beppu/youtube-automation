@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from youtube_automation.application.review_lifecycle import ReviewSource, review
+from youtube_automation.application.review_lifecycle import ReviewSource, review, sha256_file
 from youtube_automation.core.errors import ReviewError, ValidationError, WorkflowStateError
 from youtube_automation.domains.collections.workflow_state import WorkflowState
 from youtube_automation.domains.collections.workflow_state import read as read_workflow_state
@@ -89,7 +89,7 @@ class _VideoSource(ReviewSource):
             self.presentation.overlays,
             self.presentation.full_output_outlook,
         )
-        digest = hashlib.sha256((self.path.read_bytes().hex() + "\0" + "\0".join(values)).encode()).hexdigest()
+        digest = hashlib.sha256((sha256_file(self.path) + "\0" + "\0".join(values)).encode()).hexdigest()
         return (
             ReviewCandidate(
                 cid,

@@ -64,6 +64,26 @@ def _presentation() -> master_video_review.VideoReviewPresentation:
     )
 
 
+def test_video_source_streams_file_digest_through_shared_helper(tmp_path: Path, monkeypatch) -> None:
+    collection = _collection(tmp_path)
+    video = collection / "01-master" / "Rain-Preview.mp4"
+    video.write_bytes(b"preview")
+    monkeypatch.setattr(master_video_review, "probe_video", _probe)
+    digested: list[Path] = []
+
+    def digest(path: Path) -> str:
+        digested.append(path)
+        return "a" * 64
+
+    monkeypatch.setattr(master_video_review, "sha256_file", digest)
+    monkeypatch.setattr(Path, "read_bytes", lambda _path: pytest.fail("video must not be read into memory"))
+
+    source = master_video_review._VideoSource(collection, "preview", _presentation())
+    source.candidates()
+
+    assert digested == [video.resolve()]
+
+
 def test_preview_review_plays_probe_and_composition_without_updating_state(tmp_path: Path, monkeypatch) -> None:
     collection = _collection(tmp_path)
     (collection / "01-master" / "Rain-Preview.mp4").write_bytes(b"preview")

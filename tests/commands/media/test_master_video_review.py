@@ -3,6 +3,8 @@ from __future__ import annotations
 from argparse import Namespace
 from pathlib import Path
 
+import pytest
+
 from youtube_automation.application.master_video_review import MasterVideoReviewResult
 from youtube_automation.commands.media import master_video_review
 
@@ -32,3 +34,36 @@ def test_cli_passes_explicit_review_presentation_and_mode(monkeypatch, tmp_path:
     assert captured["candidate_id"] == "full:Rain-Master.mp4"
     assert captured["presentation"].background_route == "loop"
     assert '"candidate_id": "full:Rain-Master.mp4"' in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("kind", ["preview", "full"])
+def test_terminal_required_returns_exit_code_two(monkeypatch, tmp_path: Path, kind: str) -> None:
+    monkeypatch.setattr(
+        master_video_review,
+        "review_master_video",
+        lambda *_args, **_kwargs: MasterVideoReviewResult(
+            "terminal_required", "a" * 64, candidates=(f"{kind}:Rain.mp4",)
+        ),
+    )
+
+    assert (
+        master_video_review.main(
+            [
+                "--collection",
+                str(tmp_path),
+                "--kind",
+                kind,
+                "--background-route",
+                "loop",
+                "--effect",
+                "none",
+                "--overlays",
+                "disabled",
+                "--full-output-outlook",
+                "stream copy",
+                "--transport",
+                "terminal",
+            ]
+        )
+        == 2
+    )
