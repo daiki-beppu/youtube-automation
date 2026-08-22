@@ -83,11 +83,39 @@ def test_critical_findings_fail_the_check_via_structured_output() -> None:
 
     assert "--json-schema" in claude_args
     assert "critical_count" in claude_args
+    assert "report_markdown" in claude_args
 
     verdict = review["steps"][-1]
     assert verdict["env"] == {"STRUCTURED_OUTPUT": "${{ steps.review.outputs.structured_output }}"}
     assert "critical" in verdict["run"]
     assert "exit 1" in verdict["run"]
+
+
+def _allowed_tools(claude_args: str) -> list[str]:
+    line = next(part for part in claude_args.splitlines() if part.startswith("--allowedTools"))
+    return line.removeprefix("--allowedTools").strip().strip('"').split(",")
+
+
+def test_review_comment_is_upserted_by_a_workflow_step_not_by_claude() -> None:
+    review = _workflow()["jobs"]["review"]
+    steps = review["steps"]
+
+    # Claude にはコメント投稿系コマンドを許可しない(投稿経路は workflow step に一本化)
+    tools = _allowed_tools(_review_step(review)["with"]["claude_args"])
+    assert not [tool for tool in tools if tool.startswith("Bash(gh pr comment")]
+    assert not [tool for tool in tools if tool.startswith("Bash(gh api")]
+
+    post = next(step for step in steps if step.get("name") == "Post review comment")
+    assert post["if"] == "steps.review.outputs.structured_output != ''"
+    assert post["env"]["STRUCTURED_OUTPUT"] == "${{ steps.review.outputs.structured_output }}"
+    script = post["run"]
+    assert "<!-- code-review-workflow -->" in script
+    assert "report_markdown" in script
+    assert "PATCH" in script
+
+    # critical 判定で fail する前に、指摘本文が必ず PR へ投稿される
+    assert steps.index(post) < steps.index(steps[-1])
+    assert steps[-1]["run"].find("exit 1") != -1
 
 
 def test_review_cannot_push_to_the_pr_branch() -> None:
