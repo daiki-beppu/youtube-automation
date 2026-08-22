@@ -406,17 +406,20 @@ def test_runtime_path_rejects_non_directory_without_leaking_path(
     assert invalid_path.name not in format_report([result])
 
 
-def test_runtime_path_fails_when_directory_is_not_writable(tmp_path: Path) -> None:
+def test_runtime_path_fails_when_directory_is_not_writable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     env = _isolated_env(tmp_path)
     repo = _init_repo(tmp_path, env)
     runtime_root = tmp_path / "current" / ".takt" / ".runtime"
     env.update(_runtime_env(runtime_root))
     read_only_tmp = runtime_root / "tmp"
-    read_only_tmp.chmod(0o500)
-    try:
-        result = check_runtime_path(repo, env)
-    finally:
-        read_only_tmp.chmod(0o700)
+    real_access = preflight.os.access
+    monkeypatch.setattr(
+        preflight.os,
+        "access",
+        lambda path, mode: False if Path(path) == read_only_tmp and mode == os.W_OK else real_access(path, mode),
+    )
+
+    result = check_runtime_path(repo, env)
 
     assert not result.ok
     assert "TMPDIR" in result.detail

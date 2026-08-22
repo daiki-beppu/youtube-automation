@@ -126,9 +126,9 @@ def test_nix_develop_syncs_missing_environment_and_is_quiet_on_reentry(project_c
 
 @pytest.mark.skipif(not _nix_is_available(), reason="a usable Nix daemon is required")
 def test_nix_develop_warns_when_sync_fails_but_enters_shell(project_copy: Path, tmp_path: Path) -> None:
-    environment = tmp_path / "missing-parent" / "environment"
-    environment.parent.mkdir()
-    environment.parent.chmod(0o500)
+    non_directory_parent = tmp_path / "not-a-directory"
+    non_directory_parent.write_text("blocks environment creation\n", encoding="utf-8")
+    environment = non_directory_parent / "environment"
 
     result = _nix_develop(project_copy, environment)
 
