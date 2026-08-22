@@ -1,12 +1,11 @@
 name: docs_review
 tags: [review, docs-gate]
+capabilities: [readonly, enable-skills]
 parallel:
   - name: correctness_review
     edit: false
     session: compact
-    persona: merge-readiness-reviewer
-    provider_options:
-      extends: review-readonly
+    persona: supervisor
     instruction: yt-auto-review-docs
     output_contracts:
       report:
@@ -16,8 +15,6 @@ parallel:
     edit: false
     session: compact
     persona: architecture-reviewer
-    provider_options:
-      extends: review-readonly
     instruction: yt-auto-review-docs
     output_contracts:
       report:

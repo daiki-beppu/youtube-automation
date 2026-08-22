@@ -1,12 +1,11 @@
 name: reviewers
 tags: [review]
+capabilities: [readonly, enable-skills]
 parallel:
   - name: arch_review
     tags: [review]
     edit: false
     session: compact
-    provider_options:
-      extends: review-readonly
     persona: architecture-reviewer
     policy: review
     knowledge: architecture
@@ -19,8 +18,6 @@ parallel:
     tags: [review]
     edit: false
     session: compact
-    provider_options:
-      extends: review-readonly
     persona: ai-antipattern-reviewer
     policy: [review, ai-antipattern]
     instruction: ai-antipattern-review
@@ -32,8 +29,6 @@ parallel:
     tags: [review]
     edit: false
     session: compact
-    provider_options:
-      extends: review-readonly
     persona: coding-reviewer
     policy: [review, coding]
     instruction: review-coding
@@ -45,8 +40,6 @@ parallel:
     tags: [review]
     edit: false
     session: compact
-    provider_options:
-      extends: review-readonly
     persona: implementation-semantics-reviewer
     policy: review
     knowledge: implementation-semantics
@@ -59,8 +52,6 @@ parallel:
     tags: [review]
     edit: false
     session: compact
-    provider_options:
-      extends: review-readonly
     persona: contract-lifecycle-reviewer
     policy: review
     knowledge: contract-lifecycle
@@ -73,8 +64,6 @@ parallel:
     tags: [review]
     edit: false
     session: compact
-    provider_options:
-      extends: review-readonly
     persona: robustness-reviewer
     policy: review
     knowledge: robustness

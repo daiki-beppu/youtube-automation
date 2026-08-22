@@ -1,5 +1,5 @@
 # Repository defaults only. Workflow structure lives in .takt/workflows/ and
-# reusable local differences from takt 0.55.1 builtins live in .takt/steps/.
+# reusable local differences from takt 0.60.0 builtins live in .takt/steps/.
 draft_pr: false
 base_branch: main
 auto_requeue_max_attempts: 0

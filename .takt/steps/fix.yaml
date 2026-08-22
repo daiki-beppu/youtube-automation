@@ -1,5 +1,6 @@
 name: fix
 tags: [coding]
+capabilities: [edit, enable-skills]
 edit: true
 session: compact
 persona: coder

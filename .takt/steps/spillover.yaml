@@ -3,6 +3,5 @@ tags: [delivery]
 edit: false
 session: refresh
 persona: planner
-provider_options:
-  extends: review-readonly
+capabilities: [readonly, enable-skills]
 instruction: yt-auto-spillover

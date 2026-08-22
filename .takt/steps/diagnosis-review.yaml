@@ -1,12 +1,11 @@
 name: diagnosis_review
 tags: [review, diagnosis-gate]
+capabilities: [readonly, enable-skills]
 parallel:
   - name: causal_review
     edit: false
     session: compact
     persona: implementation-semantics-reviewer
-    provider_options:
-      extends: review-readonly
     instruction: yt-auto-review-diagnosis
     output_contracts:
       report:
@@ -15,9 +14,7 @@ parallel:
   - name: competing_hypothesis_review
     edit: false
     session: compact
-    persona: merge-readiness-reviewer
-    provider_options:
-      extends: review-readonly
+    persona: review-adjudicator
     instruction: yt-auto-review-diagnosis
     output_contracts:
       report:
@@ -27,8 +24,6 @@ parallel:
     edit: false
     session: compact
     persona: testing-reviewer
-    provider_options:
-      extends: review-readonly
     instruction: yt-auto-review-diagnosis
     output_contracts:
       report:

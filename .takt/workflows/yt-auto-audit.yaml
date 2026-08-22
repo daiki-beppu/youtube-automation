@@ -2,12 +2,7 @@ name: yt-auto-audit
 description: >
   汎用の read-only 監査 lane。有限スコープを定義し、追記型台帳を監査と監督で
   単調に拡張し、独立検収後だけ docs/audits/ へ配置する。
-workflow_config:
-  provider_options:
-    codex:
-      network_access: true
-      skills:
-        repo: true
+capabilities: [readonly, enable-skills]
 max_steps: 24
 initial_step: plan
 
@@ -31,8 +26,6 @@ steps:
     tags: [plan, audit]
     edit: false
     persona: planner
-    provider_options:
-      extends: review-readonly
     instruction: yt-auto-audit-plan
     output_contracts:
       report:
@@ -53,8 +46,6 @@ steps:
     edit: false
     session: refresh
     persona: testing-reviewer
-    provider_options:
-      extends: review-readonly
     instruction: yt-auto-audit-run
     output_contracts:
       report:
@@ -74,8 +65,6 @@ steps:
     tags: [review, supervise]
     edit: false
     persona: supervisor
-    provider_options:
-      extends: review-readonly
     instruction: yt-auto-audit-supervise
     pass_previous_response: false
     structured_output:
@@ -91,9 +80,7 @@ steps:
   - name: review
     tags: [review, final-gate]
     edit: false
-    persona: merge-readiness-reviewer
-    provider_options:
-      extends: review-readonly
+    persona: review-adjudicator
     instruction: yt-auto-audit-review
     pass_previous_response: false
     structured_output:
@@ -108,6 +95,7 @@ steps:
 
   - name: publish
     tags: [delivery, docs]
+    capabilities: [edit, enable-skills]
     edit: true
     persona: coder
     required_permission_mode: edit
