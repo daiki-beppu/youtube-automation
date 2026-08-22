@@ -10,7 +10,7 @@ plan §171 / test-design.md §44-50 §86 §117-122 §146-147 を満たすケー�
 - `_check_upload_interval`: config.shorts.min_hours_between_shorts_per_collection の境界
 - `_find_short_video`: `shorts/short-NN-*.mp4` 優先・`short.mp4` fallback・両方無で FileNotFoundError
 - `upload_short`: 委譲先 `YouTubeAutoUploader.upload_video` の呼出・結果分岐
-- `TrackingStore.record_short_upload`: `post_upload.shorts: list[dict]` で upsert by short_num
+- `UploadJournal`: resumable session の永続化と `WorkflowState.record_short_upload` への完了投影
 - `__init__`: `config.shorts.enabled=false` で UploadError
 """
 
@@ -30,6 +30,8 @@ from tests.helpers.paths import FIXTURES_DIR, REPO_ROOT
 sys.path.insert(0, str(REPO_ROOT))
 
 import pytest
+
+from youtube_automation.domains.uploads.upload_journal import UploadJournal
 
 # ---------------------------------------------------------------------------
 # ヘルパー
@@ -653,7 +655,6 @@ class TestUploadShort:
         tracking = json.loads(tracking_path.read_text(encoding="utf-8"))
         tracking_store = MagicMock(spec=TrackingStore)
         tracking_store.read.return_value = tracking
-        tracking_store.read_short_resume_uri.return_value = None
         published_dates = MagicMock(spec=PublishedDatesScheduler)
         published_dates.calculate_short_publish_at.return_value = "2099-01-03T08:00:00+09:00"
 
@@ -673,12 +674,8 @@ class TestUploadShort:
             tracking_path=tracking_path,
             publish_time=uploader.config.shorts.publish_time,
         )
-        tracking_store.record_short_upload.assert_called_once_with(
-            col,
-            short_num=None,
-            video_id="VIDEO_NEW",
-            publish_at="2099-01-03T08:00:00+09:00",
-        )
+        state = json.loads((col / "workflow-state.json").read_text(encoding="utf-8"))
+        assert state["post_upload"]["shorts"][0]["video_id"] == "VIDEO_NEW"
 
     def test_publish_at_future_passed_into_metadata(self, tmp_path, monkeypatch):
         """publish_at が未来日なら metadata に反映される."""
@@ -862,101 +859,6 @@ class TestUploadShort:
 
 
 # ---------------------------------------------------------------------------
-# 7. TestUpdateWorkflowState (plan アンチパターン #10 / test-design TDR-002)
-# ---------------------------------------------------------------------------
-
-
-class TestUpdateWorkflowState:
-    """共有 store のスキーマ: `post_upload.shorts: list[dict]` で `short_num` をキーに upsert.
-
-    `bulk_update_short_localizations.collect_short_videos` と同スキーマで対称検証する。
-    """
-
-    def test_initial_write_creates_list_entry(self, tmp_path):
-        """初回書き込みで `post_upload.shorts = [{...}]` の list を作る."""
-        # Given: workflow-state.json が空
-        col = _setup_collection(tmp_path)
-        ws_path = col / "workflow-state.json"
-        state = json.loads(ws_path.read_text(encoding="utf-8"))
-        state["future_section"] = {"keep": True}
-        ws_path.write_text(json.dumps(state), encoding="utf-8")
-        with _make_short_uploader() as (uploader, _):
-            # When
-            uploader.tracking_store.record_short_upload(
-                col,
-                short_num=1,
-                video_id="V1",
-                publish_at="2099-01-03T08:00:00+09:00",
-            )
-
-        # Then
-        ws = json.loads((col / "workflow-state.json").read_text(encoding="utf-8"))
-        shorts = ws["post_upload"]["shorts"]
-        assert isinstance(shorts, list)
-        assert len(shorts) == 1
-        assert shorts[0]["short_num"] == 1
-        assert shorts[0]["video_id"] == "V1"
-        assert ws["future_section"] == {"keep": True}
-
-    def test_uploaded_at_is_schedule_timezone_aware(self, tmp_path):
-        """uploaded_at は schedule timezone 付き ISO 8601 で書かれる."""
-        col = _setup_collection(tmp_path)
-        with _make_short_uploader(schedule_config={"schedule": {"timezone": "UTC"}}) as (uploader, _):
-            uploader.tracking_store.record_short_upload(col, short_num=1, video_id="V1", publish_at=None)
-
-        ws = json.loads((col / "workflow-state.json").read_text(encoding="utf-8"))
-        uploaded_at = ws["post_upload"]["shorts"][0]["uploaded_at"]
-        dt = datetime.fromisoformat(uploaded_at)
-        assert dt.tzinfo is not None
-        assert dt.utcoffset() == timedelta(0)
-
-    def test_same_short_num_replaces_existing_entry(self, tmp_path):
-        """同じ `short_num` を再 upsert したら既存 entry が置換される."""
-        # Given: 既に short_num=1 で V1 を書いた状態
-        col = _setup_collection(tmp_path)
-        with _make_short_uploader() as (uploader, _):
-            uploader.tracking_store.record_short_upload(col, short_num=1, video_id="V1", publish_at=None)
-
-            # When: 同じ short_num=1 を別 video_id で再 upsert
-            uploader.tracking_store.record_short_upload(col, short_num=1, video_id="V1_NEW", publish_at=None)
-
-        # Then: list の長さは 1 のままで V1_NEW に置換
-        ws = json.loads((col / "workflow-state.json").read_text(encoding="utf-8"))
-        shorts = ws["post_upload"]["shorts"]
-        assert len(shorts) == 1
-        assert shorts[0]["video_id"] == "V1_NEW"
-
-    def test_different_short_num_appends(self, tmp_path):
-        """異なる `short_num` は append される."""
-        # Given: short_num=1 を書く
-        col = _setup_collection(tmp_path)
-        with _make_short_uploader() as (uploader, _):
-            uploader.tracking_store.record_short_upload(col, short_num=1, video_id="V1", publish_at=None)
-
-            # When: short_num=2 を書く
-            uploader.tracking_store.record_short_upload(col, short_num=2, video_id="V2", publish_at=None)
-
-        # Then: list の長さは 2
-        ws = json.loads((col / "workflow-state.json").read_text(encoding="utf-8"))
-        shorts = ws["post_upload"]["shorts"]
-        assert len(shorts) == 2
-        nums = {s["short_num"] for s in shorts}
-        assert nums == {1, 2}
-
-    def test_skips_when_workflow_state_missing(self, tmp_path):
-        """workflow-state.json が無ければ warning を出して skip（致命的にしない）."""
-        # Given: workflow-state.json なし
-        col = tmp_path / "collections" / "live" / "ws-missing"
-        col.mkdir(parents=True)
-        with _make_short_uploader() as (uploader, _):
-            # When: 例外を投げず処理が終わる
-            uploader.tracking_store.record_short_upload(col, short_num=1, video_id="V1", publish_at=None)
-
-        # Then: ファイルは作成されない
-        assert not (col / "workflow-state.json").exists()
-
-
-# ---------------------------------------------------------------------------
 # 8. TestShortResumableUri (#466)
 # ---------------------------------------------------------------------------
 
@@ -965,7 +867,7 @@ class TestShortResumableUri:
     """`upload_short` の resumable upload session URI 永続化 (#466)。
 
     CC 経路（#381）と同等に、中断→再実行で同一 session を再開し video_id 重複を防ぐ。
-    tracking 媒体は workflow-state.json.post_upload.shorts[].resume_session_uri。
+    tracking 媒体は upload_tracking.json の UploadJournal kind `short:<番号>`。
     """
 
     def _patch_interval_ok(self, uploader):
@@ -1051,24 +953,5 @@ class TestShortResumableUri:
             result = uploader.upload_short(col, short_num=5)
 
         assert result["action"] == "short_upload_failed"
-        ws = json.loads((col / "workflow-state.json").read_text(encoding="utf-8"))
-        entry = next(s for s in ws["post_upload"]["shorts"] if s["short_num"] == 5)
-        assert entry["resume_session_uri"] == "https://resume/MID"
-
-    def test_read_resume_uri_helper(self, tmp_path):
-        """共有 store の resume URI 読み取りは entry 無→None / 保存済→値。"""
-        col = _setup_collection(tmp_path)
-        ws_path = col / "workflow-state.json"
-        with _make_short_uploader() as (uploader, _):
-            assert uploader.tracking_store.read_short_resume_uri(ws_path, 1) is None
-            self._write_shorts_state(col, [{"short_num": 1, "resume_session_uri": "https://resume/X"}])
-            assert uploader.tracking_store.read_short_resume_uri(ws_path, 1) == "https://resume/X"
-
-    def test_persist_resume_uri_skips_when_state_missing(self, tmp_path):
-        """workflow-state.json が無ければ resume URI 永続化を skip（致命的にしない）."""
-        col = tmp_path / "collections" / "live" / "ws-missing"
-        col.mkdir(parents=True)
-        ws_path = col / "workflow-state.json"
-        with _make_short_uploader() as (uploader, _):
-            uploader.tracking_store.persist_short_resume_uri(ws_path, 1, "https://resume/X")
-        assert not ws_path.exists()
+        journal = UploadJournal(col)
+        assert journal.begin("short:5").resume_uri == "https://resume/MID"

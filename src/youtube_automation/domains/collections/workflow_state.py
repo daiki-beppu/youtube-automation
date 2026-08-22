@@ -751,6 +751,25 @@ class WorkflowState(MutableMapping[str, JSONValue]):
         self._data["thumbnail_review_selection"] = deepcopy(dict(selection))
         self.touch()
 
+    def record_short_upload(self, entry: Mapping[str, JSONValue]) -> None:
+        """short_num 単位で公開記録を upsert し、更新時刻を刻印する。"""
+        short_num = entry.get("short_num")
+        if short_num is not None and (isinstance(short_num, bool) or not isinstance(short_num, int)):
+            raise WorkflowStateError("workflow-state.json::post_upload.shorts[].short_num must be an integer or null")
+        post_upload = self._data.setdefault("post_upload", {})
+        assert isinstance(post_upload, dict)
+        typed_post_upload = PostUploadState(post_upload)
+        shorts = typed_post_upload.shorts
+        replacement = deepcopy(dict(entry))
+        for index, existing in enumerate(shorts):
+            if existing.get("short_num") == short_num:
+                shorts[index] = replacement
+                break
+        else:
+            shorts.append(replacement)
+        typed_post_upload.shorts = shorts
+        self.touch()
+
     def record_distrokid_submission(self, completed_at: str) -> None:
         """DistroKid提出の初回完了時刻を保持し、再実行では上書きしない。"""
         human_tasks = self._data.setdefault("human_tasks", {})
