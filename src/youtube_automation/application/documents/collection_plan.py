@@ -15,6 +15,7 @@ from youtube_automation.application.documents.migration import (
     MarkdownMigrationDecision,
     write_operational_document,
 )
+from youtube_automation.application.documents.projection import publish_and_project
 from youtube_automation.core.errors import DocumentMigrationError
 from youtube_automation.domains.collections.workflow_state import update as update_workflow_state
 from youtube_automation.domains.documents.schema_registry import RepositorySchema, validate_repository_document
@@ -65,27 +66,33 @@ def _write_collection_plan_document(
         _validate_references(document)
         return document
 
-    result = write_operational_document(
-        json_path,
-        RepositorySchema.COLLECTION_PLAN,
-        build_and_validate,
-        migration_decision,
-    )
-    if result is DocumentWriteResult.DECLINED:
-        return result
-    document = read_published_json_document(json_path, RepositorySchema.COLLECTION_PLAN)
-    selected = _selected_candidate_or_draft(document)
-    if selected is None:
-        return result
-
-    def project(state):
-        state.record_collection_plan(
-            final_title=selected["final_title"],
-            target_persona=selected["target_persona"],
+    def publish() -> tuple[DocumentWriteResult, dict[str, object] | None]:
+        result = write_operational_document(
+            json_path,
+            RepositorySchema.COLLECTION_PLAN,
+            build_and_validate,
+            migration_decision,
         )
-        return state
+        if result is DocumentWriteResult.DECLINED:
+            return result, None
+        document = read_published_json_document(json_path, RepositorySchema.COLLECTION_PLAN)
+        return result, _selected_candidate_or_draft(document)
 
-    update_workflow_state(workflow_state_path, project)
+    def project(published: tuple[DocumentWriteResult, dict[str, object] | None]) -> None:
+        _result, selected = published
+        if selected is None:
+            return
+
+        def transition(state):
+            state.record_collection_plan(
+                final_title=selected["final_title"],
+                target_persona=selected["target_persona"],
+            )
+            return state
+
+        update_workflow_state(workflow_state_path, transition)
+
+    result, _selected = publish_and_project(publish, project)
     return result
 
 
