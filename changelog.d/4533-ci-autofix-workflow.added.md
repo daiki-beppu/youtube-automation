@@ -1,0 +1,1 @@
+- PR ゲート CI の失敗を claude-code-action が診断して修正 commit を push する自動修正 workflow（`ci-autofix.yml`）を追加する（#4533）。

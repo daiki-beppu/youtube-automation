@@ -170,6 +170,17 @@ draft でない PR の opened / ready_for_review / synchronize で `.github/work
 - `CLAUDE_CODE_OAUTH_TOKEN` / `ANTHROPIC_API_KEY` がどちらも未設定の環境では fail せず skip される(evals.yml と同じ慣行)
 - 同一 PR への連続 push は進行中の run が cancel され、最新 commit のレビューだけが残る
 
+## CI 失敗の自動修正(post-push の保険)
+
+PR をゲートする 5 workflow(CI / Dashboard / Extensions / Audio Studio / Release notes site)のいずれかが PR で失敗すると、`.github/workflows/ci-autofix.yml` が `workflow_run` で発火し、claude-code-action が失敗ログを診断して修正 commit を PR ブランチへ push する。ローカルで green にする一次経路(takt の `ci_verify` / `/issue-direct` の fix ループ)はそのままに、push 後に発生した回帰への保険として重ねる。
+
+- **push は claude-code-action 既定の OIDC → Claude GitHub App トークン交換で行う**(`id-token: write`)。App トークンの push は `pull_request: synchronize` を発火させ、修正 commit の CI が自動で再検証される。code-review.yml が `contents: read` + 明示 `GITHUB_TOKEN` でレビューに閉じるのと対で、push 経路は本 workflow だけが持つ
+- **修正試行は PR あたり 1 回。** commit body の `[ci-autofix]` マーカーで判定し、2 回目以降の失敗はコメント報告のみ(コスト暴走・修正ループ防止)
+- 修正不能・修正すべきでない(仕様矛盾・flaky・インフラ起因)と判断した場合は push せず診断コメントを投稿して正常終了する
+- オプトアウトは PR に `skip-autofix` ラベルを付与する(`skip-review` と独立制御)。draft PR・fork からの PR は最初から対象外
+- `CLAUDE_CODE_OAUTH_TOKEN` / `ANTHROPIC_API_KEY` がどちらも未設定の環境では fail せず skip される(code-review.yml と同じ慣行)
+- モデルは opus(pytest 失敗の診断・修正はレビューより難易度が高く、sonnet 既定の code-review.yml とは別判断)
+
 ## 環境
 
 親 checkout と新規 worktree の両方で devShell に入る。direnv があれば `direnv allow` で `.envrc` を allow し、なければ `nix develop` を使う。どちらも shellHook が `uv sync` を自動実行する。非対話 shell は `nix develop --command <command>` を使う。
