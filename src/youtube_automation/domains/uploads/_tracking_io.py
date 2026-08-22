@@ -89,16 +89,11 @@ class TrackingStore:
             return
 
         def record_upload(state: WorkflowState) -> None:
-            upload = state.upload
-            if upload is None:
-                state["upload"] = {}
-                upload = state.upload
-            if upload is None:
-                raise ValidationError(f"workflow-state.json upload must be object: {ws_path}")
-            upload.video_id = complete_video["video_id"]
-            upload.video_url = complete_video["video_url"]
-            upload.publish_at = publish_at
-            state["updated_at"] = now_in_schedule_tz(self.config).isoformat()
+            state.record_upload(
+                video_id=complete_video["video_id"],
+                video_url=complete_video["video_url"],
+                publish_at=publish_at,
+            )
             if collection_path.parent.name == WORKFLOW_STAGE_LIVE:
                 state.stage = WORKFLOW_STAGE_LIVE
                 state.phase = WORKFLOW_PHASE_COMPLETE

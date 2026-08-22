@@ -9,7 +9,6 @@ import os
 import subprocess
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from pathlib import Path
 
 from youtube_automation.configuration import channel_dir
@@ -177,11 +176,7 @@ def _update_workflow_state(collection: Path) -> str:
         raise ValidationError(f"生成成功後も 01-master/*.mp4 が見つかりません: {collection}")
 
     def record_master_video(state: WorkflowState) -> None:
-        assets = state.assets
-        if assets is None:
-            raise ValidationError(f"workflow-state.json::assets は object である必要があります: {collection}")
-        assets.master_video = video.name
-        state["updated_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+        state.record_master_video(video.name)
 
     try:
         update_workflow_state(paths.workflow_state_path, record_master_video)

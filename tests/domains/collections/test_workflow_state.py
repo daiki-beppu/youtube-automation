@@ -679,6 +679,9 @@ def test_record_upload_preserves_unsupplied_optional_fields() -> None:
         "future": "keep",
     }
 
+    state.record_upload(video_id="new", publish_at=None)
+    assert state.to_dict()["upload"]["publish_at"] is None
+
 
 class TestPlanningPlaylists:
     """#4346: planning.playlists は「未決定」と「auto_add のみ」を区別する。"""

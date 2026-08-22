@@ -47,7 +47,7 @@ import subprocess
 import sys
 import time
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 
 from youtube_automation.configuration import channel_dir, load_config
@@ -138,10 +138,6 @@ def _load_state(workflow_state_path: Path) -> dict:
         if isinstance(error.__cause__, json.JSONDecodeError):
             raise ValidationError(f"workflow-state.json のパースに失敗: {error.__cause__}") from error
         raise ValidationError(str(error)) from error
-
-
-def _utc_now() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
 
 
 def _has_downloaded_audio(music_dir: Path) -> bool:
@@ -305,15 +301,8 @@ def _record_master_video(collection_dir: Path) -> str:
         raise ValidationError(f"workflow-state.json が見つかりません: {paths.workflow_state_path}")
 
     def record_master_video(state: WorkflowState) -> None:
-        assets = state.assets
-        if assets is None:
-            state["assets"] = {}
-            assets = state.assets
-        if assets is None:
-            raise ValidationError("workflow-state.json::assets は object である必要があります")
-        assets.master_video = video.name
+        state.record_master_video(video.name)
         state.phase = "publishing"
-        state["updated_at"] = _utc_now()
 
     try:
         update_workflow_state(paths.workflow_state_path, record_master_video)
