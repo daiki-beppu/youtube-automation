@@ -47,6 +47,8 @@ def _assignment_bindings(node: ast.AST) -> list[tuple[ast.Name, ast.expr]]:
             bindings.extend(_target_bindings(target, node.value))
         return bindings
     if isinstance(node, ast.AnnAssign):
+        if node.value is None:
+            return []
         return _target_bindings(node.target, node.value)
     return []
 
@@ -185,6 +187,10 @@ def test_path_from_file_detection_covers_aliases() -> None:
 
     for source in examples:
         assert _uses_path_from_file(ast.parse(source))
+
+
+def test_path_from_file_detection_ignores_annotation_without_value() -> None:
+    assert not _uses_path_from_file(ast.parse("from pathlib import Path\nP: type[Path]\n"))
 
 
 def test_layout_contract_is_registered_in_repo_contract_lane() -> None:
