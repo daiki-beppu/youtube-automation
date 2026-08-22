@@ -107,6 +107,8 @@ def test_attention_collections_and_missing_artifacts_render_before_normal_detail
     assert "停滞: 6日" in segment
     assert "Master: 未生成" in segment
     assert "workflow state が古い" in segment
+    assert ".collection-card[data-attention=true]" not in html
+    assert "border: 1px solid #d3dae5" in html
 
 
 def test_empty_snapshot_renders_an_explicit_empty_state() -> None:
