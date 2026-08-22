@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import multiprocessing
 import os
+from collections.abc import Callable
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -621,6 +623,52 @@ def test_update_serializes_processes_without_losing_changes(tmp_path: Path) -> N
 
 def test_workflow_state_error_is_an_automation_error() -> None:
     assert issubclass(WorkflowStateError, AutomationError)
+
+
+def test_named_mutators_create_sections_and_use_canonical_updated_at() -> None:
+    state = WorkflowState({"unknown": {"keep": True}})
+
+    state.set_asset("music_prompts", True)
+    state.set_planning("final_title", "Rainy Harbor")
+    state.record_upload(video_id="video-123", video_url="https://youtu.be/video-123")
+    state.record_master_video("01-master/video.mp4")
+
+    document = state.to_dict()
+    assert document["assets"] == {"music_prompts": True, "master_video": "01-master/video.mp4"}
+    assert document["planning"] == {"final_title": "Rainy Harbor"}
+    assert document["upload"] == {"video_id": "video-123", "video_url": "https://youtu.be/video-123"}
+    assert document["unknown"] == {"keep": True}
+    assert isinstance(document["updated_at"], str)
+    assert datetime.strptime(document["updated_at"], "%Y-%m-%dT%H:%M:%S.%fZ").microsecond % 1000 == 0
+
+
+@pytest.mark.parametrize(
+    ("mutator", "message"),
+    [
+        (lambda state: state.set_asset("music_prompts", "yes"), "assets.music_prompts"),
+        (lambda state: state.set_planning("generated", "yes"), "planning.generated"),
+        (lambda state: state.record_master_video(True), "assets.master_video"),
+    ],
+)
+def test_named_mutators_reject_invalid_known_values(mutator: Callable[[WorkflowState], None], message: str) -> None:
+    state = WorkflowState({})
+
+    with pytest.raises(WorkflowStateError, match=message):
+        mutator(state)
+
+    assert "updated_at" not in state
+
+
+def test_record_upload_preserves_unsupplied_optional_fields() -> None:
+    state = WorkflowState({"upload": {"video_id": "old", "video_url": "https://example.test/old", "future": "keep"}})
+
+    state.record_upload(video_id="new")
+
+    assert state.to_dict()["upload"] == {
+        "video_id": "new",
+        "video_url": "https://example.test/old",
+        "future": "keep",
+    }
 
 
 class TestPlanningPlaylists:

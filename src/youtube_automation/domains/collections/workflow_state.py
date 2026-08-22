@@ -7,7 +7,7 @@ import os
 import tempfile
 from collections.abc import Callable, Iterator, Mapping, MutableMapping
 from copy import deepcopy
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from typing import Literal, TypedDict, cast
 
@@ -666,6 +666,60 @@ class WorkflowState(MutableMapping[str, JSONValue]):
     def distrokid_submission_completed_at(self) -> str | None:
         human_tasks = self.human_tasks
         return human_tasks.distrokid_submission_completed_at if human_tasks is not None else None
+
+    def touch(self) -> None:
+        """`updated_at` を UTC・ミリ秒精度の正準 RFC 3339 形式で刻印する。"""
+        self._data["updated_at"] = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+    def set_phase(self, phase: Phase) -> None:
+        """phase を検証して更新し、更新時刻を刻印する。"""
+        self.phase = phase
+        self.touch()
+
+    def set_stage(self, stage: Stage) -> None:
+        """stage を検証して更新し、更新時刻を刻印する。"""
+        self.stage = stage
+        self.touch()
+
+    def set_asset(self, key: AssetKey, value: JSONValue) -> None:
+        """asset section を必要に応じて生成し、既知 key を検証して更新する。"""
+        assets = self._data.setdefault("assets", {})
+        assert isinstance(assets, dict)
+        AssetsState(assets).set_known(key, value)
+        self.touch()
+
+    def set_planning(self, key: PlanningKey, value: JSONValue) -> None:
+        """planning section を必要に応じて生成し、既知 key を検証して更新する。"""
+        self.set_planning_known(key, value)
+        self.touch()
+
+    def record_upload(
+        self,
+        *,
+        video_id: str,
+        video_url: str | None = None,
+        publish_at: str | None = None,
+    ) -> None:
+        """YouTube upload の既知値を記録し、省略された任意値は保持する。"""
+        if not isinstance(video_id, str):
+            raise WorkflowStateError("workflow-state.json::upload.video_id must be a string")
+        upload = self._data.setdefault("upload", {})
+        assert isinstance(upload, dict)
+        typed_upload = UploadState(upload)
+        typed_upload.video_id = video_id
+        if video_url is not None:
+            if not isinstance(video_url, str):
+                raise WorkflowStateError("workflow-state.json::upload.video_url must be a string or null")
+            typed_upload.video_url = video_url
+        if publish_at is not None:
+            if not isinstance(publish_at, str):
+                raise WorkflowStateError("workflow-state.json::upload.publish_at must be a string or null")
+            typed_upload.publish_at = publish_at
+        self.touch()
+
+    def record_master_video(self, path: str | None) -> None:
+        """master video asset を検証して記録する。"""
+        self.set_asset("master_video", path)
 
     def record_distrokid_submission(self, completed_at: str) -> None:
         """DistroKid提出の初回完了時刻を保持し、再実行では上書きしない。"""
