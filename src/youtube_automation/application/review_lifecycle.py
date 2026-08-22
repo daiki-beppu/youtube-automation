@@ -39,16 +39,27 @@ class ReviewSource(Protocol):
     def commit(self, candidate: ReviewCandidate) -> None: ...
 
 
-def review(source: ReviewSource, transport: ReviewTransport, automatic: bool, timeout: float) -> ReviewOutcome:
+def review(
+    source: ReviewSource,
+    transport: ReviewTransport,
+    automatic: bool,
+    timeout: float,
+    *,
+    candidate_id: str | None = None,
+) -> ReviewOutcome:
     """Select and commit a candidate only if the source remains unchanged."""
     snapshot = _snapshot(source)
     candidate_ids = tuple(candidate.id for candidate in snapshot.manifest.candidates)
-    if not automatic and transport == "terminal":
+    if not automatic and transport == "terminal" and candidate_id is None:
         return ReviewOutcome("terminal_required", snapshot.manifest.artifact_digest, candidate_ids)
 
     destination: Path | None = None
     if automatic:
         selected_id = snapshot.manifest.candidates[0].id
+    elif transport == "terminal":
+        selected_id = candidate_id
+        if selected_id not in candidate_ids:
+            raise ReviewError(f"候補IDがreview manifest allowlistにありません: {selected_id}")
     else:
         with SelectionBroker(snapshot.manifest) as broker:
             destination = _display(source.html_path, snapshot, broker.endpoint)
