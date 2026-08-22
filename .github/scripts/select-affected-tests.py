@@ -37,6 +37,13 @@ PATH_TEST_MAP: Final = (
         ),
     ),
     ("CHANGELOG.md", ("tests/repo/test_changelog_ci_contract.py",)),
+    (
+        "changelog.d/",
+        (
+            "tests/commands/system/test_changelog_compile.py",
+            "tests/repo/test_changelog_ci_contract.py",
+        ),
+    ),
 )
 
 
