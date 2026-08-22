@@ -3,22 +3,19 @@
 from __future__ import annotations
 
 import ast
-import fcntl
 import shutil
 import subprocess
 import sys
 import tempfile
-from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterator
 
 from tests.helpers.paths import REPO_ROOT
+from tests.helpers.tests_tree import exclusive_tests_tree_lock, shared_tests_tree_lock
 
 ROOT = REPO_ROOT
 TESTS = ROOT / "tests"
 CONFTEST = TESTS / "conftest.py"
 _RELOCATION_PROBE_PREFIX = "pytest-lane-relocation-"
-_REGISTRY_LOCK = Path(tempfile.gettempdir()) / "pytest-lane-registry.lock"
 
 
 def _registry_ast_value(name: str) -> ast.expr:
@@ -65,18 +62,8 @@ def _registered_lane_module_names() -> frozenset[str]:
     return frozenset(REPO_CONTRACT_MODULES | SLOW_MODULES) | frozenset(module_name for module_name, _ in SLOW_NODE_IDS)
 
 
-@contextmanager
-def _lane_registry_lock() -> Iterator[None]:
-    with _REGISTRY_LOCK.open("a+") as lock_file:
-        fcntl.flock(lock_file, fcntl.LOCK_EX)
-        try:
-            yield
-        finally:
-            fcntl.flock(lock_file, fcntl.LOCK_UN)
-
-
 def _source_module_paths(module_name: str) -> tuple[Path, ...]:
-    with _lane_registry_lock():
+    with shared_tests_tree_lock():
         return _source_module_paths_without_lock(module_name)
 
 
@@ -108,7 +95,7 @@ def test_registered_lane_modules_exist() -> None:
 
 def test_registered_slow_nodes_belong_to_slow_lane() -> None:
     """REQ-3042-01a: every registered slow node belongs to the slow lane."""
-    with _lane_registry_lock():
+    with shared_tests_tree_lock():
         expected = _slow_node_paths_without_lock()
         result = subprocess.run(
             [
@@ -144,32 +131,37 @@ def test_slow_marker_survives_nested_module_relocation() -> None:
     """REQ-3042-01c: a registered slow node remains slow in a nested module path."""
     module_name, test_identifier = SLOW_NODE_IDS[0]
 
-    with tempfile.TemporaryDirectory(prefix="pytest-lane-relocation-", dir=TESTS) as temp_dir:
+    # probe directory の作成から後始末までを write lock の内側に収める。実ツリーを
+    # 走査する reader（select-affected / layout 契約）から見て、この窓の外では
+    # `tests/` が常に本来の姿でなければならない。
+    with (
+        exclusive_tests_tree_lock(),
+        tempfile.TemporaryDirectory(prefix=_RELOCATION_PROBE_PREFIX, dir=TESTS) as temp_dir,
+    ):
         relocated = Path(temp_dir) / "nested" / module_name
         relocated.parent.mkdir()
-        with _lane_registry_lock():
-            source = _source_module_paths_without_lock(module_name)
-            assert len(source) == 1, f"slow node module must resolve uniquely: {module_name} -> {source}"
-            shutil.move(source[0], relocated)
-            try:
-                result = subprocess.run(
-                    [
-                        sys.executable,
-                        "-m",
-                        "pytest",
-                        "--collect-only",
-                        "-q",
-                        "-m",
-                        "slow",
-                        str(relocated.relative_to(ROOT)),
-                    ],
-                    cwd=ROOT,
-                    capture_output=True,
-                    text=True,
-                    check=False,
-                )
-            finally:
-                shutil.move(relocated, source[0])
+        source = _source_module_paths_without_lock(module_name)
+        assert len(source) == 1, f"slow node module must resolve uniquely: {module_name} -> {source}"
+        shutil.move(source[0], relocated)
+        try:
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "pytest",
+                    "--collect-only",
+                    "-q",
+                    "-m",
+                    "slow",
+                    str(relocated.relative_to(ROOT)),
+                ],
+                cwd=ROOT,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+        finally:
+            shutil.move(relocated, source[0])
 
     relocated_node = f"{relocated.relative_to(ROOT)}::{test_identifier}"
     collected = {line for line in result.stdout.splitlines() if line.startswith("tests/")}
@@ -187,7 +179,7 @@ def test_registered_lane_module_basenames_are_unique_source_modules() -> None:
 
 def test_slow_node_ids_reference_existing_modules_and_tests() -> None:
     """REQ-3042-02: every registered slow node resolves to one collected test."""
-    with _lane_registry_lock():
+    with shared_tests_tree_lock():
         expected = _slow_node_paths_without_lock()
         result = subprocess.run(
             [sys.executable, "-m", "pytest", "--collect-only", "-q", *expected],
