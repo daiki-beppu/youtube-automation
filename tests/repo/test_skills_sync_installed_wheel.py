@@ -10,7 +10,6 @@ import tarfile
 from pathlib import Path
 
 from tests.helpers.paths import REPO_ROOT
-from youtube_automation.commands.system.skills_sync import _DEV_ONLY_SKILL_NAMES
 from youtube_automation.domains.skills.inventory import SkillInventory
 
 _FILE_ASSETS = {
@@ -102,10 +101,11 @@ def _tracked_skill_files(repo_root: Path) -> set[Path]:
     skills_root = inventory.skills_root.relative_to(repo_root)
     result = _run("git", "ls-files", "--", skills_root, cwd=repo_root)
     assert result.returncode == 0, result.stderr
+    dev_only = {"automation-release", "hallmark", "shadcn"}
     return {
         relative
         for line in result.stdout.splitlines()
-        if line and (relative := Path(line).relative_to(skills_root)).parts[0] not in _DEV_ONLY_SKILL_NAMES
+        if line and (relative := Path(line).relative_to(skills_root)).parts[0] not in dev_only
     }
 
 

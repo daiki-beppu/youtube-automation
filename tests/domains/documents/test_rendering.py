@@ -125,6 +125,22 @@ def test_common_view_uses_local_japanese_fonts_and_visible_keyboard_focus() -> N
     assert ":focus-visible" in html
 
 
+def test_common_view_carries_hallmark_austere_tokens_and_mobile_containment() -> None:
+    html = render_schema_document(
+        {"summary": "Ready", "rows": [], "asset": "assets/preview.jpg"},
+        _view_schema(),
+    )
+
+    assert "Hallmark · macrostructure: Long Document" in html
+    assert "Hallmark · pre-emit critique: P5 H5 E5 S5 R5 V4" in html
+    assert "--color-paper:" in html
+    assert "--font-body:" in html
+    assert "--space-page:" in html
+    assert "html,\nbody" in html
+    assert "overflow-x: clip" in html
+    assert "box-shadow:" not in html
+
+
 def test_render_escapes_markup_and_embedded_json_script_boundary() -> None:
     malicious = '</script><script>alert("owned")</script>& {{CSS}} {{DATA}} $CSS'
     html = render_schema_document(

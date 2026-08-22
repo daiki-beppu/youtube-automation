@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(documents)`: schema 文書 View を technical / austere な長文構造へ再設計し、要点を先に走査できる階層、named token、mobile containment、明瞭な keyboard focus を追加する（#4403）。
+
 - `chore(skills)`: Hallmarkを再現可能なproject skillとして導入し、HTML表示層の設計支援をwheel・sdist・下流同期から除外する（#4402）。
 
 - `fix(wf-status)`: 制作状況 View の要対応カードから重複した赤い左枠を削除し、通常カードと同じ薄いグレーの外枠で表示する（#4398）。
