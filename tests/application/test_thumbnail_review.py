@@ -175,7 +175,7 @@ def test_changed_qa_after_display_rejects_selection_before_canonical_or_state_up
     monkeypatch.setattr(thumbnail_review, "SelectionBroker", MutatingBroker)
     monkeypatch.setattr(thumbnail_review, "open_local_file", lambda _path: True)
 
-    with pytest.raises(ReviewError, match="画像またはQA結果が変わりました"):
+    with pytest.raises(ReviewError, match="review中にartifactまたは候補実体が変わりました"):
         thumbnail_review.run_thumbnail_review(collection, "thumbnail", now=NOW)
     assert target.read_bytes() == b"existing"
     assert not (collection / "workflow-state.json").exists()
