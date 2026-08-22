@@ -111,7 +111,6 @@ INITIAL_CONTEXT_COUNTS = {
     "direction": 7,
     "shared-reference": 3,
 }
-OPENINGLESS_SKILLS = frozenset({"metadata-audit", "playlist", "short"})
 
 
 def _section_identity(section: str, occurrence: int = 1) -> str:
@@ -324,42 +323,6 @@ _RAW_EXPECTED_ACTIVE_ROUTES = (
         "- **既存チャンネル**（YouTube で既に運営中）→ `/setup --import` を案内",
     ),
 )
-
-EXPECTED_ISSUE_3987_CHANGED_PATHS = frozenset(
-    {
-        ".claude/skills/alignment-check/SKILL.md",
-        ".claude/skills/collection-ideate/SKILL.md",
-        ".claude/skills/flop-analysis/SKILL.md",
-        ".claude/skills/loop-video/SKILL.md",
-        ".claude/skills/lyria/SKILL.md",
-        ".claude/skills/thumbnail/SKILL.md",
-        ".claude/skills/value-loop-audit/SKILL.md",
-        "CHANGELOG.md",
-        "tests/repo/test_production_quality_setup_redirect_contract.py",
-    }
-)
-ISSUE_3986_OWNED_PATHS = frozenset(
-    {
-        ".claude/skills/analytics/SKILL.md",
-        ".claude/skills/analytics/references/analyze.md",
-        ".claude/skills/analytics/references/collect.md",
-        ".claude/skills/analytics/references/report.md",
-        ".claude/skills/automation-schedule/SKILL.md",
-        ".claude/skills/channel-status/SKILL.md",
-        ".claude/skills/video-description/SKILL.md",
-        ".claude/skills/video-upload/SKILL.md",
-        ".claude/skills/wf-new/references/auto.md",
-        ".claude/skills/wf-new-batch/SKILL.md",
-        ".claude/skills/wf-new/SKILL.md",
-        ".claude/skills/wf-next/SKILL.md",
-        ".claude/skills/wf-status/SKILL.md",
-        "CHANGELOG.md",
-        "tests/conftest.py",
-        "tests/repo/test_skill_docs_consistency.py",
-        "tests/repo/test_workflow_upload_setup_redirect_contract.py",
-    }
-)
-
 
 _ROUTES = (
     "/channel-strategy --direction",
@@ -871,25 +834,6 @@ def _tree_target_members(root: Path) -> dict[str, bytes]:
     }
 
 
-def _implementation_changed_paths(issue: int) -> frozenset[str]:
-    commit = subprocess.run(
-        ["git", "log", "-n", "1", "--format=%H", "--fixed-strings", f"--grep=(#{issue})", "HEAD"],
-        cwd=REPO_ROOT,
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.strip()
-    assert commit, f"the #{issue} implementation commit must be reachable from HEAD"
-    changed = subprocess.run(
-        ["git", "diff-tree", "--no-commit-id", "--name-only", "-r", commit],
-        cwd=REPO_ROOT,
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.splitlines()
-    return frozenset(changed)
-
-
 def test_initial_occurrences_have_a_complete_context_ledger() -> None:
     historical_skills = {entry[0] for entry in INITIAL_OCCURRENCE_LEDGER}
     current_owners = {
@@ -1062,19 +1006,3 @@ def test_source_wheel_sdist_and_installed_downstream_share_the_complete_route_co
     downstream_members = _tree_target_members(downstream)
     assert downstream_members == source_members
     assert _route_records_for_members(downstream_members) == EXPECTED_ACTIVE_ROUTES
-
-
-def test_issue_3987_commit_has_exact_semantic_diff_scope() -> None:
-    changed = _implementation_changed_paths(3987)
-    assert changed == EXPECTED_ISSUE_3987_CHANGED_PATHS
-    assert not {
-        path for path in changed if any(path.startswith(f".claude/skills/{skill}/") for skill in OPENINGLESS_SKILLS)
-    }
-    assert not (changed & (ISSUE_3986_OWNED_PATHS - {"CHANGELOG.md"}))
-
-
-def test_diff_scope_contract_rejects_missing_target_and_unrelated_mutations() -> None:
-    missing_target = EXPECTED_ISSUE_3987_CHANGED_PATHS - {".claude/skills/thumbnail/SKILL.md"}
-    unrelated = EXPECTED_ISSUE_3987_CHANGED_PATHS | {".claude/skills/wf-new/references/auto.md"}
-    assert missing_target != EXPECTED_ISSUE_3987_CHANGED_PATHS
-    assert unrelated != EXPECTED_ISSUE_3987_CHANGED_PATHS

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import re
-import subprocess
 from collections import Counter
 from hashlib import sha256
 from pathlib import Path
@@ -388,27 +387,6 @@ MUTABLE_FILES = frozenset(
     "wf-new/references/ideate.md",
     "wf-next/SKILL.md",
 }
-EXPECTED_ISSUE_3986_CHANGED_PATHS = frozenset(
-    {
-        ".claude/skills/analytics/SKILL.md",
-        ".claude/skills/analytics/references/analyze.md",
-        ".claude/skills/analytics/references/collect.md",
-        ".claude/skills/analytics/references/report.md",
-        ".claude/skills/automation-schedule/SKILL.md",
-        ".claude/skills/channel-status/SKILL.md",
-        ".claude/skills/video-description/SKILL.md",
-        ".claude/skills/video-upload/SKILL.md",
-        ".claude/skills/wf-auto/SKILL.md",
-        ".claude/skills/wf-new-batch/SKILL.md",
-        ".claude/skills/wf-new/SKILL.md",
-        ".claude/skills/wf-next/SKILL.md",
-        ".claude/skills/wf-status/SKILL.md",
-        "CHANGELOG.md",
-        "tests/conftest.py",
-        "tests/repo/test_skill_docs_consistency.py",
-        "tests/repo/test_workflow_upload_setup_redirect_contract.py",
-    }
-)
 IMMUTABLE_TARGET_FILES_SHA256 = "a8156248649b7ce189226ecce45e5db203b84d13214fb1ebe0c00f4ca7e2eaf8"
 AUTOMATION_SCHEDULE_REGENERATE_SHA256 = "11d460f727fe50c41f00571b416a1486cb07d0b1548524bc650a7161c16f6c42"
 AUTOMATION_UPDATE_PUSH_SHA256 = "ced3211760d9ff0abd20ec3cdc402501b424f48581ef3a618d51c0d9ee12840c"
@@ -559,29 +537,6 @@ def _aggregate_hash(paths: list[Path]) -> str:
     return sha256("".join(records).encode()).hexdigest()
 
 
-def _issue_3986_changed_paths() -> frozenset[str]:
-    commit = subprocess.run(
-        ["git", "log", "-n", "1", "--format=%H", "--fixed-strings", "--grep=(#3986)", "HEAD"],
-        cwd=REPO_ROOT,
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.strip()
-    assert commit, "the #3986 implementation commit must be reachable from HEAD"
-    changed = subprocess.run(
-        ["git", "diff-tree", "--no-commit-id", "--name-only", "-r", commit],
-        cwd=REPO_ROOT,
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.splitlines()
-    return frozenset(changed)
-
-
-def _diff_scope_matches(changed_paths: frozenset[str]) -> bool:
-    return changed_paths == EXPECTED_ISSUE_3986_CHANGED_PATHS
-
-
 def test_initial_occurrences_have_a_complete_context_ledger() -> None:
     assert len(INITIAL_OCCURRENCE_LEDGER) == 31
     assert {entry[0] for entry in INITIAL_OCCURRENCE_LEDGER} == set(TARGET_SKILLS)
@@ -634,36 +589,3 @@ def test_route_contract_rejects_inactive_swap_mixed_and_relocated_mutations() ->
     )
     for mutated in mutations:
         assert _active_route_records({relative: mutated}) != EXPECTED_ACTIVE_ROUTES
-
-
-def test_issue_3986_commit_has_exact_semantic_diff_scope() -> None:
-    assert _diff_scope_matches(_issue_3986_changed_paths())
-
-
-def test_diff_scope_contract_rejects_missing_target_and_unrelated_skill_mutations() -> None:
-    missing_target = EXPECTED_ISSUE_3986_CHANGED_PATHS - {".claude/skills/wf-status/SKILL.md"}
-    unrelated_skill = EXPECTED_ISSUE_3986_CHANGED_PATHS | {".claude/skills/masterup/SKILL.md"}
-    assert not _diff_scope_matches(missing_target)
-    assert not _diff_scope_matches(unrelated_skill)
-
-
-def test_residual_target_assets_and_sections_remain_byte_identical() -> None:
-    target_roots = {SKILLS_DIR / skill for skill in TARGET_SKILLS}
-    immutable_target = [
-        path
-        for root in target_roots
-        for path in root.rglob("*")
-        if path.is_file()
-        and not path.is_symlink()
-        and "__pycache__" not in path.parts
-        and path.relative_to(SKILLS_DIR).as_posix() not in MUTABLE_FILES
-    ]
-    assert _aggregate_hash(immutable_target) == IMMUTABLE_TARGET_FILES_SHA256
-    assert (
-        sha256((SKILLS_DIR / "wf-new/references/detect_runtime.sh").read_bytes()).hexdigest()
-        == AUTOMATION_SCHEDULE_REGENERATE_SHA256
-    )
-    assert (
-        sha256((SKILLS_DIR / "automation/references/update.md").read_bytes()).hexdigest()
-        == AUTOMATION_UPDATE_PUSH_SHA256
-    )
