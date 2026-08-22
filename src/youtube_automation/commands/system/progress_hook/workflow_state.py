@@ -10,6 +10,7 @@ from datetime import date, datetime
 from pathlib import Path
 
 from youtube_automation.core.errors import AutomationError
+from youtube_automation.domains.collections.inventory import iter_collections
 from youtube_automation.domains.collections.workflow_state import WorkflowState
 from youtube_automation.domains.collections.workflow_state import read as read_workflow_state
 from youtube_automation.domains.documents.schema_registry import RepositorySchema
@@ -45,12 +46,8 @@ def _find_channel_root(cwd: Path) -> Path | None:
 
 
 def _collection_paths(root: Path) -> list[Path]:
-    paths: list[Path] = []
-    for location in ("planning", "live"):
-        base = root / "collections" / location
-        if base.is_dir():
-            paths.extend(path.parent for path in base.glob("*/workflow-state.json") if path.is_file())
-    return paths
+    # unreadable も従来どおり選択候補に残し、後段の fail-open fallback に委ねる。
+    return [record.directory for record in iter_collections(root)]
 
 
 def _select_collection(paths: list[Path], command: str | None) -> Path | None:

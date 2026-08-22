@@ -9,7 +9,7 @@ from urllib.request import Request, urlopen
 
 import pytest
 
-from youtube_automation.commands.analytics.dashboard import create_server, main
+from youtube_automation.commands.analytics.dashboard import _build_channel_workflow_timing, create_server, main
 from youtube_automation.infrastructure.analytics.dashboard_publications import (
     build_dashboard_publications,
     save_dashboard_publications,
@@ -503,6 +503,19 @@ def test_server_isolates_corrupt_history_from_healthy_channel(tmp_path: Path) ->
         server.shutdown()
         thread.join(timeout=5)
         server.server_close()
+
+
+def test_workflow_timing_contains_inventory_hazard_as_channel_error(tmp_path: Path) -> None:
+    channel = _write_channel(tmp_path)
+    target = tmp_path / "outside"
+    target.mkdir()
+    (channel / "collections" / "planning" / "hazard").symlink_to(target, target_is_directory=True)
+
+    timing = _build_channel_workflow_timing(channel)
+
+    assert timing is not None
+    assert timing["status"] == "error"
+    assert timing["error"]["code"] == "workflow_timing_failed"
 
 
 def test_server_exposes_workflow_timing_failure_reason(tmp_path: Path) -> None:
