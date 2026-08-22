@@ -100,3 +100,8 @@ def test_review_cannot_push_to_the_pr_branch() -> None:
     }
     for job in workflow["jobs"].values():
         assert "permissions" not in job
+
+    # OIDC 経由の Claude App トークン(contents: write を持ちうる)ではなく、
+    # workflow スコープの GITHUB_TOKEN で動かすことを固定する
+    step = _review_step(workflow["jobs"]["review"])
+    assert step["with"]["github_token"] == "${{ secrets.GITHUB_TOKEN }}"

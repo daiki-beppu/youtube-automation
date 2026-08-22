@@ -54,6 +54,9 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # 既定の OIDC → Claude App トークン交換(id-token: write が必要で、App トークンは
+          # push 権限を持ちうる)を使わず、この workflow の read 権限に閉じたトークンで動かす
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           plugin_marketplaces: https://github.com/anthropics/claude-plugins-official.git
           plugins: mattpocock-skills@claude-plugins-official
           prompt: |
