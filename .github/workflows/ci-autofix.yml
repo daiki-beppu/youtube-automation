@@ -1,0 +1,162 @@
+name: CI autofix
+
+# PR をゲートする workflow の失敗を claude-code-action が診断し、修正 commit を
+# PR ブランチへ push する post-push の保険。ローカルで green にする一次経路
+# (takt の ci_verify / issue-direct の fix ループ)を置き換えるものではない
+on:
+  workflow_run:
+    workflows:
+      - CI
+      - Dashboard
+      - Extensions
+      - Audio Studio
+      - Release notes site
+    types: [completed]
+
+# GITHUB_TOKEN の push は pull_request: synchronize を発火させないため、push は
+# claude-code-action 既定の OIDC → Claude App トークン交換(id-token: write)で行う。
+# contents: read は「GITHUB_TOKEN では push できない」ことの機械担保でもある
+permissions:
+  contents: read
+  pull-requests: write
+  issues: read
+  actions: read
+  id-token: write
+
+# 複数ゲートが同じ commit で同時に失敗しても修正は 1 本に絞る。進行中の修正は
+# 殺さず(cancel-in-progress: false)、後続は queue され gate の head_sha 照合で skip される
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    if: >-
+      github.event.workflow_run.conclusion == 'failure' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    outputs:
+      proceed: ${{ steps.decide.outputs.proceed }}
+      pr_number: ${{ steps.decide.outputs.pr_number }}
+    steps:
+      - name: Check Claude authentication
+        id: auth
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [[ -n "$CLAUDE_CODE_OAUTH_TOKEN" || -n "$ANTHROPIC_API_KEY" ]]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "available=false" >> "$GITHUB_OUTPUT"
+          echo "::notice::CI autofix skipped: neither CLAUDE_CODE_OAUTH_TOKEN nor ANTHROPIC_API_KEY is configured."
+      - name: Decide fix eligibility
+        id: decide
+        if: steps.auth.outputs.available == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          FAILED_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          FAILED_RUN_URL: ${{ github.event.workflow_run.html_url }}
+        run: |
+          set -eu
+          skip() {
+            echo "::notice::CI autofix skipped: $1"
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          }
+
+          pr="$(gh pr list --repo "$REPO" --state open --head "$HEAD_BRANCH" \
+            --json number,isDraft,labels,headRefOid --jq '.[0]')"
+          [ -n "$pr" ] || skip "no open PR for branch ${HEAD_BRANCH}"
+
+          [ "$(jq -r '.isDraft' <<<"$pr")" = "false" ] || skip "PR is draft"
+          if jq -e '.labels[] | select(.name == "skip-autofix")' <<<"$pr" >/dev/null; then
+            skip "PR has the skip-autofix label"
+          fi
+          # 失敗した commit から head が進んでいたら、新しい push の CI に判定を譲る
+          [ "$(jq -r '.headRefOid' <<<"$pr")" = "$FAILED_HEAD_SHA" ] \
+            || skip "branch moved past the failed commit"
+
+          number="$(jq -r '.number' <<<"$pr")"
+          echo "pr_number=${number}" >> "$GITHUB_OUTPUT"
+
+          # 修正試行は PR あたり 1 回。commit body の [ci-autofix] マーカーで判定し、
+          # 2 回目以降の失敗はコメント報告のみ(コスト暴走・修正ループ防止)
+          if gh pr view "$number" --repo "$REPO" --json commits \
+            --jq '.commits[].messageBody' | grep -qF '[ci-autofix]'; then
+            {
+              echo "## CI autofix"
+              echo
+              echo "⏭️ 自動修正 commit の push 後も CI が失敗しています。"
+              echo "自動修正は PR あたり 1 回までのため、以降は人間の対応が必要です。"
+              echo
+              echo "失敗した run: ${FAILED_RUN_URL}"
+            } > /tmp/autofix-limit-comment.md
+            gh pr comment "$number" --repo "$REPO" --edit-last --create-if-none \
+              --body-file /tmp/autofix-limit-comment.md
+            skip "autofix already attempted on PR #${number}"
+          fi
+
+          echo "proceed=true" >> "$GITHUB_OUTPUT"
+
+  autofix:
+    needs: gate
+    if: needs.gate.outputs.proceed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.workflow_run.head_branch }}
+          fetch-depth: 0
+      - name: Run Claude autofix
+        id: autofix
+        uses: anthropics/claude-code-action@4a3947e8ca609a286ab07d4d048d9ec4016798c1 # v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ needs.gate.outputs.pr_number }}
+            FAILED WORKFLOW: ${{ github.event.workflow_run.name }}
+            FAILED RUN ID: ${{ github.event.workflow_run.id }}
+
+            あなたはこの PR の CI 失敗を修正する自動修正ゲートです。checkout 済みの
+            作業ツリーは PR の head ブランチです。
+
+            ## 手順
+            1. `gh run view <FAILED RUN ID> --log-failed` で失敗ログを取得し、失敗した
+               check と根本原因を特定する
+            2. `gh pr view` / `gh pr diff` で PR の変更内容と意図を把握する。PR タイトル
+               末尾の `(#N)` から起点 issue を特定できれば `gh issue view N` で要件も読む
+            3. 根本原因を修正する。症状 → 根本原因 → 同型箇所 → 修正の順で考え、
+               指摘行だけの表面的な patch にしない
+            4. 修正を 1 commit にまとめて PR ブランチへ push する
+
+            ## commit 規約
+            - 日本語 Conventional Commits + タイトル末尾に `(#N)`(起点 issue 番号。
+              不明なら PR 番号)
+            - commit body の末尾に `[ci-autofix]` の 1 行を必ず入れる(再修正防止マーカー)
+
+            ## push してはならないケース
+            次の場合は修正せず、診断コメントを
+            `gh pr comment <PR NUMBER> --body-file <file>` で投稿して正常終了する:
+            - issue の要件と CI の期待が矛盾しており、どちらが正か判断できない
+            - 失敗が PR の変更と無関係(インフラ・flaky・外部サービス起因)
+            - 修正に secret・環境設定・リポジトリ外の操作が必要
+
+            ## 禁止事項
+            - テストの削除・スキップ・期待値の書き換えで CI を黙らせること(テストが
+              間違っていることを issue の要件から示せる場合のみテストを直してよい)
+            - リポジトリの規約(CLAUDE.md)に反する修正で green にすること
+            - 複数 commit・複数回の push・force push
+            - CI 失敗と無関係な変更の混入
+          # pytest 失敗の診断・修正はレビューより難易度が高いため、
+          # sonnet 既定の code-review.yml とは別判断で opus を使う
+          claude_args: |
+            --model opus
+            --allowedTools "Edit,Write,Bash(uv run ruff:*),Bash(uv run pytest:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(gh run view:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*),Bash(gh issue view:*)"
