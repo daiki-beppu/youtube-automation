@@ -10,6 +10,7 @@ from youtube_automation.application.documents.migration import (
     MarkdownMigrationDecision,
     write_operational_document,
 )
+from youtube_automation.application.documents.projection import publish_and_project
 from youtube_automation.core.errors import DocumentMigrationError
 from youtube_automation.domains.collections.workflow_state import update as update_workflow_state
 from youtube_automation.domains.documents.schema_registry import RepositorySchema, validate_repository_document
@@ -38,23 +39,29 @@ def write_video_description_document(
         require_quality_pass(document)
         return document
 
-    result = write_operational_document(
-        json_path,
-        RepositorySchema.VIDEO_DESCRIPTION,
-        build_and_validate,
-        migration_decision,
-    )
-    if result is DocumentWriteResult.DECLINED:
+    def publish() -> DocumentWriteResult:
+        result = write_operational_document(
+            json_path,
+            RepositorySchema.VIDEO_DESCRIPTION,
+            build_and_validate,
+            migration_decision,
+        )
+        if result is not DocumentWriteResult.DECLINED:
+            persisted = read_published_json_document(json_path, RepositorySchema.VIDEO_DESCRIPTION)
+            require_quality_pass(persisted)
         return result
-    persisted = read_published_json_document(json_path, RepositorySchema.VIDEO_DESCRIPTION)
-    require_quality_pass(persisted)
 
-    def project(state):
-        state.set_asset("description", True)
-        return state
+    def project(result: DocumentWriteResult) -> None:
+        if result is DocumentWriteResult.DECLINED:
+            return
 
-    update_workflow_state(workflow_state_path, project)
-    return result
+        def transition(state):
+            state.set_asset("description", True)
+            return state
+
+        update_workflow_state(workflow_state_path, transition)
+
+    return publish_and_project(publish, project)
 
 
 def read_video_description_metadata(json_path: Path) -> dict[str, object]:

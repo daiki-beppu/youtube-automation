@@ -13,6 +13,7 @@ from youtube_automation.application.documents.migration import (
     MarkdownMigrationDecision,
     write_operational_document,
 )
+from youtube_automation.application.documents.projection import publish_and_project
 from youtube_automation.core.errors import DocumentMigrationError
 from youtube_automation.domains.collections.workflow_state import update as update_workflow_state
 from youtube_automation.domains.documents.schema_registry import RepositorySchema, validate_repository_document
@@ -99,18 +100,24 @@ def finalize_music_prompt_review(
     current_digest = music_prompt_artifact_digest(json_path)
     if not secrets.compare_digest(current_digest, expected_artifact_digest):
         raise DocumentMigrationError("music prompt JSON digestがreview時点から変わりました")
-    document = read_published_json_document(json_path, RepositorySchema.MUSIC_PROMPT)
-    _engine, entries = _reviewed_entries(document)
-    require_recorded_machine_verification(document)
-    _require_semantic_pass(entries)
-    if decision == "reject":
-        return
 
-    def project(state):
-        state.set_asset("music_prompts", True)
-        return state
+    def publish() -> None:
+        document = read_published_json_document(json_path, RepositorySchema.MUSIC_PROMPT)
+        _engine, entries = _reviewed_entries(document)
+        require_recorded_machine_verification(document)
+        _require_semantic_pass(entries)
 
-    update_workflow_state(workflow_state_path, project)
+    def project(_published: None) -> None:
+        if decision == "reject":
+            return
+
+        def transition(state):
+            state.set_asset("music_prompts", True)
+            return state
+
+        update_workflow_state(workflow_state_path, transition)
+
+    publish_and_project(publish, project)
 
 
 def _reviewed_entries(document: object) -> tuple[str, list[object]]:
