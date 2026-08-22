@@ -282,7 +282,7 @@ test("operator docs の7 route は原本の先頭見出しを唯一の H1 とし
     ["/onboarding", "Onboarding"],
     [
       "/oauth-setup",
-      "GCP / YouTube API セットアップ（手動ルートと参照情報）",
+      "ツール導入・GCP / YouTube API セットアップ",
     ],
     ["/features", "全 skill カタログ"],
     ["/workflow-cheatsheet", "workflow チートシート"],

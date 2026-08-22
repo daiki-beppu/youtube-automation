@@ -27,61 +27,11 @@
 
 ---
 
-## 2. Prerequisites + インストール
+## 2. ツール導入と API セットアップ
 
-### 2.1 Prerequisites
+空フォルダでの prerequisites、`uv init`、automation package と skill の導入、`/setup --tool`、GCP / OAuth / ADC の本人操作、完了確認は、公開ガイド [`docs/oauth-setup.md`](docs/oauth-setup.md) を正本とする。本書には同じコマンドや OAuth GUI 手順を複製しない。
 
-| 項目 | バージョン | 用途 |
-|---|---|---|
-| Python | 3.11+ | パッケージランタイム |
-| [uv](https://docs.astral.sh/uv/) | 最新 | 仮想環境 / 依存解決 |
-| [FFmpeg](https://ffmpeg.org/) | 最新 | 動画合成 |
-| Google Cloud SDK (`gcloud`) | 最新 | Vertex AI / OAuth クライアント作成 |
-| Claude Code (claude.ai/code) | 最新 | スキル実行ホスト |
-| [1Password CLI (`op`)](https://developer.1password.com/docs/cli/) | 任意 | シークレットをディスクに書かずに使う |
-| [Nix](https://nixos.org/) | 任意 | `flake.nix` で開発環境を再現 |
-
-OS は macOS / Linux を想定。Windows は WSL2 を推奨。
-
-### 2.2 下流チャンネルリポジトリでインストール（推奨経路）
-
-各チャンネルリポジトリ側で実行:
-
-```bash
-uv add git+https://github.com/daiki-beppu/youtube-channels-automation
-# 特定タグ固定
-uv add "git+https://github.com/daiki-beppu/youtube-channels-automation@v5.5.0"
-```
-
-インストールすると `yt-*` 系 CLI が PATH に入る（`yt-skills` / `yt-analytics` / `yt-upload-collection` 等）。完全な一覧は `pyproject.toml` の `[project.scripts]` を参照。
-
-> **リネーム時の注意**: チャンネルリポジトリのディレクトリをリネームしたら `.venv` を作り直す（`rm -rf .venv && uv sync`）。`.venv/bin/*` の shebang に旧パスが残ると `bad interpreter` で落ちる。
-
-### 2.3 OAuth セットアップ
-
-**Claude Code 上で `/setup` を実行する**。AI が `yt-doctor` でツール導入と API 設定の状態を診断し、GCP プロジェクト作成・API 有効化・IAM 付与・Google Auth Platform 手動設定まで wizard で誘導する。認証情報はADCまたは専用OAuthファイルで解決し、channel-rootへdotenvを書き出さない。
-
-`gcloud auth login` / `gcloud auth application-default login` / Google Auth Platform の Branding・Audience Test users・Clients 設定と Download JSON は PKCE / GUI 制約で AI 実行不可なため利用者が手動で行うが、ダウンロードした `client_secrets.json` の配置を含むそれ以外 (プロジェクト作成・billing 紐付け・API 有効化・IAM 付与・トークン取得など) は AI が CLI や gcloud を直接 Bash で実行する。
-
-Google Cloud Console の新 UI では、OAuth 関連の手動操作は **Google Auth Platform** に集約されている。`/setup` が URL を出したら、以下の画面名を目印に進める:
-
-1. **Google Auth Platform > Branding**: アプリ名は `<channel-name> YouTube Automation`、ユーザーサポートメールとデベロッパー連絡先には自分の Google アカウントを入れて保存する。
-2. **Google Auth Platform > Audience**: User type は **External**、Publishing status は **Testing** のままでよい。**Test users** に、OAuth 認証でログインする Google アカウントを必ず追加する。追加しないと初回認証が `403 access_denied` で止まる。
-3. **Google Auth Platform > Clients**: **Create client** から Application type **Desktop app** を選び、名前は `<channel-name> Desktop Client` にする。
-4. 作成した client を開き、**Client secrets > Add secret** で新しい secret を発行する。続けて **Download JSON** を押して Downloads に保存し、`done` と返す。
-
-`done` の後、AI は次を順に実行する。
-
-```bash
-uv run yt-doctor --fix-client-secrets
-uv run yt-doctor --json
-```
-
-`client_secrets` が `ok` になることを確認する。fix または再診断が失敗した場合は、エラー詳細を確認して再実行する。
-
-`yt-channel-status` などの初回認証で `403 access_denied` が出た場合は、上記 **Audience > Test users** にログイン中の Google アカウントが入っているか確認し、`<channel_dir>/auth/token.json` を削除してから再実行する。
-
-手動で全工程やりたい上級者向けの 2 ルート (bootstrap.sh / Terraform) は [`docs/oauth-setup.md`](docs/oauth-setup.md) を参照（submodule 利用の場合は `automation/` プレフィックスを追加）。`client_secrets.json` の解決順、Vertex AI の project / location 解決、トラブルシューティングも同文書にまとめている。
+公開ガイドの推奨ルートを完了すると、automation CLI、同期済み skill、API 認証、動画アップロード前提が揃う。その後、この onboarding の §3 に進み、新規チャンネルなら `/setup --channel` を実行する。手動 bootstrap / Terraform、secret 解決順、トラブルシューティングも同じ公開ガイドの上級者向け節を参照する。
 
 ### 2.4 初期設定後の GCP 課金確認
 

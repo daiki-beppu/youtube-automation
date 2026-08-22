@@ -1652,7 +1652,7 @@
       "id": "legacy-08",
       "path": "auth/SETUP.md",
       "disposition": "delete",
-      "evidence": "route 0 received by ONBOARDING.md 2.3, manual routes and reference sections received by docs/oauth-setup.md",
+      "evidence": "setup guide ownership consolidated in docs/oauth-setup.md; ONBOARDING.md links to it",
       "received_by": "docs/oauth-setup.md",
       "verification": "assert physical path is absent and receiving document exists"
     },

@@ -1,40 +1,88 @@
-# GCP / YouTube API セットアップ（手動ルートと参照情報）
+# ツール導入・GCP / YouTube API セットアップ
 
-新しい YouTube チャンネル用に GCP プロジェクト + API + 認証情報を用意する手順のうち、**手動ルート A / B** と、ルート共通の参照情報（`client_secrets.json` の検索順、Vertex AI の project / location 解決、トラブルシューティング）をまとめる。
+空のチャンネル用フォルダから automation ツールを導入し、`/setup --tool` で GCP / OAuth / ADC と動画アップロードの前提を整えるまでの**運営者向け正本**。通常は「推奨ルート」だけを上から順に進める。
 
-推奨経路である **ルート 0（`/setup` skill）の手順は [`ONBOARDING.md`](../ONBOARDING.md) の「2.3 OAuth セットアップ」を正本とする**。本書はそこから参照される補助文書であり、ルート 0 の手順を再掲しない。
+> [!WARNING]
+> 本 Python 版はメンテナンスモードである。新規導入前に [`migration/python-to-tayk.md`](migration/python-to-tayk.md) の移行方針も確認する。
 
 skill / CLI ごとの実効 scope と read-only token の設計は [`oauth-scopes.md`](oauth-scopes.md) を参照。
+ツール/API 設定後のチャンネル開設と日常運用は [`ONBOARDING.md`](../ONBOARDING.md) を参照。
 
-本リポジトリは Gemini / Veo / Lyria を **Vertex AI 経由で 1 本化** している（AI Studio モードは廃止）。スクリプト / Terraform で半自動化しているが、Google Auth Platform の Branding / Audience / Clients は手動設定が必要。
+## 推奨ルート: 空フォルダから `/setup --tool`
 
----
+### 1. 開始条件
 
-## 前提条件
+- macOS または Linux（Windows は WSL2 を推奨）
+- Google アカウントと、セットアップ対象の YouTube チャンネル
+- [Claude Code](https://claude.ai/code)
+- Python 3.11 以上、FFmpeg、Google Cloud SDK (`gcloud`)
+- [uv](https://docs.astral.sh/uv/)。未導入なら `/setup --tool` が公式手順を案内する
+- Vertex AI を使う GCP project には Billing account が必要
 
-- Google アカウント（YouTube チャンネル所有者）
-- `gcloud` CLI インストール済み（[導入手順](https://cloud.google.com/sdk/docs/install)）
-- `gcloud auth login` 済み
-- Vertex AI API を呼ぶため **Billing account の紐付けが必須**
-- Terraform ルートを使うなら `terraform` >= 1.5 + `jq`
+作業用の空フォルダを作り、そこで Claude Code を起動する。
 
-2026 年以降、Google Cloud の新規アカウントは前払い（プリペイド）制に変更されたが、**$300 無料クレジットは Vertex AI 経由で消費可能**。本リポジトリを Vertex AI 1 本に揃えた理由もこのクレジットを活かすため。
+```bash
+mkdir my-youtube-channel
+cd my-youtube-channel
+claude
+```
 
----
+`config/channel/*.json` はまだ不要であり、ここでは `/setup --channel` を実行しない。
 
-## セットアップ: 3 つのルート
+### 2. automation と skill を導入する
 
-> **実行ディレクトリ**: 本ガイドのスクリプトコマンドはこのリポジトリのルートを基準とした相対パスです。submodule (`automation/`) 経由で導入している場合は `cd automation` してから実行してください。
+Claude Code で **`/setup --tool`** と依頼する。setup は空フォルダを許容し、次を順番に実行する。
 
-| ルート | 推奨対象 | 手数 |
-| --- | --- | --- |
-| **ルート 0**: `/setup` skill (Claude Code) | GCP / OAuth に不慣れな利用者、初心者 | 1 発話 + 手動 3 ステップ |
-| **ルート A**: `.claude/skills/setup/references/gcp-bootstrap.sh` | シェルから直接叩きたい、手動派 | 1 コマンド + Google Auth Platform 手動設定 |
-| **ルート B**: `infra/terraform/gcp/` | 複数プロジェクト管理 / 別 PC 引っ越し / drift 検出が欲しい上級者 | tfvars 編集 + apply + Google Auth Platform 手動設定 |
+```bash
+uv init
+uv add git+https://github.com/daiki-beppu/youtube-automation.git
+uv run yt-skills sync --asset skills --force
+uv run yt-skills sync --asset claude-md
+uv run yt-skills sync --asset auth-template
+uv run yt-setup-dirs
+uv run yt-doctor --json
+```
 
-「初回 1 チャンネルだけ立ち上げ」ならルート 0 or A、「2 つ目以降」「IaC 管理したい」ならルート B が向く。詳細な選択基準は [`infra/terraform/gcp/README.md`](../infra/terraform/gcp/README.md) の「いつ terraform を選ぶか」を参照。
+既に作成済みの `pyproject.toml` や導入済み package は再作成しない。`yt-skills sync` により `.claude/skills/` と運営方針が同期され、`yt-setup-dirs` により `auth/` などの最小ディレクトリが作られる。doctor が示す変更 plan を確認して承認すると、setup が `uv run yt-doctor --apply --json` を進める。
 
-ルート 0 は [`ONBOARDING.md`](../ONBOARDING.md) の「2.3 OAuth セットアップ」を参照する。`/setup --tool` の doctor wizard が正規入口であり、ルート A / B は明示的に選ぶ上級者向け代替経路である。
+### 3. GCP / ADC / OAuth を完了する
+
+setup は project 選択、Billing 紐付け、必要 API の有効化、ADC quota project、IAM、Reporting job を診断順に進める。外部の GCP 状態を変える前には、対象 project・account・実行コマンドを表示して承認を求める。
+
+認証 CLI は setup 自身が対話 session で起動する。利用者がターミナルへ別途コマンドをコピーして実行する必要はない。
+
+> [!IMPORTANT]
+> **[HUMAN STEP]** ブラウザが開いたら、利用者本人が Google ログイン、アカウント選択、OAuth 同意を完了する。password・認可コード・token・client secret をチャットへ貼らない。
+
+Google Auth Platform の GUI は API で自動化できないため、setup が Console URL を示したときだけ次を行う。
+
+> [!IMPORTANT]
+> **[HUMAN STEP]**
+> 1. **Branding** でアプリ名、ユーザーサポートメール、デベロッパー連絡先を保存する。
+> 2. **Audience** は External / Testing とし、OAuth に使う Google アカウントを Test users に追加する。
+> 3. **Clients** で Desktop app client を作成する。
+> 4. Client secrets で secret を追加し、**Download JSON** で保存してから setup に `done` と返す。
+
+`done` の後は setup が次を実行し、ダウンロード済み JSON を `auth/client_secrets.json` へ配置して再診断する。
+
+```bash
+uv run yt-doctor --fix-client-secrets
+uv run yt-doctor --apply --json
+```
+
+### 4. 完了を確認する
+
+`uv run yt-doctor --apply --json` の `apply.stop_reason` が `completed` となり、次がすべて確認できれば `/setup --tool` は完了である。
+
+- automation CLI と同期済み skill が利用できる
+- GCP / OAuth / ADC の認証が通る
+- 動画アップロードに必要な OAuth scope と `channel_id` が揃う
+
+`analytics_report` の stale fail だけが残る場合は後続 skill が解消するため、ほかの check がすべて `ok` なら完了としてよい。チャンネル固有の config、TTP、persona、branding はこの手順では作らない。新規チャンネルでは次に **`/setup --channel`** を実行する。
+
+## 上級者向け代替ルートと参照情報
+
+推奨ルートを使わず既存 GCP project を手動管理したい場合に限り、以下の bootstrap / Terraform を使う。`client_secrets.json` の解決順、Vertex AI の project / location 解決、セキュリティ、トラブルシューティングもこの後に記載する。これらの経路は廃止しないが、初回利用者の標準手順ではない。
 
 ### ルート A: `gcp-bootstrap.sh`（gcloud 半自動化・最速）
 
