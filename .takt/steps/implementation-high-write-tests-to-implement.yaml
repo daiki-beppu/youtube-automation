@@ -1,5 +1,6 @@
 name: write_tests
 tags: [coding, test-planning]
+capabilities: [edit, enable-skills]
 edit: true
 persona: coder
 policy: [coding, testing]

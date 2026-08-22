@@ -60,9 +60,10 @@
 
 ## workflow 設計の要点(保守者向け)
 
-公開定義は `.takt/workflows/`、takt 0.55.1 builtin から eject した共有 step とリポジトリ固有 step は `.takt/steps/`、固有 instruction / report contract だけを `.takt/facets/` に置く。一般的な plan / test-first / implementation review / fix / final gate は builtin 由来 fragment を正とし、旧内部構造への互換 adapter は持たない。
+公開定義は `.takt/workflows/`、takt 0.60.0 builtin から eject した共有 step とリポジトリ固有 step は `.takt/steps/`、固有 instruction / report contract だけを `.takt/facets/` に置く。一般的な plan / test-first / implementation review / fix / final gate は builtin 由来 fragment を正とし、旧内部構造への互換 adapter は持たない。
 
-- **検証は実行時 takt を正とする。** 変更前に `takt --version` と `takt catalog` / `takt eject` の内容を確認し、全公開 workflow へ `takt workflow doctor`、各 workflow へ `takt prompt <workflow>` を実行する
+- **検証は実行時 takt を正とする。** 変更前に `takt --version` と `takt catalog` / `takt eject` の内容を確認し、全公開 workflow へ `takt workflow doctor`、各 workflow へ `takt prompt <workflow>` を実行する。`takt prompt` は `workflow_call` の final gate だけ `[ERROR] reportContent is required for report-based judgment` で止まる — builtin `review-fix-default` でも同じ位置で止まるため、その 1 点より前の全 step が合成できていれば正常
+- **実行環境の権限は `capabilities` で宣言する。** workflow 直下の `capabilities: [readonly, enable-skills]` が全 step の既定になり、step 側の宣言は**継承ではなく置換**する。したがって `edit: true` の step は必ず `capabilities: [edit, enable-skills]` を自分で宣言する(落とすと readonly を継承して実行時に書き込めない)。`tests/repo/test_takt_workflow_contract.py::test_edit_boundaries_are_pinned_by_explicit_capability_sets` が静的に担保する
 - **CI 同等ゲート(`ci_verify`)を final gate より前に置く。** 最低でも ruff check / format、全 pytest、any-usage gate、`git diff --check` を実行し、変更 path に応じた CI job も追加する。ローカルで実行できるゲートの失敗は `fail` として修正へ戻す。実測した環境でコマンドまたは前提リソースを利用できない項目は、項目名と理由を findings に列挙して CI-only とし、ローカル判定から除外して正本の CI へ委ねる。`ci_verify` の verdict は `pass` / `fail` の 2 値とし、環境差を理由に ABORT しない
 - **レビューと final gate は fail-closed。** 専門レビューは未解決 finding / conflict / 判定不能を修正・再計画・ABORT へ送り、既知 verdict に一致しない出力も ABORT する。final gate も COMPLETE 以外をレビュー・修正・再計画・ABORT へ戻す
 - **分岐は 1 個の strict structured schema と `when(structured.*)` で決定する。** 並列 reviewer は各 report を生成するだけにし、直後の gate が全 report を読み structured verdict を返す。これにより判定不能を fallback ABORT へ送り、`takt prompt` でも全 step を reportContent なしで合成できる

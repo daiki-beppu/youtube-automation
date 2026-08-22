@@ -3,12 +3,7 @@ description: >
   挙動維持の保守・リファクタ用。intake、維持契約の計画と設計ゲート、変更前
   safety net、リファクタ、6 観点の専門レビュー、CI 同等ゲート、
   fail-closed final gate、spillover を行う。
-workflow_config:
-  provider_options:
-    codex:
-      network_access: true
-      skills:
-        repo: true
+capabilities: [readonly, enable-skills]
 max_steps: 44
 initial_step: intake
 
@@ -42,7 +37,7 @@ loop_monitors:
     threshold: 3
     judge:
       persona: supervisor
-      instruction: loop-monitor-reviewers-fix-fc
+      instruction: loop-monitor-reviewers-fix
       rules:
         - condition: 修正進捗があり次の修正が実行可能である
           next: fix
@@ -90,9 +85,7 @@ steps:
   - name: plan_gate
     tags: [review, design-gate]
     edit: false
-    persona: merge-readiness-reviewer
-    provider_options:
-      extends: review-readonly
+    persona: review-adjudicator
     instruction: yt-auto-review-design-gate
     structured_output:
       schema_ref: yt-auto-decision
@@ -112,8 +105,6 @@ steps:
     edit: false
     session: compact
     persona: planner
-    provider_options:
-      extends: review-readonly
     instruction: yt-auto-design-fix
     structured_output:
       schema_ref: yt-auto-decision
@@ -127,6 +118,7 @@ steps:
 
   - name: safety_net
     tags: [coding, test-planning]
+    capabilities: [edit, enable-skills]
     edit: true
     session: compact
     persona: coder
@@ -145,6 +137,7 @@ steps:
 
   - name: refactor
     tags: [coding]
+    capabilities: [edit, enable-skills]
     edit: true
     session: compact
     persona: coder
@@ -185,9 +178,7 @@ steps:
   - name: review_gate
     tags: [review]
     edit: false
-    persona: merge-readiness-reviewer
-    provider_options:
-      extends: review-readonly
+    persona: review-adjudicator
     instruction: yt-auto-review-gate
     structured_output:
       schema_ref: yt-auto-decision
@@ -216,7 +207,7 @@ steps:
 
   - name: final_gate
     kind: workflow_call
-    call: merge-readiness-final-gate
+    call: final-gate
     args:
       supervise_knowledge: [architecture, takt]
     rules:

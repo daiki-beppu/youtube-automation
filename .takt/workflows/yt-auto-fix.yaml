@@ -3,12 +3,7 @@ description: >
   バグ・回帰修正用。intake、原因診断と対立仮説、診断レビュー、修正前 red、
   root-cause repair、6 観点の専門レビュー、CI 同等ゲート、fail-closed final gate、
   spillover を行う。
-workflow_config:
-  provider_options:
-    codex:
-      network_access: true
-      skills:
-        repo: true
+capabilities: [readonly, enable-skills]
 max_steps: 50
 initial_step: intake
 
@@ -42,7 +37,7 @@ loop_monitors:
     threshold: 3
     judge:
       persona: supervisor
-      instruction: loop-monitor-reviewers-fix-fc
+      instruction: loop-monitor-reviewers-fix
       rules:
         - condition: 修正進捗があり次の修正が実行可能である
           next: fix
@@ -69,8 +64,6 @@ steps:
     edit: false
     session: compact
     persona: planner
-    provider_options:
-      extends: review-readonly
     instruction: yt-auto-diagnose
     structured_output:
       schema_ref: yt-auto-decision
@@ -97,9 +90,7 @@ steps:
   - name: diagnosis_gate
     tags: [review, diagnosis-gate]
     edit: false
-    persona: merge-readiness-reviewer
-    provider_options:
-      extends: review-readonly
+    persona: review-adjudicator
     instruction: yt-auto-review-diagnosis-gate
     structured_output:
       schema_ref: yt-auto-decision
@@ -119,8 +110,6 @@ steps:
     edit: false
     session: compact
     persona: planner
-    provider_options:
-      extends: review-readonly
     instruction: yt-auto-diagnosis-fix
     structured_output:
       schema_ref: yt-auto-decision
@@ -134,6 +123,7 @@ steps:
 
   - name: reproduce
     tags: [coding, test-planning]
+    capabilities: [edit, enable-skills]
     edit: true
     session: compact
     persona: coder
@@ -153,6 +143,7 @@ steps:
 
   - name: repair
     tags: [coding]
+    capabilities: [edit, enable-skills]
     edit: true
     session: compact
     persona: coder
@@ -193,9 +184,7 @@ steps:
   - name: review_gate
     tags: [review]
     edit: false
-    persona: merge-readiness-reviewer
-    provider_options:
-      extends: review-readonly
+    persona: review-adjudicator
     instruction: yt-auto-review-gate
     structured_output:
       schema_ref: yt-auto-decision
@@ -224,7 +213,7 @@ steps:
 
   - name: final_gate
     kind: workflow_call
-    call: merge-readiness-final-gate
+    call: final-gate
     args:
       supervise_knowledge: [architecture, takt]
     rules:

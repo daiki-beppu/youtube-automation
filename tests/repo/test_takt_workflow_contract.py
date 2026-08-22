@@ -1,4 +1,4 @@
-"""takt 0.55 系 workflow の利用者向け契約を静的に検証する。"""
+"""takt 0.60 系 workflow の利用者向け契約を静的に検証する。"""
 
 from __future__ import annotations
 
@@ -133,6 +133,15 @@ def _walk(value: object) -> Iterable[tuple[str, object]]:
             yield from _walk(child)
 
 
+def _capabilities(value: object) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [value]
+    assert isinstance(value, list)
+    return [str(item) for item in value]
+
+
 def _next_targets(workflow: dict[str, object]) -> set[str]:
     return {value for key, value in _walk(workflow) if key == "next" and isinstance(value, str)}
 
@@ -151,10 +160,7 @@ def test_public_workflow_surface_is_exact_and_named_consistently() -> None:
 
 def test_all_local_references_exist_and_builtin_calls_are_explicit() -> None:
     documents = [*WORKFLOWS.glob("*.yaml"), *STEPS.glob("*.yaml")]
-    allowed_builtin_calls = {
-        "merge-readiness-final-gate",
-        "merge-readiness-finding-contract-final-gate",
-    }
+    allowed_builtin_calls = {"final-gate"}
     allowed_builtin_formats = {"unit-audit-plan"}
 
     for path in documents:
@@ -445,6 +451,32 @@ def test_lane_edit_boundaries_are_explicit_and_minimal() -> None:
         assert editable == expected, name
 
 
+def test_edit_boundaries_are_pinned_by_explicit_capability_sets() -> None:
+    # step の capabilities は workflow 既定を継承ではなく置換する。edit step が宣言を落とすと
+    # readonly を継承して実行時に書き込めなくなるため、宣言の有無を静的に固定する。
+    for name in PUBLIC_WORKFLOWS:
+        workflow = _workflow(name)
+        assert _capabilities(workflow.get("capabilities"))[:1] == ["readonly"], name
+        for step in _steps(workflow):
+            expanded = _expanded_step(step)
+            capabilities = _capabilities(expanded.get("capabilities"))
+            if expanded.get("edit") is True:
+                assert capabilities[:1] == ["edit"], (name, step["name"])
+            else:
+                assert "edit" not in capabilities, (name, step["name"])
+
+    for path in STEPS.glob("*.yaml"):
+        fragment = _load(path)
+        capabilities = _capabilities(fragment.get("capabilities"))
+        if fragment.get("edit") is True:
+            assert capabilities[:1] == ["edit"], path
+
+    for path in (*WORKFLOWS.glob("*.yaml"), *STEPS.glob("*.yaml")):
+        for key, value in _walk(_load(path)):
+            if key == "capabilities":
+                assert set(_capabilities(value)) <= {"readonly", "edit", "enable-skills"}, (path, value)
+
+
 def test_report_consumers_receive_concrete_artifacts_or_report_directory() -> None:
     consumers = {
         "yt-auto-design-fix": ("plan.md", "requirements-design-review.md", "test-design-review.md"),
@@ -498,6 +530,12 @@ def test_removed_legacy_internal_assets_do_not_return() -> None:
     for relative in ("scripts", "facets/partials", "facets/personas", "facets/policies"):
         path = TAKT / relative
         assert not path.exists() or not any(candidate.is_file() for candidate in path.rglob("*"))
+    # takt 0.60 で撤去された綴り。復活すると workflow が load 段階で落ちるか、
+    # 存在しない facet を静かに参照する。
+    for path in (*WORKFLOWS.glob("*.yaml"), *STEPS.glob("*.yaml")):
+        text = path.read_text(encoding="utf-8")
+        for removed in ("provider_options", "review-readonly", "merge-readiness"):
+            assert removed not in text, (path, removed)
 
 
 def test_docs_and_config_match_the_public_surface() -> None:

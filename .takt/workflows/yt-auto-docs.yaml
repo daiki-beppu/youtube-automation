@@ -3,12 +3,7 @@ description: >
   文書・skill・instruction とその repository-contract test だけを変更する lane。
   intake、文書限定計画、実装、2 観点の文書レビュー、CI 同等ゲート、
   fail-closed final gate、spillover を行い production/runtime 変更は拒否する。
-workflow_config:
-  provider_options:
-    codex:
-      network_access: true
-      skills:
-        repo: true
+capabilities: [readonly, enable-skills]
 max_steps: 32
 initial_step: intake
 
@@ -62,6 +57,7 @@ steps:
 
   - name: implement
     tags: [coding, docs]
+    capabilities: [edit, enable-skills]
     edit: true
     session: compact
     persona: coder
@@ -92,9 +88,7 @@ steps:
   - name: docs_gate
     tags: [review, docs-gate]
     edit: false
-    persona: merge-readiness-reviewer
-    provider_options:
-      extends: review-readonly
+    persona: review-adjudicator
     instruction: yt-auto-review-docs-gate
     structured_output:
       schema_ref: yt-auto-decision
@@ -111,6 +105,7 @@ steps:
 
   - name: docs_fix
     tags: [coding, docs]
+    capabilities: [edit, enable-skills]
     edit: true
     session: compact
     persona: coder
@@ -140,7 +135,7 @@ steps:
 
   - name: final_gate
     kind: workflow_call
-    call: merge-readiness-final-gate
+    call: final-gate
     args:
       supervise_knowledge: [architecture]
     rules:

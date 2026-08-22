@@ -2,8 +2,7 @@ name: ci_verify
 tags: [review, delivery-gate]
 edit: false
 session: refresh
-persona: merge-readiness-reviewer
-provider_options:
-  extends: review-readonly
+persona: coding-reviewer
+capabilities: [readonly, enable-skills]
 instruction: yt-auto-ci-verify
 pass_previous_response: false

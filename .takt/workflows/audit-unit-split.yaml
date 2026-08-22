@@ -1,11 +1,6 @@
 name: audit-unit-split
 description: スコープ分割版ユニットテスト監査。plan が台帳スケルトンを作り、audit が {report} 注入された既存台帳をインクリメンタルに拡張する。コード修正なしで Issue 直貼り可能なレポートを作成する
-workflow_config:
-  provider_options:
-    codex:
-      network_access: true
-    opencode:
-      network_access: true
+capabilities: readonly
 # 汎用 audit lane と違い、production/test file を個別行へ分割する台帳形式を維持する。
 # plan が全対象を列挙し、audit は既存行を消さず一定量ずつ判定し、supervise と review が
 # 物理行数・進捗・根拠を独立検収する。
