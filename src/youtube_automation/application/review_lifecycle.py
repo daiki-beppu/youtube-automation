@@ -80,6 +80,18 @@ def review(
     )
 
 
+def preview(source: ReviewSource) -> ReviewOutcome:
+    """Render one immutable source snapshot without committing a selection."""
+    snapshot = _snapshot(source)
+    destination = _display(source.html_path, snapshot, None)
+    return ReviewOutcome(
+        "displayed",
+        snapshot.manifest.artifact_digest,
+        tuple(candidate.id for candidate in snapshot.manifest.candidates),
+        html_path=destination,
+    )
+
+
 def _snapshot(source: ReviewSource) -> ReviewSnapshot:
     candidates = source.candidates()
     manifest = SelectionManifest.create(
@@ -105,7 +117,7 @@ def _same_selection(original: ReviewSnapshot, current: ReviewSnapshot, candidate
     return current_candidate
 
 
-def _display(destination: Path, snapshot: ReviewSnapshot, endpoint: str) -> Path:
+def _display(destination: Path, snapshot: ReviewSnapshot, endpoint: str | None) -> Path:
     media = dict(snapshot.media)
     html = render_review_html(snapshot.manifest, endpoint=endpoint, media=media)
     publish_html_snapshot(
@@ -119,4 +131,4 @@ def _display(destination: Path, snapshot: ReviewSnapshot, endpoint: str) -> Path
     return resolved
 
 
-__all__ = ["ReviewSource", "review"]
+__all__ = ["ReviewSource", "preview", "review"]
