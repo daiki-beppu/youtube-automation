@@ -299,3 +299,106 @@ def _sha256_file(path: Path) -> str:
 
 
 __all__ = ["ReviewResult", "run_review"]
+
+
+@dataclass(frozen=True)
+class CollectionPlanReviewSource:
+    """review-lifecycle adapter for a persisted collection-plan pair."""
+
+    collection: Path
+    selection_source: Literal["web", "terminal", "automatic"]
+
+    @property
+    def artifact(self) -> ReviewArtifact:
+        return "plan"
+
+    @property
+    def source(self) -> Path:
+        return self.collection / "20-documentation" / "plan_proposals.json"
+
+    @property
+    def html_path(self) -> Path:
+        return self.collection / "tmp" / "reviews" / "plan-selection.html"
+
+    def candidates(self) -> tuple[ReviewCandidate, ...]:
+        document = read_published_json_document(self.source, RepositorySchema.COLLECTION_PLAN)
+        return _plan_candidates(self.source, document)
+
+    def media(self) -> tuple[tuple[str, Path], ...]:
+        document = read_published_json_document(self.source, RepositorySchema.COLLECTION_PLAN)
+        return _plan_media(self.collection, document)
+
+    def digest(self, candidates: tuple[ReviewCandidate, ...]) -> str:
+        del candidates
+        return collection_plan_artifact_digest(self.source)
+
+    def commit(self, candidate: ReviewCandidate) -> None:
+        from youtube_automation.application.documents.collection_plan import finalize_collection_plan_selection
+
+        finalize_collection_plan_selection(
+            self.source,
+            self.collection / "workflow-state.json",
+            proposal_id=candidate.id,
+            source=self.selection_source,
+            expected_artifact_digest=self.digest(()),
+        )
+
+
+@dataclass(frozen=True)
+class MusicPromptReviewSource:
+    """review-lifecycle adapter for the single persisted music-prompt pair."""
+
+    collection: Path
+    selection_source: Literal["web", "terminal", "automatic"]
+
+    @property
+    def artifact(self) -> ReviewArtifact:
+        return "music-prompt"
+
+    @property
+    def source(self) -> Path:
+        sources = tuple(
+            path
+            for name in ("suno-prompts.json", "lyria-prompt.json", "minimax-prompt.json")
+            if (path := self.collection / "20-documentation" / name).is_file()
+        )
+        if len(sources) != 1:
+            raise ReviewError("music promptの永続JSON+HTML pairを一意に解決できません")
+        return sources[0]
+
+    @property
+    def html_path(self) -> Path:
+        return self.collection / "tmp" / "reviews" / "music-prompt-selection.html"
+
+    def candidates(self) -> tuple[ReviewCandidate, ...]:
+        digest = self.digest(())
+        return (
+            ReviewCandidate("approve", "承認", digest),
+            ReviewCandidate("reject", "差し戻し", digest),
+        )
+
+    def media(self) -> tuple[tuple[str, Path], ...]:
+        return ()
+
+    def digest(self, candidates: tuple[ReviewCandidate, ...]) -> str:
+        del candidates
+        return _sha256_file(self.source)
+
+    def commit(self, candidate: ReviewCandidate) -> None:
+        from youtube_automation.application.documents.music_prompt import finalize_music_prompt_review
+
+        finalize_music_prompt_review(
+            self.source,
+            self.collection / "workflow-state.json",
+            decision=candidate.id,
+            source=self.selection_source,
+            expected_artifact_digest=self.digest(()),
+        )
+
+
+__all__ = [
+    "CollectionPlanReviewSource",
+    "MusicPromptReviewSource",
+    "ReviewResult",
+    "run_review",
+]
