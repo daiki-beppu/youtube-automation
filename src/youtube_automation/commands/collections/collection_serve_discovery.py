@@ -327,12 +327,21 @@ class DiscoveryLifecycle:
             if self._endpoint_responds():
                 raise DiscoveryRegistryError("discovery registry endpoint has incompatible schema") from bind_error
             return False
+        # Seed the replacement registry before either its HTTP endpoint or the
+        # owner readiness flag becomes observable.  Otherwise takeover can
+        # briefly expose a valid registry response with no servers.
+        try:
+            state.register({"instance_id": self.instance_id, "server_info": self.server_info})
+        except (DiscoveryRegistryError, ValueError):
+            server.server_close()
+            raise
         self._state = state
         self._registry_server = server
         self.registry_port = int(server.server_address[1])
-        self.is_owner = True
+        self._registered = True
         self._registry_thread = threading.Thread(target=server.serve_forever, daemon=True)
         self._registry_thread.start()
+        self.is_owner = True
         return True
 
     def _endpoint_responds(self) -> bool:
@@ -412,7 +421,8 @@ class DiscoveryLifecycle:
         deadline = time.monotonic() + self._startup_timeout_seconds
         last_error: OSError | None = None
         while True:
-            self._become_owner()
+            if self._become_owner():
+                return
             try:
                 self._register()
                 return
@@ -443,7 +453,7 @@ class DiscoveryLifecycle:
                     continue
             except (OSError, urllib.error.URLError):
                 if self._become_owner():
-                    self._register()
+                    return
 
     def stop(self) -> None:
         self._stop_event.set()

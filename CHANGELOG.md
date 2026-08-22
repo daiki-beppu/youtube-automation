@@ -1,5 +1,7 @@
 # Changelog
 
+- `fix(collection-serve)`: discovery owner takeover時に自己登録を完了してからowner readinessを公開し、公開endpointが一時的に空になるraceを解消した（#4477）。
+
 - `fix(tests)`: 過去issueのcommit差分だけを固定する履歴依存テストを削除し、release noteのtag整合は履歴を取得したCIで維持しつつshallow checkoutでは誤ってredにしないようにした（#4469）。
 
 - `fix(tests)`: 通常のpytestからNix wrapperと`pnpm dlx`自体の再検証を除き、extension契約をリポジトリ内のflake・workflow設定だけで決定的に検査するようにした（#4468）。
