@@ -1,12 +1,11 @@
 import "@testing-library/jest-dom/vitest"
 
-import { act, render, screen, waitFor, within } from "@testing-library/react"
+import { render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest"
 
 import App from "./App"
 import { ThemeProvider } from "./components/theme-provider"
-import { formatCollectedAt } from "./lib/dashboard-formatters"
 
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -355,171 +354,30 @@ describe("dashboard", () => {
     )
   })
 
-  it("refreshes every dashboard read model and disables the button while running", async () => {
-    const refreshResponse = deferred<Response>()
-    const updatedOverview = {
-      ...overview,
-      channels: [
-        {
-          ...overview.channels[0],
-          summary: { ...overview.channels[0].summary, views: 2400 },
-        },
-      ],
-    }
-    let refreshRequested = false
-    vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+  it("shows startup snapshot guidance without manual refresh controls", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const path = String(input)
-      if (path === "/api/refresh" && init?.method === "POST") {
-        refreshRequested = true
-        return refreshResponse.promise
-      }
       if (path === "/api/publications") {
-        return Promise.resolve(
-          new Response(JSON.stringify(publicationActivity), { status: 200 })
-        )
+        return new Response(JSON.stringify(publicationActivity))
       }
-      return Promise.resolve(
-        new Response(
-          JSON.stringify(
-            path === "/api/channels" && refreshRequested
-              ? updatedOverview
-              : overview
-          ),
-          { status: 200 }
-        )
+      if (path === "/api/trends" || path === "/api/pipeline") {
+        return new Response(JSON.stringify({ channels: [] }))
+      }
+      return new Response(JSON.stringify(overview))
+    })
+
+    renderDashboard()
+
+    expect(
+      await screen.findByText(
+        "起動時に収集した snapshot から、チャンネルと動画のパフォーマンスを確認できます。"
       )
-    })
-    const user = userEvent.setup()
-    renderDashboard()
-    const refreshButton = await screen.findByRole("button", {
-      name: "データを更新",
-    })
-
-    await user.click(refreshButton)
-    expect(screen.getByRole("button", { name: "更新中" })).toBeDisabled()
-    expect(
-      screen.queryByRole("button", { name: "7 日" })
-    ).not.toBeInTheDocument()
-    refreshResponse.resolve(
-      new Response(JSON.stringify(updatedOverview), { status: 200 })
-    )
-
-    expect(await screen.findByText("2,400")).toBeInTheDocument()
-    expect(screen.getByRole("button", { name: "データを更新" })).toBeEnabled()
-  })
-
-  it("fixes the display period to 30 days and refreshes with that period", async () => {
-    const requests: Array<{ path: string; method?: string; body?: string }> = []
-    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
-      const path = String(input)
-      requests.push({ path, method: init?.method, body: init?.body as string })
-      if (path === "/api/publications") {
-        return new Response(JSON.stringify(publicationActivity), {
-          status: 200,
-        })
-      }
-      return new Response(JSON.stringify(overview), { status: 200 })
-    })
-    const user = userEvent.setup()
-    renderDashboard()
-
-    expect(await screen.findByText("直近 30 日")).toBeInTheDocument()
-    expect(
-      screen.queryByRole("group", { name: "集計期間" })
-    ).not.toBeInTheDocument()
-    expect(
-      screen.queryByRole("button", { name: "7 日" })
-    ).not.toBeInTheDocument()
-    expect(
-      screen.queryByRole("button", { name: "30 日" })
-    ).not.toBeInTheDocument()
-    expect(
-      screen.queryByRole("button", { name: "90 日" })
-    ).not.toBeInTheDocument()
-
-    await user.click(screen.getByRole("button", { name: "データを更新" }))
-
-    await waitFor(() =>
-      expect(
-        requests.some(
-          (request) =>
-            request.path === "/api/refresh" &&
-            request.method === "POST" &&
-            request.body === JSON.stringify({ days: 30 })
-        )
-      ).toBe(true)
-    )
-  })
-
-  it("keeps the refreshed range snapshot when the initial request completes late", async () => {
-    const initialOverviewResponse = deferred<Response>()
-    const refreshedOverview = {
-      ...overview,
-      channels: [
-        {
-          ...overview.channels[0],
-          collected_at: "2026-08-08T12:34:00Z",
-          period: { start_date: "2026-08-02", end_date: "2026-08-08" },
-          summary: { ...overview.channels[0].summary, views: 4321 },
-        },
-      ],
-    }
-    let channelRequestCount = 0
-    vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
-      const path = String(input)
-      if (path === "/api/channels") {
-        channelRequestCount += 1
-        if (channelRequestCount === 1) return initialOverviewResponse.promise
-        return Promise.resolve(
-          new Response(JSON.stringify(refreshedOverview), { status: 200 })
-        )
-      }
-      if (path === "/api/refresh" && init?.method === "POST") {
-        return Promise.resolve(
-          new Response(JSON.stringify(refreshedOverview), { status: 200 })
-        )
-      }
-      if (path === "/api/publications") {
-        return Promise.resolve(
-          new Response(JSON.stringify(publicationActivity), { status: 200 })
-        )
-      }
-      if (path === "/api/trends") {
-        return Promise.resolve(
-          new Response(JSON.stringify({ channels: [] }), { status: 200 })
-        )
-      }
-      return Promise.resolve(
-        new Response(JSON.stringify({ channels: [] }), { status: 200 })
-      )
-    })
-    const user = userEvent.setup()
-    renderDashboard()
-
-    await user.click(screen.getByRole("button", { name: "データを更新" }))
-
-    expect(await screen.findByText("4,321")).toBeInTheDocument()
-    const dataContext = screen.getByRole("region", {
-      name: "表示データについて",
-    })
-    expect(
-      within(dataContext).getByText("2026/08/02〜2026/08/08")
     ).toBeInTheDocument()
     expect(
-      within(dataContext).getByText(formatCollectedAt("2026-08-08T12:34:00Z"))
-    ).toBeInTheDocument()
-
-    await act(async () => {
-      initialOverviewResponse.resolve(
-        new Response(JSON.stringify(overview), { status: 200 })
-      )
-      await initialOverviewResponse.promise
-    })
-
-    await waitFor(() => {
-      expect(screen.getByText("4,321")).toBeInTheDocument()
-      expect(screen.queryByText("1,200")).not.toBeInTheDocument()
-    })
+      screen.queryByRole("button", { name: "データを更新" })
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText("更新中")).not.toBeInTheDocument()
+    expect(screen.queryByText("手動更新対応")).not.toBeInTheDocument()
   })
 
   it("presents overview, data context, metric definitions, and comparison in decision order", async () => {

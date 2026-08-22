@@ -798,7 +798,6 @@ export function App() {
   const [detail, setDetail] = useState<ChannelDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
-  const [refreshing, setRefreshing] = useState(false)
   const [trends, setTrends] = useState<TrendsResponse | null>(null)
   const [pipeline, setPipeline] = useState<PipelineResponse | null>(null)
   const [pipelineError, setPipelineError] = useState<string | null>(null)
@@ -874,76 +873,6 @@ export function App() {
       })
   }, [])
 
-  async function refreshDashboard() {
-    const requestId = dashboardRequestId.current + 1
-    dashboardRequestId.current = requestId
-    const refreshedDetailRequestId = detailRequestId.current + 1
-    detailRequestId.current = refreshedDetailRequestId
-    const detailChannelId = selectedId
-    setRefreshing(true)
-    setError(null)
-    try {
-      await requestJson<OverviewResponse>("/api/refresh", "POST", { days: 30 })
-      const [
-        overviewResponse,
-        publicationsResponse,
-        trendsResponse,
-        detailResponse,
-      ] = await Promise.all([
-        requestJson<OverviewResponse>("/api/channels"),
-        requestJson<unknown>("/api/publications"),
-        requestJson<TrendsResponse>("/api/trends"),
-        detailChannelId
-          ? requestJson<ChannelDetail>(
-              `/api/channels/${encodeURIComponent(detailChannelId)}`
-            )
-          : Promise.resolve(null),
-      ])
-      if (!isPublicationActivityResponse(publicationsResponse)) {
-        throw new Error("応答形式が不正です")
-      }
-      if (dashboardRequestId.current !== requestId) return
-      setChannels(overviewResponse.channels)
-      if (isTrendsResponse(trendsResponse)) setTrends(trendsResponse)
-      if (detailRequestId.current === refreshedDetailRequestId) {
-        setDetail(detailResponse)
-        setDetailLoading(false)
-      }
-      try {
-        const pipelineResponse = await requestJson<unknown>("/api/pipeline")
-        if (!isPipelineResponse(pipelineResponse)) {
-          throw new Error("pipeline 応答形式が不正です")
-        }
-        if (dashboardRequestId.current === requestId) {
-          setPipeline(pipelineResponse)
-          setPipelineError(null)
-        }
-      } catch (reason) {
-        if (dashboardRequestId.current === requestId) {
-          setPipelineError(
-            reason instanceof Error ? reason.message : String(reason)
-          )
-        }
-      }
-      if (dashboardRequestId.current !== requestId) return
-      const publicationCount = Object.values(publicationsResponse.days).reduce(
-        (total, count) => total + count,
-        0
-      )
-      setPublicationActivity(
-        publicationCount === 0
-          ? { status: "empty" }
-          : { status: "ready", data: publicationsResponse }
-      )
-    } catch (reason) {
-      if (dashboardRequestId.current === requestId) {
-        setError(reason instanceof Error ? reason.message : String(reason))
-      }
-    } finally {
-      if (dashboardRequestId.current === requestId) setRefreshing(false)
-    }
-  }
-
   async function selectChannel(channelId: string) {
     const requestId = detailRequestId.current + 1
     detailRequestId.current = requestId
@@ -974,28 +903,14 @@ export function App() {
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-8 p-4 sm:p-8">
         <header className="flex items-start justify-between gap-4">
           <div className="flex flex-col gap-2">
-            <Badge variant="secondary" className="gap-1">
-              <DatabaseIcon data-icon="inline-start" />
-              手動更新対応
-            </Badge>
             <h1 className="text-3xl font-semibold tracking-tight text-primary sm:text-4xl">
               YouTube Analytics Dashboard
             </h1>
             <p className="max-w-2xl text-muted-foreground">
-              全チャンネルを更新し、チャンネルと動画の最新パフォーマンスを確認できます。
+              起動時に収集した snapshot から、チャンネルと動画のパフォーマンスを確認できます。
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              disabled={refreshing}
-              onClick={() => void refreshDashboard()}
-            >
-              <RefreshCwIcon
-                className={refreshing ? "animate-spin" : undefined}
-              />
-              {refreshing ? "更新中" : "データを更新"}
-            </Button>
             <Button
               variant="outline"
               size="icon"
