@@ -205,17 +205,19 @@ def finalize_thumbnail_review_selection(
             )
 
         def record(state: WorkflowState) -> None:
-            state["thumbnail_review_selection"] = {
-                "schema_version": 1,
-                "source": source,
-                "candidate_id": candidate_id,
-                "artifact": artifact,
-                "pattern": pattern,
-                "image_sha256": selected.image_digest,
-                "qa_sha256": selected.qa_digest,
-                "artifact_digest": expected_artifact_digest,
-                "selected_at": datetime.now(UTC).isoformat(),
-            }
+            state.record_thumbnail_review_selection(
+                {
+                    "schema_version": 1,
+                    "source": source,
+                    "candidate_id": candidate_id,
+                    "artifact": artifact,
+                    "pattern": pattern,
+                    "image_sha256": selected.image_digest,
+                    "qa_sha256": selected.qa_digest,
+                    "artifact_digest": expected_artifact_digest,
+                    "selected_at": datetime.now(UTC).isoformat(),
+                }
+            )
 
         update_workflow_state(_collection_root(collection) / "workflow-state.json", record)
     except (OSError, ConfigError, ValidationError, WorkflowStateError) as exc:

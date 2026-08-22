@@ -728,6 +728,29 @@ class WorkflowState(MutableMapping[str, JSONValue]):
         """master video asset を検証して記録する。"""
         self.set_asset("master_video", path)
 
+    def record_master_audio(self, path: str | None) -> None:
+        """master audio asset と mastered phase を一度の遷移で記録する。"""
+        assets = self._data.setdefault("assets", {})
+        assert isinstance(assets, dict)
+        AssetsState(assets).set_known("master_audio", path)
+        self.phase = "mastered"
+        self.touch()
+
+    def record_collection_plan(self, *, final_title: str, target_persona: str) -> None:
+        """承認済み collection plan の既知 planning 値をまとめて記録する。"""
+        planning = self._data.setdefault("planning", {})
+        assert isinstance(planning, dict)
+        typed_planning = PlanningState(planning)
+        typed_planning.set_known("generated", True)
+        typed_planning.set_known("final_title", final_title)
+        typed_planning.set_known("target_persona", target_persona)
+        self.touch()
+
+    def record_thumbnail_review_selection(self, selection: Mapping[str, JSONValue]) -> None:
+        """承認済み thumbnail review selection を記録する。"""
+        self._data["thumbnail_review_selection"] = deepcopy(dict(selection))
+        self.touch()
+
     def record_distrokid_submission(self, completed_at: str) -> None:
         """DistroKid提出の初回完了時刻を保持し、再実行では上書きしない。"""
         human_tasks = self._data.setdefault("human_tasks", {})

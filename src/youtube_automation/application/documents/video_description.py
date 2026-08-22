@@ -50,13 +50,7 @@ def write_video_description_document(
     require_quality_pass(persisted)
 
     def project(state):
-        assets = state.assets
-        if assets is None:
-            state["assets"] = {}
-            assets = state.assets
-        if assets is None:
-            raise DocumentMigrationError("workflow-state.json::assets を初期化できません")
-        assets.description = True
+        state.set_asset("description", True)
         return state
 
     update_workflow_state(workflow_state_path, project)

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Literal
 
@@ -216,14 +216,11 @@ def _validate_presentation(presentation: VideoReviewPresentation) -> None:
 
 
 def _record_master_video(state_path: Path, filename: str) -> None:
-    timestamp = datetime.now(UTC).isoformat().replace("+00:00", "Z")
-
     def transition(state: WorkflowState) -> None:
         assets = state.assets
         if assets is None or assets.master_audio is None or assets.master_video is not None:
             raise WorkflowStateError("master video transition is no longer pending")
-        assets.master_video = filename
-        state["updated_at"] = timestamp
+        state.record_master_video(filename)
 
     update_workflow_state(state_path, transition)
 
