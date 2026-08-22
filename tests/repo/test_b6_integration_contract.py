@@ -34,9 +34,7 @@ EXPECTED_GROUP_EVIDENCE = {
     "C-05": "helper uses shared formatter contract",
     "C-06": "helper uses shared formatter contract",
     "C-07": "helper uses shared formatter contract",
-    "legacy-08": (
-        "route 0 received by ONBOARDING.md 2.3, manual routes and reference sections received by docs/oauth-setup.md"
-    ),
+    "legacy-08": ("setup guide ownership consolidated in docs/oauth-setup.md; ONBOARDING.md links to it"),
     "legacy-09": "completed plans received by plans/README.md",
     "legacy-10": "completed plans received by plans/README.md",
     "legacy-11": "completed plans received by plans/README.md",

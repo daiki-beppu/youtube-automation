@@ -1367,21 +1367,33 @@ def test_setup_client_secrets_step_uses_download_and_automatic_move() -> None:
     assert "転記" not in step
 
 
-def test_onboarding_client_secrets_step_uses_download_and_automatic_move() -> None:
-    onboarding = _read("ONBOARDING.md")
-    oauth_setup = onboarding.split("### 2.3 OAuth セットアップ", 1)[1].split("### 2.4 初期設定後の GCP 課金確認", 1)[0]
+def test_public_setup_guide_owns_installation_and_oauth_completion() -> None:
+    oauth_setup = _read("docs/oauth-setup.md")
+    recommended = oauth_setup.split("## 推奨ルート", 1)[1].split("## 上級者向け", 1)[0]
 
     for expected in (
-        "Client secrets > Add secret",
+        "uv init",
+        "uv add git+https://github.com/daiki-beppu/youtube-automation.git",
+        "uv run yt-skills sync --asset skills --force",
+        "/setup --tool",
+        "[HUMAN STEP]",
         "Download JSON",
         "done",
         "uv run yt-doctor --fix-client-secrets",
-        "uv run yt-doctor --json",
-        "client_secrets` が `ok`",
+        "uv run yt-doctor --apply --json",
+        "apply.stop_reason` が `completed",
     ):
-        assert expected in oauth_setup
-    assert "client_secrets.template.json" not in oauth_setup
-    assert "転記" not in oauth_setup
+        assert expected in recommended
+    assert "client_secrets.template.json" not in recommended
+    assert "転記" not in recommended
+
+    onboarding = _read("ONBOARDING.md")
+    onboarding_setup = onboarding.split("## 2. ツール導入と API セットアップ", 1)[1].split(
+        "### 2.4 初期設定後の GCP 課金確認", 1
+    )[0]
+    assert "[`docs/oauth-setup.md`](docs/oauth-setup.md) を正本" in onboarding_setup
+    assert "```bash" not in onboarding_setup
+    assert "Download JSON" not in onboarding_setup
 
 
 def test_oauth_module_and_setup_guide_distinguish_automatic_and_manual_routes() -> None:
@@ -1391,14 +1403,12 @@ def test_oauth_module_and_setup_guide_distinguish_automatic_and_manual_routes() 
         assert expected in module_docstring
     assert "secret を発行して auth/client_secrets.json に配置" not in module_docstring
 
-    onboarding = _read("ONBOARDING.md")
-    route_zero = onboarding.split("### 2.3 OAuth セットアップ", 1)[1].split("### 2.4 初期設定後の GCP 課金確認", 1)[0]
-    for expected in ("Download JSON", "done", "yt-doctor --fix-client-secrets", "yt-doctor --json"):
+    oauth_setup = _read("docs/oauth-setup.md")
+    route_zero = oauth_setup.split("## 推奨ルート", 1)[1].split("## 上級者向け", 1)[0]
+    for expected in ("Download JSON", "done", "yt-doctor --fix-client-secrets", "yt-doctor --apply --json"):
         assert expected in route_zero
     assert "client_secrets.json` 配置は PKCE / GUI 制約で AI 実行不可" not in route_zero
 
-    # 手動ルート A / B は auth/SETUP.md から docs/oauth-setup.md へ移管された
-    oauth_setup = _read("docs/oauth-setup.md")
     manual_routes = oauth_setup.split("### ルート A", 1)[1].split("## Google Auth Platform 手動設定", 1)[0]
     assert "ルート A / B では `client_secrets.json` の手動配置を行う" in manual_routes
 
