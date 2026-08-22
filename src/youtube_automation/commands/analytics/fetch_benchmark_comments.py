@@ -152,6 +152,7 @@ class BenchmarkCommentCollector:
             "min_views": self.min_views,
             "max_comments_per_video": self.max_comments,
             "videos": [],
+            "skipped_videos": [],
             "summary": {
                 "total_videos": 0,
                 "total_comments": 0,
@@ -170,7 +171,14 @@ class BenchmarkCommentCollector:
                 target["channel_name"],
             )
 
-            comments = self._fetch_comments(vid)
+            try:
+                comments = self._fetch_comments(vid)
+            except YouTubeAPIError as error:
+                if error.status_code != 403 or error.reason != "commentsDisabled":
+                    raise
+                logger.warning("  → skip: %s (%s)", vid, error.reason)
+                result["skipped_videos"].append({"video_id": vid, "title": target["title"], "reason": error.reason})
+                continue
             logger.info("  → %d件取得", len(comments))
 
             result["videos"].append({**target, "comments": comments, "comment_count": len(comments)})
@@ -224,6 +232,10 @@ def print_summary(data: dict):
     print("\n📁 動画別コメント数:")
     for v in data.get("videos", []):
         print(f"   {v['views']:>7,} views | {v['comment_count']:>3}件 | {v['title'][:55]}")
+    if data.get("skipped_videos"):
+        print("\n⏭️ スキップ動画:")
+        for video in data["skipped_videos"]:
+            print(f"   {video['video_id']} | {video['reason']} | {video['title'][:55]}")
 
 
 def _build_parser() -> argparse.ArgumentParser:

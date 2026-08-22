@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -316,6 +317,60 @@ def test_collect_empty_targets_returns_without_authentication_or_save(monkeypatc
     assert calls == ["fresh"]
     assert collector.youtube is None
     assert not (tmp_path / "comments_20260630.json").exists()
+
+
+def test_collect_skips_comments_disabled_video_and_records_metadata(monkeypatch, tmp_path):
+    collector = _collector_for_date(tmp_path)
+    targets = [
+        {
+            "video_id": video_id,
+            "title": title,
+            "views": 12000,
+            "channel_name": "Benchmark Channel",
+            "channel_slug": "benchmark-channel",
+        }
+        for video_id, title in (("disabled", "Comments off"), ("enabled", "Comments on"))
+    ]
+    monkeypatch.setattr(mod, "ensure_benchmark_fresh", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(mod, "load_benchmark_videos", lambda *_args, **_kwargs: targets)
+    collector.youtube_clients = SimpleNamespace(youtube=object())
+
+    def fetch(video_id: str):
+        if video_id == "disabled":
+            raise YouTubeAPIError("comments disabled", status_code=403, reason="commentsDisabled")
+        return [_comment_item("comment-1")]
+
+    monkeypatch.setattr(collector, "_fetch_comments", fetch)
+
+    result = collector.collect()
+
+    assert [video["video_id"] for video in result["videos"]] == ["enabled"]
+    assert result["skipped_videos"] == [{"video_id": "disabled", "title": "Comments off", "reason": "commentsDisabled"}]
+    assert result["summary"]["total_videos"] == 1
+
+
+def test_collect_fails_loud_for_other_403(monkeypatch, tmp_path):
+    collector = _collector_for_date(tmp_path)
+    target = {
+        "video_id": "forbidden",
+        "title": "Forbidden",
+        "views": 12000,
+        "channel_name": "Benchmark Channel",
+        "channel_slug": "benchmark-channel",
+    }
+    monkeypatch.setattr(mod, "ensure_benchmark_fresh", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(mod, "load_benchmark_videos", lambda *_args, **_kwargs: [target])
+    collector.youtube_clients = SimpleNamespace(youtube=object())
+    monkeypatch.setattr(
+        collector,
+        "_fetch_comments",
+        lambda _video_id: (_ for _ in ()).throw(
+            YouTubeAPIError("quota exceeded", status_code=403, reason="quotaExceeded")
+        ),
+    )
+
+    with pytest.raises(YouTubeAPIError, match="quota exceeded"):
+        collector.collect()
 
 
 def _comment_item(comment_id: str) -> dict:
