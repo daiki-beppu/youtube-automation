@@ -30,7 +30,17 @@ This file provides guidance to Codex CLI (developers.openai.com/codex) when work
 
 - `config/channel/*.json` は責務別分割。必須ファイルに加え optional として `shorts.json` / `comments.json` / `pinned-comment.json` / `distrokid.json` / `community-draft.json` がある。一覧と構造は `CLAUDE.md`・`docs/architecture.md` を参照
 
+### Codex Cloud の検証
+
+この節は Codex Cloud にだけ適用し、ローカル開発と GitHub Actions には適用しない。Cloud 環境は Python 3.14、環境変数 `UV_PYTHON=3.14`、setup / maintenance script `uv sync --python 3.14 --frozen` で構成する。依存同期は setup / maintenance に任せ、task 中の検証コマンドは既存環境を変更しない `uv run --no-sync` を使う。
+
+- 変更した test file / node ID と、変更に直接必要な repository contract を focused test の対象にする。標準形は `uv run --no-sync pytest <targets>`
+- Python の静的検査は変更した path に限定し、`uv run --no-sync ruff check <paths>` を使う
+- 10,000 件超の full suite は GitHub Actions を正とし、Cloud では PR の CI 完了を確認する
+- CI failure の修正ループでは、失敗した test を Cloud で単独再現してから修正する
+- Cloud では `nix develop`、引数なしの `pytest`、全 test 指定、full collection に対する `pytest -n auto` を実行しない
+
 ### devShell と worktree
 
-- 対象 checkout（親 checkout / worktree のどちらも）で `nix develop` または direnv に入る。shellHook が `uv sync` を自動実行する
+- Codex Cloud 以外の対象 checkout（親 checkout / worktree のどちらも）で `nix develop` または direnv に入る。shellHook が `uv sync` を自動実行する
 - 品質ゲート（ruff / CHANGELOG / any 型）はローカル git hook ではなく CI で担保される。詳細は `docs/development.md` の「品質ゲート（CI）」
