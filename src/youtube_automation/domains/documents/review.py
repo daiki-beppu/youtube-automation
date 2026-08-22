@@ -6,11 +6,14 @@ import re
 import secrets
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Literal
 
 from youtube_automation.core.errors import ReviewSelectionError
 
 ReviewArtifact = Literal["plan", "music-prompt", "thumbnail", "audio", "video"]
+ReviewTransport = Literal["web", "terminal"]
+ReviewStatus = Literal["terminal_required", "selected"]
 _CANDIDATE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 _DIGEST = re.compile(r"^[a-f0-9]{64}$")
 
@@ -82,3 +85,38 @@ class SelectionManifest:
         if candidate is None:
             raise ReviewSelectionError(f"許可されていない候補です: {candidate_id}")
         return candidate
+
+
+@dataclass(frozen=True)
+class ReviewSnapshot:
+    """Immutable view of one reviewable source at a point in time."""
+
+    manifest: SelectionManifest
+    media: tuple[tuple[str, Path], ...] = ()
+
+
+@dataclass(frozen=True)
+class ReviewOutcome:
+    """Transport-neutral result, including the terminal CLI contract."""
+
+    status: ReviewStatus
+    artifact_digest: str
+    candidates: tuple[str, ...]
+    candidate_id: str | None = None
+    html_path: Path | None = None
+
+    @property
+    def exit_code(self) -> int:
+        return 2 if self.status == "terminal_required" else 0
+
+    def json_payload(self) -> dict[str, object]:
+        payload: dict[str, object] = {
+            "status": self.status,
+            "artifact_digest": self.artifact_digest,
+            "candidates": list(self.candidates),
+        }
+        if self.candidate_id is not None:
+            payload["candidate_id"] = self.candidate_id
+        if self.html_path is not None:
+            payload["html_path"] = str(self.html_path)
+        return payload
