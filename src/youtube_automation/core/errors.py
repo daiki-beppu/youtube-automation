@@ -113,6 +113,18 @@ class UploadError(AutomationError):
     """
 
 
+class UploadJournalError(UploadError):
+    """upload journal の読み書き・状態契約エラー。"""
+
+
+class UploadJournalCorruptError(UploadJournalError):
+    """破損 journal が quarantine され、再開可否を判断できない。"""
+
+
+class UploadJournalSaveError(UploadJournalError):
+    """upload journal の永続化に失敗した。"""
+
+
 class GeneratorError(AutomationError):
     """返信生成バックエンドの失敗（API エラー・レスポンス不正等）"""
 
