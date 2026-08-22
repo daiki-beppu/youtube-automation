@@ -9,15 +9,15 @@ from pathlib import Path
 import schedule
 
 from youtube_automation.configuration import channel_dir, load_config
-from youtube_automation.core.adapters.media import CollectionPaths
 from youtube_automation.core.adapters.youtube import (
     DAILY_BUCKET_LIMITS,
     UNIT_COSTS,
     UNIT_POOL_LIMIT,
     complete_collection_quota_plan,
 )
-from youtube_automation.core.errors import ValidationError, WorkflowStateError
-from youtube_automation.domains.collections.workflow_state import read as read_workflow_state
+from youtube_automation.core.errors import ValidationError
+from youtube_automation.domains.collections.inventory import UnreadableWorkflowState, iter_collections
+from youtube_automation.domains.collections.workflow_state import Stage
 from youtube_automation.domains.uploads._collection_uploader_constants import (
     ACTION_COMPLETE_COLLECTION_QUOTA_EXHAUSTED,
     ACTION_COMPLETE_COLLECTION_UPLOADED,
@@ -31,7 +31,6 @@ from youtube_automation.domains.uploads.preflight import ensure_collection_prefl
 from youtube_automation.domains.uploads.upload_journal import UploadJournal, UploadJournalOutcome
 from youtube_automation.domains.uploads.youtube import YouTubeAutoUploader
 from youtube_automation.infrastructure.filesystem import (
-    list_directory,
     make_directory,
     path_exists,
     path_is_directory,
@@ -161,17 +160,10 @@ class CollectionUploader:
 
     # ─── コレクション検索 ───────────────────────────
 
-    def find_collections(self, stages: tuple[str, ...] = ("planning", "live")) -> list[Path]:
+    def find_collections(self, stages: tuple[Stage, ...] = ("planning", "live")) -> list[Path]:
         """コレクションを検索（指定ステージを探索）"""
-        collections = []
-        for stage in stages:
-            stage_dir = self.collections_root / stage
-            if path_exists(stage_dir):
-                collections.extend(
-                    d for d in list_directory(stage_dir) if path_is_directory(d) and not d.name.startswith(".")
-                )
-        collections.sort(key=lambda x: x.name)
-        return collections
+        # unreadable も明示名検索では従来どおり候補に残す。
+        return [record.directory for record in iter_collections(self.collections_root.parent, stages)]
 
     def find_collection(self, collection_name: str | None = None) -> Path | None:
         """名前指定なら全ステージ、未指定なら未公開の planning コレクションを検索する。"""
@@ -184,13 +176,16 @@ class CollectionUploader:
             return None
 
         candidates = []
-        for collection in self.find_collections(("planning",)):
-            state_path = CollectionPaths(collection).workflow_state_path
-            try:
-                state = read_workflow_state(state_path)
-            except WorkflowStateError as exc:
-                logger.warning(f"⚠️  workflow-state.json を読み取れないため候補から除外します: {state_path}: {exc}")
+        for record in iter_collections(self.collections_root.parent, ("planning",)):
+            collection = record.directory
+            if isinstance(record.state, UnreadableWorkflowState):
+                logger.warning(
+                    "⚠️  workflow-state.json を読み取れないため候補から除外します: %s: %s",
+                    record.state.path,
+                    record.state.reason,
+                )
                 continue
+            state = record.state
 
             upload = state.upload
             if state.phase == "mastered" and upload is not None and "video_id" in upload and upload.video_id is None:

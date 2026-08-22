@@ -59,17 +59,17 @@ def _make_collection(
 
 class TestDiscoverTargets:
     def test_prepared_with_url_and_audio_is_target(self, tmp_path):
-        _make_collection(tmp_path, "001-a-collection", _state())
+        _make_collection(tmp_path / "collections" / "planning", "001-a-collection", _state())
 
-        targets, excluded = wf_batch.discover_targets(tmp_path)
+        targets, excluded = wf_batch.discover_targets(tmp_path / "collections" / "planning")
 
         assert [t.slug for t in targets] == ["001-a-collection"]
         assert excluded == []
 
     def test_missing_url_is_excluded_with_warning(self, tmp_path):
-        _make_collection(tmp_path, "001-a-collection", _state(url=None))
+        _make_collection(tmp_path / "collections" / "planning", "001-a-collection", _state(url=None))
 
-        targets, excluded = wf_batch.discover_targets(tmp_path)
+        targets, excluded = wf_batch.discover_targets(tmp_path / "collections" / "planning")
 
         assert targets == []
         assert len(excluded) == 1
@@ -77,64 +77,64 @@ class TestDiscoverTargets:
         assert "suno_playlist_url" in excluded[0].reason
 
     def test_missing_audio_is_excluded_with_warning(self, tmp_path):
-        _make_collection(tmp_path, "001-a-collection", _state(), audio_files=())
+        _make_collection(tmp_path / "collections" / "planning", "001-a-collection", _state(), audio_files=())
 
-        targets, excluded = wf_batch.discover_targets(tmp_path)
+        targets, excluded = wf_batch.discover_targets(tmp_path / "collections" / "planning")
 
         assert targets == []
         assert len(excluded) == 1
         assert "02-Individual-music" in excluded[0].reason
 
     def test_missing_url_and_audio_reports_both_reasons(self, tmp_path):
-        _make_collection(tmp_path, "001-a-collection", _state(url=None), audio_files=())
+        _make_collection(tmp_path / "collections" / "planning", "001-a-collection", _state(url=None), audio_files=())
 
-        _, excluded = wf_batch.discover_targets(tmp_path)
+        _, excluded = wf_batch.discover_targets(tmp_path / "collections" / "planning")
 
         assert "suno_playlist_url" in excluded[0].reason
         assert "02-Individual-music" in excluded[0].reason
 
     def test_non_prepared_phase_is_silently_skipped(self, tmp_path):
-        _make_collection(tmp_path, "001-a-collection", _state(phase="mastered"))
+        _make_collection(tmp_path / "collections" / "planning", "001-a-collection", _state(phase="mastered"))
 
-        targets, excluded = wf_batch.discover_targets(tmp_path)
+        targets, excluded = wf_batch.discover_targets(tmp_path / "collections" / "planning")
 
         assert targets == []
         assert excluded == []
 
     def test_raw_master_recorded_is_silently_skipped(self, tmp_path):
-        _make_collection(tmp_path, "001-a-collection", _state(raw_master="master.mp3"))
+        _make_collection(tmp_path / "collections" / "planning", "001-a-collection", _state(raw_master="master.mp3"))
 
-        targets, excluded = wf_batch.discover_targets(tmp_path)
+        targets, excluded = wf_batch.discover_targets(tmp_path / "collections" / "planning")
 
         assert targets == []
         assert excluded == []
 
     def test_music_prompts_false_is_silently_skipped(self, tmp_path):
-        _make_collection(tmp_path, "001-a-collection", _state(music_prompts=False))
+        _make_collection(tmp_path / "collections" / "planning", "001-a-collection", _state(music_prompts=False))
 
-        targets, excluded = wf_batch.discover_targets(tmp_path)
+        targets, excluded = wf_batch.discover_targets(tmp_path / "collections" / "planning")
 
         assert targets == []
         assert excluded == []
 
     def test_broken_state_is_excluded_with_warning(self, tmp_path):
-        _make_collection(tmp_path, "001-a-collection", "{broken json")
+        _make_collection(tmp_path / "collections" / "planning", "001-a-collection", "{broken json")
 
-        targets, excluded = wf_batch.discover_targets(tmp_path)
+        targets, excluded = wf_batch.discover_targets(tmp_path / "collections" / "planning")
 
         assert targets == []
         assert "workflow-state.json" in excluded[0].reason
 
     def test_targets_are_sorted_by_slug(self, tmp_path):
-        _make_collection(tmp_path, "002-b-collection", _state())
-        _make_collection(tmp_path, "001-a-collection", _state())
+        _make_collection(tmp_path / "collections" / "planning", "002-b-collection", _state())
+        _make_collection(tmp_path / "collections" / "planning", "001-a-collection", _state())
 
-        targets, _ = wf_batch.discover_targets(tmp_path)
+        targets, _ = wf_batch.discover_targets(tmp_path / "collections" / "planning")
 
         assert [t.slug for t in targets] == ["001-a-collection", "002-b-collection"]
 
     def test_missing_planning_root_returns_empty(self, tmp_path):
-        targets, excluded = wf_batch.discover_targets(tmp_path / "nope")
+        targets, excluded = wf_batch.discover_targets(tmp_path / "collections" / "planning")
 
         assert targets == []
         assert excluded == []
@@ -353,6 +353,17 @@ class TestMainDryRun:
         assert "002-b-collection" in captured.err
         assert "suno_playlist_url" in captured.err
         assert not (channel / "reports").exists()
+
+    def test_inventory_hazard_is_reported_as_cli_error(self, channel, capsys):
+        planning = channel / "collections" / "planning"
+        target = channel / "outside"
+        target.mkdir()
+        (planning / "hazard").symlink_to(target, target_is_directory=True)
+
+        rc = wf_batch.main(["--dry-run"])
+
+        assert rc == 1
+        assert "ERROR:" in capsys.readouterr().err
 
 
 class TestMainBatchRun:
