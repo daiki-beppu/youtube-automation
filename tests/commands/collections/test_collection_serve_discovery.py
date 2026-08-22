@@ -604,6 +604,28 @@ def test_real_socket_owner_follower_takeover_keeps_public_endpoint_available():
     assert not lifecycle_b.ownership_thread.is_alive()
 
 
+def test_become_owner_registers_before_publishing_owner_readiness(monkeypatch):
+    lifecycle = DiscoveryLifecycle.for_loopback_test(
+        server_info("http://beta.localhost:49152", "Beta"), discovery_port=0
+    )
+    owner_state_during_registration: list[bool] = []
+    original_register = RegistryState.register
+
+    def record_owner_state(state: RegistryState, payload: object) -> None:
+        owner_state_during_registration.append(lifecycle.is_owner)
+        original_register(state, payload)
+
+    monkeypatch.setattr(RegistryState, "register", record_owner_state)
+
+    try:
+        assert lifecycle._become_owner()
+        assert owner_state_during_registration == [False]
+        assert lifecycle.is_owner
+        assert_urls(lifecycle._endpoint(), {"http://beta.localhost:49152"})
+    finally:
+        lifecycle.stop()
+
+
 def test_lifecycle_start_fails_when_fixed_port_http_responder_returns_404():
     methods: list[str] = []
 
