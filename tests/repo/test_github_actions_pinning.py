@@ -20,6 +20,7 @@ _EXPECTED_ACTIONS = {
     "actions/cache": ("55cc8345863c7cc4c66a329aec7e433d2d1c52a9", "v6.1.0"),
     "actions/checkout": ("3d3c42e5aac5ba805825da76410c181273ba90b1", "v7.0.1"),
     "actions/setup-python": ("5fda3b95a4ea91299a34e894583c3862153e4b97", "v7.0.0"),
+    "anthropics/claude-code-action": ("4a3947e8ca609a286ab07d4d048d9ec4016798c1", "v1"),
     "astral-sh/setup-uv": ("c771a70e6277c0a99b617c7a806ffedaca235ff9", "v9.0.0"),
     "cachix/install-nix-action": ("630ae543ea3a38a9a4166f03376c02c50f408342", "v31.11.0"),
     "DeterminateSystems/nix-installer-action": ("ef8a148080ab6020fd15196c2084a2eea5ff2d25", "v22"),

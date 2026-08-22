@@ -160,6 +160,16 @@ gh stack merge <stack番号|PR番号> --yes --squash
 - `gh stack sync` はローカルとリモートの stack が diverge していると、非対話環境では何も変更せず `ℹ Sync aborted` を出して **exit 0 で終わる**。成功と読み違えない。解消は `gh stack unstack` してから作り直す
 - `gh stack rebase` の conflict は exit 3。`git add` で解決を stage して `gh stack rebase --continue`、戻せなくなったら `--abort` で全 branch が rebase 前へ復元される
 
+## PR 自動コードレビュー(マージ前ゲート)
+
+draft でない PR の opened / ready_for_review / synchronize で `.github/workflows/code-review.yml` が発火し、claude-code-action が mattpocock code-review(Standards / Spec の 2 軸)+ simplify 観点(reuse / simplification / efficiency)で差分をレビューして severity 付きの集約コメントを投稿する。生成経路(takt / `/issue-direct` / 手動)によらず全 PR に同じゲートが効く。
+
+- **critical 指摘が 1 件以上あると `Code review` check が fail する**。warning / info のみなら success。`gh stack merge` の CI green 待ちにはこの check も含まれる
+- simplify 系の提案はコメントに載るだけで、CI が PR ブランチへ修正を push することはない(workflow は `contents: read`)
+- オプトアウトは PR に `skip-review` ラベルを付与する(誤検知が続く PR・機械生成の大量 PR 向け)。draft PR は最初から対象外
+- `CLAUDE_CODE_OAUTH_TOKEN` / `ANTHROPIC_API_KEY` がどちらも未設定の環境では fail せず skip される(evals.yml と同じ慣行)
+- 同一 PR への連続 push は進行中の run が cancel され、最新 commit のレビューだけが残る
+
 ## 環境
 
 親 checkout と新規 worktree の両方で devShell に入る。direnv があれば `direnv allow` で `.envrc` を allow し、なければ `nix develop` を使う。どちらも shellHook が `uv sync` を自動実行する。非対話 shell は `nix develop --command <command>` を使う。
