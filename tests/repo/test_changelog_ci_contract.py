@@ -41,8 +41,9 @@ def _build_ci_path_filter_pattern(gated_paths: tuple[str, ...]) -> str:
 _PATH_FILTER_PATTERN = _build_ci_path_filter_pattern(_CHANGELOG_GATED_PATHS)
 # push で CI を回す対象 branch。PR は stacked PR base でも発火するよう branch 制限しない。
 _PUSH_TRIGGER_BRANCHES = ["main"]
-_CHANGELOG_FILE_PATTERN = "^(CHANGELOG\\.md|changelog\\.d/.+\\.md)$"
+_CHANGELOG_FRAGMENT_PATTERN = "^changelog\\.d/.+\\.md$"
 _LABELS_JOIN_EXPRESSION = "${{ join(github.event.pull_request.labels.*.name, ',') }}"
+_HEAD_REF_EXPRESSION = "${{ github.head_ref }}"
 _PR_EVENT_GUARD = "github.event_name == 'pull_request'"
 _PR_TEMPLATE_TEXT = """## 概要
 
@@ -69,9 +70,11 @@ _EXPECTED_RUN_LINES = [
     "set -eu",
     'if [[ ",${PR_LABELS}," == *",skip-changelog,"* ]]; then',
     'changed=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")',
+    'if [[ "$HEAD_REF" == release/* ]]; then',
+    "if echo \"$changed\" | grep -q '^CHANGELOG\\.md$'; then",
     f"if ! echo \"$changed\" | grep -qE '{_PATH_FILTER_PATTERN}'; then",
-    f"if ! echo \"$changed\" | grep -qE '{_CHANGELOG_FILE_PATTERN}'; then",
-    'echo "Changelog update found"',
+    f"if ! echo \"$changed\" | grep -qE '{_CHANGELOG_FRAGMENT_PATTERN}'; then",
+    'echo "Changelog fragment found"',
 ]
 
 
@@ -112,6 +115,7 @@ def test_ci_workflow_changelog_job_uses_expected_environment_contract() -> None:
         "PR_LABELS": _LABELS_JOIN_EXPRESSION,
         "BASE_SHA": "${{ github.event.pull_request.base.sha }}",
         "HEAD_SHA": "${{ github.event.pull_request.head.sha }}",
+        "HEAD_REF": _HEAD_REF_EXPRESSION,
     }
 
 
@@ -135,11 +139,10 @@ def test_ci_workflow_changelog_job_checks_expected_paths_and_messages() -> None:
         assert expected_line in run_script
 
     assert _CHANGELOG_LABEL in run_script
-    assert _CHANGELOG_FILE_PATTERN in run_script
-    assert (
-        "::error::Add a changelog fragment under changelog.d/ (or update CHANGELOG.md), "
-        "or apply 'skip-changelog' label." in run_script
-    )
+    assert _CHANGELOG_FRAGMENT_PATTERN in run_script
+    assert "::error::Normal PRs must not edit CHANGELOG.md directly; add a fragment under changelog.d/." in run_script
+    assert "::error::Release PRs must update CHANGELOG.md." in run_script
+    assert "::error::Add a changelog fragment under changelog.d/, or apply 'skip-changelog' label." in run_script
 
 
 def test_ci_workflow_keeps_push_branch_allowlist() -> None:
