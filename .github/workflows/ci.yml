@@ -226,6 +226,7 @@ jobs:
           PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HEAD_REF: ${{ github.head_ref }}
         run: |
           set -eu
           if [[ ",${PR_LABELS}," == *",skip-changelog,"* ]]; then
@@ -235,15 +236,27 @@ jobs:
           changed=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")
           echo "Changed files:"
           echo "$changed"
+          if [[ "$HEAD_REF" == release/* ]]; then
+            if ! echo "$changed" | grep -q '^CHANGELOG\.md$'; then
+              echo "::error::Release PRs must update CHANGELOG.md."
+              exit 1
+            fi
+            echo "Release CHANGELOG update found"
+            exit 0
+          fi
+          if echo "$changed" | grep -q '^CHANGELOG\.md$'; then
+            echo "::error::Normal PRs must not edit CHANGELOG.md directly; add a fragment under changelog.d/."
+            exit 1
+          fi
           if ! echo "$changed" | grep -qE '^(src/youtube_automation/|\.claude/skills/|\.claude/CLAUDE\.template\.md$|pyproject\.toml$)'; then
             echo "No significant code changes, skipping CHANGELOG check"
             exit 0
           fi
-          if ! echo "$changed" | grep -qE '^(CHANGELOG\.md|changelog\.d/.+\.md)$'; then
-            echo "::error::Add a changelog fragment under changelog.d/ (or update CHANGELOG.md), or apply 'skip-changelog' label."
+          if ! echo "$changed" | grep -qE '^changelog\.d/.+\.md$'; then
+            echo "::error::Add a changelog fragment under changelog.d/, or apply 'skip-changelog' label."
             exit 1
           fi
-          echo "Changelog update found"
+          echo "Changelog fragment found"
 
   adr-numbering:
     needs: changes
