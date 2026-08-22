@@ -1,0 +1,16 @@
+[
+  {
+    "date": "2026-08-22",
+    "scope": "schema document view only",
+    "target": "src/youtube_automation/domains/documents/resources/base.css",
+    "genre": "editorial",
+    "theme": "Technical Ledger",
+    "macrostructure": "Long Document",
+    "audience": "YouTube operators",
+    "decision": "Use austere rules, restrained surfaces, and native disclosures; preserve schema-driven information order.",
+    "excluded": [
+      "review view",
+      "workflow status view"
+    ]
+  }
+]
