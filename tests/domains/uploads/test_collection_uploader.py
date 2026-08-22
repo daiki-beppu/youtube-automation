@@ -718,6 +718,20 @@ class TestAutoDetectCollection:
         uploader.execute_next_step.assert_not_called()
         assert "-c で対象を明示してください" in caplog.text
 
+    def test_daily_check_skips_inventory_hazard_without_stopping_daemon(self, tmp_path, caplog):
+        uploader, _ = _make_uploader_with_collection_mock(tmp_path)
+        planning = tmp_path / "collections" / "planning"
+        planning.mkdir(parents=True)
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        (planning / "hazard").symlink_to(outside, target_is_directory=True)
+        uploader.execute_next_step = MagicMock()
+
+        uploader._daily_check_and_upload()
+
+        uploader.execute_next_step.assert_not_called()
+        assert "symlink" in caplog.text
+
 
 class TestDefaultPublishTimeFallback:
     """#1054: schedule_config 未指定時に channel youtube.default_publish_time を使う。"""

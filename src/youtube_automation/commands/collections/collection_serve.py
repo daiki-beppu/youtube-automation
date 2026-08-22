@@ -978,7 +978,11 @@ def create_server(
             if ".." in cid:
                 self.send_error(404, "Not Found")
                 return
-            known_ids = {coll.name for coll in find_collection_dirs(collections_root)}
+            try:
+                known_ids = {coll.name for coll in find_collection_dirs(collections_root)}
+            except WorkflowStateError as exc:
+                self._send_json_error(500, str(exc))
+                return
             if cid not in known_ids:
                 self.send_error(404, "Not Found")
                 return
@@ -1189,7 +1193,11 @@ def create_server(
                     self.send_error(400, "Bad Request")
                     return
                 if collections_root is not None:
-                    known_collections = {coll.name: coll for coll in find_collection_dirs(collections_root)}
+                    try:
+                        known_collections = {coll.name: coll for coll in find_collection_dirs(collections_root)}
+                    except WorkflowStateError as exc:
+                        self._send_json_error(500, str(exc))
+                        return
                     coll_dir = known_collections.get(coll_id)
                     if coll_dir is None:
                         self.send_error(400, "Bad Request")
@@ -1245,7 +1253,10 @@ def create_server(
                 self._send_bytes(body, "application/json; charset=utf-8")
                 return
             if dir_mode:
-                self._serve_dir_mode()
+                try:
+                    self._serve_dir_mode()
+                except WorkflowStateError as exc:
+                    self._send_json_error(500, str(exc))
                 return
             if self.path == COMMUNITY_POSTS_ROUTE:
                 assert collection_dir is not None
@@ -1590,7 +1601,10 @@ def main() -> None:
     r2_handoff_requested = _r2_handoff_requested()
 
     # path が `*-collection/` を並べたディレクトリなら dir mode（#816）。
-    collection_dirs = find_collection_dirs(args.path)
+    try:
+        collection_dirs = find_collection_dirs(args.path)
+    except WorkflowStateError as exc:
+        parser.error(str(exc))
     lifecycle_root = _lifecycle_root(args.path)
     lifecycle_configuration = _configuration_fingerprint(
         path=args.path,

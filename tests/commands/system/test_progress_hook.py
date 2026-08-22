@@ -134,6 +134,20 @@ def test_should_mark_real_asset_stages_from_workflow_state(
     assert "  ○  アップロード" in message
 
 
+def test_should_ignore_collection_directory_without_workflow_state(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    state = json.loads((_FIXTURES / "workflow-state-mastered.json").read_text(encoding="utf-8"))
+    _write_collection(tmp_path, "planning", "mastered-collection", state)
+    (tmp_path / "collections" / "planning" / "initialization-interrupted").mkdir()
+
+    message = _progress_message(tmp_path, capsys)
+
+    assert "  ✓  サムネイル" in message
+    assert "  ▸  動画化" in message
+
+
 def test_should_leave_source_and_later_stages_incomplete_without_raw_master(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
