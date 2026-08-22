@@ -71,7 +71,10 @@ function localDateKey(date: Date): string {
   return `${year}-${month}-${day}`
 }
 
-async function formatCollectedAt(page: Page, timestamp: string): Promise<string> {
+async function formatCollectedAt(
+  page: Page,
+  timestamp: string
+): Promise<string> {
   return page.evaluate((value) => {
     return new Intl.DateTimeFormat("ja-JP", {
       dateStyle: "medium",
@@ -322,9 +325,8 @@ test("選択期間と手動更新で最新 snapshot を画面全体へ反映す�
   await expect(
     page.getByRole("region", { name: "日次再生数の推移" })
   ).toBeVisible()
-  await expect(
-    page.getByRole("button", { name: "30 日", pressed: true })
-  ).toBeVisible()
+  await expect(page.getByRole("group", { name: "集計期間" })).toHaveCount(0)
+  await expect(page.getByText("直近 30 日")).toBeVisible()
   await page
     .getByRole("button", { name: "Night Drive の動画詳細を見る" })
     .click()
@@ -360,9 +362,9 @@ test("選択期間と手動更新で最新 snapshot を画面全体へ反映す�
       })
     )
 
-    await page.getByRole("button", { name: "7 日" }).click()
+    await page.getByRole("button", { name: "データを更新" }).click()
 
-    await expect(page.getByText("直近 7 日")).toBeVisible()
+    await expect(page.getByText("直近 30 日")).toBeVisible()
     const dataContext = page.getByRole("region", {
       name: "表示データについて",
     })

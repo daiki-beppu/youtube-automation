@@ -397,7 +397,9 @@ describe("dashboard", () => {
 
     await user.click(refreshButton)
     expect(screen.getByRole("button", { name: "更新中" })).toBeDisabled()
-    expect(screen.getByRole("button", { name: "7 日" })).toBeDisabled()
+    expect(
+      screen.queryByRole("button", { name: "7 日" })
+    ).not.toBeInTheDocument()
     refreshResponse.resolve(
       new Response(JSON.stringify(updatedOverview), { status: 200 })
     )
@@ -406,7 +408,7 @@ describe("dashboard", () => {
     expect(screen.getByRole("button", { name: "データを更新" })).toBeEnabled()
   })
 
-  it("defaults to 30 days and refreshes with the selected period", async () => {
+  it("fixes the display period to 30 days and refreshes with that period", async () => {
     const requests: Array<{ path: string; method?: string; body?: string }> = []
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       const path = String(input)
@@ -421,11 +423,21 @@ describe("dashboard", () => {
     const user = userEvent.setup()
     renderDashboard()
 
-    expect(
-      await screen.findByRole("button", { name: "30 日", pressed: true })
-    ).toBeInTheDocument()
     expect(await screen.findByText("直近 30 日")).toBeInTheDocument()
-    await user.click(screen.getByRole("button", { name: "7 日" }))
+    expect(
+      screen.queryByRole("group", { name: "集計期間" })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: "7 日" })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: "30 日" })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: "90 日" })
+    ).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole("button", { name: "データを更新" }))
 
     await waitFor(() =>
       expect(
@@ -433,11 +445,10 @@ describe("dashboard", () => {
           (request) =>
             request.path === "/api/refresh" &&
             request.method === "POST" &&
-            request.body === JSON.stringify({ days: 7 })
+            request.body === JSON.stringify({ days: 30 })
         )
       ).toBe(true)
     )
-    expect(screen.getByText("直近 7 日")).toBeInTheDocument()
   })
 
   it("keeps the refreshed range snapshot when the initial request completes late", async () => {
@@ -485,7 +496,7 @@ describe("dashboard", () => {
     const user = userEvent.setup()
     renderDashboard()
 
-    await user.click(screen.getByRole("button", { name: "7 日" }))
+    await user.click(screen.getByRole("button", { name: "データを更新" }))
 
     expect(await screen.findByText("4,321")).toBeInTheDocument()
     const dataContext = screen.getByRole("region", {
@@ -495,9 +506,7 @@ describe("dashboard", () => {
       within(dataContext).getByText("2026/08/02〜2026/08/08")
     ).toBeInTheDocument()
     expect(
-      within(dataContext).getByText(
-        formatCollectedAt("2026-08-08T12:34:00Z")
-      )
+      within(dataContext).getByText(formatCollectedAt("2026-08-08T12:34:00Z"))
     ).toBeInTheDocument()
 
     await act(async () => {
