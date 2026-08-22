@@ -6,6 +6,7 @@ import argparse
 import re
 from pathlib import Path
 
+from youtube_automation.commands._shared.cli_harness import run_cli
 from youtube_automation.core.errors import ConfigError
 
 _SECTION_ORDER = (
@@ -117,7 +118,7 @@ def compile_fragments(changelog_path: Path, fragments_dir: Path, *, dry_run: boo
     return compiled
 
 
-def _build_parser() -> argparse.ArgumentParser:
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="changelog fragments を [Unreleased] へ集約します")
     parser.add_argument("--dry-run", action="store_true", help="ファイルを変更せず集約後の内容を表示します")
     parser.add_argument("--changelog", type=Path, default=Path("CHANGELOG.md"), help="CHANGELOG ファイルのパス")
@@ -125,8 +126,7 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main() -> None:
-    args = _build_parser().parse_args()
+def run(args: argparse.Namespace) -> int:
     compiled = compile_fragments(args.changelog, args.fragments_dir, dry_run=args.dry_run)
     if compiled is None:
         print("no fragments")
@@ -134,3 +134,12 @@ def main() -> None:
         print(compiled, end="")
     else:
         print("changelog fragments compiled")
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    return run_cli(build_parser, run, argv, failure_message="changelog fragment compile failed")
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

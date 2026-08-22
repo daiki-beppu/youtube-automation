@@ -24,6 +24,7 @@ EXPECTED_ENTRYPOINT_MODULES = {
     "yt-bulk-update-desc": "youtube_automation.commands.metadata.bulk_update_descriptions",
     "yt-bulk-update-synthetic-media": "youtube_automation.commands.metadata.bulk_update_synthetic_media",
     "yt-captions-upload": "youtube_automation.commands.youtube.captions_upload",
+    "yt-changelog-compile": "youtube_automation.commands.system.changelog_compile",
     "yt-channel": "youtube_automation.commands.channel.channel",
     "yt-channel-import": "youtube_automation.commands.channel.channel_import",
     "yt-channel-init": "youtube_automation.commands.channel.channel_init",
