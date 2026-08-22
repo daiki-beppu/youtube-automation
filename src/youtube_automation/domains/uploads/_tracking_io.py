@@ -8,7 +8,7 @@ from pathlib import Path
 
 from youtube_automation.core.adapters.media import CollectionPaths
 from youtube_automation.core.adapters.runtime import now_in_schedule_tz
-from youtube_automation.core.errors import ValidationError, WorkflowStateError
+from youtube_automation.core.errors import ValidationError, WorkflowStateError, WorkflowStateSectionTypeError
 from youtube_automation.domains.collections.workflow_state import WorkflowState
 from youtube_automation.domains.collections.workflow_state import read_or_none as read_workflow_state_or_none
 from youtube_automation.domains.collections.workflow_state import update as update_workflow_state
@@ -108,7 +108,7 @@ class TrackingStore:
         except WorkflowStateError as error:
             if isinstance(error.__cause__, json.JSONDecodeError):
                 raise error.__cause__ from error
-            if "workflow-state.json::upload must be an object" in str(error):
+            if isinstance(error, WorkflowStateSectionTypeError) and error.section == "upload":
                 raise ValidationError(f"workflow-state.json upload must be object: {ws_path}") from error
             raise ValidationError(str(error)) from error
 

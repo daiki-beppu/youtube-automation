@@ -34,7 +34,12 @@ from typing import Any
 
 from youtube_automation.configuration import channel_dir
 from youtube_automation.configuration.skills import load_skill_config
-from youtube_automation.core.errors import ConfigError, ValidationError, WorkflowStateError
+from youtube_automation.core.errors import (
+    ConfigError,
+    ValidationError,
+    WorkflowStateError,
+    WorkflowStateSectionTypeError,
+)
 from youtube_automation.domains.collections.workflow_state import WorkflowState
 from youtube_automation.domains.collections.workflow_state import update as update_workflow_state
 from youtube_automation.infrastructure.media.collection_paths import (
@@ -185,7 +190,7 @@ def _update_workflow_state_raw_master(workflow_state_path: Path, new_name: str) 
             raise error.__cause__ from error
         if "root must be an object" in str(error):
             raise ValidationError("workflow-state.json の root は object である必要があります") from error
-        if "workflow-state.json::assets must be an object" in str(error):
+        if isinstance(error, WorkflowStateSectionTypeError) and error.section == "assets":
             raise ValidationError("workflow-state.json::assets は object である必要があります") from error
         raise ValidationError(f"workflow-state.json のパースに失敗: {error}") from error
     return True

@@ -51,7 +51,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from youtube_automation.configuration import channel_dir, load_config
-from youtube_automation.core.errors import ConfigError, ValidationError, WorkflowStateError
+from youtube_automation.core.errors import (
+    ConfigError,
+    ValidationError,
+    WorkflowStateError,
+    WorkflowStateSectionTypeError,
+)
 from youtube_automation.domains.collections.workflow_state import (
     WorkflowState,
 )
@@ -313,7 +318,7 @@ def _record_master_video(collection_dir: Path) -> str:
     try:
         update_workflow_state(paths.workflow_state_path, record_master_video)
     except WorkflowStateError as error:
-        if "workflow-state.json::assets must be an object" in str(error):
+        if isinstance(error, WorkflowStateSectionTypeError) and error.section == "assets":
             raise ValidationError("workflow-state.json::assets は object である必要があります") from error
         raise ValidationError(str(error)) from error
     return video.name
