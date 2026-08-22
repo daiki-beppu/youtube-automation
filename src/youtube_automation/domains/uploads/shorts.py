@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -15,11 +16,17 @@ from youtube_automation.core.errors import (
     AutomationError,
     QuotaExhaustedError,
     UploadError,
+    UploadJournalError,
     ValidationError,
+    WorkflowStateError,
 )
+from youtube_automation.domains.collections.workflow_state import WorkflowState
+from youtube_automation.domains.collections.workflow_state import read_or_none as read_workflow_state_or_none
+from youtube_automation.domains.collections.workflow_state import update as update_workflow_state
 from youtube_automation.domains.metadata import BAHMetadataGenerator
 from youtube_automation.domains.uploads._published_dates import PublishedDatesScheduler
 from youtube_automation.domains.uploads._tracking_io import TrackingStore
+from youtube_automation.domains.uploads.upload_journal import UploadJournal
 from youtube_automation.domains.uploads.youtube import YouTubeAutoUploader
 from youtube_automation.infrastructure.filesystem import list_directory, path_exists, read_json
 from youtube_automation.infrastructure.google.youtube import YouTubeClients
@@ -37,6 +44,22 @@ ACTION_BLOCKED = "short_upload_blocked"
 ACTION_FAILED = "short_upload_failed"
 
 
+def _short_upload_kind(short_num: int | None) -> str:
+    return f"short:{short_num if short_num is not None else 'default'}"
+
+
+def _legacy_short_resume_uri(workflow_state_path: Path, short_num: int | None) -> str | None:
+    """移行前 workflow-state にだけ残る resume URI を journal 初回利用時に引き継ぐ。"""
+    state = read_workflow_state_or_none(workflow_state_path)
+    if state is None or state.post_upload is None:
+        return None
+    for entry in state.post_upload.shorts:
+        if entry.get("short_num") == short_num:
+            uri = entry.get("resume_session_uri")
+            return uri if isinstance(uri, str) else None
+    return None
+
+
 class ShortUploader:
     """Shorts 投稿エージェント — `YouTubeAutoUploader` 委譲版.
 
@@ -52,6 +75,7 @@ class ShortUploader:
         collections_root: Optional[str] = None,
         youtube_clients: YouTubeClients | None = None,
         tracking_store: TrackingStore | None = None,
+        upload_journal_factory: Callable[[Path], UploadJournal] = UploadJournal,
         published_dates: PublishedDatesScheduler | None = None,
     ):
         self.config = load_config()
@@ -68,6 +92,7 @@ class ShortUploader:
         self.tracking_store = (
             tracking_store if tracking_store is not None else TrackingStore(self.collections_root, self.schedule_config)
         )
+        self.upload_journal_factory = upload_journal_factory
         self.published_dates = (
             published_dates
             if published_dates is not None
@@ -225,11 +250,21 @@ class ShortUploader:
         #    中断→再実行時に同一 session を再開し video_id 重複を防ぐ。tracking 媒体は
         #    CC の upload_tracking.json ではなく workflow-state.json.post_upload.shorts[]。
         ws_path = CollectionPaths(collection_path).workflow_state_path
-        resume_session_uri = self.tracking_store.read_short_resume_uri(ws_path, short_num)
+        journal = self.upload_journal_factory(collection_path)
+        try:
+            attempt = journal.begin(_short_upload_kind(short_num))
+            resume_session_uri = attempt.resume_uri
+            if resume_session_uri is None:
+                resume_session_uri = _legacy_short_resume_uri(ws_path, short_num)
+                if resume_session_uri is not None:
+                    attempt.record_session(resume_session_uri)
+        except UploadJournalError:
+            logger.error("❌ upload journal 読み込み失敗")
+            return {"action": ACTION_FAILED, "details": {"error": _TRACKING_READ_ERROR}}
 
         def _on_session_uri_changed(uri: Optional[str]) -> None:
             """upload 中の session URI 変化を該当 short entry に永続化する。"""
-            self.tracking_store.persist_short_resume_uri(ws_path, short_num, uri)
+            attempt.record_session(uri)
 
         def _on_upload_complete() -> None:
             """upload 成功通知。後続の最終記録と整合させるため URI を消す。"""
@@ -261,12 +296,22 @@ class ShortUploader:
             return {"action": ACTION_FAILED, "details": {"error": "upload_video returned None"}}
 
         # 8. workflow-state 更新（list 形式 upsert by short_num）
-        self.tracking_store.record_short_upload(
-            collection_path,
-            short_num=short_num,
-            video_id=video_id,
-            publish_at=publish_at,
-        )
+        entry = {
+            "short_num": short_num,
+            "video_id": video_id,
+            "uploaded_at": datetime.now(get_schedule_timezone(self.schedule_config)).isoformat(),
+            "publish_at": publish_at,
+        }
+
+        def project(state: WorkflowState) -> None:
+            state.record_short_upload(entry)
+
+        try:
+            attempt.complete({"video_id": video_id})
+            update_workflow_state(ws_path, project)
+        except (UploadJournalError, WorkflowStateError) as error:
+            logger.error("❌ short upload 完了記録失敗: %s", error)
+            return {"action": ACTION_FAILED, "details": {"error": _SHORT_UPLOAD_ERROR}}
 
         return {
             "action": ACTION_UPLOADED,

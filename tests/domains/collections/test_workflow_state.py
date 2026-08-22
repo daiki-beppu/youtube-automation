@@ -705,6 +705,29 @@ def test_document_and_review_mutators_validate_and_stamp_updates() -> None:
         state.record_collection_plan(final_title=None, target_persona="reader")
 
 
+def test_record_short_upload_upserts_by_short_num_and_preserves_unknown_fields() -> None:
+    state = WorkflowState(
+        {
+            "post_upload": {
+                "shorts": [{"short_num": 1, "video_id": "old", "uploaded_at": "old"}],
+                "future": True,
+            }
+        }
+    )
+
+    state.record_short_upload({"short_num": 1, "video_id": "new", "uploaded_at": "now", "publish_at": None})
+    state.record_short_upload({"short_num": 2, "video_id": "second", "uploaded_at": "now", "publish_at": None})
+
+    assert state.to_dict()["post_upload"] == {
+        "shorts": [
+            {"short_num": 1, "video_id": "new", "uploaded_at": "now", "publish_at": None},
+            {"short_num": 2, "video_id": "second", "uploaded_at": "now", "publish_at": None},
+        ],
+        "future": True,
+    }
+    assert isinstance(state.updated_at, str)
+
+
 class TestPlanningPlaylists:
     """#4346: planning.playlists は「未決定」と「auto_add のみ」を区別する。"""
 

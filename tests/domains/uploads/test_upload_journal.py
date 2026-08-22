@@ -12,23 +12,24 @@ from youtube_automation.domains.uploads import upload_journal
 from youtube_automation.domains.uploads.upload_journal import UploadJournal, UploadJournalOutcome
 
 
-def test_attempt_records_resume_completion_and_failure(tmp_path: Path) -> None:
+@pytest.mark.parametrize("kind", ["complete_collection", "short:1"])
+def test_attempt_records_resume_completion_and_failure(tmp_path: Path, kind: str) -> None:
     journal = UploadJournal(tmp_path / "collection")
-    attempt = journal.begin("complete_collection")
+    attempt = journal.begin(kind)
 
     assert attempt.status.outcome is UploadJournalOutcome.READY
     assert attempt.resume_uri is None
 
     attempt.record_session("https://upload.example/session")
-    assert journal.begin("complete_collection").resume_uri == "https://upload.example/session"
+    assert journal.begin(kind).resume_uri == "https://upload.example/session"
 
     attempt.fail("quota exhausted")
-    assert journal.status("complete_collection").status == "failed"
-    assert journal.begin("complete_collection").resume_uri == "https://upload.example/session"
+    assert journal.status(kind).status == "failed"
+    assert journal.begin(kind).resume_uri == "https://upload.example/session"
 
     attempt.complete({"video_id": "video-123", "video_url": "https://youtu.be/video-123"})
-    assert journal.status("complete_collection").status == "completed"
-    assert journal.begin("complete_collection").resume_uri is None
+    assert journal.status(kind).status == "completed"
+    assert journal.begin(kind).resume_uri is None
 
 
 def test_each_write_reloads_and_preserves_concurrent_fields(tmp_path: Path) -> None:
