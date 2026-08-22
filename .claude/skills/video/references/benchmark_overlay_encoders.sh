@@ -5,6 +5,7 @@ set -eu
 DURATION="${VIDEOUP_BENCH_DURATION:-60}"
 RUNS="${VIDEOUP_BENCH_RUNS:-3}"
 OUTPUT_DIR="${VIDEOUP_BENCH_OUTPUT_DIR:-$(mktemp -d "${TMPDIR:-/tmp}/video --generate-overlay-bench.XXXXXX")}"
+TIME_BIN="${VIDEOUP_BENCH_TIME_BIN:-time}"
 mkdir -p "$OUTPUT_DIR"
 
 FILTER='[1:a]asplit=2[avis_in][aout];[avis_in]showfreqs=mode=bar:s=1280x180:rate=24:fscale=log:win_size=2048:win_func=hann:colors=white,format=rgba,colorchannelmixer=aa=0.85[avis];[0:v]format=yuv420p[bg];[bg][avis]overlay=(W-w)/2:H-h-40:format=auto,format=yuv420p[vout]'
@@ -22,7 +23,7 @@ run_direct() {
     local mode="$1" run="$2"
     local output="$OUTPUT_DIR/${mode}-${run}.mp4" time_file="$OUTPUT_DIR/${mode}-${run}.time"
     shift 2
-    /usr/bin/time -p -o "$time_file" ffmpeg -y \
+    "$TIME_BIN" -p -o "$time_file" ffmpeg -y \
         -f lavfi -i "color=c=0x20252f:s=1920x1080:r=24:d=${DURATION}" \
         -i "$OUTPUT_DIR/audio.wav" \
         -filter_complex "$FILTER" -map '[vout]' -map '[aout]' \
@@ -40,13 +41,13 @@ run_twostage() {
     local output="$OUTPUT_DIR/twostage-${run}.mp4" time_file="$OUTPUT_DIR/twostage-${run}.time"
     local base_elapsed=0
     if [[ ! -f "$OUTPUT_DIR/base.mp4" ]]; then
-        /usr/bin/time -p -o "$OUTPUT_DIR/base.time" ffmpeg -y \
+        "$TIME_BIN" -p -o "$OUTPUT_DIR/base.time" ffmpeg -y \
             -f lavfi -i "color=c=0x20252f:s=1920x1080:r=24:d=${DURATION}" \
             -c:v libx264 -preset ultrafast -crf 20 -pix_fmt yuv420p -r 24 -an \
             -loglevel error "$OUTPUT_DIR/base.mp4"
         base_elapsed="$(awk '/^real /{print $2}' "$OUTPUT_DIR/base.time")"
     fi
-    /usr/bin/time -p -o "$time_file" ffmpeg -y -i "$OUTPUT_DIR/base.mp4" \
+    "$TIME_BIN" -p -o "$time_file" ffmpeg -y -i "$OUTPUT_DIR/base.mp4" \
         -i "$OUTPUT_DIR/audio.wav" \
         -filter_complex "$FILTER" -map '[vout]' -map '[aout]' \
         -c:v libx264 -preset medium -crf 20 -maxrate 4M -bufsize 8M \

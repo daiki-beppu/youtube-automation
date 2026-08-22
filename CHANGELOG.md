@@ -1,5 +1,7 @@
 # Changelog
 
+- `fix(skills)`: Codex画像ラッパーのPNG検査から未宣言の`xxd`依存を除き、overlay benchmarkの計時コマンドをdevShellで明示してfresh Linux環境でも実行できるようにした（#4466）。
+
 - `feat(skills)`: `/short --thumbnail` が 9:16 画像生成と Veo ループ動画化を担い、`/short-thumbnail` の手順・prompt・script 導線を統合した（#3834）
 
 - `feat(skills)`: `/short` が `content_model.type` から collection / release の手順を自動分岐し、`/short-release` の生成契約・設定・参照スクリプトを統合した（#3833）
