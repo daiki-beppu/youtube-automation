@@ -20,10 +20,11 @@ def render_workflow_status(snapshot: WorkflowStatusSnapshot) -> str:
     filters = (
         "".join(
             f'<input class="filter-control" type="radio" name="status-filter" id="filter-{status}"'
+            ' aria-keyshortcuts="ArrowLeft ArrowRight Space"'
             f"{' checked' if status == 'all' else ''}>"
             for status in _FILTERS
         )
-        + '<nav class="filters" aria-label="表示フィルター">'
+        + '<nav class="filters" aria-label="現在の表示">'
         + "".join(
             f'<label for="filter-{status}"><span class="filter-selected" aria-hidden="true">'
             f"選択中 · </span>{label}</label>"
@@ -40,10 +41,25 @@ def render_workflow_status(snapshot: WorkflowStatusSnapshot) -> str:
         css=css,
         generated_at=escape(snapshot.generated_at.isoformat()),
         filters=filters,
+        overview=_render_overview(snapshot),
         collections=collections,
     )
     validate_workflow_status_html(html)
     return html
+
+
+def _render_overview(snapshot: WorkflowStatusSnapshot) -> str:
+    counts = {
+        "全件": len(snapshot.collections),
+        "要対応": sum(_needs_attention(item) for item in snapshot.collections),
+        "企画中": sum(item.status == "planning" for item in snapshot.collections),
+        "公開工程": sum(item.status == "live" for item in snapshot.collections),
+        "完了": sum(item.status == "complete" for item in snapshot.collections),
+    }
+    return "".join(
+        f'<div><dt>{label}</dt><dd><strong class="overview-value">{count}</strong><span>{label}</span></dd></div>'
+        for label, count in counts.items()
+    )
 
 
 def _render_collection(item: CollectionStatusView) -> str:

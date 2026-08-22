@@ -1,6 +1,20 @@
 [
   {
     "date": "2026-08-22",
+    "scope": "workflow status view",
+    "target": "src/youtube_automation/domains/documents/resources/workflow_status.html",
+    "genre": "editorial",
+    "theme": "Technical Ledger",
+    "macrostructure": "Operational Queue",
+    "audience": "YouTube operators",
+    "decision": "Lead with triage counts, then scan a ruled operational queue from collection identity through attention, next action, and artifact evidence.",
+    "excluded": [
+      "schema document view",
+      "candidate review view"
+    ]
+  },
+  {
+    "date": "2026-08-22",
     "scope": "schema document view only",
     "target": "src/youtube_automation/domains/documents/resources/base.css",
     "genre": "editorial",

@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(wf-status)`: 制作状況 snapshot を要対応件数から各 collection の next action・成果物根拠へ走査できる technical / austere な運用キューへ再設計し、CSS filter の選択・focus と mobile containment を明確化する（#4405）。
+
 - `feat(documents)`: 候補 review View を番号・preview・固定 QA・確定操作が一続きに読める technical / austere な比較台帳へ再設計し、mobile containment と keyboard focus を明確化する（#4404）。
 
 - `feat(documents)`: schema 文書 View を technical / austere な長文構造へ再設計し、要点を先に走査できる階層、named token、mobile containment、明瞭な keyboard focus を追加する（#4403）。
