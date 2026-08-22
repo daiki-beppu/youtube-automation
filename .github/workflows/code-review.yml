@@ -63,35 +63,63 @@ jobs:
             REPO: ${{ github.repository }}
             PR NUMBER: ${{ github.event.pull_request.number }}
 
-            あなたはこの PR のマージ前レビューゲートです。コードの修正は一切行わず、
-            レビューコメントの投稿と structured output の報告だけを行ってください。
+            あなたはこの PR のマージ前レビューゲートです。コードの修正・コメント投稿は一切行わず、
+            レビュー結果を structured output で報告することだけがあなたの仕事です。
+            (PR へのコメント投稿は後続の workflow step が structured output から行います)
 
             ## 手順
             1. `gh pr view` / `gh pr diff` で PR の内容と base branch との差分を取得する
             2. PR タイトルまたは commit subject 末尾の `(#N)` から起点 issue 番号を特定し、
                `gh issue view N` で要件を読む。特定できなければ Spec 軸は「起点 issue 不明」と
-               コメントに明記して省略する
+               レポートに明記して省略する
             3. /mattpocock-skills:code-review スキルで差分を 2 軸レビューする:
                Standards(このリポジトリの規約への準拠)/ Spec(起点 issue の要件との整合)
             4. 同じ差分を simplify 観点(reuse / simplification / efficiency)でもレビューする。
-               改善提案はコメント内のコード例に留める
+               改善提案はレポート内のコード例に留める
             5. 指摘ごとに severity を付ける:
                - critical: Spec 違反(起点 issue の要件を満たさない・壊す)、明白なバグ相当
                - warning: Standards 違反(リポジトリ規約からの逸脱)
                - warning / info: simplify 系の提案(critical にはしない)
-            6. 全指摘を 1 つのコメントに集約し、severity ごとの件数サマリを冒頭に置いて
-               `gh pr comment <N> --edit-last --create-if-none --body-file <file>` で投稿する
-            7. structured output の critical_count / warning_count / info_count に、
-               コメントへ書いた件数と一致する値を報告する
+            6. structured output で結果を返す:
+               - report_markdown: 全指摘を集約した Markdown レポート。冒頭に severity ごとの
+                 件数サマリ、続けて severity 順に各指摘(対象ファイル・内容・修正案)を書く
+               - critical_count / warning_count / info_count: report_markdown に書いた
+                 件数と一致する値
 
             ## 禁止事項
             - ファイルの編集・commit・push(このワークフローには push 権限が無い)
-            - 複数コメントの投稿(1 コメントに集約し、再実行時は既存コメントを更新する)
+            - `gh pr comment` 等でのコメント投稿(投稿は workflow step の責務)
           # takt が PR を大量生成するため、コスト対策として sonnet 系を既定にする
           claude_args: |
             --model sonnet
-            --allowedTools "Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*),Bash(gh issue view:*),Bash(git log:*),Bash(git diff:*),Bash(git show:*)"
-            --json-schema '{"type":"object","properties":{"critical_count":{"type":"integer","minimum":0},"warning_count":{"type":"integer","minimum":0},"info_count":{"type":"integer","minimum":0}},"required":["critical_count","warning_count","info_count"]}'
+            --allowedTools "Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh issue view:*),Bash(git log:*),Bash(git diff:*),Bash(git show:*),Bash(git status:*),Bash(git branch:*),Bash(git rev-parse:*),Bash(git merge-base:*)"
+            --json-schema '{"type":"object","properties":{"report_markdown":{"type":"string"},"critical_count":{"type":"integer","minimum":0},"warning_count":{"type":"integer","minimum":0},"info_count":{"type":"integer","minimum":0}},"required":["report_markdown","critical_count","warning_count","info_count"]}'
+      - name: Post review comment
+        if: steps.review.outputs.structured_output != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          STRUCTURED_OUTPUT: ${{ steps.review.outputs.structured_output }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -eu
+          marker='<!-- code-review-workflow -->'
+          {
+            echo "$marker"
+            echo
+            jq -r '.report_markdown' <<<"$STRUCTURED_OUTPUT"
+          } > "$RUNNER_TEMP/review-comment.md"
+          comment_id=$(gh api "repos/${REPO}/issues/${PR_NUMBER}/comments" --paginate \
+            --jq "[.[] | select(.body | startswith(\"${marker}\"))][0].id // empty")
+          if [ -n "$comment_id" ]; then
+            gh api -X PATCH "repos/${REPO}/issues/comments/${comment_id}" \
+              -F "body=@$RUNNER_TEMP/review-comment.md" > /dev/null
+            echo "updated comment ${comment_id}"
+          else
+            gh api "repos/${REPO}/issues/${PR_NUMBER}/comments" \
+              -F "body=@$RUNNER_TEMP/review-comment.md" > /dev/null
+            echo "created a new comment"
+          fi
       - name: Fail on critical findings
         env:
           STRUCTURED_OUTPUT: ${{ steps.review.outputs.structured_output }}
