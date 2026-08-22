@@ -140,7 +140,7 @@ When characters or specific scenes can't be hand-built economically. **Always po
 | Model | URL | Cost | Best for | Output |
 | --- | --- | --- | --- | --- |
 | **[Nanobanana 2 / Gemini 2.5 Flash Image](https://ai.google.dev/gemini-api/docs/image-generation)** | Google AI | $0.039 / image | Character consistency across panels, fast iteration, brand-style adherence via reference images, infographics with text | PNG (transparent supported) |
-| **[Recraft V4](https://www.recraft.ai/)** | recraft.ai | ~$0.04 / image | **The only model with production-grade SVG output.** Logos, icons, illustrations that need to scale. | SVG + PNG |
+| **[Recraft V4](https://www.recraft.ai/)** | recraft.ai | Check current provider pricing | **The only model with production-grade SVG output.** Logos, icons, illustrations that need to scale. | SVG + PNG |
 | **[Midjourney v8](https://www.midjourney.com)** | midjourney.com | ~$0.14 / image | Aesthetic beauty, atmospheric stills, artistic direction | PNG |
 | **[Flux 2](https://blackforestlabs.ai/)** | blackforestlabs.ai | ~$0.03 / image | Photorealism — skin, fabric, product detail, hands | PNG |
 

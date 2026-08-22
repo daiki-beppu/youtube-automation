@@ -5,9 +5,7 @@ version: 1.1.0
 purpose: 作る
 ---
 
-# Hallmark
-
-## Repository execution contract
+## 前後工程
 
 - `前工程`: `なし`
 - `後工程`: `なし`
@@ -17,6 +15,8 @@ purpose: 作る
 
 - `書き込む`: ユーザーが指定したHTML表示層
 - `読み込む`: 対象実装、URL、スクリーンショット
+
+# Hallmark
 
 This project-scoped copy is development-only. Preserve existing implementation boundaries and load referenced rules only when relevant.
 

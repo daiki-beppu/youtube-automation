@@ -297,7 +297,7 @@ When characters or specific scenes are needed and hand-build is uneconomical (th
 | Model | Cost | Best for | Output |
 | --- | --- | --- | --- |
 | **[Nanobanana 2 / Gemini 2.5 Flash Image](https://ai.google.dev/gemini-api/docs/image-generation)** | $0.039 / image | Character consistency across multiple panels, fast iteration, brand-style adherence via reference images, infographics with text | PNG (transparent supported); no SVG, no animation |
-| **[Recraft V4](https://www.recraft.ai/)** | ~$0.04 / image | **The only mainstream model with production-grade SVG output.** Logos, icons, illustrations that need to live in code and scale. | SVG + PNG |
+| **[Recraft V4](https://www.recraft.ai/)** | Check current provider pricing | **The only mainstream model with production-grade SVG output.** Logos, icons, illustrations that need to live in code and scale. | SVG + PNG |
 | **[Midjourney v8](https://www.midjourney.com)** | ~$0.14 / image | Aesthetic beauty, artistic direction, atmospheric stills | PNG |
 | **[Flux 2](https://blackforestlabs.ai/)** | ~$0.03 / image | Photorealism, skin / fabric / product detail | PNG |
 

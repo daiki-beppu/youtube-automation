@@ -5,10 +5,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import yaml
-
 from tests.helpers.paths import REPO_ROOT
 from youtube_automation.commands.system.skills_sync import _DEV_ONLY_SKILL_NAMES
+from youtube_automation.domains.skills.inventory import parse_frontmatter
 
 SKILL_DIR = REPO_ROOT / ".claude" / "skills" / "hallmark"
 SKILL_FILE = SKILL_DIR / "SKILL.md"
@@ -26,13 +25,13 @@ def test_official_hallmark_skill_and_references_are_copied_without_symlinks() ->
 
 def test_frontmatter_preserves_upstream_identity_and_repository_contract() -> None:
     text = SKILL_FILE.read_text(encoding="utf-8")
-    _, frontmatter, _ = text.split("---", 2)
-    metadata = yaml.safe_load(frontmatter)
+    metadata = parse_frontmatter(text)
+    assert isinstance(metadata, dict)
 
     assert metadata["name"] == "hallmark"
     assert metadata["version"] == "1.1.0"
     assert metadata["purpose"]
-    description_line = next(line for line in frontmatter.splitlines() if line.startswith("description:"))
+    description_line = next(line for line in text.splitlines() if line.startswith("description:"))
     assert description_line.startswith('description: "')
 
 
