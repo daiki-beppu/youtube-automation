@@ -52,6 +52,7 @@
 | `<video_id>` | YouTube 動画 ID を直接指定 | `/analytics --flop dQw4w9WgXcQ` |
 | `<collection>` | コレクション名を指定（`upload_tracking.json` の `complete_collection.video_id` を解決） | `/analytics --flop rain-jazz-night` |
 | `--since <N>` | 公開後 N 日以内に公開された動画から候補を提示 | `/analytics --flop --since 14` |
+| `--no-vertex` | Vertex AI を起動せず既存成果物と subagent 推論だけで検証。不足項目は未検証にする | `/analytics --flop rain-jazz-night --no-vertex` |
 
 複数候補がある場合は AskUserQuestion で対象を選ばせる。
 
@@ -63,6 +64,7 @@
 | Vertex AI Gemini（Phase 4 で /audit --video を自律実行する場合） | 対象 1 動画 = 1 call | 仮説検証で /audit --video を実行するかどうか |
 
 - 上限 / 承認: /audit --video は承認プロンプトなしで自律実行されうるが、対象は当該 video_id 1 本に限定される。見積もりの詳細は /audit --video の「想定 API call 数」を参照。
+- `--no-vertex` 指定時は Vertex AI Gemini 0 call。後述の既存成果物だけを利用し、`/audit --video` は起動しない。
 
 ## 実行フロー
 
@@ -136,6 +138,8 @@ per-video 流入経路シェア（`YT_SEARCH` / `YT_BROWSE` 等）に基づく�
 ### Phase 4: 検証の自律実行
 
 Phase 3 で列挙した主仮説（全件）について、次の表から対応する検証手段を選び、ユーザーの承認プロンプトを挟まず対応する検証手段を自動実行する。`/audit --video` 等の有料 API を使う検証も同じ扱いとする。
+
+`--no-vertex` 指定時は例外として `/audit --video` を起動しない。対象動画と競合動画について保存済みの JSON が schema を満たす場合に限り、既存の有効な `/audit --video` 成果物を read-only 入力として subagent 推論を行う。成果物がない、無効、または必要フィールドが不足する検証は Vertex AI で補完せず、`未検証（理由: --no-vertex 指定のため <不足成果物またはフィールド> を取得できない）` と記録して残りの検証を続行する。retention timeline が `/audit --video 未実行` を返した場合も同様に再実行せず未検証とする。ローカル CLI、YouTube API、既存成果物だけで完結する他の検証は通常どおり実行する。
 
 各検証の直後に、postmortem.md の「検証ステップ」欄へ以下を記録する:
 
