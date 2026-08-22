@@ -39,7 +39,6 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty"
 import { Skeleton } from "@/components/ui/skeleton"
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import {
   Sheet,
   SheetContent,
@@ -324,13 +323,7 @@ function PublicationActivityPanel({
   )
 }
 
-function DashboardOverview({
-  channels,
-  selectedDays,
-}: {
-  channels: ChannelOverview[]
-  selectedDays: number
-}) {
+function DashboardOverview({ channels }: { channels: ChannelOverview[] }) {
   const scheduledChannels = channels.filter(
     (channel) => channel.scheduled_count !== null
   )
@@ -420,9 +413,7 @@ function DashboardOverview({
                 <CalendarRangeIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
                 <div>
                   <dt className="font-medium">選択期間</dt>
-                  <dd className="text-muted-foreground">
-                    直近 {selectedDays} 日
-                  </dd>
+                  <dd className="text-muted-foreground">直近 30 日</dd>
                 </div>
               </div>
               <div className="flex gap-3">
@@ -808,7 +799,6 @@ export function App() {
   const [error, setError] = useState<string | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
-  const [selectedDays, setSelectedDays] = useState(30)
   const [trends, setTrends] = useState<TrendsResponse | null>(null)
   const [pipeline, setPipeline] = useState<PipelineResponse | null>(null)
   const [pipelineError, setPipelineError] = useState<string | null>(null)
@@ -884,7 +874,7 @@ export function App() {
       })
   }, [])
 
-  async function refreshDashboard(days = selectedDays) {
+  async function refreshDashboard() {
     const requestId = dashboardRequestId.current + 1
     dashboardRequestId.current = requestId
     const refreshedDetailRequestId = detailRequestId.current + 1
@@ -893,7 +883,7 @@ export function App() {
     setRefreshing(true)
     setError(null)
     try {
-      await requestJson<OverviewResponse>("/api/refresh", "POST", { days })
+      await requestJson<OverviewResponse>("/api/refresh", "POST", { days: 30 })
       const [
         overviewResponse,
         publicationsResponse,
@@ -996,26 +986,6 @@ export function App() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <ToggleGroup
-              aria-label="集計期間"
-              variant="outline"
-              spacing={0}
-              value={[String(selectedDays)]}
-              disabled={refreshing}
-              onValueChange={(values) => {
-                const value = values.at(-1)
-                if (!value) return
-                const days = Number(value)
-                setSelectedDays(days)
-                void refreshDashboard(days)
-              }}
-            >
-              {[7, 30, 90].map((days) => (
-                <ToggleGroupItem key={days} value={String(days)}>
-                  {days} 日
-                </ToggleGroupItem>
-              ))}
-            </ToggleGroup>
             <Button
               variant="outline"
               disabled={refreshing}
@@ -1103,10 +1073,7 @@ export function App() {
         ) : null}
         {channels && channels.length > 0 ? (
           <div className="grid gap-8">
-            <DashboardOverview
-              channels={channels}
-              selectedDays={selectedDays}
-            />
+            <DashboardOverview channels={channels} />
             <ChannelStockTable
               channels={channels}
               selectedId={selectedId}
