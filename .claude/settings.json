@@ -40,7 +40,7 @@
           },
           {
             "type": "command",
-            "command": "for f in $CLAUDE_FILE_PATHS; do case \"$f\" in *src/youtube_automation/*|*.claude/skills/*|*.claude/CLAUDE.template.md|*pyproject.toml) echo \"NOTE: $f は CHANGELOG 必須エリア。PR 出す前に CHANGELOG.md [Unreleased] に追記すること（skip-changelog ラベルで escape 可）\" >&2; break;; esac; done; exit 0"
+            "command": "for f in $CLAUDE_FILE_PATHS; do case \"$f\" in *src/youtube_automation/*|*.claude/skills/*|*.claude/CLAUDE.template.md|*pyproject.toml) echo \"NOTE: $f は CHANGELOG 必須エリア。PR 出す前に changelog.d/ に fragment（<issue>-<slug>.<type>.md）を追加すること（CHANGELOG.md 直接編集も可、skip-changelog で escape 可）\" >&2; break;; esac; done; exit 0"
           },
           {
             "type": "command",

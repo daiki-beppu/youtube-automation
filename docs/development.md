@@ -275,7 +275,7 @@ uv run pytest tests/repo/test_skills_sync_installed_wheel.py -q
 品質ゲートはローカル git hook ではなく CI（`.github/workflows/ci.yml`）で一元的に担保する（issue #2534 で lefthook を廃止。sandbox 化された worker が `.git/hooks` へ書き込めず bootstrap が反復失敗していたため、ローカル hook は持たない）。
 
 - **lint ジョブ**: `ruff check` / `ruff format --check`（旧 pre-commit と同等）
-- **changelog ジョブ**: 実コード（`src/youtube_automation/` / `.claude/skills/` / `.claude/CLAUDE.template.md` / `pyproject.toml`）を変更したのに `CHANGELOG.md` の `[Unreleased]` が未更新なら fail する。意図的に省く場合は PR に `skip-changelog` ラベルを付与する
+- **changelog ジョブ**: 実コード（`src/youtube_automation/` / `.claude/skills/` / `.claude/CLAUDE.template.md` / `pyproject.toml`）を変更したのに `changelog.d/` の fragment 追加または `CHANGELOG.md` の更新が無ければ fail する。fragment の書式は `changelog.d/README.md` を参照する。意図的に省く場合は PR に `skip-changelog` ラベルを付与する
 - **any-gate ジョブ**: 広すぎる型注釈ゲート。基準点からの新規追加行だけを対象に、ディレクトリを問わず全 `*.py` / `*.ts` / `*.tsx` の Python の typing module 経由の Any 型、または TypeScript の any 型注釈を検出したら fail する。既存行は対象外。ロジック本体は `.github/scripts/any-usage-gate.sh`（ローカルでも `bash .github/scripts/any-usage-gate.sh` で単体実行できる）
   - **基準点の解決順**: `PRE_PUSH_DIFF_BASE`（CI の any-gate ジョブが PR の base sha を渡す）→ `origin/main` → `main`。実際の diff 基準は解決した ref と HEAD の merge-base。`main` へのフォールバックは、remote を 1 つも持たない隔離クローンで takt がタスクを実行するため（クローンのローカル `main` はクローン時点の main そのものなので基準点は変わらない）。この経路が無いと `ci_verify` が push 前に再現すべき 4 ゲートのうち any-gate だけが常に self-skip する（issue #3048）。どの ref も解決できないときは、試した ref を列挙して skip する。解決順そのものは `tests/repo/test_any_usage_gate.py` が機械担保する
   - **Python**: `.github/scripts/any_usage_python_resolver.py` が `ast` でファイルを解析し、`typing.Any` の修飾アクセス（`import typing` / `import typing as t` 経由）と `from typing import Any`（複数行の括弧 import・`as` alias 含む）の直接 import 経由の裸 `Any` の両方を、実際に参照されている行番号として解決する。コメント・docstring・文字列リテラル中の "Any" は AST 上に現れないため誤検知しない。`python3` が無い場合は警告を出して Python 側の検出のみ省略する
@@ -292,9 +292,15 @@ devShell の運用:
 - **TMPDIR の worktree 分離**: macOS の TMPDIR は per-user のグローバル値のため、複数 worktree の並行 pytest が同一パスへ書くと一時ディレクトリが run 間で干渉しうる（issue #2088）。shellHook は `.nix/worktree-tmpdir.sh` の出力を `TMPDIR` へ export し、共有 TMPDIR 配下の worktree ごとの決定的なサブディレクトリ（`yt-automation-tmp-<slug>-<cksum>`）へ分離する。TMPDIR が既に checkout 内へ隔離済みの場合はその値を尊重し、解決に失敗した場合は共有 TMPDIR のまま fail-open で続行する
 - **Nix キャッシュの worktree 分離**: 並列 worktree が同一 fingerprint の flake を同時評価すると、ユーザーグローバルの Nix キャッシュ（既定 `~/.cache/nix` の eval-cache / fetcher-cache SQLite）への同時書込みが競合し、「error (ignored): SQLite database ... is busy」を stderr へ出しつつキャッシュ書込みを破棄し続ける（issue #2089）。`.envrc` / shellHook は Nix 専用の `NIX_CACHE_HOME` を worktree 分離 TMPDIR 配下（`<worktree_tmpdir>/nix-cache`）へ export し、各 worktree が自分の評価結果だけを参照する。`XDG_CACHE_HOME` には触れないため uv 等の他ツールのキャッシュは共有のまま変わらない。継承値は別 worktree の値がシェル経由でリークし得るため尊重せず、解決に失敗した場合は共有キャッシュのまま fail-open で続行する
 - **sandbox worker での挙動**: takt worker は `.takt/runtime-prepare.sh` が TMPDIR / XDG_* / UV_CACHE_DIR を run ごとの runtime root 配下へ再構成する（issue #2163）
-- refactor / fix でも src を触れば CHANGELOG 追記が要る。tests / docs だけの変更はゲート対象外（CI が自動 skip）
+- refactor / fix でも src を触れば changelog fragment が要る。tests / docs だけの変更はゲート対象外（CI が自動 skip）
 
-### CHANGELOG.md の union merge（conflict 緩和）
+### changelog fragment（conflict 回避）
+
+通常の PR は `changelog.d/<issue>-<slug>.<type>.md` という PR 固有ファイルへ変更履歴を
+書き、リリース prepare で `uv run yt-changelog-compile` を実行して `[Unreleased]` へ
+集約する。移行中の PR との後方互換のため、CI は `CHANGELOG.md` の直接編集も許容する。
+
+### CHANGELOG.md の union merge（移行期の conflict 緩和）
 
 CHANGELOG ゲートにより並行 PR が `[Unreleased]` 先頭へ同時に追記するため、`.gitattributes` で `CHANGELOG.md merge=union` を指定している（issue #2155）。両側の追記行を conflict にせず機械的に取り込むが、union merge には以下の副作用があるため merge 後は `[Unreleased]` を目視確認すること:
 

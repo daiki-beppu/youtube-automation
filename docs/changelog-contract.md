@@ -51,6 +51,19 @@ local fix 衝突注意:
 - サブセクション: `Added` / `Changed` / `Deprecated` / `Removed` / `Fixed` / `Security` / `Migration`
 - ファイル末尾にリンク参照定義（`[<VER>]: <URL>`）を集約
 
+## fragment 運用（書き溜め方）
+
+通常の PR は `CHANGELOG.md` を直接編集せず、`changelog.d/` に
+`<issue番号>-<slug>.<type>.md` を追加する。type と本文書式は
+[`changelog.d/README.md`](../changelog.d/README.md) を正とする。リリース prepare
+の冒頭で `yt-changelog-compile` が fragment を契約順の見出しへ集約し、処理済み
+fragment を削除する。
+
+この変更は `[Unreleased]` への書き込み経路だけを分離する。コンパイル後の
+`CHANGELOG.md`、リリース済み version section、GitHub Release body の形式は変わらない。
+したがって prepare の Migration warning、下流 `/automation --update`、libecity digest
+という既存 3 消費者のパース契約にも変更はない。
+
 ## `### Migration` セクション必須要素
 
 下流の `/automation --update` が決定論的に抽出できるよう、以下を **必須要素** とする。

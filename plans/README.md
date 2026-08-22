@@ -4,6 +4,12 @@
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJECTED (with one-line rationale)
 
+## 第 6 回監査（開発並列性、2026-08-22）
+
+| Plan | Title | Priority | Effort | Depends on | Issue | Status |
+|------|-------|----------|--------|------------|-------|--------|
+| 033 | changelog fragment 基盤を導入し CHANGELOG の並列マージコンフリクトを解消 | P1 | M | — | [#4483](https://github.com/daiki-beppu/youtube-automation/issues/4483) | DONE |
+
 ## 第 5 回監査（セキュリティ専門監査、2026-07-21、基準 commit `37b362ce`）
 
 セキュリティ集中監査（フォーカス指定 /improve）。並列 4 subagent（シークレット/認証 / インジェクション・パス / ネットワーク・サーバー / Chrome 拡張・配布）→ 全 findings を advisor が実読 vet。

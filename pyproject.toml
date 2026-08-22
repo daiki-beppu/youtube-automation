@@ -144,6 +144,7 @@ yt-shorts-bulk-update-loc = "youtube_automation.entrypoints:yt_shorts_bulk_updat
 # Skill management
 yt-skills = "youtube_automation.entrypoints:yt_skills"
 yt-setup-dirs = "youtube_automation.entrypoints:yt_setup_dirs"
+yt-changelog-compile = "youtube_automation.entrypoints:yt_changelog_compile"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/youtube_automation"]
