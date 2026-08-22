@@ -626,7 +626,7 @@ def test_cli_lint_does_not_count_directory_without_skill_md(
     assert "配布対象の skill" not in out
 
 
-@pytest.mark.parametrize("dev_only_name", ["automation-release", "shadcn"])
+@pytest.mark.parametrize("dev_only_name", ["automation-release", "hallmark", "shadcn"])
 def test_cli_lint_does_not_count_dev_only_skill(
     fake_repo: Path,
     capsys: pytest.CaptureFixture[str],

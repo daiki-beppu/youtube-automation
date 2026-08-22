@@ -1,6 +1,15 @@
 {
   "version": 1,
   "skills": {
+    "hallmark": {
+      "source": "nutlope/hallmark",
+      "sourceType": "github",
+      "skillPath": "skills/hallmark/SKILL.md",
+      "computedHash": "579f86b27cdd7eb972107f7aecedd537f472891c5fd7c7c821bea15f64e0fe86",
+      "resolvedRevision": "13ac0ec7e148655948100b6396439e481361d690",
+      "version": "1.1.0",
+      "license": "MIT"
+    },
     "shadcn": {
       "source": "shadcn/ui",
       "sourceType": "github",

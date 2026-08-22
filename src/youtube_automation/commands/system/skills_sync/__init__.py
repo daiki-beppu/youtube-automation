@@ -132,7 +132,7 @@ _ASSET_SPECS: dict[str, dict[str, str]] = {
 # wheel/sdist では hatch_build.py が開発専用 skill を物理的に除外する一方、
 # editable install は repository の .claude/skills を直接読むため runtime 除外も必要。
 # build hook の設定値との一致は test_dev_only_skills_not_distributed.py が担保する。
-_DEV_ONLY_SKILL_NAMES = frozenset({"automation-release", "shadcn"})
+_DEV_ONLY_SKILL_NAMES = frozenset({"automation-release", "hallmark", "shadcn"})
 
 
 def _editable_root() -> Path:
