@@ -60,7 +60,7 @@ class UploadAttempt:
                 record.pop("resume_session_uri", None)
             else:
                 record["resume_session_uri"] = uri
-            record["status"] = "in_progress"
+            record["journal_status"] = "in_progress"
 
         self._journal._mutate(self.kind, mutate)
 
@@ -73,7 +73,7 @@ class UploadAttempt:
 
         def mutate(record: dict[str, JSONValue]) -> None:
             record.pop("resume_session_uri", None)
-            record["status"] = "completed"
+            record["journal_status"] = "completed"
             record["video_id"] = video_id
             for key in ("video_url", "upload_source"):
                 value = video.get(key)
@@ -89,8 +89,8 @@ class UploadAttempt:
             raise TypeError("upload failure must be a non-empty string")
 
         def mutate(record: dict[str, JSONValue]) -> None:
-            record["status"] = "failed"
-            record["error"] = error
+            record["journal_status"] = "failed"
+            record["journal_error"] = error
 
         self._journal._mutate(self.kind, mutate)
 
@@ -113,7 +113,7 @@ class UploadJournal:
         _validate_kind(kind)
         status = self.status(kind)
         if status.outcome is UploadJournalOutcome.ABSENT:
-            self._mutate(kind, lambda record: record.setdefault("status", "pending"))
+            self._mutate(kind, lambda record: record.setdefault("journal_status", "pending"))
             status = self.status(kind)
         return UploadAttempt(self, kind, status)
 
@@ -127,7 +127,7 @@ class UploadJournal:
         if record is not None and not isinstance(record, dict):
             quarantine_path = self._quarantine()
             return UploadJournalStatus(UploadJournalOutcome.CORRUPT, None, quarantine_path)
-        status = record.get("status") if isinstance(record, dict) else None
+        status = record.get("journal_status") if isinstance(record, dict) else None
         return UploadJournalStatus(outcome, status if isinstance(status, str) else None)
 
     def _resume_uri(self, kind: str) -> str | None:

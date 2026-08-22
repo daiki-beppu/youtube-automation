@@ -27,6 +27,19 @@ from youtube_automation.domains.uploads.collection import PlaylistAssignment, Pu
 sys.path.insert(0, str(REPO_ROOT))
 
 
+def test_corrupt_journal_never_falls_through_to_fresh_upload_or_dedup(tmp_path: Path) -> None:
+    col, tracking_path = _make_tracking_collection(tmp_path, resume_uri=None)
+    tracking_path.write_text("{truncated", encoding="utf-8")
+    uploader, mock_inner = _make_uploader_with_collection_mock(tmp_path)
+
+    result = uploader.execute_next_step(col)
+
+    assert result["action"] == "complete_collection_failed"
+    assert result["details"]["error"] == "upload journal is corrupt"
+    mock_inner.upload_collection.assert_not_called()
+    assert tracking_path.with_suffix(".json.corrupt").is_file()
+
+
 # ---------------------------------------------------------------------------
 # import smoke test (#77)
 # ---------------------------------------------------------------------------
