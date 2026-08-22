@@ -177,6 +177,13 @@ _PHASES = frozenset({"planning", "prepared", "cloud_owned", "mastered", "publish
 _STAGES = frozenset({"planning", "live"})
 _MUSIC_ENGINES = frozenset({"suno", "lyria", "minimax"})
 _MUSIC_TEMPOS = frozenset({"very slow", "slow", "gentle", "moderate", "lively"})
+
+
+class _UnsetType:
+    pass
+
+
+_UNSET = _UnsetType()
 _KNOWN_OBJECT_SECTIONS = frozenset(
     {
         "assets",
@@ -697,8 +704,8 @@ class WorkflowState(MutableMapping[str, JSONValue]):
         self,
         *,
         video_id: str,
-        video_url: str | None = None,
-        publish_at: str | None = None,
+        video_url: str | None | _UnsetType = _UNSET,
+        publish_at: str | None | _UnsetType = _UNSET,
     ) -> None:
         """YouTube upload の既知値を記録し、省略された任意値は保持する。"""
         if not isinstance(video_id, str):
@@ -707,14 +714,14 @@ class WorkflowState(MutableMapping[str, JSONValue]):
         assert isinstance(upload, dict)
         typed_upload = UploadState(upload)
         typed_upload.video_id = video_id
-        if video_url is not None:
-            if not isinstance(video_url, str):
+        if video_url is not _UNSET:
+            if video_url is not None and not isinstance(video_url, str):
                 raise WorkflowStateError("workflow-state.json::upload.video_url must be a string or null")
-            typed_upload.video_url = video_url
-        if publish_at is not None:
-            if not isinstance(publish_at, str):
+            typed_upload.video_url = cast(str | None, video_url)
+        if publish_at is not _UNSET:
+            if publish_at is not None and not isinstance(publish_at, str):
                 raise WorkflowStateError("workflow-state.json::upload.publish_at must be a string or null")
-            typed_upload.publish_at = publish_at
+            typed_upload.publish_at = cast(str | None, publish_at)
         self.touch()
 
     def record_master_video(self, path: str | None) -> None:

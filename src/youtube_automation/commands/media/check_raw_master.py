@@ -25,7 +25,6 @@ from __future__ import annotations
 import argparse
 import sys
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from pathlib import Path
 
 from youtube_automation.configuration.skills import load_skill_config
@@ -172,14 +171,7 @@ def apply_raw_master(collection_dir: Path, new_name: str, *, loudness_receipt: P
         raise ValidationError(f"workflow-state.json が見つかりません: {paths.workflow_state_path}")
 
     def record_raw_master(state: WorkflowState) -> None:
-        assets = state.assets
-        if assets is None:
-            state["assets"] = {}
-            assets = state.assets
-        if assets is None:
-            raise ValidationError("workflow-state.json::assets は object である必要があります")
-        assets.raw_master = new_name
-        state["updated_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+        state.set_asset("raw_master", new_name)
 
     try:
         update_workflow_state(paths.workflow_state_path, record_raw_master)

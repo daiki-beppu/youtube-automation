@@ -175,13 +175,7 @@ def _update_workflow_state_raw_master(workflow_state_path: Path, new_name: str) 
         return False
 
     def record_raw_master(state: WorkflowState) -> None:
-        assets = state.assets
-        if assets is None:
-            state["assets"] = {}
-            assets = state.assets
-        if assets is None:
-            raise ValidationError("workflow-state.json::assets は object である必要があります")
-        assets.raw_master = new_name
+        state.set_asset("raw_master", new_name)
 
     try:
         update_workflow_state(workflow_state_path, record_raw_master)
