@@ -2,6 +2,7 @@
 
 import json
 import logging
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 
@@ -27,6 +28,7 @@ from youtube_automation.domains.uploads._preflight import PreflightChecker
 from youtube_automation.domains.uploads._published_dates import PublishedDatesScheduler
 from youtube_automation.domains.uploads._tracking_io import TrackingStore
 from youtube_automation.domains.uploads.preflight import ensure_collection_preflight
+from youtube_automation.domains.uploads.upload_journal import UploadJournal, UploadJournalOutcome
 from youtube_automation.domains.uploads.youtube import YouTubeAutoUploader
 from youtube_automation.infrastructure.filesystem import (
     list_directory,
@@ -73,6 +75,7 @@ class CollectionUploader:
         published_dates: PublishedDatesScheduler | None = None,
         playlist_assignment: PlaylistAssignment | None = None,
         complete_collection_executor: CompleteCollectionExecutor | None = None,
+        upload_journal_factory: Callable[[Path], UploadJournal] = UploadJournal,
         allow_duration_outside_target: bool = False,
     ):
         if collections_root is None:
@@ -93,6 +96,7 @@ class CollectionUploader:
         )
         self.config = self._load_config()
         self.tracking_store = tracking_store or TrackingStore(self.collections_root, self.config)
+        self.upload_journal_factory = upload_journal_factory
         self.youtube_service = None
         self.youtube_clients = youtube_clients
         self.published_dates = published_dates or PublishedDatesScheduler(self.config, self._provide_youtube_service)
@@ -108,6 +112,7 @@ class CollectionUploader:
                 self.config,
                 self.playlist_assignment,
                 self._move_collection_to_live,
+                upload_journal_factory,
             )
         )
 
@@ -212,6 +217,13 @@ class CollectionUploader:
         Returns:
             dict: {"action": str, "details": dict}
         """
+        journal_status = self.upload_journal_factory(collection_path).status("complete_collection")
+        if journal_status.outcome is UploadJournalOutcome.CORRUPT:
+            logger.error("❌ upload journal 破損のため upload 可否を判定できません")
+            return {
+                "action": "complete_collection_failed",
+                "details": {"error": "upload journal is corrupt", "quarantine": str(journal_status.quarantine_path)},
+            }
         # tracking 読み込み or 初期化
         tracking = self.tracking_store.load(collection_path)
         if tracking is None:

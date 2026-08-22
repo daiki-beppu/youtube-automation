@@ -3,18 +3,20 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from pathlib import Path
 
 from youtube_automation.core.adapters import cost_tracker
 from youtube_automation.core.adapters.security import redact_sensitive_data
 from youtube_automation.core.adapters.youtube import complete_collection_quota_plan, quota_shortages
-from youtube_automation.core.errors import AutomationError, QuotaExhaustedError
+from youtube_automation.core.errors import AutomationError, QuotaExhaustedError, UploadJournalError
 from youtube_automation.domains.uploads._collection_uploader_constants import (
     ACTION_COMPLETE_COLLECTION_DEDUP_SKIPPED,
     ACTION_COMPLETE_COLLECTION_QUOTA_EXHAUSTED,
     ACTION_COMPLETE_COLLECTION_UPLOADED,
     TRACKING_STATUS_COMPLETED,
 )
+from youtube_automation.domains.uploads.upload_journal import UploadJournal
 from youtube_automation.domains.uploads.youtube import UPLOAD_SOURCE_EXISTING
 
 logger = logging.getLogger(__name__)
@@ -32,12 +34,14 @@ class CompleteCollectionExecutor:
         config: dict,
         playlist_assignment,
         move_collection_to_live,
+        upload_journal_factory: Callable[[Path], UploadJournal] = UploadJournal,
     ) -> None:
         self.uploader = uploader
         self.tracking_store = tracking_store
         self.config = config
         self.playlist_assignment = playlist_assignment
         self.move_collection_to_live = move_collection_to_live
+        self.upload_journal_factory = upload_journal_factory
 
     def failed(self, collection_path: Path, tracking: dict, error: AutomationError) -> dict:
         current = self.tracking_store.load(collection_path) or tracking
@@ -110,9 +114,18 @@ class CompleteCollectionExecutor:
         if publish_at:
             logger.info(f"📅 スケジュール公開: {publish_at}")
 
-        # tracking から resumable upload session URI を取り出す（無ければ None でフレッシュ実行）
+        # 移行前 tracking の URI は journal 初回利用時だけ引き継ぐ。
         cc = tracking.get("complete_collection", {})
-        resume_session_uri = cc.get("resume_session_uri")
+        try:
+            attempt = self.upload_journal_factory(collection_path).begin("complete_collection")
+            resume_session_uri = attempt.resume_uri
+            legacy_resume_uri = cc.get("resume_session_uri")
+            if resume_session_uri is None and isinstance(legacy_resume_uri, str):
+                attempt.record_session(legacy_resume_uri)
+                resume_session_uri = legacy_resume_uri
+        except UploadJournalError as error:
+            logger.error("❌ upload journal 読み込み失敗: %s", error)
+            return {"action": "complete_collection_failed", "details": {"error": _COMPLETE_COLLECTION_ERROR}}
 
         shortages = quota_shortages(
             complete_collection_quota_plan(),
@@ -127,18 +140,8 @@ class CompleteCollectionExecutor:
             }
 
         def _on_session_uri_changed(uri: str | None) -> None:
-            """upload 中の URI 変化を tracking に永続化する。
-
-            並行更新（プレイリスト追加等が tracking を書く可能性）に備え、
-            毎回 disk から再ロードしてから書き戻す。
-            """
-            current = self.tracking_store.load(collection_path) or {}
-            cc_current = current.setdefault("complete_collection", {})
-            if uri is None:
-                cc_current.pop("resume_session_uri", None)
-            else:
-                cc_current["resume_session_uri"] = uri
-            self.tracking_store.save(collection_path, current)
+            """upload 中の URI 変化を journal に永続化する。"""
+            attempt.record_session(uri)
 
         def _on_upload_complete() -> None:
             """upload 成功通知。後続の status="completed" 書き込みと整合させるため URI を消す。"""
@@ -162,15 +165,23 @@ class CompleteCollectionExecutor:
                 "details": {"error": "quota exhausted", "retry_after_seconds": e.retry_after_seconds},
             }
         except AutomationError as error:
+            try:
+                attempt.fail(_COMPLETE_COLLECTION_ERROR)
+            except UploadJournalError:
+                logger.exception("upload journal への失敗記録にも失敗しました")
             return self.failed(collection_path, tracking, error)
 
         complete_video = result.get("complete_video")
         if complete_video and "video_id" in complete_video:
+            try:
+                attempt.complete(complete_video)
+            except UploadJournalError as error:
+                logger.error("❌ upload journal 完了記録失敗: %s", error)
+                return {"action": "complete_collection_failed", "details": {"error": _COMPLETE_COLLECTION_ERROR}}
             return self.finish(collection_path, tracking, complete_video, publish_at)
 
         error_msg = _COMPLETE_COLLECTION_ERROR
-        # callback が disk に書いた URI 状態（session 失効クリア等）を保ったまま
-        # status 更新を載せるため、disk から再ロードしてから書き戻す。
+        attempt.fail(error_msg)
         current = self.tracking_store.load(collection_path) or tracking
         cc_current = current.setdefault("complete_collection", {})
         cc_current["status"] = "failed"

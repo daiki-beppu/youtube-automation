@@ -1,0 +1,1 @@
+- upload の再開 token を write 前再読込・破損 quarantine・保存失敗の明示化つきで所有する `UploadJournal` interface を追加し、Complete Collection 経路を移行する（#4441）。
