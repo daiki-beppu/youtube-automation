@@ -1,5 +1,7 @@
 # Changelog
 
+- `fix(tests)`: 通常のpytestからNix wrapperと`pnpm dlx`自体の再検証を除き、extension契約をリポジトリ内のflake・workflow設定だけで決定的に検査するようにした（#4468）。
+
 - `fix(skills)`: Codex画像ラッパーのPNG検査から未宣言の`xxd`依存を除き、overlay benchmarkの計時コマンドをdevShellで明示してfresh Linux環境でも実行できるようにした（#4466）。
 
 - `feat(skills)`: `/short --thumbnail` が 9:16 画像生成と Veo ループ動画化を担い、`/short-thumbnail` の手順・prompt・script 導線を統合した（#3834）

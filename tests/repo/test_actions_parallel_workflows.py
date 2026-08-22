@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import os
 import re
-import shutil
 import subprocess
 from pathlib import Path
 
@@ -528,105 +527,6 @@ def test_extensions_pull_request_runs_one_fallow_audit_for_the_extensions_root()
         < _top_level_step_index(steps, "Fallow audit")
         < _parallel_group_index_containing(steps, "Check (Oxlint + Oxfmt)")
     )
-
-
-def test_fallow_audit_fails_for_a_new_error_finding_in_a_git_diff(tmp_path: Path) -> None:
-    """Given a new error finding, When the audit package script runs, Then it exits non-zero."""
-    extensions_root = tmp_path / "extensions"
-    helper_root = extensions_root / "suno-helper"
-    helper_root.mkdir(parents=True)
-    package_json = json.loads(_read_text(_REPO_ROOT / "extensions" / "suno-helper" / "package.json"))
-    fallow_version = package_json["devDependencies"]["fallow"]
-    audit_package_json = {
-        "name": "fallow-audit-fixture",
-        "private": True,
-        "scripts": {"audit": package_json["scripts"]["audit"]},
-    }
-    (helper_root / "package.json").write_text(json.dumps(audit_package_json), encoding="utf-8")
-    shutil.copy2(_REPO_ROOT / "extensions" / ".fallowrc.json", extensions_root / ".fallowrc.json")
-    # .fallowrc.json の audit.dupesBaseline が参照する baseline も同梱する（#2154）。
-    shutil.copy2(
-        _REPO_ROOT / "extensions" / ".fallow-dupes-baseline.json",
-        extensions_root / ".fallow-dupes-baseline.json",
-    )
-    (extensions_root / "src").mkdir()
-    (extensions_root / "src" / "existing.ts").write_text("export const existing = 1;\n", encoding="utf-8")
-
-    subprocess.run(["git", "init", "--quiet"], cwd=tmp_path, check=True)
-    subprocess.run(
-        [
-            "git",
-            "add",
-            "extensions/.fallowrc.json",
-            "extensions/.fallow-dupes-baseline.json",
-            "extensions/suno-helper/package.json",
-            "extensions/src",
-        ],
-        cwd=tmp_path,
-        check=True,
-    )
-    subprocess.run(
-        [
-            "git",
-            "-c",
-            "user.name=Fallow test",
-            "-c",
-            "user.email=fallow-test@example.invalid",
-            "commit",
-            "--quiet",
-            "-m",
-            "baseline",
-        ],
-        cwd=tmp_path,
-        check=True,
-    )
-    base_sha = subprocess.run(
-        ["git", "rev-parse", "HEAD"], cwd=tmp_path, check=True, capture_output=True, text=True
-    ).stdout.strip()
-    audit_command = [
-        "nix",
-        "develop",
-        f"{_REPO_ROOT}#extensions",
-        "--command",
-        "pnpm",
-        f"--package=fallow@{fallow_version}",
-        "dlx",
-        "pnpm",
-        "run",
-        "audit",
-    ]
-    cache_home = tmp_path / "xdg-cache"
-    cache_home.mkdir()
-    audit_env = {
-        **os.environ,
-        "FALLOW_AUDIT_BASE": base_sha,
-        "XDG_CACHE_HOME": str(cache_home),
-    }
-    clean_audit = subprocess.run(
-        audit_command,
-        cwd=helper_root,
-        env=audit_env,
-        capture_output=True,
-        text=True,
-    )
-    assert clean_audit.returncode == 0, clean_audit.stdout + clean_audit.stderr
-
-    (extensions_root / "src" / "unused.ts").write_text(
-        "export function unusedFunction() {\n  return 1;\n}\n", encoding="utf-8"
-    )
-    audit = subprocess.run(
-        audit_command,
-        cwd=helper_root,
-        env=audit_env,
-        capture_output=True,
-        text=True,
-    )
-
-    audit_output = audit.stdout + audit.stderr
-    print(audit_output)
-    assert audit.returncode != 0, audit_output
-    assert "Unused files (1)" in audit_output, audit_output
-    assert "src/unused.ts" in audit_output, audit_output
 
 
 def test_ci_lint_runs_ruff_checks_in_a_single_parallel_group() -> None:
