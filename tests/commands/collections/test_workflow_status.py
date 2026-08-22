@@ -37,6 +37,10 @@ def test_command_generates_fixed_snapshot_and_opens_it(tmp_path: Path, monkeypat
     destination = channel / "tmp" / "reviews" / "workflow-status.html"
     assert code == 0
     assert destination.is_file()
+    rendered = destination.read_text(encoding="utf-8")
+    assert "運用サマリー" in rendered
+    assert "現在の表示" in rendered
+    assert "<script" not in rendered
     assert opened == [destination.resolve()]
     assert str(destination.resolve()) in capsys.readouterr().out
 

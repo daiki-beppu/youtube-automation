@@ -60,6 +60,38 @@ def test_renderer_provides_css_only_client_filters_for_all_statuses() -> None:
     assert '<span class="filter-selected" aria-hidden="true">選択中 · </span>' in html
     assert ".filter-control:focus-visible" in html
     assert "#filter-planning:checked ~ .collection-grid [data-status]:not([data-status=planning])" in html
+    assert 'aria-keyshortcuts="ArrowLeft ArrowRight Space"' in html
+    assert "現在の表示" in html
+
+
+def test_renderer_exposes_an_operational_overview_before_collection_rows() -> None:
+    snapshot = WorkflowStatusSnapshot(
+        generated_at=datetime(2026, 8, 16, 12, 0, tzinfo=UTC),
+        collections=(
+            _snapshot().collections[0],
+            CollectionStatusView(
+                name="Published",
+                slug="published",
+                status="complete",
+                phase="complete",
+                blocker="なし",
+                next_action="なし",
+                updated_at="2026-08-16 11:00 UTC",
+                stalled_for="1時間",
+                stale=False,
+                warnings=(),
+                artifacts=(),
+            ),
+        ),
+    )
+
+    html = render_workflow_status(snapshot)
+
+    assert html.index("運用サマリー") < html.index("Night &amp; Rain")
+    assert '<strong class="overview-value">2</strong><span>全件</span>' in html
+    assert '<strong class="overview-value">0</strong><span>要対応</span>' in html
+    assert "Hallmark · pre-emit critique: P5 H5 E5 S5 R5 V5" in html
+    assert "overflow-x: clip" in html
 
 
 def test_attention_collections_and_missing_artifacts_render_before_normal_details() -> None:
@@ -108,7 +140,7 @@ def test_attention_collections_and_missing_artifacts_render_before_normal_detail
     assert "Master: 未生成" in segment
     assert "workflow state が古い" in segment
     assert ".collection-card[data-attention=true]" not in html
-    assert "border: 1px solid #d3dae5" in html
+    assert "border-bottom: 1px solid var(--color-rule-strong)" in html
 
 
 def test_empty_snapshot_renders_an_explicit_empty_state() -> None:

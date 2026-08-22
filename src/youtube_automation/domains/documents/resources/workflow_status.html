@@ -10,11 +10,27 @@
 <body>
   <main>
     <header class="page-header">
-      <p class="eyebrow">読み取り専用 snapshot</p>
-      <h1>制作状況</h1>
-      <p>生成日時: $generated_at</p>
+      <div>
+        <p class="eyebrow">YT / OPERATIONS · READ ONLY</p>
+        <h1>制作状況<br><span>snapshot</span></h1>
+      </div>
+      <p class="generated-at"><span>生成日時</span><time>$generated_at</time></p>
     </header>
+    <section class="overview" aria-labelledby="overview-title">
+      <div class="overview-heading">
+        <p class="section-index">01 / TRIAGE</p>
+        <h2 id="overview-title">運用サマリー</h2>
+      </div>
+      <dl class="overview-metrics">$overview</dl>
+    </section>
     <section class="status-browser" aria-label="コレクション制作状況">
+      <header class="browser-heading">
+        <div>
+          <p class="section-index">02 / QUEUE</p>
+          <h2>コレクション</h2>
+        </div>
+        <p>phase で表示を限定できます。矢印キーまたは Space で選択してください。</p>
+      </header>
       $filters
       <div class="collection-grid">$collections</div>
     </section>
