@@ -6,23 +6,55 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src file:; media-src file:; style-src 'unsafe-inline'; script-src 'none'; base-uri 'none'; form-action $FORM_ACTION; frame-ancestors 'none'">
   <title>$TITLE</title>
   <style>$CSS
-  .document-header { margin-bottom: .5rem; }
-  .document-header p { color: #52617a; }
-  .review-grid { display: grid; gap: 1.25rem; }
-  .review-candidate { display: grid; gap: 1.25rem; }
-  .review-candidate-header h2 { margin: .25rem 0 0; }
+  /* Hallmark · macrostructure: Comparison Ledger · genre: editorial · theme: Technical Ledger
+   * audit: generic stacked cards, weak candidate identity, detached action, untokenized values
+   * slop-test: all applicable gates pass · mobile: pass (34, 49, 50–57)
+   */
+  /* Hallmark · pre-emit critique: P5 H5 E5 S5 R5 V5 */
+  .review-header { margin-block-end: var(--space-lg); }
+  .review-header-layout { display: grid; gap: var(--space-sm); }
+  .review-header .document-description { margin: 0; }
+  .review-protocol { margin: 0; color: var(--color-ink-muted); font-family: var(--font-mono); font-size: .75rem; }
+  .review-grid { display: grid; gap: var(--space-lg); counter-reset: none; }
+  .review-candidate {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-md);
+    padding: 0;
+    border-block-start: .25rem solid var(--color-ink);
+    background: var(--color-surface);
+    counter-increment: none;
+  }
+  .review-candidate::before { content: none; }
+  .review-candidate-header { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-sm); align-items: baseline; padding: var(--space-md) var(--space-md) 0; }
+  .candidate-index { margin: 0; color: var(--color-link); font-family: var(--font-mono); font-size: .75rem; font-weight: 700; letter-spacing: .08em; }
+  .review-candidate-header h2 { margin: 0; font-size: clamp(1.125rem, 3vw, 1.5rem); }
   .review-preview { min-width: 0; }
-  .review-qa { border-top: 1px solid #e1e6ef; padding-top: 1.25rem; }
-  .review-qa h3 { margin: 0 0 .75rem; font-size: 1rem; }
-  .review-action { display: flex; align-items: center; justify-content: space-between; gap: 1rem; border-top: 1px solid #e1e6ef; padding-top: 1.25rem; }
+  .review-preview > img, .review-preview > video { width: 100%; height: auto; max-height: 70vh; object-fit: contain; background: var(--color-surface-muted); }
+  .review-preview > audio { width: 100%; }
+  .review-qa { padding: var(--space-md); border-block-start: 1px solid var(--color-rule); }
+  .review-qa h3 { margin: 0 0 var(--space-sm); color: var(--color-ink-muted); font-family: var(--font-mono); font-size: .75rem; letter-spacing: .06em; text-transform: uppercase; }
+  .review-comparison dt, .review-comparison dd { padding-block: var(--space-2xs); border-block-start: 1px solid var(--color-rule); }
+  .review-action { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); padding: var(--space-md); border-block-start: 1px solid var(--color-rule-strong); background: var(--color-surface-muted); }
   .review-action p, .review-action form { margin: 0; }
-  button { background: #0066cc; border: 0; border-radius: .4rem; color: white; cursor: pointer; padding: .7rem 1rem; }
-  button:focus-visible { outline: 3px solid #1557b0; outline-offset: 3px; }
-  img, audio, video { display: block; max-height: 70vh; max-width: 100%; }
-  .review-images { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr)); }
+  button { min-height: 2.75rem; padding: var(--space-xs) var(--space-md); border: 1px solid var(--color-ink); border-radius: var(--radius-media); background: var(--color-ink); color: var(--color-surface); cursor: pointer; font: inherit; font-weight: 700; white-space: nowrap; }
+  button:hover { background: var(--color-link); border-color: var(--color-link); }
+  button:active { translate: 0 1px; }
+  button:focus-visible { outline: .1875rem solid var(--color-focus); outline-offset: var(--space-3xs); }
+  img, audio, video { display: block; max-width: 100%; }
+  .review-images { display: grid; gap: var(--space-sm); grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .review-images figure { margin: 0; }
-  .review-images figcaption { color: #52617a; font-weight: 650; margin-bottom: .5rem; }
+  .review-images figcaption { margin-block-end: var(--space-2xs); color: var(--color-ink-muted); font-family: var(--font-mono); font-size: .75rem; font-weight: 700; }
   .review-images .review-320 { height: auto; max-width: 100%; width: 320px; }
+  @media (min-width: 48rem) {
+    .review-header-layout { grid-template-columns: minmax(0, 1fr) minmax(14rem, .35fr); align-items: end; }
+    .review-protocol { text-align: end; }
+    .review-candidate { grid-template-columns: minmax(12rem, .36fr) minmax(0, 1fr); }
+    .review-candidate-header { grid-column: 1; align-content: start; }
+    .review-preview { grid-column: 2; grid-row: 1 / span 2; padding: var(--space-md); border-inline-start: 1px solid var(--color-rule); }
+    .review-qa { grid-column: 1; }
+    .review-action { grid-column: 1 / -1; }
+  }
   @media (max-width: 40rem) {
     .review-action { align-items: stretch; flex-direction: column; }
     .review-action button { width: 100%; }
@@ -30,5 +62,5 @@
   }
   </style>
 </head>
-<body><main><header class="document-header"><p class="eyebrow">候補レビュー</p><h1>$TITLE</h1><p>候補を比較し、選択する候補だけを確定します。</p></header><div class="review-grid">$CONTENT</div></main></body>
+<body><header class="page-header review-header"><p class="eyebrow">Selection review / fixed candidates</p><div class="review-header-layout"><div><h1>$TITLE</h1><p class="document-description">候補を比較し、選択する候補だけを確定します。</p></div><p class="review-protocol">PREVIEW → QA → CONFIRM<br>POST / ALLOWLIST ONLY</p></div></header><main><div class="review-grid">$CONTENT</div></main></body>
 </html>

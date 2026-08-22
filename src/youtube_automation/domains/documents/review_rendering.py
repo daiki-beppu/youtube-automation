@@ -96,7 +96,8 @@ def _candidate_card(
     return (
         f'<article class="view-card review-candidate" data-candidate-id="{escape(candidate_id, quote=True)}" '
         f'aria-labelledby="{title_id}"><header class="review-candidate-header">'
-        f'<p class="eyebrow">候補 {index}</p><h2 id="{title_id}">{escape(label)}</h2></header>'
+        f'<p class="candidate-index" aria-hidden="true">{index:02d}</p>'
+        f'<h2 id="{title_id}">{escape(label)}</h2></header>'
         f"{preview}{comparison}{form}</article>"
     )
 
