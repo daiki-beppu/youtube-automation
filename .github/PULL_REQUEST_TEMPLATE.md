@@ -8,7 +8,7 @@
 
 ## チェックリスト
 
-- [ ] `CHANGELOG.md::[Unreleased]` にエントリを追加した
+- [ ] `changelog.d/` に fragment を追加した（書き方: [`changelog.d/README.md`](../changelog.d/README.md)。`CHANGELOG.md` 直接編集も可）
   - 免除する場合は `skip-changelog` ラベルを付与（tests / docs / 内部リファクタのみ）
 - [ ] 下流チャンネルに影響する変更なら `### Migration` セクションも更新した
   - フォーマット: [docs/changelog-contract.md](../docs/changelog-contract.md)

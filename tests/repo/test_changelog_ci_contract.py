@@ -41,7 +41,7 @@ def _build_ci_path_filter_pattern(gated_paths: tuple[str, ...]) -> str:
 _PATH_FILTER_PATTERN = _build_ci_path_filter_pattern(_CHANGELOG_GATED_PATHS)
 # push で CI を回す対象 branch。PR は stacked PR base でも発火するよう branch 制限しない。
 _PUSH_TRIGGER_BRANCHES = ["main"]
-_CHANGELOG_FILE_PATTERN = "^CHANGELOG\\.md$"
+_CHANGELOG_FILE_PATTERN = "^(CHANGELOG\\.md|changelog\\.d/.+\\.md)$"
 _LABELS_JOIN_EXPRESSION = "${{ join(github.event.pull_request.labels.*.name, ',') }}"
 _PR_EVENT_GUARD = "github.event_name == 'pull_request'"
 _PR_TEMPLATE_TEXT = """## 概要
@@ -54,7 +54,8 @@ _PR_TEMPLATE_TEXT = """## 概要
 
 ## チェックリスト
 
-- [ ] `CHANGELOG.md::[Unreleased]` にエントリを追加した
+- [ ] `changelog.d/` に fragment を追加した（書き方: [`changelog.d/README.md`](../changelog.d/README.md)。\
+`CHANGELOG.md` 直接編集も可）
   - 免除する場合は `skip-changelog` ラベルを付与（tests / docs / 内部リファクタのみ）
 - [ ] 下流チャンネルに影響する変更なら `### Migration` セクションも更新した
   - フォーマット: [docs/changelog-contract.md](../docs/changelog-contract.md)
@@ -69,8 +70,8 @@ _EXPECTED_RUN_LINES = [
     'if [[ ",${PR_LABELS}," == *",skip-changelog,"* ]]; then',
     'changed=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")',
     f"if ! echo \"$changed\" | grep -qE '{_PATH_FILTER_PATTERN}'; then",
-    f"if ! echo \"$changed\" | grep -q '{_CHANGELOG_FILE_PATTERN}'; then",
-    'echo "CHANGELOG.md updated"',
+    f"if ! echo \"$changed\" | grep -qE '{_CHANGELOG_FILE_PATTERN}'; then",
+    'echo "Changelog update found"',
 ]
 
 
@@ -136,8 +137,8 @@ def test_ci_workflow_changelog_job_checks_expected_paths_and_messages() -> None:
     assert _CHANGELOG_LABEL in run_script
     assert _CHANGELOG_FILE_PATTERN in run_script
     assert (
-        "::error::CHANGELOG.md must be updated under [Unreleased]. Add an entry or apply 'skip-changelog' label."
-        in run_script
+        "::error::Add a changelog fragment under changelog.d/ (or update CHANGELOG.md), "
+        "or apply 'skip-changelog' label." in run_script
     )
 
 

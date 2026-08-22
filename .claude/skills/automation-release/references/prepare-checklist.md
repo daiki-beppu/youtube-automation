@@ -25,7 +25,16 @@ git rev-list --count HEAD..origin/main
 # → 0 であること（origin/main より遅れていない）
 ```
 
-### 3. CHANGELOG.md::[Unreleased] に内容がある
+### 3. changelog fragment を集約（必須）
+
+```bash
+uv run yt-changelog-compile
+test -z "$(find changelog.d -maxdepth 1 -type f -name '*.md' ! -name README.md -print -quit)"
+```
+
+fragment が無い場合は no-op。`README.md` 以外が残った場合は abort する。
+
+### 4. CHANGELOG.md::[Unreleased] に内容がある
 
 ```bash
 # Unreleased セクションの本文（次の ## までを抽出して空白行を除去）
@@ -34,7 +43,7 @@ awk '/^## \[Unreleased\]/{flag=1; next} /^## \[/{flag=0} flag' CHANGELOG.md | gr
 
 何も出力されない（実質空）場合は「リリースする変更がない」ので abort。
 
-### 4. CHANGELOG.md::[Unreleased] に `### Migration` セクションがある（warning レベル）
+### 5. CHANGELOG.md::[Unreleased] に `### Migration` セクションがある（warning レベル）
 
 ```bash
 awk '/^## \[Unreleased\]/{flag=1; next} /^## \[/{flag=0} flag' CHANGELOG.md \
@@ -44,7 +53,7 @@ awk '/^## \[Unreleased\]/{flag=1; next} /^## \[/{flag=0} flag' CHANGELOG.md \
 
 無くても abort はしない。`AskUserQuestion` で「Migration セクション無しで続行するか」を確認する。Migration セクションは下流の `/automation --update` が `所要時間の目安` / `local fix 衝突注意` を抽出する契約上の入力源（詳細: [release contract](release-contracts.md#python-migration-producer-contract)）。
 
-### 4a. Python module 移動監査（必須）
+### 5a. Python module 移動監査（必須）
 
 <!-- import-migration-audit-contract:start -->
 1. previous tag から HEAD までの production module 差分を rename 検出付きで取得する。
@@ -61,7 +70,7 @@ awk '/^## \[Unreleased\]/{flag=1; next} /^## \[/{flag=0} flag' CHANGELOG.md \
 5. 対象となる facade 無し移動が 0 件なら、監査結果と `### Migration` に `Python module 移動: なし` を明示する。
 <!-- import-migration-audit-contract:end -->
 
-### 4b. CLI 撤去・改名時の利用側監査（必須）
+### 5b. CLI 撤去・改名時の利用側監査（必須）
 
 previous tag から HEAD までに `pyproject.toml::[project.scripts]` の entry point が撤去または改名されている場合、release 前に次を完了する。CLI 実装と entry point だけを消しても、skill や smoke check が旧コマンドを起動すると下流の更新処理が最後に失敗するため、利用側まで同じ変更で移行する。
 

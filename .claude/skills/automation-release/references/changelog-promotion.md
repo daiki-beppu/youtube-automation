@@ -27,6 +27,17 @@ Migration セクションのフォーマット契約は [release contract](relea
 
 ---
 
+## Step 0: fragment を `[Unreleased]` へ集約
+
+昇格操作の前に次を実行する。fragment が無い場合は no-op になる。
+
+```bash
+uv run yt-changelog-compile
+test -z "$(find changelog.d -maxdepth 1 -type f -name '*.md' ! -name README.md -print -quit)"
+```
+
+`changelog.d/` に `README.md` 以外の Markdown が残っていたら昇格を開始しない。
+
 ## 昇格手順（3 段階）
 
 ### Step 1: `[Unreleased]` ヘッダの直後に新セクションを挿入
