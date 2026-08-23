@@ -23,7 +23,6 @@ LEGACY_CLI_ALLOWLIST: frozenset[str] = frozenset(
         "youtube_automation.commands.analytics.fetch_benchmark_comments",
         "youtube_automation.commands.analytics.retention_timeline",
         "youtube_automation.commands.analytics.video_analyze",
-        "youtube_automation.commands.analytics.video_validator",
         "youtube_automation.commands.analytics.vpd_rank",
         "youtube_automation.commands.analytics.win_pattern",
         "youtube_automation.commands.channel.channel",
