@@ -1,0 +1,1 @@
+- MediaStore の保持容量取得を port 契約へ統合し、Local / R2 adapter 共通の `retained_bytes` を境界から発見可能にする（#4459）。

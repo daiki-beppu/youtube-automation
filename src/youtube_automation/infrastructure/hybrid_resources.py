@@ -6,20 +6,16 @@ import shutil
 from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
-from typing import Protocol
 
 from youtube_automation.core.errors import ResourceLimitError
 from youtube_automation.domains.hybrid_resource_guard import HybridResourceSnapshot
-
-
-class RetainedCapacityProbe(Protocol):
-    def retained_bytes(self) -> int: ...
+from youtube_automation.domains.media_store import MediaStore
 
 
 @dataclass(frozen=True, slots=True)
 class SystemHybridResourceProbe:
     channel_dir: Path
-    store: RetainedCapacityProbe
+    store: MediaStore
     generation_cost_usd: Decimal
     monthly_run_count: int
     estimated_run_minutes: int
