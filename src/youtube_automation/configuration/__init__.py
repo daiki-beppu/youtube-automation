@@ -2,6 +2,7 @@
 
 公開 API:
     load_config() -> ChannelConfig   # シングルトン取得（初回に glob ロード + .env ロード）
+    load_schedule_config()           # config/channel/schedule.json の型付きローダー
     channel_dir() -> Path            # config/channel/ を含むプロジェクトルート解決
     explicit_channel_selection()     # CLI の明示 channel slug を参照
     find_workspace_root()            # cwd 祖先から workspace root を検出
@@ -13,6 +14,7 @@
     Shorts                           # `shorts` セクション（型ヒント用）
     PinnedComment                    # `pinned_comment` セクション（型ヒント用）
     Distrokid                        # `distrokid` セクション（型ヒント用）
+    ScheduleConfig                   # `schedule` セクション（型ヒント用）
 """
 
 from youtube_automation.configuration.community_draft import CommunityDraft
