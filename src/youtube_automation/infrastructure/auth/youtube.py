@@ -14,6 +14,7 @@ Required setup:
 import json
 import logging
 import os
+import sys
 from pathlib import Path
 from typing import ClassVar
 
@@ -308,7 +309,7 @@ class YouTubeOAuthHandler:
         Returns:
             Credentials: Google OAuth 2.0 認証情報
         """
-        print("🔐 YouTube Data API OAuth 2.0 認証開始...")
+        print("🔐 YouTube Data API OAuth 2.0 認証開始...", file=sys.stderr)
 
         # cloud secret はファイルより優先し、refresh 後もディスクへ永続化しない。
         if not force_reauth:
@@ -317,9 +318,9 @@ class YouTubeOAuthHandler:
         # 既存トークンの読み込み
         if not force_reauth and self.credentials is None and self.token_file.exists():
             try:
-                print("📁 既存トークンファイルを確認中...")
+                print("📁 既存トークンファイルを確認中...", file=sys.stderr)
                 self.credentials = Credentials.from_authorized_user_file(str(self.token_file), self._scopes)
-                print("✅ 既存トークン読み込み成功")
+                print("✅ 既存トークン読み込み成功", file=sys.stderr)
             except (OSError, ValueError) as e:
                 # 旧トークンが壊れているケースは新規認証へフォールスルーで recovery する
                 logger.warning("既存トークン読み込み失敗: %s", redact_sensitive_data(str(e), self.token_file))
@@ -329,9 +330,9 @@ class YouTubeOAuthHandler:
         if self.credentials:
             if self.credentials.expired and self.credentials.refresh_token:
                 try:
-                    print("🔄 トークンの更新中...")
+                    print("🔄 トークンの更新中...", file=sys.stderr)
                     self.credentials.refresh(Request())
-                    print("✅ トークン更新成功")
+                    print("✅ トークン更新成功", file=sys.stderr)
                     if not self._ephemeral_credentials:
                         self._save_credentials()
                 except google.auth.exceptions.GoogleAuthError as e:
@@ -347,8 +348,11 @@ class YouTubeOAuthHandler:
             self._require_interactive_reauthentication()
             self._validate_client_secrets()
             channel_label = self._channel_label()
-            print(f"🌐 [{channel_label}] ブラウザで認証を実行します...")
-            print("📝 注意: 初回認証時はブラウザが開き、Googleアカウントでのログインが必要です")
+            print(f"🌐 [{channel_label}] ブラウザで認証を実行します...", file=sys.stderr)
+            print(
+                "📝 注意: 初回認証時はブラウザが開き、Googleアカウントでのログインが必要です",
+                file=sys.stderr,
+            )
 
             try:
                 if self._client_secrets_config is not None:
@@ -371,7 +375,7 @@ class YouTubeOAuthHandler:
                         "このタブを閉じてターミナルに戻ってください。"
                     ),
                 )
-                print("✅ OAuth 2.0 認証成功")
+                print("✅ OAuth 2.0 認証成功", file=sys.stderr)
                 self._save_credentials()
             except (ValueError, OSError, google.auth.exceptions.GoogleAuthError) as e:
                 logger.error("OAuth 2.0 認証失敗: %s", redact_sensitive_data(str(e), self.client_secrets_file))
@@ -414,7 +418,7 @@ class YouTubeOAuthHandler:
         """
         try:
             save_credentials(self.token_file, self.credentials)
-            print(f"💾 認証トークン保存完了: {self.token_file}")
+            print(f"💾 認証トークン保存完了: {self.token_file}", file=sys.stderr)
         except OSError as e:
             raise ConfigError(
                 f"認証トークン保存失敗: {self.token_file} ({e})。"
@@ -433,7 +437,7 @@ class YouTubeOAuthHandler:
 
         try:
             service = build_youtube_service(self.credentials)
-            print("✅ YouTube Data API サービス接続成功")
+            print("✅ YouTube Data API サービス接続成功", file=sys.stderr)
             return service
         except HttpError as e:
             raise YouTubeAPIError.from_http_error(e, "YouTube Data API サービス接続失敗") from e
@@ -454,12 +458,12 @@ class YouTubeOAuthHandler:
                 channel = response["items"][0]
                 channel_title = channel["snippet"]["title"]
                 subscriber_count = channel["statistics"].get("subscriberCount", "N/A")
-                print("✅ API接続テスト成功")
-                print(f"📺 チャンネル名: {channel_title}")
-                print(f"👥 登録者数: {subscriber_count}")
+                print("✅ API接続テスト成功", file=sys.stderr)
+                print(f"📺 チャンネル名: {channel_title}", file=sys.stderr)
+                print(f"👥 登録者数: {subscriber_count}", file=sys.stderr)
                 return True
             else:
-                print("❌ チャンネル情報が取得できませんでした")
+                print("❌ チャンネル情報が取得できませんでした", file=sys.stderr)
                 return False
 
         except (HttpError, AuthError, YouTubeAPIError, google.auth.exceptions.GoogleAuthError, OSError) as e:
