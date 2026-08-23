@@ -65,26 +65,54 @@ def _module_name(relative: str) -> str | None:
     return ".".join(parts) if parts else None
 
 
-def _dynamic_import_argument(node: ast.AST) -> ast.expr | None:
-    """`importlib.import_module(...)` / `import_module(...)` / `__import__(...)` の第一引数を返す。"""
-    if not isinstance(node, ast.Call) or not node.args:
-        return None
+def _dynamic_import_names(tree: ast.Module) -> tuple[set[str], set[str]]:
+    """`importlib` module / `import_module` 関数に束縛された名前を alias 込みで集める。"""
+    module_names = {"importlib"}
+    function_names = {"import_module", "__import__"}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name == "importlib" and alias.asname:
+                    module_names.add(alias.asname)
+        elif isinstance(node, ast.ImportFrom) and not node.level and node.module == "importlib":
+            for alias in node.names:
+                if alias.name == "import_module" and alias.asname:
+                    function_names.add(alias.asname)
+    return module_names, function_names
+
+
+def _dynamic_import_argument(
+    node: ast.AST, module_names: set[str], function_names: set[str]
+) -> tuple[bool, ast.expr | None]:
+    """動的 import 呼び出しかどうかと、その module 名引数（特定できなければ ``None``）を返す。"""
+    if not isinstance(node, ast.Call):
+        return False, None
     function = node.func
-    if isinstance(function, ast.Name) and function.id in {"import_module", "__import__"}:
-        return node.args[0]
-    if (
-        isinstance(function, ast.Attribute)
-        and function.attr == "import_module"
-        and isinstance(function.value, ast.Name)
-        and function.value.id == "importlib"
-    ):
-        return node.args[0]
-    return None
+    if isinstance(function, ast.Name):
+        matched = function.id in function_names
+    elif isinstance(function, ast.Attribute):
+        matched = (
+            function.attr == "import_module"
+            and isinstance(function.value, ast.Name)
+            and function.value.id in module_names
+        )
+    else:
+        matched = False
+    if not matched:
+        return False, None
+    if node.args:
+        return True, node.args[0]
+    for keyword in node.keywords:
+        if keyword.arg == "name":
+            return True, keyword.value
+    # `import_module(**kwargs)` のように引数を特定できない呼び出しも動的 import として扱う。
+    return True, None
 
 
 def _imports(path: Path, module: str) -> tuple[set[str], bool]:
     """静的 import と文字列リテラルの動的 import を集め、解決不能な動的 import の有無を返す。"""
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    module_names, function_names = _dynamic_import_names(tree)
     imported: set[str] = set()
     has_unresolved_dynamic = False
     for node in ast.walk(tree):
@@ -99,8 +127,8 @@ def _imports(path: Path, module: str) -> tuple[set[str], bool]:
                 imported.add(imported_module)
                 imported.update(f"{imported_module}.{alias.name}" for alias in node.names)
         else:
-            argument = _dynamic_import_argument(node)
-            if argument is None:
+            is_dynamic_import, argument = _dynamic_import_argument(node, module_names, function_names)
+            if not is_dynamic_import:
                 continue
             if isinstance(argument, ast.Constant) and isinstance(argument.value, str):
                 imported.add(argument.value)
@@ -190,8 +218,12 @@ def select_targets(repository: Path, changed_paths: list[str]) -> tuple[str, ...
 
         affected_roots = list(changed_modules)
         if changed_modules:
-            affected_roots.extend(sorted(wildcard_importers - set(changed_modules)))
-            for wildcard in wildcard_importers:
+            # source 側 wildcard は BFS 起点にも加え、それを import する module 経由の
+            # test まで transitively 選定する。test 側 wildcard は直接選定する。
+            changed_module_set = set(changed_modules)
+            for wildcard in sorted(wildcard_importers):
+                if wildcard not in changed_module_set:
+                    affected_roots.append(wildcard)
                 relative = path_by_module.get(wildcard)
                 if relative and relative.startswith(TEST_PREFIX) and _is_test_module(repository / relative):
                     selected.add(relative)

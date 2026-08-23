@@ -1,1 +1,1 @@
-- CI の affected-test 選定が `importlib.import_module` のリテラル依存を静的依存として解決し、リテラルへ解決できない動的 import を持つモジュールを source 変更時に保守的に選定する（#4593）。
+- CI の affected-test 選定が `importlib.import_module` のリテラル依存を（キーワード引数・alias 呼び出しを含めて）静的依存として解決し、リテラルへ解決できない動的 import を持つモジュールを source 変更時に保守的に選定する（#4593）。
