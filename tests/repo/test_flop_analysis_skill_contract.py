@@ -91,16 +91,28 @@ def test_flop_analysis_calls_executable_verification_reference() -> None:
 
 def test_flop_analysis_defaults_to_agent_inference_with_existing_artifacts_only() -> None:
     text = _skill_text()
+    overview = _section(text, "## Overview")
     quick_reference = _section(text, "## Quick Reference")
     phase_4 = _section(text, "### Phase 4: 検証の自律実行")
 
     assert "`--no-vertex`" not in quick_reference
     assert "`--no-vertex`" not in text
+    assert "検証の自律実行" in overview
+    assert "ローカル CLI と YouTube API による検証は自律実行" in overview
+    assert "`/audit --video` は起動せず" in overview
+    assert "既存成果物の read-only 参照 + agent 推論に限定" in overview
     assert "`/audit --video` を起動しない" in phase_4
     assert "既存の有効な `/audit --video` 成果物" in phase_4
     assert "agent 推論" in phase_4
     assert "`未検証（理由:" in phase_4
-    assert "再実行せず未検証" in phase_4
+    assert "再実行せず" in phase_4
+
+
+def test_flop_analysis_records_skipped_retention_with_standard_unverified_reason() -> None:
+    phase_4 = _section(_skill_text(), "### Phase 4: 検証の自律実行")
+
+    assert "`status=skipped`" in phase_4
+    assert "`未検証（理由: /audit --video 未実行）`" in phase_4
 
 
 def test_flop_analysis_returns_postmortem_learning_to_creative_constraints() -> None:

@@ -17,7 +17,7 @@
 過去自チャンネル平均 + 競合ベンチマークと突き合わせ、症状から仮説を立て、対応する既存スキル / CLI / API で検証する。
 最終出力は `collections/live/<collection>/20-documentation/postmortem.md`。
 
-責務は **症状の定量化 + 仮説リスト生成 + 既存成果物の read-only 参照による agent 推論 + 結論の記入** まで。`/audit --video` を含む Vertex AI Gemini は起動せず、利用できない根拠は未検証として残りの検証を続行する。改善策の適用は本スキルの責務に含めない。
+責務は **症状の定量化 + 仮説リスト生成 + 検証の自律実行 + agent 推論 + 結論の記入** まで。ローカル CLI と YouTube API による検証は自律実行する。例外として `/audit --video` は起動せず、その Vertex AI Gemini 分析は既存成果物の read-only 参照 + agent 推論に限定する。利用できない根拠は未検証として残りの検証を続行する。改善策の適用は本スキルの責務に含めない。
 
 ## 完了条件
 
@@ -211,7 +211,7 @@ uv run python .claude/skills/analytics/references/verification.py --operation <t
 対象動画の retention が最新 `data/analytics_data_*.json::retention[]` にある場合は、
 `yt-retention-timeline --video <video_id>` を実行し、drop 地点に対応する scene / BGM を
 検証結果へ引用する。`status=skipped` で `/audit --video 未実行` と返った場合は、`/audit --video` を
-再実行せず未検証とする。retention 未収集なら
+再実行せず `未検証（理由: /audit --video 未実行）` とする。retention 未収集なら
 この照合だけを `未検証（理由: retention 未収集。/analytics --collect の full 収集が必要）` とし、
 他の content-signals 検証は続行する。`outside_analysis_window` の scene / BGM は推測しない。
 
