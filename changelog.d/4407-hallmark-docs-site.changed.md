@@ -1,0 +1,1 @@
+- ドキュメントサイトを technical / austere な目的別インデックスへ再設計し、Blume の検索・ナビゲーション・公開 route を維持したまま light / dark・focus・responsive 表示を改善した ([#4407](https://github.com/daiki-beppu/youtube-automation/issues/4407))
