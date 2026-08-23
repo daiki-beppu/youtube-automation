@@ -103,3 +103,14 @@ def test_delegation_reuses_one_lease_attempt_and_history_record() -> None:
     assert "canonical history の記録と lease 解放は `/wf-new --auto` に一度だけ" in direct
     assert "release --channel-dir . --token <token>" in direct
     assert "他 token" in direct
+
+
+def test_upload_plan_propagates_the_canonical_duration_approval() -> None:
+    text = WF_NEXT_SKILL.read_text(encoding="utf-8")
+    publishing = _section(text, "#### `mastered` → 公開フロー（アップロード承認ゲートあり）")
+    approval_gate = publishing[publishing.index("3. **アップロード承認ゲート") :]
+
+    plan_command = "uv run yt-upload-collection --plan [-c <collection-name>] [--allow-duration-outside-target]"
+    assert plan_command in approval_gate
+    assert "resolver の `allow_duration_outside_target` が true の場合" in approval_gate
+    assert "アップロード承認ゲートの plan に `--allow-duration-outside-target`" in approval_gate

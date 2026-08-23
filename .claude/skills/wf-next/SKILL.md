@@ -117,12 +117,19 @@ uv run yt-workflow-state --collection "$COLLECTION_DIR" touch
 ```bash
 STATE_SCRIPT=.claude/skills/wf-new/references/wf-auto-state.py
 uv run python "$STATE_SCRIPT" acquire --channel-dir .
-uv run python "$STATE_SCRIPT" plan --channel-dir . --collection <fixed-name>
+uv run python "$STATE_SCRIPT" plan --channel-dir . --collection <fixed-name> --token <token>
 uv run python "$STATE_SCRIPT" heartbeat --channel-dir . --token <token>
 uv run python -c 'from datetime import UTC, datetime; print(datetime.now(UTC).isoformat())'
 ```
 
-`acquire` の `busy` / exit 20 では作業を開始しない。`plan` 後は `heartbeat` の JSON 応答が `status: refreshed` の場合だけ lease owner の確認成功として AI 開始時刻を取得し、stdout を同じ attempt 専用の `<current-attempt-ai-started-at>` として保持する。`status: not-owner` も exit 0 で返るため、exit 0 だけでは owner と判定しない。`status: not-owner` では開始時刻を取得せず停止する。resolver が返した固定 collection と action を `<resolver-action>` としてそのまま使い、公開許可や実成果物から action を独自再判定せず、別 action へ読み替えない。別 collection ID や timing 保存処理も作らない。
+`acquire` の `busy` / exit 20 では作業を開始しない。`plan` には必ず同じ `<token>` を渡す。`plan` 後は `heartbeat` の JSON 応答が `status: refreshed` の場合だけ lease owner の確認成功として AI 開始時刻を取得し、stdout を同じ attempt 専用の `<current-attempt-ai-started-at>` として保持する。`status: not-owner` も exit 0 で返るため、exit 0 だけでは owner と判定しない。`status: not-owner` では開始時刻を取得せず停止する。resolver が返した固定 collection と action を `<resolver-action>` としてそのまま使い、公開許可や実成果物から action を独自再判定せず、別 action へ読み替えない。別 collection ID や timing 保存処理も作らない。
+
+resolver が `blocked / external_publish_disabled` を返した対話実行では、公開範囲と API write を明示してユーザー承認を取る。承認時は record / release せず、owner token で `approve --approval external-publish` を実行し、同じ token・collection で `plan` を再実行する。これにより durable な `workflow.scheduled_automation.allow_external_publish` は変更せず、同じ canonical attempt が `publish_ready` へ進む。却下時だけ blocked を記録して release する。
+
+```bash
+uv run python "$STATE_SCRIPT" approve --channel-dir . --token <token> --approval external-publish
+uv run python "$STATE_SCRIPT" plan --channel-dir . --collection <fixed-name> --token <token>
+```
 
 resolver action と直接入口の既存責務は次の対応を正とする。
 
@@ -141,7 +148,7 @@ resolver action と直接入口の既存責務は次の対応を正とする。
 uv run python "$STATE_SCRIPT" record --channel-dir . --token <token> --collection <fixed-name> --action <resolver-action> --status success|blocked|failed --reason <reason> [--resume-action <resolver-resume-action>] --ai-started-at <current-attempt-ai-started-at> [--human-interval <human-start> <human-end>]...
 ```
 
-status を記録した後は、成功時だけでなく blocked / failed の停止報告前にも同じ固定 collection を `plan --channel-dir . --collection <fixed-name>` で再評価し、次回の再開 action を推測しない。全終了経路の `finally` 相当で `release --channel-dir . --token <token>` を実行し、他 token の lease は変更しない。
+status を記録した後は、成功時だけでなく blocked / failed の停止報告前にも同じ固定 collection を `plan --channel-dir . --collection <fixed-name> --token <token>` で再評価し、次回の再開 action を推測しない。全終了経路の `finally` 相当で `release --channel-dir . --token <token>` を実行し、他 token の lease は変更しない。ただし上記の対話承認待ちはまだ終了経路ではなく、承認を attempt context に保存して再 plan するまで record / release しない。
 
 `/wf-new --auto` が token、resolver の action / collection、attempt の開始時刻を固定して本 skill へ委譲した場合は、その実行文脈を再利用する。nested `acquire` や独自 attempt の作成・記録・release は行わず、成果物と state の検証結果を呼び出し元へ返し、canonical history の記録と lease 解放は `/wf-new --auto` に一度だけ行わせる。
 
@@ -227,6 +234,13 @@ status を記録した後は、成功時だけでなく blocked / failed の停�
 
 以下を一気通貫実行する。実作業は subagent、成果物検証と各ステップ完了時の `workflow-state.json` 更新はメインが担当し、途中で中断しても同じ状態から再開できる。
 
+0. `01-master/<assets.master_audio>` を ffprobe し、`config.audio.target_duration_min` / `target_duration_max` と比較する。この確認は全尺動画を生成する Agent 1 の起動前に行う。目標外なら実尺と目標尺を提示して AskUserQuestion で例外承認を取り、承認時は owner token に保存して再 plan する。却下時は動画を生成せず blocked で終了する。
+
+   ```bash
+   uv run python "$STATE_SCRIPT" approve --channel-dir . --token <token> --approval duration-outside-target
+   uv run python "$STATE_SCRIPT" plan --channel-dir . --collection <fixed-name> --token <token>
+   ```
+
 1. **並列 A**（2 Agent 同時起動）:
    - Agent 1: 対象 collection、`01-master/<assets.master_audio>`、`10-assets/main.png/jpg` または `loop.mp4` を入力に Skill `/video --generate` の Subagent Contract を実行。thumbnail skill-config も渡し、`textless.enabled: false` の共有 `main.jpg` を textless 再生成へ戻さない。期待成果物は `01-master/*.mp4`。返却には同じ生成実行で解決した背景経路、effect、overlay、Full output outlookを含める
    - Agent 2 の起動前に、メインが `/video --describe` の重複トラック名を検出し、必要な表示名 mapping を確定するが、まだ `apply_track_display_names()` は呼ばない。その mapping、planning / localization、skill-config、benchmark 入力を列挙し、Agent 2 には `/video --describe` の Step 1 から品質チェック、`yt-title-duplicate-check`、検証済み `20-documentation/descriptions.json` + 同 basename HTML 保存までを実行させる。`apply_track_display_names()` と `workflow-state.json` の `assets.description` 更新は実行させない
@@ -239,7 +253,8 @@ status を記録した後は、成功時だけでなく blocked / failed の停�
      uv run yt-workflow-state --collection "$COLLECTION_DIR" set-phase publishing
      ```
 3. **アップロード承認ゲート 3-B（`skip_upload_approval = false` のとき）**:
-   - 並列 A 完了直後、ユーザーに公開方法を提示する前に必ず `uv run yt-upload-collection --plan [-c <collection-name>]` を実行し、`config/schedule_config.json` / `config/channel/youtube.json` を反映した実際の公開タイミングを確定する
+   - 並列 A 完了直後、ユーザーに公開方法を提示する前に必ず `uv run yt-upload-collection --plan [-c <collection-name>] [--allow-duration-outside-target]` を実行し、`config/schedule_config.json` / `config/channel/youtube.json` を反映した実際の公開タイミングを確定する
+   - resolver の `allow_duration_outside_target` が true の場合は、アップロード承認ゲートの plan に `--allow-duration-outside-target` を渡す。false の場合は渡さない。会話上の承認だけからフラグを組み立てず、owner 管理の attempt context を正とする
    - plan 結果が `📅 公開設定: 非公開でアップロード（即時公開は行いません）` の場合は、予約設定または YouTube Studio での手動公開を案内する。`📅 公開設定: 限定公開 (unlisted)` / `📅 公開設定: 非公開 (private)` が出た場合は、その公開範囲でアップロードされることを AskUserQuestion の文面に含める。`📅 公開予定: <日時>` が出た場合は「今アップロード → `<日時>` に自動で一般公開」と、実際の予約時刻を AskUserQuestion の文面に含める
    - `/publish --upload` を呼ぶ前に AskUserQuestion で「YouTube にアップロード + live 移行してよいか」を確認する。このとき、plan 結果に基づく公開タイミングまたは公開範囲（非公開アップロード / 限定公開 / 非公開 / 予約公開日時）を必ず明示する
    - 承認されたら次ステップへ進む。却下されたら `phase` を `mastered` のままにして停止し、ガイダンス「準備が整ったら `/wf-next` を再実行してください」を表示
@@ -252,8 +267,9 @@ status を記録した後は、成功時だけでなく blocked / failed の停�
    - これは YouTube 上の playlist 作成と `playlist_id` 書き戻しが目的。初回動画の追加は次の `/publish --upload` 内部の自動 assign (`assign_video()`) に任せる
    - `config/channel/playlists.json` が無い、または全 playlist に `playlist_id` がある場合はスキップ
 5. **順次**: Agent ツールで subagent を起動し、対象 collection、動画、thumbnail、description を明示して Skill `/publish --upload` の Subagent Contract の `plan` / preflight だけを実行させる。state / tracking 更新と実アップロードは実行させない
+   - resolver の `allow_duration_outside_target` が true の場合は、subagent の plan / preflight とメインの実 CLI の両方へ `--allow-duration-outside-target` を渡す。false の場合は渡さない。会話上の承認だけからフラグを組み立てず、owner 管理の attempt context を正とする
    - メインが完了報告の動画・メタデータパスと plan 結果を実ファイルおよび Step 3 の承認済み公開条件と突合する。不整合なら state を更新せず停止する
-   - PASS 後、メインが `uv run yt-upload-collection [-c <collection-name>]`（release 型は `uv run yt-upload-auto`）を実行する。実 CLI が upload tracking、state 更新、collection 型の planning → live 移行を一体で行うため、メインは同じ変更を手作業で重ねない
+   - PASS 後、メインが `uv run yt-upload-collection [-c <collection-name>] [--allow-duration-outside-target]`（release 型は `uv run yt-upload-auto`）を実行する。実 CLI が upload tracking、state 更新、collection 型の planning → live 移行を一体で行うため、メインは同じ変更を手作業で重ねない
    - 実行後、メインが `20-documentation/upload_tracking.json`、対象動画、移動先 collection の state に記録された `upload.video_id` / `upload.video_url`、`stage: "live"`、`phase: "complete"` を検証する。いずれかが欠落・不整合なら完了扱いにしない
 
 #### `publishing` → リカバリ（途中エラー再実行）

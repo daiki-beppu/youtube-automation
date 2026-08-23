@@ -74,6 +74,12 @@ class Decision(TypedDict):
     reason: str
     resume_action: str | None
     allow_external_publish: bool
+    allow_duration_outside_target: bool
+
+
+class AttemptContext(TypedDict):
+    external_publish: bool
+    duration_outside_target: bool
 
 
 class TimingSegment(TypedDict):
@@ -484,6 +490,7 @@ def _decision(
         "reason": reason,
         "resume_action": resume_action,
         "allow_external_publish": config.allow_external_publish,
+        "allow_duration_outside_target": False,
     }
 
 
@@ -867,7 +874,12 @@ def acquire_lease(root: Path, *, now: float, ttl_seconds: int) -> str:
         raise ValueError("ttl_seconds は正の整数でなければなりません")
     # CLI 引数でオプションと誤認される `-` を含まない表現にする。
     token = secrets.token_hex(24)
-    payload = {"token": token, "acquired_at": now, "expires_at": now + ttl_seconds}
+    payload = {
+        "token": token,
+        "acquired_at": now,
+        "expires_at": now + ttl_seconds,
+        "context": {"external_publish": False, "duration_outside_target": False},
+    }
     with _lease_mutex(root) as state_dir:
         lock_dir = state_dir / LEASE_DIR_NAME
         lease_path = lock_dir / LEASE_FILE_NAME
@@ -958,6 +970,68 @@ def _owns_lease(root: Path, token: str) -> bool:
             and not isinstance(expires_at, bool)
             and expires_at > time.time()
         )
+
+
+def _attempt_context(lease: dict) -> AttemptContext:
+    context = lease.get("context", {})
+    if not isinstance(context, dict):
+        raise ValueError("lease context は object でなければなりません")
+    external_publish = context.get("external_publish", False)
+    duration_outside_target = context.get("duration_outside_target", False)
+    if not isinstance(external_publish, bool) or not isinstance(duration_outside_target, bool):
+        raise ValueError("lease context の approval は boolean でなければなりません")
+    return {
+        "external_publish": external_publish,
+        "duration_outside_target": duration_outside_target,
+    }
+
+
+def _owned_lease(state_dir: Path, token: str) -> tuple[Path, dict]:
+    lease_path = state_dir / LEASE_DIR_NAME / LEASE_FILE_NAME
+    try:
+        lease = _read_object(lease_path)
+    except ValueError as exc:
+        raise LeaseBusyError("attempt context を管理する lease がありません") from exc
+    expires_at = lease.get("expires_at")
+    if (
+        not secrets.compare_digest(str(lease.get("token", "")), token)
+        or not isinstance(expires_at, (int, float))
+        or isinstance(expires_at, bool)
+        or expires_at <= time.time()
+    ):
+        raise LeaseBusyError("attempt context を管理する lease token の owner ではありません")
+    return lease_path, lease
+
+
+def read_attempt_context(root: Path, token: str) -> AttemptContext:
+    with _lease_mutex(root) as state_dir:
+        _, lease = _owned_lease(state_dir, token)
+        return _attempt_context(lease)
+
+
+def approve_attempt(root: Path, token: str, approval: str) -> AttemptContext:
+    keys = {
+        "external-publish": "external_publish",
+        "duration-outside-target": "duration_outside_target",
+    }
+    try:
+        key = keys[approval]
+    except KeyError as exc:
+        raise ValueError(f"未知の approval です: {approval}") from exc
+    with _lease_mutex(root) as state_dir:
+        lease_path, lease = _owned_lease(state_dir, token)
+        context = _attempt_context(lease)
+        context[key] = True
+        lease["context"] = context
+        descriptor, temporary_name = tempfile.mkstemp(prefix=".lease-json.", dir=lease_path.parent)
+        os.close(descriptor)
+        temporary = Path(temporary_name)
+        try:
+            temporary.write_text(json.dumps(lease, ensure_ascii=False) + "\n", encoding="utf-8")
+            os.replace(temporary, lease_path)
+        finally:
+            temporary.unlink(missing_ok=True)
+        return context
 
 
 def record_attempt(
@@ -1064,9 +1138,20 @@ def resolve_action(
     *,
     config: RunnerConfig | None = None,
     executor: Literal["local", "cloud"] | None = None,
+    token: str | None = None,
 ) -> Decision:
     """Return the next delegated action without mutating workflow state."""
     resolved_config = config or _load_runner_config(root)
+    context: AttemptContext = {"external_publish": False, "duration_outside_target": False}
+    if token is not None:
+        context = read_attempt_context(root, token)
+        if context["external_publish"]:
+            resolved_config = RunnerConfig(
+                allow_external_publish=True,
+                post_publish_configured=resolved_config.post_publish_configured,
+                skip_audio_approval=resolved_config.skip_audio_approval,
+                skip_upload_approval=resolved_config.skip_upload_approval,
+            )
     try:
         collection = select_collection(root, requested)
     except NoActiveCollectionError:
@@ -1080,8 +1165,11 @@ def resolve_action(
             "reason": "no_active_collection",
             "resume_action": "wf-new",
             "allow_external_publish": resolved_config.allow_external_publish,
+            "allow_duration_outside_target": context["duration_outside_target"],
         }
-    return evaluate_collection(root, collection, resolved_config, executor=executor)
+    decision = evaluate_collection(root, collection, resolved_config, executor=executor)
+    decision["allow_duration_outside_target"] = context["duration_outside_target"]
+    return decision
 
 
 def record_bootstrap_attempt(
@@ -1128,6 +1216,11 @@ def _parser() -> argparse.ArgumentParser:
     plan.add_argument("--channel-dir", type=Path, default=Path.cwd())
     plan.add_argument("--collection")
     plan.add_argument("--executor", choices=("local", "cloud"))
+    plan.add_argument("--token")
+    approve = sub.add_parser("approve")
+    approve.add_argument("--channel-dir", type=Path, default=Path.cwd())
+    approve.add_argument("--token", required=True)
+    approve.add_argument("--approval", choices=("external-publish", "duration-outside-target"), required=True)
     record = sub.add_parser("record")
     record.add_argument("--channel-dir", type=Path, default=Path.cwd())
     record.add_argument("--token", required=True)
@@ -1166,7 +1259,9 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "release":
             result = {"status": "released" if release_lease(root, args.token) else "not-owner"}
         elif args.command == "plan":
-            result = resolve_action(root, args.collection, executor=args.executor)
+            result = resolve_action(root, args.collection, executor=args.executor, token=args.token)
+        elif args.command == "approve":
+            result = {"status": "approved", "context": approve_attempt(root, args.token, args.approval)}
         elif args.command == "record-bootstrap":
             recorded_at = datetime.now(UTC).isoformat()
             record_bootstrap_attempt(
