@@ -139,6 +139,29 @@ def test_orphan_schema_and_html_are_rejected(tmp_path: Path) -> None:
     assert any("orphan schema" in item and "unused.schema.json" in item for item in violations)
 
 
+def test_explicit_standalone_html_write_passes(tmp_path: Path) -> None:
+    _skill(tmp_path, "producer", writes="reports/review.html")
+    inventory = _inventory(
+        artifacts=[],
+        allowlists={
+            "hand_written_inputs": [],
+            "repository_docs": [],
+            "machine_only": [],
+            "other_writes": [
+                {"path": "reports/review.html", "owner": "producer", "reason": "standalone review"}
+            ],
+            "schemas": [],
+        },
+    )
+
+    assert (
+        lint_operational_artifacts(
+            tmp_path, SkillInventory(tmp_path), inventory, repository_schemas=()
+        )
+        == []
+    )
+
+
 def test_unregistered_or_schema_unvalidated_consumer_is_rejected(tmp_path: Path) -> None:
     _skill(tmp_path, "producer", writes="reports/example.json`, `reports/example.html")
     _skill(tmp_path, "intruder", writes="なし", reads="reports/example.json")
