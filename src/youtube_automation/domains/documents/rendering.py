@@ -62,6 +62,7 @@ def _render_root(document: object, schema: Mapping[str, object], root_schema: Ma
     properties = schema.get("properties")
     property_schemas = properties if isinstance(properties, dict) else {}
     sections: list[tuple[int, int, str]] = []
+    navigation: list[tuple[int, int, str, str]] = []
     known_properties: set[str] = set()
     for index, (name, property_schema) in enumerate(property_schemas.items()):
         if name not in document or not isinstance(property_schema, dict):
@@ -73,8 +74,12 @@ def _render_root(document: object, schema: Mapping[str, object], root_schema: Ma
             raise DocumentRenderError(f"x-view.order は integer で指定してください: {name}")
         heading = _annotation(property_schema, "title", name)
         description = _annotation(property_schema, "description", "")
-        rendered = _render_section(heading, description, document[name], property_schema, root_schema)
+        section_id = f"section-{_html_id(name)}"
+        rendered = _render_section(
+            heading, description, document[name], property_schema, root_schema, section_id=section_id
+        )
         sections.append((order, index, rendered))
+        navigation.append((order, index, section_id, heading))
     for offset, name in enumerate(sorted(set(document) - known_properties), start=len(property_schemas)):
         fallback_schema = {
             "title": name,
@@ -84,7 +89,18 @@ def _render_root(document: object, schema: Mapping[str, object], root_schema: Ma
         sections.append((10_000, offset, rendered))
     if not sections:
         return _card(_annotation(schema, "title", "Value"), "", _render_value(document, schema, root_schema))
-    return "".join(rendered for _, _, rendered in sorted(sections))
+    nav_items = "".join(
+        f'<li><a href="#{escape(section_id, quote=True)}">{escape(heading)}</a></li>'
+        for _, _, section_id, heading in sorted(navigation)
+    )
+    navigation_html = (
+        '<nav class="review-nav" aria-label="文書内ナビゲーション">'
+        '<p><strong>目次</strong> · 検索はブラウザの Ctrl/⌘+F を使用</p>'
+        f"<ol>{nav_items}</ol></nav>"
+    )
+    # ナビゲーションは CSS order で先頭表示する。本文を先に置くことで、支援技術と
+    # テキスト抽出では承認対象の本文を目次の重複ラベルより先に読める。
+    return "".join(rendered for _, _, rendered in sorted(sections)) + navigation_html
 
 
 def _render_section(
@@ -93,25 +109,36 @@ def _render_section(
     value: object,
     schema: Mapping[str, object],
     root_schema: Mapping[str, object],
+    *,
+    section_id: str | None = None,
 ) -> str:
     view = _view(schema)
     _validate_review_view(view)
-    if view.get("collapsed") is True:
-        content = _render_value(value, _without_review_flags(schema), root_schema)
-        return _details(heading, description, content)
     presentation = _presentation(view, value)
-    if presentation == "table":
-        return _render_table(heading, description, value, schema, root_schema)
-    if presentation == "cards":
-        return _render_cards(heading, description, value, schema, root_schema)
-    if presentation == "details":
-        content = _render_value(value, _without_presentation(schema), root_schema)
-        return _details(heading, description, content)
-    if presentation == "media":
-        return _render_media(heading, description, value, view)
-    content = _render_value(value, schema, root_schema)
     modifiers = _review_classes(view)
-    return _card(heading, description, content, modifiers=modifiers)
+    rendered_schema = _without_review_flags(schema) if view.get("collapsed") is True else schema
+    if presentation == "table":
+        rendered = _render_table(heading, description, value, rendered_schema, root_schema, modifiers=modifiers)
+    elif presentation == "cards":
+        rendered = _render_cards(heading, description, value, rendered_schema, root_schema, modifiers=modifiers)
+    elif presentation == "details":
+        content = _render_value(value, _without_presentation(schema), root_schema)
+        rendered = _details(heading, description, content, modifiers=modifiers)
+    elif presentation == "media":
+        rendered = _render_media(heading, description, value, view, modifiers=modifiers)
+    else:
+        content = _render_value(value, rendered_schema, root_schema)
+        rendered = _card(heading, description, content, modifiers=modifiers)
+    if view.get("collapsed") is True and presentation != "details":
+        rendered = _details(heading, description, rendered, modifiers=modifiers)
+    if section_id is not None:
+        rendered = f'<span class="section-anchor" id="{section_id}"></span>{rendered}'
+    return rendered
+
+
+def _html_id(value: str) -> str:
+    """Schema property name を安全な fragment identifier にする。"""
+    return "".join(character if character.isalnum() or character in "-_" else "-" for character in value)
 
 
 def _view(schema: Mapping[str, object]) -> dict[str, object]:
@@ -139,10 +166,10 @@ def _card(heading: str, description: str, content: str, *, modifiers: str = "") 
     return f'<section class="{classes}"><h2>{escape(heading)}</h2>{description_html}{content}</section>'
 
 
-def _details(heading: str, description: str, content: str) -> str:
+def _details(heading: str, description: str, content: str, *, modifiers: str = "") -> str:
     description_html = f'<p class="view-description">{escape(description)}</p>' if description else ""
     return (
-        f'<details class="view-details"><summary>{escape(heading)}</summary>'
+        f'<details class="view-details{modifiers}"><summary>{escape(heading)}</summary>'
         f'<div class="view-details-content">{description_html}{content}</div></details>'
     )
 
@@ -256,7 +283,11 @@ def _render_value(value: object, schema: Mapping[str, object], root_schema: Mapp
     rendered = escape(str(value))
     if view.get("copyable") is True:
         diff_class = " view-diff" if view.get("diff") is True else ""
-        return f'<div class="copyable-content{diff_class}" tabindex="0" aria-label="コピー対象">{rendered}</div>'
+        return (
+            f'<div class="copyable-content{diff_class}" tabindex="0" '
+            'aria-label="コピー対象。選択してコピー" title="選択してコピー">'
+            f"{rendered}</div>"
+        )
     if view.get("diff") is True:
         return f'<div class="view-diff">{rendered}</div>'
     return rendered
@@ -268,6 +299,8 @@ def _render_table(
     value: object,
     schema: Mapping[str, object],
     root_schema: Mapping[str, object],
+    *,
+    modifiers: str = "",
 ) -> str:
     if not isinstance(value, list) or not all(isinstance(row, dict) for row in value):
         raise DocumentRenderError(f"table 表示には object の array が必要です: {heading}")
@@ -289,7 +322,7 @@ def _render_table(
         body = f'<tr><td class="empty" colspan="{max(1, len(columns))}">No rows</td></tr>'
     description_html = f'<p class="view-description">{escape(description)}</p>' if description else ""
     return (
-        f'<section class="view-table-section"><h2>{escape(heading)}</h2>{description_html}'
+        f'<section class="view-table-section{modifiers}"><h2>{escape(heading)}</h2>{description_html}'
         f'<div class="table-scroll"><table class="view-table"><thead><tr>{header}</tr></thead>'
         f"<tbody>{body}</tbody></table></div></section>"
     )
@@ -301,6 +334,8 @@ def _render_cards(
     value: object,
     schema: Mapping[str, object],
     root_schema: Mapping[str, object],
+    *,
+    modifiers: str = "",
 ) -> str:
     if not isinstance(value, list) or not all(isinstance(item, dict) for item in value):
         raise DocumentRenderError(f"cards 表示には object の array が必要です: {heading}")
@@ -308,19 +343,27 @@ def _render_cards(
     item_schema_value = schema.get("items")
     item_schema = item_schema_value if isinstance(item_schema_value, dict) else {}
     labels = [str(item.get("title") or item.get("name") or f"Entry {index}") for index, item in enumerate(value, 1)]
-    flow = "".join(f"<li>{escape(label)}</li>" for label in labels)
+    flow = "".join(f'<li><a href="#track-{index}">{escape(label)}</a></li>' for index, label in enumerate(labels, 1))
     cards = "".join(
-        f'<article class="entry-card"><h3>{escape(label)}</h3>{_render_value(item, item_schema, root_schema)}</article>'
-        for label, item in zip(labels, value, strict=True)
+        f'<article class="entry-card" id="track-{index}"><h3>{escape(label)}</h3>'
+        f"{_render_value(item, item_schema, root_schema)}</article>"
+        for index, (label, item) in enumerate(zip(labels, value, strict=True), 1)
     )
     description_html = f'<p class="view-description">{escape(description)}</p>' if description else ""
     return (
-        f'<section class="view-cards-section"><h2>{escape(heading)}</h2>{description_html}'
+        f'<section class="view-cards-section{modifiers}"><h2>{escape(heading)}</h2>{description_html}'
         f'<ol class="card-flow">{flow}</ol><div class="entry-card-grid">{cards}</div></section>'
     )
 
 
-def _render_media(heading: str, description: str, value: object, view: Mapping[str, object]) -> str:
+def _render_media(
+    heading: str,
+    description: str,
+    value: object,
+    view: Mapping[str, object],
+    *,
+    modifiers: str = "",
+) -> str:
     media_type = view.get("mediaType", view.get("media-type", "link"))
     if not isinstance(media_type, str) or media_type not in _MEDIA_TYPES:
         raise DocumentRenderError("x-view.mediaType は image/audio/video/link のいずれかにしてください")
@@ -342,7 +385,10 @@ def _render_media(heading: str, description: str, value: object, view: Mapping[s
         else:
             rendered.append(f'<a href="{safe_reference}">{escape(reference)}</a>')
     description_html = f'<p class="view-description">{escape(description)}</p>' if description else ""
-    return f'<section class="view-media"><h2>{escape(heading)}</h2>{description_html}{"".join(rendered)}</section>'
+    return (
+        f'<section class="view-media{modifiers}"><h2>{escape(heading)}</h2>'
+        f'{description_html}{"".join(rendered)}</section>'
+    )
 
 
 def _is_local_asset(reference: str, *, allow_plan_preview: bool = False) -> bool:

@@ -124,6 +124,55 @@ def test_review_annotations_create_priority_summary_and_collapsed_content() -> N
     assert "<summary>Audit trail</summary>" in html
 
 
+@pytest.mark.parametrize("presentation", ["table", "cards", "media"])
+def test_collapsed_section_preserves_its_presentation_and_review_modifiers(presentation: str) -> None:
+    values = {
+        "table": ([{"name": "A"}], {"items": {"properties": {"name": {}}}}),
+        "cards": ([{"title": "A"}], {"items": {"properties": {"title": {}}}}),
+        "media": ("assets/a.jpg", {}),
+    }
+    value, extra = values[presentation]
+    view = {
+        "presentation": presentation,
+        "collapsed": True,
+        "summary": True,
+        "priority": "high",
+    }
+    if presentation == "media":
+        view["mediaType"] = "image"
+    section = {"title": "Review", "x-view": view, **extra}
+    html = render_schema_document({"review": value}, {"properties": {"review": section}})
+
+    assert 'class="view-details view-summary view-priority-high"' in html
+    assert {"table": "view-table", "cards": "entry-card-grid", "media": "<img"}[presentation] in html
+
+
+def test_review_view_offers_sticky_toc_and_explains_csp_safe_copy_and_search() -> None:
+    html = render_schema_document(
+        {"description": "line one\nline two", "tracks": [{"title": "Opening"}]},
+        {
+            "title": "Release review",
+            "properties": {
+                "description": {"title": "Final description", "x-view": {"copyable": True}},
+                "tracks": {
+                    "title": "Tracks",
+                    "x-view": {"presentation": "cards"},
+                    "items": {"properties": {"title": {}}},
+                },
+            },
+        },
+    )
+
+    assert 'class="review-nav"' in html
+    assert 'href="#section-description"' in html
+    assert 'id="section-description"' in html
+    assert 'href="#track-1"' in html
+    assert "Ctrl/⌘+F" in html
+    assert "選択してコピー" in html
+    assert "position: sticky" in html
+    assert "@media (max-width: 39.99rem)" in html
+
+
 def test_copyable_and_diff_annotations_preserve_multiline_review_text() -> None:
     schema = {
         "title": "Publish review",

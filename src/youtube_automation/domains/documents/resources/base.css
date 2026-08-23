@@ -53,6 +53,20 @@ main {
   margin-inline: auto;
 }
 
+.review-nav {
+  order: -1;
+  position: sticky;
+  z-index: 1;
+  inset-block-start: 0;
+  padding: var(--space-xs) var(--space-sm);
+  border-block: 1px solid var(--color-rule-strong);
+  background: var(--color-paper);
+}
+
+.review-nav p { margin: 0 0 var(--space-2xs); color: var(--color-ink-muted); font-size: 0.8125rem; }
+.review-nav ol { display: flex; flex-wrap: wrap; gap: var(--space-2xs) var(--space-sm); margin: 0; padding: 0; list-style: none; }
+.review-nav a, .card-flow a { color: var(--color-link); }
+
 .page-header {
   display: grid;
   gap: var(--space-sm);
@@ -256,4 +270,11 @@ video:focus-visible {
 @media (min-width: 40rem) {
   dl { grid-template-columns: minmax(8rem, 0.35fr) minmax(0, 1fr); }
   dd + dt { margin-block-start: 0; }
+}
+
+@media (max-width: 39.99rem) {
+  .review-nav { position: static; }
+  .review-nav ol { display: grid; }
+  .view-card, .view-media, .view-cards-section, .view-details-content { padding: var(--space-sm); }
+  .view-table { min-width: 32rem; }
 }
