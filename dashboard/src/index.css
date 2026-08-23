@@ -372,7 +372,13 @@
 @layer components {
   .dashboard-palette-background {
     background-color: var(--background);
-    background-image: linear-gradient(var(--border) 1px, transparent 1px);
+    background-image:
+      linear-gradient(
+        90deg,
+        var(--dashboard-accent-surface),
+        transparent 42rem
+      ),
+      linear-gradient(var(--border) 1px, transparent 1px);
     background-size: 100% 4rem;
   }
 
@@ -470,6 +476,7 @@
   .dashboard-section-heading {
     padding-bottom: var(--space-sm);
     border-bottom: var(--rule-hairline) solid var(--foreground);
+    border-left-color: var(--primary);
     font-style: normal;
   }
 
