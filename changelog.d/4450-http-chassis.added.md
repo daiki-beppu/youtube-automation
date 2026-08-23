@@ -1,0 +1,1 @@
+- route table と parsed request handler を備え、origin・body 上限・JSON response・domain error・OPTIONS・PID / stop / idle lifecycle を一元管理する HTTP chassis を追加する（#4450）。
