@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from importlib.resources import files
 from pathlib import Path
-from typing import Final, Iterable, Mapping
+from typing import Final, Iterable, Literal, Mapping
 
 from youtube_automation.core.errors import AutomationError
 from youtube_automation.domains.documents.published import read_published_json_document
@@ -43,12 +43,15 @@ class InvalidArtifact:
     reason: str
 
 
+FreshnessReason = Literal["missing", "relative", "absolute"]
+
+
 @dataclass(frozen=True, slots=True)
 class ArtifactFreshness:
     """Result of comparing an artifact set with its upstream evidence."""
 
     is_stale: bool
-    reason: str | None
+    reason: FreshnessReason | None
     artifact_date: date | None
     against_date: date | None
 
@@ -79,8 +82,11 @@ class ArtifactSet:
         if max_age_days is not None:
             if max_age_days < 0:
                 raise ValueError("max_age_days は 0 以上で指定してください")
-            reference = against_date or artifact_date
-            if ((today or date.today()) - reference).days > max_age_days:
+            # Absolute freshness describes the age of upstream evidence.  With no
+            # upstream date there is nothing against which to declare the artifact
+            # stale; using the artifact's own date here would turn an unavailable
+            # upstream into a false stale result.
+            if against_date is not None and ((today or date.today()) - against_date).days > max_age_days:
                 return ArtifactFreshness(True, "absolute", artifact_date, against_date)
         return ArtifactFreshness(False, None, artifact_date, against_date)
 
@@ -173,7 +179,7 @@ def resolve_artifacts(
             invalid.append(InvalidArtifact(path, str(error)))
         else:
             valid.append(path)
-    latest = max(valid, key=lambda path: (_filename_date(path) or date.min, path.name), default=None)
+    latest = _latest_dated_path(valid)
     return ArtifactSet(artifact, tuple(valid), tuple(invalid), latest)
 
 
@@ -199,6 +205,10 @@ def _filename_date(path: Path) -> date | None:
         return None
 
 
+def _latest_dated_path(paths: Iterable[Path]) -> Path | None:
+    return max(paths, key=lambda path: (_filename_date(path) or date.min, path.name), default=None)
+
+
 def _latest_against_date(against: Path | ArtifactSet | Iterable[Path]) -> date | None:
     if isinstance(against, ArtifactSet):
         paths = against.valid
@@ -206,7 +216,8 @@ def _latest_against_date(against: Path | ArtifactSet | Iterable[Path]) -> date |
         paths = (against,)
     else:
         paths = tuple(against)
-    return max((_filename_date(path) for path in paths), default=None, key=lambda value: value or date.min)
+    latest = _latest_dated_path(paths)
+    return _filename_date(latest) if latest is not None else None
 
 
 def lint_operational_artifacts(

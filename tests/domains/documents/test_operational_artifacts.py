@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import date
 from pathlib import Path
 
 from tests.helpers.paths import REPO_ROOT
@@ -232,3 +233,50 @@ def test_artifact_freshness_compares_filename_dates(tmp_path: Path) -> None:
 
     assert freshness.is_stale is True
     assert freshness.reason == "relative"
+
+
+def test_artifact_freshness_applies_absolute_limit_to_upstream_date(tmp_path: Path) -> None:
+    report = tmp_path / "reports" / "analysis_20260822.json"
+    _published_analysis(report)
+    data = tmp_path / "data" / "analytics_data_20260822.json"
+
+    freshness = resolve_artifacts(tmp_path, "reports/analysis_*.json").freshness(
+        against=data,
+        max_age_days=1,
+        today=date(2026, 8, 24),
+    )
+
+    assert freshness.is_stale is True
+    assert freshness.reason == "absolute"
+    assert freshness.against_date == date(2026, 8, 22)
+
+
+def test_artifact_freshness_without_upstream_date_is_not_absolute_stale(tmp_path: Path) -> None:
+    report = tmp_path / "reports" / "analysis_20260820.json"
+    _published_analysis(report)
+
+    freshness = resolve_artifacts(tmp_path, "reports/analysis_*.json").freshness(
+        against=(),
+        max_age_days=1,
+        today=date(2026, 8, 24),
+    )
+
+    assert freshness.is_stale is False
+    assert freshness.reason is None
+    assert freshness.artifact_date == date(2026, 8, 20)
+    assert freshness.against_date is None
+
+
+def test_missing_artifact_takes_precedence_over_absolute_limit(tmp_path: Path) -> None:
+    data = tmp_path / "data" / "analytics_data_20260820.json"
+
+    freshness = resolve_artifacts(tmp_path, "reports/analysis_*.json").freshness(
+        against=data,
+        max_age_days=1,
+        today=date(2026, 8, 24),
+    )
+
+    assert freshness.is_stale is True
+    assert freshness.reason == "missing"
+    assert freshness.artifact_date is None
+    assert freshness.against_date == date(2026, 8, 20)
