@@ -14,7 +14,7 @@ Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJE
 | Plan | Title | Priority | Effort | Depends on | Issue | PR | Status |
 |------|-------|----------|--------|------------|-------|-----|--------|
 | 033 | changelog fragment 基盤（`changelog.d/` + `yt-changelog-compile`）を導入し CHANGELOG の並列マージ conflict を解消 | P1 | M | — | [#4483](https://github.com/daiki-beppu/youtube-automation/issues/4483) | — | DONE |
-| 028 | music skill 内の stale fork `generate_suno_prompts.py`（19KB・95 行乖離・wheel 配布に混入）を削除 | P1 | S | 033 (soft) | [#4460](https://github.com/daiki-beppu/youtube-automation/issues/4460) | — | TODO |
+| 028 | music skill 内の stale fork `generate_suno_prompts.py`（19KB・95 行乖離・wheel 配布に混入）を削除 | P1 | S | 033 (soft) | [#4460](https://github.com/daiki-beppu/youtube-automation/issues/4460) | — | DONE |
 | 029 | 到達不能な video_validator クラスタ（446 行 + テスト 278 行）と B3 facade `domains/media/{video,audio}.py` を削除 | P1 | S | 033 (soft) | [#4461](https://github.com/daiki-beppu/youtube-automation/issues/4461) | — | TODO |
 | 030 | 構築経路が封鎖済みの CodexGenerator（未監査自動返信の footgun）を削除 | P1 | S | 033 (soft) | [#4462](https://github.com/daiki-beppu/youtube-automation/issues/4462) | — | TODO |
 | 031 | suno-helper の廃止済み popup 残骸（#892 の「後続 PR」約 2000 PR 分未着手）を物理削除し README を実態に合わせる | P1 | S | 033 (soft) | [#4463](https://github.com/daiki-beppu/youtube-automation/issues/4463) | — | TODO |
