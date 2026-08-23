@@ -113,8 +113,10 @@ def _render_approval_summary(document: object, schema: Mapping[str, object], roo
     rows = "".join(
         f"<dt>{escape(label)}</dt><dd>{_status_chip(value, semantic)}</dd>" for label, value, semantic in statuses
     )
-    severity = "fail" if any(semantic == "fail" for _, _, semantic in statuses) else (
-        "warning" if any(semantic == "warning" for _, _, semantic in statuses) else "pass"
+    severity = (
+        "fail"
+        if any(semantic == "fail" for _, _, semantic in statuses)
+        else ("warning" if any(semantic == "warning" for _, _, semantic in statuses) else "pass")
     )
     return (
         f'<section class="approval-summary approval-{severity}" aria-label="承認サマリー">'
