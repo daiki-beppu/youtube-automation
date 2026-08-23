@@ -20,13 +20,11 @@
   --release-font-display: ui-sans-serif, system-ui, sans-serif;
   --release-font-body: ui-sans-serif, system-ui, sans-serif;
   --release-font-mono: ui-monospace, "SFMono-Regular", Consolas, monospace;
-  --release-space-2xs: 0.5rem;
   --release-space-xs: 0.75rem;
   --release-space-sm: 1rem;
   --release-space-md: 1.5rem;
   --release-space-lg: 2rem;
   --release-space-xl: 3rem;
-  --release-space-2xl: 4rem;
   --release-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --release-duration: 140ms;
 }
