@@ -23,7 +23,7 @@ analytics mode の前提スキルは **(analyze ∥ benchmark) → channel-strat
 - `/channel-strategy --persona` は最新ベンチマークのタグデータと `/channel-research --voice` を入力に暫定 `persona-definition.json` pair を作る
 - `/channel-strategy --persona` は暫定 persona から `/channel-strategy --scene` を実行し、その結果を反映して最終 `persona-definition.json` pair を更新する
 
-**analyze / benchmark は並列判定。その後 `/channel-strategy --persona` の最終 persona chain を判定する。** `persona-definition.json` / `viewing-scene-matrix.json` は `RepositorySchema.CHANNEL_STRATEGY` の JSON+HTML pair として検証し、相互参照も確認する（mtime 比較なし）。候補が片側欠落・schema 不正・HTML digest 不一致・参照不整合なら fail-closed で停止する。両文書が未生成の場合、analytics mode の `ttp_mode: false` は Phase 1 を中断し、`true` は共通の欲求語彙選択規則による fallback で続行する。旧 Markdown は入力にしない。stale report は `ttp_mode` にかかわらず、自動更新と再検証の成功時だけ続行する。
+**analyze / benchmark は並列判定。その後 `/channel-strategy --persona` の最終 persona chain を判定する。** persona と scene の各 JSON+HTML pair を独立に分類する（mtime 比較なし）。両 pair が fully present なら canonical validator で相互参照を確認する。各 pair の JSON/HTML 片側欠落、fully present だが schema・digest・document_type が不正、scene だけ fully present、または両 pair の参照不整合は fail-closed で停止する。両文書が未生成、または producer の暫定正規状態として persona pair だけが検証済みで scene pair が未生成なら既存の mode 別 fallback に委ねる。旧 Markdown は入力にしない。stale report は `ttp_mode` にかかわらず、自動更新と再検証の成功時だけ続行する。
 
 検証済み analytics JSON+HTML が存在しない場合は stale ではなく、以下の入力モードに分岐する。JSON または HTML の候補が存在する場合は `.claude/skills/analytics/references/analysis-json-validator.md` の validator 成功を analytics mode の Hard Gate とする。片方不在、ファイル名日付不一致、schema/pair不一致、validator の exit 非 0 は fallback せず Phase 1 を中断し、`/analytics --analyze` の再実行を案内する:
 
@@ -40,7 +40,7 @@ analytics mode の前提スキルは **(analyze ∥ benchmark) → channel-strat
 | 1a | `/analytics --analyze` | 同じファイル名日付の `reports/analysis_*.json` + `.html` | 先に schema/pair validator が exit 0 であること。次のいずれかを満たせば stale（OR 結合）: (1) **相対比較** — 最新 `data/analytics_data_*.json` のファイル名日付 (YYYYMMDD) より古い / (2) **絶対鮮度** — 最新 `data/analytics_data_*.json` のファイル名日付が実行日 (today) から `config/skills/collection-ideate.yaml` の `freshness_days`（既定 7 日）を超えて経過 | 検証済み pair 不在は benchmark fallback mode / minimal mode へ分岐する。片方だけ存在、不正、または validator 失敗は停止。相対 stale は `/analytics --analyze`、絶対 stale は `/analytics --collect` → `/analytics --analyze` を自動実行し、再検証成功時だけ続行する |
 | 1b | `/channel-research --benchmark` | 検証済み `docs/benchmarks/benchmark-report.json` + `.html` と `data/benchmark_YYYYMMDD.json` | analytics mode では pair の古い方の mtime が `config/skills/benchmark.yaml` の `freshness_days`（既定 3 日）より古ければ stale | analytics mode では `/channel-research --benchmark` を Skill ツールで実行（内部で鮮度チェック + 差分更新）。benchmark fallback mode では検証済み JSON を読む。minimal mode は `ttp_mode: false` ならスキップし、`true` なら `/channel-research --benchmark` を案内して停止する |
 | 2 | `/channel-strategy --persona` | `docs/channel/personas/persona-definition.json` + `.html` | `read_published_json_document(..., RepositorySchema.CHANNEL_STRATEGY)` 相当で検証（mtime 比較なし） | pair 未生成時の mode 別 fallback は従来どおり。候補の片側欠落・schema/pair 不正は停止 |
-| 3 | `/channel-strategy --persona` finalization | `docs/plans/viewing-scene-matrix.json` + `.html` | 同じ canonical reader で検証し、scene の `persona_id`、persona の `scene_ids` と scene ID の相互参照を確認 | pair 未生成時の mode 別 fallback は従来どおり。pair/参照不正は成果物を変更せず停止 |
+| 3 | `/channel-strategy --persona` finalization | `docs/plans/viewing-scene-matrix.json` + `.html` | 同じ canonical reader で検証し、scene の `persona_id` と、producer と共有する参照 contract（persona の `scene_ids` は scene ID の正当な subset）を確認。完成 chain では両 ID 集合を非空とする | persona pair が正常で scene pair が未生成なら mode 別 fallback。各 pair の片側欠落、scene pair だけ存在、pair/参照不正は成果物を変更せず停止 |
 
 ## workflow-state.json との同期
 
@@ -184,8 +184,22 @@ esac
 
 # 2-3. canonical persona chain — JSON+HTML pair と参照整合性を検証
 PERSONA_JSON=docs/channel/personas/persona-definition.json
+PERSONA_HTML=${PERSONA_JSON%.json}.html
 SCENE_JSON=docs/plans/viewing-scene-matrix.json
-if [ -e "$PERSONA_JSON" ] || [ -e "${PERSONA_JSON%.json}.html" ] || [ -e "$SCENE_JSON" ] || [ -e "${SCENE_JSON%.json}.html" ]; then
+SCENE_HTML=${SCENE_JSON%.json}.html
+PERSONA_PAIR=absent
+SCENE_PAIR=absent
+if [ -e "$PERSONA_JSON" ] && [ -e "$PERSONA_HTML" ]; then PERSONA_PAIR=full
+elif [ -e "$PERSONA_JSON" ] || [ -e "$PERSONA_HTML" ]; then PERSONA_PAIR=partial
+fi
+if [ -e "$SCENE_JSON" ] && [ -e "$SCENE_HTML" ]; then SCENE_PAIR=full
+elif [ -e "$SCENE_JSON" ] || [ -e "$SCENE_HTML" ]; then SCENE_PAIR=partial
+fi
+
+if [ "$PERSONA_PAIR" = "partial" ] || [ "$SCENE_PAIR" = "partial" ] || { [ "$PERSONA_PAIR" = "absent" ] && [ "$SCENE_PAIR" = "full" ]; }; then
+  echo "persona chain 検証失敗 → pair 状態が不完全なため、成果物を変更せず /channel-strategy --persona の再実行を案内"
+  exit 1
+elif [ "$PERSONA_PAIR" = "full" ] && [ "$SCENE_PAIR" = "full" ]; then
   if ! uv run python .claude/skills/wf-new/references/validate_persona_chain.py \
     --persona-json "$PERSONA_JSON" \
     --scene-json "$SCENE_JSON"
@@ -195,6 +209,13 @@ if [ -e "$PERSONA_JSON" ] || [ -e "${PERSONA_JSON%.json}.html" ] || [ -e "$SCENE
   fi
   echo "検証済み canonical persona chain を使用"
   PERSONA_CHAIN_VALID=true
+elif [ "$PERSONA_PAIR" = "full" ]; then
+  if ! uv run python .claude/skills/wf-new/references/validate_persona_chain.py --persona-json "$PERSONA_JSON"; then
+    echo "persona chain 検証失敗 → 暫定 persona pair が不正なため、成果物を変更せず /channel-strategy --persona の再実行を案内"
+    exit 1
+  fi
+  echo "検証済み暫定 persona pair・scene 未生成 → mode 別 fallback に委譲"
+  PERSONA_CHAIN_VALID=false
 else
   PERSONA_CHAIN_VALID=false
 fi
