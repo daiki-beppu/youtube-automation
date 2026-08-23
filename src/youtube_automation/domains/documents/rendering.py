@@ -256,10 +256,7 @@ def _render_value(value: object, schema: Mapping[str, object], root_schema: Mapp
     rendered = escape(str(value))
     if view.get("copyable") is True:
         diff_class = " view-diff" if view.get("diff") is True else ""
-        return (
-            f'<div class="copyable-content{diff_class}" tabindex="0" '
-            f'aria-label="コピー対象">{rendered}</div>'
-        )
+        return f'<div class="copyable-content{diff_class}" tabindex="0" aria-label="コピー対象">{rendered}</div>'
     if view.get("diff") is True:
         return f'<div class="view-diff">{rendered}</div>'
     return rendered
