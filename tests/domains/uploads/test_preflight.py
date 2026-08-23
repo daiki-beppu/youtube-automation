@@ -93,6 +93,8 @@ def _write_collection(
     master_dir = collection_dir / "01-master"
     master_dir.mkdir(parents=True)
     (master_dir / "master.mp4").write_bytes(b"probe is mocked")
+    (collection_dir / "02-Individual-music").mkdir()
+    (collection_dir / "10-assets").mkdir()
     return collection_dir
 
 

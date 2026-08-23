@@ -127,20 +127,19 @@ def test_shorts_cli_normalizes_collection_to_absolute_path_for_upload(monkeypatc
 
 
 @pytest.mark.parametrize(
-    ("option", "expected_action", "preflight"),
+    ("option", "expected_action"),
     [
-        ("--status", "show_status", False),
-        ("--plan", "show_plan", True),
-        (None, "execute_next_step", True),
+        ("--status", "show_status"),
+        ("--plan", "show_plan"),
+        (None, "execute_next_step"),
     ],
 )
-def test_collection_cli_dispatches_normal_operation(monkeypatch, option, expected_action, preflight):
+def test_collection_cli_dispatches_normal_operation(monkeypatch, option, expected_action):
     from youtube_automation.commands.uploads import collection_uploader
 
     target = Path("/collection")
     uploader = SimpleNamespace(
         find_collection=MagicMock(return_value=target),
-        ensure_upload_preflight=MagicMock(),
         show_status=MagicMock(),
         show_plan=MagicMock(),
         execute_next_step=MagicMock(),
@@ -165,7 +164,6 @@ def test_collection_cli_dispatches_normal_operation(monkeypatch, option, expecte
         allow_duration_outside_target=False,
     )
     uploader.find_collection.assert_called_once_with("slug")
-    assert uploader.ensure_upload_preflight.called is preflight
     getattr(uploader, expected_action).assert_called_once_with(target)
 
 

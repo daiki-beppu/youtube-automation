@@ -27,7 +27,6 @@ from youtube_automation.domains.uploads._playlist_assignment import PlaylistAssi
 from youtube_automation.domains.uploads._preflight import PreflightChecker
 from youtube_automation.domains.uploads._published_dates import PublishedDatesScheduler
 from youtube_automation.domains.uploads._tracking_io import TrackingStore
-from youtube_automation.domains.uploads.preflight import ensure_collection_preflight
 from youtube_automation.domains.uploads.upload_journal import UploadJournal, UploadJournalOutcome
 from youtube_automation.domains.uploads.youtube import YouTubeAutoUploader
 from youtube_automation.infrastructure.filesystem import (
@@ -237,11 +236,6 @@ class CollectionUploader:
         publish_at: str | None = None,
     ) -> dict:
         return self.complete_collection_executor.run(collection_path, tracking, publish_at)
-
-    def ensure_upload_preflight(self, collection_path: Path) -> None:
-        """CLI の各入口で共通の骨格・タイトル preflight を実行する。"""
-        ensure_collection_preflight(collection_path)
-        self.uploader.preflight_check(collection_path)
 
     # ─── ステータス表示 ──────────────────────────────
 

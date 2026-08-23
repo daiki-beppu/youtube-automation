@@ -114,7 +114,7 @@ def test_upload_preflight_failure_notifies_before_error_propagates(monkeypatch, 
     target = tmp_path / "collections" / "planning" / "night-rain"
     uploader = MagicMock()
     uploader.find_collection.return_value = target
-    uploader.ensure_upload_preflight.side_effect = ConfigError("channel mismatch")
+    uploader.execute_next_step.side_effect = ConfigError("channel mismatch")
     sink = RecordingSink()
     monkeypatch.setattr(collection_uploader, "CollectionUploader", lambda **_kwargs: uploader)
     monkeypatch.setattr(collection_uploader, "create_authenticated_youtube_clients", lambda: object())
@@ -136,4 +136,4 @@ def test_upload_preflight_failure_notifies_before_error_propagates(monkeypatch, 
             "upload-preflight",
         )
     ]
-    uploader.execute_next_step.assert_not_called()
+    uploader.execute_next_step.assert_called_once_with(target)
