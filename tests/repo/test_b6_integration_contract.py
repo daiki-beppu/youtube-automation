@@ -135,8 +135,8 @@ def test_b6_receipt_accounts_for_every_old_owner_without_duplicates() -> None:
 
     old_owners = [mapping["old_owner"] for mapping in mappings if isinstance(mapping, dict)]
 
-    assert len(old_owners) == 224
-    assert len(set(old_owners)) == 224
+    assert len(old_owners) == 223
+    assert len(set(old_owners)) == 223
     assert receipt["counts"]["old_owners"] == len(old_owners)
     assert all(owner for owner in old_owners)
 

@@ -3,7 +3,7 @@
   "status": "integrated",
   "source": "B1-B6 owner and provenance integration",
   "counts": {
-    "old_owners": 224,
+    "old_owners": 223,
     "provenance_groups": 27,
     "delete": 20,
     "merge": 5,
@@ -75,7 +75,7 @@
       "old_owner": "legacy.audio_formats",
       "exact_new_owner": "src/youtube_automation/domains/media/audio_formats.py",
       "symbols": ["AUDIO_EXTS"],
-      "consumers": ["src/youtube_automation/domains/media/audio.py", "src/youtube_automation/domains/media/video_validator.py", "src/youtube_automation/domains/metadata/service.py", "src/youtube_automation/commands/suno/suno_audio_cleanup.py"],
+      "consumers": ["src/youtube_automation/domains/metadata/service.py", "src/youtube_automation/commands/suno/suno_audio_cleanup.py"],
       "handoff": "B4"
     },
     {
@@ -224,13 +224,6 @@
       "symbols": ["resolve_configured_benchmark_references", "plan_ttp_reference_assignments"],
       "consumers": ["src/youtube_automation/commands/thumbnail/auto_select_thumbnail.py"],
       "handoff": "retained"
-    },
-    {
-      "old_owner": "legacy.video_validator",
-      "exact_new_owner": "src/youtube_automation/domains/media/video_validator.py",
-      "symbols": ["VideoValidator"],
-      "consumers": ["src/youtube_automation/commands/analytics/video_validator.py"],
-      "handoff": "B4"
     },
     {
       "old_owner": "legacy..claude.CLAUDE.template.md",
