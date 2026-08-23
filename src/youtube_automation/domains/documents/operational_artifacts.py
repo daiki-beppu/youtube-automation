@@ -6,11 +6,14 @@ import ast
 import json
 import re
 from dataclasses import dataclass
+from datetime import date, datetime
 from importlib.resources import files
 from pathlib import Path
-from typing import Final, Mapping
+from typing import Final, Iterable, Mapping
 
-from youtube_automation.domains.documents.schema_registry import repository_schema_names
+from youtube_automation.core.errors import AutomationError
+from youtube_automation.domains.documents.published import read_published_json_document
+from youtube_automation.domains.documents.schema_registry import RepositorySchema, repository_schema_names
 from youtube_automation.domains.skills.inventory import SkillInventory
 
 _TARGET_SEGMENTS: Final[tuple[str, ...]] = (
@@ -30,6 +33,56 @@ class OperationalArtifact:
     owner: str
     schema: str
     consumers: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class InvalidArtifact:
+    """A canonical artifact instance which failed its published-document contract."""
+
+    path: Path
+    reason: str
+
+
+@dataclass(frozen=True, slots=True)
+class ArtifactFreshness:
+    """Result of comparing an artifact set with its upstream evidence."""
+
+    is_stale: bool
+    reason: str | None
+    artifact_date: date | None
+    against_date: date | None
+
+
+@dataclass(frozen=True, slots=True)
+class ArtifactSet:
+    """Resolved valid and invalid instances of one inventory artifact."""
+
+    artifact: OperationalArtifact
+    valid: tuple[Path, ...]
+    invalid: tuple[InvalidArtifact, ...]
+    latest: Path | None
+
+    def freshness(
+        self,
+        *,
+        against: Path | ArtifactSet | Iterable[Path],
+        max_age_days: int | None = None,
+        today: date | None = None,
+    ) -> ArtifactFreshness:
+        """Compare filename dates, optionally applying an absolute age limit."""
+        artifact_date = _filename_date(self.latest) if self.latest is not None else None
+        against_date = _latest_against_date(against)
+        if artifact_date is None:
+            return ArtifactFreshness(True, "missing", None, against_date)
+        if against_date is not None and artifact_date < against_date:
+            return ArtifactFreshness(True, "relative", artifact_date, against_date)
+        if max_age_days is not None:
+            if max_age_days < 0:
+                raise ValueError("max_age_days は 0 以上で指定してください")
+            reference = against_date or artifact_date
+            if ((today or date.today()) - reference).days > max_age_days:
+                return ArtifactFreshness(True, "absolute", artifact_date, against_date)
+        return ArtifactFreshness(False, None, artifact_date, against_date)
 
 
 @dataclass(frozen=True, slots=True)
@@ -89,6 +142,71 @@ def load_operational_artifact_inventory() -> OperationalArtifactInventory:
     if not isinstance(payload, Mapping):
         raise ValueError("operational-artifacts.json は object である必要があります")
     return OperationalArtifactInventory.from_mapping(payload)
+
+
+def resolve_artifacts(
+    channel_dir: Path,
+    artifact_id: str,
+    inventory: OperationalArtifactInventory | None = None,
+) -> ArtifactSet:
+    """Resolve one inventory path to validated runtime instances under a channel."""
+    contract = inventory or load_operational_artifact_inventory()
+    matches = [artifact for artifact in contract.artifacts if artifact.path == artifact_id]
+    if len(matches) != 1:
+        raise ValueError(f"未登録の operational artifact です: {artifact_id}")
+    artifact = matches[0]
+    canonical = _canonical_path_pattern(artifact.path)
+    glob_pattern = re.sub(r"<[^/]+>", "*", artifact.path)
+    candidates = sorted(path for path in channel_dir.glob(glob_pattern) if path.is_file())
+    valid: list[Path] = []
+    invalid: list[InvalidArtifact] = []
+    schema = RepositorySchema(artifact.schema)
+    for path in candidates:
+        relative = path.relative_to(channel_dir).as_posix()
+        # A broad inventory glob may also match sidecars. They are other artifact
+        # kinds, not malformed instances of this artifact.
+        if canonical.fullmatch(relative) is None:
+            continue
+        try:
+            read_published_json_document(path, schema)
+        except AutomationError as error:
+            invalid.append(InvalidArtifact(path, str(error)))
+        else:
+            valid.append(path)
+    latest = max(valid, key=lambda path: (_filename_date(path) or date.min, path.name), default=None)
+    return ArtifactSet(artifact, tuple(valid), tuple(invalid), latest)
+
+
+def _canonical_path_pattern(path: str) -> re.Pattern[str]:
+    pieces: list[str] = []
+    cursor = 0
+    token_pattern = re.compile(r"\*|<[^/]+>")
+    for match in token_pattern.finditer(path):
+        pieces.append(re.escape(path[cursor : match.start()]))
+        pieces.append(r"\d{8}" if match.group() == "*" else r"[^/]+")
+        cursor = match.end()
+    pieces.append(re.escape(path[cursor:]))
+    return re.compile("".join(pieces))
+
+
+def _filename_date(path: Path) -> date | None:
+    match = re.search(r"(?<!\d)(\d{8})(?!\d)", path.name)
+    if match is None:
+        return None
+    try:
+        return datetime.strptime(match.group(1), "%Y%m%d").date()
+    except ValueError:
+        return None
+
+
+def _latest_against_date(against: Path | ArtifactSet | Iterable[Path]) -> date | None:
+    if isinstance(against, ArtifactSet):
+        paths = against.valid
+    elif isinstance(against, Path):
+        paths = (against,)
+    else:
+        paths = tuple(against)
+    return max((_filename_date(path) for path in paths), default=None, key=lambda value: value or date.min)
 
 
 def lint_operational_artifacts(

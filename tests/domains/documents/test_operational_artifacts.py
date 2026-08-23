@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from tests.helpers.paths import REPO_ROOT
@@ -9,7 +10,10 @@ from youtube_automation.domains.documents.operational_artifacts import (
     OperationalArtifactInventory,
     lint_operational_artifacts,
     load_operational_artifact_inventory,
+    resolve_artifacts,
 )
+from youtube_automation.domains.documents.rendering import render_repository_document
+from youtube_automation.domains.documents.schema_registry import RepositorySchema
 from youtube_automation.domains.skills.inventory import SkillInventory
 
 
@@ -181,3 +185,50 @@ def test_repository_inventory_matches_all_distributed_skills_and_sources() -> No
 
     assert inventory.artifacts
     assert lint_operational_artifacts(REPO_ROOT, SkillInventory(REPO_ROOT), inventory) == []
+
+
+def _published_analysis(path: Path) -> None:
+    document = json.loads((REPO_ROOT / "tests/fixtures/documents/analysis-report.json").read_text(encoding="utf-8"))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(document), encoding="utf-8")
+    path.with_suffix(".html").write_text(
+        render_repository_document(RepositorySchema.ANALYSIS_REPORT, document), encoding="utf-8"
+    )
+
+
+def test_resolve_artifacts_excludes_analysis_sidecars_and_selects_latest(tmp_path: Path) -> None:
+    older = tmp_path / "reports" / "analysis_20260820.json"
+    latest = tmp_path / "reports" / "analysis_20260822.json"
+    _published_analysis(older)
+    _published_analysis(latest)
+    (tmp_path / "reports" / "analysis_20260822.vpd-ranking.json").write_text("{}", encoding="utf-8")
+
+    resolved = resolve_artifacts(tmp_path, "reports/analysis_*.json")
+
+    assert resolved.valid == (older, latest)
+    assert resolved.invalid == ()
+    assert resolved.latest == latest
+
+
+def test_resolve_artifacts_classifies_invalid_published_pair(tmp_path: Path) -> None:
+    invalid = tmp_path / "reports" / "analysis_20260822.json"
+    invalid.parent.mkdir(parents=True)
+    invalid.write_text("{}", encoding="utf-8")
+
+    resolved = resolve_artifacts(tmp_path, "reports/analysis_*.json")
+
+    assert resolved.valid == ()
+    assert resolved.invalid[0].path == invalid
+    assert resolved.invalid[0].reason
+    assert resolved.latest is None
+
+
+def test_artifact_freshness_compares_filename_dates(tmp_path: Path) -> None:
+    report = tmp_path / "reports" / "analysis_20260820.json"
+    _published_analysis(report)
+    data = tmp_path / "data" / "analytics_data_20260822.json"
+
+    freshness = resolve_artifacts(tmp_path, "reports/analysis_*.json").freshness(against=data)
+
+    assert freshness.is_stale is True
+    assert freshness.reason == "relative"
