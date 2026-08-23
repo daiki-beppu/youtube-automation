@@ -28,7 +28,8 @@ def calculate_publish_at(
             publish_time=publish_time,
         ),
         MagicMock(),
-        now_provider=lambda timezone: now,
+        # now は Asia/Tokyo 付きの固定値なので、渡される tz は使わない
+        now_provider=lambda _tz: now,
     )
     scheduler.get_published_dates = MagicMock(return_value=existing_dates)
     return scheduler.calculate_publish_at()
