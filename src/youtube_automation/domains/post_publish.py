@@ -9,9 +9,10 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal
+from typing import ClassVar, Literal
 
 from youtube_automation.core.errors import StateSyncError, WorkflowStateError
+from youtube_automation.domains.cloud_stage_policy import ReadinessStagePolicy
 from youtube_automation.domains.collections.inventory import CollectionRecord, UnreadableWorkflowState, iter_collections
 from youtube_automation.domains.collections.workflow_state import WorkflowState, read
 from youtube_automation.infrastructure.filesystem import file_lock
@@ -248,3 +249,35 @@ def validate_post_publish_changes(repository: Path, changed: set[str]) -> None:
     unexpected = changed - allowed
     if unexpected:
         raise StateSyncError(f"cloud post-publish changed an unowned path: {sorted(unexpected)[0]}")
+
+
+@dataclass(slots=True)
+class PostPublishStagePolicy(ReadinessStagePolicy):
+    """Adapter exposing post-publish semantics to the generic sandwich runner."""
+
+    stage_label: ClassVar[str] = "post-publish"
+
+    requested: str | None = None
+
+    def resolve(self) -> None:
+        self._readiness = resolve_post_publish_readiness(self.root, self.requested)
+
+    def prompt_for(self) -> str:
+        if self._readiness is None or self._readiness.collection is None:
+            raise StateSyncError("cloud post-publish completion target is missing")
+        return (
+            f"{self.prompt}\n"
+            f"Cloud post-publish target is collection {self._readiness.collection.name!r}. "
+            "Use the cloud executor and do not select or modify any other collection."
+        )
+
+    def verify(self) -> str:
+        if self._readiness is None or self._readiness.collection is None:
+            raise StateSyncError("cloud post-publish completion target is missing")
+        self._completed = verify_post_publish_completion(self.root, self._readiness.collection)
+        return self._completed.name
+
+    def allows(self, repository: Path, changed: set[str]) -> None:
+        if self._completed is None:
+            raise StateSyncError("cloud post-publish completion target is missing")
+        validate_post_publish_changes(repository, changed)

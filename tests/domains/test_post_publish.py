@@ -5,12 +5,13 @@ from pathlib import Path
 
 import pytest
 
-from youtube_automation.core.errors import StateSyncError
+from youtube_automation.core.errors import StateSyncError, ValidationError
 from youtube_automation.domains.collections.inventory import CollectionRecord
 from youtube_automation.domains.collections.workflow_state import WorkflowState
 from youtube_automation.domains.post_publish import (
     PostPublishDecision,
     PostPublishReadiness,
+    PostPublishStagePolicy,
     _post_publish_readiness,
     evaluate,
     mark_complete,
@@ -139,3 +140,27 @@ def test_readiness_waits_when_no_live_collection_needs_followup(tmp_path: Path) 
 
     assert readiness.status == "waiting"
     assert readiness.collection is None
+
+
+def test_post_publish_stage_policy_adapts_target_prompt_completion_and_allowlist(tmp_path: Path) -> None:
+    collection = _collection(tmp_path)
+    policy = PostPublishStagePolicy(tmp_path, "/publish", requested=None)
+
+    policy.resolve()
+    assert policy.waiting is False
+    assert "collection 'demo'" in policy.prompt_for()
+    for step in ("playlist-assignment", "pinned-comment", "metadata-audit"):
+        mark_complete(tmp_path, collection, step)
+    (tmp_path / "pinned_comment_history.json").write_text(
+        json.dumps({"schema_version": 1, "posted": {"video-1": {}}}) + "\n", encoding="utf-8"
+    )
+
+    assert policy.verify() == "demo"
+    policy.allows(tmp_path, {"post_publish_history.json", "pinned_comment_history.json"})
+    with pytest.raises(StateSyncError, match="unowned path"):
+        policy.allows(tmp_path, {"README.md"})
+
+
+def test_post_publish_stage_policy_rejects_media_handoff_before_any_side_effect(tmp_path: Path) -> None:
+    with pytest.raises(ValidationError, match="media handoff を受け付けません"):
+        PostPublishStagePolicy(tmp_path, "/publish", object(), requested=None)

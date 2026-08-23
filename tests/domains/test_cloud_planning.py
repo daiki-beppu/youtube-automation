@@ -5,9 +5,10 @@ from pathlib import Path
 
 import pytest
 
-from youtube_automation.core.errors import StateSyncError
+from youtube_automation.core.errors import StateSyncError, ValidationError
 from youtube_automation.domains.cloud_planning import (
     PlanningReadiness,
+    PlanningStagePolicy,
     _planning_states,
     resolve_planning_readiness,
     verify_planning_completion,
@@ -96,3 +97,33 @@ def test_completion_resolves_exactly_one_new_collection(tmp_path: Path) -> None:
 
     with pytest.raises(StateSyncError, match="exactly one"):
         verify_planning_completion(tmp_path, None)
+
+
+def test_planning_stage_policy_adapts_readiness_completion_and_allowlist(tmp_path: Path) -> None:
+    collection = _state(tmp_path, "demo", phase="planning", created_at="2026-01-01T00:00:00Z")
+    policy = PlanningStagePolicy(tmp_path, "/wf-new --auto")
+
+    policy.resolve()
+    assert policy.waiting is False
+    assert policy.prompt_for() == "/wf-new --auto"
+
+    state_path = collection / "workflow-state.json"
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    state.update(phase="prepared")
+    state["planning"]["generated"] = True
+    state["assets"]["music_prompts"] = True
+    state_path.write_text(json.dumps(state) + "\n", encoding="utf-8")
+    docs = collection / "20-documentation"
+    docs.mkdir()
+    for name in ("plan_proposals.json", "plan_proposals.html", "suno-prompts.json", "suno-prompts.html"):
+        (docs / name).write_text("{}\n", encoding="utf-8")
+
+    assert policy.verify() == "demo"
+    policy.allows(tmp_path, {"collections/planning/demo/workflow-state.json"})
+    with pytest.raises(StateSyncError, match="unowned path"):
+        policy.allows(tmp_path, {"README.md"})
+
+
+def test_planning_stage_policy_rejects_media_handoff_before_any_side_effect(tmp_path: Path) -> None:
+    with pytest.raises(ValidationError, match="media handoff を受け付けません"):
+        PlanningStagePolicy(tmp_path, "/wf-new --auto", object())

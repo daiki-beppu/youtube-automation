@@ -10,11 +10,7 @@ from typing import Literal, Protocol
 
 from youtube_automation.application.media_handoff import HandoffSource, pull_handoff, push_handoff
 from youtube_automation.core.errors import AutomationError, ResourceLimitError, StateSyncError, ValidationError
-from youtube_automation.domains.cloud_planning import (
-    resolve_planning_readiness,
-    validate_planning_changes,
-    verify_planning_completion,
-)
+from youtube_automation.domains.cloud_planning import PlanningStagePolicy
 from youtube_automation.domains.collections.workflow_state import read
 from youtube_automation.domains.hybrid_resource_guard import (
     HybridResourcePolicy,
@@ -25,11 +21,7 @@ from youtube_automation.domains.hybrid_resource_guard import (
 from youtube_automation.domains.media_handoff_manifest import MANIFEST_NAME, HandoffIdentity, HandoffManifest
 from youtube_automation.domains.media_store import MediaStore, validate_media_relative_path
 from youtube_automation.domains.notifications import NotificationEvent, NotificationEventKind
-from youtube_automation.domains.post_publish import (
-    resolve_post_publish_readiness,
-    validate_post_publish_changes,
-    verify_post_publish_completion,
-)
+from youtube_automation.domains.post_publish import PostPublishStagePolicy
 from youtube_automation.infrastructure.auth.redaction import redact_sensitive_data
 from youtube_automation.infrastructure.vcs.state_git import build_context
 from youtube_automation.infrastructure.vcs.state_sync import (
@@ -53,15 +45,8 @@ ResourceDiagnosticsSink = Callable[[str], None]
 
 
 @dataclass(frozen=True, slots=True)
-class SandwichRequest:
-    channel_dir: Path
+class MediaHandoffRequest:
     collection_dir: str
-    channel: str
-    collection: str
-    agent: Agent
-    prompt: str
-    commit_message: str
-    stage: Stage = "pipeline"
     input_handoff: str | None = None
     input_destination: str | None = None
     output_handoff: str | None = None
@@ -69,8 +54,6 @@ class SandwichRequest:
     output_files: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
-        if not self.prompt.strip():
-            raise ValidationError("sandwich runner prompt は空にできません")
         if (self.input_handoff is None) != (self.input_destination is None):
             raise ValidationError("input handoff と destination は同時に指定してください")
         output_values = (self.output_handoff, self.output_root)
@@ -80,15 +63,27 @@ class SandwichRequest:
             raise ValidationError("output files には handoff と root が必要です")
         if self.output_handoff is not None and not self.output_files:
             raise ValidationError("output handoff には1件以上の file が必要です")
-        if self.stage in {"planning", "post-publish"} and (
-            self.input_handoff is not None or self.output_handoff is not None
-        ):
-            raise ValidationError(f"{self.stage} stage は media handoff を受け付けません")
         for path_value in filter(
             None,
             (self.collection_dir, self.input_destination, self.output_root, *self.output_files),
         ):
             validate_media_relative_path("runner path", path_value)
+
+
+@dataclass(frozen=True, slots=True)
+class SandwichRequest:
+    channel_dir: Path
+    channel: str
+    collection: str
+    agent: Agent
+    prompt: str
+    commit_message: str
+    stage: Stage = "pipeline"
+    media_handoff: MediaHandoffRequest | None = None
+
+    def __post_init__(self) -> None:
+        if not self.prompt.strip():
+            raise ValidationError("sandwich runner prompt は空にできません")
 
 
 def _inside(root: Path, relative: str) -> Path:
@@ -119,19 +114,34 @@ class SandwichResult:
 class StagePolicy(Protocol):
     """Stage-specific execution semantics used by the sandwich pipeline."""
 
+    @property
+    def waiting(self) -> bool: ...
+
+    @property
+    def collection_name(self) -> str | None: ...
+
     def resolve(self) -> None: ...
 
     def prompt_for(self) -> str: ...
 
-    def verify(self) -> SandwichResult: ...
+    def verify(self) -> str | None:
+        """成果を検証し、確定した対象 collection 名を返す。
+
+        collection を持たない stage だけが `None` を返す。対象が確定するはずの
+        stage は検証失敗を戻り値ではなく例外で表すため、常に名前を返す。
+        """
+        ...
 
     def allows(self, repository: Path, changed: set[str]) -> None: ...
 
 
 def _verify_input_reference(request: SandwichRequest, manifest: HandoffManifest) -> None:
-    state_path = _inside(request.channel_dir, request.collection_dir) / "workflow-state.json"
+    media = request.media_handoff
+    if media is None or media.input_handoff is None:
+        raise StateSyncError("input handoff policy is missing")
+    state_path = _inside(request.channel_dir, media.collection_dir) / "workflow-state.json"
     handoff = read(state_path).handoff
-    expected_key = f"{request.channel}/{request.collection}/{request.input_handoff}/{MANIFEST_NAME}"
+    expected_key = f"{request.channel}/{request.collection}/{media.input_handoff}/{MANIFEST_NAME}"
     if (
         handoff is None
         or handoff.owner != "cloud"
@@ -149,36 +159,46 @@ class PipelineStagePolicy:
     store: MediaStore
     _validate: ChangeValidator | None = field(init=False, default=None, repr=False)
 
+    @property
+    def waiting(self) -> bool:
+        return False
+
+    @property
+    def collection_name(self) -> str | None:
+        return self.request.collection or None
+
     def resolve(self) -> None:
         # allowlistは既定validatorを唯一の定義として再利用し、fast-forward pull直後にsnapshotする。
         self._validate = default_change_validator(build_context(self.request.channel_dir))
-        if self.request.input_handoff is None or self.request.input_destination is None:
+        media = self.request.media_handoff
+        if media is None or media.input_handoff is None or media.input_destination is None:
             return
-        identity = HandoffIdentity(self.request.channel, self.request.collection, self.request.input_handoff)
+        identity = HandoffIdentity(self.request.channel, self.request.collection, media.input_handoff)
         manifest = pull_handoff(
             self.store,
             identity,
-            _inside(self.request.channel_dir, self.request.input_destination),
+            _inside(self.request.channel_dir, media.input_destination),
         )
         _verify_input_reference(self.request, manifest)
 
     def prompt_for(self) -> str:
         return self.request.prompt
 
-    def verify(self) -> SandwichResult:
-        if self.request.output_handoff is not None and self.request.output_root is not None:
-            root = _inside(self.request.channel_dir, self.request.output_root)
-            sources = tuple(HandoffSource(_inside(root, path), path) for path in self.request.output_files)
+    def verify(self) -> str | None:
+        media = self.request.media_handoff
+        if media is not None and media.output_handoff is not None and media.output_root is not None:
+            root = _inside(self.request.channel_dir, media.output_root)
+            sources = tuple(HandoffSource(_inside(root, path), path) for path in media.output_files)
             push_handoff(
                 self.store,
                 HandoffIdentity(
                     self.request.channel,
                     self.request.collection,
-                    self.request.output_handoff,
+                    media.output_handoff,
                 ),
                 sources,
             )
-        return SandwichResult("completed", self.request.collection or None)
+        return self.request.collection or None
 
     def allows(self, repository: Path, changed: set[str]) -> None:
         if self._validate is None:
@@ -239,6 +259,20 @@ def _guard_resources(
     raise ResourceLimitError(f"hybrid resource guard rejected: {rejection_detail}")
 
 
+def _select_policy(request: SandwichRequest, store: MediaStore) -> StagePolicy:
+    """The single stage-to-policy selection boundary."""
+    if request.stage == "pipeline":
+        return PipelineStagePolicy(request, store)
+    if request.stage == "planning":
+        return PlanningStagePolicy(request.channel_dir, request.prompt, request.media_handoff)
+    return PostPublishStagePolicy(
+        request.channel_dir,
+        request.prompt,
+        request.media_handoff,
+        requested=request.collection or None,
+    )
+
+
 def run_sandwich(
     request: SandwichRequest,
     store: MediaStore,
@@ -250,60 +284,28 @@ def run_sandwich(
     on_state_sync_event: EventSink | None = None,
 ) -> SandwichResult:
     """Run the existing local-first workflow between verified MediaStore boundaries."""
+    # request と stage の整合検証は policy 構築時に起きるため、resource probe より前に選択する。
+    policy = _select_policy(request, store)
     _guard_resources(request, resource_probe, on_resource_event, on_resource_diagnostics)
     context = build_context(request.channel_dir)
-    policy: StagePolicy | None = PipelineStagePolicy(request, store) if request.stage == "pipeline" else None
     result = SandwichResult("completed", request.collection or None)
-    planning_collection: Path | None = None
-    post_publish_collection: Path | None = None
 
     def writer() -> None:
-        nonlocal planning_collection, post_publish_collection, result
-        if policy is not None:
-            policy.resolve()
-            agent_runner(request.agent, policy.prompt_for(), request.channel_dir)
-            result = policy.verify()
+        nonlocal result
+        policy.resolve()
+        if policy.waiting:
+            result = SandwichResult("waiting", policy.collection_name)
             return
-        if request.stage == "planning":
-            readiness = resolve_planning_readiness(request.channel_dir)
-            if readiness.status == "waiting":
-                result = SandwichResult("waiting", readiness.collection.name if readiness.collection else None)
-                return
-            agent_runner(request.agent, request.prompt, request.channel_dir)
-            planning_collection = verify_planning_completion(request.channel_dir, readiness.collection)
-            result = SandwichResult("completed", planning_collection.name)
-            return
-        readiness = resolve_post_publish_readiness(request.channel_dir, request.collection or None)
-        if readiness.status == "waiting":
-            result = SandwichResult("waiting", None)
-            return
-        if readiness.collection is None:
-            raise StateSyncError("cloud post-publish completion target is missing")
-        targeted_prompt = (
-            f"{request.prompt}\n"
-            f"Cloud post-publish target is collection {readiness.collection.name!r}. "
-            "Use the cloud executor and do not select or modify any other collection."
-        )
-        agent_runner(request.agent, targeted_prompt, request.channel_dir)
-        post_publish_collection = verify_post_publish_completion(request.channel_dir, readiness.collection)
-        result = SandwichResult("completed", post_publish_collection.name)
+        agent_runner(request.agent, policy.prompt_for(), request.channel_dir)
+        collection = policy.verify()
+        result = SandwichResult("completed", collection)
 
     def validate_changes(repository: Path, changed: set[str]) -> None:
         if result.status == "waiting":
             if changed:
                 raise StateSyncError("waiting cloud planning run must not change repository state")
             return
-        if policy is not None:
-            policy.allows(repository, changed)
-            return
-        if request.stage == "planning":
-            if planning_collection is None:
-                raise StateSyncError("cloud planning completion target is missing")
-            validate_planning_changes(repository, planning_collection, changed)
-            return
-        if post_publish_collection is None:
-            raise StateSyncError("cloud post-publish completion target is missing")
-        validate_post_publish_changes(repository, changed)
+        policy.allows(repository, changed)
 
     pull_update_commit_push(
         context,

@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import ClassVar, Literal
 
 from youtube_automation.core.errors import StateSyncError, WorkflowStateError
+from youtube_automation.domains.cloud_stage_policy import ReadinessStagePolicy
 from youtube_automation.domains.collections.inventory import CollectionRecord, UnreadableWorkflowState, iter_collections
 from youtube_automation.domains.collections.workflow_state import WorkflowState, read
 
@@ -109,3 +110,27 @@ def validate_planning_changes(repository: Path, collection: Path, changed: set[s
         allowed_postmortem = path.startswith("collections/live/") and path.endswith("/20-documentation/postmortem.md")
         if not path.startswith(collection_prefix) and not allowed_audit and not allowed_postmortem:
             raise StateSyncError(f"cloud planning changed an unowned path: {path}")
+
+
+@dataclass(slots=True)
+class PlanningStagePolicy(ReadinessStagePolicy):
+    """Adapter exposing planning semantics to the generic sandwich runner."""
+
+    stage_label: ClassVar[str] = "planning"
+
+    def resolve(self) -> None:
+        self._readiness = resolve_planning_readiness(self.root)
+
+    def prompt_for(self) -> str:
+        return self.prompt
+
+    def verify(self) -> str:
+        if self._readiness is None:
+            raise StateSyncError("cloud planning readiness is missing")
+        self._completed = verify_planning_completion(self.root, self._readiness.collection)
+        return self._completed.name
+
+    def allows(self, repository: Path, changed: set[str]) -> None:
+        if self._completed is None:
+            raise StateSyncError("cloud planning completion target is missing")
+        validate_planning_changes(repository, self._completed, changed)
