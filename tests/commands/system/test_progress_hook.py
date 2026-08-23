@@ -83,9 +83,11 @@ def _progress_message(
 
 
 def test_should_emit_progress_system_message_when_background_bash_starts(
+    tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    payload = json.dumps({"tool_name": "Bash", "tool_input": {"run_in_background": True}})
+    _write_collection(tmp_path, "planning", "in-progress", {"phase": "prepared", "assets": {"raw_master": None}})
+    payload = json.dumps({"cwd": str(tmp_path), "tool_name": "Bash", "tool_input": {"run_in_background": True}})
 
     exit_code, stdout, stderr = _run(payload, capsys)
 
@@ -106,15 +108,55 @@ def test_should_emit_nothing_when_foreground_bash_starts(capsys: pytest.CaptureF
     assert stderr == ""
 
 
-def test_should_keep_fixed_pipeline_when_repository_has_no_collections(
+def test_should_emit_nothing_when_repository_has_no_collections(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    message = _progress_message(tmp_path, capsys, command="gh pr checks 42")
+    payload = json.dumps(
+        {
+            "cwd": str(tmp_path),
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Agent",
+            "tool_input": {"subagent_type": "Explore", "description": "調査"},
+        }
+    )
 
-    assert "  ✓  マスター化" in message
-    assert "  ○  動画化" in message
-    assert "  ⋯  gh" in message
+    exit_code, stdout, stderr = _run(payload, capsys)
+
+    assert exit_code == 0
+    assert stdout == ""
+    assert stderr == ""
+
+
+def test_should_emit_nothing_when_no_collection_has_workflow_state(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "collections" / "planning" / "initialization-interrupted").mkdir(parents=True)
+    payload = json.dumps(
+        {
+            "cwd": str(tmp_path),
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": "uv run yt-generate-master"},
+        }
+    )
+
+    exit_code, stdout, stderr = _run(payload, capsys)
+
+    assert exit_code == 0
+    assert stdout == ""
+    assert stderr == ""
+
+
+def test_should_emit_nothing_when_payload_has_no_cwd(capsys: pytest.CaptureFixture[str]) -> None:
+    payload = json.dumps({"tool_name": "Bash", "tool_input": {"run_in_background": True}})
+
+    exit_code, stdout, stderr = _run(payload, capsys)
+
+    assert exit_code == 0
+    assert stdout == ""
+    assert stderr == ""
 
 
 def test_should_mark_real_asset_stages_from_workflow_state(
@@ -434,7 +476,7 @@ def test_should_not_complete_post_publish_for_other_video_or_analysis_before_pub
 
 
 @pytest.mark.parametrize("bad_state", ["not-json", "[]", '{"phase":"prepared","assets":[]}'])
-def test_should_fall_back_to_fixed_pipeline_when_workflow_state_is_invalid(
+def test_should_emit_nothing_when_workflow_state_is_invalid(
     tmp_path: Path,
     bad_state: str,
     capsys: pytest.CaptureFixture[str],
@@ -442,13 +484,20 @@ def test_should_fall_back_to_fixed_pipeline_when_workflow_state_is_invalid(
     collection = tmp_path / "collections" / "planning" / "broken"
     collection.mkdir(parents=True)
     (collection / "workflow-state.json").write_text(bad_state, encoding="utf-8")
+    payload = json.dumps(
+        {
+            "cwd": str(tmp_path),
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": "gh pr checks 42", "run_in_background": True},
+        }
+    )
 
-    message = _progress_message(tmp_path, capsys, command="gh pr checks 42")
+    exit_code, stdout, stderr = _run(payload, capsys)
 
-    assert "  ✓  企画" in message
-    assert "  ✓  マスター化" in message
-    assert "  ○  動画化" in message
-    assert "  ⋯  gh" in message
+    assert exit_code == 0
+    assert stdout == ""
+    assert stderr == ""
 
 
 @pytest.mark.parametrize(
@@ -480,9 +529,18 @@ def test_should_fall_back_to_fixed_pipeline_when_workflow_state_is_invalid(
 def test_should_mark_classified_stage_for_long_foreground_command(
     command: str,
     stage: str,
+    tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    payload = json.dumps({"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": command}})
+    _write_collection(tmp_path, "planning", "in-progress", {"phase": "planning", "assets": {"raw_master": None}})
+    payload = json.dumps(
+        {
+            "cwd": str(tmp_path),
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": command},
+        }
+    )
 
     exit_code, stdout, stderr = _run(payload, capsys)
 
@@ -494,10 +552,13 @@ def test_should_mark_classified_stage_for_long_foreground_command(
 
 
 def test_should_emit_unclassified_agent_work_with_description(
+    tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
+    _write_collection(tmp_path, "planning", "in-progress", {"phase": "prepared", "assets": {"raw_master": None}})
     payload = json.dumps(
         {
+            "cwd": str(tmp_path),
             "hook_event_name": "PreToolUse",
             "tool_name": "Agent",
             "tool_input": {"subagent_type": "Explore", "description": "hook 定義箇所を調査"},
@@ -525,9 +586,18 @@ def test_should_use_nonempty_fallback_for_unclassified_work(
     tool_name: str,
     tool_input: dict[str, object],
     expected: str,
+    tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    payload = json.dumps({"hook_event_name": "PreToolUse", "tool_name": tool_name, "tool_input": tool_input})
+    _write_collection(tmp_path, "planning", "in-progress", {"phase": "prepared", "assets": {"raw_master": None}})
+    payload = json.dumps(
+        {
+            "cwd": str(tmp_path),
+            "hook_event_name": "PreToolUse",
+            "tool_name": tool_name,
+            "tool_input": tool_input,
+        }
+    )
 
     exit_code, stdout, stderr = _run(payload, capsys)
 
@@ -538,10 +608,21 @@ def test_should_use_nonempty_fallback_for_unclassified_work(
 
 
 def test_should_mark_classified_stage_complete_after_displayed_command_returns(
+    tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
+    _write_collection(
+        tmp_path,
+        "planning",
+        "video-generated",
+        {
+            "phase": "prepared",
+            "assets": {"raw_master": "raw.wav", "master_audio": "master.wav", "master_video": "master.mp4"},
+        },
+    )
     payload = json.dumps(
         {
+            "cwd": str(tmp_path),
             "hook_event_name": "PostToolUse",
             "tool_name": "Bash",
             "tool_input": {"command": "ffmpeg -i input.mp3 output.mp4"},
