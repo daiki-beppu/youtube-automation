@@ -230,18 +230,6 @@ class CollectionUploader:
         logger.info("✅ 全ステップ完了")
         return {"action": "all_completed", "details": {}}
 
-    def _failed_complete_collection(self, collection_path: Path, tracking: dict, error) -> dict:
-        return self.complete_collection_executor.failed(collection_path, tracking, error)
-
-    def _finish_uploaded_collection(
-        self,
-        collection_path: Path,
-        tracking: dict,
-        complete_video: dict,
-        publish_at: str | None,
-    ) -> dict:
-        return self.complete_collection_executor.finish(collection_path, tracking, complete_video, publish_at)
-
     def _execute_complete_collection(
         self,
         collection_path: Path,
