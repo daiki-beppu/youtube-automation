@@ -145,6 +145,10 @@ jobs:
         with:
           ref: ${{ github.event.workflow_run.head_branch }}
           fetch-depth: 0
+          # 既定の true は read-only GITHUB_TOKEN を http.<origin>.extraheader に残し、
+          # claude-code-action が remote URL に埋め込む App token より優先されて
+          # push が 403 になる(#4591)
+          persist-credentials: false
       - name: Run Claude autofix
         id: autofix
         uses: anthropics/claude-code-action@4a3947e8ca609a286ab07d4d048d9ec4016798c1 # v1

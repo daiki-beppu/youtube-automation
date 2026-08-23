@@ -223,6 +223,16 @@ def test_fix_pushes_via_app_token_to_retrigger_ci() -> None:
     step = _autofix_step(workflow["jobs"]["autofix"])
     assert "github_token" not in step["with"]
 
+    # checkout 既定の persist-credentials: true は read-only GITHUB_TOKEN を
+    # http.<origin>.extraheader に残し、App token の remote URL 認証より優先されて
+    # push が 403 になる(#4591)
+    checkout = next(
+        step
+        for step in workflow["jobs"]["autofix"]["steps"]
+        if str(step.get("uses", "")).startswith("actions/checkout@")
+    )
+    assert checkout["with"]["persist-credentials"] is False
+
 
 def test_autofix_installs_the_pinned_action_with_opus() -> None:
     step = _autofix_step(_workflow()["jobs"]["autofix"])
