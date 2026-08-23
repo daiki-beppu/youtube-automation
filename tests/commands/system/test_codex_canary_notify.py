@@ -13,7 +13,7 @@ class RecordingSink:
         self.delivered = delivered
         self.events: list[NotificationEvent] = []
 
-    def send(self, event: NotificationEvent) -> bool:
+    def notify(self, event: NotificationEvent) -> bool:
         self.events.append(event)
         return self.delivered
 

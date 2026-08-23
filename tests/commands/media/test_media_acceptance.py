@@ -71,7 +71,7 @@ def test_cli_fails_closed_when_planned_track_is_missing(monkeypatch, capsys, tmp
     monkeypatch.setattr(
         media_acceptance,
         "create_discord_notification_sink",
-        lambda: SimpleNamespace(send=lambda event: events.append(event) or True),
+        lambda: SimpleNamespace(notify=lambda event: events.append(event) or True),
     )
 
     exit_code = media_acceptance.main([str(collection), "--output", "json"])
@@ -84,6 +84,7 @@ def test_cli_fails_closed_when_planned_track_is_missing(monkeypatch, capsys, tmp
             "ambient-lab",
             collection.name,
             "media-acceptance",
+            "track_count: planned=2, actual=1",
         )
     ]
 

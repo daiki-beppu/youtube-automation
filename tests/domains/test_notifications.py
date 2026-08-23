@@ -15,6 +15,7 @@ from youtube_automation.domains.notifications import (
         NotificationEventKind.HANDOFF_COMPLETED,
         NotificationEventKind.PUBLISH_COMPLETED,
         NotificationEventKind.CANARY_COMPLETED,
+        NotificationEventKind.HUMAN_TASKS_PENDING,
     ],
 )
 def test_category_for_classifies_successful_pipeline_events_as_normal(
