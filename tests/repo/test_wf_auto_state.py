@@ -164,7 +164,8 @@ def test_cloud_executor_resumes_suno_after_manifest_handoff(tmp_path: Path, runn
     state["planning"]["music"].update(
         {
             "expected_file_count": 2,
-            "suno_playlist_url": "https://suno.com/playlist/example",
+            "actual_file_count": 2,
+            "missing_file_count": 0,
         }
     )
     state["handoff"] = {

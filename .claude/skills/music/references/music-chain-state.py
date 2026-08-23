@@ -194,8 +194,6 @@ def _evaluate_suno_generate(collection_path: Path) -> tuple[int, dict[str, objec
     assets = state.get("assets")
     strict_complete = (
         isinstance(music, dict)
-        and isinstance(music.get("suno_playlist_url"), str)
-        and bool(music["suno_playlist_url"])
         and music.get("expected_file_count") == expected_count
         and music.get("actual_file_count") == actual_count
         and music.get("missing_file_count") == 0

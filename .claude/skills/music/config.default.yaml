@@ -538,14 +538,6 @@ master:
     #     duration: "first"        # ffmpeg amix duration (first/shortest/longest)
     #     normalize: 0             # ffmpeg amix normalize (0=disabled, 1=enabled, true/false 可)
 
-  # Suno CDN ダウンロード設定
-  suno_download:
-    cdn_url_template: "https://cdn1.suno.ai/{song_id}.mp3"
-
-    # curl の --retry / --retry-delay に渡す値。
-    # CDN が一時的に 5xx を返す場合やネットワーク不安定時に調整する。
-    retry_count: 3
-    retry_delay_seconds: 2
 
   # Suno 1 Generate = 2 clip の採用整理。
   # /music --generate が全 clip を 02-Individual-music/ に配置した後、/music --master が

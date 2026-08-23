@@ -1,0 +1,1 @@
+Suno の完了判定から playlist URL 依存を外し、検証済みローカル音源だけで `/wf-next` が masterup へ進めるようにした。非正規 CDN fallback は廃止し、音源不足時は suno-helper の download 再開へ案内する。

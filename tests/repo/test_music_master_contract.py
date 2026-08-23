@@ -36,7 +36,6 @@ def _collection(tmp_path: Path, music_engine: str) -> Path:
             {
                 "planning": {
                     "music": {
-                        "suno_playlist_url": "https://suno.com/playlist/demo",
                         "expected_file_count": 2,
                         "actual_file_count": 2,
                         "missing_file_count": 0,
@@ -69,7 +68,7 @@ def test_music_exposes_master_mode_and_owns_masterup_assets() -> None:
     assert (MUSIC / "references/master.md").is_file()
     assert (MUSIC / "references/check_loudness_deviation.py").is_file()
     assert (MUSIC / "references/finalize_master.py").is_symlink()
-    assert (MUSIC / "references/suno-fallback.md").is_file()
+    assert not (MUSIC / "references/suno-fallback.md").exists()
 
 
 def test_music_chain_runs_master_after_generate() -> None:

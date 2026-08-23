@@ -19,7 +19,7 @@
 
 SunoAI 楽曲のクロスフェード結合でマスター音源を自動生成するまでの一連フローを実行します。
 
-**ダウンロードの責務分離**: 楽曲のダウンロードは `/music --generate` が一括ダウンロード機能で自動実行するのが primary path。本スキルの Step 2-3（WebFetch + CDN curl）は `/music --generate` でダウンロード済みの場合はスキップされる。本スキルの主責務は **マスター音源生成 + workflow-state 更新** である。
+**ダウンロードの責務分離**: 楽曲のダウンロードは `/music --generate` の suno-helper が担う。本スキルはローカル音源の完全性を確認し、**マスター音源生成 + workflow-state 更新** のみを行う。
 
 ## 完了条件
 
@@ -31,7 +31,7 @@ SunoAI 楽曲のクロスフェード結合でマスター音源を自動生成�
 
 ## Subagent Contract
 
-- **入力**: 対象コレクション、fallback path を使う場合は確定済み playlist URL または title list、実行する処理
+- **入力**: 対象コレクション、検証済みローカル音源、実行する処理
 - **成果物**: `01-master/master.*`、`01-master/.selection.log`、`01-master/.loudness-receipt.json`
 - **委譲しない処理**: 選曲・混入許容・over-max 例外採用の承認。Step 5.6 の雨レイヤー後処理は成果物生成時に `workflow-state.json` を更新するためメインが実行する
 
@@ -53,7 +53,7 @@ subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実�
 
 - チャンネルの音楽エンジンが Suno であること。Lyria チャンネルでは `/music --generate` が `01-master/master.mp3` を直接出力するため本スキルは不要
 - 対象コレクションが `/music --prompt` 完了済みであること（`collections/planning/` 配下に `workflow-state.json` があり `assets.music_prompts = true`、かつ `20-documentation/suno-prompts.json` が存在）。無ければ `/wf-new` → `/music --prompt` を案内して停止する
-- `02-Individual-music/` にダウンロード済み音源が揃っていること（primary path は `/music --generate` の一括ダウンロード）。未ダウンロードの場合は `/music --generate` を案内するか、fallback としてプレイリスト URL を引数に受け取り Step 2-3 で DL する。**音源が揃っていれば playlist URL は不要**（URL 未指定を理由に停止しない。突合は Step 1.6 のローカルファイル名を第一手段にする）
+- `02-Individual-music/` にダウンロード済み音源が揃っていること（primary path は `/music --generate` の一括ダウンロード）。未ダウンロードの場合は `/music --generate` を再実行して suno-helper の download を再開するよう案内し、停止する
 - `ffmpeg` / `ffprobe` が利用可能であること（`uv run yt-generate-master` が使用）。無ければ `/setup` を案内する
 
 ## 設定
@@ -69,9 +69,6 @@ TS CLI `uv run yt-generate-master` は `audio` の実行時既定値を組み込
 | `audio.shuffle` | `false` | `uv run yt-generate-master` で CLI `--shuffle` / `--shuffle-seed` 未指定時に `--shuffle` 相当のデフォルトとして採用される。Suno で同一プロンプトから生成した類似イントロ群がマスター後半で連続するのを避けたいときに `true` にする |
 | `audio.shuffle_seed` | (未設定) | シャッフルの再現性 seed（整数）。`audio.shuffle: true` のときに CLI `--shuffle-seed` 未指定なら採用される。seed 単独設定では shuffle を有効化しない（skill-config は永続設定のため誤動作防止に明示要求とする / CLI の暗黙有効化とは挙動が異なる） |
 | `audio.pin_first_count` | `0` | `uv run yt-generate-master` で CLI `--pin-first` / `--pin-first-count` 未指定時に `--pin-first-count N` 相当のデフォルトとして採用される。ソート済み先頭 N 件を順序固定する（`audio.shuffle: true` と併用時は残りだけシャッフル）。`0` = 固定なし。retention に強い 1 曲を冒頭に置きたいときに `1` 以上を設定する |
-| `suno_download.cdn_url_template` | `https://cdn1.suno.ai/{song_id}.mp3` | Suno CDN URL テンプレート |
-| `suno_download.retry_count` | 3 | curl `--retry` に渡すリトライ回数 |
-| `suno_download.retry_delay_seconds` | 2 | curl `--retry-delay` に渡すリトライ間隔（秒） |
 | `post_processing.rain_layers.enabled` | `false` | `uv run yt-apply-rain-layers` の opt-in スイッチ。`true` で `branding/rain_layers/*.wav` を raw master に amix する後処理を有効化する |
 | `post_processing.rain_layers.volume_db` | `-19` | 各レイヤーに当てる減衰 dB（10^(-19/20) ≈ 0.112）。`uv run yt-apply-rain-layers` が ffmpeg `volume={dB}` でレイヤー毎に適用 |
 | `post_processing.rain_layers.output_name` | `master-rain.wav` | 後処理出力ファイル名（`01-master/` 配下）。成功時に `workflow-state.json::assets.raw_master` がこの名前へ書き換わる |
@@ -94,7 +91,6 @@ TS CLI `uv run yt-generate-master` は `audio` の実行時既定値を組み込
 
 - `/music --generate` で楽曲生成・ダウンロードが完了し、マスター音源を生成したいとき
 - `02-Individual-music/` に MP3 / M4A / WAV ファイルが揃っている状態でマスター結合を実行したいとき
-- `/music --generate` のダウンロードが使えない場合のフォールバックとして、プレイリスト URL 経由で DL + マスター生成を一貫実行したいとき
 
 Lyria で音源を生成するチャンネルでは `/music --generate` が `01-master/master.mp3` を直接出力するため本スキルは不要。
 
@@ -102,8 +98,7 @@ Lyria で音源を生成するチャンネルでは `/music --generate` が `01-
 
 | コマンド | 説明 | 例 |
 |---------|------|-----|
-| `/music --master` | DL 済み音源（`02-Individual-music/`）からマスター生成。URL 省略可（ローカルファイル名の突合は Step 1.6） | `/music --master` |
-| `/music --master <playlist-url>` | プレイリスト内の全曲をDL + マスター生成 | `/music --master https://suno.com/playlist/xxx` |
+| `/music --master` | DL 済み音源（`02-Individual-music/`）からマスター生成 | `/music --master` |
 | `uv run yt-generate-master --loop N` | マスター生成時に全トラックを N 回繰り返して結合 | `uv run yt-generate-master --loop 3` |
 | `uv run yt-generate-master --target-duration MIN` | 目標尺 (分) 以上になる最小ループ回数を自動算出 | `uv run yt-generate-master --target-duration 150` |
 | `uv run yt-generate-master --no-loop` | skill-config の目標尺を無視して 1 パスで生成 | `uv run yt-generate-master --no-loop` |
@@ -122,13 +117,10 @@ Lyria で音源を生成するチャンネルでは `/music --generate` が `01-
 
 出力 MP3 のビットレートとクロスフェード秒数は CLI 引数ではなく、`config/skills/masterup.json`（優先）または `config/skills/masterup.yaml` の `audio.bitrate` / `audio.crossfade_duration` で設定する。未設定時は組み込み default を使い、その値は同梱 `config.default.yaml` と同期テストで固定される。目標尺は CLI フラグ > `config/channel/audio.json` > skill-config の順で、skill-config の `audio.target_duration_min` は channel 側未設定時だけの互換 fallback。曲順は CLI の `--shuffle*` / `--pin-first*` > `20-documentation/audio-adjustments.json::order` > skill-config > ファイル名ソートの順で解決する。保存済み `order` と `02-Individual-music/` の実ファイルに過不足があれば、意図しない欠落を避けるため fail-loud で停止する。その他の CLI 対応オプションは `uv run yt-generate-master --help` を正本とする。
 
-## Suno fallback 経路
+## Suno ダウンロード失敗時の扱い
 
-suno-helper の一括ダウンロードが完了していれば、この経路は通らない。DL が途中で壊れた場合
-（プレイリスト HTML が読めない / CDN が 403・404 を返す）だけ [suno-fallback.md](suno-fallback.md)
-を読む。同ファイルに Step 2 / Step 3 の手動代替と、手動 DL からの復旧手順がある。
-
-**silent な続行は禁止**。不完全な master.mp3 を作らず、Suno 経路が壊れた可能性を報告して停止する。
+suno-helper の一括ダウンロードが途中で失敗した場合、master mode から CDN 取得へ切り替えない。
+`/music --generate` の download を再開するよう案内し、不完全な master.mp3 を作らず停止する。
 
 ## Instructions
 
@@ -140,12 +132,11 @@ suno-helper の一括ダウンロードが完了していれば、この経路�
 $ARGUMENTS
 ```
 
-- 第1引数: SunoAI プレイリストURL（省略可）。`02-Individual-music/` に音源が揃っていれば URL なしで完走できる（Step 2-3 はスキップ）。**URL 未指定を理由に「raw master 生成には playlist URL が必要です。URL を教えてください」と案内して停止するのは誤り** — Step 1.6 でローカルファイル名を突合する
+- 引数は不要。`02-Individual-music/` の検証済みローカル音源だけを入力とし、Suno URL は受け取らない
 
 ### 前提条件
 
 - アクティブなコレクションの `02-Individual-music/` ディレクトリが存在
-- WebFetch ツールが利用可能であること（Step 2-3 を実行する場合のみ）
 
 ### Step 1: コレクションの特定
 
@@ -196,23 +187,22 @@ print(f'pattern_count={pattern_count} expected={expected} actual={actual}')
 判定:
 - **`actual == 0`**: `/music --generate` 未実行として「`/music --generate` を実行してダウンロードを完了してください」を案内して停止
 - **`0 < actual < expected`**: 部分ダウンロードとして扱う。`assets.music_downloaded` が `true` であっても揃っているとはみなさない。不足曲数（`expected - actual`）を提示し、「`/music --generate` を再実行して不足分を DL するか、Suno UI から手動で不足曲をダウンロードして `02-Individual-music/` に配置してください」を案内して既定では停止する。ユーザーが欠落込みの続行を明示指示した場合だけ、Step 4.5 の `--allow-incomplete-download` 手順へ進む
-- 定期実行の extension state が `checkpoint` / `manual-intervention` / `running` の場合も、実ファイル数・`planning.music.suno_playlist_url`・`assets.music_downloaded` が揃うまでは停止する。extension state の `completed` は補助情報であり、この実ファイル突合を代替しない
+- 定期実行の extension state が `checkpoint` / `manual-intervention` / `running` の場合も、実ファイル数・欠損数・`assets.music_downloaded` が揃うまでは停止する。extension state の `completed` は補助情報であり、この実ファイル突合を代替しない
 - **`actual >= expected`**: チェック OK として Step 1.6 へ進む
 
 `pattern_count` が `None`（`suno-prompts.json` が存在しない）の場合は期待曲数が算出不能なため本チェックをスキップし、以降の既存フローに委ねる。
 
 ### Step 1.6: playlist × suno-prompts.json 突合ゲート（必須・混入検出）
 
-> **Step 5 前の共通ゲート**: この突合は Step 2 fallback 専用ではない。`02-Individual-music/` に音源があり Step 2-3 をスキップする primary path でも、Step 5 に進む前に必ず完了させる。
+> **Step 5 前の共通ゲート**: `02-Individual-music/` に音源がある場合も、Step 5 に進む前にこの突合を必ず完了させる。
 
-primary path では `02-Individual-music/` のローカルファイル名を第一手段とし、下記 CLI を実行する。`--music-dir` の相対パスは `<collection-path>` 基準で解決する。外部の title list 解決や対話確認は行わない。非正準形ファイル（Suno UI 手動 DL 由来の `Title.mp3` / `Title (1).mp3` / `Title_1.mp3` 等）は CLI が suno-prompts.json と照合して正準形 `NN{a|b}-Title.ext` へ自動リネームしてから突合する。照合できないファイルはリネームされず unknown として報告される。**playlist URL の記録有無に依らず本ゲートは完走できる** — 「Suno playlist URL がないため suno-prompts.json との突合ができません」型の停止は誤り。title list 提示 / 混入込み続行の 2 択分岐は `02-Individual-music/` に音声ファイルが 1 件も無い場合の最終 fallback に限る。
+primary path では `02-Individual-music/` のローカルファイル名を第一手段とし、下記 CLI を実行する。`--music-dir` の相対パスは `<collection-path>` 基準で解決する。外部の title list 解決や対話確認は行わない。非正準形ファイル（Suno UI 手動 DL 由来の `Title.mp3` / `Title (1).mp3` / `Title_1.mp3` 等）は CLI が suno-prompts.json と照合して正準形 `NN{a|b}-Title.ext` へ自動リネームしてから突合する。照合できないファイルはリネームされず unknown として報告される。本ゲートは Suno URL を参照せず、ローカル音源と正準 prompt だけで完走する。音声ファイルが 1 件も無い場合は `/music --generate` の download 再開を案内して停止する。
 
 ```bash
 # primary path: 02-Individual-music/ の <2桁以上のentry index>{a|b}-<title>.<ext> を直接突合
 uv run yt-suno-verify-playlist <collection-path> --music-dir 02-Individual-music
 ```
 
-fallback path（Step 2-3 で DL する場合）は従来どおり Step 2 の WebFetch 結果から title list を作り、`--titles` または `--titles-file` で突合する。
 
 判定:
 - **unknown（どの entry にも一致しない曲）**: 別コレクション由来の混入。playlist から除外するまで Step 5 に進まない
@@ -222,10 +212,9 @@ fallback path（Step 2-3 で DL する場合）は従来どおり Step 2 の Web
 
 > **背景**: playlist には「最新セットの生成が未完のまま、前後コレクションの曲が混入する」事故が繰り返し起きている（実例: 深夜コレクションに昼テーマ 2 ペアが混入 + 深夜 2 entry 未生成のまま master 化）。曲名は `/music --generate` が Song Title 欄へ注入する `entry.title ?? entry.name` で一意なため、機械突合で確実に検出できる。silent な続行は禁止。
 
-### Step 2-3: MP3 の取得（suno-helper 済みなら不要）
+### Step 2-3: ローカル音源の確認
 
-`02-Individual-music/` に MP3 が揃っていれば Step 4 へ進む。揃っていない場合は
-[suno-fallback.md](suno-fallback.md) の fallback 手順を使う。
+`02-Individual-music/` に検証済み音源が揃っていれば Step 4 へ進む。揃っていない場合は CDN から取得せず、`/music --generate` を再実行して suno-helper の download を再開するよう案内して停止する。
 
 ### Step 4: 結果レポート
 
@@ -564,19 +553,11 @@ fi
 
 `phase` は `"prepared"` のまま変更しない。`raw_master` → `master_audio` 確定後の `"mastered"` フェーズ遷移は `/wf-next` の責務（本スキルはユーザーのミキシング+マスタリング前の raw master 生成までを担う）。
 
-## CDN URL パターン (DEPRECATED -- fallback only)
-
-> suno-helper の一括ダウンロード機能が primary path。CDN curl は suno-helper が使えない場合のフォールバックとしてのみ利用する。
-
-| 形式 | URL | 認証 |
-|------|-----|------|
-| MP3 | `https://cdn1.suno.ai/{song_id}.mp3` | 不要 |
-
 ## 所要時間と完了報告
 
-`uv run yt-generate-master`（ffmpeg クロスフェード結合）は **30 秒〜2 分**。Step 3 の `curl` による MP3 一括ダウンロードも曲数が多いと数十秒〜分単位かかる。
+`uv run yt-generate-master`（ffmpeg クロスフェード結合）は **30 秒〜2 分**。
 
-ログを `/tmp/music-master-$(date +%s).log` へ redirect し、完了後は末尾から `master.mp3` のパスとダウンロード成功曲数を報告する。background 実行フラグを持たない環境（Codex 等）では `nohup ... > <log> 2>&1 &` を使い、完了はログ末尾で確認する。
+ログを `/tmp/music-master-$(date +%s).log` へ redirect し、完了後は末尾から `master.mp3` のパスと入力曲数を報告する。background 実行フラグを持たない環境（Codex 等）では `nohup ... > <log> 2>&1 &` を使い、完了はログ末尾で確認する。
 
 ## オーディオビジュアライザー / オーバーレイ
 

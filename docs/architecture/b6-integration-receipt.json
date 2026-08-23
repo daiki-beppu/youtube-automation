@@ -710,7 +710,7 @@
     },
     {
       "old_owner": "legacy..claude.skills.masterup.references.suno-fallback.md",
-      "exact_new_owner": ".claude/skills/music/references/suno-fallback.md",
+      "exact_new_owner": ".claude/skills/music/references/master.md",
       "symbols": [],
       "consumers": [],
       "handoff": "B6"

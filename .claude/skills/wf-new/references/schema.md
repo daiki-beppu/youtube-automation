@@ -220,7 +220,7 @@ top-level `music_engine` は既存 state の読み取り専用互換 field で�
 
 #### Suno 定期実行 checkpoint の責務
 
-生成途中の entry index、観測済み clip ID、playlist/download 再試行情報は suno-helper の Chrome local storage（`sunoResumeState` / `sunoUnattendedRunState`）が所有し、`workflow-state.json` へ二重保存しない。workflow-state の正規成果物は従来どおり `planning.music.suno_playlist_url`、`assets.music_downloaded`、`02-Individual-music/` の実ファイルである。定期実行 state が `completed` でもこれらが揃わなければ完了ではなく、`checkpoint` / `manual-intervention` なら `/music --master` へ進めない。
+生成途中の entry index、観測済み clip ID、playlist/download 再試行情報は suno-helper の Chrome local storage（`sunoResumeState` / `sunoUnattendedRunState`）が所有し、`workflow-state.json` へ二重保存しない。workflow-state の正規成果物は `planning.music` の期待数・実数・欠損数、`assets.music_downloaded`、`02-Individual-music/` の正準 prompt と突合済み実ファイルである。Suno URL は完了判定に使わない。定期実行 state が `completed` でもこれらが揃わなければ完了ではなく、`checkpoint` / `manual-intervention` なら `/music --master` へ進めない。
 
 ### scene_phrases フィールド
 
@@ -271,7 +271,7 @@ top-level `music_engine` は既存 state の読み取り専用互換 field で�
 | `planning.music.tempo` | string | Yes | `"very slow"` / `"slow"` / `"gentle"` / `"moderate"` / `"lively"` のいずれか |
 | `planning.music.instruments` | string[] | Yes | 主要楽器のリスト |
 | `planning.music.exclude` | string[] | No | 除外楽器（任意）|
-| `planning.music.suno_playlist_url` | string / null | No | Suno playlist URL（`/music --generate` が DL 完了時に記録。Suno エンジンのみ。Lyria エンジンでは使用しない）|
+| `planning.music.suno_playlist_url` | string / null | No | 旧 state の読み込み互換用 Suno playlist URL。新規の完了判定・復旧入力には使用しない|
 
 **冪等性**: スキル再実行時は `planning.music` 全体を上書きする（merge しない）。
 
