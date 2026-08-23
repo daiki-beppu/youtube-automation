@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import subprocess
 
 import yaml
 
@@ -12,7 +13,8 @@ WORKFLOW_PATH = REPO_ROOT / ".github/workflows/ci-autofix.yml"
 WORKFLOWS_DIR = REPO_ROOT / ".github/workflows"
 
 # PR をゲートする workflow だけが対象(evals / release-extensions は schedule / tag トリガー)
-WATCHED_WORKFLOWS = ["CI", "Dashboard", "Extensions", "Audio Studio", "Release notes site"]
+CI_WORKFLOWS = ["CI", "Dashboard", "Extensions", "Audio Studio", "Release notes site"]
+WATCHED_WORKFLOWS = [*CI_WORKFLOWS, "Code review"]
 
 _PINNED_ACTION = re.compile(r"^anthropics/claude-code-action@[0-9a-f]{40}$")
 
@@ -57,13 +59,108 @@ def test_watched_workflow_names_match_existing_workflow_files() -> None:
     assert set(WATCHED_WORKFLOWS) <= names
 
 
-def test_gate_only_processes_failed_pr_runs_from_the_same_repo() -> None:
+def test_gate_processes_ci_failures_and_every_completed_code_review() -> None:
     gate = _workflow()["jobs"]["gate"]["if"]
 
     assert "github.event.workflow_run.conclusion == 'failure'" in gate
+    assert "github.event.workflow_run.name == 'Code review'" in gate
     assert "github.event.workflow_run.event == 'pull_request'" in gate
     # fork からの PR は対象外
     assert "github.event.workflow_run.head_repository.full_name == github.repository" in gate
+
+
+def test_review_runs_skip_without_findings_and_supply_the_aggregate_comment() -> None:
+    workflow = _workflow()
+    gate = workflow["jobs"]["gate"]
+    decide = _decide_step(gate)
+
+    assert decide["env"]["SOURCE_WORKFLOW"] == "${{ github.event.workflow_run.name }}"
+    assert "<!-- code-review-workflow -->" in decide["run"]
+    assert "critical_count" in decide["run"]
+    assert "warning_count" in decide["run"]
+    assert "info_count" in decide["run"]
+    assert "${1}[[:space:][:punct:]]*[0-9]+" in decide["run"]
+    assert "][0].body" in decide["run"]
+    assert "skip-review" in decide["run"]
+    assert "awk '/^---[[:space:]]*$/{exit}" in decide["run"]
+    assert 'skip "code review reported no findings"' in decide["run"]
+
+    prompt = _autofix_step(workflow["jobs"]["autofix"])["with"]["prompt"]
+    assert "critical / warning / info" in prompt
+    assert "<!-- code-review-workflow -->" in prompt
+    assert "同意できない" in prompt
+    assert "SOURCE WORKFLOW" in prompt
+    assert "FAILED WORKFLOW" not in prompt
+
+
+def test_review_severity_parser_accepts_real_comment_formats_without_matching_prose() -> None:
+    summary = """\
+| critical | 1 |
+- **Critical**: 2
+**Critical:** 3
+- Critical: **4**
+- Critical (5 件)
+- **critical: 6件** / **warning: 7件** / **info: 8件**
+critical_path.py:42
+The critical finding is on line 99.
+"""
+
+    result = subprocess.run(
+        [
+            "bash",
+            "-c",
+            "grep -ioE 'critical[[:space:][:punct:]]*[0-9]+' | grep -oE '[0-9]+'",
+        ],
+        input=summary,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.stdout.splitlines() == ["1", "2", "3", "4", "5", "6"]
+
+    for severity, expected in (("warning", "7"), ("info", "8")):
+        result = subprocess.run(
+            [
+                "bash",
+                "-c",
+                f"grep -ioE '{severity}[[:space:][:punct:]]*[0-9]+' | grep -oE '[0-9]+'",
+            ],
+            input=summary,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        assert result.stdout.strip() == expected
+
+
+def test_review_severity_parser_ignores_finding_details_after_summary_boundary() -> None:
+    comment = """\
+<!-- code-review-workflow -->
+## Summary
+- critical: 0
+- warning: 1
+- info: 0
+---
+### critical: line 42
+The detailed finding mentions warning: 99.
+"""
+
+    result = subprocess.run(
+        [
+            "bash",
+            "-c",
+            "awk '/^---[[:space:]]*$/{exit} {print}' "
+            "| grep -ioE 'critical[[:space:][:punct:]]*[0-9]+' "
+            "| head -n 1 | grep -oE '[0-9]+' | head -n 1",
+        ],
+        input=comment,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.stdout.strip() == "0"
 
 
 def test_missing_auth_explicitly_skips_the_paid_fix() -> None:
@@ -88,7 +185,7 @@ def test_draft_skip_label_and_stale_head_opt_out_of_the_fix() -> None:
     assert "skip-autofix" in decide_script
     # 失敗した commit から head が進んでいたら、新しい push の CI に判定を譲る
     assert "headRefOid" in decide_script
-    assert "FAILED_HEAD_SHA" in decide_script
+    assert "SOURCE_HEAD_SHA" in decide_script
 
     autofix = workflow["jobs"]["autofix"]
     assert autofix["needs"] == "gate"

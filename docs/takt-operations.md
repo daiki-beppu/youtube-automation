@@ -165,18 +165,18 @@ gh stack merge <stack番号|PR番号> --yes --squash
 draft でない PR の opened / ready_for_review / synchronize で `.github/workflows/code-review.yml` が発火し、claude-code-action が mattpocock code-review(Standards / Spec の 2 軸)+ simplify 観点(reuse / simplification / efficiency)で差分をレビューして severity 付きの集約コメントを投稿する。生成経路(takt / `/issue-direct` / 手動)によらず全 PR に同じゲートが効く。
 
 - **critical 指摘が 1 件以上あると `Code review` check が fail する**。warning / info のみなら success。`gh stack merge` の CI green 待ちにはこの check も含まれる
-- simplify 系の提案はコメントに載るだけで、CI が PR ブランチへ修正を push することはない(workflow は `contents: read`)
+- review workflow 自体は `contents: read` のまま指摘の生成だけを担う。集約コメントに critical / warning / info が 1 件以上あれば、後続の CI autofix が全指摘の修正を試みる
 - オプトアウトは PR に `skip-review` ラベルを付与する(誤検知が続く PR・機械生成の大量 PR 向け)。draft PR は最初から対象外
 - `CLAUDE_CODE_OAUTH_TOKEN` / `ANTHROPIC_API_KEY` がどちらも未設定の環境では fail せず skip される(evals.yml と同じ慣行)
 - 同一 PR への連続 push は進行中の run が cancel され、最新 commit のレビューだけが残る
 
 ## CI 失敗の自動修正(post-push の保険)
 
-PR をゲートする 5 workflow(CI / Dashboard / Extensions / Audio Studio / Release notes site)のいずれかが PR で失敗すると、`.github/workflows/ci-autofix.yml` が `workflow_run` で発火し、claude-code-action が失敗ログを診断して修正 commit を PR ブランチへ push する。ローカルで green にする一次経路(takt の `ci_verify` / `/issue-direct` の fix ループ)はそのままに、push 後に発生した回帰への保険として重ねる。
+PR をゲートする 5 workflow(CI / Dashboard / Extensions / Audio Studio / Release notes site)のいずれかが PR で失敗した場合、または `Code review` の集約コメントに critical / warning / info の指摘がある場合、`.github/workflows/ci-autofix.yml` が `workflow_run` で発火する。claude-code-action は失敗ログまたはレビューコメントを診断し、修正 commit を PR ブランチへ push する。レビューが指摘 0 件なら何もせず終了する。ローカルで green にする一次経路(takt の `ci_verify` / `/issue-direct` の fix ループ)はそのままに、push 後に発生した回帰への保険として重ねる。
 
 - **push は claude-code-action 既定の OIDC → Claude GitHub App トークン交換で行う**(`id-token: write`)。App トークンの push は `pull_request: synchronize` を発火させ、修正 commit の CI が自動で再検証される。code-review.yml が `contents: read` + 明示 `GITHUB_TOKEN` でレビューに閉じるのと対で、push 経路は本 workflow だけが持つ
-- **修正試行は PR あたり 1 回。** commit body の `[ci-autofix]` マーカーで判定し、2 回目以降の失敗はコメント報告のみ(コスト暴走・修正ループ防止)
-- 修正不能・修正すべきでない(仕様矛盾・flaky・インフラ起因)と判断した場合は push せず診断コメントを投稿して正常終了する
+- **修正試行は CI 起点・レビュー起点を通算して PR あたり 1 回。** commit body の `[ci-autofix]` マーカーで判定し、修正後の再レビューや CI で問題が残っても 2 回目以降はコメント報告のみ(コスト暴走・修正ループ防止)
+- 修正不能・修正すべきでない(仕様矛盾・flaky・インフラ起因・同意できないレビュー指摘)と判断した場合は push せず診断コメントを投稿して正常終了する
 - オプトアウトは PR に `skip-autofix` ラベルを付与する(`skip-review` と独立制御)。draft PR・fork からの PR は最初から対象外
 - `CLAUDE_CODE_OAUTH_TOKEN` / `ANTHROPIC_API_KEY` がどちらも未設定の環境では fail せず skip される(code-review.yml と同じ慣行)
 - モデルは opus(pytest 失敗の診断・修正はレビューより難易度が高く、sonnet 既定の code-review.yml とは別判断)
