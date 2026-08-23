@@ -51,7 +51,10 @@ class _VideoSource(ReviewSource):
 
     @property
     def html_path(self):
-        return self.collection.resolve() / f"tmp/reviews/master-video-{self.kind}.html"
+        # Review evidence belongs to the collection history.  Keeping it under
+        # documentation (rather than tmp/) makes the exact preview/full page
+        # available after the orchestrator run has ended.
+        return self.collection.resolve() / f"20-documentation/reviews/master-video-{self.kind}.html"
 
     @property
     def compact_image_ids(self):

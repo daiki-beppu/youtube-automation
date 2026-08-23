@@ -4,6 +4,8 @@
 
 企画候補は全件 `selection_status: proposed` の draft JSON として先に owner CLI へ渡し、永続 `plan_proposals.json` + `.html` pair を公開する。この draft 公開では `planning.generated` を更新しない。候補ごとに `music_direction` / `video_direction` / `thumbnail_direction` を保存し、previewがある場合はcollection内の `10-assets/plan-preview-<proposal_id>.<ext>` へ安全にコピーして、そのrelative pathを `preview_assets` に記録する。
 
+draft pair の公開直後、親 orchestrator は `plan_proposals.html` の絶対 path をユーザーが開ける Markdown link として出し、企画名・対象persona・比較する音楽/映像/thumbnail方針を「確認対象の要約」として併記する。リンクと要約をユーザーへ提示した後にだけ選択CLIを開始し、手動経路では選択完了まで state を更新しない。自動選択でもリンク表示自体は省略せず、採用企画の要約と生成物linkを完了報告へ含める（browser表示とbroker待機だけを省略する）。
+
 企画候補の手動選択は、永続 `plan_proposals.html` と選択cardを開く製品非依存の
 `uv run yt-collection-plan-select --collection <collection-path>` で行う。
 共通brokerが返したmanifest内 `proposal_id`、企画JSON digest、全preview digestを再検証してから、同じownerが選択済みpairを公開し、既存どおりその成功後だけstateを投影する。選択candidateには `selection_source: web` を監査情報として保存する。

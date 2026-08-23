@@ -12,7 +12,7 @@ description: "Use when 音源と画像からマスター動画と YouTube 概要
 
 ## 成果物
 
-- `書き込む`: `collections/<id>/01-master/*.mp4`, `collections/<id>/20-documentation/descriptions.json`, `collections/<id>/20-documentation/descriptions.html`, `collections/<id>/workflow-state.json`
+- `書き込む`: `collections/<id>/01-master/*.mp4`, `collections/<id>/20-documentation/descriptions.json`, `collections/<id>/20-documentation/descriptions.html`, `collections/<id>/20-documentation/reviews/master-video-{preview,full}.html`, `collections/<id>/workflow-state.json`
 - `読み込む`: `collections/<id>/01-master/<master-audio>`, `collections/<id>/10-assets/main.png`, `collections/<id>/10-assets/main.jpg`, `collections/<id>/10-assets/loop.mp4`, 検証済み `collections/<id>/20-documentation/suno-prompts.json`, `data/benchmark_*.json`, 検証済み `docs/benchmarks/benchmark-report.json`, `config/channel/*.json`, `config/skills/video.yaml`
 
 ## モード判定

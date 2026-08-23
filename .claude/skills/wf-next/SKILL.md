@@ -247,6 +247,7 @@ status を記録した後は、成功時だけでなく blocked / failed の停�
    - 両 Agent とも state は入力確認に必要な範囲だけ読み、書き込まず、AskUserQuestion を実行しない。片方でも失敗または成果物欠落なら state を更新せず停止する
 2. 並列 A 完了後:
    - メインが両成果物の存在と `phase: "mastered"` との整合を確認する
+   - メインは `descriptions.html` の絶対pathをユーザーが開けるMarkdown linkで提示し、title、概要欄、tag、localizationを確認対象として要約する。自動進行でもこのlinkと要約を完了報告へ残す。手動確認を要求する設定では確認完了まで `assets.description` とphaseを更新しない
    - PASS 後だけ、メインが Agent 1 の解決済み表示値を `/video --generate` の `master-video-review.md` に従ってfull reviewへ渡す。probe・digest・承認成功時に同CLIが `assets.master_video` を確定する。次に確定済み表示名 mapping を `apply_track_display_names()` で永続化し、概要欄完了を正準キー `assets.description` へ保存する `set-description-generated true` owner CLI を実行してから、次の owner CLI で phase と `updated_at` を一体更新する
 
      ```bash
