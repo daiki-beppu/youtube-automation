@@ -52,7 +52,7 @@
       "properties": {
         "name": {"title": "Entry name", "type": "string", "minLength": 1, "x-view": {"order": 0}},
         "title": {"title": "Song title", "type": "string", "minLength": 1, "x-view": {"order": 1}},
-        "style": {"title": "Style / prompt", "type": "string", "minLength": 1, "x-view": {"order": 2}},
+        "style": {"title": "Style / prompt", "type": "string", "minLength": 1, "x-view": {"order": 2, "copyable": true}},
         "lyrics": {"title": "Lyrics", "type": "string", "x-view": {"order": 3, "collapsed": true, "copyable": true}},
         "sections": {"title": "Sections", "type": "array", "items": {}, "x-view": {"order": 4}},
         "options": {"title": "Generation options / More Options", "type": "object", "additionalProperties": true, "x-view": {"order": 5, "collapsed": true}},

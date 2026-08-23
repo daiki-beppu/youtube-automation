@@ -154,11 +154,9 @@ def _collect_statuses(
     elif isinstance(value, list):
         item_schema = resolved.get("items")
         child = item_schema if isinstance(item_schema, dict) else {}
+        object_labels = _item_labels(value, resolved) if all(isinstance(item, dict) for item in value) else None
         for index, item in enumerate(value, 1):
-            label = context
-            if isinstance(item, dict):
-                identifier = item.get("name") or item.get("plan_id") or item.get("title") or item.get("id")
-                label = str(identifier) if identifier is not None else f"{context} {index}".strip()
+            label = object_labels[index - 1] if object_labels is not None else f"{context} {index}".strip()
             _collect_statuses(item, child, root_schema, label, output)
 
 
@@ -457,6 +455,29 @@ def _render_table(
     )
 
 
+def _item_labels(items: list[object], schema: Mapping[str, object]) -> list[str]:
+    """Return the schema-owned labels shared by cards and approval summaries."""
+    label_field = _view(schema).get("labelField")
+    if label_field is not None and (not isinstance(label_field, str) or not label_field):
+        raise DocumentRenderError("x-view.labelField は空でない string で指定してください")
+
+    labels: list[str] = []
+    for index, item in enumerate(items, 1):
+        if not isinstance(item, dict):
+            raise DocumentRenderError("cards 表示には object の array が必要です")
+        if isinstance(label_field, str):
+            label = item.get(label_field)
+            if not isinstance(label, str) or not label:
+                raise DocumentRenderError(
+                    f"cards の x-view.labelField ({label_field}) は各 item の空でない string を参照してください"
+                )
+        else:
+            fallback = item.get("title") or item.get("name")
+            label = fallback if isinstance(fallback, str) and fallback else f"Entry {index}"
+        labels.append(label)
+    return labels
+
+
 def _render_cards(
     heading: str,
     description: str,
@@ -474,19 +495,7 @@ def _render_cards(
     item_schema_value = schema.get("items")
     item_schema = item_schema_value if isinstance(item_schema_value, dict) else {}
     view = _view(schema)
-    label_field = view.get("labelField")
-    labels: list[str] = []
-    for index, item in enumerate(value, 1):
-        if isinstance(label_field, str):
-            label = item.get(label_field)
-            if not isinstance(label, str) or not label:
-                raise DocumentRenderError(
-                    f"cards の x-view.labelField ({label_field}) は各 item の空でない string を参照してください"
-                )
-        else:
-            fallback = item.get("title") or item.get("name")
-            label = fallback if isinstance(fallback, str) and fallback else f"Entry {index}"
-        labels.append(label)
+    labels = _item_labels(value, schema)
     # anchor は section 単位で名前空間を分け、cards section が複数あっても id が衝突しない。
     anchors = [escape(f"{anchor_prefix}-{index}", quote=True) for index in range(1, len(labels) + 1)]
     entries = list(zip(anchors, labels, value, strict=True))

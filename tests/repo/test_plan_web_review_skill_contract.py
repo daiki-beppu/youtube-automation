@@ -63,6 +63,14 @@ def test_plan_schema_uses_candidate_cards_with_required_comparison_fields_and_pr
     assert candidate["properties"]["selection_source"]["enum"] == ["web", "terminal", "automatic"]
 
 
+def test_collapsed_constraint_details_do_not_advertise_top_level_status_summary() -> None:
+    schema = json.loads(SCHEMA.read_text(encoding="utf-8"))
+    constraint_status_view = schema["definitions"]["constraint"]["properties"]["status"].get("x-view", {})
+
+    assert "statusSummary" not in constraint_status_view
+    assert "statusMap" not in constraint_status_view
+
+
 def test_parent_orchestrator_reports_review_link_before_selection_and_on_automatic_completion() -> None:
     reference = REFERENCE.read_text(encoding="utf-8")
 

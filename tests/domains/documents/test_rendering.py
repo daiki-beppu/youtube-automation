@@ -163,18 +163,50 @@ def test_status_annotation_drives_value_style_and_top_approval_summary() -> None
     assert html.index("承認サマリー") < html.index("<h2>Checks</h2>")
 
 
+def test_status_summary_does_not_collect_annotations_below_collapsed_section() -> None:
+    schema = {
+        "properties": {
+            "audit": {
+                "title": "Audit",
+                "x-view": {"collapsed": True},
+                "properties": {
+                    "status": {
+                        "title": "Audit status",
+                        "x-view": {"statusMap": {"pass": "pass"}, "statusSummary": True},
+                    }
+                },
+            },
+            "decision": {
+                "title": "Decision",
+                "x-view": {"statusMap": {"pass": "pass"}, "statusSummary": True},
+            },
+        }
+    }
+
+    html = render_schema_document({"audit": {"status": "pass"}, "decision": "pass"}, schema)
+    approval = html.split('<section class="approval-summary', 1)[1].split("</section>", 1)[0]
+
+    assert "Decision" in approval
+    assert "Audit status" not in approval
+    assert approval.count('class="status-chip') == 1
+
+
 @pytest.mark.parametrize(
     "schema_name, expected_labels, expected_statuses",
     [
         (RepositorySchema.VIDEO_DESCRIPTION, ["Quality checks · Status"], ["pass"]),
         (
             RepositorySchema.MUSIC_PROMPT,
-            ["01-rain-window · Machine verification", "01-rain-window · Semantic review"],
+            ["Rain Window · Machine verification", "Rain Window · Semantic review"],
             ["pass", "pass"],
         ),
         (
             RepositorySchema.COLLECTION_PLAN,
-            ["plan-1 · 選択 status", "plan-2 · 選択 status", "plan-3 · 選択 status"],
+            [
+                "Rainy Midnight Focus · 選択 status",
+                "Neon Study Session · 選択 status",
+                "Quiet Window Beats · 選択 status",
+            ],
             ["selected", "rejected", "proposed"],
         ),
     ],
@@ -208,6 +240,18 @@ def test_collection_plan_uses_schema_label_and_group_order_across_navigation_com
     assert f">{selected_title}</a>" in html
     assert comparison.index(selected_title) < comparison.index(titles[0])
     assert html.index(f">{selected_title}</a>") < html.index(f">{titles[0]}</a>")
+
+
+def test_music_prompt_fixture_renders_style_as_copyable_content() -> None:
+    fixture = FIXTURES_DIR / "documents" / "music-prompt.json"
+    document = json.loads(fixture.read_text(encoding="utf-8"))
+
+    html = render_repository_document(RepositorySchema.MUSIC_PROMPT, document)
+
+    style = document["entries"][0]["style"]
+    copyable = html.split("Style / prompt</dt><dd>", 1)[1].split("</dd>", 1)[0]
+    assert 'class="copyable-content"' in copyable
+    assert style in copyable
 
 
 @pytest.mark.parametrize("label_field", ["", 42, ["title"]])
