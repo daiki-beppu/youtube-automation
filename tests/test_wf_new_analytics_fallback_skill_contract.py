@@ -238,6 +238,28 @@ def test_analytics_mode_persona_only_intermediate_state_uses_existing_fallback(
     assert expected_output in result.stdout
 
 
+@pytest.mark.parametrize("input_mode", ["benchmark-fallback", "minimal"])
+@pytest.mark.parametrize("broken_state", ["partial-pair", "invalid-pair"])
+def test_non_analytics_modes_warn_and_continue_for_unusable_persona_chain(
+    tmp_path: Path, input_mode: str, broken_state: str
+) -> None:
+    if input_mode == "benchmark-fallback":
+        _touch(tmp_path / "data/benchmark_20260701.json")
+    _persona_chain(tmp_path)
+    if broken_state == "partial-pair":
+        (tmp_path / "docs/plans/viewing-scene-matrix.html").unlink()
+    else:
+        with (tmp_path / "docs/plans/viewing-scene-matrix.html").open("a", encoding="utf-8") as stream:
+            stream.write("tampered")
+
+    result = _run_freshness_gate(tmp_path, ttp_mode=False)
+
+    assert result.returncode == 0, result.stderr
+    assert "persona chain 警告" in result.stdout
+    assert "初回仮説 fallback へ委譲" in result.stdout
+    assert "初回仮説の視聴者像から視聴シーンを仮説化" in result.stdout
+
+
 @pytest.mark.parametrize("missing_suffix", [".json", ".html"])
 def test_analytics_mode_incomplete_scene_pair_fails_closed_without_mutation(
     tmp_path: Path, missing_suffix: str
@@ -294,6 +316,7 @@ def test_analytics_mode_rejects_invalid_structured_persona_chain(tmp_path: Path,
     validator = tmp_path / ".claude/skills/wf-new/references/validate_persona_chain.py"
     validator.parent.mkdir(parents=True, exist_ok=True)
     validator.write_bytes(_PERSONA_CHAIN_VALIDATOR.read_bytes())
+    before = {path: path.read_bytes() for path in tmp_path.rglob("*") if path.is_file()}
     result = subprocess.run(
         ["bash", str(script)],
         cwd=tmp_path,
@@ -311,6 +334,8 @@ def test_analytics_mode_rejects_invalid_structured_persona_chain(tmp_path: Path,
 
     assert result.returncode != 0
     assert "persona chain 検証失敗" in result.stdout
+    for path, content in before.items():
+        assert path.read_bytes() == content
 
 
 @pytest.mark.parametrize(

@@ -6,7 +6,7 @@
 
 企画候補を `collection-plan-documents.md` に従いコレクションの検証済み `20-documentation/plan_proposals.json` + `.html` draft pair に保存し、同ownerの選択確定成功後だけ `workflow-state.json` の `planning.generated = true` と `planning.final_title` を更新し、採用画像がある場合は最終 `thumbnail.jpg` の正規入力として後段へ引き渡し、無い場合は `/thumbnail <theme>` フォールバックを案内してから `/music --prompt <theme>` へ進む Next Step を示した時点で完了。open insights を企画入力にした場合は、「open insights の消費と status 反映」に従う企画確定時の status 更新（adopted / dismissed）まで完了扱いにしない。画像生成を実施した場合は、採用企画の参照画像を `20-documentation/thumbnail-prompts.md` の `Reference Assignments` へ保存できるまで完了扱いにせず、保存失敗時は停止する。
 
-**構造化文書 Hard Gate**: `references/freshness-rules.md` の鮮度判定へ進む前に、ファイル名日付が最新の `reports/analysis_*.json` と同日付 `.html` の存在を確認し、`.claude/skills/analytics/references/analysis-json-validator.md` の validator を実行する。exit 0 の場合だけ JSON を analytics mode の入力として使用する。HTML 欠損、不正 JSON、pair 不一致、validator 失敗は必須入力不足として中断し、`/analytics --analyze` 再実行を案内する。
+**構造化文書 Hard Gate**: `references/freshness-rules.md` の鮮度判定へ進む前に、ファイル名日付が最新の `reports/analysis_*.json` と同日付 `.html` の存在を確認し、`.claude/skills/analytics/references/analysis-json-validator.md` の validator を実行する。exit 0 の場合だけ JSON を analytics mode の入力として使用する。analytics report の HTML 欠損、不正 JSON、pair 不一致、validator 失敗は必須入力不足として中断し、`/analytics --analyze` 再実行を案内する。
 
 ## Untrusted Data 境界
 
@@ -86,7 +86,7 @@ Phase 1 に入る前に入力モードを 1 回だけ判定し、以降の分析
 | minimal mode | 検証済み analysis JSON と `data/benchmark_*.json` がどちらも存在しない | `ttp_mode: false` はユーザー直接入力（テーマ / ジャンル / 雰囲気）+ config。`true` は入力不足のため企画生成しない | `false` は analytics / benchmark 依存をスキップし、persona / viewing-scene を初回仮説として扱う。`true` は `/channel-research --benchmark` を案内して停止する |
 
 analytics mode では `/analytics --analyze` と `/channel-research --benchmark` を独立・並列で鮮度判定（stale 検出）し、
-`/channel-strategy --persona` の persona / scene 各 JSON+HTML pair を独立分類する。両 pair が fully present なら canonical reader と producer 共有の参照 contract で検証する。各 pair の片側欠落・schema/digest/document_type 不正・scene pair だけ存在・参照不整合は fail-closed で停止する。両 pair が未生成、または検証済み persona pair だけの暫定正規状態で scene pair が未生成なら `freshness-rules.md` の mode 別 fallback に委ね、旧 Markdown は入力にしない。
+`/channel-strategy --persona` の persona / scene 各 JSON+HTML pair を独立分類する。両 pair が fully present なら canonical reader と producer 共有の参照 contract で検証する。各 pair の片側欠落・schema/digest/document_type 不正・scene pair だけ存在・参照不整合は、analytics mode では成果物無変更の fail-closed で停止し、benchmark fallback / minimal mode では警告して初回仮説 fallback に委ねる。両 pair が未生成、または検証済み persona pair だけの暫定正規状態で scene pair が未生成なら `freshness-rules.md` の mode 別 fallback に委ね、旧 Markdown は入力にしない。
 
 - analytics report の stale / fresh 処理は `references/freshness-rules.md::stale report の自動更新` をそのまま適用し、入口側で分岐、呼出順、成功条件、停止条件を再定義しない
 - analytics mode で `/channel-research --benchmark` が stale → Skill ツールで実行（内部で差分更新）
