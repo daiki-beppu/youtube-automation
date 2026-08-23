@@ -194,7 +194,18 @@ def test_analytics_mode_accepts_verified_structured_persona_chain_without_legacy
     assert not (tmp_path / "docs/plans/viewing-scene-matrix.md").exists()
 
 
-@pytest.mark.parametrize("broken_part", ["missing-html", "invalid-schema", "digest-mismatch", "reference-mismatch"])
+@pytest.mark.parametrize(
+    "broken_part",
+    [
+        "missing-html",
+        "invalid-schema",
+        "digest-mismatch",
+        "persona-id-mismatch",
+        "empty-references",
+        "persona-missing-scene",
+        "scene-missing-persona-reference",
+    ],
+)
 def test_analytics_mode_rejects_invalid_structured_persona_chain(tmp_path: Path, broken_part: str) -> None:
     _analysis_pair(tmp_path)
     _persona_chain(tmp_path)
@@ -205,10 +216,22 @@ def test_analytics_mode_rejects_invalid_structured_persona_chain(tmp_path: Path,
     elif broken_part == "digest-mismatch":
         with (tmp_path / "docs/plans/viewing-scene-matrix.html").open("a", encoding="utf-8") as stream:
             stream.write("tampered")
-    else:
+    elif broken_part == "persona-id-mismatch":
         scene_path = tmp_path / "docs/plans/viewing-scene-matrix.json"
         scene = json.loads(scene_path.read_text(encoding="utf-8"))
         scene["persona_id"] = "persona-other"
+        scene_path.write_text(json.dumps(scene), encoding="utf-8")
+        publish_json_document(scene_path, RepositorySchema.CHANNEL_STRATEGY)
+    elif broken_part in {"empty-references", "persona-missing-scene"}:
+        persona_path = tmp_path / "docs/channel/personas/persona-definition.json"
+        persona = json.loads(persona_path.read_text(encoding="utf-8"))
+        persona["scene_ids"] = [] if broken_part == "empty-references" else ["scene-other"]
+        persona_path.write_text(json.dumps(persona), encoding="utf-8")
+        publish_json_document(persona_path, RepositorySchema.CHANNEL_STRATEGY)
+    else:
+        scene_path = tmp_path / "docs/plans/viewing-scene-matrix.json"
+        scene = json.loads(scene_path.read_text(encoding="utf-8"))
+        scene["scenes"].append({"id": "scene-2", "situation": "rest", "desires": ["relax"], "evidence_ids": ["ev-1"]})
         scene_path.write_text(json.dumps(scene), encoding="utf-8")
         publish_json_document(scene_path, RepositorySchema.CHANNEL_STRATEGY)
 
