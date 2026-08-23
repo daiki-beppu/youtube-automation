@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -13,15 +12,13 @@ from youtube_automation.core.errors import AutomationError
 from youtube_automation.domains.collections.inventory import iter_collections
 from youtube_automation.domains.collections.workflow_state import WorkflowState
 from youtube_automation.domains.collections.workflow_state import read as read_workflow_state
-from youtube_automation.domains.documents.schema_registry import RepositorySchema
+from youtube_automation.domains.documents.operational_artifacts import resolve_artifacts
 from youtube_automation.domains.post_publish import verify_post_publish_completion
-from youtube_automation.infrastructure.documents.publishing import read_published_json_document
 
 STAGES = ("企画", "音源生成", "マスター化", "動画化", "サムネイル", "アップロード", "公開後処理", "分析")
 
 # /wf-status が定義する v2 phase 語彙を正規の段判定にも使う。
 WF_STATUS_PHASES = frozenset({"planning", "prepared", "cloud_owned", "mastered", "publishing", "complete"})
-_ANALYSIS_REPORT = re.compile(r"analysis_(\d{8})\.json\Z")
 
 
 @dataclass(frozen=True)
@@ -110,20 +107,9 @@ def _publish_date(state: WorkflowState) -> date | None:
 def _analysis_complete(root: Path, published_on: date | None) -> bool:
     if published_on is None:
         return False
-    reports = root / "reports"
-    if not reports.is_dir():
-        return False
-    for path in reports.glob("analysis_*.json"):
-        match = _ANALYSIS_REPORT.fullmatch(path.name)
-        if path.is_file() and match is not None:
-            try:
-                report_date = datetime.strptime(match.group(1), "%Y%m%d").date()
-            except ValueError:
-                continue
-            if report_date >= published_on:
-                read_published_json_document(path, RepositorySchema.ANALYSIS_REPORT)
-                return True
-    return False
+    reports = resolve_artifacts(root, "reports/analysis_*.json")
+    published_marker = Path(f"published_{published_on:%Y%m%d}.json")
+    return bool(reports.valid) and not reports.freshness(against=published_marker).is_stale
 
 
 def _completed_stages(root: Path, collection: Path, state: WorkflowState) -> frozenset[str]:
