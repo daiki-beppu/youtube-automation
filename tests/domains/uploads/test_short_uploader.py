@@ -112,11 +112,15 @@ def _make_short_uploader(
             mock_inner.upload_video.return_value = "V"
             ...
     """
+    from youtube_automation.configuration import ScheduleConfig
     from youtube_automation.domains.uploads import shorts as su_mod
+
+    raw_schedule = (schedule_config or {}).get("schedule", {})
+    resolved_schedule = ScheduleConfig(timezone=ZoneInfo(raw_schedule.get("timezone", "Asia/Tokyo")))
 
     with (
         patch.object(su_mod, "YouTubeAutoUploader") as mock_cls,
-        patch.object(su_mod.ShortUploader, "_load_schedule_config", return_value=schedule_config or {}),
+        patch.object(su_mod, "load_schedule_config", return_value=resolved_schedule),
     ):
         mock_uploader = MagicMock()
         mock_cls.return_value = mock_uploader
@@ -174,6 +178,13 @@ class TestInit:
         with _make_short_uploader() as (uploader, mock_inner):
             # Then: `uploader.uploader` 属性が YouTubeAutoUploader モックを指す
             assert uploader.uploader is mock_inner
+
+    def test_missing_schedule_config_uses_resolved_defaults(self):
+        """schedule_config.json 欠落時も typed loader の既定値を保持する。"""
+        from youtube_automation.configuration import ScheduleConfig
+
+        with _make_short_uploader(schedule_config={}) as (uploader, _):
+            assert uploader.schedule_config == ScheduleConfig()
 
     def test_short_uploader_accepts_shared_tracking_and_published_date_collaborators(self):
         """Collection uploader と同じ collaborator を明示注入できる。"""

@@ -5,6 +5,7 @@ from typing import ClassVar
 from unittest.mock import MagicMock, patch
 from zoneinfo import ZoneInfo
 
+from youtube_automation.configuration import ScheduleConfig
 from youtube_automation.domains.uploads.collection import PublishedDatesScheduler
 
 TZ = ZoneInfo("Asia/Tokyo")
@@ -20,14 +21,12 @@ def calculate_publish_at(
     """本番 collaborator を固定時刻・既存公開日で実行するテストadapter。"""
 
     scheduler = PublishedDatesScheduler(
-        {
-            "schedule": {
-                "auto_schedule_enabled": auto_schedule_enabled,
-                "cadence": cadence or [],
-                "publish_time": publish_time,
-                "timezone": "Asia/Tokyo",
-            }
-        },
+        ScheduleConfig(
+            timezone=TZ,
+            scheduling_enabled=auto_schedule_enabled,
+            cadence=tuple(cadence or ()),
+            publish_time=publish_time,
+        ),
         MagicMock(),
     )
     scheduler.get_published_dates = MagicMock(return_value=existing_dates)
@@ -127,37 +126,39 @@ class TestCadenceScheduling:
 
 
 class TestSchedulingEnabledHeuristic:
-    """schedule_config.json から予約公開有効性を判定する観測契約。"""
+    """解決済み ScheduleConfig から予約公開有効性を判定する観測契約。"""
 
     @staticmethod
-    def _calculate(schedule: dict) -> str | None:
-        scheduler = PublishedDatesScheduler({"schedule": schedule}, MagicMock())
+    def _calculate(*, enabled: bool, cadence: tuple[str, ...] = (), publish_time: str = "10:00") -> str | None:
+        scheduler = PublishedDatesScheduler(
+            ScheduleConfig(scheduling_enabled=enabled, cadence=cadence, publish_time=publish_time), MagicMock()
+        )
         scheduler.get_published_dates = MagicMock(return_value=set())
         return scheduler.calculate_publish_at()
 
     def test_explicit_true_enables(self):
-        assert self._calculate({"auto_schedule_enabled": True}) is not None
+        assert self._calculate(enabled=True) is not None
 
     def test_explicit_false_disables_even_when_cadence_present(self):
         """auto_schedule_enabled=false が明示されていればスケジュール無効（後方互換）."""
-        assert self._calculate({"auto_schedule_enabled": False, "cadence": ["tue", "thu", "sat"]}) is None
+        assert self._calculate(enabled=False, cadence=("tue", "thu", "sat")) is None
 
     def test_cadence_alone_implies_enabled(self):
         """cadence が明示されていれば auto_schedule_enabled 未設定でも有効扱い（#647）."""
-        assert self._calculate({"cadence": ["tue", "thu", "sat"]}) is not None
+        assert self._calculate(enabled=True, cadence=("tue", "thu", "sat")) is not None
 
     def test_publish_time_alone_implies_enabled(self):
         """publish_time が明示されていれば auto_schedule_enabled 未設定でも有効扱い（#647）."""
-        assert self._calculate({"publish_time": "20:00"}) is not None
+        assert self._calculate(enabled=True, publish_time="20:00") is not None
 
     def test_empty_cadence_does_not_imply_enabled(self):
         """空 cadence はオプトインシグナルにならない."""
-        assert self._calculate({"cadence": []}) is None
+        assert self._calculate(enabled=False) is None
 
     def test_day1_time_alone_does_not_imply_enabled(self):
         """day1_time のみは過去テンプレで既定値が入っていることがあるためシグナルにしない."""
         # 旧テンプレ互換（auto_schedule_enabled なしで day1_time のみ）はスケジュール無効
-        assert self._calculate({"day1_time": "20:00", "timezone": "Asia/Tokyo"}) is None
+        assert self._calculate(enabled=False, publish_time="20:00") is None
 
     def test_empty_dict_disables(self):
-        assert self._calculate({}) is None
+        assert self._calculate(enabled=False) is None

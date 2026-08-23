@@ -2,29 +2,16 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from datetime import datetime
-from typing import Any
 from zoneinfo import ZoneInfo
 
-from youtube_automation.core.errors import ConfigError, ValidationError
-
-SCHEDULE_SECTION = "schedule"
-TIMEZONE_KEY = "timezone"
-DEFAULT_SCHEDULE_TIMEZONE = "Asia/Tokyo"
+from youtube_automation.configuration import ScheduleConfig
+from youtube_automation.core.errors import ValidationError
 
 
-def get_schedule_timezone(schedule_config: Mapping[str, Any]) -> ZoneInfo:
+def get_schedule_timezone(schedule_config: ScheduleConfig) -> ZoneInfo:
     """Resolve the configured schedule timezone."""
-    schedule = schedule_config.get(SCHEDULE_SECTION, {})
-    if not isinstance(schedule, Mapping):
-        raise ConfigError("schedule_config.json の schedule は object である必要があります")
-
-    timezone_name = schedule.get(TIMEZONE_KEY, DEFAULT_SCHEDULE_TIMEZONE)
-    if not isinstance(timezone_name, str) or not timezone_name:
-        raise ConfigError("schedule_config.json の schedule.timezone は空でない文字列である必要があります")
-
-    return ZoneInfo(timezone_name)
+    return schedule_config.timezone
 
 
 def ensure_tz_aware(dt: datetime, *, context: str) -> datetime:
@@ -53,7 +40,7 @@ def ensure_tz_aware(dt: datetime, *, context: str) -> datetime:
     return dt
 
 
-def now_in_schedule_tz(schedule_config: Mapping[str, Any]) -> datetime:
+def now_in_schedule_tz(schedule_config: ScheduleConfig) -> datetime:
     """schedule.timezone の現在時刻を TZ-aware datetime として返す.
 
     永続化用 timestamp の生成を一点に集約し、`datetime.now()`（TZ-naive）の混入を防ぐ。

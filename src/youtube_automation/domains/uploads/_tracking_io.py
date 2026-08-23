@@ -6,6 +6,7 @@ import json
 import logging
 from pathlib import Path
 
+from youtube_automation.configuration import ScheduleConfig
 from youtube_automation.core.adapters.media import CollectionPaths
 from youtube_automation.core.adapters.runtime import now_in_schedule_tz
 from youtube_automation.core.errors import ValidationError, WorkflowStateError, WorkflowStateSectionTypeError
@@ -31,7 +32,7 @@ logger = logging.getLogger(__name__)
 class TrackingStore:
     """collection tracking と upload workflow state を永続化する。"""
 
-    def __init__(self, collections_root: Path, config: dict) -> None:
+    def __init__(self, collections_root: Path, config: ScheduleConfig) -> None:
         self.collections_root = collections_root
         self.config = config
 

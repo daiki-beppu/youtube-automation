@@ -14,6 +14,7 @@ class ScheduleConfig:
     publish_time: str = "10:00"
     cadence: tuple[str, ...] = ()
     scheduling_enabled: bool = False
+    scheduling_explicitly_disabled: bool = False
     category_id: str = "10"
     auto_create_playlist: bool = True
     max_retries: int = 3
