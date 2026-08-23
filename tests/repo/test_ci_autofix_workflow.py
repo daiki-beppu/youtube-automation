@@ -39,8 +39,8 @@ def _autofix_step(autofix_job: dict[str, object]) -> dict[str, object]:
     return next(step for step in autofix_job["steps"] if step.get("id") == "autofix")
 
 
-def _checkout_step(job: dict[str, object]) -> dict[str, object]:
-    return next(step for step in job["steps"] if str(step.get("uses", "")).startswith("actions/checkout@"))
+def _checkout_step(autofix_job: dict[str, object]) -> dict[str, object]:
+    return next(step for step in autofix_job["steps"] if str(step.get("uses", "")).startswith("actions/checkout@"))
 
 
 def test_autofix_fires_when_a_pr_gate_workflow_fails() -> None:
