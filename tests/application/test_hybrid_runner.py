@@ -10,7 +10,12 @@ from pathlib import Path
 import pytest
 
 from tests.helpers.paths import REPO_ROOT
-from youtube_automation.application.hybrid_runner import SandwichRequest, SandwichResult, run_sandwich
+from youtube_automation.application.hybrid_runner import (
+    PipelineStagePolicy,
+    SandwichRequest,
+    SandwichResult,
+    run_sandwich,
+)
 from youtube_automation.application.media_handoff import HandoffSource, pull_handoff, push_handoff
 from youtube_automation.core.errors import ResourceLimitError, StateSyncError
 from youtube_automation.domains.hybrid_resource_guard import GIB, HybridResourceSnapshot
@@ -74,6 +79,47 @@ class PassingResourceProbe:
             monthly_run_count=0,
             estimated_run_minutes=60,
         )
+
+
+def test_pipeline_stage_policy_resolves_media_prompt_verify_and_control_allowlist(tmp_path: Path) -> None:
+    store = LocalMediaStore(tmp_path / "store")
+    source = tmp_path / "song.mp3"
+    source.write_bytes(b"verified input")
+    manifest = push_handoff(
+        store,
+        HandoffIdentity("003ch", "demo", "suno-download"),
+        (HandoffSource(source, "song.mp3"),),
+    )
+    _, _, worker = _repositories(
+        tmp_path,
+        "003ch/demo/suno-download/manifest.json",
+        manifest.root_sha256,
+    )
+    request = SandwichRequest(
+        channel_dir=worker,
+        collection_dir="collections/planning/demo",
+        channel="003ch",
+        collection="demo",
+        agent="claude",
+        prompt="/wf-new --auto",
+        commit_message="chore: runner state",
+        input_handoff="suno-download",
+        input_destination="media",
+        output_handoff="master",
+        output_root="outputs",
+        output_files=("Master.mp4",),
+    )
+    policy = PipelineStagePolicy(request, store)
+
+    policy.resolve()
+    assert (worker / "media" / "song.mp3").read_bytes() == b"verified input"
+    assert policy.prompt_for() == "/wf-new --auto"
+    (worker / "outputs").mkdir()
+    (worker / "outputs" / "Master.mp4").write_bytes(b"output")
+    assert policy.verify() == SandwichResult("completed", "demo")
+    policy.allows(worker, {"collections/planning/demo/workflow-state.json"})
+    with pytest.raises(StateSyncError, match="Git制御面state以外"):
+        policy.allows(worker, {"unexpected.json"})
 
 
 def _planning_repository(tmp_path: Path, *, phase: str = "planning") -> tuple[Path, Path]:

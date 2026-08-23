@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import subprocess
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal, Protocol
 
@@ -79,8 +79,11 @@ class SandwichRequest:
             self.input_handoff is not None or self.output_handoff is not None
         ):
             raise ValidationError(f"{self.stage} stage は media handoff を受け付けません")
-        for field in filter(None, (self.collection_dir, self.input_destination, self.output_root, *self.output_files)):
-            validate_media_relative_path("runner path", field)
+        for path_value in filter(
+            None,
+            (self.collection_dir, self.input_destination, self.output_root, *self.output_files),
+        ):
+            validate_media_relative_path("runner path", path_value)
 
 
 def _inside(root: Path, relative: str) -> Path:
@@ -108,6 +111,18 @@ class SandwichResult:
     collection: str | None
 
 
+class StagePolicy(Protocol):
+    """Stage-specific execution semantics used by the sandwich pipeline."""
+
+    def resolve(self) -> None: ...
+
+    def prompt_for(self) -> str: ...
+
+    def verify(self) -> SandwichResult: ...
+
+    def allows(self, repository: Path, changed: set[str]) -> None: ...
+
+
 def _verify_input_reference(request: SandwichRequest, manifest: HandoffManifest) -> None:
     state_path = _inside(request.channel_dir, request.collection_dir) / "workflow-state.json"
     handoff = read(state_path).handoff
@@ -119,6 +134,57 @@ def _verify_input_reference(request: SandwichRequest, manifest: HandoffManifest)
         or handoff.root_sha256 != manifest.root_sha256
     ):
         raise StateSyncError("workflow-state handoff参照とpull済みmanifestが一致しません")
+
+
+def _control_paths(channel_dir: Path) -> set[str]:
+    context = build_context(channel_dir)
+    return {path.relative_to(context.repository).as_posix() for path in context.control_files}
+
+
+@dataclass(slots=True)
+class PipelineStagePolicy:
+    """Media handoff and control-file policy for the default pipeline stage."""
+
+    request: SandwichRequest
+    store: MediaStore
+    _initial_control_paths: set[str] = field(init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        self._initial_control_paths = _control_paths(self.request.channel_dir)
+
+    def resolve(self) -> None:
+        if self.request.input_handoff is None or self.request.input_destination is None:
+            return
+        identity = HandoffIdentity(self.request.channel, self.request.collection, self.request.input_handoff)
+        manifest = pull_handoff(
+            self.store,
+            identity,
+            _inside(self.request.channel_dir, self.request.input_destination),
+        )
+        _verify_input_reference(self.request, manifest)
+
+    def prompt_for(self) -> str:
+        return self.request.prompt
+
+    def verify(self) -> SandwichResult:
+        if self.request.output_handoff is not None and self.request.output_root is not None:
+            root = _inside(self.request.channel_dir, self.request.output_root)
+            sources = tuple(HandoffSource(_inside(root, path), path) for path in self.request.output_files)
+            push_handoff(
+                self.store,
+                HandoffIdentity(
+                    self.request.channel,
+                    self.request.collection,
+                    self.request.output_handoff,
+                ),
+                sources,
+            )
+        return SandwichResult("completed", self.request.collection or None)
+
+    def allows(self, repository: Path, changed: set[str]) -> None:
+        allowed = self._initial_control_paths | _control_paths(self.request.channel_dir)
+        if changed - allowed:
+            raise StateSyncError("writerがGit制御面state以外を変更したため停止しました")
 
 
 def _resource_detail(report: HybridResourceReport) -> str:
@@ -187,6 +253,7 @@ def run_sandwich(
     """Run the existing local-first workflow between verified MediaStore boundaries."""
     _guard_resources(request, resource_probe, on_resource_event, on_resource_diagnostics)
     context = build_context(request.channel_dir)
+    policy: StagePolicy | None = PipelineStagePolicy(request, store) if request.stage == "pipeline" else None
     result = SandwichResult("completed", request.collection or None)
     planning_collection: Path | None = None
     post_publish_collection: Path | None = None
@@ -218,17 +285,11 @@ def run_sandwich(
             post_publish_collection = verify_post_publish_completion(request.channel_dir, readiness.collection)
             result = SandwichResult("completed", post_publish_collection.name)
             return
-        if request.input_handoff is not None and request.input_destination is not None:
-            identity = HandoffIdentity(request.channel, request.collection, request.input_handoff)
-            manifest = pull_handoff(store, identity, _inside(request.channel_dir, request.input_destination))
-            _verify_input_reference(request, manifest)
-
-        agent_runner(request.agent, request.prompt, request.channel_dir)
-
-        if request.output_handoff is not None and request.output_root is not None:
-            root = _inside(request.channel_dir, request.output_root)
-            sources = tuple(HandoffSource(_inside(root, path), path) for path in request.output_files)
-            push_handoff(store, HandoffIdentity(request.channel, request.collection, request.output_handoff), sources)
+        if policy is None:
+            raise StateSyncError("pipeline stage policy is missing")
+        policy.resolve()
+        agent_runner(request.agent, policy.prompt_for(), request.channel_dir)
+        result = policy.verify()
 
     def validate_changes(repository: Path, changed: set[str]) -> None:
         if result.status == "waiting":
@@ -239,6 +300,9 @@ def run_sandwich(
             if planning_collection is None:
                 raise StateSyncError("cloud planning completion target is missing")
             validate_planning_changes(repository, planning_collection, changed)
+            return
+        if policy is not None:
+            policy.allows(repository, changed)
             return
         if post_publish_collection is None:
             raise StateSyncError("cloud post-publish completion target is missing")
@@ -251,6 +315,6 @@ def run_sandwich(
         notification_channel=request.channel,
         notification_collection=request.collection,
         on_event=on_state_sync_event,
-        change_validator=validate_changes if request.stage in {"planning", "post-publish"} else None,
+        change_validator=validate_changes,
     )
     return result
