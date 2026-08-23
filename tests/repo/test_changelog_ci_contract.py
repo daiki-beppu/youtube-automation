@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import os
 import re
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -89,6 +91,36 @@ def _load_ci_workflow() -> dict[str, object]:
     return yaml.safe_load(_read_text(_CI_WORKFLOW_PATH))
 
 
+def _run_changelog_gate(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    changed_files: tuple[str, ...],
+    head_ref: str,
+) -> subprocess.CompletedProcess[str]:
+    """CI の shell script を fake git diff に対して実行する。"""
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    fake_git = fake_bin / "git"
+    fake_git.write_text('#!/bin/sh\nprintf "%s\\n" "$CHANGED_FILES"\n', encoding="utf-8")
+    fake_git.chmod(0o755)
+
+    monkeypatch.setenv("PATH", f"{fake_bin}:{os.environ['PATH']}")
+    monkeypatch.setenv("CHANGED_FILES", "\n".join(changed_files))
+    monkeypatch.setenv("PR_LABELS", "")
+    monkeypatch.setenv("BASE_SHA", "base")
+    monkeypatch.setenv("HEAD_SHA", "head")
+    monkeypatch.setenv("HEAD_REF", head_ref)
+
+    run_script = _load_ci_workflow()["jobs"]["changelog"]["steps"][1]["run"]
+    return subprocess.run(
+        ["bash", "-c", run_script],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+
 def test_pull_request_template_matches_issue_485_contract() -> None:
     """PR template が issue #485 仕様の本文と一致することを保証する。"""
     assert _read_text(_PR_TEMPLATE_PATH) == _PR_TEMPLATE_TEXT
@@ -153,6 +185,49 @@ def test_ci_workflow_changelog_job_checks_expected_paths_and_messages() -> None:
     assert "::error::Normal PRs must not edit CHANGELOG.md directly; add a fragment under changelog.d/." in run_script
     assert "::error::Release PRs must update CHANGELOG.md." in run_script
     assert "::error::Add a changelog fragment under changelog.d/, or apply 'skip-changelog' label." in run_script
+
+
+@pytest.mark.parametrize(
+    ("changed_files", "head_ref", "expected_returncode", "expected_message"),
+    [
+        (
+            ("src/youtube_automation/example.py",),
+            "feature/example",
+            1,
+            "Add a changelog fragment under changelog.d/",
+        ),
+        (
+            ("CHANGELOG.md",),
+            "feature/example",
+            1,
+            "Normal PRs must not edit CHANGELOG.md directly",
+        ),
+        (
+            ("CHANGELOG.md",),
+            "release/1.2.3",
+            0,
+            "Release CHANGELOG update found",
+        ),
+    ],
+)
+def test_ci_changelog_gate_enforces_normal_and_release_pr_behavior(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    changed_files: tuple[str, ...],
+    head_ref: str,
+    expected_returncode: int,
+    expected_message: str,
+) -> None:
+    """通常 PR の fragment 必須化と release branch 例外を実行結果で固定する。"""
+    result = _run_changelog_gate(
+        tmp_path,
+        monkeypatch,
+        changed_files=changed_files,
+        head_ref=head_ref,
+    )
+
+    assert result.returncode == expected_returncode, result.stderr
+    assert expected_message in result.stdout
 
 
 def test_ci_workflow_keeps_push_branch_allowlist() -> None:
