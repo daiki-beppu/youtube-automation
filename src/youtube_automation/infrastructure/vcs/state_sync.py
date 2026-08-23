@@ -62,20 +62,23 @@ def _changed_paths(repository: Path) -> set[str]:
     )
 
 
-def relative_control_paths(*contexts: StateGitContext) -> set[str]:
-    """Return the shared allowlist of repository-relative control-plane paths."""
-
+def _relative_control_paths(*contexts: StateGitContext) -> set[str]:
     repository = contexts[0].repository
     return {path.relative_to(repository).as_posix() for context in contexts for path in context.control_files}
 
 
-def _default_change_validator(context: StateGitContext) -> ChangeValidator:
-    """Snapshot the control plane and allow only its paths before and after a write."""
+def default_change_validator(context: StateGitContext) -> ChangeValidator:
+    """制御面をsnapshotし、書き込み前後のcontrol面pathだけを許可するvalidatorを返す。
+
+    control面allowlistの唯一の定義であり、stage別adapterもこの結果を再利用する。
+    呼び出し時点のsnapshotを ``before`` として閉じ込めるため、fast-forward pull直後に
+    生成する。
+    """
 
     before = build_context(context.channel_dir)
 
     def validate(repository: Path, changed: set[str]) -> None:
-        allowed = relative_control_paths(before, build_context(context.channel_dir))
+        allowed = _relative_control_paths(before, build_context(context.channel_dir))
         if changed - allowed:
             raise StateSyncError("writerがGit制御面state以外を変更したため停止しました")
 
@@ -116,7 +119,7 @@ def pull_update_commit_push(
         raise StateSyncError("state同期のcommit messageは空でない1行を指定してください")
     _require_clean(context.repository)
     _pull_fast_forward(context.repository)
-    validate = change_validator if change_validator is not None else _default_change_validator(context)
+    validate = change_validator if change_validator is not None else default_change_validator(context)
     result = writer()
     changed = _changed_paths(context.repository)
     validate(context.repository, changed)

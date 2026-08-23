@@ -31,8 +31,13 @@ from youtube_automation.domains.post_publish import (
     verify_post_publish_completion,
 )
 from youtube_automation.infrastructure.auth.redaction import redact_sensitive_data
-from youtube_automation.infrastructure.vcs.state_git import StateGitContext, build_context
-from youtube_automation.infrastructure.vcs.state_sync import EventSink, pull_update_commit_push, relative_control_paths
+from youtube_automation.infrastructure.vcs.state_git import build_context
+from youtube_automation.infrastructure.vcs.state_sync import (
+    ChangeValidator,
+    EventSink,
+    default_change_validator,
+    pull_update_commit_push,
+)
 
 Agent = Literal["claude", "codex"]
 Stage = Literal["pipeline", "planning", "post-publish"]
@@ -142,14 +147,11 @@ class PipelineStagePolicy:
 
     request: SandwichRequest
     store: MediaStore
-    _initial_context: StateGitContext | None = field(init=False, repr=False)
-
-    def __post_init__(self) -> None:
-        self._initial_context = None
+    _validate: ChangeValidator | None = field(init=False, default=None, repr=False)
 
     def resolve(self) -> None:
-        # state_syncの既定validatorと同じfast-forward pull直後にcontrol面をsnapshotする。
-        self._initial_context = build_context(self.request.channel_dir)
+        # allowlistは既定validatorを唯一の定義として再利用し、fast-forward pull直後にsnapshotする。
+        self._validate = default_change_validator(build_context(self.request.channel_dir))
         if self.request.input_handoff is None or self.request.input_destination is None:
             return
         identity = HandoffIdentity(self.request.channel, self.request.collection, self.request.input_handoff)
@@ -179,11 +181,9 @@ class PipelineStagePolicy:
         return SandwichResult("completed", self.request.collection or None)
 
     def allows(self, repository: Path, changed: set[str]) -> None:
-        if self._initial_context is None:
+        if self._validate is None:
             raise StateSyncError("pipeline stage policyのresolveより先にallowsが呼ばれました")
-        allowed = relative_control_paths(self._initial_context, build_context(self.request.channel_dir))
-        if changed - allowed:
-            raise StateSyncError("writerがGit制御面state以外を変更したため停止しました")
+        self._validate(repository, changed)
 
 
 def _resource_detail(report: HybridResourceReport) -> str:
