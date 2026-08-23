@@ -1,114 +1,91 @@
 # Chrome 拡張インストールガイド
 
-YouTube 自動化ツールキットの Chrome 拡張を GitHub Release からインストールする手順。
+YouTube 自動化ツールキットの Chrome 拡張を導入・更新する手順。通常は `/extension` skill を正規入口として使う。
 
 ## 対象拡張
 
 | 拡張 | 用途 |
 |---|---|
-| **suno-helper** | Suno UI 上で曲の連続生成 + playlist 追加を自動化 |
+| **suno-helper** | Suno UI 上で曲の連続生成と playlist 追加を自動化 |
 | **distrokid-helper** | DistroKid 登録フォームへの自動入力 |
+| **community-helper** | YouTube Studio のコミュニティ投稿を補助 |
 
-## 前提条件
+## 推奨: `/extension` で導入・更新する
 
-- Google Chrome（最新版推奨）
-- [GitHub CLI (`gh`)](https://cli.github.com/) がインストール済みで、`gh auth login` で認証済みであること
-- リポジトリへのアクセス権があること
+リポジトリを Codex または Claude Code で開き、フラグなしで実行する。
 
-> `gh` がない場合は、[GitHub Release ページ](https://github.com/daiki-beppu/youtube-automation/releases)から手動でダウンロードできる。`ext-v*` タグの Release を探す。
-
-## インストール手順
-
-### 1. 最新バージョンを確認する
-
-```bash
-gh release list --repo daiki-beppu/youtube-automation --limit 5 \
-  --json tagName,publishedAt \
-  --jq '[.[] | select(.tagName | startswith("ext-v"))] | .[0]'
+```text
+/extension
 ```
 
-### 2. zip をダウンロードする
+agent はローカルの `~/chrome-extensions/<name>/manifest.json` と最新の `ext-v*` Release を比較し、3 拡張をそれぞれ次のいずれかに自動判定する。
 
-必要な拡張のみダウンロードする。
+- **install**: 未導入の拡張を新規インストールする
+- **update**: Release より古い拡張を安全に更新する
+- **skip**: 最新版の拡張は変更しない
 
-```bash
-# 最新タグを変数に入れる
-TAG=$(gh release list --repo daiki-beppu/youtube-automation --limit 10 \
-  --json tagName --jq '[.[] | select(.tagName | startswith("ext-v"))][0].tagName')
+### 対象や操作を指定する
 
-# suno-helper
-gh release download --repo daiki-beppu/youtube-automation "$TAG" \
-  --pattern 'suno-helper-*.zip' --dir ~/Downloads
+対象だけを絞る modifier は複数指定できる。省略時は 3 拡張すべてが対象になる。
 
-# distrokid-helper
-gh release download --repo daiki-beppu/youtube-automation "$TAG" \
-  --pattern 'distrokid-helper-*.zip' --dir ~/Downloads
+```text
+/extension --suno
+/extension --distrokid
+/extension --community
+/extension --suno --community
 ```
 
-### 3. zip を展開する
+自動判定を使わず操作を固定する場合は、排他的な mode を 1 つ指定する。`--install` は指定対象を新規導入し、`--update` は比較結果にかかわらず指定対象を更新する。
 
-```bash
-# suno-helper
-mkdir -p ~/chrome-extensions/suno-helper
-cd ~/chrome-extensions/suno-helper
-unzip -o ~/Downloads/suno-helper-*.zip
-
-# distrokid-helper
-mkdir -p ~/chrome-extensions/distrokid-helper
-cd ~/chrome-extensions/distrokid-helper
-unzip -o ~/Downloads/distrokid-helper-*.zip
+```text
+/extension --install --suno
+/extension --update --distrokid --community
 ```
 
-### 4. Chrome に読み込む
+## agent と利用者の責務
 
-1. Chrome のアドレスバーに `chrome://extensions` と入力して開く
-2. 右上の **デベロッパーモード** を ON にする
-3. **パッケージ化されていない拡張機能を読み込む**（Load unpacked）をクリック
-4. 展開したフォルダを選択する
-   - suno-helper: `~/chrome-extensions/suno-helper/`
-   - distrokid-helper: `~/chrome-extensions/distrokid-helper/`
-5. ツールバーに拡張アイコンが表示されれば完了
+### agent が行うこと
 
-### 5. 動作確認
+- 最新 `ext-v*` Release と対象 asset の特定・download
+- 一時ディレクトリへの安全な展開と、更新時の既存ディレクトリの backup
+- `manifest.json` の name / version が対象拡張と Release に一致することの検証
+- 検証済みファイルの `~/chrome-extensions/<name>/` への配置
+- install / update / skip の結果と、Chrome で開くディレクトリの提示
 
-| 拡張 | 確認方法 |
-|---|---|
-| suno-helper | [suno.com/create](https://suno.com/create) を開き、拡張アイコンをクリック → popup が表示される |
-| distrokid-helper | DistroKid のアップロードページを開き、拡張アイコンをクリック → popup が表示される |
+### 利用者が Chrome で行うこと
 
-## 更新手順
+agent は Chrome の GUI 操作を代行しない。案内された後に、利用者が次を行う。
 
-新しいバージョンがリリースされたら、以下の手順で更新する。
+1. `chrome://extensions` を開き、**Developer mode（デベロッパーモード）**を ON にする。
+2. 初回導入では **Load unpacked（パッケージ化されていない拡張機能を読み込む）**を選び、案内された `~/chrome-extensions/<name>/` を指定する。
+3. 更新では対象拡張の **reload（リロード）**をクリックする。
+4. 対象サービスを開き、popup または overlay が表示・動作することを確認する。
 
-### 1. 新しい zip をダウンロードする
+## 手動取得（フォールバック）
+
+`/extension` skill を実行できない場合や、`gh` が未導入・未認証の場合だけ使用する。
+
+1. [GitHub Releases](https://github.com/daiki-beppu/youtube-automation/releases) を開き、最新の `ext-v*` Release を選ぶ。
+2. 必要な `<name>-*.zip` を download し、`~/chrome-extensions/<name>/` へ展開する。
+3. 展開先の `manifest.json` で name / version が選んだ拡張と Release に一致することを確認する。
+4. 前節の Chrome 操作を行う。更新時は既存フォルダを backup してから置き換え、Chrome で reload する。
+
+`gh` を利用できる場合の手動取得例:
 
 ```bash
 TAG=$(gh release list --repo daiki-beppu/youtube-automation --limit 10 \
   --json tagName --jq '[.[] | select(.tagName | startswith("ext-v"))][0].tagName')
 
-# suno-helper の場合
+# <name> は suno-helper / distrokid-helper / community-helper のいずれか
 gh release download --repo daiki-beppu/youtube-automation "$TAG" \
-  --pattern 'suno-helper-*.zip' --dir ~/Downloads
+  --pattern '<name>-*.zip' --dir ~/Downloads
 ```
-
-### 2. 既存ファイルを置き換える
-
-```bash
-cd ~/chrome-extensions/suno-helper
-rm -rf *
-unzip -o ~/Downloads/suno-helper-*.zip
-```
-
-### 3. Chrome で拡張をリロードする
-
-1. `chrome://extensions` を開く
-2. 対象拡張のリロードボタン（更新アイコン）をクリック
 
 ## トラブルシューティング
 
 | 症状 | 対処 |
 |---|---|
-| `gh release download` で 404 | `gh auth status` で認証状態を確認。リポジトリへのアクセス権があるか確認する |
-| 拡張を読み込めない | デベロッパーモードが ON になっているか確認。展開先に `manifest.json` が存在するか確認する |
-| popup が表示されない | ツールバーのパズルアイコンから拡張をピン留めする。ページをリロードしてから再度試す |
-| 古いバージョンのまま | Chrome の拡張ページでリロードボタンを押したか確認。キャッシュが残る場合は拡張を一度削除して再インストールする |
+| `gh` を利用できない | `gh auth status` を確認する。復旧できなければ手動取得（フォールバック）を使う |
+| 拡張を読み込めない | Developer mode が ON か、指定フォルダ直下に検証済みの `manifest.json` があるか確認する |
+| popup / overlay が表示されない | 拡張をピン留めし、対象ページと拡張を reload して再確認する |
+| 古いバージョンのまま | `/extension --update` を実行し、完了後に Chrome で対象拡張を reload する |

@@ -1,7 +1,7 @@
 """`release-extensions.yml` の配布契約を静的に検証する（Issue #1022）。
 
-統一タグ `ext-v*` で3拡張の zip を単一 Release に
-添付し、Release 本文にインストール/更新手順テンプレが埋め込まれていることを担保する。
+統一タグ `ext-v*` で3拡張の zip を単一 Release に添付し、Release 本文が
+公開ガイドと `/extension` skill を正規入口として案内することを担保する。
 """
 
 from __future__ import annotations
@@ -15,6 +15,7 @@ from tests.helpers.paths import REPO_ROOT
 
 _REPO_ROOT = REPO_ROOT
 _WORKFLOW_PATH = _REPO_ROOT / ".github" / "workflows" / "release-extensions.yml"
+_INSTALL_GUIDE_PATH = _REPO_ROOT / "docs" / "chrome-extension-install-guide.md"
 
 _RELEASE_TAG_GLOB = "ext-v*"
 _GH_RELEASE_ACTION = "softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228"
@@ -22,13 +23,8 @@ _NIX_INSTALL_ACTION = "DeterminateSystems/nix-installer-action@ef8a148080ab6020f
 _VERIFY_SCRIPT = ".claude/skills/automation-release/references/verify-extensions.sh"
 _EXTENSIONS = ("suno-helper", "distrokid-helper", "community-helper")
 _ZIP_GLOBS = tuple(f"extensions/{name}/.output/*.zip" for name in _EXTENSIONS)
-# order.md が要求する手順アンカー。初回インストール（URL + Load unpacked）と
-# 更新（リロード）の両セクションが本文に埋め込まれていることを最小限で担保する。
-_BODY_REQUIRED_PHRASES = (
-    "chrome://extensions",
-    "Load unpacked",
-    "リロード",
-)
+# Release 本文が手動手順を複製せず、正規入口を案内することを固定する。
+_BODY_REQUIRED_PHRASES = ("/extension", "chrome-extension-install-guide/")
 
 
 def _read_text(path: Path) -> str:
@@ -129,8 +125,8 @@ def test_attaches_all_zips_to_one_gh_release() -> None:
     assert zip_globs == _ZIP_GLOBS
 
 
-def test_release_body_embeds_install_and_update_template() -> None:
-    """Release 本文に初回インストール/更新手順テンプレが埋め込まれている。"""
+def test_release_body_points_to_canonical_extension_entrypoint() -> None:
+    """Release 本文は手動手順を複製せず、正規入口へ案内する。"""
     steps = _release_top_level_steps()
     release_step = next(step for step in steps if str(step.get("uses", "")).startswith(_GH_RELEASE_ACTION))
     body = str(release_step.get("with", {}).get("body", ""))
@@ -140,3 +136,34 @@ def test_release_body_embeds_install_and_update_template() -> None:
 
     for name in _EXTENSIONS:
         assert f"`{name}-*.zip`" in body
+
+    assert "gh release download" not in body
+    assert "既存の展開フォルダを置き換える" not in body
+
+
+def test_install_guide_documents_extension_skill_contract() -> None:
+    """公開ガイドが /extension の自動判定と責務境界を説明する。"""
+    guide = _read_text(_INSTALL_GUIDE_PATH)
+
+    required_phrases = (
+        "/extension",
+        "suno-helper",
+        "distrokid-helper",
+        "community-helper",
+        "install",
+        "update",
+        "skip",
+        "--suno",
+        "--distrokid",
+        "--community",
+        "--install",
+        "--update",
+        "Developer mode",
+        "Load unpacked",
+        "manifest",
+        "フォールバック",
+    )
+    for phrase in required_phrases:
+        assert phrase in guide, f"インストールガイドに必須フレーズが欠落: {phrase}"
+
+    assert guide.index("/extension") < guide.index("gh release download")

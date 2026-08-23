@@ -40,13 +40,7 @@ jobs:
             - **DistroKid Helper** — `distrokid-helper-*.zip`
             - **Community Helper** — `community-helper-*.zip`
 
-            ## 初回インストール
+            ## インストール・更新
 
-            1. 目的の拡張の zip（`*.zip`）をダウンロードして任意のフォルダに展開する。
-            2. Chrome で `chrome://extensions` を開き、右上の **デベロッパーモード** を ON にする。
-            3. **パッケージ化されていない拡張機能を読み込む**（Load unpacked）をクリックし、展開したフォルダを選択する。
-
-            ## 更新
-
-            1. 新しい zip をダウンロードして展開し、既存の展開フォルダを置き換える。
-            2. `chrome://extensions` を開き、対象拡張の **リロード**（更新アイコン）をクリックする。
+            `/extension` skill を正規入口として使うと、各拡張の状態から install / update / skip が自動判定されます。
+            Chrome で必要な操作と手動取得のフォールバックは[Chrome 拡張インストールガイド](https://youtube-automation-release-notes.pages.dev/chrome-extension-install-guide/)を参照してください。
