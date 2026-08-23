@@ -6,7 +6,7 @@ YouTube チャンネル運営を自動化するツールキット。`youtube-cha
 
 ## 非自明な規約・落とし穴
 
-- devShell 必須（direnv または `nix develop`。shellHook が `uv sync` を自動実行）。非対話 shell は `nix develop --command <cmd>`
+- devShell 必須（direnv または `nix develop`。shellHook が `uv sync` を自動実行）。非対話 shell は `nix develop --command <cmd>`。Codex Cloud task の例外は `AGENTS.md`「Codex Cloud の検証」を正とする
 - チャンネル固有値は `load_config` 経由でのみ取得（`config.meta.channel_name` 形式）。ハードコード禁止。新キー追加は dataclass（`configuration/<section>.py`）+ `loader.py::_build_*` + 必須なら `_REQUIRED_KEYS_BY_SECTION` の 3 点セット — 最後の登録を忘れやすい
 - 下流の `config/channel/*.json` は責務別分割。optional は shorts.json / comments.json / pinned-comment.json / distrokid.json / community-draft.json（全容は `docs/architecture.md`）
 - 本ファイルや README / ONBOARDING / AGENTS の実行契約は機械担保されている — 文言を変更・削除するときは `tests/test_*_contract.py` / `test_skill_docs_consistency.py` を確認
