@@ -4,11 +4,14 @@ import json
 import os
 import re
 import subprocess
+import sys
+from contextlib import chdir
 from pathlib import Path
 
 import pytest
 
 from tests.helpers.paths import REPO_ROOT
+from youtube_automation.application.documents import MarkdownMigrationDecision, write_channel_strategy_document
 from youtube_automation.commands.system import doctor
 from youtube_automation.domains.documents.schema_registry import RepositorySchema
 from youtube_automation.infrastructure.documents.publishing import publish_json_document
@@ -59,6 +62,41 @@ def _analysis_pair(root: Path, report_date: str = "20260702") -> None:
     publish_json_document(path, RepositorySchema.ANALYSIS_REPORT)
 
 
+def _persona_chain(root: Path) -> None:
+    persona = {
+        "schema_version": 1,
+        "document_type": "persona",
+        "updated_at": "2026-07-02T00:00:00Z",
+        "status": "confirmed",
+        "persona": {"id": "persona-primary", "name": "primary", "desires": ["focus"]},
+        "scene_ids": [],
+        "evidence": [{"id": "ev-1", "source_path": "input.json", "observation": "fact"}],
+    }
+    scene = {
+        "schema_version": 1,
+        "document_type": "scene",
+        "updated_at": "2026-07-02T00:00:00Z",
+        "status": "confirmed",
+        "persona_id": "persona-primary",
+        "scenes": [{"id": "scene-1", "situation": "work", "desires": ["focus"], "evidence_ids": ["ev-1"]}],
+        "evidence": [{"id": "ev-1", "source_path": "input.json", "observation": "fact"}],
+    }
+    with chdir(root):
+        for relative, document in (
+            ("docs/channel/personas/persona-definition.json", persona),
+            ("docs/plans/viewing-scene-matrix.json", scene),
+        ):
+            target = root / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            write_channel_strategy_document(
+                target, lambda document=document: document, MarkdownMigrationDecision.NOT_REQUIRED
+            )
+        persona["scene_ids"] = ["scene-1"]
+        target = root / "docs/channel/personas/persona-definition.json"
+        target.write_text(json.dumps(persona), encoding="utf-8")
+        publish_json_document(target, RepositorySchema.CHANNEL_STRATEGY)
+
+
 def _run_mode_fixture(
     tmp_path: Path,
     *,
@@ -75,8 +113,7 @@ def _run_mode_fixture(
         _touch(tmp_path / "data/benchmark_20260701.json")
     if data_date is not None:
         _touch(tmp_path / f"data/analytics_data_{data_date}.json")
-    _touch(tmp_path / "docs/channel/personas/persona-definition.md", "# persona\n")
-    _touch(tmp_path / "docs/plans/viewing-scene-matrix.md", "# scene\n")
+    _persona_chain(tmp_path)
     script = tmp_path / "mode-check.sh"
     script.write_text(_freshness_script(), encoding="utf-8")
     script.chmod(0o755)
@@ -88,6 +125,8 @@ def _run_mode_fixture(
             "TODAY": today,
             "COLLECTION_IDEATE_FRESHNESS_DAYS": str(freshness_days),
             "COLLECTION_IDEATE_TTP_MODE": "false",
+            "PYTHON": sys.executable,
+            "PYTHONPATH": str(_REPO_ROOT / "src"),
         },
         capture_output=True,
         text=True,
@@ -143,6 +182,54 @@ def test_freshness_mode_script_executes_each_representative_path(tmp_path: Path,
 
     assert result.returncode == 0, result.stderr
     assert expected in result.stdout
+
+
+def test_analytics_mode_accepts_verified_structured_persona_chain_without_legacy_markdown(tmp_path: Path) -> None:
+    result = _run_mode_fixture(tmp_path, report=True)
+
+    assert result.returncode == 0, result.stderr
+    assert not (tmp_path / "docs/channel/personas/persona-definition.md").exists()
+    assert not (tmp_path / "docs/plans/viewing-scene-matrix.md").exists()
+
+
+@pytest.mark.parametrize("broken_part", ["missing-html", "invalid-schema", "digest-mismatch", "reference-mismatch"])
+def test_analytics_mode_rejects_invalid_structured_persona_chain(tmp_path: Path, broken_part: str) -> None:
+    _analysis_pair(tmp_path)
+    _persona_chain(tmp_path)
+    if broken_part == "missing-html":
+        (tmp_path / "docs/plans/viewing-scene-matrix.html").unlink()
+    elif broken_part == "invalid-schema":
+        _touch(tmp_path / "docs/channel/personas/persona-definition.json", "{}")
+    elif broken_part == "digest-mismatch":
+        with (tmp_path / "docs/plans/viewing-scene-matrix.html").open("a", encoding="utf-8") as stream:
+            stream.write("tampered")
+    else:
+        scene_path = tmp_path / "docs/plans/viewing-scene-matrix.json"
+        scene = json.loads(scene_path.read_text(encoding="utf-8"))
+        scene["persona_id"] = "persona-other"
+        scene_path.write_text(json.dumps(scene), encoding="utf-8")
+        publish_json_document(scene_path, RepositorySchema.CHANNEL_STRATEGY)
+
+    script = tmp_path / "mode-check.sh"
+    script.write_text(_freshness_script(), encoding="utf-8")
+    result = subprocess.run(
+        ["bash", str(script)],
+        cwd=tmp_path,
+        env={
+            **os.environ,
+            "TODAY": "20260702",
+            "COLLECTION_IDEATE_FRESHNESS_DAYS": "7",
+            "COLLECTION_IDEATE_TTP_MODE": "false",
+            "PYTHON": sys.executable,
+            "PYTHONPATH": str(_REPO_ROOT / "src"),
+        },
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "persona chain 検証失敗" in result.stdout
 
 
 @pytest.mark.parametrize(

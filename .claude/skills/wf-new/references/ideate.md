@@ -86,7 +86,7 @@ Phase 1 に入る前に入力モードを 1 回だけ判定し、以降の分析
 | minimal mode | 検証済み analysis JSON と `data/benchmark_*.json` がどちらも存在しない | `ttp_mode: false` はユーザー直接入力（テーマ / ジャンル / 雰囲気）+ config。`true` は入力不足のため企画生成しない | `false` は analytics / benchmark 依存をスキップし、persona / viewing-scene を初回仮説として扱う。`true` は `/channel-research --benchmark` を案内して停止する |
 
 analytics mode では `/analytics --analyze` と `/channel-research --benchmark` を独立・並列で鮮度判定（stale 検出）し、
-`/channel-strategy --persona` の最終 persona chain（`persona-definition.md` と `viewing-scene-matrix.md`）は存在チェックのみ行う（更新タイミングは戦略判断のため人間が決める）。
+`/channel-strategy --persona` の最終 persona chain（`persona-definition.json` と `viewing-scene-matrix.json` の各 JSON+HTML pair）は `read_published_json_document(..., RepositorySchema.CHANNEL_STRATEGY)` 相当で検証し、persona/scene の参照整合性も確認する。片側欠落・schema 不正・HTML digest 不一致・参照不整合は fail-closed で停止し、旧 Markdown は入力にしない。
 
 - analytics report の stale / fresh 処理は `references/freshness-rules.md::stale report の自動更新` をそのまま適用し、入口側で分岐、呼出順、成功条件、停止条件を再定義しない
 - analytics mode で `/channel-research --benchmark` が stale → Skill ツールで実行（内部で差分更新）

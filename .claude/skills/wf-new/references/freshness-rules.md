@@ -20,10 +20,10 @@ skill 呼び出し失敗または再検証失敗時は、失敗した skill ま�
 analytics mode の前提スキルは **(analyze ∥ benchmark) → channel-strategy persona finalization** の構造:
 
 - `/analytics --analyze` と `/channel-research --benchmark` は**独立・並列**（両者とも生データの分析で上下関係なし）
-- `/channel-strategy --persona` は最新ベンチマークのタグデータと `/channel-research --voice` を入力に暫定 `persona-definition.md` を作る
-- `/channel-strategy --persona` は暫定 persona から `/channel-strategy --scene` を実行し、その結果を反映して最終 `persona-definition.md` を更新する
+- `/channel-strategy --persona` は最新ベンチマークのタグデータと `/channel-research --voice` を入力に暫定 `persona-definition.json` pair を作る
+- `/channel-strategy --persona` は暫定 persona から `/channel-strategy --scene` を実行し、その結果を反映して最終 `persona-definition.json` pair を更新する
 
-**analyze / benchmark は並列判定。その後 `/channel-strategy --persona` の最終 persona chain を判定する。** `persona-definition.md` / `viewing-scene-matrix.md` は存在チェックのみ（mtime 比較なし。更新タイミングは戦略判断のため人間が決める）。analytics mode でこれらが未生成の場合、`ttp_mode: false` は Phase 1 を中断し、`true` は共通の欲求語彙選択規則による fallback で続行する。stale report は `ttp_mode` にかかわらず、自動更新と再検証の成功時だけ続行する。
+**analyze / benchmark は並列判定。その後 `/channel-strategy --persona` の最終 persona chain を判定する。** `persona-definition.json` / `viewing-scene-matrix.json` は `RepositorySchema.CHANNEL_STRATEGY` の JSON+HTML pair として検証し、相互参照も確認する（mtime 比較なし）。候補が片側欠落・schema 不正・HTML digest 不一致・参照不整合なら fail-closed で停止する。両文書が未生成の場合、analytics mode の `ttp_mode: false` は Phase 1 を中断し、`true` は共通の欲求語彙選択規則による fallback で続行する。旧 Markdown は入力にしない。stale report は `ttp_mode` にかかわらず、自動更新と再検証の成功時だけ続行する。
 
 検証済み analytics JSON+HTML が存在しない場合は stale ではなく、以下の入力モードに分岐する。JSON または HTML の候補が存在する場合は `.claude/skills/analytics/references/analysis-json-validator.md` の validator 成功を analytics mode の Hard Gate とする。片方不在、ファイル名日付不一致、schema/pair不一致、validator の exit 非 0 は fallback せず Phase 1 を中断し、`/analytics --analyze` の再実行を案内する:
 
@@ -39,8 +39,8 @@ analytics mode の前提スキルは **(analyze ∥ benchmark) → channel-strat
 |---|---|---|---|---|
 | 1a | `/analytics --analyze` | 同じファイル名日付の `reports/analysis_*.json` + `.html` | 先に schema/pair validator が exit 0 であること。次のいずれかを満たせば stale（OR 結合）: (1) **相対比較** — 最新 `data/analytics_data_*.json` のファイル名日付 (YYYYMMDD) より古い / (2) **絶対鮮度** — 最新 `data/analytics_data_*.json` のファイル名日付が実行日 (today) から `config/skills/collection-ideate.yaml` の `freshness_days`（既定 7 日）を超えて経過 | 検証済み pair 不在は benchmark fallback mode / minimal mode へ分岐する。片方だけ存在、不正、または validator 失敗は停止。相対 stale は `/analytics --analyze`、絶対 stale は `/analytics --collect` → `/analytics --analyze` を自動実行し、再検証成功時だけ続行する |
 | 1b | `/channel-research --benchmark` | 検証済み `docs/benchmarks/benchmark-report.json` + `.html` と `data/benchmark_YYYYMMDD.json` | analytics mode では pair の古い方の mtime が `config/skills/benchmark.yaml` の `freshness_days`（既定 3 日）より古ければ stale | analytics mode では `/channel-research --benchmark` を Skill ツールで実行（内部で鮮度チェック + 差分更新）。benchmark fallback mode では検証済み JSON を読む。minimal mode は `ttp_mode: false` ならスキップし、`true` なら `/channel-research --benchmark` を案内して停止する |
-| 2 | `/channel-strategy --persona` | `docs/channel/personas/persona-definition.md` | 存在すれば OK（mtime 比較なし。更新タイミングは戦略判断のため人間が決める） | analytics mode かつ `ttp_mode: false` ではユーザーに `/channel-strategy --persona` 実行を案内して中断。analytics mode かつ `true` では `.claude/skills/channel-strategy/references/desire-vocabulary.md` の fallback に従い、利用可能な競合コメント / タイトルから初回仮説の視聴者像を作ってソースと根拠を記録する。benchmark fallback mode / `ttp_mode: false` の minimal mode では config と入力データから初回仮説の視聴者像を作る。`ttp_mode: true` の minimal mode はこの判定前に停止する |
-| 3 | `/channel-strategy --persona` finalization | `docs/plans/viewing-scene-matrix.md` | 存在すれば OK（mtime 比較なし。persona 下流のため連動して判断） | analytics mode かつ `ttp_mode: false` ではユーザーに `/channel-strategy --persona` で `/channel-strategy --scene` 実行と最終 `persona-definition.md` 更新を行うよう案内して中断。analytics mode かつ `true` では同じ fallback の競合コメント / タイトルから視聴シーンを仮説化し、利用可能な根拠がなければ `判定不能` として続行する。benchmark fallback mode / `ttp_mode: false` の minimal mode では仮説ペルソナから視聴シーンを仮説化する。`ttp_mode: true` の minimal mode はこの判定前に停止する |
+| 2 | `/channel-strategy --persona` | `docs/channel/personas/persona-definition.json` + `.html` | `read_published_json_document(..., RepositorySchema.CHANNEL_STRATEGY)` 相当で検証（mtime 比較なし） | pair 未生成時の mode 別 fallback は従来どおり。候補の片側欠落・schema/pair 不正は停止 |
+| 3 | `/channel-strategy --persona` finalization | `docs/plans/viewing-scene-matrix.json` + `.html` | 同じ canonical reader で検証し、scene の `persona_id`、persona の `scene_ids` と scene ID の相互参照を確認 | pair 未生成時の mode 別 fallback は従来どおり。pair/参照不正は成果物を変更せず停止 |
 
 ## workflow-state.json との同期
 
@@ -182,8 +182,34 @@ case "$INPUT_MODE" in
     ;;
 esac
 
-# 2. persona — 存在チェックのみ
-if [ ! -f docs/channel/personas/persona-definition.md ]; then
+# 2-3. canonical persona chain — JSON+HTML pair と参照整合性を検証
+PERSONA_JSON=docs/channel/personas/persona-definition.json
+SCENE_JSON=docs/plans/viewing-scene-matrix.json
+if [ -e "$PERSONA_JSON" ] || [ -e "${PERSONA_JSON%.json}.html" ] || [ -e "$SCENE_JSON" ] || [ -e "${SCENE_JSON%.json}.html" ]; then
+  if ! "${PYTHON:-python}" - <<'PY'
+from pathlib import Path
+
+from youtube_automation.domains.documents.schema_registry import RepositorySchema
+from youtube_automation.infrastructure.documents.publishing import read_published_json_document
+
+persona = read_published_json_document(Path("docs/channel/personas/persona-definition.json"), RepositorySchema.CHANNEL_STRATEGY)
+scene = read_published_json_document(Path("docs/plans/viewing-scene-matrix.json"), RepositorySchema.CHANNEL_STRATEGY)
+persona_id = persona["persona"]["id"]
+scene_ids = {item["id"] for item in scene["scenes"]}
+if scene["persona_id"] != persona_id or not set(persona["scene_ids"]).issubset(scene_ids):
+    raise ValueError("persona/scene の参照が一致しません")
+PY
+  then
+    echo "persona chain 検証失敗 → 成果物を変更せず /channel-strategy --persona の再実行を案内"
+    exit 1
+  fi
+  echo "検証済み canonical persona chain を使用"
+  PERSONA_CHAIN_VALID=true
+else
+  PERSONA_CHAIN_VALID=false
+fi
+
+if [ "$PERSONA_CHAIN_VALID" != "true" ]; then
   if [ "$INPUT_MODE" = "analytics mode" ] && [ "$COLLECTION_IDEATE_TTP_MODE" = "false" ]; then
     echo "persona 未定義 → /wf-new 企画工程中断、/channel-strategy --persona を案内"
     exit 1
@@ -194,10 +220,10 @@ if [ ! -f docs/channel/personas/persona-definition.md ]; then
   fi
 fi
 
-# 3. viewing-scene reflection — 存在チェックのみ
-if [ ! -f docs/plans/viewing-scene-matrix.md ]; then
+# 3. viewing-scene reflection — canonical chain 未生成時の fallback
+if [ "$PERSONA_CHAIN_VALID" != "true" ]; then
   if [ "$INPUT_MODE" = "analytics mode" ] && [ "$COLLECTION_IDEATE_TTP_MODE" = "false" ]; then
-    echo "viewing-scene 未定義 → /wf-new 企画工程中断、/channel-strategy --persona で /channel-strategy --scene 実行と最終 persona-definition.md 更新を案内"
+    echo "viewing-scene 未定義 → /wf-new 企画工程中断、/channel-strategy --persona で /channel-strategy --scene 実行と最終 persona-definition.json pair 更新を案内"
     exit 1
   elif [ "$INPUT_MODE" = "analytics mode" ]; then
     echo "viewing-scene 未定義かつ ttp_mode=true → 共通 fallback の競合コメント / タイトルから視聴シーンを仮説化して続行（根拠がなければ判定不能）"
@@ -217,10 +243,10 @@ fi
 | 検証済み `reports/analysis_*.json` が最新 `data/analytics_data_*.json` より古い日付 | `/analytics --analyze` を自動実行し、再検証成功時だけ企画フローを続行 |
 | analytics mode で最新 `data/analytics_data_*.json` のファイル名日付が実行日 (today) から `config/skills/collection-ideate.yaml` の `freshness_days`（既定 7 日）を超えて経過（絶対鮮度、#1427） | `/analytics --collect` → `/analytics --analyze` の順で自動実行し、再検証成功時だけ企画フローを続行 |
 | analytics mode で `data/benchmark_*.json` が `config/skills/benchmark.yaml` の `freshness_days`（既定 3 日）より古い | `/channel-research --benchmark` を Skill ツールで自動実行 |
-| analytics mode で `persona-definition.md` が存在しない | `ttp_mode: false` は `/wf-new` を中断し、`/channel-strategy --persona` の先行実行を案内する。`true` は共通の欲求語彙選択規則に従い、利用可能な競合コメント / タイトルから初回仮説の視聴者像を作り、ソースと根拠を明記して続行する |
-| benchmark fallback mode / minimal mode で `persona-definition.md` が存在しない | benchmark fallback mode と `ttp_mode: false` の minimal mode は中断せず、config と入力データから初回仮説の視聴者像を作る。`ttp_mode: true` の minimal mode はこの判定前に停止する |
-| analytics mode で `viewing-scene-matrix.md` が存在しない | `ttp_mode: false` は `/wf-new` を中断し、`/channel-strategy --persona` で `/channel-strategy --scene` 実行と最終 `persona-definition.md` 更新を行うよう案内する。`true` は共通 fallback から視聴シーンを仮説化し、利用可能な根拠がなければ `判定不能` として続行する |
-| benchmark fallback mode / minimal mode で `viewing-scene-matrix.md` が存在しない | benchmark fallback mode と `ttp_mode: false` の minimal mode は中断せず、仮説ペルソナから視聴シーンを仮説化する。`ttp_mode: true` の minimal mode はこの判定前に停止する |
+| analytics mode で `persona-definition.json pair` が存在しない | `ttp_mode: false` は `/wf-new` を中断し、`/channel-strategy --persona` の先行実行を案内する。`true` は共通の欲求語彙選択規則に従い、利用可能な競合コメント / タイトルから初回仮説の視聴者像を作り、ソースと根拠を明記して続行する |
+| benchmark fallback mode / minimal mode で `persona-definition.json pair` が存在しない | benchmark fallback mode と `ttp_mode: false` の minimal mode は中断せず、config と入力データから初回仮説の視聴者像を作る。`ttp_mode: true` の minimal mode はこの判定前に停止する |
+| analytics mode で `viewing-scene-matrix.json pair` が存在しない | `ttp_mode: false` は `/wf-new` を中断し、`/channel-strategy --persona` で `/channel-strategy --scene` 実行と最終 `persona-definition.json pair` 更新を行うよう案内する。`true` は共通 fallback から視聴シーンを仮説化し、利用可能な根拠がなければ `判定不能` として続行する |
+| benchmark fallback mode / minimal mode で `viewing-scene-matrix.json pair` が存在しない | benchmark fallback mode と `ttp_mode: false` の minimal mode は中断せず、仮説ペルソナから視聴シーンを仮説化する。`ttp_mode: true` の minimal mode はこの判定前に停止する |
 
 ## 関連
 
