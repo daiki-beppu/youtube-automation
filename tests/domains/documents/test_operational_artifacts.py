@@ -147,19 +147,12 @@ def test_explicit_standalone_html_write_passes(tmp_path: Path) -> None:
             "hand_written_inputs": [],
             "repository_docs": [],
             "machine_only": [],
-            "other_writes": [
-                {"path": "reports/review.html", "owner": "producer", "reason": "standalone review"}
-            ],
+            "other_writes": [{"path": "reports/review.html", "owner": "producer", "reason": "standalone review"}],
             "schemas": [],
         },
     )
 
-    assert (
-        lint_operational_artifacts(
-            tmp_path, SkillInventory(tmp_path), inventory, repository_schemas=()
-        )
-        == []
-    )
+    assert lint_operational_artifacts(tmp_path, SkillInventory(tmp_path), inventory, repository_schemas=()) == []
 
 
 def test_unregistered_or_schema_unvalidated_consumer_is_rejected(tmp_path: Path) -> None:
