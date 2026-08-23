@@ -19,6 +19,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `refactor(audio-studio)`: audio-adjustments の tracks / order / master / finalize を登録型 section と socket 非依存 route handler に統合し、domain error の HTTP status 写像を一元化する（#4451）。
+
+- `feat(localserver)`: route table と parsed request handler を備え、origin・body 上限・JSON response・domain error・OPTIONS・PID / stop / idle lifecycle を一元管理する HTTP chassis を追加する（#4450）。
+
 - `feat(wf-status)`: 制作状況 snapshot を要対応件数から各 collection の next action・成果物根拠へ走査できる technical / austere な運用キューへ再設計し、CSS filter の選択・focus と mobile containment を明確化する（#4405）。
 
 - `feat(documents)`: 候補 review View を番号・preview・固定 QA・確定操作が一続きに読める technical / austere な比較台帳へ再設計し、mobile containment と keyboard focus を明確化する（#4404）。
