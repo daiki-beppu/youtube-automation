@@ -310,7 +310,7 @@ def test_assign_to_playlists_skips_when_workflow_state_is_malformed(tmp_path, ca
 
 
 # ---------------------------------------------------------------------------
-# _execute_complete_collection: resumable upload session URI 連携 (issue #381)
+# CompleteCollectionExecutor.run: resumable upload session URI 連携 (issue #381)
 # ---------------------------------------------------------------------------
 
 
@@ -440,19 +440,38 @@ def test_collection_uploader_accepts_injected_playlist_assignment(tmp_path: Path
     assert uploader.playlist_assignment is playlist_assignment
 
 
-def test_collection_uploader_delegates_to_injected_complete_collection_executor(tmp_path: Path) -> None:
+def test_collection_uploader_exposes_injected_complete_collection_executor(tmp_path: Path) -> None:
+    from youtube_automation.domains.uploads.collection import CollectionUploader
+
+    executor = MagicMock()
+    uploader = CollectionUploader(collections_root=str(tmp_path), complete_collection_executor=executor)
+
+    assert uploader.complete_collection_executor is executor
+
+
+def test_execute_next_step_delegates_complete_collection_to_executor(tmp_path: Path) -> None:
+    """未アップロードの collection は executor へ publish_at 付きで委譲される。"""
     from youtube_automation.domains.uploads.collection import CollectionUploader
 
     executor = MagicMock()
     executor.run.return_value = {"action": "delegated"}
-    uploader = CollectionUploader(collections_root=str(tmp_path), complete_collection_executor=executor)
-    collection = tmp_path / "collection"
-    tracking = {"status": "pending"}
+    tracking = {"status": "pending", "complete_collection": {"status": "pending"}}
+    tracking_store = MagicMock(spec=TrackingStore)
+    tracking_store.load.return_value = tracking
+    published_dates = MagicMock(spec=PublishedDatesScheduler)
+    published_dates.calculate_publish_at.return_value = "2099-01-01T20:00:00+09:00"
 
-    assert uploader._execute_complete_collection(collection, tracking, publish_at="2099-01-01T00:00:00Z") == {
-        "action": "delegated"
-    }
-    executor.run.assert_called_once_with(collection, tracking, "2099-01-01T00:00:00Z")
+    collection = tmp_path / "collection"
+    collection.mkdir()
+    uploader = CollectionUploader(
+        collections_root=str(tmp_path),
+        complete_collection_executor=executor,
+        tracking_store=tracking_store,
+        published_dates=published_dates,
+    )
+
+    assert uploader.execute_next_step(collection) == {"action": "delegated"}
+    executor.run.assert_called_once_with(collection, tracking, "2099-01-01T20:00:00+09:00")
 
 
 def test_collection_uploader_delegates_publish_date_calculation(tmp_path: Path) -> None:
@@ -977,7 +996,7 @@ class TestExecuteCompleteCollectionResume:
 
         # When
         tracking = uploader.tracking_store.load(col)
-        uploader._execute_complete_collection(col, tracking, publish_at=None)
+        uploader.complete_collection_executor.run(col, tracking, publish_at=None)
 
         # Then
         call_kwargs = mock_inner.upload_collection.call_args.kwargs
@@ -999,7 +1018,7 @@ class TestExecuteCompleteCollectionResume:
 
         # When
         tracking = uploader.tracking_store.load(col)
-        uploader._execute_complete_collection(col, tracking, publish_at=None)
+        uploader.complete_collection_executor.run(col, tracking, publish_at=None)
 
         # Then
         call_kwargs = mock_inner.upload_collection.call_args.kwargs
@@ -1022,7 +1041,7 @@ class TestExecuteCompleteCollectionResume:
         }
 
         tracking = uploader.tracking_store.load(col)
-        uploader._execute_complete_collection(col, tracking, publish_at=None)
+        uploader.complete_collection_executor.run(col, tracking, publish_at=None)
 
         saved = json.loads(tracking_path.read_text(encoding="utf-8"))
         upload_time = saved["complete_collection"]["upload_time"]
@@ -1044,7 +1063,7 @@ class TestExecuteCompleteCollectionResume:
         }
 
         tracking = uploader.tracking_store.load(col)
-        uploader._execute_complete_collection(col, tracking, publish_at="2099-01-01T10:00:00+09:00")
+        uploader.complete_collection_executor.run(col, tracking, publish_at="2099-01-01T10:00:00+09:00")
 
         state = json.loads((col / "workflow-state.json").read_text(encoding="utf-8"))
         assert state["upload"] == {
@@ -1070,7 +1089,7 @@ class TestExecuteCompleteCollectionResume:
             }
         }
 
-        result = uploader._execute_complete_collection(
+        result = uploader.complete_collection_executor.run(
             col,
             uploader.tracking_store.load(col),
             publish_at="2099-01-01T10:00:00+09:00",
@@ -1105,7 +1124,7 @@ class TestExecuteCompleteCollectionResume:
             "update_workflow_upload",
             side_effect=ValidationError(diagnostic),
         ):
-            result = uploader._execute_complete_collection(col, uploader.tracking_store.load(col), publish_at=None)
+            result = uploader.complete_collection_executor.run(col, uploader.tracking_store.load(col), publish_at=None)
 
         tracking = json.loads(tracking_path.read_text(encoding="utf-8"))
         assert result["action"] == "complete_collection_uploaded"
@@ -1139,7 +1158,7 @@ class TestExecuteCompleteCollectionResume:
             patch.object(uploader.playlist_assignment, "assign", side_effect=failure),
             pytest.raises(YouTubeAPIError, match="playlistItems.insert failed"),
         ):
-            uploader._execute_complete_collection(col, uploader.tracking_store.load(col), publish_at=None)
+            uploader.complete_collection_executor.run(col, uploader.tracking_store.load(col), publish_at=None)
 
         tracking = json.loads(tracking_path.read_text(encoding="utf-8"))
         assert tracking["status"] == "in_progress"
@@ -1164,7 +1183,7 @@ class TestExecuteCompleteCollectionResume:
         }
 
         tracking = uploader.tracking_store.load(col)
-        result = uploader._execute_complete_collection(col, tracking, publish_at="2099-01-01T10:00:00+09:00")
+        result = uploader.complete_collection_executor.run(col, tracking, publish_at="2099-01-01T10:00:00+09:00")
 
         live_col = tmp_path / "collections" / "live" / col.name
         saved_tracking = json.loads(
@@ -1204,7 +1223,7 @@ class TestExecuteCompleteCollectionResume:
             ),
             caplog.at_level(logging.INFO, logger="youtube_automation.domains.uploads.collection"),
         ):
-            result = uploader._execute_complete_collection(
+            result = uploader.complete_collection_executor.run(
                 col,
                 uploader.tracking_store.load(col),
                 publish_at=None,
@@ -1246,7 +1265,7 @@ class TestExecuteCompleteCollectionResume:
 
         # When
         tracking = uploader.tracking_store.load(col)
-        uploader._execute_complete_collection(col, tracking, publish_at=None)
+        uploader.complete_collection_executor.run(col, tracking, publish_at=None)
 
         # Then
         assert captured["uri"] == _SESS_NEW
@@ -1272,7 +1291,7 @@ class TestExecuteCompleteCollectionResume:
 
         # When
         tracking = uploader.tracking_store.load(col)
-        uploader._execute_complete_collection(col, tracking, publish_at=None)
+        uploader.complete_collection_executor.run(col, tracking, publish_at=None)
 
         # Then: tracking 上の URI が消えている
         assert _read_resume_uri(tracking_path) is None
@@ -1292,7 +1311,7 @@ class TestExecuteCompleteCollectionResume:
 
         # When
         tracking = uploader.tracking_store.load(col)
-        uploader._execute_complete_collection(col, tracking, publish_at=None)
+        uploader.complete_collection_executor.run(col, tracking, publish_at=None)
 
         # Then
         assert _read_resume_uri(tracking_path) is None
@@ -1325,7 +1344,7 @@ class TestExecuteCompleteCollectionResume:
 
         # When
         tracking = uploader.tracking_store.load(col)
-        uploader._execute_complete_collection(col, tracking, publish_at=None)
+        uploader.complete_collection_executor.run(col, tracking, publish_at=None)
 
         # Then: callback 内で reload してから書いていれば、両キーが同時に disk に残る
         cc = captured_cc["state"].get("complete_collection", {})
@@ -1346,7 +1365,7 @@ class TestExecuteCompleteCollectionResume:
         }
 
         first_tracking = uploader.tracking_store.load(col)
-        uploader._execute_complete_collection(col, first_tracking, publish_at=None)
+        uploader.complete_collection_executor.run(col, first_tracking, publish_at=None)
 
         assert mock_inner.upload_collection.call_args_list[0].kwargs["resume_session_uri"] == _SESS_PREV
         assert _read_resume_uri(tracking_path) is None
@@ -1360,7 +1379,7 @@ class TestExecuteCompleteCollectionResume:
             }
         }
         second_tracking = uploader.tracking_store.load(col)
-        uploader._execute_complete_collection(col, second_tracking, publish_at=None)
+        uploader.complete_collection_executor.run(col, second_tracking, publish_at=None)
 
         assert mock_inner.upload_collection.call_args_list[1].kwargs["resume_session_uri"] is None
 
@@ -1377,7 +1396,7 @@ class TestExecuteCompleteCollectionResume:
         mock_inner.upload_collection.side_effect = _first_run
 
         tracking_first = uploader.tracking_store.load(col)
-        uploader._execute_complete_collection(col, tracking_first, publish_at=None)
+        uploader.complete_collection_executor.run(col, tracking_first, publish_at=None)
 
         # 1 回目失敗で URI は tracking に残っているはず（precondition）
         assert _read_resume_uri(tracking_path) == _SESS_NEW
@@ -1393,7 +1412,7 @@ class TestExecuteCompleteCollectionResume:
             }
         }
         tracking_second = uploader.tracking_store.load(col)
-        uploader._execute_complete_collection(col, tracking_second, publish_at=None)
+        uploader.complete_collection_executor.run(col, tracking_second, publish_at=None)
 
         # Then: 2 回目は同一 URI で resume している
         second_call_kwargs = mock_inner.upload_collection.call_args.kwargs
@@ -1413,7 +1432,7 @@ class TestExecuteCompleteCollectionResume:
 
         # When
         tracking = uploader.tracking_store.load(col)
-        result = uploader._execute_complete_collection(col, tracking, publish_at=None)
+        result = uploader.complete_collection_executor.run(col, tracking, publish_at=None)
 
         # Then
         assert _read_resume_uri(tracking_path) is None
@@ -1438,7 +1457,7 @@ class TestExecuteCompleteCollectionResume:
         mock_inner.upload_collection.side_effect = _side_effect
 
         tracking = uploader.tracking_store.load(col)
-        result = uploader._execute_complete_collection(col, tracking, publish_at=None)
+        result = uploader.complete_collection_executor.run(col, tracking, publish_at=None)
 
         assert result["action"] == ACTION_COMPLETE_COLLECTION_QUOTA_EXHAUSTED
         assert result["details"]["retry_after_seconds"] == 42.0
@@ -1457,7 +1476,7 @@ class TestExecuteCompleteCollectionResume:
         secret = "secret-domain-canary"
         mock_inner.upload_collection.side_effect = AutomationError(f"access_token={secret}")
 
-        result = uploader._execute_complete_collection(col, uploader.tracking_store.load(col), publish_at=None)
+        result = uploader.complete_collection_executor.run(col, uploader.tracking_store.load(col), publish_at=None)
 
         assert result["details"]["error"] == "complete collection upload failed"
         tracking = json.loads(tracking_path.read_text(encoding="utf-8"))
@@ -1531,7 +1550,7 @@ def test_execute_collection_suppresses_lower_default_publish_fallback_when_sched
     }
 
     tracking = uploader.tracking_store.load(col)
-    uploader._execute_complete_collection(col, tracking, publish_at=None)
+    uploader.complete_collection_executor.run(col, tracking, publish_at=None)
 
     call_kwargs = mock_inner.upload_collection.call_args.kwargs
     assert call_kwargs["publish_at"] is None
