@@ -108,6 +108,7 @@ def _run_changelog_gate(
     monkeypatch.setenv("PATH", f"{fake_bin}:{os.environ['PATH']}")
     monkeypatch.setenv("CHANGED_FILES", "\n".join(changed_files))
     monkeypatch.setenv("PR_LABELS", "")
+    # fake git は値を解釈しないが、実際の git diff と同じ非空引数を渡す。
     monkeypatch.setenv("BASE_SHA", "base")
     monkeypatch.setenv("HEAD_SHA", "head")
     monkeypatch.setenv("HEAD_REF", head_ref)
@@ -226,8 +227,10 @@ def test_ci_changelog_gate_enforces_normal_and_release_pr_behavior(
         head_ref=head_ref,
     )
 
-    assert result.returncode == expected_returncode, result.stderr
-    assert expected_message in result.stdout
+    assert result.returncode == expected_returncode, f"CHANGELOG ゲートの終了コードが想定外: stderr={result.stderr!r}"
+    assert expected_message in result.stdout, (
+        f"CHANGELOG ゲートの出力に期待するメッセージがない: stdout={result.stdout!r}"
+    )
 
 
 def test_ci_workflow_keeps_push_branch_allowlist() -> None:
