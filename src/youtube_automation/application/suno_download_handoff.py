@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from enum import StrEnum
 from pathlib import Path
 
 from youtube_automation.application.media_handoff import (
@@ -18,6 +17,7 @@ from youtube_automation.domains.collections.workflow_state import read as read_w
 from youtube_automation.domains.collections.workflow_state import update as update_workflow_state
 from youtube_automation.domains.media_handoff_manifest import MANIFEST_NAME, HandoffIdentity, HandoffManifest
 from youtube_automation.domains.media_store import MediaKey, MediaStore
+from youtube_automation.domains.notifications import NotificationEvent, NotificationEventKind
 from youtube_automation.domains.suno.downloaded.archive import list_audio_files
 from youtube_automation.infrastructure.media.collection_paths import CollectionPaths
 
@@ -26,20 +26,7 @@ _HANDOFF_KEY_SEGMENT = "suno-download"
 _MUSIC_DIRECTORY = "02-Individual-music"
 
 
-class SunoDownloadHandoffEventKind(StrEnum):
-    COMPLETED = "completed"
-
-
-@dataclass(frozen=True, slots=True)
-class SunoDownloadHandoffEvent:
-    kind: SunoDownloadHandoffEventKind
-    channel: str
-    collection: str
-    manifest_key: str
-    root_sha256: str
-
-
-SunoDownloadHandoffEventSink = Callable[[SunoDownloadHandoffEvent], None]
+SunoDownloadHandoffEventSink = Callable[[NotificationEvent], None]
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,12 +73,12 @@ class SunoDownloadHandoff:
                 root_sha256=manifest.root_sha256,
             ),
         )
-        event = SunoDownloadHandoffEvent(
-            kind=SunoDownloadHandoffEventKind.COMPLETED,
-            channel=identity.channel,
-            collection=identity.collection,
-            manifest_key=manifest_key,
-            root_sha256=manifest.root_sha256,
+        event = NotificationEvent(
+            NotificationEventKind.HANDOFF_COMPLETED,
+            identity.channel,
+            identity.collection,
+            "suno-download-handoff",
+            f"manifest={manifest_key}, root_sha256={manifest.root_sha256}",
         )
         if self._on_event is not None:
             self._on_event(event)

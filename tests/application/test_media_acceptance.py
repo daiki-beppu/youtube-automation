@@ -4,12 +4,10 @@ from pathlib import Path
 
 import pytest
 
-from youtube_automation.application.media_acceptance import (
-    MediaAcceptanceEventKind,
-    validate_collection_audio,
-)
+from youtube_automation.application.media_acceptance import validate_collection_audio
 from youtube_automation.core.errors import ValidationError
 from youtube_automation.domains.media.acceptance import AudioMeasurement, MediaAcceptancePolicy
+from youtube_automation.domains.notifications import NotificationEventKind
 
 
 class FixtureInspector:
@@ -54,9 +52,9 @@ def test_validation_emits_rejected_event_and_stops_before_downstream(tmp_path: P
         validate_collection_audio(collection, _policy(), inspector, on_event=events.append)
 
     assert len(events) == 1
-    assert events[0].kind is MediaAcceptanceEventKind.REJECTED
+    assert events[0].kind is NotificationEventKind.FAIL_CLOSED_ABORTED
     assert events[0].collection == collection.name
-    assert events[0].issue_codes == ("duration",)
+    assert "duration" in events[0].detail
 
 
 def test_probe_failure_emits_rejected_event_and_stops(tmp_path: Path) -> None:
@@ -70,8 +68,8 @@ def test_probe_failure_emits_rejected_event_and_stops(tmp_path: Path) -> None:
     with pytest.raises(ValidationError, match="probe failed"):
         validate_collection_audio(collection, _policy(), FailingInspector(), on_event=events.append)
 
-    assert events[0].kind is MediaAcceptanceEventKind.REJECTED
-    assert events[0].issue_codes == ("probe",)
+    assert events[0].kind is NotificationEventKind.FAIL_CLOSED_ABORTED
+    assert "probe" in events[0].detail
 
 
 def test_empty_music_directory_is_a_track_count_rejection(tmp_path: Path) -> None:
@@ -82,4 +80,4 @@ def test_empty_music_directory_is_a_track_count_rejection(tmp_path: Path) -> Non
     with pytest.raises(ValidationError, match="track_count"):
         validate_collection_audio(collection, _policy(), FixtureInspector({}), on_event=events.append)
 
-    assert events[0].issue_codes == ("track_count",)
+    assert "track_count" in events[0].detail

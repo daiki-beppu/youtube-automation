@@ -3,11 +3,10 @@
 import argparse
 import logging
 
-from youtube_automation.application.pipeline_notifications import PipelineNotificationBridge
 from youtube_automation.commands._shared.cli_harness import run_cli
 from youtube_automation.configuration import load_config
 from youtube_automation.core.errors import AutomationError
-from youtube_automation.domains.notifications import NotificationEventKind
+from youtube_automation.domains.notifications import NotificationEvent, NotificationEventKind
 from youtube_automation.domains.uploads.collection import (
     ACTION_COMPLETE_COLLECTION_QUOTA_EXHAUSTED,
     ACTION_COMPLETE_COLLECTION_UPLOADED,
@@ -49,15 +48,17 @@ def run(args: argparse.Namespace) -> None:
         if args.status:
             uploader.show_status(target)
             return
-        notifications = PipelineNotificationBridge(create_discord_notification_sink())
+        notifications = create_discord_notification_sink()
         channel = load_config().meta.channel_short
 
         def notify_abort(stage: str) -> None:
-            notifications.emit(
-                NotificationEventKind.FAIL_CLOSED_ABORTED,
-                channel=channel,
-                collection=target.name,
-                stage=stage,
+            notifications.notify(
+                NotificationEvent(
+                    NotificationEventKind.FAIL_CLOSED_ABORTED,
+                    channel,
+                    target.name,
+                    stage,
+                )
             )
 
         if args.plan:
@@ -80,18 +81,12 @@ def run(args: argparse.Namespace) -> None:
                 raise
             action = result.get("action")
             if action == ACTION_COMPLETE_COLLECTION_UPLOADED:
-                notifications.emit(
-                    NotificationEventKind.PUBLISH_COMPLETED,
-                    channel=channel,
-                    collection=target.name,
-                    stage="youtube-publish",
+                notifications.notify(
+                    NotificationEvent(NotificationEventKind.PUBLISH_COMPLETED, channel, target.name, "youtube-publish")
                 )
             elif action == ACTION_COMPLETE_COLLECTION_QUOTA_EXHAUSTED:
-                notifications.emit(
-                    NotificationEventKind.GUARD_EXCEEDED,
-                    channel=channel,
-                    collection=target.name,
-                    stage="upload-quota",
+                notifications.notify(
+                    NotificationEvent(NotificationEventKind.GUARD_EXCEEDED, channel, target.name, "upload-quota")
                 )
 
 

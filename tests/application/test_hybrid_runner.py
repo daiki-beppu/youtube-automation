@@ -446,7 +446,7 @@ def test_runner_emits_rejection_and_has_no_git_media_or_agent_side_effect_when_r
         == head_before
     )
     assert len(events) == 1
-    assert events[0].issue_codes == ("disk_free",)
+    assert "disk" in events[0].detail
 
 
 def test_runner_emits_rejection_and_stops_when_resource_inspection_fails(tmp_path: Path) -> None:
@@ -472,7 +472,7 @@ def test_runner_emits_rejection_and_stops_when_resource_inspection_fails(tmp_pat
         run_sandwich(request, store, resource_probe=FailingResourceProbe(), on_resource_event=events.append)
 
     assert len(events) == 1
-    assert events[0].issue_codes == ("probe",)
+    assert "probe" in events[0].detail
 
 
 def test_posix_script_completes_local_pull_run_push(tmp_path: Path) -> None:

@@ -5,11 +5,9 @@ from __future__ import annotations
 import argparse
 import sys
 from decimal import Decimal
-from functools import partial
 from pathlib import Path
 
-from youtube_automation.application.hybrid_runner import HybridResourceEvent, SandwichRequest, run_sandwich
-from youtube_automation.application.pipeline_notifications import PipelineNotificationBridge
+from youtube_automation.application.hybrid_runner import SandwichRequest, run_sandwich
 from youtube_automation.commands._shared.cli_harness import run_cli
 from youtube_automation.core.errors import ConfigError
 from youtube_automation.infrastructure.hybrid_resources import SystemHybridResourceProbe
@@ -56,18 +54,6 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _report_resource_event(event: HybridResourceEvent) -> None:
-    print(
-        f"hybrid_resource_{event.kind.value}: channel={event.channel}, collection={event.collection}, {event.detail}",
-        file=sys.stderr,
-    )
-
-
-def _handle_resource_event(event: HybridResourceEvent, *, notifications: PipelineNotificationBridge) -> None:
-    _report_resource_event(event)
-    notifications.hybrid_resources(event)
-
-
 def run(args: argparse.Namespace) -> int:
     if args.media_store == "local":
         if args.local_store_root is None:
@@ -99,17 +85,18 @@ def run(args: argparse.Namespace) -> int:
         monthly_run_count=args.monthly_run_count,
         estimated_run_minutes=args.estimated_run_minutes,
     )
-    notifications = PipelineNotificationBridge(create_discord_notification_sink())
+    notifications = create_discord_notification_sink()
     result = run_sandwich(
         request,
         store,
         resource_probe=resource_probe,
-        on_resource_event=partial(_handle_resource_event, notifications=notifications),
-        on_state_sync_event=partial(
-            notifications.state_sync,
-            channel=request.channel,
-            collection=request.collection,
-        ),
+        on_resource_event=notifications.notify,
+        on_state_sync_event=notifications.notify,
+    )
+    print(
+        f"hybrid_resource_observed: channel={request.channel}, collection={request.collection}, "
+        f"monthly_runs={args.monthly_run_count + 1}",
+        file=sys.stderr,
     )
     print(f"hybrid runner {result.status}: {result.collection or 'new'}")
     return 0

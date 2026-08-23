@@ -7,10 +7,9 @@ from pathlib import Path
 import pytest
 
 from youtube_automation.core.errors import StateSyncError
+from youtube_automation.domains.notifications import NotificationEvent, NotificationEventKind
 from youtube_automation.infrastructure.vcs.state_git import build_context
 from youtube_automation.infrastructure.vcs.state_sync import (
-    StateSyncEvent,
-    StateSyncEventKind,
     pull_then_read,
     pull_update_commit_push,
 )
@@ -105,7 +104,7 @@ def test_concurrent_push_rejection_stops_and_emits_event(
     repositories: tuple[Path, Path, Path],
 ) -> None:
     remote, local_a, local_b = repositories
-    events: list[StateSyncEvent] = []
+    events: list[NotificationEvent] = []
 
     def racing_update() -> None:
         _write_state(local_a, "local-a")
@@ -125,8 +124,8 @@ def test_concurrent_push_rejection_stops_and_emits_event(
 
     verifier = _clone(remote, local_a.parent / "race-verifier")
     assert json.loads(_write_target(verifier).read_text(encoding="utf-8"))["phase"] == "local-b"
-    assert [event.kind for event in events] == [StateSyncEventKind.NON_FAST_FORWARD]
-    assert events[0].repository == local_a.resolve()
+    assert [event.kind for event in events] == [NotificationEventKind.NON_FAST_FORWARD_STOPPED]
+    assert events[0].stage == "state-sync"
     assert len(_git(local_a, "rev-list", "--parents", "-n", "1", "HEAD").split()) == 2
     assert _git(local_a, "status", "--porcelain") == ""
 

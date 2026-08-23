@@ -9,33 +9,17 @@ from __future__ import annotations
 
 import subprocess
 from collections.abc import Callable
-from dataclasses import dataclass
-from enum import StrEnum
 from pathlib import Path
 from typing import TypeVar
 
 from youtube_automation.core.errors import StateSyncError
+from youtube_automation.domains.notifications import NotificationEvent, NotificationEventKind
 from youtube_automation.infrastructure.vcs.state_git import StateGitContext, build_context
 
 T = TypeVar("T")
 
 
-class StateSyncEventKind(StrEnum):
-    """呼び出し側の通知adapterへ渡す同期イベント種別。"""
-
-    NON_FAST_FORWARD = "non_fast_forward"
-
-
-@dataclass(frozen=True, slots=True)
-class StateSyncEvent:
-    """secretやremote URLを含まない通知用event。"""
-
-    kind: StateSyncEventKind
-    repository: Path
-    message: str
-
-
-EventSink = Callable[[StateSyncEvent], None]
+EventSink = Callable[[NotificationEvent], None]
 ChangeValidator = Callable[[Path, set[str]], None]
 
 
@@ -101,6 +85,8 @@ def pull_update_commit_push(
     writer: Callable[[], T],
     *,
     commit_message: str,
+    notification_channel: str = "unknown",
+    notification_collection: str = "unknown",
     on_event: EventSink | None = None,
     change_validator: ChangeValidator | None = None,
 ) -> T:
@@ -140,10 +126,12 @@ def pull_update_commit_push(
     if pushed.returncode == 0:
         return result
     if _is_non_fast_forward(pushed):
-        event = StateSyncEvent(
-            kind=StateSyncEventKind.NON_FAST_FORWARD,
-            repository=context.repository,
-            message="state pushがnon-fast-forwardで拒否されました。自動merge/rebaseは行いません。",
+        event = NotificationEvent(
+            NotificationEventKind.NON_FAST_FORWARD_STOPPED,
+            notification_channel,
+            notification_collection,
+            "state-sync",
+            "state pushがnon-fast-forwardで拒否されました。自動merge/rebaseは行いません。",
         )
         if on_event is not None:
             on_event(event)

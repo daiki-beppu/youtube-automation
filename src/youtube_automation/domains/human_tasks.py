@@ -5,7 +5,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Protocol
 
 from youtube_automation.core.errors import ValidationError
 from youtube_automation.domains.collections.workflow_state import Phase
@@ -35,10 +34,6 @@ class HumanTask:
 class HumanTaskReport:
     channel: str
     tasks: tuple[HumanTask, ...]
-
-
-class HumanTaskNotifier(Protocol):
-    def send_human_tasks(self, report: HumanTaskReport) -> bool: ...
 
 
 def _validate_identifier(value: str, *, label: str) -> None:

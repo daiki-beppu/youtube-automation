@@ -7,15 +7,15 @@ import pytest
 
 from youtube_automation.application.human_tasks import generate_human_tasks
 from youtube_automation.core.errors import WorkflowStateError
-from youtube_automation.domains.human_tasks import HumanTaskReport
+from youtube_automation.domains.notifications import NotificationEvent
 
 
 class RecordingNotifier:
     def __init__(self) -> None:
-        self.reports: list[HumanTaskReport] = []
+        self.events: list[NotificationEvent] = []
 
-    def send_human_tasks(self, report: HumanTaskReport) -> bool:
-        self.reports.append(report)
+    def notify(self, event: NotificationEvent) -> bool:
+        self.events.append(event)
         return True
 
 
@@ -56,10 +56,7 @@ def test_generate_writes_fixed_markdown_and_notifies_same_pending_tasks(tmp_path
     assert second.path.read_bytes() == before
     assert "pending" in before.decode()
     assert "submitted" not in before.decode()
-    assert [[task.collection for task in report.tasks] for report in notifier.reports] == [
-        ["pending"],
-        ["pending"],
-    ]
+    assert [event.collection for event in notifier.events] == ["pending", "pending"]
 
 
 def test_invalid_state_does_not_overwrite_existing_human_tasks(tmp_path: Path) -> None:
@@ -122,5 +119,5 @@ def test_recording_submission_removes_task_from_file_and_next_discord_summary(tm
     )
 
     assert "volume-one" not in result.path.read_text(encoding="utf-8")
-    assert [task.collection for task in notifier.reports[0].tasks] == ["volume-one"]
-    assert notifier.reports[1].tasks == ()
+    assert notifier.events[0].collection == "volume-one"
+    assert notifier.events[1].collection == "all"

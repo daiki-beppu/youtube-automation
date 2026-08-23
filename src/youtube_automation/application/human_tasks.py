@@ -9,11 +9,12 @@ from youtube_automation.core.errors import WorkflowStateError
 from youtube_automation.domains.collections.inventory import UnreadableWorkflowState, iter_collections
 from youtube_automation.domains.human_tasks import (
     CollectionTaskState,
-    HumanTaskNotifier,
     HumanTaskReport,
     build_human_task_report,
     render_human_tasks_markdown,
+    render_human_tasks_summary,
 )
+from youtube_automation.domains.notifications import NotificationEvent, NotificationEventKind, NotificationNotifier
 from youtube_automation.infrastructure.filesystem import write_text_files_transactionally
 
 HUMAN_TASKS_FILENAME = "human-tasks.md"
@@ -51,12 +52,20 @@ def generate_human_tasks(
     *,
     channel: str,
     distrokid_enabled: bool,
-    notifier: HumanTaskNotifier,
+    notifier: NotificationNotifier,
 ) -> HumanTasksGenerationResult:
     root = channel_dir.resolve()
     states = _collection_states(root) if distrokid_enabled else ()
     report = build_human_task_report(channel, states, distrokid_enabled=distrokid_enabled)
     destination = root / HUMAN_TASKS_FILENAME
     write_text_files_transactionally({destination: render_human_tasks_markdown(report)})
-    delivered = notifier.send_human_tasks(report)
+    delivered = notifier.notify(
+        NotificationEvent(
+            NotificationEventKind.HUMAN_TASKS_PENDING,
+            report.channel,
+            report.tasks[0].collection if len(report.tasks) == 1 else "all",
+            "human-tasks",
+            render_human_tasks_summary(report),
+        )
+    )
     return HumanTasksGenerationResult(destination, report, delivered)
