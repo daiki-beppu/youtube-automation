@@ -220,7 +220,7 @@ def test_analytics_mode_accepts_verified_structured_persona_chain_without_legacy
     ("ttp_mode", "expected_returncode", "expected_output"),
     [
         (True, 0, "視聴シーンを仮説化して続行"),
-        (False, 1, "persona 未定義"),
+        (False, 1, "viewing-scene 未定義"),
     ],
 )
 def test_analytics_mode_persona_only_intermediate_state_uses_existing_fallback(
@@ -236,6 +236,25 @@ def test_analytics_mode_persona_only_intermediate_state_uses_existing_fallback(
     assert result.returncode == expected_returncode, result.stderr
     assert "検証済み暫定 persona pair・scene 未生成" in result.stdout
     assert expected_output in result.stdout
+    assert "persona 未定義" not in result.stdout
+
+
+@pytest.mark.parametrize("input_mode", ["benchmark-fallback", "minimal"])
+def test_non_analytics_persona_only_state_keeps_persona_and_falls_back_only_for_scene(
+    tmp_path: Path, input_mode: str
+) -> None:
+    if input_mode == "benchmark-fallback":
+        _touch(tmp_path / "data/benchmark_20260701.json")
+    _persona_chain(tmp_path)
+    (tmp_path / "docs/plans/viewing-scene-matrix.json").unlink()
+    (tmp_path / "docs/plans/viewing-scene-matrix.html").unlink()
+
+    result = _run_freshness_gate(tmp_path, ttp_mode=False)
+
+    assert result.returncode == 0, result.stderr
+    assert "検証済み暫定 persona pair・scene 未生成" in result.stdout
+    assert "viewing-scene 未定義" in result.stdout
+    assert "persona 未定義" not in result.stdout
 
 
 @pytest.mark.parametrize("input_mode", ["benchmark-fallback", "minimal"])

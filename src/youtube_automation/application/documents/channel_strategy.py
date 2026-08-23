@@ -26,7 +26,7 @@ def validate_channel_strategy_document_type(document: object, expected_type: str
     """Validate the shared strategy document type contract and return an object."""
     if not isinstance(document, dict):
         raise DocumentMigrationError("channel strategy document は JSON object で指定してください")
-    if expected_type not in _RELATIVE_TARGETS or document.get("document_type") != expected_type:
+    if document.get("document_type") != expected_type:
         raise DocumentMigrationError(f"参照先 {expected_type} の document_type が不正です")
     return document
 
@@ -114,7 +114,13 @@ def _validate_strategy_references(root: Path, document: dict[str, object]) -> No
         return
     persona = _published(root, "persona")
     if document_type == "scene":
-        validate_persona_scene_references(persona, document)
+        # Scene is the producer of the candidate scene ID set.  At this write
+        # boundary it may remove or rename scenes that the currently published
+        # persona still references; the persona pair is updated in the next
+        # phase.  Only its ownership reference is enforceable here.
+        persona_value = persona.get("persona")
+        if not isinstance(persona_value, dict) or document.get("persona_id") != persona_value.get("id"):
+            raise DocumentMigrationError("persona_id が persona 正本を参照していません")
     else:
         persona_value = persona.get("persona")
         if not isinstance(persona_value, dict) or document.get("persona_id") != persona_value.get("id"):

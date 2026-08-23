@@ -189,6 +189,8 @@ SCENE_JSON=docs/plans/viewing-scene-matrix.json
 SCENE_HTML=${SCENE_JSON%.json}.html
 PERSONA_PAIR=absent
 SCENE_PAIR=absent
+PERSONA_PAIR_READY=false
+CHAIN_READY=false
 if [ -e "$PERSONA_JSON" ] && [ -e "$PERSONA_HTML" ]; then PERSONA_PAIR=full
 elif [ -e "$PERSONA_JSON" ] || [ -e "$PERSONA_HTML" ]; then PERSONA_PAIR=partial
 fi
@@ -202,7 +204,6 @@ persona_chain_invalid() {
     exit 1
   fi
   echo "persona chain 警告 → $1。$INPUT_MODE の初回仮説 fallback へ委譲"
-  PERSONA_CHAIN_VALID=false
 }
 
 if [ "$PERSONA_PAIR" = "partial" ] || [ "$SCENE_PAIR" = "partial" ] || { [ "$PERSONA_PAIR" = "absent" ] && [ "$SCENE_PAIR" = "full" ]; }; then
@@ -215,20 +216,19 @@ elif [ "$PERSONA_PAIR" = "full" ] && [ "$SCENE_PAIR" = "full" ]; then
     persona_chain_invalid "canonical pair が不正"
   else
     echo "検証済み canonical persona chain を使用"
-    PERSONA_CHAIN_VALID=true
+    PERSONA_PAIR_READY=true
+    CHAIN_READY=true
   fi
 elif [ "$PERSONA_PAIR" = "full" ]; then
   if ! uv run python .claude/skills/wf-new/references/validate_persona_chain.py --persona-json "$PERSONA_JSON"; then
     persona_chain_invalid "暫定 persona pair が不正"
   else
     echo "検証済み暫定 persona pair・scene 未生成 → mode 別 fallback に委譲"
-    PERSONA_CHAIN_VALID=false
+    PERSONA_PAIR_READY=true
   fi
-else
-  PERSONA_CHAIN_VALID=false
 fi
 
-if [ "$PERSONA_CHAIN_VALID" != "true" ]; then
+if [ "$PERSONA_PAIR_READY" != "true" ]; then
   if [ "$INPUT_MODE" = "analytics mode" ] && [ "$COLLECTION_IDEATE_TTP_MODE" = "false" ]; then
     echo "persona 未定義 → /wf-new 企画工程中断、/channel-strategy --persona を案内"
     exit 1
@@ -240,7 +240,7 @@ if [ "$PERSONA_CHAIN_VALID" != "true" ]; then
 fi
 
 # 3. viewing-scene reflection — canonical chain 未生成時の fallback
-if [ "$PERSONA_CHAIN_VALID" != "true" ]; then
+if [ "$CHAIN_READY" != "true" ]; then
   if [ "$INPUT_MODE" = "analytics mode" ] && [ "$COLLECTION_IDEATE_TTP_MODE" = "false" ]; then
     echo "viewing-scene 未定義 → /wf-new 企画工程中断、/channel-strategy --persona で /channel-strategy --scene 実行と最終 persona-definition.json pair 更新を案内"
     exit 1

@@ -68,6 +68,27 @@ def test_strategy_documents_publish_validated_json_html_pairs_in_dependency_orde
     assert (tmp_path / "docs/channel/creative-constraints.html").is_file()
 
 
+def test_scene_producer_can_replace_ids_before_persona_pair_is_updated(tmp_path: Path) -> None:
+    _write(tmp_path, "docs/channel/personas/persona-definition.json", _persona())
+    initial_scene = _scene()
+    initial_scene["scenes"].append(  # type: ignore[union-attr]
+        {"id": "scene-rest", "situation": "夜の休憩", "desires": ["休息"], "evidence_ids": ["ev-1"]}
+    )
+    _write(tmp_path, "docs/plans/viewing-scene-matrix.json", initial_scene)
+    persona = _persona()
+    persona["scene_ids"] = ["scene-night"]
+    _write(tmp_path, "docs/channel/personas/persona-definition.json", persona)
+    replacement = _scene()
+    replacement["scenes"] = [
+        {"id": "scene-dawn", "situation": "朝の作業", "desires": ["集中"], "evidence_ids": ["ev-1"]}
+    ]
+
+    _write(tmp_path, "docs/plans/viewing-scene-matrix.json", replacement)
+
+    published = json.loads((tmp_path / "docs/plans/viewing-scene-matrix.json").read_text())
+    assert [scene["id"] for scene in published["scenes"]] == ["scene-dawn"]
+
+
 @pytest.mark.parametrize(
     ("relative", "document", "match"),
     [
