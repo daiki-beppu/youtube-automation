@@ -11,6 +11,7 @@ on:
       - Extensions
       - Audio Studio
       - Release notes site
+      - Code review
     types: [completed]
 
 # GITHUB_TOKEN の push は pull_request: synchronize を発火させないため、push は
@@ -32,7 +33,8 @@ concurrency:
 jobs:
   gate:
     if: >-
-      github.event.workflow_run.conclusion == 'failure' &&
+      (github.event.workflow_run.name == 'Code review' ||
+       github.event.workflow_run.conclusion == 'failure') &&
       github.event.workflow_run.event == 'pull_request' &&
       github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubuntu-latest
@@ -60,8 +62,9 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
           HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
-          FAILED_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
-          FAILED_RUN_URL: ${{ github.event.workflow_run.html_url }}
+          SOURCE_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          SOURCE_RUN_URL: ${{ github.event.workflow_run.html_url }}
+          SOURCE_WORKFLOW: ${{ github.event.workflow_run.name }}
         run: |
           set -eu
           skip() {
@@ -79,11 +82,40 @@ jobs:
             skip "PR has the skip-autofix label"
           fi
           # 失敗した commit から head が進んでいたら、新しい push の CI に判定を譲る
-          [ "$(jq -r '.headRefOid' <<<"$pr")" = "$FAILED_HEAD_SHA" ] \
-            || skip "branch moved past the failed commit"
+          [ "$(jq -r '.headRefOid' <<<"$pr")" = "$SOURCE_HEAD_SHA" ] \
+            || skip "branch moved past the source commit"
 
           number="$(jq -r '.number' <<<"$pr")"
           echo "pr_number=${number}" >> "$GITHUB_OUTPUT"
+
+          # Code review は warning / info だけなら success になるため conclusion ではなく、
+          # marker 付き集約コメント冒頭の severity 件数で修正要否を決める。
+          if [ "$SOURCE_WORKFLOW" = "Code review" ]; then
+            if jq -e '.labels[] | select(.name == "skip-review")' <<<"$pr" >/dev/null; then
+              skip "PR has the skip-review label"
+            fi
+            marker='<!-- code-review-workflow -->'
+            review_comment="$(gh api "repos/${REPO}/issues/${number}/comments" --paginate \
+              --jq "[.[] | select(.body | startswith(\"${marker}\"))][0].body // empty")"
+            [ -n "$review_comment" ] || skip "code review comment was not found"
+
+            # report_markdown 冒頭のサマリだけを対象にし、指摘本文に含まれる
+            # severity 名・行番号を件数と誤認しない。
+            summary="$(awk '/^---[[:space:]]*$/{exit} {print}' <<<"$review_comment")"
+            severity_count() {
+              # 表・箇条書き・太字・括弧と、3 severity を 1 行に連結する形式を
+              # 許容する。severity と件数の間は空白・記号だけに限定する。
+              grep -ioE "${1}[[:space:][:punct:]]*[0-9]+" <<<"$summary" \
+                | head -n 1 | grep -oE '[0-9]+' | head -n 1
+            }
+            critical_count="$(severity_count critical)"
+            warning_count="$(severity_count warning)"
+            info_count="$(severity_count info)"
+            [ -n "$critical_count" ] && [ -n "$warning_count" ] && [ -n "$info_count" ] \
+              || skip "code review severity summary could not be parsed"
+            [ "$((critical_count + warning_count + info_count))" -gt 0 ] \
+              || skip "code review reported no findings"
+          fi
 
           # 修正試行は PR あたり 1 回。commit body の [ci-autofix] マーカーで判定し、
           # 2 回目以降の失敗はコメント報告のみ(コスト暴走・修正ループ防止)
@@ -92,10 +124,10 @@ jobs:
             {
               echo "## CI autofix"
               echo
-              echo "⏭️ 自動修正 commit の push 後も CI が失敗しています。"
+              echo "⏭️ 自動修正 commit の push 後に、CI 失敗またはレビュー指摘が発生しています。"
               echo "自動修正は PR あたり 1 回までのため、以降は人間の対応が必要です。"
               echo
-              echo "失敗した run: ${FAILED_RUN_URL}"
+              echo "起点 run: ${SOURCE_RUN_URL}"
             } > /tmp/autofix-limit-comment.md
             gh pr comment "$number" --repo "$REPO" --edit-last --create-if-none \
               --body-file /tmp/autofix-limit-comment.md
@@ -122,19 +154,22 @@ jobs:
           prompt: |
             REPO: ${{ github.repository }}
             PR NUMBER: ${{ needs.gate.outputs.pr_number }}
-            FAILED WORKFLOW: ${{ github.event.workflow_run.name }}
-            FAILED RUN ID: ${{ github.event.workflow_run.id }}
+            SOURCE WORKFLOW: ${{ github.event.workflow_run.name }}
+            SOURCE RUN ID: ${{ github.event.workflow_run.id }}
 
-            あなたはこの PR の CI 失敗を修正する自動修正ゲートです。checkout 済みの
+            あなたはこの PR の CI 失敗またはコードレビュー指摘を修正する自動修正ゲートです。checkout 済みの
             作業ツリーは PR の head ブランチです。
 
             ## 手順
-            1. `gh run view <FAILED RUN ID> --log-failed` で失敗ログを取得し、失敗した
-               check と根本原因を特定する
+            1. SOURCE WORKFLOW が `Code review` の場合は、`gh api` で PR コメントから
+               `<!-- code-review-workflow -->` marker 付きの最新集約コメントを取得し、
+               critical / warning / info の全指摘を入力として扱う。それ以外の場合は
+               `gh run view <SOURCE RUN ID> --log-failed` で失敗ログを取得する
             2. `gh pr view` / `gh pr diff` で PR の変更内容と意図を把握する。PR タイトル
                末尾の `(#N)` から起点 issue を特定できれば `gh issue view N` で要件も読む
             3. 根本原因を修正する。症状 → 根本原因 → 同型箇所 → 修正の順で考え、
-               指摘行だけの表面的な patch にしない
+               指摘行だけの表面的な patch にしない。レビュー起点では全 severity の指摘を
+               修正し、一部だけ直した commit を push しない
             4. 修正を 1 commit にまとめて PR ブランチへ push する
 
             ## commit 規約
@@ -148,6 +183,8 @@ jobs:
             - issue の要件と CI の期待が矛盾しており、どちらが正か判断できない
             - 失敗が PR の変更と無関係(インフラ・flaky・外部サービス起因)
             - 修正に secret・環境設定・リポジトリ外の操作が必要
+            - レビュー指摘に同意できない、または修正すべきでないと判断した(判断理由と
+              対象指摘を診断コメントに明記する)
 
             ## 禁止事項
             - テストの削除・スキップ・期待値の書き換えで CI を黙らせること(テストが
@@ -159,4 +196,4 @@ jobs:
           # sonnet 既定の code-review.yml とは別判断で opus を使う
           claude_args: |
             --model opus
-            --allowedTools "Edit,Write,Bash(uv run ruff:*),Bash(uv run pytest:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(gh run view:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*),Bash(gh issue view:*)"
+            --allowedTools "Edit,Write,Bash(uv run ruff:*),Bash(uv run pytest:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(gh api:*),Bash(gh run view:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*),Bash(gh issue view:*)"
