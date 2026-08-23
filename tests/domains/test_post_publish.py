@@ -144,7 +144,7 @@ def test_readiness_waits_when_no_live_collection_needs_followup(tmp_path: Path) 
 
 def test_post_publish_stage_policy_adapts_target_prompt_completion_and_allowlist(tmp_path: Path) -> None:
     collection = _collection(tmp_path)
-    policy = PostPublishStagePolicy(tmp_path, "/publish", None)
+    policy = PostPublishStagePolicy(tmp_path, "/publish", requested=None)
 
     policy.resolve()
     assert policy.waiting is False
@@ -163,4 +163,4 @@ def test_post_publish_stage_policy_adapts_target_prompt_completion_and_allowlist
 
 def test_post_publish_stage_policy_rejects_media_handoff_before_any_side_effect(tmp_path: Path) -> None:
     with pytest.raises(ValidationError, match="media handoff を受け付けません"):
-        PostPublishStagePolicy(tmp_path, "/publish", None, object())
+        PostPublishStagePolicy(tmp_path, "/publish", object(), requested=None)

@@ -124,7 +124,13 @@ class StagePolicy(Protocol):
 
     def prompt_for(self) -> str: ...
 
-    def verify(self) -> str | None: ...
+    def verify(self) -> str | None:
+        """成果を検証し、確定した対象 collection 名を返す。
+
+        collection を持たない stage だけが `None` を返す。対象が確定するはずの
+        stage は検証失敗を戻り値ではなく例外で表すため、常に名前を返す。
+        """
+        ...
 
     def allows(self, repository: Path, changed: set[str]) -> None: ...
 
@@ -260,7 +266,10 @@ def _select_policy(request: SandwichRequest, store: MediaStore) -> StagePolicy:
     if request.stage == "planning":
         return PlanningStagePolicy(request.channel_dir, request.prompt, request.media_handoff)
     return PostPublishStagePolicy(
-        request.channel_dir, request.prompt, request.collection or None, request.media_handoff
+        request.channel_dir,
+        request.prompt,
+        request.media_handoff,
+        requested=request.collection or None,
     )
 
 

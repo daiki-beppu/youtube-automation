@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import ClassVar, Literal
 
-from youtube_automation.core.errors import StateSyncError, ValidationError, WorkflowStateError
+from youtube_automation.core.errors import StateSyncError, WorkflowStateError
+from youtube_automation.domains.cloud_stage_policy import ReadinessStagePolicy
 from youtube_automation.domains.collections.inventory import CollectionRecord, UnreadableWorkflowState, iter_collections
 from youtube_automation.domains.collections.workflow_state import WorkflowState, read
 
@@ -112,29 +113,10 @@ def validate_planning_changes(repository: Path, collection: Path, changed: set[s
 
 
 @dataclass(slots=True)
-class PlanningStagePolicy:
+class PlanningStagePolicy(ReadinessStagePolicy):
     """Adapter exposing planning semantics to the generic sandwich runner."""
 
-    root: Path
-    prompt: str
-    # media_handoff は application.hybrid_runner.MediaHandoffRequest を指すが、
-    # domains/ は application/ に依存できないため object のまま None 判定だけを行う。
-    media_handoff: object | None = None
-    _readiness: PlanningReadiness | None = field(init=False, default=None, repr=False)
-    _completed: Path | None = field(init=False, default=None, repr=False)
-
-    def __post_init__(self) -> None:
-        if self.media_handoff is not None:
-            raise ValidationError("planning stage は media handoff を受け付けません")
-
-    @property
-    def waiting(self) -> bool:
-        return self._readiness is not None and self._readiness.status == "waiting"
-
-    @property
-    def collection_name(self) -> str | None:
-        collection = self._completed or (self._readiness.collection if self._readiness else None)
-        return collection.name if collection else None
+    stage_label: ClassVar[str] = "planning"
 
     def resolve(self) -> None:
         self._readiness = resolve_planning_readiness(self.root)

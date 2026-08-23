@@ -6,12 +6,13 @@ import json
 import os
 import tempfile
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal
+from typing import ClassVar, Literal
 
-from youtube_automation.core.errors import StateSyncError, ValidationError, WorkflowStateError
+from youtube_automation.core.errors import StateSyncError, WorkflowStateError
+from youtube_automation.domains.cloud_stage_policy import ReadinessStagePolicy
 from youtube_automation.domains.collections.inventory import CollectionRecord, UnreadableWorkflowState, iter_collections
 from youtube_automation.domains.collections.workflow_state import WorkflowState, read
 from youtube_automation.infrastructure.filesystem import file_lock
@@ -251,30 +252,12 @@ def validate_post_publish_changes(repository: Path, changed: set[str]) -> None:
 
 
 @dataclass(slots=True)
-class PostPublishStagePolicy:
+class PostPublishStagePolicy(ReadinessStagePolicy):
     """Adapter exposing post-publish semantics to the generic sandwich runner."""
 
-    root: Path
-    prompt: str
+    stage_label: ClassVar[str] = "post-publish"
+
     requested: str | None = None
-    # media_handoff は application.hybrid_runner.MediaHandoffRequest を指すが、
-    # domains/ は application/ に依存できないため object のまま None 判定だけを行う。
-    media_handoff: object | None = None
-    _readiness: PostPublishReadiness | None = field(init=False, default=None, repr=False)
-    _completed: Path | None = field(init=False, default=None, repr=False)
-
-    def __post_init__(self) -> None:
-        if self.media_handoff is not None:
-            raise ValidationError("post-publish stage は media handoff を受け付けません")
-
-    @property
-    def waiting(self) -> bool:
-        return self._readiness is not None and self._readiness.status == "waiting"
-
-    @property
-    def collection_name(self) -> str | None:
-        collection = self._completed or (self._readiness.collection if self._readiness else None)
-        return collection.name if collection else None
 
     def resolve(self) -> None:
         self._readiness = resolve_post_publish_readiness(self.root, self.requested)
