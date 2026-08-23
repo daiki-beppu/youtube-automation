@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import subprocess
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal, Protocol
 
@@ -32,7 +32,12 @@ from youtube_automation.domains.post_publish import (
 )
 from youtube_automation.infrastructure.auth.redaction import redact_sensitive_data
 from youtube_automation.infrastructure.vcs.state_git import build_context
-from youtube_automation.infrastructure.vcs.state_sync import EventSink, pull_update_commit_push
+from youtube_automation.infrastructure.vcs.state_sync import (
+    ChangeValidator,
+    EventSink,
+    default_change_validator,
+    pull_update_commit_push,
+)
 
 Agent = Literal["claude", "codex"]
 Stage = Literal["pipeline", "planning", "post-publish"]
@@ -79,8 +84,11 @@ class SandwichRequest:
             self.input_handoff is not None or self.output_handoff is not None
         ):
             raise ValidationError(f"{self.stage} stage は media handoff を受け付けません")
-        for field in filter(None, (self.collection_dir, self.input_destination, self.output_root, *self.output_files)):
-            validate_media_relative_path("runner path", field)
+        for path_value in filter(
+            None,
+            (self.collection_dir, self.input_destination, self.output_root, *self.output_files),
+        ):
+            validate_media_relative_path("runner path", path_value)
 
 
 def _inside(root: Path, relative: str) -> Path:
@@ -108,6 +116,18 @@ class SandwichResult:
     collection: str | None
 
 
+class StagePolicy(Protocol):
+    """Stage-specific execution semantics used by the sandwich pipeline."""
+
+    def resolve(self) -> None: ...
+
+    def prompt_for(self) -> str: ...
+
+    def verify(self) -> SandwichResult: ...
+
+    def allows(self, repository: Path, changed: set[str]) -> None: ...
+
+
 def _verify_input_reference(request: SandwichRequest, manifest: HandoffManifest) -> None:
     state_path = _inside(request.channel_dir, request.collection_dir) / "workflow-state.json"
     handoff = read(state_path).handoff
@@ -119,6 +139,51 @@ def _verify_input_reference(request: SandwichRequest, manifest: HandoffManifest)
         or handoff.root_sha256 != manifest.root_sha256
     ):
         raise StateSyncError("workflow-state handoff参照とpull済みmanifestが一致しません")
+
+
+@dataclass(slots=True)
+class PipelineStagePolicy:
+    """Media handoff and control-file policy for the default pipeline stage."""
+
+    request: SandwichRequest
+    store: MediaStore
+    _validate: ChangeValidator | None = field(init=False, default=None, repr=False)
+
+    def resolve(self) -> None:
+        # allowlistは既定validatorを唯一の定義として再利用し、fast-forward pull直後にsnapshotする。
+        self._validate = default_change_validator(build_context(self.request.channel_dir))
+        if self.request.input_handoff is None or self.request.input_destination is None:
+            return
+        identity = HandoffIdentity(self.request.channel, self.request.collection, self.request.input_handoff)
+        manifest = pull_handoff(
+            self.store,
+            identity,
+            _inside(self.request.channel_dir, self.request.input_destination),
+        )
+        _verify_input_reference(self.request, manifest)
+
+    def prompt_for(self) -> str:
+        return self.request.prompt
+
+    def verify(self) -> SandwichResult:
+        if self.request.output_handoff is not None and self.request.output_root is not None:
+            root = _inside(self.request.channel_dir, self.request.output_root)
+            sources = tuple(HandoffSource(_inside(root, path), path) for path in self.request.output_files)
+            push_handoff(
+                self.store,
+                HandoffIdentity(
+                    self.request.channel,
+                    self.request.collection,
+                    self.request.output_handoff,
+                ),
+                sources,
+            )
+        return SandwichResult("completed", self.request.collection or None)
+
+    def allows(self, repository: Path, changed: set[str]) -> None:
+        if self._validate is None:
+            raise StateSyncError("pipeline stage policyのresolveより先にallowsが呼ばれました")
+        self._validate(repository, changed)
 
 
 def _resource_detail(report: HybridResourceReport) -> str:
@@ -187,12 +252,18 @@ def run_sandwich(
     """Run the existing local-first workflow between verified MediaStore boundaries."""
     _guard_resources(request, resource_probe, on_resource_event, on_resource_diagnostics)
     context = build_context(request.channel_dir)
+    policy: StagePolicy | None = PipelineStagePolicy(request, store) if request.stage == "pipeline" else None
     result = SandwichResult("completed", request.collection or None)
     planning_collection: Path | None = None
     post_publish_collection: Path | None = None
 
     def writer() -> None:
         nonlocal planning_collection, post_publish_collection, result
+        if policy is not None:
+            policy.resolve()
+            agent_runner(request.agent, policy.prompt_for(), request.channel_dir)
+            result = policy.verify()
+            return
         if request.stage == "planning":
             readiness = resolve_planning_readiness(request.channel_dir)
             if readiness.status == "waiting":
@@ -202,38 +273,28 @@ def run_sandwich(
             planning_collection = verify_planning_completion(request.channel_dir, readiness.collection)
             result = SandwichResult("completed", planning_collection.name)
             return
-        if request.stage == "post-publish":
-            readiness = resolve_post_publish_readiness(request.channel_dir, request.collection or None)
-            if readiness.status == "waiting":
-                result = SandwichResult("waiting", None)
-                return
-            if readiness.collection is None:
-                raise StateSyncError("cloud post-publish completion target is missing")
-            targeted_prompt = (
-                f"{request.prompt}\n"
-                f"Cloud post-publish target is collection {readiness.collection.name!r}. "
-                "Use the cloud executor and do not select or modify any other collection."
-            )
-            agent_runner(request.agent, targeted_prompt, request.channel_dir)
-            post_publish_collection = verify_post_publish_completion(request.channel_dir, readiness.collection)
-            result = SandwichResult("completed", post_publish_collection.name)
+        readiness = resolve_post_publish_readiness(request.channel_dir, request.collection or None)
+        if readiness.status == "waiting":
+            result = SandwichResult("waiting", None)
             return
-        if request.input_handoff is not None and request.input_destination is not None:
-            identity = HandoffIdentity(request.channel, request.collection, request.input_handoff)
-            manifest = pull_handoff(store, identity, _inside(request.channel_dir, request.input_destination))
-            _verify_input_reference(request, manifest)
-
-        agent_runner(request.agent, request.prompt, request.channel_dir)
-
-        if request.output_handoff is not None and request.output_root is not None:
-            root = _inside(request.channel_dir, request.output_root)
-            sources = tuple(HandoffSource(_inside(root, path), path) for path in request.output_files)
-            push_handoff(store, HandoffIdentity(request.channel, request.collection, request.output_handoff), sources)
+        if readiness.collection is None:
+            raise StateSyncError("cloud post-publish completion target is missing")
+        targeted_prompt = (
+            f"{request.prompt}\n"
+            f"Cloud post-publish target is collection {readiness.collection.name!r}. "
+            "Use the cloud executor and do not select or modify any other collection."
+        )
+        agent_runner(request.agent, targeted_prompt, request.channel_dir)
+        post_publish_collection = verify_post_publish_completion(request.channel_dir, readiness.collection)
+        result = SandwichResult("completed", post_publish_collection.name)
 
     def validate_changes(repository: Path, changed: set[str]) -> None:
         if result.status == "waiting":
             if changed:
                 raise StateSyncError("waiting cloud planning run must not change repository state")
+            return
+        if policy is not None:
+            policy.allows(repository, changed)
             return
         if request.stage == "planning":
             if planning_collection is None:
@@ -251,6 +312,6 @@ def run_sandwich(
         notification_channel=request.channel,
         notification_collection=request.collection,
         on_event=on_state_sync_event,
-        change_validator=validate_changes if request.stage in {"planning", "post-publish"} else None,
+        change_validator=validate_changes,
     )
     return result
