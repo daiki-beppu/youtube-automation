@@ -7,7 +7,8 @@ from pathlib import Path
 
 import schedule
 
-from youtube_automation.configuration import channel_dir, load_config, load_schedule_config
+from youtube_automation.configuration import ScheduleConfig, channel_dir, load_config
+from youtube_automation.configuration.loader import load_schedule_config_from_file
 from youtube_automation.core.adapters.youtube import (
     DAILY_BUCKET_LIMITS,
     UNIT_COSTS,
@@ -91,10 +92,7 @@ class CollectionUploader:
                 allow_duration_outside_target=allow_duration_outside_target,
             ),
         )
-        config_root = (
-            self.config_path.parent.parent if self.config_path.parent.name == "config" else self.config_path.parent
-        )
-        self.config = load_schedule_config(config_root)
+        self.config = load_schedule_config_from_file(self.config_path)
         self.tracking_store = tracking_store or TrackingStore(self.collections_root, self.config)
         self.upload_journal_factory = upload_journal_factory
         self.youtube_service = None
@@ -117,6 +115,18 @@ class CollectionUploader:
         )
 
     # ─── 設定・初期化 ───────────────────────────────
+
+    def _apply_config(self, config: ScheduleConfig) -> None:
+        """解決済み設定を差し替え、同じ設定を参照する collaborator へ一括反映する。
+
+        ``ScheduleConfig`` は frozen なため差し替えは新インスタンスになる。
+        collaborator は構築時に受け取った参照を保持するので、ここで同期しないと
+        古い設定を読み続ける。
+        """
+        self.config = config
+        self.tracking_store.config = config
+        self.published_dates.config = config
+        self.complete_collection_executor.config = config
 
     def initialize_youtube_service(self):
         """YouTube API サービス初期化"""
@@ -293,7 +303,7 @@ class CollectionUploader:
                 privacy_label = {"unlisted": "限定公開", "private": "非公開"}.get(privacy_status, privacy_status)
                 print(f"  📅 公開設定: {privacy_label} ({privacy_status})")
                 print("     └ config/channel/youtube.json::privacy_status を反映")
-            if not self.config.scheduling_enabled and self.config.cadence:
+            if self.config.scheduling_explicitly_disabled:
                 print(
                     "  ⚠️  schedule.auto_schedule_enabled が false に設定されています。"
                     "予約投稿したい場合は true に変更してください"

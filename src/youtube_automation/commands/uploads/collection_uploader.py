@@ -23,7 +23,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--plan", action="store_true")
     parser.add_argument("--daemon", "-d", action="store_true")
     parser.add_argument("--collection", "-c")
-    parser.add_argument("--config")
+    parser.add_argument(
+        "--config",
+        help="schedule_config.json のファイルパス（既定: <channel_dir>/config/schedule_config.json）",
+    )
     parser.add_argument(
         "--allow-duration-outside-target",
         action="store_true",

@@ -377,8 +377,7 @@ def _make_uploader_with_collection_mock(tmp_path: Path):
         mock_cls.return_value = mock_inner
         uploader = CollectionUploader(collections_root=str(tmp_path / "collections"))
         # auto_move_to_live を無効化してパス変動を防ぐ
-        uploader.config = replace(uploader.config, auto_move_to_live=False)
-        uploader.complete_collection_executor.config = uploader.config
+        uploader._apply_config(replace(uploader.config, auto_move_to_live=False))
         return uploader, mock_inner
 
 
@@ -554,8 +553,7 @@ def _make_uploader_with_schedule_config(tmp_path: Path, schedule_config: dict):
             collections_root=str(tmp_path / "collections"),
             config_path=str(config_path),
         )
-        uploader.config = replace(uploader.config, auto_move_to_live=False)
-        uploader.complete_collection_executor.config = uploader.config
+        uploader._apply_config(replace(uploader.config, auto_move_to_live=False))
         return uploader, mock_inner
 
 
@@ -771,6 +769,67 @@ class TestDefaultPublishTimeFallback:
 
         assert result is None
         assert not mock_resolve.called
+
+
+class TestScheduleConfigPathResolution:
+    """#4439: `--config` に渡した任意パスの schedule_config を直接読むこと。"""
+
+    def test_reads_config_path_outside_a_config_directory(self, tmp_path):
+        from youtube_automation.domains.uploads.collection import CollectionUploader
+
+        # Given: config/ 配下ではない運用者指定のパスに設定を置く
+        config_path = tmp_path / "backup" / "my_schedule.json"
+        config_path.parent.mkdir(parents=True)
+        config_path.write_text(
+            json.dumps({"schedule": {"auto_schedule_enabled": True, "cadence": ["mon"], "publish_time": "21:00"}}),
+            encoding="utf-8",
+        )
+
+        with patch("youtube_automation.domains.uploads.collection.YouTubeAutoUploader"):
+            uploader = CollectionUploader(
+                collections_root=str(tmp_path / "collections"),
+                config_path=str(config_path),
+            )
+
+        # Then: デフォルトへ黙って落ちず、指定ファイルの内容が反映される
+        assert uploader.config.scheduling_enabled is True
+        assert uploader.config.cadence == ("mon",)
+        assert uploader.config.publish_time == "21:00"
+
+    def test_apply_config_propagates_to_collaborators(self, tmp_path):
+        uploader, _ = _make_uploader_with_collection_mock(tmp_path)
+
+        uploader._apply_config(replace(uploader.config, publish_time="23:45"))
+
+        assert uploader.config.publish_time == "23:45"
+        assert uploader.tracking_store.config is uploader.config
+        assert uploader.published_dates.config is uploader.config
+        assert uploader.complete_collection_executor.config is uploader.config
+
+
+class TestShowPlanScheduleWarning:
+    """#4439: auto_schedule_enabled=false の取りこぼしを cadence 未設定でも警告すること。"""
+
+    _WARNING = "schedule.auto_schedule_enabled が false に設定されています"
+
+    def test_warns_when_scheduling_is_explicitly_disabled_without_cadence(self, tmp_path, capsys):
+        uploader, _ = _make_uploader_with_schedule_config(
+            tmp_path,
+            {"schedule": {"auto_schedule_enabled": False, "publish_time": "21:00", "timezone": "Asia/Tokyo"}},
+        )
+
+        with patch.object(uploader.published_dates, "calculate_publish_at", return_value=None):
+            uploader.show_plan(tmp_path / "collection")
+
+        assert self._WARNING in capsys.readouterr().out
+
+    def test_does_not_warn_when_scheduling_is_merely_unset(self, tmp_path, capsys):
+        uploader, _ = _make_uploader_with_schedule_config(tmp_path, {"schedule": {"timezone": "Asia/Tokyo"}})
+
+        with patch.object(uploader.published_dates, "calculate_publish_at", return_value=None):
+            uploader.show_plan(tmp_path / "collection")
+
+        assert self._WARNING not in capsys.readouterr().out
 
 
 class TestPublishedDatesQuotaRecording:
@@ -1064,8 +1123,7 @@ class TestExecuteCompleteCollectionResume:
 
         col, tracking_path = _make_tracking_collection(tmp_path, resume_uri=None)
         uploader, mock_inner = _make_uploader_with_collection_mock(tmp_path)
-        uploader.config = replace(uploader.config, auto_move_to_live=True)
-        uploader.complete_collection_executor.config = uploader.config
+        uploader._apply_config(replace(uploader.config, auto_move_to_live=True))
         mock_inner.upload_collection.return_value = {
             "complete_video": {
                 "video_id": "V_PLAYLIST_FAILED",
@@ -1094,8 +1152,7 @@ class TestExecuteCompleteCollectionResume:
         """dedup skip 時も live 移動後の tracking/workflow-state に既存 video_id を記録する."""
         col, _ = _make_tracking_collection(tmp_path, resume_uri=None)
         uploader, mock_inner = _make_uploader_with_collection_mock(tmp_path)
-        uploader.config = replace(uploader.config, auto_move_to_live=True)
-        uploader.complete_collection_executor.config = uploader.config
+        uploader._apply_config(replace(uploader.config, auto_move_to_live=True))
         mock_inner.upload_collection.return_value = {
             "complete_video": {
                 "video_id": "V_EXISTING",
@@ -1130,8 +1187,7 @@ class TestExecuteCompleteCollectionResume:
         """rename 完了後の Windows access denied でも live 側の後処理を完了する."""
         col, _ = _make_tracking_collection(tmp_path, resume_uri=None)
         uploader, mock_inner = _make_uploader_with_collection_mock(tmp_path)
-        uploader.config = replace(uploader.config, auto_move_to_live=True)
-        uploader.complete_collection_executor.config = uploader.config
+        uploader._apply_config(replace(uploader.config, auto_move_to_live=True))
         mock_inner.upload_collection.return_value = {
             "complete_video": {
                 "video_id": "V_MOVED",
