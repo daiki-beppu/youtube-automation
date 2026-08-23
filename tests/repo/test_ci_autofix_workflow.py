@@ -39,6 +39,14 @@ def _autofix_step(autofix_job: dict[str, object]) -> dict[str, object]:
     return next(step for step in autofix_job["steps"] if step.get("id") == "autofix")
 
 
+def _checkout_step(job: dict[str, object]) -> dict[str, object]:
+    return next(
+        step
+        for step in job["steps"]
+        if str(step.get("uses", "")).startswith("actions/checkout@")
+    )
+
+
 def test_autofix_fires_when_a_pr_gate_workflow_fails() -> None:
     triggers = _triggers(_workflow())
 
@@ -226,11 +234,7 @@ def test_fix_pushes_via_app_token_to_retrigger_ci() -> None:
     # checkout 既定の persist-credentials: true は read-only GITHUB_TOKEN を
     # http.<origin>.extraheader に残し、App token の remote URL 認証より優先されて
     # push が 403 になる(#4591)
-    checkout = next(
-        step
-        for step in workflow["jobs"]["autofix"]["steps"]
-        if str(step.get("uses", "")).startswith("actions/checkout@")
-    )
+    checkout = _checkout_step(workflow["jobs"]["autofix"])
     assert checkout["with"]["persist-credentials"] is False
 
 
