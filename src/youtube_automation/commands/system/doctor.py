@@ -1544,8 +1544,10 @@ def _resolve_wf_new_input_mode(channel_dir: Path) -> _WfNewInputMode:
         stale_reason = freshness.reason if freshness.is_stale else None
         if stale_reason == "missing":
             stale_reason = None
-        elif stale_reason is None and latest_data is not None and _analytics_data_exceeds_freshness_days(
-            latest_data[0], channel_dir
+        elif (
+            stale_reason is None
+            and latest_data is not None
+            and _analytics_data_exceeds_freshness_days(latest_data[0], channel_dir)
         ):
             stale_reason = "absolute"
         return _WfNewInputMode(
