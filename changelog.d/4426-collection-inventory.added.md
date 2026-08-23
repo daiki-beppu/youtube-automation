@@ -1,0 +1,1 @@
+- planning / live の collection 探索規則を inventory に集約し、symlink・予約 prefix・重複名を一貫して扱いながら読取不能な workflow state を明示値として返す（#4426）。
