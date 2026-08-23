@@ -57,12 +57,21 @@ def _session_context_command(settings: dict[str, object]) -> str:
     return commands[0]
 
 
+# repo 自身の settings.json は nix devShell が構築した .venv を hook が作り直さない
+# よう --no-sync を付ける（#4605）。下流配布 template は uv が venv を管理するため
+# 従来どおり sync あり。
+_PROGRESS_HOOK_COMMANDS = (
+    "uv run yt-progress-hook",
+    "uv run --no-sync yt-progress-hook",
+)
+
+
 def _progress_hook_matchers(settings: dict[str, object], event: str) -> list[str]:
     groups = settings["hooks"][event]
     return [
         group["matcher"]
         for group in groups
-        if any(hook["command"] == "uv run yt-progress-hook" for hook in group["hooks"])
+        if any(hook["command"] in _PROGRESS_HOOK_COMMANDS for hook in group["hooks"])
     ]
 
 
