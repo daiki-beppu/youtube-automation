@@ -140,6 +140,8 @@ def _collect_statuses(
             heading = _annotation(resolved, "title", "Status")
             output.append((f"{context} · {heading}" if context else heading, value, semantic))
         return
+    if view.get("collapsed") is True:
+        return
     if isinstance(value, dict):
         properties = resolved.get("properties")
         children = properties if isinstance(properties, dict) else {}
@@ -297,6 +299,9 @@ def _validate_review_view(view: Mapping[str, object]) -> None:
         not isinstance(compare, list) or not compare or not all(isinstance(field, str) for field in compare)
     ):
         raise DocumentRenderError("x-view.compare は空でない string array で指定してください")
+    label_field = view.get("labelField")
+    if label_field is not None and (not isinstance(label_field, str) or not label_field):
+        raise DocumentRenderError("x-view.labelField は空でない string で指定してください")
     status_map = view.get("statusMap")
     if status_map is not None:
         if not isinstance(status_map, dict) or not status_map:
@@ -456,12 +461,22 @@ def _render_cards(
     schema = _resolve_local_reference(schema, root_schema)
     item_schema_value = schema.get("items")
     item_schema = item_schema_value if isinstance(item_schema_value, dict) else {}
-    labels = [str(item.get("title") or item.get("name") or f"Entry {index}") for index, item in enumerate(value, 1)]
+    view = _view(schema)
+    label_field = view.get("labelField")
+    labels: list[str] = []
+    for index, item in enumerate(value, 1):
+        if isinstance(label_field, str):
+            label = item.get(label_field)
+            if not isinstance(label, str) or not label:
+                raise DocumentRenderError(
+                    f"cards の x-view.labelField ({label_field}) は各 item の空でない string を参照してください"
+                )
+        else:
+            fallback = item.get("title") or item.get("name")
+            label = fallback if isinstance(fallback, str) and fallback else f"Entry {index}"
+        labels.append(label)
     # anchor は section 単位で名前空間を分け、cards section が複数あっても id が衝突しない。
     anchors = [escape(f"{anchor_prefix}-{index}", quote=True) for index in range(1, len(labels) + 1)]
-    flow = "".join(
-        f'<li><a href="#{anchor}">{escape(label)}</a></li>' for anchor, label in zip(anchors, labels, strict=True)
-    )
     entries = list(zip(anchors, labels, value, strict=True))
 
     def render_entries(selected: list[tuple[str, str, dict[str, object]]]) -> str:
@@ -471,11 +486,11 @@ def _render_cards(
             for anchor, label, item in selected
         )
 
-    view = _view(schema)
     groups = view.get("itemGroups")
     grouped_content = ""
     if isinstance(groups, list):
         claimed: set[int] = set()
+        ordered_entries = []
         for group in groups:
             assert isinstance(group, dict)
             match = group["match"]
@@ -489,6 +504,7 @@ def _render_cards(
             ]
             selected = [entries[index] for index in selected_indices]
             claimed.update(selected_indices)
+            ordered_entries.extend(selected)
             if not selected:
                 continue
             group_cards = f'<div class="entry-card-grid">{render_entries(selected)}</div>'
@@ -500,9 +516,14 @@ def _render_cards(
         remaining = [entry for index, entry in enumerate(entries) if index not in claimed]
         if remaining:
             grouped_content += f'<div class="entry-card-grid">{render_entries(remaining)}</div>'
+        ordered_entries.extend(remaining)
     else:
         grouped_content = f'<div class="entry-card-grid">{render_entries(entries)}</div>'
-    comparison = _render_comparison(value, item_schema, root_schema, view.get("compare"))
+        ordered_entries = entries
+    flow = "".join(f'<li><a href="#{anchor}">{escape(label)}</a></li>' for anchor, label, _ in ordered_entries)
+    comparison = _render_comparison(
+        [entry[2] for entry in ordered_entries], item_schema, root_schema, view.get("compare")
+    )
     content = f'{comparison}<ol class="card-flow">{flow}</ol>{grouped_content}'
     if content_only:
         return content

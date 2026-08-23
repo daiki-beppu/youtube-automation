@@ -138,7 +138,7 @@ def test_status_annotation_drives_value_style_and_top_approval_summary() -> None
         "properties": {
             "checks": {
                 "title": "Checks",
-                "x-view": {"collapsed": True},
+                "x-view": {"presentation": "cards"},
                 "items": {
                     "properties": {
                         "name": {"title": "Name"},
@@ -159,7 +159,7 @@ def test_status_annotation_drives_value_style_and_top_approval_summary() -> None
     assert "meaning · Status" in approval
     assert 'class="status-chip status-fail">fail</span>' in approval
     assert 'class="status-chip status-warning">pending</span>' in approval
-    assert html.index("承認サマリー") < html.index("<summary>Checks</summary>")
+    assert html.index("承認サマリー") < html.index("<h2>Checks</h2>")
 
 
 @pytest.mark.parametrize(
@@ -187,7 +187,56 @@ def test_review_fixtures_show_real_statuses_above_collapsed_details(
 
     assert all(label in approval for label in expected_labels)
     assert all(f">{status}</span>" in approval for status in expected_statuses)
+    assert approval.count('class="status-chip') == len(expected_statuses)
     assert html.index("承認サマリー") < html.index('class="review-nav"')
+
+
+def test_collection_plan_uses_schema_label_and_group_order_across_navigation_comparison_and_cards() -> None:
+    fixture = FIXTURES_DIR / "documents" / "collection-plan.json"
+    document = json.loads(fixture.read_text(encoding="utf-8"))
+    # 採用候補を入力末尾へ置き、schema の itemGroups が表示順の正本になることを確認する。
+    document["candidates"] = document["candidates"][1:] + document["candidates"][:1]
+
+    html = render_repository_document(RepositorySchema.COLLECTION_PLAN, document)
+    comparison = html.split('<section class="candidate-comparison">', 1)[1].split("</section>", 1)[0]
+
+    titles = [candidate["final_title"] for candidate in document["candidates"]]
+    selected_title = document["candidates"][-1]["final_title"]
+    assert "Entry 1" not in html
+    assert f"<h3>{selected_title}</h3>" in html
+    assert f">{selected_title}</a>" in html
+    assert comparison.index(selected_title) < comparison.index(titles[0])
+    assert html.index(f">{selected_title}</a>") < html.index(f">{titles[0]}</a>")
+
+
+@pytest.mark.parametrize("label_field", ["", 42, ["title"]])
+def test_cards_label_field_annotation_rejects_invalid_types(label_field: object) -> None:
+    schema = {
+        "properties": {
+            "entries": {
+                "x-view": {"presentation": "cards", "labelField": label_field},
+                "items": {"properties": {"final_title": {}}},
+            }
+        }
+    }
+
+    with pytest.raises(DocumentRenderError, match="labelField"):
+        render_schema_document({"entries": [{"final_title": "Plan"}]}, schema)
+
+
+@pytest.mark.parametrize("item", [{}, {"final_title": 42}, {"final_title": ""}])
+def test_cards_label_field_fails_closed_when_item_has_no_nonempty_string(item: dict[str, object]) -> None:
+    schema = {
+        "properties": {
+            "entries": {
+                "x-view": {"presentation": "cards", "labelField": "final_title"},
+                "items": {"properties": {"final_title": {}}},
+            }
+        }
+    }
+
+    with pytest.raises(DocumentRenderError, match="labelField"):
+        render_schema_document({"entries": [item]}, schema)
 
 
 @pytest.mark.parametrize("presentation", ["card", "table", "cards", "media"])

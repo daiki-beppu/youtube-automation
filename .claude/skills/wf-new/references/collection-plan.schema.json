@@ -11,7 +11,7 @@
     "mode": {"title": "企画 mode", "enum": ["normal", "batch"], "x-view": {"order": 2, "collapsed": true}},
     "collection_id": {"title": "Collection", "type": "string", "minLength": 1, "x-view": {"order": 3, "collapsed": true}},
     "provenance": {"title": "Provenance", "$ref": "#/definitions/provenance", "x-view": {"order": 10, "collapsed": true}},
-    "candidates": {"title": "企画候補と承認状況", "type": "array", "minItems": 1, "items": {"$ref": "#/definitions/candidate"}, "x-view": {"order": 20, "presentation": "cards", "summary": true, "priority": "critical", "compare": ["selection_status", "final_title", "target_persona", "viewing_scene", "music_direction"], "itemGroups": [{"title": "採用候補", "match": {"property": "selection_status", "values": ["selected", "auto_selected"]}, "collapsed": false}, {"title": "未採用・検討中候補", "match": {"property": "selection_status", "values": ["rejected", "proposed"]}, "collapsed": true}]}}
+    "candidates": {"title": "企画候補と承認状況", "type": "array", "minItems": 1, "items": {"$ref": "#/definitions/candidate"}, "x-view": {"order": 20, "presentation": "cards", "summary": true, "priority": "critical", "labelField": "final_title", "compare": ["selection_status", "final_title", "target_persona", "viewing_scene", "music_direction"], "itemGroups": [{"title": "採用候補", "match": {"property": "selection_status", "values": ["selected", "auto_selected"]}, "collapsed": false}, {"title": "未採用・検討中候補", "match": {"property": "selection_status", "values": ["rejected", "proposed"]}, "collapsed": true}]}}
   },
   "additionalProperties": true,
   "definitions": {

@@ -32,6 +32,7 @@ def test_plan_schema_uses_candidate_cards_with_required_comparison_fields_and_pr
     candidate = schema["definitions"]["candidate"]
 
     assert candidates["x-view"]["presentation"] == "cards"
+    assert candidates["x-view"]["labelField"] == "final_title"
     assert candidates["x-view"]["compare"] == [
         "selection_status",
         "final_title",
