@@ -7,7 +7,7 @@ import sys
 from decimal import Decimal
 from pathlib import Path
 
-from youtube_automation.application.hybrid_runner import SandwichRequest, run_sandwich
+from youtube_automation.application.hybrid_runner import MediaHandoffRequest, SandwichRequest, run_sandwich
 from youtube_automation.commands._shared.cli_harness import run_cli
 from youtube_automation.core.errors import ConfigError
 from youtube_automation.infrastructure.hybrid_resources import SystemHybridResourceProbe
@@ -63,20 +63,34 @@ def run(args: argparse.Namespace) -> int:
         if args.local_store_root is not None:
             raise ConfigError("--local-store-root は local MediaStore 専用です")
         store = R2MediaStore(R2MediaStoreConfig.from_environment())
+    handoff_values = (
+        args.input_handoff,
+        args.input_destination,
+        args.output_handoff,
+        args.output_root,
+        *args.output_file,
+    )
+    media_handoff = (
+        MediaHandoffRequest(
+            collection_dir=args.collection_dir,
+            input_handoff=args.input_handoff,
+            input_destination=args.input_destination,
+            output_handoff=args.output_handoff,
+            output_root=args.output_root,
+            output_files=tuple(args.output_file),
+        )
+        if any(handoff_values)
+        else None
+    )
     request = SandwichRequest(
         channel_dir=args.channel_dir.resolve(),
-        collection_dir=args.collection_dir,
         channel=args.channel_slug,
         collection=args.collection,
         agent=args.agent,
         prompt=args.prompt,
         commit_message=args.commit_message,
         stage=args.stage,
-        input_handoff=args.input_handoff,
-        input_destination=args.input_destination,
-        output_handoff=args.output_handoff,
-        output_root=args.output_root,
-        output_files=tuple(args.output_file),
+        media_handoff=media_handoff,
     )
     resource_probe = SystemHybridResourceProbe(
         channel_dir=request.channel_dir,

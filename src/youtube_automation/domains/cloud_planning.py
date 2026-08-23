@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from youtube_automation.core.errors import StateSyncError, WorkflowStateError
+from youtube_automation.core.errors import StateSyncError, ValidationError, WorkflowStateError
 from youtube_automation.domains.collections.inventory import CollectionRecord, UnreadableWorkflowState, iter_collections
 from youtube_automation.domains.collections.workflow_state import WorkflowState, read
 
@@ -109,3 +109,44 @@ def validate_planning_changes(repository: Path, collection: Path, changed: set[s
         allowed_postmortem = path.startswith("collections/live/") and path.endswith("/20-documentation/postmortem.md")
         if not path.startswith(collection_prefix) and not allowed_audit and not allowed_postmortem:
             raise StateSyncError(f"cloud planning changed an unowned path: {path}")
+
+
+@dataclass(slots=True)
+class PlanningStagePolicy:
+    """Adapter exposing planning semantics to the generic sandwich runner."""
+
+    root: Path
+    prompt: str
+    media_handoff: object | None = None
+    _readiness: PlanningReadiness | None = None
+    _completed: Path | None = None
+
+    def __post_init__(self) -> None:
+        if self.media_handoff is not None:
+            raise ValidationError("planning stage は media handoff を受け付けません")
+
+    @property
+    def waiting(self) -> bool:
+        return self._readiness is not None and self._readiness.status == "waiting"
+
+    @property
+    def collection_name(self) -> str | None:
+        collection = self._completed or (self._readiness.collection if self._readiness else None)
+        return collection.name if collection else None
+
+    def resolve(self) -> None:
+        self._readiness = resolve_planning_readiness(self.root)
+
+    def prompt_for(self) -> str:
+        return self.prompt
+
+    def verify(self) -> str:
+        if self._readiness is None:
+            raise StateSyncError("cloud planning readiness is missing")
+        self._completed = verify_planning_completion(self.root, self._readiness.collection)
+        return self._completed.name
+
+    def allows(self, repository: Path, changed: set[str]) -> None:
+        if self._completed is None:
+            raise StateSyncError("cloud planning completion target is missing")
+        validate_planning_changes(repository, self._completed, changed)

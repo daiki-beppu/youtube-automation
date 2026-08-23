@@ -11,6 +11,7 @@ import pytest
 
 from tests.helpers.paths import REPO_ROOT
 from youtube_automation.application.hybrid_runner import (
+    MediaHandoffRequest,
     PipelineStagePolicy,
     SandwichRequest,
     SandwichResult,
@@ -97,17 +98,19 @@ def test_pipeline_stage_policy_resolves_media_prompt_verify_and_control_allowlis
     )
     request = SandwichRequest(
         channel_dir=worker,
-        collection_dir="collections/planning/demo",
         channel="003ch",
         collection="demo",
         agent="claude",
         prompt="/wf-new --auto",
         commit_message="chore: runner state",
-        input_handoff="suno-download",
-        input_destination="media",
-        output_handoff="master",
-        output_root="outputs",
-        output_files=("Master.mp4",),
+        media_handoff=MediaHandoffRequest(
+            collection_dir="collections/planning/demo",
+            input_handoff="suno-download",
+            input_destination="media",
+            output_handoff="master",
+            output_root="outputs",
+            output_files=("Master.mp4",),
+        ),
     )
     policy = PipelineStagePolicy(request, store)
 
@@ -116,7 +119,7 @@ def test_pipeline_stage_policy_resolves_media_prompt_verify_and_control_allowlis
     assert policy.prompt_for() == "/wf-new --auto"
     (worker / "outputs").mkdir()
     (worker / "outputs" / "Master.mp4").write_bytes(b"output")
-    assert policy.verify() == SandwichResult("completed", "demo")
+    assert policy.verify() == "demo"
     pulled = tmp_path / "pulled"
     pull_handoff(store, HandoffIdentity("003ch", "demo", "master"), pulled)
     assert (pulled / "Master.mp4").read_bytes() == b"output"
@@ -137,14 +140,16 @@ def test_pipeline_stage_policy_resolve_rejects_manifest_mismatch(tmp_path: Path)
     _, _, worker = _repositories(tmp_path, "003ch/demo/suno-download/manifest.json", "0" * 64)
     request = SandwichRequest(
         channel_dir=worker,
-        collection_dir="collections/planning/demo",
         channel="003ch",
         collection="demo",
         agent="claude",
         prompt="/wf-new --auto",
         commit_message="chore: runner state",
-        input_handoff="suno-download",
-        input_destination="media",
+        media_handoff=MediaHandoffRequest(
+            collection_dir="collections/planning/demo",
+            input_handoff="suno-download",
+            input_destination="media",
+        ),
     )
 
     with pytest.raises(StateSyncError, match="workflow-state handoff参照"):
@@ -156,7 +161,6 @@ def test_pipeline_stage_policy_allows_requires_resolve_snapshot(tmp_path: Path) 
     _, _, worker = _repositories(tmp_path, "003ch/demo/suno-download/manifest.json", "0" * 64)
     request = SandwichRequest(
         channel_dir=worker,
-        collection_dir="collections/planning/demo",
         channel="003ch",
         collection="demo",
         agent="claude",
@@ -266,7 +270,6 @@ def test_cloud_planning_commits_prompt_artifacts_and_prepared_state_as_single_wr
     result = run_sandwich(
         SandwichRequest(
             channel_dir=worker,
-            collection_dir="",
             channel="003ch",
             collection="",
             agent="claude",
@@ -298,7 +301,6 @@ def test_cloud_planning_waits_without_agent_or_commit_after_planning_phase(tmp_p
     result = run_sandwich(
         SandwichRequest(
             channel_dir=worker,
-            collection_dir="",
             channel="003ch",
             collection="",
             agent="claude",
@@ -335,7 +337,6 @@ def test_cloud_post_publish_commits_only_verified_tracking(tmp_path: Path) -> No
     result = run_sandwich(
         SandwichRequest(
             channel_dir=worker,
-            collection_dir="",
             channel="003ch",
             collection="",
             agent="claude",
@@ -371,7 +372,6 @@ def test_cloud_post_publish_rejects_tracking_without_pinned_actual_artifact(tmp_
         run_sandwich(
             SandwichRequest(
                 channel_dir=worker,
-                collection_dir="",
                 channel="003ch",
                 collection="",
                 agent="claude",
@@ -408,17 +408,19 @@ def test_runner_completes_manifest_pull_agent_push_and_state_commit(tmp_path: Pa
 
     request = SandwichRequest(
         channel_dir=worker,
-        collection_dir="collections/planning/demo",
         channel="003ch",
         collection="demo",
         agent="claude",
         prompt="/wf-new --auto",
         commit_message="chore: runner state",
-        input_handoff="suno-download",
-        input_destination="media",
-        output_handoff="master",
-        output_root="outputs",
-        output_files=("Master.mp4",),
+        media_handoff=MediaHandoffRequest(
+            collection_dir="collections/planning/demo",
+            input_handoff="suno-download",
+            input_destination="media",
+            output_handoff="master",
+            output_root="outputs",
+            output_files=("Master.mp4",),
+        ),
     )
 
     run_sandwich(request, store, resource_probe=PassingResourceProbe(), agent_runner=agent)
@@ -470,14 +472,16 @@ def test_runner_rejects_manifest_that_does_not_match_git_state_before_agent(tmp_
 
     request = SandwichRequest(
         channel_dir=worker,
-        collection_dir="collections/planning/demo",
         channel="003ch",
         collection="demo",
         agent="claude",
         prompt="/wf-new --auto",
         commit_message="chore: runner state",
-        input_handoff="suno-download",
-        input_destination="media",
+        media_handoff=MediaHandoffRequest(
+            collection_dir="collections/planning/demo",
+            input_handoff="suno-download",
+            input_destination="media",
+        ),
     )
 
     with pytest.raises(StateSyncError, match="manifestが一致しません"):
@@ -510,14 +514,16 @@ def test_runner_emits_rejection_and_has_no_git_media_or_agent_side_effect_when_r
 
     request = SandwichRequest(
         channel_dir=worker,
-        collection_dir="collections/planning/demo",
         channel="003ch",
         collection="demo",
         agent="claude",
         prompt="/wf-new --auto",
         commit_message="chore: runner state",
-        input_handoff="suno-download",
-        input_destination="media",
+        media_handoff=MediaHandoffRequest(
+            collection_dir="collections/planning/demo",
+            input_handoff="suno-download",
+            input_destination="media",
+        ),
     )
 
     with pytest.raises(ResourceLimitError, match="resource guard rejected"):
@@ -552,12 +558,12 @@ def test_runner_emits_rejection_and_stops_when_resource_inspection_fails(tmp_pat
 
     request = SandwichRequest(
         channel_dir=worker,
-        collection_dir="collections/planning/demo",
         channel="003ch",
         collection="demo",
         agent="claude",
         prompt="/wf-new --auto",
         commit_message="chore: runner state",
+        media_handoff=MediaHandoffRequest(collection_dir="collections/planning/demo"),
     )
 
     with pytest.raises(ResourceLimitError, match="probe unavailable"):
