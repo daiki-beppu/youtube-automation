@@ -15,10 +15,11 @@ from youtube_automation.application.hybrid_runner import (
     PipelineStagePolicy,
     SandwichRequest,
     SandwichResult,
+    Stage,
     run_sandwich,
 )
 from youtube_automation.application.media_handoff import HandoffSource, pull_handoff, push_handoff
-from youtube_automation.core.errors import ResourceLimitError, StateSyncError
+from youtube_automation.core.errors import ResourceLimitError, StateSyncError, ValidationError
 from youtube_automation.domains.hybrid_resource_guard import GIB, HybridResourceSnapshot
 from youtube_automation.domains.media_handoff_manifest import HandoffIdentity
 from youtube_automation.domains.post_publish import mark_complete
@@ -571,6 +572,37 @@ def test_runner_emits_rejection_and_stops_when_resource_inspection_fails(tmp_pat
 
     assert len(events) == 1
     assert "probe" in events[0].detail
+
+
+@pytest.mark.parametrize("stage", ["planning", "post-publish"])
+def test_runner_rejects_stage_with_media_handoff_before_probing_resources(tmp_path: Path, stage: Stage) -> None:
+    store = LocalMediaStore(tmp_path / "store")
+    _, _, worker = _repositories(tmp_path, "unused/manifest.json", "0" * 64)
+    events = []
+
+    class UnusableResourceProbe:
+        def inspect(self) -> HybridResourceSnapshot:
+            raise AssertionError("resource probe must not run for an invalid stage request")
+
+    request = SandwichRequest(
+        channel_dir=worker,
+        channel="003ch",
+        collection="",
+        agent="claude",
+        prompt="/wf-new --auto",
+        commit_message="chore: runner state",
+        stage=stage,
+        media_handoff=MediaHandoffRequest(
+            collection_dir="collections/planning/demo",
+            input_handoff="suno-download",
+            input_destination="media",
+        ),
+    )
+
+    with pytest.raises(ValidationError, match="media handoff を受け付けません"):
+        run_sandwich(request, store, resource_probe=UnusableResourceProbe(), on_resource_event=events.append)
+
+    assert events == []
 
 
 def test_posix_script_completes_local_pull_run_push(tmp_path: Path) -> None:

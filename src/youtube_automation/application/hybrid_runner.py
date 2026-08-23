@@ -253,6 +253,17 @@ def _guard_resources(
     raise ResourceLimitError(f"hybrid resource guard rejected: {rejection_detail}")
 
 
+def _select_policy(request: SandwichRequest, store: MediaStore) -> StagePolicy:
+    """The single stage-to-policy selection boundary."""
+    if request.stage == "pipeline":
+        return PipelineStagePolicy(request, store)
+    if request.stage == "planning":
+        return PlanningStagePolicy(request.channel_dir, request.prompt, request.media_handoff)
+    return PostPublishStagePolicy(
+        request.channel_dir, request.prompt, request.collection or None, request.media_handoff
+    )
+
+
 def run_sandwich(
     request: SandwichRequest,
     store: MediaStore,
@@ -264,16 +275,10 @@ def run_sandwich(
     on_state_sync_event: EventSink | None = None,
 ) -> SandwichResult:
     """Run the existing local-first workflow between verified MediaStore boundaries."""
+    # request と stage の整合検証は policy 構築時に起きるため、resource probe より前に選択する。
+    policy = _select_policy(request, store)
     _guard_resources(request, resource_probe, on_resource_event, on_resource_diagnostics)
     context = build_context(request.channel_dir)
-    if request.stage == "pipeline":  # The single stage-to-policy selection boundary.
-        policy: StagePolicy = PipelineStagePolicy(request, store)
-    elif request.stage == "planning":
-        policy = PlanningStagePolicy(request.channel_dir, request.prompt, request.media_handoff)
-    else:
-        policy = PostPublishStagePolicy(
-            request.channel_dir, request.prompt, request.collection or None, request.media_handoff
-        )
     result = SandwichResult("completed", request.collection or None)
 
     def writer() -> None:

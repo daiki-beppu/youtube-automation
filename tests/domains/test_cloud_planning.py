@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from youtube_automation.core.errors import StateSyncError
+from youtube_automation.core.errors import StateSyncError, ValidationError
 from youtube_automation.domains.cloud_planning import (
     PlanningReadiness,
     PlanningStagePolicy,
@@ -124,6 +124,6 @@ def test_planning_stage_policy_adapts_readiness_completion_and_allowlist(tmp_pat
         policy.allows(tmp_path, {"README.md"})
 
 
-def test_planning_stage_policy_hides_private_state_from_constructor(tmp_path: Path) -> None:
-    with pytest.raises(TypeError, match="_readiness"):
-        PlanningStagePolicy(tmp_path, "/wf-new --auto", _readiness=None)  # type: ignore[call-arg]
+def test_planning_stage_policy_rejects_media_handoff_before_any_side_effect(tmp_path: Path) -> None:
+    with pytest.raises(ValidationError, match="media handoff を受け付けません"):
+        PlanningStagePolicy(tmp_path, "/wf-new --auto", object())

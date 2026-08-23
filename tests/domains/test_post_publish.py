@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from youtube_automation.core.errors import StateSyncError
+from youtube_automation.core.errors import StateSyncError, ValidationError
 from youtube_automation.domains.collections.inventory import CollectionRecord
 from youtube_automation.domains.collections.workflow_state import WorkflowState
 from youtube_automation.domains.post_publish import (
@@ -161,6 +161,6 @@ def test_post_publish_stage_policy_adapts_target_prompt_completion_and_allowlist
         policy.allows(tmp_path, {"README.md"})
 
 
-def test_post_publish_stage_policy_hides_private_state_from_constructor(tmp_path: Path) -> None:
-    with pytest.raises(TypeError, match="_completed"):
-        PostPublishStagePolicy(tmp_path, "/publish", _completed=None)  # type: ignore[call-arg]
+def test_post_publish_stage_policy_rejects_media_handoff_before_any_side_effect(tmp_path: Path) -> None:
+    with pytest.raises(ValidationError, match="media handoff を受け付けません"):
+        PostPublishStagePolicy(tmp_path, "/publish", None, object())
