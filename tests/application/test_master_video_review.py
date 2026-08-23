@@ -102,7 +102,7 @@ def test_preview_review_plays_probe_and_composition_without_updating_state(tmp_p
         timeout=30,
     )
 
-    html = (collection / "tmp/reviews/master-video-preview.html").read_text(encoding="utf-8")
+    html = (collection / "20-documentation/reviews/master-video-preview.html").read_text(encoding="utf-8")
     state = json.loads((collection / "workflow-state.json").read_text(encoding="utf-8"))
     assert result.status == "selected"
     assert state["assets"]["master_video"] is None

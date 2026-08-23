@@ -4,6 +4,8 @@
 
 `/music` の prompt 正本は `references/music-prompt.schema.json` に準拠する JSON と、同 basename の HTML pair とする。
 
+HTML生成直後、親 orchestrator は生成されたHTMLの絶対pathをユーザーが開けるMarkdown linkで提示し、曲数、engine、各cardで確認するstyle / lyrics / optionsを要約する。手動承認ではこの提示後にだけ選択CLIを開始し、approve完了まで `assets.music_prompts` を更新しない。自動承認でもbrowserとbroker待機だけを省略し、HTML linkと採用内容の要約を完了報告へ必ず含める。
+
 手動承認では永続HTMLを `uv run yt-music-prompt-select --collection <collection-path>` で同 basename に再生成して表示し、product-neutralなsingle-use loopback brokerから `approve` / `reject` の候補IDだけを受け取る。
 返却後もartifact digestと検証済みJSONを再確認し、HTML・brokerから任意path、command、state patchを受け取らない。
 Web失敗は未承認のまま停止し、会話選択へ黙ってfallbackしない。browserなしは `--transport terminal` を明示する。

@@ -266,7 +266,9 @@ def lint_operational_artifacts(
         if path.endswith(".html"):
             json_path = str(Path(path).with_suffix(".json"))
             artifact = artifacts.get(json_path)
-            if artifact is None or artifact.owner != owner:
+            has_owned_json_pair = artifact is not None and artifact.owner == owner
+            is_declared_other = (owner, path) in other
+            if not has_owned_json_pair and not is_declared_other:
                 violations.append(f"orphan HTML です: owner={owner} path={path}")
             continue
         if (owner, path) not in other:
