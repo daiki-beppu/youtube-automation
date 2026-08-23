@@ -129,8 +129,9 @@ main {
   background: var(--color-surface);
 }
 
-.view-priority-critical,
-.view-priority-high { border-inline-start: 0.35rem solid var(--color-focus); }
+/* critical は太い accent、high は細い中間色で承認優先度の差を視覚化する。 */
+.view-priority-critical { border-inline-start: 0.5rem solid var(--color-focus); }
+.view-priority-high { border-inline-start: 0.25rem solid var(--color-rule-strong); }
 
 .copyable-content,
 .view-diff {

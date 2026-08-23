@@ -44,6 +44,10 @@ def _view_schema() -> dict[str, object]:
     }
 
 
+def _document_css(html: str) -> str:
+    return html.split("<style>", 1)[1].split("</style>", 1)[0]
+
+
 def test_schema_annotations_render_card_table_and_local_media_in_view_order() -> None:
     html = render_schema_document(
         {
@@ -179,6 +183,41 @@ def test_collapsed_section_renders_its_heading_and_description_once(presentation
     assert "<h2>Unique section heading</h2>" not in html
 
 
+def test_collapsed_details_presentation_does_not_nest_a_second_disclosure() -> None:
+    schema = {
+        "title": "Approval",
+        "type": "object",
+        "properties": {
+            "audit": {
+                "title": "Audit trail",
+                "x-view": {"presentation": "details", "collapsed": True},
+            }
+        },
+    }
+
+    html = render_schema_document({"audit": {"source": "plan.json"}}, schema)
+    body = html.split("<main>", 1)[1].split("</main>", 1)[0]
+
+    assert body.count("<details") == 1
+    assert "<summary>Audit trail</summary>" in body
+    assert "詳細を表示" not in body
+
+
+def test_priority_critical_and_high_are_visually_distinguishable() -> None:
+    css = _document_css(
+        render_schema_document(
+            {"summary": "Ready", "rows": [], "asset": "assets/preview.jpg"},
+            _view_schema(),
+        )
+    )
+    declarations = {
+        selector: css.split(f"{selector} {{", 1)[1].split("}", 1)[0].strip()
+        for selector in (".view-priority-critical", ".view-priority-high")
+    }
+
+    assert declarations[".view-priority-critical"] != declarations[".view-priority-high"]
+
+
 def test_review_view_offers_sticky_toc_and_explains_csp_safe_copy_and_search() -> None:
     html = render_schema_document(
         {"description": "line one\nline two", "tracks": [{"title": "Opening"}]},
@@ -198,11 +237,31 @@ def test_review_view_offers_sticky_toc_and_explains_csp_safe_copy_and_search() -
     assert 'class="review-nav"' in html
     assert 'href="#section-description"' in html
     assert 'id="section-description"' in html
-    assert 'href="#track-1"' in html
+    assert 'href="#section-tracks-1"' in html
     assert "Ctrl/⌘+F" in html
     assert "選択してコピー" in html
     assert "position: sticky" in html
     assert "@media (max-width: 39.99rem)" in html
+
+
+def test_cards_anchors_are_namespaced_per_section_so_two_card_lists_do_not_collide() -> None:
+    cards_view = {"presentation": "cards"}
+    item_schema = {"properties": {"title": {}}}
+    html = render_schema_document(
+        {"tracks": [{"title": "Opening"}], "candidates": [{"title": "Plan A"}]},
+        {
+            "title": "Release review",
+            "properties": {
+                "tracks": {"title": "Tracks", "x-view": cards_view, "items": item_schema},
+                "candidates": {"title": "Candidates", "x-view": cards_view, "items": item_schema},
+            },
+        },
+    )
+
+    assert 'id="section-tracks-1"' in html
+    assert 'id="section-candidates-1"' in html
+    assert 'href="#section-candidates-1"' in html
+    assert 'id="track-1"' not in html
 
 
 def test_copyable_and_diff_annotations_preserve_multiline_review_text() -> None:
@@ -305,6 +364,7 @@ def test_music_prompt_entries_render_as_readable_cards_with_album_flow() -> None
 
     assert 'class="card-flow"' in html
     assert 'class="entry-card"' in html
+    assert 'id="section-entries-1"' in html
     assert "Neon &lt;Drive&gt;" in html
     assert "synthwave\nslow build" in html
     assert html.index("Song title") < html.index("Style / prompt") < html.index("Lyrics")

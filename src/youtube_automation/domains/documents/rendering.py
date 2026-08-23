@@ -137,9 +137,11 @@ def _render_section(
             root_schema,
             modifiers=modifiers,
             content_only=content_only,
+            anchor_prefix=section_id or f"entry-{_html_id(heading)}",
         )
     elif presentation == "details":
-        content = _render_value(value, _without_presentation(schema), root_schema)
+        # presentation=details は _details が唯一の開閉になるよう collapsed も外す。
+        content = _render_value(value, _without_review_flags(_without_presentation(schema)), root_schema)
         rendered = _details(heading, description, content, modifiers=modifiers)
     elif presentation == "media":
         rendered = _render_media(heading, description, value, view, modifiers=modifiers, content_only=content_only)
@@ -359,6 +361,7 @@ def _render_cards(
     *,
     modifiers: str = "",
     content_only: bool = False,
+    anchor_prefix: str = "entry",
 ) -> str:
     if not isinstance(value, list) or not all(isinstance(item, dict) for item in value):
         raise DocumentRenderError(f"cards 表示には object の array が必要です: {heading}")
@@ -366,11 +369,15 @@ def _render_cards(
     item_schema_value = schema.get("items")
     item_schema = item_schema_value if isinstance(item_schema_value, dict) else {}
     labels = [str(item.get("title") or item.get("name") or f"Entry {index}") for index, item in enumerate(value, 1)]
-    flow = "".join(f'<li><a href="#track-{index}">{escape(label)}</a></li>' for index, label in enumerate(labels, 1))
+    # anchor は section 単位で名前空間を分け、cards section が複数あっても id が衝突しない。
+    anchors = [escape(f"{anchor_prefix}-{index}", quote=True) for index in range(1, len(labels) + 1)]
+    flow = "".join(
+        f'<li><a href="#{anchor}">{escape(label)}</a></li>' for anchor, label in zip(anchors, labels, strict=True)
+    )
     cards = "".join(
-        f'<article class="entry-card" id="track-{index}"><h3>{escape(label)}</h3>'
+        f'<article class="entry-card" id="{anchor}"><h3>{escape(label)}</h3>'
         f"{_render_value(item, item_schema, root_schema)}</article>"
-        for index, (label, item) in enumerate(zip(labels, value, strict=True), 1)
+        for anchor, label, item in zip(anchors, labels, value, strict=True)
     )
     content = f'<ol class="card-flow">{flow}</ol><div class="entry-card-grid">{cards}</div>'
     if content_only:

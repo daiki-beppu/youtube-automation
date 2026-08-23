@@ -1,1 +1,1 @@
-構造化文書 HTML を承認サマリー優先の表示へ改め、監査用詳細の折り畳み、コピー対象、差分表示を schema annotation から指定できるようにした。
+構造化文書 HTML を承認サマリー優先の表示へ改め、監査用詳細の折り畳み、コピー対象、差分表示を schema annotation から指定できるようにした。折り畳んだ section は見出しを重複表示せず、priority critical と high を枠線で区別し、cards の anchor を section ごとに分離する。
