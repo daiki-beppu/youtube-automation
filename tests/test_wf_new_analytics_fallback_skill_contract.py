@@ -4,11 +4,13 @@ import json
 import os
 import re
 import subprocess
+from contextlib import chdir
 from pathlib import Path
 
 import pytest
 
 from tests.helpers.paths import REPO_ROOT
+from youtube_automation.application.documents import MarkdownMigrationDecision, write_channel_strategy_document
 from youtube_automation.commands.system import doctor
 from youtube_automation.domains.documents.schema_registry import RepositorySchema
 from youtube_automation.infrastructure.documents.publishing import publish_json_document
@@ -17,6 +19,7 @@ _REPO_ROOT = REPO_ROOT
 _FRESHNESS_RULES = _REPO_ROOT / ".claude" / "skills" / "wf-new" / "references" / "freshness-rules.md"
 _WF_NEW_SKILL = _REPO_ROOT / ".claude" / "skills" / "wf-new" / "SKILL.md"
 _WF_NEW_PHASE2 = _REPO_ROOT / ".claude" / "skills" / "wf-new" / "references" / "phase2.md"
+_PERSONA_CHAIN_VALIDATOR = _REPO_ROOT / ".claude" / "skills" / "wf-new" / "references" / "validate_persona_chain.py"
 
 
 def _wf_new_text() -> str:
@@ -59,6 +62,41 @@ def _analysis_pair(root: Path, report_date: str = "20260702") -> None:
     publish_json_document(path, RepositorySchema.ANALYSIS_REPORT)
 
 
+def _persona_chain(root: Path) -> None:
+    persona = {
+        "schema_version": 1,
+        "document_type": "persona",
+        "updated_at": "2026-07-02T00:00:00Z",
+        "status": "confirmed",
+        "persona": {"id": "persona-primary", "name": "primary", "desires": ["focus"]},
+        "scene_ids": [],
+        "evidence": [{"id": "ev-1", "source_path": "input.json", "observation": "fact"}],
+    }
+    scene = {
+        "schema_version": 1,
+        "document_type": "scene",
+        "updated_at": "2026-07-02T00:00:00Z",
+        "status": "confirmed",
+        "persona_id": "persona-primary",
+        "scenes": [{"id": "scene-1", "situation": "work", "desires": ["focus"], "evidence_ids": ["ev-1"]}],
+        "evidence": [{"id": "ev-1", "source_path": "input.json", "observation": "fact"}],
+    }
+    with chdir(root):
+        for relative, document in (
+            ("docs/channel/personas/persona-definition.json", persona),
+            ("docs/plans/viewing-scene-matrix.json", scene),
+        ):
+            target = root / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            write_channel_strategy_document(
+                target, lambda document=document: document, MarkdownMigrationDecision.NOT_REQUIRED
+            )
+        persona["scene_ids"] = ["scene-1"]
+        target = root / "docs/channel/personas/persona-definition.json"
+        target.write_text(json.dumps(persona), encoding="utf-8")
+        publish_json_document(target, RepositorySchema.CHANNEL_STRATEGY)
+
+
 def _run_mode_fixture(
     tmp_path: Path,
     *,
@@ -75,8 +113,10 @@ def _run_mode_fixture(
         _touch(tmp_path / "data/benchmark_20260701.json")
     if data_date is not None:
         _touch(tmp_path / f"data/analytics_data_{data_date}.json")
-    _touch(tmp_path / "docs/channel/personas/persona-definition.md", "# persona\n")
-    _touch(tmp_path / "docs/plans/viewing-scene-matrix.md", "# scene\n")
+    _persona_chain(tmp_path)
+    validator = tmp_path / ".claude/skills/wf-new/references/validate_persona_chain.py"
+    validator.parent.mkdir(parents=True, exist_ok=True)
+    validator.write_bytes(_PERSONA_CHAIN_VALIDATOR.read_bytes())
     script = tmp_path / "mode-check.sh"
     script.write_text(_freshness_script(), encoding="utf-8")
     script.chmod(0o755)
@@ -88,6 +128,29 @@ def _run_mode_fixture(
             "TODAY": today,
             "COLLECTION_IDEATE_FRESHNESS_DAYS": str(freshness_days),
             "COLLECTION_IDEATE_TTP_MODE": "false",
+            "UV_PROJECT": str(_REPO_ROOT),
+        },
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+def _run_freshness_gate(root: Path, *, ttp_mode: bool) -> subprocess.CompletedProcess[str]:
+    validator = root / ".claude/skills/wf-new/references/validate_persona_chain.py"
+    validator.parent.mkdir(parents=True, exist_ok=True)
+    validator.write_bytes(_PERSONA_CHAIN_VALIDATOR.read_bytes())
+    script = root / "mode-check.sh"
+    script.write_text(_freshness_script(), encoding="utf-8")
+    return subprocess.run(
+        ["bash", str(script)],
+        cwd=root,
+        env={
+            **os.environ,
+            "TODAY": "20260702",
+            "COLLECTION_IDEATE_FRESHNESS_DAYS": "7",
+            "COLLECTION_IDEATE_TTP_MODE": str(ttp_mode).lower(),
+            "UV_PROJECT": str(_REPO_ROOT),
         },
         capture_output=True,
         text=True,
@@ -143,6 +206,155 @@ def test_freshness_mode_script_executes_each_representative_path(tmp_path: Path,
 
     assert result.returncode == 0, result.stderr
     assert expected in result.stdout
+
+
+def test_analytics_mode_accepts_verified_structured_persona_chain_without_legacy_markdown(tmp_path: Path) -> None:
+    result = _run_mode_fixture(tmp_path, report=True)
+
+    assert result.returncode == 0, result.stderr
+    assert not (tmp_path / "docs/channel/personas/persona-definition.md").exists()
+    assert not (tmp_path / "docs/plans/viewing-scene-matrix.md").exists()
+
+
+@pytest.mark.parametrize(
+    ("ttp_mode", "expected_returncode", "expected_output"),
+    [
+        (True, 0, "視聴シーンを仮説化して続行"),
+        (False, 1, "viewing-scene 未定義"),
+    ],
+)
+def test_analytics_mode_persona_only_intermediate_state_uses_existing_fallback(
+    tmp_path: Path, ttp_mode: bool, expected_returncode: int, expected_output: str
+) -> None:
+    _analysis_pair(tmp_path)
+    _persona_chain(tmp_path)
+    (tmp_path / "docs/plans/viewing-scene-matrix.json").unlink()
+    (tmp_path / "docs/plans/viewing-scene-matrix.html").unlink()
+
+    result = _run_freshness_gate(tmp_path, ttp_mode=ttp_mode)
+
+    assert result.returncode == expected_returncode, result.stderr
+    assert "検証済み暫定 persona pair・scene 未生成" in result.stdout
+    assert expected_output in result.stdout
+    assert "persona 未定義" not in result.stdout
+
+
+@pytest.mark.parametrize("input_mode", ["benchmark-fallback", "minimal"])
+def test_non_analytics_persona_only_state_keeps_persona_and_falls_back_only_for_scene(
+    tmp_path: Path, input_mode: str
+) -> None:
+    if input_mode == "benchmark-fallback":
+        _touch(tmp_path / "data/benchmark_20260701.json")
+    _persona_chain(tmp_path)
+    (tmp_path / "docs/plans/viewing-scene-matrix.json").unlink()
+    (tmp_path / "docs/plans/viewing-scene-matrix.html").unlink()
+
+    result = _run_freshness_gate(tmp_path, ttp_mode=False)
+
+    assert result.returncode == 0, result.stderr
+    assert "検証済み暫定 persona pair・scene 未生成" in result.stdout
+    assert "viewing-scene 未定義" in result.stdout
+    assert "persona 未定義" not in result.stdout
+
+
+@pytest.mark.parametrize("input_mode", ["benchmark-fallback", "minimal"])
+@pytest.mark.parametrize("broken_state", ["partial-pair", "invalid-pair"])
+def test_non_analytics_modes_warn_and_continue_for_unusable_persona_chain(
+    tmp_path: Path, input_mode: str, broken_state: str
+) -> None:
+    if input_mode == "benchmark-fallback":
+        _touch(tmp_path / "data/benchmark_20260701.json")
+    _persona_chain(tmp_path)
+    if broken_state == "partial-pair":
+        (tmp_path / "docs/plans/viewing-scene-matrix.html").unlink()
+    else:
+        with (tmp_path / "docs/plans/viewing-scene-matrix.html").open("a", encoding="utf-8") as stream:
+            stream.write("tampered")
+
+    result = _run_freshness_gate(tmp_path, ttp_mode=False)
+
+    assert result.returncode == 0, result.stderr
+    assert "persona chain 警告" in result.stdout
+    assert "初回仮説 fallback へ委譲" in result.stdout
+    assert "初回仮説の視聴者像から視聴シーンを仮説化" in result.stdout
+
+
+@pytest.mark.parametrize("missing_suffix", [".json", ".html"])
+def test_analytics_mode_incomplete_scene_pair_fails_closed_without_mutation(
+    tmp_path: Path, missing_suffix: str
+) -> None:
+    _analysis_pair(tmp_path)
+    _persona_chain(tmp_path)
+    missing = tmp_path / f"docs/plans/viewing-scene-matrix{missing_suffix}"
+    missing.unlink()
+    before = {path: path.read_bytes() for path in tmp_path.rglob("*") if path.is_file()}
+
+    result = _run_freshness_gate(tmp_path, ttp_mode=True)
+
+    assert result.returncode == 1
+    assert "pair 状態が不完全" in result.stdout
+    for path, content in before.items():
+        assert path.read_bytes() == content
+
+
+@pytest.mark.parametrize(
+    "broken_part",
+    [
+        "missing-html",
+        "invalid-schema",
+        "digest-mismatch",
+        "persona-id-mismatch",
+        "empty-references",
+        "persona-missing-scene",
+    ],
+)
+def test_analytics_mode_rejects_invalid_structured_persona_chain(tmp_path: Path, broken_part: str) -> None:
+    _analysis_pair(tmp_path)
+    _persona_chain(tmp_path)
+    if broken_part == "missing-html":
+        (tmp_path / "docs/plans/viewing-scene-matrix.html").unlink()
+    elif broken_part == "invalid-schema":
+        _touch(tmp_path / "docs/channel/personas/persona-definition.json", "{}")
+    elif broken_part == "digest-mismatch":
+        with (tmp_path / "docs/plans/viewing-scene-matrix.html").open("a", encoding="utf-8") as stream:
+            stream.write("tampered")
+    elif broken_part == "persona-id-mismatch":
+        scene_path = tmp_path / "docs/plans/viewing-scene-matrix.json"
+        scene = json.loads(scene_path.read_text(encoding="utf-8"))
+        scene["persona_id"] = "persona-other"
+        scene_path.write_text(json.dumps(scene), encoding="utf-8")
+        publish_json_document(scene_path, RepositorySchema.CHANNEL_STRATEGY)
+    elif broken_part in {"empty-references", "persona-missing-scene"}:
+        persona_path = tmp_path / "docs/channel/personas/persona-definition.json"
+        persona = json.loads(persona_path.read_text(encoding="utf-8"))
+        persona["scene_ids"] = [] if broken_part == "empty-references" else ["scene-other"]
+        persona_path.write_text(json.dumps(persona), encoding="utf-8")
+        publish_json_document(persona_path, RepositorySchema.CHANNEL_STRATEGY)
+    script = tmp_path / "mode-check.sh"
+    script.write_text(_freshness_script(), encoding="utf-8")
+    validator = tmp_path / ".claude/skills/wf-new/references/validate_persona_chain.py"
+    validator.parent.mkdir(parents=True, exist_ok=True)
+    validator.write_bytes(_PERSONA_CHAIN_VALIDATOR.read_bytes())
+    before = {path: path.read_bytes() for path in tmp_path.rglob("*") if path.is_file()}
+    result = subprocess.run(
+        ["bash", str(script)],
+        cwd=tmp_path,
+        env={
+            **os.environ,
+            "TODAY": "20260702",
+            "COLLECTION_IDEATE_FRESHNESS_DAYS": "7",
+            "COLLECTION_IDEATE_TTP_MODE": "false",
+            "UV_PROJECT": str(_REPO_ROOT),
+        },
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "persona chain 検証失敗" in result.stdout
+    for path, content in before.items():
+        assert path.read_bytes() == content
 
 
 @pytest.mark.parametrize(
