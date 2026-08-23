@@ -95,7 +95,7 @@ def _render_root(document: object, schema: Mapping[str, object], root_schema: Ma
     )
     navigation_html = (
         '<nav class="review-nav" aria-label="文書内ナビゲーション">'
-        '<p><strong>目次</strong> · 検索はブラウザの Ctrl/⌘+F を使用</p>'
+        "<p><strong>目次</strong> · 検索はブラウザの Ctrl/⌘+F を使用</p>"
         f"<ol>{nav_items}</ol></nav>"
     )
     # ナビゲーションは CSS order で先頭表示する。本文を先に置くことで、支援技術と
@@ -387,7 +387,7 @@ def _render_media(
     description_html = f'<p class="view-description">{escape(description)}</p>' if description else ""
     return (
         f'<section class="view-media{modifiers}"><h2>{escape(heading)}</h2>'
-        f'{description_html}{"".join(rendered)}</section>'
+        f"{description_html}{''.join(rendered)}</section>"
     )
 
 
