@@ -4,11 +4,9 @@ from __future__ import annotations
 
 import argparse
 import json
-from functools import partial
 from pathlib import Path
 
 from youtube_automation.application.media_acceptance import validate_collection_audio
-from youtube_automation.application.pipeline_notifications import PipelineNotificationBridge
 from youtube_automation.commands._shared.cli_harness import run_cli
 from youtube_automation.configuration import load_config
 from youtube_automation.configuration.skills import load_skill_config
@@ -73,15 +71,13 @@ def _print_text(report: MediaAcceptanceReport) -> None:
 def run(args: argparse.Namespace) -> int:
     collection = args.collection.resolve()
     policy = build_media_acceptance_policy(collection)
-    notifications = PipelineNotificationBridge(create_discord_notification_sink())
+    notifications = create_discord_notification_sink()
     report = validate_collection_audio(
         collection,
         policy,
         FFmpegAudioInspector(),
-        on_event=partial(
-            notifications.media_acceptance,
-            channel=load_config().meta.channel_short,
-        ),
+        channel=load_config().meta.channel_short,
+        on_event=notifications.notify,
     )
     if args.output == "json":
         print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2))

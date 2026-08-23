@@ -7,13 +7,15 @@ from pathlib import Path
 import pytest
 
 from youtube_automation.core.errors import StateSyncError
+from youtube_automation.domains.notifications import NotificationEvent, NotificationEventKind
 from youtube_automation.infrastructure.vcs.state_git import build_context
 from youtube_automation.infrastructure.vcs.state_sync import (
-    StateSyncEvent,
-    StateSyncEventKind,
     pull_then_read,
     pull_update_commit_push,
 )
+
+_NOTIFICATION_CHANNEL = "ambient-lab"
+_NOTIFICATION_COLLECTION = "sample"
 
 
 def _git(directory: Path, *args: str) -> str:
@@ -92,6 +94,8 @@ def test_update_commits_and_pushes_control_state(repositories: tuple[Path, Path,
         build_context(local_a),
         lambda: (_write_state(local_a, "mastered"), "updated")[1],
         commit_message="chore: stateを更新する",
+        notification_channel=_NOTIFICATION_CHANNEL,
+        notification_collection=_NOTIFICATION_COLLECTION,
     )
 
     verifier = _clone(remote, local_a.parent / "verifier")
@@ -105,7 +109,7 @@ def test_concurrent_push_rejection_stops_and_emits_event(
     repositories: tuple[Path, Path, Path],
 ) -> None:
     remote, local_a, local_b = repositories
-    events: list[StateSyncEvent] = []
+    events: list[NotificationEvent] = []
 
     def racing_update() -> None:
         _write_state(local_a, "local-a")
@@ -113,6 +117,8 @@ def test_concurrent_push_rejection_stops_and_emits_event(
             build_context(local_b),
             lambda: _write_state(local_b, "local-b"),
             commit_message="chore: competing state",
+            notification_channel=_NOTIFICATION_CHANNEL,
+            notification_collection=_NOTIFICATION_COLLECTION,
         )
 
     with pytest.raises(StateSyncError, match="non-fast-forward"):
@@ -120,13 +126,16 @@ def test_concurrent_push_rejection_stops_and_emits_event(
             build_context(local_a),
             racing_update,
             commit_message="chore: losing state",
+            notification_channel=_NOTIFICATION_CHANNEL,
+            notification_collection=_NOTIFICATION_COLLECTION,
             on_event=events.append,
         )
 
     verifier = _clone(remote, local_a.parent / "race-verifier")
     assert json.loads(_write_target(verifier).read_text(encoding="utf-8"))["phase"] == "local-b"
-    assert [event.kind for event in events] == [StateSyncEventKind.NON_FAST_FORWARD]
-    assert events[0].repository == local_a.resolve()
+    assert [event.kind for event in events] == [NotificationEventKind.NON_FAST_FORWARD_STOPPED]
+    assert events[0].stage == "state-sync"
+    assert (events[0].channel, events[0].collection) == (_NOTIFICATION_CHANNEL, _NOTIFICATION_COLLECTION)
     assert len(_git(local_a, "rev-list", "--parents", "-n", "1", "HEAD").split()) == 2
     assert _git(local_a, "status", "--porcelain") == ""
 
@@ -148,6 +157,8 @@ def test_update_rejects_unrelated_dirty_file_before_writer(
             build_context(local_a),
             writer,
             commit_message="chore: stateを更新する",
+            notification_channel=_NOTIFICATION_CHANNEL,
+            notification_collection=_NOTIFICATION_COLLECTION,
         )
 
     assert called is False
@@ -164,6 +175,8 @@ def test_update_rejects_changes_outside_control_files(
             build_context(local_a),
             lambda: readme.write_text("unexpected\n", encoding="utf-8"),
             commit_message="chore: stateを更新する",
+            notification_channel=_NOTIFICATION_CHANNEL,
+            notification_collection=_NOTIFICATION_COLLECTION,
         )
 
     assert not readme.is_file() or _git(local_a, "status", "--porcelain") == "?? README.md"
@@ -177,6 +190,8 @@ def test_update_without_changes_does_not_create_commit(repositories: tuple[Path,
         build_context(local_a),
         lambda: "unchanged",
         commit_message="chore: stateを更新する",
+        notification_channel=_NOTIFICATION_CHANNEL,
+        notification_collection=_NOTIFICATION_COLLECTION,
     )
 
     assert result == "unchanged"

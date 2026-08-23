@@ -5,7 +5,6 @@ from __future__ import annotations
 import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass
-from enum import StrEnum
 from pathlib import Path
 from typing import Literal, Protocol
 
@@ -25,6 +24,7 @@ from youtube_automation.domains.hybrid_resource_guard import (
 )
 from youtube_automation.domains.media_handoff_manifest import MANIFEST_NAME, HandoffIdentity, HandoffManifest
 from youtube_automation.domains.media_store import MediaStore, validate_media_relative_path
+from youtube_automation.domains.notifications import NotificationEvent, NotificationEventKind
 from youtube_automation.domains.post_publish import (
     resolve_post_publish_readiness,
     validate_post_publish_changes,
@@ -43,21 +43,8 @@ class HybridResourceProbe(Protocol):
     def inspect(self) -> HybridResourceSnapshot: ...
 
 
-class HybridResourceEventKind(StrEnum):
-    OBSERVED = "observed"
-    REJECTED = "rejected"
-
-
-@dataclass(frozen=True, slots=True)
-class HybridResourceEvent:
-    kind: HybridResourceEventKind
-    channel: str
-    collection: str
-    issue_codes: tuple[str, ...]
-    detail: str
-
-
-HybridResourceEventSink = Callable[[HybridResourceEvent], None]
+HybridResourceEventSink = Callable[[NotificationEvent], None]
+ResourceDiagnosticsSink = Callable[[str], None]
 
 
 @dataclass(frozen=True, slots=True)
@@ -151,17 +138,18 @@ def _guard_resources(
     request: SandwichRequest,
     resource_probe: HybridResourceProbe,
     on_event: HybridResourceEventSink | None,
+    on_diagnostics: ResourceDiagnosticsSink | None,
 ) -> None:
     try:
         snapshot = resource_probe.inspect()
     except AutomationError as error:
         if on_event is not None:
             on_event(
-                HybridResourceEvent(
-                    HybridResourceEventKind.REJECTED,
+                NotificationEvent(
+                    NotificationEventKind.GUARD_EXCEEDED,
                     request.channel,
                     request.collection,
-                    ("probe",),
+                    "resource-guard",
                     str(error),
                 )
             )
@@ -169,26 +157,17 @@ def _guard_resources(
     report = evaluate_hybrid_resources(snapshot, HybridResourcePolicy.zero_cost())
     detail = _resource_detail(report)
     if report.passed:
-        if on_event is not None:
-            on_event(
-                HybridResourceEvent(
-                    HybridResourceEventKind.OBSERVED,
-                    request.channel,
-                    request.collection,
-                    (),
-                    detail,
-                )
-            )
+        if on_diagnostics is not None:
+            on_diagnostics(detail)
         return
-    issue_codes = tuple(issue.code for issue in report.issues)
     rejection_detail = f"{detail}; " + "; ".join(issue.message for issue in report.issues)
     if on_event is not None:
         on_event(
-            HybridResourceEvent(
-                HybridResourceEventKind.REJECTED,
+            NotificationEvent(
+                NotificationEventKind.GUARD_EXCEEDED,
                 request.channel,
                 request.collection,
-                issue_codes,
+                "resource-guard",
                 rejection_detail,
             )
         )
@@ -202,10 +181,11 @@ def run_sandwich(
     resource_probe: HybridResourceProbe,
     agent_runner: AgentRunner = run_agent,
     on_resource_event: HybridResourceEventSink | None = None,
+    on_resource_diagnostics: ResourceDiagnosticsSink | None = None,
     on_state_sync_event: EventSink | None = None,
 ) -> SandwichResult:
     """Run the existing local-first workflow between verified MediaStore boundaries."""
-    _guard_resources(request, resource_probe, on_resource_event)
+    _guard_resources(request, resource_probe, on_resource_event, on_resource_diagnostics)
     context = build_context(request.channel_dir)
     result = SandwichResult("completed", request.collection or None)
     planning_collection: Path | None = None
@@ -268,6 +248,8 @@ def run_sandwich(
         context,
         writer,
         commit_message=request.commit_message,
+        notification_channel=request.channel,
+        notification_collection=request.collection,
         on_event=on_state_sync_event,
         change_validator=validate_changes if request.stage in {"planning", "post-publish"} else None,
     )

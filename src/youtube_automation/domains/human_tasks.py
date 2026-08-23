@@ -5,7 +5,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Protocol
 
 from youtube_automation.core.errors import ValidationError
 from youtube_automation.domains.collections.workflow_state import Phase
@@ -35,10 +34,6 @@ class HumanTask:
 class HumanTaskReport:
     channel: str
     tasks: tuple[HumanTask, ...]
-
-
-class HumanTaskNotifier(Protocol):
-    def send_human_tasks(self, report: HumanTaskReport) -> bool: ...
 
 
 def _validate_identifier(value: str, *, label: str) -> None:
@@ -91,10 +86,10 @@ def render_human_tasks_markdown(report: HumanTaskReport) -> str:
 
 
 def render_human_tasks_summary(report: HumanTaskReport) -> str:
+    """通知の分類・channel 行は notification 側が所有するため、ここでは本文だけを組み立てる。"""
+
     lines = (
-        "[ACTION] YouTube automation human tasks",
-        f"channel: {report.channel}",
         f"pending: {len(report.tasks)}",
+        *(f"- {task.kind.value}: {task.collection} (phase={task.phase})" for task in report.tasks),
     )
-    task_lines = tuple(f"- {task.kind.value}: {task.collection} (phase={task.phase})" for task in report.tasks)
-    return "\n".join((*lines, *task_lines))
+    return "\n".join(lines)

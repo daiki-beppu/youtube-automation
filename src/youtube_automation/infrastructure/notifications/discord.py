@@ -6,8 +6,8 @@ import sys
 from typing import Protocol
 
 from youtube_automation.core.errors import ConfigError
-from youtube_automation.domains.human_tasks import HumanTaskReport, render_human_tasks_summary
 from youtube_automation.domains.notifications import NotificationEvent, category_for
+from youtube_automation.infrastructure.auth.redaction import redact_sensitive_data
 from youtube_automation.infrastructure.secrets import get_secret
 from youtube_automation.infrastructure.youtube.notification import NotificationError, notify
 
@@ -34,18 +34,15 @@ class DiscordNotificationSink:
         self._secret_resolver = secret_resolver
         self._webhook_sender = webhook_sender
 
-    def send(self, event: NotificationEvent) -> bool:
+    def notify(self, event: NotificationEvent) -> bool:
+        event = NotificationEvent(
+            event.kind, event.channel, event.collection, event.stage, redact_sensitive_data(event.detail)
+        )
         return self._send_content(
             _render_event(event),
             failure_context=(
                 f"event={event.kind.value}, channel={event.channel}, collection={event.collection}, stage={event.stage}"
             ),
-        )
-
-    def send_human_tasks(self, report: HumanTaskReport) -> bool:
-        return self._send_content(
-            render_human_tasks_summary(report),
-            failure_context=f"human_tasks, channel={report.channel}, pending={len(report.tasks)}",
         )
 
     def _send_content(self, content: str, *, failure_context: str) -> bool:
@@ -79,5 +76,6 @@ def _render_event(event: NotificationEvent) -> str:
             f"channel: {event.channel}",
             f"collection: {event.collection}",
             f"stage: {event.stage}",
+            *((f"detail: {event.detail}",) if event.detail else ()),
         )
     )

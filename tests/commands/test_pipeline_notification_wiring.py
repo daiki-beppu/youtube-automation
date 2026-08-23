@@ -12,14 +12,13 @@ from youtube_automation.commands.system import hybrid_runner
 from youtube_automation.commands.uploads import collection_uploader
 from youtube_automation.core.errors import ConfigError
 from youtube_automation.domains.notifications import NotificationEvent, NotificationEventKind
-from youtube_automation.infrastructure.vcs.state_sync import StateSyncEvent, StateSyncEventKind
 
 
 class RecordingSink:
     def __init__(self) -> None:
         self.events: list[NotificationEvent] = []
 
-    def send(self, event: NotificationEvent) -> bool:
+    def notify(self, event: NotificationEvent) -> bool:
         self.events.append(event)
         return True
 
@@ -33,11 +32,21 @@ def test_hybrid_command_connects_non_fast_forward_event_to_notification(monkeypa
         *,
         resource_probe,
         on_resource_event,
+        on_resource_diagnostics,
         on_state_sync_event,
     ):
         assert resource_probe is not None
         assert on_resource_event is not None
-        on_state_sync_event(StateSyncEvent(StateSyncEventKind.NON_FAST_FORWARD, tmp_path, "rejected"))
+        on_resource_diagnostics("disk_free=1/0 bytes")
+        on_state_sync_event(
+            NotificationEvent(
+                NotificationEventKind.NON_FAST_FORWARD_STOPPED,
+                request.channel,
+                request.collection,
+                "state-sync",
+                "rejected",
+            )
+        )
         return SandwichResult("completed", request.collection)
 
     monkeypatch.setattr(hybrid_runner, "create_discord_notification_sink", lambda: sink)
@@ -73,6 +82,7 @@ def test_hybrid_command_connects_non_fast_forward_event_to_notification(monkeypa
             "ambient-lab",
             "night-rain",
             "state-sync",
+            "rejected",
         )
     ]
 

@@ -5,12 +5,10 @@ from pathlib import Path
 
 import pytest
 
-from youtube_automation.application.suno_download_handoff import (
-    SunoDownloadHandoff,
-    SunoDownloadHandoffEventKind,
-)
+from youtube_automation.application.suno_download_handoff import SunoDownloadHandoff
 from youtube_automation.core.errors import MediaStoreError, WorkflowStateError
 from youtube_automation.domains.media_store import MediaKey, MediaObjectMetadata, MediaStore
+from youtube_automation.domains.notifications import NotificationEventKind
 from youtube_automation.infrastructure.media_store.local import LocalMediaStore
 
 
@@ -78,8 +76,8 @@ def test_complete_pushes_manifest_then_records_cloud_owner_and_emits_event(tmp_p
     }
     assert state["future"] == {"keep": True}
     assert len(events) == 1
-    assert events[0].kind is SunoDownloadHandoffEventKind.COMPLETED
-    assert events[0].manifest_key == result.manifest_key
+    assert events[0].kind is NotificationEventKind.HANDOFF_COMPLETED
+    assert result.manifest_key in events[0].detail
 
 
 def test_complete_reuses_verified_manifest_without_pushing_or_emitting_twice(tmp_path: Path) -> None:

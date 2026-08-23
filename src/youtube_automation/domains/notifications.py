@@ -10,6 +10,7 @@ from typing import Protocol
 class NotificationEventCategory(StrEnum):
     NORMAL = "normal"
     ABNORMAL = "abnormal"
+    ACTION = "action"
 
 
 class NotificationEventKind(StrEnum):
@@ -20,6 +21,7 @@ class NotificationEventKind(StrEnum):
     GUARD_EXCEEDED = "guard_exceeded"
     CANARY_COMPLETED = "canary_completed"
     CANARY_FAILED = "canary_failed"
+    HUMAN_TASKS_PENDING = "human_tasks_pending"
 
 
 _CATEGORY_BY_KIND = {
@@ -30,6 +32,7 @@ _CATEGORY_BY_KIND = {
     NotificationEventKind.GUARD_EXCEEDED: NotificationEventCategory.ABNORMAL,
     NotificationEventKind.CANARY_COMPLETED: NotificationEventCategory.NORMAL,
     NotificationEventKind.CANARY_FAILED: NotificationEventCategory.ABNORMAL,
+    NotificationEventKind.HUMAN_TASKS_PENDING: NotificationEventCategory.ACTION,
 }
 
 
@@ -39,10 +42,11 @@ class NotificationEvent:
     channel: str
     collection: str
     stage: str
+    detail: str = ""
 
 
-class NotificationSink(Protocol):
-    def send(self, event: NotificationEvent) -> bool: ...
+class NotificationNotifier(Protocol):
+    def notify(self, event: NotificationEvent) -> bool: ...
 
 
 def category_for(kind: NotificationEventKind) -> NotificationEventCategory:

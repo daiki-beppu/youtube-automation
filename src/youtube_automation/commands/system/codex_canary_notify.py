@@ -5,9 +5,8 @@ from __future__ import annotations
 import argparse
 import sys
 
-from youtube_automation.application.pipeline_notifications import PipelineNotificationBridge
 from youtube_automation.commands._shared.cli_harness import run_cli
-from youtube_automation.domains.notifications import NotificationEventKind
+from youtube_automation.domains.notifications import NotificationEvent, NotificationEventKind
 from youtube_automation.infrastructure.notifications.discord import create_discord_notification_sink
 
 _COLLECTION = "monthly-codex-canary"
@@ -24,12 +23,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def run(args: argparse.Namespace) -> int:
     kind = NotificationEventKind.CANARY_COMPLETED if args.result == "success" else NotificationEventKind.CANARY_FAILED
-    delivered = PipelineNotificationBridge(create_discord_notification_sink()).emit(
-        kind,
-        channel=args.channel,
-        collection=_COLLECTION,
-        stage=_STAGE,
-    )
+    delivered = create_discord_notification_sink().notify(NotificationEvent(kind, args.channel, _COLLECTION, _STAGE))
     if not delivered:
         print("Codex canary notification was not delivered", file=sys.stderr)
     return 0
