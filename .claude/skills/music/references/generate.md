@@ -59,7 +59,7 @@ suno-helper は生成 → playlist 追加 → 一括ダウンロードまでを 
 
 ## 完了条件（server プロセス停止を含む）
 
-overlay の phase が `finished` に到達し、Step 6 の 6 点（playlist 紐付け / clip 数 = entry 数 × 2 / `02-Individual-music/` への音声配置 / `status = downloaded` / `suno_playlist_url` 記録 / `assets.music_downloaded = true`）を確認後、collection server を停止してプロセスが残っていないとき strict 完了とする（詳細は Step 6 が正）。`finished` は download 通知の終端成功を示し、1 件以上配置できた部分成功も含むため、それだけで strict 完了とは判定しない。異常値再生成を OFF にした run は、さらに duration guard NG の clip を試聴し、NG clip が ZIP に含まれることを確認してから完了とする。`entry-failed`、clip 数不足、server プロセス残留のいずれかがある場合は完了扱いにしない。
+overlay の phase が `finished` に到達し、Step 6 の 6 点（正準 prompt 突合 / clip 数 = entry 数 × 2 / `02-Individual-music/` への音声配置 / `status = downloaded` / 欠損 0 / `assets.music_downloaded = true`）を確認後、collection server を停止してプロセスが残っていないとき strict 完了とする（詳細は Step 6 が正）。`finished` は download 通知の終端成功を示し、1 件以上配置できた部分成功も含むため、それだけで strict 完了とは判定しない。異常値再生成を OFF にした run は、さらに duration guard NG の clip を試聴し、NG clip が ZIP に含まれることを確認してから完了とする。`entry-failed`、clip 数不足、server プロセス残留のいずれかがある場合は完了扱いにしない。
 
 ## 設定読み込みゲート
 
@@ -242,7 +242,7 @@ handoff 条件（agent は自動突破しない）:
 2. clip 数 = collection の entry 数 × 2（数が合わなければ resume で残りを回す）
 3. `02-Individual-music/` に mp3/m4a/wav が配置されている
 4. `GET /collections` で対象 collection の `status` が `downloaded`、`downloaded_count` が期待 clip 数以上になっている
-5. `workflow-state.json` の `planning.music.suno_playlist_url` に playlist URL が記録されている
+5. `workflow-state.json` の `planning.music.missing_file_count = 0` が記録されている
 6. `workflow-state.json` の `assets.music_downloaded` が `true` になっている（DL 完了時）
 
 `placed_count > 0` かつ `missing_file_count > 0` の partial FINISHED は download 通知としては成功だが、strict 完了ではない。`status = downloaded` や `assets.music_downloaded = true` だけを根拠に `/music --master` へ進めない。不足分の再実行または手動解決を行い、上記 6 点と `missing_file_count = 0` が揃ってから後工程へ進む。

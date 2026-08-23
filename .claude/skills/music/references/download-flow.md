@@ -33,8 +33,7 @@ popup UI からも設定可能。設定は `chrome.storage.local` に永続化�
 
 | 呼び出しタイミング | payload | 目的 |
 |---|---|---|
-| playlist 追加完了直後 | `{ file_count: 0, format: "<fmt>", suno_playlist_url: "<url>" }` | playlist URL のみ記録 |
-| ZIP ダウンロード完了後 | `{ file_count: N, expected_file_count: N, format: "<fmt>", suno_playlist_url: "<url>", download_path: "<absolute zip path>" }` | playlist URL 記録、ZIP 展開、DL 完了マークを 1 回で行う |
+| ZIP ダウンロード完了後 | `{ file_count: N, expected_file_count: N, format: "<fmt>", download_path: "<absolute zip path>" }` | ZIP 展開、実数・欠損数・DL 完了マークを 1 回で行う |
 
 このエンドポイントは冪等（idempotent）であり、同じ payload で複数回呼んでも問題ない。
 
@@ -44,15 +43,14 @@ popup UI からも設定可能。設定は `chrome.storage.local` に永続化�
 
 ### DOWNLOADING phase のエラーハンドリング
 
-ダウンロードが途中で失敗した場合（ネットワーク断、Chrome のダウンロードキャンセル等）、拡張は resume state を保持して `error` phase に遷移する。ユーザーは overlay の Download 再開操作で `retryDownload` を実行できる。POST エンドポイントは冪等（idempotent）なので、再開時に同じ playlist URL / ZIP 情報を送っても安全。
+ダウンロードが途中で失敗した場合（ネットワーク断、Chrome のダウンロードキャンセル等）、拡張は resume state を保持して `error` phase に遷移する。ユーザーは overlay の Download 再開操作で `retryDownload` を実行できる。POST エンドポイントは冪等（idempotent）なので、再開時に同じ ZIP 情報を送っても安全。
 
 ### 状態管理の変更点
 
 | 項目 | 旧（DL 機能なし） | 新（DL 機能あり） |
 |---|---|---|
-| playlist URL の記録先 | `suno-playlists.json` | `workflow-state.json` の `planning.music.suno_playlist_url` |
 | DL 完了判定（primary） | N/A | `02-Individual-music/` にファイルが存在するか（ファイルシステム） |
 | DL 完了判定（secondary） | N/A | `workflow-state.json` の `assets.music_downloaded` |
 | `suno-playlists.json` | 新規コレクションでも使用 | 使用しない（新規・レガシー互換とも廃止） |
 
-`suno-playlists.json` は新規・レガシー互換のどちらでも参照されない。playlist URL は `POST /collections/<id>/downloaded` 経由で `workflow-state.json` の `planning.music.suno_playlist_url` に一元管理される。
+`suno-playlists.json` は新規・レガシー互換のどちらでも参照されない。完了判定は正準 prompt、期待数、ローカル実数、欠損数、`assets.music_downloaded` を使い、Suno URL は参照しない。

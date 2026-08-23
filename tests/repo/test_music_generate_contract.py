@@ -60,7 +60,7 @@ def test_generate_reference_routes_by_music_engine_and_keeps_completion_contract
     assert "suno" in generate and "lyria" in generate and "minimax" in generate
     assert "entry 数 × 2" in generate
     assert "assets.music_downloaded = true" in generate
-    assert "suno_playlist_url" in generate
+    assert "suno_playlist_url" not in generate
     assert "01-master/master.mp3" in generate
     assert "extension/references/serve.md" in generate
     assert "`/suno-helper`" not in generate
@@ -101,7 +101,6 @@ def test_generate_state_routes_suno_and_requires_strict_completion(tmp_path: Pat
             {
                 "planning": {
                     "music": {
-                        "suno_playlist_url": "https://suno.com/playlist/demo",
                         "expected_file_count": 4,
                         "actual_file_count": 4,
                         "missing_file_count": 0,

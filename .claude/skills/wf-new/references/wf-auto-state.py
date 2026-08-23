@@ -525,7 +525,6 @@ def _suno_download_complete(collection: Path, state: dict) -> bool:
     if not isinstance(assets, dict) or not isinstance(music, dict):
         return False
     expected = music.get("expected_file_count")
-    playlist_url = music.get("suno_playlist_url")
     prompts_path = collection / "20-documentation" / "suno-prompts.json"
     try:
         prompts_path = _confined_path(collection, prompts_path, "suno-prompts.json")
@@ -541,9 +540,9 @@ def _suno_download_complete(collection: Path, state: dict) -> bool:
         or not isinstance(expected, int)
         or expected <= 0
         or minimum_expected <= 0
-        or expected < minimum_expected
-        or not isinstance(playlist_url, str)
-        or not playlist_url.startswith("https://suno.com/playlist/")
+        or expected != minimum_expected
+        or music.get("actual_file_count") != expected
+        or music.get("missing_file_count") != 0
     ):
         return False
     music_dir = collection / "02-Individual-music"
