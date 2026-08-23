@@ -117,18 +117,35 @@ def _render_section(
     presentation = _presentation(view, value)
     modifiers = _review_classes(view)
     rendered_schema = _without_review_flags(schema) if view.get("collapsed") is True else schema
+    content_only = view.get("collapsed") is True and presentation != "details"
     if presentation == "table":
-        rendered = _render_table(heading, description, value, rendered_schema, root_schema, modifiers=modifiers)
+        rendered = _render_table(
+            heading,
+            description,
+            value,
+            rendered_schema,
+            root_schema,
+            modifiers=modifiers,
+            content_only=content_only,
+        )
     elif presentation == "cards":
-        rendered = _render_cards(heading, description, value, rendered_schema, root_schema, modifiers=modifiers)
+        rendered = _render_cards(
+            heading,
+            description,
+            value,
+            rendered_schema,
+            root_schema,
+            modifiers=modifiers,
+            content_only=content_only,
+        )
     elif presentation == "details":
         content = _render_value(value, _without_presentation(schema), root_schema)
         rendered = _details(heading, description, content, modifiers=modifiers)
     elif presentation == "media":
-        rendered = _render_media(heading, description, value, view, modifiers=modifiers)
+        rendered = _render_media(heading, description, value, view, modifiers=modifiers, content_only=content_only)
     else:
         content = _render_value(value, rendered_schema, root_schema)
-        rendered = _card(heading, description, content, modifiers=modifiers)
+        rendered = content if content_only else _card(heading, description, content, modifiers=modifiers)
     if view.get("collapsed") is True and presentation != "details":
         rendered = _details(heading, description, rendered, modifiers=modifiers)
     if section_id is not None:
@@ -175,22 +192,22 @@ def _details(heading: str, description: str, content: str, *, modifiers: str = "
 
 
 def _without_presentation(schema: Mapping[str, object]) -> Mapping[str, object]:
+    return _without_view_keys(schema, "presentation", "type", "layout")
+
+
+def _without_review_flags(schema: Mapping[str, object]) -> Mapping[str, object]:
+    return _without_view_keys(schema, "collapsed")
+
+
+def _without_view_keys(schema: Mapping[str, object], *keys: str) -> Mapping[str, object]:
     view = dict(_view(schema))
-    for key in ("presentation", "type", "layout"):
+    for key in keys:
         view.pop(key, None)
     rendered_schema = dict(schema)
     if view:
         rendered_schema["x-view"] = view
     else:
         rendered_schema.pop("x-view", None)
-    return rendered_schema
-
-
-def _without_review_flags(schema: Mapping[str, object]) -> Mapping[str, object]:
-    view = dict(_view(schema))
-    view.pop("collapsed", None)
-    rendered_schema = dict(schema)
-    rendered_schema["x-view"] = view
     return rendered_schema
 
 
@@ -301,6 +318,7 @@ def _render_table(
     root_schema: Mapping[str, object],
     *,
     modifiers: str = "",
+    content_only: bool = False,
 ) -> str:
     if not isinstance(value, list) or not all(isinstance(row, dict) for row in value):
         raise DocumentRenderError(f"table 表示には object の array が必要です: {heading}")
@@ -320,11 +338,15 @@ def _render_table(
     )
     if not body:
         body = f'<tr><td class="empty" colspan="{max(1, len(columns))}">No rows</td></tr>'
+    table = (
+        f'<div class="table-scroll"><table class="view-table"><thead><tr>{header}</tr></thead>'
+        f"<tbody>{body}</tbody></table></div>"
+    )
+    if content_only:
+        return table
     description_html = f'<p class="view-description">{escape(description)}</p>' if description else ""
     return (
-        f'<section class="view-table-section{modifiers}"><h2>{escape(heading)}</h2>{description_html}'
-        f'<div class="table-scroll"><table class="view-table"><thead><tr>{header}</tr></thead>'
-        f"<tbody>{body}</tbody></table></div></section>"
+        f'<section class="view-table-section{modifiers}"><h2>{escape(heading)}</h2>{description_html}{table}</section>'
     )
 
 
@@ -336,6 +358,7 @@ def _render_cards(
     root_schema: Mapping[str, object],
     *,
     modifiers: str = "",
+    content_only: bool = False,
 ) -> str:
     if not isinstance(value, list) or not all(isinstance(item, dict) for item in value):
         raise DocumentRenderError(f"cards 表示には object の array が必要です: {heading}")
@@ -349,10 +372,13 @@ def _render_cards(
         f"{_render_value(item, item_schema, root_schema)}</article>"
         for index, (label, item) in enumerate(zip(labels, value, strict=True), 1)
     )
+    content = f'<ol class="card-flow">{flow}</ol><div class="entry-card-grid">{cards}</div>'
+    if content_only:
+        return content
     description_html = f'<p class="view-description">{escape(description)}</p>' if description else ""
     return (
         f'<section class="view-cards-section{modifiers}"><h2>{escape(heading)}</h2>{description_html}'
-        f'<ol class="card-flow">{flow}</ol><div class="entry-card-grid">{cards}</div></section>'
+        f"{content}</section>"
     )
 
 
@@ -363,6 +389,7 @@ def _render_media(
     view: Mapping[str, object],
     *,
     modifiers: str = "",
+    content_only: bool = False,
 ) -> str:
     media_type = view.get("mediaType", view.get("media-type", "link"))
     if not isinstance(media_type, str) or media_type not in _MEDIA_TYPES:
@@ -384,11 +411,11 @@ def _render_media(
             rendered.append(f'<video src="{safe_reference}" controls preload="metadata"></video>')
         else:
             rendered.append(f'<a href="{safe_reference}">{escape(reference)}</a>')
+    content = "".join(rendered)
+    if content_only:
+        return content
     description_html = f'<p class="view-description">{escape(description)}</p>' if description else ""
-    return (
-        f'<section class="view-media{modifiers}"><h2>{escape(heading)}</h2>'
-        f"{description_html}{''.join(rendered)}</section>"
-    )
+    return f'<section class="view-media{modifiers}"><h2>{escape(heading)}</h2>{description_html}{content}</section>'
 
 
 def _is_local_asset(reference: str, *, allow_plan_preview: bool = False) -> bool:
