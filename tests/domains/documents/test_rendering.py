@@ -425,3 +425,35 @@ def test_same_document_schema_and_resources_are_byte_stable() -> None:
 def test_generated_html_validator_rejects_executable_or_external_content(html: str) -> None:
     with pytest.raises(DocumentRenderError):
         validate_generated_html(html)
+
+
+@pytest.mark.parametrize(
+    ("fixture_name", "schema"),
+    [
+        ("collection-plan.json", RepositorySchema.COLLECTION_PLAN),
+        ("music-prompt.json", RepositorySchema.MUSIC_PROMPT),
+        ("video-description.json", RepositorySchema.VIDEO_DESCRIPTION),
+    ],
+)
+def test_representative_review_fixture_validates_and_renders_end_to_end(
+    fixture_name: str, schema: RepositorySchema
+) -> None:
+    document = json.loads((FIXTURES_DIR / "documents" / fixture_name).read_text(encoding="utf-8"))
+
+    html = render_repository_document(schema, document)
+
+    assert '<nav class="review-nav"' in html
+    assert "<main>" in html
+    validate_generated_html(html)
+
+
+def test_collection_plan_review_prioritizes_selection_and_compares_then_collapses_others() -> None:
+    document = json.loads((FIXTURES_DIR / "documents" / "collection-plan.json").read_text(encoding="utf-8"))
+
+    html = render_repository_document(RepositorySchema.COLLECTION_PLAN, document)
+
+    assert '<section class="candidate-comparison"><h3>候補比較</h3>' in html
+    assert html.index("採用候補") < html.index("Rainy Midnight Focus", html.index("採用候補"))
+    assert "<summary>未採用・検討中候補</summary>" in html
+    assert html.index("採用候補") < html.index("未採用・検討中候補")
+    assert "選択 status" in html

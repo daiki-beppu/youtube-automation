@@ -31,7 +31,16 @@ def test_plan_schema_uses_candidate_cards_with_required_comparison_fields_and_pr
     candidates = schema["properties"]["candidates"]
     candidate = schema["definitions"]["candidate"]
 
-    assert candidates["x-view"]["presentation"] == "card"
+    assert candidates["x-view"]["presentation"] == "cards"
+    assert candidates["x-view"]["compare"] == [
+        "selection_status",
+        "final_title",
+        "target_persona",
+        "viewing_scene",
+        "music_direction",
+    ]
+    assert candidates["x-view"]["itemGroups"][0]["match"]["values"] == ["selected", "auto_selected"]
+    assert candidates["x-view"]["itemGroups"][1]["collapsed"] is True
     required = set(candidate["required"])
     assert {
         "final_title",

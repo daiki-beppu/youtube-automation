@@ -221,6 +221,25 @@ def _validate_review_view(view: Mapping[str, object]) -> None:
     priority = view.get("priority")
     if priority is not None and priority not in {"critical", "high", "normal", "low"}:
         raise DocumentRenderError("x-view.priority は critical/high/normal/low のいずれかにしてください")
+    groups = view.get("itemGroups")
+    if groups is not None:
+        if not isinstance(groups, list) or not groups:
+            raise DocumentRenderError("x-view.itemGroups は空でない array で指定してください")
+        for group in groups:
+            if not isinstance(group, dict) or not isinstance(group.get("title"), str):
+                raise DocumentRenderError("x-view.itemGroups の各要素には title が必要です")
+            match = group.get("match")
+            if not isinstance(match, dict) or not isinstance(match.get("property"), str):
+                raise DocumentRenderError("x-view.itemGroups.match.property は string で指定してください")
+            if not isinstance(match.get("values"), list) or not match["values"]:
+                raise DocumentRenderError("x-view.itemGroups.match.values は空でない array で指定してください")
+            if group.get("collapsed") not in {None, True, False}:
+                raise DocumentRenderError("x-view.itemGroups.collapsed は boolean で指定してください")
+    compare = view.get("compare")
+    if compare is not None and (
+        not isinstance(compare, list) or not compare or not all(isinstance(field, str) for field in compare)
+    ):
+        raise DocumentRenderError("x-view.compare は空でない string array で指定してください")
 
 
 def _review_classes(view: Mapping[str, object]) -> str:
@@ -374,18 +393,79 @@ def _render_cards(
     flow = "".join(
         f'<li><a href="#{anchor}">{escape(label)}</a></li>' for anchor, label in zip(anchors, labels, strict=True)
     )
-    cards = "".join(
-        f'<article class="entry-card" id="{anchor}"><h3>{escape(label)}</h3>'
-        f"{_render_value(item, item_schema, root_schema)}</article>"
-        for anchor, label, item in zip(anchors, labels, value, strict=True)
-    )
-    content = f'<ol class="card-flow">{flow}</ol><div class="entry-card-grid">{cards}</div>'
+    entries = list(zip(anchors, labels, value, strict=True))
+
+    def render_entries(selected: list[tuple[str, str, dict[str, object]]]) -> str:
+        return "".join(
+            f'<article class="entry-card" id="{anchor}"><h3>{escape(label)}</h3>'
+            f"{_render_value(item, item_schema, root_schema)}</article>"
+            for anchor, label, item in selected
+        )
+
+    view = _view(schema)
+    groups = view.get("itemGroups")
+    grouped_content = ""
+    if isinstance(groups, list):
+        claimed: set[int] = set()
+        for group in groups:
+            assert isinstance(group, dict)
+            match = group["match"]
+            assert isinstance(match, dict)
+            property_name = match["property"]
+            accepted = match["values"]
+            selected_indices = [
+                index
+                for index, entry in enumerate(entries)
+                if index not in claimed and entry[2].get(property_name) in accepted
+            ]
+            selected = [entries[index] for index in selected_indices]
+            claimed.update(selected_indices)
+            if not selected:
+                continue
+            group_cards = f'<div class="entry-card-grid">{render_entries(selected)}</div>'
+            group_title = str(group["title"])
+            if group.get("collapsed") is True:
+                grouped_content += _details(group_title, "", group_cards)
+            else:
+                grouped_content += f'<section class="entry-group"><h3>{escape(group_title)}</h3>{group_cards}</section>'
+        remaining = [entry for index, entry in enumerate(entries) if index not in claimed]
+        if remaining:
+            grouped_content += f'<div class="entry-card-grid">{render_entries(remaining)}</div>'
+    else:
+        grouped_content = f'<div class="entry-card-grid">{render_entries(entries)}</div>'
+    comparison = _render_comparison(value, item_schema, root_schema, view.get("compare"))
+    content = f'{comparison}<ol class="card-flow">{flow}</ol>{grouped_content}'
     if content_only:
         return content
     description_html = f'<p class="view-description">{escape(description)}</p>' if description else ""
     return (
         f'<section class="view-cards-section{modifiers}"><h2>{escape(heading)}</h2>{description_html}'
         f"{content}</section>"
+    )
+
+
+def _render_comparison(
+    rows: list[dict[str, object]],
+    item_schema: Mapping[str, object],
+    root_schema: Mapping[str, object],
+    fields: object,
+) -> str:
+    """x-view.compare が指定した列だけの、値に依存しない汎用比較表を描画する。"""
+    if not isinstance(fields, list):
+        return ""
+    resolved = _resolve_local_reference(item_schema, root_schema)
+    properties = resolved.get("properties")
+    schemas = properties if isinstance(properties, dict) else {}
+    header = "".join(f"<th>{escape(_annotation(schemas.get(field, {}), 'title', field))}</th>" for field in fields)
+    body = "".join(
+        "<tr>"
+        + "".join(f"<td>{_render_value(row.get(field), schemas.get(field, {}), root_schema)}</td>" for field in fields)
+        + "</tr>"
+        for row in rows
+    )
+    return (
+        '<section class="candidate-comparison"><h3>候補比較</h3><div class="table-scroll">'
+        f'<table class="view-table"><thead><tr>{header}</tr></thead><tbody>{body}</tbody></table></div></section>'
     )
 
 

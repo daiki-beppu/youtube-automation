@@ -1,0 +1,119 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-08-20T12:00:00Z",
+  "mode": "normal",
+  "collection_id": "rainy-focus",
+  "provenance": {
+    "producer": "wf-new",
+    "batch_id": null,
+    "plan_id": "plan-1",
+    "manifest_path": "collections/planning/rainy-focus/manifest.json"
+  },
+  "candidates": [
+    {
+      "plan_id": "plan-1",
+      "collection_name": "Rainy Midnight Focus",
+      "theme_slug": "plan-1",
+      "track_count": 12,
+      "music_engine": "suno",
+      "music_direction": "低域を抑えたローファイ",
+      "video_direction": "雨の夜景をゆっくりループ",
+      "thumbnail_direction": "暗い窓辺と暖色の灯り",
+      "final_title": "Rainy Midnight Focus",
+      "target_persona": "夜に自宅で集中する社会人",
+      "viewing_scene": "23時のデスク作業",
+      "constraint_compliance": [
+        {
+          "constraint_id": "instrumental",
+          "status": "pass",
+          "evidence_ids": [
+            "market-1"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "id": "market-1",
+          "source_path": "20-research/market.md",
+          "observation": "深夜の集中用途に需要がある"
+        }
+      ],
+      "insight_ids": [
+        "market-1"
+      ],
+      "preview_assets": [],
+      "selection_status": "selected",
+      "selection_reason": "視聴シーンとの一致度で比較"
+    },
+    {
+      "plan_id": "plan-2",
+      "collection_name": "Neon Study Session",
+      "theme_slug": "plan-2",
+      "track_count": 12,
+      "music_engine": "suno",
+      "music_direction": "低域を抑えたローファイ",
+      "video_direction": "雨の夜景をゆっくりループ",
+      "thumbnail_direction": "暗い窓辺と暖色の灯り",
+      "final_title": "Neon Study Session",
+      "target_persona": "夜に自宅で集中する社会人",
+      "viewing_scene": "23時のデスク作業",
+      "constraint_compliance": [
+        {
+          "constraint_id": "instrumental",
+          "status": "pass",
+          "evidence_ids": [
+            "market-1"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "id": "market-1",
+          "source_path": "20-research/market.md",
+          "observation": "深夜の集中用途に需要がある"
+        }
+      ],
+      "insight_ids": [
+        "market-1"
+      ],
+      "preview_assets": [],
+      "selection_status": "rejected",
+      "selection_reason": "視聴シーンとの一致度で比較"
+    },
+    {
+      "plan_id": "plan-3",
+      "collection_name": "Quiet Window Beats",
+      "theme_slug": "plan-3",
+      "track_count": 12,
+      "music_engine": "suno",
+      "music_direction": "低域を抑えたローファイ",
+      "video_direction": "雨の夜景をゆっくりループ",
+      "thumbnail_direction": "暗い窓辺と暖色の灯り",
+      "final_title": "Quiet Window Beats",
+      "target_persona": "夜に自宅で集中する社会人",
+      "viewing_scene": "23時のデスク作業",
+      "constraint_compliance": [
+        {
+          "constraint_id": "instrumental",
+          "status": "pass",
+          "evidence_ids": [
+            "market-1"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "id": "market-1",
+          "source_path": "20-research/market.md",
+          "observation": "深夜の集中用途に需要がある"
+        }
+      ],
+      "insight_ids": [
+        "market-1"
+      ],
+      "preview_assets": [],
+      "selection_status": "proposed",
+      "selection_reason": "視聴シーンとの一致度で比較"
+    }
+  ]
+}
