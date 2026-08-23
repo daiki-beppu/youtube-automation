@@ -1,0 +1,1 @@
+- YouTube Analytics Dashboard を technical / austere な Workbench へ再設計し、概況・推移・公開活動・channel stock・workflow timing・pipeline status を意思決定順に走査できるようにした ([#4408](https://github.com/daiki-beppu/youtube-automation/issues/4408))

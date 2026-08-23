@@ -323,7 +323,13 @@ function PublicationActivityPanel({
   )
 }
 
-function DashboardOverview({ channels }: { channels: ChannelOverview[] }) {
+function DashboardOverview({
+  channels,
+  period,
+}: {
+  channels: ChannelOverview[]
+  period: string
+}) {
   const scheduledChannels = channels.filter(
     (channel) => channel.scheduled_count !== null
   )
@@ -334,9 +340,6 @@ function DashboardOverview({ channels }: { channels: ChannelOverview[] }) {
   const attentionCount = channels.filter(
     (channel) => channel.refresh_error !== null || channel.status !== "ready"
   ).length
-  const { startDate, endDate } = resolveDashboardPeriod(
-    channels.map((channel) => channel.period)
-  )
   const collectedDates = channels.flatMap((channel) =>
     channel.collected_at ? [channel.collected_at] : []
   )
@@ -421,7 +424,7 @@ function DashboardOverview({ channels }: { channels: ChannelOverview[] }) {
                 <div>
                   <dt className="font-medium">対象期間</dt>
                   <dd className="text-muted-foreground">
-                    {formatDateRange(startDate, endDate)}
+                    {period}
                   </dd>
                 </div>
               </div>
@@ -803,6 +806,14 @@ export function App() {
   const [pipelineError, setPipelineError] = useState<string | null>(null)
   const dashboardRequestId = useRef(0)
   const detailRequestId = useRef(0)
+  const dashboardPeriod = useMemo(() => {
+    if (channels === null) return error ? "取得不可" : "読み込み中"
+    const { startDate, endDate } = resolveDashboardPeriod(
+      channels.map((channel) => channel.period)
+    )
+    return formatDateRange(startDate, endDate)
+  }, [channels, error])
+  const dashboardState = error ? "error" : channels === null ? "loading" : "ready"
 
   useEffect(() => {
     const requestId = dashboardRequestId.current
@@ -900,17 +911,17 @@ export function App() {
 
   return (
     <main className="dashboard-palette-background min-h-svh">
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-8 p-4 sm:p-8">
-        <header className="flex items-start justify-between gap-4">
-          <div className="flex flex-col gap-2">
-            <h1 className="text-3xl font-semibold tracking-tight text-primary sm:text-4xl">
-              YouTube Analytics Dashboard
-            </h1>
-            <p className="max-w-2xl text-muted-foreground">
-              起動時に収集した snapshot から、チャンネルと動画のパフォーマンスを確認できます。
+      <div className="dashboard-workbench mx-auto flex w-full max-w-7xl flex-col">
+        <header className="dashboard-header">
+          <div className="dashboard-header-copy">
+            <p className="dashboard-system-label">YT / OPERATIONS</p>
+            <h1>YouTube Analytics</h1>
+            <p>
+              起動時に収集した snapshot
+              から、チャンネルと動画のパフォーマンスを確認できます。
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="dashboard-header-actions">
             <Button
               variant="outline"
               size="icon"
@@ -935,7 +946,7 @@ export function App() {
               >
                 <SettingsIcon />
               </SheetTrigger>
-              <SheetContent>
+              <SheetContent className="max-w-full min-w-0 overflow-x-hidden">
                 <SheetHeader>
                   <SheetTitle>設定</SheetTitle>
                   <SheetDescription>
@@ -961,76 +972,83 @@ export function App() {
           </div>
         </header>
 
-        <PublicationActivityPanel state={publicationActivity} />
-        {trends ? <ChannelTrendChart data={trends} /> : null}
+        <div className="dashboard-status-line" aria-label="snapshot の表示条件">
+          <span data-state={dashboardState}>起動時 snapshot</span>
+          <span>対象期間 / {dashboardPeriod}</span>
+          <span>表示 / 読み取り専用</span>
+        </div>
 
-        {error ? (
-          <Alert variant="destructive">
-            <AlertCircleIcon />
-            <AlertTitle>読み込めませんでした</AlertTitle>
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        ) : null}
-        {channels === null && !error ? <LoadingState /> : null}
-        {channels?.length === 0 ? (
-          <Empty className="border">
-            <EmptyHeader>
-              <EmptyMedia variant="icon">
-                <DatabaseIcon />
-              </EmptyMedia>
-              <EmptyTitle>登録済みチャンネルがありません</EmptyTitle>
-              <EmptyDescription>
-                ~/.config/tayk/channels.json にチャンネルの絶対 path
-                を追加してください。
-              </EmptyDescription>
-            </EmptyHeader>
-          </Empty>
-        ) : null}
-        {channels && channels.length > 0 ? (
-          <div className="grid gap-8">
-            <DashboardOverview channels={channels} />
-            <ChannelStockTable
-              channels={channels}
-              selectedId={selectedId}
-              onSelect={selectChannel}
-            />
-            <section aria-live="polite" className="min-w-0">
-              {detailLoading ? (
-                <Card>
-                  <CardHeader>
-                    <Skeleton className="h-6 w-48" />
-                    <Skeleton className="h-4 w-64" />
-                  </CardHeader>
-                  <CardContent>
-                    <Skeleton className="h-64 w-full" />
-                  </CardContent>
-                </Card>
-              ) : null}
-              {detail ? (
-                <div className="grid gap-4">
-                  <div>
-                    <h2 className="dashboard-section-heading text-2xl font-semibold">
-                      {detail.name} の動画詳細
-                    </h2>
-                    <p className="text-sm text-muted-foreground">
-                      最新 snapshot の動画別パフォーマンスです。
-                    </p>
+        <div className="dashboard-content">
+          {error ? (
+            <Alert variant="destructive">
+              <AlertCircleIcon />
+              <AlertTitle>読み込めませんでした</AlertTitle>
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          ) : null}
+          {channels === null && !error ? <LoadingState /> : null}
+          {channels?.length === 0 ? (
+            <Empty className="border">
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <DatabaseIcon />
+                </EmptyMedia>
+                <EmptyTitle>登録済みチャンネルがありません</EmptyTitle>
+                <EmptyDescription>
+                  ~/.config/tayk/channels.json にチャンネルの絶対 path
+                  を追加してください。
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
+          ) : null}
+          {channels && channels.length > 0 ? (
+            <div className="dashboard-sections">
+              <DashboardOverview channels={channels} period={dashboardPeriod} />
+              {trends ? <ChannelTrendChart data={trends} /> : null}
+              <PublicationActivityPanel state={publicationActivity} />
+              <ChannelStockTable
+                channels={channels}
+                selectedId={selectedId}
+                onSelect={selectChannel}
+              />
+              <section aria-live="polite" className="min-w-0">
+                {detailLoading ? (
+                  <Card>
+                    <CardHeader>
+                      <Skeleton className="h-6 w-48" />
+                      <Skeleton className="h-4 w-64" />
+                    </CardHeader>
+                    <CardContent>
+                      <Skeleton className="h-64 w-full" />
+                    </CardContent>
+                  </Card>
+                ) : null}
+                {detail ? (
+                  <div className="grid gap-4">
+                    <div>
+                      <h2 className="dashboard-section-heading text-2xl font-semibold">
+                        {detail.name} の動画詳細
+                      </h2>
+                      <p className="text-sm text-muted-foreground">
+                        最新 snapshot の動画別パフォーマンスです。
+                      </p>
+                    </div>
+                    <Detail detail={detail} />
                   </div>
-                  <Detail detail={detail} />
-                </div>
-              ) : null}
-            </section>
-          </div>
-        ) : null}
-        {pipeline ? <PipelineStatusTable data={pipeline} /> : null}
-        {pipelineError && channels !== null ? (
-          <Card role="status">
-            <CardHeader>
-              <CardTitle>パイプライン状況を読み込めませんでした</CardTitle>
-              <CardDescription>{pipelineError}</CardDescription>
-            </CardHeader>
-          </Card>
-        ) : null}
+                ) : null}
+              </section>
+            </div>
+          ) : null}
+          {pipeline ? <PipelineStatusTable data={pipeline} /> : null}
+          {pipelineError && channels !== null ? (
+            <Card role="status">
+              <CardHeader>
+                <CardTitle>パイプライン状況を読み込めませんでした</CardTitle>
+                <CardDescription>{pipelineError}</CardDescription>
+              </CardHeader>
+            </Card>
+          ) : null}
+        </div>
       </div>
     </main>
   )

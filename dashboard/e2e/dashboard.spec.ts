@@ -307,6 +307,7 @@ test("起動時 snapshot を表示し手動更新操作を提供しない", asyn
   await page.goto(baseURL)
 
   await expect(page.getByText("直近 30 日")).toBeVisible()
+  await expect(page.getByText("対象期間 / 未収集")).toBeVisible()
   await expect(
     page.getByText(
       "起動時に収集した snapshot から、チャンネルと動画のパフォーマンスを確認できます。"
@@ -324,7 +325,7 @@ test.afterAll(async () => {
   if (fixtureRoot) await rm(fixtureRoot, { recursive: true, force: true })
 })
 
-test("初期表示で公開活動を概況とチャンネル比較より前に表示する", async ({
+test("初期表示で概況から推移・公開活動・比較の順に表示する", async ({
   page,
 }) => {
   await page.goto(baseURL)
@@ -340,14 +341,27 @@ test("初期表示で公開活動を概況とチャンネル比較より前に�
   await expect(overview).toBeVisible()
   await expect(comparison).toBeVisible()
 
+  const trend = page.getByRole("region", { name: "日次再生数の推移" })
+  await expect(trend).toBeVisible()
+
   expect(
-    await publicationActivity.evaluate(
+    await overview.evaluate(
       (activity, laterElement) =>
         Boolean(
           activity.compareDocumentPosition(laterElement) &
           Node.DOCUMENT_POSITION_FOLLOWING
         ),
-      await overview.elementHandle()
+      await trend.elementHandle()
+    )
+  ).toBe(true)
+  expect(
+    await trend.evaluate(
+      (activity, laterElement) =>
+        Boolean(
+          activity.compareDocumentPosition(laterElement) &
+          Node.DOCUMENT_POSITION_FOLLOWING
+        ),
+      await publicationActivity.elementHandle()
     )
   ).toBe(true)
   expect(
@@ -568,6 +582,85 @@ test("768px 幅でも比較行と詳細操作が見切れない", async ({ page 
   expect(layout.buttonLeft).toBeGreaterThanOrEqual(layout.rowLeft)
   expect(layout.buttonRight).toBeLessThanOrEqual(layout.rowRight)
 })
+
+for (const width of [320, 375, 414]) {
+  test(`${width}px 幅で chart・table・sheet・長い名前を境界内に収める`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 844 })
+    await page.goto(baseURL)
+
+    const channelName = page.getByText("Night Drive", { exact: true }).first()
+    await channelName.evaluate((element) => {
+      element.textContent =
+        "Night Drive Ambient Music Channel With An Exceptionally Long Name"
+    })
+    const targets = [
+      page.getByRole("region", { name: "日次再生数の推移" }),
+      page.getByRole("table", { name: "チャンネル横断ストック一覧" }),
+      channelName,
+    ]
+    for (const target of targets) {
+      await expect(target).toBeVisible()
+      const bounds = await target.evaluate((element) => {
+        const rect = element.getBoundingClientRect()
+        return { left: rect.left, right: rect.right }
+      })
+      expect(bounds.left).toBeGreaterThanOrEqual(0)
+      expect(bounds.right).toBeLessThanOrEqual(width)
+    }
+    await page.getByRole("button", { name: "設定を開く" }).click()
+    const dialog = page.getByRole("dialog")
+    await expect(dialog).toBeVisible()
+    await expect(dialog).toHaveCSS("translate", "none")
+    const dialogBounds = await dialog.evaluate((element) => {
+      const rect = element.getBoundingClientRect()
+      return { left: rect.left, right: rect.right }
+    })
+    expect(dialogBounds.left).toBeGreaterThanOrEqual(0)
+    expect(dialogBounds.right).toBeLessThanOrEqual(width)
+    const documentWidth = await page.evaluate(
+      () => document.documentElement.scrollWidth
+    )
+    expect(documentWidth).toBeLessThanOrEqual(width)
+  })
+}
+
+for (const viewport of [
+  { width: 1280, height: 720 },
+  { width: 390, height: 844 },
+]) {
+  for (const colorScheme of ["light", "dark"] as const) {
+    test(`${viewport.width}x${viewport.height} ${colorScheme} で横スクロールせず keyboard focus を表示する`, async ({
+      page,
+    }) => {
+      await page.emulateMedia({ colorScheme })
+      await page.setViewportSize(viewport)
+      await page.goto(baseURL)
+
+      expect(
+        await page.evaluate(() => document.documentElement.scrollWidth)
+      ).toBeLessThanOrEqual(viewport.width)
+
+      await page.keyboard.press("Tab")
+      const focused = page.locator(":focus-visible")
+      await expect(focused).toBeVisible()
+      const focusStyle = await focused.evaluate((element) => {
+        const style = getComputedStyle(element)
+        return { outline: style.outlineStyle, boxShadow: style.boxShadow }
+      })
+      expect(
+        focusStyle.outline !== "none" || focusStyle.boxShadow !== "none"
+      ).toBe(true)
+
+      await page.getByRole("button", { name: "設定を開く" }).focus()
+      await page.keyboard.press("Enter")
+      await expect(page.getByRole("dialog")).toBeVisible()
+      await page.keyboard.press("Escape")
+      await expect(page.getByRole("dialog")).toBeHidden()
+    })
+  }
+}
 
 test("1440px 幅で公開活動が境界いっぱいに広がり横スクロールしない", async ({
   page,
