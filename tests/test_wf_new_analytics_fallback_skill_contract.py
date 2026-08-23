@@ -19,9 +19,7 @@ _REPO_ROOT = REPO_ROOT
 _FRESHNESS_RULES = _REPO_ROOT / ".claude" / "skills" / "wf-new" / "references" / "freshness-rules.md"
 _WF_NEW_SKILL = _REPO_ROOT / ".claude" / "skills" / "wf-new" / "SKILL.md"
 _WF_NEW_PHASE2 = _REPO_ROOT / ".claude" / "skills" / "wf-new" / "references" / "phase2.md"
-_PERSONA_CHAIN_VALIDATOR = (
-    _REPO_ROOT / ".claude" / "skills" / "wf-new" / "references" / "validate_persona_chain.py"
-)
+_PERSONA_CHAIN_VALIDATOR = _REPO_ROOT / ".claude" / "skills" / "wf-new" / "references" / "validate_persona_chain.py"
 
 
 def _wf_new_text() -> str:
