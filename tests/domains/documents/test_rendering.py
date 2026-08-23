@@ -163,6 +163,29 @@ def test_status_annotation_drives_value_style_and_top_approval_summary() -> None
     assert html.index("承認サマリー") < html.index("<h2>Checks</h2>")
 
 
+def test_status_chips_and_comparison_tables_remain_readable_on_narrow_viewports() -> None:
+    html = render_repository_document(
+        RepositorySchema.COLLECTION_PLAN,
+        json.loads((FIXTURES_DIR / "documents" / "collection-plan.json").read_text(encoding="utf-8")),
+    )
+    css = _document_css(html)
+
+    assert ".table-scroll { max-width: 100%; overflow-x: auto; }" in css
+    assert ".view-table { width: 100%; min-width: 40rem;" in css
+    assert ".status-chip" in css
+    assert "white-space: nowrap" in css
+
+
+def test_video_description_keeps_primary_copy_before_quality_details() -> None:
+    html = render_repository_document(
+        RepositorySchema.VIDEO_DESCRIPTION,
+        json.loads((FIXTURES_DIR / "documents" / "video-description.json").read_text(encoding="utf-8")),
+    )
+
+    assert html.index("承認サマリー") < html.index("公開タイトル")
+    assert html.index("公開タイトル") < html.index("最終概要欄") < html.index("<h2>Quality checks</h2>")
+
+
 def test_status_summary_does_not_collect_annotations_below_collapsed_section() -> None:
     schema = {
         "properties": {

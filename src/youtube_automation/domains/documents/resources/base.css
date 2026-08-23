@@ -277,7 +277,6 @@ video:focus-visible {
   .review-nav { position: static; }
   .review-nav ol { display: grid; }
   .view-card, .view-media, .view-cards-section, .view-details-content { padding: var(--space-sm); }
-  .view-table { min-width: 32rem; }
 }
 
 .view-card,
@@ -296,7 +295,13 @@ video:focus-visible {
 .approval-summary.approval-fail { border-color: oklch(52% 0.19 25deg); }
 .approval-summary.approval-warning { border-color: oklch(68% 0.15 75deg); }
 .approval-summary.approval-pass { border-color: oklch(56% 0.13 150deg); }
-.status-chip { display: inline-block; padding: 0.125rem 0.5rem; border: 1px solid currentColor; font-weight: 750; }
+.status-chip {
+  display: inline-block;
+  padding: 0.125rem 0.5rem;
+  border: 1px solid currentColor;
+  font-weight: 750;
+  white-space: nowrap;
+}
 .status-pass { color: oklch(42% 0.12 150deg); }
 .status-fail { color: oklch(45% 0.18 25deg); }
 .status-warning { color: oklch(48% 0.13 75deg); }
