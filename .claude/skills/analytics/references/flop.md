@@ -4,7 +4,7 @@
 
 - `前工程`: `/analytics --collect`, `/audit --alignment`
 - `後工程`: `/wf-new`
-- `委譲先`: `/audit --video`
+- `改善候補`: `/audit --video`
 
 ## 成果物
 
@@ -17,7 +17,7 @@
 過去自チャンネル平均 + 競合ベンチマークと突き合わせ、症状から仮説を立て、対応する既存スキル / CLI / API で検証する。
 最終出力は `collections/live/<collection>/20-documentation/postmortem.md`。
 
-責務は **症状の定量化 + 仮説リスト生成 + 検証の自律実行 + 結論の記入** まで。Gemini 等の API コストが発生する `/audit --video` を含め、仮説検証はユーザーの承認プロンプトを挟まず実行する。改善策の適用は本スキルの責務に含めない。
+責務は **症状の定量化 + 仮説リスト生成 + 既存成果物の read-only 参照による agent 推論 + 結論の記入** まで。`/audit --video` を含む Vertex AI Gemini は起動せず、利用できない根拠は未検証として残りの検証を続行する。改善策の適用は本スキルの責務に含めない。
 
 ## 完了条件
 
@@ -52,7 +52,6 @@
 | `<video_id>` | YouTube 動画 ID を直接指定 | `/analytics --flop dQw4w9WgXcQ` |
 | `<collection>` | コレクション名を指定（`upload_tracking.json` の `complete_collection.video_id` を解決） | `/analytics --flop rain-jazz-night` |
 | `--since <N>` | 公開後 N 日以内に公開された動画から候補を提示 | `/analytics --flop --since 14` |
-| `--no-vertex` | Vertex AI を起動せず既存成果物と subagent 推論だけで検証。不足項目は未検証にする | `/analytics --flop rain-jazz-night --no-vertex` |
 
 複数候補がある場合は AskUserQuestion で対象を選ばせる。
 
@@ -61,10 +60,9 @@
 | API | call 数 / 実行 | 変動要因 |
 |---|---|---|
 | 直接実行 CLI（yt-launch-curve / yt-theme-compare / yt-thumbnail-correlate） | 0 call（ローカル処理のみ） | — |
-| Vertex AI Gemini（Phase 4 で /audit --video を自律実行する場合） | 対象 1 動画 = 1 call | 仮説検証で /audit --video を実行するかどうか |
+| Vertex AI Gemini | 0 call | flop からは起動しない |
 
-- 上限 / 承認: /audit --video は承認プロンプトなしで自律実行されうるが、対象は当該 video_id 1 本に限定される。見積もりの詳細は /audit --video の「想定 API call 数」を参照。
-- `--no-vertex` 指定時は Vertex AI Gemini 0 call。後述の既存成果物だけを利用し、`/audit --video` は起動しない。
+- 上限 / 承認: Vertex AI Gemini は 0 call。後述の既存成果物だけを利用し、`/audit --video` は起動しない。
 
 ## 実行フロー
 
@@ -137,9 +135,9 @@ per-video 流入経路シェア（`YT_SEARCH` / `YT_BROWSE` 等）に基づく�
 
 ### Phase 4: 検証の自律実行
 
-Phase 3 で列挙した主仮説（全件）について、次の表から対応する検証手段を選び、ユーザーの承認プロンプトを挟まず対応する検証手段を自動実行する。`/audit --video` 等の有料 API を使う検証も同じ扱いとする。
+Phase 3 で列挙した主仮説（全件）について、次の表から対応する検証手段を選び、ユーザーの承認プロンプトを挟まず対応する検証手段を自動実行する。ただし `/audit --video` を起動しない。
 
-`--no-vertex` 指定時は例外として `/audit --video` を起動しない。対象動画と競合動画について保存済みの JSON が schema を満たす場合に限り、既存の有効な `/audit --video` 成果物を read-only 入力として subagent 推論を行う。成果物がない、無効、または必要フィールドが不足する検証は Vertex AI で補完せず、`未検証（理由: --no-vertex 指定のため <不足成果物またはフィールド> を取得できない）` と記録して残りの検証を続行する。retention timeline が `/audit --video 未実行` を返した場合も同様に再実行せず未検証とする。ローカル CLI、YouTube API、既存成果物だけで完結する他の検証は通常どおり実行する。
+対象動画と競合動画について保存済みの JSON が schema を満たす場合に限り、既存の有効な `/audit --video` 成果物を read-only 入力として agent 推論を行う。成果物がない、無効、または必要フィールドが不足する検証は Vertex AI で補完せず、`未検証（理由: <不足成果物またはフィールド> を取得できない）` と記録して残りの検証を続行する。retention timeline が `/audit --video 未実行` を返した場合も再実行せず未検証とする。ローカル CLI、YouTube API、既存成果物だけで完結する他の検証は通常どおり実行する。
 
 各検証の直後に、postmortem.md の「検証ステップ」欄へ以下を記録する:
 
@@ -160,7 +158,7 @@ Phase 4 は改善策を適用せず、次の境界を守る:
 - `/audit --alignment`、`/channel-research --voice`、`/channel-strategy --persona`、`/channel-strategy --scene`、`/channel-strategy --direction` はスキルとして起動しない。これらは別成果物の保存または設定更新を完了条件に含むため、既存の検証済み `docs/plans/alignment-audit.json`、`docs/plans/viewer-voice-analysis.md`、`docs/channel/personas/persona-definition.md`、`docs/plans/viewing-scene-matrix.md` がある場合だけ read-only 入力として読む。alignment は HTML ではなく JSON だけを入力とする。必要な成果物がなければ、その仮説を理由付きの `未検証` とする
 - タイトル整合性は `/audit --alignment` を起動せず、対象コレクションの `workflow-state.json`、音楽プロンプト、実動画尺、検証済み A/B 履歴の現在サムネ候補を read-only で照合する。`config/channel/content.json`、タイトル、サムネイル、音源、方向性文書は変更しない
 - 差別化・市場性は `/channel-research --discover` や `/channel-strategy --direction` を起動せず、最新の既存 `data/benchmark_*.json` と `yt-theme-compare` の標準出力だけを使う。競合の追加、方向性決定、config 更新は行わない
-- `/thumbnail --compare` と `/audit --video` は各スキルの分析成果物生成まで実行してよいが、Next Step の再生成・設定更新には進まない
+- `/thumbnail --compare` は分析成果物生成まで実行してよいが、Next Step の再生成・設定更新には進まない。`/audit --video` は起動せず、保存済み成果物だけを参照する
 
 **共通の期間・比較・記録契約**
 
@@ -212,8 +210,8 @@ uv run python .claude/skills/analytics/references/verification.py --operation <t
 
 対象動画の retention が最新 `data/analytics_data_*.json::retention[]` にある場合は、
 `yt-retention-timeline --video <video_id>` を実行し、drop 地点に対応する scene / BGM を
-検証結果へ引用する。`status=skipped` で `/audit --video 未実行` と返った場合は、既存の
-Phase 4 規則どおり対象 1 動画だけ `/audit --video` してから再実行する。retention 未収集なら
+検証結果へ引用する。`status=skipped` で `/audit --video 未実行` と返った場合は、`/audit --video` を
+再実行せず未検証とする。retention 未収集なら
 この照合だけを `未検証（理由: retention 未収集。/analytics --collect の full 収集が必要）` とし、
 他の content-signals 検証は続行する。`outside_analysis_window` の scene / BGM は推測しない。
 

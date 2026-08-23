@@ -89,16 +89,18 @@ def test_flop_analysis_calls_executable_verification_reference() -> None:
     assert "--operation" in phase_4
 
 
-def test_flop_analysis_no_vertex_uses_existing_artifacts_only() -> None:
+def test_flop_analysis_defaults_to_agent_inference_with_existing_artifacts_only() -> None:
     text = _skill_text()
     quick_reference = _section(text, "## Quick Reference")
     phase_4 = _section(text, "### Phase 4: 検証の自律実行")
 
-    assert "`--no-vertex`" in quick_reference
+    assert "`--no-vertex`" not in quick_reference
+    assert "`--no-vertex`" not in text
     assert "`/audit --video` を起動しない" in phase_4
     assert "既存の有効な `/audit --video` 成果物" in phase_4
-    assert "subagent 推論" in phase_4
+    assert "agent 推論" in phase_4
     assert "`未検証（理由:" in phase_4
+    assert "再実行せず未検証" in phase_4
 
 
 def test_flop_analysis_returns_postmortem_learning_to_creative_constraints() -> None:
