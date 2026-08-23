@@ -58,7 +58,7 @@ class MediaObjectMetadata:
 
 @runtime_checkable
 class MediaStore(Protocol):
-    """工程境界でのみ使う push / pull / 存在確認の最小 port。"""
+    """工程境界でのみ使う push / pull / 存在確認 / metadata 参照 / 保持容量観測の最小 port。"""
 
     def push(self, source: Path, key: MediaKey) -> MediaObjectMetadata: ...
 
