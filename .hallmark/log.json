@@ -1,6 +1,17 @@
 [
   {
     "date": "2026-08-23",
+    "scope": "analytics dashboard",
+    "target": "dashboard/src/App.tsx and dashboard/src/index.css",
+    "genre": "modern-minimal",
+    "theme": "Cobalt",
+    "macrostructure": "Workbench",
+    "enrichment": "none",
+    "audience": "YouTube operators",
+    "decision": "Scan startup summary, trend, publication activity, channel stock, workflow timing, and pipeline state in operational decision order."
+  },
+  {
+    "date": "2026-08-23",
     "scope": "documentation site",
     "target": "site/pages/index.astro and site/styles/release-notes.css",
     "genre": "editorial",

@@ -324,7 +324,7 @@ test.afterAll(async () => {
   if (fixtureRoot) await rm(fixtureRoot, { recursive: true, force: true })
 })
 
-test("初期表示で公開活動を概況とチャンネル比較より前に表示する", async ({
+test("初期表示で概況から推移・公開活動・比較の順に表示する", async ({
   page,
 }) => {
   await page.goto(baseURL)
@@ -340,14 +340,27 @@ test("初期表示で公開活動を概況とチャンネル比較より前に�
   await expect(overview).toBeVisible()
   await expect(comparison).toBeVisible()
 
+  const trend = page.getByRole("region", { name: "日次再生数の推移" })
+  await expect(trend).toBeVisible()
+
   expect(
-    await publicationActivity.evaluate(
+    await overview.evaluate(
       (activity, laterElement) =>
         Boolean(
           activity.compareDocumentPosition(laterElement) &
           Node.DOCUMENT_POSITION_FOLLOWING
         ),
-      await overview.elementHandle()
+      await trend.elementHandle()
+    )
+  ).toBe(true)
+  expect(
+    await trend.evaluate(
+      (activity, laterElement) =>
+        Boolean(
+          activity.compareDocumentPosition(laterElement) &
+          Node.DOCUMENT_POSITION_FOLLOWING
+        ),
+      await publicationActivity.elementHandle()
     )
   ).toBe(true)
   expect(

@@ -1,7 +1,12 @@
+/* Hallmark · macrostructure: Workbench · genre: modern-minimal · theme: Cobalt · tone: technical / austere · anchor hue: blue · enrichment: none
+ * Hallmark · pre-emit critique: P5 H5 E4 S5 R5 V5
+ * audience: YouTube operators · use: detect change and required action
+ */
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/inter";
+@import "./tokens.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -367,21 +372,111 @@
 @layer components {
   .dashboard-palette-background {
     background-color: var(--background);
-    background-image: linear-gradient(
-      180deg,
-      var(--dashboard-accent-surface),
-      transparent 24rem
-    );
+    background-image: linear-gradient(var(--border) 1px, transparent 1px);
+    background-size: 100% 4rem;
+  }
+
+  .dashboard-workbench {
+    padding: var(--space-md);
+    gap: 0;
+  }
+
+  .dashboard-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-lg);
+    padding-block: var(--space-xl);
+    border-bottom: var(--rule-hairline) solid var(--foreground);
+  }
+
+  .dashboard-header-copy {
+    min-width: 0;
+  }
+
+  .dashboard-system-label {
+    margin-bottom: var(--space-md);
+    color: var(--primary);
+    font-family: var(--font-mono);
+    font-size: var(--text-label);
+    font-weight: 700;
+    letter-spacing: 0.12em;
+  }
+
+  .dashboard-header h1 {
+    max-width: 14ch;
+    color: var(--foreground);
+    font-family: var(--font-display);
+    font-size: var(--text-display);
+    font-style: normal;
+    font-weight: 650;
+    letter-spacing: -0.055em;
+    line-height: 0.92;
+    overflow-wrap: anywhere;
+  }
+
+  .dashboard-header-copy > p:last-child {
+    max-width: 42rem;
+    margin-top: var(--space-lg);
+    color: var(--muted-foreground);
+    font-family: var(--font-body);
+    line-height: 1.65;
+  }
+
+  .dashboard-header-actions {
+    display: flex;
+    flex-shrink: 0;
+    gap: var(--space-sm);
+  }
+
+  .dashboard-status-line {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-sm) var(--space-xl);
+    padding-block: var(--space-md);
+    border-bottom: var(--rule-hairline) solid var(--border);
+    color: var(--muted-foreground);
+    font-family: var(--font-mono);
+    font-size: var(--text-label);
+  }
+
+  .dashboard-status-line span {
+    white-space: nowrap;
+  }
+
+  .dashboard-status-line [data-state="ready"]::before {
+    content: "";
+    display: inline-block;
+    width: 0.5rem;
+    height: 0.5rem;
+    margin-right: var(--space-sm);
+    border: var(--rule-hairline) solid var(--primary);
+    background: var(--primary);
+  }
+
+  .dashboard-content {
+    display: grid;
+    min-width: 0;
+    gap: var(--space-2xl);
+    padding-block: var(--space-2xl);
+  }
+
+  .dashboard-sections {
+    display: grid;
+    min-width: 0;
+    gap: var(--space-2xl);
   }
 
   .dashboard-section-heading {
-    border-left: 0.25rem solid var(--primary);
-    padding-left: 0.75rem;
+    padding-bottom: var(--space-sm);
+    border-bottom: var(--rule-hairline) solid var(--foreground);
+    font-style: normal;
   }
 
   .dashboard-metric-surface {
-    border: 1px solid var(--dashboard-accent-border);
+    border: var(--rule-hairline) solid var(--dashboard-accent-border);
     background-color: var(--dashboard-accent-surface-strong);
+    border-radius: var(--radius-control);
   }
 
   .dashboard-metric-surface[data-tone="positive"] {
@@ -418,6 +513,11 @@
   }
   html {
     @apply font-sans;
+    overflow-x: clip;
+  }
+  body {
+    overflow-x: clip;
+    font-family: var(--font-body);
   }
 }
 
@@ -425,5 +525,46 @@
   button,
   [role="button"] {
     @apply cursor-pointer;
+  }
+}
+
+@media (max-width: 40rem) {
+  .dashboard-workbench {
+    padding: var(--space-md);
+  }
+
+  .dashboard-header {
+    gap: var(--space-md);
+    padding-block: var(--space-lg);
+  }
+
+  .dashboard-header h1 {
+    font-size: clamp(2rem, 13vw, 3.25rem);
+  }
+
+  .dashboard-header-copy > p:last-child {
+    font-size: 0.875rem;
+  }
+
+  .dashboard-status-line {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-sm);
+  }
+
+  .dashboard-content,
+  .dashboard-sections {
+    gap: var(--space-xl);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: var(--dur-fast) !important;
+    animation-duration: var(--dur-fast) !important;
+    animation-iteration-count: 1 !important;
   }
 }
