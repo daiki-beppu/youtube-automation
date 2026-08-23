@@ -14,7 +14,6 @@ from youtube_automation.infrastructure.vcs.state_sync import (
     pull_update_commit_push,
 )
 
-
 _NOTIFICATION_CHANNEL = "ambient-lab"
 _NOTIFICATION_COLLECTION = "sample"
 
