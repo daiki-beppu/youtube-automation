@@ -95,6 +95,10 @@ def _render_section(
     root_schema: Mapping[str, object],
 ) -> str:
     view = _view(schema)
+    _validate_review_view(view)
+    if view.get("collapsed") is True:
+        content = _render_value(value, _without_review_flags(schema), root_schema)
+        return _details(heading, description, content)
     presentation = _presentation(view, value)
     if presentation == "table":
         return _render_table(heading, description, value, schema, root_schema)
@@ -105,7 +109,9 @@ def _render_section(
         return _details(heading, description, content)
     if presentation == "media":
         return _render_media(heading, description, value, view)
-    return _card(heading, description, _render_value(value, schema, root_schema))
+    content = _render_value(value, schema, root_schema)
+    modifiers = _review_classes(view)
+    return _card(heading, description, content, modifiers=modifiers)
 
 
 def _view(schema: Mapping[str, object]) -> dict[str, object]:
@@ -127,9 +133,10 @@ def _annotation(schema: Mapping[str, object], key: str, fallback: str) -> str:
     return value if isinstance(value, str) and value else fallback
 
 
-def _card(heading: str, description: str, content: str) -> str:
+def _card(heading: str, description: str, content: str, *, modifiers: str = "") -> str:
     description_html = f'<p class="view-description">{escape(description)}</p>' if description else ""
-    return f'<section class="view-card"><h2>{escape(heading)}</h2>{description_html}{content}</section>'
+    classes = f"view-card{modifiers}"
+    return f'<section class="{classes}"><h2>{escape(heading)}</h2>{description_html}{content}</section>'
 
 
 def _details(heading: str, description: str, content: str) -> str:
@@ -150,6 +157,34 @@ def _without_presentation(schema: Mapping[str, object]) -> Mapping[str, object]:
     else:
         rendered_schema.pop("x-view", None)
     return rendered_schema
+
+
+def _without_review_flags(schema: Mapping[str, object]) -> Mapping[str, object]:
+    view = dict(_view(schema))
+    view.pop("collapsed", None)
+    rendered_schema = dict(schema)
+    rendered_schema["x-view"] = view
+    return rendered_schema
+
+
+def _validate_review_view(view: Mapping[str, object]) -> None:
+    for key in ("summary", "collapsed", "copyable", "diff"):
+        value = view.get(key)
+        if value is not None and not isinstance(value, bool):
+            raise DocumentRenderError(f"x-view.{key} は boolean で指定してください")
+    priority = view.get("priority")
+    if priority is not None and priority not in {"critical", "high", "normal", "low"}:
+        raise DocumentRenderError("x-view.priority は critical/high/normal/low のいずれかにしてください")
+
+
+def _review_classes(view: Mapping[str, object]) -> str:
+    classes: list[str] = []
+    if view.get("summary") is True:
+        classes.append("view-summary")
+    priority = view.get("priority")
+    if isinstance(priority, str):
+        classes.append(f"view-priority-{priority}")
+    return "" if not classes else " " + " ".join(classes)
 
 
 def _resolve_local_reference(schema: Mapping[str, object], root_schema: Mapping[str, object]) -> Mapping[str, object]:
@@ -190,6 +225,9 @@ def _ordered_properties(
 def _render_value(value: object, schema: Mapping[str, object], root_schema: Mapping[str, object]) -> str:
     schema = _resolve_local_reference(schema, root_schema)
     view = _view(schema)
+    _validate_review_view(view)
+    if view.get("collapsed") is True:
+        return _details("詳細を表示", "", _render_value(value, _without_review_flags(schema), root_schema))
     presentation = _presentation(view, value)
     if presentation == "media":
         return _render_media(_annotation(schema, "title", "Media"), "", value, view)
@@ -215,7 +253,16 @@ def _render_value(value: object, schema: Mapping[str, object], root_schema: Mapp
         return '<span class="empty">None</span>'
     if isinstance(value, bool):
         return "true" if value else "false"
-    return escape(str(value))
+    rendered = escape(str(value))
+    if view.get("copyable") is True:
+        diff_class = " view-diff" if view.get("diff") is True else ""
+        return (
+            f'<div class="copyable-content{diff_class}" tabindex="0" '
+            f'aria-label="コピー対象">{rendered}</div>'
+        )
+    if view.get("diff") is True:
+        return f'<div class="view-diff">{rendered}</div>'
+    return rendered
 
 
 def _render_table(

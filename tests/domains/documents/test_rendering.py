@@ -101,6 +101,48 @@ def test_details_presentation_keeps_long_evidence_available_without_expanding_it
     assert "<details open" not in html
 
 
+def test_review_annotations_create_priority_summary_and_collapsed_content() -> None:
+    schema = {
+        "title": "Approval",
+        "type": "object",
+        "properties": {
+            "decision": {
+                "title": "Decision",
+                "x-view": {"summary": True, "priority": "critical", "order": 1},
+            },
+            "audit": {
+                "title": "Audit trail",
+                "x-view": {"collapsed": True, "order": 2},
+            },
+        },
+    }
+
+    html = render_schema_document({"decision": "PASS", "audit": {"source": "plan.json"}}, schema)
+
+    assert 'class="view-card view-summary view-priority-critical"' in html
+    assert '<details class="view-details"' in html
+    assert "<summary>Audit trail</summary>" in html
+
+
+def test_copyable_and_diff_annotations_preserve_multiline_review_text() -> None:
+    schema = {
+        "title": "Publish review",
+        "type": "object",
+        "properties": {
+            "description": {
+                "title": "Final description",
+                "x-view": {"copyable": True, "diff": True},
+            }
+        },
+    }
+
+    html = render_schema_document({"description": "first line\nsecond line"}, schema)
+
+    assert 'class="copyable-content view-diff"' in html
+    assert "first line\nsecond line" in html
+    assert "コピー対象" in html
+
+
 def test_analysis_report_prioritizes_decisions_and_preserves_additional_root_content() -> None:
     fixture = FIXTURES_DIR / "documents" / "analysis-report.json"
     document = json.loads(fixture.read_text(encoding="utf-8"))
