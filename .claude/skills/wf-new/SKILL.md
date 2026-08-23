@@ -128,8 +128,8 @@ uv run yt-postmortem-pending --json
 JSON の `pending` と `unanalyzable` を次の順に処理する。CLI 自体が非 0 の場合は設定・入力エラーを表示し、collection を作成せず同じコマンドから再開できる状態で停止する。
 
 1. `pending が 0 件`なら、`unanalyzable` の件数と reason ごとの内訳を 1 行で表示して Phase 0 を通過する。`unanalyzable` は停止理由にしない。reason は CLI の固定値 `upload_tracking_missing` / `video_id_missing` / `analytics_data_missing` / `video_not_in_analytics` をそのまま表示し、推測で補完しない。live collection がない新規チャンネルでは両方 0 件となり、表示だけで次へ進む。
-2. pending が 1 件以上なら、メインが AskUserQuestion で対象 collection 名、pending 件数、見積もり「Vertex AI Gemini は 1 件あたり最大 1 call、全体で最大 pending 件数 call」を提示する。選択肢は `実行する` / `今回はスキップ` の2択とする。`実行する`だけが手順3へ進む。`今回はスキップ`では skip 理由と pending 件数を表示し、`postmortem.md` と `data/insights.jsonl` を変更せず、既存 open insights だけでパイロット確認と Phase 1 へ進む。
-3. `実行する`の承認後、pending を JSON の出力順に、Agent ツールで canonical な `/analytics --flop <collection>` へ1件ずつ委譲する。並列 Agent は使わない。対象 collection の絶対 path、CLI が返した video_id、期待成果物の絶対 path、最大 1 Gemini call が承認済みであることを渡す。subagent は `workflow-state.json` を書き込まず AskUserQuestion を実行しない。子 skill 固有の承認が必要になった場合は、subagent が選択肢と差分案を未適用で返し、メインが AskUserQuestion で確認して回答を同じ委譲へ戻す。初回の分析コスト承認を別の変更承認として流用しない。症状判定、仮説検証、insights 還元、制作制約還流を `/wf-new` に複製せず、すべて `/analytics --flop` の責務に残す。
+2. pending が 1 件以上なら、メインが AskUserQuestion で対象 collection 名、pending 件数、見積もり「Vertex AI Gemini は 1 件あたり最大 1 call、全体で最大 pending 件数 call」を提示する。選択肢は `Vertex AI ありで実行` / `Vertex AI なしで実行` / `今回はスキップ` の3択とする。前2者だけが手順3へ進む。`Vertex AI なしで実行`は既存成果物と subagent 推論だけを使い、不足する検証項目を `未検証` として postmortem を完成させる経路である。`今回はスキップ`では skip 理由と pending 件数を表示し、`postmortem.md` と `data/insights.jsonl` を変更せず、既存 open insights だけでパイロット確認と Phase 1 へ進む。
+3. 実行の承認後、pending を JSON の出力順に、Agent ツールで canonical な `/analytics --flop <collection>` へ1件ずつ委譲する。`Vertex AI なしで実行`を選んだ場合は canonical な `/analytics --flop <collection> --no-vertex` を委譲し、全件で同じ選択を維持する。並列 Agent は使わない。対象 collection の絶対 path、CLI が返した video_id、期待成果物の絶対 pathに加え、Vertex AI ありなら最大 1 Gemini call が承認済みであること、なしなら Vertex AI の起動禁止と不足項目を `未検証` にすることを渡す。subagent は `workflow-state.json` を書き込まず AskUserQuestion を実行しない。子 skill 固有の承認が必要になった場合は、subagent が選択肢と差分案を未適用で返し、メインが AskUserQuestion で確認して回答を同じ委譲へ戻す。初回の分析コスト承認を別の変更承認として流用しない。症状判定、仮説検証、insights 還元、制作制約還流を `/wf-new` に複製せず、すべて `/analytics --flop` の責務に残す。
 4. 各委譲の直後にメインが `collections/live/<collection>/20-documentation/postmortem.md` の実在と subagent の成功を検証する。失敗または欠落時は残りの pending を実行しない。失敗した collection 名、理由、同じ `/wf-new` を再実行すれば `yt-postmortem-pending` が完成済みを除外して最初の未完了 collection から再開することを表示して停止する。この停止では `uv run yt-init-collection` を実行せず、`collections/planning/`、`workflow-state.json`、`assets.*` を新規作成・更新しない。
 5. 全件成功後、次の validator が exit 0 であることを確認する。非 0 なら理由と再開手順を表示し、Phase 1 へ進まず、企画・collection state を作成しない。exit 0 の場合だけパイロット確認と Phase 1 へ進む。
 
@@ -185,7 +185,7 @@ uv run yt-init-collection "Pilot Direction Check" "pilot-direction-check" \
 
 | API | call 数 / 実行 | 変動要因 |
 |---|---|---|
-| Phase 0 の `/analytics --flop` 委譲 | pending 1 件あたり最大 1 call | 仮説検証で `/audit --video` を実行するかどうか。全体上限は承認時の pending 件数 |
+| Phase 0 の `/analytics --flop` 委譲 | pending 1 件あたり最大 1 call（`--no-vertex` は 0 call） | 仮説検証で `/audit --video` を実行するかどうか。全体上限は承認時の pending 件数 |
 | 直接実行 CLI（yt-init-collection / yt-populate-scene-phrases / yt-collection-preflight / yt-collection-serve） | 0 call（ローカル処理のみ） | — |
 | 内部企画工程（YouTube Data 数 units + Analytics、任意で Gemini） | 1 回分 | 企画プレビュー画像の実施有無 |
 | 委譲先 /thumbnail（Gemini 画像生成 + Vision） | 1 回分 | 候補枚数 / 再生成回数 |

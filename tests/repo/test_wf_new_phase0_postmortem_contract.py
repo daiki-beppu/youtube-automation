@@ -60,6 +60,17 @@ def test_phase_zero_requires_cost_approval_or_records_unattended_block() -> None
 
     assert "対象 collection 名" in phase_zero
     assert "pending 件数" in phase_zero
+
+
+def test_phase_zero_offers_and_propagates_no_vertex_analysis() -> None:
+    phase_zero = _section(_text(), "## Phase 0: 直近サイクルの振り返り")
+
+    assert "Vertex AI ありで実行" in phase_zero
+    assert "Vertex AI なしで実行" in phase_zero
+    assert "`/analytics --flop <collection> --no-vertex`" in phase_zero
+    assert "subagent 推論" in phase_zero
+    assert "不足する検証項目" in phase_zero
+    assert "`未検証`" in phase_zero
     assert "1 件あたり最大 1 call" in phase_zero
     assert "実行する" in phase_zero
     assert "今回はスキップ" in phase_zero

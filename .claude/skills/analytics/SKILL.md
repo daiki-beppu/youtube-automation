@@ -38,6 +38,7 @@ mode 判定後に、選んだ mode の reference へ渡す値を解決する。
 | flag | 対象 mode | 意味 |
 |---|---|---|
 | `--since <N>` | `--flop` | 公開後 N 日以内に公開された動画を候補化する |
+| `--no-vertex` | `--flop` | Vertex AI を起動せず、既存成果物と subagent 推論だけで検証する |
 
 ## 共通前提
 
