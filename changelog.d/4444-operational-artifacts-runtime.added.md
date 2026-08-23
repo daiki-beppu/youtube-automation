@@ -1,0 +1,1 @@
+- operational artifact inventory に正準 filename・schema pair を検証して valid / invalid / latest instance と filename 日付基準の freshness を返す runtime API を追加する（#4444）。
