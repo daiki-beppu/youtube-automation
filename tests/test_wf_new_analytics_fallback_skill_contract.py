@@ -4,7 +4,6 @@ import json
 import os
 import re
 import subprocess
-import sys
 from contextlib import chdir
 from pathlib import Path
 
@@ -20,6 +19,9 @@ _REPO_ROOT = REPO_ROOT
 _FRESHNESS_RULES = _REPO_ROOT / ".claude" / "skills" / "wf-new" / "references" / "freshness-rules.md"
 _WF_NEW_SKILL = _REPO_ROOT / ".claude" / "skills" / "wf-new" / "SKILL.md"
 _WF_NEW_PHASE2 = _REPO_ROOT / ".claude" / "skills" / "wf-new" / "references" / "phase2.md"
+_PERSONA_CHAIN_VALIDATOR = (
+    _REPO_ROOT / ".claude" / "skills" / "wf-new" / "references" / "validate_persona_chain.py"
+)
 
 
 def _wf_new_text() -> str:
@@ -114,6 +116,9 @@ def _run_mode_fixture(
     if data_date is not None:
         _touch(tmp_path / f"data/analytics_data_{data_date}.json")
     _persona_chain(tmp_path)
+    validator = tmp_path / ".claude/skills/wf-new/references/validate_persona_chain.py"
+    validator.parent.mkdir(parents=True, exist_ok=True)
+    validator.write_bytes(_PERSONA_CHAIN_VALIDATOR.read_bytes())
     script = tmp_path / "mode-check.sh"
     script.write_text(_freshness_script(), encoding="utf-8")
     script.chmod(0o755)
@@ -125,8 +130,7 @@ def _run_mode_fixture(
             "TODAY": today,
             "COLLECTION_IDEATE_FRESHNESS_DAYS": str(freshness_days),
             "COLLECTION_IDEATE_TTP_MODE": "false",
-            "PYTHON": sys.executable,
-            "PYTHONPATH": str(_REPO_ROOT / "src"),
+            "UV_PROJECT": str(_REPO_ROOT),
         },
         capture_output=True,
         text=True,
@@ -212,6 +216,9 @@ def test_analytics_mode_rejects_invalid_structured_persona_chain(tmp_path: Path,
 
     script = tmp_path / "mode-check.sh"
     script.write_text(_freshness_script(), encoding="utf-8")
+    validator = tmp_path / ".claude/skills/wf-new/references/validate_persona_chain.py"
+    validator.parent.mkdir(parents=True, exist_ok=True)
+    validator.write_bytes(_PERSONA_CHAIN_VALIDATOR.read_bytes())
     result = subprocess.run(
         ["bash", str(script)],
         cwd=tmp_path,
@@ -220,8 +227,7 @@ def test_analytics_mode_rejects_invalid_structured_persona_chain(tmp_path: Path,
             "TODAY": "20260702",
             "COLLECTION_IDEATE_FRESHNESS_DAYS": "7",
             "COLLECTION_IDEATE_TTP_MODE": "false",
-            "PYTHON": sys.executable,
-            "PYTHONPATH": str(_REPO_ROOT / "src"),
+            "UV_PROJECT": str(_REPO_ROOT),
         },
         capture_output=True,
         text=True,

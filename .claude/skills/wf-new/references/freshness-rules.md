@@ -186,19 +186,9 @@ esac
 PERSONA_JSON=docs/channel/personas/persona-definition.json
 SCENE_JSON=docs/plans/viewing-scene-matrix.json
 if [ -e "$PERSONA_JSON" ] || [ -e "${PERSONA_JSON%.json}.html" ] || [ -e "$SCENE_JSON" ] || [ -e "${SCENE_JSON%.json}.html" ]; then
-  if ! "${PYTHON:-python}" - <<'PY'
-from pathlib import Path
-
-from youtube_automation.domains.documents.schema_registry import RepositorySchema
-from youtube_automation.infrastructure.documents.publishing import read_published_json_document
-
-persona = read_published_json_document(Path("docs/channel/personas/persona-definition.json"), RepositorySchema.CHANNEL_STRATEGY)
-scene = read_published_json_document(Path("docs/plans/viewing-scene-matrix.json"), RepositorySchema.CHANNEL_STRATEGY)
-persona_id = persona["persona"]["id"]
-scene_ids = {item["id"] for item in scene["scenes"]}
-if scene["persona_id"] != persona_id or not set(persona["scene_ids"]).issubset(scene_ids):
-    raise ValueError("persona/scene の参照が一致しません")
-PY
+  if ! uv run python .claude/skills/wf-new/references/validate_persona_chain.py \
+    --persona-json "$PERSONA_JSON" \
+    --scene-json "$SCENE_JSON"
   then
     echo "persona chain 検証失敗 → 成果物を変更せず /channel-strategy --persona の再実行を案内"
     exit 1
