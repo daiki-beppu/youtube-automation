@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from youtube_automation.application import review_lifecycle
 from youtube_automation.application.documents import review
 from youtube_automation.application.documents.collection_plan import write_collection_plan_document
 from youtube_automation.application.documents.migration import MarkdownMigrationDecision
@@ -65,6 +66,22 @@ def _published_plan(collection: Path) -> None:
         _plan_document,
         MarkdownMigrationDecision.NOT_REQUIRED,
     )
+
+
+def test_music_prompt_source_validates_digest_and_refreshes_companion_html(tmp_path: Path, monkeypatch) -> None:
+    collection = _collection(tmp_path)
+    source = collection / "20-documentation" / "suno-prompts.json"
+    source.parent.mkdir()
+    source.write_text("{}", encoding="utf-8")
+    published: list[tuple[Path, object]] = []
+    monkeypatch.setattr(review, "publish_json_document", lambda path, schema: published.append((path, schema)))
+    monkeypatch.setattr(review, "music_prompt_artifact_digest", lambda path: "a" * 64)
+
+    adapter = review.MusicPromptReviewSource(collection, "terminal")
+    candidates = adapter.candidates()
+
+    assert published == [(source, review.RepositorySchema.MUSIC_PROMPT)]
+    assert {candidate.digest for candidate in candidates} == {"a" * 64}
 
 
 def test_automatic_approval_skips_discovery_html_and_browser(tmp_path: Path, monkeypatch) -> None:
@@ -177,6 +194,7 @@ def test_plan_selection_page_compares_structured_fields_and_preview(tmp_path: Pa
     collection = _collection(tmp_path)
     _published_plan(collection)
     monkeypatch.setattr(review, "open_local_file", lambda _path: True)
+    monkeypatch.setattr(review_lifecycle, "open_local_file", lambda _path: True)
 
     class FakeBroker:
         def __init__(self, manifest, **_kwargs):
@@ -193,6 +211,7 @@ def test_plan_selection_page_compares_structured_fields_and_preview(tmp_path: Pa
             return BrokerSelection("plan-b", self.manifest.artifact_digest)
 
     monkeypatch.setattr(review, "SelectionBroker", FakeBroker)
+    monkeypatch.setattr(review_lifecycle, "SelectionBroker", FakeBroker)
 
     result = review.run_review(collection, "plan", selection=True, now=NOW)
 
