@@ -11,6 +11,7 @@ import yaml
 from tests.helpers.paths import REPO_ROOT
 
 _REPO_ROOT = REPO_ROOT
+_CLAUDE_PATH = _REPO_ROOT / "CLAUDE.md"
 _PR_TEMPLATE_PATH = _REPO_ROOT / ".github" / "PULL_REQUEST_TEMPLATE.md"
 _CI_WORKFLOW_PATH = _REPO_ROOT / ".github" / "workflows" / "ci.yml"
 
@@ -91,6 +92,15 @@ def _load_ci_workflow() -> dict[str, object]:
 def test_pull_request_template_matches_issue_485_contract() -> None:
     """PR template が issue #485 仕様の本文と一致することを保証する。"""
     assert _read_text(_PR_TEMPLATE_PATH) == _PR_TEMPLATE_TEXT
+
+
+def test_claude_requires_fragments_and_forbids_direct_changelog_edits() -> None:
+    """Codex Cloud 向けの通常 PR の変更履歴契約を固定する。"""
+    claude = _read_text(_CLAUDE_PATH)
+
+    assert "通常 PR の変更履歴は `changelog.d/<issue>-<slug>.<type>.md` に追加" in claude
+    assert "`CHANGELOG.md` を直接編集しない" in claude
+    assert "`release/*` の release prepare だけが例外" in claude
 
 
 def test_ci_workflow_declares_changelog_job_for_pull_requests_only() -> None:
