@@ -450,14 +450,30 @@
     white-space: nowrap;
   }
 
-  .dashboard-status-line [data-state="ready"]::before {
+  .dashboard-status-line [data-state]::before {
     content: "";
     display: inline-block;
     width: 0.5rem;
     height: 0.5rem;
     margin-right: var(--space-sm);
-    border: var(--rule-hairline) solid var(--primary);
-    background: var(--primary);
+    border: var(--rule-hairline) solid currentColor;
+    background: currentColor;
+  }
+
+  .dashboard-status-line [data-state="ready"] {
+    color: var(--primary);
+  }
+
+  .dashboard-status-line [data-state="loading"]::before {
+    background: transparent;
+  }
+
+  .dashboard-status-line [data-state="error"] {
+    color: var(--destructive);
+  }
+
+  .dashboard-status-line [data-state="error"]::before {
+    border-radius: 50%;
   }
 
   .dashboard-content {

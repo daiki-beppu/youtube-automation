@@ -323,7 +323,13 @@ function PublicationActivityPanel({
   )
 }
 
-function DashboardOverview({ channels }: { channels: ChannelOverview[] }) {
+function DashboardOverview({
+  channels,
+  period,
+}: {
+  channels: ChannelOverview[]
+  period: string
+}) {
   const scheduledChannels = channels.filter(
     (channel) => channel.scheduled_count !== null
   )
@@ -334,9 +340,6 @@ function DashboardOverview({ channels }: { channels: ChannelOverview[] }) {
   const attentionCount = channels.filter(
     (channel) => channel.refresh_error !== null || channel.status !== "ready"
   ).length
-  const { startDate, endDate } = resolveDashboardPeriod(
-    channels.map((channel) => channel.period)
-  )
   const collectedDates = channels.flatMap((channel) =>
     channel.collected_at ? [channel.collected_at] : []
   )
@@ -421,7 +424,7 @@ function DashboardOverview({ channels }: { channels: ChannelOverview[] }) {
                 <div>
                   <dt className="font-medium">対象期間</dt>
                   <dd className="text-muted-foreground">
-                    {formatDateRange(startDate, endDate)}
+                    {period}
                   </dd>
                 </div>
               </div>
@@ -803,13 +806,14 @@ export function App() {
   const [pipelineError, setPipelineError] = useState<string | null>(null)
   const dashboardRequestId = useRef(0)
   const detailRequestId = useRef(0)
-  const dashboardPeriod = (() => {
+  const dashboardPeriod = useMemo(() => {
     if (channels === null) return error ? "取得不可" : "読み込み中"
     const { startDate, endDate } = resolveDashboardPeriod(
       channels.map((channel) => channel.period)
     )
     return formatDateRange(startDate, endDate)
-  })()
+  }, [channels, error])
+  const dashboardState = error ? "error" : channels === null ? "loading" : "ready"
 
   useEffect(() => {
     const requestId = dashboardRequestId.current
@@ -942,7 +946,7 @@ export function App() {
               >
                 <SettingsIcon />
               </SheetTrigger>
-              <SheetContent>
+              <SheetContent className="max-w-full min-w-0 overflow-x-hidden">
                 <SheetHeader>
                   <SheetTitle>設定</SheetTitle>
                   <SheetDescription>
@@ -969,7 +973,7 @@ export function App() {
         </header>
 
         <div className="dashboard-status-line" aria-label="snapshot の表示条件">
-          <span data-state="ready">起動時 snapshot</span>
+          <span data-state={dashboardState}>起動時 snapshot</span>
           <span>対象期間 / {dashboardPeriod}</span>
           <span>表示 / 読み取り専用</span>
         </div>
@@ -999,7 +1003,7 @@ export function App() {
           ) : null}
           {channels && channels.length > 0 ? (
             <div className="dashboard-sections">
-              <DashboardOverview channels={channels} />
+              <DashboardOverview channels={channels} period={dashboardPeriod} />
               {trends ? <ChannelTrendChart data={trends} /> : null}
               <PublicationActivityPanel state={publicationActivity} />
               <ChannelStockTable

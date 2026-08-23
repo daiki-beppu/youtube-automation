@@ -1112,6 +1112,11 @@ describe("dashboard", () => {
         "読み込めませんでした"
       )
     )
+    expect(screen.getByText("対象期間 / 取得不可")).toBeInTheDocument()
+    expect(screen.getByText("起動時 snapshot")).toHaveAttribute(
+      "data-state",
+      "error"
+    )
   })
 
   it("leaves detail loading after a selected channel request fails", async () => {
