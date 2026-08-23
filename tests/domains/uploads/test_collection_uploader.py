@@ -9,10 +9,12 @@ CollectionUploader のユニットテスト
 
 import json
 import logging
+import shutil
 import sys
 from dataclasses import replace
 from datetime import datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 from zoneinfo import ZoneInfo
 
@@ -20,7 +22,8 @@ import pytest
 from googleapiclient.errors import HttpError
 from httplib2 import Response
 
-from tests.helpers.paths import REPO_ROOT
+from tests.helpers.paths import FIXTURES_DIR, REPO_ROOT
+from tests.helpers.video_description import write_video_description_pair
 from youtube_automation.configuration import ScheduleConfig
 from youtube_automation.domains.uploads.collection import PlaylistAssignment, PublishedDatesScheduler, TrackingStore
 
@@ -56,9 +59,17 @@ def test_collection_uploader_imports_playlist_manager():
     assert PlaylistManager.__module__ == "youtube_automation.domains.uploads.playlists"
 
 
-@pytest.mark.parametrize(("argv", "method_name"), [(["--plan"], "show_plan"), ([], "execute_next_step")])
-def test_main_delegates_preflight_to_upload_boundary(monkeypatch, tmp_path, argv, method_name):
-    """CLI は preflight を重複実行せず domain operation へ委譲する。"""
+@pytest.mark.parametrize(
+    ("argv", "method_name", "preflight_calls"),
+    [
+        # show_plan は表示専用なので CLI が upload 境界の preflight を明示的に依頼する。
+        (["--plan"], "show_plan", 1),
+        # execute 経路は upload_collection 内部で preflight が走るため CLI からは呼ばない。
+        ([], "execute_next_step", 0),
+    ],
+)
+def test_main_delegates_preflight_to_upload_boundary(monkeypatch, tmp_path, argv, method_name, preflight_calls):
+    """CLI は preflight を重複実行せず upload 境界へ委譲する。"""
     from youtube_automation.commands.uploads import collection_uploader
 
     target = tmp_path / "collections" / "planning" / "20990101-test-collection"
@@ -74,7 +85,7 @@ def test_main_delegates_preflight_to_upload_boundary(monkeypatch, tmp_path, argv
     ):
         collection_uploader.main()
 
-    mock_uploader.ensure_upload_preflight.assert_not_called()
+    assert mock_uploader.preflight_check.call_count == preflight_calls
     getattr(mock_uploader, method_name).assert_called_once_with(target)
 
 
@@ -114,6 +125,98 @@ def test_collection_cli_returns_nonzero_when_playlist_assignment_fails(monkeypat
     monkeypatch.setattr(sys, "argv", ["yt-upload-collection", "-c", target.name])
     with patch("youtube_automation.commands.uploads.collection_uploader.CollectionUploader", return_value=uploader):
         assert collection_uploader.main() == 1
+
+
+def test_collection_preflight_uses_public_inner_uploader_operation(tmp_path):
+    """Collection domain は検査を再実装せず upload 境界の preflight へ委譲する。"""
+    from youtube_automation.domains.uploads import collection as collection_domain
+
+    uploader = object.__new__(collection_domain.CollectionUploader)
+    uploader.uploader = MagicMock()
+    target = tmp_path / "collection"
+
+    uploader.preflight_check(target)
+
+    uploader.uploader.preflight_check.assert_called_once_with(target)
+
+
+def _write_cli_title_collection(channel_dir: Path, *, title_template_check: dict[str, object] | None) -> Path:
+    """CLI が実際に解決する planning コレクションを作る。"""
+    collection = channel_dir / "collections" / "planning" / "20990101-volume-collection"
+    for subdir in ("01-master", "02-Individual-music", "03-Individual-movie", "10-assets", "20-documentation"):
+        (collection / subdir).mkdir(parents=True, exist_ok=True)
+    (collection / "01-master" / "master.mp4").write_bytes(b"probe is mocked")
+    write_video_description_pair(
+        collection / "20-documentation",
+        title="Funky Soul Spirit Vol.2 | 3 Hours of Feel-Good Retro Grooves",
+        description="00:00 Opening Groove\n10:00 Midnight Funk\n20:00 Last Call Soul",
+        tags=["soul funk", "retro groove", "study music"],
+    )
+    state: dict[str, object] = {"scene_phrases": {lang: {"title": f"title-{lang}"} for lang in ("ja", "en", "de")}}
+    if title_template_check is not None:
+        state["title_template_check"] = title_template_check
+    (collection / "workflow-state.json").write_text(json.dumps(state), encoding="utf-8")
+    return collection
+
+
+def _title_preflight_config() -> SimpleNamespace:
+    return SimpleNamespace(
+        audio=SimpleNamespace(chapter_max=100),
+        content=SimpleNamespace(
+            tags=SimpleNamespace(min_count=None, for_collection=lambda _name: ["fallback"]),
+            title=SimpleNamespace(
+                template="{adjective} Soul/Funk {noun} | {hours} Hours of {mood}",
+                template_check={"core_vocabulary": ["Soul", "Funk"]},
+            ),
+        ),
+        localizations=SimpleNamespace(supported_languages=["ja", "en", "de"]),
+        # 分類プレイリスト（auto_add 以外）を持たないチャンネル → 未割り当て検出は対象外 (#4346)
+        playlists=SimpleNamespace(items={}),
+    )
+
+
+@pytest.mark.parametrize(
+    ("title_template_check", "expected_outcome"),
+    [({"allow_volume_patterns": True}, "pass"), (None, "fail")],
+)
+def test_plan_title_preflight_honors_collection_opt_in(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    title_template_check: dict[str, object] | None,
+    expected_outcome: str,
+) -> None:
+    """`--plan` も state の title opt-in を実際に評価する（素通ししない）。
+
+    execute 経路の同一検査は `upload_collection` 内部で担保されている
+    （`test_youtube_auto_uploader.py::...forwards_resume_kwargs...`）。
+    """
+    from youtube_automation.commands.uploads import collection_uploader
+    from youtube_automation.configuration import reset as reset_config
+    from youtube_automation.domains.uploads.collection import CollectionUploader
+
+    fixture_channel = FIXTURES_DIR / "sample_channel"
+    test_channel = tmp_path / "channel"
+    shutil.copytree(fixture_channel, test_channel)
+    collection = _write_cli_title_collection(test_channel, title_template_check=title_template_check)
+
+    monkeypatch.setenv("CHANNEL_DIR", str(test_channel))
+    monkeypatch.setattr(sys, "argv", ["yt-upload-collection", "--plan", "-c", collection.name])
+    reset_config()
+
+    with (
+        patch("youtube_automation.domains.uploads._preflight.load_config", return_value=_title_preflight_config()),
+        patch("youtube_automation.domains.uploads._preflight.probe_duration", return_value=3600),
+        patch("youtube_automation.domains.uploads.youtube.YouTubeAutoUploader._verify_authenticated_upload_channel"),
+        patch.object(CollectionUploader, "show_plan") as mock_show_plan,
+    ):
+        if expected_outcome == "pass":
+            assert collection_uploader.main() == 0
+            mock_show_plan.assert_called_once_with(collection)
+        else:
+            assert collection_uploader.main() == 1
+            assert "巻数表記を検出" in capsys.readouterr().err
+            mock_show_plan.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -547,13 +650,19 @@ class TestAutoDetectCollection:
         assert uploader.find_collection("published") == live
 
     @pytest.mark.parametrize(
-        ("argv", "method_name"),
-        [(["--status"], "show_status"), (["--plan"], "show_plan"), ([], "execute_next_step")],
+        ("argv", "method_name", "preflight_calls"),
+        [
+            (["--status"], "show_status", 0),
+            (["--plan"], "show_plan", 1),
+            ([], "execute_next_step", 0),
+        ],
     )
-    def test_main_uses_safe_auto_detect_for_status_plan_and_upload(self, monkeypatch, tmp_path, argv, method_name):
+    def test_main_uses_safe_auto_detect_for_status_plan_and_upload(
+        self, monkeypatch, tmp_path, argv, method_name, preflight_calls
+    ):
         from youtube_automation.commands.uploads import collection_uploader
 
-        uploader, _ = _make_uploader_with_collection_mock(tmp_path)
+        uploader, mock_inner = _make_uploader_with_collection_mock(tmp_path)
         live = tmp_path / "collections" / "live" / "20260101-published-collection"
         target = tmp_path / "collections" / "planning" / "20260201-mastered-collection"
         _write_workflow_state(live, phase="complete", video_id="published-video")
@@ -568,6 +677,7 @@ class TestAutoDetectCollection:
             collection_uploader.main()
 
         method.assert_called_once_with(target)
+        assert mock_inner.preflight_check.call_count == preflight_calls
 
     @pytest.mark.parametrize("argv", [["--status"], ["--plan"], []])
     def test_main_fails_loudly_when_auto_detect_has_no_candidate(self, monkeypatch, tmp_path, capsys, argv):

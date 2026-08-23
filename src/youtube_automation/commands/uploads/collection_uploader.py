@@ -51,18 +51,32 @@ def run(args: argparse.Namespace) -> None:
             return
         notifications = PipelineNotificationBridge(create_discord_notification_sink())
         channel = load_config().meta.channel_short
+
+        def notify_abort(stage: str) -> None:
+            notifications.emit(
+                NotificationEventKind.FAIL_CLOSED_ABORTED,
+                channel=channel,
+                collection=target.name,
+                stage=stage,
+            )
+
         if args.plan:
+            # show_plan は表示専用なので、ドライランでも実行時と同じ検査集合を
+            # 通すために upload 境界の preflight を明示的に依頼する。
+            try:
+                uploader.preflight_check(target)
+            except (AutomationError, OSError, ValueError):
+                notify_abort("upload-preflight")
+                raise
             uploader.show_plan(target)
         else:
+            # この try は preflight だけでなく execute_next_step 全体（実アップロード /
+            # tracking I/O / quota 判定 / プレイリスト割当）を囲むため、stage は
+            # preflight 固定ではなく実行系を表す名前にする。
             try:
                 result = uploader.execute_next_step(target)
             except (AutomationError, OSError, ValueError):
-                notifications.emit(
-                    NotificationEventKind.FAIL_CLOSED_ABORTED,
-                    channel=channel,
-                    collection=target.name,
-                    stage="upload-preflight",
-                )
+                notify_abort("upload-execution")
                 raise
             action = result.get("action")
             if action == ACTION_COMPLETE_COLLECTION_UPLOADED:
