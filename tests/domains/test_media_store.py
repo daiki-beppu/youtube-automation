@@ -3,7 +3,11 @@ from __future__ import annotations
 import pytest
 
 from youtube_automation.core.errors import ValidationError
-from youtube_automation.domains.media_store import MediaKey
+from youtube_automation.domains.media_store import MediaKey, MediaStore
+
+
+def test_media_store_exposes_retained_capacity() -> None:
+    assert callable(MediaStore.retained_bytes)
 
 
 def test_media_key_builds_the_canonical_handoff_path() -> None:
