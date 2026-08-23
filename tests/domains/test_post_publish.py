@@ -159,3 +159,8 @@ def test_post_publish_stage_policy_adapts_target_prompt_completion_and_allowlist
     policy.allows(tmp_path, {"post_publish_history.json", "pinned_comment_history.json"})
     with pytest.raises(StateSyncError, match="unowned path"):
         policy.allows(tmp_path, {"README.md"})
+
+
+def test_post_publish_stage_policy_hides_private_state_from_constructor(tmp_path: Path) -> None:
+    with pytest.raises(TypeError, match="_completed"):
+        PostPublishStagePolicy(tmp_path, "/publish", _completed=None)  # type: ignore[call-arg]

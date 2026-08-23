@@ -122,3 +122,8 @@ def test_planning_stage_policy_adapts_readiness_completion_and_allowlist(tmp_pat
     policy.allows(tmp_path, {"collections/planning/demo/workflow-state.json"})
     with pytest.raises(StateSyncError, match="unowned path"):
         policy.allows(tmp_path, {"README.md"})
+
+
+def test_planning_stage_policy_hides_private_state_from_constructor(tmp_path: Path) -> None:
+    with pytest.raises(TypeError, match="_readiness"):
+        PlanningStagePolicy(tmp_path, "/wf-new --auto", _readiness=None)  # type: ignore[call-arg]

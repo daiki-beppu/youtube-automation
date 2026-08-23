@@ -6,7 +6,7 @@ import json
 import os
 import tempfile
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
@@ -257,9 +257,11 @@ class PostPublishStagePolicy:
     root: Path
     prompt: str
     requested: str | None = None
+    # media_handoff は application.hybrid_runner.MediaHandoffRequest を指すが、
+    # domains/ は application/ に依存できないため object のまま None 判定だけを行う。
     media_handoff: object | None = None
-    _readiness: PostPublishReadiness | None = None
-    _completed: Path | None = None
+    _readiness: PostPublishReadiness | None = field(init=False, default=None, repr=False)
+    _completed: Path | None = field(init=False, default=None, repr=False)
 
     def __post_init__(self) -> None:
         if self.media_handoff is not None:
