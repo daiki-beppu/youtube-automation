@@ -2,7 +2,7 @@
 
 from datetime import date, datetime
 from typing import ClassVar
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 from zoneinfo import ZoneInfo
 
 from youtube_automation.configuration import ScheduleConfig
@@ -28,16 +28,10 @@ def calculate_publish_at(
             publish_time=publish_time,
         ),
         MagicMock(),
+        now_provider=lambda timezone: now,
     )
     scheduler.get_published_dates = MagicMock(return_value=existing_dates)
-
-    class FixedDateTime(datetime):
-        @classmethod
-        def now(cls, tz=None):
-            return now
-
-    with patch("youtube_automation.domains.uploads._published_dates.datetime", FixedDateTime):
-        return scheduler.calculate_publish_at()
+    return scheduler.calculate_publish_at()
 
 
 class TestCadenceScheduling:
