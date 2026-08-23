@@ -16,14 +16,18 @@ import pytest
 from youtube_automation.commands.media import audio_studio
 from youtube_automation.commands.media.audio_studio import (
     DEFAULT_HOST,
+    AdjustmentSection,
+    adjustment_sections,
     build_track_payload,
     create_server,
+    write_adjustment_route,
 )
 from youtube_automation.commands.suno.suno_audio_cleanup import CleanupConfig, cleanup_config_settings
 from youtube_automation.domains.media.audio_adjustments import (
     master_settings_from_cleanup,
     replace_master_adjustments,
 )
+from youtube_automation.infrastructure.localserver.app import Request
 from youtube_automation.infrastructure.media.collection_paths import CollectionPaths
 
 
@@ -39,6 +43,24 @@ def _assets(tmp_path: Path) -> Path:
     assets.mkdir()
     (assets / "index.html").write_text("<title>Audio Studio</title><div id='root'></div>", encoding="utf-8")
     return assets
+
+
+def test_adjustment_section_registry_and_put_handler_are_socket_free(tmp_path: Path) -> None:
+    collection = _collection(tmp_path)
+    document_path = CollectionPaths(collection).audio_adjustments_path
+    written: list[object] = []
+
+    def write(_path: Path, settings: object):
+        written.append(settings)
+        return MagicMock()
+
+    section = AdjustmentSection("example", lambda document: document.master, write)
+    request = Request(method="PUT", path="/api/example", query={}, headers={}, json={"settings": {"enabled": True}})
+
+    write_adjustment_route(request, section=section, document_path=document_path, collection_dir=collection)
+
+    assert written == [{"enabled": True}]
+    assert set(adjustment_sections()) == {"tracks", "order", "master", "finalize"}
 
 
 def test_build_track_payload_lists_supported_audio_in_name_order(tmp_path: Path) -> None:
