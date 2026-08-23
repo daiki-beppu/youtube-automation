@@ -17,8 +17,7 @@
   --release-rule-strong: var(--color-neutral-solid-gray-700);
   --release-surface: color-mix(in srgb, var(--color-key-800) 3%, transparent);
   --release-focus: var(--color-key-800);
-  --release-font-display: ui-sans-serif, system-ui, sans-serif;
-  --release-font-body: ui-sans-serif, system-ui, sans-serif;
+  --release-font-sans: ui-sans-serif, system-ui, sans-serif;
   --release-font-mono: ui-monospace, "SFMono-Regular", Consolas, monospace;
   --release-space-xs: 0.75rem;
   --release-space-sm: 1rem;
@@ -50,7 +49,7 @@ body {
 }
 
 .release-shell {
-  font-family: var(--release-font-body);
+  font-family: var(--release-font-sans);
   margin: 0 auto;
   max-width: 76rem;
   padding: clamp(2.5rem, 7vw, 6rem) clamp(1rem, 4vw, 3rem) 6rem;
@@ -74,7 +73,7 @@ body {
 }
 
 .release-hero h1 {
-  font-family: var(--release-font-display);
+  font-family: var(--release-font-sans);
   font-size: clamp(3rem, 8vw, 6.75rem);
   font-style: normal;
   font-weight: 750;
@@ -109,9 +108,9 @@ body {
   font-family: var(--release-font-mono);
   font-size: 0.75rem;
   font-weight: 700;
+  overflow-wrap: anywhere;
   padding: var(--release-space-xs) 0;
   text-decoration: none;
-  white-space: nowrap;
 }
 
 .release-hero__brief a:hover {
@@ -145,7 +144,7 @@ body {
 }
 
 .doc-section__heading h2 {
-  font-family: var(--release-font-display);
+  font-family: var(--release-font-sans);
   font-size: clamp(1.75rem, 3vw, 2.5rem);
   font-style: normal;
   letter-spacing: -0.035em;
@@ -194,6 +193,7 @@ body {
   font-size: clamp(1.2rem, 2.5vw, 1.5rem);
   letter-spacing: -0.025em;
   margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .doc-card p {
@@ -247,7 +247,9 @@ body {
   display: block;
   padding: clamp(1.4rem, 4vw, 2.25rem);
   text-decoration: none;
-  transition: background-color var(--release-duration) var(--release-ease-out), border-color var(--release-duration) var(--release-ease-out);
+  transition:
+    background-color var(--release-duration) var(--release-ease-out),
+    border-color var(--release-duration) var(--release-ease-out);
 }
 
 .release-card:hover {
@@ -288,6 +290,7 @@ body {
   font-size: clamp(1.45rem, 3vw, 2rem);
   letter-spacing: -0.025em;
   margin: 1.1rem 0 0.55rem;
+  overflow-wrap: anywhere;
 }
 
 .release-card > p {
