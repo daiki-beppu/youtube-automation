@@ -31,7 +31,17 @@ def test_plan_schema_uses_candidate_cards_with_required_comparison_fields_and_pr
     candidates = schema["properties"]["candidates"]
     candidate = schema["definitions"]["candidate"]
 
-    assert candidates["x-view"]["presentation"] == "card"
+    assert candidates["x-view"]["presentation"] == "cards"
+    assert candidates["x-view"]["labelField"] == "final_title"
+    assert candidates["x-view"]["compare"] == [
+        "selection_status",
+        "final_title",
+        "target_persona",
+        "viewing_scene",
+        "music_direction",
+    ]
+    assert candidates["x-view"]["itemGroups"][0]["match"]["values"] == ["selected", "auto_selected"]
+    assert candidates["x-view"]["itemGroups"][1]["collapsed"] is True
     required = set(candidate["required"])
     assert {
         "final_title",
@@ -51,6 +61,14 @@ def test_plan_schema_uses_candidate_cards_with_required_comparison_fields_and_pr
         "pathPrefix": "../",
     }
     assert candidate["properties"]["selection_source"]["enum"] == ["web", "terminal", "automatic"]
+
+
+def test_collapsed_constraint_details_do_not_advertise_top_level_status_summary() -> None:
+    schema = json.loads(SCHEMA.read_text(encoding="utf-8"))
+    constraint_status_view = schema["definitions"]["constraint"]["properties"]["status"].get("x-view", {})
+
+    assert "statusSummary" not in constraint_status_view
+    assert "statusMap" not in constraint_status_view
 
 
 def test_parent_orchestrator_reports_review_link_before_selection_and_on_automatic_completion() -> None:

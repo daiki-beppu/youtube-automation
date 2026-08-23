@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-08-20T12:00:00Z",
+  "engine": "suno",
+  "collection_id": "rainy-focus",
+  "provenance": {
+    "producer": "music",
+    "source_paths": [
+      "collections/planning/rainy-focus/plan.json"
+    ],
+    "insight_ids": [
+      "market-1"
+    ]
+  },
+  "entries": [
+    {
+      "name": "01-rain-window",
+      "title": "Rain Window",
+      "style": "instrumental lo-fi, warm rhodes, soft rain, 72 BPM",
+      "lyrics": "[Instrumental]\nNo vocals",
+      "sections": [
+        "intro",
+        "main",
+        "outro"
+      ],
+      "options": {
+        "weirdness": 35
+      },
+      "track_role": "opening",
+      "quality": {
+        "score": 94,
+        "summary": "cohesive opening"
+      },
+      "review": {
+        "verify_status": "pass",
+        "semantic_status": "pass",
+        "notes": []
+      }
+    }
+  ]
+}

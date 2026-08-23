@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-08-20T12:00:00Z",
+  "collection_id": "rainy-focus",
+  "title": "Rainy Midnight Focus — Lo-fi for Deep Work",
+  "description": "静かな雨音とローファイで、夜の集中時間を。\n\n00:00 Rain Window\n03:24 Warm Desk",
+  "description_sections": [
+    {
+      "id": "intro",
+      "heading": "About",
+      "body": "夜の作業用BGMです。"
+    },
+    {
+      "id": "tracks",
+      "heading": "Tracklist",
+      "body": "00:00 Rain Window"
+    }
+  ],
+  "tracks": [
+    {
+      "position": 1,
+      "start": "00:00",
+      "title": "Rain Window"
+    },
+    {
+      "position": 2,
+      "start": "03:24",
+      "title": "Warm Desk"
+    }
+  ],
+  "tags": [
+    "lofi",
+    "study music",
+    "rain"
+  ],
+  "localizations": {
+    "en": {
+      "title": "Rainy Midnight Focus — Lo-fi for Deep Work",
+      "description": "Quiet rainy lo-fi for late-night focus."
+    }
+  },
+  "provenance": {
+    "producer": "video",
+    "source_paths": [
+      "collections/planning/rainy-focus/plan.json"
+    ]
+  },
+  "quality": {
+    "status": "pass",
+    "checks": [
+      {
+        "id": "title-length",
+        "status": "pass",
+        "message": "100文字以内"
+      },
+      {
+        "id": "chapters",
+        "status": "pass",
+        "message": "チャプター形式を確認"
+      }
+    ]
+  }
+}

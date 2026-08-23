@@ -6,12 +6,12 @@
   "type": "object",
   "required": ["schema_version", "generated_at", "engine", "collection_id", "provenance", "entries"],
   "properties": {
-    "schema_version": {"title": "Schema version", "const": 1, "x-view": {"order": 0}},
-    "generated_at": {"title": "生成日時", "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$", "x-view": {"order": 1}},
-    "engine": {"title": "Music engine", "enum": ["suno", "lyria", "minimax"], "x-view": {"order": 2}},
-    "collection_id": {"title": "Collection", "type": "string", "minLength": 1, "x-view": {"order": 3}},
-    "provenance": {"title": "Provenance", "$ref": "#/definitions/provenance", "x-view": {"order": 10}},
-    "entries": {"title": "Album flow / prompt entries", "description": "アルバム順と各トラックの生成入力・品質根拠", "type": "array", "minItems": 1, "items": {"$ref": "#/definitions/entry"}, "x-view": {"order": 20, "presentation": "cards"}},
+    "schema_version": {"title": "Schema version", "const": 1, "x-view": {"order": 0, "collapsed": true}},
+    "generated_at": {"title": "生成日時", "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$", "x-view": {"order": 1, "collapsed": true}},
+    "engine": {"title": "Music engine", "enum": ["suno", "lyria", "minimax"], "x-view": {"order": 2, "collapsed": true}},
+    "collection_id": {"title": "Collection", "type": "string", "minLength": 1, "x-view": {"order": 3, "collapsed": true}},
+    "provenance": {"title": "Provenance", "$ref": "#/definitions/provenance", "x-view": {"order": 10, "collapsed": true}},
+    "entries": {"title": "Album flow / prompt entries", "description": "アルバム順と各トラックの生成入力・品質根拠", "type": "array", "minItems": 1, "items": {"$ref": "#/definitions/entry"}, "x-view": {"order": 20, "presentation": "cards", "summary": true, "priority": "high"}},
     "duration_filter": {
       "title": "Suno duration guard",
       "type": "object",
@@ -40,8 +40,8 @@
       "type": "object",
       "required": ["verify_status", "semantic_status", "notes"],
       "properties": {
-        "verify_status": {"title": "Machine verification", "enum": ["pass", "fail"], "x-view": {"order": 0}},
-        "semantic_status": {"title": "Semantic review", "enum": ["pass", "fail"], "x-view": {"order": 1}},
+        "verify_status": {"title": "Machine verification", "enum": ["pass", "fail"], "x-view": {"order": 0, "statusMap": {"pass": "pass", "fail": "fail"}, "statusSummary": true}},
+        "semantic_status": {"title": "Semantic review", "enum": ["pass", "fail"], "x-view": {"order": 1, "statusMap": {"pass": "pass", "fail": "fail"}, "statusSummary": true}},
         "notes": {"title": "Review notes", "type": "array", "items": {"type": "string", "minLength": 1}, "x-view": {"order": 2}}
       },
       "additionalProperties": true
@@ -52,12 +52,12 @@
       "properties": {
         "name": {"title": "Entry name", "type": "string", "minLength": 1, "x-view": {"order": 0}},
         "title": {"title": "Song title", "type": "string", "minLength": 1, "x-view": {"order": 1}},
-        "style": {"title": "Style / prompt", "type": "string", "minLength": 1, "x-view": {"order": 2}},
-        "lyrics": {"title": "Lyrics", "type": "string", "x-view": {"order": 3}},
+        "style": {"title": "Style / prompt", "type": "string", "minLength": 1, "x-view": {"order": 2, "copyable": true}},
+        "lyrics": {"title": "Lyrics", "type": "string", "x-view": {"order": 3, "collapsed": true, "copyable": true}},
         "sections": {"title": "Sections", "type": "array", "items": {}, "x-view": {"order": 4}},
-        "options": {"title": "Generation options / More Options", "type": "object", "additionalProperties": true, "x-view": {"order": 5}},
+        "options": {"title": "Generation options / More Options", "type": "object", "additionalProperties": true, "x-view": {"order": 5, "collapsed": true}},
         "track_role": {"title": "Track role", "type": "string", "minLength": 1, "x-view": {"order": 6}},
-        "quality": {"title": "Quality", "type": "object", "additionalProperties": true, "x-view": {"order": 7}},
+        "quality": {"title": "Quality", "type": "object", "additionalProperties": true, "x-view": {"order": 7, "collapsed": true}},
         "review": {"title": "Review result", "$ref": "#/definitions/review", "x-view": {"order": 8}}
       },
       "additionalProperties": true

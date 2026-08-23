@@ -6,17 +6,17 @@
   "type": "object",
   "required": ["schema_version", "generated_at", "collection_id", "title", "description", "description_sections", "tracks", "tags", "localizations", "provenance", "quality"],
   "properties": {
-    "schema_version": {"title": "Schema version", "const": 1, "x-view": {"order": 0}},
-    "generated_at": {"title": "生成日時", "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$", "x-view": {"order": 1}},
-    "collection_id": {"title": "Collection", "type": "string", "minLength": 1, "x-view": {"order": 2}},
-    "title": {"title": "公開タイトル", "type": "string", "minLength": 1, "maxLength": 100, "x-view": {"order": 10}},
-    "description": {"title": "最終概要欄", "type": "string", "minLength": 1, "x-view": {"order": 20, "presentation": "card"}},
-    "description_sections": {"title": "概要欄セクション", "type": "array", "minItems": 1, "items": {"$ref": "#/definitions/section"}, "x-view": {"order": 30, "presentation": "table"}},
+    "schema_version": {"title": "Schema version", "const": 1, "x-view": {"order": 0, "collapsed": true}},
+    "generated_at": {"title": "生成日時", "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$", "x-view": {"order": 1, "collapsed": true}},
+    "collection_id": {"title": "Collection", "type": "string", "minLength": 1, "x-view": {"order": 2, "collapsed": true}},
+    "title": {"title": "公開タイトル", "type": "string", "minLength": 1, "maxLength": 100, "x-view": {"order": 10, "summary": true, "priority": "critical", "copyable": true}},
+    "description": {"title": "最終概要欄", "type": "string", "minLength": 1, "x-view": {"order": 20, "presentation": "card", "summary": true, "priority": "critical", "copyable": true, "diff": true}},
+    "description_sections": {"title": "概要欄セクション", "type": "array", "minItems": 1, "items": {"$ref": "#/definitions/section"}, "x-view": {"order": 30, "presentation": "table", "collapsed": true}},
     "tracks": {"title": "Track list", "type": "array", "items": {"$ref": "#/definitions/track"}, "x-view": {"order": 40, "presentation": "table"}},
-    "tags": {"title": "YouTube tags", "type": "array", "items": {"type": "string", "minLength": 1}, "x-view": {"order": 50}},
-    "localizations": {"title": "Localization diff", "type": "object", "propertyNames": {"pattern": "^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$"}, "additionalProperties": {"$ref": "#/definitions/localization"}, "x-view": {"order": 60, "presentation": "card"}},
-    "provenance": {"title": "Provenance", "$ref": "#/definitions/provenance", "x-view": {"order": 70}},
-    "quality": {"title": "Quality checks", "$ref": "#/definitions/quality", "x-view": {"order": 80, "presentation": "card"}}
+    "tags": {"title": "YouTube tags", "type": "array", "items": {"type": "string", "minLength": 1}, "x-view": {"order": 50, "collapsed": true}},
+    "localizations": {"title": "Localization diff", "type": "object", "propertyNames": {"pattern": "^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$"}, "additionalProperties": {"$ref": "#/definitions/localization"}, "x-view": {"order": 60, "presentation": "card", "collapsed": true}},
+    "provenance": {"title": "Provenance", "$ref": "#/definitions/provenance", "x-view": {"order": 70, "collapsed": true}},
+    "quality": {"title": "Quality checks", "$ref": "#/definitions/quality", "x-view": {"order": 80, "presentation": "card", "summary": true, "priority": "critical"}}
   },
   "additionalProperties": true,
   "definitions": {
@@ -72,7 +72,7 @@
       "type": "object",
       "required": ["status", "checks"],
       "properties": {
-        "status": {"enum": ["pass", "fail"]},
+        "status": {"title": "Status", "enum": ["pass", "fail"], "x-view": {"statusMap": {"pass": "pass", "fail": "fail"}, "statusSummary": true}},
         "checks": {"type": "array", "minItems": 1, "items": {"$ref": "#/definitions/quality_check"}}
       },
       "additionalProperties": true
