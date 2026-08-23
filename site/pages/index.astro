@@ -64,6 +64,13 @@ const operatorSections = [
   },
 ] as const;
 
+const releaseNotesSection = {
+  id: "release-notes",
+  label: "更新を確認する",
+} as const;
+const heroNavItems = [...operatorSections, releaseNotesSection];
+const sectionNumber = (index: number) => String(index + 1).padStart(2, "0");
+
 const routeByEntryId = new Map(data.routes.map((route) => [route.entryId, route.path]));
 const releases = (await getCollection("docs"))
   .map((entry) => {
@@ -116,15 +123,27 @@ const formatDate = (date: Date) =>
 >
   <main class="release-shell">
     <header class="release-hero">
-      <p class="release-eyebrow">OPERATOR GUIDE</p>
-      <h1>YouTube 運用ガイド</h1>
-      <p>導入、日々の制作、アップデート確認に必要な公式ドキュメントを目的別に案内します。</p>
+      <div class="release-hero__title">
+        <p class="release-eyebrow">youtube-automation / operator docs</p>
+        <h1>YouTube<br />運用ガイド</h1>
+      </div>
+      <div class="release-hero__brief">
+        <p>導入、日々の制作、アップデート確認に必要な公式ドキュメントを目的別に案内します。</p>
+        <nav aria-label="このページの案内">
+          {heroNavItems.map((item, index) => (
+            <a href={`#${item.id}`}>{sectionNumber(index)}&nbsp; {item.label}</a>
+          ))}
+        </nav>
+      </div>
     </header>
 
     <div class="doc-sections">
-      {operatorSections.map((section) => (
+      {operatorSections.map((section, index) => (
         <section class="doc-section" data-doc-section={section.id} id={section.id}>
-          <h2>{section.label}</h2>
+          <header class="doc-section__heading">
+            <span aria-hidden="true">{sectionNumber(index)}</span>
+            <h2>{section.label}</h2>
+          </header>
           <ul class="doc-list">
             {section.pages.map((page) => (
               <li>
@@ -139,8 +158,15 @@ const formatDate = (date: Date) =>
         </section>
       ))}
 
-      <section class="doc-section" data-doc-section="release-notes" id="release-notes">
-        <h2>リリースノート</h2>
+      <section
+        class="doc-section"
+        data-doc-section={releaseNotesSection.id}
+        id={releaseNotesSection.id}
+      >
+        <header class="doc-section__heading">
+          <span aria-hidden="true">{sectionNumber(operatorSections.length)}</span>
+          <h2>リリースノート</h2>
+        </header>
         <p class="doc-section-lead">本体と Chrome 拡張の新機能・改善内容を確認できます。</p>
         <div class="release-sections">
           {releaseGroupsByKind.map(({ groups, kind, label }) => (

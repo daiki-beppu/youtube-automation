@@ -1,5 +1,16 @@
 [
   {
+    "date": "2026-08-23",
+    "scope": "documentation site",
+    "target": "site/pages/index.astro and site/styles/release-notes.css",
+    "genre": "editorial",
+    "theme": "DADS system",
+    "macrostructure": "Catalogue",
+    "enrichment": "none",
+    "audience": "YouTube operators",
+    "decision": "Expose purpose-led routes as a restrained operator index while Blume owns global navigation, search, and content pages."
+  },
+  {
     "date": "2026-08-22",
     "scope": "workflow status view",
     "target": "src/youtube_automation/domains/documents/resources/workflow_status.html",
