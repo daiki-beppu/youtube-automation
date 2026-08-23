@@ -378,6 +378,9 @@ describe("dashboard", () => {
     ).not.toBeInTheDocument()
     expect(screen.queryByText("更新中")).not.toBeInTheDocument()
     expect(screen.queryByText("手動更新対応")).not.toBeInTheDocument()
+    expect(
+      screen.getByText("対象期間 / 2026/06/20〜2026/07/20")
+    ).toBeInTheDocument()
   })
 
   it("presents overview, data context, metric definitions, and comparison in decision order", async () => {
@@ -417,6 +420,9 @@ describe("dashboard", () => {
     expect(within(dataContext).getByText("対象期間")).toBeInTheDocument()
     expect(
       within(dataContext).getByText("2026/05/01〜2026/08/31")
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText("対象期間 / 2026/05/01〜2026/08/31")
     ).toBeInTheDocument()
     expect(within(dataContext).getByText("最終更新")).toBeInTheDocument()
     expect(within(dataContext).getByText(/\d{1,2}:\d{2}/)).toBeInTheDocument()
@@ -848,9 +854,11 @@ describe("dashboard", () => {
 
     renderDashboard()
 
+    expect(screen.getByText("対象期間 / 読み込み中")).toBeInTheDocument()
     expect(
       await screen.findByText("登録済みチャンネルがありません")
     ).toBeInTheDocument()
+    expect(screen.getByText("対象期間 / 未収集")).toBeInTheDocument()
   })
 
   it("shows publication loading without delaying the overview", async () => {

@@ -307,6 +307,7 @@ test("起動時 snapshot を表示し手動更新操作を提供しない", asyn
   await page.goto(baseURL)
 
   await expect(page.getByText("直近 30 日")).toBeVisible()
+  await expect(page.getByText("対象期間 / 未収集")).toBeVisible()
   await expect(
     page.getByText(
       "起動時に収集した snapshot から、チャンネルと動画のパフォーマンスを確認できます。"

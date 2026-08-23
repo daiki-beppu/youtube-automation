@@ -474,9 +474,10 @@
   }
 
   .dashboard-section-heading {
-    padding-bottom: var(--space-sm);
+    padding-block: var(--space-sm);
+    padding-left: var(--space-md);
     border-bottom: var(--rule-hairline) solid var(--foreground);
-    border-left-color: var(--primary);
+    border-left: 0.25rem solid var(--primary);
     font-style: normal;
   }
 

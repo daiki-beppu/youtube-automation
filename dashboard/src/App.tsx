@@ -803,6 +803,13 @@ export function App() {
   const [pipelineError, setPipelineError] = useState<string | null>(null)
   const dashboardRequestId = useRef(0)
   const detailRequestId = useRef(0)
+  const dashboardPeriod = (() => {
+    if (channels === null) return error ? "取得不可" : "読み込み中"
+    const { startDate, endDate } = resolveDashboardPeriod(
+      channels.map((channel) => channel.period)
+    )
+    return formatDateRange(startDate, endDate)
+  })()
 
   useEffect(() => {
     const requestId = dashboardRequestId.current
@@ -963,7 +970,7 @@ export function App() {
 
         <div className="dashboard-status-line" aria-label="snapshot の表示条件">
           <span data-state="ready">起動時 snapshot</span>
-          <span>対象期間 / 30 DAYS</span>
+          <span>対象期間 / {dashboardPeriod}</span>
           <span>表示 / 読み取り専用</span>
         </div>
 
