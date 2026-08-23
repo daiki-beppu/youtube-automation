@@ -65,9 +65,28 @@ def _module_name(relative: str) -> str | None:
     return ".".join(parts) if parts else None
 
 
-def _imports(path: Path, module: str) -> set[str]:
+def _dynamic_import_argument(node: ast.AST) -> ast.expr | None:
+    """`importlib.import_module(...)` / `import_module(...)` / `__import__(...)` の第一引数を返す。"""
+    if not isinstance(node, ast.Call) or not node.args:
+        return None
+    function = node.func
+    if isinstance(function, ast.Name) and function.id in {"import_module", "__import__"}:
+        return node.args[0]
+    if (
+        isinstance(function, ast.Attribute)
+        and function.attr == "import_module"
+        and isinstance(function.value, ast.Name)
+        and function.value.id == "importlib"
+    ):
+        return node.args[0]
+    return None
+
+
+def _imports(path: Path, module: str) -> tuple[set[str], bool]:
+    """静的 import と文字列リテラルの動的 import を集め、解決不能な動的 import の有無を返す。"""
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     imported: set[str] = set()
+    has_unresolved_dynamic = False
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             imported.update(alias.name for alias in node.names)
@@ -79,7 +98,15 @@ def _imports(path: Path, module: str) -> set[str]:
             if imported_module:
                 imported.add(imported_module)
                 imported.update(f"{imported_module}.{alias.name}" for alias in node.names)
-    return imported
+        else:
+            argument = _dynamic_import_argument(node)
+            if argument is None:
+                continue
+            if isinstance(argument, ast.Constant) and isinstance(argument.value, str):
+                imported.add(argument.value)
+            else:
+                has_unresolved_dynamic = True
+    return imported, has_unresolved_dynamic
 
 
 def _validate_path(repository: Path, changed: str) -> bool:
@@ -117,13 +144,19 @@ def select_targets(repository: Path, changed_paths: list[str]) -> tuple[str, ...
             for path in module_paths
         }
         importers: dict[str, set[str]] = defaultdict(set)
+        wildcard_importers: set[str] = set()
         for path in module_paths:
             relative = path.relative_to(repository).as_posix()
             importer = module_by_path[relative]
             if importer is None:
                 continue
-            for imported in _imports(path, importer):
+            imported_names, has_unresolved_dynamic = _imports(path, importer)
+            for imported in imported_names:
                 importers[imported].add(importer)
+            if has_unresolved_dynamic:
+                # 文字列リテラルへ解決できない動的 import は依存先を静的に特定できない。
+                # 保守的に「どの source 変更でも影響を受ける」扱いにする。
+                wildcard_importers.add(importer)
 
         path_by_module = {module: relative for relative, module in module_by_path.items() if module is not None}
         selected: set[str] = set()
@@ -155,8 +188,15 @@ def select_targets(repository: Path, changed_paths: list[str]) -> tuple[str, ...
             else:
                 return ALL
 
-        queue = deque(changed_modules)
-        visited = set(changed_modules)
+        affected_roots = list(changed_modules)
+        if changed_modules:
+            affected_roots.extend(sorted(wildcard_importers - set(changed_modules)))
+            for wildcard in wildcard_importers:
+                relative = path_by_module.get(wildcard)
+                if relative and relative.startswith(TEST_PREFIX) and _is_test_module(repository / relative):
+                    selected.add(relative)
+        queue = deque(affected_roots)
+        visited = set(affected_roots)
         while queue:
             module = queue.popleft()
             for importer in sorted(importers.get(module, ())):

@@ -56,6 +56,16 @@ def _synthetic_repository(tmp_path: Path) -> Path:
         "tests/test_other.py",
         "from youtube_automation.other import VALUE\n",
     )
+    _write(
+        repository,
+        "tests/test_dynamic_literal.py",
+        "import importlib\n\nMODULE = importlib.import_module('youtube_automation.core.leaf')\n",
+    )
+    _write(
+        repository,
+        "tests/test_dynamic_wildcard.py",
+        "import importlib\n\n\ndef _load(name):\n    return importlib.import_module(name)\n",
+    )
     _write(repository, "tests/repo/test_actions_parallel_workflows.py")
     _write(repository, "tests/repo/test_changelog_ci_contract.py")
     _write(repository, "tests/commands/system/test_changelog_compile.py")
@@ -80,6 +90,33 @@ def test_source_change_selects_only_direct_and_transitive_importers(tmp_path: Pa
         "tests/core/test_leaf.py",
         "tests/core/test_middle.py",
         "tests/test_direct.py",
+        "tests/test_dynamic_literal.py",
+        "tests/test_dynamic_wildcard.py",
+    )
+
+
+def test_literal_dynamic_import_is_resolved_as_a_static_dependency(tmp_path: Path) -> None:
+    selector = _load_selector()
+    repository = _synthetic_repository(tmp_path)
+
+    result = selector.select_targets(repository, ["src/youtube_automation/other.py"])
+
+    # other.py を静的 import する test_other に加え、リテラルでない動的 import を持つ
+    # wildcard importer だけが追加される（leaf 系のリテラル動的 import は選ばれない）
+    assert result == (
+        "tests/test_dynamic_wildcard.py",
+        "tests/test_other.py",
+    )
+
+
+def test_non_source_changes_do_not_select_dynamic_wildcard_importers(tmp_path: Path) -> None:
+    selector = _load_selector()
+    repository = _synthetic_repository(tmp_path)
+
+    assert selector.select_targets(repository, ["tests/core/test_leaf.py"]) == ("tests/core/test_leaf.py",)
+    assert selector.select_targets(repository, ["changelog.d/4526-example.fixed.md"]) == (
+        "tests/commands/system/test_changelog_compile.py",
+        "tests/repo/test_changelog_ci_contract.py",
     )
 
 
@@ -210,6 +247,19 @@ def test_cli_output_is_deterministic_unique_and_existing_subset(tmp_path: Path) 
     assert set(targets) <= all_tests
     assert targets_exist
     assert json.loads(json_result.stdout) == {"mode": "selected", "targets": targets}
+
+
+def test_configuration_change_selects_the_reorganization_contract_test(tmp_path: Path) -> None:
+    # #4438 の再発防止: configuration の公開 surface を importlib.import_module で
+    # 検証する契約テストが、src/youtube_automation/configuration/ の変更で選ばれること
+    selector = _load_selector()
+    changed = ["src/youtube_automation/configuration/__init__.py"]
+
+    with shared_tests_tree_lock():
+        result = selector.select_targets(REPO_ROOT, changed)
+
+    assert result is not None
+    assert "tests/contracts/architecture/test_repository_reorganization_contract.py" in result
 
 
 def test_cli_missing_argument_is_usage_error() -> None:
