@@ -444,15 +444,34 @@ def test_collection_uploader_exposes_injected_complete_collection_executor(tmp_p
     from youtube_automation.domains.uploads.collection import CollectionUploader
 
     executor = MagicMock()
-    executor.run.return_value = {"action": "delegated"}
     uploader = CollectionUploader(collections_root=str(tmp_path), complete_collection_executor=executor)
-    collection = tmp_path / "collection"
-    tracking = {"status": "pending"}
 
-    assert uploader.complete_collection_executor.run(collection, tracking, publish_at="2099-01-01T00:00:00Z") == {
-        "action": "delegated"
-    }
-    executor.run.assert_called_once_with(collection, tracking, publish_at="2099-01-01T00:00:00Z")
+    assert uploader.complete_collection_executor is executor
+
+
+def test_execute_next_step_delegates_complete_collection_to_executor(tmp_path: Path) -> None:
+    """未アップロードの collection は executor へ publish_at 付きで委譲される。"""
+    from youtube_automation.domains.uploads.collection import CollectionUploader
+
+    executor = MagicMock()
+    executor.run.return_value = {"action": "delegated"}
+    tracking = {"status": "pending", "complete_collection": {"status": "pending"}}
+    tracking_store = MagicMock(spec=TrackingStore)
+    tracking_store.load.return_value = tracking
+    published_dates = MagicMock(spec=PublishedDatesScheduler)
+    published_dates.calculate_publish_at.return_value = "2099-01-01T20:00:00+09:00"
+
+    collection = tmp_path / "collection"
+    collection.mkdir()
+    uploader = CollectionUploader(
+        collections_root=str(tmp_path),
+        complete_collection_executor=executor,
+        tracking_store=tracking_store,
+        published_dates=published_dates,
+    )
+
+    assert uploader.execute_next_step(collection) == {"action": "delegated"}
+    executor.run.assert_called_once_with(collection, tracking, "2099-01-01T20:00:00+09:00")
 
 
 def test_collection_uploader_delegates_publish_date_calculation(tmp_path: Path) -> None:
