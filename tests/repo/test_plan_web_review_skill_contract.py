@@ -56,8 +56,10 @@ def test_plan_schema_uses_candidate_cards_with_required_comparison_fields_and_pr
 def test_parent_orchestrator_reports_review_link_before_selection_and_on_automatic_completion() -> None:
     reference = REFERENCE.read_text(encoding="utf-8")
 
+    assert "HTML生成直後" in reference
+    assert "絶対path" in reference
     assert "Markdown link" in reference
-    assert "確認対象の要約" in reference
-    assert "ユーザーへ提示した後" in reference
-    assert "選択完了まで state を更新しない" in reference
+    assert "確認対象として要約" in reference
+    assert "リンクと要約を提示した後" in reference
+    assert "選択完了までstateを更新しない" in reference
     assert "自動選択" in reference and "完了報告" in reference

@@ -155,6 +155,15 @@ def test_explicit_standalone_html_write_passes(tmp_path: Path) -> None:
     assert lint_operational_artifacts(tmp_path, SkillInventory(tmp_path), inventory, repository_schemas=()) == []
 
 
+def test_master_video_review_inventory_uses_concrete_output_paths() -> None:
+    inventory = load_operational_artifact_inventory()
+    video_paths = {entry.path for entry in inventory.other_writes if entry.owner == "video"}
+
+    assert "collections/<id>/20-documentation/reviews/master-video-preview.html" in video_paths
+    assert "collections/<id>/20-documentation/reviews/master-video-full.html" in video_paths
+    assert not any("{" in path or "}" in path for path in video_paths)
+
+
 def test_unregistered_or_schema_unvalidated_consumer_is_rejected(tmp_path: Path) -> None:
     _skill(tmp_path, "producer", writes="reports/example.json`, `reports/example.html")
     _skill(tmp_path, "intruder", writes="なし", reads="reports/example.json")

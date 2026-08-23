@@ -116,7 +116,8 @@
       {"path": "collections/<id>/20-documentation/upload_tracking.json", "owner": "wf-next", "reason": "publish handoff state"}
     ],
     "other_writes": [
-      {"path": "collections/<id>/20-documentation/reviews/master-video-{preview,full}.html", "owner": "video", "reason": "preview/full master video review evidence without a structured JSON source"},
+      {"path": "collections/<id>/20-documentation/reviews/master-video-preview.html", "owner": "video", "reason": "preview master video review evidence without a structured JSON source"},
+      {"path": "collections/<id>/20-documentation/reviews/master-video-full.html", "owner": "video", "reason": "full master video review evidence without a structured JSON source"},
       {"path": "docs/benchmarks/thumbnails/<channel>_<video-id>.jpg", "owner": "channel-research", "reason": "binary thumbnail evidence"},
       {"path": "collections/<id>/20-documentation/suno-patterns.yaml", "owner": "music", "reason": "Suno helper machine configuration"},
       {"path": "collections/<id>/20-documentation/community-post.txt", "owner": "publish", "reason": "community UI paste input"},
