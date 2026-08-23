@@ -962,17 +962,17 @@ def test_cli_rejects_json_titles_file_with_invalid_shape(tmp_path, monkeypatch, 
     assert "文字列の配列" in err
 
 
-def test_masterup_primary_verification_uses_music_directory_without_playlist_resolution():
+def test_masterup_verification_uses_only_music_directory_without_playlist_resolution():
     """Given masterup の Step 1.6
     When primary path の title 解決手順を読む
     Then music directory が第一手段で URL WebFetch・title list 確認を要求しない。
     """
     skill = Path(".claude/skills/music/references/master.md").read_text(encoding="utf-8")
     step = skill.split("### Step 1.6:", 1)[1].split("### Step 2:", 1)[0]
-    primary = step.split("primary path では", 1)[1].split("fallback path", 1)[0]
+    primary = step.split("primary path では", 1)[1]
 
     assert "uv run yt-suno-verify-playlist <collection-path> --music-dir 02-Individual-music" in primary
     assert "第一手段" in primary
     assert "WebFetch" not in primary
     assert "title list を提示" not in primary
-    assert "fallback path" in step
+    assert "fallback path" not in step

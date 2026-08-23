@@ -117,12 +117,10 @@ Lyria で音源を生成するチャンネルでは `/music --generate` が `01-
 
 出力 MP3 のビットレートとクロスフェード秒数は CLI 引数ではなく、`config/skills/masterup.json`（優先）または `config/skills/masterup.yaml` の `audio.bitrate` / `audio.crossfade_duration` で設定する。未設定時は組み込み default を使い、その値は同梱 `config.default.yaml` と同期テストで固定される。目標尺は CLI フラグ > `config/channel/audio.json` > skill-config の順で、skill-config の `audio.target_duration_min` は channel 側未設定時だけの互換 fallback。曲順は CLI の `--shuffle*` / `--pin-first*` > `20-documentation/audio-adjustments.json::order` > skill-config > ファイル名ソートの順で解決する。保存済み `order` と `02-Individual-music/` の実ファイルに過不足があれば、意図しない欠落を避けるため fail-loud で停止する。その他の CLI 対応オプションは `uv run yt-generate-master --help` を正本とする。
 
-## Suno fallback 経路
+## Suno ダウンロード失敗時の扱い
 
-suno-helper の一括ダウンロードが完了していれば、この経路は通らない。DL が途中で壊れた場合
-を読む。同ファイルに Step 2 / Step 3 の手動代替と、手動 DL からの復旧手順がある。
-
-**silent な続行は禁止**。不完全な master.mp3 を作らず、Suno 経路が壊れた可能性を報告して停止する。
+suno-helper の一括ダウンロードが途中で失敗した場合、master mode から CDN 取得へ切り替えない。
+`/music --generate` の download を再開するよう案内し、不完全な master.mp3 を作らず停止する。
 
 ## Instructions
 
@@ -196,7 +194,7 @@ print(f'pattern_count={pattern_count} expected={expected} actual={actual}')
 
 ### Step 1.6: playlist × suno-prompts.json 突合ゲート（必須・混入検出）
 
-> **Step 5 前の共通ゲート**: この突合は Step 2 fallback 専用ではない。`02-Individual-music/` に音源があり Step 2-3 をスキップする primary path でも、Step 5 に進む前に必ず完了させる。
+> **Step 5 前の共通ゲート**: `02-Individual-music/` に音源がある場合も、Step 5 に進む前にこの突合を必ず完了させる。
 
 primary path では `02-Individual-music/` のローカルファイル名を第一手段とし、下記 CLI を実行する。`--music-dir` の相対パスは `<collection-path>` 基準で解決する。外部の title list 解決や対話確認は行わない。非正準形ファイル（Suno UI 手動 DL 由来の `Title.mp3` / `Title (1).mp3` / `Title_1.mp3` 等）は CLI が suno-prompts.json と照合して正準形 `NN{a|b}-Title.ext` へ自動リネームしてから突合する。照合できないファイルはリネームされず unknown として報告される。本ゲートは Suno URL を参照せず、ローカル音源と正準 prompt だけで完走する。音声ファイルが 1 件も無い場合は `/music --generate` の download 再開を案内して停止する。
 
