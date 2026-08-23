@@ -55,25 +55,23 @@ def test_phase_zero_lists_all_candidates_and_reports_non_blocking_reasons() -> N
         assert reason in phase_zero
 
 
-def test_phase_zero_requires_cost_approval_or_records_unattended_block() -> None:
+def test_phase_zero_requires_execution_approval_or_records_unattended_block() -> None:
     phase_zero = _section(_text(), "## Phase 0: 直近サイクルの振り返り")
 
     assert "対象 collection 名" in phase_zero
     assert "pending 件数" in phase_zero
 
 
-def test_phase_zero_offers_and_propagates_no_vertex_analysis() -> None:
+def test_phase_zero_offers_two_choices_and_uses_agent_inference() -> None:
     phase_zero = _section(_text(), "## Phase 0: 直近サイクルの振り返り")
 
-    assert "Vertex AI ありで実行" in phase_zero
-    assert "Vertex AI なしで実行" in phase_zero
-    assert "`/analytics --flop <collection> --no-vertex`" in phase_zero
-    assert "subagent 推論" in phase_zero
-    assert "不足する検証項目" in phase_zero
-    assert "`未検証`" in phase_zero
-    assert "1 件あたり最大 1 call" in phase_zero
     assert "実行する" in phase_zero
     assert "今回はスキップ" in phase_zero
+    assert "2択" in phase_zero
+    assert "Vertex AI ありで実行" not in phase_zero
+    assert "Vertex AI なしで実行" not in phase_zero
+    assert "--no-vertex" not in phase_zero
+    assert "1 件あたり最大 1 call" not in phase_zero
     assert "postmortem.md" in phase_zero
     assert "data/insights.jsonl" in phase_zero
     assert "無人実行" in phase_zero
@@ -130,7 +128,8 @@ def test_api_estimate_and_cheatsheet_expose_phase_zero() -> None:
     cheatsheet = CHEATSHEET.read_text(encoding="utf-8")
 
     assert "Phase 0" in api_calls
-    assert "pending 1 件あたり最大 1 call" in api_calls
+    assert "Vertex AI 0 call（ローカル CLI + agent 推論のみ）" in api_calls
+    assert "--no-vertex" not in api_calls
     assert "/analytics --flop" in api_calls
     assert "Phase 0" in cheatsheet
     assert "yt-postmortem-pending" in cheatsheet
