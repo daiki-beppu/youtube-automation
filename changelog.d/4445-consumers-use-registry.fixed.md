@@ -1,0 +1,1 @@
+- doctor と progress hook の analysis report 解決を operational artifact registry に統一し、分析 sidecar を進捗完了判定からも除外する（#4445）。
