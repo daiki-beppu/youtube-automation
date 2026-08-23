@@ -27,6 +27,12 @@ FAIL_SAFE_EXACT: Final = frozenset(
     }
 )
 FAIL_SAFE_PREFIXES: Final = ("tests/helpers/", "tests/fixtures/")
+CHANGELOG_FRAGMENT_PREFIX: Final = "changelog.d/"
+CHANGELOG_FRAGMENT_SUFFIX: Final = ".md"
+CHANGELOG_FRAGMENT_TESTS: Final = (
+    "tests/commands/system/test_changelog_compile.py",
+    "tests/repo/test_changelog_ci_contract.py",
+)
 PATH_TEST_MAP: Final = (
     (".github/workflows/", ("tests/repo/test_actions_parallel_workflows.py",)),
     (
@@ -37,13 +43,6 @@ PATH_TEST_MAP: Final = (
         ),
     ),
     ("CHANGELOG.md", ("tests/repo/test_changelog_ci_contract.py",)),
-    (
-        "changelog.d/",
-        (
-            "tests/commands/system/test_changelog_compile.py",
-            "tests/repo/test_changelog_ci_contract.py",
-        ),
-    ),
 )
 
 
@@ -93,6 +92,8 @@ def _validate_path(repository: Path, changed: str) -> bool:
 
 
 def _mapped_tests(changed: str) -> tuple[str, ...] | None:
+    if changed.startswith(CHANGELOG_FRAGMENT_PREFIX) and changed.endswith(CHANGELOG_FRAGMENT_SUFFIX):
+        return CHANGELOG_FRAGMENT_TESTS
     for pattern, targets in PATH_TEST_MAP:
         if (pattern.endswith("/") and changed.startswith(pattern)) or changed == pattern:
             return targets
