@@ -26,7 +26,7 @@ from youtube_automation.domains.uploads._uploader_constants import (
     YOUTUBE_VIDEO_URL_PREFIX,
 )
 from youtube_automation.domains.uploads.policy import SESSION_EXPIRED_HTTP_STATUSES, RetryDecision, ThumbnailCompression
-from youtube_automation.domains.uploads.preflight import check_title_codepoint_limit
+from youtube_automation.domains.uploads.preflight import check_title_codepoint_limit, ensure_collection_preflight
 from youtube_automation.domains.youtube.channel_settings import build_upload_status_flags
 from youtube_automation.infrastructure.filesystem import file_size, path_exists, remove_file
 from youtube_automation.infrastructure.google.upload import HttpError, create_media_upload
@@ -290,7 +290,8 @@ class YouTubeAutoUploader(ResumableUploader):
         self._verified_authenticated_channel_id = authenticated_channel_id
 
     def preflight_check(self, collection_dir: Path) -> None:
-        """チャンネル本人性を確認してからメタデータ品質を検証する。"""
+        """collection 骨格・チャンネル本人性・メタデータ品質を検証する。"""
+        ensure_collection_preflight(collection_dir)
         self._verify_authenticated_upload_channel()
         self.preflight_checker.check(collection_dir)
 

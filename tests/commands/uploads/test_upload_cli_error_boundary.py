@@ -130,8 +130,10 @@ def test_shorts_cli_normalizes_collection_to_absolute_path_for_upload(monkeypatc
     ("option", "expected_action", "preflight"),
     [
         ("--status", "show_status", False),
+        # show_plan は表示専用なので CLI が preflight を明示的に依頼する。
         ("--plan", "show_plan", True),
-        (None, "execute_next_step", True),
+        # execute 経路は upload_collection 内部で 1 回だけ preflight が走る。
+        (None, "execute_next_step", False),
     ],
 )
 def test_collection_cli_dispatches_normal_operation(monkeypatch, option, expected_action, preflight):
@@ -140,7 +142,7 @@ def test_collection_cli_dispatches_normal_operation(monkeypatch, option, expecte
     target = Path("/collection")
     uploader = SimpleNamespace(
         find_collection=MagicMock(return_value=target),
-        ensure_upload_preflight=MagicMock(),
+        preflight_check=MagicMock(),
         show_status=MagicMock(),
         show_plan=MagicMock(),
         execute_next_step=MagicMock(),
@@ -165,7 +167,7 @@ def test_collection_cli_dispatches_normal_operation(monkeypatch, option, expecte
         allow_duration_outside_target=False,
     )
     uploader.find_collection.assert_called_once_with("slug")
-    assert uploader.ensure_upload_preflight.called is preflight
+    assert uploader.preflight_check.called is preflight
     getattr(uploader, expected_action).assert_called_once_with(target)
 
 

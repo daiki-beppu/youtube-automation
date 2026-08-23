@@ -133,6 +133,7 @@ class TestUploadChannelIdentityPreflight:
         )
 
         with (
+            patch("youtube_automation.domains.uploads.youtube.ensure_collection_preflight"),
             patch(
                 "youtube_automation.domains.uploads.youtube.load_config",
                 return_value=SimpleNamespace(meta=SimpleNamespace(channel_id="UC_CONFIGURED")),
@@ -159,6 +160,7 @@ class TestUploadChannelIdentityPreflight:
         collection = tmp_path / "collection"
 
         with (
+            patch("youtube_automation.domains.uploads.youtube.ensure_collection_preflight"),
             patch(
                 "youtube_automation.domains.uploads.youtube.load_config",
                 return_value=SimpleNamespace(meta=SimpleNamespace(channel_id="UC_CONFIGURED")),
@@ -182,6 +184,7 @@ class TestUploadChannelIdentityPreflight:
         )
 
         with (
+            patch("youtube_automation.domains.uploads.youtube.ensure_collection_preflight"),
             patch(
                 "youtube_automation.domains.uploads.youtube.load_config",
                 return_value=SimpleNamespace(meta=SimpleNamespace(channel_id="UC_CONFIGURED")),
@@ -235,6 +238,8 @@ def _write_preflight_collection(tmp_path: Path, scene_languages: list[str]) -> P
     master_dir = col_dir / "01-master"
     master_dir.mkdir()
     (master_dir / "master.mp4").write_bytes(b"probe is mocked")
+    (col_dir / "02-Individual-music").mkdir()
+    (col_dir / "10-assets").mkdir()
     return col_dir
 
 
@@ -317,6 +322,8 @@ def _write_title_collection(
     master_dir = col_dir / "01-master"
     master_dir.mkdir()
     (master_dir / "master.mp4").write_bytes(b"probe is mocked")
+    (col_dir / "02-Individual-music").mkdir()
+    (col_dir / "10-assets").mkdir()
     return col_dir
 
 
@@ -611,8 +618,9 @@ class TestUploadCollectionForwarding:
         on_complete = MagicMock()
 
         with (
+            patch("youtube_automation.domains.uploads.youtube.ensure_collection_preflight") as skeleton_preflight,
             patch.object(uploader, "_verify_authenticated_upload_channel"),
-            patch.object(uploader.preflight_checker, "check"),
+            patch.object(uploader.preflight_checker, "check") as metadata_preflight,
             patch.object(
                 uploader,
                 "_upload_complete_collection",
@@ -636,6 +644,8 @@ class TestUploadCollectionForwarding:
         assert call_kwargs.get("resume_session_uri") == _SESS_PREV
         assert call_kwargs.get("on_session_uri_changed") is on_session
         assert call_kwargs.get("on_upload_complete") is on_complete
+        skeleton_preflight.assert_called_once_with(col_dir)
+        metadata_preflight.assert_called_once_with(col_dir)
 
 
 def test_uploader_delegates_complete_collection_to_injected_strategy(tmp_path):
@@ -1599,6 +1609,7 @@ class TestDefaultPublishAt:
         uploader = YouTubeAutoUploader(collections_root=str(tmp_path))
 
         with (
+            patch("youtube_automation.domains.uploads.youtube.ensure_collection_preflight"),
             patch.object(uploader, "_verify_authenticated_upload_channel"),
             patch.object(uploader.preflight_checker, "check"),
             patch.object(
@@ -1630,6 +1641,7 @@ class TestDefaultPublishAt:
         uploader = YouTubeAutoUploader(collections_root=str(tmp_path))
 
         with (
+            patch("youtube_automation.domains.uploads.youtube.ensure_collection_preflight"),
             patch.object(uploader, "_verify_authenticated_upload_channel"),
             patch.object(uploader.preflight_checker, "check"),
             patch.object(
@@ -1654,6 +1666,7 @@ class TestDefaultPublishAt:
         uploader = YouTubeAutoUploader(collections_root=str(tmp_path))
 
         with (
+            patch("youtube_automation.domains.uploads.youtube.ensure_collection_preflight"),
             patch.object(uploader, "_verify_authenticated_upload_channel"),
             patch.object(uploader.preflight_checker, "check"),
             patch.object(

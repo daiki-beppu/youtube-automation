@@ -110,11 +110,12 @@ def test_upload_command_notifies_terminal_pipeline_result(
     assert sink.events == [NotificationEvent(expected_kind, "ambient-lab", "night-rain", expected_stage)]
 
 
-def test_upload_preflight_failure_notifies_before_error_propagates(monkeypatch, tmp_path: Path) -> None:
+def test_upload_execution_failure_notifies_with_execution_stage(monkeypatch, tmp_path: Path) -> None:
+    """execute_next_step 全体を囲む try は preflight ではなく実行系 stage を通知する。"""
     target = tmp_path / "collections" / "planning" / "night-rain"
     uploader = MagicMock()
     uploader.find_collection.return_value = target
-    uploader.ensure_upload_preflight.side_effect = ConfigError("channel mismatch")
+    uploader.execute_next_step.side_effect = ConfigError("channel mismatch")
     sink = RecordingSink()
     monkeypatch.setattr(collection_uploader, "CollectionUploader", lambda **_kwargs: uploader)
     monkeypatch.setattr(collection_uploader, "create_authenticated_youtube_clients", lambda: object())
@@ -133,7 +134,39 @@ def test_upload_preflight_failure_notifies_before_error_propagates(monkeypatch, 
             NotificationEventKind.FAIL_CLOSED_ABORTED,
             "ambient-lab",
             "night-rain",
+            "upload-execution",
+        )
+    ]
+    uploader.execute_next_step.assert_called_once_with(target)
+
+
+def test_plan_preflight_failure_notifies_with_preflight_stage(monkeypatch, tmp_path: Path) -> None:
+    """--plan の fail-closed は preflight 由来なので stage も preflight を示す。"""
+    target = tmp_path / "collections" / "planning" / "night-rain"
+    uploader = MagicMock()
+    uploader.find_collection.return_value = target
+    uploader.preflight_check.side_effect = ConfigError("channel mismatch")
+    sink = RecordingSink()
+    monkeypatch.setattr(collection_uploader, "CollectionUploader", lambda **_kwargs: uploader)
+    monkeypatch.setattr(collection_uploader, "create_authenticated_youtube_clients", lambda: object())
+    monkeypatch.setattr(collection_uploader, "create_discord_notification_sink", lambda: sink)
+    monkeypatch.setattr(
+        collection_uploader,
+        "load_config",
+        lambda: SimpleNamespace(meta=SimpleNamespace(channel_short="ambient-lab")),
+    )
+
+    with pytest.raises(ConfigError, match="channel mismatch"):
+        collection_uploader.run(Namespace(config=None, daemon=False, collection="night-rain", status=False, plan=True))
+
+    assert sink.events == [
+        NotificationEvent(
+            NotificationEventKind.FAIL_CLOSED_ABORTED,
+            "ambient-lab",
+            "night-rain",
             "upload-preflight",
         )
     ]
+    uploader.preflight_check.assert_called_once_with(target)
+    uploader.show_plan.assert_not_called()
     uploader.execute_next_step.assert_not_called()

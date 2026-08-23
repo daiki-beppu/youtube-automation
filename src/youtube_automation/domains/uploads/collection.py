@@ -27,7 +27,6 @@ from youtube_automation.domains.uploads._playlist_assignment import PlaylistAssi
 from youtube_automation.domains.uploads._preflight import PreflightChecker
 from youtube_automation.domains.uploads._published_dates import PublishedDatesScheduler
 from youtube_automation.domains.uploads._tracking_io import TrackingStore
-from youtube_automation.domains.uploads.preflight import ensure_collection_preflight
 from youtube_automation.domains.uploads.upload_journal import UploadJournal, UploadJournalOutcome
 from youtube_automation.domains.uploads.youtube import YouTubeAutoUploader
 from youtube_automation.infrastructure.filesystem import (
@@ -238,9 +237,13 @@ class CollectionUploader:
     ) -> dict:
         return self.complete_collection_executor.run(collection_path, tracking, publish_at)
 
-    def ensure_upload_preflight(self, collection_path: Path) -> None:
-        """CLI の各入口で共通の骨格・タイトル preflight を実行する。"""
-        ensure_collection_preflight(collection_path)
+    def preflight_check(self, collection_path: Path) -> None:
+        """アップロードを伴わない経路（``--plan``）から upload 境界の preflight を依頼する。
+
+        検査の実体は `YouTubeAutoUploader.preflight_check` が単独で持ち、
+        `execute_next_step` 経路では `upload_collection` の内部で同じ検査集合が
+        1 回だけ走る。ここで検査を再実装しないことが二重実行を防ぐ条件。
+        """
         self.uploader.preflight_check(collection_path)
 
     # ─── ステータス表示 ──────────────────────────────
