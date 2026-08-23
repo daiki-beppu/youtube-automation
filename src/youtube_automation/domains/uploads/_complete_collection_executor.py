@@ -6,6 +6,7 @@ import logging
 from collections.abc import Callable
 from pathlib import Path
 
+from youtube_automation.configuration import ScheduleConfig
 from youtube_automation.core.adapters import cost_tracker
 from youtube_automation.core.adapters.security import redact_sensitive_data
 from youtube_automation.core.adapters.youtube import complete_collection_quota_plan, quota_shortages
@@ -31,7 +32,7 @@ class CompleteCollectionExecutor:
         self,
         uploader,
         tracking_store,
-        config: dict,
+        config: ScheduleConfig,
         playlist_assignment,
         move_collection_to_live,
         upload_journal_factory: Callable[[Path], UploadJournal] = UploadJournal,
@@ -71,7 +72,7 @@ class CompleteCollectionExecutor:
         self.tracking_store.save(collection_path, tracking)
 
         post_processing_errors: list[str] = []
-        if self.config["collections_management"].get("auto_move_to_live", True):
+        if self.config.auto_move_to_live:
             try:
                 collection_path = self.move_collection_to_live(collection_path)
             except AutomationError as error:

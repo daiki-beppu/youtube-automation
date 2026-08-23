@@ -241,8 +241,16 @@ def load_config_from_path(channel_dir_path: Path) -> ChannelConfig:
 
 
 def load_schedule_config(channel_dir_path: Path) -> ScheduleConfig:
-    """``config/schedule_config.json`` を読み、既定値と優先順位を解決する."""
-    path = channel_dir_path.resolve() / "config" / "schedule_config.json"
+    """channel root 配下の ``config/schedule_config.json`` を読み、既定値と優先順位を解決する."""
+    return load_schedule_config_from_file(channel_dir_path.resolve() / "config" / "schedule_config.json")
+
+
+def load_schedule_config_from_file(path: Path) -> ScheduleConfig:
+    """schedule_config JSON をファイルパス直指定で読み、既定値と優先順位を解決する.
+
+    `--config <path>` のように任意のパスを渡す CLI 経路のための入口。
+    channel root からの解決は `load_schedule_config` を使う。
+    """
     if not path.exists():
         return _build_schedule({})
     try:
@@ -298,6 +306,7 @@ def _build_schedule(raw: dict) -> ScheduleConfig:
         publish_time=str(schedule.get("publish_time") or schedule.get("day1_time") or "10:00"),
         cadence=tuple(str(day) for day in cadence),
         scheduling_enabled=scheduling_enabled,
+        scheduling_explicitly_disabled=schedule.get("auto_schedule_enabled") is False,
         category_id=str(upload.get("category_id", "10")),
         auto_create_playlist=bool(upload.get("auto_create_playlist", True)),
         max_retries=int(upload.get("max_retries", 3)),

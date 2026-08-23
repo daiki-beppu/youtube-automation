@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, tzinfo
 from pathlib import Path
 from typing import ClassVar
 
-from youtube_automation.configuration import load_config
+from youtube_automation.configuration import ScheduleConfig, load_config
 from youtube_automation.core.adapters.runtime import get_schedule_timezone, resolve_default_publish_at
 from youtube_automation.core.errors import ValidationError, YouTubeAPIError
 from youtube_automation.infrastructure.google.youtube import execute_youtube_request, validate_youtube_response_items
@@ -54,28 +54,6 @@ def _published_datetime(video: object) -> datetime:
         raise ValidationError(f"published dates response has invalid publishedAt: {publish_at}") from exc
 
 
-def _scheduling_enabled(schedule_cfg: dict) -> bool:
-    """``schedule_config.json`` の ``schedule`` セクションからスケジュール公開有効性を判定する。
-
-    優先順位（#647 ユーザーが「予約投稿の設定をしたつもりが即時公開された」FB 対応）:
-
-    1. ``auto_schedule_enabled`` が明示的に ``true`` → 有効。
-    2. ``auto_schedule_enabled`` が明示的に ``false`` → 無効（予約日時を設定しない）。
-    3. キー未設定で ``cadence`` (非空) または ``publish_time`` が明示設定 → 暗黙オプトイン: 有効。
-    4. 上記いずれにも該当しなければ無効（即時公開）。
-
-    ``day1_time`` は旧テンプレ互換のため ``publish_time`` が無いときのフォールバックとして使うが、
-    「明示的なスケジュール設定」のシグナルとしては扱わない（過去テンプレで既定値が
-    入っていることがあるため）。
-    """
-    if "auto_schedule_enabled" in schedule_cfg:
-        return bool(schedule_cfg["auto_schedule_enabled"])
-
-    has_cadence = bool(schedule_cfg.get("cadence"))
-    has_publish_time = "publish_time" in schedule_cfg and bool(schedule_cfg.get("publish_time"))
-    return has_cadence or has_publish_time
-
-
 class PublishedDatesScheduler:
     """設定と YouTube service provider から公開日時を計算する。"""
 
@@ -92,7 +70,7 @@ class PublishedDatesScheduler:
 
     def __init__(
         self,
-        config: dict,
+        config: ScheduleConfig,
         youtube_service_provider: Callable[[], object],
         now_provider: Callable[[tzinfo | None], datetime] | None = None,
     ) -> None:
@@ -175,9 +153,8 @@ class PublishedDatesScheduler:
         Returns:
             ISO 8601 形式の公開日時文字列。予約日時を設定しない場合は None。
         """
-        schedule_cfg = self.config.get("schedule", {})
-        if not _scheduling_enabled(schedule_cfg):
-            if schedule_cfg.get("auto_schedule_enabled") is False:
+        if not self.config.scheduling_enabled:
+            if self.config.scheduling_explicitly_disabled:
                 logger.info("📅 公開設定: 即時公開（schedule.auto_schedule_enabled=false）")
                 return None
             default_publish_at = resolve_default_publish_at(load_config())
@@ -187,12 +164,12 @@ class PublishedDatesScheduler:
             logger.info("📅 公開設定: 即時公開（schedule_config.json で auto_schedule_enabled 未設定）")
             return None
 
-        publish_time = schedule_cfg.get("publish_time", schedule_cfg.get("day1_time", "17:00"))
+        publish_time = self.config.publish_time
         tz = get_schedule_timezone(self.config)
         hour, minute = map(int, publish_time.split(":"))
 
         # cadence 曜日を isoweekday に変換（未設定なら全曜日許可）
-        cadence = schedule_cfg.get("cadence", [])
+        cadence = self.config.cadence
         allowed_weekdays = {self._WEEKDAY_MAP[d.lower()] for d in cadence} if cadence else set(range(1, 8))
 
         now = self.now_provider(tz)

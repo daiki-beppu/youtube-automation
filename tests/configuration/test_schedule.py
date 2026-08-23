@@ -5,7 +5,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from youtube_automation.configuration.loader import load_schedule_config
+from youtube_automation.configuration.loader import load_schedule_config, load_schedule_config_from_file
 
 
 @pytest.mark.parametrize(
@@ -61,6 +61,32 @@ def test_missing_file_uses_explicit_defaults(tmp_path: Path) -> None:
     assert config.scheduling_enabled is False
     assert config.auto_move_to_live is True
     assert config.upload_quota_per_day == 6
+
+
+def test_from_file_reads_a_path_outside_a_config_directory(tmp_path: Path) -> None:
+    path = tmp_path / "backup" / "my_schedule.json"
+    path.parent.mkdir()
+    payload = {"schedule": {"auto_schedule_enabled": True, "publish_time": "21:00"}}
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    config = load_schedule_config_from_file(path)
+
+    assert config.scheduling_enabled is True
+    assert config.publish_time == "21:00"
+
+
+def test_from_file_uses_defaults_when_the_file_is_missing(tmp_path: Path) -> None:
+    config = load_schedule_config_from_file(tmp_path / "absent.json")
+
+    assert config.publish_time == "10:00"
+    assert config.scheduling_enabled is False
+
+
+def test_scheduling_explicitly_disabled_tracks_the_auto_schedule_flag(tmp_path: Path) -> None:
+    _write_schedule(tmp_path, {"schedule": {"auto_schedule_enabled": False}})
+
+    assert load_schedule_config(tmp_path).scheduling_explicitly_disabled is True
+    assert load_schedule_config_from_file(tmp_path / "absent.json").scheduling_explicitly_disabled is False
 
 
 def test_warns_that_upload_privacy_status_is_ignored(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:

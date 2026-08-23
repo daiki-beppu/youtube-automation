@@ -9,7 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from youtube_automation.configuration import channel_dir, load_config
+from youtube_automation.configuration import channel_dir, load_config, load_schedule_config
 from youtube_automation.core.adapters.media import CollectionPaths
 from youtube_automation.core.adapters.runtime import get_schedule_timezone
 from youtube_automation.core.errors import (
@@ -28,7 +28,7 @@ from youtube_automation.domains.uploads._published_dates import PublishedDatesSc
 from youtube_automation.domains.uploads._tracking_io import TrackingStore
 from youtube_automation.domains.uploads.upload_journal import UploadJournal
 from youtube_automation.domains.uploads.youtube import YouTubeAutoUploader
-from youtube_automation.infrastructure.filesystem import list_directory, path_exists, read_json
+from youtube_automation.infrastructure.filesystem import list_directory, path_exists
 from youtube_automation.infrastructure.google.youtube import YouTubeClients
 
 logger = logging.getLogger(__name__)
@@ -88,7 +88,7 @@ class ShortUploader:
         self.collections_root = Path(collections_root)
         self.uploader = YouTubeAutoUploader(collections_root, youtube_clients)
         self.channel_dir = channel_dir()
-        self.schedule_config = self._load_schedule_config()
+        self.schedule_config = load_schedule_config(self.channel_dir)
         self.tracking_store = (
             tracking_store if tracking_store is not None else TrackingStore(self.collections_root, self.schedule_config)
         )
@@ -98,24 +98,6 @@ class ShortUploader:
             if published_dates is not None
             else PublishedDatesScheduler(self.schedule_config, lambda: self.uploader.youtube)
         )
-
-    # ─── 設定読み込み ────────────────────────────────
-
-    def _load_schedule_config(self) -> dict:
-        """`config/schedule_config.json` を読み込む（存在しなければ空 dict）.
-
-        schedule_config は新 ChannelConfig には含めず、JSON を都度読みする
-        旧 `CollectionUploader` のパターンを踏襲（タイムゾーンや投稿間隔は
-        運用ごとに上書きされやすいため、シングルトンに乗せない）。
-        """
-        path = self.channel_dir / "config" / "schedule_config.json"
-        if not path_exists(path):
-            return {}
-        try:
-            return read_json(path)
-        except (OSError, json.JSONDecodeError) as e:
-            logger.warning(f"schedule_config.json 読み込み失敗: {e}")
-            return {}
 
     # ─── 投稿間隔チェック (plan 要件 6.1) ─────────────
 
