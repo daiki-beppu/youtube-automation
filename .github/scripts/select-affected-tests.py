@@ -38,7 +38,7 @@ PATH_TEST_MAP: Final = (
     ),
     ("CHANGELOG.md", ("tests/repo/test_changelog_ci_contract.py",)),
     (
-        "changelog.d/",
+        "changelog.d/*.md",
         (
             "tests/commands/system/test_changelog_compile.py",
             "tests/repo/test_changelog_ci_contract.py",
@@ -94,7 +94,11 @@ def _validate_path(repository: Path, changed: str) -> bool:
 
 def _mapped_tests(changed: str) -> tuple[str, ...] | None:
     for pattern, targets in PATH_TEST_MAP:
-        if (pattern.endswith("/") and changed.startswith(pattern)) or changed == pattern:
+        if (
+            ("*" in pattern and PurePosixPath(changed).match(pattern))
+            or (pattern.endswith("/") and changed.startswith(pattern))
+            or changed == pattern
+        ):
             return targets
     return None
 

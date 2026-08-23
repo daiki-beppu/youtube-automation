@@ -65,6 +65,7 @@ def _synthetic_repository(tmp_path: Path) -> Path:
     _write(repository, "docs/adr/0024-example.md")
     _write(repository, "CHANGELOG.md")
     _write(repository, "changelog.d/4526-example.fixed.md")
+    _write(repository, "changelog.d/notes.txt")
     return repository
 
 
@@ -118,6 +119,7 @@ def test_workflow_adr_changelog_and_direct_test_use_explicit_mapping(tmp_path: P
         "tests/commands/system/test_changelog_compile.py",
         "tests/repo/test_changelog_ci_contract.py",
     )
+    assert selector.select_targets(repository, ["changelog.d/notes.txt"]) is None
     assert selector.select_targets(repository, ["tests/repo/test_actions_parallel_workflows.py"]) == (
         "tests/repo/test_actions_parallel_workflows.py",
     )
