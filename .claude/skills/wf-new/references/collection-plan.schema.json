@@ -49,7 +49,7 @@
         "track_count": {"title": "Track count", "type": "integer", "minimum": 1, "x-view": {"order": 22}},
         "music_engine": {"title": "Music engine", "enum": ["suno", "lyria", "minimax"], "x-view": {"order": 23}},
         "insight_ids": {"title": "Insight IDs", "type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
-        "selection_status": {"title": "選択 status", "enum": ["proposed", "selected", "auto_selected", "rejected"], "x-view": {"statusMap": {"selected": "pass", "auto_selected": "pass", "proposed": "warning", "rejected": "warning"}, "statusSummary": true}},
+        "selection_status": {"title": "選択 status", "enum": ["proposed", "selected", "auto_selected", "rejected"], "x-view": {"statusMap": {"selected": "pass", "auto_selected": "pass", "proposed": "warning", "rejected": "neutral"}, "statusSummary": true}},
         "selection_reason": {"title": "選択根拠", "type": "string", "minLength": 1},
         "selection_source": {"title": "選択元", "enum": ["web", "terminal", "automatic"]}
       },

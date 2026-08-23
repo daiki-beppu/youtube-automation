@@ -175,8 +175,9 @@ def _render_section(
     _validate_review_view(view)
     presentation = _presentation(view, value)
     modifiers = _review_classes(view)
-    rendered_schema = _without_review_flags(schema) if view.get("collapsed") is True else schema
-    content_only = view.get("collapsed") is True and presentation != "details"
+    should_collapse = view.get("collapsed") is True
+    rendered_schema = _without_review_flags(schema) if should_collapse else schema
+    content_only = should_collapse and presentation != "details"
     if presentation == "table":
         rendered = _render_table(
             heading,
@@ -207,11 +208,19 @@ def _render_section(
     else:
         content = _render_value(value, rendered_schema, root_schema)
         rendered = content if content_only else _card(heading, description, content, modifiers=modifiers)
-    if view.get("collapsed") is True and presentation != "details":
+    if should_collapse and presentation != "details":
         rendered = _details(heading, description, rendered, modifiers=modifiers)
     if section_id is not None:
-        rendered = f'<span class="section-anchor" id="{section_id}"></span>{rendered}'
+        rendered = _with_element_id(rendered, section_id)
     return rendered
+
+
+def _with_element_id(rendered: str, element_id: str) -> str:
+    """描画済みの単一 root 要素へ、安全な fragment id を付与する。"""
+    tag_end = rendered.find(">")
+    if not rendered.startswith("<") or tag_end < 1:
+        raise DocumentRenderError("section anchor を付与できる root element がありません")
+    return f'{rendered[:tag_end]} id="{escape(element_id, quote=True)}"{rendered[tag_end:]}'
 
 
 def _html_id(value: str) -> str:
@@ -306,8 +315,11 @@ def _validate_review_view(view: Mapping[str, object]) -> None:
     if status_map is not None:
         if not isinstance(status_map, dict) or not status_map:
             raise DocumentRenderError("x-view.statusMap は空でない object で指定してください")
-        if not all(isinstance(key, str) and value in {"pass", "fail", "warning"} for key, value in status_map.items()):
-            raise DocumentRenderError("x-view.statusMap の値は pass/fail/warning のいずれかにしてください")
+        if not all(
+            isinstance(key, str) and value in {"pass", "fail", "warning", "neutral"}
+            for key, value in status_map.items()
+        ):
+            raise DocumentRenderError("x-view.statusMap の値は pass/fail/warning/neutral のいずれかにしてください")
     if view.get("statusSummary") not in {None, True, False}:
         raise DocumentRenderError("x-view.statusSummary は boolean で指定してください")
 

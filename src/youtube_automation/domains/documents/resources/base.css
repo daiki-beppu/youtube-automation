@@ -280,7 +280,11 @@ video:focus-visible {
   .view-table { min-width: 32rem; }
 }
 
-.section-anchor,
+.view-card,
+.view-media,
+.view-cards-section,
+.view-table-section,
+.view-details,
 .entry-card { scroll-margin-block-start: 7rem; }
 
 .approval-summary {
@@ -296,3 +300,4 @@ video:focus-visible {
 .status-pass { color: oklch(42% 0.12 150deg); }
 .status-fail { color: oklch(45% 0.18 25deg); }
 .status-warning { color: oklch(48% 0.13 75deg); }
+.status-neutral { color: var(--color-ink-muted); }

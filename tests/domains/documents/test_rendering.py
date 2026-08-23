@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from html.parser import HTMLParser
 
 import pytest
 
@@ -99,7 +100,7 @@ def test_details_presentation_keeps_long_evidence_available_without_expanding_it
         schema,
     )
 
-    assert '<details class="view-details">' in html
+    assert '<details class="view-details" id="section-evidence">' in html
     assert "<summary>Evidence and provenance</summary>" in html
     assert "reports/source.json" in html
     assert "<details open" not in html
@@ -568,3 +569,71 @@ def test_collection_plan_review_prioritizes_selection_and_compares_then_collapse
     assert "<summary>未採用・検討中候補</summary>" in html
     assert html.index("採用候補") < html.index("未採用・検討中候補")
     assert "選択 status" in html
+
+
+@pytest.mark.parametrize("presentation", ["card", "cards", "details", "table", "media"])
+@pytest.mark.parametrize("collapsed", [False, True])
+def test_navigation_anchor_is_the_section_root_without_extra_grid_item(presentation: str, collapsed: bool) -> None:
+    values = {
+        "card": ({"name": "A"}, {"properties": {"name": {}}}),
+        "cards": ([{"title": "A"}], {"items": {"properties": {"title": {}}}}),
+        "details": ({"name": "A"}, {"properties": {"name": {}}}),
+        "table": ([{"name": "A"}], {"items": {"properties": {"name": {}}}}),
+        "media": ("assets/a.jpg", {}),
+    }
+    value, extra = values[presentation]
+    view: dict[str, object] = {"presentation": presentation, "collapsed": collapsed}
+    if presentation == "media":
+        view["mediaType"] = "image"
+    schema = {"properties": {"review unsafe": {"title": "Review", "x-view": view, **extra}}}
+
+    html = render_schema_document({"review unsafe": value}, schema)
+
+    class MainChildrenParser(HTMLParser):
+        def __init__(self) -> None:
+            super().__init__()
+            self.depth = 0
+            self.children: list[tuple[str, dict[str, str | None]]] = []
+
+        def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+            if tag == "main":
+                self.depth = 1
+            elif self.depth:
+                if self.depth == 1:
+                    self.children.append((tag, dict(attrs)))
+                if tag not in {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source"}:
+                    self.depth += 1
+
+        def handle_endtag(self, tag: str) -> None:
+            if self.depth:
+                self.depth -= 1
+
+    parser = MainChildrenParser()
+    parser.feed(html)
+    anchored = [(tag, attrs) for tag, attrs in parser.children if attrs.get("id") == "section-review-unsafe"]
+    href_target = html.split('href="#section-review-unsafe"', 1)
+
+    assert len(href_target) == 2
+    assert len(anchored) == 1
+    assert anchored[0][0] in {"section", "details"}
+    assert "section-anchor" not in html
+    # 承認サマリーなしでは、本文 section と nav だけが main grid item になる。
+    assert len(parser.children) == 2
+
+
+def test_collection_plan_resolved_rejection_is_neutral_but_proposal_warns() -> None:
+    fixture = FIXTURES_DIR / "documents" / "collection-plan.json"
+    document = json.loads(fixture.read_text(encoding="utf-8"))
+    document["candidates"] = [
+        candidate for candidate in document["candidates"] if candidate["selection_status"] != "proposed"
+    ]
+
+    resolved_html = render_repository_document(RepositorySchema.COLLECTION_PLAN, document)
+    unresolved_document = json.loads(fixture.read_text(encoding="utf-8"))
+    unresolved_html = render_repository_document(RepositorySchema.COLLECTION_PLAN, unresolved_document)
+
+    assert 'class="status-chip status-neutral">rejected</span>' in resolved_html
+    assert 'class="approval-summary approval-pass"' in resolved_html
+    assert 'class="approval-summary approval-warning"' not in resolved_html
+    assert 'class="status-chip status-warning">proposed</span>' in unresolved_html
+    assert 'class="approval-summary approval-warning"' in unresolved_html
