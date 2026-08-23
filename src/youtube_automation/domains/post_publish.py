@@ -5,12 +5,14 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 
 from youtube_automation.core.errors import StateSyncError, WorkflowStateError
+from youtube_automation.domains.collections.inventory import CollectionRecord, UnreadableWorkflowState, iter_collections
 from youtube_automation.domains.collections.workflow_state import WorkflowState, read
 from youtube_automation.infrastructure.filesystem import file_lock
 
@@ -188,30 +190,45 @@ def _all_steps_complete(root: Path, collection: Path) -> bool:
     return _pinned_actual_exists(root, video_id)
 
 
-def resolve_post_publish_readiness(root: Path, requested: str | None = None) -> PostPublishReadiness:
-    root = root.resolve()
-    live = root / "collections" / "live"
-    if not live.exists():
-        return PostPublishReadiness("waiting", None)
-    if live.is_symlink() or not live.is_dir():
-        raise StateSyncError("collections/live must be a regular directory")
+def _post_publish_readiness(
+    records: tuple[CollectionRecord, ...],
+    requested: str | None,
+    is_complete: Callable[[Path], bool],
+) -> PostPublishReadiness:
     candidates: list[tuple[str, str, Path]] = []
-    for collection in sorted(live.iterdir(), key=lambda path: path.name):
-        if collection.is_symlink():
-            raise StateSyncError(f"live collection must not be a symlink: {collection.name}")
-        if not collection.is_dir() or collection.name.startswith("_"):
-            continue
+    for record in records:
+        collection = record.directory
         if requested and collection.name != requested:
             continue
-        try:
-            _, state = _video_id(collection)
-        except StateSyncError:
+        if isinstance(record.state, UnreadableWorkflowState):
             continue
-        if not _all_steps_complete(root, collection):
-            candidates.append((state.created_at or "9999", collection.name, collection.resolve()))
+        try:
+            upload = record.state.upload
+            eligible = (
+                record.state.phase == "complete"
+                and record.state.stage == "live"
+                and upload is not None
+                and bool(upload.video_id)
+            )
+        except WorkflowStateError:
+            continue
+        if not eligible:
+            continue
+        complete = is_complete(collection)
+        if not complete:
+            candidates.append((record.state.created_at or "9999", collection.name, collection))
     if not candidates:
         return PostPublishReadiness("waiting", None)
     return PostPublishReadiness("ready", min(candidates)[2])
+
+
+def resolve_post_publish_readiness(root: Path, requested: str | None = None) -> PostPublishReadiness:
+    root = root.resolve()
+    try:
+        records = iter_collections(root, ("live",))
+    except WorkflowStateError as exc:
+        raise StateSyncError("post-publish inventory is invalid") from exc
+    return _post_publish_readiness(records, requested, lambda collection: _all_steps_complete(root, collection))
 
 
 def verify_post_publish_completion(root: Path, collection: Path) -> Path:

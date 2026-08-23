@@ -12,7 +12,8 @@ from importlib.resources import files
 from pathlib import Path
 from typing import Final
 
-from youtube_automation.core.errors import ConfigError
+from youtube_automation.core.errors import ConfigError, WorkflowStateError
+from youtube_automation.domains.collections.inventory import iter_collections
 
 STATE_GITIGNORE_MARKER: Final[str] = "# yt-state-git control plane (ADR-0024)"
 _ROOT_HISTORY_NAMES: Final[tuple[str, ...]] = (
@@ -97,32 +98,32 @@ def _regular_file(path: Path, *, label: str) -> None:
 
 
 def _collection_control_files(channel_dir: Path) -> list[Path]:
-    collections = channel_dir / "collections"
-    if not collections.exists() and not collections.is_symlink():
-        return []
-    _regular_directory(collections, label="collections directory")
     discovered: list[Path] = []
-    for stage in sorted(collections.iterdir(), key=lambda path: path.name):
-        if stage.is_symlink():
-            raise ConfigError(f"collections 配下に symlink は使えません: {stage}")
-        if not stage.is_dir():
-            continue
-        for collection in sorted(stage.iterdir(), key=lambda path: path.name):
-            if collection.is_symlink():
-                raise ConfigError(f"collection に symlink は使えません: {collection}")
-            if not collection.is_dir():
-                continue
-            state = collection / "workflow-state.json"
-            if state.exists() or state.is_symlink():
-                _regular_file(state, label="workflow-state.json")
-                discovered.append(state)
-            docs = collection / "20-documentation"
-            if docs.is_symlink():
-                raise ConfigError(f"20-documentation に symlink は使えません: {docs}")
-            tracking = docs / "upload_tracking.json"
-            if tracking.exists() or tracking.is_symlink():
-                _regular_file(tracking, label="upload_tracking.json")
-                discovered.append(tracking)
+    try:
+        records = iter_collections(channel_dir)
+    except WorkflowStateError as exc:
+        raise ConfigError(str(exc)) from exc
+    collections_root = channel_dir / "collections"
+    if collections_root.is_dir():
+        try:
+            unknown_entries = (entry for entry in collections_root.iterdir() if entry.name not in {"planning", "live"})
+            symlink = next((entry for entry in unknown_entries if entry.is_symlink()), None)
+        except OSError as exc:
+            raise ConfigError(f"collections directory を読み取れません: {collections_root}") from exc
+        if symlink is not None:
+            raise ConfigError(f"collections 配下に symlink は使えません: {symlink}")
+    for record in records:
+        state = record.directory / "workflow-state.json"
+        if state.exists() or state.is_symlink():
+            _regular_file(state, label="workflow-state.json")
+            discovered.append(state)
+        documentation = record.directory / "20-documentation"
+        if documentation.is_symlink():
+            raise ConfigError(f"20-documentation に symlink は使えません: {documentation}")
+        tracking = documentation / "upload_tracking.json"
+        if tracking.exists() or tracking.is_symlink():
+            _regular_file(tracking, label="upload_tracking.json")
+            discovered.append(tracking)
     return discovered
 
 

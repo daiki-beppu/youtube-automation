@@ -8,9 +8,12 @@ import pytest
 from youtube_automation.core.errors import StateSyncError
 from youtube_automation.domains.cloud_planning import (
     PlanningReadiness,
+    _planning_states,
     resolve_planning_readiness,
     verify_planning_completion,
 )
+from youtube_automation.domains.collections.inventory import CollectionRecord
+from youtube_automation.domains.collections.workflow_state import WorkflowState
 
 
 def _state(root: Path, name: str, *, phase: str, created_at: str, engine: str = "suno") -> Path:
@@ -36,6 +39,13 @@ def test_readiness_selects_new_planning_when_no_unfinished_collection_exists(tmp
     assert resolve_planning_readiness(tmp_path) == PlanningReadiness("ready", None)
 
 
+def test_planning_policy_projects_inventory_records_without_reading_files(tmp_path: Path) -> None:
+    directory = tmp_path / "not-created"
+    state = WorkflowState({"phase": "planning", "created_at": "2026-01-01T00:00:00Z"})
+
+    assert _planning_states((CollectionRecord(directory, "planning", state),)) == [(directory, state)]
+
+
 def test_readiness_selects_oldest_planning_collection(tmp_path: Path) -> None:
     newer = _state(tmp_path, "newer", phase="planning", created_at="2026-02-02T00:00:00Z")
     older = _state(tmp_path, "older", phase="planning", created_at="2026-01-01T00:00:00Z")
@@ -49,6 +59,13 @@ def test_readiness_waits_when_oldest_active_collection_has_left_planning(tmp_pat
     _state(tmp_path, "planning", phase="planning", created_at="2026-02-01T00:00:00Z")
 
     assert resolve_planning_readiness(tmp_path) == PlanningReadiness("waiting", prepared.resolve())
+
+
+def test_readiness_skips_collection_whose_state_is_not_created_yet(tmp_path: Path) -> None:
+    (tmp_path / "collections" / "planning" / "initializing").mkdir(parents=True)
+    active = _state(tmp_path, "active", phase="planning", created_at="2026-01-01T00:00:00Z")
+
+    assert resolve_planning_readiness(tmp_path) == PlanningReadiness("ready", active.resolve())
 
 
 def test_completion_requires_prepared_state_and_engine_prompt_pair(tmp_path: Path) -> None:

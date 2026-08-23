@@ -224,6 +224,34 @@ def test_symlinked_collection_is_rejected_without_reading_external_data(tmp_path
     assert "secret outside data" not in captured.out + captured.err
 
 
+def test_symlinked_documentation_is_rejected_without_reading_external_tracking(tmp_path: Path, capsys) -> None:
+    channel = _init_repo(tmp_path / "channel")
+    collection = channel / "collections" / "planning" / "demo"
+    collection.mkdir(parents=True)
+    (collection / "workflow-state.json").write_text('{"phase": "planning"}\n', encoding="utf-8")
+    outside = tmp_path / "external-documentation"
+    outside.mkdir()
+    (outside / "upload_tracking.json").write_text('{"schema_version": 3}\n', encoding="utf-8")
+    (collection / "20-documentation").symlink_to(outside, target_is_directory=True)
+
+    assert main(["migrate-state-git", "--channel-dir", str(channel), "--dry-run"]) == 1
+
+    captured = capsys.readouterr()
+    assert "symlink" in captured.err
+
+
+def test_symlinked_unknown_collection_stage_is_rejected(tmp_path: Path, capsys) -> None:
+    channel = _init_repo(tmp_path / "channel")
+    outside = tmp_path / "outside-stage"
+    outside.mkdir()
+    collections = channel / "collections"
+    collections.mkdir()
+    (collections / "backup").symlink_to(outside, target_is_directory=True)
+
+    assert main(["migrate-state-git", "--channel-dir", str(channel), "--dry-run"]) == 1
+    assert "symlink" in capsys.readouterr().err
+
+
 def test_check_rejects_untracked_control_file_even_when_policy_exists(tmp_path: Path, capsys) -> None:
     channel = _init_repo(tmp_path / "channel", gitignore="")
     state, *_ = _write_control_files(channel)
