@@ -57,6 +57,7 @@ from youtube_automation.core.errors import (
     WorkflowStateError,
     WorkflowStateSectionTypeError,
 )
+from youtube_automation.domains.collections.inventory import UnreadableWorkflowState, iter_collections
 from youtube_automation.domains.collections.workflow_state import (
     WorkflowState,
 )
@@ -156,18 +157,18 @@ def discover_targets(planning_root: Path) -> tuple[list[WfBatchTarget], list[Exc
     """
     targets: list[WfBatchTarget] = []
     excluded: list[ExcludedCollection] = []
-    if not planning_root.is_dir():
+    if planning_root.name != "planning" or planning_root.parent.name != "collections":
         return targets, excluded
 
-    for coll in sorted(p for p in planning_root.iterdir() if p.is_dir()):
-        state_path = coll / "workflow-state.json"
-        if not state_path.is_file():
+    for record in iter_collections(planning_root.parent.parent, ("planning",)):
+        coll = record.directory
+        if isinstance(record.state, UnreadableWorkflowState):
+            state_path = coll / "workflow-state.json"
+            if not state_path.exists() and not state_path.is_symlink():
+                continue
+            excluded.append(ExcludedCollection(coll.name, f"workflow-state.json を読めません: {record.state.reason}"))
             continue
-        try:
-            state = _load_state(state_path)
-        except ValidationError as e:
-            excluded.append(ExcludedCollection(coll.name, f"workflow-state.json を読めません: {e}"))
-            continue
+        state = record.state.to_dict()
 
         assets = state.get("assets")
         if not isinstance(assets, dict):
@@ -454,7 +455,7 @@ def main(argv: list[str] | None = None) -> int:
             from_slug=args.from_slug,
             limit=args.limit,
         )
-    except (ValidationError, ConfigError) as e:
+    except (ValidationError, ConfigError, WorkflowStateError) as e:
         print(f"ERROR: {e}", file=sys.stderr)
         return 1
 

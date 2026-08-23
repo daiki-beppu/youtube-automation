@@ -19,7 +19,8 @@ from urllib.parse import unquote, urlsplit
 
 from youtube_automation.commands.analytics.analytics_system import AnalyticsSystem
 from youtube_automation.configuration.loader import load_config_from_path
-from youtube_automation.core.errors import ConfigError, DashboardChannelNotFoundError
+from youtube_automation.core.errors import ConfigError, DashboardChannelNotFoundError, WorkflowStateError
+from youtube_automation.domains.collections.inventory import iter_collections
 from youtube_automation.infrastructure.analytics.channel_registry import (
     DEFAULT_CHANNEL_REGISTRY,
     load_channel_registry,
@@ -38,19 +39,16 @@ ALLOWED_REFRESH_DAYS = frozenset({7, 30, 90})
 
 def _build_channel_workflow_timing(channel: Path) -> dict[str, object] | None:
     try:
-        collection_states = (
-            state_path
-            for stage in ("planning", "live")
-            for state_path in (channel / "collections" / stage).glob("*/workflow-state.json")
-        )
-        if next(collection_states, None) is None:
+        records = iter_collections(channel)
+        # 初期化中断などで state 未作成のディレクトリしかない場合は、従来どおり collection なしと扱う。
+        if not any((record.directory / "workflow-state.json").is_file() for record in records):
             timing = build_workflow_timing(channel, None)
             if timing.get("status") == "in_progress":
                 return timing
             return {"status": "unavailable", "reason": "collection_missing", "collections": []}
         config = load_config_from_path(channel)
         return build_workflow_timing(channel, config.workflow.manual_baseline_minutes)
-    except (ConfigError, OSError, ValueError) as exc:
+    except (ConfigError, OSError, ValueError, WorkflowStateError) as exc:
         return {
             "status": "error",
             "collections": [],

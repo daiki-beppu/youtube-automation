@@ -68,6 +68,7 @@ from youtube_automation.infrastructure.collections.chrome_extensions import (
     ChromeExtensionOrigin,
     resolve_unpacked_extension_origin,
 )
+from youtube_automation.infrastructure.localserver.collections import find_suno_collection_dirs
 
 extract_and_rename_music = partial(
     _extract_and_rename_music,
@@ -1045,6 +1046,21 @@ def test_embedded_discovery_registry_preserves_delete_behavior_on_collection_rou
 # ---------------------------------------------------------------------------
 
 
+def test_main_reports_inventory_hazard_as_cli_error(monkeypatch, capsys, tmp_path):
+    planning = tmp_path / "collections" / "planning"
+    planning.mkdir(parents=True)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (planning / "hazard").symlink_to(outside, target_is_directory=True)
+    monkeypatch.setattr(sys, "argv", ["yt-collection-serve", str(planning)])
+
+    with pytest.raises(SystemExit) as exc_info:
+        main()
+
+    assert exc_info.value.code == 2
+    assert "symlink" in capsys.readouterr().err
+
+
 def test_help_flag_shows_usage_and_exits_zero(monkeypatch, capsys):
     """--help は argparse の usage を表示して exit 0 する."""
     monkeypatch.setattr(sys, "argv", ["yt-collection-serve", "--help"])
@@ -1739,17 +1755,30 @@ def test_find_collection_dirs_returns_only_collection_dirs_sorted(tmp_path):
     When find_collection_dirs を呼ぶ
     Then `*-collection` ディレクトリのみを名前昇順で返す。
     """
-    _make_collection(tmp_path, "20260602-clm-bbb-collection", entries=[])
-    _make_collection(tmp_path, "20260601-clm-aaa-collection", entries=[])
-    (tmp_path / "01-master").mkdir()  # collection 接尾辞でない dir は除外
-    (tmp_path / "notes.txt").write_text("x", encoding="utf-8")  # ファイルは除外
+    planning = tmp_path / "collections" / "planning"
+    _make_collection(planning, "20260602-clm-bbb-collection", entries=[])
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    (planning / "01-master").mkdir()  # collection 接尾辞でない dir は除外
+    (planning / "notes.txt").write_text("x", encoding="utf-8")  # ファイルは除外
 
-    found = find_collection_dirs(tmp_path)
+    found = find_collection_dirs(planning)
 
     assert [p.name for p in found] == [
         "20260601-clm-aaa-collection",
         "20260602-clm-bbb-collection",
     ]
+
+
+def test_find_suno_collection_dirs_keeps_planning_results_when_live_inventory_is_hazardous(tmp_path):
+    planning = tmp_path / "collections" / "planning"
+    collection = _make_collection(planning, "20260601-clm-demo-collection", entries=[])
+    live = tmp_path / "collections" / "live"
+    live.mkdir(parents=True)
+    target = tmp_path / "outside"
+    target.mkdir()
+    (live / "hazard").symlink_to(target, target_is_directory=True)
+
+    assert find_suno_collection_dirs(planning) == [collection.resolve()]
 
 
 def test_build_collections_index_reports_status_and_pattern_count(tmp_path):
