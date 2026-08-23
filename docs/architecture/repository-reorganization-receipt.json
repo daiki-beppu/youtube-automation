@@ -1254,7 +1254,6 @@
         "Updated consumer: tests/commands/youtube/test_playlist_cli.py",
         "Updated consumer: tests/commands/suno/test_suno_prompt_quality_rules.py",
         "Updated consumer: tests/commands/channel/test_channel_init.py",
-        "Updated consumer: tests/domains/uploads/test_descriptions_md_quote_strip.py",
         "Updated consumer: tests/infrastructure/youtube/test_stream_vultr_bandwidth.py",
         "Updated consumer: tests/commands/collections/test_collection_serve_discovery.py",
         "Updated consumer: tests/domains/analytics/mixins/test_ctr_analytics.py",

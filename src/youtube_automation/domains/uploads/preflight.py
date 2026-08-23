@@ -446,8 +446,7 @@ def _is_placeholder(value: object) -> bool:
 def extract_descriptions_md_tags(desc_md: Path) -> list[str] | None:
     """`descriptions.md` の「タグ（YouTube タグ欄）」セクションからタグリストを抽出.
 
-    実アップロード時 `load_descriptions_md` がここを優先採用するため、preflight も
-    本番と同じソースを検証する必要がある。ファイル不在 / セクション不在 / 空なら None。
+    ファイル不在 / セクション不在 / 空なら None。
     """
     if not path_exists(desc_md):
         return None
