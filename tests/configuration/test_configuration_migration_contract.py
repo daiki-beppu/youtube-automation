@@ -2,7 +2,7 @@
 
 Coverage matrix (the implementation step must keep every row green):
 
-* B1-01: the configuration package exposes the eleven specified public names.
+* B1-01: the configuration package exposes the specified public names.
 * B1-02: wf-next skip keys default to ``True`` and preserve explicit booleans.
 * B1-03: wf-next ``approval_gates`` is rejected for every value shape.
 * B1-04: post-publish approval gates remain supported in their own namespace.
@@ -34,8 +34,10 @@ from youtube_automation.configuration import (
     CommunityDraft,
     Distrokid,
     PinnedComment,
+    ScheduleConfig,
     Shorts,
     load_config,
+    load_schedule_config,
     reset,
 )
 from youtube_automation.infrastructure.errors import ConfigError
@@ -100,11 +102,13 @@ def test_configuration_public_api_preserves_the_specified_exports():
         "CommunityDraft",
         "Distrokid",
         "PinnedComment",
+        "ScheduleConfig",
         "Shorts",
         "channel_dir",
         "explicit_channel_selection",
         "find_workspace_root",
         "load_config",
+        "load_schedule_config",
         "reset",
         "select_channel",
         "workspace_channels",
@@ -113,7 +117,9 @@ def test_configuration_public_api_preserves_the_specified_exports():
     assert configuration.CommunityDraft is CommunityDraft
     assert configuration.Distrokid is Distrokid
     assert configuration.PinnedComment is PinnedComment
+    assert configuration.ScheduleConfig is ScheduleConfig
     assert configuration.Shorts is Shorts
+    assert configuration.load_schedule_config is load_schedule_config
 
 
 def test_channel_config_is_owned_by_configuration_model():

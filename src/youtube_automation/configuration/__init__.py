@@ -22,12 +22,14 @@ from youtube_automation.configuration.loader import (
     explicit_channel_selection,
     find_workspace_root,
     load_config,
+    load_schedule_config,
     reset,
     select_channel,
     workspace_channels,
 )
 from youtube_automation.configuration.model import ChannelConfig
 from youtube_automation.configuration.pinned_comment import PinnedComment
+from youtube_automation.configuration.schedule import ScheduleConfig
 from youtube_automation.configuration.shorts import Shorts
 
 __all__ = [
@@ -35,11 +37,13 @@ __all__ = [
     "CommunityDraft",
     "Distrokid",
     "PinnedComment",
+    "ScheduleConfig",
     "Shorts",
     "channel_dir",
     "explicit_channel_selection",
     "find_workspace_root",
     "load_config",
+    "load_schedule_config",
     "reset",
     "select_channel",
     "workspace_channels",

@@ -8,6 +8,7 @@ import math
 import os
 import warnings
 from pathlib import Path
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from youtube_automation.configuration.analytics import Analytics, Benchmark
 from youtube_automation.configuration.audio import Audio
@@ -39,6 +40,7 @@ from youtube_automation.configuration.meta import Branding, ChannelMeta
 from youtube_automation.configuration.model import ChannelConfig
 from youtube_automation.configuration.pinned_comment import PinnedComment
 from youtube_automation.configuration.playlists import Playlists
+from youtube_automation.configuration.schedule import ScheduleConfig
 from youtube_automation.configuration.shorts import Shorts, ShortsCollection, ShortsRelease
 from youtube_automation.configuration.workflow import (
     SCHEDULED_AUTOMATION_CADENCE_DAYS,
@@ -74,7 +76,7 @@ _instance: ChannelConfig | None = None
 _channel_dir: Path | None = None
 _explicit_channel: str | None = None
 
-__all__ = ["resolve_existing_target_dir"]
+__all__ = ["load_schedule_config", "resolve_existing_target_dir"]
 
 
 # 必須キー（ドット区切り）。分割前の channel_config.py::_REQUIRED_KEYS を新構造へ分配。
@@ -236,6 +238,81 @@ def load_config() -> ChannelConfig:
 def load_config_from_path(channel_dir_path: Path) -> ChannelConfig:
     """明示した channel root の設定を singleton state へ影響させず読み込む。"""
     return _build(channel_dir_path.resolve())
+
+
+def load_schedule_config(channel_dir_path: Path) -> ScheduleConfig:
+    """``config/schedule_config.json`` を読み、既定値と優先順位を解決する."""
+    path = channel_dir_path.resolve() / "config" / "schedule_config.json"
+    if not path.exists():
+        return _build_schedule({})
+    try:
+        with path.open(encoding="utf-8") as file:
+            raw = json.load(file)
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ConfigError(f"schedule_config.json の読み込みに失敗しました: {path}: {exc}") from exc
+    if not isinstance(raw, dict):
+        raise ConfigError(f"{path} のトップレベルは object でなければなりません")
+    return _build_schedule(raw)
+
+
+def _build_schedule(raw: dict) -> ScheduleConfig:
+    """schedule_config の各セクションを検証して flat な設定へ組み立てる."""
+    sections: dict[str, dict] = {}
+    for name in ("schedule", "upload_settings", "collections_management", "notification_settings", "api_limits"):
+        value = raw.get(name) or {}
+        if not isinstance(value, dict):
+            raise ConfigError(f"schedule_config.json の {name} は object でなければなりません")
+        sections[name] = value
+
+    schedule = sections["schedule"]
+    upload = sections["upload_settings"]
+    collections = sections["collections_management"]
+    notifications = sections["notification_settings"]
+    limits = sections["api_limits"]
+
+    timezone_name = schedule.get("timezone", "Asia/Tokyo")
+    if not isinstance(timezone_name, str) or not timezone_name:
+        raise ConfigError("schedule_config.json の schedule.timezone は空でない文字列である必要があります")
+    try:
+        timezone = ZoneInfo(timezone_name)
+    except ZoneInfoNotFoundError as exc:
+        raise ConfigError(f"schedule_config.json の schedule.timezone が不正です: {timezone_name}") from exc
+
+    if "auto_schedule_enabled" in schedule:
+        scheduling_enabled = bool(schedule["auto_schedule_enabled"])
+    else:
+        scheduling_enabled = bool(schedule.get("cadence")) or bool(schedule.get("publish_time"))
+
+    if upload.get("privacy_status") is not None:
+        logger.warning(
+            "schedule_config.json の upload_settings.privacy_status は無視されます。"
+            "実効値は config/channel/youtube.json::youtube.privacy_status です"
+        )
+
+    cadence = schedule.get("cadence") or ()
+    if not isinstance(cadence, (list, tuple)):
+        raise ConfigError("schedule_config.json の schedule.cadence は配列でなければなりません")
+
+    return ScheduleConfig(
+        timezone=timezone,
+        publish_time=str(schedule.get("publish_time") or schedule.get("day1_time") or "10:00"),
+        cadence=tuple(str(day) for day in cadence),
+        scheduling_enabled=scheduling_enabled,
+        category_id=str(upload.get("category_id", "10")),
+        auto_create_playlist=bool(upload.get("auto_create_playlist", True)),
+        max_retries=int(upload.get("max_retries", 3)),
+        retry_delay_seconds=int(upload.get("retry_delay_seconds", 300)),
+        auto_move_to_live=bool(collections.get("auto_move_to_live", True)),
+        backup_before_move=bool(collections.get("backup_before_move", False)),
+        watch_ready_directory=bool(collections.get("watch_ready_directory", True)),
+        discord_webhook_url=str(notifications.get("discord_webhook_url", "")),
+        email_notifications=bool(notifications.get("email_notifications", False)),
+        terminal_notifications=bool(notifications.get("terminal_notifications", True)),
+        upload_quota_per_day=int(limits.get("upload_quota_per_day", 6)),
+        uploads_per_batch=int(limits.get("uploads_per_batch", 5)),
+        concurrent_uploads=int(limits.get("concurrent_uploads", 1)),
+        delay_between_uploads=int(limits.get("delay_between_uploads", 5)),
+    )
 
 
 def _build(channel_dir_path: Path) -> ChannelConfig:
