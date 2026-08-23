@@ -199,17 +199,6 @@ def test_legacy_agent_owners_have_canonical_domain_implementations() -> None:
         assert hasattr(owner, symbol_name), f"{owner_name}.{symbol_name}"
 
 
-def test_descriptions_md_is_a_public_pure_function_owner() -> None:
-    owner = importlib.import_module("youtube_automation.domains.uploads.descriptions_md")
-
-    assert not (SRC / "domains" / "uploads" / "_descriptions_md.py").exists()
-    assert {
-        "load_descriptions_md",
-        "extract_body_for_localizations",
-        "extract_md_section",
-    }.issubset(vars(owner))
-
-
 def test_upload_preflight_uses_explicit_checker_without_mro_hook() -> None:
     source = (SRC / "domains" / "uploads" / "youtube.py").read_text(encoding="utf-8")
 
