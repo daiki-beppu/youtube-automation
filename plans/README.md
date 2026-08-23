@@ -4,6 +4,39 @@
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJECTED (with one-line rationale)
 
+## 第 7 回監査（CI 過剰性の監査、2026-08-23、基準 commit `9996de7b`）
+
+フォーカス指定 /improve（「CI が過剰すぎないか監査、最適化したい」）。advisor が全 workflow 9 本 + CI スクリプト + contract test 群を実読し、`gh run list` 直近 200 run の実測（回数・所要・conclusion 内訳）で裏取り。
+総評: **コア CI（ci.yml）は過剰ではなく最適化済み**（path 分類 + import グラフ affected-test 選定で PR CI 実測 60〜70 秒、main push フル実行は直近 15 run 中 3 failure を実際に捕捉する現役の安全網）。過剰は後付けの AI ゲート層に集中 — このリポジトリは public で runner 分は無料のため、実コストは Claude クォータ消費・マージ待ち latency・ノイズの 3 つ。(1) stacked PR の rebase 連鎖で Code review が 1 PR あたり 5〜9 run（diff 不変でも sonnet 全再レビュー）、(2) CI autofix が info-only 指摘でも Opus を起動しほぼ全 PR でパイプラインが実質 2 周、(3) 日次 Skill E2E eval は認証不備で 10 日以上空回り → secret 追加後の初実走（run 32591953739）が既定 devShell に無い pnpm を呼び `exec: pnpm: not found` で即死。3 件とも plan 化（ユーザー選択: 全件）。
+
+### Execution order & status
+
+| Plan | Title | Priority | Effort | Depends on | Issue | PR | Status |
+|------|-------|----------|--------|------------|-------|-----|--------|
+| 034 | Code review を patch-id で重複排除し rebase-only push の sonnet 再レビューを skip | P1 | M | — | [#4601](https://github.com/daiki-beppu/youtube-automation/issues/4601) | — | TODO |
+| 035 | CI autofix の発火しきい値を critical+warning に上げ info-only での Opus 起動を止める | P1 | S | — | [#4602](https://github.com/daiki-beppu/youtube-automation/issues/4602) | — | TODO |
+| 036 | Skill E2E eval の pnpm devShell 不整合を修理し日次 → 週次化 | P2 | S | — | [#4603](https://github.com/daiki-beppu/youtube-automation/issues/4603) | — | TODO |
+
+### Dependency notes
+
+- 034 / 035 / 036 は触るファイルが完全非重複で並列実行可。いずれも `.github/workflows/*.yml` + 対応する `tests/repo/test_*_workflow.py` の 2 ファイルペアを更新する（CI 構造は contract test で機械担保されているため、workflow 単独の変更は必ず test が赤くなる — 各 plan に更新すべき assertion を明記済み）
+- いずれも CHANGELOG ゲート対象パス外のため changelog fragment 不要
+- 034 と 035 は相互作用がある（レビューコメントのメタ行が autofix の severity パーサに誤検出されない語彙 `crit=` を使う契約）— 034 の Step 1 に明記済み
+
+### Findings considered and rejected（再監査不要）
+
+- **lint / test job の setup 重複（checkout + nix + uv sync ×2）**: 並列実行が latency を稼いでおり、public repo で runner 分は無料。統合すると PR CI が遅くなるだけで益なし
+- **非 Python 変更時に lint / test が echo だけの runner を起動**: required check を安定させる定石パターン。1 job 数秒
+- **`fetch-depth: 0` の多用**: .git は 67MB・3,321 commits で full clone は数秒差。削る価値なし
+- **main push CI のキュー滞留懸念**: 実測で全 run の startedAt−createdAt = 0 秒。concurrency の pending 置き換えにより中間 run は自動 cancel されており設計どおり
+- **Extensions / Dashboard / Audio Studio / site workflow の負荷**: path フィルタが効いており直近 200 run にほぼ出現しない（Dashboard 5 / site 3 / Extensions 0）。対処不要
+- **main push CI のフルスイート実行を選択実行化する案**: 却下。PR 側の affected-test 選定の安全網であり、直近 15 run 中 3 failure を実際に捕捉している
+
+### 監査で plan 化を見送った残課題
+
+- **main の CI failure の通知経路追加**: 不要と裁定（ユーザー判断 2026-08-23）— GitHub の失敗 workflow メール通知で捕捉できるため、Discord webhook / issue 自動起票いずれも追加しない
+- **autofix 適用後の効果測定**（035 の Maintenance notes に記載）— 1〜2 週間後に `gh run list --workflow "CI autofix"` の 70 秒超 run 数で半減を確認し、不足なら critical-only へ再調整
+
 ## 第 6 回監査（未参照ファイル・不要ファイル特化、2026-08-22、基準 commit `0030e636`）
 
 フォーカス指定 /improve（「いらないファイル、参照されていないファイルがないか監査」）。並列 4 subagent（Python 本体 / skills・.takt / docs・ルート / TypeScript 表示層）→ 全 findings を advisor が実読 vet。Python 側は AST import graph（450 モジュール全数、entrypoints の文字列 dispatch 込み）で機械的に到達可能性を判定。
