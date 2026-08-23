@@ -117,9 +117,55 @@ def test_pipeline_stage_policy_resolves_media_prompt_verify_and_control_allowlis
     (worker / "outputs").mkdir()
     (worker / "outputs" / "Master.mp4").write_bytes(b"output")
     assert policy.verify() == SandwichResult("completed", "demo")
+    pulled = tmp_path / "pulled"
+    pull_handoff(store, HandoffIdentity("003ch", "demo", "master"), pulled)
+    assert (pulled / "Master.mp4").read_bytes() == b"output"
     policy.allows(worker, {"collections/planning/demo/workflow-state.json"})
     with pytest.raises(StateSyncError, match="Git制御面state以外"):
         policy.allows(worker, {"unexpected.json"})
+
+
+def test_pipeline_stage_policy_resolve_rejects_manifest_mismatch(tmp_path: Path) -> None:
+    store = LocalMediaStore(tmp_path / "store")
+    source = tmp_path / "song.mp3"
+    source.write_bytes(b"verified input")
+    push_handoff(
+        store,
+        HandoffIdentity("003ch", "demo", "suno-download"),
+        (HandoffSource(source, "song.mp3"),),
+    )
+    _, _, worker = _repositories(tmp_path, "003ch/demo/suno-download/manifest.json", "0" * 64)
+    request = SandwichRequest(
+        channel_dir=worker,
+        collection_dir="collections/planning/demo",
+        channel="003ch",
+        collection="demo",
+        agent="claude",
+        prompt="/wf-new --auto",
+        commit_message="chore: runner state",
+        input_handoff="suno-download",
+        input_destination="media",
+    )
+
+    with pytest.raises(StateSyncError, match="workflow-state handoff参照"):
+        PipelineStagePolicy(request, store).resolve()
+
+
+def test_pipeline_stage_policy_allows_requires_resolve_snapshot(tmp_path: Path) -> None:
+    store = LocalMediaStore(tmp_path / "store")
+    _, _, worker = _repositories(tmp_path, "003ch/demo/suno-download/manifest.json", "0" * 64)
+    request = SandwichRequest(
+        channel_dir=worker,
+        collection_dir="collections/planning/demo",
+        channel="003ch",
+        collection="demo",
+        agent="claude",
+        prompt="/wf-new --auto",
+        commit_message="chore: runner state",
+    )
+
+    with pytest.raises(StateSyncError, match="resolveより先にallows"):
+        PipelineStagePolicy(request, store).allows(worker, set())
 
 
 def _planning_repository(tmp_path: Path, *, phase: str = "planning") -> tuple[Path, Path]:

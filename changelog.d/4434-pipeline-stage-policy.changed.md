@@ -1,1 +1,1 @@
-- hybrid sandwich runner の pipeline stage を `StagePolicy` adapter として分離し、media handoff と制御ファイル allowlist を単体で検証可能にした。
+- hybrid sandwich runner の pipeline stage を `StagePolicy` adapter として分離し、media handoff と制御ファイル allowlist を単体で検証可能にした。制御面 allowlist の判定は `state_sync.relative_control_paths` を唯一の定義として adapter と既定 validator の双方から使う。
