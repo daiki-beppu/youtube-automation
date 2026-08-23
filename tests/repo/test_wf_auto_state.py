@@ -86,6 +86,7 @@ def test_no_active_collection_starts_wf_new_without_fabricating_state(tmp_path: 
         "reason": "no_active_collection",
         "resume_action": "wf-new",
         "allow_external_publish": False,
+        "allow_duration_outside_target": False,
     }
     assert not (tmp_path / "collections").exists()
 
@@ -1124,3 +1125,44 @@ def test_cli_rejects_invalid_bootstrap_human_intervals_without_mutating_history(
     assert runner.main(argv) == 2
     assert message in json.loads(capsys.readouterr().out)["reason"]
     assert history_path.read_text(encoding="utf-8") == original
+
+
+def test_attempt_approval_replans_publish_without_changing_durable_config(tmp_path: Path, runner: ModuleType) -> None:
+    collection = _collection(
+        tmp_path,
+        "20260721-approved-publish",
+        phase="publishing",
+        assets={
+            "raw_master": "master.wav",
+            "master_audio": "master.wav",
+            "master_video": "video.mp4",
+            "description": True,
+        },
+    )
+    (collection / "01-master" / "master.wav").touch()
+    (collection / "01-master" / "video.mp4").touch()
+    write_video_description_pair(collection / "20-documentation")
+    token = runner.acquire_lease(tmp_path, now=time.time(), ttl_seconds=60)
+
+    before_approval = runner.resolve_action(tmp_path, collection.name, config=_config(runner))
+    assert before_approval["reason"] == "external_publish_disabled"
+    runner.approve_attempt(tmp_path, token, "external-publish")
+    decision = runner.resolve_action(tmp_path, collection.name, config=_config(runner), token=token)
+
+    assert decision["action"] == "wf-next"
+    assert decision["reason"] == "publish_ready"
+    assert decision["allow_external_publish"] is True
+    assert decision["allow_duration_outside_target"] is False
+    assert _config(runner).allow_external_publish is False
+
+
+def test_attempt_approval_is_owner_scoped_and_duration_is_propagated(tmp_path: Path, runner: ModuleType) -> None:
+    token = runner.acquire_lease(tmp_path, now=time.time(), ttl_seconds=60)
+
+    with pytest.raises(runner.LeaseBusyError, match="owner"):
+        runner.approve_attempt(tmp_path, "not-owner", "duration-outside-target")
+
+    runner.approve_attempt(tmp_path, token, "duration-outside-target")
+    context = runner.read_attempt_context(tmp_path, token)
+
+    assert context == {"external_publish": False, "duration_outside_target": True}
