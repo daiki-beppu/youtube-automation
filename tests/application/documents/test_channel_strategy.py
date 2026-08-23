@@ -89,6 +89,30 @@ def test_scene_producer_can_replace_ids_before_persona_pair_is_updated(tmp_path:
     assert [scene["id"] for scene in published["scenes"]] == ["scene-dawn"]
 
 
+def test_persona_producer_can_clear_references_when_published_scene_has_stale_owner(tmp_path: Path) -> None:
+    _write(tmp_path, "docs/channel/personas/persona-definition.json", _persona())
+    _write(tmp_path, "docs/plans/viewing-scene-matrix.json", _scene())
+    regenerated = _persona()
+    regenerated["persona"] = {"id": "persona-regenerated", "name": "朝の集中者", "desires": ["集中したい"]}
+
+    _write(tmp_path, "docs/channel/personas/persona-definition.json", regenerated)
+
+    published = json.loads((tmp_path / "docs/channel/personas/persona-definition.json").read_text())
+    assert published["persona"]["id"] == "persona-regenerated"
+    assert published["scene_ids"] == []
+
+
+def test_persona_producer_rejects_undefined_nonempty_scene_references(tmp_path: Path) -> None:
+    _write(tmp_path, "docs/channel/personas/persona-definition.json", _persona())
+    _write(tmp_path, "docs/plans/viewing-scene-matrix.json", _scene())
+    regenerated = _persona()
+    regenerated["persona"] = {"id": "persona-regenerated", "name": "朝の集中者", "desires": ["集中したい"]}
+    regenerated["scene_ids"] = ["scene-undefined"]
+
+    with pytest.raises(DocumentMigrationError, match="scene_ids に未定義 ID.*scene-undefined"):
+        _write(tmp_path, "docs/channel/personas/persona-definition.json", regenerated)
+
+
 @pytest.mark.parametrize(
     ("relative", "document", "match"),
     [

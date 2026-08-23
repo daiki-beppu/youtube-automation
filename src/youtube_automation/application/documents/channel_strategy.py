@@ -108,23 +108,19 @@ def _validate_strategy_references(root: Path, document: dict[str, object]) -> No
         scene_path = root / _RELATIVE_TARGETS["scene"]
         if scene_ids or scene_path.exists() or scene_path.with_suffix(".html").exists():
             scene = _published(root, "scene")
-            validate_persona_scene_references(document, scene)
+            # Persona regeneration may change its ID before the scene producer
+            # catches up.  This producer boundary owns only the selected scene
+            # references, not the already-published scene's persona ownership.
+            _require_subset(scene_ids, _ids(scene.get("scenes"), "scenes"), "scene_ids")
         return
     if document_type not in {"scene", "constraints"}:
         return
     persona = _published(root, "persona")
-    if document_type == "scene":
-        # Scene is the producer of the candidate scene ID set.  At this write
-        # boundary it may remove or rename scenes that the currently published
-        # persona still references; the persona pair is updated in the next
-        # phase.  Only its ownership reference is enforceable here.
-        persona_value = persona.get("persona")
-        if not isinstance(persona_value, dict) or document.get("persona_id") != persona_value.get("id"):
-            raise DocumentMigrationError("persona_id が persona 正本を参照していません")
-    else:
-        persona_value = persona.get("persona")
-        if not isinstance(persona_value, dict) or document.get("persona_id") != persona_value.get("id"):
-            raise DocumentMigrationError("persona_id が persona 正本を参照していません")
+    # Scene and constraints both own a persona reference.  Scene may otherwise
+    # replace its ID set before the published persona catches up.
+    persona_value = persona.get("persona")
+    if not isinstance(persona_value, dict) or document.get("persona_id") != persona_value.get("id"):
+        raise DocumentMigrationError("persona_id が persona 正本を参照していません")
     if document_type == "constraints":
         scene = _published(root, "scene")
         _require_subset(
