@@ -2698,6 +2698,23 @@ class TestCheckAnalyticsReport:
         assert "/analytics --collect" in r.next_action["instructions"]
         assert "/analytics --analyze" in r.next_action["instructions"]
 
+    def test_relative_stale_takes_priority_when_data_is_also_absolute_stale(self, tmp_path, monkeypatch):
+        """report が data より古い場合は data 自体も古くても相対鮮度を先に案内する。"""
+        monkeypatch.setattr(doctor, "_today_yyyymmdd", lambda: "20260702")
+        _write_analysis_pair(tmp_path, "20260621")
+
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        (data_dir / "analytics_data_20260622_120000.json").write_text("{}", encoding="utf-8")
+
+        result = doctor.check_analytics_report(tmp_path)
+
+        assert result.status == "fail"
+        assert "最新 data/analytics_data_*.json より古い" in result.message
+        assert "freshness_days" not in result.message
+        assert result.next_action is not None
+        assert result.next_action["instructions"].startswith("/analytics --analyze")
+
     def test_analysis_file_absolute_stale_respects_collection_ideate_override(self, tmp_path, monkeypatch):
         """collection-ideate freshness_days override は doctor の絶対鮮度判定にも効く."""
         monkeypatch.setattr(doctor, "_today_yyyymmdd", lambda: "20260702")
