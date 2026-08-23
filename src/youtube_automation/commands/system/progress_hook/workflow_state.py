@@ -145,7 +145,7 @@ def _completed_stages(root: Path, collection: Path, state: WorkflowState) -> fro
 
 
 def load_progress_snapshot(cwd: str | None, command: str | None) -> ProgressSnapshot | None:
-    """コレクションが無い、または状態を安全に読めない場合は fallback を指示する。"""
+    """コレクションが無い、または状態を安全に読めない場合は None を返し、表示可否の判定を呼び出し側へ委ねる。"""
 
     if cwd is None:
         return None

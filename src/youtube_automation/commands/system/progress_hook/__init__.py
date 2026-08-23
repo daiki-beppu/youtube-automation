@@ -12,7 +12,10 @@ from dataclasses import dataclass
 from typing import TextIO
 
 from youtube_automation.commands.system.progress_hook.workflow_state import STAGES as _STAGES
-from youtube_automation.commands.system.progress_hook.workflow_state import load_progress_snapshot
+from youtube_automation.commands.system.progress_hook.workflow_state import (
+    ProgressSnapshot,
+    load_progress_snapshot,
+)
 
 _STAGE_COMMANDS = {
     "音源生成": (
@@ -100,33 +103,21 @@ def _unclassified_detail(invocation: _Invocation) -> str:
     return f"{kind} — {description}" if description is not None else kind
 
 
-def _render(invocation: _Invocation) -> str:
+def _render(invocation: _Invocation, snapshot: ProgressSnapshot) -> str:
     completed = invocation.event == "PostToolUse"
-    command = _nonempty_string(invocation.tool_input.get("command"))
-    snapshot = load_progress_snapshot(invocation.cwd, command)
     lines = ["```"]
     if invocation.stage is None:
-        for index, stage in enumerate(_STAGES):
-            marker = (
-                "✓"
-                if (snapshot is not None and stage in snapshot.completed_stages) or (snapshot is None and index <= 2)
-                else "○"
-            )
+        for stage in _STAGES:
+            marker = "✓" if stage in snapshot.completed_stages else "○"
             lines.append(f"  {marker}  {stage}")
         lines.append(f"  ⋯  {_unclassified_detail(invocation)}")
     else:
         current_index = _STAGES.index(invocation.stage)
         for index, stage in enumerate(_STAGES):
-            if snapshot is not None and not completed and index == current_index:
-                marker = "▸"
-            elif snapshot is not None:
-                marker = "✓" if stage in snapshot.completed_stages else "○"
-            elif index < current_index or (completed and index == current_index):
-                marker = "✓"
-            elif index == current_index:
+            if not completed and index == current_index:
                 marker = "▸"
             else:
-                marker = "○"
+                marker = "✓" if stage in snapshot.completed_stages else "○"
             detail = f" — {invocation.command_name}" if index == current_index else ""
             lines.append(f"  {marker}  {stage}{detail}")
     lines.append("```")
@@ -145,6 +136,11 @@ def main(argv: Sequence[str] | None = None, *, stdin: TextIO | None = None) -> i
         return 0
 
     invocation = _parse_invocation(payload)
-    if invocation is not None and _should_display(invocation):
-        print(json.dumps({"systemMessage": _render(invocation)}, ensure_ascii=False))
+    if invocation is None or not _should_display(invocation):
+        return 0
+    command = _nonempty_string(invocation.tool_input.get("command"))
+    snapshot = load_progress_snapshot(invocation.cwd, command)
+    if snapshot is None:
+        return 0
+    print(json.dumps({"systemMessage": _render(invocation, snapshot)}, ensure_ascii=False))
     return 0
