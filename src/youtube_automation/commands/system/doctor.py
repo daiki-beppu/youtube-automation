@@ -47,7 +47,7 @@ from youtube_automation.domains.channel_readiness import (
     evaluate_initial_setup_readiness,
     evaluate_ttp_wf_new_readiness,
 )
-from youtube_automation.domains.documents.schema_registry import RepositorySchema
+from youtube_automation.domains.documents.operational_artifacts import resolve_artifacts
 from youtube_automation.infrastructure.auth import (
     UPLOAD_REQUIRED_SCOPES,
     OAuthCredentialState,
@@ -65,7 +65,6 @@ from youtube_automation.infrastructure.collections.numbered_duplicates import (
     format_scan_error_reason,
     scan_numbered_duplicates,
 )
-from youtube_automation.infrastructure.documents.publishing import read_published_json_document
 from youtube_automation.infrastructure.retry import QUOTA_REASONS
 from youtube_automation.infrastructure.youtube.reporting_api import ReportingAPIClient
 from youtube_automation.infrastructure.youtube.streaming.state_reconciliation import reconcile_streaming_vps
@@ -78,7 +77,6 @@ AUTOMATION_PACKAGE_NAME = "youtube-channels-automation"
 SKILLS_SYNC_ARGV = ("uv", "run", "yt-skills", "sync", "--asset", "skills", "--force")
 SKILLS_SYNC_PRUNE_ARGV = (*SKILLS_SYNC_ARGV, "--prune", "--yes")
 SKILLS_SYNC_CMD = shlex.join(SKILLS_SYNC_ARGV)
-ANALYSIS_REPORT_FILENAME_RE = re.compile(r"analysis_\d{8}\.json")
 LEGACY_BUNDLED_SKILLS = (
     "onboard",
     "distrokid-prep",
@@ -1535,45 +1533,35 @@ def check_analytics_report(channel_dir: Path) -> CheckResult:
 
 
 def _resolve_wf_new_input_mode(channel_dir: Path) -> _WfNewInputMode:
-    reports_dir = channel_dir / "reports"
     data_dir = channel_dir / "data"
-    report_candidates = [
-        path
-        for path in _matching_files(reports_dir, "analysis_*.json")
-        if ANALYSIS_REPORT_FILENAME_RE.fullmatch(path.name)
-    ]
-    reports: list[Path] = []
-    invalid_report = False
-    for report in report_candidates:
-        try:
-            read_published_json_document(report, RepositorySchema.ANALYSIS_REPORT)
-        except AutomationError:
-            invalid_report = True
-        else:
-            reports.append(report)
+    reports = resolve_artifacts(channel_dir, "reports/analysis_*.json")
     benchmarks = _matching_files(data_dir, "benchmark_*.json")
     data_files = _matching_files(data_dir, "analytics_data_*.json")
 
-    if reports:
-        latest_report = _latest_filename_date(reports)
+    if reports.valid:
         latest_data = _latest_filename_date(data_files)
-        stale_reason: str | None = None
-        if latest_data is not None and (latest_report is None or latest_report[0] < latest_data[0]):
-            stale_reason = "relative"
-        elif latest_data is not None and _analytics_data_exceeds_freshness_days(latest_data[0], channel_dir):
+        freshness = reports.freshness(against=data_files)
+        stale_reason = freshness.reason if freshness.is_stale else None
+        if stale_reason == "missing":
+            stale_reason = None
+        elif (
+            stale_reason is None
+            and latest_data is not None
+            and _analytics_data_exceeds_freshness_days(latest_data[0], channel_dir)
+        ):
             stale_reason = "absolute"
         return _WfNewInputMode(
             mode="analytics mode",
-            report_count=len(reports),
+            report_count=len(reports.valid),
             benchmark_count=len(benchmarks),
             stale_report=stale_reason is not None,
             stale_reason=stale_reason,
-            invalid_report=invalid_report,
+            invalid_report=bool(reports.invalid),
         )
-    if invalid_report:
+    if reports.invalid:
         return _WfNewInputMode(
             mode="invalid analytics report",
-            report_count=len(report_candidates),
+            report_count=len(reports.invalid),
             benchmark_count=len(benchmarks),
             stale_report=False,
             invalid_report=True,

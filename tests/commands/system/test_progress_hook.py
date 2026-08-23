@@ -424,6 +424,7 @@ def test_should_not_complete_post_publish_for_other_video_or_analysis_before_pub
     reports = tmp_path / "reports"
     reports.mkdir()
     (reports / "analysis_20261340.json").write_text("{}", encoding="utf-8")
+    (reports / "analysis_20260721.vpd-ranking.json").write_text("{}", encoding="utf-8")
     _analysis_pair(reports, "20260719")
 
     message = _progress_message(tmp_path, capsys, command="gh pr checks 42")
