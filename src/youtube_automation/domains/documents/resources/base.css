@@ -279,3 +279,20 @@ video:focus-visible {
   .view-card, .view-media, .view-cards-section, .view-details-content { padding: var(--space-sm); }
   .view-table { min-width: 32rem; }
 }
+
+.section-anchor,
+.entry-card { scroll-margin-block-start: 7rem; }
+
+.approval-summary {
+  order: -2;
+  padding: var(--space-md);
+  border: 0.25rem solid var(--color-rule-strong);
+  background: var(--color-surface);
+}
+.approval-summary.approval-fail { border-color: oklch(52% 0.19 25deg); }
+.approval-summary.approval-warning { border-color: oklch(68% 0.15 75deg); }
+.approval-summary.approval-pass { border-color: oklch(56% 0.13 150deg); }
+.status-chip { display: inline-block; padding: 0.125rem 0.5rem; border: 1px solid currentColor; font-weight: 750; }
+.status-pass { color: oklch(42% 0.12 150deg); }
+.status-fail { color: oklch(45% 0.18 25deg); }
+.status-warning { color: oklch(48% 0.13 75deg); }

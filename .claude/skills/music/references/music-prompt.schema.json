@@ -40,8 +40,8 @@
       "type": "object",
       "required": ["verify_status", "semantic_status", "notes"],
       "properties": {
-        "verify_status": {"title": "Machine verification", "enum": ["pass", "fail"], "x-view": {"order": 0}},
-        "semantic_status": {"title": "Semantic review", "enum": ["pass", "fail"], "x-view": {"order": 1}},
+        "verify_status": {"title": "Machine verification", "enum": ["pass", "fail"], "x-view": {"order": 0, "statusMap": {"pass": "pass", "fail": "fail"}, "statusSummary": true}},
+        "semantic_status": {"title": "Semantic review", "enum": ["pass", "fail"], "x-view": {"order": 1, "statusMap": {"pass": "pass", "fail": "fail"}, "statusSummary": true}},
         "notes": {"title": "Review notes", "type": "array", "items": {"type": "string", "minLength": 1}, "x-view": {"order": 2}}
       },
       "additionalProperties": true

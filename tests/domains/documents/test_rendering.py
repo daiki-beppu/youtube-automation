@@ -128,6 +128,68 @@ def test_review_annotations_create_priority_summary_and_collapsed_content() -> N
     assert "<summary>Audit trail</summary>" in html
 
 
+def test_status_annotation_drives_value_style_and_top_approval_summary() -> None:
+    status_view = {
+        "statusMap": {"pass": "pass", "fail": "fail", "pending": "warning"},
+        "statusSummary": True,
+    }
+    schema = {
+        "title": "Approval",
+        "properties": {
+            "checks": {
+                "title": "Checks",
+                "x-view": {"collapsed": True},
+                "items": {
+                    "properties": {
+                        "name": {"title": "Name"},
+                        "status": {"title": "Status", "x-view": status_view},
+                    }
+                },
+            }
+        },
+    }
+
+    html = render_schema_document(
+        {"checks": [{"name": "syntax", "status": "fail"}, {"name": "meaning", "status": "pending"}]},
+        schema,
+    )
+
+    approval = html.split('<section class="approval-summary', 1)[1].split("</section>", 1)[0]
+    assert "syntax · Status" in approval
+    assert "meaning · Status" in approval
+    assert 'class="status-chip status-fail">fail</span>' in approval
+    assert 'class="status-chip status-warning">pending</span>' in approval
+    assert html.index("承認サマリー") < html.index("<summary>Checks</summary>")
+
+
+@pytest.mark.parametrize(
+    "schema_name, expected_labels, expected_statuses",
+    [
+        (RepositorySchema.VIDEO_DESCRIPTION, ["Quality checks · Status"], ["pass"]),
+        (
+            RepositorySchema.MUSIC_PROMPT,
+            ["01-rain-window · Machine verification", "01-rain-window · Semantic review"],
+            ["pass", "pass"],
+        ),
+        (
+            RepositorySchema.COLLECTION_PLAN,
+            ["plan-1 · 選択 status", "plan-2 · 選択 status", "plan-3 · 選択 status"],
+            ["selected", "rejected", "proposed"],
+        ),
+    ],
+)
+def test_review_fixtures_show_real_statuses_above_collapsed_details(
+    schema_name: RepositorySchema, expected_labels: list[str], expected_statuses: list[str]
+) -> None:
+    fixture = FIXTURES_DIR / "documents" / schema_name.value.replace(".schema", "")
+    html = render_repository_document(schema_name, json.loads(fixture.read_text(encoding="utf-8")))
+    approval = html.split('<section class="approval-summary', 1)[1].split("</section>", 1)[0]
+
+    assert all(label in approval for label in expected_labels)
+    assert all(f">{status}</span>" in approval for status in expected_statuses)
+    assert html.index("承認サマリー") < html.index('class="review-nav"')
+
+
 @pytest.mark.parametrize("presentation", ["card", "table", "cards", "media"])
 def test_collapsed_section_preserves_its_presentation_and_review_modifiers(presentation: str) -> None:
     values = {

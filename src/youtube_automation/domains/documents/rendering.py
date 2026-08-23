@@ -98,9 +98,64 @@ def _render_root(document: object, schema: Mapping[str, object], root_schema: Ma
         "<p><strong>目次</strong> · 検索はブラウザの Ctrl/⌘+F を使用</p>"
         f"<ol>{nav_items}</ol></nav>"
     )
+    approval_summary = _render_approval_summary(document, schema, root_schema)
     # ナビゲーションは CSS order で先頭表示する。本文を先に置くことで、支援技術と
     # テキスト抽出では承認対象の本文を目次の重複ラベルより先に読める。
-    return "".join(rendered for _, _, rendered in sorted(sections)) + navigation_html
+    return approval_summary + "".join(rendered for _, _, rendered in sorted(sections)) + navigation_html
+
+
+def _render_approval_summary(document: object, schema: Mapping[str, object], root_schema: Mapping[str, object]) -> str:
+    """statusSummary annotation の実データを、折り畳まない承認一覧へ集約する。"""
+    statuses: list[tuple[str, object, str]] = []
+    _collect_statuses(document, schema, root_schema, "", statuses)
+    if not statuses:
+        return ""
+    rows = "".join(
+        f"<dt>{escape(label)}</dt><dd>{_status_chip(value, semantic)}</dd>" for label, value, semantic in statuses
+    )
+    severity = "fail" if any(semantic == "fail" for _, _, semantic in statuses) else (
+        "warning" if any(semantic == "warning" for _, _, semantic in statuses) else "pass"
+    )
+    return (
+        f'<section class="approval-summary approval-{severity}" aria-label="承認サマリー">'
+        f"<h2>承認サマリー</h2><dl>{rows}</dl></section>"
+    )
+
+
+def _collect_statuses(
+    value: object,
+    schema: Mapping[str, object],
+    root_schema: Mapping[str, object],
+    context: str,
+    output: list[tuple[str, object, str]],
+) -> None:
+    resolved = _resolve_local_reference(schema, root_schema)
+    view = _view(resolved)
+    status_map = view.get("statusMap")
+    if view.get("statusSummary") is True and isinstance(status_map, dict):
+        semantic = status_map.get(str(value))
+        if isinstance(semantic, str):
+            heading = _annotation(resolved, "title", "Status")
+            output.append((f"{context} · {heading}" if context else heading, value, semantic))
+        return
+    if isinstance(value, dict):
+        properties = resolved.get("properties")
+        children = properties if isinstance(properties, dict) else {}
+        for name, child in children.items():
+            if name in value and isinstance(child, dict):
+                child_context = context
+                if not context:
+                    child_context = _annotation(child, "title", name)
+                _collect_statuses(value[name], child, root_schema, child_context, output)
+    elif isinstance(value, list):
+        item_schema = resolved.get("items")
+        child = item_schema if isinstance(item_schema, dict) else {}
+        for index, item in enumerate(value, 1):
+            label = context
+            if isinstance(item, dict):
+                identifier = item.get("name") or item.get("plan_id") or item.get("title") or item.get("id")
+                label = str(identifier) if identifier is not None else f"{context} {index}".strip()
+            _collect_statuses(item, child, root_schema, label, output)
 
 
 def _render_section(
@@ -240,6 +295,14 @@ def _validate_review_view(view: Mapping[str, object]) -> None:
         not isinstance(compare, list) or not compare or not all(isinstance(field, str) for field in compare)
     ):
         raise DocumentRenderError("x-view.compare は空でない string array で指定してください")
+    status_map = view.get("statusMap")
+    if status_map is not None:
+        if not isinstance(status_map, dict) or not status_map:
+            raise DocumentRenderError("x-view.statusMap は空でない object で指定してください")
+        if not all(isinstance(key, str) and value in {"pass", "fail", "warning"} for key, value in status_map.items()):
+            raise DocumentRenderError("x-view.statusMap の値は pass/fail/warning のいずれかにしてください")
+    if view.get("statusSummary") not in {None, True, False}:
+        raise DocumentRenderError("x-view.statusSummary は boolean で指定してください")
 
 
 def _review_classes(view: Mapping[str, object]) -> str:
@@ -319,6 +382,9 @@ def _render_value(value: object, schema: Mapping[str, object], root_schema: Mapp
     if isinstance(value, bool):
         return "true" if value else "false"
     rendered = escape(str(value))
+    status_map = view.get("statusMap")
+    if isinstance(status_map, dict) and isinstance(status_map.get(str(value)), str):
+        return _status_chip(value, status_map[str(value)])
     if view.get("copyable") is True:
         diff_class = " view-diff" if view.get("diff") is True else ""
         return (
@@ -329,6 +395,10 @@ def _render_value(value: object, schema: Mapping[str, object], root_schema: Mapp
     if view.get("diff") is True:
         return f'<div class="view-diff">{rendered}</div>'
     return rendered
+
+
+def _status_chip(value: object, semantic: str) -> str:
+    return f'<span class="status-chip status-{semantic}">{escape(str(value))}</span>'
 
 
 def _render_table(
@@ -359,10 +429,7 @@ def _render_table(
     )
     if not body:
         body = f'<tr><td class="empty" colspan="{max(1, len(columns))}">No rows</td></tr>'
-    table = (
-        f'<div class="table-scroll"><table class="view-table"><thead><tr>{header}</tr></thead>'
-        f"<tbody>{body}</tbody></table></div>"
-    )
+    table = _table_markup(header, body)
     if content_only:
         return table
     description_html = f'<p class="view-description">{escape(description)}</p>' if description else ""
@@ -463,9 +530,13 @@ def _render_comparison(
         + "</tr>"
         for row in rows
     )
+    return f'<section class="candidate-comparison"><h3>候補比較</h3>{_table_markup(header, body)}</section>'
+
+
+def _table_markup(header: str, body: str) -> str:
     return (
-        '<section class="candidate-comparison"><h3>候補比較</h3><div class="table-scroll">'
-        f'<table class="view-table"><thead><tr>{header}</tr></thead><tbody>{body}</tbody></table></div></section>'
+        f'<div class="table-scroll"><table class="view-table"><thead><tr>{header}</tr></thead>'
+        f"<tbody>{body}</tbody></table></div>"
     )
 
 
