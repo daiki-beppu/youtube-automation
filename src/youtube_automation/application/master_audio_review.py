@@ -12,15 +12,17 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Literal
 
+from youtube_automation.application.review_lifecycle import ReviewSource as LifecycleSource
+from youtube_automation.application.review_lifecycle import collection_root as _collection_root
+from youtube_automation.application.review_lifecycle import review
+from youtube_automation.application.review_lifecycle import sha256_file as _sha256
 from youtube_automation.core.errors import ReviewError, ValidationError, WorkflowStateError
 from youtube_automation.domains.collections.workflow_state import WorkflowState
 from youtube_automation.domains.collections.workflow_state import read as read_workflow_state
 from youtube_automation.domains.collections.workflow_state import update as update_workflow_state
 from youtube_automation.domains.documents.review import ReviewCandidate, SelectionManifest
-from youtube_automation.domains.documents.review_rendering import render_review_html, validate_review_html
 from youtube_automation.infrastructure.browser import open_local_file
 from youtube_automation.infrastructure.browser.selection_broker import SelectionBroker
-from youtube_automation.infrastructure.documents.publishing import publish_html_snapshot
 from youtube_automation.infrastructure.media.probe import probe_duration
 
 ReviewTransport = Literal["web", "terminal"]
@@ -60,6 +62,48 @@ class MasterAudioReviewSnapshot:
         return {candidate.candidate_id: candidate.path for candidate in self.candidates}
 
 
+class _AudioSource(LifecycleSource):
+    def __init__(self, collection: Path, skip: bool, main: Path | None, source: ReviewSource) -> None:
+        self.collection, self.skip, self.main, self.source = collection, skip, main, source
+        self.snapshot: MasterAudioReviewSnapshot | None = None
+
+    @property
+    def artifact(self):
+        return "audio"
+
+    @property
+    def html_path(self):
+        return self.collection.resolve() / "tmp/reviews/master-audio.html"
+
+    @property
+    def compact_image_ids(self):
+        return frozenset()
+
+    def candidates(self):
+        self.snapshot = build_master_audio_review_snapshot(
+            self.collection, skip_manual_mastering=self.skip, main_repo_root=self.main, now=datetime.now(UTC)
+        )
+        return self.snapshot.manifest.candidates
+
+    def media(self):
+        assert self.snapshot is not None
+        return tuple(self.snapshot.media().items())
+
+    def digest(self, candidates):
+        return _artifact_digest(self.snapshot.candidates) if self.snapshot else ""
+
+    def commit(self, candidate):
+        assert self.snapshot is not None
+        finalize_master_audio_selection(
+            self.collection,
+            skip_manual_mastering=self.skip,
+            candidate_id=candidate.id,
+            source=self.source,
+            expected_artifact_digest=self.snapshot.manifest.artifact_digest,
+            main_repo_root=self.main,
+        )
+
+
 def review_and_finalize_master_audio(
     collection: Path,
     *,
@@ -71,60 +115,27 @@ def review_and_finalize_master_audio(
     now: datetime | None = None,
     timeout: float = 300,
 ) -> MasterAudioReviewResult:
-    """Resolve candidates once, optionally review them, then finalize one revalidated ID."""
-    instant = now or datetime.now(UTC)
-    snapshot = build_master_audio_review_snapshot(
-        collection,
-        skip_manual_mastering=skip_manual_mastering,
-        main_repo_root=main_repo_root,
-        now=instant,
-    )
-    candidate_ids = tuple(candidate.candidate_id for candidate in snapshot.candidates)
-    destination: Path | None = None
-    source: ReviewSource
-    selected_id: str
-    if skip_audio_approval:
-        if candidate_id is None and len(candidate_ids) > 1:
-            return _terminal_required(snapshot)
-        selected_id = candidate_id or candidate_ids[0]
-        source = "automatic" if candidate_id is None else "terminal"
-    elif transport == "terminal":
-        if candidate_id is None:
-            return _terminal_required(snapshot)
-        selected_id = candidate_id
-        source = "terminal"
-    else:
-        if candidate_id is not None:
-            raise ValidationError("candidate-idはterminal review専用です")
-        with SelectionBroker(snapshot.manifest) as broker:
-            destination = _display(collection, snapshot, broker.endpoint)
-            selection = broker.wait(timeout=timeout)
-        current = build_master_audio_review_snapshot(
-            collection,
-            skip_manual_mastering=skip_manual_mastering,
-            main_repo_root=main_repo_root,
-            now=instant,
-        )
-        _require_same_selection(snapshot, current, selection.candidate_id, selection.artifact_digest)
-        selected_id = selection.candidate_id
-        source = "web"
-
-    if selected_id not in candidate_ids:
-        raise ValidationError(f"候補IDがreview manifest allowlistにありません: {selected_id}")
-    finalize_master_audio_selection(
-        collection,
-        skip_manual_mastering=skip_manual_mastering,
-        candidate_id=selected_id,
-        source=source,
-        expected_artifact_digest=snapshot.manifest.artifact_digest,
-        main_repo_root=main_repo_root,
+    del now
+    automatic = skip_audio_approval and candidate_id is None
+    source_name: ReviewSource = "automatic" if automatic else ("terminal" if transport == "terminal" else "web")
+    source = _AudioSource(collection, skip_manual_mastering, main_repo_root, source_name)
+    if automatic:
+        initial = source.candidates()
+        if len(initial) > 1:
+            return MasterAudioReviewResult(
+                "terminal_required", source.digest(initial), candidates=tuple(c.id for c in initial)
+            )
+    outcome = review(
+        source,
+        transport,
+        automatic,
+        timeout,
+        candidate_id=candidate_id,
+        broker_factory=SelectionBroker,
+        open_file=open_local_file,
     )
     return MasterAudioReviewResult(
-        status="selected",
-        artifact_digest=snapshot.manifest.artifact_digest,
-        candidate_id=selected_id,
-        candidates=candidate_ids,
-        html_path=destination,
+        outcome.status, outcome.artifact_digest, outcome.candidate_id, outcome.candidates, outcome.html_path
     )
 
 
@@ -315,12 +326,6 @@ def _review_state(collection: Path) -> tuple[Path, str]:
     return root, raw_master
 
 
-def _collection_root(collection: Path) -> Path:
-    if collection.is_symlink() or not collection.is_dir():
-        raise ReviewError(f"collection directoryが不正です: {collection}")
-    return collection.resolve()
-
-
 def _require_audio_file(path: Path) -> None:
     if path.is_symlink() or not path.is_file() or path.suffix.lower() not in _AUDIO_EXTENSIONS:
         raise ReviewError(f"master audio fileが不正です: {path}")
@@ -362,57 +367,6 @@ def _selection_summary(collection: Path) -> str:
 def _artifact_digest(candidates: tuple[MasterAudioCandidate, ...]) -> str:
     payload = "\n".join(f"{candidate.candidate_id}:{candidate.digest}" for candidate in candidates)
     return hashlib.sha256(payload.encode()).hexdigest()
-
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def _terminal_required(snapshot: MasterAudioReviewSnapshot) -> MasterAudioReviewResult:
-    return MasterAudioReviewResult(
-        status="terminal_required",
-        artifact_digest=snapshot.manifest.artifact_digest,
-        candidates=tuple(candidate.candidate_id for candidate in snapshot.candidates),
-    )
-
-
-def _display(collection: Path, snapshot: MasterAudioReviewSnapshot, endpoint: str) -> Path:
-    destination = _collection_root(collection) / "tmp/reviews/master-audio.html"
-    media = snapshot.media()
-    html = render_review_html(snapshot.manifest, endpoint=endpoint, media=media)
-    publish_html_snapshot(
-        destination,
-        html,
-        lambda persisted: validate_review_html(
-            persisted,
-            manifest=snapshot.manifest,
-            endpoint=endpoint,
-            media=media,
-        ),
-    )
-    if not open_local_file(destination.resolve()):
-        raise ReviewError(f"browserでmaster audio review HTMLを開けません: {destination.resolve()}")
-    return destination.resolve()
-
-
-def _require_same_selection(
-    original: MasterAudioReviewSnapshot,
-    current: MasterAudioReviewSnapshot,
-    candidate_id: str,
-    artifact_digest: str,
-) -> None:
-    if original.manifest.artifact_digest != artifact_digest:
-        raise ReviewError("brokerが返したartifact digestがreview対象と一致しません")
-    if current.manifest.artifact_digest != artifact_digest:
-        raise ReviewError("review中に音源または検査結果が変わりました")
-    before = next((candidate for candidate in original.candidates if candidate.candidate_id == candidate_id), None)
-    after = next((candidate for candidate in current.candidates if candidate.candidate_id == candidate_id), None)
-    if before is None or after is None or before.digest != after.digest:
-        raise ReviewError("review中に選択候補が変わりました")
 
 
 def _adopt(state_path: Path, selected: str) -> None:

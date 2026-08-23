@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from youtube_automation.application.thumbnail_review import ThumbnailReviewResult
 from youtube_automation.commands.thumbnail import thumbnail_review
 
@@ -23,7 +25,10 @@ def test_automatic_skips_html_broker_and_existing_auto_owner_remains_canonical(
     assert "yt-thumbnail-auto-select" in capsys.readouterr().out
 
 
-def test_terminal_fallback_lists_allowlisted_ids_without_finalizing(tmp_path: Path, monkeypatch, capsys) -> None:
+@pytest.mark.parametrize("artifact", ["thumbnail", "main"])
+def test_terminal_fallback_lists_allowlisted_ids_without_finalizing(
+    tmp_path: Path, monkeypatch, capsys, artifact: str
+) -> None:
     monkeypatch.setattr(
         thumbnail_review,
         "run_thumbnail_review",
@@ -37,7 +42,7 @@ def test_terminal_fallback_lists_allowlisted_ids_without_finalizing(tmp_path: Pa
         lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("must not finalize")),
     )
 
-    result = thumbnail_review.main(["--collection", str(tmp_path), "--artifact", "main", "--transport", "terminal"])
+    result = thumbnail_review.main(["--collection", str(tmp_path), "--artifact", artifact, "--transport", "terminal"])
 
     assert result == 2
     assert '"candidate_id"' not in capsys.readouterr().out

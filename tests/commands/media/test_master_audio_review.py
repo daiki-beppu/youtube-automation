@@ -35,3 +35,27 @@ def test_cli_passes_explicit_review_contract_to_application(tmp_path, monkeypatc
         "candidate_id": "worktree:final.wav",
         "main_repo_root": None,
     }
+
+
+def test_terminal_required_returns_exit_code_two(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(
+        master_audio_review,
+        "review_and_finalize_master_audio",
+        Mock(return_value=MasterAudioReviewResult(status="terminal_required", candidates=("worktree:final.wav",))),
+    )
+
+    assert (
+        master_audio_review.main(
+            [
+                "--collection",
+                str(tmp_path),
+                "--skip-manual-mastering",
+                "false",
+                "--skip-audio-approval",
+                "false",
+                "--transport",
+                "terminal",
+            ]
+        )
+        == 2
+    )
