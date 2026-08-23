@@ -1,0 +1,1 @@
+- `yt-upload-collection --plan` が書き込みを行わない一方、投稿先照合と予約日計算で YouTube read API を使う契約を publish skill に明記しました。

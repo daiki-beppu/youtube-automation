@@ -13,12 +13,14 @@ from PIL import Image as PILImage
 from PIL import UnidentifiedImageError
 
 from youtube_automation.configuration.skills import load_skill_config
-from youtube_automation.core.errors import ConfigError, ValidationError
+from youtube_automation.core.errors import AutomationError, ConfigError, ValidationError
 from youtube_automation.domains.analytics.benchmark import (
     TTP_VIDEO_ANALYZE_TOP_N,
     load_benchmark_videos,
     select_top_vod_benchmark_videos,
 )
+from youtube_automation.domains.documents.published import read_published_json_document
+from youtube_automation.domains.documents.schema_registry import RepositorySchema
 from youtube_automation.domains.documents.video_description import read_video_description_metadata
 from youtube_automation.domains.thumbnail.references import resolve_configured_benchmark_references
 from youtube_automation.domains.uploads.preflight import (
@@ -84,8 +86,7 @@ def _matching_files(directory: Path, pattern: str) -> list[Path]:
 
 
 def evaluate_ttp_wf_new_readiness(channel_dir: Path) -> ReadinessResult:
-    persona_definition = channel_dir / "docs" / "channel" / "personas" / "persona-definition.md"
-    missing_persona = _missing_persona_readiness_items(persona_definition)
+    missing_persona = _missing_persona_readiness_items(channel_dir)
     missing_persona_suffix = ("; " + "; ".join(missing_persona)) if missing_persona else ""
 
     analytics_path = channel_dir / "config" / "channel" / "analytics.json"
@@ -179,7 +180,41 @@ def evaluate_ttp_wf_new_readiness(channel_dir: Path) -> ReadinessResult:
     )
 
 
-def _missing_persona_readiness_items(path: Path) -> list[str]:
+def _missing_persona_readiness_items(channel_dir: Path) -> list[str]:
+    json_path = channel_dir / "docs" / "channel" / "personas" / "persona-definition.json"
+    html_path = json_path.with_suffix(".html")
+    if json_path.exists() or html_path.exists():
+        relative = "docs/channel/personas/persona-definition.json"
+        try:
+            document = read_published_json_document(json_path, RepositorySchema.CHANNEL_STRATEGY)
+        except (AutomationError, OSError, ValueError) as exc:
+            return [f"{relative} + .html pair を検証できません ({exc})"]
+        if not isinstance(document, dict) or document.get("document_type") != "persona":
+            return [f"{relative} の document_type が persona ではありません"]
+        persona = document.get("persona")
+        if not isinstance(persona, dict):
+            return [f"{relative} の persona が object ではありません"]
+        missing: list[str] = []
+        for field in ("id", "name"):
+            if not isinstance(persona.get(field), str) or not persona[field].strip():
+                missing.append(f"{relative} persona.{field} が空です")
+        desires = persona.get("desires")
+        if (
+            not isinstance(desires, list)
+            or not desires
+            or not all(isinstance(item, str) and item.strip() for item in desires)
+        ):
+            missing.append(f"{relative} persona.desires が空です")
+        scene_ids = document.get("scene_ids")
+        if document.get("status") == "confirmed" and (not isinstance(scene_ids, list) or not scene_ids):
+            missing.append(f"{relative} confirmed persona の scene_ids が空です")
+        return missing
+
+    path = channel_dir / "docs" / "channel" / "personas" / "persona-definition.md"
+    return _missing_legacy_persona_readiness_items(path)
+
+
+def _missing_legacy_persona_readiness_items(path: Path) -> list[str]:
     relative = "docs/channel/personas/persona-definition.md"
     if not path.is_file():
         return [f"{relative} 未作成"]
@@ -244,7 +279,7 @@ def _with_persona_recovery(instructions: str, missing_persona: list[str]) -> str
         return instructions
     return (
         instructions + "。ペルソナの不足はユーザー承認済み例外にせず、"
-        "/channel-strategy --persona で最終 persona-definition.md を更新してください"
+        "/channel-strategy --persona で検証済み persona-definition.json + .html pair を更新してください"
     )
 
 
@@ -388,6 +423,7 @@ def _missing_video_analysis_items(channel_dir: Path, approved_slugs: list[str]) 
     if not approved_slug_set:
         return [], []
     benchmark_by_slug, errors = _latest_benchmark_videos_by_slug(channel_dir, approved_slug_set)
+    historical_ids_by_slug = _historical_benchmark_video_ids_by_slug(channel_dir, approved_slug_set)
     missing = list(errors)
     notes: list[str] = []
     video_analysis_dir = channel_dir / "data" / "video_analysis"
@@ -401,7 +437,7 @@ def _missing_video_analysis_items(channel_dir: Path, approved_slugs: list[str]) 
         excluded_live = len(skipped_live)
         if excluded_live:
             notes.append(
-                f"{slug}: live 配信 {excluded_live} 本は Gemini で解析不能のため "
+                f"{slug}: live 配信 {excluded_live} 本は動画解析器で解析不能のため "
                 f"benchmark top {TTP_VIDEO_ANALYZE_TOP_N} の判定から除外（次点 VOD を繰り上げ）"
             )
         if len(videos) < TTP_VIDEO_ANALYZE_TOP_N and not excluded_live:
@@ -417,10 +453,11 @@ def _missing_video_analysis_items(channel_dir: Path, approved_slugs: list[str]) 
             else:
                 missing.append(f"{slug}: benchmark top {TTP_VIDEO_ANALYZE_TOP_N} に video_id がありません")
             continue
+        historical_ids = historical_ids_by_slug.get(slug, set()) | expected_ids
         done_ids, analysis_errors = _verified_video_analysis_ids(
             slug,
             slug_dir or video_analysis_dir / slug,
-            expected_ids,
+            historical_ids,
         )
         missing.extend(analysis_errors)
         done = len(done_ids)
@@ -431,6 +468,12 @@ def _missing_video_analysis_items(channel_dir: Path, approved_slugs: list[str]) 
             missing.append(f"{slug}: video_analysis 未実行 (0/{required})")
         elif done < required:
             missing.append(f"{slug}: video_analysis が一部のみ ({done}/{required})")
+        latest_missing = expected_ids - done_ids
+        if done >= required and latest_missing:
+            notes.append(
+                f"{slug}: 最新 benchmark top {TTP_VIDEO_ANALYZE_TOP_N} の未解析 {len(latest_missing)} 本あり"
+                "（同じ承認済み競合の benchmark 履歴にある検証済み分析で充足）"
+            )
     return missing, notes
 
 
@@ -448,6 +491,38 @@ def _latest_benchmark_videos_by_slug(
         if slug in approved_slugs:
             result.setdefault(slug, []).append(video)
     return result, []
+
+
+def _historical_benchmark_video_ids_by_slug(
+    channel_dir: Path,
+    approved_slugs: set[str],
+) -> dict[str, set[str]]:
+    """Return eligible video IDs seen in any benchmark snapshot for approved competitors."""
+    result: dict[str, set[str]] = {}
+    for path in _matching_files(channel_dir / "data", "benchmark_*.json"):
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            continue
+        if not isinstance(payload, dict) or not isinstance(payload.get("channels"), list):
+            continue
+        for channel in payload["channels"]:
+            if not isinstance(channel, dict):
+                continue
+            slug = str(channel.get("slug") or "").strip()
+            if slug not in approved_slugs or not isinstance(channel.get("videos"), list):
+                continue
+            for video in channel["videos"]:
+                if not isinstance(video, dict):
+                    continue
+                video_id = str(video.get("video_id") or "").strip()
+                try:
+                    views = int(video.get("views", 0))
+                except (TypeError, ValueError):
+                    continue
+                if video_id and views >= 10_000 and str(video.get("duration_iso") or "") != "P0D":
+                    result.setdefault(slug, set()).add(video_id)
+    return result
 
 
 def _verified_video_analysis_ids(slug: str, slug_dir: Path, expected_ids: set[str]) -> tuple[set[str], list[str]]:
@@ -469,8 +544,53 @@ def _verified_video_analysis_ids(slug: str, slug_dir: Path, expected_ids: set[st
         if payload_video_id is not None and str(payload_video_id) != video_id:
             errors.append(f"{slug}: {path.name} の video_id が期待値と一致しません")
             continue
+        shape_error = _video_analysis_shape_error(data)
+        if shape_error:
+            errors.append(f"{slug}: {path.name} の分析結果が不完全です ({shape_error})")
+            continue
         done.add(video_id)
     return done, errors
+
+
+def _video_analysis_shape_error(data: dict[str, object]) -> str | None:
+    current_types: tuple[tuple[str, type], ...] = (
+        ("hook_structure", dict),
+        ("bgm_arc", dict),
+        ("scene_timeline", list),
+        ("thumbnail_alignment", dict),
+        ("editing_metrics", dict),
+    )
+    legacy_types: tuple[tuple[str, type], ...] = (
+        ("title_formula", dict),
+        ("audio_signature", dict),
+        ("set_structure", dict),
+        ("production", dict),
+        ("thumbnail_and_branding", dict),
+        ("suno_style_translation", dict),
+    )
+
+    def first_shape_error(required_types: tuple[tuple[str, type], ...]) -> str | None:
+        for key, expected_type in required_types:
+            if not isinstance(data.get(key), expected_type):
+                return f"{key} が {expected_type.__name__} ではありません"
+        return None
+
+    current_error = first_shape_error(current_types)
+    legacy_error = first_shape_error(legacy_types)
+    if current_error and legacy_error:
+        return current_error
+
+    analysis_window_sec = data.get("analysis_window_sec")
+    if analysis_window_sec is not None and (
+        isinstance(analysis_window_sec, bool)
+        or not isinstance(analysis_window_sec, int)
+        or analysis_window_sec <= 0
+    ):
+        return "analysis_window_sec が正の整数ではありません"
+    analysis_scope = data.get("analysis_scope")
+    if analysis_scope is not None and not isinstance(analysis_scope, dict):
+        return "analysis_scope が dict ではありません"
+    return None
 
 
 _SEED_CONFIRMATION_MARKERS: tuple[tuple[str, tuple[str, ...]], ...] = (

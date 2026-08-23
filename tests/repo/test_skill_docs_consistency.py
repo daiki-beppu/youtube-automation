@@ -345,7 +345,8 @@ def test_setup_channel_ttp_hearing_routes_direction_to_strategy_mode() -> None:
 
     assert "/channel-research --voice` → `/channel-strategy --persona` → `/channel-strategy --scene" in step7
     assert "必須" in step7
-    assert "docs/channel/personas/persona-definition.md" in step7
+    assert "docs/channel/personas/persona-definition.json" in step7
+    assert "docs/channel/personas/persona-definition.html" in step7
     assert "Step 8 へ進まない" in step7
     assert "channel-new-persona.md" not in setup_channel
 
@@ -398,7 +399,8 @@ def test_setup_channel_ttp_completion_condition_is_an_early_hard_gate() -> None:
 
     assert setup_channel.splitlines().index(completion_heading) < 60
     completion = setup_channel.split(completion_heading, 1)[1].split("## TTP 原則", 1)[0]
-    assert "docs/channel/personas/persona-definition.md" in completion
+    assert "docs/channel/personas/persona-definition.json" in completion
+    assert "docs/channel/personas/persona-definition.html" in completion
     assert "候補ごとの source、seed fetch 要約、承認 / 不採用判断" in completion
     assert "`snippet` / `brandingSettings` / `localizations` snapshot" in completion
     assert "config/skills/thumbnail.yaml::image_generation.gemini.reference_images.default" in completion
@@ -542,7 +544,8 @@ def test_setup_import_mode_contract_is_separate_from_ttp_completion() -> None:
     config_rules = _read(".claude/skills/setup/references/config-generation-rules.md")
 
     assert "完了条件（--channel）" in setup_channel
-    assert "docs/channel/personas/persona-definition.md" in setup_channel
+    assert "docs/channel/personas/persona-definition.json" in setup_channel
+    assert "docs/channel/personas/persona-definition.html" in setup_channel
     assert "既存チャンネル取り込みモードにはこの TTP 完了条件を適用しない" in setup_channel
     assert "取り込み Step 8: 次ステップ案内" in setup_channel
     assert "references/import-mode.md" in setup
@@ -990,7 +993,8 @@ def test_upload_schedule_plan_must_precede_publish_guidance() -> None:
         assert "📅 公開設定: 非公開 (private)" in text
         assert "📅 公開予定" in text
 
-    for text in (video_upload, posting_checklist, scheduled_publish):
+    assert "書き込み API と upload を実行しない read-only plan" in video_upload
+    for text in (posting_checklist, scheduled_publish):
         assert "アップロード API は叩かない" in text
         assert "YouTube read API を呼ぶ場合がある" in text
         assert "実 API は叩かない" not in text

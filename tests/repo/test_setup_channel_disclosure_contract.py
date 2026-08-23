@@ -301,8 +301,10 @@ def test_skill_keeps_persona_branding_readiness_artifacts_and_stop_contracts() -
 
     for artifact in (
         "docs/plans/viewer-voice-analysis.json",
-        "docs/channel/personas/persona-definition.md",
-        "docs/plans/viewing-scene-matrix.md",
+        "docs/channel/personas/persona-definition.json",
+        "docs/channel/personas/persona-definition.html",
+        "docs/plans/viewing-scene-matrix.json",
+        "docs/plans/viewing-scene-matrix.html",
         "branding/icon.png",
         "branding/banner.png",
     ):

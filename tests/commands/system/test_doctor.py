@@ -3346,6 +3346,19 @@ def _valid_persona_definition() -> str:
 """
 
 
+def _video_analysis_payload(video_id: str) -> dict[str, object]:
+    return {
+        "video_id": video_id,
+        "hook_structure": {},
+        "bgm_arc": {},
+        "scene_timeline": [],
+        "thumbnail_alignment": {},
+        "editing_metrics": {},
+        "analysis_window_sec": 900,
+        "analysis_scope": {"start_offset_sec": 0, "end_offset_sec": 900},
+    }
+
+
 def _write_ttp_readiness_files(base: Path) -> None:
     docs_channel = base / "docs" / "channel"
     docs_channel.mkdir(parents=True, exist_ok=True)
@@ -3431,7 +3444,9 @@ def _write_ttp_readiness_files(base: Path) -> None:
     analysis_dir = data_dir / "video_analysis" / "rival"
     analysis_dir.mkdir(parents=True, exist_ok=True)
     for video_id in video_ids:
-        (analysis_dir / f"{video_id}.json").write_text(json.dumps({"video_id": video_id}), encoding="utf-8")
+        (analysis_dir / f"{video_id}.json").write_text(
+            json.dumps(_video_analysis_payload(video_id)), encoding="utf-8"
+        )
     docs_benchmarks = base / "docs" / "benchmarks"
     docs_benchmarks.mkdir(parents=True, exist_ok=True)
     (docs_benchmarks / "rival.md").write_text("# Rival", encoding="utf-8")
@@ -4613,7 +4628,9 @@ class TestCheckTtpWfNewReadinessChannelNew:
         for path in analysis_dir.glob("*.json"):
             path.unlink()
         for video_id in video_ids:
-            (analysis_dir / f"{video_id}.json").write_text(json.dumps({"video_id": video_id}), encoding="utf-8")
+            (analysis_dir / f"{video_id}.json").write_text(
+                json.dumps(_video_analysis_payload(video_id)), encoding="utf-8"
+            )
 
         r = doctor.check_ttp_wf_new_readiness(tmp_path)
 
@@ -4636,7 +4653,9 @@ class TestCheckTtpWfNewReadinessChannelNew:
         for path in analysis_dir.glob("*.json"):
             path.unlink()
         for video_id in high_view_ids:
-            (analysis_dir / f"{video_id}.json").write_text(json.dumps({"video_id": video_id}), encoding="utf-8")
+            (analysis_dir / f"{video_id}.json").write_text(
+                json.dumps(_video_analysis_payload(video_id)), encoding="utf-8"
+            )
 
         r = doctor.check_ttp_wf_new_readiness(tmp_path)
 
@@ -4736,6 +4755,70 @@ class TestCheckTtpWfNewReadinessChannelNew:
         assert "rival: VID1.json のトップレベルが object ではありません" in r.message
         assert "rival: video_analysis が一部のみ (4/5)" in r.message
 
+    def test_video_analysis_requires_observation_shape(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        (tmp_path / "data" / "video_analysis" / "rival" / "VID1.json").write_text(
+            json.dumps({"video_id": "VID1"}), encoding="utf-8"
+        )
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "VID1.json の分析結果が不完全です" in r.message
+        assert "video_analysis が一部のみ (4/5)" in r.message
+
+    def test_historical_verified_analysis_satisfies_count_with_latest_freshness_note(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        old_ids = [f"OLD{i}" for i in range(1, 6)]
+        (tmp_path / "data" / "benchmark_20240101.json").write_text(
+            json.dumps(
+                {
+                    "channels": [
+                        {
+                            "slug": "rival",
+                            "videos": [
+                                {"video_id": video_id, "views": 40_000 - index}
+                                for index, video_id in enumerate(old_ids)
+                            ],
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        latest_ids = ["NEW1", *old_ids[:4]]
+        (tmp_path / "data" / "benchmark_20240201.json").write_text(
+            json.dumps(
+                {
+                    "channels": [
+                        {
+                            "slug": "rival",
+                            "videos": [
+                                {"video_id": video_id, "views": 50_000 - index}
+                                for index, video_id in enumerate(latest_ids)
+                            ],
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        analysis_dir = tmp_path / "data" / "video_analysis" / "rival"
+        for path in analysis_dir.glob("*.json"):
+            path.unlink()
+        for video_id in old_ids:
+            (analysis_dir / f"{video_id}.json").write_text(
+                json.dumps(_video_analysis_payload(video_id)), encoding="utf-8"
+            )
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "ok"
+        assert "最新 benchmark top 5 の未解析 1 本あり" in r.message
+        assert "benchmark 履歴にある検証済み分析で充足" in r.message
+
     def _write_rival_benchmark(self, tmp_path, videos: list[dict]) -> None:
         (tmp_path / "data" / "benchmark_20240101.json").write_text(
             json.dumps({"channels": [{"slug": "rival", "videos": videos}]}),
@@ -4747,7 +4830,9 @@ class TestCheckTtpWfNewReadinessChannelNew:
         for path in analysis_dir.glob("*.json"):
             path.unlink()
         for video_id in video_ids:
-            (analysis_dir / f"{video_id}.json").write_text(json.dumps({"video_id": video_id}), encoding="utf-8")
+            (analysis_dir / f"{video_id}.json").write_text(
+                json.dumps(_video_analysis_payload(video_id)), encoding="utf-8"
+            )
 
     def test_live_video_is_excluded_and_next_vod_promoted(self, tmp_path):
         # Given: top 5 の 2 位が live 配信 (duration_iso == "P0D")、次点 VOD 込みで 5 本の解析済み

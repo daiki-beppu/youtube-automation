@@ -89,8 +89,10 @@ subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実�
 | thumbnails.set（50 units / 本） | アップロード本数分 | — |
 | search.list（100 units、dedup 確認） | 約 2 | — |
 | playlistItems.insert（50 units） | 割当プレイリスト数 P | プレイリスト構成 |
+| channels.list（1 unit） | `--plan` で 1 call | OAuth の投稿先チャンネル照合 |
+| search.list + videos.list（各 1 unit） | `--plan` で各最大 1 call | 予約有効時の公開日重複回避。予約無効時は 0 |
 
-- 上限 / 承認: `--plan` は API を一切叩かないドライラン。dedup search が二重 insert を回避し、quota 枯渇時は `QuotaExhaustedError` で中断する（collection 型 1 実行 ≈ 1,900+ units）。
+- 上限 / 承認: `--plan` は書き込み API と upload を実行しない read-only plan。投稿先照合と予約日の重複回避に上記 read API を使う。dedup search が二重 insert を回避し、quota 枯渇時は `QuotaExhaustedError` で中断する（collection 型 1 実行 ≈ 1,900+ units）。
 
 ## Instructions
 
@@ -175,7 +177,7 @@ CC は `config/schedule_config.json` の `schedule` セクションに応じて�
 - **自動予約を無効化** — `auto_schedule_enabled: false` を明示すると予約日時を設定せず、`privacy_status=public` でも非公開でアップロードする
 - **今回の直接指定との衝突** — AskUserQuestion 等で今回「即時公開」を選んでも即時公開は行わない。予約設定を変更して再 plan するか、非公開アップロード後の手動公開を選ぶ
 
-collection 型では、ユーザーに公開方法を提示する前の挙動確認は必ず `--plan` を実行する。`--plan` はアップロード API は叩かないが、予約日時計算のため YouTube read API を呼ぶ場合がある:
+collection 型では、ユーザーに公開方法を提示する前の挙動確認は必ず `--plan` を実行する。`--plan` は書き込み API と upload を実行しない。OAuth の投稿先照合に `channels.list`、予約有効時の公開日計算に `search.list` / `videos.list` を使う read-only plan である:
 
 ```bash
 uv run yt-upload-collection --plan -c <NAME>
