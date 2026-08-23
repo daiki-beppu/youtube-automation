@@ -247,13 +247,14 @@ status を記録した後は、成功時だけでなく blocked / failed の停�
    - 両 Agent とも state は入力確認に必要な範囲だけ読み、書き込まず、AskUserQuestion を実行しない。片方でも失敗または成果物欠落なら state を更新せず停止する
 2. 並列 A 完了後:
    - メインが両成果物の存在と `phase: "mastered"` との整合を確認する
-   - メインは `descriptions.html` の絶対pathをユーザーが開けるMarkdown linkで提示し、title、概要欄、tag、localizationを確認対象として要約する。自動進行でもこのlinkと要約を完了報告へ残す。手動確認を要求する設定では確認完了まで `assets.description` とphaseを更新しない
-   - PASS 後だけ、メインが Agent 1 の解決済み表示値を `/video --generate` の `master-video-review.md` に従ってfull reviewへ渡す。probe・digest・承認成功時に同CLIが `assets.master_video` を確定する。次に確定済み表示名 mapping を `apply_track_display_names()` で永続化し、概要欄完了を正準キー `assets.description` へ保存する `set-description-generated true` owner CLI を実行してから、次の owner CLI で phase と `updated_at` を一体更新する
+   - メインは `descriptions.html` の絶対pathをユーザーが開けるMarkdown linkで提示し、title、概要欄、tag、localizationを確認対象として要約する。自動進行でもこのlinkと要約を完了報告へ残す。`skip_upload_approval = false` では、この概要欄確認を後述のアップロード承認ゲート 3-B に含め、確認完了まで `assets.description` と phase を更新しない
+   - PASS 後だけ、メインが Agent 1 の解決済み表示値を `/video --generate` の `master-video-review.md` に従ってfull reviewへ渡す。probe・digest・承認成功時に同CLIが `assets.master_video` を確定する。`skip_upload_approval = false` なら、ここでアップロード承認ゲート 3-B を先に実行し、承認後だけこの項目の残りへ進む。次に確定済み表示名 mapping を `apply_track_display_names()` で永続化し、概要欄完了を正準キー `assets.description` へ保存する `set-description-generated true` owner CLI を実行してから、次の owner CLI で phase と `updated_at` を一体更新する
 
      ```bash
      uv run yt-workflow-state --collection "$COLLECTION_DIR" set-phase publishing
      ```
 3. **アップロード承認ゲート 3-B（`skip_upload_approval = false` のとき）**:
+   - Step 2 から呼ぶゲートであり、承認されるまで `assets.description` と phase は `mastered` のまま保持する
    - 並列 A 完了直後、ユーザーに公開方法を提示する前に必ず `uv run yt-upload-collection --plan [-c <collection-name>] [--allow-duration-outside-target]` を実行し、`config/schedule_config.json` / `config/channel/youtube.json` を反映した実際の公開タイミングを確定する
    - resolver の `allow_duration_outside_target` が true の場合は、アップロード承認ゲートの plan に `--allow-duration-outside-target` を渡す。false の場合は渡さない。会話上の承認だけからフラグを組み立てず、owner 管理の attempt context を正とする
    - plan 結果が `📅 公開設定: 非公開でアップロード（即時公開は行いません）` の場合は、予約設定または YouTube Studio での手動公開を案内する。`📅 公開設定: 限定公開 (unlisted)` / `📅 公開設定: 非公開 (private)` が出た場合は、その公開範囲でアップロードされることを AskUserQuestion の文面に含める。`📅 公開予定: <日時>` が出た場合は「今アップロード → `<日時>` に自動で一般公開」と、実際の予約時刻を AskUserQuestion の文面に含める
