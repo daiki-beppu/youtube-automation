@@ -86,10 +86,10 @@ def render_human_tasks_markdown(report: HumanTaskReport) -> str:
 
 
 def render_human_tasks_summary(report: HumanTaskReport) -> str:
+    """通知の分類・channel 行は notification 側が所有するため、ここでは本文だけを組み立てる。"""
+
     lines = (
-        "[ACTION] YouTube automation human tasks",
-        f"channel: {report.channel}",
         f"pending: {len(report.tasks)}",
+        *(f"- {task.kind.value}: {task.collection} (phase={task.phase})" for task in report.tasks),
     )
-    task_lines = tuple(f"- {task.kind.value}: {task.collection} (phase={task.phase})" for task in report.tasks)
-    return "\n".join((*lines, *task_lines))
+    return "\n".join(lines)

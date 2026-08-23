@@ -27,7 +27,6 @@ MediaAcceptanceEventSink = Callable[[NotificationEvent], None]
 def _emit_rejection(
     collection: Path,
     channel: str,
-    issue_codes: tuple[str, ...],
     detail: str,
     on_event: MediaAcceptanceEventSink | None,
 ) -> None:
@@ -44,21 +43,20 @@ def validate_collection_audio(
     policy: MediaAcceptancePolicy,
     inspector: AudioInspector,
     *,
-    channel: str = "unknown",
+    channel: str,
     on_event: MediaAcceptanceEventSink | None = None,
 ) -> MediaAcceptanceReport:
     try:
         files = list_audio_files(collection)
         measurements = tuple(inspector.inspect(path) for path in files)
     except ValidationError as error:
-        _emit_rejection(collection, channel, ("probe",), str(error), on_event)
+        _emit_rejection(collection, channel, str(error), on_event)
         raise
     report = evaluate_media_acceptance(measurements, policy)
     if report.passed:
         return report
-    issue_codes = tuple(dict.fromkeys(issue.code for issue in report.issues))
     detail = "; ".join(
         f"{issue.code}{f'[{issue.file}]' if issue.file else ''}: {issue.message}" for issue in report.issues
     )
-    _emit_rejection(collection, channel, issue_codes, detail, on_event)
+    _emit_rejection(collection, channel, detail, on_event)
     raise ValidationError(f"media acceptance failed: {detail}")

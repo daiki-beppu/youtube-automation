@@ -86,17 +86,20 @@ def run(args: argparse.Namespace) -> int:
         estimated_run_minutes=args.estimated_run_minutes,
     )
     notifications = create_discord_notification_sink()
+
+    def report_resource_diagnostics(detail: str) -> None:
+        print(
+            f"hybrid_resource_observed: channel={request.channel}, collection={request.collection}, {detail}",
+            file=sys.stderr,
+        )
+
     result = run_sandwich(
         request,
         store,
         resource_probe=resource_probe,
         on_resource_event=notifications.notify,
+        on_resource_diagnostics=report_resource_diagnostics,
         on_state_sync_event=notifications.notify,
-    )
-    print(
-        f"hybrid_resource_observed: channel={request.channel}, collection={request.collection}, "
-        f"monthly_runs={args.monthly_run_count + 1}",
-        file=sys.stderr,
     )
     print(f"hybrid runner {result.status}: {result.collection or 'new'}")
     return 0

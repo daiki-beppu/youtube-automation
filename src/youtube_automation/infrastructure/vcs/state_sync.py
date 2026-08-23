@@ -85,8 +85,8 @@ def pull_update_commit_push(
     writer: Callable[[], T],
     *,
     commit_message: str,
-    notification_channel: str = "unknown",
-    notification_collection: str = "unknown",
+    notification_channel: str,
+    notification_collection: str,
     on_event: EventSink | None = None,
     change_validator: ChangeValidator | None = None,
 ) -> T:

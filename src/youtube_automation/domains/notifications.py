@@ -10,6 +10,7 @@ from typing import Protocol
 class NotificationEventCategory(StrEnum):
     NORMAL = "normal"
     ABNORMAL = "abnormal"
+    ACTION = "action"
 
 
 class NotificationEventKind(StrEnum):
@@ -31,7 +32,7 @@ _CATEGORY_BY_KIND = {
     NotificationEventKind.GUARD_EXCEEDED: NotificationEventCategory.ABNORMAL,
     NotificationEventKind.CANARY_COMPLETED: NotificationEventCategory.NORMAL,
     NotificationEventKind.CANARY_FAILED: NotificationEventCategory.ABNORMAL,
-    NotificationEventKind.HUMAN_TASKS_PENDING: NotificationEventCategory.NORMAL,
+    NotificationEventKind.HUMAN_TASKS_PENDING: NotificationEventCategory.ACTION,
 }
 
 

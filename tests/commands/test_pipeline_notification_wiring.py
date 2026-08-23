@@ -32,10 +32,12 @@ def test_hybrid_command_connects_non_fast_forward_event_to_notification(monkeypa
         *,
         resource_probe,
         on_resource_event,
+        on_resource_diagnostics,
         on_state_sync_event,
     ):
         assert resource_probe is not None
         assert on_resource_event is not None
+        on_resource_diagnostics("disk_free=1/0 bytes")
         on_state_sync_event(
             NotificationEvent(
                 NotificationEventKind.NON_FAST_FORWARD_STOPPED,

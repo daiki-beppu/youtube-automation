@@ -15,13 +15,16 @@ from youtube_automation.domains.notifications import (
         NotificationEventKind.HANDOFF_COMPLETED,
         NotificationEventKind.PUBLISH_COMPLETED,
         NotificationEventKind.CANARY_COMPLETED,
-        NotificationEventKind.HUMAN_TASKS_PENDING,
     ],
 )
 def test_category_for_classifies_successful_pipeline_events_as_normal(
     kind: NotificationEventKind,
 ) -> None:
     assert category_for(kind) is NotificationEventCategory.NORMAL
+
+
+def test_category_for_classifies_pending_human_tasks_as_action() -> None:
+    assert category_for(NotificationEventKind.HUMAN_TASKS_PENDING) is NotificationEventCategory.ACTION
 
 
 @pytest.mark.parametrize(

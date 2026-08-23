@@ -37,7 +37,7 @@ def test_validation_returns_report_without_event_when_all_tracks_pass(tmp_path: 
     events = []
     inspector = FixtureInspector({"01.mp3": (180.0, -14.0), "02.m4a": (200.0, -15.0)})
 
-    report = validate_collection_audio(collection, _policy(), inspector, on_event=events.append)
+    report = validate_collection_audio(collection, _policy(), inspector, channel="ambient-lab", on_event=events.append)
 
     assert report.passed is True
     assert events == []
@@ -49,11 +49,11 @@ def test_validation_emits_rejected_event_and_stops_before_downstream(tmp_path: P
     inspector = FixtureInspector({"01.mp3": (30.0, -14.0), "02.m4a": (200.0, -15.0)})
 
     with pytest.raises(ValidationError, match="media acceptance failed"):
-        validate_collection_audio(collection, _policy(), inspector, on_event=events.append)
+        validate_collection_audio(collection, _policy(), inspector, channel="ambient-lab", on_event=events.append)
 
     assert len(events) == 1
     assert events[0].kind is NotificationEventKind.FAIL_CLOSED_ABORTED
-    assert events[0].collection == collection.name
+    assert (events[0].channel, events[0].collection) == ("ambient-lab", collection.name)
     assert "duration" in events[0].detail
 
 
@@ -66,7 +66,9 @@ def test_probe_failure_emits_rejected_event_and_stops(tmp_path: Path) -> None:
             raise ValidationError(f"probe failed: {path.name}")
 
     with pytest.raises(ValidationError, match="probe failed"):
-        validate_collection_audio(collection, _policy(), FailingInspector(), on_event=events.append)
+        validate_collection_audio(
+            collection, _policy(), FailingInspector(), channel="ambient-lab", on_event=events.append
+        )
 
     assert events[0].kind is NotificationEventKind.FAIL_CLOSED_ABORTED
     assert "probe" in events[0].detail
@@ -78,6 +80,8 @@ def test_empty_music_directory_is_a_track_count_rejection(tmp_path: Path) -> Non
     events = []
 
     with pytest.raises(ValidationError, match="track_count"):
-        validate_collection_audio(collection, _policy(), FixtureInspector({}), on_event=events.append)
+        validate_collection_audio(
+            collection, _policy(), FixtureInspector({}), channel="ambient-lab", on_event=events.append
+        )
 
     assert "track_count" in events[0].detail

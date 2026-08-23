@@ -580,6 +580,9 @@ exec "$YTA_TEST_PYTHON" "$YTA_AGENT_SCRIPT"
     assert result.returncode == 0, result.stderr
     assert "hybrid_resource_observed" in result.stderr
     assert "monthly_runs=1" in result.stderr
+    assert "disk_free=" in result.stderr
+    assert "r2_retained=" in result.stderr
+    assert "projected_actions_minutes=" in result.stderr
     verify = tmp_path / "script-verify"
     subprocess.run(["git", "clone", "--branch", "main", str(remote), str(verify)], check=True, capture_output=True)
     state = json.loads((verify / "collections/planning/demo/workflow-state.json").read_text(encoding="utf-8"))

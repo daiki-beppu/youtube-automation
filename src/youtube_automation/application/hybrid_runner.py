@@ -44,6 +44,7 @@ class HybridResourceProbe(Protocol):
 
 
 HybridResourceEventSink = Callable[[NotificationEvent], None]
+ResourceDiagnosticsSink = Callable[[str], None]
 
 
 @dataclass(frozen=True, slots=True)
@@ -137,6 +138,7 @@ def _guard_resources(
     request: SandwichRequest,
     resource_probe: HybridResourceProbe,
     on_event: HybridResourceEventSink | None,
+    on_diagnostics: ResourceDiagnosticsSink | None,
 ) -> None:
     try:
         snapshot = resource_probe.inspect()
@@ -155,6 +157,8 @@ def _guard_resources(
     report = evaluate_hybrid_resources(snapshot, HybridResourcePolicy.zero_cost())
     detail = _resource_detail(report)
     if report.passed:
+        if on_diagnostics is not None:
+            on_diagnostics(detail)
         return
     rejection_detail = f"{detail}; " + "; ".join(issue.message for issue in report.issues)
     if on_event is not None:
@@ -177,10 +181,11 @@ def run_sandwich(
     resource_probe: HybridResourceProbe,
     agent_runner: AgentRunner = run_agent,
     on_resource_event: HybridResourceEventSink | None = None,
+    on_resource_diagnostics: ResourceDiagnosticsSink | None = None,
     on_state_sync_event: EventSink | None = None,
 ) -> SandwichResult:
     """Run the existing local-first workflow between verified MediaStore boundaries."""
-    _guard_resources(request, resource_probe, on_resource_event)
+    _guard_resources(request, resource_probe, on_resource_event, on_resource_diagnostics)
     context = build_context(request.channel_dir)
     result = SandwichResult("completed", request.collection or None)
     planning_collection: Path | None = None
