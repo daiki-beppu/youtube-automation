@@ -57,6 +57,9 @@ jobs:
           # 既定の OIDC → Claude App トークン交換(id-token: write が必要で、App トークンは
           # push 権限を持ちうる)を使わず、この workflow の read 権限に閉じたトークンで動かす
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          # Claude Code セッション由来の push は actor が bot "claude" になり、action が
+          # 既定で起動を拒否する。レビューは提案のみ（push 権限なし）なので許可してよい
+          allowed_bots: claude
           plugin_marketplaces: https://github.com/anthropics/claude-plugins-official.git
           plugins: mattpocock-skills@claude-plugins-official
           prompt: |

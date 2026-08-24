@@ -56,6 +56,16 @@ def _synthetic_repository(tmp_path: Path) -> Path:
         "tests/test_other.py",
         "from youtube_automation.other import VALUE\n",
     )
+    _write(
+        repository,
+        "tests/test_dynamic_literal.py",
+        "import importlib\n\nMODULE = importlib.import_module('youtube_automation.core.leaf')\n",
+    )
+    _write(
+        repository,
+        "tests/test_dynamic_wildcard.py",
+        "import importlib\n\n\ndef _load(name):\n    return importlib.import_module(name)\n",
+    )
     _write(repository, "tests/repo/test_actions_parallel_workflows.py")
     _write(repository, "tests/repo/test_changelog_ci_contract.py")
     _write(repository, "tests/commands/system/test_changelog_compile.py")
@@ -80,6 +90,110 @@ def test_source_change_selects_only_direct_and_transitive_importers(tmp_path: Pa
         "tests/core/test_leaf.py",
         "tests/core/test_middle.py",
         "tests/test_direct.py",
+        "tests/test_dynamic_literal.py",
+        "tests/test_dynamic_wildcard.py",
+    )
+
+
+def test_literal_dynamic_import_is_resolved_as_a_static_dependency(tmp_path: Path) -> None:
+    selector = _load_selector()
+    repository = _synthetic_repository(tmp_path)
+
+    result = selector.select_targets(repository, ["src/youtube_automation/other.py"])
+
+    # other.py を静的 import する test_other に加え、リテラルでない動的 import を持つ
+    # wildcard importer だけが追加される（leaf 系のリテラル動的 import は選ばれない）
+    assert result == (
+        "tests/test_dynamic_wildcard.py",
+        "tests/test_other.py",
+    )
+
+
+def test_source_side_wildcard_is_a_bfs_root_for_its_transitive_importers(tmp_path: Path) -> None:
+    selector = _load_selector()
+    repository = _synthetic_repository(tmp_path)
+    _write(
+        repository,
+        "src/youtube_automation/core/dynamic.py",
+        "import importlib\n\n\ndef load(name):\n    return importlib.import_module(name)\n",
+    )
+    _write(
+        repository,
+        "src/youtube_automation/core/consumer.py",
+        "from youtube_automation.core.dynamic import load\n",
+    )
+    _write(
+        repository,
+        "tests/test_consumer.py",
+        "from youtube_automation.core.consumer import load\n",
+    )
+
+    result = selector.select_targets(repository, ["src/youtube_automation/other.py"])
+
+    # source 側 wildcard（core.dynamic）は BFS 起点にも入るため、それを静的 import する
+    # consumer 経由の test まで、無関係な source 変更でも保守的に選定される
+    assert result == (
+        "tests/test_consumer.py",
+        "tests/test_dynamic_wildcard.py",
+        "tests/test_other.py",
+    )
+
+
+def test_keyword_argument_dynamic_imports_are_resolved_or_treated_as_wildcards(tmp_path: Path) -> None:
+    selector = _load_selector()
+    repository = _synthetic_repository(tmp_path)
+    _write(
+        repository,
+        "tests/test_keyword_literal.py",
+        "import importlib\n\nMODULE = importlib.import_module(name='youtube_automation.core.leaf')\n",
+    )
+    _write(
+        repository,
+        "tests/test_keyword_wildcard.py",
+        "import importlib\n\n\ndef _load(**kwargs):\n    return importlib.import_module(**kwargs)\n",
+    )
+
+    leaf_result = selector.select_targets(repository, ["src/youtube_automation/core/leaf.py"])
+    other_result = selector.select_targets(repository, ["src/youtube_automation/other.py"])
+
+    # キーワード引数のリテラルは静的依存として解決し、引数を特定できない呼び出しは wildcard 扱いにする
+    assert "tests/test_keyword_literal.py" in leaf_result
+    assert "tests/test_keyword_literal.py" not in other_result
+    assert "tests/test_keyword_wildcard.py" in leaf_result
+    assert "tests/test_keyword_wildcard.py" in other_result
+
+
+def test_aliased_dynamic_imports_are_detected(tmp_path: Path) -> None:
+    selector = _load_selector()
+    repository = _synthetic_repository(tmp_path)
+    _write(
+        repository,
+        "tests/test_alias_literal.py",
+        "import importlib as il\n\nMODULE = il.import_module('youtube_automation.core.leaf')\n",
+    )
+    _write(
+        repository,
+        "tests/test_alias_wildcard.py",
+        "from importlib import import_module as im\n\n\ndef _load(name):\n    return im(name)\n",
+    )
+
+    leaf_result = selector.select_targets(repository, ["src/youtube_automation/core/leaf.py"])
+    other_result = selector.select_targets(repository, ["src/youtube_automation/other.py"])
+
+    assert "tests/test_alias_literal.py" in leaf_result
+    assert "tests/test_alias_literal.py" not in other_result
+    assert "tests/test_alias_wildcard.py" in leaf_result
+    assert "tests/test_alias_wildcard.py" in other_result
+
+
+def test_non_source_changes_do_not_select_dynamic_wildcard_importers(tmp_path: Path) -> None:
+    selector = _load_selector()
+    repository = _synthetic_repository(tmp_path)
+
+    assert selector.select_targets(repository, ["tests/core/test_leaf.py"]) == ("tests/core/test_leaf.py",)
+    assert selector.select_targets(repository, ["changelog.d/4526-example.fixed.md"]) == (
+        "tests/commands/system/test_changelog_compile.py",
+        "tests/repo/test_changelog_ci_contract.py",
     )
 
 
@@ -210,6 +324,19 @@ def test_cli_output_is_deterministic_unique_and_existing_subset(tmp_path: Path) 
     assert set(targets) <= all_tests
     assert targets_exist
     assert json.loads(json_result.stdout) == {"mode": "selected", "targets": targets}
+
+
+def test_configuration_change_selects_the_reorganization_contract_test(tmp_path: Path) -> None:
+    # #4438 の再発防止: configuration の公開 surface を importlib.import_module で
+    # 検証する契約テストが、src/youtube_automation/configuration/ の変更で選ばれること
+    selector = _load_selector()
+    changed = ["src/youtube_automation/configuration/__init__.py"]
+
+    with shared_tests_tree_lock():
+        result = selector.select_targets(REPO_ROOT, changed)
+
+    assert result is not None
+    assert "tests/contracts/architecture/test_repository_reorganization_contract.py" in result
 
 
 def test_cli_missing_argument_is_usage_error() -> None:
