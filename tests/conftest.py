@@ -216,7 +216,36 @@ def _prepare_isolated_channel_dir() -> None:
     os.environ[_ISOLATED_MARKER_ENV] = "1"
 
 
+_SKILLS_DIR = REPO_ROOT / ".claude" / "skills"
+
+
+def _prune_stale_skill_bytecode_dirs(skills_dir: Path = _SKILLS_DIR) -> None:
+    """skill 改名・削除で旧パスに残った `__pycache__` だけのディレクトリを削除する。
+
+    reference スクリプトの import で生成される `__pycache__` は gitignore されて
+    いるため、skill の改名・削除後も旧パスに残り続け、git status には表示されない
+    まま「`.claude/skills/<旧名>/` が存在しない」ことを検証する ownership 契約
+    テストを壊す（#4595）。bytecode 以外のファイルを 1 つでも含むディレクトリには
+    触れない。xdist の全プロセスが同時に走っても rmtree は ignore_errors で競合を
+    握りつぶす。走査中も、他プロセスの prune による消失（`FileNotFoundError` /
+    `NotADirectoryError`）と読めないディレクトリ（`PermissionError`）だけを個別に
+    見送り、それ以外の I/O エラーは握りつぶさず伝播させる。
+    """
+    if not skills_dir.is_dir():
+        return
+    for candidate in skills_dir.iterdir():
+        if not candidate.is_dir() or candidate.is_symlink():
+            continue
+        try:
+            has_real_file = any(path.is_file() and "__pycache__" not in path.parts for path in candidate.rglob("*"))
+        except (FileNotFoundError, NotADirectoryError, PermissionError):
+            continue
+        if not has_real_file:
+            shutil.rmtree(candidate, ignore_errors=True)
+
+
 _prepare_isolated_channel_dir()
+_prune_stale_skill_bytecode_dirs()
 
 
 @pytest.hookimpl(tryfirst=True)
