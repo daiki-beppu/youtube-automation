@@ -38,10 +38,10 @@
   .review-action { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); padding: var(--space-md); border-block-start: 1px solid var(--color-rule-strong); background: var(--color-surface-muted); }
   .review-action p, .review-action form { margin: 0; }
   button { min-height: 2.75rem; padding: var(--space-xs) var(--space-md); border: 1px solid var(--color-ink); border-radius: var(--radius-media); background: var(--color-ink); color: var(--color-surface); cursor: pointer; font: inherit; font-weight: 700; white-space: nowrap; }
-  button:hover { background: var(--color-link); border-color: var(--color-link); }
-  button:active { translate: 0 1px; }
+  button:hover:not(:disabled) { background: var(--color-link); border-color: var(--color-link); }
+  button:active:not(:disabled) { translate: 0 1px; }
   button:focus-visible { outline: .1875rem solid var(--color-focus); outline-offset: var(--space-3xs); }
-  button:disabled { background: var(--color-rule-strong); border-color: var(--color-rule-strong); cursor: not-allowed; opacity: .55; }
+  button:disabled { cursor: not-allowed; opacity: .55; }
   img, audio, video { display: block; max-width: 100%; }
   .review-images { display: grid; gap: var(--space-sm); grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .review-images figure { margin: 0; }
