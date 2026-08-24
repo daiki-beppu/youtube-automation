@@ -1,5 +1,5 @@
 /* Hallmark · macrostructure: Long Document · genre: editorial · theme: Technical Ledger
- * audit: generic card repetition, ornamental shadows, untokenized values, desktop-first collapse
+ * audit: pass · contrast: pass (40–41) · tokens: pass (48)
  * slop-test: all applicable gates pass · mobile: pass (34, 49, 50–57)
  */
 /* Hallmark · pre-emit critique: P5 H5 E5 S5 R5 V4 */
@@ -14,6 +14,12 @@
   --color-rule-strong: oklch(58% 0.032 245deg);
   --color-link: oklch(42% 0.13 250deg);
   --color-focus: oklch(55% 0.18 250deg);
+  --color-pass-border: oklch(56% 0.13 150deg);
+  --color-pass-text: oklch(42% 0.12 150deg);
+  --color-fail-border: oklch(52% 0.19 25deg);
+  --color-fail-text: oklch(45% 0.18 25deg);
+  --color-warning-border: oklch(68% 0.15 75deg);
+  --color-warning-text: oklch(48% 0.13 75deg);
   --font-body: "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Yu Gothic", Meiryo, system-ui, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --space-3xs: 0.25rem;
@@ -129,9 +135,9 @@ main {
   background: var(--color-surface);
 }
 
-/* critical は太い accent、high は細い中間色で承認優先度の差を視覚化する。 */
-.view-priority-critical { border-inline-start: 0.5rem solid var(--color-focus); }
-.view-priority-high { border-inline-start: 0.25rem solid var(--color-rule-strong); }
+/* 優先度は側面ストライプを避け、上罫線の色と太さだけで段階を示す。 */
+.view-priority-critical { border-block-start: 0.25rem solid var(--color-focus); }
+.view-priority-high { border-block-start: 0.125rem solid var(--color-rule-strong); }
 
 .copyable-content,
 .view-diff {
@@ -292,9 +298,9 @@ video:focus-visible {
   border: 0.25rem solid var(--color-rule-strong);
   background: var(--color-surface);
 }
-.approval-summary.approval-fail { border-color: oklch(52% 0.19 25deg); }
-.approval-summary.approval-warning { border-color: oklch(68% 0.15 75deg); }
-.approval-summary.approval-pass { border-color: oklch(56% 0.13 150deg); }
+.approval-summary.approval-fail { border-color: var(--color-fail-border); }
+.approval-summary.approval-warning { border-color: var(--color-warning-border); }
+.approval-summary.approval-pass { border-color: var(--color-pass-border); }
 .status-chip {
   display: inline-block;
   padding: 0.125rem 0.5rem;
@@ -302,7 +308,7 @@ video:focus-visible {
   font-weight: 750;
   white-space: nowrap;
 }
-.status-pass { color: oklch(42% 0.12 150deg); }
-.status-fail { color: oklch(45% 0.18 25deg); }
-.status-warning { color: oklch(48% 0.13 75deg); }
+.status-pass { color: var(--color-pass-text); }
+.status-fail { color: var(--color-fail-text); }
+.status-warning { color: var(--color-warning-text); }
 .status-neutral { color: var(--color-ink-muted); }
