@@ -16,7 +16,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run yt-progress-hook"
+            "command": "uv run --no-sync yt-progress-hook"
           }
         ]
       }
@@ -27,7 +27,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run yt-progress-hook"
+            "command": "uv run --no-sync yt-progress-hook"
           }
         ]
       },
@@ -36,7 +36,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "files=$(echo \"$CLAUDE_FILE_PATHS\" | tr ' ' '\\n' | grep '\\.py$' || true); if [ -n \"$files\" ]; then uv run ruff format $files >/dev/null 2>&1 && uv run ruff check --fix $files >/dev/null 2>&1 || true; fi"
+            "command": "files=$(echo \"$CLAUDE_FILE_PATHS\" | tr ' ' '\\n' | grep '\\.py$' || true); if [ -n \"$files\" ]; then uv run --no-sync ruff format $files >/dev/null 2>&1 && uv run --no-sync ruff check --fix $files >/dev/null 2>&1 || true; fi"
           },
           {
             "type": "command",
