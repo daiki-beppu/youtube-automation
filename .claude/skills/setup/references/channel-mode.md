@@ -10,7 +10,7 @@
 - `config/channel/analytics.json::benchmark.channels` に承認済み TTP 対象が 1 件以上あり、各 entry に relationship（何を転写するか）が入っている
 - `docs/channel/ttp-seed-confirmation.md` に、候補ごとの source、seed fetch 要約、承認 / 不採用判断、転写したい要素、relationship、branding snapshot 参照または description / keywords / localizations の転写方針、未反映項目が保存されている
 - `docs/channel/competitor-branding-snapshot.json` に、承認済み TTP 対象の `snippet` / `brandingSettings` / `localizations` snapshot が保存されている
-- `docs/channel/personas/persona-definition.md` が存在する
+- 検証済み `docs/channel/personas/persona-definition.json` + `docs/channel/personas/persona-definition.html` pair が存在する
 - thumbnail TTP の参照元として `config/skills/thumbnail.yaml::image_generation.gemini.reference_images.default` が設定済み、またはスキップ理由が `ユーザー承認済み例外: thumbnail ...` として `ttp-seed-confirmation.md` に残っている
 - `music_engine: suno` の場合、`config/skills/music.yaml::prompt.genre_line` または `data/video_analysis/<slug>/*.json::suno_preset.genre_line` が準備済み、または曲構造 TTP 未反映が `ユーザー承認済み例外: music ...` / `ユーザー承認済み例外: 曲構造 ...` として `ttp-seed-confirmation.md` に残っている
 - 承認済み TTP ごとの上位 5 Long VOD から算出した duration 根拠・推奨 min/max・ユーザー承認結果が `ttp-seed-confirmation.md` に残っている、または手入力値・理由・後続 `/channel-research --benchmark` が `ユーザー承認済み例外: duration ...` として記録されている
@@ -215,9 +215,9 @@ Step 6〜9 を始める前に [persona / branding / readiness の実施詳細](p
 
 `/channel-research --voice` → `/channel-strategy --persona` → `/channel-strategy --scene` を必須チェーンとして順に実行する。このチェーンには **実行コンテキスト: 新規開設（公開前）** を明示して引き継ぐ。公開後の自チャンネル Analytics を前提に切り替えない。
 
-`/channel-strategy --persona` へ検証済み `docs/plans/viewer-voice-analysis.json`、`docs/channel/ttp-seed-confirmation.md`、`docs/channel/competitor-branding-snapshot.json`、任意の `/channel-research --benchmark` 成果物を渡す。`reports/analysis_*.md` は要求しない。構造化 persona fields の出典注記は persona mode の `references/persona.md` を唯一の正とし、暫定保存から最終更新まで維持する。`/channel-strategy --persona` から同じ実行コンテキストを引き継いで `/channel-strategy --scene` を実行し、`docs/plans/viewing-scene-matrix.md` を生成してから、最終 `docs/channel/personas/persona-definition.md` を更新する。
+`/channel-strategy --persona` へ検証済み `docs/plans/viewer-voice-analysis.json`、`docs/channel/ttp-seed-confirmation.md`、`docs/channel/competitor-branding-snapshot.json`、任意の `/channel-research --benchmark` 成果物を渡す。`reports/analysis_*.md` は要求しない。構造化 persona fields と evidence は persona mode の `references/persona.md` を唯一の正とし、暫定保存から最終更新まで維持する。`/channel-strategy --persona` から同じ実行コンテキストを引き継いで `/channel-strategy --scene` を実行し、`docs/plans/viewing-scene-matrix.json` + `docs/plans/viewing-scene-matrix.html` pair を生成してから、最終 `docs/channel/personas/persona-definition.json` + `docs/channel/personas/persona-definition.html` pair を更新する。
 
-最終 `persona-definition.md` が通常ファイルとして存在し、persona mode 所有の必須9セクションと非空本文が揃い、「暫定」表記がなく、構造化 persona fields の各項目に出典注記が維持されていることを確認する。規定の正は `references/persona.md`、機械判定は `yt-doctor --json --check ttp_wf_new_readiness` とし、いずれかが欠ける場合は Step 7 未完了として成功案内を出さず、Step 8 へ進まない。
+最終 persona JSON+HTML pair が schema・digest検証を通り、`document_type=persona`、非空の `persona.id/name/desires`、evidenceを持つことを確認する。`status=confirmed` では非空の `scene_ids` も必須とし、視聴シーンを明示的にスキップした仮説版だけ `status=hypothesis`, `scene_ids=[]` を許可する。機械判定は `yt-doctor --json --check ttp_wf_new_readiness` とし、不足時は Step 7 未完了として Step 8 へ進まない。
 
 ### Step 8: branding 初回反映
 

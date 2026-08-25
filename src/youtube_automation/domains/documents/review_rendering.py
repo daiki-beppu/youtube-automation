@@ -93,8 +93,11 @@ def _candidate_card(
             f'aria-label="{escape(label, quote=True)} を選ぶ">'
             "この候補を選ぶ</button></form></div>"
         )
+    candidate_class = "view-card review-candidate"
+    if not preview:
+        candidate_class += " review-candidate-no-preview"
     return (
-        f'<article class="view-card review-candidate" data-candidate-id="{escape(candidate_id, quote=True)}" '
+        f'<article class="{candidate_class}" data-candidate-id="{escape(candidate_id, quote=True)}" '
         f'aria-labelledby="{title_id}"><header class="review-candidate-header">'
         f'<p class="candidate-index" aria-hidden="true">{index:02d}</p>'
         f'<h2 id="{title_id}">{escape(label)}</h2></header>'

@@ -90,6 +90,28 @@ def test_plan_review_card_shows_comparison_details_and_preview(tmp_path: Path) -
     assert preview.resolve().as_uri() in html
 
 
+def test_text_only_plan_card_uses_full_width_layout() -> None:
+    manifest = SelectionManifest.create(
+        artifact="plan",
+        artifact_digest="a" * 64,
+        candidates=(
+            ReviewCandidate(
+                "plan-a",
+                "静かな雨の夜",
+                "b" * 64,
+                details=(("対象視聴者", "夜に集中したい人"), ("映像方針", "固定構図")),
+            ),
+        ),
+        now=datetime(2026, 8, 16, tzinfo=UTC),
+        lifetime=timedelta(minutes=5),
+    )
+
+    html = render_review_html(manifest, endpoint=None, media={})
+
+    assert 'class="view-card review-candidate review-candidate-no-preview"' in html
+    assert ".review-candidate-no-preview { grid-template-columns: minmax(0, 1fr); }" in html
+
+
 def test_each_candidate_has_unique_accessible_label_preview_qa_and_action(tmp_path: Path) -> None:
     preview = tmp_path / "preview.png"
     preview.write_bytes(b"preview")

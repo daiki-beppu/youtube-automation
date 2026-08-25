@@ -314,7 +314,7 @@ minimal mode / benchmark fallback mode は新規チャンネル初回制作を�
 - `config/skills/thumbnail.yaml::image_generation.gemini.reference_images.default` に `data/thumbnail_compare/benchmark/...` の相対パスを転記する
 - 完了後に `uv run yt-doctor --apply --json <apply_flags>` を再実行し、`ttp_wf_new_readiness` が ok になることを確認する
 
-同じ check は最終 `persona-definition.md` についても、persona mode 所有の必須セクション、非空本文、最終化、構造化項目の出典注記を検証する。persona 不足は `ttp-seed-confirmation.md` のユーザー承認済み例外では抑制せず、`next_action` の `/channel-strategy --persona` に戻って解消する。
+同じ check は最終 `persona-definition.json` + `.html` pair についても、schema・digest、`document_type=persona`、非空の人物フィールド、確度とscene参照を検証する。persona 不足は `ttp-seed-confirmation.md` のユーザー承認済み例外では抑制せず、`next_action` の `/channel-strategy --persona` に戻って解消する。
 
 `benchmark.channels` 未設定の場合は minimal mode として扱われるため、setup の完了を止めない。
 
