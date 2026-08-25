@@ -1462,6 +1462,16 @@ wheels = [
 ]
 
 [[package]]
+name = "pyscn"
+version = "1.29.1"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a0/c4/bba2b75c3ce677b96cbc34ac82acfc3fc61e402ab8e2fb6e44cec4af298f/pyscn-1.29.1-py3-none-macosx_11_0_arm64.whl", hash = "sha256:eefcbc1388a3a573c20f404241df2ea4d38c4f3fa8ea59034039d90d8a49e02d", size = 10026460, upload-time = "2026-08-16T03:22:51.307Z" },
+    { url = "https://files.pythonhosted.org/packages/e2/e6/b311086e861ec5f4d7b4fe2a112cc1a41039506c7453dca47bd0a0815cd3/pyscn-1.29.1-py3-none-manylinux_2_17_x86_64.whl", hash = "sha256:adeff99afd3a1df1ae711463712c1122fc66e494f80c53c8d8f1826a14126ce1", size = 10948738, upload-time = "2026-08-16T03:22:53.259Z" },
+    { url = "https://files.pythonhosted.org/packages/79/bc/1ae38573b5503613453c5b2db8d907060720489ed52cdc7d1b20a62e6efb/pyscn-1.29.1-py3-none-win_amd64.whl", hash = "sha256:61c4d3fe6d82988b9776932ccedfbe4f6c9150eea274666eb01776b3f29b1450", size = 11408077, upload-time = "2026-08-16T03:22:54.915Z" },
+]
+
+[[package]]
 name = "pytest"
 version = "9.1.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1851,6 +1861,7 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "pyscn" },
     { name = "pytest" },
     { name = "pytest-xdist" },
     { name = "ruff" },
@@ -1878,6 +1889,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "pyscn", specifier = ">=1.29,<2" },
     { name = "pytest", specifier = ">=9,<10" },
     { name = "pytest-xdist", specifier = ">=3.8,<4" },
     { name = "ruff", specifier = ">=0.15,<1" },

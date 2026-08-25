@@ -62,7 +62,7 @@ python .github/scripts/run-affected-tests.py                              # work
 
 | 変更 | 最初に実行 | PR 前の追加確認 |
 |---|---|---|
-| Python product code | behavioral fast lane + 変更 module の直接 test | unit-only full suite |
+| Python product code | behavioral fast lane + 変更 module の直接 test | unit-only full suite + `uv run pyscn check src/youtube_automation` |
 | skill / skill reference script | production-importing test は `docs/architecture/tests-layout.md` の鏡像規則、repository-only 契約は `tests/repo/` | repository contract lane + unit-only full suite |
 | docs / CI / packaging / hook | repository contract lane + 対応 file の直接 test | slow lane（tool 契約を含む場合）+ unit-only full suite |
 | extensions | 対象 workspace の既存 pnpm lint / type / Vitest / Playwright | Extensions CI（pytest marker 対象外） |
@@ -274,14 +274,15 @@ uv run pytest tests/repo/test_skills_sync_installed_wheel.py -q
 
 品質ゲートはローカル git hook ではなく CI（`.github/workflows/ci.yml`）で一元的に担保する（issue #2534 で lefthook を廃止。sandbox 化された worker が `.git/hooks` へ書き込めず bootstrap が反復失敗していたため、ローカル hook は持たない）。
 
-- **lint ジョブ**: `ruff check` / `ruff format --check`（旧 pre-commit と同等）
+- **lint ジョブ**: `ruff check` / `ruff format --check`（旧 pre-commit と同等）/ `pyscn check src/youtube_automation`（構造品質ゲート。Fallow の Python 対応物として issue #4615 で導入）
+  - **pyscn の閾値方針**: 複雑度（`max_complexity`）と関数長（`function_sloc_critical_threshold`）は導入時点の `src/youtube_automation` 実測最大値を `pyproject.toml::[tool.pyscn]` に固定してあり、既存債務は通しつつ実測値を超える新規の悪化だけを fail させる。dead code と循環 import は導入時点で 0 件のため即時 fail が有効。債務返済で実測値が下がったら閾値も追随して締め直す。code clone の検出は informational（fail しない）
 - **changelog ジョブ**: 実コード（`src/youtube_automation/` / `.claude/skills/` / `.claude/CLAUDE.template.md` / `pyproject.toml`）を変更したのに `changelog.d/` の fragment 追加または `CHANGELOG.md` の更新が無ければ fail する。fragment の書式は `changelog.d/README.md` を参照する。意図的に省く場合は PR に `skip-changelog` ラベルを付与する
 - **any-gate ジョブ**: 広すぎる型注釈ゲート。基準点からの新規追加行だけを対象に、ディレクトリを問わず全 `*.py` / `*.ts` / `*.tsx` の Python の typing module 経由の Any 型、または TypeScript の any 型注釈を検出したら fail する。既存行は対象外。ロジック本体は `.github/scripts/any-usage-gate.sh`（ローカルでも `bash .github/scripts/any-usage-gate.sh` で単体実行できる）
   - **基準点の解決順**: `PRE_PUSH_DIFF_BASE`（CI の any-gate ジョブが PR の base sha を渡す）→ `origin/main` → `main`。実際の diff 基準は解決した ref と HEAD の merge-base。`main` へのフォールバックは、remote を 1 つも持たない隔離クローンで takt がタスクを実行するため（クローンのローカル `main` はクローン時点の main そのものなので基準点は変わらない）。この経路が無いと `ci_verify` が push 前に再現すべき 4 ゲートのうち any-gate だけが常に self-skip する（issue #3048）。どの ref も解決できないときは、試した ref を列挙して skip する。解決順そのものは `tests/repo/test_any_usage_gate.py` が機械担保する
   - **Python**: `.github/scripts/any_usage_python_resolver.py` が `ast` でファイルを解析し、`typing.Any` の修飾アクセス（`import typing` / `import typing as t` 経由）と `from typing import Any`（複数行の括弧 import・`as` alias 含む）の直接 import 経由の裸 `Any` の両方を、実際に参照されている行番号として解決する。コメント・docstring・文字列リテラル中の "Any" は AST 上に現れないため誤検知しない。`python3` が無い場合は警告を出して Python 側の検出のみ省略する
   - **TypeScript**: `: any` 直書きに加え、`Array<any>` / `Record<string, any>` のようなジェネリック引数、union / intersection、tuple 要素、型エイリアス代入（`type X = any;`）、アロー関数戻り値（`() => any`）、型アサーション（`value as any`）などの型位置の `any` を検出する。正規表現で候補行を検出したのち `.github/scripts/any_usage_ts_line_cleaner.py` で行コメント（`//...`）と文字列・テンプレートリテラルの中身を取り除いてから再判定するため、コメントや文字列リテラル中の "any"（型注釈っぽい表記を含む）は誤検知しない
 
-Python 側の未使用コード検出は、追加依存なしで CI に載っている Ruff `F` 系（未使用 import / 変数、未定義名など）を継続採用する。vulture は新規依存追加が必要で、Ruff `ARG` は既存コードに多数の既存違反があるため #1510 では採用しない。
+Python 側の未使用コード検出は、追加依存なしで CI に載っている Ruff `F` 系（未使用 import / 変数、未定義名など）を継続採用する。vulture は新規依存追加が必要で、Ruff `ARG` は既存コードに多数の既存違反があるため #1510 では採用しない。#4615 以降は lint ジョブの pyscn が CFG ベースの到達不能コード検出（return / raise 後のコードなど）を併用する。
 
 devShell の運用:
 

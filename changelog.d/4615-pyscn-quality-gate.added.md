@@ -1,0 +1,1 @@
+- CI の lint ジョブに pyscn の構造品質ゲート（`pyscn check src/youtube_automation`）を追加。複雑度・関数長は導入時点の実測値を `[tool.pyscn]` の閾値に固定して既存債務を通し、dead code・循環 import は即時 fail で新規の悪化だけを検出する
