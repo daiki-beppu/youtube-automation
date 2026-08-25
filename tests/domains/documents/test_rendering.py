@@ -483,6 +483,8 @@ def test_common_view_uses_local_japanese_fonts_and_visible_keyboard_focus() -> N
     )
 
     assert '"Hiragino Kaku Gothic ProN", "Hiragino Sans", "Yu Gothic", Meiryo' in html
+    assert "theme: Midnight" in html
+    assert "color-scheme: dark" in html
     assert ":focus-visible" in html
 
 

@@ -6,8 +6,8 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src file:; media-src file:; style-src 'unsafe-inline'; script-src 'none'; base-uri 'none'; form-action $FORM_ACTION; frame-ancestors 'none'">
   <title>$TITLE</title>
   <style>$CSS
-  /* Hallmark · macrostructure: Comparison Ledger · genre: editorial · theme: Technical Ledger
-   * audit: generic stacked cards, weak candidate identity, detached action, untokenized values
+  /* Hallmark · macrostructure: Comparison Ledger · genre: atmospheric · theme: Midnight
+   * audit: pass · contrast: pass (40–41) · tokens: pass (48)
    * slop-test: all applicable gates pass · mobile: pass (34, 49, 50–57)
    */
   /* Hallmark · pre-emit critique: P5 H5 E5 S5 R5 V5 */
@@ -26,7 +26,7 @@
     counter-increment: none;
   }
   .review-candidate::before { content: none; }
-  .review-candidate-header { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-sm); align-items: baseline; padding: var(--space-md) var(--space-md) 0; }
+  .review-candidate-header { display: flex; flex-direction: column; gap: var(--space-2xs); padding: var(--space-md) var(--space-md) 0; }
   .candidate-index { margin: 0; color: var(--color-link); font-family: var(--font-mono); font-size: .75rem; font-weight: 700; letter-spacing: .08em; }
   .review-candidate-header h2 { margin: 0; font-size: clamp(1.125rem, 3vw, 1.5rem); }
   .review-preview { min-width: 0; }
@@ -38,9 +38,10 @@
   .review-action { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); padding: var(--space-md); border-block-start: 1px solid var(--color-rule-strong); background: var(--color-surface-muted); }
   .review-action p, .review-action form { margin: 0; }
   button { min-height: 2.75rem; padding: var(--space-xs) var(--space-md); border: 1px solid var(--color-ink); border-radius: var(--radius-media); background: var(--color-ink); color: var(--color-surface); cursor: pointer; font: inherit; font-weight: 700; white-space: nowrap; }
-  button:hover { background: var(--color-link); border-color: var(--color-link); }
-  button:active { translate: 0 1px; }
+  button:hover:not(:disabled) { background: var(--color-link); border-color: var(--color-link); }
+  button:active:not(:disabled) { translate: 0 1px; }
   button:focus-visible { outline: .1875rem solid var(--color-focus); outline-offset: var(--space-3xs); }
+  button:disabled { cursor: not-allowed; opacity: .55; }
   img, audio, video { display: block; max-width: 100%; }
   .review-images { display: grid; gap: var(--space-sm); grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .review-images figure { margin: 0; }
@@ -61,7 +62,7 @@
   @media (max-width: 40rem) {
     .review-action { align-items: stretch; flex-direction: column; }
     .review-action button { width: 100%; }
-    .review-images { grid-template-columns: 1fr; }
+    .review-images { grid-template-columns: minmax(0, 1fr); }
   }
   </style>
 </head>

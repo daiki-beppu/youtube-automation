@@ -49,6 +49,8 @@ def test_renderer_escapes_untrusted_values_and_keeps_page_read_only() -> None:
     assert "<button" not in html
     assert "href=" not in html
     assert "Content-Security-Policy" in html
+    assert "theme: Midnight" in html
+    assert "color-scheme: dark" in html
 
 
 def test_renderer_provides_css_only_client_filters_for_all_statuses() -> None:
