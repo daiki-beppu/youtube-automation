@@ -207,6 +207,21 @@ ignore = ["RUF001", "RUF002", "RUF003"]
 # pytest.raises(match=...) の正規表現メタ文字警告はテスト可読性を優先して抑制
 "tests/**" = ["RUF043"]
 
+[tool.pyscn.complexity]
+enabled = true
+# 導入時点（issue #4615）の src/youtube_automation 実測最大値で固定し、既存債務は通しつつ
+# それを超える新規の悪化だけを fail させる。債務返済で下がったら実測値へ追随して締め直す
+max_complexity = 42
+function_sloc_critical_threshold = 544
+
+[tool.pyscn.dead_code]
+enabled = true
+min_severity = "warning"
+
+[tool.pyscn.dependencies]
+enabled = true
+detect_cycles = true
+
 [tool.pytest.ini_options]
 tmp_path_retention_policy = "failed"
 markers = [
@@ -216,6 +231,7 @@ markers = [
 
 [dependency-groups]
 dev = [
+    "pyscn>=1.29,<2",
     "pytest>=9,<10",
     "pytest-xdist>=3.8,<4",
     "ruff>=0.15,<1",

@@ -22,6 +22,7 @@ _CI_PATH_CLASSIFIER = _REPO_ROOT / ".github" / "scripts" / "classify-ci-paths.sh
 _CI_LINT_PARALLEL_STEPS = {
     "Ruff check": "nix develop --command uv run ruff check .",
     "Ruff format check": "nix develop --command uv run ruff format --check .",
+    "pyscn check": "nix develop --command uv run pyscn check src/youtube_automation",
 }
 
 _SUNO_FAST_PARALLEL_STEPS = {

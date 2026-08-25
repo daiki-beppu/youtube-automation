@@ -7,6 +7,8 @@ __pycache__/
 .venv/
 .env
 .direnv/
+# pyscn analyze のローカルレポート出力
+.pyscn/
 
 # Pytest temp（--basetemp などで生成される一時ディレクトリ）
 .tmp_test/

@@ -85,6 +85,9 @@ jobs:
           - name: Ruff format check
             if: needs.changes.outputs.python == 'true'
             run: nix develop --command uv run ruff format --check .
+          - name: pyscn check
+            if: needs.changes.outputs.python == 'true'
+            run: nix develop --command uv run pyscn check src/youtube_automation
       - name: Skill catalog check
         if: needs.changes.outputs.python == 'true'
         run: nix develop --command uv run yt-skills catalog --check
