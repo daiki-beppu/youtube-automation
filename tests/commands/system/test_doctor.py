@@ -3444,9 +3444,7 @@ def _write_ttp_readiness_files(base: Path) -> None:
     analysis_dir = data_dir / "video_analysis" / "rival"
     analysis_dir.mkdir(parents=True, exist_ok=True)
     for video_id in video_ids:
-        (analysis_dir / f"{video_id}.json").write_text(
-            json.dumps(_video_analysis_payload(video_id)), encoding="utf-8"
-        )
+        (analysis_dir / f"{video_id}.json").write_text(json.dumps(_video_analysis_payload(video_id)), encoding="utf-8")
     docs_benchmarks = base / "docs" / "benchmarks"
     docs_benchmarks.mkdir(parents=True, exist_ok=True)
     (docs_benchmarks / "rival.md").write_text("# Rival", encoding="utf-8")

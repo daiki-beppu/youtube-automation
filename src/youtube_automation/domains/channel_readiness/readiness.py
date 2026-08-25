@@ -582,9 +582,7 @@ def _video_analysis_shape_error(data: dict[str, object]) -> str | None:
 
     analysis_window_sec = data.get("analysis_window_sec")
     if analysis_window_sec is not None and (
-        isinstance(analysis_window_sec, bool)
-        or not isinstance(analysis_window_sec, int)
-        or analysis_window_sec <= 0
+        isinstance(analysis_window_sec, bool) or not isinstance(analysis_window_sec, int) or analysis_window_sec <= 0
     ):
         return "analysis_window_sec が正の整数ではありません"
     analysis_scope = data.get("analysis_scope")
