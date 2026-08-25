@@ -66,6 +66,9 @@ jobs:
         run: echo "Extension-only change; Python lint is not applicable."
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: needs.changes.outputs.python == 'true'
+        with:
+          # pyscn 差分ゲートが base commit を worktree へ展開するため全履歴が必要
+          fetch-depth: 0
       - uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342 # v31.11.0
         if: needs.changes.outputs.python == 'true'
       - name: Cache uv
@@ -88,6 +91,25 @@ jobs:
           - name: pyscn check
             if: needs.changes.outputs.python == 'true'
             run: nix develop --command uv run pyscn check src/youtube_automation
+      - name: pyscn new-only diff gate
+        if: needs.changes.outputs.python == 'true'
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          set -eu
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            base="$PR_BASE_SHA"
+          else
+            base="$PUSH_BEFORE_SHA"
+          fi
+          case "$base" in
+            "" | 0000000000000000000000000000000000000000)
+              base="$(git rev-parse HEAD^)"
+              ;;
+          esac
+          PYSCN_DIFF_BASE="$base" nix develop --command uv run python .github/scripts/pyscn-diff-gate.py
       - name: Skill catalog check
         if: needs.changes.outputs.python == 'true'
         run: nix develop --command uv run yt-skills catalog --check
