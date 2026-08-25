@@ -113,6 +113,8 @@ def test_each_candidate_has_unique_accessible_label_preview_qa_and_action(tmp_pa
 
     assert 'class="review-grid"' in html
     assert "Hallmark · macrostructure: Comparison Ledger" in html
+    assert "theme: Midnight" in html
+    assert "color-scheme: dark" in html
     assert 'class="page-header review-header"' in html
     assert 'class="candidate-index" aria-hidden="true">01</p>' in html
     assert 'class="candidate-index" aria-hidden="true">02</p>' in html

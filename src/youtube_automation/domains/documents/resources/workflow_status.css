@@ -1,26 +1,26 @@
-/* Hallmark · macrostructure: Operational Queue · genre: editorial · theme: Technical Ledger
+/* Hallmark · macrostructure: Operational Queue · genre: atmospheric · theme: Midnight
  * audience: YouTube operators · tone: technical / austere · motion: cut
  * audit: pass · contrast: pass (40–41) · tokens: pass (48)
  * slop-test: all applicable gates pass · mobile: pass (34, 49, 50–57)
  */
 /* Hallmark · pre-emit critique: P5 H5 E5 S5 R5 V5 */
 :root {
-  color-scheme: light;
-  --font-body: "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Yu Gothic", Meiryo, system-ui, sans-serif;
-  --font-mono: ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-  --color-paper: #f1f2ee;
-  --color-surface: #fafaf7;
-  --color-ink: #18201f;
-  --color-muted: #596461;
-  --color-rule: #b7bfbb;
-  --color-rule-strong: #65706c;
-  --color-accent: #185a4b;
-  --color-accent-soft: #dce9e3;
-  --color-alert: #8a3028;
-  --color-alert-soft: #f5e3df;
-  --color-warning: #6c5200;
-  --color-warning-soft: #f2e8c6;
-  --color-focus: #075eb4;
+  color-scheme: dark;
+  --font-body: "Geist", "Inter", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Yu Gothic", Meiryo, system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  --color-paper: oklch(13.5% 0.028 250deg);
+  --color-surface: oklch(17% 0.026 250deg);
+  --color-ink: oklch(94% 0.012 250deg);
+  --color-muted: oklch(72% 0.025 250deg);
+  --color-rule: oklch(30% 0.028 250deg);
+  --color-rule-strong: oklch(48% 0.045 250deg);
+  --color-accent: oklch(72% 0.14 250deg);
+  --color-accent-soft: oklch(24% 0.06 250deg);
+  --color-alert: oklch(78% 0.14 25deg);
+  --color-alert-soft: oklch(23% 0.065 25deg);
+  --color-warning: oklch(83% 0.11 80deg);
+  --color-warning-soft: oklch(23% 0.05 80deg);
+  --color-focus: oklch(78% 0.16 250deg);
   --space-2xs: .25rem;
   --space-xs: .5rem;
   --space-sm: .75rem;
