@@ -61,6 +61,7 @@ REPO_CONTRACT_MODULES = frozenset(
         "test_lifecycle_skills_no_tayk.py",
         "test_market_research_skill_contract.py",
         "test_no_google_auth_httplib2_direct_import.py",
+        "test_pyscn_diff_gate_contract.py",
         "test_pytest_lane_contract.py",
         "test_readme_dev_install_documentation.py",
         "test_select_affected_tests.py",
@@ -109,6 +110,14 @@ SLOW_NODE_IDS = (
     (
         "test_analytics_cli_integration.py",
         "test_yt_analytics_returns_failure_when_subscribed_status_collection_fails",
+    ),
+    (
+        "test_pyscn_diff_gate_contract.py",
+        "test_gate_fails_on_new_finding_and_reports_only_the_new_one",
+    ),
+    (
+        "test_pyscn_diff_gate_contract.py",
+        "test_gate_passes_when_existing_findings_only_shift_lines",
     ),
     (
         "test_audience_analytics.py",
