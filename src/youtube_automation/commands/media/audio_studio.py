@@ -139,6 +139,11 @@ def _write_order_section(path: Path, settings: object) -> AudioAdjustments:
     return replace_track_order(path, settings.get("order"), settings.get("shuffle_seed"), settings.get("pin_first"))
 
 
+def read_adjustment_route(*, section: AdjustmentSection, document_path: Path) -> object:
+    """Read one registered adjustment section without an HTTP socket."""
+    return section.read(read_audio_adjustments(document_path))
+
+
 def write_adjustment_route(
     request: Request,
     *,

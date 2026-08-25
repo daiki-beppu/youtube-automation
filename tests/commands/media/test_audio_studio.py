@@ -20,6 +20,7 @@ from youtube_automation.commands.media.audio_studio import (
     adjustment_sections,
     build_track_payload,
     create_server,
+    read_adjustment_route,
     write_adjustment_route,
 )
 from youtube_automation.commands.suno.suno_audio_cleanup import CleanupConfig, cleanup_config_settings
@@ -61,6 +62,14 @@ def test_adjustment_section_registry_and_put_handler_are_socket_free(tmp_path: P
 
     assert written == [{"enabled": True}]
     assert set(adjustment_sections()) == {"tracks", "order", "master", "finalize"}
+
+
+def test_adjustment_section_read_handler_is_socket_free(tmp_path: Path) -> None:
+    collection = _collection(tmp_path)
+    document_path = CollectionPaths(collection).audio_adjustments_path
+    section = adjustment_sections()["master"]
+
+    assert read_adjustment_route(section=section, document_path=document_path) is None
 
 
 def test_build_track_payload_lists_supported_audio_in_name_order(tmp_path: Path) -> None:
