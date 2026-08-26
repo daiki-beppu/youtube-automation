@@ -11,6 +11,7 @@ from typing import Mapping, Sequence
 from urllib.parse import unquote, urlsplit
 
 from youtube_automation.core.errors import DocumentRenderError
+from youtube_automation.domains.documents.resources import load_css
 from youtube_automation.domains.documents.schema_registry import (
     RepositorySchema,
     load_repository_schema,
@@ -43,9 +44,7 @@ def render_schema_document(document: object, schema: Mapping[str, object]) -> st
     embedded = _embedded_json(document)
     package = "youtube_automation.domains.documents.resources"
     template = files(package).joinpath("base.html").read_text(encoding="utf-8")
-    css = "\n".join(
-        files(package).joinpath(name).read_text(encoding="utf-8").strip() for name in ("foundation.css", "base.css")
-    )
+    css = load_css("base.css")
     description_html = f'<p class="document-description">{escape(description)}</p>' if description else ""
     html = Template(template).substitute(
         TITLE=escape(title),

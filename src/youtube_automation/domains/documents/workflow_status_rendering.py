@@ -8,6 +8,7 @@ from importlib.resources import files
 from string import Template
 
 from youtube_automation.core.errors import DocumentRenderError
+from youtube_automation.domains.documents.resources import load_css
 from youtube_automation.domains.documents.workflow_status import CollectionStatusView, WorkflowStatusSnapshot
 
 _RESOURCE_PACKAGE = "youtube_automation.domains.documents.resources"
@@ -16,10 +17,7 @@ _FILTERS = ("all", "planning", "live", "complete")
 
 def render_workflow_status(snapshot: WorkflowStatusSnapshot) -> str:
     template = Template(files(_RESOURCE_PACKAGE).joinpath("workflow_status.html").read_text(encoding="utf-8"))
-    css = "\n".join(
-        files(_RESOURCE_PACKAGE).joinpath(name).read_text(encoding="utf-8").strip()
-        for name in ("foundation.css", "workflow_status.css")
-    )
+    css = load_css("workflow_status.css")
     filters = (
         "".join(
             f'<input class="filter-control" type="radio" name="status-filter" id="filter-{status}"'

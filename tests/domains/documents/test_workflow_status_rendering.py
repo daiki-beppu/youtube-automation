@@ -60,6 +60,15 @@ def test_renderer_embeds_shared_foundation_before_workflow_styles() -> None:
     assert html.index("/* Documents design foundation") < html.index("/* Hallmark · macrostructure: Operational Queue")
 
 
+def test_renderer_defers_page_gutters_to_shared_foundation() -> None:
+    css = render_workflow_status(_snapshot()).split("<style>", 1)[1].split("</style>", 1)[0]
+    screen_css = css.split("/* Hallmark · macrostructure: Operational Queue", 1)[1]
+
+    assert css.count("padding: var(--space-page)") == 1
+    assert "body {" not in screen_css
+    assert "main {" not in screen_css
+
+
 def test_renderer_provides_css_only_client_filters_for_all_statuses() -> None:
     html = render_workflow_status(_snapshot())
 

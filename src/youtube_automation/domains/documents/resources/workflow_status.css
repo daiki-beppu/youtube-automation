@@ -4,7 +4,6 @@
  * slop-test: all applicable gates pass · mobile: pass (34, 49, 50–57)
  */
 /* Hallmark · pre-emit critique: P5 H5 E5 S5 R5 V5 */
-main { padding-block: var(--space-lg); }
 .page-header { border-bottom: 2px solid var(--color-ink); display: flex; flex-direction: column; gap: var(--space-md); padding-bottom: var(--space-md); }
 .eyebrow, .section-index, .status, dt { color: var(--color-ink-muted); font-family: var(--font-mono); font-size: .72rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 .eyebrow { margin: 0 0 var(--space-xs); }
@@ -72,7 +71,6 @@ th { color: var(--color-ink-muted); font-family: var(--font-mono); font-size: .7
   .attention, .summary, .table-scroll { grid-column: 1; }
 }
 @media (max-width: 520px) {
-  main { width: min(100% - 1rem, var(--measure-page)); padding-top: var(--space-sm); }
   .page-header, .browser-heading { gap: var(--space-sm); }
   .overview-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .overview-metrics > div { border-bottom: 1px solid var(--color-rule); }
