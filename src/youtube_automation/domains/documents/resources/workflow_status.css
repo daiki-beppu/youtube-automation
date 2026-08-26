@@ -62,7 +62,7 @@ th { color: var(--color-ink-muted); font-family: var(--font-mono); font-size: .7
 .artifact.complete { background: var(--color-link-soft); color: var(--color-link); }
 .artifact.missing { background: var(--color-warning-soft); color: var(--color-warning-text); }
 .artifact.inconsistent { background: var(--color-fail-soft); color: var(--color-fail-text); }
-.empty { border-block: 1px dashed var(--color-rule-strong); color: var(--color-ink-muted); margin: 0; padding: var(--space-lg) var(--space-sm); text-align: center; }
+.empty { border-block: 1px dashed var(--color-rule-strong); color: var(--color-ink-muted); margin: 0; padding: var(--space-xl) var(--space-sm); text-align: center; }
 @media (max-width: 768px) {
   .overview { grid-template-columns: minmax(0, 1fr); }
   .overview-metrics { border-top: 1px solid var(--color-rule); }

@@ -170,4 +170,5 @@ def test_empty_snapshot_renders_an_explicit_empty_state() -> None:
     html = render_workflow_status(snapshot)
 
     assert "コレクションはありません" in html
+    assert "padding: var(--space-xl) var(--space-sm)" in html
     validate_workflow_status_html(html)
