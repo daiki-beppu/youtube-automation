@@ -29,7 +29,7 @@
 
 ## 2. ツール導入と API セットアップ
 
-空フォルダでの prerequisites、`uv init`、automation package と skill の導入、`/setup --tool`、GCP / OAuth / ADC の本人操作、完了確認は、公開ガイド [`docs/oauth-setup.md`](docs/oauth-setup.md) を正本とする。本書には同じコマンドや OAuth GUI 手順を複製しない。
+空フォルダでの prerequisites、`uv init`、automation package と skill の導入は、公開ガイド [`docs/tool-setup.md`](docs/tool-setup.md) を正本とする。`/setup --tool` による GCP / OAuth / ADC の本人操作と完了確認は、[`docs/oauth-setup.md`](docs/oauth-setup.md) を正本とする。本書には同じコマンドや OAuth GUI 手順を複製しない。
 
 公開ガイドの推奨ルートを完了すると、automation CLI、同期済み skill、API 認証、動画アップロード前提が揃う。その後、この onboarding の §3 に進み、新規チャンネルなら `/setup --channel` を実行する。手動 bootstrap / Terraform、secret 解決順、トラブルシューティングも同じ公開ガイドの上級者向け節を参照する。
 

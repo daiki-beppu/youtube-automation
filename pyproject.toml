@@ -176,6 +176,7 @@ only-include = [
     # README の OAuth 導線（ONBOARDING → oauth-setup → oauth-scopes / ルート B 詳細）が
     # sdist 内で解決するよう同梱する。infra/ はこの README 以外は配布しない
     "ONBOARDING.md",
+    "docs/tool-setup.md",
     "docs/oauth-setup.md",
     "docs/oauth-scopes.md",
     "infra/terraform/gcp/README.md",

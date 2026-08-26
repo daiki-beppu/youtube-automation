@@ -48,7 +48,7 @@ export default defineConfig({
     sidebar: [
       {
         label: "はじめる",
-        items: ["/oauth-setup", "/chrome-extension-install-guide"],
+        items: ["/tool-setup", "/oauth-setup", "/chrome-extension-install-guide"],
       },
       {
         label: "使う",

@@ -17,6 +17,7 @@ ROOT = REPO_ROOT
 WORKFLOW_PATH = ROOT / ".github/workflows/site.yml"
 OPERATOR_DOC_SOURCES = (
     "ONBOARDING.md",
+    "docs/tool-setup.md",
     "docs/oauth-setup.md",
     "docs/features.md",
     "docs/workflow-cheatsheet.md",
@@ -126,6 +127,7 @@ def test_python_build_configuration_excludes_site_workspace() -> None:
     }
     assert sdist_operator_sources == {
         "ONBOARDING.md",
+        "docs/tool-setup.md",
         "docs/oauth-setup.md",
         "docs/features.md",
         "docs/workflow-cheatsheet.md",

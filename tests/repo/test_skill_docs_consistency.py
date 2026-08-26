@@ -1372,6 +1372,7 @@ def test_setup_client_secrets_step_uses_download_and_automatic_move() -> None:
 
 
 def test_public_setup_guide_owns_installation_and_oauth_completion() -> None:
+    tool_setup = _read("docs/tool-setup.md")
     oauth_setup = _read("docs/oauth-setup.md")
     recommended = oauth_setup.split("## 推奨ルート", 1)[1].split("## 上級者向け", 1)[0]
 
@@ -1379,6 +1380,10 @@ def test_public_setup_guide_owns_installation_and_oauth_completion() -> None:
         "uv init",
         "uv add git+https://github.com/daiki-beppu/youtube-automation.git",
         "uv run yt-skills sync --asset skills --force",
+    ):
+        assert expected in tool_setup
+
+    for expected in (
         "/setup --tool",
         "[HUMAN STEP]",
         "Download JSON",
@@ -1395,7 +1400,8 @@ def test_public_setup_guide_owns_installation_and_oauth_completion() -> None:
     onboarding_setup = onboarding.split("## 2. ツール導入と API セットアップ", 1)[1].split(
         "### 2.4 初期設定後の GCP 課金確認", 1
     )[0]
-    assert "[`docs/oauth-setup.md`](docs/oauth-setup.md) を正本" in onboarding_setup
+    assert "[`docs/tool-setup.md`](docs/tool-setup.md)" in onboarding_setup
+    assert "[`docs/oauth-setup.md`](docs/oauth-setup.md)" in onboarding_setup
     assert "```bash" not in onboarding_setup
     assert "Download JSON" not in onboarding_setup
 
