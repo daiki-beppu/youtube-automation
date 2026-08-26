@@ -128,6 +128,22 @@ def test_load_namespaced_skill_config_returns_only_requested_section(
     assert loaded == {"model": "custom"}
 
 
+def test_load_namespaced_skill_config_uses_legacy_owner_override(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    default_path = tmp_path / "music.default.yaml"
+    default_path.write_text("prompt:\n  model: v5\n", encoding="utf-8")
+    channel_dir = tmp_path / "channel"
+    overrides = channel_dir / "config" / "skills"
+    overrides.mkdir(parents=True)
+    (overrides / "suno.yaml").write_text("model: legacy-custom\n", encoding="utf-8")
+    monkeypatch.setattr(skill_config, "_default_path", lambda owner: default_path if owner == "music" else None)
+
+    loaded = skill_config.load_skill_config("music.prompt", use_cache=False, channel_dir=channel_dir)
+
+    assert loaded == {"model": "legacy-custom"}
+
+
 def test_load_namespaced_skill_config_rejects_missing_section(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     default_path = tmp_path / "music.default.yaml"
     default_path.write_text("master:\n  target_lufs: -14\n", encoding="utf-8")
@@ -156,6 +172,17 @@ def test_load_namespaced_channel_override_returns_requested_section(
     monkeypatch.setenv("CHANNEL_DIR", str(tmp_path))
 
     assert skill_config.load_channel_override("music.prompt") == {"model": "custom"}
+
+
+def test_load_namespaced_channel_override_uses_legacy_owner_override(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    overrides = tmp_path / "config" / "skills"
+    overrides.mkdir(parents=True)
+    (overrides / "suno.yaml").write_text("model: legacy-custom\n", encoding="utf-8")
+    monkeypatch.setenv("CHANNEL_DIR", str(tmp_path))
+
+    assert skill_config.load_channel_override("music.prompt") == {"model": "legacy-custom"}
 
 
 def test_moved_channel_research_modes_keep_legacy_loader_and_override_keys(tmp_path: Path) -> None:
