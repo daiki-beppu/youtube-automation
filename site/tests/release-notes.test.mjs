@@ -34,6 +34,8 @@ const operatorSections = [
   },
 ];
 const operatorRoutes = operatorSections.flatMap(({ routes }) => routes);
+/** 公開 route に、navigation から除外される /onboarding を足した生成 route 総数。 */
+const generatedRouteCount = operatorRoutes.length + 1;
 
 const readStylesheetClosure = async (html) => {
   const inlineStyles = [...html.matchAll(/<style(?:\s[^>]*)?>([\s\S]*?)<\/style>/g)].map(
@@ -191,7 +193,7 @@ const sectionByAttribute = (html, attribute, value) => {
 const hrefsWithin = (markup) =>
   [...markup.matchAll(/href="(\/[^"#?]*)"/g)].map((match) => match[1]);
 
-test("landing page は3区分を表示し、公開operator docs 7件だけへ1回ずつ到達できる", async () => {
+test(`landing page は3区分を表示し、公開operator docs ${operatorRoutes.length}件だけへ1回ずつ到達できる`, async () => {
   const html = await readIndex();
   const sectionLabels = [
     ["getting-started", "はじめる"],
@@ -264,7 +266,7 @@ test("全ページ共通 sidebar と tabs は operator 区分・release規模・
   }
 });
 
-test("onboarding は直接描画だけを維持し、公開operator docs 7件だけを検索へ載せる", async () => {
+test(`onboarding は直接描画だけを維持し、公開operator docs ${operatorRoutes.length}件だけを検索へ載せる`, async () => {
   const search = JSON.parse(
     await readFile(new URL("../dist/blume-search.json", import.meta.url), "utf8")
   );
@@ -295,7 +297,7 @@ test("onboarding は直接描画だけを維持し、公開operator docs 7件だ
   );
 });
 
-test("operator docs の8 route は原本の先頭見出しを唯一の H1 として描画する", async () => {
+test(`operator docs の${generatedRouteCount} route は原本の先頭見出しを唯一の H1 として描画する`, async () => {
   const expectedTitles = new Map([
     ["/onboarding", "Onboarding"],
     [
@@ -310,8 +312,10 @@ test("operator docs の8 route は原本の先頭見出しを唯一の H1 とし
       "/channel-workspace-migration",
       "単一チャンネル repository から workspace への移行",
     ],
+    ["/cloud-execution", "クラウドでの実行"],
   ]);
 
+  assert.equal(expectedTitles.size, generatedRouteCount);
   for (const [route, expectedTitle] of expectedTitles) {
     const html = await readOperatorDoc(route);
     const headings = [...html.matchAll(/<h1(?:\s[^>]*)?>([^<]+)<\/h1>/g)].map(

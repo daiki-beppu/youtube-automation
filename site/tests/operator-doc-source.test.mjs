@@ -33,12 +33,15 @@ const createRepository = async (map = operatorDocMap) => {
   return repositoryRoot;
 };
 
-test("operator document map は生成対象8件だけを明示列挙する", () => {
+test(`operator document map は生成対象${expectedSources.length}件だけを明示列挙する`, () => {
   assert.deepEqual(
     operatorDocMap.map(({ source }) => source),
     expectedSources
   );
-  assert.equal(new Set(operatorDocMap.map(({ route }) => route)).size, 8);
+  assert.equal(
+    new Set(operatorDocMap.map(({ route }) => route)).size,
+    expectedSources.length
+  );
 });
 
 test("source は build ごとに原本を読み、安定 route と doc type を返す", async () => {
@@ -51,7 +54,7 @@ test("source は build ごとに原本を読み、安定 route と doc type を�
   await writeFile(onboarding, "# Second\n\n## Details\n\nSecond body\n", "utf8");
   const second = await source.load();
 
-  assert.equal(first.entries.length, 8);
+  assert.equal(first.entries.length, expectedSources.length);
   assert.equal(first.entries[0].body.text, "## Details\n\nFirst body\n");
   assert.equal(second.entries[0].body.text, "## Details\n\nSecond body\n");
   assert.equal(first.entries[0].data.title, "First");
