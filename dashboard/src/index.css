@@ -377,9 +377,7 @@
         90deg,
         var(--dashboard-accent-surface),
         transparent 42rem
-      ),
-      linear-gradient(var(--border) 1px, transparent 1px);
-    background-size: 100% 4rem;
+      );
   }
 
   .dashboard-workbench {
