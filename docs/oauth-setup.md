@@ -2,15 +2,18 @@
 
 `/setup --tool` で GCP / OAuth / ADC と動画アップロードの前提を整えるための**運営者向け正本**。
 
+> [!WARNING]
+> 本 Python 版はメンテナンスモードである。新規導入前に [`migration/python-to-tayk.md`](migration/python-to-tayk.md) の移行方針も確認する。
+
 > [!IMPORTANT]
 > この手順は先に [`ツール導入`](tool-setup.md) を完了していることを前提とする。
 
 skill / CLI ごとの実効 scope と read-only token の設計は [`oauth-scopes.md`](oauth-scopes.md) を参照。
 ツール/API 設定後のチャンネル開設と日常運用は [`ONBOARDING.md`](../ONBOARDING.md) を参照。
 
-## 推奨ルート: `/setup --tool` で GCP / ADC / OAuth を完了する
+## 推奨ルート: `/setup --tool`
 
-### 3. GCP / ADC / OAuth を完了する
+### 1. GCP / ADC / OAuth を完了する
 
 setup は project 選択、Billing 紐付け、必要 API の有効化、ADC quota project、IAM、Reporting job を診断順に進める。外部の GCP 状態を変える前には、対象 project・account・実行コマンドを表示して承認を求める。
 
@@ -35,7 +38,7 @@ uv run yt-doctor --fix-client-secrets
 uv run yt-doctor --apply --json
 ```
 
-### 4. 完了を確認する
+### 2. 完了を確認する
 
 `uv run yt-doctor --apply --json` の `apply.stop_reason` が `completed` となり、次がすべて確認できれば `/setup --tool` は完了である。
 
