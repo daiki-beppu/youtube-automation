@@ -46,9 +46,7 @@ export default function App() {
           <Disc3Icon aria-hidden="true" />
           <span>Local collection editor</span>
         </div>
-        <h1 className="studio-title text-3xl font-semibold tracking-tight sm:text-4xl">
-          Audio Studio
-        </h1>
+        <h1 className="studio-title">Audio Studio</h1>
         <p className="studio-collection max-w-2xl text-muted-foreground">
           {data?.collection_name ?? "コレクションの音源を読み込んでいます"}
         </p>
