@@ -30,6 +30,7 @@ const operatorSections = [
         label: "Chrome 拡張の導入",
       },
     ],
+    groups: [],
   },
   {
     id: "use",
@@ -51,14 +52,22 @@ const operatorSections = [
         label: "ワークフローの使い分け",
       },
       {
-        description: "複数チャンネルの数字を確認する dashboard の使い方",
-        href: "/dashboard",
-        label: "dashboard",
-      },
-      {
         description: "単一チャンネル構成から workspace へ移行する手順",
         href: "/channel-workspace-migration",
         label: "workspace 移行",
+      },
+    ],
+    groups: [
+      {
+        id: "experimental",
+        label: "実験的機能",
+        pages: [
+          {
+            description: "複数チャンネルの数字を確認する dashboard の使い方",
+            href: "/dashboard",
+            label: "dashboard",
+          },
+        ],
       },
     ],
   },
@@ -155,6 +164,22 @@ const formatDate = (date: Date) =>
               </li>
             ))}
           </ul>
+          {section.groups.map((group) => (
+            <section class="doc-group" data-doc-group={group.id}>
+              <h3>{group.label}</h3>
+              <ul class="doc-list">
+                {group.pages.map((page) => (
+                  <li>
+                    <a class="doc-card" href={page.href}>
+                      <h4>{page.label}</h4>
+                      <p>{page.description}</p>
+                      <span aria-hidden="true">読む →</span>
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ))}
         </section>
       ))}
 

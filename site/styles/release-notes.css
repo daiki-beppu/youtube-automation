@@ -168,6 +168,17 @@ body {
   padding: 0;
 }
 
+.doc-group {
+  margin-top: var(--release-space-lg);
+}
+
+.doc-group > h3 {
+  color: var(--color-muted-foreground);
+  font-size: clamp(1.1rem, 2vw, 1.35rem);
+  letter-spacing: -0.02em;
+  margin: 0 0 var(--release-space-sm);
+}
+
 .doc-card {
   border-bottom: 1px solid var(--release-border);
   color: inherit;
@@ -189,7 +200,8 @@ body {
   outline-offset: 3px;
 }
 
-.doc-card h3 {
+.doc-card h3,
+.doc-card h4 {
   font-size: clamp(1.2rem, 2.5vw, 1.5rem);
   letter-spacing: -0.025em;
   margin: 0;
