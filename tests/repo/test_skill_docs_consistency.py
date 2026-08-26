@@ -1377,11 +1377,19 @@ def test_public_setup_guide_owns_installation_and_oauth_completion() -> None:
     recommended = oauth_setup.split("## 推奨ルート", 1)[1].split("## 上級者向け", 1)[0]
 
     for expected in (
+        "uv が入っているか確認",
+        "公式手順",
         "uv init",
         "uv add git+https://github.com/daiki-beppu/youtube-automation.git",
         "uv run yt-skills sync --asset skills --force",
+        "uv run yt-skills sync --asset claude-md",
+        "uv run yt-skills sync --asset auth-template",
+        "uv run yt-setup-dirs",
+        "uv run yt-doctor --json",
     ):
         assert expected in tool_setup
+    assert tool_setup.index("yt-skills sync") < tool_setup.index("新しいセッション")
+    assert tool_setup.index("新しいセッション") < tool_setup.index("/setup --tool")
 
     for expected in (
         "/setup --tool",
