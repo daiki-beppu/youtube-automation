@@ -49,6 +49,14 @@ def _document_css(html: str) -> str:
     return html.split("<style>", 1)[1].split("</style>", 1)[0]
 
 
+def test_renderer_embeds_shared_foundation_before_document_styles() -> None:
+    html = render_schema_document({}, {"title": "Example", "type": "object"})
+    css = _document_css(html)
+
+    assert css.count("--color-paper: oklch(13.5% 0.028 250deg)") == 1
+    assert css.index("/* Documents design foundation") < css.index("/* Hallmark · macrostructure: Long Document")
+
+
 def test_schema_annotations_render_card_table_and_local_media_in_view_order() -> None:
     html = render_schema_document(
         {

@@ -7,6 +7,21 @@ from youtube_automation.domains.documents.review import ReviewCandidate, Selecti
 from youtube_automation.domains.documents.review_rendering import render_review_html, validate_review_html
 
 
+def test_review_embeds_shared_foundation_before_screen_styles() -> None:
+    manifest = SelectionManifest.create(
+        artifact="plan",
+        artifact_digest="a" * 64,
+        candidates=(ReviewCandidate("candidate", "Candidate", "b" * 64),),
+        now=datetime(2026, 8, 16, tzinfo=UTC),
+        lifetime=timedelta(minutes=5),
+    )
+
+    html = render_review_html(manifest, endpoint=None, media={})
+
+    assert html.count("--color-paper: oklch(13.5% 0.028 250deg)") == 1
+    assert html.index("/* Documents design foundation") < html.index("/* Hallmark · macrostructure: Long Document")
+
+
 def test_review_renderer_escapes_labels_and_exposes_only_allowlisted_form_fields(tmp_path: Path) -> None:
     media = tmp_path / "candidate.jpg"
     media.write_bytes(b"image")

@@ -42,7 +42,9 @@ def render_review_html(
     )
     package = "youtube_automation.domains.documents.resources"
     template = Template(files(package).joinpath("review.html").read_text(encoding="utf-8"))
-    css = files(package).joinpath("base.css").read_text(encoding="utf-8").strip()
+    css = "\n".join(
+        files(package).joinpath(name).read_text(encoding="utf-8").strip() for name in ("foundation.css", "base.css")
+    )
     csp_action = endpoint.rsplit("/select/", 1)[0] if endpoint is not None else "'none'"
     html = template.substitute(
         TITLE=escape(f"{manifest.artifact} review"),

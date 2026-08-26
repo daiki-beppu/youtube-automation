@@ -43,7 +43,9 @@ def render_schema_document(document: object, schema: Mapping[str, object]) -> st
     embedded = _embedded_json(document)
     package = "youtube_automation.domains.documents.resources"
     template = files(package).joinpath("base.html").read_text(encoding="utf-8")
-    css = files(package).joinpath("base.css").read_text(encoding="utf-8").strip()
+    css = "\n".join(
+        files(package).joinpath(name).read_text(encoding="utf-8").strip() for name in ("foundation.css", "base.css")
+    )
     description_html = f'<p class="document-description">{escape(description)}</p>' if description else ""
     html = Template(template).substitute(
         TITLE=escape(title),

@@ -16,7 +16,10 @@ _FILTERS = ("all", "planning", "live", "complete")
 
 def render_workflow_status(snapshot: WorkflowStatusSnapshot) -> str:
     template = Template(files(_RESOURCE_PACKAGE).joinpath("workflow_status.html").read_text(encoding="utf-8"))
-    css = files(_RESOURCE_PACKAGE).joinpath("workflow_status.css").read_text(encoding="utf-8")
+    css = "\n".join(
+        files(_RESOURCE_PACKAGE).joinpath(name).read_text(encoding="utf-8").strip()
+        for name in ("foundation.css", "workflow_status.css")
+    )
     filters = (
         "".join(
             f'<input class="filter-control" type="radio" name="status-filter" id="filter-{status}"'
