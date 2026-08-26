@@ -24,6 +24,7 @@ import argparse
 import contextlib
 import hashlib
 import http.client
+import io
 import json
 import math
 import mimetypes
@@ -40,8 +41,10 @@ import time
 import urllib.parse
 import uuid
 from datetime import datetime
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from email.message import Message
+from http import HTTPStatus
 from pathlib import Path
+from typing import Callable, ClassVar
 
 from youtube_automation import __version__
 from youtube_automation.application.distrokid.disc_query import find_distrokid_discs
@@ -95,6 +98,12 @@ from youtube_automation.infrastructure.collections.chrome_extensions import (
     resolve_unpacked_extension_origin,
 )
 from youtube_automation.infrastructure.file_lock import file_lock
+from youtube_automation.infrastructure.localserver.app import (
+    LocalHTTPServer,
+    Request,
+    Response,
+    Route,
+)
 from youtube_automation.infrastructure.localserver.collections import (
     COLLECTION_DIR_SUFFIX as _COLLECTION_DIR_SUFFIX,
 )
@@ -206,13 +215,27 @@ class _IdleTimeout(RuntimeError):
         super().__init__(f"no HTTP requests received for {seconds:g} seconds")
 
 
-class _IdleTrackingHTTPServer(ThreadingHTTPServer):
+class _IdleTrackingHTTPServer(LocalHTTPServer):
     """request の受付時刻を追跡し、serve loop から idle 終了する HTTP server。"""
 
-    def __init__(self, server_address: tuple[str, int], handler_class: type[BaseHTTPRequestHandler], seconds: float):
+    def __init__(
+        self,
+        server_address: tuple[str, int],
+        routes: list[Route],
+        origin_policy: Callable[[str | None], bool],
+        seconds: float,
+    ):
         self._idle_timeout_seconds = seconds
         self._last_request_at = time.monotonic()
-        super().__init__(server_address, handler_class)
+        super().__init__(
+            server_address,
+            routes,
+            origin_policy,
+            max_body_bytes=_MAX_POST_BODY_BYTES,
+            stop_path=None,
+            idle_timeout_seconds=None,
+            enforce_origin=False,
+        )
 
     def finish_request(self, request: object, client_address: tuple[str, int]) -> None:
         self._last_request_at = time.monotonic()
@@ -854,6 +877,84 @@ def _positive_float(value: str) -> float:
     return parsed
 
 
+class _TransportFreeHandler:
+    """Minimal response recorder used by collection route handlers."""
+
+    responses: ClassVar = {status.value: (status.phrase, status.description) for status in HTTPStatus}
+
+    def __init__(self, request: Request, port: int) -> None:
+        self.command = request.method
+        self.path = request.path
+        if request.query:
+            self.path += "?" + urllib.parse.urlencode(request.query, doseq=True)
+        self.headers = Message()
+        for key, value in request.headers.items():
+            self.headers[key] = value
+        self.rfile = io.BytesIO(request.body)
+        self.wfile = io.BytesIO()
+        self.server = type("ServerAddress", (), {"server_address": ("127.0.0.1", port)})()
+        self._status = 200
+        self._headers: list[tuple[str, str]] = []
+
+    def send_response(self, status: int) -> None:
+        self._status = status
+
+    def send_header(self, key: str, value: str) -> None:
+        self._headers.append((key, value))
+
+    def end_headers(self) -> None:
+        return None
+
+    def response(self) -> Response:
+        headers = dict(self._headers)
+        return Response(
+            self.wfile.getvalue(),
+            self._status,
+            {key: value for key, value in headers.items() if key.lower() not in {"content-type", "content-length"}},
+            headers.get("Content-Type", "application/json; charset=utf-8"),
+        )
+
+
+def _collection_routes(handler_type: type[_TransportFreeHandler], port: int) -> list[Route]:
+    def dispatch(request: Request) -> Response:
+        handler = handler_type(request, port)
+        method = getattr(handler, f"do_{request.method}", None)
+        if method is None:
+            handler.send_error(501, f"Unsupported method ({request.method!r})")
+        else:
+            method()
+        return handler.response()
+
+    return [
+        Route(
+            "POST",
+            f"{COLLECTIONS_ROUTE}/{{collection}}/downloaded",
+            dispatch,
+            _MAX_DOWNLOADED_POST_BODY_BYTES,
+        ),
+        Route("POST", _UNATTENDED_REQUESTS_ROUTE, dispatch, _MAX_UNATTENDED_REQUEST_BODY_BYTES),
+        *[
+            Route(method, path, dispatch)
+            for method in ("GET", "POST", "DELETE", "HEAD", "OPTIONS")
+            for path in ("/", "/{path*}")
+        ],
+    ]
+
+
+def _server_metadata(
+    server_info: dict[str, object] | None,
+    port: int,
+    distrokid_enabled: bool,
+    collections_root: Path | None,
+) -> dict[str, object]:
+    resolved = server_info if server_info is not None else build_server_info("YouTube Automation", "YA", port)
+    mode = "disabled" if not distrokid_enabled else ("dir" if collections_root is not None else "single")
+    resolved["capabilities"] = {"distrokid": {"mode": mode}}
+    if collections_root is not None:
+        resolved["collections_root"] = collections_root.name
+    return resolved
+
+
 def create_server(
     port: int,
     allow_origin: str | None,
@@ -871,7 +972,7 @@ def create_server(
     lifecycle_record: _LifecycleRecord | None = None,
     lifecycle_root: Path | None = None,
     downloaded_handoff: SunoDownloadHandoff | None = None,
-) -> ThreadingHTTPServer:
+) -> LocalHTTPServer:
     """サブパス分離した GET / POST / CORS preflight を返すサーバーを生成する.
 
     `collections_root` 指定時は **dir mode**（`/collections` 系を配信し
@@ -888,16 +989,12 @@ def create_server(
     serve_token = str(uuid.uuid4())
     unattended_requests: dict[str, tuple[float, dict[str, object]]] = {}
     unattended_requests_lock = threading.Lock()
-    resolved_server_info = (
-        server_info if server_info is not None else build_server_info("YouTube Automation", "YA", port)
-    )
-    distrokid_mode = "disabled" if not distrokid_enabled else ("dir" if dir_mode else "single")
-    resolved_server_info["capabilities"] = {"distrokid": {"mode": distrokid_mode}}
-    if collections_root is not None:
-        resolved_server_info["collections_root"] = collections_root.name
+    resolved_server_info = _server_metadata(server_info, port, distrokid_enabled, collections_root)
     resolved_community_asset_root = community_asset_root if community_asset_root is not None else collection_dir
 
-    class _Handler(BaseHTTPRequestHandler):
+    class _Handler(_TransportFreeHandler):
+        """Transport-free compatibility application for collection routes."""
+
         def _allowed_origin(self) -> str | None:
             headers = getattr(self, "headers", None)
             if headers is None:
@@ -1469,7 +1566,12 @@ def create_server(
         def log_message(self, *args) -> None:  # サーバーログを抑制
             pass
 
-    server = _IdleTrackingHTTPServer(("localhost", port), _Handler, idle_timeout_seconds)
+    server = _IdleTrackingHTTPServer(
+        ("localhost", port),
+        _collection_routes(_Handler, port),
+        lambda origin: is_origin_allowed(origin, allow_origin),
+        idle_timeout_seconds,
+    )
     if server_info is None:
         resolved_server_info.update(build_server_info("YouTube Automation", "YA", server.server_address[1]))
     return server

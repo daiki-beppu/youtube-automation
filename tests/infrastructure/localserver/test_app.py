@@ -8,7 +8,7 @@ from typing import Iterator
 import pytest
 
 from youtube_automation.core.errors import ConfigError, ValidationError
-from youtube_automation.infrastructure.localserver.app import Request, Route, create_server
+from youtube_automation.infrastructure.localserver.app import Request, Response, Route, create_server
 
 
 @contextmanager
@@ -84,6 +84,22 @@ def test_body_limit_is_rejected_before_handler() -> None:
         response = request(address, "POST", "/items", body=b"12345", headers={"Content-Length": "5"})
         assert response.status == 413
     assert not called
+
+
+def test_route_body_limit_can_be_stricter_than_server_limit() -> None:
+    route = Route("POST", "/items", lambda _request: {}, max_body_bytes=2)
+    with running([route], max_body_bytes=32) as address:
+        response = request(address, "POST", "/items", body=b"123", headers={"Content-Length": "3"})
+    assert response.status == 413
+
+
+def test_binary_response_is_written_without_json_encoding() -> None:
+    route = Route("GET", "/asset", lambda _request: Response(b"asset", content_type="audio/mpeg"))
+    with running([route]) as address:
+        response = request(address, "GET", "/asset")
+        assert response.status == 200
+        assert response.getheader("Content-Type") == "audio/mpeg"
+        assert response.read() == b"asset"
 
 
 @pytest.mark.parametrize(

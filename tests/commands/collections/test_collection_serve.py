@@ -68,6 +68,7 @@ from youtube_automation.infrastructure.collections.chrome_extensions import (
     ChromeExtensionOrigin,
     resolve_unpacked_extension_origin,
 )
+from youtube_automation.infrastructure.localserver.app import Request, Response
 from youtube_automation.infrastructure.localserver.collections import find_suno_collection_dirs
 
 extract_and_rename_music = partial(
@@ -90,6 +91,21 @@ _VERSION_ROUTE = "/version"
 
 # 外部 HTTP 契約（#1352）: 拡張が接続先 selector の label 更新に使う配信元情報。
 _SERVER_INFO_ROUTE = "/server-info"
+
+
+def test_version_route_handler_runs_without_a_request_socket(tmp_path: Path) -> None:
+    server = create_server(0, None, prompts_path=None, collection_dir=tmp_path, distrokid=None)
+    try:
+        route = next(
+            route for route, pattern in server.routes if route.method == "GET" and pattern.fullmatch("/version")
+        )
+        response = route.handler(Request("GET", "/version", {}, {}))
+    finally:
+        server.server_close()
+
+    assert isinstance(response, Response)
+    assert response.status == 200
+    assert json.loads(response.payload)["version"]
 
 
 def test_module_import_succeeds_without_fcntl() -> None:
