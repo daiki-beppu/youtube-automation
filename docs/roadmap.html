@@ -8,7 +8,6 @@
   /* Hallmark · macrostructure: Long Document · genre: editorial · theme: Cobalt
    * nav: none (standalone document) · footer: Ft2 inline rule · enrichment: none
    * Hallmark · pre-emit critique: P5 H5 E5 S5 R5 V4
-   * honest: pass (46) · chrome: pass (47) · tokens: pass (48) · responsive: pass (34, 49–57) · icons: pass (30)
    */
   :root {
     --color-paper: oklch(19% 0.018 255);
@@ -36,6 +35,8 @@
     --space-lg: 2rem;
     --space-xl: 3rem;
     --radius-sm: 0.25rem;
+    /* .timeline 側で上書きすると .milestone-marker の負のオフセットにも継承される */
+    --timeline-gutter: var(--space-xl);
   }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -96,8 +97,7 @@
   /* ── 正本への案内 ── */
   .source-note {
     background: var(--color-accent-wash);
-    border-top: 1px solid var(--color-accent-rule);
-    border-bottom: 1px solid var(--color-accent-rule);
+    border-block: 1px solid var(--color-accent-rule);
     padding: var(--space-sm) 0;
     margin-bottom: var(--space-md);
     font-size: 0.9rem;
@@ -109,8 +109,7 @@
   /* ── TL;DR ── */
   .tldr {
     background: var(--color-surface);
-    border-top: 1px solid var(--color-rule);
-    border-bottom: 1px solid var(--color-rule);
+    border-block: 1px solid var(--color-rule);
     padding: var(--space-md);
     margin-bottom: var(--space-xl);
     font-size: 0.95rem;
@@ -159,7 +158,7 @@
   /* ── Milestone timeline ── */
   .timeline {
     position: relative;
-    padding-left: var(--space-xl);
+    padding-left: var(--timeline-gutter);
   }
 
   .timeline::before {
@@ -181,7 +180,7 @@
 
   .milestone-marker {
     position: absolute;
-    left: calc(-1 * var(--space-xl));
+    left: calc(-1 * var(--timeline-gutter));
     top: var(--space-3xs);
     width: var(--space-lg);
     height: var(--space-lg);
@@ -262,8 +261,7 @@
   .note {
     margin-top: var(--space-xl);
     background: var(--color-caution-wash);
-    border-top: 1px solid var(--color-caution-rule);
-    border-bottom: 1px solid var(--color-caution-rule);
+    border-block: 1px solid var(--color-caution-rule);
     padding: var(--space-sm) 0;
     font-size: 0.85rem;
     color: var(--color-muted);
@@ -284,9 +282,9 @@
   @media (max-width: 37.5rem) {
     body { padding: var(--space-sm); }
     header { padding-top: var(--space-lg); }
-    .timeline { padding-left: 2.5rem; }
+    .timeline { --timeline-gutter: 2.5rem; }
     .timeline::before { left: var(--space-xs); }
-    .milestone-marker { left: -2.5rem; width: 1.75rem; height: 1.75rem; font-size: 0.8rem; }
+    .milestone-marker { width: 1.75rem; height: 1.75rem; font-size: 0.8rem; }
     .milestone-card { padding-inline: var(--space-sm); }
   }
 </style>
