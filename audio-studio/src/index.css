@@ -1,3 +1,8 @@
+/* Hallmark · macrostructure: Long Document · genre: modern-minimal · theme: Terminal · tone: technical / focused · anchor hue: phosphor green · enrichment: none
+ * Hallmark · designed-as-app: local audio editor · nav: none · footer: none
+ * Hallmark · contrast: pass (40–41) · slop: pass (42–45) · honest: pass (46) · chrome: pass (47) · tokens: pass (48) · responsive: pass (34, 49–57) · icons: pass (30)
+ * audience: YouTube operators · use: adjust, sequence, and render collection audio
+ */
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
@@ -6,7 +11,8 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  --font-sans: "Inter Variable", "Hiragino Sans", sans-serif;
+  --font-display: var(--display);
+  --font-sans: var(--body);
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
@@ -30,26 +36,147 @@
 }
 
 :root {
-  --background: oklch(0.985 0.004 250);
-  --foreground: oklch(0.2 0.02 250);
-  --card: oklch(1 0 0);
+  --display:
+    ui-monospace, "SFMono-Regular", "Cascadia Code", "Roboto Mono", monospace;
+  --body: "Inter Variable", "Hiragino Sans", sans-serif;
+  --background: oklch(0.16 0.014 155);
+  --foreground: oklch(0.91 0.018 145);
+  --card: oklch(0.205 0.018 155);
   --card-foreground: var(--foreground);
-  --primary: oklch(0.4 0.12 250);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.95 0.008 250);
+  --primary: oklch(0.78 0.145 145);
+  --primary-foreground: oklch(0.16 0.014 155);
+  --secondary: oklch(0.27 0.025 155);
   --secondary-foreground: var(--foreground);
-  --muted: oklch(0.95 0.008 250);
-  --muted-foreground: oklch(0.46 0.025 250);
-  --accent: oklch(0.93 0.02 250);
+  --muted: oklch(0.25 0.02 155);
+  --muted-foreground: oklch(0.72 0.025 145);
+  --accent: oklch(0.3 0.045 145);
   --accent-foreground: var(--foreground);
-  --destructive: oklch(0.55 0.2 25);
-  --border: oklch(0.88 0.012 250);
+  --destructive: oklch(0.68 0.19 28);
+  --border: oklch(0.39 0.025 155);
   --input: var(--border);
-  --ring: oklch(0.5 0.14 250);
-  --radius: 0.75rem;
+  --ring: oklch(0.78 0.145 145);
+  --radius: 0.2rem;
 }
 
 @layer base {
-  * { @apply border-border outline-ring/50; }
-  body { @apply bg-background text-foreground antialiased; }
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+
+  h1,
+  h2,
+  h3,
+  [data-slot="card-title"] {
+    font-family: var(--display);
+    font-style: normal;
+    overflow-wrap: anywhere;
+    min-width: 0;
+  }
+
+  button,
+  [role="button"] {
+    white-space: nowrap;
+  }
+
+  input,
+  select,
+  button {
+    min-height: 2.75rem;
+  }
+
+  audio {
+    color-scheme: dark;
+  }
+}
+
+@layer components {
+  .studio-shell {
+    position: relative;
+  }
+
+  .studio-shell::before {
+    content: "AUDIO / LOCAL";
+    position: absolute;
+    inset-block-start: 1rem;
+    inset-inline-end: 1rem;
+    color: var(--muted-foreground);
+    font-family: var(--display);
+    font-size: 0.6875rem;
+    letter-spacing: 0.14em;
+  }
+
+  .studio-masthead {
+    border-block-end: 1px solid var(--border);
+    padding-block: 2.75rem 3.75rem;
+  }
+
+  .studio-kicker {
+    font-family: var(--display);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .studio-title {
+    max-width: 14ch;
+    color: var(--primary);
+    font-family: var(--display);
+    font-size: clamp(2.75rem, 9vw, 6.5rem);
+    font-weight: 650;
+    line-height: 1;
+    letter-spacing: -0.075em;
+    overflow-wrap: anywhere;
+  }
+
+  .studio-collection {
+    border-inline-start: 2px solid var(--primary);
+    padding-inline-start: 1rem;
+  }
+
+  [data-slot="card"] {
+    --tw-ring-color: var(--border);
+    border-radius: var(--radius);
+    box-shadow: none;
+  }
+
+  [data-slot="card-header"] {
+    border-radius: 0;
+    border-block-end: 1px solid var(--border);
+    padding-block-end: 1rem;
+  }
+
+  [data-slot="card-title"] {
+    letter-spacing: -0.02em;
+  }
+
+  [data-slot="badge"] {
+    border-radius: var(--radius);
+    font-family: var(--display);
+    font-variant-numeric: tabular-nums;
+  }
+
+  [role="status"],
+  input[type="number"] {
+    font-variant-numeric: tabular-nums;
+  }
+
+  input:focus-visible,
+  select:focus-visible {
+    border-width: 1px;
+    outline: 2px solid var(--ring);
+    outline-offset: 1px;
+  }
+}
+
+@media (max-width: 40rem) {
+  .studio-shell::before {
+    display: none;
+  }
+
+  .studio-masthead {
+    padding-block: 1.5rem 2.25rem;
+  }
 }
