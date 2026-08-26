@@ -132,10 +132,11 @@ class _RequestHandler(BaseHTTPRequestHandler):
             fallback = "???"
         body = json.dumps({"error": message or fallback}, ensure_ascii=False).encode()
         self.send_response(code)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Content-Length", str(len(body)))
-        self._common_headers(self.headers.get("Origin") if hasattr(self, "headers") else None)
-        self.end_headers()
+        self._emit_headers(
+            {"X-Content-Type-Options": "nosniff"},
+            self._cors_headers(self.headers.get("Origin") if hasattr(self, "headers") else None),
+            {"Content-Type": "application/json; charset=utf-8", "Content-Length": str(len(body))},
+        )
         if self.command != "HEAD":
             self.wfile.write(body)
 
@@ -181,11 +182,15 @@ class _RequestHandler(BaseHTTPRequestHandler):
             self._json(HTTPStatus.NOT_FOUND, {"error": "route not found"})
             return
         self.send_response(HTTPStatus.NO_CONTENT)
-        self._common_headers(origin)
-        self.send_header("Access-Control-Allow-Methods", ", ".join(methods))
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
-        self.send_header("Content-Length", "0")
-        self.end_headers()
+        self._emit_headers(
+            {"X-Content-Type-Options": "nosniff"},
+            self._cors_headers(origin),
+            {
+                "Access-Control-Allow-Methods": ", ".join(methods),
+                "Access-Control-Allow-Headers": "Content-Type",
+                "Content-Length": "0",
+            },
+        )
 
     def _dispatch(self) -> None:
         origin = self.headers.get("Origin")
@@ -196,14 +201,7 @@ class _RequestHandler(BaseHTTPRequestHandler):
         path_matches = [
             (route, match) for route, pattern in self.server.routes if (match := pattern.fullmatch(split.path))
         ]
-        matched = next(
-            (
-                (route, match)
-                for route, pattern in self.server.routes
-                if route.method == self.command and (match := pattern.fullmatch(split.path))
-            ),
-            None,
-        )
+        matched = next((entry for entry in path_matches if entry[0].method == self.command), None)
         if matched is None:
             status = HTTPStatus.METHOD_NOT_ALLOWED if path_matches else HTTPStatus.NOT_FOUND
             self._json(status, {"error": "method not allowed" if path_matches else "route not found"})
@@ -261,33 +259,45 @@ class _RequestHandler(BaseHTTPRequestHandler):
             else json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode()
         )
         self.send_response(status)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
-        self._common_headers(self.headers.get("Origin"))
-        for key, value in (headers or {}).items():
-            self.send_header(key, value)
-        self.end_headers()
+        self._emit_headers(
+            {"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"},
+            self._cors_headers(self.headers.get("Origin")),
+            headers or {},
+            {"Content-Type": "application/json; charset=utf-8", "Content-Length": str(len(body))},
+        )
         if self.command != "HEAD" and body:
             self.wfile.write(body)
 
     def _bytes(self, status: int, body: bytes, content_type: str, headers: Mapping[str, str]) -> None:
         self.send_response(status)
-        self.send_header("Content-Type", content_type)
-        self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
-        self._common_headers(self.headers.get("Origin"))
-        for key, value in headers.items():
-            self.send_header(key, value)
-        self.end_headers()
+        self._emit_headers(
+            {"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"},
+            self._cors_headers(self.headers.get("Origin")),
+            headers,
+            {"Content-Type": content_type, "Content-Length": str(len(body))},
+        )
         if self.command != "HEAD" and body:
             self.wfile.write(body)
 
-    def _common_headers(self, origin: str | None) -> None:
+    def _cors_headers(self, origin: str | None) -> Mapping[str, str]:
         if origin is not None and self.server.origin_policy(origin):
-            self.send_header("Access-Control-Allow-Origin", origin)
-            self.send_header("Vary", "Origin")
-        self.send_header("X-Content-Type-Options", "nosniff")
+            return {"Access-Control-Allow-Origin": origin, "Vary": "Origin"}
+        return {}
+
+    def _emit_headers(self, *sources: Mapping[str, str]) -> None:
+        """Send each header name exactly once; later sources override earlier ones.
+
+        route handler が自前で CORS ヘッダーを載せる場合（chassis へ載せ替えた
+        collection server 等）、chassis 側の既定値と同名ヘッダーが二重送信されると
+        ブラウザの CORS 検証が壊れるため、送出前に名前で畳み込む（#4452）。
+        """
+        merged: dict[str, tuple[str, str]] = {}
+        for source in sources:
+            for key, value in source.items():
+                merged[key.lower()] = (key, value)
+        for key, value in merged.values():
+            self.send_header(key, value)
+        self.end_headers()
 
 
 class _HTTPError(RuntimeError):

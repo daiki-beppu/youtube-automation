@@ -44,6 +44,7 @@ from datetime import datetime
 from email.message import Message
 from http import HTTPStatus
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Callable, ClassVar
 
 from youtube_automation import __version__
@@ -892,7 +893,7 @@ class _TransportFreeHandler:
             self.headers[key] = value
         self.rfile = io.BytesIO(request.body)
         self.wfile = io.BytesIO()
-        self.server = type("ServerAddress", (), {"server_address": ("127.0.0.1", port)})()
+        self.server = SimpleNamespace(server_address=("127.0.0.1", port))
         self._status = 200
         self._headers: list[tuple[str, str]] = []
 

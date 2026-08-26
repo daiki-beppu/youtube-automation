@@ -102,6 +102,28 @@ def test_binary_response_is_written_without_json_encoding() -> None:
         assert response.read() == b"asset"
 
 
+def test_route_supplied_headers_replace_chassis_defaults_instead_of_duplicating() -> None:
+    """route が自前で CORS ヘッダーを返す場合でも同名ヘッダーを二重送信しない（#4452）."""
+    route = Route(
+        "GET",
+        "/asset",
+        lambda _request: Response(
+            b"asset",
+            content_type="audio/mpeg",
+            headers={"Access-Control-Allow-Origin": "https://allowed.example", "Vary": "Origin"},
+        ),
+    )
+    with running([route]) as address:
+        connection = http.client.HTTPConnection(*address)
+        connection.request("GET", "/asset", headers={"Origin": "https://allowed.example"})
+        response = connection.getresponse()
+        assert response.status == 200
+        assert response.getheader("Content-Type") == "audio/mpeg"
+        assert response.msg.get_all("Access-Control-Allow-Origin") == ["https://allowed.example"]
+        assert response.msg.get_all("Vary") == ["Origin"]
+        assert response.msg.get_all("Content-Length") == ["5"]
+
+
 @pytest.mark.parametrize(
     ("error", "status"),
     [(ValidationError("bad input"), 400), (ConfigError("bad config"), 500)],

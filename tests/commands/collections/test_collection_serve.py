@@ -683,6 +683,30 @@ def test_get_version_sets_cors_header_for_extension_origin(serve):
         assert resp.headers.get("Access-Control-Allow-Origin") == _EXTENSION_ORIGIN
 
 
+def test_cors_headers_are_not_duplicated_on_the_wire(serve):
+    """Given route handler と chassis の双方が CORS ヘッダーを載せうる構成
+    When 許可 Origin で GET する
+    Then 生レスポンスの Access-Control-Allow-Origin / Vary は各 1 行だけになる（#4452）。
+
+    同名ヘッダーが 2 行返ると fetch の CORS 検証が失敗するが、`http.client` の
+    `headers.get()` は先頭値しか返さないため、生バイト列で本数を数える。
+    """
+    base = serve([{"name": "A", "style": "s", "lyrics": ""}])
+    raw_request = (
+        f"GET {_VERSION_ROUTE} HTTP/1.1\r\n"
+        "Host: localhost\r\n"
+        "Origin: https://suno.com\r\n"
+        "Connection: close\r\n\r\n"
+    ).encode()
+
+    response = _send_raw_http_request(base, raw_request)
+
+    head = response.split(b"\r\n\r\n", 1)[0]
+    assert head.lower().count(b"\r\naccess-control-allow-origin:") == 1
+    assert head.lower().count(b"\r\nvary:") == 1
+    assert head.lower().count(b"\r\ncontent-length:") == 1
+
+
 def test_old_root_prompts_json_returns_404(serve):
     """Given 旧ルート `/prompts.json`
     When GET する
