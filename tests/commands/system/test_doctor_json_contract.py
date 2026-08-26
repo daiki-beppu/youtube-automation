@@ -154,3 +154,25 @@ def test_json_should_keep_internal_action_fields_out_of_public_contract(
     assert "auto_apply" not in payload["checks"][0]["next_action"]
     assert "argv" not in payload["apply"]["next_action"]
     assert "auto_apply" not in payload["apply"]["next_action"]
+
+
+@pytest.mark.parametrize(
+    ("action", "public"),
+    [
+        (doctor.NoRemediation(), None),
+        (doctor.AgentCommand(("uv", "init"), "uv init", False), {"kind": "ai-exec", "cmd": "uv init"}),
+        (
+            doctor.HumanBrowserAuth((("reason", "authentication"), ("instructions", "open browser"))),
+            {"kind": "human", "reason": "authentication", "instructions": "open browser"},
+        ),
+        (
+            doctor.ManualRemediation((("kind", "decision"), ("flag", "--project-id"))),
+            {"kind": "decision", "flag": "--project-id"},
+        ),
+    ],
+)
+def test_remediation_action_union_owns_public_serialization(
+    action: doctor.RemediationAction,
+    public: dict | None,
+) -> None:
+    assert action.to_public_dict() == public

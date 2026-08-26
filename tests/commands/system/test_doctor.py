@@ -1465,7 +1465,7 @@ class TestCheckChannelConfig:
         r = doctor.check_channel_config(tmp_path)
         assert r.status == "fail"
         assert r.next_action is not None
-        action_str = json.dumps(r.next_action, ensure_ascii=False)
+        action_str = json.dumps(r.next_action.to_public_dict(), ensure_ascii=False)
         assert "/setup --import" in action_str
 
     def test_config_dir_exists_but_missing_required_keys_is_fail_with_channel_new_import_mode(self, tmp_path):
@@ -1476,7 +1476,7 @@ class TestCheckChannelConfig:
         (config_dir / "meta.json").write_text(json.dumps({"channel": {}}), encoding="utf-8")
         r = doctor.check_channel_config(tmp_path)
         assert r.status == "fail"
-        action_str = json.dumps(r.next_action, ensure_ascii=False)
+        action_str = json.dumps(r.next_action.to_public_dict(), ensure_ascii=False)
         assert "/setup --import" in action_str
 
     def test_valid_config_is_ok(self, tmp_path):
@@ -2997,7 +2997,7 @@ class TestCheckTtpWfNewReadinessChannelSetup:
         assert "data/thumbnail_compare/benchmark/" in r.message
         assert "reference_images.default" in r.message
         assert r.next_action is not None
-        payload = json.dumps(r.next_action, ensure_ascii=False)
+        payload = json.dumps(r.next_action.to_public_dict(), ensure_ascii=False)
         assert "/setup --regenerate" in payload
         assert "yt-doctor" in payload
         assert "channel-new Step 9" not in payload
@@ -5521,7 +5521,7 @@ class TestCheckUploadReady:
         assert r.next_action is not None
         assert r.next_action["kind"] == "human"
         assert "uv run yt-channel-status" in r.next_action["instructions"]
-        _assert_no_bare_yt_channel_status(r.next_action)
+        _assert_no_bare_yt_channel_status(r.next_action.to_public_dict())
 
     def test_message_contains_all_issues_when_multiple(self, tmp_path):
         """scope 不足と channel_id 未設定が同時の場合、message に両方の事由が含まれる."""
