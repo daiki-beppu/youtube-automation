@@ -141,17 +141,6 @@ class _ActionMapping(Mapping):
 
 
 @dataclass(frozen=True, eq=False)
-class NoRemediation(_ActionMapping):
-    """A check which cannot be remediated automatically."""
-
-    def to_public_dict(self) -> None:
-        return None
-
-    def _internal_dict(self) -> dict:
-        return {}
-
-
-@dataclass(frozen=True, eq=False)
 class AgentCommand(_ActionMapping):
     """A validated, non-interactive command which the apply loop may execute."""
 
@@ -197,15 +186,19 @@ class ManualRemediation(_ActionMapping):
         return self.to_public_dict()
 
 
-RemediationAction = AgentCommand | HumanBrowserAuth | ManualRemediation | NoRemediation | None
+RemediationAction = AgentCommand | HumanBrowserAuth | ManualRemediation
+
+# 公開 JSON へ出してはならない内部専用キー（apply loop だけが使う実行情報）。
+_INTERNAL_ACTION_KEYS = frozenset({"argv", "auto_apply"})
 
 
-def _remediation_action(value: RemediationAction | dict | None) -> RemediationAction:
+def _remediation_action(value: RemediationAction | dict | None) -> RemediationAction | None:
     if value is None:
         return None
     if not isinstance(value, dict):
         return value
-    public = tuple((key, item) for key, item in value.items() if key not in {"argv", "auto_apply", "kind"})
+    exposed = tuple((key, item) for key, item in value.items() if key not in _INTERNAL_ACTION_KEYS)
+    public = tuple((key, item) for key, item in exposed if key != "kind")
     kind = value.get("kind")
     raw_argv = value.get("argv")
     argv = tuple(raw_argv) if isinstance(raw_argv, list) and all(isinstance(item, str) for item in raw_argv) else ()
@@ -213,7 +206,7 @@ def _remediation_action(value: RemediationAction | dict | None) -> RemediationAc
         return AgentCommand(argv, str(value.get("cmd", shlex.join(argv))), value.get("auto_apply") is not False, public)
     if kind == "human" and value.get("reason") == "authentication":
         return HumanBrowserAuth(public, argv)
-    return ManualRemediation(tuple(value.items()))
+    return ManualRemediation(exposed)
 
 
 @dataclass
@@ -277,14 +270,10 @@ def _youtube_oauth_action(instructions: str) -> HumanBrowserAuth:
     return HumanBrowserAuth(
         (
             *action.public_fields,
-            *tuple(
-                {
-                    "execution_mode": "background",
-                    "url_source": "stdout",
-                    "completion_signal": "process-exit",
-                    "post_check_cmd": "uv run yt-doctor --json",
-                }.items()
-            ),
+            ("execution_mode", "background"),
+            ("url_source", "stdout"),
+            ("completion_signal", "process-exit"),
+            ("post_check_cmd", "uv run yt-doctor --json"),
         ),
         action.argv,
     )
@@ -301,15 +290,11 @@ def _youtube_readonly_oauth_action(channel_dir: Path) -> HumanBrowserAuth:
     return HumanBrowserAuth(
         (
             *action.public_fields,
-            *tuple(
-                {
-                    "cwd": str(channel_dir),
-                    "execution_mode": "background",
-                    "url_source": "stdout",
-                    "completion_signal": "process-exit",
-                    "post_check_cmd": "uv run yt-doctor --json",
-                }.items()
-            ),
+            ("cwd", str(channel_dir)),
+            ("execution_mode", "background"),
+            ("url_source", "stdout"),
+            ("completion_signal", "process-exit"),
+            ("post_check_cmd", "uv run yt-doctor --json"),
         ),
         action.argv,
     )
@@ -2151,7 +2136,7 @@ class ExecutedStep:
 class ApplySummary:
     stop_reason: str
     check_id: str | None
-    next_action: RemediationAction
+    next_action: RemediationAction | None
     executed: tuple[ExecutedStep, ...]
     cmd: str | None = None
     stderr: str | None = None
@@ -2261,7 +2246,9 @@ def _run_apply_loop(
                 check=unresolved,
                 next_action={"kind": "decision", "flag": "--project-id"},
             )
-        if apply_kind is ApplyKind.BILLING and billing_account is None:
+        # remediation がある = billing 未紐付けが確定しているケースだけ --billing-account を要求する。
+        # describe 自体の失敗（権限不足など。next_action なし）は account を選んでも解決しないので human_required に落とす。
+        if apply_kind is ApplyKind.BILLING and billing_account is None and unresolved.next_action is not None:
             return _apply_outcome(
                 results,
                 "decision_required",

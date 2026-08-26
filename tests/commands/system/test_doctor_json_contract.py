@@ -159,7 +159,6 @@ def test_json_should_keep_internal_action_fields_out_of_public_contract(
 @pytest.mark.parametrize(
     ("action", "public"),
     [
-        (doctor.NoRemediation(), None),
         (doctor.AgentCommand(("uv", "init"), "uv init", False), {"kind": "ai-exec", "cmd": "uv init"}),
         (
             doctor.HumanBrowserAuth((("reason", "authentication"), ("instructions", "open browser"))),
@@ -173,6 +172,16 @@ def test_json_should_keep_internal_action_fields_out_of_public_contract(
 )
 def test_remediation_action_union_owns_public_serialization(
     action: doctor.RemediationAction,
-    public: dict | None,
+    public: dict,
 ) -> None:
     assert action.to_public_dict() == public
+
+
+def test_manual_remediation_fallback_should_drop_internal_action_fields() -> None:
+    """ai-exec/human のどちらにも該当しない dict でも argv / auto_apply を公開しない。"""
+    action = doctor._remediation_action(
+        {"kind": "decision", "flag": "--billing-account", "argv": ["gcloud", "beta"], "auto_apply": False}
+    )
+
+    assert isinstance(action, doctor.ManualRemediation)
+    assert action.to_public_dict() == {"kind": "decision", "flag": "--billing-account"}

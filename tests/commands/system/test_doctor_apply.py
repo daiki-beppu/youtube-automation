@@ -290,6 +290,28 @@ def test_apply_stops_for_billing_decision_without_account(monkeypatch, tmp_path:
     }
 
 
+def test_apply_requires_human_when_billing_probe_failed(monkeypatch, tmp_path: Path, capsys) -> None:
+    """describe 失敗（next_action なし）は --billing-account では解決しないため human_required に落とす。"""
+    monkeypatch.setattr(
+        doctor,
+        "run_all_checks",
+        lambda _channel_dir: [_result("billing_linked", "fail")],
+    )
+    monkeypatch.setattr(
+        doctor,
+        "_run_apply_command",
+        lambda _argv, _cwd: (_ for _ in ()).throw(AssertionError("billing probe failure must not run")),
+    )
+
+    code = doctor.main(["--apply", "--json", "--target", str(tmp_path)])
+
+    assert code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["apply"]["stop_reason"] == "human_required"
+    assert payload["apply"]["check_id"] == "billing_linked"
+    assert payload["apply"]["next_action"] is None
+
+
 def test_apply_uses_billing_account_then_continues(monkeypatch, tmp_path: Path, capsys) -> None:
     action = {
         "kind": "ai-exec",
