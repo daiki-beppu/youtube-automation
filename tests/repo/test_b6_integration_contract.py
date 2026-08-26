@@ -366,6 +366,7 @@ def test_built_sdist_contains_only_approved_members(tmp_path: Path) -> None:
         "docs/features.md",
         "docs/workflow-cheatsheet.md",
         "ONBOARDING.md",
+        "docs/tool-setup.md",
         "docs/oauth-setup.md",
         "docs/oauth-scopes.md",
         "infra/terraform/gcp/README.md",
