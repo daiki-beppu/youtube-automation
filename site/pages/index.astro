@@ -14,7 +14,26 @@ interface ReleaseData {
   version: string;
 }
 
-const operatorSections = [
+interface OperatorPage {
+  description: string;
+  href: string;
+  label: string;
+}
+
+interface OperatorGroup {
+  id: string;
+  label: string;
+  pages: readonly OperatorPage[];
+}
+
+interface OperatorSection {
+  id: string;
+  label: string;
+  pages: readonly OperatorPage[];
+  groups?: readonly OperatorGroup[];
+}
+
+const operatorSections: readonly OperatorSection[] = [
   {
     id: "getting-started",
     label: "はじめる",
@@ -30,7 +49,6 @@ const operatorSections = [
         label: "Chrome 拡張の導入",
       },
     ],
-    groups: [],
   },
   {
     id: "use",
@@ -71,7 +89,7 @@ const operatorSections = [
       },
     ],
   },
-] as const;
+];
 
 const releaseNotesSection = {
   id: "release-notes",
@@ -164,7 +182,7 @@ const formatDate = (date: Date) =>
               </li>
             ))}
           </ul>
-          {section.groups.map((group) => (
+          {section.groups?.map((group) => (
             <section class="doc-group" data-doc-group={group.id}>
               <h3>{group.label}</h3>
               <ul class="doc-list">
