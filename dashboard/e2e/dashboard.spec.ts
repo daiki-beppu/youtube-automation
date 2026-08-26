@@ -948,8 +948,8 @@ test("カラーパレットを切り替えて再読み込み後も保持でき�
       }
       return {
         background: getComputedStyle(document.querySelector("main")!)
-          .backgroundImage,
-        headingBorder: getComputedStyle(overviewHeading).borderLeftColor,
+          .backgroundColor,
+        headingBorder: getComputedStyle(overviewHeading).borderBottomColor,
         metricSurface: getComputedStyle(registeredChannels.parentElement)
           .backgroundColor,
       }

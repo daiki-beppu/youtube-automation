@@ -92,7 +92,7 @@
   --dashboard-negative: #fa0000;
   --dashboard-negative-surface: #fdeeee;
   --dashboard-negative-border: #ffbbbb;
-  --background: oklch(1 0 0);
+  --background: oklch(0.985 0.003 255);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.145 0 0);
@@ -371,13 +371,11 @@
 
 @layer components {
   .dashboard-palette-background {
-    background-color: var(--background);
-    background-image:
-      linear-gradient(
-        90deg,
-        var(--dashboard-accent-surface),
-        transparent 42rem
-      );
+    background-color: color-mix(
+      in srgb,
+      var(--palette-series-base) 3%,
+      var(--background)
+    );
   }
 
   .dashboard-workbench {
@@ -391,7 +389,7 @@
     justify-content: space-between;
     gap: var(--space-lg);
     padding-block: var(--space-xl);
-    border-bottom: var(--rule-hairline) solid var(--foreground);
+    border-bottom: var(--rule-hairline) solid var(--primary);
   }
 
   .dashboard-header-copy {
@@ -488,10 +486,8 @@
   }
 
   .dashboard-section-heading {
-    padding-block: var(--space-sm);
-    padding-left: var(--space-md);
-    border-bottom: var(--rule-hairline) solid var(--foreground);
-    border-left: 0.25rem solid var(--primary);
+    padding-top: var(--space-sm);
+    border-bottom: var(--rule-hairline) solid var(--primary);
     font-style: normal;
   }
 
