@@ -2214,9 +2214,12 @@ def test_overlays_section_full_override(tmp_path, monkeypatch):
     assert ov.audio_visualizer.enabled is True
     assert ov.audio_visualizer.style == "ring-line"
     assert ov.audio_visualizer.bars == 24
+    assert ov.audio_visualizer.mode == "bar"
     assert ov.audio_visualizer.size == "1920x240"
     assert ov.audio_visualizer.rate == "30"
+    assert ov.audio_visualizer.fscale == "log"
     assert ov.audio_visualizer.win_size == 4096
+    assert ov.audio_visualizer.win_func == "hann"
     assert ov.audio_visualizer.colors == "0xff66ccff"
     assert ov.audio_visualizer.position == "(W-w)/2:H-h-80"
     assert ov.audio_visualizer.glow_sigma == 14.0
@@ -2226,14 +2229,17 @@ def test_overlays_section_full_override(tmp_path, monkeypatch):
     assert ov.audio_visualizer.ring.arc_deg == (30.0, 330.0)
     assert ov.audio_visualizer.fill is not None
     assert ov.audio_visualizer.fill.type == "gradient"
+    assert ov.audio_visualizer.fill.top == "0xFF8800"
     assert ov.audio_visualizer.fill.bottom == "0x4400AA"
     assert ov.audio_visualizer.mirror_center is True
     assert ov.audio_visualizer.symmetric_vertical is True
     assert ov.audio_visualizer.rounding is not None
     assert ov.audio_visualizer.rounding.blur == 2.3
+    assert ov.audio_visualizer.rounding.contrast == 3.2
     assert ov.audio_visualizer.glow is not None
     assert ov.audio_visualizer.glow.enabled is False
     assert ov.audio_visualizer.glow.sigma == 6.0
+    assert ov.audio_visualizer.glow.opacity == 0.4
 
     assert ov.subscribe_popup.enabled is True
     assert ov.subscribe_popup.image == "popup.png"
@@ -2243,10 +2249,13 @@ def test_overlays_section_full_override(tmp_path, monkeypatch):
     assert ov.subscribe_popup.position == "W-w-32:32"
     assert ov.subscribe_popup.opacity == 0.95
 
+    assert ov.encoder.codec == "libx264"
     assert ov.encoder.preset == "slow"
     assert ov.encoder.crf == 18
+    assert ov.encoder.pix_fmt == "yuv420p"
     assert ov.encoder.maxrate == "6M"
     assert ov.encoder.bufsize == "12M"
+    assert ov.encoder.profile == "high"
     assert ov.encoder.framerate == 30
 
 
