@@ -8,7 +8,8 @@
 実ロジック 21 件は full override の未観測フィールドを positive assertion へ追加した後、
 すべて killed になることを部分再実行で確認した。
 
-#4620 の 886 件は `09e2255c` の configuration 全体を対象にした値である。現行コードだけを
+#4620 の 886 件は `docs/investigations/2026-08-26-4620-mutmut-adoption.md`（`09e2255c` 時点、
+configuration 全体を変異対象にした計測のうち `loader.py` 分）の値である。現行コードだけを
 `loader.py` に限定した今回の再計測では、生成数と関数構成が変わっているため 782 件を
 triage の母数とした。依存を恒久追加せず、一時クローン `/tmp/mutmut-4623` だけで実行した。
 
