@@ -688,8 +688,7 @@ def _build_analytics(merged: dict) -> Analytics:
         # 複数キーを結合するときは 1 件ずつ benchmark. を前置する（トップレベルキーと誤読させない）
         names = ", ".join(f"benchmark.{key}" for key in sorted(legacy))
         warnings.warn(
-            f"analytics.json の {names} は非推奨であり反映されません。"
-            "config/skills/benchmark.yaml に設定してください",
+            f"analytics.json の {names} は非推奨であり反映されません。config/skills/benchmark.yaml に設定してください",
             DeprecationWarning,
             stacklevel=2,
         )
