@@ -2164,17 +2164,17 @@ def test_overlays_section_full_override(tmp_path, monkeypatch):
             "enabled": True,
             "style": "ring-line",
             "bars": 24,
-            "mode": "bar",
+            "mode": "line",
             "size": "1920x240",
             "rate": "30",
-            "fscale": "log",
+            "fscale": "lin",
             "win_size": 4096,
-            "win_func": "hann",
+            "win_func": "hamming",
             "colors": "0xff66ccff",
             "fill": {"type": "gradient", "top": "0xFF8800", "bottom": "0x4400AA"},
             "mirror_center": True,
             "symmetric_vertical": True,
-            "rounding": {"blur": 2.3, "contrast": 3.2},
+            "rounding": {"blur": 1.4, "contrast": 4.1},
             "position": "(W-w)/2:H-h-80",
             "opacity": 0.9,
             "glow_enabled": True,
@@ -2196,10 +2196,10 @@ def test_overlays_section_full_override(tmp_path, monkeypatch):
             "codec": "libx264",
             "preset": "slow",
             "crf": 18,
-            "pix_fmt": "yuv420p",
+            "pix_fmt": "yuv422p",
             "maxrate": "6M",
             "bufsize": "12M",
-            "profile": "high",
+            "profile": "main",
             "framerate": 30,
         },
     }
@@ -2214,9 +2214,12 @@ def test_overlays_section_full_override(tmp_path, monkeypatch):
     assert ov.audio_visualizer.enabled is True
     assert ov.audio_visualizer.style == "ring-line"
     assert ov.audio_visualizer.bars == 24
+    assert ov.audio_visualizer.mode == "line"
     assert ov.audio_visualizer.size == "1920x240"
     assert ov.audio_visualizer.rate == "30"
+    assert ov.audio_visualizer.fscale == "lin"
     assert ov.audio_visualizer.win_size == 4096
+    assert ov.audio_visualizer.win_func == "hamming"
     assert ov.audio_visualizer.colors == "0xff66ccff"
     assert ov.audio_visualizer.position == "(W-w)/2:H-h-80"
     assert ov.audio_visualizer.glow_sigma == 14.0
@@ -2226,14 +2229,17 @@ def test_overlays_section_full_override(tmp_path, monkeypatch):
     assert ov.audio_visualizer.ring.arc_deg == (30.0, 330.0)
     assert ov.audio_visualizer.fill is not None
     assert ov.audio_visualizer.fill.type == "gradient"
+    assert ov.audio_visualizer.fill.top == "0xFF8800"
     assert ov.audio_visualizer.fill.bottom == "0x4400AA"
     assert ov.audio_visualizer.mirror_center is True
     assert ov.audio_visualizer.symmetric_vertical is True
     assert ov.audio_visualizer.rounding is not None
-    assert ov.audio_visualizer.rounding.blur == 2.3
+    assert ov.audio_visualizer.rounding.blur == 1.4
+    assert ov.audio_visualizer.rounding.contrast == 4.1
     assert ov.audio_visualizer.glow is not None
     assert ov.audio_visualizer.glow.enabled is False
     assert ov.audio_visualizer.glow.sigma == 6.0
+    assert ov.audio_visualizer.glow.opacity == 0.4
 
     assert ov.subscribe_popup.enabled is True
     assert ov.subscribe_popup.image == "popup.png"
@@ -2243,11 +2249,42 @@ def test_overlays_section_full_override(tmp_path, monkeypatch):
     assert ov.subscribe_popup.position == "W-w-32:32"
     assert ov.subscribe_popup.opacity == 0.95
 
+    assert ov.encoder.codec == "libx264"
     assert ov.encoder.preset == "slow"
     assert ov.encoder.crf == 18
+    assert ov.encoder.pix_fmt == "yuv422p"
     assert ov.encoder.maxrate == "6M"
     assert ov.encoder.bufsize == "12M"
+    assert ov.encoder.profile == "main"
     assert ov.encoder.framerate == 30
+
+
+def test_overlays_omitted_fields_fall_back_to_declared_defaults(tmp_path, monkeypatch):
+    """#4623: override に無いキーは loader が宣言した既定値で埋まる（既定値変異を kill する）."""
+    sections = _minimal_sections()
+    sections["youtube.json"]["overlays"] = {
+        "enabled": True,
+        # mode / fscale / win_func は指定せず、rounding は空 object で既定値経路を通す
+        "audio_visualizer": {"enabled": True, "rounding": {}},
+        # pix_fmt / profile は指定しない
+        "encoder": {"codec": "libx264"},
+    }
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    config = load_config()
+
+    av = config.youtube.overlays.audio_visualizer
+    assert av.mode == "bar"
+    assert av.fscale == "log"
+    assert av.win_func == "hann"
+    assert av.rounding is not None
+    assert av.rounding.blur == 2.3
+    assert av.rounding.contrast == 3.2
+
+    encoder = config.youtube.overlays.encoder
+    assert encoder.pix_fmt == "yuv420p"
+    assert encoder.profile == "high"
 
 
 def test_overlays_empty_object_uses_defaults(tmp_path, monkeypatch):
