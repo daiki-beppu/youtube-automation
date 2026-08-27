@@ -17,7 +17,7 @@ import sys
 import tempfile
 import tomllib
 import unicodedata
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Mapping
 from contextlib import contextmanager, redirect_stdout
 from contextvars import ContextVar
 from dataclasses import asdict, dataclass
@@ -105,16 +105,6 @@ BILLING_ACCOUNT_ID_RE = re.compile(r"[A-Za-z0-9]{6}-[A-Za-z0-9]{6}-[A-Za-z0-9]{6
 _APPLY_PROJECT_ID: ContextVar[str | None] = ContextVar("doctor_apply_project_id", default=None)
 
 
-@dataclass
-class CheckResult:
-    id: str
-    status: str  # ok / info / warn / fail / unknown
-    message: str
-    category: str = API_CATEGORY  # bootstrap / api / channel / data / upload
-    next_action: Optional[dict] = None
-    data: Optional[dict] = None
-
-
 class ApplyKind(Enum):
     """診断の apply 可否と特別な入力契約。"""
 
@@ -131,6 +121,118 @@ class CwdSemantics(Enum):
     BOOTSTRAP_ROOT = "bootstrap-root"
 
 
+class _ActionMapping(Mapping):
+    def _internal_dict(self) -> dict:
+        raise NotImplementedError
+
+    def __getitem__(self, key: str) -> object:
+        return self._internal_dict()[key]
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._internal_dict())
+
+    def __len__(self) -> int:
+        return len(self._internal_dict())
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, Mapping):
+            return self._internal_dict() == dict(other)
+        return NotImplemented
+
+
+def _is_interactive_auth_command(argv: tuple[str, ...]) -> bool:
+    """Return True for auth commands which need a person at a terminal or a browser."""
+    return argv[:3] == ("gcloud", "auth", "login") or argv[:4] == (
+        "gcloud",
+        "auth",
+        "application-default",
+        "login",
+    )
+
+
+@dataclass(frozen=True, eq=False)
+class AgentCommand(_ActionMapping):
+    """A validated, non-interactive command which the apply loop may execute."""
+
+    argv: tuple[str, ...]
+    cmd: str
+    auto_apply: bool = True
+    public_fields: tuple[tuple[str, object], ...] = ()
+
+    def to_public_dict(self) -> dict:
+        return {"kind": "ai-exec", "cmd": self.cmd, **dict(self.public_fields)}
+
+    def _internal_dict(self) -> dict:
+        payload = {**self.to_public_dict(), "argv": list(self.argv)}
+        if not self.auto_apply:
+            payload["auto_apply"] = False
+        return payload
+
+
+@dataclass(frozen=True, eq=False)
+class HumanBrowserAuth(_ActionMapping):
+    """A browser authentication hand-off; its command is never auto-applied."""
+
+    public_fields: tuple[tuple[str, object], ...]
+    argv: tuple[str, ...] = ()
+
+    def to_public_dict(self) -> dict:
+        return {"kind": "human", **dict(self.public_fields)}
+
+    def _internal_dict(self) -> dict:
+        return {**self.to_public_dict(), "argv": list(self.argv)}
+
+
+@dataclass(frozen=True, eq=False)
+class ManualRemediation(_ActionMapping):
+    """A public action which requires a person or an explicit decision."""
+
+    public_fields: tuple[tuple[str, object], ...]
+
+    def to_public_dict(self) -> dict:
+        return dict(self.public_fields)
+
+    def _internal_dict(self) -> dict:
+        return self.to_public_dict()
+
+
+RemediationAction = AgentCommand | HumanBrowserAuth | ManualRemediation
+
+# 公開 JSON へ出してはならない内部専用キー（apply loop だけが使う実行情報）。
+_INTERNAL_ACTION_KEYS = frozenset({"argv", "auto_apply"})
+
+
+def _remediation_action(value: RemediationAction | dict | None) -> RemediationAction | None:
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        return value
+    exposed = tuple((key, item) for key, item in value.items() if key not in _INTERNAL_ACTION_KEYS)
+    # kind は to_public_dict が、cmd は AgentCommand.cmd が持つので public_fields には残さない
+    public = tuple((key, item) for key, item in exposed if key not in {"kind", "cmd"})
+    kind = value.get("kind")
+    raw_argv = value.get("argv")
+    argv = tuple(raw_argv) if isinstance(raw_argv, list) and all(isinstance(item, str) for item in raw_argv) else ()
+    if kind == "ai-exec" and argv:
+        return AgentCommand(argv, str(value.get("cmd", shlex.join(argv))), value.get("auto_apply") is not False, public)
+    if kind == "human" and value.get("reason") == "authentication":
+        return HumanBrowserAuth(public, argv)
+    return ManualRemediation(exposed)
+
+
+@dataclass
+class CheckResult:
+    id: str
+    status: str  # ok / info / warn / fail / unknown
+    message: str
+    category: str = API_CATEGORY  # bootstrap / api / channel / data / upload
+    next_action: RemediationAction | dict | None = None
+    data: Optional[dict] = None
+
+    def __post_init__(self) -> None:
+        self.next_action = _remediation_action(self.next_action)
+
+
 @dataclass(frozen=True)
 class CheckDefinition:
     """1 件の doctor check を構成する宣言。"""
@@ -141,37 +243,39 @@ class CheckDefinition:
     apply_kind: ApplyKind
     cwd_semantics: CwdSemantics
 
+    def command_cwd(self, channel_dir: Path) -> Path:
+        return _bootstrap_root(channel_dir) if self.cwd_semantics is CwdSemantics.BOOTSTRAP_ROOT else channel_dir
+
 
 def _ai_exec_action(
     argv: list[str] | tuple[str, ...],
     *,
     auto_apply: bool = True,
     display_cmd: str | None = None,
-) -> dict:
-    action: dict = {
-        "kind": "ai-exec",
-        "cmd": display_cmd or shlex.join(argv),
-        "argv": list(argv),
-    }
-    if not auto_apply:
-        action["auto_apply"] = False
-    return action
+) -> AgentCommand:
+    return AgentCommand(tuple(argv), display_cmd or shlex.join(argv), auto_apply)
 
 
-def _human_auth_action(argv: list[str] | tuple[str, ...], instructions: str) -> dict:
+def _decision_action(flag: str) -> ManualRemediation:
+    """Return the hand-off which asks the operator to re-run with an explicit flag."""
+    return ManualRemediation((("kind", "decision"), ("flag", flag)))
+
+
+def _human_auth_action(argv: list[str] | tuple[str, ...], instructions: str) -> HumanBrowserAuth:
     """Return an auth hand-off without delegating command execution to the user."""
-    return {
-        "kind": "human",
-        "reason": "authentication",
-        "cmd": shlex.join(argv),
-        "argv": list(argv),
-        "execution_owner": "ai-or-setup",
-        "human_role": "browser-authentication",
-        "instructions": instructions,
-    }
+    return HumanBrowserAuth(
+        (
+            ("reason", "authentication"),
+            ("cmd", shlex.join(argv)),
+            ("execution_owner", "ai-or-setup"),
+            ("human_role", "browser-authentication"),
+            ("instructions", instructions),
+        ),
+        tuple(argv),
+    )
 
 
-def _youtube_oauth_action(instructions: str) -> dict:
+def _youtube_oauth_action(instructions: str) -> HumanBrowserAuth:
     """Return the agent-driven YouTube OAuth hand-off contract."""
     action = _human_auth_action(
         ["uv", "run", "yt-oauth"],
@@ -179,18 +283,19 @@ def _youtube_oauth_action(instructions: str) -> dict:
         "利用者はブラウザで OAuth 同意だけを完了してください。AI は同じ process の exit 0 を待ち、"
         f"`uv run yt-doctor --json` で再検証します。{instructions}",
     )
-    action.update(
-        {
-            "execution_mode": "background",
-            "url_source": "stdout",
-            "completion_signal": "process-exit",
-            "post_check_cmd": "uv run yt-doctor --json",
-        }
+    return HumanBrowserAuth(
+        (
+            *action.public_fields,
+            ("execution_mode", "background"),
+            ("url_source", "stdout"),
+            ("completion_signal", "process-exit"),
+            ("post_check_cmd", "uv run yt-doctor --json"),
+        ),
+        action.argv,
     )
-    return action
 
 
-def _youtube_readonly_oauth_action(channel_dir: Path) -> dict:
+def _youtube_readonly_oauth_action(channel_dir: Path) -> HumanBrowserAuth:
     """Return the agent-driven read-only OAuth hand-off in the target channel context."""
     action = _human_auth_action(
         ["uv", "run", "yt-oauth", "--readonly"],
@@ -198,16 +303,17 @@ def _youtube_readonly_oauth_action(channel_dir: Path) -> dict:
         "として起動し、stdout の同意 URL を利用者へ中継します。利用者はブラウザで OAuth 同意だけを"
         "完了してください。AI は同じ process の exit 0 を待ち、`uv run yt-doctor --json` で再検証します。",
     )
-    action.update(
-        {
-            "cwd": str(channel_dir),
-            "execution_mode": "background",
-            "url_source": "stdout",
-            "completion_signal": "process-exit",
-            "post_check_cmd": "uv run yt-doctor --json",
-        }
+    return HumanBrowserAuth(
+        (
+            *action.public_fields,
+            ("cwd", str(channel_dir)),
+            ("execution_mode", "background"),
+            ("url_source", "stdout"),
+            ("completion_signal", "process-exit"),
+            ("post_check_cmd", "uv run yt-doctor --json"),
+        ),
+        action.argv,
     )
-    return action
 
 
 @dataclass(frozen=True)
@@ -2046,7 +2152,7 @@ class ExecutedStep:
 class ApplySummary:
     stop_reason: str
     check_id: str | None
-    next_action: dict | None
+    next_action: RemediationAction | None
     executed: tuple[ExecutedStep, ...]
     cmd: str | None = None
     stderr: str | None = None
@@ -2055,7 +2161,7 @@ class ApplySummary:
         payload: dict = {
             "stop_reason": self.stop_reason,
             "check_id": self.check_id,
-            "next_action": _public_next_action(self.next_action),
+            "next_action": self.next_action.to_public_dict() if self.next_action else None,
             "executed": [asdict(step) for step in self.executed],
         }
         if self.cmd is not None:
@@ -2072,17 +2178,15 @@ class ApplyOutcome:
     exit_code: int
 
 
-def _public_next_action(action: dict | None) -> dict | None:
-    if action is None:
-        return None
-    return {key: value for key, value in action.items() if key not in {"argv", "auto_apply"}}
-
-
 def _check_result_to_dict(result: CheckResult) -> dict:
-    payload = asdict(result)
-    payload["category"] = _declared_category(result)
-    payload["next_action"] = _public_next_action(result.next_action)
-    return payload
+    return {
+        "id": result.id,
+        "status": result.status,
+        "message": result.message,
+        "category": _declared_category(result),
+        "next_action": result.next_action.to_public_dict() if result.next_action else None,
+        "data": result.data,
+    }
 
 
 def _apply_outcome(
@@ -2091,7 +2195,7 @@ def _apply_outcome(
     executed: list[ExecutedStep],
     *,
     check: CheckResult | None = None,
-    next_action: dict | None = None,
+    next_action: RemediationAction | dict | None = None,
     cmd: str | None = None,
     stderr: str | None = None,
     exit_code: int = 0,
@@ -2101,7 +2205,7 @@ def _apply_outcome(
         summary=ApplySummary(
             stop_reason=stop_reason,
             check_id=check.id if check else None,
-            next_action=next_action,
+            next_action=_remediation_action(next_action),
             executed=tuple(executed),
             cmd=cmd,
             stderr=stderr,
@@ -2112,24 +2216,6 @@ def _apply_outcome(
 
 def _run_apply_command(argv: list[str], cwd: Path) -> tuple[int, str, str]:
     return _run(argv, timeout=300, cwd=cwd)
-
-
-def _is_interactive_auth_command(argv: list[str]) -> bool:
-    return argv[:3] == ["gcloud", "auth", "login"] or argv[:4] == [
-        "gcloud",
-        "auth",
-        "application-default",
-        "login",
-    ]
-
-
-def _validated_action_argv(action: dict) -> list[str] | None:
-    raw_argv = action.get("argv")
-    if not isinstance(raw_argv, list) or not raw_argv:
-        return None
-    if not all(isinstance(value, str) and value for value in raw_argv):
-        return None
-    return raw_argv
 
 
 def _forced_project_check(
@@ -2149,28 +2235,6 @@ def _forced_project_check(
     return CheckResult(id="gcp_project", status="fail", message=f"project {project_id} を選択")
 
 
-def _apply_kind_for(result: CheckResult) -> ApplyKind:
-    definition = _check_definition(result.id)
-    if definition is not None:
-        return definition.apply_kind
-    if result.id == "gcp_project":
-        return ApplyKind.PROJECT
-    if result.id == "billing_linked":
-        return ApplyKind.BILLING
-    return ApplyKind.AI_EXEC
-
-
-def _apply_cwd_for(result: CheckResult, channel_dir: Path) -> Path:
-    definition = _check_definition(result.id)
-    if definition is not None:
-        semantics = definition.cwd_semantics
-    elif result.category == BOOTSTRAP_CATEGORY:
-        semantics = CwdSemantics.BOOTSTRAP_ROOT
-    else:
-        semantics = CwdSemantics.CHANNEL
-    return _bootstrap_root(channel_dir) if semantics is CwdSemantics.BOOTSTRAP_ROOT else channel_dir
-
-
 def _run_apply_loop(
     channel_dir: Path,
     project_id: str | None,
@@ -2184,27 +2248,30 @@ def _run_apply_loop(
         unresolved = _forced_project_check(results, project_id, current_project_id) or _first_unresolved_check(results)
         if unresolved is None:
             return _apply_outcome(results, "completed", executed)
-        apply_kind = _apply_kind_for(unresolved)
+        definition = _check_definition(unresolved.id)
+        if definition is None:
+            return _apply_outcome(
+                results, "human_required", executed, check=unresolved, next_action=unresolved.next_action
+            )
+        apply_kind = definition.apply_kind
         if apply_kind is ApplyKind.PROJECT and project_id is None:
             return _apply_outcome(
                 results,
                 "decision_required",
                 executed,
                 check=unresolved,
-                next_action={"kind": "decision", "flag": "--project-id"},
+                next_action=_decision_action("--project-id"),
             )
-        if (
-            apply_kind is ApplyKind.BILLING
-            and billing_account is None
-            and unresolved.next_action
-            and unresolved.next_action.get("kind") == "ai-exec"
-        ):
+        # remediation がある = billing 未紐付けが確定しているケースだけ --billing-account を要求する。
+        # describe 自体の失敗（権限不足など。next_action なし）は
+        # account を選んでも解決しないので human_required に落とす。
+        if apply_kind is ApplyKind.BILLING and billing_account is None and unresolved.next_action is not None:
             return _apply_outcome(
                 results,
                 "decision_required",
                 executed,
                 check=unresolved,
-                next_action={"kind": "decision", "flag": "--billing-account"},
+                next_action=_decision_action("--billing-account"),
             )
         action = unresolved.next_action
         if apply_kind is ApplyKind.PROJECT and project_id is not None:
@@ -2217,7 +2284,7 @@ def _run_apply_loop(
                     "decision_required",
                     executed,
                     check=CheckResult(id="gcp_project", status="fail", message="project ID が必要"),
-                    next_action={"kind": "decision", "flag": "--project-id"},
+                    next_action=_decision_action("--project-id"),
                 )
             action = _ai_exec_action(
                 [
@@ -2232,9 +2299,10 @@ def _run_apply_loop(
             )
         if (
             apply_kind is ApplyKind.NONE
-            or not action
-            or action.get("kind") != "ai-exec"
-            or action.get("auto_apply") is False
+            or not isinstance(action, AgentCommand)
+            or not action.auto_apply
+            # ai-exec と誤ってラベルされても対話 auth は非対話実行しない
+            or _is_interactive_auth_command(action.argv)
         ):
             return _apply_outcome(
                 results,
@@ -2243,24 +2311,8 @@ def _run_apply_loop(
                 check=unresolved,
                 next_action=action,
             )
-        argv = _validated_action_argv(action)
-        if argv is None:
-            return _apply_outcome(
-                results,
-                "human_required",
-                executed,
-                check=unresolved,
-                next_action=action,
-            )
+        argv = list(action.argv)
         command = shlex.join(argv)
-        if _is_interactive_auth_command(argv):
-            return _apply_outcome(
-                results,
-                "human_required",
-                executed,
-                check=unresolved,
-                next_action=action,
-            )
         step_key = (unresolved.id, command)
         if step_key in attempted_steps:
             return _apply_outcome(
@@ -2274,7 +2326,7 @@ def _run_apply_loop(
                 exit_code=1,
             )
         attempted_steps.add(step_key)
-        command_cwd = _apply_cwd_for(unresolved, channel_dir)
+        command_cwd = definition.command_cwd(channel_dir)
         returncode, _stdout, stderr = _run_apply_command(argv, command_cwd)
         executed.append(ExecutedStep(unresolved.id, command, returncode))
         if returncode != 0:
@@ -2577,15 +2629,16 @@ def render_table(results: list[CheckResult], summary: dict, channel_dir: Path) -
         color = _COLORS.get(r.status, "")
         icon = _STATUS_ICONS.get(r.status, "?")
         lines.append(f"{color}{icon} {r.status:<5}{_RESET} {r.id:<22} {r.message}")
-        if r.next_action:
-            kind = r.next_action.get("kind")
+        action = r.next_action.to_public_dict() if r.next_action else None
+        if action:
+            kind = action.get("kind")
             if kind == "human":
-                if r.next_action.get("url"):
-                    lines.append(f"  → {r.next_action['url']}")
-                if r.next_action.get("instructions"):
-                    lines.append(f"  → {r.next_action['instructions']}")
+                if action.get("url"):
+                    lines.append(f"  → {action['url']}")
+                if action.get("instructions"):
+                    lines.append(f"  → {action['instructions']}")
             elif kind == "ai-exec":
-                lines.append(f"  → run: {r.next_action.get('cmd', '')}")
+                lines.append(f"  → run: {action.get('cmd', '')}")
 
     lines.append("")
     lines.append(

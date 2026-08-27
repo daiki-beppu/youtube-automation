@@ -146,6 +146,30 @@ def test_apply_never_executes_interactive_auth_even_if_mislabeled(monkeypatch, t
     }
 
 
+def test_apply_refuses_interactive_auth_labelled_as_ai_exec_on_an_executable_check(
+    monkeypatch, tmp_path: Path, capsys
+) -> None:
+    """#4447: apply_kind が AI_EXEC の check でも、対話 auth の argv は実行しない。
+
+    `adc` / `gcloud_account` は ApplyKind.NONE で早期に止まるため、この経路は
+    実行可能な check（`apis_enabled`）でしか通らない。
+    """
+    action = _ai_action("gcloud", "auth", "application-default", "login")
+    monkeypatch.setattr(doctor, "run_all_checks", lambda _channel_dir: [_result("apis_enabled", "fail", action)])
+    monkeypatch.setattr(
+        doctor,
+        "_run_apply_command",
+        lambda _argv, _cwd: (_ for _ in ()).throw(AssertionError("interactive auth must not run")),
+    )
+
+    code = doctor.main(["--apply", "--json", "--target", str(tmp_path)])
+
+    assert code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["apply"]["stop_reason"] == "human_required"
+    assert payload["apply"]["check_id"] == "apis_enabled"
+
+
 def test_apply_stops_for_project_decision_without_project_id(monkeypatch, tmp_path: Path, capsys) -> None:
     monkeypatch.setattr(
         doctor,
@@ -288,6 +312,28 @@ def test_apply_stops_for_billing_decision_without_account(monkeypatch, tmp_path:
         "kind": "decision",
         "flag": "--billing-account",
     }
+
+
+def test_apply_requires_human_when_billing_probe_failed(monkeypatch, tmp_path: Path, capsys) -> None:
+    """describe 失敗（next_action なし）は --billing-account では解決しないため human_required に落とす。"""
+    monkeypatch.setattr(
+        doctor,
+        "run_all_checks",
+        lambda _channel_dir: [_result("billing_linked", "fail")],
+    )
+    monkeypatch.setattr(
+        doctor,
+        "_run_apply_command",
+        lambda _argv, _cwd: (_ for _ in ()).throw(AssertionError("billing probe failure must not run")),
+    )
+
+    code = doctor.main(["--apply", "--json", "--target", str(tmp_path)])
+
+    assert code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["apply"]["stop_reason"] == "human_required"
+    assert payload["apply"]["check_id"] == "billing_linked"
+    assert payload["apply"]["next_action"] is None
 
 
 def test_apply_uses_billing_account_then_continues(monkeypatch, tmp_path: Path, capsys) -> None:

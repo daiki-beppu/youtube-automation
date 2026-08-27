@@ -154,3 +154,34 @@ def test_json_should_keep_internal_action_fields_out_of_public_contract(
     assert "auto_apply" not in payload["checks"][0]["next_action"]
     assert "argv" not in payload["apply"]["next_action"]
     assert "auto_apply" not in payload["apply"]["next_action"]
+
+
+@pytest.mark.parametrize(
+    ("action", "public"),
+    [
+        (doctor.AgentCommand(("uv", "init"), "uv init", False), {"kind": "ai-exec", "cmd": "uv init"}),
+        (
+            doctor.HumanBrowserAuth((("reason", "authentication"), ("instructions", "open browser"))),
+            {"kind": "human", "reason": "authentication", "instructions": "open browser"},
+        ),
+        (
+            doctor.ManualRemediation((("kind", "decision"), ("flag", "--project-id"))),
+            {"kind": "decision", "flag": "--project-id"},
+        ),
+    ],
+)
+def test_remediation_action_union_owns_public_serialization(
+    action: doctor.RemediationAction,
+    public: dict,
+) -> None:
+    assert action.to_public_dict() == public
+
+
+def test_manual_remediation_fallback_should_drop_internal_action_fields() -> None:
+    """ai-exec/human のどちらにも該当しない dict でも argv / auto_apply を公開しない。"""
+    action = doctor._remediation_action(
+        {"kind": "decision", "flag": "--billing-account", "argv": ["gcloud", "beta"], "auto_apply": False}
+    )
+
+    assert isinstance(action, doctor.ManualRemediation)
+    assert action.to_public_dict() == {"kind": "decision", "flag": "--billing-account"}
