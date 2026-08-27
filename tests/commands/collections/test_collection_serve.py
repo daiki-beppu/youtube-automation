@@ -693,10 +693,7 @@ def test_cors_headers_are_not_duplicated_on_the_wire(serve):
     """
     base = serve([{"name": "A", "style": "s", "lyrics": ""}])
     raw_request = (
-        f"GET {_VERSION_ROUTE} HTTP/1.1\r\n"
-        "Host: localhost\r\n"
-        "Origin: https://suno.com\r\n"
-        "Connection: close\r\n\r\n"
+        f"GET {_VERSION_ROUTE} HTTP/1.1\r\nHost: localhost\r\nOrigin: https://suno.com\r\nConnection: close\r\n\r\n"
     ).encode()
 
     response = _send_raw_http_request(base, raw_request)
