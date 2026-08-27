@@ -4,11 +4,3 @@
 !.gitignore
 !config.yaml
 !runtime-prepare.sh
-!workflows/
-!workflows/**
-!steps/
-!steps/**
-!schemas/
-!schemas/**
-!facets/
-!facets/**

@@ -1,1 +1,0 @@
-Implement the accepted plan against the confirmed red tests with the smallest coherent diff. Preserve scope, run the relevant tests, and record verification evidence. Set structured verdict to `implemented` only when the planned behavior is complete and green, `replan` when the implementation premise must change, or `abort` when completion is unsafe or impossible.

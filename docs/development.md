@@ -20,7 +20,7 @@ nix develop
 - **非対話 shell / agent**: `nix develop --command <command> [args...]` を正規入口とする。例: `nix develop --command uv run pytest tests/commands/system/test_doctor.py -q`
 - **依存同期を fail-closed にしたい場合**: `nix develop --command uv sync` を明示実行する。exit 非 0 なら依存は同期されていないので、後続コマンドを実行しない
 
-worktree の生成・命名・issue / PR 運用は [`docs/takt-operations.md`](takt-operations.md) を参照する。標準実装経路は takt + `.takt/workflows/` の専用 workflow（#2686）。
+worktree の生成・命名・issue / PR 運用は [`docs/takt-operations.md`](takt-operations.md) を参照する。標準実装経路は takt + builtin workflow。
 
 ## プロジェクト固有コマンド（全量）
 

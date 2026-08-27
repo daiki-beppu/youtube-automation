@@ -1,7 +1,0 @@
-name: spillover
-tags: [delivery]
-edit: false
-session: refresh
-persona: planner
-capabilities: [readonly, enable-skills]
-instruction: yt-auto-spillover

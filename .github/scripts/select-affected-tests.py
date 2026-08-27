@@ -81,26 +81,14 @@ PATH_TEST_MAP: Final = (
         ),
     ),
     (".github/scripts/", ("tests/repo/test_select_affected_tests.py",)),
-    (
-        ".github/scripts/any-usage-gate.sh",
-        (
-            "tests/repo/test_any_usage_gate.py",
-            "tests/repo/test_takt_workflow_contract.py",
-        ),
-    ),
+    (".github/scripts/any-usage-gate.sh", ("tests/repo/test_any_usage_gate.py",)),
     # resolver / cleaner は any-usage-gate.sh から subprocess で呼ばれるだけで
     # 名指しの参照を持たないため、gate 本体の E2E テストへ対応付ける。
     (".github/scripts/any_usage_python_resolver.py", ("tests/repo/test_any_usage_gate.py",)),
     (".github/scripts/any_usage_ts_line_cleaner.py", ("tests/repo/test_any_usage_gate.py",)),
     (".github/scripts/classify-ci-paths.sh", ("tests/repo/test_actions_parallel_workflows.py",)),
     (".github/scripts/pyscn-diff-gate.py", ("tests/repo/test_pyscn_diff_gate_contract.py",)),
-    (
-        ".github/scripts/run-affected-tests.py",
-        (
-            "tests/repo/test_pytest_lane_contract.py",
-            "tests/repo/test_takt_workflow_contract.py",
-        ),
-    ),
+    (".github/scripts/run-affected-tests.py", ("tests/repo/test_pytest_lane_contract.py",)),
     (
         ".github/scripts/validate-changelog-fragments.py",
         ("tests/repo/test_changelog_ci_contract.py",),
