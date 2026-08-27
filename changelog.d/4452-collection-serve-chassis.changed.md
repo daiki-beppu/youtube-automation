@@ -1,0 +1,1 @@
+- `yt-collection-serve` の HTTP 層を共通 localserver chassis へ移行しました。routing・CORS origin 判定・body 上限は chassis が所有し、各エンドポイントは socket を持たない handler 関数になりました。

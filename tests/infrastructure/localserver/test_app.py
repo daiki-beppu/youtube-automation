@@ -8,7 +8,22 @@ from typing import Iterator
 import pytest
 
 from youtube_automation.core.errors import ConfigError, ValidationError
-from youtube_automation.infrastructure.localserver.app import Request, Route, create_server
+from youtube_automation.infrastructure.localserver.app import (
+    OriginDecision,
+    OriginQuery,
+    Request,
+    Response,
+    Route,
+    create_server,
+)
+
+
+def _reject_unknown_origins(query: OriginQuery) -> OriginDecision:
+    if query.origin is None:
+        return OriginDecision.OMIT
+    if query.origin == "https://allowed.example":
+        return OriginDecision.ALLOW
+    return OriginDecision.REJECT
 
 
 @contextmanager
@@ -16,7 +31,7 @@ def running(routes: list[Route], *, max_body_bytes: int = 32) -> Iterator[tuple[
     server = create_server(
         routes,
         port=0,
-        origin_policy=lambda origin: origin == "https://allowed.example",
+        origin_policy=_reject_unknown_origins,
         max_body_bytes=max_body_bytes,
     )
     thread = threading.Thread(target=server.serve_forever)
@@ -84,6 +99,44 @@ def test_body_limit_is_rejected_before_handler() -> None:
         response = request(address, "POST", "/items", body=b"12345", headers={"Content-Length": "5"})
         assert response.status == 413
     assert not called
+
+
+def test_route_body_limit_can_be_stricter_than_server_limit() -> None:
+    route = Route("POST", "/items", lambda _request: {}, max_body_bytes=2)
+    with running([route], max_body_bytes=32) as address:
+        response = request(address, "POST", "/items", body=b"123", headers={"Content-Length": "3"})
+    assert response.status == 413
+
+
+def test_binary_response_is_written_without_json_encoding() -> None:
+    route = Route("GET", "/asset", lambda _request: Response(b"asset", content_type="audio/mpeg"))
+    with running([route]) as address:
+        response = request(address, "GET", "/asset")
+        assert response.status == 200
+        assert response.getheader("Content-Type") == "audio/mpeg"
+        assert response.read() == b"asset"
+
+
+def test_route_supplied_headers_replace_chassis_defaults_instead_of_duplicating() -> None:
+    """route が自前で CORS ヘッダーを返す場合でも同名ヘッダーを二重送信しない（#4452）."""
+    route = Route(
+        "GET",
+        "/asset",
+        lambda _request: Response(
+            b"asset",
+            content_type="audio/mpeg",
+            headers={"Access-Control-Allow-Origin": "https://allowed.example", "Vary": "Origin"},
+        ),
+    )
+    with running([route]) as address:
+        connection = http.client.HTTPConnection(*address)
+        connection.request("GET", "/asset", headers={"Origin": "https://allowed.example"})
+        response = connection.getresponse()
+        assert response.status == 200
+        assert response.getheader("Content-Type") == "audio/mpeg"
+        assert response.msg.get_all("Access-Control-Allow-Origin") == ["https://allowed.example"]
+        assert response.msg.get_all("Vary") == ["Origin"]
+        assert response.msg.get_all("Content-Length") == ["5"]
 
 
 @pytest.mark.parametrize(

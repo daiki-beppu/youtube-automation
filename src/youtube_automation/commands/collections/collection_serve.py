@@ -24,6 +24,7 @@ import argparse
 import contextlib
 import hashlib
 import http.client
+import io
 import json
 import math
 import mimetypes
@@ -39,15 +40,19 @@ import threading
 import time
 import urllib.parse
 import uuid
+from dataclasses import replace
 from datetime import datetime
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from email.message import Message
+from http import HTTPStatus
 from pathlib import Path
 
 from youtube_automation import __version__
 from youtube_automation.application.distrokid.disc_query import find_distrokid_discs
 from youtube_automation.application.suno_download_handoff import SunoDownloadHandoff
 from youtube_automation.commands.collections.collection_serve_discovery import (
+    DISCOVERY_PATH,
     DISCOVERY_PORT,
+    MAX_REGISTRATION_BODY_BYTES,
     RegistryState,
     create_discovery_lifecycle,
     handle_registry_request,
@@ -95,6 +100,15 @@ from youtube_automation.infrastructure.collections.chrome_extensions import (
     resolve_unpacked_extension_origin,
 )
 from youtube_automation.infrastructure.file_lock import file_lock
+from youtube_automation.infrastructure.localserver.app import (
+    LocalHTTPServer,
+    OriginDecision,
+    OriginPolicy,
+    OriginQuery,
+    Request,
+    Response,
+    Route,
+)
 from youtube_automation.infrastructure.localserver.collections import (
     COLLECTION_DIR_SUFFIX as _COLLECTION_DIR_SUFFIX,
 )
@@ -168,6 +182,8 @@ _R2_HANDOFF_ENVIRONMENT = frozenset({"R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_AP
 
 # 30-distrokid サブディレクトリ名（#934）。コレクション配下のこのサブディレクトリが disc を含む。
 _DISTROKID_DIRNAME = "30-distrokid"
+# collection-scoped release route の固定セグメント（`/collections/<id>/distrokid/<disc>/release.json`）。
+_DISTROKID_ROUTE_SEGMENT = "distrokid"
 _DISTROKID_METADATA_FILENAME = "metadata.md"
 
 # dir mode: DistroKid collections 一覧 + releases POST のルート定数（#934）。
@@ -206,13 +222,26 @@ class _IdleTimeout(RuntimeError):
         super().__init__(f"no HTTP requests received for {seconds:g} seconds")
 
 
-class _IdleTrackingHTTPServer(ThreadingHTTPServer):
+class _IdleTrackingHTTPServer(LocalHTTPServer):
     """request の受付時刻を追跡し、serve loop から idle 終了する HTTP server。"""
 
-    def __init__(self, server_address: tuple[str, int], handler_class: type[BaseHTTPRequestHandler], seconds: float):
+    def __init__(
+        self,
+        server_address: tuple[str, int],
+        routes: list[Route],
+        origin_policy: OriginPolicy,
+        seconds: float,
+    ):
         self._idle_timeout_seconds = seconds
         self._last_request_at = time.monotonic()
-        super().__init__(server_address, handler_class)
+        super().__init__(
+            server_address,
+            routes,
+            origin_policy,
+            max_body_bytes=_MAX_POST_BODY_BYTES,
+            stop_path=None,
+            idle_timeout_seconds=None,
+        )
 
     def finish_request(self, request: object, client_address: tuple[str, int]) -> None:
         self._last_request_at = time.monotonic()
@@ -854,6 +883,121 @@ def _positive_float(value: str) -> float:
     return parsed
 
 
+class _DiscoveryRecorder:
+    """Minimal stdlib-handler stand-in kept only for the shared discovery contract.
+
+    `collection_serve_discovery.handle_registry_request` is shared with the
+    dedicated registry server and still speaks the `BaseHTTPRequestHandler`
+    protocol. Every collection route below is a plain `Request -> Response`
+    function; this shim exists solely so the fixed discovery path keeps its
+    schema v1 status matrix without forking that module (#4452).
+    """
+
+    def __init__(self, request: Request) -> None:
+        self.command = request.method
+        self.path = request.path
+        self.headers = Message()
+        for key, value in request.headers.items():
+            self.headers[key] = value
+        self.rfile = io.BytesIO(request.body)
+        self.wfile = io.BytesIO()
+        self._status = int(HTTPStatus.OK)
+        self._headers: list[tuple[str, str]] = []
+
+    def send_response(self, status: int) -> None:
+        self._status = status
+
+    def send_header(self, key: str, value: str) -> None:
+        self._headers.append((key, value))
+
+    def end_headers(self) -> None:
+        return None
+
+    def response(self) -> Response:
+        headers = dict(self._headers)
+        return Response(
+            self.wfile.getvalue(),
+            self._status,
+            {key: value for key, value in headers.items() if key.lower() not in {"content-type", "content-length"}},
+            headers.get("Content-Type", "application/json; charset=utf-8"),
+        )
+
+
+# chassis が dispatch できる HTTP method の全集合。collection server はこのうち
+# GET / POST / OPTIONS だけを実装し、残りは stdlib と同じ 501 で答える契約を保つ。
+_DISPATCHABLE_METHODS = ("GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS", "CONNECT", "TRACE", "BREW")
+_FALLBACK_PATH_PATTERNS = ("/", "/{path*}")
+
+
+def _json_body(payload: object, status: int = int(HTTPStatus.OK)) -> Response:
+    """Serialise a payload the way the helper extensions already parse it."""
+    return Response(
+        json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+        status,
+        {},
+        "application/json; charset=utf-8",
+    )
+
+
+def _error_body(status: int, message: str) -> Response:
+    return _json_body({"error": message}, status)
+
+
+def _not_found() -> Response:
+    return _error_body(int(HTTPStatus.NOT_FOUND), "Not Found")
+
+
+def _forbidden() -> Response:
+    return _error_body(int(HTTPStatus.FORBIDDEN), "Forbidden")
+
+
+def _bad_request() -> Response:
+    return _error_body(int(HTTPStatus.BAD_REQUEST), "Bad Request")
+
+
+def _server_error(exc: Exception) -> Response:
+    # 破損 spec.json / workflow-state.json 等の fail-loud は handler 落ち（接続断）
+    # ではなく 500 + メッセージで拡張へ届ける（#944）。
+    return _error_body(int(HTTPStatus.INTERNAL_SERVER_ERROR), str(exc))
+
+
+def _binary_body(path_name: str, body: bytes) -> Response:
+    content_type = mimetypes.guess_type(path_name)[0] or "application/octet-stream"
+    return Response(body, int(HTTPStatus.OK), {}, content_type)
+
+
+def _collection_origin_policy(allow_origin: str | None) -> OriginPolicy:
+    """Own the read/write origin split in one place instead of per route.
+
+    A disallowed origin is not rejected outright: the response is served without
+    CORS headers so the browser drops it, which is the behaviour the helper
+    extensions have always seen (#4452).
+    """
+
+    def policy(query: OriginQuery) -> OriginDecision:
+        if query.method in {"GET", "HEAD", "OPTIONS"}:
+            allowed = _is_read_origin_allowed(query.origin, allow_origin, query.path)
+        else:
+            allowed = is_origin_allowed(query.origin, allow_origin)
+        return OriginDecision.ALLOW if allowed else OriginDecision.OMIT
+
+    return policy
+
+
+def _server_metadata(
+    server_info: dict[str, object] | None,
+    port: int,
+    distrokid_enabled: bool,
+    collections_root: Path | None,
+) -> dict[str, object]:
+    resolved = server_info if server_info is not None else build_server_info("YouTube Automation", "YA", port)
+    mode = "disabled" if not distrokid_enabled else ("dir" if collections_root is not None else "single")
+    resolved["capabilities"] = {"distrokid": {"mode": mode}}
+    if collections_root is not None:
+        resolved["collections_root"] = collections_root.name
+    return resolved
+
+
 def create_server(
     port: int,
     allow_origin: str | None,
@@ -871,7 +1015,7 @@ def create_server(
     lifecycle_record: _LifecycleRecord | None = None,
     lifecycle_root: Path | None = None,
     downloaded_handoff: SunoDownloadHandoff | None = None,
-) -> ThreadingHTTPServer:
+) -> LocalHTTPServer:
     """サブパス分離した GET / POST / CORS preflight を返すサーバーを生成する.
 
     `collections_root` 指定時は **dir mode**（`/collections` 系を配信し
@@ -882,596 +1026,426 @@ def create_server(
     None なら capture 系 POST は 404。
 
     distrokid が None または `enabled == False` のとき `/distrokid/*` は 404。
+
+    routing・CORS・body 上限は chassis（`infrastructure/localserver/app.py`）が
+    所有する。ここで組み立てるのは route table と各 route の業務判断だけで、
+    handler は socket を持たない `Request -> Response` 関数である（#4452）。
     """
     dir_mode = collections_root is not None
     distrokid_enabled = distrokid is not None and distrokid.enabled
     serve_token = str(uuid.uuid4())
     unattended_requests: dict[str, tuple[float, dict[str, object]]] = {}
     unattended_requests_lock = threading.Lock()
-    resolved_server_info = (
-        server_info if server_info is not None else build_server_info("YouTube Automation", "YA", port)
-    )
-    distrokid_mode = "disabled" if not distrokid_enabled else ("dir" if dir_mode else "single")
-    resolved_server_info["capabilities"] = {"distrokid": {"mode": distrokid_mode}}
-    if collections_root is not None:
-        resolved_server_info["collections_root"] = collections_root.name
+    resolved_server_info = _server_metadata(server_info, port, distrokid_enabled, collections_root)
     resolved_community_asset_root = community_asset_root if community_asset_root is not None else collection_dir
+    # port=0 で OS に選ばせる場合、bind 後の実ポートを route から参照する。
+    bound_port: list[int] = [port]
 
-    class _Handler(BaseHTTPRequestHandler):
-        def _allowed_origin(self) -> str | None:
-            headers = getattr(self, "headers", None)
-            if headers is None:
-                return None
-            origin = headers.get("Origin")
-            if self.command in {"GET", "HEAD", "OPTIONS"}:
-                return origin if _is_read_origin_allowed(origin, allow_origin, self.path) else None
-            return origin if is_origin_allowed(origin, allow_origin) else None
+    def locked_extension_request(request: Request) -> bool:
+        return _is_locked_extension_request(
+            request.headers.get("Origin"),
+            request.headers.get("X-Extension-Origin"),
+            allow_origin,
+        )
 
-        def _send_cors(self, origin: str | None) -> None:
-            if origin:
-                self.send_header("Access-Control-Allow-Origin", origin)
-                self.send_header("Vary", "Origin")
+    def write_authorised(request: Request) -> bool:
+        """書き込み境界（#1360）: extension lock と serve token の両方を要求する。
 
-        def _send_bytes(self, body: bytes, content_type: str) -> None:
-            origin = self._allowed_origin()
-            self.send_response(200)
-            self.send_header("Content-Type", content_type)
-            self.send_header("Content-Length", str(len(body)))
-            self._send_cors(origin)
-            self.end_headers()
-            self.wfile.write(body)
+        MV3 background fetch は Origin を省略しうるため、runtime origin の明示宣言を
+        configured extension lock と完全一致させ、本人性は serve token で担保する。
+        """
+        return locked_extension_request(request) and request.headers.get("X-Serve-Token") == serve_token
 
-        def _send_json_error(self, status: int, message: str) -> None:
-            # send_error は CORS ヘッダを付けず HTML を返すため、拡張へ届けるエラーは
-            # JSON + CORS で返す（#944）。message に改行を含む ConfigError も安全に運べる。
-            origin = self._allowed_origin()
-            body = json.dumps({"error": message}, ensure_ascii=False).encode("utf-8")
-            self.send_response(status)
-            self.send_header("Content-Type", "application/json; charset=utf-8")
-            self.send_header("Content-Length", str(len(body)))
-            self._send_cors(origin)
-            self.end_headers()
-            can_write_body = self.command != "HEAD" and status >= 200 and status not in (204, 205, 304)
-            if can_write_body:
-                self.wfile.write(body)
+    def known_collection_dir(collection_id: str) -> Path | None:
+        """トラバーサル防御: find_collection_dirs のホワイトリストで弾く（#934）。"""
+        known_ids = {coll.name for coll in find_collection_dirs(collections_root)}
+        return collections_root / collection_id if collection_id in known_ids else None
 
-        def send_error(self, code: int, message: str | None = None, explain: str | None = None) -> None:
-            if (
-                code == 501
-                and discovery_registry_state is not None
-                and handle_registry_request(self, discovery_registry_state)
-            ):
-                return
-            resolved_message = message
-            if resolved_message is None:
-                resolved_message = self.responses.get(code, ("???", "???"))[0]
-            self._send_json_error(code, resolved_message)
+    # --- 固定 discovery route: schema v1 の status matrix は共有実装へ委ねる ---
 
-        def do_OPTIONS(self) -> None:
-            if discovery_registry_state is not None and handle_registry_request(self, discovery_registry_state):
-                return
-            origin = self._allowed_origin()
-            self.send_response(204)
-            self._send_cors(origin)
-            self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-            self.send_header(
-                "Access-Control-Allow-Headers",
-                "Content-Type, X-Serve-Token, X-Extension-Origin",
-            )
-            self.end_headers()
+    def discovery(request: Request) -> Response:
+        assert discovery_registry_state is not None
+        recorder = _DiscoveryRecorder(request)
+        handle_registry_request(recorder, discovery_registry_state)
+        return recorder.response()
 
-        def _handle_downloaded_post(self, cid: str) -> None:
-            """POST /collections/<id>/downloaded を処理する（dir mode only、#1216/#1217）。"""
-            assert collections_root is not None
-            raw_origin = self.headers.get("Origin")
-            declared_origin = self.headers.get("X-Extension-Origin")
-            if not _is_locked_extension_request(raw_origin, declared_origin, allow_origin):
-                self.send_error(403, "Forbidden")
-                return
-            req_token = self.headers.get("X-Serve-Token")
-            if req_token != serve_token:
-                self.send_error(403, "Forbidden")
-                return
+    # --- GET routes ---
 
-            cid = _decode_collection_id_path_segment(cid)
-            if ".." in cid:
-                self.send_error(404, "Not Found")
-                return
-            try:
-                known_ids = {coll.name for coll in find_collection_dirs(collections_root)}
-            except WorkflowStateError as exc:
-                self._send_json_error(500, str(exc))
-                return
-            if cid not in known_ids:
-                self.send_error(404, "Not Found")
-                return
+    def version(_request: Request) -> Response:
+        return _json_body(build_version_payload())
 
-            raw = self._read_limited_post_body(max_bytes=_MAX_DOWNLOADED_POST_BODY_BYTES)
-            if raw is None:
-                return
-            try:
-                payload = json.loads(raw.decode("utf-8"))
-            except (json.JSONDecodeError, UnicodeDecodeError):
-                self.send_error(400, "Bad Request")
-                return
-            try:
-                downloaded = parse_downloaded_payload(payload)
-            except DownloadedPayloadError:
-                self.send_error(400, "Bad Request")
-                return
+    def server_metadata(_request: Request) -> Response:
+        return _json_body(resolved_server_info)
 
-            coll_dir = collections_root / cid
-            try:
-                apply_result = apply_downloaded_artifacts_detailed(
-                    coll_dir,
-                    downloaded,
-                    prompt_entries_reader=read_suno_prompt_entries,
-                    defer_archive_cleanup=True,
-                )
-            except DownloadedPayloadError:
-                self.send_error(400, "Bad Request")
-                return
-            except DownloadedArtifactError as exc:
-                self._send_json_error(500, str(exc))
-                return
-            if downloaded.download_path and downloaded_handoff is not None:
-                try:
-                    downloaded_handoff.complete(coll_dir)
-                except (MediaStoreError, WorkflowStateError) as exc:
-                    self._send_json_error(500, str(exc))
-                    return
-            cleanup_downloaded_archive(downloaded)
-            resp: dict = {"ok": True, "collection_id": cid, "placed_count": apply_result.placed_count}
-            # playlist URL だけを記録する先行 POST は legacy 応答を維持し、実 ZIP 適用後だけ summary を返す。
-            if downloaded.download_path:
-                missing_file_count = max(apply_result.expected_count - apply_result.placed_count, 0)
-                resp.update(
-                    expected_file_count=apply_result.expected_count,
-                    missing_file_count=missing_file_count,
-                )
-                # 部分完了（Suno が期待数未満しか生成しないケース）は 500 にせず warning で返す（#1913）
-                if 0 < apply_result.placed_count < apply_result.expected_count:
-                    missing_reasons = apply_result.missing_reasons
-                    resp["missing_reasons"] = missing_reasons
-                    resp["warning"] = (
-                        f"placed {apply_result.placed_count} files, expected {apply_result.expected_count} "
-                        f"({missing_file_count} missing; Suno 未生成 {missing_reasons['suno_unfulfilled']} / "
-                        f"配置 skip {missing_reasons['apply_skipped']})"
-                    )
-            resp_body = json.dumps(resp).encode("utf-8")
-            self._send_bytes(resp_body, "application/json; charset=utf-8")
+    def lifecycle_probe(_request: Request) -> Response:
+        assert lifecycle_record is not None
+        return _json_body({"process_id": os.getpid(), "configuration": lifecycle_record.configuration})
 
-        def _read_limited_post_body(self, *, max_bytes: int = _MAX_POST_BODY_BYTES) -> bytes | None:
-            try:
-                length = int(self.headers.get("Content-Length", 0) or 0)
-            except ValueError:
-                self.send_error(400, "Bad Request")
-                return None
-            if length < 0:
-                self.send_error(400, "Bad Request")
-                return None
-            if length > max_bytes:
-                self.send_error(413, "Payload Too Large")
-                return None
-            return self.rfile.read(length) if length else b""
+    def auth_token(request: Request) -> Response:
+        if not locked_extension_request(request):
+            return _forbidden()
+        return _json_body({"token": serve_token})
 
-        def do_POST(self) -> None:
-            # GET と異なり POST は route ごとに書き込み可否を明示的に判定する。
-            lifecycle_stop_prefix = (
-                f"{_LIFECYCLE_ROUTE_PREFIX}{lifecycle_record.token}/stop/" if lifecycle_record is not None else None
-            )
-            if (
-                lifecycle_record is not None
-                and lifecycle_stop_prefix is not None
-                and self.path.startswith(lifecycle_stop_prefix)
-            ):
-                if lifecycle_root is None:
-                    self.send_error(404, "Not Found")
-                    return
-                marker_path = _stop_request_path(lifecycle_root, self.server.server_address[1])
-                try:
-                    marker = _read_pid_file(marker_path)
-                except ConfigError:
-                    marker = None
-                marker_matches_owner = (
-                    marker is not None
-                    and marker.pid == lifecycle_record.pid
-                    and marker.configuration == lifecycle_record.configuration
-                )
-                if not marker_matches_owner or self.path != _lifecycle_stop_path(lifecycle_record, marker.token):
-                    self.send_error(409, "Stop request is no longer active")
-                    return
-                body = json.dumps(
-                    {"process_id": lifecycle_record.pid, "configuration": lifecycle_record.configuration}
-                ).encode("utf-8")
-                self._send_bytes(body, "application/json; charset=utf-8")
-                self.wfile.flush()
-                os.kill(os.getpid(), signal.SIGTERM)
-                return
-            if discovery_registry_state is not None and handle_registry_request(self, discovery_registry_state):
-                return
+    def collections_index(_request: Request) -> Response:
+        try:
+            return _json_body(build_collections_index(collections_root))
+        except WorkflowStateError as exc:
+            return _server_error(exc)
 
-            # Local scheduler only: register the paid-operation request outside the
-            # browser, then expose only a short-lived nonce in the Suno URL. Browser
-            # requests always carry Origin, so rejecting it here prevents a Suno page
-            # from minting its own unattended command.
-            if dir_mode and self.path == _UNATTENDED_REQUESTS_ROUTE:
-                if self.headers.get("Origin") is not None:
-                    self.send_error(403, "Forbidden")
-                    return
-                content_type = self.headers.get("Content-Type", "").split(";", 1)[0].strip().lower()
-                if content_type != "application/json":
-                    self.send_error(415, "Unsupported Media Type")
-                    return
-                raw = self._read_limited_post_body(max_bytes=_MAX_UNATTENDED_REQUEST_BODY_BYTES)
-                if raw is None:
-                    return
-                try:
-                    payload = json.loads(raw.decode("utf-8"))
-                except (json.JSONDecodeError, UnicodeDecodeError):
-                    self.send_error(400, "Bad Request")
-                    return
-                if not isinstance(payload, dict):
-                    self.send_error(400, "Bad Request")
-                    return
-                nonce = secrets.token_urlsafe(32)
-                expires_at = time.monotonic() + _UNATTENDED_REQUEST_TTL_SECONDS
-                with unattended_requests_lock:
-                    unattended_requests[nonce] = (expires_at, payload)
-                body = json.dumps({"nonce": nonce, "expires_in": _UNATTENDED_REQUEST_TTL_SECONDS}).encode()
-                self._send_bytes(body, "application/json; charset=utf-8")
-                return
+    def collection_prompts(request: Request) -> Response:
+        try:
+            resolved = resolve_collection_prompts_path(collections_root, request.path_params["collection"])
+        except WorkflowStateError as exc:
+            return _server_error(exc)
+        if resolved is None or not resolved.is_file():
+            return _not_found()
+        try:
+            payload = read_suno_prompt_delivery_payload(resolved.parent.parent)
+        except ValueError as exc:
+            return _server_error(exc)
+        return _json_body(payload)
 
-            consume_prefix = f"{_UNATTENDED_REQUESTS_ROUTE}/"
-            if dir_mode and self.path.startswith(consume_prefix) and self.path.endswith("/consume"):
-                raw_origin = self.headers.get("Origin")
-                declared_origin = self.headers.get("X-Extension-Origin")
-                if not _is_locked_extension_request(raw_origin, declared_origin, allow_origin):
-                    self.send_error(403, "Forbidden")
-                    return
-                if self.headers.get("X-Serve-Token") != serve_token:
-                    self.send_error(403, "Forbidden")
-                    return
-                nonce = self.path[len(consume_prefix) : -len("/consume")]
-                if not nonce or "/" in nonce or urllib.parse.quote(nonce, safe="") != nonce:
-                    self.send_error(404, "Not Found")
-                    return
-                with unattended_requests_lock:
-                    record = unattended_requests.pop(nonce, None)
-                if record is None:
-                    self.send_error(404, "Unattended request not found or already consumed")
-                    return
-                expires_at, payload = record
-                if expires_at < time.monotonic():
-                    self.send_error(410, "Unattended request expired")
-                    return
-                self._send_bytes(json.dumps(payload, ensure_ascii=False).encode(), "application/json; charset=utf-8")
-                return
+    def single_mode_prompts(_request: Request) -> Response:
+        if prompts_path is None:
+            return _not_found()
+        try:
+            payload = read_suno_prompt_delivery_payload_from_path(prompts_path)
+        except ValueError as exc:
+            return _server_error(exc)
+        return _json_body(payload)
 
-            # POST /distrokid/releases: capture 有効時のみ（#934）。
-            if self.path == _DISTROKID_RELEASES_ROUTE:
-                if not distrokid_enabled or capture_root is None:
-                    # distrokid disabled / capture root 未指定時は endpoint 自体を出さない。
-                    self.send_error(404, "Not Found")
-                    return
-                # 書き込み境界（#1360）: /downloaded と同じく extension lock + serve token 必須。
-                # MV3 background fetch は Origin を省略しうるため、runtime origin の明示宣言を
-                # configured extension lock と完全一致させる。本人性は serve token も併用する。
-                raw_origin = self.headers.get("Origin")
-                declared_origin = self.headers.get("X-Extension-Origin")
-                if not _is_locked_extension_request(raw_origin, declared_origin, allow_origin):
-                    self.send_error(403, "Forbidden")
-                    return
-                req_token = self.headers.get("X-Serve-Token")
-                if req_token != serve_token:
-                    self.send_error(403, "Forbidden")
-                    return
-                raw = self._read_limited_post_body()
-                if raw is None:
-                    return
-                try:
-                    payload = json.loads(raw.decode("utf-8"))
-                except (json.JSONDecodeError, UnicodeDecodeError):
-                    self.send_error(400, "Bad Request")
-                    return
-                if not isinstance(payload, dict):
-                    self.send_error(400, "Bad Request")
-                    return
-                coll_id = payload.get("collection_id")
-                disc = payload.get("disc")
-                album_title = payload.get("album_title")
-                if (
-                    not isinstance(coll_id, str)
-                    or not coll_id
-                    or not isinstance(disc, str)
-                    or not disc
-                    or not isinstance(album_title, str)
-                    or not album_title
-                ):
-                    # 必須フィールド欠落・非 string は 400（#934）。
-                    self.send_error(400, "Bad Request")
-                    return
-                if collections_root is not None:
-                    try:
-                        known_collections = {coll.name: coll for coll in find_collection_dirs(collections_root)}
-                    except WorkflowStateError as exc:
-                        self._send_json_error(500, str(exc))
-                        return
-                    coll_dir = known_collections.get(coll_id)
-                    if coll_dir is None:
-                        self.send_error(400, "Bad Request")
-                        return
-                    if disc not in find_distrokid_discs(coll_dir):
-                        self.send_error(400, "Bad Request")
-                        return
-                write_distrokid_release(capture_root, coll_id, disc, album_title)
-                resp_body = json.dumps(
-                    {"recorded": True, "path": str(distrokid_releases_output_path(capture_root))}
-                ).encode("utf-8")
-                self._send_bytes(resp_body, "application/json; charset=utf-8")
-                return
+    def community_posts(_request: Request) -> Response:
+        assert collection_dir is not None
+        try:
+            posts = _read_community_posts(collection_dir)
+        except ConfigError as exc:
+            return _server_error(exc)
+        if posts is None:
+            return _not_found()
+        return _json_body(posts)
 
-            # POST /collections/<id>/downloaded: dir mode のみ（#1216）。
-            downloaded_prefix = f"{COLLECTIONS_ROUTE}/"
-            if dir_mode and self.path.startswith(downloaded_prefix) and self.path.endswith(DOWNLOADED_ROUTE_SUFFIX):
-                cid = self.path[len(downloaded_prefix) : -len(DOWNLOADED_ROUTE_SUFFIX)]
-                decoded_cid = _decode_collection_id_path_segment(cid)
-                if self.path != collection_downloaded_route(decoded_cid):
-                    self.send_error(404, "Not Found")
-                    return
-                self._handle_downloaded_post(cid)
-                return
+    def community_image(request: Request) -> Response:
+        assert collection_dir is not None
+        assert resolved_community_asset_root is not None
+        index = request.path_params["index"]
+        if not index.isdigit():
+            return _not_found()
+        try:
+            image = _resolve_community_image(collection_dir, resolved_community_asset_root, int(index))
+        except ConfigError as exc:
+            return _server_error(exc)
+        if image is None:
+            return _not_found()
+        return _binary_body(image.name, image.read_bytes())
 
-            # その他のパスは 404。POST は定義済みルートのみハンドルする。
-            self.send_error(404, "Not Found")
+    def distrokid_release(_request: Request) -> Response:
+        if not distrokid_enabled:
+            return _not_found()
+        try:
+            payload = build_release_payload(collection_dir, distrokid, distrokid_source=distrokid_source)
+        except ConfigError as exc:
+            return _server_error(exc)
+        return _json_body(payload)
 
-        def do_GET(self) -> None:
-            if discovery_registry_state is not None and handle_registry_request(self, discovery_registry_state):
-                return
-            if self.path == VERSION_ROUTE:
-                body = json.dumps(build_version_payload()).encode("utf-8")
-                self._send_bytes(body, "application/json; charset=utf-8")
-                return
-            if self.path == SERVER_INFO_ROUTE:
-                body = json.dumps(resolved_server_info, ensure_ascii=False).encode("utf-8")
-                self._send_bytes(body, "application/json; charset=utf-8")
-                return
-            if lifecycle_record is not None and self.path == f"{_LIFECYCLE_ROUTE_PREFIX}{lifecycle_record.token}":
-                body = json.dumps({"process_id": os.getpid(), "configuration": lifecycle_record.configuration}).encode(
-                    "utf-8"
-                )
-                self._send_bytes(body, "application/json; charset=utf-8")
-                return
-            if self.path == "/auth/token":
-                raw_origin = self.headers.get("Origin")
-                declared_origin = self.headers.get("X-Extension-Origin")
-                if not _is_locked_extension_request(raw_origin, declared_origin, allow_origin):
-                    self.send_error(403, "Forbidden")
-                    return
-                body = json.dumps({"token": serve_token}).encode("utf-8")
-                self._send_bytes(body, "application/json; charset=utf-8")
-                return
-            if dir_mode:
-                try:
-                    self._serve_dir_mode()
-                except WorkflowStateError as exc:
-                    self._send_json_error(500, str(exc))
-                return
-            if self.path == COMMUNITY_POSTS_ROUTE:
-                assert collection_dir is not None
-                try:
-                    posts = _read_community_posts(collection_dir)
-                except ConfigError as exc:
-                    self._send_json_error(500, str(exc))
-                    return
-                if posts is None:
-                    self.send_error(404, "Not Found")
-                    return
-                body = json.dumps(posts, ensure_ascii=False).encode("utf-8")
-                self._send_bytes(body, "application/json; charset=utf-8")
-                return
-            community_image_match = _COMMUNITY_IMAGE_ROUTE_PATTERN.fullmatch(self.path)
-            if community_image_match is not None:
-                assert collection_dir is not None
-                assert resolved_community_asset_root is not None
-                try:
-                    image = _resolve_community_image(
-                        collection_dir,
-                        resolved_community_asset_root,
-                        int(community_image_match.group("index")),
-                    )
-                except ConfigError as exc:
-                    self._send_json_error(500, str(exc))
-                    return
-                if image is None:
-                    self.send_error(404, "Not Found")
-                    return
-                content_type = mimetypes.guess_type(image.name)[0] or "application/octet-stream"
-                self._send_bytes(image.read_bytes(), content_type)
-                return
-            if self.path == SUNO_PROMPTS_ROUTE:
-                if prompts_path is None:
-                    self.send_error(404, "Not Found")
-                    return
-                try:
-                    payload = read_suno_prompt_delivery_payload_from_path(prompts_path)
-                except ValueError as exc:
-                    self._send_json_error(500, str(exc))
-                    return
-                self._send_bytes(
-                    json.dumps(payload, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8"
-                )
-                return
-            if self.path == DISTROKID_RELEASE_ROUTE:
-                self._serve_distrokid_release()
-                return
-            if self.path.startswith(DISTROKID_ASSETS_PREFIX):
-                self._serve_distrokid_asset()
-                return
-            if self.path == COLLECTIONS_ROUTE:
-                self._send_json_error(404, "Not Found")
-                return
-            self.send_error(404, "Not Found")
+    def distrokid_asset(request: Request) -> Response:
+        if not distrokid_enabled:
+            return _not_found()
+        resolved = resolve_asset_path(collection_dir, request.path_params["relpath"])
+        if resolved is None:
+            return _not_found()
+        return _binary_body(resolved.name, resolved.read_bytes())
 
-        def do_DELETE(self) -> None:
-            if discovery_registry_state is not None and handle_registry_request(self, discovery_registry_state):
-                return
-            self.send_error(501, f"Unsupported method ({self.command!r})")
-
-        def _serve_dir_mode(self) -> None:
-            if self.path == COLLECTIONS_ROUTE:
-                index = build_collections_index(collections_root)
-                body = json.dumps(index).encode("utf-8")
-                self._send_bytes(body, "application/json; charset=utf-8")
-                return
-            coll_prefix = f"{COLLECTIONS_ROUTE}/"
-            if self.path.startswith(coll_prefix) and self.path.endswith(SUNO_PROMPTS_ROUTE):
-                cid = _decode_collection_id_path_segment(self.path[len(coll_prefix) : -len(SUNO_PROMPTS_ROUTE)])
-                resolved = resolve_collection_prompts_path(collections_root, cid)
-                if resolved is None or not resolved.is_file():
-                    self._send_json_error(404, "Not Found")
-                    return
-                try:
-                    payload = read_suno_prompt_delivery_payload(resolved.parent.parent)
-                except ValueError as exc:
-                    self._send_json_error(500, str(exc))
-                    return
-                self._send_bytes(
-                    json.dumps(payload, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8"
-                )
-                return
-
-            if self.path == SUNO_PROMPTS_ROUTE:
-                self._send_json_error(404, "Not Found")
-                return
-
-            # --- dir mode DistroKid エンドポイント群（#934）---
-
-            # GET /distrokid/collections: disc 一覧
-            if self.path == _DISTROKID_COLLECTIONS_ROUTE:
-                self._serve_distrokid_dir_collections()
-                return
-
-            # GET /collections/<id>/distrokid/<disc>/release.json: collection-scoped release payload
-            # GET /collections/<id>/distrokid/assets/<rel>: collection-scoped アセット
-            if self.path.startswith(coll_prefix):
-                self._serve_distrokid_collection_routes(self.path[len(coll_prefix) :])
-                return
-
-            self.send_error(404, "Not Found")
-
-        def _serve_distrokid_dir_collections(self) -> None:
-            """GET /distrokid/collections を処理する（#934）."""
-            # capture root が指定されている場合のみ released 判定を行う（gating は #893 と同方針）。
-            released = read_released_discs(capture_root) if capture_root is not None else None
+    def distrokid_collections(_request: Request) -> Response:
+        # capture root がある場合だけ released 判定を行う（gating は #893 と同方針）。
+        released = read_released_discs(capture_root) if capture_root is not None else None
+        try:
             index = build_distrokid_collections_index(collections_root, released_discs=released)
-            body = json.dumps(index).encode("utf-8")
-            self._send_bytes(body, "application/json; charset=utf-8")
+        except WorkflowStateError as exc:
+            return _server_error(exc)
+        return _json_body(index)
 
-        def _serve_distrokid_collection_routes(self, rest: str) -> None:
-            """GET /collections/<id>/distrokid/... を処理する（#934）.
+    def collection_distrokid_asset(request: Request) -> Response:
+        try:
+            coll_dir = known_collection_dir(request.path_params["collection"])
+        except WorkflowStateError as exc:
+            return _server_error(exc)
+        if coll_dir is None:
+            return _not_found()
+        # コレクションルートからの相対パスで resolve（30-distrokid 配下も含む）。
+        resolved = resolve_asset_path(coll_dir, request.path_params["relpath"])
+        if resolved is None:
+            return _not_found()
+        return _binary_body(resolved.name, resolved.read_bytes())
 
-            `rest` は `/collections/` を除いた残り（例: `<id>/distrokid/<disc>/release.json`）。
-            """
-            # collection_id を最初のスラッシュで分割し、残りをサブパスとして処理する。
-            parts = rest.split("/", 1)
-            if len(parts) != 2:
-                self.send_error(404, "Not Found")
-                return
-            raw_coll_id, sub = parts
-            coll_id = _decode_collection_id_path_segment(raw_coll_id)
+    def collection_distrokid_release(request: Request) -> Response:
+        collection_id = request.path_params["collection"]
+        try:
+            coll_dir = known_collection_dir(collection_id)
+        except WorkflowStateError as exc:
+            return _server_error(exc)
+        if coll_dir is None:
+            return _not_found()
+        disc = request.path_params["disc"]
+        # disc 実在確認: find_distrokid_discs のホワイトリストで弾く（#934）。
+        if disc not in find_distrokid_discs(coll_dir) or not distrokid_enabled:
+            return _not_found()
+        # asset_path を collection-scoped 形式にするための prefix を組み立てる（#934）。
+        encoded_coll_id = _encode_collection_id_path_segment(collection_id)
+        coll_assets_prefix = f"{COLLECTIONS_ROUTE}/{encoded_coll_id}{DISTROKID_COLLECTION_ASSETS_PREFIX}"
+        try:
+            payload = build_release_payload(
+                coll_dir,
+                distrokid,
+                distrokid_source=f"{_DISTROKID_DIRNAME}/{disc}",
+                assets_prefix=coll_assets_prefix,
+            )
+        except ConfigError as exc:
+            return _server_error(exc)
+        return _json_body(payload)
 
-            # トラバーサル防御: find_collection_dirs のホワイトリストで弾く（#934）。
-            known_ids = {coll.name for coll in find_collection_dirs(collections_root)}
-            if coll_id not in known_ids:
-                self.send_error(404, "Not Found")
-                return
+    # --- POST routes ---
 
-            coll_dir = collections_root / coll_id
+    def lifecycle_stop(request: Request) -> Response:
+        assert lifecycle_record is not None
+        if lifecycle_root is None:
+            return _not_found()
+        marker_path = _stop_request_path(lifecycle_root, bound_port[0])
+        try:
+            marker = _read_pid_file(marker_path)
+        except ConfigError:
+            marker = None
+        marker_matches_owner = (
+            marker is not None
+            and marker.pid == lifecycle_record.pid
+            and marker.configuration == lifecycle_record.configuration
+        )
+        if not marker_matches_owner or request.path != _lifecycle_stop_path(lifecycle_record, marker.token):
+            return _error_body(int(HTTPStatus.CONFLICT), "Stop request is no longer active")
+        acknowledgement = _json_body(
+            {"process_id": lifecycle_record.pid, "configuration": lifecycle_record.configuration}
+        )
+        # 応答を書き切ってから自プロセスを落とす。socket 操作は chassis 側に閉じる。
+        return replace(acknowledgement, after_send=lambda: os.kill(os.getpid(), signal.SIGTERM))
 
-            # `/distrokid/assets/<rel>` → collection-scoped アセット配信
-            distrokid_assets_infix = "distrokid/assets/"
-            if sub.startswith(distrokid_assets_infix):
-                relpath = urllib.parse.unquote(sub[len(distrokid_assets_infix) :])
-                # コレクションルートからの相対パスで resolve（30-distrokid 配下も含む）
-                resolved = resolve_asset_path(coll_dir, relpath)
-                if resolved is None:
-                    self.send_error(404, "Not Found")
-                    return
-                content_type = mimetypes.guess_type(resolved.name)[0] or "application/octet-stream"
-                self._send_bytes(resolved.read_bytes(), content_type)
-                return
+    def register_unattended_request(request: Request) -> Response:
+        # Local scheduler only: register the paid-operation request outside the
+        # browser, then expose only a short-lived nonce in the Suno URL. Browser
+        # requests always carry Origin, so rejecting it here prevents a Suno page
+        # from minting its own unattended command.
+        if request.headers.get("Origin") is not None:
+            return _forbidden()
+        content_type = request.headers.get("Content-Type", "").split(";", 1)[0].strip().lower()
+        if content_type != "application/json":
+            return _error_body(int(HTTPStatus.UNSUPPORTED_MEDIA_TYPE), "Unsupported Media Type")
+        if not isinstance(request.json, dict):
+            return _bad_request()
+        nonce = secrets.token_urlsafe(32)
+        expires_at = time.monotonic() + _UNATTENDED_REQUEST_TTL_SECONDS
+        with unattended_requests_lock:
+            unattended_requests[nonce] = (expires_at, request.json)
+        return _json_body({"nonce": nonce, "expires_in": _UNATTENDED_REQUEST_TTL_SECONDS})
 
-            # `/distrokid/<disc>/release.json` → collection-scoped release payload
-            distrokid_prefix = "distrokid/"
-            release_suffix = "/release.json"
-            if sub.startswith(distrokid_prefix) and sub.endswith(release_suffix):
-                disc = sub[len(distrokid_prefix) : -len(release_suffix)]
-                # disc にスラッシュを含む場合はトラバーサルのおそれがある（#934）。
-                if not disc or "/" in disc:
-                    self.send_error(404, "Not Found")
-                    return
-                # disc 実在確認: find_distrokid_discs のホワイトリストで弾く（#934）。
-                known_discs = find_distrokid_discs(coll_dir)
-                if disc not in known_discs:
-                    self.send_error(404, "Not Found")
-                    return
-                if not distrokid_enabled:
-                    self.send_error(404, "Not Found")
-                    return
-                # asset_path を collection-scoped 形式にするための prefix を組み立てる（#934）。
-                encoded_coll_id = _encode_collection_id_path_segment(coll_id)
-                coll_assets_prefix = f"{COLLECTIONS_ROUTE}/{encoded_coll_id}{DISTROKID_COLLECTION_ASSETS_PREFIX}"
-                distrokid_source = f"{_DISTROKID_DIRNAME}/{disc}"
-                try:
-                    payload = build_release_payload(
-                        coll_dir,
-                        distrokid,
-                        distrokid_source=distrokid_source,
-                        assets_prefix=coll_assets_prefix,
-                    )
-                except ConfigError as exc:
-                    # 破損 spec.json 等の fail-loud は handler 落ち（接続切断）ではなく
-                    # 500 + メッセージで拡張へ届ける（#944）。配信停止の意図は維持する。
-                    self._send_json_error(500, str(exc))
-                    return
-                body = json.dumps(payload).encode("utf-8")
-                self._send_bytes(body, "application/json; charset=utf-8")
-                return
+    def consume_unattended_request(request: Request) -> Response:
+        if not write_authorised(request):
+            return _forbidden()
+        nonce = request.path_params["nonce"]
+        canonical = f"{_UNATTENDED_REQUESTS_ROUTE}/{urllib.parse.quote(nonce, safe='')}/consume"
+        if not nonce or request.path != canonical:
+            return _not_found()
+        with unattended_requests_lock:
+            record = unattended_requests.pop(nonce, None)
+        if record is None:
+            return _error_body(int(HTTPStatus.NOT_FOUND), "Unattended request not found or already consumed")
+        expires_at, payload = record
+        if expires_at < time.monotonic():
+            return _error_body(int(HTTPStatus.GONE), "Unattended request expired")
+        return _json_body(payload)
 
-            self.send_error(404, "Not Found")
-
-        def _serve_distrokid_release(self) -> None:
-            if not distrokid_enabled:
-                self.send_error(404, "Not Found")
-                return
+    def capture_distrokid_release(request: Request) -> Response:
+        # POST /distrokid/releases: capture 有効時のみ（#934）。
+        if not distrokid_enabled or capture_root is None:
+            # distrokid disabled / capture root 未指定時は endpoint 自体を出さない。
+            return _not_found()
+        if not write_authorised(request):
+            return _forbidden()
+        payload = request.json
+        if not isinstance(payload, dict):
+            return _bad_request()
+        coll_id = payload.get("collection_id")
+        disc = payload.get("disc")
+        album_title = payload.get("album_title")
+        if not all(isinstance(value, str) and value for value in (coll_id, disc, album_title)):
+            # 必須フィールド欠落・非 string は 400（#934）。
+            return _bad_request()
+        if collections_root is not None:
             try:
-                payload = build_release_payload(collection_dir, distrokid, distrokid_source=distrokid_source)
-            except ConfigError as exc:
-                # 単一 mode も同様: 破損 spec / metadata.md 不在の fail-loud を 500 で返す（#944）。
-                self._send_json_error(500, str(exc))
-                return
-            body = json.dumps(payload).encode("utf-8")
-            self._send_bytes(body, "application/json; charset=utf-8")
+                known_collections = {coll.name: coll for coll in find_collection_dirs(collections_root)}
+            except WorkflowStateError as exc:
+                return _server_error(exc)
+            coll_dir = known_collections.get(coll_id)
+            if coll_dir is None or disc not in find_distrokid_discs(coll_dir):
+                return _bad_request()
+        write_distrokid_release(capture_root, coll_id, disc, album_title)
+        return _json_body({"recorded": True, "path": str(distrokid_releases_output_path(capture_root))})
 
-        def _serve_distrokid_asset(self) -> None:
-            if not distrokid_enabled:
-                self.send_error(404, "Not Found")
-                return
-            relpath = urllib.parse.unquote(self.path[len(DISTROKID_ASSETS_PREFIX) :])
-            resolved = resolve_asset_path(collection_dir, relpath)
-            if resolved is None:
-                self.send_error(404, "Not Found")
-                return
-            content_type = mimetypes.guess_type(resolved.name)[0] or "application/octet-stream"
-            self._send_bytes(resolved.read_bytes(), content_type)
+    def downloaded(request: Request) -> Response:
+        """POST /collections/<id>/downloaded を処理する（dir mode only、#1216/#1217）。"""
+        assert collections_root is not None
+        if not write_authorised(request):
+            return _forbidden()
+        cid = request.path_params["collection"]
+        # 正規化されていない encoding は受け付けない（legacy と同じ厳密一致）。
+        if request.path != collection_downloaded_route(cid) or ".." in cid:
+            return _not_found()
+        try:
+            known_ids = {coll.name for coll in find_collection_dirs(collections_root)}
+        except WorkflowStateError as exc:
+            return _server_error(exc)
+        if cid not in known_ids:
+            return _not_found()
+        try:
+            parsed = parse_downloaded_payload(request.json)
+        except DownloadedPayloadError:
+            return _bad_request()
 
-        def log_message(self, *args) -> None:  # サーバーログを抑制
-            pass
+        coll_dir = collections_root / cid
+        try:
+            apply_result = apply_downloaded_artifacts_detailed(
+                coll_dir,
+                parsed,
+                prompt_entries_reader=read_suno_prompt_entries,
+                defer_archive_cleanup=True,
+            )
+        except DownloadedPayloadError:
+            return _bad_request()
+        except DownloadedArtifactError as exc:
+            return _server_error(exc)
+        if parsed.download_path and downloaded_handoff is not None:
+            try:
+                downloaded_handoff.complete(coll_dir)
+            except (MediaStoreError, WorkflowStateError) as exc:
+                return _server_error(exc)
+        cleanup_downloaded_archive(parsed)
+        resp: dict = {"ok": True, "collection_id": cid, "placed_count": apply_result.placed_count}
+        # playlist URL だけを記録する先行 POST は legacy 応答を維持し、実 ZIP 適用後だけ summary を返す。
+        if parsed.download_path:
+            missing_file_count = max(apply_result.expected_count - apply_result.placed_count, 0)
+            resp.update(
+                expected_file_count=apply_result.expected_count,
+                missing_file_count=missing_file_count,
+            )
+            # 部分完了（Suno が期待数未満しか生成しないケース）は 500 にせず warning で返す（#1913）
+            if 0 < apply_result.placed_count < apply_result.expected_count:
+                missing_reasons = apply_result.missing_reasons
+                resp["missing_reasons"] = missing_reasons
+                resp["warning"] = (
+                    f"placed {apply_result.placed_count} files, expected {apply_result.expected_count} "
+                    f"({missing_file_count} missing; Suno 未生成 {missing_reasons['suno_unfulfilled']} / "
+                    f"配置 skip {missing_reasons['apply_skipped']})"
+                )
+        return _json_body(resp)
 
-    server = _IdleTrackingHTTPServer(("localhost", port), _Handler, idle_timeout_seconds)
+    # --- protocol-level routes ---
+
+    def preflight(_request: Request) -> Response:
+        return Response(
+            b"",
+            int(HTTPStatus.NO_CONTENT),
+            {
+                "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type, X-Serve-Token, X-Extension-Origin",
+            },
+        )
+
+    def unsupported_method(request: Request) -> Response:
+        return _error_body(int(HTTPStatus.NOT_IMPLEMENTED), f"Unsupported method ({request.method!r})")
+
+    def missing_route(_request: Request) -> Response:
+        return _not_found()
+
+    routes: list[Route] = []
+    if discovery_registry_state is not None:
+        # 固定 discovery path は全 method を占有し、collection 側の fallback へ落とさない。
+        routes.extend(
+            Route(method, DISCOVERY_PATH, discovery, MAX_REGISTRATION_BODY_BYTES) for method in _DISPATCHABLE_METHODS
+        )
+
+    routes.append(Route("GET", VERSION_ROUTE, version))
+    routes.append(Route("GET", SERVER_INFO_ROUTE, server_metadata))
+    routes.append(Route("GET", "/auth/token", auth_token))
+    if lifecycle_record is not None:
+        lifecycle_route = f"{_LIFECYCLE_ROUTE_PREFIX}{lifecycle_record.token}"
+        routes.append(Route("GET", lifecycle_route, lifecycle_probe))
+        routes.append(Route("POST", f"{lifecycle_route}/stop/{{attempt}}", lifecycle_stop))
+
+    if dir_mode:
+        routes.append(Route("GET", COLLECTIONS_ROUTE, collections_index))
+        routes.append(Route("GET", f"{COLLECTIONS_ROUTE}/{{collection}}{SUNO_PROMPTS_ROUTE}", collection_prompts))
+        routes.append(Route("GET", SUNO_PROMPTS_ROUTE, missing_route))
+        routes.append(Route("GET", _DISTROKID_COLLECTIONS_ROUTE, distrokid_collections))
+        # assets は disc より先に登録する: `{disc}` は "assets" にも一致するため。
+        routes.append(
+            Route(
+                "GET",
+                f"{COLLECTIONS_ROUTE}/{{collection}}{DISTROKID_COLLECTION_ASSETS_PREFIX}{{relpath*}}",
+                collection_distrokid_asset,
+            )
+        )
+        routes.append(
+            Route(
+                "GET",
+                f"{COLLECTIONS_ROUTE}/{{collection}}/{_DISTROKID_ROUTE_SEGMENT}/{{disc}}/release.json",
+                collection_distrokid_release,
+            )
+        )
+        routes.append(Route("GET", f"{COLLECTIONS_ROUTE}/{{path*}}", missing_route))
+        routes.append(
+            Route(
+                "POST",
+                _UNATTENDED_REQUESTS_ROUTE,
+                register_unattended_request,
+                _MAX_UNATTENDED_REQUEST_BODY_BYTES,
+            )
+        )
+        routes.append(Route("POST", f"{_UNATTENDED_REQUESTS_ROUTE}/{{nonce}}/consume", consume_unattended_request))
+        routes.append(
+            Route(
+                "POST",
+                f"{COLLECTIONS_ROUTE}/{{collection}}{DOWNLOADED_ROUTE_SUFFIX}",
+                downloaded,
+                _MAX_DOWNLOADED_POST_BODY_BYTES,
+            )
+        )
+    else:
+        routes.append(Route("GET", COMMUNITY_POSTS_ROUTE, community_posts))
+        routes.append(Route("GET", f"{COMMUNITY_IMAGE_ROUTE}/{{index}}/image", community_image))
+        routes.append(Route("GET", SUNO_PROMPTS_ROUTE, single_mode_prompts))
+        routes.append(Route("GET", DISTROKID_RELEASE_ROUTE, distrokid_release))
+        routes.append(Route("GET", f"{DISTROKID_ASSETS_PREFIX}{{relpath*}}", distrokid_asset))
+        routes.append(Route("GET", COLLECTIONS_ROUTE, missing_route))
+
+    routes.append(Route("POST", _DISTROKID_RELEASES_ROUTE, capture_distrokid_release, _MAX_POST_BODY_BYTES))
+
+    # 未定義パス・未実装 method の応答は 1 箇所で決める（stdlib と同じ 404 / 501）。
+    for pattern in _FALLBACK_PATH_PATTERNS:
+        routes.append(Route("OPTIONS", pattern, preflight))
+        routes.append(Route("GET", pattern, missing_route))
+        routes.append(Route("POST", pattern, missing_route))
+        routes.extend(
+            Route(method, pattern, unsupported_method)
+            for method in _DISPATCHABLE_METHODS
+            if method not in {"GET", "POST", "OPTIONS"}
+        )
+
+    server = _IdleTrackingHTTPServer(
+        ("localhost", port),
+        routes,
+        _collection_origin_policy(allow_origin),
+        idle_timeout_seconds,
+    )
+    bound_port[0] = int(server.server_address[1])
     if server_info is None:
-        resolved_server_info.update(build_server_info("YouTube Automation", "YA", server.server_address[1]))
+        resolved_server_info.update(build_server_info("YouTube Automation", "YA", bound_port[0]))
     return server
 
 

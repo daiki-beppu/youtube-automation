@@ -68,6 +68,7 @@ from youtube_automation.infrastructure.collections.chrome_extensions import (
     ChromeExtensionOrigin,
     resolve_unpacked_extension_origin,
 )
+from youtube_automation.infrastructure.localserver.app import Request, Response
 from youtube_automation.infrastructure.localserver.collections import find_suno_collection_dirs
 
 extract_and_rename_music = partial(
@@ -90,6 +91,21 @@ _VERSION_ROUTE = "/version"
 
 # 外部 HTTP 契約（#1352）: 拡張が接続先 selector の label 更新に使う配信元情報。
 _SERVER_INFO_ROUTE = "/server-info"
+
+
+def test_version_route_handler_runs_without_a_request_socket(tmp_path: Path) -> None:
+    server = create_server(0, None, prompts_path=None, collection_dir=tmp_path, distrokid=None)
+    try:
+        route = next(
+            route for route, pattern in server.routes if route.method == "GET" and pattern.fullmatch("/version")
+        )
+        response = route.handler(Request("GET", "/version", {}, {}))
+    finally:
+        server.server_close()
+
+    assert isinstance(response, Response)
+    assert response.status == 200
+    assert json.loads(response.payload)["version"]
 
 
 def test_module_import_succeeds_without_fcntl() -> None:
@@ -665,6 +681,27 @@ def test_get_version_sets_cors_header_for_extension_origin(serve):
 
     with urllib.request.urlopen(req) as resp:
         assert resp.headers.get("Access-Control-Allow-Origin") == _EXTENSION_ORIGIN
+
+
+def test_cors_headers_are_not_duplicated_on_the_wire(serve):
+    """Given route handler と chassis の双方が CORS ヘッダーを載せうる構成
+    When 許可 Origin で GET する
+    Then 生レスポンスの Access-Control-Allow-Origin / Vary は各 1 行だけになる（#4452）。
+
+    同名ヘッダーが 2 行返ると fetch の CORS 検証が失敗するが、`http.client` の
+    `headers.get()` は先頭値しか返さないため、生バイト列で本数を数える。
+    """
+    base = serve([{"name": "A", "style": "s", "lyrics": ""}])
+    raw_request = (
+        f"GET {_VERSION_ROUTE} HTTP/1.1\r\nHost: localhost\r\nOrigin: https://suno.com\r\nConnection: close\r\n\r\n"
+    ).encode()
+
+    response = _send_raw_http_request(base, raw_request)
+
+    head = response.split(b"\r\n\r\n", 1)[0]
+    assert head.lower().count(b"\r\naccess-control-allow-origin:") == 1
+    assert head.lower().count(b"\r\nvary:") == 1
+    assert head.lower().count(b"\r\ncontent-length:") == 1
 
 
 def test_old_root_prompts_json_returns_404(serve):

@@ -987,8 +987,8 @@ def test_post_distrokid_releases_writes_file_and_returns_recorded(tmp_path, serv
 
 def test_post_distrokid_releases_ignores_query_side_inputs(tmp_path, serve_dir_dk):
     """Given root route に query だけで collection/disc を渡す
-    When body が空の POST /distrokid/releases?... を送る
-    Then 記録を書かず 400/404 を返す。
+    When 認証済みだが body が空の POST /distrokid/releases?... を送る
+    Then query は route 解決にも入力にも使われず、記録を書かず 400 を返す。
     """
     planning = tmp_path / "planning"
     _make_collection(planning, "20260526-abc-collection", discs=["disc1-alpha"])
@@ -1006,10 +1006,10 @@ def test_post_distrokid_releases_ignores_query_side_inputs(tmp_path, serve_dir_d
         _post(
             f"{base}{_DISTROKID_RELEASES_ROUTE}?{query}",
             {},
-            headers={"Origin": _EXTENSION_ORIGIN},
+            headers=_auth_headers(base),
         )
 
-    assert exc_info.value.code in {400, 404}
+    assert exc_info.value.code == 400
     assert not distrokid_releases_output_path(capture_root).exists()
 
 

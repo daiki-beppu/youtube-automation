@@ -8,6 +8,7 @@ import re
 import time
 import uuid
 from dataclasses import dataclass, field
+from enum import Enum
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -46,10 +47,37 @@ class Response:
     payload: object = None
     status: int = HTTPStatus.OK
     headers: Mapping[str, str] = field(default_factory=dict)
+    content_type: str = "application/json; charset=utf-8"
+    after_send: Callable[[], None] | None = None
+    """Run once the body has been flushed — for routes that end the process."""
 
 
 Handler = Callable[[Request], object | Response]
-OriginPolicy = Callable[[str | None], bool]
+
+
+class OriginDecision(Enum):
+    """What the chassis does with a request's `Origin` before the route runs."""
+
+    ALLOW = "allow"
+    """Serve the route and echo the origin back in the CORS headers."""
+
+    OMIT = "omit"
+    """Serve the route but send no CORS headers, so a browser drops the response."""
+
+    REJECT = "reject"
+    """Answer 403 without running the route."""
+
+
+@dataclass(frozen=True)
+class OriginQuery:
+    """Everything a policy may look at when judging one request's origin."""
+
+    origin: str | None
+    method: str
+    path: str
+
+
+OriginPolicy = Callable[[OriginQuery], OriginDecision]
 
 
 @dataclass(frozen=True)
@@ -57,6 +85,7 @@ class Route:
     method: str
     path_pattern: str
     handler: Handler
+    max_body_bytes: int | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "method", self.method.upper())
@@ -115,6 +144,27 @@ class _RequestHandler(BaseHTTPRequestHandler):
     def log_message(self, format: str, *args: object) -> None:
         return None
 
+    def send_error(
+        self,
+        code: int,
+        message: str | None = None,
+        explain: str | None = None,
+    ) -> None:
+        del explain
+        try:
+            fallback = HTTPStatus(code).phrase
+        except ValueError:
+            fallback = "???"
+        body = json.dumps({"error": message or fallback}, ensure_ascii=False).encode()
+        self.send_response(code)
+        self._emit_headers(
+            {"X-Content-Type-Options": "nosniff"},
+            self._cors_headers(),
+            {"Content-Type": "application/json; charset=utf-8", "Content-Length": str(len(body))},
+        )
+        if self.command != "HEAD":
+            self.wfile.write(body)
+
     def do_GET(self) -> None:
         self._dispatch()
 
@@ -130,9 +180,24 @@ class _RequestHandler(BaseHTTPRequestHandler):
     def do_PATCH(self) -> None:
         self._dispatch()
 
+    def do_HEAD(self) -> None:
+        self._dispatch()
+
+    def do_CONNECT(self) -> None:
+        self._dispatch()
+
+    def do_TRACE(self) -> None:
+        self._dispatch()
+
+    def do_BREW(self) -> None:
+        self._dispatch()
+
     def do_OPTIONS(self) -> None:
-        origin = self.headers.get("Origin")
-        if not self.server.origin_policy(origin):
+        split = urlsplit(self.path)
+        if any(route.method == "OPTIONS" and pattern.fullmatch(split.path) for route, pattern in self.server.routes):
+            self._dispatch()
+            return
+        if self._origin_decision() is OriginDecision.REJECT:
             self._json(HTTPStatus.FORBIDDEN, {"error": "origin not allowed"})
             return
         path = urlsplit(self.path).path
@@ -141,32 +206,32 @@ class _RequestHandler(BaseHTTPRequestHandler):
             self._json(HTTPStatus.NOT_FOUND, {"error": "route not found"})
             return
         self.send_response(HTTPStatus.NO_CONTENT)
-        self._common_headers(origin)
-        self.send_header("Access-Control-Allow-Methods", ", ".join(methods))
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
-        self.send_header("Content-Length", "0")
-        self.end_headers()
+        self._emit_headers(
+            {"X-Content-Type-Options": "nosniff"},
+            self._cors_headers(),
+            {
+                "Access-Control-Allow-Methods": ", ".join(methods),
+                "Access-Control-Allow-Headers": "Content-Type",
+                "Content-Length": "0",
+            },
+        )
 
     def _dispatch(self) -> None:
-        origin = self.headers.get("Origin")
-        if origin is not None and not self.server.origin_policy(origin):
+        if self._origin_decision() is OriginDecision.REJECT:
             self._json(HTTPStatus.FORBIDDEN, {"error": "origin not allowed"})
             return
         split = urlsplit(self.path)
-        matched = next(
-            (
-                (route, match)
-                for route, pattern in self.server.routes
-                if route.method == self.command and (match := pattern.fullmatch(split.path))
-            ),
-            None,
-        )
+        path_matches = [
+            (route, match) for route, pattern in self.server.routes if (match := pattern.fullmatch(split.path))
+        ]
+        matched = next((entry for entry in path_matches if entry[0].method == self.command), None)
         if matched is None:
-            self._json(HTTPStatus.NOT_FOUND, {"error": "route not found"})
+            status = HTTPStatus.METHOD_NOT_ALLOWED if path_matches else HTTPStatus.NOT_FOUND
+            self._json(status, {"error": "method not allowed" if path_matches else "route not found"})
             return
         route, match = matched
         try:
-            body, payload = self._read_body()
+            body, payload = self._read_body(route.max_body_bytes)
             incoming = Request(
                 method=self.command,
                 path=split.path,
@@ -178,7 +243,13 @@ class _RequestHandler(BaseHTTPRequestHandler):
             )
             result = route.handler(incoming)
             response = result if isinstance(result, Response) else Response(result)
-            self._json(response.status, response.payload, response.headers)
+            if isinstance(response.payload, bytes):
+                self._bytes(response.status, response.payload, response.content_type, response.headers)
+            else:
+                self._json(response.status, response.payload, response.headers)
+            if response.after_send is not None:
+                self.wfile.flush()
+                response.after_send()
         except _HTTPError as error:
             self._json(error.status, {"error": str(error)})
         except ValidationError as error:
@@ -186,25 +257,26 @@ class _RequestHandler(BaseHTTPRequestHandler):
         except ConfigError as error:
             self._json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": str(error)})
 
-    def _read_body(self) -> tuple[bytes, object | None]:
+    def _read_body(self, route_limit: int | None) -> tuple[bytes, object | None]:
         raw_length = self.headers.get("Content-Length")
         if raw_length is None:
             return b"", None
         try:
             length = int(raw_length)
         except ValueError as error:
-            raise _HTTPError(HTTPStatus.BAD_REQUEST, "invalid Content-Length") from error
+            raise _HTTPError(HTTPStatus.BAD_REQUEST, "Bad Request") from error
         if length < 0:
-            raise _HTTPError(HTTPStatus.BAD_REQUEST, "invalid Content-Length")
-        if length > self.server.max_body_bytes:
-            raise _HTTPError(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "request body too large")
+            raise _HTTPError(HTTPStatus.BAD_REQUEST, "Bad Request")
+        limit = route_limit if route_limit is not None else self.server.max_body_bytes
+        if length > limit:
+            raise _HTTPError(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "Payload Too Large")
         body = self.rfile.read(length)
         if not body:
             return body, None
         try:
             return body, json.loads(body)
         except (UnicodeDecodeError, json.JSONDecodeError) as error:
-            raise _HTTPError(HTTPStatus.BAD_REQUEST, "invalid JSON body") from error
+            raise _HTTPError(HTTPStatus.BAD_REQUEST, "Bad Request") from error
 
     def _json(self, status: int, payload: object, headers: Mapping[str, str] | None = None) -> None:
         body = (
@@ -212,22 +284,61 @@ class _RequestHandler(BaseHTTPRequestHandler):
             if status == HTTPStatus.NO_CONTENT
             else json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode()
         )
+        self._bytes(status, body, "application/json; charset=utf-8", headers or {})
+
+    def _bytes(self, status: int, body: bytes, content_type: str, headers: Mapping[str, str]) -> None:
         self.send_response(status)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
-        self._common_headers(self.headers.get("Origin"))
-        for key, value in (headers or {}).items():
-            self.send_header(key, value)
-        self.end_headers()
+        self._emit_headers(
+            {"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"},
+            self._cors_headers(),
+            headers,
+            {"Content-Type": content_type, "Content-Length": str(len(body))},
+        )
         if self.command != "HEAD" and body:
             self.wfile.write(body)
 
-    def _common_headers(self, origin: str | None) -> None:
-        if origin is not None and self.server.origin_policy(origin):
-            self.send_header("Access-Control-Allow-Origin", origin)
-            self.send_header("Vary", "Origin")
-        self.send_header("X-Content-Type-Options", "nosniff")
+    def _request_origin(self) -> str | None:
+        headers = getattr(self, "headers", None)
+        return headers.get("Origin") if headers is not None else None
+
+    def _origin_decision(self) -> OriginDecision:
+        """Judge the request origin once, so every response path agrees on it.
+
+        Routes never emit CORS headers themselves; the chassis owns the decision
+        and the headers derived from it (#4452).
+        """
+        cached = getattr(self, "_origin_decision_cache", None)
+        if cached is not None:
+            return cached
+        query = OriginQuery(
+            self._request_origin(),
+            getattr(self, "command", ""),
+            urlsplit(getattr(self, "path", "")).path,
+        )
+        decision = self.server.origin_policy(query)
+        self._origin_decision_cache = decision
+        return decision
+
+    def _cors_headers(self) -> Mapping[str, str]:
+        origin = self._request_origin()
+        if origin is None or self._origin_decision() is not OriginDecision.ALLOW:
+            return {}
+        return {"Access-Control-Allow-Origin": origin, "Vary": "Origin"}
+
+    def _emit_headers(self, *sources: Mapping[str, str]) -> None:
+        """Send each header name exactly once; later sources override earlier ones.
+
+        route handler が自前で CORS ヘッダーを載せる場合（chassis へ載せ替えた
+        collection server 等）、chassis 側の既定値と同名ヘッダーが二重送信されると
+        ブラウザの CORS 検証が壊れるため、送出前に名前で畳み込む（#4452）。
+        """
+        merged: dict[str, tuple[str, str]] = {}
+        for source in sources:
+            for key, value in source.items():
+                merged[key.lower()] = (key, value)
+        for key, value in merged.values():
+            self.send_header(key, value)
+        self.end_headers()
 
 
 class _HTTPError(RuntimeError):
@@ -239,9 +350,9 @@ class _HTTPError(RuntimeError):
 def _compile_path(path_pattern: str) -> re.Pattern[str]:
     cursor = 0
     chunks: list[str] = []
-    for match in re.finditer(r"\{([A-Za-z_][A-Za-z0-9_]*)\}", path_pattern):
+    for match in re.finditer(r"\{([A-Za-z_][A-Za-z0-9_]*)(\*)?\}", path_pattern):
         chunks.append(re.escape(path_pattern[cursor : match.start()]))
-        chunks.append(f"(?P<{match.group(1)}>[^/]+)")
+        chunks.append(f"(?P<{match.group(1)}>{'.+' if match.group(2) else '[^/]+'})")
         cursor = match.end()
     chunks.append(re.escape(path_pattern[cursor:]))
     try:
