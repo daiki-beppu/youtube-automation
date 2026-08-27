@@ -11,7 +11,8 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  --font-display: var(--display);
+  /* 見出し用フォントは Tailwind ユーティリティを介さず :root の --display を直接参照する。
+   * --font-sans だけを登録するのは Tailwind の既定 font-family が参照するため。 */
   --font-sans: var(--body);
   --color-ring: var(--ring);
   --color-input: var(--input);
