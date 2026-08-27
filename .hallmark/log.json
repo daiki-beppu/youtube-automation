@@ -1,5 +1,16 @@
 [
   {
+    "date": "2026-08-27",
+    "scope": "audio studio",
+    "target": "audio-studio/src/index.css and audio-studio/src/App.tsx",
+    "genre": "atmospheric",
+    "theme": "Terminal",
+    "macrostructure": "Long Document",
+    "enrichment": "none",
+    "audience": "YouTube operators",
+    "decision": "Read the console as one continuous editing surface: phosphor-on-dark, JetBrains Mono display, hairline card rules, and tabular numerals for every value being adjusted."
+  },
+  {
     "date": "2026-08-23",
     "scope": "analytics dashboard",
     "target": "dashboard/src/App.tsx and dashboard/src/index.css",

@@ -40,16 +40,14 @@ export default function App() {
   }, [])
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-8 px-4 py-8 sm:px-6 lg:py-12">
-      <header className="flex flex-col gap-3">
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+    <main className="studio-shell mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-8 px-4 py-8 sm:px-6 lg:py-12">
+      <header className="studio-masthead flex flex-col gap-3">
+        <div className="studio-kicker flex items-center gap-2 text-sm text-muted-foreground">
           <Disc3Icon aria-hidden="true" />
           <span>Local collection editor</span>
         </div>
-        <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
-          Audio Studio
-        </h1>
-        <p className="max-w-2xl text-muted-foreground">
+        <h1 className="studio-title">Audio Studio</h1>
+        <p className="studio-collection max-w-2xl text-muted-foreground">
           {data?.collection_name ?? "コレクションの音源を読み込んでいます"}
         </p>
       </header>
