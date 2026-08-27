@@ -1,7 +1,7 @@
 """`release-extensions.yml` の配布契約を静的に検証する（Issue #1022）。
 
-統一タグ `ext-v*` で3拡張の zip を単一 Release に
-添付し、Release 本文にインストール/更新手順テンプレが埋め込まれていることを担保する。
+統一タグ `ext-v*` で3拡張の zip を単一 Release に添付し、Release 本文が
+公開ガイドと `/extension` を正規入口として案内することを担保する。
 """
 
 from __future__ import annotations
