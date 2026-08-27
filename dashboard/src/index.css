@@ -6,6 +6,7 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/inter";
+@import "@fontsource-variable/space-grotesk";
 @import "./tokens.css";
 
 @custom-variant dark (&:is(.dark *));
@@ -77,8 +78,8 @@
   --palette-purple-preview: #a565f8;
   --dashboard-accent-surface: color-mix(
     in srgb,
-    var(--palette-series-base) 8%,
-    white
+    var(--palette-series-base) 3%,
+    var(--background)
   );
   --dashboard-accent-surface-strong: color-mix(
     in srgb,
@@ -92,7 +93,7 @@
   --dashboard-negative: #fa0000;
   --dashboard-negative-surface: #fdeeee;
   --dashboard-negative-border: #ffbbbb;
-  --background: oklch(1 0 0);
+  --background: oklch(0.985 0.003 255);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.145 0 0);
@@ -131,7 +132,7 @@
 .dark {
   --dashboard-accent-surface: color-mix(
     in srgb,
-    var(--palette-series-base) 10%,
+    var(--palette-series-base) 3%,
     var(--background)
   );
   --dashboard-accent-surface-strong: color-mix(
@@ -371,13 +372,7 @@
 
 @layer components {
   .dashboard-palette-background {
-    background-color: var(--background);
-    background-image:
-      linear-gradient(
-        90deg,
-        var(--dashboard-accent-surface),
-        transparent 42rem
-      );
+    background-color: var(--dashboard-accent-surface);
   }
 
   .dashboard-workbench {
@@ -391,7 +386,7 @@
     justify-content: space-between;
     gap: var(--space-lg);
     padding-block: var(--space-xl);
-    border-bottom: var(--rule-hairline) solid var(--foreground);
+    border-bottom: var(--rule-hairline) solid var(--primary);
   }
 
   .dashboard-header-copy {
@@ -413,9 +408,9 @@
     font-family: var(--font-display);
     font-size: var(--text-display);
     font-style: normal;
-    font-weight: 650;
-    letter-spacing: -0.055em;
-    line-height: 0.92;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    line-height: 1;
     overflow-wrap: anywhere;
   }
 
@@ -488,10 +483,8 @@
   }
 
   .dashboard-section-heading {
-    padding-block: var(--space-sm);
-    padding-left: var(--space-md);
-    border-bottom: var(--rule-hairline) solid var(--foreground);
-    border-left: 0.25rem solid var(--primary);
+    padding-top: var(--space-sm);
+    border-bottom: var(--rule-hairline) solid var(--primary);
     font-style: normal;
   }
 
