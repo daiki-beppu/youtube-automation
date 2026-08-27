@@ -44,6 +44,10 @@ jobs:
     needs: auth-check
     if: needs.auth-check.outputs.available == 'true'
     runs-on: ubuntu-latest
+    # 集約コメントの marker は ci-autofix.yml の gate が startswith で探す契約。
+    # 検索側(Look up previous review)と書き込み側(Post review comment)で必ず同一にする
+    env:
+      REVIEW_MARKER: "<!-- code-review-workflow -->"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -66,9 +70,13 @@ jobs:
           PATCH_ID: ${{ steps.fingerprint.outputs.patch_id }}
         run: |
           set -eu
-          marker='<!-- code-review-workflow -->'
-          body="$(gh api "repos/${REPO}/issues/${PR_NUMBER}/comments" --paginate \
-            --jq "[.[] | select(.body | startswith(\"${marker}\"))][0].body // empty")"
+          # コメント一覧の取得はこの 1 回だけ。id も同時に拾って Post review comment へ渡す
+          # --paginate は page ごとに --jq を適用するため、複数 page 分の出力を 1 件に畳む
+          comment="$(gh api "repos/${REPO}/issues/${PR_NUMBER}/comments" --paginate \
+            --jq "[.[] | select(.body | startswith(\"${REVIEW_MARKER}\"))][0] // empty" | head -n 1)"
+          comment_id="$(jq -r '.id // empty' <<<"$comment")"
+          body="$(jq -r '.body // empty' <<<"$comment")"
+          echo "comment_id=${comment_id}" >> "$GITHUB_OUTPUT"
           meta="$(grep -m1 -oE '<!-- code-review-meta patch=[0-9a-f]+ crit=[0-9]+ -->' <<<"$body" || true)"
           prev_patch="$(grep -oE 'patch=[0-9a-f]+' <<<"$meta" | cut -d= -f2 || true)"
           prev_crit="$(grep -oE 'crit=[0-9]+' <<<"$meta" | cut -d= -f2 || true)"
@@ -138,22 +146,20 @@ jobs:
           REPO: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PATCH_ID: ${{ steps.fingerprint.outputs.patch_id }}
+          COMMENT_ID: ${{ steps.previous.outputs.comment_id }}
         run: |
           set -eu
-          marker='<!-- code-review-workflow -->'
           critical=$(jq -r '.critical_count' <<<"$STRUCTURED_OUTPUT")
           {
-            echo "$marker"
+            echo "$REVIEW_MARKER"
             echo "<!-- code-review-meta patch=${PATCH_ID} crit=${critical} -->"
             echo
             jq -r '.report_markdown' <<<"$STRUCTURED_OUTPUT"
           } > "$RUNNER_TEMP/review-comment.md"
-          comment_id=$(gh api "repos/${REPO}/issues/${PR_NUMBER}/comments" --paginate \
-            --jq "[.[] | select(.body | startswith(\"${marker}\"))][0].id // empty")
-          if [ -n "$comment_id" ]; then
-            gh api -X PATCH "repos/${REPO}/issues/comments/${comment_id}" \
+          if [ -n "$COMMENT_ID" ]; then
+            gh api -X PATCH "repos/${REPO}/issues/comments/${COMMENT_ID}" \
               -F "body=@$RUNNER_TEMP/review-comment.md" > /dev/null
-            echo "updated comment ${comment_id}"
+            echo "updated comment ${COMMENT_ID}"
           else
             gh api "repos/${REPO}/issues/${PR_NUMBER}/comments" \
               -F "body=@$RUNNER_TEMP/review-comment.md" > /dev/null

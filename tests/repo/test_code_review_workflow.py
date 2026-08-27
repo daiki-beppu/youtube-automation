@@ -113,9 +113,15 @@ def test_review_comment_is_upserted_by_a_workflow_step_not_by_claude() -> None:
     assert post["if"] == ("steps.previous.outputs.skip != 'true' && steps.review.outputs.structured_output != ''")
     assert post["env"]["STRUCTURED_OUTPUT"] == "${{ steps.review.outputs.structured_output }}"
     script = post["run"]
-    assert "<!-- code-review-workflow -->" in script
+    # marker は job env の 1 箇所定義（ci-autofix の startswith gate と揃える契約）
+    assert review["env"]["REVIEW_MARKER"] == "<!-- code-review-workflow -->"
+    assert 'echo "$REVIEW_MARKER"' in script
     assert "report_markdown" in script
     assert "PATCH" in script
+
+    # コメント一覧の取得は Look up previous review の 1 回だけ（id を再利用し再取得しない）
+    assert post["env"]["COMMENT_ID"] == "${{ steps.previous.outputs.comment_id }}"
+    assert "--paginate" not in script
 
     # critical 判定で fail する前に、指摘本文が必ず PR へ投稿される
     assert steps.index(post) < steps.index(steps[-1])
@@ -134,6 +140,9 @@ def test_unchanged_diff_skips_the_paid_review_but_reapplies_the_verdict() -> Non
     assert "code-review-meta patch=" in previous["run"]
     assert "crit=" in previous["run"]
     assert "critical" not in previous["run"].split("code-review-meta")[1].splitlines()[0]
+    # comment_id も同じ 1 回の取得で拾い、Post review comment 側の再取得を不要にする
+    assert "comment_id=" in previous["run"]
+    assert previous["run"].count("gh api") == 1
 
     assert _review_step(review)["if"] == "steps.previous.outputs.skip != 'true'"
 
