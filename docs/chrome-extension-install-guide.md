@@ -49,12 +49,16 @@ agent はローカルの `~/chrome-extensions/<name>/manifest.json` と最新の
 
 ### agent が行うこと
 
-- GitHub CLI (`gh`) の認証状態と最新の `ext-v*` release を確認する
-- 対象 asset をダウンロードし、安全な一時ディレクトリへ展開する
-- 展開した `manifest.json` の name と version を対象 asset / release と照合する
-- install では `~/chrome-extensions/<name>/` へ配置する
-- update では検証後に既存ディレクトリを timestamp 付き backup へ移し、検証済みディレクトリで置き換える
-- 完了後の manifest version を再確認し、install / update / skip の結果を報告する
+install / update に共通する処理:
+
+- GitHub CLI (`gh`) の認証状態と最新の `ext-v*` release を確認し、対象 asset をダウンロードする
+- 展開した `manifest.json` の name と version を対象 asset / release と照合し、一致しない場合は Chrome へ案内せず停止する
+- install / update / skip のどれを選んだかと、その結果を報告する
+
+展開先は install と update で分岐します:
+
+- **install**: 空の `~/chrome-extensions/<name>/` へ直接展開する
+- **update**: 一時ディレクトリへ展開して検証し、検証後に既存ディレクトリを timestamp 付き backup へ移してから検証済みディレクトリで置き換え、置き換え後の manifest version を再確認する
 
 ### 利用者が Chrome で行うこと
 
