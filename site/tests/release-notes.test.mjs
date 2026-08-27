@@ -28,11 +28,14 @@ const operatorSections = [
       "/workflow-cheatsheet",
       "/channel-workspace-migration",
       "/dashboard",
+      "/cloud-execution",
     ],
     section: "use",
   },
 ];
 const operatorRoutes = operatorSections.flatMap(({ routes }) => routes);
+/** 公開 route に、navigation から除外される /onboarding を足した生成 route 総数。 */
+const generatedRouteCount = operatorRoutes.length + 1;
 
 const readStylesheetClosure = async (html) => {
   const inlineStyles = [...html.matchAll(/<style(?:\s[^>]*)?>([\s\S]*?)<\/style>/g)].map(
@@ -190,7 +193,7 @@ const sectionByAttribute = (html, attribute, value) => {
 const hrefsWithin = (markup) =>
   [...markup.matchAll(/href="(\/[^"#?]*)"/g)].map((match) => match[1]);
 
-test("landing page は3区分を表示し、公開operator docs 6件だけへ1回ずつ到達できる", async () => {
+test(`landing page は3区分を表示し、公開operator docs ${operatorRoutes.length}件だけへ1回ずつ到達できる`, async () => {
   const html = await readIndex();
   const sectionLabels = [
     ["getting-started", "はじめる"],
@@ -213,13 +216,14 @@ test("landing page は3区分を表示し、公開operator docs 6件だけへ1�
   assert.doesNotMatch(operatorMarkup, /href="\/onboarding(?:\/|"|#)/);
 });
 
-test("landing page は dashboard を使う内の実験的機能として表示する", async () => {
+test("landing page は dashboard とクラウド実行を使う内の実験的機能として表示する", async () => {
   const use = sectionByAttribute(await readIndex(), "data-doc-section", "use");
   const experimental = sectionByAttribute(use, "data-doc-group", "experimental");
 
   assert.match(experimental, /<h3>実験的機能<\/h3>/);
-  assert.deepEqual(hrefsWithin(experimental), ["/dashboard"]);
+  assert.deepEqual(hrefsWithin(experimental), ["/dashboard", "/cloud-execution"]);
   assert.equal(hrefsWithin(use).filter((href) => href === "/dashboard").length, 1);
+  assert.equal(hrefsWithin(use).filter((href) => href === "/cloud-execution").length, 1);
 });
 
 test("全ページ共通 sidebar と tabs は operator 区分・release規模・exact route ownership を保つ", async () => {
@@ -255,12 +259,14 @@ test("全ページ共通 sidebar と tabs は operator 区分・release規模・
 
     const experimentalLabel = sidebar.indexOf(">実験的機能<");
     const dashboard = sidebar.indexOf('href="/dashboard"');
+    const cloudExecution = sidebar.indexOf('href="/cloud-execution"');
     assert.notEqual(experimentalLabel, -1);
     assert.ok(dashboard > experimentalLabel);
+    assert.ok(cloudExecution > experimentalLabel);
   }
 });
 
-test("onboarding は直接描画だけを維持し、公開operator docs 6件だけを検索へ載せる", async () => {
+test(`onboarding は直接描画だけを維持し、公開operator docs ${operatorRoutes.length}件だけを検索へ載せる`, async () => {
   const search = JSON.parse(
     await readFile(new URL("../dist/blume-search.json", import.meta.url), "utf8")
   );
@@ -291,7 +297,7 @@ test("onboarding は直接描画だけを維持し、公開operator docs 6件だ
   );
 });
 
-test("operator docs の7 route は原本の先頭見出しを唯一の H1 として描画する", async () => {
+test(`operator docs の${generatedRouteCount} route は原本の先頭見出しを唯一の H1 として描画する`, async () => {
   const expectedTitles = new Map([
     ["/onboarding", "Onboarding"],
     [
@@ -306,8 +312,10 @@ test("operator docs の7 route は原本の先頭見出しを唯一の H1 とし
       "/channel-workspace-migration",
       "単一チャンネル repository から workspace への移行",
     ],
+    ["/cloud-execution", "クラウドでの実行"],
   ]);
 
+  assert.equal(expectedTitles.size, generatedRouteCount);
   for (const [route, expectedTitle] of expectedTitles) {
     const html = await readOperatorDoc(route);
     const headings = [...html.matchAll(/<h1(?:\s[^>]*)?>([^<]+)<\/h1>/g)].map(
