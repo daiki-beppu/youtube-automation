@@ -29,7 +29,10 @@ export async function backgroundFetchAsset(url: string, filename: string) {
   const parts: ArrayBuffer[] = [];
   let offset = 0;
   let contentType = "";
-  do {
+  // 総サイズは最初の chunk 応答で確定するため、それまでは未達として扱う。
+  // 終了条件は「受領済み byte が総サイズに達したか」だけに保つ。
+  let totalSize = Number.POSITIVE_INFINITY;
+  while (offset < totalSize) {
     const chunk = await sendMessage("fetchLocalAssetChunk", { url, offset });
     const binary = atob(chunk.base64);
     const bytes = Uint8Array.from(binary, (character) =>
@@ -38,10 +41,11 @@ export async function backgroundFetchAsset(url: string, filename: string) {
     parts.push(bytes.buffer);
     offset += bytes.byteLength;
     contentType = chunk.contentType;
-    if (offset >= chunk.totalSize) break;
-    if (bytes.byteLength === 0)
+    totalSize = chunk.totalSize;
+    // 未達なのに 0 byte しか返らないと進まないため、無限ループにせず打ち切る。
+    if (offset < totalSize && bytes.byteLength === 0)
       throw new Error("asset chunk fetch made no progress");
-  } while (offset >= 0);
+  }
 
   const blobUrl = URL.createObjectURL(new Blob(parts, { type: contentType }));
   return { filename, blobUrl, revoke: () => URL.revokeObjectURL(blobUrl) };

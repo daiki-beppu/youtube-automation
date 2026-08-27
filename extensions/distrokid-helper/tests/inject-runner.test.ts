@@ -185,10 +185,21 @@ describe("runInjection", () => {
     expect(made.fetched).toEqual([]);
   });
 
+  // 失敗系でも fetch 済み asset は必ず解放される。revoke も events に混ぜて記録し、
+  // 「送信が reject した直後に revoke される」順序ごと固定する（finally 除去の退行検出）。
   it.each([
     ["start", ["start"]],
     ["trackFetch", ["start", "message:track-01.mp3", "fetch:track-01.mp3"]],
-    ["track", ["start", "message:track-01.mp3", "fetch:track-01.mp3", "track"]],
+    [
+      "track",
+      [
+        "start",
+        "message:track-01.mp3",
+        "fetch:track-01.mp3",
+        "track",
+        "revoke:track-01.mp3",
+      ],
+    ],
     [
       "coverFetch",
       [
@@ -196,6 +207,7 @@ describe("runInjection", () => {
         "message:track-01.mp3",
         "fetch:track-01.mp3",
         "track",
+        "revoke:track-01.mp3",
         "message:main.png",
         "fetch:main.png",
       ],
@@ -207,9 +219,11 @@ describe("runInjection", () => {
         "message:track-01.mp3",
         "fetch:track-01.mp3",
         "track",
+        "revoke:track-01.mp3",
         "message:main.png",
         "fetch:main.png",
         "cover",
+        "revoke:main.png",
       ],
     ],
     [
@@ -219,14 +233,16 @@ describe("runInjection", () => {
         "message:track-01.mp3",
         "fetch:track-01.mp3",
         "track",
+        "revoke:track-01.mp3",
         "message:main.png",
         "fetch:main.png",
         "cover",
+        "revoke:main.png",
         "finish",
       ],
     ],
   ] as const)(
-    "propagates a %s rejection and performs no later message or side effect",
+    "propagates a %s rejection, revokes fetched assets, and performs no later message or side effect",
     async (failure, expectedEvents) => {
       const events: string[] = [];
       const rejectAt = async (name: string): Promise<void> => {
@@ -243,7 +259,11 @@ describe("runInjection", () => {
           const step = filename === "main.png" ? "coverFetch" : "trackFetch";
           events.push(`fetch:${filename}`);
           if (failure === step) throw new Error(`${failure} failed`);
-          return { filename, blobUrl: `blob:${filename}`, revoke: () => {} };
+          return {
+            filename,
+            blobUrl: `blob:${filename}`,
+            revoke: () => events.push(`revoke:${filename}`),
+          };
         },
         track: async () => rejectAt("track"),
         cover: async () => rejectAt("cover"),

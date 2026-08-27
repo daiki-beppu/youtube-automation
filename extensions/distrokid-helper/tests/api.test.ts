@@ -8,8 +8,8 @@
 // 設計契約（draft が実装する前提）:
 //   - fetchRelease(baseUrl): 200 で ReleasePayload を返す。404 は ReleaseUnavailableError（要件 #16）。
 //     その他の非 OK は汎用 Error。baseUrl 末尾スラッシュは正規化して二重スラッシュを作らない。
-//   - fetchAsset(baseUrl, assetPath, filename): blob を取得し SerializedAsset
-//     （filename / mimeType / base64）を返す。content へは直列化して転送する（CORS 回避）。
+//   - asset は API client を通さず background の chunk 取得（lib/background-fetch.ts）で運ぶ。
+//     一括 base64 直列化は 64MiB messaging 上限に当たるため撤去した（#4645）。
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 

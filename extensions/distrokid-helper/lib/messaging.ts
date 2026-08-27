@@ -4,8 +4,9 @@
 // 3 者が解釈を共有する進捗フェーズは PHASES で固定する（状態の正規化）。
 //
 // asset（曲 / ジャケット）は 1 メッセージ 1 件で per-track 分割して送る（#871）。
-// 全 track を 1 メッセージにまとめると Base64 化後のバイト列が chrome.tabs.sendMessage の
-// 64MiB 上限を超えるため、overlay・runner とも常時 1 asset 分のみメモリ保持する設計にする。
+// overlay・runner とも常時 1 asset 分のみメモリ保持する設計にする。
+// メッセージが運ぶのは Blob URL 参照だけで、asset 本体は chrome.tabs.sendMessage の
+// 64MiB 上限がある境界を跨がせない（#4645。取得は fetchLocalAssetChunk の chunk 往復）。
 
 import { defineExtensionMessaging } from "@webext-core/messaging";
 
@@ -36,7 +37,8 @@ export interface InjectStartRequest {
 }
 
 // overlay -> runner: 1 track の曲ファイルを注入する。
-// asset は overlay 側で fetch 済みのものを直列化して渡す（asset-transfer.ts 参照）。
+// asset は overlay 側で fetch 済みの Blob を指す URL 参照で渡し、runner が File へ復元する
+// （asset-transfer.ts 参照）。
 // trackIndex は payload.release.tracks の 0-indexed 位置。
 // fetchAsset は取得失敗時に throw する（null を返さない）ため asset に欠落は生じない。
 export interface InjectTrackRequest {

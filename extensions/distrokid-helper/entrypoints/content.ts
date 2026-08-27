@@ -2,7 +2,7 @@
 //
 // overlay から同一タブ relay された per-track 分割メッセージ（injectStart → injectTrack* → injectCover? →
 // injectFinish）を受け、静的プロファイル + 動的データのテキスト/SELECT を注入し、
-// overlay が fetch 済みの曲 / ジャケット（直列化済み）を File へ復元して <input type=file> にセットする。
+// overlay が fetch 済みの曲 / ジャケットを Blob URL から File へ復元して <input type=file> にセットする。
 // セッションのロジック（順序保証・範囲検査）は lib/inject-session.ts が担い、ここは DOM 束縛の
 // 注入 primitive とメッセージ配線のみを持つ。
 // 「続ける」等の送信系操作は一切行わない（規約遵守・スコープ外）。
