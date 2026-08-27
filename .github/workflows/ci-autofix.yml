@@ -113,8 +113,8 @@ jobs:
             info_count="$(severity_count info)"
             [ -n "$critical_count" ] && [ -n "$warning_count" ] && [ -n "$info_count" ] \
               || skip "code review severity summary could not be parsed"
-            [ "$((critical_count + warning_count + info_count))" -gt 0 ] \
-              || skip "code review reported no findings"
+            [ "$((critical_count + warning_count))" -gt 0 ] \
+              || skip "code review reported no critical or warning findings (info-only is not auto-fixed)"
           fi
 
           # 修正試行は PR あたり 1 回。commit body の [ci-autofix] マーカーで判定し、

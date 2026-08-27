@@ -74,6 +74,7 @@ def test_gate_processes_ci_failures_and_every_completed_code_review() -> None:
 
 
 def test_review_runs_skip_without_findings_and_supply_the_aggregate_comment() -> None:
+    """info の simplify 提案だけでは自動修正を起動しない。"""
     workflow = _workflow()
     gate = workflow["jobs"]["gate"]
     decide = _decide_step(gate)
@@ -82,12 +83,16 @@ def test_review_runs_skip_without_findings_and_supply_the_aggregate_comment() ->
     assert "<!-- code-review-workflow -->" in decide["run"]
     assert "critical_count" in decide["run"]
     assert "warning_count" in decide["run"]
+    # summary の parse 可能性ガードとして info_count の取得・検証は残す
     assert "info_count" in decide["run"]
     assert "${1}[[:space:][:punct:]]*[0-9]+" in decide["run"]
     assert "][0].body" in decide["run"]
     assert "skip-review" in decide["run"]
     assert "awk '/^---[[:space:]]*$/{exit}" in decide["run"]
-    assert 'skip "code review reported no findings"' in decide["run"]
+    assert 'skip "code review reported no critical or warning findings' in decide["run"]
+    # info-only のレビューでは Opus を起動しない(発火は critical+warning のみ)
+    assert '[ "$((critical_count + warning_count))" -gt 0 ]' in decide["run"]
+    assert "critical_count + warning_count + info_count" not in decide["run"]
 
     prompt = _autofix_step(workflow["jobs"]["autofix"])["with"]["prompt"]
     assert "critical / warning / info" in prompt
