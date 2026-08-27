@@ -86,7 +86,11 @@ def test_critical_findings_fail_the_check_via_structured_output() -> None:
     assert "report_markdown" in claude_args
 
     verdict = review["steps"][-1]
-    assert verdict["env"] == {"STRUCTURED_OUTPUT": "${{ steps.review.outputs.structured_output }}"}
+    assert verdict["env"] == {
+        "STRUCTURED_OUTPUT": "${{ steps.review.outputs.structured_output }}",
+        "SKIPPED": "${{ steps.previous.outputs.skip }}",
+        "PREV_CRIT": "${{ steps.previous.outputs.prev_crit }}",
+    }
     assert "critical" in verdict["run"]
     assert "exit 1" in verdict["run"]
 
@@ -106,16 +110,66 @@ def test_review_comment_is_upserted_by_a_workflow_step_not_by_claude() -> None:
     assert not [tool for tool in tools if tool.startswith("Bash(gh api")]
 
     post = next(step for step in steps if step.get("name") == "Post review comment")
-    assert post["if"] == "steps.review.outputs.structured_output != ''"
+    assert post["if"] == ("steps.previous.outputs.skip != 'true' && steps.review.outputs.structured_output != ''")
     assert post["env"]["STRUCTURED_OUTPUT"] == "${{ steps.review.outputs.structured_output }}"
     script = post["run"]
-    assert "<!-- code-review-workflow -->" in script
+    # marker は job env の 1 箇所定義（ci-autofix の startswith gate と揃える契約）
+    assert review["env"]["REVIEW_MARKER"] == "<!-- code-review-workflow -->"
+    assert 'echo "$REVIEW_MARKER"' in script
     assert "report_markdown" in script
     assert "PATCH" in script
+
+    # コメント一覧の取得は Look up previous review の 1 回だけ（id を再利用し再取得しない）
+    assert post["env"]["COMMENT_ID"] == "${{ steps.previous.outputs.comment_id }}"
+    assert "--paginate" not in script
 
     # critical 判定で fail する前に、指摘本文が必ず PR へ投稿される
     assert steps.index(post) < steps.index(steps[-1])
     assert steps[-1]["run"].find("exit 1") != -1
+
+
+def test_unchanged_diff_skips_the_paid_review_but_reapplies_the_verdict() -> None:
+    review = _workflow()["jobs"]["review"]
+    steps = review["steps"]
+
+    fingerprint = next(step for step in steps if step.get("id") == "fingerprint")
+    assert "git patch-id --stable" in fingerprint["run"]
+
+    previous = next(step for step in steps if step.get("id") == "previous")
+    # メタ行の語彙は crit= 固定(ci-autofix の severity パーサに "critical" を誤検出させない)
+    assert "code-review-meta patch=" in previous["run"]
+    assert "crit=" in previous["run"]
+    assert "critical" not in previous["run"].split("code-review-meta")[1].splitlines()[0]
+    # comment_id も同じ 1 回の取得で拾い、Post review comment 側の再取得を不要にする
+    assert "comment_id=" in previous["run"]
+    assert previous["run"].count("gh api") == 1
+    # gh api をパイプへ通すため、API 失敗を head/jq の exit 0 で握りつぶさない
+    assert "set -eu -o pipefail" in previous["run"]
+    # page 境界を跨いだ先頭 1 件の選択は --slurp で行う（head での打ち切りは SIGPIPE を招く）
+    assert "--slurp" in previous["run"]
+    assert "head -n 1" not in previous["run"]
+
+    assert _review_step(review)["if"] == "steps.previous.outputs.skip != 'true'"
+
+    verdict = steps[-1]
+    assert verdict["env"]["SKIPPED"] == "${{ steps.previous.outputs.skip }}"
+    assert verdict["env"]["PREV_CRIT"] == "${{ steps.previous.outputs.prev_crit }}"
+    assert "exit 1" in verdict["run"]
+
+
+def test_review_meta_line_never_matches_the_autofix_severity_parser() -> None:
+    """メタ行が ci-autofix の severity_count に数値として拾われないことの回帰ガード。"""
+    import subprocess
+
+    meta_line = "<!-- code-review-meta patch=0123abcd crit=3 -->"
+    result = subprocess.run(
+        ["bash", "-c", "grep -ioE 'critical[[:space:][:punct:]]*[0-9]+' || true"],
+        input=meta_line,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert result.stdout.strip() == ""
 
 
 def test_review_cannot_push_to_the_pr_branch() -> None:

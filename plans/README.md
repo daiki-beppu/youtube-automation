@@ -13,7 +13,7 @@ Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJE
 
 | Plan | Title | Priority | Effort | Depends on | Issue | PR | Status |
 |------|-------|----------|--------|------------|-------|-----|--------|
-| 034 | Code review を patch-id で重複排除し rebase-only push の sonnet 再レビューを skip | P1 | M | — | [#4601](https://github.com/daiki-beppu/youtube-automation/issues/4601) | — | TODO |
+| 034 | Code review を patch-id で重複排除し rebase-only push の sonnet 再レビューを skip | P1 | M | — | [#4601](https://github.com/daiki-beppu/youtube-automation/issues/4601) | [#4662](https://github.com/daiki-beppu/youtube-automation/pull/4662) | DONE |
 | 035 | CI autofix の発火しきい値を critical+warning に上げ info-only での Opus 起動を止める | P1 | S | — | [#4602](https://github.com/daiki-beppu/youtube-automation/issues/4602) | — | DONE |
 | 036 | Skill E2E eval の pnpm devShell 不整合を修理し日次 → 週次化 | P2 | S | — | [#4603](https://github.com/daiki-beppu/youtube-automation/issues/4603) | — | TODO |
 
