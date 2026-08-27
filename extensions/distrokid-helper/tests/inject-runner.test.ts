@@ -7,7 +7,6 @@
 
 import { describe, it, expect } from "vitest";
 
-import type { SerializedAsset } from "../lib/asset-transfer";
 import { runInjection, type InjectChannel } from "../lib/inject-runner";
 import type { ReleasePayload } from "../lib/types";
 
@@ -61,15 +60,21 @@ function makeChannel(options?: { onFetch?: (assetPath: string) => void }): {
   calls: ChannelCall[];
   fetched: string[];
   stop: () => void;
+  revoked: string[];
 } {
   const calls: ChannelCall[] = [];
   const fetched: string[] = [];
+  const revoked: string[] = [];
   let stopped = false;
   const channel: InjectChannel = {
-    fetchAsset: async (assetPath, filename): Promise<SerializedAsset> => {
+    fetchAsset: async (assetPath, filename) => {
       fetched.push(assetPath);
       options?.onFetch?.(assetPath);
-      return { filename, mimeType: "audio/mpeg", base64: btoa("audio") };
+      return {
+        filename,
+        blobUrl: `blob:${filename}`,
+        revoke: () => revoked.push(filename),
+      };
     },
     start: async (payload) => {
       calls.push({ kind: "start", trackIndex: payload.release.tracks.length });
@@ -90,6 +95,7 @@ function makeChannel(options?: { onFetch?: (assetPath: string) => void }): {
     channel,
     calls,
     fetched,
+    revoked,
     stop: () => {
       stopped = true;
     },
@@ -99,7 +105,7 @@ function makeChannel(options?: { onFetch?: (assetPath: string) => void }): {
 describe("runInjection", () => {
   it("start → track*N → cover → finish の順で送信する", async () => {
     // Given: 2 track + cover あり
-    const { channel, calls } = makeChannel();
+    const { channel, calls, revoked } = makeChannel();
 
     // When
     await runInjection(makePayload(2, true), channel);
@@ -112,6 +118,7 @@ describe("runInjection", () => {
       { kind: "cover", filename: "main.png" },
       { kind: "finish" },
     ]);
+    expect(revoked).toEqual(["track-01.mp3", "track-02.mp3", "main.png"]);
   });
 
   it("cover が null なら cover を送らず finish に進む", async () => {
@@ -236,7 +243,7 @@ describe("runInjection", () => {
           const step = filename === "main.png" ? "coverFetch" : "trackFetch";
           events.push(`fetch:${filename}`);
           if (failure === step) throw new Error(`${failure} failed`);
-          return { filename, mimeType: "audio/mpeg", base64: "AQID" };
+          return { filename, blobUrl: `blob:${filename}`, revoke: () => {} };
         },
         track: async () => rejectAt("track"),
         cover: async () => rejectAt("cover"),

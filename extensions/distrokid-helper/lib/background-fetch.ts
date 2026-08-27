@@ -26,5 +26,23 @@ export async function backgroundFetch(
 }
 
 export async function backgroundFetchAsset(url: string, filename: string) {
-  return sendMessage("fetchLocalAsset", { url, filename });
+  const parts: ArrayBuffer[] = [];
+  let offset = 0;
+  let contentType = "";
+  do {
+    const chunk = await sendMessage("fetchLocalAssetChunk", { url, offset });
+    const binary = atob(chunk.base64);
+    const bytes = Uint8Array.from(binary, (character) =>
+      character.charCodeAt(0)
+    );
+    parts.push(bytes.buffer);
+    offset += bytes.byteLength;
+    contentType = chunk.contentType;
+    if (offset >= chunk.totalSize) break;
+    if (bytes.byteLength === 0)
+      throw new Error("asset chunk fetch made no progress");
+  } while (offset >= 0);
+
+  const blobUrl = URL.createObjectURL(new Blob(parts, { type: contentType }));
+  return { filename, blobUrl, revoke: () => URL.revokeObjectURL(blobUrl) };
 }

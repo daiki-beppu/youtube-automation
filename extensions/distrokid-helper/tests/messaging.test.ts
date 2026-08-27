@@ -9,7 +9,6 @@
 
 import { describe, it, expect } from "vitest";
 
-import type { SerializedAsset } from "../lib/asset-transfer";
 import { PHASES, sendMessage, onMessage } from "../lib/messaging";
 import type { InjectTrackRequest } from "../lib/messaging";
 
@@ -17,7 +16,8 @@ import type { InjectTrackRequest } from "../lib/messaging";
 // asset は injectTrack で 1 件ずつ送る。fetchAsset は取得失敗時に throw する（null を返さない）
 // ため asset は常に SerializedAsset で欠落しない。`SerializedAsset | null` へ退行させると
 // 下の代入が型エラーになり `pnpm compile`（tsc --noEmit）で検出される。
-const _trackAssetIsNonNull: SerializedAsset = {} as InjectTrackRequest["asset"];
+const _trackAssetIsNonNull: { filename: string; blobUrl: string } =
+  {} as InjectTrackRequest["asset"];
 void _trackAssetIsNonNull;
 
 describe("PHASES（PROGRESS フェーズ契約）", () => {

@@ -1,0 +1,1 @@
+- DistroKid Helper の音源転送を 4 MiB chunk と Blob URL に変更し、64 MiB を超える素材でも Chrome messaging 上限に達しないようにした。

@@ -9,25 +9,29 @@
 // asset は 1 track ずつ fetch → 送信 → 解放を逐次実行し、overlay memory を track 数に対し
 // O(1) に保つ。全 track を 1 メッセージで送ると Base64 化後に 64MiB 上限を超えるため分割する。
 
-import type { SerializedAsset } from "./asset-transfer";
+import type { BlobAssetReference } from "./messaging";
 import type { ReleasePayload } from "./types";
 
 // 注入オーケストレーションの境界（transport / 停止判定 / 進捗表示）。
 export interface InjectChannel {
   // serverUrl 上の 1 asset を overlay から取得して直列化する。
-  fetchAsset(assetPath: string, filename: string): Promise<SerializedAsset>;
+  fetchAsset(assetPath: string, filename: string): Promise<AssetHandle>;
   // content へ注入セッションを開始する（テキスト / SELECT 系のみ、asset なし）。
   start(payload: ReleasePayload): Promise<void>;
   // content へ 1 track の曲ファイルを注入する。
-  track(trackIndex: number, asset: SerializedAsset): Promise<void>;
+  track(trackIndex: number, asset: BlobAssetReference): Promise<void>;
   // content へジャケットを注入する。
-  cover(asset: SerializedAsset): Promise<void>;
+  cover(asset: BlobAssetReference): Promise<void>;
   // content の注入セッションを完了する（AI 開示注入 + DONE）。
   finish(): Promise<void>;
   // 進捗メッセージを UI へ反映する。
   setMessage(message: string): void;
   // 停止要求の確認（ループ境界・send 直前で参照する）。
   isStopped(): boolean;
+}
+
+export interface AssetHandle extends BlobAssetReference {
+  revoke(): void;
 }
 
 // 注入を逐次実行する。停止要求はループ境界と各 send 直前で確認し、確認後は以降の送信を
@@ -46,13 +50,12 @@ export async function runInjection(
     const track = release.tracks[i];
     channel.setMessage(`アセットを取得中: ${track.filename}`);
     const asset = await channel.fetchAsset(track.asset_path, track.filename);
-    // fetch 中に停止された場合、content は既に session を破棄している。ここで送ると
-    // injectTrack が null セッションへ届き fail-loud で throw し、STOPPED を ERROR で
-    // 上書きしてしまうため send 直前に再チェックする。
-    if (channel.isStopped()) {
-      return;
+    try {
+      if (channel.isStopped()) return;
+      await channel.track(i, asset);
+    } finally {
+      asset.revoke();
     }
-    await channel.track(i, asset);
   }
 
   if (channel.isStopped()) {
@@ -64,11 +67,12 @@ export async function runInjection(
       release.cover.asset_path,
       release.cover.filename
     );
-    // track ループと同様、fetch 中の停止に備えて send 直前に再チェックする。
-    if (channel.isStopped()) {
-      return;
+    try {
+      if (channel.isStopped()) return;
+      await channel.cover(asset);
+    } finally {
+      asset.revoke();
     }
-    await channel.cover(asset);
   }
 
   if (channel.isStopped()) {

@@ -10,9 +10,9 @@
 import { defineExtensionMessaging } from "@webext-core/messaging";
 
 import type { DistrokidReleaseRecord } from "../../shared/api";
-import type { SerializedAsset } from "./asset-transfer";
 import type {
-  LocalFetchAssetRequest,
+  LocalFetchAssetChunkRequest,
+  LocalFetchAssetChunkResponse,
   LocalFetchRequest,
   LocalFetchTextResponse,
 } from "./local-fetch";
@@ -41,12 +41,17 @@ export interface InjectStartRequest {
 // fetchAsset は取得失敗時に throw する（null を返さない）ため asset に欠落は生じない。
 export interface InjectTrackRequest {
   trackIndex: number;
-  asset: SerializedAsset;
+  asset: BlobAssetReference;
 }
 
 // overlay -> runner: ジャケットを注入する（release.cover !== null のときのみ送信）。
 export interface InjectCoverRequest {
-  asset: SerializedAsset;
+  asset: BlobAssetReference;
+}
+
+export interface BlobAssetReference {
+  filename: string;
+  blobUrl: string;
 }
 
 // runner -> overlay の進捗通知。
@@ -63,7 +68,9 @@ export interface ProtocolMap {
   // overlay -> background: HTTPS page から直接読めない loopback HTTP JSON を取得する。
   fetchLocalText(request: LocalFetchRequest): LocalFetchTextResponse;
   // overlay -> background: loopback HTTP asset を1件ずつ取得・直列化する。
-  fetchLocalAsset(request: LocalFetchAssetRequest): SerializedAsset;
+  fetchLocalAssetChunk(
+    request: LocalFetchAssetChunkRequest
+  ): LocalFetchAssetChunkResponse;
   // overlay -> runner: テキスト / SELECT 系を一括注入し、セッションを開始する。
   injectStart(request: InjectStartRequest): void;
   // overlay -> runner: 1 track の曲ファイルを注入する。

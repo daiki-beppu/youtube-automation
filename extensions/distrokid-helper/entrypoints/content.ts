@@ -7,6 +7,7 @@
 // 注入 primitive とメッセージ配線のみを持つ。
 // 「続ける」等の送信系操作は一切行わない（規約遵守・スコープ外）。
 
+import { blobUrlToFile } from "@/lib/asset-transfer";
 import { createDocumentInjector } from "@/lib/content-injector";
 import { InjectSession } from "@/lib/inject-session";
 import { MANIFEST_CONTENT_SCRIPT_MATCHES } from "@/lib/manifest";
@@ -26,10 +27,17 @@ export default defineContentScript({
     // 各メッセージ handler は例外を握りつぶさず伝播させる。@webext-core/messaging が
     // overlay 側 sendMessage を reject し、overlay が ERROR フェーズへ一元変換する（fail-loud）。
     onMessage("injectStart", ({ data }) => session.start(data.payload));
-    onMessage("injectTrack", ({ data }) =>
-      session.track(data.trackIndex, data.asset)
-    );
-    onMessage("injectCover", ({ data }) => session.cover(data.asset));
+    onMessage("injectTrack", async ({ data }) => {
+      return session.track(
+        data.trackIndex,
+        await blobUrlToFile(data.asset.blobUrl, data.asset.filename)
+      );
+    });
+    onMessage("injectCover", async ({ data }) => {
+      return session.cover(
+        await blobUrlToFile(data.asset.blobUrl, data.asset.filename)
+      );
+    });
     onMessage("injectFinish", () => session.finish());
     onMessage("stop", () => session.stop());
   },

@@ -5,7 +5,6 @@
 
 import { describe, it, expect, beforeEach } from "vitest";
 
-import type { SerializedAsset } from "../lib/asset-transfer";
 import {
   InjectSession,
   type Injector,
@@ -49,8 +48,8 @@ function makePayload(trackCount: number): ReleasePayload {
   };
 }
 
-function makeAsset(filename: string): SerializedAsset {
-  return { filename, mimeType: "audio/mpeg", base64: btoa("audio") };
+function makeAsset(filename: string): File {
+  return new File(["audio"], filename, { type: "audio/mpeg" });
 }
 
 interface InjectorCall {

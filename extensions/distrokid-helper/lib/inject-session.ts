@@ -9,7 +9,6 @@
 // エラーは握りつぶさず throw する。content は onMessage handler でそのまま伝播させ、
 // @webext-core/messaging が overlay 側の sendMessage を reject する（fail-loud）。
 
-import { decodeAsset, type SerializedAsset } from "./asset-transfer";
 import { PHASES, type Phase } from "./messaging";
 import type { ReleasePayload } from "./types";
 
@@ -44,21 +43,21 @@ export class InjectSession {
     this.payload = payload;
   }
 
-  track(trackIndex: number, asset: SerializedAsset): void {
+  track(trackIndex: number, file: File): void {
     const { tracks } = this.requirePayload().release;
     if (trackIndex < 0 || trackIndex >= tracks.length) {
       throw new Error(
         `trackIndex が範囲外です: ${trackIndex}（tracks=${tracks.length}）`
       );
     }
-    this.report(PHASES.INJECTING, `曲ファイルを注入中: ${asset.filename}`);
-    this.injector.injectTrackFile(trackIndex, decodeAsset(asset));
+    this.report(PHASES.INJECTING, `曲ファイルを注入中: ${file.name}`);
+    this.injector.injectTrackFile(trackIndex, file);
   }
 
-  cover(asset: SerializedAsset): void {
+  cover(file: File): void {
     this.requirePayload();
-    this.report(PHASES.INJECTING, `ジャケットを注入中: ${asset.filename}`);
-    this.injector.injectCover(decodeAsset(asset));
+    this.report(PHASES.INJECTING, `ジャケットを注入中: ${file.name}`);
+    this.injector.injectCover(file);
   }
 
   async finish(): Promise<void> {

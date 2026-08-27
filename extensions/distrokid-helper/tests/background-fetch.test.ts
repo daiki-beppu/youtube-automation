@@ -75,23 +75,39 @@ describe("background fetch adapter", () => {
     }
   );
 
-  it("relays one asset request and returns the serialized wire unchanged", async () => {
-    const wire = {
-      filename: "track.mp3",
-      mimeType: "audio/mpeg",
-      base64: "AQID",
-    };
-    vi.mocked(sendMessage).mockResolvedValueOnce(wire);
-
-    await expect(
-      backgroundFetchAsset(
-        "http://localhost:7873/distrokid/assets/track.mp3",
-        "track.mp3"
-      )
-    ).resolves.toBe(wire);
-    expect(sendMessage).toHaveBeenCalledWith("fetchLocalAsset", {
-      url: "http://localhost:7873/distrokid/assets/track.mp3",
-      filename: "track.mp3",
+  it("assembles chunks into a Blob URL and exposes an explicit revoke handle", async () => {
+    vi.stubGlobal("URL", {
+      createObjectURL: vi.fn(() => "blob:asset"),
+      revokeObjectURL: vi.fn(),
     });
+    vi.mocked(sendMessage)
+      .mockResolvedValueOnce({
+        base64: "AQI=",
+        contentType: "audio/mpeg",
+        totalSize: 3,
+      })
+      .mockResolvedValueOnce({
+        base64: "Aw==",
+        contentType: "audio/mpeg",
+        totalSize: 3,
+      });
+    const handle = await backgroundFetchAsset(
+      "http://localhost:7873/track.mp3",
+      "track.mp3"
+    );
+    expect(handle).toMatchObject({
+      filename: "track.mp3",
+      blobUrl: "blob:asset",
+    });
+    expect(sendMessage).toHaveBeenNthCalledWith(1, "fetchLocalAssetChunk", {
+      url: "http://localhost:7873/track.mp3",
+      offset: 0,
+    });
+    expect(sendMessage).toHaveBeenNthCalledWith(2, "fetchLocalAssetChunk", {
+      url: "http://localhost:7873/track.mp3",
+      offset: 2,
+    });
+    handle.revoke();
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:asset");
   });
 });

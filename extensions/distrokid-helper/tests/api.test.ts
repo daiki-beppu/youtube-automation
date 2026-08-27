@@ -20,10 +20,8 @@ import {
 import {
   fetchRelease,
   fetchCollectionRelease,
-  fetchAsset,
   ReleaseUnavailableError,
 } from "../lib/api";
-import { decodeAsset } from "../lib/asset-transfer";
 import type { ReleasePayload } from "../lib/types";
 
 const SAMPLE_PAYLOAD: ReleasePayload = {
@@ -66,14 +64,6 @@ function jsonResponse(status: number, body: unknown): Response {
     ok: status >= 200 && status < 300,
     status,
     json: async () => body,
-  } as unknown as Response;
-}
-
-function blobResponse(status: number, blob: Blob): Response {
-  return {
-    ok: status >= 200 && status < 300,
-    status,
-    blob: async () => blob,
   } as unknown as Response;
 }
 
@@ -302,67 +292,6 @@ describe("fetchCollectionRelease", () => {
     );
     await expect(promise).rejects.toThrow();
     await expect(promise).rejects.not.toBeInstanceOf(ReleaseUnavailableError);
-  });
-});
-
-describe("fetchAsset", () => {
-  it("asset を取得し filename / MIME 型 / base64 を持つ SerializedAsset を返す", async () => {
-    // Given: audio/mpeg の blob を返すサーバー
-    const blob = new Blob(["abc"], { type: "audio/mpeg" });
-    fetchMock.mockResolvedValue(blobResponse(200, blob));
-
-    // When
-    const asset = await fetchAsset(
-      "http://localhost:7873",
-      "/distrokid/assets/track-01.mp3",
-      "track-01.mp3"
-    );
-
-    // Then: 転送用に直列化されている（File ではなく base64）
-    expect(asset.filename).toBe("track-01.mp3");
-    expect(asset.mimeType).toBe("audio/mpeg");
-    expect(asset.base64).toBe(btoa("abc"));
-
-    // Then: content 側 decodeAsset で元バイト列の File に復元できる
-    const file = decodeAsset(asset);
-    expect(file).toBeInstanceOf(File);
-    expect(file.name).toBe("track-01.mp3");
-    expect(file.type).toBe("audio/mpeg");
-    expect(file.size).toBe(3);
-  });
-
-  it("asset_path は接頭辞込みのため baseUrl と連結して fetch する", async () => {
-    // Given
-    const blob = new Blob(["x"], { type: "image/png" });
-    fetchMock.mockResolvedValue(blobResponse(200, blob));
-
-    // When
-    await fetchAsset(
-      "http://localhost:7873/",
-      "/distrokid/assets/main.png",
-      "main.png"
-    );
-
-    // Then: 末尾スラッシュ正規化 + asset_path 連結（二重スラッシュ無し）
-    expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:7873/distrokid/assets/main.png",
-      expect.anything()
-    );
-  });
-
-  it("非 OK では Error を throw する", async () => {
-    // Given
-    const blob = new Blob([""], { type: "application/octet-stream" });
-    fetchMock.mockResolvedValue(blobResponse(404, blob));
-
-    // When / Then
-    await expect(
-      fetchAsset(
-        "http://localhost:7873",
-        "/distrokid/assets/missing.mp3",
-        "missing.mp3"
-      )
-    ).rejects.toThrow();
   });
 });
 
