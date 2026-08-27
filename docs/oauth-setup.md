@@ -13,7 +13,7 @@ skill / CLI ごとの実効 scope と read-only token の設計は [`oauth-scope
 
 ## 推奨ルート: `/setup --tool`
 
-### 3. GCP / ADC / OAuth を完了する
+### 5. GCP / ADC / OAuth を完了する
 
 setup は project 選択、Billing 紐付け、必要 API の有効化、ADC quota project、IAM、Reporting job を診断順に進める。外部の GCP 状態を変える前には、対象 project・account・実行コマンドを表示して承認を求める。
 
@@ -38,7 +38,7 @@ uv run yt-doctor --fix-client-secrets
 uv run yt-doctor --apply --json
 ```
 
-### 4. 完了を確認する
+### 6. 完了を確認する
 
 `uv run yt-doctor --apply --json` の `apply.stop_reason` が `completed` となり、次がすべて確認できれば `/setup --tool` は完了である。
 

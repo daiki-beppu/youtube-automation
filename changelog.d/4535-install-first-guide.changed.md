@@ -1,0 +1,2 @@
+- `docs/tool-setup.md` を、automation package と skill の同期後に新しい Claude Code セッションで setup wizard を開始する、インストール先行の手順へ更新
+- `docs/oauth-setup.md` の手順番号を `docs/tool-setup.md` の 4 ステップに続く 5 / 6 へ振り直し、各ステップへ `**目的:**` 行を追加
