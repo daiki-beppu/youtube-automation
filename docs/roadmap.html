@@ -5,73 +5,115 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>tayk 移行ロードマップ</title>
 <style>
+  /* Hallmark · macrostructure: Long Document · genre: editorial
+   * theme: custom · vibe: "nocturnal technical roadmap, measured progress" · paper: oklch(19% 0.018 255) · accent: oklch(73% 0.14 250)
+   * display: Iowan Old Style · body: Avenir Next · axes: dark / roman-serif / chromatic-blue
+   * studied: no · context: inferred · nav: none (standalone document) · footer: Ft2 inline rule · enrichment: none · v1.1.0
+   * Hallmark · pre-emit critique: P5 H5 E5 S5 R5 V4
+   */
   :root {
-    --bg: #0d1117;
-    --surface: #161b22;
-    --border: #30363d;
-    --text: #e6edf3;
-    --text-muted: #8b949e;
-    --accent-blue: #58a6ff;
-    --accent-green: #3fb950;
-    --accent-orange: #d29922;
-    --accent-purple: #bc8cff;
-    --accent-red: #f85149;
+    --color-paper: oklch(19% 0.018 255);
+    --color-surface: oklch(23% 0.021 255);
+    --color-rule: oklch(39% 0.025 255);
+    --color-text: oklch(94% 0.012 255);
+    --color-muted: oklch(70% 0.025 255);
+    --color-accent: oklch(73% 0.14 250);
+    --color-done: oklch(72% 0.15 148);
+    --color-caution: oklch(78% 0.13 78);
+    --color-accent-wash: oklch(73% 0.14 250 / 10%);
+    --color-accent-rule: oklch(73% 0.14 250 / 38%);
+    --color-done-wash: oklch(72% 0.15 148 / 15%);
+    --color-muted-wash: oklch(70% 0.025 255 / 12%);
+    --color-caution-wash: oklch(78% 0.13 78 / 9%);
+    --color-caution-rule: oklch(78% 0.13 78 / 35%);
+    --font-display: "Iowan Old Style", "YuMincho", "Hiragino Mincho ProN", serif;
+    --font-body: "Avenir Next", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+    --font-mono: "SFMono-Regular", "Cascadia Mono", "Liberation Mono", monospace;
+    --space-3xs: 0.25rem;
+    --space-2xs: 0.5rem;
+    --space-xs: 0.75rem;
+    --space-sm: 1rem;
+    --space-md: 1.5rem;
+    --space-lg: 2rem;
+    --space-xl: 3rem;
+    --radius-sm: 0.25rem;
+    /* .timeline 側で上書きすると .milestone-marker の負のオフセットにも継承される */
+    --timeline-gutter: var(--space-xl);
   }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
+  html,
+  body { overflow-x: clip; }
+
   body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', sans-serif;
-    background: var(--bg);
-    color: var(--text);
+    font-family: var(--font-body);
+    background: var(--color-paper);
+    color: var(--color-text);
     line-height: 1.7;
-    padding: 2rem;
-    max-width: 860px;
+    padding: var(--space-lg);
+    max-width: 75ch;
     margin: 0 auto;
   }
 
-  a { color: var(--accent-blue); }
+  a {
+    color: var(--color-accent);
+    text-underline-offset: 0.125rem;
+    white-space: nowrap;
+  }
+  a:hover { text-decoration-thickness: 0.125rem; }
+  a:focus-visible { outline: 0.125rem solid var(--color-accent); outline-offset: var(--space-3xs); }
+  a:active { color: var(--color-text); }
+  a[aria-disabled="true"] { color: var(--color-muted); pointer-events: none; }
 
   code {
-    font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+    font-family: var(--font-mono);
     font-size: 0.9em;
-    background: rgba(110, 118, 129, 0.2);
-    padding: 0.1em 0.35em;
-    border-radius: 4px;
+    background: var(--color-muted-wash);
+    padding: 0 var(--space-3xs);
+    border-radius: var(--radius-sm);
   }
 
   header {
-    text-align: center;
-    margin-bottom: 1.5rem;
-    padding-bottom: 1.5rem;
-    border-bottom: 1px solid var(--border);
+    margin-bottom: var(--space-md);
+    padding: var(--space-xl) 0 var(--space-md);
+    border-bottom: 1px solid var(--color-rule);
   }
 
-  header h1 { font-size: 2rem; font-weight: 700; margin-bottom: 0.25rem; }
-  header h1 span { color: var(--accent-blue); }
-  header .subtitle { color: var(--text-muted); font-size: 0.95rem; }
-  header .meta { color: var(--text-muted); font-size: 0.8rem; margin-top: 0.3rem; }
+  header h1 {
+    max-width: 12ch;
+    font-family: var(--font-display);
+    font-size: clamp(2.5rem, 8vw, 5rem);
+    font-style: normal;
+    font-weight: 600;
+    line-height: 1.05;
+    letter-spacing: -0.04em;
+    overflow-wrap: anywhere;
+    min-width: 0;
+    margin-bottom: var(--space-sm);
+  }
+  header h1 span { color: var(--color-accent); }
+  header .subtitle { max-width: 60ch; color: var(--color-muted); font-size: 1rem; }
+  header .meta { color: var(--color-muted); font-family: var(--font-mono); font-size: 0.75rem; margin-top: var(--space-2xs); }
 
   /* ── 正本への案内 ── */
   .source-note {
-    background: rgba(88, 166, 255, 0.08);
-    border: 1px solid rgba(88, 166, 255, 0.25);
-    border-radius: 8px;
-    padding: 1rem 1.25rem;
-    margin-bottom: 1.5rem;
+    background: var(--color-accent-wash);
+    border-block: 1px solid var(--color-accent-rule);
+    padding: var(--space-sm) 0;
+    margin-bottom: var(--space-md);
     font-size: 0.9rem;
-    color: var(--text-muted);
+    color: var(--color-muted);
   }
 
-  .source-note strong { color: var(--accent-blue); }
+  .source-note strong { color: var(--color-accent); font-family: var(--font-mono); }
 
   /* ── TL;DR ── */
   .tldr {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 1.25rem 1.5rem;
-    margin-bottom: 2.5rem;
+    background: var(--color-surface);
+    border-block: 1px solid var(--color-rule);
+    padding: var(--space-md);
+    margin-bottom: var(--space-xl);
     font-size: 0.95rem;
   }
 
@@ -80,70 +122,70 @@
     font-weight: 700;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: var(--text-muted);
-    margin-bottom: 0.6rem;
+    color: var(--color-muted);
+    margin-bottom: var(--space-2xs);
   }
 
   .tldr ul { list-style: none; }
-  .tldr li { margin-bottom: 0.4rem; padding-left: 1.2rem; position: relative; }
-  .tldr li::before { content: '›'; position: absolute; left: 0.2rem; color: var(--accent-blue); }
+  .tldr li { margin-bottom: var(--space-2xs); padding-left: var(--space-md); position: relative; }
+  .tldr li::before { content: '—'; position: absolute; left: 0; color: var(--color-accent); }
 
   /* ── Legend ── */
   .legend {
     display: flex;
-    gap: 1.5rem;
-    justify-content: center;
+    gap: var(--space-md);
+    justify-content: flex-start;
     flex-wrap: wrap;
-    margin-bottom: 2rem;
+    margin-bottom: var(--space-lg);
   }
 
   .legend-item {
     display: flex;
     align-items: center;
-    gap: 0.4rem;
+    gap: var(--space-2xs);
     font-size: 0.85rem;
-    color: var(--text-muted);
+    color: var(--color-muted);
   }
 
   .legend-dot {
-    width: 10px;
-    height: 10px;
+    width: var(--space-2xs);
+    height: var(--space-2xs);
     border-radius: 50%;
   }
 
-  .legend-dot.done { background: var(--accent-green); }
-  .legend-dot.doing { background: var(--accent-blue); box-shadow: 0 0 8px rgba(88, 166, 255, 0.5); }
-  .legend-dot.todo { background: var(--border); }
+  .legend-dot.done { background: var(--color-done); }
+  .legend-dot.doing { background: var(--color-accent); }
+  .legend-dot.todo { background: var(--color-rule); }
 
   /* ── Milestone timeline ── */
   .timeline {
     position: relative;
-    padding-left: 3rem;
+    padding-left: var(--timeline-gutter);
   }
 
   .timeline::before {
     content: '';
     position: absolute;
-    left: 15px;
-    top: 8px;
-    bottom: 8px;
-    width: 2px;
-    background: var(--border);
+    left: var(--space-sm);
+    top: var(--space-2xs);
+    bottom: var(--space-2xs);
+    width: 0.125rem;
+    background: var(--color-rule);
   }
 
   .milestone {
     position: relative;
-    margin-bottom: 2rem;
+    margin-bottom: var(--space-lg);
   }
 
   .milestone:last-child { margin-bottom: 0; }
 
   .milestone-marker {
     position: absolute;
-    left: -3rem;
-    top: 0.2rem;
-    width: 32px;
-    height: 32px;
+    left: calc(-1 * var(--timeline-gutter));
+    top: var(--space-3xs);
+    width: var(--space-lg);
+    height: var(--space-lg);
     border-radius: 50%;
     display: flex;
     align-items: center;
@@ -151,41 +193,37 @@
     font-size: 0.9rem;
     font-weight: 700;
     z-index: 1;
-    background: var(--bg);
+    background: var(--color-paper);
   }
 
   .milestone.done .milestone-marker {
-    background: var(--accent-green);
-    color: var(--bg);
+    background: var(--color-done);
+    color: var(--color-paper);
   }
 
   .milestone.doing .milestone-marker {
-    background: var(--bg);
-    border: 3px solid var(--accent-blue);
-    color: var(--accent-blue);
-    box-shadow: 0 0 14px rgba(88, 166, 255, 0.45);
+    background: var(--color-paper);
+    border: 0.125rem solid var(--color-accent);
+    color: var(--color-accent);
   }
 
   .milestone.todo .milestone-marker {
-    background: var(--bg);
-    border: 2px solid var(--border);
-    color: var(--text-muted);
+    background: var(--color-paper);
+    border: 0.125rem solid var(--color-rule);
+    color: var(--color-muted);
   }
 
   .milestone-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 1rem 1.25rem;
-    border-left: 3px solid var(--border);
+    background: var(--color-surface);
+    border-top: 1px solid var(--color-rule);
+    padding: var(--space-sm) var(--space-md);
   }
 
-  .milestone.done .milestone-card { border-left-color: var(--accent-green); }
+  .milestone.done .milestone-card { border-top-color: var(--color-done); }
 
   .milestone.doing .milestone-card {
-    border-left-color: var(--accent-blue);
-    border-color: rgba(88, 166, 255, 0.45);
-    box-shadow: 0 0 18px rgba(88, 166, 255, 0.12);
+    border-top-color: var(--color-accent);
+    background: var(--color-accent-wash);
   }
 
   .milestone.todo .milestone-card { opacity: 0.75; }
@@ -193,63 +231,63 @@
   .milestone-header {
     display: flex;
     align-items: baseline;
-    gap: 0.6rem;
+    gap: var(--space-2xs);
     flex-wrap: wrap;
-    margin-bottom: 0.4rem;
+    margin-bottom: var(--space-2xs);
   }
 
   .milestone-title { font-weight: 600; font-size: 1rem; }
 
-  .milestone.todo .milestone-title { color: var(--text-muted); }
+  .milestone.todo .milestone-title { color: var(--color-muted); }
 
   .status-tag {
     font-size: 0.7rem;
     font-weight: 700;
-    padding: 0.1rem 0.55rem;
-    border-radius: 10px;
+    padding: 0 var(--space-2xs);
+    border-radius: var(--radius-sm);
     white-space: nowrap;
   }
 
-  .status-tag.done { background: rgba(63, 185, 80, 0.2); color: var(--accent-green); }
-  .status-tag.doing { background: rgba(88, 166, 255, 0.2); color: var(--accent-blue); }
-  .status-tag.todo { background: rgba(139, 148, 158, 0.15); color: var(--text-muted); }
+  .status-tag.done { background: var(--color-done-wash); color: var(--color-done); }
+  .status-tag.doing { background: var(--color-accent-wash); color: var(--color-accent); }
+  .status-tag.todo { background: var(--color-muted-wash); color: var(--color-muted); }
 
   .milestone-effect {
     font-size: 0.88rem;
-    color: var(--text-muted);
+    color: var(--color-muted);
   }
 
-  .milestone-effect strong { color: var(--text); }
+  .milestone-effect strong { color: var(--color-text); }
 
   /* ── 注意書き ── */
   .note {
-    margin-top: 2.5rem;
-    background: rgba(210, 153, 34, 0.08);
-    border: 1px solid rgba(210, 153, 34, 0.3);
-    border-radius: 8px;
-    padding: 1rem 1.25rem;
+    margin-top: var(--space-xl);
+    background: var(--color-caution-wash);
+    border-block: 1px solid var(--color-caution-rule);
+    padding: var(--space-sm) 0;
     font-size: 0.85rem;
-    color: var(--text-muted);
+    color: var(--color-muted);
   }
 
-  .note strong { color: var(--accent-orange); }
+  .note strong { color: var(--color-caution); font-family: var(--font-mono); }
 
   /* ── Footer ── */
   footer {
-    margin-top: 3rem;
-    padding-top: 1.5rem;
-    border-top: 1px solid var(--border);
-    text-align: center;
-    color: var(--text-muted);
+    margin-top: var(--space-xl);
+    padding: var(--space-md) 0 var(--space-lg);
+    border-top: 1px solid var(--color-rule);
+    color: var(--color-muted);
     font-size: 0.8rem;
   }
 
   /* ── Responsive ── */
-  @media (max-width: 600px) {
-    body { padding: 1rem; }
-    .timeline { padding-left: 2.6rem; }
-    .timeline::before { left: 13px; }
-    .milestone-marker { left: -2.6rem; width: 28px; height: 28px; font-size: 0.8rem; }
+  @media (max-width: 37.5rem) {
+    body { padding: var(--space-sm); }
+    header { padding-top: var(--space-lg); }
+    .timeline { --timeline-gutter: 2.5rem; }
+    .timeline::before { left: var(--space-xs); }
+    .milestone-marker { width: 1.75rem; height: 1.75rem; font-size: 0.8rem; }
+    .milestone-card { padding-inline: var(--space-sm); }
   }
 </style>
 </head>
@@ -262,7 +300,7 @@
 </header>
 
 <div class="source-note">
-  <strong>ℹ️ 本ページについて</strong> — このロードマップは ADR-0021 のイベントベース方針に準拠しています。日付・期限は提示せず、マイルストーンの到達をもって次の段階へ進みます。正本は移行ガイド <a href="migration/python-to-tayk.md">docs/migration/python-to-tayk.md</a> です。本ページと差異がある場合は正本が優先されます。
+  <strong>本ページについて</strong> — このロードマップは ADR-0021 のイベントベース方針に準拠しています。日付・期限は提示せず、マイルストーンの到達をもって次の段階へ進みます。正本は移行ガイド <a href="migration/python-to-tayk.md">docs/migration/python-to-tayk.md</a> です。本ページと差異がある場合は正本が優先されます。
 </div>
 
 <div class="tldr">
@@ -283,7 +321,7 @@
 <div class="timeline">
 
   <div class="milestone done">
-    <div class="milestone-marker">✓</div>
+    <div class="milestone-marker">1</div>
     <div class="milestone-card">
       <div class="milestone-header">
         <span class="status-tag done">済</span>
@@ -294,7 +332,7 @@
   </div>
 
   <div class="milestone doing">
-    <div class="milestone-marker">●</div>
+    <div class="milestone-marker">2</div>
     <div class="milestone-card">
       <div class="milestone-header">
         <span class="status-tag doing">進行中</span>
@@ -351,7 +389,7 @@
 </div>
 
 <div class="note">
-  <strong>⚠ 日付は提示しません</strong> — 各マイルストーンの到達をもって次の段階へ進み、その都度移行ガイド（<a href="migration/python-to-tayk.md">python-to-tayk.md</a>）と GitHub Release で告知します。
+  <strong>日付は提示しません</strong> — 各マイルストーンの到達をもって次の段階へ進み、その都度移行ガイド（<a href="migration/python-to-tayk.md">python-to-tayk.md</a>）と GitHub Release で告知します。
 </div>
 
 <footer>
