@@ -8,17 +8,7 @@ pyscn に続く CI 品質ゲート候補として mutation testing ツール mut
 ## 結論
 
 **CI 品質ゲートとしては不採用。ローカルのオンデマンド検出力監査ツールとしては条件付きで有効。**
-
-- ゲート不採用の根拠: (1) mutant 実行前の固定オーバーヘッドだけで全スイート単プロセス 2 周
-  （stats 22 分 + clean tests。clean tests は実測で 2.6 時間経過後に flake 1 件で中断）が必要、
-  (2) 全 src への適用は mutant 数の粗い比例見積りで 11 時間超となり GitHub Actions の
-  job 上限（6 時間)を超える、(3) `-x` 前提の実行モデルのため flaky テスト 1 件で全体が中断する、
-  (4) ベースラインで原理的に失敗する静的契約テスト 41 件の deselect リストを保守し続ける
-  運用コストが発生する。
-- 条件付きで有効の根拠: 「閉じたモジュール + 対応テストディレクトリ」に限定すれば
-  39 分で完走し、実際に検出力の穴（legacy override 解決経路がどのテストにも固定されていない等）を
-  具体的な diff として特定できた。恒久導入はせず、必要時に本レポートの再現手順で実行する。
-- survived mutant の triage から得られたテスト強化候補は別 issue として起票する（スコープ外）。
+判定の根拠と運用条件は後段の「採否推奨」節にまとめる。
 
 ## 実測 PoC
 
@@ -30,7 +20,7 @@ pyscn に続く CI 品質ゲート候補として mutation testing ツール mut
 | 実行環境 | uv 0.12.3 / Python 3.11（`uv sync` した PoC 用 venv。nix devShell 経由の再現手順は後述） |
 | mutmut | 3.7.0（2026-07-31 リリース） |
 | 変異対象 | `src/youtube_automation/configuration/`（19 ファイル・3,075 行） |
-| テスト選択 | `tests/configuration/`（488 件）+ ベースラインで成立しない 41 nodeid を deselect |
+| テスト選択 | `tests/configuration/`（488 件）+ この選択範囲でベースラインが成立しない 2 nodeid を deselect（落とし穴 #4。全スイートに広げる場合は 41 nodeid） |
 | ベースコミット | `09e2255c` |
 
 ### 測定値
@@ -45,13 +35,18 @@ pyscn に続く CI 品質ゲート候補として mutation testing ツール mut
 | mutant 実行フェーズ | 1,692 秒（2.20 mutations/秒。CPU 数分の子プロセスで並列） |
 | 総 wall-clock | 2,357 秒（39 分 17 秒。再複製チェック・stats・clean tests・forced fail 含む） |
 
-参考値（フェーズ規模の把握用）:
+kill 率 73.5% は「`tests/configuration/` に対する」値である。survived の一部は
+`tests/application/` 等の上位テストが殺せる可能性があり、全スイートで測れば kill 率は上がる。
+ただし全スイートモードは後述のとおり実行時間の面で成立しなかったため、本 PoC では
+モジュール所有テストに対する検出力として解釈する。
+
+参考値（フェーズ規模の把握用。以降の節で「固定オーバーヘッド」と呼ぶ値の一次情報源）:
 
 | 項目 | 値 |
 |---|---|
 | 全スイート `pytest -n auto`（通常環境・10,190 件） | 565 秒 |
-| 全スイート単プロセス（mutants 複製内・stats 相当） | 1,318 秒 |
-| clean tests フェーズ（テスト選択なしの場合） | 9,404 秒経過時点で flake 1 件により中断（完走せず） |
+| 全スイート単プロセス（mutants 複製内・stats 相当） | 1,318 秒（22 分。stats / clean tests で 2 周するため固定費は ≧ 44 分） |
+| clean tests フェーズ（テスト選択なしの場合） | 9,404 秒（2.6 時間）経過時点で flake 1 件により中断（完走せず） |
 
 ### survived mutant の内訳と具体例
 
@@ -81,11 +76,6 @@ survived の相当数がこの類型で、triage では機械的に除外して�
 +        raise ConfigError("XXcomments セクションは object でなければなりませんXX")
 ```
 
-kill 率 73.5% は「`tests/configuration/` に対する」値である点に注意。
-survived の一部は `tests/application/` 等の上位テストが殺せる可能性があり、
-全スイートで測れば kill 率は上がる。ただし全スイートモードは後述のとおり実行時間の面で
-成立しなかったため、本 PoC ではモジュール所有テストに対する検出力として解釈する。
-
 ### pytest-xdist との併用
 
 競合しない（そのまま共存できる）。mutmut は pytest を `-x -q` の単プロセスで in-process
@@ -106,7 +96,7 @@ in-process 実行する。この複製モデルが本リポジトリのテスト
 | 1 | `tests/repo/` などが collection error（`.claude/skills/...py` が無い） | `mutants/` には `source_paths` + tests しか複製されず、リポジトリ実ファイルを読む contract テストが参照先を失う | `also_copy` でリポジトリ top-level をほぼ全部複製する |
 | 2 | `yt-collection-serve` の subprocess 起動テストが `FileNotFoundError` | `uv run --with mutmut` の一時 overlay 環境は console script の実体パスが揮発する | mutmut を PoC 環境の venv に `uv pip install` し、`uv run --no-sync mutmut run` で実行する |
 | 3 | `python3` を bare 起動するテストが `ModuleNotFoundError` | venv の bin が PATH に無いと系外 python が解決される | 同上（`uv run --no-sync` が PATH に `.venv/bin` を通す） |
-| 4 | ベースライン（無変異）で 41 テストが失敗し stats 収集が中断 | (a) symlink 実体・wheel/sdist 内容・nix devShell・codex CLI を検証する静的契約テストは `mutants/` 複製内で原理的に成立しない（`also_copy` の copytree が symlink を実体化する等）。(b) `warnings` の発生元 filename を検証するテストは trampoline 経由呼び出しで帰属が変わる | 該当 nodeid を `pytest_add_cli_args` の `--deselect` で除外（`-m "not repo_contract"` では不足 — マーカーが付いていない静的契約テストが `tests/configuration/` 等にも分布している） |
+| 4 | ベースライン（無変異）で 41 テストが失敗し stats 収集が中断（全スイートを選択した場合。本 PoC のテスト選択 `tests/configuration` では該当は 2 件） | (a) symlink 実体・wheel/sdist 内容・nix devShell・codex CLI を検証する静的契約テストは `mutants/` 複製内で原理的に成立しない（`also_copy` の copytree が symlink を実体化する等）。(b) `warnings` の発生元 filename を検証するテストは trampoline 経由呼び出しで帰属が変わる | 該当 nodeid を `pytest_add_cli_args` の `--deselect` で除外（`-m "not repo_contract"` では不足 — マーカーが付いていない静的契約テストが `tests/configuration/` 等にも分布している） |
 
 除外したのは静的リポジトリ契約・パッケージング・外部 CLI 系のみで、
 `configuration/` のロジックを exercise するテストではないため kill 率の測定は歪まない。
@@ -131,7 +121,7 @@ in-process 実行する。この複製モデルが本リポジトリのテスト
 
 ## 代替ツールとの簡易比較
 
-実測は mutmut のみ。以下は文献ベースの比較（2026-08-26 時点）。
+実測は mutmut のみ。以下は文献ベースの比較（2026-08-26 時点。参照先は末尾の「参照資料」節）。
 
 | 項目 | mutmut | cosmic-ray | mutatest |
 |---|---|---|---|
@@ -158,8 +148,8 @@ in-process 実行する。この複製モデルが本リポジトリのテスト
 mutant 数はコード量に概ね比例する（configuration/ 19 ファイルで 3,723 mutants）。
 src 全体 453 ファイルへの適用は粗い比例で約 **8.9 万 mutants**。mutant 実行レートを
 本 PoC の 2.20 mutations/秒（軽量な 488 テスト選択時の値 = 楽観値）としても
-**約 11.2 時間** + 固定オーバーヘッド（stats / clean tests で全スイート単プロセス 2 周 ≧ 44 分、
-実測では clean tests が 2.6 時間で中断）となり、GitHub Actions の job 上限 6 時間を超える。
+**約 11.2 時間** + 固定オーバーヘッド（stats / clean tests の全スイート単プロセス 2 周。
+実測値は前掲の「参考値」表を参照）となり、GitHub Actions の job 上限 6 時間を超える。
 実際には対象モジュールが広いほど mutant ごとの選択テスト数が増えレートは悪化するため、
 これは下限の見積りである。
 
@@ -168,7 +158,7 @@ src 全体 453 ファイルへの適用は粗い比例で約 **8.9 万 mutants**
 機構としては可能だが、本リポジトリでは固定オーバーヘッドが支配的で成立しない。
 `mutmut run` は mutant 名パターンの部分実行と結果キャッシュを持つため、変更ファイルの
 mutant に限定する運用は組める。しかし stats / clean tests の全スイート実行は
-変更量に関係なく毎回かかり（≧ 44 分/回）、さらに `-x` 前提のため 10,190 件スイート中の
+変更量に関係なく毎回かかり（前掲の「参考値」表）、さらに `-x` 前提のため 10,190 件スイート中の
 flaky テスト 1 件で全体が中断する（実測で 2 回発生: `test_collection_serve_lifecycle`、
 `test_broadcast_recovery` — いずれも通常環境の単体実行では green）。
 deselect リスト（41 nodeid）の保守も継続コストになる。
@@ -177,11 +167,21 @@ deselect リスト（41 nodeid）の保守も継続コストになる。
 
 ### 採否推奨
 
-**CI 品質ゲートとしては不採用**（上記 3 点: 実行時間・flake 感受性・deselect 保守）。
+**CI 品質ゲートとしては不採用。** 根拠は 4 点:
+
+1. mutant 実行前の固定オーバーヘッドだけで全スイート単プロセス 2 周が必要（前掲の「参考値」表）。
+2. 全 src への適用は mutant 数の粗い比例見積りで 11 時間超となり、GitHub Actions の
+   job 上限（6 時間）を超える。
+3. `-x` 前提の実行モデルのため、flaky テスト 1 件で全体が中断する。
+4. ベースラインで原理的に失敗する静的契約テストの deselect リスト（全スイート適用時 41 nodeid）を
+   保守し続ける運用コストが発生する。
+
 **「閉じたモジュール + 所有テストディレクトリ」単位のオンデマンド監査としては条件付き採用**:
-39 分で完走し、survived diff がテスト強化の具体的な出発点になることは実証済み。
+39 分で完走し、survived diff がテスト強化の具体的な出発点（legacy override の解決経路が
+どのテストにも固定されていない等）になることは実証済み。
 恒久導入（dev 依存追加・`[tool.mutmut]` コミット）は行わず、必要時に下記の再現手順で
-一時環境に導入して実行する。survived triage から出るテスト追加候補は別 issue に起票する。
+一時環境に導入して実行する。survived triage から出るテスト追加候補は別 issue に起票する
+（本レポートのスコープ外）。
 
 ## 再現手順
 
@@ -208,6 +208,8 @@ also_copy = [
     "hatch_build.py", "infra", "plans", "site", "skills-lock.json", "uv.lock",
 ]
 pytest_add_cli_args_test_selection = ["tests/configuration"]
+# 下の 2 件は `mutants/` 複製内で原理的に成立しない静的契約テスト（詳細は「落とし穴」節の #4）。
+# tests/configuration に分布する分だけを除外している
 pytest_add_cli_args = ["--deselect=tests/configuration/test_skill_config.py::test_load_skill_config_postmortem_warns_for_legacy_override", "--deselect=tests/configuration/test_thumbnail_skill_assets.py::test_thumbnail_compare_is_disclosed_as_a_thumbnail_mode"]
 EOF
 
@@ -231,10 +233,20 @@ nix develop --command bash -c '
 
 補足:
 
-- 実測は devShell 外の同一 uv toolchain（uv 0.12.3 / Python 3.11）で行い、
-  手順 3〜4 の devShell 経由でも同一結果になることを `mutmut results` で確認済み
+- 「測定値」表の実測は devShell 外の同一 uv toolchain（uv 0.12.3 / Python 3.11）で行った。
+  手順 3〜4 の devShell 経由については survived 件数（985）が一致することを `mutmut results` で
+  確認しており、kill 率・生成 mutant 数・実行時間の devShell 側での再現は取っていない
 - テスト選択を全スイートに広げる場合は `pytest_add_cli_args_test_selection` を外し、
-  「落とし穴」節の deselect 41 件（`tests/repo/` ほか）を追加する。ただし clean tests
+  「落とし穴」節 #4 の deselect 41 nodeid（`tests/repo/` ほか）を追加する。ただし clean tests
   フェーズが数時間規模になり flake で中断し得ることは上記のとおり
 - deselect 対象の全 nodeid 一覧は、`--maxfail=0` を `pytest_add_cli_args` に一時追加して
   `mutmut run` を実行するとベースライン失敗として一括列挙できる
+
+## 参照資料
+
+「代替ツールとの簡易比較」表のバージョン・リリース日・メンテ状況は、2026-08-26 時点で
+次のページ（PyPI のリリース履歴と GitHub のコミット / issue 活動）を参照した。
+
+- [mutmut (PyPI)](https://pypi.org/project/mutmut/) / [boxed/mutmut](https://github.com/boxed/mutmut)
+- [cosmic-ray (PyPI)](https://pypi.org/project/cosmic-ray/) / [sixty-north/cosmic-ray](https://github.com/sixty-north/cosmic-ray)
+- [mutatest (PyPI)](https://pypi.org/project/mutatest/) / [EvanKepner/mutatest](https://github.com/EvanKepner/mutatest)
