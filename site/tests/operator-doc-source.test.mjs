@@ -12,6 +12,7 @@ import {
 
 const expectedSources = [
   "ONBOARDING.md",
+  "docs/tool-setup.md",
   "docs/oauth-setup.md",
   "docs/features.md",
   "docs/workflow-cheatsheet.md",

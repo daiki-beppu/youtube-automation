@@ -18,7 +18,7 @@ const execFileAsync = promisify(execFile);
 const operatorSections = [
   {
     label: "はじめる",
-    routes: ["/oauth-setup", "/chrome-extension-install-guide"],
+    routes: ["/tool-setup", "/oauth-setup", "/chrome-extension-install-guide"],
     section: "getting-started",
   },
   {
@@ -297,9 +297,12 @@ test(`onboarding は直接描画だけを維持し、公開operator docs ${opera
   assert.equal(searchRoutes.includes("/onboarding"), false);
 
   const features = await readOperatorDoc("/features");
+  const toolSetup = await readOperatorDoc("/tool-setup");
   const oauth = await readOperatorDoc("/oauth-setup");
   assert.match(features, /href="\/workflow-cheatsheet"/);
   assert.match(onboarding, /href="\/oauth-setup"/);
+  assert.match(toolSetup, /href="\/oauth-setup"/);
+  assert.match(oauth, /href="\/tool-setup"/);
   assert.match(oauth, /href="\/onboarding"/);
   assert.match(
     onboarding,
@@ -310,9 +313,10 @@ test(`onboarding は直接描画だけを維持し、公開operator docs ${opera
 test(`operator docs の${generatedRouteCount} route は原本の先頭見出しを唯一の H1 として描画する`, async () => {
   const expectedTitles = new Map([
     ["/onboarding", "Onboarding"],
+    ["/tool-setup", "ツール導入"],
     [
       "/oauth-setup",
-      "ツール導入・GCP / YouTube API セットアップ",
+      "GCP / YouTube API セットアップ",
     ],
     ["/features", "全 skill カタログ"],
     ["/workflow-cheatsheet", "workflow チートシート"],

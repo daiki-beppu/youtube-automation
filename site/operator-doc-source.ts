@@ -14,6 +14,7 @@ export interface OperatorDocMapping {
 
 export const operatorDocMap = [
   { source: "ONBOARDING.md", route: "/onboarding" },
+  { source: "docs/tool-setup.md", route: "/tool-setup" },
   { source: "docs/oauth-setup.md", route: "/oauth-setup" },
   { source: "docs/features.md", route: "/features" },
   { source: "docs/workflow-cheatsheet.md", route: "/workflow-cheatsheet" },
