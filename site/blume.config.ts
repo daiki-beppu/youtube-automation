@@ -56,8 +56,12 @@ export default defineConfig({
           "/skills",
           "/features",
           "/workflow-cheatsheet",
-          "/dashboard",
           "/channel-workspace-migration",
+          {
+            display: "group",
+            label: "実験的機能",
+            items: ["/dashboard"],
+          },
         ],
       },
       {

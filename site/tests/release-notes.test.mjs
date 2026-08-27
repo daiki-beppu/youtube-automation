@@ -26,8 +26,8 @@ const operatorSections = [
     routes: [
       "/features",
       "/workflow-cheatsheet",
-      "/dashboard",
       "/channel-workspace-migration",
+      "/dashboard",
     ],
     section: "use",
   },
@@ -213,6 +213,15 @@ test("landing page は3区分を表示し、公開operator docs 6件だけへ1�
   assert.doesNotMatch(operatorMarkup, /href="\/onboarding(?:\/|"|#)/);
 });
 
+test("landing page は dashboard を使う内の実験的機能として表示する", async () => {
+  const use = sectionByAttribute(await readIndex(), "data-doc-section", "use");
+  const experimental = sectionByAttribute(use, "data-doc-group", "experimental");
+
+  assert.match(experimental, /<h3>実験的機能<\/h3>/);
+  assert.deepEqual(hrefsWithin(experimental), ["/dashboard"]);
+  assert.equal(hrefsWithin(use).filter((href) => href === "/dashboard").length, 1);
+});
+
 test("全ページ共通 sidebar と tabs は operator 区分・release規模・exact route ownership を保つ", async () => {
   const pages = [await readRelease("v5.6.0"), await readOperatorDoc("/features")];
 
@@ -243,6 +252,11 @@ test("全ページ共通 sidebar と tabs は operator 区分・release規模・
       assert.equal(hrefsWithin(sidebar).filter((href) => href === route).length, 1);
     }
     assert.equal(hrefsWithin(sidebar).includes("/onboarding"), false);
+
+    const experimentalLabel = sidebar.indexOf(">実験的機能<");
+    const dashboard = sidebar.indexOf('href="/dashboard"');
+    assert.notEqual(experimentalLabel, -1);
+    assert.ok(dashboard > experimentalLabel);
   }
 });
 
