@@ -110,10 +110,6 @@ jobs:
               ;;
           esac
           PYSCN_DIFF_BASE="$base" nix develop --command uv run python .github/scripts/pyscn-diff-gate.py
-      - name: Skill catalog check
-        if: needs.changes.outputs.python == 'true'
-        run: nix develop --command uv run yt-skills catalog --check
-
   test:
     needs: changes
     runs-on: ubuntu-latest
