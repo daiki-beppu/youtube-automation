@@ -72,16 +72,17 @@ body {
   margin: 0 0 1rem;
 }
 
-/* clamp 下限は最小幅 375px のタイトル列（約 343px = 100vw - padding 16px×2）に
- * `YouTube-Automation` 18 文字（letter-spacing 込みで約 8.3em）を 1 行で収める境界。
- * 収まりは font-size で担保する。
+/* 製品名を 1 行に保つのは font-size clamp であって overflow-wrap ではない。
+ * `-` は overflow-wrap の値に関係なく標準の改行候補点なので、列に収まらなければ
+ * どの設定でも `YouTube-` / `Automation` に割れる。clamp 下限 2rem は最小幅 375px
+ * のタイトル列（約 343px = 100vw - padding 16px×2）に `YouTube-Automation` 18 文字を
+ * 1 行で収める境界で、375 / 768 / 1440px の実測で 1 行を確認している。
  *
- * このファイルの他の可変幅見出しは `overflow-wrap: anywhere` を使うが、ここだけ
- * `break-word` にする。`anywhere` は min-content 幅を 1 文字まで縮めるため、列が
- * 収まる幅を持っていても製品名が語中で折れてしまう（本 issue の元の症状）。
- * `break-word` は min-content 幅に影響しないので通常時は 1 行を保ち、想定外の
- * フォント幅で単語が列に収まらないときだけ折り返す。既定値のままだと折り返せず、
- * `html, body { overflow-x: clip }` に当たって文字が見切れる。
+ * このファイルの他の可変幅見出しは `overflow-wrap: anywhere` を使うが、ここは
+ * `break-word` にする。列幅は `grid-template-columns: minmax(0, 1.45fr)` で決まり
+ * min-content には引かれない（3 値とも列幅 343px を実測）ため、ここでの差は
+ * 「収まらなかったときの最終手段」だけ。既定値のままだと単語が列を超えても
+ * 折り返せず `html, body { overflow-x: clip }` に当たって文字が見切れる。
  */
 .release-hero h1 {
   font-family: var(--release-font-sans);

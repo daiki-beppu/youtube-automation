@@ -211,9 +211,9 @@ test("hero h1 は 375px / 1440px の両端で製品名を語中で折らない�
   const declarations = /\.release-hero h1 \{([\s\S]*?)\}/.exec(css)?.[1] ?? "";
 
   assert.ok(declarations !== "", ".release-hero h1 の宣言が見つかりません");
-  // `anywhere` は min-content 幅を 1 文字まで縮め、列が足りていても
-  // `YouTube-A` / `utomation` の語中折れを招く。`break-word` は min-content を
-  // 変えないので通常時は 1 行を保ち、収まらないときだけ折り返す。
+  // 1 行を保つのは font-size clamp。overflow-wrap は収まらなかったときの最終手段で、
+  // 既定値のままだと折り返せず overflow-x: clip で文字が見切れる。
+  // `anywhere` はこのファイルの他の見出し用で、hero では最終手段を弱い方に留める。
   assert.doesNotMatch(declarations, /overflow-wrap:\s*anywhere/);
   assert.match(declarations, /overflow-wrap:\s*break-word/);
 
