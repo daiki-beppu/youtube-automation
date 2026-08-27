@@ -231,23 +231,15 @@ def test_music_engine_arg_is_written_to_youtube_json(tmp_path, engine):
 # ===================== Case 7: analytics.json benchmark セクションの既定 =====================
 
 
-def test_analytics_json_has_default_benchmark_parameters(tmp_path):
+def test_analytics_json_benchmark_contains_channels_only(tmp_path):
     # Given/When: 通常実行
     rc = main(_required_args(tmp_path))
 
-    # Then: benchmark セクションに SKILL.md Step 4 と同等のキーが揃う
+    # Then: benchmark セクションはチャンネル一覧だけを生成する
     assert rc == 0
     analytics = _read_json(_channel_dir(tmp_path) / "analytics.json")
     bm = analytics["benchmark"]
-    assert bm["channels"] == []
-    assert bm["scan_recent"] == 150
-    default_config = yaml.safe_load(
-        (REPO_ROOT / ".claude/skills/channel-research/config.default.yaml").read_text(encoding="utf-8")
-    )
-    assert default_config["benchmark"]["scan_recent"] == bm["scan_recent"]
-    assert "min_views" in bm
-    assert "freshness_days" in bm
-    assert "gemini_thumbnail_analysis" in bm
+    assert bm == {"channels": []}
 
 
 # ===================== Case 8: playlists / workflow / audio は空テンプレ =====================
