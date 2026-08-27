@@ -7,38 +7,10 @@ import re
 from pathlib import Path
 
 from youtube_automation.commands._shared.cli_harness import run_cli
+from youtube_automation.commands.system.changelog_fragments import SECTION_ORDER, load_fragments
 from youtube_automation.core.errors import ConfigError
 
-_SECTION_ORDER = (
-    "added",
-    "changed",
-    "deprecated",
-    "removed",
-    "fixed",
-    "security",
-    "migration",
-)
-_SECTION_NAMES = {section: section.title() for section in _SECTION_ORDER}
-_FRAGMENT_PATTERN = re.compile(rf"^.+\.(?P<type>{'|'.join(_SECTION_ORDER)})\.md$")
-
-
-def _load_fragments(fragments_dir: Path) -> dict[str, list[tuple[Path, str]]]:
-    grouped = {section: [] for section in _SECTION_ORDER}
-    if not fragments_dir.exists():
-        return grouped
-
-    for path in sorted(fragments_dir.glob("*.md")):
-        if path.name.casefold() == "readme.md":
-            continue
-        match = _FRAGMENT_PATTERN.fullmatch(path.name)
-        if match is None:
-            raise ConfigError(f"不正な changelog fragment ファイル名です: {path.name}")
-        body = path.read_text(encoding="utf-8").strip()
-        lines = [line for line in body.splitlines() if line.strip()]
-        if not lines or any(not line.startswith("- ") for line in lines):
-            raise ConfigError(f"changelog fragment は '- ' で始まる bullet で記述してください: {path.name}")
-        grouped[match.group("type")].append((path, "\n".join(lines)))
-    return grouped
+_SECTION_NAMES = {section: section.title() for section in SECTION_ORDER}
 
 
 def _unreleased_bounds(changelog: str) -> tuple[int, int]:
@@ -56,8 +28,8 @@ def _append_to_section(unreleased: str, section_type: str, bullets: str) -> str:
     match = re.search(rf"^{re.escape(heading)}\s*$", unreleased, re.MULTILINE)
     if match is None:
         insert_at = len(unreleased.rstrip())
-        wanted_index = _SECTION_ORDER.index(section_type)
-        for later_type in _SECTION_ORDER[wanted_index + 1 :]:
+        wanted_index = SECTION_ORDER.index(section_type)
+        for later_type in SECTION_ORDER[wanted_index + 1 :]:
             later = re.search(
                 rf"^### {re.escape(_SECTION_NAMES[later_type])}\s*$",
                 unreleased,
@@ -94,7 +66,7 @@ def _append_to_section(unreleased: str, section_type: str, bullets: str) -> str:
 
 def compile_fragments(changelog_path: Path, fragments_dir: Path, *, dry_run: bool = False) -> str | None:
     """Compile fragments and return the resulting CHANGELOG text, or None when empty."""
-    grouped = _load_fragments(fragments_dir)
+    grouped = load_fragments(fragments_dir)
     fragment_paths = [path for entries in grouped.values() for path, _ in entries]
     if not fragment_paths:
         return None
@@ -102,7 +74,7 @@ def compile_fragments(changelog_path: Path, fragments_dir: Path, *, dry_run: boo
     original = changelog_path.read_text(encoding="utf-8")
     start, end = _unreleased_bounds(original)
     unreleased = original[start:end]
-    for section_type in _SECTION_ORDER:
+    for section_type in SECTION_ORDER:
         entries = grouped[section_type]
         if entries:
             unreleased = _append_to_section(

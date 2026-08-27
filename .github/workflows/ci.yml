@@ -282,6 +282,10 @@ jobs:
             exit 1
           fi
           echo "Changelog fragment found"
+      # fragment の存在だけでなく、release prepare が要求する type 文字列と bullet 体裁も
+      # PR 時点で検証する。ラベルや path filter に関係なく changelog.d/ 全件を対象にする。
+      - name: Validate changelog fragments
+        run: python .github/scripts/validate-changelog-fragments.py
 
   adr-numbering:
     needs: changes

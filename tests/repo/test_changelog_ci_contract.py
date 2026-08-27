@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import re
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -16,6 +17,14 @@ _REPO_ROOT = REPO_ROOT
 _CLAUDE_PATH = _REPO_ROOT / "CLAUDE.md"
 _PR_TEMPLATE_PATH = _REPO_ROOT / ".github" / "PULL_REQUEST_TEMPLATE.md"
 _CI_WORKFLOW_PATH = _REPO_ROOT / ".github" / "workflows" / "ci.yml"
+_FRAGMENTS_DIR = _REPO_ROOT / "changelog.d"
+_FRAGMENTS_README_PATH = _FRAGMENTS_DIR / "README.md"
+_FRAGMENT_VALIDATOR_PATH = _REPO_ROOT / ".github" / "scripts" / "validate-changelog-fragments.py"
+_FRAGMENT_VALIDATOR_RELATIVE = ".github/scripts/validate-changelog-fragments.py"
+_FRAGMENT_VALIDATOR_STEP_NAME = "Validate changelog fragments"
+_FRAGMENT_VALIDATOR_COMMAND = f"python {_FRAGMENT_VALIDATOR_RELATIVE}"
+_CHANGELOG_UPDATE_STEP_NAME = "Check CHANGELOG update"
+_FRAGMENT_RULES_MODULE = "youtube_automation.commands.system.changelog_fragments"
 
 _CHANGELOG_LABEL = "skip-changelog"
 
@@ -120,6 +129,23 @@ def _run_changelog_gate(
         capture_output=True,
         text=True,
     )
+
+
+def _run_fragment_validator(fragments_dir: Path) -> subprocess.CompletedProcess[str]:
+    """CI が呼ぶ fragment 検証スクリプトを、指定した fragment 集合に対して実行する。"""
+    return subprocess.run(
+        [sys.executable, str(_FRAGMENT_VALIDATOR_PATH), "--fragments-dir", str(fragments_dir)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+
+def _write_fragment_fixture(tmp_path: Path, name: str, body: str) -> Path:
+    fragments_dir = tmp_path / "changelog.d"
+    fragments_dir.mkdir()
+    (fragments_dir / name).write_text(body, encoding="utf-8")
+    return fragments_dir
 
 
 def test_pull_request_template_matches_issue_485_contract() -> None:
@@ -268,3 +294,95 @@ def test_changelog_gate_paths_match_single_source_in_ci() -> None:
     assert ci_pattern_match.group(1) == _PATH_FILTER_PATTERN, (
         "CI workflow の path filter regex が _CHANGELOG_GATED_PATHS と一致しない"
     )
+
+
+def test_ci_workflow_changelog_job_validates_fragment_format() -> None:
+    """fragment の存在確認だけでなく、type / bullet 体裁の検証 step も持つことを固定する。"""
+    steps = _load_ci_workflow()["jobs"]["changelog"]["steps"]
+    names = [step.get("name") for step in steps]
+
+    assert _FRAGMENT_VALIDATOR_STEP_NAME in names, "fragment 体裁を検証する step が存在しない"
+    assert names.index(_FRAGMENT_VALIDATOR_STEP_NAME) > names.index(_CHANGELOG_UPDATE_STEP_NAME), (
+        "体裁検証は fragment 存在チェックの後に置く"
+    )
+
+    validator_step = steps[names.index(_FRAGMENT_VALIDATOR_STEP_NAME)]
+    assert validator_step.get("run", "").strip() == _FRAGMENT_VALIDATOR_COMMAND
+    # skip-changelog ラベルや path filter で握り潰さず、常に changelog.d/ 全件を検証する。
+    assert "if" not in validator_step
+    assert _FRAGMENT_VALIDATOR_PATH.is_file(), f"{_FRAGMENT_VALIDATOR_RELATIVE} が存在しない"
+
+
+def test_fragment_rules_module_imports_without_third_party_dependencies() -> None:
+    """changelog ゲートは nix / uv 無しで走るため、規則 module に third-party 依存を持たせない。"""
+    code = (
+        f"import sys; sys.path.insert(0, {str(_REPO_ROOT / 'src')!r}); "
+        # 空振りしない保証: site-packages が本当に外れていることを import 前に確かめる。
+        "assert not any('site-packages' in entry for entry in sys.path), sys.path; "
+        f"import {_FRAGMENT_RULES_MODULE}"
+    )
+
+    # -S で site を無効化し、-E で devShell の PYTHONPATH も無視する。依存が増えれば ImportError で落ちる。
+    result = subprocess.run([sys.executable, "-E", "-S", "-c", code], check=False, capture_output=True, text=True)
+
+    assert result.returncode == 0, f"素の python で {_FRAGMENT_RULES_MODULE} を import できない: {result.stderr}"
+
+
+def test_compile_and_ci_share_the_same_fragment_rules() -> None:
+    """release prepare 側が規則を再実装せず、CI と同じ module を使うことを固定する。"""
+    compile_source = _read_text(_REPO_ROOT / "src/youtube_automation/commands/system/changelog_compile.py")
+    validator_source = _read_text(_FRAGMENT_VALIDATOR_PATH)
+
+    assert f"from {_FRAGMENT_RULES_MODULE} import" in compile_source
+    assert f"from {_FRAGMENT_RULES_MODULE} import" in validator_source
+
+
+def test_changelog_fragment_validator_accepts_repository_fragments() -> None:
+    """リポジトリの changelog.d/ 全件が release prepare と同じ規則を満たす（#4649 の回帰防止）。"""
+    result = _run_fragment_validator(_FRAGMENTS_DIR)
+
+    assert result.returncode == 0, f"changelog.d/ に体裁違反がある: {result.stdout}{result.stderr}"
+    assert "changelog fragments are valid" in result.stdout
+
+
+@pytest.mark.parametrize(
+    ("fragment_name", "fragment_body", "expected_message"),
+    [
+        ("9-plain.fixed.md", "bullet ではない平文\n", "'- ' で始まる bullet で記述してください"),
+        ("9-continuation.fixed.md", "- 先頭行\n継続行\n", "'- ' で始まる bullet で記述してください"),
+        ("9-empty.fixed.md", "\n", "'- ' で始まる bullet で記述してください"),
+        ("9-unknown.improved.md", "- 本文\n", "不正な changelog fragment ファイル名です"),
+    ],
+)
+def test_changelog_fragment_validator_rejects_invalid_fragments(
+    tmp_path: Path,
+    fragment_name: str,
+    fragment_body: str,
+    expected_message: str,
+) -> None:
+    """type 文字列と bullet 体裁の違反を、いずれも PR 時点で fail させる。"""
+    fragments_dir = _write_fragment_fixture(tmp_path, fragment_name, fragment_body)
+
+    result = _run_fragment_validator(fragments_dir)
+
+    assert result.returncode == 1, f"体裁違反が検出されなかった: stdout={result.stdout!r}"
+    assert "::error::" in result.stdout, "GitHub Actions の error annotation で出力する"
+    assert expected_message in result.stdout
+    assert fragment_name in result.stdout, "違反ファイル名を出力に含める"
+
+
+def test_changelog_fragment_validator_does_not_consume_fragments(tmp_path: Path) -> None:
+    """検証は読み取りのみで、release prepare のように fragment を集約・削除しない。"""
+    fragments_dir = _write_fragment_fixture(tmp_path, "9-valid.fixed.md", "- 正しい bullet\n")
+
+    result = _run_fragment_validator(fragments_dir)
+
+    assert result.returncode == 0, f"正しい fragment が拒否された: {result.stdout}{result.stderr}"
+    assert (fragments_dir / "9-valid.fixed.md").read_text(encoding="utf-8") == "- 正しい bullet\n"
+
+
+def test_changelog_fragments_readme_documents_ci_validation() -> None:
+    """fragment の書き方の正本に、PR 時点で検証される旨を記載しておく。"""
+    readme = _read_text(_FRAGMENTS_README_PATH)
+
+    assert _FRAGMENT_VALIDATOR_RELATIVE in readme
