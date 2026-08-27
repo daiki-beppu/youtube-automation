@@ -5,7 +5,7 @@
 import { requireSenderTabId } from "@youtube-automation/extensions-shared/tab-relay";
 
 import { recordDistrokidRelease } from "../../shared/api";
-import { fetchLocalAsset, fetchLocalText } from "../lib/local-fetch";
+import { fetchLocalAssetChunk, fetchLocalText } from "../lib/local-fetch";
 import { onMessage, sendMessage } from "../lib/messaging";
 import { migrateServerSourcesStorage } from "../lib/storage";
 
@@ -34,7 +34,7 @@ export default defineBackground(() => {
   });
 
   onMessage("fetchLocalText", ({ data }) => fetchLocalText(data));
-  onMessage("fetchLocalAsset", ({ data }) => fetchLocalAsset(data));
+  onMessage("fetchLocalAssetChunk", ({ data }) => fetchLocalAssetChunk(data));
 
   onMessage("injectStart", ({ data, sender }) =>
     sendMessage("injectStart", data, requireSenderTabId(sender, "injectStart"))

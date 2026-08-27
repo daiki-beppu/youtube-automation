@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { fetchLocalAsset, fetchLocalText } from "../lib/local-fetch";
+import {
+  ASSET_CHUNK_SIZE,
+  fetchLocalAssetChunk,
+  fetchLocalText,
+} from "../lib/local-fetch";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -63,29 +67,40 @@ describe("background local fetch boundary", () => {
     });
   });
 
-  it("asset を1件だけ base64 wire に変換する", async () => {
+  it("asset を固定長 chunk で往復し、境界・端数・全 byte 値を保持する", async () => {
+    const source = Uint8Array.from(
+      { length: ASSET_CHUNK_SIZE + 257 },
+      (_, index) => index % 256
+    );
     vi.stubGlobal(
       "fetch",
       vi.fn(
         async () =>
-          new Response(new Uint8Array([1, 2, 3]), {
+          new Response(source, {
             status: 200,
-            headers: { "Content-Type": "audio/mpeg" },
+            headers: { "Content-Type": "audio/flac" },
           })
       )
     );
 
-    await expect(
-      fetchLocalAsset({
-        url: "http://music.localhost:7873/distrokid/assets/track.mp3",
-        filename: "track.mp3",
-      })
-    ).resolves.toEqual({
-      base64: "AQID",
-      filename: "track.mp3",
-      mimeType: "audio/mpeg",
+    const first = await fetchLocalAssetChunk({
+      url: "http://localhost:7873/distrokid/assets/track.flac",
+      offset: 0,
     });
-  });
+    const last = await fetchLocalAssetChunk({
+      url: "http://localhost:7873/distrokid/assets/track.flac",
+      offset: ASSET_CHUNK_SIZE,
+    });
+    const decode = (value: string) =>
+      Uint8Array.from(atob(value), (c) => c.charCodeAt(0));
+    const restored = new Uint8Array(source.length);
+    restored.set(decode(first.base64));
+    restored.set(decode(last.base64), ASSET_CHUNK_SIZE);
+    expect(restored).toEqual(source);
+    expect(first.base64.length).toBeLessThan(6 * 1024 * 1024);
+    expect(first.totalSize).toBe(source.length);
+    expect(last.contentType).toBe("audio/flac");
+  }, 60_000);
 
   it.each([404, 500])(
     "rejects a non-OK asset response: HTTP %i",
@@ -94,11 +109,10 @@ describe("background local fetch boundary", () => {
         "fetch",
         vi.fn(async () => new Response("failed", { status }))
       );
-
       await expect(
-        fetchLocalAsset({
-          url: "http://localhost:7873/distrokid/assets/track.mp3",
-          filename: "track.mp3",
+        fetchLocalAssetChunk({
+          url: `http://localhost:7873/distrokid/assets/${status}.mp3`,
+          offset: 0,
         })
       ).rejects.toThrow(`asset fetch failed: HTTP ${status}`);
     }

@@ -58,6 +58,10 @@ describe("distrokid content entrypoint", () => {
 
   it("registers exact handlers, preserves payloads/order, and relays progress", async () => {
     vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(new Blob(["asset"])))
+    );
+    vi.stubGlobal(
       "defineContentScript",
       (definition: typeof contentMocks.definition) => {
         contentMocks.definition = definition;
@@ -75,23 +79,28 @@ describe("distrokid content entrypoint", () => {
       "stop",
     ]);
     const payload = { release: { tracks: [] } };
-    const trackAsset = { filename: "track.mp3", base64: "AQID" };
-    const coverAsset = { filename: "main.png", base64: "BAUG" };
+    const trackAsset = { filename: "track.mp3", blobUrl: "blob:track" };
+    const coverAsset = { filename: "main.png", blobUrl: "blob:cover" };
     await contentMocks.handlers.get("injectStart")!({
       data: { payload },
     });
-    contentMocks.handlers.get("injectTrack")!({
+    await contentMocks.handlers.get("injectTrack")!({
       data: { trackIndex: 2, asset: trackAsset },
     });
-    contentMocks.handlers.get("injectCover")!({
+    await contentMocks.handlers.get("injectCover")!({
       data: { asset: coverAsset },
     });
     await contentMocks.handlers.get("injectFinish")!();
     contentMocks.handlers.get("stop")!();
 
     expect(contentMocks.start).toHaveBeenCalledWith(payload);
-    expect(contentMocks.track).toHaveBeenCalledWith(2, trackAsset);
-    expect(contentMocks.cover).toHaveBeenCalledWith(coverAsset);
+    expect(contentMocks.track).toHaveBeenCalledWith(
+      2,
+      expect.objectContaining({ name: "track.mp3" })
+    );
+    expect(contentMocks.cover).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "main.png" })
+    );
     expect(contentMocks.finish).toHaveBeenCalledOnce();
     expect(contentMocks.stop).toHaveBeenCalledOnce();
     expect(contentMocks.start.mock.invocationCallOrder[0]).toBeLessThan(
@@ -121,6 +130,10 @@ describe("distrokid content entrypoint", () => {
     "stop",
   ])("propagates %s handler rejection to the message caller", async (name) => {
     vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(new Blob(["asset"])))
+    );
+    vi.stubGlobal(
       "defineContentScript",
       (definition: typeof contentMocks.definition) => {
         contentMocks.definition = definition;
@@ -142,7 +155,7 @@ describe("distrokid content entrypoint", () => {
       data: {
         payload: {},
         trackIndex: 0,
-        asset: { filename: "asset" },
+        asset: { filename: "asset", blobUrl: "blob:asset" },
       },
     });
     await expect(Promise.resolve(result)).rejects.toThrow(`${name} rejected`);

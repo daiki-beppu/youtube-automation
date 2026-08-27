@@ -1,6 +1,6 @@
 {
   "name": "distrokid-helper",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "private": true,
   "description": "DistroKid 登録フォーム自動入力 Chrome 拡張 (WXT + React)",
   "type": "module",

@@ -21,8 +21,8 @@ WXT + React + TypeScript + Tailwind CSS + [@webext-core/messaging](https://webex
 | `entrypoints/content.ts`    | `distrokid.com/new` での DOM 注入（テキスト + overlay から受け取った File）                                 |
 | `entrypoints/overlay.content.ts` | Shadow DOM overlay を `distrokid.com/new` に mount                                                    |
 | `components/`               | draggable overlay UI + `useDistrokidRunner`（fetch / collection 選択 / 注入 / 停止 / 配信済み記録）       |
-| `lib/api.ts`                | `/distrokid/release.json` / assets の fetch client（`ReleaseUnavailableError`）                             |
-| `lib/asset-transfer.ts`     | overlay で fetch した asset を runner へ渡すための base64 直列化                                           |
+| `lib/api.ts`                | `/distrokid/release.json` の fetch client（`ReleaseUnavailableError`）                             |
+| `lib/asset-transfer.ts`     | Blob URL から注入用 `File` への復元                                           |
 | `lib/distrokid-injector.ts` | React 互換ネイティブイベント注入 + `DataTransfer` ファイル注入 + セレクタ契約                               |
 | `lib/messaging.ts`          | overlay ↔ background ↔ runner の型付き channel（`PHASES` 進捗契約）                                       |
 | `lib/storage.ts`            | 選択中ローカル配信元の永続化（既定 `http://youtube-automation.localhost:7873`）                             |
@@ -186,7 +186,7 @@ Apple Music credits は `profile.artist` を performer / producer の name 欄�
 
 `--allow-extension` は macOS Chrome profile の `Secure Preferences` を優先し、無ければ `Preferences` を読み、`extensions.settings[*].path` が絶対パスかつ basename is `distrokid-helper` の unpacked extension ID から `chrome-extension://<id>` を組み立てる。検出 0 件、複数 ID、Preferences read failure、JSON parse failure の場合だけ、Chrome の `chrome://extensions` で distrokid-helper の拡張 ID を確認し、手動 fallback として `--allow-origin chrome-extension://<EXTENSION_ID>` を指定する。`.output/chrome-mv3/` を直接ロードすると basename is `chrome-mv3` になり `--allow-extension distrokid-helper` では検出できないため、通常は `$HOME/chrome-extensions/distrokid-helper` のような固定パスをロードする。
 
-HTTPS の DistroKid page から loopback HTTP への mixed-content fetch は Chrome が拒否するため、`release.json` と asset（曲 / ジャケット）の GET は background service worker へ委譲する。background は URL を loopback HTTP に限定し、redirect を拒否する。asset は1件ずつ `lib/asset-transfer.ts` の base64 wire に変換して overlay へ返し、さらに同一タブの runner へ転送する。書き込み route は従来どおり background の extension origin + serve token に限定し、content script の注入先は `distrokid.com/new` に限定する。
+HTTPS の DistroKid page から loopback HTTP への mixed-content fetch は Chrome が拒否するため、`release.json` と asset（曲 / ジャケット）の GET は background service worker へ委譲する。background は URL を loopback HTTP に限定し、redirect を拒否する。asset は background から 4 MiB chunk で pull し、overlay で組み立てた Blob URL だけを同一タブの runner へ転送する。注入後は Blob URL を必ず revoke する。書き込み route は従来どおり background の extension origin + serve token に限定し、content script の注入先は `distrokid.com/new` に限定する。
 
 ## スコープ外
 

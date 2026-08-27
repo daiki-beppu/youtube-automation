@@ -7,7 +7,6 @@
 //   - distrokid.enabled=false / 未配置のチャンネルは /distrokid/* が 404（要件 #16）
 
 import { distrokidReleaseRoute } from "../../shared/constants";
-import { encodeAsset, type SerializedAsset } from "./asset-transfer";
 import type { ReleasePayload } from "./types";
 
 type Fetcher = (
@@ -109,19 +108,3 @@ export async function fetchCollectionRelease(
 // asset（曲 / ジャケット）を取得し、content へ転送するため直列化して返す。
 // assetPath は接頭辞 "/distrokid/assets/" または "/collections/<id>/distrokid/assets/" 込みのため
 // baseUrl と連結するだけでよい（dir mode の collection-scoped asset_path も同形式）。
-export async function fetchAsset(
-  baseUrl: string,
-  assetPath: string,
-  filename: string
-): Promise<SerializedAsset> {
-  const url = `${normalizeBaseUrl(baseUrl)}${assetPath}`;
-  const response = await fetch(url, { method: "GET" });
-
-  if (!response.ok) {
-    throw new Error(
-      `asset fetch failed (${assetPath}): HTTP ${response.status}`
-    );
-  }
-
-  return encodeAsset(filename, await response.blob());
-}

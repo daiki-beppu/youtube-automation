@@ -1,5 +1,3 @@
-import { encodeAsset, type SerializedAsset } from "./asset-transfer";
-
 export interface LocalFetchRequest {
   url: string;
 }
@@ -11,9 +9,18 @@ export interface LocalFetchTextResponse {
   statusText: string;
 }
 
-export interface LocalFetchAssetRequest extends LocalFetchRequest {
-  filename: string;
+export interface LocalFetchAssetChunkRequest extends LocalFetchRequest {
+  offset: number;
 }
+
+export interface LocalFetchAssetChunkResponse {
+  base64: string;
+  contentType: string;
+  totalSize: number;
+}
+
+export const ASSET_CHUNK_SIZE = 4 * 1024 * 1024;
+const assetCache = new Map<string, Promise<Blob>>();
 
 function assertLoopbackHttpUrl(value: string): URL {
   const url = new URL(value);
@@ -51,12 +58,48 @@ export async function fetchLocalText(
   };
 }
 
-export async function fetchLocalAsset(
-  request: LocalFetchAssetRequest
-): Promise<SerializedAsset> {
-  const response = await fetchLoopback(request.url);
-  if (!response.ok) {
-    throw new Error(`asset fetch failed: HTTP ${response.status}`);
+function bytesToBase64(bytes: Uint8Array): string {
+  const chunks: string[] = [];
+  for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+    chunks.push(
+      String.fromCharCode(...bytes.subarray(offset, offset + 0x8000))
+    );
   }
-  return encodeAsset(request.filename, await response.blob());
+  return btoa(chunks.join(""));
+}
+
+async function loadAsset(url: string): Promise<Blob> {
+  const response = await fetchLoopback(url);
+  if (!response.ok)
+    throw new Error(`asset fetch failed: HTTP ${response.status}`);
+  return response.blob();
+}
+
+export async function fetchLocalAssetChunk(
+  request: LocalFetchAssetChunkRequest
+): Promise<LocalFetchAssetChunkResponse> {
+  if (!Number.isSafeInteger(request.offset) || request.offset < 0) {
+    throw new Error("asset chunk offset must be a non-negative integer");
+  }
+  const key = assertLoopbackHttpUrl(request.url).href;
+  const pending = assetCache.get(key) ?? loadAsset(key);
+  assetCache.set(key, pending);
+  try {
+    const blob = await pending;
+    if (request.offset > blob.size)
+      throw new Error("asset chunk offset exceeds asset size");
+    const end = Math.min(request.offset + ASSET_CHUNK_SIZE, blob.size);
+    const bytes = new Uint8Array(
+      await blob.slice(request.offset, end).arrayBuffer()
+    );
+    if (end >= blob.size) assetCache.delete(key);
+    return {
+      base64: bytesToBase64(bytes),
+      contentType: blob.type,
+      totalSize: blob.size,
+    };
+  } catch (error) {
+    assetCache.delete(key);
+    throw error;
+  }
 }

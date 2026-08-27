@@ -124,7 +124,6 @@ const discoveryMocks = vi.hoisted(() => ({
 vi.mock("../../shared/server-discovery", () => discoveryMocks);
 
 vi.mock("../lib/background-fetch", async () => {
-  const { encodeAsset } = await import("../lib/asset-transfer");
   return {
     backgroundFetch: (input: string | URL | Request, init?: RequestInit) =>
       init === undefined ? fetch(input) : fetch(input, init),
@@ -132,7 +131,7 @@ vi.mock("../lib/background-fetch", async () => {
       const response = await fetch(url, { method: "GET" });
       if (!response.ok)
         throw new Error(`asset fetch failed: HTTP ${response.status}`);
-      return encodeAsset(filename, await response.blob());
+      return { filename, blobUrl: `blob:${filename}`, revoke: () => {} };
     },
   };
 });
