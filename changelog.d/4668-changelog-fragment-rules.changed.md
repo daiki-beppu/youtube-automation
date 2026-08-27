@@ -1,0 +1,2 @@
+- changelog fragment の許可 type と bullet 体裁を `CLAUDE.md` / `changelog.d/README.md` / `docs/development.md` へ明示し、CI と同一のローカル検証コマンドを併記した（#4668）。
+- `changelog.d/README.md` に検証を通る記述例と間違えやすい形の対照表を追加し、記述例そのものを validator へ掛ける契約テストで固定した（#4668）。
