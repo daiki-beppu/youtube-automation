@@ -29,6 +29,7 @@ const operatorSections = [
       "/channel-workspace-migration",
       "/dashboard",
       "/cloud-execution",
+      "/live-chat-reply",
       "/live-streaming",
     ],
     section: "use",
@@ -226,14 +227,19 @@ test("landing page はライブ配信を使う内の「こんなこともでき�
   assert.equal(hrefsWithin(use).filter((href) => href === "/live-streaming").length, 1);
 });
 
-test("landing page は dashboard とクラウド実行を使う内の実験的機能として表示する", async () => {
+test("landing page は実験的機能を使う内の専用グループとして表示する", async () => {
   const use = sectionByAttribute(await readIndex(), "data-doc-section", "use");
   const experimental = sectionByAttribute(use, "data-doc-group", "experimental");
 
   assert.match(experimental, /<h3>実験的機能<\/h3>/);
-  assert.deepEqual(hrefsWithin(experimental), ["/dashboard", "/cloud-execution"]);
+  assert.deepEqual(hrefsWithin(experimental), [
+    "/dashboard",
+    "/cloud-execution",
+    "/live-chat-reply",
+  ]);
   assert.equal(hrefsWithin(use).filter((href) => href === "/dashboard").length, 1);
   assert.equal(hrefsWithin(use).filter((href) => href === "/cloud-execution").length, 1);
+  assert.equal(hrefsWithin(use).filter((href) => href === "/live-chat-reply").length, 1);
 });
 
 test("全ページ共通 sidebar と tabs は operator 区分・release規模・exact route ownership を保つ", async () => {
@@ -270,9 +276,11 @@ test("全ページ共通 sidebar と tabs は operator 区分・release規模・
     const experimentalLabel = sidebar.indexOf(">実験的機能<");
     const dashboard = sidebar.indexOf('href="/dashboard"');
     const cloudExecution = sidebar.indexOf('href="/cloud-execution"');
+    const liveChatReply = sidebar.indexOf('href="/live-chat-reply"');
     assert.notEqual(experimentalLabel, -1);
     assert.ok(dashboard > experimentalLabel);
     assert.ok(cloudExecution > experimentalLabel);
+    assert.ok(liveChatReply > experimentalLabel);
   }
 });
 
@@ -328,6 +336,7 @@ test(`operator docs の${generatedRouteCount} route は原本の先頭見出し�
     ],
     ["/cloud-execution", "クラウドでの実行"],
     ["/live-streaming", "24時間ライブ配信を始める"],
+    ["/live-chat-reply", "ライブチャット自動返信を試す"],
   ]);
 
   assert.equal(expectedTitles.size, generatedRouteCount);
