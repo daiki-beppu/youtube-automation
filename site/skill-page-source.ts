@@ -161,7 +161,7 @@ const renderSkillIndex = (
   if (uncategorized.length > 0) {
     sections.push(`## 未分類\n\n${uncategorized.join("\n")}`);
   }
-  return `# 全 skill 一覧\n\n${skills.length} 個の skill を用途別に掲載しています。\n\n${sections.join("\n\n")}\n`;
+  return `# 発動条件から skill を使う\n\n${skills.length} 個の skill について、発動条件・前提・前後工程を確認できます。目的に合う skill がまだ決まっていない場合は、[できることの 1 行要約から探す](/features)ページへ進んでください。\n\n${sections.join("\n\n")}\n`;
 };
 
 const assertInsideRepository = (repositoryRoot: string, path: string): string => {

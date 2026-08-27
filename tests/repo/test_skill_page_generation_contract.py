@@ -27,6 +27,10 @@ def test_skill_catalog_matches_all_distributed_skills() -> None:
     assert len(catalog_names) == len(set(catalog_names))
     assert set(catalog_names) == skill_names
 
+    introduction = FEATURES_PATH.read_text(encoding="utf-8").split("## ", 1)[0]
+    mentioned_counts = [int(value) for value in re.findall(r"(?:全\s*|^)(\d+)\s*個", introduction)]
+    assert all(count == len(skill_names) for count in mentioned_counts)
+
 
 def test_skill_catalog_keeps_exactly_nine_categories() -> None:
     features = FEATURES_PATH.read_text(encoding="utf-8")
