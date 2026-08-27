@@ -28,7 +28,7 @@ ${prerequisites}
 INTERNAL INSTRUCTION MUST NOT LEAK
 `;
 
-const catalog = `# 全 skill カタログ
+const catalog = `# できることから skill を探す
 
 ## category one
 
@@ -116,10 +116,12 @@ test("一覧と個別ページの先頭 H1 を title へ分離する", async () 
   const index = result.entries.find((entry) => entry.slug === "/skills");
   const alpha = result.entries.find((entry) => entry.slug === "/skills/alpha");
 
-  assert.equal(index.data.title, "全 skill 一覧");
+  assert.equal(index.data.title, "発動条件から skill を使う");
+  assert.match(index.body.text, /発動条件・前提・前後工程/);
+  assert.match(index.body.text, /\[できることの 1 行要約から探す\]\(\/features\)/);
   assert.doesNotMatch(index.body.text, /^# /mu);
   assert.match(index.body.text, /^## category one$/mu);
-  assert.match(index.raw, /^---\ntitle: "全 skill 一覧"\ntype: doc\n---\n\n/mu);
+  assert.match(index.raw, /^---\ntitle: "発動条件から skill を使う"\ntype: doc\n---\n\n/mu);
   assert.equal(alpha.data.title, "/alpha");
   assert.doesNotMatch(alpha.body.text, /^# /mu);
   assert.match(alpha.body.text, /^## 前提$/mu);
@@ -172,7 +174,8 @@ test("production build は一覧と22個の個別ページを公開する", asyn
   assert.doesNotMatch(index, /href="\/skills\/flop-analysis"/);
   assert.doesNotMatch(index, /href="\/skills\/channel-status"/);
   assert.equal((index.match(/<h1\b/g) ?? []).length, 1);
-  assert.match(index, /<h1[^>]*>全 skill 一覧<\/h1>/);
+  assert.match(index, /<h1[^>]*>発動条件から skill を使う<\/h1>/);
+  assert.match(index, /href="\/features"/);
   assert.match(thumbnail, /--compare/);
   assert.match(thumbnail, /--test/);
   assert.match(thumbnail, /--iterate/);

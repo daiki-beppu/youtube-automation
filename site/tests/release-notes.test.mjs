@@ -216,6 +216,11 @@ test(`landing page は3区分を表示し、公開operator docs ${operatorRoutes
   );
   assert.deepEqual(operatorHrefs, operatorRoutes);
   assert.doesNotMatch(operatorMarkup, /href="\/onboarding(?:\/|"|#)/);
+  assert.match(operatorMarkup, />skill を探す</);
+  assert.match(operatorMarkup, />skill を使う</);
+  assert.doesNotMatch(operatorMarkup, />skill (?:カタログ|ガイド)</);
+  assert.match(operatorMarkup, /できることの 1 行要約/);
+  assert.match(operatorMarkup, /発動条件・前提・前後工程/);
 });
 
 test("landing page はライブ配信を使う内の「こんなこともできる！」として表示する", async () => {
@@ -308,6 +313,7 @@ test(`onboarding は直接描画だけを維持し、公開operator docs ${opera
   const toolSetup = await readOperatorDoc("/tool-setup");
   const oauth = await readOperatorDoc("/oauth-setup");
   assert.match(features, /href="\/workflow-cheatsheet"/);
+  assert.match(features, /href="\/skills"/);
   assert.match(onboarding, /href="\/oauth-setup"/);
   assert.match(toolSetup, /href="\/oauth-setup"/);
   assert.match(oauth, /href="\/tool-setup"/);
@@ -326,7 +332,7 @@ test(`operator docs の${generatedRouteCount} route は原本の先頭見出し�
       "/oauth-setup",
       "GCP / YouTube API セットアップ",
     ],
-    ["/features", "全 skill カタログ"],
+    ["/features", "できることから skill を探す"],
     ["/workflow-cheatsheet", "workflow チートシート"],
     ["/chrome-extension-install-guide", "Chrome 拡張インストールガイド"],
     ["/dashboard", "Analytics dashboard"],

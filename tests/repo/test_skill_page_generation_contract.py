@@ -19,6 +19,12 @@ def _catalog_names() -> list[str]:
     return re.findall(r"^\| /([a-z0-9-]+) \|", FEATURES_PATH.read_text(encoding="utf-8"), re.MULTILINE)
 
 
+def _introduction_counts(features: str) -> list[int]:
+    """冒頭（最初の `## ` 見出しより前）に書かれた skill 件数表記を全て拾う。"""
+    introduction = features.split("## ", 1)[0]
+    return [int(value) for value in re.findall(r"(\d+)\s*個", introduction)]
+
+
 def test_skill_catalog_matches_all_distributed_skills() -> None:
     skill_names = _skill_names()
     catalog_names = _catalog_names()
@@ -26,6 +32,20 @@ def test_skill_catalog_matches_all_distributed_skills() -> None:
     assert len(skill_names) == 22
     assert len(catalog_names) == len(set(catalog_names))
     assert set(catalog_names) == skill_names
+
+    # 件数表記は無くてもよいが、書くなら実数と一致していること。
+    features = FEATURES_PATH.read_text(encoding="utf-8")
+    assert all(count == len(skill_names) for count in _introduction_counts(features))
+
+
+def test_stale_skill_count_in_introduction_is_detected() -> None:
+    """件数チェックが vacuous に成立しない（stale な件数を実際に検出できる）ことを固定する。"""
+    stale = "# できることから skill を探す\n\nskill は全部で 40 個あります。\n\n## ワークフロー管理\n"
+
+    assert _introduction_counts(stale) == [40]
+    assert _introduction_counts(stale.replace("40 個", "22 個")) == [22]
+    assert _introduction_counts("# 見出し\n\n個別の使い分けは別ページへ。\n\n## カテゴリ\n") == []
+    assert _introduction_counts("# 見出し\n\n## カテゴリ\n\n全 40 個と書かれた本文\n") == []
 
 
 def test_skill_catalog_keeps_exactly_nine_categories() -> None:

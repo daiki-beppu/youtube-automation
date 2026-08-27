@@ -1,6 +1,6 @@
-# 全 skill カタログ
+# できることから skill を探す
 
-`yt-skills sync` で各チャンネルリポジトリに配布される Claude Code skill の一覧（全 **40 個**）。各行は「なにができるか」（what）の 1 行要約。発動トリガー・前提・前後工程はサイトの [skill ガイド](/skills)、詳細手順は `.claude/skills/<name>/SKILL.md` を参照。
+`yt-skills sync` で各チャンネルリポジトリに配布される skill を、カテゴリ別の「なにができるか」という 1 行要約から探せます。使う skill が決まったら、サイトの [発動条件・前提・前後工程を確認するページ](/skills) へ進み、詳細手順は `.claude/skills/<name>/SKILL.md` を参照してください。
 
 > 個別の使い分けは各カテゴリの冒頭リンクや [`docs/workflow-cheatsheet.md`](workflow-cheatsheet.md)（workflow 系）も併せて参照。
 
