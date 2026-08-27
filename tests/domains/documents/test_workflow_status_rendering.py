@@ -53,6 +53,22 @@ def test_renderer_escapes_untrusted_values_and_keeps_page_read_only() -> None:
     assert "color-scheme: dark" in html
 
 
+def test_renderer_embeds_shared_foundation_before_workflow_styles() -> None:
+    html = render_workflow_status(_snapshot())
+
+    assert html.count("--color-paper: oklch(13.5% 0.028 250deg)") == 1
+    assert html.index("/* Documents design foundation") < html.index("/* Hallmark · macrostructure: Operational Queue")
+
+
+def test_renderer_defers_page_gutters_to_shared_foundation() -> None:
+    css = render_workflow_status(_snapshot()).split("<style>", 1)[1].split("</style>", 1)[0]
+    screen_css = css.split("/* Hallmark · macrostructure: Operational Queue", 1)[1]
+
+    assert css.count("padding: var(--space-page)") == 1
+    assert "body {" not in screen_css
+    assert "main {" not in screen_css
+
+
 def test_renderer_provides_css_only_client_filters_for_all_statuses() -> None:
     html = render_workflow_status(_snapshot())
 
@@ -154,4 +170,5 @@ def test_empty_snapshot_renders_an_explicit_empty_state() -> None:
     html = render_workflow_status(snapshot)
 
     assert "コレクションはありません" in html
+    assert "padding: var(--space-xl) var(--space-sm)" in html
     validate_workflow_status_html(html)

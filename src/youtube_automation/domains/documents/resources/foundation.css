@@ -1,0 +1,56 @@
+/* Documents design foundation · Midnight */
+:root {
+  color-scheme: dark;
+  --color-paper: oklch(13.5% 0.028 250deg);
+  --color-surface: oklch(17% 0.026 250deg);
+  --color-surface-muted: oklch(21% 0.032 250deg);
+  --color-ink: oklch(94% 0.012 250deg);
+  --color-ink-muted: oklch(72% 0.025 250deg);
+  --color-rule: oklch(30% 0.028 250deg);
+  --color-rule-strong: oklch(48% 0.045 250deg);
+  --color-link: oklch(72% 0.14 250deg);
+  --color-link-soft: oklch(24% 0.06 250deg);
+  --color-focus: oklch(78% 0.16 250deg);
+  --color-pass-border: oklch(72% 0.13 155deg);
+  --color-pass-text: oklch(80% 0.12 155deg);
+  --color-fail-border: oklch(68% 0.18 25deg);
+  --color-fail-text: oklch(78% 0.14 25deg);
+  --color-fail-soft: oklch(23% 0.065 25deg);
+  --color-warning-border: oklch(76% 0.14 80deg);
+  --color-warning-text: oklch(83% 0.11 80deg);
+  --color-warning-soft: oklch(23% 0.05 80deg);
+  --font-body: "Geist", "Inter", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Yu Gothic", Meiryo, system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --space-3xs: 0.25rem;
+  --space-2xs: 0.5rem;
+  --space-xs: 0.75rem;
+  --space-sm: 1rem;
+  --space-md: 1.5rem;
+  --space-lg: 2rem;
+  --space-xl: 3rem;
+  --space-page: clamp(var(--space-sm), 4vw, var(--space-xl));
+  --measure-page: 72rem;
+  --measure-copy: 68ch;
+  --radius-media: 0.25rem;
+  --focus-outline: 0.1875rem solid var(--color-focus);
+  --focus-offset: var(--space-3xs);
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-body);
+  line-height: 1.6;
+}
+*, *::before, *::after { box-sizing: border-box; }
+html,
+body { max-width: 100%; overflow-x: clip; }
+body { margin: 0; padding: var(--space-page); background: var(--color-paper); }
+.page-header, main { width: min(var(--measure-page), 100%); min-width: 0; margin-inline: auto; }
+h1, h2 { font-style: normal; }
+button:focus-visible,
+a:focus-visible,
+summary:focus-visible,
+[tabindex]:focus-visible,
+audio:focus-visible,
+video:focus-visible {
+  outline: var(--focus-outline);
+  outline-offset: var(--focus-offset);
+}
