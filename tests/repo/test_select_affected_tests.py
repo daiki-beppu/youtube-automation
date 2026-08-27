@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import functools
 import importlib.util
 import json
 import re
@@ -15,7 +16,6 @@ from tests.helpers.tests_tree import shared_tests_tree_lock
 
 SCRIPT = REPO_ROOT / ".github/scripts/select-affected-tests.py"
 _GITHUB_ASSET_DIRECTORIES: Final = (".github/workflows", ".github/scripts")
-_NON_TEST_PREFIXES: Final = ("tests/helpers/", "tests/fixtures/")
 
 
 def _load_selector():
@@ -379,24 +379,44 @@ def _github_assets() -> list[str]:
     )
 
 
-def _tests_referencing(basename: str) -> set[str]:
-    """basename を path 成分として参照する test module を実ツリーから集める。
+@functools.lru_cache(maxsize=1)
+def _github_asset_reference_index(non_test_prefixes: tuple[str, ...]) -> dict[str, frozenset[str]]:
+    """`.github/` 資産の basename ごとに、参照する test module を実ツリーから集める。
 
-    期待値を PATH_TEST_MAP から導かないのは、対応表が間違っていても通る自己言及
-    テストになるため。直前が path 区切り相当であることを要求し、`extensions.yml`
-    が `release-extensions.yml` の一部へ誤マッチするのを防ぐ。
+    parametrize 1 件ごとに `tests/` を舐め直すと、資産の件数だけツリー全体を再読込
+    することになる。全 basename の突き合わせを 1 回の走査へまとめ、結果だけ持つ。
+    走査は `shared_tests_tree_lock()` の内側で初回だけ動く。
+
+    直前が path 区切り相当であることを要求し、`extensions.yml` が
+    `release-extensions.yml` の一部へ誤マッチするのを防ぐ。
     """
-    pattern = re.compile(r"(?<![A-Za-z0-9_.\-])" + re.escape(basename))
-    referencing: set[str] = set()
+    patterns = {
+        basename: re.compile(r"(?<![A-Za-z0-9_.\-])" + re.escape(basename))
+        for basename in {PurePosixPath(asset).name for asset in _github_assets()}
+    }
+    index: dict[str, set[str]] = {basename: set() for basename in patterns}
     for path in (REPO_ROOT / "tests").rglob("*.py"):
         relative = path.relative_to(REPO_ROOT).as_posix()
         if not (path.name.startswith("test_") or path.name.endswith("_test.py")):
             continue
-        if relative.startswith(_NON_TEST_PREFIXES):
+        if relative.startswith(non_test_prefixes):
             continue
-        if pattern.search(path.read_text(encoding="utf-8")):
-            referencing.add(relative)
-    return referencing
+        text = path.read_text(encoding="utf-8")
+        for basename, pattern in patterns.items():
+            if basename in text and pattern.search(text):
+                index[basename].add(relative)
+    return {basename: frozenset(referencing) for basename, referencing in index.items()}
+
+
+def _tests_referencing(basename: str, non_test_prefixes: tuple[str, ...]) -> frozenset[str]:
+    """basename を path 成分として参照する test module を返す。
+
+    期待値を PATH_TEST_MAP から導かないのは、対応表が間違っていても通る自己言及
+    テストになるため。`non_test_prefixes` は selector の `FAIL_SAFE_PREFIXES` を
+    呼び出し側から渡す。ここで値を複製すると、ドリフトを検出するはずのこの module
+    自身が selector とのドリフトを起こす。
+    """
+    return _github_asset_reference_index(non_test_prefixes)[basename]
 
 
 @pytest.mark.parametrize(
@@ -466,7 +486,7 @@ def test_github_asset_change_selects_every_test_that_references_it(asset: str) -
 
     with shared_tests_tree_lock():
         result = selector.select_targets(REPO_ROOT, [asset])
-        referencing = _tests_referencing(PurePosixPath(asset).name)
+        referencing = _tests_referencing(PurePosixPath(asset).name, selector.FAIL_SAFE_PREFIXES)
 
     if result is None:
         # ALL は全件実行なので契約は満たす。意図せず fail-safe へ落ちる path が
