@@ -6,6 +6,7 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/inter";
+@import "@fontsource-variable/space-grotesk";
 @import "./tokens.css";
 
 @custom-variant dark (&:is(.dark *));
@@ -77,8 +78,8 @@
   --palette-purple-preview: #a565f8;
   --dashboard-accent-surface: color-mix(
     in srgb,
-    var(--palette-series-base) 8%,
-    white
+    var(--palette-series-base) 3%,
+    var(--background)
   );
   --dashboard-accent-surface-strong: color-mix(
     in srgb,
@@ -131,7 +132,7 @@
 .dark {
   --dashboard-accent-surface: color-mix(
     in srgb,
-    var(--palette-series-base) 10%,
+    var(--palette-series-base) 3%,
     var(--background)
   );
   --dashboard-accent-surface-strong: color-mix(
@@ -371,11 +372,7 @@
 
 @layer components {
   .dashboard-palette-background {
-    background-color: color-mix(
-      in srgb,
-      var(--palette-series-base) 3%,
-      var(--background)
-    );
+    background-color: var(--dashboard-accent-surface);
   }
 
   .dashboard-workbench {
@@ -411,9 +408,9 @@
     font-family: var(--font-display);
     font-size: var(--text-display);
     font-style: normal;
-    font-weight: 700;
-    letter-spacing: -0.015em;
-    line-height: 1.02;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    line-height: 1;
     overflow-wrap: anywhere;
   }
 

@@ -1,5 +1,5 @@
 :root {
-  --font-display: Georgia, "Times New Roman", serif;
+  --font-display: "Space Grotesk Variable", ui-sans-serif, system-ui, sans-serif;
   --font-body: "Inter Variable", sans-serif;
   --font-mono: ui-monospace, "SFMono-Regular", Consolas, monospace;
   --space-sm: 0.5rem;
