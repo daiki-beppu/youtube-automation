@@ -47,7 +47,8 @@ interface ChunkRequest {
 }
 
 interface ServedAsset {
-  bytes: Uint8Array;
+  // Response の BodyInit は ArrayBuffer 裏付けの view だけを受ける（SharedArrayBuffer 不可）。
+  bytes: Uint8Array<ArrayBuffer>;
   contentType: string;
 }
 
@@ -154,7 +155,7 @@ function isAssetReference(message: WireMessage): boolean {
 }
 
 // 0..255 全域を巡回させ、chunk 境界での byte 取りこぼし・ずれを検出可能にする。
-function makeSource(size: number): Uint8Array {
+function makeSource(size: number): Uint8Array<ArrayBuffer> {
   const bytes = new Uint8Array(size);
   for (let index = 0; index < size; index += 1) {
     bytes[index] = index % 256;
