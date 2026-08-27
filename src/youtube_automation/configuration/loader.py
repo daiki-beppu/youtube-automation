@@ -678,15 +678,17 @@ def _build_analytics(merged: dict) -> Analytics:
         "gemini_thumbnail_analysis",
         "analyze_thumbnails",
     }
-    unexpected = set(bm) - {"channels"} - legacy_benchmark_keys
+    bm_keys = set(bm)
+    unexpected = bm_keys - {"channels"} - legacy_benchmark_keys
     if unexpected:
         names = ", ".join(sorted(unexpected))
         raise ConfigError(f"benchmark に未知のキーがあります: {names}")
-    legacy = set(bm) & legacy_benchmark_keys
+    legacy = bm_keys & legacy_benchmark_keys
     if legacy:
-        names = ", ".join(sorted(legacy))
+        # 複数キーを結合するときは 1 件ずつ benchmark. を前置する（トップレベルキーと誤読させない）
+        names = ", ".join(f"benchmark.{key}" for key in sorted(legacy))
         warnings.warn(
-            f"analytics.json の benchmark.{names} は非推奨であり反映されません。"
+            f"analytics.json の {names} は非推奨であり反映されません。"
             "config/skills/benchmark.yaml に設定してください",
             DeprecationWarning,
             stacklevel=2,
