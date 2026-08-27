@@ -8,6 +8,7 @@ import re
 import time
 import uuid
 from dataclasses import dataclass, field
+from enum import Enum
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -47,10 +48,36 @@ class Response:
     status: int = HTTPStatus.OK
     headers: Mapping[str, str] = field(default_factory=dict)
     content_type: str = "application/json; charset=utf-8"
+    after_send: Callable[[], None] | None = None
+    """Run once the body has been flushed — for routes that end the process."""
 
 
 Handler = Callable[[Request], object | Response]
-OriginPolicy = Callable[[str | None], bool]
+
+
+class OriginDecision(Enum):
+    """What the chassis does with a request's `Origin` before the route runs."""
+
+    ALLOW = "allow"
+    """Serve the route and echo the origin back in the CORS headers."""
+
+    OMIT = "omit"
+    """Serve the route but send no CORS headers, so a browser drops the response."""
+
+    REJECT = "reject"
+    """Answer 403 without running the route."""
+
+
+@dataclass(frozen=True)
+class OriginQuery:
+    """Everything a policy may look at when judging one request's origin."""
+
+    origin: str | None
+    method: str
+    path: str
+
+
+OriginPolicy = Callable[[OriginQuery], OriginDecision]
 
 
 @dataclass(frozen=True)
@@ -79,14 +106,12 @@ class LocalHTTPServer(ThreadingHTTPServer):
         max_body_bytes: int,
         stop_path: Path | None,
         idle_timeout_seconds: float | None,
-        enforce_origin: bool = True,
     ) -> None:
         self.routes = tuple((route, _compile_path(route.path_pattern)) for route in routes)
         self.origin_policy = origin_policy
         self.max_body_bytes = max_body_bytes
         self.stop_path = stop_path
         self.idle_timeout_seconds = idle_timeout_seconds
-        self.enforce_origin = enforce_origin
         self.last_request_at = time.monotonic()
         super().__init__(address, _RequestHandler)
 
@@ -134,7 +159,7 @@ class _RequestHandler(BaseHTTPRequestHandler):
         self.send_response(code)
         self._emit_headers(
             {"X-Content-Type-Options": "nosniff"},
-            self._cors_headers(self.headers.get("Origin") if hasattr(self, "headers") else None),
+            self._cors_headers(),
             {"Content-Type": "application/json; charset=utf-8", "Content-Length": str(len(body))},
         )
         if self.command != "HEAD":
@@ -172,8 +197,7 @@ class _RequestHandler(BaseHTTPRequestHandler):
         if any(route.method == "OPTIONS" and pattern.fullmatch(split.path) for route, pattern in self.server.routes):
             self._dispatch()
             return
-        origin = self.headers.get("Origin")
-        if not self.server.origin_policy(origin):
+        if self._origin_decision() is OriginDecision.REJECT:
             self._json(HTTPStatus.FORBIDDEN, {"error": "origin not allowed"})
             return
         path = urlsplit(self.path).path
@@ -184,7 +208,7 @@ class _RequestHandler(BaseHTTPRequestHandler):
         self.send_response(HTTPStatus.NO_CONTENT)
         self._emit_headers(
             {"X-Content-Type-Options": "nosniff"},
-            self._cors_headers(origin),
+            self._cors_headers(),
             {
                 "Access-Control-Allow-Methods": ", ".join(methods),
                 "Access-Control-Allow-Headers": "Content-Type",
@@ -193,8 +217,7 @@ class _RequestHandler(BaseHTTPRequestHandler):
         )
 
     def _dispatch(self) -> None:
-        origin = self.headers.get("Origin")
-        if self.server.enforce_origin and origin is not None and not self.server.origin_policy(origin):
+        if self._origin_decision() is OriginDecision.REJECT:
             self._json(HTTPStatus.FORBIDDEN, {"error": "origin not allowed"})
             return
         split = urlsplit(self.path)
@@ -224,6 +247,9 @@ class _RequestHandler(BaseHTTPRequestHandler):
                 self._bytes(response.status, response.payload, response.content_type, response.headers)
             else:
                 self._json(response.status, response.payload, response.headers)
+            if response.after_send is not None:
+                self.wfile.flush()
+                response.after_send()
         except _HTTPError as error:
             self._json(error.status, {"error": str(error)})
         except ValidationError as error:
@@ -258,31 +284,46 @@ class _RequestHandler(BaseHTTPRequestHandler):
             if status == HTTPStatus.NO_CONTENT
             else json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode()
         )
-        self.send_response(status)
-        self._emit_headers(
-            {"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"},
-            self._cors_headers(self.headers.get("Origin")),
-            headers or {},
-            {"Content-Type": "application/json; charset=utf-8", "Content-Length": str(len(body))},
-        )
-        if self.command != "HEAD" and body:
-            self.wfile.write(body)
+        self._bytes(status, body, "application/json; charset=utf-8", headers or {})
 
     def _bytes(self, status: int, body: bytes, content_type: str, headers: Mapping[str, str]) -> None:
         self.send_response(status)
         self._emit_headers(
             {"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"},
-            self._cors_headers(self.headers.get("Origin")),
+            self._cors_headers(),
             headers,
             {"Content-Type": content_type, "Content-Length": str(len(body))},
         )
         if self.command != "HEAD" and body:
             self.wfile.write(body)
 
-    def _cors_headers(self, origin: str | None) -> Mapping[str, str]:
-        if origin is not None and self.server.origin_policy(origin):
-            return {"Access-Control-Allow-Origin": origin, "Vary": "Origin"}
-        return {}
+    def _request_origin(self) -> str | None:
+        headers = getattr(self, "headers", None)
+        return headers.get("Origin") if headers is not None else None
+
+    def _origin_decision(self) -> OriginDecision:
+        """Judge the request origin once, so every response path agrees on it.
+
+        Routes never emit CORS headers themselves; the chassis owns the decision
+        and the headers derived from it (#4452).
+        """
+        cached = getattr(self, "_origin_decision_cache", None)
+        if cached is not None:
+            return cached
+        query = OriginQuery(
+            self._request_origin(),
+            getattr(self, "command", ""),
+            urlsplit(getattr(self, "path", "")).path,
+        )
+        decision = self.server.origin_policy(query)
+        self._origin_decision_cache = decision
+        return decision
+
+    def _cors_headers(self) -> Mapping[str, str]:
+        origin = self._request_origin()
+        if origin is None or self._origin_decision() is not OriginDecision.ALLOW:
+            return {}
+        return {"Access-Control-Allow-Origin": origin, "Vary": "Origin"}
 
     def _emit_headers(self, *sources: Mapping[str, str]) -> None:
         """Send each header name exactly once; later sources override earlier ones.

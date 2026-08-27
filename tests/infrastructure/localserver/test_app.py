@@ -8,7 +8,22 @@ from typing import Iterator
 import pytest
 
 from youtube_automation.core.errors import ConfigError, ValidationError
-from youtube_automation.infrastructure.localserver.app import Request, Response, Route, create_server
+from youtube_automation.infrastructure.localserver.app import (
+    OriginDecision,
+    OriginQuery,
+    Request,
+    Response,
+    Route,
+    create_server,
+)
+
+
+def _reject_unknown_origins(query: OriginQuery) -> OriginDecision:
+    if query.origin is None:
+        return OriginDecision.OMIT
+    if query.origin == "https://allowed.example":
+        return OriginDecision.ALLOW
+    return OriginDecision.REJECT
 
 
 @contextmanager
@@ -16,7 +31,7 @@ def running(routes: list[Route], *, max_body_bytes: int = 32) -> Iterator[tuple[
     server = create_server(
         routes,
         port=0,
-        origin_policy=lambda origin: origin == "https://allowed.example",
+        origin_policy=_reject_unknown_origins,
         max_body_bytes=max_body_bytes,
     )
     thread = threading.Thread(target=server.serve_forever)

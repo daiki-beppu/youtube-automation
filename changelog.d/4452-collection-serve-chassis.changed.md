@@ -1,1 +1,1 @@
-`yt-collection-serve` の HTTP transport を共通 localserver chassis の route table・body limit・response writer 上へ移行しました。route handler と chassis の双方が載せる同名ヘッダー（`Access-Control-Allow-Origin` / `Vary` など）は送出前に畳み込むため、拡張からの fetch で CORS 検証が壊れることはありません。
+- `yt-collection-serve` の HTTP 層を共通 localserver chassis へ移行しました。routing・CORS origin 判定・body 上限は chassis が所有し、各エンドポイントは socket を持たない handler 関数になりました。
