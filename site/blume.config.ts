@@ -62,6 +62,11 @@ export default defineConfig({
             label: "実験的機能",
             items: ["/dashboard", "/cloud-execution"],
           },
+          {
+            display: "group",
+            label: "こんなこともできる！",
+            items: ["/live-streaming"],
+          },
         ],
       },
       {

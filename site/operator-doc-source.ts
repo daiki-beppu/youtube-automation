@@ -27,6 +27,7 @@ export const operatorDocMap = [
     route: "/channel-workspace-migration",
   },
   { source: "docs/cloud-execution.md", route: "/cloud-execution" },
+  { source: "docs/live-streaming.md", route: "/live-streaming" },
 ] as const satisfies readonly OperatorDocMapping[];
 
 /** Internal marker allowing staged operator entries through release-only fields. */

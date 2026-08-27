@@ -24,6 +24,7 @@ OPERATOR_DOC_SOURCES = (
     "docs/dashboard.md",
     "docs/channel-workspace-migration.md",
     "docs/cloud-execution.md",
+    "docs/live-streaming.md",
 )
 NONPUBLIC_DOC_PREFIXES = (
     "docs/adr/",

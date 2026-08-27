@@ -19,6 +19,7 @@ const expectedSources = [
   "docs/dashboard.md",
   "docs/channel-workspace-migration.md",
   "docs/cloud-execution.md",
+  "docs/live-streaming.md",
 ];
 
 const createRepository = async (map = operatorDocMap) => {
