@@ -12,11 +12,13 @@ import pytest
 import yaml
 
 from tests.helpers.paths import REPO_ROOT
+from youtube_automation.commands.system.changelog_fragments import SECTION_ORDER
 
 _REPO_ROOT = REPO_ROOT
 _CLAUDE_PATH = _REPO_ROOT / "CLAUDE.md"
 _PR_TEMPLATE_PATH = _REPO_ROOT / ".github" / "PULL_REQUEST_TEMPLATE.md"
 _CI_WORKFLOW_PATH = _REPO_ROOT / ".github" / "workflows" / "ci.yml"
+_DEVELOPMENT_DOC_PATH = _REPO_ROOT / "docs" / "development.md"
 _FRAGMENTS_DIR = _REPO_ROOT / "changelog.d"
 _FRAGMENTS_README_PATH = _FRAGMENTS_DIR / "README.md"
 _FRAGMENT_VALIDATOR_PATH = _REPO_ROOT / ".github" / "scripts" / "validate-changelog-fragments.py"
@@ -27,6 +29,17 @@ _CHANGELOG_UPDATE_STEP_NAME = "Check CHANGELOG update"
 _FRAGMENT_RULES_MODULE = "youtube_automation.commands.system.changelog_fragments"
 
 _CHANGELOG_LABEL = "skip-changelog"
+
+# 書式の正本（README）に置く実行可能な記述例の在り処。節を限定するのは、
+# 「間違えやすい形」の反例を記述例として拾わないため。
+_README_EXAMPLE_HEADING = "## 記述例"
+_README_EXAMPLE_FENCE = "```markdown"
+# CLAUDE.md が書く type 一覧は SECTION_ORDER から組み立てて完全一致で照合する。
+# 各要素の包含だけを見ると、実装から type を削っても文書に残った古い一覧を検出できない。
+_DOCUMENTED_TYPE_LIST = " / ".join(SECTION_ORDER)
+_DOCUMENTED_BULLET_RULE = "全非空行を `- ` 始まりの bullet にする"
+# 規則の到達性を担保する文書。いずれも takt の自作 workflow 資産と独立に残る（#4666）。
+_FRAGMENT_RULE_DOCS = (_FRAGMENTS_README_PATH, _DEVELOPMENT_DOC_PATH, _CLAUDE_PATH)
 
 # CHANGELOG ゲート対象パスの単一ソース。CI workflow の path filter regex を
 # この定数と照合する。
@@ -139,6 +152,27 @@ def _run_fragment_validator(fragments_dir: Path) -> subprocess.CompletedProcess[
         capture_output=True,
         text=True,
     )
+
+
+def _readme_example() -> tuple[str, str]:
+    """README の「記述例」節から fragment のファイル名と本文を取り出す。
+
+    節を跨がないのは、後続の「間違えやすい形」に載る反例を記述例と取り違えないため。
+    """
+    readme = _read_text(_FRAGMENTS_README_PATH)
+    heading_index = readme.find(_README_EXAMPLE_HEADING)
+    assert heading_index != -1, f"{_README_EXAMPLE_HEADING} の節が無い"
+
+    section_end = readme.find("\n## ", heading_index + len(_README_EXAMPLE_HEADING))
+    section = readme[heading_index:] if section_end == -1 else readme[heading_index:section_end]
+
+    name_match = re.search(r"`changelog\.d/([^`/]+\.md)`", section)
+    assert name_match is not None, "記述例の節に fragment のファイル名が無い"
+
+    body_match = re.search(rf"{re.escape(_README_EXAMPLE_FENCE)}\n(.*?)```", section, re.DOTALL)
+    assert body_match is not None, f"記述例の節に {_README_EXAMPLE_FENCE} の本文が無い"
+
+    return name_match.group(1), body_match.group(1)
 
 
 def _write_fragment_fixture(tmp_path: Path, name: str, body: str) -> Path:
@@ -386,3 +420,43 @@ def test_changelog_fragments_readme_documents_ci_validation() -> None:
     readme = _read_text(_FRAGMENTS_README_PATH)
 
     assert _FRAGMENT_VALIDATOR_RELATIVE in readme
+
+
+def test_readme_example_passes_the_fragment_validator(tmp_path: Path) -> None:
+    """README の記述例がそのまま validator を通る（#4668）。
+
+    書式の正本に実例を置いても、それ自体が規則違反なら誤りを増やすだけになる。
+    文字列一致ではなく実際に validator へ掛けることで、例が腐った時点で fail させる。
+    """
+    name, body = _readme_example()
+    fragments_dir = _write_fragment_fixture(tmp_path, name, body)
+
+    result = _run_fragment_validator(fragments_dir)
+
+    assert result.returncode == 0, f"README の記述例が validator を通らない: {result.stdout}{result.stderr}"
+
+
+def test_local_fragment_validation_command_is_documented() -> None:
+    """CI と同一のコマンドで手元検証できる経路を、規則の到達点すべてに書いておく（#4668）。"""
+    for path in _FRAGMENT_RULE_DOCS:
+        assert _FRAGMENT_VALIDATOR_COMMAND in _read_text(path), (
+            f"{path.relative_to(_REPO_ROOT)} にローカル検証コマンドの記載が無い"
+        )
+
+
+def test_claude_md_states_fragment_type_set_and_bullet_rule() -> None:
+    """常時読み込まれる CLAUDE.md が、type 集合と bullet 体裁を実装と揃えて明示する（#4668）。"""
+    claude = _read_text(_CLAUDE_PATH)
+
+    assert _DOCUMENTED_TYPE_LIST in claude, (
+        f"CLAUDE.md の type 一覧が SECTION_ORDER と一致しない: {_DOCUMENTED_TYPE_LIST}"
+    )
+    assert _DOCUMENTED_BULLET_RULE in claude, "CLAUDE.md に bullet 体裁の記載が無い"
+
+
+def test_readme_lists_every_fragment_type() -> None:
+    """書式の正本が、実装が受け付ける type を漏れなく列挙する（#4668）。"""
+    readme = _read_text(_FRAGMENTS_README_PATH)
+
+    for section in SECTION_ORDER:
+        assert f"`{section}`" in readme, f"changelog.d/README.md に type `{section}` の記載が無い"
