@@ -17,7 +17,7 @@
 - Google アカウントと、セットアップ対象の YouTube チャンネル
 - [Claude Code](https://claude.ai/code)
 - Python 3.11 以上、FFmpeg（動画・音声を処理するツール）、Google Cloud SDK（Google Cloud を操作するツール）
-- Vertex AI（Google Cloud の AI サービス）を使う GCP project には Billing account（課金先）が必要
+- Vertex AI（Google Cloud の AI サービス）を使う GCP（Google Cloud Platform）project には Billing account（課金先）が必要
 
 空のフォルダを作り、そこで Claude Code を起動する。
 
@@ -59,7 +59,7 @@ Claude Code は project の skill をセッション開始時に検出するた�
 
 ### 4. 認証セットアップを始める
 
-**目的:** GCP（Google Cloud Platform）、OAuth（YouTube へ安全にアクセスするための認証）、ADC（Google Cloud ツールが使うローカル認証情報）を対話形式で設定する。
+**目的:** GCP、OAuth（YouTube へ安全にアクセスするための認証）、ADC（Google Cloud ツールが使うローカル認証情報）を対話形式で設定する。
 
 新しいセッションで **`/setup --tool`** と依頼する。セットアップが診断結果を読み、必要な操作だけを順に案内する。
 
@@ -82,7 +82,7 @@ uv run yt-setup-dirs
 uv run yt-doctor --json
 ```
 
-実行後は、推奨ルートの手順 3 と 4 へ進む。
+実行後は、推奨ルートの「Claude Code を新しいセッションで開き直す」と「認証セットアップを始める」へ進む。
 
 </details>
 

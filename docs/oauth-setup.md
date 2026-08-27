@@ -15,8 +15,6 @@ skill / CLI ごとの実効 scope と read-only token の設計は [`oauth-scope
 
 ### 5. GCP / ADC / OAuth を完了する
 
-**目的:** YouTube と Vertex AI を使うための GCP project と認証を、setup の案内どおりに整える。
-
 setup は project 選択、Billing 紐付け、必要 API の有効化、ADC quota project、IAM、Reporting job を診断順に進める。外部の GCP 状態を変える前には、対象 project・account・実行コマンドを表示して承認を求める。
 
 認証 CLI は setup 自身が対話 session で起動する。利用者がターミナルへ別途コマンドをコピーして実行する必要はない。
@@ -41,8 +39,6 @@ uv run yt-doctor --apply --json
 ```
 
 ### 6. 完了を確認する
-
-**目的:** 認証セットアップが終わったことを、診断結果で確かめる。
 
 `uv run yt-doctor --apply --json` の `apply.stop_reason` が `completed` となり、次がすべて確認できれば `/setup --tool` は完了である。
 
