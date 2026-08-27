@@ -165,18 +165,6 @@
       ]
     },
     {
-      "old_owner": "src/youtube_automation/utils/comments/codex_generator.py",
-      "exact_new_owner": "src/youtube_automation/application/comments/codex_generator.py",
-      "responsibility": "Canonical owner for codex_generator.py in comments",
-      "reference_updates": [
-        "Canonical owner: src/youtube_automation/application/comments/codex_generator.py",
-        "Moved-source audit: src/youtube_automation/utils/comments/codex_generator.py",
-        "Updated consumer: tests/application/comments/test_comments_generator.py",
-        "Updated consumer: tests/infrastructure/media/test_prompt_schema.py",
-        "Updated consumer: tests/contracts/architecture/test_repository_reorganization_contract.py"
-      ]
-    },
-    {
       "old_owner": "src/youtube_automation/utils/comments/fetcher.py",
       "exact_new_owner": "src/youtube_automation/application/comments/fetcher.py",
       "responsibility": "Canonical owner for fetcher.py in comments",
@@ -198,7 +186,6 @@
         "Canonical owner: src/youtube_automation/application/comments/generator.py",
         "Moved-source audit: src/youtube_automation/utils/comments/generator.py",
         "Updated consumer: src/youtube_automation/application/comments/generator_factory.py",
-        "Updated consumer: src/youtube_automation/application/comments/codex_generator.py",
         "Updated consumer: src/youtube_automation/application/comments/replier.py",
         "Updated consumer: src/youtube_automation/application/comments/prompt_safety.py",
         "Updated consumer: tests/application/comments/test_comments_generator_factory.py",
@@ -239,7 +226,6 @@
       "reference_updates": [
         "Canonical owner: src/youtube_automation/application/comments/prompt_safety.py",
         "Moved-source audit: src/youtube_automation/utils/comments/prompt_safety.py",
-        "Updated consumer: src/youtube_automation/application/comments/codex_generator.py",
         "Updated consumer: src/youtube_automation/application/comments/generator.py",
         "Updated consumer: src/youtube_automation/application/live_chat/codex.py",
         "Updated consumer: tests/application/comments/test_comments_generator.py",
@@ -1128,7 +1114,6 @@
         "Updated consumer: src/youtube_automation/infrastructure/youtube/streaming/instance_resolver.py",
         "Updated consumer: src/youtube_automation/infrastructure/youtube/streaming/monthly_archive.py",
         "Updated consumer: src/youtube_automation/application/comments/generator_factory.py",
-        "Updated consumer: src/youtube_automation/application/comments/codex_generator.py",
         "Updated consumer: src/youtube_automation/application/comments/replier.py",
         "Updated consumer: src/youtube_automation/application/comments/generator.py",
         "Updated consumer: src/youtube_automation/application/comments/fetcher.py",

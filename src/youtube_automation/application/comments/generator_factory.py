@@ -25,6 +25,7 @@ def create_reply_generator(
             sleep_fn=sleep_fn,
         )
     if config.provider == PROVIDER_CODEX:
+        # codex は監査済み export/replies フロー専用（直接生成の実装は #4462 で削除済み）
         raise ConfigError(
             "comments.generator.provider='codex' は直接生成に使用できません。"
             "--export-candidates と --agent-replies-file の監査済みフローを使用してください"
