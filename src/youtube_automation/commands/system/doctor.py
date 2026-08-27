@@ -140,6 +140,16 @@ class _ActionMapping(Mapping):
         return NotImplemented
 
 
+def _is_interactive_auth_command(argv: tuple[str, ...]) -> bool:
+    """Return True for auth commands which need a person at a terminal or a browser."""
+    return argv[:3] == ("gcloud", "auth", "login") or argv[:4] == (
+        "gcloud",
+        "auth",
+        "application-default",
+        "login",
+    )
+
+
 @dataclass(frozen=True, eq=False)
 class AgentCommand(_ActionMapping):
     """A validated, non-interactive command which the apply loop may execute."""
@@ -198,7 +208,8 @@ def _remediation_action(value: RemediationAction | dict | None) -> RemediationAc
     if not isinstance(value, dict):
         return value
     exposed = tuple((key, item) for key, item in value.items() if key not in _INTERNAL_ACTION_KEYS)
-    public = tuple((key, item) for key, item in exposed if key != "kind")
+    # kind は to_public_dict が、cmd は AgentCommand.cmd が持つので public_fields には残さない
+    public = tuple((key, item) for key, item in exposed if key not in {"kind", "cmd"})
     kind = value.get("kind")
     raw_argv = value.get("argv")
     argv = tuple(raw_argv) if isinstance(raw_argv, list) and all(isinstance(item, str) for item in raw_argv) else ()
@@ -243,6 +254,11 @@ def _ai_exec_action(
     display_cmd: str | None = None,
 ) -> AgentCommand:
     return AgentCommand(tuple(argv), display_cmd or shlex.join(argv), auto_apply)
+
+
+def _decision_action(flag: str) -> ManualRemediation:
+    """Return the hand-off which asks the operator to re-run with an explicit flag."""
+    return ManualRemediation((("kind", "decision"), ("flag", flag)))
 
 
 def _human_auth_action(argv: list[str] | tuple[str, ...], instructions: str) -> HumanBrowserAuth:
@@ -2244,7 +2260,7 @@ def _run_apply_loop(
                 "decision_required",
                 executed,
                 check=unresolved,
-                next_action={"kind": "decision", "flag": "--project-id"},
+                next_action=_decision_action("--project-id"),
             )
         # remediation がある = billing 未紐付けが確定しているケースだけ --billing-account を要求する。
         # describe 自体の失敗（権限不足など。next_action なし）は
@@ -2255,7 +2271,7 @@ def _run_apply_loop(
                 "decision_required",
                 executed,
                 check=unresolved,
-                next_action={"kind": "decision", "flag": "--billing-account"},
+                next_action=_decision_action("--billing-account"),
             )
         action = unresolved.next_action
         if apply_kind is ApplyKind.PROJECT and project_id is not None:
@@ -2268,7 +2284,7 @@ def _run_apply_loop(
                     "decision_required",
                     executed,
                     check=CheckResult(id="gcp_project", status="fail", message="project ID が必要"),
-                    next_action={"kind": "decision", "flag": "--project-id"},
+                    next_action=_decision_action("--project-id"),
                 )
             action = _ai_exec_action(
                 [
@@ -2281,7 +2297,13 @@ def _run_apply_loop(
                     f"--billing-account={billing_account}",
                 ]
             )
-        if apply_kind is ApplyKind.NONE or not isinstance(action, AgentCommand) or not action.auto_apply:
+        if (
+            apply_kind is ApplyKind.NONE
+            or not isinstance(action, AgentCommand)
+            or not action.auto_apply
+            # ai-exec と誤ってラベルされても対話 auth は非対話実行しない
+            or _is_interactive_auth_command(action.argv)
+        ):
             return _apply_outcome(
                 results,
                 "human_required",
