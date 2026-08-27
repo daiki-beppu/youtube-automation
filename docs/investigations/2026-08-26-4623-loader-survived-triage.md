@@ -58,6 +58,18 @@ triage の母数とした。依存を恒久追加せず、一時クローン `/t
 独立 glow の `opacity`、encoder の `codec` / `pix_fmt` / `profile` のキーまたは既定値置換。
 これらを出力側で直接観測する assertion を追加した。
 
+### 検出力を得るための前提: fixture 値を既定値と区別する
+
+full override fixture は `mode` / `fscale` / `win_func` / `pix_fmt` / `profile` と rounding の
+`blur` / `contrast` に、たまたま loader の既定値と同一の値を渡していた。この状態では assertion を
+追加してもキー置換変異が既定値へフォールバックして同じ値を返すため mutant は生き残る。fixture 側を
+既定値と異なる値（`line` / `lin` / `hamming` / `yuv422p` / `main` / `1.4` / `4.1`）へ変更したうえで
+assertion を追加している。
+
+既定値そのものの置換変異は、full override では既定分岐へ到達しないため kill できない。キーを省いた
+`test_overlays_omitted_fields_fall_back_to_declared_defaults` を追加し、既定値経路を別テストで観測
+している（rounding は `{}` を渡して既定値経路を通す）。
+
 ## 再実測
 
 一時クローンの `pyproject.toml` にだけ次の限定設定を置いた。
@@ -86,3 +98,8 @@ uv pip install -q -p /tmp/mutmut-4623/.venv mutmut==3.7.0
 
 部分再実行は対象 21 件が killed へ移ったことを mutant 名の集合差でも確認した。エラー文言の
 完全一致 assert は追加していない。`src/` と恒久依存・mutmut 設定への変更もない。
+
+補助検証として、上記 7 フィールドについてキー置換（`"mode"` → `"XXmodeXX"` 等）と既定値置換
+（`"bar"` → `"XXbarXX"` 等）の計 14 変異を `loader.py` へ 1 件ずつ適用し、
+`pytest tests/configuration/test_config_loader.py -k overlays` が全件で fail する（= killed）ことを
+確認した。
