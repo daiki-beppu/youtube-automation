@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import re
 import subprocess
 import sys
-from pathlib import Path
+from pathlib import Path, PurePosixPath
+from typing import Final
 
 import pytest
 
@@ -12,6 +14,8 @@ from tests.helpers.paths import REPO_ROOT
 from tests.helpers.tests_tree import shared_tests_tree_lock
 
 SCRIPT = REPO_ROOT / ".github/scripts/select-affected-tests.py"
+_GITHUB_ASSET_DIRECTORIES: Final = (".github/workflows", ".github/scripts")
+_NON_TEST_PREFIXES: Final = ("tests/helpers/", "tests/fixtures/")
 
 
 def _load_selector():
@@ -66,14 +70,17 @@ def _synthetic_repository(tmp_path: Path) -> Path:
         "tests/test_dynamic_wildcard.py",
         "import importlib\n\n\ndef _load(name):\n    return importlib.import_module(name)\n",
     )
-    _write(repository, "tests/repo/test_actions_parallel_workflows.py")
-    _write(repository, "tests/repo/test_changelog_ci_contract.py")
-    _write(repository, "tests/commands/system/test_changelog_compile.py")
-    _write(repository, "tests/repo/test_b6_integration_contract.py")
-    _write(repository, "tests/repo/test_site_repository_contract.py")
-    _write(repository, ".github/workflows/ci.yml")
+    # 対応表の対象が1件でも実在しないと selector は ALL へ fail-safe する。
+    # ここは期待値ではなく前提条件なので、対応表から機械的に用意する。
+    selector = _load_selector()
+    for pattern, targets in selector.PATH_TEST_MAP:
+        if not pattern.endswith("/"):
+            _write(repository, pattern)
+        for target in targets:
+            _write(repository, target)
+    for target in selector.CHANGELOG_FRAGMENT_TESTS:
+        _write(repository, target)
     _write(repository, "docs/adr/0024-example.md")
-    _write(repository, "CHANGELOG.md")
     _write(repository, "changelog.d/4526-example.fixed.md")
     _write(repository, "changelog.d/notes.txt")
     _write(repository, "some/other/changelog.d/4526-example.fixed.md")
@@ -222,8 +229,17 @@ def test_workflow_adr_changelog_and_direct_test_use_explicit_mapping(tmp_path: P
     selector = _load_selector()
     repository = _synthetic_repository(tmp_path)
 
+    # ci.yml は prefix エントリと完全一致エントリの両方にマッチし、両者が合成される
     assert selector.select_targets(repository, [".github/workflows/ci.yml"]) == (
         "tests/repo/test_actions_parallel_workflows.py",
+        "tests/repo/test_changelog_ci_contract.py",
+        "tests/repo/test_evals_workflow.py",
+        "tests/repo/test_github_actions_pinning.py",
+        "tests/repo/test_pyscn_diff_gate_contract.py",
+        "tests/repo/test_pytest_lane_contract.py",
+        "tests/repo/test_release_notes_contract.py",
+        "tests/repo/test_select_affected_tests.py",
+        "tests/repo/test_skill_catalog_removal.py",
     )
     assert selector.select_targets(repository, ["docs/adr/0024-example.md"]) == (
         "tests/repo/test_b6_integration_contract.py",
@@ -351,3 +367,153 @@ def test_cli_missing_argument_is_usage_error() -> None:
     assert result.returncode == 2
     assert result.stdout == ""
     assert "usage:" in result.stderr
+
+
+def _github_assets() -> list[str]:
+    """`.github/workflows/` と `.github/scripts/` の実在ファイルを repo 相対 path で返す。"""
+    return sorted(
+        path.relative_to(REPO_ROOT).as_posix()
+        for directory in _GITHUB_ASSET_DIRECTORIES
+        for path in (REPO_ROOT / directory).iterdir()
+        if path.is_file()
+    )
+
+
+def _tests_referencing(basename: str) -> set[str]:
+    """basename を path 成分として参照する test module を実ツリーから集める。
+
+    期待値を PATH_TEST_MAP から導かないのは、対応表が間違っていても通る自己言及
+    テストになるため。直前が path 区切り相当であることを要求し、`extensions.yml`
+    が `release-extensions.yml` の一部へ誤マッチするのを防ぐ。
+    """
+    pattern = re.compile(r"(?<![A-Za-z0-9_.\-])" + re.escape(basename))
+    referencing: set[str] = set()
+    for path in (REPO_ROOT / "tests").rglob("*.py"):
+        relative = path.relative_to(REPO_ROOT).as_posix()
+        if not (path.name.startswith("test_") or path.name.endswith("_test.py")):
+            continue
+        if relative.startswith(_NON_TEST_PREFIXES):
+            continue
+        if pattern.search(path.read_text(encoding="utf-8")):
+            referencing.add(relative)
+    return referencing
+
+
+@pytest.mark.parametrize(
+    "entries",
+    [
+        pytest.param(
+            (
+                (".github/workflows/", ("tests/core/test_leaf.py",)),
+                (".github/workflows/ci.yml", ("tests/core/test_middle.py",)),
+            ),
+            id="prefix-first",
+        ),
+        pytest.param(
+            (
+                (".github/workflows/ci.yml", ("tests/core/test_middle.py",)),
+                (".github/workflows/", ("tests/core/test_leaf.py",)),
+            ),
+            id="exact-first",
+        ),
+    ],
+)
+def test_every_matching_entry_contributes_regardless_of_order(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    entries: tuple[tuple[str, tuple[str, ...]], ...],
+) -> None:
+    # #4658: 最初のマッチで打ち切ると prefix と完全一致のどちらか片方しか効かない。
+    # エントリの並び順に依存せず、マッチした全エントリが合成されることを固定する。
+    selector = _load_selector()
+    repository = _synthetic_repository(tmp_path)
+    monkeypatch.setattr(selector, "PATH_TEST_MAP", entries)
+
+    assert selector.select_targets(repository, [".github/workflows/ci.yml"]) == (
+        "tests/core/test_leaf.py",
+        "tests/core/test_middle.py",
+    )
+
+
+@pytest.mark.parametrize("workflow", sorted(path.name for path in (REPO_ROOT / ".github/workflows").glob("*.yml")))
+def test_every_workflow_change_selects_the_actions_pinning_gate(workflow: str) -> None:
+    # test_github_actions_pinning.py は全 workflow を parametrize する supply-chain
+    # ゲート。workflow 固有ではないため prefix 側で必ず選ばれる必要がある。
+    selector = _load_selector()
+
+    with shared_tests_tree_lock():
+        result = selector.select_targets(REPO_ROOT, [f".github/workflows/{workflow}"])
+
+    assert result is not None
+    assert "tests/repo/test_github_actions_pinning.py" in result
+
+
+def test_ci_yml_alone_selects_the_changelog_gate_contract() -> None:
+    # #4658 の再発防止: ci.yml 単独変更で changelog ゲートの契約テストが選ばれること。
+    selector = _load_selector()
+
+    with shared_tests_tree_lock():
+        result = selector.select_targets(REPO_ROOT, [".github/workflows/ci.yml"])
+
+    assert result is not None
+    assert "tests/repo/test_changelog_ci_contract.py" in result
+
+
+@pytest.mark.parametrize("asset", _github_assets())
+def test_github_asset_change_selects_every_test_that_references_it(asset: str) -> None:
+    # 対応表のドリフト検出。実ツリーから参照元を導出し、選定結果が覆うことを要求する。
+    selector = _load_selector()
+
+    with shared_tests_tree_lock():
+        result = selector.select_targets(REPO_ROOT, [asset])
+        referencing = _tests_referencing(PurePosixPath(asset).name)
+
+    if result is None:
+        # ALL は全件実行なので契約は満たす。意図せず fail-safe へ落ちる path が
+        # 増えていないことだけ固定する。
+        assert asset in selector.FAIL_SAFE_EXACT
+        return
+    assert referencing <= set(result), f"{asset}: 対応表に載っていない参照元 test がある"
+
+
+@pytest.mark.parametrize("asset", [".github/workflows/ci.yml", ".github/scripts/pyscn-diff-gate.py"])
+def test_github_asset_change_selects_this_completeness_guard(asset: str) -> None:
+    # ドリフト検出窓を PR 時点へ入れるため、対象ドメインを変更した PR では
+    # 完全性契約テストを持つこの module 自身が選定される必要がある。
+    selector = _load_selector()
+
+    with shared_tests_tree_lock():
+        result = selector.select_targets(REPO_ROOT, [asset])
+
+    assert result is not None
+    assert "tests/repo/test_select_affected_tests.py" in result
+
+
+@pytest.mark.parametrize(
+    ("script", "expected"),
+    [
+        (".github/scripts/pyscn-diff-gate.py", "tests/repo/test_pyscn_diff_gate_contract.py"),
+        (".github/scripts/run-affected-tests.py", "tests/repo/test_pytest_lane_contract.py"),
+        (".github/scripts/any-usage-gate.sh", "tests/repo/test_any_usage_gate.py"),
+        (".github/scripts/validate-changelog-fragments.py", "tests/repo/test_changelog_ci_contract.py"),
+    ],
+)
+def test_github_scripts_change_is_narrowed_from_the_all_fail_safe(script: str, expected: str) -> None:
+    # 未対応 path として ALL へ落ちていた経路を、対応する契約テストへ絞り込む。
+    selector = _load_selector()
+
+    with shared_tests_tree_lock():
+        result = selector.select_targets(REPO_ROOT, [script])
+
+    assert result is not None, f"{script}: ALL へ fail-safe している"
+    assert expected in result
+
+
+def test_selector_script_itself_still_fails_safe_to_all() -> None:
+    # `.github/scripts/` の絞り込みが FAIL_SAFE_EXACT を上書きしないこと。
+    selector = _load_selector()
+
+    with shared_tests_tree_lock():
+        result = selector.select_targets(REPO_ROOT, [".github/scripts/select-affected-tests.py"])
+
+    assert result is None
