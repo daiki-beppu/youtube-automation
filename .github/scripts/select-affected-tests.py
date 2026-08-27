@@ -33,8 +33,78 @@ CHANGELOG_FRAGMENT_TESTS: Final = (
     "tests/commands/system/test_changelog_compile.py",
     "tests/repo/test_changelog_ci_contract.py",
 )
+# prefix エントリと完全一致エントリは合成される（`_mapped_tests` が全マッチを union する）。
+# prefix 側には配下を横断して検証する test だけを置き、ファイル固有の契約は完全一致側へ分ける。
+# `tests/repo/test_select_affected_tests.py` を `.github/` の両 prefix に含めるのは、
+# 対応表のドリフトを検出する完全性契約テストを、対象ドメインを変更した PR 自身で走らせるため。
 PATH_TEST_MAP: Final = (
-    (".github/workflows/", ("tests/repo/test_actions_parallel_workflows.py",)),
+    (
+        ".github/workflows/",
+        (
+            "tests/repo/test_actions_parallel_workflows.py",
+            "tests/repo/test_github_actions_pinning.py",
+            "tests/repo/test_select_affected_tests.py",
+        ),
+    ),
+    (
+        ".github/workflows/ci.yml",
+        (
+            "tests/repo/test_changelog_ci_contract.py",
+            "tests/repo/test_evals_workflow.py",
+            "tests/repo/test_pyscn_diff_gate_contract.py",
+            "tests/repo/test_pytest_lane_contract.py",
+            "tests/repo/test_release_notes_contract.py",
+            "tests/repo/test_skill_catalog_removal.py",
+        ),
+    ),
+    (".github/workflows/ci-autofix.yml", ("tests/repo/test_ci_autofix_workflow.py",)),
+    (".github/workflows/code-review.yml", ("tests/repo/test_code_review_workflow.py",)),
+    (
+        ".github/workflows/dashboard.yml",
+        ("tests/contracts/architecture/test_repository_reorganization_contract.py",),
+    ),
+    (".github/workflows/evals.yml", ("tests/repo/test_evals_workflow.py",)),
+    (".github/workflows/extensions.yml", ("tests/repo/test_extension_package_manager_contract.py",)),
+    (
+        ".github/workflows/release-extensions.yml",
+        (
+            "tests/repo/test_extension_package_manager_contract.py",
+            "tests/repo/test_release_extensions_workflow.py",
+            "tests/repo/test_verify_extensions_script.py",
+        ),
+    ),
+    (
+        ".github/workflows/site.yml",
+        (
+            "tests/repo/test_site_repository_contract.py",
+            "tests/repo/test_skill_page_generation_contract.py",
+        ),
+    ),
+    (".github/scripts/", ("tests/repo/test_select_affected_tests.py",)),
+    (
+        ".github/scripts/any-usage-gate.sh",
+        (
+            "tests/repo/test_any_usage_gate.py",
+            "tests/repo/test_takt_workflow_contract.py",
+        ),
+    ),
+    # resolver / cleaner は any-usage-gate.sh から subprocess で呼ばれるだけで
+    # 名指しの参照を持たないため、gate 本体の E2E テストへ対応付ける。
+    (".github/scripts/any_usage_python_resolver.py", ("tests/repo/test_any_usage_gate.py",)),
+    (".github/scripts/any_usage_ts_line_cleaner.py", ("tests/repo/test_any_usage_gate.py",)),
+    (".github/scripts/classify-ci-paths.sh", ("tests/repo/test_actions_parallel_workflows.py",)),
+    (".github/scripts/pyscn-diff-gate.py", ("tests/repo/test_pyscn_diff_gate_contract.py",)),
+    (
+        ".github/scripts/run-affected-tests.py",
+        (
+            "tests/repo/test_pytest_lane_contract.py",
+            "tests/repo/test_takt_workflow_contract.py",
+        ),
+    ),
+    (
+        ".github/scripts/validate-changelog-fragments.py",
+        ("tests/repo/test_changelog_ci_contract.py",),
+    ),
     (
         "docs/adr/",
         (
@@ -147,12 +217,18 @@ def _validate_path(repository: Path, changed: str) -> bool:
 
 
 def _mapped_tests(changed: str) -> tuple[str, ...] | None:
+    """マッチした**全**エントリの対象を合成して返す。未マッチなら ``None``。
+
+    最初のマッチで打ち切ると prefix と完全一致のどちらか片方しか効かず、
+    `.github/workflows/ci.yml` の変更が横断 test 1 件にしか対応付かない（#4658）。
+    """
     if changed.startswith(CHANGELOG_FRAGMENT_PREFIX) and changed.endswith(CHANGELOG_FRAGMENT_SUFFIX):
         return CHANGELOG_FRAGMENT_TESTS
+    matched: set[str] = set()
     for pattern, targets in PATH_TEST_MAP:
         if (pattern.endswith("/") and changed.startswith(pattern)) or changed == pattern:
-            return targets
-    return None
+            matched.update(targets)
+    return tuple(sorted(matched)) if matched else None
 
 
 def select_targets(repository: Path, changed_paths: list[str]) -> tuple[str, ...] | None:
