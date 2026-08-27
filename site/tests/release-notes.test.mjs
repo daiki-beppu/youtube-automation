@@ -195,6 +195,17 @@ const sectionByAttribute = (html, attribute, value) => {
 const hrefsWithin = (markup) =>
   [...markup.matchAll(/href="(\/[^"#?]*)"/g)].map((match) => match[1]);
 
+test("landing page の hero は YouTube-Automation 運用ガイドを名乗る", async () => {
+  const html = await readIndex();
+  const title = /<title>([^<]+)<\/title>/.exec(html);
+  const eyebrow = /<p class="release-eyebrow">([^<]+)<\/p>/.exec(html);
+  const heading = /<h1>([\s\S]*?)<\/h1>/.exec(html);
+
+  assert.equal(title?.[1], "YouTube-Automation 運用ガイド");
+  assert.equal(eyebrow?.[1], "operator docs");
+  assert.match(heading?.[1] ?? "", /^YouTube-Automation<br\s*\/?>運用ガイド$/);
+});
+
 test(`landing page は3区分を表示し、公開operator docs ${operatorRoutes.length}件だけへ1回ずつ到達できる`, async () => {
   const html = await readIndex();
   const sectionLabels = [

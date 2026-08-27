@@ -74,7 +74,7 @@ body {
 
 .release-hero h1 {
   font-family: var(--release-font-sans);
-  font-size: clamp(3rem, 8vw, 6.75rem);
+  font-size: clamp(2.25rem, 6vw, 4.75rem);
   font-style: normal;
   font-weight: 750;
   letter-spacing: -0.07em;
