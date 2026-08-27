@@ -2247,7 +2247,8 @@ def _run_apply_loop(
                 next_action={"kind": "decision", "flag": "--project-id"},
             )
         # remediation がある = billing 未紐付けが確定しているケースだけ --billing-account を要求する。
-        # describe 自体の失敗（権限不足など。next_action なし）は account を選んでも解決しないので human_required に落とす。
+        # describe 自体の失敗（権限不足など。next_action なし）は
+        # account を選んでも解決しないので human_required に落とす。
         if apply_kind is ApplyKind.BILLING and billing_account is None and unresolved.next_action is not None:
             return _apply_outcome(
                 results,
