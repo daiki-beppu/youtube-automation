@@ -411,9 +411,9 @@
     font-family: var(--font-display);
     font-size: var(--text-display);
     font-style: normal;
-    font-weight: 650;
-    letter-spacing: -0.055em;
-    line-height: 0.92;
+    font-weight: 700;
+    letter-spacing: -0.015em;
+    line-height: 1.02;
     overflow-wrap: anywhere;
   }
 
