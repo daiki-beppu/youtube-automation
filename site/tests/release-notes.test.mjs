@@ -195,6 +195,40 @@ const sectionByAttribute = (html, attribute, value) => {
 const hrefsWithin = (markup) =>
   [...markup.matchAll(/href="(\/[^"#?]*)"/g)].map((match) => match[1]);
 
+test("landing page の hero は YouTube-Automation 運用ガイドを名乗る", async () => {
+  const html = await readIndex();
+  const title = /<title>([^<]+)<\/title>/.exec(html);
+  const eyebrow = /<p class="release-eyebrow">([^<]+)<\/p>/.exec(html);
+  const heading = /<h1>([\s\S]*?)<\/h1>/.exec(html);
+
+  assert.equal(title?.[1], "YouTube-Automation 運用ガイド");
+  assert.equal(eyebrow?.[1], "operator docs");
+  assert.match(heading?.[1] ?? "", /^YouTube-Automation<br\s*\/?>運用ガイド$/);
+});
+
+test("hero h1 は 375px / 1440px の両端で製品名を語中で折らない寸法を保つ", async () => {
+  const css = await readFile(new URL("../styles/release-notes.css", import.meta.url), "utf8");
+  const declarations = /\.release-hero h1 \{([\s\S]*?)\}/.exec(css)?.[1] ?? "";
+
+  assert.ok(declarations !== "", ".release-hero h1 の宣言が見つかりません");
+  // 1 行を保つのは font-size clamp。overflow-wrap は収まらなかったときの最終手段で、
+  // 既定値のままだと折り返せず overflow-x: clip で文字が見切れる。
+  // `anywhere` はこのファイルの他の見出し用で、hero では最終手段を弱い方に留める。
+  assert.doesNotMatch(declarations, /overflow-wrap:\s*anywhere/);
+  assert.match(declarations, /overflow-wrap:\s*break-word/);
+
+  const clamp = /font-size:\s*clamp\(\s*([\d.]+)rem\s*,\s*([\d.]+)vw\s*,\s*([\d.]+)rem\s*\)/.exec(declarations);
+  assert.ok(clamp, "font-size の clamp が 3 値の形で読み取れません");
+  const [, minRem, vw, maxRem] = clamp.map(Number);
+
+  // 375px: タイトル列 約343px。実測で font-size 32px = 2rem のとき 1 行に収まる。
+  assert.ok(Number(minRem) <= 2, `375px の下限 2rem を超えています: ${minRem}rem`);
+  // 1440px: タイトル列 約777px。実測で font-size 76px = 4.75rem のとき 1 行に収まる。
+  assert.ok(Number(maxRem) <= 4.75, `1440px の上限 4.75rem を超えています: ${maxRem}rem`);
+  // 768px は vw 項が効く帯。6vw = 46.08px で列 707px に収まることを実測済み。
+  assert.ok(Number(vw) <= 6, `768px 帯の vw 係数 6vw を超えています: ${vw}vw`);
+});
+
 test(`landing page は3区分を表示し、公開operator docs ${operatorRoutes.length}件だけへ1回ずつ到達できる`, async () => {
   const html = await readIndex();
   const sectionLabels = [

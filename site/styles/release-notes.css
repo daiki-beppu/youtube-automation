@@ -72,16 +72,28 @@ body {
   margin: 0 0 1rem;
 }
 
+/* 製品名を 1 行に保つのは font-size clamp であって overflow-wrap ではない。
+ * `-` は overflow-wrap の値に関係なく標準の改行候補点なので、列に収まらなければ
+ * どの設定でも `YouTube-` / `Automation` に割れる。clamp 下限 2rem は最小幅 375px
+ * のタイトル列（約 343px = 100vw - padding 16px×2）に `YouTube-Automation` 18 文字を
+ * 1 行で収める境界で、375 / 768 / 1440px の実測で 1 行を確認している。
+ *
+ * このファイルの他の可変幅見出しは `overflow-wrap: anywhere` を使うが、ここは
+ * `break-word` にする。列幅は `grid-template-columns: minmax(0, 1.45fr)` で決まり
+ * min-content には引かれない（3 値とも列幅 343px を実測）ため、ここでの差は
+ * 「収まらなかったときの最終手段」だけ。既定値のままだと単語が列を超えても
+ * 折り返せず `html, body { overflow-x: clip }` に当たって文字が見切れる。
+ */
 .release-hero h1 {
   font-family: var(--release-font-sans);
-  font-size: clamp(3rem, 8vw, 6.75rem);
+  font-size: clamp(2rem, 6vw, 4.75rem);
   font-style: normal;
   font-weight: 750;
   letter-spacing: -0.07em;
   line-height: 0.88;
   margin: 0;
   min-width: 0;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 .release-hero__brief {
