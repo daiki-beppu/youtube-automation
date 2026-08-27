@@ -60,7 +60,7 @@ export default defineConfig({
           {
             display: "group",
             label: "実験的機能",
-            items: ["/dashboard", "/cloud-execution"],
+            items: ["/dashboard", "/cloud-execution", "/live-chat-reply"],
           },
           {
             display: "group",
