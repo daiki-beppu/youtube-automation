@@ -69,11 +69,13 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PATCH_ID: ${{ steps.fingerprint.outputs.patch_id }}
         run: |
-          set -eu
-          # コメント一覧の取得はこの 1 回だけ。id も同時に拾って Post review comment へ渡す
-          # --paginate は page ごとに --jq を適用するため、複数 page 分の出力を 1 件に畳む
-          comment="$(gh api "repos/${REPO}/issues/${PR_NUMBER}/comments" --paginate \
-            --jq "[.[] | select(.body | startswith(\"${REVIEW_MARKER}\"))][0] // empty" | head -n 1)"
+          set -eu -o pipefail
+          # コメント一覧の取得はこの 1 回だけ。id も同時に拾って Post review comment へ渡す。
+          # --slurp は全 page を 1 つの配列へ畳むので page 境界を跨いで先頭 1 件を選べる
+          # （--slurp は --jq と併用できないため jq へパイプする）。jq -c で 1 行に固定し、
+          # 入力を読み切る jq を終端に置くことで --paginate 中の SIGPIPE も起こさない。
+          comment="$(gh api "repos/${REPO}/issues/${PR_NUMBER}/comments" --paginate --slurp \
+            | jq -c "[.[][] | select(.body | startswith(\"${REVIEW_MARKER}\"))][0] // empty")"
           comment_id="$(jq -r '.id // empty' <<<"$comment")"
           body="$(jq -r '.body // empty' <<<"$comment")"
           echo "comment_id=${comment_id}" >> "$GITHUB_OUTPUT"

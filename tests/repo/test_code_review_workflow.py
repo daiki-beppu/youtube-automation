@@ -143,6 +143,11 @@ def test_unchanged_diff_skips_the_paid_review_but_reapplies_the_verdict() -> Non
     # comment_id も同じ 1 回の取得で拾い、Post review comment 側の再取得を不要にする
     assert "comment_id=" in previous["run"]
     assert previous["run"].count("gh api") == 1
+    # gh api をパイプへ通すため、API 失敗を head/jq の exit 0 で握りつぶさない
+    assert "set -eu -o pipefail" in previous["run"]
+    # page 境界を跨いだ先頭 1 件の選択は --slurp で行う（head での打ち切りは SIGPIPE を招く）
+    assert "--slurp" in previous["run"]
+    assert "head -n 1" not in previous["run"]
 
     assert _review_step(review)["if"] == "steps.previous.outputs.skip != 'true'"
 
