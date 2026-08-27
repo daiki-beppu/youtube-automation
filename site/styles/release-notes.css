@@ -72,16 +72,19 @@ body {
   margin: 0 0 1rem;
 }
 
+/* clamp 下限は最小幅 375px のタイトル列（約 343px = 100vw - padding 16px×2）に
+ * `YouTube-Automation` 18 文字（letter-spacing 込みで約 8.3em）を 1 行で収める境界。
+ * 収まりは font-size だけで担保し、語中折れを招く overflow-wrap は既定値に戻す。
+ */
 .release-hero h1 {
   font-family: var(--release-font-sans);
-  font-size: clamp(2.25rem, 6vw, 4.75rem);
+  font-size: clamp(2rem, 6vw, 4.75rem);
   font-style: normal;
   font-weight: 750;
   letter-spacing: -0.07em;
   line-height: 0.88;
   margin: 0;
   min-width: 0;
-  overflow-wrap: anywhere;
 }
 
 .release-hero__brief {

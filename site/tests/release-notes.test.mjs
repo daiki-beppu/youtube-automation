@@ -206,6 +206,22 @@ test("landing page の hero は YouTube-Automation 運用ガイドを名乗る",
   assert.match(heading?.[1] ?? "", /^YouTube-Automation<br\s*\/?>運用ガイド$/);
 });
 
+test("hero h1 は最小幅 375px でも製品名を語中で折らない寸法を保つ", async () => {
+  const css = await readFile(new URL("../styles/release-notes.css", import.meta.url), "utf8");
+  const declarations = /\.release-hero h1 \{([\s\S]*?)\}/.exec(css)?.[1] ?? "";
+
+  assert.ok(declarations !== "", ".release-hero h1 の宣言が見つかりません");
+  // `overflow-wrap: anywhere` は収まらなかったとき `YouTube-A` / `utomation` の語中折れを招く。
+  assert.doesNotMatch(declarations, /overflow-wrap:\s*anywhere/);
+
+  const minFontSize = /font-size:\s*clamp\(\s*([\d.]+)rem/.exec(declarations)?.[1] ?? "";
+  assert.ok(minFontSize !== "", "font-size の clamp 下限が読み取れません");
+  assert.ok(
+    Number(minFontSize) <= 2,
+    `375px 幅のタイトル列 約343px に収まる下限 2rem を超えています: ${minFontSize}rem`
+  );
+});
+
 test(`landing page は3区分を表示し、公開operator docs ${operatorRoutes.length}件だけへ1回ずつ到達できる`, async () => {
   const html = await readIndex();
   const sectionLabels = [
