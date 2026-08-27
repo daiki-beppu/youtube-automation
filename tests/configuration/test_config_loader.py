@@ -761,6 +761,57 @@ def test_distrokid_section_must_be_object(tmp_path, monkeypatch):
         load_config()
 
 
+def test_analytics_benchmark_unknown_key_is_rejected(tmp_path, monkeypatch):
+    sections = _minimal_sections()
+    sections["analytics.json"] = {"benchmark": {"analyze_thumbnail": True}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match="analyze_thumbnail"):
+        load_config()
+
+
+@pytest.mark.parametrize(
+    "legacy_key",
+    [
+        "scan_recent",
+        "min_views",
+        "freshness_days",
+        "gemini_thumbnail_analysis",
+        "analyze_thumbnails",
+    ],
+)
+def test_analytics_benchmark_legacy_keys_warn_with_actual_config_path(tmp_path, monkeypatch, legacy_key):
+    sections = _minimal_sections()
+    sections["analytics.json"] = {"benchmark": {legacy_key: True}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.warns(DeprecationWarning, match=r"config/skills/benchmark\.yaml") as records:
+        config = load_config()
+
+    assert any(f"benchmark.{legacy_key} " in str(record.message) for record in records)
+
+    assert config.analytics.benchmark.channels == []
+
+
+def test_analytics_benchmark_multiple_legacy_keys_are_each_prefixed(tmp_path, monkeypatch):
+    """#4625: 複数の旧キーが同時にある場合もキーごとに benchmark. を前置する。"""
+    sections = _minimal_sections()
+    sections["analytics.json"] = {"benchmark": {"freshness_days": 30, "min_views": 100}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.warns(DeprecationWarning) as records:
+        load_config()
+
+    messages = [str(record.message) for record in records]
+    assert any(
+        "benchmark.freshness_days, benchmark.min_views" in message and "config/skills/benchmark.yaml" in message
+        for message in messages
+    ), messages
+
+
 def test_load_all_sections(tmp_path, monkeypatch):
     sections = _minimal_sections()
     sections["analytics.json"] = {

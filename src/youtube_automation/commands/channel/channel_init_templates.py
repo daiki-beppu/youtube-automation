@@ -105,13 +105,7 @@ def _render_youtube(ctx: ChannelInitContext) -> dict:
 def _render_analytics(ctx: ChannelInitContext) -> dict:
     return {
         "analytics": {"collection_filter_keywords": ["Complete Collection", ctx.short]},
-        "benchmark": {
-            "channels": list(ctx.benchmark_channels),
-            "scan_recent": 150,
-            "min_views": 10000,
-            "freshness_days": 3,
-            "gemini_thumbnail_analysis": False,
-        },
+        "benchmark": {"channels": list(ctx.benchmark_channels)},
     }
 
 
