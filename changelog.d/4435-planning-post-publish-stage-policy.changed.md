@@ -1,1 +1,1 @@
-hybrid sandwich runner の planning / post-publish を共通 base を持つ StagePolicy adapter 化し、media handoff request を分離しました。
+- hybrid sandwich runner の planning / post-publish を共通 base を持つ StagePolicy adapter 化し、media handoff request を分離しました。

@@ -1,1 +1,1 @@
-構造化文書の review と workflow status を Hallmark の全監査ゲートに適合させ、狭い画面でも判断対象と操作状態を読み取りやすくしました。
+- 構造化文書の review と workflow status を Hallmark の全監査ゲートに適合させ、狭い画面でも判断対象と操作状態を読み取りやすくしました。

@@ -1,1 +1,1 @@
-`YouTubeAutoUploader` を upload preflight の単一責務境界とし、collection 骨格・認証チャンネル・メタデータ品質の検査がどの CLI 経路でも一度だけ実行されるよう統一した。`yt-upload-collection --plan` のドライランも同じ検査集合を通し、fail-closed 通知の stage は preflight と実行系を区別して送るようにした。
+- `YouTubeAutoUploader` を upload preflight の単一責務境界とし、collection 骨格・認証チャンネル・メタデータ品質の検査がどの CLI 経路でも一度だけ実行されるよう統一した。`yt-upload-collection --plan` のドライランも同じ検査集合を通し、fail-closed 通知の stage は preflight と実行系を区別して送るようにした。
