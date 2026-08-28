@@ -7,6 +7,7 @@ __pycache__/
 .venv/
 .env
 .direnv/
+*.json.lock
 # pyscn analyze のローカルレポート出力
 .pyscn/
 

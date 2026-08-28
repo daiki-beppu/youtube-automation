@@ -19,6 +19,7 @@ from youtube_automation.infrastructure.media.image_provider import (
     prompt_schema as prompt_schema,
 )
 
+# サブモジュールのエイリアスはこの __init__ に集約する（per-file shim は import 機構上実行されないため置かない）
 sys.modules[f"{__name__}.composition"] = composition
 sys.modules[f"{__name__}.config"] = config
 sys.modules[f"{__name__}.gemini"] = gemini
