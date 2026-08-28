@@ -487,12 +487,10 @@ def _merge_skill_channel_override(
     skill: str,
     owner: str,
     section: str | None,
-    defaults: dict[str, Any],
+    defaults: dict[str, object],
     channel_dir: Path | None,
-) -> dict[str, Any]:
-    override_path, legacy_override_owner, migrated_override_section = _resolve_skill_override(
-        skill, owner, channel_dir
-    )
+) -> dict[str, object]:
+    override_path, legacy_override_owner, migrated_override_section = _resolve_skill_override(skill, owner, channel_dir)
     if override_path is None:
         return defaults
 
@@ -501,8 +499,7 @@ def _merge_skill_channel_override(
         migrated = override.get(migrated_override_section)
         if not isinstance(migrated, dict):
             raise ConfigError(
-                f"skill-config {override_path} の移行先 {migrated_override_section!r} は "
-                "mapping である必要があります"
+                f"skill-config {override_path} の移行先 {migrated_override_section!r} は mapping である必要があります"
             )
         override = dict(migrated)
     if legacy_override_owner is not None and section is not None:
