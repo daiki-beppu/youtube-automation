@@ -34,6 +34,7 @@ const operatorSections = [
       "/ambient-layers",
       "/scheduled-publish",
       "/localizations",
+      "/distrokid",
     ],
     section: "use",
   },
@@ -270,11 +271,13 @@ test("landing page は活用ガイドを使う内の「こんなこともでき�
     "/ambient-layers",
     "/scheduled-publish",
     "/localizations",
+    "/distrokid",
   ]);
   assert.equal(hrefsWithin(use).filter((href) => href === "/live-streaming").length, 1);
   assert.equal(hrefsWithin(use).filter((href) => href === "/ambient-layers").length, 1);
   assert.equal(hrefsWithin(use).filter((href) => href === "/scheduled-publish").length, 1);
   assert.equal(hrefsWithin(use).filter((href) => href === "/localizations").length, 1);
+  assert.equal(hrefsWithin(use).filter((href) => href === "/distrokid").length, 1);
 });
 
 test("landing page は実験的機能を使う内の専用グループとして表示する", async () => {
@@ -391,6 +394,7 @@ test(`operator docs の${generatedRouteCount} route は原本の先頭見出し�
     ["/ambient-layers", "環境音レイヤーを重ねる"],
     ["/scheduled-publish", "公開日時を決めて予約公開する"],
     ["/localizations", "タイトルと概要欄を多言語化する"],
+    ["/distrokid", "楽曲を DistroKid 配信向けに準備する"],
   ]);
 
   assert.equal(expectedTitles.size, generatedRouteCount);

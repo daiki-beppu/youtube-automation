@@ -30,6 +30,7 @@ OPERATOR_DOC_SOURCES = (
     "docs/ambient-layers.md",
     "docs/scheduled-publish.md",
     "docs/localizations.md",
+    "docs/distrokid.md",
 )
 NONPUBLIC_DOC_PREFIXES = (
     "docs/adr/",
