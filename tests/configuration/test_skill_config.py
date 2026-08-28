@@ -144,6 +144,86 @@ def test_load_namespaced_skill_config_uses_legacy_owner_override(
     assert loaded == {"model": "legacy-custom"}
 
 
+@pytest.mark.parametrize(
+    ("legacy_key", "target_skill", "section"),
+    [
+        (source, migration.target_skill, migration.section)
+        for source, migration in skill_config.SKILL_CONFIG_MIGRATIONS.items()
+    ],
+)
+def test_legacy_skill_config_uses_migrated_override_when_legacy_file_is_absent(
+    tmp_path: Path,
+    legacy_key: str,
+    target_skill: str,
+    section: str | None,
+) -> None:
+    overrides = tmp_path / "config" / "skills"
+    overrides.mkdir(parents=True)
+    migrated_override = {"migration_test_marker": legacy_key}
+    target_override = (
+        {**migrated_override, "acknowledged_unknown_keys": ["migration_test_marker"]}
+        if section is None
+        else {section: migrated_override, "acknowledged_unknown_keys": ["migration_test_marker"]}
+    )
+    (overrides / f"{target_skill}.yaml").write_text(yaml.safe_dump(target_override), encoding="utf-8")
+
+    loaded = skill_config.load_skill_config(legacy_key, use_cache=False, channel_dir=tmp_path)
+
+    assert loaded["migration_test_marker"] == legacy_key
+
+
+def test_legacy_and_namespaced_keys_resolve_the_same_migrated_override(tmp_path: Path) -> None:
+    overrides = tmp_path / "config" / "skills"
+    overrides.mkdir(parents=True)
+    (overrides / "thumbnail.yaml").write_text(
+        "loop:\n  skip_preview_approval: true\n",
+        encoding="utf-8",
+    )
+
+    legacy = skill_config.load_skill_config("loop-video", use_cache=False, channel_dir=tmp_path)
+    namespaced = skill_config.load_skill_config("thumbnail", use_cache=False, channel_dir=tmp_path)["loop"]
+
+    assert legacy == namespaced
+
+
+def test_legacy_skill_config_file_keeps_priority_over_migrated_override(tmp_path: Path) -> None:
+    overrides = tmp_path / "config" / "skills"
+    overrides.mkdir(parents=True)
+    (overrides / "loop-video.yaml").write_text("skip_preview_approval: true\n", encoding="utf-8")
+    (overrides / "thumbnail.yaml").write_text("loop:\n  skip_preview_approval: false\n", encoding="utf-8")
+
+    loaded = skill_config.load_skill_config("loop-video", use_cache=False, channel_dir=tmp_path)
+
+    assert loaded["skip_preview_approval"] is True
+
+
+def test_legacy_skill_config_uses_defaults_when_migrated_override_section_is_absent(tmp_path: Path) -> None:
+    expected = skill_config.load_skill_config(
+        "loop-video",
+        use_cache=False,
+        channel_dir=tmp_path / "without-overrides",
+    )
+    overrides = tmp_path / "config" / "skills"
+    overrides.mkdir(parents=True)
+    (overrides / "thumbnail.yaml").write_text(
+        "image_generation:\n  provider: gemini\n",
+        encoding="utf-8",
+    )
+
+    loaded = skill_config.load_skill_config("loop-video", use_cache=False, channel_dir=tmp_path)
+
+    assert loaded == expected
+
+
+def test_legacy_skill_config_rejects_non_mapping_migrated_override_section(tmp_path: Path) -> None:
+    overrides = tmp_path / "config" / "skills"
+    overrides.mkdir(parents=True)
+    (overrides / "thumbnail.yaml").write_text("loop: null\n", encoding="utf-8")
+
+    with pytest.raises(ConfigError, match="移行先 'loop' は mapping"):
+        skill_config.load_skill_config("loop-video", use_cache=False, channel_dir=tmp_path)
+
+
 def test_load_namespaced_skill_config_rejects_missing_section(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     default_path = tmp_path / "music.default.yaml"
     default_path.write_text("master:\n  target_lufs: -14\n", encoding="utf-8")
@@ -238,6 +318,8 @@ def test_unknown_top_level_override_key_warns_but_still_merges(tmp_path, monkeyp
     assert "コードからは参照されない可能性があります" in message
     assert "SKILL.md 経由で AI が読む設計であれば意図どおりです" in message
     assert "利用側に参照されない可能性があります" not in message
+    # 警告の発生位置は loader 内部ではなく呼び出し元コードを指す
+    assert caught[0].filename == __file__
 
 
 def test_acknowledged_unknown_keys_suppress_only_named_warning(tmp_path, monkeypatch):
@@ -366,6 +448,8 @@ def test_thumbnail_deprecated_override_keys_warn_but_still_merge(tmp_path, monke
     assert "image_generation.gemini.composition_rules.environment" in message
     assert "image_generation.gemini.thumbnail_text.copy_position" in message
     assert "#1702" in message
+    # 警告の発生位置は loader 内部ではなく呼び出し元コードを指す
+    assert records[0].filename == __file__
     # override は従来どおり有効（後方互換 no-op を維持）
     gemini = cfg["image_generation"]["gemini"]
     assert gemini["composition_rules"]["environment"] == "cozy tavern"

@@ -13,15 +13,8 @@ from typing import Final, Mapping
 
 import yaml
 
+from youtube_automation.configuration.skills import SKILL_CONFIG_MIGRATIONS, SkillConfigMigration
 from youtube_automation.core.errors import ConfigError
-
-
-@dataclass(frozen=True, slots=True)
-class SkillConfigMigration:
-    """One old config filename and its consolidated destination."""
-
-    target_skill: str
-    section: str | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -41,25 +34,6 @@ class MigrationPlan:
     destinations: Mapping[Path, dict[str, object]]
     orphans: tuple[Path, ...]
 
-
-# 統合先 skill と名前空間 loader key が成立した段から移行を有効化する。
-# apply は利用者の明示実行だけで行い、旧 loader key は互換入口として維持する。
-SKILL_CONFIG_MIGRATIONS: Final[Mapping[str, SkillConfigMigration]] = {
-    "benchmark": SkillConfigMigration("channel-research", "benchmark"),
-    "collection-ideate": SkillConfigMigration("wf-new", None),
-    "community-post": SkillConfigMigration("publish", "community"),
-    "live-clean": SkillConfigMigration("publish", "clean"),
-    "loop-video": SkillConfigMigration("thumbnail", "loop"),
-    "lyria": SkillConfigMigration("music", "generate"),
-    "masterup": SkillConfigMigration("music", "master"),
-    "suno": SkillConfigMigration("music", "prompt"),
-    "suno-lyric": SkillConfigMigration("music", "lyric"),
-    "metadata-audit": SkillConfigMigration("audit", "metadata"),
-    "video-upload": SkillConfigMigration("publish", "upload"),
-    "video-description": SkillConfigMigration("video", "describe"),
-    "videoup": SkillConfigMigration("video", "generate"),
-    "video-analyze": SkillConfigMigration("audit", "video"),
-}
 
 _COMPATIBLE_CONFIG_NAMES: Final[frozenset[str]] = frozenset({"postmortem"})
 
