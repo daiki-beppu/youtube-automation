@@ -24,6 +24,7 @@ const expectedSources = [
   "docs/live-chat-reply.md",
   "docs/ambient-layers.md",
   "docs/scheduled-publish.md",
+  "docs/localizations.md",
 ];
 
 const createRepository = async (map = operatorDocMap) => {
