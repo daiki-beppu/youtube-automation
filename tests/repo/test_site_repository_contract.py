@@ -29,6 +29,7 @@ OPERATOR_DOC_SOURCES = (
     "docs/live-chat-reply.md",
     "docs/ambient-layers.md",
     "docs/scheduled-publish.md",
+    "docs/localizations.md",
 )
 NONPUBLIC_DOC_PREFIXES = (
     "docs/adr/",

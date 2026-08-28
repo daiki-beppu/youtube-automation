@@ -33,6 +33,7 @@ const operatorSections = [
       "/live-streaming",
       "/ambient-layers",
       "/scheduled-publish",
+      "/localizations",
     ],
     section: "use",
   },
@@ -268,10 +269,12 @@ test("landing page は活用ガイドを使う内の「こんなこともでき�
     "/live-streaming",
     "/ambient-layers",
     "/scheduled-publish",
+    "/localizations",
   ]);
   assert.equal(hrefsWithin(use).filter((href) => href === "/live-streaming").length, 1);
   assert.equal(hrefsWithin(use).filter((href) => href === "/ambient-layers").length, 1);
   assert.equal(hrefsWithin(use).filter((href) => href === "/scheduled-publish").length, 1);
+  assert.equal(hrefsWithin(use).filter((href) => href === "/localizations").length, 1);
 });
 
 test("landing page は実験的機能を使う内の専用グループとして表示する", async () => {
@@ -387,6 +390,7 @@ test(`operator docs の${generatedRouteCount} route は原本の先頭見出し�
     ["/live-chat-reply", "ライブチャット自動返信を試す"],
     ["/ambient-layers", "環境音レイヤーを重ねる"],
     ["/scheduled-publish", "公開日時を決めて予約公開する"],
+    ["/localizations", "タイトルと概要欄を多言語化する"],
   ]);
 
   assert.equal(expectedTitles.size, generatedRouteCount);

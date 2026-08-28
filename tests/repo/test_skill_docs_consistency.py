@@ -672,6 +672,7 @@ def test_channel_new_pre_wf_new_checks_include_analytics_reporting_and_live_stre
 def test_wf_new_fail_fast_contract_points_to_setup_import_and_collection_local_suno_style() -> None:
     channel_new = _read(".claude/skills/channel-strategy/SKILL.md")
     doctor = _read("src/youtube_automation/commands/system/doctor.py")
+    readiness_checks = _read("src/youtube_automation/application/channel_readiness/checks.py")
 
     hard_gates = SKILL_INVENTORY.section("wf-new", "## Hard Gates")
 
@@ -684,9 +685,9 @@ def test_wf_new_fail_fast_contract_points_to_setup_import_and_collection_local_s
     assert "`suno_preset` は推奨入力" in hard_gates
 
     assert "取り込みモード" not in channel_new
-    assert "def check_channel_config" in doctor
-    assert 'id="channel_config"' in doctor
-    assert "def check_ttp_wf_new_readiness" in doctor
+    assert 'check_channel_config = _domain_check("check_channel_config")' in doctor
+    assert 'id="channel_config"' in readiness_checks
+    assert "def check_ttp_wf_new_readiness" in readiness_checks
     assert 'CheckDefinition(\n        "ttp_wf_new_readiness"' in doctor
 
 
