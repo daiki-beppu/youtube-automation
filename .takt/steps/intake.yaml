@@ -1,7 +1,0 @@
-name: intake
-tags: [plan, intake]
-edit: false
-session: compact
-persona: planner
-capabilities: [readonly, enable-skills]
-instruction: yt-auto-intake

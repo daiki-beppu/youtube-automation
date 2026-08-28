@@ -73,7 +73,6 @@ REPO_CONTRACT_MODULES = frozenset(
         "test_site_repository_contract.py",
         "test_suno_skill_doc.py",
         "test_takt_runtime_prepare.py",
-        "test_takt_workflow_contract.py",
         "test_tests_layout_contract.py",
         "test_upgrade_guide_command_guard.py",
         "test_video_description_skill_contract.py",

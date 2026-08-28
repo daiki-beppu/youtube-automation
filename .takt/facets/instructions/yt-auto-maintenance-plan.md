@@ -1,1 +1,0 @@
-Plan a behavior-preserving maintenance change. State the structural objective, explicit observable behavior that must remain unchanged, affected public/internal boundaries, and the safety-net evidence that will detect semantic drift. Set structured verdict to `planned` when ready, `complete` for a non-maintenance question, or `out_of_lane` if behavior must change.

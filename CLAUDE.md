@@ -30,11 +30,10 @@ YouTube チャンネル運営を自動化するツールキット。`youtube-cha
 
 ## 開発ワークフロー
 
-- 標準ルートは takt: `takt add '#<N>'` で `.takt/workflows/` の専用 workflow（yt-auto-feature / yt-auto-fix / yt-auto-docs / yt-auto-maintenance / yt-auto-audit / yt-auto-audit-runs）を選び、`auto_pr` 有効で `takt run`。使い分けと運用は `docs/takt-operations.md`（既存 `takt:*` ラベルは履歴メタデータのみ — 新規に付与しない）
+- 標準ルートは takt: `takt add '#<N>'` でタスクに合う builtin workflow を選び、`auto_pr` 有効で `takt run`。使い分けと運用は `docs/takt-operations.md`（既存 `takt:*` ラベルは履歴メタデータのみ — 新規に付与しない）
 - issue は **1 issue = 1 PR = 1 振る舞い変更**の粒度に割る（要件 3 件以上 / 影響ファイル 4 件以上 / 独立した関心事 2 つ以上 / 複数 PR 見込みのいずれかで分割）。分割は sub-issue で階層化し、実装順の依存は `addBlockedBy` で表す
 - PR は **stacked PR 前提**。takt 経路は生成された PR を `gh stack link <下段PR> <上段PR>` で後からまとめ、対話経路は worktree 内で `gh stack init` / `add` で積む。merge は `gh pr merge` ではなく `gh stack merge --yes --squash`（非対話フラグと落とし穴は `docs/takt-operations.md`）
 - 人間と対話しながら進めたいタスク・要件が固まっていない探索は `/issue-direct <N>`（issue 専用 linked worktree、1 worktree = 1 stack）
 - takt 経路以外の開発は必ず issue 専用 linked worktree 上で行う（メイン作業ツリーで直接ブランチを切らない）
-- `.takt/workflows/` / `.takt/steps/` / `.takt/facets/` を変更したら、実行時版を確認して `takt workflow doctor` と各公開 workflow の `takt prompt` で検証する
 - commit は日本語 Conventional Commits + タイトル末尾に `(#<N>)`。stack の PR タイトルは commit から自動生成されるため 1 branch 1 commit に寄せる
 - リリースは `/automation-release`（post-release は `/release-notes`）

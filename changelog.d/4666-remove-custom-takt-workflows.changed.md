@@ -1,0 +1,1 @@
+- takt のリポジトリ固有 workflow 資産と契約テストを撤去し、builtin workflow を選択する運用へ統一しました。

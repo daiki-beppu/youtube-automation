@@ -1,1 +1,0 @@
-Implement the approved tests before production code and run them. Set structured verdict to `red_confirmed` only when every planned test exists and fails for the expected missing behavior, `replan` when the test design is unsound, `blocked` only when one material user answer is required, or `abort` when an honest red cannot be established. Never weaken existing checks.

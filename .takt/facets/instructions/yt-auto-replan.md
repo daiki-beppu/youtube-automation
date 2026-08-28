@@ -1,1 +1,0 @@
-Use the failed implementation/review evidence to define one materially different, untried approach without changing the accepted requirements. Include the validation that can disprove it. Set structured verdict to `planned` when the next implementation attempt is executable, otherwise `abort`.

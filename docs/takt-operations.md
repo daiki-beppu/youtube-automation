@@ -1,6 +1,6 @@
 # Issue / worktree 運用(takt 正規経路)
 
-> 2026-07-30(#2686)以降、このリポジトリの標準実装経路は takt + リポジトリ専用 workflow である。2026-07-23(#2453)の takt 廃止は「ドキュメントが前提とする workflow の実体が環境に存在しない」ことが原因だった。現在は workflow を `.takt/workflows/` で git 管理し、`takt workflow doctor` で機械検証するため、廃止の根拠は解消されている。
+> このリポジトリの標準実装経路は takt + builtin workflow である。workflow 定義は takt 本体の catalog を正とし、リポジトリ固有の workflow 資産は持たない。
 
 ## issue の粒度
 
@@ -44,33 +44,9 @@
 
 ## workflow の使い分け
 
-| workflow | 対象 | 骨子 |
-| --- | --- | --- |
-| `yt-auto-feature` | 新機能・機能拡張(CLI 追加、skill 新設など) | intake → 計画 / テスト設計 → 実装前設計レビュー 3 並列 + structured gate → red test → 実装 → 専門レビュー 6 並列 + structured gate → CI 同等ゲート → fail-closed final gate → spillover |
-| `yt-auto-fix` | バグ修正・回帰修正 | intake → 原因診断(対立仮説を含む)→ 診断レビュー 3 並列 + structured gate → 修正前 red → root-cause repair → 専門レビュー 6 並列 + structured gate → CI 同等ゲート → fail-closed final gate → spillover |
-| `yt-auto-docs` | docs / skill / instruction 限定の変更(実コード・runtime 変更なし) | intake → 文書限定計画 → 実装 → 文書レビュー 2 並列 → CI 同等ゲート → fail-closed final gate → spillover |
-| `yt-auto-maintenance` | 挙動を変えないリファクタリング | intake → 維持契約の計画 / 設計レビュー + structured gate → 変更前 safety net → リファクタ → 専門レビュー 6 並列 + structured gate → CI 同等ゲート → fail-closed final gate → spillover |
-| `yt-auto-audit` | 汎用監査(テスト監査・タスク完了検収・アーキテクチャ監査など) | 有限スコープ計画 / 初期台帳 → 追記型監査 → 監督 ⇄ 再監査 → 独立検収 → `docs/audits/` へ配置 |
-| `yt-auto-audit-runs` | takt 資産そのものの監査(workflow 定義の整合 + 読み取り可能な実行トレース) | 定義 / run 証拠の有限棚卸し → 追記型監査 → 監督 ⇄ 再監査 → 独立検収 → `docs/audits/` へ配置 |
-| `audit-unit-split` | ユニットテスト監査 16 分割(稼働中の特化 workflow) | 現状維持。汎用の監査は `yt-auto-audit` を使う |
+`takt add` が表示する builtin catalog から、機能追加・不具合修正・文書更新・保守などタスクの性質に合う workflow を選ぶ。workflow 名と内部 step は takt のバージョンに追従するため、リポジトリの文書やテストで固定しない。利用可能な選択肢と構成は実行環境の `takt catalog` で確認する。
 
-迷ったときの判定順: 壊れている → `yt-auto-fix`。コードを変えず文書だけ → `yt-auto-docs`。挙動を変えずに構造を変える → `yt-auto-maintenance`。takt の workflow / facet / 実行トレース自体を点検する → `yt-auto-audit-runs`。それ以外を調査して報告するだけ → `yt-auto-audit`。それ以外 → `yt-auto-feature`。
-
-`yt-auto-audit-runs` は issue 起点でなくてもよい定期点検レーン。run トレースの所在が 2 系統(メインチェックアウトの `.takt/runs` と、`.takt/clone-meta/*.json` の `clonePath` 配下)に分かれる点が他レーンと違う — takt はタスクを隔離クローンで実行するため、`yt-auto-*` の実行実績はクローン側にしか無い。クローンはスイープで消えるので、読める run 数は実行回数と一致しない。
-
-## workflow 設計の要点(保守者向け)
-
-公開定義は `.takt/workflows/`、takt 0.60.0 builtin から eject した共有 step とリポジトリ固有 step は `.takt/steps/`、固有 instruction / report contract だけを `.takt/facets/` に置く。一般的な plan / test-first / implementation review / fix / final gate は builtin 由来 fragment を正とし、旧内部構造への互換 adapter は持たない。
-
-- **検証は実行時 takt を正とする。** 変更前に `takt --version` と `takt catalog` / `takt eject` の内容を確認し、全公開 workflow へ `takt workflow doctor`、各 workflow へ `takt prompt <workflow>` を実行する。`takt prompt` は `workflow_call` の final gate だけ `[ERROR] reportContent is required for report-based judgment` で止まる — builtin `review-fix-default` でも同じ位置で止まるため、その 1 点より前の全 step が合成できていれば正常
-- **実行環境の権限は `capabilities` で宣言する。** workflow 直下の `capabilities: [readonly, enable-skills]` が全 step の既定になり、step 側の宣言は**継承ではなく置換**する。したがって `edit: true` の step は必ず `capabilities: [edit, enable-skills]` を自分で宣言する(落とすと readonly を継承して実行時に書き込めない)。`tests/repo/test_takt_workflow_contract.py::test_edit_boundaries_are_pinned_by_explicit_capability_sets` が静的に担保する
-- **CI 同等ゲート(`ci_verify`)を final gate より前に置く。** 最低でも ruff check / format、全 pytest、any-usage gate、`git diff --check` を実行し、変更 path に応じた CI job も追加する。ローカルで実行できるゲートの失敗は `fail` として修正へ戻す。実測した環境でコマンドまたは前提リソースを利用できない項目は、項目名と理由を findings に列挙して CI-only とし、ローカル判定から除外して正本の CI へ委ねる。`ci_verify` の verdict は `pass` / `fail` の 2 値とし、環境差を理由に ABORT しない
-- **レビューと final gate は fail-closed。** 専門レビューは未解決 finding / conflict / 判定不能を修正・再計画・ABORT へ送り、既知 verdict に一致しない出力も ABORT する。final gate も COMPLETE 以外をレビュー・修正・再計画・ABORT へ戻す
-- **分岐は 1 個の strict structured schema と `when(structured.*)` で決定する。** 並列 reviewer は各 report を生成するだけにし、直後の gate が全 report を読み structured verdict を返す。これにより判定不能を fallback ABORT へ送り、`takt prompt` でも全 step を reportContent なしで合成できる
-- **有限停止は root `max_steps` と loop monitor で担保する。** monitor は `ignore_steps` でゲートを挟む実際の cycle を追跡し、継続・再計画・ABORT を明示する。公開 lane から無制限 self-loop を作らない
-- **編集境界を lane ごとに固定する。** docs は文書 / skill / instruction と repository-contract test だけ、audit は最終レポート配置だけ、audit-runs は takt 定義と trace の読み取り + 最終レポート配置だけ、maintenance は挙動維持契約と safety net の範囲だけを変更できる
-- **監査台帳は追記型。** plan で有限な対象数を確定し、audit / supervise / review が物理行数と completed/total を照合する。既存 finding ID や証拠の要約削除を禁止し、検収後だけ `docs/audits/` へ配置する
-- **spillover は外部副作用を起こさない。** 因果ありは lane へ戻し、非因果の actionable finding は手動起票用の草案として記録する。workflow 内で `gh`、issue 作成、comment、push、PR 作成を行わない
+監査は takt のリポジトリ固有レーンではなく、対象に合う skill（例: `/improve` や `/code-review`）で行う。builtin catalog に相当する workflow がない場合は、自作 workflow を追加せず対話用の代替ルートを使う。
 
 ## linked worktree(`/issue-direct` 用)
 

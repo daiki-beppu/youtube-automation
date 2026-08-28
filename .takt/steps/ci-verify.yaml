@@ -1,8 +1,0 @@
-name: ci_verify
-tags: [review, delivery-gate]
-edit: false
-session: refresh
-persona: coding-reviewer
-capabilities: [readonly, enable-skills]
-instruction: yt-auto-ci-verify
-pass_previous_response: false
