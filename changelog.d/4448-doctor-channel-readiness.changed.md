@@ -1,0 +1,2 @@
+- `yt-doctor` の診断本体を `application/channel_readiness` へ移し、CLI 層を registry・表示・引数処理へ縮小しました。
+- 外部コマンド実行を `ReadinessProbes` で注入可能にし、readiness 単体テストから診断判定を検証できるようにしました。
