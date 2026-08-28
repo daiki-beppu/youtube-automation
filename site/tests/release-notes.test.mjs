@@ -30,6 +30,7 @@ const operatorSections = [
       "/dashboard",
       "/cloud-execution",
       "/live-chat-reply",
+      "/audio-studio",
       "/live-streaming",
       "/ambient-layers",
       "/scheduled-publish",
@@ -289,10 +290,12 @@ test("landing page は実験的機能を使う内の専用グループとして�
     "/dashboard",
     "/cloud-execution",
     "/live-chat-reply",
+    "/audio-studio",
   ]);
   assert.equal(hrefsWithin(use).filter((href) => href === "/dashboard").length, 1);
   assert.equal(hrefsWithin(use).filter((href) => href === "/cloud-execution").length, 1);
   assert.equal(hrefsWithin(use).filter((href) => href === "/live-chat-reply").length, 1);
+  assert.equal(hrefsWithin(use).filter((href) => href === "/audio-studio").length, 1);
 });
 
 test("全ページ共通 sidebar と tabs は operator 区分・release規模・exact route ownership を保つ", async () => {
@@ -330,10 +333,12 @@ test("全ページ共通 sidebar と tabs は operator 区分・release規模・
     const dashboard = sidebar.indexOf('href="/dashboard"');
     const cloudExecution = sidebar.indexOf('href="/cloud-execution"');
     const liveChatReply = sidebar.indexOf('href="/live-chat-reply"');
+    const audioStudio = sidebar.indexOf('href="/audio-studio"');
     assert.notEqual(experimentalLabel, -1);
     assert.ok(dashboard > experimentalLabel);
     assert.ok(cloudExecution > experimentalLabel);
     assert.ok(liveChatReply > experimentalLabel);
+    assert.ok(audioStudio > experimentalLabel);
   }
 });
 
@@ -395,6 +400,7 @@ test(`operator docs の${generatedRouteCount} route は原本の先頭見出し�
     ["/scheduled-publish", "公開日時を決めて予約公開する"],
     ["/localizations", "タイトルと概要欄を多言語化する"],
     ["/distrokid", "楽曲を DistroKid 配信向けに準備する"],
+    ["/audio-studio", "Audio Studio で音を調整する"],
   ]);
 
   assert.equal(expectedTitles.size, generatedRouteCount);
