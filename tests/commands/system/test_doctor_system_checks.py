@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from youtube_automation.commands.system import doctor
 
 # ---------------------------------------------------------------------------
@@ -117,9 +119,12 @@ class TestSystemChecksCombinations:
 
 
 class TestBootstrapInOutput:
+    @pytest.fixture(autouse=True)
+    def _missing_external_commands(self, monkeypatch):
+        monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
+
     def test_bootstrap_category_in_table(self, monkeypatch, tmp_path):
         """render_table 出力に bootstrap カテゴリラベルが含まれる."""
-        monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
         results = doctor.run_all_checks(tmp_path)
         summary = doctor.summarize(results)
         output = doctor.render_table(results, summary, tmp_path)
@@ -129,7 +134,6 @@ class TestBootstrapInOutput:
 
     def test_bootstrap_category_in_json(self, monkeypatch, tmp_path, capsys):
         """--json 出力に bootstrap カテゴリが含まれる."""
-        monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
         monkeypatch.setattr(doctor, "resolve_channel_dir", lambda t: tmp_path)
         doctor.main(["--json"])
         out = capsys.readouterr().out
@@ -139,7 +143,6 @@ class TestBootstrapInOutput:
 
     def test_bootstrap_appears_first_in_table(self, monkeypatch, tmp_path):
         """render_table で bootstrap が api より先に出現する."""
-        monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
         results = doctor.run_all_checks(tmp_path)
         summary = doctor.summarize(results)
         output = doctor.render_table(results, summary, tmp_path)
