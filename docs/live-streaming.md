@@ -26,10 +26,10 @@
 
 ## `/streaming` で始める
 
-チャンネルリポジトリで、配信したい動画と希望する運用を伝えて `/streaming` skill を呼び出します。
+チャンネルリポジトリで `/streaming` skill を呼び出します。
 
 ```text
-/streaming この動画を24時間ライブ配信したい
+/streaming
 ```
 
 skill は前提条件を確認し、`infra/terraform/streaming/` の設定準備から `terraform plan`、`terraform apply`、配信状態の確認までを案内します。複数チャンネルを運用している場合はチャンネルごとに Terraform workspace を分け、選択中の workspace と plan の対象が一致していることを確認してから適用します。
