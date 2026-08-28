@@ -100,6 +100,19 @@ def _allowed_tools(claude_args: str) -> list[str]:
     return line.removeprefix("--allowedTools").strip().strip('"').split(",")
 
 
+def test_review_reads_pr_checks_as_a_snapshot_without_waiting() -> None:
+    step = _review_step(_workflow()["jobs"]["review"])
+    prompt = step["with"]["prompt"]
+    tools = _allowed_tools(step["with"]["claude_args"])
+
+    assert "Bash(gh pr checks:*)" in tools
+    assert "Checks API" in prompt
+    assert "参照時点" in prompt
+    assert "CI 未検証" in prompt
+    assert "ローカルの full suite" in prompt
+    assert "--watch" not in prompt
+
+
 def test_review_comment_is_upserted_by_a_workflow_step_not_by_claude() -> None:
     review = _workflow()["jobs"]["review"]
     steps = review["steps"]

@@ -115,6 +115,8 @@ jobs:
 
             ## 手順
             1. `gh pr view` / `gh pr diff` で PR の内容と base branch との差分を取得する
+               `gh pr checks` を Checks API の正本として使い、参照時点の状態だけを取得する。
+               pending check の完了は待たず、CI の最終 green 判定は既存 GitHub checks に任せる
             2. PR タイトルまたは commit subject 末尾の `(#N)` から起点 issue 番号を特定し、
                `gh issue view N` で要件を読む。特定できなければ Spec 軸は「起点 issue 不明」と
                レポートに明記して省略する
@@ -135,10 +137,12 @@ jobs:
             ## 禁止事項
             - ファイルの編集・commit・push(このワークフローには push 権限が無い)
             - `gh pr comment` 等でのコメント投稿(投稿は workflow step の責務)
+            - ツール許可不足やローカルの full suite 未実行を、CI 未検証・サンドボックス制限の
+              finding として報告すること
           # takt が PR を大量生成するため、コスト対策として sonnet 系を既定にする
           claude_args: |
             --model sonnet
-            --allowedTools "Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh issue view:*),Bash(git log:*),Bash(git diff:*),Bash(git show:*),Bash(git status:*),Bash(git branch:*),Bash(git rev-parse:*),Bash(git merge-base:*)"
+            --allowedTools "Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr checks:*),Bash(gh issue view:*),Bash(git log:*),Bash(git diff:*),Bash(git show:*),Bash(git status:*),Bash(git branch:*),Bash(git rev-parse:*),Bash(git merge-base:*)"
             --json-schema '{"type":"object","properties":{"report_markdown":{"type":"string"},"critical_count":{"type":"integer","minimum":0},"warning_count":{"type":"integer","minimum":0},"info_count":{"type":"integer","minimum":0}},"required":["report_markdown","critical_count","warning_count","info_count"]}'
       - name: Post review comment
         if: steps.previous.outputs.skip != 'true' && steps.review.outputs.structured_output != ''
