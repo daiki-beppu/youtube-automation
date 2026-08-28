@@ -511,7 +511,9 @@ def _merge_skill_channel_override(
 
     override, acknowledged = _split_acknowledged_unknown_keys(_load_override(override_path), override_path)
     if resolution.migrated_section is not None:
-        migrated = override.get(resolution.migrated_section)
+        if resolution.migrated_section not in override:
+            return defaults
+        migrated = override[resolution.migrated_section]
         if not isinstance(migrated, dict):
             raise ConfigError(
                 f"skill-config {override_path} の移行先 {resolution.migrated_section!r} は mapping である必要があります"

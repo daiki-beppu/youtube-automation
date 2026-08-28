@@ -197,6 +197,33 @@ def test_legacy_skill_config_file_keeps_priority_over_migrated_override(tmp_path
     assert loaded["skip_preview_approval"] is True
 
 
+def test_legacy_skill_config_uses_defaults_when_migrated_override_section_is_absent(tmp_path: Path) -> None:
+    expected = skill_config.load_skill_config(
+        "loop-video",
+        use_cache=False,
+        channel_dir=tmp_path / "without-overrides",
+    )
+    overrides = tmp_path / "config" / "skills"
+    overrides.mkdir(parents=True)
+    (overrides / "thumbnail.yaml").write_text(
+        "image_generation:\n  provider: gemini\n",
+        encoding="utf-8",
+    )
+
+    loaded = skill_config.load_skill_config("loop-video", use_cache=False, channel_dir=tmp_path)
+
+    assert loaded == expected
+
+
+def test_legacy_skill_config_rejects_non_mapping_migrated_override_section(tmp_path: Path) -> None:
+    overrides = tmp_path / "config" / "skills"
+    overrides.mkdir(parents=True)
+    (overrides / "thumbnail.yaml").write_text("loop: null\n", encoding="utf-8")
+
+    with pytest.raises(ConfigError, match="移行先 'loop' は mapping"):
+        skill_config.load_skill_config("loop-video", use_cache=False, channel_dir=tmp_path)
+
+
 def test_load_namespaced_skill_config_rejects_missing_section(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     default_path = tmp_path / "music.default.yaml"
     default_path.write_text("master:\n  target_lufs: -14\n", encoding="utf-8")
