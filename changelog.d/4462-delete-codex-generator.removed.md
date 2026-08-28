@@ -1,0 +1,1 @@
+- 構築経路が封鎖済みだった CodexGenerator（comments 直接生成の codex 実装）を削除。codex provider は従来どおり --export-candidates / --agent-replies-file へ誘導
