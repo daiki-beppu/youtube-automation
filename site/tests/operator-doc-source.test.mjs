@@ -27,6 +27,7 @@ const expectedSources = [
   "docs/localizations.md",
   "docs/distrokid.md",
   "docs/audio-studio.md",
+  "docs/review-viewers.md",
 ];
 
 const createRepository = async (map = operatorDocMap) => {

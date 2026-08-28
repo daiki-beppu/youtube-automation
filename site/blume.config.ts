@@ -65,6 +65,7 @@ export default defineConfig({
               "/cloud-execution",
               "/live-chat-reply",
               "/audio-studio",
+              "/review-viewers",
             ],
           },
           {

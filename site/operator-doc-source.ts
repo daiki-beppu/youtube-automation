@@ -35,6 +35,7 @@ export const operatorDocMap = [
   { source: "docs/localizations.md", route: "/localizations" },
   { source: "docs/distrokid.md", route: "/distrokid" },
   { source: "docs/audio-studio.md", route: "/audio-studio" },
+  { source: "docs/review-viewers.md", route: "/review-viewers" },
 ] as const satisfies readonly OperatorDocMapping[];
 
 /** Internal marker allowing staged operator entries through release-only fields. */

@@ -32,6 +32,7 @@ OPERATOR_DOC_SOURCES = (
     "docs/localizations.md",
     "docs/distrokid.md",
     "docs/audio-studio.md",
+    "docs/review-viewers.md",
 )
 NONPUBLIC_DOC_PREFIXES = (
     "docs/adr/",
