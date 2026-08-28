@@ -1,1 +1,0 @@
-- 通常 PR の `CHANGELOG.md` 直接編集を CI で拒否して `changelog.d/` fragment を必須化し、`release/*` の release prepare だけを例外として許可する（#4525）。

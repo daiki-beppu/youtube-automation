@@ -1,1 +1,0 @@
-- 到達不能だった video_validator（CLI + domain 実装 + facade）と B3 facade domains/media/{video,audio}.py を削除

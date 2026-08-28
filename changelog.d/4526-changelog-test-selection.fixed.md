@@ -1,1 +1,0 @@
-- changelog fragment変更を影響テスト選択でchangelog契約テストへ限定し、未知path扱いによる全pytest誤実行を防ぐ（#4526）。

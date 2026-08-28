@@ -1,1 +1,0 @@
-- thumbnail / master audio / master video を source adapter 化し、review 表示・再 snapshot 検証・digest 計算を共通 lifecycle に集約する（#4432）。

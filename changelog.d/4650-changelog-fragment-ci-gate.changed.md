@@ -1,1 +1,0 @@
-- PR CI の changelog ゲートが fragment の存在だけでなく type 文字列と bullet 体裁も `yt-changelog-compile` と同じ実装で検証するようにし、体裁違反がリリース作業まで滞留しないようにする（#4650）。

@@ -1,2 +1,0 @@
-- CI の影響テスト選定で `.github/workflows/` 配下の変更が横断 test 1 件にしか対応付かず、GitHub Actions の pinning ゲートや `ci.yml` の契約テストが PR CI で走らなかった問題を修正
-- `.github/scripts/` 配下の変更を fail-safe の全件実行から対応する契約テストへ絞り込み

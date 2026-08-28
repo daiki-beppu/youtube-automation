@@ -1,5 +1,14 @@
 # Changelog
 
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [5.7.0] - 2026-08-29
+
 - `fix(collection-serve)`: discovery owner takeover時に自己登録を完了してからowner readinessを公開し、公開endpointが一時的に空になるraceを解消した（#4477）。
 
 - `fix(tests)`: 過去issueのcommit差分だけを固定する履歴依存テストを削除し、release noteのtag整合は履歴を取得したCIで維持しつつshallow checkoutでは誤ってredにしないようにした（#4469）。
@@ -11,13 +20,6 @@
 - `feat(skills)`: `/short --thumbnail` が 9:16 画像生成と Veo ループ動画化を担い、`/short-thumbnail` の手順・prompt・script 導線を統合した（#3834）
 
 - `feat(skills)`: `/short` が `content_model.type` から collection / release の手順を自動分岐し、`/short-release` の生成契約・設定・参照スクリプトを統合した（#3833）
-
-All notable changes to this project will be documented in this file.
-
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
-## [Unreleased]
 
 - `feat(wf-status)`: 制作状況 snapshot を要対応件数から各 collection の next action・成果物根拠へ走査できる technical / austere な運用キューへ再設計し、CSS filter の選択・focus と mobile containment を明確化する（#4405）。
 
@@ -572,6 +574,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `refactor(tests)`: `tests.helpers.paths` に repository root、`tests/`、fixtures の共通 path helper を追加し、テストからの `Path(__file__)` 直接遡上を禁止する契約テストと tests 配置規約を導入した（#3041）。
 - `refactor(repository)`: 再配置後に役目を終えた旧 `youtube_automation.auth` package marker と、受領済みの plans 025〜027 を削除した。互換 façade、配布物、契約テスト、履歴受領先は維持した。
 - `refactor(packaging)`: リポジトリを責務別 layer へ再配置し、canonical owner への production import・receipt・active documentation を同期した。`youtube_automation.utils` と `infrastructure.legacy_utils` は下流向け compatibility façade として installed wheel でも維持し、削除・統合候補は `docs/architecture/reorganization-followups.md` に記録した。
+
+- ドキュメントサイトを technical / austere な目的別インデックスへ再設計し、Blume の検索・ナビゲーション・公開 route を維持したまま light / dark・focus・responsive 表示を改善した ([#4407](https://github.com/daiki-beppu/youtube-automation/issues/4407))
+- YouTube Analytics Dashboard を technical / austere な Workbench へ再設計し、概況・推移・公開活動・channel stock・workflow timing・pipeline status を意思決定順に走査できるようにした ([#4408](https://github.com/daiki-beppu/youtube-automation/issues/4408))
+- 公開セットアップガイドを空フォルダでのツール導入から OAuth・アップロード準備完了までの正本にする（#4414）。
+- workflow-state の不正な section 型を識別する typed error を追加し、caller のエラー文言依存を解消する（#4418）。
+- media / uploads の workflow-state writer を owner mutator 経由へ移行し、rain layer 適用時にも正準 `updated_at` を刻印する（#4419）。
+- documents / review の workflow-state writer を検証付き owner mutator へ移行し、`updated_at` を正準形式に統一する（#4420）。
+- Chrome 拡張の公開インストールガイドと Release 案内を、状態判定と安全な更新を行う `/extension` 正規入口へ統一しました。
+- domain / application / VCS の collection 列挙を共通 inventory 経由へ移行し、readiness policy を filesystem 探索から分離する（#4427）。
+- commands / uploads / localserver の collection 列挙を共通 inventory へ移行し、読取不能 state の warn&skip・除外記録・lenient 処理を caller ごとの明示選択として維持する（#4428）。
+- collection plan / music prompt を source adapter と共通 select CLI harness へ移行する（#4431）。
+- thumbnail / master audio / master video を source adapter 化し、review 表示・再 snapshot 検証・digest 計算を共通 lifecycle に集約する（#4432）。
+- hybrid sandwich runner の pipeline stage を `StagePolicy` adapter として分離し、media handoff と制御ファイル allowlist を単体で検証可能にした。制御面 allowlist の判定は `state_sync.default_change_validator` を唯一の定義とし、adapter は既定 validator をそのまま再利用する。
+- hybrid sandwich runner の planning / post-publish を共通 base を持つ StagePolicy adapter 化し、media handoff request を分離しました。
+- uploads のスケジュール設定 consumer を解決済み `ScheduleConfig` に統一し、重複していた JSON loader を削除しました。
+- Shorts の resumable session を Complete Collection と共通の `UploadJournal` 契約へ移し、完了情報だけを workflow-state owner へ投影する（#4442）。
+- `yt-doctor --apply` の remediation を型付き union として扱い、公開 JSON の直列化とコマンド実行契約を action 自身へ集約しました。
+- `yt-doctor` の診断本体を `application/channel_readiness` へ移し、CLI 層を registry・表示・引数処理へ縮小しました。
+- 外部コマンド実行を `ReadinessProbes` で注入可能にし、readiness 単体テストから診断判定を検証できるようにしました。
+- audio-adjustments の tracks / order / master / finalize を登録型 section と socket 非依存 route handler に統合し、domain error の HTTP status 写像を一元化する（#4451）。
+- `yt-collection-serve` の HTTP 層を共通 localserver chassis へ移行しました。routing・CORS origin 判定・body 上限は chassis が所有し、各エンドポイントは socket を持たない handler 関数になりました。
+- パイプライン通知を channel・collection・stage・redaction 済み detail を持つ単一イベントと `notify` 配送へ統合し、owner 別イベント型と写像 bridge を削除しました。
+- uploads の未使用な Complete Collection 委譲メソッドを削除し、テストを executor の公開インターフェースへ直接接続しました。
+- `PublishedDatesScheduler` の cadence テストを datetime の module global patch から `now_provider` 注入へ移し、時刻 seam を実際のテスト経路で検証するようにした（#4457）。
+- MediaStore の保持容量取得を port 契約へ統合し、Local / R2 adapter 共通の `retained_bytes` を境界から発見可能にする（#4459）。
+- `yt-changelog-compile` と `changelog.d/` を導入し、並列 PR が `CHANGELOG.md` の同一箇所を編集せず変更履歴を書き溜められるようにする（#4483）。
+- Codex Cloud と PR template の通常 PR 向け変更履歴案内を changelog fragment に統一し、契約テストで固定
+- 通常 PR の `CHANGELOG.md` 直接編集を CI で拒否して `changelog.d/` fragment を必須化し、`release/*` の release prepare だけを例外として許可する（#4525）。
+- 公開セットアップガイドからツール導入手順を `/tool-setup` へ分離し、GCP / OAuth 手順との相互導線を追加しました。
+- `docs/tool-setup.md` を、automation package と skill の同期後に新しい Claude Code セッションで setup wizard を開始する、インストール先行の手順へ更新
+- `docs/oauth-setup.md` の手順番号を `docs/tool-setup.md` の 4 ステップに続く 5 / 6 へ振り直し、各ステップへ `**目的:**` 行を追加
+- `/analytics --flop` はローカル CLI / YouTube API の自律検証を維持しつつ、`/audit --video` だけを既存成果物の参照と agent 推論に限定して Vertex AI の自律起動を廃止しました。
+- `/wf-new` Phase 0 の失速分析確認を「実行する」「今回はスキップ」の2択に簡素化し、agent 推論へ統一しました。
+- リリースノートサイトの「使う」で、dashboard を折りたたみ可能な「実験的機能」セクションへ整理しました。
+- クラウドとローカルをまたぐ制作工程の範囲、前提条件、導入・確認手順、実験的機能としての制約を operator 向けドキュメントに追加しました。
+- リリースノートサイトの「こんなこともできる！」に、24時間ライブ配信の活用ガイドを追加しました。
+- CI autofix を critical / warning / info のレビュー指摘にも対応させ、PR ごとの通算 1 回上限内で自動修正する（#4550）。
+- 構造化文書の review と workflow status を Hallmark の全監査ゲートに適合させ、狭い画面でも判断対象と操作状態を読み取りやすくしました。
+- Dashboard の背景、見出し、表示書体と対話要素のトランジションを見直し、Hallmark 監査で検出された画一的な視覚表現を解消しました。
+- Audio Studio の音源編集画面を Hallmark の基準に合わせ、編集卓に適した視覚階層、配色、タイポグラフィへ更新しました。
+- 文書レンダラーの Midnight デザイントークンと基礎スタイルを共通化し、各画面の自己完結 HTML に埋め込むようにしました。
+- operator サイトの skill 入口を「探す」と「使う」に分け、各ページで選び方を明示しました。
+- ライブチャット自動返信の前提、安全上限、二重 opt-in を説明する実験的機能ガイドを追加しました。
+- PR CI の changelog ゲートが fragment の存在だけでなく type 文字列と bullet 体裁も `yt-changelog-compile` と同じ実装で検証するようにし、体裁違反がリリース作業まで滞留しないようにする（#4650）。
+- docs-site の landing hero とページタイトルを「YouTube-Automation 運用ガイド」に統一し、製品名が画面幅にかかわらず語中で折れないよう見出し寸法を調整しました。
+- takt のリポジトリ固有 workflow 資産と契約テストを撤去し、builtin workflow を選択する運用へ統一しました。
+- changelog fragment の許可 type と bullet 体裁を `CLAUDE.md` / `changelog.d/README.md` / `docs/development.md` へ明示し、CI と同一のローカル検証コマンドを併記した（#4668）。
+- `changelog.d/README.md` に検証を通る記述例と間違えやすい形の対照表を追加し、記述例そのものを validator へ掛ける契約テストで固定した（#4668）。
+- ライブ配信ページの起点サンプルを、引数なしの `/streaming` 呼び出しへ統一した（#4671）。
+- 公開ドキュメントサイトの「こんなこともできる！」に、環境音レイヤーの有効化と調整方法を案内する活用ガイドを追加しました。
+- リリースノートサイトの「こんなこともできる！」に、予約公開の活用ガイドを追加しました。
+- リリースノートサイトの「こんなこともできる！」に、タイトルと概要欄の多言語化ガイドを追加しました。
+- リリースノートサイトの「こんなこともできる！」に、DistroKid 配信向けの活用ガイドを追加しました。
+- リリースノートサイトの「実験的機能」に、Audio Studio の活用ガイドを追加しました。
+- リリースノートサイトの「実験的機能」に、音源と動画の review 用 HTML を案内する活用ガイドを追加しました。
 ### Added
 
 - `feat(dashboard)`: 日別公開本数を当日終端の過去365日について週×曜日へ配置し、月・曜日ラベルと0本+4強度の semantic-token 凡例を表示する独立 heatmap component を追加した（#3408）。
@@ -622,6 +679,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `ci(site)`: Blume リリースノートサイトの frozen install / schema check / test / build を stacked PR と `main` push で検証する専用 workflow を追加した。`site/` の生成物・依存を明示的に gitignore し、実際に build した Python wheel / sdist へサイト workspace が混入しない配布境界を契約テストで固定。公開サイトを ADR-0021 の限定 TypeScript 例外として ADR-0023、CLAUDE.md、architecture、development guide、README に反映した（#3056）。
 - `docs(release-notes)`: 運営者向け公開リリースノートの frontmatter・本文・表記契約を定義し、v5.5.17 / v5.6.0 / ext-v0.2.5 / ext-v0.3.0 の初期 4 件を `docs/release-notes/` へ追加した。非公開チャット向け digest を Web 用 Markdown へ移植し、更新判断に必要な新機能・改善・修正・移行手順を保ちながら、コミュニティ固有記号、issue・PR 番号、内部実装名、本文全体のコードブロックを除去した。必須 frontmatter、所定見出し、タグと Release リンクの一致、公開表記は契約テストで機械担保する（#3054）。
 
+- workflow-state owner に section 生成・既知値検証・正準 `updated_at` 刻印を担う named mutator を追加する（#4417）。
+- planning / live の collection 探索規則を inventory に集約し、symlink・予約 prefix・重複名を一貫して扱いながら読取不能な workflow state を明示値として返す（#4426）。
+- review lifecycle と artifact source adapter interface を追加し、terminal 契約と確定前の変異検出を単一 protocol で提供する（#4430）。
+- `schedule_config.json` の予約投稿優先順位とアップロード既定値を型付き `ScheduleConfig` loader に集約しました。
+- upload の再開 token を write 前再読込・破損 quarantine・保存失敗の明示化つきで所有する `UploadJournal` interface を追加し、Complete Collection 経路を移行する（#4441）。
+- operational artifact inventory に正準 filename・schema pair を検証して valid / invalid / latest instance と filename 日付基準の freshness を返す runtime API を追加する（#4444）。
+- route table と parsed request handler を備え、origin・body 上限・JSON response・domain error・OPTIONS・PID / stop / idle lifecycle を一元管理する HTTP chassis を追加する（#4450）。
+- PR ゲート CI の失敗を claude-code-action が診断して修正 commit を push する自動修正 workflow（`ci-autofix.yml`）を追加する（#4533）。
+- CI の lint ジョブに pyscn の構造品質ゲート（`pyscn check src/youtube_automation`）を追加。複雑度・関数長は導入時点の実測値を `[tool.pyscn]` の閾値に固定して既存債務を通し、dead code・循環 import は即時 fail で新規の悪化だけを検出する
+- CI の lint ジョブに pyscn の new-only 差分ゲートを追加した。PR の base commit を一時 worktree へ展開して base / HEAD の 2 回 `pyscn analyze` を実行し、base に無い finding（complexity high risk 関数 / dead code）が増えたときだけ fail する。#4615 の閾値ゲート（絶対上限）とは独立に併存する
+
+### Removed
+
+- `/onboarding` の共有クエリトークン制限と Pages Function を撤廃し、非掲載契約を保ったまま静的配信する（#4415）。
+- `uploads` の本番経路から参照されていなかった旧 `descriptions_md` module を削除する。
+- music skill の references から stale な generate_suno_prompts.py の実体コピーを削除（正規経路は yt-generate-suno CLI）
+- 到達不能だった video_validator（CLI + domain 実装 + facade）と B3 facade domains/media/{video,audio}.py を削除
+- 構築経路が封鎖済みだった CodexGenerator（comments 直接生成の codex 実装）を削除。codex provider は従来どおり --export-candidates / --agent-replies-file へ誘導
+- suno-helper: #892 で廃止済みだった popup のソース残骸（entrypoints/popup/ とそのテスト）を物理削除し、README の popup 記述を overlay に更新
+- legacy_utils/image_provider の実行されない per-file shim 5 本を削除（エイリアスは __init__ に集約済み）。あわせて参照ゼロの fixture・bench オーケストレータ・prettier 設定・fallow baseline の亡霊エントリを掃除
+- 参照経路のなかった `docs/skill-catalog.md` と `yt-skills catalog`、その CI 更新チェックを削除しました。
+
 ### Fixed
 
 - `fix(thumbnail)`: Codex prompt helper が `image_generation.gemini.single_step` の opt-in clause を silent に無視せず、非空の 1 件をテキスト付きサムネイル prompt へ伝搬するようにした。複数 clause の同時指定は fail-fast し、textless 専用の `text_strip_clause` は初回 prompt へ混入させない（#2557）。
@@ -660,6 +739,116 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `fix(videoup)`: `generate_videos.sh` の音声エンコーダ選択を、`ffmpeg -encoders` の列挙だけでなく実行時プローブの成功を条件にした。`aac_at` は AudioToolbox 経由で coreaudiod への Mach lookup を必要とするため、サンドボックス下では列挙されていても初期化に失敗し ffmpeg が exit 171 で落ちていた。プローブに失敗した場合は警告を出して `aac` へフォールバックする（#3034）。
 - `fix(ci)`: any-usage-gate が diff の基準点を解決できず素通りしていた事象を解消した。基準点の解決順を `PRE_PUSH_DIFF_BASE` → `origin/main` → `main` とし、remote を 1 つも持たない隔離クローン（takt がタスクを実行する形態）でもローカル `main` を基準に判定する。従来の self-skip は client-side lefthook 時代の設計で CI がバックストップだったが、`ci_verify` は CI の前に立つため同じ skip がそのままゲートの消失になり、CI の 4 ジョブのうち any-gate だけが takt run で一度も実行されていなかった。どの ref も解決できない場合は試した ref を列挙して skip する。解決順は新設した `tests/test_any_usage_gate.py` が機械担保する（#3048）。
 - `fix(automation-release)`: リリース前検証の誤検出 2 件を解消した。`verify-extensions.sh` は `pnpm zip` の直前に `.output/*.zip` を掃除し、過去 run のビルド残骸によって「期待名 zip が唯一の1件」判定が `expected exactly one zip ... found N` で誤 FAIL しないようにする（判定の意図である「今回の run が期待名の zip だけを生成した」ことの検証力は維持する。`release-extensions.yml` が `.output/*.zip` を glob で Release asset へ上げるため、期待名以外の成果物を公開前に止める必要があるという本来の目的に合わせ、回帰テストも「事前残骸は掃除されて成功する」「zip コマンドが余分な成果物を生んだら停止する」の 2 本へ分けた）。あわせて semver 判定の BREAKING 検出を大小文字非依存（`grep -qiE`）にし、本リポジトリで実際に使われる `**Breaking:**` / `breaking(scope):` 表記の取りこぼしを解消した。v5.6.0 の prepare で破壊的変更 6 件を検出できず minor と提案した事象への対策。`.output/` 残骸・パイプ越しの exit code 誤読という 2 つの落とし穴も SKILL.md の Gotchas と extension checklist へ明文化した。
+
+- `ttp_wf_new_readiness` が検証済み persona JSON+HTML pair を優先し、構造化 persona の確度と scene 参照を判定できるようにしました。
+- メディアを持たない文書レビュー候補がデスクトップ表示で空のプレビュー列を確保せず、比較内容を全幅で読めるように修正しました。
+- `yt-upload-collection --plan` が書き込みを行わない一方、投稿先照合と予約日計算で YouTube read API を使う契約を publish skill に明記しました。
+- Phase 0 の失速分析で Vertex AI を使わず、既存成果物と subagent 推論だけで不足項目を未検証として記録する経路を追加する（#4410）。
+- OAuth handler の人間向け進捗を stderr へ分離し、JSON CLI の stdout を機械可読出力だけに保つ（#4411）。
+- 競合動画の `commentsDisabled` 403 だけを動画単位でスキップし、残りのコメント収集を継続して対象と理由を結果へ記録する（#4412）。
+- 進捗図 hook がコレクションを解決できないとき（`collections/` 無し・コレクション 0 件・`workflow-state.json` 破損）は何も表示せず、実態と無関係な固定進捗図を描かないようにした ([#4416](https://github.com/daiki-beppu/youtube-automation/issues/4416))
+- 文書 pair の公開と workflow-state 投影を再実行可能な調停 API にまとめ、投影失敗後の再実行で収束させる（#4421）。
+- Suno の完了判定から playlist URL 依存を外し、検証済みローカル音源だけで `/wf-next` が masterup へ進めるようにした。非正規 CDN fallback は廃止し、音源不足時は suno-helper の download 再開へ案内する。
+- doctor と progress hook の analysis report 解決を operational artifact registry に統一し、分析 sidecar を進捗完了判定からも除外する（#4445）。
+- `YouTubeAutoUploader` を upload preflight の単一責務境界とし、collection 骨格・認証チャンネル・メタデータ品質の検査がどの CLI 経路でも一度だけ実行されるよう統一した。`yt-upload-collection --plan` のドライランも同じ検査集合を通し、fail-closed 通知の stage は preflight と実行系を区別して送るようにした。
+- `/wf-next` の一回限りの外部公開・目標尺外承認を lease owner の canonical attempt context に保持し、同じ resolver / upload 経路へ伝播できるようにした。
+- 承認・確認用HTMLを生成直後にリンクと確認対象を提示し、動画review HTMLをrun後も再参照できる場所へ保存するようにしました。
+- 構造化文書 HTML を承認サマリー優先の表示へ改め、監査用詳細の折り畳み、コピー対象、差分表示を schema annotation から指定できるようにした。折り畳んだ section は見出しを重複表示せず、priority critical と high を枠線で区別し、cards の anchor を section ごとに分離する。さらに値ベースの status annotation から PASS / FAIL / 警告をページ上部へ集約する。
+- `/wf-new` の analytics mode が検証済み JSON+HTML の persona chain を正規入力として受理し、不正な pair や参照不整合を fail-closed で拒否するよう修正した。
+- changelog fragment変更を影響テスト選択でchangelog契約テストへ限定し、未知path扱いによる全pytest誤実行を防ぐ（#4526）。
+- CI autofix の checkout に `persist-credentials: false` を追加し、残留した read-only GITHUB_TOKEN が App token 認証より優先されて `git push` が 403 になる問題を修正する（#4591）。
+- CI の affected-test 選定が `importlib.import_module` のリテラル依存を（キーワード引数・alias 呼び出しを含めて）静的依存として解決し、リテラルへ解決できない動的 import を持つモジュールを source 変更時に保守的に選定する（#4593）。
+- `configuration` package docstring の公開 API 一覧へ `load_schedule_config` / `ScheduleConfig` を追記し `__all__` と同期する（#4594）。
+- skill 改名・削除で旧パスに残る `__pycache__` だけのディレクトリをテストセッション開始時に prune し、ownership 契約テストの誤検知を防ぐ（#4595）。
+- dashboard の背景から 4rem 間隔の横罫線を削除し、カード間の余白に不要な線が透けて見える問題を修正する（#4596）。
+- 本リポジトリの hook（progress-hook / ruff）へ `uv run --no-sync` を適用し、nix devShell が構築した `.venv` を hook が作り直して実行中のテストを壊す干渉を止める（#4605）。
+- `analytics.json` の benchmark 死にキーを新規生成せず、旧キーには実際の設定先を警告するようにしました。
+- DistroKid Helper の音源転送を 4 MiB chunk と Blob URL に変更し、64 MiB を超える素材でも Chrome messaging 上限に達しないようにした。
+- CI の影響テスト選定で `.github/workflows/` 配下の変更が横断 test 1 件にしか対応付かず、GitHub Actions の pinning ゲートや `ci.yml` の契約テストが PR CI で走らなかった問題を修正
+- `.github/scripts/` 配下の変更を fail-safe の全件実行から対応する契約テストへ絞り込み
+- 移行済みの統合先設定だけが存在する場合も、旧 skill-config キーから同じ channel override を解決できるようにしました。
+- `yt-skills migrate-config` の適用前後で公開 loader の設定解決値を比較し、値が変わる場合はファイルを復元して中止するようにしました。
+- `yt-skills lint` で config migration の移行先を loader の互換 fallback が解決できるか検証し、登録キー・同梱 default・移行先の節の不整合を修正箇所付きで報告するようにしました。
+- PR 自動コードレビューが GitHub checks の参照時点の状態を読み取り、許可不足を CI 未検証と誤報告しないようにした（#4693）。
+
+### Migration
+
+所要時間の目安: 30〜60 分
+
+Python module 移動: あり
+互換 facade: 一部あり（`youtube_automation.utils` 配下は明示サポートの 9 path のみ facade 経由で存続: `audio_visualizer_mask` / `channel_target` / `cli_arguments` / `collection_paths` / `genai_client` / `image_provider` / `schemas` / `setup_directory_contract` / `skill_config`。これ以外の旧 `utils.*` path は削除済みで import は失敗する）
+
+| 旧 import path | 新 import path |
+|---|---|
+| `youtube_automation.utils.comments`（package 一式） | `youtube_automation.application.comments` |
+| `youtube_automation.utils.live_chat`（package 一式） | `youtube_automation.application.live_chat` |
+| `youtube_automation.utils.streaming`（package 一式） | `youtube_automation.infrastructure.youtube.streaming` |
+| `youtube_automation.utils.benchmark_analyzer` | `youtube_automation.infrastructure.analytics.benchmark_analyzer` |
+| `youtube_automation.utils.channel_registry` | `youtube_automation.infrastructure.analytics.channel_registry` |
+| `youtube_automation.utils.competitor_discovery` | `youtube_automation.infrastructure.analytics.competitor_discovery` |
+| `youtube_automation.utils.competitor_scoring` | `youtube_automation.infrastructure.analytics.competitor_scoring` |
+| `youtube_automation.utils.ctr_resolver` | `youtube_automation.infrastructure.analytics.ctr_resolver` |
+| `youtube_automation.utils.dashboard_read_model` | `youtube_automation.infrastructure.analytics.dashboard_read_model` |
+| `youtube_automation.utils.dashboard_refresh` | `youtube_automation.infrastructure.analytics.dashboard_refresh` |
+| `youtube_automation.utils.kpi_dashboard` | `youtube_automation.infrastructure.analytics.kpi_dashboard` |
+| `youtube_automation.utils.launch_curve_data` | `youtube_automation.infrastructure.analytics.launch_curve_data` |
+| `youtube_automation.utils.retention_timeline` | `youtube_automation.infrastructure.analytics.retention_timeline` |
+| `youtube_automation.utils.theme_performance` | `youtube_automation.infrastructure.analytics.theme_performance` |
+| `youtube_automation.utils.traffic_trend` | `youtube_automation.infrastructure.analytics.traffic_trend` |
+| `youtube_automation.utils.ttp_health` | `youtube_automation.infrastructure.analytics.ttp_health` |
+| `youtube_automation.utils.audio_visualizer_fill` | `youtube_automation.infrastructure.media.audio_visualizer_fill` |
+| `youtube_automation.utils.composition_lock` | `youtube_automation.infrastructure.media.composition_lock` |
+| `youtube_automation.utils.lyria_client` | `youtube_automation.infrastructure.media.lyria_client` |
+| `youtube_automation.utils.omni_generator` | `youtube_automation.infrastructure.media.omni_generator` |
+| `youtube_automation.utils.probe` | `youtube_automation.infrastructure.media.probe` |
+| `youtube_automation.utils.stock` | `youtube_automation.infrastructure.media.stock` |
+| `youtube_automation.utils.veo_generator` | `youtube_automation.infrastructure.media.veo_generator` |
+| `youtube_automation.utils.veo_operation_store` | `youtube_automation.infrastructure.media.veo_operation_store` |
+| `youtube_automation.utils.video_analyzer` | `youtube_automation.infrastructure.media.video_analyzer` |
+| `youtube_automation.utils.google_cloud_project` | `youtube_automation.infrastructure.runtime.google_cloud_project` |
+| `youtube_automation.utils.progress` | `youtube_automation.infrastructure.runtime.progress` |
+| `youtube_automation.utils.publish_schedule` | `youtube_automation.infrastructure.runtime.publish_schedule` |
+| `youtube_automation.utils.schedule` | `youtube_automation.infrastructure.runtime.schedule` |
+| `youtube_automation.utils.time_utils` | `youtube_automation.infrastructure.runtime.time_utils` |
+| `youtube_automation.utils.notification` | `youtube_automation.infrastructure.youtube.notification` |
+| `youtube_automation.utils.reporting_api` | `youtube_automation.infrastructure.youtube.reporting_api` |
+| `youtube_automation.utils.youtube_quota` | `youtube_automation.infrastructure.youtube.youtube_quota` |
+| `youtube_automation.utils.youtube_tag` | `youtube_automation.infrastructure.youtube.youtube_tag` |
+| `youtube_automation.utils.chrome_extensions` | `youtube_automation.infrastructure.collections.chrome_extensions` |
+| `youtube_automation.utils.numbered_duplicates` | `youtube_automation.infrastructure.collections.numbered_duplicates` |
+| `youtube_automation.utils.profile` | `youtube_automation.infrastructure.observability.profile` |
+| `youtube_automation.utils.worktree` | `youtube_automation.infrastructure.vcs.worktree` |
+
+Python module 削除（代替なし）: あり
+
+| 削除された import path | 理由 |
+|---|---|
+| `youtube_automation.domains.media.audio` / `youtube_automation.domains.media.video` / `youtube_automation.domains.media.video_validator` / `youtube_automation.commands.analytics.video_validator` | 到達不能クラスタの削除（#4461）。代替なし |
+| `youtube_automation.utils.comments.codex_generator` | 構築経路封鎖済みの CodexGenerator を削除（#4462）。代替なし |
+| `youtube_automation.utils.image_provider.gemini_cli` | `gemini_cli` provider の削除（#3308）。`gemini`（Vertex AI）へ移行 |
+| `youtube_automation.auth` | package 残骸の削除（#3022）。v5.6.0 で案内済みの `youtube_automation.infrastructure.auth` へ |
+
+local fix 衝突注意:
+- analytics: 旧 `analytics-collect` / `analytics-analyze` / `analytics-report` / `analytics-run` を `/analytics` の排他 mode へ統合（#3729）。旧 skill を参照する local fix は要更新
+- music, publish, video, reply, audit, channel-research, channel-strategy, setup, wf-new, short: 旧 skill 群（`/suno`, `/suno-lyric`, `/masterup`, `/video-upload`, `/community-post`, `/live-clean`, `/videoup`, `/video-description`, `/comments-reply`, `/metadata-audit`, `/video-analyze`, `/benchmark`, `/discover-competitors`, `/audience-persona-design`, `/wf-auto`, `/wf-new-batch`, `/automation-schedule`, `/short-thumbnail`, `/short-release`, `collection-ideate` ほか）を統合 skill の排他 mode へ移設。統廃合で削除された 42 skill を参照する local fix は要再適用（#4334）
+- thumbnail: 既定生成順序を文字入り先行へ回帰させ、textless 先行は `text_render.mode: deterministic` の明示 opt-in へ変更（#3312）。`gemini_cli` provider は削除（#3308）
+- wf-status / documents / dashboard: HTML 表示層を再設計（#4376〜#4405 ほか）。表示層への local fix は上書きされる可能性が高い
+
+必須の手作業（下流チャンネルリポジトリ）:
+- `yt-skills sync --prune` で統廃合済み旧 skill の配布ディレクトリを削除する（#4334。未知の自作 skill は保護され、削除は明示承認付き）
+- 分類プレイリストを定義しているチャンネルでは `yt-init-collection` に `--playlist` か `--no-playlist` が必須（#4346）。プレイリスト割り当ての正本は `workflow-state.json::planning.playlists` へ移行
+- `config/skills/` の旧 Analytics 設定を `config/skills/analytics.yaml` へ統合する（#3729）
+- 旧 skill 単位の config（`suno.yaml` → `music.yaml::prompt` 等）は互換 loader で読めるが、警告解消には統合先 yaml への移行が必要（`yt-skills migrate-config` を利用可能）
+- scheduled automation 設定済みの場合、`workflow.scheduled_automation.target_workflow` の旧値は移行案内付きで拒否される（#3740）
+- Python から旧 `utils.*` を直接 import している local script は上表の新 path へ移行する（facade 存続 9 path を除く）
+
+サマリ:
+
+- 統廃合により 42 skill を統合 skill 系（`/analytics`, `/music`, `/publish`, `/video`, `/audit`, `/reply`, `/channel-research`, `/channel-strategy`, `/setup`, `/wf-new`, `/short` 等）の排他 mode へ集約し、`yt-skills sync --prune` で旧配布ディレクトリを削除可能にした
+- リポジトリ全体を役割別（`application` / `domains` / `infrastructure` / `commands` / `configuration` / `core`）へ再配置し、`utils` は明示サポート 9 path の互換 namespace だけ残した（#3022）
+- Audio Studio（`yt-audio-studio` / `yt-master-adjust` ほか）を新設し、曲順・EQ・loudnorm・ambient layer の調整と非累積再出力を追加
+- dashboard を起動時 snapshot の閲覧画面へ整理し、wf-status / documents の HTML View を再設計
+- breaking: `yt-init-collection` の playlist フラグ必須化（#4346）、Analytics skill 統合（#3729）、thumbnail 既定順序の回帰と `gemini_cli` 削除（#3312, #3308）
 
 ## [5.6.0] - 2026-07-31
 
@@ -2692,6 +2881,7 @@ uv run yt-config-migrate verify                  # 新 loader で読めるか検
 未マップキー（例: `suno` 等のチャンネル独自拡張）は `yt-config-migrate` が warning を出力し、
 `--strict` 指定時は `ConfigError` で中止する。
 
+[5.7.0]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.7.0
 [5.6.0]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.6.0
 [5.5.17]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.17
 [5.5.16]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.16

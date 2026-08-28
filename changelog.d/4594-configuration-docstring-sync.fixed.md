@@ -1,1 +1,0 @@
-- `configuration` package docstring の公開 API 一覧へ `load_schedule_config` / `ScheduleConfig` を追記し `__all__` と同期する（#4594）。

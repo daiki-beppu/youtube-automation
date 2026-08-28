@@ -1,1 +1,0 @@
-- 本リポジトリの hook（progress-hook / ruff）へ `uv run --no-sync` を適用し、nix devShell が構築した `.venv` を hook が作り直して実行中のテストを壊す干渉を止める（#4605）。

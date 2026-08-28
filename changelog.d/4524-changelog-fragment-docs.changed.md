@@ -1,1 +1,0 @@
-- Codex Cloud と PR template の通常 PR 向け変更履歴案内を changelog fragment に統一し、契約テストで固定

@@ -1,1 +1,0 @@
-- docs-site の landing hero とページタイトルを「YouTube-Automation 運用ガイド」に統一し、製品名が画面幅にかかわらず語中で折れないよう見出し寸法を調整しました。

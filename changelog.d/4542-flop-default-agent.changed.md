@@ -1,1 +1,0 @@
-- `/analytics --flop` はローカル CLI / YouTube API の自律検証を維持しつつ、`/audit --video` だけを既存成果物の参照と agent 推論に限定して Vertex AI の自律起動を廃止しました。

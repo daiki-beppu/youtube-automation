@@ -1,1 +1,0 @@
-- OAuth handler の人間向け進捗を stderr へ分離し、JSON CLI の stdout を機械可読出力だけに保つ（#4411）。

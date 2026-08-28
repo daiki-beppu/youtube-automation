@@ -1,1 +1,0 @@
-- media / uploads の workflow-state writer を owner mutator 経由へ移行し、rain layer 適用時にも正準 `updated_at` を刻印する（#4419）。

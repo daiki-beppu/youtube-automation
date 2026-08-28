@@ -1,1 +1,0 @@
-- `ttp_wf_new_readiness` が検証済み persona JSON+HTML pair を優先し、構造化 persona の確度と scene 参照を判定できるようにしました。

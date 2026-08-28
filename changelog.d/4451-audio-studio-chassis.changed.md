@@ -1,1 +1,0 @@
-- audio-adjustments の tracks / order / master / finalize を登録型 section と socket 非依存 route handler に統合し、domain error の HTTP status 写像を一元化する（#4451）。

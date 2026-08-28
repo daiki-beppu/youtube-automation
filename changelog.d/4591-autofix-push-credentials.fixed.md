@@ -1,1 +1,0 @@
-- CI autofix の checkout に `persist-credentials: false` を追加し、残留した read-only GITHUB_TOKEN が App token 認証より優先されて `git push` が 403 になる問題を修正する（#4591）。
