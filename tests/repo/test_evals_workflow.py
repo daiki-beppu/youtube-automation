@@ -21,12 +21,13 @@ def _triggers(workflow: dict[str, object]) -> dict[str, object]:
     return triggers
 
 
-def test_evals_workflow_is_manual_and_nightly_but_not_a_pr_gate() -> None:
+def test_evals_workflow_is_manual_and_weekly_but_not_a_pr_gate() -> None:
     triggers = _triggers(_workflow())
 
     assert set(triggers) == {"workflow_dispatch", "schedule"}
     assert triggers["workflow_dispatch"] is None
-    assert triggers["schedule"] == [{"cron": "17 18 * * *"}]
+    # 日次は対象 skill の変更頻度に対して過剰だったため週次にする（2026-08 監査）。
+    assert triggers["schedule"] == [{"cron": "17 18 * * 1"}]
 
 
 def test_missing_auth_explicitly_skips_the_paid_eval() -> None:
@@ -60,7 +61,9 @@ def test_authenticated_eval_uses_pinned_tools_and_reports_assertion_failures() -
 
     promptfoo = next(step for step in steps if step.get("id") == "promptfoo")
     assert promptfoo["continue-on-error"] is True
-    assert "pnpm dlx promptfoo@0.122.0 eval" in promptfoo["run"]
+    # pnpm / npm は .#extensions shell にしか無い（既定 shell では即死する）。
+    assert "nix develop .#extensions --command pnpm dlx promptfoo@0.122.0 eval" in promptfoo["run"]
+    assert "nix develop .#extensions --command npm install" in steps[2]["run"]
     assert "-c evals/promptfooconfig.yaml" in promptfoo["run"]
     assert "--output evals/results/ci.json" in promptfoo["run"]
 
