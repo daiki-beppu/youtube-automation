@@ -1,9 +1,0 @@
-# verify fixture: benchmark 上書き
-scan_recent: 77
-min_views: 55555
-freshness_days: 99
-gemini_thumbnail_analysis: false
-thumbnail_analysis:
-  model: "gemini-3.5-flash"
-  delay_sec: 12
-  prompt: "VERIFY_PROMPT_MARKER"
