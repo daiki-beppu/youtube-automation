@@ -13,7 +13,7 @@ from typing import Final, Mapping
 
 import yaml
 
-from youtube_automation.configuration.skills import SKILL_CONFIG_MIGRATIONS, SkillConfigMigration
+from youtube_automation.configuration.skills import SKILL_CONFIG_MIGRATIONS, SkillConfigMigration, load_skill_config
 from youtube_automation.core.errors import ConfigError
 
 
@@ -30,6 +30,7 @@ class MigrationAction:
 class MigrationPlan:
     """Fully validated filesystem changes for one channel."""
 
+    channel_dir: Path
     actions: tuple[MigrationAction, ...]
     destinations: Mapping[Path, dict[str, object]]
     orphans: tuple[Path, ...]
@@ -105,6 +106,7 @@ def build_migration_plan(
         actions.append(MigrationAction(source, destination, migration.section))
 
     return MigrationPlan(
+        channel_dir=channel_dir,
         actions=tuple(actions),
         destinations=destinations,
         orphans=_orphan_configs(config_dir, migrations),
@@ -142,18 +144,29 @@ def _restore_files(originals: Mapping[Path, bytes | None]) -> None:
 
 
 def apply_migration_plan(plan: MigrationPlan) -> None:
-    """Stage all writes, then replace destinations and delete sources as one transaction."""
+    """Stage all writes, then replace destinations and delete sources as one transaction.
+
+    公開 loader の解決値を適用前後で比較し、値が変わる場合も同じ transaction として rollback する。
+    """
     staged: dict[Path, Path] = {}
     affected = {*plan.destinations, *(action.source for action in plan.actions)}
     originals: dict[Path, bytes | None] = {}
     try:
         originals = {path: path.read_bytes() if path.is_file() else None for path in affected}
+        resolved_before = {
+            action.source.stem: load_skill_config(action.source.stem, use_cache=False, channel_dir=plan.channel_dir)
+            for action in plan.actions
+        }
         for destination, data in plan.destinations.items():
             staged[destination] = _stage_mapping(destination, data)
         for destination, temporary in staged.items():
             os.replace(temporary, destination)
         for action in plan.actions:
             action.source.unlink()
+        for skill, before in resolved_before.items():
+            after = load_skill_config(skill, use_cache=False, channel_dir=plan.channel_dir)
+            if after != before:
+                raise ConfigError(f"公開 loader の設定解決値が変化しました: {skill}")
     except (ConfigError, OSError) as exc:
         for temporary in staged.values():
             temporary.unlink(missing_ok=True)
@@ -164,7 +177,7 @@ def apply_migration_plan(plan: MigrationPlan) -> None:
         raise ConfigError(f"skill-config 移行に失敗しました。既存ファイルを復元しました: {exc}") from exc
 
 
-def _print_plan(channel_dir: Path, plan: MigrationPlan, *, dry_run: bool) -> None:
+def _print_plan(plan: MigrationPlan, *, dry_run: bool) -> None:
     prefix = "[dry-run] " if dry_run else ""
     for action in plan.actions:
         section_suffix = f"::{action.section}" if action.section is not None else ""
@@ -178,8 +191,8 @@ def _print_plan(channel_dir: Path, plan: MigrationPlan, *, dry_run: bool) -> Non
                     difflib.unified_diff(
                         before,
                         after,
-                        fromfile=f"{destination.relative_to(channel_dir)} (before)",
-                        tofile=f"{destination.relative_to(channel_dir)} (after)",
+                        fromfile=f"{destination.relative_to(plan.channel_dir)} (before)",
+                        tofile=f"{destination.relative_to(plan.channel_dir)} (after)",
                     )
                 ),
                 end="",
@@ -192,7 +205,7 @@ def cmd_migrate_config(args: argparse.Namespace) -> int:
     """`yt-skills migrate-config` — downstream override を明示適用で移行する。"""
     try:
         plan = build_migration_plan(args.channel_dir, SKILL_CONFIG_MIGRATIONS)
-        _print_plan(args.channel_dir, plan, dry_run=args.dry_run)
+        _print_plan(plan, dry_run=args.dry_run)
         if not plan.actions:
             print("移行対象はありません")
             return 0
