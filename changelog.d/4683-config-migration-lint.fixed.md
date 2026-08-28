@@ -1,0 +1,1 @@
+- `yt-skills lint` で config migration と互換 loader 経路の対応を検証し、不整合な移行定義を修正方法付きで報告するようにしました。

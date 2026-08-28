@@ -403,6 +403,29 @@ def test_cli_lint_guides_unmigrated_downstream_skill_config(
     assert "yt-skills migrate-config" in output
 
 
+def test_skill_config_migration_lint_accepts_loader_compatible_table() -> None:
+    assert _lint._lint_skill_config_migrations(skill_config.SKILL_CONFIG_MIGRATIONS) == []
+
+
+def test_cli_lint_rejects_migration_without_compatible_loader_path(
+    fake_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(
+        _migrate_config,
+        "SKILL_CONFIG_MIGRATIONS",
+        {"suno": _migrate_config.SkillConfigMigration("broken-owner", "prompt")},
+    )
+
+    assert main(["lint"]) == 1
+
+    output = capsys.readouterr().out
+    assert "suno -> broken-owner::prompt" in output
+    assert "互換 loader 経路がありません" in output
+    assert "SKILL_CONFIG_MIGRATIONS" in output
+
+
 def test_cli_lint_missing_mode_reference_reports_skill_flag_and_path(
     fake_repo: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
