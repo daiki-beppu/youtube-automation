@@ -327,9 +327,15 @@ def skill_config_migration_loader_gaps(source: str, migration: SkillConfigMigrat
         )
     # migration は移行先ファイル直下の節へ配置し、loader はそこから同梱 default と
     # 同じ full path を辿る。したがって migration の節は full path の入口と一致する必要がある。
-    expected_path = skill_config_migration_section_path(source, migration)
+    configured_path = _MOVED_SKILL_CONFIG_SECTIONS.get(source)
+    if migration.section is not None and configured_path is None:
+        gaps.append(
+            f"移行元 {source} の full section path が未登録です "
+            f"(_MOVED_SKILL_CONFIG_SECTIONS[{source!r}] を登録してください)"
+        )
+    expected_path = configured_path or ()
     expected_section = expected_path[0] if expected_path else None
-    if migration.section != expected_section:
+    if configured_path is not None and migration.section != expected_section:
         dotted = ".".join(expected_path) if expected_path else None
         gaps.append(
             f"移行先の節 {migration.section!r} が同梱 default の節 "

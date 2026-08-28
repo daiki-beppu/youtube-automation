@@ -73,6 +73,40 @@ def _orphan_configs(
     return tuple(path for path in sorted(config_dir.glob("*.yaml")) if path.is_file() and path.stem not in known)
 
 
+def _merge_source_into_destination(
+    destination: Path,
+    destination_data: dict[str, object],
+    section_path: tuple[str, ...],
+    source_data: dict[str, object],
+) -> dict[str, object]:
+    """source data を section path へ衝突なしで配置する。"""
+    if not section_path:
+        if destination_data and destination_data != source_data:
+            raise ConfigError(f"移行先に既存内容があります: {destination} (既存内容を上書きしません)")
+        return source_data
+
+    destination_section = destination_data
+    for path_part in section_path[:-1]:
+        existing_parent = destination_section.get(path_part)
+        if existing_parent is None:
+            nested: dict[str, object] = {}
+            destination_section[path_part] = nested
+            destination_section = nested
+        elif isinstance(existing_parent, dict):
+            destination_section = existing_parent
+        else:
+            dotted = ".".join(section_path[:-1])
+            raise ConfigError(f"移行先の節が mapping ではありません: {destination}::{dotted}")
+
+    leaf = section_path[-1]
+    existing = destination_section.get(leaf)
+    if leaf in destination_section and existing != source_data:
+        dotted = ".".join(section_path)
+        raise ConfigError(f"移行先の節が既存内容と衝突しています: {destination}::{dotted} (既存内容を上書きしません)")
+    destination_section[leaf] = source_data
+    return destination_data
+
+
 def build_migration_plan(
     channel_dir: Path,
     migrations: Mapping[str, SkillConfigMigration],
@@ -95,34 +129,13 @@ def build_migration_plan(
         source_data = _load_mapping(source)
         if destination not in destinations:
             destinations[destination] = _load_mapping(destination) if destination.is_file() else {}
-        destination_data = destinations[destination]
-        if migration.section is None:
-            if destination_data and destination_data != source_data:
-                raise ConfigError(f"移行先に既存内容があります: {destination} (既存内容を上書きしません)")
-            destinations[destination] = source_data
-            actions.append(MigrationAction(source, destination, migration.section))
-            continue
         section_path = skill_config_migration_section_path(source_name, migration)
-        destination_section = destination_data
-        for path_part in section_path[:-1]:
-            existing_parent = destination_section.get(path_part)
-            if existing_parent is None:
-                nested: dict[str, object] = {}
-                destination_section[path_part] = nested
-                destination_section = nested
-            elif isinstance(existing_parent, dict):
-                destination_section = existing_parent
-            else:
-                dotted = ".".join(section_path[:-1])
-                raise ConfigError(f"移行先の節が mapping ではありません: {destination}::{dotted}")
-        leaf = section_path[-1]
-        existing = destination_section.get(leaf)
-        if leaf in destination_section and existing != source_data:
-            dotted = ".".join(section_path)
-            raise ConfigError(
-                f"移行先の節が既存内容と衝突しています: {destination}::{dotted} (既存内容を上書きしません)"
-            )
-        destination_section[leaf] = source_data
+        destinations[destination] = _merge_source_into_destination(
+            destination,
+            destinations[destination],
+            section_path,
+            source_data,
+        )
         actions.append(MigrationAction(source, destination, migration.section))
 
     return MigrationPlan(

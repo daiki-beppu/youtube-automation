@@ -440,6 +440,15 @@ def test_skill_config_migration_lint_reports_full_bundled_default_section_path()
     assert "同梱 default の節 path 'generate.lyria' の入口 'generate'" in violations[0]
 
 
+def test_skill_config_migration_lint_rejects_section_without_registered_full_path() -> None:
+    violations = _lint._lint_skill_config_migrations(
+        {"publish": _migrate_config.SkillConfigMigration("publish", "community")}
+    )
+
+    assert len(violations) == 1
+    assert "移行元 publish の full section path が未登録です" in violations[0]
+
+
 def test_skill_config_migration_lint_rejects_source_outside_loader_keys() -> None:
     violations = _lint._lint_skill_config_migrations({"music": _migrate_config.SkillConfigMigration("music", None)})
 
