@@ -50,7 +50,7 @@ Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJE
 | 028 | music skill 内の stale fork `generate_suno_prompts.py`（19KB・95 行乖離・wheel 配布に混入）を削除 | P1 | S | 033 (soft) | [#4460](https://github.com/daiki-beppu/youtube-automation/issues/4460) | — | DONE |
 | 029 | 到達不能な video_validator クラスタ（446 行 + テスト 278 行）と B3 facade `domains/media/{video,audio}.py` を削除 | P1 | S | 033 (soft) | [#4461](https://github.com/daiki-beppu/youtube-automation/issues/4461) | — | DONE |
 | 030 | 構築経路が封鎖済みの CodexGenerator（未監査自動返信の footgun）を削除 | P1 | S | 033 (soft) | [#4462](https://github.com/daiki-beppu/youtube-automation/issues/4462) | — | DONE |
-| 031 | suno-helper の廃止済み popup 残骸（#892 の「後続 PR」約 2000 PR 分未着手）を物理削除し README を実態に合わせる | P1 | S | 033 (soft) | [#4463](https://github.com/daiki-beppu/youtube-automation/issues/4463) | — | TODO |
+| 031 | suno-helper の廃止済み popup 残骸（#892 の「後続 PR」約 2000 PR 分未着手）を物理削除し README を実態に合わせる | P1 | S | 033 (soft) | [#4463](https://github.com/daiki-beppu/youtube-automation/issues/4463) | — | DONE |
 | 032 | 参照ゼロの小粒残骸一括掃除（legacy image_provider shim ×5 / 廃止スキーマ fixture / bench_real_apis / .prettierignore ×2 / fallow baseline 亡霊 / commit 済み .lock） | P2 | S | 033 (soft) | [#4464](https://github.com/daiki-beppu/youtube-automation/issues/4464) | — | DONE |
 
 ### Dependency notes
