@@ -547,6 +547,31 @@ def _resolve_skill_override(
     return _SkillOverrideResolution(override_path, legacy_owner if override_path is not None else None, ())
 
 
+def _select_migrated_override(
+    override: dict[str, object],
+    section_path: tuple[str, ...],
+    defaults: dict[str, object],
+    override_path: Path,
+) -> dict[str, object] | None:
+    """full path の override を選び、旧 migrate-config の flat 形式も互換読込する。"""
+    migrated: object = override
+    for index, migrated_section in enumerate(section_path):
+        if not isinstance(migrated, dict):
+            dotted = ".".join(section_path[:index])
+            raise ConfigError(f"skill-config {override_path} の移行先 {dotted!r} は mapping である必要があります")
+        if migrated_section not in migrated:
+            # 旧 migrate-config は多階層 path の入口へ source mapping を直接保存した。
+            # 最終 segment だけが無く、legacy default のキーがある場合に限り旧形式と判定する。
+            if index == len(section_path) - 1 and migrated.keys() & defaults.keys():
+                return dict(migrated)
+            return None
+        migrated = migrated[migrated_section]
+    if not isinstance(migrated, dict):
+        dotted = ".".join(section_path)
+        raise ConfigError(f"skill-config {override_path} の移行先 {dotted!r} は mapping である必要があります")
+    return dict(migrated)
+
+
 def _merge_skill_channel_override(
     skill: str,
     owner: str,
@@ -561,18 +586,10 @@ def _merge_skill_channel_override(
 
     override, acknowledged = _split_acknowledged_unknown_keys(_load_override(override_path), override_path)
     if resolution.migrated_section_path:
-        migrated: object = override
-        for index, migrated_section in enumerate(resolution.migrated_section_path):
-            if not isinstance(migrated, dict):
-                dotted = ".".join(resolution.migrated_section_path[:index])
-                raise ConfigError(f"skill-config {override_path} の移行先 {dotted!r} は mapping である必要があります")
-            if migrated_section not in migrated:
-                return defaults
-            migrated = migrated[migrated_section]
-        if not isinstance(migrated, dict):
-            dotted = ".".join(resolution.migrated_section_path)
-            raise ConfigError(f"skill-config {override_path} の移行先 {dotted!r} は mapping である必要があります")
-        override = dict(migrated)
+        migrated = _select_migrated_override(override, resolution.migrated_section_path, defaults, override_path)
+        if migrated is None:
+            return defaults
+        override = migrated
     # legacy owner の override は節を持たないため、名前空間キー側の節へ包み直す。
     legacy_section = section if resolution.legacy_owner is not None else None
     if legacy_section is not None:

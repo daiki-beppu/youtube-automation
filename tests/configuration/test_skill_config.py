@@ -186,6 +186,37 @@ def test_legacy_skill_config_narrows_migrated_override_through_full_section_path
     assert "provider" not in loaded
 
 
+def test_legacy_skill_config_reads_flat_override_written_by_old_migrate_config(tmp_path: Path) -> None:
+    overrides = tmp_path / "config" / "skills"
+    overrides.mkdir(parents=True)
+    (overrides / "music.yaml").write_text(
+        "generate:\n  model: lyria-002\n",
+        encoding="utf-8",
+    )
+
+    loaded = skill_config.load_skill_config("lyria", use_cache=False, channel_dir=tmp_path)
+
+    assert loaded["model"] == "lyria-002"
+
+
+def test_legacy_skill_config_ignores_sibling_only_migrated_override(tmp_path: Path) -> None:
+    expected = skill_config.load_skill_config(
+        "lyria",
+        use_cache=False,
+        channel_dir=tmp_path / "without-overrides",
+    )
+    overrides = tmp_path / "config" / "skills"
+    overrides.mkdir(parents=True)
+    (overrides / "music.yaml").write_text(
+        "generate:\n  minimax:\n    model: speech-2.6-hd\n",
+        encoding="utf-8",
+    )
+
+    loaded = skill_config.load_skill_config("lyria", use_cache=False, channel_dir=tmp_path)
+
+    assert loaded == expected
+
+
 def test_legacy_and_namespaced_keys_resolve_the_same_migrated_override(tmp_path: Path) -> None:
     overrides = tmp_path / "config" / "skills"
     overrides.mkdir(parents=True)
