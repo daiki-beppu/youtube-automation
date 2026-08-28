@@ -24,6 +24,7 @@ import json
 import stat
 import warnings
 from collections.abc import Mapping
+from dataclasses import dataclass
 from importlib.resources import as_file, files
 from pathlib import Path
 from typing import Any, Final
@@ -34,6 +35,32 @@ from youtube_automation.configuration import channel_dir as configured_channel_d
 from youtube_automation.core.errors import ConfigError
 
 _cache: dict[str, dict[str, Any]] = {}
+
+
+@dataclass(frozen=True, slots=True)
+class SkillConfigMigration:
+    """旧 config filename と統合先の対応。"""
+
+    target_skill: str
+    section: str | None
+
+
+SKILL_CONFIG_MIGRATIONS: Final[Mapping[str, SkillConfigMigration]] = {
+    "benchmark": SkillConfigMigration("channel-research", "benchmark"),
+    "collection-ideate": SkillConfigMigration("wf-new", None),
+    "community-post": SkillConfigMigration("publish", "community"),
+    "live-clean": SkillConfigMigration("publish", "clean"),
+    "loop-video": SkillConfigMigration("thumbnail", "loop"),
+    "lyria": SkillConfigMigration("music", "generate"),
+    "masterup": SkillConfigMigration("music", "master"),
+    "suno": SkillConfigMigration("music", "prompt"),
+    "suno-lyric": SkillConfigMigration("music", "lyric"),
+    "metadata-audit": SkillConfigMigration("audit", "metadata"),
+    "video-upload": SkillConfigMigration("publish", "upload"),
+    "video-description": SkillConfigMigration("video", "describe"),
+    "videoup": SkillConfigMigration("video", "generate"),
+    "video-analyze": SkillConfigMigration("audit", "video"),
+}
 
 SKILL_CONFIG_KEYS: Final[frozenset[str]] = frozenset(
     {
@@ -460,12 +487,24 @@ def load_skill_config(
     defaults = _select_moved_default_section(owner, defaults)
 
     override_path = _resolve_channel_override(owner, channel_dir)
+    migrated_override_section: str | None = None
+    if override_path is None and (migration := SKILL_CONFIG_MIGRATIONS.get(skill)) is not None:
+        override_path = _resolve_channel_override(migration.target_skill, channel_dir)
+        migrated_override_section = migration.section if override_path is not None else None
     legacy_override_owner: str | None = None
     if override_path is None and (legacy_owner := _NAMESPACED_LEGACY_OVERRIDE_OWNERS.get(skill)) is not None:
         override_path = _resolve_channel_override(legacy_owner, channel_dir)
         legacy_override_owner = legacy_owner if override_path is not None else None
     if override_path is not None:
         override, acknowledged = _split_acknowledged_unknown_keys(_load_override(override_path), override_path)
+        if migrated_override_section is not None:
+            migrated = override.get(migrated_override_section)
+            if not isinstance(migrated, dict):
+                raise ConfigError(
+                    f"skill-config {override_path} の移行先 {migrated_override_section!r} は "
+                    "mapping である必要があります"
+                )
+            override = dict(migrated)
         if legacy_override_owner is not None and section is not None:
             override = {section: override}
         merged = _deep_merge(defaults, override)
