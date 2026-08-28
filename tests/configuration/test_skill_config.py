@@ -291,6 +291,8 @@ def test_unknown_top_level_override_key_warns_but_still_merges(tmp_path, monkeyp
     assert "コードからは参照されない可能性があります" in message
     assert "SKILL.md 経由で AI が読む設計であれば意図どおりです" in message
     assert "利用側に参照されない可能性があります" not in message
+    # 警告の発生位置は loader 内部ではなく呼び出し元コードを指す
+    assert caught[0].filename == __file__
 
 
 def test_acknowledged_unknown_keys_suppress_only_named_warning(tmp_path, monkeypatch):
@@ -419,6 +421,8 @@ def test_thumbnail_deprecated_override_keys_warn_but_still_merge(tmp_path, monke
     assert "image_generation.gemini.composition_rules.environment" in message
     assert "image_generation.gemini.thumbnail_text.copy_position" in message
     assert "#1702" in message
+    # 警告の発生位置は loader 内部ではなく呼び出し元コードを指す
+    assert records[0].filename == __file__
     # override は従来どおり有効（後方互換 no-op を維持）
     gemini = cfg["image_generation"]["gemini"]
     assert gemini["composition_rules"]["environment"] == "cozy tavern"

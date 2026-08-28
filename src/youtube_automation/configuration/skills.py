@@ -27,7 +27,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from importlib.resources import as_file, files
 from pathlib import Path
-from typing import Any, Final
+from typing import Any, Final, NamedTuple
 
 import yaml
 
@@ -45,6 +45,8 @@ class SkillConfigMigration:
     section: str | None
 
 
+# 統合先 skill と名前空間 loader key が成立した段から移行を有効化する。
+# apply は利用者の明示実行だけで行い、旧 loader key は互換入口として維持する。
 SKILL_CONFIG_MIGRATIONS: Final[Mapping[str, SkillConfigMigration]] = {
     "benchmark": SkillConfigMigration("channel-research", "benchmark"),
     "collection-ideate": SkillConfigMigration("wf-new", None),
@@ -209,6 +211,8 @@ def _warn_deprecated_override_keys(
     override: dict[str, object],
     override_path: Path,
     merged: dict[str, object],
+    *,
+    warning_stacklevel: int = 3,
 ) -> None:
     image_generation = merged.get("image_generation")
     codex_provider = isinstance(image_generation, dict) and image_generation.get("provider") == "codex"
@@ -226,7 +230,7 @@ def _warn_deprecated_override_keys(
         "後続リリースで削除予定です（現時点では従来どおり deep-merge されます）。"
         f"意図は {migration_target} へ移行してください (#1702)。",
         DeprecationWarning,
-        stacklevel=3,
+        stacklevel=warning_stacklevel,
     )
 
 
@@ -251,6 +255,8 @@ def _warn_unknown_top_level_override_keys(
     defaults: dict[str, object],
     override_path: Path,
     acknowledged: set[str],
+    *,
+    warning_stacklevel: int = 3,
 ) -> None:
     known_keys = defaults.keys() | _KNOWN_OVERRIDE_ONLY_KEYS.get(skill, frozenset())
     unknown_keys = sorted(override.keys() - known_keys - acknowledged)
@@ -269,7 +275,7 @@ def _warn_unknown_top_level_override_keys(
         "値は互換性のためマージされますが、コードからは参照されない可能性があります。"
         "SKILL.md 経由で AI が読む設計であれば意図どおりです。",
         UserWarning,
-        stacklevel=3,
+        stacklevel=warning_stacklevel,
     )
 
 
@@ -460,27 +466,35 @@ def _select_moved_default_section(owner: str, defaults: dict[str, object]) -> di
     return dict(selected)
 
 
+class _SkillOverrideResolution(NamedTuple):
+    """解決した override path と、互換読込に必要な legacy owner / 移行先 section。"""
+
+    path: Path | None
+    legacy_owner: str | None
+    migrated_section: str | None
+
+
 def _resolve_skill_override(
     skill: str,
     owner: str,
     channel_dir: Path | None,
-) -> tuple[Path | None, str | None, str | None]:
+) -> _SkillOverrideResolution:
     """override path と互換読込に必要な legacy owner / 移行先 section を返す。"""
     override_path = _resolve_channel_override(owner, channel_dir, warning_stacklevel=5)
     if override_path is not None:
-        return override_path, None, None
+        return _SkillOverrideResolution(override_path, None, None)
 
     migration = SKILL_CONFIG_MIGRATIONS.get(skill)
     if migration is not None:
         override_path = _resolve_channel_override(migration.target_skill, channel_dir, warning_stacklevel=5)
         if override_path is not None:
-            return override_path, None, migration.section
+            return _SkillOverrideResolution(override_path, None, migration.section)
 
     legacy_owner = _NAMESPACED_LEGACY_OVERRIDE_OWNERS.get(skill)
     if legacy_owner is None:
-        return None, None, None
+        return _SkillOverrideResolution(None, None, None)
     override_path = _resolve_channel_override(legacy_owner, channel_dir, warning_stacklevel=5)
-    return override_path, legacy_owner if override_path is not None else None, None
+    return _SkillOverrideResolution(override_path, legacy_owner if override_path is not None else None, None)
 
 
 def _merge_skill_channel_override(
@@ -490,28 +504,33 @@ def _merge_skill_channel_override(
     defaults: dict[str, object],
     channel_dir: Path | None,
 ) -> dict[str, object]:
-    override_path, legacy_override_owner, migrated_override_section = _resolve_skill_override(skill, owner, channel_dir)
+    resolution = _resolve_skill_override(skill, owner, channel_dir)
+    override_path = resolution.path
     if override_path is None:
         return defaults
 
     override, acknowledged = _split_acknowledged_unknown_keys(_load_override(override_path), override_path)
-    if migrated_override_section is not None:
-        migrated = override.get(migrated_override_section)
+    if resolution.migrated_section is not None:
+        migrated = override.get(resolution.migrated_section)
         if not isinstance(migrated, dict):
             raise ConfigError(
-                f"skill-config {override_path} の移行先 {migrated_override_section!r} は mapping である必要があります"
+                f"skill-config {override_path} の移行先 {resolution.migrated_section!r} は mapping である必要があります"
             )
         override = dict(migrated)
-    if legacy_override_owner is not None and section is not None:
-        override = {section: override}
+    # legacy owner の override は節を持たないため、名前空間キー側の節へ包み直す。
+    legacy_section = section if resolution.legacy_owner is not None else None
+    if legacy_section is not None:
+        override = {legacy_section: override}
 
     merged = _deep_merge(defaults, override)
-    warning_owner = legacy_override_owner or owner
-    warning_override = override[section] if legacy_override_owner is not None and section is not None else override
-    warning_defaults = defaults[section] if legacy_override_owner is not None and section is not None else defaults
-    _warn_deprecated_override_keys(warning_owner, warning_override, override_path, merged)
+    warning_owner = resolution.legacy_owner or owner
+    warning_override = override[legacy_section] if legacy_section is not None else override
+    warning_defaults = defaults[legacy_section] if legacy_section is not None else defaults
+    # load_skill_config → _merge_skill_channel_override → 警告関数の 3 段を辿って
+    # 呼び出し元コードを指す。
+    _warn_deprecated_override_keys(warning_owner, warning_override, override_path, merged, warning_stacklevel=4)
     _warn_unknown_top_level_override_keys(
-        warning_owner, warning_override, warning_defaults, override_path, acknowledged
+        warning_owner, warning_override, warning_defaults, override_path, acknowledged, warning_stacklevel=4
     )
     return merged
 
