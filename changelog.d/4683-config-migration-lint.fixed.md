@@ -1,1 +1,1 @@
-- `yt-skills lint` で config migration と互換 loader 経路の対応を検証し、不整合な移行定義を修正方法付きで報告するようにしました。
+- `yt-skills lint` で config migration の移行先を loader の互換 fallback が解決できるか検証し、登録キー・同梱 default・移行先の節の不整合を修正箇所付きで報告するようにしました。

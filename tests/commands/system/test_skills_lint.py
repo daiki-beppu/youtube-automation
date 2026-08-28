@@ -66,6 +66,9 @@ def fake_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setattr(skills_sync, "_editable_root", lambda: tmp_path)
     monkeypatch.setattr(skill_config, "SKILL_CONFIG_KEYS", frozenset())
     monkeypatch.setattr(skill_config, "SKILL_ONLY_CONFIG_KEYS", frozenset())
+    # 登録キーを空にした偽ツリーでは実表の migration を検証できないため、
+    # migration lint を使うテストだけが自前の表を設定する。
+    monkeypatch.setattr(_migrate_config, "SKILL_CONFIG_MIGRATIONS", {})
     return tmp_path
 
 
@@ -407,11 +410,41 @@ def test_skill_config_migration_lint_accepts_loader_compatible_table() -> None:
     assert _lint._lint_skill_config_migrations(skill_config.SKILL_CONFIG_MIGRATIONS) == []
 
 
+def test_skill_config_migration_lint_rejects_target_without_bundled_default() -> None:
+    violations = _lint._lint_skill_config_migrations(
+        {"suno": _migrate_config.SkillConfigMigration("broken-owner", "prompt")}
+    )
+
+    assert len(violations) == 1
+    assert violations[0].startswith("suno -> broken-owner::prompt に互換 loader 経路がありません")
+    assert "同梱 default が music/ 配下" in violations[0]
+
+
+def test_skill_config_migration_lint_rejects_section_outside_bundled_default() -> None:
+    violations = _lint._lint_skill_config_migrations(
+        {"suno": _migrate_config.SkillConfigMigration("music", "broken-section")}
+    )
+
+    assert len(violations) == 1
+    assert "移行先の節 'broken-section' が同梱 default の節 'prompt' と一致しません" in violations[0]
+
+
+def test_skill_config_migration_lint_rejects_source_outside_loader_keys() -> None:
+    violations = _lint._lint_skill_config_migrations({"music": _migrate_config.SkillConfigMigration("music", None)})
+
+    assert len(violations) == 1
+    assert "移行元 music が loader の登録キーではない" in violations[0]
+
+
 def test_cli_lint_rejects_migration_without_compatible_loader_path(
     fake_repo: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
+    skills_dir = fake_repo / ".claude" / "skills"
+    _write_skill(skills_dir, "music", _VALID_SKILL_MD.replace("good-skill", "music"))
+    (skills_dir / "music" / "config.default.yaml").write_text("prompt: {}\n", encoding="utf-8")
+    monkeypatch.setattr(skill_config, "SKILL_CONFIG_KEYS", frozenset({"suno"}))
     monkeypatch.setattr(
         _migrate_config,
         "SKILL_CONFIG_MIGRATIONS",
@@ -423,7 +456,7 @@ def test_cli_lint_rejects_migration_without_compatible_loader_path(
     output = capsys.readouterr().out
     assert "suno -> broken-owner::prompt" in output
     assert "互換 loader 経路がありません" in output
-    assert "SKILL_CONFIG_MIGRATIONS" in output
+    assert "_MOVED_SKILL_CONFIG_DEFAULTS['suno']" in output
 
 
 def test_cli_lint_missing_mode_reference_reports_skill_flag_and_path(

@@ -296,6 +296,39 @@ def skill_config_default_relative_path(skill: str) -> Path:
     return _MOVED_SKILL_CONFIG_DEFAULTS.get(skill, Path(skill, "config.default.yaml"))
 
 
+def skill_config_migration_loader_gaps(source: str, migration: SkillConfigMigration) -> tuple[str, ...]:
+    """migration の移行先を loader が解決できない理由を返す (空なら互換)。
+
+    旧 config を移行した後、`_resolve_skill_override` は `SKILL_CONFIG_MIGRATIONS`
+    経由で `<target_skill>.yaml` の `section` 節を旧キーの override として読み、
+    同梱 default は `_MOVED_SKILL_CONFIG_DEFAULTS` / `_MOVED_SKILL_CONFIG_SECTIONS`
+    で解決する。この 3 表が食い違うと移行後に設定が失効するため、静的に照合する。
+    """
+    gaps: list[str] = []
+    if source not in SKILL_CONFIG_KEYS | SKILL_ONLY_CONFIG_KEYS | _LEGACY_SKILL_CONFIG_ALIASES:
+        gaps.append(
+            f"移行元 {source} が loader の登録キーではないため load_skill_config から辿れません "
+            "(SKILL_CONFIG_KEYS / SKILL_ONLY_CONFIG_KEYS のいずれかに登録してください)"
+        )
+    default_owner = skill_config_default_relative_path(source).parts[0]
+    if default_owner != migration.target_skill:
+        gaps.append(
+            f"同梱 default が {default_owner}/ 配下のため "
+            f"移行先 {migration.target_skill} の override と噛み合いません "
+            f"(_MOVED_SKILL_CONFIG_DEFAULTS[{source!r}] を確認してください)"
+        )
+    # 移行後の override は移行先ファイル直下の 1 節として読むため、同梱 default 側の
+    # 節パス先頭 (未登録ならファイル全体 = None) と一致していなければ値が拾われない。
+    expected_section = next(iter(_MOVED_SKILL_CONFIG_SECTIONS.get(source, ())), None)
+    if migration.section != expected_section:
+        gaps.append(
+            f"移行先の節 {migration.section!r} が同梱 default の節 "
+            f"{expected_section!r} と一致しません "
+            f"(_MOVED_SKILL_CONFIG_SECTIONS[{source!r}] を確認してください)"
+        )
+    return tuple(gaps)
+
+
 def _default_path(skill: str) -> Path:
     """パッケージ同梱の default.yaml を解決する。
 

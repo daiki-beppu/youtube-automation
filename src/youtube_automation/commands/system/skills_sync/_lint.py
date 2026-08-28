@@ -142,16 +142,19 @@ def _lint_unmigrated_skill_configs(channel_dir: Path) -> list[str]:
 def _lint_skill_config_migrations(
     migrations: Mapping[str, skill_config.SkillConfigMigration],
 ) -> list[str]:
-    """migration table と公開 loader の互換 fallback が一致するか検証する。"""
+    """移行先 override を loader の互換 fallback が解決できるか検証する。
+
+    判定は loader 側の登録表を単一ソースとする
+    `skill_config.skill_config_migration_loader_gaps` に委ね、ここでは診断文へ整形する。
+    """
     violations: list[str] = []
     for source, migration in sorted(migrations.items()):
-        if skill_config.SKILL_CONFIG_MIGRATIONS.get(source) == migration:
+        gaps = skill_config.skill_config_migration_loader_gaps(source, migration)
+        if not gaps:
             continue
         section_suffix = f"::{migration.section}" if migration.section is not None else ""
-        violations.append(
-            f"{source} -> {migration.target_skill}{section_suffix} に互換 loader 経路がありません: "
-            "youtube_automation.configuration.skills.SKILL_CONFIG_MIGRATIONS に同じ対応を登録してください"
-        )
+        route = f"{source} -> {migration.target_skill}{section_suffix}"
+        violations.append(f"{route} に互換 loader 経路がありません: {' / '.join(gaps)}")
     return violations
 
 
