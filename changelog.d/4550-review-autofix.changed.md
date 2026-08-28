@@ -1,1 +1,0 @@
-- CI autofix を critical / warning / info のレビュー指摘にも対応させ、PR ごとの通算 1 回上限内で自動修正する（#4550）。

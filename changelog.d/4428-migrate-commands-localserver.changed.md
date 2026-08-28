@@ -1,1 +1,0 @@
-- commands / uploads / localserver の collection 列挙を共通 inventory へ移行し、読取不能 state の warn&skip・除外記録・lenient 処理を caller ごとの明示選択として維持する（#4428）。

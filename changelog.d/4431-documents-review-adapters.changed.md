@@ -1,1 +1,0 @@
-- collection plan / music prompt を source adapter と共通 select CLI harness へ移行する（#4431）。

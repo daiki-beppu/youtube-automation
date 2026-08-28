@@ -1,1 +1,0 @@
-- 移行済みの統合先設定だけが存在する場合も、旧 skill-config キーから同じ channel override を解決できるようにしました。

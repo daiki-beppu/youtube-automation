@@ -1,1 +1,0 @@
-- uploads のスケジュール設定 consumer を解決済み `ScheduleConfig` に統一し、重複していた JSON loader を削除しました。

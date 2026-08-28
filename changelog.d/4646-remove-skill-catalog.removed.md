@@ -1,1 +1,0 @@
-- 参照経路のなかった `docs/skill-catalog.md` と `yt-skills catalog`、その CI 更新チェックを削除しました。

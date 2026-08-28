@@ -1,1 +1,0 @@
-- 進捗図 hook がコレクションを解決できないとき（`collections/` 無し・コレクション 0 件・`workflow-state.json` 破損）は何も表示せず、実態と無関係な固定進捗図を描かないようにした ([#4416](https://github.com/daiki-beppu/youtube-automation/issues/4416))

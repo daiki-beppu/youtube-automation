@@ -1,1 +1,0 @@
-- `yt-changelog-compile` と `changelog.d/` を導入し、並列 PR が `CHANGELOG.md` の同一箇所を編集せず変更履歴を書き溜められるようにする（#4483）。

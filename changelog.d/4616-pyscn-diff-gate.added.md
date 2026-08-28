@@ -1,1 +1,0 @@
-- CI の lint ジョブに pyscn の new-only 差分ゲートを追加した。PR の base commit を一時 worktree へ展開して base / HEAD の 2 回 `pyscn analyze` を実行し、base に無い finding（complexity high risk 関数 / dead code）が増えたときだけ fail する。#4615 の閾値ゲート（絶対上限）とは独立に併存する

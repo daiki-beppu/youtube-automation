@@ -1,1 +1,0 @@
-- workflow-state の不正な section 型を識別する typed error を追加し、caller のエラー文言依存を解消する（#4418）。

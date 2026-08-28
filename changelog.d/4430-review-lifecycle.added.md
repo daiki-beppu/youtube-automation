@@ -1,1 +1,0 @@
-- review lifecycle と artifact source adapter interface を追加し、terminal 契約と確定前の変異検出を単一 protocol で提供する（#4430）。

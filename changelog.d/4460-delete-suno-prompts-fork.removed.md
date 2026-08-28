@@ -1,1 +1,0 @@
-- music skill の references から stale な generate_suno_prompts.py の実体コピーを削除（正規経路は yt-generate-suno CLI）

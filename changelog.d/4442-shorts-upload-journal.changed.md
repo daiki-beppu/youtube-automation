@@ -1,1 +1,0 @@
-- Shorts の resumable session を Complete Collection と共通の `UploadJournal` 契約へ移し、完了情報だけを workflow-state owner へ投影する（#4442）。
