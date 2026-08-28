@@ -25,6 +25,7 @@ const expectedSources = [
   "docs/ambient-layers.md",
   "docs/scheduled-publish.md",
   "docs/localizations.md",
+  "docs/distrokid.md",
 ];
 
 const createRepository = async (map = operatorDocMap) => {
