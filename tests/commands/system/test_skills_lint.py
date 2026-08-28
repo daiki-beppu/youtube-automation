@@ -66,6 +66,9 @@ def fake_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setattr(skills_sync, "_editable_root", lambda: tmp_path)
     monkeypatch.setattr(skill_config, "SKILL_CONFIG_KEYS", frozenset())
     monkeypatch.setattr(skill_config, "SKILL_ONLY_CONFIG_KEYS", frozenset())
+    # 登録キーを空にした偽ツリーでは実表の migration を検証できないため、
+    # migration lint を使うテストだけが自前の表を設定する。
+    monkeypatch.setattr(_migrate_config, "SKILL_CONFIG_MIGRATIONS", {})
     return tmp_path
 
 
@@ -401,6 +404,79 @@ def test_cli_lint_guides_unmigrated_downstream_skill_config(
     output = capsys.readouterr().out
     assert "config/skills/suno.yaml は未移行" in output
     assert "yt-skills migrate-config" in output
+
+
+def test_skill_config_migration_lint_accepts_loader_compatible_table() -> None:
+    assert _lint._lint_skill_config_migrations(skill_config.SKILL_CONFIG_MIGRATIONS) == []
+
+
+def test_skill_config_migration_lint_rejects_target_without_bundled_default() -> None:
+    violations = _lint._lint_skill_config_migrations(
+        {"suno": _migrate_config.SkillConfigMigration("broken-owner", "prompt")}
+    )
+
+    assert len(violations) == 1
+    assert violations[0].startswith("suno -> broken-owner::prompt に互換 loader 経路がありません")
+    assert "同梱 default が music/ 配下" in violations[0]
+
+
+def test_skill_config_migration_lint_rejects_section_outside_bundled_default() -> None:
+    violations = _lint._lint_skill_config_migrations(
+        {"suno": _migrate_config.SkillConfigMigration("music", "broken-section")}
+    )
+
+    assert len(violations) == 1
+    assert (
+        "移行先の節 'broken-section' が同梱 default の節 path 'prompt' の入口 'prompt' と一致しません" in violations[0]
+    )
+
+
+def test_skill_config_migration_lint_reports_full_bundled_default_section_path() -> None:
+    violations = _lint._lint_skill_config_migrations(
+        {"lyria": _migrate_config.SkillConfigMigration("music", "broken-section")}
+    )
+
+    assert len(violations) == 1
+    assert "同梱 default の節 path 'generate.lyria' の入口 'generate'" in violations[0]
+
+
+def test_skill_config_migration_lint_rejects_section_without_registered_full_path() -> None:
+    violations = _lint._lint_skill_config_migrations(
+        {"publish": _migrate_config.SkillConfigMigration("publish", "community")}
+    )
+
+    assert len(violations) == 1
+    assert "移行元 publish の full section path が未登録です" in violations[0]
+
+
+def test_skill_config_migration_lint_rejects_source_outside_loader_keys() -> None:
+    violations = _lint._lint_skill_config_migrations({"music": _migrate_config.SkillConfigMigration("music", None)})
+
+    assert len(violations) == 1
+    assert "移行元 music が loader の登録キーではない" in violations[0]
+
+
+def test_cli_lint_rejects_migration_without_compatible_loader_path(
+    fake_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    skills_dir = fake_repo / ".claude" / "skills"
+    _write_skill(skills_dir, "music", _VALID_SKILL_MD.replace("good-skill", "music"))
+    (skills_dir / "music" / "config.default.yaml").write_text("prompt: {}\n", encoding="utf-8")
+    monkeypatch.setattr(skill_config, "SKILL_CONFIG_KEYS", frozenset({"suno"}))
+    monkeypatch.setattr(
+        _migrate_config,
+        "SKILL_CONFIG_MIGRATIONS",
+        {"suno": _migrate_config.SkillConfigMigration("broken-owner", "prompt")},
+    )
+
+    assert main(["lint"]) == 1
+
+    output = capsys.readouterr().out
+    assert "suno -> broken-owner::prompt" in output
+    assert "互換 loader 経路がありません" in output
+    assert "_MOVED_SKILL_CONFIG_DEFAULTS['suno']" in output
 
 
 def test_cli_lint_missing_mode_reference_reports_skill_flag_and_path(

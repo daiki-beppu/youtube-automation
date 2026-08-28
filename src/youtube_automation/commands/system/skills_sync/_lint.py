@@ -21,7 +21,7 @@ skill 編集後の検証を pytest 全体実行 (約 4 分) に律速されず�
     11. SKILL.md 本体が 400 行以下である
     12. 成果物ブロックと `書き込む` 宣言行が存在する
     13. skill-config の登録キーと config.default.yaml が双方向に一致する
-    14. 下流に移行対応表の旧 skill-config が残っていない
+    14. config migration に互換 loader 経路があり、下流に旧 skill-config が残っていない
     15. downstream 配布対象の skill が総数上限以下である
     16. 運用成果物 inventory の owner / schema / consumer / JSON+HTML pair が一致する
 """
@@ -29,6 +29,7 @@ skill 編集後の検証を pytest 全体実行 (約 4 分) に律速されず�
 from __future__ import annotations
 
 import argparse
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Final
 
@@ -138,6 +139,25 @@ def _lint_unmigrated_skill_configs(channel_dir: Path) -> list[str]:
     ]
 
 
+def _lint_skill_config_migrations(
+    migrations: Mapping[str, skill_config.SkillConfigMigration],
+) -> list[str]:
+    """移行先 override を loader の互換 fallback が解決できるか検証する。
+
+    判定は loader 側の登録表を単一ソースとする
+    `skill_config.skill_config_migration_loader_gaps` に委ね、ここでは診断文へ整形する。
+    """
+    violations: list[str] = []
+    for source, migration in sorted(migrations.items()):
+        gaps = skill_config.skill_config_migration_loader_gaps(source, migration)
+        if not gaps:
+            continue
+        section_suffix = f"::{migration.section}" if migration.section is not None else ""
+        route = f"{source} -> {migration.target_skill}{section_suffix}"
+        violations.append(f"{route} に互換 loader 経路がありません: {' / '.join(gaps)}")
+    return violations
+
+
 def _distributed_skill_names(inventory: SkillInventory) -> tuple[str, ...]:
     """Return real sync candidates, excluding dev-only and non-skill residue."""
     return tuple(
@@ -186,7 +206,13 @@ def cmd_lint(args: argparse.Namespace) -> int:
         targets = available
 
     skill_config_violations = (
-        [] if requested else [*_lint_skill_config_contract(inventory), *_lint_unmigrated_skill_configs(Path.cwd())]
+        []
+        if requested
+        else [
+            *_lint_skill_config_contract(inventory),
+            *_lint_skill_config_migrations(_migrate_config.SKILL_CONFIG_MIGRATIONS),
+            *_lint_unmigrated_skill_configs(Path.cwd()),
+        ]
     )
     skill_count_violation = None if requested else _skill_count_violation(inventory)
     artifact_violations = [] if requested else _operational_artifact_violations(root, inventory)
