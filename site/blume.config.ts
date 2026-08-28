@@ -65,7 +65,7 @@ export default defineConfig({
           {
             display: "group",
             label: "こんなこともできる！",
-            items: ["/live-streaming"],
+            items: ["/live-streaming", "/ambient-layers"],
           },
         ],
       },

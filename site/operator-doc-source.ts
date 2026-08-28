@@ -30,6 +30,7 @@ export const operatorDocMap = [
   { source: "docs/cloud-execution.md", route: "/cloud-execution" },
   { source: "docs/live-streaming.md", route: "/live-streaming" },
   { source: "docs/live-chat-reply.md", route: "/live-chat-reply" },
+  { source: "docs/ambient-layers.md", route: "/ambient-layers" },
 ] as const satisfies readonly OperatorDocMapping[];
 
 /** Internal marker allowing staged operator entries through release-only fields. */

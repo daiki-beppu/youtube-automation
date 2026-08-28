@@ -31,6 +31,7 @@ const operatorSections = [
       "/cloud-execution",
       "/live-chat-reply",
       "/live-streaming",
+      "/ambient-layers",
     ],
     section: "use",
   },
@@ -257,13 +258,14 @@ test(`landing page は3区分を表示し、公開operator docs ${operatorRoutes
   assert.match(operatorMarkup, /発動条件・前提・前後工程/);
 });
 
-test("landing page はライブ配信を使う内の「こんなこともできる！」として表示する", async () => {
+test("landing page は活用ガイドを使う内の「こんなこともできる！」として表示する", async () => {
   const use = sectionByAttribute(await readIndex(), "data-doc-section", "use");
   const advanced = sectionByAttribute(use, "data-doc-group", "advanced");
 
   assert.match(advanced, /<h3>こんなこともできる！<\/h3>/);
-  assert.deepEqual(hrefsWithin(advanced), ["/live-streaming"]);
+  assert.deepEqual(hrefsWithin(advanced), ["/live-streaming", "/ambient-layers"]);
   assert.equal(hrefsWithin(use).filter((href) => href === "/live-streaming").length, 1);
+  assert.equal(hrefsWithin(use).filter((href) => href === "/ambient-layers").length, 1);
 });
 
 test("landing page は実験的機能を使う内の専用グループとして表示する", async () => {
@@ -377,6 +379,7 @@ test(`operator docs の${generatedRouteCount} route は原本の先頭見出し�
     ["/cloud-execution", "クラウドでの実行"],
     ["/live-streaming", "24時間ライブ配信を始める"],
     ["/live-chat-reply", "ライブチャット自動返信を試す"],
+    ["/ambient-layers", "環境音レイヤーを重ねる"],
   ]);
 
   assert.equal(expectedTitles.size, generatedRouteCount);
