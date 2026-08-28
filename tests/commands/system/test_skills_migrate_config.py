@@ -73,6 +73,31 @@ def test_migrate_config_apply_aggregates_sources_into_namespaced_sections(channe
     assert not masterup.exists()
 
 
+def test_migrate_config_apply_rolls_back_when_public_loader_value_changes(
+    channel_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    source = _write_config(channel_dir, "suno", {"model": "v5"})
+    source_before = source.read_bytes()
+
+    def changing_loader(skill: str, *, use_cache: bool, channel_dir: Path) -> dict[str, object]:
+        assert skill == "suno"
+        assert use_cache is False
+        source_exists = (channel_dir / "config" / "skills" / "suno.yaml").is_file()
+        return {"model": "v5" if source_exists else "v4"}
+
+    monkeypatch.setattr(migrate_config, "load_skill_config", changing_loader)
+
+    assert main(["migrate-config", "--channel-dir", str(channel_dir)]) == 1
+
+    error = capsys.readouterr().err
+    assert "公開 loader の設定解決値が変化" in error
+    assert "suno" in error
+    assert source.read_bytes() == source_before
+    assert not (channel_dir / "config" / "skills" / "music.yaml").exists()
+
+
 def test_migrate_config_is_idempotent_after_apply(channel_dir: Path, capsys: pytest.CaptureFixture[str]) -> None:
     _write_config(channel_dir, "suno", {"model": "v5"})
     assert main(["migrate-config", "--channel-dir", str(channel_dir)]) == 0

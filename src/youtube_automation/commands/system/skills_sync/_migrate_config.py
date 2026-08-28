@@ -13,7 +13,7 @@ from typing import Final, Mapping
 
 import yaml
 
-from youtube_automation.configuration.skills import SKILL_CONFIG_MIGRATIONS, SkillConfigMigration
+from youtube_automation.configuration.skills import SKILL_CONFIG_MIGRATIONS, SkillConfigMigration, load_skill_config
 from youtube_automation.core.errors import ConfigError
 
 
@@ -143,17 +143,28 @@ def _restore_files(originals: Mapping[Path, bytes | None]) -> None:
 
 def apply_migration_plan(plan: MigrationPlan) -> None:
     """Stage all writes, then replace destinations and delete sources as one transaction."""
+    if not plan.actions:
+        return
     staged: dict[Path, Path] = {}
     affected = {*plan.destinations, *(action.source for action in plan.actions)}
     originals: dict[Path, bytes | None] = {}
     try:
         originals = {path: path.read_bytes() if path.is_file() else None for path in affected}
+        channel_dir = plan.actions[0].source.parents[2]
+        resolved_before = {
+            action.source.stem: load_skill_config(action.source.stem, use_cache=False, channel_dir=channel_dir)
+            for action in plan.actions
+        }
         for destination, data in plan.destinations.items():
             staged[destination] = _stage_mapping(destination, data)
         for destination, temporary in staged.items():
             os.replace(temporary, destination)
         for action in plan.actions:
             action.source.unlink()
+        for skill, before in resolved_before.items():
+            after = load_skill_config(skill, use_cache=False, channel_dir=channel_dir)
+            if after != before:
+                raise ConfigError(f"公開 loader の設定解決値が変化しました: {skill}")
     except (ConfigError, OSError) as exc:
         for temporary in staged.values():
             temporary.unlink(missing_ok=True)
