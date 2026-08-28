@@ -294,8 +294,9 @@ assets/stock/           # ボツ画像ストック (#364)。<theme-slug>/ 配下
 - `docs/scheduled-publish.md`
 - `docs/localizations.md`
 - `docs/distrokid.md`
+- `docs/audio-studio.md`
 
-source は build ごとに原本を読み、掲載対象間の相対 Markdown link を site route、対象外の repository 内 Markdown link を GitHub の原本へ解決する。加えて `site/skill-page-source.ts` は `.claude/skills/*/SKILL.md` を動的に走査し、frontmatter の `name` / `description` と `## 前提` / `## 前後工程` だけから `/skills` と個別ページを生成する。カテゴリの正は `docs/features.md` の9分類に置き、実行手順や内部契約は公開しない。どちらも原本を移動・永続コピーせず、Blume が所有する `site/.blume/` の一時 staging と `site/dist/` の生成だけを行う。GitHub Actions の site workflow は15原本を個別 path として、skill ページは `.claude/skills/**` として監視し、broad な `docs/**` は使わない。
+source は build ごとに原本を読み、掲載対象間の相対 Markdown link を site route、対象外の repository 内 Markdown link を GitHub の原本へ解決する。加えて `site/skill-page-source.ts` は `.claude/skills/*/SKILL.md` を動的に走査し、frontmatter の `name` / `description` と `## 前提` / `## 前後工程` だけから `/skills` と個別ページを生成する。カテゴリの正は `docs/features.md` の9分類に置き、実行手順や内部契約は公開しない。どちらも原本を移動・永続コピーせず、Blume が所有する `site/.blume/` の一時 staging と `site/dist/` の生成だけを行う。GitHub Actions の site workflow は16原本を個別 path として、skill ページは `.claude/skills/**` として監視し、broad な `docs/**` は使わない。
 
 公開境界は allowlist で閉じる。`docs/adr/`、`docs/audits/`、`docs/investigations/`、`docs/research/`、`docs/strategy/`、`docs/benchmarks/`、および `docs/development.md` や `docs/takt-operations.md` などの development workflow 文書は暗黙収集せず、navigation・search・生成 route に含めない。
 

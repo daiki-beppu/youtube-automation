@@ -31,6 +31,7 @@ OPERATOR_DOC_SOURCES = (
     "docs/scheduled-publish.md",
     "docs/localizations.md",
     "docs/distrokid.md",
+    "docs/audio-studio.md",
 )
 NONPUBLIC_DOC_PREFIXES = (
     "docs/adr/",
