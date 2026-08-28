@@ -3,7 +3,7 @@ name: Skill E2E eval
 on:
   workflow_dispatch:
   schedule:
-    - cron: "17 18 * * *"
+    - cron: "17 18 * * 1"
 
 permissions:
   contents: read
@@ -49,14 +49,14 @@ jobs:
       - uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342 # v31.11.0
       - name: Install Claude Code
         run: |
-          nix develop --command npm install --global --prefix "$RUNNER_TEMP/claude-code" @anthropic-ai/claude-code@2.1.226
+          nix develop .#extensions --command npm install --global --prefix "$RUNNER_TEMP/claude-code" @anthropic-ai/claude-code@2.1.226
           echo "$RUNNER_TEMP/claude-code/bin" >> "$GITHUB_PATH"
       - name: Run skill E2E eval
         id: promptfoo
         continue-on-error: true
         run: |
           mkdir -p evals/results
-          nix develop --command pnpm dlx promptfoo@0.122.0 eval \
+          nix develop .#extensions --command pnpm dlx promptfoo@0.122.0 eval \
             -c evals/promptfooconfig.yaml \
             --output evals/results/ci.json
       - name: Summarize assertions
