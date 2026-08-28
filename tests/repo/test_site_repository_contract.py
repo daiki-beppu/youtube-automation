@@ -27,6 +27,7 @@ OPERATOR_DOC_SOURCES = (
     "docs/cloud-execution.md",
     "docs/live-streaming.md",
     "docs/live-chat-reply.md",
+    "docs/ambient-layers.md",
 )
 NONPUBLIC_DOC_PREFIXES = (
     "docs/adr/",
