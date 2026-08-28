@@ -17,8 +17,8 @@ extensions/
     community-dom.ts      # YouTube チャンネル投稿 UI の DOM 操作（本文 / 画像 / 予約日時 / 投稿）
   suno-helper/            # Suno Advanced タブ自動投入拡張（WXT プロジェクト）
     wxt.config.ts         # manifest 自動生成（最小権限は lib/manifest.ts が SSOT）
-    entrypoints/          # background / content / popup
-    components/           # popup の React UI
+    entrypoints/          # background / content / overlay
+    components/           # overlay の React UI
     lib/                  # messaging / storage / manifest schema
     tests/                # Vitest unit + Playwright e2e
   distrokid-helper/       # DistroKid 登録ページ用 Shadow DOM overlay 拡張

@@ -33,7 +33,6 @@ def test_all_shadcn_configs_choose_base_vega() -> None:
 def test_helpers_import_the_shared_theme_contract() -> None:
     styles = (
         EXTENSIONS / "suno-helper/components/overlay.css",
-        EXTENSIONS / "suno-helper/entrypoints/popup/style.css",
         EXTENSIONS / "distrokid-helper/components/overlay.css",
         EXTENSIONS / "community-helper/components/overlay.css",
     )

@@ -13,19 +13,18 @@
 | `entrypoints/background.ts`          | service worker（Download all ZIP 監視、server token 取得、downloaded POST 中継）                            |
 | `entrypoints/content.ts`             | Suno UI への注入と Generate 連続実行のフロー制御                                                            |
 | `entrypoints/suno-bridge.content.ts` | MAIN world fetch bridge（#948）。Suno API の生成投入 / clip status を passive 観測                          |
-| `entrypoints/popup/`                 | popup の HTML / エントリ（React + Tailwind）                                                                |
-| `components/`                        | popup UI（`App.tsx` / `PatternList.tsx` / `useSunoRunner.ts`）                                              |
-| `lib/messaging.ts`                   | popup ⇄ content の型付き message（@webext-core/messaging）                                                  |
+| `components/`                        | overlay UI（`App.tsx` / `PatternList.tsx` / `useSunoRunner.ts`）                                            |
+| `lib/messaging.ts`                   | overlay ⇄ content の型付き message（@webext-core/messaging）                                                |
 | `lib/clip-tracker.ts` ほか           | bridge 観測の集計（in-flight / ACK / stall。`bridge-listener` / `ack-probe` / `entry-retry`）               |
 | `lib/storage.ts`                     | 選択中ローカル配信元 / resume state / overlay state の型付き storage（@wxt-dev/storage）                    |
 | `lib/manifest.ts`                    | 最小権限定数 `MANIFEST_PERMISSIONS`                                                                         |
 | `../shared/`                         | DOM 注入 / API client / origin allowlist / 契約定数（複数拡張で共有）                                       |
 
-DOM 注入セレクタ（Style / Lyrics の placeholder、Generate ボタンのラベル、reCAPTCHA 検知）は `../shared/dom.ts` の `SELECTORS` に集約する。Suno の UI 変更で注入先が見つからなくなった場合はここを更新する。見つからない場合は **silent に続行せず停止** し、popup に理由を表示する。
+DOM 注入セレクタ（Style / Lyrics の placeholder、Generate ボタンのラベル、reCAPTCHA 検知）は `../shared/dom.ts` の `SELECTORS` に集約する。Suno の UI 変更で注入先が見つからなくなった場合はここを更新する。見つからない場合は **silent に続行せず停止** し、overlay に理由を表示する。
 
 ## Agent 操作用 DOM signal
 
-browser use から overlay / popup を安定して観測できるよう、操作 panel は読み取り専用の `data-suno-*` 属性を持つ。これらは表示状態の公開契約であり、runner の実行制御や server API 契約は変更しない。
+browser use から overlay を安定して観測できるよう、操作 panel は読み取り専用の `data-suno-*` 属性を持つ。これらは表示状態の公開契約であり、runner の実行制御や server API 契約は変更しない。
 
 <!-- prettier-ignore -->
 | selector / 属性                                                                                    | 意味                                                                                                      |
@@ -98,13 +97,13 @@ build 後は `.output/chrome-mv3/manifest.json`、zip 後は `.output/suno-helpe
 6. 全件完了後、対象 clip を一括選択 → playlist 追加 → More menu の **Download all** → format 選択 → ZIP ダウンロード完了監視 → `POST /collections/<id>/downloaded` で ZIP パス通知、まで実行する。サーバーは ZIP を展開し、`02-Individual-music/` と `workflow-state.json` を更新する。
 7. captcha challenge は waiting-captcha 表示で解消（多くは自動 verify）を待って続行する。entry 単位の一時的な失敗は Balanced 固定の上限で自動リトライし、上限超過分はスキップして完走する（#948）。スキップされた entry は一覧表示され、**失敗分のみ再実行** で再投入できる。
 
-prompt entry に `duration_sec` がある場合は、各 Generate 前に Duration の **Custom** を選択し、Suno UI の slider が公開する最小値・最大値の範囲内で指定秒数を注入する。selector 不在、範囲外、操作不受理、読戻し不一致は entry をエラー停止し、popup に原因を表示する。`duration_sec` がない entry では Auto / Custom と slider の現在状態を変更しない。
+prompt entry に `duration_sec` がある場合は、各 Generate 前に Duration の **Custom** を選択し、Suno UI の slider が公開する最小値・最大値の範囲内で指定秒数を注入する。selector 不在、範囲外、操作不受理、読戻し不一致は entry をエラー停止し、overlay に原因を表示する。`duration_sec` がない entry では Auto / Custom と slider の現在状態を変更しない。
 
 通知は初期状態で ON。最終 `FINISHED` は OS 通知と明るい3音上昇音、`ERROR` はエラー概要付き OS 通知と短い2音下降ベルで知らせる。手動 `STOPPED` と collection queue の途中完了では通知しない。Switch の設定は再読み込み後も維持され、旧 preset 設定は enabled を保ったまま自動移行される。OS 通知と Web Audio は独立して試行するため、一方の失敗は run 結果へ影響しない。
 
 複数 collection queue は各 collection の `/downloaded` 完了または失敗結果を extension storage へ保存してから Suno タブを再読み込みする。この境界処理が clip tracker と Suno 内部 multi-select を collection 間で破棄し、次の collection は保存済み index から自動開始する。タブ再読み込みや Stop で中断した queue は同じ current collection から再開でき、全件終了後は summary の **失敗したコレクションだけ再実行** を使う。
 
-**異常値の曲を再生成する** を OFF にした run は、duration guard の閾値外 clip も歯抜けにせず playlist と ZIP に含める。popup の status / console warning で NG を確認し、完了後に対象 playlist を試聴して採否を手動判断する。popup を閉じて再表示した場合も選択は復元される。entry phase の ERROR / STOPPED は resume バナー、playlist / download phase の中断は **Playlist から再開** / **Download から再開** を使い、いずれも元 run の選択と警告を引き継ぐ。
+**異常値の曲を再生成する** を OFF にした run は、duration guard の閾値外 clip も歯抜けにせず playlist と ZIP に含める。overlay の status / console warning で NG を確認し、完了後に対象 playlist を試聴して採否を手動判断する。overlay を閉じて再表示した場合も選択は復元される。entry phase の ERROR / STOPPED は resume バナー、playlist / download phase の中断は **Playlist から再開** / **Download から再開** を使い、いずれも元 run の選択と警告を引き継ぐ。
 
 ### 定期実行 launch 契約
 
@@ -122,7 +121,7 @@ uv run yt-suno-unattended-request \
 
 ### in-flight 検知と停止判断（#948）
 
-- **in-flight カウント**: MAIN world bridge（`suno-bridge.content.ts`）が Suno API（`POST /api/generate/v2-web/` / `POST /api/feed/v3`）のレスポンスを観測し、clip status（complete/error 以外 = in-flight）で数える。「Remix ボタン disabled = 生成中」の旧 DOM プロキシは生成完了後も disabled が残り過大カウントするため fallback 専用（縮退中は popup に「bridge 未観測: DOM 計数で待機中」と表示される）
+- **in-flight カウント**: MAIN world bridge（`suno-bridge.content.ts`）が Suno API（`POST /api/generate/v2-web/` / `POST /api/feed/v3`）のレスポンスを観測し、clip status（complete/error 以外 = in-flight）で数える。「Remix ボタン disabled = 生成中」の旧 DOM プロキシは生成完了後も disabled が残り過大カウントするため fallback 専用（縮退中は overlay に「bridge 未観測: DOM 計数で待機中」と表示される）
 - **停止判断**: queue 空き待ちは固定 timeout ではなく stall ベース（in-flight 集合が 10 分間まったく変化しないときのみ ERROR）。run 全体を止めるのは `FatalRunError`（DOM セレクタ不在 / captcha 手動解決 timeout / queue stall / Lyrics 全注入方式失敗）のみ
 - **Bearer token**: bridge が MAIN world ローカルに保持し extension 側へは渡さない。401 で破棄しページの次リクエストで自動再捕捉
 

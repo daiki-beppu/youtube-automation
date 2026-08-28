@@ -1,0 +1,1 @@
+- suno-helper: #892 で廃止済みだった popup のソース残骸（entrypoints/popup/ とそのテスト）を物理削除し、README の popup 記述を overlay に更新

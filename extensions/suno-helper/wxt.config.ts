@@ -35,9 +35,7 @@ export default defineConfig({
       dedupe: ["react", "react-dom", "@base-ui/react"],
     },
   }),
-  // popup 廃止 (#892 要件5): popup entrypoint を build 対象から外し manifest の default_popup を未指定化する。
-  // これにより action クリックで chrome.action.onClicked が発火し overlay 表示を toggle できる。
-  // popup のソース (entrypoints/popup/) はファイルとして残置し、物理削除は後続 PR に委ねる (order.md スコープ外)。
+  // popup は #892 要件5 で廃止済み（ソースも削除済み）。action クリックは chrome.action.onClicked で overlay を toggle する。
   // suno-bridge は MAIN world の fetch 観測 bridge (#948)。
   filterEntrypoints: ["background", "content", "overlay", "suno-bridge"],
   manifest: {
