@@ -356,7 +356,12 @@ def _override_candidate_exists(path: Path, *, strict_regular_file: bool) -> bool
     return True
 
 
-def _resolve_channel_override(skill: str, target_channel_dir: Path | None = None) -> Path | None:
+def _resolve_channel_override(
+    skill: str,
+    target_channel_dir: Path | None = None,
+    *,
+    warning_stacklevel: int = 3,
+) -> Path | None:
     candidates = _channel_override_candidates(skill, target_channel_dir)
     selected = next(
         (path for path in candidates if _override_candidate_exists(path, strict_regular_file=skill == "masterup")),
@@ -366,7 +371,7 @@ def _resolve_channel_override(skill: str, target_channel_dir: Path | None = None
         warnings.warn(
             f"旧 skill-config {selected} を読み込みます。{candidates[0]} へリネームしてください。",
             UserWarning,
-            stacklevel=3,
+            stacklevel=warning_stacklevel,
         )
     return selected
 
@@ -455,6 +460,65 @@ def _select_moved_default_section(owner: str, defaults: dict[str, object]) -> di
     return dict(selected)
 
 
+def _resolve_skill_override(
+    skill: str,
+    owner: str,
+    channel_dir: Path | None,
+) -> tuple[Path | None, str | None, str | None]:
+    """override path と互換読込に必要な legacy owner / 移行先 section を返す。"""
+    override_path = _resolve_channel_override(owner, channel_dir, warning_stacklevel=5)
+    if override_path is not None:
+        return override_path, None, None
+
+    migration = SKILL_CONFIG_MIGRATIONS.get(skill)
+    if migration is not None:
+        override_path = _resolve_channel_override(migration.target_skill, channel_dir, warning_stacklevel=5)
+        if override_path is not None:
+            return override_path, None, migration.section
+
+    legacy_owner = _NAMESPACED_LEGACY_OVERRIDE_OWNERS.get(skill)
+    if legacy_owner is None:
+        return None, None, None
+    override_path = _resolve_channel_override(legacy_owner, channel_dir, warning_stacklevel=5)
+    return override_path, legacy_owner if override_path is not None else None, None
+
+
+def _merge_skill_channel_override(
+    skill: str,
+    owner: str,
+    section: str | None,
+    defaults: dict[str, Any],
+    channel_dir: Path | None,
+) -> dict[str, Any]:
+    override_path, legacy_override_owner, migrated_override_section = _resolve_skill_override(
+        skill, owner, channel_dir
+    )
+    if override_path is None:
+        return defaults
+
+    override, acknowledged = _split_acknowledged_unknown_keys(_load_override(override_path), override_path)
+    if migrated_override_section is not None:
+        migrated = override.get(migrated_override_section)
+        if not isinstance(migrated, dict):
+            raise ConfigError(
+                f"skill-config {override_path} の移行先 {migrated_override_section!r} は "
+                "mapping である必要があります"
+            )
+        override = dict(migrated)
+    if legacy_override_owner is not None and section is not None:
+        override = {section: override}
+
+    merged = _deep_merge(defaults, override)
+    warning_owner = legacy_override_owner or owner
+    warning_override = override[section] if legacy_override_owner is not None and section is not None else override
+    warning_defaults = defaults[section] if legacy_override_owner is not None and section is not None else defaults
+    _warn_deprecated_override_keys(warning_owner, warning_override, override_path, merged)
+    _warn_unknown_top_level_override_keys(
+        warning_owner, warning_override, warning_defaults, override_path, acknowledged
+    )
+    return merged
+
+
 def load_skill_config(
     skill: str,
     *,
@@ -486,37 +550,7 @@ def load_skill_config(
     defaults = _load_yaml(_default_path(owner))
     defaults = _select_moved_default_section(owner, defaults)
 
-    override_path = _resolve_channel_override(owner, channel_dir)
-    migrated_override_section: str | None = None
-    if override_path is None and (migration := SKILL_CONFIG_MIGRATIONS.get(skill)) is not None:
-        override_path = _resolve_channel_override(migration.target_skill, channel_dir)
-        migrated_override_section = migration.section if override_path is not None else None
-    legacy_override_owner: str | None = None
-    if override_path is None and (legacy_owner := _NAMESPACED_LEGACY_OVERRIDE_OWNERS.get(skill)) is not None:
-        override_path = _resolve_channel_override(legacy_owner, channel_dir)
-        legacy_override_owner = legacy_owner if override_path is not None else None
-    if override_path is not None:
-        override, acknowledged = _split_acknowledged_unknown_keys(_load_override(override_path), override_path)
-        if migrated_override_section is not None:
-            migrated = override.get(migrated_override_section)
-            if not isinstance(migrated, dict):
-                raise ConfigError(
-                    f"skill-config {override_path} の移行先 {migrated_override_section!r} は "
-                    "mapping である必要があります"
-                )
-            override = dict(migrated)
-        if legacy_override_owner is not None and section is not None:
-            override = {section: override}
-        merged = _deep_merge(defaults, override)
-        warning_owner = legacy_override_owner or owner
-        warning_override = override[section] if legacy_override_owner is not None and section is not None else override
-        warning_defaults = defaults[section] if legacy_override_owner is not None and section is not None else defaults
-        _warn_deprecated_override_keys(warning_owner, warning_override, override_path, merged)
-        _warn_unknown_top_level_override_keys(
-            warning_owner, warning_override, warning_defaults, override_path, acknowledged
-        )
-    else:
-        merged = defaults
+    merged = _merge_skill_channel_override(skill, owner, section, defaults, channel_dir)
 
     if section is not None:
         selected = merged.get(section)
