@@ -13,7 +13,12 @@ from typing import Final, Mapping
 
 import yaml
 
-from youtube_automation.configuration.skills import SKILL_CONFIG_MIGRATIONS, SkillConfigMigration, load_skill_config
+from youtube_automation.configuration.skills import (
+    SKILL_CONFIG_MIGRATIONS,
+    SkillConfigMigration,
+    load_skill_config,
+    skill_config_migration_section_path,
+)
 from youtube_automation.core.errors import ConfigError
 
 
@@ -97,12 +102,27 @@ def build_migration_plan(
             destinations[destination] = source_data
             actions.append(MigrationAction(source, destination, migration.section))
             continue
-        existing = destination_data.get(migration.section)
-        if migration.section in destination_data and existing != source_data:
+        section_path = skill_config_migration_section_path(source_name, migration)
+        destination_section = destination_data
+        for path_part in section_path[:-1]:
+            existing_parent = destination_section.get(path_part)
+            if existing_parent is None:
+                nested: dict[str, object] = {}
+                destination_section[path_part] = nested
+                destination_section = nested
+            elif isinstance(existing_parent, dict):
+                destination_section = existing_parent
+            else:
+                dotted = ".".join(section_path[:-1])
+                raise ConfigError(f"移行先の節が mapping ではありません: {destination}::{dotted}")
+        leaf = section_path[-1]
+        existing = destination_section.get(leaf)
+        if leaf in destination_section and existing != source_data:
+            dotted = ".".join(section_path)
             raise ConfigError(
-                f"移行先の節が既存内容と衝突しています: {destination}::{migration.section} (既存内容を上書きしません)"
+                f"移行先の節が既存内容と衝突しています: {destination}::{dotted} (既存内容を上書きしません)"
             )
-        destination_data[migration.section] = source_data
+        destination_section[leaf] = source_data
         actions.append(MigrationAction(source, destination, migration.section))
 
     return MigrationPlan(

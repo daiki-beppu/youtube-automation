@@ -160,16 +160,30 @@ def test_legacy_skill_config_uses_migrated_override_when_legacy_file_is_absent(
     overrides = tmp_path / "config" / "skills"
     overrides.mkdir(parents=True)
     migrated_override = {"migration_test_marker": legacy_key}
-    target_override = (
-        {**migrated_override, "acknowledged_unknown_keys": ["migration_test_marker"]}
-        if section is None
-        else {section: migrated_override, "acknowledged_unknown_keys": ["migration_test_marker"]}
-    )
+    section_path = skill_config._MOVED_SKILL_CONFIG_SECTIONS.get(legacy_key, ())
+    nested_override: dict[str, object] = migrated_override
+    for path_part in reversed(section_path):
+        nested_override = {path_part: nested_override}
+    target_override = {**nested_override, "acknowledged_unknown_keys": ["migration_test_marker"]}
     (overrides / f"{target_skill}.yaml").write_text(yaml.safe_dump(target_override), encoding="utf-8")
 
     loaded = skill_config.load_skill_config(legacy_key, use_cache=False, channel_dir=tmp_path)
 
     assert loaded["migration_test_marker"] == legacy_key
+
+
+def test_legacy_skill_config_narrows_migrated_override_through_full_section_path(tmp_path: Path) -> None:
+    overrides = tmp_path / "config" / "skills"
+    overrides.mkdir(parents=True)
+    (overrides / "music.yaml").write_text(
+        "generate:\n  provider: sibling\n  lyria:\n    model: lyria-002\n",
+        encoding="utf-8",
+    )
+
+    loaded = skill_config.load_skill_config("lyria", use_cache=False, channel_dir=tmp_path)
+
+    assert loaded["model"] == "lyria-002"
+    assert "provider" not in loaded
 
 
 def test_legacy_and_namespaced_keys_resolve_the_same_migrated_override(tmp_path: Path) -> None:

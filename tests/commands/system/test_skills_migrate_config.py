@@ -239,7 +239,7 @@ def test_production_cli_migrates_consolidated_skill_configs_without_orphans(
     assert _read_config(channel_dir, "wf-new") == sources["collection-ideate"]
     assert _read_config(channel_dir, "thumbnail")["loop"] == sources["loop-video"]
     assert _read_config(channel_dir, "music")["master"] == sources["masterup"]
-    assert _read_config(channel_dir, "music")["generate"] == sources["lyria"]
+    assert _read_config(channel_dir, "music")["generate"]["lyria"] == sources["lyria"]
     assert _read_config(channel_dir, "channel-research")["benchmark"] == sources["benchmark"]
     assert all(not (channel_dir / "config" / "skills" / f"{name}.yaml").exists() for name in sources)
     assert "孤児 skill-config" not in capsys.readouterr().out

@@ -296,6 +296,14 @@ def skill_config_default_relative_path(skill: str) -> Path:
     return _MOVED_SKILL_CONFIG_DEFAULTS.get(skill, Path(skill, "config.default.yaml"))
 
 
+def skill_config_migration_section_path(source: str, migration: SkillConfigMigration) -> tuple[str, ...]:
+    """移行後の override を旧 loader が読む full section path を返す。"""
+    configured_path = _MOVED_SKILL_CONFIG_SECTIONS.get(source)
+    if configured_path is not None:
+        return configured_path
+    return (migration.section,) if migration.section is not None else ()
+
+
 def skill_config_migration_loader_gaps(source: str, migration: SkillConfigMigration) -> tuple[str, ...]:
     """migration の移行先を loader が解決できない理由を返す (空なら互換)。
 
@@ -317,13 +325,15 @@ def skill_config_migration_loader_gaps(source: str, migration: SkillConfigMigrat
             f"移行先 {migration.target_skill} の override と噛み合いません "
             f"(_MOVED_SKILL_CONFIG_DEFAULTS[{source!r}] を確認してください)"
         )
-    # 移行後の override は移行先ファイル直下の 1 節として読むため、同梱 default 側の
-    # 節パス先頭 (未登録ならファイル全体 = None) と一致していなければ値が拾われない。
-    expected_section = next(iter(_MOVED_SKILL_CONFIG_SECTIONS.get(source, ())), None)
+    # migration は移行先ファイル直下の節へ配置し、loader はそこから同梱 default と
+    # 同じ full path を辿る。したがって migration の節は full path の入口と一致する必要がある。
+    expected_path = skill_config_migration_section_path(source, migration)
+    expected_section = expected_path[0] if expected_path else None
     if migration.section != expected_section:
+        dotted = ".".join(expected_path) if expected_path else None
         gaps.append(
             f"移行先の節 {migration.section!r} が同梱 default の節 "
-            f"{expected_section!r} と一致しません "
+            f"path {dotted!r} の入口 {expected_section!r} と一致しません "
             f"(_MOVED_SKILL_CONFIG_SECTIONS[{source!r}] を確認してください)"
         )
     return tuple(gaps)
@@ -500,11 +510,11 @@ def _select_moved_default_section(owner: str, defaults: dict[str, object]) -> di
 
 
 class _SkillOverrideResolution(NamedTuple):
-    """解決した override path と、互換読込に必要な legacy owner / 移行先 section。"""
+    """解決した override path と、互換読込に必要な legacy owner / 移行先 section path。"""
 
     path: Path | None
     legacy_owner: str | None
-    migrated_section: str | None
+    migrated_section_path: tuple[str, ...]
 
 
 def _resolve_skill_override(
@@ -515,19 +525,20 @@ def _resolve_skill_override(
     """override path と互換読込に必要な legacy owner / 移行先 section を返す。"""
     override_path = _resolve_channel_override(owner, channel_dir, warning_stacklevel=5)
     if override_path is not None:
-        return _SkillOverrideResolution(override_path, None, None)
+        return _SkillOverrideResolution(override_path, None, ())
 
     migration = SKILL_CONFIG_MIGRATIONS.get(skill)
     if migration is not None:
         override_path = _resolve_channel_override(migration.target_skill, channel_dir, warning_stacklevel=5)
         if override_path is not None:
-            return _SkillOverrideResolution(override_path, None, migration.section)
+            section_path = skill_config_migration_section_path(skill, migration)
+            return _SkillOverrideResolution(override_path, None, section_path)
 
     legacy_owner = _NAMESPACED_LEGACY_OVERRIDE_OWNERS.get(skill)
     if legacy_owner is None:
-        return _SkillOverrideResolution(None, None, None)
+        return _SkillOverrideResolution(None, None, ())
     override_path = _resolve_channel_override(legacy_owner, channel_dir, warning_stacklevel=5)
-    return _SkillOverrideResolution(override_path, legacy_owner if override_path is not None else None, None)
+    return _SkillOverrideResolution(override_path, legacy_owner if override_path is not None else None, ())
 
 
 def _merge_skill_channel_override(
@@ -543,14 +554,18 @@ def _merge_skill_channel_override(
         return defaults
 
     override, acknowledged = _split_acknowledged_unknown_keys(_load_override(override_path), override_path)
-    if resolution.migrated_section is not None:
-        if resolution.migrated_section not in override:
-            return defaults
-        migrated = override[resolution.migrated_section]
+    if resolution.migrated_section_path:
+        migrated: object = override
+        for index, migrated_section in enumerate(resolution.migrated_section_path):
+            if not isinstance(migrated, dict):
+                dotted = ".".join(resolution.migrated_section_path[:index])
+                raise ConfigError(f"skill-config {override_path} の移行先 {dotted!r} は mapping である必要があります")
+            if migrated_section not in migrated:
+                return defaults
+            migrated = migrated[migrated_section]
         if not isinstance(migrated, dict):
-            raise ConfigError(
-                f"skill-config {override_path} の移行先 {resolution.migrated_section!r} は mapping である必要があります"
-            )
+            dotted = ".".join(resolution.migrated_section_path)
+            raise ConfigError(f"skill-config {override_path} の移行先 {dotted!r} は mapping である必要があります")
         override = dict(migrated)
     # legacy owner の override は節を持たないため、名前空間キー側の節へ包み直す。
     legacy_section = section if resolution.legacy_owner is not None else None

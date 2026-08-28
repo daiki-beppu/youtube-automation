@@ -426,7 +426,18 @@ def test_skill_config_migration_lint_rejects_section_outside_bundled_default() -
     )
 
     assert len(violations) == 1
-    assert "移行先の節 'broken-section' が同梱 default の節 'prompt' と一致しません" in violations[0]
+    assert (
+        "移行先の節 'broken-section' が同梱 default の節 path 'prompt' の入口 'prompt' と一致しません" in violations[0]
+    )
+
+
+def test_skill_config_migration_lint_reports_full_bundled_default_section_path() -> None:
+    violations = _lint._lint_skill_config_migrations(
+        {"lyria": _migrate_config.SkillConfigMigration("music", "broken-section")}
+    )
+
+    assert len(violations) == 1
+    assert "同梱 default の節 path 'generate.lyria' の入口 'generate'" in violations[0]
 
 
 def test_skill_config_migration_lint_rejects_source_outside_loader_keys() -> None:
