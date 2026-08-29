@@ -40,14 +40,8 @@ YouTube チャンネル運営を自動化するツールキット。`youtube-cha
 
 ## Agent skills
 
-### Issue tracker
+mattpocock-skills の engineering skills（to-tickets / triage / to-spec / wayfinder 等）が読むリポジトリ固有設定:
 
-Issue はこのリポジトリの GitHub Issues で管理する（`gh` CLI 経由）。詳細は `docs/agents/issue-tracker.md`。
-
-### Triage labels
-
-triage はデフォルトの 5 ラベル（`needs-triage` / `needs-info` / `ready-for-agent` / `ready-for-human` / `wontfix`）をそのまま使う。対応表は `docs/agents/triage-labels.md`。
-
-### Domain docs
-
-単一コンテキスト構成 — ルート `CONTEXT.md`（未作成・lazily 生成）+ `docs/adr/`。読み方の規約は `docs/agents/domain.md`。
+- Issue tracker: GitHub Issues（`gh` CLI 経由）— `docs/agents/issue-tracker.md`
+- Triage labels: デフォルト 5 ラベル（`needs-triage` / `needs-info` / `ready-for-agent` / `ready-for-human` / `wontfix`）— `docs/agents/triage-labels.md`
+- Domain docs: 単一コンテキスト構成。グロッサリ正本は `docs/architecture.md`「プロジェクト用語集」（旧 `CONTEXT.md` 統合済み）+ `docs/adr/` — 読み方は `docs/agents/domain.md`
