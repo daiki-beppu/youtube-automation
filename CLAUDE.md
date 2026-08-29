@@ -37,3 +37,11 @@ YouTube チャンネル運営を自動化するツールキット。`youtube-cha
 - takt 経路以外の開発は必ず issue 専用 linked worktree 上で行う（メイン作業ツリーで直接ブランチを切らない）
 - commit は日本語 Conventional Commits + タイトル末尾に `(#<N>)`。stack の PR タイトルは commit から自動生成されるため 1 branch 1 commit に寄せる
 - リリースは `/automation-release`（post-release は `/release-notes`）
+
+## Agent skills
+
+mattpocock-skills の engineering skills（to-tickets / triage / to-spec / wayfinder 等）が読むリポジトリ固有設定:
+
+- Issue tracker: GitHub Issues（`gh` CLI 経由）— `docs/agents/issue-tracker.md`
+- Triage labels: デフォルト 5 ラベル（`needs-triage` / `needs-info` / `ready-for-agent` / `ready-for-human` / `wontfix`）— `docs/agents/triage-labels.md`
+- Domain docs: 単一コンテキスト構成。グロッサリ正本は `docs/architecture.md`「プロジェクト用語集」（旧 `CONTEXT.md` 統合済み）+ `docs/adr/` — 読み方は `docs/agents/domain.md`
