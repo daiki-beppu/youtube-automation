@@ -12,4 +12,4 @@ The skills speak in terms of five canonical triage roles. This file maps those r
 
 When a skill mentions a role (e.g. "apply the AFK-ready triage label"), use the corresponding label string from this table.
 
-Edit the right-hand column to match whatever vocabulary you actually use.
+このリポジトリはデフォルト 5 種をそのまま使うため対応表は恒等マッピング。ラベル名を変えるときは右列を書き換える。
