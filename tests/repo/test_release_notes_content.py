@@ -28,6 +28,14 @@ EXPECTED_NOTES = {
         -2026073102,
         "/automation --update",
     ),
+    "v5.7.0.md": (
+        "v5.7.0",
+        date(2026, 8, 29),
+        "main",
+        "youtube-automation v5.7.0",
+        -2026082902,
+        "/automation --update",
+    ),
     "ext-v0.2.5.md": (
         "ext-v0.2.5",
         date(2026, 7, 10),
