@@ -1,0 +1,1 @@
+- mattpocock-skills の engineering skills が読むリポジトリ設定（`docs/agents/issue-tracker.md` / `triage-labels.md` / `domain.md`）と `CLAUDE.md` の `## Agent skills` セクションを追加した（#4727）。
