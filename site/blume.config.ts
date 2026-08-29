@@ -10,6 +10,8 @@ import {
 } from "./operator-doc-source";
 import { releaseFrontmatter } from "./release-schema";
 import { createSkillPageSource } from "./skill-page-source";
+// PROTOTYPE — wayfinder #4731 の使い捨て配線。決定後にこの import ごと外す
+import { createSkillDetailPrototypeSource } from "./skill-detail-prototype-source";
 
 const lightAccent = dadsTokens.Color.Key["800"].$value;
 const darkAccent = dadsTokens.Color.Key["400"].$value;
@@ -39,6 +41,11 @@ export default defineConfig({
         source: createSkillPageSource({ repositoryRoot }),
         type: "custom",
       },
+      // PROTOTYPE — wayfinder #4731 の使い捨て source
+      {
+        source: createSkillDetailPrototypeSource({ repositoryRoot }),
+        type: "custom",
+      },
     ],
   },
   frontmatter: {
@@ -46,6 +53,16 @@ export default defineConfig({
   },
   navigation: {
     sidebar: [
+      // PROTOTYPE — wayfinder #4731 の試作グループ。決定後に削除する
+      {
+        label: "🧪 試作: スキル詳細ページ",
+        items: [
+          "/skills-prototype",
+          { href: "/skills-prototype/music-a", label: "A: 読み物先行" },
+          { href: "/skills-prototype/music-b", label: "B: リファレンス先行" },
+          { href: "/skills-prototype/music-c", label: "C: タスク逆引き" },
+        ],
+      },
       {
         label: "はじめる",
         items: ["/tool-setup", "/oauth-setup", "/chrome-extension-install-guide"],
