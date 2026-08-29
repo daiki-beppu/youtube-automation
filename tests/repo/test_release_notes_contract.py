@@ -109,7 +109,7 @@ def test_existing_release_notes_match_real_tags_and_public_contract() -> None:
     tags = _repository_tags()
     notes = sorted(NOTES_DIR.glob("*.md"))
 
-    assert len(notes) == 4
+    assert len(notes) == 5
     referenced_tags = {version for note in notes if isinstance((version := _read_note(note)[0].get("version")), str)}
     if referenced_tags - tags and _repository_history_is_shallow():
         pytest.skip("release tag history is unavailable in this shallow checkout")

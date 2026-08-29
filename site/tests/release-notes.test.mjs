@@ -553,36 +553,37 @@ test("top page は kind の下に非空の更新規模 section を見出し階�
   }
 });
 
-test("top page の kind × 更新規模 group は4 releaseの所属・日付・リンクを維持する", async () => {
+test("top page の kind × 更新規模 group は5 releaseの所属・日付・リンクを維持する", async () => {
   const html = await readIndex();
   const expectedGroups = [
     {
       kind: "main",
       scale: "major",
-      version: "v5.6.0",
-      date: "2026-07-31T00:00:00.000Z",
-      href: "/v5.6.0",
+      entries: [
+        { version: "v5.7.0", date: "2026-08-29T00:00:00.000Z", href: "/v5.7.0" },
+        { version: "v5.6.0", date: "2026-07-31T00:00:00.000Z", href: "/v5.6.0" },
+      ],
     },
     {
       kind: "main",
       scale: "minor",
-      version: "v5.5.17",
-      date: "2026-07-10T00:00:00.000Z",
-      href: "/v5.5.17",
+      entries: [
+        { version: "v5.5.17", date: "2026-07-10T00:00:00.000Z", href: "/v5.5.17" },
+      ],
     },
     {
       kind: "extension",
       scale: "major",
-      version: "ext-v0.3.0",
-      date: "2026-07-31T00:00:00.000Z",
-      href: "/ext-v0.3.0",
+      entries: [
+        { version: "ext-v0.3.0", date: "2026-07-31T00:00:00.000Z", href: "/ext-v0.3.0" },
+      ],
     },
     {
       kind: "extension",
       scale: "minor",
-      version: "ext-v0.2.5",
-      date: "2026-07-10T00:00:00.000Z",
-      href: "/ext-v0.2.5",
+      entries: [
+        { version: "ext-v0.2.5", date: "2026-07-10T00:00:00.000Z", href: "/ext-v0.2.5" },
+      ],
     },
   ];
 
@@ -597,9 +598,14 @@ test("top page の kind × 更新規模 group は4 releaseの所属・日付・�
       (match) => match[1]
     );
 
-    assert.deepEqual(hrefs, [expected.href]);
-    assert.match(scaleSection, new RegExp(`<h5>${expected.version}</h5>`));
-    assert.match(scaleSection, new RegExp(`<time datetime="${expected.date}">[^<]+</time>`));
+    assert.deepEqual(
+      hrefs,
+      expected.entries.map((entry) => entry.href)
+    );
+    for (const entry of expected.entries) {
+      assert.match(scaleSection, new RegExp(`<h5>${entry.version}</h5>`));
+      assert.match(scaleSection, new RegExp(`<time datetime="${entry.date}">[^<]+</time>`));
+    }
     assert.match(
       scaleSection,
       new RegExp(`<span class="release-kind release-kind--${expected.kind}">`)
@@ -625,7 +631,7 @@ test("一覧は本体とChrome拡張に分かれ、それぞれ公開日の新�
 
   assert.match(main, /<h3>本体<\/h3>/);
   assert.match(extension, /<h3>Chrome 拡張<\/h3>/);
-  assert.deepEqual(hrefs(main), ["/v5.6.0", "/v5.5.17"]);
+  assert.deepEqual(hrefs(main), ["/v5.7.0", "/v5.6.0", "/v5.5.17"]);
   assert.deepEqual(hrefs(extension), ["/ext-v0.3.0", "/ext-v0.2.5"]);
 });
 
