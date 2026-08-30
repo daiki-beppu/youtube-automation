@@ -128,6 +128,23 @@ class _FakeVideos:
 
 
 class TestGetAllChannelVideosCache:
+    def test_deduplicates_video_ids_across_pages_preserving_first_occurrence(self) -> None:
+        first_item = _video_item("DUPLICATE", "2026-01-01T00:00:00Z")
+        duplicate_item = _video_item("DUPLICATE", "2026-01-02T00:00:00Z")
+        playlist_items = _FakePlaylistItems(
+            pages=[
+                {"items": [first_item], "nextPageToken": "1"},
+                {"items": [duplicate_item, _video_item("UNIQUE", "2026-01-03T00:00:00Z")]},
+            ]
+        )
+        collector = _StubCollector(playlist_items)
+
+        videos = collector.get_all_channel_videos(refresh=True)
+
+        assert [video["video_id"] for video in videos] == ["DUPLICATE", "UNIQUE"]
+        assert videos[0]["published_at"] == "2026-01-01T00:00:00Z"
+        assert playlist_items.call_count == 2
+
     def test_fetches_more_than_fifty_uploads_across_every_page(self) -> None:
         first_page = [_video_item(f"V{i:02d}", "2026-01-01T00:00:00Z") for i in range(50)]
         playlist_items = _FakePlaylistItems(
