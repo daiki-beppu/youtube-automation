@@ -48,6 +48,7 @@ class VideoListingMixin:
 
             # 全動画を取得
             videos = []
+            seen_video_ids: set[str] = set()
             next_page_token = None
 
             while True:
@@ -55,8 +56,12 @@ class VideoListingMixin:
                 playlist_response = self.youtube_service.list_playlist_items(uploads_playlist_id, next_page_token)
 
                 for item in playlist_response["items"]:
+                    video_id = item["contentDetails"]["videoId"]
+                    if video_id in seen_video_ids:
+                        continue
+                    seen_video_ids.add(video_id)
                     video_info = {
-                        "video_id": item["contentDetails"]["videoId"],
+                        "video_id": video_id,
                         "title": item["snippet"]["title"],
                         "published_at": item["snippet"]["publishedAt"],
                         "description": (
