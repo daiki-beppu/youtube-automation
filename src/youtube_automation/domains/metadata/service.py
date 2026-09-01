@@ -120,7 +120,7 @@ class BAHMetadataGenerator:
 
         tracks = []
         skipped: list[tuple[str, str]] = []
-        current_time = 0
+        current_time = 0.0
         crossfade = self._crossfade_sec
 
         # 音声ファイルを取得（AUDIO_EXTS で許容形式を共有、数字順にソート）
@@ -159,7 +159,7 @@ class BAHMetadataGenerator:
                 }
             )
 
-            current_time = int(end_time - crossfade)
+            current_time = end_time - crossfade
 
         if skipped:
             logger.warning(f"⚠️  {len(skipped)}/{len(wav_files)} トラックがスキップされました:")
@@ -179,7 +179,7 @@ class BAHMetadataGenerator:
         logger.info(f"楽曲解析完了: {len(tracks)}曲")
         return tracks
 
-    def _get_audio_duration(self, wav_file: Path) -> int:
+    def _get_audio_duration(self, wav_file: Path) -> float:
         """
         afinfo / ffprobe で音声ファイルの長さを取得
 
@@ -187,7 +187,7 @@ class BAHMetadataGenerator:
             wav_file (Path): 音声ファイルパス
 
         Returns:
-            int: 長さ（秒）
+            float: 長さ（秒）
 
         Raises:
             subprocess.CalledProcessError: afinfo が非ゼロ終了した場合
@@ -211,14 +211,14 @@ class BAHMetadataGenerator:
                     duration_str = line.split(":")[1].strip().split()[0]
                     afinfo_duration = float(duration_str)
                     if afinfo_duration > 0:
-                        return max(1, int(afinfo_duration))
+                        return max(1.0, afinfo_duration)
                     break
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ValueError, IndexError, OSError) as e:
             afinfo_error = e
 
         duration = probe_duration(wav_file)
         if duration is not None and duration > 0:
-            return max(1, int(duration))
+            return max(1.0, duration)
 
         if afinfo_error is not None:
             raise afinfo_error
@@ -269,9 +269,9 @@ class BAHMetadataGenerator:
 
         return title
 
-    def _format_timestamp(self, seconds: int) -> str:
+    def _format_timestamp(self, seconds: int | float) -> str:
         """秒数をYouTubeチャプター形式のタイムスタンプに変換（MM:SS または H:MM:SS）"""
-        return format_timestamp(seconds)
+        return format_timestamp(int(seconds))
 
     # ─── タイムスタンプ生成 ─────────────────────────────
 
@@ -285,7 +285,7 @@ class BAHMetadataGenerator:
             loops: master のループ回数（`yt-generate-master --loop N` /
                 `--target-duration` のループ展開と同じ回数）。2 以上を指定すると
                 トラック列を N 回繰り返し、2 周目以降の開始秒は 1 周目と同じ
-                クロスフェード算術（`int(current + duration - crossfade)`）で
+                クロスフェード算術（`current + duration - crossfade`）で
                 連続計算する。既定 1（従来挙動）。
 
         戻り値: `list[{"type": "theme_header"|"track", "timestamp": str, "title": str, "loop": int}]`。
@@ -308,7 +308,7 @@ class BAHMetadataGenerator:
         theme_names = self._load_theme_display_names()
         crossfade = self._crossfade_sec
         out: list[dict] = []
-        current_time = 0
+        current_time = 0.0
         for loop_index in range(1, loops + 1):
             last_pattern: str | None = None
             for track in self.tracks:
@@ -321,7 +321,7 @@ class BAHMetadataGenerator:
                     out.append({"type": "theme_header", "timestamp": timestamp, "title": label, "loop": loop_index})
                     last_pattern = pattern
                 out.append({"type": "track", "timestamp": timestamp, "title": track["title"], "loop": loop_index})
-                current_time = int(current_time + track["duration"] - crossfade)
+                current_time = current_time + track["duration"] - crossfade
         return out
 
     def format_timestamps_text(self, loops: int = 1) -> str:

@@ -2083,9 +2083,38 @@ class TestAnalyzeAudioFilesSkipDetection:
 
         assert len(tracks) == 1
         assert tracks[0]["filename"] == "01-circuit-door.m4a"
-        assert tracks[0]["duration"] == 121
+        assert tracks[0]["duration"] == 121.9
         assert "再生時間が 0 秒" not in caplog.text
         assert "入力 1 ファイル → 出力 0 タイムスタンプ" not in caplog.text
+
+    def test_fractional_durations_accumulate_without_per_track_truncation(self, gen_with_audio_dir, monkeypatch):
+        gen, audio_dir = gen_with_audio_dir
+        for index in range(1, 5):
+            (audio_dir / f"{index:02d}-track.wav").write_bytes(b"audio")
+
+        monkeypatch.setattr(gen, "_get_audio_duration", lambda _path: 112.4)
+
+        tracks = gen.analyze_audio_files()
+
+        assert [track["duration"] for track in tracks] == [112.4] * 4
+        assert [track["timestamp"] for track in tracks] == ["00:00", "01:51", "03:42", "05:34"]
+
+    def test_afinfo_fractional_duration_is_preserved(self, gen_with_audio_dir, monkeypatch):
+        gen, audio_dir = gen_with_audio_dir
+        audio_file = audio_dir / "01-track.wav"
+        audio_file.write_bytes(b"audio")
+
+        import subprocess as _subprocess
+
+        monkeypatch.setattr(
+            _subprocess,
+            "run",
+            lambda *args, **kwargs: _subprocess.CompletedProcess(
+                args[0], 0, stdout="estimated duration: 112.4 seconds\n", stderr=""
+            ),
+        )
+
+        assert gen.analyze_audio_files()[0]["duration"] == 112.4
 
     def test_m4a_probe_duration_subsecond_is_kept_as_one_second(self, gen_with_audio_dir, caplog, monkeypatch):
         gen, audio_dir = gen_with_audio_dir
@@ -2135,7 +2164,7 @@ class TestAnalyzeAudioFilesSkipDetection:
 
         assert len(tracks) == 1
         assert tracks[0]["filename"] == "01-circuit-door.m4a"
-        assert tracks[0]["duration"] == 121
+        assert tracks[0]["duration"] == 121.9
         assert "再生時間が 0 秒" not in caplog.text
         assert "入力 1 ファイル → 出力 0 タイムスタンプ" not in caplog.text
 
@@ -2160,7 +2189,7 @@ class TestAnalyzeAudioFilesSkipDetection:
 
         assert len(tracks) == 1
         assert tracks[0]["filename"] == "01-circuit-door.m4a"
-        assert tracks[0]["duration"] == 121
+        assert tracks[0]["duration"] == 121.9
         assert "再生時間が 0 秒" not in caplog.text
         assert "入力 1 ファイル → 出力 0 タイムスタンプ" not in caplog.text
 
@@ -2185,7 +2214,7 @@ class TestAnalyzeAudioFilesSkipDetection:
 
         assert len(tracks) == 1
         assert tracks[0]["filename"] == "01-circuit-door.m4a"
-        assert tracks[0]["duration"] == 121
+        assert tracks[0]["duration"] == 121.9
         assert "再生時間が 0 秒" not in caplog.text
         assert "入力 1 ファイル → 出力 0 タイムスタンプ" not in caplog.text
 
@@ -2267,6 +2296,18 @@ class TestGenerateTimestampsLoops:
             ("03:28", "Alpha", 2),
             ("05:27", "Beta", 2),
         ]
+
+    def test_loops_preserve_fractional_duration_across_boundaries(self):
+        gen = _make_generator()
+        gen._crossfade_sec = 1.0
+        gen.tracks = [
+            _track(f"{index:02d}-track.mp3", f"Track {index}", timestamp, None, duration=112.4)
+            for index, timestamp in enumerate(["00:00", "01:51", "03:42", "05:34"], start=1)
+        ]
+
+        out = gen.generate_timestamps(loops=2)
+
+        assert out[4]["timestamp"] == "07:25"
 
     def test_loops_2_reemits_theme_headers_per_loop(self):
         """Given pattern_key 付きトラック
