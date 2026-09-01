@@ -6,6 +6,7 @@ import importlib.util
 import json
 import sys
 import time
+from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import ModuleType
@@ -39,6 +40,24 @@ def _config(runner: ModuleType, *, publish: bool = False, post_publish: bool = F
         allow_external_publish=publish,
         post_publish_configured=post_publish,
     )
+
+
+def test_lease_mutex_uses_canonical_descriptor_lock(
+    tmp_path: Path, runner: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    descriptors = []
+
+    @contextmanager
+    def fake_lock(descriptor):
+        descriptors.append(descriptor)
+        yield
+
+    monkeypatch.setattr(runner, "file_descriptor_lock", fake_lock)
+
+    with runner._lease_mutex(tmp_path):
+        pass
+
+    assert len(descriptors) == 1
 
 
 def _collection(

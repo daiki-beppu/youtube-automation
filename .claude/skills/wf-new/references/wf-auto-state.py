@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import fcntl
 import hashlib
 import json
 import math
@@ -25,6 +24,7 @@ from youtube_automation.domains.collections.workflow_state import WorkflowState
 from youtube_automation.domains.collections.workflow_state import read as read_workflow_state
 from youtube_automation.domains.documents.video_description import read_video_description_metadata
 from youtube_automation.domains.post_publish import verify_post_publish_completion
+from youtube_automation.infrastructure.file_lock import file_descriptor_lock
 
 STATE_DIR_NAME = ".automation-run"
 LEASE_DIR_NAME = "lease"
@@ -862,10 +862,9 @@ def _lease_mutex(root: Path):
         flags |= os.O_NOFOLLOW
     descriptor = os.open(mutex_path, flags, 0o600)
     try:
-        fcntl.flock(descriptor, fcntl.LOCK_EX)
-        yield state_dir
+        with file_descriptor_lock(descriptor):
+            yield state_dir
     finally:
-        fcntl.flock(descriptor, fcntl.LOCK_UN)
         os.close(descriptor)
 
 

@@ -79,6 +79,41 @@ def test_file_lock_releases_msvcrt_lock_when_body_raises(tmp_path: Path, monkeyp
     assert calls == [(fake_msvcrt.LK_NBLCK, 1), (fake_msvcrt.LK_UNLCK, 1)]
 
 
+def test_file_descriptor_lock_retries_windows_contention_until_acquired(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Given Windows の descriptor lock が旧 retry 上限を超えて競合する
+    When file_descriptor_lock を使う
+    Then 競合解除まで待機して lock を取得する。
+    """
+    attempts = 0
+    fake_msvcrt = ModuleType("msvcrt")
+    fake_msvcrt.LK_NBLCK = 1
+    fake_msvcrt.LK_UNLCK = 2
+
+    def locking(_descriptor: int, mode: int, _size: int) -> None:
+        nonlocal attempts
+        if mode == fake_msvcrt.LK_NBLCK:
+            attempts += 1
+            if attempts <= 20:
+                raise OSError(13, "lock contention")
+
+    fake_msvcrt.locking = locking
+    lock_path = tmp_path / "lease.mutex"
+    lock_path.touch()
+
+    with _import_file_lock_without(monkeypatch, {"fcntl"}, msvcrt_module=fake_msvcrt) as module:
+        monkeypatch.setattr(module.time, "sleep", lambda _seconds: None)
+        descriptor = lock_path.open("r+b")
+        try:
+            with module.file_descriptor_lock(descriptor.fileno()):
+                pass
+        finally:
+            descriptor.close()
+
+    assert attempts == 21
+
+
 def test_file_lock_serializes_threads_without_platform_locks(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """Given fcntl / msvcrt の双方がない環境
     When 複数スレッドが共通ファイルロックを使う
