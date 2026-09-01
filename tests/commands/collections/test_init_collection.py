@@ -7,6 +7,7 @@ conftest.py が CHANNEL_DIR を tmp コピーへ向けるため fixture を汚�
 
 import json
 import sys
+from datetime import datetime
 from pathlib import Path
 
 from tests.helpers.paths import REPO_ROOT
@@ -17,6 +18,7 @@ import pytest
 
 from youtube_automation.commands.collections.init_collection import main
 from youtube_automation.configuration import channel_dir, load_config, reset
+from youtube_automation.domains.collections.workflow_state import update as update_workflow_state
 from youtube_automation.infrastructure.media.collection_paths import REQUIRED_SUBDIRS
 
 
@@ -46,6 +48,32 @@ def categorizing_playlists():
     yield
     path.write_text(original, encoding="utf-8")
     reset()
+
+
+def _collection_path(theme: str) -> Path:
+    """init_collection と同じ規則で collection path を組み立てる。"""
+    short = load_config().meta.channel_short.lower()
+    dir_name = f"{datetime.now().strftime('%Y%m%d')}-{short}-{theme}-collection"
+    return Path(channel_dir()) / "collections" / "planning" / dir_name
+
+
+def _publish_plan_draft(theme: str, *, project_selection: bool = True) -> Path:
+    """Phase 1 の draft 公開と企画確定投影が作る状態を再現する (#4754)."""
+    base = _collection_path(theme)
+    documentation = base / "20-documentation"
+    documentation.mkdir(parents=True)
+    (documentation / "plan_proposals.json").write_text(
+        json.dumps({"schema_version": 1, "candidates": []}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    if project_selection:
+
+        def project(state):
+            state.record_collection_plan(final_title="Rain Focus", target_persona="persona-primary")
+            return state
+
+        update_workflow_state(base / "workflow-state.json", project)
+    return base
 
 
 def _created_collection() -> Path:
@@ -170,6 +198,80 @@ class TestScaffold:
             state = json.loads((collection / "workflow-state.json").read_text(encoding="utf-8"))
             assert state["planning"]["music"]["engine"] == "minimax"
             assert "music_engine" not in state
+        finally:
+            import shutil
+
+            shutil.rmtree(collection)
+
+
+class TestPlanDraftDirectory:
+    """#4754: Phase 1 の企画 draft 公開が先に作ったディレクトリで 2a を止めない。
+
+    draft pair は初期化前に `20-documentation/` へ公開され、`yt-collection-plan-select`
+    が `planning.*` だけの workflow-state を作る。ここで「既に存在します」と落ちると、
+    完全な workflow-state を書ける入口が無くなって制作フローが詰む。
+    """
+
+    def test_init_continues_and_keeps_projected_planning(self, monkeypatch, capsys):
+        collection = _publish_plan_draft("draft-scaffold")
+        try:
+            _run(monkeypatch, ["Draft Scaffold", "draft-scaffold", "--track-count", "9"])
+            assert "企画 draft 公開済み" in capsys.readouterr().out
+            for sub in REQUIRED_SUBDIRS:
+                assert (collection / sub).is_dir(), f"{sub} が作成されていません"
+            state = json.loads((collection / "workflow-state.json").read_text(encoding="utf-8"))
+            assert state["collection_name"] == "Draft Scaffold"
+            assert state["stage"] == "planning"
+            assert state["phase"] == "planning"
+            assert state["track_count"] == 9
+            assert state["planning"]["generated"] is True
+            assert state["planning"]["final_title"] == "Rain Focus"
+            assert state["planning"]["target_persona"] == "persona-primary"
+            assert state["planning"]["music"]["engine"] == load_config().youtube.music_engine
+        finally:
+            import shutil
+
+            shutil.rmtree(collection)
+
+    def test_init_continues_when_selection_is_not_finalized_yet(self, monkeypatch):
+        """draft 公開だけで state が無い段階でも初期化できる。"""
+        collection = _publish_plan_draft("draft-only-scaffold", project_selection=False)
+        try:
+            _run(monkeypatch, ["Draft Only", "draft-only-scaffold"])
+            state = json.loads((collection / "workflow-state.json").read_text(encoding="utf-8"))
+            assert state["collection_name"] == "Draft Only"
+            assert "generated" not in state["planning"]
+        finally:
+            import shutil
+
+            shutil.rmtree(collection)
+
+    def test_initialized_collection_still_fails_loud(self, monkeypatch, capsys):
+        """企画 pair があっても初期化済み collection の再初期化は拒否する。"""
+        _run(monkeypatch, ["Init Scaffold", "init-scaffold"])
+        collection = _created_collection()
+        try:
+            (collection / "20-documentation" / "plan_proposals.json").write_text("{}", encoding="utf-8")
+            with pytest.raises(SystemExit) as exc:
+                _run(monkeypatch, ["Init Scaffold", "init-scaffold"])
+            assert exc.value.code == 1
+            assert "既に存在します" in capsys.readouterr().err
+        finally:
+            import shutil
+
+            shutil.rmtree(collection)
+
+    def test_directory_without_plan_pair_still_fails_loud(self, monkeypatch, capsys):
+        """企画 draft 由来でないディレクトリは従来どおり fail-loud で止める。"""
+        collection = _collection_path("bare-scaffold")
+        collection.mkdir(parents=True)
+        try:
+            with pytest.raises(SystemExit) as exc:
+                _run(monkeypatch, ["Bare Scaffold", "bare-scaffold"])
+            assert exc.value.code == 1
+            err = capsys.readouterr().err
+            assert "既に存在します" in err
+            assert "uv run yt-collection-preflight" in err
         finally:
             import shutil
 
