@@ -11,7 +11,7 @@ Lyria 3 `interactions` API は 1 リクエスト最大約 184 秒の MP3 を返�
 3. 失敗時は最大 `--max-retries` 回リトライ (`generate_music_dj._generate_one_segment` 流儀)
 4. 既存セグメントがあれば skip (resume 可能)
 5. entry 順の `audio-adjustments.json::order` を保存し、全セグメント揃ったら
-   `generate_master.generate_master(no_loop=True)` を 1 回だけ呼び、
+   同じ order を渡して `generate_master.generate_master(no_loop=True)` を 1 回だけ呼び、
    `01-master/master.mp3` を出力 (`yt-generate-master` の WAV 入力経路を再利用)
 
 Usage:
@@ -130,14 +130,6 @@ def _load_lyria_prompt_inputs(path: Path) -> tuple[_LyriaPromptInput, ...]:
     if not isinstance(entries, list) or not entries:
         raise ValidationError("Lyria prompt document は entry を1件以上必要とします")
     return tuple(_parse_lyria_prompt_entry(entry, index) for index, entry in enumerate(entries, start=1))
-
-
-def _load_lyria_prompt_input(path: Path) -> _LyriaPromptInput:
-    """単一 entry 呼び出し向けの互換 projection。"""
-    prompts = _load_lyria_prompt_inputs(path)
-    if len(prompts) != 1:
-        raise ValidationError("Lyria prompt document は entry を1件だけ必要とします")
-    return prompts[0]
 
 
 def _resolve_segment_count(target_min: float, padding_min: float) -> int:
@@ -510,12 +502,15 @@ def main() -> int:
 
         print()
         print(f"  === セグメント生成完了 ({total_segments} segments) → クロスフェード結合 ===")
-        replace_track_order(paths.docs_dir / "audio-adjustments.json", generated_order, None, [])
+        replace_track_order(paths.audio_adjustments_path, generated_order, None, [])
+        # 保存した order を結合にも明示的に渡す。省略するとファイル名のアルファベット順に
+        # フォールバックし、music_dir に残った無関係な音声まで master に混入しうる。
         master_path = generate_master.generate_master(
             collection_dir,
             crossfade,
             bitrate,
             no_loop=True,
+            order=generated_order,
         )
         print()
         print(f"  Master audio: {master_path}")

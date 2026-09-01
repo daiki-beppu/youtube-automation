@@ -20,7 +20,6 @@ from youtube_automation.commands.media.generate_lyria_master import (
     _LYRIA_SEGMENT_SEC,
     _MAX_SEGMENT_COUNT,
     _generate_one_segment,
-    _load_lyria_prompt_input,
     _load_lyria_prompt_inputs,
     _resolve_segment_count,
 )
@@ -40,7 +39,7 @@ def _make_collection(root: Path) -> Path:
     return root
 
 
-def test_load_lyria_prompt_input_uses_only_validated_pair(tmp_path: Path) -> None:
+def test_load_lyria_prompt_inputs_uses_only_validated_pair(tmp_path: Path) -> None:
     collection = _make_collection(tmp_path)
     target = collection / "20-documentation/lyria-prompt.json"
     target.parent.mkdir()
@@ -71,11 +70,12 @@ def test_load_lyria_prompt_input_uses_only_validated_pair(tmp_path: Path) -> Non
         machine_verify=lambda _document: None,
     )
 
-    prompt = _load_lyria_prompt_input(target)
+    prompts = _load_lyria_prompt_inputs(target)
 
-    assert prompt.prompt == "soft fingerpicked guitar"
-    assert prompt.name == "rain"
-    assert prompt.bpm == 72
+    assert len(prompts) == 1
+    assert prompts[0].prompt == "soft fingerpicked guitar"
+    assert prompts[0].name == "rain"
+    assert prompts[0].bpm == 72
 
 
 def test_load_lyria_prompt_inputs_preserves_multiple_entry_order(tmp_path: Path, monkeypatch) -> None:
@@ -295,6 +295,44 @@ class TestGenerateSegments:
         adjustments = json.loads((collection / "20-documentation/audio-adjustments.json").read_text(encoding="utf-8"))
         assert adjustments["order"] == ["01_dawn.wav", "02_night.wav"]
         assert master_capture["kwargs"]["no_loop"] is True
+        # 保存した order をそのまま結合へ渡す（ファイル名ソートへのフォールバック禁止）
+        assert master_capture["kwargs"]["order"] == ["01_dawn.wav", "02_night.wav"]
+
+    def test_total_segments_over_cap_stops_before_any_generation(self, tmp_path, monkeypatch, capsys):
+        collection = _make_collection(tmp_path / "coll")
+        prompt_document = collection / "20-documentation/lyria-prompt.json"
+        prompt_document.parent.mkdir()
+        # 100min + padding 0 → 33 セグメント / entry。単体では cap 内だが 2 entry の合計 66 で超過する。
+        prompts = (
+            generate_lyria_master._LyriaPromptInput("warm dawn", "dawn", None, 100, 0, None, None, None, None, None),
+            generate_lyria_master._LyriaPromptInput("quiet night", "night", None, 100, 0, None, None, None, None, None),
+        )
+        monkeypatch.setattr(generate_lyria_master, "_load_lyria_prompt_inputs", lambda _path: prompts)
+        call_log = _patch_lyria_generate(monkeypatch)
+        _patch_ffmpeg(monkeypatch)
+        _patch_skill_configs(monkeypatch)
+        _patch_load_config(monkeypatch, target_duration_min=None)
+        generate_master = MagicMock()
+        monkeypatch.setattr(generate_lyria_master.generate_master, "generate_master", generate_master)
+        monkeypatch.setattr(
+            "sys.argv",
+            [
+                "yt-generate-lyria-master",
+                "--prompt-document",
+                str(prompt_document),
+                "--collection",
+                str(collection),
+            ],
+        )
+
+        assert generate_lyria_master.main() == 1
+
+        err = capsys.readouterr().err
+        assert f"セグメント数 66 が上限 {_MAX_SEGMENT_COUNT}" in err
+        # 課金が走る前に止まる
+        assert call_log == []
+        generate_master.assert_not_called()
+        assert not list((collection / "02-Individual-music").glob("*.wav"))
 
     def test_resume_skips_existing_segments(self, tmp_path, monkeypatch, capsys):
         collection = _make_collection(tmp_path / "coll")
