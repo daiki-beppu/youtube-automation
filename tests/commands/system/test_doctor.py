@@ -2640,6 +2640,17 @@ class TestCheckAnalyticsReport:
         assert result.status == "fail"
         assert "HTML 欠損" in result.message
 
+    def test_stale_analysis_html_routes_to_render_without_reanalysis(self, tmp_path):
+        _write_analysis_pair(tmp_path, "20240101")
+        report = tmp_path / "reports" / "analysis_20240101.json"
+        report.with_suffix(".html").write_text("old template", encoding="utf-8")
+
+        result = doctor.check_analytics_report(tmp_path)
+
+        assert result.status == "fail"
+        assert "yt-document-render" in result.next_action["instructions"]
+        assert "/analytics --analyze" not in result.next_action["instructions"]
+
     def test_multiple_analysis_files_is_ok(self, tmp_path):
         """analysis_*.md が複数存在しても ok."""
         reports_dir = tmp_path / "reports"

@@ -34,7 +34,13 @@ from youtube_automation.configuration import (
     workspace_channels,
 )
 from youtube_automation.configuration.skills import load_skill_config
-from youtube_automation.core.errors import AutomationError, ConfigError, YouTubeAPIError
+from youtube_automation.core.errors import (
+    AutomationError,
+    ConfigError,
+    DocumentRenderError,
+    DocumentValidationError,
+    YouTubeAPIError,
+)
 from youtube_automation.domains.channel_readiness import (
     ReadinessResult,
     approved_ttp_exceptions,
@@ -42,6 +48,7 @@ from youtube_automation.domains.channel_readiness import (
     evaluate_ttp_wf_new_readiness,
 )
 from youtube_automation.domains.documents.operational_artifacts import resolve_artifacts
+from youtube_automation.domains.documents.schema_registry import RepositorySchema, validate_repository_document
 from youtube_automation.infrastructure.auth import (
     UPLOAD_REQUIRED_SCOPES,
     OAuthCredentialState,
@@ -59,6 +66,7 @@ from youtube_automation.infrastructure.collections.numbered_duplicates import (
     format_scan_error_reason,
     scan_numbered_duplicates,
 )
+from youtube_automation.infrastructure.documents.publishing import read_published_json_document
 from youtube_automation.infrastructure.retry import QUOTA_REASONS
 from youtube_automation.infrastructure.youtube.reporting_api import ReportingAPIClient
 from youtube_automation.infrastructure.youtube.streaming.state_reconciliation import reconcile_streaming_vps
@@ -1632,12 +1640,19 @@ def _temporary_channel_dir(channel_dir: Path) -> Iterator[None]:
 def check_analytics_report(channel_dir: Path) -> CheckResult:
     input_mode = _resolve_wf_new_input_mode(channel_dir)
     if input_mode.invalid_report:
+        stale_html = _analysis_report_with_stale_html(channel_dir)
+        instructions = (
+            f"`uv run yt-document-render {stale_html} --schema analysis-report.schema.json` で "
+            "HTML を再発行してください"
+            if stale_html is not None
+            else "/analytics --analyze を再実行してください"
+        )
         return CheckResult(
             id="analytics_report",
             status="fail",
             category=DATA_CATEGORY,
             message="reports/analysis_*.json が schema 不正、HTML 欠損、または JSON と不一致",
-            next_action={"kind": "human", "instructions": "/analytics --analyze を再実行してください"},
+            next_action={"kind": "human", "instructions": instructions},
         )
     if input_mode.stale_report:
         if input_mode.stale_reason == "absolute":
@@ -1677,6 +1692,20 @@ def check_analytics_report(channel_dir: Path) -> CheckResult:
         category=DATA_CATEGORY,
         message=f"reports/analysis_*.json 未生成。/wf-new は {input_mode.mode} で開始可能",
     )
+
+
+def _analysis_report_with_stale_html(channel_dir: Path) -> Path | None:
+    for source in sorted((channel_dir / "reports").glob("analysis_*.json"), reverse=True):
+        try:
+            document = json.loads(source.read_text(encoding="utf-8"))
+            validate_repository_document(RepositorySchema.ANALYSIS_REPORT, document)
+        except (OSError, UnicodeError, json.JSONDecodeError, DocumentValidationError):
+            continue
+        try:
+            read_published_json_document(source, RepositorySchema.ANALYSIS_REPORT)
+        except DocumentRenderError:
+            return source.relative_to(channel_dir)
+    return None
 
 
 def _resolve_wf_new_input_mode(channel_dir: Path) -> _WfNewInputMode:

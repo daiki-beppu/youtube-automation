@@ -504,6 +504,10 @@ uv sync
 ```
 
 `channel_config` 以外の `yt-doctor` check が `warn` / `fail` / `unknown` の場合は、安全化して表示された `message` / `next_action` を省略せず利用者へ示し、`/setup` を起動して再診断するよう案内。`channel_config` 自体が `ok` 以外、check の重複・欠落・型不正、JSON 破損、またはコマンドを起動できない場合は `yt-channel-status` へ進まず停止する。
+
+### Step 3-4. 既発行文書 pair のテンプレート整合確認
+
+追従に文書テンプレート変更が含まれる可能性があるため、下流リポジトリの root で `uv run yt-document-render --check --all` を実行する。stale が 1 件以上なら列挙結果を利用者へ示し、HTML の一括上書きについて `[HUMAN STEP]` で同意を得た場合だけ `uv run yt-document-render --fix --all` を実行する。JSON の再生成や `/analytics --analyze` の再実行は不要。修復後は同じ `--check --all` を再実行し、stale 0 件を確認する。
 ただし `branding/icon.png` / `branding/banner.png` の「未生成」が報告された場合は、新規生成の前に必ず `branding/` 配下の既存ファイルを確認する。同名 stem の別拡張子（例: `icon.jpg` / `banner.webp`）と別サフィックス（例: `banner-v2.jpg` / `banner-v3.png`）も候補に含め、複数候補がある場合はどれが最終版か人間に確認してからリネーム/変換する。
 
 sync 直後に、次の 2 点を Phase 4 へ進む前に判定する。手順は [post-apply-checks.md](post-apply-checks.md) を読む:
