@@ -158,6 +158,22 @@ class TestExpandThumbnailPromptClauses:
         with pytest.raises(ConfigError, match=message):
             expand_thumbnail_prompt_clauses("Text-included thumbnail prompt. ${typography_clause}", skill_cfg)
 
+    @pytest.mark.parametrize(
+        "single_step, message",
+        [
+            ({"text_strip_clause": ""}, "text_strip_clause"),
+            ({"text_strip_clause": "   "}, "text_strip_clause"),
+            ({}, "text_strip_clause"),
+            ({"text_strip_clause": 123}, "text_strip_clause"),
+        ],
+    )
+    def test_rejects_empty_text_strip_clause(self, single_step: dict, message: str) -> None:
+        """#4755: 空 / 未設定 / 非文字列の除去指示は no-op 展開せず fail-fast する。"""
+        skill_cfg = {"image_generation": {"gemini": {"single_step": single_step}}}
+
+        with pytest.raises(ConfigError, match=message):
+            expand_thumbnail_prompt_clauses("${text_strip_clause}\nPreserve the composition.", skill_cfg)
+
 
 class TestAbTestPatterns:
     def test_disabled_or_missing_preserves_single_thumbnail_flow(self) -> None:

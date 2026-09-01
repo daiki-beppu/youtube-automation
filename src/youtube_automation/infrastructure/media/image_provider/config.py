@@ -245,7 +245,9 @@ def _codex_thumbnail_guidance_from_gemini(section: object) -> str | None:
     if not configured:
         return None
     key, guidance = configured[0]
-    return _render_thumbnail_typography_clause(section) if key == "typography_clause" else guidance
+    if key == "typography_clause":
+        return _render_thumbnail_typography_clause(section, single_step)
+    return guidance
 
 
 def _required_mapping(value: object, key: str) -> dict:
@@ -260,9 +262,8 @@ def _required_non_empty_string(value: object, key: str) -> str:
     return value
 
 
-def _render_thumbnail_typography_clause(gemini: object) -> str:
+def _render_thumbnail_typography_clause(gemini: object, single_step: dict) -> str:
     gemini = _required_mapping(gemini, "image_generation.gemini")
-    single_step = _required_mapping(gemini.get("single_step"), "image_generation.gemini.single_step")
     thumbnail_text = _required_mapping(gemini.get("thumbnail_text"), "image_generation.gemini.thumbnail_text")
     font = _required_mapping(thumbnail_text.get("font"), "image_generation.gemini.thumbnail_text.font")
     typography_clause = _required_non_empty_string(
@@ -288,11 +289,11 @@ def expand_thumbnail_prompt_clauses(prompt: str, skill_cfg: dict) -> str:
         return prompt
     image_generation = _required_mapping(skill_cfg.get("image_generation"), "image_generation")
     gemini = _required_mapping(image_generation.get("gemini"), "image_generation.gemini")
+    single_step = _required_mapping(gemini.get("single_step"), "image_generation.gemini.single_step")
     if typography_placeholder in prompt:
-        rendered_clause = _render_thumbnail_typography_clause(gemini)
+        rendered_clause = _render_thumbnail_typography_clause(gemini, single_step)
         prompt = prompt.replace(typography_placeholder, rendered_clause)
     if text_strip_placeholder in prompt:
-        single_step = _required_mapping(gemini.get("single_step"), "image_generation.gemini.single_step")
         text_strip_clause = _required_non_empty_string(
             single_step.get("text_strip_clause"),
             "image_generation.gemini.single_step.text_strip_clause",
