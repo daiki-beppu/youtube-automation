@@ -38,6 +38,25 @@ def test_inspector_returns_duration_and_loudness_from_local_tools(monkeypatch, t
     assert [call[0] for call in calls] == ["ffprobe", "ffmpeg"]
 
 
+def test_inspector_decodes_tool_output_as_utf8_with_replacement(monkeypatch, tmp_path: Path) -> None:
+    track = tmp_path / "日本語.mp3"
+    track.write_bytes(b"fixture")
+    run_kwargs = []
+
+    def fake_run(command, **kwargs):
+        run_kwargs.append(kwargs)
+        if command[0] == "ffprobe":
+            return subprocess.CompletedProcess(command, 0, stdout="180.5\n", stderr="")
+        return subprocess.CompletedProcess(command, 0, stdout="", stderr='{"input_i":"-14.25"}')
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    FFmpegAudioInspector().inspect(track)
+
+    assert all(kwargs["encoding"] == "utf-8" for kwargs in run_kwargs)
+    assert all(kwargs["errors"] == "replace" for kwargs in run_kwargs)
+
+
 def test_inspector_rejects_unreadable_duration(monkeypatch, tmp_path: Path) -> None:
     track = tmp_path / "track.mp3"
     track.write_bytes(b"fixture")

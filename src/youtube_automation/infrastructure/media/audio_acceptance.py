@@ -37,7 +37,15 @@ def parse_loudnorm_input_i(stderr: str) -> float:
 
 def _run(command: list[str], path: Path, timeout: int) -> subprocess.CompletedProcess[str]:
     try:
-        completed = subprocess.run(command, capture_output=True, text=True, check=False, timeout=timeout)
+        completed = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+            timeout=timeout,
+        )
     except (FileNotFoundError, subprocess.TimeoutExpired) as error:
         raise ValidationError(f"音源計測を実行できません: {path.name}") from error
     if completed.returncode != 0:
