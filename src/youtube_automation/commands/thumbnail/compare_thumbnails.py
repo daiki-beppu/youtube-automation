@@ -35,6 +35,7 @@ from youtube_automation.commands.analytics.benchmark_collector import (
 )
 from youtube_automation.configuration import channel_dir as _channel_dir
 from youtube_automation.configuration import load_config
+from youtube_automation.core.errors import DocumentRenderError
 
 logger = logging.getLogger(__name__)
 
@@ -156,12 +157,21 @@ class ThumbnailComparer:
     def collect_and_compare(self, no_open: bool = False, small_only: bool = False):
         """サムネイルを収集・縮小・表示"""
         print("[1/3] ベンチマーク鮮度確認を開始します...", flush=True)
-        ensure_benchmark_fresh(
-            self.data_dir,
-            collector_factory=BenchmarkCollector,
-            analyzer_factory=BenchmarkThumbnailAnalyzer,
-            reporter_factory=BenchmarkReportGenerator,
-        )
+        try:
+            ensure_benchmark_fresh(
+                self.data_dir,
+                collector_factory=BenchmarkCollector,
+                analyzer_factory=BenchmarkThumbnailAnalyzer,
+                reporter_factory=BenchmarkReportGenerator,
+            )
+        except DocumentRenderError as error:
+            logger.warning(
+                "ベンチマーク文書 pair を検証できませんでした: %s。"
+                "stale HTML は使用せず JSON データで比較を続行します。"
+                "文書を再発行するには channel repository で "
+                "`uv run yt-document-render --fix --all .` を実行してください。",
+                error,
+            )
 
         for d in [self.benchmark_dir, self.channel_thumb_dir, self.small_dir]:
             d.mkdir(parents=True, exist_ok=True)

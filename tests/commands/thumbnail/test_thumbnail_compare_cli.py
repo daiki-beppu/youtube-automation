@@ -6,6 +6,7 @@ from urllib.error import URLError
 import pytest
 
 from youtube_automation.commands.thumbnail import compare_thumbnails as mod
+from youtube_automation.core.errors import DocumentRenderError
 
 
 def _comparer(tmp_path: Path) -> mod.ThumbnailComparer:
@@ -248,6 +249,30 @@ def test_collect_reports_refresh_progress_before_refresh_starts(tmp_path: Path, 
     comparer._collect_channel_thumbnails = lambda: []
 
     comparer.collect_and_compare(no_open=True)
+
+
+def test_collect_continues_with_json_when_benchmark_report_pair_is_stale(tmp_path: Path, monkeypatch, caplog):
+    comparer = _comparer(tmp_path)
+    loaded = []
+    monkeypatch.setattr(
+        mod,
+        "ensure_benchmark_fresh",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            DocumentRenderError("structured document JSON と HTML が対応していません")
+        ),
+    )
+    monkeypatch.setattr(
+        mod,
+        "load_benchmark_videos",
+        lambda *_args, **_kwargs: loaded.append(True) or [],
+    )
+    comparer._collect_channel_thumbnails = lambda: []
+
+    comparer.collect_and_compare(no_open=True)
+
+    assert loaded == [True]
+    assert "stale HTML は使用せず" in caplog.text
+    assert "uv run yt-document-render --fix --all ." in caplog.text
 
 
 def test_collect_continues_after_download_and_resize_failures_and_opens_small_dir(tmp_path: Path, monkeypatch, capsys):

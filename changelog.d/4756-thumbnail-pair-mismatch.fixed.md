@@ -1,0 +1,1 @@
+- `yt-thumbnail-compare` が benchmark report の stale HTML を検出した場合、再発行コマンドを案内し、HTML を使わず JSON データで比較を続行するよう修正。
