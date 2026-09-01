@@ -776,17 +776,42 @@ class TestDefaultPublishTimeFallback:
         assert result == "2099-01-01T20:00:00+09:00"
         assert mock_resolve.called
 
-    def test_auto_schedule_false_suppresses_channel_default(self, tmp_path):
+    def test_auto_schedule_false_suppresses_channel_default(self, tmp_path, caplog):
         uploader, _ = _make_uploader_with_schedule_config(
             tmp_path,
             {"schedule": {"auto_schedule_enabled": False, "timezone": "Asia/Tokyo"}},
         )
 
-        with patch("youtube_automation.domains.uploads._published_dates.resolve_default_publish_at") as mock_resolve:
+        with (
+            caplog.at_level(logging.INFO, logger="youtube_automation.domains.uploads._published_dates"),
+            patch("youtube_automation.domains.uploads._published_dates.resolve_default_publish_at") as mock_resolve,
+        ):
             result = uploader.published_dates.calculate_publish_at()
 
         assert result is None
         assert not mock_resolve.called
+        assert "📅 自動予約: 無効（schedule.auto_schedule_enabled=false）" in caplog.text
+        assert "公開設定:" not in caplog.text
+
+    def test_missing_auto_schedule_reports_only_automatic_scheduling_state(self, tmp_path, caplog):
+        uploader, _ = _make_uploader_with_schedule_config(
+            tmp_path,
+            {"schedule": {"timezone": "Asia/Tokyo"}},
+        )
+
+        with (
+            caplog.at_level(logging.INFO, logger="youtube_automation.domains.uploads._published_dates"),
+            patch("youtube_automation.domains.uploads._published_dates.load_config", return_value=MagicMock()),
+            patch(
+                "youtube_automation.domains.uploads._published_dates.resolve_default_publish_at",
+                return_value=None,
+            ),
+        ):
+            result = uploader.published_dates.calculate_publish_at()
+
+        assert result is None
+        assert "📅 自動予約: 無効（schedule_config.json で auto_schedule_enabled 未設定）" in caplog.text
+        assert "公開設定:" not in caplog.text
 
 
 class TestScheduleConfigPathResolution:

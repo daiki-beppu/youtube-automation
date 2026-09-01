@@ -155,13 +155,13 @@ class PublishedDatesScheduler:
         """
         if not self.config.scheduling_enabled:
             if self.config.scheduling_explicitly_disabled:
-                logger.info("📅 公開設定: 即時公開（schedule.auto_schedule_enabled=false）")
+                logger.info("📅 自動予約: 無効（schedule.auto_schedule_enabled=false）")
                 return None
             default_publish_at = resolve_default_publish_at(load_config())
             if default_publish_at:
                 logger.info(f"📅 channel youtube.default_publish_time から公開予定を適用: {default_publish_at}")
                 return default_publish_at
-            logger.info("📅 公開設定: 即時公開（schedule_config.json で auto_schedule_enabled 未設定）")
+            logger.info("📅 自動予約: 無効（schedule_config.json で auto_schedule_enabled 未設定）")
             return None
 
         publish_time = self.config.publish_time
