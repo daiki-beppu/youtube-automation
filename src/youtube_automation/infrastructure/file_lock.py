@@ -65,12 +65,12 @@ def _prepare_lock_file(lock_file: BinaryIO) -> None:
     lock_file.seek(0)
 
 
-def _acquire_lock(lock_file: BinaryIO) -> None:
+def _acquire_lock(lock_file: BinaryIO, *, wait_forever: bool = False) -> None:
     if _fcntl is not None:
         _fcntl.flock(lock_file.fileno(), _fcntl.LOCK_EX)
         return
     if _msvcrt is not None:
-        _acquire_msvcrt_lock(lock_file)
+        _acquire_msvcrt_lock(lock_file, wait_forever=wait_forever)
         return
     raise RuntimeError("platform file locks are unavailable")
 
@@ -115,12 +115,7 @@ def file_descriptor_lock(descriptor: int) -> Iterator[None]:
     """Exclusively lock an already securely opened file descriptor."""
     with os.fdopen(descriptor, "r+b", closefd=False) as lock_file:
         _prepare_lock_file(lock_file)
-        if _fcntl is not None:
-            _fcntl.flock(lock_file.fileno(), _fcntl.LOCK_EX)
-        elif _msvcrt is not None:
-            _acquire_msvcrt_lock(lock_file, wait_forever=True)
-        else:
-            raise RuntimeError("platform file locks are unavailable")
+        _acquire_lock(lock_file, wait_forever=True)
         try:
             yield
         finally:
