@@ -55,8 +55,6 @@ def run(args: argparse.Namespace) -> int:
     if schema is RepositorySchema.CHANNEL_STRATEGY:
         result = write_channel_strategy_document(args.target, load_candidate, decision)
     elif schema is RepositorySchema.COLLECTION_PLAN:
-        if args.workflow_state is None:
-            raise ValidationError("collection plan の公開には --workflow-state が必要です")
         result = write_collection_plan_document(args.target, args.workflow_state, load_candidate, decision)
     elif schema is RepositorySchema.MUSIC_PROMPT:
         if args.workflow_state is None:

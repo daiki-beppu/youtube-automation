@@ -27,7 +27,7 @@ SelectionSource = Literal["web", "terminal", "automatic"]
 
 def write_collection_plan_document(
     json_path: Path,
-    workflow_state_path: Path,
+    workflow_state_path: Path | None,
     build_document: Callable[[], object],
     migration_decision: MarkdownMigrationDecision,
 ) -> DocumentWriteResult:
@@ -43,7 +43,7 @@ def write_collection_plan_document(
 
 def _write_collection_plan_document(
     json_path: Path,
-    workflow_state_path: Path,
+    workflow_state_path: Path | None,
     build_document: Callable[[], object],
     migration_decision: MarkdownMigrationDecision,
     *,
@@ -82,6 +82,12 @@ def _write_collection_plan_document(
         _result, selected = published
         if selected is None:
             return
+        if workflow_state_path is None:
+            # `selected` が非 None になるのは selection_finalized=True の確定経路だけで、そこは
+            # 常に state path を渡すため現在のコールグラフでは到達しない。将来 draft 公開側
+            # （workflow_state_path=None）へ確定 candidate が流れ込んだときに、投影を黙って
+            # 飛ばさず fail-closed で止めるための防御。
+            raise DocumentMigrationError("collection plan の確定には workflow-state.json が必要です")
 
         def transition(state):
             state.record_collection_plan(

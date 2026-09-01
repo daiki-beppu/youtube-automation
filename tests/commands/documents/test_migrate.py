@@ -73,16 +73,62 @@ def test_cli_no_decision_stops_markdown_update_successfully(tmp_path: Path, caps
     assert markdown.read_bytes() == b"legacy"
 
 
-def test_collection_plan_requires_workflow_state_gate(tmp_path: Path, capsys) -> None:
+def test_collection_plan_draft_can_be_published_before_workflow_state_exists(tmp_path: Path, capsys) -> None:
     candidate = tmp_path / "candidate.json"
     target = tmp_path / "20-documentation/plan_proposals.json"
     target.parent.mkdir()
-    candidate.write_text("{}", encoding="utf-8")
+    preview = tmp_path / "10-assets/planning-preview.png"
+    preview.parent.mkdir()
+    preview.write_bytes(b"preview")
+    candidate.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "generated_at": "2026-08-16T00:00:00Z",
+                "mode": "normal",
+                "collection_id": "20260816-rain-focus",
+                "provenance": {"producer": "wf-new", "batch_id": None},
+                "candidates": [
+                    {
+                        "plan_id": "plan-a",
+                        "collection_name": "Rain Focus",
+                        "theme_slug": "rain-focus",
+                        "track_count": 12,
+                        "music_engine": "suno",
+                        "music_direction": "soft ambient",
+                        "video_direction": "rainy window",
+                        "thumbnail_direction": "blue window",
+                        "final_title": "Rain Focus",
+                        "target_persona": "persona-primary",
+                        "viewing_scene": "scene-night",
+                        "constraint_compliance": [
+                            {"constraint_id": "audio-001", "status": "pass", "evidence_ids": ["ev-1"]}
+                        ],
+                        "evidence": [
+                            {
+                                "id": "ev-1",
+                                "source_path": "reports/analysis.json",
+                                "observation": "retention",
+                            }
+                        ],
+                        "insight_ids": [],
+                        "preview_assets": ["10-assets/planning-preview.png"],
+                        "selection_status": "proposed",
+                        "selection_reason": "推奨順1位",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
 
     result = migrate.main([str(candidate), "--target", str(target), "--schema", "collection-plan.schema.json"])
 
-    assert result == 1
-    assert "--workflow-state" in capsys.readouterr().err
+    assert result == 0
+    assert "created:" in capsys.readouterr().out
+    assert target.is_file()
+    assert target.with_suffix(".html").is_file()
+    assert not (tmp_path / "workflow-state.json").exists()
 
 
 def test_music_prompt_cli_publishes_reviewed_candidate_without_approving_state(tmp_path: Path, capsys) -> None:

@@ -182,6 +182,34 @@ def test_proposed_plan_pair_is_published_for_review_without_state_projection(tmp
     assert state.read_bytes() == before
 
 
+def test_draft_without_state_is_projected_when_selection_is_finalized(tmp_path: Path) -> None:
+    target = tmp_path / "20-documentation/plan_proposals.json"
+    state = tmp_path / "workflow-state.json"
+    target.parent.mkdir()
+    preview = tmp_path / "10-assets" / "planning-preview.png"
+    preview.parent.mkdir()
+    preview.write_bytes(b"preview")
+    draft = _document()
+    draft["candidates"] = [_candidate(status="proposed")]
+
+    write_collection_plan_document(target, None, lambda: draft, MarkdownMigrationDecision.NOT_REQUIRED)
+
+    assert not state.exists()
+    finalize_collection_plan_selection(
+        target,
+        state,
+        proposal_id="plan-a",
+        source="terminal",
+        expected_artifact_digest=collection_plan_artifact_digest(target),
+    )
+
+    assert json.loads(state.read_text(encoding="utf-8"))["planning"] == {
+        "generated": True,
+        "final_title": "Rain Focus",
+        "target_persona": "persona-primary",
+    }
+
+
 def test_web_selection_revalidates_digest_and_projects_existing_owner_order(tmp_path: Path) -> None:
     target = tmp_path / "20-documentation/plan_proposals.json"
     state = tmp_path / "workflow-state.json"

@@ -1,0 +1,2 @@
+- collection 初期化前でも collection plan の draft JSON/HTML pair を公開できるように修正
+- `yt-init-collection` が企画 draft 公開済みディレクトリを既存扱いで停止せず、投影済みの `planning.generated` / `final_title` / `target_persona` を残して初期化するよう修正
