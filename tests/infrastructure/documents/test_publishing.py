@@ -5,7 +5,11 @@ from pathlib import Path
 
 import pytest
 
-from youtube_automation.core.errors import DocumentRenderError, DocumentValidationError
+from youtube_automation.core.errors import (
+    DocumentPairMismatchError,
+    DocumentRenderError,
+    DocumentValidationError,
+)
 from youtube_automation.domains.documents.schema_registry import RepositorySchema
 from youtube_automation.infrastructure.documents import publishing
 
@@ -55,7 +59,8 @@ def test_read_published_json_document_rejects_mismatched_html(tmp_path: Path) ->
     html = publishing.publish_json_document(source, RepositorySchema.WEEKLY_VOTE_LOG)
     html.write_text("stale", encoding="utf-8")
 
-    with pytest.raises(DocumentRenderError, match="対応していません"):
+    # pair 陳腐化だけを stale として扱えるよう、汎用 DocumentRenderError ではなく専用の派生例外
+    with pytest.raises(DocumentPairMismatchError, match="対応していません"):
         publishing.read_published_json_document(source, RepositorySchema.WEEKLY_VOTE_LOG)
 
 

@@ -6,6 +6,7 @@
 - `collect_all`: 欠落チャンネルを黙殺せず `YouTubeAPIError` / 未登録 slug → `ConfigError`
 - `_fetch_channels_metadata`: HttpError → `YouTubeAPIError`
 - `ensure_benchmark_fresh`: benchmark.channels 未設定 → `ConfigError`
+- `ensure_benchmark_fresh`: 文書 pair 不整合 → 収集済み JSON で継続 / それ以外の描画エラー → 送出（issue #4756）
 
 ネットワークも YouTube API も呼ばない（MagicMock / HttpError で差し込み）。
 """
@@ -24,7 +25,12 @@ from youtube_automation.application.analytics.benchmark_query import load_benchm
 from youtube_automation.commands.analytics.benchmark_collector import (
     BenchmarkCollector,
 )
-from youtube_automation.core.errors import ConfigError, YouTubeAPIError
+from youtube_automation.core.errors import (
+    ConfigError,
+    DocumentPairMismatchError,
+    DocumentRenderError,
+    YouTubeAPIError,
+)
 from youtube_automation.domains.analytics.benchmark import is_live_benchmark_video
 
 
@@ -312,6 +318,53 @@ class TestEnsureBenchmarkFresh:
             analyzer_factory=MagicMock(),
             reporter_factory=MagicMock(),
         )
+
+    def test_continues_with_collected_json_when_document_pair_is_stale(self, tmp_path, caplog):
+        # Given: 収集済み JSON は全チャンネル揃っているが、公開済み HTML が renderer 更新に追従していない
+        def _raise_pair_mismatch():
+            raise DocumentPairMismatchError(
+                "structured document JSON と HTML が対応していません: docs/benchmarks/benchmark-report.json"
+            )
+
+        collector = SimpleNamespace(
+            config=SimpleNamespace(analytics=SimpleNamespace(benchmark=SimpleNamespace(channels=[{"slug": "a"}]))),
+            data_dir=tmp_path,
+            check_freshness=_raise_pair_mismatch,
+        )
+        (tmp_path / "benchmark_20260727.json").write_text(json.dumps({"channels": [{"slug": "a"}]}), encoding="utf-8")
+
+        # When: 呼び出し元（yt-thumbnail-compare / yt-benchmark-comments-fetch）は例外を受け取らない
+        benchmark_refresh.ensure_benchmark_fresh(
+            tmp_path,
+            collector_factory=lambda: collector,
+            analyzer_factory=MagicMock(),
+            reporter_factory=MagicMock(),
+        )
+
+        # Then: stale HTML を使わず続行し、pair の一括再発行コマンドを案内する
+        assert "stale HTML は使用せず" in caplog.text
+        assert "uv run yt-document-render --fix --all ." in caplog.text
+
+    def test_propagates_document_render_error_that_is_not_a_pair_mismatch(self, tmp_path):
+        # Given: schema / 安全境界違反など pair 陳腐化ではない文書エラー
+        def _raise_render_error():
+            raise DocumentRenderError("x-view.order は integer である必要があります")
+
+        collector = SimpleNamespace(
+            config=SimpleNamespace(analytics=SimpleNamespace(benchmark=SimpleNamespace(channels=[{"slug": "a"}]))),
+            data_dir=tmp_path,
+            check_freshness=_raise_render_error,
+        )
+        (tmp_path / "benchmark_20260727.json").write_text(json.dumps({"channels": [{"slug": "a"}]}), encoding="utf-8")
+
+        # When / Then: stale 扱いで握りつぶさず送出する
+        with pytest.raises(DocumentRenderError, match="x-view.order"):
+            benchmark_refresh.ensure_benchmark_fresh(
+                tmp_path,
+                collector_factory=lambda: collector,
+                analyzer_factory=MagicMock(),
+                reporter_factory=MagicMock(),
+            )
 
     def test_refreshes_when_configured_channel_is_missing_from_latest_json(self, tmp_path):
         events: list[str] = []

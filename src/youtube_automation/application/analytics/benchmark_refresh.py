@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Protocol
 
 from youtube_automation.application.analytics.benchmark_query import find_latest_benchmark_json
-from youtube_automation.core.errors import ConfigError, YouTubeAPIError
+from youtube_automation.core.errors import ConfigError, DocumentPairMismatchError, YouTubeAPIError
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +85,20 @@ def ensure_benchmark_fresh(
             logger.info("ベンチマーク: 最新 JSON に %s が欠けている → 全チャンネル更新", missing)
             need_update = True
         else:
-            stale = collector.check_freshness()
+            try:
+                stale = collector.check_freshness()
+            except DocumentPairMismatchError as error:
+                # 公開済み HTML だけが renderer 更新に追従できていない状態。
+                # 収集済み JSON は全チャンネル揃っているため、stale HTML を使わず
+                # そのまま呼び出し元へ返して処理を継続させる。
+                logger.warning(
+                    "ベンチマーク: 文書 pair が不整合のため鮮度確認をスキップします（%s）。"
+                    "stale HTML は使用せず収集済み JSON で続行します。"
+                    "文書を再発行するには channel repository で "
+                    "`uv run yt-document-render --fix --all .` を実行してください。",
+                    error,
+                )
+                return
             if stale:
                 logger.info("ベンチマーク: %d チャンネルが古い → 全チャンネル更新", len(stale))
                 need_update = True

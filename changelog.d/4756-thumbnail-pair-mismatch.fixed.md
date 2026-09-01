@@ -1,0 +1,2 @@
+- ベンチマーク鮮度確認で benchmark report の JSON と HTML の pair 不整合を検出した場合、stale HTML を使わず収集済み JSON で処理を続行し、`uv run yt-document-render --fix --all .` での一括再発行を案内するよう修正。`yt-thumbnail-compare` と `yt-benchmark-comments-fetch` の両方が対象。
+- pair 陳腐化を `DocumentPairMismatchError` として送出し、schema 検証・HTML 安全境界違反など他の `DocumentRenderError` は従来どおり失敗させるよう変更。

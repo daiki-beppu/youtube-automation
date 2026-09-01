@@ -88,6 +88,10 @@ class DocumentRenderError(ValidationError):
     """検証済み構造化文書の HTML 生成・検証エラー。"""
 
 
+class DocumentPairMismatchError(DocumentRenderError):
+    """公開済み HTML が JSON から再生成した期待 HTML と一致しない（pair 陳腐化）。"""
+
+
 class BrowserOpenError(AutomationError):
     """生成済みローカル文書を既定ブラウザで開けない。"""
 
