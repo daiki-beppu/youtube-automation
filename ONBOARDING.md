@@ -3,6 +3,7 @@
 `youtube-channels-automation` は **複数の BGM 系 YouTube チャンネルを 1 人で運営するためのツールキット**である。本書は **下流チャンネルリポジトリの運営者** を一次読者とし、`/setup --channel` から始まる新規開設フロー → 1 コレクション完成 → 継続運用までの動線をまとめる。
 
 > 本リポジトリそのものを編集する開発者向けのメモは末尾の §6「付録: 開発者向け」に置く。
+
 > 過去に公開した tayk への移行案内は撤回済みであり、経緯のみを [`docs/migration/python-to-tayk.md`](docs/migration/python-to-tayk.md) に記録している。
 
 ---

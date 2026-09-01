@@ -4,6 +4,8 @@ YouTube チャンネル運営を自動化するツールキット。Analytics �
 
 > **新規利用者の方へ**: セットアップ手順は [`ONBOARDING.md`](ONBOARDING.md) を参照してください。
 
+> 過去に公開した tayk への移行案内は撤回済みであり、経緯のみを [`docs/migration/python-to-tayk.md`](docs/migration/python-to-tayk.md) に記録しています。
+
 ## Features
 
 - **Analytics 収集・分析** - YouTube Analytics API からデータを自動収集し、CTR・エンゲージメント分析レポートを生成
