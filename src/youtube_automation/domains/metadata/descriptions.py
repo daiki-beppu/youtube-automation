@@ -77,6 +77,23 @@ def _format_heading_list(headings: Sequence[str]) -> str:
     return "\n".join(f"  - ## {heading}" for heading in headings)
 
 
+_DESCRIPTION_METADATA_GENRE_FIELDS = {
+    "genre": "primary",
+    "vibe": "style",
+    "best_for": "context",
+}
+
+
+def description_metadata_line(descriptions, key: str) -> str:
+    """`descriptions.metadata[key]` を返し、未定義ならチャンネルの `genre` 設定から補完する.
+
+    Jazz 前提の固定既定値を各呼び出し側に持たせると非 jazz チャンネルで実態とズレるため
+    (#4751)、フォールバック先の対応表をここに一本化して直し忘れを防ぐ。
+    """
+    genre_field = _DESCRIPTION_METADATA_GENRE_FIELDS[key]
+    return descriptions.metadata.get(key, getattr(descriptions.genre, genre_field))
+
+
 def _format_short_duration_phrase(config) -> str:
     """`config.audio.target_duration_min` から「2 hours」等の文字列を組み立てる.
 

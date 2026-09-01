@@ -36,6 +36,7 @@ from youtube_automation.domains.media.audio_formats import AUDIO_EXTS
 from youtube_automation.domains.metadata.descriptions import (
     build_complete_collection_description,
     build_short_description,
+    description_metadata_line,
 )
 from youtube_automation.domains.metadata.localizations import (
     _validate_and_format_scene_titles,
@@ -698,10 +699,9 @@ class BAHMetadataGenerator:
 
         # 英語固定パーツ（config/channel/content.json の descriptions.metadata から取得）
         descriptions = self.config.content.descriptions
-        desc_metadata = descriptions.metadata
-        genre_line = desc_metadata.get("genre", descriptions.genre.primary)
-        vibe_line = desc_metadata.get("vibe", descriptions.genre.style)
-        best_for_line = desc_metadata.get("best_for", descriptions.genre.context)
+        genre_line = description_metadata_line(descriptions, "genre")
+        vibe_line = description_metadata_line(descriptions, "vibe")
+        best_for_line = description_metadata_line(descriptions, "best_for")
         usage_lines = "\n".join(self._video_description_config.get("usage_attribution_lines", []))
 
         # 欠落チェック + 100 codepoint 超過を全言語まとめて検出する

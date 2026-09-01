@@ -8,7 +8,10 @@ from dataclasses import dataclass
 from typing import Dict, List
 
 from youtube_automation.core.adapters.runtime import format_localized_duration_display
-from youtube_automation.domains.metadata.descriptions import build_short_description
+from youtube_automation.domains.metadata.descriptions import (
+    build_short_description,
+    description_metadata_line,
+)
 from youtube_automation.domains.metadata.titles import (
     _referenced_placeholders,
     format_title_template,
@@ -228,8 +231,7 @@ def _validate_and_format_scene_titles(
             "→ 既存例: collections/live/20260322-rjn-city-collection/workflow-state.json"
         )
 
-    desc_metadata = config.content.descriptions.metadata
-    best_for_line = desc_metadata.get("best_for", "Study, Focus, Late Night")
+    best_for_line = description_metadata_line(config.content.descriptions, "best_for")
 
     violations: List[SceneTitleViolation] = []
     titles: Dict[str, str] = {}

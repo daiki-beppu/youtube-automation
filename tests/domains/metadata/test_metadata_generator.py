@@ -35,6 +35,7 @@ from youtube_automation.domains.metadata import service as metadata_generator_mo
 from youtube_automation.domains.metadata.descriptions import build_short_description
 from youtube_automation.domains.metadata.localizations import (
     _localized_title_values,
+    _validate_and_format_scene_titles,
     build_short_localizations,
 )
 from youtube_automation.domains.metadata.placeholders import is_placeholder_value
@@ -1095,7 +1096,13 @@ class TestValidateScenePhrases:
                     },
                 }
             ),
-            content=SimpleNamespace(descriptions=SimpleNamespace(metadata={})),
+            content=SimpleNamespace(
+                descriptions=SimpleNamespace(
+                    metadata={},
+                    # metadata 未定義時は genre 設定へフォールバックするため実 dataclass と同じ形にする
+                    genre=SimpleNamespace(primary="chiptune", style="8-bit", context="RPG"),
+                )
+            ),
         )
         scene_phrases = {lang: "focus" for lang in supported}
         calls = []
@@ -1115,6 +1122,40 @@ class TestValidateScenePhrases:
         warnings = [record for record in caplog.records if "duration_display locale" in record.getMessage()]
         assert len(warnings) == 1
         assert "xx-ZZ" in warnings[0].getMessage()
+
+    def test_missing_activities_falls_back_to_channel_genre(self):
+        """localizations に activities が無い言語でも Jazz 固定値でなく genre 設定を使う（#4751）."""
+        from types import SimpleNamespace
+
+        config = SimpleNamespace(
+            localizations=SimpleNamespace(
+                data={
+                    "supported_languages": ["en", "de"],
+                    "languages": {
+                        # en は activities 定義あり / de は未定義でフォールバックを踏む
+                        "en": {"title_template": "{scene_phrase} | BGM ({activities})", "activities": "Gaming"},
+                        "de": {"title_template": "{scene_phrase} | BGM ({activities})"},
+                    },
+                }
+            ),
+            content=SimpleNamespace(
+                descriptions=SimpleNamespace(
+                    metadata={},
+                    genre=SimpleNamespace(primary="chiptune", style="8-bit", context="RPG"),
+                )
+            ),
+        )
+
+        _, titles = _validate_and_format_scene_titles(
+            {"en": "Pixel night", "de": "Pixelnacht"},
+            config,
+            3600,
+            scene_emoji="🎮",
+        )
+
+        assert titles["en"] == "Pixel night | BGM (Gaming)"
+        assert titles["de"] == "Pixelnacht | BGM (RPG)"
+        assert "Study, Focus, Late Night" not in titles["de"]
 
     def test_single_language_over_limit(self):
         """1 言語だけ超過すれば 1 件返る"""
@@ -1166,7 +1207,13 @@ class TestValidateScenePhrases:
                     },
                 }
             ),
-            content=SimpleNamespace(descriptions=SimpleNamespace(metadata={})),
+            content=SimpleNamespace(
+                descriptions=SimpleNamespace(
+                    metadata={},
+                    # metadata 未定義時は genre 設定へフォールバックするため実 dataclass と同じ形にする
+                    genre=SimpleNamespace(primary="chiptune", style="8-bit", context="RPG"),
+                )
+            ),
         )
         scene_phrases = {"en": "x" * 90, "de": "y" * 90}
 
