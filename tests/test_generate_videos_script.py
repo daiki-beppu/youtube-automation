@@ -2115,6 +2115,70 @@ def test_effect_preview_creates_short_sample_without_master_or_workflow_state(tm
     assert "-stream_loop -1" in preview_cmd
     assert "Full output outlook:" in result.stdout
     assert "Route   : effect bake + stream copy" in result.stdout
+    assert (
+        "Estimate: roughly 1 minute for 0h 02m 00s output "
+        "(duration-based; disk I/O varies) (plus first bake: about 10–40 seconds)"
+    ) in result.stdout
+    assert "Execution: background recommended" not in result.stdout
+
+
+def test_long_loop_preview_estimates_duration_and_recommends_background(tmp_path: Path) -> None:
+    """#4757: 長尺 stream copy は full 尺ベースの見積もりと background 推奨を表示する。"""
+    collection = _create_collection(tmp_path)
+
+    result, _ = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        extra_env={"VIDEOUP_EFFECT": "none", "FFPROBE_DURATION": "11580"},
+        extra_args=["--preview", "20"],
+        collection=collection,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "Route   : loop stream copy" in result.stdout
+    assert "Estimate: roughly 13–20 minutes for 3h 13m 00s output" in result.stdout
+    assert "Execution: background recommended" in result.stdout
+
+
+def test_long_effect_preview_estimates_duration_with_bake_note(tmp_path: Path) -> None:
+    """#4757: 長尺 effect bake 経路も見積もりと background 推奨を同時に表示する。"""
+    collection = _create_collection(tmp_path)
+
+    result, _ = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        extra_env={"VIDEOUP_EFFECT": "particles", "FFPROBE_DURATION": "11580"},
+        extra_args=["--preview", "20"],
+        collection=collection,
+        with_loop=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "Route   : effect bake + stream copy" in result.stdout
+    assert (
+        "Estimate: roughly 13–20 minutes for 3h 13m 00s output "
+        "(duration-based; disk I/O varies) (plus first bake: about 10–40 seconds)"
+    ) in result.stdout
+    assert "Execution: background recommended" in result.stdout
+
+
+@pytest.mark.parametrize(("duration", "recommended"), [("2400", False), ("2401", True)])
+def test_background_recommendation_uses_half_of_foreground_timeout(
+    tmp_path: Path, duration: str, recommended: bool
+) -> None:
+    """#4757: background 推奨は上限見積もりが timeout の半分に達する境界で切り替わる。"""
+    collection = _create_collection(tmp_path)
+
+    result, _ = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        extra_env={"VIDEOUP_EFFECT": "none", "FFPROBE_DURATION": duration},
+        extra_args=["--preview", "20"],
+        collection=collection,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert ("Execution: background recommended" in result.stdout) is recommended
 
 
 def test_effect_preview_reuses_existing_baked_loop(tmp_path: Path) -> None:
@@ -2208,6 +2272,7 @@ def test_preview_overlay_filter_includes_effect_visualizer_and_popup(tmp_path: P
     assert preview_cmd.index("showfreqs=mode=bar") < preview_cmd.index("fade=t=in")
     assert " -t 25 " in f" {preview_cmd} "
     assert "Route   : overlays + particles effect/full encode" in result.stdout
+    assert "Execution: background recommended" in result.stdout
 
 
 def test_enabled_subscribe_popup_with_missing_image_fails_before_ffmpeg(tmp_path: Path) -> None:

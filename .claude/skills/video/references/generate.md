@@ -173,7 +173,7 @@ effect:
 
 ### 挙動と注意点
 
-- **v14: エフェクト有効時も高速**。エフェクト込みで 1 周期分だけ `fx_baked.mp4` に焼き、あとは `-stream_loop -1 -c:v copy` で連結する。従来の全尺再エンコード（loop/静止画ともに 8〜15 分）が **約 1〜2 分**になり、継ぎ目は closed GOP の stream copy で原理的に無損失
+- **v14: エフェクト有効時も高速**。エフェクト込みで 1 周期分だけ `fx_baked.mp4` に焼き、あとは `-stream_loop -1 -c:v copy` で連結する。従来の全尺再エンコードより高速で、目安は出力尺の 10〜15 倍速（#4757 の実測は約 10.6 倍速）。継ぎ目は closed GOP の stream copy で原理的に無損失
 - エフェクト周期は整数固定: **particles=36s / bokeh=60s / gradient=72s**。背景が `loop.mp4` のときは `lcm(loop 尺, 周期)` の長さを焼いて背景・エフェクト双方の継ぎ目を揃える
 - ベイク尺が動画尺以上、または上限（`BAKE_MAX_LEN=900s`）超のときは従来の全尺再エンコードへ **自動フォールバック**する（短尺動画など）
 - `fx_baked.mp4` は `fx_baked.params`（effect / intensity / 周期 / 元画像 mtime / maxrate）でキャッシュ。サムネ差し替え時のみ再ベイク（10〜40 秒）するので「画像差し替え→再生成」が軽い
@@ -273,7 +273,7 @@ runtime mask helper は script 内から `uv run python -m youtube_automation.in
 
 ## 所要時間と完了報告
 
-`generate_videos.sh` の目安（2 時間尺）: **エフェクト無し（ループ / 静止画短尺ベイクの stream copy）= 約 1〜2 分** / **エフェクト有り（v14 ループ・ベイク）= 約 1〜2 分**（初回はベイク 10〜40 秒 + 連結 約 1 分、2 回目以降はベイク cache hit）。`shrink.enabled` の容量最適化や短尺フォールバックの全尺再エンコードを使うときは尺なりに数分〜十数分かかる。
+`generate_videos.sh` の stream copy 経路は出力尺にほぼ比例する disk I/O 律速で、目安は出力尺の 10〜15 倍速（#4757 の 3時間13分出力の実測は 18分08秒、約 10.6 倍速）。`--preview` の `Full output outlook` に尺ベースの見積もりと、必要な場合は `Execution: background recommended` が表示されるため、そのシグナルに従って foreground / background を判断する。overlay や effect fallback の full re-encode 経路は所要時間を安全に上限見積もりできないため、常に background 推奨とする。
 
 ログを `/tmp/video-generate-$(date +%s).log` へ redirect し、完了後は末尾から生成された `.mp4` のパスを報告する。失敗時は ffmpeg のエラー行を抜き出す。background 実行フラグを持たない環境（Codex 等）では `nohup ... > <log> 2>&1 &` を使い、完了はログ末尾で確認する。
 
