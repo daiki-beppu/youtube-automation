@@ -23,6 +23,7 @@ except ImportError:
 _LOCK_FILE_SUFFIX = ".lock"
 _LOCK_REGION_BYTES = 1
 _MSVCRT_LOCK_RETRY_DELAY_SECONDS = 0.05
+_MSVCRT_LOCK_MAX_ATTEMPTS = 20
 _MSVCRT_LOCK_RETRY_ERRNOS = {
     errno.EACCES,
     errno.EAGAIN,
@@ -71,11 +72,15 @@ def _acquire_lock(lock_file: BinaryIO) -> None:
     if _msvcrt is not None:
         _acquire_msvcrt_lock(lock_file)
         return
-    raise ValueError("platform file locks are unavailable")
+    raise RuntimeError("platform file locks are unavailable")
 
 
-def _acquire_msvcrt_lock(lock_file: BinaryIO) -> None:
-    while True:
+def _acquire_msvcrt_lock(lock_file: BinaryIO, *, wait_forever: bool = False) -> None:
+    max_attempts = None if wait_forever else _MSVCRT_LOCK_MAX_ATTEMPTS
+    last_error: OSError | None = None
+    attempt = 0
+    while max_attempts is None or attempt < max_attempts:
+        attempt += 1
         lock_file.seek(0)
         try:
             _msvcrt.locking(lock_file.fileno(), _msvcrt.LK_NBLCK, _LOCK_REGION_BYTES)
@@ -83,7 +88,11 @@ def _acquire_msvcrt_lock(lock_file: BinaryIO) -> None:
         except OSError as error:
             if not _is_msvcrt_lock_contention(error):
                 raise
+            last_error = error
+            if max_attempts is not None and attempt == max_attempts:
+                break
             time.sleep(_MSVCRT_LOCK_RETRY_DELAY_SECONDS)
+    raise TimeoutError(f"msvcrt lock acquisition timed out after {max_attempts} attempts") from last_error
 
 
 def _is_msvcrt_lock_contention(error: OSError) -> bool:
@@ -98,7 +107,7 @@ def _release_lock(lock_file: BinaryIO) -> None:
         lock_file.seek(0)
         _msvcrt.locking(lock_file.fileno(), _msvcrt.LK_UNLCK, _LOCK_REGION_BYTES)
         return
-    raise ValueError("platform file locks are unavailable")
+    raise RuntimeError("platform file locks are unavailable")
 
 
 @contextlib.contextmanager
@@ -106,7 +115,12 @@ def file_descriptor_lock(descriptor: int) -> Iterator[None]:
     """Exclusively lock an already securely opened file descriptor."""
     with os.fdopen(descriptor, "r+b", closefd=False) as lock_file:
         _prepare_lock_file(lock_file)
-        _acquire_lock(lock_file)
+        if _fcntl is not None:
+            _fcntl.flock(lock_file.fileno(), _fcntl.LOCK_EX)
+        elif _msvcrt is not None:
+            _acquire_msvcrt_lock(lock_file, wait_forever=True)
+        else:
+            raise RuntimeError("platform file locks are unavailable")
         try:
             yield
         finally:

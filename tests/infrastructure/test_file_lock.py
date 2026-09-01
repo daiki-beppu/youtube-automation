@@ -82,7 +82,10 @@ def test_file_lock_releases_msvcrt_lock_when_body_raises(tmp_path: Path, monkeyp
 def test_file_descriptor_lock_retries_windows_contention_until_acquired(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Windows の競合が旧上限を超えても、解除後に descriptor lock を取得する。"""
+    """Given Windows の descriptor lock が旧 retry 上限を超えて競合する
+    When file_descriptor_lock を使う
+    Then 競合解除まで待機して lock を取得する。
+    """
     attempts = 0
     fake_msvcrt = ModuleType("msvcrt")
     fake_msvcrt.LK_NBLCK = 1
