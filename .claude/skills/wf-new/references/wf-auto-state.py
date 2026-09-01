@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import fcntl
 import hashlib
 import json
 import math
@@ -19,6 +18,16 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal, TypedDict
+
+try:
+    import fcntl as _fcntl
+except ImportError:
+    _fcntl = None
+
+try:
+    import msvcrt as _msvcrt
+except ImportError:
+    _msvcrt = None
 
 from youtube_automation.core.errors import StateSyncError, ValidationError, WorkflowStateError
 from youtube_automation.domains.collections.workflow_state import WorkflowState
@@ -851,6 +860,28 @@ def _state_dir(root: Path) -> Path:
     return _confined_path(root, path, STATE_DIR_NAME)
 
 
+def _lock_descriptor(descriptor: int) -> None:
+    if _fcntl is not None:
+        _fcntl.flock(descriptor, _fcntl.LOCK_EX)
+        return
+    if _msvcrt is None:
+        raise RuntimeError("platform file locks are unavailable")
+    if os.fstat(descriptor).st_size == 0:
+        os.write(descriptor, b"\0")
+    os.lseek(descriptor, 0, os.SEEK_SET)
+    _msvcrt.locking(descriptor, _msvcrt.LK_LOCK, 1)
+
+
+def _unlock_descriptor(descriptor: int) -> None:
+    if _fcntl is not None:
+        _fcntl.flock(descriptor, _fcntl.LOCK_UN)
+        return
+    if _msvcrt is None:
+        raise RuntimeError("platform file locks are unavailable")
+    os.lseek(descriptor, 0, os.SEEK_SET)
+    _msvcrt.locking(descriptor, _msvcrt.LK_UNLCK, 1)
+
+
 @contextmanager
 def _lease_mutex(root: Path):
     state_dir = _state_dir(root)
@@ -862,10 +893,10 @@ def _lease_mutex(root: Path):
         flags |= os.O_NOFOLLOW
     descriptor = os.open(mutex_path, flags, 0o600)
     try:
-        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        _lock_descriptor(descriptor)
         yield state_dir
     finally:
-        fcntl.flock(descriptor, fcntl.LOCK_UN)
+        _unlock_descriptor(descriptor)
         os.close(descriptor)
 
 

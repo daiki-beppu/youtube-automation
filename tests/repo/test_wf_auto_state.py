@@ -41,6 +41,51 @@ def _config(runner: ModuleType, *, publish: bool = False, post_publish: bool = F
     )
 
 
+def test_lease_mutex_uses_posix_file_lock(tmp_path: Path, runner: ModuleType, monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = []
+
+    class FakeFcntl:
+        LOCK_EX = 2
+        LOCK_UN = 8
+
+        @staticmethod
+        def flock(descriptor, operation):
+            calls.append((descriptor, operation))
+
+    monkeypatch.setattr(runner, "_fcntl", FakeFcntl())
+    monkeypatch.setattr(runner, "_msvcrt", None)
+
+    with runner._lease_mutex(tmp_path):
+        pass
+
+    assert [operation for _, operation in calls] == [FakeFcntl.LOCK_EX, FakeFcntl.LOCK_UN]
+
+
+def test_lease_mutex_uses_windows_file_lock_without_fcntl(
+    tmp_path: Path, runner: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = []
+
+    class FakeMsvcrt:
+        LK_LOCK = 1
+        LK_UNLCK = 2
+
+        @staticmethod
+        def locking(descriptor, operation, size):
+            calls.append((descriptor, operation, size))
+
+    monkeypatch.setattr(runner, "_fcntl", None)
+    monkeypatch.setattr(runner, "_msvcrt", FakeMsvcrt())
+
+    with runner._lease_mutex(tmp_path):
+        pass
+
+    assert [(operation, size) for _, operation, size in calls] == [
+        (FakeMsvcrt.LK_LOCK, 1),
+        (FakeMsvcrt.LK_UNLCK, 1),
+    ]
+
+
 def _collection(
     root: Path,
     name: str,
