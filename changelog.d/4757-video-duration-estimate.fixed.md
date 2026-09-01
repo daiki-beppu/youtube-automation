@@ -1,0 +1,1 @@
+- `/video --generate --preview` の Full output outlook が full 尺に応じた stream copy 所要時間を表示し、見積もり上限が foreground timeout の半分以上になる出力では background 実行を推奨するようにした。
