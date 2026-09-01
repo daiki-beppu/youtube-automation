@@ -452,10 +452,10 @@ def test_log_generation_does_not_retry_non_contention_msvcrt_errors(tmp_channel:
     assert sleep_calls == []
 
 
-def test_log_generation_stops_after_msvcrt_contention_retry_limit(tmp_channel: Path, monkeypatch):
-    """Given msvcrt.locking の競合が解消しない
+def test_log_generation_waits_until_msvcrt_contention_clears(tmp_channel: Path, monkeypatch):
+    """Given msvcrt.locking の競合が一時的に継続する
     When log_generation を呼ぶ
-    Then retry 上限で停止し既存契約どおり None を返す。
+    Then 固定 retry 上限で失敗せず、解除後に記録する。
     """
 
     class FakeMsvcrt:
@@ -467,14 +467,13 @@ def test_log_generation_stops_after_msvcrt_contention_retry_limit(tmp_channel: P
 
         def locking(self, fd: int, mode: int, nbytes: int) -> None:
             self.calls.append((mode, nbytes))
-            if mode == self.LK_NBLCK:
+            if mode == self.LK_NBLCK and len(self.calls) <= 3:
                 raise OSError(errno.EACCES, "fake persistent lock contention")
 
     fake_msvcrt = FakeMsvcrt()
     sleep_calls: list[float] = []
     monkeypatch.setattr(file_lock_module, "_fcntl", None)
     monkeypatch.setattr(file_lock_module, "_msvcrt", fake_msvcrt)
-    monkeypatch.setattr(file_lock_module, "_MSVCRT_LOCK_MAX_ATTEMPTS", 3)
     monkeypatch.setattr(file_lock_module.time, "sleep", sleep_calls.append)
 
     entry = cost_tracker.log_generation(
@@ -484,13 +483,16 @@ def test_log_generation_stops_after_msvcrt_contention_retry_limit(tmp_channel: P
         unit="image",
     )
 
-    assert entry is None
+    assert entry is not None
     assert fake_msvcrt.calls == [
         (fake_msvcrt.LK_NBLCK, 1),
         (fake_msvcrt.LK_NBLCK, 1),
         (fake_msvcrt.LK_NBLCK, 1),
+        (fake_msvcrt.LK_NBLCK, 1),
+        (fake_msvcrt.LK_UNLCK, 1),
     ]
     assert sleep_calls == [
+        file_lock_module._MSVCRT_LOCK_RETRY_DELAY_SECONDS,
         file_lock_module._MSVCRT_LOCK_RETRY_DELAY_SECONDS,
         file_lock_module._MSVCRT_LOCK_RETRY_DELAY_SECONDS,
     ]

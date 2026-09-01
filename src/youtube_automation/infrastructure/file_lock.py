@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import errno
+import os
 import threading
 import time
 from pathlib import Path
@@ -22,7 +23,6 @@ except ImportError:
 _LOCK_FILE_SUFFIX = ".lock"
 _LOCK_REGION_BYTES = 1
 _MSVCRT_LOCK_RETRY_DELAY_SECONDS = 0.05
-_MSVCRT_LOCK_MAX_ATTEMPTS = 20
 _MSVCRT_LOCK_RETRY_ERRNOS = {
     errno.EACCES,
     errno.EAGAIN,
@@ -71,12 +71,11 @@ def _acquire_lock(lock_file: BinaryIO) -> None:
     if _msvcrt is not None:
         _acquire_msvcrt_lock(lock_file)
         return
-    raise RuntimeError("platform file locks are unavailable")
+    raise ValueError("platform file locks are unavailable")
 
 
 def _acquire_msvcrt_lock(lock_file: BinaryIO) -> None:
-    last_error: OSError | None = None
-    for attempt in range(_MSVCRT_LOCK_MAX_ATTEMPTS):
+    while True:
         lock_file.seek(0)
         try:
             _msvcrt.locking(lock_file.fileno(), _msvcrt.LK_NBLCK, _LOCK_REGION_BYTES)
@@ -84,11 +83,7 @@ def _acquire_msvcrt_lock(lock_file: BinaryIO) -> None:
         except OSError as error:
             if not _is_msvcrt_lock_contention(error):
                 raise
-            last_error = error
-            if attempt == _MSVCRT_LOCK_MAX_ATTEMPTS - 1:
-                break
             time.sleep(_MSVCRT_LOCK_RETRY_DELAY_SECONDS)
-    raise TimeoutError(f"msvcrt lock acquisition timed out after {_MSVCRT_LOCK_MAX_ATTEMPTS} attempts") from last_error
 
 
 def _is_msvcrt_lock_contention(error: OSError) -> bool:
@@ -103,4 +98,16 @@ def _release_lock(lock_file: BinaryIO) -> None:
         lock_file.seek(0)
         _msvcrt.locking(lock_file.fileno(), _msvcrt.LK_UNLCK, _LOCK_REGION_BYTES)
         return
-    raise RuntimeError("platform file locks are unavailable")
+    raise ValueError("platform file locks are unavailable")
+
+
+@contextlib.contextmanager
+def file_descriptor_lock(descriptor: int) -> Iterator[None]:
+    """Exclusively lock an already securely opened file descriptor."""
+    with os.fdopen(descriptor, "r+b", closefd=False) as lock_file:
+        _prepare_lock_file(lock_file)
+        _acquire_lock(lock_file)
+        try:
+            yield
+        finally:
+            _release_lock(lock_file)

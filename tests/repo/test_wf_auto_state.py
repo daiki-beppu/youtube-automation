@@ -6,6 +6,7 @@ import importlib.util
 import json
 import sys
 import time
+from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import ModuleType
@@ -41,49 +42,22 @@ def _config(runner: ModuleType, *, publish: bool = False, post_publish: bool = F
     )
 
 
-def test_lease_mutex_uses_posix_file_lock(tmp_path: Path, runner: ModuleType, monkeypatch: pytest.MonkeyPatch) -> None:
-    calls = []
-
-    class FakeFcntl:
-        LOCK_EX = 2
-        LOCK_UN = 8
-
-        @staticmethod
-        def flock(descriptor, operation):
-            calls.append((descriptor, operation))
-
-    monkeypatch.setattr(runner, "_fcntl", FakeFcntl())
-    monkeypatch.setattr(runner, "_msvcrt", None)
-
-    with runner._lease_mutex(tmp_path):
-        pass
-
-    assert [operation for _, operation in calls] == [FakeFcntl.LOCK_EX, FakeFcntl.LOCK_UN]
-
-
-def test_lease_mutex_uses_windows_file_lock_without_fcntl(
+def test_lease_mutex_uses_canonical_descriptor_lock(
     tmp_path: Path, runner: ModuleType, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    calls = []
+    descriptors = []
 
-    class FakeMsvcrt:
-        LK_LOCK = 1
-        LK_UNLCK = 2
+    @contextmanager
+    def fake_lock(descriptor):
+        descriptors.append(descriptor)
+        yield
 
-        @staticmethod
-        def locking(descriptor, operation, size):
-            calls.append((descriptor, operation, size))
-
-    monkeypatch.setattr(runner, "_fcntl", None)
-    monkeypatch.setattr(runner, "_msvcrt", FakeMsvcrt())
+    monkeypatch.setattr(runner, "file_descriptor_lock", fake_lock)
 
     with runner._lease_mutex(tmp_path):
         pass
 
-    assert [(operation, size) for _, operation, size in calls] == [
-        (FakeMsvcrt.LK_LOCK, 1),
-        (FakeMsvcrt.LK_UNLCK, 1),
-    ]
+    assert len(descriptors) == 1
 
 
 def _collection(
