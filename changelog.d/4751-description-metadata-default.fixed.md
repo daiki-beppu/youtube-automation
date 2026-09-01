@@ -1,0 +1,1 @@
+- 概要欄の `descriptions.metadata` 未定義時に Jazz 固定値を使わず、チャンネルの `genre` 設定からメタデータを生成するよう修正

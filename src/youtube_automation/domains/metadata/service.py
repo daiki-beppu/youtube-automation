@@ -697,10 +697,11 @@ class BAHMetadataGenerator:
             raise ValueError("localizations.json の title_template が不正です:\n" + "\n".join(template_errors))
 
         # 英語固定パーツ（config/channel/content.json の descriptions.metadata から取得）
-        desc_metadata = self.config.content.descriptions.metadata
-        genre_line = desc_metadata.get("genre", "Jazz")
-        vibe_line = desc_metadata.get("vibe", "Rainy night, Cozy")
-        best_for_line = desc_metadata.get("best_for", "Study, Focus, Late Night")
+        descriptions = self.config.content.descriptions
+        desc_metadata = descriptions.metadata
+        genre_line = desc_metadata.get("genre", descriptions.genre.primary)
+        vibe_line = desc_metadata.get("vibe", descriptions.genre.style)
+        best_for_line = desc_metadata.get("best_for", descriptions.genre.context)
         usage_lines = "\n".join(self._video_description_config.get("usage_attribution_lines", []))
 
         # 欠落チェック + 100 codepoint 超過を全言語まとめて検出する

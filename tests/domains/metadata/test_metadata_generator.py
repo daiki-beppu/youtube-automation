@@ -639,6 +639,24 @@ class TestGenerateCompleteCollectionMetadata:
         assert "Usage & Attribution" in ja_desc
         assert "00:00 01. Track 1" in ja_desc
 
+    def test_localizations_description_metadata_defaults_to_channel_genre(self):
+        """metadata 未定義時は Jazz 固定値でなくチャンネルの genre 設定を使う。"""
+        gen = _make_generator()
+
+        locs = gen.generate_localizations(
+            english_title="Test",
+            timestamp_body="00:00 Track 1",
+            scene_phrases=self._all_phrases(),
+            duration_seconds=3600,
+        )
+
+        description = locs["ja"]["description"]
+        assert "- Genre : chiptune" in description
+        assert "- Vibe : 8-bit" in description
+        assert "- Best for : RPG" in description
+        assert "Jazz" not in description
+        assert "Rainy night, Cozy" not in description
+
     def test_localizations_description_length(self):
         """全言語の概要欄が5000文字以下"""
         gen = _make_generator()
