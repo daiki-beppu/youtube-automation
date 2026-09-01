@@ -1,0 +1,1 @@
+- collection 初期化前でも collection plan の draft JSON/HTML pair を公開できるように修正

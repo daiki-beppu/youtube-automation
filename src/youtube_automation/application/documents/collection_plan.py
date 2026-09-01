@@ -27,7 +27,7 @@ SelectionSource = Literal["web", "terminal", "automatic"]
 
 def write_collection_plan_document(
     json_path: Path,
-    workflow_state_path: Path,
+    workflow_state_path: Path | None,
     build_document: Callable[[], object],
     migration_decision: MarkdownMigrationDecision,
 ) -> DocumentWriteResult:
@@ -82,6 +82,8 @@ def _write_collection_plan_document(
         _result, selected = published
         if selected is None:
             return
+        if workflow_state_path is None:
+            raise DocumentMigrationError("collection plan の確定には workflow-state.json が必要です")
 
         def transition(state):
             state.record_collection_plan(

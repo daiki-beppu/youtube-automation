@@ -22,9 +22,11 @@ browserのないterminal環境だけは `--transport terminal` を明示し、�
 ```bash
 uv run yt-document-migrate <candidate.json> \
   --target <collection>/20-documentation/plan_proposals.json \
-  --schema collection-plan.schema.json \
-  --workflow-state <collection>/workflow-state.json
+  --schema collection-plan.schema.json
 ```
+
+draft pair は collection 初期化前でも公開できるため `--workflow-state` を指定しない。選択時は
+`yt-collection-plan-select` が `workflow-state.json` へ確定企画を投影する。
 
 既存 `plan_proposals.md` だけがある場合は移行可否を明示確認し、Yes だけ `--migration-decision yes`、No は `--migration-decision no` を付ける。No では Markdown と workflow state を変更しない。JSON+HTML pair の更新では移行 flag を付けない。
 
