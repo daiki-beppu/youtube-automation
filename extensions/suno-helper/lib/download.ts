@@ -9,8 +9,9 @@ const CLIP_ROW_SELECTOR =
   '[data-testid="clip-row"], .clip-row, article, [role="group"]';
 const CONTEXT_MENU_SELECTOR = 'div[data-context-menu="true"]';
 const DOWNLOAD_MENU_ITEM_TEXT = /download\s*all/i;
-const FORMAT_MODAL_CANDIDATE_SELECTOR =
-  '[role="dialog"], div.modal-class.modal-overlay';
+// Suno の Tailwind class はリリースごとに変わるため、形式選択モーダルは
+// WAI-ARIA の dialog role だけを安定した探索契約として使う (#4747)。
+const FORMAT_MODAL_CANDIDATE_SELECTOR = '[role="dialog"]';
 const BUTTON_SELECTOR = "button";
 const DOWNLOAD_CONFIRM_LABEL = "Download";
 const FORMAT_OPTION_LABELS = ["M4A", "MP3", "WAV"] as const;
