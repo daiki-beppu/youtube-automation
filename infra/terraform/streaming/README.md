@@ -66,6 +66,22 @@ terraform apply
 
 1 つの `infra/terraform/streaming` module を複数チャンネルで使う場合は、チャンネルごとに Terraform workspace を 1 つ作り、workspace 名をチャンネル slug と一致させる。GCS backend の `prefix = "streaming"` により、`<workspace>` の state は bucket 内の `streaming/<workspace>.tfstate` に保存される（`default` は `streaming/default.tfstate`）。workspace は state だけを分離し、shell の `TF_VAR_*` や共有の `terraform.tfvars` は切り替えない。
 
+既存 workspace の日常操作には `select_channel.sh` を使う。slug を唯一のチャンネル入力として workspace の存在確認と切替後の一致検証を行い、state を表示してから、対応する `stream_key` の 1Password 参照と `TF_VAR_channel_slug` を Terraform の子プロセスだけへ注入する。存在しない workspace は自動作成しない。
+
+```bash
+SELECT_CHANNEL="$(git rev-parse --show-toplevel)/.claude/skills/streaming/references/select_channel.sh"
+
+"$SELECT_CHANNEL" 003ch-soulful-grooves show
+"$SELECT_CHANNEL" 003ch-soulful-grooves plan --video ./stream.mp4
+"$SELECT_CHANNEL" 003ch-soulful-grooves apply --video ./stream.mp4
+"$SELECT_CHANNEL" 003ch-soulful-grooves destroy
+
+# secret を取得せず、解決する 1Password 参照と操作だけを確認
+"$SELECT_CHANNEL" 002ch-deepfocus365 plan --video ./stream.mp4 --dry-run
+```
+
+`plan` / `apply` は `--video` が必須で、存在確認後に絶対パス化する。`apply` / `destroy` の対話確認を省く場合だけ `--auto-approve` を追加する。別 module を操作する場合は `--tf-dir DIR` を指定する。初回 workspace 作成と、対応表にないチャンネルの 1Password item 登録は明示的な管理作業として残す。
+
 ```bash
 cd infra/terraform/streaming
 
@@ -75,7 +91,7 @@ terraform workspace list
 # 初回だけ新規作成する（作成後はその workspace が選択される）
 terraform workspace new <workspace>
 
-# 既存 workspace へ切り替える場合
+# 低レベル操作で既存 workspace へ切り替える場合（通常は select_channel.sh を使う）
 terraform workspace select <workspace>
 
 # 切替後に対象チャンネルの値を必ず再注入する
