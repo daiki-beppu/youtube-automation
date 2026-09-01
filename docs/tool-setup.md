@@ -2,9 +2,6 @@
 
 空のチャンネル用フォルダへ automation ツールと skill（Claude Code に作業手順を教えるファイル）を導入するための**運営者向け正本**。コマンドの意味が分からなくても、以下を上から順に進めればよい。
 
-> [!WARNING]
-> 本 Python 版はメンテナンスモードである。新規導入前に [`migration/python-to-tayk.md`](migration/python-to-tayk.md) の移行方針も確認する。
-
 ## 推奨ルート: Claude Code に導入を任せる
 
 ### 1. 作業フォルダを開く
