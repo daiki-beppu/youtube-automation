@@ -282,12 +282,23 @@ def _render_thumbnail_typography_clause(gemini: object) -> str:
 
 def expand_thumbnail_prompt_clauses(prompt: str, skill_cfg: dict) -> str:
     """thumbnail skill-config の prompt clause placeholder を展開する。"""
-    if "${typography_clause}" not in prompt:
+    typography_placeholder = "${typography_clause}"
+    text_strip_placeholder = "${text_strip_clause}"
+    if typography_placeholder not in prompt and text_strip_placeholder not in prompt:
         return prompt
     image_generation = _required_mapping(skill_cfg.get("image_generation"), "image_generation")
     gemini = _required_mapping(image_generation.get("gemini"), "image_generation.gemini")
-    rendered_clause = _render_thumbnail_typography_clause(gemini)
-    return prompt.replace("${typography_clause}", rendered_clause)
+    if typography_placeholder in prompt:
+        rendered_clause = _render_thumbnail_typography_clause(gemini)
+        prompt = prompt.replace(typography_placeholder, rendered_clause)
+    if text_strip_placeholder in prompt:
+        single_step = _required_mapping(gemini.get("single_step"), "image_generation.gemini.single_step")
+        text_strip_clause = _required_non_empty_string(
+            single_step.get("text_strip_clause"),
+            "image_generation.gemini.single_step.text_strip_clause",
+        ).strip()
+        prompt = prompt.replace(text_strip_placeholder, text_strip_clause)
+    return prompt
 
 
 def _validate_codex_prompt_template(template: Any) -> str:

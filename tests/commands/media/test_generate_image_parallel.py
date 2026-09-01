@@ -74,6 +74,21 @@ class _FakeProvider:
 
 
 class TestExpandThumbnailPromptClauses:
+    def test_replaces_text_strip_clause_for_textless_prompt(self) -> None:
+        skill_cfg = {
+            "image_generation": {
+                "gemini": {
+                    "single_step": {
+                        "text_strip_clause": "Remove the upper arched title and lower straight subtitle.",
+                    }
+                }
+            }
+        }
+
+        prompt = expand_thumbnail_prompt_clauses("${text_strip_clause}\nPreserve the composition.", skill_cfg)
+
+        assert prompt.startswith("Remove the upper arched title and lower straight subtitle.")
+
     def test_replaces_typography_clause_with_configured_font_description(self) -> None:
         skill_cfg = {
             "image_generation": {
