@@ -194,7 +194,7 @@ image_generation:
       # ---- ガイダンス clause の方針 (#1702) ----
       # TTP は参照画像主導で生成する。プロンプトに指示を積むほど参照画像の支配力が
       # 薄れるため、既定で注入される clause は ip_safety_clause の 1 つだけに集約した。
-      # 以下の opt-in clause 群は既定空文字（展開しても no-op）。必要なチャンネルだけ
+      # text_strip_clause を除く opt-in clause 群は既定空文字（展開しても no-op）。必要なチャンネルだけ
       # config/skills/thumbnail.yaml で本文を設定し、自前の diff_prompt_template で
       # ${<clause 名>} として展開する。推奨文面は各 clause のコメントを参照。
       #
@@ -207,12 +207,14 @@ image_generation:
       #   Match the lighting direction, color temperature, and overall mood of
       #   the reference image.
       style_lock_clause: ""
-      # text_strip_clause (opt-in): textless main 再生成プロンプト専用（テキスト付き
-      # thumbnail 生成には展開しない）。未設定時は SKILL.md の「Remove all text」相当の
-      # 除去指示をそのまま書く。推奨文面:
-      #   Do not include any text, captions, watermarks, logos, or typography
-      #   from the reference unless explicitly described in the diff prompt.
-      text_strip_clause: ""
+      # text_strip_clause: textless main 再生成プロンプト専用（テキスト付き thumbnail
+      # 生成には展開しない）。文字配置を名指しし、背景で塗り直す指示を先頭に置く。
+      text_strip_clause: |
+        First remove every text element from the reference: erase the upper arched title,
+        lower straight title or subtitle, captions, channel names, logos, watermarks, and all
+        other typography. Repaint each removed area with the surrounding background colors and
+        texture so no letter shapes, outlines, shadows, or text artifacts remain. Preserve the
+        subject, composition, lighting, and non-text visual elements.
       # anatomy_clause (#570, opt-in): キャラ + 手が写る構図で指の破綻（融合・本数異常・
       # 溶融）が出るチャンネルだけ本文を設定し、diff_prompt_template で
       # ${anatomy_clause} を展開する。推奨文面:

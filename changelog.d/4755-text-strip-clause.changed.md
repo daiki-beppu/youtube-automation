@@ -1,0 +1,1 @@
+- `${text_strip_clause}` の展開時に `image_generation.gemini.single_step.text_strip_clause` が空文字だと、無効化ではなく `ConfigError` で停止するようになりました（空文字へ override していたチャンネルは本文を設定するか、`${text_strip_clause}` を含まない `diff_prompt_template` を使ってください）。

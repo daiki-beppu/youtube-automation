@@ -1031,10 +1031,11 @@ def test_thumbnail_default_config_remains_ttp_aligned() -> None:
     assert "承認済み thumbnail から textless main を後続再生成" in config
     assert "背景 → テキストオーバーレイ" not in config
     assert "rotate: true" in config
-    # #1702: opt-in clause は既定空文字（キーは後方互換のため残す）
+    # #1702: thumbnail 用 opt-in clause は既定空文字（キーは後方互換のため残す）
     assert 'variation_clause: ""' in config
     assert 'style_lock_clause: ""' in config
-    assert 'text_strip_clause: ""' in config
+    # #4755: textless 再生成では deep-merge 後も実効性のある除去指示を同梱する
+    assert "text_strip_clause: |" in config
     # #569: TTP 参照画像の署名・透かし・ロゴが焼き込まれる IP / 版権リスク防止
     assert "ip_safety_clause: |" in config
     assert "signature" in config
@@ -1691,6 +1692,25 @@ def test_thumbnail_gemini_diff_template_channel_override_takes_priority(tmp_path
     assert "ip_safety_clause" in merged["image_generation"]["gemini"]["single_step"]
 
 
+def test_thumbnail_deep_merge_preserves_non_empty_text_strip_clause(tmp_path) -> None:
+    """#4755: unrelated channel override 後も textless 除去指示を保持する。"""
+    from youtube_automation.configuration import skills as skill_config
+
+    override_dir = tmp_path / "config" / "skills"
+    override_dir.mkdir(parents=True)
+    (override_dir / "thumbnail.yaml").write_text(
+        "image_generation:\n  gemini:\n    single_step:\n      max_attempts: 2\n",
+        encoding="utf-8",
+    )
+
+    merged = skill_config.load_skill_config("thumbnail", use_cache=False, channel_dir=tmp_path)
+
+    clause = merged["image_generation"]["gemini"]["single_step"]["text_strip_clause"]
+    assert clause.strip()
+    assert "upper" in clause
+    assert "lower" in clause
+
+
 def test_thumbnail_docs_state_provider_agnostic_ttp_policy() -> None:
     """#2070: SKILL.md / prompting.md が provider 差なく同じ TTP 方針を明示する。"""
     prompting = (_repo_root() / ".claude" / "skills" / "thumbnail" / "references" / "prompting.md").read_text(
@@ -1858,12 +1878,12 @@ def test_thumbnail_default_config_provides_anatomy_clause() -> None:
 
 
 def test_thumbnail_default_config_injects_only_ip_safety_clause_by_default() -> None:
-    """#1702: 既定で注入される clause は ip_safety_clause の 1 つだけに集約する。"""
+    """#1702 / #4755: 文字入り候補へ既定注入するのは IP safety だけ。"""
     config = _load_thumbnail_default_config()
     single_step = config["image_generation"]["gemini"]["single_step"]
 
     clause_keys = [key for key in single_step if key.endswith("_clause")]
-    non_empty = [key for key in clause_keys if single_step[key]]
+    non_empty = [key for key in clause_keys if single_step[key] and key != "text_strip_clause"]
     assert non_empty == ["ip_safety_clause"]
 
     template = _gemini_diff_prompt_template(config)

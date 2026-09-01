@@ -17,7 +17,7 @@
 1. `image_generation.gemini.diff_prompt_template`（TTP 方針行 + `{title_line1}` / `{title_line2}`）のプレースホルダを置換する
 2. 既定で展開する clause は `${ip_safety_clause}` の 1 つだけ（TTP で常時挿入必須）
 
-opt-in clause（`variation_clause` / `style_lock_clause` / `text_strip_clause` / `anatomy_clause` / `typography_clause`）は既定空文字。必要なチャンネルだけ override に本文を設定し、自前の `diff_prompt_template` で展開する。複数の clause を同時に積み上げない。バリエーション、スタイル固定、テキスト除去を同時に強く指示すると、参照画像の支配力が薄れる。
+opt-in clause（`variation_clause` / `style_lock_clause` / `anatomy_clause` / `typography_clause`）は既定空文字。必要なチャンネルだけ override に本文を設定し、自前の `diff_prompt_template` で展開する。`text_strip_clause` は textless main 再生成専用の非空既定値を持ち、`${text_strip_clause}` で展開する。複数の clause を同時に積み上げない。バリエーション、スタイル固定、テキスト除去を同時に強く指示すると、参照画像の支配力が薄れる。
 
 **最終プロンプト例（TTP / 既定 config でプロバイダーへ渡る全文）:**
 

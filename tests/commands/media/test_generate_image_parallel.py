@@ -74,6 +74,21 @@ class _FakeProvider:
 
 
 class TestExpandThumbnailPromptClauses:
+    def test_replaces_text_strip_clause_for_textless_prompt(self) -> None:
+        skill_cfg = {
+            "image_generation": {
+                "gemini": {
+                    "single_step": {
+                        "text_strip_clause": "Remove the upper arched title and lower straight subtitle.",
+                    }
+                }
+            }
+        }
+
+        prompt = expand_thumbnail_prompt_clauses("${text_strip_clause}\nPreserve the composition.", skill_cfg)
+
+        assert prompt.startswith("Remove the upper arched title and lower straight subtitle.")
+
     def test_replaces_typography_clause_with_configured_font_description(self) -> None:
         skill_cfg = {
             "image_generation": {
@@ -142,6 +157,22 @@ class TestExpandThumbnailPromptClauses:
     def test_rejects_malformed_typography_config(self, skill_cfg: dict, message: str) -> None:
         with pytest.raises(ConfigError, match=message):
             expand_thumbnail_prompt_clauses("Text-included thumbnail prompt. ${typography_clause}", skill_cfg)
+
+    @pytest.mark.parametrize(
+        "single_step, message",
+        [
+            ({"text_strip_clause": ""}, "text_strip_clause"),
+            ({"text_strip_clause": "   "}, "text_strip_clause"),
+            ({}, "text_strip_clause"),
+            ({"text_strip_clause": 123}, "text_strip_clause"),
+        ],
+    )
+    def test_rejects_empty_text_strip_clause(self, single_step: dict, message: str) -> None:
+        """#4755: 空 / 未設定 / 非文字列の除去指示は no-op 展開せず fail-fast する。"""
+        skill_cfg = {"image_generation": {"gemini": {"single_step": single_step}}}
+
+        with pytest.raises(ConfigError, match=message):
+            expand_thumbnail_prompt_clauses("${text_strip_clause}\nPreserve the composition.", skill_cfg)
 
 
 class TestAbTestPatterns:
