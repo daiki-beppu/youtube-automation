@@ -91,7 +91,7 @@ uv run python .claude/skills/music/references/music-chain-state.py \
 | API | call 数 / 実行 | 変動要因 |
 |---|---|---|
 | Suno UI | entry 数分の Generate（1 Generate = 2 clips） | 選択 entry 数、duration guard 再生成、resume 状態 |
-| Vertex AI Lyria 3（yt-generate-lyria-master） | N call、N = ceil((audio.target_duration_min + duration_padding_min) × 60 / 184)（上限 60） | 目標尺、padding、retry。既存 segment は resume で skip |
+| Vertex AI Lyria 3（yt-generate-lyria-master） | N call、N = prompt entry ごとの ceil((target_duration_min + duration_padding_min) × 60 / 184) の合計（上限 60） | pattern 数、目標尺、padding、retry。既存 segment は resume で skip |
 | MiniMax Music（yt-generate-minimax-master） | instrumental は N call、N = ceil((audio.target_duration_min + duration_padding_min) × 60 / 300)（上限 60）。vocal は 1 call | 目標尺、padding、retry、`--lyrics`。既存 segment / vocal master は resume で skip |
 
 - 上限 / 承認: Suno はログイン・CAPTCHA・credit 確認を自動突破しない。Lyria は `skip_generation_approval: false`、MiniMax は生成条件とcall数の提示後に明示承認し、どちらも 60 segment hard cap を維持する。

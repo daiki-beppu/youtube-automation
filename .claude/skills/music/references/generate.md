@@ -435,7 +435,7 @@ uv run python -c "from youtube_automation.configuration.skills import load_skill
 
 | API | call 数 / 実行 | 変動要因 |
 |---|---|---|
-| Vertex AI Lyria 3（yt-generate-lyria-master） | N call、N = ceil((audio.target_duration_min + duration_padding_min) × 60 / 184)（上限 60） | `audio.target_duration_min` / `--target-duration` / `--padding-min`。失敗時は `--max-retries`（既定 3）で最悪 N×4。既存セグメントは skip（resume）され再課金なし |
+| Vertex AI Lyria 3（yt-generate-lyria-master） | N call、N = 各 entry の ceil((target_duration_min + duration_padding_min) × 60 / 184) の合計（文書全体で上限 60） | entry 数 / entry ごとの目標尺・padding。失敗時は `--max-retries`（既定 3）で最悪 N×4。既存セグメントは skip（resume）され再課金なし |
 
 - 上限 / 承認: CLI 側に y/N プロンプトはないが、セグメント数は hard cap 60 で clamp + WARNING される。実行前に Step 3 のユーザー確認（承認ゲート）を必ず経る。
 
@@ -497,7 +497,7 @@ celtic folk only, clean dry recording, no pads, gentle melodic phrases rising an
 
 ## Step 3: 設定の書き出しとユーザー確認
 
-1. 設計したプロンプトと API 入力パラメータを `music-prompt.schema.json` 準拠の未公開candidateに書き出す。`style` に最終prompt、`options` に model / reference_image / bpm / intensity / mode / duration / segment count、`track_role`、review結果、provenanceを保存する:
+1. 設計したパターンを entry 順が最終結合順になる `music-prompt.schema.json` 準拠の未公開candidateに書き出す。各 entry の `name` を一意なパターン slug、`style` を最終prompt、`options` を model / reference_image / bpm / intensity / mode / `target_duration_min` / `duration_padding_min` / segment count とし、`track_role`、review結果、provenanceも保存する:
    - ヘッダー（Engine, Channel, Model）
    - 最終プロンプト本文
    - API 入力パラメータ（`reference_image` / `bpm` / `intensity` / `mode`）
@@ -514,10 +514,10 @@ celtic folk only, clean dry recording, no pads, gentle melodic phrases rising an
 
 ユーザー承認後、または `skip_generation_approval: true` で検証済み `lyria-prompt.json` / `.html` pairを確認後、JSONの `style` / `options` だけを `yt-generate-lyria-master` CLIへ渡す。MarkdownやHTMLをparseしない。CLI が以下を一気通貫で実行する:
 
-1. `audio.target_duration_min` + skill-config `duration_padding_min` から必要セグメント数 N を自動算出（`ceil((target + padding) * 60 / 184)`）。上限は 60 セグメント（= Lyria API リクエスト数の hard cap）で、超過時は 60 に clamp して warning を stderr に出力する
-2. `lyria_client.generate_music()` を N 回呼び、レスポンスを `02-Individual-music/{NN}_{name}.wav` に PCM s16le 48 kHz stereo で保存（既存ファイルは skip = resume 可能）
+1. entry ごとの `target_duration_min` + `duration_padding_min` から必要セグメント数を算出する。未指定値だけ channel / skill-config へ fallback し、全 entry の合計 N は 60 セグメント（= Lyria API リクエスト数）の hard cap を超えたら生成前に停止する
+2. entry 順に `lyria_client.generate_music()` を呼び、レスポンスを文書全体で連続する `02-Individual-music/{NN}_{name}.wav` に PCM s16le 48 kHz stereo で保存する（既存ファイルは skip = resume 可能）
 3. 失敗時は `--max-retries` 回までリトライ
-4. 全セグメント揃ったら `generate_master.generate_master()` 経由でクロスフェード結合し `01-master/master.mp3` を出力（`masterup.audio.crossfade_duration` を参照）
+4. 全セグメント揃ったら entry 順の全 filename を `20-documentation/audio-adjustments.json::order` へ自動保存し、`generate_master.generate_master(no_loop=True)` を 1 回だけ呼んで `01-master/master.mp3` を出力する（`masterup.audio.crossfade_duration` を参照）。Lyria の実尺はヒント値と一致しないため、自動 loop は使わない
 
 ```bash
 uv run yt-generate-lyria-master \
@@ -540,7 +540,7 @@ uv run yt-generate-lyria-master \
 **注意点**:
 - Vertex AI の Lyria クォータ（プロジェクト単位）は有限。他チャンネルと同時に大量生成すると 429 エラーが発生する（クォータ管理・並列実行制御は本スキルの責務外）
 - CLI は逐次実行のため、N セグメントの生成には `N × 約 30〜90 秒` 程度を要する
-- フェーズ展開（セグメントごとにプロンプトを切り替える DJ 的展開）は本 CLI の責務外。同一プロンプトの N 回呼び出しに留める
+- パターン間は entry ごとにプロンプトを切り替える。同じ entry の複数セグメント内では同一プロンプトを使う
 
 ## Step 4.1: ワークツリーからメインへのコピー
 

@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -20,6 +21,7 @@ from youtube_automation.commands.media.generate_lyria_master import (
     _MAX_SEGMENT_COUNT,
     _generate_one_segment,
     _load_lyria_prompt_input,
+    _load_lyria_prompt_inputs,
     _resolve_segment_count,
 )
 from youtube_automation.core.errors import ValidationError
@@ -74,6 +76,28 @@ def test_load_lyria_prompt_input_uses_only_validated_pair(tmp_path: Path) -> Non
     assert prompt.prompt == "soft fingerpicked guitar"
     assert prompt.name == "rain"
     assert prompt.bpm == 72
+
+
+def test_load_lyria_prompt_inputs_preserves_multiple_entry_order(tmp_path: Path, monkeypatch) -> None:
+    entries = [
+        {
+            "name": name,
+            "style": style,
+            "lyrics": "",
+            "options": {"target_duration_min": 3, "duration_padding_min": 0},
+        }
+        for name, style in (("dawn", "warm dawn"), ("night", "quiet night"))
+    ]
+    monkeypatch.setattr(
+        generate_lyria_master,
+        "read_published_json_document",
+        lambda *_args: {"engine": "lyria", "entries": entries},
+    )
+
+    prompts = _load_lyria_prompt_inputs(tmp_path / "lyria-prompt.json")
+
+    assert [prompt.name for prompt in prompts] == ["dawn", "night"]
+    assert [prompt.prompt for prompt in prompts] == ["warm dawn", "quiet night"]
 
 
 class TestResolveSegmentCount:
@@ -236,6 +260,41 @@ class TestGenerateSegments:
 
         out = capsys.readouterr().out
         assert "Segments   : 4" in out
+
+    def test_prompt_document_generates_patterns_in_order_and_builds_master_once(self, tmp_path, monkeypatch):
+        collection = _make_collection(tmp_path / "coll")
+        prompt_document = collection / "20-documentation/lyria-prompt.json"
+        prompt_document.parent.mkdir()
+        prompts = (
+            generate_lyria_master._LyriaPromptInput("warm dawn", "dawn", None, 3, 0, None, None, None, None, None),
+            generate_lyria_master._LyriaPromptInput("quiet night", "night", None, 3, 0, None, None, None, None, None),
+        )
+        monkeypatch.setattr(generate_lyria_master, "_load_lyria_prompt_inputs", lambda _path: prompts)
+        call_log = _patch_lyria_generate(monkeypatch)
+        _patch_ffmpeg(monkeypatch)
+        _patch_skill_configs(monkeypatch)
+        _patch_load_config(monkeypatch, target_duration_min=None)
+        master_capture = _patch_generate_master(monkeypatch)
+        monkeypatch.setattr(
+            "sys.argv",
+            [
+                "yt-generate-lyria-master",
+                "--prompt-document",
+                str(prompt_document),
+                "--collection",
+                str(collection),
+            ],
+        )
+
+        assert generate_lyria_master.main() == 0
+        assert [entry["prompt"] for entry in call_log] == ["warm dawn", "quiet night"]
+        assert sorted(path.name for path in (collection / "02-Individual-music").glob("*.wav")) == [
+            "01_dawn.wav",
+            "02_night.wav",
+        ]
+        adjustments = json.loads((collection / "20-documentation/audio-adjustments.json").read_text(encoding="utf-8"))
+        assert adjustments["order"] == ["01_dawn.wav", "02_night.wav"]
+        assert master_capture["kwargs"]["no_loop"] is True
 
     def test_resume_skips_existing_segments(self, tmp_path, monkeypatch, capsys):
         collection = _make_collection(tmp_path / "coll")

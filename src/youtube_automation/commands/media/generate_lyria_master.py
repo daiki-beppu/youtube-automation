@@ -5,12 +5,13 @@ Lyria 3 `interactions` API は 1 リクエスト最大約 184 秒の MP3 を返�
 コレクション尺 (30 分〜数時間) のマスター音源を作るには複数セグメントが必要なため、
 本 CLI は以下を逐次実行する:
 
-1. `audio.target_duration_min` + 余裕分から呼び出し回数 N を自動算出
-2. `lyria_client.generate_music()` を N 回呼び、MP3 バイト列を ffmpeg で WAV (PCM s16le,
+1. prompt document の entry ごとに目標尺 + 余裕分から呼び出し回数を自動算出
+2. `lyria_client.generate_music()` を全文書合計 N 回呼び、MP3 バイト列を ffmpeg で WAV (PCM s16le,
    48 kHz stereo) に変換して `02-Individual-music/{NN}_{name}.wav` に保存
 3. 失敗時は最大 `--max-retries` 回リトライ (`generate_music_dj._generate_one_segment` 流儀)
 4. 既存セグメントがあれば skip (resume 可能)
-5. 全セグメント揃ったら `generate_master.generate_master()` を呼び、
+5. entry 順の `audio-adjustments.json::order` を保存し、全セグメント揃ったら
+   `generate_master.generate_master(no_loop=True)` を 1 回だけ呼び、
    `01-master/master.mp3` を出力 (`yt-generate-master` の WAV 入力経路を再利用)
 
 Usage:
@@ -22,8 +23,7 @@ Usage:
   クロスフェード結合段で再エンコードロスを避けるため。
 - `generate_master.generate_master()` を Python 関数として呼び、`build_filter` /
   `_resolve_loop_count` を流用する (DRY)。WAV 入力経路は #277 で同時実装。
-- セグメント間のフェーズ展開 (DJ 的なプロンプト切り替え) は本 CLI の責務外
-  (Issue #279 scope 外、別 issue 待ち)。同一プロンプトの N 回呼び出しに留める。
+- prompt document の entry はパターンとして扱い、entry 内では同一プロンプトを繰り返す。
 """
 
 from __future__ import annotations
@@ -44,6 +44,7 @@ from youtube_automation.configuration.skills import load_skill_config
 from youtube_automation.core.errors import ConfigError, ValidationError
 from youtube_automation.domains.documents.published import read_published_json_document
 from youtube_automation.domains.documents.schema_registry import RepositorySchema
+from youtube_automation.domains.media.audio_adjustments import replace_track_order
 from youtube_automation.domains.media.audio_units import unit_for_audio
 from youtube_automation.infrastructure import cost_tracker
 from youtube_automation.infrastructure.media import lyria_client
@@ -88,30 +89,24 @@ class _LyriaPromptInput:
     lyrics: str | None
 
 
-def _load_lyria_prompt_input(path: Path) -> _LyriaPromptInput:
-    """検証済み Lyria JSON+HTML pair を API 引数へ投影する。"""
-    document = read_published_json_document(path, RepositorySchema.MUSIC_PROMPT)
-    if not isinstance(document, Mapping) or document.get("engine") != "lyria":
-        raise ValidationError("Lyria prompt document の engine は lyria である必要があります")
-    entries = document.get("entries")
-    if not isinstance(entries, list) or len(entries) != 1 or not isinstance(entries[0], Mapping):
-        raise ValidationError("Lyria prompt document は entry を1件だけ必要とします")
-    entry = entries[0]
+def _parse_lyria_prompt_entry(entry: object, index: int) -> _LyriaPromptInput:
+    if not isinstance(entry, Mapping):
+        raise ValidationError(f"Lyria prompt document entries[{index}] は object である必要があります")
     options = entry.get("options")
     if not isinstance(options, Mapping):
-        raise ValidationError("Lyria prompt document の options は object である必要があります")
+        raise ValidationError(f"Lyria prompt document entries[{index}].options は object である必要があります")
 
     def optional(key: str, expected: type):
         value = options.get(key)
         if value is not None and not isinstance(value, expected):
-            raise ValidationError(f"Lyria prompt document options.{key} の型が不正です")
+            raise ValidationError(f"Lyria prompt document entries[{index}].options.{key} の型が不正です")
         return value
 
     prompt = entry.get("style")
     name = entry.get("name")
     lyrics = entry.get("lyrics")
     if not isinstance(prompt, str) or not isinstance(name, str) or not isinstance(lyrics, str):
-        raise ValidationError("Lyria prompt document の name / style / lyrics が不正です")
+        raise ValidationError(f"Lyria prompt document entries[{index}] の name / style / lyrics が不正です")
     return _LyriaPromptInput(
         prompt=prompt,
         name=name,
@@ -124,6 +119,25 @@ def _load_lyria_prompt_input(path: Path) -> _LyriaPromptInput:
         reference_image=optional("reference_image", str),
         lyrics=lyrics or None,
     )
+
+
+def _load_lyria_prompt_inputs(path: Path) -> tuple[_LyriaPromptInput, ...]:
+    """検証済み Lyria JSON+HTML pair の entry を文書順で API 引数へ投影する。"""
+    document = read_published_json_document(path, RepositorySchema.MUSIC_PROMPT)
+    if not isinstance(document, Mapping) or document.get("engine") != "lyria":
+        raise ValidationError("Lyria prompt document の engine は lyria である必要があります")
+    entries = document.get("entries")
+    if not isinstance(entries, list) or not entries:
+        raise ValidationError("Lyria prompt document は entry を1件以上必要とします")
+    return tuple(_parse_lyria_prompt_entry(entry, index) for index, entry in enumerate(entries, start=1))
+
+
+def _load_lyria_prompt_input(path: Path) -> _LyriaPromptInput:
+    """単一 entry 呼び出し向けの互換 projection。"""
+    prompts = _load_lyria_prompt_inputs(path)
+    if len(prompts) != 1:
+        raise ValidationError("Lyria prompt document は entry を1件だけ必要とします")
+    return prompts[0]
 
 
 def _resolve_segment_count(target_min: float, padding_min: float) -> int:
@@ -409,88 +423,99 @@ def main() -> int:
         music_dir = paths.music_dir
         music_dir.mkdir(parents=True, exist_ok=True)
 
-        prompt = args.prompt
-        name = args.name
-        model_arg = args.model
-        target_duration_arg = args.target_duration
-        padding_min_arg = args.padding_min
-        bpm = args.bpm
-        intensity = args.intensity
-        mode = args.mode
-        reference_image_arg = args.reference_image
-        lyrics = args.lyrics
         if args.prompt_document is not None:
             document_path = args.prompt_document
             if not document_path.is_absolute():
                 document_path = collection_dir / document_path
-            prompt_input = _load_lyria_prompt_input(document_path)
-            prompt = prompt_input.prompt
-            name = prompt_input.name
-            model_arg = prompt_input.model
-            target_duration_arg = prompt_input.target_duration
-            padding_min_arg = prompt_input.padding_min
-            bpm = prompt_input.bpm
-            intensity = prompt_input.intensity
-            mode = prompt_input.mode
-            reference_image_arg = prompt_input.reference_image
-            lyrics = prompt_input.lyrics
-        if not prompt or not name:
-            raise ValidationError("legacy --prompt では --name も指定してください")
+            prompt_inputs = _load_lyria_prompt_inputs(document_path)
+        else:
+            if not args.prompt or not args.name:
+                raise ValidationError("legacy --prompt では --name も指定してください")
+            prompt_inputs = (
+                _LyriaPromptInput(
+                    prompt=args.prompt,
+                    name=args.name,
+                    model=args.model,
+                    target_duration=args.target_duration,
+                    padding_min=args.padding_min,
+                    bpm=args.bpm,
+                    intensity=args.intensity,
+                    mode=args.mode,
+                    reference_image=args.reference_image,
+                    lyrics=args.lyrics,
+                ),
+            )
 
         lyria_cfg = load_skill_config(_SKILL_LYRIA)
         masterup_cfg = load_skill_config(_SKILL_MASTERUP).get("audio", {})
 
-        target_min = _resolve_target_duration(target_duration_arg)
-        padding_min = _resolve_padding_min(padding_min_arg, lyria_cfg)
-        n = _resolve_segment_count(target_min, padding_min)
-        model = _resolve_model(model_arg, lyria_cfg)
-        reference_image = _resolve_reference_image(reference_image_arg, collection_dir)
-
         crossfade, bitrate = _resolve_masterup_audio(masterup_cfg)
-
-        print()
-        print("  yt-generate-lyria-master")
-        print("  ──────────────────────────────────────────")
-        print(f"  Collection : {collection_dir}")
-        print(
-            f"  Segments   : {n}  (target {target_min:g}min + padding {padding_min:g}min @ {_LYRIA_SEGMENT_SEC}s/seg)"
-        )
-        print(f"  Model      : {model}")
-        if bpm is not None:
-            print(f"  BPM        : {bpm}")
-        if intensity:
-            print(f"  Intensity  : {intensity}")
-        if mode:
-            print(f"  Mode       : {mode}")
-        if reference_image is not None:
-            print(f"  Reference  : {reference_image}")
-        print()
-
-        for i in range(1, n + 1):
-            seg_path = _segment_path(music_dir, i, name)
-            ok = _generate_one_segment(
-                index=i,
-                seg_path=seg_path,
-                prompt=prompt,
-                model=model,
-                reference_image=reference_image,
-                bpm=bpm,
-                intensity=intensity,
-                mode=mode,
-                lyrics=lyrics,
-                max_retries=args.max_retries,
+        resolved_patterns = []
+        for prompt_input in prompt_inputs:
+            target_min = _resolve_target_duration(prompt_input.target_duration)
+            padding_min = _resolve_padding_min(prompt_input.padding_min, lyria_cfg)
+            resolved_patterns.append(
+                (
+                    prompt_input,
+                    target_min,
+                    padding_min,
+                    _resolve_segment_count(target_min, padding_min),
+                    _resolve_model(prompt_input.model, lyria_cfg),
+                    _resolve_reference_image(prompt_input.reference_image, collection_dir),
+                )
             )
-            if not ok:
-                print()
-                print("  成功済みセグメントは保持されています。再実行で続行できます。")
-                return 1
+        total_segments = sum(pattern[3] for pattern in resolved_patterns)
+        if total_segments > _MAX_SEGMENT_COUNT:
+            raise ValidationError(
+                f"prompt document 全体のセグメント数 {total_segments} が上限 {_MAX_SEGMENT_COUNT} を超えています"
+            )
+
+        generated_order: list[str] = []
+        global_index = 0
+        for pattern_index, (prompt_input, target_min, padding_min, n, model, reference_image) in enumerate(
+            resolved_patterns, start=1
+        ):
+            print()
+            print("  yt-generate-lyria-master")
+            print("  ──────────────────────────────────────────")
+            print(f"  Collection : {collection_dir}")
+            print(f"  Pattern    : {pattern_index}/{len(resolved_patterns)} ({prompt_input.name})")
+            print(
+                f"  Segments   : {n}  "
+                f"(target {target_min:g}min + padding {padding_min:g}min @ {_LYRIA_SEGMENT_SEC}s/seg)"
+            )
+            print(f"  Model      : {model}")
+            print()
+
+            for pattern_segment_index in range(1, n + 1):
+                global_index += 1
+                seg_path = _segment_path(music_dir, global_index, prompt_input.name)
+                ok = _generate_one_segment(
+                    index=pattern_segment_index,
+                    seg_path=seg_path,
+                    prompt=prompt_input.prompt,
+                    model=model,
+                    reference_image=reference_image,
+                    bpm=prompt_input.bpm,
+                    intensity=prompt_input.intensity,
+                    mode=prompt_input.mode,
+                    lyrics=prompt_input.lyrics,
+                    max_retries=args.max_retries,
+                )
+                if not ok:
+                    print()
+                    print("  成功済みセグメントは保持されています。再実行で続行できます。")
+                    return 1
+                generated_order.append(seg_path.name)
 
         print()
-        print(f"  === セグメント生成完了 ({n} segments) → クロスフェード結合 ===")
+        print(f"  === セグメント生成完了 ({total_segments} segments) → クロスフェード結合 ===")
+        replace_track_order(paths.docs_dir / "audio-adjustments.json", generated_order, None, [])
         master_path = generate_master.generate_master(
             collection_dir,
             crossfade,
             bitrate,
+            no_loop=True,
         )
         print()
         print(f"  Master audio: {master_path}")
