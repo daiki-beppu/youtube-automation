@@ -1,0 +1,1 @@
+- `yt-upload-collection --plan` の自動予約 INFO が実効公開範囲を誤って即時公開と表示しないよう修正
