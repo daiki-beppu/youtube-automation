@@ -56,7 +56,7 @@ class Descriptions:
     @property
     def hashtag_line(self) -> str:
         """ハッシュタグ行（スペース区切り）."""
-        return " ".join(self.hashtags)
+        return " ".join(tag if tag.startswith("#") else f"#{tag}" for tag in self.hashtags)
 
     def render_opening(self) -> str:
         """`{style}` / `{primary}` / `{context}` を format 展開した冒頭行を返す."""
