@@ -1,0 +1,1 @@
+- suno-helper の形式選択モーダル検出を変動する CSS class ではなく `dialog` role に統一し、現行 Suno UI で playlist 追加後の ZIP ダウンロードがタイムアウトする問題を修正。
