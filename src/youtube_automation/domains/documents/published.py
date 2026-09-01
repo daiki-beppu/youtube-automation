@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from youtube_automation.core.errors import DocumentRenderError
+from youtube_automation.core.errors import DocumentPairMismatchError, DocumentRenderError
 from youtube_automation.domains.documents.rendering import render_repository_document
 from youtube_automation.domains.documents.schema_registry import RepositorySchema
 
@@ -20,5 +20,5 @@ def read_published_json_document(source: Path, schema: RepositorySchema) -> obje
         raise DocumentRenderError(f"structured document pair を読めません: {source}") from error
     expected_html = render_repository_document(schema, document)
     if persisted_html != expected_html:
-        raise DocumentRenderError(f"structured document JSON と HTML が対応していません: {source}")
+        raise DocumentPairMismatchError(f"structured document JSON と HTML が対応していません: {source}")
     return document
