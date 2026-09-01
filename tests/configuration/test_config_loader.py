@@ -146,6 +146,20 @@ def test_load_minimal_sections(tmp_path, monkeypatch):
     assert config.pinned_comment.default_language == "en"
 
 
+def test_hashtag_line_prefixes_bare_tags_without_duplicate_hashes(tmp_path, monkeypatch):
+    sections = _minimal_sections()
+    sections["content.json"]["descriptions"]["hashtags"] = [
+        "huddlefocus",
+        "#deadlineplaylist",
+    ]
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    config = load_config()
+
+    assert config.content.descriptions.hashtag_line == "#huddlefocus #deadlineplaylist"
+
+
 def test_load_config_from_path_does_not_change_singleton_selection(tmp_path, monkeypatch):
     selected_sections = _minimal_sections()
     selected_sections["meta.json"]["channel"]["name"] = "Selected Channel"
