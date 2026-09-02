@@ -204,9 +204,17 @@ def _patch_generate_master(monkeypatch, *, return_path: Path | None = None):
     return captured
 
 
-def _patch_load_config(monkeypatch, *, target_duration_min: float | None = None):
-    """`configuration.load_config()` を差し替えて audio.target_duration_min をテスト制御下に置く。"""
-    audio_ns = SimpleNamespace(target_duration_min=target_duration_min)
+def _patch_load_config(
+    monkeypatch,
+    *,
+    target_duration_min: float | None = None,
+    target_duration_max: float | None = None,
+):
+    """`configuration.load_config()` を差し替えて audio の目標尺をテスト制御下に置く。"""
+    audio_ns = SimpleNamespace(
+        target_duration_min=target_duration_min,
+        target_duration_max=target_duration_max,
+    )
     cfg_ns = SimpleNamespace(audio=audio_ns)
 
     monkeypatch.setattr(generate_lyria_master, "load_config", lambda: cfg_ns)
@@ -531,7 +539,7 @@ class TestMasterCombineDelegation:
         _patch_lyria_generate(monkeypatch)
         _patch_ffmpeg(monkeypatch)
         _patch_skill_configs(monkeypatch, lyria={"model": "lyria-3-pro-preview", "duration_padding_min": 0})
-        _patch_load_config(monkeypatch, target_duration_min=None)
+        _patch_load_config(monkeypatch, target_duration_min=None, target_duration_max=60)
         capture = _patch_generate_master(monkeypatch)
         monkeypatch.setattr(
             "sys.argv",
@@ -553,6 +561,96 @@ class TestMasterCombineDelegation:
         assert generate_lyria_master.main() == 0
         assert capture["kwargs"]["loops"] == 5
         assert capture["kwargs"]["no_loop"] is False
+        # `--loop` でもチャンネルの目標尺上限の安全弁を通す (yt-generate-master 単体と同じ)
+        assert capture["kwargs"]["target_duration_max"] == 60
+        assert capture["kwargs"]["allow_duration_outside_target"] is False
+
+    def test_target_duration_max_forwarded_without_loop(self, tmp_path, monkeypatch):
+        collection = _make_collection(tmp_path / "coll")
+        _patch_lyria_generate(monkeypatch)
+        _patch_ffmpeg(monkeypatch)
+        _patch_skill_configs(monkeypatch, lyria={"model": "lyria-3-pro-preview", "duration_padding_min": 0})
+        _patch_load_config(monkeypatch, target_duration_min=None, target_duration_max=60.0)
+        capture = _patch_generate_master(monkeypatch)
+        monkeypatch.setattr(
+            "sys.argv",
+            [
+                "yt-generate-lyria-master",
+                "--prompt",
+                "p",
+                "--name",
+                "single-pass",
+                "--target-duration",
+                "6",
+                "--collection",
+                str(collection),
+            ],
+        )
+
+        assert generate_lyria_master.main() == 0
+        assert capture["kwargs"]["no_loop"] is True
+        assert capture["kwargs"]["target_duration_max"] == 60
+
+    def test_allow_duration_outside_target_disables_safety_valve(self, tmp_path, monkeypatch):
+        collection = _make_collection(tmp_path / "coll")
+        _patch_lyria_generate(monkeypatch)
+        _patch_ffmpeg(monkeypatch)
+        _patch_skill_configs(monkeypatch, lyria={"model": "lyria-3-pro-preview", "duration_padding_min": 0})
+        _patch_load_config(monkeypatch, target_duration_min=None, target_duration_max=60)
+        capture = _patch_generate_master(monkeypatch)
+        monkeypatch.setattr(
+            "sys.argv",
+            [
+                "yt-generate-lyria-master",
+                "--prompt",
+                "p",
+                "--name",
+                "looped",
+                "--target-duration",
+                "6",
+                "--loop",
+                "20",
+                "--allow-duration-outside-target",
+                "--collection",
+                str(collection),
+            ],
+        )
+
+        assert generate_lyria_master.main() == 0
+        assert capture["kwargs"]["allow_duration_outside_target"] is True
+
+    def test_loop_exceeding_target_duration_max_fails(self, tmp_path, monkeypatch, capsys):
+        """安全弁に引っかかった `ValidationError` を握り潰さず exit 1 で返す。"""
+        collection = _make_collection(tmp_path / "coll")
+        _patch_lyria_generate(monkeypatch)
+        _patch_ffmpeg(monkeypatch)
+        _patch_skill_configs(monkeypatch, lyria={"model": "lyria-3-pro-preview", "duration_padding_min": 0})
+        _patch_load_config(monkeypatch, target_duration_min=None, target_duration_max=60)
+
+        def fail_generate(collection_dir, crossfade, bitrate, **kwargs):
+            assert kwargs["target_duration_max"] == 60
+            raise ValidationError("channel audio の目標尺を整数ループで満たせません")
+
+        monkeypatch.setattr(generate_lyria_master.generate_master, "generate_master", fail_generate)
+        monkeypatch.setattr(
+            "sys.argv",
+            [
+                "yt-generate-lyria-master",
+                "--prompt",
+                "p",
+                "--name",
+                "looped",
+                "--target-duration",
+                "6",
+                "--loop",
+                "20",
+                "--collection",
+                str(collection),
+            ],
+        )
+
+        assert generate_lyria_master.main() == 1
+        assert "目標尺" in capsys.readouterr().err
 
     def test_non_positive_loop_stops_before_generation(self, tmp_path, monkeypatch, capsys):
         collection = _make_collection(tmp_path / "coll")
