@@ -43,6 +43,8 @@ description: "Use when ライブ配信用 Vultr VPS・動画配信本体を Terr
 | 現在の workspace | `terraform -chdir=infra/terraform/streaming workspace show` |
 | workspace 作成 | `terraform -chdir=infra/terraform/streaming workspace new <workspace>` |
 | workspace 切替 | `terraform -chdir=infra/terraform/streaming workspace select <workspace>` |
+| チャンネル選択・state 確認 | `$(git rev-parse --show-toplevel)/.claude/skills/streaming/references/select_channel.sh <channel-slug> show` |
+| チャンネル別 plan / apply | 同上 + `plan --video ./stream.mp4` / `apply --video ./stream.mp4` |
 | 選択 workspace の GCS state | `workspace=$(terraform -chdir=infra/terraform/streaming workspace show); bucket=$(jq -r '.backend.config.bucket' infra/terraform/streaming/.terraform/terraform.tfstate); gcloud storage ls "gs://${bucket}/streaming/${workspace}.tfstate"` |
 | VPS / state 突合診断 | `VULTR_API_KEY="$(op read 'op://Personal/Vultr/api_key')" uv run yt-doctor --json` (`streaming_vps_state` を確認) |
 | ライブチャット自動返信 | `/reply --live` |
@@ -56,7 +58,7 @@ description: "Use when ライブ配信用 Vultr VPS・動画配信本体を Terr
 | ログ追跡 | 同上 + `journalctl -u youtube-stream -f` |
 | 破棄 | §5 |
 
-workspace は state だけを切り替える。作成・切替後は対象チャンネルの `TF_VAR_video_path` / `TF_VAR_stream_key` / `TF_VAR_discord_webhook_url` を必ず再注入し、apply 前の照合まで含む詳細手順は [README の「チャンネル別 Terraform workspace 運用」](../../../infra/terraform/streaming/README.md#チャンネル別-terraform-workspace-運用) を正本とする。
+workspace は state だけを切り替える。既存 workspace の操作は `select_channel.sh` で切替・一致検証・state 表示と `TF_VAR_video_path` / `TF_VAR_stream_key` / `TF_VAR_discord_webhook_url` / `TF_VAR_channel_slug` の再注入を一体化する。workspace の新規作成だけは明示操作とし、apply 前の照合まで含む詳細手順は [README の「チャンネル別 Terraform workspace 運用」](../../../infra/terraform/streaming/README.md#チャンネル別-terraform-workspace-運用) を正本とする。
 
 | CLI / スクリプト | 用途 |
 |---|---|
@@ -65,6 +67,7 @@ workspace は state だけを切り替える。作成・切替後は対象チャ
 | `yt-stream-archive-check --expected 2` | `stream_hours=11` / `break_hours=1` 運用で 1 日 2 本のアーカイブが上がっているか確認 |
 | `yt-stream-broadcast-recover` | active 枠があれば no-op。ingest inactive なら systemd 側の復旧を待つ。active ingest かつ active 枠なしの場合だけ upcoming 枠を再利用、または作成して bind → live 遷移 |
 | `$(git rev-parse --show-toplevel)/.claude/skills/streaming/references/swap_video.sh` | `terraform plan` → `apply` の 1 コマンドラッパー |
+| `$(git rev-parse --show-toplevel)/.claude/skills/streaming/references/select_channel.sh` | workspace とチャンネル資格情報を揃えて `show` / `plan` / `apply` / `destroy` |
 
 ## 想定 API call 数
 

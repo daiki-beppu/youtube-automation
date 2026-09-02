@@ -17,8 +17,164 @@ from tests.helpers.hcl import read_file
 from tests.repo.streaming._helpers import (
     _REPO_ROOT,
     _RUN_FFMPEG_SCRIPT,
+    _SELECT_CHANNEL_SCRIPT,
     _SWAP_VIDEO_SCRIPT,
 )
+
+
+class TestSelectChannelScript:
+    """チャンネル選択と Terraform 変数注入を一体化するラッパーの契約。"""
+
+    @staticmethod
+    def _run(
+        tmp_path: Path,
+        workspace: str,
+        *args: str,
+        agent_fingerprint: str = "SHA256:test",
+    ) -> tuple[subprocess.CompletedProcess[str], str]:
+        tf_dir = tmp_path / "terraform"
+        tf_dir.mkdir(exist_ok=True)
+        (tf_dir / "main.tf").touch()
+        stub_dir = tmp_path / "bin"
+        stub_dir.mkdir(exist_ok=True)
+        calls = tmp_path / "calls"
+        terraform = stub_dir / "terraform"
+        terraform.write_text(
+            "#!/usr/bin/env bash\n"
+            'printf "%s channel=%s video=%s\\n" "$*" "${TF_VAR_channel_slug:-}" '
+            '"${TF_VAR_video_path:-}" >> "$CALLS"\n'
+            'case "$*" in\n'
+            '  *"workspace list"*) printf "  default\\n  002ch-deepfocus365\\n  003ch-soulful-grooves\\n" ;;\n'
+            f'  *"workspace show"*) printf "%s\\n" "${{SHOW_WORKSPACE:-{workspace}}}" ;;\n'
+            "esac\n",
+            encoding="utf-8",
+        )
+        terraform.chmod(0o755)
+        op = stub_dir / "op"
+        op.write_text('#!/usr/bin/env bash\nprintf "secret-value\\n"\n', encoding="utf-8")
+        op.chmod(0o755)
+        ssh_keygen = stub_dir / "ssh-keygen"
+        ssh_keygen.write_text(
+            '#!/usr/bin/env bash\nprintf "256 SHA256:test operator@test (ED25519)\\n"\n',
+            encoding="utf-8",
+        )
+        ssh_keygen.chmod(0o755)
+        ssh_add = stub_dir / "ssh-add"
+        ssh_add.write_text(
+            f'#!/usr/bin/env bash\nprintf "256 {agent_fingerprint} operator@test (ED25519)\\n"\n',
+            encoding="utf-8",
+        )
+        ssh_add.chmod(0o755)
+        home_dir = tmp_path / "home"
+        ssh_dir = home_dir / ".ssh"
+        ssh_dir.mkdir(parents=True)
+        (ssh_dir / "yt_stream_key.pub").write_text("stub public key\n", encoding="utf-8")
+        env = {
+            **os.environ,
+            "HOME": str(home_dir),
+            "PATH": f"{stub_dir}:{os.environ['PATH']}",
+            "CALLS": str(calls),
+        }
+        result = subprocess.run(
+            [str(_SELECT_CHANNEL_SCRIPT), workspace, *args, "--tf-dir", str(tf_dir)],
+            capture_output=True,
+            text=True,
+            env=env,
+            check=False,
+        )
+        return result, calls.read_text(encoding="utf-8") if calls.exists() else ""
+
+    def test_rejects_unknown_workspace_before_select(self, tmp_path: Path):
+        result, calls = self._run(tmp_path, "missing-channel", "show")
+        assert result.returncode != 0
+        assert "workspace new missing-channel" in result.stderr
+        assert "002ch-deepfocus365" in result.stderr
+        assert "workspace select" not in calls
+
+    def test_selects_verifies_and_shows_state(self, tmp_path: Path):
+        result, calls = self._run(tmp_path, "003ch-soulful-grooves", "show")
+        assert result.returncode == 0, result.stderr
+        assert "workspace select 003ch-soulful-grooves" in calls
+        assert "workspace show" in calls
+        assert "state list" in calls
+
+    def test_rejects_missing_video_before_plan(self, tmp_path: Path):
+        missing = tmp_path / "missing.mp4"
+        result, calls = self._run(tmp_path, "003ch-soulful-grooves", "plan", "--video", str(missing))
+        assert result.returncode != 0
+        assert str(missing) in result.stderr
+        assert " plan" not in calls
+
+    def test_dry_run_prints_reference_not_secret(self, tmp_path: Path):
+        video = tmp_path / "stream.mp4"
+        video.touch()
+        result, calls = self._run(
+            tmp_path,
+            "002ch-deepfocus365",
+            "plan",
+            "--video",
+            str(video),
+            "--dry-run",
+        )
+        assert result.returncode == 0, result.stderr
+        assert "op://Personal/YouTube_DeepFocus365/stream_key" in result.stdout
+        assert "secret-value" not in result.stdout + result.stderr
+        assert calls == ""
+
+    def test_show_dry_run_does_not_require_registered_stream_key(self, tmp_path: Path):
+        result, calls = self._run(tmp_path, "unregistered-channel", "show", "--dry-run")
+        assert result.returncode == 0, result.stderr
+        assert "stream-key-ref" not in result.stdout
+        assert "terraform show" not in result.stdout
+        assert calls == ""
+
+    def test_help_does_not_include_shell_setup(self, tmp_path: Path):
+        result, calls = self._run(tmp_path, "--help")
+        assert result.returncode == 0, result.stderr
+        assert "set -euo pipefail" not in result.stdout
+        assert calls == ""
+
+    def test_plan_injects_channel_slug(self, tmp_path: Path):
+        video = tmp_path / "stream.mp4"
+        video.touch()
+        result, calls = self._run(tmp_path, "003ch-soulful-grooves", "plan", "--video", str(video))
+        assert result.returncode == 0, result.stderr
+        assert "plan channel=003ch-soulful-grooves" in calls
+        assert "secret-value" not in result.stdout + result.stderr
+
+    def test_destroy_without_video_injects_required_video_path(self, tmp_path: Path):
+        result, calls = self._run(tmp_path, "003ch-soulful-grooves", "destroy")
+        assert result.returncode == 0, result.stderr
+        assert "destroy channel=003ch-soulful-grooves video=/dev/null" in calls
+
+    def test_apply_rejects_unregistered_ssh_key_before_terraform(self, tmp_path: Path):
+        video = tmp_path / "stream.mp4"
+        video.touch()
+        result, calls = self._run(
+            tmp_path,
+            "003ch-soulful-grooves",
+            "apply",
+            "--video",
+            str(video),
+            agent_fingerprint="SHA256:other",
+        )
+        assert result.returncode != 0
+        assert "ssh-agent" in result.stderr
+        assert " apply" not in calls
+
+    def test_apply_accepts_registered_ssh_key(self, tmp_path: Path):
+        video = tmp_path / "stream.mp4"
+        video.touch()
+        result, calls = self._run(
+            tmp_path,
+            "003ch-soulful-grooves",
+            "apply",
+            "--video",
+            str(video),
+        )
+        assert result.returncode == 0, result.stderr
+        assert f"apply channel=003ch-soulful-grooves video={video}" in calls
+
 
 # ============================================================================
 # .claude/skills/streaming/references/swap_video.sh — #111 1 コマンドラッパー

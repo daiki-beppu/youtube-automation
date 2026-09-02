@@ -32,6 +32,7 @@ _STREAMING_SKILL = _REPO_ROOT / ".claude" / "skills" / "streaming" / "SKILL.md"
 
 _SCRIPTS_STREAMING_DIR = _REPO_ROOT / ".claude" / "skills" / "streaming" / "references"
 _SWAP_VIDEO_SCRIPT = _SCRIPTS_STREAMING_DIR / "swap_video.sh"
+_SELECT_CHANNEL_SCRIPT = _SCRIPTS_STREAMING_DIR / "select_channel.sh"
 _RUN_FFMPEG_SCRIPT = _SCRIPTS_STREAMING_DIR / "run-ffmpeg.sh"
 
 _TFSTATE_BACKEND_PREFIX = "streaming"
