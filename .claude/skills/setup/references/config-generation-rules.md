@@ -63,7 +63,7 @@
 | フィールド | 内容 |
 |---|---|
 | `template` | `"{style} {theme} ... Music - {activity} BGM [{duration_display}]"` 形式 |
-| `theme_scenes` | テーマ → アクティビティ + 英語シーンフレーズのマッピング（TTP 形式・推奨）。`{theme: {activities: "...", scene: "..."}}` 形式。`yt-populate-scene-phrases` の `--en` 自動補完に使われる |
+| `theme_scenes` | テーマ slug に含まれるキーワード → アクティビティ + 英語シーンフレーズのマッピング（TTP 形式・推奨）。`{keyword: {activities: "...", scene: "..."}}` 形式。キーは `tags.themes` のテーマグループ名に限定せず、実際の slug（例: `wah-guitar-fusion`）に完全一致または部分一致する語を使う。`yt-populate-scene-phrases` の `--en` 自動補完に使われる |
 | `theme_activities` | テーマ → アクティビティのマッピング（レガシー形式）。`theme_scenes` 未設定のときのみ参照される |
 
 `activities` に複数の値を書く場合はカンマ区切り（例: `"Focus, Study, Writing"`）を使う。

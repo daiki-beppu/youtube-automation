@@ -1415,10 +1415,3 @@ def _validate_cross_file(
                 f"content_model.languages に localizations.supported_languages へ未登録の"
                 f"言語があります: {unknown_langs}"
             )
-
-    # 2. title.theme_scenes のキー ⊆ tags.themes のキー
-    unknown_scenes = set(content.title.theme_scenes.keys()) - set(content.tags.themes.keys())
-    if unknown_scenes:
-        raise ConfigError(
-            f"title.theme_scenes に tags.themes で定義されていないテーマキーがあります: {sorted(unknown_scenes)}"
-        )
