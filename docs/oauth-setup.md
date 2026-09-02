@@ -2,9 +2,6 @@
 
 `/setup --tool` で GCP / OAuth / ADC と動画アップロードの前提を整えるための**運営者向け正本**。
 
-> [!WARNING]
-> 本 Python 版はメンテナンスモードである。新規導入前に [`migration/python-to-tayk.md`](migration/python-to-tayk.md) の移行方針も確認する。
-
 > [!IMPORTANT]
 > この手順は先に [`ツール導入`](tool-setup.md) を完了していることを前提とする。
 

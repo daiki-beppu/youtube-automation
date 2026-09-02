@@ -1,11 +1,10 @@
 # Onboarding
 
-> [!WARNING]
-> **移行告知（2026-07-02 / 2026-07-08 改訂）**: 本 Python 版は**メンテナンスモード**（バグ修正のみ、新機能なし）です。後継の TypeScript 製 **`tayk`**（npm パッケージ）が実運用カバレッジに達した時点で提供終了を判断します（期日は設けません）。これから新規導入する場合も必ず [`docs/migration/python-to-tayk.md`](docs/migration/python-to-tayk.md) を先に読んでください。
-
 `youtube-channels-automation` は **複数の BGM 系 YouTube チャンネルを 1 人で運営するためのツールキット**である。本書は **下流チャンネルリポジトリの運営者** を一次読者とし、`/setup --channel` から始まる新規開設フロー → 1 コレクション完成 → 継続運用までの動線をまとめる。
 
 > 本リポジトリそのものを編集する開発者向けのメモは末尾の §6「付録: 開発者向け」に置く。
+
+> 過去に公開した tayk への移行案内は撤回済みであり、経緯のみを [`docs/migration/python-to-tayk.md`](docs/migration/python-to-tayk.md) に記録している。
 
 ---
 

@@ -10,23 +10,26 @@ CLAUDE.md の「アーキテクチャ」節の詳細版。要点は CLAUDE.md �
 
 ### 配布・移行
 
-**tayk**: cutover 後に公開する予定のブランド、npm package 名、bin 名。現行 Python 版の canonical CLI は `yt-*` であり、cutover 後の起動方式として `bunx tayk <cmd>` を計画している。
+> [!NOTE]
+> Python 版のメンテナンスモード純化と cutover は [ADR-0021 の Amendment](adr/0021-separate-repo-restart.md)（2026-09-01, #4779）で**撤回済み**である。本リポジトリはアクティブ開発を継続しており、tayk は後継・移行先ではなく独立した別プロジェクトである。以下の cutover 系の語は、撤回済みの計画を記録した文書（ADR-0015 / `docs/audits/` / `docs/migration/python-to-tayk.md` 等）を読むための語彙として残す。
 
-**cutover**: first-party 下流の日常運用が tayk のみで回るようになり、Python 版のメンテナンスを終了するイベント。tayk のリリース単位とは独立した判断であり、同一リポジトリ内の big-bang merge ではない。
+**tayk**: 独立した別プロジェクトとして開発している TypeScript 製ツールの npm package 名、bin 名。撤回済みの計画では Python 版の後継ブランドと位置づけ、`bunx tayk <cmd>` を cutover 後の起動方式としていた。本リポジトリの canonical CLI は `yt-*` である。
 
-**dogfood**: cutover 前に first-party 2 リポジトリで各コレクション 1 本のフルライフサイクルを実走させる受け入れ検証。期間ではなく完走で判定する。
+**cutover**: 撤回済みの計画で、first-party 下流の日常運用が tayk のみで回るようになった時点で Python 版のメンテナンスを終了するとしていたイベント。実施しない。
 
-**critical regression**: cutover をブロックする欠陥。誤公開・誤メタデータ、analytics 履歴または collection 成果物のデータ破壊、auth 破壊の 3 種に限る。
+**dogfood**: 撤回済みの cutover 判断のために計画していた受け入れ検証。first-party 2 リポジトリで各コレクション 1 本のフルライフサイクルを実走させ、期間ではなく完走で判定するとしていた。
 
-**first-party**: 運営者自身が保有するチャンネルリポジトリ。dogfood の対象であり、第三者 consumer が存在しないことを意味しない。
+**critical regression**: 撤回済みの計画で cutover をブロックする欠陥として定義していた区分。誤公開・誤メタデータ、analytics 履歴または collection 成果物のデータ破壊、auth 破壊の 3 種に限る。
 
-**external user**: `uv add git+https://` で Python 版を導入し skills 経由で運用する第三者コミュニティ。first-party ではないため dogfood 対象外だが、cutover の告知義務と移行コスト判断に影響する。
+**first-party**: 運営者自身が保有するチャンネルリポジトリ。第三者 consumer が存在しないことを意味しない。
+
+**external user**: `uv add git+https://` で Python 版を導入し skills 経由で運用する第三者コミュニティ。first-party ではなく、リポジトリの方針変更を告知する対象となる層。
 
 ### 計画・設定
 
 **Phase**: 実行順の見出しで、「いつ書くか」を表す。Tier とは直交する。
 
-**Tier**: マイルストーンゲート所属のバッジ。[T1] は dogfood ブロッカー、[T2] は cutover ブロッカー、[T3] は port せず削除を表す。優先度ではない。
+**Tier**: 撤回済みの cutover 計画で、マイルストーンゲート所属を表したバッジ。[T1] は dogfood ブロッカー、[T2] は cutover ブロッカー、[T3] は port せず削除を表した。優先度ではない。
 
 **config format**: tayk core が読み書きするファイル形式。すべて JSON とし、core は YAML パーサー依存を持たない。takt や CI など外部ツール所有ファイルは各ツールの規約に従う。
 
@@ -40,7 +43,7 @@ CLAUDE.md の「アーキテクチャ」節の詳細版。要点は CLAUDE.md �
 
 **primitive tool**: 単一操作を行う細粒度の MCP tool。workflow tool が内部で呼ぶほか、agent が直接呼んで細かく制御できる。
 
-**knowledge codec**: MCP tool の WHAT に対して WHEN/HOW を提供するドメイン知識パッケージ。60+ skill を `collection-lifecycle`、`channel-management`、`analytics`、`content-quality`、`distribution` の 5 本に集約し、cutover 時点で下流へ配布する操作面はこの 5 本だけとする。
+**knowledge codec**: MCP tool の WHAT に対して WHEN/HOW を提供するドメイン知識パッケージ。60+ skill を `collection-lifecycle`、`channel-management`、`analytics`、`content-quality`、`distribution` の 5 本に集約する設計。撤回済みの cutover 計画では、cutover 時点で下流へ配布する操作面をこの 5 本だけとするとしていた。
 
 **adapter**: core の MCP tool を各プロトコルへ橋渡しする薄いラッパ。MCP adapter と CLI adapter（`tayk <cmd>`）がある。
 

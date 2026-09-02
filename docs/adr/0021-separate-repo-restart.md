@@ -62,3 +62,9 @@ ADR-0001 以降、TS リライトは同一リポの `feat/ts-rewrite` → main �
 ## Amendment: Audio Studio 限定 TypeScript 例外（2026-08-20, #4380）
 
 collection 音源を loopback で編集する Python 製品 UI に限り、`audio-studio/` 内の React + Vite + shadcn/ui source、test、build config と、完成 asset の `src/youtube_automation/audio_studio_dist/` を許可する。Python が filesystem・probe・Range 配信・lifecycle を所有し、frontend は同一 origin API だけを利用する。`dashboard/` と `extensions/shared-ui` を直接 import せず、独立した Base UI / Tailwind CSS v4 workspace とする。責務・配布境界の正は ADR-0028 と `docs/development.md::Audio Studio 開発` とする。
+
+## Amendment: Python 版のメンテナンスモードと cutover の撤回（2026-09-01, #4779）
+
+Decision 3 のうち、**本リポジトリを Python 版のメンテナンスモードに限定する決定と、tayk の実運用カバレッジを条件に Python コードを削除する cutover は撤回する**。告知後も本リポジトリでは ADR-0022〜0028 を含む新機能開発が続き、実態と「バグ修正のみ」という説明が一致しなくなった。また、tayk は本リポジトリの後継・移行先ではなく、独立した別プロジェクトとして位置づける。
+
+この撤回は、tayk を別リポジトリで開発する物理分離、本リポジトリから旧 `packages/` を削除した決定、および本リポジトリ内の TypeScript 実装境界を変更しない。外部へ公開済みの移行告知は URL を維持したまま、撤回済みの履歴文書へ変更する。
