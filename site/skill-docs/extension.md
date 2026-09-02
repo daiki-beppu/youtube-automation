@@ -2,7 +2,7 @@
 
 automation と一緒に使う Chrome 拡張の導入・更新と、拡張が collection を読むためのローカル server を管理するスキルです。suno-helper、distrokid-helper、community-helper の 3 種を扱い、対象だけを modifier で絞れます。フラグなしでは各拡張の状態を調べ、未導入なら install、旧版なら update、最新版なら skip します。
 
-| mode | すること | 主な結果 |
+| mode | すること | 主な成果物 |
 |---|---|---|
 | `--install` | GitHub Release から拡張を新規導入 | `~/chrome-extensions/<name>/` |
 | `--update` | 導入済み拡張を最新 release に置換 | release と一致した manifest version |

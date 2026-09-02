@@ -2,7 +2,7 @@
 
 下流のチャンネルリポジトリを youtube-automation の最新 release へ追従させたり、導入中の version に即してツールキットの使い方を調べたりするスキルです。更新は差分確認と人間の承認を挟む wizard、質問はローカル資料を優先する読み取り専用処理として分離されています。upstream 本体ではなく、automation package を依存に持つ下流リポジトリで使います。
 
-| mode | すること | 主な結果 |
+| mode | すること | 主な成果物 |
 |---|---|---|
 | `--update` | package、lock、skill を最新 release へ追従 | 更新済みファイルとローカル commit |
 | `--question` | 仕様、skill、CLI の質問に根拠つきで回答 | version と参照元を示した回答 |
