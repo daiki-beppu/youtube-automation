@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 
 from tests.helpers.paths import REPO_ROOT
+from youtube_automation.commands.system.skills_sync import _DEV_ONLY_SKILL_NAMES
 
 SKILLS_ROOT = REPO_ROOT / ".claude" / "skills"
 FEATURES_PATH = REPO_ROOT / "docs" / "features.md"
@@ -13,6 +14,16 @@ SOURCE_PATH = REPO_ROOT / "site" / "skill-page-source.ts"
 
 def _skill_names() -> set[str]:
     return {path.parent.name for path in SKILLS_ROOT.glob("*/SKILL.md")}
+
+
+def _site_dev_only_skill_names() -> set[str]:
+    source = SOURCE_PATH.read_text(encoding="utf-8")
+    match = re.search(
+        r"export const DEV_ONLY_SKILL_NAMES = new Set\(\[([\s\S]*?)\]\);",
+        source,
+    )
+    assert match is not None
+    return set(re.findall(r'"([a-z0-9-]+)"', match.group(1)))
 
 
 def _catalog_names() -> list[str]:
@@ -26,16 +37,20 @@ def _introduction_counts(features: str) -> list[int]:
 
 
 def test_skill_catalog_matches_all_distributed_skills() -> None:
-    skill_names = _skill_names()
+    skill_names = _skill_names() - _DEV_ONLY_SKILL_NAMES
     catalog_names = _catalog_names()
 
-    assert len(skill_names) == 22
+    assert len(skill_names) == 19
     assert len(catalog_names) == len(set(catalog_names))
     assert set(catalog_names) == skill_names
 
     # 件数表記は無くてもよいが、書くなら実数と一致していること。
     features = FEATURES_PATH.read_text(encoding="utf-8")
     assert all(count == len(skill_names) for count in _introduction_counts(features))
+
+
+def test_site_dev_only_skills_match_distribution_source_of_truth() -> None:
+    assert _site_dev_only_skill_names() == _DEV_ONLY_SKILL_NAMES
 
 
 def test_stale_skill_count_in_introduction_is_detected() -> None:

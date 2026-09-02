@@ -47,6 +47,7 @@ const createRepository = async () => {
   const root = await mkdtemp(join(tmpdir(), "skill-page-source-"));
   await mkdir(join(root, ".claude/skills/alpha"), { recursive: true });
   await mkdir(join(root, ".claude/skills/beta"), { recursive: true });
+  await mkdir(join(root, ".claude/skills/hallmark"), { recursive: true });
   await mkdir(join(root, "docs"), { recursive: true });
   await writeFile(
     join(root, ".claude/skills/alpha/SKILL.md"),
@@ -56,6 +57,11 @@ const createRepository = async () => {
   await writeFile(
     join(root, ".claude/skills/beta/SKILL.md"),
     skillMarkdown({ description: "Use when beta", name: "beta" }),
+    "utf8"
+  );
+  await writeFile(
+    join(root, ".claude/skills/hallmark/SKILL.md"),
+    skillMarkdown({ description: "Use when hallmark", name: "hallmark" }),
     "utf8"
   );
   await writeFile(join(root, "docs/features.md"), catalog, "utf8");
@@ -100,6 +106,7 @@ test("一覧と全 skill ページを生成し、参照をサイト内リンク�
     result.entries.map((entry) => entry.slug),
     ["/skills", "/skills/alpha", "/skills/beta"]
   );
+  assert(!result.entries.some((entry) => entry.slug === "/skills/hallmark"));
   const alpha = result.entries.find((entry) => entry.slug === "/skills/alpha");
   assert.match(alpha.body.text, /\[\/beta\]\(\/skills\/beta\)/);
   assert.match(alpha.body.text, /## 前提\n\nalpha prerequisite/);
@@ -145,7 +152,7 @@ test("skill を追加するとカタログ更新前でも個別ページが増�
   assert.match(after.entries[0].body.text, /## 未分類/);
 });
 
-test("実リポジトリでは9カテゴリと全skillを生成する", async () => {
+test("実リポジトリでは9カテゴリと配布対象skillだけを生成する", async () => {
   const repositoryRoot = resolve(import.meta.dirname, "../..");
   const source = createSkillPageSource({ repositoryRoot });
   const result = await source.load();
@@ -153,13 +160,13 @@ test("実リポジトリでは9カテゴリと全skillを生成する", async ()
     await readFile(join(repositoryRoot, "docs/features.md"), "utf8")
   ).match(/^\| \/[a-z0-9-]+ /gmu);
 
-  assert.equal(result.entries.length, 23);
-  assert.equal(skillDirectories?.length, 22);
+  assert.equal(result.entries.length, 20);
+  assert.equal(skillDirectories?.length, 19);
   assert.equal(parseSkillCategories(await readFile(join(repositoryRoot, "docs/features.md"), "utf8")).length, 9);
   assert.doesNotMatch(result.entries[0].body.text, /## 未分類/);
 });
 
-test("production build は一覧と22個の個別ページを公開する", async () => {
+test("production build は一覧と19個の個別ページを公開する", async () => {
   const siteRoot = resolve(import.meta.dirname, "..");
   const index = await readFile(join(siteRoot, "dist/skills/index.html"), "utf8");
   const thumbnail = await readFile(
@@ -168,11 +175,12 @@ test("production build は一覧と22個の個別ページを公開する", asyn
   );
   const music = await readFile(join(siteRoot, "dist/skills/music/index.html"), "utf8");
 
-  assert.match(index, /22 個の skill/);
+  assert.match(index, /19 個の skill/);
   assert.match(index, /href="\/skills\/wf-new"/);
   assert.doesNotMatch(index, /href="\/skills\/masterup"/);
   assert.doesNotMatch(index, /href="\/skills\/flop-analysis"/);
   assert.doesNotMatch(index, /href="\/skills\/channel-status"/);
+  assert.doesNotMatch(index, /href="\/skills\/(?:automation-release|hallmark|shadcn)"/);
   assert.equal((index.match(/<h1\b/g) ?? []).length, 1);
   assert.match(index, /<h1[^>]*>発動条件から skill を使う<\/h1>/);
   assert.match(index, /href="\/features"/);
