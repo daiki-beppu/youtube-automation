@@ -78,17 +78,21 @@ def _create_stub_bin(tmp_path: Path) -> Path:
     _write_executable(
         bin_dir / "afinfo",
         """#!/bin/bash
+afinfo() {
 printf 'File:           %s\\nestimated duration: %s sec\\n' "$1" "${FFPROBE_DURATION:-1.00}"
+}
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then afinfo "$@"; fi
+true
 """,
     )
     _write_executable(
         bin_dir / "ffprobe",
         """#!/bin/bash
-set -eu
+ffprobe() {
 args="$*"
 input_path="${!#}"
 if [[ "${FFPROBE_OUTPUT_FAIL:-0}" == "1" && "$input_path" == *"-Master.mp4" ]]; then
-    exit 1
+    return 1
 fi
 if [[ "$args" == *"format=duration"* ]]; then
     if [[ "$input_path" == *"-Master.mp4" && -n "${FFPROBE_OUTPUT_DURATION+x}" ]]; then
@@ -98,42 +102,44 @@ if [[ "$args" == *"format=duration"* ]]; then
     else
         printf '%s\\n' "${FFPROBE_DURATION:-1.00}"
     fi
-    exit 0
+    return 0
 fi
 if [[ "$args" == *"stream=r_frame_rate"* ]]; then
     printf '%s\\n' "${FFPROBE_OUTPUT_FRAME_RATE-24/1}"
-    exit 0
+    return 0
 fi
 if [[ "$args" == *"stream=width,height,pix_fmt,r_frame_rate"* ]]; then
     printf '%s\\n' "${FFPROBE_STREAM_OUTPUT}"
-    exit 0
+    return 0
 fi
 if [[ "$args" == *"stream=bit_rate"* ]]; then
     printf '%s\\n' "${FFPROBE_STREAM_BITRATE_OUTPUT:-}"
-    exit 0
+    return 0
 fi
 if [[ "$args" == *"format=bit_rate"* ]]; then
     printf '%s\\n' "${FFPROBE_FORMAT_BITRATE_OUTPUT:-}"
-    exit 0
+    return 0
 fi
-exit 0
+}
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then ffprobe "$@"; fi
+true
 """,
     )
     _write_executable(
         bin_dir / "ffmpeg",
         """#!/bin/bash
-set -eu
+ffmpeg() {
 if [[ "$*" == *"-encoders"* ]]; then
     printf ' A..... aac \\n'
     if [[ -n "${FFMPEG_ENCODERS:-}" ]]; then printf '%b' "$FFMPEG_ENCODERS"; fi
-    exit 0
+    return 0
 fi
 
 if [[ -n "${FFMPEG_LOG:-}" ]]; then
     printf '%s\\n' "$*" >> "${FFMPEG_LOG}"
 fi
 if [[ -n "${FFMPEG_FAIL_MATCH:-}" && "$*" == *"${FFMPEG_FAIL_MATCH}"* ]]; then
-    exit 9
+    return 9
 fi
 
 progress_path=""
@@ -154,17 +160,19 @@ if [[ -n "$progress_path" ]]; then
 fi
 
 output_path="${!#}"
-mkdir -p "$(dirname "$output_path")"
 printf 'stub-output' > "$output_path"
 if [[ -n "$duration" ]]; then
     printf '%s\\n' "$duration" > "${output_path}.duration"
 fi
+}
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then ffmpeg "$@"; fi
+true
 """,
     )
     _write_executable(
         bin_dir / "jq",
         """#!/bin/bash
-set -eu
+jq() {
 expr=""
 file=""
 for arg in "$@"; do
@@ -255,6 +263,49 @@ PY
     *".overlays.encoder.framerate"*) printf '%s\\n' "${OVERLAY_ENCODER_FRAMERATE:-}" ;;
     *) printf '\\n' ;;
 esac
+}
+
+uv() {
+    if [[ -n "${UV_LOG:-}" ]]; then
+        command uv "$@"
+        return
+    fi
+    if [[ "$*" != *"youtube_automation.infrastructure.media.audio_visualizer_mask"* ]]; then
+        printf 'unexpected uv invocation: %s\\n' "$*" >&2
+        return 2
+    fi
+    local output="" prev="" arg
+    for arg in "$@"; do
+        if [[ "$prev" == "--output" ]]; then output="$arg"; fi
+        prev="$arg"
+    done
+    if [[ -z "$output" ]]; then
+        printf 'audio visualizer mask output is required\\n' >&2
+        return 2
+    fi
+    printf 'stub-mask' > "$output"
+}
+
+dirname() {
+    local path="${1%/}" parent
+    parent="${path%/*}"
+    if [[ -z "$parent" ]]; then parent="/"; fi
+    printf '%s\\n' "$parent"
+}
+
+basename() {
+    local path="${1%/}"
+    printf '%s\\n' "${path##*/}"
+}
+
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    jq "$@"
+fi
+stub_bin_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$stub_bin_dir/afinfo"
+source "$stub_bin_dir/ffprobe"
+source "$stub_bin_dir/ffmpeg"
+true
 """,
     )
     _write_executable(
@@ -289,6 +340,12 @@ def _shared_stub_bin(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Path]
     数百 ms かかるため、テストごとに stub を作り直すと 1 テストあたり
     0.5〜0.8s のオーバーヘッドになる。stub は環境変数と引数だけで挙動が決まり
     bin ディレクトリ側に状態を持たないので、session 全体で安全に共有できる。
+
+    jq / ffprobe / ffmpeg stub と単純な path helper は ``BASH_ENV`` から function としても読み込む。
+    overlay 設定を多数読む 1 回の script 実行で同じ短命 shell を数十回起動するコスト
+    だけを除き、各引数と戻り値、および production script の分岐は従来どおり検査する。
+    runtime mask の通常ケースも function で出力を再現するが、``UV_LOG`` を指定する
+    起動契約テストは PATH 上の専用 executable へ委譲して実際の argv を検査する。
     """
     global _SHARED_STUB_BIN
     _SHARED_STUB_BIN = _create_stub_bin(tmp_path_factory.mktemp("shared-stub"))
@@ -324,6 +381,7 @@ def _run_generate_videos(
     env["FFPROBE_STREAM_OUTPUT"] = stream_output
     env["FFPROBE_STREAM_BITRATE_OUTPUT"] = stream_bitrate_output
     env["FFMPEG_LOG"] = str(ffmpeg_log)
+    env["BASH_ENV"] = str(bin_dir / "jq")
     if extra_env:
         env.update(extra_env)
     script_args = extra_args or []
