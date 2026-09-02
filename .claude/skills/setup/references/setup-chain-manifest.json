@@ -106,7 +106,7 @@
       "skill": "setup",
       "defaultChain": false,
       "reference": "references/regeneration-mode.md",
-      "prerequisiteArtifacts": ["docs/channel/channel-direction.md"],
+      "prerequisiteArtifacts": ["docs/channel/channel-direction.json", "docs/channel/channel-direction.html"],
       "outputArtifacts": ["config/channel/meta.json", "doctor:channel_config", "doctor:ttp_wf_new_readiness"],
       "approvalGate": {"skip": true, "configPath": "workflow.setup.skip_approvals.regenerate"},
       "idempotency": {"script": "references/setup-chain-state.py"}

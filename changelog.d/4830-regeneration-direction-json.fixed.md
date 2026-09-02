@@ -1,0 +1,1 @@
+- `/setup --regenerate` が検証済みの `channel-direction.json` + `.html` pair を確認し、JSON 正本だけから設定を再生成する契約へ修正

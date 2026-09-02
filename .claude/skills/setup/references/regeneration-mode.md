@@ -10,11 +10,11 @@
 **前提**:
 
 - `/setup --channel` が完了していること（TTP 対象確認 / seed fetch / 承認済み benchmark.channels 反映 / config / persona / branding の初期生成は同 mode が担当する）
-- 方向性検討モードが完了し、`docs/channel/channel-direction.md` が存在すること
+- 方向性検討モードが完了し、検証済み `docs/channel/channel-direction.json` + `.html` pair が存在すること
 
 ## Step R1: 方向性ドキュメントの読み込み
 
-`docs/channel/channel-direction.md` を読み、確定した方向性を把握:
+`docs/channel/channel-direction.json` + `.html` pair を検証し、入力には JSON だけを使って確定した方向性を把握する（HTML や旧 Markdown を直接 parse しない）:
 - チャンネル名、短縮名、ジャンル、スタイル、コンテキスト
 - コアメッセージ、差別化ポイント
 - 動画の長さ、投稿頻度、音楽エンジン
@@ -79,9 +79,9 @@ self-check が pass したら提案をユーザーに見せ、承認 or 修正�
 含めるべきセクション（必須・skill-config 管理・オプション）は **`.claude/skills/setup/references/config-generation-rules.md`** を参照。
 `benchmark.channels` は `/setup --channel` で承認済み TTP 対象だけが設定済み（`config/channel/analytics.json`）。
 
-**channel-direction.md からの転記（必須・空のまま終了しないこと、issue #567）**:
+**`channel-direction.json` からの転記（必須・空のまま終了しないこと、issue #567）**:
 
-| `channel-direction.md` の決定 | 書き込み先 |
+| `channel-direction.json` の決定 | 書き込み先 |
 |---|---|
 | 動画の長さ（分）| `config/channel/audio.json::audio.target_duration_min` / `target_duration_max` |
 | テーマ → アクティビティ・シーンの対応表 | `config/channel/content.json::title.theme_scenes`（TTP 形式・推奨）または `title.theme_activities`（レガシー） |
@@ -95,11 +95,11 @@ self-check が pass したら提案をユーザーに見せ、承認 or 修正�
 
 ## Step R3.5: config/skills/*.yaml への転記（音楽方向性・サムネ TTP）
 
-`docs/channel/channel-direction.md` の「ジャンル & スタイル」「ビジュアルアイデンティティ」決定は
+`docs/channel/channel-direction.json` の「ジャンル & スタイル」「ビジュアルアイデンティティ」決定は
 **必ず** `config/skills/<skill>.yaml` に転記する。空のまま残ると下流 skill が
 チャンネル方向性を AI に手書きさせる素地になる（issue #567 根本原因）。
 
-雛形は `.claude/skills/setup/references/config-template/skills/<skill>.yaml`。channel-direction.md の決定を
+雛形は `.claude/skills/setup/references/config-template/skills/<skill>.yaml`。`channel-direction.json` の決定を
 プレースホルダ（`{{...}}`）に埋めてから `config/skills/` 配下にコピーする。
 
 | 対象 skill | 雛形 | 書き込む内容 |
@@ -139,7 +139,7 @@ Fail Fast 原則）。再生成モード側で空欄を残さないことで、�
 
 | ファイル | 生成方法 |
 |---------|---------|
-| `config/channel/audio.json` | `.claude/skills/setup/references/config-template/audio.json` をコピー。`target_duration_min` は channel-direction.md の「動画の長さ」を必ず転記する（空のまま終了しない、issue #567）|
+| `config/channel/audio.json` | `.claude/skills/setup/references/config-template/audio.json` をコピー。`target_duration_min` は `channel-direction.json` の「動画の長さ」を必ず転記する（空のまま終了しない、issue #567）|
 | `config/schedule_config.json` | `.claude/skills/setup/references/schedule-template.json` をコピー。投稿頻度と `upload_settings` を方向性に合わせて調整する |
 | `config/localizations.json` | `.claude/skills/setup/references/localizations-template.json`（既定 `["ja", "en"]`）を起点に、次の 3 分岐へ必ず調整する: TTP かつ競合が多言語なら競合 `localizations` の言語セットを追加・削除せず踏襲、TTP かつ競合が非多言語なら `en` のみ、非 TTP なら単一言語・ローカライズなしとしてファイル省略可。省略時は `load_config().localizations.supported_languages` が `youtube.api.language` へフォールバックする。ジャンル情報を反映した具体的な文言に調整し、`languages.<lang>.title_template` のプレースホルダは **`{scene_phrase}` / `{activities}` / `{scene_emoji}` のみ使用可**（アップローダー許可リスト、issue #1471）。`{style}` / `{theme}` / `{axis_label}` 等の content.json 用キーは使わない。違反は `uv run yt-doctor --json` の `channel_config` check が検出する。`config/localizations.json` が唯一の Canonical ソース |
 | `.claude/CLAUDE.md` | `.claude/skills/setup/references/claude-md-template.md` の `{{CHANNEL_NAME}}` / `{{DIR_NAME}}` を置換 |
