@@ -55,6 +55,8 @@ if [[ "$ACTION" == "plan" || "$ACTION" == "apply" ]]; then
     [[ -f "$VIDEO_PATH" ]] || { error "動画ファイルが存在しません: $VIDEO_PATH"; exit 1; }
     command -v realpath >/dev/null 2>&1 || { error "realpath が見つかりません"; exit 1; }
     VIDEO_PATH="$(realpath "$VIDEO_PATH")"
+elif [[ "$ACTION" == "destroy" ]]; then
+    VIDEO_PATH="/dev/null"
 fi
 
 resolve_stream_key_ref() {
@@ -103,6 +105,10 @@ log "workspace: $SELECTED_WORKSPACE"
 terraform -chdir="$TF_DIR" state list
 
 [[ "$ACTION" == "show" ]] && exit 0
+if [[ "$ACTION" == "apply" ]]; then
+    SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+    "$SCRIPT_DIR/verify_ssh_agent_key.sh" "$HOME/.ssh/yt_stream_key"
+fi
 command -v op >/dev/null 2>&1 || { error "1Password CLI (op) が見つかりません"; exit 1; }
 STREAM_KEY_REF="$(resolve_stream_key_ref "$CHANNEL_SLUG")"
 log "stream-key-ref: $STREAM_KEY_REF"
@@ -113,7 +119,7 @@ TF_VAR_vultr_api_key="$(op read "$VULTR_API_KEY_REF")"
 TF_VAR_discord_webhook_url="$(op read "$DISCORD_WEBHOOK_REF")"
 export TF_VAR_channel_slug="$CHANNEL_SLUG"
 export TF_VAR_stream_key TF_VAR_vultr_api_key TF_VAR_discord_webhook_url
-[[ -n "$VIDEO_PATH" ]] && export TF_VAR_video_path="$VIDEO_PATH"
+export TF_VAR_video_path="$VIDEO_PATH"
 
 terraform_args=("-chdir=$TF_DIR" "$ACTION")
 if $AUTO_APPROVE && [[ "$ACTION" == "apply" || "$ACTION" == "destroy" ]]; then

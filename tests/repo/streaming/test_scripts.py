@@ -26,7 +26,12 @@ class TestSelectChannelScript:
     """チャンネル選択と Terraform 変数注入を一体化するラッパーの契約。"""
 
     @staticmethod
-    def _run(tmp_path: Path, workspace: str, *args: str) -> tuple[subprocess.CompletedProcess[str], str]:
+    def _run(
+        tmp_path: Path,
+        workspace: str,
+        *args: str,
+        agent_fingerprint: str = "SHA256:test",
+    ) -> tuple[subprocess.CompletedProcess[str], str]:
         tf_dir = tmp_path / "terraform"
         tf_dir.mkdir(exist_ok=True)
         (tf_dir / "main.tf").touch()
@@ -36,7 +41,8 @@ class TestSelectChannelScript:
         terraform = stub_dir / "terraform"
         terraform.write_text(
             "#!/usr/bin/env bash\n"
-            'printf "%s channel=%s\\n" "$*" "${TF_VAR_channel_slug:-}" >> "$CALLS"\n'
+            'printf "%s channel=%s video=%s\\n" "$*" "${TF_VAR_channel_slug:-}" '
+            '"${TF_VAR_video_path:-}" >> "$CALLS"\n'
             'case "$*" in\n'
             '  *"workspace list"*) printf "  default\\n  002ch-deepfocus365\\n  003ch-soulful-grooves\\n" ;;\n'
             f'  *"workspace show"*) printf "%s\\n" "${{SHOW_WORKSPACE:-{workspace}}}" ;;\n'
@@ -47,8 +53,25 @@ class TestSelectChannelScript:
         op = stub_dir / "op"
         op.write_text('#!/usr/bin/env bash\nprintf "secret-value\\n"\n', encoding="utf-8")
         op.chmod(0o755)
+        ssh_keygen = stub_dir / "ssh-keygen"
+        ssh_keygen.write_text(
+            '#!/usr/bin/env bash\nprintf "256 SHA256:test operator@test (ED25519)\\n"\n',
+            encoding="utf-8",
+        )
+        ssh_keygen.chmod(0o755)
+        ssh_add = stub_dir / "ssh-add"
+        ssh_add.write_text(
+            f'#!/usr/bin/env bash\nprintf "256 {agent_fingerprint} operator@test (ED25519)\\n"\n',
+            encoding="utf-8",
+        )
+        ssh_add.chmod(0o755)
+        home_dir = tmp_path / "home"
+        ssh_dir = home_dir / ".ssh"
+        ssh_dir.mkdir(parents=True)
+        (ssh_dir / "yt_stream_key.pub").write_text("stub public key\n", encoding="utf-8")
         env = {
             **os.environ,
+            "HOME": str(home_dir),
             "PATH": f"{stub_dir}:{os.environ['PATH']}",
             "CALLS": str(calls),
         }
@@ -118,6 +141,39 @@ class TestSelectChannelScript:
         assert result.returncode == 0, result.stderr
         assert "plan channel=003ch-soulful-grooves" in calls
         assert "secret-value" not in result.stdout + result.stderr
+
+    def test_destroy_without_video_injects_required_video_path(self, tmp_path: Path):
+        result, calls = self._run(tmp_path, "003ch-soulful-grooves", "destroy")
+        assert result.returncode == 0, result.stderr
+        assert "destroy channel=003ch-soulful-grooves video=/dev/null" in calls
+
+    def test_apply_rejects_unregistered_ssh_key_before_terraform(self, tmp_path: Path):
+        video = tmp_path / "stream.mp4"
+        video.touch()
+        result, calls = self._run(
+            tmp_path,
+            "003ch-soulful-grooves",
+            "apply",
+            "--video",
+            str(video),
+            agent_fingerprint="SHA256:other",
+        )
+        assert result.returncode != 0
+        assert "ssh-agent" in result.stderr
+        assert " apply" not in calls
+
+    def test_apply_accepts_registered_ssh_key(self, tmp_path: Path):
+        video = tmp_path / "stream.mp4"
+        video.touch()
+        result, calls = self._run(
+            tmp_path,
+            "003ch-soulful-grooves",
+            "apply",
+            "--video",
+            str(video),
+        )
+        assert result.returncode == 0, result.stderr
+        assert f"apply channel=003ch-soulful-grooves video={video}" in calls
 
 
 # ============================================================================
