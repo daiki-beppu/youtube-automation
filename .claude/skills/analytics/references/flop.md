@@ -204,7 +204,7 @@ uv run python .claude/skills/analytics/references/verification.py --operation <t
 
 入力 JSON のキー・閾値・支持 / 反証 / 未検証条件は reference の各公開関数を正とする。必要な入力を収集できない場合は operation を推測値で埋めず、欠けた入力名を理由に `未検証` とする。A/B 履歴は `result.status`、`result.result_candidate_id`、`candidates[].{id,file}` をそのまま `thumbnail` に渡し、現行候補か挑戦候補かも reference で解決する。主観評価は verdict の入力にしない。
 
-`/audit --video` の各出力は動画全尺ではなく冒頭クリップ窓（既定 900 秒、JSON の
+`/audit --video` の各出力は動画全尺ではなく冒頭クリップ窓（既定 30 秒、JSON の
 `analysis_window_sec`）内の分析結果として扱う。`bgm_arc.peak` は実スキーマの `M:SS` / `H:MM:SS` 文字列を reference が秒へ変換する。競合の `competitor_avg_cut_median` は対象と同じ `analysis_window_sec` の既存 `/audit --video` 成果物が3本以上ある場合だけその `editing_metrics.avg_cut_sec` の中央値を使い、不足時は推定せず `未検証` とする。`bgm_arc.outro` や `editing_metrics`
 を動画全体の終盤・全尺平均として読まない。
 

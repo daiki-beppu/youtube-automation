@@ -167,7 +167,7 @@ jq -c 'select(.status == "open" and .lever == "bgm")' data/insights.jsonl
 
 設計に入る前に `data/video_analysis/<slug>/*.json` の `bgm_arc` を読み込み、slug ごとに intro 秒・peak 秒・outro 開始秒の平均と代表的な `energy_curve` パターンを抽出する。インストモードでは entry 間のバリエーション素材として、ボーカルモードでは起伏配置の参考にする。`scene_timeline[].summary` も情景フレーズ設計の素材として活用する。ベンチマーク構造を参考にするが**完全模倣しない** -- 差別化方針と矛盾する場合は意図的に外す。
 
-なお `/audit --video` の分析データは動画冒頭のクリップ窓（既定 900 秒 = 15 分）のみが対象。`bgm_arc.outro` は動画全体のアウトロではなく窓内終盤を指すため、「冒頭 N 分の構造データ」である前提で平均・配置設計に使うこと。
+なお `/audit --video` の分析データは動画冒頭のクリップ窓（既定 30 秒）のみが対象。既定窓の `bgm_arc` は冒頭部分だけを表し、`bgm_arc.outro` も動画全体のアウトロではなく窓内終盤を指す。長尺の構成データが必要な場合は `config/skills/audit.yaml::video.analysis_window_sec` を上書きすること。
 
 ### Suno プリセット推奨（suno_preset fallback）
 

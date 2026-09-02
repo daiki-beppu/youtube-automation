@@ -12,10 +12,10 @@ video:
 
   # 解析対象のクリップ窓 (秒)。動画冒頭からこの秒数だけを Gemini に渡す。
   # BGM チャンネルの長尺 Complete Collection は 1〜3 時間あるが、抽出したい
-  # 主要データ (hook_structure / bgm_arc.intro / 序盤 scene_timeline) は冒頭
-  # 2〜3 曲相当に集中するため、既定 900 秒 (15 分) に絞ってコストを抑える。
-  # 曲数が多い・イントロが長いチャンネルは config/skills/audit.yaml::video で上書き可。
-  analysis_window_sec: 900
+  # 視聴継続の可否を判断する主要データ (hook_structure / thumbnail_alignment) は
+  # 冒頭 30 秒に集中するため、既定 30 秒に絞ってフック評価のコストを抑える。
+  # 長尺の構成データが必要なチャンネルは config/skills/audit.yaml::video で上書き可。
+  analysis_window_sec: 30
 
   # Gemini に渡すプロンプト。チャンネルのジャンル/世界観に合わせて
   # config/skills/audit.yaml::video で上書きを推奨。
@@ -40,8 +40,8 @@ video:
       },
       "bgm_arc": {
         "intro": "timestamp range (e.g. 0:00-0:15)",
-        "peak": "timestamp of the highest-energy moment within the clip window (e.g. 1:30)",
-        "outro": "timestamp range of the final section within the clip window (e.g. 13:30-end of clip)",
+        "peak": "timestamp of the highest-energy moment within the clip window",
+        "outro": "timestamp range of the final section within the clip window (ending at end of clip)",
         "energy_curve": "brief description of dynamics within the clip window",
         "segments": [
           {
