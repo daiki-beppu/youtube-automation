@@ -91,9 +91,9 @@ export const parseSkillMarkdown = (
     description,
     name,
     prerequisites: extractSection(markdown, "前提"),
-    triggerPhrases: [...description.matchAll(/「([^」]+)」/gu)].map(
-      (match) => match[1]
-    ),
+    triggerPhrases: [
+      ...description.matchAll(/「([^」]+)」|『([^』]+)』/gu),
+    ].map((match) => match[1] ?? match[2]),
     workflow,
   };
 };
@@ -137,7 +137,7 @@ const linkSkillReferences = (
 };
 
 const codeSpanFlags = (description: string): string =>
-  description.replace(/(?<![\w`])(--[a-z0-9][a-z0-9-]*)(?![\w-]|`)/gu, "`$1`");
+  description.replace(/(?<![\w`])(--[A-Za-z0-9][A-Za-z0-9-]*)(?![\w-]|`)/gu, "`$1`");
 
 const renderSkillPage = (
   skill: SkillPage,
@@ -147,13 +147,19 @@ const renderSkillPage = (
     `# /${skill.name}`,
     linkSkillReferences(codeSpanFlags(skill.description), skillNames),
     "## リファレンス",
-    "### 発動フレーズ",
-    skill.triggerPhrases.map((phrase) => `- ${phrase}`).join("\n"),
+  ];
+  if (skill.triggerPhrases.length > 0) {
+    sections.push(
+      "### 発動フレーズ",
+      skill.triggerPhrases.map((phrase) => `- ${phrase}`).join("\n")
+    );
+  }
+  sections.push(
     "### 前後工程",
     linkSkillReferences(skill.workflow, skillNames),
     "### 成果物",
-    linkSkillReferences(skill.artifacts, skillNames),
-  ];
+    linkSkillReferences(skill.artifacts, skillNames)
+  );
   if (skill.apiCalls) {
     sections.push(
       "### 想定 API call 数",

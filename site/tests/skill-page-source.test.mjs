@@ -89,6 +89,15 @@ test("frontmatter とリファレンス用の公開節だけを抽出する", ()
   assert.doesNotMatch(parsed.workflow, /INTERNAL INSTRUCTION/);
 });
 
+test("二重鉤括弧の発動フレーズも抽出する", () => {
+  const parsed = parseSkillMarkdown(
+    skillMarkdown({ description: "Use when 『準備』「配信準備」で発動" }),
+    "alpha"
+  );
+
+  assert.deepEqual(parsed.triggerPhrases, ["準備", "配信準備"]);
+});
+
 test("description 欠損は該当 skill 名を示して拒否する", () => {
   const markdown = skillMarkdown().replace(/^description:.*\n/mu, "");
   assert.throws(
@@ -131,6 +140,8 @@ test("骨格ページのリード文とリファレンスを生成する", async
   assert.doesNotMatch(alpha.body.text, /Task|Gotchas|Subagent|INTERNAL/);
   const beta = result.entries.find((entry) => entry.slug === "/skills/beta");
   assert.doesNotMatch(beta.body.text, /### 前提/);
+  assert.doesNotMatch(beta.body.text, /### 発動フレーズ/);
+  assert.match(beta.body.text, /## リファレンス\n\n### 前後工程/);
 });
 
 test("想定 API call 数があるときだけリファレンスに掲載する", async () => {
@@ -144,6 +155,19 @@ test("想定 API call 数があるときだけリファレンスに掲載する"
   const alpha = result.entries.find((entry) => entry.slug === "/skills/alpha");
 
   assert.match(alpha.body.text, /### 想定 API call 数\n\n- 1 call/);
+});
+
+test("大文字始まりのフラグもコードスパン化する", async () => {
+  const repositoryRoot = await createRepository();
+  await writeFile(
+    join(repositoryRoot, ".claude/skills/alpha/SKILL.md"),
+    skillMarkdown({ description: "Use when 「テストして」。--Dry-Run を使う" }),
+    "utf8"
+  );
+  const result = await createSkillPageSource({ repositoryRoot }).load();
+  const alpha = result.entries.find((entry) => entry.slug === "/skills/alpha");
+
+  assert.match(alpha.body.text, /`--Dry-Run`/);
 });
 
 test("一覧と個別ページの先頭 H1 を title へ分離する", async () => {
@@ -194,6 +218,19 @@ test("実リポジトリでは9カテゴリと配布対象skillだけを生成�
 
   assert.equal(result.entries.length, 20);
   assert.equal(skillDirectories?.length, 19);
+  for (const entry of result.entries) {
+    assert.doesNotMatch(
+      entry.body.text,
+      /### 発動フレーズ\n\s*(?:###|$)/u,
+      `${entry.slug} が空の発動フレーズ節を出力している`
+    );
+  }
+  const distrokid = result.entries.find(
+    (entry) => entry.slug === "/skills/distrokid-helper"
+  );
+  assert.match(distrokid.body.text, /### 発動フレーズ\n\n- DistroKid 準備\n/);
+  const video = result.entries.find((entry) => entry.slug === "/skills/video");
+  assert.doesNotMatch(video.body.text, /### 発動フレーズ/);
   assert.equal(parseSkillCategories(await readFile(join(repositoryRoot, "docs/features.md"), "utf8")).length, 9);
   assert.doesNotMatch(result.entries[0].body.text, /## 未分類/);
 });
