@@ -1,0 +1,1 @@
+- multi-channel workspace でも cloud planning が対象チャンネル配下の postmortem を正しく許可するよう修正
