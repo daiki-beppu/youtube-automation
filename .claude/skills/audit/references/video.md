@@ -14,7 +14,8 @@
 ## Overview
 
 `yt-video-analyze` で YouTube 動画を Gemini に直接渡し、以下の構造化データを抽出する。
-解析対象は全尺ではなく **動画冒頭のクリップ窓**（既定 30 秒、`analysis_window_sec` で変更可）のみ:
+既定の `static` は **動画冒頭のクリップ窓**（既定 30 秒、`analysis_window_sec` で変更可）のみを解析する。
+`agentic` は対応モデルが必要だが、モデル主導で全尺を探索して構成データを取得できる:
 
 - `hook_structure` — 0-30 秒のカット割り・テキスト出現タイミング・signature 要素
 - `bgm_arc` — イントロ尺・ピーク位置・クリップ窓内終盤のタイムスタンプ（窓内スコープ）
@@ -49,7 +50,7 @@ Step 1 のスクリプトが exit 0 で終了して `data/video_analysis/<slug>/
 
 | API | call 数 / 実行 | 変動要因 |
 |---|---|---|
-| Vertex AI Gemini（yt-video-analyze の generate_content） | 未解析の対象動画数 × 1 call（`--source benchmark`: `--top` 既定 5 / `own`: complete_collection + videos[] の合計 / `url`: 1。既存の有効な `<video_id>.json` がある動画は 0 call） | `--source` / `--top` / 対象動画数 / `--force`（キャッシュ無視で全件再解析）。1 call あたりのコストは `analysis_window_sec`（既定 30 秒）に比例。`delay_sec` は間隔制御のみで課金には無影響 |
+| Vertex AI Gemini（yt-video-analyze の generate_content） | 未解析の対象動画数 × 1 call（`--source benchmark`: `--top` 既定 5 / `own`: complete_collection + videos[] の合計 / `url`: 1。既存の有効な `<video_id>.json` がある動画は 0 call） | `--source` / `--top` / 対象動画数 / `--force`（キャッシュ無視で全件再解析）。`static` の 1 call あたりのコストは `analysis_window_sec`（既定 30 秒）に比例。`agentic` は全尺から必要な区間をモデルが探索する。`delay_sec` は間隔制御のみで課金には無影響 |
 
 - 上限 / 承認: y/N プロンプトはない。`--source` と `--top` で対象数を絞り、`analysis_window_sec` で 1 call あたりの解析コストを制御する。
 
@@ -121,6 +122,7 @@ skill-config (`.claude/skills/audit/config.default.yaml::video`):
 | 項目 | 既定 | 説明 |
 |---|---|---|
 | `model` | `gemini-3.5-flash` | Vertex AI global endpoint の動画入力対応 GA Gemini モデル |
+| `processing` | `static` | `static`（冒頭クリップ窓）または `agentic`（全尺をモデル主導で探索）。`agentic` は `gemini-3.7-flash` / `gemini-3.6-flash` / `gemini-3.5-flash-lite` のみ対応 |
 | `delay_sec` | 10 | 動画間の API レート対策ウェイト (秒) |
 | `analysis_window_sec` | 30 | 解析するクリップ窓 (秒)。動画冒頭からこの秒数のみ Gemini に渡す。bool ではない正の整数のみ有効 |
 | `prompt` | 汎用プロンプト | ジャンル/世界観に合わせて `config/skills/audit.yaml::video` で上書き推奨 |
@@ -128,10 +130,10 @@ skill-config (`.claude/skills/audit/config.default.yaml::video`):
 ## 注意事項
 
 - Gemini API には YouTube URL を直接渡す (動画ダウンロードしない)
-- **全尺は解析しない**: `video_metadata` の offset 指定で動画冒頭 `analysis_window_sec` 秒
-  （既定 30 秒、冒頭のフック相当）のみを解析する。Gemini の動画入力コストは再生尺に
-  比例するため、長尺 BGM 動画の全尺解析を避ける。窓幅は `config/skills/audit.yaml::video` の
-  `analysis_window_sec` で上書きできる（deep-merge、曲数が多い・イントロが長いチャンネル向け）
+- **`static`（既定）**: `video_metadata` の offset 指定で動画冒頭 `analysis_window_sec` 秒
+  （既定 30 秒、冒頭のフック相当）のみを解析する。窓幅は `config/skills/audit.yaml::video` で上書きできる。
+- **`agentic`**: offset を渡さず、対応 Gemini モデルへ全尺の探索を委ねる。`analysis_window_sec` は
+  使用されず、結果 JSON では `null` になる。長尺の構成データが必要な場合にのみ選ぶ。
 - Public/Unlisted のみ対応 (Private 動画は API 側で拒否される)
 - Shorts は Gemini の 1fps サンプリング制約により短尺フック構造の解析精度が落ちる。`/short` で生成・投稿した自チャンネル Shorts は本 skill の対象外として扱い、リテンション / CTR 分析は `/analytics --analyze` に任せる
 - API レート制限対策で動画間に `delay_sec` 秒スリープ
@@ -142,7 +144,7 @@ skill-config (`.claude/skills/audit/config.default.yaml::video`):
 `scene_timeline` / `thumbnail_alignment` / `editing_metrics` を入力として参照する。
 `/audit --video` が未実行のときは警告で続行するが、ベンチマークデータがあれば自動実行を提案する。
 
-**注意**: これらのデータは動画冒頭のクリップ窓（既定 30 秒）のみの分析結果。
+**注意**: `static` のデータは動画冒頭のクリップ窓（既定 30 秒）のみの分析結果。
 `bgm_arc.outro` は「動画全体のアウトロ」ではなく「窓内終盤」を指すため、下流での平均計算や
 起伏配置の設計に使う際は「設定したクリップ窓内のデータ」である前提で扱うこと。
 

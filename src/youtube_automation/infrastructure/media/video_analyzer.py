@@ -58,7 +58,7 @@ class VideoAnalyzer:
     """Gemini に YouTube URL を直接渡して構造化 JSON を得る。
 
     `client` / `model` / `prompt` / `delay_sec` / `data_dir` /
-    `analysis_window_sec` は CLI 層 (境界) で 1 度だけ解決して渡す。
+    `analysis_window_sec` / `processing` は CLI 層 (境界) で 1 度だけ解決して渡す。
     analyze_url ループ内で再解決しない。
     """
 
@@ -71,6 +71,7 @@ class VideoAnalyzer:
         delay_sec: int,
         data_dir: Path,
         analysis_window_sec: int,
+        processing: str = "static",
     ) -> None:
         self.client = client
         self.model = model
@@ -78,32 +79,32 @@ class VideoAnalyzer:
         self.delay_sec = delay_sec
         self.data_dir = data_dir
         self.analysis_window_sec = analysis_window_sec
+        self.processing = processing
 
     def analyze_url(self, target: VideoTarget) -> dict[str, Any]:
-        """target.url の冒頭 `analysis_window_sec` 秒を Gemini に渡し、JSON をパースして返す。
+        """処理モードに従って target.url を Gemini に渡し、JSON をパースして返す。
 
-        `types.Part.from_uri()` は `video_metadata` を受け取れないため、
-        `types.Part(file_data=..., video_metadata=...)` で offset 付き Part を組み立てる。
+        static は offset 付き `video_metadata`、agentic は窓なしの
+        `media_processing=AGENTIC` を排他的に Part へ設定する。
 
         Raises:
             ValidationError: Gemini レスポンスが JSON にパースできない場合
         """
-        logger.info(
-            "Gemini 動画解析 (冒頭 %d 秒): %s (%s)",
-            self.analysis_window_sec,
-            target.title[:40],
-            target.video_id,
-        )
+        logger.info("Gemini 動画解析 (%s): %s (%s)", self.processing, target.title[:40], target.video_id)
+        part_kwargs: dict[str, Any] = {
+            "file_data": types.FileData(file_uri=target.url, mime_type=_VIDEO_MIME_TYPE),
+        }
+        if self.processing == "agentic":
+            part_kwargs["media_processing"] = types.MediaProcessing.AGENTIC
+        else:
+            part_kwargs["video_metadata"] = types.VideoMetadata(
+                start_offset="0s",
+                end_offset=f"{self.analysis_window_sec}s",
+            )
         response = self.client.models.generate_content(
             model=self.model,
             contents=[
-                types.Part(
-                    file_data=types.FileData(file_uri=target.url, mime_type=_VIDEO_MIME_TYPE),
-                    video_metadata=types.VideoMetadata(
-                        start_offset="0s",
-                        end_offset=f"{self.analysis_window_sec}s",
-                    ),
-                ),
+                types.Part(**part_kwargs),
                 self.prompt,
             ],
         )
@@ -114,6 +115,7 @@ class VideoAnalyzer:
             target=target,
             model=self.model,
             analysis_window_sec=self.analysis_window_sec,
+            processing=self.processing,
         )
 
     def json_path(self, target: VideoTarget) -> Path:
@@ -179,6 +181,7 @@ def _attach_metadata(
     target: VideoTarget,
     model: str,
     analysis_window_sec: int,
+    processing: str = "static",
 ) -> dict[str, Any]:
     """ドメインキーは payload を保ち、メタデータは target で上書きする (envelope)。"""
     return {
@@ -189,11 +192,11 @@ def _attach_metadata(
         "title": target.title,
         "analyzed_at": datetime.now().isoformat(timespec="seconds"),
         "model": model,
-        "analysis_window_sec": analysis_window_sec,
+        "analysis_window_sec": analysis_window_sec if processing == "static" else None,
         "analysis_scope": {
-            "start_offset_sec": 0,
-            "end_offset_sec": analysis_window_sec,
-            "description": "opening clip window",
+            "start_offset_sec": 0 if processing == "static" else None,
+            "end_offset_sec": analysis_window_sec if processing == "static" else None,
+            "description": "opening clip window" if processing == "static" else "full video (agentic processing)",
         },
     }
 

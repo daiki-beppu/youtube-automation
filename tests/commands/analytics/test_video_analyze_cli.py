@@ -28,6 +28,7 @@ from youtube_automation.commands.analytics.video_analyze import (
     _analysis_window_sec_from_config,
     _build_parser,
     _extract_video_id_from_url,
+    _processing_from_config,
     _resolve_benchmark_targets,
     _resolve_own_targets,
     _resolve_url_target,
@@ -492,6 +493,27 @@ class TestAnalysisWindowValidation:
         with pytest.raises(ConfigError, match="analysis_window_sec"):
             _analysis_window_sec_from_config(cfg)
 
+
+class TestProcessingValidation:
+    @pytest.mark.parametrize("value", ["fast", "", True])
+    def test_rejects_unknown_processing(self, value):
+        with pytest.raises(ConfigError, match="audit.video.processing"):
+            _processing_from_config({"processing": value, "model": "gemini-3.7-flash"})
+
+    def test_defaults_to_static(self):
+        assert _processing_from_config({"model": "gemini-3.5-flash"}) == "static"
+
+    def test_rejects_unsupported_agentic_model(self):
+        with pytest.raises(ConfigError, match="gemini-3.5-flash"):
+            _processing_from_config({"processing": "agentic", "model": "gemini-3.5-flash"})
+
+    @pytest.mark.parametrize(
+        "model",
+        ["gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite"],
+    )
+    def test_accepts_supported_agentic_models(self, model):
+        assert _processing_from_config({"processing": "agentic", "model": model}) == "agentic"
+
     @pytest.mark.parametrize("yaml_value", ["0", "-1", "'300'", "true", "false", "null"])
     def test_channel_override_invalid_window_is_rejected(self, tmp_path, yaml_value):
         # Given: config/skills/video-analyze.yaml に不正な override
@@ -583,6 +605,19 @@ class TestMainAnalysisWindowFlow:
         # Then: default の 30 秒が同じ入口から SDK metadata に届く
         contents = client.models.generate_content.call_args.kwargs["contents"]
         assert contents[0].video_metadata.end_offset == "30s"
+
+    def test_agentic_mode_flows_to_gemini_and_full_video_prompt(self, tmp_path, monkeypatch):
+        client = self._run_main_with_channel(
+            tmp_path,
+            monkeypatch,
+            "processing: agentic\nmodel: gemini-3.7-flash\ndelay_sec: 0\n",
+        )
+
+        contents = client.models.generate_content.call_args.kwargs["contents"]
+        assert contents[0].media_processing == "AGENTIC"
+        assert contents[0].video_metadata is None
+        assert "full video timeline" in contents[1]
+        assert "fixed-length opening clip" not in contents[1]
 
 
 # ----------------------------------------------------------------------------
