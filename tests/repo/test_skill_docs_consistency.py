@@ -1533,6 +1533,24 @@ def test_channel_new_regeneration_reads_validated_direction_json_pair() -> None:
     assert "channel-direction.md" not in regeneration_mode
 
 
+def test_setup_push_verification_accounts_for_localization_propagation_delay() -> None:
+    mode = _read(".claude/skills/setup/references/push-mode.md")
+    troubleshooting = _read(".claude/skills/setup/references/save-push-troubleshooting.md")
+
+    for document in (mode, troubleshooting):
+        assert "localizations" in document
+        assert "伝播遅延" in document
+        assert "数分" in document
+        assert "再度" in document
+        assert "再 apply しない" in document
+
+    assert "uv run yt-channel-settings diff" in mode
+    assert "#562" in troubleshooting
+    assert "`ja`→`ja_JP`" in troubleshooting
+    assert "`defaultLanguage`" in troubleshooting
+    assert "silent skip" in troubleshooting
+
+
 def test_channel_new_regeneration_snapshot_collects_all_benchmark_channels() -> None:
     regeneration_mode = _read(".claude/skills/setup/references/regeneration-mode.md")
     step = regeneration_mode.split("### Step R2.1:", 1)[1].split("### Step R2.2:", 1)[0]

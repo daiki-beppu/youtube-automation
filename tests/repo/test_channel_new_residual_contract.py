@@ -37,9 +37,9 @@ STRATEGY_ASSET_SHA256 = {
 MOVED_ASSET_SHA256 = {
     "import-mode.md": "2e7a69d0e45994d4ce267a7852c475b8db86bd6971e64311bf53021f337d060b",
     "localizations-template.json": "d0267074151af61f27856d0e67e8f0c3d56cf327b2255e00a8035e2851cde558",
-    "push-mode.md": "be122ecbe19c803cfe09465f68ab364636f46f92f0ec842fb803566337eb57ee",
+    "push-mode.md": "2780e43674d3a0c1cb36906f87d9fa18c23aa8ad851d658f0cdda5d8c920a8c6",
     "regeneration-mode.md": "3df846018dc016cff85c5429fb55c698efef87a71fde489beaae951218c19e2c",
-    "save-push-troubleshooting.md": "89a7cab34a96ddf7f10636293621c8b39e6cdf9f17e033a0469d5b14c0fc9a45",
+    "save-push-troubleshooting.md": "d5fe082a28307aa00dbfb2fdb66bc0cf5950c295ba27fd5962172bd1fae65872",
 }
 
 
