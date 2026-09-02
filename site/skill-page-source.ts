@@ -19,6 +19,7 @@ export interface SkillPage {
   readonly artifacts: string;
   readonly category?: string;
   readonly description: string;
+  readonly modeFlags: readonly string[];
   readonly name: string;
   readonly prerequisites?: string;
   readonly triggerPhrases: readonly string[];
@@ -58,6 +59,23 @@ const parseQuotedField = (
   }
 };
 
+const extractModeFlags = (markdown: string): string[] => {
+  const modeSection = extractSection(markdown, "モード判定");
+  if (!modeSection) return [];
+  return [
+    ...new Set(
+      modeSection
+        .split("\n")
+        .filter((line) => line.trimStart().startsWith("|"))
+        .flatMap((line) =>
+          [...line.matchAll(/`(--[a-z0-9][a-z0-9-]*)`/gu)].map(
+            (match) => match[1]
+          )
+        )
+    ),
+  ];
+};
+
 export const parseSkillMarkdown = (
   markdown: string,
   directoryName: string
@@ -89,6 +107,7 @@ export const parseSkillMarkdown = (
     apiCalls: extractSection(markdown, "想定 API call 数"),
     artifacts,
     description,
+    modeFlags: extractModeFlags(markdown),
     name,
     prerequisites: extractSection(markdown, "前提"),
     triggerPhrases: [
@@ -141,11 +160,15 @@ const codeSpanFlags = (description: string): string =>
 
 const renderSkillPage = (
   skill: SkillPage,
-  skillNames: ReadonlySet<string>
+  skillNames: ReadonlySet<string>,
+  handwritten?: string
 ): string => {
   const sections = [
     `# /${skill.name}`,
     linkSkillReferences(codeSpanFlags(skill.description), skillNames),
+  ];
+  if (handwritten) sections.push(linkSkillReferences(handwritten, skillNames));
+  sections.push(
     "## リファレンス",
   ];
   if (skill.triggerPhrases.length > 0) {
@@ -173,6 +196,32 @@ const renderSkillPage = (
     );
   }
   return `${sections.join("\n\n")}\n`;
+};
+
+const validateHandwritten = (skill: SkillPage, markdown: string): string => {
+  const content = markdown.trim();
+  const firstHeading = content.match(/^## .+$/mu)?.[0];
+  const overviewIndex = content.indexOf("## 何ができるか");
+  const troubleshootingIndex = content.indexOf("## つまずいたら");
+  if (
+    firstHeading !== "## 何ができるか" ||
+    troubleshootingIndex <= overviewIndex
+  ) {
+    throw new Error(
+      `Handwritten skill ${skill.name} must start with ## 何ができるか and later include ## つまずいたら`
+    );
+  }
+  const missingFlags = skill.modeFlags.filter(
+    (flag) => !content.includes(`\`${flag}\``)
+  );
+  if (missingFlags.length > 0) {
+    throw new Error(
+      `Handwritten skill ${skill.name} is missing mode flags: ${missingFlags
+        .map((flag) => `\`${flag}\``)
+        .join(", ")}`
+    );
+  }
+  return content;
 };
 
 const renderSkillIndex = (
@@ -260,9 +309,38 @@ const loadSkillEntries = async (repositoryRoot: string): Promise<SourceEntry[]> 
   const pages = skills.filter((skill): skill is SkillPage => skill !== undefined);
   const names = new Set(pages.map((skill) => skill.name));
   if (names.size !== pages.length) throw new Error("Duplicate skill names detected");
+  const handwrittenRoot = resolve(repositoryRoot, "site/skill-docs");
+  const handwritten = new Map<string, string>();
+  if (existsSync(handwrittenRoot)) {
+    assertInsideRepository(repositoryRoot, handwrittenRoot);
+    const files = (await readdir(handwrittenRoot, { withFileTypes: true })).filter(
+      (entry) =>
+        entry.isFile() && entry.name.endsWith(".md") && entry.name !== "README.md"
+    );
+    for (const file of files) {
+      const name = file.name.slice(0, -3);
+      if (!directories.includes(name)) {
+        throw new Error(
+          `Handwritten skill ${name} has no corresponding skill ディレクトリ`
+        );
+      }
+      const skill = pages.find((candidate) => candidate.name === name);
+      if (!skill) {
+        throw new Error(`Handwritten skill ${name} has no corresponding SKILL.md`);
+      }
+      const path = assertInsideRepository(
+        repositoryRoot,
+        join(handwrittenRoot, file.name)
+      );
+      handwritten.set(
+        name,
+        validateHandwritten(skill, await readFile(path, "utf8"))
+      );
+    }
+  }
   const categories = parseSkillCategories(await readFile(catalogPath, "utf8"));
   const entries = pages.map((skill) => {
-    const text = renderSkillPage(skill, names);
+    const text = renderSkillPage(skill, names, handwritten.get(skill.name));
     return sourceEntry(
       `${skill.name}.md`,
       `/skills/${skill.name}`,
