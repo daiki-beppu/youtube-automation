@@ -63,6 +63,21 @@ def test_readiness_waits_when_oldest_active_collection_has_left_planning(tmp_pat
     assert resolve_planning_readiness(tmp_path) == PlanningReadiness("waiting", prepared.resolve())
 
 
+def test_readiness_waits_when_cloud_planning_outputs_are_complete(tmp_path: Path) -> None:
+    collection = _state(tmp_path, "planned", phase="planning", created_at="2026-01-01T00:00:00Z")
+    state_path = collection / "workflow-state.json"
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    state["planning"]["generated"] = True
+    state["assets"]["music_prompts"] = True
+    state_path.write_text(json.dumps(state) + "\n", encoding="utf-8")
+    docs = collection / "20-documentation"
+    docs.mkdir()
+    for name in ("plan_proposals.json", "plan_proposals.html", "suno-prompts.json", "suno-prompts.html"):
+        (docs / name).write_text("{}\n", encoding="utf-8")
+
+    assert resolve_planning_readiness(tmp_path) == PlanningReadiness("waiting", collection.resolve())
+
+
 def test_readiness_skips_collection_whose_state_is_not_created_yet(tmp_path: Path) -> None:
     (tmp_path / "collections" / "planning" / "initializing").mkdir(parents=True)
     active = _state(tmp_path, "active", phase="planning", created_at="2026-01-01T00:00:00Z")
@@ -70,8 +85,13 @@ def test_readiness_skips_collection_whose_state_is_not_created_yet(tmp_path: Pat
     assert resolve_planning_readiness(tmp_path) == PlanningReadiness("ready", active.resolve())
 
 
-def test_completion_requires_prepared_state_and_engine_prompt_pair(tmp_path: Path) -> None:
-    collection = _state(tmp_path, "demo", phase="prepared", created_at="2026-01-01T00:00:00Z")
+def test_completion_requires_planning_state_and_engine_prompt_pair(tmp_path: Path) -> None:
+    collection = _state(tmp_path, "demo", phase="planning", created_at="2026-01-01T00:00:00Z")
+    state_path = collection / "workflow-state.json"
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    state["planning"]["generated"] = True
+    state["assets"]["music_prompts"] = True
+    state_path.write_text(json.dumps(state) + "\n", encoding="utf-8")
     docs = collection / "20-documentation"
     docs.mkdir()
     (docs / "plan_proposals.json").write_text("{}\n", encoding="utf-8")
@@ -106,11 +126,11 @@ def test_planning_stage_policy_adapts_readiness_completion_and_allowlist(tmp_pat
 
     policy.resolve()
     assert policy.waiting is False
-    assert policy.prompt_for() == "/wf-new --auto"
+    assert policy.prompt_for().startswith("/wf-new --auto\nCloud planning scope ends after")
+    assert "leave phase planning" in policy.prompt_for()
 
     state_path = collection / "workflow-state.json"
     state = json.loads(state_path.read_text(encoding="utf-8"))
-    state.update(phase="prepared")
     state["planning"]["generated"] = True
     state["assets"]["music_prompts"] = True
     state_path.write_text(json.dumps(state) + "\n", encoding="utf-8")

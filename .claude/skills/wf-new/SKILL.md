@@ -296,6 +296,8 @@ Step 1（企画）を自動実行中...
 
 ユーザー選択または設定による自動選択で企画が確定したら、[`references/phase2.md`](references/phase2.md) を読み、記載された 2a / 2b / 2c / 2e / 2f / 2g を上から順に実行する。
 
+cloud planning runner から scope の停止指示が付いている場合だけ、同 reference の cloud 専用契約を優先する。企画と engine 別 prompt の検証済み pair、`planning.generated = true`、`assets.music_prompts = true` を確定した時点で `phase = "planning"` のまま完了し、Vertex AI 経路では ADC を使う thumbnail / loop-video と `set-phase prepared` は local 再開へ残す。
+
 完了条件は、成果物を検証したメインが次の owner CLI を実行し、再読込で `phase = "prepared"` を確認してから 2g の完了ガイダンスを表示すること。
 
 ```bash

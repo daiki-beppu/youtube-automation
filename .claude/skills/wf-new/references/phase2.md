@@ -67,6 +67,8 @@ uv run yt-populate-scene-phrases <collection-dir-name> \
 
 #### 2c. サムネイル確定 + 音楽素材生成
 
+cloud planning runner から、企画・music prompt の pair を確定したら `phase: planning` のまま停止する指示を受けている場合は、この節の thumbnail branch を起動しない。music branch だけを実行し、engine 別 prompt の JSON/HTML pair を通常契約どおり検証してから `planning.generated = true` と `assets.music_prompts = true` を owner CLI で確定する。`thumbnail` / `main` / `loop.mp4` は生成せず、`set-phase prepared`、2e、2f は実行しない。この停止点は GitHub Actions に ADC を渡さず企画工程だけを完了させるための cloud 専用契約であり、通常の local 実行は以下の全 branch を続行する。
+
 サムネイル候補生成と音楽素材生成は initial dispatch で重ね、承認・確定・成果物検証は join 後に進める。Suno チャンネルでは、メインが対象 collection と確定企画を固定し、`config/skills/music.yaml::prompt` と利用可能な `data/video_analysis/<slug>/*.json` を fallback / 推奨入力として `/music --prompt` へ渡す。subagent は共有 config を変更せず、その collection の `20-documentation/suno-patterns.yaml` に effective Style 系の root 値を保存する。`suno_preset` が無くても確定企画と制約から collection-local Style を設計して続行し、検証前に `assets.music_prompts = true` へ更新しない。
 
 各 branch の成果物検証、state 適用、partial failure、再開判定は、最初に [`Phase 2c 成果物・再開契約`](phase-2c-artifact-contract.md) を読み、その契約だけを正とする。

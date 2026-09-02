@@ -21,7 +21,7 @@ Suno を使う標準的な制作は、次の **cloud → local → cloud** の�
 - **AI 工程**: コレクションの企画と、music engine ごとのプロンプト生成
 - **軽量メディア工程と公開**: `overlays.enabled: false` で、映像を再エンコードせず stream copy できるチャンネル
 
-AI 工程は Claude Code の headless 実行を標準経路にしています。日次 workflow は状態を見て、最古の制作中コレクションを一段進めます。すでにローカル工程の完了待ちなら、同じ工程を重複実行せず waiting で終了します。
+AI 工程は Claude Code の headless 実行を標準経路にしています。日次 workflow は状態を見て、最古の制作中コレクションを一段進めます。企画と music engine 別 prompt の検証済み pair を作成し、`planning.generated` と `assets.music_prompts` を確定した時点で `phase: planning` のまま停止します。この cloud 完了点に GCP ADC は不要です。thumbnail / loop-video 生成（Vertex AI 経路では ADC が必要）と `phase: prepared` への遷移はローカルで再開します。すでに cloud 完了点または後続のローカル工程へ到達していれば、同じ工程を重複実行せず waiting で終了します。
 
 ## ローカルに残る工程
 
