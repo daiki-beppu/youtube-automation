@@ -16,7 +16,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run --no-sync yt-progress-hook"
+            "command": "uv run --no-sync --project \"$CLAUDE_PROJECT_DIR\" yt-progress-hook"
           }
         ]
       }
@@ -27,7 +27,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run --no-sync yt-progress-hook"
+            "command": "uv run --no-sync --project \"$CLAUDE_PROJECT_DIR\" yt-progress-hook"
           }
         ]
       },

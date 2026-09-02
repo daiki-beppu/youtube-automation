@@ -32,7 +32,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run yt-progress-hook"
+            "command": "uv run --project \"$CLAUDE_PROJECT_DIR\" yt-progress-hook"
           }
         ]
       }
@@ -43,7 +43,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run yt-progress-hook"
+            "command": "uv run --project \"$CLAUDE_PROJECT_DIR\" yt-progress-hook"
           }
         ]
       }
