@@ -553,7 +553,7 @@ test("top page は kind の下に非空の更新規模 section を見出し階�
   }
 });
 
-test("top page の kind × 更新規模 group は5 releaseの所属・日付・リンクを維持する", async () => {
+test("top page の kind × 更新規模 group は6 releaseの所属・日付・リンクを維持する", async () => {
   const html = await readIndex();
   const expectedGroups = [
     {
@@ -568,6 +568,7 @@ test("top page の kind × 更新規模 group は5 releaseの所属・日付・�
       kind: "main",
       scale: "minor",
       entries: [
+        { version: "v5.7.1", date: "2026-09-02T00:00:00.000Z", href: "/v5.7.1" },
         { version: "v5.5.17", date: "2026-07-10T00:00:00.000Z", href: "/v5.5.17" },
       ],
     },
@@ -631,7 +632,7 @@ test("一覧は本体とChrome拡張に分かれ、それぞれ公開日の新�
 
   assert.match(main, /<h3>本体<\/h3>/);
   assert.match(extension, /<h3>Chrome 拡張<\/h3>/);
-  assert.deepEqual(hrefs(main), ["/v5.7.0", "/v5.6.0", "/v5.5.17"]);
+  assert.deepEqual(hrefs(main), ["/v5.7.0", "/v5.6.0", "/v5.7.1", "/v5.5.17"]);
   assert.deepEqual(hrefs(extension), ["/ext-v0.3.0", "/ext-v0.2.5"]);
 });
 
