@@ -1,0 +1,1 @@
+- 公開サイトに thumbnail・video・short スキルの手書き解説を追加
