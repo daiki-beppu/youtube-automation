@@ -1,1 +1,0 @@
-- cloud planning が GCP ADC を要求する画像生成より前に、企画と music prompt の検証済み成果物を確定して完了できるよう修正

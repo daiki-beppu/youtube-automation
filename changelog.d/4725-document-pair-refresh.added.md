@@ -1,2 +1,0 @@
-- `yt-document-render --check --all` と `--fix --all` を追加し、全登録 schema の stale HTML pair を横断検知・一括再発行できるようにした（#4725）。
-- analytics report の JSON が正常で HTML のみ stale な場合は、再分析ではなく再 render を案内するようにした（#4725）。

@@ -1,2 +1,0 @@
-- Python 版のメンテナンスモードと tayk への cutover 告知を撤回し、現行の導入文書から移行案内を削除した（#4779）。
-- `docs/architecture.md` の用語集で、tayk / cutover / dogfood / Tier などの語を撤回済みの計画を読むための語彙として記述し直した（#4779）。
