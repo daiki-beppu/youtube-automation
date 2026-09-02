@@ -18,6 +18,9 @@ const readRelease = (version) =>
   readFile(new URL(`../dist/${version}/index.html`, import.meta.url), "utf8");
 const readOperatorDoc = (route) =>
   readFile(new URL(`../dist${route}/index.html`, import.meta.url), "utf8");
+const releaseNotesDirectory = fileURLToPath(
+  new URL("../../docs/release-notes", import.meta.url)
+);
 const execFileAsync = promisify(execFile);
 const operatorSections = [
   {
@@ -538,59 +541,43 @@ test("release がない規模の group は返さない", () => {
 
 test("top page は kind の下に非空の更新規模 section を見出し階層付きで描画する", async () => {
   const html = await readIndex();
+  const releases = await releaseNotes();
 
   for (const [kind, kindLabel] of [
     ["main", "本体"],
     ["extension", "Chrome 拡張"],
   ]) {
     const kindSection = sectionByAttribute(html, "data-release-kind", kind);
-    const majorSection = sectionByAttribute(kindSection, "data-release-scale", "major");
-    const minorSection = sectionByAttribute(kindSection, "data-release-scale", "minor");
+    const expectedGroups = groupReleasesByScale(
+      releases.filter((release) => release.kind === kind)
+    );
 
     assert.match(kindSection, new RegExp(`<h3>${kindLabel}</h3>`));
-    assert.equal([...kindSection.matchAll(/<section[^>]*data-release-scale=/g)].length, 2);
-    assert.match(majorSection, /<h4>大きいアップデート<\/h4>/);
-    assert.match(minorSection, /<h4>小さいアップデート<\/h4>/);
-    assert.match(majorSection, /<ol[^>]*class="release-list"[^>]*>\s*<li>/);
-    assert.match(minorSection, /<ol[^>]*class="release-list"[^>]*>\s*<li>/);
+    assert.equal(
+      [...kindSection.matchAll(/<section[^>]*data-release-scale=/g)].length,
+      expectedGroups.length
+    );
+    for (const group of expectedGroups) {
+      const scaleSection = sectionByAttribute(
+        kindSection,
+        "data-release-scale",
+        group.scale
+      );
+      assert.match(scaleSection, new RegExp(`<h4>${group.label}<\\/h4>`));
+      assert.match(scaleSection, /<ol[^>]*class="release-list"[^>]*>\s*<li>/);
+    }
     assert.doesNotMatch(kindSection, /<section[^>]*data-release-scale[^>]*>\s*<h4>[^<]+<\/h4>\s*<ol[^>]*>\s*<\/ol>/);
   }
 });
 
-test("top page の kind × 更新規模 group は6 releaseの所属・日付・リンクを維持する", async () => {
+test("top page の kind × 更新規模 group は実ファイルの所属・日付・リンクを維持する", async () => {
   const html = await readIndex();
-  const expectedGroups = [
-    {
-      kind: "main",
-      scale: "major",
-      entries: [
-        { version: "v5.7.0", date: "2026-08-29T00:00:00.000Z", href: "/v5.7.0" },
-        { version: "v5.6.0", date: "2026-07-31T00:00:00.000Z", href: "/v5.6.0" },
-      ],
-    },
-    {
-      kind: "main",
-      scale: "minor",
-      entries: [
-        { version: "v5.7.1", date: "2026-09-02T00:00:00.000Z", href: "/v5.7.1" },
-        { version: "v5.5.17", date: "2026-07-10T00:00:00.000Z", href: "/v5.5.17" },
-      ],
-    },
-    {
-      kind: "extension",
-      scale: "major",
-      entries: [
-        { version: "ext-v0.3.0", date: "2026-07-31T00:00:00.000Z", href: "/ext-v0.3.0" },
-      ],
-    },
-    {
-      kind: "extension",
-      scale: "minor",
-      entries: [
-        { version: "ext-v0.2.5", date: "2026-07-10T00:00:00.000Z", href: "/ext-v0.2.5" },
-      ],
-    },
-  ];
+  const releases = await releaseNotes();
+  const expectedGroups = ["main", "extension"].flatMap((kind) =>
+    groupReleasesByScale(releases.filter((release) => release.kind === kind)).map(
+      (group) => ({ entries: group.releases, kind, scale: group.scale })
+    )
+  );
 
   for (const expected of expectedGroups) {
     const kindSection = sectionByAttribute(html, "data-release-kind", expected.kind);
@@ -605,11 +592,14 @@ test("top page の kind × 更新規模 group は6 releaseの所属・日付・�
 
     assert.deepEqual(
       hrefs,
-      expected.entries.map((entry) => entry.href)
+      expected.entries.map((entry) => `/${entry.version}`)
     );
     for (const entry of expected.entries) {
       assert.match(scaleSection, new RegExp(`<h5>${entry.version}</h5>`));
-      assert.match(scaleSection, new RegExp(`<time datetime="${entry.date}">[^<]+</time>`));
+      assert.match(
+        scaleSection,
+        new RegExp(`<time datetime="${entry.released_at.toISOString()}">[^<]+</time>`)
+      );
     }
     assert.match(
       scaleSection,
@@ -636,8 +626,13 @@ test("一覧は本体とChrome拡張に分かれ、それぞれ公開日の新�
 
   assert.match(main, /<h3>本体<\/h3>/);
   assert.match(extension, /<h3>Chrome 拡張<\/h3>/);
-  assert.deepEqual(hrefs(main), ["/v5.7.0", "/v5.6.0", "/v5.7.1", "/v5.5.17"]);
-  assert.deepEqual(hrefs(extension), ["/ext-v0.3.0", "/ext-v0.2.5"]);
+  const releases = await releaseNotes();
+  const expectedHrefs = (kind) =>
+    groupReleasesByScale(releases.filter((release) => release.kind === kind)).flatMap(
+      (group) => group.releases.map((release) => `/${release.version}`)
+    );
+  assert.deepEqual(hrefs(main), expectedHrefs("main"));
+  assert.deepEqual(hrefs(extension), expectedHrefs("extension"));
 });
 
 test("本体とChrome拡張を区別し、詳細ページへリンクする", async () => {
@@ -660,10 +655,6 @@ const sidebarGroups = (html) => {
     }));
 };
 
-const releaseNotesDirectory = fileURLToPath(
-  new URL("../../docs/release-notes", import.meta.url)
-);
-
 const releaseNotes = async () => {
   const files = (await readdir(releaseNotesDirectory)).filter((file) =>
     file.endsWith(".md")
@@ -672,8 +663,18 @@ const releaseNotes = async () => {
     files.map(async (file) => {
       const source = await readFile(join(releaseNotesDirectory, file), "utf8");
       const title = source.match(/^title:\s*"?(?<title>.+?)"?$/mu)?.groups.title;
+      const kind = source.match(/^kind:\s*(?<kind>main|extension)$/mu)?.groups.kind;
+      const releasedAt = source.match(/^released_at:\s*(?<date>\d{4}-\d{2}-\d{2})$/mu)
+        ?.groups.date;
       assert.ok(title, `release note has no title: ${file}`);
-      return { title, version: file.replace(/\.md$/u, "") };
+      assert.ok(kind, `release note has no kind: ${file}`);
+      assert.ok(releasedAt, `release note has no released_at: ${file}`);
+      return {
+        kind,
+        released_at: new Date(`${releasedAt}T00:00:00.000Z`),
+        title,
+        version: file.replace(/\.md$/u, ""),
+      };
     })
   );
 };
