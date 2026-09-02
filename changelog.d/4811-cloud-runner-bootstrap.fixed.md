@@ -1,0 +1,1 @@
+- 配布する GitHub Actions workflow に private repository clone の認証と Claude Code headless runner の導入を追加した（#4811）。
