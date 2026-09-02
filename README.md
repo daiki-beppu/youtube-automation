@@ -2,72 +2,19 @@
 
 YouTube チャンネル運営を自動化するツールキット。Analytics データ収集、AI コンテンツ生成、動画アップロード、メタデータ管理をまとめて提供します。
 
-> **新規利用者の方へ**: セットアップ手順は [`ONBOARDING.md`](ONBOARDING.md) を参照してください。
+主に、下流のチャンネルリポジトリで制作・公開・分析を継続する運営者と、導入を検討する開発者を対象にしています。セットアップから日々の運営までの手順は [`ONBOARDING.md`](ONBOARDING.md) を参照してください。
 
 > 過去に公開した tayk への移行案内は撤回済みであり、経緯のみを [`docs/migration/python-to-tayk.md`](docs/migration/python-to-tayk.md) に記録しています。
 
 ## Features
 
-- **Analytics 収集・分析** - YouTube Analytics API からデータを自動収集し、CTR・エンゲージメント分析レポートを生成
-- **AI 音楽生成** - Google Lyria RealTime API / Suno プロンプト生成で楽曲を自動作成
-- **AI 動画生成** - Google Veo で動画を生成、FFmpeg で静止画＋音声から MP4 を合成
-- **AI 画像生成** - Gemini API でサムネイル・カバー画像を自動生成
-- **YouTube 自動アップロード** - 動画・サムネイル・メタデータを一括アップロード
-- **メタデータ生成** - チャンネル設定に基づくタイトル・説明文・タグ・多言語ローカライゼーションの自動生成
-- **ベンチマーク分析** - 競合チャンネルのパフォーマンス比較
-- **プレイリスト管理** - プレイリストの自動作成・動画追加
-- **Analytics dashboard** - `yt-dashboard` で収集済みチャンネル指標をローカル横断表示（[利用手順](docs/dashboard.md)）
-- **運用者向け公開ドキュメント（公開リリースノート）** - 「はじめる」「使う」「リリースノート」の区分で、セットアップ、OAuth、skill / workflow、dashboard、workspace 移行、本体と Chrome 拡張の更新内容を掲載（[公開サイト](https://youtube-automation-release-notes.pages.dev/) / [掲載原本](ONBOARDING.md)）
+- YouTube Analytics の収集・分析と競合ベンチマーク
+- AI による音楽・動画・画像・メタデータの生成
+- 動画、サムネイル、メタデータの公開とプレイリスト管理
+- 複数チャンネルの制作ワークフローとローカル dashboard
+- 運用者向けの公開リリースノート
 
-> **個別 skill のカタログ**: `yt-skills sync` で配布される全 46 skill の「なにができるか」一覧は [`docs/features.md`](docs/features.md) を参照。
->
-> **workflow 系 skill の使い分け**: 利用者入口は `/wf-new` `/wf-next` `/wf-status` の 3 種です。`workflow-state.json` の扱いは [`docs/workflow-cheatsheet.md`](docs/workflow-cheatsheet.md) を参照。
->
-> **自前動画素材を結合する場合**: fps が違う素材を FFmpeg concat する際の注意点は [`docs/media-concat-fps.md`](docs/media-concat-fps.md) を参照。
-
-## Architecture
-
-```
-youtube-channels-automation/      # ← このリポジトリ
-├── src/
-│   └── youtube_automation/       # インストール対象パッケージ
-│       ├── application/         # ユースケースと実行フロー
-│       ├── commands/             # yt-* CLI の入口（機能別、channel-init テンプレート含む）
-│       ├── configuration/        # 設定モデル・loader・canonical 境界
-│       ├── core/                 # 共通エラーと基盤契約
-│       ├── domains/              # ドメインロジック
-│       ├── infrastructure/      # 外部連携・互換 facade
-│       └── auth/                 # OAuth 2.0 認証
-├── .claude/skills/               # Claude Code スキル群 (yt-skills sync で配布)
-├── tests/                        # テストスイート
-```
-
-各チャンネルリポジトリ側では、以下のいずれかの方法で導入します:
-
-```
-channel-repo/                  # チャンネル固有リポジトリ
-├── config/
-│   ├── channel/               # チャンネル設定（責務別分割、v2.0.0 以降）
-│   │   ├── meta.json          #   channel / youtube_channel
-│   │   ├── content.json       #   genre / tags / descriptions / title
-│   │   ├── youtube.json       #   youtube / music_engine / content_model
-│   │   ├── analytics.json     #   analytics / benchmark (optional)
-│   │   ├── playlists.json     #   playlists (optional)
-│   │   ├── workflow.json      #   workflow / wf_next / post-publish (optional)
-│   │   ├── audio.json         #   audio (optional)
-│   │   ├── shorts.json        #   shorts (optional)
-│   │   ├── comments.json      #   comments (optional)
-│   │   ├── pinned-comment.json # pinned_comment (optional)
-│   │   └── distrokid.json     #   distrokid (optional)
-│   └── localizations.json     # 多言語テンプレート
-├── auth/                      # OAuth 2.0 認証情報 (channel 固有)
-│   ├── client_secrets.json
-│   └── token.json
-├── .claude/skills/            # yt-skills sync で展開される
-└── collections/               # コンテンツ成果物
-```
-
-チャンネル固有の設定は親リポジトリの `config/` と `auth/` に配置します。
+機能と skill の全一覧は [`docs/features.md`](docs/features.md) を参照してください。利用できる CLI entry point の正は [`pyproject.toml`](pyproject.toml) の `[project.scripts]` です。
 
 ## Prerequisites
 
@@ -79,191 +26,33 @@ channel-repo/                  # チャンネル固有リポジトリ
 
 ## Quick Start
 
-### 1. パッケージをインストール (推奨)
+### 1. パッケージをインストール
 
-`uv` または `pip` で git+https からインストールします:
+`uv` または `pip` でインストールします。
 
 ```bash
-# uv
 uv add git+https://github.com/daiki-beppu/youtube-automation
-# 特定タグで固定する場合
-uv add "git+https://github.com/daiki-beppu/youtube-automation@v1.1.0"
-
-# pip
-pip install "git+https://github.com/daiki-beppu/youtube-automation@v1.1.0"
+# または
+pip install "git+https://github.com/daiki-beppu/youtube-automation"
 ```
 
-インストールすると `yt-*` という CLI コマンド群と `yt-skills` 同期ツールが PATH に入ります。
+### 2. チャンネルリポジトリへ配布物を同期
 
-> **submodule 形式 (legacy)**: GCP セットアップスクリプト（`.claude/skills/setup/references/`）は、submodule 利用者は `automation/.claude/skills/setup/references/gcp-bootstrap.sh` のように submodule パス経由で参照するか、`yt-skills sync` を先に実行してください（pip install 環境のみ）。新規チャンネルは pip install を推奨。移行手順: [`docs/migration-submodule-to-uv.md`](docs/migration-submodule-to-uv.md)
-
-### 2. Claude Code 配布物を同期
-
-チャンネルリポジトリのルートで:
+チャンネルリポジトリのルートで実行します。
 
 ```bash
-yt-skills list                            # 全 asset の同梱一覧（skills / CLAUDE.md / docs / auth-template）
-yt-skills sync                            # 全 asset を一括展開 (--asset all がデフォルト)
-yt-skills sync --asset skills             # 個別: Claude Code スキルだけ
-yt-skills sync --asset claude-md          # 個別: 運営方針テンプレ (.claude/CLAUDE.md)
-yt-skills sync --asset workflow-cheatsheet  # 個別: workflow チートシート (docs/workflow-cheatsheet.md)
-yt-skills sync --asset features           # 個別: 全 skill カタログ (docs/features.md)
-yt-skills sync --asset auth-template      # 個別: OAuth client_secrets テンプレ (auth/client_secrets.template.json)
-yt-skills sync --asset channel-workflow   # 個別: 日次 GHA workflow (.github/workflows/youtube-automation.yml)
-yt-skills sync --symlink                  # 開発時はシンボリックリンク
-yt-skills diff                            # 全 asset で同梱版との差分表示
-yt-skills sync --force                    # 既存ファイルを上書き
-yt-skills sync --asset skills --prune     # skills で同梱に無い entry を列挙 (実削除しない)
-yt-skills sync --asset skills --prune --yes  # 列挙したうえで実際に削除する
+yt-skills sync
 ```
 
-> `yt-skills sync` のデフォルト挙動は `--asset all` で、`.claude/skills/`・`.claude/CLAUDE.md`・`docs/{workflow-cheatsheet,features}.md`・`auth/client_secrets.template.json` の全てを 1 コマンドで配布します。配布される SKILL.md / CLAUDE.md は `docs/` 配下に相対 link を張るため、`--asset skills` だけを単独で sync すると link 切れになります。
->
-> `--target` で配布先を独自パスに変えたい場合は `--asset <name>` を必ず明示してください（`--asset all` + `--target` は asset ごとに default_target が異なり曖昧なため error 終了します）。
+チャンネル作成、OAuth、シークレット、設定、Nix を含む以降の手順は [`ONBOARDING.md`](ONBOARDING.md) に進んでください。
 
-### 3. チャンネル設定を作成
+## Documentation
 
-`config/channel/*.json`（責務別分割の必須ファイル + optional ファイル）と `config/localizations.json` を作成します。
-サンプルは [`examples/channel_config.example/`](examples/channel_config.example/) と [`examples/localizations.example.json`](examples/localizations.example.json) を参照してください。
-
-### 4. OAuth 認証をセットアップ
-
-[ONBOARDING.md](ONBOARDING.md) の「2.3 OAuth セットアップ」に従って Google Auth Platform の Branding / Audience / Clients を設定し、チャンネルディレクトリの `auth/client_secrets.json` に配置してください。手動ルート（`gcp-bootstrap.sh` / Terraform）とトラブルシューティングは [docs/oauth-setup.md](docs/oauth-setup.md) を参照してください。
-
-```bash
-# どのスクリプトでも初回実行時に OAuth フローが立ち上がります
-yt-channel-status
-```
-
-### 5. 認証とシークレットを設定
-
-シークレットは次の優先順位で取得されます:
-
-1. `os.environ` に既にセットされていればそれを使う
-2. `YOUTUBE_AUTOMATION_DISABLE_OP_READ=1` でなく、1Password CLI (`op`) が利用可能なら `op read` で取得
-3. 失敗した場合は `ConfigError`
-
-通常のテスト実行では `YOUTUBE_AUTOMATION_DISABLE_OP_READ=1` を既定有効にし、`op` の探索と `op read` の起動を行わず、env/file で解決できなければ最終エラーへ進みます。`op read` fallback を検証するテストだけ、この opt-out を明示的に解除します。
-
-#### A. Google Cloud: ADC（標準）
-
-```bash
-gcloud auth application-default login
-gcloud auth application-default set-quota-project <PROJECT_ID>
-```
-
-Vertex AI の project ID は ADC quota project から解決する。必要な場合だけ起動プロセスへ `GOOGLE_CLOUD_PROJECT=<id>` を渡して上書きできる。Vertex AI mode と location は用途別にアプリが決定するため、利用者の設定は不要。
-
-#### B. 1Password CLI 方式（秘密をディスクに書かない）
-
-`op` CLI にサインインしておけば、Python スクリプト実行時に必要な瞬間だけ `op read` で取得します。シークレットをファイルへ書き出しません。`YOUTUBE_AUTOMATION_DISABLE_OP_READ=1` を設定したプロセスではこの fallback を使わず、process env / 専用 OAuth file で解決できない場合に `ConfigError` で停止します。
-
-```bash
-op signin
-# 以降、スクリプト実行時に infrastructure/secrets.py が op read を呼ぶ
-```
-
-シークレット参照は `infrastructure/secrets.py` の `_SECRET_REFS` で定義されています（デフォルト: `op://Personal/YouTube_OAuth_Client_Secrets/credential`）。AI 系は ADC 経由の認証のため `op` 取得は不要です。
-
-### 6. (オプション) Nix devShell
-
-ランタイム（Python / uv / FFmpeg / op）の再現性が必要な場合:
-
-```bash
-nix develop
-```
-
-`flake.nix` の `devShells.default` が Python 3.11 / uv / FFmpeg / 1Password CLI を提供します。Nix を使わない OSS 利用者は、システムの Python と FFmpeg を自前で用意してください。
-
-## Configuration
-
-### config/channel/*.json
-
-チャンネルのメタデータ、ジャンル、タグ、タイトルテンプレートなどを責務別ファイルに分割して定義します（v2.0.0 以降）。
-
-| ファイル | 責務 |
-|---|---|
-| `meta.json` | `channel` / `youtube_channel` |
-| `content.json` | `genre` / `tags` / `descriptions` / `title` |
-| `youtube.json` | `youtube` / `music_engine`（`suno` / `lyria` / `minimax`）/ `content_model` |
-| `analytics.json` | `analytics` / `benchmark` (optional) |
-| `playlists.json` | `playlists` (optional) |
-| `workflow.json` | `workflow` / `wf_next` / `post-publish` (optional) |
-| `audio.json` | `audio` (optional) |
-| `shorts.json` | `shorts` (optional) |
-| `comments.json` | `comments` (optional) |
-| `pinned-comment.json` | `pinned_comment` (optional) |
-| `distrokid.json` | `distrokid` (optional) |
-
-`workflow.json` は `/wf-next` と `/post-publish` 向けの任意設定です。`workflow.wf_next` は制作フェーズの承認・mastering 運用を宣言します。`workflow.post-publish.skip_approvals.{community-post,pinned-comment}` は `true` で公開後 step 直前の承認を省略します。旧 `approval_gates` は逆向きの後方互換 alias です。`metadata-audit` step の両承認キーは `/audit --metadata` への移行により非推奨ですが、移行期間中は警告付きで読み込みます。
-
-詳細なフィールド説明は [`examples/channel_config.example/`](examples/channel_config.example/) を参照してください。多言語テンプレートは `config/localizations.json` に集約します（単一ソース）。`community.example.json` は `/community-post` が直接読む skill-local raw JSON の雛形で、共通 config loader の必須/optional section ではありません。
-
-### 環境変数
-
-| 変数名 | 必須 | 説明 |
-|--------|------|------|
-| `GOOGLE_CLOUD_PROJECT` | 任意 | Vertex AI を呼ぶ GCP プロジェクト ID。未設定なら ADC quota project から自動解決 |
-| `CHANNEL_DIR` | 自動検出可 | チャンネルリポジトリのルートパス |
-| `CLIENT_SECRETS_DIR` | 任意 | `client_secrets.json` を置いたディレクトリ。設定時はそのディレクトリのみ検査。未設定時は `<channel_dir>/auth/`、`<channel_dir>/automation/auth/`、`<workspace_root>/auth/`、`<main_worktree_root>/auth/`、1Password / `CLIENT_SECRETS_JSON` fallback の順で探索（[解決順の詳細](docs/oauth-setup.md#client-secrets-resolution)） |
-
-## Development
-
-### Developer bootstrap
-
-開発環境の正規入口と worktree / 対話・非対話 shell の区別は [`docs/development.md`](docs/development.md#開発者-bootstrap正規入口) を単一ソースとします。親 checkout は初期化だけに使い、変更は linked worktree 上で行ってください。
-
-```bash
-git clone git@github.com:daiki-beppu/youtube-automation.git
-cd youtube-automation
-nix develop
-```
-
-### テスト実行
-
-```bash
-uv run pytest
-```
-
-devShell 入場時（direnv / `nix develop`）の shellHook が実行する `uv sync` で、`uv run pytest tests/` が collection error 0 件で走るために必要な依存がすべて揃います。非対話 shell は `nix develop --command uv run pytest` のように実行します。
-
-- テスト用ツール (`pytest` / `ruff`) は `[dependency-groups].dev` 経由で導入されます。
-- テストが間接的に require する `Pillow` / `pandas` / `pyyaml` / `matplotlib` / `japanize-matplotlib` / `google-api-python-client` / `google-auth-oauthlib` などは `[project] dependencies`（main deps）に同梱されています。
-- 現時点で optional dependency 扱いの test dep は存在しません（Issue #216 で `pyyaml`、コミット `801ffa8` / v5.5.0 で `Pillow` を main deps へ統合済み。本 Issue #329 はその状態を README に明文化したもの）。
-
-### Lint
-
-```bash
-uv run ruff check .
-```
-
-### CLI commands
-
-インストール後に利用できる主な entry points:
-
-| Command | Description |
-|---------|-------------|
-| `yt-skills` | Claude Code スキルの sync / list / diff |
-| `yt-analytics` | Analytics データ収集 |
-| `yt-generate-image` | Gemini / OpenAI で画像生成（サムネイル兼用） |
-| `yt-generate-lyria-master` | Lyria 3 で N セグメント生成 + クロスフェード結合してマスター音源を作成 |
-| `yt-generate-minimax-master` | MiniMax Musicでinstrumental segmentを生成し、長尺マスター音源へ結合 |
-| `yt-generate-master` | 個別音声 (MP3 / WAV) をクロスフェード結合してマスター音源を作成 |
-| `yt-generate-suno` | Suno プロンプト生成 |
-| `yt-generate-loop-video` | Veo ループ動画生成 |
-| `yt-init-collection` | 新規コレクションの雛形作成 |
-| `yt-metadata-audit` | メタデータの整合性監査 |
-| `yt-playlist-manager` / `yt-playlist-status` | プレイリスト管理 |
-| `yt-benchmark-collect` / `yt-benchmark-comments` | 競合チャンネル分析 |
-| `yt-thumbnail-compare` | サムネイル比較検証 |
-| `yt-video-analyze` | Gemini で YouTube 動画を直接解析（フック構造・BGM 展開・シーン・サムネ整合性・編集指標） |
-| `yt-channel-status` | チャンネル最新状況 |
-| `yt-channel` / `yt-channel-import` | workspace の channel 一覧 / 既存単一 channel repository のコピー移行（[ガイド](docs/channel-workspace-migration.md)） |
-| `yt-upload-collection` / `yt-upload-auto` | YouTube アップロード |
-
-完全な一覧は `pyproject.toml` の `[project.scripts]` を参照してください。
-
-> **`yt-video-analyze` の動画公開範囲制約**: Gemini API は YouTube URL を直接受け取って動画本体を解析しますが、対象動画は **Public または Unlisted** である必要があります。Private 動画は API 側で取得できず解析できません。
+- [`ONBOARDING.md`](ONBOARDING.md) — 導入、API セットアップ、チャンネル開設、日々の運営
+- [`docs/architecture.md`](docs/architecture.md) — ツールキットと下流チャンネルリポジトリの構成、設定の責務
+- [`docs/features.md`](docs/features.md) — workflow、skill、CLI が提供する機能の一覧
+- [`docs/oauth-setup.md`](docs/oauth-setup.md) — OAuth、ADC、シークレットの設定とトラブルシューティング
+- [`docs/development.md`](docs/development.md) — 開発環境、テスト、パッケージング、品質ゲート
 
 ## License
 

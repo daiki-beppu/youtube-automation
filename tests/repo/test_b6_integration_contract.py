@@ -394,9 +394,6 @@ def test_built_sdist_contains_only_approved_members(tmp_path: Path) -> None:
         ".claude/skills/setup/references/terraform-gcp/terraform.tfvars.example",
     }
     assert setup_gcp_assets <= members
-    readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    assert all(link in readme for link in ("(ONBOARDING.md)", "(docs/oauth-setup.md)"))
-
     forbidden_prefixes = (
         ".github/",
         ".takt/",

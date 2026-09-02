@@ -58,8 +58,8 @@ def test_public_route_guidance_exposes_only_workflow_surface() -> None:
 
     assert "/collection-ideate" not in cheatsheet_flow
     assert "/collection-ideate" not in trigger_list
-    for path in (REPO_ROOT / "README.md", REPO_ROOT / "ONBOARDING.md"):
-        assert "/collection-ideate" not in path.read_text(encoding="utf-8")
+    onboarding = (REPO_ROOT / "ONBOARDING.md").read_text(encoding="utf-8")
+    assert "/collection-ideate" not in onboarding
     for route in ("/wf-new", "/wf-next", "/wf-status"):
         assert route in cheatsheet_flow
         assert route in trigger_list

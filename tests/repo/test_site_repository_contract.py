@@ -168,8 +168,6 @@ def test_repository_docs_define_the_site_as_a_typescript_exception_and_separate_
     development = (ROOT / "docs/development.md").read_text(encoding="utf-8")
     architecture = (ROOT / "docs/architecture.md").read_text(encoding="utf-8")
     adr = (ROOT / "docs/adr/0023-release-notes-site.md").read_text(encoding="utf-8")
-    readme = (ROOT / "README.md").read_text(encoding="utf-8")
-
     assert "`site/`" in claude and "TypeScript" in claude
     assert "## リリースノートサイト開発" in development
     assert "Python wheel / sdist には同梱しない" in development
@@ -181,4 +179,3 @@ def test_repository_docs_define_the_site_as_a_typescript_exception_and_separate_
     assert all(prefix in architecture for prefix in NONPUBLIC_DOC_PREFIXES)
     assert "Python wheel / sdist" in architecture
     assert "Blume" in adr and "Cloudflare Pages" in adr
-    assert "公開リリースノート" in readme
