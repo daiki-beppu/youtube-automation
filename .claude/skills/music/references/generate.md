@@ -517,7 +517,7 @@ celtic folk only, clean dry recording, no pads, gentle melodic phrases rising an
 1. entry ごとの `target_duration_min` + `duration_padding_min` から必要セグメント数を算出する。未指定値だけ channel / skill-config へ fallback し、全 entry の合計 N は 60 セグメント（= Lyria API リクエスト数）の hard cap を超えたら生成前に停止する
 2. entry 順に `lyria_client.generate_music()` を呼び、レスポンスを文書全体で連続する `02-Individual-music/{NN}_{name}.wav` に PCM s16le 48 kHz stereo で保存する（既存ファイルは skip = resume 可能）
 3. 失敗時は `--max-retries` 回までリトライ
-4. 全セグメント揃ったら entry 順の全 filename を `20-documentation/audio-adjustments.json::order` へ自動保存し、`generate_master.generate_master(no_loop=True)` を 1 回だけ呼んで `01-master/master.mp3` を出力する（`masterup.audio.crossfade_duration` を参照）。Lyria の実尺はヒント値と一致しないため、自動 loop は使わない
+4. 全セグメント揃ったら entry 順の全 filename を `20-documentation/audio-adjustments.json::order` へ自動保存し、`generate_master.generate_master()` を 1 回だけ呼んで `01-master/master.mp3` を出力する（`masterup.audio.crossfade_duration` を参照）。既定は 1 pass とし、少数セグメントを作り込んで繰り返す構成では `--loop N` を明示する
 
 ```bash
 uv run yt-generate-lyria-master \
@@ -530,10 +530,13 @@ uv run yt-generate-lyria-master \
 | フラグ | 用途 |
 |------|------|
 | `--prompt-document` (必須) | 同 basename HTMLと対応する検証済み `lyria-prompt.json`。prompt/name/optionsをここから読む |
+| `--loop N` | 生成したセグメント列をマスター結合時に N 回繰り返す。`--target-duration` / prompt document の `target_duration_min` は 1 pass 分の生成セグメント数を決める |
 | `--max-retries N` | 1 セグメントあたりの失敗時リトライ回数（default: 3） |
 | `--collection PATH` | コレクションディレクトリ（省略時は CWD） |
 
 低水準の互換入口 `--prompt` / `--name` と個別option flagは既存呼出しのため残るが、skillの正規経路では使わない。新規実行は必ず `--prompt-document` を使い、JSONとCLI flagの二重正本を作らない。
+
+たとえば 1 pass 33 分相当のセグメント列を 5 回繰り返す場合は、prompt document の各 entry の合計 `target_duration_min` を 33 分相当に設計し、`--loop 5` を付けて単一コマンドで生成からマスター結合まで実行する。
 
 > **認証**: Vertex AI は ADC を使う。project ID は ADC quota project（必要時のみ `GOOGLE_CLOUD_PROJECT` process env override）、location は Lyria 用にアプリが決定する。
 

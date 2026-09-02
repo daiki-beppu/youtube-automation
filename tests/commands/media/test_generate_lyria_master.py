@@ -526,6 +526,63 @@ class TestMasterCombineDelegation:
         assert rc == 0
         assert capture["args"] == (collection, 2.5, "256k")
 
+    def test_explicit_loop_repeats_generated_segments_in_master(self, tmp_path, monkeypatch):
+        collection = _make_collection(tmp_path / "coll")
+        _patch_lyria_generate(monkeypatch)
+        _patch_ffmpeg(monkeypatch)
+        _patch_skill_configs(monkeypatch, lyria={"model": "lyria-3-pro-preview", "duration_padding_min": 0})
+        _patch_load_config(monkeypatch, target_duration_min=None)
+        capture = _patch_generate_master(monkeypatch)
+        monkeypatch.setattr(
+            "sys.argv",
+            [
+                "yt-generate-lyria-master",
+                "--prompt",
+                "p",
+                "--name",
+                "looped",
+                "--target-duration",
+                "6",
+                "--loop",
+                "5",
+                "--collection",
+                str(collection),
+            ],
+        )
+
+        assert generate_lyria_master.main() == 0
+        assert capture["kwargs"]["loops"] == 5
+        assert capture["kwargs"]["no_loop"] is False
+
+    def test_non_positive_loop_stops_before_generation(self, tmp_path, monkeypatch, capsys):
+        collection = _make_collection(tmp_path / "coll")
+        call_log = _patch_lyria_generate(monkeypatch)
+        _patch_skill_configs(monkeypatch)
+        _patch_load_config(monkeypatch, target_duration_min=None)
+        master = MagicMock()
+        monkeypatch.setattr(generate_lyria_master.generate_master, "generate_master", master)
+        monkeypatch.setattr(
+            "sys.argv",
+            [
+                "yt-generate-lyria-master",
+                "--prompt",
+                "p",
+                "--name",
+                "looped",
+                "--target-duration",
+                "6",
+                "--loop",
+                "0",
+                "--collection",
+                str(collection),
+            ],
+        )
+
+        assert generate_lyria_master.main() == 1
+        assert "--loop は 1 以上" in capsys.readouterr().err
+        assert call_log == []
+        master.assert_not_called()
+
 
 class TestCli:
     """CLI 引数バリデーションと到達経路。"""

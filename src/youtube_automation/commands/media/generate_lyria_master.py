@@ -11,7 +11,7 @@ Lyria 3 `interactions` API は 1 リクエスト最大約 184 秒の MP3 を返�
 3. 失敗時は最大 `--max-retries` 回リトライ (`generate_music_dj._generate_one_segment` 流儀)
 4. 既存セグメントがあれば skip (resume 可能)
 5. entry 順の `audio-adjustments.json::order` を保存し、全セグメント揃ったら
-   同じ order を渡して `generate_master.generate_master(no_loop=True)` を 1 回だけ呼び、
+   同じ order と `--loop` を渡して `generate_master.generate_master()` を 1 回だけ呼び、
    `01-master/master.mp3` を出力 (`yt-generate-master` の WAV 入力経路を再利用)
 
 Usage:
@@ -316,6 +316,11 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         help=f"target に上乗せする余裕分 (分)。省略時は skill-config lyria.{_KEY_DURATION_PADDING_MIN}",
     )
     parser.add_argument(
+        "--loop",
+        type=int,
+        help="生成したセグメント列をマスター結合時に繰り返す回数 (1 以上、省略時は 1)",
+    )
+    parser.add_argument(
         "--max-retries",
         type=int,
         default=3,
@@ -410,6 +415,9 @@ def main() -> int:
     args = parser.parse_args()
 
     try:
+        if args.loop is not None and args.loop < 1:
+            raise ValidationError("--loop は 1 以上を指定してください")
+
         collection_dir = resolve_collection_dir(args.collection)
         paths = CollectionPaths(collection_dir)
         music_dir = paths.music_dir
@@ -509,7 +517,8 @@ def main() -> int:
             collection_dir,
             crossfade,
             bitrate,
-            no_loop=True,
+            loops=args.loop,
+            no_loop=args.loop is None,
             order=generated_order,
         )
         print()
