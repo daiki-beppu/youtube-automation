@@ -187,7 +187,11 @@ def _attach_metadata(
     analysis_window_sec: int,
     processing: str = "static",
 ) -> dict[str, Any]:
-    """ドメインキーは payload を保ち、メタデータは target で上書きする (envelope)。"""
+    """ドメインキーは payload を保ち、メタデータは target で上書きする (envelope)。
+
+    agentic は窓を渡さずに解析するため、窓由来のキーは `null` にして全尺スコープを名乗る。
+    """
+    is_static = processing == "static"
     return {
         **payload,
         "video_id": target.video_id,
@@ -196,11 +200,11 @@ def _attach_metadata(
         "title": target.title,
         "analyzed_at": datetime.now().isoformat(timespec="seconds"),
         "model": model,
-        "analysis_window_sec": analysis_window_sec if processing == "static" else None,
+        "analysis_window_sec": analysis_window_sec if is_static else None,
         "analysis_scope": {
-            "start_offset_sec": 0 if processing == "static" else None,
-            "end_offset_sec": analysis_window_sec if processing == "static" else None,
-            "description": "opening clip window" if processing == "static" else "full video (agentic processing)",
+            "start_offset_sec": 0 if is_static else None,
+            "end_offset_sec": analysis_window_sec if is_static else None,
+            "description": "opening clip window" if is_static else "full video (agentic processing)",
         },
     }
 
