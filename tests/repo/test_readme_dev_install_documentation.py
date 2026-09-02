@@ -1,9 +1,9 @@
-"""README の Development 節が Issue #329 完了条件 3 を満たすかを検証する。
+"""docs/development.md の開発者向け節が Issue #329 完了条件 3 を満たすかを検証する。
 
 Issue #329: pytest 全実行で optional dependency 未インストール時の collection error を解消
 
-完了条件 3 が「どの optional dep が必要かを README/CONTRIBUTING に明文化」のため、
-本リポジトリでは README.md の Development 節に以下を含めることで満たす:
+完了条件 3 が「どの optional dep が必要かを開発者向け文書に明文化」のため、
+本リポジトリでは docs/development.md に以下を含めることで満たす:
 
 1. Developer bootstrap のコマンド例から削除済み extra (`--extra veo`) を取り除き、
    正規 setup wrapper で依存が揃うことを示す。
@@ -34,7 +34,7 @@ from tests.helpers.paths import REPO_ROOT
 
 # リポジトリルート (tests/ の親)
 _REPO_ROOT = REPO_ROOT
-README = _REPO_ROOT / "README.md"
+DEVELOPMENT_DOC = _REPO_ROOT / "docs" / "development.md"
 
 
 # ---------- 共通ヘルパー ----------
@@ -44,69 +44,69 @@ def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def _development_section(text: str) -> str:
-    """`## Development` 見出しから次の `## ` 見出し直前までを抽出する。"""
+def _developer_bootstrap_section(text: str) -> str:
+    """開発者 bootstrap 見出しから次の `## ` 見出し直前までを抽出する。"""
     match = re.search(
-        r"^## Development\b.*?(?=^## |\Z)",
+        r"^## 開発者 bootstrap（正規入口）.*?(?=^## |\Z)",
         text,
         flags=re.DOTALL | re.MULTILINE,
     )
     if not match:
-        raise AssertionError("README.md に `## Development` 節が見つかりません")
+        raise AssertionError("docs/development.md に開発者 bootstrap 節が見つかりません")
     return match.group(0)
 
 
 def _developer_bootstrap_block(dev_section: str) -> str:
-    """Development 節内の Developer bootstrap 配下の bash code block を抽出する。"""
+    """開発者 bootstrap 節の bash code block を抽出する。"""
     match = re.search(
-        r"### Developer bootstrap\b.*?```bash\n(.*?)```",
+        r"```bash\n(.*?)```",
         dev_section,
         flags=re.DOTALL,
     )
     if not match:
-        raise AssertionError("README.md に Developer bootstrap の bash code block が見つかりません")
+        raise AssertionError("docs/development.md の開発者 bootstrap 節に bash code block が見つかりません")
     return match.group(1)
 
 
-def _test_run_section(dev_section: str) -> str:
-    """Development 節内の `### テスト実行` ブロックを抽出する (次の `### ` まで)。"""
+def _test_run_section(text: str) -> str:
+    """テスト実行節を次の `## ` 見出し直前まで抽出する。"""
     match = re.search(
-        r"### テスト実行\b(.*?)(?=^### |\Z)",
-        dev_section,
+        r"^## テスト実行（pytest-xdist による並列化）(.*?)(?=^## |\Z)",
+        text,
         flags=re.DOTALL | re.MULTILINE,
     )
     if not match:
-        raise AssertionError("README.md に `### テスト実行` 節が見つかりません")
+        raise AssertionError("docs/development.md にテスト実行節が見つかりません")
     return match.group(1)
 
 
-# ---------- 前提: README とセクションが存在する ----------
+# ---------- 前提: 開発文書とセクションが存在する ----------
 
 
-def test_readme_file_exists() -> None:
+def test_development_doc_exists() -> None:
     """Given リポジトリルート
-    When README.md を探す
+    When docs/development.md を探す
     Then ファイルが存在する。
     """
-    assert README.exists(), f"{README} が存在しません"
+    assert DEVELOPMENT_DOC.exists(), f"{DEVELOPMENT_DOC} が存在しません"
 
 
-def test_readme_has_development_section() -> None:
-    """Given README.md
-    When `## Development` を探す
+def test_development_doc_has_bootstrap_section() -> None:
+    """Given docs/development.md
+    When 開発者 bootstrap 見出しを探す
     Then 節が存在する。
     """
-    text = _read(README)
-    assert "## Development" in text, "README.md に `## Development` 節がない"
+    text = _read(DEVELOPMENT_DOC)
+    assert "## 開発者 bootstrap（正規入口）" in text, "docs/development.md に開発者 bootstrap 節がない"
 
 
 def test_developer_bootstrap_drops_removed_veo_extra() -> None:
-    block = _developer_bootstrap_block(_development_section(_read(README)))
+    block = _developer_bootstrap_block(_developer_bootstrap_section(_read(DEVELOPMENT_DOC)))
     assert "--extra veo" not in block, f"Developer bootstrap に削除済み extra `--extra veo` が残存:\n{block}"
 
 
 def test_developer_bootstrap_uses_canonical_devshell_entry() -> None:
-    block = _developer_bootstrap_block(_development_section(_read(README)))
+    block = _developer_bootstrap_block(_developer_bootstrap_section(_read(DEVELOPMENT_DOC)))
     assert "nix develop" in block
     assert "uv sync" not in block
     assert "lefthook" not in block
@@ -119,59 +119,59 @@ def test_developer_bootstrap_uses_canonical_devshell_entry() -> None:
 
 
 def test_test_run_section_mentions_collection_error_term() -> None:
-    """Given README.md `### テスト実行` 節
+    """Given docs/development.md のテスト実行節
     When 本文を読む
     Then Issue #329 で使われた `collection error` の語彙が含まれている。
 
     将来同じ症状で `collection error` を grep した開発者がたどり着けるようにするため。
     """
-    section = _test_run_section(_development_section(_read(README)))
+    section = _test_run_section(_read(DEVELOPMENT_DOC))
     assert "collection error" in section, (
         f"テスト実行節に `collection error` の語彙がない (Issue #329 検索性のため必須):\n{section}"
     )
 
 
 def test_test_run_section_mentions_optional_dependency_term() -> None:
-    """Given README.md `### テスト実行` 節
+    """Given docs/development.md のテスト実行節
     When 本文を読む
     Then `optional dependency` (または日本語の "optional 依存") の語彙が含まれている。
     """
-    section = _test_run_section(_development_section(_read(README)))
+    section = _test_run_section(_read(DEVELOPMENT_DOC))
     assert ("optional dependency" in section) or ("optional 依存" in section.lower()), (
         f"テスト実行節に `optional dependency` の語彙がない:\n{section}"
     )
 
 
 def test_test_run_section_mentions_pillow_in_main_deps() -> None:
-    """Given README.md `### テスト実行` 節
+    """Given docs/development.md のテスト実行節
     When 本文を読む
     Then Issue #329 の主因だった `Pillow` への言及がある。
 
     `Pillow` が main dependencies に含まれている事実 (issue 起票時点と現状の差) を
     開発者に伝えるため。
     """
-    section = _test_run_section(_development_section(_read(README)))
+    section = _test_run_section(_read(DEVELOPMENT_DOC))
     assert "Pillow" in section, f"テスト実行節に `Pillow` への言及がない (Issue #329 主因の dep):\n{section}"
 
 
 def test_test_run_section_explains_uv_sync_is_sufficient() -> None:
-    """Given README.md `### テスト実行` 節
+    """Given docs/development.md のテスト実行節
     When 本文を読む
     Then `uv sync` 単独でテストが揃う旨が案内されている。
     """
-    section = _test_run_section(_development_section(_read(README)))
+    section = _test_run_section(_read(DEVELOPMENT_DOC))
     assert "uv sync" in section, f"テスト実行節に `uv sync` で揃う旨の案内がない:\n{section}"
 
 
 def test_test_run_section_is_expanded_beyond_single_codeblock() -> None:
-    """Given README.md `### テスト実行` 節
+    """Given docs/development.md のテスト実行節
     When 本文の中身を計測する
     Then 単一の `uv run pytest` コードブロックだけでなく、説明文が追記されている。
 
     Issue #329 完了条件 3 を満たすには、コマンド例 1 行だけでは「optional dep の明文化」と
     呼べないため、少なくとも 1 行以上の説明文が追加されているはず。
     """
-    section = _test_run_section(_development_section(_read(README)))
+    section = _test_run_section(_read(DEVELOPMENT_DOC))
     # コードフェンス・空行・見出し以外の散文行を数える
     prose_lines = [
         ln.strip()
@@ -190,9 +190,9 @@ def test_test_run_section_is_expanded_beyond_single_codeblock() -> None:
 # ---------- 横断: dev install 説明と pyproject.toml の整合 ----------
 
 
-def test_readme_does_not_advertise_empty_extras() -> None:
-    text = _read(README)
-    assert "--extra veo" not in text, "README.md のどこかに削除済み `--extra veo` の案内が残存"
+def test_development_doc_does_not_advertise_empty_extras() -> None:
+    text = _read(DEVELOPMENT_DOC)
+    assert "--extra veo" not in text, "docs/development.md に削除済み `--extra veo` の案内が残存"
 
 
 def test_pyproject_does_not_define_veo_extra() -> None:

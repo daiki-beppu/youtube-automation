@@ -1081,7 +1081,7 @@ def test_wf_next_example_uses_skip_approval_keys() -> None:
 def test_publish_skip_approvals_are_documented_consistently() -> None:
     publish = _read(".claude/skills/publish/SKILL.md")
     setup = _read(".claude/skills/setup/SKILL.md")
-    readme = _read("README.md")
+    architecture = _read("docs/architecture.md")
     example = json.loads(_read("examples/channel_config.example/workflow.json"))
     config = example["workflow"]["post-publish"]
 
@@ -1090,7 +1090,7 @@ def test_publish_skip_approvals_are_documented_consistently() -> None:
         "community-post": True,
         "pinned-comment": True,
     }
-    for text in (publish, setup, readme):
+    for text in (publish, setup, architecture):
         assert "skip_approvals" in text
     assert "resolved skip が `false`" in publish
     assert "逆向き alias" in publish
@@ -1116,7 +1116,7 @@ def test_chain_manifest_approval_gate_uses_true_equals_skip() -> None:
 def test_common_docs_list_optional_channel_config_files() -> None:
     required = ("shorts.json", "comments.json", "pinned-comment.json", "distrokid.json")
 
-    for path in ("README.md", "AGENTS.md", "CLAUDE.md", "ONBOARDING.md"):
+    for path in ("docs/architecture.md", "AGENTS.md", "CLAUDE.md", "ONBOARDING.md"):
         text = _read(path)
         for name in required:
             assert name in text, f"{path} missing {name}"

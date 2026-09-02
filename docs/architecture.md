@@ -219,6 +219,8 @@ collections/            # コンテンツ成果物
 assets/stock/           # ボツ画像ストック (#364)。<theme-slug>/ 配下に画像 + .meta.json
 ```
 
+`config/channel/workflow.json` の `workflow.post-publish.skip_approvals` は、`community-post` と `pinned-comment` の各キーに `true` を指定すると、対応する公開後 step 直前の承認を省略する。両キーの既定値は `true`（承認を省略）である。
+
 ## 主要モジュール
 
 | モジュール | 責務 |
