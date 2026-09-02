@@ -397,7 +397,7 @@ def _assemble(merged: dict, channel_dir_path: Path) -> ChannelConfig:
     pinned_comment = _build_pinned_comment(merged)
     distrokid = _build_distrokid(merged)
 
-    _validate_cross_file(youtube, content, localizations)
+    _validate_cross_file(youtube, localizations)
 
     return ChannelConfig(
         meta=meta,
@@ -1401,7 +1401,6 @@ def _load_localizations(channel_dir_path: Path, fallback_language: str) -> Local
 
 def _validate_cross_file(
     youtube: YoutubeSection,
-    content: Content,
     localizations: Localizations,
 ) -> None:
     """ファイル跨ぎ整合性チェック（違反はすべて ConfigError）."""
