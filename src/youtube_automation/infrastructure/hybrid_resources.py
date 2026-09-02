@@ -15,7 +15,7 @@ from youtube_automation.domains.media_store import MediaStore
 @dataclass(frozen=True, slots=True)
 class SystemHybridResourceProbe:
     channel_dir: Path
-    store: MediaStore
+    store: MediaStore | None
     generation_cost_usd: Decimal
     monthly_run_count: int
     estimated_run_minutes: int
@@ -23,7 +23,7 @@ class SystemHybridResourceProbe:
     def inspect(self) -> HybridResourceSnapshot:
         try:
             disk_free_bytes = shutil.disk_usage(self.channel_dir).free
-            r2_retained_bytes = self.store.retained_bytes()
+            r2_retained_bytes = self.store.retained_bytes() if self.store is not None else 0
         except OSError as error:
             raise ResourceLimitError(f"hybrid resource probe failed: {error}") from error
         return HybridResourceSnapshot(

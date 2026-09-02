@@ -605,6 +605,34 @@ def test_runner_rejects_stage_with_media_handoff_before_probing_resources(tmp_pa
     assert events == []
 
 
+def test_runner_rejects_pipeline_stage_without_media_store_before_probing_resources(tmp_path: Path) -> None:
+    events = []
+
+    class UnusableResourceProbe:
+        def inspect(self) -> HybridResourceSnapshot:
+            raise AssertionError("resource probe must not run for an invalid stage request")
+
+    request = SandwichRequest(
+        channel_dir=tmp_path,
+        channel="003ch",
+        collection="demo",
+        agent="claude",
+        prompt="/wf-next",
+        commit_message="chore: runner state",
+        stage="pipeline",
+        media_handoff=MediaHandoffRequest(
+            collection_dir="collections/planning/demo",
+            input_handoff="suno-download",
+            input_destination="media",
+        ),
+    )
+
+    with pytest.raises(ValidationError, match="pipeline stage には MediaStore が必要です"):
+        run_sandwich(request, None, resource_probe=UnusableResourceProbe(), on_resource_event=events.append)
+
+    assert events == []
+
+
 def test_posix_script_completes_local_pull_run_push(tmp_path: Path) -> None:
     root = REPO_ROOT
     store = LocalMediaStore(tmp_path / "store")
