@@ -234,14 +234,24 @@ test("実リポジトリでは9カテゴリと配布対象skillだけを生成�
   assert.equal(parseSkillCategories(await readFile(join(repositoryRoot, "docs/features.md"), "utf8")).length, 9);
   assert.doesNotMatch(result.entries[0].body.text, /## 未分類/);
   const music = result.entries.find((entry) => entry.slug === "/skills/music");
-  const analytics = result.entries.find(
-    (entry) => entry.slug === "/skills/analytics"
-  );
   assert.match(music.body.text, /## 何ができるか[\s\S]*## つまずいたら[\s\S]*## リファレンス/u);
   assert.match(music.body.text, /`\/music --prompt`/u);
   assert.match(music.body.text, /^\/music {13}# 状態判定つき一括実行/mu);
   assert.doesNotMatch(music.body.text, /`\[\/music\]/u);
-  assert.doesNotMatch(analytics.body.text, /## 何ができるか/u);
+  for (const skillName of [
+    "analytics",
+    "audit",
+    "channel-research",
+    "channel-strategy",
+  ]) {
+    const skill = result.entries.find(
+      (entry) => entry.slug === `/skills/${skillName}`
+    );
+    assert.match(
+      skill.body.text,
+      /## 何ができるか[\s\S]*## つまずいたら[\s\S]*## リファレンス/u
+    );
+  }
 });
 
 test("production build は一覧と19個の個別ページを公開する", async () => {
