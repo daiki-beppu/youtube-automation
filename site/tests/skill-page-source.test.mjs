@@ -10,9 +10,10 @@ import {
 } from "../skill-page-source.ts";
 
 const skillMarkdown = ({
-  description = "Use when test。後続は /beta",
+  description = "Use when 「テストして」「試して」。--collect の後続は /beta",
   name = "alpha",
   prerequisites = "",
+  apiCalls = "",
 } = {}) => `---
 name: ${name}
 description: ${JSON.stringify(description)}
@@ -23,6 +24,10 @@ description: ${JSON.stringify(description)}
 - \`前工程\`: \`なし\`
 - \`後工程\`: \`/beta\`
 ${prerequisites}
+## 成果物
+
+- \`output.md\`
+${apiCalls}
 ## Task
 
 INTERNAL INSTRUCTION MUST NOT LEAK
@@ -68,15 +73,18 @@ const createRepository = async () => {
   return root;
 };
 
-test("frontmatter と公開2節だけを抽出する", () => {
+test("frontmatter とリファレンス用の公開節だけを抽出する", () => {
   const parsed = parseSkillMarkdown(
     skillMarkdown({ prerequisites: "\n## 前提\n\nrequired\n\n" }),
     "alpha"
   );
 
   assert.equal(parsed.name, "alpha");
-  assert.equal(parsed.description, "Use when test。後続は /beta");
+  assert.equal(parsed.description, "Use when 「テストして」「試して」。--collect の後続は /beta");
+  assert.deepEqual(parsed.triggerPhrases, ["テストして", "試して"]);
   assert.equal(parsed.prerequisites, "required");
+  assert.equal(parsed.artifacts, "- `output.md`");
+  assert.equal(parsed.apiCalls, undefined);
   assert.match(parsed.workflow, /後工程/);
   assert.doesNotMatch(parsed.workflow, /INTERNAL INSTRUCTION/);
 });
@@ -89,6 +97,11 @@ test("description 欠損は該当 skill 名を示して拒否する", () => {
   );
 });
 
+test("必須の成果物節がない skill を拒否する", () => {
+  const markdown = skillMarkdown().replace(/## 成果物\n[\s\S]*?(?=## Task)/u, "");
+  assert.throws(() => parseSkillMarkdown(markdown, "alpha"), /alpha.*成果物/i);
+});
+
 test("features のカテゴリと skill 順を抽出する", () => {
   assert.deepEqual(parseSkillCategories(catalog), [
     { label: "category one", skills: ["alpha"] },
@@ -96,7 +109,7 @@ test("features のカテゴリと skill 順を抽出する", () => {
   ]);
 });
 
-test("一覧と全 skill ページを生成し、参照をサイト内リンクへ変換する", async () => {
+test("骨格ページのリード文とリファレンスを生成する", async () => {
   const repositoryRoot = await createRepository();
   const source = createSkillPageSource({ repositoryRoot });
   const result = await source.load();
@@ -109,10 +122,28 @@ test("一覧と全 skill ページを生成し、参照をサイト内リンク�
   assert(!result.entries.some((entry) => entry.slug === "/skills/hallmark"));
   const alpha = result.entries.find((entry) => entry.slug === "/skills/alpha");
   assert.match(alpha.body.text, /\[\/beta\]\(\/skills\/beta\)/);
-  assert.match(alpha.body.text, /## 前提\n\nalpha prerequisite/);
+  assert.match(alpha.body.text, /^Use when 「テストして」「試して」。`--collect`/mu);
+  assert.match(alpha.body.text, /## リファレンス/);
+  assert.match(alpha.body.text, /### 発動フレーズ\n\n- テストして\n- 試して/);
+  assert.match(alpha.body.text, /### 前後工程/);
+  assert.match(alpha.body.text, /### 成果物\n\n- `output\.md`/);
+  assert.match(alpha.body.text, /### 前提\n\nalpha prerequisite/);
   assert.doesNotMatch(alpha.body.text, /Task|Gotchas|Subagent|INTERNAL/);
   const beta = result.entries.find((entry) => entry.slug === "/skills/beta");
-  assert.doesNotMatch(beta.body.text, /## 前提/);
+  assert.doesNotMatch(beta.body.text, /### 前提/);
+});
+
+test("想定 API call 数があるときだけリファレンスに掲載する", async () => {
+  const repositoryRoot = await createRepository();
+  await writeFile(
+    join(repositoryRoot, ".claude/skills/alpha/SKILL.md"),
+    skillMarkdown({ apiCalls: "\n## 想定 API call 数\n\n- 1 call\n" }),
+    "utf8"
+  );
+  const result = await createSkillPageSource({ repositoryRoot }).load();
+  const alpha = result.entries.find((entry) => entry.slug === "/skills/alpha");
+
+  assert.match(alpha.body.text, /### 想定 API call 数\n\n- 1 call/);
 });
 
 test("一覧と個別ページの先頭 H1 を title へ分離する", async () => {
@@ -131,7 +162,8 @@ test("一覧と個別ページの先頭 H1 を title へ分離する", async () 
   assert.match(index.raw, /^---\ntitle: "発動条件から skill を使う"\ntype: doc\n---\n\n/mu);
   assert.equal(alpha.data.title, "/alpha");
   assert.doesNotMatch(alpha.body.text, /^# /mu);
-  assert.match(alpha.body.text, /^## 前提$/mu);
+  assert.match(alpha.body.text, /^## リファレンス$/mu);
+  assert.match(alpha.body.text, /^### 前提$/mu);
   assert.match(alpha.raw, /^---\ntitle: "\/alpha"\ntype: doc\n---\n\n/mu);
 });
 
@@ -188,14 +220,15 @@ test("production build は一覧と19個の個別ページを公開する", asyn
   assert.match(thumbnail, /--test/);
   assert.match(thumbnail, /--iterate/);
   assert.match(thumbnail, /--loop/);
-  // Blume's typography pass renders the CLI double hyphen as an en dash.
-  assert.match(music, /–master/);
+  assert.match(music, /<code>--master<\/code>/);
   assert.doesNotMatch(index, /href="\/skills\/thumbnail-compare"/);
   assert.doesNotMatch(index, /href="\/skills\/thumbnail-test"/);
   assert.doesNotMatch(index, /href="\/skills\/thumbnail-iterate"/);
   assert.doesNotMatch(index, /href="\/skills\/loop-video"/);
   assert.equal((thumbnail.match(/<h1\b/g) ?? []).length, 1);
   assert.match(thumbnail, /<h1[^>]*>\/thumbnail<\/h1>/);
-  assert.match(thumbnail, /<h2[^>]*>.*?前提.*?<\/h2>/);
+  assert.match(thumbnail, /<h2[^>]*>.*?リファレンス.*?<\/h2>/);
+  assert.match(thumbnail, /<h3[^>]*>.*?前提.*?<\/h3>/);
+  assert.doesNotMatch(thumbnail, /完了条件/);
   assert.doesNotMatch(thumbnail, /Subagent Contract|run_in_background|Gotchas/);
 });
