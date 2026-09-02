@@ -1,2 +1,1 @@
 - `/setup --regenerate` が検証済みの `channel-direction.json` + `.html` pair を確認し、JSON 正本だけから設定を再生成する契約へ修正
-- CI autofix がレビュー修正時に `.claude/skills/` の編集確認で停止せず、自動修正を適用できるように改善
