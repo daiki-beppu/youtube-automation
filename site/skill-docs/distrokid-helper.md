@@ -19,11 +19,20 @@ collection の MP3 を DistroKid で配信できるアルバム一式に整え�
 
 ## 配信用ファイルとジャケットを作りたいとき
 
+```
+uv run yt-distrokid-prepare build --spec <collection>/30-distrokid/spec.json --release-date YYYY-MM-DD <collection>
+uv run yt-distrokid-prepare cover --input <collection>/30-distrokid/cover-src.png <collection>
+```
+
 確定した `spec.json` から MP3 のコピーとメタデータを生成します。リリース日が決まっていれば初回 build で指定します。ジャケットは既存サムネイルの単純リサイズではなく、ブランド設定を引き継いだ文字なしの正方形画像を新規生成してから 3000×3000 JPEG にします。
 
 ## DistroKid へ受け渡したいとき
 
-verify が green になった後、distrokid-helper 用の collection server を起動します。表示された URL を Chrome 拡張が読み、各 disc の `release.json` と音源をフォーム入力に使います。アップロード完了を確認したら server を停止し、workflow state に人間タスクの完了を記録します。
+```
+uv run yt-distrokid-prepare verify <collection>
+```
+
+verify が green になった後、`/extension --serve --distrokid` で distrokid-helper 用の collection server を起動します。表示された URL を Chrome 拡張が読み、各 disc の `release.json` と音源をフォーム入力に使います。アップロード完了を確認したら `uv run yt-workflow-state --collection <collection> record-distrokid-submission` で workflow state に人間タスクの完了を記録し、`/extension --stop --distrokid` で server を停止します。
 
 ## つまずいたら
 
