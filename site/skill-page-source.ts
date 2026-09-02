@@ -15,10 +15,13 @@ export const DEV_ONLY_SKILL_NAMES = new Set([
 ]);
 
 export interface SkillPage {
+  readonly apiCalls?: string;
+  readonly artifacts: string;
   readonly category?: string;
   readonly description: string;
   readonly name: string;
   readonly prerequisites?: string;
+  readonly triggerPhrases: readonly string[];
   readonly workflow: string;
 }
 
@@ -77,10 +80,20 @@ export const parseSkillMarkdown = (
   if (!workflow) {
     throw new Error(`Skill ${name} is missing section: 前後工程`);
   }
+  const artifacts = extractSection(markdown, "成果物");
+  if (!artifacts) {
+    throw new Error(`Skill ${name} is missing section: 成果物`);
+  }
+  const description = parseQuotedField(frontmatterMatch[1], "description", name);
   return {
-    description: parseQuotedField(frontmatterMatch[1], "description", name),
+    apiCalls: extractSection(markdown, "想定 API call 数"),
+    artifacts,
+    description,
     name,
     prerequisites: extractSection(markdown, "前提"),
+    triggerPhrases: [
+      ...description.matchAll(/「([^」]+)」|『([^』]+)』/gu),
+    ].map((match) => match[1] ?? match[2]),
     workflow,
   };
 };
@@ -123,21 +136,42 @@ const linkSkillReferences = (
   return linked;
 };
 
+const codeSpanFlags = (description: string): string =>
+  description.replace(/(?<![\w`])(--[A-Za-z0-9][A-Za-z0-9-]*)(?![\w-]|`)/gu, "`$1`");
+
 const renderSkillPage = (
   skill: SkillPage,
   skillNames: ReadonlySet<string>
 ): string => {
   const sections = [
     `# /${skill.name}`,
-    linkSkillReferences(skill.description, skillNames),
+    linkSkillReferences(codeSpanFlags(skill.description), skillNames),
+    "## リファレンス",
   ];
+  if (skill.triggerPhrases.length > 0) {
+    sections.push(
+      "### 発動フレーズ",
+      skill.triggerPhrases.map((phrase) => `- ${phrase}`).join("\n")
+    );
+  }
+  sections.push(
+    "### 前後工程",
+    linkSkillReferences(skill.workflow, skillNames),
+    "### 成果物",
+    linkSkillReferences(skill.artifacts, skillNames)
+  );
+  if (skill.apiCalls) {
+    sections.push(
+      "### 想定 API call 数",
+      linkSkillReferences(skill.apiCalls, skillNames)
+    );
+  }
   if (skill.prerequisites) {
     sections.push(
-      "## 前提",
+      "### 前提",
       linkSkillReferences(skill.prerequisites, skillNames)
     );
   }
-  sections.push("## 前後工程", linkSkillReferences(skill.workflow, skillNames));
   return `${sections.join("\n\n")}\n`;
 };
 
