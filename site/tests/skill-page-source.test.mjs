@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
@@ -54,6 +54,7 @@ const createRepository = async () => {
   await mkdir(join(root, ".claude/skills/beta"), { recursive: true });
   await mkdir(join(root, ".claude/skills/hallmark"), { recursive: true });
   await mkdir(join(root, "docs"), { recursive: true });
+  await mkdir(join(root, "site/skill-docs"), { recursive: true });
   await writeFile(
     join(root, ".claude/skills/alpha/SKILL.md"),
     skillMarkdown({ prerequisites: "\n## 前提\n\nalpha prerequisite\n\n" }),
@@ -70,6 +71,16 @@ const createRepository = async () => {
     "utf8"
   );
   await writeFile(join(root, "docs/features.md"), catalog, "utf8");
+  await writeFile(
+    join(root, "site/skill-docs/alpha.md"),
+    "## 何ができるか\n\nalpha の解説です。`--collect`\n\n## つまずいたら\n\n確認してください。\n",
+    "utf8"
+  );
+  await writeFile(
+    join(root, "site/skill-docs/beta.md"),
+    "## 何ができるか\n\nbeta の解説です。\n\n## つまずいたら\n\n確認してください。\n",
+    "utf8"
+  );
   return root;
 };
 
@@ -191,21 +202,26 @@ test("一覧と個別ページの先頭 H1 を title へ分離する", async () 
   assert.match(alpha.raw, /^---\ntitle: "\/alpha"\ntype: doc\n---\n\n/mu);
 });
 
-test("skill を追加するとカタログ更新前でも個別ページが増える", async () => {
+test("skill を追加して手書き解説を追加し忘れると拒否する", async () => {
   const repositoryRoot = await createRepository();
   const source = createSkillPageSource({ repositoryRoot });
-  const before = await source.load();
   await mkdir(join(repositoryRoot, ".claude/skills/gamma"), { recursive: true });
   await writeFile(
     join(repositoryRoot, ".claude/skills/gamma/SKILL.md"),
     skillMarkdown({ description: "Use when gamma", name: "gamma" }),
     "utf8"
   );
-  const after = await source.load();
+  await assert.rejects(() => source.load(), /gamma.*handwritten/i);
+});
 
-  assert.equal(after.entries.length, before.entries.length + 1);
-  assert(after.entries.some((entry) => entry.slug === "/skills/gamma"));
-  assert.match(after.entries[0].body.text, /## 未分類/);
+test("対象 skill の手書き解説が欠落していると拒否する", async () => {
+  const repositoryRoot = await createRepository();
+  await rm(join(repositoryRoot, "site/skill-docs/alpha.md"));
+
+  await assert.rejects(
+    () => createSkillPageSource({ repositoryRoot }).load(),
+    /alpha.*handwritten/i
+  );
 });
 
 test("実リポジトリでは9カテゴリと配布対象skillだけを生成する", async () => {

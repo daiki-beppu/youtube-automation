@@ -210,13 +210,13 @@ const codeSpanFlags = (description: string): string =>
 const renderSkillPage = (
   skill: SkillPage,
   skillNames: ReadonlySet<string>,
-  handwritten?: string
+  handwritten: string
 ): string => {
   const sections = [
     `# /${skill.name}`,
     linkSkillReferences(codeSpanFlags(skill.description), skillNames),
   ];
-  if (handwritten) sections.push(linkSkillReferences(handwritten, skillNames));
+  sections.push(linkSkillReferences(handwritten, skillNames));
   sections.push("## リファレンス");
   if (skill.triggerPhrases.length > 0) {
     sections.push(
@@ -388,9 +388,14 @@ const loadSkillEntries = async (repositoryRoot: string): Promise<SourceEntry[]> 
       );
     }
   }
+  for (const skill of pages) {
+    if (!handwritten.has(skill.name)) {
+      throw new Error(`Skill ${skill.name} is missing handwritten documentation`);
+    }
+  }
   const categories = parseSkillCategories(await readFile(catalogPath, "utf8"));
   const entries = pages.map((skill) => {
-    const text = renderSkillPage(skill, names, handwritten.get(skill.name));
+    const text = renderSkillPage(skill, names, handwritten.get(skill.name)!);
     return sourceEntry(
       `${skill.name}.md`,
       `/skills/${skill.name}`,
