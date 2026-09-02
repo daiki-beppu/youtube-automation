@@ -1,0 +1,1 @@
+- cloud sandwich runner が multi-channel workspace で `--channel-slug` に対応する channel directory を使用し、planning 前に `collections/` 欠落を検出するよう修正
