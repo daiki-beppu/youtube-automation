@@ -1,7 +1,7 @@
 import dadsTokens from "@digital-go-jp/design-tokens";
 import { defineConfig } from "blume";
-import { releaseScaleLabels } from "./release-scale";
 import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { z } from "zod";
 import {
   createOperatorDocSource,
@@ -9,6 +9,7 @@ import {
   operatorDocReleaseField,
 } from "./operator-doc-source";
 import { releaseFrontmatter } from "./release-schema";
+import { releaseSidebarGroups } from "./release-sidebar";
 import { createSkillPageSource } from "./skill-page-source";
 
 const lightAccent = dadsTokens.Color.Key["800"].$value;
@@ -81,22 +82,7 @@ export default defineConfig({
           },
         ],
       },
-      {
-        label: `本体｜${releaseScaleLabels.major}`,
-        items: ["/v5.6.0"],
-      },
-      {
-        label: `本体｜${releaseScaleLabels.minor}`,
-        items: ["/v5.5.17"],
-      },
-      {
-        label: `Chrome 拡張｜${releaseScaleLabels.major}`,
-        items: ["/ext-v0.3.0"],
-      },
-      {
-        label: `Chrome 拡張｜${releaseScaleLabels.minor}`,
-        items: ["/ext-v0.2.5"],
-      },
+      ...releaseSidebarGroups(join(repositoryRoot, "docs/release-notes")),
     ],
     // Operator routes are intentionally flat; root-scoped tabs keep the same
     // three-section sidebar visible instead of treating one route as a prefix.

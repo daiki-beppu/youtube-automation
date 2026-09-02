@@ -1,13 +1,17 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { readdir, readFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import {
   groupReleasesByScale,
   releaseScaleLabels,
   scaleFromVersion,
 } from "../release-scale.ts";
+import { releaseSidebarGroups } from "../release-sidebar.ts";
 
 const readIndex = () => readFile(new URL("../dist/index.html", import.meta.url), "utf8");
 const readRelease = (version) =>
@@ -656,34 +660,87 @@ const sidebarGroups = (html) => {
     }));
 };
 
-test("全詳細ページのサイドバーを kind × 更新規模の4 flat groupで表示する", async () => {
-  const expectedGroups = [
-    { label: "本体｜大きいアップデート", hrefs: ["/v5.6.0"] },
-    { label: "本体｜小さいアップデート", hrefs: ["/v5.5.17"] },
-    { label: "Chrome 拡張｜大きいアップデート", hrefs: ["/ext-v0.3.0"] },
-    { label: "Chrome 拡張｜小さいアップデート", hrefs: ["/ext-v0.2.5"] },
-  ];
-  const details = [
-    { version: "v5.6.0", title: "youtube-automation v5.6.0" },
-    { version: "v5.5.17", title: "youtube-automation v5.5.17" },
-    { version: "ext-v0.3.0", title: "Chrome 拡張 ext-v0.3.0" },
-    { version: "ext-v0.2.5", title: "Chrome 拡張 ext-v0.2.5" },
-  ];
+const releaseNotesDirectory = fileURLToPath(
+  new URL("../../docs/release-notes", import.meta.url)
+);
 
-  for (const detail of details) {
-    const html = await readRelease(detail.version);
+const releaseNotes = async () => {
+  const files = (await readdir(releaseNotesDirectory)).filter((file) =>
+    file.endsWith(".md")
+  );
+  return Promise.all(
+    files.map(async (file) => {
+      const source = await readFile(join(releaseNotesDirectory, file), "utf8");
+      const title = source.match(/^title:\s*"?(?<title>.+?)"?$/mu)?.groups.title;
+      assert.ok(title, `release note has no title: ${file}`);
+      return { title, version: file.replace(/\.md$/u, "") };
+    })
+  );
+};
+
+const writeReleaseNotes = async (directory, releases) =>
+  Promise.all(
+    releases.map(({ file, kind, released_at, version }) =>
+      writeFile(
+        join(directory, file ?? `${version}.md`),
+        [
+          "---",
+          `title: "${version}"`,
+          `version: ${version}`,
+          `released_at: ${released_at}`,
+          `kind: ${kind}`,
+          'summary: "テスト用のリリース"',
+          "sidebar:",
+          "  order: -1",
+          "---",
+          "",
+        ].join("\n")
+      )
+    )
+  );
+
+test("sidebar の release 節を実ファイル群から導出し、節内を公開日の降順にする", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "release-sidebar-"));
+  await writeReleaseNotes(directory, [
+    { kind: "main", released_at: "2026-07-31", version: "v5.6.0" },
+    { kind: "main", released_at: "2026-08-29", version: "v5.7.0" },
+    { kind: "main", released_at: "2026-07-10", version: "v5.5.17" },
+    { kind: "extension", released_at: "2026-07-31", version: "ext-v0.3.0" },
+  ]);
+
+  assert.deepEqual(releaseSidebarGroups(directory), [
+    { items: ["/v5.7.0", "/v5.6.0"], label: `本体｜${releaseScaleLabels.major}` },
+    { items: ["/v5.5.17"], label: `本体｜${releaseScaleLabels.minor}` },
+    { items: ["/ext-v0.3.0"], label: `Chrome 拡張｜${releaseScaleLabels.major}` },
+  ]);
+});
+
+test("ファイル名と version が食い違う release note を path 付きで拒否する", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "release-sidebar-"));
+  await writeReleaseNotes(directory, [
+    { file: "v5.6.1.md", kind: "main", released_at: "2026-07-31", version: "v5.6.0" },
+  ]);
+
+  assert.throws(() => releaseSidebarGroups(directory), /v5\.6\.1\.md/u);
+});
+
+test("全詳細ページのサイドバーへ release 節を実ファイル群から反映する", async () => {
+  const expectedGroups = releaseSidebarGroups(releaseNotesDirectory).map((group) => ({
+    hrefs: [...group.items],
+    label: group.label,
+  }));
+  const notes = await releaseNotes();
+
+  assert.ok(notes.length > 0);
+  for (const note of notes) {
+    const html = await readRelease(note.version);
     const titles = [...html.matchAll(/<h1(?:\s[^>]*)?>([^<]+)<\/h1>/g)].map(
       (match) => match[1]
     );
-    const groups = sidebarGroups(html);
 
-    assert.equal(titles.filter((title) => title === detail.title).length, 1);
+    assert.equal(titles.filter((title) => title === note.title).length, 1);
     assert.match(html, /youtube-automation ドキュメント/);
-    assert.deepEqual(groups, expectedGroups);
-    assert.deepEqual(
-      groups.flatMap((group) => group.hrefs),
-      expectedGroups.flatMap((group) => group.hrefs)
-    );
+    assert.deepEqual(sidebarGroups(html), expectedGroups);
   }
 });
 
