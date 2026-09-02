@@ -100,16 +100,18 @@ def verify_planning_completion(root: Path, collection: Path | None) -> Path:
     return collection
 
 
-def validate_planning_changes(repository: Path, collection: Path, changed: set[str]) -> None:
+def validate_planning_changes(repository: Path, channel_dir: Path, collection: Path, changed: set[str]) -> None:
     """Restrict the planning agent to its selected collection and audit outputs."""
 
-    relative_collection = collection.resolve().relative_to(repository.resolve())
-    collection_prefix = f"{relative_collection.as_posix()}/"
-    collection_parts = relative_collection.parts
-    collections_index = collection_parts.index("collections")
-    live_prefix = Path(*collection_parts[:collections_index], "collections", "live").as_posix() + "/"
+    root = repository.resolve()
+    relative_channel = channel_dir.resolve().relative_to(root)
+    # repository == channel_dir の single-channel では relative_to が "." を返すため前置を空にする。
+    channel_prefix = "" if relative_channel == Path(".") else f"{relative_channel.as_posix()}/"
+    collection_prefix = f"{collection.resolve().relative_to(root).as_posix()}/"
+    live_prefix = f"{channel_prefix}collections/live/"
+    audit_paths = {f"{channel_prefix}.automation-run/history.json", f"{channel_prefix}data/insights.jsonl"}
     for path in changed:
-        allowed_audit = path in {".automation-run/history.json", "data/insights.jsonl"}
+        allowed_audit = path in audit_paths
         allowed_postmortem = path.startswith(live_prefix) and path.endswith("/20-documentation/postmortem.md")
         if not path.startswith(collection_prefix) and not allowed_audit and not allowed_postmortem:
             raise StateSyncError(f"cloud planning changed an unowned path: {path}")
@@ -136,4 +138,5 @@ class PlanningStagePolicy(ReadinessStagePolicy):
     def allows(self, repository: Path, changed: set[str]) -> None:
         if self._completed is None:
             raise StateSyncError("cloud planning completion target is missing")
-        validate_planning_changes(repository, self._completed, changed)
+        # hybrid_runner から渡される self.root が対象チャンネルの channel_dir そのもの。
+        validate_planning_changes(repository, self.root, self._completed, changed)
