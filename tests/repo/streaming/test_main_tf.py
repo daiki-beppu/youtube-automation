@@ -465,7 +465,7 @@ class TestMainTfNullResource:
         Then deploy 再実行に必要なキーが宣言されている。
 
         - instance_id = vultr_instance.this.id（VPS 再作成時の再 deploy）
-        - video_hash = filemd5(var.video_path)（動画差分での再 deploy）
+        - video_hash = fileexists(...) ? filemd5(...) : ""（動画差分での再 deploy。destroy は不在を許容）
         - stream_hours / break_hours / crash_restart_seconds（配信サイクル差分での再 deploy）
         - stream_key（sha256 ハッシュ。stream key 差分での再 deploy）
         """
@@ -477,9 +477,11 @@ class TestMainTfNullResource:
         assert re.search(r"instance_id\s*=\s*vultr_instance\.this\.id", triggers), (
             "triggers.instance_id が vultr_instance.this.id でない"
         )
-        assert re.search(r"video_hash\s*=\s*filemd5\(\s*var\.video_path\s*\)", triggers), (
-            "triggers.video_hash が filemd5(var.video_path) でない"
-        )
+        assert re.search(
+            r"video_hash\s*=\s*fileexists\(\s*var\.video_path\s*\)\s*\?\s*"
+            r'filemd5\(\s*var\.video_path\s*\)\s*:\s*""',
+            triggers,
+        ), "triggers.video_hash が動画不在時を空 hash に退避せず、実在時の filemd5(var.video_path) を維持していない"
         assert re.search(r"stream_hours\s*=\s*tostring\(\s*var\.stream_hours\s*\)", triggers), (
             "triggers.stream_hours が tostring(var.stream_hours) でない"
         )

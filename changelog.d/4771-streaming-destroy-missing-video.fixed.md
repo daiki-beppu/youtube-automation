@@ -1,0 +1,1 @@
+- 配信元動画を削除した後でも Terraform が video hash の評価で停止せず、配信 VPS を destroy して課金を止められるようにした（#4771）。

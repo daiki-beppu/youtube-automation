@@ -83,7 +83,7 @@ resource "vultr_instance" "this" {
 resource "null_resource" "deploy" {
   triggers = {
     instance_id           = vultr_instance.this.id
-    video_hash            = filemd5(var.video_path)
+    video_hash            = fileexists(var.video_path) ? filemd5(var.video_path) : ""
     ssh_host_key          = local.ssh_host_public_key_sha
     stream_hours          = tostring(var.stream_hours)
     break_hours           = tostring(var.break_hours)
