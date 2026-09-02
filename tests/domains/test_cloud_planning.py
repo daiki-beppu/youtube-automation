@@ -141,8 +141,10 @@ def test_planning_stage_policy_adapts_readiness_completion_and_allowlist(tmp_pat
     assert policy.waiting is False
     assert policy.prompt_for().startswith("/wf-new --auto\nCloud planning scope ends after")
     assert "leave phase planning" in policy.prompt_for()
-    assert "No human can respond to this headless run" in policy.prompt_for()
-    assert "exit non-zero instead of asking a question or offering choices" in policy.prompt_for()
+    assert (
+        "No human can respond to this headless run. If a prerequisite is unavailable, "
+        "report the blocker and exit non-zero instead of asking a question or offering choices." in policy.prompt_for()
+    )
 
     state_path = collection / "workflow-state.json"
     state = json.loads(state_path.read_text(encoding="utf-8"))
