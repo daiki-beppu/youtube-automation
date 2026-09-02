@@ -470,7 +470,7 @@ jq -e --slurpfile targets "$analysis_target" '
          end)
 ' "$analysis_json" >/dev/null
 
-yt-document-render "$analysis_json" --schema analysis-report.schema.json --check >/dev/null
+uv run yt-document-render "$analysis_json" --schema analysis-report.schema.json --check >/dev/null
 ```
 
 ## 検証する evidence 契約

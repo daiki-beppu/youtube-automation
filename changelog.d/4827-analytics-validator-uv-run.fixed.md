@@ -1,0 +1,1 @@
+- analytics の analysis JSON validator が `yt-document-render` を `uv run` 経由で実行し、仮想環境を activate していない標準運用でも完走するようにした（#4827）。

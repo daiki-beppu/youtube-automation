@@ -22,7 +22,7 @@ def _validator_script() -> str:
 def test_validator_uses_cwd_independent_canonical_cli_boundary() -> None:
     script = _validator_script()
 
-    assert "yt-document-render" in script
+    assert 'uv run yt-document-render "$analysis_json"' in script
     assert "--check" in script
     assert "uv run python" not in script
     assert "from youtube_automation" not in script
