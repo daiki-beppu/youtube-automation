@@ -1,0 +1,1 @@
+- media handoff を使わない planning / post-publish stage が R2 credential 未設定でも起動できるように修正

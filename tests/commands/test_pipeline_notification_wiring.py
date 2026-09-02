@@ -87,6 +87,55 @@ def test_hybrid_command_connects_non_fast_forward_event_to_notification(monkeypa
     ]
 
 
+@pytest.mark.parametrize("stage", ["planning", "post-publish"])
+def test_handoff_free_hybrid_stage_does_not_require_media_store(monkeypatch, tmp_path: Path, stage: str) -> None:
+    def reject_r2_configuration():
+        raise AssertionError("handoff-free stages must not resolve R2 credentials")
+
+    def fake_run_sandwich(
+        request,
+        store,
+        *,
+        resource_probe,
+        on_resource_event,
+        on_resource_diagnostics,
+        on_state_sync_event,
+    ):
+        assert request.stage == stage
+        assert store is None
+        assert resource_probe.inspect().r2_retained_bytes == 0
+        return SandwichResult("completed", request.collection)
+
+    monkeypatch.setattr(hybrid_runner.R2MediaStoreConfig, "from_environment", reject_r2_configuration)
+    monkeypatch.setattr(hybrid_runner, "create_discord_notification_sink", RecordingSink)
+    monkeypatch.setattr(hybrid_runner, "run_sandwich", fake_run_sandwich)
+
+    result = hybrid_runner.run(
+        Namespace(
+            media_store="r2",
+            local_store_root=None,
+            channel_dir=tmp_path,
+            collection_dir="collections/planning/night-rain",
+            channel_slug="ambient-lab",
+            collection="night-rain",
+            agent="claude",
+            stage=stage,
+            prompt="/wf-new --auto",
+            commit_message="chore: state",
+            input_handoff=None,
+            input_destination=None,
+            output_handoff=None,
+            output_root=None,
+            output_file=[],
+            generation_cost_usd=0,
+            monthly_run_count=0,
+            estimated_run_minutes=60,
+        )
+    )
+
+    assert result == 0
+
+
 @pytest.mark.parametrize(
     ("action", "expected_kind", "expected_stage"),
     [

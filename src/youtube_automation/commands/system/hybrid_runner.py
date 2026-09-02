@@ -58,11 +58,9 @@ def run(args: argparse.Namespace) -> int:
     if args.media_store == "local":
         if args.local_store_root is None:
             raise ConfigError("--media-store local には --local-store-root が必要です")
-        store = LocalMediaStore(args.local_store_root)
     else:
         if args.local_store_root is not None:
             raise ConfigError("--local-store-root は local MediaStore 専用です")
-        store = R2MediaStore(R2MediaStoreConfig.from_environment())
     handoff_values = (
         args.input_handoff,
         args.input_destination,
@@ -92,6 +90,13 @@ def run(args: argparse.Namespace) -> int:
         stage=args.stage,
         media_handoff=media_handoff,
     )
+    store = None
+    if request.stage == "pipeline":
+        store = (
+            LocalMediaStore(args.local_store_root)
+            if args.media_store == "local"
+            else R2MediaStore(R2MediaStoreConfig.from_environment())
+        )
     resource_probe = SystemHybridResourceProbe(
         channel_dir=request.channel_dir,
         store=store,

@@ -71,7 +71,7 @@ gh secret set CLAUDE_CODE_OAUTH_TOKEN
 gh secret list
 ```
 
-最初のコマンドの非表示 prompt に token を貼り付けます。token をファイル、shell 変数、コマンド引数、チャット、issue、ログへ保存しないでください。配布 workflow に合わせ、`R2_ACCOUNT_ID` / `R2_ACCESS_KEY_ID` / `R2_API_TOKEN` と `DISCORD_WEBHOOK_URL` を Actions secrets、`R2_BUCKET` を Actions variable として登録します。チャンネル識別子や対象 collection などの `YTA_*` repository variables も workflow の入力に必要です。公開工程を動かす場合だけ、追加で YouTube credential を Actions secret に設定します。
+最初のコマンドの非表示 prompt に token を貼り付けます。token をファイル、shell 変数、コマンド引数、チャット、issue、ログへ保存しないでください。`planning` / `post-publish` stage は media handoff を使わないため、R2 credential を登録せずに実行できます。media handoff を使う `pipeline` stage では、配布 workflow に合わせて `R2_ACCOUNT_ID` / `R2_ACCESS_KEY_ID` / `R2_API_TOKEN` を Actions secrets、`R2_BUCKET` を Actions variable として登録します。`DISCORD_WEBHOOK_URL` と、チャンネル識別子や対象 collection などの `YTA_*` repository variables も workflow の入力に必要です。公開工程を動かす場合だけ、追加で YouTube credential を Actions secret に設定します。
 
 ### 3. スケジュールを設定する
 

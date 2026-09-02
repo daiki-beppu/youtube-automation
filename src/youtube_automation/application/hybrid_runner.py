@@ -259,9 +259,11 @@ def _guard_resources(
     raise ResourceLimitError(f"hybrid resource guard rejected: {rejection_detail}")
 
 
-def _select_policy(request: SandwichRequest, store: MediaStore) -> StagePolicy:
+def _select_policy(request: SandwichRequest, store: MediaStore | None) -> StagePolicy:
     """The single stage-to-policy selection boundary."""
     if request.stage == "pipeline":
+        if store is None:
+            raise ValidationError("pipeline stage には MediaStore が必要です")
         return PipelineStagePolicy(request, store)
     if request.stage == "planning":
         return PlanningStagePolicy(request.channel_dir, request.prompt, request.media_handoff)
@@ -275,7 +277,7 @@ def _select_policy(request: SandwichRequest, store: MediaStore) -> StagePolicy:
 
 def run_sandwich(
     request: SandwichRequest,
-    store: MediaStore,
+    store: MediaStore | None,
     *,
     resource_probe: HybridResourceProbe,
     agent_runner: AgentRunner = run_agent,
