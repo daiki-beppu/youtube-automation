@@ -21,7 +21,9 @@ _CLOUD_PLANNING_SCOPE = (
     "Cloud planning scope ends after planning.generated and assets.music_prompts are true, "
     "and the planning and music prompt JSON/HTML pairs are finalized. "
     "Do not generate thumbnail or loop-video assets, and do not set phase prepared; "
-    "leave phase planning for local continuation."
+    "leave phase planning for local continuation. "
+    "No human can respond to this headless run. If a prerequisite is unavailable, "
+    "report the blocker and exit non-zero instead of asking a question or offering choices."
 )
 
 
@@ -88,6 +90,11 @@ def verify_planning_completion(root: Path, collection: Path | None) -> Path:
             active = _planning_states(iter_collections(root.resolve(), ("planning",)))
         except WorkflowStateError as exc:
             raise StateSyncError("cloud planning inventory is invalid") from exc
+        if not active:
+            raise StateSyncError(
+                "cloud planning created no active collection; the agent may not have started "
+                "because a prerequisite was unavailable or it tried to ask a human"
+            )
         if len(active) != 1:
             raise StateSyncError("cloud planning must create exactly one active collection")
         collection, state = active[0]

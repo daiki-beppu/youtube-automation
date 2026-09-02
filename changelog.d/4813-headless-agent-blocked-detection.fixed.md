@@ -1,0 +1,1 @@
+- cloud planning の headless agent が前提不足を人間へ問い返さず失敗として報告し、collection 未作成時に未着手の可能性を示すよう修正した（#4813）。

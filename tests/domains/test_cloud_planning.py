@@ -126,6 +126,13 @@ def test_completion_resolves_exactly_one_new_collection(tmp_path: Path) -> None:
         verify_planning_completion(tmp_path, None)
 
 
+def test_completion_reports_when_agent_created_no_active_collection(tmp_path: Path) -> None:
+    (tmp_path / "collections").mkdir()
+
+    with pytest.raises(StateSyncError, match="agent may not have started"):
+        verify_planning_completion(tmp_path, None)
+
+
 def test_planning_stage_policy_adapts_readiness_completion_and_allowlist(tmp_path: Path) -> None:
     collection = _state(tmp_path, "demo", phase="planning", created_at="2026-01-01T00:00:00Z")
     policy = PlanningStagePolicy(tmp_path, "/wf-new --auto")
@@ -134,6 +141,10 @@ def test_planning_stage_policy_adapts_readiness_completion_and_allowlist(tmp_pat
     assert policy.waiting is False
     assert policy.prompt_for().startswith("/wf-new --auto\nCloud planning scope ends after")
     assert "leave phase planning" in policy.prompt_for()
+    assert (
+        "No human can respond to this headless run. If a prerequisite is unavailable, "
+        "report the blocker and exit non-zero instead of asking a question or offering choices." in policy.prompt_for()
+    )
 
     state_path = collection / "workflow-state.json"
     state = json.loads(state_path.read_text(encoding="utf-8"))
