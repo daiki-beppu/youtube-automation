@@ -135,24 +135,73 @@ export const parseSkillCategories = (markdown: string): SkillCategory[] => {
   return categories.filter((category) => category.skills.length > 0);
 };
 
-const linkSkillReferences = (
-  markdown: string,
-  skillNames: ReadonlySet<string>
-): string => {
-  let linked = markdown;
-  const names = [...skillNames].sort((left, right) => right.length - left.length);
+const FENCE_PATTERN = /^[ \t]{0,3}(`{3,}|~{3,})(.*)$/u;
+const INLINE_CODE_PATTERN = /`+[^`]*`+/gu;
+
+const linkPlainText = (text: string, names: readonly string[]): string => {
+  let linked = text;
   for (const name of names) {
-    const escaped = name;
     linked = linked.replace(
-      new RegExp("`/" + escaped + "`", "gu"),
-      `[/${name}](/skills/${name})`
-    );
-    linked = linked.replace(
-      new RegExp(`(?<![\\w/.(\\[])\\/${escaped}(?![\\w-]|\\)\\])`, "gu"),
+      new RegExp(`(?<![\\w/.(\\[])\\/${name}(?![\\w-]|\\)\\])`, "gu"),
       `[/${name}](/skills/${name})`
     );
   }
   return linked;
+};
+
+// コードスパンは中身が `/skill` ちょうどのときだけリンク化する。`/skill --flag`
+// のようにフラグが続くスパンを裸パターンで置換すると、バッククォート内に生の
+// リンク構文が残って表示が壊れる。
+const linkCodeSpan = (span: string, skillNames: ReadonlySet<string>): string => {
+  const name = span.replace(/^`+/u, "").replace(/`+$/u, "");
+  return name.startsWith("/") && skillNames.has(name.slice(1))
+    ? `[${name}](/skills${name})`
+    : span;
+};
+
+const linkLine = (
+  line: string,
+  names: readonly string[],
+  skillNames: ReadonlySet<string>
+): string => {
+  let linked = "";
+  let index = 0;
+  for (const match of line.matchAll(INLINE_CODE_PATTERN)) {
+    linked += linkPlainText(line.slice(index, match.index), names);
+    linked += linkCodeSpan(match[0], skillNames);
+    index = match.index + match[0].length;
+  }
+  return linked + linkPlainText(line.slice(index), names);
+};
+
+const linkSkillReferences = (
+  markdown: string,
+  skillNames: ReadonlySet<string>
+): string => {
+  const names = [...skillNames].sort((left, right) => right.length - left.length);
+  let fence: string | undefined;
+  return markdown
+    .split("\n")
+    .map((line) => {
+      const [, marker, info] = line.match(FENCE_PATTERN) ?? [];
+      if (fence !== undefined) {
+        if (
+          marker &&
+          marker[0] === fence[0] &&
+          marker.length >= fence.length &&
+          (info ?? "").trim() === ""
+        ) {
+          fence = undefined;
+        }
+        return line;
+      }
+      if (marker) {
+        fence = marker;
+        return line;
+      }
+      return linkLine(line, names, skillNames);
+    })
+    .join("\n");
 };
 
 const codeSpanFlags = (description: string): string =>
@@ -168,9 +217,7 @@ const renderSkillPage = (
     linkSkillReferences(codeSpanFlags(skill.description), skillNames),
   ];
   if (handwritten) sections.push(linkSkillReferences(handwritten, skillNames));
-  sections.push(
-    "## リファレンス",
-  ];
+  sections.push("## リファレンス");
   if (skill.triggerPhrases.length > 0) {
     sections.push(
       "### 発動フレーズ",
@@ -200,12 +247,10 @@ const renderSkillPage = (
 
 const validateHandwritten = (skill: SkillPage, markdown: string): string => {
   const content = markdown.trim();
-  const firstHeading = content.match(/^## .+$/mu)?.[0];
-  const overviewIndex = content.indexOf("## 何ができるか");
-  const troubleshootingIndex = content.indexOf("## つまずいたら");
+  const [firstLine] = content.split("\n");
   if (
-    firstHeading !== "## 何ができるか" ||
-    troubleshootingIndex <= overviewIndex
+    firstLine !== "## 何ができるか" ||
+    !/^## つまずいたら$/mu.test(content)
   ) {
     throw new Error(
       `Handwritten skill ${skill.name} must start with ## 何ができるか and later include ## つまずいたら`
@@ -319,9 +364,14 @@ const loadSkillEntries = async (repositoryRoot: string): Promise<SourceEntry[]> 
     );
     for (const file of files) {
       const name = file.name.slice(0, -3);
+      if (DEV_ONLY_SKILL_NAMES.has(name)) {
+        throw new Error(
+          `Handwritten skill ${name} is excluded from distribution and has no published page`
+        );
+      }
       if (!directories.includes(name)) {
         throw new Error(
-          `Handwritten skill ${name} has no corresponding skill ディレクトリ`
+          `Handwritten skill ${name} has no corresponding skill directory`
         );
       }
       const skill = pages.find((candidate) => candidate.name === name);
