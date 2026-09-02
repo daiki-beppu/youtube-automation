@@ -7,6 +7,78 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.7.1] - 2026-09-02
+
+### Added
+
+- `yt-document-render --check --all` と `--fix --all` を追加し、全登録 schema の stale HTML pair を横断検知・一括再発行できるようにした（#4725）。
+- analytics report の JSON が正常で HTML のみ stale な場合は、再分析ではなく再 render を案内するようにした（#4725）。
+- mattpocock-skills の engineering skills が読むリポジトリ設定（`docs/agents/issue-tracker.md` / `triage-labels.md` / `domain.md`）と `CLAUDE.md` の `## Agent skills` セクションを追加した（#4727）。
+- Terraform workspace の切替とチャンネル別資格情報の注入を一体化し、誤チャンネルへのライブ配信を apply 前に防止するラッパーを追加した（#4770）。
+- Lyria prompt document の複数パターンを entry 順に生成し、曲順を自動保存してループなしのマスターへ一度だけ結合できるようにした（#4778）。
+- 保存した曲順をマスター結合にも明示的に渡すようにし、`02-Individual-music/` に残った無関係な音源が混入した場合はファイル名順で黙って取り込まず失敗するようにした（#4778）。
+
+### Changed
+
+- `${text_strip_clause}` の展開時に `image_generation.gemini.single_step.text_strip_clause` が空文字だと、無効化ではなく `ConfigError` で停止するようになりました（空文字へ override していたチャンネルは本文を設定するか、`${text_strip_clause}` を含まない `diff_prompt_template` を使ってください）。
+- Python 版のメンテナンスモードと tayk への cutover 告知を撤回し、現行の導入文書から移行案内を削除した（#4779）。
+- `docs/architecture.md` の用語集で、tayk / cutover / dogfood / Tier などの語を撤回済みの計画を読むための語彙として記述し直した（#4779）。
+- README と開発文書に重複していた開発環境・設定・OAuth の契約について、検証対象を各 docs の正本へ集約した（#4780）。
+- README を導入判断と最初の同期に絞り、詳細な構成・設定・開発情報を各ドキュメントの正へ委譲した（#4781）。
+
+### Removed
+
+- 下流へ配布しない開発専用 skill を公開サイトの索引と詳細ページから除外した（#4789）。
+
+### Fixed
+
+- uploads playlist のページ境界で同じ動画が返された場合も、全動画一覧を video ID の初出順で一意化するよう修正した（#4745）。
+- suno-helper の形式選択モーダル検出を変動する CSS class ではなく `dialog` role に統一し、現行 Suno UI で playlist 追加後の ZIP ダウンロードがタイムアウトする問題を修正。
+- FFmpeg / FFprobe の出力を OS のロケールに依存せず UTF-8 として安全に復号し、日本語パス環境でもラウドネス偏差ゲートが完走するようにした（#4748）。
+- 音声解析で小数秒の duration を保持し、長尺動画のチャプター時刻に累積ドリフトが生じないよう修正した（#4749）。
+- 概要欄のハッシュタグに `#` を自動付与し、設定済みの `#` は二重付与しないよう修正した（#4750）。
+- 概要欄の `descriptions.metadata` 未定義時に Jazz 固定値を使わず、チャンネルの `genre` 設定からメタデータを生成するよう修正
+- 多言語タイトルの `activities` 未定義時のフォールバックも Jazz 固定値から `genre` 設定へ統一し、補完ロジックを共有ヘルパーに集約
+- `yt-upload-collection --plan` の自動予約 INFO が実効公開範囲を誤って即時公開と表示しないよう修正
+- Windows でも自動ワークフローの lease と実行履歴を排他制御付きで記録できるようにしました。
+- collection 初期化前でも collection plan の draft JSON/HTML pair を公開できるように修正
+- `yt-init-collection` が企画 draft 公開済みディレクトリを既存扱いで停止せず、投影済みの `planning.generated` / `final_title` / `target_persona` を残して初期化するよう修正
+- textless サムネイル再生成で、文字位置を名指しして背景を復元する既定の除去指示をプロンプトへ展開できるようにしました。
+- ベンチマーク鮮度確認で benchmark report の JSON と HTML の pair 不整合を検出した場合、stale HTML を使わず収集済み JSON で処理を続行し、`uv run yt-document-render --fix --all .` での一括再発行を案内するよう修正。`yt-thumbnail-compare` と `yt-benchmark-comments-fetch` の両方が対象。
+- pair 陳腐化を `DocumentPairMismatchError` として送出し、schema 検証・HTML 安全境界違反など他の `DocumentRenderError` は従来どおり失敗させるよう変更。
+- `/video --generate --preview` の Full output outlook が full 尺に応じた stream copy 所要時間を表示し、見積もり上限が foreground timeout の半分以上になる出力では background 実行を推奨するようにした。
+- 配信元動画を削除した後でも Terraform が video hash の評価で停止せず、配信 VPS を destroy して課金を止められるようにした（#4771）。
+- cloud sandwich runner が multi-channel workspace で `--channel-slug` に対応する channel directory を使用し、planning 前に `collections/` 欠落を検出するよう修正
+- multi-channel workspace でも cloud planning が対象チャンネル配下の postmortem と監査出力（`.automation-run/history.json` / `data/insights.jsonl`）を正しく許可するよう修正
+- media handoff を使わない planning / post-publish stage が R2 credential 未設定でも起動できるように修正
+- 配布する GitHub Actions workflow に private repository clone の認証と Claude Code headless runner の導入を追加した（#4811）。
+- cloud planning が GCP ADC を要求する画像生成より前に、企画と music prompt の検証済み成果物を確定して完了できるよう修正
+- cloud planning の headless agent が前提不足を人間へ問い返さず失敗として報告し、collection 未作成時に未着手の可能性を示すよう修正した（#4813）。
+
+### Migration
+
+所要時間の目安: 5〜15 分
+
+Python module 移動: なし
+互換 facade: 対象なし
+
+local fix 衝突注意:
+
+- `/thumbnail`（textless 再生成の文字除去指示を prompt へ展開）
+- `/video`（`--preview` の出力所要時間見積もり）
+- `/music`（Lyria pattern workflow の曲順保存と結合）
+- `/streaming`（Terraform workspace 切替ラッパー）
+- `/wf-new`（cloud runner の bootstrap と planning 前提検出）
+- `/automation`（追従手順の文書更新）
+
+サマリ:
+
+- `image_generation.gemini.single_step.text_strip_clause` を空文字へ override しているチャンネルは、本文を設定するか `${text_strip_clause}` を含まない `diff_prompt_template` へ変更する（空文字は無効化ではなく `ConfigError` で停止する）。
+- 概要欄と多言語タイトルのメタデータ既定値が Jazz 固定値からチャンネルの `genre` 設定へ変わるため、`descriptions.metadata` / `activities` を未設定のチャンネルは生成結果を確認する。
+- HTML pair の陳腐化は `uv run yt-document-render --fix --all .` で全 schema を一括再発行できる。benchmark / analytics report の pair 不整合もこの導線に従う。
+- cloud sandwich runner が multi-channel workspace の `--channel-slug` 解決と planning 前提検出に対応したため、cloud 実行を使うチャンネルは配布 workflow を再同期する。
+- 開発専用 skill を公開サイトの索引から除外した（下流へ配布する skill 一覧そのものに変更はない）。
+
 ## [5.7.0] - 2026-08-29
 
 - `fix(collection-serve)`: discovery owner takeover時に自己登録を完了してからowner readinessを公開し、公開endpointが一時的に空になるraceを解消した（#4477）。
@@ -2881,6 +2953,7 @@ uv run yt-config-migrate verify                  # 新 loader で読めるか検
 未マップキー（例: `suno` 等のチャンネル独自拡張）は `yt-config-migrate` が warning を出力し、
 `--strict` 指定時は `ConfigError` で中止する。
 
+[5.7.1]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.7.1
 [5.7.0]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.7.0
 [5.6.0]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.6.0
 [5.5.17]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.17

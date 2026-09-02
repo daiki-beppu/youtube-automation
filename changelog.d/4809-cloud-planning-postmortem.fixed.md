@@ -1,1 +1,0 @@
-- multi-channel workspace でも cloud planning が対象チャンネル配下の postmortem と監査出力（`.automation-run/history.json` / `data/insights.jsonl`）を正しく許可するよう修正
