@@ -91,20 +91,24 @@ class VideoAnalyzer:
             ValidationError: Gemini レスポンスが JSON にパースできない場合
         """
         logger.info("Gemini 動画解析 (%s): %s (%s)", self.processing, target.title[:40], target.video_id)
-        part_kwargs: dict[str, Any] = {
-            "file_data": types.FileData(file_uri=target.url, mime_type=_VIDEO_MIME_TYPE),
-        }
+        file_data = types.FileData(file_uri=target.url, mime_type=_VIDEO_MIME_TYPE)
         if self.processing == "agentic":
-            part_kwargs["media_processing"] = types.MediaProcessing.AGENTIC
+            video_part = types.Part(
+                file_data=file_data,
+                media_processing=types.MediaProcessing.AGENTIC,
+            )
         else:
-            part_kwargs["video_metadata"] = types.VideoMetadata(
-                start_offset="0s",
-                end_offset=f"{self.analysis_window_sec}s",
+            video_part = types.Part(
+                file_data=file_data,
+                video_metadata=types.VideoMetadata(
+                    start_offset="0s",
+                    end_offset=f"{self.analysis_window_sec}s",
+                ),
             )
         response = self.client.models.generate_content(
             model=self.model,
             contents=[
-                types.Part(**part_kwargs),
+                video_part,
                 self.prompt,
             ],
         )
