@@ -21,7 +21,7 @@ DRY_RUN=false
 
 log()   { printf '\033[0;36m[select-channel]\033[0m %s\n' "$*"; }
 error() { printf '\033[0;31m[error]\033[0m %s\n' "$*" >&2; }
-usage() { sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; }
 
 if [[ $# -eq 0 || "$1" == "-h" || "$1" == "--help" ]]; then
     usage
@@ -72,10 +72,14 @@ log "channel: $CHANNEL_SLUG"
 log "tf-dir: $TF_DIR"
 
 if $DRY_RUN; then
-    STREAM_KEY_REF="$(resolve_stream_key_ref "$CHANNEL_SLUG")"
-    log "stream-key-ref: $STREAM_KEY_REF"
     log "dry-run: terraform workspace select $CHANNEL_SLUG"
-    log "dry-run: terraform workspace show && terraform state list && terraform $ACTION"
+    if [[ "$ACTION" == "show" ]]; then
+        log "dry-run: terraform workspace show && terraform state list"
+    else
+        STREAM_KEY_REF="$(resolve_stream_key_ref "$CHANNEL_SLUG")"
+        log "stream-key-ref: $STREAM_KEY_REF"
+        log "dry-run: terraform workspace show && terraform state list && terraform $ACTION"
+    fi
     exit 0
 fi
 

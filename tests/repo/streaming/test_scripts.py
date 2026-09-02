@@ -98,6 +98,19 @@ class TestSelectChannelScript:
         assert "secret-value" not in result.stdout + result.stderr
         assert calls == ""
 
+    def test_show_dry_run_does_not_require_registered_stream_key(self, tmp_path: Path):
+        result, calls = self._run(tmp_path, "unregistered-channel", "show", "--dry-run")
+        assert result.returncode == 0, result.stderr
+        assert "stream-key-ref" not in result.stdout
+        assert "terraform show" not in result.stdout
+        assert calls == ""
+
+    def test_help_does_not_include_shell_setup(self, tmp_path: Path):
+        result, calls = self._run(tmp_path, "--help")
+        assert result.returncode == 0, result.stderr
+        assert "set -euo pipefail" not in result.stdout
+        assert calls == ""
+
     def test_plan_injects_channel_slug(self, tmp_path: Path):
         video = tmp_path / "stream.mp4"
         video.touch()
