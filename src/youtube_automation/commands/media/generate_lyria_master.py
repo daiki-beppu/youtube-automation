@@ -11,8 +11,10 @@ Lyria 3 `interactions` API は 1 リクエスト最大約 184 秒の MP3 を返�
 3. 失敗時は最大 `--max-retries` 回リトライ (`generate_music_dj._generate_one_segment` 流儀)
 4. 既存セグメントがあれば skip (resume 可能)
 5. entry 順の `audio-adjustments.json::order` を保存し、全セグメント揃ったら
-   同じ order を渡して `generate_master.generate_master(no_loop=True)` を 1 回だけ呼び、
-   `01-master/master.mp3` を出力 (`yt-generate-master` の WAV 入力経路を再利用)
+   同じ order と `--loop` を渡して `generate_master.generate_master()` を 1 回だけ呼び、
+   `01-master/master.mp3` を出力 (`yt-generate-master` の WAV 入力経路を再利用)。
+   channel audio の `target_duration_max` も併せて渡し、`yt-generate-master` 単体実行と
+   同じ目標尺上限の安全弁を通す (`--allow-duration-outside-target` で明示的に無効化できる)
 
 Usage:
     yt-generate-lyria-master --prompt "<prompt>" --name <slug>
@@ -316,6 +318,17 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         help=f"target に上乗せする余裕分 (分)。省略時は skill-config lyria.{_KEY_DURATION_PADDING_MIN}",
     )
     parser.add_argument(
+        "--loop",
+        type=int,
+        help="生成したセグメント列をマスター結合時に繰り返す回数 (1 以上、省略時は 1)",
+    )
+    parser.add_argument(
+        "--allow-duration-outside-target",
+        action="store_true",
+        dest="allow_duration_outside_target",
+        help="channel audio の目標尺外でも operator 判断で生成を許可",
+    )
+    parser.add_argument(
         "--max-retries",
         type=int,
         default=3,
@@ -353,6 +366,12 @@ def _resolve_target_duration(args_target: float | None) -> float:
             "config/channel/audio.json の audio.target_duration_min を設定してください"
         )
     return float(cfg_target)
+
+
+def _resolve_target_duration_max() -> int | None:
+    """`config/channel/audio.json` の目標尺上限を解決する (`yt-generate-master` と同じ安全弁)。"""
+    cfg_max = load_config().audio.target_duration_max
+    return int(cfg_max) if cfg_max is not None else None
 
 
 def _resolve_padding_min(args_padding: float | None, lyria_cfg: dict) -> float:
@@ -410,6 +429,9 @@ def main() -> int:
     args = parser.parse_args()
 
     try:
+        if args.loop is not None and args.loop < 1:
+            raise ValidationError("--loop は 1 以上を指定してください")
+
         collection_dir = resolve_collection_dir(args.collection)
         paths = CollectionPaths(collection_dir)
         music_dir = paths.music_dir
@@ -442,6 +464,8 @@ def main() -> int:
         masterup_cfg = load_skill_config(_SKILL_MASTERUP).get("audio", {})
 
         crossfade, bitrate = _resolve_masterup_audio(masterup_cfg)
+        # 生成前に解決しておき、config 不備は Lyria 課金が走る前に落とす。
+        target_duration_max = _resolve_target_duration_max()
         resolved_patterns = []
         for prompt_input in prompt_inputs:
             target_min = _resolve_target_duration(prompt_input.target_duration)
@@ -509,7 +533,12 @@ def main() -> int:
             collection_dir,
             crossfade,
             bitrate,
-            no_loop=True,
+            loops=args.loop,
+            no_loop=args.loop is None,
+            # `--loop` で尺を伸ばしても channel audio の目標尺上限を超えないよう、
+            # `yt-generate-master` と同じ安全弁を通す (超過時は ValidationError)。
+            target_duration_max=target_duration_max,
+            allow_duration_outside_target=args.allow_duration_outside_target,
             order=generated_order,
         )
         print()
