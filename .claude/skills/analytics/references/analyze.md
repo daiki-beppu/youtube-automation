@@ -227,4 +227,4 @@ validator が失敗した場合は未完了として扱い、不正エントリ�
 ## 関連ファイル
 
 - `data/video_analysis/<slug>/<video_id>.json` — `/audit --video` の `scene_timeline` 出力（retention drop と動画展開のクロス参照に使う）
-  - 冒頭クリップ窓（既定 900 秒、JSON の `analysis_window_sec`）内の分析結果。retention drop との照合では、窓外の全尺展開を推測しない。
+  - 冒頭クリップ窓（既定 30 秒、JSON の `analysis_window_sec`）内の分析結果。retention drop との照合では、窓外の全尺展開を推測しない。
