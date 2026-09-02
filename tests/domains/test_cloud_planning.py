@@ -11,6 +11,7 @@ from youtube_automation.domains.cloud_planning import (
     PlanningStagePolicy,
     _planning_states,
     resolve_planning_readiness,
+    validate_planning_changes,
     verify_planning_completion,
 )
 from youtube_automation.domains.collections.inventory import CollectionRecord
@@ -127,3 +128,61 @@ def test_planning_stage_policy_adapts_readiness_completion_and_allowlist(tmp_pat
 def test_planning_stage_policy_rejects_media_handoff_before_any_side_effect(tmp_path: Path) -> None:
     with pytest.raises(ValidationError, match="media handoff を受け付けません"):
         PlanningStagePolicy(tmp_path, "/wf-new --auto", object())
+
+
+def test_change_allowlist_scopes_postmortem_to_channel_directory(tmp_path: Path) -> None:
+    channel_dir = tmp_path / "channels" / "focus"
+    collection = channel_dir / "collections" / "planning" / "demo"
+
+    validate_planning_changes(
+        tmp_path,
+        channel_dir,
+        collection,
+        {"channels/focus/collections/live/older/20-documentation/postmortem.md"},
+    )
+
+    with pytest.raises(StateSyncError, match="unowned path"):
+        validate_planning_changes(
+            tmp_path,
+            channel_dir,
+            collection,
+            {"collections/live/older/20-documentation/postmortem.md"},
+        )
+
+
+def test_change_allowlist_scopes_audit_outputs_to_channel_directory(tmp_path: Path) -> None:
+    channel_dir = tmp_path / "channels" / "focus"
+    collection = channel_dir / "collections" / "planning" / "demo"
+
+    validate_planning_changes(
+        tmp_path,
+        channel_dir,
+        collection,
+        {"channels/focus/.automation-run/history.json", "channels/focus/data/insights.jsonl"},
+    )
+
+    with pytest.raises(StateSyncError, match="unowned path"):
+        validate_planning_changes(tmp_path, channel_dir, collection, {"data/insights.jsonl"})
+
+
+def test_change_allowlist_keeps_repository_root_scope_for_single_channel(tmp_path: Path) -> None:
+    collection = tmp_path / "collections" / "planning" / "demo"
+
+    validate_planning_changes(
+        tmp_path,
+        tmp_path,
+        collection,
+        {
+            "collections/live/older/20-documentation/postmortem.md",
+            ".automation-run/history.json",
+            "data/insights.jsonl",
+        },
+    )
+
+    with pytest.raises(StateSyncError, match="unowned path"):
+        validate_planning_changes(
+            tmp_path,
+            tmp_path,
+            collection,
+            {"channels/focus/collections/live/older/20-documentation/postmortem.md"},
+        )
