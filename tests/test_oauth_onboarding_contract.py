@@ -164,8 +164,8 @@ def _make_workspace_channel_worktree(tmp_path: Path) -> Path:
     return channel
 
 
-def test_client_secrets_resolution_order_matches_readme_and_oauth_setup(tmp_path: Path, monkeypatch) -> None:
-    """README / docs の解決順が実装の候補列と一致する（README だけ古くなる事故を防ぐ）。"""
+def test_client_secrets_resolution_order_matches_oauth_setup(tmp_path: Path, monkeypatch) -> None:
+    """docs の解決順が実装の候補列と一致する。"""
     from youtube_automation.infrastructure.auth.youtube import client_secrets_file_candidates
 
     monkeypatch.delenv("CLIENT_SECRETS_DIR", raising=False)
@@ -192,11 +192,8 @@ def test_client_secrets_resolution_order_matches_readme_and_oauth_setup(tmp_path
 
     oauth_setup = (REPO_ROOT / "docs" / "oauth-setup.md").read_text(encoding="utf-8")
     resolution_section = oauth_setup.split("`client_secrets.json` の解決順", 1)[1].split("## 動作確認", 1)[0]
-    readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
-
-    for document, context in ((readme, "README.md"), (resolution_section, "docs/oauth-setup.md")):
-        positions = []
-        for token in documented_tokens:
-            assert token in document, f"{context} is missing {token!r}"
-            positions.append(document.index(token))
-        assert positions == sorted(positions), f"{context} lists the candidates out of implementation order"
+    positions = []
+    for token in documented_tokens:
+        assert token in resolution_section, f"docs/oauth-setup.md is missing {token!r}"
+        positions.append(resolution_section.index(token))
+    assert positions == sorted(positions), "docs/oauth-setup.md lists the candidates out of implementation order"

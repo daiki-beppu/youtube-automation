@@ -37,6 +37,8 @@ uv run yt-skills migrate-state-git --channel-dir <path> --check    # 制御面JS
 
 ## テスト実行（pytest-xdist による並列化）
 
+devShell の shellHook が実行する `uv sync` で main dependencies と default の dev dependency group が揃うため、追加の extra を指定せずにテストを収集・実行できる。画像処理で使う `Pillow` は main dependencies に含まれており、未導入の optional dependency が原因となる `collection error` を避けるためにも、テスト前にこの同期を完了させる。
+
 ### テストの配置
 
 `youtube_automation` の production module を実行して挙動を検証するテストは、`src/youtube_automation/` と同じ layer・subdirectory の `tests/<layer>/<sub>/test_<module>.py` に置く。repository の docs、CI、packaging、skill、Terraform などを静的に検査し、production module を実行しないテストは `tests/repo/` に置く。複数 layer をまたぐ実 tool の end-to-end テストは `tests/integration/`、共有 helper と fixture はそれぞれ `tests/helpers/` と `tests/fixtures/` に置く。
