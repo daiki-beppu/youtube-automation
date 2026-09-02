@@ -1468,16 +1468,19 @@ def test_cross_file_content_model_languages_subset(tmp_path, monkeypatch):
         load_config()
 
 
-def test_cross_file_theme_scenes_subset(tmp_path, monkeypatch):
+def test_theme_scenes_accepts_slug_keywords_independent_of_tag_theme_groups(tmp_path, monkeypatch):
     sections = _minimal_sections()
+    sections["content.json"]["title"]["default_activity"] = "Chill"
     sections["content.json"]["title"]["theme_scenes"] = {
-        "unknown_theme": {"activities": "Study"},
+        "wah-guitar": {"activities": "Focus", "scene": "A guitarist in a neon loft"},
     }
     ch = _setup_channel(tmp_path, sections)
     monkeypatch.setenv("CHANNEL_DIR", str(ch))
 
-    with pytest.raises(ConfigError, match="theme_scenes"):
-        load_config()
+    config = load_config()
+
+    assert config.content.title.activity_for_theme("wah-guitar-fusion") == "Focus"
+    assert config.content.title.scene_for_theme("wah-guitar-fusion") == "A guitarist in a neon loft"
 
 
 def test_optional_sections_default(tmp_path, monkeypatch):
