@@ -17,6 +17,8 @@ dry-run の差分、対象 part、`meta.json::channel.channel_id` を提示し�
 uv run yt-channel-settings push --apply
 ```
 
+apply 後は `uv run yt-channel-settings diff` で反映後確認する。ただし YouTube の `localizations` は `brandingSettings` より反映が遅く、数分の伝播遅延が生じることがある。直後の diff に localization の差分だけが残っても 1 回の確認で push 失敗と判定せず、数分待ってから再度 diff を実行する。伝播待ちの間は同じ変更を再 apply しない。
+
 **逆方向（pull: YouTube → local）が必要な場合**:
 
 ```bash
