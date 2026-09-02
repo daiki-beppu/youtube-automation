@@ -8,6 +8,11 @@ import { operatorDocReleaseField } from "./operator-doc-source.ts";
 const GITHUB_SKILL_BASE =
   "https://github.com/daiki-beppu/youtube-automation/blob/main/.claude/skills/";
 const SKILL_NAME_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
+export const DEV_ONLY_SKILL_NAMES = new Set([
+  "automation-release",
+  "hallmark",
+  "shadcn",
+]);
 
 export interface SkillPage {
   readonly category?: string;
@@ -208,6 +213,7 @@ const loadSkillEntries = async (repositoryRoot: string): Promise<SourceEntry[]> 
   const directories = (await readdir(skillsRoot, { withFileTypes: true }))
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name)
+    .filter((name) => !DEV_ONLY_SKILL_NAMES.has(name))
     .sort();
   const skills = await Promise.all(
     directories.map(async (directoryName) => {

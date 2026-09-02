@@ -82,13 +82,10 @@ YouTube Analytics と動画本体の解析。
 
 | Skill | なにができるか |
 |---|---|
-| /automation-release | （upstream 開発専用・downstream 配布対象外）本リポジトリの新規リリースを作成（prepare → publish の 2 フェーズ） |
 | /automation | `--update` で下流チャンネルを upstream 最新版へ追従し、`--question <質問>` または自然文で配布物ローカルを根拠に読み取り専用で質問へ回答 |
 | /extension | Chrome 拡張の状態判定・導入・更新と、拡張向け collection server の起動・停止 |
-| /hallmark | （upstream 開発専用・downstream 配布対象外）新規ページの設計、既存UIの監査・再設計、URLやスクリーンショットからのデザイン抽出 |
 | /skill-feedback | スキル実行中の不具合・摩擦・改善案を append-only JSONL に構造化記録 |
-| /shadcn | （upstream 開発専用・downstream 配布対象外）`components.json` を読み、公式docs・registry差分を基準にshadcn/ui componentを追加・更新・監査 |
 
 ---
 
-> このカタログと `.claude/skills/*/SKILL.md` の件数・名称・9カテゴリ分類は CI で照合する。新規 skill を追加・削除した場合は本ファイルも更新すること。
+> このカタログと下流配布対象の `.claude/skills/*/SKILL.md` の件数・名称・9カテゴリ分類は CI で照合する。新規 skill を追加・削除した場合は本ファイルも更新すること。
