@@ -233,6 +233,15 @@ test("実リポジトリでは9カテゴリと配布対象skillだけを生成�
   assert.doesNotMatch(video.body.text, /### 発動フレーズ/);
   assert.equal(parseSkillCategories(await readFile(join(repositoryRoot, "docs/features.md"), "utf8")).length, 9);
   assert.doesNotMatch(result.entries[0].body.text, /## 未分類/);
+  const music = result.entries.find((entry) => entry.slug === "/skills/music");
+  const analytics = result.entries.find(
+    (entry) => entry.slug === "/skills/analytics"
+  );
+  assert.match(music.body.text, /## 何ができるか[\s\S]*## つまずいたら[\s\S]*## リファレンス/u);
+  assert.match(music.body.text, /`\/music --prompt`/u);
+  assert.match(music.body.text, /^\/music {13}# 状態判定つき一括実行/mu);
+  assert.doesNotMatch(music.body.text, /`\[\/music\]/u);
+  assert.doesNotMatch(analytics.body.text, /## 何ができるか/u);
 });
 
 test("production build は一覧と19個の個別ページを公開する", async () => {
@@ -268,4 +277,140 @@ test("production build は一覧と19個の個別ページを公開する", asyn
   assert.match(thumbnail, /<h3[^>]*>.*?前提.*?<\/h3>/);
   assert.doesNotMatch(thumbnail, /完了条件/);
   assert.doesNotMatch(thumbnail, /Subagent Contract|run_in_background|Gotchas/);
+});
+
+test("手書き解説をリード文とリファレンスの間に合成する", async () => {
+  const repositoryRoot = await createRepository();
+  await mkdir(join(repositoryRoot, "site/skill-docs"), { recursive: true });
+  await writeFile(
+    join(repositoryRoot, "site/skill-docs/alpha.md"),
+    "## 何ができるか\n\n手書きの説明です。`--collect`\n\n## 試したいとき\n\n例です。\n\n## つまずいたら\n\n確認してください。\n",
+    "utf8"
+  );
+
+  const result = await createSkillPageSource({ repositoryRoot }).load();
+  const alpha = result.entries.find((entry) => entry.slug === "/skills/alpha");
+  assert.match(
+    alpha.body.text,
+    /Use when.*\n\n## 何ができるか[\s\S]*## つまずいたら[\s\S]*## リファレンス/u
+  );
+});
+
+test("対応する skill ディレクトリがない手書きファイルを拒否する", async () => {
+  const repositoryRoot = await createRepository();
+  await mkdir(join(repositoryRoot, "site/skill-docs"), { recursive: true });
+  await writeFile(
+    join(repositoryRoot, "site/skill-docs/removed.md"),
+    "## 何ができるか\n\n説明\n\n## つまずいたら\n\n確認\n",
+    "utf8"
+  );
+
+  await assert.rejects(
+    () => createSkillPageSource({ repositoryRoot }).load(),
+    /removed.*skill directory/u
+  );
+});
+
+test("配布対象外 skill の手書きファイルは理由を示して拒否する", async () => {
+  const repositoryRoot = await createRepository();
+  await mkdir(join(repositoryRoot, "site/skill-docs"), { recursive: true });
+  await writeFile(
+    join(repositoryRoot, "site/skill-docs/hallmark.md"),
+    "## 何ができるか\n\n説明\n\n## つまずいたら\n\n確認\n",
+    "utf8"
+  );
+
+  await assert.rejects(
+    () => createSkillPageSource({ repositoryRoot }).load(),
+    /hallmark.*excluded from distribution/u
+  );
+});
+
+test("手書き解説の最小セクション契約を検証する", async () => {
+  const repositoryRoot = await createRepository();
+  await mkdir(join(repositoryRoot, "site/skill-docs"), { recursive: true });
+  await writeFile(
+    join(repositoryRoot, "site/skill-docs/alpha.md"),
+    "## つまずいたら\n\n確認\n\n## 何ができるか\n\n説明\n",
+    "utf8"
+  );
+
+  await assert.rejects(
+    () => createSkillPageSource({ repositoryRoot }).load(),
+    /alpha.*何ができるか.*つまずいたら/u
+  );
+});
+
+test("手書き解説の見出し前に本文があるファイルを拒否する", async () => {
+  const repositoryRoot = await createRepository();
+  await mkdir(join(repositoryRoot, "site/skill-docs"), { recursive: true });
+  await writeFile(
+    join(repositoryRoot, "site/skill-docs/alpha.md"),
+    "前置きの一文\n\n## 何ができるか\n\n説明\n\n## つまずいたら\n\n確認\n",
+    "utf8"
+  );
+
+  await assert.rejects(
+    () => createSkillPageSource({ repositoryRoot }).load(),
+    /alpha.*何ができるか.*つまずいたら/u
+  );
+});
+
+test("コードスパン内のフラグ付き記法とフェンス例をリンク化しない", async () => {
+  const repositoryRoot = await createRepository();
+  await mkdir(join(repositoryRoot, "site/skill-docs"), { recursive: true });
+  await writeFile(
+    join(repositoryRoot, "site/skill-docs/alpha.md"),
+    [
+      "## 何ができるか",
+      "",
+      "単体の `/beta` はリンクになります。/beta も同じです。",
+      "フラグ付きの `/beta --collect` はそのまま残します。",
+      "",
+      "```",
+      "/beta --collect  # フェンス内はコピペ用なので触らない",
+      "/alpha",
+      "```",
+      "",
+      "## つまずいたら",
+      "",
+      "確認してください。",
+      "",
+    ].join("\n"),
+    "utf8"
+  );
+
+  const result = await createSkillPageSource({ repositoryRoot }).load();
+  const alpha = result.entries.find((entry) => entry.slug === "/skills/alpha");
+
+  assert.match(alpha.body.text, /単体の \[\/beta\]\(\/skills\/beta\) はリンク/u);
+  assert.match(alpha.body.text, /\[\/beta\]\(\/skills\/beta\) も同じです/u);
+  assert.match(alpha.body.text, /フラグ付きの `\/beta --collect` はそのまま/u);
+  assert.match(
+    alpha.body.text,
+    /```\n\/beta --collect  # フェンス内はコピペ用なので触らない\n\/alpha\n```/u
+  );
+});
+
+test("モード判定表の全フラグが手書き解説の code span に必要", async () => {
+  const repositoryRoot = await createRepository();
+  await writeFile(
+    join(repositoryRoot, ".claude/skills/alpha/SKILL.md"),
+    skillMarkdown().replace(
+      "## Task",
+      "## モード判定\n\n| mode | reference |\n|---|---|\n| `--collect` | collect.md |\n| `--report` | report.md |\n\n## Task"
+    ),
+    "utf8"
+  );
+  await mkdir(join(repositoryRoot, "site/skill-docs"), { recursive: true });
+  await writeFile(
+    join(repositoryRoot, "site/skill-docs/alpha.md"),
+    "## 何ができるか\n\n`--collect` を実行します。\n\n## つまずいたら\n\n確認\n",
+    "utf8"
+  );
+
+  await assert.rejects(
+    () => createSkillPageSource({ repositoryRoot }).load(),
+    /alpha.*`--report`/u
+  );
 });

@@ -19,6 +19,7 @@ export interface SkillPage {
   readonly artifacts: string;
   readonly category?: string;
   readonly description: string;
+  readonly modeFlags: readonly string[];
   readonly name: string;
   readonly prerequisites?: string;
   readonly triggerPhrases: readonly string[];
@@ -58,6 +59,23 @@ const parseQuotedField = (
   }
 };
 
+const extractModeFlags = (markdown: string): string[] => {
+  const modeSection = extractSection(markdown, "モード判定");
+  if (!modeSection) return [];
+  return [
+    ...new Set(
+      modeSection
+        .split("\n")
+        .filter((line) => line.trimStart().startsWith("|"))
+        .flatMap((line) =>
+          [...line.matchAll(/`(--[a-z0-9][a-z0-9-]*)`/gu)].map(
+            (match) => match[1]
+          )
+        )
+    ),
+  ];
+};
+
 export const parseSkillMarkdown = (
   markdown: string,
   directoryName: string
@@ -89,6 +107,7 @@ export const parseSkillMarkdown = (
     apiCalls: extractSection(markdown, "想定 API call 数"),
     artifacts,
     description,
+    modeFlags: extractModeFlags(markdown),
     name,
     prerequisites: extractSection(markdown, "前提"),
     triggerPhrases: [
@@ -116,24 +135,73 @@ export const parseSkillCategories = (markdown: string): SkillCategory[] => {
   return categories.filter((category) => category.skills.length > 0);
 };
 
-const linkSkillReferences = (
-  markdown: string,
-  skillNames: ReadonlySet<string>
-): string => {
-  let linked = markdown;
-  const names = [...skillNames].sort((left, right) => right.length - left.length);
+const FENCE_PATTERN = /^[ \t]{0,3}(`{3,}|~{3,})(.*)$/u;
+const INLINE_CODE_PATTERN = /`+[^`]*`+/gu;
+
+const linkPlainText = (text: string, names: readonly string[]): string => {
+  let linked = text;
   for (const name of names) {
-    const escaped = name;
     linked = linked.replace(
-      new RegExp("`/" + escaped + "`", "gu"),
-      `[/${name}](/skills/${name})`
-    );
-    linked = linked.replace(
-      new RegExp(`(?<![\\w/.(\\[])\\/${escaped}(?![\\w-]|\\)\\])`, "gu"),
+      new RegExp(`(?<![\\w/.(\\[])\\/${name}(?![\\w-]|\\)\\])`, "gu"),
       `[/${name}](/skills/${name})`
     );
   }
   return linked;
+};
+
+// コードスパンは中身が `/skill` ちょうどのときだけリンク化する。`/skill --flag`
+// のようにフラグが続くスパンを裸パターンで置換すると、バッククォート内に生の
+// リンク構文が残って表示が壊れる。
+const linkCodeSpan = (span: string, skillNames: ReadonlySet<string>): string => {
+  const name = span.replace(/^`+/u, "").replace(/`+$/u, "");
+  return name.startsWith("/") && skillNames.has(name.slice(1))
+    ? `[${name}](/skills${name})`
+    : span;
+};
+
+const linkLine = (
+  line: string,
+  names: readonly string[],
+  skillNames: ReadonlySet<string>
+): string => {
+  let linked = "";
+  let index = 0;
+  for (const match of line.matchAll(INLINE_CODE_PATTERN)) {
+    linked += linkPlainText(line.slice(index, match.index), names);
+    linked += linkCodeSpan(match[0], skillNames);
+    index = match.index + match[0].length;
+  }
+  return linked + linkPlainText(line.slice(index), names);
+};
+
+const linkSkillReferences = (
+  markdown: string,
+  skillNames: ReadonlySet<string>
+): string => {
+  const names = [...skillNames].sort((left, right) => right.length - left.length);
+  let fence: string | undefined;
+  return markdown
+    .split("\n")
+    .map((line) => {
+      const [, marker, info] = line.match(FENCE_PATTERN) ?? [];
+      if (fence !== undefined) {
+        if (
+          marker &&
+          marker[0] === fence[0] &&
+          marker.length >= fence.length &&
+          (info ?? "").trim() === ""
+        ) {
+          fence = undefined;
+        }
+        return line;
+      }
+      if (marker) {
+        fence = marker;
+        return line;
+      }
+      return linkLine(line, names, skillNames);
+    })
+    .join("\n");
 };
 
 const codeSpanFlags = (description: string): string =>
@@ -141,13 +209,15 @@ const codeSpanFlags = (description: string): string =>
 
 const renderSkillPage = (
   skill: SkillPage,
-  skillNames: ReadonlySet<string>
+  skillNames: ReadonlySet<string>,
+  handwritten?: string
 ): string => {
   const sections = [
     `# /${skill.name}`,
     linkSkillReferences(codeSpanFlags(skill.description), skillNames),
-    "## リファレンス",
   ];
+  if (handwritten) sections.push(linkSkillReferences(handwritten, skillNames));
+  sections.push("## リファレンス");
   if (skill.triggerPhrases.length > 0) {
     sections.push(
       "### 発動フレーズ",
@@ -173,6 +243,30 @@ const renderSkillPage = (
     );
   }
   return `${sections.join("\n\n")}\n`;
+};
+
+const validateHandwritten = (skill: SkillPage, markdown: string): string => {
+  const content = markdown.trim();
+  const [firstLine] = content.split("\n");
+  if (
+    firstLine !== "## 何ができるか" ||
+    !/^## つまずいたら$/mu.test(content)
+  ) {
+    throw new Error(
+      `Handwritten skill ${skill.name} must start with ## 何ができるか and later include ## つまずいたら`
+    );
+  }
+  const missingFlags = skill.modeFlags.filter(
+    (flag) => !content.includes(`\`${flag}\``)
+  );
+  if (missingFlags.length > 0) {
+    throw new Error(
+      `Handwritten skill ${skill.name} is missing mode flags: ${missingFlags
+        .map((flag) => `\`${flag}\``)
+        .join(", ")}`
+    );
+  }
+  return content;
 };
 
 const renderSkillIndex = (
@@ -260,9 +354,43 @@ const loadSkillEntries = async (repositoryRoot: string): Promise<SourceEntry[]> 
   const pages = skills.filter((skill): skill is SkillPage => skill !== undefined);
   const names = new Set(pages.map((skill) => skill.name));
   if (names.size !== pages.length) throw new Error("Duplicate skill names detected");
+  const handwrittenRoot = resolve(repositoryRoot, "site/skill-docs");
+  const handwritten = new Map<string, string>();
+  if (existsSync(handwrittenRoot)) {
+    assertInsideRepository(repositoryRoot, handwrittenRoot);
+    const files = (await readdir(handwrittenRoot, { withFileTypes: true })).filter(
+      (entry) =>
+        entry.isFile() && entry.name.endsWith(".md") && entry.name !== "README.md"
+    );
+    for (const file of files) {
+      const name = file.name.slice(0, -3);
+      if (DEV_ONLY_SKILL_NAMES.has(name)) {
+        throw new Error(
+          `Handwritten skill ${name} is excluded from distribution and has no published page`
+        );
+      }
+      if (!directories.includes(name)) {
+        throw new Error(
+          `Handwritten skill ${name} has no corresponding skill directory`
+        );
+      }
+      const skill = pages.find((candidate) => candidate.name === name);
+      if (!skill) {
+        throw new Error(`Handwritten skill ${name} has no corresponding SKILL.md`);
+      }
+      const path = assertInsideRepository(
+        repositoryRoot,
+        join(handwrittenRoot, file.name)
+      );
+      handwritten.set(
+        name,
+        validateHandwritten(skill, await readFile(path, "utf8"))
+      );
+    }
+  }
   const categories = parseSkillCategories(await readFile(catalogPath, "utf8"));
   const entries = pages.map((skill) => {
-    const text = renderSkillPage(skill, names);
+    const text = renderSkillPage(skill, names, handwritten.get(skill.name));
     return sourceEntry(
       `${skill.name}.md`,
       `/skills/${skill.name}`,
