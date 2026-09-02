@@ -17,6 +17,13 @@ _PROMPT_FILES = {
     "minimax": "minimax-prompt",
 }
 
+_CLOUD_PLANNING_SCOPE = (
+    "Cloud planning scope ends after planning.generated and assets.music_prompts are true, "
+    "and the planning and music prompt JSON/HTML pairs are finalized. "
+    "Do not generate thumbnail or loop-video assets, and do not set phase prepared; "
+    "leave phase planning for local continuation."
+)
+
 
 @dataclass(frozen=True, slots=True)
 class PlanningReadiness:
@@ -55,7 +62,13 @@ def resolve_planning_readiness(root: Path) -> PlanningReadiness:
     if not active:
         return PlanningReadiness("ready", None)
     collection, state = min(active, key=_sort_key)
-    return PlanningReadiness("ready" if state.phase == "planning" else "waiting", collection)
+    if state.phase != "planning":
+        return PlanningReadiness("waiting", collection)
+    try:
+        verify_planning_completion(root, collection)
+    except StateSyncError:
+        return PlanningReadiness("ready", collection)
+    return PlanningReadiness("waiting", collection)
 
 
 def _require_regular(path: Path, *, label: str) -> None:
@@ -82,8 +95,8 @@ def verify_planning_completion(root: Path, collection: Path | None) -> Path:
             raise StateSyncError(f"cloud planning state is invalid: {collection.name}") from exc
     planning = state.get("planning")
     assets = state.get("assets")
-    if state.phase != "prepared":
-        raise StateSyncError("cloud planning must finish with phase prepared")
+    if state.phase != "planning":
+        raise StateSyncError("cloud planning must leave phase planning for local continuation")
     if not isinstance(planning, dict) or planning.get("generated") is not True:
         raise StateSyncError("cloud planning must finalize planning.generated")
     if not isinstance(assets, dict) or assets.get("music_prompts") is not True:
@@ -127,7 +140,7 @@ class PlanningStagePolicy(ReadinessStagePolicy):
         self._readiness = resolve_planning_readiness(self.root)
 
     def prompt_for(self) -> str:
-        return self.prompt
+        return f"{self.prompt}\n{_CLOUD_PLANNING_SCOPE}"
 
     def verify(self) -> str:
         if self._readiness is None:

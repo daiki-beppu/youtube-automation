@@ -249,11 +249,13 @@ def _post_publish_repository(tmp_path: Path) -> tuple[Path, Path]:
     return remote, worker
 
 
-def test_cloud_planning_commits_prompt_artifacts_and_prepared_state_as_single_writer(tmp_path: Path) -> None:
+def test_cloud_planning_commits_prompt_artifacts_without_prepared_state_as_single_writer(tmp_path: Path) -> None:
     remote, worker = _planning_repository(tmp_path)
 
     def agent(agent: str, prompt: str, cwd: Path) -> None:
-        assert (agent, prompt) == ("claude", "/wf-new --auto")
+        assert agent == "claude"
+        assert prompt.startswith("/wf-new --auto\nCloud planning scope ends after")
+        assert "leave phase planning" in prompt
         collection = cwd / "collections" / "planning" / "demo"
         docs = collection / "20-documentation"
         docs.mkdir()
@@ -263,7 +265,6 @@ def test_cloud_planning_commits_prompt_artifacts_and_prepared_state_as_single_wr
         (docs / "suno-prompts.html").write_text("<!doctype html>\n", encoding="utf-8")
         state_path = collection / "workflow-state.json"
         state = json.loads(state_path.read_text(encoding="utf-8"))
-        state["phase"] = "prepared"
         state["planning"]["generated"] = True
         state["assets"]["music_prompts"] = True
         state_path.write_text(json.dumps(state) + "\n", encoding="utf-8")
@@ -288,7 +289,7 @@ def test_cloud_planning_commits_prompt_artifacts_and_prepared_state_as_single_wr
     subprocess.run(["git", "clone", "--branch", "main", str(remote), str(verify)], check=True, capture_output=True)
     collection = verify / "collections" / "planning" / "demo"
     assert (collection / "20-documentation" / "plan_proposals.json").is_file()
-    assert json.loads((collection / "workflow-state.json").read_text(encoding="utf-8"))["phase"] == "prepared"
+    assert json.loads((collection / "workflow-state.json").read_text(encoding="utf-8"))["phase"] == "planning"
 
 
 def test_cloud_planning_waits_without_agent_or_commit_after_planning_phase(tmp_path: Path) -> None:
