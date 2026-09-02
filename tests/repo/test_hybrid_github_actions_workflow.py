@@ -36,24 +36,42 @@ def test_workflow_serializes_runs_without_cancelling() -> None:
     }
 
 
-def test_workflow_is_a_thin_platform_wrapper_for_sandwich_script() -> None:
+def test_workflow_bootstraps_authenticated_claude_runner_before_sandwich_script() -> None:
     document = _document()
     jobs = document["jobs"]
     assert isinstance(jobs, dict) and list(jobs) == ["automation"]
     job = jobs["automation"]
     assert isinstance(job, dict)
+    assert job["env"] == {"GH_TOKEN": "${{ github.token }}"}
     steps = job["steps"]
     assert isinstance(steps, list)
 
-    shell_steps = [step for step in steps if isinstance(step, dict) and "run" in step]
-    assert len(shell_steps) == 1
-    command = shell_steps[0]["run"]
+    named_steps = {step["name"]: step for step in steps if isinstance(step, dict) and isinstance(step.get("name"), str)}
+    authentication = named_steps["Configure private repository authentication"]
+    assert authentication["run"] == "gh auth setup-git"
+
+    install = named_steps["Install Claude Code headless runner"]
+    install_command = install["run"]
+    assert isinstance(install_command, str)
+    assert "https://claude.ai/install.sh" in install_command
+    assert "claude-native" in install_command
+    assert ".claude/skills/wf-new/references/claude-headless.sh" in install_command
+    assert "GITHUB_PATH" in install_command
+
+    runner_step = named_steps["Run platform-neutral sandwich runner"]
+    step_names = [step.get("name") for step in steps if isinstance(step, dict)]
+    assert (
+        step_names.index(authentication["name"])
+        < step_names.index(install["name"])
+        < step_names.index(runner_step["name"])
+    )
+    command = runner_step["run"]
     assert isinstance(command, str)
     assert command.count("run-github-actions.sh") == 1
     assert "uv run" not in command
     assert not re.search(r"\b(if|for|while|case|ffmpeg|yt-workflow-state)\b", command)
 
-    env = shell_steps[0]["env"]
+    env = runner_step["env"]
     assert isinstance(env, dict)
     assert {
         key: env[key]
@@ -93,8 +111,12 @@ def test_workflow_is_a_thin_platform_wrapper_for_sandwich_script() -> None:
         "YTA_STAGE": "${{ vars.YTA_STAGE || 'planning' }}",
         "YTA_AUTOMATION_PROMPT": "${{ vars.YTA_AUTOMATION_PROMPT || '/wf-new --auto' }}",
     }
-    command = shell_steps[0]["run"]
+    command = runner_step["run"]
     assert '--stage "$YTA_STAGE"' in command
+
+    diagnostics = named_steps["Report Claude Code failure log"]
+    assert diagnostics["if"] == "${{ failure() }}"
+    assert "claude-output.log" in diagnostics["run"]
 
 
 def test_workflow_actions_are_immutable_pins() -> None:
@@ -104,6 +126,49 @@ def test_workflow_actions_are_immutable_pins() -> None:
         ("actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1", "v7.0.1"),
         ("astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9", "v9.0.0"),
     ]
+
+
+def test_claude_headless_wrapper_adds_permission_flag_and_captures_output(tmp_path: Path) -> None:
+    wrapper = REPO_ROOT / ".claude/skills/wf-new/references/claude-headless.sh"
+    installed = tmp_path / wrapper.name
+    installed.write_bytes(wrapper.read_bytes())
+    installed.chmod(0o755)
+    native = tmp_path / "claude-native"
+    native.write_text('#!/bin/sh\nprintf "%s\\n" "$*"\nprintf "agent output\\n"\n', encoding="utf-8")
+    native.chmod(0o755)
+
+    result = subprocess.run(
+        [str(installed), "--print", "hello"],
+        text=True,
+        capture_output=True,
+        env={**os.environ, "RUNNER_TEMP": str(tmp_path)},
+        check=False,
+    )
+
+    assert result.returncode == 0
+    assert result.stdout == "--dangerously-skip-permissions --print hello\nagent output\n"
+    assert (tmp_path / "claude-output.log").read_text(encoding="utf-8") == result.stdout
+
+
+def test_claude_headless_wrapper_preserves_native_failure_status(tmp_path: Path) -> None:
+    wrapper = REPO_ROOT / ".claude/skills/wf-new/references/claude-headless.sh"
+    installed = tmp_path / wrapper.name
+    installed.write_bytes(wrapper.read_bytes())
+    installed.chmod(0o755)
+    native = tmp_path / "claude-native"
+    native.write_text('#!/bin/sh\nprintf "agent failed\\n"\nexit 23\n', encoding="utf-8")
+    native.chmod(0o755)
+
+    result = subprocess.run(
+        [str(installed)],
+        text=True,
+        capture_output=True,
+        env={**os.environ, "RUNNER_TEMP": str(tmp_path)},
+        check=False,
+    )
+
+    assert result.returncode == 23
+    assert (tmp_path / "claude-output.log").read_text(encoding="utf-8") == "agent failed\n"
 
 
 def _run_auth_wrapper(

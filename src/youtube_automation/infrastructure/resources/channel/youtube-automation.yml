@@ -16,11 +16,22 @@ jobs:
   automation:
     runs-on: ubuntu-latest
     timeout-minutes: 360
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: true
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+      - name: Configure private repository authentication
+        run: gh auth setup-git
+      - name: Install Claude Code headless runner
+        run: |
+          curl -fsSL https://claude.ai/install.sh | bash
+          install -d "${RUNNER_TEMP}/yta-bin"
+          install -m 0755 "${HOME}/.local/bin/claude" "${RUNNER_TEMP}/yta-bin/claude-native"
+          install -m 0755 ".claude/skills/wf-new/references/claude-headless.sh" "${RUNNER_TEMP}/yta-bin/claude"
+          echo "${RUNNER_TEMP}/yta-bin" >> "${GITHUB_PATH}"
       - name: Run platform-neutral sandwich runner
         env:
           REPOSITORY_URL: ${{ github.server_url }}/${{ github.repository }}.git
@@ -50,3 +61,6 @@ jobs:
           --agent "$YTA_AGENT"
           --stage "$YTA_STAGE"
           --prompt "$YTA_AUTOMATION_PROMPT"
+      - name: Report Claude Code failure log
+        if: ${{ failure() }}
+        run: tail -n 200 "${RUNNER_TEMP}/claude-output.log" 2>/dev/null || true
