@@ -216,8 +216,10 @@ const renderSkillPage = (
     `# /${skill.name}`,
     linkSkillReferences(codeSpanFlags(skill.description), skillNames),
   ];
-  sections.push(linkSkillReferences(handwritten, skillNames));
-  sections.push("## リファレンス");
+  sections.push(
+    linkSkillReferences(handwritten, skillNames),
+    "## リファレンス"
+  );
   if (skill.triggerPhrases.length > 0) {
     sections.push(
       "### 発動フレーズ",
