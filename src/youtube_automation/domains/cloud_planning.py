@@ -55,8 +55,12 @@ def _sort_key(item: tuple[Path, WorkflowState]) -> tuple[str, str]:
 def resolve_planning_readiness(root: Path) -> PlanningReadiness:
     """Select the oldest active collection without mutating repository state."""
 
+    resolved_root = root.resolve()
+    collections_root = resolved_root / "collections"
+    if not collections_root.exists() and not collections_root.is_symlink():
+        raise StateSyncError(f"cloud planning collections directory is missing: {collections_root}")
     try:
-        active = _planning_states(iter_collections(root.resolve(), ("planning",)))
+        active = _planning_states(iter_collections(resolved_root, ("planning",)))
     except WorkflowStateError as exc:
         raise StateSyncError("cloud planning inventory is invalid") from exc
     if not active:

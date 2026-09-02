@@ -652,7 +652,10 @@ def test_posix_script_completes_local_pull_run_push(tmp_path: Path) -> None:
         """#!/bin/sh
 set -eu
 [ "$1" = run ] && [ "$2" = --frozen ]
-if [ "$3" = yt-human-tasks ]; then exit 0; fi
+if [ "$3" = yt-human-tasks ]; then
+  printf "%s\\n" "$*" > "$YTA_HUMAN_TASKS_ARGS"
+  exit 0
+fi
 [ "$3" = yt-hybrid-runner ]
 shift 3
 git config user.name Test
@@ -691,6 +694,7 @@ exec "$YTA_TEST_PYTHON" "$YTA_AGENT_SCRIPT"
             "PATH": f"{bin_dir}:{env['PATH']}",
             "YTA_TEST_PYTHON": sys.executable,
             "YTA_AGENT_SCRIPT": str(agent_script),
+            "YTA_HUMAN_TASKS_ARGS": str(tmp_path / "human-tasks-args"),
         }
     )
 
@@ -742,6 +746,9 @@ exec "$YTA_TEST_PYTHON" "$YTA_AGENT_SCRIPT"
     assert "disk_free=" in result.stderr
     assert "r2_retained=" in result.stderr
     assert "projected_actions_minutes=" in result.stderr
+    assert (tmp_path / "human-tasks-args").read_text(encoding="utf-8").strip() == (
+        "run --frozen yt-human-tasks --channel 003ch"
+    )
     verify = tmp_path / "script-verify"
     subprocess.run(["git", "clone", "--branch", "main", str(remote), str(verify)], check=True, capture_output=True)
     state = json.loads((verify / "collections/planning/demo/workflow-state.json").read_text(encoding="utf-8"))

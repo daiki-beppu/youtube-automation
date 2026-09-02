@@ -136,6 +136,84 @@ def test_handoff_free_hybrid_stage_does_not_require_media_store(monkeypatch, tmp
     assert result == 0
 
 
+def test_hybrid_command_resolves_workspace_channel_from_slug(monkeypatch, tmp_path: Path) -> None:
+    channel_dir = tmp_path / "channels" / "ambient-lab"
+    (channel_dir / "config" / "channel").mkdir(parents=True)
+
+    def fake_run_sandwich(
+        request,
+        store,
+        *,
+        resource_probe,
+        on_resource_event,
+        on_resource_diagnostics,
+        on_state_sync_event,
+    ):
+        assert store is None
+        assert request.channel_dir == channel_dir.resolve()
+        assert resource_probe.channel_dir == channel_dir.resolve()
+        return SandwichResult("completed", request.collection)
+
+    monkeypatch.setattr(hybrid_runner, "create_discord_notification_sink", RecordingSink)
+    monkeypatch.setattr(hybrid_runner, "run_sandwich", fake_run_sandwich)
+
+    result = hybrid_runner.run(
+        Namespace(
+            media_store="r2",
+            local_store_root=None,
+            channel_dir=tmp_path,
+            collection_dir="collections/planning/night-rain",
+            channel_slug="ambient-lab",
+            collection="night-rain",
+            agent="claude",
+            stage="planning",
+            prompt="/wf-new --auto",
+            commit_message="chore: state",
+            input_handoff=None,
+            input_destination=None,
+            output_handoff=None,
+            output_root=None,
+            output_file=[],
+            generation_cost_usd=0,
+            monthly_run_count=0,
+            estimated_run_minutes=60,
+        )
+    )
+
+    assert result == 0
+
+
+def test_hybrid_command_rejects_unknown_workspace_channel_before_execution(
+    monkeypatch,
+    tmp_path: Path,
+    capsys,
+) -> None:
+    (tmp_path / "channels" / "ambient-lab" / "config" / "channel").mkdir(parents=True)
+    runner = MagicMock(side_effect=AssertionError("runner must not execute"))
+    monkeypatch.setattr(hybrid_runner, "run_sandwich", runner)
+
+    result = hybrid_runner.main(
+        [
+            "--channel-dir",
+            str(tmp_path),
+            "--channel-slug",
+            "missing",
+            "--collection",
+            "night-rain",
+            "--collection-dir",
+            "collections/planning/night-rain",
+            "--stage",
+            "planning",
+            "--prompt",
+            "/wf-new --auto",
+        ]
+    )
+
+    assert result == 1
+    assert "--channel-slug='missing' に対応するチャンネルがありません" in capsys.readouterr().err
+    runner.assert_not_called()
+
+
 @pytest.mark.parametrize(
     ("action", "expected_kind", "expected_stage"),
     [

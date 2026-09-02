@@ -38,7 +38,13 @@ def _state(root: Path, name: str, *, phase: str, created_at: str, engine: str = 
 
 
 def test_readiness_selects_new_planning_when_no_unfinished_collection_exists(tmp_path: Path) -> None:
+    (tmp_path / "collections").mkdir()
     assert resolve_planning_readiness(tmp_path) == PlanningReadiness("ready", None)
+
+
+def test_readiness_rejects_missing_collections_directory(tmp_path: Path) -> None:
+    with pytest.raises(StateSyncError, match="collections directory"):
+        resolve_planning_readiness(tmp_path)
 
 
 def test_planning_policy_projects_inventory_records_without_reading_files(tmp_path: Path) -> None:
