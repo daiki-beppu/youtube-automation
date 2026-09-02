@@ -83,7 +83,7 @@ MODE_ONLY_CONTRACTS = {
         "references/import-mode.md",
     ),
     "regenerate": (
-        ("docs/channel/channel-direction.md",),
+        ("docs/channel/channel-direction.json", "docs/channel/channel-direction.html"),
         ("config/channel/meta.json", "doctor:channel_config", "doctor:ttp_wf_new_readiness"),
         "references/regeneration-mode.md",
     ),

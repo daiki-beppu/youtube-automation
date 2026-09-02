@@ -1524,6 +1524,15 @@ def test_setup_owns_setting_push_mode_and_strategy_keeps_direction_mode() -> Non
         assert contract in mode
 
 
+def test_channel_new_regeneration_reads_validated_direction_json_pair() -> None:
+    regeneration_mode = _read(".claude/skills/setup/references/regeneration-mode.md")
+
+    assert "`docs/channel/channel-direction.json` + `.html` pair" in regeneration_mode
+    assert "入力には JSON だけを使" in regeneration_mode
+    assert "HTML や旧 Markdown を直接 parse しない" in regeneration_mode
+    assert "channel-direction.md" not in regeneration_mode
+
+
 def test_channel_new_regeneration_snapshot_collects_all_benchmark_channels() -> None:
     regeneration_mode = _read(".claude/skills/setup/references/regeneration-mode.md")
     step = regeneration_mode.split("### Step R2.1:", 1)[1].split("### Step R2.2:", 1)[0]

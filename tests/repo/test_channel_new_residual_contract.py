@@ -16,13 +16,13 @@ SETUP_REFERENCES = REPO_ROOT / ".claude" / "skills" / "setup" / "references"
 
 SETUP_ASSET_SHA256 = {
     "claude-md-template.md": "64882d3cbe6c1d69c982f723d2a62bf67a88aa6895dddc79b75ce3c45857bbdd",
-    "config-generation-rules.md": "73067404592646cc3073f9ca1912c703f57f25fc9a6f597c4843622f8f3f9188",
+    "config-generation-rules.md": "8291d1db39553c103bc4faa3e66dde1582cc9d23bb797aea6a5ffc333cade027",
     "config-template/analytics.json": "4344ad8d4c9a1c81958b721eb3d999172f14f71f17d863a1708492ce687b68d2",
     "config-template/audio.json": "c55033dc448cb91fe3cdb47e20f220c5879c05f95855d918a8e72297a5f20a43",
     "config-template/content.json": "5a60fc3327bb2cca1daa5da3744dc218495f3f0f304aebdad41fd2ba32d1bed0",
     "config-template/meta.json": "324194e12d576604b3751af469bd7e965efb28db088b4671d76bb80b499d9da4",
-    "config-template/skills/music.yaml": "5e626dc43b3ba208729d0d338683bcc014e302149d0e917e30d9877efff707be",
-    "config-template/skills/thumbnail.yaml": "9b284e8ec42a52fecee9c813fd0ca042009623ce0923c30d50f1b3ad7ec7a14e",
+    "config-template/skills/music.yaml": "dfb8800beadfd058fdbbb5380259d9d75f3c50e27705f430de940a4826175336",
+    "config-template/skills/thumbnail.yaml": "d13c92a2f44730b62da29f92c38a9e6df11488929fd77c16fb880418725e3991",
     "config-template/youtube.json": "849f4b0912cb7be3d1cc92b7607d355e856b5af3e9e85db0449fabdf1713bb6c",
     "directory-structure.md": "d8590189cf8929b968b4f1169b723cc0ed71e0be06dbd57cc3ed405967bc4e14",
     "fetch_branding_snapshot.py": "3f7ecd1eb902ee8ae1b4002f23d6d3c7ed793d93200d87cc11777b55745a51a3",
@@ -38,7 +38,7 @@ MOVED_ASSET_SHA256 = {
     "import-mode.md": "2e7a69d0e45994d4ce267a7852c475b8db86bd6971e64311bf53021f337d060b",
     "localizations-template.json": "d0267074151af61f27856d0e67e8f0c3d56cf327b2255e00a8035e2851cde558",
     "push-mode.md": "be122ecbe19c803cfe09465f68ab364636f46f92f0ec842fb803566337eb57ee",
-    "regeneration-mode.md": "81b254e4ae5f63ddba121b40653100c93c55468fe3ebffbd198c32f0995f9bc7",
+    "regeneration-mode.md": "3df846018dc016cff85c5429fb55c698efef87a71fde489beaae951218c19e2c",
     "save-push-troubleshooting.md": "89a7cab34a96ddf7f10636293621c8b39e6cdf9f17e033a0469d5b14c0fc9a45",
 }
 

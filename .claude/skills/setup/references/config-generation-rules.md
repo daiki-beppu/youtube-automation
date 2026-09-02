@@ -5,7 +5,7 @@
 
 ## TTP（徹底的にパクる）路線時の優先順位
 
-`docs/channel/channel-direction.md` で「TTP 完全コピー路線」が選ばれている場合、各フィールド生成ルール（後述）は **競合スナップショットの転写を最優先** し、独自設計はあとから差分として乗せる。
+`docs/channel/channel-direction.json` で「TTP 完全コピー路線」が選ばれている場合、各フィールド生成ルール（後述）は **競合スナップショットの転写を最優先** し、独自設計はあとから差分として乗せる。
 
 1. **`/setup --regenerate` Step R2.1 で取得した競合の `channels().list(part='snippet,brandingSettings,localizations')` レスポンス**を Claude のコンテキストに必ず載せる
 2. 競合の構造（章立て・段落順・箇条書きの数・絵文字の有無）をそのままコピーし、`competitor → my-channel` の固有名詞置換だけを行う
@@ -70,7 +70,7 @@
 プレイリスト自動割り当ては既存 config の中黒区切り（`"Focus · Study · Writing"`）も受理する。
 
 `theme_scenes` / `theme_activities` をどちらも空のまま `/setup --regenerate` を抜けると
-下流 `yt-populate-scene-phrases` が手動 `--en` 指定を要求する。channel-direction.md で
+下流 `yt-populate-scene-phrases` が手動 `--en` 指定を要求する。channel-direction.json で
 テーマ群が確定しているなら空のまま終了しないこと（issue #567）。
 
 ### `audio`（`config/channel/audio.json`）
@@ -102,7 +102,7 @@
 | music --master（`audio.crossfade_duration` 等。旧 override） | `config/skills/masterup.yaml` |
 | loop-video（Veo 3.1 ループ生成） | `config/skills/loop-video.yaml` |
 
-### channel-direction.md の決定を必ず転記する skill-config（issue #567）
+### channel-direction.json の決定を必ず転記する skill-config（issue #567）
 
 下記は「チャンネル固有の上書きが必要」ではなく **方向性が決まっていれば必ず書く**
 セクション。空のまま `/setup --regenerate` を抜けてはならない。雛形は
@@ -110,7 +110,7 @@
 
 **Suno**（`music_engine: suno` のチャンネル）:
 
-| キー | channel-direction.md からの転記元 |
+| キー | channel-direction.json からの転記元 |
 |---|---|
 | `workspace_name` | Suno UI 上のワークスペース名（チャンネル短縮名 + ジャンルなど） |
 | `genre_line` | 「ジャンル & スタイル」決定の直訳（Suno Styles 欄にそのまま入る） |

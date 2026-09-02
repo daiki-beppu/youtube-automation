@@ -244,6 +244,7 @@ def test_autofix_installs_the_pinned_action_with_opus() -> None:
 
     assert _PINNED_ACTION.match(step["uses"])
     assert "--model opus" in step["with"]["claude_args"]
+    assert "--permission-mode acceptEdits" in step["with"]["claude_args"]
 
 
 def test_autofix_can_edit_files_and_run_project_quality_gates() -> None:

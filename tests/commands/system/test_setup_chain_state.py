@@ -97,6 +97,19 @@ def _commit_workspace(root: Path) -> None:
     )
 
 
+def test_regenerate_contract_requires_published_direction_pair(state: ModuleType) -> None:
+    manifest = state.load_manifest(MANIFEST)
+    regenerate = next(step for step in manifest["steps"] if step["id"] == "regenerate")
+    expected = [
+        "docs/channel/channel-direction.json",
+        "docs/channel/channel-direction.html",
+    ]
+
+    assert regenerate["prerequisiteArtifacts"] == expected
+    assert list(state.MODE_ONLY_CONTRACTS["regenerate"][0]) == expected
+    assert "docs/channel/channel-direction.md" not in regenerate["prerequisiteArtifacts"]
+
+
 def test_channel_is_blocked_until_tool_prerequisites_are_complete(tmp_path: Path, state: ModuleType) -> None:
     manifest = state.load_manifest(MANIFEST)
     _write_file_artifacts(tmp_path, manifest["steps"][0]["outputArtifacts"])

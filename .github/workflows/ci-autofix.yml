@@ -200,4 +200,5 @@ jobs:
           # sonnet 既定の code-review.yml とは別判断で opus を使う
           claude_args: |
             --model opus
+            --permission-mode acceptEdits
             --allowedTools "Edit,Write,Bash(uv run ruff:*),Bash(uv run pytest:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(gh api:*),Bash(gh run view:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*),Bash(gh issue view:*)"
