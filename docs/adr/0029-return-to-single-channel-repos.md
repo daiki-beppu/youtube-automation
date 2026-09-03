@@ -18,6 +18,8 @@ ADR-0022 は運営者の 6 チャンネルを `channels/<slug>/` として 1 リ
 4. **「cutover までのつなぎ」という前提が撤回された。** ADR-0021 の Amendment（2026-09-01, #4779）で Python 版のメンテナンスモード純化と cutover は撤回され、本リポジトリはアクティブ開発を継続する。workspace は一時的な例外投資ではなく恒久構造になってしまい、上記 1・2 のコストを恒久に払うことになる。
 5. **重複コストには別解が立つ。** ADR-0022 の動機である sync / update の重複は、構造を同居させなくても「channel registry を回って各リポで同じ更新を 1 操作で実行する」fan-out で解消できる。「一元管理」を *置き場を 1 つにする* 意味から *操作を 1 回にする* 意味へ再定義する。
 
+workspace が達成したものは記録しておく。`yt-skills sync` / automation-update をチャンネル数分でなく 1 回にしたこと、git 管理対象をデータ 4 分類に忠実化して旧 6 リポジトリで約 4.7GB あった git 管理ファイルを管理外にしたこと、`--channel` を自チャンネルに予約して benchmark 系を `--competitor` に分けたことは、いずれも実現した。本 ADR はこのうち後ろ 2 つを維持し（§Decision 10）、前者だけを fan-out で置き換える。
+
 ## Decision
 
 1. **構造: 1 チャンネル = 1 リポジトリ = 1 cwd を正規形に戻す。** workspace 経路（`channels/<slug>/` の規約検出、`--channel` / `CHANNEL` によるチャンネル選択、`yt-channel-import`、`yt-workspace-guard`、`yt-workspace-status`）は deprecated とし、削除リリースで物理削除する。
@@ -57,6 +59,8 @@ ADR-0022 は運営者の 6 チャンネルを `channels/<slug>/` として 1 リ
 - **cloud runner**: cloud session は「チャンネルリポジトリに commit 済みの skills」を正とし、cloud 側では追従しない（`CI` で no-op）。hybrid cloud（#4070）の前提は変わらない
 - **移行期間**: workspace と独立リポジトリが併存し、dashboard には export 済みチャンネルが両方のパスで並ぶ。fan-out は workspace 内エントリを skip する
 - **git 履歴**: 001〜006ch は workspace 移行時に旧リポジトリの履歴を捨てており、今回さらに workspace の履歴も捨てる（2 度目）。復旧は Suno プレイリスト・YouTube・export 後の初回 commit を正とする
+- **first-party の workspace root 固有物**: `.claude/CLAUDE.local.md` / `settings.local.json` / `scripts/collect_reporting.sh` + launchd plist / 手書き `docs/*.md` は export の責務外であり、runbook の「手で持ち込む物の一覧」に従って手で持ち直す。同居運用のために生まれた物で、単一リポジトリ回帰で大半は不要になる
+- **ディスク**: export はメディアを含む `channels/<slug>/` の実体を丸ごと copy する（003ch は約 12GB）ため、workspace 側を残置する期間はチャンネル分のディスクを二重に使う。workspace 側の削除は独立リポジトリで 1 周確認した後に手で行う
 
 ## Considered Options
 
@@ -79,9 +83,21 @@ ADR-0022 は運営者の 6 チャンネルを `channels/<slug>/` として 1 リ
 1. **per-channel `pyproject` + `.venv` の維持（採用）** — skills 内 `uv run yt-*` 552 箇所と hook・cloud runner が無傷
 2. **`uv tool install` による global 化** — 552 箇所の書き換えと cloud 経路の再設計が必要で費用対効果が合わない
 
+### 逆移行の手段
+
+1. **`yt-channel-export`（copy + 検証、workspace 無変更）（採用）** — `yt-channel-import` と対称で、staging → 検証 → publish の idiom を流用できる。切り戻しは dest を消すだけ
+2. **archive 済み旧リポジトリの復活** — workspace 移行後の state / collections / reports が無く、履歴の継ぎ足しは 2 系統の履歴を混ぜる。007ch は旧リポジトリ自体が無い
+3. **手動 copy（runbook のみ）** — 7 回繰り返す手作業で symlink / auth / `.gitignore` の漏れが出る。external の workspace 利用者にも同じ手順を配る必要がある
+
+### 廃止の仕方
+
+1. **警告リリース → 削除リリースの 2 段（採用）** — semver 規則に従い、削除は 7 チャンネルの export 完了 + workspace archive をゲートにする
+2. **即削除** — first-party 7 チャンネルが export を終える前に経路が消え、external の workspace 利用者にも予告なしの breaking になる
+3. **恒久併存** — ADR-0022 が「全 CLI が 2 構造対応になり最悪」と退けた構造そのもの。Context 2 のコストを恒久に払う
+
 ## Related
 
-- ADR-0013（multi-channel dashboard — channel registry の由来）
+- ADR-0013（multi-channel dashboard — channel registry の由来。台帳化の Amendment は 2026-09-03, #4879）
 - ADR-0021 Amendment（メンテナンスモード撤回、2026-09-01）
 - ADR-0022（マルチチャンネル workspace — 本 ADR が supersede）
 - ADR-0024（クラウド移譲原則 — cloud は commit 済み skills を読む）
