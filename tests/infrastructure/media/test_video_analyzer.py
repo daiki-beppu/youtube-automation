@@ -23,6 +23,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+from google.genai import types
 from google.genai.errors import APIError
 
 from youtube_automation.application.analytics.video_report import write_video_analysis_report
@@ -272,6 +273,30 @@ class TestVideoAnalyzerAnalyzeUrl:
         assert part.file_data.file_uri == target.url
         assert part.video_metadata.start_offset == "0s"
         assert part.video_metadata.end_offset == "900s"
+
+    def test_agentic_processing_omits_video_metadata(self, tmp_path):
+        client = _make_client(json.dumps(_VALID_PAYLOAD))
+        analyzer = VideoAnalyzer(
+            client=client,
+            model="gemini-3.7-flash",
+            prompt="analyze the full video",
+            delay_sec=0,
+            data_dir=tmp_path,
+            analysis_window_sec=900,
+            processing="agentic",
+        )
+
+        result = analyzer.analyze_url(_make_target())
+
+        part = client.models.generate_content.call_args.kwargs["contents"][0]
+        assert part.media_processing == types.MediaProcessing.AGENTIC
+        assert part.video_metadata is None
+        assert result["analysis_window_sec"] is None
+        assert result["analysis_scope"] == {
+            "start_offset_sec": None,
+            "end_offset_sec": None,
+            "description": "full video (agentic processing)",
+        }
 
     def test_custom_window_is_reflected_in_end_offset(self, tmp_path):
         # Given: チャンネル側上書き相当のカスタム窓幅

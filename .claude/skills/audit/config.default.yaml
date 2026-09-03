@@ -7,6 +7,10 @@ video:
   # Gemini モデル名 (動画入力対応モデルを指定)
   model: gemini-3.5-flash
 
+  # static は冒頭クリップ窓、agentic はモデル主導で全尺を探索する。
+  # agentic は Gemini 3.7 Flash / 3.6 Flash / 3.5 Flash-Lite のみ対応。
+  processing: static
+
   # API レート制限対策の動画間ウェイト (秒)
   delay_sec: 10
 
@@ -26,10 +30,7 @@ video:
   # `suno_preset` は SunoAI プロンプト生成 (`/music --prompt`) の初期推奨値として
   # `yt-generate-suno` が config/skills/music.yaml::prompt 空欄時の fallback で参照する。
   prompt: |
-    Analyze the opening clip window of this YouTube video as a music channel content audit.
-    Only the beginning of the video is provided as a fixed-length clip window — scope ALL
-    observations, timestamps, and averages to this clip window. Never emit timestamps
-    beyond the end of the provided clip, and do not speculate about the rest of the video.
+    Analyze this YouTube video as a music channel content audit, following the analysis scope above.
     Return ONLY valid JSON (no markdown, no code fences) with this exact shape:
     {
       "hook_structure": {
@@ -40,9 +41,9 @@ video:
       },
       "bgm_arc": {
         "intro": "timestamp range (e.g. 0:00-0:15)",
-        "peak": "timestamp of the highest-energy moment within the clip window",
-        "outro": "timestamp range of the final section within the clip window",
-        "energy_curve": "brief description of dynamics within the clip window",
+        "peak": "timestamp of the highest-energy moment within the analysis scope",
+        "outro": "timestamp range of the final section within the analysis scope",
+        "energy_curve": "brief description of dynamics within the analysis scope",
         "segments": [
           {
             "start": "M:SS",
@@ -53,16 +54,16 @@ video:
         ]
       },
       "scene_timeline": [
-        {"start": "0:00", "summary": "one-line description of what changes (clip window only)"}
+        {"start": "0:00", "summary": "one-line description of what changes (analysis scope only)"}
       ],
       "thumbnail_alignment": {
         "signature_present": <bool>,
         "color_palette_match": <bool>,
-        "notes": "what was promised by thumbnail vs delivered in the clip window"
+        "notes": "what was promised by thumbnail vs delivered in the analysis scope"
       },
       "editing_metrics": {
-        "avg_cut_sec": <number, averaged over the clip window>,
-        "text_per_min": <number, averaged over the clip window>,
+        "avg_cut_sec": <number, averaged over the analysis scope>,
+        "text_per_min": <number, averaged over the analysis scope>,
         "transition_style": "brief description"
       },
       "suno_preset": {

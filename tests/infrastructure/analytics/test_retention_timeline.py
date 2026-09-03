@@ -78,6 +78,34 @@ def test_drop_outside_analysis_window_is_not_guessed() -> None:
     assert result["drops"][0]["mapping_status"] == "outside_analysis_window"
 
 
+def test_null_analysis_window_maps_and_reports_full_video() -> None:
+    result = correlate_retention_timeline(
+        video_id="VID123",
+        duration_seconds=3600,
+        retention_curve=[
+            {"elapsed_ratio": 0.2, "watch_ratio": 0.8},
+            {"elapsed_ratio": 0.5, "watch_ratio": 0.7},
+        ],
+        video_analysis={
+            "analysis_window_sec": None,
+            "scene_timeline": [{"start": "20:00", "summary": "late scene"}],
+            "bgm_arc": {"segments": [{"start": "20:00", "track": "late track"}]},
+        },
+    )
+
+    assert result["drops"][0]["elapsed_seconds"] == 1800
+    assert result["drops"][0]["scene"] == "late scene"
+    assert result["drops"][0]["bgm"] == "late track"
+    assert result["drops"][0]["mapping_status"] == "matched"
+
+    markdown = render_retention_report(
+        result,
+        analytics_path=Path("data/analytics.json"),
+        analysis_path=Path("data/analysis.json"),
+    )
+    assert "- analysis window: 動画全体" in markdown
+
+
 def test_legacy_bgm_arc_maps_to_phase() -> None:
     result = correlate_retention_timeline(
         video_id="VID123",

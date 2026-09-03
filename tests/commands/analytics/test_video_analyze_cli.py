@@ -28,6 +28,7 @@ from youtube_automation.commands.analytics.video_analyze import (
     _analysis_window_sec_from_config,
     _build_parser,
     _extract_video_id_from_url,
+    _processing_from_config,
     _resolve_benchmark_targets,
     _resolve_own_targets,
     _resolve_url_target,
@@ -508,18 +509,29 @@ class TestAnalysisWindowValidation:
             _analysis_window_sec_from_config(cfg)
 
 
+class TestProcessingValidation:
+    @pytest.mark.parametrize("value", ["fast", "", True])
+    def test_rejects_unknown_processing(self, value):
+        with pytest.raises(ConfigError, match="audit.video.processing"):
+            _processing_from_config({"processing": value, "model": "gemini-3.7-flash"})
+
+    def test_defaults_to_static(self):
+        assert _processing_from_config({"model": "gemini-3.5-flash"}) == "static"
+
+    def test_rejects_unsupported_agentic_model(self):
+        with pytest.raises(ConfigError, match="gemini-3.5-flash"):
+            _processing_from_config({"processing": "agentic", "model": "gemini-3.5-flash"})
+
+    @pytest.mark.parametrize(
+        "model",
+        ["gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite"],
+    )
+    def test_accepts_supported_agentic_models(self, model):
+        assert _processing_from_config({"processing": "agentic", "model": model}) == "agentic"
+
+
 class TestMainAnalysisWindowFlow:
-    def _run_main_with_channel(self, tmp_path, monkeypatch, config_yaml: str) -> MagicMock:
-        from youtube_automation.configuration import reset as reset_config
-
-        skills_dir = tmp_path / "config" / "skills"
-        skills_dir.mkdir(parents=True)
-        (skills_dir / "video-analyze.yaml").write_text(config_yaml, encoding="utf-8")
-
-        monkeypatch.setenv("CHANNEL_DIR", str(tmp_path))
-        reset_config()
-        reset_skill_config("audit.video")
-
+    def _make_client(self) -> MagicMock:
         client = MagicMock()
         response = MagicMock()
         response.text = json.dumps(
@@ -537,6 +549,27 @@ class TestMainAnalysisWindowFlow:
             }
         )
         client.models.generate_content.return_value = response
+        return client
+
+    def _run_main_with_channel(
+        self,
+        tmp_path,
+        monkeypatch,
+        config_yaml: str,
+        *,
+        client: MagicMock | None = None,
+    ) -> MagicMock:
+        from youtube_automation.configuration import reset as reset_config
+
+        skills_dir = tmp_path / "config" / "skills"
+        skills_dir.mkdir(parents=True)
+        (skills_dir / "video-analyze.yaml").write_text(config_yaml, encoding="utf-8")
+
+        monkeypatch.setenv("CHANNEL_DIR", str(tmp_path))
+        reset_config()
+        reset_skill_config("audit.video")
+
+        client = client if client is not None else self._make_client()
 
         try:
             with (
@@ -583,6 +616,35 @@ class TestMainAnalysisWindowFlow:
         # Then: default の 30 秒が同じ入口から SDK metadata に届く
         contents = client.models.generate_content.call_args.kwargs["contents"]
         assert contents[0].video_metadata.end_offset == "30s"
+
+    def test_agentic_mode_flows_to_gemini_and_full_video_prompt(self, tmp_path, monkeypatch):
+        client = self._run_main_with_channel(
+            tmp_path,
+            monkeypatch,
+            "processing: agentic\nmodel: gemini-3.7-flash\ndelay_sec: 0\n",
+        )
+
+        contents = client.models.generate_content.call_args.kwargs["contents"]
+        assert contents[0].media_processing == "AGENTIC"
+        assert contents[0].video_metadata is None
+        assert "full video timeline" in contents[1]
+        assert "fixed-length opening clip" not in contents[1]
+
+    def test_agentic_with_unsupported_model_rejects_before_gemini_call(self, tmp_path, monkeypatch):
+        # Given: agentic × 配布既定の非対応モデル
+        client = self._make_client()
+
+        # When/Then: 実 main() 経由で ConfigError
+        with pytest.raises(ConfigError, match="gemini-3.5-flash"):
+            self._run_main_with_channel(
+                tmp_path,
+                monkeypatch,
+                "processing: agentic\nmodel: gemini-3.5-flash\ndelay_sec: 0\n",
+                client=client,
+            )
+
+        # And: 動画入力が課金され得る generate_content の前で落ちている
+        assert client.models.generate_content.call_count == 0
 
 
 # ----------------------------------------------------------------------------

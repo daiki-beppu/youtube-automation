@@ -48,6 +48,24 @@ SKILL_CONFIG_KEY = "audit.video"
 SOURCE_BENCHMARK = "benchmark"
 SOURCE_OWN = "own"
 SOURCE_CHOICES = (SOURCE_BENCHMARK, SOURCE_OWN)
+PROCESSING_STATIC = "static"
+PROCESSING_AGENTIC = "agentic"
+_PROCESSING_CHOICES = frozenset((PROCESSING_STATIC, PROCESSING_AGENTIC))
+_AGENTIC_MODELS = frozenset(("gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite"))
+
+_SCOPE_PROMPT_TEMPLATE = """{action}. Scope all observations, timestamps, and averages to {scope}. {boundary}"""
+_SCOPE_PROMPT_BY_PROCESSING = {
+    PROCESSING_STATIC: _SCOPE_PROMPT_TEMPLATE.format(
+        action="Analyze only the fixed-length opening clip provided",
+        scope="this clip window",
+        boundary="Never emit timestamps beyond the clip or speculate about the rest of the video.",
+    ),
+    PROCESSING_AGENTIC: _SCOPE_PROMPT_TEMPLATE.format(
+        action="Use agentic video processing to inspect the full video timeline",
+        scope="the complete video",
+        boundary="Explore the sections needed to support the analysis.",
+    ),
+}
 
 # 任意 URL 経路では slug を一意に持てないため固定名で保存する
 URL_SOURCE_SLUG = "url"
@@ -281,6 +299,29 @@ def _analysis_window_sec_from_config(cfg: dict) -> int:
     return value
 
 
+def _processing_from_config(cfg: dict) -> str:
+    """処理モードと agentic 対応モデルの組み合わせを API 呼出前に検証する。"""
+    processing = cfg.get("processing", PROCESSING_STATIC)
+    if not isinstance(processing, str) or processing not in _PROCESSING_CHOICES:
+        raise ConfigError(
+            f"audit.video.processing は 'static' または 'agentic' である必要があります (received: {processing!r})"
+        )
+    model = cfg.get("model")
+    if processing == PROCESSING_AGENTIC and model not in _AGENTIC_MODELS:
+        supported = ", ".join(sorted(_AGENTIC_MODELS))
+        raise ConfigError(
+            f"audit.video.processing='agentic' は対応モデルのみ使用できます (received: {model!r}; "
+            f"supported: {supported})"
+        )
+    return processing
+
+
+def _prompt_for_processing(prompt: str, processing: str) -> str:
+    """ユーザー prompt に実際の解析スコープを明示する。"""
+    scope = _SCOPE_PROMPT_BY_PROCESSING[processing]
+    return f"{scope}\n\n{prompt}"
+
+
 def _run_analysis(
     *, analyzer: VideoAnalyzer, targets: list[VideoTarget], force: bool = False
 ) -> tuple[list[dict], list[dict]]:
@@ -332,6 +373,7 @@ def main():
     data_dir = channel_dir / "data"
     reports_dir = channel_dir / "reports"
     analysis_window_sec = _analysis_window_sec_from_config(cfg)
+    processing = _processing_from_config(cfg)
 
     slug, targets = _resolve_targets(args, channel_dir=channel_dir, data_dir=data_dir)
     logger.info("解析対象: slug='%s' 件数=%d", slug, len(targets))
@@ -351,10 +393,11 @@ def main():
     analyzer = VideoAnalyzer(
         client=create_global_genai_client(),
         model=cfg["model"],
-        prompt=cfg["prompt"],
+        prompt=_prompt_for_processing(cfg["prompt"], processing),
         delay_sec=cfg["delay_sec"],
         data_dir=data_dir,
         analysis_window_sec=analysis_window_sec,
+        processing=processing,
     )
 
     results, failures = _run_analysis(analyzer=analyzer, targets=targets, force=args.force)

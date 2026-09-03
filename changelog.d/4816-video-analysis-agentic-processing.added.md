@@ -1,0 +1,1 @@
+- 動画解析に、全尺をモデル主導で探索する Gemini agentic processing モードを追加しました。
