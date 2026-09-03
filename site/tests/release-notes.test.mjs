@@ -6,12 +6,17 @@ import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { operatorDocMap, operatorDocRedirects } from "../operator-doc-source.ts";
 import {
   groupReleasesByScale,
   releaseScaleLabels,
   scaleFromVersion,
 } from "../release-scale.ts";
-import { releaseRedirects, releaseSidebarGroups } from "../release-sidebar.ts";
+import {
+  firstReleaseRoute,
+  releaseRedirects,
+  releaseSidebarGroups,
+} from "../release-sidebar.ts";
 
 const readIndex = () => readFile(new URL("../dist/index.html", import.meta.url), "utf8");
 const readRelease = (version) =>
@@ -25,25 +30,25 @@ const execFileAsync = promisify(execFile);
 const operatorSections = [
   {
     label: "はじめる",
-    routes: ["/tool-setup", "/oauth-setup", "/chrome-extension-install-guide"],
+    routes: ["/getting-started/tool-setup", "/getting-started/oauth-setup", "/getting-started/chrome-extension-install-guide"],
     section: "getting-started",
   },
   {
     label: "使う",
     routes: [
-      "/features",
-      "/workflow-cheatsheet",
-      "/channel-workspace-migration",
-      "/dashboard",
-      "/cloud-execution",
-      "/live-chat-reply",
-      "/audio-studio",
-      "/review-viewers",
-      "/live-streaming",
-      "/ambient-layers",
-      "/scheduled-publish",
-      "/localizations",
-      "/distrokid",
+      "/skills/features",
+      "/guides/workflow-cheatsheet",
+      "/guides/channel-workspace-migration",
+      "/guides/dashboard",
+      "/guides/cloud-execution",
+      "/guides/live-chat-reply",
+      "/guides/audio-studio",
+      "/guides/review-viewers",
+      "/guides/live-streaming",
+      "/guides/ambient-layers",
+      "/guides/scheduled-publish",
+      "/guides/localizations",
+      "/guides/distrokid",
     ],
     section: "use",
   },
@@ -263,7 +268,7 @@ test(`landing page は3区分を表示し、公開operator docs ${operatorRoutes
     operatorRoutes.includes(href)
   );
   assert.deepEqual(operatorHrefs, operatorRoutes);
-  assert.doesNotMatch(operatorMarkup, /href="\/onboarding(?:\/|"|#)/);
+  assert.doesNotMatch(operatorMarkup, /href="\/getting-started\/onboarding(?:\/|"|#)/);
   assert.match(operatorMarkup, />skill を探す</);
   assert.match(operatorMarkup, />skill を使う</);
   assert.doesNotMatch(operatorMarkup, />skill (?:カタログ|ガイド)</);
@@ -277,17 +282,17 @@ test("landing page は活用ガイドを使う内の「こんなこともでき�
 
   assert.match(advanced, /<h3>こんなこともできる！<\/h3>/);
   assert.deepEqual(hrefsWithin(advanced), [
-    "/live-streaming",
-    "/ambient-layers",
-    "/scheduled-publish",
-    "/localizations",
-    "/distrokid",
+    "/guides/live-streaming",
+    "/guides/ambient-layers",
+    "/guides/scheduled-publish",
+    "/guides/localizations",
+    "/guides/distrokid",
   ]);
-  assert.equal(hrefsWithin(use).filter((href) => href === "/live-streaming").length, 1);
-  assert.equal(hrefsWithin(use).filter((href) => href === "/ambient-layers").length, 1);
-  assert.equal(hrefsWithin(use).filter((href) => href === "/scheduled-publish").length, 1);
-  assert.equal(hrefsWithin(use).filter((href) => href === "/localizations").length, 1);
-  assert.equal(hrefsWithin(use).filter((href) => href === "/distrokid").length, 1);
+  assert.equal(hrefsWithin(use).filter((href) => href === "/guides/live-streaming").length, 1);
+  assert.equal(hrefsWithin(use).filter((href) => href === "/guides/ambient-layers").length, 1);
+  assert.equal(hrefsWithin(use).filter((href) => href === "/guides/scheduled-publish").length, 1);
+  assert.equal(hrefsWithin(use).filter((href) => href === "/guides/localizations").length, 1);
+  assert.equal(hrefsWithin(use).filter((href) => href === "/guides/distrokid").length, 1);
 });
 
 test("landing page は実験的機能を使う内の専用グループとして表示する", async () => {
@@ -296,62 +301,72 @@ test("landing page は実験的機能を使う内の専用グループとして�
 
   assert.match(experimental, /<h3>実験的機能<\/h3>/);
   assert.deepEqual(hrefsWithin(experimental), [
-    "/dashboard",
-    "/cloud-execution",
-    "/live-chat-reply",
-    "/audio-studio",
-    "/review-viewers",
+    "/guides/dashboard",
+    "/guides/cloud-execution",
+    "/guides/live-chat-reply",
+    "/guides/audio-studio",
+    "/guides/review-viewers",
   ]);
-  assert.equal(hrefsWithin(use).filter((href) => href === "/dashboard").length, 1);
-  assert.equal(hrefsWithin(use).filter((href) => href === "/cloud-execution").length, 1);
-  assert.equal(hrefsWithin(use).filter((href) => href === "/live-chat-reply").length, 1);
-  assert.equal(hrefsWithin(use).filter((href) => href === "/audio-studio").length, 1);
-  assert.equal(hrefsWithin(use).filter((href) => href === "/review-viewers").length, 1);
+  assert.equal(hrefsWithin(use).filter((href) => href === "/guides/dashboard").length, 1);
+  assert.equal(hrefsWithin(use).filter((href) => href === "/guides/cloud-execution").length, 1);
+  assert.equal(hrefsWithin(use).filter((href) => href === "/guides/live-chat-reply").length, 1);
+  assert.equal(hrefsWithin(use).filter((href) => href === "/guides/audio-studio").length, 1);
+  assert.equal(hrefsWithin(use).filter((href) => href === "/guides/review-viewers").length, 1);
 });
 
-test("全ページ共通 sidebar と tabs は operator 区分・release規模・exact route ownership を保つ", async () => {
-  const pages = [await readRelease("v5.6.0"), await readOperatorDoc("/features")];
+test("読者タスク別4タブは route prefix ごとに sidebar を切り替える", async () => {
+  const sections = [
+    {
+      label: "はじめる",
+      route: "/getting-started/tool-setup",
+      tabHref: "/getting-started/tool-setup",
+      sidebarRoutes: [
+        "/getting-started/tool-setup",
+        "/getting-started/oauth-setup",
+        "/getting-started/chrome-extension-install-guide",
+      ],
+    },
+    {
+      label: "ガイド",
+      route: "/guides/workflow-cheatsheet",
+      tabHref: "/guides/workflow-cheatsheet",
+      sidebarRoutes: operatorRoutes.filter((route) => route.startsWith("/guides/")),
+    },
+    {
+      label: "スキル",
+      route: "/skills",
+      tabHref: "/skills",
+      sidebarRoutes: ["/skills", "/skills/analytics", "/skills/features"],
+    },
+    {
+      label: "アップデート",
+      route: "/releases/v5.6.0",
+      tabHref: "/releases/v5.7.0",
+      sidebarRoutes: ["/releases/v5.6.0", "/releases/ext-v0.3.0"],
+    },
+  ];
 
-  for (const html of pages) {
+  for (const section of sections) {
+    const html = await readOperatorDoc(section.route);
     const sidebar = html.match(/<nav data-blume-nav-tree>([\s\S]*?)<\/nav>/)?.[1] ?? "";
     const header = html.match(/<header\b[^>]*data-blume-header[^>]*>([\s\S]*?)<\/header>/)?.[1] ?? "";
     const tabs = header.match(/<nav aria-label="Sections"[^>]*>([\s\S]*?)<\/nav>/)?.[1] ?? "";
 
-    for (const { label } of operatorSections) {
-      assert.match(sidebar, new RegExp(`>${label}<`));
+    for (const { label } of sections) {
       assert.match(tabs, new RegExp(`>${label}<`));
     }
-    for (const label of [
-      "本体｜大きいアップデート",
-      "本体｜小さいアップデート",
-      "Chrome 拡張｜大きいアップデート",
-      "Chrome 拡張｜小さいアップデート",
-    ]) {
-      assert.match(sidebar, new RegExp(`>${label}<`));
-    }
-    assert.match(tabs, />リリースノート</);
-    assert.deepEqual(
-      [...tabs.matchAll(/href="([^"]+)"/g)].map((match) => match[1]),
-      ["/#getting-started", "/#use", "/#release-notes"]
+    assert.match(tabs, new RegExp(`aria-current="page"[^>]*>\\s*${section.label}<`));
+    assert.match(
+      tabs,
+      new RegExp(`href="${section.tabHref}"[^>]*>\\s*${section.label}<`)
     );
-
-    for (const route of operatorRoutes) {
+    for (const route of section.sidebarRoutes) {
       assert.equal(hrefsWithin(sidebar).filter((href) => href === route).length, 1);
     }
-    assert.equal(hrefsWithin(sidebar).includes("/onboarding"), false);
-
-    const experimentalLabel = sidebar.indexOf(">実験的機能<");
-    const dashboard = sidebar.indexOf('href="/dashboard"');
-    const cloudExecution = sidebar.indexOf('href="/cloud-execution"');
-    const liveChatReply = sidebar.indexOf('href="/live-chat-reply"');
-    const audioStudio = sidebar.indexOf('href="/audio-studio"');
-    const reviewViewers = sidebar.indexOf('href="/review-viewers"');
-    assert.notEqual(experimentalLabel, -1);
-    assert.ok(dashboard > experimentalLabel);
-    assert.ok(cloudExecution > experimentalLabel);
-    assert.ok(liveChatReply > experimentalLabel);
-    assert.ok(audioStudio > experimentalLabel);
-    assert.ok(reviewViewers > experimentalLabel);
+    const otherRoutes = sections
+      .filter((candidate) => candidate !== section)
+      .flatMap(({ sidebarRoutes }) => sidebarRoutes);
+    assert.equal(otherRoutes.some((route) => hrefsWithin(sidebar).includes(route)), false);
   }
 });
 
@@ -367,23 +382,23 @@ test(`onboarding は直接描画だけを維持し、公開operator docs ${opera
     assert.equal(searchRoutes.filter((candidate) => candidate === route).length, 1);
   }
 
-  const onboarding = await readOperatorDoc("/onboarding");
+  const onboarding = await readOperatorDoc("/getting-started/onboarding");
   assert.match(onboarding, /<article\b/);
   assert.match(
     onboarding,
     /<meta(?=[^>]*name="robots")(?=[^>]*content="noindex")[^>]*>/i
   );
-  assert.equal(searchRoutes.includes("/onboarding"), false);
+  assert.equal(searchRoutes.includes("/getting-started/onboarding"), false);
 
-  const features = await readOperatorDoc("/features");
-  const toolSetup = await readOperatorDoc("/tool-setup");
-  const oauth = await readOperatorDoc("/oauth-setup");
-  assert.match(features, /href="\/workflow-cheatsheet"/);
+  const features = await readOperatorDoc("/skills/features");
+  const toolSetup = await readOperatorDoc("/getting-started/tool-setup");
+  const oauth = await readOperatorDoc("/getting-started/oauth-setup");
+  assert.match(features, /href="\/guides\/workflow-cheatsheet"/);
   assert.match(features, /href="\/skills"/);
-  assert.match(onboarding, /href="\/oauth-setup"/);
-  assert.match(toolSetup, /href="\/oauth-setup"/);
-  assert.match(oauth, /href="\/tool-setup"/);
-  assert.match(oauth, /href="\/onboarding"/);
+  assert.match(onboarding, /href="\/getting-started\/oauth-setup"/);
+  assert.match(toolSetup, /href="\/getting-started\/oauth-setup"/);
+  assert.match(oauth, /href="\/getting-started\/tool-setup"/);
+  assert.match(oauth, /href="\/getting-started\/onboarding"/);
   assert.match(
     onboarding,
     /href="https:\/\/github\.com\/daiki-beppu\/youtube-automation\/blob\/main\/docs\/migration\/python-to-tayk\.md"/
@@ -392,29 +407,29 @@ test(`onboarding は直接描画だけを維持し、公開operator docs ${opera
 
 test(`operator docs の${generatedRouteCount} route は原本の先頭見出しを唯一の H1 として描画する`, async () => {
   const expectedTitles = new Map([
-    ["/onboarding", "Onboarding"],
-    ["/tool-setup", "ツール導入"],
+    ["/getting-started/onboarding", "Onboarding"],
+    ["/getting-started/tool-setup", "ツール導入"],
     [
-      "/oauth-setup",
+      "/getting-started/oauth-setup",
       "GCP / YouTube API セットアップ",
     ],
-    ["/features", "できることから skill を探す"],
-    ["/workflow-cheatsheet", "workflow チートシート"],
-    ["/chrome-extension-install-guide", "Chrome 拡張インストールガイド"],
-    ["/dashboard", "Analytics dashboard"],
+    ["/skills/features", "できることから skill を探す"],
+    ["/guides/workflow-cheatsheet", "workflow チートシート"],
+    ["/getting-started/chrome-extension-install-guide", "Chrome 拡張インストールガイド"],
+    ["/guides/dashboard", "Analytics dashboard"],
     [
-      "/channel-workspace-migration",
+      "/guides/channel-workspace-migration",
       "単一チャンネル repository から workspace への移行",
     ],
-    ["/cloud-execution", "クラウドでの実行"],
-    ["/live-streaming", "24時間ライブ配信を始める"],
-    ["/live-chat-reply", "ライブチャット自動返信を試す"],
-    ["/ambient-layers", "環境音レイヤーを重ねる"],
-    ["/scheduled-publish", "公開日時を決めて予約公開する"],
-    ["/localizations", "タイトルと概要欄を多言語化する"],
-    ["/distrokid", "楽曲を DistroKid 配信向けに準備する"],
-    ["/audio-studio", "Audio Studio で音を調整する"],
-    ["/review-viewers", "review 用 HTML で音源と動画を確認する"],
+    ["/guides/cloud-execution", "クラウドでの実行"],
+    ["/guides/live-streaming", "24時間ライブ配信を始める"],
+    ["/guides/live-chat-reply", "ライブチャット自動返信を試す"],
+    ["/guides/ambient-layers", "環境音レイヤーを重ねる"],
+    ["/guides/scheduled-publish", "公開日時を決めて予約公開する"],
+    ["/guides/localizations", "タイトルと概要欄を多言語化する"],
+    ["/guides/distrokid", "楽曲を DistroKid 配信向けに準備する"],
+    ["/guides/audio-studio", "Audio Studio で音を調整する"],
+    ["/guides/review-viewers", "review 用 HTML で音源と動画を確認する"],
   ]);
 
   assert.equal(expectedTitles.size, generatedRouteCount);
@@ -425,7 +440,7 @@ test(`operator docs の${generatedRouteCount} route は原本の先頭見出し�
     );
 
     assert.deepEqual(headings, [expectedTitle]);
-    if (route === "/onboarding") {
+    if (route === "/getting-started/onboarding") {
       assert.match(html, /<h2 id="1-このリポジトリは何か">/);
     }
   }
@@ -435,7 +450,7 @@ test("AI出力はonboardingだけを除外し、直接取得用Markdown生成は
   const llms = await readFile(new URL("../dist/llms.txt", import.meta.url), "utf8");
   const llmsFull = await readFile(new URL("../dist/llms-full.txt", import.meta.url), "utf8");
 
-  assert.doesNotMatch(llms, /\[Onboarding\]\(\/onboarding\)/i);
+  assert.doesNotMatch(llms, /\[Onboarding\]\(\/getting-started\/onboarding\)/i);
   assert.doesNotMatch(llmsFull, /^# Onboarding$/mu);
   assert.doesNotMatch(llmsFull, /## 1\. このリポジトリは何か/);
   for (const route of operatorRoutes) {
@@ -444,7 +459,7 @@ test("AI出力はonboardingだけを除外し、直接取得用Markdown生成は
   }
   for (const extension of ["md", "mdx"]) {
     const markdown = await readFile(
-      new URL(`../dist/onboarding.${extension}`, import.meta.url),
+      new URL(`../dist/getting-started/onboarding.${extension}`, import.meta.url),
       "utf8"
     );
     assert.match(markdown, /このリポジトリは何か/);
@@ -459,7 +474,7 @@ test("sitemap が生成された場合だけ onboarding route を含めない", 
 
   for (const path of sitemapPaths) {
     const sitemap = await readFile(new URL(`../dist/${path}`, import.meta.url), "utf8");
-    assert.doesNotMatch(sitemap, /\/onboarding\/?(?:<|$)/);
+    assert.doesNotMatch(sitemap, /\/getting-started\/onboarding\/?(?:<|$)/);
     for (const route of operatorRoutes) {
       assert.match(sitemap, new RegExp(`${route}/?`));
     }
@@ -736,13 +751,39 @@ test("全リリースの旧 URL を /releases/ 配下へ恒久リダイレクト
   ]);
 });
 
-test("production build は全リリースの Cloudflare Pages redirect を出力する", async () => {
+test("production build は旧 URL 全件の Cloudflare Pages redirect を出力する", async () => {
   const redirects = await readFile(new URL("../dist/_redirects", import.meta.url), "utf8");
-  const expected = (await releaseNotes())
-    .map(({ version }) => `/${version} /releases/${version} 301`)
-    .toSorted();
+  const expected = [
+    ...(await releaseNotes()).map(
+      ({ version }) => `/${version} /releases/${version} 301`
+    ),
+    ...operatorDocRedirects(operatorDocMap).map(
+      ({ from, to }) => `${from} ${to} 301`
+    ),
+  ].toSorted();
 
   assert.deepEqual(redirects.trim().split("\n").toSorted(), expected);
+});
+
+test("タブ導入前の operator doc URL は production build で新 route へ転送する", async () => {
+  const redirects = await readFile(new URL("../dist/_redirects", import.meta.url), "utf8");
+
+  for (const route of ["/tool-setup", "/features", "/dashboard", "/onboarding"]) {
+    const to = operatorDocMap.find(
+      (entry) => entry.legacyRoute === route
+    )?.route;
+
+    assert.ok(to, `${route} は operator doc map の legacy route である`);
+    assert.match(redirects, new RegExp(`^${route} ${to} 301$`, "mu"));
+  }
+});
+
+test("リリースノートが 1 件も無い構成はタブの既定リンク先を解決できず落ちる", () => {
+  assert.throws(() => firstReleaseRoute([]), /no release note/iu);
+  assert.equal(
+    firstReleaseRoute([{ items: ["/releases/v5.7.0"], label: "本体｜大" }]),
+    "/releases/v5.7.0"
+  );
 });
 
 test("ファイル名と version が食い違う release note を path 付きで拒否する", async () => {

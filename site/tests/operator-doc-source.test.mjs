@@ -6,6 +6,7 @@ import test from "node:test";
 import {
   createOperatorDocSource,
   operatorDocMap,
+  operatorDocRedirects,
   rewriteFeatureSkillLinks,
   rewriteMarkdownLinks,
 } from "../operator-doc-source.ts";
@@ -91,6 +92,57 @@ test("存在しない原本は解決対象を示して fail closed する", asyn
   await assert.rejects(source.load(), /ONBOARDING\.md/);
 });
 
+test(`タブ導入前の flat route ${expectedSources.length}件を新 route へ恒久リダイレクトする`, () => {
+  assert.deepEqual(
+    operatorDocRedirects(operatorDocMap),
+    operatorDocMap.map(({ legacyRoute, route }) => ({
+      from: legacyRoute,
+      status: 301,
+      to: route,
+    }))
+  );
+  assert.equal(
+    new Set(operatorDocMap.map(({ legacyRoute }) => legacyRoute)).size,
+    expectedSources.length
+  );
+});
+
+test("legacy route を持たない doc は redirect を生成しない", () => {
+  const map = [
+    { source: "ONBOARDING.md", route: "/guides/setup" },
+    { legacyRoute: "/old", source: "docs/oauth-setup.md", route: "/guides/new" },
+  ];
+
+  assert.deepEqual(operatorDocRedirects(map), [
+    { from: "/old", status: 301, to: "/guides/new" },
+  ]);
+});
+
+test("生成 route と衝突する legacy route は衝突先を示して拒否する", () => {
+  const map = [
+    { source: "ONBOARDING.md", route: "/guides/setup" },
+    {
+      legacyRoute: "/guides/setup",
+      source: "docs/oauth-setup.md",
+      route: "/guides/oauth",
+    },
+  ];
+
+  assert.throws(() => operatorDocRedirects(map), /collides.*\/guides\/setup/i);
+});
+
+test("重複 legacy route は衝突した route を示して拒否する", () => {
+  const map = [
+    { legacyRoute: "/old", source: "ONBOARDING.md", route: "/guides/setup" },
+    { legacyRoute: "/old", source: "docs/oauth-setup.md", route: "/guides/oauth" },
+  ];
+
+  assert.throws(
+    () => operatorDocRedirects(map),
+    /duplicate legacy route.*\/old/i
+  );
+});
+
 test("重複 route は衝突した route を示して拒否する", () => {
   const map = [
     { source: "ONBOARDING.md", route: "/setup" },
@@ -144,7 +196,7 @@ test("mapped Markdown link は site route と fragment へ書き換える", () =
 
   assert.equal(
     rewriteMarkdownLinks(markdown, "docs/features.md", operatorDocMap),
-    "[workflow](/workflow-cheatsheet#再開) [setup](/onboarding#install)"
+    "[workflow](/guides/workflow-cheatsheet#再開) [setup](/getting-started/onboarding#install)"
   );
 });
 

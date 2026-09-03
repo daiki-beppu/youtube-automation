@@ -78,6 +78,19 @@ export function releaseSidebarGroups(directory: string): ReleaseSidebarGroup[] {
   );
 }
 
+/**
+ * 「アップデート」タブの既定リンク先。`releaseKinds` 順にグループを組むため
+ * 本体リリースが 1 件でもあれば本体の最新版になる。1 件も無い構成は
+ * タブが空リンクになる設定ミスなので、config 評価時に落とす。
+ */
+export function firstReleaseRoute(groups: readonly ReleaseSidebarGroup[]): string {
+  const route = groups.at(0)?.items.at(0);
+  if (route === undefined) {
+    throw new Error("Release sidebar has no release note to anchor the tab to");
+  }
+  return route;
+}
+
 /** 既存の外部リンクを保つため、全リリースの旧 route を新 route へ転送する。 */
 export function releaseRedirects(directory: string): ReleaseRedirect[] {
   return readdirSync(directory)

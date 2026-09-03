@@ -7,6 +7,7 @@ import {
   createSkillPageSource,
   parseSkillCategories,
   parseSkillMarkdown,
+  skillSidebarRoutes,
 } from "../skill-page-source.ts";
 
 const skillMarkdown = ({
@@ -155,6 +156,35 @@ test("骨格ページのリード文とリファレンスを生成する", async
   assert.match(beta.body.text, /## リファレンス\n\n### 前後工程/);
 });
 
+test("sidebar route は生成されるページとだけ一致する", async () => {
+  const repositoryRoot = await createRepository();
+  await mkdir(join(repositoryRoot, ".claude/skills/wip"), { recursive: true });
+
+  const routes = skillSidebarRoutes(repositoryRoot);
+  const slugs = (await createSkillPageSource({ repositoryRoot }).load()).entries
+    .map((entry) => entry.slug)
+    .toSorted();
+
+  assert.deepEqual(routes, ["/skills", "/skills/features", "/skills/alpha", "/skills/beta"]);
+  assert.deepEqual(
+    routes.filter((route) => route !== "/skills/features").toSorted(),
+    slugs
+  );
+});
+
+test("実リポジトリの sidebar route は生成ページ全件と一致する", async () => {
+  const repositoryRoot = resolve(import.meta.dirname, "../..");
+  const routes = skillSidebarRoutes(repositoryRoot);
+  const slugs = (await createSkillPageSource({ repositoryRoot }).load()).entries
+    .map((entry) => entry.slug)
+    .toSorted();
+
+  assert.deepEqual(
+    routes.filter((route) => route !== "/skills/features").toSorted(),
+    slugs
+  );
+});
+
 test("想定 API call 数があるときだけリファレンスに掲載する", async () => {
   const repositoryRoot = await createRepository();
   await writeFile(
@@ -191,7 +221,7 @@ test("一覧と個別ページの先頭 H1 を title へ分離する", async () 
 
   assert.equal(index.data.title, "発動条件から skill を使う");
   assert.match(index.body.text, /発動条件・前提・前後工程/);
-  assert.match(index.body.text, /\[できることの 1 行要約から探す\]\(\/features\)/);
+  assert.match(index.body.text, /\[できることの 1 行要約から探す\]\(\/skills\/features\)/);
   assert.doesNotMatch(index.body.text, /^# /mu);
   assert.match(index.body.text, /^## category one$/mu);
   assert.match(index.raw, /^---\ntitle: "発動条件から skill を使う"\ntype: doc\n---\n\n/mu);
@@ -287,7 +317,7 @@ test("production build は一覧と19個の個別ページを公開する", asyn
   assert.doesNotMatch(index, /href="\/skills\/(?:automation-release|hallmark|shadcn)"/);
   assert.equal((index.match(/<h1\b/g) ?? []).length, 1);
   assert.match(index, /<h1[^>]*>発動条件から skill を使う<\/h1>/);
-  assert.match(index, /href="\/features"/);
+  assert.match(index, /href="\/skills\/features"/);
   assert.match(thumbnail, /--compare/);
   assert.match(thumbnail, /--test/);
   assert.match(thumbnail, /--iterate/);
