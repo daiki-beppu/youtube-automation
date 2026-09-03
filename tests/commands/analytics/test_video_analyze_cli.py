@@ -457,12 +457,12 @@ class TestAnalysisWindowSkillConfig:
         # Then: Vertex AI global endpoint の動画入力対応 GA モデル
         assert cfg["model"] == "gemini-3.5-flash"
 
-    def test_default_window_is_900(self, tmp_path):
+    def test_default_window_is_30(self, tmp_path):
         # Given: チャンネル側 override なし
         cfg = load_skill_config("video-analyze", use_cache=False, channel_dir=tmp_path)
 
-        # Then: 配布 default の 900 秒
-        assert cfg["analysis_window_sec"] == 900
+        # Then: 配布 default の 30 秒
+        assert cfg["analysis_window_sec"] == 30
 
     def test_channel_override_changes_window(self, tmp_path):
         # Given: config/skills/video-analyze.yaml で窓幅を上書き
@@ -577,12 +577,12 @@ class TestMainAnalysisWindowFlow:
         assert report_path.with_suffix(".html").is_file()
 
     def test_default_window_flows_to_gemini_end_offset(self, tmp_path, monkeypatch):
-        # Given: delay だけ override し、analysis_window_sec は配布 default の 900 秒
+        # Given: delay だけ override し、analysis_window_sec は配布 default の 30 秒
         client = self._run_main_with_channel(tmp_path, monkeypatch, "delay_sec: 0\n")
 
-        # Then: default の 900 秒が同じ入口から SDK metadata に届く
+        # Then: default の 30 秒が同じ入口から SDK metadata に届く
         contents = client.models.generate_content.call_args.kwargs["contents"]
-        assert contents[0].video_metadata.end_offset == "900s"
+        assert contents[0].video_metadata.end_offset == "30s"
 
 
 # ----------------------------------------------------------------------------
