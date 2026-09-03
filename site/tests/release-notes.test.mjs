@@ -234,6 +234,9 @@ const hrefsWithin = (markup) =>
 test("トップページは日本語検索と読者タスク別4入口を表示する", async () => {
   const html = await readIndex();
   const source = await readFile(new URL("../pages/index.astro", import.meta.url), "utf8");
+  const latest = (await releaseNotes()).toSorted(
+    (left, right) => right.released_at.getTime() - left.released_at.getTime()
+  )[0];
   const cards = [...html.matchAll(/class="home-task-card" href="([^"]+)"[^>]*>[\s\S]*?<h2>([^<]+)<\/h2>/g)].map(
     (match) => ({ href: match[1], label: match[2] })
   );
@@ -246,8 +249,10 @@ test("トップページは日本語検索と読者タスク別4入口を表示�
     { href: "/getting-started/tool-setup", label: "はじめる" },
     { href: "/guides/workflow-cheatsheet", label: "ガイド" },
     { href: "/skills", label: "スキル" },
-    { href: "/releases/v5.7.0", label: "アップデート" },
+    { href: `/releases/${latest.version}`, label: "アップデート" },
   ]);
+  assert.match(source, /href: latestRelease\?\.href/);
+  assert.match(source, /<a href=\{latestRelease\.href\}>すべて見る/);
 });
 
 test("読者タスク別4タブは route prefix ごとに sidebar を切り替える", async () => {

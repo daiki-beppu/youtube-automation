@@ -14,6 +14,16 @@ interface ReleaseData {
   version: string;
 }
 
+const routeByEntryId = new Map(data.routes.map((route) => [route.entryId, route.path]));
+const latestRelease = (await getCollection("docs"))
+  .map((entry) => {
+    const release = entry.data as typeof entry.data & ReleaseData;
+    return {
+      ...release,
+      href: routeByEntryId.get(entry.id) ?? `/${entry.id.replace(/\.mdx?$/, "")}`,
+    };
+  })
+  .toSorted((left, right) => right.released_at.getTime() - left.released_at.getTime())[0];
 const taskCards = [
   {
     description: "ツール導入、YouTube API、OAuth の準備を始める",
@@ -35,22 +45,11 @@ const taskCards = [
   },
   {
     description: "変更内容と、利用中の環境を追従させる手順を確認する",
-    href: "/releases/v5.7.0",
+    href: latestRelease?.href ?? "/releases",
     label: "アップデート",
     number: "04",
   },
 ] as const;
-
-const routeByEntryId = new Map(data.routes.map((route) => [route.entryId, route.path]));
-const latestRelease = (await getCollection("docs"))
-  .map((entry) => {
-    const release = entry.data as typeof entry.data & ReleaseData;
-    return {
-      ...release,
-      href: routeByEntryId.get(entry.id) ?? `/${entry.id.replace(/\.mdx?$/, "")}`,
-    };
-  })
-  .toSorted((left, right) => right.released_at.getTime() - left.released_at.getTime())[0];
 
 const kindLabel: Record<ReleaseKind, string> = {
   main: "本体",
@@ -112,7 +111,7 @@ const formatDate = (date: Date) =>
             <p class="release-eyebrow">latest release</p>
             <h2>最新のアップデート</h2>
           </div>
-          <a href="/releases/v5.7.0">すべて見る →</a>
+          <a href={latestRelease.href}>すべて見る →</a>
         </header>
         <a class="release-card" href={latestRelease.href}>
           <div class="release-meta">
