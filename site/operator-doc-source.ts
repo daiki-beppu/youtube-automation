@@ -36,6 +36,7 @@ export const operatorDocMap = [
     source: "docs/oauth-setup.md",
     route: "/getting-started/oauth-setup",
   },
+  { source: "docs/oauth-scopes.md", route: "/getting-started/oauth-scopes" },
   { legacyRoute: "/features", source: "docs/features.md", route: "/skills/features" },
   {
     legacyRoute: "/workflow-cheatsheet",

@@ -34,7 +34,12 @@ const execFileAsync = promisify(execFile);
 const operatorSections = [
   {
     label: "はじめる",
-    routes: ["/getting-started/tool-setup", "/getting-started/oauth-setup", "/getting-started/chrome-extension-install-guide"],
+    routes: [
+      "/getting-started/tool-setup",
+      "/getting-started/oauth-setup",
+      "/getting-started/oauth-scopes",
+      "/getting-started/chrome-extension-install-guide",
+    ],
     section: "getting-started",
   },
   {
@@ -333,6 +338,7 @@ test("読者タスク別4タブは route prefix ごとに sidebar を切り替�
       sidebarRoutes: [
         "/getting-started/tool-setup",
         "/getting-started/oauth-setup",
+        "/getting-started/oauth-scopes",
         "/getting-started/chrome-extension-install-guide",
       ],
     },
@@ -428,6 +434,7 @@ test(`operator docs の${generatedRouteCount} route は原本の先頭見出し�
       "/getting-started/oauth-setup",
       "GCP / YouTube API セットアップ",
     ],
+    ["/getting-started/oauth-scopes", "YouTube 権限を安全に使い分ける"],
     ["/skills/features", "できることから skill を探す"],
     ["/guides/workflow-cheatsheet", "workflow チートシート"],
     ["/getting-started/chrome-extension-install-guide", "Chrome 拡張インストールガイド"],

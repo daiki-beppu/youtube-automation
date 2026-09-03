@@ -19,6 +19,7 @@ OPERATOR_DOC_SOURCES = (
     "ONBOARDING.md",
     "docs/tool-setup.md",
     "docs/oauth-setup.md",
+    "docs/oauth-scopes.md",
     "docs/features.md",
     "docs/workflow-cheatsheet.md",
     "docs/chrome-extension-install-guide.md",
@@ -140,6 +141,7 @@ def test_python_build_configuration_excludes_site_workspace() -> None:
         "ONBOARDING.md",
         "docs/tool-setup.md",
         "docs/oauth-setup.md",
+        "docs/oauth-scopes.md",
         "docs/features.md",
         "docs/workflow-cheatsheet.md",
     }
