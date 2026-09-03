@@ -251,7 +251,7 @@ test("トップページは日本語検索と読者タスク別4入口を表示�
     { href: "/skills", label: "スキル" },
     { href: `/releases/${latest.version}`, label: "アップデート" },
   ]);
-  assert.match(source, /href: latestRelease\?\.href/);
+  assert.match(source, /href: latestRelease\.href/);
   assert.match(source, /<a href=\{latestRelease\.href\}>すべて見る/);
 });
 
@@ -568,7 +568,7 @@ test("トップページは最新リリース1件をハイライトする", asyn
   assert.equal((highlight.match(/class="release-card"/g) ?? []).length, 1);
   assert.match(highlight, new RegExp(`href="/releases/${latest.version}"`));
   assert.match(highlight, new RegExp(`<h2>${latest.version}</h2>`));
-  assert.match(highlight, new RegExp(latest.title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.match(highlight, new RegExp(latest.summary.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 });
 
 test("対応形式でない version は version を示して拒否する", () => {
@@ -601,12 +601,15 @@ const releaseNotes = async () => {
       const kind = source.match(/^kind:\s*(?<kind>main|extension)$/mu)?.groups.kind;
       const releasedAt = source.match(/^released_at:\s*(?<date>\d{4}-\d{2}-\d{2})$/mu)
         ?.groups.date;
+      const summary = source.match(/^summary:\s*"?(?<summary>.+?)"?$/mu)?.groups.summary;
       assert.ok(title, `release note has no title: ${file}`);
       assert.ok(kind, `release note has no kind: ${file}`);
       assert.ok(releasedAt, `release note has no released_at: ${file}`);
+      assert.ok(summary, `release note has no summary: ${file}`);
       return {
         kind,
         released_at: new Date(`${releasedAt}T00:00:00.000Z`),
+        summary,
         title,
         version: file.replace(/\.md$/u, ""),
       };

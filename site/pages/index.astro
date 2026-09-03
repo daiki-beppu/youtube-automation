@@ -10,7 +10,6 @@ interface ReleaseData {
   kind: ReleaseKind;
   released_at: Date;
   summary: string;
-  title: string;
   version: string;
 }
 
@@ -24,6 +23,14 @@ const latestRelease = (await getCollection("docs"))
     };
   })
   .toSorted((left, right) => right.released_at.getTime() - left.released_at.getTime())[0];
+
+// リリースノートが 0 件だとアップデート導線の行き先が無い。/releases は sidebar の
+// route prefix でしかなくページ実体を持たないため、そこへ逃がすと 404 を配信してしまう。
+// 静的サイトなので、壊れた導線を出すより build 時に落として気付ける方が安全。
+if (!latestRelease) {
+  throw new Error("リリースノートが 0 件のためトップページを生成できません");
+}
+
 const taskCards = [
   {
     description: "ツール導入、YouTube API、OAuth の準備を始める",
@@ -45,7 +52,7 @@ const taskCards = [
   },
   {
     description: "変更内容と、利用中の環境を追従させる手順を確認する",
-    href: latestRelease?.href ?? "/releases",
+    href: latestRelease.href,
     label: "アップデート",
     number: "04",
   },
@@ -104,30 +111,28 @@ const formatDate = (date: Date) =>
       ))}
     </nav>
 
-    {latestRelease && (
-      <section class="home-latest" data-home-section="latest-release">
-        <header>
-          <div>
-            <p class="release-eyebrow">latest release</p>
-            <h2>最新のアップデート</h2>
-          </div>
-          <a href={latestRelease.href}>すべて見る →</a>
-        </header>
-        <a class="release-card" href={latestRelease.href}>
-          <div class="release-meta">
-            <span class:list={["release-kind", `release-kind--${latestRelease.kind}`]}>
-              {kindLabel[latestRelease.kind]}
-            </span>
-            <time datetime={latestRelease.released_at.toISOString()}>
-              {formatDate(latestRelease.released_at)}
-            </time>
-          </div>
-          <h2>{latestRelease.version}</h2>
-          <p>{latestRelease.title}</p>
-          <span class="release-link" aria-hidden="true">{latestRelease.summary} <span>→</span></span>
-        </a>
-      </section>
-    )}
+    <section class="home-latest" data-home-section="latest-release">
+      <header>
+        <div>
+          <p class="release-eyebrow">latest release</p>
+          <h2>最新のアップデート</h2>
+        </div>
+        <a href={latestRelease.href}>すべて見る →</a>
+      </header>
+      <a class="release-card" href={latestRelease.href}>
+        <div class="release-meta">
+          <span class:list={["release-kind", `release-kind--${latestRelease.kind}`]}>
+            {kindLabel[latestRelease.kind]}
+          </span>
+          <time datetime={latestRelease.released_at.toISOString()}>
+            {formatDate(latestRelease.released_at)}
+          </time>
+        </div>
+        <h2>{latestRelease.version}</h2>
+        <p>{latestRelease.summary}</p>
+        <span class="release-link" aria-hidden="true">リリースノートを読む <span>→</span></span>
+      </a>
+    </section>
   </main>
   <script>
     document.querySelector("[data-home-search]")?.addEventListener("click", () => {
