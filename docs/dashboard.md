@@ -1,5 +1,7 @@
 # Analytics dashboard
 
+> **実験的機能です。** 保存済みデータを確認しながら、まずは少数のチャンネルで試してください。
+
 `yt-dashboard` は登録済みチャンネルの Analytics を起動時に更新し、ローカルブラウザで横断表示する読み取り中心の UI です。frontend は同一 origin の JSON API を読み取り、Python server が YouTube Data API と YouTube Analytics API を使用して各チャンネルの snapshot を保存します。
 
 ## channel registry

@@ -73,27 +73,44 @@ export default defineConfig({
         label: "ガイド",
         root: "/guides",
         items: [
-          "/guides/workflow-cheatsheet",
           {
             display: "group",
-            label: "実験的機能",
+            label: "日々の制作",
             items: [
-              "/guides/dashboard",
+              "/guides/workflow-cheatsheet",
               "/guides/cloud-execution",
-              "/guides/live-chat-reply",
-              "/guides/audio-studio",
-              "/guides/review-viewers",
+              "/guides/ambient-layers",
             ],
           },
           {
             display: "group",
-            label: "こんなこともできる！",
+            label: "公開を広げる",
             items: [
-              "/guides/live-streaming",
-              "/guides/ambient-layers",
               "/guides/scheduled-publish",
               "/guides/localizations",
               "/guides/distrokid",
+            ],
+          },
+          {
+            display: "group",
+            label: "ライブ配信",
+            items: [
+              "/guides/live-streaming",
+              "/guides/streaming-healthcheck",
+            ],
+          },
+          {
+            display: "group",
+            label: "視聴者と関わる",
+            items: ["/guides/live-chat-reply"],
+          },
+          {
+            display: "group",
+            label: "手元ツール",
+            items: [
+              "/guides/dashboard",
+              "/guides/audio-studio",
+              "/guides/review-viewers",
             ],
           },
         ],

@@ -54,6 +54,7 @@ const operatorSections = [
       "/guides/audio-studio",
       "/guides/review-viewers",
       "/guides/live-streaming",
+      "/guides/streaming-healthcheck",
       "/guides/ambient-layers",
       "/guides/scheduled-publish",
       "/guides/localizations",
@@ -298,12 +299,17 @@ test("landing page は活用ガイドを使う内の「こんなこともでき�
   assert.match(advanced, /<h3>こんなこともできる！<\/h3>/);
   assert.deepEqual(hrefsWithin(advanced), [
     "/guides/live-streaming",
+    "/guides/streaming-healthcheck",
     "/guides/ambient-layers",
     "/guides/scheduled-publish",
     "/guides/localizations",
     "/guides/distrokid",
   ]);
   assert.equal(hrefsWithin(use).filter((href) => href === "/guides/live-streaming").length, 1);
+  assert.equal(
+    hrefsWithin(use).filter((href) => href === "/guides/streaming-healthcheck").length,
+    1
+  );
   assert.equal(hrefsWithin(use).filter((href) => href === "/guides/ambient-layers").length, 1);
   assert.equal(hrefsWithin(use).filter((href) => href === "/guides/scheduled-publish").length, 1);
   assert.equal(hrefsWithin(use).filter((href) => href === "/guides/localizations").length, 1);
@@ -391,6 +397,40 @@ test("読者タスク別4タブは route prefix ごとに sidebar を切り替�
   }
 });
 
+test("ガイド sidebar は読者タスク別5群で全ページを一度ずつ案内する", async () => {
+  const html = await readOperatorDoc("/guides/workflow-cheatsheet");
+  const sidebar = html.match(/<nav data-blume-nav-tree>([\s\S]*?)<\/nav>/)?.[1] ?? "";
+  const labels = [
+    "日々の制作",
+    "公開を広げる",
+    "ライブ配信",
+    "視聴者と関わる",
+    "手元ツール",
+  ];
+
+  assert.deepEqual(
+    labels.map((label) => sidebar.indexOf(`>${label}<`)),
+    labels.map((label) => sidebar.indexOf(`>${label}<`)).toSorted((a, b) => a - b)
+  );
+  for (const label of labels) assert.match(sidebar, new RegExp(`>${label}<`));
+  assert.doesNotMatch(sidebar, />実験的機能<|>こんなこともできる！</);
+  assert.equal(hrefsWithin(sidebar).filter((href) => href === "/guides/streaming-healthcheck").length, 1);
+});
+
+test("実験的機能の各ガイドは冒頭で利用上の注意を示す", async () => {
+  for (const route of [
+    "/guides/dashboard",
+    "/guides/cloud-execution",
+    "/guides/live-chat-reply",
+    "/guides/audio-studio",
+    "/guides/review-viewers",
+  ]) {
+    const html = await readOperatorDoc(route);
+    const article = html.match(/<article\b[^>]*>([\s\S]*?)<\/article>/)?.[1] ?? "";
+    assert.match(article.split("<h2", 1)[0], /実験的機能/);
+  }
+});
+
 test(`onboarding は直接描画だけを維持し、公開operator docs ${publicOperatorRoutes.length}件だけを検索へ載せる`, async () => {
   const search = JSON.parse(
     await readFile(new URL("../dist/blume-search.json", import.meta.url), "utf8")
@@ -445,6 +485,7 @@ test(`operator docs の${generatedRouteCount} route は原本の先頭見出し�
     ],
     ["/guides/cloud-execution", "クラウドでの実行"],
     ["/guides/live-streaming", "24時間ライブ配信を始める"],
+    ["/guides/streaming-healthcheck", "ライブ配信の稼働状態を確認する"],
     ["/guides/live-chat-reply", "ライブチャット自動返信を試す"],
     ["/guides/ambient-layers", "環境音レイヤーを重ねる"],
     ["/guides/scheduled-publish", "公開日時を決めて予約公開する"],

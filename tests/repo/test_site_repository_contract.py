@@ -27,6 +27,7 @@ OPERATOR_DOC_SOURCES = (
     "docs/channel-workspace-migration.md",
     "docs/cloud-execution.md",
     "docs/live-streaming.md",
+    "docs/streaming-healthcheck.md",
     "docs/live-chat-reply.md",
     "docs/ambient-layers.md",
     "docs/scheduled-publish.md",
