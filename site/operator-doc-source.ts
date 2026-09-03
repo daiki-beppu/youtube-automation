@@ -69,6 +69,10 @@ export const operatorDocMap = [
     route: "/guides/live-streaming",
   },
   {
+    source: "docs/streaming-healthcheck.md",
+    route: "/guides/streaming-healthcheck",
+  },
+  {
     legacyRoute: "/live-chat-reply",
     source: "docs/live-chat-reply.md",
     route: "/guides/live-chat-reply",
