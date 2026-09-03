@@ -6,12 +6,17 @@ import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { operatorDocMap, operatorDocRedirects } from "../operator-doc-source.ts";
 import {
   groupReleasesByScale,
   releaseScaleLabels,
   scaleFromVersion,
 } from "../release-scale.ts";
-import { releaseRedirects, releaseSidebarGroups } from "../release-sidebar.ts";
+import {
+  firstReleaseRoute,
+  releaseRedirects,
+  releaseSidebarGroups,
+} from "../release-sidebar.ts";
 
 const readIndex = () => readFile(new URL("../dist/index.html", import.meta.url), "utf8");
 const readRelease = (version) =>
@@ -746,13 +751,39 @@ test("全リリースの旧 URL を /releases/ 配下へ恒久リダイレクト
   ]);
 });
 
-test("production build は全リリースの Cloudflare Pages redirect を出力する", async () => {
+test("production build は旧 URL 全件の Cloudflare Pages redirect を出力する", async () => {
   const redirects = await readFile(new URL("../dist/_redirects", import.meta.url), "utf8");
-  const expected = (await releaseNotes())
-    .map(({ version }) => `/${version} /releases/${version} 301`)
-    .toSorted();
+  const expected = [
+    ...(await releaseNotes()).map(
+      ({ version }) => `/${version} /releases/${version} 301`
+    ),
+    ...operatorDocRedirects(operatorDocMap).map(
+      ({ from, to }) => `${from} ${to} 301`
+    ),
+  ].toSorted();
 
   assert.deepEqual(redirects.trim().split("\n").toSorted(), expected);
+});
+
+test("タブ導入前の operator doc URL は production build で新 route へ転送する", async () => {
+  const redirects = await readFile(new URL("../dist/_redirects", import.meta.url), "utf8");
+
+  for (const route of ["/tool-setup", "/features", "/dashboard", "/onboarding"]) {
+    const to = operatorDocMap.find(
+      (entry) => entry.legacyRoute === route
+    )?.route;
+
+    assert.ok(to, `${route} は operator doc map の legacy route である`);
+    assert.match(redirects, new RegExp(`^${route} ${to} 301$`, "mu"));
+  }
+});
+
+test("リリースノートが 1 件も無い構成はタブの既定リンク先を解決できず落ちる", () => {
+  assert.throws(() => firstReleaseRoute([]), /no release note/iu);
+  assert.equal(
+    firstReleaseRoute([{ items: ["/releases/v5.7.0"], label: "本体｜大" }]),
+    "/releases/v5.7.0"
+  );
 });
 
 test("ファイル名と version が食い違う release note を path 付きで拒否する", async () => {

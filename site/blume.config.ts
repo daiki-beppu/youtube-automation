@@ -6,10 +6,15 @@ import { z } from "zod";
 import {
   createOperatorDocSource,
   operatorDocMap,
+  operatorDocRedirects,
   operatorDocReleaseField,
 } from "./operator-doc-source";
 import { releaseFrontmatter } from "./release-schema";
-import { releaseRedirects, releaseSidebarGroups } from "./release-sidebar";
+import {
+  firstReleaseRoute,
+  releaseRedirects,
+  releaseSidebarGroups,
+} from "./release-sidebar";
 import { createSkillPageSource, skillSidebarRoutes } from "./skill-page-source";
 
 const lightAccent = dadsTokens.Color.Key["800"].$value;
@@ -120,13 +125,16 @@ export default defineConfig({
         path: "/skills",
       },
       {
-        href: releaseNavigationGroups[0].items[0],
+        href: firstReleaseRoute(releaseNavigationGroups),
         label: "アップデート",
         path: "/releases",
       },
     ],
   },
-  redirects: releaseRedirects(releaseNotesRoot),
+  redirects: [
+    ...releaseRedirects(releaseNotesRoot),
+    ...operatorDocRedirects(operatorDocMap),
+  ],
   theme: {
     accent: {
       light: lightAccent,

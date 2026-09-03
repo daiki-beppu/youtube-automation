@@ -8,34 +8,100 @@ const GITHUB_BLOB_BASE =
   "https://github.com/daiki-beppu/youtube-automation/blob/main/";
 
 export interface OperatorDocMapping {
+  /** タブ導入前に公開していた flat route。転送不要な新規 doc では省く。 */
+  readonly legacyRoute?: string;
   readonly source: string;
   readonly route: string;
 }
 
+export interface OperatorDocRedirect {
+  readonly from: string;
+  readonly status: 301;
+  readonly to: string;
+}
+
 export const operatorDocMap = [
-  { source: "ONBOARDING.md", route: "/getting-started/onboarding" },
-  { source: "docs/tool-setup.md", route: "/getting-started/tool-setup" },
-  { source: "docs/oauth-setup.md", route: "/getting-started/oauth-setup" },
-  { source: "docs/features.md", route: "/skills/features" },
-  { source: "docs/workflow-cheatsheet.md", route: "/guides/workflow-cheatsheet" },
   {
+    legacyRoute: "/onboarding",
+    source: "ONBOARDING.md",
+    route: "/getting-started/onboarding",
+  },
+  {
+    legacyRoute: "/tool-setup",
+    source: "docs/tool-setup.md",
+    route: "/getting-started/tool-setup",
+  },
+  {
+    legacyRoute: "/oauth-setup",
+    source: "docs/oauth-setup.md",
+    route: "/getting-started/oauth-setup",
+  },
+  { legacyRoute: "/features", source: "docs/features.md", route: "/skills/features" },
+  {
+    legacyRoute: "/workflow-cheatsheet",
+    source: "docs/workflow-cheatsheet.md",
+    route: "/guides/workflow-cheatsheet",
+  },
+  {
+    legacyRoute: "/chrome-extension-install-guide",
     source: "docs/chrome-extension-install-guide.md",
     route: "/getting-started/chrome-extension-install-guide",
   },
-  { source: "docs/dashboard.md", route: "/guides/dashboard" },
   {
+    legacyRoute: "/dashboard",
+    source: "docs/dashboard.md",
+    route: "/guides/dashboard",
+  },
+  {
+    legacyRoute: "/channel-workspace-migration",
     source: "docs/channel-workspace-migration.md",
     route: "/guides/channel-workspace-migration",
   },
-  { source: "docs/cloud-execution.md", route: "/guides/cloud-execution" },
-  { source: "docs/live-streaming.md", route: "/guides/live-streaming" },
-  { source: "docs/live-chat-reply.md", route: "/guides/live-chat-reply" },
-  { source: "docs/ambient-layers.md", route: "/guides/ambient-layers" },
-  { source: "docs/scheduled-publish.md", route: "/guides/scheduled-publish" },
-  { source: "docs/localizations.md", route: "/guides/localizations" },
-  { source: "docs/distrokid.md", route: "/guides/distrokid" },
-  { source: "docs/audio-studio.md", route: "/guides/audio-studio" },
-  { source: "docs/review-viewers.md", route: "/guides/review-viewers" },
+  {
+    legacyRoute: "/cloud-execution",
+    source: "docs/cloud-execution.md",
+    route: "/guides/cloud-execution",
+  },
+  {
+    legacyRoute: "/live-streaming",
+    source: "docs/live-streaming.md",
+    route: "/guides/live-streaming",
+  },
+  {
+    legacyRoute: "/live-chat-reply",
+    source: "docs/live-chat-reply.md",
+    route: "/guides/live-chat-reply",
+  },
+  {
+    legacyRoute: "/ambient-layers",
+    source: "docs/ambient-layers.md",
+    route: "/guides/ambient-layers",
+  },
+  {
+    legacyRoute: "/scheduled-publish",
+    source: "docs/scheduled-publish.md",
+    route: "/guides/scheduled-publish",
+  },
+  {
+    legacyRoute: "/localizations",
+    source: "docs/localizations.md",
+    route: "/guides/localizations",
+  },
+  {
+    legacyRoute: "/distrokid",
+    source: "docs/distrokid.md",
+    route: "/guides/distrokid",
+  },
+  {
+    legacyRoute: "/audio-studio",
+    source: "docs/audio-studio.md",
+    route: "/guides/audio-studio",
+  },
+  {
+    legacyRoute: "/review-viewers",
+    source: "docs/review-viewers.md",
+    route: "/guides/review-viewers",
+  },
 ] as const satisfies readonly OperatorDocMapping[];
 
 /** Internal marker allowing staged operator entries through release-only fields. */
@@ -73,7 +139,8 @@ const validateMap = (
 ): readonly OperatorDocMapping[] => {
   const sources = new Set<string>();
   const routes = new Set<string>();
-  return map.map((entry) => {
+  const legacyRoutes = new Set<string>();
+  const validated = map.map((entry) => {
     const source = normalizedRepositoryPath(entry.source);
     const route = normalizedRoute(entry.route);
     if (sources.has(source)) {
@@ -84,9 +151,41 @@ const validateMap = (
     }
     sources.add(source);
     routes.add(route);
-    return { route, source };
+    if (entry.legacyRoute === undefined) {
+      return { route, source };
+    }
+    const legacyRoute = normalizedRoute(entry.legacyRoute);
+    if (legacyRoutes.has(legacyRoute)) {
+      throw new Error(
+        `Duplicate legacy route in operator document map: ${legacyRoute}`
+      );
+    }
+    legacyRoutes.add(legacyRoute);
+    return { legacyRoute, route, source };
   });
+  for (const legacyRoute of legacyRoutes) {
+    if (routes.has(legacyRoute)) {
+      // 生成ページを redirect が覆い隠すため、route と legacy route は排他にする。
+      throw new Error(
+        `Legacy route collides with a generated route: ${legacyRoute}`
+      );
+    }
+  }
+  return validated;
 };
+
+/**
+ * 既存の外部リンクを保つため、タブ導入前の flat route を新 route へ転送する。
+ * 明示 map から導くので出力順は宣言順で安定する。
+ */
+export const operatorDocRedirects = (
+  map: readonly OperatorDocMapping[]
+): OperatorDocRedirect[] =>
+  validateMap(map).flatMap((entry) =>
+    entry.legacyRoute === undefined
+      ? []
+      : [{ from: entry.legacyRoute, status: 301 as const, to: entry.route }]
+  );
 
 const targetParts = (target: string): { fragment: string; path: string } => {
   const fragmentIndex = target.indexOf("#");

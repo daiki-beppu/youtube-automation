@@ -14,16 +14,25 @@ export const DEV_ONLY_SKILL_NAMES = new Set([
   "shadcn",
 ]);
 
+/**
+ * ページが実生成される skill 名。sidebar とページ生成が別々に「配布対象」を
+ * 判定すると、`SKILL.md` 未整備の WIP ディレクトリが 404 リンクとして
+ * sidebar に載るため、両者はこの 1 箇所だけを見る。
+ */
+const publishedSkillNames = (skillsRoot: string): string[] =>
+  readdirSync(skillsRoot, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && !DEV_ONLY_SKILL_NAMES.has(entry.name))
+    .map((entry) => entry.name)
+    .filter((name) => existsSync(join(skillsRoot, name, "SKILL.md")))
+    .toSorted();
+
 /** 配布対象 skill の全ページを明示 sidebar へ漏れなく追加する。 */
 export const skillSidebarRoutes = (repositoryRoot: string): string[] => [
   "/skills",
   "/skills/features",
-  ...readdirSync(resolve(repositoryRoot, ".claude/skills"), { withFileTypes: true })
-    .filter(
-      (entry) => entry.isDirectory() && !DEV_ONLY_SKILL_NAMES.has(entry.name)
-    )
-    .map((entry) => `/skills/${entry.name}`)
-    .toSorted(),
+  ...publishedSkillNames(resolve(repositoryRoot, ".claude/skills")).map(
+    (name) => `/skills/${name}`
+  ),
 ];
 
 export interface SkillPage {
@@ -352,20 +361,15 @@ const loadSkillEntries = async (repositoryRoot: string): Promise<SourceEntry[]> 
   }
   assertInsideRepository(repositoryRoot, skillsRoot);
   assertInsideRepository(repositoryRoot, catalogPath);
-  const directories = (await readdir(skillsRoot, { withFileTypes: true }))
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => entry.name)
-    .filter((name) => !DEV_ONLY_SKILL_NAMES.has(name))
-    .sort();
-  const skills = await Promise.all(
-    directories.map(async (directoryName) => {
-      const path = join(skillsRoot, directoryName, "SKILL.md");
-      if (!existsSync(path)) return undefined;
-      const realPath = assertInsideRepository(repositoryRoot, path);
+  const pages = await Promise.all(
+    publishedSkillNames(skillsRoot).map(async (directoryName) => {
+      const realPath = assertInsideRepository(
+        repositoryRoot,
+        join(skillsRoot, directoryName, "SKILL.md")
+      );
       return parseSkillMarkdown(await readFile(realPath, "utf8"), directoryName);
     })
   );
-  const pages = skills.filter((skill): skill is SkillPage => skill !== undefined);
   const names = new Set(pages.map((skill) => skill.name));
   if (names.size !== pages.length) throw new Error("Duplicate skill names detected");
   const handwrittenRoot = resolve(repositoryRoot, "site/skill-docs");
@@ -383,14 +387,11 @@ const loadSkillEntries = async (repositoryRoot: string): Promise<SourceEntry[]> 
           `Handwritten skill ${name} is excluded from distribution and has no published page`
         );
       }
-      if (!directories.includes(name)) {
-        throw new Error(
-          `Handwritten skill ${name} has no corresponding skill directory`
-        );
-      }
       const skill = pages.find((candidate) => candidate.name === name);
       if (!skill) {
-        throw new Error(`Handwritten skill ${name} has no corresponding SKILL.md`);
+        throw new Error(
+          `Handwritten skill ${name} has no corresponding skill directory with SKILL.md`
+        );
       }
       const path = assertInsideRepository(
         repositoryRoot,
