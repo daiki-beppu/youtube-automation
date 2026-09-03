@@ -9,6 +9,7 @@ import {
   operatorDocRedirects,
   rewriteFeatureSkillLinks,
   rewriteMarkdownLinks,
+  upgradeGuideRoutes,
 } from "../operator-doc-source.ts";
 
 const expectedSources = [
@@ -75,6 +76,36 @@ test("追従ドキュメントをすべてアップデート tab 配下へ割り
       `/releases/upgrades/${version}`
     );
   }
+});
+
+test("バージョン別アップグレードの navigation を map から新しい版順に導出する", () => {
+  assert.deepEqual(upgradeGuideRoutes(operatorDocMap), [
+    "/releases/upgrades/v5.5.1",
+    "/releases/upgrades/v5.5.0",
+    "/releases/upgrades/v5.4.0",
+  ]);
+  assert.deepEqual(
+    upgradeGuideRoutes([
+      { source: "docs/upgrades/v5.4.0.md", route: "/releases/upgrades/v5.4.0" },
+      { source: "docs/tool-setup.md", route: "/getting-started/tool-setup" },
+      { source: "docs/upgrades/v5.10.0.md", route: "/releases/upgrades/v5.10.0" },
+      { source: "docs/upgrades/v5.9.2.md", route: "/releases/upgrades/v5.9.2" },
+    ]),
+    [
+      "/releases/upgrades/v5.10.0",
+      "/releases/upgrades/v5.9.2",
+      "/releases/upgrades/v5.4.0",
+    ]
+  );
+});
+
+test("対応形式でない upgrade guide route は route を示して拒否する", () => {
+  const map = [{ source: "docs/upgrades/next.md", route: "/releases/upgrades/next" }];
+
+  assert.throws(
+    () => upgradeGuideRoutes(map),
+    /upgrade guide route.*\/releases\/upgrades\/next/i
+  );
 });
 
 test("source は build ごとに原本を読み、安定 route と doc type を返す", async () => {

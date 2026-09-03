@@ -6,7 +6,11 @@ import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { operatorDocMap, operatorDocRedirects } from "../operator-doc-source.ts";
+import {
+  operatorDocMap,
+  operatorDocRedirects,
+  upgradeGuideRoutes,
+} from "../operator-doc-source.ts";
 import {
   groupReleasesByScale,
   releaseScaleLabels,
@@ -54,11 +58,10 @@ const operatorSections = [
   },
 ];
 const operatorRoutes = operatorSections.flatMap(({ routes }) => routes);
+/** navigation と同じ導出を使い、map への追加が sidebar 未掲載のまま通らないようにする。 */
 const updateRoutes = [
   "/releases/high-cpm-locales",
-  "/releases/upgrades/v5.4.0",
-  "/releases/upgrades/v5.5.0",
-  "/releases/upgrades/v5.5.1",
+  ...upgradeGuideRoutes(operatorDocMap),
 ];
 const publicOperatorRoutes = [...operatorRoutes, ...updateRoutes];
 /** 公開 route に、navigation から除外される /onboarding を足した生成 route 総数。 */
@@ -353,10 +356,7 @@ test("読者タスク別4タブは route prefix ごとに sidebar を切り替�
         "/releases/v5.6.0",
         "/releases/ext-v0.3.0",
         "/releases/workspace-migration",
-        "/releases/high-cpm-locales",
-        "/releases/upgrades/v5.4.0",
-        "/releases/upgrades/v5.5.0",
-        "/releases/upgrades/v5.5.1",
+        ...updateRoutes,
       ],
     },
   ];

@@ -8,6 +8,7 @@ import {
   operatorDocMap,
   operatorDocRedirects,
   operatorDocReleaseField,
+  upgradeGuideRoutes,
 } from "./operator-doc-source";
 import { releaseFrontmatter } from "./release-schema";
 import {
@@ -114,11 +115,7 @@ export default defineConfig({
           },
           {
             label: "バージョン別アップグレード",
-            items: [
-              "/releases/upgrades/v5.5.1",
-              "/releases/upgrades/v5.5.0",
-              "/releases/upgrades/v5.4.0",
-            ],
+            items: upgradeGuideRoutes(operatorDocMap),
           },
           ...releaseNavigationGroups,
         ],
