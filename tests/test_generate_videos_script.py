@@ -78,17 +78,23 @@ def _create_stub_bin(tmp_path: Path) -> Path:
     _write_executable(
         bin_dir / "afinfo",
         """#!/bin/bash
+afinfo() {
 printf 'File:           %s\\nestimated duration: %s sec\\n' "$1" "${FFPROBE_DURATION:-1.00}"
+}
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then afinfo "$@"; exit $?; fi
+true
 """,
     )
     _write_executable(
         bin_dir / "ffprobe",
         """#!/bin/bash
-set -eu
+ffprobe() {
+# BASH_ENV 経由で production script と同じ shell に載るため、作業変数は必ず local にする。
+local args input_path
 args="$*"
 input_path="${!#}"
 if [[ "${FFPROBE_OUTPUT_FAIL:-0}" == "1" && "$input_path" == *"-Master.mp4" ]]; then
-    exit 1
+    return 1
 fi
 if [[ "$args" == *"format=duration"* ]]; then
     if [[ "$input_path" == *"-Master.mp4" && -n "${FFPROBE_OUTPUT_DURATION+x}" ]]; then
@@ -98,42 +104,47 @@ if [[ "$args" == *"format=duration"* ]]; then
     else
         printf '%s\\n' "${FFPROBE_DURATION:-1.00}"
     fi
-    exit 0
+    return 0
 fi
 if [[ "$args" == *"stream=r_frame_rate"* ]]; then
     printf '%s\\n' "${FFPROBE_OUTPUT_FRAME_RATE-24/1}"
-    exit 0
+    return 0
 fi
 if [[ "$args" == *"stream=width,height,pix_fmt,r_frame_rate"* ]]; then
     printf '%s\\n' "${FFPROBE_STREAM_OUTPUT}"
-    exit 0
+    return 0
 fi
 if [[ "$args" == *"stream=bit_rate"* ]]; then
     printf '%s\\n' "${FFPROBE_STREAM_BITRATE_OUTPUT:-}"
-    exit 0
+    return 0
 fi
 if [[ "$args" == *"format=bit_rate"* ]]; then
     printf '%s\\n' "${FFPROBE_FORMAT_BITRATE_OUTPUT:-}"
-    exit 0
+    return 0
 fi
-exit 0
+}
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then ffprobe "$@"; exit $?; fi
+true
 """,
     )
     _write_executable(
         bin_dir / "ffmpeg",
         """#!/bin/bash
-set -eu
+ffmpeg() {
+# generate_videos.sh は ffmpeg を command substitution 外から直接呼ぶため、
+# 作業変数を local にしないと script 側の同名変数 (duration 等) を壊す。
+local progress_path duration prev arg output_path output_dir
 if [[ "$*" == *"-encoders"* ]]; then
     printf ' A..... aac \\n'
     if [[ -n "${FFMPEG_ENCODERS:-}" ]]; then printf '%b' "$FFMPEG_ENCODERS"; fi
-    exit 0
+    return 0
 fi
 
 if [[ -n "${FFMPEG_LOG:-}" ]]; then
     printf '%s\\n' "$*" >> "${FFMPEG_LOG}"
 fi
 if [[ -n "${FFMPEG_FAIL_MATCH:-}" && "$*" == *"${FFMPEG_FAIL_MATCH}"* ]]; then
-    exit 9
+    return 9
 fi
 
 progress_path=""
@@ -154,17 +165,25 @@ if [[ -n "$progress_path" ]]; then
 fi
 
 output_path="${!#}"
-mkdir -p "$(dirname "$output_path")"
+# 旧 stub の `mkdir -p` 相当を外部プロセス起動なしで再現する。
+output_dir="${output_path%/*}"
+if [[ -n "$output_dir" && "$output_dir" != "$output_path" && ! -d "$output_dir" ]]; then
+    mkdir -p "$output_dir"
+fi
 printf 'stub-output' > "$output_path"
 if [[ -n "$duration" ]]; then
     printf '%s\\n' "$duration" > "${output_path}.duration"
 fi
+}
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then ffmpeg "$@"; exit $?; fi
+true
 """,
     )
     _write_executable(
         bin_dir / "jq",
         """#!/bin/bash
-set -eu
+jq() {
+local expr file arg
 expr=""
 file=""
 for arg in "$@"; do
@@ -255,6 +274,74 @@ PY
     *".overlays.encoder.framerate"*) printf '%s\\n' "${OVERLAY_ENCODER_FRAMERATE:-}" ;;
     *) printf '\\n' ;;
 esac
+}
+
+# runtime mask だけ function で高速に再現し、その他の `uv run <cmd>` は stub bin 上の
+# 同名 stub へ委譲する。stub の無い呼び出しだけを未知として失敗させるので、
+# 新しい `uv run` 経路を検証するテストは stub bin に実行ファイルを足すだけで済む。
+uv() {
+    if [[ -n "${UV_LOG:-}" ]]; then
+        command uv "$@"
+        return
+    fi
+    if [[ "$*" == *"youtube_automation.infrastructure.media.audio_visualizer_mask"* ]]; then
+        local output="" prev="" arg
+        for arg in "$@"; do
+            if [[ "$prev" == "--output" ]]; then output="$arg"; fi
+            prev="$arg"
+        done
+        if [[ -z "$output" ]]; then
+            printf 'audio visualizer mask output is required\\n' >&2
+            return 2
+        fi
+        printf 'stub-mask' > "$output"
+        return 0
+    fi
+    if [[ "${1:-}" == "run" && -n "${2:-}" && -x "${_STUB_BIN_DIR:-}/${2}" ]]; then
+        local target="$2"
+        shift 2
+        "${_STUB_BIN_DIR}/${target}" "$@"
+        return
+    fi
+    printf 'unexpected uv invocation: %s\\n' "$*" >&2
+    return 2
+}
+
+# BASH_ENV 経由で bash プロセス全体の dirname / basename を置き換えるため、
+# GNU coreutils と同じ結果を返す（スラッシュ非包含なら `.`、末尾スラッシュは無視）。
+dirname() {
+    local path="${1:-}" parent
+    while [[ "$path" == */ && "$path" != "/" ]]; do path="${path%/}"; done
+    if [[ "$path" != */* ]]; then
+        printf '.\\n'
+        return
+    fi
+    parent="${path%/*}"
+    if [[ -z "$parent" ]]; then parent="/"; fi
+    printf '%s\\n' "$parent"
+}
+
+basename() {
+    local path="${1:-}" name
+    while [[ "$path" == */ && "$path" != "/" ]]; do path="${path%/}"; done
+    if [[ "$path" == "/" ]]; then
+        printf '/\\n'
+        return
+    fi
+    name="${path##*/}"
+    if [[ -n "${2:-}" && "$name" != "$2" ]]; then name="${name%"$2"}"; fi
+    printf '%s\\n' "$name"
+}
+
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    jq "$@"
+    exit $?
+fi
+_STUB_BIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$_STUB_BIN_DIR/afinfo"
+source "$_STUB_BIN_DIR/ffprobe"
+source "$_STUB_BIN_DIR/ffmpeg"
+true
 """,
     )
     _write_executable(
@@ -289,6 +376,26 @@ def _shared_stub_bin(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Path]
     数百 ms かかるため、テストごとに stub を作り直すと 1 テストあたり
     0.5〜0.8s のオーバーヘッドになる。stub は環境変数と引数だけで挙動が決まり
     bin ディレクトリ側に状態を持たないので、session 全体で安全に共有できる。
+
+    jq / ffprobe / ffmpeg stub と単純な path helper は ``BASH_ENV`` から function としても読み込む。
+    overlay 設定を多数読む 1 回の script 実行で同じ短命 shell を数十回起動するコスト
+    だけを除き、各引数と戻り値、および production script の分岐は従来どおり検査する。
+    runtime mask の通常ケースも function で出力を再現するが、``UV_LOG`` を指定する
+    起動契約テストは PATH 上の専用 executable へ委譲して実際の argv を検査する。
+
+    新規テストを書くときの注意（function は bash プロセス全体で有効なため）:
+
+    - ``uv run <cmd>`` は stub bin 上の同名 stub があればそこへ委譲する。新しい
+      ``uv run`` 経路を検証したいときは stub bin に実行ファイルを足す（stub の無い
+      呼び出しだけが ``unexpected uv invocation`` で失敗する）
+    - ``dirname`` / ``basename`` は GNU coreutils と同じ結果を返すので、相対パスや
+      裸のファイル名を渡しても実コマンドと差が出ない
+    - stub 内の作業変数はすべて ``local``。ffmpeg のように command substitution 外から
+      直接呼ばれる stub が production script の同名変数を壊さないようにしている
+    - ffmpeg stub は旧 stub と同様に出力先ディレクトリが無ければ作る
+    - stub bin の実行ファイルにも ``BASH_ENV`` が継承され、この定義が再度 source
+      される。新しい stub から jq / ffmpeg / dirname 等を独立プロセスとして呼ぶ場合は、
+      function の上書きや直接実行 guard による二重実行が起きないことを確認する
     """
     global _SHARED_STUB_BIN
     _SHARED_STUB_BIN = _create_stub_bin(tmp_path_factory.mktemp("shared-stub"))
@@ -324,6 +431,7 @@ def _run_generate_videos(
     env["FFPROBE_STREAM_OUTPUT"] = stream_output
     env["FFPROBE_STREAM_BITRATE_OUTPUT"] = stream_bitrate_output
     env["FFMPEG_LOG"] = str(ffmpeg_log)
+    env["BASH_ENV"] = str(bin_dir / "jq")
     if extra_env:
         env.update(extra_env)
     script_args = extra_args or []
