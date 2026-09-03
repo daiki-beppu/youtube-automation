@@ -369,7 +369,7 @@ GitHub Release: https://github.com/daiki-beppu/youtube-automation/releases/tag/v
 生成 path: docs/release-notes/v${VER}.md
 post-release PR: ${PR_URL または skip / retry 状態}
 site は PR pending: Cloudflare Pages preview と required checks の確認待ち
-merge 後の公開 URL: https://youtube-automation-release-notes.pages.dev/v${VER}/
+merge 後の公開 URL: https://youtube-automation-release-notes.pages.dev/releases/v${VER}/
 
 次の選択肢:
 - 各チャンネルリポジトリで `/automation --update` を実行すれば CHANGELOG.md / Release 本文から累積影響を要約して追従可能
@@ -579,7 +579,7 @@ merge commit tag: ${merge_sha}
 生成 path: docs/release-notes/ext-v${VER}.md
 post-release PR: ${EXT_PR_URL または skip / retry 状態}
 site は PR pending: Cloudflare Pages preview と required checks の確認待ち
-merge 後の公開 URL: https://youtube-automation-release-notes.pages.dev/ext-v${VER}/
+merge 後の公開 URL: https://youtube-automation-release-notes.pages.dev/releases/ext-v${VER}/
 
 次のステップ:
 - 利用者への告知はチャットで Release URL を共有（ADR 0011。自動アップデート通知は無し）

@@ -9,6 +9,12 @@ export interface ReleaseSidebarGroup {
   readonly label: string;
 }
 
+export interface ReleaseRedirect {
+  readonly from: string;
+  readonly status: 301;
+  readonly to: string;
+}
+
 const releaseSchema = z.object(releaseFrontmatter);
 
 type ReleaseKind = z.infer<typeof releaseSchema>["kind"];
@@ -65,9 +71,22 @@ export function releaseSidebarGroups(directory: string): ReleaseSidebarGroup[] {
   return releaseKinds.flatMap((kind) =>
     groupReleasesByScale(releases.filter((release) => release.kind === kind)).map(
       (group) => ({
-        items: group.releases.map((release) => `/${release.version}`),
+        items: group.releases.map((release) => `/releases/${release.version}`),
         label: `${releaseKindLabels[kind]}｜${releaseScaleLabels[group.scale]}`,
       })
     )
   );
+}
+
+/** 既存の外部リンクを保つため、全リリースの旧 route を新 route へ転送する。 */
+export function releaseRedirects(directory: string): ReleaseRedirect[] {
+  return readdirSync(directory)
+    .filter((file) => file.endsWith(".md"))
+    .toSorted()
+    .map((file) => readRelease(directory, file).version)
+    .map((version) => ({
+      from: `/${version}`,
+      status: 301,
+      to: `/releases/${version}`,
+    }));
 }

@@ -11,11 +11,11 @@ import {
   releaseScaleLabels,
   scaleFromVersion,
 } from "../release-scale.ts";
-import { releaseSidebarGroups } from "../release-sidebar.ts";
+import { releaseRedirects, releaseSidebarGroups } from "../release-sidebar.ts";
 
 const readIndex = () => readFile(new URL("../dist/index.html", import.meta.url), "utf8");
 const readRelease = (version) =>
-  readFile(new URL(`../dist/${version}/index.html`, import.meta.url), "utf8");
+  readFile(new URL(`../dist/releases/${version}/index.html`, import.meta.url), "utf8");
 const readOperatorDoc = (route) =>
   readFile(new URL(`../dist${route}/index.html`, import.meta.url), "utf8");
 const releaseNotesDirectory = fileURLToPath(
@@ -176,6 +176,7 @@ test("全 Blume page の stylesheet closure で DADS accent を解決する", as
   assert.ok(htmlPaths.length > 1);
   for (const htmlPath of htmlPaths) {
     const html = await readFile(new URL(htmlPath, distDirectory), "utf8");
+    if (/<meta http-equiv="refresh"/u.test(html)) continue;
     const styles = await readStylesheetClosure(html);
     const accentReferences = [...styles.matchAll(/--blume-accent:\s*var\((--[^)]+)\)/g)];
 
@@ -592,7 +593,7 @@ test("top page の kind × 更新規模 group は実ファイルの所属・日�
 
     assert.deepEqual(
       hrefs,
-      expected.entries.map((entry) => `/${entry.version}`)
+      expected.entries.map((entry) => `/releases/${entry.version}`)
     );
     for (const entry of expected.entries) {
       assert.match(scaleSection, new RegExp(`<h5>${entry.version}</h5>`));
@@ -629,7 +630,7 @@ test("一覧は本体とChrome拡張に分かれ、それぞれ公開日の新�
   const releases = await releaseNotes();
   const expectedHrefs = (kind) =>
     groupReleasesByScale(releases.filter((release) => release.kind === kind)).flatMap(
-      (group) => group.releases.map((release) => `/${release.version}`)
+      (group) => group.releases.map((release) => `/releases/${release.version}`)
     );
   assert.deepEqual(hrefs(main), expectedHrefs("main"));
   assert.deepEqual(hrefs(extension), expectedHrefs("extension"));
@@ -640,8 +641,8 @@ test("本体とChrome拡張を区別し、詳細ページへリンクする", as
 
   assert.match(html, /release-kind--main[^>]*>\s*本体/);
   assert.match(html, /release-kind--extension[^>]*>\s*Chrome 拡張/);
-  assert.match(html, /href="\/v5\.6\.0\/?"/);
-  assert.match(html, /href="\/ext-v0\.3\.0\/?"/);
+  assert.match(html, /href="\/releases\/v5\.6\.0\/?"/);
+  assert.match(html, /href="\/releases\/ext-v0\.3\.0\/?"/);
 });
 
 const sidebarGroups = (html) => {
@@ -710,10 +711,38 @@ test("sidebar の release 節を実ファイル群から導出し、節内を公
   ]);
 
   assert.deepEqual(releaseSidebarGroups(directory), [
-    { items: ["/v5.7.0", "/v5.6.0"], label: `本体｜${releaseScaleLabels.major}` },
-    { items: ["/v5.5.17"], label: `本体｜${releaseScaleLabels.minor}` },
-    { items: ["/ext-v0.3.0"], label: `Chrome 拡張｜${releaseScaleLabels.major}` },
+    {
+      items: ["/releases/v5.7.0", "/releases/v5.6.0"],
+      label: `本体｜${releaseScaleLabels.major}`,
+    },
+    { items: ["/releases/v5.5.17"], label: `本体｜${releaseScaleLabels.minor}` },
+    {
+      items: ["/releases/ext-v0.3.0"],
+      label: `Chrome 拡張｜${releaseScaleLabels.major}`,
+    },
   ]);
+});
+
+test("全リリースの旧 URL を /releases/ 配下へ恒久リダイレクトする", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "release-redirects-"));
+  await writeReleaseNotes(directory, [
+    { kind: "main", released_at: "2026-08-29", version: "v5.7.0" },
+    { kind: "extension", released_at: "2026-07-31", version: "ext-v0.3.0" },
+  ]);
+
+  assert.deepEqual(releaseRedirects(directory), [
+    { from: "/ext-v0.3.0", status: 301, to: "/releases/ext-v0.3.0" },
+    { from: "/v5.7.0", status: 301, to: "/releases/v5.7.0" },
+  ]);
+});
+
+test("production build は全リリースの Cloudflare Pages redirect を出力する", async () => {
+  const redirects = await readFile(new URL("../dist/_redirects", import.meta.url), "utf8");
+  const expected = (await releaseNotes())
+    .map(({ version }) => `/${version} /releases/${version} 301`)
+    .toSorted();
+
+  assert.deepEqual(redirects.trim().split("\n").toSorted(), expected);
 });
 
 test("ファイル名と version が食い違う release note を path 付きで拒否する", async () => {

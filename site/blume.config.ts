@@ -9,12 +9,13 @@ import {
   operatorDocReleaseField,
 } from "./operator-doc-source";
 import { releaseFrontmatter } from "./release-schema";
-import { releaseSidebarGroups } from "./release-sidebar";
+import { releaseRedirects, releaseSidebarGroups } from "./release-sidebar";
 import { createSkillPageSource } from "./skill-page-source";
 
 const lightAccent = dadsTokens.Color.Key["800"].$value;
 const darkAccent = dadsTokens.Color.Key["400"].$value;
 const repositoryRoot = fileURLToPath(new URL("..", import.meta.url));
+const releaseNotesRoot = join(repositoryRoot, "docs/release-notes");
 const operatorDocReleaseFieldSchema = z
   .custom((value) => value === operatorDocReleaseField)
   .transform(() => undefined);
@@ -31,7 +32,7 @@ export default defineConfig({
   content: {
     root: "../docs/release-notes",
     sources: [
-      { root: "../docs/release-notes", type: "filesystem" },
+      { prefix: "releases", root: "../docs/release-notes", type: "filesystem" },
       {
         source: createOperatorDocSource({ map: operatorDocMap, repositoryRoot }),
         type: "custom",
@@ -86,7 +87,7 @@ export default defineConfig({
           },
         ],
       },
-      ...releaseSidebarGroups(join(repositoryRoot, "docs/release-notes")),
+      ...releaseSidebarGroups(releaseNotesRoot),
     ],
     // Operator routes are intentionally flat; root-scoped tabs keep the same
     // three-section sidebar visible instead of treating one route as a prefix.
@@ -108,6 +109,7 @@ export default defineConfig({
       },
     ],
   },
+  redirects: releaseRedirects(releaseNotesRoot),
   theme: {
     accent: {
       light: lightAccent,
