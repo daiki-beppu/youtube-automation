@@ -55,6 +55,17 @@ def _write_executable(path: Path, content: str) -> None:
     path.chmod(0o755)
 
 
+def _sourceable_stub(function_name: str, definition: str, *, sourced_setup: str = "") -> str:
+    """直接実行時だけ関数の終了コードを返し、source 時は定義と setup を読み込む."""
+    setup = f"{sourced_setup.rstrip()}\n" if sourced_setup else ""
+    return (
+        "#!/bin/bash\n"
+        f"{definition.rstrip()}\n"
+        f'if [[ "${{BASH_SOURCE[0]}}" == "$0" ]]; then {function_name} "$@"; exit $?; fi\n'
+        f"{setup}true\n"
+    )
+
+
 def _create_collection(
     tmp_path: Path,
     *,
@@ -77,17 +88,20 @@ def _create_stub_bin(tmp_path: Path) -> Path:
     # macOS の afinfo をスタブ化し、入力音声の duration を返す。
     _write_executable(
         bin_dir / "afinfo",
-        """#!/bin/bash
+        _sourceable_stub(
+            "afinfo",
+            """
 afinfo() {
 printf 'File:           %s\\nestimated duration: %s sec\\n' "$1" "${FFPROBE_DURATION:-1.00}"
 }
-if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then afinfo "$@"; exit $?; fi
-true
 """,
+        ),
     )
     _write_executable(
         bin_dir / "ffprobe",
-        """#!/bin/bash
+        _sourceable_stub(
+            "ffprobe",
+            """
 ffprobe() {
 # BASH_ENV 経由で production script と同じ shell に載るため、作業変数は必ず local にする。
 local args input_path
@@ -123,13 +137,14 @@ if [[ "$args" == *"format=bit_rate"* ]]; then
     return 0
 fi
 }
-if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then ffprobe "$@"; exit $?; fi
-true
 """,
+        ),
     )
     _write_executable(
         bin_dir / "ffmpeg",
-        """#!/bin/bash
+        _sourceable_stub(
+            "ffmpeg",
+            """
 ffmpeg() {
 # generate_videos.sh は ffmpeg を command substitution 外から直接呼ぶため、
 # 作業変数を local にしないと script 側の同名変数 (duration 等) を壊す。
@@ -175,13 +190,14 @@ if [[ -n "$duration" ]]; then
     printf '%s\\n' "$duration" > "${output_path}.duration"
 fi
 }
-if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then ffmpeg "$@"; exit $?; fi
-true
 """,
+        ),
     )
     _write_executable(
         bin_dir / "jq",
-        """#!/bin/bash
+        _sourceable_stub(
+            "jq",
+            """
 jq() {
 local expr file arg
 expr=""
@@ -309,9 +325,16 @@ uv() {
 
 # BASH_ENV 経由で bash プロセス全体の dirname / basename を置き換えるため、
 # GNU coreutils と同じ結果を返す（スラッシュ非包含なら `.`、末尾スラッシュは無視）。
+_strip_trailing_slashes() {
+    local value="$1"
+    local -n result="$2"
+    while [[ "$value" == */ && "$value" != "/" ]]; do value="${value%/}"; done
+    result="$value"
+}
+
 dirname() {
-    local path="${1:-}" parent
-    while [[ "$path" == */ && "$path" != "/" ]]; do path="${path%/}"; done
+    local path parent
+    _strip_trailing_slashes "${1:-}" path
     if [[ "$path" != */* ]]; then
         printf '.\\n'
         return
@@ -322,8 +345,8 @@ dirname() {
 }
 
 basename() {
-    local path="${1:-}" name
-    while [[ "$path" == */ && "$path" != "/" ]]; do path="${path%/}"; done
+    local path name
+    _strip_trailing_slashes "${1:-}" path
     if [[ "$path" == "/" ]]; then
         printf '/\\n'
         return
@@ -333,16 +356,14 @@ basename() {
     printf '%s\\n' "$name"
 }
 
-if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
-    jq "$@"
-    exit $?
-fi
+""",
+            sourced_setup="""
 _STUB_BIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$_STUB_BIN_DIR/afinfo"
 source "$_STUB_BIN_DIR/ffprobe"
 source "$_STUB_BIN_DIR/ffmpeg"
-true
 """,
+        ),
     )
     _write_executable(
         bin_dir / "yt-audio-visualizer-fill",
