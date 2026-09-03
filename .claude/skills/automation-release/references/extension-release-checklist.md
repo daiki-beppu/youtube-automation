@@ -143,7 +143,7 @@ Asset: <name>-<VER>-chrome.zip（+ 他2拡張の現行版数 zip）
 生成 path: docs/release-notes/ext-v${VER}.md
 post-release PR: <URL または skip / retry 状態>
 site は PR pending: Cloudflare Pages preview と required checks の確認待ち
-merge 後の公開 URL: https://youtube-automation-release-notes.pages.dev/ext-v${VER}/
+merge 後の公開 URL: https://youtube-automation-release-notes.pages.dev/releases/ext-v${VER}/
 
 次のステップ:
 - 利用者への告知はチャットで Release URL を共有（ADR 0011。自動アップデート通知は無し）
