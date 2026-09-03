@@ -2,7 +2,13 @@
 
 ## Status
 
-accepted (2026-07-13)。workspace 解決と `yt-channel list` は #1947、コピー移行 CLI と移行ガイドは #1949 で実装。
+**superseded (2026-09-03) by [ADR-0029](0029-return-to-single-channel-repos.md)**。元の採択は accepted (2026-07-13)。workspace 解決と `yt-channel list` は #1947、コピー移行 CLI と移行ガイドは #1949 で実装。
+
+> **⚠️ 2026-09-03 supersede (ADR-0029)**: 本 ADR の中核決定は **ADR-0029 で「1 チャンネル = 1 リポジトリ = 1 cwd」への回帰に反転**した。
+> - **反転**: workspace 構造（`channels/<slug>/` 同居）、`--channel` / `CHANNEL` によるチャンネル解決、`yt-channel-import`。workspace 経路は警告リリースで deprecated、削除リリース（7 チャンネルの export 完了 + workspace archive がゲート）で削除される。逆移行は `yt-channel-export`
+> - **維持**: benchmark 系の `--competitor` リネーム、プロセス内 singleton 切替による横断実行の恒久禁止、生成成果物を git 管理外にするデータ 4 分類への忠実化
+>
+> 以下の本文は履歴として不変。
 
 複数チャンネルを `channels/<slug>/` として 1 リポジトリに同居させる **workspace** 構造を Python 版（本リポ）に導入する。単一チャンネルリポ構成は恒久サポートであり、workspace は opt-in。
 

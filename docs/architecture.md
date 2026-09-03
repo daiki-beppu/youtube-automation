@@ -69,13 +69,33 @@ CLAUDE.md の「アーキテクチャ」節の詳細版。要点は CLAUDE.md �
 
 ### マルチチャンネル運用・データ
 
-**workspace**: 複数チャンネルを `channels/<slug>/` として同居させる単一リポジトリ。共有物はルートに 1 セット、per-channel 状態は各チャンネル配下に置く。単一チャンネルリポ構成は恒久サポートで、workspace への移行は opt-in とする。
+**チャンネルリポジトリ**: 1 チャンネル = 1 リポジトリ = 1 cwd で運用する下流リポジトリ（`CHANNEL_DIR` が指す先）。ADR-0029 以降の正規形であり、skills などの同梱資産は各リポジトリに実体コピーとして commit する。複数チャンネルの一元管理は置き場を 1 つにすることではなく、fan-out で操作を 1 回にすることで実現する。
 
-**channel slug**: workspace 内でチャンネルを識別する `channels/` 直下のディレクトリ名。`--channel <slug>` または `CHANNEL=<slug>` で実行対象を指定する。
+**workspace**: 複数チャンネルを `channels/<slug>/` として同居させる単一リポジトリ。共有物はルートに 1 セット、per-channel 状態は各チャンネル配下に置く。ADR-0029 で deprecated となり、警告リリースで警告、削除リリースで経路ごと撤去する（本項も同時に削除）。独立したチャンネルリポジトリへ戻す操作は channel export。
+
+**channel slug**: workspace 内でチャンネルを識別する `channels/` 直下のディレクトリ名。`--channel <slug>` または `CHANNEL=<slug>` で実行対象を指定する。workspace とともに ADR-0029 で deprecated（削除リリースで本項も削除）。
+
+**channel export（逆移行）**: workspace の `channels/<slug>/` を独立したチャンネルリポジトリへ copy + 検証で戻す操作。workspace 側は変更せず、git 履歴は引き継がない。ADR-0022 の import と対称。
 
 **competitor**: `analytics.benchmark.channels` に登録するベンチマーク分析対象の他者チャンネル。CLI フラグは `--competitor` であり、`--channel` は自チャンネル指定に予約する。
 
-**channel registry**: first-party チャンネルの絶対パス一覧を `~/.config/tayk/channels.json` に JSON 配列で保持するもの。表示名などは各チャンネルの `config/channel/meta.json` から解決し、dashboard が消費する。
+**channel registry**: first-party チャンネルの絶対パス一覧を `~/.config/tayk/channels.json` に JSON 配列で保持するもの。表示名などは各チャンネルの `config/channel/meta.json` から解決する。dashboard の表示対象と fan-out の適格チャンネルの両方を列挙する台帳であり（ADR-0029）、channel export が戻し先のパスを追加する。
+
+**fan-out**: channel registry の全エントリに同じ操作を 1 回の呼び出しで適用し、失敗をチャンネル単位で隔離する実行様式。表記は英字のまま。
+
+**適格チャンネル（eligible channel）**: channel registry のエントリのうち、自前の git 作業ツリーと package 依存を持つ独立したチャンネルリポジトリ。workspace 内のエントリは移行期間中は非適格として skip し、パス不在は error にする。
+
+**追従（update）**: 1 つのチャンネルリポジトリで上流 package の新しい ref を lock → sync → commit まで反映すること。fan-out は全適格チャンネルへの一括追従、SessionStart 自動追従は開いたチャンネルでの遅延実行で、1 チャンネル分の処理は同一。
+
+**clean（作業ツリー）**: 追跡ファイルに変更が無い状態。untracked ファイルの有無は問わない。自動追従は clean でなければ skip し、その補集合を dirty と呼ぶ。
+
+**local fix**: 同梱版と内容が異なる下流側の同期資産。追従は更新前 package との差分で検出し、明示の上書き指示なしには潰さない。
+
+**警告リリース**: workspace 経路が動作を維持したまま deprecation 警告を出し始めるリリース。
+
+**削除リリース**: workspace 経路を物理削除するリリース。semver 規則上 major で、first-party 7 チャンネルの export 完了 + workspace archive をゲートにする。
+
+**廃止 hook の prune**: settings 同期が下流 `.claude/settings.json` から既知の廃止 hook を除去する処理。従来の hook マージは追加専用で、これだけが削除を行う。
 
 **dashboard**: 全 first-party チャンネルの analytics スナップショットを起動時に最新化して一覧表示するローカル Web UI。Python HTTP server が registry、全チャンネルの直列収集、read model/API/build asset 配信を担い、`dashboard/` の React + Vite + shadcn/ui 表示層は同一 origin の API だけを読む。SSOT は各チャンネルの `data/analytics_data_*.json`（将来は local store）。channel registry で対象チャンネルを解決し、失敗はチャンネル単位の部分エラーとして隔離する。
 
