@@ -219,12 +219,12 @@ test("一覧と個別ページの先頭 H1 を title へ分離する", async () 
   const index = result.entries.find((entry) => entry.slug === "/skills");
   const alpha = result.entries.find((entry) => entry.slug === "/skills/alpha");
 
-  assert.equal(index.data.title, "発動条件から skill を使う");
+  assert.equal(index.data.title, "制作ワークフロー順に skill を使う");
   assert.match(index.body.text, /発動条件・前提・前後工程/);
-  assert.match(index.body.text, /\[できることの 1 行要約から探す\]\(\/skills\/features\)/);
+  assert.match(index.body.text, /\[できることから探す\]\(\/skills\/features\)/);
   assert.doesNotMatch(index.body.text, /^# /mu);
-  assert.match(index.body.text, /^## category one$/mu);
-  assert.match(index.raw, /^---\ntitle: "発動条件から skill を使う"\ntype: doc\n---\n\n/mu);
+  assert.match(index.body.text, /^## 未分類$/mu);
+  assert.match(index.raw, /^---\ntitle: "制作ワークフロー順に skill を使う"\ntype: doc\n---\n\n/mu);
   assert.equal(alpha.data.title, "/alpha");
   assert.doesNotMatch(alpha.body.text, /^# /mu);
   assert.match(alpha.body.text, /^## リファレンス$/mu);
@@ -316,8 +316,20 @@ test("production build は一覧と19個の個別ページを公開する", asyn
   assert.doesNotMatch(index, /href="\/skills\/channel-status"/);
   assert.doesNotMatch(index, /href="\/skills\/(?:automation-release|hallmark|shadcn)"/);
   assert.equal((index.match(/<h1\b/g) ?? []).length, 1);
-  assert.match(index, /<h1[^>]*>発動条件から skill を使う<\/h1>/);
+  assert.match(index, /<h1[^>]*>制作ワークフロー順に skill を使う<\/h1>/);
   assert.match(index, /href="\/skills\/features"/);
+  for (const label of [
+    "立ち上げ",
+    "戦略・リサーチ",
+    "制作ワークフロー",
+    "コンテンツ生成",
+    "公開",
+    "運用・交流",
+    "分析・監査",
+    "メンテ・追従",
+  ]) {
+    assert.match(index, new RegExp(`<h2[^>]*>.*?${label}.*?<\\/h2>`));
+  }
   assert.match(thumbnail, /--compare/);
   assert.match(thumbnail, /--test/);
   assert.match(thumbnail, /--iterate/);

@@ -27,13 +27,39 @@ const publishedSkillNames = (skillsRoot: string): string[] =>
     .toSorted();
 
 /** 配布対象 skill の全ページを明示 sidebar へ漏れなく追加する。 */
-export const skillSidebarRoutes = (repositoryRoot: string): string[] => [
-  "/skills",
-  "/skills/features",
-  ...publishedSkillNames(resolve(repositoryRoot, ".claude/skills")).map(
-    (name) => `/skills/${name}`
-  ),
-];
+export const WORKFLOW_SKILL_GROUPS = [
+  { label: "立ち上げ", skills: ["setup", "extension"] },
+  {
+    label: "戦略・リサーチ",
+    skills: ["channel-strategy", "channel-research"],
+  },
+  { label: "制作ワークフロー", skills: ["wf-new", "wf-next", "wf-status"] },
+  {
+    label: "コンテンツ生成",
+    skills: ["music", "thumbnail", "video", "short"],
+  },
+  { label: "公開", skills: ["publish", "distrokid-helper"] },
+  { label: "運用・交流", skills: ["reply", "streaming"] },
+  { label: "分析・監査", skills: ["analytics", "audit"] },
+  { label: "メンテ・追従", skills: ["automation", "skill-feedback"] },
+] as const satisfies readonly SkillCategory[];
+
+/** 制作 workflow 順の全 skill と「できることから探す」を sidebar に並べる。 */
+export const skillSidebarItems = (repositoryRoot: string) => {
+  const available = new Set(
+    publishedSkillNames(resolve(repositoryRoot, ".claude/skills"))
+  );
+  return [
+    { label: "できることから探す", root: "/skills/features" },
+    "/skills",
+    ...WORKFLOW_SKILL_GROUPS.map(({ label, skills }) => ({
+      label,
+      items: skills
+        .filter((name) => available.has(name))
+        .map((name) => `/skills/${name}`),
+    })),
+  ];
+};
 
 export interface SkillPage {
   readonly apiCalls?: string;
@@ -298,15 +324,14 @@ const renderSkillIndex = (
 ): string => {
   const byName = new Map(skills.map((skill) => [skill.name, skill]));
   const categorized = new Set(categories.flatMap((category) => category.skills));
-  const sections = categories.map((category) => {
-    const rows = category.skills.map((name) => {
+  const sections = categories.flatMap((category) => {
+    const rows = category.skills.flatMap((name) => {
       const skill = byName.get(name);
-      if (!skill) {
-        throw new Error(`Skill catalog references missing skill: ${name}`);
-      }
-      return `- [/${name}](/skills/${name}) — ${skill.description}`;
+      return skill
+        ? [`- [/${name}](/skills/${name}) — ${skill.description}`]
+        : [];
     });
-    return `## ${category.label}\n\n${rows.join("\n")}`;
+    return rows.length > 0 ? [`## ${category.label}\n\n${rows.join("\n")}`] : [];
   });
   const uncategorized = skills
     .filter((skill) => !categorized.has(skill.name))
@@ -317,7 +342,7 @@ const renderSkillIndex = (
   if (uncategorized.length > 0) {
     sections.push(`## 未分類\n\n${uncategorized.join("\n")}`);
   }
-  return `# 発動条件から skill を使う\n\n${skills.length} 個の skill について、発動条件・前提・前後工程を確認できます。目的に合う skill がまだ決まっていない場合は、[できることの 1 行要約から探す](/skills/features)ページへ進んでください。\n\n${sections.join("\n\n")}\n`;
+  return `# 制作ワークフロー順に skill を使う\n\n${skills.length} 個の skill について、制作の流れに沿って発動条件・前提・前後工程を確認できます。目的に合う skill がまだ決まっていない場合は、[できることから探す](/skills/features)ページへ進んでください。\n\n${sections.join("\n\n")}\n`;
 };
 
 const assertInsideRepository = (repositoryRoot: string, path: string): string => {
@@ -408,7 +433,6 @@ const loadSkillEntries = async (repositoryRoot: string): Promise<SourceEntry[]> 
       throw new Error(`Skill ${skill.name} is missing handwritten documentation`);
     }
   }
-  const categories = parseSkillCategories(await readFile(catalogPath, "utf8"));
   const entries = pages.map((skill) => {
     const text = renderSkillPage(skill, names, handwritten.get(skill.name)!);
     return sourceEntry(
@@ -422,7 +446,7 @@ const loadSkillEntries = async (repositoryRoot: string): Promise<SourceEntry[]> 
     sourceEntry(
       "index.md",
       "/skills",
-      renderSkillIndex(pages, categories),
+      renderSkillIndex(pages, WORKFLOW_SKILL_GROUPS),
       "https://github.com/daiki-beppu/youtube-automation/blob/main/docs/features.md"
     )
   );
