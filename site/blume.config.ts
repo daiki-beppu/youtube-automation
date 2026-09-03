@@ -72,7 +72,6 @@ export default defineConfig({
         root: "/guides",
         items: [
           "/guides/workflow-cheatsheet",
-          "/guides/channel-workspace-migration",
           {
             display: "group",
             label: "実験的機能",
@@ -105,7 +104,24 @@ export default defineConfig({
       {
         label: "アップデート",
         root: "/releases",
-        items: releaseNavigationGroups,
+        items: [
+          {
+            label: "移行ガイド",
+            items: [
+              "/releases/workspace-migration",
+              "/releases/high-cpm-locales",
+            ],
+          },
+          {
+            label: "バージョン別アップグレード",
+            items: [
+              "/releases/upgrades/v5.5.1",
+              "/releases/upgrades/v5.5.0",
+              "/releases/upgrades/v5.4.0",
+            ],
+          },
+          ...releaseNavigationGroups,
+        ],
       },
     ],
     tabs: [

@@ -33,6 +33,10 @@ OPERATOR_DOC_SOURCES = (
     "docs/distrokid.md",
     "docs/audio-studio.md",
     "docs/review-viewers.md",
+    "docs/migration/high-cpm-locales.md",
+    "docs/upgrades/v5.4.0.md",
+    "docs/upgrades/v5.5.0.md",
+    "docs/upgrades/v5.5.1.md",
 )
 NONPUBLIC_DOC_PREFIXES = (
     "docs/adr/",

@@ -29,6 +29,10 @@ const expectedSources = [
   "docs/distrokid.md",
   "docs/audio-studio.md",
   "docs/review-viewers.md",
+  "docs/migration/high-cpm-locales.md",
+  "docs/upgrades/v5.4.0.md",
+  "docs/upgrades/v5.5.0.md",
+  "docs/upgrades/v5.5.1.md",
 ];
 
 const createRepository = async (map = operatorDocMap) => {
@@ -52,6 +56,25 @@ test(`operator document map は生成対象${expectedSources.length}件だけを
     new Set(operatorDocMap.map(({ route }) => route)).size,
     expectedSources.length
   );
+});
+
+test("追従ドキュメントをすべてアップデート tab 配下へ割り当てる", () => {
+  const routes = new Map(operatorDocMap.map(({ route, source }) => [source, route]));
+
+  assert.equal(
+    routes.get("docs/channel-workspace-migration.md"),
+    "/releases/workspace-migration"
+  );
+  assert.equal(
+    routes.get("docs/migration/high-cpm-locales.md"),
+    "/releases/high-cpm-locales"
+  );
+  for (const version of ["v5.4.0", "v5.5.0", "v5.5.1"]) {
+    assert.equal(
+      routes.get(`docs/upgrades/${version}.md`),
+      `/releases/upgrades/${version}`
+    );
+  }
 });
 
 test("source は build ごとに原本を読み、安定 route と doc type を返す", async () => {

@@ -55,7 +55,7 @@ export const operatorDocMap = [
   {
     legacyRoute: "/channel-workspace-migration",
     source: "docs/channel-workspace-migration.md",
-    route: "/guides/channel-workspace-migration",
+    route: "/releases/workspace-migration",
   },
   {
     legacyRoute: "/cloud-execution",
@@ -102,6 +102,13 @@ export const operatorDocMap = [
     source: "docs/review-viewers.md",
     route: "/guides/review-viewers",
   },
+  {
+    source: "docs/migration/high-cpm-locales.md",
+    route: "/releases/high-cpm-locales",
+  },
+  { source: "docs/upgrades/v5.4.0.md", route: "/releases/upgrades/v5.4.0" },
+  { source: "docs/upgrades/v5.5.0.md", route: "/releases/upgrades/v5.5.0" },
+  { source: "docs/upgrades/v5.5.1.md", route: "/releases/upgrades/v5.5.1" },
 ] as const satisfies readonly OperatorDocMapping[];
 
 /** Internal marker allowing staged operator entries through release-only fields. */
