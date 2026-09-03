@@ -81,7 +81,7 @@ def _create_stub_bin(tmp_path: Path) -> Path:
 afinfo() {
 printf 'File:           %s\\nestimated duration: %s sec\\n' "$1" "${FFPROBE_DURATION:-1.00}"
 }
-if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then afinfo "$@"; fi
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then afinfo "$@"; exit $?; fi
 true
 """,
     )
@@ -123,7 +123,7 @@ if [[ "$args" == *"format=bit_rate"* ]]; then
     return 0
 fi
 }
-if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then ffprobe "$@"; fi
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then ffprobe "$@"; exit $?; fi
 true
 """,
     )
@@ -175,7 +175,7 @@ if [[ -n "$duration" ]]; then
     printf '%s\\n' "$duration" > "${output_path}.duration"
 fi
 }
-if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then ffmpeg "$@"; fi
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then ffmpeg "$@"; exit $?; fi
 true
 """,
     )
@@ -335,6 +335,7 @@ basename() {
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
     jq "$@"
+    exit $?
 fi
 _STUB_BIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$_STUB_BIN_DIR/afinfo"
