@@ -165,8 +165,7 @@ if [[ -n "$progress_path" ]]; then
 fi
 
 output_path="${!#}"
-# 実 ffmpeg 同様に出力先ディレクトリが無ければ作る（旧 stub の `mkdir -p` 相当を
-# 外部プロセス起動なしで再現する）。
+# 旧 stub の `mkdir -p` 相当を外部プロセス起動なしで再現する。
 output_dir="${output_path%/*}"
 if [[ -n "$output_dir" && "$output_dir" != "$output_path" && ! -d "$output_dir" ]]; then
     mkdir -p "$output_dir"
@@ -392,7 +391,10 @@ def _shared_stub_bin(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Path]
       裸のファイル名を渡しても実コマンドと差が出ない
     - stub 内の作業変数はすべて ``local``。ffmpeg のように command substitution 外から
       直接呼ばれる stub が production script の同名変数を壊さないようにしている
-    - ffmpeg stub は実 ffmpeg 同様に出力先ディレクトリが無ければ作る
+    - ffmpeg stub は旧 stub と同様に出力先ディレクトリが無ければ作る
+    - stub bin の実行ファイルにも ``BASH_ENV`` が継承され、この定義が再度 source
+      される。新しい stub から jq / ffmpeg / dirname 等を独立プロセスとして呼ぶ場合は、
+      function の上書きや直接実行 guard による二重実行が起きないことを確認する
     """
     global _SHARED_STUB_BIN
     _SHARED_STUB_BIN = _create_stub_bin(tmp_path_factory.mktemp("shared-stub"))
