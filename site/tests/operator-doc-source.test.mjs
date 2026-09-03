@@ -16,6 +16,7 @@ const expectedSources = [
   "ONBOARDING.md",
   "docs/tool-setup.md",
   "docs/oauth-setup.md",
+  "docs/oauth-scopes.md",
   "docs/features.md",
   "docs/workflow-cheatsheet.md",
   "docs/chrome-extension-install-guide.md",
@@ -258,12 +259,12 @@ test("mapped Markdown link は site route と fragment へ書き換える", () =
   );
 });
 
-test("map 外の repository-relative Markdown link は GitHub 原本へ書き換える", () => {
+test("新たに公開した OAuth scope link は site route へ書き換える", () => {
   const markdown = "[scope](oauth-scopes.md#read-only)";
 
   assert.equal(
     rewriteMarkdownLinks(markdown, "docs/oauth-setup.md", operatorDocMap),
-    "[scope](https://github.com/daiki-beppu/youtube-automation/blob/main/docs/oauth-scopes.md#read-only)"
+    "[scope](/getting-started/oauth-scopes#read-only)"
   );
 });
 

@@ -65,6 +65,7 @@ export default defineConfig({
         items: [
           "/getting-started/tool-setup",
           "/getting-started/oauth-setup",
+          "/getting-started/oauth-scopes",
           "/getting-started/chrome-extension-install-guide",
         ],
       },
