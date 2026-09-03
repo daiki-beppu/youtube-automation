@@ -21,6 +21,7 @@ import {
   releaseRedirects,
   releaseSidebarGroups,
 } from "../release-sidebar.ts";
+import { WORKFLOW_SKILL_GROUPS } from "../skill-page-source.ts";
 
 const readIndex = () => readFile(new URL("../dist/index.html", import.meta.url), "utf8");
 const readRelease = (version) =>
@@ -415,6 +416,21 @@ test("ガイド sidebar は読者タスク別5群で全ページを一度ずつ�
   for (const label of labels) assert.match(sidebar, new RegExp(`>${label}<`));
   assert.doesNotMatch(sidebar, />実験的機能<|>こんなこともできる！</);
   assert.equal(hrefsWithin(sidebar).filter((href) => href === "/guides/streaming-healthcheck").length, 1);
+});
+
+test("スキル sidebar は workflow 順8群で19 skill と検索入口を案内する", async () => {
+  const html = await readOperatorDoc("/skills");
+  const sidebar = html.match(/<nav data-blume-nav-tree>([\s\S]*?)<\/nav>/)?.[1] ?? "";
+  const labels = WORKFLOW_SKILL_GROUPS.map(({ label }) => label);
+  const skillHrefs = hrefsWithin(sidebar).filter(
+    (href) => href.startsWith("/skills/") && href !== "/skills/features"
+  );
+
+  for (const label of labels) assert.match(sidebar, new RegExp(`>${label}<`));
+  assert.equal(skillHrefs.length, 19);
+  assert.equal(new Set(skillHrefs).size, 19);
+  assert.match(sidebar, />できることから探す<[^]*href="\/skills"/);
+  assert.equal(hrefsWithin(sidebar).filter((href) => href === "/skills/features").length, 1);
 });
 
 test("実験的機能の各ガイドは冒頭で利用上の注意を示す", async () => {

@@ -16,7 +16,7 @@ import {
   releaseRedirects,
   releaseSidebarGroups,
 } from "./release-sidebar";
-import { createSkillPageSource, skillSidebarRoutes } from "./skill-page-source";
+import { createSkillPageSource, skillSidebarItems } from "./skill-page-source";
 
 const lightAccent = dadsTokens.Color.Key["800"].$value;
 const darkAccent = dadsTokens.Color.Key["400"].$value;
@@ -118,7 +118,7 @@ export default defineConfig({
       {
         label: "スキル",
         root: "/skills",
-        items: skillSidebarRoutes(repositoryRoot),
+        items: skillSidebarItems(repositoryRoot),
       },
       {
         label: "アップデート",
