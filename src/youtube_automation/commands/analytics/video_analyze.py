@@ -53,12 +53,19 @@ PROCESSING_AGENTIC = "agentic"
 _PROCESSING_CHOICES = frozenset((PROCESSING_STATIC, PROCESSING_AGENTIC))
 _AGENTIC_MODELS = frozenset(("gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite"))
 
-_STATIC_SCOPE_PROMPT = """Analyze only the fixed-length opening clip provided. Scope all observations,
-timestamps, and averages to this clip window. Never emit timestamps beyond the clip or speculate
-about the rest of the video."""
-_AGENTIC_SCOPE_PROMPT = """Use agentic video processing to inspect the full video timeline. Scope all
-observations, timestamps, and averages to the complete video, exploring the sections needed to support
-the analysis."""
+_SCOPE_PROMPT_TEMPLATE = """{action}. Scope all observations, timestamps, and averages to {scope}. {boundary}"""
+_SCOPE_PROMPT_BY_PROCESSING = {
+    PROCESSING_STATIC: _SCOPE_PROMPT_TEMPLATE.format(
+        action="Analyze only the fixed-length opening clip provided",
+        scope="this clip window",
+        boundary="Never emit timestamps beyond the clip or speculate about the rest of the video.",
+    ),
+    PROCESSING_AGENTIC: _SCOPE_PROMPT_TEMPLATE.format(
+        action="Use agentic video processing to inspect the full video timeline",
+        scope="the complete video",
+        boundary="Explore the sections needed to support the analysis.",
+    ),
+}
 
 # 任意 URL 経路では slug を一意に持てないため固定名で保存する
 URL_SOURCE_SLUG = "url"
@@ -311,7 +318,7 @@ def _processing_from_config(cfg: dict) -> str:
 
 def _prompt_for_processing(prompt: str, processing: str) -> str:
     """ユーザー prompt に実際の解析スコープを明示する。"""
-    scope = _AGENTIC_SCOPE_PROMPT if processing == PROCESSING_AGENTIC else _STATIC_SCOPE_PROMPT
+    scope = _SCOPE_PROMPT_BY_PROCESSING[processing]
     return f"{scope}\n\n{prompt}"
 
 
