@@ -115,18 +115,22 @@ test("存在しない原本は解決対象を示して fail closed する", asyn
   await assert.rejects(source.load(), /ONBOARDING\.md/);
 });
 
-test(`タブ導入前の flat route ${expectedSources.length}件を新 route へ恒久リダイレクトする`, () => {
+const expectedRedirects = operatorDocMap.filter(
+  ({ legacyRoute }) => legacyRoute !== undefined
+);
+
+test(`タブ導入前の flat route ${expectedRedirects.length}件を新 route へ恒久リダイレクトする`, () => {
   assert.deepEqual(
     operatorDocRedirects(operatorDocMap),
-    operatorDocMap.map(({ legacyRoute, route }) => ({
+    expectedRedirects.map(({ legacyRoute, route }) => ({
       from: legacyRoute,
       status: 301,
       to: route,
     }))
   );
   assert.equal(
-    new Set(operatorDocMap.map(({ legacyRoute }) => legacyRoute)).size,
-    expectedSources.length
+    new Set(expectedRedirects.map(({ legacyRoute }) => legacyRoute)).size,
+    expectedRedirects.length
   );
 });
 
