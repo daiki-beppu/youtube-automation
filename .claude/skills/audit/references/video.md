@@ -17,12 +17,14 @@
 既定の `static` は **動画冒頭のクリップ窓**（既定 30 秒、`analysis_window_sec` で変更可）のみを解析する。
 `agentic` は対応モデルが必要だが、モデル主導で全尺を探索して構成データを取得できる:
 
-- `hook_structure` — 0-30 秒のカット割り・テキスト出現タイミング・signature 要素
-- `bgm_arc` — イントロ尺・ピーク位置・クリップ窓内終盤のタイムスタンプ（窓内スコープ）
+以下の括弧内スコープは既定 `static`（クリップ窓内）の場合の説明で、`agentic` では対象がいずれも全尺になる。
+
+- `hook_structure` — 冒頭のカット割り・テキスト出現タイミング・signature 要素（static: 窓内 / agentic: 全尺の冒頭）
+- `bgm_arc` — イントロ尺・ピーク位置・終盤のタイムスタンプ（static: 窓内スコープ / agentic: 全尺スコープ）
   - `segments[]` — 曲 / BGM 区間の `start` / `end` / `track` / `description`。曲名が映像・説明から確認できない場合は `track N` とし、推測した固有名を付けない
-- `scene_timeline` — シーン境界 + 一言要約（窓内のみ）
-- `thumbnail_alignment` — サムネで提示した要素が本編（窓内）に映っているかの整合性
-- `editing_metrics` — 平均カット長・テキスト出現頻度（窓内平均）
+- `scene_timeline` — シーン境界 + 一言要約（static: 窓内のみ / agentic: 全尺）
+- `thumbnail_alignment` — サムネで提示した要素が本編に映っているかの整合性（static: 窓内 / agentic: 全尺）
+- `editing_metrics` — 平均カット長・テキスト出現頻度（static: 窓内平均 / agentic: 全尺平均）
 
 既存スキルが扱えていなかった「動画の中身」というドメインを埋め、`/channel-research --benchmark`・`/analytics --analyze`・`/audit --alignment`・`/thumbnail --compare`・`/channel-research --voice` の精度を底上げする。
 
