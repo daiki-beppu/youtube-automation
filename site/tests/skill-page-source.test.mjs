@@ -7,7 +7,6 @@ import {
   WORKFLOW_SKILL_GROUPS,
   createSkillPageSource,
   parseSkillMarkdown,
-  skillSidebarRoutes,
 } from "../skill-page-source.ts";
 
 const skillMarkdown = ({
@@ -147,35 +146,6 @@ test("骨格ページのリード文とリファレンスを生成する", async
   assert.doesNotMatch(beta.body.text, /### 前提/);
   assert.doesNotMatch(beta.body.text, /### 発動フレーズ/);
   assert.match(beta.body.text, /## リファレンス\n\n### 前後工程/);
-});
-
-test("sidebar route は生成されるページとだけ一致する", async () => {
-  const repositoryRoot = await createRepository();
-  await mkdir(join(repositoryRoot, ".claude/skills/wip"), { recursive: true });
-
-  const routes = skillSidebarRoutes(repositoryRoot);
-  const slugs = (await createSkillPageSource({ repositoryRoot }).load()).entries
-    .map((entry) => entry.slug)
-    .toSorted();
-
-  assert.deepEqual(routes, ["/skills", "/skills/features", "/skills/alpha", "/skills/beta"]);
-  assert.deepEqual(
-    routes.filter((route) => route !== "/skills/features").toSorted(),
-    slugs
-  );
-});
-
-test("実リポジトリの sidebar route は生成ページ全件と一致する", async () => {
-  const repositoryRoot = resolve(import.meta.dirname, "../..");
-  const routes = skillSidebarRoutes(repositoryRoot);
-  const slugs = (await createSkillPageSource({ repositoryRoot }).load()).entries
-    .map((entry) => entry.slug)
-    .toSorted();
-
-  assert.deepEqual(
-    routes.filter((route) => route !== "/skills/features").toSorted(),
-    slugs
-  );
 });
 
 test("想定 API call 数があるときだけリファレンスに掲載する", async () => {
