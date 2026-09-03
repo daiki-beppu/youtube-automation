@@ -268,6 +268,18 @@ test("新たに公開した OAuth scope link は site route へ書き換える",
   );
 });
 
+test("map 外の repository-relative Markdown link は GitHub 原本へ書き換える", () => {
+  const markdown =
+    "[development](development.md#品質ゲート) [adr](adr/0023-release-notes-site.md)";
+  const blobBase = "https://github.com/daiki-beppu/youtube-automation/blob/main";
+
+  assert.equal(
+    rewriteMarkdownLinks(markdown, "docs/tool-setup.md", operatorDocMap),
+    `[development](${blobBase}/docs/development.md#品質ゲート) ` +
+      `[adr](${blobBase}/docs/adr/0023-release-notes-site.md)`
+  );
+});
+
 test("anchor、絶対 URL、非 Markdown link は変更しない", () => {
   const markdown = [
     "[anchor](#local)",
