@@ -5,26 +5,17 @@ import type { ContentSource, SourceEntry } from "blume/sources/types";
 import { extractMarkdownTitle } from "./markdown-title.ts";
 import { operatorDocReleaseField } from "./operator-doc-source.ts";
 
-const GITHUB_SKILL_BASE =
-  "https://github.com/daiki-beppu/youtube-automation/blob/main/.claude/skills/";
+const GITHUB_BLOB_BASE =
+  "https://github.com/daiki-beppu/youtube-automation/blob/main/";
+const GITHUB_SKILL_BASE = `${GITHUB_BLOB_BASE}.claude/skills/`;
+// `/skills` の並びは docs/features.md ではなく本ファイルの WORKFLOW_SKILL_GROUPS が正。
+const SKILL_INDEX_EDIT_URL = `${GITHUB_BLOB_BASE}site/skill-page-source.ts`;
 const SKILL_NAME_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
 export const DEV_ONLY_SKILL_NAMES = new Set([
   "automation-release",
   "hallmark",
   "shadcn",
 ]);
-
-/**
- * ページが実生成される skill 名。sidebar とページ生成が別々に「配布対象」を
- * 判定すると、`SKILL.md` 未整備の WIP ディレクトリが 404 リンクとして
- * sidebar に載るため、両者はこの 1 箇所だけを見る。
- */
-const publishedSkillNames = (skillsRoot: string): string[] =>
-  readdirSync(skillsRoot, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory() && !DEV_ONLY_SKILL_NAMES.has(entry.name))
-    .map((entry) => entry.name)
-    .filter((name) => existsSync(join(skillsRoot, name, "SKILL.md")))
-    .toSorted();
 
 /** 配布対象 skill の全ページを明示 sidebar へ漏れなく追加する。 */
 export const WORKFLOW_SKILL_GROUPS = [
@@ -44,19 +35,51 @@ export const WORKFLOW_SKILL_GROUPS = [
   { label: "メンテ・追従", skills: ["automation", "skill-feedback"] },
 ] as const satisfies readonly SkillCategory[];
 
+interface SkillDirectoryEntry {
+  readonly name: string;
+  isDirectory: () => boolean;
+}
+
+/** 配布対象 skill のディレクトリ名だけを名前順に取り出す（sync / async 共用）。 */
+const availableSkillNames = (
+  entries: readonly SkillDirectoryEntry[]
+): string[] =>
+  entries
+    .filter((entry) => entry.isDirectory() && !DEV_ONLY_SKILL_NAMES.has(entry.name))
+    .map((entry) => entry.name)
+    .toSorted();
+
+/**
+ * WORKFLOW_SKILL_GROUPS の typo・リネーム漏れを build 時に落とす唯一の検証点。
+ * ここを通しているので、後段の描画側は存在しない skill 名を考慮しなくてよい。
+ */
+const assertWorkflowSkillGroups = (available: ReadonlySet<string>): void => {
+  const missing = WORKFLOW_SKILL_GROUPS.flatMap(({ skills }) =>
+    skills.filter((name) => !available.has(name))
+  );
+  if (missing.length > 0) {
+    throw new Error(
+      `Skill catalog references missing skill: ${missing.join(", ")}`
+    );
+  }
+};
+
 /** 制作 workflow 順の全 skill と「できることから探す」を sidebar に並べる。 */
 export const skillSidebarItems = (repositoryRoot: string) => {
   const available = new Set(
-    publishedSkillNames(resolve(repositoryRoot, ".claude/skills"))
+    availableSkillNames(
+      readdirSync(resolve(repositoryRoot, ".claude/skills"), {
+        withFileTypes: true,
+      })
+    )
   );
+  assertWorkflowSkillGroups(available);
   return [
     { label: "できることから探す", root: "/skills/features" },
     "/skills",
     ...WORKFLOW_SKILL_GROUPS.map(({ label, skills }) => ({
       label,
-      items: skills
-        .filter((name) => available.has(name))
-        .map((name) => `/skills/${name}`),
+      items: skills.map((name) => `/skills/${name}`),
     })),
   ];
 };
@@ -162,24 +185,6 @@ export const parseSkillMarkdown = (
     ].map((match) => match[1] ?? match[2]),
     workflow,
   };
-};
-
-export const parseSkillCategories = (markdown: string): SkillCategory[] => {
-  const categories: Array<{ label: string; skills: string[] }> = [];
-  let current: { label: string; skills: string[] } | undefined;
-  for (const line of markdown.split("\n")) {
-    const heading = line.match(/^## ([^#].*)$/u);
-    if (heading) {
-      current = { label: heading[1].trim(), skills: [] };
-      categories.push(current);
-      continue;
-    }
-    const row = line.match(
-      /^\|\s*(?:\[`)?\/([a-z0-9]+(?:-[a-z0-9]+)*)(?:`?\]\(\/skills\/[^)]+\))?\s*\|/u
-    );
-    if (row && current) current.skills.push(row[1]);
-  }
-  return categories.filter((category) => category.skills.length > 0);
 };
 
 const FENCE_PATTERN = /^[ \t]{0,3}(`{3,}|~{3,})(.*)$/u;
@@ -324,6 +329,8 @@ const renderSkillIndex = (
 ): string => {
   const byName = new Map(skills.map((skill) => [skill.name, skill]));
   const categorized = new Set(categories.flatMap((category) => category.skills));
+  // 名前の実在は assertWorkflowSkillGroups が build 時に保証する。ここで落とすのは
+  // SKILL.md がなくページ自体を生成しなかった skill だけ。
   const sections = categories.flatMap((category) => {
     const rows = category.skills.flatMap((name) => {
       const skill = byName.get(name);
@@ -380,21 +387,25 @@ const sourceEntry = (
 
 const loadSkillEntries = async (repositoryRoot: string): Promise<SourceEntry[]> => {
   const skillsRoot = resolve(repositoryRoot, ".claude/skills");
+  // 一覧から案内する「できることから探す」(/skills/features) の原本。
   const catalogPath = resolve(repositoryRoot, "docs/features.md");
   if (!existsSync(skillsRoot) || !existsSync(catalogPath)) {
     throw new Error("Skill pages require .claude/skills and docs/features.md");
   }
   assertInsideRepository(repositoryRoot, skillsRoot);
   assertInsideRepository(repositoryRoot, catalogPath);
-  const pages = await Promise.all(
-    publishedSkillNames(skillsRoot).map(async (directoryName) => {
-      const realPath = assertInsideRepository(
-        repositoryRoot,
-        join(skillsRoot, directoryName, "SKILL.md")
-      );
+  const directories = availableSkillNames(
+    await readdir(skillsRoot, { withFileTypes: true })
+  );
+  const skills = await Promise.all(
+    directories.map(async (directoryName) => {
+      const path = join(skillsRoot, directoryName, "SKILL.md");
+      if (!existsSync(path)) return undefined;
+      const realPath = assertInsideRepository(repositoryRoot, path);
       return parseSkillMarkdown(await readFile(realPath, "utf8"), directoryName);
     })
   );
+  const pages = skills.filter((skill): skill is SkillPage => skill !== undefined);
   const names = new Set(pages.map((skill) => skill.name));
   if (names.size !== pages.length) throw new Error("Duplicate skill names detected");
   const handwrittenRoot = resolve(repositoryRoot, "site/skill-docs");
@@ -447,7 +458,7 @@ const loadSkillEntries = async (repositoryRoot: string): Promise<SourceEntry[]> 
       "index.md",
       "/skills",
       renderSkillIndex(pages, WORKFLOW_SKILL_GROUPS),
-      "https://github.com/daiki-beppu/youtube-automation/blob/main/docs/features.md"
+      SKILL_INDEX_EDIT_URL
     )
   );
   return entries;

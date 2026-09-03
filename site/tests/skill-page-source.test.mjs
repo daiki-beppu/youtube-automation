@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
 import {
+  WORKFLOW_SKILL_GROUPS,
   createSkillPageSource,
-  parseSkillCategories,
   parseSkillMarkdown,
   skillSidebarRoutes,
 } from "../skill-page-source.ts";
@@ -121,13 +121,6 @@ test("description 欠損は該当 skill 名を示して拒否する", () => {
 test("必須の成果物節がない skill を拒否する", () => {
   const markdown = skillMarkdown().replace(/## 成果物\n[\s\S]*?(?=## Task)/u, "");
   assert.throws(() => parseSkillMarkdown(markdown, "alpha"), /alpha.*成果物/i);
-});
-
-test("features のカテゴリと skill 順を抽出する", () => {
-  assert.deepEqual(parseSkillCategories(catalog), [
-    { label: "category one", skills: ["alpha"] },
-    { label: "category two", skills: ["beta"] },
-  ]);
 });
 
 test("骨格ページのリード文とリファレンスを生成する", async () => {
@@ -258,9 +251,11 @@ test("実リポジトリでは9カテゴリと配布対象skillだけを生成�
   const repositoryRoot = resolve(import.meta.dirname, "../..");
   const source = createSkillPageSource({ repositoryRoot });
   const result = await source.load();
-  const skillDirectories = (
-    await readFile(join(repositoryRoot, "docs/features.md"), "utf8")
-  ).match(/^\| \/[a-z0-9-]+ /gmu);
+  const catalogMarkdown = await readFile(
+    join(repositoryRoot, "docs/features.md"),
+    "utf8"
+  );
+  const skillDirectories = catalogMarkdown.match(/^\| \/[a-z0-9-]+ /gmu);
 
   assert.equal(result.entries.length, 20);
   assert.equal(skillDirectories?.length, 19);
@@ -277,7 +272,7 @@ test("実リポジトリでは9カテゴリと配布対象skillだけを生成�
   assert.match(distrokid.body.text, /### 発動フレーズ\n\n- DistroKid 準備\n/);
   const video = result.entries.find((entry) => entry.slug === "/skills/video");
   assert.doesNotMatch(video.body.text, /### 発動フレーズ/);
-  assert.equal(parseSkillCategories(await readFile(join(repositoryRoot, "docs/features.md"), "utf8")).length, 9);
+  assert.equal(catalogMarkdown.match(/^## /gmu)?.length, 9);
   assert.doesNotMatch(result.entries[0].body.text, /## 未分類/);
   const music = result.entries.find((entry) => entry.slug === "/skills/music");
   assert.match(music.body.text, /## 何ができるか[\s\S]*## つまずいたら[\s\S]*## リファレンス/u);
@@ -300,6 +295,27 @@ test("実リポジトリでは9カテゴリと配布対象skillだけを生成�
   }
 });
 
+test("一覧は workflow 群の定義どおりに全 skill を1行ずつ掲載する", async () => {
+  const repositoryRoot = resolve(import.meta.dirname, "../..");
+  const result = await createSkillPageSource({ repositoryRoot }).load();
+  const index = result.entries.find((entry) => entry.slug === "/skills");
+  const sections = index.body.text.split(/^## /mu).slice(1);
+
+  assert.equal(
+    index.editUrl,
+    "https://github.com/daiki-beppu/youtube-automation/blob/main/site/skill-page-source.ts"
+  );
+  assert.equal(sections.length, WORKFLOW_SKILL_GROUPS.length);
+  for (const [position, group] of WORKFLOW_SKILL_GROUPS.entries()) {
+    const [heading, ...body] = sections[position].split("\n");
+    assert.equal(heading, group.label);
+    assert.deepEqual(
+      body.flatMap((line) => line.match(/^- \[\/([a-z0-9-]+)\]/u)?.[1] ?? []),
+      [...group.skills]
+    );
+  }
+});
+
 test("production build は一覧と19個の個別ページを公開する", async () => {
   const siteRoot = resolve(import.meta.dirname, "..");
   const index = await readFile(join(siteRoot, "dist/skills/index.html"), "utf8");
@@ -318,16 +334,7 @@ test("production build は一覧と19個の個別ページを公開する", asyn
   assert.equal((index.match(/<h1\b/g) ?? []).length, 1);
   assert.match(index, /<h1[^>]*>制作ワークフロー順に skill を使う<\/h1>/);
   assert.match(index, /href="\/skills\/features"/);
-  for (const label of [
-    "立ち上げ",
-    "戦略・リサーチ",
-    "制作ワークフロー",
-    "コンテンツ生成",
-    "公開",
-    "運用・交流",
-    "分析・監査",
-    "メンテ・追従",
-  ]) {
+  for (const { label } of WORKFLOW_SKILL_GROUPS) {
     assert.match(index, new RegExp(`<h2[^>]*>.*?${label}.*?<\\/h2>`));
   }
   assert.match(thumbnail, /--compare/);
