@@ -45,6 +45,10 @@ export default defineConfig({
   frontmatter: {
     extend: mixedContentFrontmatter,
   },
+  i18n: {
+    defaultLocale: "ja",
+    locales: [{ code: "ja", label: "日本語" }],
+  },
   navigation: {
     sidebar: [
       {
